@@ -125,10 +125,19 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		// Destroy the character entity
 		world.DestroyEntity(entity)
 
+		// Store old cursor position for trail effect
+		oldCursorX := s.ctx.CursorX
+		oldCursorY := s.ctx.CursorY
+
 		// Move cursor right
 		s.ctx.CursorX++
 		if s.ctx.CursorX >= s.ctx.GameWidth {
 			s.ctx.CursorX = s.ctx.GameWidth - 1
+		}
+
+		// Create trail visual effect if trail is active
+		if s.ctx.TrailEnabled {
+			AddTrail(world, oldCursorX, oldCursorY, s.ctx.CursorX, s.ctx.CursorY)
 		}
 
 	} else {

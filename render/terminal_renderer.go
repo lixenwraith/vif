@@ -447,26 +447,53 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 		}
 	}
 
-	// Draw score
+	// Calculate positions and draw trail timer + score
 	scoreText := fmt.Sprintf(" Score: %d ", ctx.Score)
-	scoreStartX := r.width - len(scoreText)
-	if scoreStartX < 0 {
-		scoreStartX = 0
+	var trailText string
+	var totalWidth int
+
+	if ctx.TrailEnabled {
+		remaining := ctx.TrailEndTime.Sub(time.Now()).Seconds()
+		if remaining < 0 {
+			remaining = 0
+		}
+		trailText = fmt.Sprintf(" Trail: %.1fs ", remaining)
+		totalWidth = len(trailText) + len(scoreText)
+	} else {
+		totalWidth = len(scoreText)
+	}
+
+	startX := r.width - totalWidth
+	if startX < 0 {
+		startX = 0
 	}
 
 	now := time.Now()
+
+	// Draw trail timer if active (with purple background)
+	if ctx.TrailEnabled {
+		trailStyle := defaultStyle.Foreground(RgbStatusText).Background(RgbTrailBg)
+		for i, ch := range trailText {
+			if startX+i < r.width {
+				r.screen.SetContent(startX+i, statusY, ch, nil, trailStyle)
+			}
+		}
+		startX += len(trailText)
+	}
+
+	// Draw score (with yellow background, or blink color if active)
 	if ctx.ScoreBlinkActive && now.Sub(ctx.ScoreBlinkTime).Milliseconds() < 200 {
 		scoreStyle := defaultStyle.Foreground(RgbStatusText).Background(ctx.ScoreBlinkColor)
 		for i, ch := range scoreText {
-			if scoreStartX+i < r.width {
-				r.screen.SetContent(scoreStartX+i, statusY, ch, nil, scoreStyle)
+			if startX+i < r.width {
+				r.screen.SetContent(startX+i, statusY, ch, nil, scoreStyle)
 			}
 		}
 	} else {
 		scoreStyle := defaultStyle.Foreground(RgbStatusText).Background(RgbScoreBg)
 		for i, ch := range scoreText {
-			if scoreStartX+i < r.width {
-				r.screen.SetContent(scoreStartX+i, statusY, ch, nil, scoreStyle)
+			if startX+i < r.width {
+				r.screen.SetContent(startX+i, statusY, ch, nil, scoreStyle)
 			}
 		}
 	}
