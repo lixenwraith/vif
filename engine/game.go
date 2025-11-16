@@ -52,6 +52,7 @@ type GameContext struct {
 	CommandPrefix  rune
 	StatusMessage  string
 	DeleteOperator bool
+	LastCommand    string // Last executed command for display
 
 	// Score tracking
 	Score            int

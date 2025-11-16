@@ -113,7 +113,7 @@ func (r *TerminalRenderer) drawHeatMeter(scoreIncrement int, defaultStyle tcell.
 		heatValue = 9999
 	}
 	heatText := fmt.Sprintf("%4d", heatValue)
-	heatNumStyle := defaultStyle.Foreground(tcell.NewRGBColor(0, 255, 255))
+	heatNumStyle := defaultStyle.Foreground(tcell.NewRGBColor(0, 255, 255)).Background(tcell.NewRGBColor(0, 0, 0))
 	startX := r.width - 4
 	if startX < heatBarWidth+2 {
 		startX = heatBarWidth + 2
@@ -171,13 +171,20 @@ func (r *TerminalRenderer) getPingColor(world *engine.World, cursorX, cursorY in
 // drawPingHighlights draws the cursor row and column highlights
 func (r *TerminalRenderer) drawPingHighlights(ctx *engine.GameContext, pingColor tcell.Color, defaultStyle tcell.Style) {
 	pingStyle := defaultStyle.Background(pingColor)
+	normalBgStyle := defaultStyle.Background(RgbBackground)
 
 	// Highlight the row
 	for x := 0; x < r.gameWidth; x++ {
 		screenX := r.gameX + x
 		screenY := r.gameY + ctx.CursorY
 		if screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
-			r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+			// Use normal background if there's a character at this position
+			entity := ctx.World.GetEntityAtPosition(x, ctx.CursorY)
+			if entity != 0 {
+				r.screen.SetContent(screenX, screenY, ' ', nil, normalBgStyle)
+			} else {
+				r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+			}
 		}
 	}
 
@@ -186,18 +193,24 @@ func (r *TerminalRenderer) drawPingHighlights(ctx *engine.GameContext, pingColor
 		screenX := r.gameX + ctx.CursorX
 		screenY := r.gameY + y
 		if screenX >= r.gameX && screenX < r.width && screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
-			r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+			// Use normal background if there's a character at this position
+			entity := ctx.World.GetEntityAtPosition(ctx.CursorX, y)
+			if entity != 0 {
+				r.screen.SetContent(screenX, screenY, ' ', nil, normalBgStyle)
+			} else {
+				r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+			}
 		}
 	}
 
 	// Draw grid lines if ping is active
 	if ctx.PingActive {
-		r.drawPingGrid(ctx, pingStyle)
+		r.drawPingGrid(ctx, pingStyle, normalBgStyle)
 	}
 }
 
 // drawPingGrid draws coordinate grid lines at 5-column intervals
-func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell.Style) {
+func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell.Style, normalBgStyle tcell.Style) {
 	// Vertical lines
 	for n := 1; ; n++ {
 		offset := 5 * n
@@ -210,7 +223,13 @@ func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell
 				screenX := r.gameX + col
 				screenY := r.gameY + y
 				if screenX >= r.gameX && screenX < r.width && screenY >= 0 && screenY < r.gameHeight {
-					r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+					// Use normal background if there's a character at this position
+					entity := ctx.World.GetEntityAtPosition(col, y)
+					if entity != 0 {
+						r.screen.SetContent(screenX, screenY, ' ', nil, normalBgStyle)
+					} else {
+						r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+					}
 				}
 			}
 		}
@@ -220,7 +239,13 @@ func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell
 				screenX := r.gameX + col
 				screenY := r.gameY + y
 				if screenX >= r.gameX && screenX < r.width && screenY >= 0 && screenY < r.gameHeight {
-					r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+					// Use normal background if there's a character at this position
+					entity := ctx.World.GetEntityAtPosition(col, y)
+					if entity != 0 {
+						r.screen.SetContent(screenX, screenY, ' ', nil, normalBgStyle)
+					} else {
+						r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+					}
 				}
 			}
 		}
@@ -238,7 +263,13 @@ func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell
 				screenX := r.gameX + x
 				screenY := r.gameY + row
 				if screenY >= 0 && screenY < r.gameHeight {
-					r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+					// Use normal background if there's a character at this position
+					entity := ctx.World.GetEntityAtPosition(x, row)
+					if entity != 0 {
+						r.screen.SetContent(screenX, screenY, ' ', nil, normalBgStyle)
+					} else {
+						r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+					}
 				}
 			}
 		}
@@ -248,7 +279,13 @@ func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell
 				screenX := r.gameX + x
 				screenY := r.gameY + row
 				if screenY >= 0 && screenY < r.gameHeight {
-					r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+					// Use normal background if there's a character at this position
+					entity := ctx.World.GetEntityAtPosition(x, row)
+					if entity != 0 {
+						r.screen.SetContent(screenX, screenY, ' ', nil, normalBgStyle)
+					} else {
+						r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+					}
 				}
 			}
 		}
@@ -422,8 +459,22 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 		}
 	}
 
+	// Draw last command indicator (if present)
+	statusStartX := len(modeText)
+	if ctx.LastCommand != "" && !ctx.IsSearchMode() {
+		statusStartX++
+		lastCmdStyle := defaultStyle.Foreground(tcell.ColorYellow)
+		for i, ch := range ctx.LastCommand {
+			if statusStartX+i < r.width {
+				r.screen.SetContent(statusStartX+i, statusY, ch, nil, lastCmdStyle)
+			}
+		}
+		statusStartX += len(ctx.LastCommand) + 1
+	} else {
+		statusStartX++
+	}
+
 	// Draw search text or status message
-	statusStartX := len(modeText) + 1
 	if ctx.IsSearchMode() {
 		searchStyle := defaultStyle.Foreground(tcell.ColorWhite)
 		cursorStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(RgbCursorNormal)

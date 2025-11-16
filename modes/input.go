@@ -1,6 +1,8 @@
 package modes
 
 import (
+	"fmt"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/systems"
@@ -137,32 +139,38 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 			h.ctx.CursorY--
 		}
 		h.ctx.ScoreIncrement = 0
+		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
 	case tcell.KeyDown:
 		if h.ctx.CursorY < h.ctx.GameHeight-1 {
 			h.ctx.CursorY++
 		}
 		h.ctx.ScoreIncrement = 0
+		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
 	case tcell.KeyLeft:
 		if h.ctx.CursorX > 0 {
 			h.ctx.CursorX--
 		}
 		h.ctx.ScoreIncrement = 0
+		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
 	case tcell.KeyRight:
 		if h.ctx.CursorX < h.ctx.GameWidth-1 {
 			h.ctx.CursorX++
 		}
 		h.ctx.ScoreIncrement = 0
+		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
 	case tcell.KeyHome:
 		h.ctx.CursorX = 0
 		h.ctx.ScoreIncrement = 0
+		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
 	case tcell.KeyEnd:
 		h.ctx.CursorX = findLineEnd(h.ctx)
 		h.ctx.ScoreIncrement = 0
+		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
 	}
 
@@ -171,17 +179,23 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 
 		// Handle waiting for 'f' character
 		if h.ctx.WaitingForF {
+			// Build command string: [count]f[char]
+			cmd := h.buildCommandString('f', char, h.ctx.MotionCount, false)
 			ExecuteFindChar(h.ctx, char)
 			h.ctx.WaitingForF = false
+			h.ctx.LastCommand = cmd
 			return true
 		}
 
 		// Handle delete operator
 		if h.ctx.DeleteOperator {
+			// Build command string: [count]d[motion]
+			cmd := h.buildCommandString('d', char, h.ctx.MotionCount, false)
 			ExecuteDeleteMotion(h.ctx, char, h.ctx.MotionCount)
 			h.ctx.MotionCount = 0
 			h.ctx.MotionCommand = ""
 			h.ctx.CommandPrefix = 0
+			h.ctx.LastCommand = cmd
 			return true
 		}
 
@@ -191,9 +205,11 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 			if char == '0' && h.ctx.MotionCount == 0 {
 				ExecuteMotion(h.ctx, char, 1)
 				h.ctx.MotionCommand = ""
+				h.ctx.LastCommand = "0"
 				return true
 			}
 			h.ctx.MotionCount = h.ctx.MotionCount*10 + int(char-'0')
+			// Don't clear LastCommand when building count
 			return true
 		}
 
@@ -208,6 +224,7 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 			h.ctx.Mode = engine.ModeInsert
 			h.ctx.MotionCount = 0
 			h.ctx.MotionCommand = ""
+			h.ctx.LastCommand = "" // Clear on mode change
 			return true
 		}
 
@@ -217,6 +234,7 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 			h.ctx.SearchText = ""
 			h.ctx.MotionCount = 0
 			h.ctx.MotionCommand = ""
+			h.ctx.LastCommand = "" // Clear on mode change
 			return true
 		}
 
@@ -225,6 +243,7 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 			RepeatSearch(h.ctx, true)
 			h.ctx.MotionCount = 0
 			h.ctx.MotionCommand = ""
+			h.ctx.LastCommand = "n"
 			return true
 		}
 
@@ -232,15 +251,18 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 			RepeatSearch(h.ctx, false)
 			h.ctx.MotionCount = 0
 			h.ctx.MotionCommand = ""
+			h.ctx.LastCommand = "N"
 			return true
 		}
 
 		// D - delete to end of line (equivalent to d$)
 		if char == 'D' {
+			cmd := h.buildCommandString('D', 0, count, true)
 			ExecuteDeleteMotion(h.ctx, '$', count)
 			h.ctx.MotionCount = 0
 			h.ctx.MotionCommand = ""
 			h.ctx.CommandPrefix = 0
+			h.ctx.LastCommand = cmd
 			return true
 		}
 
@@ -248,13 +270,16 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 		if char == 'd' {
 			if h.ctx.CommandPrefix == 'd' {
 				// dd - delete line
+				cmd := h.buildCommandString('d', 'd', count, false)
 				ExecuteDeleteMotion(h.ctx, 'd', count)
 				h.ctx.MotionCount = 0
 				h.ctx.MotionCommand = ""
 				h.ctx.CommandPrefix = 0
+				h.ctx.LastCommand = cmd
 			} else {
 				h.ctx.DeleteOperator = true
 				h.ctx.CommandPrefix = 'd'
+				// Don't clear LastCommand yet - waiting for motion
 			}
 			return true
 		}
@@ -264,21 +289,26 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 			// Second character after 'g'
 			if char == 'g' {
 				// gg - goto top (same column)
+				cmd := h.buildCommandString('g', 'g', count, false)
 				h.ctx.CursorY = 0
 				h.ctx.CommandPrefix = 0
 				h.ctx.MotionCount = 0
+				h.ctx.LastCommand = cmd
 				return true
 			} else if char == 'o' {
 				// go - goto top left (first row, first column)
+				cmd := h.buildCommandString('g', 'o', count, false)
 				h.ctx.CursorY = 0
 				h.ctx.CursorX = 0
 				h.ctx.CommandPrefix = 0
 				h.ctx.MotionCount = 0
+				h.ctx.LastCommand = cmd
 				return true
 			} else {
 				// Unknown 'g' command, reset
 				h.ctx.CommandPrefix = 0
 				h.ctx.MotionCount = 0
+				h.ctx.LastCommand = "" // Clear on error
 				return true
 			}
 		}
@@ -286,6 +316,7 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 		// Start 'g' prefix
 		if char == 'g' {
 			h.ctx.CommandPrefix = 'g'
+			// Don't clear LastCommand yet - waiting for second char
 			return true
 		}
 
@@ -294,14 +325,37 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 			h.ctx.PingActive = !h.ctx.PingActive
 			h.ctx.MotionCount = 0
 			h.ctx.MotionCommand = ""
+			h.ctx.LastCommand = "" // Clear on ping toggle
 			return true
 		}
 
 		// Execute motion commands
+		cmd := h.buildCommandString(char, 0, count, true)
 		ExecuteMotion(h.ctx, char, count)
 		h.ctx.MotionCount = 0
 		h.ctx.MotionCommand = ""
 		h.ctx.CommandPrefix = 0
+		h.ctx.LastCommand = cmd
 	}
 	return true
+}
+
+// buildCommandString builds a display string for the last command
+func (h *InputHandler) buildCommandString(action rune, motion rune, count int, singleChar bool) string {
+	var cmd string
+
+	// Add count prefix if present
+	if count > 1 {
+		cmd = fmt.Sprintf("%d", count)
+	}
+
+	// Add action
+	cmd += string(action)
+
+	// Add motion if present
+	if !singleChar && motion != 0 {
+		cmd += string(motion)
+	}
+
+	return cmd
 }
