@@ -19,6 +19,43 @@ const (
 	characterSpawnMs = 2000
 )
 
+// Color palette - custom RGB colors for consistent theming
+const (
+	// Character colors
+	colorCharLowercase = tcell.Color(16) // Will be set via RGB
+	colorCharUppercase = tcell.Color(17)
+	colorCharDigit     = tcell.Color(18)
+	colorCharSpecial   = tcell.Color(19)
+
+	// UI element colors
+	colorLineNumbers   = tcell.Color(20)
+	colorStatusBar     = tcell.Color(21)
+	colorColumnIndicator = tcell.Color(22)
+
+	// Highlight colors
+	colorPingHighlight = tcell.Color(23)
+	colorCursorNormal  = tcell.Color(24)
+	colorCursorError   = tcell.Color(25)
+	colorTrailGray     = tcell.Color(26)
+)
+
+var (
+	// RGB color definitions
+	rgbCharLowercase   = tcell.NewRGBColor(0, 200, 0)      // Green
+	rgbCharUppercase   = tcell.NewRGBColor(100, 150, 255)  // Blue
+	rgbCharDigit       = tcell.NewRGBColor(255, 220, 0)    // Yellow
+	rgbCharSpecial     = tcell.NewRGBColor(200, 100, 255)  // Purple
+
+	rgbLineNumbers     = tcell.NewRGBColor(100, 100, 100)  // Dark gray
+	rgbStatusBar       = tcell.NewRGBColor(255, 255, 255)  // White
+	rgbColumnIndicator = tcell.NewRGBColor(100, 100, 100)  // Dark gray
+
+	rgbPingHighlight   = tcell.NewRGBColor(50, 50, 50)     // Very dark gray for ping
+	rgbCursorNormal    = tcell.NewRGBColor(255, 255, 255)  // White
+	rgbCursorError     = tcell.NewRGBColor(255, 80, 80)    // Red
+	rgbTrailGray       = tcell.NewRGBColor(200, 200, 200)  // Light gray base
+)
+
 type Character struct {
 	rune  rune
 	x, y  int
@@ -55,10 +92,11 @@ type Game struct {
 	lastSpawn  time.Time
 
 	// Vi-motion state
-	motionCount   int
-	motionCommand string
-	waitingForF   bool
-	statusMessage string
+	motionCount    int
+	motionCommand  string
+	waitingForF    bool
+	commandPrefix  rune  // For multi-key commands like 'g'
+	statusMessage  string
 
 	// Ping coordinates feature
 	pingActive    bool
@@ -87,6 +125,7 @@ func NewGame() (*Game, error) {
 		motionCount:     0,
 		motionCommand:   "",
 		waitingForF:     false,
+		commandPrefix:   0,
 		statusMessage:   "",
 	}
 
@@ -137,17 +176,17 @@ func (g *Game) generateCharacter() Character {
 
 	char := chars[rand.Intn(len(chars))]
 
-	// Color based on character type
+	// Color based on character type using custom RGB palette
 	var style tcell.Style
 	switch {
 	case char >= 'a' && char <= 'z':
-		style = tcell.StyleDefault.Foreground(tcell.ColorGreen)
+		style = tcell.StyleDefault.Foreground(rgbCharLowercase)
 	case char >= 'A' && char <= 'Z':
-		style = tcell.StyleDefault.Foreground(tcell.ColorBlue)
+		style = tcell.StyleDefault.Foreground(rgbCharUppercase)
 	case char >= '0' && char <= '9':
-		style = tcell.StyleDefault.Foreground(tcell.ColorYellow)
+		style = tcell.StyleDefault.Foreground(rgbCharDigit)
 	default:
-		style = tcell.StyleDefault.Foreground(tcell.ColorPurple)
+		style = tcell.StyleDefault.Foreground(rgbCharSpecial)
 	}
 
 	return Character{
@@ -233,7 +272,7 @@ func (g *Game) handleResize() {
 func (g *Game) draw() {
 	g.screen.Clear()
 
-	lineNumStyle := tcell.StyleDefault.Foreground(tcell.ColorDarkGray)
+	lineNumStyle := tcell.StyleDefault.Foreground(rgbLineNumbers)
 
 	// Draw relative line numbers (like vim's set number relativenumber)
 	for y := 0; y < g.gameHeight; y++ {
@@ -256,7 +295,7 @@ func (g *Game) draw() {
 
 	// Draw ping highlights (background only)
 	if g.pingActive {
-		pingStyle := tcell.StyleDefault.Background(tcell.ColorDarkGray)
+		pingStyle := tcell.StyleDefault.Background(rgbPingHighlight)
 		// Highlight the row
 		for x := 0; x < g.gameWidth; x++ {
 			screenX := g.gameX + x
@@ -283,7 +322,7 @@ func (g *Game) draw() {
 			style := ch.style
 			// Add gray background if on ping row or column
 			if g.pingActive && (ch.y == g.pingRow || ch.x == g.pingCol) {
-				style = style.Background(tcell.ColorDarkGray)
+				style = style.Background(rgbPingHighlight)
 			}
 			g.screen.SetContent(screenX, screenY, ch.rune, nil, style)
 		}
@@ -305,7 +344,7 @@ func (g *Game) draw() {
 
 	// Draw column indicators at bottom (row gameHeight) - relative to cursor
 	indicatorY := g.gameHeight
-	indicatorStyle := tcell.StyleDefault.Foreground(tcell.ColorDarkGray)
+	indicatorStyle := tcell.StyleDefault.Foreground(rgbColumnIndicator)
 	for x := 0; x < g.gameWidth; x++ {
 		screenX := g.gameX + x
 		relativeCol := x - g.cursorX
@@ -337,7 +376,7 @@ func (g *Game) draw() {
 
 	// Draw status bar (row gameHeight + 1)
 	statusY := g.gameHeight + 1
-	statusStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite)
+	statusStyle := tcell.StyleDefault.Foreground(rgbStatusBar)
 	// Clear the status bar first
 	for x := 0; x < g.width; x++ {
 		g.screen.SetContent(x, statusY, ' ', nil, tcell.StyleDefault)
@@ -366,9 +405,9 @@ func (g *Game) draw() {
 	if g.cursorVisible {
 		var cursorStyle tcell.Style
 		if g.cursorError {
-			cursorStyle = tcell.StyleDefault.Foreground(tcell.ColorRed).Reverse(true)
+			cursorStyle = tcell.StyleDefault.Foreground(rgbCursorError).Reverse(true)
 		} else {
-			cursorStyle = tcell.StyleDefault.Foreground(tcell.ColorWhite).Reverse(true)
+			cursorStyle = tcell.StyleDefault.Foreground(rgbCursorNormal).Reverse(true)
 		}
 		screenX := g.gameX + g.cursorX
 		screenY := g.gameY + g.cursorY
@@ -456,11 +495,41 @@ func (g *Game) executeMotion(command rune, count int) {
 			g.cursorError = true
 			g.cursorErrorTime = time.Now()
 		}
+	case 'G': // bottom row, same column
+		dy := (g.gameHeight - 1) - g.cursorY
+		g.moveCursor(0, dy)
 	}
 
 	// Clear motion state
 	g.motionCount = 0
 	g.motionCommand = ""
+	g.commandPrefix = 0
+	g.statusMessage = ""
+}
+
+// executeCompoundMotion handles multi-key commands like 'gg' or 'go'
+func (g *Game) executeCompoundMotion(prefix rune, command rune) {
+	switch prefix {
+	case 'g':
+		switch command {
+		case 'g': // gg - go to top row, same column
+			dy := -g.cursorY
+			g.moveCursor(0, dy)
+		case 'o': // go - go to top-left corner
+			dx := -g.cursorX
+			dy := -g.cursorY
+			g.moveCursor(dx, dy)
+		default:
+			// Unknown compound command - flash error
+			g.cursorError = true
+			g.cursorErrorTime = time.Now()
+		}
+	}
+
+	// Clear motion state
+	g.motionCount = 0
+	g.motionCommand = ""
+	g.commandPrefix = 0
 	g.statusMessage = ""
 }
 
@@ -472,7 +541,9 @@ func (g *Game) findCharOnLine(target rune) {
 			if ch.y == g.cursorY && ch.x == x && ch.rune == target {
 				g.moveCursor(x-g.cursorX, 0)
 				g.waitingForF = false
+				g.motionCount = 0
 				g.motionCommand = ""
+				g.commandPrefix = 0
 				g.statusMessage = ""
 				return
 			}
@@ -483,7 +554,9 @@ func (g *Game) findCharOnLine(target rune) {
 	g.cursorError = true
 	g.cursorErrorTime = time.Now()
 	g.waitingForF = false
+	g.motionCount = 0
 	g.motionCommand = ""
+	g.commandPrefix = 0
 	g.statusMessage = ""
 }
 
@@ -513,8 +586,25 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 				return true
 			}
 
-			// Handle digits for motion count
-			if char >= '1' && char <= '9' {
+			// If we have a command prefix (like 'g'), handle the next character
+			if g.commandPrefix != 0 {
+				g.motionCommand += string(char)
+				g.statusMessage = g.motionCommand
+				g.executeCompoundMotion(g.commandPrefix, char)
+				return true
+			}
+
+			// Handle digits for motion count (including '0' when already in count mode)
+			if char >= '0' && char <= '9' {
+				// '0' is beginning-of-line command only when NOT in count mode
+				if char == '0' && g.motionCount == 0 {
+					// Execute '0' command (beginning of line)
+					g.motionCommand = "0"
+					g.statusMessage = g.motionCommand
+					g.executeMotion('0', 0)
+					return true
+				}
+				// Otherwise, '0' is part of count (e.g., "10k")
 				g.motionCount = g.motionCount*10 + int(char-'0')
 				g.motionCommand += string(char)
 				g.statusMessage = g.motionCommand
@@ -529,14 +619,23 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 				return true
 			}
 
-			// Handle special commands
-			if char == '0' {
-				g.motionCommand = "0"
+			// Handle 'G' command (bottom of screen)
+			if char == 'G' {
+				g.motionCommand = "G"
 				g.statusMessage = g.motionCommand
-				g.executeMotion('0', 0)
+				g.executeMotion('G', 0)
 				return true
 			}
 
+			// Handle 'g' command prefix
+			if char == 'g' {
+				g.commandPrefix = 'g'
+				g.motionCommand = "g"
+				g.statusMessage = g.motionCommand
+				return true
+			}
+
+			// Handle '$' command
 			if char == '$' {
 				g.motionCommand = "$"
 				g.statusMessage = g.motionCommand
@@ -544,6 +643,7 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 				return true
 			}
 
+			// Handle 'f' command
 			if char == 'f' {
 				g.waitingForF = true
 				g.motionCommand += "f"
@@ -554,6 +654,7 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 			// Unknown command - clear state and flash error
 			g.motionCount = 0
 			g.motionCommand = ""
+			g.commandPrefix = 0
 			g.statusMessage = ""
 			g.cursorError = true
 			g.cursorErrorTime = time.Now()
