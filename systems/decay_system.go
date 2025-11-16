@@ -11,29 +11,27 @@ import (
 
 // DecaySystem handles character decay animation and logic
 type DecaySystem struct {
-	animating         bool
-	currentRow        int
-	startTime         time.Time
-	lastUpdate        time.Time
-	nextDecayTime     time.Time // When the next decay will trigger
-	gameWidth         int
-	gameHeight        int
-	screenWidth       int
-	heatIncrement     int
-	lastHeatIncrement int // Track previous heat to detect changes
+	animating     bool
+	currentRow    int
+	startTime     time.Time
+	lastUpdate    time.Time
+	nextDecayTime time.Time // When the next decay will trigger
+	gameWidth     int
+	gameHeight    int
+	screenWidth   int
+	heatIncrement int
 }
 
 // NewDecaySystem creates a new decay system
 func NewDecaySystem(gameWidth, gameHeight, screenWidth, heatIncrement int) *DecaySystem {
 	s := &DecaySystem{
-		animating:         false,
-		currentRow:        0,
-		lastUpdate:        time.Now(),
-		gameWidth:         gameWidth,
-		gameHeight:        gameHeight,
-		screenWidth:       screenWidth,
-		heatIncrement:     heatIncrement,
-		lastHeatIncrement: heatIncrement,
+		animating:     false,
+		currentRow:    0,
+		lastUpdate:    time.Now(),
+		gameWidth:     gameWidth,
+		gameHeight:    gameHeight,
+		screenWidth:   screenWidth,
+		heatIncrement: heatIncrement,
 	}
 	s.startTicker()
 	return s
@@ -57,28 +55,7 @@ func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 			s.currentRow = 0
 			s.startTime = now
 		}
-
-		// Recalculate interval if heat changed significantly (>10% of heat bar width)
-		heatBarWidth := s.screenWidth - 6
-		if heatBarWidth < 1 {
-			heatBarWidth = 1
-		}
-		threshold := heatBarWidth / 10
-		if threshold < 1 {
-			threshold = 1
-		}
-
-		heatDiff := s.heatIncrement - s.lastHeatIncrement
-		if heatDiff < 0 {
-			heatDiff = -heatDiff
-		}
-
-		if heatDiff >= threshold {
-			s.lastHeatIncrement = s.heatIncrement
-			// Recalculate next decay time
-			interval := s.calculateInterval()
-			s.nextDecayTime = now.Add(interval)
-		}
+		// Timer is only recalculated after decay animation completes
 	}
 }
 
@@ -174,7 +151,10 @@ func (s *DecaySystem) startTicker() {
 	s.lastUpdate = time.Now()
 }
 
-// calculateInterval calculates the decay interval based on screen size and heat
+// calculateInterval calculates the decay interval based on heat
+// Formula: 60 - 50 * (heat_filled / heat_max)
+// Empty heat bar (0): 60 - 50 * 0 = 60 seconds
+// Full heat bar (max): 60 - 50 * 1 = 10 seconds
 func (s *DecaySystem) calculateInterval() time.Duration {
 	heatBarWidth := s.screenWidth - 6
 	if heatBarWidth < 1 {
@@ -189,17 +169,8 @@ func (s *DecaySystem) calculateInterval() time.Duration {
 		heatPercentage = 0.0
 	}
 
-	screenArea := float64(s.gameWidth * s.gameHeight)
-	// Reduced base from 60s to 30s for better gameplay
-	baseInterval := 30.0 + (screenArea / 50.0)
-
-	minInterval := baseInterval * 0.1
-	if minInterval < 5.0 {
-		minInterval = 5.0
-	}
-
-	// High heat = faster decay (shorter interval)
-	intervalSeconds := baseInterval*(1.0-heatPercentage*0.9) + minInterval
+	// Simple formula: 60 - 50 * (heat_filled / heat_max)
+	intervalSeconds := 60.0 - 50.0*heatPercentage
 	return time.Duration(intervalSeconds * float64(time.Second))
 }
 
