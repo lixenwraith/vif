@@ -3,16 +3,12 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"math"
 	"math/rand"
 	"os"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/gopxl/beep"
-	"github.com/gopxl/beep/generators"
-	"github.com/gopxl/beep/speaker"
 )
 
 const (
@@ -39,7 +35,12 @@ type Game struct {
 	screen        tcell.Screen
 	width, height int
 
-	// Cursor state
+	// Game area (excluding line numbers and status bars)
+	gameX, gameY           int
+	gameWidth, gameHeight  int
+	lineNumWidth           int
+
+	// Cursor state (in game area coordinates)
 	cursorX, cursorY int
 	cursorVisible    bool
 	cursorError      bool
@@ -53,8 +54,11 @@ type Game struct {
 	characters []Character
 	lastSpawn  time.Time
 
-	// Audio
-	audioInit bool
+	// Vi-motion state
+	motionCount   int
+	motionCommand string
+	waitingForF   bool
+	statusMessage string
 }
 
 func NewGame() (*Game, error) {
@@ -74,52 +78,52 @@ func NewGame() (*Game, error) {
 		cursorVisible:   true,
 		lastSpawn:       time.Now(),
 		cursorBlinkTime: time.Now(),
+		motionCount:     0,
+		motionCommand:   "",
+		waitingForF:     false,
+		statusMessage:   "",
 	}
 
 	g.width, g.height = screen.Size()
-	g.cursorX = g.width / 2
-	g.cursorY = g.height / 2
-
-	// Initialize audio
-	if err := g.initAudio(); err != nil {
-		// Non-fatal, game can run without sound
-		log.Printf("Audio initialization failed: %v", err)
-	}
+	g.updateGameArea()
+	g.cursorX = g.gameWidth / 2
+	g.cursorY = g.gameHeight / 2
 
 	return g, nil
 }
 
-func (g *Game) initAudio() error {
-	sampleRate := beep.SampleRate(44100)
-	err := speaker.Init(sampleRate, sampleRate.N(time.Second/10))
-	if err == nil {
-		g.audioInit = true
-	}
-	return err
-}
-
-func (g *Game) playHitSound() {
-	if !g.audioInit {
-		return
+func (g *Game) updateGameArea() {
+	// Calculate line number width based on height
+	// We need 2 lines for column indicator and status bar at bottom
+	gameHeight := g.height - 2
+	if gameHeight < 1 {
+		gameHeight = 1
 	}
 
-	sampleRate := beep.SampleRate(44100)
-	duration := sampleRate.N(50 * time.Millisecond)
-	sine, _ := generators.SineTone(sampleRate, 880)
+	lineNumWidth := len(fmt.Sprintf("%d", gameHeight))
+	if lineNumWidth < 1 {
+		lineNumWidth = 1
+	}
 
-	// Create a buffer and play
-	buffer := beep.Take(duration, sine)
-	speaker.Play(buffer)
+	g.lineNumWidth = lineNumWidth
+	g.gameX = lineNumWidth + 1 // line number + 1 space
+	g.gameY = 0
+	g.gameWidth = g.width - g.gameX
+	g.gameHeight = gameHeight
+
+	if g.gameWidth < 1 {
+		g.gameWidth = 1
+	}
 }
 
 func (g *Game) generateCharacter() Character {
 	chars := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]{}|;:,.<>?/")
 
-	// Avoid spawn near cursor
+	// Avoid spawn near cursor (coordinates are in game area)
 	var x, y int
 	for {
-		x = rand.Intn(g.width)
-		y = rand.Intn(g.height)
+		x = rand.Intn(g.gameWidth)
+		y = rand.Intn(g.gameHeight)
 		if math.Abs(float64(x-g.cursorX)) > 5 || math.Abs(float64(y-g.cursorY)) > 3 {
 			break
 		}
@@ -193,19 +197,26 @@ func (g *Game) handleResize() {
 	if newWidth != g.width || newHeight != g.height {
 		g.width = newWidth
 		g.height = newHeight
+		g.updateGameArea()
 
-		// Clamp cursor position
-		if g.cursorX >= g.width {
-			g.cursorX = g.width - 1
+		// Clamp cursor position to game area
+		if g.cursorX >= g.gameWidth {
+			g.cursorX = g.gameWidth - 1
 		}
-		if g.cursorY >= g.height {
-			g.cursorY = g.height - 1
+		if g.cursorY >= g.gameHeight {
+			g.cursorY = g.gameHeight - 1
+		}
+		if g.cursorX < 0 {
+			g.cursorX = 0
+		}
+		if g.cursorY < 0 {
+			g.cursorY = 0
 		}
 
 		// Remove out-of-bounds characters
 		newChars := make([]Character, 0, len(g.characters))
 		for _, ch := range g.characters {
-			if ch.x < g.width && ch.y < g.height {
+			if ch.x < g.gameWidth && ch.y < g.gameHeight && ch.x >= 0 && ch.y >= 0 {
 				newChars = append(newChars, ch)
 			}
 		}
@@ -216,24 +227,76 @@ func (g *Game) handleResize() {
 func (g *Game) draw() {
 	g.screen.Clear()
 
-	// Draw characters
-	for _, ch := range g.characters {
-		g.screen.SetContent(ch.x, ch.y, ch.rune, nil, ch.style)
+	lineNumStyle := tcell.StyleDefault.Foreground(tcell.ColorDarkGray)
+
+	// Draw line numbers
+	for y := 0; y < g.gameHeight; y++ {
+		lineNum := fmt.Sprintf("%*d", g.lineNumWidth, y+1)
+		for i, ch := range lineNum {
+			g.screen.SetContent(i, y, ch, nil, lineNumStyle)
+		}
 	}
 
-	// Draw trails
+	// Draw characters (translate game coords to screen coords)
+	for _, ch := range g.characters {
+		screenX := g.gameX + ch.x
+		screenY := g.gameY + ch.y
+		if screenX >= g.gameX && screenX < g.width && screenY >= 0 && screenY < g.gameHeight {
+			g.screen.SetContent(screenX, screenY, ch.rune, nil, ch.style)
+		}
+	}
+
+	// Draw trails (translate game coords to screen coords)
 	for _, trail := range g.trails {
-		if trail.x >= 0 && trail.x < g.width && trail.y >= 0 && trail.y < g.height {
+		screenX := g.gameX + trail.x
+		screenY := g.gameY + trail.y
+		if screenX >= g.gameX && screenX < g.width && screenY >= 0 && screenY < g.gameHeight {
 			intensity := int(trail.intensity * 255)
 			if intensity > 255 {
 				intensity = 255
 			}
 			color := tcell.NewRGBColor(int32(intensity), int32(intensity), int32(intensity))
-			g.screen.SetContent(trail.x, trail.y, '█', nil, tcell.StyleDefault.Foreground(color))
+			g.screen.SetContent(screenX, screenY, '█', nil, tcell.StyleDefault.Foreground(color))
 		}
 	}
 
-	// Draw cursor
+	// Draw column indicators at bottom (row gameHeight)
+	indicatorY := g.gameHeight
+	indicatorStyle := tcell.StyleDefault.Foreground(tcell.ColorDarkGray)
+	for x := 0; x < g.gameWidth; x++ {
+		screenX := g.gameX + x
+		var ch rune
+		if (x+1)%10 == 0 {
+			// Every 10th column: show the tens digit
+			ch = rune('0' + ((x + 1) / 10 % 10))
+		} else if (x+1)%5 == 0 {
+			// Every 5th column: show |
+			ch = '|'
+		} else {
+			ch = ' '
+		}
+		g.screen.SetContent(screenX, indicatorY, ch, nil, indicatorStyle)
+	}
+	// Clear line number area for indicator row
+	for i := 0; i < g.gameX; i++ {
+		g.screen.SetContent(i, indicatorY, ' ', nil, tcell.StyleDefault)
+	}
+
+	// Draw status bar (row gameHeight + 1)
+	statusY := g.gameHeight + 1
+	statusStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite)
+	// Clear the status bar first
+	for x := 0; x < g.width; x++ {
+		g.screen.SetContent(x, statusY, ' ', nil, tcell.StyleDefault)
+	}
+	// Draw status message
+	for i, ch := range g.statusMessage {
+		if i < g.width {
+			g.screen.SetContent(i, statusY, ch, nil, statusStyle)
+		}
+	}
+
+	// Draw cursor (translate game coords to screen coords)
 	now := time.Now()
 
 	// Handle error blink
@@ -254,10 +317,117 @@ func (g *Game) draw() {
 		} else {
 			cursorStyle = tcell.StyleDefault.Foreground(tcell.ColorWhite).Reverse(true)
 		}
-		g.screen.SetContent(g.cursorX, g.cursorY, ' ', nil, cursorStyle)
+		screenX := g.gameX + g.cursorX
+		screenY := g.gameY + g.cursorY
+		if screenX >= g.gameX && screenX < g.width && screenY >= 0 && screenY < g.gameHeight {
+			g.screen.SetContent(screenX, screenY, ' ', nil, cursorStyle)
+		}
 	}
 
 	g.screen.Show()
+}
+
+func (g *Game) moveCursor(dx, dy int) {
+	oldX, oldY := g.cursorX, g.cursorY
+
+	g.cursorX += dx
+	g.cursorY += dy
+
+	// Clamp to game area
+	if g.cursorX < 0 {
+		g.cursorX = 0
+	}
+	if g.cursorX >= g.gameWidth {
+		g.cursorX = g.gameWidth - 1
+	}
+	if g.cursorY < 0 {
+		g.cursorY = 0
+	}
+	if g.cursorY >= g.gameHeight {
+		g.cursorY = g.gameHeight - 1
+	}
+
+	// Add trail if cursor moved
+	if oldX != g.cursorX || oldY != g.cursorY {
+		g.addTrail(oldX, oldY, g.cursorX, g.cursorY)
+
+		// Check if we hit a character at the new position
+		for i, ch := range g.characters {
+			if ch.x == g.cursorX && ch.y == g.cursorY {
+				// Remove character
+				g.characters = append(g.characters[:i], g.characters[i+1:]...)
+				break
+			}
+		}
+	}
+
+	// Reset cursor blink
+	g.cursorVisible = true
+	g.cursorBlinkTime = time.Now()
+}
+
+func (g *Game) executeMotion(command rune, count int) {
+	if count == 0 {
+		count = 1
+	}
+
+	switch command {
+	case 'h': // left
+		g.moveCursor(-count, 0)
+	case 'j': // down
+		g.moveCursor(0, count)
+	case 'k': // up
+		g.moveCursor(0, -count)
+	case 'l': // right
+		g.moveCursor(count, 0)
+	case '0': // beginning of line
+		g.moveCursor(-g.cursorX, 0)
+	case '$': // end of line (rightmost non-space)
+		// Find rightmost character on current line
+		rightmost := g.gameWidth - 1
+		hasChar := false
+		for _, ch := range g.characters {
+			if ch.y == g.cursorY {
+				hasChar = true
+				if ch.x > rightmost {
+					rightmost = ch.x
+				}
+			}
+		}
+		// If no characters on line, go to end of game width
+		if !hasChar {
+			rightmost = g.gameWidth - 1
+		}
+		g.moveCursor(rightmost-g.cursorX, 0)
+	}
+
+	// Clear motion state
+	g.motionCount = 0
+	g.motionCommand = ""
+	g.statusMessage = ""
+}
+
+func (g *Game) findCharOnLine(target rune) {
+	// Search from current position to right on current line
+	for x := g.cursorX + 1; x < g.gameWidth; x++ {
+		// Check if there's a character at this position
+		for _, ch := range g.characters {
+			if ch.y == g.cursorY && ch.x == x && ch.rune == target {
+				g.moveCursor(x-g.cursorX, 0)
+				g.waitingForF = false
+				g.motionCommand = ""
+				g.statusMessage = ""
+				return
+			}
+		}
+	}
+
+	// Character not found - flash error
+	g.cursorError = true
+	g.cursorErrorTime = time.Now()
+	g.waitingForF = false
+	g.motionCommand = ""
+	g.statusMessage = ""
 }
 
 func (g *Game) handleInput(ev tcell.Event) bool {
@@ -271,29 +441,54 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 		if ev.Key() == tcell.KeyRune {
 			char := ev.Rune()
 
-			// Check if character matches any on screen
-			for i, ch := range g.characters {
-				if ch.rune == char {
-					// Move cursor with trail
-					g.addTrail(g.cursorX, g.cursorY, ch.x, ch.y)
-					g.cursorX = ch.x
-					g.cursorY = ch.y
-
-					// Remove character
-					g.characters = append(g.characters[:i], g.characters[i+1:]...)
-
-					// Play sound
-					g.playHitSound()
-
-					// Reset cursor blink
-					g.cursorVisible = true
-					g.cursorBlinkTime = time.Now()
-
-					return true
-				}
+			// If waiting for f{char}, handle it
+			if g.waitingForF {
+				g.findCharOnLine(char)
+				return true
 			}
 
-			// Wrong key - flash red
+			// Handle digits for motion count
+			if char >= '1' && char <= '9' {
+				g.motionCount = g.motionCount*10 + int(char-'0')
+				g.motionCommand += string(char)
+				g.statusMessage = g.motionCommand
+				return true
+			}
+
+			// Handle movement commands
+			if char == 'h' || char == 'j' || char == 'k' || char == 'l' {
+				g.motionCommand += string(char)
+				g.statusMessage = g.motionCommand
+				g.executeMotion(char, g.motionCount)
+				return true
+			}
+
+			// Handle special commands
+			if char == '0' {
+				g.motionCommand = "0"
+				g.statusMessage = g.motionCommand
+				g.executeMotion('0', 0)
+				return true
+			}
+
+			if char == '$' {
+				g.motionCommand = "$"
+				g.statusMessage = g.motionCommand
+				g.executeMotion('$', 0)
+				return true
+			}
+
+			if char == 'f' {
+				g.waitingForF = true
+				g.motionCommand += "f"
+				g.statusMessage = g.motionCommand
+				return true
+			}
+
+			// Unknown command - clear state and flash error
+			g.motionCount = 0
+			g.motionCommand = ""
+			g.statusMessage = ""
 			g.cursorError = true
 			g.cursorErrorTime = time.Now()
 		}
@@ -339,9 +534,6 @@ func (g *Game) run() {
 }
 
 func (g *Game) cleanup() {
-	if g.audioInit {
-		speaker.Close()
-	}
 	g.screen.Fini()
 }
 
