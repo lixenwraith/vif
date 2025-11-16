@@ -199,8 +199,8 @@ func NewGame() (*Game, error) {
 
 func (g *Game) updateGameArea() {
 	// Calculate line number width based on height
-	// We need 2 lines for column indicator and status bar at bottom
-	gameHeight := g.height - 2
+	// We need 1 line for heat meter at top, 2 lines for column indicator and status bar at bottom
+	gameHeight := g.height - 3
 	if gameHeight < 1 {
 		gameHeight = 1
 	}
@@ -212,7 +212,7 @@ func (g *Game) updateGameArea() {
 
 	g.lineNumWidth = lineNumWidth
 	g.gameX = lineNumWidth + 1 // line number + 1 space
-	g.gameY = 0
+	g.gameY = 1                // Start at row 1 (row 0 is for heat meter)
 	g.gameWidth = g.width - g.gameX
 	g.gameHeight = gameHeight
 
@@ -411,12 +411,113 @@ func (g *Game) handleResize() {
 	}
 }
 
+// getHeatMeterColor returns the color for a given position in the heat meter gradient
+// progress is 0.0 to 1.0, representing position from start to end
+func getHeatMeterColor(progress float64) tcell.Color {
+	if progress <= 0.0 {
+		return tcell.NewRGBColor(0, 0, 0) // Black for unfilled
+	}
+	if progress > 1.0 {
+		progress = 1.0
+	}
+
+	// Rainbow gradient: deep red → orange → yellow → green → cyan → blue → purple/pink
+	// Split into segments
+	if progress < 0.167 { // Red to Orange
+		t := progress / 0.167
+		r := int32(139 + (255-139)*t)
+		g := int32(0 + (69-0)*t)
+		b := int32(0)
+		return tcell.NewRGBColor(r, g, b)
+	} else if progress < 0.333 { // Orange to Yellow
+		t := (progress - 0.167) / 0.166
+		r := int32(255)
+		g := int32(69 + (215-69)*t)
+		b := int32(0)
+		return tcell.NewRGBColor(r, g, b)
+	} else if progress < 0.500 { // Yellow to Green
+		t := (progress - 0.333) / 0.167
+		r := int32(255 - (255-34)*t)
+		g := int32(215 - (215-139)*t)
+		b := int32(0 + (34-0)*t)
+		return tcell.NewRGBColor(r, g, b)
+	} else if progress < 0.667 { // Green to Cyan
+		t := (progress - 0.500) / 0.167
+		r := int32(34 - (34-0)*t)
+		g := int32(139 + (206-139)*t)
+		b := int32(34 + (209-34)*t)
+		return tcell.NewRGBColor(r, g, b)
+	} else if progress < 0.833 { // Cyan to Blue
+		t := (progress - 0.667) / 0.166
+		r := int32(0 + (65-0)*t)
+		g := int32(206 - (206-105)*t)
+		b := int32(209 + (225-209)*t)
+		return tcell.NewRGBColor(r, g, b)
+	} else { // Blue to Purple/Pink
+		t := (progress - 0.833) / 0.167
+		r := int32(65 + (219-65)*t)
+		g := int32(105 - (105-112)*t)
+		b := int32(225 - (225-147)*t)
+		return tcell.NewRGBColor(r, g, b)
+	}
+}
+
 func (g *Game) draw() {
 	g.screen.Clear()
 
 	// Set default background to Tokyo Night color
 	defaultStyle := tcell.StyleDefault.Background(rgbBackground)
 	lineNumStyle := defaultStyle.Foreground(rgbLineNumbers)
+
+	// Draw heat meter at the top (row 0)
+	// Reserve 2 spaces + 4 digits for the numeric indicator on the right
+	indicatorWidth := 6 // 2 spaces + 4 digits
+	heatBarWidth := g.width - indicatorWidth
+	if heatBarWidth < 1 {
+		heatBarWidth = 1
+	}
+
+	// Calculate how many characters to color based on scoreIncrement
+	filledChars := g.scoreIncrement
+	if filledChars > heatBarWidth {
+		filledChars = heatBarWidth
+	}
+
+	// Draw the heat meter bar
+	for x := 0; x < heatBarWidth; x++ {
+		var style tcell.Style
+		if x < filledChars {
+			// Calculate progress for this character (0.0 to 1.0)
+			progress := float64(x+1) / float64(heatBarWidth)
+			color := getHeatMeterColor(progress)
+			style = defaultStyle.Foreground(color)
+		} else {
+			// Unfilled: black character
+			style = defaultStyle.Foreground(tcell.NewRGBColor(0, 0, 0))
+		}
+		g.screen.SetContent(x, 0, '█', nil, style)
+	}
+
+	// Draw numeric indicator on the right (white/cyan text, 4 digits max 9999)
+	heatValue := g.scoreIncrement
+	if heatValue > 9999 {
+		heatValue = 9999
+	}
+	heatText := fmt.Sprintf("%4d", heatValue)
+	heatNumStyle := defaultStyle.Foreground(tcell.NewRGBColor(0, 255, 255)) // Cyan
+	startX := g.width - 4
+	if startX < heatBarWidth+2 {
+		startX = heatBarWidth + 2
+	}
+	for i, ch := range heatText {
+		if startX+i < g.width {
+			g.screen.SetContent(startX+i, 0, ch, nil, heatNumStyle)
+		}
+	}
+	// Draw 2 spaces between bar and number
+	for i := 0; i < 2 && heatBarWidth+i < startX; i++ {
+		g.screen.SetContent(heatBarWidth+i, 0, ' ', nil, defaultStyle)
+	}
 
 	// Draw relative line numbers (like vim's set number relativenumber)
 	for y := 0; y < g.gameHeight; y++ {
@@ -1658,6 +1759,12 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 
 			// Normal mode commands below
 
+			// If waiting for f{char}, handle it FIRST before any other commands
+			if g.waitingForF {
+				g.findCharOnLine(char)
+				return true
+			}
+
 			// Handle '/' to enter search mode
 			if char == '/' {
 				g.searchMode = true
@@ -1732,12 +1839,6 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 			// Handle 'D' to delete to end of line (same as d$)
 			if char == 'D' {
 				g.deleteToEndOfLine()
-				return true
-			}
-
-			// If waiting for f{char}, handle it
-			if g.waitingForF {
-				g.findCharOnLine(char)
 				return true
 			}
 
