@@ -58,16 +58,16 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 	// Draw characters
 	r.drawCharacters(ctx.World, pingColor, defaultStyle, ctx)
 
-	// Draw trails
-	r.drawTrails(ctx.World, defaultStyle, ctx, pingColor)
-
 	// Draw decay animation if active
 	if decayAnimating {
 		r.drawDecayAnimation(ctx.World, decayRow, defaultStyle)
 	}
 
-	// Draw ping highlights (cursor row/column) and grid - AFTER characters/trails/decay
+	// Draw ping highlights (cursor row/column) and grid - AFTER characters/decay
 	r.drawPingHighlights(ctx, pingColor, defaultStyle)
+
+	// Draw trails - AFTER ping highlights so they're visible on top
+	r.drawTrails(ctx.World, defaultStyle, ctx, pingColor)
 
 	// Draw column indicators
 	r.drawColumnIndicators(ctx, defaultStyle)
@@ -598,10 +598,11 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 		}
 	}
 
-	// Calculate positions and draw timers + score (from right to left: Trail, Decay, Score)
+	// Calculate positions and draw timers + score (from right to left: Trail, Grid, Decay, Score)
 	scoreText := fmt.Sprintf(" Score: %d ", ctx.Score)
 	decayText := fmt.Sprintf(" Decay: %.1fs ", decayTimeRemaining)
 	var trailText string
+	var gridText string
 	var totalWidth int
 
 	if ctx.TrailEnabled {
@@ -610,10 +611,17 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 			remaining = 0
 		}
 		trailText = fmt.Sprintf(" Trail: %.1fs ", remaining)
-		totalWidth = len(trailText) + len(decayText) + len(scoreText)
-	} else {
-		totalWidth = len(decayText) + len(scoreText)
 	}
+
+	if ctx.PingActive {
+		gridRemaining := ctx.PingGridTimer
+		if gridRemaining < 0 {
+			gridRemaining = 0
+		}
+		gridText = fmt.Sprintf(" Grid: %.1fs ", gridRemaining)
+	}
+
+	totalWidth = len(trailText) + len(gridText) + len(decayText) + len(scoreText)
 
 	startX := r.width - totalWidth
 	if startX < 0 {
@@ -631,6 +639,17 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 			}
 		}
 		startX += len(trailText)
+	}
+
+	// Draw grid timer if active (with default background and white text)
+	if ctx.PingActive {
+		gridStyle := defaultStyle.Foreground(tcell.ColorWhite)
+		for i, ch := range gridText {
+			if startX+i < r.width {
+				r.screen.SetContent(startX+i, statusY, ch, nil, gridStyle)
+			}
+		}
+		startX += len(gridText)
 	}
 
 	// Draw decay timer (always visible, with red background and black text)
