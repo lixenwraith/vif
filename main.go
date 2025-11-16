@@ -53,9 +53,10 @@ var (
 	rgbSequenceBlueNormal    = tcell.NewRGBColor(100, 150, 255)  // Normal Blue
 	rgbSequenceBlueBright    = tcell.NewRGBColor(140, 190, 255)  // Bright Blue
 
-	rgbLineNumbers           = tcell.NewRGBColor(100, 100, 100)  // Dark gray
+	rgbLineNumbers           = tcell.NewRGBColor(180, 180, 180)  // Brighter gray
 	rgbStatusBar             = tcell.NewRGBColor(255, 255, 255)  // White
-	rgbColumnIndicator       = tcell.NewRGBColor(100, 100, 100)  // Dark gray
+	rgbColumnIndicator       = tcell.NewRGBColor(180, 180, 180)  // Brighter gray
+	rgbBackground            = tcell.NewRGBColor(26, 27, 38)     // Tokyo Night background
 
 	rgbPingHighlight         = tcell.NewRGBColor(50, 50, 50)     // Very dark gray for ping
 	rgbPingOrange            = tcell.NewRGBColor(60, 40, 0)      // Very dark orange for ping on whitespace
@@ -238,33 +239,34 @@ func (g *Game) generateCharacterSequence() []Character {
 
 	// Pick color based on sequence type and level
 	var style tcell.Style
+	baseStyle := tcell.StyleDefault.Background(rgbBackground)
 	switch seqType {
 	case SequenceGreen:
 		switch seqLevel {
 		case LevelDark:
-			style = tcell.StyleDefault.Foreground(rgbSequenceGreenDark)
+			style = baseStyle.Foreground(rgbSequenceGreenDark)
 		case LevelNormal:
-			style = tcell.StyleDefault.Foreground(rgbSequenceGreenNormal)
+			style = baseStyle.Foreground(rgbSequenceGreenNormal)
 		case LevelBright:
-			style = tcell.StyleDefault.Foreground(rgbSequenceGreenBright)
+			style = baseStyle.Foreground(rgbSequenceGreenBright)
 		}
 	case SequenceRed:
 		switch seqLevel {
 		case LevelDark:
-			style = tcell.StyleDefault.Foreground(rgbSequenceRedDark)
+			style = baseStyle.Foreground(rgbSequenceRedDark)
 		case LevelNormal:
-			style = tcell.StyleDefault.Foreground(rgbSequenceRedNormal)
+			style = baseStyle.Foreground(rgbSequenceRedNormal)
 		case LevelBright:
-			style = tcell.StyleDefault.Foreground(rgbSequenceRedBright)
+			style = baseStyle.Foreground(rgbSequenceRedBright)
 		}
 	case SequenceBlue:
 		switch seqLevel {
 		case LevelDark:
-			style = tcell.StyleDefault.Foreground(rgbSequenceBlueDark)
+			style = baseStyle.Foreground(rgbSequenceBlueDark)
 		case LevelNormal:
-			style = tcell.StyleDefault.Foreground(rgbSequenceBlueNormal)
+			style = baseStyle.Foreground(rgbSequenceBlueNormal)
 		case LevelBright:
-			style = tcell.StyleDefault.Foreground(rgbSequenceBlueBright)
+			style = baseStyle.Foreground(rgbSequenceBlueBright)
 		}
 	}
 
@@ -410,7 +412,9 @@ func (g *Game) handleResize() {
 func (g *Game) draw() {
 	g.screen.Clear()
 
-	lineNumStyle := tcell.StyleDefault.Foreground(rgbLineNumbers)
+	// Set default background to Tokyo Night color
+	defaultStyle := tcell.StyleDefault.Background(rgbBackground)
+	lineNumStyle := defaultStyle.Foreground(rgbLineNumbers)
 
 	// Draw relative line numbers (like vim's set number relativenumber)
 	for y := 0; y < g.gameHeight; y++ {
@@ -442,7 +446,7 @@ func (g *Game) draw() {
 			break
 		}
 	}
-	pingStyle := tcell.StyleDefault.Background(pingColor)
+	pingStyle := defaultStyle.Background(pingColor)
 	// Highlight the row
 	for x := 0; x < g.gameWidth; x++ {
 		screenX := g.gameX + x
@@ -460,15 +464,77 @@ func (g *Game) draw() {
 		}
 	}
 
+	// Coordinate ping: draw grid lines at (+/-)5*n intervals if active
+	if g.pingActive {
+		// Draw vertical lines at (+/-)5*n columns from cursor
+		for n := 1; ; n++ {
+			offset := 5 * n
+			// Positive direction
+			col := g.cursorX + offset
+			if col >= g.gameWidth && g.cursorX-offset < 0 {
+				break
+			}
+			if col < g.gameWidth {
+				for y := 0; y < g.gameHeight; y++ {
+					screenX := g.gameX + col
+					screenY := g.gameY + y
+					if screenX >= g.gameX && screenX < g.width && screenY >= 0 && screenY < g.gameHeight {
+						g.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+					}
+				}
+			}
+			// Negative direction
+			col = g.cursorX - offset
+			if col >= 0 {
+				for y := 0; y < g.gameHeight; y++ {
+					screenX := g.gameX + col
+					screenY := g.gameY + y
+					if screenX >= g.gameX && screenX < g.width && screenY >= 0 && screenY < g.gameHeight {
+						g.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+					}
+				}
+			}
+		}
+		// Draw horizontal lines at (+/-)5*n rows from cursor
+		for n := 1; ; n++ {
+			offset := 5 * n
+			// Positive direction
+			row := g.cursorY + offset
+			if row >= g.gameHeight && g.cursorY-offset < 0 {
+				break
+			}
+			if row < g.gameHeight {
+				for x := 0; x < g.gameWidth; x++ {
+					screenX := g.gameX + x
+					screenY := g.gameY + row
+					if screenY >= 0 && screenY < g.gameHeight {
+						g.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+					}
+				}
+			}
+			// Negative direction
+			row = g.cursorY - offset
+			if row >= 0 {
+				for x := 0; x < g.gameWidth; x++ {
+					screenX := g.gameX + x
+					screenY := g.gameY + row
+					if screenY >= 0 && screenY < g.gameHeight {
+						g.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+					}
+				}
+			}
+		}
+	}
+
 	// Draw characters (translate game coords to screen coords)
 	for _, ch := range g.characters {
 		screenX := g.gameX + ch.x
 		screenY := g.gameY + ch.y
 		if screenX >= g.gameX && screenX < g.width && screenY >= 0 && screenY < g.gameHeight {
 			style := ch.style
-			// Add gray background if on cursor's row or column
+			// Add ping background if on cursor's row or column
 			if ch.y == g.cursorY || ch.x == g.cursorX {
-				style = style.Background(rgbPingHighlight)
+				style = style.Background(pingColor)
 			}
 			g.screen.SetContent(screenX, screenY, ch.rune, nil, style)
 		}
@@ -484,13 +550,13 @@ func (g *Game) draw() {
 				intensity = 255
 			}
 			color := tcell.NewRGBColor(int32(intensity), int32(intensity), int32(intensity))
-			g.screen.SetContent(screenX, screenY, '█', nil, tcell.StyleDefault.Foreground(color))
+			g.screen.SetContent(screenX, screenY, '█', nil, defaultStyle.Foreground(color))
 		}
 	}
 
 	// Draw column indicators at bottom (row gameHeight) - relative to cursor
 	indicatorY := g.gameHeight
-	indicatorStyle := tcell.StyleDefault.Foreground(rgbColumnIndicator)
+	indicatorStyle := defaultStyle.Foreground(rgbColumnIndicator)
 	for x := 0; x < g.gameWidth; x++ {
 		screenX := g.gameX + x
 		relativeCol := x - g.cursorX
@@ -517,26 +583,22 @@ func (g *Game) draw() {
 	}
 	// Clear line number area for indicator row
 	for i := 0; i < g.gameX; i++ {
-		g.screen.SetContent(i, indicatorY, ' ', nil, tcell.StyleDefault)
+		g.screen.SetContent(i, indicatorY, ' ', nil, defaultStyle)
 	}
 
 	// Draw status bar (row gameHeight + 1)
 	statusY := g.gameHeight + 1
 	// Clear the status bar first
 	for x := 0; x < g.width; x++ {
-		g.screen.SetContent(x, statusY, ' ', nil, tcell.StyleDefault)
+		g.screen.SetContent(x, statusY, ' ', nil, defaultStyle)
 	}
 
 	// Draw mode indicator on the left with colored background
 	var modeText string
 	var modeBgColor tcell.Color
 	if g.searchMode {
-		// In search mode, show orange background
-		if g.insertMode {
-			modeText = " INSERT "
-		} else {
-			modeText = " NORMAL "
-		}
+		// In search mode, show SEARCH with orange background
+		modeText = " SEARCH "
 		modeBgColor = rgbCursorNormal // Orange background
 	} else if g.insertMode {
 		modeText = " INSERT "
@@ -545,7 +607,7 @@ func (g *Game) draw() {
 		modeText = " NORMAL "
 		modeBgColor = rgbModeNormalBg
 	}
-	modeStyle := tcell.StyleDefault.Foreground(rgbStatusText).Background(modeBgColor)
+	modeStyle := defaultStyle.Foreground(rgbStatusText).Background(modeBgColor)
 	for i, ch := range modeText {
 		if i < g.width {
 			g.screen.SetContent(i, statusY, ch, nil, modeStyle)
@@ -556,8 +618,8 @@ func (g *Game) draw() {
 	statusStartX := len(modeText) + 1
 	if g.searchMode {
 		// Draw search text with orange block cursor
-		searchStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite)
-		cursorStyle := tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(rgbCursorNormal)
+		searchStyle := defaultStyle.Foreground(tcell.ColorWhite)
+		cursorStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(rgbCursorNormal)
 
 		// Draw the search text
 		for i, ch := range g.searchText {
@@ -573,7 +635,7 @@ func (g *Game) draw() {
 		}
 	} else {
 		// Draw status message (count/motion) after mode indicator
-		statusStyle := tcell.StyleDefault.Foreground(rgbStatusBar)
+		statusStyle := defaultStyle.Foreground(rgbStatusBar)
 		for i, ch := range g.statusMessage {
 			if statusStartX+i < g.width {
 				g.screen.SetContent(statusStartX+i, statusY, ch, nil, statusStyle)
@@ -594,7 +656,7 @@ func (g *Game) draw() {
 	// Check if score blink is active
 	if g.scoreBlinkActive && now.Sub(g.scoreBlinkTime).Milliseconds() < 200 {
 		// Blink with character color
-		scoreStyle := tcell.StyleDefault.Foreground(rgbStatusText).Background(g.scoreBlinkColor)
+		scoreStyle := defaultStyle.Foreground(rgbStatusText).Background(g.scoreBlinkColor)
 		for i, ch := range scoreText {
 			if scoreStartX+i < g.width {
 				g.screen.SetContent(scoreStartX+i, statusY, ch, nil, scoreStyle)
@@ -603,7 +665,7 @@ func (g *Game) draw() {
 	} else {
 		// Normal score display with golden yellow background
 		g.scoreBlinkActive = false
-		scoreStyle := tcell.StyleDefault.Foreground(rgbStatusText).Background(rgbScoreBg)
+		scoreStyle := defaultStyle.Foreground(rgbStatusText).Background(rgbScoreBg)
 		for i, ch := range scoreText {
 			if scoreStartX+i < g.width {
 				g.screen.SetContent(scoreStartX+i, statusY, ch, nil, scoreStyle)
@@ -645,9 +707,9 @@ func (g *Game) draw() {
 				cursorBgColor = rgbCursorError
 				charFgColor = tcell.ColorBlack
 			} else if hasChar {
-				// Cursor on a character: cursor bg = character color, char fg = black
-				cursorBgColor = charColor
-				charFgColor = tcell.ColorBlack
+				// Cursor on a character: cursor bg = black, char fg = character color
+				cursorBgColor = tcell.NewRGBColor(10, 10, 10) // Very dark (almost black)
+				charFgColor = charColor
 			} else {
 				// Cursor on empty space: orange (normal) or white (insert)
 				if g.insertMode {
@@ -659,7 +721,7 @@ func (g *Game) draw() {
 			}
 
 			// Draw cursor with character (or space)
-			cursorStyle := tcell.StyleDefault.Foreground(charFgColor).Background(cursorBgColor)
+			cursorStyle := defaultStyle.Foreground(charFgColor).Background(cursorBgColor)
 			g.screen.SetContent(screenX, screenY, charAtCursor, nil, cursorStyle)
 		}
 	}
@@ -1137,22 +1199,29 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 			return false
 		}
 
-		// Handle Enter key in search mode
-		if ev.Key() == tcell.KeyEnter && g.searchMode {
-			if g.searchText == "" {
-				// Empty search text - exit search mode
-				g.searchMode = false
-				return true
-			} else {
-				// Execute search
-				if !g.performSearch(g.searchText) {
-					// Search failed - flash error
-					g.cursorError = true
-					g.cursorErrorTime = time.Now()
+		// Handle Enter key
+		if ev.Key() == tcell.KeyEnter {
+			if g.searchMode {
+				// In search mode: execute search
+				if g.searchText == "" {
+					// Empty search text - exit search mode
+					g.searchMode = false
+					return true
+				} else {
+					// Execute search
+					if !g.performSearch(g.searchText) {
+						// Search failed - flash error
+						g.cursorError = true
+						g.cursorErrorTime = time.Now()
+					}
+					// Exit search mode
+					g.searchMode = false
+					g.searchText = ""
+					return true
 				}
-				// Exit search mode
-				g.searchMode = false
-				g.searchText = ""
+			} else if !g.insertMode {
+				// In normal mode: toggle coordinate ping
+				g.pingActive = !g.pingActive
 				return true
 			}
 		}
@@ -1164,6 +1233,48 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 				g.searchText = g.searchText[:len(g.searchText)-1]
 				return true
 			}
+		}
+
+		// Handle arrow keys in insert mode
+		if g.insertMode {
+			switch ev.Key() {
+			case tcell.KeyUp:
+				g.moveCursor(0, -1)
+				return true
+			case tcell.KeyDown:
+				g.moveCursor(0, 1)
+				return true
+			case tcell.KeyLeft:
+				g.moveCursor(-1, 0)
+				return true
+			case tcell.KeyRight:
+				g.moveCursor(1, 0)
+				return true
+			}
+		}
+
+		// Handle Home key in both modes (behaves like '0' - go to beginning of line)
+		if ev.Key() == tcell.KeyHome {
+			g.moveCursor(-g.cursorX, 0)
+			return true
+		}
+
+		// Handle End key in both modes (behaves like '$' - go to rightmost character)
+		if ev.Key() == tcell.KeyEnd {
+			// Find rightmost character on current line
+			rightmost := -1
+			for _, ch := range g.characters {
+				if ch.y == g.cursorY {
+					if rightmost == -1 || ch.x > rightmost {
+						rightmost = ch.x
+					}
+				}
+			}
+			// Only move if we found a character on the line
+			if rightmost >= 0 && rightmost != g.cursorX {
+				g.moveCursor(rightmost-g.cursorX, 0)
+			}
+			return true
 		}
 
 		if ev.Key() == tcell.KeyRune {
