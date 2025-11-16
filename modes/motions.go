@@ -158,7 +158,7 @@ func findWordEnd(ctx *engine.GameContext) int {
 		}
 	}
 
-	return ctx.GameWidth - 1 // No word end found, go to end
+	return ctx.CursorX // No word end found, stay at current position
 }
 
 // findPrevWordStart finds the start of the previous word
@@ -187,24 +187,14 @@ func findPrevWordStart(ctx *engine.GameContext) int {
 		x--
 	}
 
-	// Now skip the word we're in/on
-	for x >= 0 && charPositions[x] {
-		x--
-	}
-
-	// Skip any more whitespace
-	for x >= 0 && !charPositions[x] {
-		x--
-	}
-
-	// Now we should be at the end of the previous word, or at -1
+	// If we're still >= 0, we're at a character (end of previous word)
 	// Find the start of this word
 	if x < 0 {
 		// No previous word found, stay at current position
 		return ctx.CursorX
 	}
 
-	// We're at the end of a word, find its start
+	// We're at a character, find the start of this word
 	for x >= 0 && charPositions[x] {
 		x--
 	}
