@@ -40,19 +40,34 @@ const (
 )
 
 var (
-	// RGB color definitions for sequences
-	rgbSequenceGreen   = tcell.NewRGBColor(0, 200, 0)      // Green
-	rgbSequenceRed     = tcell.NewRGBColor(255, 80, 80)    // Red
-	rgbSequenceBlue    = tcell.NewRGBColor(100, 150, 255)  // Blue
+	// RGB color definitions for sequences - dark/normal/bright levels
+	rgbSequenceGreenDark     = tcell.NewRGBColor(0, 130, 0)      // Dark Green
+	rgbSequenceGreenNormal   = tcell.NewRGBColor(0, 200, 0)      // Normal Green
+	rgbSequenceGreenBright   = tcell.NewRGBColor(50, 255, 50)    // Bright Green
 
-	rgbLineNumbers     = tcell.NewRGBColor(100, 100, 100)  // Dark gray
-	rgbStatusBar       = tcell.NewRGBColor(255, 255, 255)  // White
-	rgbColumnIndicator = tcell.NewRGBColor(100, 100, 100)  // Dark gray
+	rgbSequenceRedDark       = tcell.NewRGBColor(180, 50, 50)    // Dark Red
+	rgbSequenceRedNormal     = tcell.NewRGBColor(255, 80, 80)    // Normal Red
+	rgbSequenceRedBright     = tcell.NewRGBColor(255, 120, 120)  // Bright Red
 
-	rgbPingHighlight   = tcell.NewRGBColor(50, 50, 50)     // Very dark gray for ping
-	rgbCursorNormal    = tcell.NewRGBColor(255, 255, 255)  // White
-	rgbCursorError     = tcell.NewRGBColor(255, 80, 80)    // Red
-	rgbTrailGray       = tcell.NewRGBColor(200, 200, 200)  // Light gray base
+	rgbSequenceBlueDark      = tcell.NewRGBColor(60, 100, 200)   // Dark Blue
+	rgbSequenceBlueNormal    = tcell.NewRGBColor(100, 150, 255)  // Normal Blue
+	rgbSequenceBlueBright    = tcell.NewRGBColor(140, 190, 255)  // Bright Blue
+
+	rgbLineNumbers           = tcell.NewRGBColor(100, 100, 100)  // Dark gray
+	rgbStatusBar             = tcell.NewRGBColor(255, 255, 255)  // White
+	rgbColumnIndicator       = tcell.NewRGBColor(100, 100, 100)  // Dark gray
+
+	rgbPingHighlight         = tcell.NewRGBColor(50, 50, 50)     // Very dark gray for ping
+	rgbCursorNormal          = tcell.NewRGBColor(255, 165, 0)    // Orange for normal mode
+	rgbCursorInsert          = tcell.NewRGBColor(255, 255, 255)  // Bright white for insert mode
+	rgbCursorError           = tcell.NewRGBColor(255, 80, 80)    // Red
+	rgbTrailGray             = tcell.NewRGBColor(200, 200, 200)  // Light gray base
+
+	// Status bar backgrounds
+	rgbModeNormalBg          = tcell.NewRGBColor(135, 206, 250)  // Light sky blue
+	rgbModeInsertBg          = tcell.NewRGBColor(144, 238, 144)  // Light grass green
+	rgbScoreBg               = tcell.NewRGBColor(255, 223, 100)  // Light golden yellow
+	rgbStatusText            = tcell.NewRGBColor(0, 0, 0)        // Dark text for status
 )
 
 type SequenceType int
@@ -63,13 +78,22 @@ const (
 	SequenceBlue                       // Positive scoring + trail effect
 )
 
+type SequenceLevel int
+
+const (
+	LevelDark   SequenceLevel = iota // x1 multiplier
+	LevelNormal                      // x2 multiplier
+	LevelBright                      // x3 multiplier
+)
+
 type Character struct {
 	rune         rune
 	x, y         int
 	style        tcell.Style
-	sequenceID   int          // All chars in same sequence have same ID
-	seqIndex     int          // Position in the sequence (0-based)
-	sequenceType SequenceType // Type of sequence (Green, Red, Blue)
+	sequenceID   int           // All chars in same sequence have same ID
+	seqIndex     int           // Position in the sequence (0-based)
+	sequenceType SequenceType  // Type of sequence (Green, Red, Blue)
+	level        SequenceLevel // Sequence level (Dark, Normal, Bright)
 }
 
 type Trail struct {
@@ -94,6 +118,9 @@ type Game struct {
 	cursorErrorTime  time.Time
 	cursorBlinkTime  time.Time
 
+	// Mode state (normal/insert)
+	insertMode       bool
+
 	// Trail effect
 	trails        []Trail
 	trailEnabled  bool
@@ -110,6 +137,9 @@ type Game struct {
 	lastCharX        int // Last character position hit (-1 if none or space)
 	lastCharY        int
 	hitSequencePos   int // Current position in hit sequence (1-based)
+	scoreBlinkActive bool
+	scoreBlinkColor  tcell.Color
+	scoreBlinkTime   time.Time
 
 	// Vi-motion state
 	motionCount    int
@@ -201,15 +231,39 @@ func (g *Game) generateCharacterSequence() []Character {
 	// Randomly assign sequence type (Green, Red, or Blue)
 	seqType := SequenceType(rand.Intn(3))
 
-	// Pick color based on sequence type
+	// Randomly assign sequence level (Dark, Normal, or Bright)
+	seqLevel := SequenceLevel(rand.Intn(3))
+
+	// Pick color based on sequence type and level
 	var style tcell.Style
 	switch seqType {
 	case SequenceGreen:
-		style = tcell.StyleDefault.Foreground(rgbSequenceGreen)
+		switch seqLevel {
+		case LevelDark:
+			style = tcell.StyleDefault.Foreground(rgbSequenceGreenDark)
+		case LevelNormal:
+			style = tcell.StyleDefault.Foreground(rgbSequenceGreenNormal)
+		case LevelBright:
+			style = tcell.StyleDefault.Foreground(rgbSequenceGreenBright)
+		}
 	case SequenceRed:
-		style = tcell.StyleDefault.Foreground(rgbSequenceRed)
+		switch seqLevel {
+		case LevelDark:
+			style = tcell.StyleDefault.Foreground(rgbSequenceRedDark)
+		case LevelNormal:
+			style = tcell.StyleDefault.Foreground(rgbSequenceRedNormal)
+		case LevelBright:
+			style = tcell.StyleDefault.Foreground(rgbSequenceRedBright)
+		}
 	case SequenceBlue:
-		style = tcell.StyleDefault.Foreground(rgbSequenceBlue)
+		switch seqLevel {
+		case LevelDark:
+			style = tcell.StyleDefault.Foreground(rgbSequenceBlueDark)
+		case LevelNormal:
+			style = tcell.StyleDefault.Foreground(rgbSequenceBlueNormal)
+		case LevelBright:
+			style = tcell.StyleDefault.Foreground(rgbSequenceBlueBright)
+		}
 	}
 
 	// Find a position where the sequence fits without overlapping
@@ -265,6 +319,7 @@ func (g *Game) generateCharacterSequence() []Character {
 			sequenceID:   sequenceID,
 			seqIndex:     i,
 			sequenceType: seqType,
+			level:        seqLevel,
 		}
 	}
 
@@ -450,30 +505,65 @@ func (g *Game) draw() {
 
 	// Draw status bar (row gameHeight + 1)
 	statusY := g.gameHeight + 1
-	statusStyle := tcell.StyleDefault.Foreground(rgbStatusBar)
 	// Clear the status bar first
 	for x := 0; x < g.width; x++ {
 		g.screen.SetContent(x, statusY, ' ', nil, tcell.StyleDefault)
 	}
-	// Draw status message
-	for i, ch := range g.statusMessage {
+
+	// Draw mode indicator on the left with colored background
+	var modeText string
+	var modeBgColor tcell.Color
+	if g.insertMode {
+		modeText = " INSERT "
+		modeBgColor = rgbModeInsertBg
+	} else {
+		modeText = " NORMAL "
+		modeBgColor = rgbModeNormalBg
+	}
+	modeStyle := tcell.StyleDefault.Foreground(rgbStatusText).Background(modeBgColor)
+	for i, ch := range modeText {
 		if i < g.width {
-			g.screen.SetContent(i, statusY, ch, nil, statusStyle)
+			g.screen.SetContent(i, statusY, ch, nil, modeStyle)
 		}
 	}
-	// Draw score at bottom right
-	scoreText := fmt.Sprintf("Score: %d", g.score)
+
+	// Draw status message (count/motion) after mode indicator
+	statusStyle := tcell.StyleDefault.Foreground(rgbStatusBar)
+	statusStartX := len(modeText) + 1
+	for i, ch := range g.statusMessage {
+		if statusStartX+i < g.width {
+			g.screen.SetContent(statusStartX+i, statusY, ch, nil, statusStyle)
+		}
+	}
+
+	// Draw score at bottom right with colored background
+	scoreText := fmt.Sprintf(" Score: %d ", g.score)
 	scoreStartX := g.width - len(scoreText)
 	if scoreStartX < 0 {
 		scoreStartX = 0
 	}
-	for i, ch := range scoreText {
-		if scoreStartX+i < g.width {
-			g.screen.SetContent(scoreStartX+i, statusY, ch, nil, statusStyle)
+
+	// Check if score blink is active
+	if g.scoreBlinkActive && now.Sub(g.scoreBlinkTime).Milliseconds() < 200 {
+		// Blink with character color
+		scoreStyle := tcell.StyleDefault.Foreground(rgbStatusText).Background(g.scoreBlinkColor)
+		for i, ch := range scoreText {
+			if scoreStartX+i < g.width {
+				g.screen.SetContent(scoreStartX+i, statusY, ch, nil, scoreStyle)
+			}
+		}
+	} else {
+		// Normal score display with golden yellow background
+		g.scoreBlinkActive = false
+		scoreStyle := tcell.StyleDefault.Foreground(rgbStatusText).Background(rgbScoreBg)
+		for i, ch := range scoreText {
+			if scoreStartX+i < g.width {
+				g.screen.SetContent(scoreStartX+i, statusY, ch, nil, scoreStyle)
+			}
 		}
 	}
 
-	// Draw cursor (translate game coords to screen coords)
+	// Draw cursor (translate game coords to screen coords) - non-blinking
 	now = time.Now()
 
 	// Handle error blink
@@ -481,22 +571,40 @@ func (g *Game) draw() {
 		g.cursorError = false
 	}
 
-	// Handle cursor blink
-	if now.Sub(g.cursorBlinkTime).Milliseconds() > cursorBlinkMs {
-		g.cursorVisible = !g.cursorVisible
-		g.cursorBlinkTime = now
-	}
-
-	if g.cursorVisible {
-		var cursorStyle tcell.Style
-		if g.cursorError {
-			cursorStyle = tcell.StyleDefault.Foreground(rgbCursorError).Reverse(true)
-		} else {
-			cursorStyle = tcell.StyleDefault.Foreground(rgbCursorNormal).Reverse(true)
+	// Draw cursor as orange/white empty box (always visible, non-blinking)
+	screenX := g.gameX + g.cursorX
+	screenY := g.gameY + g.cursorY
+	if screenX >= g.gameX && screenX < g.width && screenY >= 0 && screenY < g.gameHeight {
+		// Check if there's a character at cursor position
+		var charAtCursor rune = ' '
+		var charStyle tcell.Style
+		for _, ch := range g.characters {
+			if ch.x == g.cursorX && ch.y == g.cursorY {
+				charAtCursor = ch.rune
+				charStyle = ch.style
+				break
+			}
 		}
-		screenX := g.gameX + g.cursorX
-		screenY := g.gameY + g.cursorY
-		if screenX >= g.gameX && screenX < g.width && screenY >= 0 && screenY < g.gameHeight {
+
+		// Determine cursor color based on mode
+		var cursorColor tcell.Color
+		if g.cursorError {
+			cursorColor = rgbCursorError
+		} else if g.insertMode {
+			cursorColor = rgbCursorInsert
+		} else {
+			cursorColor = rgbCursorNormal
+		}
+
+		// Draw character with cursor color as underline/background
+		// Use underline style to create "empty box" effect
+		if charAtCursor != ' ' {
+			// Show character with cursor color as background
+			cursorStyle := charStyle.Background(cursorColor)
+			g.screen.SetContent(screenX, screenY, charAtCursor, nil, cursorStyle)
+		} else {
+			// No character, show colored block
+			cursorStyle := tcell.StyleDefault.Background(cursorColor)
 			g.screen.SetContent(screenX, screenY, ' ', nil, cursorStyle)
 		}
 	}
@@ -532,86 +640,108 @@ func (g *Game) moveCursor(dx, dy int) {
 
 		// Clear ping on cursor movement
 		g.pingActive = false
+	}
+}
 
-		// Check if we hit a character at the new position
-		hitCharIndex := -1
-		var hitChar Character
-		for i, ch := range g.characters {
-			if ch.x == g.cursorX && ch.y == g.cursorY {
-				hitCharIndex = i
-				hitChar = ch
-				break
-			}
-		}
-
-		if hitCharIndex >= 0 {
-			// We hit a character - update score
-			wasOnSpace := g.lastCharX == -1
-
-			// Calculate score multiplier based on sequence type
-			scoreMultiplier := 1
-			if hitChar.sequenceType == SequenceRed {
-				scoreMultiplier = -1
-			}
-
-			if wasOnSpace {
-				// Moving from space to character
-				g.score += 1 * scoreMultiplier
-				g.hitSequencePos = 1
-			} else {
-				// Moving from character to character - check if continuing sequence
-				// Find the last character we hit
-				var lastHitChar *Character
-				for i := range g.characters {
-					if g.characters[i].x == g.lastCharX && g.characters[i].y == g.lastCharY {
-						lastHitChar = &g.characters[i]
-						break
-					}
-				}
-
-				continuing := false
-				if lastHitChar != nil {
-					// Check if there's a clear path between last char and current char
-					// (no spaces in between)
-					pathClear := g.checkPathForCharacters(lastHitChar.x, lastHitChar.y, hitChar.x, hitChar.y)
-					if pathClear {
-						continuing = true
-					}
-				}
-
-				if continuing {
-					// Continuing sequence
-					g.hitSequencePos++
-					g.score += g.hitSequencePos * scoreMultiplier
-				} else {
-					// New sequence
-					g.hitSequencePos = 1
-					g.score += 1 * scoreMultiplier
-				}
-			}
-
-			// If this is a blue character, enable trail for 5 seconds
-			if hitChar.sequenceType == SequenceBlue {
-				g.enableTrailFor5Seconds()
-			}
-
-			// Update last character position
-			g.lastCharX = hitChar.x
-			g.lastCharY = hitChar.y
-
-			// Remove character
-			g.characters = append(g.characters[:hitCharIndex], g.characters[hitCharIndex+1:]...)
-		} else {
-			// No character at new position - reset to space
-			g.lastCharX = -1
-			g.lastCharY = -1
-			g.hitSequencePos = 0
+// handleCharacterTyping processes character input in insert mode
+func (g *Game) handleCharacterTyping(typedChar rune) {
+	// Find character at cursor position
+	hitCharIndex := -1
+	var hitChar Character
+	for i, ch := range g.characters {
+		if ch.x == g.cursorX && ch.y == g.cursorY {
+			hitCharIndex = i
+			hitChar = ch
+			break
 		}
 	}
 
-	// Reset cursor blink
-	g.cursorVisible = true
-	g.cursorBlinkTime = time.Now()
+	// Check if typed character matches
+	if hitCharIndex >= 0 && hitChar.rune == typedChar {
+		// Calculate score with level multiplier
+		levelMultiplier := 1
+		switch hitChar.level {
+		case LevelDark:
+			levelMultiplier = 1
+		case LevelNormal:
+			levelMultiplier = 2
+		case LevelBright:
+			levelMultiplier = 3
+		}
+
+		// Calculate score multiplier based on sequence type
+		typeMultiplier := 1
+		if hitChar.sequenceType == SequenceRed {
+			typeMultiplier = -1
+		}
+
+		// Check if continuing a sequence
+		wasOnSpace := g.lastCharX == -1
+		if wasOnSpace {
+			// Starting new sequence
+			g.score += 1 * levelMultiplier * typeMultiplier
+			g.hitSequencePos = 1
+		} else {
+			// Check if continuing sequence
+			var lastHitChar *Character
+			for i := range g.characters {
+				if g.characters[i].x == g.lastCharX && g.characters[i].y == g.lastCharY {
+					lastHitChar = &g.characters[i]
+					break
+				}
+			}
+
+			continuing := false
+			if lastHitChar != nil {
+				// Check if adjacent
+				if lastHitChar.x == hitChar.x-1 && lastHitChar.y == hitChar.y {
+					continuing = true
+				}
+			}
+
+			if continuing {
+				// Continuing sequence
+				g.hitSequencePos++
+				g.score += g.hitSequencePos * levelMultiplier * typeMultiplier
+			} else {
+				// New sequence
+				g.hitSequencePos = 1
+				g.score += 1 * levelMultiplier * typeMultiplier
+			}
+		}
+
+		// Activate score blink with character color
+		g.scoreBlinkActive = true
+		g.scoreBlinkTime = time.Now()
+		// Extract the foreground color from the character's style
+		fg, _, _ := hitChar.style.Decompose()
+		g.scoreBlinkColor = fg
+
+		// If this is a blue character, enable trail for 5 seconds
+		if hitChar.sequenceType == SequenceBlue {
+			g.enableTrailFor5Seconds()
+		}
+
+		// Update last character position
+		g.lastCharX = hitChar.x
+		g.lastCharY = hitChar.y
+
+		// Remove character
+		g.characters = append(g.characters[:hitCharIndex], g.characters[hitCharIndex+1:]...)
+
+		// Move cursor right if possible
+		if g.cursorX < g.gameWidth-1 {
+			g.moveCursor(1, 0)
+		}
+	} else {
+		// Wrong character - flash error
+		g.cursorError = true
+		g.cursorErrorTime = time.Now()
+		// Reset sequence tracking
+		g.lastCharX = -1
+		g.lastCharY = -1
+		g.hitSequencePos = 0
+	}
 }
 
 // Helper to check if there's a character at position (x, y)
@@ -883,13 +1013,30 @@ func (g *Game) findCharOnLine(target rune) {
 func (g *Game) handleInput(ev tcell.Event) bool {
 	switch ev := ev.(type) {
 	case *tcell.EventKey:
-		if ev.Key() == tcell.KeyEscape || ev.Key() == tcell.KeyCtrlC ||
+		// Handle Escape key
+		if ev.Key() == tcell.KeyEscape {
+			if g.insertMode {
+				// Exit insert mode
+				g.insertMode = false
+				// Reset sequence tracking when exiting insert mode
+				g.lastCharX = -1
+				g.lastCharY = -1
+				g.hitSequencePos = 0
+				return true
+			} else {
+				// Exit game
+				return false
+			}
+		}
+
+		// Handle Ctrl+C and Ctrl+Q to exit
+		if ev.Key() == tcell.KeyCtrlC ||
 			(ev.Key() == tcell.KeyRune && ev.Rune() == 'q' && ev.Modifiers()&tcell.ModCtrl != 0) {
 			return false
 		}
 
-		// Handle Enter key for ping coordinates
-		if ev.Key() == tcell.KeyEnter {
+		// Handle Enter key for ping coordinates (only in normal mode)
+		if ev.Key() == tcell.KeyEnter && !g.insertMode {
 			g.pingActive = true
 			g.pingStartTime = time.Now()
 			g.pingRow = g.cursorY
@@ -899,6 +1046,20 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 
 		if ev.Key() == tcell.KeyRune {
 			char := ev.Rune()
+
+			// Handle insert mode - type characters
+			if g.insertMode {
+				g.handleCharacterTyping(char)
+				return true
+			}
+
+			// Normal mode commands below
+
+			// Handle 'i' to enter insert mode
+			if char == 'i' {
+				g.insertMode = true
+				return true
+			}
 
 			// If waiting for f{char}, handle it
 			if g.waitingForF {
