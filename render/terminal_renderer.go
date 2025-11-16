@@ -211,7 +211,7 @@ func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell
 			for y := 0; y < r.gameHeight; y++ {
 				screenX := r.gameX + col
 				screenY := r.gameY + y
-				if screenX >= r.gameX && screenX < r.width && screenY >= 0 && screenY < r.gameHeight {
+				if screenX >= r.gameX && screenX < r.width && screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
 					r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
 				}
 			}
@@ -221,7 +221,7 @@ func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell
 			for y := 0; y < r.gameHeight; y++ {
 				screenX := r.gameX + col
 				screenY := r.gameY + y
-				if screenX >= r.gameX && screenX < r.width && screenY >= 0 && screenY < r.gameHeight {
+				if screenX >= r.gameX && screenX < r.width && screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
 					r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
 				}
 			}
@@ -239,7 +239,7 @@ func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell
 			for x := 0; x < r.gameWidth; x++ {
 				screenX := r.gameX + x
 				screenY := r.gameY + row
-				if screenY >= 0 && screenY < r.gameHeight {
+				if screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
 					r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
 				}
 			}
@@ -249,7 +249,7 @@ func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell
 			for x := 0; x < r.gameWidth; x++ {
 				screenX := r.gameX + x
 				screenY := r.gameY + row
-				if screenY >= 0 && screenY < r.gameHeight {
+				if screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
 					r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
 				}
 			}
@@ -274,7 +274,7 @@ func (r *TerminalRenderer) drawCharacters(world *engine.World, pingColor tcell.C
 		screenX := r.gameX + pos.X
 		screenY := r.gameY + pos.Y
 
-		if screenX >= r.gameX && screenX < r.width && screenY >= 0 && screenY < r.gameHeight {
+		if screenX >= r.gameX && screenX < r.width && screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
 			style := char.Style
 
 			// Check if character is on a ping line (cursor row or column)
@@ -322,7 +322,7 @@ func (r *TerminalRenderer) drawTrails(world *engine.World, defaultStyle tcell.St
 		screenX := r.gameX + pos.X
 		screenY := r.gameY + pos.Y
 
-		if screenX >= r.gameX && screenX < r.width && screenY >= 0 && screenY < r.gameHeight {
+		if screenX >= r.gameX && screenX < r.width && screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
 			intensity := int(trail.Intensity * 255)
 			if intensity > 255 {
 				intensity = 255
@@ -366,7 +366,7 @@ func (r *TerminalRenderer) drawDecayAnimation(world *engine.World, decayRow int,
 	// Draw the decay row
 	for x := 0; x < r.gameWidth; x++ {
 		screenX := r.gameX + x
-		if screenX >= r.gameX && screenX < r.width && screenY >= 0 && screenY < r.gameHeight {
+		if screenX >= r.gameX && screenX < r.width && screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
 			if ch, ok := charsAtRow[x]; ok {
 				r.screen.SetContent(screenX, screenY, ch, nil, stylesAtRow[x])
 			} else {
