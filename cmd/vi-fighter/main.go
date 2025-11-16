@@ -101,7 +101,7 @@ func main() {
 			decaySystem.UpdateDimensions(ctx.GameWidth, ctx.GameHeight, ctx.Width, ctx.ScoreIncrement)
 
 			// Render frame
-			renderer.RenderFrame(ctx, decaySystem.IsAnimating(), decaySystem.CurrentRow())
+			renderer.RenderFrame(ctx, decaySystem.IsAnimating(), decaySystem.CurrentRow(), decaySystem.GetTimeUntilDecay())
 		}
 	}
 }

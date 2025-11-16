@@ -11,11 +11,11 @@ import (
 
 // DecaySystem handles character decay animation and logic
 type DecaySystem struct {
-	ticker            *time.Timer
 	animating         bool
 	currentRow        int
 	startTime         time.Time
 	lastUpdate        time.Time
+	nextDecayTime     time.Time // When the next decay will trigger
 	gameWidth         int
 	gameHeight        int
 	screenWidth       int
@@ -50,7 +50,15 @@ func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 	if s.animating {
 		s.updateAnimation(world)
 	} else {
-		// Restart ticker if heat changed significantly (>10% of heat bar width)
+		// Check if it's time to start decay animation
+		now := time.Now()
+		if now.After(s.nextDecayTime) || now.Equal(s.nextDecayTime) {
+			s.animating = true
+			s.currentRow = 0
+			s.startTime = now
+		}
+
+		// Recalculate interval if heat changed significantly (>10% of heat bar width)
 		heatBarWidth := s.screenWidth - 6
 		if heatBarWidth < 1 {
 			heatBarWidth = 1
@@ -67,7 +75,9 @@ func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 
 		if heatDiff >= threshold {
 			s.lastHeatIncrement = s.heatIncrement
-			s.startTicker()
+			// Recalculate next decay time
+			interval := s.calculateInterval()
+			s.nextDecayTime = now.Add(interval)
 		}
 	}
 }
@@ -87,7 +97,9 @@ func (s *DecaySystem) updateAnimation(world *engine.World) {
 	if s.currentRow >= s.gameHeight {
 		s.animating = false
 		s.currentRow = 0
-		s.startTicker()
+		// Schedule next decay
+		interval := s.calculateInterval()
+		s.nextDecayTime = time.Now().Add(interval)
 	}
 }
 
@@ -155,18 +167,10 @@ func (s *DecaySystem) applyDecayToRow(world *engine.World, row int) {
 	}
 }
 
-// startTicker starts or restarts the decay ticker
+// startTicker initializes the decay timer (called once at startup)
 func (s *DecaySystem) startTicker() {
-	if s.ticker != nil {
-		s.ticker.Stop()
-	}
-
 	interval := s.calculateInterval()
-	s.ticker = time.AfterFunc(interval, func() {
-		s.animating = true
-		s.currentRow = 0
-		s.startTime = time.Now()
-	})
+	s.nextDecayTime = time.Now().Add(interval)
 	s.lastUpdate = time.Now()
 }
 
@@ -207,6 +211,18 @@ func (s *DecaySystem) IsAnimating() bool {
 // CurrentRow returns the current decay row
 func (s *DecaySystem) CurrentRow() int {
 	return s.currentRow
+}
+
+// GetTimeUntilDecay returns seconds until next decay trigger
+func (s *DecaySystem) GetTimeUntilDecay() float64 {
+	if s.animating {
+		return 0.0
+	}
+	remaining := s.nextDecayTime.Sub(time.Now()).Seconds()
+	if remaining < 0 {
+		remaining = 0
+	}
+	return remaining
 }
 
 // UpdateDimensions updates the game dimensions

@@ -42,7 +42,7 @@ func NewTerminalRenderer(screen tcell.Screen, width, height, gameX, gameY, gameW
 }
 
 // RenderFrame renders the entire game frame
-func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating bool, decayRow int) {
+func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating bool, decayRow int, decayTimeRemaining float64) {
 	r.screen.Clear()
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
 
@@ -71,7 +71,7 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 	r.drawColumnIndicators(ctx, defaultStyle)
 
 	// Draw status bar
-	r.drawStatusBar(ctx, defaultStyle)
+	r.drawStatusBar(ctx, defaultStyle, decayTimeRemaining)
 
 	// Draw cursor (if not in search mode)
 	if !ctx.IsSearchMode() {
@@ -394,7 +394,7 @@ func (r *TerminalRenderer) drawColumnIndicators(ctx *engine.GameContext, default
 }
 
 // drawStatusBar draws the status bar
-func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle tcell.Style) {
+func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle tcell.Style, decayTimeRemaining float64) {
 	statusY := r.gameY + r.gameHeight + 1
 
 	// Clear status bar
@@ -447,8 +447,9 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 		}
 	}
 
-	// Calculate positions and draw trail timer + score
+	// Calculate positions and draw timers + score (from right to left: Decay, Trail, Score)
 	scoreText := fmt.Sprintf(" Score: %d ", ctx.Score)
+	decayText := fmt.Sprintf(" Decay: %.1fs ", decayTimeRemaining)
 	var trailText string
 	var totalWidth int
 
@@ -458,9 +459,9 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 			remaining = 0
 		}
 		trailText = fmt.Sprintf(" Trail: %.1fs ", remaining)
-		totalWidth = len(trailText) + len(scoreText)
+		totalWidth = len(scoreText) + len(trailText) + len(decayText)
 	} else {
-		totalWidth = len(scoreText)
+		totalWidth = len(scoreText) + len(decayText)
 	}
 
 	startX := r.width - totalWidth
@@ -469,17 +470,6 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 	}
 
 	now := time.Now()
-
-	// Draw trail timer if active (with purple background)
-	if ctx.TrailEnabled {
-		trailStyle := defaultStyle.Foreground(RgbStatusText).Background(RgbTrailBg)
-		for i, ch := range trailText {
-			if startX+i < r.width {
-				r.screen.SetContent(startX+i, statusY, ch, nil, trailStyle)
-			}
-		}
-		startX += len(trailText)
-	}
 
 	// Draw score (with yellow background, or blink color if active)
 	if ctx.ScoreBlinkActive && now.Sub(ctx.ScoreBlinkTime).Milliseconds() < 200 {
@@ -495,6 +485,26 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 			if startX+i < r.width {
 				r.screen.SetContent(startX+i, statusY, ch, nil, scoreStyle)
 			}
+		}
+	}
+	startX += len(scoreText)
+
+	// Draw trail timer if active (with purple background)
+	if ctx.TrailEnabled {
+		trailStyle := defaultStyle.Foreground(RgbStatusText).Background(RgbTrailBg)
+		for i, ch := range trailText {
+			if startX+i < r.width {
+				r.screen.SetContent(startX+i, statusY, ch, nil, trailStyle)
+			}
+		}
+		startX += len(trailText)
+	}
+
+	// Draw decay timer (always visible, with red background and black text)
+	decayStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(tcell.NewRGBColor(200, 50, 50))
+	for i, ch := range decayText {
+		if startX+i < r.width {
+			r.screen.SetContent(startX+i, statusY, ch, nil, decayStyle)
 		}
 	}
 }
