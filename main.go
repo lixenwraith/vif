@@ -58,6 +58,10 @@ var (
 	rgbColumnIndicator       = tcell.NewRGBColor(100, 100, 100)  // Dark gray
 
 	rgbPingHighlight         = tcell.NewRGBColor(50, 50, 50)     // Very dark gray for ping
+	rgbPingOrange            = tcell.NewRGBColor(60, 40, 0)      // Very dark orange for ping on whitespace
+	rgbPingGreen             = tcell.NewRGBColor(0, 40, 0)       // Very dark green for ping on green char
+	rgbPingRed               = tcell.NewRGBColor(50, 15, 15)     // Very dark red for ping on red char
+	rgbPingBlue              = tcell.NewRGBColor(15, 25, 50)     // Very dark blue for ping on blue char
 	rgbCursorNormal          = tcell.NewRGBColor(255, 165, 0)    // Orange for normal mode
 	rgbCursorInsert          = tcell.NewRGBColor(255, 255, 255)  // Bright white for insert mode
 	rgbCursorError           = tcell.NewRGBColor(255, 80, 80)    // Red
@@ -118,8 +122,10 @@ type Game struct {
 	cursorErrorTime  time.Time
 	cursorBlinkTime  time.Time
 
-	// Mode state (normal/insert)
+	// Mode state (normal/insert/search)
 	insertMode       bool
+	searchMode       bool
+	searchText       string
 
 	// Trail effect
 	trails        []Trail
@@ -266,6 +272,7 @@ func (g *Game) generateCharacterSequence() []Character {
 	// Try up to 100 times to find a valid position
 	var x, y int
 	maxAttempts := 100
+	foundValidPosition := false
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		// Random position, avoiding cursor
 		x = rand.Intn(g.gameWidth)
@@ -297,8 +304,14 @@ func (g *Game) generateCharacterSequence() []Character {
 
 		if !overlaps {
 			// Found a valid position
+			foundValidPosition = true
 			break
 		}
+	}
+
+	// If no valid position was found, return empty slice
+	if !foundValidPosition {
+		return []Character{}
 	}
 
 	// Create the sequence
@@ -413,7 +426,23 @@ func (g *Game) draw() {
 	}
 
 	// Permanent ping state: always highlight cursor's row and column
-	pingStyle := tcell.StyleDefault.Background(rgbPingHighlight)
+	// Determine ping color based on character under cursor
+	pingColor := rgbPingOrange // Default: very dark orange (whitespace)
+	for _, ch := range g.characters {
+		if ch.x == g.cursorX && ch.y == g.cursorY {
+			// Cursor is on a character - use color based on sequence type
+			switch ch.sequenceType {
+			case SequenceGreen:
+				pingColor = rgbPingGreen
+			case SequenceRed:
+				pingColor = rgbPingRed
+			case SequenceBlue:
+				pingColor = rgbPingBlue
+			}
+			break
+		}
+	}
+	pingStyle := tcell.StyleDefault.Background(pingColor)
 	// Highlight the row
 	for x := 0; x < g.gameWidth; x++ {
 		screenX := g.gameX + x
@@ -501,7 +530,15 @@ func (g *Game) draw() {
 	// Draw mode indicator on the left with colored background
 	var modeText string
 	var modeBgColor tcell.Color
-	if g.insertMode {
+	if g.searchMode {
+		// In search mode, show orange background
+		if g.insertMode {
+			modeText = " INSERT "
+		} else {
+			modeText = " NORMAL "
+		}
+		modeBgColor = rgbCursorNormal // Orange background
+	} else if g.insertMode {
 		modeText = " INSERT "
 		modeBgColor = rgbModeInsertBg
 	} else {
@@ -515,12 +552,32 @@ func (g *Game) draw() {
 		}
 	}
 
-	// Draw status message (count/motion) after mode indicator
-	statusStyle := tcell.StyleDefault.Foreground(rgbStatusBar)
+	// Draw search mode UI or status message after mode indicator
 	statusStartX := len(modeText) + 1
-	for i, ch := range g.statusMessage {
-		if statusStartX+i < g.width {
-			g.screen.SetContent(statusStartX+i, statusY, ch, nil, statusStyle)
+	if g.searchMode {
+		// Draw search text with orange block cursor
+		searchStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite)
+		cursorStyle := tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(rgbCursorNormal)
+
+		// Draw the search text
+		for i, ch := range g.searchText {
+			if statusStartX+i < g.width {
+				g.screen.SetContent(statusStartX+i, statusY, ch, nil, searchStyle)
+			}
+		}
+
+		// Draw block cursor at the end of search text
+		cursorX := statusStartX + len(g.searchText)
+		if cursorX < g.width {
+			g.screen.SetContent(cursorX, statusY, ' ', nil, cursorStyle)
+		}
+	} else {
+		// Draw status message (count/motion) after mode indicator
+		statusStyle := tcell.StyleDefault.Foreground(rgbStatusBar)
+		for i, ch := range g.statusMessage {
+			if statusStartX+i < g.width {
+				g.screen.SetContent(statusStartX+i, statusY, ch, nil, statusStyle)
+			}
 		}
 	}
 
@@ -562,46 +619,49 @@ func (g *Game) draw() {
 	}
 
 	// Draw cursor as full box (always visible, non-blinking)
-	screenX := g.gameX + g.cursorX
-	screenY := g.gameY + g.cursorY
-	if screenX >= g.gameX && screenX < g.width && screenY >= 0 && screenY < g.gameHeight {
-		// Check if there's a character at cursor position
-		var charAtCursor rune = ' '
-		var charColor tcell.Color
-		hasChar := false
-		for _, ch := range g.characters {
-			if ch.x == g.cursorX && ch.y == g.cursorY {
-				charAtCursor = ch.rune
-				fg, _, _ := ch.style.Decompose()
-				charColor = fg
-				hasChar = true
-				break
+	// In search mode, cursor is not visually shown (appears normal)
+	if !g.searchMode {
+		screenX := g.gameX + g.cursorX
+		screenY := g.gameY + g.cursorY
+		if screenX >= g.gameX && screenX < g.width && screenY >= 0 && screenY < g.gameHeight {
+			// Check if there's a character at cursor position
+			var charAtCursor rune = ' '
+			var charColor tcell.Color
+			hasChar := false
+			for _, ch := range g.characters {
+				if ch.x == g.cursorX && ch.y == g.cursorY {
+					charAtCursor = ch.rune
+					fg, _, _ := ch.style.Decompose()
+					charColor = fg
+					hasChar = true
+					break
+				}
 			}
-		}
 
-		// Determine cursor color based on mode and character
-		var cursorBgColor tcell.Color
-		var charFgColor tcell.Color
-		if g.cursorError {
-			cursorBgColor = rgbCursorError
-			charFgColor = tcell.ColorBlack
-		} else if hasChar {
-			// Cursor on a character: cursor bg = character color, char fg = black
-			cursorBgColor = charColor
-			charFgColor = tcell.ColorBlack
-		} else {
-			// Cursor on empty space: orange (normal) or white (insert)
-			if g.insertMode {
-				cursorBgColor = rgbCursorInsert
+			// Determine cursor color based on mode and character
+			var cursorBgColor tcell.Color
+			var charFgColor tcell.Color
+			if g.cursorError {
+				cursorBgColor = rgbCursorError
+				charFgColor = tcell.ColorBlack
+			} else if hasChar {
+				// Cursor on a character: cursor bg = character color, char fg = black
+				cursorBgColor = charColor
+				charFgColor = tcell.ColorBlack
 			} else {
-				cursorBgColor = rgbCursorNormal
+				// Cursor on empty space: orange (normal) or white (insert)
+				if g.insertMode {
+					cursorBgColor = rgbCursorInsert
+				} else {
+					cursorBgColor = rgbCursorNormal
+				}
+				charFgColor = tcell.ColorBlack
 			}
-			charFgColor = tcell.ColorBlack
-		}
 
-		// Draw cursor with character (or space)
-		cursorStyle := tcell.StyleDefault.Foreground(charFgColor).Background(cursorBgColor)
-		g.screen.SetContent(screenX, screenY, charAtCursor, nil, cursorStyle)
+			// Draw cursor with character (or space)
+			cursorStyle := tcell.StyleDefault.Foreground(charFgColor).Background(cursorBgColor)
+			g.screen.SetContent(screenX, screenY, charAtCursor, nil, cursorStyle)
+		}
 	}
 
 	g.screen.Show()
@@ -968,6 +1028,83 @@ func (g *Game) findCharOnLine(target rune) {
 	g.statusMessage = ""
 }
 
+// performSearch searches for the given text starting from current cursor position
+// Returns true if found and moves cursor to the beginning of the match
+func (g *Game) performSearch(searchStr string) bool {
+	if searchStr == "" {
+		// Empty search string - do nothing
+		return true
+	}
+
+	searchRunes := []rune(searchStr)
+	searchLen := len(searchRunes)
+
+	// Helper function to check if sequence at (startX, y) matches search string
+	matchesAt := func(startX, y int) bool {
+		for i := 0; i < searchLen; i++ {
+			found := false
+			for _, ch := range g.characters {
+				if ch.x == startX+i && ch.y == y && ch.rune == searchRunes[i] {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return false
+			}
+		}
+		return true
+	}
+
+	// Search from current position forward
+	// Start from next position after cursor
+	startY := g.cursorY
+	startX := g.cursorX + 1
+
+	// Search from current row to end
+	for y := startY; y < g.gameHeight; y++ {
+		xStart := 0
+		if y == startY {
+			xStart = startX
+		}
+		for x := xStart; x <= g.gameWidth-searchLen; x++ {
+			if matchesAt(x, y) {
+				// Found match - move cursor
+				dx := x - g.cursorX
+				dy := y - g.cursorY
+				g.moveCursor(dx, dy)
+				return true
+			}
+		}
+	}
+
+	// If not found, search from beginning (rollover)
+	for y := 0; y < startY; y++ {
+		for x := 0; x <= g.gameWidth-searchLen; x++ {
+			if matchesAt(x, y) {
+				// Found match - move cursor
+				dx := x - g.cursorX
+				dy := y - g.cursorY
+				g.moveCursor(dx, dy)
+				return true
+			}
+		}
+	}
+
+	// Search remaining part of starting row (before cursor)
+	for x := 0; x < startX && x <= g.gameWidth-searchLen; x++ {
+		if matchesAt(x, startY) {
+			// Found match - move cursor
+			dx := x - g.cursorX
+			g.moveCursor(dx, 0)
+			return true
+		}
+	}
+
+	// Not found
+	return false
+}
+
 func (g *Game) handleInput(ev tcell.Event) bool {
 	switch ev := ev.(type) {
 	case *tcell.EventKey:
@@ -978,6 +1115,12 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 
 		// Handle Escape key
 		if ev.Key() == tcell.KeyEscape {
+			if g.searchMode {
+				// Exit search mode
+				g.searchMode = false
+				g.searchText = ""
+				return true
+			}
 			if g.insertMode {
 				// Exit insert mode
 				g.insertMode = false
@@ -994,10 +1137,43 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 			return false
 		}
 
-		// Enter key no longer needed for ping (ping is now permanent)
+		// Handle Enter key in search mode
+		if ev.Key() == tcell.KeyEnter && g.searchMode {
+			if g.searchText == "" {
+				// Empty search text - exit search mode
+				g.searchMode = false
+				return true
+			} else {
+				// Execute search
+				if !g.performSearch(g.searchText) {
+					// Search failed - flash error
+					g.cursorError = true
+					g.cursorErrorTime = time.Now()
+				}
+				// Exit search mode
+				g.searchMode = false
+				g.searchText = ""
+				return true
+			}
+		}
+
+		// Handle Backspace in search mode
+		if ev.Key() == tcell.KeyBackspace || ev.Key() == tcell.KeyBackspace2 {
+			if g.searchMode && len(g.searchText) > 0 {
+				// Remove last character from search text
+				g.searchText = g.searchText[:len(g.searchText)-1]
+				return true
+			}
+		}
 
 		if ev.Key() == tcell.KeyRune {
 			char := ev.Rune()
+
+			// Handle search mode - type characters into search text
+			if g.searchMode {
+				g.searchText += string(char)
+				return true
+			}
 
 			// Handle insert mode - type characters
 			if g.insertMode {
@@ -1006,6 +1182,13 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 			}
 
 			// Normal mode commands below
+
+			// Handle '/' to enter search mode
+			if char == '/' {
+				g.searchMode = true
+				g.searchText = ""
+				return true
+			}
 
 			// Handle 'i' to enter insert mode
 			if char == 'i' {
@@ -1143,11 +1326,32 @@ func (g *Game) run() {
 			}
 
 		case <-ticker.C:
+			// Calculate screen fill percentage
+			totalCells := g.gameWidth * g.gameHeight
+			filledCells := len(g.characters)
+			fillPercentage := float64(filledCells) / float64(totalCells)
+
+			// Adjust spawn rate based on fill percentage
+			var spawnDelay int64
+			if fillPercentage < 0.30 {
+				// Less than 30% filled - accelerate spawning (2x faster)
+				spawnDelay = characterSpawnMs / 2
+			} else if fillPercentage > 0.70 {
+				// More than 70% filled - decelerate spawning (2x slower)
+				spawnDelay = characterSpawnMs * 2
+			} else {
+				// Normal spawn rate
+				spawnDelay = characterSpawnMs
+			}
+
 			// Spawn new character sequences
-			if time.Since(g.lastSpawn).Milliseconds() > characterSpawnMs {
-				if len(g.characters) < 50 { // Max characters on screen (increased for sequences)
+			if time.Since(g.lastSpawn).Milliseconds() > spawnDelay {
+				if len(g.characters) < 200 { // Max characters on screen (increased for sequences)
 					newSeq := g.generateCharacterSequence()
-					g.characters = append(g.characters, newSeq...)
+					// Only add if sequence was successfully placed (not all zeros for position)
+					if len(newSeq) > 0 {
+						g.characters = append(g.characters, newSeq...)
+					}
 					g.lastSpawn = time.Now()
 				}
 			}
