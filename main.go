@@ -134,9 +134,7 @@ type Game struct {
 
 	// Score tracking
 	score            int
-	lastCharX        int // Last character position hit (-1 if none or space)
-	lastCharY        int
-	hitSequencePos   int // Current position in hit sequence (1-based)
+	scoreIncrement   int // Current score multiplier (increments with each correct char, resets on wrong)
 	scoreBlinkActive bool
 	scoreBlinkColor  tcell.Color
 	scoreBlinkTime   time.Time
@@ -174,9 +172,7 @@ func NewGame() (*Game, error) {
 		cursorBlinkTime: time.Now(),
 		nextSeqID:       1,
 		score:           0,
-		lastCharX:       -1,
-		lastCharY:       -1,
-		hitSequencePos:  0,
+		scoreIncrement:  0,
 		motionCount:     0,
 		motionCommand:   "",
 		waitingForF:     false,
@@ -416,30 +412,22 @@ func (g *Game) draw() {
 		}
 	}
 
-	// Check if ping should still be active
-	now := time.Now()
-	if g.pingActive && now.Sub(g.pingStartTime).Milliseconds() > 1000 {
-		g.pingActive = false
-	}
-
-	// Draw ping highlights (background only)
-	if g.pingActive {
-		pingStyle := tcell.StyleDefault.Background(rgbPingHighlight)
-		// Highlight the row
-		for x := 0; x < g.gameWidth; x++ {
-			screenX := g.gameX + x
-			screenY := g.gameY + g.pingRow
-			if screenY >= 0 && screenY < g.gameHeight {
-				g.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
-			}
+	// Permanent ping state: always highlight cursor's row and column
+	pingStyle := tcell.StyleDefault.Background(rgbPingHighlight)
+	// Highlight the row
+	for x := 0; x < g.gameWidth; x++ {
+		screenX := g.gameX + x
+		screenY := g.gameY + g.cursorY
+		if screenY >= 0 && screenY < g.gameHeight {
+			g.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
 		}
-		// Highlight the column
-		for y := 0; y < g.gameHeight; y++ {
-			screenX := g.gameX + g.pingCol
-			screenY := g.gameY + y
-			if screenX >= g.gameX && screenX < g.width && screenY >= 0 && screenY < g.gameHeight {
-				g.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
-			}
+	}
+	// Highlight the column
+	for y := 0; y < g.gameHeight; y++ {
+		screenX := g.gameX + g.cursorX
+		screenY := g.gameY + y
+		if screenX >= g.gameX && screenX < g.width && screenY >= 0 && screenY < g.gameHeight {
+			g.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
 		}
 	}
 
@@ -449,8 +437,8 @@ func (g *Game) draw() {
 		screenY := g.gameY + ch.y
 		if screenX >= g.gameX && screenX < g.width && screenY >= 0 && screenY < g.gameHeight {
 			style := ch.style
-			// Add gray background if on ping row or column
-			if g.pingActive && (ch.y == g.pingRow || ch.x == g.pingCol) {
+			// Add gray background if on cursor's row or column
+			if ch.y == g.cursorY || ch.x == g.cursorX {
 				style = style.Background(rgbPingHighlight)
 			}
 			g.screen.SetContent(screenX, screenY, ch.rune, nil, style)
@@ -543,6 +531,9 @@ func (g *Game) draw() {
 		scoreStartX = 0
 	}
 
+	// Get current time for blinking effects
+	now := time.Now()
+
 	// Check if score blink is active
 	if g.scoreBlinkActive && now.Sub(g.scoreBlinkTime).Milliseconds() < 200 {
 		// Blink with character color
@@ -564,49 +555,53 @@ func (g *Game) draw() {
 	}
 
 	// Draw cursor (translate game coords to screen coords) - non-blinking
-	now = time.Now()
 
 	// Handle error blink
 	if g.cursorError && now.Sub(g.cursorErrorTime).Milliseconds() > errorBlinkMs {
 		g.cursorError = false
 	}
 
-	// Draw cursor as orange/white empty box (always visible, non-blinking)
+	// Draw cursor as full box (always visible, non-blinking)
 	screenX := g.gameX + g.cursorX
 	screenY := g.gameY + g.cursorY
 	if screenX >= g.gameX && screenX < g.width && screenY >= 0 && screenY < g.gameHeight {
 		// Check if there's a character at cursor position
 		var charAtCursor rune = ' '
-		var charStyle tcell.Style
+		var charColor tcell.Color
+		hasChar := false
 		for _, ch := range g.characters {
 			if ch.x == g.cursorX && ch.y == g.cursorY {
 				charAtCursor = ch.rune
-				charStyle = ch.style
+				fg, _, _ := ch.style.Decompose()
+				charColor = fg
+				hasChar = true
 				break
 			}
 		}
 
-		// Determine cursor color based on mode
-		var cursorColor tcell.Color
+		// Determine cursor color based on mode and character
+		var cursorBgColor tcell.Color
+		var charFgColor tcell.Color
 		if g.cursorError {
-			cursorColor = rgbCursorError
-		} else if g.insertMode {
-			cursorColor = rgbCursorInsert
+			cursorBgColor = rgbCursorError
+			charFgColor = tcell.ColorBlack
+		} else if hasChar {
+			// Cursor on a character: cursor bg = character color, char fg = black
+			cursorBgColor = charColor
+			charFgColor = tcell.ColorBlack
 		} else {
-			cursorColor = rgbCursorNormal
+			// Cursor on empty space: orange (normal) or white (insert)
+			if g.insertMode {
+				cursorBgColor = rgbCursorInsert
+			} else {
+				cursorBgColor = rgbCursorNormal
+			}
+			charFgColor = tcell.ColorBlack
 		}
 
-		// Draw character with cursor color as underline/background
-		// Use underline style to create "empty box" effect
-		if charAtCursor != ' ' {
-			// Show character with cursor color as background
-			cursorStyle := charStyle.Background(cursorColor)
-			g.screen.SetContent(screenX, screenY, charAtCursor, nil, cursorStyle)
-		} else {
-			// No character, show colored block
-			cursorStyle := tcell.StyleDefault.Background(cursorColor)
-			g.screen.SetContent(screenX, screenY, ' ', nil, cursorStyle)
-		}
+		// Draw cursor with character (or space)
+		cursorStyle := tcell.StyleDefault.Foreground(charFgColor).Background(cursorBgColor)
+		g.screen.SetContent(screenX, screenY, charAtCursor, nil, cursorStyle)
 	}
 
 	g.screen.Show()
@@ -637,9 +632,6 @@ func (g *Game) moveCursor(dx, dy int) {
 		if g.trailEnabled {
 			g.addTrail(oldX, oldY, g.cursorX, g.cursorY)
 		}
-
-		// Clear ping on cursor movement
-		g.pingActive = false
 	}
 }
 
@@ -658,7 +650,10 @@ func (g *Game) handleCharacterTyping(typedChar rune) {
 
 	// Check if typed character matches
 	if hitCharIndex >= 0 && hitChar.rune == typedChar {
-		// Calculate score with level multiplier
+		// Increment score multiplier (first correct char = 1, second = 2, etc.)
+		g.scoreIncrement++
+
+		// Calculate level multiplier based on character level
 		levelMultiplier := 1
 		switch hitChar.level {
 		case LevelDark:
@@ -669,46 +664,16 @@ func (g *Game) handleCharacterTyping(typedChar rune) {
 			levelMultiplier = 3
 		}
 
-		// Calculate score multiplier based on sequence type
-		typeMultiplier := 1
+		// Calculate points (score increment × level multiplier)
+		points := g.scoreIncrement * levelMultiplier
+
+		// Apply negative for red sequences
 		if hitChar.sequenceType == SequenceRed {
-			typeMultiplier = -1
+			points = -points
 		}
 
-		// Check if continuing a sequence
-		wasOnSpace := g.lastCharX == -1
-		if wasOnSpace {
-			// Starting new sequence
-			g.score += 1 * levelMultiplier * typeMultiplier
-			g.hitSequencePos = 1
-		} else {
-			// Check if continuing sequence
-			var lastHitChar *Character
-			for i := range g.characters {
-				if g.characters[i].x == g.lastCharX && g.characters[i].y == g.lastCharY {
-					lastHitChar = &g.characters[i]
-					break
-				}
-			}
-
-			continuing := false
-			if lastHitChar != nil {
-				// Check if adjacent
-				if lastHitChar.x == hitChar.x-1 && lastHitChar.y == hitChar.y {
-					continuing = true
-				}
-			}
-
-			if continuing {
-				// Continuing sequence
-				g.hitSequencePos++
-				g.score += g.hitSequencePos * levelMultiplier * typeMultiplier
-			} else {
-				// New sequence
-				g.hitSequencePos = 1
-				g.score += 1 * levelMultiplier * typeMultiplier
-			}
-		}
+		// Add to score
+		g.score += points
 
 		// Activate score blink with character color
 		g.scoreBlinkActive = true
@@ -722,10 +687,6 @@ func (g *Game) handleCharacterTyping(typedChar rune) {
 			g.enableTrailFor5Seconds()
 		}
 
-		// Update last character position
-		g.lastCharX = hitChar.x
-		g.lastCharY = hitChar.y
-
 		// Remove character
 		g.characters = append(g.characters[:hitCharIndex], g.characters[hitCharIndex+1:]...)
 
@@ -734,13 +695,10 @@ func (g *Game) handleCharacterTyping(typedChar rune) {
 			g.moveCursor(1, 0)
 		}
 	} else {
-		// Wrong character - flash error
+		// Wrong character - flash error and reset score increment
 		g.cursorError = true
 		g.cursorErrorTime = time.Now()
-		// Reset sequence tracking
-		g.lastCharX = -1
-		g.lastCharY = -1
-		g.hitSequencePos = 0
+		g.scoreIncrement = 0
 	}
 }
 
@@ -1013,36 +971,30 @@ func (g *Game) findCharOnLine(target rune) {
 func (g *Game) handleInput(ev tcell.Event) bool {
 	switch ev := ev.(type) {
 	case *tcell.EventKey:
+		// Handle Ctrl+Q to exit (works in both normal and insert modes)
+		if ev.Key() == tcell.KeyCtrlQ {
+			return false
+		}
+
 		// Handle Escape key
 		if ev.Key() == tcell.KeyEscape {
 			if g.insertMode {
 				// Exit insert mode
 				g.insertMode = false
-				// Reset sequence tracking when exiting insert mode
-				g.lastCharX = -1
-				g.lastCharY = -1
-				g.hitSequencePos = 0
+				// Reset score increment when exiting insert mode
+				g.scoreIncrement = 0
 				return true
-			} else {
-				// Exit game
-				return false
 			}
+			// In normal mode, ESC does nothing
+			return true
 		}
 
-		// Handle Ctrl+C and Ctrl+Q to exit
-		if ev.Key() == tcell.KeyCtrlC ||
-			(ev.Key() == tcell.KeyRune && ev.Rune() == 'q' && ev.Modifiers()&tcell.ModCtrl != 0) {
+		// Handle Ctrl+C to exit
+		if ev.Key() == tcell.KeyCtrlC {
 			return false
 		}
 
-		// Handle Enter key for ping coordinates (only in normal mode)
-		if ev.Key() == tcell.KeyEnter && !g.insertMode {
-			g.pingActive = true
-			g.pingStartTime = time.Now()
-			g.pingRow = g.cursorY
-			g.pingCol = g.cursorX
-			return true
-		}
+		// Enter key no longer needed for ping (ping is now permanent)
 
 		if ev.Key() == tcell.KeyRune {
 			char := ev.Rune()
