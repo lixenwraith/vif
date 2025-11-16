@@ -320,12 +320,13 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 			return true
 		}
 
-		// Toggle ping
+		// Activate ping grid for 1 second
 		if char == '\r' || char == '\n' {
-			h.ctx.PingActive = !h.ctx.PingActive
+			h.ctx.PingActive = true
+			h.ctx.PingGridTimer = 1.0 // 1 second
 			h.ctx.MotionCount = 0
 			h.ctx.MotionCommand = ""
-			h.ctx.LastCommand = "" // Clear on ping toggle
+			h.ctx.LastCommand = "" // Clear on ping activation
 			return true
 		}
 

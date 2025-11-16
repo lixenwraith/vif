@@ -67,10 +67,11 @@ type GameContext struct {
 	TrailEndTime time.Time
 
 	// Ping coordinates feature
-	PingActive    bool
-	PingStartTime time.Time
-	PingRow       int
-	PingCol       int
+	PingActive     bool
+	PingGridTimer  float64 // Timer in seconds for ping grid (0 = inactive)
+	PingStartTime  time.Time
+	PingRow        int
+	PingCol        int
 
 	// Heat tracking
 	LastMoveKey      rune

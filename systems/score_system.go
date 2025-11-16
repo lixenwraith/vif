@@ -79,7 +79,12 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 	// Check if typed character matches
 	if char.Rune == typedRune {
 		// Correct character
-		s.ctx.ScoreIncrement++
+		// RED characters reset heat instead of incrementing it
+		if seq.Type == components.SequenceRed {
+			s.ctx.ScoreIncrement = 0
+		} else {
+			s.ctx.ScoreIncrement++
+		}
 		s.lastCorrect = time.Now()
 
 		// Calculate points: increment * level_multiplier * (trail?2:1) * (red?-1:1)

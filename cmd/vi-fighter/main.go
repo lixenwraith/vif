@@ -97,6 +97,15 @@ func main() {
 			dt := 16 * time.Millisecond
 			ctx.World.Update(dt)
 
+			// Update ping grid timer
+			if ctx.PingGridTimer > 0 {
+				ctx.PingGridTimer -= dt.Seconds()
+				if ctx.PingGridTimer <= 0 {
+					ctx.PingGridTimer = 0
+					ctx.PingActive = false
+				}
+			}
+
 			// Update decay system dimensions
 			decaySystem.UpdateDimensions(ctx.GameWidth, ctx.GameHeight, ctx.Width, ctx.ScoreIncrement)
 

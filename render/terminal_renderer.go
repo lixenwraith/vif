@@ -53,7 +53,7 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 	r.drawLineNumbers(ctx, defaultStyle)
 
 	// Draw ping highlights (cursor row/column)
-	pingColor := r.getPingColor(ctx.World, ctx.CursorX, ctx.CursorY)
+	pingColor := r.getPingColor(ctx.World, ctx.CursorX, ctx.CursorY, ctx)
 	r.drawPingHighlights(ctx, pingColor, defaultStyle)
 
 	// Draw characters
@@ -160,13 +160,14 @@ func (r *TerminalRenderer) drawLineNumbers(ctx *engine.GameContext, defaultStyle
 	}
 }
 
-// getPingColor determines the ping highlight color based on cursor position
-func (r *TerminalRenderer) getPingColor(world *engine.World, cursorX, cursorY int) tcell.Color {
-	entity := world.GetEntityAtPosition(cursorX, cursorY)
-	if entity != 0 {
-		return tcell.NewRGBColor(5, 5, 5) // Almost black when on character
+// getPingColor determines the ping highlight color based on game mode
+func (r *TerminalRenderer) getPingColor(world *engine.World, cursorX, cursorY int, ctx *engine.GameContext) tcell.Color {
+	// INSERT mode: use whitespace color (dark gray)
+	// NORMAL/SEARCH mode: use character color (almost black)
+	if ctx.IsInsertMode() {
+		return RgbPingHighlight // Dark gray (50,50,50)
 	}
-	return RgbPingHighlight // Dark gray for whitespace
+	return tcell.NewRGBColor(5, 5, 5) // Almost black for NORMAL and SEARCH modes
 }
 
 // drawPingHighlights draws the cursor row and column highlights
@@ -279,10 +280,10 @@ func (r *TerminalRenderer) drawCharacters(world *engine.World, pingColor tcell.C
 			// Check if character is on a ping line (cursor row or column)
 			onPingLine := (pos.Y == ctx.CursorY) || (pos.X == ctx.CursorX)
 
-			// If on ping line, use normal background instead of ping background
+			// If on ping line, use ping background color
 			if onPingLine {
 				fg, _, _ := style.Decompose()
-				style = defaultStyle.Foreground(fg).Background(RgbBackground)
+				style = defaultStyle.Foreground(fg).Background(pingColor)
 			}
 
 			r.screen.SetContent(screenX, screenY, char.Rune, nil, style)
