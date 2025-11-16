@@ -40,11 +40,10 @@ const (
 )
 
 var (
-	// RGB color definitions
-	rgbCharLowercase   = tcell.NewRGBColor(0, 200, 0)      // Green
-	rgbCharUppercase   = tcell.NewRGBColor(100, 150, 255)  // Blue
-	rgbCharDigit       = tcell.NewRGBColor(255, 220, 0)    // Yellow
-	rgbCharSpecial     = tcell.NewRGBColor(200, 100, 255)  // Purple
+	// RGB color definitions for sequences
+	rgbSequenceGreen   = tcell.NewRGBColor(0, 200, 0)      // Green
+	rgbSequenceRed     = tcell.NewRGBColor(255, 80, 80)    // Red
+	rgbSequenceBlue    = tcell.NewRGBColor(100, 150, 255)  // Blue
 
 	rgbLineNumbers     = tcell.NewRGBColor(100, 100, 100)  // Dark gray
 	rgbStatusBar       = tcell.NewRGBColor(255, 255, 255)  // White
@@ -56,12 +55,21 @@ var (
 	rgbTrailGray       = tcell.NewRGBColor(200, 200, 200)  // Light gray base
 )
 
+type SequenceType int
+
+const (
+	SequenceGreen SequenceType = iota // Positive scoring
+	SequenceRed                        // Negative scoring
+	SequenceBlue                       // Positive scoring + trail effect
+)
+
 type Character struct {
-	rune       rune
-	x, y       int
-	style      tcell.Style
-	sequenceID int // All chars in same sequence have same ID
-	seqIndex   int // Position in the sequence (0-based)
+	rune         rune
+	x, y         int
+	style        tcell.Style
+	sequenceID   int          // All chars in same sequence have same ID
+	seqIndex     int          // Position in the sequence (0-based)
+	sequenceType SequenceType // Type of sequence (Green, Red, Blue)
 }
 
 type Trail struct {
@@ -87,7 +95,10 @@ type Game struct {
 	cursorBlinkTime  time.Time
 
 	// Trail effect
-	trails []Trail
+	trails        []Trail
+	trailEnabled  bool
+	trailTimer    *time.Timer
+	trailEndTime  time.Time
 
 	// Characters on screen
 	characters []Character
@@ -187,17 +198,18 @@ func (g *Game) generateCharacterSequence() []Character {
 		sequence[i] = chars[rand.Intn(len(chars))]
 	}
 
-	// Pick a color based on the first character
+	// Randomly assign sequence type (Green, Red, or Blue)
+	seqType := SequenceType(rand.Intn(3))
+
+	// Pick color based on sequence type
 	var style tcell.Style
-	switch {
-	case sequence[0] >= 'a' && sequence[0] <= 'z':
-		style = tcell.StyleDefault.Foreground(rgbCharLowercase)
-	case sequence[0] >= 'A' && sequence[0] <= 'Z':
-		style = tcell.StyleDefault.Foreground(rgbCharUppercase)
-	case sequence[0] >= '0' && sequence[0] <= '9':
-		style = tcell.StyleDefault.Foreground(rgbCharDigit)
-	default:
-		style = tcell.StyleDefault.Foreground(rgbCharSpecial)
+	switch seqType {
+	case SequenceGreen:
+		style = tcell.StyleDefault.Foreground(rgbSequenceGreen)
+	case SequenceRed:
+		style = tcell.StyleDefault.Foreground(rgbSequenceRed)
+	case SequenceBlue:
+		style = tcell.StyleDefault.Foreground(rgbSequenceBlue)
 	}
 
 	// Find a position where the sequence fits without overlapping
@@ -246,12 +258,13 @@ func (g *Game) generateCharacterSequence() []Character {
 	result := make([]Character, seqLength)
 	for i := 0; i < seqLength; i++ {
 		result[i] = Character{
-			rune:       sequence[i],
-			x:          x + i,
-			y:          y,
-			style:      style,
-			sequenceID: sequenceID,
-			seqIndex:   i,
+			rune:         sequence[i],
+			x:            x + i,
+			y:            y,
+			style:        style,
+			sequenceID:   sequenceID,
+			seqIndex:     i,
+			sequenceType: seqType,
 		}
 	}
 
@@ -511,9 +524,11 @@ func (g *Game) moveCursor(dx, dy int) {
 		g.cursorY = g.gameHeight - 1
 	}
 
-	// Add trail if cursor moved
+	// Add trail if cursor moved and trail is enabled
 	if oldX != g.cursorX || oldY != g.cursorY {
-		g.addTrail(oldX, oldY, g.cursorX, g.cursorY)
+		if g.trailEnabled {
+			g.addTrail(oldX, oldY, g.cursorX, g.cursorY)
+		}
 
 		// Clear ping on cursor movement
 		g.pingActive = false
@@ -533,9 +548,15 @@ func (g *Game) moveCursor(dx, dy int) {
 			// We hit a character - update score
 			wasOnSpace := g.lastCharX == -1
 
+			// Calculate score multiplier based on sequence type
+			scoreMultiplier := 1
+			if hitChar.sequenceType == SequenceRed {
+				scoreMultiplier = -1
+			}
+
 			if wasOnSpace {
 				// Moving from space to character
-				g.score += 1
+				g.score += 1 * scoreMultiplier
 				g.hitSequencePos = 1
 			} else {
 				// Moving from character to character - check if continuing sequence
@@ -550,12 +571,10 @@ func (g *Game) moveCursor(dx, dy int) {
 
 				continuing := false
 				if lastHitChar != nil {
-					// Check if hitChar is the next character in the sequence
-					// (position-wise, not necessarily by seqIndex)
-					xDiff := hitChar.x - lastHitChar.x
-					yDiff := hitChar.y - lastHitChar.y
-					// Consider it continuing if moving by 1 in any direction
-					if (xDiff == 1 || xDiff == -1 || xDiff == 0) && (yDiff == 1 || yDiff == -1 || yDiff == 0) {
+					// Check if there's a clear path between last char and current char
+					// (no spaces in between)
+					pathClear := g.checkPathForCharacters(lastHitChar.x, lastHitChar.y, hitChar.x, hitChar.y)
+					if pathClear {
 						continuing = true
 					}
 				}
@@ -563,12 +582,17 @@ func (g *Game) moveCursor(dx, dy int) {
 				if continuing {
 					// Continuing sequence
 					g.hitSequencePos++
-					g.score += g.hitSequencePos
+					g.score += g.hitSequencePos * scoreMultiplier
 				} else {
 					// New sequence
 					g.hitSequencePos = 1
-					g.score += 1
+					g.score += 1 * scoreMultiplier
 				}
+			}
+
+			// If this is a blue character, enable trail for 5 seconds
+			if hitChar.sequenceType == SequenceBlue {
+				g.enableTrailFor5Seconds()
 			}
 
 			// Update last character position
@@ -598,6 +622,54 @@ func (g *Game) hasCharAt(x, y int) bool {
 		}
 	}
 	return false
+}
+
+// checkPathForCharacters checks if all positions between (x1, y1) and (x2, y2) contain characters
+// Returns true if the path is clear (all positions have characters), false if there's a gap
+func (g *Game) checkPathForCharacters(x1, y1, x2, y2 int) bool {
+	// For horizontal movement on same line
+	if y1 == y2 {
+		minX := x1
+		maxX := x2
+		if x1 > x2 {
+			minX = x2
+			maxX = x1
+		}
+		// Check all positions between (exclusive of endpoints)
+		for x := minX + 1; x < maxX; x++ {
+			if !g.hasCharAt(x, y1) {
+				return false // Found a gap
+			}
+		}
+		return true
+	}
+	// For vertical or diagonal movement, just check if adjacent
+	xDiff := x2 - x1
+	yDiff := y2 - y1
+	if xDiff < 0 {
+		xDiff = -xDiff
+	}
+	if yDiff < 0 {
+		yDiff = -yDiff
+	}
+	// Only consider adjacent if within 1 step
+	return xDiff <= 1 && yDiff <= 1
+}
+
+// enableTrailFor5Seconds enables the cursor trail effect for 5 seconds
+func (g *Game) enableTrailFor5Seconds() {
+	g.trailEnabled = true
+	g.trailEndTime = time.Now().Add(5 * time.Second)
+
+	// Cancel existing timer if any
+	if g.trailTimer != nil {
+		g.trailTimer.Stop()
+	}
+
+	// Set new timer
+	g.trailTimer = time.AfterFunc(5*time.Second, func() {
+		g.trailEnabled = false
+	})
 }
 
 // moveToNextWordStart implements 'w' motion
@@ -663,6 +735,40 @@ func (g *Game) moveToNextWordEnd() {
 	}
 }
 
+// moveToPrevWordStart implements 'b' motion
+// Moves to the beginning of the word on the left
+func (g *Game) moveToPrevWordStart() {
+	y := g.cursorY
+	startX := g.cursorX
+
+	// Start from position to the left
+	x := startX - 1
+	if x < 0 {
+		// Already at beginning - flash error
+		g.cursorError = true
+		g.cursorErrorTime = time.Now()
+		return
+	}
+
+	// Phase 1: Skip any spaces
+	for x >= 0 && !g.hasCharAt(x, y) {
+		x--
+	}
+
+	// Phase 2: If we found a character, find the beginning of that word
+	if x >= 0 && g.hasCharAt(x, y) {
+		// We're on a character, move to the beginning of this word
+		for x-1 >= 0 && g.hasCharAt(x-1, y) {
+			x--
+		}
+		g.moveCursor(x-g.cursorX, 0)
+	} else {
+		// No word found - flash error
+		g.cursorError = true
+		g.cursorErrorTime = time.Now()
+	}
+}
+
 func (g *Game) executeMotion(command rune, count int) {
 	if count == 0 {
 		count = 1
@@ -701,9 +807,17 @@ func (g *Game) executeMotion(command rune, count int) {
 		dy := (g.gameHeight - 1) - g.cursorY
 		g.moveCursor(0, dy)
 	case 'w': // next word start (first character after spaces)
-		g.moveToNextWordStart()
+		for i := 0; i < count; i++ {
+			g.moveToNextWordStart()
+		}
 	case 'e': // next word end (last character before space)
-		g.moveToNextWordEnd()
+		for i := 0; i < count; i++ {
+			g.moveToNextWordEnd()
+		}
+	case 'b': // previous word start (beginning of word on left)
+		for i := 0; i < count; i++ {
+			g.moveToPrevWordStart()
+		}
 	}
 
 	// Clear motion state
@@ -827,17 +941,25 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 
 			// Handle 'w' command (next word start)
 			if char == 'w' {
-				g.motionCommand = "w"
+				g.motionCommand += "w"
 				g.statusMessage = g.motionCommand
-				g.executeMotion('w', 0)
+				g.executeMotion('w', g.motionCount)
 				return true
 			}
 
 			// Handle 'e' command (next word end)
 			if char == 'e' {
-				g.motionCommand = "e"
+				g.motionCommand += "e"
 				g.statusMessage = g.motionCommand
-				g.executeMotion('e', 0)
+				g.executeMotion('e', g.motionCount)
+				return true
+			}
+
+			// Handle 'b' command (previous word start)
+			if char == 'b' {
+				g.motionCommand += "b"
+				g.statusMessage = g.motionCommand
+				g.executeMotion('b', g.motionCount)
 				return true
 			}
 
