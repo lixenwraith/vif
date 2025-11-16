@@ -164,6 +164,13 @@ type Game struct {
 	// Heat tracking for consecutive movements
 	lastMoveKey    rune  // Last movement key pressed
 	consecutiveCount int  // Count of consecutive same key presses
+
+	// Decay feature
+	decayTicker     *time.Timer // Timer for next decay cycle
+	decayAnimating  bool        // True when decay animation is running
+	decayRow        int         // Current row being animated (0 to gameHeight-1)
+	decayStartTime  time.Time   // When current decay animation started
+	lastDecayUpdate time.Time   // Last time decay ticker was updated
 }
 
 func NewGame() (*Game, error) {
@@ -191,12 +198,18 @@ func NewGame() (*Game, error) {
 		waitingForF:     false,
 		commandPrefix:   0,
 		statusMessage:   "",
+		decayAnimating:  false,
+		decayRow:        0,
+		lastDecayUpdate: time.Now(),
 	}
 
 	g.width, g.height = screen.Size()
 	g.updateGameArea()
 	g.cursorX = g.gameWidth / 2
 	g.cursorY = g.gameHeight / 2
+
+	// Start the decay ticker
+	g.startDecayTicker()
 
 	return g, nil
 }
@@ -670,6 +683,24 @@ func (g *Game) draw() {
 			}
 			color := tcell.NewRGBColor(int32(intensity), int32(intensity), int32(intensity))
 			g.screen.SetContent(screenX, screenY, '█', nil, defaultStyle.Foreground(color))
+		}
+	}
+
+	// Draw decay animation - orange row moving from top to bottom
+	if g.decayAnimating {
+		elapsed := time.Since(g.decayStartTime).Seconds()
+		currentRow := int(elapsed / 0.1)
+
+		// Draw orange row at current position
+		if currentRow < g.gameHeight {
+			orangeStyle := defaultStyle.Foreground(tcell.NewRGBColor(255, 165, 0)) // Orange
+			screenY := g.gameY + currentRow
+			for x := 0; x < g.gameWidth; x++ {
+				screenX := g.gameX + x
+				if screenX >= g.gameX && screenX < g.width && screenY >= 0 && screenY < g.gameHeight {
+					g.screen.SetContent(screenX, screenY, '█', nil, orangeStyle)
+				}
+			}
 		}
 	}
 
@@ -2073,6 +2104,148 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 	return true
 }
 
+// calculateDecayInterval calculates the interval in seconds until the next decay
+// based on: gameWidth * gameHeight * (heatMeterPercentage / 2)
+func (g *Game) calculateDecayInterval() time.Duration {
+	// Calculate heat meter percentage (0.0 to 1.0)
+	heatBarWidth := g.width - 6 // Same as in draw()
+	if heatBarWidth < 1 {
+		heatBarWidth = 1
+	}
+
+	heatPercentage := float64(g.scoreIncrement) / float64(heatBarWidth)
+	if heatPercentage > 1.0 {
+		heatPercentage = 1.0
+	}
+	if heatPercentage < 0.0 {
+		heatPercentage = 0.0
+	}
+
+	// Calculate interval: gameWidth * gameHeight * (heatPercentage / 2) seconds
+	intervalSeconds := float64(g.gameWidth) * float64(g.gameHeight) * (heatPercentage / 2.0)
+
+	// Minimum interval of 1 second to prevent too frequent decays
+	if intervalSeconds < 1.0 {
+		intervalSeconds = 1.0
+	}
+
+	return time.Duration(intervalSeconds * float64(time.Second))
+}
+
+// startDecayTicker starts or restarts the decay ticker based on current heat meter
+func (g *Game) startDecayTicker() {
+	// Cancel existing timer if any
+	if g.decayTicker != nil {
+		g.decayTicker.Stop()
+	}
+
+	interval := g.calculateDecayInterval()
+	g.decayTicker = time.AfterFunc(interval, func() {
+		// Start decay animation
+		g.decayAnimating = true
+		g.decayRow = 0
+		g.decayStartTime = time.Now()
+	})
+	g.lastDecayUpdate = time.Now()
+}
+
+// applyDecayToRow applies decay logic to all characters at the given row
+func (g *Game) applyDecayToRow(row int) {
+	newChars := make([]Character, 0, len(g.characters))
+
+	for _, ch := range g.characters {
+		if ch.y == row {
+			// Apply decay logic
+			if ch.level > LevelDark {
+				// Reduce level by 1 and update color
+				ch.level--
+				ch.style = g.getStyleForSequence(ch.sequenceType, ch.level)
+				newChars = append(newChars, ch)
+			} else {
+				// Level is LevelDark - decay color: Blue → Green → Red → disappear
+				if ch.sequenceType == SequenceBlue {
+					// Blue becomes Green
+					ch.sequenceType = SequenceGreen
+					ch.style = g.getStyleForSequence(SequenceGreen, LevelDark)
+					newChars = append(newChars, ch)
+				} else if ch.sequenceType == SequenceGreen {
+					// Green becomes Red
+					ch.sequenceType = SequenceRed
+					ch.style = g.getStyleForSequence(SequenceRed, LevelDark)
+					newChars = append(newChars, ch)
+				}
+				// Red disappears (don't append to newChars)
+			}
+		} else {
+			// Not on decay row, keep as is
+			newChars = append(newChars, ch)
+		}
+	}
+
+	g.characters = newChars
+}
+
+// getStyleForSequence returns the style for a given sequence type and level
+func (g *Game) getStyleForSequence(seqType SequenceType, level SequenceLevel) tcell.Style {
+	baseStyle := tcell.StyleDefault.Background(rgbBackground)
+	switch seqType {
+	case SequenceGreen:
+		switch level {
+		case LevelDark:
+			return baseStyle.Foreground(rgbSequenceGreenDark)
+		case LevelNormal:
+			return baseStyle.Foreground(rgbSequenceGreenNormal)
+		case LevelBright:
+			return baseStyle.Foreground(rgbSequenceGreenBright)
+		}
+	case SequenceRed:
+		switch level {
+		case LevelDark:
+			return baseStyle.Foreground(rgbSequenceRedDark)
+		case LevelNormal:
+			return baseStyle.Foreground(rgbSequenceRedNormal)
+		case LevelBright:
+			return baseStyle.Foreground(rgbSequenceRedBright)
+		}
+	case SequenceBlue:
+		switch level {
+		case LevelDark:
+			return baseStyle.Foreground(rgbSequenceBlueDark)
+		case LevelNormal:
+			return baseStyle.Foreground(rgbSequenceBlueNormal)
+		case LevelBright:
+			return baseStyle.Foreground(rgbSequenceBlueBright)
+		}
+	}
+	return baseStyle
+}
+
+// updateDecayAnimation updates the decay animation state
+func (g *Game) updateDecayAnimation() {
+	if !g.decayAnimating {
+		return
+	}
+
+	// Calculate which row should be decaying based on elapsed time
+	// 0.1 second per row
+	elapsed := time.Since(g.decayStartTime).Seconds()
+	currentRow := int(elapsed / 0.1)
+
+	// Apply decay to any newly reached rows
+	for g.decayRow <= currentRow && g.decayRow < g.gameHeight {
+		g.applyDecayToRow(g.decayRow)
+		g.decayRow++
+	}
+
+	// Check if animation is complete
+	if g.decayRow >= g.gameHeight {
+		g.decayAnimating = false
+		g.decayRow = 0
+		// Restart the decay ticker for next cycle
+		g.startDecayTicker()
+	}
+}
+
 func (g *Game) run() {
 	ticker := time.NewTicker(16 * time.Millisecond) // ~60 FPS
 	defer ticker.Stop()
@@ -2120,6 +2293,15 @@ func (g *Game) run() {
 					}
 					g.lastSpawn = time.Now()
 				}
+			}
+
+			// Update decay animation
+			g.updateDecayAnimation()
+
+			// Update decay ticker if heat meter changed significantly
+			// (check every second to avoid too frequent updates)
+			if time.Since(g.lastDecayUpdate).Seconds() > 1.0 {
+				g.startDecayTicker()
 			}
 
 			g.updateTrails()
