@@ -70,8 +70,10 @@ func (s *DecaySystem) updateAnimation(world *engine.World) {
 		s.currentRow++
 	}
 
-	// Check if animation complete (currentRow > gameHeight-1 means we've processed all rows)
-	if s.currentRow > s.gameHeight-1 {
+	// Check if animation complete based on elapsed time (0.1s per row)
+	// This ensures the last row (gameHeight-1) is displayed for one frame
+	animationDuration := float64(s.gameHeight) * 0.1
+	if elapsed >= animationDuration {
 		s.animating = false
 		s.currentRow = 0
 		// Schedule next decay
@@ -181,10 +183,19 @@ func (s *DecaySystem) IsAnimating() bool {
 
 // CurrentRow returns the current decay row being displayed
 func (s *DecaySystem) CurrentRow() int {
-	// currentRow tracks the next row to process
-	// For display, we want the last row that was processed
+	// When animation is done, currentRow is 0, but we want to avoid displaying row 0
+	// During animation, currentRow is the next row to process
+	// For display, return the last processed row (currentRow - 1)
+	// but clamp to valid range [0, gameHeight-1]
+	if !s.animating {
+		return 0
+	}
 	if s.currentRow > 0 {
-		return s.currentRow - 1
+		displayRow := s.currentRow - 1
+		if displayRow >= s.gameHeight {
+			return s.gameHeight - 1
+		}
+		return displayRow
 	}
 	return 0
 }

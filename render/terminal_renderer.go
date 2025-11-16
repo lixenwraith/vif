@@ -57,7 +57,7 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 	r.drawPingHighlights(ctx, pingColor, defaultStyle)
 
 	// Draw characters
-	r.drawCharacters(ctx.World, pingColor, defaultStyle)
+	r.drawCharacters(ctx.World, pingColor, defaultStyle, ctx)
 
 	// Draw trails
 	r.drawTrails(ctx.World, defaultStyle)
@@ -124,9 +124,10 @@ func (r *TerminalRenderer) drawHeatMeter(scoreIncrement int, defaultStyle tcell.
 		}
 	}
 
-	// Draw spaces between bar and number
+	// Draw spaces between bar and number (with black background)
+	blackBgStyle := defaultStyle.Background(tcell.NewRGBColor(0, 0, 0))
 	for i := 0; i < 2 && heatBarWidth+i < startX; i++ {
-		r.screen.SetContent(heatBarWidth+i, 0, ' ', nil, defaultStyle)
+		r.screen.SetContent(heatBarWidth+i, 0, ' ', nil, blackBgStyle)
 	}
 }
 
@@ -171,20 +172,13 @@ func (r *TerminalRenderer) getPingColor(world *engine.World, cursorX, cursorY in
 // drawPingHighlights draws the cursor row and column highlights
 func (r *TerminalRenderer) drawPingHighlights(ctx *engine.GameContext, pingColor tcell.Color, defaultStyle tcell.Style) {
 	pingStyle := defaultStyle.Background(pingColor)
-	normalBgStyle := defaultStyle.Background(RgbBackground)
 
 	// Highlight the row
 	for x := 0; x < r.gameWidth; x++ {
 		screenX := r.gameX + x
 		screenY := r.gameY + ctx.CursorY
 		if screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
-			// Use normal background if there's a character at this position
-			entity := ctx.World.GetEntityAtPosition(x, ctx.CursorY)
-			if entity != 0 {
-				r.screen.SetContent(screenX, screenY, ' ', nil, normalBgStyle)
-			} else {
-				r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
-			}
+			r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
 		}
 	}
 
@@ -193,24 +187,18 @@ func (r *TerminalRenderer) drawPingHighlights(ctx *engine.GameContext, pingColor
 		screenX := r.gameX + ctx.CursorX
 		screenY := r.gameY + y
 		if screenX >= r.gameX && screenX < r.width && screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
-			// Use normal background if there's a character at this position
-			entity := ctx.World.GetEntityAtPosition(ctx.CursorX, y)
-			if entity != 0 {
-				r.screen.SetContent(screenX, screenY, ' ', nil, normalBgStyle)
-			} else {
-				r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
-			}
+			r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
 		}
 	}
 
 	// Draw grid lines if ping is active
 	if ctx.PingActive {
-		r.drawPingGrid(ctx, pingStyle, normalBgStyle)
+		r.drawPingGrid(ctx, pingStyle)
 	}
 }
 
 // drawPingGrid draws coordinate grid lines at 5-column intervals
-func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell.Style, normalBgStyle tcell.Style) {
+func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell.Style) {
 	// Vertical lines
 	for n := 1; ; n++ {
 		offset := 5 * n
@@ -223,13 +211,7 @@ func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell
 				screenX := r.gameX + col
 				screenY := r.gameY + y
 				if screenX >= r.gameX && screenX < r.width && screenY >= 0 && screenY < r.gameHeight {
-					// Use normal background if there's a character at this position
-					entity := ctx.World.GetEntityAtPosition(col, y)
-					if entity != 0 {
-						r.screen.SetContent(screenX, screenY, ' ', nil, normalBgStyle)
-					} else {
-						r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
-					}
+					r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
 				}
 			}
 		}
@@ -239,13 +221,7 @@ func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell
 				screenX := r.gameX + col
 				screenY := r.gameY + y
 				if screenX >= r.gameX && screenX < r.width && screenY >= 0 && screenY < r.gameHeight {
-					// Use normal background if there's a character at this position
-					entity := ctx.World.GetEntityAtPosition(col, y)
-					if entity != 0 {
-						r.screen.SetContent(screenX, screenY, ' ', nil, normalBgStyle)
-					} else {
-						r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
-					}
+					r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
 				}
 			}
 		}
@@ -263,13 +239,7 @@ func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell
 				screenX := r.gameX + x
 				screenY := r.gameY + row
 				if screenY >= 0 && screenY < r.gameHeight {
-					// Use normal background if there's a character at this position
-					entity := ctx.World.GetEntityAtPosition(x, row)
-					if entity != 0 {
-						r.screen.SetContent(screenX, screenY, ' ', nil, normalBgStyle)
-					} else {
-						r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
-					}
+					r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
 				}
 			}
 		}
@@ -279,13 +249,7 @@ func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell
 				screenX := r.gameX + x
 				screenY := r.gameY + row
 				if screenY >= 0 && screenY < r.gameHeight {
-					// Use normal background if there's a character at this position
-					entity := ctx.World.GetEntityAtPosition(x, row)
-					if entity != 0 {
-						r.screen.SetContent(screenX, screenY, ' ', nil, normalBgStyle)
-					} else {
-						r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
-					}
+					r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
 				}
 			}
 		}
@@ -293,7 +257,7 @@ func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell
 }
 
 // drawCharacters draws all character entities
-func (r *TerminalRenderer) drawCharacters(world *engine.World, pingColor tcell.Color, defaultStyle tcell.Style) {
+func (r *TerminalRenderer) drawCharacters(world *engine.World, pingColor tcell.Color, defaultStyle tcell.Style, ctx *engine.GameContext) {
 	posType := reflect.TypeOf(components.PositionComponent{})
 	charType := reflect.TypeOf(components.CharacterComponent{})
 
@@ -311,8 +275,16 @@ func (r *TerminalRenderer) drawCharacters(world *engine.World, pingColor tcell.C
 
 		if screenX >= r.gameX && screenX < r.width && screenY >= 0 && screenY < r.gameHeight {
 			style := char.Style
-			// Add ping background if on cursor row/column
-			// (We'd need cursor position from context for this - simplified for now)
+
+			// Check if character is on a ping line (cursor row or column)
+			onPingLine := (pos.Y == ctx.CursorY) || (pos.X == ctx.CursorX)
+
+			// If on ping line, use normal background instead of ping background
+			if onPingLine {
+				fg, _, _ := style.Decompose()
+				style = defaultStyle.Foreground(fg).Background(RgbBackground)
+			}
+
 			r.screen.SetContent(screenX, screenY, char.Rune, nil, style)
 		}
 	}
