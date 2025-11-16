@@ -280,6 +280,20 @@ func (r *TerminalRenderer) drawCharacters(world *engine.World, pingColor tcell.C
 			// Check if character is on a ping line (cursor row or column)
 			onPingLine := (pos.Y == ctx.CursorY) || (pos.X == ctx.CursorX)
 
+			// Also check if on ping grid lines when ping is active
+			if !onPingLine && ctx.PingActive {
+				// Check if on vertical grid line (columns at ±5, ±10, ±15, etc.)
+				deltaX := pos.X - ctx.CursorX
+				if deltaX%5 == 0 && deltaX != 0 {
+					onPingLine = true
+				}
+				// Check if on horizontal grid line (rows at ±5, ±10, ±15, etc.)
+				deltaY := pos.Y - ctx.CursorY
+				if deltaY%5 == 0 && deltaY != 0 {
+					onPingLine = true
+				}
+			}
+
 			// If on ping line, use ping background color
 			if onPingLine {
 				fg, _, _ := style.Decompose()
