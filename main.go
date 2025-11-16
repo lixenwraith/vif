@@ -127,6 +127,7 @@ type Game struct {
 	insertMode       bool
 	searchMode       bool
 	searchText       string
+	lastSearchText   string
 
 	// Trail effect
 	trails        []Trail
@@ -430,19 +431,12 @@ func (g *Game) draw() {
 	}
 
 	// Permanent ping state: always highlight cursor's row and column
-	// Determine ping color based on character under cursor
-	pingColor := rgbPingOrange // Default: very dark orange (whitespace)
+	// Determine ping color based on whether cursor is on a character or space
+	pingColor := rgbPingHighlight // Default: dark gray (whitespace)
 	for _, ch := range g.characters {
 		if ch.x == g.cursorX && ch.y == g.cursorY {
-			// Cursor is on a character - use color based on sequence type
-			switch ch.sequenceType {
-			case SequenceGreen:
-				pingColor = rgbPingGreen
-			case SequenceRed:
-				pingColor = rgbPingRed
-			case SequenceBlue:
-				pingColor = rgbPingBlue
-			}
+			// Cursor is on a character - use almost black
+			pingColor = tcell.NewRGBColor(5, 5, 5) // Almost black
 			break
 		}
 	}
@@ -707,9 +701,9 @@ func (g *Game) draw() {
 				cursorBgColor = rgbCursorError
 				charFgColor = tcell.ColorBlack
 			} else if hasChar {
-				// Cursor on a character: cursor bg = black, char fg = character color
-				cursorBgColor = tcell.NewRGBColor(10, 10, 10) // Very dark (almost black)
-				charFgColor = charColor
+				// Cursor on a character: cursor bg = character color, char fg = black
+				cursorBgColor = charColor
+				charFgColor = tcell.ColorBlack
 			} else {
 				// Cursor on empty space: orange (normal) or white (insert)
 				if g.insertMode {
@@ -789,6 +783,11 @@ func (g *Game) handleCharacterTyping(typedChar rune) {
 		// Calculate points (score increment × level multiplier)
 		points := g.scoreIncrement * levelMultiplier
 
+		// Apply x2 multiplier if trail is active
+		if g.trailEnabled {
+			points *= 2
+		}
+
 		// Apply negative for red sequences
 		if hitChar.sequenceType == SequenceRed {
 			points = -points
@@ -804,9 +803,9 @@ func (g *Game) handleCharacterTyping(typedChar rune) {
 		fg, _, _ := hitChar.style.Decompose()
 		g.scoreBlinkColor = fg
 
-		// If this is a blue character, enable trail for 5 seconds
+		// If this is a blue character, add 1 second to trail time
 		if hitChar.sequenceType == SequenceBlue {
-			g.enableTrailFor5Seconds()
+			g.addTrailTime(1)
 		}
 
 		// Remove character
@@ -866,18 +865,32 @@ func (g *Game) checkPathForCharacters(x1, y1, x2, y2 int) bool {
 	return xDiff <= 1 && yDiff <= 1
 }
 
-// enableTrailFor5Seconds enables the cursor trail effect for 5 seconds
-func (g *Game) enableTrailFor5Seconds() {
+// addTrailTime adds the specified number of seconds to the cursor trail effect
+func (g *Game) addTrailTime(seconds int) {
+	newEndTime := time.Now().Add(time.Duration(seconds) * time.Second)
+
+	// If trail is already enabled, add to existing time
+	if g.trailEnabled && g.trailEndTime.After(time.Now()) {
+		// Add seconds to the current end time
+		newEndTime = g.trailEndTime.Add(time.Duration(seconds) * time.Second)
+	}
+
 	g.trailEnabled = true
-	g.trailEndTime = time.Now().Add(5 * time.Second)
+	g.trailEndTime = newEndTime
 
 	// Cancel existing timer if any
 	if g.trailTimer != nil {
 		g.trailTimer.Stop()
 	}
 
+	// Calculate duration until end time
+	duration := time.Until(newEndTime)
+	if duration < 0 {
+		duration = 0
+	}
+
 	// Set new timer
-	g.trailTimer = time.AfterFunc(5*time.Second, func() {
+	g.trailTimer = time.AfterFunc(duration, func() {
 		g.trailEnabled = false
 	})
 }
@@ -915,14 +928,23 @@ func (g *Game) moveToNextWordEnd() {
 	y := g.cursorY
 	startX := g.cursorX
 
-	// If we're on a character, skip to end of current word first
 	x := startX
+
+	// Check if we're on a character
 	if g.hasCharAt(x, y) {
-		x++
-		for x < g.gameWidth && g.hasCharAt(x, y) {
-			x++
+		// Check if we're at the end of the current word
+		if x+1 < g.gameWidth && g.hasCharAt(x+1, y) {
+			// Not at the end, move to end of current word
+			for x+1 < g.gameWidth && g.hasCharAt(x+1, y) {
+				x++
+			}
+			g.moveCursor(x-g.cursorX, 0)
+			return
 		}
+		// We're at the end of the word, continue to find next word
+		x++
 	} else {
+		// We're on a space, move to next position
 		x++
 	}
 
@@ -931,9 +953,9 @@ func (g *Game) moveToNextWordEnd() {
 		x++
 	}
 
-	// Now find the end of the next word
+	// Find the end of the next word
 	if x < g.gameWidth && g.hasCharAt(x, y) {
-		// Found start of word, now find its end
+		// Found start of word, find its end
 		for x+1 < g.gameWidth && g.hasCharAt(x+1, y) {
 			x++
 		}
@@ -1167,6 +1189,83 @@ func (g *Game) performSearch(searchStr string) bool {
 	return false
 }
 
+// performSearchBackward searches for the given text in backward direction from current cursor position
+// Returns true if found and moves cursor to the beginning of the match
+func (g *Game) performSearchBackward(searchStr string) bool {
+	if searchStr == "" {
+		// Empty search string - do nothing
+		return true
+	}
+
+	searchRunes := []rune(searchStr)
+	searchLen := len(searchRunes)
+
+	// Helper function to check if sequence at (startX, y) matches search string
+	matchesAt := func(startX, y int) bool {
+		for i := 0; i < searchLen; i++ {
+			found := false
+			for _, ch := range g.characters {
+				if ch.x == startX+i && ch.y == y && ch.rune == searchRunes[i] {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return false
+			}
+		}
+		return true
+	}
+
+	// Search backward from current position
+	// Start from previous position before cursor
+	startY := g.cursorY
+	startX := g.cursorX - 1
+
+	// Search from current row backward to beginning
+	for y := startY; y >= 0; y-- {
+		xEnd := g.gameWidth - searchLen
+		if y == startY {
+			xEnd = startX
+		}
+		for x := xEnd; x >= 0; x-- {
+			if matchesAt(x, y) {
+				// Found match - move cursor
+				dx := x - g.cursorX
+				dy := y - g.cursorY
+				g.moveCursor(dx, dy)
+				return true
+			}
+		}
+	}
+
+	// If not found, search from end (rollover)
+	for y := g.gameHeight - 1; y > startY; y-- {
+		for x := g.gameWidth - searchLen; x >= 0; x-- {
+			if matchesAt(x, y) {
+				// Found match - move cursor
+				dx := x - g.cursorX
+				dy := y - g.cursorY
+				g.moveCursor(dx, dy)
+				return true
+			}
+		}
+	}
+
+	// Search remaining part of starting row (after cursor)
+	for x := g.gameWidth - searchLen; x > startX && x >= 0; x-- {
+		if matchesAt(x, startY) {
+			// Found match - move cursor
+			dx := x - g.cursorX
+			g.moveCursor(dx, 0)
+			return true
+		}
+	}
+
+	// Not found
+	return false
+}
+
 func (g *Game) handleInput(ev tcell.Event) bool {
 	switch ev := ev.(type) {
 	case *tcell.EventKey:
@@ -1209,6 +1308,7 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 					return true
 				} else {
 					// Execute search
+					g.lastSearchText = g.searchText
 					if !g.performSearch(g.searchText) {
 						// Search failed - flash error
 						g.cursorError = true
@@ -1298,6 +1398,38 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 			if char == '/' {
 				g.searchMode = true
 				g.searchText = ""
+				return true
+			}
+
+			// Handle 'n' to repeat last search forward
+			if char == 'n' {
+				if g.lastSearchText == "" {
+					// No previous search - flash error
+					g.cursorError = true
+					g.cursorErrorTime = time.Now()
+				} else {
+					if !g.performSearch(g.lastSearchText) {
+						// Search failed - flash error
+						g.cursorError = true
+						g.cursorErrorTime = time.Now()
+					}
+				}
+				return true
+			}
+
+			// Handle 'N' to repeat last search backward
+			if char == 'N' {
+				if g.lastSearchText == "" {
+					// No previous search - flash error
+					g.cursorError = true
+					g.cursorErrorTime = time.Now()
+				} else {
+					if !g.performSearchBackward(g.lastSearchText) {
+						// Search failed - flash error
+						g.cursorError = true
+						g.cursorErrorTime = time.Now()
+					}
+				}
 				return true
 			}
 
