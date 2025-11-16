@@ -153,6 +153,7 @@ type Game struct {
 	waitingForF    bool
 	commandPrefix  rune  // For multi-key commands like 'g'
 	statusMessage  string
+	deleteOperator bool  // True when 'd' operator is active
 
 	// Ping coordinates feature
 	pingActive    bool
@@ -425,8 +426,25 @@ func (g *Game) draw() {
 			relativeNum = -relativeNum
 		}
 		lineNum = fmt.Sprintf("%*d", g.lineNumWidth, relativeNum)
+
+		// Determine style based on whether this is row 0 and current mode
+		var numStyle tcell.Style
+		if relativeNum == 0 {
+			// This is the cursor's row (coordinate 0)
+			if g.searchMode {
+				// In search mode: orange text, normal background
+				numStyle = defaultStyle.Foreground(rgbCursorNormal)
+			} else {
+				// Not in search mode: orange background, black text
+				numStyle = defaultStyle.Foreground(tcell.ColorBlack).Background(rgbCursorNormal)
+			}
+		} else {
+			// Regular line number style
+			numStyle = lineNumStyle
+		}
+
 		for i, ch := range lineNum {
-			g.screen.SetContent(i, y, ch, nil, lineNumStyle)
+			g.screen.SetContent(i, y, ch, nil, numStyle)
 		}
 	}
 
@@ -555,9 +573,19 @@ func (g *Game) draw() {
 		screenX := g.gameX + x
 		relativeCol := x - g.cursorX
 		var ch rune
+		var colStyle tcell.Style
+
 		if relativeCol == 0 {
 			// Cursor column: show 0
 			ch = '0'
+			// Determine style based on current mode
+			if g.searchMode {
+				// In search mode: orange text, normal background
+				colStyle = defaultStyle.Foreground(rgbCursorNormal)
+			} else {
+				// Not in search mode: orange background, black text
+				colStyle = defaultStyle.Foreground(tcell.ColorBlack).Background(rgbCursorNormal)
+			}
 		} else {
 			absRelative := relativeCol
 			if absRelative < 0 {
@@ -572,8 +600,10 @@ func (g *Game) draw() {
 			} else {
 				ch = ' '
 			}
+			// Regular indicator style
+			colStyle = indicatorStyle
 		}
-		g.screen.SetContent(screenX, indicatorY, ch, nil, indicatorStyle)
+		g.screen.SetContent(screenX, indicatorY, ch, nil, colStyle)
 	}
 	// Clear line number area for indicator row
 	for i := 0; i < g.gameX; i++ {
@@ -1001,9 +1031,205 @@ func (g *Game) moveToPrevWordStart() {
 	}
 }
 
+// deleteCharAt deletes a single character at the given position without adding score
+func (g *Game) deleteCharAt(x, y int) {
+	for i, ch := range g.characters {
+		if ch.x == x && ch.y == y {
+			g.characters = append(g.characters[:i], g.characters[i+1:]...)
+			return
+		}
+	}
+}
+
+// deleteCharactersInRange deletes all characters from (x1, y) to (x2, y) on the same line
+func (g *Game) deleteCharactersInRange(x1, x2, y int) {
+	if x1 > x2 {
+		x1, x2 = x2, x1
+	}
+	newChars := make([]Character, 0, len(g.characters))
+	for _, ch := range g.characters {
+		if ch.y == y && ch.x >= x1 && ch.x <= x2 {
+			// Skip this character (delete it)
+			continue
+		}
+		newChars = append(newChars, ch)
+	}
+	g.characters = newChars
+}
+
+// deleteToEndOfLine deletes all characters from cursor position to end of line
+func (g *Game) deleteToEndOfLine() {
+	// Find rightmost character on current line
+	rightmost := -1
+	for _, ch := range g.characters {
+		if ch.y == g.cursorY {
+			if rightmost == -1 || ch.x > rightmost {
+				rightmost = ch.x
+			}
+		}
+	}
+	if rightmost >= g.cursorX {
+		g.deleteCharactersInRange(g.cursorX, rightmost, g.cursorY)
+	}
+	// Reset score increment after delete
+	g.scoreIncrement = 0
+}
+
+// deleteLine deletes all characters on the current line
+func (g *Game) deleteLine() {
+	newChars := make([]Character, 0, len(g.characters))
+	for _, ch := range g.characters {
+		if ch.y != g.cursorY {
+			newChars = append(newChars, ch)
+		}
+	}
+	g.characters = newChars
+	// Reset score increment after delete
+	g.scoreIncrement = 0
+}
+
+// executeDeleteMotion handles delete operations with motions (d + motion)
+func (g *Game) executeDeleteMotion(command rune, count int) {
+	if count == 0 {
+		count = 1
+	}
+
+	startX := g.cursorX
+	startY := g.cursorY
+
+	switch command {
+	case 'd': // dd - delete entire line
+		g.deleteLine()
+	case '0': // d0 - delete from cursor to beginning of line
+		if startX > 0 {
+			// Find leftmost character on line
+			leftmost := startX
+			for _, ch := range g.characters {
+				if ch.y == startY && ch.x < leftmost {
+					leftmost = ch.x
+				}
+			}
+			g.deleteCharactersInRange(leftmost, startX, startY)
+		}
+		g.scoreIncrement = 0
+	case '$': // d$ - delete to end of line
+		g.deleteToEndOfLine()
+	case 'w': // dw - delete word(s)
+		for i := 0; i < count; i++ {
+			// Find the range for word deletion
+			y := g.cursorY
+			x := g.cursorX
+
+			// Phase 1: Skip any characters (current word)
+			endX := x
+			for endX < g.gameWidth && g.hasCharAt(endX, y) {
+				endX++
+			}
+
+			// Phase 2: Skip spaces
+			for endX < g.gameWidth && !g.hasCharAt(endX, y) {
+				endX++
+			}
+
+			// Delete from current position to end of range (exclusive)
+			if endX > x {
+				g.deleteCharactersInRange(x, endX-1, y)
+			}
+		}
+		g.scoreIncrement = 0
+	case 'e': // de - delete to end of word
+		for i := 0; i < count; i++ {
+			y := g.cursorY
+			x := g.cursorX
+
+			endX := x
+			// Check if we're on a character
+			if g.hasCharAt(x, y) {
+				// Check if we're at the end of the current word
+				if x+1 < g.gameWidth && g.hasCharAt(x+1, y) {
+					// Not at the end, move to end of current word
+					for endX+1 < g.gameWidth && g.hasCharAt(endX+1, y) {
+						endX++
+					}
+				} else {
+					// We're at the end of the word, continue to find next word
+					endX++
+					// Skip spaces
+					for endX < g.gameWidth && !g.hasCharAt(endX, y) {
+						endX++
+					}
+					// Find the end of the next word
+					if endX < g.gameWidth && g.hasCharAt(endX, y) {
+						for endX+1 < g.gameWidth && g.hasCharAt(endX+1, y) {
+							endX++
+						}
+					}
+				}
+			} else {
+				// We're on a space
+				endX++
+				// Skip spaces
+				for endX < g.gameWidth && !g.hasCharAt(endX, y) {
+					endX++
+				}
+				// Find the end of the next word
+				if endX < g.gameWidth && g.hasCharAt(endX, y) {
+					for endX+1 < g.gameWidth && g.hasCharAt(endX+1, y) {
+						endX++
+					}
+				}
+			}
+
+			// Delete from current position to endX
+			if endX > x {
+				g.deleteCharactersInRange(x, endX, y)
+			}
+		}
+		g.scoreIncrement = 0
+	case 'b': // db - delete backward word
+		for i := 0; i < count; i++ {
+			y := g.cursorY
+			x := g.cursorX
+
+			startX := x - 1
+			if startX < 0 {
+				break
+			}
+
+			// Skip spaces
+			for startX >= 0 && !g.hasCharAt(startX, y) {
+				startX--
+			}
+
+			// Find beginning of word
+			if startX >= 0 && g.hasCharAt(startX, y) {
+				for startX-1 >= 0 && g.hasCharAt(startX-1, y) {
+					startX--
+				}
+				// Delete from start of word to cursor (exclusive of cursor)
+				g.deleteCharactersInRange(startX, x-1, y)
+			}
+		}
+		g.scoreIncrement = 0
+	}
+
+	// Clear delete operator state
+	g.deleteOperator = false
+	g.motionCount = 0
+	g.motionCommand = ""
+	g.commandPrefix = 0
+	g.statusMessage = ""
+}
+
 func (g *Game) executeMotion(command rune, count int) {
 	if count == 0 {
 		count = 1
+	}
+
+	// If delete operator is active, handle deletion instead of movement
+	if g.deleteOperator {
+		g.executeDeleteMotion(command, count)
+		return
 	}
 
 	switch command {
@@ -1086,6 +1312,12 @@ func (g *Game) executeCompoundMotion(prefix rune, command rune) {
 }
 
 func (g *Game) findCharOnLine(target rune) {
+	// If delete operator is active, handle df<char>
+	if g.deleteOperator {
+		g.deleteToChar(target)
+		return
+	}
+
 	// Search from current position to right on current line
 	for x := g.cursorX + 1; x < g.gameWidth; x++ {
 		// Check if there's a character at this position
@@ -1105,6 +1337,38 @@ func (g *Game) findCharOnLine(target rune) {
 	// Character not found - flash error
 	g.cursorError = true
 	g.cursorErrorTime = time.Now()
+	g.waitingForF = false
+	g.motionCount = 0
+	g.motionCommand = ""
+	g.commandPrefix = 0
+	g.statusMessage = ""
+}
+
+// deleteToChar deletes from cursor position to (and including) the target character
+func (g *Game) deleteToChar(target rune) {
+	// Search from current position to right on current line
+	for x := g.cursorX + 1; x < g.gameWidth; x++ {
+		// Check if there's a character at this position
+		for _, ch := range g.characters {
+			if ch.y == g.cursorY && ch.x == x && ch.rune == target {
+				// Found target - delete from cursor to target (inclusive)
+				g.deleteCharactersInRange(g.cursorX, x, g.cursorY)
+				g.scoreIncrement = 0
+				g.deleteOperator = false
+				g.waitingForF = false
+				g.motionCount = 0
+				g.motionCommand = ""
+				g.commandPrefix = 0
+				g.statusMessage = ""
+				return
+			}
+		}
+	}
+
+	// Character not found - flash error
+	g.cursorError = true
+	g.cursorErrorTime = time.Now()
+	g.deleteOperator = false
 	g.waitingForF = false
 	g.motionCount = 0
 	g.motionCommand = ""
@@ -1436,6 +1700,38 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 			// Handle 'i' to enter insert mode
 			if char == 'i' {
 				g.insertMode = true
+				return true
+			}
+
+			// Handle 'x' to delete character without breaking score
+			if char == 'x' {
+				// Delete character at cursor position
+				g.deleteCharAt(g.cursorX, g.cursorY)
+				// Don't reset scoreIncrement - sequence continues
+				return true
+			}
+
+			// Handle 'd' to enter delete operator mode
+			if char == 'd' {
+				if g.deleteOperator {
+					// Second 'd' - execute dd (delete line)
+					g.deleteLine()
+					g.deleteOperator = false
+					g.motionCount = 0
+					g.motionCommand = ""
+					g.statusMessage = ""
+					return true
+				}
+				// First 'd' - enter delete operator mode
+				g.deleteOperator = true
+				g.motionCommand = "d"
+				g.statusMessage = "d"
+				return true
+			}
+
+			// Handle 'D' to delete to end of line (same as d$)
+			if char == 'D' {
+				g.deleteToEndOfLine()
 				return true
 			}
 
