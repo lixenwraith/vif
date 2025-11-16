@@ -160,6 +160,10 @@ type Game struct {
 	pingStartTime time.Time
 	pingRow       int
 	pingCol       int
+
+	// Heat tracking for consecutive movements
+	lastMoveKey    rune  // Last movement key pressed
+	consecutiveCount int  // Count of consecutive same key presses
 }
 
 func NewGame() (*Game, error) {
@@ -544,8 +548,10 @@ func (g *Game) draw() {
 			numStyle = lineNumStyle
 		}
 
+		// Draw at screen row g.gameY + y to account for heat meter at top
+		screenY := g.gameY + y
 		for i, ch := range lineNum {
-			g.screen.SetContent(i, y, ch, nil, numStyle)
+			g.screen.SetContent(i, screenY, ch, nil, numStyle)
 		}
 	}
 
@@ -668,7 +674,7 @@ func (g *Game) draw() {
 	}
 
 	// Draw column indicators at bottom (row gameHeight) - relative to cursor
-	indicatorY := g.gameHeight
+	indicatorY := g.gameY + g.gameHeight
 	indicatorStyle := defaultStyle.Foreground(rgbColumnIndicator)
 	for x := 0; x < g.gameWidth; x++ {
 		screenX := g.gameX + x
@@ -712,7 +718,7 @@ func (g *Game) draw() {
 	}
 
 	// Draw status bar (row gameHeight + 1)
-	statusY := g.gameHeight + 1
+	statusY := g.gameY + g.gameHeight + 1
 	// Clear the status bar first
 	for x := 0; x < g.width; x++ {
 		g.screen.SetContent(x, statusY, ' ', nil, defaultStyle)
@@ -1132,34 +1138,56 @@ func (g *Game) moveToPrevWordStart() {
 	}
 }
 
-// deleteCharAt deletes a single character at the given position without adding score
-func (g *Game) deleteCharAt(x, y int) {
-	for i, ch := range g.characters {
+// hasGreenOrBlueCharAt checks if there's a green or blue character at the given position
+// Returns true if the character is green or blue, false if red or no character
+func (g *Game) hasGreenOrBlueCharAt(x, y int) bool {
+	for _, ch := range g.characters {
 		if ch.x == x && ch.y == y {
-			g.characters = append(g.characters[:i], g.characters[i+1:]...)
-			return
+			return ch.sequenceType == SequenceGreen || ch.sequenceType == SequenceBlue
 		}
 	}
+	return false
+}
+
+// deleteCharAt deletes a single character at the given position without adding score
+// Returns true if a green or blue character was deleted (for heat tracking)
+func (g *Game) deleteCharAt(x, y int) bool {
+	for i, ch := range g.characters {
+		if ch.x == x && ch.y == y {
+			deletedGreenOrBlue := ch.sequenceType == SequenceGreen || ch.sequenceType == SequenceBlue
+			g.characters = append(g.characters[:i], g.characters[i+1:]...)
+			return deletedGreenOrBlue
+		}
+	}
+	return false
 }
 
 // deleteCharactersInRange deletes all characters from (x1, y) to (x2, y) on the same line
-func (g *Game) deleteCharactersInRange(x1, x2, y int) {
+// Returns true if any green or blue character was deleted (for heat tracking)
+func (g *Game) deleteCharactersInRange(x1, x2, y int) bool {
 	if x1 > x2 {
 		x1, x2 = x2, x1
 	}
+	deletedGreenOrBlue := false
 	newChars := make([]Character, 0, len(g.characters))
 	for _, ch := range g.characters {
 		if ch.y == y && ch.x >= x1 && ch.x <= x2 {
+			// Check if this is a green or blue character
+			if ch.sequenceType == SequenceGreen || ch.sequenceType == SequenceBlue {
+				deletedGreenOrBlue = true
+			}
 			// Skip this character (delete it)
 			continue
 		}
 		newChars = append(newChars, ch)
 	}
 	g.characters = newChars
+	return deletedGreenOrBlue
 }
 
 // deleteToEndOfLine deletes all characters from cursor position to end of line
-func (g *Game) deleteToEndOfLine() {
+// Returns true if any green or blue character was deleted (for heat tracking)
+func (g *Game) deleteToEndOfLine() bool {
 	// Find rightmost character on current line
 	rightmost := -1
 	for _, ch := range g.characters {
@@ -1170,23 +1198,28 @@ func (g *Game) deleteToEndOfLine() {
 		}
 	}
 	if rightmost >= g.cursorX {
-		g.deleteCharactersInRange(g.cursorX, rightmost, g.cursorY)
+		return g.deleteCharactersInRange(g.cursorX, rightmost, g.cursorY)
 	}
-	// Reset score increment after delete
-	g.scoreIncrement = 0
+	return false
 }
 
 // deleteLine deletes all characters on the current line
-func (g *Game) deleteLine() {
+// Returns true if any green or blue character was deleted (for heat tracking)
+func (g *Game) deleteLine() bool {
+	deletedGreenOrBlue := false
 	newChars := make([]Character, 0, len(g.characters))
 	for _, ch := range g.characters {
 		if ch.y != g.cursorY {
 			newChars = append(newChars, ch)
+		} else {
+			// Check if this is a green or blue character
+			if ch.sequenceType == SequenceGreen || ch.sequenceType == SequenceBlue {
+				deletedGreenOrBlue = true
+			}
 		}
 	}
 	g.characters = newChars
-	// Reset score increment after delete
-	g.scoreIncrement = 0
+	return deletedGreenOrBlue
 }
 
 // executeDeleteMotion handles delete operations with motions (d + motion)
@@ -1197,10 +1230,11 @@ func (g *Game) executeDeleteMotion(command rune, count int) {
 
 	startX := g.cursorX
 	startY := g.cursorY
+	deletedGreenOrBlue := false
 
 	switch command {
 	case 'd': // dd - delete entire line
-		g.deleteLine()
+		deletedGreenOrBlue = g.deleteLine()
 	case '0': // d0 - delete from cursor to beginning of line
 		if startX > 0 {
 			// Find leftmost character on line
@@ -1210,11 +1244,10 @@ func (g *Game) executeDeleteMotion(command rune, count int) {
 					leftmost = ch.x
 				}
 			}
-			g.deleteCharactersInRange(leftmost, startX, startY)
+			deletedGreenOrBlue = g.deleteCharactersInRange(leftmost, startX, startY)
 		}
-		g.scoreIncrement = 0
 	case '$': // d$ - delete to end of line
-		g.deleteToEndOfLine()
+		deletedGreenOrBlue = g.deleteToEndOfLine()
 	case 'w': // dw - delete word(s)
 		for i := 0; i < count; i++ {
 			// Find the range for word deletion
@@ -1234,10 +1267,11 @@ func (g *Game) executeDeleteMotion(command rune, count int) {
 
 			// Delete from current position to end of range (exclusive)
 			if endX > x {
-				g.deleteCharactersInRange(x, endX-1, y)
+				if g.deleteCharactersInRange(x, endX-1, y) {
+					deletedGreenOrBlue = true
+				}
 			}
 		}
-		g.scoreIncrement = 0
 	case 'e': // de - delete to end of word
 		for i := 0; i < count; i++ {
 			y := g.cursorY
@@ -1283,10 +1317,11 @@ func (g *Game) executeDeleteMotion(command rune, count int) {
 
 			// Delete from current position to endX
 			if endX > x {
-				g.deleteCharactersInRange(x, endX, y)
+				if g.deleteCharactersInRange(x, endX, y) {
+					deletedGreenOrBlue = true
+				}
 			}
 		}
-		g.scoreIncrement = 0
 	case 'b': // db - delete backward word
 		for i := 0; i < count; i++ {
 			y := g.cursorY
@@ -1308,9 +1343,15 @@ func (g *Game) executeDeleteMotion(command rune, count int) {
 					startX--
 				}
 				// Delete from start of word to cursor (exclusive of cursor)
-				g.deleteCharactersInRange(startX, x-1, y)
+				if g.deleteCharactersInRange(startX, x-1, y) {
+					deletedGreenOrBlue = true
+				}
 			}
 		}
+	}
+
+	// Only reset heat if green or blue characters were deleted
+	if deletedGreenOrBlue {
 		g.scoreIncrement = 0
 	}
 
@@ -1333,6 +1374,29 @@ func (g *Game) executeMotion(command rune, count int) {
 		return
 	}
 
+	// Track consecutive same-key movements (only for h, j, k, l)
+	if command == 'h' || command == 'j' || command == 'k' || command == 'l' {
+		if g.lastMoveKey == command {
+			g.consecutiveCount++
+		} else {
+			g.lastMoveKey = command
+			g.consecutiveCount = 1
+		}
+
+		// Reset heat if same key pressed more than 3 times consecutively
+		if g.consecutiveCount > 3 {
+			g.scoreIncrement = 0
+			g.consecutiveCount = 1 // Reset counter
+		}
+	} else {
+		// Different movement command, reset tracking
+		g.lastMoveKey = 0
+		g.consecutiveCount = 0
+	}
+
+	// Save cursor position to check if movement occurred
+	oldX, oldY := g.cursorX, g.cursorY
+
 	switch command {
 	case 'h': // left
 		g.moveCursor(-count, 0)
@@ -1344,6 +1408,10 @@ func (g *Game) executeMotion(command rune, count int) {
 		g.moveCursor(count, 0)
 	case '0': // beginning of line
 		g.moveCursor(-g.cursorX, 0)
+		// Reset heat if no movement occurred
+		if g.cursorX == oldX && g.cursorY == oldY {
+			g.scoreIncrement = 0
+		}
 	case '$': // end of line (rightmost non-space character)
 		// Find rightmost character on current line
 		rightmost := -1
@@ -1362,20 +1430,40 @@ func (g *Game) executeMotion(command rune, count int) {
 			g.cursorError = true
 			g.cursorErrorTime = time.Now()
 		}
+		// Reset heat if no movement occurred
+		if g.cursorX == oldX && g.cursorY == oldY {
+			g.scoreIncrement = 0
+		}
 	case 'G': // bottom row, same column
 		dy := (g.gameHeight - 1) - g.cursorY
 		g.moveCursor(0, dy)
+		// Reset heat if no movement occurred
+		if g.cursorX == oldX && g.cursorY == oldY {
+			g.scoreIncrement = 0
+		}
 	case 'w': // next word start (first character after spaces)
 		for i := 0; i < count; i++ {
 			g.moveToNextWordStart()
+		}
+		// Reset heat if no movement occurred
+		if g.cursorX == oldX && g.cursorY == oldY {
+			g.scoreIncrement = 0
 		}
 	case 'e': // next word end (last character before space)
 		for i := 0; i < count; i++ {
 			g.moveToNextWordEnd()
 		}
+		// Reset heat if no movement occurred
+		if g.cursorX == oldX && g.cursorY == oldY {
+			g.scoreIncrement = 0
+		}
 	case 'b': // previous word start (beginning of word on left)
 		for i := 0; i < count; i++ {
 			g.moveToPrevWordStart()
+		}
+		// Reset heat if no movement occurred
+		if g.cursorX == oldX && g.cursorY == oldY {
+			g.scoreIncrement = 0
 		}
 	}
 
@@ -1388,6 +1476,9 @@ func (g *Game) executeMotion(command rune, count int) {
 
 // executeCompoundMotion handles multi-key commands like 'gg' or 'go'
 func (g *Game) executeCompoundMotion(prefix rune, command rune) {
+	// Save cursor position to check if movement occurred
+	oldX, oldY := g.cursorX, g.cursorY
+
 	switch prefix {
 	case 'g':
 		switch command {
@@ -1403,6 +1494,11 @@ func (g *Game) executeCompoundMotion(prefix rune, command rune) {
 			g.cursorError = true
 			g.cursorErrorTime = time.Now()
 		}
+	}
+
+	// Reset heat if no movement occurred
+	if g.cursorX == oldX && g.cursorY == oldY {
+		g.scoreIncrement = 0
 	}
 
 	// Clear motion state
@@ -1435,9 +1531,10 @@ func (g *Game) findCharOnLine(target rune) {
 		}
 	}
 
-	// Character not found - flash error
+	// Character not found - flash error and reset heat
 	g.cursorError = true
 	g.cursorErrorTime = time.Now()
+	g.scoreIncrement = 0
 	g.waitingForF = false
 	g.motionCount = 0
 	g.motionCommand = ""
@@ -1453,8 +1550,11 @@ func (g *Game) deleteToChar(target rune) {
 		for _, ch := range g.characters {
 			if ch.y == g.cursorY && ch.x == x && ch.rune == target {
 				// Found target - delete from cursor to target (inclusive)
-				g.deleteCharactersInRange(g.cursorX, x, g.cursorY)
-				g.scoreIncrement = 0
+				deletedGreenOrBlue := g.deleteCharactersInRange(g.cursorX, x, g.cursorY)
+				// Only reset heat if green or blue characters were deleted
+				if deletedGreenOrBlue {
+					g.scoreIncrement = 0
+				}
 				g.deleteOperator = false
 				g.waitingForF = false
 				g.motionCount = 0
@@ -1466,9 +1566,10 @@ func (g *Game) deleteToChar(target rune) {
 		}
 	}
 
-	// Character not found - flash error
+	// Character not found - flash error and reset heat
 	g.cursorError = true
 	g.cursorErrorTime = time.Now()
+	g.scoreIncrement = 0
 	g.deleteOperator = false
 	g.waitingForF = false
 	g.motionCount = 0
@@ -1650,8 +1751,7 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 			if g.insertMode {
 				// Exit insert mode
 				g.insertMode = false
-				// Reset score increment when exiting insert mode
-				g.scoreIncrement = 0
+				// Don't reset score increment when exiting insert mode
 				return true
 			}
 			// In normal mode, ESC does nothing
@@ -1675,9 +1775,10 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 					// Execute search
 					g.lastSearchText = g.searchText
 					if !g.performSearch(g.searchText) {
-						// Search failed - flash error
+						// Search failed - flash error and reset heat
 						g.cursorError = true
 						g.cursorErrorTime = time.Now()
+						g.scoreIncrement = 0
 					}
 					// Exit search mode
 					g.searchMode = false
@@ -1705,15 +1806,19 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 			switch ev.Key() {
 			case tcell.KeyUp:
 				g.moveCursor(0, -1)
+				g.scoreIncrement = 0 // Reset heat
 				return true
 			case tcell.KeyDown:
 				g.moveCursor(0, 1)
+				g.scoreIncrement = 0 // Reset heat
 				return true
 			case tcell.KeyLeft:
 				g.moveCursor(-1, 0)
+				g.scoreIncrement = 0 // Reset heat
 				return true
 			case tcell.KeyRight:
 				g.moveCursor(1, 0)
+				g.scoreIncrement = 0 // Reset heat
 				return true
 			}
 		}
@@ -1721,6 +1826,9 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 		// Handle Home key in both modes (behaves like '0' - go to beginning of line)
 		if ev.Key() == tcell.KeyHome {
 			g.moveCursor(-g.cursorX, 0)
+			if g.insertMode {
+				g.scoreIncrement = 0 // Reset heat in insert mode
+			}
 			return true
 		}
 
@@ -1738,6 +1846,9 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 			// Only move if we found a character on the line
 			if rightmost >= 0 && rightmost != g.cursorX {
 				g.moveCursor(rightmost-g.cursorX, 0)
+			}
+			if g.insertMode {
+				g.scoreIncrement = 0 // Reset heat in insert mode
 			}
 			return true
 		}
@@ -1775,14 +1886,16 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 			// Handle 'n' to repeat last search forward
 			if char == 'n' {
 				if g.lastSearchText == "" {
-					// No previous search - flash error
+					// No previous search - flash error and reset heat
 					g.cursorError = true
 					g.cursorErrorTime = time.Now()
+					g.scoreIncrement = 0
 				} else {
 					if !g.performSearch(g.lastSearchText) {
-						// Search failed - flash error
+						// Search failed - flash error and reset heat
 						g.cursorError = true
 						g.cursorErrorTime = time.Now()
+						g.scoreIncrement = 0
 					}
 				}
 				return true
@@ -1791,14 +1904,16 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 			// Handle 'N' to repeat last search backward
 			if char == 'N' {
 				if g.lastSearchText == "" {
-					// No previous search - flash error
+					// No previous search - flash error and reset heat
 					g.cursorError = true
 					g.cursorErrorTime = time.Now()
+					g.scoreIncrement = 0
 				} else {
 					if !g.performSearchBackward(g.lastSearchText) {
-						// Search failed - flash error
+						// Search failed - flash error and reset heat
 						g.cursorError = true
 						g.cursorErrorTime = time.Now()
+						g.scoreIncrement = 0
 					}
 				}
 				return true
@@ -1813,8 +1928,11 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 			// Handle 'x' to delete character without breaking score
 			if char == 'x' {
 				// Delete character at cursor position
-				g.deleteCharAt(g.cursorX, g.cursorY)
-				// Don't reset scoreIncrement - sequence continues
+				deletedGreenOrBlue := g.deleteCharAt(g.cursorX, g.cursorY)
+				// Only reset heat if green or blue character was deleted
+				if deletedGreenOrBlue {
+					g.scoreIncrement = 0
+				}
 				return true
 			}
 
@@ -1822,7 +1940,11 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 			if char == 'd' {
 				if g.deleteOperator {
 					// Second 'd' - execute dd (delete line)
-					g.deleteLine()
+					deletedGreenOrBlue := g.deleteLine()
+					// Only reset heat if green or blue characters were deleted
+					if deletedGreenOrBlue {
+						g.scoreIncrement = 0
+					}
 					g.deleteOperator = false
 					g.motionCount = 0
 					g.motionCommand = ""
@@ -1838,7 +1960,11 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 
 			// Handle 'D' to delete to end of line (same as d$)
 			if char == 'D' {
-				g.deleteToEndOfLine()
+				deletedGreenOrBlue := g.deleteToEndOfLine()
+				// Only reset heat if green or blue characters were deleted
+				if deletedGreenOrBlue {
+					g.scoreIncrement = 0
+				}
 				return true
 			}
 
