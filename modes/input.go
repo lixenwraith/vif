@@ -164,6 +164,15 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 			return true
 		}
 
+		// D - delete to end of line (equivalent to d$)
+		if char == 'D' {
+			ExecuteDeleteMotion(h.ctx, '$', count)
+			h.ctx.MotionCount = 0
+			h.ctx.MotionCommand = ""
+			h.ctx.CommandPrefix = 0
+			return true
+		}
+
 		// Delete operator
 		if char == 'd' {
 			if h.ctx.CommandPrefix == 'd' {
@@ -179,15 +188,33 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 			return true
 		}
 
-		// Handle 'gg' for goto top
-		if char == 'g' {
-			if h.ctx.CommandPrefix == 'g' {
+		// Handle 'g' prefix commands
+		if h.ctx.CommandPrefix == 'g' {
+			// Second character after 'g'
+			if char == 'g' {
+				// gg - goto top (same column)
 				h.ctx.CursorY = 0
 				h.ctx.CommandPrefix = 0
 				h.ctx.MotionCount = 0
+				return true
+			} else if char == 'o' {
+				// go - goto top left (first row, first column)
+				h.ctx.CursorY = 0
+				h.ctx.CursorX = 0
+				h.ctx.CommandPrefix = 0
+				h.ctx.MotionCount = 0
+				return true
 			} else {
-				h.ctx.CommandPrefix = 'g'
+				// Unknown 'g' command, reset
+				h.ctx.CommandPrefix = 0
+				h.ctx.MotionCount = 0
+				return true
 			}
+		}
+
+		// Start 'g' prefix
+		if char == 'g' {
+			h.ctx.CommandPrefix = 'g'
 			return true
 		}
 

@@ -154,10 +154,18 @@ func (s *ScoreSystem) extendTrail(duration time.Duration) {
 		s.ctx.TrailTimer.Stop()
 	}
 
+	// If trail is already active, add to existing end time; otherwise start fresh
+	now := time.Now()
+	if s.ctx.TrailEnabled && s.ctx.TrailEndTime.After(now) {
+		s.ctx.TrailEndTime = s.ctx.TrailEndTime.Add(duration)
+	} else {
+		s.ctx.TrailEndTime = now.Add(duration)
+	}
 	s.ctx.TrailEnabled = true
-	s.ctx.TrailEndTime = time.Now().Add(duration)
 
-	s.ctx.TrailTimer = time.AfterFunc(duration, func() {
+	// Calculate remaining time for the timer
+	remaining := s.ctx.TrailEndTime.Sub(now)
+	s.ctx.TrailTimer = time.AfterFunc(remaining, func() {
 		s.ctx.TrailEnabled = false
 	})
 }

@@ -179,17 +179,38 @@ func findPrevWordStart(ctx *engine.GameContext) int {
 		}
 	}
 
-	// Find previous gap (transition from no-char to char), searching backward
-	inWord := charPositions[ctx.CursorX]
-	for x := ctx.CursorX - 1; x >= 0; x-- {
-		hasChar := charPositions[x]
-		if !inWord && hasChar {
-			return x // Found start of previous word
-		}
-		inWord = hasChar
+	// Start from cursor position - 1
+	x := ctx.CursorX - 1
+
+	// Skip any whitespace (positions without characters)
+	for x >= 0 && !charPositions[x] {
+		x--
 	}
 
-	return 0 // No word found, go to beginning
+	// Now skip the word we're in/on
+	for x >= 0 && charPositions[x] {
+		x--
+	}
+
+	// Skip any more whitespace
+	for x >= 0 && !charPositions[x] {
+		x--
+	}
+
+	// Now we should be at the end of the previous word, or at -1
+	// Find the start of this word
+	if x < 0 {
+		// No previous word found, stay at current position
+		return ctx.CursorX
+	}
+
+	// We're at the end of a word, find its start
+	for x >= 0 && charPositions[x] {
+		x--
+	}
+
+	// x is now at the position before the word starts, so word starts at x+1
+	return x + 1
 }
 
 // findLineEnd finds the rightmost character on the current line

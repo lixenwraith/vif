@@ -176,7 +176,7 @@ func (r *TerminalRenderer) drawPingHighlights(ctx *engine.GameContext, pingColor
 	for x := 0; x < r.gameWidth; x++ {
 		screenX := r.gameX + x
 		screenY := r.gameY + ctx.CursorY
-		if screenY >= 0 && screenY < r.gameHeight {
+		if screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
 			r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
 		}
 	}
@@ -185,7 +185,7 @@ func (r *TerminalRenderer) drawPingHighlights(ctx *engine.GameContext, pingColor
 	for y := 0; y < r.gameHeight; y++ {
 		screenX := r.gameX + ctx.CursorX
 		screenY := r.gameY + y
-		if screenX >= r.gameX && screenX < r.width && screenY >= 0 && screenY < r.gameHeight {
+		if screenX >= r.gameX && screenX < r.width && screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
 			r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
 		}
 	}
@@ -504,7 +504,7 @@ func (r *TerminalRenderer) drawCursor(ctx *engine.GameContext, defaultStyle tcel
 	screenX := r.gameX + ctx.CursorX
 	screenY := r.gameY + ctx.CursorY
 
-	if screenX < r.gameX || screenX >= r.width || screenY < 0 || screenY >= r.gameHeight {
+	if screenX < r.gameX || screenX >= r.width || screenY < r.gameY || screenY >= r.gameY+r.gameHeight {
 		return
 	}
 
