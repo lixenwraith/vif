@@ -60,13 +60,6 @@ func main() {
 	// Create input handler
 	inputHandler := modes.NewInputHandler(ctx, scoreSystem)
 
-	// Start decay ticker
-	ctx.DecayTicker = time.AfterFunc(60*time.Second, func() {
-		ctx.DecayAnimating = true
-		ctx.DecayRow = 0
-		ctx.DecayStartTime = time.Now()
-	})
-
 	// Main game loop
 	ticker := time.NewTicker(16 * time.Millisecond) // ~60 FPS
 	defer ticker.Stop()

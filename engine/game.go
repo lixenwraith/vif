@@ -75,13 +75,6 @@ type GameContext struct {
 	LastMoveKey      rune
 	ConsecutiveCount int
 
-	// Decay state
-	DecayTicker     *time.Timer
-	DecayAnimating  bool
-	DecayRow        int
-	DecayStartTime  time.Time
-	LastDecayUpdate time.Time
-
 	// Spawn tracking
 	LastSpawn time.Time
 	NextSeqID int
@@ -103,7 +96,6 @@ func NewGameContext(screen tcell.Screen) *GameContext {
 		Score:           0,
 		ScoreIncrement:  0,
 		LastSpawn:       time.Now(),
-		LastDecayUpdate: time.Now(),
 	}
 
 	ctx.updateGameArea()

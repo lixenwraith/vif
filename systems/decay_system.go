@@ -11,27 +11,29 @@ import (
 
 // DecaySystem handles character decay animation and logic
 type DecaySystem struct {
-	ticker        *time.Timer
-	animating     bool
-	currentRow    int
-	startTime     time.Time
-	lastUpdate    time.Time
-	gameWidth     int
-	gameHeight    int
-	screenWidth   int
-	heatIncrement int
+	ticker            *time.Timer
+	animating         bool
+	currentRow        int
+	startTime         time.Time
+	lastUpdate        time.Time
+	gameWidth         int
+	gameHeight        int
+	screenWidth       int
+	heatIncrement     int
+	lastHeatIncrement int // Track previous heat to detect changes
 }
 
 // NewDecaySystem creates a new decay system
 func NewDecaySystem(gameWidth, gameHeight, screenWidth, heatIncrement int) *DecaySystem {
 	s := &DecaySystem{
-		animating:     false,
-		currentRow:    0,
-		lastUpdate:    time.Now(),
-		gameWidth:     gameWidth,
-		gameHeight:    gameHeight,
-		screenWidth:   screenWidth,
-		heatIncrement: heatIncrement,
+		animating:         false,
+		currentRow:        0,
+		lastUpdate:        time.Now(),
+		gameWidth:         gameWidth,
+		gameHeight:        gameHeight,
+		screenWidth:       screenWidth,
+		heatIncrement:     heatIncrement,
+		lastHeatIncrement: heatIncrement,
 	}
 	s.startTicker()
 	return s
@@ -48,8 +50,23 @@ func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 	if s.animating {
 		s.updateAnimation(world)
 	} else {
-		// Restart ticker if heat changed significantly
-		if time.Since(s.lastUpdate).Seconds() > 1.0 {
+		// Restart ticker if heat changed significantly (>10% of heat bar width)
+		heatBarWidth := s.screenWidth - 6
+		if heatBarWidth < 1 {
+			heatBarWidth = 1
+		}
+		threshold := heatBarWidth / 10
+		if threshold < 1 {
+			threshold = 1
+		}
+
+		heatDiff := s.heatIncrement - s.lastHeatIncrement
+		if heatDiff < 0 {
+			heatDiff = -heatDiff
+		}
+
+		if heatDiff >= threshold {
+			s.lastHeatIncrement = s.heatIncrement
 			s.startTicker()
 		}
 	}
@@ -169,13 +186,15 @@ func (s *DecaySystem) calculateInterval() time.Duration {
 	}
 
 	screenArea := float64(s.gameWidth * s.gameHeight)
-	baseInterval := 60.0 + (screenArea / 50.0)
+	// Reduced base from 60s to 30s for better gameplay
+	baseInterval := 30.0 + (screenArea / 50.0)
 
 	minInterval := baseInterval * 0.1
 	if minInterval < 5.0 {
 		minInterval = 5.0
 	}
 
+	// High heat = faster decay (shorter interval)
 	intervalSeconds := baseInterval*(1.0-heatPercentage*0.9) + minInterval
 	return time.Duration(intervalSeconds * float64(time.Second))
 }
