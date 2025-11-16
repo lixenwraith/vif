@@ -3,17 +3,20 @@ package modes
 import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/systems"
 )
 
 // InputHandler processes user input events
 type InputHandler struct {
-	ctx *engine.GameContext
+	ctx         *engine.GameContext
+	scoreSystem *systems.ScoreSystem
 }
 
 // NewInputHandler creates a new input handler
-func NewInputHandler(ctx *engine.GameContext) *InputHandler {
+func NewInputHandler(ctx *engine.GameContext, scoreSystem *systems.ScoreSystem) *InputHandler {
 	return &InputHandler{
-		ctx: ctx,
+		ctx:         ctx,
+		scoreSystem: scoreSystem,
 	}
 }
 
@@ -59,16 +62,24 @@ func (h *InputHandler) handleKeyEvent(ev *tcell.EventKey) bool {
 
 // handleInsertMode handles input in insert mode
 func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
-	// Simplified insert mode - just handle mode switching
-	// Full implementation would handle character typing
+	if ev.Key() == tcell.KeyRune {
+		// Delegate character typing to score system
+		h.scoreSystem.HandleCharacterTyping(h.ctx.World, h.ctx.CursorX, h.ctx.CursorY, ev.Rune())
+	}
 	return true
 }
 
 // handleSearchMode handles input in search mode
 func (h *InputHandler) handleSearchMode(ev *tcell.EventKey) bool {
-	// Simplified search mode
 	if ev.Key() == tcell.KeyEnter {
+		// Execute search
+		if h.ctx.SearchText != "" {
+			if PerformSearch(h.ctx, h.ctx.SearchText, true) {
+				h.ctx.LastSearchText = h.ctx.SearchText
+			}
+		}
 		h.ctx.Mode = engine.ModeNormal
+		h.ctx.SearchText = ""
 		return true
 	}
 	if ev.Key() == tcell.KeyBackspace || ev.Key() == tcell.KeyBackspace2 {
@@ -88,9 +99,44 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 	if ev.Key() == tcell.KeyRune {
 		char := ev.Rune()
 
+		// Handle waiting for 'f' character
+		if h.ctx.WaitingForF {
+			ExecuteFindChar(h.ctx, char)
+			h.ctx.WaitingForF = false
+			return true
+		}
+
+		// Handle delete operator
+		if h.ctx.DeleteOperator {
+			ExecuteDeleteMotion(h.ctx, char, h.ctx.MotionCount)
+			h.ctx.MotionCount = 0
+			h.ctx.MotionCommand = ""
+			return true
+		}
+
+		// Handle numbers for count
+		if char >= '0' && char <= '9' {
+			// Special case: '0' is a motion (line start) when not following a number
+			if char == '0' && h.ctx.MotionCount == 0 {
+				ExecuteMotion(h.ctx, char, 1)
+				h.ctx.MotionCommand = ""
+				return true
+			}
+			h.ctx.MotionCount = h.ctx.MotionCount*10 + int(char-'0')
+			return true
+		}
+
+		// Get count (default to 1 if not specified)
+		count := h.ctx.MotionCount
+		if count == 0 {
+			count = 1
+		}
+
 		// Enter insert mode
 		if char == 'i' {
 			h.ctx.Mode = engine.ModeInsert
+			h.ctx.MotionCount = 0
+			h.ctx.MotionCommand = ""
 			return true
 		}
 
@@ -98,46 +144,66 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 		if char == '/' {
 			h.ctx.Mode = engine.ModeSearch
 			h.ctx.SearchText = ""
+			h.ctx.MotionCount = 0
+			h.ctx.MotionCommand = ""
+			return true
+		}
+
+		// Repeat search
+		if char == 'n' {
+			RepeatSearch(h.ctx, true)
+			h.ctx.MotionCount = 0
+			h.ctx.MotionCommand = ""
+			return true
+		}
+
+		if char == 'N' {
+			RepeatSearch(h.ctx, false)
+			h.ctx.MotionCount = 0
+			h.ctx.MotionCommand = ""
+			return true
+		}
+
+		// Delete operator
+		if char == 'd' {
+			if h.ctx.CommandPrefix == 'd' {
+				// dd - delete line
+				ExecuteDeleteMotion(h.ctx, 'd', count)
+				h.ctx.MotionCount = 0
+				h.ctx.MotionCommand = ""
+				h.ctx.CommandPrefix = 0
+			} else {
+				h.ctx.DeleteOperator = true
+				h.ctx.CommandPrefix = 'd'
+			}
+			return true
+		}
+
+		// Handle 'gg' for goto top
+		if char == 'g' {
+			if h.ctx.CommandPrefix == 'g' {
+				h.ctx.CursorY = 0
+				h.ctx.CommandPrefix = 0
+				h.ctx.MotionCount = 0
+			} else {
+				h.ctx.CommandPrefix = 'g'
+			}
 			return true
 		}
 
 		// Toggle ping
 		if char == '\r' || char == '\n' {
 			h.ctx.PingActive = !h.ctx.PingActive
+			h.ctx.MotionCount = 0
+			h.ctx.MotionCommand = ""
 			return true
 		}
 
-		// Basic movements (simplified)
-		switch char {
-		case 'h':
-			h.moveCursor(-1, 0)
-		case 'j':
-			h.moveCursor(0, 1)
-		case 'k':
-			h.moveCursor(0, -1)
-		case 'l':
-			h.moveCursor(1, 0)
-		}
+		// Execute motion commands
+		ExecuteMotion(h.ctx, char, count)
+		h.ctx.MotionCount = 0
+		h.ctx.MotionCommand = ""
+		h.ctx.CommandPrefix = 0
 	}
 	return true
-}
-
-// moveCursor moves the cursor with bounds checking
-func (h *InputHandler) moveCursor(dx, dy int) {
-	h.ctx.CursorX += dx
-	h.ctx.CursorY += dy
-
-	// Clamp to game area
-	if h.ctx.CursorX < 0 {
-		h.ctx.CursorX = 0
-	}
-	if h.ctx.CursorX >= h.ctx.GameWidth {
-		h.ctx.CursorX = h.ctx.GameWidth - 1
-	}
-	if h.ctx.CursorY < 0 {
-		h.ctx.CursorY = 0
-	}
-	if h.ctx.CursorY >= h.ctx.GameHeight {
-		h.ctx.CursorY = h.ctx.GameHeight - 1
-	}
 }

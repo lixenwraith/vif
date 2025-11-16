@@ -33,6 +33,9 @@ func main() {
 	ctx := engine.NewGameContext(screen)
 
 	// Create and add systems to the ECS world
+	scoreSystem := systems.NewScoreSystem(ctx)
+	ctx.World.AddSystem(scoreSystem)
+
 	spawnSystem := systems.NewSpawnSystem(ctx.GameWidth, ctx.GameHeight, ctx.CursorX, ctx.CursorY)
 	ctx.World.AddSystem(spawnSystem)
 
@@ -55,7 +58,7 @@ func main() {
 	)
 
 	// Create input handler
-	inputHandler := modes.NewInputHandler(ctx)
+	inputHandler := modes.NewInputHandler(ctx, scoreSystem)
 
 	// Start decay ticker
 	ctx.DecayTicker = time.AfterFunc(60*time.Second, func() {
