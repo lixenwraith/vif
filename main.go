@@ -57,9 +57,11 @@ var (
 )
 
 type Character struct {
-	rune  rune
-	x, y  int
-	style tcell.Style
+	rune       rune
+	x, y       int
+	style      tcell.Style
+	sequenceID int // All chars in same sequence have same ID
+	seqIndex   int // Position in the sequence (0-based)
 }
 
 type Trail struct {
@@ -90,6 +92,13 @@ type Game struct {
 	// Characters on screen
 	characters []Character
 	lastSpawn  time.Time
+	nextSeqID  int // Counter for unique sequence IDs
+
+	// Score tracking
+	score            int
+	lastCharX        int // Last character position hit (-1 if none or space)
+	lastCharY        int
+	hitSequencePos   int // Current position in hit sequence (1-based)
 
 	// Vi-motion state
 	motionCount    int
@@ -122,6 +131,11 @@ func NewGame() (*Game, error) {
 		cursorVisible:   true,
 		lastSpawn:       time.Now(),
 		cursorBlinkTime: time.Now(),
+		nextSeqID:       1,
+		score:           0,
+		lastCharX:       -1,
+		lastCharY:       -1,
+		hitSequencePos:  0,
 		motionCount:     0,
 		motionCommand:   "",
 		waitingForF:     false,
@@ -161,40 +175,87 @@ func (g *Game) updateGameArea() {
 	}
 }
 
-func (g *Game) generateCharacter() Character {
+func (g *Game) generateCharacterSequence() []Character {
 	chars := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]{}|;:,.<>?/")
 
-	// Avoid spawn near cursor (coordinates are in game area)
-	var x, y int
-	for {
-		x = rand.Intn(g.gameWidth)
-		y = rand.Intn(g.gameHeight)
-		if math.Abs(float64(x-g.cursorX)) > 5 || math.Abs(float64(y-g.cursorY)) > 3 {
-			break
-		}
+	// Generate sequence length (1-10 characters)
+	seqLength := rand.Intn(10) + 1
+
+	// Generate the sequence of runes
+	sequence := make([]rune, seqLength)
+	for i := 0; i < seqLength; i++ {
+		sequence[i] = chars[rand.Intn(len(chars))]
 	}
 
-	char := chars[rand.Intn(len(chars))]
-
-	// Color based on character type using custom RGB palette
+	// Pick a color based on the first character
 	var style tcell.Style
 	switch {
-	case char >= 'a' && char <= 'z':
+	case sequence[0] >= 'a' && sequence[0] <= 'z':
 		style = tcell.StyleDefault.Foreground(rgbCharLowercase)
-	case char >= 'A' && char <= 'Z':
+	case sequence[0] >= 'A' && sequence[0] <= 'Z':
 		style = tcell.StyleDefault.Foreground(rgbCharUppercase)
-	case char >= '0' && char <= '9':
+	case sequence[0] >= '0' && sequence[0] <= '9':
 		style = tcell.StyleDefault.Foreground(rgbCharDigit)
 	default:
 		style = tcell.StyleDefault.Foreground(rgbCharSpecial)
 	}
 
-	return Character{
-		rune:  char,
-		x:     x,
-		y:     y,
-		style: style,
+	// Find a position where the sequence fits without overlapping
+	// Try up to 100 times to find a valid position
+	var x, y int
+	maxAttempts := 100
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		// Random position, avoiding cursor
+		x = rand.Intn(g.gameWidth)
+		y = rand.Intn(g.gameHeight)
+
+		// Check if far enough from cursor
+		if math.Abs(float64(x-g.cursorX)) <= 5 && math.Abs(float64(y-g.cursorY)) <= 3 {
+			continue
+		}
+
+		// Check if sequence fits within game width
+		if x+seqLength > g.gameWidth {
+			continue
+		}
+
+		// Check for overlaps with existing characters
+		overlaps := false
+		for i := 0; i < seqLength; i++ {
+			for _, ch := range g.characters {
+				if ch.x == x+i && ch.y == y {
+					overlaps = true
+					break
+				}
+			}
+			if overlaps {
+				break
+			}
+		}
+
+		if !overlaps {
+			// Found a valid position
+			break
+		}
 	}
+
+	// Create the sequence
+	sequenceID := g.nextSeqID
+	g.nextSeqID++
+
+	result := make([]Character, seqLength)
+	for i := 0; i < seqLength; i++ {
+		result[i] = Character{
+			rune:       sequence[i],
+			x:          x + i,
+			y:          y,
+			style:      style,
+			sequenceID: sequenceID,
+			seqIndex:   i,
+		}
+	}
+
+	return result
 }
 
 func (g *Game) addTrail(fromX, fromY, toX, toY int) {
@@ -387,6 +448,17 @@ func (g *Game) draw() {
 			g.screen.SetContent(i, statusY, ch, nil, statusStyle)
 		}
 	}
+	// Draw score at bottom right
+	scoreText := fmt.Sprintf("Score: %d", g.score)
+	scoreStartX := g.width - len(scoreText)
+	if scoreStartX < 0 {
+		scoreStartX = 0
+	}
+	for i, ch := range scoreText {
+		if scoreStartX+i < g.width {
+			g.screen.SetContent(scoreStartX+i, statusY, ch, nil, statusStyle)
+		}
+	}
 
 	// Draw cursor (translate game coords to screen coords)
 	now = time.Now()
@@ -447,18 +519,148 @@ func (g *Game) moveCursor(dx, dy int) {
 		g.pingActive = false
 
 		// Check if we hit a character at the new position
+		hitCharIndex := -1
+		var hitChar Character
 		for i, ch := range g.characters {
 			if ch.x == g.cursorX && ch.y == g.cursorY {
-				// Remove character
-				g.characters = append(g.characters[:i], g.characters[i+1:]...)
+				hitCharIndex = i
+				hitChar = ch
 				break
 			}
+		}
+
+		if hitCharIndex >= 0 {
+			// We hit a character - update score
+			wasOnSpace := g.lastCharX == -1
+
+			if wasOnSpace {
+				// Moving from space to character
+				g.score += 1
+				g.hitSequencePos = 1
+			} else {
+				// Moving from character to character - check if continuing sequence
+				// Find the last character we hit
+				var lastHitChar *Character
+				for i := range g.characters {
+					if g.characters[i].x == g.lastCharX && g.characters[i].y == g.lastCharY {
+						lastHitChar = &g.characters[i]
+						break
+					}
+				}
+
+				continuing := false
+				if lastHitChar != nil {
+					// Check if hitChar is the next character in the sequence
+					// (position-wise, not necessarily by seqIndex)
+					xDiff := hitChar.x - lastHitChar.x
+					yDiff := hitChar.y - lastHitChar.y
+					// Consider it continuing if moving by 1 in any direction
+					if (xDiff == 1 || xDiff == -1 || xDiff == 0) && (yDiff == 1 || yDiff == -1 || yDiff == 0) {
+						continuing = true
+					}
+				}
+
+				if continuing {
+					// Continuing sequence
+					g.hitSequencePos++
+					g.score += g.hitSequencePos
+				} else {
+					// New sequence
+					g.hitSequencePos = 1
+					g.score += 1
+				}
+			}
+
+			// Update last character position
+			g.lastCharX = hitChar.x
+			g.lastCharY = hitChar.y
+
+			// Remove character
+			g.characters = append(g.characters[:hitCharIndex], g.characters[hitCharIndex+1:]...)
+		} else {
+			// No character at new position - reset to space
+			g.lastCharX = -1
+			g.lastCharY = -1
+			g.hitSequencePos = 0
 		}
 	}
 
 	// Reset cursor blink
 	g.cursorVisible = true
 	g.cursorBlinkTime = time.Now()
+}
+
+// Helper to check if there's a character at position (x, y)
+func (g *Game) hasCharAt(x, y int) bool {
+	for _, ch := range g.characters {
+		if ch.x == x && ch.y == y {
+			return true
+		}
+	}
+	return false
+}
+
+// moveToNextWordStart implements 'w' motion
+// Moves to the first character after spaces on the right
+func (g *Game) moveToNextWordStart() {
+	y := g.cursorY
+	startX := g.cursorX + 1
+
+	// Phase 1: Skip any characters (if we're in a word)
+	x := startX
+	for x < g.gameWidth && g.hasCharAt(x, y) {
+		x++
+	}
+
+	// Phase 2: Skip spaces
+	for x < g.gameWidth && !g.hasCharAt(x, y) {
+		x++
+	}
+
+	// Phase 3: Found first character after spaces (or reached end)
+	if x < g.gameWidth && g.hasCharAt(x, y) {
+		g.moveCursor(x-g.cursorX, 0)
+	} else {
+		// No word found - flash error
+		g.cursorError = true
+		g.cursorErrorTime = time.Now()
+	}
+}
+
+// moveToNextWordEnd implements 'e' motion
+// Moves to the last character of the first word on the right
+func (g *Game) moveToNextWordEnd() {
+	y := g.cursorY
+	startX := g.cursorX
+
+	// If we're on a character, skip to end of current word first
+	x := startX
+	if g.hasCharAt(x, y) {
+		x++
+		for x < g.gameWidth && g.hasCharAt(x, y) {
+			x++
+		}
+	} else {
+		x++
+	}
+
+	// Skip spaces
+	for x < g.gameWidth && !g.hasCharAt(x, y) {
+		x++
+	}
+
+	// Now find the end of the next word
+	if x < g.gameWidth && g.hasCharAt(x, y) {
+		// Found start of word, now find its end
+		for x+1 < g.gameWidth && g.hasCharAt(x+1, y) {
+			x++
+		}
+		g.moveCursor(x-g.cursorX, 0)
+	} else {
+		// No word found - flash error
+		g.cursorError = true
+		g.cursorErrorTime = time.Now()
+	}
 }
 
 func (g *Game) executeMotion(command rune, count int) {
@@ -498,6 +700,10 @@ func (g *Game) executeMotion(command rune, count int) {
 	case 'G': // bottom row, same column
 		dy := (g.gameHeight - 1) - g.cursorY
 		g.moveCursor(0, dy)
+	case 'w': // next word start (first character after spaces)
+		g.moveToNextWordStart()
+	case 'e': // next word end (last character before space)
+		g.moveToNextWordEnd()
 	}
 
 	// Clear motion state
@@ -619,6 +825,22 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 				return true
 			}
 
+			// Handle 'w' command (next word start)
+			if char == 'w' {
+				g.motionCommand = "w"
+				g.statusMessage = g.motionCommand
+				g.executeMotion('w', 0)
+				return true
+			}
+
+			// Handle 'e' command (next word end)
+			if char == 'e' {
+				g.motionCommand = "e"
+				g.statusMessage = g.motionCommand
+				g.executeMotion('e', 0)
+				return true
+			}
+
 			// Handle 'G' command (bottom of screen)
 			if char == 'G' {
 				g.motionCommand = "G"
@@ -686,10 +908,11 @@ func (g *Game) run() {
 			}
 
 		case <-ticker.C:
-			// Spawn new characters
+			// Spawn new character sequences
 			if time.Since(g.lastSpawn).Milliseconds() > characterSpawnMs {
-				if len(g.characters) < 20 { // Max characters on screen
-					g.characters = append(g.characters, g.generateCharacter())
+				if len(g.characters) < 50 { // Max characters on screen (increased for sequences)
+					newSeq := g.generateCharacterSequence()
+					g.characters = append(g.characters, newSeq...)
 					g.lastSpawn = time.Now()
 				}
 			}
