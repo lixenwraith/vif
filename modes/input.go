@@ -62,7 +62,41 @@ func (h *InputHandler) handleKeyEvent(ev *tcell.EventKey) bool {
 
 // handleInsertMode handles input in insert mode
 func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
-	if ev.Key() == tcell.KeyRune {
+	// Handle arrow keys (reset heat)
+	switch ev.Key() {
+	case tcell.KeyUp:
+		if h.ctx.CursorY > 0 {
+			h.ctx.CursorY--
+		}
+		h.ctx.ScoreIncrement = 0
+		return true
+	case tcell.KeyDown:
+		if h.ctx.CursorY < h.ctx.GameHeight-1 {
+			h.ctx.CursorY++
+		}
+		h.ctx.ScoreIncrement = 0
+		return true
+	case tcell.KeyLeft:
+		if h.ctx.CursorX > 0 {
+			h.ctx.CursorX--
+		}
+		h.ctx.ScoreIncrement = 0
+		return true
+	case tcell.KeyRight:
+		if h.ctx.CursorX < h.ctx.GameWidth-1 {
+			h.ctx.CursorX++
+		}
+		h.ctx.ScoreIncrement = 0
+		return true
+	case tcell.KeyHome:
+		h.ctx.CursorX = 0
+		h.ctx.ScoreIncrement = 0
+		return true
+	case tcell.KeyEnd:
+		h.ctx.CursorX = findLineEnd(h.ctx)
+		h.ctx.ScoreIncrement = 0
+		return true
+	case tcell.KeyRune:
 		// Delegate character typing to score system
 		h.scoreSystem.HandleCharacterTyping(h.ctx.World, h.ctx.CursorX, h.ctx.CursorY, ev.Rune())
 	}
@@ -96,6 +130,42 @@ func (h *InputHandler) handleSearchMode(ev *tcell.EventKey) bool {
 
 // handleNormalMode handles input in normal mode
 func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
+	// Handle arrow keys (work like h/j/k/l, but reset heat)
+	switch ev.Key() {
+	case tcell.KeyUp:
+		if h.ctx.CursorY > 0 {
+			h.ctx.CursorY--
+		}
+		h.ctx.ScoreIncrement = 0
+		return true
+	case tcell.KeyDown:
+		if h.ctx.CursorY < h.ctx.GameHeight-1 {
+			h.ctx.CursorY++
+		}
+		h.ctx.ScoreIncrement = 0
+		return true
+	case tcell.KeyLeft:
+		if h.ctx.CursorX > 0 {
+			h.ctx.CursorX--
+		}
+		h.ctx.ScoreIncrement = 0
+		return true
+	case tcell.KeyRight:
+		if h.ctx.CursorX < h.ctx.GameWidth-1 {
+			h.ctx.CursorX++
+		}
+		h.ctx.ScoreIncrement = 0
+		return true
+	case tcell.KeyHome:
+		h.ctx.CursorX = 0
+		h.ctx.ScoreIncrement = 0
+		return true
+	case tcell.KeyEnd:
+		h.ctx.CursorX = findLineEnd(h.ctx)
+		h.ctx.ScoreIncrement = 0
+		return true
+	}
+
 	if ev.Key() == tcell.KeyRune {
 		char := ev.Rune()
 
@@ -111,6 +181,7 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 			ExecuteDeleteMotion(h.ctx, char, h.ctx.MotionCount)
 			h.ctx.MotionCount = 0
 			h.ctx.MotionCommand = ""
+			h.ctx.CommandPrefix = 0
 			return true
 		}
 

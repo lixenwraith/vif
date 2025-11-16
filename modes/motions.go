@@ -130,7 +130,7 @@ func findNextWordStart(ctx *engine.GameContext) int {
 		inWord = hasChar
 	}
 
-	return ctx.GameWidth - 1 // No word found, go to end
+	return ctx.CursorX // No word found, stay at current position
 }
 
 // findWordEnd finds the end of the current/next word
