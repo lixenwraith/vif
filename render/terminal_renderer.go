@@ -52,20 +52,22 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 	// Draw line numbers
 	r.drawLineNumbers(ctx, defaultStyle)
 
-	// Draw ping highlights (cursor row/column)
+	// Get ping color for later use
 	pingColor := r.getPingColor(ctx.World, ctx.CursorX, ctx.CursorY, ctx)
-	r.drawPingHighlights(ctx, pingColor, defaultStyle)
 
 	// Draw characters
 	r.drawCharacters(ctx.World, pingColor, defaultStyle, ctx)
 
 	// Draw trails
-	r.drawTrails(ctx.World, defaultStyle)
+	r.drawTrails(ctx.World, defaultStyle, ctx, pingColor)
 
 	// Draw decay animation if active
 	if decayAnimating {
 		r.drawDecayAnimation(ctx.World, decayRow, defaultStyle)
 	}
+
+	// Draw ping highlights (cursor row/column) and grid - AFTER characters/trails/decay
+	r.drawPingHighlights(ctx, pingColor, defaultStyle)
 
 	// Draw column indicators
 	r.drawColumnIndicators(ctx, defaultStyle)
@@ -173,13 +175,30 @@ func (r *TerminalRenderer) getPingColor(world *engine.World, cursorX, cursorY in
 // drawPingHighlights draws the cursor row and column highlights
 func (r *TerminalRenderer) drawPingHighlights(ctx *engine.GameContext, pingColor tcell.Color, defaultStyle tcell.Style) {
 	pingStyle := defaultStyle.Background(pingColor)
+	posType := reflect.TypeOf(components.PositionComponent{})
+	charType := reflect.TypeOf(components.CharacterComponent{})
+	trailType := reflect.TypeOf(components.TrailComponent{})
 
 	// Highlight the row
 	for x := 0; x < r.gameWidth; x++ {
 		screenX := r.gameX + x
 		screenY := r.gameY + ctx.CursorY
 		if screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
-			r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+			// Check if there's a character or trail entity at this position
+			entity := ctx.World.GetEntityAtPosition(x, ctx.CursorY)
+			hasEntity := false
+			if entity != 0 {
+				if _, ok := ctx.World.GetComponent(entity, charType); ok {
+					hasEntity = true
+				} else if _, ok := ctx.World.GetComponent(entity, trailType); ok {
+					hasEntity = true
+				}
+			}
+
+			// Only draw space if there's no entity (entities already have ping background from their draw functions)
+			if !hasEntity {
+				r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+			}
 		}
 	}
 
@@ -188,18 +207,32 @@ func (r *TerminalRenderer) drawPingHighlights(ctx *engine.GameContext, pingColor
 		screenX := r.gameX + ctx.CursorX
 		screenY := r.gameY + y
 		if screenX >= r.gameX && screenX < r.width && screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
-			r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+			// Check if there's a character or trail entity at this position
+			entity := ctx.World.GetEntityAtPosition(ctx.CursorX, y)
+			hasEntity := false
+			if entity != 0 {
+				if _, ok := ctx.World.GetComponent(entity, charType); ok {
+					hasEntity = true
+				} else if _, ok := ctx.World.GetComponent(entity, trailType); ok {
+					hasEntity = true
+				}
+			}
+
+			// Only draw space if there's no entity
+			if !hasEntity {
+				r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+			}
 		}
 	}
 
 	// Draw grid lines if ping is active
 	if ctx.PingActive {
-		r.drawPingGrid(ctx, pingStyle)
+		r.drawPingGrid(ctx, pingStyle, posType, charType, trailType)
 	}
 }
 
 // drawPingGrid draws coordinate grid lines at 5-column intervals
-func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell.Style) {
+func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell.Style, posType, charType, trailType reflect.Type) {
 	// Vertical lines
 	for n := 1; ; n++ {
 		offset := 5 * n
@@ -212,7 +245,21 @@ func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell
 				screenX := r.gameX + col
 				screenY := r.gameY + y
 				if screenX >= r.gameX && screenX < r.width && screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
-					r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+					// Check if there's an entity at this position
+					entity := ctx.World.GetEntityAtPosition(col, y)
+					hasEntity := false
+					if entity != 0 {
+						if _, ok := ctx.World.GetComponent(entity, charType); ok {
+							hasEntity = true
+						} else if _, ok := ctx.World.GetComponent(entity, trailType); ok {
+							hasEntity = true
+						}
+					}
+
+					// Only draw space if there's no entity
+					if !hasEntity {
+						r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+					}
 				}
 			}
 		}
@@ -222,7 +269,21 @@ func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell
 				screenX := r.gameX + col
 				screenY := r.gameY + y
 				if screenX >= r.gameX && screenX < r.width && screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
-					r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+					// Check if there's an entity at this position
+					entity := ctx.World.GetEntityAtPosition(col, y)
+					hasEntity := false
+					if entity != 0 {
+						if _, ok := ctx.World.GetComponent(entity, charType); ok {
+							hasEntity = true
+						} else if _, ok := ctx.World.GetComponent(entity, trailType); ok {
+							hasEntity = true
+						}
+					}
+
+					// Only draw space if there's no entity
+					if !hasEntity {
+						r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+					}
 				}
 			}
 		}
@@ -240,7 +301,21 @@ func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell
 				screenX := r.gameX + x
 				screenY := r.gameY + row
 				if screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
-					r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+					// Check if there's an entity at this position
+					entity := ctx.World.GetEntityAtPosition(x, row)
+					hasEntity := false
+					if entity != 0 {
+						if _, ok := ctx.World.GetComponent(entity, charType); ok {
+							hasEntity = true
+						} else if _, ok := ctx.World.GetComponent(entity, trailType); ok {
+							hasEntity = true
+						}
+					}
+
+					// Only draw space if there's no entity
+					if !hasEntity {
+						r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+					}
 				}
 			}
 		}
@@ -250,7 +325,21 @@ func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell
 				screenX := r.gameX + x
 				screenY := r.gameY + row
 				if screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
-					r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+					// Check if there's an entity at this position
+					entity := ctx.World.GetEntityAtPosition(x, row)
+					hasEntity := false
+					if entity != 0 {
+						if _, ok := ctx.World.GetComponent(entity, charType); ok {
+							hasEntity = true
+						} else if _, ok := ctx.World.GetComponent(entity, trailType); ok {
+							hasEntity = true
+						}
+					}
+
+					// Only draw space if there's no entity
+					if !hasEntity {
+						r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+					}
 				}
 			}
 		}
@@ -306,7 +395,7 @@ func (r *TerminalRenderer) drawCharacters(world *engine.World, pingColor tcell.C
 }
 
 // drawTrails draws all trail particles
-func (r *TerminalRenderer) drawTrails(world *engine.World, defaultStyle tcell.Style) {
+func (r *TerminalRenderer) drawTrails(world *engine.World, defaultStyle tcell.Style, ctx *engine.GameContext, pingColor tcell.Color) {
 	posType := reflect.TypeOf(components.PositionComponent{})
 	trailType := reflect.TypeOf(components.TrailComponent{})
 
@@ -328,7 +417,31 @@ func (r *TerminalRenderer) drawTrails(world *engine.World, defaultStyle tcell.St
 				intensity = 255
 			}
 			color := tcell.NewRGBColor(int32(intensity), int32(intensity), int32(intensity))
-			r.screen.SetContent(screenX, screenY, '█', nil, defaultStyle.Foreground(color))
+
+			// Check if trail is on a ping line (cursor row or column)
+			onPingLine := (pos.Y == ctx.CursorY) || (pos.X == ctx.CursorX)
+
+			// Also check if on ping grid lines when ping is active
+			if !onPingLine && ctx.PingActive {
+				// Check if on vertical grid line (columns at ±5, ±10, ±15, etc.)
+				deltaX := pos.X - ctx.CursorX
+				if deltaX%5 == 0 && deltaX != 0 {
+					onPingLine = true
+				}
+				// Check if on horizontal grid line (rows at ±5, ±10, ±15, etc.)
+				deltaY := pos.Y - ctx.CursorY
+				if deltaY%5 == 0 && deltaY != 0 {
+					onPingLine = true
+				}
+			}
+
+			// Apply ping background if on ping line
+			style := defaultStyle.Foreground(color)
+			if onPingLine {
+				style = style.Background(pingColor)
+			}
+
+			r.screen.SetContent(screenX, screenY, '█', nil, style)
 		}
 	}
 }
@@ -485,7 +598,7 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 		}
 	}
 
-	// Calculate positions and draw timers + score (from right to left: Decay, Trail, Score)
+	// Calculate positions and draw timers + score (from right to left: Trail, Decay, Score)
 	scoreText := fmt.Sprintf(" Score: %d ", ctx.Score)
 	decayText := fmt.Sprintf(" Decay: %.1fs ", decayTimeRemaining)
 	var trailText string
@@ -497,9 +610,9 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 			remaining = 0
 		}
 		trailText = fmt.Sprintf(" Trail: %.1fs ", remaining)
-		totalWidth = len(scoreText) + len(trailText) + len(decayText)
+		totalWidth = len(trailText) + len(decayText) + len(scoreText)
 	} else {
-		totalWidth = len(scoreText) + len(decayText)
+		totalWidth = len(decayText) + len(scoreText)
 	}
 
 	startX := r.width - totalWidth
@@ -508,24 +621,6 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 	}
 
 	now := time.Now()
-
-	// Draw score (with yellow background, or blink color if active)
-	if ctx.ScoreBlinkActive && now.Sub(ctx.ScoreBlinkTime).Milliseconds() < 200 {
-		scoreStyle := defaultStyle.Foreground(RgbStatusText).Background(ctx.ScoreBlinkColor)
-		for i, ch := range scoreText {
-			if startX+i < r.width {
-				r.screen.SetContent(startX+i, statusY, ch, nil, scoreStyle)
-			}
-		}
-	} else {
-		scoreStyle := defaultStyle.Foreground(RgbStatusText).Background(RgbScoreBg)
-		for i, ch := range scoreText {
-			if startX+i < r.width {
-				r.screen.SetContent(startX+i, statusY, ch, nil, scoreStyle)
-			}
-		}
-	}
-	startX += len(scoreText)
 
 	// Draw trail timer if active (with purple background)
 	if ctx.TrailEnabled {
@@ -543,6 +638,24 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 	for i, ch := range decayText {
 		if startX+i < r.width {
 			r.screen.SetContent(startX+i, statusY, ch, nil, decayStyle)
+		}
+	}
+	startX += len(decayText)
+
+	// Draw score (with yellow background, or blink color if active)
+	if ctx.ScoreBlinkActive && now.Sub(ctx.ScoreBlinkTime).Milliseconds() < 200 {
+		scoreStyle := defaultStyle.Foreground(RgbStatusText).Background(ctx.ScoreBlinkColor)
+		for i, ch := range scoreText {
+			if startX+i < r.width {
+				r.screen.SetContent(startX+i, statusY, ch, nil, scoreStyle)
+			}
+		}
+	} else {
+		scoreStyle := defaultStyle.Foreground(RgbStatusText).Background(RgbScoreBg)
+		for i, ch := range scoreText {
+			if startX+i < r.width {
+				r.screen.SetContent(startX+i, statusY, ch, nil, scoreStyle)
+			}
 		}
 	}
 }
