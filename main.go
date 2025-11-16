@@ -686,19 +686,36 @@ func (g *Game) draw() {
 		}
 	}
 
-	// Draw decay animation - orange row moving from top to bottom
+	// Draw decay animation - dark gray row moving from top to bottom
+	// Characters are visible through the dark gray background
 	if g.decayAnimating {
 		elapsed := time.Since(g.decayStartTime).Seconds()
 		currentRow := int(elapsed / 0.1)
 
-		// Draw orange row at current position
+		// Draw dark gray row at current position with characters visible
 		if currentRow < g.gameHeight {
-			orangeStyle := defaultStyle.Foreground(tcell.NewRGBColor(255, 165, 0)) // Orange
+			darkGrayBg := tcell.NewRGBColor(60, 60, 60) // Dark gray background
 			screenY := g.gameY + currentRow
 			for x := 0; x < g.gameWidth; x++ {
 				screenX := g.gameX + x
 				if screenX >= g.gameX && screenX < g.width && screenY >= 0 && screenY < g.gameHeight {
-					g.screen.SetContent(screenX, screenY, '█', nil, orangeStyle)
+					// Check if there's a character at this position
+					charFound := false
+					for _, ch := range g.characters {
+						if ch.x == x && ch.y == currentRow {
+							// Draw character with dark gray background
+							fg, _, _ := ch.style.Decompose()
+							decayStyle := defaultStyle.Foreground(fg).Background(darkGrayBg)
+							g.screen.SetContent(screenX, screenY, ch.rune, nil, decayStyle)
+							charFound = true
+							break
+						}
+					}
+					// If no character, draw empty cell with dark gray background
+					if !charFound {
+						decayStyle := defaultStyle.Background(darkGrayBg)
+						g.screen.SetContent(screenX, screenY, ' ', nil, decayStyle)
+					}
 				}
 			}
 		}
@@ -2105,7 +2122,10 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 }
 
 // calculateDecayInterval calculates the interval in seconds until the next decay
-// based on: gameWidth * gameHeight * (heatMeterPercentage / 2)
+// Based on screen size and heat meter:
+// - Larger screens have longer base intervals
+// - Higher heat meter results in shorter intervals (more frequent decay)
+// - Lower heat meter results in longer intervals (less frequent decay)
 func (g *Game) calculateDecayInterval() time.Duration {
 	// Calculate heat meter percentage (0.0 to 1.0)
 	heatBarWidth := g.width - 6 // Same as in draw()
@@ -2121,13 +2141,21 @@ func (g *Game) calculateDecayInterval() time.Duration {
 		heatPercentage = 0.0
 	}
 
-	// Calculate interval: gameWidth * gameHeight * (heatPercentage / 2) seconds
-	intervalSeconds := float64(g.gameWidth) * float64(g.gameHeight) * (heatPercentage / 2.0)
+	// Calculate base interval proportional to screen size
+	// Base: 60 seconds + screen area factor
+	screenArea := float64(g.gameWidth * g.gameHeight)
+	baseInterval := 60.0 + (screenArea / 50.0) // For 80x24: ~98 seconds, for 200x50: ~260 seconds
 
-	// Minimum interval of 1 second to prevent too frequent decays
-	if intervalSeconds < 1.0 {
-		intervalSeconds = 1.0
+	// Calculate minimum interval (10% of base interval, at least 5 seconds)
+	minInterval := baseInterval * 0.1
+	if minInterval < 5.0 {
+		minInterval = 5.0
 	}
+
+	// Apply heat meter adjustment: higher heat = shorter interval
+	// Heat 0%: full baseInterval
+	// Heat 100%: minInterval
+	intervalSeconds := baseInterval*(1.0-heatPercentage*0.9) + minInterval
 
 	return time.Duration(intervalSeconds * float64(time.Second))
 }
@@ -2163,18 +2191,21 @@ func (g *Game) applyDecayToRow(row int) {
 				newChars = append(newChars, ch)
 			} else {
 				// Level is LevelDark - decay color: Blue → Green → Red → disappear
+				// When changing color, reset to LevelBright
 				if ch.sequenceType == SequenceBlue {
-					// Blue becomes Green
+					// Blue becomes Green at Bright level
 					ch.sequenceType = SequenceGreen
-					ch.style = g.getStyleForSequence(SequenceGreen, LevelDark)
+					ch.level = LevelBright
+					ch.style = g.getStyleForSequence(SequenceGreen, LevelBright)
 					newChars = append(newChars, ch)
 				} else if ch.sequenceType == SequenceGreen {
-					// Green becomes Red
+					// Green becomes Red at Bright level
 					ch.sequenceType = SequenceRed
-					ch.style = g.getStyleForSequence(SequenceRed, LevelDark)
+					ch.level = LevelBright
+					ch.style = g.getStyleForSequence(SequenceRed, LevelBright)
 					newChars = append(newChars, ch)
 				}
-				// Red disappears (don't append to newChars)
+				// Red at LevelDark disappears (don't append to newChars)
 			}
 		} else {
 			// Not on decay row, keep as is
@@ -2300,7 +2331,8 @@ func (g *Game) run() {
 
 			// Update decay ticker if heat meter changed significantly
 			// (check every second to avoid too frequent updates)
-			if time.Since(g.lastDecayUpdate).Seconds() > 1.0 {
+			// Only restart ticker if not currently animating
+			if !g.decayAnimating && time.Since(g.lastDecayUpdate).Seconds() > 1.0 {
 				g.startDecayTicker()
 			}
 
