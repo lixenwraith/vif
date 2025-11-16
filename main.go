@@ -59,6 +59,12 @@ type Game struct {
 	motionCommand string
 	waitingForF   bool
 	statusMessage string
+
+	// Ping coordinates feature
+	pingActive    bool
+	pingStartTime time.Time
+	pingRow       int
+	pingCol       int
 }
 
 func NewGame() (*Game, error) {
@@ -229,11 +235,43 @@ func (g *Game) draw() {
 
 	lineNumStyle := tcell.StyleDefault.Foreground(tcell.ColorDarkGray)
 
-	// Draw line numbers
+	// Draw relative line numbers (like vim's set number relativenumber)
 	for y := 0; y < g.gameHeight; y++ {
-		lineNum := fmt.Sprintf("%*d", g.lineNumWidth, y+1)
+		var lineNum string
+		relativeNum := y - g.cursorY
+		if relativeNum < 0 {
+			relativeNum = -relativeNum
+		}
+		lineNum = fmt.Sprintf("%*d", g.lineNumWidth, relativeNum)
 		for i, ch := range lineNum {
 			g.screen.SetContent(i, y, ch, nil, lineNumStyle)
+		}
+	}
+
+	// Check if ping should still be active
+	now := time.Now()
+	if g.pingActive && now.Sub(g.pingStartTime).Milliseconds() > 1000 {
+		g.pingActive = false
+	}
+
+	// Draw ping highlights (background only)
+	if g.pingActive {
+		pingStyle := tcell.StyleDefault.Background(tcell.ColorDarkGray)
+		// Highlight the row
+		for x := 0; x < g.gameWidth; x++ {
+			screenX := g.gameX + x
+			screenY := g.gameY + g.pingRow
+			if screenY >= 0 && screenY < g.gameHeight {
+				g.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+			}
+		}
+		// Highlight the column
+		for y := 0; y < g.gameHeight; y++ {
+			screenX := g.gameX + g.pingCol
+			screenY := g.gameY + y
+			if screenX >= g.gameX && screenX < g.width && screenY >= 0 && screenY < g.gameHeight {
+				g.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+			}
 		}
 	}
 
@@ -242,7 +280,12 @@ func (g *Game) draw() {
 		screenX := g.gameX + ch.x
 		screenY := g.gameY + ch.y
 		if screenX >= g.gameX && screenX < g.width && screenY >= 0 && screenY < g.gameHeight {
-			g.screen.SetContent(screenX, screenY, ch.rune, nil, ch.style)
+			style := ch.style
+			// Add gray background if on ping row or column
+			if g.pingActive && (ch.y == g.pingRow || ch.x == g.pingCol) {
+				style = style.Background(tcell.ColorDarkGray)
+			}
+			g.screen.SetContent(screenX, screenY, ch.rune, nil, style)
 		}
 	}
 
@@ -260,20 +303,30 @@ func (g *Game) draw() {
 		}
 	}
 
-	// Draw column indicators at bottom (row gameHeight)
+	// Draw column indicators at bottom (row gameHeight) - relative to cursor
 	indicatorY := g.gameHeight
 	indicatorStyle := tcell.StyleDefault.Foreground(tcell.ColorDarkGray)
 	for x := 0; x < g.gameWidth; x++ {
 		screenX := g.gameX + x
+		relativeCol := x - g.cursorX
 		var ch rune
-		if (x+1)%10 == 0 {
-			// Every 10th column: show the tens digit
-			ch = rune('0' + ((x + 1) / 10 % 10))
-		} else if (x+1)%5 == 0 {
-			// Every 5th column: show |
-			ch = '|'
+		if relativeCol == 0 {
+			// Cursor column: show 0
+			ch = '0'
 		} else {
-			ch = ' '
+			absRelative := relativeCol
+			if absRelative < 0 {
+				absRelative = -absRelative
+			}
+			if absRelative%10 == 0 {
+				// Every 10th column: show the tens digit
+				ch = rune('0' + (absRelative / 10 % 10))
+			} else if absRelative%5 == 0 {
+				// Every 5th column: show |
+				ch = '|'
+			} else {
+				ch = ' '
+			}
 		}
 		g.screen.SetContent(screenX, indicatorY, ch, nil, indicatorStyle)
 	}
@@ -297,7 +350,7 @@ func (g *Game) draw() {
 	}
 
 	// Draw cursor (translate game coords to screen coords)
-	now := time.Now()
+	now = time.Now()
 
 	// Handle error blink
 	if g.cursorError && now.Sub(g.cursorErrorTime).Milliseconds() > errorBlinkMs {
@@ -351,6 +404,9 @@ func (g *Game) moveCursor(dx, dy int) {
 	if oldX != g.cursorX || oldY != g.cursorY {
 		g.addTrail(oldX, oldY, g.cursorX, g.cursorY)
 
+		// Clear ping on cursor movement
+		g.pingActive = false
+
 		// Check if we hit a character at the new position
 		for i, ch := range g.characters {
 			if ch.x == g.cursorX && ch.y == g.cursorY {
@@ -382,23 +438,24 @@ func (g *Game) executeMotion(command rune, count int) {
 		g.moveCursor(count, 0)
 	case '0': // beginning of line
 		g.moveCursor(-g.cursorX, 0)
-	case '$': // end of line (rightmost non-space)
+	case '$': // end of line (rightmost non-space character)
 		// Find rightmost character on current line
-		rightmost := g.gameWidth - 1
-		hasChar := false
+		rightmost := -1
 		for _, ch := range g.characters {
 			if ch.y == g.cursorY {
-				hasChar = true
-				if ch.x > rightmost {
+				if rightmost == -1 || ch.x > rightmost {
 					rightmost = ch.x
 				}
 			}
 		}
-		// If no characters on line, go to end of game width
-		if !hasChar {
-			rightmost = g.gameWidth - 1
+		// Only move if we found a character on the line
+		if rightmost >= 0 && rightmost != g.cursorX {
+			g.moveCursor(rightmost-g.cursorX, 0)
+		} else if rightmost < 0 {
+			// No characters on line - flash error
+			g.cursorError = true
+			g.cursorErrorTime = time.Now()
 		}
-		g.moveCursor(rightmost-g.cursorX, 0)
 	}
 
 	// Clear motion state
@@ -436,6 +493,15 @@ func (g *Game) handleInput(ev tcell.Event) bool {
 		if ev.Key() == tcell.KeyEscape || ev.Key() == tcell.KeyCtrlC ||
 			(ev.Key() == tcell.KeyRune && ev.Rune() == 'q' && ev.Modifiers()&tcell.ModCtrl != 0) {
 			return false
+		}
+
+		// Handle Enter key for ping coordinates
+		if ev.Key() == tcell.KeyEnter {
+			g.pingActive = true
+			g.pingStartTime = time.Now()
+			g.pingRow = g.cursorY
+			g.pingCol = g.cursorX
+			return true
 		}
 
 		if ev.Key() == tcell.KeyRune {
