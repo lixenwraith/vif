@@ -25,8 +25,8 @@ const (
 
 // Game Timing Constants
 const (
-	// BoostExtensionDuration is how long each blue character extends the boost
-	BoostExtensionDuration = 1 * time.Second
+	// BoostExtensionDuration is how long each matching color character extends the boost
+	BoostExtensionDuration = 500 * time.Millisecond
 )
 
 // Gold Sequence Constants

@@ -88,7 +88,7 @@ func TestBoostHeatMultiplier(t *testing.T) {
 	}
 }
 
-// TestBlueCharacterActivatesBoost verifies that typing blue characters triggers boost
+// TestBlueCharacterActivatesBoost verifies that typing blue characters triggers boost when heat reaches max
 func TestBlueCharacterActivatesBoost(t *testing.T) {
 	// Create mock screen
 	screen := tcell.NewSimulationScreen("UTF-8")
@@ -99,6 +99,15 @@ func TestBlueCharacterActivatesBoost(t *testing.T) {
 	// Create game context
 	ctx := engine.NewGameContext(screen)
 	scoreSystem := NewScoreSystem(ctx)
+
+	// Calculate max heat
+	maxHeat := ctx.Width - constants.HeatBarIndicatorWidth
+	if maxHeat < 1 {
+		maxHeat = 1
+	}
+
+	// Set heat to max - 1 (just below threshold)
+	ctx.SetScoreIncrement(maxHeat - 1)
 
 	// Create a blue character at cursor position
 	entity := ctx.World.CreateEntity()
@@ -121,21 +130,21 @@ func TestBlueCharacterActivatesBoost(t *testing.T) {
 		t.Error("Boost should not be active initially")
 	}
 
-	// Type the blue character
+	// Type the blue character (should reach max heat and activate boost)
 	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
 
 	// Boost should now be active
 	if !ctx.GetBoostEnabled() {
-		t.Error("Boost should be active after typing blue character")
+		t.Error("Boost should be active after typing blue character and reaching max heat")
 	}
 
 	// Boost end time should be in the future
-	if !ctx.GetBoostEndTime().After(time.Now()) {
+	if !ctx.GetBoostEndTime().After(ctx.TimeProvider.Now()) {
 		t.Error("Boost end time should be in the future")
 	}
 }
 
-// TestBoostExtension verifies that consecutive blue characters extend boost time
+// TestBoostExtension verifies that consecutive blue characters extend boost time when heat is at max
 func TestBoostExtension(t *testing.T) {
 	// Create mock screen
 	screen := tcell.NewSimulationScreen("UTF-8")
@@ -146,6 +155,15 @@ func TestBoostExtension(t *testing.T) {
 	// Create game context
 	ctx := engine.NewGameContext(screen)
 	scoreSystem := NewScoreSystem(ctx)
+
+	// Calculate max heat
+	maxHeat := ctx.Width - constants.HeatBarIndicatorWidth
+	if maxHeat < 1 {
+		maxHeat = 1
+	}
+
+	// Set heat to max - 1 and activate boost with first character
+	ctx.SetScoreIncrement(maxHeat - 1)
 
 	// Create first blue character
 	entity1 := ctx.World.CreateEntity()
@@ -163,9 +181,14 @@ func TestBoostExtension(t *testing.T) {
 	ctx.World.AddComponent(entity1, seq1)
 	ctx.World.UpdateSpatialIndex(entity1, pos1.X, pos1.Y)
 
-	// Type first blue character
+	// Type first blue character (should activate boost)
 	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
 	firstEndTime := ctx.GetBoostEndTime()
+
+	// Verify boost is active
+	if !ctx.GetBoostEnabled() {
+		t.Fatal("Boost should be active after first character")
+	}
 
 	// Wait a bit
 	time.Sleep(100 * time.Millisecond)
@@ -186,7 +209,7 @@ func TestBoostExtension(t *testing.T) {
 	ctx.World.AddComponent(entity2, seq2)
 	ctx.World.UpdateSpatialIndex(entity2, pos2.X, pos2.Y)
 
-	// Type second blue character
+	// Type second blue character (should extend boost)
 	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'b')
 	secondEndTime := ctx.GetBoostEndTime()
 

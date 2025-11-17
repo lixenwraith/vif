@@ -69,8 +69,9 @@ type GameContext struct {
 	scoreBlinkTime   atomic.Int64  // UnixNano
 
 	// Atomic boost state (heat multiplier mechanic)
-	boostEnabled atomic.Bool
-	boostEndTime atomic.Int64 // UnixNano
+	boostEnabled      atomic.Bool
+	boostEndTime      atomic.Int64 // UnixNano
+	boostSequenceColor atomic.Int32 // 0=None, 1=Blue, 2=Green
 
 	// Atomic ping coordinates feature
 	pingActive    atomic.Bool
@@ -111,6 +112,7 @@ func NewGameContext(screen tcell.Screen) *GameContext {
 	ctx.scoreBlinkTime.Store(0)
 	ctx.boostEnabled.Store(false)
 	ctx.boostEndTime.Store(0)
+	ctx.boostSequenceColor.Store(0) // 0 = None
 	ctx.cursorError.Store(false)
 	ctx.cursorErrorTime.Store(0)
 	ctx.pingActive.Store(false)
@@ -205,6 +207,16 @@ func (g *GameContext) SetBoostEndTime(t time.Time) {
 	g.boostEndTime.Store(t.UnixNano())
 }
 
+// Atomic accessor methods for BoostSequenceColor
+// Color values: 0=None, 1=Blue, 2=Green
+func (g *GameContext) GetBoostSequenceColor() int32 {
+	return g.boostSequenceColor.Load()
+}
+
+func (g *GameContext) SetBoostSequenceColor(color int32) {
+	g.boostSequenceColor.Store(color)
+}
+
 // UpdateBoostTimerAtomic atomically checks if boost should expire and disables it
 // Returns true if boost was disabled due to expiration
 // Uses CAS pattern to avoid race conditions in check-then-set
@@ -229,6 +241,8 @@ func (g *GameContext) UpdateBoostTimerAtomic() bool {
 		// Try to atomically disable boost using CAS
 		// Only disable if it's still enabled (another goroutine might have disabled it)
 		if g.boostEnabled.CompareAndSwap(true, false) {
+			// Reset boost sequence color when boost expires
+			g.boostSequenceColor.Store(0) // 0 = None
 			return true
 		}
 	}
