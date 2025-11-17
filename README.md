@@ -23,7 +23,7 @@ The game features four types of character sequences, each with distinct behavior
 - **Spawning**: Generated from code blocks in `assets/data.txt` at regular intervals
 - **Content**: Lines of Go source code (trimmed and randomly placed)
 - **Scoring**: Positive points when typed correctly
-- **Special Effect**: Completing a blue sequence triggers a heat boost (x2 multiplier) for a limited time
+- **Boost Effect**: When heat is maxed and a Blue character triggers boost, typing more Blue extends the boost timer (x2 heat multiplier)
 - **Levels**: Three brightness levels (Dark, Normal, Bright) with multipliers (x1, x2, x3)
 - **Decay**: Decays through brightness levels, then transforms into Green (Bright) sequences
 
@@ -44,13 +44,14 @@ The game features four types of character sequences, each with distinct behavior
 
 ### Heat System
 
-- **Heat Meter**: Displayed at the bottom of the screen, representing typing skill/performance
-- **Gaining Heat**: Successfully typing correct sequences increases heat
-- **Losing Heat**: Typing incorrect characters or red sequences decreases heat
+- **Heat Meter**: Displayed at the top of the screen as a colored progress bar with numeric value
+- **Gaining Heat**: +1 for each correct Green/Blue character (+2 if boost active)
+- **Losing Heat**: Resets to 0 on incorrect typing, typing red sequences, arrow keys, or 3+ consecutive h/j/k/l moves
 - **Effects**:
-  - Heat level determines decay speed (higher heat = faster decay)
-  - Maximum heat can be instantly achieved by completing gold sequences
-  - Blue sequences provide temporary heat boost multiplier
+  - Heat level determines decay speed (higher heat = faster decay, from 60s to 10s intervals)
+  - Heat directly multiplies score for each character typed
+  - Maximum heat activates boost (x2 heat multiplier for matching color)
+  - Completing gold sequences instantly fills heat to maximum
 
 ### Decay System
 
@@ -104,19 +105,52 @@ The spawn system uses **file-based code blocks** from `assets/data.txt` to popul
 
 ## Vi Motion Commands
 
-vi-fighter supports standard vi/vim motion commands for navigation:
+vi-fighter supports a comprehensive set of vi/vim motion commands for navigation:
 
 ### Basic Navigation
-- `h` / `j` / `k` / `l` - Move left/down/up/right
-- `w` / `b` / `e` - Word motions (forward word, back word, end of word)
-- `0` / `$` - Start/end of line
-- `gg` / `G` - Top/bottom of screen
+- `h` / `j` / `k` / `l` - Move left/down/up/right (supports count prefixes)
+- Arrow keys - Same as hjkl but reset heat (not recommended)
+- Space - Move right (same as `l` in NORMAL mode, safe movement in INSERT mode)
+
+### Line Navigation
+- `0` - Jump to start of line (column 0)
+- `^` - Jump to first non-whitespace character
+- `$` - Jump to end of line
+
+### Word Motions
+- `w` / `b` / `e` - Word forward/backward/end (alphanumeric/punctuation boundaries)
+- `W` / `B` / `E` - WORD forward/backward/end (space-delimited only)
+
+### Screen Motions
+- `gg` - Jump to top-left (row 0, same column)
+- `G` - Jump to bottom (last row, same column)
+- `go` - Jump to absolute top-left corner (row 0, column 0)
+- `H` / `M` / `L` - Jump to top/middle/bottom of screen (same column)
+
+### Paragraph Navigation
+- `{` - Jump to previous empty line
+- `}` - Jump to next empty line
+
+### Find & Search
 - `f<char>` - Find character forward on current line
+- `/` - Enter search mode (type pattern, press Enter)
+- `n` / `N` - Repeat last search forward/backward
+
+### Delete Operations
+- `x` - Delete character at cursor (resets heat if Green/Blue)
+- `dd` - Delete entire line
+- `d<motion>` - Delete with motion (e.g., `dw`, `d$`, `d5j`)
+- `D` - Delete to end of line (same as `d$`)
 
 ### Advanced Features
-- Count prefixes: `5j`, `3w`, etc.
-- Search: `/` followed by pattern
-- Insert mode: `i` to start typing sequences
+- **Count prefixes**: Any motion supports numeric prefixes (e.g., `5j`, `3w`, `10l`)
+- **Insert mode**: Press `i` to start typing sequences
+- **Mode switching**: Press `ESC` to return to NORMAL mode
+- **Ping grid**: Press `Enter` to activate row/column guides for 1 second
+
+**Note**: Using `h`/`j`/`k`/`l` more than 3 times consecutively resets heat. Use word motions or other movement commands for efficiency.
+
+For a complete player guide with all commands and strategies, see [game.md](./game.md).
 
 ## Technical Architecture
 
@@ -191,19 +225,25 @@ go test ./systems
 
 ## Controls
 
-- **Movement**: Vi motion commands (h/j/k/l, w/b/e, etc.)
+- **Movement**: Vi motion commands (h/j/k/l, w/b/e, gg/G/H/M/L, etc.)
 - **Insert Mode**: Press `i` to begin typing sequences
-- **Search**: Press `/` followed by pattern
-- **Exit Insert/Search**: Press `ESC`
-- **Quit**: `Ctrl+C` or close terminal
+- **Search Mode**: Press `/` followed by pattern, then `Enter`
+- **Exit Insert/Search**: Press `ESC` to return to NORMAL mode
+- **Ping Grid**: Press `Enter` to show row/column guides (1 second)
+- **Quit**: `Ctrl+C` or `Ctrl+Q`
 
-## Game Strategy
+For detailed command reference and gameplay strategies, see [game.md](./game.md).
 
-1. **Prioritize Decay**: Focus on typing sequences that are close to decaying (darker colors)
-2. **Avoid Red**: Red sequences penalize your score - clear them carefully or avoid if possible
-3. **Chase Gold**: Gold sequences provide massive heat rewards - prioritize them when they appear
-4. **Use Blue Boosts**: Complete blue sequences strategically to activate heat multipliers
-5. **Manage Heat**: Higher heat means faster decay - balance aggressive clearing with accuracy
+## Game Strategy (Quick Tips)
+
+1. **Prioritize Gold**: Gold sequences fill heat to maximum - chase them when they appear
+2. **Avoid Red**: Red sequences penalize your score and reset heat
+3. **Type Bright When Hot**: Bright sequences at high heat give maximum points (Heat × 3)
+4. **Manage Decay**: Higher heat = faster decay - balance aggressive play with sustainability
+5. **Boost Color Matching**: When boost activates, keep typing the same color to extend it
+6. **Motion Efficiency**: Use `w`/`b`/`e` instead of repeated `h`/`j`/`k`/`l` to avoid heat reset
+
+**For comprehensive strategy guides including beginner, intermediate, and advanced tactics, see [game.md](./game.md).**
 
 ## Development
 

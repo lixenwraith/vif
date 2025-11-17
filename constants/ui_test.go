@@ -68,8 +68,8 @@ func TestUITimingConstants(t *testing.T) {
 		t.Errorf("Expected ScoreBlinkTimeout to be 300ms, got %v", ScoreBlinkTimeout)
 	}
 
-	if BoostExtensionDuration != 1*time.Second {
-		t.Errorf("Expected BoostExtensionDuration to be 1s, got %v", BoostExtensionDuration)
+	if BoostExtensionDuration != 500*time.Millisecond {
+		t.Errorf("Expected BoostExtensionDuration to be 500ms, got %v", BoostExtensionDuration)
 	}
 
 	if DecayRowAnimationDuration != 100*time.Millisecond {

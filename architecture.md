@@ -47,15 +47,31 @@ Component (marker interface)
 
 ## Input State Machine
 ```
-NORMAL ─[i]→ INSERT 
-NORMAL ─[/]→ SEARCH 
+NORMAL ─[i]→ INSERT
+NORMAL ─[/]→ SEARCH
 INSERT / SEARCH ─[ESC]→ NORMAL
 ```
 
-### Motion Commands
-- Single character: Direct execution
-- Prefix commands: Build state (`g`, `d`, `f`)
-- Count prefix: Accumulate digits until motion
+### Motion Commands (NORMAL Mode)
+- **Single character**: Direct execution (h, j, k, l, w, b, e, etc.)
+- **Prefix commands**: Build state (`g`, `d`, `f`) then wait for completion
+  - `gg` - Jump to top
+  - `go` - Jump to top-left corner
+  - `dd` - Delete line
+  - `dw`, `d$`, `d<motion>` - Delete with motion
+  - `f<char>` - Find character on line
+- **Count prefix**: Accumulate digits until motion (e.g., `5j`, `10l`, `3w`)
+- **Consecutive move penalty**: Using h/j/k/l more than 3 times consecutively resets heat
+- **Arrow keys**: Function like h/j/k/l but always reset heat
+
+### Supported Vi Motions
+**Basic**: h, j, k, l, Space (as l)
+**Line**: 0 (start), ^ (first non-space), $ (end)
+**Word**: w, b, e (word), W, B, E (WORD)
+**Screen**: gg (top), G (bottom), go (top-left), H (high), M (middle), L (low)
+**Paragraph**: { (prev empty), } (next empty)
+**Find/Search**: f<char> (find), / (search), n/N (next/prev match)
+**Delete**: x (char), dd (line), d<motion> (delete with motion), D (to end of line)
 
 ## Concurrency Model
 
@@ -104,7 +120,7 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 2. **Component Consistency**: Entity with SequenceComponent MUST have Position and Character
 3. **Cursor Bounds**: `0 <= CursorX < GameWidth && 0 <= CursorY < GameHeight`
 4. **Score Monotonicity**: Score can decrease (red chars) but ScoreIncrement >= 0
-5. **Boost Mechanic**: Blue characters trigger heat multiplier (x2) for limited time
+5. **Boost Mechanic**: When heat reaches maximum, boost activates with color-matching (Blue or Green) providing x2 heat multiplier. Typing the matching color extends boost duration by 500ms per character, while typing a different color deactivates boost
 6. **Red Spawn Invariant**: Red sequences are NEVER spawned directly, only through decay
 7. **Gold Randomness**: Gold sequences spawn at random positions (not fixed center-top)
 8. **6-Color Limit**: At most 6 Blue/Green color/level combinations present simultaneously
@@ -154,6 +170,18 @@ INSERT / SEARCH ─[ESC]→ NORMAL
   - Red and Gold characters do not affect color counters
 - **Heat Updates**: Typing correct characters increases heat (with boost multiplier if active)
 - **Error Handling**: Incorrect typing resets heat and triggers error cursor
+
+### Boost System
+- **Activation Condition**: Heat reaches maximum value (screen width - HeatBarIndicatorWidth)
+- **Initial Duration**: 500ms (BoostExtensionDuration constant)
+- **Color Binding**: Boost is tied to the color (Blue or Green) of the character that triggered max heat
+- **Extension Mechanic**:
+  - Typing matching color: Extends boost timer by 500ms per character
+  - Typing different color: Deactivates boost immediately (heat remains at max)
+  - Typing red or incorrect: Deactivates boost and resets heat to 0
+- **Effect**: Heat gain multiplier of 2× (+2 heat per character instead of +1)
+- **Visual Indicator**: Pink background "Boost: X.Xs" in status bar
+- **Implementation**: Managed within ScoreSystem, not a separate system
 
 ### Gold Sequence System
 - **Trigger**: Spawns when decay animation completes
