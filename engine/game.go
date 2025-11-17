@@ -75,7 +75,6 @@ type GameContext struct {
 	// Atomic ping coordinates feature
 	pingActive    atomic.Bool
 	pingGridTimer atomic.Uint64 // float64 bits for seconds
-	PingStartTime time.Time
 	PingRow       int
 	PingCol       int
 
@@ -84,7 +83,6 @@ type GameContext struct {
 	ConsecutiveCount int
 
 	// Spawn tracking
-	LastSpawn time.Time
 	NextSeqID int
 }
 
@@ -103,7 +101,6 @@ func NewGameContext(screen tcell.Screen) *GameContext {
 		CursorVisible:   true,
 		CursorBlinkTime: timeProvider.Now(),
 		NextSeqID:       1,
-		LastSpawn:       timeProvider.Now(),
 	}
 
 	// Initialize atomic values
@@ -208,6 +205,37 @@ func (g *GameContext) SetBoostEndTime(t time.Time) {
 	g.boostEndTime.Store(t.UnixNano())
 }
 
+// UpdateBoostTimerAtomic atomically checks if boost should expire and disables it
+// Returns true if boost was disabled due to expiration
+// Uses CAS pattern to avoid race conditions in check-then-set
+func (g *GameContext) UpdateBoostTimerAtomic() bool {
+	// Check if boost is currently enabled
+	if !g.boostEnabled.Load() {
+		return false
+	}
+
+	// Get current time
+	now := g.TimeProvider.Now()
+
+	// Get boost end time
+	endTimeNano := g.boostEndTime.Load()
+	if endTimeNano == 0 {
+		return false
+	}
+	endTime := time.Unix(0, endTimeNano)
+
+	// Check if expired
+	if now.After(endTime) {
+		// Try to atomically disable boost using CAS
+		// Only disable if it's still enabled (another goroutine might have disabled it)
+		if g.boostEnabled.CompareAndSwap(true, false) {
+			return true
+		}
+	}
+
+	return false
+}
+
 // Atomic accessor methods for CursorError
 func (g *GameContext) GetCursorError() bool {
 	return g.cursorError.Load()
@@ -258,6 +286,36 @@ func (g *GameContext) AddPingGridTimer(delta float64) {
 		newBits := *(*uint64)(unsafe.Pointer(&newValue))
 		if g.pingGridTimer.CompareAndSwap(oldBits, newBits) {
 			break
+		}
+	}
+}
+
+// UpdatePingGridTimerAtomic atomically decrements the ping timer and returns true if it expired
+// This method handles the check-then-set atomically to avoid race conditions
+func (g *GameContext) UpdatePingGridTimerAtomic(delta float64) bool {
+	for {
+		oldBits := g.pingGridTimer.Load()
+		oldValue := *(*float64)(unsafe.Pointer(&oldBits))
+
+		if oldValue <= 0 {
+			// Timer already expired or not active
+			return false
+		}
+
+		newValue := oldValue - delta
+		var newBits uint64
+
+		if newValue <= 0 {
+			// Timer will expire, set to 0
+			newBits = 0
+		} else {
+			// Timer still active
+			newBits = *(*uint64)(unsafe.Pointer(&newValue))
+		}
+
+		if g.pingGridTimer.CompareAndSwap(oldBits, newBits) {
+			// Successfully updated, return true if timer expired
+			return newValue <= 0
 		}
 	}
 }

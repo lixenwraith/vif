@@ -98,25 +98,17 @@ func main() {
 			)
 
 		case <-ticker.C:
-			// Check if boost should expire
-			if ctx.GetBoostEnabled() && ctx.TimeProvider.Now().After(ctx.GetBoostEndTime()) {
-				ctx.SetBoostEnabled(false)
-			}
+			// Check if boost should expire (atomic CAS pattern)
+			ctx.UpdateBoostTimerAtomic()
 
 			// Update all ECS systems
 			dt := 16 * time.Millisecond
 			ctx.World.Update(dt)
 
-			// Update ping grid timer
-			pingTimer := ctx.GetPingGridTimer()
-			if pingTimer > 0 {
-				newTimer := pingTimer - dt.Seconds()
-				if newTimer <= 0 {
-					ctx.SetPingGridTimer(0)
-					ctx.SetPingActive(false)
-				} else {
-					ctx.SetPingGridTimer(newTimer)
-				}
+			// Update ping grid timer atomically (CAS pattern)
+			if ctx.UpdatePingGridTimerAtomic(dt.Seconds()) {
+				// Timer expired, deactivate ping
+				ctx.SetPingActive(false)
 			}
 
 			// Update decay system dimensions

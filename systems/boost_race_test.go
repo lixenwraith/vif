@@ -66,15 +66,13 @@ func TestBoostRapidToggle(t *testing.T) {
 		}
 	}()
 
-	// Goroutine 3: Simulate main loop checking boost expiration
+	// Goroutine 3: Simulate main loop checking boost expiration (using atomic CAS)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 500; i++ {
-			// Check if boost should expire
-			if ctx.GetBoostEnabled() && time.Now().After(ctx.GetBoostEndTime()) {
-				ctx.SetBoostEnabled(false)
-			}
+			// Check if boost should expire atomically
+			ctx.UpdateBoostTimerAtomic()
 			time.Sleep(1 * time.Millisecond) // Main loop tick
 		}
 	}()
@@ -181,14 +179,12 @@ func TestBoostExpirationRace(t *testing.T) {
 		scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'b')
 	}()
 
-	// Goroutine 2: Check for expiration
+	// Goroutine 2: Check for expiration (using atomic CAS)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 50; i++ {
-			if ctx.GetBoostEnabled() && time.Now().After(ctx.GetBoostEndTime()) {
-				ctx.SetBoostEnabled(false)
-			}
+			ctx.UpdateBoostTimerAtomic()
 			time.Sleep(1 * time.Millisecond)
 		}
 	}()
@@ -271,14 +267,12 @@ func TestBoostWithScoreUpdates(t *testing.T) {
 		}
 	}()
 
-	// Goroutine 3: Check boost expiration
+	// Goroutine 3: Check boost expiration (using atomic CAS)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 150; i++ {
-			if ctx.GetBoostEnabled() && time.Now().After(ctx.GetBoostEndTime()) {
-				ctx.SetBoostEnabled(false)
-			}
+			ctx.UpdateBoostTimerAtomic()
 			time.Sleep(1 * time.Millisecond)
 		}
 	}()
@@ -311,21 +305,13 @@ func TestSimulateFullGameLoop(t *testing.T) {
 		for {
 			select {
 			case <-ticker.C:
-				// Check boost expiration (as in main.go)
-				if ctx.GetBoostEnabled() && time.Now().After(ctx.GetBoostEndTime()) {
-					ctx.SetBoostEnabled(false)
-				}
+				// Check boost expiration (atomic CAS pattern as in main.go)
+				ctx.UpdateBoostTimerAtomic()
 
-				// Update ping timer
-				pingTimer := ctx.GetPingGridTimer()
-				if pingTimer > 0 {
-					newTimer := pingTimer - 0.016 // 16ms in seconds
-					if newTimer <= 0 {
-						ctx.SetPingGridTimer(0)
-						ctx.SetPingActive(false)
-					} else {
-						ctx.SetPingGridTimer(newTimer)
-					}
+				// Update ping timer atomically (CAS pattern as in main.go)
+				if ctx.UpdatePingGridTimerAtomic(0.016) {
+					// Timer expired, deactivate ping
+					ctx.SetPingActive(false)
 				}
 
 				// Simulate rendering
@@ -433,7 +419,7 @@ func TestAllAtomicStateAccess(t *testing.T) {
 		}
 	}()
 
-	// Goroutine 3: Mixed read/write operations
+	// Goroutine 3: Mixed read/write operations (using atomic methods)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -445,12 +431,211 @@ func TestAllAtomicStateAccess(t *testing.T) {
 				_ = ctx.GetBoostEndTime()
 			}
 			if ctx.GetPingActive() {
-				timer := ctx.GetPingGridTimer()
-				if timer > 0 {
-					ctx.SetPingGridTimer(timer - 0.1)
-				}
+				// Use atomic CAS for ping timer update
+				ctx.UpdatePingGridTimerAtomic(0.1)
 			}
 			time.Sleep(75 * time.Microsecond)
+		}
+	}()
+
+	wg.Wait()
+
+	// Test passes if no race is detected
+}
+
+// TestPingTimerAtomicCAS tests the atomic CAS pattern for ping timer updates
+func TestPingTimerAtomicCAS(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.Init()
+	defer screen.Fini()
+	screen.SetSize(80, 24)
+
+	ctx := engine.NewGameContext(screen)
+
+	// Set initial ping timer
+	ctx.SetPingGridTimer(1.0) // 1 second
+	ctx.SetPingActive(true)
+
+	var wg sync.WaitGroup
+
+	// Goroutine 1: Simulate main loop decrementing ping timer
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 100; i++ {
+			if ctx.UpdatePingGridTimerAtomic(0.016) {
+				// Timer expired
+				ctx.SetPingActive(false)
+			}
+			time.Sleep(1 * time.Millisecond)
+		}
+	}()
+
+	// Goroutine 2: Simulate another goroutine reading ping timer
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 200; i++ {
+			timer := ctx.GetPingGridTimer()
+			active := ctx.GetPingActive()
+			_ = timer
+			_ = active
+			time.Sleep(500 * time.Microsecond)
+		}
+	}()
+
+	// Goroutine 3: Occasionally add to ping timer (simulate ping activation)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 10; i++ {
+			ctx.AddPingGridTimer(0.5)
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
+
+	wg.Wait()
+
+	// Test passes if no race is detected
+}
+
+// TestBoostTimerAtomicCAS tests the atomic CAS pattern for boost timer expiration
+func TestBoostTimerAtomicCAS(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.Init()
+	defer screen.Fini()
+	screen.SetSize(80, 24)
+
+	ctx := engine.NewGameContext(screen)
+
+	var wg sync.WaitGroup
+
+	// Goroutine 1: Repeatedly activate boost with short duration
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 50; i++ {
+			ctx.SetBoostEnabled(true)
+			ctx.SetBoostEndTime(ctx.TimeProvider.Now().Add(5 * time.Millisecond))
+			time.Sleep(2 * time.Millisecond)
+		}
+	}()
+
+	// Goroutine 2: Check for expiration using atomic CAS
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 200; i++ {
+			ctx.UpdateBoostTimerAtomic()
+			time.Sleep(500 * time.Microsecond)
+		}
+	}()
+
+	// Goroutine 3: Read boost state
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 300; i++ {
+			enabled := ctx.GetBoostEnabled()
+			if enabled {
+				_ = ctx.GetBoostEndTime()
+			}
+			time.Sleep(300 * time.Microsecond)
+		}
+	}()
+
+	wg.Wait()
+
+	// Test passes if no race is detected
+}
+
+// TestConcurrentPingTimerUpdates tests concurrent updates to ping timer
+func TestConcurrentPingTimerUpdates(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.Init()
+	defer screen.Fini()
+	screen.SetSize(80, 24)
+
+	ctx := engine.NewGameContext(screen)
+
+	// Set initial timer
+	ctx.SetPingGridTimer(10.0)
+	ctx.SetPingActive(true)
+
+	var wg sync.WaitGroup
+
+	// Multiple goroutines decrementing the timer
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < 50; j++ {
+				if ctx.UpdatePingGridTimerAtomic(0.1) {
+					// Timer expired
+					ctx.SetPingActive(false)
+				}
+				time.Sleep(1 * time.Millisecond)
+			}
+		}(i)
+	}
+
+	// Goroutine to occasionally reset the timer
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 10; i++ {
+			ctx.SetPingGridTimer(5.0)
+			ctx.SetPingActive(true)
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
+
+	wg.Wait()
+
+	// Test passes if no race is detected
+}
+
+// TestConcurrentBoostUpdates tests concurrent boost activations and expirations
+func TestConcurrentBoostUpdates(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.Init()
+	defer screen.Fini()
+	screen.SetSize(80, 24)
+
+	ctx := engine.NewGameContext(screen)
+
+	var wg sync.WaitGroup
+
+	// Goroutine 1: Rapidly toggle boost on/off
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 100; i++ {
+			ctx.SetBoostEnabled(true)
+			ctx.SetBoostEndTime(ctx.TimeProvider.Now().Add(10 * time.Millisecond))
+			time.Sleep(5 * time.Millisecond)
+		}
+	}()
+
+	// Goroutine 2: Check for expiration
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 200; i++ {
+			ctx.UpdateBoostTimerAtomic()
+			time.Sleep(2 * time.Millisecond)
+		}
+	}()
+
+	// Goroutine 3: Manually disable boost
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 50; i++ {
+			if ctx.GetBoostEnabled() {
+				ctx.SetBoostEnabled(false)
+			}
+			time.Sleep(8 * time.Millisecond)
 		}
 	}()
 

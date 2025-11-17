@@ -70,7 +70,7 @@ func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 
 // updateAnimation progresses the decay animation
 func (s *DecaySystem) updateAnimation(world *engine.World) {
-	elapsed := time.Since(s.startTime).Seconds()
+	elapsed := s.ctx.TimeProvider.Now().Sub(s.startTime).Seconds()
 	rowDurationSeconds := constants.DecayRowAnimationDuration.Seconds()
 	targetRow := int(elapsed / rowDurationSeconds)
 
