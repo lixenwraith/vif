@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/components"
+	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -64,7 +65,8 @@ func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 // updateAnimation progresses the decay animation
 func (s *DecaySystem) updateAnimation(world *engine.World) {
 	elapsed := time.Since(s.startTime).Seconds()
-	targetRow := int(elapsed / 0.1)
+	rowDurationSeconds := constants.DecayRowAnimationDuration.Seconds()
+	targetRow := int(elapsed / rowDurationSeconds)
 
 	// Apply decay to rows that we've passed
 	for s.currentRow <= targetRow && s.currentRow < s.gameHeight {
@@ -72,9 +74,9 @@ func (s *DecaySystem) updateAnimation(world *engine.World) {
 		s.currentRow++
 	}
 
-	// Check if animation complete based on elapsed time (0.1s per row)
+	// Check if animation complete based on elapsed time
 	// This ensures the last row (gameHeight-1) is displayed for one frame
-	animationDuration := float64(s.gameHeight) * 0.1
+	animationDuration := float64(s.gameHeight) * rowDurationSeconds
 	if elapsed >= animationDuration {
 		s.animating = false
 		s.currentRow = 0
@@ -166,11 +168,11 @@ func (s *DecaySystem) startTicker() {
 }
 
 // calculateInterval calculates the decay interval based on heat
-// Formula: 60 - 50 * (heat_filled / heat_max)
+// Formula: DecayIntervalBaseSeconds - DecayIntervalRangeSeconds * (heat_filled / heat_max)
 // Empty heat bar (0): 60 - 50 * 0 = 60 seconds
 // Full heat bar (max): 60 - 50 * 1 = 10 seconds
 func (s *DecaySystem) calculateInterval() time.Duration {
-	heatBarWidth := s.screenWidth - 6
+	heatBarWidth := s.screenWidth - constants.HeatBarIndicatorWidth
 	if heatBarWidth < 1 {
 		heatBarWidth = 1
 	}
@@ -183,8 +185,8 @@ func (s *DecaySystem) calculateInterval() time.Duration {
 		heatPercentage = 0.0
 	}
 
-	// Simple formula: 60 - 50 * (heat_filled / heat_max)
-	intervalSeconds := 60.0 - 50.0*heatPercentage
+	// Formula: base - range * heat_percentage
+	intervalSeconds := constants.DecayIntervalBaseSeconds - constants.DecayIntervalRangeSeconds*heatPercentage
 	return time.Duration(intervalSeconds * float64(time.Second))
 }
 

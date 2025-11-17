@@ -1,0 +1,48 @@
+package constants
+
+import "time"
+
+// UI Layout Constants
+const (
+	// HeatBarIndicatorWidth is the width reserved for the heat value indicator (right side)
+	HeatBarIndicatorWidth = 6
+)
+
+// UI Timing Constants (in milliseconds)
+const (
+	// ErrorCursorTimeoutMs is how long the error cursor flashes
+	ErrorCursorTimeoutMs = 200
+
+	// ScoreBlinkTimeoutMs is how long the score blinks after scoring
+	ScoreBlinkTimeoutMs = 300
+
+	// ErrorCursorTimeout is the duration for error cursor flash
+	ErrorCursorTimeout = ErrorCursorTimeoutMs * time.Millisecond
+
+	// ScoreBlinkTimeout is the duration for score blink
+	ScoreBlinkTimeout = ScoreBlinkTimeoutMs * time.Millisecond
+)
+
+// Game Timing Constants
+const (
+	// TrailExtensionDuration is how long each blue character extends the trail
+	TrailExtensionDuration = 1 * time.Second
+)
+
+// Decay System Constants
+const (
+	// DecayRowAnimationDurationMs is the time per row during decay animation
+	DecayRowAnimationDurationMs = 100
+
+	// DecayRowAnimationDuration is the time per row during decay animation
+	DecayRowAnimationDuration = DecayRowAnimationDurationMs * time.Millisecond
+
+	// DecayIntervalBaseSeconds is the base decay interval at zero heat
+	DecayIntervalBaseSeconds = 60
+
+	// DecayIntervalRangeSeconds is the range of decay interval affected by heat
+	DecayIntervalRangeSeconds = 50
+
+	// DecayIntervalMinSeconds is the minimum decay interval at max heat
+	DecayIntervalMinSeconds = DecayIntervalBaseSeconds - DecayIntervalRangeSeconds // 10 seconds
+)

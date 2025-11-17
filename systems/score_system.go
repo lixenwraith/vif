@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/components"
+	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -32,18 +33,18 @@ func (s *ScoreSystem) Priority() int {
 // Update runs the score system (unused for now, character typing is event-driven)
 func (s *ScoreSystem) Update(world *engine.World, dt time.Duration) {
 	// Clear error cursor after timeout
-	if s.ctx.CursorError && time.Since(s.ctx.CursorErrorTime) > 200*time.Millisecond {
+	if s.ctx.CursorError && time.Since(s.ctx.CursorErrorTime) > constants.ErrorCursorTimeout {
 		s.ctx.CursorError = false
 	}
 
 	// Clear score blink after timeout
-	if s.ctx.ScoreBlinkActive && time.Since(s.ctx.ScoreBlinkTime) > 300*time.Millisecond {
+	if s.ctx.ScoreBlinkActive && time.Since(s.ctx.ScoreBlinkTime) > constants.ScoreBlinkTimeout {
 		s.ctx.ScoreBlinkActive = false
 	}
 
 	// Handle max heat sound
-	// Max heat is when scoreIncrement >= heatBarWidth (screen width - 6)
-	heatBarWidth := s.ctx.Width - 6
+	// Max heat is when scoreIncrement >= heatBarWidth (screen width - HeatBarIndicatorWidth)
+	heatBarWidth := s.ctx.Width - constants.HeatBarIndicatorWidth
 	if heatBarWidth < 1 {
 		heatBarWidth = 1
 	}
@@ -166,9 +167,9 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 
 		s.ctx.Score += points
 
-		// Blue character adds 1s to trail time
+		// Blue character adds trail time
 		if seq.Type == components.SequenceBlue {
-			s.extendTrail(1 * time.Second)
+			s.extendTrail(constants.TrailExtensionDuration)
 		}
 
 		// Trigger score blink with character color

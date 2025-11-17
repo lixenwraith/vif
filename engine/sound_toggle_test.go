@@ -93,7 +93,7 @@ func TestSoundEnabledMultipleToggleSequence(t *testing.T) {
 
 	// Perform 10 toggles
 	for i := 0; i < 10; i++ {
-		expected := (i % 2) == 1 // odd iterations should be true
+		expected := (i % 2) == 0 // even iterations should be true (starting from false)
 		ctx.SoundEnabled.Store(!ctx.SoundEnabled.Load())
 		actual := ctx.SoundEnabled.Load()
 

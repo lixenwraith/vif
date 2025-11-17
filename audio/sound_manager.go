@@ -10,7 +10,39 @@ import (
 )
 
 const (
-	sampleRate = beep.SampleRate(48000)
+	// Audio system configuration
+	sampleRate              = beep.SampleRate(48000)
+	speakerBufferDurationMs = 100
+
+	// Sound effect durations
+	errorBuzzDurationMs = 150
+	decaySoundDurationMs = 300
+
+	// Error buzz parameters
+	errorBuzzFrequencyHz = 120
+	errorBuzzAmplitude   = 0.2
+	errorBuzzFadeTimeMs  = 20
+
+	// Whroom (trail) sound parameters
+	whroomCycleDurationS = 2
+	whroomFreqMinHz      = 80
+	whroomFreqMaxHz      = 200
+	whroomBaseAmplitude  = 0.15
+
+	// Synthwave (max heat) parameters
+	synthwaveBPM             = 100
+	synthwaveBeatIntervalMs  = 600 // 100 BPM = 600ms per beat
+	synthwaveKickDurationMs  = 100
+	synthwaveBassFrequencyHz = 110
+	synthwaveBassAmplitude   = 0.15
+	synthwaveKickAmplitude   = 0.4
+	synthwaveKickFrequencyHz = 60
+
+	// Decay sound parameters
+	decayEnvelopeDecayRate = 8.0
+	decayNoiseAmplitude    = 0.25
+	decayRumbleFrequencyHz = 80
+	decayRumbleAmplitude   = 0.3
 )
 
 // SoundManager manages all game audio
@@ -42,7 +74,7 @@ func (sm *SoundManager) Initialize() error {
 	}
 
 	// Initialize speaker with sample rate and buffer size
-	err := speaker.Init(sampleRate, sampleRate.N(time.Millisecond*100))
+	err := speaker.Init(sampleRate, sampleRate.N(time.Millisecond*speakerBufferDurationMs))
 	if err != nil {
 		return err
 	}
@@ -124,7 +156,7 @@ func (sm *SoundManager) PlayError() {
 	}
 
 	// Create a short low-pitched buzz
-	streamer := beep.Take(sampleRate.N(time.Millisecond*150), NewBuzzGenerator(sampleRate, 120))
+	streamer := beep.Take(sampleRate.N(time.Millisecond*errorBuzzDurationMs), NewBuzzGenerator(sampleRate, errorBuzzFrequencyHz))
 	sm.mixer.Add(streamer)
 }
 
@@ -169,7 +201,7 @@ func (sm *SoundManager) PlayDecay() {
 	}
 
 	// Create a crackling/breaking sound effect
-	streamer := beep.Take(sampleRate.N(time.Millisecond*300), NewDecayGenerator(sampleRate))
+	streamer := beep.Take(sampleRate.N(time.Millisecond*decaySoundDurationMs), NewDecayGenerator(sampleRate))
 	sm.mixer.Add(streamer)
 }
 
@@ -184,7 +216,7 @@ type WhroomGenerator struct {
 func NewWhroomGenerator(sr beep.SampleRate) *WhroomGenerator {
 	return &WhroomGenerator{
 		sr:      sr,
-		samples: sr.N(time.Second * 2), // 2 second cycle
+		samples: sr.N(time.Second * whroomCycleDurationS),
 	}
 }
 
@@ -192,12 +224,13 @@ func (g *WhroomGenerator) Stream(samples [][2]float64) (n int, ok bool) {
 	for i := range samples {
 		t := float64(g.pos) / float64(g.sr)
 
-		// Frequency sweep from 80Hz to 200Hz and back
+		// Frequency sweep from whroomFreqMinHz to whroomFreqMaxHz and back
 		cyclePos := float64(g.pos%g.samples) / float64(g.samples)
-		freq := 80 + 120*math.Sin(cyclePos*math.Pi)
+		freqRange := whroomFreqMaxHz - whroomFreqMinHz
+		freq := whroomFreqMinHz + freqRange*math.Sin(cyclePos*math.Pi)
 
 		// Generate sine wave with envelope
-		amplitude := 0.15 * (0.5 + 0.5*math.Sin(cyclePos*math.Pi*2))
+		amplitude := whroomBaseAmplitude * (0.5 + 0.5*math.Sin(cyclePos*math.Pi*2))
 		sample := amplitude * math.Sin(2*math.Pi*freq*t)
 
 		samples[i][0] = sample
@@ -237,8 +270,9 @@ func (g *BuzzGenerator) Stream(samples [][2]float64) (n int, ok bool) {
 		sample += 0.075 * math.Sin(2*math.Pi*g.freq*3*t)
 
 		// Envelope to fade in/out
-		envelope := math.Min(float64(g.pos)/float64(g.sr)/0.02, 1.0)
-		sample *= envelope * 0.2
+		fadeTimeSec := errorBuzzFadeTimeMs / 1000.0
+		envelope := math.Min(float64(g.pos)/float64(g.sr)/fadeTimeSec, 1.0)
+		sample *= envelope * errorBuzzAmplitude
 
 		samples[i][0] = sample
 		samples[i][1] = sample
@@ -262,7 +296,7 @@ type SynthwaveGenerator struct {
 func NewSynthwaveGenerator(sr beep.SampleRate) *SynthwaveGenerator {
 	return &SynthwaveGenerator{
 		sr:      sr,
-		samples: sr.N(time.Millisecond * 600), // 100 BPM (600ms per beat)
+		samples: sr.N(time.Millisecond * synthwaveBeatIntervalMs),
 	}
 }
 
@@ -273,14 +307,15 @@ func (g *SynthwaveGenerator) Stream(samples [][2]float64) (n int, ok bool) {
 
 		// Kick drum on beat 1
 		kick := 0.0
-		if beatPos < g.sr.N(time.Millisecond*100) {
-			kickEnv := 1.0 - float64(beatPos)/float64(g.sr.N(time.Millisecond*100))
-			kickFreq := 60 * (1 + 2*kickEnv)
-			kick = 0.4 * kickEnv * math.Sin(2*math.Pi*kickFreq*t)
+		kickDuration := g.sr.N(time.Millisecond * synthwaveKickDurationMs)
+		if beatPos < kickDuration {
+			kickEnv := 1.0 - float64(beatPos)/float64(kickDuration)
+			kickFreq := synthwaveKickFrequencyHz * (1 + 2*kickEnv)
+			kick = synthwaveKickAmplitude * kickEnv * math.Sin(2*math.Pi*kickFreq*t)
 		}
 
 		// Bass synth
-		bass := 0.15 * math.Sin(2*math.Pi*110*t)
+		bass := synthwaveBassAmplitude * math.Sin(2*math.Pi*synthwaveBassFrequencyHz*t)
 
 		sample := kick + bass
 
@@ -315,16 +350,16 @@ func (g *DecayGenerator) Stream(samples [][2]float64) (n int, ok bool) {
 		t := float64(g.pos) / float64(g.sr)
 
 		// Envelope - quick attack, slower decay
-		envelope := math.Exp(-t * 8)
+		envelope := math.Exp(-t * decayEnvelopeDecayRate)
 
 		// Noise with low-pass filtering for crackling
 		g.seed = (g.seed*1103515245 + 12345) & 0x7fffffff
 		noise := float64(g.seed)/float64(0x7fffffff)*2 - 1
 
 		// Mix with low rumble
-		rumble := 0.3 * math.Sin(2*math.Pi*80*t)
+		rumble := decayRumbleAmplitude * math.Sin(2*math.Pi*decayRumbleFrequencyHz*t)
 
-		sample := envelope * (0.25*noise + rumble)
+		sample := envelope * (decayNoiseAmplitude*noise + rumble)
 
 		samples[i][0] = sample
 		samples[i][1] = sample

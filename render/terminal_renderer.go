@@ -7,6 +7,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/components"
+	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
@@ -85,8 +86,7 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 
 // drawHeatMeter draws the heat meter at the top
 func (r *TerminalRenderer) drawHeatMeter(scoreIncrement int, defaultStyle tcell.Style) {
-	indicatorWidth := 6
-	heatBarWidth := r.width - indicatorWidth
+	heatBarWidth := r.width - constants.HeatBarIndicatorWidth
 	if heatBarWidth < 1 {
 		heatBarWidth = 1
 	}
