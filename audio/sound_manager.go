@@ -15,45 +15,49 @@ const (
 	speakerBufferDurationMs = 100
 
 	// Sound effect durations
-	errorBuzzDurationMs = 150
+	errorBuzzDurationMs  = 150
 	decaySoundDurationMs = 300
 
+	// Concurrency limits for one-shot sounds
+	maxConcurrentErrorSounds = 3
+	maxConcurrentDecaySounds = 3
+
 	// Error buzz parameters
-	errorBuzzFrequencyHz = 120
+	errorBuzzFrequencyHz = 120.0
 	errorBuzzAmplitude   = 0.2
-	errorBuzzFadeTimeMs  = 20
+	errorBuzzFadeTimeMs  = 20.0
 
 	// Whroom (trail) sound parameters
 	whroomCycleDurationS = 2
-	whroomFreqMinHz      = 80
-	whroomFreqMaxHz      = 200
+	whroomFreqMinHz      = 80.0
+	whroomFreqMaxHz      = 200.0
 	whroomBaseAmplitude  = 0.15
 
 	// Synthwave (max heat) parameters
 	synthwaveBPM             = 100
 	synthwaveBeatIntervalMs  = 600 // 100 BPM = 600ms per beat
 	synthwaveKickDurationMs  = 100
-	synthwaveBassFrequencyHz = 110
+	synthwaveBassFrequencyHz = 110.0
 	synthwaveBassAmplitude   = 0.15
 	synthwaveKickAmplitude   = 0.4
-	synthwaveKickFrequencyHz = 60
+	synthwaveKickFrequencyHz = 60.0
 
 	// Decay sound parameters
 	decayEnvelopeDecayRate = 8.0
 	decayNoiseAmplitude    = 0.25
-	decayRumbleFrequencyHz = 80
+	decayRumbleFrequencyHz = 80.0
 	decayRumbleAmplitude   = 0.3
 )
 
 // SoundManager manages all game audio
 type SoundManager struct {
-	mu              sync.Mutex
-	trailStreamer   *beep.Ctrl
-	errorStreamer   *beep.Ctrl
-	maxHeatStreamer *beep.Ctrl
-	decayStreamer   *beep.Ctrl
-	mixer           *beep.Mixer
-	initialized     bool
+	mu                 sync.Mutex
+	trailStreamer      *beep.Ctrl
+	maxHeatStreamer    *beep.Ctrl
+	mixer              *beep.Mixer
+	initialized        bool
+	activeErrorSounds  int
+	activeDecaySounds  int
 }
 
 // NewSoundManager creates a new sound manager
@@ -97,18 +101,16 @@ func (sm *SoundManager) Cleanup() {
 	if sm.trailStreamer != nil {
 		sm.trailStreamer.Paused = true
 	}
-	if sm.errorStreamer != nil {
-		sm.errorStreamer.Paused = true
-	}
 	if sm.maxHeatStreamer != nil {
 		sm.maxHeatStreamer.Paused = true
-	}
-	if sm.decayStreamer != nil {
-		sm.decayStreamer.Paused = true
 	}
 
 	// Clear mixer
 	sm.mixer.Clear()
+
+	// Reset counters for one-shot sounds
+	sm.activeErrorSounds = 0
+	sm.activeDecaySounds = 0
 
 	// Note: beep doesn't provide a Close() method for speaker,
 	// but clearing all streamers ensures no audio artifacts
@@ -155,8 +157,23 @@ func (sm *SoundManager) PlayError() {
 		return
 	}
 
-	// Create a short low-pitched buzz
-	streamer := beep.Take(sampleRate.N(time.Millisecond*errorBuzzDurationMs), NewBuzzGenerator(sampleRate, errorBuzzFrequencyHz))
+	// Limit concurrent error sounds to prevent buffer overflow
+	if sm.activeErrorSounds >= maxConcurrentErrorSounds {
+		return
+	}
+
+	sm.activeErrorSounds++
+
+	// Create a short low-pitched buzz with callback to decrement counter
+	sound := beep.Take(sampleRate.N(time.Millisecond*errorBuzzDurationMs), NewBuzzGenerator(sampleRate, errorBuzzFrequencyHz))
+	streamer := beep.Seq(sound, beep.Callback(func() {
+		sm.mu.Lock()
+		sm.activeErrorSounds--
+		if sm.activeErrorSounds < 0 {
+			sm.activeErrorSounds = 0
+		}
+		sm.mu.Unlock()
+	}))
 	sm.mixer.Add(streamer)
 }
 
@@ -200,8 +217,23 @@ func (sm *SoundManager) PlayDecay() {
 		return
 	}
 
-	// Create a crackling/breaking sound effect
-	streamer := beep.Take(sampleRate.N(time.Millisecond*decaySoundDurationMs), NewDecayGenerator(sampleRate))
+	// Limit concurrent decay sounds to prevent buffer overflow
+	if sm.activeDecaySounds >= maxConcurrentDecaySounds {
+		return
+	}
+
+	sm.activeDecaySounds++
+
+	// Create a crackling/breaking sound effect with callback to decrement counter
+	sound := beep.Take(sampleRate.N(time.Millisecond*decaySoundDurationMs), NewDecayGenerator(sampleRate))
+	streamer := beep.Seq(sound, beep.Callback(func() {
+		sm.mu.Lock()
+		sm.activeDecaySounds--
+		if sm.activeDecaySounds < 0 {
+			sm.activeDecaySounds = 0
+		}
+		sm.mu.Unlock()
+	}))
 	sm.mixer.Add(streamer)
 }
 

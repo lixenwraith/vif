@@ -172,3 +172,38 @@ func TestAudioFrequencies(t *testing.T) {
 		}
 	}
 }
+
+// TestConcurrentSoundLimiting verifies one-shot sounds are limited to prevent buffer overflow
+func TestConcurrentSoundLimiting(t *testing.T) {
+	sm := NewSoundManager()
+
+	// Without initialization, calls should be safe but counters should not increment
+	for i := 0; i < 10; i++ {
+		sm.PlayError()
+		sm.PlayDecay()
+	}
+
+	// Counters should remain at 0 when not initialized
+	if sm.activeErrorSounds != 0 {
+		t.Errorf("Expected 0 active error sounds when not initialized, got %d", sm.activeErrorSounds)
+	}
+	if sm.activeDecaySounds != 0 {
+		t.Errorf("Expected 0 active decay sounds when not initialized, got %d", sm.activeDecaySounds)
+	}
+}
+
+// TestConcurrentSoundLimits verifies the max concurrent sound constants
+func TestConcurrentSoundLimits(t *testing.T) {
+	if maxConcurrentErrorSounds <= 0 {
+		t.Error("maxConcurrentErrorSounds must be positive")
+	}
+	if maxConcurrentDecaySounds <= 0 {
+		t.Error("maxConcurrentDecaySounds must be positive")
+	}
+	if maxConcurrentErrorSounds > 10 {
+		t.Errorf("maxConcurrentErrorSounds too high (%d), may cause buffer issues", maxConcurrentErrorSounds)
+	}
+	if maxConcurrentDecaySounds > 10 {
+		t.Errorf("maxConcurrentDecaySounds too high (%d), may cause buffer issues", maxConcurrentDecaySounds)
+	}
+}
