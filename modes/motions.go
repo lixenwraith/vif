@@ -98,6 +98,9 @@ func ExecuteMotion(ctx *engine.GameContext, cmd rune, count int) {
 		}
 	}
 
+	// Validate cursor position after motion
+	ctx.CursorX, ctx.CursorY = validatePosition(ctx, ctx.CursorX, ctx.CursorY)
+
 	// Check for consecutive motion keys (heat penalty)
 	if cmd == ctx.LastMoveKey && (cmd == 'h' || cmd == 'j' || cmd == 'k' || cmd == 'l') {
 		ctx.ConsecutiveCount++
@@ -173,21 +176,14 @@ func getCharAt(ctx *engine.GameContext, x, y int) rune {
 func findNextWordStartVim(ctx *engine.GameContext) int {
 	x := ctx.CursorX
 
-	// Get current character
-	currentChar := getCharAt(ctx, x, ctx.CursorY)
+	// Get current character type
+	currentType := getCharacterTypeAt(ctx, x, ctx.CursorY)
 
 	// Phase 1: Skip current character type (if not on space)
-	if currentChar != 0 { // Not on space
-		if isWordChar(currentChar) {
-			// Skip all word characters
-			for x < ctx.GameWidth && isWordChar(getCharAt(ctx, x, ctx.CursorY)) {
-				x++
-			}
-		} else if isPunctuation(currentChar) {
-			// Skip all punctuation
-			for x < ctx.GameWidth && isPunctuation(getCharAt(ctx, x, ctx.CursorY)) {
-				x++
-			}
+	if currentType != CharTypeSpace {
+		// Skip all characters of the same type
+		for x < ctx.GameWidth && getCharacterTypeAt(ctx, x, ctx.CursorY) == currentType {
+			x++
 		}
 	} else {
 		// On space: move at least one position forward
@@ -195,7 +191,7 @@ func findNextWordStartVim(ctx *engine.GameContext) int {
 	}
 
 	// Phase 2: Skip any spaces
-	for x < ctx.GameWidth && getCharAt(ctx, x, ctx.CursorY) == 0 {
+	for x < ctx.GameWidth && getCharacterTypeAt(ctx, x, ctx.CursorY) == CharTypeSpace {
 		x++
 	}
 
@@ -212,7 +208,8 @@ func findNextWordStartVim(ctx *engine.GameContext) int {
 		}
 	}
 
-	return x
+	validX, _ := validatePosition(ctx, x, ctx.CursorY)
+	return validX
 }
 
 // findWordEndVim finds the end of the current/next word (Vim-style)
@@ -229,7 +226,7 @@ func findWordEndVim(ctx *engine.GameContext) int {
 	}
 
 	// Skip any whitespace
-	for x < ctx.GameWidth && getCharAt(ctx, x, ctx.CursorY) == 0 {
+	for x < ctx.GameWidth && getCharacterTypeAt(ctx, x, ctx.CursorY) == CharTypeSpace {
 		x++
 	}
 
@@ -238,30 +235,27 @@ func findWordEndVim(ctx *engine.GameContext) int {
 	}
 
 	// Now we're on the start of a word, find its end
-	ch := getCharAt(ctx, x, ctx.CursorY)
-	isWord := isWordChar(ch)
+	currentType := getCharacterTypeAt(ctx, x, ctx.CursorY)
 
 	// Move to the end of this word/punctuation group
 	for x < ctx.GameWidth {
-		nextChar := getCharAt(ctx, x+1, ctx.CursorY)
+		nextType := getCharacterTypeAt(ctx, x+1, ctx.CursorY)
 
 		// Stop if next char is space
-		if nextChar == 0 {
+		if nextType == CharTypeSpace {
 			break
 		}
 
-		// Stop if changing from word to non-word (or vice versa)
-		if isWord && !isWordChar(nextChar) {
-			break
-		}
-		if !isWord && !isPunctuation(nextChar) {
+		// Stop if changing character type
+		if nextType != currentType {
 			break
 		}
 
 		x++
 	}
 
-	return x
+	validX, _ := validatePosition(ctx, x, ctx.CursorY)
+	return validX
 }
 
 // findPrevWordStartVim finds the start of the previous word (Vim-style)
@@ -279,7 +273,7 @@ func findPrevWordStartVim(ctx *engine.GameContext) int {
 	}
 
 	// Phase 2: Skip backward over any spaces
-	for x >= 0 && getCharAt(ctx, x, ctx.CursorY) == 0 {
+	for x >= 0 && getCharacterTypeAt(ctx, x, ctx.CursorY) == CharTypeSpace {
 		x--
 	}
 
@@ -290,30 +284,27 @@ func findPrevWordStartVim(ctx *engine.GameContext) int {
 	}
 
 	// Phase 3: We're on a character, skip backward over same type to find start
-	ch := getCharAt(ctx, x, ctx.CursorY)
-	isWord := isWordChar(ch)
+	currentType := getCharacterTypeAt(ctx, x, ctx.CursorY)
 
 	// Move backward while still in same character type
 	for x > 0 {
-		prevChar := getCharAt(ctx, x-1, ctx.CursorY)
+		prevType := getCharacterTypeAt(ctx, x-1, ctx.CursorY)
 
 		// Stop if previous char is space
-		if prevChar == 0 {
+		if prevType == CharTypeSpace {
 			break
 		}
 
 		// Stop if changing character type
-		if isWord && !isWordChar(prevChar) {
-			break
-		}
-		if !isWord && !isPunctuation(prevChar) {
+		if prevType != currentType {
 			break
 		}
 
 		x--
 	}
 
-	return x
+	validX, _ := validatePosition(ctx, x, ctx.CursorY)
+	return validX
 }
 
 // findLineEnd finds the rightmost character on the current line
@@ -365,11 +356,11 @@ func deleteCharAt(ctx *engine.GameContext, x, y int) {
 // WORD is any sequence of non-space characters separated by spaces
 func findNextWORDStart(ctx *engine.GameContext) int {
 	x := ctx.CursorX
-	currentChar := getCharAt(ctx, x, ctx.CursorY)
+	currentType := getCharacterTypeAt(ctx, x, ctx.CursorY)
 
 	// Phase 1: Skip current WORD (all non-spaces)
-	if currentChar != 0 { // Not on space
-		for x < ctx.GameWidth && getCharAt(ctx, x, ctx.CursorY) != 0 {
+	if currentType != CharTypeSpace {
+		for x < ctx.GameWidth && getCharacterTypeAt(ctx, x, ctx.CursorY) != CharTypeSpace {
 			x++
 		}
 	} else {
@@ -378,7 +369,7 @@ func findNextWORDStart(ctx *engine.GameContext) int {
 	}
 
 	// Phase 2: Skip any spaces
-	for x < ctx.GameWidth && getCharAt(ctx, x, ctx.CursorY) == 0 {
+	for x < ctx.GameWidth && getCharacterTypeAt(ctx, x, ctx.CursorY) == CharTypeSpace {
 		x++
 	}
 
@@ -395,7 +386,8 @@ func findNextWORDStart(ctx *engine.GameContext) int {
 		}
 	}
 
-	return x
+	validX, _ := validatePosition(ctx, x, ctx.CursorY)
+	return validX
 }
 
 // findWORDEnd finds the end of the current/next WORD (space-delimited)
@@ -410,7 +402,7 @@ func findWORDEnd(ctx *engine.GameContext) int {
 	}
 
 	// Skip any whitespace
-	for x < ctx.GameWidth && getCharAt(ctx, x, ctx.CursorY) == 0 {
+	for x < ctx.GameWidth && getCharacterTypeAt(ctx, x, ctx.CursorY) == CharTypeSpace {
 		x++
 	}
 
@@ -420,14 +412,15 @@ func findWORDEnd(ctx *engine.GameContext) int {
 
 	// Now we're on a non-space character, find the end of this WORD
 	for x < ctx.GameWidth {
-		nextChar := getCharAt(ctx, x+1, ctx.CursorY)
-		if nextChar == 0 { // Next is space or edge
+		nextType := getCharacterTypeAt(ctx, x+1, ctx.CursorY)
+		if nextType == CharTypeSpace { // Next is space or edge
 			break
 		}
 		x++
 	}
 
-	return x
+	validX, _ := validatePosition(ctx, x, ctx.CursorY)
+	return validX
 }
 
 // findPrevWORDStart finds the start of the previous WORD (space-delimited)
@@ -442,7 +435,7 @@ func findPrevWORDStart(ctx *engine.GameContext) int {
 	}
 
 	// Skip backward over any spaces
-	for x >= 0 && getCharAt(ctx, x, ctx.CursorY) == 0 {
+	for x >= 0 && getCharacterTypeAt(ctx, x, ctx.CursorY) == CharTypeSpace {
 		x--
 	}
 
@@ -452,21 +445,23 @@ func findPrevWORDStart(ctx *engine.GameContext) int {
 
 	// We're on a non-space character, skip backward to find the start of this WORD
 	for x > 0 {
-		prevChar := getCharAt(ctx, x-1, ctx.CursorY)
-		if prevChar == 0 { // Previous is space
+		prevType := getCharacterTypeAt(ctx, x-1, ctx.CursorY)
+		if prevType == CharTypeSpace { // Previous is space
 			break
 		}
 		x--
 	}
 
-	return x
+	validX, _ := validatePosition(ctx, x, ctx.CursorY)
+	return validX
 }
 
 // findFirstNonWhitespace finds the first non-whitespace character on the current line
 func findFirstNonWhitespace(ctx *engine.GameContext) int {
 	for x := 0; x < ctx.GameWidth; x++ {
-		if getCharAt(ctx, x, ctx.CursorY) != 0 {
-			return x
+		if getCharacterTypeAt(ctx, x, ctx.CursorY) != CharTypeSpace {
+			validX, _ := validatePosition(ctx, x, ctx.CursorY)
+			return validX
 		}
 	}
 	return 0 // No non-whitespace found, go to line start
