@@ -29,6 +29,15 @@ const (
 	BoostExtensionDuration = 1 * time.Second
 )
 
+// Gold Sequence Constants
+const (
+	// GoldSequenceDuration is how long the gold sequence remains on screen
+	GoldSequenceDuration = 10 * time.Second
+
+	// GoldSequenceLength is the number of characters in the gold sequence
+	GoldSequenceLength = 10
+)
+
 // Decay System Constants
 const (
 	// DecayRowAnimationDurationMs is the time per row during decay animation

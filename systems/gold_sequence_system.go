@@ -1,0 +1,240 @@
+package systems
+
+import (
+	"math/rand"
+	"reflect"
+	"time"
+
+	"github.com/lixenwraith/vi-fighter/components"
+	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/render"
+)
+
+// GoldSequenceSystem manages the gold sequence mechanic
+type GoldSequenceSystem struct {
+	ctx               *engine.GameContext
+	decaySystem       *DecaySystem
+	wasDecayAnimating bool
+	active            bool
+	sequenceID        int
+	startTime         time.Time
+	characters        string
+	gameWidth         int
+	gameHeight        int
+}
+
+// NewGoldSequenceSystem creates a new gold sequence system
+func NewGoldSequenceSystem(ctx *engine.GameContext, decaySystem *DecaySystem, gameWidth, gameHeight int) *GoldSequenceSystem {
+	return &GoldSequenceSystem{
+		ctx:               ctx,
+		decaySystem:       decaySystem,
+		wasDecayAnimating: false,
+		active:            false,
+		sequenceID:        0,
+		characters:        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+		gameWidth:         gameWidth,
+		gameHeight:        gameHeight,
+	}
+}
+
+// Priority returns the system's priority (runs between spawn and decay)
+func (s *GoldSequenceSystem) Priority() int {
+	return 20
+}
+
+// Update runs the gold sequence system logic
+func (s *GoldSequenceSystem) Update(world *engine.World, dt time.Duration) {
+	now := s.ctx.TimeProvider.Now()
+	isDecayAnimating := s.decaySystem.IsAnimating()
+
+	// Detect transition from decay animating to not animating (decay just ended)
+	if s.wasDecayAnimating && !isDecayAnimating {
+		// Decay just ended - spawn gold sequence
+		s.spawnGoldSequence(world)
+	}
+
+	s.wasDecayAnimating = isDecayAnimating
+
+	// If gold sequence is active, check timeout
+	if s.active {
+		elapsed := now.Sub(s.startTime)
+		if elapsed >= constants.GoldSequenceDuration {
+			// Timeout - remove gold sequence
+			s.removeGoldSequence(world)
+		}
+	}
+}
+
+// spawnGoldSequence creates a new gold sequence at the center-top of the screen
+func (s *GoldSequenceSystem) spawnGoldSequence(world *engine.World) {
+	if s.active {
+		// Already have an active gold sequence
+		return
+	}
+
+	// Generate random 10-character sequence
+	sequence := make([]rune, constants.GoldSequenceLength)
+	for i := 0; i < constants.GoldSequenceLength; i++ {
+		sequence[i] = rune(s.characters[rand.Intn(len(s.characters))])
+	}
+
+	// Calculate center-top position
+	x := (s.gameWidth - constants.GoldSequenceLength) / 2
+	if x < 0 {
+		x = 0
+	}
+	y := 0
+
+	// Check if position is valid (no overlapping entities)
+	overlaps := false
+	for i := 0; i < constants.GoldSequenceLength; i++ {
+		if x+i >= s.gameWidth {
+			overlaps = true
+			break
+		}
+		if world.GetEntityAtPosition(x+i, y) != 0 {
+			overlaps = true
+			break
+		}
+	}
+
+	if overlaps {
+		// Can't spawn gold sequence due to overlap
+		return
+	}
+
+	// Create unique sequence ID
+	s.sequenceID++
+	sequenceID := s.sequenceID
+
+	// Get style for gold sequence
+	style := render.GetStyleForSequence(components.SequenceGold, components.LevelBright)
+
+	// Create entities for each character in the gold sequence
+	for i := 0; i < constants.GoldSequenceLength; i++ {
+		entity := world.CreateEntity()
+
+		// Add position component
+		world.AddComponent(entity, components.PositionComponent{
+			X: x + i,
+			Y: y,
+		})
+
+		// Add character component
+		world.AddComponent(entity, components.CharacterComponent{
+			Rune:  sequence[i],
+			Style: style,
+		})
+
+		// Add sequence component
+		world.AddComponent(entity, components.SequenceComponent{
+			ID:    sequenceID,
+			Index: i,
+			Type:  components.SequenceGold,
+			Level: components.LevelBright,
+		})
+
+		// Update spatial index
+		world.UpdateSpatialIndex(entity, x+i, y)
+	}
+
+	// Mark gold sequence as active
+	s.active = true
+	s.startTime = s.ctx.TimeProvider.Now()
+}
+
+// removeGoldSequence removes all gold sequence entities from the world
+func (s *GoldSequenceSystem) removeGoldSequence(world *engine.World) {
+	if !s.active {
+		return
+	}
+
+	seqType := reflect.TypeOf(components.SequenceComponent{})
+	posType := reflect.TypeOf(components.PositionComponent{})
+
+	entities := world.GetEntitiesWith(seqType, posType)
+
+	for _, entity := range entities {
+		seqComp, ok := world.GetComponent(entity, seqType)
+		if !ok {
+			continue
+		}
+		seq := seqComp.(components.SequenceComponent)
+
+		// Only remove gold sequence entities with our ID
+		if seq.Type == components.SequenceGold && seq.ID == s.sequenceID {
+			// Remove from spatial index
+			posComp, ok := world.GetComponent(entity, posType)
+			if ok {
+				pos := posComp.(components.PositionComponent)
+				world.RemoveFromSpatialIndex(pos.X, pos.Y)
+			}
+			// Destroy entity
+			world.DestroyEntity(entity)
+		}
+	}
+
+	s.active = false
+}
+
+// IsActive returns whether a gold sequence is currently active
+func (s *GoldSequenceSystem) IsActive() bool {
+	return s.active
+}
+
+// GetSequenceID returns the current gold sequence ID
+func (s *GoldSequenceSystem) GetSequenceID() int {
+	return s.sequenceID
+}
+
+// GetExpectedCharacter returns the expected character at the given index for the active gold sequence
+// Returns 0 and false if no active gold sequence or index is invalid
+func (s *GoldSequenceSystem) GetExpectedCharacter(sequenceID int, index int) (rune, bool) {
+	if !s.active || sequenceID != s.sequenceID {
+		return 0, false
+	}
+
+	// Find the entity with this sequence ID and index
+	seqType := reflect.TypeOf(components.SequenceComponent{})
+	charType := reflect.TypeOf(components.CharacterComponent{})
+
+	entities := s.ctx.World.GetEntitiesWith(seqType, charType)
+
+	for _, entity := range entities {
+		seqComp, ok := s.ctx.World.GetComponent(entity, seqType)
+		if !ok {
+			continue
+		}
+		seq := seqComp.(components.SequenceComponent)
+
+		if seq.Type == components.SequenceGold && seq.ID == sequenceID && seq.Index == index {
+			charComp, ok := s.ctx.World.GetComponent(entity, charType)
+			if !ok {
+				return 0, false
+			}
+			char := charComp.(components.CharacterComponent)
+			return char.Rune, true
+		}
+	}
+
+	return 0, false
+}
+
+// CompleteGoldSequence is called when the gold sequence is successfully completed
+func (s *GoldSequenceSystem) CompleteGoldSequence(world *engine.World) {
+	if !s.active {
+		return
+	}
+
+	// Remove gold sequence entities
+	s.removeGoldSequence(world)
+
+	// Fill heat to max (handled by ScoreSystem)
+}
+
+// UpdateDimensions updates the game area dimensions
+func (s *GoldSequenceSystem) UpdateDimensions(gameWidth, gameHeight int) {
+	s.gameWidth = gameWidth
+	s.gameHeight = gameHeight
+}

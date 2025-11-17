@@ -12,9 +12,10 @@ import (
 
 // ScoreSystem handles character typing and score calculation
 type ScoreSystem struct {
-	ctx            *engine.GameContext
-	lastCorrect    time.Time
-	errorCursorSet bool
+	ctx               *engine.GameContext
+	lastCorrect       time.Time
+	errorCursorSet    bool
+	goldSequenceSystem *GoldSequenceSystem
 }
 
 // NewScoreSystem creates a new score system
@@ -28,6 +29,11 @@ func NewScoreSystem(ctx *engine.GameContext) *ScoreSystem {
 // Priority returns the system's priority
 func (s *ScoreSystem) Priority() int {
 	return 10 // High priority, run before other systems
+}
+
+// SetGoldSequenceSystem sets the gold sequence system reference
+func (s *ScoreSystem) SetGoldSequenceSystem(goldSystem *GoldSequenceSystem) {
+	s.goldSequenceSystem = goldSystem
 }
 
 // Update runs the score system (unused for now, character typing is event-driven)
@@ -80,6 +86,13 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		return
 	}
 	seq := seqComp.(components.SequenceComponent)
+
+	// Check if this is a gold sequence character
+	if seq.Type == components.SequenceGold && s.goldSequenceSystem != nil && s.goldSequenceSystem.IsActive() {
+		// Handle gold sequence typing
+		s.handleGoldSequenceTyping(world, entity, char, seq, typedRune, cursorX, cursorY)
+		return
+	}
 
 	// Check if typed character matches
 	if char.Rune == typedRune {
@@ -164,4 +177,54 @@ func (s *ScoreSystem) extendBoost(duration time.Duration) {
 	}
 
 	s.ctx.SetBoostEnabled(true)
+}
+
+// handleGoldSequenceTyping processes typing of gold sequence characters
+func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engine.Entity, char components.CharacterComponent, seq components.SequenceComponent, typedRune rune, cursorX, cursorY int) {
+	now := s.ctx.TimeProvider.Now()
+
+	// Check if typed character matches
+	if char.Rune != typedRune {
+		// Incorrect character - flash error cursor but DON'T reset heat for gold sequence
+		s.ctx.SetCursorError(true)
+		s.ctx.SetCursorErrorTime(now)
+		return
+	}
+
+	// Correct character - remove entity and move cursor
+	// Remove from spatial index first
+	posType := reflect.TypeOf(components.PositionComponent{})
+	posComp, ok := world.GetComponent(entity, posType)
+	if ok {
+		pos := posComp.(components.PositionComponent)
+		world.RemoveFromSpatialIndex(pos.X, pos.Y)
+	}
+
+	// Destroy the character entity
+	world.DestroyEntity(entity)
+
+	// Move cursor right
+	s.ctx.CursorX++
+	if s.ctx.CursorX >= s.ctx.GameWidth {
+		s.ctx.CursorX = s.ctx.GameWidth - 1
+	}
+
+	// Check if this was the last character of the gold sequence
+	isLastChar := (seq.Index == constants.GoldSequenceLength-1)
+
+	if isLastChar {
+		// Gold sequence completed! Fill heat to max (if not already higher)
+		heatBarWidth := s.ctx.Width - constants.HeatBarIndicatorWidth
+		if heatBarWidth < 1 {
+			heatBarWidth = 1
+		}
+
+		currentHeat := s.ctx.GetScoreIncrement()
+		if currentHeat < heatBarWidth {
+			s.ctx.SetScoreIncrement(heatBarWidth)
+		}
+
+		// Mark gold sequence as complete
+		s.goldSequenceSystem.CompleteGoldSequence(world)
+	}
 }
