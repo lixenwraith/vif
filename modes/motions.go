@@ -362,74 +362,104 @@ func deleteCharAt(ctx *engine.GameContext, x, y int) {
 // WORD motion functions (space-delimited, treat all non-space as WORD)
 
 // findNextWORDStart finds the start of the next WORD (space-delimited)
+// WORD is any sequence of non-space characters separated by spaces
 func findNextWORDStart(ctx *engine.GameContext) int {
-	x := ctx.CursorX + 1
-	if x >= ctx.GameWidth {
-		return ctx.CursorX
-	}
+	x := ctx.CursorX
+	currentChar := getCharAt(ctx, x, ctx.CursorY)
 
-	// Skip current WORD (any non-space characters)
-	for x < ctx.GameWidth && getCharAt(ctx, x, ctx.CursorY) != 0 {
+	// Phase 1: Skip current WORD (all non-spaces)
+	if currentChar != 0 { // Not on space
+		for x < ctx.GameWidth && getCharAt(ctx, x, ctx.CursorY) != 0 {
+			x++
+		}
+	} else {
+		// On space: move at least one position forward
 		x++
 	}
 
-	// Skip whitespace
+	// Phase 2: Skip any spaces
 	for x < ctx.GameWidth && getCharAt(ctx, x, ctx.CursorY) == 0 {
 		x++
 	}
 
+	// We're now at the first character of next WORD (or at edge)
 	if x >= ctx.GameWidth {
-		return ctx.CursorX
+		return ctx.CursorX // Stay in place if we hit the edge
 	}
+
+	// Ensure we advanced at least one position
+	if x == ctx.CursorX {
+		x++
+		if x >= ctx.GameWidth {
+			return ctx.CursorX
+		}
+	}
+
 	return x
 }
 
 // findWORDEnd finds the end of the current/next WORD (space-delimited)
+// Moves forward to the last character of the next WORD
 func findWORDEnd(ctx *engine.GameContext) int {
-	x := ctx.CursorX + 1
+	x := ctx.CursorX
+
+	// Move forward at least one position
+	x++
 	if x >= ctx.GameWidth {
-		return ctx.CursorX
+		return ctx.CursorX // Can't move forward
 	}
 
-	// Skip whitespace first
+	// Skip any whitespace
 	for x < ctx.GameWidth && getCharAt(ctx, x, ctx.CursorY) == 0 {
 		x++
 	}
 
 	if x >= ctx.GameWidth {
-		return ctx.CursorX
+		return ctx.CursorX // Only whitespace ahead
 	}
 
-	// Now find the end of this WORD
-	for x < ctx.GameWidth && getCharAt(ctx, x, ctx.CursorY) != 0 {
+	// Now we're on a non-space character, find the end of this WORD
+	for x < ctx.GameWidth {
+		nextChar := getCharAt(ctx, x+1, ctx.CursorY)
+		if nextChar == 0 { // Next is space or edge
+			break
+		}
 		x++
 	}
 
-	return x - 1
+	return x
 }
 
 // findPrevWORDStart finds the start of the previous WORD (space-delimited)
+// Moves backward to the first character of the previous WORD
 func findPrevWORDStart(ctx *engine.GameContext) int {
-	x := ctx.CursorX - 1
+	x := ctx.CursorX
+
+	// Move back at least one position
+	x--
 	if x < 0 {
-		return ctx.CursorX
+		return ctx.CursorX // Can't move back
 	}
 
-	// Skip whitespace
+	// Skip backward over any spaces
 	for x >= 0 && getCharAt(ctx, x, ctx.CursorY) == 0 {
 		x--
 	}
 
 	if x < 0 {
-		return ctx.CursorX
+		return ctx.CursorX // Only spaces before cursor
 	}
 
-	// Now find the start of this WORD
-	for x >= 0 && getCharAt(ctx, x, ctx.CursorY) != 0 {
+	// We're on a non-space character, skip backward to find the start of this WORD
+	for x > 0 {
+		prevChar := getCharAt(ctx, x-1, ctx.CursorY)
+		if prevChar == 0 { // Previous is space
+			break
+		}
 		x--
 	}
 
-	return x + 1
+	return x
 }
 
 // findFirstNonWhitespace finds the first non-whitespace character on the current line
