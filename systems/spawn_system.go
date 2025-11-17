@@ -25,18 +25,20 @@ type SpawnSystem struct {
 	gameHeight int
 	cursorX    int
 	cursorY    int
+	ctx        *engine.GameContext
 }
 
 // NewSpawnSystem creates a new spawn system
-func NewSpawnSystem(gameWidth, gameHeight, cursorX, cursorY int) *SpawnSystem {
+func NewSpawnSystem(gameWidth, gameHeight, cursorX, cursorY int, ctx *engine.GameContext) *SpawnSystem {
 	return &SpawnSystem{
-		lastSpawn:  time.Now(),
+		lastSpawn:  ctx.TimeProvider.Now(),
 		nextSeqID:  1,
 		characters: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]{}|;:,.<>?/",
 		gameWidth:  gameWidth,
 		gameHeight: gameHeight,
 		cursorX:    cursorX,
 		cursorY:    cursorY,
+		ctx:        ctx,
 	}
 }
 
@@ -69,13 +71,14 @@ func (s *SpawnSystem) Update(world *engine.World, dt time.Duration) {
 	}
 
 	// Check if it's time to spawn
-	if time.Since(s.lastSpawn).Milliseconds() <= spawnDelay {
+	now := s.ctx.TimeProvider.Now()
+	if now.Sub(s.lastSpawn).Milliseconds() <= spawnDelay {
 		return
 	}
 
 	// Generate and spawn a new sequence
 	s.spawnSequence(world)
-	s.lastSpawn = time.Now()
+	s.lastSpawn = now
 }
 
 // spawnSequence generates and spawns a new character sequence

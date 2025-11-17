@@ -3,7 +3,6 @@ package render
 import (
 	"fmt"
 	"reflect"
-	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/components"
@@ -537,7 +536,7 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 	var totalWidth int
 
 	if ctx.GetBoostEnabled() {
-		remaining := ctx.GetBoostEndTime().Sub(time.Now()).Seconds()
+		remaining := ctx.GetBoostEndTime().Sub(ctx.TimeProvider.Now()).Seconds()
 		if remaining < 0 {
 			remaining = 0
 		}
@@ -559,7 +558,7 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 		startX = 0
 	}
 
-	now := time.Now()
+	now := ctx.TimeProvider.Now()
 
 	// Draw boost timer if active (with pink background)
 	if ctx.GetBoostEnabled() {
@@ -620,7 +619,7 @@ func (r *TerminalRenderer) drawCursor(ctx *engine.GameContext, defaultStyle tcel
 	}
 
 	// Check for cursor error blink
-	now := time.Now()
+	now := ctx.TimeProvider.Now()
 	if ctx.GetCursorError() && now.Sub(ctx.GetCursorErrorTime()).Milliseconds() > errorBlinkMs {
 		ctx.SetCursorError(false)
 	}

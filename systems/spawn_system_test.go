@@ -4,6 +4,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
@@ -231,7 +232,17 @@ func TestFindValidPositionEventually(t *testing.T) {
 	cursorY := 12
 
 	world := engine.NewWorld()
-	spawnSys := NewSpawnSystem(gameWidth, gameHeight, cursorX, cursorY)
+
+	// Create a simulation screen for testing
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+	ctx.GameWidth = gameWidth
+	ctx.GameHeight = gameHeight
+	ctx.CursorX = cursorX
+	ctx.CursorY = cursorY
+
+	spawnSys := NewSpawnSystem(gameWidth, gameHeight, cursorX, cursorY, ctx)
 
 	// Try to find a valid position for a small sequence
 	x, y := spawnSys.findValidPosition(world, 3)

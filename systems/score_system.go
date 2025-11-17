@@ -21,7 +21,7 @@ type ScoreSystem struct {
 func NewScoreSystem(ctx *engine.GameContext) *ScoreSystem {
 	return &ScoreSystem{
 		ctx:         ctx,
-		lastCorrect: time.Now(),
+		lastCorrect: ctx.TimeProvider.Now(),
 	}
 }
 
@@ -32,25 +32,29 @@ func (s *ScoreSystem) Priority() int {
 
 // Update runs the score system (unused for now, character typing is event-driven)
 func (s *ScoreSystem) Update(world *engine.World, dt time.Duration) {
+	now := s.ctx.TimeProvider.Now()
+
 	// Clear error cursor after timeout
-	if s.ctx.GetCursorError() && time.Since(s.ctx.GetCursorErrorTime()) > constants.ErrorCursorTimeout {
+	if s.ctx.GetCursorError() && now.Sub(s.ctx.GetCursorErrorTime()) > constants.ErrorCursorTimeout {
 		s.ctx.SetCursorError(false)
 	}
 
 	// Clear score blink after timeout
-	if s.ctx.GetScoreBlinkActive() && time.Since(s.ctx.GetScoreBlinkTime()) > constants.ScoreBlinkTimeout {
+	if s.ctx.GetScoreBlinkActive() && now.Sub(s.ctx.GetScoreBlinkTime()) > constants.ScoreBlinkTimeout {
 		s.ctx.SetScoreBlinkActive(false)
 	}
 }
 
 // HandleCharacterTyping processes a character typed in insert mode
 func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursorY int, typedRune rune) {
+	now := s.ctx.TimeProvider.Now()
+
 	// Get entity at cursor position
 	entity := world.GetEntityAtPosition(cursorX, cursorY)
 	if entity == 0 {
 		// No character at cursor - flash error cursor
 		s.ctx.SetCursorError(true)
-		s.ctx.SetCursorErrorTime(time.Now())
+		s.ctx.SetCursorErrorTime(now)
 		s.ctx.SetScoreIncrement(0) // Reset heat
 		return
 	}
@@ -60,7 +64,7 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 	charComp, ok := world.GetComponent(entity, charType)
 	if !ok {
 		s.ctx.SetCursorError(true)
-		s.ctx.SetCursorErrorTime(time.Now())
+		s.ctx.SetCursorErrorTime(now)
 		s.ctx.SetScoreIncrement(0)
 		return
 	}
@@ -71,7 +75,7 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 	seqComp, ok := world.GetComponent(entity, seqType)
 	if !ok {
 		s.ctx.SetCursorError(true)
-		s.ctx.SetCursorErrorTime(time.Now())
+		s.ctx.SetCursorErrorTime(now)
 		s.ctx.SetScoreIncrement(0)
 		return
 	}
@@ -91,7 +95,7 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 			}
 			s.ctx.AddScoreIncrement(heatGain)
 		}
-		s.lastCorrect = time.Now()
+		s.lastCorrect = now
 
 		// Calculate points: increment * level_multiplier * (red?-1:1)
 		levelMultipliers := map[components.SequenceLevel]int{
@@ -118,7 +122,7 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.SetScoreBlinkActive(true)
 		fgColor, _, _ := render.GetStyleForSequence(seq.Type, seq.Level).Decompose()
 		s.ctx.SetScoreBlinkColor(fgColor)
-		s.ctx.SetScoreBlinkTime(time.Now())
+		s.ctx.SetScoreBlinkTime(now)
 
 		// Remove entity from spatial index first
 		posType := reflect.TypeOf(components.PositionComponent{})
@@ -140,14 +144,14 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 	} else {
 		// Incorrect character - flash error cursor and reset heat
 		s.ctx.SetCursorError(true)
-		s.ctx.SetCursorErrorTime(time.Now())
+		s.ctx.SetCursorErrorTime(now)
 		s.ctx.SetScoreIncrement(0)
 	}
 }
 
 // extendBoost extends the boost timer by the given duration
 func (s *ScoreSystem) extendBoost(duration time.Duration) {
-	now := time.Now()
+	now := s.ctx.TimeProvider.Now()
 
 	// If boost is already active, add to existing end time; otherwise start fresh
 	currentEndTime := s.ctx.GetBoostEndTime()

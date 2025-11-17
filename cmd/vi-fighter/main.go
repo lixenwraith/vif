@@ -36,7 +36,7 @@ func main() {
 	scoreSystem := systems.NewScoreSystem(ctx)
 	ctx.World.AddSystem(scoreSystem)
 
-	spawnSystem := systems.NewSpawnSystem(ctx.GameWidth, ctx.GameHeight, ctx.CursorX, ctx.CursorY)
+	spawnSystem := systems.NewSpawnSystem(ctx.GameWidth, ctx.GameHeight, ctx.CursorX, ctx.CursorY, ctx)
 	ctx.World.AddSystem(spawnSystem)
 
 	decaySystem := systems.NewDecaySystem(ctx.GameWidth, ctx.GameHeight, ctx.Width, ctx.GetScoreIncrement(), ctx)
@@ -91,7 +91,7 @@ func main() {
 
 		case <-ticker.C:
 			// Check if boost should expire
-			if ctx.GetBoostEnabled() && time.Now().After(ctx.GetBoostEndTime()) {
+			if ctx.GetBoostEnabled() && ctx.TimeProvider.Now().After(ctx.GetBoostEndTime()) {
 				ctx.SetBoostEnabled(false)
 			}
 

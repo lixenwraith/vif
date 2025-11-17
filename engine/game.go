@@ -27,6 +27,9 @@ type GameContext struct {
 	Screen tcell.Screen
 	Buffer *core.Buffer
 
+	// Time provider (monotonic clock for animations)
+	TimeProvider TimeProvider
+
 	// Screen dimensions
 	Width, Height int
 
@@ -88,17 +91,19 @@ type GameContext struct {
 // NewGameContext creates a new game context with initialized ECS world
 func NewGameContext(screen tcell.Screen) *GameContext {
 	width, height := screen.Size()
+	timeProvider := NewMonotonicTimeProvider()
 
 	ctx := &GameContext{
 		World:           NewWorld(),
 		Screen:          screen,
+		TimeProvider:    timeProvider,
 		Width:           width,
 		Height:          height,
 		Mode:            ModeNormal,
 		CursorVisible:   true,
-		CursorBlinkTime: time.Now(),
+		CursorBlinkTime: timeProvider.Now(),
 		NextSeqID:       1,
-		LastSpawn:       time.Now(),
+		LastSpawn:       timeProvider.Now(),
 	}
 
 	// Initialize atomic values

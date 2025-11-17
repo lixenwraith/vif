@@ -29,7 +29,7 @@ func NewDecaySystem(gameWidth, gameHeight, screenWidth, heatIncrement int, ctx *
 	s := &DecaySystem{
 		animating:     false,
 		currentRow:    0,
-		lastUpdate:    time.Now(),
+		lastUpdate:    ctx.TimeProvider.Now(),
 		gameWidth:     gameWidth,
 		gameHeight:    gameHeight,
 		screenWidth:   screenWidth,
@@ -52,7 +52,7 @@ func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 		s.updateAnimation(world)
 	} else {
 		// Check if it's time to start decay animation
-		now := time.Now()
+		now := s.ctx.TimeProvider.Now()
 		if now.After(s.nextDecayTime) || now.Equal(s.nextDecayTime) {
 			s.animating = true
 			s.currentRow = 0
@@ -82,7 +82,7 @@ func (s *DecaySystem) updateAnimation(world *engine.World) {
 		s.currentRow = 0
 		// Schedule next decay
 		interval := s.calculateInterval()
-		s.nextDecayTime = time.Now().Add(interval)
+		s.nextDecayTime = s.ctx.TimeProvider.Now().Add(interval)
 	}
 }
 
@@ -155,8 +155,8 @@ func (s *DecaySystem) applyDecayToRow(world *engine.World, row int) {
 // startTicker initializes the decay timer (called once at startup)
 func (s *DecaySystem) startTicker() {
 	interval := s.calculateInterval()
-	s.nextDecayTime = time.Now().Add(interval)
-	s.lastUpdate = time.Now()
+	s.nextDecayTime = s.ctx.TimeProvider.Now().Add(interval)
+	s.lastUpdate = s.ctx.TimeProvider.Now()
 }
 
 // calculateInterval calculates the decay interval based on heat
@@ -211,7 +211,7 @@ func (s *DecaySystem) GetTimeUntilDecay() float64 {
 	if s.animating {
 		return 0.0
 	}
-	remaining := s.nextDecayTime.Sub(time.Now()).Seconds()
+	remaining := s.nextDecayTime.Sub(s.ctx.TimeProvider.Now()).Seconds()
 	if remaining < 0 {
 		remaining = 0
 	}
