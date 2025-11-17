@@ -97,7 +97,7 @@ func (sm *SoundManager) Cleanup() {
 		return
 	}
 
-	// Stop all active sounds
+	// Stop all active sounds by pausing them
 	if sm.trailStreamer != nil {
 		sm.trailStreamer.Paused = true
 	}
@@ -105,15 +105,17 @@ func (sm *SoundManager) Cleanup() {
 		sm.maxHeatStreamer.Paused = true
 	}
 
-	// Clear mixer
-	sm.mixer.Clear()
-
 	// Reset counters for one-shot sounds
+	// Note: We don't call mixer.Clear() because it causes race conditions with
+	// the speaker's streaming goroutine. The mixer is safe to leave with paused
+	// streamers, and new sounds won't be added once initialized=false.
 	sm.activeErrorSounds = 0
 	sm.activeDecaySounds = 0
 
-	// Note: beep doesn't provide a Close() method for speaker,
-	// but clearing all streamers ensures no audio artifacts
+	// Mark as uninitialized to prevent new sounds from being added
+	// Note: beep doesn't provide a Close() method for speaker.
+	// The speaker goroutine will continue running but won't produce sound
+	// since all streamers are paused and no new ones will be added.
 	sm.initialized = false
 }
 

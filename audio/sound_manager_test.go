@@ -2,6 +2,7 @@ package audio
 
 import (
 	"testing"
+	"time"
 )
 
 // TestSoundManagerGracefulDegradation verifies audio operations don't panic when not initialized
@@ -40,6 +41,9 @@ func TestSoundManagerInitialization(t *testing.T) {
 
 	// If initialization succeeded, cleanup should work
 	sm.Cleanup()
+
+	// Allow time for speaker goroutine to complete any in-flight operations
+	time.Sleep(50 * time.Millisecond)
 }
 
 // TestSoundManagerDoubleInitialization verifies double initialization is safe
@@ -59,6 +63,9 @@ func TestSoundManagerDoubleInitialization(t *testing.T) {
 	}
 
 	sm.Cleanup()
+
+	// Allow time for speaker goroutine to complete any in-flight operations
+	time.Sleep(50 * time.Millisecond)
 }
 
 // TestSoundManagerCleanupWithoutInit verifies cleanup without initialization is safe
@@ -86,6 +93,9 @@ func TestSoundManagerOperationsAfterCleanup(t *testing.T) {
 	}
 
 	sm.Cleanup()
+
+	// Allow time for speaker goroutine to complete any in-flight operations
+	time.Sleep(50 * time.Millisecond)
 
 	// All operations should be safe after cleanup
 	defer func() {
