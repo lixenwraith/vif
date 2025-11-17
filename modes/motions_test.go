@@ -711,3 +711,391 @@ func TestWORDEndEdgeCases(t *testing.T) {
 		t.Errorf("E at last WORD: expected X=6, got X=%d", ctx.CursorX)
 	}
 }
+
+// Test repeated 'w' presses on "hello world test"
+func TestRepeatedWPresses(t *testing.T) {
+	ctx := createTestContext()
+
+	// Setup: "hello world test" at y=0
+	// Positions: h(0)e(1)l(2)l(3)o(4) (5) w(6)o(7)r(8)l(9)d(10) (11) t(12)e(13)s(14)t(15)
+	text := "hello world test"
+	for i, r := range text {
+		if r != ' ' {
+			placeChar(ctx, i, 0, r)
+		}
+	}
+
+	// Start at 'h' (position 0)
+	ctx.CursorX = 0
+	ctx.CursorY = 0
+
+	// First 'w' press - should move to 'w' in "world"
+	ExecuteMotion(ctx, 'w', 1)
+	if ctx.CursorX != 6 {
+		t.Errorf("First w press: expected X=6 (at 'w' in 'world'), got X=%d", ctx.CursorX)
+	}
+
+	// Second 'w' press - should move to 't' in "test"
+	ExecuteMotion(ctx, 'w', 1)
+	if ctx.CursorX != 12 {
+		t.Errorf("Second w press: expected X=12 (at 't' in 'test'), got X=%d", ctx.CursorX)
+	}
+
+	// Third 'w' press - should stay at 't' (no more words)
+	startX := ctx.CursorX
+	ExecuteMotion(ctx, 'w', 1)
+	if ctx.CursorX != startX {
+		t.Errorf("Third w press at end: expected X=%d (stay in place), got X=%d", startX, ctx.CursorX)
+	}
+}
+
+// Test word motions with mixed content: "foo_bar, baz.qux! end"
+func TestWordMotionsMixedContent(t *testing.T) {
+	ctx := createTestContext()
+
+	// Setup: "foo_bar, baz.qux! end" at y=0
+	// Positions: f(0)o(1)o(2)_(3)b(4)a(5)r(6),(7) (8) b(9)a(10)z(11).(12)q(13)u(14)x(15)!(16) (17) e(18)n(19)d(20)
+	text := "foo_bar, baz.qux! end"
+	for i, r := range text {
+		if r != ' ' {
+			placeChar(ctx, i, 0, r)
+		}
+	}
+
+	// Test 'w' from start - punctuation is treated as separate word
+	ctx.CursorX = 0 // at 'f'
+	ctx.CursorY = 0
+	ExecuteMotion(ctx, 'w', 1)
+	// Should jump to ',' (punctuation is a separate word in vim)
+	if ctx.CursorX != 7 {
+		t.Errorf("w to punctuation: expected X=7 (at ','), got X=%d", ctx.CursorX)
+	}
+
+	// Test 'w' from comma - should go to 'b' in "baz"
+	ExecuteMotion(ctx, 'w', 1)
+	if ctx.CursorX != 9 {
+		t.Errorf("w from comma: expected X=9 (at 'b'), got X=%d", ctx.CursorX)
+	}
+
+	// Test 'w' from 'b' - should go to '.' (period)
+	ExecuteMotion(ctx, 'w', 1)
+	if ctx.CursorX != 12 {
+		t.Errorf("w from baz: expected X=12 (at '.'), got X=%d", ctx.CursorX)
+	}
+
+	// Test 'w' from '.' - should go to 'q' (start of "qux")
+	ExecuteMotion(ctx, 'w', 1)
+	if ctx.CursorX != 13 {
+		t.Errorf("w from period: expected X=13 (at 'q'), got X=%d", ctx.CursorX)
+	}
+
+	// Test 'w' from 'q' - should go to '!' (next punctuation after "qux")
+	ExecuteMotion(ctx, 'w', 1)
+	if ctx.CursorX != 16 {
+		t.Errorf("w from q: expected X=16 (at '!'), got X=%d", ctx.CursorX)
+	}
+
+	// Test 'w' from '!' - should go to 'e' in "end"
+	ExecuteMotion(ctx, 'w', 1)
+	if ctx.CursorX != 18 {
+		t.Errorf("w from exclamation: expected X=18 (at 'e'), got X=%d", ctx.CursorX)
+	}
+
+	// Test 'e' motion on mixed content
+	ctx.CursorX = 0 // at 'f'
+	ExecuteMotion(ctx, 'e', 1)
+	if ctx.CursorX != 6 {
+		t.Errorf("e from start: expected X=6 (at 'r'), got X=%d", ctx.CursorX)
+	}
+
+	// Test 'e' again - should go to comma (end of punctuation group)
+	ExecuteMotion(ctx, 'e', 1)
+	if ctx.CursorX != 7 {
+		t.Errorf("e to comma: expected X=7 (at ','), got X=%d", ctx.CursorX)
+	}
+
+	// Test 'b' motion backward through mixed content
+	ctx.CursorX = 18 // at 'e' in "end"
+	ExecuteMotion(ctx, 'b', 1)
+	if ctx.CursorX != 16 {
+		t.Errorf("b from end: expected X=16 (at '!'), got X=%d", ctx.CursorX)
+	}
+
+	ExecuteMotion(ctx, 'b', 1)
+	if ctx.CursorX != 13 {
+		t.Errorf("b from !: expected X=13 (at 'q'), got X=%d", ctx.CursorX)
+	}
+
+	ExecuteMotion(ctx, 'b', 1)
+	if ctx.CursorX != 12 {
+		t.Errorf("b from q: expected X=12 (at '.'), got X=%d", ctx.CursorX)
+	}
+}
+
+// Test WORD motions on mixed content: "foo_bar, baz.qux! end"
+func TestWORDMotionsMixedContent(t *testing.T) {
+	ctx := createTestContext()
+
+	// Setup: "foo_bar, baz.qux! end" at y=0
+	// Positions: f(0)o(1)o(2)_(3)b(4)a(5)r(6),(7) (8) b(9)a(10)z(11).(12)q(13)u(14)x(15)!(16) (17) e(18)n(19)d(20)
+	text := "foo_bar, baz.qux! end"
+	for i, r := range text {
+		if r != ' ' {
+			placeChar(ctx, i, 0, r)
+		}
+	}
+
+	// Test 'W' from start - "foo_bar," is treated as one WORD
+	ctx.CursorX = 0 // at 'f'
+	ctx.CursorY = 0
+	ExecuteMotion(ctx, 'W', 1)
+	// Should jump to 'b' in "baz.qux!" (entire "foo_bar," is one WORD)
+	if ctx.CursorX != 9 {
+		t.Errorf("W to next WORD: expected X=9 (at 'b'), got X=%d", ctx.CursorX)
+	}
+
+	// Test 'W' again - should go to 'e' in "end"
+	ExecuteMotion(ctx, 'W', 1)
+	if ctx.CursorX != 18 {
+		t.Errorf("W to end: expected X=18 (at 'e'), got X=%d", ctx.CursorX)
+	}
+
+	// Test 'E' motion - should find end of WORD "foo_bar," (the comma)
+	ctx.CursorX = 0
+	ExecuteMotion(ctx, 'E', 1)
+	if ctx.CursorX != 7 {
+		t.Errorf("E from start: expected X=7 (at ','), got X=%d", ctx.CursorX)
+	}
+
+	// Test 'E' again - should go to '!' at end of "baz.qux!"
+	ExecuteMotion(ctx, 'E', 1)
+	if ctx.CursorX != 16 {
+		t.Errorf("E to next WORD end: expected X=16 (at '!'), got X=%d", ctx.CursorX)
+	}
+
+	// Test 'B' backward - should go back to 'b' in "baz.qux!"
+	ctx.CursorX = 18 // at 'e' in "end"
+	ExecuteMotion(ctx, 'B', 1)
+	if ctx.CursorX != 9 {
+		t.Errorf("B from end: expected X=9 (at 'b'), got X=%d", ctx.CursorX)
+	}
+
+	// Test 'B' again - should go back to 'f' in "foo_bar,"
+	ExecuteMotion(ctx, 'B', 1)
+	if ctx.CursorX != 0 {
+		t.Errorf("B to start: expected X=0 (at 'f'), got X=%d", ctx.CursorX)
+	}
+}
+
+// Test edge cases for word motions
+func TestWordMotionsEdgeCases(t *testing.T) {
+	ctx := createTestContext()
+
+	// Test 1: Multiple consecutive spaces
+	// Setup: "foo    bar" at y=0 (4 spaces between)
+	// Positions: f(0)o(1)o(2) (3)(4)(5)(6) b(7)a(8)r(9)
+	placeChar(ctx, 0, 0, 'f')
+	placeChar(ctx, 1, 0, 'o')
+	placeChar(ctx, 2, 0, 'o')
+	placeChar(ctx, 7, 0, 'b')
+	placeChar(ctx, 8, 0, 'a')
+	placeChar(ctx, 9, 0, 'r')
+
+	ctx.CursorX = 0
+	ctx.CursorY = 0
+
+	// 'w' should skip all spaces and land on 'b'
+	ExecuteMotion(ctx, 'w', 1)
+	if ctx.CursorX != 7 {
+		t.Errorf("w over multiple spaces: expected X=7 (at 'b'), got X=%d", ctx.CursorX)
+	}
+
+	// 'b' should skip all spaces and land back on 'f'
+	ExecuteMotion(ctx, 'b', 1)
+	if ctx.CursorX != 0 {
+		t.Errorf("b over multiple spaces: expected X=0 (at 'f'), got X=%d", ctx.CursorX)
+	}
+
+	// Test 2: Beginning of line - 'b' should stay at position 0
+	ctx.CursorX = 0
+	ExecuteMotion(ctx, 'b', 1)
+	if ctx.CursorX != 0 {
+		t.Errorf("b at beginning: expected X=0 (stay), got X=%d", ctx.CursorX)
+	}
+
+	// Test 3: End of line - 'w' should stay in place
+	ctx.CursorX = 7 // at 'b' in "bar" (last word)
+	startX := ctx.CursorX
+	ExecuteMotion(ctx, 'w', 1)
+	if ctx.CursorX != startX {
+		t.Errorf("w at end: expected X=%d (stay), got X=%d", startX, ctx.CursorX)
+	}
+
+	// Test 4: Single character words/punctuation
+	ctx = createTestContext()
+	// Setup: "a b c" at y=0
+	placeChar(ctx, 0, 0, 'a')
+	placeChar(ctx, 2, 0, 'b')
+	placeChar(ctx, 4, 0, 'c')
+
+	ctx.CursorX = 0
+	ctx.CursorY = 0
+
+	ExecuteMotion(ctx, 'w', 1)
+	if ctx.CursorX != 2 {
+		t.Errorf("w over single chars: expected X=2 (at 'b'), got X=%d", ctx.CursorX)
+	}
+
+	ExecuteMotion(ctx, 'w', 1)
+	if ctx.CursorX != 4 {
+		t.Errorf("w to last single char: expected X=4 (at 'c'), got X=%d", ctx.CursorX)
+	}
+
+	// Test 5: Empty positions between characters (same as multiple spaces)
+	ctx = createTestContext()
+	// Setup: "x     y" (5 spaces)
+	placeChar(ctx, 0, 0, 'x')
+	placeChar(ctx, 6, 0, 'y')
+
+	ctx.CursorX = 0
+	ctx.CursorY = 0
+
+	ExecuteMotion(ctx, 'w', 1)
+	if ctx.CursorX != 6 {
+		t.Errorf("w over many empty positions: expected X=6 (at 'y'), got X=%d", ctx.CursorX)
+	}
+
+	// Test 6: Starting from middle of multiple spaces
+	ctx = createTestContext()
+	// Setup: "foo    bar"
+	placeChar(ctx, 0, 0, 'f')
+	placeChar(ctx, 1, 0, 'o')
+	placeChar(ctx, 2, 0, 'o')
+	placeChar(ctx, 7, 0, 'b')
+	placeChar(ctx, 8, 0, 'a')
+	placeChar(ctx, 9, 0, 'r')
+
+	ctx.CursorX = 4 // in the middle of spaces
+	ctx.CursorY = 0
+
+	ExecuteMotion(ctx, 'w', 1)
+	if ctx.CursorX != 7 {
+		t.Errorf("w from middle of spaces: expected X=7 (at 'b'), got X=%d", ctx.CursorX)
+	}
+
+	// Test 'b' from middle of spaces
+	ctx.CursorX = 5 // in the middle of spaces
+	ExecuteMotion(ctx, 'b', 1)
+	if ctx.CursorX != 0 {
+		t.Errorf("b from middle of spaces: expected X=0 (at 'f'), got X=%d", ctx.CursorX)
+	}
+
+	// Test 7: Consecutive punctuation marks
+	ctx = createTestContext()
+	// Setup: "word...more"
+	text := "word...more"
+	for i, r := range text {
+		placeChar(ctx, i, 0, r)
+	}
+
+	ctx.CursorX = 0
+	ctx.CursorY = 0
+
+	ExecuteMotion(ctx, 'w', 1) // Should go to first '.'
+	if ctx.CursorX != 4 {
+		t.Errorf("w to consecutive punct: expected X=4 (at first '.'), got X=%d", ctx.CursorX)
+	}
+
+	ExecuteMotion(ctx, 'w', 1) // Should go to 'm' in "more"
+	if ctx.CursorX != 7 {
+		t.Errorf("w past consecutive punct: expected X=7 (at 'm'), got X=%d", ctx.CursorX)
+	}
+}
+
+// Test WORD motions edge cases
+func TestWORDMotionsEdgeCasesComprehensive(t *testing.T) {
+	ctx := createTestContext()
+
+	// Test 1: Multiple consecutive spaces with WORD motions
+	// Setup: "foo    bar" at y=0 (4 spaces between)
+	placeChar(ctx, 0, 0, 'f')
+	placeChar(ctx, 1, 0, 'o')
+	placeChar(ctx, 2, 0, 'o')
+	placeChar(ctx, 7, 0, 'b')
+	placeChar(ctx, 8, 0, 'a')
+	placeChar(ctx, 9, 0, 'r')
+
+	ctx.CursorX = 0
+	ctx.CursorY = 0
+
+	// 'W' should skip all spaces and land on 'b'
+	ExecuteMotion(ctx, 'W', 1)
+	if ctx.CursorX != 7 {
+		t.Errorf("W over multiple spaces: expected X=7 (at 'b'), got X=%d", ctx.CursorX)
+	}
+
+	// 'B' should skip all spaces and land back on 'f'
+	ExecuteMotion(ctx, 'B', 1)
+	if ctx.CursorX != 0 {
+		t.Errorf("B over multiple spaces: expected X=0 (at 'f'), got X=%d", ctx.CursorX)
+	}
+
+	// Test 2: Beginning of line - 'B' should stay at position 0
+	ctx.CursorX = 0
+	ExecuteMotion(ctx, 'B', 1)
+	if ctx.CursorX != 0 {
+		t.Errorf("B at beginning: expected X=0 (stay), got X=%d", ctx.CursorX)
+	}
+
+	// Test 3: End of line - 'W' should stay in place
+	ctx.CursorX = 7 // at 'b' in "bar" (last WORD)
+	startX := ctx.CursorX
+	ExecuteMotion(ctx, 'W', 1)
+	if ctx.CursorX != startX {
+		t.Errorf("W at end: expected X=%d (stay), got X=%d", startX, ctx.CursorX)
+	}
+
+	// Test 4: Complex punctuation treated as single WORD
+	ctx = createTestContext()
+	// Setup: "a...b...c...d"
+	text := "a...b...c...d"
+	for i, r := range text {
+		placeChar(ctx, i, 0, r)
+	}
+
+	ctx.CursorX = 0
+	ctx.CursorY = 0
+
+	// 'W' should treat all characters up to next space as one WORD
+	// Since there are no spaces, should stay at 0 (already at the only WORD)
+	startX = ctx.CursorX
+	ExecuteMotion(ctx, 'W', 1)
+	if ctx.CursorX != startX {
+		t.Errorf("W on continuous non-spaces: expected X=%d (stay), got X=%d", startX, ctx.CursorX)
+	}
+
+	// Test 5: Starting from middle of multiple spaces with WORD
+	ctx = createTestContext()
+	// Setup: "foo    bar"
+	placeChar(ctx, 0, 0, 'f')
+	placeChar(ctx, 1, 0, 'o')
+	placeChar(ctx, 2, 0, 'o')
+	placeChar(ctx, 7, 0, 'b')
+	placeChar(ctx, 8, 0, 'a')
+	placeChar(ctx, 9, 0, 'r')
+
+	ctx.CursorX = 4 // in the middle of spaces
+	ctx.CursorY = 0
+
+	ExecuteMotion(ctx, 'W', 1)
+	if ctx.CursorX != 7 {
+		t.Errorf("W from middle of spaces: expected X=7 (at 'b'), got X=%d", ctx.CursorX)
+	}
+
+	// Test 'B' from middle of spaces
+	ctx.CursorX = 5 // in the middle of spaces
+	ExecuteMotion(ctx, 'B', 1)
+	if ctx.CursorX != 0 {
+		t.Errorf("B from middle of spaces: expected X=0 (at 'f'), got X=%d", ctx.CursorX)
+	}
+}
