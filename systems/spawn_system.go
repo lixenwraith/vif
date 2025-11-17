@@ -20,15 +20,23 @@ const (
 	characterSpawnMs = 2000
 	maxCharacters    = 200
 	dataFilePath     = "./assets/data.txt"
-	minBlockLines    = 5
-	maxBlockLines    = 10
+	minBlockLines    = 3
+	maxBlockLines    = 15
 	maxPlacementTries = 3
+	minIndentChange  = 2 // Minimum indent change to start new block
 )
 
 // ColorLevelKey represents a unique color+level combination
 type ColorLevelKey struct {
 	Type  components.SequenceType
 	Level components.SequenceLevel
+}
+
+// CodeBlock represents a logical group of related lines
+type CodeBlock struct {
+	Lines       []string
+	IndentLevel int
+	HasBraces   bool
 }
 
 // SpawnSystem handles character sequence generation and spawning
@@ -42,8 +50,8 @@ type SpawnSystem struct {
 	ctx        *engine.GameContext
 
 	// File-based content
-	fileLines []string
-	nextLineIndex int
+	codeBlocks    []CodeBlock
+	nextBlockIndex int
 
 	// Atomic color tracking counters (6 states: Blue×3 + Green×3)
 	blueCountBright  atomic.Int64
@@ -64,7 +72,7 @@ func NewSpawnSystem(gameWidth, gameHeight, cursorX, cursorY int, ctx *engine.Gam
 		cursorX:    cursorX,
 		cursorY:    cursorY,
 		ctx:        ctx,
-		nextLineIndex: 0,
+		nextBlockIndex: 0,
 	}
 
 	// Load file content
@@ -81,27 +89,119 @@ func NewSpawnSystem(gameWidth, gameHeight, cursorX, cursorY int, ctx *engine.Gam
 	return s
 }
 
-// loadFileContent loads and parses the data file
+// loadFileContent loads and parses the data file into logical blocks
 func (s *SpawnSystem) loadFileContent() {
 	file, err := os.Open(dataFilePath)
 	if err != nil {
 		// If file doesn't exist or can't be read, use empty slice
 		// System will gracefully handle this by not spawning file-based blocks
-		s.fileLines = []string{}
+		s.codeBlocks = []CodeBlock{}
 		return
 	}
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
-	s.fileLines = []string{}
+	var rawLines []string
 
+	// First pass: filter empty lines and full-line comments
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		// Include non-empty lines
-		if len(line) > 0 {
-			s.fileLines = append(s.fileLines, line)
+		line := scanner.Text()
+		trimmed := strings.TrimSpace(line)
+
+		// Skip empty lines and full-line comments
+		if len(trimmed) == 0 || strings.HasPrefix(trimmed, "//") {
+			continue
+		}
+
+		rawLines = append(rawLines, trimmed)
+	}
+
+	// Second pass: group lines into logical blocks
+	s.codeBlocks = s.groupIntoBlocks(rawLines)
+}
+
+// groupIntoBlocks groups lines into logical code blocks
+func (s *SpawnSystem) groupIntoBlocks(lines []string) []CodeBlock {
+	if len(lines) == 0 {
+		return []CodeBlock{}
+	}
+
+	var blocks []CodeBlock
+	var currentBlock []string
+	var currentIndent int
+	var braceDepth int
+
+	for _, line := range lines {
+		indent := s.getIndentLevel(line)
+
+		// Update brace depth
+		braceDepth += strings.Count(line, "{")
+		braceDepth -= strings.Count(line, "}")
+
+		// Start new block if:
+		// 1. Current block is empty (first line)
+		// 2. Significant indent change (>= minIndentChange) and brace depth is 0
+		// 3. Current block reached max size
+		shouldStartNewBlock := len(currentBlock) == 0 ||
+			(len(currentBlock) >= maxBlockLines) ||
+			(braceDepth == 0 && len(currentBlock) >= minBlockLines &&
+				(indent < currentIndent-minIndentChange || indent > currentIndent+minIndentChange))
+
+		if shouldStartNewBlock && len(currentBlock) > 0 {
+			// Save current block if it meets minimum size
+			if len(currentBlock) >= minBlockLines {
+				blocks = append(blocks, CodeBlock{
+					Lines:       currentBlock,
+					IndentLevel: currentIndent,
+					HasBraces:   s.hasBracesInBlock(currentBlock),
+				})
+			}
+			currentBlock = []string{}
+			currentIndent = indent
+		}
+
+		// Add line to current block
+		currentBlock = append(currentBlock, line)
+		if len(currentBlock) == 1 {
+			currentIndent = indent
 		}
 	}
+
+	// Add final block if it meets minimum size
+	if len(currentBlock) >= minBlockLines {
+		blocks = append(blocks, CodeBlock{
+			Lines:       currentBlock,
+			IndentLevel: currentIndent,
+			HasBraces:   s.hasBracesInBlock(currentBlock),
+		})
+	}
+
+	return blocks
+}
+
+// getIndentLevel counts leading spaces/tabs
+func (s *SpawnSystem) getIndentLevel(line string) int {
+	indent := 0
+	for _, ch := range line {
+		if ch == ' ' {
+			indent++
+		} else if ch == '\t' {
+			indent += 4 // Count tabs as 4 spaces
+		} else {
+			break
+		}
+	}
+	return indent
+}
+
+// hasBracesInBlock checks if a block contains braces
+func (s *SpawnSystem) hasBracesInBlock(lines []string) bool {
+	for _, line := range lines {
+		if strings.Contains(line, "{") || strings.Contains(line, "}") {
+			return true
+		}
+	}
+	return false
 }
 
 // Priority returns the system's priority (lower runs first)
@@ -227,9 +327,9 @@ func (s *SpawnSystem) spawnSequence(world *engine.World) {
 		return
 	}
 
-	// Check if we have file content
-	if len(s.fileLines) == 0 {
-		// No file content, can't spawn file-based blocks
+	// Check if we have code blocks
+	if len(s.codeBlocks) == 0 {
+		// No code blocks, can't spawn file-based blocks
 		return
 	}
 
@@ -241,35 +341,29 @@ func (s *SpawnSystem) spawnSequence(world *engine.World) {
 	// Get style for this sequence
 	style := render.GetStyleForSequence(seqType, seqLevel)
 
-	// Select random block size (5-10 lines)
-	blockSize := rand.Intn(maxBlockLines-minBlockLines+1) + minBlockLines
-
-	// Get block of lines from file (wrap around if needed)
-	blockLines := s.getNextBlock(blockSize)
-	if len(blockLines) == 0 {
+	// Get next logical code block
+	block := s.getNextBlock()
+	if len(block.Lines) == 0 {
 		return
 	}
 
-	// Try to place each line on the screen
+	// Try to place each line from the block on the screen
 	placedCount := 0
-	for _, line := range blockLines {
+	for _, line := range block.Lines {
 		if s.placeLine(world, line, seqType, seqLevel, style) {
 			placedCount++
 		}
 	}
 }
 
-// getNextBlock retrieves the next block of lines from the file
-func (s *SpawnSystem) getNextBlock(blockSize int) []string {
-	if len(s.fileLines) == 0 {
-		return []string{}
+// getNextBlock retrieves the next logical code block
+func (s *SpawnSystem) getNextBlock() CodeBlock {
+	if len(s.codeBlocks) == 0 {
+		return CodeBlock{Lines: []string{}}
 	}
 
-	block := []string{}
-	for i := 0; i < blockSize; i++ {
-		block = append(block, s.fileLines[s.nextLineIndex])
-		s.nextLineIndex = (s.nextLineIndex + 1) % len(s.fileLines)
-	}
+	block := s.codeBlocks[s.nextBlockIndex]
+	s.nextBlockIndex = (s.nextBlockIndex + 1) % len(s.codeBlocks)
 	return block
 }
 

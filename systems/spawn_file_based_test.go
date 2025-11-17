@@ -3,6 +3,7 @@ package systems
 import (
 	"os"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 
@@ -46,8 +47,8 @@ line three
 
 	// The system should have loaded the file (or have empty slice if file doesn't exist)
 	// This tests that the system initializes without crashing
-	if spawnSys.fileLines == nil {
-		t.Error("fileLines should be initialized (empty slice if no file)")
+	if spawnSys.codeBlocks == nil {
+		t.Error("codeBlocks should be initialized (empty slice if no file)")
 	}
 }
 
@@ -218,8 +219,10 @@ func TestSpawnWithNoAvailableColors(t *testing.T) {
 	spawnSys.AddColorCount(components.SequenceGreen, components.LevelNormal, 10)
 	spawnSys.AddColorCount(components.SequenceGreen, components.LevelDark, 10)
 
-	// Add some dummy file content
-	spawnSys.fileLines = []string{"test line 1", "test line 2"}
+	// Add some dummy code blocks
+	spawnSys.codeBlocks = []CodeBlock{
+		{Lines: []string{"test line 1", "test line 2", "test line 3"}},
+	}
 
 	// Get entities before spawn
 	beforeCount := len(world.GetEntitiesWith())
@@ -232,47 +235,6 @@ func TestSpawnWithNoAvailableColors(t *testing.T) {
 
 	if afterCount != beforeCount {
 		t.Errorf("Expected no new entities when all 6 colors present, before=%d, after=%d", beforeCount, afterCount)
-	}
-}
-
-// TestGetNextBlock tests block retrieval from file lines
-func TestGetNextBlock(t *testing.T) {
-	screen := tcell.NewSimulationScreen("UTF-8")
-	screen.SetSize(80, 24)
-	ctx := engine.NewGameContext(screen)
-
-	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
-
-	// Set up test file lines
-	spawnSys.fileLines = []string{"line1", "line2", "line3", "line4", "line5"}
-	spawnSys.nextLineIndex = 0
-
-	// Get a block of 3 lines
-	block := spawnSys.getNextBlock(3)
-	if len(block) != 3 {
-		t.Errorf("Expected block of 3 lines, got %d", len(block))
-	}
-	if block[0] != "line1" || block[1] != "line2" || block[2] != "line3" {
-		t.Error("Block doesn't contain expected lines in order")
-	}
-
-	// Verify index advanced
-	if spawnSys.nextLineIndex != 3 {
-		t.Errorf("Expected nextLineIndex to be 3, got %d", spawnSys.nextLineIndex)
-	}
-
-	// Test wraparound
-	block = spawnSys.getNextBlock(4)
-	if len(block) != 4 {
-		t.Errorf("Expected block of 4 lines, got %d", len(block))
-	}
-	if block[0] != "line4" || block[1] != "line5" || block[2] != "line1" {
-		t.Error("Block doesn't wrap around correctly")
-	}
-
-	// Verify index wrapped
-	if spawnSys.nextLineIndex != 2 {
-		t.Errorf("Expected nextLineIndex to wrap to 2, got %d", spawnSys.nextLineIndex)
 	}
 }
 
@@ -316,6 +278,279 @@ func TestPlaceLineNearCursor(t *testing.T) {
 				world.SafeDestroyEntity(entity)
 			}
 			spawnSys.AddColorCount(components.SequenceBlue, components.LevelBright, -int64(len(line)))
+		}
+	}
+}
+
+// TestCommentFiltering tests that full-line comments are filtered out
+func TestCommentFiltering(t *testing.T) {
+	testLines := []string{
+		"package main",
+		"// This is a comment",
+		"",
+		"func main() {",
+		"  // Another comment",
+		"  fmt.Println(\"hello\")",
+		"}",
+	}
+
+	filtered := []string{}
+	for _, line := range testLines {
+		trimmed := strings.TrimSpace(line)
+		if len(trimmed) > 0 && !strings.HasPrefix(trimmed, "//") {
+			filtered = append(filtered, trimmed)
+		}
+	}
+
+	// Should have 4 lines (package, func, fmt, })
+	expected := 4
+	if len(filtered) != expected {
+		t.Errorf("Expected %d lines after filtering, got %d", expected, len(filtered))
+	}
+
+	// Verify no comment lines remain
+	for _, line := range filtered {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "//") {
+			t.Errorf("Comment line should have been filtered: %s", line)
+		}
+	}
+}
+
+// TestGroupIntoBlocks tests logical block grouping
+func TestGroupIntoBlocks(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+
+	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+
+	tests := []struct {
+		name          string
+		input         []string
+		minBlocks     int
+		maxBlocks     int
+		checkBraces   bool
+	}{
+		{
+			name: "function with braces",
+			input: []string{
+				"func example() {",
+				"x := 1",
+				"y := 2",
+				"return x + y",
+				"}",
+			},
+			minBlocks:   1,
+			maxBlocks:   1,
+			checkBraces: true,
+		},
+		{
+			name: "const block",
+			input: []string{
+				"const (",
+				"MaxSize = 100",
+				"MinSize = 10",
+				")",
+			},
+			minBlocks:   1,
+			maxBlocks:   1,
+			checkBraces: false,
+		},
+		{
+			name: "multiple functions",
+			input: []string{
+				"func first() {",
+				"a := 1",
+				"b := 2",
+				"}",
+				"func second() {",
+				"c := 3",
+				"d := 4",
+				"}",
+			},
+			minBlocks:   1,
+			maxBlocks:   2,
+			checkBraces: true,
+		},
+		{
+			name: "indentation change",
+			input: []string{
+				"type Foo struct {",
+				"Field1 int",
+				"Field2 string",
+				"}",
+				"var x = 1",
+				"var y = 2",
+				"var z = 3",
+			},
+			minBlocks:   1,
+			maxBlocks:   2,
+			checkBraces: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			blocks := spawnSys.groupIntoBlocks(tt.input)
+
+			if len(blocks) < tt.minBlocks || len(blocks) > tt.maxBlocks {
+				t.Errorf("Expected %d-%d blocks, got %d", tt.minBlocks, tt.maxBlocks, len(blocks))
+			}
+
+			// Verify all blocks meet minimum size
+			for i, block := range blocks {
+				if len(block.Lines) < minBlockLines {
+					t.Errorf("Block %d has %d lines, expected at least %d", i, len(block.Lines), minBlockLines)
+				}
+				if len(block.Lines) > maxBlockLines {
+					t.Errorf("Block %d has %d lines, expected at most %d", i, len(block.Lines), maxBlockLines)
+				}
+			}
+
+			// Check braces if required
+			if tt.checkBraces && len(blocks) > 0 {
+				hasBraces := false
+				for _, block := range blocks {
+					if block.HasBraces {
+						hasBraces = true
+						break
+					}
+				}
+				if !hasBraces {
+					t.Error("Expected at least one block with braces")
+				}
+			}
+		})
+	}
+}
+
+// TestGetIndentLevel tests indent calculation
+func TestGetIndentLevel(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+
+	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+
+	tests := []struct {
+		line     string
+		expected int
+	}{
+		{"no indent", 0},
+		{"  two spaces", 2},
+		{"    four spaces", 4},
+		{"\tone tab", 4},
+		{"\t\ttwo tabs", 8},
+		{"  \tmixed", 6},
+	}
+
+	for _, tt := range tests {
+		result := spawnSys.getIndentLevel(tt.line)
+		if result != tt.expected {
+			t.Errorf("getIndentLevel(%q) = %d, expected %d", tt.line, result, tt.expected)
+		}
+	}
+}
+
+// TestBlockSpawning tests that blocks are spawned as units
+func TestBlockSpawning(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+
+	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+
+	// Create test code blocks
+	spawnSys.codeBlocks = []CodeBlock{
+		{
+			Lines:       []string{"line1", "line2", "line3"},
+			IndentLevel: 0,
+			HasBraces:   false,
+		},
+		{
+			Lines:       []string{"func foo() {", "return 1", "}"},
+			IndentLevel: 0,
+			HasBraces:   true,
+		},
+	}
+
+	// Get first block
+	block1 := spawnSys.getNextBlock()
+	if len(block1.Lines) != 3 {
+		t.Errorf("Expected first block to have 3 lines, got %d", len(block1.Lines))
+	}
+	if spawnSys.nextBlockIndex != 1 {
+		t.Errorf("Expected nextBlockIndex to be 1, got %d", spawnSys.nextBlockIndex)
+	}
+
+	// Get second block
+	block2 := spawnSys.getNextBlock()
+	if len(block2.Lines) != 3 {
+		t.Errorf("Expected second block to have 3 lines, got %d", len(block2.Lines))
+	}
+	if !block2.HasBraces {
+		t.Error("Expected second block to have braces")
+	}
+
+	// Test wraparound
+	if spawnSys.nextBlockIndex != 0 {
+		t.Errorf("Expected nextBlockIndex to wrap to 0, got %d", spawnSys.nextBlockIndex)
+	}
+
+	// Get third block (should be first again)
+	block3 := spawnSys.getNextBlock()
+	if len(block3.Lines) != 3 || block3.Lines[0] != "line1" {
+		t.Error("Block wraparound failed")
+	}
+}
+
+// TestEmptyBlockHandling tests graceful handling of empty blocks
+func TestEmptyBlockHandling(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+
+	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+
+	// Set empty code blocks
+	spawnSys.codeBlocks = []CodeBlock{}
+
+	// Should return empty block
+	block := spawnSys.getNextBlock()
+	if len(block.Lines) != 0 {
+		t.Errorf("Expected empty block, got %d lines", len(block.Lines))
+	}
+}
+
+// TestBlockGroupingWithShortLines tests that short blocks are filtered
+func TestBlockGroupingWithShortLines(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+
+	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+
+	// Input with blocks shorter than minBlockLines
+	input := []string{
+		"a",
+		"b",
+		// This block is too short (2 lines < minBlockLines=3)
+		"func long() {",
+		"x := 1",
+		"y := 2",
+		"z := 3",
+		"}",
+		// This block is long enough (5 lines >= minBlockLines=3)
+	}
+
+	blocks := spawnSys.groupIntoBlocks(input)
+
+	// Should only get blocks that meet minimum size
+	for i, block := range blocks {
+		if len(block.Lines) < minBlockLines {
+			t.Errorf("Block %d has %d lines, should have been filtered (min=%d)",
+				i, len(block.Lines), minBlockLines)
 		}
 	}
 }

@@ -246,8 +246,10 @@ func TestPlaceLineLogicMatchesExclusionZone(t *testing.T) {
 
 	spawnSys := NewSpawnSystem(gameWidth, gameHeight, cursorX, cursorY, ctx)
 
-	// Set up some file content for spawning
-	spawnSys.fileLines = []string{"test", "line", "data"}
+	// Set up some code blocks for spawning
+	spawnSys.codeBlocks = []CodeBlock{
+		{Lines: []string{"test", "line", "data"}},
+	}
 
 	// Try to place a line multiple times and verify all placements respect exclusion zone
 	style := tcell.StyleDefault

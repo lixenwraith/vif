@@ -17,13 +17,10 @@ func TestSpawnSystemOnlyGeneratesBlueAndGreen(t *testing.T) {
 
 	spawnSystem := NewSpawnSystem(ctx.GameWidth, ctx.GameHeight, 0, 0, ctx)
 
-	// Add file content for spawning (required for new file-based system)
-	spawnSystem.fileLines = []string{
-		"test line one",
-		"test line two",
-		"test line three",
-		"test line four",
-		"test line five",
+	// Add code blocks for spawning (required for new file-based system)
+	spawnSystem.codeBlocks = []CodeBlock{
+		{Lines: []string{"test line one", "test line two", "test line three"}},
+		{Lines: []string{"test line four", "test line five", "test line six"}},
 	}
 
 	// Spawn many sequences to ensure statistical coverage
