@@ -197,6 +197,21 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 			return true
 		}
 
+		// Handle numbers for count (BEFORE DeleteOperator check, so d2w works)
+		if char >= '0' && char <= '9' {
+			// Special case: '0' is a motion (line start) when not following a number
+			// and not in delete operator mode
+			if char == '0' && h.ctx.MotionCount == 0 && !h.ctx.DeleteOperator {
+				ExecuteMotion(h.ctx, char, 1)
+				h.ctx.MotionCommand = ""
+				h.ctx.LastCommand = "0"
+				return true
+			}
+			h.ctx.MotionCount = h.ctx.MotionCount*10 + int(char-'0')
+			// Don't clear LastCommand when building count
+			return true
+		}
+
 		// Handle delete operator
 		if h.ctx.DeleteOperator {
 			// Build command string: [count]d[motion]
@@ -206,20 +221,6 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 			h.ctx.MotionCommand = ""
 			h.ctx.CommandPrefix = 0
 			h.ctx.LastCommand = cmd
-			return true
-		}
-
-		// Handle numbers for count
-		if char >= '0' && char <= '9' {
-			// Special case: '0' is a motion (line start) when not following a number
-			if char == '0' && h.ctx.MotionCount == 0 {
-				ExecuteMotion(h.ctx, char, 1)
-				h.ctx.MotionCommand = ""
-				h.ctx.LastCommand = "0"
-				return true
-			}
-			h.ctx.MotionCount = h.ctx.MotionCount*10 + int(char-'0')
-			// Don't clear LastCommand when building count
 			return true
 		}
 
