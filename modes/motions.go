@@ -233,12 +233,18 @@ func deleteCharAt(ctx *engine.GameContext, x, y int) {
 	}
 
 	// Check if it's a green or blue character (reset heat if so)
+	// Also check if it's a red character (play decay sound)
 	seqType := reflect.TypeOf(components.SequenceComponent{})
 	seqComp, ok := ctx.World.GetComponent(entity, seqType)
 	if ok {
 		seq := seqComp.(components.SequenceComponent)
 		if seq.Type == components.SequenceGreen || seq.Type == components.SequenceBlue {
 			ctx.ScoreIncrement = 0 // Reset heat
+		} else if seq.Type == components.SequenceRed {
+			// Play decay sound for red character deletion
+			if ctx.SoundManager != nil {
+				ctx.SoundManager.PlayDecay()
+			}
 		}
 	}
 

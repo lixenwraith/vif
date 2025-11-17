@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/core"
 )
 
@@ -80,6 +81,10 @@ type GameContext struct {
 	// Spawn tracking
 	LastSpawn time.Time
 	NextSeqID int
+
+	// Audio
+	SoundManager *audio.SoundManager
+	WasMaxHeat   bool // Track if we were at max heat last frame
 }
 
 // NewGameContext creates a new game context with initialized ECS world

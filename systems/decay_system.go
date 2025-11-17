@@ -20,10 +20,11 @@ type DecaySystem struct {
 	gameHeight    int
 	screenWidth   int
 	heatIncrement int
+	ctx           *engine.GameContext
 }
 
 // NewDecaySystem creates a new decay system
-func NewDecaySystem(gameWidth, gameHeight, screenWidth, heatIncrement int) *DecaySystem {
+func NewDecaySystem(gameWidth, gameHeight, screenWidth, heatIncrement int, ctx *engine.GameContext) *DecaySystem {
 	s := &DecaySystem{
 		animating:     false,
 		currentRow:    0,
@@ -32,6 +33,7 @@ func NewDecaySystem(gameWidth, gameHeight, screenWidth, heatIncrement int) *Deca
 		gameHeight:    gameHeight,
 		screenWidth:   screenWidth,
 		heatIncrement: heatIncrement,
+		ctx:           ctx,
 	}
 	s.startTicker()
 	return s
@@ -140,6 +142,10 @@ func (s *DecaySystem) applyDecayToRow(world *engine.World, row int) {
 				}
 			} else {
 				// Red at LevelDark - remove entity
+				// Play decay sound
+				if s.ctx.SoundManager != nil {
+					s.ctx.SoundManager.PlayDecay()
+				}
 				world.DestroyEntity(entity)
 			}
 		}

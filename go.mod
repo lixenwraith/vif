@@ -4,7 +4,10 @@ go 1.24.0
 
 toolchain go1.24.7
 
-require github.com/gdamore/tcell/v2 v2.9.0
+require (
+	github.com/gdamore/tcell/v2 v2.9.0
+	github.com/gopxl/beep v1.4.1
+)
 
 require (
 	github.com/clipperhouse/uax29/v2 v2.2.0 // indirect
