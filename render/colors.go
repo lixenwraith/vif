@@ -38,7 +38,7 @@ var (
 	RgbModeNormalBg = tcell.NewRGBColor(135, 206, 250) // Light sky blue
 	RgbModeInsertBg = tcell.NewRGBColor(144, 238, 144) // Light grass green
 	RgbScoreBg      = tcell.NewRGBColor(255, 223, 100) // Light golden yellow
-	RgbTrailBg      = tcell.NewRGBColor(147, 112, 219) // Medium purple for trail timer
+	RgbBoostBg      = tcell.NewRGBColor(255, 192, 203) // Pink for boost timer
 	RgbStatusText   = tcell.NewRGBColor(0, 0, 0)       // Dark text for status
 )
 

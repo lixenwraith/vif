@@ -25,8 +25,8 @@ const (
 
 // Game Timing Constants
 const (
-	// TrailExtensionDuration is how long each blue character extends the trail
-	TrailExtensionDuration = 1 * time.Second
+	// BoostExtensionDuration is how long each blue character extends the boost
+	BoostExtensionDuration = 1 * time.Second
 )
 
 // Decay System Constants

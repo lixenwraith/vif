@@ -13,8 +13,7 @@
 Systems execute in priority order (lower = earlier):
 1. **Input/Score (10)**: Process user input, update score
 2. **Spawn (10)**: Generate new character sequences
-3. **Trail (20)**: Update visual effects
-4. **Decay (30)**: Apply character degradation
+3. **Decay (30)**: Apply character degradation
 
 ### Spatial Indexing
 - Primary index: `World.spatialIndex[y][x] -> Entity`
@@ -27,15 +26,14 @@ Systems execute in priority order (lower = earlier):
 Component (marker interface)
 ├── PositionComponent {X, Y int}
 ├── CharacterComponent {Rune, Style}
-├── SequenceComponent {ID, Index, Type, Level}
-└── TrailComponent {Intensity, Timestamp}
+└── SequenceComponent {ID, Index, Type, Level}
 ```
 
 ## Rendering Pipeline
 
 1. Clear dirty regions (when implemented)
 2. Draw static UI (heat meter, line numbers)
-3. Draw game entities (characters, trails)
+3. Draw game entities (characters)
 4. Draw overlays (ping, decay animation)
 5. Draw cursor (topmost layer)
 
@@ -93,7 +91,7 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 2. **Component Consistency**: Entity with SequenceComponent MUST have Position and Character
 3. **Cursor Bounds**: `0 <= CursorX < GameWidth && 0 <= CursorY < GameHeight`
 4. **Score Monotonicity**: Score can decrease (red chars) but ScoreIncrement >= 0
-5. **Trail Lifecycle**: Trail intensity decreases monotonically until destruction
+5. **Boost Mechanic**: Blue characters trigger heat multiplier (x2) for limited time
 
 ## Error Handling Strategy
 

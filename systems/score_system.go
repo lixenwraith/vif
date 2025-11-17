@@ -84,11 +84,16 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		if seq.Type == components.SequenceRed {
 			s.ctx.ScoreIncrement = 0
 		} else {
-			s.ctx.ScoreIncrement++
+			// Apply heat gain with boost multiplier
+			heatGain := 1
+			if s.ctx.BoostEnabled {
+				heatGain = 2
+			}
+			s.ctx.ScoreIncrement += heatGain
 		}
 		s.lastCorrect = time.Now()
 
-		// Calculate points: increment * level_multiplier * (trail?2:1) * (red?-1:1)
+		// Calculate points: increment * level_multiplier * (red?-1:1)
 		levelMultipliers := map[components.SequenceLevel]int{
 			components.LevelDark:   1,
 			components.LevelNormal: 2,
@@ -97,11 +102,6 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		levelMult := levelMultipliers[seq.Level]
 		points := s.ctx.ScoreIncrement * levelMult
 
-		// Double points if trail is active
-		if s.ctx.TrailEnabled {
-			points *= 2
-		}
-
 		// Red characters give negative points
 		if seq.Type == components.SequenceRed {
 			points = -points
@@ -109,9 +109,9 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 
 		s.ctx.Score += points
 
-		// Blue character adds trail time
+		// Blue character adds boost time
 		if seq.Type == components.SequenceBlue {
-			s.extendTrail(constants.TrailExtensionDuration)
+			s.extendBoost(constants.BoostExtensionDuration)
 		}
 
 		// Trigger score blink with character color
@@ -131,19 +131,10 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		// Destroy the character entity
 		world.DestroyEntity(entity)
 
-		// Store old cursor position for trail effect
-		oldCursorX := s.ctx.CursorX
-		oldCursorY := s.ctx.CursorY
-
 		// Move cursor right
 		s.ctx.CursorX++
 		if s.ctx.CursorX >= s.ctx.GameWidth {
 			s.ctx.CursorX = s.ctx.GameWidth - 1
-		}
-
-		// Create trail visual effect if trail is active
-		if s.ctx.TrailEnabled {
-			AddTrail(world, oldCursorX, oldCursorY, s.ctx.CursorX, s.ctx.CursorY)
 		}
 
 	} else {
@@ -154,25 +145,25 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 	}
 }
 
-// extendTrail extends the trail timer by the given duration
-func (s *ScoreSystem) extendTrail(duration time.Duration) {
-	if s.ctx.TrailTimer != nil {
-		s.ctx.TrailTimer.Stop()
+// extendBoost extends the boost timer by the given duration
+func (s *ScoreSystem) extendBoost(duration time.Duration) {
+	if s.ctx.BoostTimer != nil {
+		s.ctx.BoostTimer.Stop()
 	}
 
-	// If trail is already active, add to existing end time; otherwise start fresh
+	// If boost is already active, add to existing end time; otherwise start fresh
 	now := time.Now()
-	wasActive := s.ctx.TrailEnabled && s.ctx.TrailEndTime.After(now)
+	wasActive := s.ctx.BoostEnabled && s.ctx.BoostEndTime.After(now)
 	if wasActive {
-		s.ctx.TrailEndTime = s.ctx.TrailEndTime.Add(duration)
+		s.ctx.BoostEndTime = s.ctx.BoostEndTime.Add(duration)
 	} else {
-		s.ctx.TrailEndTime = now.Add(duration)
+		s.ctx.BoostEndTime = now.Add(duration)
 	}
-	s.ctx.TrailEnabled = true
+	s.ctx.BoostEnabled = true
 
 	// Calculate remaining time for the timer
-	remaining := s.ctx.TrailEndTime.Sub(now)
-	s.ctx.TrailTimer = time.AfterFunc(remaining, func() {
-		s.ctx.TrailEnabled = false
+	remaining := s.ctx.BoostEndTime.Sub(now)
+	s.ctx.BoostTimer = time.AfterFunc(remaining, func() {
+		s.ctx.BoostEnabled = false
 	})
 }

@@ -61,10 +61,10 @@ type GameContext struct {
 	ScoreBlinkColor  tcell.Color
 	ScoreBlinkTime   time.Time
 
-	// Trail state
-	TrailEnabled bool
-	TrailTimer   *time.Timer
-	TrailEndTime time.Time
+	// Boost state (heat multiplier mechanic)
+	BoostEnabled bool
+	BoostTimer   *time.Timer
+	BoostEndTime time.Time
 
 	// Ping coordinates feature
 	PingActive    bool

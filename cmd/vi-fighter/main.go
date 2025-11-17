@@ -39,9 +39,6 @@ func main() {
 	spawnSystem := systems.NewSpawnSystem(ctx.GameWidth, ctx.GameHeight, ctx.CursorX, ctx.CursorY)
 	ctx.World.AddSystem(spawnSystem)
 
-	trailSystem := systems.NewTrailSystem()
-	ctx.World.AddSystem(trailSystem)
-
 	decaySystem := systems.NewDecaySystem(ctx.GameWidth, ctx.GameHeight, ctx.Width, ctx.ScoreIncrement, ctx)
 	ctx.World.AddSystem(decaySystem)
 
