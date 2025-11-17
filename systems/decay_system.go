@@ -22,6 +22,7 @@ type DecaySystem struct {
 	screenWidth   int
 	heatIncrement int
 	ctx           *engine.GameContext
+	spawnSystem   *SpawnSystem
 }
 
 // NewDecaySystem creates a new decay system
@@ -38,6 +39,11 @@ func NewDecaySystem(gameWidth, gameHeight, screenWidth, heatIncrement int, ctx *
 	}
 	s.startTicker()
 	return s
+}
+
+// SetSpawnSystem sets the spawn system reference for color counter updates
+func (s *DecaySystem) SetSpawnSystem(spawnSystem *SpawnSystem) {
+	s.spawnSystem = spawnSystem
 }
 
 // Priority returns the system's priority
@@ -105,6 +111,10 @@ func (s *DecaySystem) applyDecayToRow(world *engine.World, row int) {
 		seqComp, _ := world.GetComponent(entity, seqType)
 		seq := seqComp.(components.SequenceComponent)
 
+		// Store old values for counter updates
+		oldType := seq.Type
+		oldLevel := seq.Level
+
 		// Apply decay logic
 		if seq.Level > components.LevelDark {
 			// Reduce level by 1 and update style
@@ -117,6 +127,12 @@ func (s *DecaySystem) applyDecayToRow(world *engine.World, row int) {
 				char := charComp.(components.CharacterComponent)
 				char.Style = render.GetStyleForSequence(seq.Type, seq.Level)
 				world.AddComponent(entity, char)
+			}
+
+			// Update counters: decrement old level, increment new level (only for Blue/Green)
+			if s.spawnSystem != nil && (oldType == components.SequenceBlue || oldType == components.SequenceGreen) {
+				s.spawnSystem.AddColorCount(oldType, oldLevel, -1)
+				s.spawnSystem.AddColorCount(seq.Type, seq.Level, 1)
 			}
 		} else {
 			// Level is LevelDark - decay color: Blue → Green → Red → disappear
@@ -131,6 +147,12 @@ func (s *DecaySystem) applyDecayToRow(world *engine.World, row int) {
 					char.Style = render.GetStyleForSequence(seq.Type, seq.Level)
 					world.AddComponent(entity, char)
 				}
+
+				// Update counters: Blue Dark → Green Bright
+				if s.spawnSystem != nil {
+					s.spawnSystem.AddColorCount(oldType, oldLevel, -1)
+					s.spawnSystem.AddColorCount(seq.Type, seq.Level, 1)
+				}
 			} else if seq.Type == components.SequenceGreen {
 				seq.Type = components.SequenceRed
 				seq.Level = components.LevelBright
@@ -142,8 +164,13 @@ func (s *DecaySystem) applyDecayToRow(world *engine.World, row int) {
 					char.Style = render.GetStyleForSequence(seq.Type, seq.Level)
 					world.AddComponent(entity, char)
 				}
+
+				// Update counters: Green Dark → Red Bright (only decrement Green, Red is not tracked)
+				if s.spawnSystem != nil {
+					s.spawnSystem.AddColorCount(oldType, oldLevel, -1)
+				}
 			} else {
-				// Red at LevelDark - remove entity
+				// Red at LevelDark - remove entity (no counter change, Red is not tracked)
 				// Remove from spatial index before destroying
 				world.RemoveFromSpatialIndex(pos.X, pos.Y)
 				world.DestroyEntity(entity)

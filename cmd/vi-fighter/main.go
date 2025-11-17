@@ -45,8 +45,10 @@ func main() {
 	goldSequenceSystem := systems.NewGoldSequenceSystem(ctx, decaySystem, ctx.GameWidth, ctx.GameHeight, ctx.CursorX, ctx.CursorY)
 	ctx.World.AddSystem(goldSequenceSystem)
 
-	// Wire up the gold sequence system reference in score system
+	// Wire up system references
 	scoreSystem.SetGoldSequenceSystem(goldSequenceSystem)
+	scoreSystem.SetSpawnSystem(spawnSystem)
+	decaySystem.SetSpawnSystem(spawnSystem)
 
 	// Create renderer
 	renderer := render.NewTerminalRenderer(

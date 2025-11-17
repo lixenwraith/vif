@@ -16,6 +16,7 @@ type ScoreSystem struct {
 	lastCorrect       time.Time
 	errorCursorSet    bool
 	goldSequenceSystem *GoldSequenceSystem
+	spawnSystem       *SpawnSystem
 }
 
 // NewScoreSystem creates a new score system
@@ -34,6 +35,11 @@ func (s *ScoreSystem) Priority() int {
 // SetGoldSequenceSystem sets the gold sequence system reference
 func (s *ScoreSystem) SetGoldSequenceSystem(goldSystem *GoldSequenceSystem) {
 	s.goldSequenceSystem = goldSystem
+}
+
+// SetSpawnSystem sets the spawn system reference for color counter updates
+func (s *ScoreSystem) SetSpawnSystem(spawnSystem *SpawnSystem) {
+	s.spawnSystem = spawnSystem
 }
 
 // Update runs the score system (unused for now, character typing is event-driven)
@@ -136,6 +142,11 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		fgColor, _, _ := render.GetStyleForSequence(seq.Type, seq.Level).Decompose()
 		s.ctx.SetScoreBlinkColor(fgColor)
 		s.ctx.SetScoreBlinkTime(now)
+
+		// Decrement color counter (only for Blue and Green, not Red or Gold)
+		if s.spawnSystem != nil && (seq.Type == components.SequenceBlue || seq.Type == components.SequenceGreen) {
+			s.spawnSystem.AddColorCount(seq.Type, seq.Level, -1)
+		}
 
 		// Remove entity from spatial index first
 		posType := reflect.TypeOf(components.PositionComponent{})

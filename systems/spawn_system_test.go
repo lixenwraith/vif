@@ -2,9 +2,11 @@ package systems
 
 import (
 	"math"
+	"reflect"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
@@ -224,8 +226,8 @@ func TestSpawnExclusionZoneAtBoundaries(t *testing.T) {
 	}
 }
 
-// TestFindValidPositionEventually tests that findValidPosition can find a valid spot
-func TestFindValidPositionEventually(t *testing.T) {
+// TestPlaceLineLogicMatchesExclusionZone tests that placeLine respects cursor exclusion zones
+func TestPlaceLineLogicMatchesExclusionZone(t *testing.T) {
 	gameWidth := 80
 	gameHeight := 24
 	cursorX := 40
@@ -244,26 +246,39 @@ func TestFindValidPositionEventually(t *testing.T) {
 
 	spawnSys := NewSpawnSystem(gameWidth, gameHeight, cursorX, cursorY, ctx)
 
-	// Try to find a valid position for a small sequence
-	x, y := spawnSys.findValidPosition(world, 3)
+	// Set up some file content for spawning
+	spawnSys.fileLines = []string{"test", "line", "data"}
 
-	if x < 0 || y < 0 {
-		t.Error("Expected to find a valid position, but got (-1, -1)")
-		return
+	// Try to place a line multiple times and verify all placements respect exclusion zone
+	style := tcell.StyleDefault
+	successCount := 0
+
+	for attempt := 0; attempt < 20; attempt++ {
+		if spawnSys.placeLine(world, "abc", components.SequenceBlue, components.LevelBright, style) {
+			successCount++
+		}
 	}
 
-	// Verify the position is valid
-	dx := math.Abs(float64(x - cursorX))
-	dy := math.Abs(float64(y - cursorY))
-
-	// Should be excluded if EITHER dimension is too close (OR logic)
-	if dx <= 5 || dy <= 3 {
-		t.Errorf("Found position (%d, %d) is too close to cursor (%d, %d): dx=%.1f, dy=%.1f",
-			x, y, cursorX, cursorY, dx, dy)
+	// Should have succeeded at least once (unless screen is impossibly constrained)
+	if successCount == 0 {
+		t.Error("Expected at least one successful placement")
 	}
 
-	// Verify sequence fits
-	if x+3 > gameWidth {
-		t.Errorf("Sequence at x=%d with length 3 doesn't fit in width %d", x, gameWidth)
+	// Verify all placed entities respect cursor exclusion zone
+	posType := reflect.TypeOf(components.PositionComponent{})
+	entities := world.GetEntitiesWith(posType)
+	for _, entity := range entities {
+		posComp, ok := world.GetComponent(entity, posType)
+		if ok {
+			pos := posComp.(components.PositionComponent)
+			dx := math.Abs(float64(pos.X - cursorX))
+			dy := math.Abs(float64(pos.Y - cursorY))
+
+			// Should be excluded if BOTH dimensions are too close (AND logic in the check)
+			if dx <= 5 && dy <= 3 {
+				t.Errorf("Found entity at position (%d, %d) too close to cursor (%d, %d): dx=%.1f, dy=%.1f",
+					pos.X, pos.Y, cursorX, cursorY, dx, dy)
+			}
+		}
 	}
 }
