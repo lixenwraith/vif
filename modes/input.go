@@ -101,6 +101,13 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 		h.ctx.SetScoreIncrement(0)
 		return true
 	case tcell.KeyRune:
+		// SPACE key: move right without typing, no heat contribution
+		if ev.Rune() == ' ' {
+			if h.ctx.CursorX < h.ctx.GameWidth-1 {
+				h.ctx.CursorX++
+			}
+			return true
+		}
 		// Delegate character typing to score system
 		h.scoreSystem.HandleCharacterTyping(h.ctx.World, h.ctx.CursorX, h.ctx.CursorY, ev.Rune())
 	}

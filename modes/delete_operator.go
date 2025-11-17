@@ -23,23 +23,57 @@ func ExecuteDeleteMotion(ctx *engine.GameContext, motion rune, count int) {
 	case '0': // d0 - delete to line start
 		deletedGreenOrBlue = deleteRange(ctx, 0, startX, startY)
 
+	case '^': // d^ - delete to first non-whitespace
+		firstNonWS := findFirstNonWhitespace(ctx)
+		deletedGreenOrBlue = deleteRange(ctx, firstNonWS, startX, startY)
+
 	case '$': // d$ - delete to line end
 		endX := findLineEnd(ctx)
 		deletedGreenOrBlue = deleteRange(ctx, startX, endX, startY)
 
-	case 'w': // dw - delete word
-		endX := findNextWordStart(ctx)
+	case 'w': // dw - delete word (vim-style)
+		endX := findNextWordStartVim(ctx)
 		if endX > startX {
 			deletedGreenOrBlue = deleteRange(ctx, startX, endX-1, startY)
 		}
 
-	case 'e': // de - delete to end of word
-		endX := findWordEnd(ctx)
+	case 'W': // dW - delete WORD (space-delimited)
+		endX := findNextWORDStart(ctx)
+		if endX > startX {
+			deletedGreenOrBlue = deleteRange(ctx, startX, endX-1, startY)
+		}
+
+	case 'e': // de - delete to end of word (vim-style)
+		endX := findWordEndVim(ctx)
 		deletedGreenOrBlue = deleteRange(ctx, startX, endX, startY)
 
-	case 'b': // db - delete word backward
-		startWordX := findPrevWordStart(ctx)
+	case 'E': // dE - delete to end of WORD (space-delimited)
+		endX := findWORDEnd(ctx)
+		deletedGreenOrBlue = deleteRange(ctx, startX, endX, startY)
+
+	case 'b': // db - delete word backward (vim-style)
+		startWordX := findPrevWordStartVim(ctx)
 		deletedGreenOrBlue = deleteRange(ctx, startWordX, startX, startY)
+
+	case 'B': // dB - delete WORD backward (space-delimited)
+		startWordX := findPrevWORDStart(ctx)
+		deletedGreenOrBlue = deleteRange(ctx, startWordX, startX, startY)
+
+	case '{': // d{ - delete to previous empty line
+		targetY := findPrevEmptyLine(ctx)
+		for y := targetY; y <= startY; y++ {
+			if deleteAllOnLine(ctx, y) {
+				deletedGreenOrBlue = true
+			}
+		}
+
+	case '}': // d} - delete to next empty line
+		targetY := findNextEmptyLine(ctx)
+		for y := startY; y <= targetY; y++ {
+			if deleteAllOnLine(ctx, y) {
+				deletedGreenOrBlue = true
+			}
+		}
 
 	case 'G': // dG - delete to end of file
 		// Delete from cursor to end of screen
