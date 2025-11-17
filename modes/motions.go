@@ -16,27 +16,57 @@ func ExecuteMotion(ctx *engine.GameContext, cmd rune, count int) {
 	switch cmd {
 	case 'w': // Word forward (vim-style: considers punctuation)
 		for i := 0; i < count; i++ {
+			prevX := ctx.CursorX
 			ctx.CursorX = findNextWordStartVim(ctx)
+			// Break if cursor didn't move (can't advance further)
+			if ctx.CursorX == prevX {
+				break
+			}
 		}
 	case 'W': // WORD forward (space-delimited)
 		for i := 0; i < count; i++ {
+			prevX := ctx.CursorX
 			ctx.CursorX = findNextWORDStart(ctx)
+			// Break if cursor didn't move (can't advance further)
+			if ctx.CursorX == prevX {
+				break
+			}
 		}
 	case 'e': // Word end (vim-style: considers punctuation)
 		for i := 0; i < count; i++ {
+			prevX := ctx.CursorX
 			ctx.CursorX = findWordEndVim(ctx)
+			// Break if cursor didn't move (can't advance further)
+			if ctx.CursorX == prevX {
+				break
+			}
 		}
 	case 'E': // WORD end (space-delimited)
 		for i := 0; i < count; i++ {
+			prevX := ctx.CursorX
 			ctx.CursorX = findWORDEnd(ctx)
+			// Break if cursor didn't move (can't advance further)
+			if ctx.CursorX == prevX {
+				break
+			}
 		}
 	case 'b': // Word backward (vim-style: considers punctuation)
 		for i := 0; i < count; i++ {
+			prevX := ctx.CursorX
 			ctx.CursorX = findPrevWordStartVim(ctx)
+			// Break if cursor didn't move (can't advance further)
+			if ctx.CursorX == prevX {
+				break
+			}
 		}
 	case 'B': // WORD backward (space-delimited)
 		for i := 0; i < count; i++ {
+			prevX := ctx.CursorX
 			ctx.CursorX = findPrevWORDStart(ctx)
+			// Break if cursor didn't move (can't advance further)
+			if ctx.CursorX == prevX {
+				break
+			}
 		}
 	case '0': // Line start
 		ctx.CursorX = 0
@@ -52,11 +82,21 @@ func ExecuteMotion(ctx *engine.GameContext, cmd rune, count int) {
 		ctx.CursorY = ctx.GameHeight - 1
 	case '{': // Previous empty line (paragraph backward)
 		for i := 0; i < count; i++ {
+			prevY := ctx.CursorY
 			ctx.CursorY = findPrevEmptyLine(ctx)
+			// Break if cursor didn't move (can't advance further)
+			if ctx.CursorY == prevY {
+				break
+			}
 		}
 	case '}': // Next empty line (paragraph forward)
 		for i := 0; i < count; i++ {
+			prevY := ctx.CursorY
 			ctx.CursorY = findNextEmptyLine(ctx)
+			// Break if cursor didn't move (can't advance further)
+			if ctx.CursorY == prevY {
+				break
+			}
 		}
 	case 'G': // Bottom
 		ctx.CursorY = ctx.GameHeight - 1
@@ -70,30 +110,45 @@ func ExecuteMotion(ctx *engine.GameContext, cmd rune, count int) {
 		for i := 0; i < count; i++ {
 			if ctx.CursorX > 0 {
 				ctx.CursorX--
+			} else {
+				// Break early if we can't move further left
+				break
 			}
 		}
 	case 'j': // Down
 		for i := 0; i < count; i++ {
 			if ctx.CursorY < ctx.GameHeight-1 {
 				ctx.CursorY++
+			} else {
+				// Break early if we can't move further down
+				break
 			}
 		}
 	case 'k': // Up
 		for i := 0; i < count; i++ {
 			if ctx.CursorY > 0 {
 				ctx.CursorY--
+			} else {
+				// Break early if we can't move further up
+				break
 			}
 		}
 	case 'l': // Right
 		for i := 0; i < count; i++ {
 			if ctx.CursorX < ctx.GameWidth-1 {
 				ctx.CursorX++
+			} else {
+				// Break early if we can't move further right
+				break
 			}
 		}
 	case ' ': // Space - behaves like 'l' in normal mode
 		for i := 0; i < count; i++ {
 			if ctx.CursorX < ctx.GameWidth-1 {
 				ctx.CursorX++
+			} else {
+				// Break early if we can't move further right
+				break
 			}
 		}
 	}

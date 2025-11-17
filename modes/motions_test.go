@@ -679,6 +679,309 @@ func TestWORDMotionsConsecutive(t *testing.T) {
 	}
 }
 
+// Test motion count handling - ensure each iteration starts from updated position
+func TestMotionCountHandling(t *testing.T) {
+	ctx := createTestContext()
+
+	// Setup: "one two three four five" at y=0
+	// Positions: o(0)n(1)e(2) (3) t(4)w(5)o(6) (7) t(8)h(9)r(10)e(11)e(12) (13) f(14)o(15)u(16)r(17) (18) f(19)i(20)v(21)e(22)
+	text := "one two three four five"
+	for i, r := range text {
+		if r != ' ' {
+			placeChar(ctx, i, 0, r)
+		}
+	}
+
+	// Test 3w - should move 3 words forward
+	ctx.CursorX = 0
+	ctx.CursorY = 0
+	ExecuteMotion(ctx, 'w', 3)
+	// First w: 0 -> 4 ('t' in "two")
+	// Second w: 4 -> 8 ('t' in "three")
+	// Third w: 8 -> 14 ('f' in "four")
+	if ctx.CursorX != 14 {
+		t.Errorf("3w motion: expected X=14 (at 'f' in 'four'), got X=%d", ctx.CursorX)
+	}
+
+	// Test 2b - should move 2 words backward
+	ExecuteMotion(ctx, 'b', 2)
+	// First b: 14 -> 8 ('t' in "three")
+	// Second b: 8 -> 4 ('t' in "two")
+	if ctx.CursorX != 4 {
+		t.Errorf("2b motion: expected X=4 (at 't' in 'two'), got X=%d", ctx.CursorX)
+	}
+
+	// Test 2e - should move to end of 2nd word ahead
+	ctx.CursorX = 0
+	ExecuteMotion(ctx, 'e', 2)
+	// First e: 0 -> 2 (end of "one")
+	// Second e: 2 -> 6 (end of "two")
+	if ctx.CursorX != 6 {
+		t.Errorf("2e motion: expected X=6 (at 'o' in 'two'), got X=%d", ctx.CursorX)
+	}
+
+	// Test 2W - WORD forward with count
+	ctx.CursorX = 0
+	ExecuteMotion(ctx, 'W', 2)
+	// First W: 0 -> 4 ('t' in "two")
+	// Second W: 4 -> 8 ('t' in "three")
+	if ctx.CursorX != 8 {
+		t.Errorf("2W motion: expected X=8 (at 't' in 'three'), got X=%d", ctx.CursorX)
+	}
+
+	// Test 2E - WORD end with count
+	ctx.CursorX = 0
+	ExecuteMotion(ctx, 'E', 2)
+	// First E: 0 -> 2 (end of "one")
+	// Second E: 2 -> 6 (end of "two")
+	if ctx.CursorX != 6 {
+		t.Errorf("2E motion: expected X=6 (at 'o' in 'two'), got X=%d", ctx.CursorX)
+	}
+
+	// Test 2B - WORD backward with count
+	ctx.CursorX = 14 // at 'f' in "four"
+	ExecuteMotion(ctx, 'B', 2)
+	// First B: 14 -> 8 ('t' in "three")
+	// Second B: 8 -> 4 ('t' in "two")
+	if ctx.CursorX != 4 {
+		t.Errorf("2B motion: expected X=4 (at 't' in 'two'), got X=%d", ctx.CursorX)
+	}
+}
+
+// Test motion count boundary conditions - large counts should stop at boundary
+func TestMotionCountBoundaryHandling(t *testing.T) {
+	ctx := createTestContext()
+
+	// Setup: "one two three" at y=0
+	text := "one two three"
+	for i, r := range text {
+		if r != ' ' {
+			placeChar(ctx, i, 0, r)
+		}
+	}
+
+	// Test 100w - should stop at last word, not loop unnecessarily
+	ctx.CursorX = 0
+	ctx.CursorY = 0
+	ExecuteMotion(ctx, 'w', 100)
+	// Should stop at 't' in "three" (position 8)
+	if ctx.CursorX != 8 {
+		t.Errorf("100w motion: expected X=8 (at 't' in 'three'), got X=%d", ctx.CursorX)
+	}
+
+	// Test 100b - should stop at first word
+	ExecuteMotion(ctx, 'b', 100)
+	// Should stop at 'o' in "one" (position 0)
+	if ctx.CursorX != 0 {
+		t.Errorf("100b motion: expected X=0 (at 'o' in 'one'), got X=%d", ctx.CursorX)
+	}
+
+	// Test 100h - should stop at left edge
+	ctx.CursorX = 5
+	ExecuteMotion(ctx, 'h', 100)
+	if ctx.CursorX != 0 {
+		t.Errorf("100h motion: expected X=0 (left edge), got X=%d", ctx.CursorX)
+	}
+
+	// Test 100l - should stop at right edge
+	ctx.CursorX = 5
+	ExecuteMotion(ctx, 'l', 100)
+	if ctx.CursorX != ctx.GameWidth-1 {
+		t.Errorf("100l motion: expected X=%d (right edge), got X=%d", ctx.GameWidth-1, ctx.CursorX)
+	}
+
+	// Test 100j - should stop at bottom
+	ctx.CursorY = 5
+	ExecuteMotion(ctx, 'j', 100)
+	if ctx.CursorY != ctx.GameHeight-1 {
+		t.Errorf("100j motion: expected Y=%d (bottom), got Y=%d", ctx.GameHeight-1, ctx.CursorY)
+	}
+
+	// Test 100k - should stop at top
+	ctx.CursorY = 5
+	ExecuteMotion(ctx, 'k', 100)
+	if ctx.CursorY != 0 {
+		t.Errorf("100k motion: expected Y=0 (top), got Y=%d", ctx.CursorY)
+	}
+
+	// Test 100 space - should stop at right edge
+	ctx.CursorX = 5
+	ExecuteMotion(ctx, ' ', 100)
+	if ctx.CursorX != ctx.GameWidth-1 {
+		t.Errorf("100 space motion: expected X=%d (right edge), got X=%d", ctx.GameWidth-1, ctx.CursorX)
+	}
+}
+
+// Test paragraph motion count handling
+func TestParagraphMotionCountHandling(t *testing.T) {
+	ctx := createTestContext()
+
+	// Setup: Text on lines 2, 5, 8, 11 (empty: 0, 1, 3, 4, 6, 7, 9, 10, 12+)
+	placeChar(ctx, 0, 2, 'a')
+	placeChar(ctx, 0, 5, 'b')
+	placeChar(ctx, 0, 8, 'c')
+	placeChar(ctx, 0, 11, 'd')
+
+	// Test 2} - jump forward 2 empty lines
+	ctx.CursorY = 2
+	ExecuteMotion(ctx, '}', 2)
+	// First }: 2 -> 3 (first empty line)
+	// Second }: 3 -> 4 (second empty line)
+	if ctx.CursorY != 4 {
+		t.Errorf("2} motion: expected Y=4, got Y=%d", ctx.CursorY)
+	}
+
+	// Test 3} - jump forward 3 empty lines
+	ctx.CursorY = 2
+	ExecuteMotion(ctx, '}', 3)
+	// First }: 2 -> 3
+	// Second }: 3 -> 4
+	// Third }: 4 -> 6
+	if ctx.CursorY != 6 {
+		t.Errorf("3} motion: expected Y=6, got Y=%d", ctx.CursorY)
+	}
+
+	// Test 2{ - jump backward 2 empty lines
+	ctx.CursorY = 11
+	ExecuteMotion(ctx, '{', 2)
+	// First {: 11 -> 10
+	// Second {: 10 -> 9
+	if ctx.CursorY != 9 {
+		t.Errorf("2{ motion: expected Y=9, got Y=%d", ctx.CursorY)
+	}
+
+	// Test 100{ - should stop at top
+	ctx.CursorY = 5
+	ExecuteMotion(ctx, '{', 100)
+	if ctx.CursorY != 0 {
+		t.Errorf("100{ motion: expected Y=0 (top), got Y=%d", ctx.CursorY)
+	}
+
+	// Test 100} - should stop when can't find more empty lines
+	ctx.CursorY = 2
+	ExecuteMotion(ctx, '}', 100)
+	// Should stop when it can't find any more empty lines
+	if ctx.CursorY < 12 {
+		t.Errorf("100} motion: expected Y>=12 (stopped at boundary), got Y=%d", ctx.CursorY)
+	}
+}
+
+// Test motion count with mixed word and punctuation
+func TestMotionCountMixedContent(t *testing.T) {
+	ctx := createTestContext()
+
+	// Setup: "foo, bar, baz, qux" at y=0
+	// Positions: f(0)o(1)o(2),(3) (4) b(5)a(6)r(7),(8) (9) b(10)a(11)z(12),(13) (14) q(15)u(16)x(17)
+	text := "foo, bar, baz, qux"
+	for i, r := range text {
+		if r != ' ' {
+			placeChar(ctx, i, 0, r)
+		}
+	}
+
+	// Test 4w - move through words and punctuation
+	ctx.CursorX = 0
+	ctx.CursorY = 0
+	ExecuteMotion(ctx, 'w', 4)
+	// First w: 0 -> 3 (',')
+	// Second w: 3 -> 5 ('b')
+	// Third w: 5 -> 8 (',')
+	// Fourth w: 8 -> 10 ('b')
+	if ctx.CursorX != 10 {
+		t.Errorf("4w with punctuation: expected X=10 (at 'b' in 'baz'), got X=%d", ctx.CursorX)
+	}
+
+	// Test 6w - should reach end
+	ctx.CursorX = 0
+	ExecuteMotion(ctx, 'w', 6)
+	// First w: 0 -> 3 (',')
+	// Second w: 3 -> 5 ('b')
+	// Third w: 5 -> 8 (',')
+	// Fourth w: 8 -> 10 ('b')
+	// Fifth w: 10 -> 13 (',')
+	// Sixth w: 13 -> 15 ('q')
+	if ctx.CursorX != 15 {
+		t.Errorf("6w with punctuation: expected X=15 (at 'q' in 'qux'), got X=%d", ctx.CursorX)
+	}
+
+	// Test 10w - should stop at last word
+	ctx.CursorX = 0
+	ExecuteMotion(ctx, 'w', 10)
+	// Should stop at 'q' in "qux" (can't move further)
+	if ctx.CursorX != 15 {
+		t.Errorf("10w with punctuation: expected X=15 (stopped at 'q'), got X=%d", ctx.CursorX)
+	}
+}
+
+// Test count with simple motions (h, j, k, l, space)
+func TestSimpleMotionCountHandling(t *testing.T) {
+	ctx := createTestContext()
+
+	// Test 5h from middle
+	ctx.CursorX = 10
+	ctx.CursorY = 5
+	ExecuteMotion(ctx, 'h', 5)
+	if ctx.CursorX != 5 {
+		t.Errorf("5h motion: expected X=5, got X=%d", ctx.CursorX)
+	}
+
+	// Test 3j
+	ctx.CursorY = 5
+	ExecuteMotion(ctx, 'j', 3)
+	if ctx.CursorY != 8 {
+		t.Errorf("3j motion: expected Y=8, got Y=%d", ctx.CursorY)
+	}
+
+	// Test 4k
+	ctx.CursorY = 10
+	ExecuteMotion(ctx, 'k', 4)
+	if ctx.CursorY != 6 {
+		t.Errorf("4k motion: expected Y=6, got Y=%d", ctx.CursorY)
+	}
+
+	// Test 7l
+	ctx.CursorX = 3
+	ExecuteMotion(ctx, 'l', 7)
+	if ctx.CursorX != 10 {
+		t.Errorf("7l motion: expected X=10, got X=%d", ctx.CursorX)
+	}
+
+	// Test 5 space (should work like l)
+	ctx.CursorX = 3
+	ExecuteMotion(ctx, ' ', 5)
+	if ctx.CursorX != 8 {
+		t.Errorf("5 space motion: expected X=8, got X=%d", ctx.CursorX)
+	}
+}
+
+// Test count of zero should default to 1
+func TestMotionCountZeroDefaultsToOne(t *testing.T) {
+	ctx := createTestContext()
+
+	// Setup: "one two three" at y=0
+	text := "one two three"
+	for i, r := range text {
+		if r != ' ' {
+			placeChar(ctx, i, 0, r)
+		}
+	}
+
+	// Test 0w (count=0) should behave like 1w
+	ctx.CursorX = 0
+	ctx.CursorY = 0
+	ExecuteMotion(ctx, 'w', 0)
+	if ctx.CursorX != 4 {
+		t.Errorf("0w motion (should default to 1): expected X=4, got X=%d", ctx.CursorX)
+	}
+
+	// Test 0h should behave like 1h
+	ctx.CursorX = 5
+	ExecuteMotion(ctx, 'h', 0)
+	if ctx.CursorX != 4 {
+		t.Errorf("0h motion (should default to 1): expected X=4, got X=%d", ctx.CursorX)
+	}
+}
+
 // Test WORD end motion edge cases
 func TestWORDEndEdgeCases(t *testing.T) {
 	ctx := createTestContext()
