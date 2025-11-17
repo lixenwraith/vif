@@ -166,34 +166,66 @@ func getCharAt(ctx *engine.GameContext, x, y int) rune {
 }
 
 // findNextWordStartVim finds the start of the next word (Vim-style: considers punctuation)
+// Three-phase logic:
+// Phase 1: Skip current character type (if not on space)
+// Phase 2: Skip any spaces
+// Phase 3: Stop at the first character of next word
 func findNextWordStartVim(ctx *engine.GameContext) int {
-	x := ctx.CursorX + 1
-	if x >= ctx.GameWidth {
-		return ctx.CursorX
-	}
+	x := ctx.CursorX
 
-	// Get current character type
-	currentChar := getCharAt(ctx, ctx.CursorX, ctx.CursorY)
-	var inWord, inPunct bool
-	if currentChar != 0 {
-		inWord = isWordChar(currentChar)
-		inPunct = isPunctuation(currentChar)
-	}
+	// Get current character
+	currentChar := getCharAt(ctx, x, ctx.CursorY)
 
-	// Skip characters of the same type as current
-	for x < ctx.GameWidth {
-		ch := getCharAt(ctx, x, ctx.CursorY)
-		if ch == 0 {
-			// Hit space, move to next
-			break
+	// Phase 1: Skip current character type (if not on space)
+	if currentChar != 0 { // Not on space
+		if isWordChar(currentChar) {
+			// Skip all word characters
+			for x < ctx.GameWidth && isWordChar(getCharAt(ctx, x, ctx.CursorY)) {
+				x++
+			}
+		} else if isPunctuation(currentChar) {
+			// Skip all punctuation
+			for x < ctx.GameWidth && isPunctuation(getCharAt(ctx, x, ctx.CursorY)) {
+				x++
+			}
 		}
-		if inWord && !isWordChar(ch) {
-			break
-		}
-		if inPunct && !isPunctuation(ch) {
-			break
-		}
+	} else {
+		// On space: move at least one position forward
 		x++
+	}
+
+	// Phase 2: Skip any spaces
+	for x < ctx.GameWidth && getCharAt(ctx, x, ctx.CursorY) == 0 {
+		x++
+	}
+
+	// Phase 3: We're now at the first character of next word (or at edge)
+	if x >= ctx.GameWidth {
+		return ctx.CursorX // Stay in place if we hit the edge
+	}
+
+	// Ensure we advanced at least one position
+	if x == ctx.CursorX {
+		x++
+		if x >= ctx.GameWidth {
+			return ctx.CursorX
+		}
+	}
+
+	return x
+}
+
+// findWordEndVim finds the end of the current/next word (Vim-style)
+// If on a word character, move forward one then skip to end of next word
+// If on space, skip spaces then find end of next word
+// If on punctuation, move forward one then skip to end of next word
+func findWordEndVim(ctx *engine.GameContext) int {
+	x := ctx.CursorX
+
+	// Move forward at least one position
+	x++
+	if x >= ctx.GameWidth {
+		return ctx.CursorX // Can't move forward
 	}
 
 	// Skip any whitespace
@@ -202,84 +234,86 @@ func findNextWordStartVim(ctx *engine.GameContext) int {
 	}
 
 	if x >= ctx.GameWidth {
-		return ctx.CursorX
-	}
-	return x
-}
-
-// findWordEndVim finds the end of the current/next word (Vim-style)
-func findWordEndVim(ctx *engine.GameContext) int {
-	x := ctx.CursorX + 1
-	if x >= ctx.GameWidth {
-		return ctx.CursorX
+		return ctx.CursorX // Only whitespace ahead
 	}
 
-	// Skip whitespace first
-	for x < ctx.GameWidth && getCharAt(ctx, x, ctx.CursorY) == 0 {
-		x++
-	}
-
-	if x >= ctx.GameWidth {
-		return ctx.CursorX
-	}
-
-	// Now we're on a character, find the end of this word/punct group
+	// Now we're on the start of a word, find its end
 	ch := getCharAt(ctx, x, ctx.CursorY)
 	isWord := isWordChar(ch)
 
+	// Move to the end of this word/punctuation group
 	for x < ctx.GameWidth {
-		ch := getCharAt(ctx, x, ctx.CursorY)
-		if ch == 0 {
-			return x - 1 // End is before the space
+		nextChar := getCharAt(ctx, x+1, ctx.CursorY)
+
+		// Stop if next char is space
+		if nextChar == 0 {
+			break
 		}
-		if isWord && !isWordChar(ch) {
-			return x - 1
+
+		// Stop if changing from word to non-word (or vice versa)
+		if isWord && !isWordChar(nextChar) {
+			break
 		}
-		if !isWord && !isPunctuation(ch) {
-			return x - 1
+		if !isWord && !isPunctuation(nextChar) {
+			break
 		}
+
 		x++
 	}
 
-	return ctx.GameWidth - 1
+	return x
 }
 
 // findPrevWordStartVim finds the start of the previous word (Vim-style)
+// Reverse three-phase logic:
+// Phase 1: Move back one position
+// Phase 2: Skip backward over any spaces
+// Phase 3: Skip backward over the character type, then return start position
 func findPrevWordStartVim(ctx *engine.GameContext) int {
-	x := ctx.CursorX - 1
+	x := ctx.CursorX
+
+	// Phase 1: Move back at least one position
+	x--
 	if x < 0 {
-		return ctx.CursorX
+		return ctx.CursorX // Can't move back
 	}
 
-	// Skip whitespace
+	// Phase 2: Skip backward over any spaces
 	for x >= 0 && getCharAt(ctx, x, ctx.CursorY) == 0 {
 		x--
 	}
 
 	if x < 0 {
+		// Only spaces before cursor - check if entire line is empty
+		// If we went all the way back, stay in place on empty line
 		return ctx.CursorX
 	}
 
-	// We're on a character, determine its type
+	// Phase 3: We're on a character, skip backward over same type to find start
 	ch := getCharAt(ctx, x, ctx.CursorY)
 	isWord := isWordChar(ch)
 
-	// Move backward while still in same type
-	for x >= 0 {
-		ch := getCharAt(ctx, x, ctx.CursorY)
-		if ch == 0 {
-			return x + 1 // Start is after the space
+	// Move backward while still in same character type
+	for x > 0 {
+		prevChar := getCharAt(ctx, x-1, ctx.CursorY)
+
+		// Stop if previous char is space
+		if prevChar == 0 {
+			break
 		}
-		if isWord && !isWordChar(ch) {
-			return x + 1
+
+		// Stop if changing character type
+		if isWord && !isWordChar(prevChar) {
+			break
 		}
-		if !isWord && !isPunctuation(ch) {
-			return x + 1
+		if !isWord && !isPunctuation(prevChar) {
+			break
 		}
+
 		x--
 	}
 
-	return 0
+	return x
 }
 
 // findLineEnd finds the rightmost character on the current line
