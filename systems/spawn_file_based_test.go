@@ -313,12 +313,7 @@ func TestPlaceLineNearCursor(t *testing.T) {
 
 			// Clean up for next attempt
 			for _, entity := range entities {
-				posComp, ok := world.GetComponent(entity, posType)
-				if ok {
-					pos := posComp.(components.PositionComponent)
-					world.RemoveFromSpatialIndex(pos.X, pos.Y)
-				}
-				world.DestroyEntity(entity)
+				world.SafeDestroyEntity(entity)
 			}
 			spawnSys.AddColorCount(components.SequenceBlue, components.LevelBright, -int64(len(line)))
 		}

@@ -52,6 +52,7 @@ func (w *World) CreateEntity() Entity {
 }
 
 // DestroyEntity removes an entity and all its components
+// Note: Prefer using SafeDestroyEntity which handles spatial index cleanup atomically
 func (w *World) DestroyEntity(entity Entity) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -73,6 +74,52 @@ func (w *World) DestroyEntity(entity Entity) {
 			}
 		}
 	}
+}
+
+// SafeDestroyEntity safely removes an entity by atomically:
+// 1. Removing from spatial index first (if entity has PositionComponent)
+// 2. Then destroying the entity and cleaning up all component indices
+// This ensures spatial index consistency and prevents race conditions.
+// All operations are performed under a single lock for atomicity.
+func (w *World) SafeDestroyEntity(entity Entity) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	// Check if entity exists
+	components, ok := w.entities[entity]
+	if !ok {
+		return // Entity doesn't exist
+	}
+
+	// First, remove from spatial index if entity has a position
+	// We need to find PositionComponent type from the components
+	for compType, comp := range components {
+		// Check if this is a PositionComponent by type name
+		if compType.Name() == "PositionComponent" {
+			// Use reflection to get X and Y fields
+			posVal := reflect.ValueOf(comp)
+			if posVal.Kind() == reflect.Struct {
+				xField := posVal.FieldByName("X")
+				yField := posVal.FieldByName("Y")
+				if xField.IsValid() && yField.IsValid() && xField.CanInt() && yField.CanInt() {
+					x := int(xField.Int())
+					y := int(yField.Int())
+					if row, exists := w.spatialIndex[y]; exists {
+						delete(row, x)
+					}
+				}
+			}
+			break // Only one PositionComponent per entity
+		}
+	}
+
+	// Remove from component type index
+	for compType := range components {
+		w.removeFromTypeIndex(entity, compType)
+	}
+
+	// Delete entity
+	delete(w.entities, entity)
 }
 
 // AddComponent adds a component to an entity

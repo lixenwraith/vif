@@ -242,9 +242,6 @@ func deleteCharAt(ctx *engine.GameContext, x, y int) {
 		}
 	}
 
-	// Remove from spatial index
-	ctx.World.RemoveFromSpatialIndex(x, y)
-
-	// Destroy entity
-	ctx.World.DestroyEntity(entity)
+	// Safely destroy entity (handles spatial index removal)
+	ctx.World.SafeDestroyEntity(entity)
 }

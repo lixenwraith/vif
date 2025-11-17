@@ -171,9 +171,8 @@ func (s *DecaySystem) applyDecayToRow(world *engine.World, row int) {
 				}
 			} else {
 				// Red at LevelDark - remove entity (no counter change, Red is not tracked)
-				// Remove from spatial index before destroying
-				world.RemoveFromSpatialIndex(pos.X, pos.Y)
-				world.DestroyEntity(entity)
+				// Safely destroy entity (handles spatial index removal)
+				world.SafeDestroyEntity(entity)
 			}
 		}
 	}

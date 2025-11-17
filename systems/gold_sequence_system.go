@@ -151,14 +151,8 @@ func (s *GoldSequenceSystem) removeGoldSequence(world *engine.World) {
 
 		// Only remove gold sequence entities with our ID
 		if seq.Type == components.SequenceGold && seq.ID == s.sequenceID {
-			// Remove from spatial index
-			posComp, ok := world.GetComponent(entity, posType)
-			if ok {
-				pos := posComp.(components.PositionComponent)
-				world.RemoveFromSpatialIndex(pos.X, pos.Y)
-			}
-			// Destroy entity
-			world.DestroyEntity(entity)
+			// Safely destroy entity (handles spatial index removal)
+			world.SafeDestroyEntity(entity)
 		}
 	}
 

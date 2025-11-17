@@ -148,16 +148,8 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 			s.spawnSystem.AddColorCount(seq.Type, seq.Level, -1)
 		}
 
-		// Remove entity from spatial index first
-		posType := reflect.TypeOf(components.PositionComponent{})
-		posComp, ok := world.GetComponent(entity, posType)
-		if ok {
-			pos := posComp.(components.PositionComponent)
-			world.RemoveFromSpatialIndex(pos.X, pos.Y)
-		}
-
-		// Destroy the character entity
-		world.DestroyEntity(entity)
+		// Safely destroy the character entity (handles spatial index removal)
+		world.SafeDestroyEntity(entity)
 
 		// Move cursor right
 		s.ctx.CursorX++
@@ -203,16 +195,8 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 	}
 
 	// Correct character - remove entity and move cursor
-	// Remove from spatial index first
-	posType := reflect.TypeOf(components.PositionComponent{})
-	posComp, ok := world.GetComponent(entity, posType)
-	if ok {
-		pos := posComp.(components.PositionComponent)
-		world.RemoveFromSpatialIndex(pos.X, pos.Y)
-	}
-
-	// Destroy the character entity
-	world.DestroyEntity(entity)
+	// Safely destroy the character entity (handles spatial index removal)
+	world.SafeDestroyEntity(entity)
 
 	// Move cursor right
 	s.ctx.CursorX++
