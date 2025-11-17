@@ -172,6 +172,14 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 		h.ctx.ScoreIncrement = 0
 		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
+	case tcell.KeyEnter:
+		// Activate ping grid for 1 second
+		h.ctx.PingActive = true
+		h.ctx.PingGridTimer = 1.0
+		h.ctx.MotionCount = 0
+		h.ctx.MotionCommand = ""
+		h.ctx.LastCommand = ""
+		return true
 	}
 
 	if ev.Key() == tcell.KeyRune {
@@ -317,16 +325,6 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 		if char == 'g' {
 			h.ctx.CommandPrefix = 'g'
 			// Don't clear LastCommand yet - waiting for second char
-			return true
-		}
-
-		// Activate ping grid for 1 second
-		if char == '\r' || char == '\n' {
-			h.ctx.PingActive = true
-			h.ctx.PingGridTimer = 1.0 // 1 second
-			h.ctx.MotionCount = 0
-			h.ctx.MotionCommand = ""
-			h.ctx.LastCommand = "" // Clear on ping activation
 			return true
 		}
 

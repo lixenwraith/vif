@@ -67,7 +67,7 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 	r.drawPingHighlights(ctx, pingColor, defaultStyle)
 
 	// Draw trails - AFTER ping highlights so they're visible on top
-	r.drawTrails(ctx.World, defaultStyle, ctx, pingColor)
+	r.drawTrails(ctx.World, defaultStyle, ctx)
 
 	// Draw column indicators
 	r.drawColumnIndicators(ctx, defaultStyle)
@@ -395,7 +395,7 @@ func (r *TerminalRenderer) drawCharacters(world *engine.World, pingColor tcell.C
 }
 
 // drawTrails draws all trail particles
-func (r *TerminalRenderer) drawTrails(world *engine.World, defaultStyle tcell.Style, ctx *engine.GameContext, pingColor tcell.Color) {
+func (r *TerminalRenderer) drawTrails(world *engine.World, defaultStyle tcell.Style, ctx *engine.GameContext) {
 	posType := reflect.TypeOf(components.PositionComponent{})
 	trailType := reflect.TypeOf(components.TrailComponent{})
 
@@ -418,29 +418,8 @@ func (r *TerminalRenderer) drawTrails(world *engine.World, defaultStyle tcell.St
 			}
 			color := tcell.NewRGBColor(int32(intensity), int32(intensity), int32(intensity))
 
-			// Check if trail is on a ping line (cursor row or column)
-			onPingLine := (pos.Y == ctx.CursorY) || (pos.X == ctx.CursorX)
-
-			// Also check if on ping grid lines when ping is active
-			if !onPingLine && ctx.PingActive {
-				// Check if on vertical grid line (columns at ±5, ±10, ±15, etc.)
-				deltaX := pos.X - ctx.CursorX
-				if deltaX%5 == 0 && deltaX != 0 {
-					onPingLine = true
-				}
-				// Check if on horizontal grid line (rows at ±5, ±10, ±15, etc.)
-				deltaY := pos.Y - ctx.CursorY
-				if deltaY%5 == 0 && deltaY != 0 {
-					onPingLine = true
-				}
-			}
-
-			// Apply ping background if on ping line
+			// Always use default background for trails to ensure visibility across all modes
 			style := defaultStyle.Foreground(color)
-			if onPingLine {
-				style = style.Background(pingColor)
-			}
-
 			r.screen.SetContent(screenX, screenY, '█', nil, style)
 		}
 	}
