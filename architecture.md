@@ -62,6 +62,11 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 - Main game loop: Single-threaded ECS updates
 - Input events: Goroutine → channel → main loop
 - Use `sync.RWMutex` for all shared state
+- **Atomic Operations**: Color counters use `atomic.Int64` for lock-free updates
+  - `SpawnSystem`: Increments counters when blocks placed
+  - `ScoreSystem`: Decrements counters when characters typed
+  - `DecaySystem`: Updates counters during decay transitions
+  - All counter operations are race-free and thread-safe
 
 ## Performance Guidelines
 
@@ -102,35 +107,78 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 5. **Boost Mechanic**: Blue characters trigger heat multiplier (x2) for limited time
 6. **Red Spawn Invariant**: Red sequences are NEVER spawned directly, only through decay
 7. **Gold Randomness**: Gold sequences spawn at random positions (not fixed center-top)
+8. **6-Color Limit**: At most 6 Blue/Green color/level combinations present simultaneously
+9. **Counter Accuracy**: Color counters must match actual on-screen character counts
+10. **Atomic Operations**: All color counter updates use atomic operations for thread safety
 
 ## Game Mechanics Details
 
 ### Spawn System
-- **Generates**: Only Blue and Green sequences (never Red)
-- **Position**: Random locations with exclusion zone around cursor (5 horizontal, 3 vertical)
+- **Content Source**: Loads Go source code from `./assets/data.txt` at initialization
+- **Block Generation**:
+  - Selects random 5-10 consecutive lines from file per spawn
+  - Lines are trimmed of whitespace before placement
+  - Line order within block doesn't need to be preserved
+- **6-Color Limit**:
+  - Tracks 6 color/level combinations: Blue×3 (Bright, Normal, Dark) + Green×3 (Bright, Normal, Dark)
+  - Uses atomic counters (`atomic.Int64`) for race-free character tracking
+  - Only spawns new blocks when fewer than 6 colors are present on screen
+  - When all characters of a color/level are cleared, that slot becomes available
+- **Intelligent Placement**:
+  - Each line attempts placement up to 3 times
+  - Random row and column selection per attempt
+  - Collision detection with existing characters
+  - Cursor exclusion zone (5 horizontal, 3 vertical)
+  - Lines that fail placement after 3 attempts are discarded
+- **Position**: Random locations across screen avoiding collisions and cursor
 - **Rate**: 2 seconds base, adaptive based on screen fill (1-4 seconds)
-- **Length**: Random 1-10 characters
-- **Characters**: Full alphanumeric + special characters
+- **Generates**: Only Blue and Green sequences (never Red)
 
 ### Decay System
 - **Brightness Decay**: Bright → Normal → Dark (reduces score multiplier)
+  - Updates color counters atomically: decrements old level, increments new level
 - **Color Decay Chain**:
   - Blue (Dark) → Green (Bright)
   - Green (Dark) → Red (Bright) ← **Only source of Red sequences**
   - Red (Dark) → Destroyed
+  - Counter updates during color transitions (Blue→Green, Green→Red)
+  - Red sequences are not tracked in color counters
 - **Timing**: 10-60 seconds interval based on heat level (higher heat = faster decay)
 - **Animation**: Row-by-row sweep from top to bottom
+- **Counter Management**: Decrements counters when characters destroyed at Red (Dark) level
+
+### Score System
+- **Character Typing**: Processes user input in insert mode
+- **Counter Management**:
+  - Atomically decrements color counters when Blue/Green characters typed
+  - Red and Gold characters do not affect color counters
+- **Heat Updates**: Typing correct characters increases heat (with boost multiplier if active)
+- **Error Handling**: Incorrect typing resets heat and triggers error cursor
 
 ### Gold Sequence System
 - **Trigger**: Spawns when decay animation completes
 - **Position**: Random location avoiding cursor (NOT fixed center-top)
-- **Length**: Fixed 10 alphanumeric characters
+- **Length**: Fixed 10 alphanumeric characters (randomly generated)
 - **Duration**: 10 seconds before timeout
 - **Reward**: Fills heat meter to maximum on completion
 - **Behavior**: Typing gold chars does not affect heat/score directly
+
+## Data Files
+
+### assets/data.txt
+- **Purpose**: Source file for game content (code blocks)
+- **Format**: Plain text file containing Go source code
+- **Location**: `./assets/data.txt` (relative to executable)
+- **Content**: Go standard library source code (e.g., crypto/md5)
+- **Processing**:
+  - Loaded at game initialization
+  - Lines trimmed of whitespace
+  - Empty lines ignored
+  - Wrapped around when reaching end of file
 
 ## Error Handling Strategy
 
 - **User Input**: Flash error cursor, reset heat
 - **System Errors**: Log warning, continue with degraded functionality
+- **Missing Data File**: Graceful degradation (no file-based spawns)
 - **Fatal Errors**: Clean shutdown with screen.Fini()

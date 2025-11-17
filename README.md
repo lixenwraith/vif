@@ -13,13 +13,15 @@ vi-fighter is a terminal typing game where players type character sequences that
 The game features four types of character sequences, each with distinct behaviors:
 
 #### Green Sequences
-- **Spawning**: Generated randomly across the screen at regular intervals
+- **Spawning**: Generated from code blocks in `assets/data.txt` at regular intervals
+- **Content**: Lines of Go source code (trimmed and randomly placed)
 - **Scoring**: Positive points when typed correctly
 - **Levels**: Three brightness levels (Dark, Normal, Bright) with multipliers (x1, x2, x3)
 - **Decay**: Decays through brightness levels, then transforms into Red sequences
 
 #### Blue Sequences
-- **Spawning**: Generated randomly across the screen at regular intervals
+- **Spawning**: Generated from code blocks in `assets/data.txt` at regular intervals
+- **Content**: Lines of Go source code (trimmed and randomly placed)
 - **Scoring**: Positive points when typed correctly
 - **Special Effect**: Completing a blue sequence triggers a heat boost (x2 multiplier) for a limited time
 - **Levels**: Three brightness levels (Dark, Normal, Bright) with multipliers (x1, x2, x3)
@@ -70,18 +72,34 @@ The decay system creates pressure by gradually degrading sequences over time:
 
 ### Spawn System
 
-- **Spawn Rate**: Sequences spawn every 2 seconds (base rate)
+The spawn system uses **file-based code blocks** from `assets/data.txt` to populate the screen:
+
+- **Content Source**: Reads Go source code from `./assets/data.txt` at startup
+- **Block Selection**:
+  - Random 5-10 consecutive lines selected from file
+  - Lines are trimmed of whitespace before placement
+  - Line order within block doesn't matter (can be shuffled)
+
+- **6-Color Limit System**:
+  - Only 6 color/level combinations allowed on screen simultaneously:
+    - Blue: Bright, Normal, Dark (3 states)
+    - Green: Bright, Normal, Dark (3 states)
+  - New blocks only spawn when fewer than 6 colors are present
+  - When a color is fully cleared (typed or decayed), a new block can spawn
+
+- **Intelligent Placement**:
+  - Each line attempts placement up to 3 times
+  - Random row and column selection per attempt
+  - Checks for collisions with existing characters
+  - Maintains cursor exclusion zone (5 units horizontal, 3 units vertical)
+  - Lines that can't be placed after 3 attempts are discarded
+
+- **Spawn Rate**: Blocks spawn every 2 seconds (base rate)
 - **Adaptive Rate**:
   - < 30% screen filled: 2x faster spawning (1 second intervals)
   - > 70% screen filled: 2x slower spawning (4 second intervals)
-- **Sequence Generation**:
-  - Random length: 1-10 characters
-  - Character set: Full alphanumeric + special characters
-  - Types: Only Blue and Green are spawned directly (Red comes from decay)
-- **Position Rules**:
-  - Random placement across game area
-  - Maintains exclusion zone around cursor (5 units horizontal, 3 units vertical)
-  - No overlapping with existing sequences
+
+- **Character Tracking**: Atomic counters track character count per color/level for race-free state management
 - **Maximum Capacity**: 200 characters on screen at once
 
 ## Vi Motion Commands
@@ -133,6 +151,7 @@ Systems execute in priority order each frame:
 
 - Go 1.19 or later
 - Terminal with color support
+- `assets/data.txt` file containing source code (included in repository)
 
 ### Build
 
@@ -142,7 +161,10 @@ go build -o vi-fighter ./cmd/vi-fighter
 
 ### Run
 
+The game expects `assets/data.txt` to be present in the current working directory:
+
 ```bash
+# From repository root
 ./vi-fighter
 ```
 
@@ -151,6 +173,8 @@ Or directly:
 ```bash
 go run ./cmd/vi-fighter
 ```
+
+**Note**: The game gracefully handles missing `assets/data.txt` but will not spawn file-based code blocks.
 
 ### Running Tests
 
