@@ -143,7 +143,7 @@ func (s *SpawnSystem) findValidPosition(world *engine.World, seqLength int) (int
 		y := rand.Intn(s.gameHeight)
 
 		// Check if far enough from cursor
-		if math.Abs(float64(x-s.cursorX)) <= 5 && math.Abs(float64(y-s.cursorY)) <= 3 {
+		if math.Abs(float64(x-s.cursorX)) <= 5 || math.Abs(float64(y-s.cursorY)) <= 3 {
 			continue
 		}
 

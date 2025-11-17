@@ -158,3 +158,150 @@ func TestCtrlSMultipleToggles(t *testing.T) {
 		t.Error("Expected SoundEnabled to be false after even number of toggles")
 	}
 }
+
+// TestDeleteOperatorResetOnModeTransitions tests that DeleteOperator flag is reset when changing modes
+func TestDeleteOperatorResetOnModeTransitions(t *testing.T) {
+	mockScreen := &MockScreen{width: 80, height: 24}
+	ctx := engine.NewGameContext(mockScreen)
+	scoreSystem := systems.NewScoreSystem(ctx)
+	handler := NewInputHandler(ctx, scoreSystem)
+
+	// Test 1: DeleteOperator reset when pressing 'i' to enter insert mode
+	ctx.Mode = engine.ModeNormal
+	ctx.DeleteOperator = true
+	evI := tcell.NewEventKey(tcell.KeyRune, 'i', tcell.ModNone)
+	handler.HandleEvent(evI)
+
+	if ctx.DeleteOperator {
+		t.Error("Expected DeleteOperator to be reset when entering insert mode with 'i'")
+	}
+	if ctx.Mode != engine.ModeInsert {
+		t.Error("Expected to be in insert mode")
+	}
+
+	// Test 2: DeleteOperator reset when pressing '/' to enter search mode
+	ctx.Mode = engine.ModeNormal
+	ctx.DeleteOperator = true
+	evSlash := tcell.NewEventKey(tcell.KeyRune, '/', tcell.ModNone)
+	handler.HandleEvent(evSlash)
+
+	if ctx.DeleteOperator {
+		t.Error("Expected DeleteOperator to be reset when entering search mode with '/'")
+	}
+	if ctx.Mode != engine.ModeSearch {
+		t.Error("Expected to be in search mode")
+	}
+
+	// Test 3: DeleteOperator reset when pressing Escape from insert mode
+	ctx.Mode = engine.ModeInsert
+	ctx.DeleteOperator = true
+	evEsc := tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone)
+	handler.HandleEvent(evEsc)
+
+	if ctx.DeleteOperator {
+		t.Error("Expected DeleteOperator to be reset when escaping from insert mode")
+	}
+	if ctx.Mode != engine.ModeNormal {
+		t.Error("Expected to be in normal mode")
+	}
+
+	// Test 4: DeleteOperator reset when pressing Escape from search mode
+	ctx.Mode = engine.ModeSearch
+	ctx.DeleteOperator = true
+	handler.HandleEvent(evEsc)
+
+	if ctx.DeleteOperator {
+		t.Error("Expected DeleteOperator to be reset when escaping from search mode")
+	}
+	if ctx.Mode != engine.ModeNormal {
+		t.Error("Expected to be in normal mode")
+	}
+}
+
+// TestDeleteOperatorPersistenceWithinNormalMode tests that DeleteOperator persists in normal mode until motion
+func TestDeleteOperatorPersistenceWithinNormalMode(t *testing.T) {
+	mockScreen := &MockScreen{width: 80, height: 24}
+	ctx := engine.NewGameContext(mockScreen)
+	scoreSystem := systems.NewScoreSystem(ctx)
+	handler := NewInputHandler(ctx, scoreSystem)
+
+	// Start in normal mode
+	ctx.Mode = engine.ModeNormal
+
+	// Press 'd' to enter delete operator mode
+	evD := tcell.NewEventKey(tcell.KeyRune, 'd', tcell.ModNone)
+	handler.HandleEvent(evD)
+
+	if !ctx.DeleteOperator {
+		t.Error("Expected DeleteOperator to be set after pressing 'd'")
+	}
+
+	// Verify that pressing a number doesn't reset it (count accumulation)
+	ev2 := tcell.NewEventKey(tcell.KeyRune, '2', tcell.ModNone)
+	handler.HandleEvent(ev2)
+
+	if !ctx.DeleteOperator {
+		t.Error("Expected DeleteOperator to persist when entering count")
+	}
+}
+
+// TestDeleteOperatorResetSequence tests complete sequence: d -> mode change -> verify reset
+func TestDeleteOperatorResetSequence(t *testing.T) {
+	mockScreen := &MockScreen{width: 80, height: 24}
+	ctx := engine.NewGameContext(mockScreen)
+	scoreSystem := systems.NewScoreSystem(ctx)
+	handler := NewInputHandler(ctx, scoreSystem)
+
+	tests := []struct {
+		name         string
+		setupMode    engine.GameMode
+		triggerEvent *tcell.EventKey
+		expectedMode engine.GameMode
+	}{
+		{
+			name:         "Normal -> Insert via 'i'",
+			setupMode:    engine.ModeNormal,
+			triggerEvent: tcell.NewEventKey(tcell.KeyRune, 'i', tcell.ModNone),
+			expectedMode: engine.ModeInsert,
+		},
+		{
+			name:         "Normal -> Search via '/'",
+			setupMode:    engine.ModeNormal,
+			triggerEvent: tcell.NewEventKey(tcell.KeyRune, '/', tcell.ModNone),
+			expectedMode: engine.ModeSearch,
+		},
+		{
+			name:         "Insert -> Normal via Escape",
+			setupMode:    engine.ModeInsert,
+			triggerEvent: tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone),
+			expectedMode: engine.ModeNormal,
+		},
+		{
+			name:         "Search -> Normal via Escape",
+			setupMode:    engine.ModeSearch,
+			triggerEvent: tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone),
+			expectedMode: engine.ModeNormal,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup: set mode and DeleteOperator flag
+			ctx.Mode = tt.setupMode
+			ctx.DeleteOperator = true
+
+			// Trigger the mode transition
+			handler.HandleEvent(tt.triggerEvent)
+
+			// Verify DeleteOperator is reset
+			if ctx.DeleteOperator {
+				t.Errorf("Expected DeleteOperator to be reset after %s transition", tt.name)
+			}
+
+			// Verify mode changed as expected
+			if ctx.Mode != tt.expectedMode {
+				t.Errorf("Expected mode %v, got %v", tt.expectedMode, ctx.Mode)
+			}
+		})
+	}
+}
