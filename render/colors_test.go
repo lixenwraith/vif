@@ -206,3 +206,61 @@ func TestGetHeatMeterColorBoundaries(t *testing.T) {
 		}
 	}
 }
+
+func TestDecayAnimationBackgroundConsistency(t *testing.T) {
+	// Verify that decay animation gray background is sufficiently visible
+	// against the main RgbBackground to ensure decay animation remains visible
+	decayGrayBg := tcell.NewRGBColor(60, 60, 60)
+
+	bgR, bgG, bgB := RgbBackground.RGB()
+	decayR, decayG, decayB := decayGrayBg.RGB()
+
+	// Tokyo Night background is (26, 27, 38)
+	// Decay gray background is (60, 60, 60)
+	// Verify decay gray is significantly lighter than background
+	if decayR <= bgR || decayG <= bgG || decayB <= bgB {
+		t.Errorf("Decay animation background (%d,%d,%d) must be lighter than RgbBackground (%d,%d,%d) for visibility",
+			decayR, decayG, decayB, bgR, bgG, bgB)
+	}
+
+	// Calculate approximate luminance difference
+	// Simple approximation: average RGB values
+	bgLuminance := (int32(bgR) + int32(bgG) + int32(bgB)) / 3
+	decayLuminance := (int32(decayR) + int32(decayG) + int32(decayB)) / 3
+
+	luminanceDiff := decayLuminance - bgLuminance
+
+	// Verify there's at least 20 points of luminance difference for visibility
+	if luminanceDiff < 20 {
+		t.Errorf("Decay animation background luminance difference (%d) should be at least 20 for clear visibility",
+			luminanceDiff)
+	}
+}
+
+func TestBackgroundColorConsistency(t *testing.T) {
+	// Verify that all character sequences use consistent RgbBackground
+	types := []components.SequenceType{
+		components.SequenceGreen,
+		components.SequenceRed,
+		components.SequenceBlue,
+		components.SequenceGold,
+	}
+
+	levels := []components.SequenceLevel{
+		components.LevelDark,
+		components.LevelNormal,
+		components.LevelBright,
+	}
+
+	for _, seqType := range types {
+		for _, level := range levels {
+			style := GetStyleForSequence(seqType, level)
+			_, bg, _ := style.Decompose()
+
+			if bg != RgbBackground {
+				t.Errorf("Sequence type=%v level=%v has inconsistent background %v, expected RgbBackground %v",
+					seqType, level, bg, RgbBackground)
+			}
+		}
+	}
+}

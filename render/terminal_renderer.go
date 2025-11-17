@@ -411,9 +411,11 @@ func (r *TerminalRenderer) drawDecayAnimation(world *engine.World, decayRow int,
 		screenX := r.gameX + x
 		if screenX >= r.gameX && screenX < r.width && screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
 			if ch, ok := charsAtRow[x]; ok {
+				// Character present: use gray background to highlight decay animation
 				r.screen.SetContent(screenX, screenY, ch, nil, stylesAtRow[x])
 			} else {
-				r.screen.SetContent(screenX, screenY, ' ', nil, defaultStyle.Background(darkGrayBg))
+				// No character: use consistent RgbBackground
+				r.screen.SetContent(screenX, screenY, ' ', nil, defaultStyle)
 			}
 		}
 	}
