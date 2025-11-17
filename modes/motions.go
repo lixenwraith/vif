@@ -242,11 +242,13 @@ func deleteCharAt(ctx *engine.GameContext, x, y int) {
 			ctx.ScoreIncrement = 0 // Reset heat
 		} else if seq.Type == components.SequenceRed {
 			// Play decay sound for red character deletion
-			ctx.SoundMu.RLock()
-			if ctx.SoundManager != nil {
-				ctx.SoundManager.PlayDecay()
+			if ctx.SoundEnabled.Load() {
+				ctx.SoundMu.RLock()
+				if ctx.SoundManager != nil {
+					ctx.SoundManager.PlayDecay()
+				}
+				ctx.SoundMu.RUnlock()
 			}
-			ctx.SoundMu.RUnlock()
 		}
 	}
 

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -31,9 +32,9 @@ type GameContext struct {
 	Width, Height int
 
 	// Game area (excluding UI elements)
-	GameX, GameY           int
-	GameWidth, GameHeight  int
-	LineNumWidth           int
+	GameX, GameY          int
+	GameWidth, GameHeight int
+	LineNumWidth          int
 
 	// Mode state
 	Mode           GameMode
@@ -41,11 +42,11 @@ type GameContext struct {
 	LastSearchText string
 
 	// Cursor state
-	CursorX, CursorY    int
-	CursorVisible       bool
-	CursorError         bool
-	CursorErrorTime     time.Time
-	CursorBlinkTime     time.Time
+	CursorX, CursorY int
+	CursorVisible    bool
+	CursorError      bool
+	CursorErrorTime  time.Time
+	CursorBlinkTime  time.Time
 
 	// Motion command state
 	MotionCount    int
@@ -69,11 +70,11 @@ type GameContext struct {
 	TrailEndTime time.Time
 
 	// Ping coordinates feature
-	PingActive     bool
-	PingGridTimer  float64 // Timer in seconds for ping grid (0 = inactive)
-	PingStartTime  time.Time
-	PingRow        int
-	PingCol        int
+	PingActive    bool
+	PingGridTimer float64 // Timer in seconds for ping grid (0 = inactive)
+	PingStartTime time.Time
+	PingRow       int
+	PingCol       int
 
 	// Heat tracking
 	LastMoveKey      rune
@@ -86,6 +87,7 @@ type GameContext struct {
 	// Audio
 	SoundManager *audio.SoundManager
 	SoundMu      sync.RWMutex // Protects SoundManager access
+	SoundEnabled atomic.Bool  // Atomic flag to enable/disable all sound (default: false)
 	WasMaxHeat   bool         // Track if we were at max heat last frame
 }
 
@@ -113,6 +115,9 @@ func NewGameContext(screen tcell.Screen) *GameContext {
 
 	// Create buffer
 	ctx.Buffer = core.NewBuffer(ctx.GameWidth, ctx.GameHeight)
+
+	// Initialize sound as disabled (false) by default
+	ctx.SoundEnabled.Store(false)
 
 	return ctx
 }

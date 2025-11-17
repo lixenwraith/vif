@@ -24,7 +24,7 @@ func TestTrailSystemCleanup(t *testing.T) {
 
 	world.AddComponent(entity, pos)
 	world.AddComponent(entity, trail)
-	world.UpdateSpatialIndex(pos.X, pos.Y)
+	world.UpdateSpatialIndex(entity, pos.X, pos.Y)
 
 	// Verify entity is in spatial index
 	foundEntity := world.GetEntityAtPosition(pos.X, pos.Y)

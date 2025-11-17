@@ -147,7 +147,7 @@ func TestConcurrentComponentAccess(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for _, entity := range entities {
-				comp, ok := world.GetComponent(entity, TestComponentType())
+				comp, ok := world.GetComponent(entity, testComponentType())
 				if !ok {
 					t.Error("Failed to get component")
 				}
@@ -171,8 +171,8 @@ func TestConcurrentComponentAccess(t *testing.T) {
 	wg.Wait()
 }
 
-// TestComponentType returns the reflect.Type for TestComponent
-func TestComponentType() interface{} {
+// testComponentType returns the reflect.Type for TestComponent
+func testComponentType() interface{} {
 	return TestComponent{}
 }
 
