@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"sync"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -84,7 +85,8 @@ type GameContext struct {
 
 	// Audio
 	SoundManager *audio.SoundManager
-	WasMaxHeat   bool // Track if we were at max heat last frame
+	soundMu      sync.RWMutex // Protects SoundManager access
+	WasMaxHeat   bool         // Track if we were at max heat last frame
 }
 
 // NewGameContext creates a new game context with initialized ECS world
@@ -197,4 +199,18 @@ func (g *GameContext) IsSearchMode() bool {
 // IsNormalMode returns true if in normal mode
 func (g *GameContext) IsNormalMode() bool {
 	return g.Mode == ModeNormal
+}
+
+// GetSoundManager safely returns the sound manager with read lock
+func (g *GameContext) GetSoundManager() *audio.SoundManager {
+	g.soundMu.RLock()
+	defer g.soundMu.RUnlock()
+	return g.SoundManager
+}
+
+// SetSoundManager safely sets the sound manager with write lock
+func (g *GameContext) SetSoundManager(sm *audio.SoundManager) {
+	g.soundMu.Lock()
+	defer g.soundMu.Unlock()
+	g.SoundManager = sm
 }

@@ -119,9 +119,11 @@ func deleteAllOnLine(ctx *engine.GameContext, y int) bool {
 	}
 
 	// Play decay sound if red was deleted
+	ctx.soundMu.RLock()
 	if deletedRed && ctx.SoundManager != nil {
 		ctx.SoundManager.PlayDecay()
 	}
+	ctx.soundMu.RUnlock()
 
 	return deletedGreenOrBlue
 }
@@ -171,9 +173,11 @@ func deleteRange(ctx *engine.GameContext, startX, endX, y int) bool {
 	}
 
 	// Play decay sound if red was deleted
+	ctx.soundMu.RLock()
 	if deletedRed && ctx.SoundManager != nil {
 		ctx.SoundManager.PlayDecay()
 	}
+	ctx.soundMu.RUnlock()
 
 	return deletedGreenOrBlue
 }

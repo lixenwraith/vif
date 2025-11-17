@@ -38,18 +38,25 @@ func (s *TrailSystem) Update(world *engine.World, dt time.Duration) {
 		trailComp, _ := world.GetComponent(entity, trailType)
 		trail := trailComp.(components.TrailComponent)
 
+		// Get position for spatial index cleanup
+		posComp, _ := world.GetComponent(entity, posType)
+		pos := posComp.(components.PositionComponent)
+
 		// Check if trail should decay
 		elapsed := now.Sub(trail.Timestamp).Seconds()
 		if elapsed < 0 {
 			// Future trail point - skip
 			continue
 		} else if elapsed >= 0.5 {
-			// Trail expired - remove entity
+			// Trail expired - remove from spatial index and destroy
+			world.RemoveFromSpatialIndex(pos.X, pos.Y)
 			world.DestroyEntity(entity)
 		} else {
 			// Update intensity
 			trail.Intensity *= (1.0 - elapsed*2)
 			if trail.Intensity <= 0.05 {
+				// Remove from spatial index before destroying
+				world.RemoveFromSpatialIndex(pos.X, pos.Y)
 				world.DestroyEntity(entity)
 			} else {
 				world.AddComponent(entity, trail)

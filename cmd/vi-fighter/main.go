@@ -39,7 +39,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize audio: %v\n", err)
 		// Continue without audio - non-fatal
 	}
-	ctx.SoundManager = soundManager
+	ctx.SetSoundManager(soundManager)
 	defer soundManager.Cleanup()
 
 	// Create and add systems to the ECS world
