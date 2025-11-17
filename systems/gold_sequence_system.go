@@ -1,6 +1,7 @@
 package systems
 
 import (
+	"math"
 	"math/rand"
 	"reflect"
 	"time"
@@ -22,10 +23,12 @@ type GoldSequenceSystem struct {
 	characters        string
 	gameWidth         int
 	gameHeight        int
+	cursorX           int
+	cursorY           int
 }
 
 // NewGoldSequenceSystem creates a new gold sequence system
-func NewGoldSequenceSystem(ctx *engine.GameContext, decaySystem *DecaySystem, gameWidth, gameHeight int) *GoldSequenceSystem {
+func NewGoldSequenceSystem(ctx *engine.GameContext, decaySystem *DecaySystem, gameWidth, gameHeight, cursorX, cursorY int) *GoldSequenceSystem {
 	return &GoldSequenceSystem{
 		ctx:               ctx,
 		decaySystem:       decaySystem,
@@ -35,6 +38,8 @@ func NewGoldSequenceSystem(ctx *engine.GameContext, decaySystem *DecaySystem, ga
 		characters:        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
 		gameWidth:         gameWidth,
 		gameHeight:        gameHeight,
+		cursorX:           cursorX,
+		cursorY:           cursorY,
 	}
 }
 
@@ -66,7 +71,7 @@ func (s *GoldSequenceSystem) Update(world *engine.World, dt time.Duration) {
 	}
 }
 
-// spawnGoldSequence creates a new gold sequence at the center-top of the screen
+// spawnGoldSequence creates a new gold sequence at a random position on the screen
 func (s *GoldSequenceSystem) spawnGoldSequence(world *engine.World) {
 	if s.active {
 		// Already have an active gold sequence
@@ -79,28 +84,10 @@ func (s *GoldSequenceSystem) spawnGoldSequence(world *engine.World) {
 		sequence[i] = rune(s.characters[rand.Intn(len(s.characters))])
 	}
 
-	// Calculate center-top position
-	x := (s.gameWidth - constants.GoldSequenceLength) / 2
-	if x < 0 {
-		x = 0
-	}
-	y := 0
-
-	// Check if position is valid (no overlapping entities)
-	overlaps := false
-	for i := 0; i < constants.GoldSequenceLength; i++ {
-		if x+i >= s.gameWidth {
-			overlaps = true
-			break
-		}
-		if world.GetEntityAtPosition(x+i, y) != 0 {
-			overlaps = true
-			break
-		}
-	}
-
-	if overlaps {
-		// Can't spawn gold sequence due to overlap
+	// Find random valid position (similar to spawn system)
+	x, y := s.findValidPosition(world, constants.GoldSequenceLength)
+	if x < 0 || y < 0 {
+		// No valid position found
 		return
 	}
 
@@ -233,8 +220,44 @@ func (s *GoldSequenceSystem) CompleteGoldSequence(world *engine.World) {
 	// Fill heat to max (handled by ScoreSystem)
 }
 
-// UpdateDimensions updates the game area dimensions
-func (s *GoldSequenceSystem) UpdateDimensions(gameWidth, gameHeight int) {
+// findValidPosition finds a valid random position for the gold sequence
+func (s *GoldSequenceSystem) findValidPosition(world *engine.World, seqLength int) (int, int) {
+	maxAttempts := 100
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		x := rand.Intn(s.gameWidth)
+		y := rand.Intn(s.gameHeight)
+
+		// Check if far enough from cursor (same exclusion zone as spawn system)
+		if math.Abs(float64(x-s.cursorX)) <= 5 || math.Abs(float64(y-s.cursorY)) <= 3 {
+			continue
+		}
+
+		// Check if sequence fits within game width
+		if x+seqLength > s.gameWidth {
+			continue
+		}
+
+		// Check for overlaps with existing characters
+		overlaps := false
+		for i := 0; i < seqLength; i++ {
+			if world.GetEntityAtPosition(x+i, y) != 0 {
+				overlaps = true
+				break
+			}
+		}
+
+		if !overlaps {
+			return x, y
+		}
+	}
+
+	return -1, -1 // No valid position found
+}
+
+// UpdateDimensions updates the game area dimensions and cursor position
+func (s *GoldSequenceSystem) UpdateDimensions(gameWidth, gameHeight, cursorX, cursorY int) {
 	s.gameWidth = gameWidth
 	s.gameHeight = gameHeight
+	s.cursorX = cursorX
+	s.cursorY = cursorY
 }

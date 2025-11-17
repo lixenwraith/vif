@@ -12,8 +12,9 @@
 ### System Priorities
 Systems execute in priority order (lower = earlier):
 1. **Input/Score (10)**: Process user input, update score
-2. **Spawn (10)**: Generate new character sequences
-3. **Decay (30)**: Apply character degradation
+2. **Spawn (10)**: Generate new character sequences (Blue and Green only)
+3. **Gold Sequence (20)**: Manage gold sequence lifecycle and random placement
+4. **Decay (30)**: Apply character degradation and color transitions
 
 ### Spatial Indexing
 - Primary index: `World.spatialIndex[y][x] -> Entity`
@@ -26,8 +27,15 @@ Systems execute in priority order (lower = earlier):
 Component (marker interface)
 ├── PositionComponent {X, Y int}
 ├── CharacterComponent {Rune, Style}
-└── SequenceComponent {ID, Index, Type, Level}
+├── SequenceComponent {ID, Index, Type, Level}
+└── GoldSequenceComponent {Active, SequenceID, StartTime, CharSequence, CurrentIndex}
 ```
+
+### Sequence Types
+- **Green**: Positive scoring, spawned by SpawnSystem, decays to Red
+- **Blue**: Positive scoring with boost effect, spawned by SpawnSystem, decays to Green
+- **Red**: Negative scoring (penalty), ONLY created through decay (not spawned directly)
+- **Gold**: Bonus sequence, spawned randomly by GoldSequenceSystem after decay animation
 
 ## Rendering Pipeline
 
@@ -92,6 +100,34 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 3. **Cursor Bounds**: `0 <= CursorX < GameWidth && 0 <= CursorY < GameHeight`
 4. **Score Monotonicity**: Score can decrease (red chars) but ScoreIncrement >= 0
 5. **Boost Mechanic**: Blue characters trigger heat multiplier (x2) for limited time
+6. **Red Spawn Invariant**: Red sequences are NEVER spawned directly, only through decay
+7. **Gold Randomness**: Gold sequences spawn at random positions (not fixed center-top)
+
+## Game Mechanics Details
+
+### Spawn System
+- **Generates**: Only Blue and Green sequences (never Red)
+- **Position**: Random locations with exclusion zone around cursor (5 horizontal, 3 vertical)
+- **Rate**: 2 seconds base, adaptive based on screen fill (1-4 seconds)
+- **Length**: Random 1-10 characters
+- **Characters**: Full alphanumeric + special characters
+
+### Decay System
+- **Brightness Decay**: Bright → Normal → Dark (reduces score multiplier)
+- **Color Decay Chain**:
+  - Blue (Dark) → Green (Bright)
+  - Green (Dark) → Red (Bright) ← **Only source of Red sequences**
+  - Red (Dark) → Destroyed
+- **Timing**: 10-60 seconds interval based on heat level (higher heat = faster decay)
+- **Animation**: Row-by-row sweep from top to bottom
+
+### Gold Sequence System
+- **Trigger**: Spawns when decay animation completes
+- **Position**: Random location avoiding cursor (NOT fixed center-top)
+- **Length**: Fixed 10 alphanumeric characters
+- **Duration**: 10 seconds before timeout
+- **Reward**: Fills heat meter to maximum on completion
+- **Behavior**: Typing gold chars does not affect heat/score directly
 
 ## Error Handling Strategy
 

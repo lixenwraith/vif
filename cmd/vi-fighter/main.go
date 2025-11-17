@@ -42,7 +42,7 @@ func main() {
 	decaySystem := systems.NewDecaySystem(ctx.GameWidth, ctx.GameHeight, ctx.Width, ctx.GetScoreIncrement(), ctx)
 	ctx.World.AddSystem(decaySystem)
 
-	goldSequenceSystem := systems.NewGoldSequenceSystem(ctx, decaySystem, ctx.GameWidth, ctx.GameHeight)
+	goldSequenceSystem := systems.NewGoldSequenceSystem(ctx, decaySystem, ctx.GameWidth, ctx.GameHeight, ctx.CursorX, ctx.CursorY)
 	ctx.World.AddSystem(goldSequenceSystem)
 
 	// Wire up the gold sequence system reference in score system
@@ -120,8 +120,8 @@ func main() {
 			// Update decay system dimensions
 			decaySystem.UpdateDimensions(ctx.GameWidth, ctx.GameHeight, ctx.Width, ctx.GetScoreIncrement())
 
-			// Update gold sequence system dimensions
-			goldSequenceSystem.UpdateDimensions(ctx.GameWidth, ctx.GameHeight)
+			// Update gold sequence system dimensions and cursor position
+			goldSequenceSystem.UpdateDimensions(ctx.GameWidth, ctx.GameHeight, ctx.CursorX, ctx.CursorY)
 
 			// Render frame
 			renderer.RenderFrame(ctx, decaySystem.IsAnimating(), decaySystem.CurrentRow(), decaySystem.GetTimeUntilDecay())

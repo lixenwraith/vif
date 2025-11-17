@@ -17,7 +17,7 @@ func TestGoldSequenceSpawnsAfterDecay(t *testing.T) {
 	world := ctx.World
 
 	decaySystem := NewDecaySystem(ctx.GameWidth, ctx.GameHeight, ctx.Width, 0, ctx)
-	goldSystem := NewGoldSequenceSystem(ctx, decaySystem, ctx.GameWidth, ctx.GameHeight)
+	goldSystem := NewGoldSequenceSystem(ctx, decaySystem, ctx.GameWidth, ctx.GameHeight, 0, 0)
 
 	// Initially, no gold sequence should be active
 	if goldSystem.IsActive() {
@@ -67,7 +67,7 @@ func TestGoldSequenceTimeout(t *testing.T) {
 	world := ctx.World
 
 	decaySystem := NewDecaySystem(ctx.GameWidth, ctx.GameHeight, ctx.Width, 0, ctx)
-	goldSystem := NewGoldSequenceSystem(ctx, decaySystem, ctx.GameWidth, ctx.GameHeight)
+	goldSystem := NewGoldSequenceSystem(ctx, decaySystem, ctx.GameWidth, ctx.GameHeight, 0, 0)
 
 	// Trigger gold sequence spawn
 	decaySystem.animating = true
@@ -115,7 +115,7 @@ func TestGoldSequenceTypingDoesNotAffectHeat(t *testing.T) {
 	world := ctx.World
 
 	decaySystem := NewDecaySystem(ctx.GameWidth, ctx.GameHeight, ctx.Width, 0, ctx)
-	goldSystem := NewGoldSequenceSystem(ctx, decaySystem, ctx.GameWidth, ctx.GameHeight)
+	goldSystem := NewGoldSequenceSystem(ctx, decaySystem, ctx.GameWidth, ctx.GameHeight, 0, 0)
 	scoreSystem := NewScoreSystem(ctx)
 	scoreSystem.SetGoldSequenceSystem(goldSystem)
 
@@ -172,7 +172,7 @@ func TestGoldSequenceCompletionFillsHeat(t *testing.T) {
 	world := ctx.World
 
 	decaySystem := NewDecaySystem(ctx.GameWidth, ctx.GameHeight, ctx.Width, 0, ctx)
-	goldSystem := NewGoldSequenceSystem(ctx, decaySystem, ctx.GameWidth, ctx.GameHeight)
+	goldSystem := NewGoldSequenceSystem(ctx, decaySystem, ctx.GameWidth, ctx.GameHeight, 0, 0)
 	scoreSystem := NewScoreSystem(ctx)
 	scoreSystem.SetGoldSequenceSystem(goldSystem)
 
@@ -237,7 +237,7 @@ func TestGoldSequenceDoesNotReduceHigherHeat(t *testing.T) {
 	world := ctx.World
 
 	decaySystem := NewDecaySystem(ctx.GameWidth, ctx.GameHeight, ctx.Width, 0, ctx)
-	goldSystem := NewGoldSequenceSystem(ctx, decaySystem, ctx.GameWidth, ctx.GameHeight)
+	goldSystem := NewGoldSequenceSystem(ctx, decaySystem, ctx.GameWidth, ctx.GameHeight, 0, 0)
 	scoreSystem := NewScoreSystem(ctx)
 	scoreSystem.SetGoldSequenceSystem(goldSystem)
 
@@ -290,7 +290,7 @@ func TestIgnoringGoldSequenceHasNoEffect(t *testing.T) {
 	world := ctx.World
 
 	decaySystem := NewDecaySystem(ctx.GameWidth, ctx.GameHeight, ctx.Width, 0, ctx)
-	goldSystem := NewGoldSequenceSystem(ctx, decaySystem, ctx.GameWidth, ctx.GameHeight)
+	goldSystem := NewGoldSequenceSystem(ctx, decaySystem, ctx.GameWidth, ctx.GameHeight, 0, 0)
 
 	// Spawn gold sequence
 	decaySystem.animating = true

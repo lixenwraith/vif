@@ -92,8 +92,15 @@ func (s *SpawnSystem) spawnSequence(world *engine.World) {
 		sequence[i] = rune(s.characters[rand.Intn(len(s.characters))])
 	}
 
-	// Randomly assign sequence type and level
-	seqType := components.SequenceType(rand.Intn(3))
+	// Randomly assign sequence type (only Green or Blue, Red comes from decay)
+	// rand.Intn(2) gives 0 or 1, map to Green (0) or Blue (2)
+	typeChoice := rand.Intn(2)
+	var seqType components.SequenceType
+	if typeChoice == 0 {
+		seqType = components.SequenceGreen
+	} else {
+		seqType = components.SequenceBlue
+	}
 	seqLevel := components.SequenceLevel(rand.Intn(3))
 
 	// Get style for this sequence
