@@ -51,19 +51,10 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 - Prefix commands: Build state (`g`, `d`, `f`)
 - Count prefix: Accumulate digits until motion
 
-## Audio Integration
-
-**Principles:**
-- Audio is OPTIONAL - game must function without it
-- Sound manager initialized once, shared via context
-- All sound calls are fire-and-forget
-- Use channels for complex timing, not timers
-
 ## Concurrency Model
 
 - Main game loop: Single-threaded ECS updates
 - Input events: Goroutine → channel → main loop
-- Audio: Separate goroutine, read-only game state access
 - Use `sync.RWMutex` for all shared state
 
 ## Performance Guidelines

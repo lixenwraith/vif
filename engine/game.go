@@ -1,12 +1,9 @@
 package engine
 
 import (
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/core"
 )
 
@@ -83,12 +80,6 @@ type GameContext struct {
 	// Spawn tracking
 	LastSpawn time.Time
 	NextSeqID int
-
-	// Audio
-	SoundManager *audio.SoundManager
-	SoundMu      sync.RWMutex // Protects SoundManager access
-	SoundEnabled atomic.Bool  // Atomic flag to enable/disable all sound (default: false)
-	WasMaxHeat   bool         // Track if we were at max heat last frame
 }
 
 // NewGameContext creates a new game context with initialized ECS world
@@ -115,9 +106,6 @@ func NewGameContext(screen tcell.Screen) *GameContext {
 
 	// Create buffer
 	ctx.Buffer = core.NewBuffer(ctx.GameWidth, ctx.GameHeight)
-
-	// Initialize sound as disabled (false) by default
-	ctx.SoundEnabled.Store(false)
 
 	return ctx
 }
@@ -204,18 +192,4 @@ func (g *GameContext) IsSearchMode() bool {
 // IsNormalMode returns true if in normal mode
 func (g *GameContext) IsNormalMode() bool {
 	return g.Mode == ModeNormal
-}
-
-// GetSoundManager safely returns the sound manager with read lock
-func (g *GameContext) GetSoundManager() *audio.SoundManager {
-	g.SoundMu.RLock()
-	defer g.SoundMu.RUnlock()
-	return g.SoundManager
-}
-
-// SetSoundManager safely sets the sound manager with write lock
-func (g *GameContext) SetSoundManager(sm *audio.SoundManager) {
-	g.SoundMu.Lock()
-	defer g.SoundMu.Unlock()
-	g.SoundManager = sm
 }

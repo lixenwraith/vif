@@ -41,13 +41,6 @@ func (h *InputHandler) handleKeyEvent(ev *tcell.EventKey) bool {
 		return false
 	}
 
-	// Handle Ctrl+S to toggle sound
-	if ev.Key() == tcell.KeyCtrlS {
-		currentState := h.ctx.SoundEnabled.Load()
-		h.ctx.SoundEnabled.Store(!currentState)
-		return true
-	}
-
 	// Handle Escape
 	if ev.Key() == tcell.KeyEscape {
 		if h.ctx.IsSearchMode() {

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/modes"
 	"github.com/lixenwraith/vi-fighter/render"
@@ -32,15 +31,6 @@ func main() {
 
 	// Create game context with ECS world
 	ctx := engine.NewGameContext(screen)
-
-	// Initialize sound manager
-	soundManager := audio.NewSoundManager()
-	if err := soundManager.Initialize(); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize audio: %v\n", err)
-		// Continue without audio - non-fatal
-	}
-	ctx.SetSoundManager(soundManager)
-	defer soundManager.Cleanup()
 
 	// Create and add systems to the ECS world
 	scoreSystem := systems.NewScoreSystem(ctx)

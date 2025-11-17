@@ -41,35 +41,6 @@ func (s *ScoreSystem) Update(world *engine.World, dt time.Duration) {
 	if s.ctx.ScoreBlinkActive && time.Since(s.ctx.ScoreBlinkTime) > constants.ScoreBlinkTimeout {
 		s.ctx.ScoreBlinkActive = false
 	}
-
-	// Handle max heat sound
-	// Max heat is when scoreIncrement >= heatBarWidth (screen width - HeatBarIndicatorWidth)
-	heatBarWidth := s.ctx.Width - constants.HeatBarIndicatorWidth
-	if heatBarWidth < 1 {
-		heatBarWidth = 1
-	}
-	isMaxHeat := s.ctx.ScoreIncrement >= heatBarWidth
-
-	if isMaxHeat && !s.ctx.WasMaxHeat {
-		// Just reached max heat - start the rhythm
-		if s.ctx.SoundEnabled.Load() {
-			s.ctx.SoundMu.RLock()
-			if s.ctx.SoundManager != nil {
-				s.ctx.SoundManager.PlayMaxHeat()
-			}
-			s.ctx.SoundMu.RUnlock()
-		}
-	} else if !isMaxHeat && s.ctx.WasMaxHeat {
-		// Dropped below max heat - stop the rhythm
-		if s.ctx.SoundEnabled.Load() {
-			s.ctx.SoundMu.RLock()
-			if s.ctx.SoundManager != nil {
-				s.ctx.SoundManager.StopMaxHeat()
-			}
-			s.ctx.SoundMu.RUnlock()
-		}
-	}
-	s.ctx.WasMaxHeat = isMaxHeat
 }
 
 // HandleCharacterTyping processes a character typed in insert mode
@@ -81,13 +52,6 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.CursorError = true
 		s.ctx.CursorErrorTime = time.Now()
 		s.ctx.ScoreIncrement = 0 // Reset heat
-		if s.ctx.SoundEnabled.Load() {
-			s.ctx.SoundMu.RLock()
-			if s.ctx.SoundManager != nil {
-				s.ctx.SoundManager.PlayError()
-			}
-			s.ctx.SoundMu.RUnlock()
-		}
 		return
 	}
 
@@ -98,13 +62,6 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.CursorError = true
 		s.ctx.CursorErrorTime = time.Now()
 		s.ctx.ScoreIncrement = 0
-		if s.ctx.SoundEnabled.Load() {
-			s.ctx.SoundMu.RLock()
-			if s.ctx.SoundManager != nil {
-				s.ctx.SoundManager.PlayError()
-			}
-			s.ctx.SoundMu.RUnlock()
-		}
 		return
 	}
 	char := charComp.(components.CharacterComponent)
@@ -116,13 +73,6 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.CursorError = true
 		s.ctx.CursorErrorTime = time.Now()
 		s.ctx.ScoreIncrement = 0
-		if s.ctx.SoundEnabled.Load() {
-			s.ctx.SoundMu.RLock()
-			if s.ctx.SoundManager != nil {
-				s.ctx.SoundManager.PlayError()
-			}
-			s.ctx.SoundMu.RUnlock()
-		}
 		return
 	}
 	seq := seqComp.(components.SequenceComponent)
@@ -133,14 +83,6 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		// RED characters reset heat instead of incrementing it
 		if seq.Type == components.SequenceRed {
 			s.ctx.ScoreIncrement = 0
-			// Play error sound for heat reset
-			if s.ctx.SoundEnabled.Load() {
-				s.ctx.SoundMu.RLock()
-				if s.ctx.SoundManager != nil {
-					s.ctx.SoundManager.PlayError()
-				}
-				s.ctx.SoundMu.RUnlock()
-			}
 		} else {
 			s.ctx.ScoreIncrement++
 		}
@@ -209,13 +151,6 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.CursorError = true
 		s.ctx.CursorErrorTime = time.Now()
 		s.ctx.ScoreIncrement = 0
-		if s.ctx.SoundEnabled.Load() {
-			s.ctx.SoundMu.RLock()
-			if s.ctx.SoundManager != nil {
-				s.ctx.SoundManager.PlayError()
-			}
-			s.ctx.SoundMu.RUnlock()
-		}
 	}
 }
 
@@ -232,14 +167,6 @@ func (s *ScoreSystem) extendTrail(duration time.Duration) {
 		s.ctx.TrailEndTime = s.ctx.TrailEndTime.Add(duration)
 	} else {
 		s.ctx.TrailEndTime = now.Add(duration)
-		// Just activated trail - start the whroom sound
-		if s.ctx.SoundEnabled.Load() {
-			s.ctx.SoundMu.RLock()
-			if s.ctx.SoundManager != nil {
-				s.ctx.SoundManager.PlayTrail()
-			}
-			s.ctx.SoundMu.RUnlock()
-		}
 	}
 	s.ctx.TrailEnabled = true
 
@@ -247,13 +174,5 @@ func (s *ScoreSystem) extendTrail(duration time.Duration) {
 	remaining := s.ctx.TrailEndTime.Sub(now)
 	s.ctx.TrailTimer = time.AfterFunc(remaining, func() {
 		s.ctx.TrailEnabled = false
-		// Stop the whroom sound when trail ends
-		if s.ctx.SoundEnabled.Load() {
-			s.ctx.SoundMu.RLock()
-			if s.ctx.SoundManager != nil {
-				s.ctx.SoundManager.StopTrail()
-			}
-			s.ctx.SoundMu.RUnlock()
-		}
 	})
 }

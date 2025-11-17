@@ -144,14 +144,6 @@ func (s *DecaySystem) applyDecayToRow(world *engine.World, row int) {
 				}
 			} else {
 				// Red at LevelDark - remove entity
-				// Play decay sound
-				if s.ctx.SoundEnabled.Load() {
-					s.ctx.SoundMu.RLock()
-					if s.ctx.SoundManager != nil {
-						s.ctx.SoundManager.PlayDecay()
-					}
-					s.ctx.SoundMu.RUnlock()
-				}
 				// Remove from spatial index before destroying
 				world.RemoveFromSpatialIndex(pos.X, pos.Y)
 				world.DestroyEntity(entity)

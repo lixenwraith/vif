@@ -15,7 +15,7 @@ func TestSpawnExclusionZone(t *testing.T) {
 	cursorY := 12
 
 	world := engine.NewWorld()
-	spawnSys := NewSpawnSystem(gameWidth, gameHeight, cursorX, cursorY)
+	_ = gameHeight // Used in test logic below
 
 	tests := []struct {
 		name      string

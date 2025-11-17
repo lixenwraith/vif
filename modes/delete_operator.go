@@ -87,7 +87,6 @@ func deleteAllOnLine(ctx *engine.GameContext, y int) bool {
 	entities := ctx.World.GetEntitiesWith(posType)
 
 	deletedGreenOrBlue := false
-	deletedRed := false
 	entitiesToDelete := make([]engine.Entity, 0)
 
 	for _, entity := range entities {
@@ -95,14 +94,12 @@ func deleteAllOnLine(ctx *engine.GameContext, y int) bool {
 		pos := posComp.(components.PositionComponent)
 
 		if pos.Y == y {
-			// Check if green or blue or red
+			// Check if green or blue
 			seqComp, ok := ctx.World.GetComponent(entity, seqType)
 			if ok {
 				seq := seqComp.(components.SequenceComponent)
 				if seq.Type == components.SequenceGreen || seq.Type == components.SequenceBlue {
 					deletedGreenOrBlue = true
-				} else if seq.Type == components.SequenceRed {
-					deletedRed = true
 				}
 			}
 
@@ -118,15 +115,6 @@ func deleteAllOnLine(ctx *engine.GameContext, y int) bool {
 		ctx.World.DestroyEntity(entity)
 	}
 
-	// Play decay sound if red was deleted
-	if ctx.SoundEnabled.Load() {
-		ctx.SoundMu.RLock()
-		if deletedRed && ctx.SoundManager != nil {
-			ctx.SoundManager.PlayDecay()
-		}
-		ctx.SoundMu.RUnlock()
-	}
-
 	return deletedGreenOrBlue
 }
 
@@ -138,7 +126,6 @@ func deleteRange(ctx *engine.GameContext, startX, endX, y int) bool {
 	entities := ctx.World.GetEntitiesWith(posType)
 
 	deletedGreenOrBlue := false
-	deletedRed := false
 	entitiesToDelete := make([]engine.Entity, 0)
 
 	// Ensure startX <= endX
@@ -151,14 +138,12 @@ func deleteRange(ctx *engine.GameContext, startX, endX, y int) bool {
 		pos := posComp.(components.PositionComponent)
 
 		if pos.Y == y && pos.X >= startX && pos.X <= endX {
-			// Check if green or blue or red
+			// Check if green or blue
 			seqComp, ok := ctx.World.GetComponent(entity, seqType)
 			if ok {
 				seq := seqComp.(components.SequenceComponent)
 				if seq.Type == components.SequenceGreen || seq.Type == components.SequenceBlue {
 					deletedGreenOrBlue = true
-				} else if seq.Type == components.SequenceRed {
-					deletedRed = true
 				}
 			}
 
@@ -172,15 +157,6 @@ func deleteRange(ctx *engine.GameContext, startX, endX, y int) bool {
 		pos := posComp.(components.PositionComponent)
 		ctx.World.RemoveFromSpatialIndex(pos.X, pos.Y)
 		ctx.World.DestroyEntity(entity)
-	}
-
-	// Play decay sound if red was deleted
-	if ctx.SoundEnabled.Load() {
-		ctx.SoundMu.RLock()
-		if deletedRed && ctx.SoundManager != nil {
-			ctx.SoundManager.PlayDecay()
-		}
-		ctx.SoundMu.RUnlock()
 	}
 
 	return deletedGreenOrBlue
