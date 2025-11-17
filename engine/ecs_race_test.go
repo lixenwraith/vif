@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -147,7 +148,7 @@ func TestConcurrentComponentAccess(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for _, entity := range entities {
-				comp, ok := world.GetComponent(entity, testComponentType())
+				comp, ok := world.GetComponent(entity, reflect.TypeOf(testComponentType()))
 				if !ok {
 					t.Error("Failed to get component")
 				}

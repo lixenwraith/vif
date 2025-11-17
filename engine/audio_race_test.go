@@ -9,12 +9,12 @@ import (
 
 // MockSoundManager is a mock implementation for testing
 type MockSoundManager struct {
-	mu            sync.Mutex
-	playCount     int
-	stopCount     int
-	errorCount    int
-	maxHeatCount  int
-	decayCount    int
+	mu           sync.Mutex
+	playCount    int
+	stopCount    int
+	errorCount   int
+	maxHeatCount int
+	decayCount   int
 }
 
 func (m *MockSoundManager) PlayTrail() {
@@ -67,10 +67,6 @@ func TestConcurrentSoundManagerAccess(t *testing.T) {
 	ctx := &GameContext{
 		World: NewWorld(),
 	}
-
-	// Create and set a real sound manager (or mock)
-	// For this test, we'll use a mock that doesn't require audio initialization
-	mock := &MockSoundManager{}
 
 	// Cast to the interface type that GameContext expects
 	// Since we can't create audio.SoundManager without initialization,
@@ -157,9 +153,9 @@ func TestSoundManagerNilSafety(t *testing.T) {
 	}
 
 	// SoundManager is nil by default
-	ctx.soundMu.RLock()
+	ctx.SoundMu.RLock()
 	sm := ctx.SoundManager
-	ctx.soundMu.RUnlock()
+	ctx.SoundMu.RUnlock()
 
 	if sm != nil {
 		t.Error("Expected SoundManager to be nil initially")
