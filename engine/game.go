@@ -85,7 +85,7 @@ type GameContext struct {
 
 	// Audio
 	SoundManager *audio.SoundManager
-	soundMu      sync.RWMutex // Protects SoundManager access
+	SoundMu      sync.RWMutex // Protects SoundManager access
 	WasMaxHeat   bool         // Track if we were at max heat last frame
 }
 
@@ -203,14 +203,14 @@ func (g *GameContext) IsNormalMode() bool {
 
 // GetSoundManager safely returns the sound manager with read lock
 func (g *GameContext) GetSoundManager() *audio.SoundManager {
-	g.soundMu.RLock()
-	defer g.soundMu.RUnlock()
+	g.SoundMu.RLock()
+	defer g.SoundMu.RUnlock()
 	return g.SoundManager
 }
 
 // SetSoundManager safely sets the sound manager with write lock
 func (g *GameContext) SetSoundManager(sm *audio.SoundManager) {
-	g.soundMu.Lock()
-	defer g.soundMu.Unlock()
+	g.SoundMu.Lock()
+	defer g.SoundMu.Unlock()
 	g.SoundManager = sm
 }

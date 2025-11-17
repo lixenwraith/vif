@@ -51,18 +51,18 @@ func (s *ScoreSystem) Update(world *engine.World, dt time.Duration) {
 
 	if isMaxHeat && !s.ctx.WasMaxHeat {
 		// Just reached max heat - start the rhythm
-		s.ctx.soundMu.RLock()
+		s.ctx.SoundMu.RLock()
 		if s.ctx.SoundManager != nil {
 			s.ctx.SoundManager.PlayMaxHeat()
 		}
-		s.ctx.soundMu.RUnlock()
+		s.ctx.SoundMu.RUnlock()
 	} else if !isMaxHeat && s.ctx.WasMaxHeat {
 		// Dropped below max heat - stop the rhythm
-		s.ctx.soundMu.RLock()
+		s.ctx.SoundMu.RLock()
 		if s.ctx.SoundManager != nil {
 			s.ctx.SoundManager.StopMaxHeat()
 		}
-		s.ctx.soundMu.RUnlock()
+		s.ctx.SoundMu.RUnlock()
 	}
 	s.ctx.WasMaxHeat = isMaxHeat
 }
@@ -76,11 +76,11 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.CursorError = true
 		s.ctx.CursorErrorTime = time.Now()
 		s.ctx.ScoreIncrement = 0 // Reset heat
-		s.ctx.soundMu.RLock()
+		s.ctx.SoundMu.RLock()
 		if s.ctx.SoundManager != nil {
 			s.ctx.SoundManager.PlayError()
 		}
-		s.ctx.soundMu.RUnlock()
+		s.ctx.SoundMu.RUnlock()
 		return
 	}
 
@@ -91,11 +91,11 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.CursorError = true
 		s.ctx.CursorErrorTime = time.Now()
 		s.ctx.ScoreIncrement = 0
-		s.ctx.soundMu.RLock()
+		s.ctx.SoundMu.RLock()
 		if s.ctx.SoundManager != nil {
 			s.ctx.SoundManager.PlayError()
 		}
-		s.ctx.soundMu.RUnlock()
+		s.ctx.SoundMu.RUnlock()
 		return
 	}
 	char := charComp.(components.CharacterComponent)
@@ -107,11 +107,11 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.CursorError = true
 		s.ctx.CursorErrorTime = time.Now()
 		s.ctx.ScoreIncrement = 0
-		s.ctx.soundMu.RLock()
+		s.ctx.SoundMu.RLock()
 		if s.ctx.SoundManager != nil {
 			s.ctx.SoundManager.PlayError()
 		}
-		s.ctx.soundMu.RUnlock()
+		s.ctx.SoundMu.RUnlock()
 		return
 	}
 	seq := seqComp.(components.SequenceComponent)
@@ -123,11 +123,11 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		if seq.Type == components.SequenceRed {
 			s.ctx.ScoreIncrement = 0
 			// Play error sound for heat reset
-			s.ctx.soundMu.RLock()
+			s.ctx.SoundMu.RLock()
 			if s.ctx.SoundManager != nil {
 				s.ctx.SoundManager.PlayError()
 			}
-			s.ctx.soundMu.RUnlock()
+			s.ctx.SoundMu.RUnlock()
 		} else {
 			s.ctx.ScoreIncrement++
 		}
@@ -196,11 +196,11 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.CursorError = true
 		s.ctx.CursorErrorTime = time.Now()
 		s.ctx.ScoreIncrement = 0
-		s.ctx.soundMu.RLock()
+		s.ctx.SoundMu.RLock()
 		if s.ctx.SoundManager != nil {
 			s.ctx.SoundManager.PlayError()
 		}
-		s.ctx.soundMu.RUnlock()
+		s.ctx.SoundMu.RUnlock()
 	}
 }
 
@@ -218,11 +218,11 @@ func (s *ScoreSystem) extendTrail(duration time.Duration) {
 	} else {
 		s.ctx.TrailEndTime = now.Add(duration)
 		// Just activated trail - start the whroom sound
-		s.ctx.soundMu.RLock()
+		s.ctx.SoundMu.RLock()
 		if s.ctx.SoundManager != nil {
 			s.ctx.SoundManager.PlayTrail()
 		}
-		s.ctx.soundMu.RUnlock()
+		s.ctx.SoundMu.RUnlock()
 	}
 	s.ctx.TrailEnabled = true
 
@@ -231,10 +231,10 @@ func (s *ScoreSystem) extendTrail(duration time.Duration) {
 	s.ctx.TrailTimer = time.AfterFunc(remaining, func() {
 		s.ctx.TrailEnabled = false
 		// Stop the whroom sound when trail ends
-		s.ctx.soundMu.RLock()
+		s.ctx.SoundMu.RLock()
 		if s.ctx.SoundManager != nil {
 			s.ctx.SoundManager.StopTrail()
 		}
-		s.ctx.soundMu.RUnlock()
+		s.ctx.SoundMu.RUnlock()
 	})
 }

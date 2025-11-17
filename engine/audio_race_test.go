@@ -85,13 +85,13 @@ func TestConcurrentSoundManagerAccess(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < iterations; j++ {
-				ctx.soundMu.RLock()
+				ctx.SoundMu.RLock()
 				sm := ctx.SoundManager
 				if sm != nil {
 					// Simulate using the sound manager
 					_ = sm
 				}
-				ctx.soundMu.RUnlock()
+				ctx.SoundMu.RUnlock()
 			}
 		}()
 	}
@@ -100,9 +100,9 @@ func TestConcurrentSoundManagerAccess(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		ctx.soundMu.Lock()
+		ctx.SoundMu.Lock()
 		ctx.SoundManager = (*audio.SoundManager)(nil)
-		ctx.soundMu.Unlock()
+		ctx.SoundMu.Unlock()
 	}()
 
 	wg.Wait()
@@ -187,11 +187,11 @@ func TestMultipleSystemsAccessingAudio(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < 50; j++ {
-				ctx.soundMu.RLock()
+				ctx.SoundMu.RLock()
 				if ctx.SoundManager != nil {
 					// Would call PlayError() here
 				}
-				ctx.soundMu.RUnlock()
+				ctx.SoundMu.RUnlock()
 			}
 		}()
 	}
@@ -202,11 +202,11 @@ func TestMultipleSystemsAccessingAudio(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < 50; j++ {
-				ctx.soundMu.RLock()
+				ctx.SoundMu.RLock()
 				if ctx.SoundManager != nil {
 					// Would call PlayDecay() here
 				}
-				ctx.soundMu.RUnlock()
+				ctx.SoundMu.RUnlock()
 			}
 		}()
 	}
@@ -217,11 +217,11 @@ func TestMultipleSystemsAccessingAudio(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < 30; j++ {
-				ctx.soundMu.RLock()
+				ctx.SoundMu.RLock()
 				if ctx.SoundManager != nil {
 					// Would call PlayTrail() or StopTrail() here
 				}
-				ctx.soundMu.RUnlock()
+				ctx.SoundMu.RUnlock()
 			}
 		}()
 	}
