@@ -98,7 +98,7 @@ func (sm *SoundManager) PlayTrail() {
 	}
 
 	// Create a sweeping 'whroom' sound - low to high frequency sweep
-	streamer := beep.Loop(-1, NewWhroomGenerator(sampleRate))
+	streamer := NewWhroomGenerator(sampleRate)
 	ctrl := &beep.Ctrl{Streamer: streamer, Paused: false}
 	sm.trailStreamer = ctrl
 	sm.mixer.Add(ctrl)
@@ -143,7 +143,7 @@ func (sm *SoundManager) PlayMaxHeat() {
 	}
 
 	// Create a synthwave-style rhythmic beat
-	streamer := beep.Loop(-1, NewSynthwaveGenerator(sampleRate))
+	streamer := NewSynthwaveGenerator(sampleRate)
 	ctrl := &beep.Ctrl{Streamer: streamer, Paused: false}
 	sm.maxHeatStreamer = ctrl
 	sm.mixer.Add(ctrl)
