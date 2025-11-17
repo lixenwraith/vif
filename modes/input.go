@@ -72,33 +72,33 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 		if h.ctx.CursorY > 0 {
 			h.ctx.CursorY--
 		}
-		h.ctx.ScoreIncrement = 0
+		h.ctx.SetScoreIncrement(0)
 		return true
 	case tcell.KeyDown:
 		if h.ctx.CursorY < h.ctx.GameHeight-1 {
 			h.ctx.CursorY++
 		}
-		h.ctx.ScoreIncrement = 0
+		h.ctx.SetScoreIncrement(0)
 		return true
 	case tcell.KeyLeft:
 		if h.ctx.CursorX > 0 {
 			h.ctx.CursorX--
 		}
-		h.ctx.ScoreIncrement = 0
+		h.ctx.SetScoreIncrement(0)
 		return true
 	case tcell.KeyRight:
 		if h.ctx.CursorX < h.ctx.GameWidth-1 {
 			h.ctx.CursorX++
 		}
-		h.ctx.ScoreIncrement = 0
+		h.ctx.SetScoreIncrement(0)
 		return true
 	case tcell.KeyHome:
 		h.ctx.CursorX = 0
-		h.ctx.ScoreIncrement = 0
+		h.ctx.SetScoreIncrement(0)
 		return true
 	case tcell.KeyEnd:
 		h.ctx.CursorX = findLineEnd(h.ctx)
-		h.ctx.ScoreIncrement = 0
+		h.ctx.SetScoreIncrement(0)
 		return true
 	case tcell.KeyRune:
 		// Delegate character typing to score system
@@ -140,44 +140,44 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 		if h.ctx.CursorY > 0 {
 			h.ctx.CursorY--
 		}
-		h.ctx.ScoreIncrement = 0
+		h.ctx.SetScoreIncrement(0)
 		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
 	case tcell.KeyDown:
 		if h.ctx.CursorY < h.ctx.GameHeight-1 {
 			h.ctx.CursorY++
 		}
-		h.ctx.ScoreIncrement = 0
+		h.ctx.SetScoreIncrement(0)
 		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
 	case tcell.KeyLeft:
 		if h.ctx.CursorX > 0 {
 			h.ctx.CursorX--
 		}
-		h.ctx.ScoreIncrement = 0
+		h.ctx.SetScoreIncrement(0)
 		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
 	case tcell.KeyRight:
 		if h.ctx.CursorX < h.ctx.GameWidth-1 {
 			h.ctx.CursorX++
 		}
-		h.ctx.ScoreIncrement = 0
+		h.ctx.SetScoreIncrement(0)
 		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
 	case tcell.KeyHome:
 		h.ctx.CursorX = 0
-		h.ctx.ScoreIncrement = 0
+		h.ctx.SetScoreIncrement(0)
 		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
 	case tcell.KeyEnd:
 		h.ctx.CursorX = findLineEnd(h.ctx)
-		h.ctx.ScoreIncrement = 0
+		h.ctx.SetScoreIncrement(0)
 		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
 	case tcell.KeyEnter:
 		// Activate ping grid for 1 second
-		h.ctx.PingActive = true
-		h.ctx.PingGridTimer = 1.0
+		h.ctx.SetPingActive(true)
+		h.ctx.SetPingGridTimer(1.0)
 		h.ctx.MotionCount = 0
 		h.ctx.MotionCommand = ""
 		h.ctx.LastCommand = ""

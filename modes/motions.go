@@ -68,7 +68,7 @@ func ExecuteMotion(ctx *engine.GameContext, cmd rune, count int) {
 	if cmd == ctx.LastMoveKey && (cmd == 'h' || cmd == 'j' || cmd == 'k' || cmd == 'l') {
 		ctx.ConsecutiveCount++
 		if ctx.ConsecutiveCount > 3 {
-			ctx.ScoreIncrement = 0 // Reset heat after 3+ consecutive moves
+			ctx.SetScoreIncrement(0) // Reset heat after 3+ consecutive moves
 		}
 	} else {
 		ctx.LastMoveKey = cmd
@@ -238,7 +238,7 @@ func deleteCharAt(ctx *engine.GameContext, x, y int) {
 	if ok {
 		seq := seqComp.(components.SequenceComponent)
 		if seq.Type == components.SequenceGreen || seq.Type == components.SequenceBlue {
-			ctx.ScoreIncrement = 0 // Reset heat
+			ctx.SetScoreIncrement(0) // Reset heat
 		}
 	}
 

@@ -48,7 +48,7 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
 
 	// Draw heat meter
-	r.drawHeatMeter(ctx.ScoreIncrement, defaultStyle)
+	r.drawHeatMeter(ctx.GetScoreIncrement(), defaultStyle)
 
 	// Draw line numbers
 	r.drawLineNumbers(ctx, defaultStyle)
@@ -217,7 +217,7 @@ func (r *TerminalRenderer) drawPingHighlights(ctx *engine.GameContext, pingColor
 	}
 
 	// Draw grid lines if ping is active
-	if ctx.PingActive {
+	if ctx.GetPingActive() {
 		r.drawPingGrid(ctx, pingStyle, charType)
 	}
 }
@@ -353,7 +353,7 @@ func (r *TerminalRenderer) drawCharacters(world *engine.World, pingColor tcell.C
 			onPingLine := (pos.Y == ctx.CursorY) || (pos.X == ctx.CursorX)
 
 			// Also check if on ping grid lines when ping is active
-			if !onPingLine && ctx.PingActive {
+			if !onPingLine && ctx.GetPingActive() {
 				// Check if on vertical grid line (columns at ±5, ±10, ±15, etc.)
 				deltaX := pos.X - ctx.CursorX
 				if deltaX%5 == 0 && deltaX != 0 {
@@ -530,22 +530,22 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 	}
 
 	// Calculate positions and draw timers + score (from right to left: Boost, Grid, Decay, Score)
-	scoreText := fmt.Sprintf(" Score: %d ", ctx.Score)
+	scoreText := fmt.Sprintf(" Score: %d ", ctx.GetScore())
 	decayText := fmt.Sprintf(" Decay: %.1fs ", decayTimeRemaining)
 	var boostText string
 	var gridText string
 	var totalWidth int
 
-	if ctx.BoostEnabled {
-		remaining := ctx.BoostEndTime.Sub(time.Now()).Seconds()
+	if ctx.GetBoostEnabled() {
+		remaining := ctx.GetBoostEndTime().Sub(time.Now()).Seconds()
 		if remaining < 0 {
 			remaining = 0
 		}
 		boostText = fmt.Sprintf(" Boost: %.1fs ", remaining)
 	}
 
-	if ctx.PingActive {
-		gridRemaining := ctx.PingGridTimer
+	if ctx.GetPingActive() {
+		gridRemaining := ctx.GetPingGridTimer()
 		if gridRemaining < 0 {
 			gridRemaining = 0
 		}
@@ -562,7 +562,7 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 	now := time.Now()
 
 	// Draw boost timer if active (with pink background)
-	if ctx.BoostEnabled {
+	if ctx.GetBoostEnabled() {
 		boostStyle := defaultStyle.Foreground(RgbStatusText).Background(RgbBoostBg)
 		for i, ch := range boostText {
 			if startX+i < r.width {
@@ -573,7 +573,7 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 	}
 
 	// Draw grid timer if active (with default background and white text)
-	if ctx.PingActive {
+	if ctx.GetPingActive() {
 		gridStyle := defaultStyle.Foreground(tcell.ColorWhite)
 		for i, ch := range gridText {
 			if startX+i < r.width {
@@ -593,8 +593,8 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 	startX += len(decayText)
 
 	// Draw score (with yellow background, or blink color if active)
-	if ctx.ScoreBlinkActive && now.Sub(ctx.ScoreBlinkTime).Milliseconds() < 200 {
-		scoreStyle := defaultStyle.Foreground(RgbStatusText).Background(ctx.ScoreBlinkColor)
+	if ctx.GetScoreBlinkActive() && now.Sub(ctx.GetScoreBlinkTime()).Milliseconds() < 200 {
+		scoreStyle := defaultStyle.Foreground(RgbStatusText).Background(ctx.GetScoreBlinkColor())
 		for i, ch := range scoreText {
 			if startX+i < r.width {
 				r.screen.SetContent(startX+i, statusY, ch, nil, scoreStyle)
@@ -621,8 +621,8 @@ func (r *TerminalRenderer) drawCursor(ctx *engine.GameContext, defaultStyle tcel
 
 	// Check for cursor error blink
 	now := time.Now()
-	if ctx.CursorError && now.Sub(ctx.CursorErrorTime).Milliseconds() > errorBlinkMs {
-		ctx.CursorError = false
+	if ctx.GetCursorError() && now.Sub(ctx.GetCursorErrorTime()).Milliseconds() > errorBlinkMs {
+		ctx.SetCursorError(false)
 	}
 
 	// Find character at cursor position
@@ -646,7 +646,7 @@ func (r *TerminalRenderer) drawCursor(ctx *engine.GameContext, defaultStyle tcel
 	var cursorBgColor tcell.Color
 	var charFgColor tcell.Color
 
-	if ctx.CursorError {
+	if ctx.GetCursorError() {
 		cursorBgColor = RgbCursorError
 		charFgColor = tcell.ColorBlack
 	} else if hasChar {

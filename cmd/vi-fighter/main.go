@@ -39,7 +39,7 @@ func main() {
 	spawnSystem := systems.NewSpawnSystem(ctx.GameWidth, ctx.GameHeight, ctx.CursorX, ctx.CursorY)
 	ctx.World.AddSystem(spawnSystem)
 
-	decaySystem := systems.NewDecaySystem(ctx.GameWidth, ctx.GameHeight, ctx.Width, ctx.ScoreIncrement, ctx)
+	decaySystem := systems.NewDecaySystem(ctx.GameWidth, ctx.GameHeight, ctx.Width, ctx.GetScoreIncrement(), ctx)
 	ctx.World.AddSystem(decaySystem)
 
 	// Create renderer
@@ -90,21 +90,29 @@ func main() {
 			)
 
 		case <-ticker.C:
+			// Check if boost should expire
+			if ctx.GetBoostEnabled() && time.Now().After(ctx.GetBoostEndTime()) {
+				ctx.SetBoostEnabled(false)
+			}
+
 			// Update all ECS systems
 			dt := 16 * time.Millisecond
 			ctx.World.Update(dt)
 
 			// Update ping grid timer
-			if ctx.PingGridTimer > 0 {
-				ctx.PingGridTimer -= dt.Seconds()
-				if ctx.PingGridTimer <= 0 {
-					ctx.PingGridTimer = 0
-					ctx.PingActive = false
+			pingTimer := ctx.GetPingGridTimer()
+			if pingTimer > 0 {
+				newTimer := pingTimer - dt.Seconds()
+				if newTimer <= 0 {
+					ctx.SetPingGridTimer(0)
+					ctx.SetPingActive(false)
+				} else {
+					ctx.SetPingGridTimer(newTimer)
 				}
 			}
 
 			// Update decay system dimensions
-			decaySystem.UpdateDimensions(ctx.GameWidth, ctx.GameHeight, ctx.Width, ctx.ScoreIncrement)
+			decaySystem.UpdateDimensions(ctx.GameWidth, ctx.GameHeight, ctx.Width, ctx.GetScoreIncrement())
 
 			// Render frame
 			renderer.RenderFrame(ctx, decaySystem.IsAnimating(), decaySystem.CurrentRow(), decaySystem.GetTimeUntilDecay())

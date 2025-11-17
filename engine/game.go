@@ -1,7 +1,9 @@
 package engine
 
 import (
+	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/core"
@@ -41,9 +43,11 @@ type GameContext struct {
 	// Cursor state
 	CursorX, CursorY int
 	CursorVisible    bool
-	CursorError      bool
-	CursorErrorTime  time.Time
 	CursorBlinkTime  time.Time
+
+	// Atomic cursor error state
+	cursorError     atomic.Bool
+	cursorErrorTime atomic.Int64 // UnixNano
 
 	// Motion command state
 	MotionCount    int
@@ -54,21 +58,20 @@ type GameContext struct {
 	DeleteOperator bool
 	LastCommand    string // Last executed command for display
 
-	// Score tracking
-	Score            int
-	ScoreIncrement   int
-	ScoreBlinkActive bool
-	ScoreBlinkColor  tcell.Color
-	ScoreBlinkTime   time.Time
+	// Atomic score tracking
+	score            atomic.Int64
+	scoreIncrement   atomic.Int64
+	scoreBlinkActive atomic.Bool
+	scoreBlinkColor  atomic.Uint32 // tcell.Color is uint32
+	scoreBlinkTime   atomic.Int64  // UnixNano
 
-	// Boost state (heat multiplier mechanic)
-	BoostEnabled bool
-	BoostTimer   *time.Timer
-	BoostEndTime time.Time
+	// Atomic boost state (heat multiplier mechanic)
+	boostEnabled atomic.Bool
+	boostEndTime atomic.Int64 // UnixNano
 
-	// Ping coordinates feature
-	PingActive    bool
-	PingGridTimer float64 // Timer in seconds for ping grid (0 = inactive)
+	// Atomic ping coordinates feature
+	pingActive    atomic.Bool
+	pingGridTimer atomic.Uint64 // float64 bits for seconds
 	PingStartTime time.Time
 	PingRow       int
 	PingCol       int
@@ -95,10 +98,21 @@ func NewGameContext(screen tcell.Screen) *GameContext {
 		CursorVisible:   true,
 		CursorBlinkTime: time.Now(),
 		NextSeqID:       1,
-		Score:           0,
-		ScoreIncrement:  0,
 		LastSpawn:       time.Now(),
 	}
+
+	// Initialize atomic values
+	ctx.score.Store(0)
+	ctx.scoreIncrement.Store(0)
+	ctx.scoreBlinkActive.Store(false)
+	ctx.scoreBlinkColor.Store(0)
+	ctx.scoreBlinkTime.Store(0)
+	ctx.boostEnabled.Store(false)
+	ctx.boostEndTime.Store(0)
+	ctx.cursorError.Store(false)
+	ctx.cursorErrorTime.Store(0)
+	ctx.pingActive.Store(false)
+	ctx.pingGridTimer.Store(0)
 
 	ctx.updateGameArea()
 	ctx.CursorX = ctx.GameWidth / 2
@@ -108,6 +122,139 @@ func NewGameContext(screen tcell.Screen) *GameContext {
 	ctx.Buffer = core.NewBuffer(ctx.GameWidth, ctx.GameHeight)
 
 	return ctx
+}
+
+// Atomic accessor methods for Score
+func (g *GameContext) GetScore() int {
+	return int(g.score.Load())
+}
+
+func (g *GameContext) SetScore(score int) {
+	g.score.Store(int64(score))
+}
+
+func (g *GameContext) AddScore(delta int) {
+	g.score.Add(int64(delta))
+}
+
+// Atomic accessor methods for ScoreIncrement
+func (g *GameContext) GetScoreIncrement() int {
+	return int(g.scoreIncrement.Load())
+}
+
+func (g *GameContext) SetScoreIncrement(increment int) {
+	g.scoreIncrement.Store(int64(increment))
+}
+
+func (g *GameContext) AddScoreIncrement(delta int) {
+	g.scoreIncrement.Add(int64(delta))
+}
+
+// Atomic accessor methods for ScoreBlinkActive
+func (g *GameContext) GetScoreBlinkActive() bool {
+	return g.scoreBlinkActive.Load()
+}
+
+func (g *GameContext) SetScoreBlinkActive(active bool) {
+	g.scoreBlinkActive.Store(active)
+}
+
+// Atomic accessor methods for ScoreBlinkColor
+func (g *GameContext) GetScoreBlinkColor() tcell.Color {
+	return tcell.Color(g.scoreBlinkColor.Load())
+}
+
+func (g *GameContext) SetScoreBlinkColor(color tcell.Color) {
+	g.scoreBlinkColor.Store(uint32(color))
+}
+
+// Atomic accessor methods for ScoreBlinkTime
+func (g *GameContext) GetScoreBlinkTime() time.Time {
+	nano := g.scoreBlinkTime.Load()
+	if nano == 0 {
+		return time.Time{}
+	}
+	return time.Unix(0, nano)
+}
+
+func (g *GameContext) SetScoreBlinkTime(t time.Time) {
+	g.scoreBlinkTime.Store(t.UnixNano())
+}
+
+// Atomic accessor methods for BoostEnabled
+func (g *GameContext) GetBoostEnabled() bool {
+	return g.boostEnabled.Load()
+}
+
+func (g *GameContext) SetBoostEnabled(enabled bool) {
+	g.boostEnabled.Store(enabled)
+}
+
+// Atomic accessor methods for BoostEndTime
+func (g *GameContext) GetBoostEndTime() time.Time {
+	nano := g.boostEndTime.Load()
+	if nano == 0 {
+		return time.Time{}
+	}
+	return time.Unix(0, nano)
+}
+
+func (g *GameContext) SetBoostEndTime(t time.Time) {
+	g.boostEndTime.Store(t.UnixNano())
+}
+
+// Atomic accessor methods for CursorError
+func (g *GameContext) GetCursorError() bool {
+	return g.cursorError.Load()
+}
+
+func (g *GameContext) SetCursorError(error bool) {
+	g.cursorError.Store(error)
+}
+
+// Atomic accessor methods for CursorErrorTime
+func (g *GameContext) GetCursorErrorTime() time.Time {
+	nano := g.cursorErrorTime.Load()
+	if nano == 0 {
+		return time.Time{}
+	}
+	return time.Unix(0, nano)
+}
+
+func (g *GameContext) SetCursorErrorTime(t time.Time) {
+	g.cursorErrorTime.Store(t.UnixNano())
+}
+
+// Atomic accessor methods for PingActive
+func (g *GameContext) GetPingActive() bool {
+	return g.pingActive.Load()
+}
+
+func (g *GameContext) SetPingActive(active bool) {
+	g.pingActive.Store(active)
+}
+
+// Atomic accessor methods for PingGridTimer
+func (g *GameContext) GetPingGridTimer() float64 {
+	bits := g.pingGridTimer.Load()
+	return *(*float64)(unsafe.Pointer(&bits))
+}
+
+func (g *GameContext) SetPingGridTimer(seconds float64) {
+	bits := *(*uint64)(unsafe.Pointer(&seconds))
+	g.pingGridTimer.Store(bits)
+}
+
+func (g *GameContext) AddPingGridTimer(delta float64) {
+	for {
+		oldBits := g.pingGridTimer.Load()
+		oldValue := *(*float64)(unsafe.Pointer(&oldBits))
+		newValue := oldValue + delta
+		newBits := *(*uint64)(unsafe.Pointer(&newValue))
+		if g.pingGridTimer.CompareAndSwap(oldBits, newBits) {
+			break
+		}
+	}
 }
 
 // updateGameArea calculates the game area dimensions

@@ -33,13 +33,13 @@ func (s *ScoreSystem) Priority() int {
 // Update runs the score system (unused for now, character typing is event-driven)
 func (s *ScoreSystem) Update(world *engine.World, dt time.Duration) {
 	// Clear error cursor after timeout
-	if s.ctx.CursorError && time.Since(s.ctx.CursorErrorTime) > constants.ErrorCursorTimeout {
-		s.ctx.CursorError = false
+	if s.ctx.GetCursorError() && time.Since(s.ctx.GetCursorErrorTime()) > constants.ErrorCursorTimeout {
+		s.ctx.SetCursorError(false)
 	}
 
 	// Clear score blink after timeout
-	if s.ctx.ScoreBlinkActive && time.Since(s.ctx.ScoreBlinkTime) > constants.ScoreBlinkTimeout {
-		s.ctx.ScoreBlinkActive = false
+	if s.ctx.GetScoreBlinkActive() && time.Since(s.ctx.GetScoreBlinkTime()) > constants.ScoreBlinkTimeout {
+		s.ctx.SetScoreBlinkActive(false)
 	}
 }
 
@@ -49,9 +49,9 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 	entity := world.GetEntityAtPosition(cursorX, cursorY)
 	if entity == 0 {
 		// No character at cursor - flash error cursor
-		s.ctx.CursorError = true
-		s.ctx.CursorErrorTime = time.Now()
-		s.ctx.ScoreIncrement = 0 // Reset heat
+		s.ctx.SetCursorError(true)
+		s.ctx.SetCursorErrorTime(time.Now())
+		s.ctx.SetScoreIncrement(0) // Reset heat
 		return
 	}
 
@@ -59,9 +59,9 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 	charType := reflect.TypeOf(components.CharacterComponent{})
 	charComp, ok := world.GetComponent(entity, charType)
 	if !ok {
-		s.ctx.CursorError = true
-		s.ctx.CursorErrorTime = time.Now()
-		s.ctx.ScoreIncrement = 0
+		s.ctx.SetCursorError(true)
+		s.ctx.SetCursorErrorTime(time.Now())
+		s.ctx.SetScoreIncrement(0)
 		return
 	}
 	char := charComp.(components.CharacterComponent)
@@ -70,9 +70,9 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 	seqType := reflect.TypeOf(components.SequenceComponent{})
 	seqComp, ok := world.GetComponent(entity, seqType)
 	if !ok {
-		s.ctx.CursorError = true
-		s.ctx.CursorErrorTime = time.Now()
-		s.ctx.ScoreIncrement = 0
+		s.ctx.SetCursorError(true)
+		s.ctx.SetCursorErrorTime(time.Now())
+		s.ctx.SetScoreIncrement(0)
 		return
 	}
 	seq := seqComp.(components.SequenceComponent)
@@ -82,14 +82,14 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		// Correct character
 		// RED characters reset heat instead of incrementing it
 		if seq.Type == components.SequenceRed {
-			s.ctx.ScoreIncrement = 0
+			s.ctx.SetScoreIncrement(0)
 		} else {
 			// Apply heat gain with boost multiplier
 			heatGain := 1
-			if s.ctx.BoostEnabled {
+			if s.ctx.GetBoostEnabled() {
 				heatGain = 2
 			}
-			s.ctx.ScoreIncrement += heatGain
+			s.ctx.AddScoreIncrement(heatGain)
 		}
 		s.lastCorrect = time.Now()
 
@@ -100,14 +100,14 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 			components.LevelBright: 3,
 		}
 		levelMult := levelMultipliers[seq.Level]
-		points := s.ctx.ScoreIncrement * levelMult
+		points := s.ctx.GetScoreIncrement() * levelMult
 
 		// Red characters give negative points
 		if seq.Type == components.SequenceRed {
 			points = -points
 		}
 
-		s.ctx.Score += points
+		s.ctx.AddScore(points)
 
 		// Blue character adds boost time
 		if seq.Type == components.SequenceBlue {
@@ -115,10 +115,10 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		}
 
 		// Trigger score blink with character color
-		s.ctx.ScoreBlinkActive = true
+		s.ctx.SetScoreBlinkActive(true)
 		fgColor, _, _ := render.GetStyleForSequence(seq.Type, seq.Level).Decompose()
-		s.ctx.ScoreBlinkColor = fgColor
-		s.ctx.ScoreBlinkTime = time.Now()
+		s.ctx.SetScoreBlinkColor(fgColor)
+		s.ctx.SetScoreBlinkTime(time.Now())
 
 		// Remove entity from spatial index first
 		posType := reflect.TypeOf(components.PositionComponent{})
@@ -139,31 +139,25 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 
 	} else {
 		// Incorrect character - flash error cursor and reset heat
-		s.ctx.CursorError = true
-		s.ctx.CursorErrorTime = time.Now()
-		s.ctx.ScoreIncrement = 0
+		s.ctx.SetCursorError(true)
+		s.ctx.SetCursorErrorTime(time.Now())
+		s.ctx.SetScoreIncrement(0)
 	}
 }
 
 // extendBoost extends the boost timer by the given duration
 func (s *ScoreSystem) extendBoost(duration time.Duration) {
-	if s.ctx.BoostTimer != nil {
-		s.ctx.BoostTimer.Stop()
-	}
+	now := time.Now()
 
 	// If boost is already active, add to existing end time; otherwise start fresh
-	now := time.Now()
-	wasActive := s.ctx.BoostEnabled && s.ctx.BoostEndTime.After(now)
-	if wasActive {
-		s.ctx.BoostEndTime = s.ctx.BoostEndTime.Add(duration)
-	} else {
-		s.ctx.BoostEndTime = now.Add(duration)
-	}
-	s.ctx.BoostEnabled = true
+	currentEndTime := s.ctx.GetBoostEndTime()
+	wasActive := s.ctx.GetBoostEnabled() && currentEndTime.After(now)
 
-	// Calculate remaining time for the timer
-	remaining := s.ctx.BoostEndTime.Sub(now)
-	s.ctx.BoostTimer = time.AfterFunc(remaining, func() {
-		s.ctx.BoostEnabled = false
-	})
+	if wasActive {
+		s.ctx.SetBoostEndTime(currentEndTime.Add(duration))
+	} else {
+		s.ctx.SetBoostEndTime(now.Add(duration))
+	}
+
+	s.ctx.SetBoostEnabled(true)
 }
