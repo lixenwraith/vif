@@ -402,10 +402,12 @@ An automated pressure mechanic that gradually degrades all sequences on screen, 
 - Example: At 50% heat, decay occurs every 35 seconds
 
 **Visual Animation:**
-- Row-by-row sweep from top to bottom
-- Gray background (RGB: 60,60,60) highlights current decay row
-- 100ms per row
-- Total time ≈ 100ms × screen height
+- Matrix-style falling character effect from top to bottom
+- One falling character per column with randomized speeds (5-15 rows/second)
+- Characters change randomly as they fall (~40% chance per row)
+- Each column processed independently for complete screen coverage
+- When a falling character reaches a game character, decay is applied once
+- Animation completes when slowest falling character reaches the bottom
 
 **Decay Progression:**
 

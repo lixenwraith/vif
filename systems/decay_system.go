@@ -272,19 +272,27 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 		currentRow := int(fall.YPosition)
 
 		// Matrix-style character change: when crossing row boundaries, randomly change character
-		// Check if we've entered a new row
+		// Note: LastChangeRow tracks the last row we checked to ensure we only attempt
+		// one change per row. It must be updated on every row to prevent re-checking.
 		if currentRow != fall.LastChangeRow {
-			// Only consider changing if minimum rows have passed since last change
+			// Calculate distance since last row check
 			rowsSinceLastChange := currentRow - fall.LastChangeRow
+			// Handle initial case when LastChangeRow is -1
+			if fall.LastChangeRow < 0 {
+				rowsSinceLastChange = currentRow + 1
+			}
+
+			// Always update LastChangeRow to current row to prevent re-checking same row
+			fall.LastChangeRow = currentRow
+
+			// Only consider changing if minimum rows have passed since last check
 			if rowsSinceLastChange >= constants.FallingDecayMinRowsBetweenChanges {
-				// Random chance to change character
+				// Random chance to change character (40% probability)
 				if rand.Float64() < constants.FallingDecayChangeChance {
 					characters := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 					fall.Char = rune(characters[rand.Intn(len(characters))])
 				}
 			}
-			// Always update LastChangeRow when entering a new row
-			fall.LastChangeRow = currentRow
 		}
 
 		// Entity is still within bounds
