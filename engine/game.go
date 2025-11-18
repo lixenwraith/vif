@@ -56,6 +56,7 @@ type GameContext struct {
 	MotionCount    int
 	MotionCommand  string
 	WaitingForF    bool
+	PendingCount   int  // Preserved count for multi-keystroke commands (e.g., 2fa)
 	CommandPrefix  rune
 	StatusMessage  string
 	DeleteOperator bool

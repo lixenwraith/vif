@@ -196,10 +196,20 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 
 		// Handle waiting for 'f' character
 		if h.ctx.WaitingForF {
+			// Use PendingCount if set, otherwise default to 1
+			count := h.ctx.PendingCount
+			if count == 0 {
+				count = 1
+			}
+
 			// Build command string: [count]f[char]
-			cmd := h.buildCommandString('f', char, h.ctx.MotionCount, false)
-			ExecuteFindChar(h.ctx, char)
+			cmd := h.buildCommandString('f', char, count, false)
+			ExecuteFindChar(h.ctx, char, count)
+
+			// Clear multi-keystroke state
 			h.ctx.WaitingForF = false
+			h.ctx.PendingCount = 0
+			h.ctx.MotionCount = 0
 			h.ctx.LastCommand = cmd
 			return true
 		}
@@ -337,6 +347,15 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 		if char == 'g' {
 			h.ctx.CommandPrefix = 'g'
 			// Don't clear LastCommand yet - waiting for second char
+			return true
+		}
+
+		// Handle 'f' command (find character - multi-keystroke)
+		if char == 'f' {
+			h.ctx.WaitingForF = true
+			h.ctx.PendingCount = count // Preserve count for when target char is typed
+			// Don't clear MotionCount yet - will be cleared when command completes
+			// Don't set LastCommand yet - waiting for target character
 			return true
 		}
 

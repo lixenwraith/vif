@@ -213,8 +213,15 @@ INSERT / SEARCH ─[ESC]→ NORMAL
   - `go` - Jump to top-left corner
   - `dd` - Delete line
   - `dw`, `d$`, `d<motion>` - Delete with motion
-  - `f<char>` - Find character on line
-- **Count prefix**: Accumulate digits until motion (e.g., `5j`, `10l`, `3w`)
+  - `f<char>` - Find character on line (count-aware: `2fa` finds 2nd 'a')
+- **Count prefix**: Accumulate digits until motion (e.g., `5j`, `10l`, `3w`, `2fa`)
+- **Count-aware multi-keystroke commands**: Commands like `f` preserve count through phases
+  - `MotionCount` → `PendingCount` when entering multi-keystroke state
+  - `PendingCount` used when completing the command
+  - Both cleared after execution
+- **CommandCapabilities system**: Systematic mapping of which commands accept counts
+  - Flags: `AcceptsCount`, `MultiKeystroke`, `RequiresMotion`
+  - See `modes/capabilities.go` for full mapping
 - **Consecutive move penalty**: Using h/j/k/l more than 3 times consecutively resets heat
 - **Arrow keys**: Function like h/j/k/l but always reset heat
 

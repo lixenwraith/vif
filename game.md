@@ -64,10 +64,11 @@ There is no end state - the challenge is to survive as long as possible while th
 - **`l`** - Move right
 - **`Space`** - Move right (same as `l`)
 
-**Count Prefixes**: Any motion can be prefixed with a number
+**Count Prefixes**: Most motions can be prefixed with a number
 - `5j` - Move down 5 lines
 - `10l` - Move right 10 characters
 - `3w` - Move forward 3 words
+- `2fa` - Find the 2nd 'a' on the current line (multi-keystroke with count)
 
 #### Line Navigation
 - **`0`** - Jump to start of line (column 0)
@@ -107,6 +108,7 @@ Examples:
 #### Find & Search
 - **`f<char>`** - Find character forward on current line
   - Example: `fa` finds next 'a' on the current line
+  - **Count-aware**: `2fa` finds the 2nd 'a', `3fb` finds the 3rd 'b'
 - **`/<pattern>`** - Search for text pattern (enters SEARCH mode)
   - Type pattern, press `Enter` to jump to first match
 - **`n`** - Repeat last search forward

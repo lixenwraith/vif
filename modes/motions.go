@@ -108,8 +108,8 @@ func ExecuteMotion(ctx *engine.GameContext, cmd rune, count int) {
 		ctx.CursorY = ctx.GameHeight - 1
 	case 'g': // Top (when preceded by another 'g')
 		ctx.CursorY = 0
-	case 'f': // Find character (set waiting state)
-		ctx.WaitingForF = true
+	// Note: 'f' is handled in input.go handleNormalMode, not here
+	// This is because 'f' is a multi-keystroke command that needs special handling
 	case 'x': // Delete character
 		deleteCharAt(ctx, ctx.CursorX, ctx.CursorY)
 	case 'h': // Left
@@ -175,12 +175,21 @@ func ExecuteMotion(ctx *engine.GameContext, cmd rune, count int) {
 }
 
 // ExecuteFindChar executes the 'f' (find character) command
-func ExecuteFindChar(ctx *engine.GameContext, targetChar rune) {
+// Finds the Nth occurrence of targetChar on the current line, where N = count
+// If count is 0 or 1, finds the first occurrence
+// If count > 1, finds the Nth occurrence (e.g., 2fa finds the 2nd 'a')
+func ExecuteFindChar(ctx *engine.GameContext, targetChar rune, count int) {
+	if count == 0 {
+		count = 1
+	}
+
 	// Search forward on current line for the character
 	posType := reflect.TypeOf(components.PositionComponent{})
 	charType := reflect.TypeOf(components.CharacterComponent{})
 
 	entities := ctx.World.GetEntitiesWith(posType, charType)
+
+	occurrencesFound := 0
 
 	for x := ctx.CursorX + 1; x < ctx.GameWidth; x++ {
 		for _, entity := range entities {
@@ -192,12 +201,16 @@ func ExecuteFindChar(ctx *engine.GameContext, targetChar rune) {
 				char := charComp.(components.CharacterComponent)
 
 				if char.Rune == targetChar {
-					ctx.CursorX = x
-					return
+					occurrencesFound++
+					if occurrencesFound == count {
+						ctx.CursorX = x
+						return
+					}
 				}
 			}
 		}
 	}
+	// If we didn't find the Nth occurrence, cursor doesn't move
 }
 
 // isWordChar returns true if the rune is a word character (alphanumeric or underscore)
