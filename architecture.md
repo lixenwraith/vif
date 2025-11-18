@@ -130,7 +130,7 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 ## Game Mechanics Details
 
 ### Spawn System
-- **Content Source**: Loads Go source code from `./assets/data.txt` at initialization
+- **Content Source**: Loads Go source code from `assets/` directory at initialization (automatically located at project root)
 - **Block Generation**:
   - Selects random 5-10 consecutive lines from file per spawn
   - Lines are trimmed of whitespace before placement
@@ -193,16 +193,18 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 
 ## Data Files
 
-### assets/data.txt
-- **Purpose**: Source file for game content (code blocks)
-- **Format**: Plain text file containing Go source code
-- **Location**: `./assets/data.txt` (relative to executable)
-- **Content**: Go standard library source code (e.g., crypto/md5)
+### assets/ directory
+- **Purpose**: Contains `.txt` files with game content (code blocks)
+- **Format**: Plain text files containing source code
+- **Location**: Automatically located at project root by searching for `go.mod`
+- **Content**: Source code files (e.g., Go standard library code like crypto/md5)
+- **Discovery**: ContentManager scans for all `.txt` files (excluding hidden files starting with `.`)
 - **Processing**:
-  - Loaded at game initialization
+  - All valid files are pre-validated and cached at initialization
   - Lines trimmed of whitespace
-  - Empty lines ignored
-  - Wrapped around when reaching end of file
+  - Empty lines and comments ignored
+  - Files must have at least 10 valid lines after processing
+  - Content blocks are selected randomly from validated cache
 
 ## Error Handling Strategy
 

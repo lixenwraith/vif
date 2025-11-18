@@ -75,7 +75,7 @@ The decay system creates pressure by gradually degrading sequences over time:
 
 The spawn system uses **file-based code blocks** from `assets/data.txt` to populate the screen:
 
-- **Content Source**: Reads Go source code from `./assets/data.txt` at startup
+- **Content Source**: Reads Go source code from `assets/` directory at startup (automatically located at project root)
 - **Block Selection**:
   - Random 5-10 consecutive lines selected from file
   - Lines are trimmed of whitespace before placement
@@ -185,7 +185,7 @@ Systems execute in priority order each frame:
 
 - Go 1.19 or later
 - Terminal with color support
-- `assets/data.txt` file containing source code (included in repository)
+- `assets/` directory containing `.txt` files with source code (included in repository)
 
 ### Build
 
@@ -195,7 +195,7 @@ go build -o vi-fighter ./cmd/vi-fighter
 
 ### Run
 
-The game expects `assets/data.txt` to be present in the current working directory:
+The game automatically locates the `assets/` directory at the project root:
 
 ```bash
 # From repository root
@@ -208,7 +208,7 @@ Or directly:
 go run ./cmd/vi-fighter
 ```
 
-**Note**: The game gracefully handles missing `assets/data.txt` but will not spawn file-based code blocks.
+**Note**: The ContentManager automatically finds the project root by searching for `go.mod`, then uses the `assets/` directory from there. If `assets/` is missing or contains no valid `.txt` files, the game gracefully falls back to default content.
 
 ### Running Tests
 
@@ -216,12 +216,17 @@ go run ./cmd/vi-fighter
 # Run all tests
 go test ./...
 
+# Run tests with race detector
+go test -race ./...
+
 # Run tests with verbose output
 go test -v ./...
 
 # Run specific test package
 go test ./systems
 ```
+
+**Note**: Tests automatically locate the project root and `assets/` directory regardless of the current working directory. This ensures tests pass consistently in CI environments and when run from subdirectories.
 
 ## Controls
 

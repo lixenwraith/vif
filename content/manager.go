@@ -14,7 +14,6 @@ import (
 )
 
 const (
-	assetsDir        = "./assets"
 	ContentBlockSize = 30 // Default number of lines per content block (20-50 range)
 	MinProcessedLines = 10 // Minimum number of valid lines required after processing
 	MaxLineLength    = 80 // Maximum line length to match game width
@@ -27,6 +26,32 @@ var (
 	// CommentPrefixes defines the prefixes that identify comment lines
 	CommentPrefixes = []string{"//", "#"}
 )
+
+// findProjectRoot finds the project root by looking for go.mod
+// Returns the directory containing go.mod, or current directory if not found
+func findProjectRoot() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		log.Printf("Warning: could not get current directory: %v", err)
+		return "."
+	}
+
+	// Walk up the directory tree looking for go.mod
+	for {
+		goModPath := filepath.Join(dir, "go.mod")
+		if _, err := os.Stat(goModPath); err == nil {
+			return dir
+		}
+
+		parent := filepath.Dir(dir)
+		// If we've reached the root, stop
+		if parent == dir {
+			log.Printf("Warning: could not find go.mod, using current directory")
+			return "."
+		}
+		dir = parent
+	}
+}
 
 // circuitBreaker tracks failures and prevents excessive retries
 type circuitBreaker struct {
@@ -75,13 +100,19 @@ type ContentManager struct {
 	breaker          circuitBreaker
 	validatedCache   []validatedContent
 	cacheMu          sync.RWMutex
+	assetsDir        string
 }
 
 // NewContentManager creates a new content manager
+// It automatically finds the project root and uses assets/ directory from there
 func NewContentManager() *ContentManager {
+	projectRoot := findProjectRoot()
+	assetsPath := filepath.Join(projectRoot, "assets")
+
 	return &ContentManager{
 		contentFiles:   []string{},
 		validatedCache: []validatedContent{},
+		assetsDir:      assetsPath,
 	}
 }
 
@@ -220,13 +251,13 @@ func (cm *ContentManager) DiscoverContentFiles() error {
 	}()
 
 	// Check if assets directory exists
-	if _, err := os.Stat(assetsDir); os.IsNotExist(err) {
-		log.Printf("Assets directory '%s' does not exist, no content files discovered", assetsDir)
+	if _, err := os.Stat(cm.assetsDir); os.IsNotExist(err) {
+		log.Printf("Assets directory '%s' does not exist, no content files discovered", cm.assetsDir)
 		return nil // Not an error, just no files to discover
 	}
 
 	// Read directory entries
-	entries, err := os.ReadDir(assetsDir)
+	entries, err := os.ReadDir(cm.assetsDir)
 	if err != nil {
 		return fmt.Errorf("failed to read assets directory: %w", err)
 	}
@@ -251,7 +282,7 @@ func (cm *ContentManager) DiscoverContentFiles() error {
 
 		// Check if file has .txt extension
 		if strings.HasSuffix(fileName, ".txt") {
-			filePath := filepath.Join(assetsDir, fileName)
+			filePath := filepath.Join(cm.assetsDir, fileName)
 			cm.contentFiles = append(cm.contentFiles, filePath)
 			log.Printf("Discovered content file: %s", filePath)
 		}
@@ -259,7 +290,7 @@ func (cm *ContentManager) DiscoverContentFiles() error {
 
 	// Log summary
 	if len(cm.contentFiles) == 0 {
-		log.Printf("No .txt files found in %s", assetsDir)
+		log.Printf("No .txt files found in %s", cm.assetsDir)
 	} else {
 		log.Printf("Discovered %d content file(s)", len(cm.contentFiles))
 	}

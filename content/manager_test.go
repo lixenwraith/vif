@@ -27,15 +27,8 @@ func TestDiscoverContentFiles(t *testing.T) {
 		}
 	}
 
-	// Temporarily change assetsDir for testing
-	originalAssetsDir := assetsDir
-	defer func() {
-		// Note: assetsDir is a const, so we can't actually change it in this test
-		// In production code, you might want to make it configurable
-		_ = originalAssetsDir
-	}()
-
 	// Create content manager
+	// Note: ContentManager now automatically finds the project root and uses assets/ from there
 	cm := NewContentManager()
 
 	// Test with actual assets directory
