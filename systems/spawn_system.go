@@ -52,6 +52,7 @@ type SpawnSystem struct {
 	// Content management
 	contentManager   *content.ContentManager
 	contentMutex     sync.RWMutex
+	indexMutex       sync.Mutex   // Mutex to protect index update and wraparound operations
 	codeBlocks       []CodeBlock
 	nextBlockIndex   atomic.Int32 // Atomic index for thread-safe access
 	totalBlocks      atomic.Int32 // Atomic counter for total blocks
@@ -473,20 +474,41 @@ func (s *SpawnSystem) getNextBlock() CodeBlock {
 	block := s.codeBlocks[currentIndex]
 	s.contentMutex.RUnlock()
 
+	// Use mutex to protect the critical section where we update index and check for wraparound
+	// This prevents race conditions where blocksConsumed could exceed totalBlocks
+	s.indexMutex.Lock()
+
+	// Re-read totalBlocks inside critical section to ensure consistency
+	currentTotal := int(s.totalBlocks.Load())
+	currentConsumed := int(s.blocksConsumed.Load())
+
+	// Check if we've already consumed all blocks (can happen during concurrent wraparound)
+	if currentConsumed >= currentTotal && currentTotal > 0 {
+		// Another thread is handling or has handled the swap, just return this block
+		s.indexMutex.Unlock()
+		return block
+	}
+
 	// Calculate next index
-	nextIndex := (currentIndex + 1) % totalBlocks
+	currentIndex = int(s.nextBlockIndex.Load())
+	nextIndex := (currentIndex + 1) % currentTotal
 
 	// Atomically update index
 	s.nextBlockIndex.Store(int32(nextIndex))
 
-	// Check if we've wrapped around (consumed all blocks)
-	if nextIndex == 0 {
+	// Atomically increment consumed counter
+	newConsumed := s.blocksConsumed.Add(1)
+
+	// Check if we've consumed all blocks
+	needsSwap := int(newConsumed) >= currentTotal
+
+	s.indexMutex.Unlock()
+
+	// Perform operations outside the mutex to avoid holding lock during expensive operations
+	if needsSwap {
 		// We've consumed all blocks, swap to new content
 		s.swapToNextContent()
 	} else {
-		// Atomically increment consumed counter
-		s.blocksConsumed.Add(1)
-
 		// Check if we need to start pre-fetching
 		s.checkAndTriggerRefresh()
 	}
