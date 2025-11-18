@@ -1,15 +1,23 @@
 package content
 
 import (
+	"bufio"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
 const (
-	assetsDir = "./assets"
+	assetsDir        = "./assets"
+	ContentBlockSize = 30 // Default number of lines per content block (20-50 range)
+)
+
+var (
+	// CommentPrefixes defines the prefixes that identify comment lines
+	CommentPrefixes = []string{"//", "#"}
 )
 
 // ContentManager handles discovery and loading of content files
@@ -93,4 +101,118 @@ func (cm *ContentManager) LoadContentFile(path string) ([]byte, error) {
 	// For now, just return empty content
 	log.Printf("LoadContentFile stub called for: %s", path)
 	return []byte{}, nil
+}
+
+// isCommentLine checks if a line starts with any comment prefix
+func (cm *ContentManager) isCommentLine(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	for _, prefix := range CommentPrefixes {
+		if strings.HasPrefix(trimmed, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// isValidContentLine checks if a line is valid content (non-empty, non-comment)
+func (cm *ContentManager) isValidContentLine(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	return len(trimmed) > 0 && !cm.isCommentLine(line)
+}
+
+// GetContentBlock reads a block of lines from a file starting at startLine
+// It skips empty lines and comments, and wraps around to the beginning if needed
+// Returns the lines and any error encountered
+func (cm *ContentManager) GetContentBlock(filePath string, startLine, size int) ([]string, error) {
+	// Open the file
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file %s: %w", filePath, err)
+	}
+	defer file.Close()
+
+	// First pass: read all valid content lines
+	var validLines []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if cm.isValidContentLine(line) {
+			validLines = append(validLines, strings.TrimSpace(line))
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error reading file %s: %w", filePath, err)
+	}
+
+	// Check if we have any valid lines
+	if len(validLines) == 0 {
+		return []string{}, nil
+	}
+
+	// Normalize startLine to be within bounds
+	startLine = startLine % len(validLines)
+	if startLine < 0 {
+		startLine = 0
+	}
+
+	// Extract the block with wrapping
+	var block []string
+	for i := 0; i < size && i < len(validLines); i++ {
+		lineIndex := (startLine + i) % len(validLines)
+		block = append(block, validLines[lineIndex])
+	}
+
+	return block, nil
+}
+
+// SelectRandomBlock selects a random file and a random block from that file
+// Returns the selected lines and the file path, or an error
+func (cm *ContentManager) SelectRandomBlock() ([]string, string, error) {
+	// Check if we have any discovered files
+	if len(cm.contentFiles) == 0 {
+		return nil, "", fmt.Errorf("no content files discovered")
+	}
+
+	// Select a random file
+	randomFileIndex := rand.Intn(len(cm.contentFiles))
+	selectedFile := cm.contentFiles[randomFileIndex]
+
+	// Open the file to count valid lines
+	file, err := os.Open(selectedFile)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to open file %s: %w", selectedFile, err)
+	}
+	defer file.Close()
+
+	// Count valid content lines
+	var validLineCount int
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if cm.isValidContentLine(line) {
+			validLineCount++
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, "", fmt.Errorf("error reading file %s: %w", selectedFile, err)
+	}
+
+	// Check if we have any valid lines
+	if validLineCount == 0 {
+		return []string{}, selectedFile, nil
+	}
+
+	// Select a random starting line
+	randomStartLine := rand.Intn(validLineCount)
+
+	// Get the content block
+	block, err := cm.GetContentBlock(selectedFile, randomStartLine, ContentBlockSize)
+	if err != nil {
+		return nil, "", err
+	}
+
+	log.Printf("Selected random block from %s starting at line %d (%d lines)", selectedFile, randomStartLine, len(block))
+	return block, selectedFile, nil
 }

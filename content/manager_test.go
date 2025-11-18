@@ -97,3 +97,164 @@ func TestGetContentFiles(t *testing.T) {
 		t.Error("GetContentFiles should not return nil")
 	}
 }
+
+func TestIsCommentLine(t *testing.T) {
+	cm := NewContentManager()
+
+	tests := []struct {
+		line     string
+		expected bool
+	}{
+		{"// This is a comment", true},
+		{"# This is also a comment", true},
+		{"   // Comment with leading spaces", true},
+		{"   # Comment with leading spaces", true},
+		{"This is not a comment", false},
+		{"func main() {", false},
+		{"", false},
+		{"   ", false},
+	}
+
+	for _, test := range tests {
+		result := cm.isCommentLine(test.line)
+		if result != test.expected {
+			t.Errorf("isCommentLine(%q) = %v, expected %v", test.line, result, test.expected)
+		}
+	}
+}
+
+func TestIsValidContentLine(t *testing.T) {
+	cm := NewContentManager()
+
+	tests := []struct {
+		line     string
+		expected bool
+	}{
+		{"This is valid content", true},
+		{"func main() {", true},
+		{"// This is a comment", false},
+		{"# This is a comment", false},
+		{"", false},
+		{"   ", false},
+		{"   // Comment", false},
+	}
+
+	for _, test := range tests {
+		result := cm.isValidContentLine(test.line)
+		if result != test.expected {
+			t.Errorf("isValidContentLine(%q) = %v, expected %v", test.line, result, test.expected)
+		}
+	}
+}
+
+func TestGetContentBlock(t *testing.T) {
+	// Create a temporary test file
+	tempDir := t.TempDir()
+	testFile := filepath.Join(tempDir, "test.txt")
+
+	content := `// This is a comment
+Line 1
+Line 2
+
+// Another comment
+Line 3
+Line 4
+Line 5
+
+# Python-style comment
+Line 6
+Line 7
+`
+
+	if err := os.WriteFile(testFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	cm := NewContentManager()
+
+	// Test getting a block from the beginning
+	block, err := cm.GetContentBlock(testFile, 0, 3)
+	if err != nil {
+		t.Fatalf("GetContentBlock failed: %v", err)
+	}
+
+	if len(block) != 3 {
+		t.Errorf("Expected 3 lines, got %d", len(block))
+	}
+
+	// Verify it skipped comments and empty lines
+	if block[0] != "Line 1" {
+		t.Errorf("Expected 'Line 1', got %q", block[0])
+	}
+
+	// Test wrapping around
+	block, err = cm.GetContentBlock(testFile, 6, 3)
+	if err != nil {
+		t.Fatalf("GetContentBlock failed: %v", err)
+	}
+
+	// Should wrap around (there are 7 valid lines total)
+	if len(block) != 3 {
+		t.Errorf("Expected 3 lines with wrapping, got %d", len(block))
+	}
+}
+
+func TestSelectRandomBlock(t *testing.T) {
+	// Create a temporary test directory with files
+	tempDir := t.TempDir()
+
+	testFiles := map[string]string{
+		"file1.txt": `Line 1
+Line 2
+Line 3
+Line 4
+Line 5`,
+		"file2.txt": `// Comment
+Other Line 1
+Other Line 2
+
+Other Line 3`,
+	}
+
+	for name, content := range testFiles {
+		path := filepath.Join(tempDir, name)
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatalf("Failed to create test file %s: %v", name, err)
+		}
+	}
+
+	cm := NewContentManager()
+
+	// Manually set content files for testing
+	cm.contentFiles = []string{
+		filepath.Join(tempDir, "file1.txt"),
+		filepath.Join(tempDir, "file2.txt"),
+	}
+
+	// Test selecting a random block
+	block, filePath, err := cm.SelectRandomBlock()
+	if err != nil {
+		t.Fatalf("SelectRandomBlock failed: %v", err)
+	}
+
+	if len(block) == 0 {
+		t.Error("Expected non-empty block")
+	}
+
+	if filePath == "" {
+		t.Error("Expected non-empty file path")
+	}
+
+	t.Logf("Selected block from %s with %d lines", filePath, len(block))
+	t.Logf("Block content: %v", block)
+}
+
+func TestSelectRandomBlock_NoFiles(t *testing.T) {
+	cm := NewContentManager()
+
+	// No files discovered
+	_, _, err := cm.SelectRandomBlock()
+	if err == nil {
+		t.Error("Expected error when no files discovered, got nil")
+	}
+}
