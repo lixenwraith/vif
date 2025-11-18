@@ -20,6 +20,9 @@ const (
 
 // GameContext holds all game state including the ECS world
 type GameContext struct {
+	// Central game state (Phase 1: spawn/content state management)
+	State *GameState
+
 	// ECS World
 	World *World
 
@@ -43,50 +46,31 @@ type GameContext struct {
 	SearchText     string
 	LastSearchText string
 
-	// Cursor state
-	CursorX, CursorY int
+	// Cursor state (local to input handling)
+	CursorX, CursorY int // These will be synced to State.CursorX/Y
 	CursorVisible    bool
 	CursorBlinkTime  time.Time
 
-	// Atomic cursor error state
-	cursorError     atomic.Bool
-	cursorErrorTime atomic.Int64 // UnixNano
-
-	// Motion command state
-	MotionCount        int
-	MotionCommand      string
-	WaitingForF        bool
+	// Motion command state (input parsing - not game mechanics)
+	MotionCount         int
+	MotionCommand       string
+	WaitingForF         bool
 	WaitingForFBackward bool
-	PendingCount       int  // Preserved count for multi-keystroke commands (e.g., 2fa, 3Fb)
-	CommandPrefix      rune
-	StatusMessage      string
-	DeleteOperator     bool
-	LastCommand        string // Last executed command for display
+	PendingCount        int  // Preserved count for multi-keystroke commands (e.g., 2fa, 3Fb)
+	CommandPrefix       rune
+	StatusMessage       string
+	DeleteOperator      bool
+	LastCommand         string // Last executed command for display
 
-	// Atomic score tracking
-	score            atomic.Int64
-	scoreIncrement   atomic.Int64
-	scoreBlinkActive atomic.Bool
-	scoreBlinkColor  atomic.Uint32 // tcell.Color is uint32
-	scoreBlinkTime   atomic.Int64  // UnixNano
-
-	// Atomic boost state (heat multiplier mechanic)
-	boostEnabled      atomic.Bool
-	boostEndTime      atomic.Int64 // UnixNano
-	boostSequenceColor atomic.Int32 // 0=None, 1=Blue, 2=Green
-
-	// Atomic ping coordinates feature
+	// Atomic ping coordinates feature (local to input handling)
 	pingActive    atomic.Bool
 	pingGridTimer atomic.Uint64 // float64 bits for seconds
 	PingRow       int
 	PingCol       int
 
-	// Heat tracking
+	// Heat tracking (for consecutive move penalty - input specific)
 	LastMoveKey      rune
 	ConsecutiveCount int
-
-	// Spawn tracking
-	NextSeqID int
 }
 
 // NewGameContext creates a new game context with initialized ECS world
@@ -103,26 +87,25 @@ func NewGameContext(screen tcell.Screen) *GameContext {
 		Mode:            ModeNormal,
 		CursorVisible:   true,
 		CursorBlinkTime: timeProvider.Now(),
-		NextSeqID:       1,
 	}
 
-	// Initialize atomic values
-	ctx.score.Store(0)
-	ctx.scoreIncrement.Store(0)
-	ctx.scoreBlinkActive.Store(false)
-	ctx.scoreBlinkColor.Store(0)
-	ctx.scoreBlinkTime.Store(0)
-	ctx.boostEnabled.Store(false)
-	ctx.boostEndTime.Store(0)
-	ctx.boostSequenceColor.Store(0) // 0 = None
-	ctx.cursorError.Store(false)
-	ctx.cursorErrorTime.Store(0)
-	ctx.pingActive.Store(false)
-	ctx.pingGridTimer.Store(0)
-
+	// Calculate game area first
 	ctx.updateGameArea()
+
+	// Create centralized game state
+	ctx.State = NewGameState(ctx.GameWidth, ctx.GameHeight, ctx.Width, timeProvider)
+
+	// Initialize local cursor position
 	ctx.CursorX = ctx.GameWidth / 2
 	ctx.CursorY = ctx.GameHeight / 2
+
+	// Sync cursor to game state
+	ctx.State.SetCursorX(ctx.CursorX)
+	ctx.State.SetCursorY(ctx.CursorY)
+
+	// Initialize ping atomic values (still local to input handling)
+	ctx.pingActive.Store(false)
+	ctx.pingGridTimer.Store(0)
 
 	// Create buffer
 	ctx.Buffer = core.NewBuffer(ctx.GameWidth, ctx.GameHeight)
@@ -130,148 +113,104 @@ func NewGameContext(screen tcell.Screen) *GameContext {
 	return ctx
 }
 
-// Atomic accessor methods for Score
+// ===== DELEGATED ACCESSORS TO GAMESTATE =====
+// These methods delegate to GameState for backward compatibility
+
+// Score accessors
 func (g *GameContext) GetScore() int {
-	return int(g.score.Load())
+	return g.State.GetScore()
 }
 
 func (g *GameContext) SetScore(score int) {
-	g.score.Store(int64(score))
+	g.State.SetScore(score)
 }
 
 func (g *GameContext) AddScore(delta int) {
-	g.score.Add(int64(delta))
+	g.State.AddScore(delta)
 }
 
-// Atomic accessor methods for ScoreIncrement
+// ScoreIncrement accessors (now Heat in GameState)
 func (g *GameContext) GetScoreIncrement() int {
-	return int(g.scoreIncrement.Load())
+	return g.State.GetHeat()
 }
 
 func (g *GameContext) SetScoreIncrement(increment int) {
-	g.scoreIncrement.Store(int64(increment))
+	g.State.SetHeat(increment)
 }
 
 func (g *GameContext) AddScoreIncrement(delta int) {
-	g.scoreIncrement.Add(int64(delta))
+	g.State.AddHeat(delta)
 }
 
-// Atomic accessor methods for ScoreBlinkActive
+// ScoreBlink accessors
 func (g *GameContext) GetScoreBlinkActive() bool {
-	return g.scoreBlinkActive.Load()
+	return g.State.GetScoreBlinkActive()
 }
 
 func (g *GameContext) SetScoreBlinkActive(active bool) {
-	g.scoreBlinkActive.Store(active)
+	g.State.SetScoreBlinkActive(active)
 }
 
-// Atomic accessor methods for ScoreBlinkColor
 func (g *GameContext) GetScoreBlinkColor() tcell.Color {
-	return tcell.Color(g.scoreBlinkColor.Load())
+	return tcell.Color(g.State.GetScoreBlinkColor())
 }
 
 func (g *GameContext) SetScoreBlinkColor(color tcell.Color) {
-	g.scoreBlinkColor.Store(uint32(color))
+	g.State.SetScoreBlinkColor(uint32(color))
 }
 
-// Atomic accessor methods for ScoreBlinkTime
 func (g *GameContext) GetScoreBlinkTime() time.Time {
-	nano := g.scoreBlinkTime.Load()
-	if nano == 0 {
-		return time.Time{}
-	}
-	return time.Unix(0, nano)
+	return g.State.GetScoreBlinkTime()
 }
 
 func (g *GameContext) SetScoreBlinkTime(t time.Time) {
-	g.scoreBlinkTime.Store(t.UnixNano())
+	g.State.SetScoreBlinkTime(t)
 }
 
-// Atomic accessor methods for BoostEnabled
+// Boost accessors
 func (g *GameContext) GetBoostEnabled() bool {
-	return g.boostEnabled.Load()
+	return g.State.GetBoostEnabled()
 }
 
 func (g *GameContext) SetBoostEnabled(enabled bool) {
-	g.boostEnabled.Store(enabled)
+	g.State.SetBoostEnabled(enabled)
 }
 
-// Atomic accessor methods for BoostEndTime
 func (g *GameContext) GetBoostEndTime() time.Time {
-	nano := g.boostEndTime.Load()
-	if nano == 0 {
-		return time.Time{}
-	}
-	return time.Unix(0, nano)
+	return g.State.GetBoostEndTime()
 }
 
 func (g *GameContext) SetBoostEndTime(t time.Time) {
-	g.boostEndTime.Store(t.UnixNano())
+	g.State.SetBoostEndTime(t)
 }
 
-// Atomic accessor methods for BoostSequenceColor
-// Color values: 0=None, 1=Blue, 2=Green
 func (g *GameContext) GetBoostSequenceColor() int32 {
-	return g.boostSequenceColor.Load()
+	return g.State.GetBoostColor()
 }
 
 func (g *GameContext) SetBoostSequenceColor(color int32) {
-	g.boostSequenceColor.Store(color)
+	g.State.SetBoostColor(color)
 }
 
-// UpdateBoostTimerAtomic atomically checks if boost should expire and disables it
-// Returns true if boost was disabled due to expiration
-// Uses CAS pattern to avoid race conditions in check-then-set
 func (g *GameContext) UpdateBoostTimerAtomic() bool {
-	// Check if boost is currently enabled
-	if !g.boostEnabled.Load() {
-		return false
-	}
-
-	// Get current time
-	now := g.TimeProvider.Now()
-
-	// Get boost end time
-	endTimeNano := g.boostEndTime.Load()
-	if endTimeNano == 0 {
-		return false
-	}
-	endTime := time.Unix(0, endTimeNano)
-
-	// Check if expired
-	if now.After(endTime) {
-		// Try to atomically disable boost using CAS
-		// Only disable if it's still enabled (another goroutine might have disabled it)
-		if g.boostEnabled.CompareAndSwap(true, false) {
-			// Reset boost sequence color when boost expires
-			g.boostSequenceColor.Store(0) // 0 = None
-			return true
-		}
-	}
-
-	return false
+	return g.State.UpdateBoostTimerAtomic()
 }
 
-// Atomic accessor methods for CursorError
+// CursorError accessors
 func (g *GameContext) GetCursorError() bool {
-	return g.cursorError.Load()
+	return g.State.GetCursorError()
 }
 
 func (g *GameContext) SetCursorError(error bool) {
-	g.cursorError.Store(error)
+	g.State.SetCursorError(error)
 }
 
-// Atomic accessor methods for CursorErrorTime
 func (g *GameContext) GetCursorErrorTime() time.Time {
-	nano := g.cursorErrorTime.Load()
-	if nano == 0 {
-		return time.Time{}
-	}
-	return time.Unix(0, nano)
+	return g.State.GetCursorErrorTime()
 }
 
 func (g *GameContext) SetCursorErrorTime(t time.Time) {
-	g.cursorErrorTime.Store(t.UnixNano())
+	g.State.SetCursorErrorTime(t)
 }
 
 // Atomic accessor methods for PingActive

@@ -40,39 +40,30 @@ type CodeBlock struct {
 }
 
 // SpawnSystem handles character sequence generation and spawning
+// State management delegated to GameState (spawn timing, color counters, sequence IDs)
 type SpawnSystem struct {
-	lastSpawn     time.Time
-	nextSeqID     atomic.Int64 // Atomic for thread-safe sequence ID generation
-	gameWidth     int
-	gameHeight    int
-	cursorX       int
-	cursorY       int
-	ctx           *engine.GameContext
+	gameWidth  int
+	gameHeight int
+	cursorX    int // Cached for exclusion zone, synced from ctx.State
+	cursorY    int // Cached for exclusion zone, synced from ctx.State
+	ctx        *engine.GameContext
 
-	// Content management
-	contentManager   *content.ContentManager
-	contentMutex     sync.RWMutex
-	indexMutex       sync.Mutex   // Mutex to protect index update and wraparound operations
-	codeBlocks       []CodeBlock
-	nextBlockIndex   atomic.Int32 // Atomic index for thread-safe access
-	totalBlocks      atomic.Int32 // Atomic counter for total blocks
-	blocksConsumed   atomic.Int32 // Atomic counter for consumed blocks
-	nextContent      []CodeBlock  // Pre-fetched content for seamless transition
-	isRefreshing     atomic.Bool
-
-	// Atomic color tracking counters (6 states: Blue×3 + Green×3)
-	blueCountBright  atomic.Int64
-	blueCountNormal  atomic.Int64
-	blueCountDark    atomic.Int64
-	greenCountBright atomic.Int64
-	greenCountNormal atomic.Int64
-	greenCountDark   atomic.Int64
+	// Content management (implementation detail, not game state)
+	contentManager *content.ContentManager
+	contentMutex   sync.RWMutex
+	indexMutex     sync.Mutex   // Mutex to protect index update and wraparound operations
+	codeBlocks     []CodeBlock
+	nextBlockIndex atomic.Int32 // Atomic index for thread-safe access
+	totalBlocks    atomic.Int32 // Atomic counter for total blocks
+	blocksConsumed atomic.Int32 // Atomic counter for consumed blocks
+	nextContent    []CodeBlock  // Pre-fetched content for seamless transition
+	isRefreshing   atomic.Bool
 }
 
 // NewSpawnSystem creates a new spawn system
+// State is now managed in ctx.State (spawn timing, color counters, sequence IDs)
 func NewSpawnSystem(gameWidth, gameHeight, cursorX, cursorY int, ctx *engine.GameContext) *SpawnSystem {
 	s := &SpawnSystem{
-		lastSpawn:  ctx.TimeProvider.Now(),
 		gameWidth:  gameWidth,
 		gameHeight: gameHeight,
 		cursorX:    cursorX,
@@ -80,19 +71,8 @@ func NewSpawnSystem(gameWidth, gameHeight, cursorX, cursorY int, ctx *engine.Gam
 		ctx:        ctx,
 	}
 
-	// Initialize atomic sequence ID
-	s.nextSeqID.Store(1)
-
-	// Initialize atomic counters to 0 (before loading content)
-	s.blueCountBright.Store(0)
-	s.blueCountNormal.Store(0)
-	s.blueCountDark.Store(0)
-	s.greenCountBright.Store(0)
-	s.greenCountNormal.Store(0)
-	s.greenCountDark.Store(0)
+	// Initialize content management atomics (not game state)
 	s.isRefreshing.Store(false)
-
-	// Initialize content tracking atomic counters
 	s.nextBlockIndex.Store(0)
 	s.totalBlocks.Store(0)
 	s.blocksConsumed.Store(0)
@@ -112,7 +92,7 @@ func NewSpawnSystem(gameWidth, gameHeight, cursorX, cursorY int, ctx *engine.Gam
 		// System will handle gracefully
 	}
 
-	// Load initial content (this will update the atomic counters)
+	// Load initial content
 	s.loadContentFromManager()
 
 	return s
@@ -302,52 +282,63 @@ func (s *SpawnSystem) Priority() int {
 }
 
 // GetColorCount returns the character count for a specific color/level combination
+// Delegated to GameState
 func (s *SpawnSystem) GetColorCount(seqType components.SequenceType, level components.SequenceLevel) int64 {
-	switch seqType {
-	case components.SequenceBlue:
-		switch level {
-		case components.LevelBright:
-			return s.blueCountBright.Load()
-		case components.LevelNormal:
-			return s.blueCountNormal.Load()
-		case components.LevelDark:
-			return s.blueCountDark.Load()
+	// Convert components.SequenceType to int for GameState
+	var typeInt int
+	if seqType == components.SequenceBlue {
+		typeInt = 0
+	} else if seqType == components.SequenceGreen {
+		typeInt = 1
+	} else {
+		return 0
+	}
+
+	// Convert components.SequenceLevel to int for GameState
+	levelInt := int(level) // 0=Dark, 1=Normal, 2=Bright
+
+	// Read from GameState atomically
+	switch typeInt {
+	case 0: // Blue
+		switch levelInt {
+		case 2: // Bright
+			return s.ctx.State.BlueCountBright.Load()
+		case 1: // Normal
+			return s.ctx.State.BlueCountNormal.Load()
+		case 0: // Dark
+			return s.ctx.State.BlueCountDark.Load()
 		}
-	case components.SequenceGreen:
-		switch level {
-		case components.LevelBright:
-			return s.greenCountBright.Load()
-		case components.LevelNormal:
-			return s.greenCountNormal.Load()
-		case components.LevelDark:
-			return s.greenCountDark.Load()
+	case 1: // Green
+		switch levelInt {
+		case 2: // Bright
+			return s.ctx.State.GreenCountBright.Load()
+		case 1: // Normal
+			return s.ctx.State.GreenCountNormal.Load()
+		case 0: // Dark
+			return s.ctx.State.GreenCountDark.Load()
 		}
 	}
 	return 0
 }
 
 // AddColorCount atomically increments the counter for a color/level
+// Delegated to GameState
 func (s *SpawnSystem) AddColorCount(seqType components.SequenceType, level components.SequenceLevel, delta int64) {
-	switch seqType {
-	case components.SequenceBlue:
-		switch level {
-		case components.LevelBright:
-			s.blueCountBright.Add(delta)
-		case components.LevelNormal:
-			s.blueCountNormal.Add(delta)
-		case components.LevelDark:
-			s.blueCountDark.Add(delta)
-		}
-	case components.SequenceGreen:
-		switch level {
-		case components.LevelBright:
-			s.greenCountBright.Add(delta)
-		case components.LevelNormal:
-			s.greenCountNormal.Add(delta)
-		case components.LevelDark:
-			s.greenCountDark.Add(delta)
-		}
+	// Convert components.SequenceType to int for GameState
+	var typeInt int
+	if seqType == components.SequenceBlue {
+		typeInt = 0
+	} else if seqType == components.SequenceGreen {
+		typeInt = 1
+	} else {
+		return
 	}
+
+	// Convert components.SequenceLevel to int for GameState
+	levelInt := int(level) // 0=Dark, 1=Normal, 2=Bright
+
+	// Update GameState atomically
+	s.ctx.State.AddColorCount(typeInt, levelInt, int(delta))
 }
 
 // getAvailableColors returns colors that are not yet on screen
@@ -377,37 +368,39 @@ func (s *SpawnSystem) getAvailableColors() []ColorLevelKey {
 }
 
 // Update runs the spawn system logic
+// Now uses GameState for spawn timing and rate adaptation
 func (s *SpawnSystem) Update(world *engine.World, dt time.Duration) {
-	// Calculate fill percentage
+	// Calculate fill percentage and update GameState
 	posType := reflect.TypeOf(components.PositionComponent{})
 	entities := world.GetEntitiesWith(posType)
-	totalCells := s.gameWidth * s.gameHeight
-	filledCells := len(entities)
-	if filledCells > maxCharacters {
+	entityCount := len(entities)
+
+	if entityCount > maxCharacters {
 		return // Already at max capacity
 	}
 
-	fillPercentage := float64(filledCells) / float64(totalCells)
+	// Update spawn rate in GameState based on entity count
+	s.ctx.State.UpdateSpawnRate(entityCount, maxCharacters)
 
-	// Adjust spawn rate based on fill percentage
-	var spawnDelay int64
-	if fillPercentage < 0.30 {
-		spawnDelay = characterSpawnMs / 2 // 2x faster
-	} else if fillPercentage > 0.70 {
-		spawnDelay = characterSpawnMs * 2 // 2x slower
-	} else {
-		spawnDelay = characterSpawnMs
-	}
-
-	// Check if it's time to spawn
-	now := s.ctx.TimeProvider.Now()
-	if now.Sub(s.lastSpawn).Milliseconds() <= spawnDelay {
+	// Check if it's time to spawn (reads from GameState)
+	if !s.ctx.State.ShouldSpawn() {
 		return
 	}
 
+	// Get current spawn state for rate calculation
+	spawnState := s.ctx.State.ReadSpawnState()
+
+	// Calculate next spawn time based on rate multiplier
+	baseDelay := time.Duration(characterSpawnMs) * time.Millisecond
+	adjustedDelay := time.Duration(float64(baseDelay) / spawnState.RateMultiplier)
+
 	// Generate and spawn a new sequence
 	s.spawnSequence(world)
-	s.lastSpawn = now
+
+	// Update spawn timing in GameState
+	now := s.ctx.TimeProvider.Now()
+	nextTime := now.Add(adjustedDelay)
+	s.ctx.State.UpdateSpawnTiming(now, nextTime)
 }
 
 // spawnSequence generates and spawns a new character block from file
@@ -568,8 +561,8 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 
 		if !hasOverlap {
 			// Valid position found, create entities atomically
-			// Atomically get and increment sequence ID to prevent race conditions
-			sequenceID := int(s.nextSeqID.Add(1) - 1)
+			// Get sequence ID from GameState (atomic increment)
+			sequenceID := s.ctx.State.IncrementSeqID()
 
 			// Count non-space characters for color counter
 			nonSpaceCount := 0

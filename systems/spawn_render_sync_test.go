@@ -236,8 +236,8 @@ func TestAtomicSequenceIDGeneration(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < 100; j++ {
-				// Simulate atomic sequence ID generation
-				seqID := int(spawnSystem.nextSeqID.Add(1) - 1)
+				// Simulate atomic sequence ID generation from GameState
+				seqID := ctx.State.IncrementSeqID()
 				seqIDs <- seqID
 			}
 		}()

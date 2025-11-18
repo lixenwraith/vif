@@ -211,6 +211,8 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		if s.ctx.CursorX >= s.ctx.GameWidth {
 			s.ctx.CursorX = s.ctx.GameWidth - 1
 		}
+		// Sync cursor position to GameState
+		s.ctx.State.SetCursorX(s.ctx.CursorX)
 
 	} else {
 		// Incorrect character - flash error cursor, reset heat, and deactivate boost
@@ -274,6 +276,8 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 	if s.ctx.CursorX >= s.ctx.GameWidth {
 		s.ctx.CursorX = s.ctx.GameWidth - 1
 	}
+	// Sync cursor position to GameState
+	s.ctx.State.SetCursorX(s.ctx.CursorX)
 
 	// Check if this was the last character of the gold sequence
 	isLastChar := (seq.Index == constants.GoldSequenceLength-1)
