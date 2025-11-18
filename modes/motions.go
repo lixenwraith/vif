@@ -201,7 +201,7 @@ func isWordChar(r rune) bool {
 
 // isPunctuation returns true if the rune is punctuation (not word char, not space)
 func isPunctuation(r rune) bool {
-	return !isWordChar(r) && r != ' '
+	return r != 0 && r != ' ' && !isWordChar(r)
 }
 
 // getCharAt returns the character at the given position, or 0 if empty.

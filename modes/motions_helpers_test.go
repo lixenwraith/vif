@@ -335,3 +335,37 @@ func TestGetCharacterTypeAt_CommonPunctuation(t *testing.T) {
 		ctx.World.DestroyEntity(ctx.World.GetEntityAtPosition(0, 0))
 	}
 }
+
+// TestGetCharacterTypeAt_SpaceHandling tests that both empty positions and space entities are detected as spaces
+func TestGetCharacterTypeAt_SpaceHandling(t *testing.T) {
+	ctx := createSimpleTestContext()
+
+	// Test empty position (no entity) - should return CharTypeSpace
+	charType := getCharacterTypeAt(ctx, 0, 0)
+	if charType != CharTypeSpace {
+		t.Errorf("Expected CharTypeSpace for empty position (no entity), got %d", charType)
+	}
+
+	// Test space character entity - should return CharTypeSpace
+	// Note: getCharAt currently returns 0 for space entities, but getCharacterTypeAt
+	// should handle both 0 and ' ' to be robust to future changes
+	placeSimpleChar(ctx, 1, 0, ' ')
+	charType = getCharacterTypeAt(ctx, 1, 0)
+	if charType != CharTypeSpace {
+		t.Errorf("Expected CharTypeSpace for space character entity, got %d", charType)
+	}
+
+	// Test that a space entity and empty position are treated the same
+	emptyType := getCharacterTypeAt(ctx, 5, 5) // Empty position
+	spaceType := getCharacterTypeAt(ctx, 1, 0)  // Space entity
+	if emptyType != spaceType {
+		t.Errorf("Empty position and space entity should have same type, got empty=%d space=%d", emptyType, spaceType)
+	}
+
+	// Verify non-space characters are not detected as spaces
+	placeSimpleChar(ctx, 2, 0, 'a')
+	charType = getCharacterTypeAt(ctx, 2, 0)
+	if charType == CharTypeSpace {
+		t.Errorf("Expected non-space type for 'a', got CharTypeSpace")
+	}
+}

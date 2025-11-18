@@ -279,6 +279,7 @@ func TestIsPunctuation(t *testing.T) {
 		{'Z', false},
 		{'_', false},
 		{' ', false},
+		{0, false}, // Test that 0 (empty position) is not punctuation
 	}
 
 	for _, tt := range tests {

@@ -21,7 +21,8 @@ const (
 func getCharacterTypeAt(ctx *engine.GameContext, x, y int) CharType {
 	ch := getCharAt(ctx, x, y)
 
-	if ch == 0 {
+	// Both 0 (no entity) and ' ' (space entity) are spaces
+	if ch == 0 || ch == ' ' {
 		return CharTypeSpace
 	}
 
