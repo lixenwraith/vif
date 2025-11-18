@@ -217,10 +217,11 @@ func (s *DecaySystem) spawnFallingEntities(world *engine.World) {
 		// Create falling entity
 		entity := world.CreateEntity()
 		world.AddComponent(entity, components.FallingDecayComponent{
-			Column:    column,
-			YPosition: 0.0,
-			Speed:     speed,
-			Char:      char,
+			Column:        column,
+			YPosition:     0.0,
+			Speed:         speed,
+			Char:          char,
+			LastChangeRow: -1, // Initialize to -1 to trigger change on first row
 		})
 
 		s.fallingEntities = append(s.fallingEntities, entity)
@@ -252,12 +253,24 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 			continue
 		}
 
+		// Calculate current row
+		currentRow := int(fall.YPosition)
+
+		// Matrix-style character change: when crossing row boundaries, randomly change character
+		if currentRow != fall.LastChangeRow {
+			// 40% chance to change character when crossing into a new row
+			if rand.Float64() < 0.4 {
+				characters := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+				fall.Char = rune(characters[rand.Intn(len(characters))])
+			}
+			fall.LastChangeRow = currentRow
+		}
+
 		// Entity is still within bounds
 		// Update component
 		world.AddComponent(entity, fall)
 
 		// Check for character at this position and apply decay
-		currentRow := int(fall.YPosition)
 		targetEntity := world.GetEntityAtPosition(fall.Column, currentRow)
 		if targetEntity != 0 && !s.decayedThisFrame[targetEntity] {
 			// Apply decay to this character

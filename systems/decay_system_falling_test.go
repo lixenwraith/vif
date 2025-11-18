@@ -1234,6 +1234,208 @@ func TestFallingDecayFullBoard(t *testing.T) {
 	}
 }
 
+// TestFallingDecayCharacterChange tests that falling characters change when crossing row boundaries
+func TestFallingDecayCharacterChange(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+	world := ctx.World
+
+	mockTime := engine.NewMockTimeProvider(time.Now())
+	ctx.TimeProvider = mockTime
+
+	decaySystem := NewDecaySystem(80, 24, 80, 0, ctx)
+	decaySystem.animating = true
+	decaySystem.startTime = mockTime.Now()
+
+	// Create a falling entity with known properties
+	entity := world.CreateEntity()
+	world.AddComponent(entity, components.FallingDecayComponent{
+		Column:        10,
+		YPosition:     0.5,
+		Speed:         10.0,
+		Char:          'A',
+		LastChangeRow: -1, // Should initialize to -1
+	})
+	decaySystem.fallingEntities = []engine.Entity{entity}
+
+	// Track character changes over multiple updates
+	fallingType := reflect.TypeOf(components.FallingDecayComponent{})
+	characterChanges := 0
+	previousChar := 'A'
+
+	// Run multiple updates to simulate falling through multiple rows
+	// With speed 10.0, entity will cross a new row approximately every 0.1 seconds
+	for i := 0; i < 30; i++ {
+		elapsed := float64(i) * 0.05 // Increment by 0.05 seconds each iteration
+		decaySystem.updateFallingEntities(world, elapsed)
+
+		fallComp, ok := world.GetComponent(entity, fallingType)
+		if !ok {
+			break // Entity may have been destroyed
+		}
+		fall := fallComp.(components.FallingDecayComponent)
+
+		if fall.Char != previousChar {
+			characterChanges++
+			previousChar = fall.Char
+		}
+
+		// Verify LastChangeRow is being updated
+		expectedRow := int(fall.YPosition)
+		if fall.LastChangeRow != expectedRow {
+			t.Errorf("At iteration %d, expected LastChangeRow=%d, got %d", i, expectedRow, fall.LastChangeRow)
+		}
+	}
+
+	// Due to the 40% probability, we should see at least some character changes
+	// across 30 iterations with frequent row crossings
+	if characterChanges == 0 {
+		t.Error("Expected at least some character changes during fall, got none")
+	}
+}
+
+// TestFallingDecayLastChangeRowInitialization tests that LastChangeRow is initialized to -1
+func TestFallingDecayLastChangeRowInitialization(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+	world := ctx.World
+
+	mockTime := engine.NewMockTimeProvider(time.Now())
+	ctx.TimeProvider = mockTime
+
+	decaySystem := NewDecaySystem(80, 24, 80, 0, ctx)
+	decaySystem.animating = true
+	decaySystem.startTime = mockTime.Now()
+	decaySystem.spawnFallingEntities(world)
+
+	// Check that all entities have LastChangeRow initialized to -1
+	fallingType := reflect.TypeOf(components.FallingDecayComponent{})
+	for _, entity := range decaySystem.fallingEntities {
+		fallComp, ok := world.GetComponent(entity, fallingType)
+		if !ok {
+			t.Errorf("Entity %d missing FallingDecayComponent", entity)
+			continue
+		}
+		fall := fallComp.(components.FallingDecayComponent)
+
+		if fall.LastChangeRow != -1 {
+			t.Errorf("Entity %d: expected LastChangeRow=-1, got %d", entity, fall.LastChangeRow)
+		}
+	}
+}
+
+// TestFallingDecayCharacterPool tests that characters are selected from the correct pool
+func TestFallingDecayCharacterPool(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+	world := ctx.World
+
+	mockTime := engine.NewMockTimeProvider(time.Now())
+	ctx.TimeProvider = mockTime
+
+	decaySystem := NewDecaySystem(80, 24, 80, 0, ctx)
+	decaySystem.animating = true
+	decaySystem.startTime = mockTime.Now()
+	decaySystem.spawnFallingEntities(world)
+
+	// Expected character pool
+	validChars := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+	validCharMap := make(map[rune]bool)
+	for _, c := range validChars {
+		validCharMap[c] = true
+	}
+
+	// Check that all initial characters are from the valid pool
+	fallingType := reflect.TypeOf(components.FallingDecayComponent{})
+	for _, entity := range decaySystem.fallingEntities {
+		fallComp, ok := world.GetComponent(entity, fallingType)
+		if !ok {
+			t.Errorf("Entity %d missing FallingDecayComponent", entity)
+			continue
+		}
+		fall := fallComp.(components.FallingDecayComponent)
+
+		if !validCharMap[fall.Char] {
+			t.Errorf("Entity %d has invalid character '%c' (not in character pool)", entity, fall.Char)
+		}
+	}
+
+	// Simulate updates and check that any changed characters are also from the valid pool
+	for i := 0; i < 20; i++ {
+		elapsed := float64(i) * 0.1
+		decaySystem.updateFallingEntities(world, elapsed)
+
+		for _, entity := range decaySystem.fallingEntities {
+			fallComp, ok := world.GetComponent(entity, fallingType)
+			if !ok {
+				continue
+			}
+			fall := fallComp.(components.FallingDecayComponent)
+
+			if !validCharMap[fall.Char] {
+				t.Errorf("After update %d, entity %d has invalid character '%c'", i, entity, fall.Char)
+			}
+		}
+	}
+}
+
+// TestFallingDecayNoChangeWithinSameRow tests that characters don't change within the same row
+func TestFallingDecayNoChangeWithinSameRow(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+	world := ctx.World
+
+	mockTime := engine.NewMockTimeProvider(time.Now())
+	ctx.TimeProvider = mockTime
+
+	decaySystem := NewDecaySystem(80, 24, 80, 0, ctx)
+	decaySystem.animating = true
+	decaySystem.startTime = mockTime.Now()
+
+	// Create entity with very slow speed to stay within same row for multiple updates
+	entity := world.CreateEntity()
+	world.AddComponent(entity, components.FallingDecayComponent{
+		Column:        10,
+		YPosition:     5.3, // Within row 5
+		Speed:         0.1, // Very slow speed
+		Char:          'X',
+		LastChangeRow: 5,
+	})
+	decaySystem.fallingEntities = []engine.Entity{entity}
+
+	fallingType := reflect.TypeOf(components.FallingDecayComponent{})
+	fallComp, _ := world.GetComponent(entity, fallingType)
+	originalChar := fallComp.(components.FallingDecayComponent).Char
+
+	// Run multiple updates that keep entity within same row
+	// With speed 0.1 and increments of 0.1s, YPosition increases by 0.01 each time
+	for i := 0; i < 10; i++ {
+		elapsed := 5.3 + float64(i)*0.01 // Small increments to stay in row 5
+		decaySystem.updateFallingEntities(world, elapsed/0.1) // Adjust elapsed relative to speed
+
+		fallComp, ok := world.GetComponent(entity, fallingType)
+		if !ok {
+			t.Fatal("Entity lost FallingDecayComponent")
+		}
+		fall := fallComp.(components.FallingDecayComponent)
+
+		// Character should not change while in same row
+		if fall.Char != originalChar {
+			t.Errorf("Character changed from '%c' to '%c' while still in row %d", originalChar, fall.Char, int(fall.YPosition))
+		}
+
+		// LastChangeRow should remain 5
+		currentRow := int(fall.YPosition)
+		if currentRow == 5 && fall.LastChangeRow != 5 {
+			t.Errorf("LastChangeRow changed to %d while still in row 5", fall.LastChangeRow)
+		}
+	}
+}
+
 // TestFallingDecayConcurrentPrevention tests that concurrent decay animations are prevented
 func TestFallingDecayConcurrentPrevention(t *testing.T) {
 	screen := tcell.NewSimulationScreen("UTF-8")
