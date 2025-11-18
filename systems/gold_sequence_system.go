@@ -28,6 +28,8 @@ type GoldSequenceSystem struct {
 	cursorX             int
 	cursorY             int
 	cleanerTriggerFunc  func(*engine.World) // Callback to trigger cleaners when gold completed at max heat
+	firstUpdate         bool                // Tracks if this is the first update
+	initialSpawnTime    time.Time           // Time of first update (for delayed initial spawn)
 }
 
 // NewGoldSequenceSystem creates a new gold sequence system
@@ -43,6 +45,7 @@ func NewGoldSequenceSystem(ctx *engine.GameContext, decaySystem *DecaySystem, ga
 		gameHeight:        gameHeight,
 		cursorX:           cursorX,
 		cursorY:           cursorY,
+		firstUpdate:       false,
 	}
 }
 
@@ -61,7 +64,22 @@ func (s *GoldSequenceSystem) Update(world *engine.World, dt time.Duration) {
 	wasDecayAnimating := s.wasDecayAnimating
 	s.wasDecayAnimating = isDecayAnimating
 	active := s.active
+	firstUpdate := s.firstUpdate
+
+	// Handle first update - record time for delayed initial spawn
+	if !firstUpdate {
+		s.firstUpdate = true
+		s.initialSpawnTime = now
+	}
+	initialSpawnTime := s.initialSpawnTime
 	s.mu.Unlock()
+
+	// Spawn gold sequence at game start with delay (150ms)
+	const initialSpawnDelay = 150 * time.Millisecond
+	if !active && now.Sub(initialSpawnTime) >= initialSpawnDelay && now.Sub(initialSpawnTime) < initialSpawnDelay+100*time.Millisecond {
+		// Spawn initial gold sequence after delay
+		s.spawnGoldSequence(world)
+	}
 
 	// Detect transition from decay animating to not animating (decay just ended)
 	if wasDecayAnimating && !isDecayAnimating {

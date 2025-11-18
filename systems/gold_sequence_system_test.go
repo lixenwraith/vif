@@ -451,3 +451,127 @@ func TestCleanerCleanup(t *testing.T) {
 
 	t.Log("Cleaner cleanup test completed successfully")
 }
+
+// TestGoldSequenceSpawnsAtGameStart tests that gold sequence spawns at game start with delay
+func TestGoldSequenceSpawnsAtGameStart(t *testing.T) {
+	mockTime := engine.NewMockTimeProvider(time.Now())
+	ctx := createTestContext(mockTime)
+	world := ctx.World
+
+	decaySystem := NewDecaySystem(ctx.GameWidth, ctx.GameHeight, ctx.Width, 0, ctx)
+	goldSystem := NewGoldSequenceSystem(ctx, decaySystem, ctx.GameWidth, ctx.GameHeight, 0, 0)
+
+	// Initially, no gold sequence should be active
+	if goldSystem.IsActive() {
+		t.Error("Gold sequence should not be active initially")
+	}
+
+	// First update - should not spawn immediately (needs delay)
+	goldSystem.Update(world, 16*time.Millisecond)
+	if goldSystem.IsActive() {
+		t.Error("Gold sequence should not spawn immediately on first update")
+	}
+
+	// Advance time by 100ms (less than 150ms delay) - should not spawn yet
+	mockTime.Advance(100 * time.Millisecond)
+	goldSystem.Update(world, 16*time.Millisecond)
+	if goldSystem.IsActive() {
+		t.Error("Gold sequence should not spawn before 150ms delay")
+	}
+
+	// Advance time to 150ms - should spawn now
+	mockTime.Advance(50 * time.Millisecond)
+	goldSystem.Update(world, 16*time.Millisecond)
+	if !goldSystem.IsActive() {
+		t.Error("Gold sequence should spawn after 150ms delay at game start")
+	}
+
+	// Verify gold sequence entities were created
+	seqType := reflect.TypeOf(components.SequenceComponent{})
+	entities := world.GetEntitiesWith(seqType)
+
+	goldCount := 0
+	for _, entity := range entities {
+		seqComp, _ := world.GetComponent(entity, seqType)
+		seq := seqComp.(components.SequenceComponent)
+		if seq.Type == components.SequenceGold {
+			goldCount++
+		}
+	}
+
+	if goldCount != constants.GoldSequenceLength {
+		t.Errorf("Expected %d gold characters, got %d", constants.GoldSequenceLength, goldCount)
+	}
+
+	// Verify position is random (not center-top)
+	// We just verify that it's a valid position, randomness is tested elsewhere
+	posType := reflect.TypeOf(components.PositionComponent{})
+	goldEntities := world.GetEntitiesWith(seqType, posType)
+	if len(goldEntities) == 0 {
+		t.Error("Expected gold entities with position component")
+	}
+
+	for _, entity := range goldEntities {
+		seqComp, _ := world.GetComponent(entity, seqType)
+		seq := seqComp.(components.SequenceComponent)
+		if seq.Type == components.SequenceGold {
+			posComp, _ := world.GetComponent(entity, posType)
+			pos := posComp.(components.PositionComponent)
+
+			// Verify position is within game bounds
+			if pos.X < 0 || pos.X >= ctx.GameWidth || pos.Y < 0 || pos.Y >= ctx.GameHeight {
+				t.Errorf("Gold character at invalid position: X=%d, Y=%d", pos.X, pos.Y)
+			}
+		}
+	}
+}
+
+// TestGoldSequenceDoesNotSpawnTwiceOnFirstUpdate tests that initial spawn only happens once
+func TestGoldSequenceDoesNotSpawnTwiceOnFirstUpdate(t *testing.T) {
+	mockTime := engine.NewMockTimeProvider(time.Now())
+	ctx := createTestContext(mockTime)
+	world := ctx.World
+
+	decaySystem := NewDecaySystem(ctx.GameWidth, ctx.GameHeight, ctx.Width, 0, ctx)
+	goldSystem := NewGoldSequenceSystem(ctx, decaySystem, ctx.GameWidth, ctx.GameHeight, 0, 0)
+
+	// First update
+	goldSystem.Update(world, 16*time.Millisecond)
+
+	// Advance time to spawn
+	mockTime.Advance(150 * time.Millisecond)
+	goldSystem.Update(world, 16*time.Millisecond)
+
+	if !goldSystem.IsActive() {
+		t.Fatal("Gold sequence should be active after initial spawn")
+	}
+
+	firstSequenceID := goldSystem.GetSequenceID()
+
+	// Multiple updates should not spawn another gold sequence
+	for i := 0; i < 10; i++ {
+		mockTime.Advance(200 * time.Millisecond)
+		goldSystem.Update(world, 16*time.Millisecond)
+	}
+
+	if goldSystem.GetSequenceID() != firstSequenceID {
+		t.Error("Gold sequence should not spawn again while first one is active")
+	}
+
+	// Count gold entities - should still be the same
+	seqType := reflect.TypeOf(components.SequenceComponent{})
+	entities := world.GetEntitiesWith(seqType)
+
+	goldCount := 0
+	for _, entity := range entities {
+		seqComp, _ := world.GetComponent(entity, seqType)
+		seq := seqComp.(components.SequenceComponent)
+		if seq.Type == components.SequenceGold {
+			goldCount++
+		}
+	}
+
+	if goldCount != constants.GoldSequenceLength {
+		t.Errorf("Expected %d gold characters (only initial spawn), got %d", constants.GoldSequenceLength, goldCount)
+	}
+}
