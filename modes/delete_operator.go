@@ -150,11 +150,9 @@ func deleteAllOnLine(ctx *engine.GameContext, y int) bool {
 }
 
 // deleteRange deletes all characters in a range on a line
+// Now uses spatial index to efficiently handle gaps (positions without entities)
 func deleteRange(ctx *engine.GameContext, startX, endX, y int) bool {
-	posType := reflect.TypeOf(components.PositionComponent{})
 	seqType := reflect.TypeOf(components.SequenceComponent{})
-
-	entities := ctx.World.GetEntitiesWith(posType)
 
 	deletedGreenOrBlue := false
 	entitiesToDelete := make([]engine.Entity, 0)
@@ -164,22 +162,25 @@ func deleteRange(ctx *engine.GameContext, startX, endX, y int) bool {
 		startX, endX = endX, startX
 	}
 
-	for _, entity := range entities {
-		posComp, _ := ctx.World.GetComponent(entity, posType)
-		pos := posComp.(components.PositionComponent)
+	// Iterate through the position range and use spatial index to find entities
+	for x := startX; x <= endX; x++ {
+		entity := ctx.World.GetEntityAtPosition(x, y)
 
-		if pos.Y == y && pos.X >= startX && pos.X <= endX {
-			// Check if green or blue
-			seqComp, ok := ctx.World.GetComponent(entity, seqType)
-			if ok {
-				seq := seqComp.(components.SequenceComponent)
-				if seq.Type == components.SequenceGreen || seq.Type == components.SequenceBlue {
-					deletedGreenOrBlue = true
-				}
-			}
-
-			entitiesToDelete = append(entitiesToDelete, entity)
+		// Skip positions without entities (gaps, including spaces)
+		if entity == 0 {
+			continue
 		}
+
+		// Check if green or blue
+		seqComp, ok := ctx.World.GetComponent(entity, seqType)
+		if ok {
+			seq := seqComp.(components.SequenceComponent)
+			if seq.Type == components.SequenceGreen || seq.Type == components.SequenceBlue {
+				deletedGreenOrBlue = true
+			}
+		}
+
+		entitiesToDelete = append(entitiesToDelete, entity)
 	}
 
 	// Delete all entities in range
