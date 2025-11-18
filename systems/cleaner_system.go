@@ -1,6 +1,7 @@
 package systems
 
 import (
+	"fmt"
 	"log"
 	"reflect"
 	"sync"
@@ -42,6 +43,7 @@ type CleanerSystem struct {
 	config            constants.CleanerConfig // Configuration for cleaner behavior
 	mu                sync.RWMutex         // Protects gameWidth, gameHeight, animationDuration, world
 	stateMu           sync.RWMutex         // Protects cleanerDataMap
+	flashMu           sync.RWMutex         // Protects flashPositions
 	isActive          atomic.Bool          // Atomic flag for cleaner active state
 	activationTime    atomic.Int64         // Unix nano timestamp of activation
 	lastUpdateTime    atomic.Int64         // Unix nano timestamp of last update
@@ -55,6 +57,7 @@ type CleanerSystem struct {
 	stopChan          chan struct{}        // Channel to stop the update loop
 	cleanerPool       sync.Pool            // Pool for cleaner trail slice allocation
 	cleanerDataMap    map[engine.Entity]*cleanerData // Maps entity to its runtime data
+	flashPositions    map[string]bool      // Tracks active flash positions to prevent duplicates
 	wg                sync.WaitGroup       // Tracks goroutine lifecycle
 }
 
@@ -69,6 +72,7 @@ func NewCleanerSystem(ctx *engine.GameContext, gameWidth, gameHeight int, config
 		spawnChan:         make(chan cleanerSpawnRequest, 10), // Buffered channel
 		stopChan:          make(chan struct{}),
 		cleanerDataMap:    make(map[engine.Entity]*cleanerData),
+		flashPositions:    make(map[string]bool),
 		cleanerPool: sync.Pool{
 			New: func() interface{} {
 				// Pre-allocate trail slice to avoid repeated allocations
@@ -98,14 +102,17 @@ func (cs *CleanerSystem) Priority() int {
 
 // Update runs the cleaner system logic (called from main game loop)
 func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
-	// Main game loop just processes spawn requests
-	// Actual cleaner updates happen in concurrent updateLoop
+	// Process spawn requests from channel
 	select {
 	case req := <-cs.spawnChan:
 		cs.processSpawnRequest(req)
 	default:
 		// No spawn request, continue
 	}
+
+	// Update cleaners synchronously (in addition to concurrent updateLoop)
+	// This ensures tests work properly with mock time providers
+	cs.updateCleaners()
 
 	// Clean up expired flash effects
 	cs.cleanupExpiredFlashes(world)
@@ -127,6 +134,12 @@ func (cs *CleanerSystem) cleanupExpiredFlashes(world *engine.World) {
 
 		elapsed := now.Sub(flash.StartTime).Milliseconds()
 		if elapsed >= int64(flash.Duration) {
+			// Remove from flash position tracking
+			flashKey := fmt.Sprintf("%d,%d", flash.X, flash.Y)
+			cs.flashMu.Lock()
+			delete(cs.flashPositions, flashKey)
+			cs.flashMu.Unlock()
+
 			// Flash has expired, destroy entity
 			world.SafeDestroyEntity(entity)
 		}
@@ -440,6 +453,9 @@ func (cs *CleanerSystem) updateCleanerPositions(world *engine.World, deltaTime f
 		}
 		cleaner := cleanerComp.(components.CleanerComponent)
 
+		// Store old position before updating
+		oldPosition := cleaner.XPosition
+
 		// Update position based on speed and direction
 		cleaner.XPosition += cleaner.Speed * float64(cleaner.Direction) * deltaTime
 
@@ -459,14 +475,114 @@ func (cs *CleanerSystem) updateCleanerPositions(world *engine.World, deltaTime f
 		// Update component
 		world.AddComponent(entity, cleaner)
 
-		// Update tracked data
+		// Update tracked data and check for collisions along the path
 		cs.stateMu.Lock()
 		if data, exists := cs.cleanerDataMap[entity]; exists {
 			data.xPosition = cleaner.XPosition
 			data.trailPositions = cleaner.TrailPositions
 		}
 		cs.stateMu.Unlock()
+
+		// Check all integer positions between old and new position for collisions
+		cs.checkCollisionsAlongPath(world, entity, oldPosition, cleaner.XPosition, cleaner.Row, cleaner.Direction)
 	}
+}
+
+// checkCollisionsAlongPath checks all integer positions between old and new position for collisions
+func (cs *CleanerSystem) checkCollisionsAlongPath(world *engine.World, cleanerEntity engine.Entity, oldX, newX float64, row, direction int) {
+	cs.mu.RLock()
+	gameWidth := cs.gameWidth
+	cs.mu.RUnlock()
+
+	// Determine the range of integer positions to check
+	startX := int(oldX + 0.5)
+	endX := int(newX + 0.5)
+
+	// Ensure we check in the correct direction
+	if direction < 0 {
+		// R→L: swap if needed
+		if startX < endX {
+			startX, endX = endX, startX
+		}
+		// Check from startX down to endX
+		for x := startX; x >= endX; x-- {
+			if x >= 0 && x < gameWidth {
+				cs.checkAndDestroyAtPosition(world, x, row)
+			}
+		}
+	} else {
+		// L→R
+		if startX > endX {
+			startX, endX = endX, startX
+		}
+		// Check from startX up to endX
+		for x := startX; x <= endX; x++ {
+			if x >= 0 && x < gameWidth {
+				cs.checkAndDestroyAtPosition(world, x, row)
+			}
+		}
+	}
+}
+
+// checkAndDestroyAtPosition checks a specific position for Red characters and destroys them
+func (cs *CleanerSystem) checkAndDestroyAtPosition(world *engine.World, x, y int) {
+	seqType := reflect.TypeOf(components.SequenceComponent{})
+	charType := reflect.TypeOf(components.CharacterComponent{})
+	posType := reflect.TypeOf(components.PositionComponent{})
+
+	// Check if there's an entity at this position
+	targetEntity := world.GetEntityAtPosition(x, y)
+	if targetEntity == 0 {
+		return
+	}
+
+	// Check if it's a Red character
+	seqComp, ok := world.GetComponent(targetEntity, seqType)
+	if !ok || seqComp == nil {
+		return
+	}
+	seq, ok := seqComp.(components.SequenceComponent)
+	if !ok || seq.Type != components.SequenceRed {
+		return
+	}
+
+	// Get character info for flash effect before destroying
+	charComp, hasChar := world.GetComponent(targetEntity, charType)
+	posComp, hasPos := world.GetComponent(targetEntity, posType)
+
+	// Create flash effect at removal location
+	if hasChar && hasPos && charComp != nil && posComp != nil {
+		char, charOk := charComp.(components.CharacterComponent)
+		pos, posOk := posComp.(components.PositionComponent)
+
+		if charOk && posOk {
+			// Check if flash already exists at this position
+			flashKey := fmt.Sprintf("%d,%d", pos.X, pos.Y)
+
+			cs.flashMu.Lock()
+			if !cs.flashPositions[flashKey] {
+				// Mark position as having an active flash
+				cs.flashPositions[flashKey] = true
+				cs.flashMu.Unlock()
+
+				// Create flash entity
+				flashEntity := world.CreateEntity()
+				flash := components.RemovalFlashComponent{
+					X:         pos.X,
+					Y:         pos.Y,
+					Char:      char.Rune,
+					StartTime: cs.ctx.TimeProvider.Now(),
+					Duration:  cs.config.FlashDuration,
+				}
+				world.AddComponent(flashEntity, flash)
+			} else {
+				cs.flashMu.Unlock()
+			}
+		}
+	}
+
+	// Destroy the Red character
+	world.SafeDestroyEntity(targetEntity)
 }
 
 // detectAndDestroyRedCharacters checks for Red characters under cleaners and destroys them
@@ -530,15 +646,28 @@ func (cs *CleanerSystem) detectAndDestroyRedCharacters(world *engine.World) {
 				pos, posOk := posComp.(components.PositionComponent)
 
 				if charOk && posOk {
-					flashEntity := world.CreateEntity()
-					flash := components.RemovalFlashComponent{
-						X:         pos.X,
-						Y:         pos.Y,
-						Char:      char.Rune,
-						StartTime: cs.ctx.TimeProvider.Now(),
-						Duration:  cs.config.FlashDuration,
+					// Check if flash already exists at this position
+					flashKey := fmt.Sprintf("%d,%d", pos.X, pos.Y)
+
+					cs.flashMu.Lock()
+					if !cs.flashPositions[flashKey] {
+						// Mark position as having an active flash
+						cs.flashPositions[flashKey] = true
+						cs.flashMu.Unlock()
+
+						// Create flash entity
+						flashEntity := world.CreateEntity()
+						flash := components.RemovalFlashComponent{
+							X:         pos.X,
+							Y:         pos.Y,
+							Char:      char.Rune,
+							StartTime: cs.ctx.TimeProvider.Now(),
+							Duration:  cs.config.FlashDuration,
+						}
+						world.AddComponent(flashEntity, flash)
+					} else {
+						cs.flashMu.Unlock()
 					}
-					world.AddComponent(flashEntity, flash)
 				}
 			}
 
@@ -599,6 +728,11 @@ func (cs *CleanerSystem) cleanupCleaners(world *engine.World) {
 	cs.mu.Lock()
 	cs.world = nil
 	cs.mu.Unlock()
+
+	// Clear flash position tracking
+	cs.flashMu.Lock()
+	cs.flashPositions = make(map[string]bool)
+	cs.flashMu.Unlock()
 
 	// Verification: ensure no cleaners remain in world
 	remainingCleaners := world.GetEntitiesWith(cleanerType)
