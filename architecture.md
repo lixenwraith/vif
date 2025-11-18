@@ -246,3 +246,118 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 - **System Errors**: Log warning, continue with degraded functionality
 - **Missing Data File**: Graceful degradation (no file-based spawns)
 - **Fatal Errors**: Clean shutdown with screen.Fini()
+
+## Testing Strategy
+
+### Unit Tests
+- **Component Tests**: Validate individual component data structures
+- **System Tests**: Test system logic in isolation
+- **Helper Tests**: Verify utility functions and time providers
+
+### Integration Tests
+Located in `systems/cleaner_gold_integration_test.go`:
+- **Concurrent Gold Activation**: Tests gold sequence activation during active cleaners
+- **Multiple Cleaners on Adjacent Lines**: Verifies cleaners on adjacent rows don't interfere
+- **Cleaner Collision with Changing Text**: Tests cleaners hitting characters being modified by decay
+- **Heat Meter State Transitions**: Validates heat changes during cleaner animation
+- **Screen Buffer Modifications**: Tests concurrent buffer reads/writes during cleaner scan
+- **Concurrent Cleaner Spawns**: Verifies thread-safe spawn request handling
+- **Text Color Changes**: Tests decay-induced color changes during cleaner transit
+- **Game State Pause/Resume**: Validates cleaner behavior during time control changes
+
+### Race Condition Tests
+Located in `systems/cleaner_race_stress_test.go`:
+- **Rapid Gold Activation**: Stress tests rapid gold sequence spawning
+- **Maximum Cleaners on Screen**: Tests system with 24 concurrent cleaners
+- **Memory Leak Detection**: Verifies proper cleanup after multiple cycles
+- **Extreme Concurrency**: 20+ goroutines performing various operations
+- **Atomic Operation Consistency**: Validates atomic state management
+- **Flash Effect Stress Test**: Tests flash creation/cleanup under load
+- **Spatial Index Race Conditions**: Tests concurrent spatial index operations
+
+### Benchmark Tests
+Located in `systems/cleaner_benchmark_test.go`:
+- **Cleaner Spawn Performance**: `BenchmarkCleanerSpawn`
+- **Collision Detection**: `BenchmarkCleanerDetectAndDestroy`
+- **Row Scanning**: `BenchmarkCleanerScanRedRows`
+- **Position Updates**: `BenchmarkCleanerUpdate`
+- **Flash Effects**: `BenchmarkFlashEffectCreation`, `BenchmarkFlashEffectCleanup`
+- **Gold Sequence Operations**: `BenchmarkGoldSequenceSpawn`, `BenchmarkGoldSequenceCompletion`
+- **Concurrent Operations**: `BenchmarkConcurrentCleanerOperations`
+- **Full Pipeline**: `BenchmarkCompleteGoldCleanerPipeline`
+
+### Running Tests
+
+#### Standard Test Run
+```bash
+go test ./systems/... -v
+```
+
+#### Race Detector (CRITICAL for concurrency validation)
+```bash
+go test ./systems/... -race -v
+```
+
+#### Benchmarks
+```bash
+go test ./systems/... -bench=. -benchmem
+```
+
+#### Specific Test Categories
+```bash
+# Integration tests only
+go test ./systems/... -run TestConcurrent -v
+
+# Race condition tests only
+go test ./systems/... -run TestRapid -v -race
+
+# Memory leak detection (long running)
+go test ./systems/... -run TestMemoryLeak -v
+```
+
+#### Debug Logging
+Set environment variable for verbose race logging:
+```bash
+VERBOSE_RACE_LOG=1 go test ./systems/... -race -v
+```
+
+### Debug Helpers
+Located in `systems/test_helpers.go`:
+- **RaceDetectionLogger**: Logs concurrent events for race analysis
+- **ConcurrencyMonitor**: Tracks operation concurrency and detects anomalies
+- **AtomicStateValidator**: Validates atomic state consistency
+- **EntityLifecycleTracker**: Detects entity memory leaks
+
+### Test Coverage Goals
+- **Unit Tests**: >80% coverage for core systems
+- **Integration Tests**: All critical concurrent scenarios
+- **Race Tests**: All atomic operations and shared state access
+- **Benchmarks**: All performance-critical paths
+
+### Common Race Conditions to Test
+1. **Cleaner System**:
+   - Concurrent spawn requests
+   - Active state checks during cleanup
+   - Trail slice pool allocation/deallocation
+   - Screen buffer scanning during modifications
+
+2. **Gold System**:
+   - Spawn during active sequence
+   - Completion during spawn
+   - Cleaner triggering race conditions
+
+3. **Color Counters**:
+   - Concurrent increment/decrement (spawn vs. score vs. decay)
+   - Read during modification
+   - Negative counter prevention
+
+4. **Spatial Index**:
+   - Concurrent reads during entity destruction
+   - Position updates during queries
+   - Entity removal during iteration
+
+### Continuous Integration Requirements
+- All tests must pass with `-race` flag
+- No memory leaks detected in leak tests
+- Benchmarks should not regress >10% between commits
+- Test coverage should not decrease
