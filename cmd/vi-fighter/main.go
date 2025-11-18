@@ -144,8 +144,9 @@ func main() {
 	inputHandler := modes.NewInputHandler(ctx, scoreSystem)
 
 	// Phase 2: Create and start clock scheduler (50ms tick for game logic)
-	// Phase 3 will add phase transition logic to the clock tick
+	// Phase 3: Clock scheduler now handles Gold/Decay phase transitions
 	clockScheduler := engine.NewClockScheduler(ctx)
+	clockScheduler.SetSystems(goldSequenceSystem, decaySystem)
 	clockScheduler.Start()
 	defer clockScheduler.Stop()
 

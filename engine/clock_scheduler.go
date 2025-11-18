@@ -3,6 +3,8 @@ package engine
 import (
 	"sync"
 	"time"
+
+	"github.com/lixenwraith/vi-fighter/constants"
 )
 
 // GamePhase represents the current phase of the game's mechanic cycle
@@ -45,7 +47,7 @@ func (p GamePhase) String() string {
 // ClockScheduler manages game logic on a fixed 50ms tick
 // Provides infrastructure for phase transitions and state ownership
 // Phase 2: Clock infrastructure only
-// Phase 3: Will add Gold/Decay/Cleaner transition logic
+// Phase 3: Gold/Decay transition logic
 type ClockScheduler struct {
 	ctx          *GameContext
 	timeProvider TimeProvider
@@ -60,6 +62,21 @@ type ClockScheduler struct {
 	// Tick counter for debugging and metrics
 	tickCount uint64
 	mu        sync.RWMutex
+
+	// System references (Phase 3: needed for triggering transitions)
+	// These will be set via SetSystems() after scheduler creation
+	goldSystem  GoldSequenceSystemInterface
+	decaySystem DecaySystemInterface
+}
+
+// GoldSequenceSystemInterface defines the methods needed by the clock scheduler
+type GoldSequenceSystemInterface interface {
+	TimeoutGoldSequence(world *World)
+}
+
+// DecaySystemInterface defines the methods needed by the clock scheduler
+type DecaySystemInterface interface {
+	TriggerDecayAnimation(world *World)
 }
 
 // NewClockScheduler creates a new clock scheduler with 50ms tick rate
@@ -70,7 +87,18 @@ func NewClockScheduler(ctx *GameContext) *ClockScheduler {
 		ticker:       time.NewTicker(50 * time.Millisecond),
 		stopChan:     make(chan struct{}),
 		tickCount:    0,
+		goldSystem:   nil,
+		decaySystem:  nil,
 	}
+}
+
+// SetSystems sets the system references needed for phase transitions
+// Must be called before Start() to enable phase transition logic
+func (cs *ClockScheduler) SetSystems(goldSystem GoldSequenceSystemInterface, decaySystem DecaySystemInterface) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	cs.goldSystem = goldSystem
+	cs.decaySystem = decaySystem
 }
 
 // Start begins the clock scheduler in a separate goroutine
@@ -92,25 +120,60 @@ func (cs *ClockScheduler) run() {
 }
 
 // tick executes one clock cycle (called every 50ms)
-// Phase 2: Infrastructure only - increments tick counter
-// Phase 3: Will add phase transition logic here
+// Phase 3: Implements phase transition logic for Gold→Decay→Normal cycle
 func (cs *ClockScheduler) tick() {
 	cs.mu.Lock()
 	cs.tickCount++
-	tickNum := cs.tickCount
+	goldSys := cs.goldSystem
+	decaySys := cs.decaySystem
 	cs.mu.Unlock()
 
-	// Phase 2: Just tick infrastructure
-	// Phase 3: Will add:
-	// - Check spawn timing via ctx.State.ShouldSpawn()
-	// - Check gold timeout (if PhaseGoldActive)
-	// - Check decay timer (if PhaseDecayWait)
-	// - Update animation state (if PhaseDecayAnimation)
+	// Get current phase from GameState
+	phase := cs.ctx.State.GetPhase()
 
-	// Placeholder logging (will be removed in Phase 3)
-	if tickNum%20 == 0 { // Log every second (20 ticks × 50ms = 1000ms)
-		// Debug: Can check state here
-		_ = cs.ctx.State.GetPhase()
+	// Handle phase transitions based on current phase
+	switch phase {
+	case PhaseGoldActive:
+		// Check if gold sequence has timed out
+		if cs.ctx.State.IsGoldTimedOut() {
+			// Gold timeout - transition to DecayWait
+			// Call gold system to remove gold entities
+			if goldSys != nil {
+				goldSys.TimeoutGoldSequence(cs.ctx.World)
+			}
+
+			// Start decay timer (reads heat atomically, no cached value)
+			cs.ctx.State.StartDecayTimer(
+				cs.ctx.State.ScreenWidth,
+				constants.HeatBarIndicatorWidth,
+				constants.DecayIntervalBaseSeconds,
+				constants.DecayIntervalRangeSeconds,
+			)
+		}
+
+	case PhaseDecayWait:
+		// Check if decay timer has expired
+		if cs.ctx.State.IsDecayReady() {
+			// Timer expired - transition to DecayAnimation
+			// Start decay animation
+			cs.ctx.State.StartDecayAnimation()
+
+			// Trigger decay system to spawn falling entities
+			if decaySys != nil {
+				decaySys.TriggerDecayAnimation(cs.ctx.World)
+			}
+		}
+
+	case PhaseDecayAnimation:
+		// Animation is handled by DecaySystem
+		// When animation completes, DecaySystem will call StopDecayAnimation()
+		// which transitions back to PhaseNormal
+		// Nothing to do in clock tick for this phase
+
+	case PhaseNormal:
+		// Normal gameplay - no phase transitions
+		// Gold spawning is handled by GoldSequenceSystem's Update() method
+		// Nothing to do in clock tick for this phase
 	}
 }
 

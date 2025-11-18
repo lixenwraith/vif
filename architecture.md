@@ -65,9 +65,12 @@ snapshot := gs.ReadSpawnState()  // RLock, no blocking
 - Spawn timing and rate adaptation
 - Sequence ID generation
 
-⏳ **Remaining in Systems** (Phase 3):
-- Gold sequence lifecycle (GoldSequenceSystem)
-- Decay timer and animation (DecaySystem)
+✅ **Migrated in Phase 3**:
+- Gold sequence lifecycle (GoldSequenceSystem → GameState)
+- Decay timer and animation (DecaySystem → GameState)
+- **Critical Fix**: Removed heat caching from DecaySystem (was causing race condition)
+
+⏳ **Remaining in Systems** (Phase 6):
 - Cleaner activation (CleanerSystem)
 - Content management (SpawnSystem - implementation detail, not game state)
 
@@ -101,7 +104,10 @@ const (
 **Phase State** (in `GameState`):
 - `CurrentPhase` (`GamePhase`): Current game phase (mutex protected)
 - `PhaseStartTime` (`time.Time`): When current phase started
-- Phase 3 will add: Gold timeout, Decay interval, Animation state
+- **Phase 3 additions**:
+  - Gold sequence state: `GoldActive`, `GoldSequenceID`, `GoldStartTime`, `GoldTimeoutTime`
+  - Decay timer state: `DecayTimerActive`, `DecayNextTime`
+  - Decay animation state: `DecayAnimating`, `DecayStartTime`
 
 **Phase Access Pattern**:
 ```go
@@ -126,10 +132,14 @@ snapshot := ctx.State.ReadPhaseState()
 - Tick counter for debugging and metrics
 - Graceful shutdown on game exit
 
-**Current Behavior**:
+**Current Behavior** (Phase 3):
 - Ticks every 50ms independently of frame rate
-- Phase 2: Just increments tick counter
-- Phase 3 will add: Phase transition logic, spawn triggers, timeout checks
+- **Phase transitions handled on clock tick**:
+  - `PhaseGoldActive`: Check gold timeout → remove gold → start decay timer
+  - `PhaseDecayWait`: Check decay ready → start decay animation
+  - `PhaseDecayAnimation`: Handled by DecaySystem → return to PhaseNormal
+  - `PhaseNormal`: Gold spawning handled by GoldSequenceSystem
+- **Critical fix**: Decay timer reads heat atomically at transition (no caching)
 
 **Integration** (`cmd/vi-fighter/main.go`):
 ```go
@@ -173,15 +183,22 @@ defer ticker.Stop()
 - Tests for scheduler and phase state
 - No game logic changes (Gold/Decay/Cleaner unchanged)
 
-**Phase 3 (Future)**: Game logic migration
-- Move Gold sequence state to GameState
-- Move Decay timer state to GameState
-- Implement phase transition logic in clock tick
-- Fix race condition: Heat snapshot during Gold completion
-- Add integration tests for Gold→Decay→Cleaner flow
+**Phase 3 (Complete)**: Game logic migration
+- ✅ Moved Gold sequence state to GameState
+- ✅ Moved Decay timer state to GameState
+- ✅ Implemented phase transition logic in clock tick
+- ✅ **Fixed race condition**: Removed heat caching from DecaySystem
+- ✅ Added integration tests for Gold→Decay phase transitions
+- **Key Achievement**: Decay timer now reads heat atomically at phase transition, not stale cached value
+- See `PHASE3_REPORT.md` for detailed analysis
 
 #### Testing
 - `engine/clock_scheduler_test.go`: Scheduler tick tests, phase transition tests
+- `engine/phase3_integration_test.go`: Gold→Decay phase transition tests (Phase 3)
+  - `TestGoldToDecayPhaseTransition`: Complete cycle validation
+  - `TestDecayIntervalCalculation`: Heat-based interval formula (60s→10s)
+  - `TestConcurrentPhaseAccess`: Race condition testing
+  - **`TestNoHeatCaching`**: Validates critical fix (no stale heat)
 - All tests pass with `-race` flag
 - Clock runs in goroutine, no memory leaks detected
 - Concurrent phase reads/writes tested (20 goroutines)

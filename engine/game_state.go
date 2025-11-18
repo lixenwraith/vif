@@ -72,11 +72,19 @@ type GameState struct {
 	CurrentPhase GamePhase // Current game phase
 	PhaseStartTime time.Time // When current phase started
 
-	// Phase 3: Will add phase-specific state here
-	// - Gold sequence state (active, timeout, sequence ID)
-	// - Decay timer state (next decay time, heat snapshot)
-	// - Decay animation state (progress tracking)
-	// - Cleaner state (active, trigger time)
+	// Gold Sequence State (Phase 3: Migrated from GoldSequenceSystem)
+	GoldActive      bool      // Whether gold sequence is active
+	GoldSequenceID  int       // Current gold sequence ID
+	GoldStartTime   time.Time // When gold spawned
+	GoldTimeoutTime time.Time // When gold will timeout (10s from start)
+
+	// Decay Timer State (Phase 3: Migrated from DecaySystem)
+	DecayTimerActive bool      // Whether decay timer has been started
+	DecayNextTime    time.Time // When decay will trigger
+
+	// Decay Animation State (Phase 3: Migrated from DecaySystem)
+	DecayAnimating bool      // Whether decay animation is running
+	DecayStartTime time.Time // When decay animation started
 
 	// ===== CONFIGURATION (read-only after init) =====
 	// Set once at initialization, never mutated
@@ -146,6 +154,20 @@ func NewGameState(gameWidth, gameHeight, screenWidth int, timeProvider TimeProvi
 	// Initialize phase state (Phase 2: Start in Normal phase)
 	gs.CurrentPhase = PhaseNormal
 	gs.PhaseStartTime = now
+
+	// Initialize Gold sequence state (Phase 3)
+	gs.GoldActive = false
+	gs.GoldSequenceID = 0
+	gs.GoldStartTime = time.Time{}
+	gs.GoldTimeoutTime = time.Time{}
+
+	// Initialize Decay timer state (Phase 3)
+	gs.DecayTimerActive = false
+	gs.DecayNextTime = time.Time{}
+
+	// Initialize Decay animation state (Phase 3)
+	gs.DecayAnimating = false
+	gs.DecayStartTime = time.Time{}
 
 	return gs
 }
@@ -519,5 +541,258 @@ func (gs *GameState) ReadPhaseState() PhaseSnapshot {
 		Phase:     gs.CurrentPhase,
 		StartTime: gs.PhaseStartTime,
 		Duration:  now.Sub(gs.PhaseStartTime),
+	}
+}
+
+// ===== GOLD SEQUENCE STATE ACCESSORS (mutex protected) =====
+
+// GetGoldActive returns whether a gold sequence is active
+func (gs *GameState) GetGoldActive() bool {
+	gs.mu.RLock()
+	defer gs.mu.RUnlock()
+	return gs.GoldActive
+}
+
+// SetGoldActive sets whether a gold sequence is active
+func (gs *GameState) SetGoldActive(active bool) {
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
+	gs.GoldActive = active
+}
+
+// GetGoldSequenceID returns the current gold sequence ID
+func (gs *GameState) GetGoldSequenceID() int {
+	gs.mu.RLock()
+	defer gs.mu.RUnlock()
+	return gs.GoldSequenceID
+}
+
+// IncrementGoldSequenceID increments and returns the next gold sequence ID
+func (gs *GameState) IncrementGoldSequenceID() int {
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
+	gs.GoldSequenceID++
+	return gs.GoldSequenceID
+}
+
+// ActivateGoldSequence atomically activates a gold sequence with timeout
+func (gs *GameState) ActivateGoldSequence(sequenceID int, duration time.Duration) {
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
+	now := gs.TimeProvider.Now()
+	gs.GoldActive = true
+	gs.GoldSequenceID = sequenceID
+	gs.GoldStartTime = now
+	gs.GoldTimeoutTime = now.Add(duration)
+	gs.CurrentPhase = PhaseGoldActive
+	gs.PhaseStartTime = now
+}
+
+// DeactivateGoldSequence atomically deactivates the gold sequence
+func (gs *GameState) DeactivateGoldSequence() {
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
+	gs.GoldActive = false
+	gs.GoldStartTime = time.Time{}
+	gs.GoldTimeoutTime = time.Time{}
+}
+
+// GetGoldTimeoutTime returns when the gold sequence will timeout
+func (gs *GameState) GetGoldTimeoutTime() time.Time {
+	gs.mu.RLock()
+	defer gs.mu.RUnlock()
+	return gs.GoldTimeoutTime
+}
+
+// IsGoldTimedOut checks if the gold sequence has timed out
+func (gs *GameState) IsGoldTimedOut() bool {
+	gs.mu.RLock()
+	defer gs.mu.RUnlock()
+	if !gs.GoldActive {
+		return false
+	}
+	return gs.TimeProvider.Now().After(gs.GoldTimeoutTime)
+}
+
+// GoldSnapshot provides a consistent view of gold state
+type GoldSnapshot struct {
+	Active      bool
+	SequenceID  int
+	StartTime   time.Time
+	TimeoutTime time.Time
+	Elapsed     time.Duration
+	Remaining   time.Duration
+}
+
+// ReadGoldState returns a consistent snapshot of the gold sequence state
+func (gs *GameState) ReadGoldState() GoldSnapshot {
+	gs.mu.RLock()
+	defer gs.mu.RUnlock()
+
+	now := gs.TimeProvider.Now()
+	var elapsed, remaining time.Duration
+	if gs.GoldActive {
+		elapsed = now.Sub(gs.GoldStartTime)
+		remaining = gs.GoldTimeoutTime.Sub(now)
+		if remaining < 0 {
+			remaining = 0
+		}
+	}
+
+	return GoldSnapshot{
+		Active:      gs.GoldActive,
+		SequenceID:  gs.GoldSequenceID,
+		StartTime:   gs.GoldStartTime,
+		TimeoutTime: gs.GoldTimeoutTime,
+		Elapsed:     elapsed,
+		Remaining:   remaining,
+	}
+}
+
+// ===== DECAY TIMER STATE ACCESSORS (mutex protected) =====
+
+// GetDecayTimerActive returns whether the decay timer is active
+func (gs *GameState) GetDecayTimerActive() bool {
+	gs.mu.RLock()
+	defer gs.mu.RUnlock()
+	return gs.DecayTimerActive
+}
+
+// StartDecayTimer starts the decay timer with the given interval
+// Calculates interval based on current heat atomically
+func (gs *GameState) StartDecayTimer(screenWidth int, heatBarIndicatorWidth int, baseSeconds, rangeSeconds float64) {
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
+
+	// Read heat atomically (no cached value)
+	heat := int(gs.Heat.Load())
+
+	// Calculate heat bar width
+	heatBarWidth := screenWidth - heatBarIndicatorWidth
+	if heatBarWidth < 1 {
+		heatBarWidth = 1
+	}
+
+	// Calculate heat percentage
+	heatPercentage := float64(heat) / float64(heatBarWidth)
+	if heatPercentage > 1.0 {
+		heatPercentage = 1.0
+	}
+	if heatPercentage < 0.0 {
+		heatPercentage = 0.0
+	}
+
+	// Formula: base - range * heat_percentage
+	// Empty heat bar (0): 60 - 50 * 0 = 60 seconds
+	// Full heat bar (max): 60 - 50 * 1 = 10 seconds
+	intervalSeconds := baseSeconds - rangeSeconds*heatPercentage
+	interval := time.Duration(intervalSeconds * float64(time.Second))
+
+	now := gs.TimeProvider.Now()
+	gs.DecayTimerActive = true
+	gs.DecayNextTime = now.Add(interval)
+	gs.CurrentPhase = PhaseDecayWait
+	gs.PhaseStartTime = now
+}
+
+// GetDecayNextTime returns when the next decay will trigger
+func (gs *GameState) GetDecayNextTime() time.Time {
+	gs.mu.RLock()
+	defer gs.mu.RUnlock()
+	return gs.DecayNextTime
+}
+
+// IsDecayReady checks if the decay timer has expired
+func (gs *GameState) IsDecayReady() bool {
+	gs.mu.RLock()
+	defer gs.mu.RUnlock()
+	if !gs.DecayTimerActive {
+		return false
+	}
+	now := gs.TimeProvider.Now()
+	return now.After(gs.DecayNextTime) || now.Equal(gs.DecayNextTime)
+}
+
+// GetTimeUntilDecay returns seconds until next decay trigger
+func (gs *GameState) GetTimeUntilDecay() float64 {
+	gs.mu.RLock()
+	defer gs.mu.RUnlock()
+	if !gs.DecayTimerActive || gs.DecayAnimating {
+		return 0.0
+	}
+	remaining := gs.DecayNextTime.Sub(gs.TimeProvider.Now()).Seconds()
+	if remaining < 0 {
+		remaining = 0
+	}
+	return remaining
+}
+
+// ===== DECAY ANIMATION STATE ACCESSORS (mutex protected) =====
+
+// GetDecayAnimating returns whether decay animation is running
+func (gs *GameState) GetDecayAnimating() bool {
+	gs.mu.RLock()
+	defer gs.mu.RUnlock()
+	return gs.DecayAnimating
+}
+
+// StartDecayAnimation starts the decay animation
+func (gs *GameState) StartDecayAnimation() {
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
+	now := gs.TimeProvider.Now()
+	gs.DecayAnimating = true
+	gs.DecayStartTime = now
+	gs.DecayTimerActive = false // Timer is no longer active once animation starts
+	gs.CurrentPhase = PhaseDecayAnimation
+	gs.PhaseStartTime = now
+}
+
+// StopDecayAnimation stops the decay animation and returns to Normal phase
+func (gs *GameState) StopDecayAnimation() {
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
+	now := gs.TimeProvider.Now()
+	gs.DecayAnimating = false
+	gs.DecayStartTime = time.Time{}
+	gs.CurrentPhase = PhaseNormal
+	gs.PhaseStartTime = now
+}
+
+// GetDecayStartTime returns when the decay animation started
+func (gs *GameState) GetDecayStartTime() time.Time {
+	gs.mu.RLock()
+	defer gs.mu.RUnlock()
+	return gs.DecayStartTime
+}
+
+// DecaySnapshot provides a consistent view of decay state
+type DecaySnapshot struct {
+	TimerActive bool
+	NextTime    time.Time
+	Animating   bool
+	StartTime   time.Time
+	TimeUntil   float64
+}
+
+// ReadDecayState returns a consistent snapshot of the decay state
+func (gs *GameState) ReadDecayState() DecaySnapshot {
+	gs.mu.RLock()
+	defer gs.mu.RUnlock()
+
+	timeUntil := 0.0
+	if gs.DecayTimerActive && !gs.DecayAnimating {
+		remaining := gs.DecayNextTime.Sub(gs.TimeProvider.Now()).Seconds()
+		if remaining > 0 {
+			timeUntil = remaining
+		}
+	}
+
+	return DecaySnapshot{
+		TimerActive: gs.DecayTimerActive,
+		NextTime:    gs.DecayNextTime,
+		Animating:   gs.DecayAnimating,
+		StartTime:   gs.DecayStartTime,
+		TimeUntil:   timeUntil,
 	}
 }
