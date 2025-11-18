@@ -1,9 +1,13 @@
 package main
 
 import (
+	"flag"
 	"fmt"
+	"io"
+	"log"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -13,8 +17,75 @@ import (
 	"github.com/lixenwraith/vi-fighter/systems"
 )
 
+const (
+	logDir      = "logs"
+	logFileName = "vi-fighter.log"
+	maxLogSize  = 10 * 1024 * 1024 // 10MB
+)
+
+// setupLogging configures log output based on debug flag
+// If debug is true, logs go to file; otherwise, logging is disabled
+// Returns the log file handle (or nil) that should be closed when done
+func setupLogging(debug bool) *os.File {
+	if !debug {
+		// Disable all logging by redirecting to io.Discard
+		log.SetOutput(io.Discard)
+		return nil
+	}
+
+	// Create logs directory if it doesn't exist
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		// Can't log yet, so write to stderr
+		fmt.Fprintf(os.Stderr, "Warning: failed to create logs directory: %v\n", err)
+		log.SetOutput(io.Discard)
+		return nil
+	}
+
+	logPath := filepath.Join(logDir, logFileName)
+
+	// Check if log file needs rotation (>10MB)
+	if info, err := os.Stat(logPath); err == nil {
+		if info.Size() > maxLogSize {
+			// Rotate the log file by renaming it with timestamp
+			timestamp := time.Now().Format("2006-01-02-15-04-05")
+			rotatedName := filepath.Join(logDir, fmt.Sprintf("vi-fighter-%s.log", timestamp))
+			if err := os.Rename(logPath, rotatedName); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to rotate log file: %v\n", err)
+			}
+		}
+	}
+
+	// Open log file in append mode
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to open log file: %v\n", err)
+		log.SetOutput(io.Discard)
+		return nil
+	}
+
+	// Redirect all log output to the file
+	log.SetOutput(logFile)
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+
+	// Log startup
+	log.Printf("=== Vi-Fighter started ===")
+
+	return logFile
+}
+
 func main() {
+	// Parse command-line flags
+	debug := flag.Bool("debug", false, "Enable debug logging to file")
+	flag.Parse()
+
 	rand.Seed(time.Now().UnixNano())
+
+	// Setup logging before any other operations
+	// This ensures no log output goes to stdout/stderr during gameplay
+	logFile := setupLogging(*debug)
+	if logFile != nil {
+		defer logFile.Close()
+	}
 
 	// Initialize screen
 	screen, err := tcell.NewScreen()
