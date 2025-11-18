@@ -1,0 +1,86 @@
+name: Test with Race Detection
+
+on:
+  push:
+    branches: [ main, master, develop, claude/* ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  test:
+    name: Test on Go ${{ matrix.go-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.21', '1.22']
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ matrix.go-version }}
+
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-${{ matrix.go-version }}-
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Run tests without race detector
+      run: go test -v ./...
+
+    - name: Run tests with race detector
+      run: go test -race -v ./...
+      env:
+        GORACE: "halt_on_error=1"
+
+    - name: Run specific race condition tests
+      run: |
+        go test -race -v -run TestConcurrentContentRefresh ./systems
+        go test -race -v -run TestRenderWhileSpawning ./systems
+        go test -race -v -run TestContentSwapDuringRead ./systems
+        go test -race -v -run TestStressContentSystem ./systems
+        go test -race -v -run TestConcurrentColorCounterUpdates ./systems
+      env:
+        GORACE: "halt_on_error=1"
+
+  race-stress-test:
+    name: Extended Race Stress Test
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Run stress tests with race detector
+      run: |
+        echo "Running stress test suite with race detector..."
+        go test -race -v -timeout 5m -run "TestStress|TestConcurrent" ./...
+      env:
+        GORACE: "halt_on_error=1 log_path=race"
+
+    - name: Upload race detector logs on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: race-detector-logs
+        path: race.*
+        retention-days: 7
