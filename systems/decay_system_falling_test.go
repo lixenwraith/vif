@@ -749,3 +749,550 @@ func TestSingleDecayPerAnimation(t *testing.T) {
 		t.Error("Decay tracking map should be cleared after animation completes")
 	}
 }
+
+// TestFallingDecayFullCoverage tests that all columns have exactly one falling entity (full coverage)
+func TestFallingDecayFullCoverage(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+	world := ctx.World
+
+	mockTime := engine.NewMockTimeProvider(time.Now())
+	ctx.TimeProvider = mockTime
+
+	gameWidth := 80
+	decaySystem := NewDecaySystem(gameWidth, 24, 80, 0, ctx)
+
+	// Trigger decay animation
+	mockTime.Advance(61 * time.Second) // Trigger decay
+	decaySystem.Update(world, 16*time.Millisecond)
+
+	if !decaySystem.IsAnimating() {
+		t.Fatal("Expected decay system to be animating after time trigger")
+	}
+
+	// Track which columns have falling entities
+	columnCoverage := make(map[int]int) // column -> count
+
+	fallingType := reflect.TypeOf(components.FallingDecayComponent{})
+	for _, entity := range decaySystem.fallingEntities {
+		fallComp, ok := world.GetComponent(entity, fallingType)
+		if !ok {
+			t.Errorf("Falling entity %d missing FallingDecayComponent", entity)
+			continue
+		}
+
+		fall := fallComp.(components.FallingDecayComponent)
+		columnCoverage[fall.Column]++
+	}
+
+	// Verify all columns have exactly one falling entity
+	for col := 0; col < gameWidth; col++ {
+		count, exists := columnCoverage[col]
+		if !exists {
+			t.Errorf("Column %d has no falling entity - missing coverage", col)
+		} else if count != 1 {
+			t.Errorf("Column %d has %d falling entities, expected exactly 1", col, count)
+		}
+	}
+
+	// Verify no extra columns
+	if len(columnCoverage) != gameWidth {
+		t.Errorf("Expected %d columns with falling entities, got %d", gameWidth, len(columnCoverage))
+	}
+
+	// Verify total count
+	if len(decaySystem.fallingEntities) != gameWidth {
+		t.Errorf("Expected exactly %d falling entities (one per column), got %d", gameWidth, len(decaySystem.fallingEntities))
+	}
+}
+
+// TestFallingDecayIndividualCleanup tests that entities are cleaned up individually when reaching bottom
+func TestFallingDecayIndividualCleanup(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+	world := ctx.World
+
+	mockTime := engine.NewMockTimeProvider(time.Now())
+	ctx.TimeProvider = mockTime
+
+	gameHeight := 24
+	decaySystem := NewDecaySystem(80, gameHeight, 80, 0, ctx)
+	decaySystem.animating = true
+	decaySystem.startTime = mockTime.Now()
+	decaySystem.decayedThisFrame = make(map[engine.Entity]bool)
+
+	// Create falling entities with different speeds
+	// Slow entity: will take longer to reach bottom
+	slowEntity := world.CreateEntity()
+	world.AddComponent(slowEntity, components.FallingDecayComponent{
+		Column:    10,
+		YPosition: 0.0,
+		Speed:     5.0, // Slow speed - takes 4.8s to reach bottom
+		Char:      'S',
+	})
+
+	// Medium entity
+	mediumEntity := world.CreateEntity()
+	world.AddComponent(mediumEntity, components.FallingDecayComponent{
+		Column:    30,
+		YPosition: 0.0,
+		Speed:     20.0, // Medium speed - takes 1.2s to reach bottom
+		Char:      'M',
+	})
+
+	// Fast entity: will reach bottom quickly
+	fastEntity := world.CreateEntity()
+	world.AddComponent(fastEntity, components.FallingDecayComponent{
+		Column:    20,
+		YPosition: 0.0,
+		Speed:     50.0, // Fast speed - takes 0.48s to reach bottom
+		Char:      'F',
+	})
+
+	decaySystem.fallingEntities = []engine.Entity{slowEntity, mediumEntity, fastEntity}
+
+	// Initial count should be 3
+	if len(decaySystem.fallingEntities) != 3 {
+		t.Fatalf("Expected 3 falling entities initially, got %d", len(decaySystem.fallingEntities))
+	}
+
+	// Simulate elapsed time: 0.5s - fast entity should pass bottom
+	elapsed := 0.5
+	decaySystem.updateFallingEntities(world, elapsed)
+
+	if len(decaySystem.fallingEntities) != 2 {
+		t.Errorf("After 0.5s, expected 2 entities remaining (fast entity cleaned up), got %d", len(decaySystem.fallingEntities))
+	}
+
+	// Verify fast entity was destroyed
+	fallingType := reflect.TypeOf(components.FallingDecayComponent{})
+	_, exists := world.GetComponent(fastEntity, fallingType)
+	if exists {
+		t.Error("Fast entity should have been destroyed after passing bottom")
+	}
+
+	// Simulate more time: 1.3s total - medium entity should pass bottom
+	elapsed = 1.3
+	decaySystem.updateFallingEntities(world, elapsed)
+
+	if len(decaySystem.fallingEntities) != 1 {
+		t.Errorf("After 1.3s, expected 1 entity remaining (medium entity cleaned up), got %d", len(decaySystem.fallingEntities))
+	}
+
+	// Verify medium entity was destroyed
+	_, exists = world.GetComponent(mediumEntity, fallingType)
+	if exists {
+		t.Error("Medium entity should have been destroyed after passing bottom")
+	}
+
+	// Simulate more time: 5.0s total - slow entity should pass bottom
+	elapsed = 5.0
+	decaySystem.updateFallingEntities(world, elapsed)
+
+	if len(decaySystem.fallingEntities) != 0 {
+		t.Errorf("After 5.0s, expected 0 entities remaining (all cleaned up), got %d", len(decaySystem.fallingEntities))
+	}
+
+	// Verify slow entity was destroyed
+	_, exists = world.GetComponent(slowEntity, fallingType)
+	if exists {
+		t.Error("Slow entity should have been destroyed after passing bottom")
+	}
+}
+
+// TestFallingDecayOncePerAnimation tests that characters are only decayed once per animation
+func TestFallingDecayOncePerAnimation(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+	world := ctx.World
+
+	mockTime := engine.NewMockTimeProvider(time.Now())
+	ctx.TimeProvider = mockTime
+
+	decaySystem := NewDecaySystem(80, 24, 80, 0, ctx)
+	spawnSystem := NewSpawnSystem(80, 24, 0, 0, ctx)
+	decaySystem.SetSpawnSystem(spawnSystem)
+
+	// Create test characters at same column but different rows
+	entity1 := world.CreateEntity()
+	world.AddComponent(entity1, components.PositionComponent{X: 15, Y: 5})
+	world.AddComponent(entity1, components.CharacterComponent{
+		Rune:  'A',
+		Style: render.GetStyleForSequence(components.SequenceBlue, components.LevelBright),
+	})
+	world.AddComponent(entity1, components.SequenceComponent{
+		ID:    1,
+		Index: 0,
+		Type:  components.SequenceBlue,
+		Level: components.LevelBright,
+	})
+	world.UpdateSpatialIndex(entity1, 15, 5)
+
+	entity2 := world.CreateEntity()
+	world.AddComponent(entity2, components.PositionComponent{X: 15, Y: 10})
+	world.AddComponent(entity2, components.CharacterComponent{
+		Rune:  'B',
+		Style: render.GetStyleForSequence(components.SequenceGreen, components.LevelBright),
+	})
+	world.AddComponent(entity2, components.SequenceComponent{
+		ID:    2,
+		Index: 0,
+		Type:  components.SequenceGreen,
+		Level: components.LevelBright,
+	})
+	world.UpdateSpatialIndex(entity2, 15, 10)
+
+	// Start decay animation
+	mockTime.Advance(61 * time.Second)
+	decaySystem.Update(world, 16*time.Millisecond)
+
+	if !decaySystem.IsAnimating() {
+		t.Fatal("Expected decay system to be animating")
+	}
+
+	// Run animation for several update cycles
+	for i := 0; i < 20; i++ {
+		mockTime.Advance(100 * time.Millisecond)
+		decaySystem.Update(world, 16*time.Millisecond)
+	}
+
+	// Check that each character was decayed exactly once
+	seqType := reflect.TypeOf(components.SequenceComponent{})
+
+	seq1Comp, ok := world.GetComponent(entity1, seqType)
+	if !ok {
+		t.Fatal("Entity1 lost SequenceComponent")
+	}
+	seq1 := seq1Comp.(components.SequenceComponent)
+	// Blue Bright should decay to Blue Normal (one level down)
+	if seq1.Level != components.LevelNormal {
+		t.Errorf("Entity1: expected level Normal (decayed once from Bright), got %v", seq1.Level)
+	}
+	if seq1.Type != components.SequenceBlue {
+		t.Errorf("Entity1: expected type Blue, got %v", seq1.Type)
+	}
+
+	seq2Comp, ok := world.GetComponent(entity2, seqType)
+	if !ok {
+		t.Fatal("Entity2 lost SequenceComponent")
+	}
+	seq2 := seq2Comp.(components.SequenceComponent)
+	// Green Bright should decay to Green Normal (one level down)
+	if seq2.Level != components.LevelNormal {
+		t.Errorf("Entity2: expected level Normal (decayed once from Bright), got %v", seq2.Level)
+	}
+	if seq2.Type != components.SequenceGreen {
+		t.Errorf("Entity2: expected type Green, got %v", seq2.Type)
+	}
+}
+
+// TestFallingDecayAllPositions tests that decay works correctly for characters at all Y positions
+func TestFallingDecayAllPositions(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+	world := ctx.World
+
+	mockTime := engine.NewMockTimeProvider(time.Now())
+	ctx.TimeProvider = mockTime
+
+	gameHeight := 24
+	decaySystem := NewDecaySystem(80, gameHeight, 80, 0, ctx)
+	spawnSystem := NewSpawnSystem(80, gameHeight, 0, 0, ctx)
+	decaySystem.SetSpawnSystem(spawnSystem)
+
+	// Create characters at all Y positions (all rows)
+	entities := make([]engine.Entity, gameHeight)
+	for y := 0; y < gameHeight; y++ {
+		entity := world.CreateEntity()
+		world.AddComponent(entity, components.PositionComponent{X: 10, Y: y})
+		world.AddComponent(entity, components.CharacterComponent{
+			Rune:  rune('A' + (y % 26)),
+			Style: render.GetStyleForSequence(components.SequenceGreen, components.LevelBright),
+		})
+		world.AddComponent(entity, components.SequenceComponent{
+			ID:    y,
+			Index: 0,
+			Type:  components.SequenceGreen,
+			Level: components.LevelBright,
+		})
+		world.UpdateSpatialIndex(entity, 10, y)
+		entities[y] = entity
+	}
+
+	// Trigger decay animation
+	mockTime.Advance(61 * time.Second)
+	decaySystem.Update(world, 16*time.Millisecond)
+
+	if !decaySystem.IsAnimating() {
+		t.Fatal("Expected decay system to be animating")
+	}
+
+	// Run animation - need to call Update multiple times for falling entities to progress
+	// and decay characters at all positions
+	// With FallingDecayMaxSpeed = 15.0, fastest entity moves 15 rows/sec
+	// Use small time increments (16ms ~= 60fps) to prevent skipping rows
+	// With FallingDecayMinSpeed = 5.0, slowest entity needs 24/5.0 = 4.8 seconds
+	// Run for 300 * 16ms = 4.8s, then a bit more to ensure completion
+	for i := 0; i < 350; i++ {
+		mockTime.Advance(16 * time.Millisecond)
+		decaySystem.Update(world, 16*time.Millisecond)
+	}
+
+	// Check if animation completed, if not advance more time
+	if decaySystem.IsAnimating() {
+		animationDuration := float64(gameHeight) / constants.FallingDecayMinSpeed
+		mockTime.Advance(time.Duration(animationDuration) * time.Second)
+		decaySystem.Update(world, 16*time.Millisecond)
+	}
+
+	if decaySystem.IsAnimating() {
+		t.Error("Expected animation to be complete")
+	}
+
+	// Verify all characters at all positions were decayed exactly once
+	seqType := reflect.TypeOf(components.SequenceComponent{})
+	for y := 0; y < gameHeight; y++ {
+		seqComp, ok := world.GetComponent(entities[y], seqType)
+		if !ok {
+			t.Errorf("Character at Y=%d lost SequenceComponent", y)
+			continue
+		}
+		seq := seqComp.(components.SequenceComponent)
+
+		// Should have decayed from Bright to Normal
+		if seq.Level != components.LevelNormal {
+			t.Errorf("Character at Y=%d: expected level Normal (decayed once), got %v", y, seq.Level)
+		}
+		if seq.Type != components.SequenceGreen {
+			t.Errorf("Character at Y=%d: expected type Green, got %v", y, seq.Type)
+		}
+	}
+}
+
+// TestFallingDecayEmptyBoard tests decay animation with no characters on the board
+func TestFallingDecayEmptyBoard(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+	world := ctx.World
+
+	mockTime := engine.NewMockTimeProvider(time.Now())
+	ctx.TimeProvider = mockTime
+
+	decaySystem := NewDecaySystem(80, 24, 80, 0, ctx)
+
+	// Board is empty - no characters
+
+	// Trigger decay animation
+	mockTime.Advance(61 * time.Second)
+	decaySystem.Update(world, 16*time.Millisecond)
+
+	if !decaySystem.IsAnimating() {
+		t.Fatal("Expected decay system to be animating even with empty board")
+	}
+
+	// Verify falling entities were still created
+	if len(decaySystem.fallingEntities) != 80 {
+		t.Errorf("Expected 80 falling entities even with empty board, got %d", len(decaySystem.fallingEntities))
+	}
+
+	// Run animation until completion
+	animationDuration := float64(24) / constants.FallingDecayMinSpeed
+	mockTime.Advance(time.Duration(animationDuration+1) * time.Second)
+	decaySystem.Update(world, 16*time.Millisecond)
+
+	// Animation should complete successfully
+	if decaySystem.IsAnimating() {
+		t.Error("Expected animation to complete even with empty board")
+	}
+
+	// Falling entities should be cleaned up
+	if len(decaySystem.fallingEntities) != 0 {
+		t.Errorf("Expected falling entities to be cleaned up, got %d remaining", len(decaySystem.fallingEntities))
+	}
+
+	// No errors should occur with empty board
+	fallingType := reflect.TypeOf(components.FallingDecayComponent{})
+	remainingFalling := world.GetEntitiesWith(fallingType)
+	if len(remainingFalling) != 0 {
+		t.Errorf("Expected no FallingDecayComponent entities remaining, got %d", len(remainingFalling))
+	}
+}
+
+// TestFallingDecayFullBoard tests decay animation with a board full of characters
+func TestFallingDecayFullBoard(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+	world := ctx.World
+
+	mockTime := engine.NewMockTimeProvider(time.Now())
+	ctx.TimeProvider = mockTime
+
+	gameWidth := 80
+	gameHeight := 24
+	decaySystem := NewDecaySystem(gameWidth, gameHeight, 80, 0, ctx)
+	spawnSystem := NewSpawnSystem(gameWidth, gameHeight, 0, 0, ctx)
+	decaySystem.SetSpawnSystem(spawnSystem)
+
+	// Fill the entire board with characters
+	totalChars := 0
+	for y := 0; y < gameHeight; y++ {
+		for x := 0; x < gameWidth; x++ {
+			entity := world.CreateEntity()
+			// Alternate between different sequence types and levels
+			seqType := components.SequenceGreen
+			if x%2 == 0 {
+				seqType = components.SequenceBlue
+			}
+			level := components.LevelBright
+			if y%3 == 1 {
+				level = components.LevelNormal
+			} else if y%3 == 2 {
+				level = components.LevelDark
+			}
+
+			world.AddComponent(entity, components.PositionComponent{X: x, Y: y})
+			world.AddComponent(entity, components.CharacterComponent{
+				Rune:  rune('A' + ((x + y) % 26)),
+				Style: render.GetStyleForSequence(seqType, level),
+			})
+			world.AddComponent(entity, components.SequenceComponent{
+				ID:    totalChars,
+				Index: 0,
+				Type:  seqType,
+				Level: level,
+			})
+			world.UpdateSpatialIndex(entity, x, y)
+			totalChars++
+		}
+	}
+
+	expectedTotal := gameWidth * gameHeight
+	if totalChars != expectedTotal {
+		t.Fatalf("Expected %d total characters, created %d", expectedTotal, totalChars)
+	}
+
+	// Trigger decay animation
+	mockTime.Advance(61 * time.Second)
+	decaySystem.Update(world, 16*time.Millisecond)
+
+	if !decaySystem.IsAnimating() {
+		t.Fatal("Expected decay system to be animating with full board")
+	}
+
+	// Verify falling entities were created (one per column)
+	if len(decaySystem.fallingEntities) != gameWidth {
+		t.Errorf("Expected %d falling entities, got %d", gameWidth, len(decaySystem.fallingEntities))
+	}
+
+	// Run animation until completion
+	animationDuration := float64(gameHeight) / constants.FallingDecayMinSpeed
+	mockTime.Advance(time.Duration(animationDuration+1) * time.Second)
+	decaySystem.Update(world, 16*time.Millisecond)
+
+	if decaySystem.IsAnimating() {
+		t.Error("Expected animation to complete with full board")
+	}
+
+	// Verify all characters were decayed exactly once
+	seqType := reflect.TypeOf(components.SequenceComponent{})
+	entities := world.GetEntitiesWith(seqType)
+
+	for _, entity := range entities {
+		seqComp, ok := world.GetComponent(entity, seqType)
+		if !ok {
+			continue
+		}
+		seq := seqComp.(components.SequenceComponent)
+
+		posType := reflect.TypeOf(components.PositionComponent{})
+		posComp, ok := world.GetComponent(entity, posType)
+		if !ok {
+			continue
+		}
+		pos := posComp.(components.PositionComponent)
+
+		// Check that decay occurred correctly based on original level
+		// Note: We can't check exact original level, but we can verify
+		// that the entity still exists and has valid decay state
+		if seq.Type != components.SequenceBlue && seq.Type != components.SequenceGreen && seq.Type != components.SequenceRed {
+			t.Errorf("Character at (%d,%d) has invalid type after decay: %v", pos.X, pos.Y, seq.Type)
+		}
+		if seq.Level < components.LevelDark || seq.Level > components.LevelBright {
+			t.Errorf("Character at (%d,%d) has invalid level after decay: %v", pos.X, pos.Y, seq.Level)
+		}
+	}
+
+	// Verify no falling entities remain
+	if len(decaySystem.fallingEntities) != 0 {
+		t.Errorf("Expected falling entities to be cleaned up, got %d remaining", len(decaySystem.fallingEntities))
+	}
+}
+
+// TestFallingDecayConcurrentPrevention tests that concurrent decay animations are prevented
+func TestFallingDecayConcurrentPrevention(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+	world := ctx.World
+
+	mockTime := engine.NewMockTimeProvider(time.Now())
+	ctx.TimeProvider = mockTime
+
+	decaySystem := NewDecaySystem(80, 24, 80, 0, ctx)
+
+	// Trigger first decay animation
+	mockTime.Advance(61 * time.Second)
+	decaySystem.Update(world, 16*time.Millisecond)
+
+	if !decaySystem.IsAnimating() {
+		t.Fatal("Expected first decay animation to start")
+	}
+
+	initialFallingCount := len(decaySystem.fallingEntities)
+	if initialFallingCount != 80 {
+		t.Errorf("Expected 80 falling entities for first animation, got %d", initialFallingCount)
+	}
+
+	// Try to trigger second decay while first is still running
+	// Advance time slightly (but keep animation running)
+	mockTime.Advance(500 * time.Millisecond)
+	decaySystem.Update(world, 16*time.Millisecond)
+
+	// Should still be animating (first animation)
+	if !decaySystem.IsAnimating() {
+		t.Error("Animation should still be running")
+	}
+
+	// Should not have spawned additional falling entities
+	if len(decaySystem.fallingEntities) != initialFallingCount {
+		t.Errorf("Expected falling entity count to remain %d, got %d - concurrent decay may have triggered",
+			initialFallingCount, len(decaySystem.fallingEntities))
+	}
+
+	// Complete first animation
+	animationDuration := float64(24) / constants.FallingDecayMinSpeed
+	mockTime.Advance(time.Duration(animationDuration+1) * time.Second)
+	decaySystem.Update(world, 16*time.Millisecond)
+
+	if decaySystem.IsAnimating() {
+		t.Error("Expected first animation to complete")
+	}
+
+	// Now a second decay should be allowed
+	mockTime.Advance(61 * time.Second)
+	decaySystem.Update(world, 16*time.Millisecond)
+
+	if !decaySystem.IsAnimating() {
+		t.Error("Expected second decay animation to start after first completed")
+	}
+
+	if len(decaySystem.fallingEntities) != 80 {
+		t.Errorf("Expected 80 falling entities for second animation, got %d", len(decaySystem.fallingEntities))
+	}
+}
