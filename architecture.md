@@ -204,26 +204,36 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 
 ### Cleaner System
 - **Trigger**: Activated when gold sequence completed while heat meter already at maximum
+- **Configuration**: Fully configurable via `constants.CleanerConfig` struct
+  - **Animation Duration**: Time to traverse screen (default: 1 second)
+  - **Speed**: Characters/second (default: auto-calculated from duration and screen width)
+  - **Trail Length**: Number of trail positions (default: 10)
+  - **Trail Fade Time**: Duration for complete trail fade (default: 0.3 seconds)
+  - **Trail Fade Curve**: Linear or exponential interpolation (default: linear)
+  - **Max Concurrent Cleaners**: Limit simultaneous cleaners (default: 0/unlimited)
+  - **Scan Interval**: Periodic Red character scanning (default: 0/disabled)
+  - **FPS**: Animation frame rate (default: 60)
+  - **Character**: Unicode block character (default: '█')
+  - **Flash Duration**: Removal flash duration in ms (default: 150)
 - **Behavior**: Sweeps across rows containing Red characters, removing them on contact
 - **Direction**: Alternating - odd rows sweep L→R, even rows sweep R→L
-- **Speed**: Calculated to traverse screen width in 1 second (CleanerAnimationDuration)
 - **Selectivity**: Only destroys Red characters, leaves Blue/Green untouched
-- **Animation**: Bright yellow blocks with fade trail effect (10 position history)
+- **Animation**: Configurable block character with fade trail effect
 - **Visual Effects**:
   - Pre-calculated gradient table for trail rendering (bright yellow → transparent)
-  - Trail length: 8-10 characters with smooth opacity falloff
-  - Removal flash effect: 150ms bright flash when Red characters destroyed
+  - Configurable trail length with smooth opacity falloff
+  - Configurable removal flash effect when Red characters destroyed
   - Flash cleanup: Automatic removal of expired flash entities
 - **Concurrency**:
-  - Updates run in separate goroutine at 60 FPS for smooth animation
+  - Updates run in separate goroutine at configurable FPS for smooth animation
   - Non-blocking spawn requests via buffered channel
   - Atomic state management for thread-safe activation/deactivation
   - Trail slices allocated from `sync.Pool` for efficient memory reuse
+  - Optional periodic scanning for Red characters (configurable interval)
 - **Performance**:
   - Pre-calculated color gradients avoid per-frame calculations
   - Batch terminal updates for trail rendering
   - Minimal allocations in render loop (gradient array vs dynamic color creation)
-- **Duration**: 1 second from spawn to cleanup
 
 ## Data Files
 

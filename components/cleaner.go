@@ -11,4 +11,5 @@ type CleanerComponent struct {
 	Direction      int       // Movement direction: 1 for L→R, -1 for R→L
 	TrailPositions []float64 // Recent X positions for fade trail effect (FIFO queue)
 	TrailMaxAge    float64   // Maximum age in seconds for trail to fade completely
+	Char           rune      // Character used to render the cleaner block
 }

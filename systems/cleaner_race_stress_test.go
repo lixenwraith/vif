@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/components"
+	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
@@ -16,7 +17,7 @@ func TestRapidGoldActivation(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	decaySystem := NewDecaySystem(80, 24, 80, 0, ctx)
@@ -98,7 +99,7 @@ func TestMaximumCleanersOnScreen(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Create Red characters on every row
@@ -184,7 +185,7 @@ func TestMemoryLeakDetection(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Run multiple cycles of cleaner creation and cleanup
@@ -244,7 +245,7 @@ func TestCleanerSystemUnderExtremeConcurrency(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
@@ -420,7 +421,7 @@ func TestAtomicOperationConsistency(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Create Red characters
@@ -472,7 +473,7 @@ func TestFlashEffectStressTest(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Create many Red characters
@@ -589,7 +590,7 @@ func TestSpatialIndexRaceConditions(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	var wg sync.WaitGroup

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/components"
+	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
@@ -17,7 +18,7 @@ func TestConcurrentGoldActivationDuringActiveCleaners(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	decaySystem := NewDecaySystem(80, 24, 80, 0, ctx)
@@ -149,7 +150,7 @@ func TestMultipleCleanersOnAdjacentLines(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Create Red characters on adjacent rows
@@ -254,7 +255,7 @@ func TestCleanerCollisionWithActivelyChangingText(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
@@ -417,7 +418,7 @@ func TestHeatMeterStateTransitionsDuringCleanerAnimation(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	goldSystem := NewGoldSequenceSystem(ctx, nil, 80, 24, 0, 0)
@@ -558,7 +559,7 @@ func TestScreenBufferModificationsDuringScan(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Create entities across the screen
@@ -728,7 +729,7 @@ func TestConcurrentCleanerSpawns(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Create Red characters on multiple rows
@@ -805,7 +806,7 @@ func TestTextColorChangesDuringCleanerTransit(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
@@ -961,7 +962,7 @@ func TestGameStatePauseResumeWithCleaners(t *testing.T) {
 		GameHeight:   24,
 	}
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Create Red characters

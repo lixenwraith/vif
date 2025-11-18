@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/modes"
 	"github.com/lixenwraith/vi-fighter/render"
@@ -116,7 +117,9 @@ func main() {
 	goldSequenceSystem := systems.NewGoldSequenceSystem(ctx, decaySystem, ctx.GameWidth, ctx.GameHeight, ctx.CursorX, ctx.CursorY)
 	ctx.World.AddSystem(goldSequenceSystem)
 
-	cleanerSystem := systems.NewCleanerSystem(ctx, ctx.GameWidth, ctx.GameHeight)
+	// Initialize cleaner system with default configuration
+	cleanerConfig := constants.DefaultCleanerConfig()
+	cleanerSystem := systems.NewCleanerSystem(ctx, ctx.GameWidth, ctx.GameHeight, cleanerConfig)
 	ctx.World.AddSystem(cleanerSystem)
 
 	// Wire up system references

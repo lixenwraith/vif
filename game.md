@@ -297,16 +297,29 @@ The game features four types of character sequences, each with distinct behavior
 - **Visual**: Bright yellow blocks that sweep horizontally across the screen
 - **Behavior**: Cleaners scan for and automatically destroy Red characters on contact
 - **Pattern**: Alternating sweep direction (odd rows left-to-right, even rows right-to-left)
-- **Duration**: 1 second animation from spawn to completion
+- **Duration**: Configurable animation duration (default: 1 second from spawn to completion)
 - **Selectivity**: **Only removes Red characters** - Blue and Green sequences are completely safe
 - **Effect**: Provides instant relief when overwhelmed by Red penalty sequences
 - **Strategic Use**:
   - Complete gold sequences at max heat to clear accumulated Red characters
   - Allows aggressive high-heat play without Red penalty accumulation
   - Most effective when multiple Red sequences have decayed across different rows
-- **Animation**: Smooth 60 FPS movement with trailing fade effect for visual clarity
-- **Trail Effect**: 8-10 character gradient trail (bright yellow → transparent) follows each cleaner
-- **Removal Flash**: Brief bright flash (150ms) appears when Red characters are destroyed, providing visual feedback
+- **Animation**: Configurable frame rate (default: 60 FPS) with trailing fade effect for visual clarity
+- **Trail Effect**: Configurable trail length (default: 8-10 characters) with gradient fade (bright yellow → transparent)
+- **Removal Flash**: Configurable flash duration (default: 150ms) appears when Red characters are destroyed
+
+#### Cleaner Configuration
+The Cleaner system supports the following configurable parameters (see `constants/ui.go`):
+- **Animation Duration**: Time for cleaner to traverse screen (default: 1.0 second)
+- **Speed**: Movement speed in characters/second (default: auto-calculated from animation duration)
+- **Trail Length**: Number of trailing positions (default: 10)
+- **Trail Fade Time**: Duration for trail to fade completely (default: 0.3 seconds)
+- **Trail Fade Curve**: Interpolation method - linear or exponential (default: linear)
+- **Max Concurrent Cleaners**: Limit on simultaneous cleaners (default: unlimited)
+- **Scan Interval**: Periodic scan interval for Red characters (default: disabled, only triggers on gold completion)
+- **FPS**: Target frame rate for animation (default: 60)
+- **Character**: Unicode character for cleaner block (default: '█')
+- **Flash Duration**: Duration of removal flash effect in milliseconds (default: 150)
 
 ---
 

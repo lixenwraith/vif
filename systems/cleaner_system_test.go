@@ -51,7 +51,7 @@ func TestCleanersTriggerConditions(t *testing.T) {
 			ctx := createCleanerTestContext()
 
 			// Create cleaner and gold systems
-			cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+			cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 			defer cleanerSystem.Shutdown()
 
 			goldSystem := NewGoldSequenceSystem(ctx, nil, 80, 24, 0, 0)
@@ -93,7 +93,7 @@ func TestCleanersDirectionAlternation(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Create Red characters on multiple rows
@@ -152,7 +152,7 @@ func TestCleanersRemoveOnlyRedCharacters(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Create mixed character types on row 5
@@ -217,7 +217,7 @@ func TestCleanersAnimationCompletion(t *testing.T) {
 		GameHeight:   24,
 	}
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Create Red character
@@ -280,7 +280,7 @@ func TestCleanersMovementSpeed(t *testing.T) {
 	}
 
 	gameWidth := 80
-	cleanerSystem := NewCleanerSystem(ctx, gameWidth, 24)
+	cleanerSystem := NewCleanerSystem(ctx, gameWidth, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Create Red character
@@ -341,7 +341,7 @@ func TestCleanersNoRedCharacters(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Create only Blue and Green characters
@@ -368,7 +368,7 @@ func TestCleanersMultipleRows(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Create Red characters on rows 1, 5, 10
@@ -413,7 +413,7 @@ func TestCleanersTrailTracking(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Create Red character
@@ -472,7 +472,7 @@ func TestCleanersDuplicateTriggerIgnored(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Create Red characters
@@ -522,7 +522,7 @@ func TestCleanersPoolReuse(t *testing.T) {
 		GameHeight:   24,
 	}
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Create Red character
@@ -587,7 +587,7 @@ func TestCleanersConcurrentAccess(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Create multiple Red characters
@@ -636,7 +636,7 @@ func TestCleanersRemovalFlashEffect(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Create a Red character at position (40, 5)
@@ -715,7 +715,7 @@ func TestCleanersFlashCleanup(t *testing.T) {
 		GameHeight:   24,
 	}
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Create a Red character
@@ -777,7 +777,7 @@ func TestCleanersNoFlashForBlueGreen(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Create Red character first (so cleaner spawns), then Blue and Green on same row
@@ -843,7 +843,7 @@ func TestCleanersMultipleFlashEffects(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Create multiple Red characters on same row

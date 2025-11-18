@@ -38,11 +38,13 @@ type cleanerData struct {
 // - Mutex protection for screen buffer scanning
 type CleanerSystem struct {
 	ctx               *engine.GameContext
+	config            constants.CleanerConfig // Configuration for cleaner behavior
 	mu                sync.RWMutex         // Protects gameWidth, gameHeight, animationDuration
 	stateMu           sync.RWMutex         // Protects cleanerDataMap
 	isActive          atomic.Bool          // Atomic flag for cleaner active state
 	activationTime    atomic.Int64         // Unix nano timestamp of activation
 	lastUpdateTime    atomic.Int64         // Unix nano timestamp of last update
+	lastScanTime      atomic.Int64         // Unix nano timestamp of last periodic scan
 	gameWidth         int                  // Protected by mu
 	gameHeight        int                  // Protected by mu
 	animationDuration time.Duration        // Protected by mu
@@ -53,20 +55,21 @@ type CleanerSystem struct {
 	wg                sync.WaitGroup       // Tracks goroutine lifecycle
 }
 
-// NewCleanerSystem creates a new cleaner system
-func NewCleanerSystem(ctx *engine.GameContext, gameWidth, gameHeight int) *CleanerSystem {
+// NewCleanerSystem creates a new cleaner system with the specified configuration
+func NewCleanerSystem(ctx *engine.GameContext, gameWidth, gameHeight int, config constants.CleanerConfig) *CleanerSystem {
 	cs := &CleanerSystem{
 		ctx:               ctx,
+		config:            config,
 		gameWidth:         gameWidth,
 		gameHeight:        gameHeight,
-		animationDuration: constants.CleanerAnimationDuration,
+		animationDuration: config.AnimationDuration,
 		spawnChan:         make(chan cleanerSpawnRequest, 10), // Buffered channel
 		stopChan:          make(chan struct{}),
 		cleanerDataMap:    make(map[engine.Entity]*cleanerData),
 		cleanerPool: sync.Pool{
 			New: func() interface{} {
 				// Pre-allocate trail slice to avoid repeated allocations
-				return make([]float64, 0, constants.CleanerTrailLength)
+				return make([]float64, 0, config.TrailLength)
 			},
 		},
 	}
@@ -75,6 +78,7 @@ func NewCleanerSystem(ctx *engine.GameContext, gameWidth, gameHeight int) *Clean
 	cs.isActive.Store(false)
 	cs.activationTime.Store(0)
 	cs.lastUpdateTime.Store(0)
+	cs.lastScanTime.Store(0)
 
 	// Start concurrent update loop
 	cs.wg.Add(1)
@@ -129,8 +133,15 @@ func (cs *CleanerSystem) cleanupExpiredFlashes(world *engine.World) {
 func (cs *CleanerSystem) updateLoop() {
 	defer cs.wg.Done()
 
-	ticker := time.NewTicker(time.Second / constants.CleanerFPS)
+	ticker := time.NewTicker(time.Second / time.Duration(cs.config.FPS))
 	defer ticker.Stop()
+
+	// Create periodic scan ticker if ScanInterval is set
+	var scanTicker *time.Ticker
+	if cs.config.ScanInterval > 0 {
+		scanTicker = time.NewTicker(cs.config.ScanInterval)
+		defer scanTicker.Stop()
+	}
 
 	for {
 		select {
@@ -138,8 +149,34 @@ func (cs *CleanerSystem) updateLoop() {
 			return
 		case <-ticker.C:
 			cs.updateCleaners()
+		case <-func() <-chan time.Time {
+			if scanTicker != nil {
+				return scanTicker.C
+			}
+			// Return a channel that never receives if scanTicker is nil
+			return make(<-chan time.Time)
+		}():
+			// Periodic scan triggered
+			cs.triggerPeriodicScan()
 		}
 	}
+}
+
+// triggerPeriodicScan checks if a periodic scan should trigger cleaners
+func (cs *CleanerSystem) triggerPeriodicScan() {
+	// Don't scan if cleaners are already active
+	if cs.isActive.Load() {
+		return
+	}
+
+	now := cs.ctx.TimeProvider.Now()
+	nowNano := now.UnixNano()
+
+	// Update last scan time
+	cs.lastScanTime.Store(nowNano)
+
+	// Trigger cleaners (uses existing spawn request mechanism)
+	cs.TriggerCleaners(cs.ctx.World)
 }
 
 // updateCleaners performs the actual cleaner update logic
@@ -212,6 +249,12 @@ func (cs *CleanerSystem) processSpawnRequest(req cleanerSpawnRequest) {
 	if len(redRows) == 0 {
 		// No Red characters to clean
 		return
+	}
+
+	// Apply MaxConcurrentCleaners limit if configured
+	if cs.config.MaxConcurrentCleaners > 0 && len(redRows) > cs.config.MaxConcurrentCleaners {
+		// Limit to max concurrent cleaners
+		redRows = redRows[:cs.config.MaxConcurrentCleaners]
 	}
 
 	// Spawn cleaner entities for each row
@@ -289,8 +332,14 @@ func (cs *CleanerSystem) spawnCleanerForRow(world *engine.World, row int) {
 		startX = float64(gameWidth)
 	}
 
-	// Calculate speed: distance / time = gameWidth / animationDuration
-	speed := float64(gameWidth) / duration.Seconds()
+	// Calculate speed: use configured speed if set, otherwise calculate from duration
+	var speed float64
+	if cs.config.Speed > 0 {
+		speed = cs.config.Speed
+	} else {
+		// Calculate speed: distance / time = gameWidth / animationDuration
+		speed = float64(gameWidth) / duration.Seconds()
+	}
 
 	// Get trail slice from pool
 	trail := cs.cleanerPool.Get().([]float64)
@@ -305,7 +354,8 @@ func (cs *CleanerSystem) spawnCleanerForRow(world *engine.World, row int) {
 		Speed:          speed,
 		Direction:      direction,
 		TrailPositions: trail,
-		TrailMaxAge:    constants.CleanerTrailFadeTime,
+		TrailMaxAge:    cs.config.TrailFadeTime,
+		Char:           cs.config.Char,
 	}
 
 	world.AddComponent(entity, cleaner)
@@ -340,8 +390,8 @@ func (cs *CleanerSystem) updateCleanerPositions(world *engine.World, deltaTime f
 
 		// Update trail (add current position to front)
 		cleaner.TrailPositions = append([]float64{cleaner.XPosition}, cleaner.TrailPositions...)
-		if len(cleaner.TrailPositions) > constants.CleanerTrailLength {
-			cleaner.TrailPositions = cleaner.TrailPositions[:constants.CleanerTrailLength]
+		if len(cleaner.TrailPositions) > cs.config.TrailLength {
+			cleaner.TrailPositions = cleaner.TrailPositions[:cs.config.TrailLength]
 		}
 
 		// Update component
@@ -417,7 +467,7 @@ func (cs *CleanerSystem) detectAndDestroyRedCharacters(world *engine.World) {
 					Y:         pos.Y,
 					Char:      char.Rune,
 					StartTime: cs.ctx.TimeProvider.Now(),
-					Duration:  constants.RemovalFlashDuration,
+					Duration:  cs.config.FlashDuration,
 				}
 				world.AddComponent(flashEntity, flash)
 			}

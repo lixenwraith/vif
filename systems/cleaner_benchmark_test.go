@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/components"
+	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
@@ -14,7 +15,7 @@ func BenchmarkCleanerSpawn(b *testing.B) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Create Red characters on multiple rows
@@ -47,7 +48,7 @@ func BenchmarkCleanerDetectAndDestroy(b *testing.B) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Setup: Create cleaners and Red characters
@@ -73,7 +74,7 @@ func BenchmarkCleanerScanRedRows(b *testing.B) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Create Red characters scattered across the screen
@@ -101,7 +102,7 @@ func BenchmarkCleanerUpdate(b *testing.B) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Create Red characters and spawn cleaners
@@ -125,7 +126,7 @@ func BenchmarkFlashEffectCreation(b *testing.B) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Pre-create entities for consistent benchmarking
@@ -156,7 +157,7 @@ func BenchmarkFlashEffectCleanup(b *testing.B) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	b.ResetTimer()
@@ -227,7 +228,7 @@ func BenchmarkConcurrentCleanerOperations(b *testing.B) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Create test environment
@@ -306,7 +307,7 @@ func BenchmarkCleanerPoolAllocation(b *testing.B) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	// Create Red characters
@@ -338,7 +339,7 @@ func BenchmarkAtomicStateOperations(b *testing.B) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	createRedCharacterAt(world, 40, 5)
@@ -357,7 +358,7 @@ func BenchmarkGoldTriggerCleaners(b *testing.B) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	decaySystem := NewDecaySystem(80, 24, 80, 0, ctx)
@@ -392,7 +393,7 @@ func BenchmarkCompleteGoldCleanerPipeline(b *testing.B) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24)
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
 	decaySystem := NewDecaySystem(80, 24, 80, 0, ctx)

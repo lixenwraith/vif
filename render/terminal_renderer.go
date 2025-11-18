@@ -465,7 +465,7 @@ func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.
 			if gradientIndex < len(CleanerTrailGradient) {
 				trailColor := CleanerTrailGradient[gradientIndex]
 				trailStyle := defaultStyle.Foreground(trailColor)
-				r.screen.SetContent(screenX, screenY, constants.CleanerChar, nil, trailStyle)
+				r.screen.SetContent(screenX, screenY, cleaner.Char, nil, trailStyle)
 			}
 		}
 
@@ -474,7 +474,7 @@ func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.
 		if x >= 0 && x < r.gameWidth {
 			screenX := r.gameX + x
 			cleanerStyle := defaultStyle.Foreground(RgbSequenceGold)
-			r.screen.SetContent(screenX, screenY, constants.CleanerChar, nil, cleanerStyle)
+			r.screen.SetContent(screenX, screenY, cleaner.Char, nil, cleanerStyle)
 		}
 	}
 }
