@@ -54,4 +54,16 @@ const (
 
 	// DecayIntervalMinSeconds is the minimum decay interval at max heat
 	DecayIntervalMinSeconds = DecayIntervalBaseSeconds - DecayIntervalRangeSeconds // 10 seconds
+
+	// FallingDecayMinSpeed is the minimum falling speed in rows per second
+	FallingDecayMinSpeed = 5.0
+
+	// FallingDecayMaxSpeed is the maximum falling speed in rows per second
+	FallingDecayMaxSpeed = 15.0
+
+	// FallingDecayMinCount is the minimum number of falling characters
+	FallingDecayMinCount = 15
+
+	// FallingDecayMaxCount is the maximum number of falling characters
+	FallingDecayMaxCount = 25
 )

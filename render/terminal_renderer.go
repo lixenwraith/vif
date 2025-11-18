@@ -58,13 +58,13 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 	// Draw characters
 	r.drawCharacters(ctx.World, pingColor, defaultStyle, ctx)
 
-	// Draw decay animation if active
-	if decayAnimating {
-		r.drawDecayAnimation(ctx.World, decayRow, defaultStyle)
-	}
-
-	// Draw ping highlights (cursor row/column) and grid - AFTER characters/decay
+	// Draw ping highlights (cursor row/column) and grid - AFTER characters
 	r.drawPingHighlights(ctx, pingColor, defaultStyle)
+
+	// Draw falling decay animation if active - AFTER ping highlights
+	if decayAnimating {
+		r.drawFallingDecay(ctx.World, defaultStyle)
+	}
 
 	// Draw column indicators
 	r.drawColumnIndicators(ctx, defaultStyle)
@@ -376,47 +376,33 @@ func (r *TerminalRenderer) drawCharacters(world *engine.World, pingColor tcell.C
 	}
 }
 
-// drawDecayAnimation draws the decay animation row
-func (r *TerminalRenderer) drawDecayAnimation(world *engine.World, decayRow int, defaultStyle tcell.Style) {
-	if decayRow >= r.gameHeight {
-		return
-	}
+// drawFallingDecay draws the falling decay characters
+func (r *TerminalRenderer) drawFallingDecay(world *engine.World, defaultStyle tcell.Style) {
+	fallingType := reflect.TypeOf(components.FallingDecayComponent{})
+	entities := world.GetEntitiesWith(fallingType)
 
-	darkGrayBg := tcell.NewRGBColor(60, 60, 60)
-	screenY := r.gameY + decayRow
-
-	posType := reflect.TypeOf(components.PositionComponent{})
-	charType := reflect.TypeOf(components.CharacterComponent{})
-	entities := world.GetEntitiesWith(posType, charType)
-
-	// Build map of characters at this row
-	charsAtRow := make(map[int]rune)
-	stylesAtRow := make(map[int]tcell.Style)
+	// Style for falling characters: bright yellow (gold) foreground, no background
+	fallingStyle := tcell.StyleDefault.Foreground(RgbSequenceGold)
 
 	for _, entity := range entities {
-		posComp, _ := world.GetComponent(entity, posType)
-		pos := posComp.(components.PositionComponent)
-
-		if pos.Y == decayRow {
-			charComp, _ := world.GetComponent(entity, charType)
-			char := charComp.(components.CharacterComponent)
-			charsAtRow[pos.X] = char.Rune
-			fg, _, _ := char.Style.Decompose()
-			stylesAtRow[pos.X] = defaultStyle.Foreground(fg).Background(darkGrayBg)
+		fallComp, ok := world.GetComponent(entity, fallingType)
+		if !ok {
+			continue
 		}
-	}
+		fall := fallComp.(components.FallingDecayComponent)
 
-	// Draw the decay row
-	for x := 0; x < r.gameWidth; x++ {
-		screenX := r.gameX + x
+		// Calculate screen position
+		y := int(fall.YPosition)
+		if y < 0 || y >= r.gameHeight {
+			continue
+		}
+
+		screenX := r.gameX + fall.Column
+		screenY := r.gameY + y
+
 		if screenX >= r.gameX && screenX < r.width && screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
-			if ch, ok := charsAtRow[x]; ok {
-				// Character present: use gray background to highlight decay animation
-				r.screen.SetContent(screenX, screenY, ch, nil, stylesAtRow[x])
-			} else {
-				// No character: use consistent RgbBackground
-				r.screen.SetContent(screenX, screenY, ' ', nil, defaultStyle)
-			}
+			// Draw the falling character with no background (preserves existing background)
+			r.screen.SetContent(screenX, screenY, fall.Char, nil, fallingStyle)
 		}
 	}
 }
