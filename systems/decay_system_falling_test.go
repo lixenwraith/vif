@@ -22,20 +22,17 @@ func TestFallingDecaySpawn(t *testing.T) {
 	mockTime := engine.NewMockTimeProvider(time.Now())
 	ctx.TimeProvider = mockTime
 
-	decaySystem := NewDecaySystem(80, 24, 80, 0, ctx)
+	gameWidth := 80
+	decaySystem := NewDecaySystem(gameWidth, 24, 80, 0, ctx)
 
 	// Trigger decay animation
 	decaySystem.animating = true
 	decaySystem.startTime = mockTime.Now()
 	decaySystem.spawnFallingEntities(world)
 
-	// Check that falling entities were created
-	if len(decaySystem.fallingEntities) < constants.FallingDecayMinCount {
-		t.Errorf("Expected at least %d falling entities, got %d", constants.FallingDecayMinCount, len(decaySystem.fallingEntities))
-	}
-
-	if len(decaySystem.fallingEntities) > constants.FallingDecayMaxCount {
-		t.Errorf("Expected at most %d falling entities, got %d", constants.FallingDecayMaxCount, len(decaySystem.fallingEntities))
+	// Check that exactly one falling entity per column was created
+	if len(decaySystem.fallingEntities) != gameWidth {
+		t.Errorf("Expected exactly %d falling entities (one per column), got %d", gameWidth, len(decaySystem.fallingEntities))
 	}
 
 	// Check that all entities have FallingDecayComponent
@@ -60,14 +57,63 @@ func TestFallingDecaySpawn(t *testing.T) {
 		}
 
 		// Check column is within bounds
-		if fall.Column < 0 || fall.Column >= 80 {
-			t.Errorf("Column %d out of bounds [0, 80)", fall.Column)
+		if fall.Column < 0 || fall.Column >= gameWidth {
+			t.Errorf("Column %d out of bounds [0, %d)", fall.Column, gameWidth)
 		}
 
 		// Check character is valid
 		if fall.Char == 0 {
 			t.Error("Falling character is null")
 		}
+	}
+}
+
+// TestFallingDecayColumnCoverage tests that all columns have exactly one falling entity
+func TestFallingDecayColumnCoverage(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+	world := ctx.World
+
+	mockTime := engine.NewMockTimeProvider(time.Now())
+	ctx.TimeProvider = mockTime
+
+	gameWidth := 80
+	decaySystem := NewDecaySystem(gameWidth, 24, 80, 0, ctx)
+
+	// Trigger decay animation
+	decaySystem.animating = true
+	decaySystem.startTime = mockTime.Now()
+	decaySystem.spawnFallingEntities(world)
+
+	// Track which columns have falling entities
+	columnCoverage := make(map[int]int) // column -> count
+
+	fallingType := reflect.TypeOf(components.FallingDecayComponent{})
+	for _, entity := range decaySystem.fallingEntities {
+		fallComp, ok := world.GetComponent(entity, fallingType)
+		if !ok {
+			t.Errorf("Falling entity %d missing FallingDecayComponent", entity)
+			continue
+		}
+
+		fall := fallComp.(components.FallingDecayComponent)
+		columnCoverage[fall.Column]++
+	}
+
+	// Verify all columns have exactly one falling entity
+	for col := 0; col < gameWidth; col++ {
+		count, exists := columnCoverage[col]
+		if !exists {
+			t.Errorf("Column %d has no falling entity", col)
+		} else if count != 1 {
+			t.Errorf("Column %d has %d falling entities, expected 1", col, count)
+		}
+	}
+
+	// Verify no extra columns
+	if len(columnCoverage) != gameWidth {
+		t.Errorf("Expected %d columns with falling entities, got %d", gameWidth, len(columnCoverage))
 	}
 }
 

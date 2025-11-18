@@ -59,11 +59,6 @@ const (
 	FallingDecayMinSpeed = 5.0
 
 	// FallingDecayMaxSpeed is the maximum falling speed in rows per second
+	// Note: One falling entity is spawned per column with random speeds between min and max
 	FallingDecayMaxSpeed = 15.0
-
-	// FallingDecayMinCount is the minimum number of falling characters
-	FallingDecayMinCount = 15
-
-	// FallingDecayMaxCount is the maximum number of falling characters
-	FallingDecayMaxCount = 25
 )

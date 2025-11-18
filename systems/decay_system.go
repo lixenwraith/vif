@@ -199,24 +199,20 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 }
 
 // spawnFallingEntities creates falling decay character entities
+// One entity is created per column to ensure complete column coverage
 func (s *DecaySystem) spawnFallingEntities(world *engine.World) {
 	// Clear any existing falling entities
 	s.fallingEntities = make([]engine.Entity, 0)
 
-	// Determine number of falling characters
-	count := constants.FallingDecayMinCount + rand.Intn(constants.FallingDecayMaxCount-constants.FallingDecayMinCount+1)
-
 	// Character pool for random selection
 	characters := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
-	for i := 0; i < count; i++ {
-		// Random column
-		column := rand.Intn(s.gameWidth)
-
-		// Random speed
+	// Create one falling entity per column to ensure complete coverage
+	for column := 0; column < s.gameWidth; column++ {
+		// Random speed for each entity
 		speed := constants.FallingDecayMinSpeed + rand.Float64()*(constants.FallingDecayMaxSpeed-constants.FallingDecayMinSpeed)
 
-		// Random character
+		// Random character for each entity
 		char := rune(characters[rand.Intn(len(characters))])
 
 		// Create falling entity
