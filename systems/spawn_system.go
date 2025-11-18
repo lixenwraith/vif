@@ -127,12 +127,18 @@ func (s *SpawnSystem) loadContentFromManager() {
 
 // checkAndTriggerRefresh checks if content refresh is needed and triggers pre-fetch
 func (s *SpawnSystem) checkAndTriggerRefresh() {
+	// Read current state with lock
+	s.contentMutex.RLock()
+	totalBlocks := s.totalBlocks
+	blocksConsumed := s.blocksConsumed
+	s.contentMutex.RUnlock()
+
 	// Check if we're at the refresh threshold
-	if s.totalBlocks == 0 {
+	if totalBlocks == 0 {
 		return
 	}
 
-	consumptionRatio := float64(s.blocksConsumed) / float64(s.totalBlocks)
+	consumptionRatio := float64(blocksConsumed) / float64(totalBlocks)
 
 	// If we've consumed 80% and not already refreshing, start pre-fetch
 	if consumptionRatio >= contentRefreshThreshold && !s.isRefreshing.Load() {
