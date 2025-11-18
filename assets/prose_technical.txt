@@ -1,0 +1,167 @@
+TCP/IP PROTOCOL STACK ARCHITECTURE
+
+The Transmission Control Protocol (TCP) is one of the main protocols of the Internet protocol suite.
+It originated in the initial network implementation in which it complemented the Internet Protocol (IP).
+Therefore, the entire suite is commonly referred to as TCP/IP.
+
+TCP provides reliable, ordered, and error-checked delivery of a stream of octets between applications
+running on hosts communicating via an IP network. Major internet applications such as the World Wide Web,
+email, remote administration, and file transfer rely on TCP.
+
+Applications that do not require reliable data stream service may use the User Datagram Protocol (UDP),
+which provides a connectionless datagram service that prioritizes time over reliability.
+
+
+NETWORK LAYERS AND ENCAPSULATION
+
+The TCP/IP model consists of four abstraction layers which are used to sort all related protocols
+according to the scope of networking involved. From lowest to highest, the layers are:
+
+The link layer contains communication methods for data that remains within a single network segment.
+This layer includes the device drivers and network interface cards in the computers.
+
+The internet layer connects independent networks, thus establishing internetworking. The Internet Protocol
+is the principal component of this layer, and it defines two addressing systems to identify network hosts
+computers, and to locate them on the network.
+
+The transport layer handles host-to-host communication. It provides services such as connection-oriented
+communication, reliability, flow control, and multiplexing. The two most common protocols are TCP and UDP.
+
+The application layer includes the protocols used by most applications for providing user services or
+exchanging application data over the network connections established by the lower level protocols.
+
+
+CONNECTION ESTABLISHMENT
+
+TCP uses a three-way handshake to establish a reliable connection. The connection establishment process
+begins when one application (the client) sends a TCP segment with the SYN flag set to another application
+server. This initial segment also contains the client's initial sequence number.
+
+When the server receives this SYN segment, it responds with a segment that has both the SYN and ACK flags
+set. This segment acknowledges the client's initial sequence number and also contains the server's initial
+sequence number.
+
+Finally, the client responds with an ACK segment, acknowledging the server's initial sequence number. At
+this point, both sides have acknowledged each other's initial sequence numbers, and the connection is
+considered established.
+
+This process ensures that both sides are ready to communicate and have agreed upon initial sequence numbers,
+which are crucial for maintaining ordered, reliable communication.
+
+
+DATA TRANSFER AND FLOW CONTROL
+
+Once the connection is established, data transfer can begin. TCP breaks data into segments, and each segment
+is numbered according to the sequence number scheme established during connection setup. The receiving TCP
+reassembles the segments into the original data stream.
+
+TCP implements flow control through a sliding window mechanism. The receiver advertises a window size, which
+indicates how much data it is willing to buffer. The sender must not send more data than the receiver's window
+size permits.
+
+As the receiver processes data and frees up buffer space, it can increase its advertised window size. Conversely,
+if the receiver's buffer starts to fill up, it can decrease the window size to slow down the sender. This
+mechanism prevents the sender from overwhelming the receiver with too much data.
+
+
+CONGESTION CONTROL ALGORITHMS
+
+TCP also implements congestion control to prevent network congestion. Several algorithms work together to
+achieve this goal. The slow start algorithm begins data transmission with a small congestion window and
+increases it exponentially until it reaches a threshold or detects packet loss.
+
+Congestion avoidance is triggered when the congestion window reaches the slow start threshold. At this point,
+the window grows linearly rather than exponentially, probing for additional available bandwidth more cautiously.
+
+Fast retransmit allows TCP to detect packet loss before the retransmission timer expires. When the receiver
+receives out-of-order segments, it immediately sends duplicate acknowledgments. If the sender receives three
+duplicate acknowledgments, it assumes a packet was lost and retransmits it without waiting for the timer.
+
+Fast recovery works in conjunction with fast retransmit. Instead of going back to slow start after detecting
+loss, fast recovery maintains a higher congestion window and continues transmission, providing better throughput
+during loss recovery.
+
+
+ERROR DETECTION AND RECOVERY
+
+TCP uses checksums to detect errors in transmitted segments. Each segment includes a checksum calculated over
+the TCP header, data, and a pseudo-header derived from the IP header. The receiver recalculates the checksum
+and discards any segments where it doesn't match.
+
+When a segment is lost or corrupted, TCP uses retransmission to recover. The sender maintains a retransmission
+timer for each sent segment. If an acknowledgment is not received before the timer expires, the segment is
+retransmitted.
+
+The retransmission timeout (RTO) is dynamically calculated based on the measured round-trip time (RTT) of the
+connection. TCP continuously updates its RTT estimate and adjusts the RTO accordingly to balance between quick
+recovery from loss and avoiding unnecessary retransmissions.
+
+
+CONNECTION TERMINATION
+
+TCP connection termination uses a four-way handshake to ensure both sides have finished sending data. Either
+side can initiate the close by sending a segment with the FIN flag set, indicating it has no more data to send.
+
+The receiving side acknowledges the FIN with an ACK segment. At this point, the connection is half-closed: the
+side that sent the FIN can no longer send data, but it can still receive data from the other side.
+
+When the receiving side has also finished sending its data, it sends its own FIN segment. The original sender
+acknowledges this FIN with an ACK, and the connection moves to a TIME_WAIT state before being fully closed.
+
+The TIME_WAIT state serves two purposes: it allows for the final ACK to be retransmitted if lost, and it
+prevents delayed segments from a previous connection from being accepted as part of a new connection using
+the same port numbers.
+
+
+SECURITY CONSIDERATIONS
+
+TCP itself does not provide encryption or authentication. The protocol is vulnerable to various attacks
+including SYN flooding, where an attacker sends many SYN segments without completing the handshake, exhausting
+server resources.
+
+Session hijacking is another concern, where an attacker intercepts and takes over an established TCP connection.
+This is possible because TCP's sequence numbers are predictable in some implementations.
+
+To address these security concerns, TCP is often used in conjunction with security protocols. Transport Layer
+Security (TLS) operates above TCP to provide encryption, authentication, and integrity. IPsec operates below
+TCP at the network layer to secure all IP traffic.
+
+Modern implementations include various countermeasures against attacks. SYN cookies allow servers to avoid
+storing state for half-open connections. Random initial sequence numbers make session hijacking more difficult.
+TCP timestamps can detect and reject old duplicate segments.
+
+
+PERFORMANCE OPTIMIZATION
+
+TCP performance depends on many factors including bandwidth, latency, and packet loss. The bandwidth-delay
+product determines how much data can be "in flight" on the network at once. For optimal performance, the TCP
+window size should be at least as large as the bandwidth-delay product.
+
+Window scaling is a TCP option that allows window sizes larger than the original 65,535 byte limit. This is
+essential for high-bandwidth or high-latency networks where the bandwidth-delay product exceeds 64KB.
+
+Selective acknowledgment (SACK) is another important optimization. Instead of only acknowledging the highest
+in-order segment received, SACK allows the receiver to acknowledge multiple non-contiguous segments. This
+helps the sender determine exactly which segments need retransmission.
+
+TCP Fast Open (TFO) is a more recent optimization that allows data to be sent during the initial SYN segment,
+reducing latency for short-lived connections. This is particularly beneficial for web browsing and other
+applications that make many brief connections.
+
+
+MODERN VARIANTS AND EXTENSIONS
+
+Several TCP variants have been developed to optimize performance for different network conditions. TCP Cubic
+is the default congestion control algorithm in Linux and focuses on better utilizing high-bandwidth networks.
+
+TCP BBR (Bottleneck Bandwidth and RTT) is a newer congestion control algorithm developed by Google. Instead
+of packet loss, it uses bottleneck bandwidth and round-trip time as primary congestion signals, potentially
+providing better performance on modern networks.
+
+Multipath TCP (MPTCP) allows a TCP connection to use multiple paths simultaneously. This can improve throughput,
+provide redundancy, and enable seamless mobility between networks. MPTCP is particularly useful for mobile
+devices that can switch between Wi-Fi and cellular networks.
+
+TCP timestamps provide two benefits: they enable more accurate RTT measurement for better retransmission timeout
+calculation, and they protect against wrapped sequence numbers on very high-speed connections through the PAWS
+(Protection Against Wrapped Sequences) mechanism.

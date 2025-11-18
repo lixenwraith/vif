@@ -1,0 +1,322 @@
+// std::collections - Collection types
+// Rust's standard library provides efficient implementations of the most common
+// general purpose programming data structures.
+
+use core::borrow::Borrow;
+use core::cmp::Ordering;
+use core::fmt::{self, Debug};
+use core::hash::{Hash, Hasher};
+use core::iter::{FromIterator, FusedIterator};
+use core::mem;
+use core::ops::{Index, RangeBounds};
+
+
+/// A hash map implemented with quadratic probing and SIMD lookup.
+///
+/// By default, `HashMap` uses a hashing algorithm selected to provide
+/// resistance against HashDoS attacks. The algorithm is randomly seeded, and a
+/// reasonable best-effort is made to generate this seed from a high quality,
+/// secure source of randomness provided by the host without blocking the
+/// program.
+pub struct HashMap<K, V, S = RandomState> {
+    base: base::HashMap<K, V, S>,
+}
+
+impl<K, V> HashMap<K, V, RandomState> {
+    /// Creates an empty `HashMap`.
+    ///
+    /// The hash map is initially created with a capacity of 0, so it will not
+    /// allocate until it is first inserted into.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::HashMap;
+    /// let mut map: HashMap<&str, i32> = HashMap::new();
+    /// ```
+    #[inline]
+    #[must_use]
+    pub fn new() -> HashMap<K, V, RandomState> {
+        Default::default()
+    }
+
+    /// Creates an empty `HashMap` with at least the specified capacity.
+    ///
+    /// The hash map will be able to hold at least `capacity` elements without
+    /// reallocating. This method is allowed to allocate for more elements than
+    /// `capacity`. If `capacity` is 0, the hash map will not allocate.
+    #[inline]
+    #[must_use]
+    pub fn with_capacity(capacity: usize) -> HashMap<K, V, RandomState> {
+        HashMap::with_capacity_and_hasher(capacity, Default::default())
+    }
+}
+
+impl<K, V, S> HashMap<K, V, S> {
+    /// Returns the number of elements the map can hold without reallocating.
+    ///
+    /// This number is a lower bound; the `HashMap<K, V>` might be able to hold
+    /// more, but is guaranteed to be able to hold at least this many.
+    #[inline]
+    pub fn capacity(&self) -> usize {
+        self.base.capacity()
+    }
+
+    /// An iterator visiting all keys in arbitrary order.
+    /// The iterator element type is `&'a K`.
+    #[inline]
+    pub fn keys(&self) -> Keys<'_, K, V> {
+        Keys { inner: self.iter() }
+    }
+
+    /// An iterator visiting all values in arbitrary order.
+    /// The iterator element type is `&'a V`.
+    #[inline]
+    pub fn values(&self) -> Values<'_, K, V> {
+        Values { inner: self.iter() }
+    }
+
+    /// Returns `true` if the map contains no elements.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.base.len() == 0
+    }
+
+    /// Clears the map, removing all key-value pairs.
+    /// Keeps the allocated memory for reuse.
+    #[inline]
+    pub fn clear(&mut self) {
+        self.base.clear();
+    }
+}
+
+
+// std::result - Error handling with the Result type
+
+/// `Result` is a type that represents either success ([`Ok`]) or failure ([`Err`]).
+///
+/// See the [module documentation](self) for details.
+#[derive(Copy, PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
+#[must_use = "this `Result` may be an `Err` variant, which should be handled"]
+pub enum Result<T, E> {
+    /// Contains the success value
+    Ok(T),
+
+    /// Contains the error value
+    Err(E),
+}
+
+impl<T, E> Result<T, E> {
+    /// Returns `true` if the result is [`Ok`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let x: Result<i32, &str> = Ok(-3);
+    /// assert_eq!(x.is_ok(), true);
+    ///
+    /// let x: Result<i32, &str> = Err("Some error message");
+    /// assert_eq!(x.is_ok(), false);
+    /// ```
+    #[must_use = "if you intended to assert that this is ok, consider `.unwrap()` instead"]
+    #[inline]
+    pub const fn is_ok(&self) -> bool {
+        matches!(*self, Ok(_))
+    }
+
+    /// Returns `true` if the result is [`Err`].
+    #[must_use = "if you intended to assert that this is err, consider `.unwrap_err()` instead"]
+    #[inline]
+    pub const fn is_err(&self) -> bool {
+        !self.is_ok()
+    }
+
+    /// Converts from `Result<T, E>` to [`Option<T>`].
+    ///
+    /// Converts `self` into an [`Option<T>`], consuming `self`,
+    /// and discarding the error, if any.
+    #[inline]
+    pub fn ok(self) -> Option<T> {
+        match self {
+            Ok(x) => Some(x),
+            Err(_) => None,
+        }
+    }
+
+    /// Converts from `Result<T, E>` to [`Option<E>`].
+    ///
+    /// Converts `self` into an [`Option<E>`], consuming `self`,
+    /// and discarding the success value, if any.
+    #[inline]
+    pub fn err(self) -> Option<E> {
+        match self {
+            Ok(_) => None,
+            Err(x) => Some(x),
+        }
+    }
+
+    /// Maps a `Result<T, E>` to `Result<U, E>` by applying a function to a
+    /// contained [`Ok`] value, leaving an [`Err`] value untouched.
+    #[inline]
+    pub fn map<U, F: FnOnce(T) -> U>(self, op: F) -> Result<U, E> {
+        match self {
+            Ok(t) => Ok(op(t)),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Returns the provided default (if [`Err`]), or applies a function to
+    /// the contained value (if [`Ok`]).
+    #[inline]
+    pub fn map_or<U, F: FnOnce(T) -> U>(self, default: U, f: F) -> U {
+        match self {
+            Ok(t) => f(t),
+            Err(_) => default,
+        }
+    }
+
+    /// Maps a `Result<T, E>` to `Result<T, F>` by applying a function to a
+    /// contained [`Err`] value, leaving an [`Ok`] value untouched.
+    #[inline]
+    pub fn map_err<F, O: FnOnce(E) -> F>(self, op: O) -> Result<T, F> {
+        match self {
+            Ok(t) => Ok(t),
+            Err(e) => Err(op(e)),
+        }
+    }
+
+    /// Returns the contained [`Ok`] value, consuming the `self` value.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the value is an [`Err`], with a panic message including the
+    /// passed message, and the content of the [`Err`].
+    #[inline]
+    #[track_caller]
+    pub fn expect(self, msg: &str) -> T
+    where
+        E: fmt::Debug,
+    {
+        match self {
+            Ok(t) => t,
+            Err(e) => unwrap_failed(msg, &e),
+        }
+    }
+
+    /// Returns the contained [`Ok`] value, consuming the `self` value.
+    ///
+    /// Because this function may panic, its use is generally discouraged.
+    /// Instead, prefer to use pattern matching and handle the [`Err`]
+    /// case explicitly.
+    #[inline]
+    #[track_caller]
+    pub fn unwrap(self) -> T
+    where
+        E: fmt::Debug,
+    {
+        match self {
+            Ok(t) => t,
+            Err(e) => unwrap_failed("called `Result::unwrap()` on an `Err` value", &e),
+        }
+    }
+}
+
+
+// std::option - Optional values
+
+/// The `Option` type. See [the module level documentation](self) for more.
+#[derive(Copy, PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
+pub enum Option<T> {
+    /// No value.
+    None,
+    /// Some value of type `T`.
+    Some(T),
+}
+
+impl<T> Option<T> {
+    /// Returns `true` if the option is a [`Some`] value.
+    #[must_use = "if you intended to assert that this has a value, consider `.unwrap()` instead"]
+    #[inline]
+    pub const fn is_some(&self) -> bool {
+        matches!(*self, Some(_))
+    }
+
+    /// Returns `true` if the option is a [`None`] value.
+    #[must_use = "if you intended to assert that this doesn't have a value, consider \
+                  `.and_then(|_| panic!(\"`Option` had a value when expected `None`\"))` instead"]
+    #[inline]
+    pub const fn is_none(&self) -> bool {
+        !self.is_some()
+    }
+
+    /// Returns the contained [`Some`] value, consuming the `self` value.
+    #[inline]
+    #[track_caller]
+    pub fn unwrap(self) -> T {
+        match self {
+            Some(val) => val,
+            None => panic!("called `Option::unwrap()` on a `None` value"),
+        }
+    }
+
+    /// Returns the contained [`Some`] value or a provided default.
+    #[inline]
+    pub fn unwrap_or(self, default: T) -> T {
+        match self {
+            Some(x) => x,
+            None => default,
+        }
+    }
+
+    /// Returns the contained [`Some`] value or computes it from a closure.
+    #[inline]
+    pub fn unwrap_or_else<F>(self, f: F) -> T
+    where
+        F: FnOnce() -> T,
+    {
+        match self {
+            Some(x) => x,
+            None => f(),
+        }
+    }
+
+    /// Maps an `Option<T>` to `Option<U>` by applying a function to a contained value.
+    #[inline]
+    pub fn map<U, F>(self, f: F) -> Option<U>
+    where
+        F: FnOnce(T) -> U,
+    {
+        match self {
+            Some(x) => Some(f(x)),
+            None => None,
+        }
+    }
+
+    /// Returns [`None`] if the option is [`None`], otherwise calls `f` with the
+    /// wrapped value and returns the result.
+    #[inline]
+    pub fn and_then<U, F>(self, f: F) -> Option<U>
+    where
+        F: FnOnce(T) -> Option<U>,
+    {
+        match self {
+            Some(x) => f(x),
+            None => None,
+        }
+    }
+
+    /// Returns the option if it contains a value, otherwise returns `optb`.
+    #[inline]
+    pub fn or(self, optb: Option<T>) -> Option<T> {
+        match self {
+            Some(_) => self,
+            None => optb,
+        }
+    }
+
+    /// Takes the value out of the option, leaving a [`None`] in its place.
+    #[inline]
+    pub fn take(&mut self) -> Option<T> {
+        mem::replace(self, None)
+    }
+}

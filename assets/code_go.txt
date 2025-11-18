@@ -1,0 +1,351 @@
+// Package encoding/json provides JSON encoding and decoding
+package json
+
+import (
+	"bytes"
+	"encoding"
+	"encoding/base64"
+	"fmt"
+	"math"
+	"reflect"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"unicode"
+	"unicode/utf8"
+)
+
+// Marshal returns the JSON encoding of v.
+//
+// Marshal traverses the value v recursively.
+// If an encountered value implements the Marshaler interface
+// and is not a nil pointer, Marshal calls its MarshalJSON method
+// to produce JSON. If no MarshalJSON method is present but the
+// value implements encoding.TextMarshaler instead, Marshal calls
+// its MarshalText method and encodes the result as a JSON string.
+func Marshal(v any) ([]byte, error) {
+	e := newEncodeState()
+	defer encodeStatePool.Put(e)
+
+	err := e.marshal(v, encOpts{escapeHTML: true})
+	if err != nil {
+		return nil, err
+	}
+	buf := append([]byte(nil), e.Bytes()...)
+
+	return buf, nil
+}
+
+// MarshalIndent is like Marshal but applies Indent to format the output.
+// Each JSON element in the output will begin on a new line beginning with prefix
+// followed by one or more copies of indent according to the indentation nesting.
+func MarshalIndent(v any, prefix, indent string) ([]byte, error) {
+	b, err := Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	err = Indent(&buf, b, prefix, indent)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// Indent appends to dst an indented form of the JSON-encoded src.
+// Each element in a JSON object or array begins on a new line
+// beginning with prefix followed by one or more copies of indent
+// according to the indentation nesting.
+func Indent(dst *bytes.Buffer, src []byte, prefix, indent string) error {
+	origLen := dst.Len()
+	scan := newScanner()
+	defer freeScanner(scan)
+	needIndent := false
+	depth := 0
+
+	for _, c := range src {
+		scan.bytes++
+		v := scan.step(scan, c)
+		if v == scanSkipSpace {
+			continue
+		}
+		if v == scanError {
+			break
+		}
+		if needIndent && v != scanEndObject && v != scanEndArray {
+			needIndent = false
+			depth++
+			dst.WriteByte('\n')
+			dst.WriteString(prefix)
+			for i := 0; i < depth; i++ {
+				dst.WriteString(indent)
+			}
+		}
+
+		// Emit semantically uninteresting bytes
+		// (in particular, punctuation in strings) unmodified.
+		if v == scanContinue {
+			dst.WriteByte(c)
+			continue
+		}
+
+		// Add spacing around real punctuation.
+		switch c {
+		case '{', '[':
+			needIndent = true
+			dst.WriteByte(c)
+
+		case ',':
+			dst.WriteByte(c)
+			needIndent = true
+
+		case ':':
+			dst.WriteByte(c)
+			dst.WriteByte(' ')
+
+		case '}', ']':
+			if needIndent {
+				needIndent = false
+			} else {
+				depth--
+				dst.WriteByte('\n')
+				dst.WriteString(prefix)
+				for i := 0; i < depth; i++ {
+					dst.WriteString(indent)
+				}
+			}
+			dst.WriteByte(c)
+
+		default:
+			dst.WriteByte(c)
+		}
+	}
+	if scan.eof() == scanError {
+		dst.Truncate(origLen)
+		return scan.err
+	}
+	return nil
+}
+
+// Package context defines the Context type, which carries deadlines,
+// cancellation signals, and other request-scoped values across API
+// boundaries and between processes.
+
+type Context interface {
+	Deadline() (deadline time.Time, ok bool)
+	Done() <-chan struct{}
+	Err() error
+	Value(key any) any
+}
+
+// Background returns a non-nil, empty Context. It is never canceled,
+// has no values, and has no deadline. It is typically used by the main
+// function, initialization, and tests, and as the top-level Context for
+// incoming requests.
+func Background() Context {
+	return backgroundCtx{}
+}
+
+// TODO returns a non-nil, empty Context. Code should use context.TODO when
+// it's unclear which Context to use or it is not yet available (because the
+// surrounding function has not yet been extended to accept a Context parameter).
+func TODO() Context {
+	return todoCtx{}
+}
+
+// WithCancel returns a copy of parent with a new Done channel.
+// The returned context's Done channel is closed when the returned cancel
+// function is called or when the parent context's Done channel is closed,
+// whichever happens first.
+func WithCancel(parent Context) (ctx Context, cancel CancelFunc) {
+	c := withCancel(parent)
+	return c, func() { c.cancel(true, Canceled, nil) }
+}
+
+// WithDeadline returns a copy of the parent context with the deadline adjusted
+// to be no later than d. If the parent's deadline is already earlier than d,
+// WithDeadline(parent, d) is semantically equivalent to parent.
+func WithDeadline(parent Context, d time.Time) (Context, CancelFunc) {
+	if parent == nil {
+		panic("cannot create context from nil parent")
+	}
+	if cur, ok := parent.Deadline(); ok && cur.Before(d) {
+		return WithCancel(parent)
+	}
+	c := &timerCtx{
+		deadline: d,
+	}
+	c.cancelCtx.propagateCancel(parent, c)
+	dur := time.Until(d)
+	if dur <= 0 {
+		c.cancel(true, DeadlineExceeded, nil)
+		return c, func() { c.cancel(false, Canceled, nil) }
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.err == nil {
+		c.timer = time.AfterFunc(dur, func() {
+			c.cancel(true, DeadlineExceeded, nil)
+		})
+	}
+	return c, func() { c.cancel(true, Canceled, nil) }
+}
+
+// Package io provides basic interfaces to I/O primitives.
+// Its primary job is to wrap existing implementations of such primitives,
+// such as those in package os, into shared public interfaces that
+// abstract the functionality, plus some other related primitives.
+
+type Reader interface {
+	Read(p []byte) (n int, err error)
+}
+
+type Writer interface {
+	Write(p []byte) (n int, err error)
+}
+
+// ReadWriter is the interface that groups the basic Read and Write methods.
+type ReadWriter interface {
+	Reader
+	Writer
+}
+
+// Copy copies from src to dst until either EOF is reached
+// on src or an error occurs. It returns the number of bytes
+// copied and the first error encountered while copying, if any.
+func Copy(dst Writer, src Reader) (written int64, err error) {
+	return copyBuffer(dst, src, nil)
+}
+
+// CopyN copies n bytes (or until an error) from src to dst.
+// It returns the number of bytes copied and the earliest
+// error encountered while copying.
+func CopyN(dst Writer, src Reader, n int64) (written int64, err error) {
+	written, err = Copy(dst, LimitReader(src, n))
+	if written == n {
+		return n, nil
+	}
+	if written < n && err == nil {
+		err = EOF
+	}
+	return
+}
+
+// Package http provides HTTP client and server implementations.
+
+type Handler interface {
+	ServeHTTP(ResponseWriter, *Request)
+}
+
+// HandleFunc registers the handler function for the given pattern
+// in the DefaultServeMux.
+// The documentation for ServeMux explains how patterns are matched.
+func HandleFunc(pattern string, handler func(ResponseWriter, *Request)) {
+	DefaultServeMux.HandleFunc(pattern, handler)
+}
+
+// ListenAndServe listens on the TCP network address addr and then calls
+// Serve with handler to handle requests on incoming connections.
+// Accepted connections are configured to enable TCP keep-alives.
+func ListenAndServe(addr string, handler Handler) error {
+	server := &Server{Addr: addr, Handler: handler}
+	return server.ListenAndServe()
+}
+
+// Package sync provides basic synchronization primitives such as mutual
+// exclusion locks. Other than the Once and WaitGroup types, most are intended
+// for use by low-level library routines.
+
+type Mutex struct {
+	state int32
+	sema  uint32
+}
+
+// Lock locks m.
+// If the lock is already in use, the calling goroutine
+// blocks until the mutex is available.
+func (m *Mutex) Lock() {
+	if atomic.CompareAndSwapInt32(&m.state, 0, mutexLocked) {
+		if race.Enabled {
+			race.Acquire(unsafe.Pointer(m))
+		}
+		return
+	}
+	m.lockSlow()
+}
+
+// Unlock unlocks m.
+// It is a run-time error if m is not locked on entry to Unlock.
+func (m *Mutex) Unlock() {
+	if race.Enabled {
+		_ = m.state
+		race.Release(unsafe.Pointer(m))
+	}
+
+	new := atomic.AddInt32(&m.state, -mutexLocked)
+	if new != 0 {
+		m.unlockSlow(new)
+	}
+}
+
+// Package fmt implements formatted I/O with functions analogous
+// to C's printf and scanf.
+
+// Printf formats according to a format specifier and writes to standard output.
+// It returns the number of bytes written and any write error encountered.
+func Printf(format string, a ...any) (n int, err error) {
+	return Fprintf(os.Stdout, format, a...)
+}
+
+// Sprintf formats according to a format specifier and returns the resulting string.
+func Sprintf(format string, a ...any) string {
+	p := newPrinter()
+	p.doPrintf(format, a)
+	s := string(p.buf)
+	p.free()
+	return s
+}
+
+// Package time provides functionality for measuring and displaying time.
+
+type Time struct {
+	wall uint64
+	ext  int64
+	loc *Location
+}
+
+// Now returns the current local time.
+func Now() Time {
+	sec, nsec, mono := now()
+	mono -= startNano
+	sec += unixToInternal - minWall
+	if uint64(sec)>>33 != 0 {
+		return Time{uint64(nsec), sec + minWall, Local}
+	}
+	return Time{hasMonotonic | uint64(sec)<<nsecShift | uint64(nsec), mono, Local}
+}
+
+// Add returns the time t+d.
+func (t Time) Add(d Duration) Time {
+	dsec := int64(d / 1e9)
+	nsec := t.nsec() + int32(d%1e9)
+	if nsec >= 1e9 {
+		dsec++
+		nsec -= 1e9
+	} else if nsec < 0 {
+		dsec--
+		nsec += 1e9
+	}
+	t.wall = t.wall&^nsecMask | uint64(nsec)
+	t.addSec(dsec)
+	if t.wall&hasMonotonic != 0 {
+		te := t.ext + int64(d)
+		if d < 0 && te > t.ext || d > 0 && te < t.ext {
+			t.stripMonotonic()
+		} else {
+			t.ext = te
+		}
+	}
+	return t
+}
