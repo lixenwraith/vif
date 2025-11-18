@@ -1,6 +1,7 @@
 package systems
 
 import (
+	"log"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -217,6 +218,7 @@ func (cs *CleanerSystem) updateCleaners() {
 	cs.mu.RUnlock()
 
 	if elapsed >= duration {
+		log.Printf("[CLEANER] Animation complete (elapsed: %v) - cleaning up", elapsed)
 		if world != nil {
 			cs.cleanupCleaners(world)
 		}
@@ -229,6 +231,7 @@ func (cs *CleanerSystem) updateCleaners() {
 	lastUpdateNano := cs.lastUpdateTime.Load()
 	if lastUpdateNano == 0 {
 		// First update, just set time
+		log.Printf("[CLEANER] First update - initializing timestamps")
 		cs.lastUpdateTime.Store(nowNano)
 		return
 	}
@@ -248,19 +251,24 @@ func (cs *CleanerSystem) updateCleaners() {
 
 // TriggerCleaners initiates the cleaner animation (non-blocking)
 func (cs *CleanerSystem) TriggerCleaners(world *engine.World) {
+	log.Printf("[CLEANER] TriggerCleaners called")
+
 	// Send spawn request via channel (non-blocking with select)
 	select {
 	case cs.spawnChan <- cleanerSpawnRequest{world: world}:
-		// Request queued successfully
+		log.Printf("[CLEANER] Spawn request queued successfully")
 	default:
-		// Channel full, drop request (already have pending spawn)
+		log.Printf("[CLEANER] WARNING: Spawn channel full - request dropped")
 	}
 }
 
 // processSpawnRequest handles a cleaner spawn request
 func (cs *CleanerSystem) processSpawnRequest(req cleanerSpawnRequest) {
+	log.Printf("[CLEANER] Processing spawn request...")
+
 	// Prevent duplicate triggers
 	if cs.isActive.Load() {
+		log.Printf("[CLEANER] Already active - ignoring spawn request")
 		return
 	}
 
@@ -272,14 +280,17 @@ func (cs *CleanerSystem) processSpawnRequest(req cleanerSpawnRequest) {
 	// Scan for rows with Red characters (with mutex protection)
 	redRows := cs.scanRedCharacterRows(req.world)
 
+	log.Printf("[CLEANER] Scanned for Red characters: found %d rows with Red chars", len(redRows))
+
 	if len(redRows) == 0 {
-		// No Red characters to clean
+		log.Printf("[CLEANER] No Red characters to clean - spawn aborted")
 		return
 	}
 
 	// Apply MaxConcurrentCleaners limit if configured
 	if cs.config.MaxConcurrentCleaners > 0 && len(redRows) > cs.config.MaxConcurrentCleaners {
-		// Limit to max concurrent cleaners
+		log.Printf("[CLEANER] Limiting cleaners from %d to %d (MaxConcurrentCleaners)",
+			len(redRows), cs.config.MaxConcurrentCleaners)
 		redRows = redRows[:cs.config.MaxConcurrentCleaners]
 	}
 
@@ -292,11 +303,14 @@ func (cs *CleanerSystem) processSpawnRequest(req cleanerSpawnRequest) {
 
 	// Activate the system before spawning to ensure updateLoop can see active state
 	cs.isActive.Store(true)
+	log.Printf("[CLEANER] Activated cleaner system - spawning %d cleaners", len(redRows))
 
 	// Spawn cleaner entities for each row
 	for _, row := range redRows {
 		cs.spawnCleanerForRow(req.world, row)
 	}
+
+	log.Printf("[CLEANER] Spawn complete - active cleaner count: %d", cs.activeCleanerCount.Load())
 }
 
 // IsActive returns whether the cleaner animation is currently running
@@ -409,6 +423,9 @@ func (cs *CleanerSystem) spawnCleanerForRow(world *engine.World, row int) {
 
 	// Increment active cleaner count
 	cs.activeCleanerCount.Add(1)
+
+	log.Printf("[CLEANER] Spawned cleaner on row %d (entity=%d, direction=%d, speed=%.2f)",
+		row, entity, direction, speed)
 }
 
 // updateCleanerPositions updates the position of all cleaner entities

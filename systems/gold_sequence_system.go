@@ -1,6 +1,7 @@
 package systems
 
 import (
+	"log"
 	"math"
 	"math/rand"
 	"reflect"
@@ -276,10 +277,13 @@ func (s *GoldSequenceSystem) CompleteGoldSequence(world *engine.World) bool {
 	s.mu.Lock()
 	if !s.active {
 		s.mu.Unlock()
+		log.Printf("[GOLD] CompleteGoldSequence called but sequence not active")
 		return false
 	}
 	sequenceID := s.sequenceID
 	s.mu.Unlock()
+
+	log.Printf("[GOLD] CompleteGoldSequence - removing gold sequence entities")
 
 	// Remove gold sequence entities (has its own locking)
 	// This will also trigger decay timer restart
@@ -354,13 +358,21 @@ func (s *GoldSequenceSystem) TriggerCleanersIfHeatFull(world *engine.World, curr
 	triggerFunc := s.cleanerTriggerFunc
 	s.mu.RUnlock()
 
+	// DEBUG: Log trigger attempt
+	log.Printf("[GOLD] TriggerCleanersIfHeatFull called: currentHeat=%d, maxHeat=%d, hasFunc=%v",
+		currentHeat, maxHeat, triggerFunc != nil)
+
 	if triggerFunc == nil {
+		log.Printf("[GOLD] ISSUE: Cleaner trigger function is nil!")
 		return
 	}
 
 	// Only trigger if heat is already at max (or higher)
 	if currentHeat >= maxHeat {
+		log.Printf("[GOLD] Heat condition MET - triggering cleaners!")
 		// Call outside lock to avoid potential deadlock
 		triggerFunc(world)
+	} else {
+		log.Printf("[GOLD] Heat condition NOT met - cleaners NOT triggered")
 	}
 }
