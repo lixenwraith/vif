@@ -38,8 +38,8 @@ type DecaySystem struct {
 
 // NewDecaySystem creates a new decay system
 // Phase 3: Timer and animation state now managed by GameState
-// Note: heatIncrement parameter kept for API compatibility but no longer used (was causing race)
-func NewDecaySystem(gameWidth, gameHeight, screenWidth, heatIncrement int, ctx *engine.GameContext) *DecaySystem {
+// Phase 4: Removed deprecated heatIncrement parameter (was causing race condition)
+func NewDecaySystem(gameWidth, gameHeight int, ctx *engine.GameContext) *DecaySystem {
 	s := &DecaySystem{
 		// Phase 3: animating, timerStarted, nextDecayTime now in GameState
 		// Phase 3: heatIncrement removed - was causing race condition

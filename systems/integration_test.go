@@ -18,7 +18,7 @@ func TestDecaySystemCounterUpdates(t *testing.T) {
 	world := engine.NewWorld()
 
 	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
-	decaySys := NewDecaySystem(80, 24, 80, 0, ctx)
+	decaySys := NewDecaySystem(80, 24, ctx)
 	decaySys.SetSpawnSystem(spawnSys)
 
 	// Manually create some Blue Bright characters at row 0
@@ -86,7 +86,7 @@ func TestDecaySystemColorTransitionWithCounters(t *testing.T) {
 	world := engine.NewWorld()
 
 	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
-	decaySys := NewDecaySystem(80, 24, 80, 0, ctx)
+	decaySys := NewDecaySystem(80, 24, ctx)
 	decaySys.SetSpawnSystem(spawnSys)
 
 	// Create Blue Dark characters at row 0

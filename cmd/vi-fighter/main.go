@@ -111,7 +111,7 @@ func main() {
 	spawnSystem := systems.NewSpawnSystem(ctx.GameWidth, ctx.GameHeight, ctx.CursorX, ctx.CursorY, ctx)
 	ctx.World.AddSystem(spawnSystem)
 
-	decaySystem := systems.NewDecaySystem(ctx.GameWidth, ctx.GameHeight, ctx.Width, ctx.GetScoreIncrement(), ctx)
+	decaySystem := systems.NewDecaySystem(ctx.GameWidth, ctx.GameHeight, ctx)
 	ctx.World.AddSystem(decaySystem)
 
 	goldSequenceSystem := systems.NewGoldSequenceSystem(ctx, decaySystem, ctx.GameWidth, ctx.GameHeight, ctx.CursorX, ctx.CursorY)

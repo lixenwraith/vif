@@ -189,7 +189,7 @@ func BenchmarkGoldSequenceSpawn(b *testing.B) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	decaySystem := NewDecaySystem(80, 24, 80, 0, ctx)
+	decaySystem := NewDecaySystem(80, 24, ctx)
 	goldSystem := NewGoldSequenceSystem(ctx, decaySystem, 80, 24, 0, 0)
 
 	b.ResetTimer()
@@ -209,7 +209,7 @@ func BenchmarkGoldSequenceCompletion(b *testing.B) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
 
-	decaySystem := NewDecaySystem(80, 24, 80, 0, ctx)
+	decaySystem := NewDecaySystem(80, 24, ctx)
 	goldSystem := NewGoldSequenceSystem(ctx, decaySystem, 80, 24, 0, 0)
 
 	b.ResetTimer()
@@ -361,7 +361,7 @@ func BenchmarkGoldTriggerCleaners(b *testing.B) {
 	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
-	decaySystem := NewDecaySystem(80, 24, 80, 0, ctx)
+	decaySystem := NewDecaySystem(80, 24, ctx)
 	goldSystem := NewGoldSequenceSystem(ctx, decaySystem, 80, 24, 0, 0)
 	goldSystem.SetCleanerTrigger(cleanerSystem.TriggerCleaners)
 
@@ -396,7 +396,7 @@ func BenchmarkCompleteGoldCleanerPipeline(b *testing.B) {
 	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
-	decaySystem := NewDecaySystem(80, 24, 80, 0, ctx)
+	decaySystem := NewDecaySystem(80, 24, ctx)
 	goldSystem := NewGoldSequenceSystem(ctx, decaySystem, 80, 24, 0, 0)
 	goldSystem.SetCleanerTrigger(cleanerSystem.TriggerCleaners)
 

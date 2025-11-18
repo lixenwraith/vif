@@ -57,7 +57,7 @@ heat := gs.GetHeat()             // Atomic load
 snapshot := gs.ReadSpawnState()  // RLock, no blocking
 ```
 
-#### Migration Status (Phase 1 Complete)
+#### Migration Status (Phase 4 Complete)
 ✅ **Migrated to GameState**:
 - Heat/Score/Cursor (real-time typing feedback)
 - Color counters (spawn/typing/decay coordination)
@@ -69,6 +69,11 @@ snapshot := gs.ReadSpawnState()  // RLock, no blocking
 - Gold sequence lifecycle (GoldSequenceSystem → GameState)
 - Decay timer and animation (DecaySystem → GameState)
 - **Critical Fix**: Removed heat caching from DecaySystem (was causing race condition)
+
+✅ **Phase 4 Cleanup**:
+- Removed deprecated `heatIncrement` parameter from `NewDecaySystem` (artifact from pre-Phase 3)
+- Verified scoring/input systems remain real-time (event-driven, immediate atomic operations)
+- All tests pass with race detector
 
 ⏳ **Remaining in Systems** (Phase 6):
 - Cleaner activation (CleanerSystem)
