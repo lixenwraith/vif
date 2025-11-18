@@ -739,3 +739,232 @@ func TestPlaceLinePositionMaintenance(t *testing.T) {
 		t.Errorf("Found entity at space position %d (should be empty)", startX+3)
 	}
 }
+
+// TestPlaceLinePackageMd5 tests that "package md5" creates exactly 10 entities (not 11)
+func TestPlaceLinePackageMd5(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+	world := engine.NewWorld()
+
+	// Place cursor far from spawn area to avoid exclusion zone
+	spawnSys := NewSpawnSystem(80, 24, 0, 0, ctx)
+
+	line := "package md5"
+	style := tcell.StyleDefault
+
+	// Place the line
+	success := spawnSys.placeLine(world, line, components.SequenceBlue, components.LevelBright, style)
+
+	if !success {
+		t.Fatal("Failed to place line 'package md5'")
+	}
+
+	// Get all entities
+	posType := reflect.TypeOf(components.PositionComponent{})
+	entities := world.GetEntitiesWith(posType)
+
+	// Should have exactly 10 entities (7 for "package" + 3 for "md5"), not 11
+	if len(entities) != 10 {
+		t.Errorf("Expected exactly 10 entities (7 from 'package' + 3 from 'md5'), got %d", len(entities))
+	}
+
+	// Verify color counter counts only non-space characters
+	count := spawnSys.GetColorCount(components.SequenceBlue, components.LevelBright)
+	if count != 10 {
+		t.Errorf("Expected color count 10 (no space counted), got %d", count)
+	}
+
+	// Find where the line was placed
+	if len(entities) == 0 {
+		t.Fatal("No entities created")
+	}
+
+	firstPosComp, _ := world.GetComponent(entities[0], posType)
+	firstPos := firstPosComp.(components.PositionComponent)
+	startX := firstPos.X
+	startY := firstPos.Y
+
+	// Verify "package" characters exist at correct positions (0-6)
+	expectedPackage := []rune("package")
+	for i, expectedRune := range expectedPackage {
+		entity := world.GetEntityAtPosition(startX+i, startY)
+		if entity == 0 {
+			t.Errorf("No entity at position %d (expected '%c' from 'package')", i, expectedRune)
+			continue
+		}
+
+		charType := reflect.TypeOf(components.CharacterComponent{})
+		charComp, ok := world.GetComponent(entity, charType)
+		if !ok {
+			t.Errorf("Entity at position %d missing CharacterComponent", i)
+			continue
+		}
+
+		char := charComp.(components.CharacterComponent)
+		if char.Rune != expectedRune {
+			t.Errorf("Position %d: expected '%c', got '%c'", i, expectedRune, char.Rune)
+		}
+	}
+
+	// Verify NO entity exists at the space position (position 7)
+	spaceEntity := world.GetEntityAtPosition(startX+7, startY)
+	if spaceEntity != 0 {
+		charType := reflect.TypeOf(components.CharacterComponent{})
+		charComp, _ := world.GetComponent(spaceEntity, charType)
+		char := charComp.(components.CharacterComponent)
+		t.Errorf("Found entity at space position 7 with character '%c', should be empty", char.Rune)
+	}
+
+	// Verify "md5" characters exist at correct positions (8-10)
+	expectedMd5 := []rune("md5")
+	for i, expectedRune := range expectedMd5 {
+		pos := 8 + i // Offset by 8 to account for "package " (7 chars + 1 space)
+		entity := world.GetEntityAtPosition(startX+pos, startY)
+		if entity == 0 {
+			t.Errorf("No entity at position %d (expected '%c' from 'md5')", pos, expectedRune)
+			continue
+		}
+
+		charType := reflect.TypeOf(components.CharacterComponent{})
+		charComp, ok := world.GetComponent(entity, charType)
+		if !ok {
+			t.Errorf("Entity at position %d missing CharacterComponent", pos)
+			continue
+		}
+
+		char := charComp.(components.CharacterComponent)
+		if char.Rune != expectedRune {
+			t.Errorf("Position %d: expected '%c', got '%c'", pos, expectedRune, char.Rune)
+		}
+	}
+}
+
+// TestPlaceLineConstBlockSize tests that "const BlockSize = 64" creates correct entities with spaces preserved
+func TestPlaceLineConstBlockSize(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+	world := engine.NewWorld()
+
+	// Place cursor far from spawn area
+	spawnSys := NewSpawnSystem(80, 24, 0, 0, ctx)
+
+	line := "const BlockSize = 64"
+	style := tcell.StyleDefault
+
+	// Count expected non-space characters
+	expectedNonSpaceCount := 0
+	for _, r := range line {
+		if r != ' ' {
+			expectedNonSpaceCount++
+		}
+	}
+	// "const" (5) + "BlockSize" (9) + "=" (1) + "64" (2) = 17 characters
+
+	// Place the line
+	success := spawnSys.placeLine(world, line, components.SequenceGreen, components.LevelNormal, style)
+
+	if !success {
+		t.Fatal("Failed to place line 'const BlockSize = 64'")
+	}
+
+	// Get all entities
+	posType := reflect.TypeOf(components.PositionComponent{})
+	entities := world.GetEntitiesWith(posType)
+
+	// Should have exactly expectedNonSpaceCount entities (spaces don't create entities)
+	if len(entities) != expectedNonSpaceCount {
+		t.Errorf("Expected %d entities (non-space chars only), got %d", expectedNonSpaceCount, len(entities))
+	}
+
+	// Verify color counter counts only non-space characters
+	count := spawnSys.GetColorCount(components.SequenceGreen, components.LevelNormal)
+	if count != int64(expectedNonSpaceCount) {
+		t.Errorf("Expected color count %d (no spaces counted), got %d", expectedNonSpaceCount, count)
+	}
+
+	// Find where the line was placed
+	if len(entities) == 0 {
+		t.Fatal("No entities created")
+	}
+
+	firstPosComp, _ := world.GetComponent(entities[0], posType)
+	firstPos := firstPosComp.(components.PositionComponent)
+	startX := firstPos.X
+	startY := firstPos.Y
+
+	// Verify spaces don't have entities and non-spaces do
+	lineRunes := []rune(line)
+	for i, r := range lineRunes {
+		entity := world.GetEntityAtPosition(startX+i, startY)
+
+		if r == ' ' {
+			// Space position should NOT have an entity
+			if entity != 0 {
+				charType := reflect.TypeOf(components.CharacterComponent{})
+				charComp, _ := world.GetComponent(entity, charType)
+				char := charComp.(components.CharacterComponent)
+				t.Errorf("Found entity at space position %d with character '%c', should be empty", i, char.Rune)
+			}
+		} else {
+			// Non-space position should have an entity
+			if entity == 0 {
+				t.Errorf("No entity at non-space position %d (expected '%c')", i, r)
+				continue
+			}
+
+			// Verify the character matches
+			charType := reflect.TypeOf(components.CharacterComponent{})
+			charComp, ok := world.GetComponent(entity, charType)
+			if !ok {
+				t.Errorf("Entity at position %d missing CharacterComponent", i)
+				continue
+			}
+
+			char := charComp.(components.CharacterComponent)
+			if char.Rune != r {
+				t.Errorf("Position %d: expected '%c', got '%c'", i, r, char.Rune)
+			}
+		}
+	}
+
+	// Verify word boundaries are preserved (check specific positions)
+	// "const" should be at positions 0-4
+	// space at position 5
+	// "BlockSize" should be at positions 6-14
+	// space at position 15
+	// "=" should be at position 16
+	// space at position 17
+	// "64" should be at positions 18-19
+
+	expectedPositions := map[int]rune{
+		0: 'c', 1: 'o', 2: 'n', 3: 's', 4: 't',
+		// 5 is space (no entity)
+		6: 'B', 7: 'l', 8: 'o', 9: 'c', 10: 'k', 11: 'S', 12: 'i', 13: 'z', 14: 'e',
+		// 15 is space (no entity)
+		16: '=',
+		// 17 is space (no entity)
+		18: '6', 19: '4',
+	}
+
+	for offset, expectedRune := range expectedPositions {
+		entity := world.GetEntityAtPosition(startX+offset, startY)
+		if entity == 0 {
+			t.Errorf("No entity at position %d (expected '%c')", offset, expectedRune)
+			continue
+		}
+
+		charType := reflect.TypeOf(components.CharacterComponent{})
+		charComp, ok := world.GetComponent(entity, charType)
+		if !ok {
+			t.Errorf("Entity at position %d missing CharacterComponent", offset)
+			continue
+		}
+
+		char := charComp.(components.CharacterComponent)
+		if char.Rune != expectedRune {
+			t.Errorf("Position %d: expected '%c', got '%c'", offset, expectedRune, char.Rune)
+		}
+	}
+}
