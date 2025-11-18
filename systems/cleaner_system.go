@@ -39,15 +39,17 @@ type cleanerData struct {
 type CleanerSystem struct {
 	ctx               *engine.GameContext
 	config            constants.CleanerConfig // Configuration for cleaner behavior
-	mu                sync.RWMutex         // Protects gameWidth, gameHeight, animationDuration
+	mu                sync.RWMutex         // Protects gameWidth, gameHeight, animationDuration, world
 	stateMu           sync.RWMutex         // Protects cleanerDataMap
 	isActive          atomic.Bool          // Atomic flag for cleaner active state
 	activationTime    atomic.Int64         // Unix nano timestamp of activation
 	lastUpdateTime    atomic.Int64         // Unix nano timestamp of last update
 	lastScanTime      atomic.Int64         // Unix nano timestamp of last periodic scan
+	activeCleanerCount atomic.Int64        // Number of active cleaner entities
 	gameWidth         int                  // Protected by mu
 	gameHeight        int                  // Protected by mu
 	animationDuration time.Duration        // Protected by mu
+	world             *engine.World        // Protected by mu - stored from spawn request
 	spawnChan         chan cleanerSpawnRequest // Channel for spawn requests
 	stopChan          chan struct{}        // Channel to stop the update loop
 	cleanerPool       sync.Pool            // Pool for cleaner trail slice allocation
@@ -79,6 +81,7 @@ func NewCleanerSystem(ctx *engine.GameContext, gameWidth, gameHeight int, config
 	cs.activationTime.Store(0)
 	cs.lastUpdateTime.Store(0)
 	cs.lastScanTime.Store(0)
+	cs.activeCleanerCount.Store(0)
 
 	// Start concurrent update loop
 	cs.wg.Add(1)
@@ -175,8 +178,18 @@ func (cs *CleanerSystem) triggerPeriodicScan() {
 	// Update last scan time
 	cs.lastScanTime.Store(nowNano)
 
+	// Get world reference safely
+	cs.mu.RLock()
+	world := cs.world
+	cs.mu.RUnlock()
+
+	// If world is nil, use ctx.World (e.g., during periodic scan before first spawn)
+	if world == nil {
+		world = cs.ctx.World
+	}
+
 	// Trigger cleaners (uses existing spawn request mechanism)
-	cs.TriggerCleaners(cs.ctx.World)
+	cs.TriggerCleaners(world)
 }
 
 // updateCleaners performs the actual cleaner update logic
@@ -200,10 +213,13 @@ func (cs *CleanerSystem) updateCleaners() {
 	// Check if animation is complete
 	cs.mu.RLock()
 	duration := cs.animationDuration
+	world := cs.world
 	cs.mu.RUnlock()
 
 	if elapsed >= duration {
-		cs.cleanupCleaners(cs.ctx.World)
+		if world != nil {
+			cs.cleanupCleaners(world)
+		}
 		cs.isActive.Store(false)
 		cs.lastUpdateTime.Store(0)
 		return
@@ -217,9 +233,14 @@ func (cs *CleanerSystem) updateCleaners() {
 		return
 	}
 
+	// Only update if we have a valid world reference
+	if world == nil {
+		return
+	}
+
 	deltaTime := float64(nowNano-lastUpdateNano) / float64(time.Second)
-	cs.updateCleanerPositions(cs.ctx.World, deltaTime)
-	cs.detectAndDestroyRedCharacters(cs.ctx.World)
+	cs.updateCleanerPositions(world, deltaTime)
+	cs.detectAndDestroyRedCharacters(world)
 
 	// Update last update time
 	cs.lastUpdateTime.Store(nowNano)
@@ -242,6 +263,11 @@ func (cs *CleanerSystem) processSpawnRequest(req cleanerSpawnRequest) {
 	if cs.isActive.Load() {
 		return
 	}
+
+	// Store world reference for updateLoop goroutine to use
+	cs.mu.Lock()
+	cs.world = req.world
+	cs.mu.Unlock()
 
 	// Scan for rows with Red characters (with mutex protection)
 	redRows := cs.scanRedCharacterRows(req.world)
@@ -272,6 +298,11 @@ func (cs *CleanerSystem) processSpawnRequest(req cleanerSpawnRequest) {
 // IsActive returns whether the cleaner animation is currently running
 func (cs *CleanerSystem) IsActive() bool {
 	return cs.isActive.Load()
+}
+
+// GetActiveCleanerCount returns the number of active cleaner entities
+func (cs *CleanerSystem) GetActiveCleanerCount() int64 {
+	return cs.activeCleanerCount.Load()
 }
 
 // scanRedCharacterRows scans the world for rows containing Red characters
@@ -371,6 +402,9 @@ func (cs *CleanerSystem) spawnCleanerForRow(world *engine.World, row int) {
 		trailPositions: trail,
 	}
 	cs.stateMu.Unlock()
+
+	// Increment active cleaner count
+	cs.activeCleanerCount.Add(1)
 }
 
 // updateCleanerPositions updates the position of all cleaner entities
@@ -423,10 +457,13 @@ func (cs *CleanerSystem) detectAndDestroyRedCharacters(world *engine.World) {
 
 	for _, cleanerEntity := range cleanerEntities {
 		cleanerComp, ok := world.GetComponent(cleanerEntity, cleanerType)
+		if !ok || cleanerComp == nil {
+			continue
+		}
+		cleaner, ok := cleanerComp.(components.CleanerComponent)
 		if !ok {
 			continue
 		}
-		cleaner := cleanerComp.(components.CleanerComponent)
 
 		// Get the integer X position (current cleaner location)
 		cleanerX := int(cleaner.XPosition + 0.5) // Round to nearest integer
@@ -444,35 +481,40 @@ func (cs *CleanerSystem) detectAndDestroyRedCharacters(world *engine.World) {
 			continue
 		}
 
-		// Check if it's a Red character
+		// Check if it's a Red character (with nil checks)
 		seqComp, ok := world.GetComponent(targetEntity, seqType)
+		if !ok || seqComp == nil {
+			continue
+		}
+		seq, ok := seqComp.(components.SequenceComponent)
 		if !ok {
 			continue
 		}
-		seq := seqComp.(components.SequenceComponent)
 
 		if seq.Type == components.SequenceRed {
-			// Get character info for flash effect before destroying
+			// Get character info for flash effect before destroying (with nil checks)
 			charComp, hasChar := world.GetComponent(targetEntity, charType)
 			posComp, hasPos := world.GetComponent(targetEntity, posType)
 
 			// Create flash effect at removal location
-			if hasChar && hasPos {
-				char := charComp.(components.CharacterComponent)
-				pos := posComp.(components.PositionComponent)
+			if hasChar && hasPos && charComp != nil && posComp != nil {
+				char, charOk := charComp.(components.CharacterComponent)
+				pos, posOk := posComp.(components.PositionComponent)
 
-				flashEntity := world.CreateEntity()
-				flash := components.RemovalFlashComponent{
-					X:         pos.X,
-					Y:         pos.Y,
-					Char:      char.Rune,
-					StartTime: cs.ctx.TimeProvider.Now(),
-					Duration:  cs.config.FlashDuration,
+				if charOk && posOk {
+					flashEntity := world.CreateEntity()
+					flash := components.RemovalFlashComponent{
+						X:         pos.X,
+						Y:         pos.Y,
+						Char:      char.Rune,
+						StartTime: cs.ctx.TimeProvider.Now(),
+						Duration:  cs.config.FlashDuration,
+					}
+					world.AddComponent(flashEntity, flash)
 				}
-				world.AddComponent(flashEntity, flash)
 			}
 
-			// Destroy the Red character
+			// Destroy the Red character using SafeDestroyEntity (handles spatial index removal)
 			world.SafeDestroyEntity(targetEntity)
 		}
 	}
@@ -486,6 +528,7 @@ func (cs *CleanerSystem) cleanupCleaners(world *engine.World) {
 	cs.stateMu.Lock()
 	defer cs.stateMu.Unlock()
 
+	cleanerCount := int64(0)
 	for _, entity := range entities {
 		// Return trail slice to pool
 		if data, exists := cs.cleanerDataMap[entity]; exists {
@@ -497,6 +540,7 @@ func (cs *CleanerSystem) cleanupCleaners(world *engine.World) {
 
 		// Destroy entity (cleaners don't have PositionComponent, so no spatial index removal needed)
 		world.SafeDestroyEntity(entity)
+		cleanerCount++
 	}
 
 	// Clear internal state
@@ -504,6 +548,16 @@ func (cs *CleanerSystem) cleanupCleaners(world *engine.World) {
 	cs.isActive.Store(false)
 	cs.activationTime.Store(0)
 	cs.lastUpdateTime.Store(0)
+
+	// Decrement active cleaner count by the number of cleaners removed
+	if cleanerCount > 0 {
+		cs.activeCleanerCount.Add(-cleanerCount)
+	}
+
+	// Clear world reference
+	cs.mu.Lock()
+	cs.world = nil
+	cs.mu.Unlock()
 }
 
 // UpdateDimensions updates the game area dimensions

@@ -106,8 +106,14 @@ func (s *DecaySystem) applyDecayToRow(world *engine.World, row int) {
 	entities := world.GetEntitiesWith(seqType, posType)
 
 	for _, entity := range entities {
-		posComp, _ := world.GetComponent(entity, posType)
-		pos := posComp.(components.PositionComponent)
+		posComp, ok := world.GetComponent(entity, posType)
+		if !ok || posComp == nil {
+			continue
+		}
+		pos, ok := posComp.(components.PositionComponent)
+		if !ok {
+			continue
+		}
 
 		if pos.Y == row {
 			s.applyDecayToCharacter(world, entity)
@@ -121,10 +127,13 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 	charType := reflect.TypeOf(components.CharacterComponent{})
 
 	seqComp, ok := world.GetComponent(entity, seqType)
-	if !ok {
+	if !ok || seqComp == nil {
 		return // Not a sequence entity
 	}
-	seq := seqComp.(components.SequenceComponent)
+	seq, ok := seqComp.(components.SequenceComponent)
+	if !ok {
+		return
+	}
 
 	// Don't decay gold sequences
 	if seq.Type == components.SequenceGold {
@@ -143,10 +152,12 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 
 		// Update character style
 		charComp, ok := world.GetComponent(entity, charType)
-		if ok {
-			char := charComp.(components.CharacterComponent)
-			char.Style = render.GetStyleForSequence(seq.Type, seq.Level)
-			world.AddComponent(entity, char)
+		if ok && charComp != nil {
+			char, charOk := charComp.(components.CharacterComponent)
+			if charOk {
+				char.Style = render.GetStyleForSequence(seq.Type, seq.Level)
+				world.AddComponent(entity, char)
+			}
 		}
 
 		// Update counters: decrement old level, increment new level (only for Blue/Green)
@@ -162,10 +173,12 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 			world.AddComponent(entity, seq)
 
 			charComp, ok := world.GetComponent(entity, charType)
-			if ok {
-				char := charComp.(components.CharacterComponent)
-				char.Style = render.GetStyleForSequence(seq.Type, seq.Level)
-				world.AddComponent(entity, char)
+			if ok && charComp != nil {
+				char, charOk := charComp.(components.CharacterComponent)
+				if charOk {
+					char.Style = render.GetStyleForSequence(seq.Type, seq.Level)
+					world.AddComponent(entity, char)
+				}
 			}
 
 			// Update counters: Blue Dark → Green Bright
@@ -179,10 +192,12 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 			world.AddComponent(entity, seq)
 
 			charComp, ok := world.GetComponent(entity, charType)
-			if ok {
-				char := charComp.(components.CharacterComponent)
-				char.Style = render.GetStyleForSequence(seq.Type, seq.Level)
-				world.AddComponent(entity, char)
+			if ok && charComp != nil {
+				char, charOk := charComp.(components.CharacterComponent)
+				if charOk {
+					char.Style = render.GetStyleForSequence(seq.Type, seq.Level)
+					world.AddComponent(entity, char)
+				}
 			}
 
 			// Update counters: Green Dark → Red Bright (only decrement Green, Red is not tracked)
