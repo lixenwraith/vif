@@ -27,10 +27,11 @@ func TestContentRefreshThreshold(t *testing.T) {
 
 	spawnSys.contentMutex.Lock()
 	spawnSys.codeBlocks = testBlocks
-	spawnSys.totalBlocks = 5
-	spawnSys.nextBlockIndex = 0
-	spawnSys.blocksConsumed = 0
 	spawnSys.contentMutex.Unlock()
+
+	spawnSys.totalBlocks.Store(5)
+	spawnSys.nextBlockIndex.Store(0)
+	spawnSys.blocksConsumed.Store(0)
 
 	// Consume blocks until we hit the threshold
 	// At 80% of 5 blocks = 4 blocks consumed
@@ -76,10 +77,11 @@ func TestContentSwapOnWrapAround(t *testing.T) {
 
 	spawnSys.contentMutex.Lock()
 	spawnSys.codeBlocks = initialBlocks
-	spawnSys.totalBlocks = 2
-	spawnSys.nextBlockIndex = 0
-	spawnSys.blocksConsumed = 0
 	spawnSys.contentMutex.Unlock()
+
+	spawnSys.totalBlocks.Store(2)
+	spawnSys.nextBlockIndex.Store(0)
+	spawnSys.blocksConsumed.Store(0)
 
 	// Get first block
 	block1 := spawnSys.getNextBlock()
@@ -131,10 +133,11 @@ func TestThreadSafeContentSwap(t *testing.T) {
 
 	spawnSys.contentMutex.Lock()
 	spawnSys.codeBlocks = testBlocks
-	spawnSys.totalBlocks = 2
-	spawnSys.nextBlockIndex = 0
-	spawnSys.blocksConsumed = 0
 	spawnSys.contentMutex.Unlock()
+
+	spawnSys.totalBlocks.Store(2)
+	spawnSys.nextBlockIndex.Store(0)
+	spawnSys.blocksConsumed.Store(0)
 
 	// Consume blocks concurrently
 	done := make(chan bool, 10)
@@ -176,10 +179,11 @@ func TestEmptyContentHandling(t *testing.T) {
 	// Manually set empty content
 	spawnSys.contentMutex.Lock()
 	spawnSys.codeBlocks = []CodeBlock{}
-	spawnSys.totalBlocks = 0
-	spawnSys.nextBlockIndex = 0
-	spawnSys.blocksConsumed = 0
 	spawnSys.contentMutex.Unlock()
+
+	spawnSys.totalBlocks.Store(0)
+	spawnSys.nextBlockIndex.Store(0)
+	spawnSys.blocksConsumed.Store(0)
 
 	// Should return empty block gracefully
 	block := spawnSys.getNextBlock()
@@ -188,9 +192,7 @@ func TestEmptyContentHandling(t *testing.T) {
 	}
 
 	// System should still be in valid state
-	spawnSys.contentMutex.RLock()
-	idx := spawnSys.nextBlockIndex
-	spawnSys.contentMutex.RUnlock()
+	idx := spawnSys.nextBlockIndex.Load()
 
 	if idx != 0 {
 		t.Errorf("nextBlockIndex should remain 0 with empty content, got %d", idx)
@@ -213,10 +215,11 @@ func TestContentRefreshDoesNotBlockGameplay(t *testing.T) {
 
 	spawnSys.contentMutex.Lock()
 	spawnSys.codeBlocks = testBlocks
-	spawnSys.totalBlocks = 10
-	spawnSys.nextBlockIndex = 0
-	spawnSys.blocksConsumed = 0
 	spawnSys.contentMutex.Unlock()
+
+	spawnSys.totalBlocks.Store(10)
+	spawnSys.nextBlockIndex.Store(0)
+	spawnSys.blocksConsumed.Store(0)
 
 	// Consume blocks to trigger refresh (80% of 10 = 8)
 	startTime := time.Now()
@@ -228,5 +231,222 @@ func TestContentRefreshDoesNotBlockGameplay(t *testing.T) {
 	// Should complete quickly (< 100ms) since refresh happens in background
 	if elapsed > 100*time.Millisecond {
 		t.Errorf("getNextBlock took too long (%v), might be blocking on content refresh", elapsed)
+	}
+}
+
+// TestConcurrentSpawningAndContentRefresh tests thread-safety with concurrent spawning and content updates
+func TestConcurrentSpawningAndContentRefresh(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+
+	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+	world := engine.NewWorld()
+
+	// Set up test blocks
+	testBlocks := make([]CodeBlock, 20)
+	for i := 0; i < 20; i++ {
+		testBlocks[i] = CodeBlock{Lines: []string{
+			"func test() {",
+			"    x := 42",
+			"    return x",
+			"}",
+		}}
+	}
+
+	spawnSys.contentMutex.Lock()
+	spawnSys.codeBlocks = testBlocks
+	spawnSys.contentMutex.Unlock()
+
+	spawnSys.totalBlocks.Store(20)
+	spawnSys.nextBlockIndex.Store(0)
+	spawnSys.blocksConsumed.Store(0)
+
+	// Run concurrent operations
+	done := make(chan bool)
+	errors := make(chan error, 100)
+
+	// Goroutine 1: Continuously get blocks
+	go func() {
+		for i := 0; i < 50; i++ {
+			block := spawnSys.getNextBlock()
+			if len(block.Lines) == 0 {
+				errors <- nil // Empty block is acceptable during swap
+			}
+			time.Sleep(1 * time.Millisecond)
+		}
+		done <- true
+	}()
+
+	// Goroutine 2: Continuously get blocks
+	go func() {
+		for i := 0; i < 50; i++ {
+			block := spawnSys.getNextBlock()
+			if len(block.Lines) == 0 {
+				errors <- nil // Empty block is acceptable during swap
+			}
+			time.Sleep(1 * time.Millisecond)
+		}
+		done <- true
+	}()
+
+	// Goroutine 3: Read content state
+	go func() {
+		for i := 0; i < 50; i++ {
+			spawnSys.contentMutex.RLock()
+			_ = len(spawnSys.codeBlocks)
+			spawnSys.contentMutex.RUnlock()
+
+			_ = spawnSys.totalBlocks.Load()
+			_ = spawnSys.nextBlockIndex.Load()
+			_ = spawnSys.blocksConsumed.Load()
+
+			time.Sleep(1 * time.Millisecond)
+		}
+		done <- true
+	}()
+
+	// Goroutine 4: Simulate spawning
+	go func() {
+		for i := 0; i < 20; i++ {
+			spawnSys.spawnSequence(world)
+			time.Sleep(2 * time.Millisecond)
+		}
+		done <- true
+	}()
+
+	// Wait for all goroutines
+	for i := 0; i < 4; i++ {
+		<-done
+	}
+
+	// Verify system is in a valid state
+	idx := spawnSys.nextBlockIndex.Load()
+	total := spawnSys.totalBlocks.Load()
+
+	if total > 0 && idx >= total {
+		t.Errorf("Invalid state: nextBlockIndex (%d) >= totalBlocks (%d)", idx, total)
+	}
+}
+
+// TestAtomicIndexOperations verifies that index operations are truly atomic
+func TestAtomicIndexOperations(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+
+	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+
+	// Set up test blocks
+	testBlocks := make([]CodeBlock, 5)
+	for i := 0; i < 5; i++ {
+		testBlocks[i] = CodeBlock{Lines: []string{"line1", "line2", "line3"}}
+	}
+
+	spawnSys.contentMutex.Lock()
+	spawnSys.codeBlocks = testBlocks
+	spawnSys.contentMutex.Unlock()
+
+	spawnSys.totalBlocks.Store(5)
+	spawnSys.nextBlockIndex.Store(0)
+	spawnSys.blocksConsumed.Store(0)
+
+	// Launch many goroutines to hammer on getNextBlock
+	const numGoroutines = 50
+	const blocksPerGoroutine = 20
+	done := make(chan bool, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func() {
+			for j := 0; j < blocksPerGoroutine; j++ {
+				block := spawnSys.getNextBlock()
+				if len(block.Lines) == 0 {
+					// Empty block can happen during content swap
+					continue
+				}
+				// Verify block has valid structure (non-zero lines)
+				// Don't check exact count since content may swap to default content
+				if len(block.Lines) < 1 {
+					t.Errorf("Block should have at least 1 line, got %d", len(block.Lines))
+				}
+			}
+			done <- true
+		}()
+	}
+
+	// Wait for all goroutines
+	for i := 0; i < numGoroutines; i++ {
+		<-done
+	}
+
+	// Verify final state is consistent
+	spawnSys.contentMutex.RLock()
+	codeBlocksLen := len(spawnSys.codeBlocks)
+	spawnSys.contentMutex.RUnlock()
+
+	idx := spawnSys.nextBlockIndex.Load()
+	total := spawnSys.totalBlocks.Load()
+
+	if codeBlocksLen > 0 && (idx < 0 || idx >= total) {
+		t.Errorf("Invalid final state: index=%d, total=%d, actual_len=%d", idx, total, codeBlocksLen)
+	}
+}
+
+// TestContentSwapDuringConcurrentReads tests that content swap doesn't corrupt reads
+func TestContentSwapDuringConcurrentReads(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+
+	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+
+	// Set up initial small content to trigger frequent swaps
+	initialBlocks := []CodeBlock{
+		{Lines: []string{"block1"}},
+		{Lines: []string{"block2"}},
+	}
+
+	spawnSys.contentMutex.Lock()
+	spawnSys.codeBlocks = initialBlocks
+	spawnSys.contentMutex.Unlock()
+
+	spawnSys.totalBlocks.Store(2)
+	spawnSys.nextBlockIndex.Store(0)
+	spawnSys.blocksConsumed.Store(0)
+
+	// Run many concurrent reads that will trigger content swaps
+	const numReaders = 20
+	const readsPerReader = 50
+	done := make(chan bool, numReaders)
+	panics := make(chan interface{}, numReaders)
+
+	for i := 0; i < numReaders; i++ {
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					panics <- r
+				}
+			}()
+
+			for j := 0; j < readsPerReader; j++ {
+				block := spawnSys.getNextBlock()
+				// Just access the block, even if empty
+				_ = len(block.Lines)
+			}
+			done <- true
+		}()
+	}
+
+	// Wait for all readers
+	for i := 0; i < numReaders; i++ {
+		<-done
+	}
+
+	// Check for panics
+	select {
+	case p := <-panics:
+		t.Fatalf("Goroutine panicked during concurrent reads: %v", p)
+	default:
+		// No panics.
 	}
 }

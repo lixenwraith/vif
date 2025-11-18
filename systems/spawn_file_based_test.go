@@ -31,18 +31,23 @@ func TestContentManagerIntegration(t *testing.T) {
 	}
 
 	// Verify totalBlocks is set correctly
-	if len(spawnSys.codeBlocks) != spawnSys.totalBlocks {
+	spawnSys.contentMutex.RLock()
+	codeBlocksLen := len(spawnSys.codeBlocks)
+	spawnSys.contentMutex.RUnlock()
+
+	totalBlocks := spawnSys.totalBlocks.Load()
+	if int32(codeBlocksLen) != totalBlocks {
 		t.Errorf("totalBlocks (%d) should match length of codeBlocks (%d)",
-			spawnSys.totalBlocks, len(spawnSys.codeBlocks))
+			totalBlocks, codeBlocksLen)
 	}
 
 	// Verify initial state
-	if spawnSys.blocksConsumed != 0 {
-		t.Errorf("blocksConsumed should be 0 initially, got %d", spawnSys.blocksConsumed)
+	if spawnSys.blocksConsumed.Load() != 0 {
+		t.Errorf("blocksConsumed should be 0 initially, got %d", spawnSys.blocksConsumed.Load())
 	}
 
-	if spawnSys.nextBlockIndex != 0 {
-		t.Errorf("nextBlockIndex should be 0 initially, got %d", spawnSys.nextBlockIndex)
+	if spawnSys.nextBlockIndex.Load() != 0 {
+		t.Errorf("nextBlockIndex should be 0 initially, got %d", spawnSys.nextBlockIndex.Load())
 	}
 }
 
@@ -472,19 +477,18 @@ func TestBlockSpawning(t *testing.T) {
 	}
 	spawnSys.contentMutex.Lock()
 	spawnSys.codeBlocks = testBlocks
-	spawnSys.totalBlocks = len(testBlocks)
-	spawnSys.nextBlockIndex = 0
-	spawnSys.blocksConsumed = 0
 	spawnSys.contentMutex.Unlock()
+
+	spawnSys.totalBlocks.Store(int32(len(testBlocks)))
+	spawnSys.nextBlockIndex.Store(0)
+	spawnSys.blocksConsumed.Store(0)
 
 	// Get first block
 	block1 := spawnSys.getNextBlock()
 	if len(block1.Lines) != 3 {
 		t.Errorf("Expected first block to have 3 lines, got %d", len(block1.Lines))
 	}
-	spawnSys.contentMutex.RLock()
-	idx1 := spawnSys.nextBlockIndex
-	spawnSys.contentMutex.RUnlock()
+	idx1 := spawnSys.nextBlockIndex.Load()
 	if idx1 != 1 {
 		t.Errorf("Expected nextBlockIndex to be 1, got %d", idx1)
 	}

@@ -50,14 +50,14 @@ type SpawnSystem struct {
 	ctx        *engine.GameContext
 
 	// Content management
-	contentManager *content.ContentManager
-	contentMutex   sync.RWMutex
-	codeBlocks     []CodeBlock
-	nextBlockIndex int
-	totalBlocks    int
-	blocksConsumed int
-	nextContent    []CodeBlock // Pre-fetched content for seamless transition
-	isRefreshing   atomic.Bool
+	contentManager   *content.ContentManager
+	contentMutex     sync.RWMutex
+	codeBlocks       []CodeBlock
+	nextBlockIndex   atomic.Int32 // Atomic index for thread-safe access
+	totalBlocks      atomic.Int32 // Atomic counter for total blocks
+	blocksConsumed   atomic.Int32 // Atomic counter for consumed blocks
+	nextContent      []CodeBlock  // Pre-fetched content for seamless transition
+	isRefreshing     atomic.Bool
 
 	// Atomic color tracking counters (6 states: Blue×3 + Green×3)
 	blueCountBright  atomic.Int64
@@ -71,16 +71,28 @@ type SpawnSystem struct {
 // NewSpawnSystem creates a new spawn system
 func NewSpawnSystem(gameWidth, gameHeight, cursorX, cursorY int, ctx *engine.GameContext) *SpawnSystem {
 	s := &SpawnSystem{
-		lastSpawn:      ctx.TimeProvider.Now(),
-		nextSeqID:      1,
-		gameWidth:      gameWidth,
-		gameHeight:     gameHeight,
-		cursorX:        cursorX,
-		cursorY:        cursorY,
-		ctx:            ctx,
-		nextBlockIndex: 0,
-		blocksConsumed: 0,
+		lastSpawn:  ctx.TimeProvider.Now(),
+		nextSeqID:  1,
+		gameWidth:  gameWidth,
+		gameHeight: gameHeight,
+		cursorX:    cursorX,
+		cursorY:    cursorY,
+		ctx:        ctx,
 	}
+
+	// Initialize atomic counters to 0 (before loading content)
+	s.blueCountBright.Store(0)
+	s.blueCountNormal.Store(0)
+	s.blueCountDark.Store(0)
+	s.greenCountBright.Store(0)
+	s.greenCountNormal.Store(0)
+	s.greenCountDark.Store(0)
+	s.isRefreshing.Store(false)
+
+	// Initialize content tracking atomic counters
+	s.nextBlockIndex.Store(0)
+	s.totalBlocks.Store(0)
+	s.blocksConsumed.Store(0)
 
 	// Initialize ContentManager
 	s.contentManager = content.NewContentManager()
@@ -89,17 +101,8 @@ func NewSpawnSystem(gameWidth, gameHeight, cursorX, cursorY int, ctx *engine.Gam
 		// System will handle gracefully
 	}
 
-	// Load initial content
+	// Load initial content (this will update the atomic counters)
 	s.loadContentFromManager()
-
-	// Initialize atomic counters to 0
-	s.blueCountBright.Store(0)
-	s.blueCountNormal.Store(0)
-	s.blueCountDark.Store(0)
-	s.greenCountBright.Store(0)
-	s.greenCountNormal.Store(0)
-	s.greenCountDark.Store(0)
-	s.isRefreshing.Store(false)
 
 	return s
 }
@@ -111,27 +114,35 @@ func (s *SpawnSystem) loadContentFromManager() {
 	if err != nil || len(lines) == 0 {
 		// If no content available, use empty slice
 		// System will gracefully handle this by not spawning file-based blocks
+		s.contentMutex.Lock()
 		s.codeBlocks = []CodeBlock{}
-		s.totalBlocks = 0
+		s.contentMutex.Unlock()
+
+		s.totalBlocks.Store(0)
+		s.nextBlockIndex.Store(0)
+		s.blocksConsumed.Store(0)
 		return
 	}
 
 	// Group the content lines into logical code blocks
+	newBlocks := s.groupIntoBlocks(lines)
+
+	// Atomically update content with write lock
 	s.contentMutex.Lock()
-	s.codeBlocks = s.groupIntoBlocks(lines)
-	s.totalBlocks = len(s.codeBlocks)
-	s.nextBlockIndex = 0
-	s.blocksConsumed = 0
+	s.codeBlocks = newBlocks
 	s.contentMutex.Unlock()
+
+	// Update atomic counters
+	s.totalBlocks.Store(int32(len(newBlocks)))
+	s.nextBlockIndex.Store(0)
+	s.blocksConsumed.Store(0)
 }
 
 // checkAndTriggerRefresh checks if content refresh is needed and triggers pre-fetch
 func (s *SpawnSystem) checkAndTriggerRefresh() {
-	// Read current state with lock
-	s.contentMutex.RLock()
-	totalBlocks := s.totalBlocks
-	blocksConsumed := s.blocksConsumed
-	s.contentMutex.RUnlock()
+	// Read current state using atomic operations
+	totalBlocks := s.totalBlocks.Load()
+	blocksConsumed := s.blocksConsumed.Load()
 
 	// Check if we're at the refresh threshold
 	if totalBlocks == 0 {
@@ -169,22 +180,24 @@ func (s *SpawnSystem) preFetchNextContent() {
 // swapToNextContent performs thread-safe content swap when current content is exhausted
 func (s *SpawnSystem) swapToNextContent() {
 	s.contentMutex.Lock()
-	defer s.contentMutex.Unlock()
 
 	// Check if we have pre-fetched content
 	if len(s.nextContent) > 0 {
-		// Swap to pre-fetched content
+		// Atomically swap to pre-fetched content
 		s.codeBlocks = s.nextContent
-		s.totalBlocks = len(s.codeBlocks)
-		s.nextBlockIndex = 0
-		s.blocksConsumed = 0
+		newTotalBlocks := int32(len(s.codeBlocks))
 		s.nextContent = nil
+		s.contentMutex.Unlock()
+
+		// Update atomic counters after releasing lock
+		s.totalBlocks.Store(newTotalBlocks)
+		s.nextBlockIndex.Store(0)
+		s.blocksConsumed.Store(0)
 		s.isRefreshing.Store(false)
 	} else {
-		// No pre-fetched content, load new content synchronously
-		s.contentMutex.Unlock() // Unlock before calling loadContentFromManager
+		// No pre-fetched content, need to load synchronously
+		s.contentMutex.Unlock()
 		s.loadContentFromManager()
-		s.contentMutex.Lock() // Re-lock before returning
 	}
 }
 
@@ -395,8 +408,12 @@ func (s *SpawnSystem) spawnSequence(world *engine.World) {
 		return
 	}
 
-	// Check if we have code blocks
-	if len(s.codeBlocks) == 0 {
+	// Check if we have code blocks (with read lock for thread safety)
+	s.contentMutex.RLock()
+	hasBlocks := len(s.codeBlocks) > 0
+	s.contentMutex.RUnlock()
+
+	if !hasBlocks {
 		// No code blocks, can't spawn file-based blocks
 		return
 	}
@@ -426,28 +443,39 @@ func (s *SpawnSystem) spawnSequence(world *engine.World) {
 
 // getNextBlock retrieves the next logical code block with content refresh management
 func (s *SpawnSystem) getNextBlock() CodeBlock {
+	// Read block with lock to ensure consistency
 	s.contentMutex.RLock()
 	if len(s.codeBlocks) == 0 {
 		s.contentMutex.RUnlock()
 		return CodeBlock{Lines: []string{}}
 	}
 
-	block := s.codeBlocks[s.nextBlockIndex]
-	currentIndex := s.nextBlockIndex
+	// Get current index atomically
+	currentIndex := int(s.nextBlockIndex.Load())
+	totalBlocks := len(s.codeBlocks)
+
+	// Bounds check
+	if currentIndex >= totalBlocks {
+		currentIndex = 0
+		s.nextBlockIndex.Store(0)
+	}
+
+	block := s.codeBlocks[currentIndex]
 	s.contentMutex.RUnlock()
 
-	// Update index and consumption counter (thread-safe write)
-	s.contentMutex.Lock()
-	s.nextBlockIndex = (currentIndex + 1) % len(s.codeBlocks)
+	// Calculate next index
+	nextIndex := (currentIndex + 1) % totalBlocks
+
+	// Atomically update index
+	s.nextBlockIndex.Store(int32(nextIndex))
 
 	// Check if we've wrapped around (consumed all blocks)
-	if s.nextBlockIndex == 0 {
+	if nextIndex == 0 {
 		// We've consumed all blocks, swap to new content
-		s.contentMutex.Unlock()
 		s.swapToNextContent()
 	} else {
-		s.blocksConsumed++
-		s.contentMutex.Unlock()
+		// Atomically increment consumed counter
+		s.blocksConsumed.Add(1)
 
 		// Check if we need to start pre-fetching
 		s.checkAndTriggerRefresh()
