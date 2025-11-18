@@ -418,7 +418,15 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 			sequenceID := s.nextSeqID
 			s.nextSeqID++
 
+			// Count non-space characters for color counter
+			nonSpaceCount := 0
+
 			for i := 0; i < lineLength; i++ {
+				// Skip space characters - don't create entities for them
+				if lineRunes[i] == ' ' {
+					continue
+				}
+
 				entity := world.CreateEntity()
 
 				// Add position component
@@ -443,10 +451,13 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 
 				// Update spatial index
 				world.UpdateSpatialIndex(entity, startCol+i, row)
+
+				// Increment non-space character count
+				nonSpaceCount++
 			}
 
-			// Atomically increment the color counter
-			s.AddColorCount(seqType, seqLevel, int64(lineLength))
+			// Atomically increment the color counter (only non-space characters)
+			s.AddColorCount(seqType, seqLevel, int64(nonSpaceCount))
 
 			return true
 		}

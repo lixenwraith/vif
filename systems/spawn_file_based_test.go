@@ -179,10 +179,12 @@ func TestPlaceLine(t *testing.T) {
 		t.Error("Expected to successfully place line on empty screen")
 	}
 
-	// Verify counter was incremented
+	// Verify counter was incremented (should count only non-space characters)
+	// "test line" has 8 non-space characters ('t','e','s','t','l','i','n','e')
+	expectedCount := int64(len(strings.ReplaceAll(line, " ", "")))
 	count := spawnSys.GetColorCount(components.SequenceBlue, components.LevelBright)
-	if count != int64(len(line)) {
-		t.Errorf("Expected counter to be %d, got %d", len(line), count)
+	if count != expectedCount {
+		t.Errorf("Expected counter to be %d (non-space chars), got %d", expectedCount, count)
 	}
 
 	// Test placing when screen is full
@@ -552,5 +554,188 @@ func TestBlockGroupingWithShortLines(t *testing.T) {
 			t.Errorf("Block %d has %d lines, should have been filtered (min=%d)",
 				i, len(block.Lines), minBlockLines)
 		}
+	}
+}
+
+// TestPlaceLineSkipsSpaces tests that space characters are not created as entities
+func TestPlaceLineSkipsSpaces(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+
+	tests := []struct {
+		name                string
+		line                string
+		expectedEntityCount int
+		expectedCounterInc  int
+	}{
+		{
+			name:                "line with no spaces",
+			line:                "hello",
+			expectedEntityCount: 5,
+			expectedCounterInc:  5,
+		},
+		{
+			name:                "line with spaces",
+			line:                "hi world",
+			expectedEntityCount: 7, // 'h', 'i', 'w', 'o', 'r', 'l', 'd' (no space entity)
+			expectedCounterInc:  7, // counter should only count non-space chars
+		},
+		{
+			name:                "line with multiple spaces",
+			line:                "a  b  c",
+			expectedEntityCount: 3, // 'a', 'b', 'c'
+			expectedCounterInc:  3,
+		},
+		{
+			name:                "line starting with space",
+			line:                " test",
+			expectedEntityCount: 4, // 't', 'e', 's', 't'
+			expectedCounterInc:  4,
+		},
+		{
+			name:                "line ending with space",
+			line:                "test ",
+			expectedEntityCount: 4, // 't', 'e', 's', 't'
+			expectedCounterInc:  4,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a fresh world for each test
+			world := engine.NewWorld()
+			spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+
+			style := tcell.StyleDefault
+			initialCount := spawnSys.GetColorCount(components.SequenceBlue, components.LevelBright)
+
+			// Place the line
+			success := spawnSys.placeLine(world, tt.line, components.SequenceBlue, components.LevelBright, style)
+
+			if !success {
+				t.Error("Expected to successfully place line on empty screen")
+				return
+			}
+
+			// Count entities created
+			posType := reflect.TypeOf(components.PositionComponent{})
+			entities := world.GetEntitiesWith(posType)
+			actualEntityCount := len(entities)
+
+			if actualEntityCount != tt.expectedEntityCount {
+				t.Errorf("Expected %d entities, got %d", tt.expectedEntityCount, actualEntityCount)
+			}
+
+			// Verify counter incremented correctly (only non-space characters)
+			finalCount := spawnSys.GetColorCount(components.SequenceBlue, components.LevelBright)
+			actualCounterInc := int(finalCount - initialCount)
+
+			if actualCounterInc != tt.expectedCounterInc {
+				t.Errorf("Expected counter increment of %d, got %d", tt.expectedCounterInc, actualCounterInc)
+			}
+
+			// Verify no space entities were created
+			for _, entity := range entities {
+				charComp, ok := world.GetComponent(entity, reflect.TypeOf(components.CharacterComponent{}))
+				if ok {
+					char := charComp.(components.CharacterComponent)
+					if char.Rune == ' ' {
+						t.Error("Found space character entity - spaces should be skipped")
+					}
+				}
+			}
+
+			// Verify positions are correct (spaces should create gaps)
+			// Get all positions
+			positions := make(map[int]bool) // Track X positions
+			for _, entity := range entities {
+				posComp, ok := world.GetComponent(entity, posType)
+				if ok {
+					pos := posComp.(components.PositionComponent)
+					positions[pos.X] = true
+				}
+			}
+
+			// For lines with spaces, verify there are gaps in positions
+			if strings.Contains(tt.line, " ") {
+				lineRunes := []rune(tt.line)
+				for i, r := range lineRunes {
+					if r == ' ' {
+						// At position i, there should be NO entity
+						// We can't verify exact position without knowing startCol,
+						// but we verified no space runes exist above
+						_ = i // position verification done above
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestPlaceLinePositionMaintenance tests that positions are maintained even when skipping spaces
+func TestPlaceLinePositionMaintenance(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+	world := engine.NewWorld()
+
+	// Place cursor far from common spawn locations
+	spawnSys := NewSpawnSystem(80, 24, 0, 0, ctx)
+
+	line := "a b c"
+	style := tcell.StyleDefault
+
+	// Place line multiple times to find where it gets placed
+	success := spawnSys.placeLine(world, line, components.SequenceBlue, components.LevelBright, style)
+
+	if !success {
+		t.Fatal("Failed to place line")
+	}
+
+	// Get all entities
+	posType := reflect.TypeOf(components.PositionComponent{})
+	entities := world.GetEntitiesWith(posType)
+
+	if len(entities) != 3 {
+		t.Fatalf("Expected 3 entities (a, b, c), got %d", len(entities))
+	}
+
+	// Build a map of position to character
+	posMap := make(map[int]rune)
+	var startX int
+	minX := 1000
+	for _, entity := range entities {
+		posComp, _ := world.GetComponent(entity, posType)
+		charComp, _ := world.GetComponent(entity, reflect.TypeOf(components.CharacterComponent{}))
+
+		pos := posComp.(components.PositionComponent)
+		char := charComp.(components.CharacterComponent)
+
+		posMap[pos.X] = char.Rune
+		if pos.X < minX {
+			minX = pos.X
+			startX = pos.X
+		}
+	}
+
+	// Verify positions: 'a' at startX, 'b' at startX+2, 'c' at startX+4
+	// (with spaces at startX+1 and startX+3)
+	if posMap[startX] != 'a' {
+		t.Errorf("Expected 'a' at position %d, got %c", startX, posMap[startX])
+	}
+	if posMap[startX+2] != 'b' {
+		t.Errorf("Expected 'b' at position %d, got %c", startX+2, posMap[startX+2])
+	}
+	if posMap[startX+4] != 'c' {
+		t.Errorf("Expected 'c' at position %d, got %c", startX+4, posMap[startX+4])
+	}
+
+	// Verify no entities at space positions
+	if _, exists := posMap[startX+1]; exists {
+		t.Errorf("Found entity at space position %d (should be empty)", startX+1)
+	}
+	if _, exists := posMap[startX+3]; exists {
+		t.Errorf("Found entity at space position %d (should be empty)", startX+3)
 	}
 }
