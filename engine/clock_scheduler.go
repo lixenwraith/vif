@@ -58,6 +58,7 @@ type ClockScheduler struct {
 	// Control channels
 	stopChan chan struct{}
 	stopOnce sync.Once
+	wg       sync.WaitGroup // Ensures goroutine exits before Stop() returns
 
 	// Tick counter for debugging and metrics
 	tickCount uint64
@@ -104,11 +105,13 @@ func (cs *ClockScheduler) SetSystems(goldSystem GoldSequenceSystemInterface, dec
 // Start begins the clock scheduler in a separate goroutine
 // Returns immediately; scheduler runs until Stop() is called
 func (cs *ClockScheduler) Start() {
+	cs.wg.Add(1)
 	go cs.run()
 }
 
 // run is the main clock loop (runs in goroutine)
 func (cs *ClockScheduler) run() {
+	defer cs.wg.Done()
 	for {
 		select {
 		case <-cs.ticker.C:
@@ -178,11 +181,12 @@ func (cs *ClockScheduler) tick() {
 }
 
 // Stop halts the clock scheduler gracefully
-// Waits for current tick to complete before returning
+// Waits for the goroutine to fully exit before returning
 func (cs *ClockScheduler) Stop() {
 	cs.stopOnce.Do(func() {
 		cs.ticker.Stop()
 		close(cs.stopChan)
+		cs.wg.Wait() // Wait for goroutine to exit
 	})
 }
 
