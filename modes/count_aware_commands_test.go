@@ -64,10 +64,10 @@ func TestFindCharWithCount(t *testing.T) {
 			expectedPendingCount: 0,
 		},
 		{
-			name:           "10fa doesn't move (only 7 'a's after cursor)",
+			name:           "10fa moves to last match (only 7 'a's after cursor)",
 			count:          10,
 			targetChar:     'a',
-			expectedX:      0, // Cursor should not move
+			expectedX:      9, // Should move to last 'a' when count exceeds matches
 			expectedPendingCount: 0,
 		},
 	}
@@ -156,6 +156,171 @@ func TestFindCharStateTransition(t *testing.T) {
 	}
 	if ctx.WaitingForF {
 		t.Error("WaitingForF should be false after completion")
+	}
+	if ctx.PendingCount != 0 {
+		t.Errorf("PendingCount should be 0 after completion, got %d", ctx.PendingCount)
+	}
+	if ctx.MotionCount != 0 {
+		t.Errorf("MotionCount should be 0 after completion, got %d", ctx.MotionCount)
+	}
+}
+
+// TestFindCharBackwardWithCount verifies that count-aware 'F' commands work correctly
+func TestFindCharBackwardWithCount(t *testing.T) {
+	ctx := createMinimalTestContext(80, 24)
+
+	// Create a line with multiple 'a' characters: "aaabaabaab"
+	// Positions: a=0, a=1, a=2, b=3, a=4, a=5, b=6, a=7, a=8, b=9
+	createTestChar(ctx, 0, 10, 'a')
+	createTestChar(ctx, 1, 10, 'a')
+	createTestChar(ctx, 2, 10, 'a')
+	createTestChar(ctx, 3, 10, 'b')
+	createTestChar(ctx, 4, 10, 'a')
+	createTestChar(ctx, 5, 10, 'a')
+	createTestChar(ctx, 6, 10, 'b')
+	createTestChar(ctx, 7, 10, 'a')
+	createTestChar(ctx, 8, 10, 'a')
+	createTestChar(ctx, 9, 10, 'b')
+
+	// Set cursor at position 9, line 10 (at the end)
+	ctx.CursorX = 9
+	ctx.CursorY = 10
+
+	tests := []struct {
+		name           string
+		count          int
+		targetChar     rune
+		expectedX      int
+		expectedPendingCount int
+	}{
+		{
+			name:           "Fa finds first 'a' backward",
+			count:          1,
+			targetChar:     'a',
+			expectedX:      8,
+			expectedPendingCount: 0,
+		},
+		{
+			name:           "2Fa finds second 'a' backward",
+			count:          2,
+			targetChar:     'a',
+			expectedX:      7,
+			expectedPendingCount: 0,
+		},
+		{
+			name:           "3Fa finds third 'a' backward",
+			count:          3,
+			targetChar:     'a',
+			expectedX:      5,
+			expectedPendingCount: 0,
+		},
+		{
+			name:           "5Fa finds fifth 'a' backward",
+			count:          5,
+			targetChar:     'a',
+			expectedX:      2,
+			expectedPendingCount: 0,
+		},
+		{
+			name:           "10Fa moves to first match (only 7 'a's before cursor)",
+			count:          10,
+			targetChar:     'a',
+			expectedX:      0, // Should move to first 'a' when count exceeds matches
+			expectedPendingCount: 0,
+		},
+		{
+			name:           "Fx finds 'x' (not found, cursor doesn't move)",
+			count:          1,
+			targetChar:     'x',
+			expectedX:      9, // Cursor should not move when character not found
+			expectedPendingCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset cursor to start position
+			ctx.CursorX = 9
+			ctx.CursorY = 10
+			ctx.PendingCount = 0
+			ctx.MotionCount = 0
+
+			// Simulate the command flow:
+			// 1. User types count (e.g., "2")
+			ctx.MotionCount = tt.count
+
+			// 2. User types 'F'
+			ctx.WaitingForFBackward = true
+			ctx.PendingCount = ctx.MotionCount
+
+			// 3. User types target character (e.g., "a")
+			ExecuteFindCharBackward(ctx, tt.targetChar, ctx.PendingCount)
+
+			// 4. Clear state
+			ctx.WaitingForFBackward = false
+			ctx.PendingCount = 0
+			ctx.MotionCount = 0
+
+			// Verify cursor position
+			if ctx.CursorX != tt.expectedX {
+				t.Errorf("Expected cursor at X=%d, got X=%d", tt.expectedX, ctx.CursorX)
+			}
+
+			// Verify PendingCount was cleared
+			if ctx.PendingCount != tt.expectedPendingCount {
+				t.Errorf("Expected PendingCount=%d, got %d", tt.expectedPendingCount, ctx.PendingCount)
+			}
+		})
+	}
+}
+
+// TestFindCharBackwardStateTransition verifies count preservation through WaitingForFBackward state
+func TestFindCharBackwardStateTransition(t *testing.T) {
+	ctx := createMinimalTestContext(80, 24)
+
+	// Create test line: "axaxax"
+	createTestChar(ctx, 0, 10, 'a')
+	createTestChar(ctx, 1, 10, 'x')
+	createTestChar(ctx, 2, 10, 'a')
+	createTestChar(ctx, 3, 10, 'x')
+	createTestChar(ctx, 4, 10, 'a')
+	createTestChar(ctx, 5, 10, 'x')
+
+	ctx.CursorX = 5
+	ctx.CursorY = 10
+
+	// Simulate "2Fa" command
+	// Step 1: User types "2"
+	ctx.MotionCount = 2
+
+	// Step 2: User types "F"
+	if ctx.MotionCount != 2 {
+		t.Errorf("MotionCount should be 2 before 'F', got %d", ctx.MotionCount)
+	}
+
+	ctx.WaitingForFBackward = true
+	ctx.PendingCount = ctx.MotionCount
+
+	// Verify state after 'F'
+	if !ctx.WaitingForFBackward {
+		t.Error("WaitingForFBackward should be true after pressing 'F'")
+	}
+	if ctx.PendingCount != 2 {
+		t.Errorf("PendingCount should be 2 after pressing 'F', got %d", ctx.PendingCount)
+	}
+
+	// Step 3: User types "a"
+	ExecuteFindCharBackward(ctx, 'a', ctx.PendingCount)
+	ctx.WaitingForFBackward = false
+	ctx.PendingCount = 0
+	ctx.MotionCount = 0
+
+	// Verify final state
+	if ctx.CursorX != 2 {
+		t.Errorf("Expected cursor at X=2 (second 'a' backward), got X=%d", ctx.CursorX)
+	}
+	if ctx.WaitingForFBackward {
+		t.Error("WaitingForFBackward should be false after completion")
 	}
 	if ctx.PendingCount != 0 {
 		t.Errorf("PendingCount should be 0 after completion, got %d", ctx.PendingCount)
@@ -284,6 +449,7 @@ func TestCommandCapabilities(t *testing.T) {
 		requiresMotion bool
 	}{
 		{'f', true, true, false},
+		{'F', true, true, false},
 		{'h', true, false, false},
 		{'j', true, false, false},
 		{'k', true, false, false},

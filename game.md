@@ -109,6 +109,11 @@ Examples:
 - **`f<char>`** - Find character forward on current line
   - Example: `fa` finds next 'a' on the current line
   - **Count-aware**: `2fa` finds the 2nd 'a', `3fb` finds the 3rd 'b'
+  - If count exceeds available matches, moves to last match
+- **`F<char>`** - Find character backward on current line
+  - Example: `Fa` finds previous 'a' on the current line
+  - **Count-aware**: `2Fa` finds the 2nd 'a' backward, `3Fb` finds the 3rd 'b' backward
+  - If count exceeds available matches, moves to first match (furthest back)
 - **`/<pattern>`** - Search for text pattern (enters SEARCH mode)
   - Type pattern, press `Enter` to jump to first match
 - **`n`** - Repeat last search forward

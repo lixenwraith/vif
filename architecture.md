@@ -208,14 +208,15 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 
 ### Motion Commands (NORMAL Mode)
 - **Single character**: Direct execution (h, j, k, l, w, b, e, etc.)
-- **Prefix commands**: Build state (`g`, `d`, `f`) then wait for completion
+- **Prefix commands**: Build state (`g`, `d`, `f`, `F`) then wait for completion
   - `gg` - Jump to top
   - `go` - Jump to top-left corner
   - `dd` - Delete line
   - `dw`, `d$`, `d<motion>` - Delete with motion
-  - `f<char>` - Find character on line (count-aware: `2fa` finds 2nd 'a')
-- **Count prefix**: Accumulate digits until motion (e.g., `5j`, `10l`, `3w`, `2fa`)
-- **Count-aware multi-keystroke commands**: Commands like `f` preserve count through phases
+  - `f<char>` - Find character forward on line (count-aware: `2fa` finds 2nd 'a')
+  - `F<char>` - Find character backward on line (count-aware: `2Fa` finds 2nd 'a' backward)
+- **Count prefix**: Accumulate digits until motion (e.g., `5j`, `10l`, `3w`, `2fa`, `3Fb`)
+- **Count-aware multi-keystroke commands**: Commands like `f` and `F` preserve count through phases
   - `MotionCount` → `PendingCount` when entering multi-keystroke state
   - `PendingCount` used when completing the command
   - Both cleared after execution
@@ -231,7 +232,7 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 **Word**: w, b, e (word), W, B, E (WORD)
 **Screen**: gg (top), G (bottom), go (top-left), H (high), M (middle), L (low)
 **Paragraph**: { (prev empty), } (next empty), % (matching bracket)
-**Find/Search**: f<char> (find), / (search), n/N (next/prev match)
+**Find/Search**: f<char> (find forward), F<char> (find backward), / (search), n/N (next/prev match)
 **Delete**: x (char), dd (line), d<motion> (delete with motion), D (to end of line)
 
 ## Concurrency Model

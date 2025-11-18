@@ -50,9 +50,10 @@ var commandCapabilities = map[rune]CommandCapability{
 	'}': {AcceptsCount: true, MultiKeystroke: false, RequiresMotion: false},
 	'%': {AcceptsCount: false, MultiKeystroke: false, RequiresMotion: false}, // Matching bracket
 
-	// Find/Search - 'f' accepts count and is multi-keystroke
+	// Find/Search - 'f' and 'F' accept count and are multi-keystroke
 	'f': {AcceptsCount: true, MultiKeystroke: true, RequiresMotion: false},
-	// Future: 'F' (find backward), 't' (till), 'T' (till backward)
+	'F': {AcceptsCount: true, MultiKeystroke: true, RequiresMotion: false},
+	// Future: 't' (till), 'T' (till backward)
 
 	// Delete operations
 	'x': {AcceptsCount: true, MultiKeystroke: false, RequiresMotion: false},  // Delete char

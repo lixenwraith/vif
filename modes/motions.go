@@ -178,6 +178,7 @@ func ExecuteMotion(ctx *engine.GameContext, cmd rune, count int) {
 // Finds the Nth occurrence of targetChar on the current line, where N = count
 // If count is 0 or 1, finds the first occurrence
 // If count > 1, finds the Nth occurrence (e.g., 2fa finds the 2nd 'a')
+// If count exceeds available matches, moves to the last match found
 func ExecuteFindChar(ctx *engine.GameContext, targetChar rune, count int) {
 	if count == 0 {
 		count = 1
@@ -190,6 +191,7 @@ func ExecuteFindChar(ctx *engine.GameContext, targetChar rune, count int) {
 	entities := ctx.World.GetEntitiesWith(posType, charType)
 
 	occurrencesFound := 0
+	lastMatchX := -1
 
 	for x := ctx.CursorX + 1; x < ctx.GameWidth; x++ {
 		for _, entity := range entities {
@@ -202,6 +204,7 @@ func ExecuteFindChar(ctx *engine.GameContext, targetChar rune, count int) {
 
 				if char.Rune == targetChar {
 					occurrencesFound++
+					lastMatchX = x
 					if occurrencesFound == count {
 						ctx.CursorX = x
 						return
@@ -210,7 +213,63 @@ func ExecuteFindChar(ctx *engine.GameContext, targetChar rune, count int) {
 			}
 		}
 	}
-	// If we didn't find the Nth occurrence, cursor doesn't move
+
+	// If count exceeds available matches but we found at least one match,
+	// move to the last match found
+	if lastMatchX != -1 {
+		ctx.CursorX = lastMatchX
+	}
+	// Otherwise, cursor doesn't move (no matches found)
+}
+
+// ExecuteFindCharBackward executes the 'F' (find character backward) command
+// Searches backward from CursorX - 1 to 0 on the current line
+// Finds the Nth occurrence of targetChar, where N = count
+// If count is 0 or 1, finds the first occurrence backward
+// If count > 1, finds the Nth occurrence backward (e.g., 2Fa finds the 2nd 'a' backward)
+// If count exceeds available matches, moves to the first match found (furthest back)
+func ExecuteFindCharBackward(ctx *engine.GameContext, targetChar rune, count int) {
+	if count == 0 {
+		count = 1
+	}
+
+	// Search backward on current line for the character
+	posType := reflect.TypeOf(components.PositionComponent{})
+	charType := reflect.TypeOf(components.CharacterComponent{})
+
+	entities := ctx.World.GetEntitiesWith(posType, charType)
+
+	occurrencesFound := 0
+	firstMatchX := -1
+
+	// Search backward from CursorX - 1 to 0
+	for x := ctx.CursorX - 1; x >= 0; x-- {
+		for _, entity := range entities {
+			posComp, _ := ctx.World.GetComponent(entity, posType)
+			pos := posComp.(components.PositionComponent)
+
+			if pos.Y == ctx.CursorY && pos.X == x {
+				charComp, _ := ctx.World.GetComponent(entity, charType)
+				char := charComp.(components.CharacterComponent)
+
+				if char.Rune == targetChar {
+					occurrencesFound++
+					firstMatchX = x // Keep track of first (furthest back) match
+					if occurrencesFound == count {
+						ctx.CursorX = x
+						return
+					}
+				}
+			}
+		}
+	}
+
+	// If count exceeds available matches but we found at least one match,
+	// move to the first match found (furthest back)
+	if firstMatchX != -1 {
+		ctx.CursorX = firstMatchX
+	}
+	// Otherwise, cursor doesn't move (no matches found)
 }
 
 // isWordChar returns true if the rune is a word character (alphanumeric or underscore)

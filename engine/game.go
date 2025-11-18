@@ -53,14 +53,15 @@ type GameContext struct {
 	cursorErrorTime atomic.Int64 // UnixNano
 
 	// Motion command state
-	MotionCount    int
-	MotionCommand  string
-	WaitingForF    bool
-	PendingCount   int  // Preserved count for multi-keystroke commands (e.g., 2fa)
-	CommandPrefix  rune
-	StatusMessage  string
-	DeleteOperator bool
-	LastCommand    string // Last executed command for display
+	MotionCount        int
+	MotionCommand      string
+	WaitingForF        bool
+	WaitingForFBackward bool
+	PendingCount       int  // Preserved count for multi-keystroke commands (e.g., 2fa, 3Fb)
+	CommandPrefix      rune
+	StatusMessage      string
+	DeleteOperator     bool
+	LastCommand        string // Last executed command for display
 
 	// Atomic score tracking
 	score            atomic.Int64
