@@ -219,12 +219,7 @@ func TestMemoryLeakDetection(t *testing.T) {
 		entities := world.GetEntitiesWith(seqType, posType)
 
 		for _, entity := range entities {
-			posComp, ok := world.GetComponent(entity, posType)
-			if ok {
-				pos := posComp.(components.PositionComponent)
-				world.RemoveFromSpatialIndex(pos.X, pos.Y)
-			}
-			world.DestroyEntity(entity)
+			world.SafeDestroyEntity(entity)
 		}
 
 		if cycle%10 == 0 {
@@ -349,12 +344,7 @@ func TestCleanerSystemUnderExtremeConcurrency(t *testing.T) {
 						entities := world.GetEntitiesWith(seqType, posType)
 						if len(entities) > 10 {
 							entity := entities[localOps%len(entities)]
-							posComp, ok := world.GetComponent(entity, posType)
-							if ok {
-								pos := posComp.(components.PositionComponent)
-								world.RemoveFromSpatialIndex(pos.X, pos.Y)
-							}
-							world.DestroyEntity(entity)
+							world.SafeDestroyEntity(entity)
 						}
 					case "world_read":
 						_ = world.GetEntitiesWith()
@@ -736,12 +726,7 @@ func TestSpatialIndexRaceConditions(t *testing.T) {
 					if len(entities) > 50 {
 						for j := 0; j < 5 && j < len(entities); j++ {
 							entity := entities[j]
-							posComp, ok := world.GetComponent(entity, posType)
-							if ok {
-								pos := posComp.(components.PositionComponent)
-								world.RemoveFromSpatialIndex(pos.X, pos.Y)
-							}
-							world.DestroyEntity(entity)
+							world.SafeDestroyEntity(entity)
 						}
 					}
 
