@@ -50,6 +50,154 @@ Component (marker interface)
 6. Draw removal flash effects
 7. Draw cursor (topmost layer)
 
+## System Coordination and Event Flow
+
+### Complete Game Cycle
+The game operates in a continuous cycle managed by three primary systems:
+
+```
+Gold Sequence → Completion/Timeout → Decay Timer → Decay Animation → Gold Sequence
+     ↓                                                      ↓
+ (Optional)                                          (Always happens)
+ Cleaner Trigger                                  Characters decay levels
+ (if heat maxed)
+```
+
+### Event Sequencing
+
+#### 1. Gold Sequence Phase
+- **Activation**: Gold sequence spawns after decay animation completes
+- **Duration**: 10 seconds (constants.GoldSequenceDuration)
+- **Completion**: Either typed correctly or times out
+- **Next Action**: Calls `DecaySystem.StartDecayTimer()`
+
+**State Validation**:
+- Gold can only spawn when NOT active
+- Gold entities have unique sequence IDs
+- Position conflicts with existing entities are avoided
+
+#### 2. Decay Timer Phase
+- **Activation**: Started when Gold sequence ends (completion or timeout)
+- **Duration**: 60-10 seconds (based on heat percentage at Gold end time)
+  - Formula: `60s - (50s * heatPercentage)`
+  - Higher heat = faster decay
+- **Purpose**: Creates breathing room between Gold sequences
+- **Next Action**: Triggers decay animation when timer expires
+
+**State Validation**:
+- Timer only starts if not already running
+- Timer calculation is atomic (based on heat at specific moment)
+- Timer does not restart during active animation
+
+#### 3. Decay Animation Phase
+- **Activation**: Triggered when decay timer expires
+- **Duration**: Based on falling entity speed (4.8-1.6 seconds)
+  - Slowest entity: 24 rows / 5.0 rows/sec = 4.8s
+  - Fastest entity: 24 rows / 15.0 rows/sec = 1.6s
+- **Effects**:
+  - Spawns falling entities (one per column)
+  - Entities decay characters they pass over
+  - Characters decay one level: Bright → Normal → Dark
+  - Dark level triggers color change: Blue→Green, Green→Red
+- **Next Action**: Returns to Gold Sequence Phase
+
+**State Validation**:
+- Animation cannot start if already animating
+- Each character decayed at most once per animation
+- Falling entities properly cleaned up on completion
+
+### Score System Integration
+
+#### Gold Sequence Typing
+When user types during active gold sequence:
+
+```
+ScoreSystem.handleGoldSequenceTyping():
+  1. Verify character matches expected gold character
+  2. If incorrect: Flash error, DO NOT reset heat
+  3. If correct:
+     - Destroy character entity
+     - Move cursor right
+  4. If last character:
+     - Check if heat is at maximum
+     - If yes: Trigger cleaners immediately
+     - Fill heat to maximum (if not already)
+     - Mark gold sequence as complete
+```
+
+**Key Behavior**:
+- Gold typing NEVER resets heat (unlike incorrect regular typing)
+- Cleaners trigger BEFORE heat is filled (to check pre-fill state)
+- Heat is guaranteed to be at max after gold completion
+
+### Concurrency Guarantees
+
+#### Mutex Protection (DecaySystem)
+All DecaySystem state is protected by `sync.RWMutex`:
+- `animating`: Animation active state
+- `timerStarted`: Whether decay timer has been initialized
+- `fallingEntities`: List of active falling entities
+- `decayedThisFrame`: Map tracking which entities were decayed
+- `startTime`, `nextDecayTime`: Timing information
+- `gameWidth`, `gameHeight`: Dimension information
+
+**Lock Patterns**:
+- RLock for reads: Allows concurrent readers
+- Lock for writes: Exclusive access for modifications
+- Locks released before calling into other systems (prevents deadlock)
+
+#### Atomic Operations (CleanerSystem)
+CleanerSystem uses atomic operations for lock-free state:
+- `isActive`: Cleaner animation active (atomic.Bool)
+- `activationTime`: When cleaners were triggered (atomic.Int64)
+- `activeCleanerCount`: Number of active cleaners (atomic.Int64)
+
+**Benefits**:
+- No lock contention for reads
+- Fast state checks from render thread
+- Concurrent updates without blocking
+
+#### Gold System Synchronization
+GoldSequenceSystem uses `sync.RWMutex` for all state:
+- `active`: Gold sequence active state
+- `sequenceID`: Current sequence identifier
+- `startTime`: When sequence was spawned
+- Cleaner trigger function reference
+
+### State Transition Rules
+
+#### Invalid Transitions (Prevented)
+- Gold spawning while Gold already active → Ignored
+- Decay animation starting while already animating → Ignored
+- Decay timer restarting during active animation → Blocked
+- Cleaners triggering while already active → Ignored (queued)
+
+#### Valid Transitions
+- Gold End → Decay Timer Start: Always allowed
+- Decay Timer Expire → Animation Start: Atomic transition
+- Animation Complete → Gold Spawn: Automatic, immediate
+
+### Debugging Support
+
+All major systems provide `GetSystemState()` for debugging:
+
+```go
+decaySystem.GetSystemState()
+// Returns: "Decay[animating=true, elapsed=2.30s, fallingEntities=80]"
+// or: "Decay[timer=active, timeUntil=45.20s, nextDecay=...]"
+// or: "Decay[inactive]"
+
+goldSystem.GetSystemState()
+// Returns: "Gold[active=true, sequenceID=123, timeRemaining=7.50s]"
+// or: "Gold[inactive]"
+
+cleanerSystem.GetSystemState()
+// Returns: "Cleaner[active=true, count=5, elapsed=1.20s]"
+// or: "Cleaner[inactive]"
+```
+
+**Usage**: Call during test failures or production debugging to understand system state.
+
 ## Input State Machine
 ```
 NORMAL ─[i]→ INSERT

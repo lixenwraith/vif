@@ -1,6 +1,7 @@
 package systems
 
 import (
+	"fmt"
 	"math/rand"
 	"reflect"
 	"sync"
@@ -21,7 +22,7 @@ import (
 // 4. Decay animation runs when timer expires
 // 5. After decay animation ends → Gold spawns again
 type DecaySystem struct {
-	mu              sync.RWMutex // Protects timerStarted, nextDecayTime, lastUpdate, heatIncrement, and dimension fields
+	mu              sync.RWMutex // Protects all fields
 	animating       bool
 	currentRow      int
 	startTime       time.Time
@@ -70,8 +71,13 @@ func (s *DecaySystem) Priority() int {
 
 // Update runs the decay system
 func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
+	// Check if animation is active
+	s.mu.RLock()
+	animating := s.animating
+	s.mu.RUnlock()
+
 	// Update animation if active
-	if s.animating {
+	if animating {
 		s.updateAnimation(world)
 	} else {
 		// Check if timer is started and if it's time to decay
@@ -84,11 +90,14 @@ func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 			// Only check timer if it has been started (after first Gold sequence ends)
 			now := s.ctx.TimeProvider.Now()
 			if now.After(nextDecayTime) || now.Equal(nextDecayTime) {
+				s.mu.Lock()
 				s.animating = true
 				s.currentRow = 0
 				s.startTime = now
 				// Initialize decay tracking map for the entire animation duration
 				s.decayedThisFrame = make(map[engine.Entity]bool)
+				s.mu.Unlock()
+
 				// Spawn falling decay entities
 				s.spawnFallingEntities(world)
 			}
@@ -99,17 +108,25 @@ func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 
 // updateAnimation progresses the decay animation
 func (s *DecaySystem) updateAnimation(world *engine.World) {
-	elapsed := s.ctx.TimeProvider.Now().Sub(s.startTime).Seconds()
+	s.mu.RLock()
+	startTime := s.startTime
+	gameHeight := s.gameHeight
+	s.mu.RUnlock()
+
+	elapsed := s.ctx.TimeProvider.Now().Sub(startTime).Seconds()
 
 	// Update falling entity positions and apply decay
 	s.updateFallingEntities(world, elapsed)
 
 	// Check if animation complete based on elapsed time
 	// Animation duration is based on the slowest falling entity reaching the bottom
-	animationDuration := float64(s.gameHeight) / constants.FallingDecayMinSpeed
+	animationDuration := float64(gameHeight) / constants.FallingDecayMinSpeed
 	if elapsed >= animationDuration {
+		s.mu.Lock()
 		s.animating = false
 		s.currentRow = 0
+		s.mu.Unlock()
+
 		// Clean up falling entities and clear decay tracking
 		s.cleanupFallingEntities(world)
 		// DO NOT restart decay timer here - it will be restarted when Gold sequence ends
@@ -234,14 +251,19 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 // spawnFallingEntities creates falling decay character entities
 // One entity is created per column to ensure complete column coverage
 func (s *DecaySystem) spawnFallingEntities(world *engine.World) {
-	// Clear any existing falling entities
-	s.fallingEntities = make([]engine.Entity, 0)
+	// Get gameWidth with lock
+	s.mu.RLock()
+	gameWidth := s.gameWidth
+	s.mu.RUnlock()
+
+	// Create new falling entities list
+	newFallingEntities := make([]engine.Entity, 0, gameWidth)
 
 	// Character pool for random selection
 	characters := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
 	// Create one falling entity per column to ensure complete coverage
-	for column := 0; column < s.gameWidth; column++ {
+	for column := 0; column < gameWidth; column++ {
 		// Random speed for each entity
 		speed := constants.FallingDecayMinSpeed + rand.Float64()*(constants.FallingDecayMaxSpeed-constants.FallingDecayMinSpeed)
 
@@ -258,18 +280,29 @@ func (s *DecaySystem) spawnFallingEntities(world *engine.World) {
 			LastChangeRow: -1, // Initialize to -1 to trigger change on first row
 		})
 
-		s.fallingEntities = append(s.fallingEntities, entity)
+		newFallingEntities = append(newFallingEntities, entity)
 	}
+
+	// Update falling entities list with lock
+	s.mu.Lock()
+	s.fallingEntities = newFallingEntities
+	s.mu.Unlock()
 }
 
 // updateFallingEntities updates falling entity positions and applies decay
 func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64) {
 	fallingType := reflect.TypeOf(components.FallingDecayComponent{})
 
-	// Track entities to destroy and keep
-	var remainingEntities []engine.Entity
+	// Get fields with lock
+	s.mu.RLock()
+	gameHeight := s.gameHeight
+	fallingEntities := s.fallingEntities
+	s.mu.RUnlock()
 
-	for _, entity := range s.fallingEntities {
+	// Track entities to destroy and keep
+	remainingEntities := make([]engine.Entity, 0, len(fallingEntities))
+
+	for _, entity := range fallingEntities {
 		fallComp, ok := world.GetComponent(entity, fallingType)
 		if !ok {
 			continue
@@ -280,7 +313,7 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 		fall.YPosition = fall.Speed * elapsed
 
 		// Check if entity has passed the bottom boundary
-		if fall.YPosition >= float64(s.gameHeight) {
+		if fall.YPosition >= float64(gameHeight) {
 			// Entity has gone beyond the bottom - destroy immediately
 			world.DestroyEntity(entity)
 			// Don't add to remaining entities
@@ -320,27 +353,45 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 
 		// Check for character at this position and apply decay
 		targetEntity := world.GetEntityAtPosition(fall.Column, currentRow)
-		if targetEntity != 0 && !s.decayedThisFrame[targetEntity] {
-			// Apply decay to this character
-			s.applyDecayToCharacter(world, targetEntity)
-			s.decayedThisFrame[targetEntity] = true
+		if targetEntity != 0 {
+			// Check if already decayed with lock
+			s.mu.RLock()
+			alreadyDecayed := s.decayedThisFrame[targetEntity]
+			s.mu.RUnlock()
+
+			if !alreadyDecayed {
+				// Apply decay to this character
+				s.applyDecayToCharacter(world, targetEntity)
+
+				// Mark as decayed with lock
+				s.mu.Lock()
+				s.decayedThisFrame[targetEntity] = true
+				s.mu.Unlock()
+			}
 		}
 
 		// Keep this entity in the list
 		remainingEntities = append(remainingEntities, entity)
 	}
 
-	// Update the falling entities list to only contain entities still active
+	// Update the falling entities list with lock
+	s.mu.Lock()
 	s.fallingEntities = remainingEntities
+	s.mu.Unlock()
 }
 
 // cleanupFallingEntities removes all falling decay entities
 func (s *DecaySystem) cleanupFallingEntities(world *engine.World) {
-	for _, entity := range s.fallingEntities {
-		world.DestroyEntity(entity)
-	}
+	s.mu.Lock()
+	fallingEntities := s.fallingEntities
 	s.fallingEntities = make([]engine.Entity, 0)
 	s.decayedThisFrame = make(map[engine.Entity]bool)
+	s.mu.Unlock()
+
+	// Destroy entities outside of lock
+	for _, entity := range fallingEntities {
+		world.DestroyEntity(entity)
+	}
 }
 
 // StartDecayTimer starts or restarts the decay timer based on current heat
@@ -386,11 +437,16 @@ func (s *DecaySystem) calculateInterval() time.Duration {
 
 // IsAnimating returns true if decay animation is active
 func (s *DecaySystem) IsAnimating() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.animating
 }
 
 // CurrentRow returns the current decay row being displayed
 func (s *DecaySystem) CurrentRow() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	// When animation is done, currentRow is 0, but we want to avoid displaying row 0
 	// During animation, currentRow is the next row to process
 	// For display, return the last processed row (currentRow - 1)
@@ -410,12 +466,14 @@ func (s *DecaySystem) CurrentRow() int {
 
 // GetTimeUntilDecay returns seconds until next decay trigger
 func (s *DecaySystem) GetTimeUntilDecay() float64 {
-	if s.animating {
-		return 0.0
-	}
 	s.mu.RLock()
+	animating := s.animating
 	nextDecayTime := s.nextDecayTime
 	s.mu.RUnlock()
+
+	if animating {
+		return 0.0
+	}
 
 	remaining := nextDecayTime.Sub(s.ctx.TimeProvider.Now()).Seconds()
 	if remaining < 0 {
@@ -433,4 +491,27 @@ func (s *DecaySystem) UpdateDimensions(gameWidth, gameHeight, screenWidth, heatI
 	s.gameHeight = gameHeight
 	s.screenWidth = screenWidth
 	s.heatIncrement = heatIncrement
+}
+
+// GetSystemState returns the current state of the decay system for debugging
+func (s *DecaySystem) GetSystemState() string {
+	s.mu.RLock()
+	animating := s.animating
+	timerStarted := s.timerStarted
+	nextDecayTime := s.nextDecayTime
+	startTime := s.startTime
+	fallingCount := len(s.fallingEntities)
+	s.mu.RUnlock()
+
+	timeUntilDecay := s.GetTimeUntilDecay()
+
+	if animating {
+		elapsed := s.ctx.TimeProvider.Now().Sub(startTime).Seconds()
+		return fmt.Sprintf("Decay[animating=true, elapsed=%.2fs, fallingEntities=%d]",
+			elapsed, fallingCount)
+	} else if timerStarted {
+		return fmt.Sprintf("Decay[timer=active, timeUntil=%.2fs, nextDecay=%v]",
+			timeUntilDecay, nextDecayTime)
+	}
+	return "Decay[inactive]"
 }

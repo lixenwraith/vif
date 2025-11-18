@@ -1,6 +1,7 @@
 package systems
 
 import (
+	"fmt"
 	"log"
 	"math"
 	"math/rand"
@@ -375,4 +376,18 @@ func (s *GoldSequenceSystem) TriggerCleanersIfHeatFull(world *engine.World, curr
 	} else {
 		log.Printf("[GOLD] Heat condition NOT met - cleaners NOT triggered")
 	}
+}
+
+// GetSystemState returns the current state of the gold sequence system for debugging
+func (s *GoldSequenceSystem) GetSystemState() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.active {
+		elapsed := s.ctx.TimeProvider.Now().Sub(s.startTime)
+		remaining := constants.GoldSequenceDuration - elapsed
+		return fmt.Sprintf("Gold[active=true, sequenceID=%d, timeRemaining=%.2fs]",
+			s.sequenceID, remaining.Seconds())
+	}
+	return "Gold[inactive]"
 }

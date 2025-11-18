@@ -768,3 +768,21 @@ func (cs *CleanerSystem) Shutdown() {
 		cs.cleanupCleaners(cs.ctx.World)
 	}
 }
+
+// GetSystemState returns the current state of the cleaner system for debugging
+func (cs *CleanerSystem) GetSystemState() string {
+	active := cs.isActive.Load()
+	cleanerCount := cs.activeCleanerCount.Load()
+
+	if active {
+		activationNano := cs.activationTime.Load()
+		if activationNano > 0 {
+			activationTime := time.Unix(0, activationNano)
+			elapsed := cs.ctx.TimeProvider.Now().Sub(activationTime)
+			return fmt.Sprintf("Cleaner[active=true, count=%d, elapsed=%.2fs]",
+				cleanerCount, elapsed.Seconds())
+		}
+		return fmt.Sprintf("Cleaner[active=true, count=%d]", cleanerCount)
+	}
+	return "Cleaner[inactive]"
+}
