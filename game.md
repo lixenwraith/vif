@@ -288,8 +288,23 @@ The game features four types of character sequences, each with distinct behavior
 - **Content**: Random alphanumeric characters (a-z, A-Z, 0-9)
 - **Duration**: 10 seconds before timeout (disappears if not completed)
 - **Reward**: Completing all 10 characters fills heat meter to maximum
+- **Bonus Mechanic**: If heat is already at maximum when gold completed, triggers **Cleaners**
 - **Scoring**: Typing gold characters does NOT affect heat or score during typing
 - **Strategy**: **Highest priority target** - can turn around a low-heat situation instantly
+
+### Cleaners (Advanced Mechanic)
+- **Trigger**: Automatically activated when you complete a gold sequence while heat meter is already at maximum
+- **Visual**: Bright yellow blocks that sweep horizontally across the screen
+- **Behavior**: Cleaners scan for and automatically destroy Red characters on contact
+- **Pattern**: Alternating sweep direction (odd rows left-to-right, even rows right-to-left)
+- **Duration**: 1 second animation from spawn to completion
+- **Selectivity**: **Only removes Red characters** - Blue and Green sequences are completely safe
+- **Effect**: Provides instant relief when overwhelmed by Red penalty sequences
+- **Strategic Use**:
+  - Complete gold sequences at max heat to clear accumulated Red characters
+  - Allows aggressive high-heat play without Red penalty accumulation
+  - Most effective when multiple Red sequences have decayed across different rows
+- **Animation**: Smooth 60 FPS movement with trailing fade effect for visual clarity
 
 ---
 

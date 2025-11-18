@@ -15,6 +15,7 @@ Systems execute in priority order (lower = earlier):
 2. **Spawn (10)**: Generate new character sequences (Blue and Green only)
 3. **Gold Sequence (20)**: Manage gold sequence lifecycle and random placement
 4. **Decay (30)**: Apply character degradation and color transitions
+5. **Cleaner (35)**: Process cleaner spawn requests (actual updates run concurrently)
 
 ### Spatial Indexing
 - Primary index: `World.spatialIndex[y][x] -> Entity`
@@ -28,7 +29,8 @@ Component (marker interface)
 ├── PositionComponent {X, Y int}
 ├── CharacterComponent {Rune, Style}
 ├── SequenceComponent {ID, Index, Type, Level}
-└── GoldSequenceComponent {Active, SequenceID, StartTime, CharSequence, CurrentIndex}
+├── GoldSequenceComponent {Active, SequenceID, StartTime, CharSequence, CurrentIndex}
+└── CleanerComponent {Row, XPosition, Speed, Direction, TrailPositions, TrailMaxAge}
 ```
 
 ### Sequence Types
@@ -77,6 +79,11 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 
 - Main game loop: Single-threaded ECS updates
 - Input events: Goroutine → channel → main loop
+- **CleanerSystem**: Concurrent update loop running at 60 FPS in separate goroutine
+  - Uses `sync.Pool` for cleaner trail slice allocation/deallocation
+  - Channel-based spawn requests for non-blocking trigger mechanism
+  - Atomic operations (`atomic.Bool`, `atomic.Int64`) for thread-safe state
+  - Mutex protection for screen buffer scanning
 - Use `sync.RWMutex` for all shared state
 - **Atomic Operations**: Color counters use `atomic.Int64` for lock-free updates
   - `SpawnSystem`: Increments counters when blocks placed
@@ -189,7 +196,22 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 - **Length**: Fixed 10 alphanumeric characters (randomly generated)
 - **Duration**: 10 seconds before timeout
 - **Reward**: Fills heat meter to maximum on completion
+- **Cleaner Trigger**: If heat is already at maximum when gold completed, triggers Cleaner animation
 - **Behavior**: Typing gold chars does not affect heat/score directly
+
+### Cleaner System
+- **Trigger**: Activated when gold sequence completed while heat meter already at maximum
+- **Behavior**: Sweeps across rows containing Red characters, removing them on contact
+- **Direction**: Alternating - odd rows sweep L→R, even rows sweep R→L
+- **Speed**: Calculated to traverse screen width in 1 second (CleanerAnimationDuration)
+- **Selectivity**: Only destroys Red characters, leaves Blue/Green untouched
+- **Animation**: Bright yellow blocks with fade trail effect (10 position history)
+- **Concurrency**:
+  - Updates run in separate goroutine at 60 FPS for smooth animation
+  - Non-blocking spawn requests via buffered channel
+  - Atomic state management for thread-safe activation/deactivation
+  - Trail slices allocated from `sync.Pool` for efficient memory reuse
+- **Duration**: 1 second from spawn to cleanup
 
 ## Data Files
 

@@ -1,7 +1,5 @@
 package components
 
-import "time"
-
 // CleanerComponent represents a horizontal line-clearing animation entity.
 // Cleaners are triggered when a gold sequence is completed while the heat meter
 // is already at maximum. They sweep across rows containing Red characters,
@@ -11,7 +9,6 @@ type CleanerComponent struct {
 	XPosition      float64   // Current horizontal position (float for smooth sub-pixel movement)
 	Speed          float64   // Movement speed in pixels per second
 	Direction      int       // Movement direction: 1 for L→R, -1 for R→L
-	StartTime      time.Time // Animation start time (for trail effect timing)
 	TrailPositions []float64 // Recent X positions for fade trail effect (FIFO queue)
 	TrailMaxAge    float64   // Maximum age in seconds for trail to fade completely
 }
