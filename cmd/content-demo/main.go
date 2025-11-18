@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	fmt.Println("=== Content Discovery Demo ===\n")
+	fmt.Println("=== Content Discovery Demo ===")
 
 	// Create a new content manager
 	cm := content.NewContentManager()
