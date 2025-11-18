@@ -65,7 +65,7 @@ snapshot := gs.ReadSpawnState()  // RLock, no blocking
 - Spawn timing and rate adaptation
 - Sequence ID generation
 
-⏳ **Remaining in Systems** (Phase 2+):
+⏳ **Remaining in Systems** (Phase 3):
 - Gold sequence lifecycle (GoldSequenceSystem)
 - Decay timer and animation (DecaySystem)
 - Cleaner activation (CleanerSystem)
@@ -75,6 +75,116 @@ snapshot := gs.ReadSpawnState()  // RLock, no blocking
 - `engine/game_state_test.go`: Unit tests for atomic operations, state snapshots, spawn timing
 - All tests pass with `-race` flag (no data races detected)
 - Reduced stress test volume (10 goroutines × 10 ops) for faster CI
+
+### Clock Scheduler (Phase 2: Infrastructure Complete)
+
+**Architecture**: Hybrid real-time/clock-based game loop with separate tickers:
+- **Frame Ticker** (16ms): Real-time input, scoring, cursor movement, rendering
+- **Clock Ticker** (50ms): Game logic phase transitions, spawn decisions
+
+**Purpose**: Solves race conditions in inter-dependent mechanics (Gold→Decay→Cleaner flow) by centralizing phase transitions on a predictable clock tick.
+
+#### GamePhase State Machine
+
+**Phase Enum** (`engine/clock_scheduler.go`):
+```go
+type GamePhase int
+
+const (
+    PhaseNormal         // Regular gameplay, content spawning
+    PhaseGoldActive     // Gold sequence active (Phase 3: timeout tracking)
+    PhaseDecayWait      // Waiting for decay timer (Phase 3: heat-based interval)
+    PhaseDecayAnimation // Decay animation running (Phase 3: falling entities)
+)
+```
+
+**Phase State** (in `GameState`):
+- `CurrentPhase` (`GamePhase`): Current game phase (mutex protected)
+- `PhaseStartTime` (`time.Time`): When current phase started
+- Phase 3 will add: Gold timeout, Decay interval, Animation state
+
+**Phase Access Pattern**:
+```go
+// Read current phase (thread-safe)
+phase := ctx.State.GetPhase()
+
+// Transition to new phase (resets start time)
+ctx.State.SetPhase(PhaseGoldActive)
+
+// Get phase duration
+duration := ctx.State.GetPhaseDuration()
+
+// Consistent snapshot
+snapshot := ctx.State.ReadPhaseState()
+```
+
+#### ClockScheduler (`engine/clock_scheduler.go`)
+
+**Infrastructure** (Phase 2):
+- 50ms ticker running in dedicated goroutine
+- Thread-safe start/stop with idempotent Stop()
+- Tick counter for debugging and metrics
+- Graceful shutdown on game exit
+
+**Current Behavior**:
+- Ticks every 50ms independently of frame rate
+- Phase 2: Just increments tick counter
+- Phase 3 will add: Phase transition logic, spawn triggers, timeout checks
+
+**Integration** (`cmd/vi-fighter/main.go`):
+```go
+// Create and start clock scheduler (runs in background goroutine)
+clockScheduler := engine.NewClockScheduler(ctx)
+clockScheduler.Start()
+defer clockScheduler.Stop()
+
+// Separate frame ticker for rendering (continues as before)
+ticker := time.NewTicker(16 * time.Millisecond) // ~60 FPS
+defer ticker.Stop()
+```
+
+#### Phase 2 Architecture Benefits
+
+**Separation of Concerns**:
+- **Real-time layer** (16ms): User input, typing feedback, visual updates (no blocking)
+- **Game logic layer** (50ms): Phase transitions, spawn decisions (can use mutex safely)
+
+**Race Condition Prevention**:
+- Phase transitions happen atomically on clock tick
+- Heat snapshots taken at specific moments (not cached)
+- State ownership model eliminates conflicting writes
+
+**Testability**:
+- Clock tick is deterministic with `MockTimeProvider`
+- Phase transitions can be unit tested independently
+- Integration tests can advance time precisely
+
+**Performance**:
+- Real-time input remains responsive (no clock blocking)
+- Clock logic only runs 3× per frame (50ms vs 16ms)
+- Mutex contention minimized (clock thread vs main thread)
+
+#### Phase 2 vs Phase 3
+
+**Phase 2 (Complete)**: Infrastructure only
+- GamePhase enum and state tracking
+- ClockScheduler with 50ms tick
+- Integration into main game loop
+- Tests for scheduler and phase state
+- No game logic changes (Gold/Decay/Cleaner unchanged)
+
+**Phase 3 (Future)**: Game logic migration
+- Move Gold sequence state to GameState
+- Move Decay timer state to GameState
+- Implement phase transition logic in clock tick
+- Fix race condition: Heat snapshot during Gold completion
+- Add integration tests for Gold→Decay→Cleaner flow
+
+#### Testing
+- `engine/clock_scheduler_test.go`: Scheduler tick tests, phase transition tests
+- All tests pass with `-race` flag
+- Clock runs in goroutine, no memory leaks detected
+- Concurrent phase reads/writes tested (20 goroutines)
 
 ### System Priorities
 Systems execute in priority order (lower = earlier):

@@ -143,8 +143,14 @@ func main() {
 	// Create input handler
 	inputHandler := modes.NewInputHandler(ctx, scoreSystem)
 
+	// Phase 2: Create and start clock scheduler (50ms tick for game logic)
+	// Phase 3 will add phase transition logic to the clock tick
+	clockScheduler := engine.NewClockScheduler(ctx)
+	clockScheduler.Start()
+	defer clockScheduler.Stop()
+
 	// Main game loop
-	ticker := time.NewTicker(16 * time.Millisecond) // ~60 FPS
+	ticker := time.NewTicker(16 * time.Millisecond) // ~60 FPS (frame rate for rendering)
 	defer ticker.Stop()
 
 	eventChan := make(chan tcell.Event, 100)

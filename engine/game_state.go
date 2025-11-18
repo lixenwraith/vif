@@ -66,6 +66,18 @@ type GameState struct {
 	MaxEntities    int // Maximum allowed entities (200)
 	ScreenDensity  float64 // Percentage of screen filled (0.0-1.0)
 
+	// Phase State (Phase 2: Infrastructure)
+	// Controls which game mechanic is active (Normal, Gold, Decay Wait, Decay Animation)
+	// Phase 3 will add transition logic between phases
+	CurrentPhase GamePhase // Current game phase
+	PhaseStartTime time.Time // When current phase started
+
+	// Phase 3: Will add phase-specific state here
+	// - Gold sequence state (active, timeout, sequence ID)
+	// - Decay timer state (next decay time, heat snapshot)
+	// - Decay animation state (progress tracking)
+	// - Cleaner state (active, trigger time)
+
 	// ===== CONFIGURATION (read-only after init) =====
 	// Set once at initialization, never mutated
 
@@ -130,6 +142,10 @@ func NewGameState(gameWidth, gameHeight, screenWidth int, timeProvider TimeProvi
 	gs.SpawnEnabled = true
 	gs.EntityCount = 0
 	gs.ScreenDensity = 0.0
+
+	// Initialize phase state (Phase 2: Start in Normal phase)
+	gs.CurrentPhase = PhaseNormal
+	gs.PhaseStartTime = now
 
 	return gs
 }
@@ -452,4 +468,56 @@ func (gs *GameState) GetScoreBlinkTime() time.Time {
 
 func (gs *GameState) SetScoreBlinkTime(t time.Time) {
 	gs.ScoreBlinkTime.Store(t.UnixNano())
+}
+
+// ===== PHASE STATE ACCESSORS (mutex protected) =====
+
+// GetPhase returns the current game phase
+func (gs *GameState) GetPhase() GamePhase {
+	gs.mu.RLock()
+	defer gs.mu.RUnlock()
+	return gs.CurrentPhase
+}
+
+// SetPhase updates the current game phase and resets the phase start time
+// Phase 3: Will add validation and phase transition logic
+func (gs *GameState) SetPhase(phase GamePhase) {
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
+	gs.CurrentPhase = phase
+	gs.PhaseStartTime = gs.TimeProvider.Now()
+}
+
+// GetPhaseStartTime returns when the current phase started
+func (gs *GameState) GetPhaseStartTime() time.Time {
+	gs.mu.RLock()
+	defer gs.mu.RUnlock()
+	return gs.PhaseStartTime
+}
+
+// GetPhaseDuration returns how long the current phase has been active
+func (gs *GameState) GetPhaseDuration() time.Duration {
+	gs.mu.RLock()
+	defer gs.mu.RUnlock()
+	return gs.TimeProvider.Now().Sub(gs.PhaseStartTime)
+}
+
+// PhaseSnapshot provides a consistent view of phase state
+type PhaseSnapshot struct {
+	Phase     GamePhase
+	StartTime time.Time
+	Duration  time.Duration
+}
+
+// ReadPhaseState returns a consistent snapshot of the current phase state
+func (gs *GameState) ReadPhaseState() PhaseSnapshot {
+	gs.mu.RLock()
+	defer gs.mu.RUnlock()
+
+	now := gs.TimeProvider.Now()
+	return PhaseSnapshot{
+		Phase:     gs.CurrentPhase,
+		StartTime: gs.PhaseStartTime,
+		Duration:  now.Sub(gs.PhaseStartTime),
+	}
 }
