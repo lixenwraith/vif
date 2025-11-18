@@ -381,8 +381,8 @@ func (r *TerminalRenderer) drawFallingDecay(world *engine.World, defaultStyle tc
 	fallingType := reflect.TypeOf(components.FallingDecayComponent{})
 	entities := world.GetEntitiesWith(fallingType)
 
-	// Style for falling characters: bright yellow (gold) foreground, no background
-	fallingStyle := tcell.StyleDefault.Foreground(RgbSequenceGold)
+	// Style for falling characters: bright yellow (gold) foreground, default background
+	fallingStyle := defaultStyle.Foreground(RgbSequenceGold)
 
 	for _, entity := range entities {
 		fallComp, ok := world.GetComponent(entity, fallingType)
