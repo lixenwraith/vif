@@ -40,7 +40,17 @@ The game features four types of character sequences, each with distinct behavior
 - **Duration**: 10 seconds before timeout
 - **Position**: Random location avoiding cursor proximity (not fixed to center-top)
 - **Reward**: Completing a gold sequence fills the heat meter to maximum
+- **Bonus Mechanic**: If heat is already at maximum when gold completed, triggers **Cleaners** (see below)
 - **Special**: Typing gold sequence characters does not affect heat or score directly
+
+#### Cleaners (Bonus Mechanic)
+- **Trigger**: Automatically activated when completing a gold sequence while heat is already at maximum
+- **Behavior**: Bright yellow blocks sweep horizontally across rows containing Red sequences
+- **Pattern**: Alternating direction (odd rows left-to-right, even rows right-to-left)
+- **Effect**: Destroys Red characters on contact, leaving Green/Blue sequences untouched
+- **Duration**: Configurable animation (default: 1 second per cleaner)
+- **Visual**: Block character ('█') with trailing fade effect and removal flash on Red destruction
+- **Strategy**: Allows aggressive high-heat play without Red penalty accumulation
 
 ### Heat System
 
@@ -77,7 +87,7 @@ The spawn system uses **file-based code blocks** from `assets/data.txt` to popul
 
 - **Content Source**: Reads Go source code from `assets/` directory at startup (automatically located at project root)
 - **Block Selection**:
-  - Random 5-10 consecutive lines selected from file
+  - Random 3-15 consecutive lines selected from file (grouped by indent level and structure)
   - Lines are trimmed of whitespace before placement
   - Line order within block doesn't matter (can be shuffled)
 
@@ -130,6 +140,7 @@ vi-fighter supports a comprehensive set of vi/vim motion commands for navigation
 ### Paragraph Navigation
 - `{` - Jump to previous empty line
 - `}` - Jump to next empty line
+- `%` - Jump to matching bracket (works with (), {}, [])
 
 ### Find & Search
 - `f<char>` - Find character forward on current line
@@ -159,8 +170,8 @@ For a complete player guide with all commands and strategies, see [game.md](./ga
 The game strictly follows ECS architecture principles:
 
 - **Entities**: Simple uint64 identifiers
-- **Components**: Pure data structures (Position, Character, Sequence)
-- **Systems**: All game logic (Spawn, Decay, Score, Gold Sequence)
+- **Components**: Pure data structures (Position, Character, Sequence, Cleaner, etc.)
+- **Systems**: All game logic (Spawn, Decay, Score, Gold Sequence, Cleaner)
 - **World**: Single source of truth for game state
 
 ### System Execution Order
@@ -171,6 +182,7 @@ Systems execute in priority order each frame:
 2. **Spawn System** (Priority 10): Generate new character sequences
 3. **Gold Sequence System** (Priority 20): Manage gold sequence lifecycle
 4. **Decay System** (Priority 30): Apply character degradation and color transitions
+5. **Cleaner System** (Priority 35): Process cleaner spawn requests and manage animation state
 
 ### Key Features
 

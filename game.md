@@ -102,6 +102,7 @@ Examples:
 #### Paragraph Motions
 - **`{`** - Jump to previous empty line
 - **`}`** - Jump to next empty line
+- **`%`** - Jump to matching bracket (works with (), {}, [])
 
 #### Find & Search
 - **`f<char>`** - Find character forward on current line
@@ -305,7 +306,7 @@ The game features four types of character sequences, each with distinct behavior
   - Allows aggressive high-heat play without Red penalty accumulation
   - Most effective when multiple Red sequences have decayed across different rows
 - **Animation**: Configurable frame rate (default: 60 FPS) with trailing fade effect for visual clarity
-- **Trail Effect**: Configurable trail length (default: 8-10 characters) with gradient fade (bright yellow → transparent)
+- **Trail Effect**: Configurable trail length (default: 10 positions) with gradient fade (bright yellow → transparent)
 - **Removal Flash**: Configurable flash duration (default: 150ms) appears when Red characters are destroyed
 
 #### Cleaner Configuration

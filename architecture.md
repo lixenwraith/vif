@@ -30,6 +30,7 @@ Component (marker interface)
 ├── CharacterComponent {Rune, Style}
 ├── SequenceComponent {ID, Index, Type, Level}
 ├── GoldSequenceComponent {Active, SequenceID, StartTime, CharSequence, CurrentIndex}
+├── FallingDecayComponent {Column, YPosition, Speed, Char, LastChangeRow}
 ├── CleanerComponent {Row, XPosition, Speed, Direction, TrailPositions, TrailMaxAge}
 └── RemovalFlashComponent {X, Y, Char, StartTime, Duration}
 ```
@@ -222,7 +223,7 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 **Line**: 0 (start), ^ (first non-space), $ (end)
 **Word**: w, b, e (word), W, B, E (WORD)
 **Screen**: gg (top), G (bottom), go (top-left), H (high), M (middle), L (low)
-**Paragraph**: { (prev empty), } (next empty)
+**Paragraph**: { (prev empty), } (next empty), % (matching bracket)
 **Find/Search**: f<char> (find), / (search), n/N (next/prev match)
 **Delete**: x (char), dd (line), d<motion> (delete with motion), D (to end of line)
 
@@ -290,7 +291,7 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 ### Spawn System
 - **Content Source**: Loads Go source code from `assets/` directory at initialization (automatically located at project root)
 - **Block Generation**:
-  - Selects random 5-10 consecutive lines from file per spawn
+  - Selects random 3-15 consecutive lines from file per spawn (grouped by indent level and structure)
   - Lines are trimmed of whitespace before placement
   - Line order within block doesn't need to be preserved
 - **6-Color Limit**:
