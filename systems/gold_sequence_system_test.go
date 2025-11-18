@@ -336,3 +336,113 @@ func createTestContext(timeProvider engine.TimeProvider) *engine.GameContext {
 	ctx.SetScoreIncrement(0)
 	return ctx
 }
+
+// TestGoldSystemMutexProtection tests that concurrent access doesn't cause races
+// Run with: go test -race
+func TestGoldSystemMutexProtection(t *testing.T) {
+	mockTime := engine.NewMockTimeProvider(time.Now())
+	ctx := createTestContext(mockTime)
+	world := ctx.World
+
+	decaySystem := NewDecaySystem(ctx.GameWidth, ctx.GameHeight, ctx.Width, 0, ctx)
+	goldSystem := NewGoldSequenceSystem(ctx, decaySystem, ctx.GameWidth, ctx.GameHeight, 0, 0)
+
+	// Launch multiple goroutines to access the gold system concurrently
+	done := make(chan bool)
+	for i := 0; i < 10; i++ {
+		go func() {
+			for j := 0; j < 100; j++ {
+				// Concurrent reads
+				_ = goldSystem.IsActive()
+				_ = goldSystem.GetSequenceID()
+
+				// Concurrent updates
+				goldSystem.Update(world, 16*time.Millisecond)
+				goldSystem.UpdateDimensions(90, 26, 10, 10)
+
+				// Concurrent spawn/complete
+				goldSystem.spawnGoldSequence(world)
+				goldSystem.CompleteGoldSequence(world)
+
+				time.Sleep(time.Millisecond)
+			}
+			done <- true
+		}()
+	}
+
+	// Wait for all goroutines to finish
+	for i := 0; i < 10; i++ {
+		<-done
+	}
+
+	t.Log("Mutex protection test completed without races")
+}
+
+// TestCleanerCleanup verifies that all cleaners are properly destroyed and cleaned up
+func TestCleanerCleanup(t *testing.T) {
+	mockTime := engine.NewMockTimeProvider(time.Now())
+	ctx := &engine.GameContext{
+		World:        engine.NewWorld(),
+		TimeProvider: mockTime,
+		Width:        100,
+		Height:       30,
+		GameWidth:    90,
+		GameHeight:   26,
+	}
+	world := ctx.World
+
+	cleanerSystem := NewCleanerSystem(ctx, 90, 26, constants.DefaultCleanerConfig())
+
+	// Create Red characters on multiple rows
+	for row := 0; row < 10; row++ {
+		for x := 10; x < 80; x += 10 {
+			entity := world.CreateEntity()
+			world.AddComponent(entity, components.PositionComponent{X: x, Y: row})
+			world.AddComponent(entity, components.CharacterComponent{Rune: 'R', Style: 0})
+			world.AddComponent(entity, components.SequenceComponent{
+				ID:    row,
+				Index: x / 10,
+				Type:  components.SequenceRed,
+				Level: components.LevelBright,
+			})
+			world.UpdateSpatialIndex(entity, x, row)
+		}
+	}
+
+	// Trigger cleaners
+	cleanerSystem.TriggerCleaners(world)
+	cleanerSystem.Update(world, 16*time.Millisecond)
+
+	// Wait for spawn to process
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify cleaners were created
+	cleanerType := reflect.TypeOf(components.CleanerComponent{})
+	cleaners := world.GetEntitiesWith(cleanerType)
+	if len(cleaners) == 0 {
+		t.Error("Expected cleaners to be created")
+	}
+
+	initialCleanerCount := len(cleaners)
+	t.Logf("Created %d cleaners", initialCleanerCount)
+
+	// Wait for animation to complete (1 second default duration + margin)
+	time.Sleep(1200 * time.Millisecond)
+
+	// Verify cleaners were cleaned up
+	cleaners = world.GetEntitiesWith(cleanerType)
+	if len(cleaners) > 0 {
+		t.Errorf("Expected all cleaners to be cleaned up, but %d remain", len(cleaners))
+	}
+
+	// Shutdown and verify final cleanup
+	cleanerSystem.Shutdown()
+
+	// Final verification: no cleaners should remain
+	cleaners = world.GetEntitiesWith(cleanerType)
+	if len(cleaners) > 0 {
+		t.Errorf("After shutdown, expected 0 cleaners but found %d", len(cleaners))
+	}
+
+	t.Log("Cleaner cleanup test completed successfully")
+}

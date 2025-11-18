@@ -4,6 +4,7 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/components"
@@ -14,6 +15,7 @@ import (
 
 // GoldSequenceSystem manages the gold sequence mechanic
 type GoldSequenceSystem struct {
+	mu                  sync.RWMutex       // Protects all fields below
 	ctx                 *engine.GameContext
 	decaySystem         *DecaySystem
 	wasDecayAnimating   bool
@@ -54,26 +56,39 @@ func (s *GoldSequenceSystem) Update(world *engine.World, dt time.Duration) {
 	now := s.ctx.TimeProvider.Now()
 	isDecayAnimating := s.decaySystem.IsAnimating()
 
+	// Read and update wasDecayAnimating atomically
+	s.mu.Lock()
+	wasDecayAnimating := s.wasDecayAnimating
+	s.wasDecayAnimating = isDecayAnimating
+	active := s.active
+	s.mu.Unlock()
+
 	// Detect transition from decay animating to not animating (decay just ended)
-	if s.wasDecayAnimating && !isDecayAnimating {
+	if wasDecayAnimating && !isDecayAnimating {
 		// Decay just ended - spawn gold sequence
 		s.spawnGoldSequence(world)
 	}
 
-	s.wasDecayAnimating = isDecayAnimating
-
 	// If gold sequence is active, check timeout
-	if s.active {
-		elapsed := now.Sub(s.startTime)
+	if active {
+		s.mu.RLock()
+		startTime := s.startTime
+		sequenceID := s.sequenceID
+		s.mu.RUnlock()
+
+		elapsed := now.Sub(startTime)
 		if elapsed >= constants.GoldSequenceDuration {
 			// Timeout - remove gold sequence
-			s.removeGoldSequence(world)
+			s.removeGoldSequence(world, sequenceID)
 		}
 	}
 }
 
 // spawnGoldSequence creates a new gold sequence at a random position on the screen
 func (s *GoldSequenceSystem) spawnGoldSequence(world *engine.World) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if s.active {
 		// Already have an active gold sequence
 		return
@@ -127,14 +142,22 @@ func (s *GoldSequenceSystem) spawnGoldSequence(world *engine.World) {
 		world.UpdateSpatialIndex(entity, x+i, y)
 	}
 
-	// Mark gold sequence as active
+	// Mark gold sequence as active (already holding lock from defer)
 	s.active = true
 	s.startTime = s.ctx.TimeProvider.Now()
 }
 
 // removeGoldSequence removes all gold sequence entities from the world
-func (s *GoldSequenceSystem) removeGoldSequence(world *engine.World) {
+func (s *GoldSequenceSystem) removeGoldSequence(world *engine.World, sequenceID int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if !s.active {
+		return
+	}
+
+	// Only remove if the sequenceID matches
+	if sequenceID != s.sequenceID {
 		return
 	}
 
@@ -151,7 +174,7 @@ func (s *GoldSequenceSystem) removeGoldSequence(world *engine.World) {
 		seq := seqComp.(components.SequenceComponent)
 
 		// Only remove gold sequence entities with our ID
-		if seq.Type == components.SequenceGold && seq.ID == s.sequenceID {
+		if seq.Type == components.SequenceGold && seq.ID == sequenceID {
 			// Safely destroy entity (handles spatial index removal)
 			world.SafeDestroyEntity(entity)
 		}
@@ -162,18 +185,27 @@ func (s *GoldSequenceSystem) removeGoldSequence(world *engine.World) {
 
 // IsActive returns whether a gold sequence is currently active
 func (s *GoldSequenceSystem) IsActive() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.active
 }
 
 // GetSequenceID returns the current gold sequence ID
 func (s *GoldSequenceSystem) GetSequenceID() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.sequenceID
 }
 
 // GetExpectedCharacter returns the expected character at the given index for the active gold sequence
 // Returns 0 and false if no active gold sequence or index is invalid
 func (s *GoldSequenceSystem) GetExpectedCharacter(sequenceID int, index int) (rune, bool) {
-	if !s.active || sequenceID != s.sequenceID {
+	s.mu.RLock()
+	active := s.active
+	currentSeqID := s.sequenceID
+	s.mu.RUnlock()
+
+	if !active || sequenceID != currentSeqID {
 		return 0, false
 	}
 
@@ -204,31 +236,43 @@ func (s *GoldSequenceSystem) GetExpectedCharacter(sequenceID int, index int) (ru
 }
 
 // CompleteGoldSequence is called when the gold sequence is successfully completed
-func (s *GoldSequenceSystem) CompleteGoldSequence(world *engine.World) {
+func (s *GoldSequenceSystem) CompleteGoldSequence(world *engine.World) bool {
+	s.mu.Lock()
 	if !s.active {
-		return
+		s.mu.Unlock()
+		return false
 	}
+	sequenceID := s.sequenceID
+	s.mu.Unlock()
 
-	// Remove gold sequence entities
-	s.removeGoldSequence(world)
+	// Remove gold sequence entities (has its own locking)
+	s.removeGoldSequence(world, sequenceID)
 
 	// Fill heat to max (handled by ScoreSystem)
+	return true
 }
 
 // findValidPosition finds a valid random position for the gold sequence
+// Must be called with s.mu locked
 func (s *GoldSequenceSystem) findValidPosition(world *engine.World, seqLength int) (int, int) {
+	// Read dimensions and cursor position (caller already holds lock)
+	gameWidth := s.gameWidth
+	gameHeight := s.gameHeight
+	cursorX := s.cursorX
+	cursorY := s.cursorY
+
 	maxAttempts := 100
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		x := rand.Intn(s.gameWidth)
-		y := rand.Intn(s.gameHeight)
+		x := rand.Intn(gameWidth)
+		y := rand.Intn(gameHeight)
 
 		// Check if far enough from cursor (same exclusion zone as spawn system)
-		if math.Abs(float64(x-s.cursorX)) <= 5 || math.Abs(float64(y-s.cursorY)) <= 3 {
+		if math.Abs(float64(x-cursorX)) <= 5 || math.Abs(float64(y-cursorY)) <= 3 {
 			continue
 		}
 
 		// Check if sequence fits within game width
-		if x+seqLength > s.gameWidth {
+		if x+seqLength > gameWidth {
 			continue
 		}
 
@@ -251,6 +295,8 @@ func (s *GoldSequenceSystem) findValidPosition(world *engine.World, seqLength in
 
 // UpdateDimensions updates the game area dimensions and cursor position
 func (s *GoldSequenceSystem) UpdateDimensions(gameWidth, gameHeight, cursorX, cursorY int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.gameWidth = gameWidth
 	s.gameHeight = gameHeight
 	s.cursorX = cursorX
@@ -259,18 +305,25 @@ func (s *GoldSequenceSystem) UpdateDimensions(gameWidth, gameHeight, cursorX, cu
 
 // SetCleanerTrigger sets the callback function to trigger cleaners
 func (s *GoldSequenceSystem) SetCleanerTrigger(triggerFunc func(*engine.World)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.cleanerTriggerFunc = triggerFunc
 }
 
 // TriggerCleanersIfHeatFull triggers cleaners if heat is at maximum
 // This is called by ScoreSystem when gold sequence is completed
 func (s *GoldSequenceSystem) TriggerCleanersIfHeatFull(world *engine.World, currentHeat, maxHeat int) {
-	if s.cleanerTriggerFunc == nil {
+	s.mu.RLock()
+	triggerFunc := s.cleanerTriggerFunc
+	s.mu.RUnlock()
+
+	if triggerFunc == nil {
 		return
 	}
 
 	// Only trigger if heat is already at max (or higher)
 	if currentHeat >= maxHeat {
-		s.cleanerTriggerFunc(world)
+		// Call outside lock to avoid potential deadlock
+		triggerFunc(world)
 	}
 }

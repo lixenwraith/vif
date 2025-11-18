@@ -495,9 +495,15 @@ func (cs *CleanerSystem) cleanupCleaners(world *engine.World) {
 			delete(cs.cleanerDataMap, entity)
 		}
 
-		// Destroy entity
+		// Destroy entity (cleaners don't have PositionComponent, so no spatial index removal needed)
 		world.SafeDestroyEntity(entity)
 	}
+
+	// Clear internal state
+	cs.cleanerDataMap = make(map[engine.Entity]*cleanerData)
+	cs.isActive.Store(false)
+	cs.activationTime.Store(0)
+	cs.lastUpdateTime.Store(0)
 }
 
 // UpdateDimensions updates the game area dimensions
@@ -514,8 +520,14 @@ func (cs *CleanerSystem) GetCleanerEntities(world *engine.World) []engine.Entity
 	return world.GetEntitiesWith(cleanerType)
 }
 
-// Shutdown stops the concurrent update loop
+// Shutdown stops the concurrent update loop and cleans up all resources
 func (cs *CleanerSystem) Shutdown() {
+	// Stop the update loop
 	close(cs.stopChan)
 	cs.wg.Wait()
+
+	// Final cleanup of any remaining cleaners
+	if cs.ctx != nil && cs.ctx.World != nil {
+		cs.cleanupCleaners(cs.ctx.World)
+	}
 }
