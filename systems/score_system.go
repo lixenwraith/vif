@@ -252,13 +252,18 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 	isLastChar := (seq.Index == constants.GoldSequenceLength-1)
 
 	if isLastChar {
-		// Gold sequence completed! Fill heat to max (if not already higher)
+		// Gold sequence completed! Check if we should trigger cleaners
 		heatBarWidth := s.ctx.Width - constants.HeatBarIndicatorWidth
 		if heatBarWidth < 1 {
 			heatBarWidth = 1
 		}
 
 		currentHeat := s.ctx.GetScoreIncrement()
+
+		// Trigger cleaners if heat is already at max
+		s.goldSequenceSystem.TriggerCleanersIfHeatFull(world, currentHeat, heatBarWidth)
+
+		// Fill heat to max (if not already higher)
 		if currentHeat < heatBarWidth {
 			s.ctx.SetScoreIncrement(heatBarWidth)
 		}

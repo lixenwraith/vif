@@ -116,10 +116,14 @@ func main() {
 	goldSequenceSystem := systems.NewGoldSequenceSystem(ctx, decaySystem, ctx.GameWidth, ctx.GameHeight, ctx.CursorX, ctx.CursorY)
 	ctx.World.AddSystem(goldSequenceSystem)
 
+	cleanerSystem := systems.NewCleanerSystem(ctx, ctx.GameWidth, ctx.GameHeight)
+	ctx.World.AddSystem(cleanerSystem)
+
 	// Wire up system references
 	scoreSystem.SetGoldSequenceSystem(goldSequenceSystem)
 	scoreSystem.SetSpawnSystem(spawnSystem)
 	decaySystem.SetSpawnSystem(spawnSystem)
+	goldSequenceSystem.SetCleanerTrigger(cleanerSystem.TriggerCleaners)
 
 	// Create renderer
 	renderer := render.NewTerminalRenderer(
@@ -191,6 +195,9 @@ func main() {
 
 			// Update gold sequence system dimensions and cursor position
 			goldSequenceSystem.UpdateDimensions(ctx.GameWidth, ctx.GameHeight, ctx.CursorX, ctx.CursorY)
+
+			// Update cleaner system dimensions
+			cleanerSystem.UpdateDimensions(ctx.GameWidth, ctx.GameHeight)
 
 			// Render frame (all updates guaranteed complete)
 			renderer.RenderFrame(ctx, decaySystem.IsAnimating(), decaySystem.CurrentRow(), decaySystem.GetTimeUntilDecay())

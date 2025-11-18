@@ -14,17 +14,18 @@ import (
 
 // GoldSequenceSystem manages the gold sequence mechanic
 type GoldSequenceSystem struct {
-	ctx               *engine.GameContext
-	decaySystem       *DecaySystem
-	wasDecayAnimating bool
-	active            bool
-	sequenceID        int
-	startTime         time.Time
-	characters        string
-	gameWidth         int
-	gameHeight        int
-	cursorX           int
-	cursorY           int
+	ctx                 *engine.GameContext
+	decaySystem         *DecaySystem
+	wasDecayAnimating   bool
+	active              bool
+	sequenceID          int
+	startTime           time.Time
+	characters          string
+	gameWidth           int
+	gameHeight          int
+	cursorX             int
+	cursorY             int
+	cleanerTriggerFunc  func(*engine.World) // Callback to trigger cleaners when gold completed at max heat
 }
 
 // NewGoldSequenceSystem creates a new gold sequence system
@@ -254,4 +255,22 @@ func (s *GoldSequenceSystem) UpdateDimensions(gameWidth, gameHeight, cursorX, cu
 	s.gameHeight = gameHeight
 	s.cursorX = cursorX
 	s.cursorY = cursorY
+}
+
+// SetCleanerTrigger sets the callback function to trigger cleaners
+func (s *GoldSequenceSystem) SetCleanerTrigger(triggerFunc func(*engine.World)) {
+	s.cleanerTriggerFunc = triggerFunc
+}
+
+// TriggerCleanersIfHeatFull triggers cleaners if heat is at maximum
+// This is called by ScoreSystem when gold sequence is completed
+func (s *GoldSequenceSystem) TriggerCleanersIfHeatFull(world *engine.World, currentHeat, maxHeat int) {
+	if s.cleanerTriggerFunc == nil {
+		return
+	}
+
+	// Only trigger if heat is already at max (or higher)
+	if currentHeat >= maxHeat {
+		s.cleanerTriggerFunc(world)
+	}
 }

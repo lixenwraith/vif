@@ -66,6 +66,9 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 		r.drawFallingDecay(ctx.World, defaultStyle)
 	}
 
+	// Draw cleaners if active - AFTER decay animation
+	r.drawCleaners(ctx.World, defaultStyle)
+
 	// Draw column indicators
 	r.drawColumnIndicators(ctx, defaultStyle)
 
@@ -412,6 +415,71 @@ func (r *TerminalRenderer) drawFallingDecay(world *engine.World, defaultStyle tc
 		if screenX >= r.gameX && screenX < r.width && screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
 			// Draw the falling character with no background (preserves existing background)
 			r.screen.SetContent(screenX, screenY, fall.Char, nil, fallingStyle)
+		}
+	}
+}
+
+// drawCleaners draws the cleaner animation with trail effects
+func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.Style) {
+	cleanerType := reflect.TypeOf(components.CleanerComponent{})
+	entities := world.GetEntitiesWith(cleanerType)
+
+	for _, entity := range entities {
+		// Defensive: Check if entity still exists
+		cleanerComp, ok := world.GetComponent(entity, cleanerType)
+		if !ok {
+			continue // Entity was destroyed between GetEntitiesWith and GetComponent
+		}
+		cleaner := cleanerComp.(components.CleanerComponent)
+
+		// Calculate screen position for cleaner row
+		if cleaner.Row < 0 || cleaner.Row >= r.gameHeight {
+			continue
+		}
+		screenY := r.gameY + cleaner.Row
+
+		// Draw trail with fade effect (from oldest to newest)
+		for i := len(cleaner.TrailPositions) - 1; i >= 0; i-- {
+			trailX := cleaner.TrailPositions[i]
+			x := int(trailX + 0.5) // Round to nearest integer
+
+			// Skip if out of bounds
+			if x < 0 || x >= r.gameWidth {
+				continue
+			}
+
+			screenX := r.gameX + x
+
+			// Calculate opacity based on position in trail
+			// Newest positions (index 0) are brightest, oldest positions fade
+			age := float64(i) / float64(constants.CleanerTrailLength)
+			if age > 1.0 {
+				age = 1.0
+			}
+
+			// Interpolate from bright yellow to background
+			// age=0.0 -> full brightness, age=1.0 -> fully faded
+			opacity := 1.0 - age
+			if opacity > 0.0 {
+				// Bright yellow RGB: (255, 255, 0)
+				// Background RGB: typically (0, 0, 0)
+				red := int32(255 * opacity)
+				green := int32(255 * opacity)
+				blue := int32(0)
+
+				trailColor := tcell.NewRGBColor(red, green, blue)
+				trailStyle := defaultStyle.Foreground(trailColor)
+
+				r.screen.SetContent(screenX, screenY, constants.CleanerChar, nil, trailStyle)
+			}
+		}
+
+		// Draw the main cleaner block (bright yellow, on top of trail)
+		x := int(cleaner.XPosition + 0.5) // Round to nearest integer
+		if x >= 0 && x < r.gameWidth {
+			screenX := r.gameX + x
+			cleanerStyle := defaultStyle.Foreground(RgbSequenceGold)
+			r.screen.SetContent(screenX, screenY, constants.CleanerChar, nil, cleanerStyle)
 		}
 	}
 }
