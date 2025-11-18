@@ -98,6 +98,12 @@ func ExecuteMotion(ctx *engine.GameContext, cmd rune, count int) {
 				break
 			}
 		}
+	case '%': // Matching bracket
+		newX, newY := findMatchingBracket(ctx)
+		if newX != -1 && newY != -1 {
+			ctx.CursorX = newX
+			ctx.CursorY = newY
+		}
 	case 'G': // Bottom
 		ctx.CursorY = ctx.GameHeight - 1
 	case 'g': // Top (when preceded by another 'g')
