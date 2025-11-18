@@ -103,6 +103,14 @@ func NewSpawnSystem(gameWidth, gameHeight, cursorX, cursorY int, ctx *engine.Gam
 		// System will handle gracefully
 	}
 
+	// Pre-validate all discovered content files and build cache
+	// This ensures content is validated once at startup for better performance
+	// and prevents corruption from malformed files
+	if err := s.contentManager.PreValidateAllContent(); err != nil {
+		// Log error but continue - will fall back to default content
+		// System will handle gracefully
+	}
+
 	// Load initial content (this will update the atomic counters)
 	s.loadContentFromManager()
 

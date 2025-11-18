@@ -8,6 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"unicode"
+	"unicode/utf8"
 )
 
 const (
@@ -16,6 +19,8 @@ const (
 	MinProcessedLines = 10 // Minimum number of valid lines required after processing
 	MaxLineLength    = 80 // Maximum line length to match game width
 	MaxRetries       = 5  // Maximum number of retries when selecting content blocks
+	MaxBlockSize     = 1000 // Maximum number of lines in a content block to prevent memory issues
+	CircuitBreakerThreshold = 10 // Number of consecutive failures before circuit breaker trips
 )
 
 var (
@@ -23,22 +28,197 @@ var (
 	CommentPrefixes = []string{"//", "#"}
 )
 
+// circuitBreaker tracks failures and prevents excessive retries
+type circuitBreaker struct {
+	mu               sync.RWMutex
+	failureCount     int
+	isOpen           bool
+	lastFailureError error
+}
+
+func (cb *circuitBreaker) recordFailure(err error) {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	cb.failureCount++
+	cb.lastFailureError = err
+
+	if cb.failureCount >= CircuitBreakerThreshold {
+		cb.isOpen = true
+		log.Printf("Circuit breaker OPEN after %d failures. Using default content only.", cb.failureCount)
+	}
+}
+
+func (cb *circuitBreaker) recordSuccess() {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	cb.failureCount = 0
+	cb.isOpen = false
+}
+
+func (cb *circuitBreaker) IsOpen() bool {
+	cb.mu.RLock()
+	defer cb.mu.RUnlock()
+	return cb.isOpen
+}
+
+// validatedContent represents pre-validated content cache
+type validatedContent struct {
+	lines    []string
+	filePath string
+}
+
 // ContentManager handles discovery and loading of content files
 type ContentManager struct {
-	contentFiles []string
+	contentFiles     []string
+	breaker          circuitBreaker
+	validatedCache   []validatedContent
+	cacheMu          sync.RWMutex
 }
 
 // NewContentManager creates a new content manager
 func NewContentManager() *ContentManager {
 	return &ContentManager{
-		contentFiles: []string{},
+		contentFiles:   []string{},
+		validatedCache: []validatedContent{},
 	}
+}
+
+// safeOperation wraps an operation with panic recovery
+// Returns default content on panic
+func (cm *ContentManager) safeOperation(operation func() ([]string, error), operationName string) (lines []string, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC in %s: %v - returning default content", operationName, r)
+			lines = cm.GetDefaultContent()
+			err = fmt.Errorf("panic in %s: %v", operationName, r)
+			cm.breaker.recordFailure(err)
+		}
+	}()
+
+	lines, err = operation()
+	if err != nil {
+		cm.breaker.recordFailure(err)
+	}
+	return lines, err
+}
+
+// isValidUTF8 checks if a string is valid UTF-8
+func (cm *ContentManager) isValidUTF8(s string) bool {
+	return utf8.ValidString(s)
+}
+
+// hasControlCharacters checks if a string contains terminal control sequences or harmful control characters
+// Allows tabs and newlines, but rejects other control characters
+func (cm *ContentManager) hasControlCharacters(s string) bool {
+	for _, r := range s {
+		// Allow tab and newline
+		if r == '\t' || r == '\n' || r == '\r' {
+			continue
+		}
+		// Reject other control characters (0x00-0x1F except tab/newline, and 0x7F-0x9F)
+		if unicode.IsControl(r) {
+			return true
+		}
+		// Check for ANSI escape sequences (ESC character)
+		if r == '\x1b' {
+			return true
+		}
+	}
+	return false
+}
+
+// sanitizeLine removes ANSI sequences and control characters from a line
+// Returns the sanitized line
+func (cm *ContentManager) sanitizeLine(line string) string {
+	var result strings.Builder
+	result.Grow(len(line))
+
+	inEscapeSeq := false
+	for _, r := range line {
+		// Detect ANSI escape sequence start
+		if r == '\x1b' {
+			inEscapeSeq = true
+			continue
+		}
+
+		// Skip characters in escape sequence until we find the terminator
+		if inEscapeSeq {
+			// ANSI escape sequences typically end with a letter
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+				inEscapeSeq = false
+			}
+			continue
+		}
+
+		// Skip control characters (except tab which we'll convert to space)
+		if unicode.IsControl(r) {
+			if r == '\t' {
+				result.WriteRune(' ')
+			}
+			continue
+		}
+
+		// Keep printable characters
+		if unicode.IsPrint(r) || r == ' ' {
+			result.WriteRune(r)
+		}
+	}
+
+	return result.String()
+}
+
+// validateFileEncoding checks if a file is valid UTF-8 and doesn't contain harmful control sequences
+func (cm *ContentManager) validateFileEncoding(filePath string) error {
+	// Wrap in panic recovery
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC in validateFileEncoding for %s: %v", filePath, r)
+		}
+	}()
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	lineNum := 0
+	for scanner.Scan() {
+		lineNum++
+		line := scanner.Text()
+
+		// Check UTF-8 validity
+		if !cm.isValidUTF8(line) {
+			return fmt.Errorf("invalid UTF-8 encoding at line %d", lineNum)
+		}
+
+		// Check for control characters (but don't fail, we'll sanitize instead)
+		if cm.hasControlCharacters(line) {
+			log.Printf("Warning: control characters found in %s at line %d (will be sanitized)", filePath, lineNum)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("error reading file: %w", err)
+	}
+
+	return nil
 }
 
 // DiscoverContentFiles scans the assets directory for all .txt files
 // and stores their paths. It handles missing directories gracefully
 // and skips hidden files (those starting with .)
 func (cm *ContentManager) DiscoverContentFiles() error {
+	// Wrap in panic recovery
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC in DiscoverContentFiles: %v - continuing with no files", r)
+		}
+	}()
+
 	// Check if assets directory exists
 	if _, err := os.Stat(assetsDir); os.IsNotExist(err) {
 		log.Printf("Assets directory '%s' does not exist, no content files discovered", assetsDir)
@@ -87,23 +267,150 @@ func (cm *ContentManager) DiscoverContentFiles() error {
 	return nil
 }
 
+// PreValidateAllContent validates all discovered content files and builds a cache
+// This should be called after DiscoverContentFiles during initialization
+func (cm *ContentManager) PreValidateAllContent() error {
+	// Wrap in panic recovery
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC in PreValidateAllContent: %v - cache may be incomplete", r)
+		}
+	}()
+
+	cm.cacheMu.Lock()
+	defer cm.cacheMu.Unlock()
+
+	cm.validatedCache = []validatedContent{}
+
+	if len(cm.contentFiles) == 0 {
+		log.Printf("No content files to pre-validate")
+		return nil
+	}
+
+	log.Printf("Pre-validating %d content files...", len(cm.contentFiles))
+
+	for _, filePath := range cm.contentFiles {
+		// Validate file encoding
+		if err := cm.validateFileEncoding(filePath); err != nil {
+			log.Printf("Skipping file %s: %v", filePath, err)
+			continue
+		}
+
+		// Try to load and process the entire file
+		lines, err := cm.loadAndProcessFile(filePath)
+		if err != nil {
+			log.Printf("Skipping file %s: %v", filePath, err)
+			continue
+		}
+
+		// Validate the processed content
+		if !cm.ValidateProcessedContent(lines) {
+			log.Printf("Skipping file %s: content validation failed", filePath)
+			continue
+		}
+
+		// Add to validated cache
+		cm.validatedCache = append(cm.validatedCache, validatedContent{
+			lines:    lines,
+			filePath: filePath,
+		})
+
+		log.Printf("Pre-validated and cached: %s (%d lines)", filePath, len(lines))
+	}
+
+	log.Printf("Pre-validation complete: %d/%d files cached", len(cm.validatedCache), len(cm.contentFiles))
+
+	return nil
+}
+
+// loadAndProcessFile loads an entire file and processes all lines
+func (cm *ContentManager) loadAndProcessFile(filePath string) ([]string, error) {
+	// Wrap in panic recovery
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC in loadAndProcessFile for %s: %v", filePath, r)
+		}
+	}()
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	var allLines []string
+	scanner := bufio.NewScanner(file)
+	lineCount := 0
+
+	for scanner.Scan() {
+		lineCount++
+
+		// Check for maximum block size to prevent memory issues
+		if lineCount > MaxBlockSize {
+			log.Printf("Warning: file %s exceeds MaxBlockSize (%d lines), truncating", filePath, MaxBlockSize)
+			break
+		}
+
+		line := scanner.Text()
+
+		// Sanitize the line
+		sanitized := cm.sanitizeLine(line)
+
+		// Skip if line becomes empty after sanitization
+		trimmed := strings.TrimSpace(sanitized)
+		if len(trimmed) == 0 || cm.isCommentLine(trimmed) {
+			continue
+		}
+
+		// Truncate if too long
+		if len(trimmed) > MaxLineLength {
+			trimmed = trimmed[:MaxLineLength]
+		}
+
+		allLines = append(allLines, trimmed)
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error reading file: %w", err)
+	}
+
+	return allLines, nil
+}
+
 // GetContentFiles returns the list of discovered content files
 func (cm *ContentManager) GetContentFiles() []string {
 	return cm.contentFiles
 }
 
 // LoadContentFile loads and returns the content of a specific file
-// This is a stub for future implementation
+// Includes panic recovery and validation
 func (cm *ContentManager) LoadContentFile(path string) ([]byte, error) {
+	// Wrap in panic recovery
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC in LoadContentFile for %s: %v", path, r)
+		}
+	}()
+
 	// Check if file exists
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return nil, fmt.Errorf("file does not exist: %s", path)
 	}
 
-	// TODO: Implement actual file loading logic
-	// For now, just return empty content
-	log.Printf("LoadContentFile stub called for: %s", path)
-	return []byte{}, nil
+	// Validate file encoding first
+	if err := cm.validateFileEncoding(path); err != nil {
+		log.Printf("File encoding validation failed for %s: %v", path, err)
+		return nil, err
+	}
+
+	// Read the file
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	log.Printf("LoadContentFile loaded: %s (%d bytes)", path, len(data))
+	return data, nil
 }
 
 // isCommentLine checks if a line starts with any comment prefix
@@ -124,17 +431,27 @@ func (cm *ContentManager) isValidContentLine(line string) bool {
 }
 
 // ProcessContentBlock cleans and prepares a block of text lines for use in game
-// It removes comments, empty lines, trims whitespace, and truncates lines that are too long
-// Returns the processed lines
+// It removes comments, empty lines, trims whitespace, sanitizes control characters,
+// and truncates lines that are too long. Returns the processed lines
 func (cm *ContentManager) ProcessContentBlock(lines []string) []string {
+	// Wrap in panic recovery
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC in ProcessContentBlock: %v - returning empty slice", r)
+		}
+	}()
+
 	var processed []string
 
 	for _, line := range lines {
+		// Sanitize the line first (removes ANSI sequences and control characters)
+		sanitized := cm.sanitizeLine(line)
+
 		// Trim whitespace
-		trimmed := strings.TrimSpace(line)
+		trimmed := strings.TrimSpace(sanitized)
 
 		// Skip empty lines and comments
-		if len(trimmed) == 0 || cm.isCommentLine(line) {
+		if len(trimmed) == 0 || cm.isCommentLine(trimmed) {
 			continue
 		}
 
@@ -174,6 +491,18 @@ func (cm *ContentManager) ValidateProcessedContent(lines []string) bool {
 // It skips empty lines and comments, and wraps around to the beginning if needed
 // Returns the lines and any error encountered
 func (cm *ContentManager) GetContentBlock(filePath string, startLine, size int) ([]string, error) {
+	// Wrap in panic recovery
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC in GetContentBlock for %s: %v", filePath, r)
+		}
+	}()
+
+	// Enforce maximum size limit
+	if size > MaxBlockSize {
+		size = MaxBlockSize
+	}
+
 	// Open the file
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -184,10 +513,24 @@ func (cm *ContentManager) GetContentBlock(filePath string, startLine, size int) 
 	// First pass: read all valid content lines
 	var validLines []string
 	scanner := bufio.NewScanner(file)
+	lineCount := 0
+
 	for scanner.Scan() {
+		lineCount++
+
+		// Prevent excessive memory usage
+		if lineCount > MaxBlockSize {
+			log.Printf("Warning: file %s exceeds MaxBlockSize, truncating", filePath)
+			break
+		}
+
 		line := scanner.Text()
-		if cm.isValidContentLine(line) {
-			validLines = append(validLines, strings.TrimSpace(line))
+
+		// Sanitize the line
+		sanitized := cm.sanitizeLine(line)
+
+		if cm.isValidContentLine(sanitized) {
+			validLines = append(validLines, strings.TrimSpace(sanitized))
 		}
 	}
 
@@ -238,9 +581,57 @@ func (cm *ContentManager) GetDefaultContent() []string {
 	}
 }
 
+// selectFromValidatedCache selects a random block from the pre-validated cache
+// Returns the selected lines and the file path, or an error if cache is empty
+func (cm *ContentManager) selectFromValidatedCache() ([]string, string, error) {
+	cm.cacheMu.RLock()
+	defer cm.cacheMu.RUnlock()
+
+	if len(cm.validatedCache) == 0 {
+		return nil, "", fmt.Errorf("validated cache is empty")
+	}
+
+	// Select a random cached file
+	randomIndex := rand.Intn(len(cm.validatedCache))
+	cached := cm.validatedCache[randomIndex]
+
+	// Select a random block from the cached lines
+	if len(cached.lines) == 0 {
+		return nil, "", fmt.Errorf("cached file %s has no valid lines", cached.filePath)
+	}
+
+	// Determine block size (use minimum of ContentBlockSize and available lines)
+	blockSize := ContentBlockSize
+	if len(cached.lines) < blockSize {
+		blockSize = len(cached.lines)
+	}
+
+	// Select a random starting position
+	var startLine int
+	if len(cached.lines) > blockSize {
+		startLine = rand.Intn(len(cached.lines) - blockSize + 1)
+	}
+
+	// Extract the block
+	block := make([]string, blockSize)
+	for i := 0; i < blockSize; i++ {
+		block[i] = cached.lines[(startLine+i)%len(cached.lines)]
+	}
+
+	log.Printf("Selected block from validated cache: %s (%d lines)", cached.filePath, len(block))
+	return block, cached.filePath, nil
+}
+
 // SelectRandomBlock selects a random file and a random block from that file
 // Returns the selected lines and the file path, or an error
 func (cm *ContentManager) SelectRandomBlock() ([]string, string, error) {
+	// Wrap in panic recovery
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC in SelectRandomBlock: %v", r)
+		}
+	}()
+
 	// Check if we have any discovered files
 	if len(cm.contentFiles) == 0 {
 		return nil, "", fmt.Errorf("no content files discovered")
@@ -260,9 +651,20 @@ func (cm *ContentManager) SelectRandomBlock() ([]string, string, error) {
 	// Count valid content lines
 	var validLineCount int
 	scanner := bufio.NewScanner(file)
+	lineCount := 0
+
 	for scanner.Scan() {
+		lineCount++
+
+		// Prevent excessive scanning
+		if lineCount > MaxBlockSize {
+			break
+		}
+
 		line := scanner.Text()
-		if cm.isValidContentLine(line) {
+		sanitized := cm.sanitizeLine(line)
+
+		if cm.isValidContentLine(sanitized) {
 			validLineCount++
 		}
 	}
@@ -292,8 +694,34 @@ func (cm *ContentManager) SelectRandomBlock() ([]string, string, error) {
 // SelectRandomBlockWithValidation selects a random block and validates it
 // If the block doesn't meet requirements, it retries with different blocks
 // Falls back to default content if no valid content can be found
+// Uses circuit breaker to prevent excessive retries after multiple failures
+// Prefers validated cache when available
 // Returns the validated lines, the file path (or "default" for fallback), and any error
 func (cm *ContentManager) SelectRandomBlockWithValidation() ([]string, string, error) {
+	// Wrap in panic recovery
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC in SelectRandomBlockWithValidation: %v - returning default content", r)
+		}
+	}()
+
+	// Check if circuit breaker is open
+	if cm.breaker.IsOpen() {
+		log.Printf("Circuit breaker is OPEN, using default content")
+		return cm.GetDefaultContent(), "default", nil
+	}
+
+	// Try to use validated cache first (most reliable)
+	if len(cm.validatedCache) > 0 {
+		block, filePath, err := cm.selectFromValidatedCache()
+		if err == nil && cm.ValidateProcessedContent(block) {
+			cm.breaker.recordSuccess()
+			log.Printf("Using validated cache: %s (%d lines)", filePath, len(block))
+			return block, filePath, nil
+		}
+		log.Printf("Failed to use validated cache: %v, falling back to file loading", err)
+	}
+
 	// Try to get valid content with retries
 	for attempt := 0; attempt < MaxRetries; attempt++ {
 		// Try to select a random block
@@ -302,6 +730,7 @@ func (cm *ContentManager) SelectRandomBlockWithValidation() ([]string, string, e
 			// If we have no content files, fall back immediately
 			if len(cm.contentFiles) == 0 {
 				log.Printf("No content files available, using default content")
+				cm.breaker.recordFailure(err)
 				return cm.GetDefaultContent(), "default", nil
 			}
 			log.Printf("Attempt %d: Error selecting random block: %v", attempt+1, err)
@@ -314,6 +743,7 @@ func (cm *ContentManager) SelectRandomBlockWithValidation() ([]string, string, e
 		// Validate the processed content
 		if cm.ValidateProcessedContent(processed) {
 			log.Printf("Successfully selected and validated content from %s (%d lines)", filePath, len(processed))
+			cm.breaker.recordSuccess()
 			return processed, filePath, nil
 		}
 
@@ -322,5 +752,7 @@ func (cm *ContentManager) SelectRandomBlockWithValidation() ([]string, string, e
 
 	// All retries failed, fall back to default content
 	log.Printf("All %d attempts failed, falling back to default content", MaxRetries)
+	err := fmt.Errorf("all %d attempts failed to load valid content", MaxRetries)
+	cm.breaker.recordFailure(err)
 	return cm.GetDefaultContent(), "default", nil
 }

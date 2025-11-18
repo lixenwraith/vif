@@ -21,6 +21,13 @@ func main() {
 		log.Fatalf("Error discovering files: %v", err)
 	}
 
+	// Pre-validate all content files
+	fmt.Println("Pre-validating content files...")
+	err = cm.PreValidateAllContent()
+	if err != nil {
+		log.Printf("Warning during pre-validation: %v", err)
+	}
+
 	// Get the discovered files
 	files := cm.GetContentFiles()
 
