@@ -1,7 +1,6 @@
 package systems
 
 import (
-	"os"
 	"reflect"
 	"strings"
 	"sync"
@@ -12,43 +11,38 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
-// TestFileLoading tests that the data file is loaded correctly
-func TestFileLoading(t *testing.T) {
-	// Create a temporary test file
-	tmpFile, err := os.CreateTemp("", "test_data_*.txt")
-	if err != nil {
-		t.Fatalf("Failed to create temp file: %v", err)
-	}
-	defer os.Remove(tmpFile.Name())
-
-	testContent := `line one
-line two
-line three
-    indented line
-`
-	if _, err := tmpFile.WriteString(testContent); err != nil {
-		t.Fatalf("Failed to write to temp file: %v", err)
-	}
-	tmpFile.Close()
-
-	// Override the dataFilePath temporarily
-	originalPath := dataFilePath
-	defer func() {
-		// Can't actually restore since dataFilePath is const, but this documents intent
-		_ = originalPath
-	}()
-
-	// Since we can't change const, we'll test the loadFileContent method behavior
+// TestContentManagerIntegration tests that ContentManager is properly integrated
+func TestContentManagerIntegration(t *testing.T) {
 	screen := tcell.NewSimulationScreen("UTF-8")
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 
 	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
 
-	// The system should have loaded the file (or have empty slice if file doesn't exist)
+	// The system should have initialized ContentManager
+	if spawnSys.contentManager == nil {
+		t.Error("ContentManager should be initialized")
+	}
+
+	// The system should have loaded content (or have empty slice if no files available)
 	// This tests that the system initializes without crashing
 	if spawnSys.codeBlocks == nil {
-		t.Error("codeBlocks should be initialized (empty slice if no file)")
+		t.Error("codeBlocks should be initialized (empty slice if no content)")
+	}
+
+	// Verify totalBlocks is set correctly
+	if len(spawnSys.codeBlocks) != spawnSys.totalBlocks {
+		t.Errorf("totalBlocks (%d) should match length of codeBlocks (%d)",
+			spawnSys.totalBlocks, len(spawnSys.codeBlocks))
+	}
+
+	// Verify initial state
+	if spawnSys.blocksConsumed != 0 {
+		t.Errorf("blocksConsumed should be 0 initially, got %d", spawnSys.blocksConsumed)
+	}
+
+	if spawnSys.nextBlockIndex != 0 {
+		t.Errorf("nextBlockIndex should be 0 initially, got %d", spawnSys.nextBlockIndex)
 	}
 }
 
@@ -463,8 +457,8 @@ func TestBlockSpawning(t *testing.T) {
 
 	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
 
-	// Create test code blocks
-	spawnSys.codeBlocks = []CodeBlock{
+	// Create test code blocks with proper state
+	testBlocks := []CodeBlock{
 		{
 			Lines:       []string{"line1", "line2", "line3"},
 			IndentLevel: 0,
@@ -476,14 +470,23 @@ func TestBlockSpawning(t *testing.T) {
 			HasBraces:   true,
 		},
 	}
+	spawnSys.contentMutex.Lock()
+	spawnSys.codeBlocks = testBlocks
+	spawnSys.totalBlocks = len(testBlocks)
+	spawnSys.nextBlockIndex = 0
+	spawnSys.blocksConsumed = 0
+	spawnSys.contentMutex.Unlock()
 
 	// Get first block
 	block1 := spawnSys.getNextBlock()
 	if len(block1.Lines) != 3 {
 		t.Errorf("Expected first block to have 3 lines, got %d", len(block1.Lines))
 	}
-	if spawnSys.nextBlockIndex != 1 {
-		t.Errorf("Expected nextBlockIndex to be 1, got %d", spawnSys.nextBlockIndex)
+	spawnSys.contentMutex.RLock()
+	idx1 := spawnSys.nextBlockIndex
+	spawnSys.contentMutex.RUnlock()
+	if idx1 != 1 {
+		t.Errorf("Expected nextBlockIndex to be 1, got %d", idx1)
 	}
 
 	// Get second block
@@ -495,15 +498,12 @@ func TestBlockSpawning(t *testing.T) {
 		t.Error("Expected second block to have braces")
 	}
 
-	// Test wraparound
-	if spawnSys.nextBlockIndex != 0 {
-		t.Errorf("Expected nextBlockIndex to wrap to 0, got %d", spawnSys.nextBlockIndex)
-	}
-
-	// Get third block (should be first again)
+	// After getting second block, it wraps around and swaps to new content
+	// The new content comes from ContentManager (default content since no files exist)
+	// So we just verify that we can continue getting blocks without errors
 	block3 := spawnSys.getNextBlock()
-	if len(block3.Lines) != 3 || block3.Lines[0] != "line1" {
-		t.Error("Block wraparound failed")
+	if len(block3.Lines) == 0 {
+		t.Error("Should get valid content block after wraparound")
 	}
 }
 

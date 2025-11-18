@@ -1,17 +1,17 @@
 package systems
 
 import (
-	"bufio"
 	"math"
 	"math/rand"
-	"os"
 	"reflect"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/components"
+	"github.com/lixenwraith/vi-fighter/content"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -19,11 +19,11 @@ import (
 const (
 	characterSpawnMs = 2000
 	maxCharacters    = 200
-	dataFilePath     = "./assets/data.txt"
 	minBlockLines    = 3
 	maxBlockLines    = 15
 	maxPlacementTries = 3
-	minIndentChange  = 2 // Minimum indent change to start new block
+	minIndentChange  = 2   // Minimum indent change to start new block
+	contentRefreshThreshold = 0.8 // Refresh when 80% of content consumed
 )
 
 // ColorLevelKey represents a unique color+level combination
@@ -49,9 +49,15 @@ type SpawnSystem struct {
 	cursorY    int
 	ctx        *engine.GameContext
 
-	// File-based content
-	codeBlocks    []CodeBlock
+	// Content management
+	contentManager *content.ContentManager
+	contentMutex   sync.RWMutex
+	codeBlocks     []CodeBlock
 	nextBlockIndex int
+	totalBlocks    int
+	blocksConsumed int
+	nextContent    []CodeBlock // Pre-fetched content for seamless transition
+	isRefreshing   atomic.Bool
 
 	// Atomic color tracking counters (6 states: Blue×3 + Green×3)
 	blueCountBright  atomic.Int64
@@ -65,18 +71,26 @@ type SpawnSystem struct {
 // NewSpawnSystem creates a new spawn system
 func NewSpawnSystem(gameWidth, gameHeight, cursorX, cursorY int, ctx *engine.GameContext) *SpawnSystem {
 	s := &SpawnSystem{
-		lastSpawn:  ctx.TimeProvider.Now(),
-		nextSeqID:  1,
-		gameWidth:  gameWidth,
-		gameHeight: gameHeight,
-		cursorX:    cursorX,
-		cursorY:    cursorY,
-		ctx:        ctx,
+		lastSpawn:      ctx.TimeProvider.Now(),
+		nextSeqID:      1,
+		gameWidth:      gameWidth,
+		gameHeight:     gameHeight,
+		cursorX:        cursorX,
+		cursorY:        cursorY,
+		ctx:            ctx,
 		nextBlockIndex: 0,
+		blocksConsumed: 0,
 	}
 
-	// Load file content
-	s.loadFileContent()
+	// Initialize ContentManager
+	s.contentManager = content.NewContentManager()
+	if err := s.contentManager.DiscoverContentFiles(); err != nil {
+		// Log error but continue with empty content
+		// System will handle gracefully
+	}
+
+	// Load initial content
+	s.loadContentFromManager()
 
 	// Initialize atomic counters to 0
 	s.blueCountBright.Store(0)
@@ -85,39 +99,87 @@ func NewSpawnSystem(gameWidth, gameHeight, cursorX, cursorY int, ctx *engine.Gam
 	s.greenCountBright.Store(0)
 	s.greenCountNormal.Store(0)
 	s.greenCountDark.Store(0)
+	s.isRefreshing.Store(false)
 
 	return s
 }
 
-// loadFileContent loads and parses the data file into logical blocks
-func (s *SpawnSystem) loadFileContent() {
-	file, err := os.Open(dataFilePath)
-	if err != nil {
-		// If file doesn't exist or can't be read, use empty slice
+// loadContentFromManager loads content using ContentManager
+func (s *SpawnSystem) loadContentFromManager() {
+	// Get random content block from ContentManager
+	lines, _, err := s.contentManager.SelectRandomBlockWithValidation()
+	if err != nil || len(lines) == 0 {
+		// If no content available, use empty slice
 		// System will gracefully handle this by not spawning file-based blocks
 		s.codeBlocks = []CodeBlock{}
+		s.totalBlocks = 0
 		return
 	}
-	defer file.Close()
 
-	scanner := bufio.NewScanner(file)
-	var rawLines []string
+	// Group the content lines into logical code blocks
+	s.contentMutex.Lock()
+	s.codeBlocks = s.groupIntoBlocks(lines)
+	s.totalBlocks = len(s.codeBlocks)
+	s.nextBlockIndex = 0
+	s.blocksConsumed = 0
+	s.contentMutex.Unlock()
+}
 
-	// First pass: filter empty lines and full-line comments
-	for scanner.Scan() {
-		line := scanner.Text()
-		trimmed := strings.TrimSpace(line)
-
-		// Skip empty lines and full-line comments
-		if len(trimmed) == 0 || strings.HasPrefix(trimmed, "//") {
-			continue
-		}
-
-		rawLines = append(rawLines, trimmed)
+// checkAndTriggerRefresh checks if content refresh is needed and triggers pre-fetch
+func (s *SpawnSystem) checkAndTriggerRefresh() {
+	// Check if we're at the refresh threshold
+	if s.totalBlocks == 0 {
+		return
 	}
 
-	// Second pass: group lines into logical blocks
-	s.codeBlocks = s.groupIntoBlocks(rawLines)
+	consumptionRatio := float64(s.blocksConsumed) / float64(s.totalBlocks)
+
+	// If we've consumed 80% and not already refreshing, start pre-fetch
+	if consumptionRatio >= contentRefreshThreshold && !s.isRefreshing.Load() {
+		s.isRefreshing.Store(true)
+		go s.preFetchNextContent()
+	}
+}
+
+// preFetchNextContent loads next content batch in background
+func (s *SpawnSystem) preFetchNextContent() {
+	// Get new content from ContentManager
+	lines, _, err := s.contentManager.SelectRandomBlockWithValidation()
+	if err != nil || len(lines) == 0 {
+		// Failed to get new content, will retry on next check
+		s.isRefreshing.Store(false)
+		return
+	}
+
+	// Group into blocks
+	newBlocks := s.groupIntoBlocks(lines)
+
+	// Store pre-fetched content
+	s.contentMutex.Lock()
+	s.nextContent = newBlocks
+	s.contentMutex.Unlock()
+}
+
+// swapToNextContent performs thread-safe content swap when current content is exhausted
+func (s *SpawnSystem) swapToNextContent() {
+	s.contentMutex.Lock()
+	defer s.contentMutex.Unlock()
+
+	// Check if we have pre-fetched content
+	if len(s.nextContent) > 0 {
+		// Swap to pre-fetched content
+		s.codeBlocks = s.nextContent
+		s.totalBlocks = len(s.codeBlocks)
+		s.nextBlockIndex = 0
+		s.blocksConsumed = 0
+		s.nextContent = nil
+		s.isRefreshing.Store(false)
+	} else {
+		// No pre-fetched content, load new content synchronously
+		s.contentMutex.Unlock() // Unlock before calling loadContentFromManager
+		s.loadContentFromManager()
+		s.contentMutex.Lock() // Re-lock before returning
+	}
 }
 
 // groupIntoBlocks groups lines into logical code blocks
@@ -356,14 +418,35 @@ func (s *SpawnSystem) spawnSequence(world *engine.World) {
 	}
 }
 
-// getNextBlock retrieves the next logical code block
+// getNextBlock retrieves the next logical code block with content refresh management
 func (s *SpawnSystem) getNextBlock() CodeBlock {
+	s.contentMutex.RLock()
 	if len(s.codeBlocks) == 0 {
+		s.contentMutex.RUnlock()
 		return CodeBlock{Lines: []string{}}
 	}
 
 	block := s.codeBlocks[s.nextBlockIndex]
-	s.nextBlockIndex = (s.nextBlockIndex + 1) % len(s.codeBlocks)
+	currentIndex := s.nextBlockIndex
+	s.contentMutex.RUnlock()
+
+	// Update index and consumption counter (thread-safe write)
+	s.contentMutex.Lock()
+	s.nextBlockIndex = (currentIndex + 1) % len(s.codeBlocks)
+
+	// Check if we've wrapped around (consumed all blocks)
+	if s.nextBlockIndex == 0 {
+		// We've consumed all blocks, swap to new content
+		s.contentMutex.Unlock()
+		s.swapToNextContent()
+	} else {
+		s.blocksConsumed++
+		s.contentMutex.Unlock()
+
+		// Check if we need to start pre-fetching
+		s.checkAndTriggerRefresh()
+	}
+
 	return block
 }
 
