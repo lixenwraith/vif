@@ -27,6 +27,8 @@ type World struct {
 	spatialIndex     map[int]map[int]Entity // [y][x] -> Entity for position queries
 	positionType     reflect.Type
 	componentsByType map[reflect.Type][]Entity // Reverse index: component type -> entities
+	updateMutex      sync.Mutex                // Frame barrier mutex to prevent concurrent updates
+	isUpdating       bool                      // Flag indicating if update is in progress
 }
 
 // NewWorld creates a new ECS world
@@ -233,7 +235,14 @@ func (w *World) AddSystem(system System) {
 }
 
 // Update runs all systems
+// This method ensures all system updates complete before returning,
+// providing a frame barrier for safe rendering after updates.
+// Only one update cycle can run at a time.
 func (w *World) Update(dt time.Duration) {
+	// Acquire update mutex to ensure only one update runs at a time
+	w.updateMutex.Lock()
+	defer w.updateMutex.Unlock()
+
 	w.mu.RLock()
 	systems := make([]System, len(w.systems))
 	copy(systems, w.systems)
@@ -242,6 +251,17 @@ func (w *World) Update(dt time.Duration) {
 	for _, system := range systems {
 		system.Update(w, dt)
 	}
+}
+
+// WaitForUpdates waits for all pending updates to complete
+// This should be called before rendering to ensure a consistent state
+// This is a no-op if Update is called synchronously, but provides
+// explicit synchronization for future concurrent update scenarios.
+func (w *World) WaitForUpdates() {
+	// Try to acquire and immediately release the update mutex
+	// This ensures any ongoing Update() has completed
+	w.updateMutex.Lock()
+	w.updateMutex.Unlock()
 }
 
 // UpdateSpatialIndex updates the spatial index for an entity with a position
@@ -310,4 +330,60 @@ func (w *World) EntityCount() int {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return len(w.entities)
+}
+
+// EntitySnapshot represents an entity with its components captured atomically
+type EntitySnapshot struct {
+	Entity     Entity
+	Components map[reflect.Type]Component
+}
+
+// GetEntitiesWithSnapshot returns entities and their components atomically
+// This prevents race conditions where entities are destroyed between getting
+// the entity list and reading components. All data is captured under a single lock.
+func (w *World) GetEntitiesWithSnapshot(componentTypes ...reflect.Type) []EntitySnapshot {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
+	if len(componentTypes) == 0 {
+		return nil
+	}
+
+	// Start with entities that have the first component type
+	candidates := w.componentsByType[componentTypes[0]]
+	if candidates == nil {
+		return nil
+	}
+
+	result := make([]EntitySnapshot, 0)
+	for _, entity := range candidates {
+		// Check if entity has all required components
+		hasAll := true
+		for _, compType := range componentTypes {
+			if !w.hasComponentUnsafe(entity, compType) {
+				hasAll = false
+				break
+			}
+		}
+
+		if hasAll {
+			// Create snapshot with all components for this entity
+			snapshot := EntitySnapshot{
+				Entity:     entity,
+				Components: make(map[reflect.Type]Component),
+			}
+
+			// Copy all components (not just the requested ones)
+			// This ensures we have a complete snapshot
+			if components, ok := w.entities[entity]; ok {
+				for compType, comp := range components {
+					snapshot.Components[compType] = comp
+				}
+			}
+
+			result = append(result, snapshot)
+		}
+	}
+
+	return result
 }

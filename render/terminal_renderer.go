@@ -336,10 +336,18 @@ func (r *TerminalRenderer) drawCharacters(world *engine.World, pingColor tcell.C
 	entities := world.GetEntitiesWith(posType, charType)
 
 	for _, entity := range entities {
-		posComp, _ := world.GetComponent(entity, posType)
+		// Defensive: Check if entity still exists and has components
+		// Entity could be destroyed between GetEntitiesWith and GetComponent calls
+		posComp, ok := world.GetComponent(entity, posType)
+		if !ok {
+			continue // Entity was destroyed or component removed
+		}
 		pos := posComp.(components.PositionComponent)
 
-		charComp, _ := world.GetComponent(entity, charType)
+		charComp, ok := world.GetComponent(entity, charType)
+		if !ok {
+			continue // Entity was destroyed or component removed
+		}
 		char := charComp.(components.CharacterComponent)
 
 		screenX := r.gameX + pos.X
@@ -385,9 +393,10 @@ func (r *TerminalRenderer) drawFallingDecay(world *engine.World, defaultStyle tc
 	fallingStyle := defaultStyle.Foreground(RgbSequenceGold)
 
 	for _, entity := range entities {
+		// Defensive: Check if entity still exists
 		fallComp, ok := world.GetComponent(entity, fallingType)
 		if !ok {
-			continue
+			continue // Entity was destroyed between GetEntitiesWith and GetComponent
 		}
 		fall := fallComp.(components.FallingDecayComponent)
 

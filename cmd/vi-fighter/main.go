@@ -176,6 +176,10 @@ func main() {
 			dt := 16 * time.Millisecond
 			ctx.World.Update(dt)
 
+			// Wait for all updates to complete before rendering (frame barrier)
+			// This ensures no entity modifications occur during rendering
+			ctx.World.WaitForUpdates()
+
 			// Update ping grid timer atomically (CAS pattern)
 			if ctx.UpdatePingGridTimerAtomic(dt.Seconds()) {
 				// Timer expired, deactivate ping
@@ -188,7 +192,7 @@ func main() {
 			// Update gold sequence system dimensions and cursor position
 			goldSequenceSystem.UpdateDimensions(ctx.GameWidth, ctx.GameHeight, ctx.CursorX, ctx.CursorY)
 
-			// Render frame
+			// Render frame (all updates guaranteed complete)
 			renderer.RenderFrame(ctx, decaySystem.IsAnimating(), decaySystem.CurrentRow(), decaySystem.GetTimeUntilDecay())
 		}
 	}

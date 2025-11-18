@@ -41,13 +41,13 @@ type CodeBlock struct {
 
 // SpawnSystem handles character sequence generation and spawning
 type SpawnSystem struct {
-	lastSpawn  time.Time
-	nextSeqID  int
-	gameWidth  int
-	gameHeight int
-	cursorX    int
-	cursorY    int
-	ctx        *engine.GameContext
+	lastSpawn     time.Time
+	nextSeqID     atomic.Int64 // Atomic for thread-safe sequence ID generation
+	gameWidth     int
+	gameHeight    int
+	cursorX       int
+	cursorY       int
+	ctx           *engine.GameContext
 
 	// Content management
 	contentManager   *content.ContentManager
@@ -72,13 +72,15 @@ type SpawnSystem struct {
 func NewSpawnSystem(gameWidth, gameHeight, cursorX, cursorY int, ctx *engine.GameContext) *SpawnSystem {
 	s := &SpawnSystem{
 		lastSpawn:  ctx.TimeProvider.Now(),
-		nextSeqID:  1,
 		gameWidth:  gameWidth,
 		gameHeight: gameHeight,
 		cursorX:    cursorX,
 		cursorY:    cursorY,
 		ctx:        ctx,
 	}
+
+	// Initialize atomic sequence ID
+	s.nextSeqID.Store(1)
 
 	// Initialize atomic counters to 0 (before loading content)
 	s.blueCountBright.Store(0)
@@ -485,6 +487,10 @@ func (s *SpawnSystem) getNextBlock() CodeBlock {
 }
 
 // placeLine attempts to place a single line on the screen
+// Thread-safety: This method creates multiple entities for a single line.
+// While individual World operations are thread-safe (via mutex), the entire
+// sequence of entity creation is not atomic. Callers should ensure this method
+// is not called concurrently with rendering to avoid seeing partially-created entities.
 func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType components.SequenceType, seqLevel components.SequenceLevel, style tcell.Style) bool {
 	lineRunes := []rune(line)
 	lineLength := len(lineRunes)
@@ -531,9 +537,9 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 		}
 
 		if !hasOverlap {
-			// Valid position found, create entities
-			sequenceID := s.nextSeqID
-			s.nextSeqID++
+			// Valid position found, create entities atomically
+			// Atomically get and increment sequence ID to prevent race conditions
+			sequenceID := int(s.nextSeqID.Add(1) - 1)
 
 			// Count non-space characters for color counter
 			nonSpaceCount := 0
