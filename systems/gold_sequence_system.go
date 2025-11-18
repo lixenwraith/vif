@@ -78,13 +78,21 @@ func (s *GoldSequenceSystem) Update(world *engine.World, dt time.Duration) {
 	const initialSpawnDelay = 150 * time.Millisecond
 	if !active && now.Sub(initialSpawnTime) >= initialSpawnDelay && now.Sub(initialSpawnTime) < initialSpawnDelay+100*time.Millisecond {
 		// Spawn initial gold sequence after delay
-		s.spawnGoldSequence(world)
+		success := s.spawnGoldSequence(world)
+		// EDGE CASE: If first Gold spawn fails, start decay timer anyway
+		if !success && s.decaySystem != nil {
+			s.decaySystem.StartDecayTimer()
+		}
 	}
 
 	// Detect transition from decay animating to not animating (decay just ended)
 	if wasDecayAnimating && !isDecayAnimating {
 		// Decay just ended - spawn gold sequence
-		s.spawnGoldSequence(world)
+		success := s.spawnGoldSequence(world)
+		// EDGE CASE: If Gold spawn fails after decay, start decay timer anyway
+		if !success && s.decaySystem != nil {
+			s.decaySystem.StartDecayTimer()
+		}
 	}
 
 	// If gold sequence is active, check timeout
@@ -103,13 +111,14 @@ func (s *GoldSequenceSystem) Update(world *engine.World, dt time.Duration) {
 }
 
 // spawnGoldSequence creates a new gold sequence at a random position on the screen
-func (s *GoldSequenceSystem) spawnGoldSequence(world *engine.World) {
+// Returns true if spawn succeeded, false if spawn failed (e.g., no valid position)
+func (s *GoldSequenceSystem) spawnGoldSequence(world *engine.World) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if s.active {
 		// Already have an active gold sequence
-		return
+		return false
 	}
 
 	// Generate random 10-character sequence
@@ -121,8 +130,8 @@ func (s *GoldSequenceSystem) spawnGoldSequence(world *engine.World) {
 	// Find random valid position (similar to spawn system)
 	x, y := s.findValidPosition(world, constants.GoldSequenceLength)
 	if x < 0 || y < 0 {
-		// No valid position found
-		return
+		// No valid position found - spawn failed
+		return false
 	}
 
 	// Create unique sequence ID
@@ -163,9 +172,11 @@ func (s *GoldSequenceSystem) spawnGoldSequence(world *engine.World) {
 	// Mark gold sequence as active (already holding lock from defer)
 	s.active = true
 	s.startTime = s.ctx.TimeProvider.Now()
+	return true
 }
 
 // removeGoldSequence removes all gold sequence entities from the world
+// and triggers decay timer restart
 func (s *GoldSequenceSystem) removeGoldSequence(world *engine.World, sequenceID int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -199,6 +210,12 @@ func (s *GoldSequenceSystem) removeGoldSequence(world *engine.World, sequenceID 
 	}
 
 	s.active = false
+
+	// IMPORTANT: Start decay timer now that Gold sequence has ended
+	// Timer interval is calculated based on current heat value
+	if s.decaySystem != nil {
+		s.decaySystem.StartDecayTimer()
+	}
 }
 
 // IsActive returns whether a gold sequence is currently active
@@ -254,6 +271,7 @@ func (s *GoldSequenceSystem) GetExpectedCharacter(sequenceID int, index int) (ru
 }
 
 // CompleteGoldSequence is called when the gold sequence is successfully completed
+// Gold removal triggers decay timer restart in removeGoldSequence()
 func (s *GoldSequenceSystem) CompleteGoldSequence(world *engine.World) bool {
 	s.mu.Lock()
 	if !s.active {
@@ -264,6 +282,7 @@ func (s *GoldSequenceSystem) CompleteGoldSequence(world *engine.World) bool {
 	s.mu.Unlock()
 
 	// Remove gold sequence entities (has its own locking)
+	// This will also trigger decay timer restart
 	s.removeGoldSequence(world, sequenceID)
 
 	// Fill heat to max (handled by ScoreSystem)

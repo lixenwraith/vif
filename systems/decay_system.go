@@ -12,12 +12,20 @@ import (
 )
 
 // DecaySystem handles character decay animation and logic
+//
+// GAME FLOW: Decay timer calculation starts AFTER Gold sequence ends
+// 1. Gold spawns at game start
+// 2. Gold ends (timeout or completion) → StartDecayTimer() called
+// 3. Timer calculates interval based on heat at Gold end time
+// 4. Decay animation runs when timer expires
+// 5. After decay animation ends → Gold spawns again
 type DecaySystem struct {
 	animating       bool
 	currentRow      int
 	startTime       time.Time
 	lastUpdate      time.Time
 	nextDecayTime   time.Time // When the next decay will trigger
+	timerStarted    bool      // Whether decay timer has been started (starts after first Gold ends)
 	gameWidth       int
 	gameHeight      int
 	screenWidth     int
@@ -29,11 +37,13 @@ type DecaySystem struct {
 }
 
 // NewDecaySystem creates a new decay system
+// Note: Decay timer does NOT start automatically - it starts when Gold sequence ends
 func NewDecaySystem(gameWidth, gameHeight, screenWidth, heatIncrement int, ctx *engine.GameContext) *DecaySystem {
 	s := &DecaySystem{
 		animating:        false,
 		currentRow:       0,
 		lastUpdate:       ctx.TimeProvider.Now(),
+		timerStarted:     false, // Timer starts after first Gold sequence ends
 		gameWidth:        gameWidth,
 		gameHeight:       gameHeight,
 		screenWidth:      screenWidth,
@@ -42,7 +52,7 @@ func NewDecaySystem(gameWidth, gameHeight, screenWidth, heatIncrement int, ctx *
 		fallingEntities:  make([]engine.Entity, 0),
 		decayedThisFrame: make(map[engine.Entity]bool),
 	}
-	s.startTicker()
+	// DO NOT call s.startTicker() - timer starts when Gold sequence ends
 	return s
 }
 
@@ -61,8 +71,8 @@ func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 	// Update animation if active
 	if s.animating {
 		s.updateAnimation(world)
-	} else {
-		// Check if it's time to start decay animation
+	} else if s.timerStarted {
+		// Only check timer if it has been started (after first Gold sequence ends)
 		now := s.ctx.TimeProvider.Now()
 		if now.After(s.nextDecayTime) || now.Equal(s.nextDecayTime) {
 			s.animating = true
@@ -92,9 +102,8 @@ func (s *DecaySystem) updateAnimation(world *engine.World) {
 		s.currentRow = 0
 		// Clean up falling entities and clear decay tracking
 		s.cleanupFallingEntities(world)
-		// Schedule next decay
-		interval := s.calculateInterval()
-		s.nextDecayTime = s.ctx.TimeProvider.Now().Add(interval)
+		// DO NOT restart decay timer here - it will be restarted when Gold sequence ends
+		// (Gold spawns after decay animation completes, then ends, then timer restarts)
 	}
 }
 
@@ -324,11 +333,19 @@ func (s *DecaySystem) cleanupFallingEntities(world *engine.World) {
 	s.decayedThisFrame = make(map[engine.Entity]bool)
 }
 
-// startTicker initializes the decay timer (called once at startup)
-func (s *DecaySystem) startTicker() {
+// StartDecayTimer starts or restarts the decay timer based on current heat
+// This should be called when Gold sequence ends (timeout or completion)
+func (s *DecaySystem) StartDecayTimer() {
 	interval := s.calculateInterval()
 	s.nextDecayTime = s.ctx.TimeProvider.Now().Add(interval)
 	s.lastUpdate = s.ctx.TimeProvider.Now()
+	s.timerStarted = true
+}
+
+// startTicker is deprecated - use StartDecayTimer() instead
+// Kept for backward compatibility with tests
+func (s *DecaySystem) startTicker() {
+	s.StartDecayTimer()
 }
 
 // calculateInterval calculates the decay interval based on heat

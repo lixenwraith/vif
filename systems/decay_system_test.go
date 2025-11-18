@@ -50,6 +50,8 @@ func TestDecaySystemIntervalCalculation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			system := NewDecaySystem(80, 24, 80, tt.heatIncrement, ctx)
+			// Start decay timer (normally started when Gold ends)
+			system.StartDecayTimer()
 			timeUntilDecay := system.GetTimeUntilDecay()
 
 			if timeUntilDecay < tt.wantMin || timeUntilDecay > tt.wantMax {
@@ -71,6 +73,9 @@ func TestDecaySystemAnimation(t *testing.T) {
 
 	system := NewDecaySystem(80, 24, 80, 0, ctx)
 	world := ctx.World
+
+	// Start decay timer (normally started when Gold ends)
+	system.StartDecayTimer()
 
 	// Create some entities to decay
 	for y := 0; y < 3; y++ {

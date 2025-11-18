@@ -763,6 +763,9 @@ func TestFallingDecayFullCoverage(t *testing.T) {
 	gameWidth := 80
 	decaySystem := NewDecaySystem(gameWidth, 24, 80, 0, ctx)
 
+	// Start decay timer (normally started when Gold ends)
+	decaySystem.StartDecayTimer()
+
 	// Trigger decay animation
 	mockTime.Advance(61 * time.Second) // Trigger decay
 	decaySystem.Update(world, 16*time.Millisecond)
@@ -945,6 +948,9 @@ func TestFallingDecayOncePerAnimation(t *testing.T) {
 	})
 	world.UpdateSpatialIndex(entity2, 15, 10)
 
+	// Start decay timer (normally started when Gold ends)
+	decaySystem.StartDecayTimer()
+
 	// Start decay animation
 	mockTime.Advance(61 * time.Second)
 	decaySystem.Update(world, 16*time.Millisecond)
@@ -1023,6 +1029,9 @@ func TestFallingDecayAllPositions(t *testing.T) {
 		entities[y] = entity
 	}
 
+	// Start decay timer (normally started when Gold ends)
+	decaySystem.StartDecayTimer()
+
 	// Trigger decay animation
 	mockTime.Advance(61 * time.Second)
 	decaySystem.Update(world, 16*time.Millisecond)
@@ -1084,6 +1093,9 @@ func TestFallingDecayEmptyBoard(t *testing.T) {
 	ctx.TimeProvider = mockTime
 
 	decaySystem := NewDecaySystem(80, 24, 80, 0, ctx)
+
+	// Start decay timer (normally started when Gold ends)
+	decaySystem.StartDecayTimer()
 
 	// Board is empty - no characters
 
@@ -1176,6 +1188,9 @@ func TestFallingDecayFullBoard(t *testing.T) {
 	if totalChars != expectedTotal {
 		t.Fatalf("Expected %d total characters, created %d", expectedTotal, totalChars)
 	}
+
+	// Start decay timer (normally started when Gold ends)
+	decaySystem.StartDecayTimer()
 
 	// Trigger decay animation
 	mockTime.Advance(61 * time.Second)
@@ -1448,6 +1463,9 @@ func TestFallingDecayConcurrentPrevention(t *testing.T) {
 
 	decaySystem := NewDecaySystem(80, 24, 80, 0, ctx)
 
+	// Start decay timer (normally started when Gold ends)
+	decaySystem.StartDecayTimer()
+
 	// Trigger first decay animation
 	mockTime.Advance(61 * time.Second)
 	decaySystem.Update(world, 16*time.Millisecond)
@@ -1485,6 +1503,9 @@ func TestFallingDecayConcurrentPrevention(t *testing.T) {
 	if decaySystem.IsAnimating() {
 		t.Error("Expected first animation to complete")
 	}
+
+	// Restart decay timer (normally happens when Gold ends after decay animation completes)
+	decaySystem.StartDecayTimer()
 
 	// Now a second decay should be allowed
 	mockTime.Advance(61 * time.Second)
