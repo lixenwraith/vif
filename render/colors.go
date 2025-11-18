@@ -156,3 +156,24 @@ func GetStyleForSequence(seqType components.SequenceType, level components.Seque
 	}
 	return baseStyle
 }
+
+// GetScoreBlinkBackgroundColor returns a bright color suitable for score background
+// These colors are brighter than the foreground colors to provide good contrast with black text
+func GetScoreBlinkBackgroundColor(seqType components.SequenceType, level components.SequenceLevel) tcell.Color {
+	switch seqType {
+	case components.SequenceGreen:
+		// Always use bright green for visibility as background
+		return tcell.NewRGBColor(120, 255, 120) // Brighter green for background
+	case components.SequenceRed:
+		// Always use bright red for visibility as background
+		return tcell.NewRGBColor(255, 140, 140) // Brighter red for background
+	case components.SequenceBlue:
+		// Always use bright blue for visibility as background
+		return tcell.NewRGBColor(160, 210, 255) // Brighter blue for background
+	case components.SequenceGold:
+		// Gold is already bright yellow, perfect for backgrounds
+		return RgbSequenceGold // RGB(255, 255, 0)
+	}
+	// Default to white if unknown type
+	return tcell.NewRGBColor(255, 255, 255)
+}

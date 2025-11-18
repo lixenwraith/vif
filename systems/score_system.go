@@ -192,10 +192,10 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 
 		s.ctx.AddScore(points)
 
-		// Trigger score blink with character color
+		// Trigger score blink with character color (bright version for background)
 		s.ctx.SetScoreBlinkActive(true)
-		fgColor, _, _ := render.GetStyleForSequence(seq.Type, seq.Level).Decompose()
-		s.ctx.SetScoreBlinkColor(fgColor)
+		bgColor := render.GetScoreBlinkBackgroundColor(seq.Type, seq.Level)
+		s.ctx.SetScoreBlinkColor(bgColor)
 		s.ctx.SetScoreBlinkTime(now)
 
 		// Decrement color counter (only for Blue and Green, not Red or Gold)
@@ -260,10 +260,10 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 	}
 
 	// Correct character - remove entity and move cursor
-	// Trigger score blink with Gold color (Bright Yellow)
+	// Trigger score blink with Gold color (bright version for background)
 	s.ctx.SetScoreBlinkActive(true)
-	fgColor, _, _ := render.GetStyleForSequence(seq.Type, seq.Level).Decompose()
-	s.ctx.SetScoreBlinkColor(fgColor)
+	bgColor := render.GetScoreBlinkBackgroundColor(seq.Type, seq.Level)
+	s.ctx.SetScoreBlinkColor(bgColor)
 	s.ctx.SetScoreBlinkTime(now)
 
 	// Safely destroy the character entity (handles spatial index removal)

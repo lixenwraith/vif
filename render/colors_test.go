@@ -264,3 +264,75 @@ func TestBackgroundColorConsistency(t *testing.T) {
 		}
 	}
 }
+
+func TestGetScoreBlinkBackgroundColor(t *testing.T) {
+	tests := []struct {
+		name     string
+		seqType  components.SequenceType
+		level    components.SequenceLevel
+		minR     int32 // Minimum expected red value
+		minG     int32 // Minimum expected green value
+		minB     int32 // Minimum expected blue value
+	}{
+		{"Green (any level)", components.SequenceGreen, components.LevelBright, 100, 200, 100},
+		{"Blue (any level)", components.SequenceBlue, components.LevelNormal, 150, 200, 200},
+		{"Red (any level)", components.SequenceRed, components.LevelDark, 200, 100, 100},
+		{"Gold (any level)", components.SequenceGold, components.LevelBright, 250, 250, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			color := GetScoreBlinkBackgroundColor(tt.seqType, tt.level)
+			r, g, b := color.RGB()
+
+			// Verify color is bright enough for use as background with black text
+			if r < tt.minR {
+				t.Errorf("Red channel %d is less than minimum %d for good contrast", r, tt.minR)
+			}
+			if g < tt.minG {
+				t.Errorf("Green channel %d is less than minimum %d for good contrast", g, tt.minG)
+			}
+			if b < tt.minB {
+				t.Errorf("Blue channel %d is less than minimum %d for good contrast", b, tt.minB)
+			}
+
+			// Verify it's not black (which would indicate error state)
+			if r == 0 && g == 0 && b == 0 {
+				t.Error("Score blink background should never be black (reserved for error state)")
+			}
+		})
+	}
+}
+
+func TestGetScoreBlinkBackgroundColorBrightness(t *testing.T) {
+	// Verify that score blink colors are brighter than their foreground counterparts
+	// This ensures good contrast when used as backgrounds with black text
+	types := []struct {
+		seqType components.SequenceType
+		level   components.SequenceLevel
+	}{
+		{components.SequenceGreen, components.LevelBright},
+		{components.SequenceBlue, components.LevelBright},
+		{components.SequenceRed, components.LevelBright},
+		{components.SequenceGold, components.LevelBright},
+	}
+
+	for _, tt := range types {
+		// Get the foreground color from style
+		style := GetStyleForSequence(tt.seqType, tt.level)
+		fgColor, _, _ := style.Decompose()
+		fgR, fgG, fgB := fgColor.RGB()
+		fgBrightness := (int32(fgR) + int32(fgG) + int32(fgB)) / 3
+
+		// Get the background color for score blink
+		bgColor := GetScoreBlinkBackgroundColor(tt.seqType, tt.level)
+		bgR, bgG, bgB := bgColor.RGB()
+		bgBrightness := (int32(bgR) + int32(bgG) + int32(bgB)) / 3
+
+		// Background should be brighter or equal (for Gold which is already very bright)
+		if bgBrightness < fgBrightness-10 { // Allow small tolerance
+			t.Errorf("Score blink background brightness (%d) for type=%v should be >= foreground brightness (%d)",
+				bgBrightness, tt.seqType, fgBrightness)
+		}
+	}
+}
