@@ -232,6 +232,9 @@ func (s *DecaySystem) spawnFallingEntities(world *engine.World) {
 func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64) {
 	fallingType := reflect.TypeOf(components.FallingDecayComponent{})
 
+	// Track entities to destroy and keep
+	var remainingEntities []engine.Entity
+
 	for _, entity := range s.fallingEntities {
 		fallComp, ok := world.GetComponent(entity, fallingType)
 		if !ok {
@@ -242,21 +245,33 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 		// Update Y position based on speed and elapsed time
 		fall.YPosition = fall.Speed * elapsed
 
-		// Check if within game bounds
-		if fall.YPosition < float64(s.gameHeight) {
-			// Update component
-			world.AddComponent(entity, fall)
-
-			// Check for character at this position and apply decay
-			currentRow := int(fall.YPosition)
-			targetEntity := world.GetEntityAtPosition(fall.Column, currentRow)
-			if targetEntity != 0 && !s.decayedThisFrame[targetEntity] {
-				// Apply decay to this character
-				s.applyDecayToCharacter(world, targetEntity)
-				s.decayedThisFrame[targetEntity] = true
-			}
+		// Check if entity has passed the bottom boundary
+		if fall.YPosition >= float64(s.gameHeight) {
+			// Entity has gone beyond the bottom - destroy immediately
+			world.DestroyEntity(entity)
+			// Don't add to remaining entities
+			continue
 		}
+
+		// Entity is still within bounds
+		// Update component
+		world.AddComponent(entity, fall)
+
+		// Check for character at this position and apply decay
+		currentRow := int(fall.YPosition)
+		targetEntity := world.GetEntityAtPosition(fall.Column, currentRow)
+		if targetEntity != 0 && !s.decayedThisFrame[targetEntity] {
+			// Apply decay to this character
+			s.applyDecayToCharacter(world, targetEntity)
+			s.decayedThisFrame[targetEntity] = true
+		}
+
+		// Keep this entity in the list
+		remainingEntities = append(remainingEntities, entity)
 	}
+
+	// Update the falling entities list to only contain entities still active
+	s.fallingEntities = remainingEntities
 }
 
 // cleanupFallingEntities removes all falling decay entities
