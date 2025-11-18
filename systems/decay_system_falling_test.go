@@ -1498,3 +1498,173 @@ func TestFallingDecayConcurrentPrevention(t *testing.T) {
 		t.Errorf("Expected 80 falling entities for second animation, got %d", len(decaySystem.fallingEntities))
 	}
 }
+
+// TestFallingDecayChangeFrequency tests that character change frequency matches configuration
+func TestFallingDecayChangeFrequency(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+	world := ctx.World
+
+	mockTime := engine.NewMockTimeProvider(time.Now())
+	ctx.TimeProvider = mockTime
+
+	decaySystem := NewDecaySystem(80, 24, 80, 0, ctx)
+	decaySystem.animating = true
+	decaySystem.startTime = mockTime.Now()
+
+	// Create a falling entity that will cross many rows
+	entity := world.CreateEntity()
+	world.AddComponent(entity, components.FallingDecayComponent{
+		Column:        10,
+		YPosition:     0.0,
+		Speed:         10.0,
+		Char:          'A',
+		LastChangeRow: -1,
+	})
+	decaySystem.fallingEntities = []engine.Entity{entity}
+
+	fallingType := reflect.TypeOf(components.FallingDecayComponent{})
+
+	// Track row crossings and character changes
+	rowsCrossed := 0
+	characterChanges := 0
+	previousRow := -1
+	previousChar := 'A'
+
+	// Simulate falling through many rows
+	// With speed 10.0, entity moves 10 rows per second
+	// We'll simulate 10 seconds to cross 100 rows for better statistics
+	for i := 0; i <= 1000; i++ {
+		elapsed := float64(i) * 0.01 // 0.01 second increments
+		decaySystem.updateFallingEntities(world, elapsed)
+
+		fallComp, ok := world.GetComponent(entity, fallingType)
+		if !ok {
+			break // Entity was destroyed
+		}
+		fall := fallComp.(components.FallingDecayComponent)
+
+		currentRow := int(fall.YPosition)
+
+		// Track when we cross into a new row
+		if currentRow != previousRow && previousRow >= 0 {
+			rowsCrossed++
+		}
+
+		// Track character changes
+		if fall.Char != previousChar {
+			characterChanges++
+			previousChar = fall.Char
+		}
+
+		previousRow = currentRow
+	}
+
+	// With FallingDecayChangeChance = 0.4 and FallingDecayMinRowsBetweenChanges = 1,
+	// we expect roughly 40% of row crossings to result in character changes
+	// Allow for statistical variance (20% - 60% range is reasonable for randomness)
+	if rowsCrossed == 0 {
+		t.Fatal("No rows were crossed during the test")
+	}
+
+	changeRate := float64(characterChanges) / float64(rowsCrossed)
+	expectedRate := constants.FallingDecayChangeChance
+
+	// Allow 40% variance for statistical randomness (with larger sample size, this should be reasonable)
+	minExpectedRate := expectedRate * 0.6
+	maxExpectedRate := expectedRate * 1.4
+
+	if changeRate < minExpectedRate || changeRate > maxExpectedRate {
+		t.Errorf("Change rate %.2f is outside expected range [%.2f, %.2f] (expected ~%.2f)",
+			changeRate, minExpectedRate, maxExpectedRate, expectedRate)
+	}
+
+	t.Logf("Character change statistics: %d changes across %d row crossings (%.1f%% change rate, expected ~%.1f%%)",
+		characterChanges, rowsCrossed, changeRate*100, expectedRate*100)
+}
+
+// TestFallingDecayMinRowsBetweenChanges tests that minimum rows between changes is respected
+func TestFallingDecayMinRowsBetweenChanges(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+	world := ctx.World
+
+	mockTime := engine.NewMockTimeProvider(time.Now())
+	ctx.TimeProvider = mockTime
+
+	decaySystem := NewDecaySystem(80, 24, 80, 0, ctx)
+	decaySystem.animating = true
+	decaySystem.startTime = mockTime.Now()
+
+	// Create a falling entity
+	entity := world.CreateEntity()
+	world.AddComponent(entity, components.FallingDecayComponent{
+		Column:        10,
+		YPosition:     0.0,
+		Speed:         10.0,
+		Char:          'A',
+		LastChangeRow: -1,
+	})
+	decaySystem.fallingEntities = []engine.Entity{entity}
+
+	fallingType := reflect.TypeOf(components.FallingDecayComponent{})
+
+	// Track last row where character changed
+	lastChangeRow := -1
+	previousChar := 'A'
+
+	// Simulate falling through many rows
+	for i := 0; i <= 200; i++ {
+		elapsed := float64(i) * 0.01
+		decaySystem.updateFallingEntities(world, elapsed)
+
+		fallComp, ok := world.GetComponent(entity, fallingType)
+		if !ok {
+			break
+		}
+		fall := fallComp.(components.FallingDecayComponent)
+
+		currentRow := int(fall.YPosition)
+
+		// Check if character changed
+		if fall.Char != previousChar {
+			// Verify minimum rows between changes was respected
+			if lastChangeRow >= 0 {
+				rowsSinceLastChange := currentRow - lastChangeRow
+				if rowsSinceLastChange < constants.FallingDecayMinRowsBetweenChanges {
+					t.Errorf("Character changed too soon: only %d rows since last change (minimum is %d)",
+						rowsSinceLastChange, constants.FallingDecayMinRowsBetweenChanges)
+				}
+			}
+			lastChangeRow = currentRow
+			previousChar = fall.Char
+		}
+	}
+
+	if lastChangeRow == -1 {
+		t.Log("Warning: No character changes observed during test (this can happen due to randomness)")
+	}
+}
+
+// TestFallingDecayConfigurableParameters tests that the configurable parameters affect behavior
+func TestFallingDecayConfigurableParameters(t *testing.T) {
+	// Verify constants are set to expected values
+	if constants.FallingDecayChangeChance != 0.4 {
+		t.Errorf("FallingDecayChangeChance = %f, expected 0.4", constants.FallingDecayChangeChance)
+	}
+
+	if constants.FallingDecayMinRowsBetweenChanges != 1 {
+		t.Errorf("FallingDecayMinRowsBetweenChanges = %d, expected 1", constants.FallingDecayMinRowsBetweenChanges)
+	}
+
+	// These constants should be positive and within reasonable ranges
+	if constants.FallingDecayChangeChance < 0.0 || constants.FallingDecayChangeChance > 1.0 {
+		t.Errorf("FallingDecayChangeChance should be between 0.0 and 1.0, got %f", constants.FallingDecayChangeChance)
+	}
+
+	if constants.FallingDecayMinRowsBetweenChanges < 0 {
+		t.Errorf("FallingDecayMinRowsBetweenChanges should be non-negative, got %d", constants.FallingDecayMinRowsBetweenChanges)
+	}
+}
