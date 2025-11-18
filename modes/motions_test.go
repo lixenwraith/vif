@@ -1402,3 +1402,74 @@ func TestWORDMotionsEdgeCasesComprehensive(t *testing.T) {
 		t.Errorf("B from middle of spaces: expected X=0 (at 'f'), got X=%d", ctx.CursorX)
 	}
 }
+
+// Test getCharAt with defensive space handling
+func TestGetCharAtSpaceHandling(t *testing.T) {
+	ctx := createTestContext()
+
+	// Test 1: Empty position (no entity) - should return 0
+	result := getCharAt(ctx, 5, 5)
+	if result != 0 {
+		t.Errorf("getCharAt at empty position: expected 0, got %v (%q)", result, result)
+	}
+
+	// Test 2: Regular character entity - should return the rune
+	placeChar(ctx, 10, 10, 'a')
+	result = getCharAt(ctx, 10, 10)
+	if result != 'a' {
+		t.Errorf("getCharAt with regular char: expected 'a', got %v (%q)", result, result)
+	}
+
+	// Test 3: Space character entity - should return 0 (defensive handling)
+	// Create an entity with a space character directly (for backwards compatibility testing)
+	entity := ctx.World.CreateEntity()
+	ctx.World.AddComponent(entity, components.PositionComponent{X: 15, Y: 15})
+	ctx.World.AddComponent(entity, components.CharacterComponent{Rune: ' ', Style: tcell.StyleDefault})
+	ctx.World.AddComponent(entity, components.SequenceComponent{
+		ID:    1,
+		Index: 0,
+		Type:  components.SequenceGreen,
+		Level: components.LevelBright,
+	})
+
+	result = getCharAt(ctx, 15, 15)
+	if result != 0 {
+		t.Errorf("getCharAt with space char entity: expected 0 (defensive handling), got %v (%q)", result, result)
+	}
+
+	// Test 4: Multiple positions with different characters
+	placeChar(ctx, 0, 0, 'x')
+	placeChar(ctx, 1, 0, 'y')
+	placeChar(ctx, 2, 0, 'z')
+
+	if getCharAt(ctx, 0, 0) != 'x' {
+		t.Errorf("getCharAt at (0,0): expected 'x', got %q", getCharAt(ctx, 0, 0))
+	}
+	if getCharAt(ctx, 1, 0) != 'y' {
+		t.Errorf("getCharAt at (1,0): expected 'y', got %q", getCharAt(ctx, 1, 0))
+	}
+	if getCharAt(ctx, 2, 0) != 'z' {
+		t.Errorf("getCharAt at (2,0): expected 'z', got %q", getCharAt(ctx, 2, 0))
+	}
+
+	// Test 5: Position between characters should return 0
+	result = getCharAt(ctx, 0, 1) // Different row, no char
+	if result != 0 {
+		t.Errorf("getCharAt at empty row: expected 0, got %v (%q)", result, result)
+	}
+
+	// Test 6: Punctuation and special characters should work normally
+	placeChar(ctx, 20, 5, '.')
+	placeChar(ctx, 21, 5, ',')
+	placeChar(ctx, 22, 5, '!')
+
+	if getCharAt(ctx, 20, 5) != '.' {
+		t.Errorf("getCharAt with '.': expected '.', got %q", getCharAt(ctx, 20, 5))
+	}
+	if getCharAt(ctx, 21, 5) != ',' {
+		t.Errorf("getCharAt with ',': expected ',', got %q", getCharAt(ctx, 21, 5))
+	}
+	if getCharAt(ctx, 22, 5) != '!' {
+		t.Errorf("getCharAt with '!': expected '!', got %q", getCharAt(ctx, 22, 5))
+	}
+}

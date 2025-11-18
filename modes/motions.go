@@ -204,7 +204,11 @@ func isPunctuation(r rune) bool {
 	return !isWordChar(r) && r != ' '
 }
 
-// getCharAt returns the character at the given position, or 0 if empty
+// getCharAt returns the character at the given position, or 0 if empty.
+// Returns:
+//   - 0 for empty positions (no entity at position)
+//   - 0 for space character entities (defensive handling for backwards compatibility)
+//   - The actual rune for all other characters
 func getCharAt(ctx *engine.GameContext, x, y int) rune {
 	posType := reflect.TypeOf(components.PositionComponent{})
 	charType := reflect.TypeOf(components.CharacterComponent{})
@@ -217,6 +221,10 @@ func getCharAt(ctx *engine.GameContext, x, y int) rune {
 		if pos.Y == y && pos.X == x {
 			charComp, _ := ctx.World.GetComponent(entity, charType)
 			char := charComp.(components.CharacterComponent)
+			// Treat space characters as empty positions
+			if char.Rune == ' ' {
+				return 0
+			}
 			return char.Rune
 		}
 	}
