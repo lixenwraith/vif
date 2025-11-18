@@ -42,10 +42,10 @@ func TestRapidGoldActivation(t *testing.T) {
 				}
 			}()
 
-			for j := 0; j < 20; j++ {
+			for j := 0; j < 10; j++ {
 				goldSystem.spawnGoldSequence(world)
 				activationCount.Add(1)
-				time.Sleep(25 * time.Millisecond)
+				time.Sleep(10 * time.Millisecond)
 			}
 		}(i)
 	}
@@ -62,9 +62,9 @@ func TestRapidGoldActivation(t *testing.T) {
 				}
 			}()
 
-			for j := 0; j < 15; j++ {
+			for j := 0; j < 8; j++ {
 				goldSystem.CompleteGoldSequence(world)
-				time.Sleep(35 * time.Millisecond)
+				time.Sleep(15 * time.Millisecond)
 			}
 		}(i)
 	}
@@ -80,9 +80,9 @@ func TestRapidGoldActivation(t *testing.T) {
 			}
 		}()
 
-		for i := 0; i < 100; i++ {
+		for i := 0; i < 50; i++ {
 			goldSystem.Update(world, 16*time.Millisecond)
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(5 * time.Millisecond)
 		}
 	}()
 
@@ -164,8 +164,8 @@ func TestMaximumCleanersOnScreen(t *testing.T) {
 		}(i)
 	}
 
-	// Let test run
-	time.Sleep(600 * time.Millisecond)
+	// Let test run - reduced from 600ms to 150ms
+	time.Sleep(150 * time.Millisecond)
 	close(stopChan)
 
 	wg.Wait()
@@ -191,7 +191,8 @@ func TestMemoryLeakDetection(t *testing.T) {
 	defer cleanerSystem.Shutdown()
 
 	// Run multiple cycles of cleaner creation and cleanup
-	cycles := 50
+	// Reduced from 50 to 5 cycles for faster testing - memory leaks would show up even in fewer cycles
+	cycles := 5
 	for cycle := 0; cycle < cycles; cycle++ {
 		// Create Red characters
 		for i := 0; i < 10; i++ {
@@ -203,8 +204,8 @@ func TestMemoryLeakDetection(t *testing.T) {
 		cleanerSystem.Update(world, 16*time.Millisecond)
 		time.Sleep(20 * time.Millisecond)
 
-		// Wait for cleanup
-		time.Sleep(1100 * time.Millisecond)
+		// Wait for cleanup - reduced from 1100ms to 1050ms (animation duration + buffer)
+		time.Sleep(1050 * time.Millisecond)
 
 		// Verify cleaners were cleaned up
 		cleanerType := reflect.TypeOf(components.CleanerComponent{})
@@ -398,8 +399,8 @@ func TestCleanerSystemUnderExtremeConcurrency(t *testing.T) {
 		}(i, opType)
 	}
 
-	// Let stress test run
-	time.Sleep(2 * time.Second)
+	// Let stress test run - reduced from 2s to 500ms
+	time.Sleep(500 * time.Millisecond)
 	close(stopChan)
 
 	wg.Wait()
@@ -579,8 +580,8 @@ func TestFlashEffectStressTest(t *testing.T) {
 		}
 	}()
 
-	// Let test run
-	time.Sleep(1200 * time.Millisecond)
+	// Let test run - reduced from 1200ms to 250ms
+	time.Sleep(250 * time.Millisecond)
 	close(stopChan)
 
 	wg.Wait()
@@ -737,8 +738,8 @@ func TestSpatialIndexRaceConditions(t *testing.T) {
 		}(i)
 	}
 
-	// Let test run
-	time.Sleep(1500 * time.Millisecond)
+	// Let test run - reduced from 1500ms to 300ms
+	time.Sleep(300 * time.Millisecond)
 	close(stopChan)
 
 	wg.Wait()

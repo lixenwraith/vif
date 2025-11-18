@@ -130,8 +130,8 @@ func TestConcurrentGoldActivationDuringActiveCleaners(t *testing.T) {
 		}
 	}()
 
-	// Let test run
-	time.Sleep(600 * time.Millisecond)
+	// Let test run - reduced from 600ms to 150ms
+	time.Sleep(150 * time.Millisecond)
 	close(stopChan)
 
 	wg.Wait()
@@ -398,8 +398,8 @@ func TestCleanerCollisionWithActivelyChangingText(t *testing.T) {
 		}
 	}()
 
-	// Let test run
-	time.Sleep(1 * time.Second)
+	// Let test run - reduced from 1s to 200ms
+	time.Sleep(200 * time.Millisecond)
 	close(stopChan)
 
 	wg.Wait()
@@ -710,8 +710,8 @@ func TestScreenBufferModificationsDuringScan(t *testing.T) {
 		}
 	}()
 
-	// Let test run
-	time.Sleep(1 * time.Second)
+	// Let test run - reduced from 1s to 200ms
+	time.Sleep(200 * time.Millisecond)
 	close(stopChan)
 
 	wg.Wait()

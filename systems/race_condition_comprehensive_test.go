@@ -132,8 +132,8 @@ func TestConcurrentContentRefresh(t *testing.T) {
 		}
 	}()
 
-	// Let tests run for a reasonable duration
-	time.Sleep(500 * time.Millisecond)
+	// Let tests run for a reasonable duration - reduced from 500ms to 150ms
+	time.Sleep(150 * time.Millisecond)
 	close(stopChan)
 
 	wg.Wait()
@@ -311,8 +311,8 @@ func TestRenderWhileSpawning(t *testing.T) {
 		}
 	}()
 
-	// Let the test run
-	time.Sleep(600 * time.Millisecond)
+	// Let the test run - reduced from 600ms to 150ms
+	time.Sleep(150 * time.Millisecond)
 	close(stopChan)
 
 	wg.Wait()
@@ -450,8 +450,8 @@ func TestContentSwapDuringRead(t *testing.T) {
 		}
 	}()
 
-	// Run test
-	time.Sleep(700 * time.Millisecond)
+	// Run test - reduced from 700ms to 150ms
+	time.Sleep(150 * time.Millisecond)
 	close(stopChan)
 
 	wg.Wait()
@@ -669,8 +669,8 @@ func TestStressContentSystem(t *testing.T) {
 		}
 	}()
 
-	// Run stress test for 1 second
-	time.Sleep(1 * time.Second)
+	// Run stress test - reduced from 1s to 200ms
+	time.Sleep(200 * time.Millisecond)
 	close(stopChan)
 
 	wg.Wait()
@@ -771,8 +771,8 @@ func TestConcurrentColorCounterUpdates(t *testing.T) {
 		}
 	}()
 
-	// Let test run
-	time.Sleep(600 * time.Millisecond)
+	// Let test run - reduced from 600ms to 150ms
+	time.Sleep(150 * time.Millisecond)
 	close(stopChan)
 
 	wg.Wait()

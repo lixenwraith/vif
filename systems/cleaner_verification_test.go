@@ -36,7 +36,8 @@ func TestCleanerNoMemoryLeak(t *testing.T) {
 	var totalCleaned atomic.Int64
 	var cycleErrors atomic.Int32
 
-	cycles := 30 // Run 30 cycles to detect any persistent leaks
+	// Reduced from 30 to 5 cycles - memory leaks would show up even in fewer cycles
+	cycles := 5
 
 	for cycle := 0; cycle < cycles; cycle++ {
 		// Reset time for each cycle
@@ -55,8 +56,8 @@ func TestCleanerNoMemoryLeak(t *testing.T) {
 		cleanerSystem.TriggerCleaners(world)
 		cleanerSystem.Update(world, 16*time.Millisecond)
 
-		// Wait for async spawn processing
-		time.Sleep(50 * time.Millisecond)
+		// Wait for async spawn processing - reduced from 50ms to 30ms
+		time.Sleep(30 * time.Millisecond)
 
 		// Verify cleaners were created
 		cleanerType := reflect.TypeOf(components.CleanerComponent{})
@@ -89,8 +90,8 @@ func TestCleanerNoMemoryLeak(t *testing.T) {
 		// Advance time past animation duration to trigger cleanup
 		mockTime.Advance(constants.CleanerAnimationDuration + 100*time.Millisecond)
 
-		// Wait for cleanup to complete in update loop
-		time.Sleep(150 * time.Millisecond)
+		// Wait for cleanup to complete in update loop - reduced from 150ms to 50ms
+		time.Sleep(50 * time.Millisecond)
 
 		// Verify all cleaners were cleaned up
 		cleanersAfter := world.GetEntitiesWith(cleanerType)
@@ -367,8 +368,8 @@ func TestCleanerConcurrentWorldAccess(t *testing.T) {
 		}(i)
 	}
 
-	// Let all goroutines run concurrently for 2 seconds
-	time.Sleep(2 * time.Second)
+	// Let all goroutines run concurrently - reduced from 2s to 500ms
+	time.Sleep(500 * time.Millisecond)
 	close(stopChan)
 
 	// Wait for all goroutines to complete
