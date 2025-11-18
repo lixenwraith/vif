@@ -68,6 +68,8 @@ func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 			s.animating = true
 			s.currentRow = 0
 			s.startTime = now
+			// Initialize decay tracking map for the entire animation duration
+			s.decayedThisFrame = make(map[engine.Entity]bool)
 			// Spawn falling decay entities
 			s.spawnFallingEntities(world)
 		}
@@ -79,9 +81,6 @@ func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 func (s *DecaySystem) updateAnimation(world *engine.World) {
 	elapsed := s.ctx.TimeProvider.Now().Sub(s.startTime).Seconds()
 
-	// Clear the decayed tracking map for this frame
-	s.decayedThisFrame = make(map[engine.Entity]bool)
-
 	// Update falling entity positions and apply decay
 	s.updateFallingEntities(world, elapsed)
 
@@ -91,7 +90,7 @@ func (s *DecaySystem) updateAnimation(world *engine.World) {
 	if elapsed >= animationDuration {
 		s.animating = false
 		s.currentRow = 0
-		// Clean up falling entities
+		// Clean up falling entities and clear decay tracking
 		s.cleanupFallingEntities(world)
 		// Schedule next decay
 		interval := s.calculateInterval()

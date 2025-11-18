@@ -612,3 +612,140 @@ func TestFallingEntityMemoryLeakPrevention(t *testing.T) {
 		t.Errorf("Expected 0 FallingDecayComponent entities in world, got %d - potential memory leak", len(allFallingEntities))
 	}
 }
+
+// TestSingleDecayPerAnimation tests that a character is only decayed once during entire animation
+// even with multiple falling entities in the same column across multiple update frames
+func TestSingleDecayPerAnimation(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+	world := ctx.World
+
+	mockTime := engine.NewMockTimeProvider(time.Now())
+	ctx.TimeProvider = mockTime
+
+	decaySystem := NewDecaySystem(80, 24, 80, 0, ctx)
+	spawnSystem := NewSpawnSystem(80, 24, 0, 0, ctx)
+	decaySystem.SetSpawnSystem(spawnSystem)
+
+	// Create a test character at position (10, 12) with Bright level
+	entity := world.CreateEntity()
+	world.AddComponent(entity, components.PositionComponent{X: 10, Y: 12})
+	world.AddComponent(entity, components.CharacterComponent{
+		Rune:  'A',
+		Style: render.GetStyleForSequence(components.SequenceGreen, components.LevelBright),
+	})
+	world.AddComponent(entity, components.SequenceComponent{
+		ID:    1,
+		Index: 0,
+		Type:  components.SequenceGreen,
+		Level: components.LevelBright,
+	})
+	world.UpdateSpatialIndex(entity, 10, 12)
+
+	// Start decay animation - this should initialize decayedThisFrame map
+	decaySystem.animating = true
+	decaySystem.startTime = mockTime.Now()
+	decaySystem.decayedThisFrame = make(map[engine.Entity]bool)
+
+	// Create multiple falling entities at column 10 with different speeds
+	// These will pass over the character at different times during the animation
+	falling1 := world.CreateEntity()
+	world.AddComponent(falling1, components.FallingDecayComponent{
+		Column:    10,
+		YPosition: 0.0,
+		Speed:     8.0, // Will reach row 12 at elapsed = 1.5 seconds
+		Char:      'X',
+	})
+	falling2 := world.CreateEntity()
+	world.AddComponent(falling2, components.FallingDecayComponent{
+		Column:    10,
+		YPosition: 0.0,
+		Speed:     12.0, // Will reach row 12 at elapsed = 1.0 seconds
+		Char:      'Y',
+	})
+	falling3 := world.CreateEntity()
+	world.AddComponent(falling3, components.FallingDecayComponent{
+		Column:    10,
+		YPosition: 0.0,
+		Speed:     6.0, // Will reach row 12 at elapsed = 2.0 seconds
+		Char:      'Z',
+	})
+	decaySystem.fallingEntities = []engine.Entity{falling1, falling2, falling3}
+
+	// Simulate multiple update frames during the animation
+	// Frame 1: elapsed = 0.5s - no entities have reached row 12 yet
+	mockTime.Advance(500 * time.Millisecond)
+	decaySystem.updateAnimation(world)
+
+	// Check character is still Bright (not decayed yet)
+	seqType := reflect.TypeOf(components.SequenceComponent{})
+	seqComp, ok := world.GetComponent(entity, seqType)
+	if !ok {
+		t.Fatal("Character entity lost SequenceComponent")
+	}
+	seq := seqComp.(components.SequenceComponent)
+	if seq.Level != components.LevelBright {
+		t.Errorf("After 0.5s, expected level Bright, got %v", seq.Level)
+	}
+
+	// Frame 2: elapsed = 1.0s - falling2 (speed 12.0) reaches row 12, should decay character
+	mockTime.Advance(500 * time.Millisecond)
+	decaySystem.updateAnimation(world)
+
+	// Check character decayed once: Bright -> Normal
+	seqComp, ok = world.GetComponent(entity, seqType)
+	if !ok {
+		t.Fatal("Character entity lost SequenceComponent")
+	}
+	seq = seqComp.(components.SequenceComponent)
+	if seq.Level != components.LevelNormal {
+		t.Errorf("After 1.0s, expected level Normal (decayed once), got %v", seq.Level)
+	}
+
+	// Frame 3: elapsed = 1.5s - falling1 (speed 8.0) reaches row 12, should NOT decay again
+	mockTime.Advance(500 * time.Millisecond)
+	decaySystem.updateAnimation(world)
+
+	// Check character is still Normal (not decayed again)
+	seqComp, ok = world.GetComponent(entity, seqType)
+	if !ok {
+		t.Fatal("Character entity lost SequenceComponent")
+	}
+	seq = seqComp.(components.SequenceComponent)
+	if seq.Level != components.LevelNormal {
+		t.Errorf("After 1.5s, expected level Normal (no second decay), got %v", seq.Level)
+	}
+
+	// Frame 4: elapsed = 2.0s - falling3 (speed 6.0) reaches row 12, should NOT decay again
+	mockTime.Advance(500 * time.Millisecond)
+	decaySystem.updateAnimation(world)
+
+	// Check character is still Normal (not decayed a third time)
+	seqComp, ok = world.GetComponent(entity, seqType)
+	if !ok {
+		t.Fatal("Character entity lost SequenceComponent")
+	}
+	seq = seqComp.(components.SequenceComponent)
+	if seq.Level != components.LevelNormal {
+		t.Errorf("After 2.0s, expected level Normal (no third decay), got %v", seq.Level)
+	}
+
+	// Verify the character is in the decayed tracking map
+	if !decaySystem.decayedThisFrame[entity] {
+		t.Error("Character should be marked as decayed in tracking map")
+	}
+
+	// Complete the animation
+	animationDuration := float64(24) / constants.FallingDecayMinSpeed
+	mockTime.Advance(time.Duration(animationDuration) * time.Second)
+	decaySystem.updateAnimation(world)
+
+	// Verify animation completed and tracking map was cleared
+	if decaySystem.animating {
+		t.Error("Animation should be complete")
+	}
+	if len(decaySystem.decayedThisFrame) != 0 {
+		t.Error("Decay tracking map should be cleared after animation completes")
+	}
+}
