@@ -199,7 +199,7 @@ func BenchmarkGoldSequenceSpawn(b *testing.B) {
 
 		// Clean up for next iteration
 		b.StopTimer()
-		goldSystem.removeGoldSequence(world)
+		goldSystem.CompleteGoldSequence(world)
 		b.StartTimer()
 	}
 }
@@ -424,7 +424,7 @@ func BenchmarkCompleteGoldCleanerPipeline(b *testing.B) {
 
 		// Clean up
 		b.StopTimer()
-		goldSystem.removeGoldSequence(world)
+		goldSystem.CompleteGoldSequence(world)
 		cleanerType := reflect.TypeOf(components.CleanerComponent{})
 		cleaners := world.GetEntitiesWith(cleanerType)
 		for _, entity := range cleaners {

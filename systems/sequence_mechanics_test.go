@@ -186,7 +186,7 @@ func TestGoldSequenceRandomPosition(t *testing.T) {
 		}
 
 		// Remove gold sequence for next iteration
-		goldSystem.removeGoldSequence(world)
+		goldSystem.CompleteGoldSequence(world)
 	}
 
 	// Verify that we got some variation in positions
@@ -352,7 +352,7 @@ func TestGoldSequenceNotAtFixedCenter(t *testing.T) {
 		}
 
 		// Remove gold sequence for next iteration
-		goldSystem.removeGoldSequence(world)
+		goldSystem.CompleteGoldSequence(world)
 	}
 
 	if totalSpawns == 0 {

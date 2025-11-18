@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/render"
 )
 
 // TestGoldSequenceSpawnsAfterDecay tests that gold sequence spawns when decay ends
@@ -394,11 +395,12 @@ func TestCleanerCleanup(t *testing.T) {
 	cleanerSystem := NewCleanerSystem(ctx, 90, 26, constants.DefaultCleanerConfig())
 
 	// Create Red characters on multiple rows
+	redStyle := render.GetStyleForSequence(components.SequenceRed, components.LevelBright)
 	for row := 0; row < 10; row++ {
 		for x := 10; x < 80; x += 10 {
 			entity := world.CreateEntity()
 			world.AddComponent(entity, components.PositionComponent{X: x, Y: row})
-			world.AddComponent(entity, components.CharacterComponent{Rune: 'R', Style: 0})
+			world.AddComponent(entity, components.CharacterComponent{Rune: 'R', Style: redStyle})
 			world.AddComponent(entity, components.SequenceComponent{
 				ID:    row,
 				Index: x / 10,
