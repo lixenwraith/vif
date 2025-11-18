@@ -420,6 +420,27 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 - **Component Tests**: Validate individual component data structures
 - **System Tests**: Test system logic in isolation
 - **Helper Tests**: Verify utility functions and time providers
+- **Motion Tests**: Validate vi motion commands and find operations
+
+#### Motion and Command Tests
+Located in `modes/`:
+- **find_motion_test.go**: Comprehensive tests for find motions
+  - Forward find (`f`) with count support: `fa`, `2fa`, `5fx`
+  - Backward find (`F`) with count support: `Fa`, `2Fa`, `3Fb`
+  - Edge cases: no match, count exceeds matches, boundary conditions
+  - Unicode character support
+  - Delete integration: `dfa`, `d2fa`, `dFx`, `d3Fx`
+- **regression_test.go**: Ensures no regressions in existing vi commands
+  - Basic motions: h, j, k, l, w, b, e, W, B, E
+  - Count prefixes: `5h`, `3j`, `10w`
+  - Special commands: `gg`, `G`, `go`, `dd`, `d$`, `%`
+  - Cursor validation and boundary checks
+  - Race condition tests for motion execution
+- **count_aware_commands_test.go**: Count-aware command state management
+- **motions_test.go**: Core motion functionality
+- **motions_helpers_test.go**: Helper functions for motion operations
+- **input_test.go**: Input handling and mode switching
+- **delete_operator_test.go**: Delete operation tests
 
 ### Integration Tests
 Located in `systems/cleaner_gold_integration_test.go`:
@@ -457,11 +478,25 @@ Located in `systems/cleaner_benchmark_test.go`:
 
 #### Standard Test Run
 ```bash
+# Run all tests
+go test ./... -v
+
+# Run modes tests only
+go test ./modes/... -v
+
+# Run systems tests only
 go test ./systems/... -v
 ```
 
 #### Race Detector (CRITICAL for concurrency validation)
 ```bash
+# Run all tests with race detection
+go test ./... -race -v
+
+# Run modes tests with race detection
+go test ./modes/... -race -v
+
+# Run systems tests with race detection
 go test ./systems/... -race -v
 ```
 
@@ -472,11 +507,18 @@ go test ./systems/... -bench=. -benchmem
 
 #### Specific Test Categories
 ```bash
+# Find motion tests only
+go test ./modes/... -run TestFindChar -v
+
+# Regression tests only
+go test ./modes/... -run "Regression|StillWork" -v
+
 # Integration tests only
 go test ./systems/... -run TestConcurrent -v
 
 # Race condition tests only
 go test ./systems/... -run TestRapid -v -race
+go test ./modes/... -run TestNoRace -v -race
 
 # Memory leak detection (long running)
 go test ./systems/... -run TestMemoryLeak -v
