@@ -305,6 +305,8 @@ The game features four types of character sequences, each with distinct behavior
   - Allows aggressive high-heat play without Red penalty accumulation
   - Most effective when multiple Red sequences have decayed across different rows
 - **Animation**: Smooth 60 FPS movement with trailing fade effect for visual clarity
+- **Trail Effect**: 8-10 character gradient trail (bright yellow → transparent) follows each cleaner
+- **Removal Flash**: Brief bright flash (150ms) appears when Red characters are destroyed, providing visual feedback
 
 ---
 

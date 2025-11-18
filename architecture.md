@@ -30,7 +30,8 @@ Component (marker interface)
 ├── CharacterComponent {Rune, Style}
 ├── SequenceComponent {ID, Index, Type, Level}
 ├── GoldSequenceComponent {Active, SequenceID, StartTime, CharSequence, CurrentIndex}
-└── CleanerComponent {Row, XPosition, Speed, Direction, TrailPositions, TrailMaxAge}
+├── CleanerComponent {Row, XPosition, Speed, Direction, TrailPositions, TrailMaxAge}
+└── RemovalFlashComponent {X, Y, Char, StartTime, Duration}
 ```
 
 ### Sequence Types
@@ -45,7 +46,9 @@ Component (marker interface)
 2. Draw static UI (heat meter, line numbers)
 3. Draw game entities (characters)
 4. Draw overlays (ping, decay animation)
-5. Draw cursor (topmost layer)
+5. Draw cleaners with gradient trail effects
+6. Draw removal flash effects
+7. Draw cursor (topmost layer)
 
 ## Input State Machine
 ```
@@ -206,11 +209,20 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 - **Speed**: Calculated to traverse screen width in 1 second (CleanerAnimationDuration)
 - **Selectivity**: Only destroys Red characters, leaves Blue/Green untouched
 - **Animation**: Bright yellow blocks with fade trail effect (10 position history)
+- **Visual Effects**:
+  - Pre-calculated gradient table for trail rendering (bright yellow → transparent)
+  - Trail length: 8-10 characters with smooth opacity falloff
+  - Removal flash effect: 150ms bright flash when Red characters destroyed
+  - Flash cleanup: Automatic removal of expired flash entities
 - **Concurrency**:
   - Updates run in separate goroutine at 60 FPS for smooth animation
   - Non-blocking spawn requests via buffered channel
   - Atomic state management for thread-safe activation/deactivation
   - Trail slices allocated from `sync.Pool` for efficient memory reuse
+- **Performance**:
+  - Pre-calculated color gradients avoid per-frame calculations
+  - Batch terminal updates for trail rendering
+  - Minimal allocations in render loop (gradient array vs dynamic color creation)
 - **Duration**: 1 second from spawn to cleanup
 
 ## Data Files

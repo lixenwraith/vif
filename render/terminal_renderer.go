@@ -69,6 +69,9 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 	// Draw cleaners if active - AFTER decay animation
 	r.drawCleaners(ctx.World, defaultStyle)
 
+	// Draw removal flash effects - AFTER cleaners
+	r.drawRemovalFlashes(ctx.World, ctx, defaultStyle)
+
 	// Draw column indicators
 	r.drawColumnIndicators(ctx, defaultStyle)
 
@@ -419,7 +422,7 @@ func (r *TerminalRenderer) drawFallingDecay(world *engine.World, defaultStyle tc
 	}
 }
 
-// drawCleaners draws the cleaner animation with trail effects
+// drawCleaners draws the cleaner animation with trail effects using pre-calculated gradients
 func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.Style) {
 	cleanerType := reflect.TypeOf(components.CleanerComponent{})
 	entities := world.GetEntitiesWith(cleanerType)
@@ -438,8 +441,9 @@ func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.
 		}
 		screenY := r.gameY + cleaner.Row
 
-		// Draw trail with fade effect (from oldest to newest)
-		for i := len(cleaner.TrailPositions) - 1; i >= 0; i-- {
+		// Draw trail with fade effect using pre-calculated gradient (from oldest to newest)
+		trailLen := len(cleaner.TrailPositions)
+		for i := trailLen - 1; i >= 0; i-- {
 			trailX := cleaner.TrailPositions[i]
 			x := int(trailX + 0.5) // Round to nearest integer
 
@@ -450,26 +454,17 @@ func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.
 
 			screenX := r.gameX + x
 
-			// Calculate opacity based on position in trail
-			// Newest positions (index 0) are brightest, oldest positions fade
-			age := float64(i) / float64(constants.CleanerTrailLength)
-			if age > 1.0 {
-				age = 1.0
+			// Use pre-calculated gradient table for trail colors
+			// Index 0 = newest/brightest, higher indices = older/fainter
+			gradientIndex := i
+			if gradientIndex >= len(CleanerTrailGradient) {
+				gradientIndex = len(CleanerTrailGradient) - 1
 			}
 
-			// Interpolate from bright yellow to background
-			// age=0.0 -> full brightness, age=1.0 -> fully faded
-			opacity := 1.0 - age
-			if opacity > 0.0 {
-				// Bright yellow RGB: (255, 255, 0)
-				// Background RGB: typically (0, 0, 0)
-				red := int32(255 * opacity)
-				green := int32(255 * opacity)
-				blue := int32(0)
-
-				trailColor := tcell.NewRGBColor(red, green, blue)
+			// Only draw if color has sufficient opacity
+			if gradientIndex < len(CleanerTrailGradient) {
+				trailColor := CleanerTrailGradient[gradientIndex]
 				trailStyle := defaultStyle.Foreground(trailColor)
-
 				r.screen.SetContent(screenX, screenY, constants.CleanerChar, nil, trailStyle)
 			}
 		}
@@ -481,6 +476,55 @@ func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.
 			cleanerStyle := defaultStyle.Foreground(RgbSequenceGold)
 			r.screen.SetContent(screenX, screenY, constants.CleanerChar, nil, cleanerStyle)
 		}
+	}
+}
+
+// drawRemovalFlashes draws the brief flash effects when red characters are removed
+func (r *TerminalRenderer) drawRemovalFlashes(world *engine.World, ctx *engine.GameContext, defaultStyle tcell.Style) {
+	flashType := reflect.TypeOf(components.RemovalFlashComponent{})
+	entities := world.GetEntitiesWith(flashType)
+
+	for _, entity := range entities {
+		// Defensive: Check if entity still exists
+		flashComp, ok := world.GetComponent(entity, flashType)
+		if !ok {
+			continue // Entity was destroyed between GetEntitiesWith and GetComponent
+		}
+		flash := flashComp.(components.RemovalFlashComponent)
+
+		// Check if position is in bounds
+		if flash.Y < 0 || flash.Y >= r.gameHeight || flash.X < 0 || flash.X >= r.gameWidth {
+			continue
+		}
+
+		// Calculate elapsed time for fade effect
+		now := ctx.TimeProvider.Now()
+		elapsed := now.Sub(flash.StartTime).Milliseconds()
+
+		// Skip if flash has expired (cleanup will handle removal)
+		if elapsed >= int64(flash.Duration) {
+			continue
+		}
+
+		// Calculate opacity based on elapsed time (fade from bright to transparent)
+		opacity := 1.0 - (float64(elapsed) / float64(flash.Duration))
+		if opacity < 0.0 {
+			opacity = 0.0
+		}
+
+		// Interpolate flash color from bright yellow-white to transparent
+		// Start: RGB(255, 255, 200) -> End: RGB(255, 255, 0)
+		red := int32(255)
+		green := int32(255)
+		blue := int32(200 * opacity) // Fade blue component for yellow transition
+
+		flashColor := tcell.NewRGBColor(red, green, blue)
+		flashStyle := defaultStyle.Foreground(flashColor)
+
+		screenX := r.gameX + flash.X
+		screenY := r.gameY + flash.Y
+
+		r.screen.SetContent(screenX, screenY, flash.Char, nil, flashStyle)
 	}
 }
 

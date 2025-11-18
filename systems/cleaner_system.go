@@ -98,6 +98,31 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 	default:
 		// No spawn request, continue
 	}
+
+	// Clean up expired flash effects
+	cs.cleanupExpiredFlashes(world)
+}
+
+// cleanupExpiredFlashes removes flash effect entities that have exceeded their duration
+func (cs *CleanerSystem) cleanupExpiredFlashes(world *engine.World) {
+	flashType := reflect.TypeOf(components.RemovalFlashComponent{})
+	entities := world.GetEntitiesWith(flashType)
+
+	now := cs.ctx.TimeProvider.Now()
+
+	for _, entity := range entities {
+		flashComp, ok := world.GetComponent(entity, flashType)
+		if !ok {
+			continue
+		}
+		flash := flashComp.(components.RemovalFlashComponent)
+
+		elapsed := now.Sub(flash.StartTime).Milliseconds()
+		if elapsed >= int64(flash.Duration) {
+			// Flash has expired, destroy entity
+			world.SafeDestroyEntity(entity)
+		}
+	}
 }
 
 // updateLoop runs concurrently and updates cleaner positions
@@ -333,11 +358,14 @@ func (cs *CleanerSystem) updateCleanerPositions(world *engine.World, deltaTime f
 }
 
 // detectAndDestroyRedCharacters checks for Red characters under cleaners and destroys them
+// with optional flash effect for visual feedback
 func (cs *CleanerSystem) detectAndDestroyRedCharacters(world *engine.World) {
 	cleanerType := reflect.TypeOf(components.CleanerComponent{})
 	cleanerEntities := world.GetEntitiesWith(cleanerType)
 
 	seqType := reflect.TypeOf(components.SequenceComponent{})
+	posType := reflect.TypeOf(components.PositionComponent{})
+	charType := reflect.TypeOf(components.CharacterComponent{})
 
 	cs.mu.RLock()
 	gameWidth := cs.gameWidth
@@ -374,6 +402,26 @@ func (cs *CleanerSystem) detectAndDestroyRedCharacters(world *engine.World) {
 		seq := seqComp.(components.SequenceComponent)
 
 		if seq.Type == components.SequenceRed {
+			// Get character info for flash effect before destroying
+			charComp, hasChar := world.GetComponent(targetEntity, charType)
+			posComp, hasPos := world.GetComponent(targetEntity, posType)
+
+			// Create flash effect at removal location
+			if hasChar && hasPos {
+				char := charComp.(components.CharacterComponent)
+				pos := posComp.(components.PositionComponent)
+
+				flashEntity := world.CreateEntity()
+				flash := components.RemovalFlashComponent{
+					X:         pos.X,
+					Y:         pos.Y,
+					Char:      char.Rune,
+					StartTime: cs.ctx.TimeProvider.Now(),
+					Duration:  constants.RemovalFlashDuration,
+				}
+				world.AddComponent(flashEntity, flash)
+			}
+
 			// Destroy the Red character
 			world.SafeDestroyEntity(targetEntity)
 		}

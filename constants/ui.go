@@ -87,4 +87,7 @@ const (
 
 	// CleanerChar is the character used to render the cleaner block
 	CleanerChar = '█'
+
+	// RemovalFlashDuration is how long the removal flash effect lasts in milliseconds
+	RemovalFlashDuration = 150
 )

@@ -42,7 +42,31 @@ var (
 	RgbScoreBg      = tcell.NewRGBColor(255, 223, 100) // Light golden yellow
 	RgbBoostBg      = tcell.NewRGBColor(255, 192, 203) // Pink for boost timer
 	RgbStatusText   = tcell.NewRGBColor(0, 0, 0)       // Dark text for status
+
+	// Cleaner removal flash effect
+	RgbRemovalFlash = tcell.NewRGBColor(255, 255, 200) // Bright yellow-white flash
 )
+
+// CleanerTrailGradient is a pre-calculated gradient table for cleaner trail rendering.
+// Index 0 = newest/brightest (full yellow), Index 9 = oldest/faded (transparent).
+// This avoids calculating colors on every frame, improving render performance.
+var CleanerTrailGradient [10]tcell.Color
+
+func init() {
+	// Pre-calculate gradient from bright yellow (255, 255, 0) to transparent/black (0, 0, 0)
+	// Trail length is 10 positions (constants.CleanerTrailLength)
+	for i := 0; i < 10; i++ {
+		// Calculate opacity: index 0 = 1.0 (brightest), index 9 = 0.1 (faintest)
+		opacity := 1.0 - (float64(i) / 10.0)
+
+		// Interpolate from bright yellow to black
+		red := int32(255 * opacity)
+		green := int32(255 * opacity)
+		blue := int32(0) // Yellow has no blue component
+
+		CleanerTrailGradient[i] = tcell.NewRGBColor(red, green, blue)
+	}
+}
 
 // GetHeatMeterColor returns the color for a given position in the heat meter gradient
 // progress is 0.0 to 1.0, representing position from start to end
