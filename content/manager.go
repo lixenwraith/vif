@@ -3,6 +3,7 @@ package content
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"os"
@@ -25,7 +26,48 @@ const (
 var (
 	// CommentPrefixes defines the prefixes that identify comment lines
 	CommentPrefixes = []string{"//", "#"}
+
+	// testMode indicates if we're running under go test
+	testMode bool
 )
+
+// init detects test mode and suppresses verbose logging during tests
+func init() {
+	// Check if running under go test by examining the executable name
+	// Test binaries have names ending in .test or containing ".test" in the path
+	testMode = isTestMode()
+
+	if testMode {
+		// Suppress all logging in test mode to reduce output clutter
+		// Critical errors will still be visible through test failures
+		log.SetOutput(io.Discard)
+	}
+}
+
+// isTestMode detects if we're running under go test
+func isTestMode() bool {
+	// Check environment variable first (for explicit control)
+	if os.Getenv("GO_TEST_MODE") == "1" {
+		return true
+	}
+
+	// Check if the executable name indicates test mode
+	if len(os.Args) > 0 {
+		// Test binaries typically have ".test" in their name
+		if strings.Contains(os.Args[0], ".test") {
+			return true
+		}
+	}
+
+	// Check if any test flags are present
+	for _, arg := range os.Args {
+		if strings.HasPrefix(arg, "-test.") {
+			return true
+		}
+	}
+
+	return false
+}
 
 // findProjectRoot finds the project root by looking for go.mod
 // Returns the directory containing go.mod, or current directory if not found
