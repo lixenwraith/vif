@@ -1,0 +1,28 @@
+// This file tests various edge cases for content processing
+// Comments at the beginning should be filtered out
+# Hash-style comments should also be filtered
+
+Line 1: Normal content line
+Line 2: Another normal line
+
+   Line 3: With leading whitespace
+Line 4: With trailing spaces
+
+// Mid-file comment
+Line 5: After comment
+
+# Another hash comment
+Line 6: After hash comment
+
+Line 7: Short line
+Line 8: Medium length line with more text
+Line 9: This is a longer line but still within the 80 character limit for display
+Line 10: Exactly at minimum required lines
+Line 11: Extra content to ensure we meet requirements
+Line 12: More test content
+Line 13: Additional line for testing
+Line 14: Another test line
+Line 15: Final test line
+
+// Comments at the end should be filtered too
+# End of file

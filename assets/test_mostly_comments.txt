@@ -1,0 +1,18 @@
+// This file is mostly comments
+// It should be filtered out by validation
+// Because it won't have enough valid content lines
+# More comments here
+# And more
+// Even more comments
+
+Line 1
+Line 2
+
+// Lots of comments in between
+// To dilute the content
+# Hash comments too
+
+Line 3
+
+// This file should fail validation
+// Because it has less than 10 valid lines

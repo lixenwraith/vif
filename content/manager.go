@@ -13,6 +13,9 @@ import (
 const (
 	assetsDir        = "./assets"
 	ContentBlockSize = 30 // Default number of lines per content block (20-50 range)
+	MinProcessedLines = 10 // Minimum number of valid lines required after processing
+	MaxLineLength    = 80 // Maximum line length to match game width
+	MaxRetries       = 5  // Maximum number of retries when selecting content blocks
 )
 
 var (
@@ -120,6 +123,53 @@ func (cm *ContentManager) isValidContentLine(line string) bool {
 	return len(trimmed) > 0 && !cm.isCommentLine(line)
 }
 
+// ProcessContentBlock cleans and prepares a block of text lines for use in game
+// It removes comments, empty lines, trims whitespace, and truncates lines that are too long
+// Returns the processed lines
+func (cm *ContentManager) ProcessContentBlock(lines []string) []string {
+	var processed []string
+
+	for _, line := range lines {
+		// Trim whitespace
+		trimmed := strings.TrimSpace(line)
+
+		// Skip empty lines and comments
+		if len(trimmed) == 0 || cm.isCommentLine(line) {
+			continue
+		}
+
+		// Truncate lines that are too long
+		if len(trimmed) > MaxLineLength {
+			trimmed = trimmed[:MaxLineLength]
+		}
+
+		processed = append(processed, trimmed)
+	}
+
+	return processed
+}
+
+// ValidateProcessedContent checks if the processed content meets minimum requirements
+// Returns true if content is valid, false otherwise
+func (cm *ContentManager) ValidateProcessedContent(lines []string) bool {
+	// Check if we have enough lines
+	if len(lines) < MinProcessedLines {
+		log.Printf("Content validation failed: only %d lines (minimum %d required)", len(lines), MinProcessedLines)
+		return false
+	}
+
+	// All lines should already be within MaxLineLength due to processing
+	// But we can verify for safety
+	for i, line := range lines {
+		if len(line) > MaxLineLength {
+			log.Printf("Content validation failed: line %d exceeds max length (%d > %d)", i, len(line), MaxLineLength)
+			return false
+		}
+	}
+
+	return true
+}
+
 // GetContentBlock reads a block of lines from a file starting at startLine
 // It skips empty lines and comments, and wraps around to the beginning if needed
 // Returns the lines and any error encountered
@@ -164,6 +214,28 @@ func (cm *ContentManager) GetContentBlock(filePath string, startLine, size int) 
 	}
 
 	return block, nil
+}
+
+// GetDefaultContent returns a default content block to use as fallback
+// when no valid content can be loaded from files
+func (cm *ContentManager) GetDefaultContent() []string {
+	return []string{
+		"Welcome to Vi-Fighter!",
+		"Type to defeat the falling text",
+		"Use Vi motions for combo attacks",
+		"Press ESC for normal mode",
+		"Press i for insert mode",
+		"Press / to search",
+		"Delete with d + motion",
+		"Jump with f + character",
+		"Boost with consecutive moves",
+		"Master the combos!",
+		"Keep typing to survive",
+		"Speed increases over time",
+		"Watch your heat meter",
+		"Chain commands for points",
+		"Good luck, warrior!",
+	}
 }
 
 // SelectRandomBlock selects a random file and a random block from that file
@@ -215,4 +287,40 @@ func (cm *ContentManager) SelectRandomBlock() ([]string, string, error) {
 
 	log.Printf("Selected random block from %s starting at line %d (%d lines)", selectedFile, randomStartLine, len(block))
 	return block, selectedFile, nil
+}
+
+// SelectRandomBlockWithValidation selects a random block and validates it
+// If the block doesn't meet requirements, it retries with different blocks
+// Falls back to default content if no valid content can be found
+// Returns the validated lines, the file path (or "default" for fallback), and any error
+func (cm *ContentManager) SelectRandomBlockWithValidation() ([]string, string, error) {
+	// Try to get valid content with retries
+	for attempt := 0; attempt < MaxRetries; attempt++ {
+		// Try to select a random block
+		block, filePath, err := cm.SelectRandomBlock()
+		if err != nil {
+			// If we have no content files, fall back immediately
+			if len(cm.contentFiles) == 0 {
+				log.Printf("No content files available, using default content")
+				return cm.GetDefaultContent(), "default", nil
+			}
+			log.Printf("Attempt %d: Error selecting random block: %v", attempt+1, err)
+			continue
+		}
+
+		// Process the block
+		processed := cm.ProcessContentBlock(block)
+
+		// Validate the processed content
+		if cm.ValidateProcessedContent(processed) {
+			log.Printf("Successfully selected and validated content from %s (%d lines)", filePath, len(processed))
+			return processed, filePath, nil
+		}
+
+		log.Printf("Attempt %d: Content from %s did not meet requirements (%d lines)", attempt+1, filePath, len(processed))
+	}
+
+	// All retries failed, fall back to default content
+	log.Printf("All %d attempts failed, falling back to default content", MaxRetries)
+	return cm.GetDefaultContent(), "default", nil
 }

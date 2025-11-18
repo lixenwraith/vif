@@ -1,0 +1,16 @@
+// Test file with lines that exceed the maximum length
+Line 1: Normal short line
+Line 2: This is a very long line that exceeds the 80 character limit and should be truncated by the processing logic to fit within the game width constraints
+Line 3: Another extremely long line with lots of text that goes on and on and on, way past the 80 character limit that we have set for the maximum line length in our game
+Line 4: Short line again
+Line 5: Yet another super duper extra long line with excessive content that needs to be truncated to match the game display requirements and prevent overflow issues
+Line 6: Normal line
+Line 7: Testing truncation with a line full of repeated characters: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Line 8: Short
+Line 9: Medium length line that fits
+Line 10: Final very long line that should also be truncated because it exceeds our maximum allowed character count of 80
+Line 11: Extra line
+Line 12: Extra line 2
+Line 13: Extra line 3
+Line 14: Extra line 4
+Line 15: Extra line 5
