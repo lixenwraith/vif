@@ -3,6 +3,7 @@ package systems
 import (
 	"math/rand"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/components"
@@ -20,6 +21,7 @@ import (
 // 4. Decay animation runs when timer expires
 // 5. After decay animation ends → Gold spawns again
 type DecaySystem struct {
+	mu              sync.RWMutex // Protects timerStarted, nextDecayTime, lastUpdate, heatIncrement, and dimension fields
 	animating       bool
 	currentRow      int
 	startTime       time.Time
@@ -71,19 +73,27 @@ func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 	// Update animation if active
 	if s.animating {
 		s.updateAnimation(world)
-	} else if s.timerStarted {
-		// Only check timer if it has been started (after first Gold sequence ends)
-		now := s.ctx.TimeProvider.Now()
-		if now.After(s.nextDecayTime) || now.Equal(s.nextDecayTime) {
-			s.animating = true
-			s.currentRow = 0
-			s.startTime = now
-			// Initialize decay tracking map for the entire animation duration
-			s.decayedThisFrame = make(map[engine.Entity]bool)
-			// Spawn falling decay entities
-			s.spawnFallingEntities(world)
+	} else {
+		// Check if timer is started and if it's time to decay
+		s.mu.RLock()
+		timerStarted := s.timerStarted
+		nextDecayTime := s.nextDecayTime
+		s.mu.RUnlock()
+
+		if timerStarted {
+			// Only check timer if it has been started (after first Gold sequence ends)
+			now := s.ctx.TimeProvider.Now()
+			if now.After(nextDecayTime) || now.Equal(nextDecayTime) {
+				s.animating = true
+				s.currentRow = 0
+				s.startTime = now
+				// Initialize decay tracking map for the entire animation duration
+				s.decayedThisFrame = make(map[engine.Entity]bool)
+				// Spawn falling decay entities
+				s.spawnFallingEntities(world)
+			}
+			// Timer is only recalculated after decay animation completes
 		}
-		// Timer is only recalculated after decay animation completes
 	}
 }
 
@@ -336,6 +346,9 @@ func (s *DecaySystem) cleanupFallingEntities(world *engine.World) {
 // StartDecayTimer starts or restarts the decay timer based on current heat
 // This should be called when Gold sequence ends (timeout or completion)
 func (s *DecaySystem) StartDecayTimer() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	interval := s.calculateInterval()
 	s.nextDecayTime = s.ctx.TimeProvider.Now().Add(interval)
 	s.lastUpdate = s.ctx.TimeProvider.Now()
@@ -400,7 +413,11 @@ func (s *DecaySystem) GetTimeUntilDecay() float64 {
 	if s.animating {
 		return 0.0
 	}
-	remaining := s.nextDecayTime.Sub(s.ctx.TimeProvider.Now()).Seconds()
+	s.mu.RLock()
+	nextDecayTime := s.nextDecayTime
+	s.mu.RUnlock()
+
+	remaining := nextDecayTime.Sub(s.ctx.TimeProvider.Now()).Seconds()
 	if remaining < 0 {
 		remaining = 0
 	}
@@ -409,6 +426,9 @@ func (s *DecaySystem) GetTimeUntilDecay() float64 {
 
 // UpdateDimensions updates the game dimensions
 func (s *DecaySystem) UpdateDimensions(gameWidth, gameHeight, screenWidth, heatIncrement int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	s.gameWidth = gameWidth
 	s.gameHeight = gameHeight
 	s.screenWidth = screenWidth
