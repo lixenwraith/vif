@@ -14,7 +14,7 @@ const (
 	ErrorCursorTimeoutMs = 200
 
 	// ScoreBlinkTimeoutMs is how long the score blinks after scoring
-	ScoreBlinkTimeoutMs = 300
+	ScoreBlinkTimeoutMs = 200
 
 	// ErrorCursorTimeout is the duration for error cursor flash
 	ErrorCursorTimeout = ErrorCursorTimeoutMs * time.Millisecond

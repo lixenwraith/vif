@@ -71,6 +71,10 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.SetScoreIncrement(0) // Reset heat
 		s.ctx.SetBoostEnabled(false)
 		s.ctx.SetBoostSequenceColor(0) // 0 = None
+		// Set score blink to black background with bright red text
+		s.ctx.SetScoreBlinkActive(true)
+		s.ctx.SetScoreBlinkColor(0) // Black background (will be handled specially in renderer)
+		s.ctx.SetScoreBlinkTime(now)
 		return
 	}
 
@@ -83,6 +87,10 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.SetScoreIncrement(0)
 		s.ctx.SetBoostEnabled(false)
 		s.ctx.SetBoostSequenceColor(0)
+		// Set score blink to black background with bright red text
+		s.ctx.SetScoreBlinkActive(true)
+		s.ctx.SetScoreBlinkColor(0) // Black background (will be handled specially in renderer)
+		s.ctx.SetScoreBlinkTime(now)
 		return
 	}
 	char := charComp.(components.CharacterComponent)
@@ -96,6 +104,10 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.SetScoreIncrement(0)
 		s.ctx.SetBoostEnabled(false)
 		s.ctx.SetBoostSequenceColor(0)
+		// Set score blink to black background with bright red text
+		s.ctx.SetScoreBlinkActive(true)
+		s.ctx.SetScoreBlinkColor(0) // Black background (will be handled specially in renderer)
+		s.ctx.SetScoreBlinkTime(now)
 		return
 	}
 	seq := seqComp.(components.SequenceComponent)
@@ -207,6 +219,10 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.SetScoreIncrement(0)
 		s.ctx.SetBoostEnabled(false)
 		s.ctx.SetBoostSequenceColor(0) // 0 = None
+		// Set score blink to black background with bright red text
+		s.ctx.SetScoreBlinkActive(true)
+		s.ctx.SetScoreBlinkColor(0) // Black background (will be handled specially in renderer)
+		s.ctx.SetScoreBlinkTime(now)
 	}
 }
 
@@ -236,10 +252,20 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 		// Incorrect character - flash error cursor but DON'T reset heat for gold sequence
 		s.ctx.SetCursorError(true)
 		s.ctx.SetCursorErrorTime(now)
+		// Set score blink to black background with bright red text for error
+		s.ctx.SetScoreBlinkActive(true)
+		s.ctx.SetScoreBlinkColor(0) // Black background (will be handled specially in renderer)
+		s.ctx.SetScoreBlinkTime(now)
 		return
 	}
 
 	// Correct character - remove entity and move cursor
+	// Trigger score blink with Gold color (Bright Yellow)
+	s.ctx.SetScoreBlinkActive(true)
+	fgColor, _, _ := render.GetStyleForSequence(seq.Type, seq.Level).Decompose()
+	s.ctx.SetScoreBlinkColor(fgColor)
+	s.ctx.SetScoreBlinkTime(now)
+
 	// Safely destroy the character entity (handles spatial index removal)
 	world.SafeDestroyEntity(entity)
 

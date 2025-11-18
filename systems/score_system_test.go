@@ -402,3 +402,226 @@ func TestIncorrectCharacterResetsHeat(t *testing.T) {
 		t.Error("Expected cursor error to be set after incorrect character")
 	}
 }
+
+// TestScoreBlinkOnCorrectCharacter verifies that score blink is activated with character color
+func TestScoreBlinkOnCorrectCharacter(t *testing.T) {
+	// Create mock screen
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.Init()
+	defer screen.Fini()
+	screen.SetSize(80, 24)
+
+	// Create game context
+	ctx := engine.NewGameContext(screen)
+	scoreSystem := NewScoreSystem(ctx)
+
+	// Test with different character types and levels
+	tests := []struct {
+		name  string
+		seqType components.SequenceType
+		level components.SequenceLevel
+	}{
+		{"Bright Blue", components.SequenceBlue, components.LevelBright},
+		{"Normal Green", components.SequenceGreen, components.LevelNormal},
+		{"Dark Blue", components.SequenceBlue, components.LevelDark},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a character at cursor position
+			entity := ctx.World.CreateEntity()
+			pos := components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY}
+			char := components.CharacterComponent{Rune: 'a', Style: tcell.StyleDefault}
+			seq := components.SequenceComponent{
+				ID:    1,
+				Index: 0,
+				Type:  tt.seqType,
+				Level: tt.level,
+			}
+
+			ctx.World.AddComponent(entity, pos)
+			ctx.World.AddComponent(entity, char)
+			ctx.World.AddComponent(entity, seq)
+			ctx.World.UpdateSpatialIndex(entity, pos.X, pos.Y)
+
+			// Type correct character
+			scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
+
+			// Score blink should be active
+			if !ctx.GetScoreBlinkActive() {
+				t.Error("Expected score blink to be active after correct character")
+			}
+
+			// Score blink color should match character color (non-zero)
+			blinkColor := ctx.GetScoreBlinkColor()
+			if blinkColor == 0 {
+				t.Error("Expected score blink color to be non-zero (character color)")
+			}
+
+			// Score blink time should be recent
+			blinkTime := ctx.GetScoreBlinkTime()
+			now := ctx.TimeProvider.Now()
+			if blinkTime.After(now) || now.Sub(blinkTime) > 100*time.Millisecond {
+				t.Errorf("Expected score blink time to be recent, got %v", blinkTime)
+			}
+		})
+	}
+}
+
+// TestScoreBlinkOnError verifies that score blink is activated with error color (black)
+func TestScoreBlinkOnError(t *testing.T) {
+	// Create mock screen
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.Init()
+	defer screen.Fini()
+	screen.SetSize(80, 24)
+
+	// Create game context
+	ctx := engine.NewGameContext(screen)
+	scoreSystem := NewScoreSystem(ctx)
+
+	// Test 1: Typing on empty space
+	t.Run("Empty Space", func(t *testing.T) {
+		scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
+
+		// Score blink should be active
+		if !ctx.GetScoreBlinkActive() {
+			t.Error("Expected score blink to be active after error")
+		}
+
+		// Score blink color should be 0 (black background for error)
+		blinkColor := ctx.GetScoreBlinkColor()
+		if blinkColor != 0 {
+			t.Errorf("Expected score blink color to be 0 (error state), got %d", blinkColor)
+		}
+	})
+
+	// Test 2: Typing wrong character
+	t.Run("Wrong Character", func(t *testing.T) {
+		// Create a character at cursor position
+		entity := ctx.World.CreateEntity()
+		pos := components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY}
+		char := components.CharacterComponent{Rune: 'a', Style: tcell.StyleDefault}
+		seq := components.SequenceComponent{
+			ID:    1,
+			Index: 0,
+			Type:  components.SequenceGreen,
+			Level: components.LevelNormal,
+		}
+
+		ctx.World.AddComponent(entity, pos)
+		ctx.World.AddComponent(entity, char)
+		ctx.World.AddComponent(entity, seq)
+		ctx.World.UpdateSpatialIndex(entity, pos.X, pos.Y)
+
+		// Type wrong character
+		scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'b')
+
+		// Score blink should be active
+		if !ctx.GetScoreBlinkActive() {
+			t.Error("Expected score blink to be active after error")
+		}
+
+		// Score blink color should be 0 (black background for error)
+		blinkColor := ctx.GetScoreBlinkColor()
+		if blinkColor != 0 {
+			t.Errorf("Expected score blink color to be 0 (error state), got %d", blinkColor)
+		}
+	})
+}
+
+// TestScoreBlinkOnGoldCharacter verifies that gold character typing triggers score blink
+func TestScoreBlinkOnGoldCharacter(t *testing.T) {
+	// Create mock screen
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.Init()
+	defer screen.Fini()
+	screen.SetSize(80, 24)
+
+	// Create game context
+	ctx := engine.NewGameContext(screen)
+	scoreSystem := NewScoreSystem(ctx)
+
+	// Note: Without an active gold sequence system, gold characters are treated as regular characters
+	// This test verifies that the score blink is activated when typing a gold character
+	// when gold sequence is not active (which should not happen in normal gameplay but tests the code path)
+
+	// Create a gold character at cursor position
+	entity := ctx.World.CreateEntity()
+	pos := components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY}
+	char := components.CharacterComponent{Rune: 'x', Style: tcell.StyleDefault}
+	seq := components.SequenceComponent{
+		ID:    1,
+		Index: 0,
+		Type:  components.SequenceGold,
+		Level: components.LevelBright,
+	}
+
+	ctx.World.AddComponent(entity, pos)
+	ctx.World.AddComponent(entity, char)
+	ctx.World.AddComponent(entity, seq)
+	ctx.World.UpdateSpatialIndex(entity, pos.X, pos.Y)
+
+	// Type correct gold character (without gold sequence active, it will be treated as regular character)
+	// The character will still trigger score blink with its color
+	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'x')
+
+	// Score blink should be active
+	if !ctx.GetScoreBlinkActive() {
+		t.Error("Expected score blink to be active after gold character")
+	}
+
+	// Score blink color should be non-zero (gold color)
+	blinkColor := ctx.GetScoreBlinkColor()
+	if blinkColor == 0 {
+		t.Error("Expected score blink color to be non-zero (gold color)")
+	}
+}
+
+// TestScoreBlinkTimeout verifies that score blink deactivates after timeout
+func TestScoreBlinkTimeout(t *testing.T) {
+	// Create mock screen
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.Init()
+	defer screen.Fini()
+	screen.SetSize(80, 24)
+
+	// Create game context
+	ctx := engine.NewGameContext(screen)
+	scoreSystem := NewScoreSystem(ctx)
+
+	// Create a green character at cursor position
+	entity := ctx.World.CreateEntity()
+	pos := components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY}
+	char := components.CharacterComponent{Rune: 'a', Style: tcell.StyleDefault}
+	seq := components.SequenceComponent{
+		ID:    1,
+		Index: 0,
+		Type:  components.SequenceGreen,
+		Level: components.LevelNormal,
+	}
+
+	ctx.World.AddComponent(entity, pos)
+	ctx.World.AddComponent(entity, char)
+	ctx.World.AddComponent(entity, seq)
+	ctx.World.UpdateSpatialIndex(entity, pos.X, pos.Y)
+
+	// Type correct character
+	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
+
+	// Score blink should be active
+	if !ctx.GetScoreBlinkActive() {
+		t.Fatal("Expected score blink to be active initially")
+	}
+
+	// Wait for timeout (ScoreBlinkTimeout = 200ms)
+	time.Sleep(250 * time.Millisecond)
+
+	// Run update to clear the blink
+	scoreSystem.Update(ctx.World, 100*time.Millisecond)
+
+	// Score blink should be inactive now
+	if ctx.GetScoreBlinkActive() {
+		t.Error("Expected score blink to be inactive after timeout")
+	}
+}

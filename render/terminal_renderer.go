@@ -700,16 +700,25 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 	}
 	startX += len(decayText)
 
-	// Draw score (with yellow background, or blink color if active)
+	// Draw score (with white background, or blink color if active)
 	if ctx.GetScoreBlinkActive() && now.Sub(ctx.GetScoreBlinkTime()).Milliseconds() < 200 {
-		scoreStyle := defaultStyle.Foreground(RgbStatusText).Background(ctx.GetScoreBlinkColor())
+		blinkColor := ctx.GetScoreBlinkColor()
+		var scoreStyle tcell.Style
+		if blinkColor == 0 {
+			// Error state: black background with bright red text
+			scoreStyle = defaultStyle.Foreground(tcell.NewRGBColor(255, 100, 100)).Background(tcell.NewRGBColor(0, 0, 0))
+		} else {
+			// Success state: character color background with black text
+			scoreStyle = defaultStyle.Foreground(tcell.NewRGBColor(0, 0, 0)).Background(blinkColor)
+		}
 		for i, ch := range scoreText {
 			if startX+i < r.width {
 				r.screen.SetContent(startX+i, statusY, ch, nil, scoreStyle)
 			}
 		}
 	} else {
-		scoreStyle := defaultStyle.Foreground(RgbStatusText).Background(RgbScoreBg)
+		// Default: white background with black text
+		scoreStyle := defaultStyle.Foreground(tcell.NewRGBColor(0, 0, 0)).Background(RgbScoreBg)
 		for i, ch := range scoreText {
 			if startX+i < r.width {
 				r.screen.SetContent(startX+i, statusY, ch, nil, scoreStyle)

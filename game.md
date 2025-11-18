@@ -128,8 +128,8 @@ Examples:
 
 When in INSERT mode (white cursor):
 
-- **Type matching character** - Character disappears, score increases, cursor moves right
-- **Type wrong character** - Red cursor flash (200ms), heat resets to zero, boost deactivates
+- **Type matching character** - Character disappears, score increases, cursor moves right, score background flashes character color (200ms)
+- **Type wrong character** - Red cursor flash (200ms), heat resets to zero, boost deactivates, score background flashes black with red text (200ms)
 - **`Space`** - Move right without typing (no heat change)
 - **`ESC`** - Return to NORMAL mode
 
@@ -228,7 +228,7 @@ Mode      Last command                    Boost timer  Decay timer   Total score
 - Search pattern (when in SEARCH mode)
 
 **Right Section** (from right to left):
-- **Score** - Yellow background, total points
+- **Score** - White background with black text, flashes character color on correct typing (200ms), total points
 - **Decay** - Red background, countdown to next decay
 - **Grid** - White text, ping grid timer (only when active)
 - **Boost** - Pink background, boost multiplier timer (only when active)
@@ -248,6 +248,12 @@ Mode      Last command                    Boost timer  Decay timer   Total score
 **Error Cursor**:
 - Red background flash for 200ms
 - Appears when typing incorrect character in INSERT mode
+
+**Score Display Feedback**:
+- **Default**: White background with black text
+- **Correct Character**: Flashes the character's color (Blue, Green, or Gold) for 200ms
+- **Error**: Flashes black background with bright red text for 200ms
+- Provides instant visual feedback for typing accuracy
 
 ---
 
