@@ -50,18 +50,24 @@ func TestCleanersTriggerConditions(t *testing.T) {
 			world := engine.NewWorld()
 			ctx := createCleanerTestContext()
 
-			// Create cleaner and gold systems
+			// Create cleaner system
 			cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 			defer cleanerSystem.Shutdown()
-
-			goldSystem := NewGoldSequenceSystem(ctx, nil, 80, 24, 0, 0)
-			goldSystem.SetCleanerTrigger(cleanerSystem.TriggerCleaners)
 
 			// Create some Red characters to clean
 			createRedCharacterAt(world, 10, 5)
 
-			// Trigger cleaners through gold system
-			goldSystem.TriggerCleanersIfHeatFull(world, tt.currentHeat, tt.maxHeat)
+			// Phase 6: Test cleaner triggering via GameState
+			// Simulate gold completion at max heat
+			if tt.currentHeat >= tt.maxHeat {
+				ctx.State.RequestCleaners()
+			}
+
+			// Check if cleaners should be triggered
+			if ctx.State.GetCleanerPending() {
+				ctx.State.ActivateCleaners()
+				cleanerSystem.ActivateCleaners(world)
+			}
 
 			// Process spawn requests
 			cleanerSystem.Update(world, 16*time.Millisecond)
@@ -917,6 +923,7 @@ func createCleanerTestContext() *engine.GameContext {
 	return &engine.GameContext{
 		World:        world,
 		TimeProvider: timeProvider,
+		State:        engine.NewGameState(80, 24, 100, timeProvider), // Phase 6: Initialize State
 		GameWidth:    80,
 		GameHeight:   24,
 	}

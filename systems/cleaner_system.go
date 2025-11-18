@@ -786,3 +786,38 @@ func (cs *CleanerSystem) GetSystemState() string {
 	}
 	return "Cleaner[inactive]"
 }
+
+// ActivateCleaners initiates the cleaner animation (Phase 6: called by ClockScheduler)
+// This is an alias for TriggerCleaners to match the CleanerSystemInterface
+func (cs *CleanerSystem) ActivateCleaners(world *engine.World) {
+	log.Printf("[CLEANER] ActivateCleaners called via ClockScheduler")
+	cs.TriggerCleaners(world)
+}
+
+// IsAnimationComplete checks if the cleaner animation has finished (Phase 6: for ClockScheduler)
+// Returns true if animation duration has elapsed or cleaners are not active
+func (cs *CleanerSystem) IsAnimationComplete() bool {
+	if !cs.isActive.Load() {
+		return true // Not active = complete
+	}
+
+	activationNano := cs.activationTime.Load()
+	if activationNano == 0 {
+		return true // No valid activation time = complete
+	}
+
+	now := cs.ctx.TimeProvider.Now()
+	activationTime := time.Unix(0, activationNano)
+	elapsed := now.Sub(activationTime)
+
+	cs.mu.RLock()
+	duration := cs.animationDuration
+	cs.mu.RUnlock()
+
+	isComplete := elapsed >= duration
+	if isComplete {
+		log.Printf("[CLEANER] Animation complete: elapsed=%.2fs, duration=%.2fs", elapsed.Seconds(), duration.Seconds())
+	}
+
+	return isComplete
+}

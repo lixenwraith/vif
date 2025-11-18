@@ -39,6 +39,29 @@ func (m *MockDecaySystem) GetTriggerCount() int {
 	return int(m.triggerCount.Load())
 }
 
+// MockCleanerSystem implements CleanerSystemInterface for testing (Phase 6)
+type MockCleanerSystem struct {
+	activateCount atomic.Int32
+	isComplete    atomic.Bool
+}
+
+func (m *MockCleanerSystem) ActivateCleaners(world *World) {
+	m.activateCount.Add(1)
+	m.isComplete.Store(false) // Animation starts, not complete
+}
+
+func (m *MockCleanerSystem) IsAnimationComplete() bool {
+	return m.isComplete.Load()
+}
+
+func (m *MockCleanerSystem) GetActivateCount() int {
+	return int(m.activateCount.Load())
+}
+
+func (m *MockCleanerSystem) SetComplete(complete bool) {
+	m.isComplete.Store(complete)
+}
+
 // TestClockSchedulerBasicTicking tests that the clock scheduler ticks correctly
 func TestClockSchedulerBasicTicking(t *testing.T) {
 	mockTime := NewMockTimeProvider(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
@@ -80,7 +103,8 @@ func TestClockSchedulerPhaseTransitionTiming(t *testing.T) {
 	mockDecay := &MockDecaySystem{}
 
 	scheduler := NewClockScheduler(ctx)
-	scheduler.SetSystems(mockGold, mockDecay)
+	mockCleaner := &MockCleanerSystem{}
+	scheduler.SetSystems(mockGold, mockDecay, mockCleaner)
 
 	// ===== Test Gold Timeout Transition =====
 	// Activate gold sequence
@@ -176,7 +200,8 @@ func TestClockSchedulerMultipleGoldTimeouts(t *testing.T) {
 	mockDecay := &MockDecaySystem{}
 
 	scheduler := NewClockScheduler(ctx)
-	scheduler.SetSystems(mockGold, mockDecay)
+	mockCleaner := &MockCleanerSystem{}
+	scheduler.SetSystems(mockGold, mockDecay, mockCleaner)
 
 	// Run 5 complete cycles
 	for cycle := 0; cycle < 5; cycle++ {
@@ -231,7 +256,8 @@ func TestClockSchedulerConcurrentTicking(t *testing.T) {
 	mockDecay := &MockDecaySystem{}
 
 	scheduler := NewClockScheduler(ctx)
-	scheduler.SetSystems(mockGold, mockDecay)
+	mockCleaner := &MockCleanerSystem{}
+	scheduler.SetSystems(mockGold, mockDecay, mockCleaner)
 
 	const numGoroutines = 10
 	const ticksPerGoroutine = 100
@@ -295,7 +321,8 @@ func TestClockSchedulerPhaseTransitionAtBoundary(t *testing.T) {
 	mockDecay := &MockDecaySystem{}
 
 	scheduler := NewClockScheduler(ctx)
-	scheduler.SetSystems(mockGold, mockDecay)
+	mockCleaner := &MockCleanerSystem{}
+	scheduler.SetSystems(mockGold, mockDecay, mockCleaner)
 
 	// Activate gold
 	sequenceID := ctx.State.IncrementGoldSequenceID()
@@ -342,7 +369,8 @@ func TestClockSchedulerNoEarlyTransition(t *testing.T) {
 	mockDecay := &MockDecaySystem{}
 
 	scheduler := NewClockScheduler(ctx)
-	scheduler.SetSystems(mockGold, mockDecay)
+	mockCleaner := &MockCleanerSystem{}
+	scheduler.SetSystems(mockGold, mockDecay, mockCleaner)
 
 	// Activate gold
 	sequenceID := ctx.State.IncrementGoldSequenceID()
@@ -379,7 +407,8 @@ func TestClockSchedulerPhaseNormalDoesNothing(t *testing.T) {
 	mockDecay := &MockDecaySystem{}
 
 	scheduler := NewClockScheduler(ctx)
-	scheduler.SetSystems(mockGold, mockDecay)
+	mockCleaner := &MockCleanerSystem{}
+	scheduler.SetSystems(mockGold, mockDecay, mockCleaner)
 
 	// Start in Normal phase
 	if phase := ctx.State.GetPhase(); phase != PhaseNormal {
@@ -421,7 +450,8 @@ func TestClockSchedulerPhaseDecayAnimationDoesNothing(t *testing.T) {
 	mockDecay := &MockDecaySystem{}
 
 	scheduler := NewClockScheduler(ctx)
-	scheduler.SetSystems(mockGold, mockDecay)
+	mockCleaner := &MockCleanerSystem{}
+	scheduler.SetSystems(mockGold, mockDecay, mockCleaner)
 
 	// Manually transition to DecayAnimation phase
 	ctx.State.StartDecayAnimation()
@@ -487,7 +517,8 @@ func TestClockSchedulerIntegrationWithRealTime(t *testing.T) {
 	mockDecay := &MockDecaySystem{}
 
 	scheduler := NewClockScheduler(ctx)
-	scheduler.SetSystems(mockGold, mockDecay)
+	mockCleaner := &MockCleanerSystem{}
+	scheduler.SetSystems(mockGold, mockDecay, mockCleaner)
 
 	// Start scheduler in goroutine
 	scheduler.Start()

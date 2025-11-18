@@ -23,14 +23,14 @@ type GoldSequenceSystem struct {
 	decaySystem         *DecaySystem
 	wasDecayAnimating   bool
 	// Phase 3: Removed active, sequenceID, startTime - now in GameState
-	characters          string
-	gameWidth           int
-	gameHeight          int
-	cursorX             int
-	cursorY             int
-	cleanerTriggerFunc  func(*engine.World) // Callback to trigger cleaners when gold completed at max heat
-	firstUpdate         bool                // Tracks if this is the first update
-	initialSpawnTime    time.Time           // Time of first update (for delayed initial spawn)
+	// Phase 6: Removed cleanerTriggerFunc - now managed by GameState/ClockScheduler
+	characters       string
+	gameWidth        int
+	gameHeight       int
+	cursorX          int
+	cursorY          int
+	firstUpdate      bool      // Tracks if this is the first update
+	initialSpawnTime time.Time // Time of first update (for delayed initial spawn)
 }
 
 // NewGoldSequenceSystem creates a new gold sequence system
@@ -353,38 +353,8 @@ func (s *GoldSequenceSystem) UpdateDimensions(gameWidth, gameHeight, cursorX, cu
 	s.cursorY = cursorY
 }
 
-// SetCleanerTrigger sets the callback function to trigger cleaners
-func (s *GoldSequenceSystem) SetCleanerTrigger(triggerFunc func(*engine.World)) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.cleanerTriggerFunc = triggerFunc
-}
-
-// TriggerCleanersIfHeatFull triggers cleaners if heat is at maximum
-// This is called by ScoreSystem when gold sequence is completed
-func (s *GoldSequenceSystem) TriggerCleanersIfHeatFull(world *engine.World, currentHeat, maxHeat int) {
-	s.mu.RLock()
-	triggerFunc := s.cleanerTriggerFunc
-	s.mu.RUnlock()
-
-	// DEBUG: Log trigger attempt
-	log.Printf("[GOLD] TriggerCleanersIfHeatFull called: currentHeat=%d, maxHeat=%d, hasFunc=%v",
-		currentHeat, maxHeat, triggerFunc != nil)
-
-	if triggerFunc == nil {
-		log.Printf("[GOLD] ISSUE: Cleaner trigger function is nil!")
-		return
-	}
-
-	// Only trigger if heat is already at max (or higher)
-	if currentHeat >= maxHeat {
-		log.Printf("[GOLD] Heat condition MET - triggering cleaners!")
-		// Call outside lock to avoid potential deadlock
-		triggerFunc(world)
-	} else {
-		log.Printf("[GOLD] Heat condition NOT met - cleaners NOT triggered")
-	}
-}
+// Phase 6: Removed SetCleanerTrigger and TriggerCleanersIfHeatFull
+// Cleaner triggering is now managed by GameState.RequestCleaners() and ClockScheduler
 
 // GetSystemState returns the current state of the gold sequence system for debugging
 // Phase 3: Uses GameState

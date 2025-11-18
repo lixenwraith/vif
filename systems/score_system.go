@@ -294,8 +294,12 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 		// DEBUG: Log gold completion
 		log.Printf("[SCORE] Gold sequence COMPLETED! currentHeat=%d, maxHeat=%d", currentHeat, heatBarWidth)
 
-		// Trigger cleaners if heat is already at max
-		s.goldSequenceSystem.TriggerCleanersIfHeatFull(world, currentHeat, heatBarWidth)
+		// Phase 6: Request cleaners if heat is already at max
+		// Clock scheduler will trigger cleaners on next tick (within 50ms)
+		if currentHeat >= heatBarWidth {
+			log.Printf("[SCORE] Heat at max - requesting cleaners via GameState")
+			s.ctx.State.RequestCleaners()
+		}
 
 		// Fill heat to max (if not already higher)
 		if currentHeat < heatBarWidth {

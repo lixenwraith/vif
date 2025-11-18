@@ -361,10 +361,6 @@ func BenchmarkGoldTriggerCleaners(b *testing.B) {
 	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
 
-	decaySystem := NewDecaySystem(80, 24, ctx)
-	goldSystem := NewGoldSequenceSystem(ctx, decaySystem, 80, 24, 0, 0)
-	goldSystem.SetCleanerTrigger(cleanerSystem.TriggerCleaners)
-
 	// Create Red characters
 	for i := 0; i < 10; i++ {
 		createRedCharacterAt(world, 10+i*5, 5)
@@ -373,7 +369,10 @@ func BenchmarkGoldTriggerCleaners(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		goldSystem.TriggerCleanersIfHeatFull(world, 100, 100)
+		// Phase 6: Trigger cleaners via GameState
+		ctx.State.RequestCleaners()
+		ctx.State.ActivateCleaners()
+		cleanerSystem.ActivateCleaners(world)
 		cleanerSystem.Update(world, 16*time.Millisecond)
 
 		// Clean up
@@ -398,7 +397,6 @@ func BenchmarkCompleteGoldCleanerPipeline(b *testing.B) {
 
 	decaySystem := NewDecaySystem(80, 24, ctx)
 	goldSystem := NewGoldSequenceSystem(ctx, decaySystem, 80, 24, 0, 0)
-	goldSystem.SetCleanerTrigger(cleanerSystem.TriggerCleaners)
 
 	// Create environment
 	for row := 0; row < 24; row++ {
@@ -415,8 +413,10 @@ func BenchmarkCompleteGoldCleanerPipeline(b *testing.B) {
 		// Spawn gold
 		goldSystem.spawnGoldSequence(world)
 
-		// Complete gold (triggers cleaners if heat full)
-		goldSystem.TriggerCleanersIfHeatFull(world, 100, 100)
+		// Phase 6: Complete gold (triggers cleaners via GameState)
+		ctx.State.RequestCleaners()
+		ctx.State.ActivateCleaners()
+		cleanerSystem.ActivateCleaners(world)
 
 		// Process cleaners
 		cleanerSystem.Update(world, 16*time.Millisecond)

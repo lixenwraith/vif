@@ -126,7 +126,7 @@ func main() {
 	scoreSystem.SetGoldSequenceSystem(goldSequenceSystem)
 	scoreSystem.SetSpawnSystem(spawnSystem)
 	decaySystem.SetSpawnSystem(spawnSystem)
-	goldSequenceSystem.SetCleanerTrigger(cleanerSystem.TriggerCleaners)
+	// Phase 6: Removed goldSequenceSystem.SetCleanerTrigger - now managed by ClockScheduler
 
 	// Create renderer
 	renderer := render.NewTerminalRenderer(
@@ -145,8 +145,9 @@ func main() {
 
 	// Phase 2: Create and start clock scheduler (50ms tick for game logic)
 	// Phase 3: Clock scheduler now handles Gold/Decay phase transitions
+	// Phase 6: Clock scheduler now handles Cleaner triggers
 	clockScheduler := engine.NewClockScheduler(ctx)
-	clockScheduler.SetSystems(goldSequenceSystem, decaySystem)
+	clockScheduler.SetSystems(goldSequenceSystem, decaySystem, cleanerSystem)
 	clockScheduler.Start()
 	defer clockScheduler.Stop()
 

@@ -64,10 +64,11 @@ type ClockScheduler struct {
 	tickCount uint64
 	mu        sync.RWMutex
 
-	// System references (Phase 3: needed for triggering transitions)
+	// System references (Phase 3/6: needed for triggering transitions)
 	// These will be set via SetSystems() after scheduler creation
-	goldSystem  GoldSequenceSystemInterface
-	decaySystem DecaySystemInterface
+	goldSystem    GoldSequenceSystemInterface
+	decaySystem   DecaySystemInterface
+	cleanerSystem CleanerSystemInterface // Phase 6
 }
 
 // GoldSequenceSystemInterface defines the methods needed by the clock scheduler
@@ -80,26 +81,34 @@ type DecaySystemInterface interface {
 	TriggerDecayAnimation(world *World)
 }
 
+// CleanerSystemInterface defines the methods needed by the clock scheduler
+type CleanerSystemInterface interface {
+	ActivateCleaners(world *World)
+	IsAnimationComplete() bool
+}
+
 // NewClockScheduler creates a new clock scheduler with 50ms tick rate
 func NewClockScheduler(ctx *GameContext) *ClockScheduler {
 	return &ClockScheduler{
 		ctx:          ctx,
 		timeProvider: ctx.TimeProvider,
 		ticker:       time.NewTicker(50 * time.Millisecond),
-		stopChan:     make(chan struct{}),
-		tickCount:    0,
-		goldSystem:   nil,
-		decaySystem:  nil,
+		stopChan:      make(chan struct{}),
+		tickCount:     0,
+		goldSystem:    nil,
+		decaySystem:   nil,
+		cleanerSystem: nil,
 	}
 }
 
 // SetSystems sets the system references needed for phase transitions
 // Must be called before Start() to enable phase transition logic
-func (cs *ClockScheduler) SetSystems(goldSystem GoldSequenceSystemInterface, decaySystem DecaySystemInterface) {
+func (cs *ClockScheduler) SetSystems(goldSystem GoldSequenceSystemInterface, decaySystem DecaySystemInterface, cleanerSystem CleanerSystemInterface) {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 	cs.goldSystem = goldSystem
 	cs.decaySystem = decaySystem
+	cs.cleanerSystem = cleanerSystem
 }
 
 // Start begins the clock scheduler in a separate goroutine
@@ -124,12 +133,34 @@ func (cs *ClockScheduler) run() {
 
 // tick executes one clock cycle (called every 50ms)
 // Phase 3: Implements phase transition logic for Gold→Decay→Normal cycle
+// Phase 6: Implements cleaner trigger logic (parallel to main phase cycle)
 func (cs *ClockScheduler) tick() {
 	cs.mu.Lock()
 	cs.tickCount++
 	goldSys := cs.goldSystem
 	decaySys := cs.decaySystem
+	cleanerSys := cs.cleanerSystem
 	cs.mu.Unlock()
+
+	// Phase 6: Handle cleaner requests (runs in parallel with phase transitions)
+	// Cleaners don't block the main Gold→Decay→Normal cycle
+	if cs.ctx.State.GetCleanerPending() {
+		// Activate cleaners in GameState
+		cs.ctx.State.ActivateCleaners()
+
+		// Trigger cleaner system to spawn cleaners
+		if cleanerSys != nil {
+			cleanerSys.ActivateCleaners(cs.ctx.World)
+		}
+	}
+
+	// Phase 6: Check if cleaner animation has completed
+	if cs.ctx.State.GetCleanerActive() {
+		if cleanerSys != nil && cleanerSys.IsAnimationComplete() {
+			// Deactivate cleaners in GameState
+			cs.ctx.State.DeactivateCleaners()
+		}
+	}
 
 	// Get current phase from GameState
 	phase := cs.ctx.State.GetPhase()

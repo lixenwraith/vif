@@ -57,7 +57,7 @@ heat := gs.GetHeat()             // Atomic load
 snapshot := gs.ReadSpawnState()  // RLock, no blocking
 ```
 
-#### Migration Status (Phase 4 Complete)
+#### Migration Status (Phase 6 Complete)
 ✅ **Migrated to GameState**:
 - Heat/Score/Cursor (real-time typing feedback)
 - Color counters (spawn/typing/decay coordination)
@@ -75,8 +75,14 @@ snapshot := gs.ReadSpawnState()  // RLock, no blocking
 - Verified scoring/input systems remain real-time (event-driven, immediate atomic operations)
 - All tests pass with race detector
 
-⏳ **Remaining in Systems** (Phase 6):
-- Cleaner activation (CleanerSystem)
+✅ **Phase 6 Migration** (Cleaner triggers to clock):
+- Cleaner request/activation state (CleanerSystem → GameState)
+- Removed callback pattern from GoldSequenceSystem
+- Cleaners triggered by ClockScheduler on pending request
+- Animation completion tracked by ClockScheduler
+- All tests pass with race detector
+
+⏳ **Remaining**:
 - Content management (SpawnSystem - implementation detail, not game state)
 
 #### Testing
@@ -113,6 +119,9 @@ const (
   - Gold sequence state: `GoldActive`, `GoldSequenceID`, `GoldStartTime`, `GoldTimeoutTime`
   - Decay timer state: `DecayTimerActive`, `DecayNextTime`
   - Decay animation state: `DecayAnimating`, `DecayStartTime`
+- **Phase 6 additions**:
+  - Cleaner state: `CleanerPending`, `CleanerActive`, `CleanerStartTime`
+  - Cleaners run in parallel with main phase cycle (non-blocking)
 
 **Phase Access Pattern**:
 ```go
@@ -137,13 +146,17 @@ snapshot := ctx.State.ReadPhaseState()
 - Tick counter for debugging and metrics
 - Graceful shutdown on game exit
 
-**Current Behavior** (Phase 3):
+**Current Behavior** (Phase 3/6):
 - Ticks every 50ms independently of frame rate
-- **Phase transitions handled on clock tick**:
+- **Phase transitions handled on clock tick** (Phase 3):
   - `PhaseGoldActive`: Check gold timeout → remove gold → start decay timer
   - `PhaseDecayWait`: Check decay ready → start decay animation
   - `PhaseDecayAnimation`: Handled by DecaySystem → return to PhaseNormal
   - `PhaseNormal`: Gold spawning handled by GoldSequenceSystem
+- **Cleaner triggers handled on clock tick** (Phase 6):
+  - Check `CleanerPending` → activate cleaners via CleanerSystem
+  - Check `CleanerActive` + animation complete → deactivate cleaners
+  - Cleaners run in parallel with phase transitions (non-blocking)
 - **Critical fix**: Decay timer reads heat atomically at transition (no caching)
 
 **Integration** (`cmd/vi-fighter/main.go`):
@@ -206,6 +219,18 @@ defer ticker.Stop()
 - ✅ Mock/deterministic time provider for precise time control
 - **Key Achievement**: Full game cycle testing with deterministic time ensures all phase transitions work correctly without race conditions
 - See `PHASE5_REPORT.md` for detailed analysis
+
+**Phase 6 (Complete)**: Cleaner triggers to clock
+- ✅ Moved Cleaner state to GameState (`CleanerPending`, `CleanerActive`, `CleanerStartTime`)
+- ✅ Added CleanerSystemInterface to ClockScheduler
+- ✅ Implemented clock tick logic for cleaner triggers (parallel to main phases)
+- ✅ Updated ScoreSystem to use `GameState.RequestCleaners()`
+- ✅ Removed callback pattern from GoldSequenceSystem
+- ✅ Added `ActivateCleaners()` and `IsAnimationComplete()` methods to CleanerSystem
+- ✅ Updated main.go integration
+- ✅ All tests pass with race detector
+- **Key Achievement**: Cleaner triggering now uses the same clock-based pattern as Gold/Decay, eliminating callback dependencies
+- See `PHASE6_REPORT.md` for detailed analysis
 
 #### Testing
 - `engine/clock_scheduler_test.go`: Scheduler tick tests, phase transition tests
