@@ -428,8 +428,11 @@ func TestCleanerCleanup(t *testing.T) {
 	initialCleanerCount := len(cleaners)
 	t.Logf("Created %d cleaners", initialCleanerCount)
 
-	// Wait for animation to complete (1 second default duration + margin)
-	time.Sleep(1200 * time.Millisecond)
+	// Advance mock time to complete animation (1 second default duration + margin)
+	mockTime.Advance(1200 * time.Millisecond)
+
+	// Wait for update loop to process the time change
+	time.Sleep(100 * time.Millisecond)
 
 	// Verify cleaners were cleaned up
 	cleaners = world.GetEntitiesWith(cleanerType)

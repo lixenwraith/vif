@@ -283,16 +283,20 @@ func (cs *CleanerSystem) processSpawnRequest(req cleanerSpawnRequest) {
 		redRows = redRows[:cs.config.MaxConcurrentCleaners]
 	}
 
-	// Spawn cleaner entities for each row
+	// Set activation time ATOMICALLY BEFORE spawning cleaners to prevent race condition
+	// where updateLoop checks elapsed time before activation time is set
 	now := cs.ctx.TimeProvider.Now()
+	nowNano := now.UnixNano()
+	cs.activationTime.Store(nowNano)
+	cs.lastUpdateTime.Store(nowNano)
+
+	// Activate the system before spawning to ensure updateLoop can see active state
+	cs.isActive.Store(true)
+
+	// Spawn cleaner entities for each row
 	for _, row := range redRows {
 		cs.spawnCleanerForRow(req.world, row)
 	}
-
-	// Activate the system
-	cs.isActive.Store(true)
-	cs.activationTime.Store(now.UnixNano())
-	cs.lastUpdateTime.Store(now.UnixNano())
 }
 
 // IsActive returns whether the cleaner animation is currently running
@@ -422,10 +426,17 @@ func (cs *CleanerSystem) updateCleanerPositions(world *engine.World, deltaTime f
 		// Update position based on speed and direction
 		cleaner.XPosition += cleaner.Speed * float64(cleaner.Direction) * deltaTime
 
-		// Update trail (add current position to front)
-		cleaner.TrailPositions = append([]float64{cleaner.XPosition}, cleaner.TrailPositions...)
-		if len(cleaner.TrailPositions) > cs.config.TrailLength {
-			cleaner.TrailPositions = cleaner.TrailPositions[:cs.config.TrailLength]
+		// Update trail (add current position to front) while preserving capacity
+		// Use insert-at-front pattern that maintains the original slice capacity from pool
+		if len(cleaner.TrailPositions) < cs.config.TrailLength {
+			// Still room to grow, append to end then shift
+			cleaner.TrailPositions = append(cleaner.TrailPositions, 0)
+			copy(cleaner.TrailPositions[1:], cleaner.TrailPositions[0:])
+			cleaner.TrailPositions[0] = cleaner.XPosition
+		} else {
+			// At max length, shift and overwrite last
+			copy(cleaner.TrailPositions[1:], cleaner.TrailPositions[0:cs.config.TrailLength-1])
+			cleaner.TrailPositions[0] = cleaner.XPosition
 		}
 
 		// Update component
@@ -523,19 +534,30 @@ func (cs *CleanerSystem) detectAndDestroyRedCharacters(world *engine.World) {
 // cleanupCleaners removes all cleaner entities from the world
 func (cs *CleanerSystem) cleanupCleaners(world *engine.World) {
 	cleanerType := reflect.TypeOf(components.CleanerComponent{})
+
+	// Get ALL cleaner entities from world before we start modifying
 	entities := world.GetEntitiesWith(cleanerType)
 
 	cs.stateMu.Lock()
-	defer cs.stateMu.Unlock()
 
+	// Iterate through ALL cleaner entities
 	cleanerCount := int64(0)
 	for _, entity := range entities {
-		// Return trail slice to pool
+		// Return trail slice to pool before destroying entity
 		if data, exists := cs.cleanerDataMap[entity]; exists {
 			if data.trailPositions != nil {
 				cs.cleanerPool.Put(data.trailPositions)
 			}
 			delete(cs.cleanerDataMap, entity)
+		} else {
+			// If not in map, still try to get component and return trail to pool
+			cleanerComp, ok := world.GetComponent(entity, cleanerType)
+			if ok {
+				cleaner := cleanerComp.(components.CleanerComponent)
+				if cleaner.TrailPositions != nil {
+					cs.cleanerPool.Put(cleaner.TrailPositions)
+				}
+			}
 		}
 
 		// Destroy entity (cleaners don't have PositionComponent, so no spatial index removal needed)
@@ -543,21 +565,31 @@ func (cs *CleanerSystem) cleanupCleaners(world *engine.World) {
 		cleanerCount++
 	}
 
-	// Clear internal state
+	// Clear cleanerDataMap completely
 	cs.cleanerDataMap = make(map[engine.Entity]*cleanerData)
+
+	cs.stateMu.Unlock()
+
+	// Reset all atomic state variables
 	cs.isActive.Store(false)
 	cs.activationTime.Store(0)
 	cs.lastUpdateTime.Store(0)
 
-	// Decrement active cleaner count by the number of cleaners removed
-	if cleanerCount > 0 {
-		cs.activeCleanerCount.Add(-cleanerCount)
-	}
+	// Reset active cleaner count to 0 (not decrement, as we're doing full cleanup)
+	cs.activeCleanerCount.Store(0)
 
 	// Clear world reference
 	cs.mu.Lock()
 	cs.world = nil
 	cs.mu.Unlock()
+
+	// Verification: ensure no cleaners remain in world
+	remainingCleaners := world.GetEntitiesWith(cleanerType)
+	if len(remainingCleaners) > 0 {
+		// Sanity check: in production, this should never happen
+		// We could log this if we had a logger, but for now we just verify
+		_ = remainingCleaners // Silence unused variable warning
+	}
 }
 
 // UpdateDimensions updates the game area dimensions

@@ -90,8 +90,17 @@ func TestCleanersTriggerConditions(t *testing.T) {
 
 // TestCleanersDirectionAlternation verifies odd rows go L→R and even rows go R→L
 func TestCleanersDirectionAlternation(t *testing.T) {
+	// Use mock time provider to prevent cleaners from moving before we check positions
+	startTime := time.Now()
+	mockTime := engine.NewMockTimeProvider(startTime)
+
 	world := engine.NewWorld()
-	ctx := createCleanerTestContext()
+	ctx := &engine.GameContext{
+		World:        world,
+		TimeProvider: mockTime,
+		GameWidth:    80,
+		GameHeight:   24,
+	}
 
 	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
 	defer cleanerSystem.Shutdown()
@@ -108,7 +117,7 @@ func TestCleanersDirectionAlternation(t *testing.T) {
 	// Process spawn request
 	cleanerSystem.Update(world, 16*time.Millisecond)
 
-	// Wait for async processing
+	// Wait for async spawn processing (real time) but don't advance mock time
 	time.Sleep(50 * time.Millisecond)
 
 	// Get cleaner entities
@@ -120,6 +129,7 @@ func TestCleanersDirectionAlternation(t *testing.T) {
 	}
 
 	// Verify each cleaner's direction and starting position
+	// Since we haven't advanced mock time, cleaners should be at their initial positions
 	for _, entity := range cleaners {
 		cleanerComp, ok := world.GetComponent(entity, cleanerType)
 		if !ok {
