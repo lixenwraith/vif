@@ -9,6 +9,73 @@
 - Systems contain ALL logic, operate on component sets
 - World is the single source of truth for all game state
 
+### State Ownership Model (Phase 1: Spawn/Content)
+
+**GameState** (`engine/game_state.go`) centralizes game state with clear ownership boundaries:
+
+#### Real-Time State (Lock-Free Atomics)
+Updated immediately on user input/spawn events, read by all systems:
+- **Heat** (`atomic.Int64`): Current heat value (formerly scoreIncrement)
+- **Score** (`atomic.Int64`): Player score
+- **Cursor Position** (`atomic.Int32`): CursorX, CursorY for spawn exclusion zone
+- **Color Counters** (6× `atomic.Int64`): Blue/Green × Bright/Normal/Dark tracking
+- **Boost State** (`atomic.Bool`, `atomic.Int64`): Enabled, EndTime, Color
+- **Visual Feedback**: CursorError, ScoreBlink, PingGrid (atomic)
+- **Sequence ID** (`atomic.Int64`): Thread-safe ID generation
+
+**Why Atomic**: These values are accessed on every frame and every keystroke. Atomics provide:
+- Lock-free reads (no contention on render or input threads)
+- Immediate consistency (typing feedback feels instant)
+- Race-free updates without blocking
+
+#### Clock-Tick State (Mutex Protected)
+Updated during scheduled game logic ticks, read by all systems:
+- **Spawn Timing** (`sync.RWMutex`): LastTime, NextTime, RateMultiplier
+- **Screen Density**: EntityCount, ScreenDensity, SpawnEnabled
+- **6-Color Limit**: Enforced via atomic color counter checks
+
+**Why Mutex**: These values change infrequently (every 2 seconds for spawn) and require:
+- Consistent multi-field reads (spawn timing snapshot)
+- Atomic state transitions (spawn rate adaptation)
+- Blocking is acceptable (not on hot path)
+
+#### State Access Patterns
+```go
+// Real-time (typing): Direct atomic access
+gs.AddHeat(1)                    // No lock, instant
+gs.AddColorCount(Blue, Bright, 1) // Atomic increment
+
+// Clock-tick (spawn): Snapshot pattern
+snapshot := gs.ReadSpawnState()  // RLock, consistent view
+if gs.ShouldSpawn() {            // RLock, check timing
+    // ... spawn logic ...
+    gs.UpdateSpawnTiming(now, next) // Lock, update state
+}
+
+// Render: Safe concurrent reads
+heat := gs.GetHeat()             // Atomic load
+snapshot := gs.ReadSpawnState()  // RLock, no blocking
+```
+
+#### Migration Status (Phase 1 Complete)
+✅ **Migrated to GameState**:
+- Heat/Score/Cursor (real-time typing feedback)
+- Color counters (spawn/typing/decay coordination)
+- Boost state (heat-triggered multiplier)
+- Spawn timing and rate adaptation
+- Sequence ID generation
+
+⏳ **Remaining in Systems** (Phase 2+):
+- Gold sequence lifecycle (GoldSequenceSystem)
+- Decay timer and animation (DecaySystem)
+- Cleaner activation (CleanerSystem)
+- Content management (SpawnSystem - implementation detail, not game state)
+
+#### Testing
+- `engine/game_state_test.go`: Unit tests for atomic operations, state snapshots, spawn timing
+- All tests pass with `-race` flag (no data races detected)
+- Reduced stress test volume (10 goroutines × 10 ops) for faster CI
+
 ### System Priorities
 Systems execute in priority order (lower = earlier):
 1. **Input/Score (10)**: Process user input, update score
