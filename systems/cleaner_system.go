@@ -54,11 +54,9 @@ type CleanerSystem struct {
 	animationDuration time.Duration        // Protected by mu
 	world             *engine.World        // Protected by mu - stored from spawn request
 	spawnChan         chan cleanerSpawnRequest // Channel for spawn requests
-	stopChan          chan struct{}        // Channel to stop the update loop
 	cleanerPool       sync.Pool            // Pool for cleaner trail slice allocation
 	cleanerDataMap    map[engine.Entity]*cleanerData // Maps entity to its runtime data
 	flashPositions    map[string]bool      // Tracks active flash positions to prevent duplicates
-	wg                sync.WaitGroup       // Tracks goroutine lifecycle
 }
 
 // NewCleanerSystem creates a new cleaner system with the specified configuration
@@ -70,7 +68,6 @@ func NewCleanerSystem(ctx *engine.GameContext, gameWidth, gameHeight int, config
 		gameHeight:        gameHeight,
 		animationDuration: config.AnimationDuration,
 		spawnChan:         make(chan cleanerSpawnRequest, 10), // Buffered channel
-		stopChan:          make(chan struct{}),
 		cleanerDataMap:    make(map[engine.Entity]*cleanerData),
 		flashPositions:    make(map[string]bool),
 		cleanerPool: sync.Pool{
@@ -87,10 +84,6 @@ func NewCleanerSystem(ctx *engine.GameContext, gameWidth, gameHeight int, config
 	cs.lastUpdateTime.Store(0)
 	cs.lastScanTime.Store(0)
 	cs.activeCleanerCount.Store(0)
-
-	// Start concurrent update loop
-	cs.wg.Add(1)
-	go cs.updateLoop()
 
 	return cs
 }
@@ -110,8 +103,10 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 		// No spawn request, continue
 	}
 
-	//Cleaner updates handled by concurrent updateLoop() goroutine only
-	// Removed synchronous updateCleaners() call to prevent race condition
+	// Update cleaners if active (now runs in main game loop)
+	if cs.isActive.Load() {
+		cs.updateCleaners()
+	}
 
 	// Clean up expired flash effects
 	cs.cleanupExpiredFlashes(world)
@@ -143,66 +138,6 @@ func (cs *CleanerSystem) cleanupExpiredFlashes(world *engine.World) {
 			world.SafeDestroyEntity(entity)
 		}
 	}
-}
-
-// updateLoop runs concurrently and updates cleaner positions
-func (cs *CleanerSystem) updateLoop() {
-	defer cs.wg.Done()
-
-	ticker := time.NewTicker(time.Second / time.Duration(cs.config.FPS))
-	defer ticker.Stop()
-
-	// Create periodic scan ticker if ScanInterval is set
-	var scanTicker *time.Ticker
-	if cs.config.ScanInterval > 0 {
-		scanTicker = time.NewTicker(cs.config.ScanInterval)
-		defer scanTicker.Stop()
-	}
-
-	for {
-		select {
-		case <-cs.stopChan:
-			return
-		case <-ticker.C:
-			cs.updateCleaners()
-		case <-func() <-chan time.Time {
-			if scanTicker != nil {
-				return scanTicker.C
-			}
-			// Return a channel that never receives if scanTicker is nil
-			return make(<-chan time.Time)
-		}():
-			// Periodic scan triggered
-			cs.triggerPeriodicScan()
-		}
-	}
-}
-
-// triggerPeriodicScan checks if a periodic scan should trigger cleaners
-func (cs *CleanerSystem) triggerPeriodicScan() {
-	// Don't scan if cleaners are already active
-	if cs.isActive.Load() {
-		return
-	}
-
-	now := cs.ctx.TimeProvider.Now()
-	nowNano := now.UnixNano()
-
-	// Update last scan time
-	cs.lastScanTime.Store(nowNano)
-
-	// Get world reference safely
-	cs.mu.RLock()
-	world := cs.world
-	cs.mu.RUnlock()
-
-	// If world is nil, use ctx.World (e.g., during periodic scan before first spawn)
-	if world == nil {
-		world = cs.ctx.World
-	}
-
-	// Trigger cleaners (uses existing spawn request mechanism)
-	cs.TriggerCleaners(world)
 }
 
 // updateCleaners performs the actual cleaner update logic
@@ -705,12 +640,8 @@ func (cs *CleanerSystem) GetCleanerSnapshots() []render.CleanerSnapshot {
 	return snapshots
 }
 
-// Shutdown stops the concurrent update loop and cleans up all resources
+// Shutdown cleans up all resources
 func (cs *CleanerSystem) Shutdown() {
-	// Stop the update loop
-	close(cs.stopChan)
-	cs.wg.Wait()
-
 	// Final cleanup of any remaining cleaners
 	if cs.ctx != nil && cs.ctx.World != nil {
 		cs.cleanupCleaners(cs.ctx.World)
