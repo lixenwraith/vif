@@ -188,7 +188,22 @@ func (cs *CleanerSystem) updateCleaners(world *engine.World, dt time.Duration) {
 }
 
 // TriggerCleaners initiates the cleaner animation (non-blocking)
+// Sets activation state atomically BEFORE sending to channel to prevent race condition
+// where IsAnimationComplete() is called before processSpawnRequest() runs
 func (cs *CleanerSystem) TriggerCleaners(world *engine.World) {
+	// Prevent duplicate triggers - check if already active
+	if cs.isActive.Load() {
+		return
+	}
+
+	// CRITICAL: Set activation state BEFORE sending to channel
+	// This ensures IsAnimationComplete() returns false even if processSpawnRequest() hasn't run yet
+	now := cs.ctx.TimeProvider.Now()
+	nowNano := now.UnixNano()
+	cs.activationTime.Store(nowNano)
+	cs.isActive.Store(true)
+	cs.firstUpdate.Store(true)
+
 	// Send spawn request via channel (non-blocking with select)
 	// World will be passed via Update() method
 	select {
@@ -200,27 +215,23 @@ func (cs *CleanerSystem) TriggerCleaners(world *engine.World) {
 }
 
 // processSpawnRequest handles a cleaner spawn request
+// Note: Activation state (isActive, activationTime, firstUpdate) is already set by TriggerCleaners()
+// This method only handles the actual spawning of visual cleaner entities
 func (cs *CleanerSystem) processSpawnRequest(world *engine.World) {
-	// Prevent duplicate triggers
-	if cs.isActive.Load() {
+	// Check if already active - if so, this is likely a duplicate request
+	// The activation state was already set by TriggerCleaners(), so we just need to spawn cleaners
+	if !cs.isActive.Load() {
+		// This should not happen - TriggerCleaners should have set isActive before sending to channel
+		// But handle gracefully by returning without spawning
 		return
 	}
 
 	// Scan for rows with Red characters
 	redRows := cs.scanRedCharacterRows(world)
 
-	// CRITICAL: Always set activation state for proper phase transitions
-	// Even if no Red characters exist, cleaners must "activate" to ensure
-	// phase cycle completes correctly (phantom cleaners)
-	now := cs.ctx.TimeProvider.Now()
-	nowNano := now.UnixNano()
-	cs.activationTime.Store(nowNano)
-
-	// Activate the system before spawning and mark for first update skip
-	cs.isActive.Store(true)
-	cs.firstUpdate.Store(true)
-
 	// Only spawn visual entities if Red characters exist
+	// Even if no Red characters exist, cleaners are still "active" (phantom cleaners)
+	// for proper phase transitions - the activation state was set by ActivateCleaners()
 	if len(redRows) == 0 {
 		return
 	}
