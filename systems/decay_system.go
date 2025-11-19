@@ -61,7 +61,7 @@ func (s *DecaySystem) SetSpawnSystem(spawnSystem *SpawnSystem) {
 
 // Priority returns the system's priority
 func (s *DecaySystem) Priority() int {
-	return 30
+	return 25
 }
 
 // Update runs the decay system

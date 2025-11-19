@@ -92,7 +92,7 @@ func NewCleanerSystem(ctx *engine.GameContext, gameWidth, gameHeight int, config
 
 // Priority returns the system's priority (runs after decay system)
 func (cs *CleanerSystem) Priority() int {
-	return 35
+	return 30
 }
 
 // Update runs the cleaner system logic synchronously in the main game loop.

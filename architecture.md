@@ -192,11 +192,13 @@ defer ticker.Stop()
 
 ### System Priorities
 Systems execute in priority order (lower = earlier):
-1. **Input/Score (10)**: Process user input, update score
-2. **Spawn (10)**: Generate new character sequences (Blue and Green only)
-3. **Gold Sequence (20)**: Manage gold sequence lifecycle and random placement
-4. **Decay (30)**: Apply character degradation and color transitions
-5. **Cleaner (35)**: Process cleaner spawn requests (actual updates run concurrently)
+1. **ScoreSystem (10)**: Process user input, update score (highest priority for input)
+2. **SpawnSystem (15)**: Generate new character sequences (Blue and Green only)
+3. **GoldSequenceSystem (20)**: Manage gold sequence lifecycle and random placement
+4. **DecaySystem (25)**: Apply character degradation and color transitions
+5. **CleanerSystem (30)**: Process cleaner spawn requests (actual updates run concurrently)
+
+**Important**: All priorities must be unique to ensure deterministic execution order. The priority values define the exact order in which systems process game state each frame.
 
 ### Spatial Indexing
 - Primary index: `World.spatialIndex[y][x] -> Entity`

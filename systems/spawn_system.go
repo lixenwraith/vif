@@ -278,7 +278,7 @@ func (s *SpawnSystem) hasBracesInBlock(lines []string) bool {
 
 // Priority returns the system's priority (lower runs first)
 func (s *SpawnSystem) Priority() int {
-	return 10 // Run early
+	return 15 // Run early
 }
 
 // GetColorCount returns the character count for a specific color/level combination

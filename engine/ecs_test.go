@@ -3,6 +3,7 @@ package engine
 import (
 	"reflect"
 	"testing"
+	"time"
 )
 
 // TestComponent is a test component for testing
@@ -319,4 +320,56 @@ func TestSafeDestroyEntityComponentTypeIndex(t *testing.T) {
 	if foundEntity != entity2 {
 		t.Errorf("Expected entity2 (%d) at position (2, 2), got %d", entity2, foundEntity)
 	}
+}
+
+// TestSystemExecutionOrder verifies that systems execute in priority order
+func TestSystemExecutionOrder(t *testing.T) {
+	world := NewWorld()
+
+	// Track execution order
+	executionOrder := make([]int, 0)
+
+	// Create test systems with different priorities
+	system10 := &testSystem{priority: 10, executionOrder: &executionOrder}
+	system15 := &testSystem{priority: 15, executionOrder: &executionOrder}
+	system20 := &testSystem{priority: 20, executionOrder: &executionOrder}
+	system25 := &testSystem{priority: 25, executionOrder: &executionOrder}
+	system30 := &testSystem{priority: 30, executionOrder: &executionOrder}
+
+	// Add systems in random order to verify sorting works
+	world.AddSystem(system25)
+	world.AddSystem(system10)
+	world.AddSystem(system30)
+	world.AddSystem(system15)
+	world.AddSystem(system20)
+
+	// Run update
+	world.Update(0)
+
+	// Verify execution order matches priority order (lower priority = runs first)
+	expectedOrder := []int{10, 15, 20, 25, 30}
+	if len(executionOrder) != len(expectedOrder) {
+		t.Fatalf("Expected %d systems to execute, got %d", len(expectedOrder), len(executionOrder))
+	}
+
+	for i, expectedPriority := range expectedOrder {
+		if executionOrder[i] != expectedPriority {
+			t.Errorf("System execution order mismatch at position %d: expected priority %d, got %d",
+				i, expectedPriority, executionOrder[i])
+		}
+	}
+}
+
+// testSystem is a mock system for testing execution order
+type testSystem struct {
+	priority       int
+	executionOrder *[]int
+}
+
+func (s *testSystem) Update(world *World, dt time.Duration) {
+	*s.executionOrder = append(*s.executionOrder, s.priority)
+}
+
+func (s *testSystem) Priority() int {
+	return s.priority
 }
