@@ -6,8 +6,14 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
+// setupGradient initializes the gradient with default yellow color for testing
+func setupGradient() {
+	BuildCleanerGradient(10, tcell.NewRGBColor(255, 255, 0))
+}
+
 // TestCleanerTrailGradientInitialized verifies the pre-calculated gradient is properly initialized
 func TestCleanerTrailGradientInitialized(t *testing.T) {
+	setupGradient()
 	// Verify array has correct length
 	if len(CleanerTrailGradient) != 10 {
 		t.Fatalf("Expected gradient length 10, got %d", len(CleanerTrailGradient))
@@ -37,6 +43,7 @@ func TestCleanerTrailGradientInitialized(t *testing.T) {
 
 // TestCleanerTrailGradientBrightness verifies brightness progression
 func TestCleanerTrailGradientBrightness(t *testing.T) {
+	setupGradient()
 	// First element (index 0) should be brightest (full yellow: 255, 255, 0)
 	first := CleanerTrailGradient[0]
 	r, g, b := first.RGB()
@@ -61,6 +68,7 @@ func TestCleanerTrailGradientBrightness(t *testing.T) {
 
 // TestCleanerTrailGradientUniformFade verifies uniform fade distribution
 func TestCleanerTrailGradientUniformFade(t *testing.T) {
+	setupGradient()
 	// Check that each step reduces brightness by approximately 10% (1/10th)
 	for i := 0; i < len(CleanerTrailGradient)-1; i++ {
 		current := CleanerTrailGradient[i]
@@ -86,6 +94,7 @@ func TestCleanerTrailGradientUniformFade(t *testing.T) {
 
 // TestCleanerGradientIsYellow verifies all colors in gradient are shades of yellow
 func TestCleanerGradientIsYellow(t *testing.T) {
+	setupGradient()
 	for i, color := range CleanerTrailGradient {
 		r, g, b := color.RGB()
 
@@ -101,6 +110,7 @@ func TestCleanerGradientIsYellow(t *testing.T) {
 
 // TestCleanerGradientNoAllocation verifies gradient is pre-allocated
 func TestCleanerGradientNoAllocation(t *testing.T) {
+	setupGradient()
 	// Access gradient multiple times - should be the same array
 	first := &CleanerTrailGradient
 	second := &CleanerTrailGradient
@@ -111,6 +121,44 @@ func TestCleanerGradientNoAllocation(t *testing.T) {
 
 	// Verify it's an array, not a slice (compile-time check)
 	var _ [10]tcell.Color = CleanerTrailGradient
+}
+
+// TestBuildCleanerGradientConfigurability verifies the function works with different configurations
+func TestBuildCleanerGradientConfigurability(t *testing.T) {
+	// Test with custom color (cyan instead of yellow)
+	BuildCleanerGradient(10, tcell.NewRGBColor(0, 255, 255))
+
+	first := CleanerTrailGradient[0]
+	r, g, b := first.RGB()
+
+	// First element should be full cyan (0, 255, 255) adjusted for RGB extraction
+	if r != 0 || g == 0 || b == 0 {
+		t.Errorf("First gradient color should be cyan-based, got RGB(%d,%d,%d)", r, g, b)
+	}
+
+	// Test with shorter trail length
+	BuildCleanerGradient(5, tcell.NewRGBColor(255, 0, 0))
+
+	// First 5 should have values, rest should be transparent
+	for i := 0; i < 10; i++ {
+		color := CleanerTrailGradient[i]
+		r, g, b := color.RGB()
+
+		if i < 5 {
+			// Should have some red component
+			if r == 0 {
+				t.Errorf("Gradient index %d should have red component, got RGB(%d,%d,%d)", i, r, g, b)
+			}
+		} else {
+			// Should be transparent (all zeros)
+			if r != 0 || g != 0 || b != 0 {
+				t.Errorf("Gradient index %d should be transparent, got RGB(%d,%d,%d)", i, r, g, b)
+			}
+		}
+	}
+
+	// Restore default yellow gradient for other tests
+	setupGradient()
 }
 
 // Helper function

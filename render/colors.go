@@ -49,25 +49,10 @@ var (
 )
 
 // CleanerTrailGradient is a pre-calculated gradient table for cleaner trail rendering.
-// Index 0 = newest/brightest (full yellow), Index 9 = oldest/faded (transparent).
+// Index 0 = newest/brightest (full color), Index 9 = oldest/faded (transparent).
 // This avoids calculating colors on every frame, improving render performance.
+// Must be initialized by calling BuildCleanerGradient before use.
 var CleanerTrailGradient [10]tcell.Color
-
-// func init() {
-// 	// Pre-calculate gradient from bright yellow (255, 255, 0) to transparent/black (0, 0, 0)
-// 	// Trail length is 10 positions (constants.CleanerTrailLength)
-// 	for i := 0; i < 10; i++ {
-// 		// Calculate opacity: index 0 = 1.0 (brightest), index 9 = 0.1 (faintest)
-// 		opacity := 1.0 - (float64(i) / 10.0)
-//
-// 		// Interpolate from bright yellow to black
-// 		red := int32(255 * opacity)
-// 		green := int32(255 * opacity)
-// 		blue := int32(0) // Yellow has no blue component
-//
-// 		CleanerTrailGradient[i] = tcell.NewRGBColor(red, green, blue)
-// 	}
-// }
 
 // BuildCleanerGradient constructs the trail gradient based on configuration
 func BuildCleanerGradient(trailLength int, baseColor tcell.Color) {
@@ -78,9 +63,9 @@ func BuildCleanerGradient(trailLength int, baseColor tcell.Color) {
 	r, g, b := baseColor.RGB()
 	for i := 0; i < trailLength; i++ {
 		opacity := 1.0 - (float64(i) / float64(trailLength))
-		red := int32(float64(r>>8) * opacity)
-		green := int32(float64(g>>8) * opacity)
-		blue := int32(float64(b>>8) * opacity)
+		red := int32(float64(r) * opacity)
+		green := int32(float64(g) * opacity)
+		blue := int32(float64(b) * opacity)
 		CleanerTrailGradient[i] = tcell.NewRGBColor(red, green, blue)
 	}
 
