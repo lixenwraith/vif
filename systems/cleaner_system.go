@@ -15,7 +15,7 @@ import (
 
 // cleanerSpawnRequest represents a request to spawn cleaners
 type cleanerSpawnRequest struct {
-	world *engine.World
+	// Empty - world will be passed via Update() method
 }
 
 // cleanerData holds the runtime data for a cleaner entity
@@ -41,18 +41,17 @@ type cleanerData struct {
 type CleanerSystem struct {
 	ctx               *engine.GameContext
 	config            constants.CleanerConfig // Configuration for cleaner behavior
-	mu                sync.RWMutex         // Protects gameWidth, gameHeight, animationDuration, world
+	mu                sync.RWMutex         // Protects gameWidth, gameHeight, animationDuration
 	stateMu           sync.RWMutex         // Protects cleanerDataMap
 	flashMu           sync.RWMutex         // Protects flashPositions
 	isActive          atomic.Bool          // Atomic flag for cleaner active state
+	firstUpdate       atomic.Bool          // Atomic flag to skip first update (set on activation)
 	activationTime    atomic.Int64         // Unix nano timestamp of activation
-	lastUpdateTime    atomic.Int64         // Unix nano timestamp of last update
 	lastScanTime      atomic.Int64         // Unix nano timestamp of last periodic scan
 	activeCleanerCount atomic.Int64        // Number of active cleaner entities
 	gameWidth         int                  // Protected by mu
 	gameHeight        int                  // Protected by mu
 	animationDuration time.Duration        // Protected by mu
-	world             *engine.World        // Protected by mu - stored from spawn request
 	spawnChan         chan cleanerSpawnRequest // Channel for spawn requests
 	cleanerPool       sync.Pool            // Pool for cleaner trail slice allocation
 	cleanerDataMap    map[engine.Entity]*cleanerData // Maps entity to its runtime data
@@ -80,8 +79,8 @@ func NewCleanerSystem(ctx *engine.GameContext, gameWidth, gameHeight int, config
 
 	// Set initial atomic values
 	cs.isActive.Store(false)
+	cs.firstUpdate.Store(false)
 	cs.activationTime.Store(0)
-	cs.lastUpdateTime.Store(0)
 	cs.lastScanTime.Store(0)
 	cs.activeCleanerCount.Store(0)
 
@@ -97,15 +96,15 @@ func (cs *CleanerSystem) Priority() int {
 func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 	// Process spawn requests from channel
 	select {
-	case req := <-cs.spawnChan:
-		cs.processSpawnRequest(req)
+	case <-cs.spawnChan:
+		cs.processSpawnRequest(world)
 	default:
 		// No spawn request, continue
 	}
 
 	// Update cleaners if active (now runs in main game loop)
 	if cs.isActive.Load() {
-		cs.updateCleaners()
+		cs.updateCleaners(world, dt)
 	}
 
 	// Clean up expired flash effects
@@ -141,8 +140,14 @@ func (cs *CleanerSystem) cleanupExpiredFlashes(world *engine.World) {
 }
 
 // updateCleaners performs the actual cleaner update logic
-func (cs *CleanerSystem) updateCleaners() {
+func (cs *CleanerSystem) updateCleaners(world *engine.World, dt time.Duration) {
 	if !cs.isActive.Load() {
+		return
+	}
+
+	// Skip first update to match old behavior (cleaners spawn but don't move yet)
+	if cs.firstUpdate.Load() {
+		cs.firstUpdate.Store(false)
 		return
 	}
 
@@ -161,44 +166,27 @@ func (cs *CleanerSystem) updateCleaners() {
 	// Check if animation is complete
 	cs.mu.RLock()
 	duration := cs.animationDuration
-	world := cs.world
 	cs.mu.RUnlock()
 
 	if elapsed >= duration {
-		if world != nil {
-			cs.cleanupCleaners(world)
-		}
+		cs.cleanupCleaners(world)
 		cs.isActive.Store(false)
-		cs.lastUpdateTime.Store(0)
 		return
 	}
 
-	// Update cleaner positions
-	lastUpdateNano := cs.lastUpdateTime.Load()
-	if lastUpdateNano == 0 {
-		// First update, just set time
-		cs.lastUpdateTime.Store(nowNano)
-		return
-	}
+	// Calculate deltaTime from the dt parameter
+	deltaTime := dt.Seconds()
 
-	// Only update if we have a valid world reference
-	if world == nil {
-		return
-	}
-
-	deltaTime := float64(nowNano-lastUpdateNano) / float64(time.Second)
-	//updateCleanerPositions now handles all collision detection via trail
+	// Update cleaner positions - handles all collision detection via trail
 	cs.updateCleanerPositions(world, deltaTime)
-
-	// Update last update time
-	cs.lastUpdateTime.Store(nowNano)
 }
 
 // TriggerCleaners initiates the cleaner animation (non-blocking)
 func (cs *CleanerSystem) TriggerCleaners(world *engine.World) {
 	// Send spawn request via channel (non-blocking with select)
+	// World will be passed via Update() method
 	select {
-	case cs.spawnChan <- cleanerSpawnRequest{world: world}:
+	case cs.spawnChan <- cleanerSpawnRequest{}:
 		// Spawn request queued successfully
 	default:
 		// Spawn channel full - request dropped
@@ -206,19 +194,14 @@ func (cs *CleanerSystem) TriggerCleaners(world *engine.World) {
 }
 
 // processSpawnRequest handles a cleaner spawn request
-func (cs *CleanerSystem) processSpawnRequest(req cleanerSpawnRequest) {
+func (cs *CleanerSystem) processSpawnRequest(world *engine.World) {
 	// Prevent duplicate triggers
 	if cs.isActive.Load() {
 		return
 	}
 
-	// Store world reference for updateLoop goroutine to use
-	cs.mu.Lock()
-	cs.world = req.world
-	cs.mu.Unlock()
-
-	// Scan for rows with Red characters (with mutex protection)
-	redRows := cs.scanRedCharacterRows(req.world)
+	// Scan for rows with Red characters
+	redRows := cs.scanRedCharacterRows(world)
 
 	if len(redRows) == 0 {
 		return
@@ -230,18 +213,17 @@ func (cs *CleanerSystem) processSpawnRequest(req cleanerSpawnRequest) {
 	}
 
 	// Set activation time ATOMICALLY BEFORE spawning cleaners to prevent race condition
-	// where updateLoop checks elapsed time before activation time is set
 	now := cs.ctx.TimeProvider.Now()
 	nowNano := now.UnixNano()
 	cs.activationTime.Store(nowNano)
-	cs.lastUpdateTime.Store(nowNano)
 
-	// Activate the system before spawning to ensure updateLoop can see active state
+	// Activate the system before spawning and mark for first update skip
 	cs.isActive.Store(true)
+	cs.firstUpdate.Store(true)
 
 	// Spawn cleaner entities for each row
 	for _, row := range redRows {
-		cs.spawnCleanerForRow(req.world, row)
+		cs.spawnCleanerForRow(world, row)
 	}
 }
 
@@ -578,16 +560,11 @@ func (cs *CleanerSystem) cleanupCleaners(world *engine.World) {
 
 	// Reset all atomic state variables
 	cs.isActive.Store(false)
+	cs.firstUpdate.Store(false)
 	cs.activationTime.Store(0)
-	cs.lastUpdateTime.Store(0)
 
 	// Reset active cleaner count to 0 (not decrement, as we're doing full cleanup)
 	cs.activeCleanerCount.Store(0)
-
-	// Clear world reference
-	cs.mu.Lock()
-	cs.world = nil
-	cs.mu.Unlock()
 
 	// Clear flash position tracking
 	cs.flashMu.Lock()

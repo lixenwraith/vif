@@ -254,21 +254,22 @@ func TestCleanersAnimationCompletion(t *testing.T) {
 		t.Fatal("Cleaners should be active after trigger")
 	}
 
-	// Advance time (just before duration)
-	mockTime.Advance(900 * time.Millisecond)
-
-	// Wait for update loop to process
-	time.Sleep(100 * time.Millisecond)
+	// Simulate 900ms of game loop updates at 60fps
+	frameDuration := 16 * time.Millisecond
+	for i := 0; i < 56; i++ { // 56 frames * 16ms = 896ms
+		mockTime.Advance(frameDuration)
+		cleanerSystem.Update(world, frameDuration)
+	}
 
 	if !cleanerSystem.IsActive() {
 		t.Error("Cleaners should still be active before duration expires")
 	}
 
-	// Advance time (after duration)
-	mockTime.Advance(200 * time.Millisecond) // Total: 1.1 seconds
-
-	// Wait for update loop to process
-	time.Sleep(100 * time.Millisecond)
+	// Simulate another 200ms of updates (total: ~1.1 seconds)
+	for i := 0; i < 13; i++ { // 13 frames * 16ms = 208ms
+		mockTime.Advance(frameDuration)
+		cleanerSystem.Update(world, frameDuration)
+	}
 
 	if cleanerSystem.IsActive() {
 		t.Error("Cleaners should be inactive after duration expires")
@@ -334,11 +335,15 @@ func TestCleanersMovementSpeed(t *testing.T) {
 	// Record initial position
 	initialPos := cleaner.XPosition
 
-	// Advance time by 0.5 seconds
-	mockTime.Advance(500 * time.Millisecond)
+	// Simulate 0.5 seconds of game loop updates at 60fps (16ms per frame)
+	frameDuration := 16 * time.Millisecond
+	totalTime := 500 * time.Millisecond
+	numFrames := int(totalTime / frameDuration)
 
-	// Wait for update loop to process multiple frames
-	time.Sleep(200 * time.Millisecond)
+	for i := 0; i < numFrames; i++ {
+		mockTime.Advance(frameDuration)
+		cleanerSystem.Update(world, frameDuration)
+	}
 
 	cleanerComp, _ = world.GetComponent(entity, cleanerType)
 	cleaner = cleanerComp.(components.CleanerComponent)
@@ -562,17 +567,17 @@ func TestCleanersPoolReuse(t *testing.T) {
 	cleaner := cleanerComp.(components.CleanerComponent)
 	firstTrail := cleaner.TrailPositions
 
-	// Force cleanup by advancing time beyond animation duration
-	mockTime.Advance(2 * time.Second)
-
-	// Wait for cleanup to complete
-	time.Sleep(200 * time.Millisecond)
+	// Force cleanup by advancing time beyond animation duration and calling Update
+	frameDuration := 16 * time.Millisecond
+	for i := 0; i < 125; i++ { // 125 frames * 16ms = 2 seconds
+		mockTime.Advance(frameDuration)
+		cleanerSystem.Update(world, frameDuration)
+	}
 
 	// Verify cleanup happened
 	cleaners = world.GetEntitiesWith(cleanerType)
 	if len(cleaners) > 0 {
-		t.Logf("Warning: cleaners not cleaned up yet, waiting longer...")
-		time.Sleep(200 * time.Millisecond)
+		t.Errorf("Expected cleaners to be cleaned up, but found %d", len(cleaners))
 	}
 
 	// Create new Red character for second activation
