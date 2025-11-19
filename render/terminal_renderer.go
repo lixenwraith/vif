@@ -15,29 +15,44 @@ const (
 	cursorBlinkMs = 500
 )
 
+// CleanerSnapshot represents a thread-safe snapshot of cleaner data for rendering
+type CleanerSnapshot struct {
+	Row            int
+	XPosition      float64
+	TrailPositions []float64
+	Char           rune
+}
+
+// CleanerSystemInterface provides the interface needed by the renderer
+type CleanerSystemInterface interface {
+	GetCleanerSnapshots() []CleanerSnapshot
+}
+
 // TerminalRenderer handles all terminal rendering
 type TerminalRenderer struct {
-	screen     tcell.Screen
-	width      int
-	height     int
-	gameX      int
-	gameY      int
-	gameWidth  int
-	gameHeight int
-	lineNumWidth int
+	screen        tcell.Screen
+	width         int
+	height        int
+	gameX         int
+	gameY         int
+	gameWidth     int
+	gameHeight    int
+	lineNumWidth  int
+	cleanerSystem CleanerSystemInterface
 }
 
 // NewTerminalRenderer creates a new terminal renderer
-func NewTerminalRenderer(screen tcell.Screen, width, height, gameX, gameY, gameWidth, gameHeight, lineNumWidth int) *TerminalRenderer {
+func NewTerminalRenderer(screen tcell.Screen, width, height, gameX, gameY, gameWidth, gameHeight, lineNumWidth int, cleanerSystem CleanerSystemInterface) *TerminalRenderer {
 	return &TerminalRenderer{
-		screen:       screen,
-		width:        width,
-		height:       height,
-		gameX:        gameX,
-		gameY:        gameY,
-		gameWidth:    gameWidth,
-		gameHeight:   gameHeight,
-		lineNumWidth: lineNumWidth,
+		screen:        screen,
+		width:         width,
+		height:        height,
+		gameX:         gameX,
+		gameY:         gameY,
+		gameWidth:     gameWidth,
+		gameHeight:    gameHeight,
+		lineNumWidth:  lineNumWidth,
+		cleanerSystem: cleanerSystem,
 	}
 }
 
@@ -67,7 +82,7 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 	}
 
 	// Draw cleaners if active - AFTER decay animation
-	r.drawCleaners(ctx.World, defaultStyle)
+	r.drawCleaners(defaultStyle)
 
 	// Draw removal flash effects - AFTER cleaners
 	r.drawRemovalFlashes(ctx.World, ctx, defaultStyle)
@@ -423,19 +438,18 @@ func (r *TerminalRenderer) drawFallingDecay(world *engine.World, defaultStyle tc
 }
 
 // drawCleaners draws the cleaner animation with trail effects using pre-calculated gradients
-func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.Style) {
-	cleanerType := reflect.TypeOf(components.CleanerComponent{})
-	entities := world.GetEntitiesWith(cleanerType)
+// Uses thread-safe snapshots from CleanerSystem to avoid race conditions
+func (r *TerminalRenderer) drawCleaners(defaultStyle tcell.Style) {
+	// Skip if no cleaner system configured
+	if r.cleanerSystem == nil {
+		return
+	}
 
-	for _, entity := range entities {
-		// Defensive: Check if entity still exists
-		cleanerComp, ok := world.GetComponent(entity, cleanerType)
-		if !ok {
-			continue // Entity was destroyed between GetEntitiesWith and GetComponent
-		}
-		cleaner := cleanerComp.(components.CleanerComponent)
+	// Get thread-safe snapshot of cleaner data
+	snapshots := r.cleanerSystem.GetCleanerSnapshots()
 
-		// Calculate screen position for cleaner row
+	for _, cleaner := range snapshots {
+		// Bounds check for cleaner row
 		if cleaner.Row < 0 || cleaner.Row >= r.gameHeight {
 			continue
 		}
@@ -487,10 +501,13 @@ func (r *TerminalRenderer) drawRemovalFlashes(world *engine.World, ctx *engine.G
 	for _, entity := range entities {
 		// Defensive: Check if entity still exists
 		flashComp, ok := world.GetComponent(entity, flashType)
-		if !ok {
+		if !ok || flashComp == nil {
 			continue // Entity was destroyed between GetEntitiesWith and GetComponent
 		}
-		flash := flashComp.(components.RemovalFlashComponent)
+		flash, ok := flashComp.(components.RemovalFlashComponent)
+		if !ok {
+			continue // Type assertion failed
+		}
 
 		// Check if position is in bounds
 		if flash.Y < 0 || flash.Y >= r.gameHeight || flash.X < 0 || flash.X >= r.gameWidth {

@@ -128,7 +128,7 @@ func main() {
 	decaySystem.SetSpawnSystem(spawnSystem)
 	// Phase 6: Removed goldSequenceSystem.SetCleanerTrigger - now managed by ClockScheduler
 
-	// Create renderer
+	// Create renderer (with CleanerSystem for thread-safe cleaner rendering)
 	renderer := render.NewTerminalRenderer(
 		screen,
 		ctx.Width,
@@ -138,6 +138,7 @@ func main() {
 		ctx.GameWidth,
 		ctx.GameHeight,
 		ctx.LineNumWidth,
+		cleanerSystem,
 	)
 
 	// Create input handler

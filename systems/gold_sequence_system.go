@@ -2,7 +2,6 @@ package systems
 
 import (
 	"fmt"
-	"log"
 	"math"
 	"math/rand"
 	"reflect"
@@ -287,12 +286,9 @@ func (s *GoldSequenceSystem) GetExpectedCharacter(sequenceID int, index int) (ru
 func (s *GoldSequenceSystem) CompleteGoldSequence(world *engine.World) bool {
 	// Phase 3: Read from GameState
 	if !s.ctx.State.GetGoldActive() {
-		log.Printf("[GOLD] CompleteGoldSequence called but sequence not active")
 		return false
 	}
 	sequenceID := s.ctx.State.GetGoldSequenceID()
-
-	log.Printf("[GOLD] CompleteGoldSequence - removing gold sequence entities")
 
 	// Remove gold sequence entities
 	// This will also trigger decay timer restart

@@ -2,7 +2,6 @@ package systems
 
 import (
 	"fmt"
-	"log"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -11,6 +10,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/render"
 )
 
 // cleanerSpawnRequest represents a request to spawn cleaners
@@ -230,7 +230,6 @@ func (cs *CleanerSystem) updateCleaners() {
 	cs.mu.RUnlock()
 
 	if elapsed >= duration {
-		log.Printf("[CLEANER] Animation complete (elapsed: %v) - cleaning up", elapsed)
 		if world != nil {
 			cs.cleanupCleaners(world)
 		}
@@ -243,7 +242,6 @@ func (cs *CleanerSystem) updateCleaners() {
 	lastUpdateNano := cs.lastUpdateTime.Load()
 	if lastUpdateNano == 0 {
 		// First update, just set time
-		log.Printf("[CLEANER] First update - initializing timestamps")
 		cs.lastUpdateTime.Store(nowNano)
 		return
 	}
@@ -263,24 +261,19 @@ func (cs *CleanerSystem) updateCleaners() {
 
 // TriggerCleaners initiates the cleaner animation (non-blocking)
 func (cs *CleanerSystem) TriggerCleaners(world *engine.World) {
-	log.Printf("[CLEANER] TriggerCleaners called")
-
 	// Send spawn request via channel (non-blocking with select)
 	select {
 	case cs.spawnChan <- cleanerSpawnRequest{world: world}:
-		log.Printf("[CLEANER] Spawn request queued successfully")
+		// Spawn request queued successfully
 	default:
-		log.Printf("[CLEANER] WARNING: Spawn channel full - request dropped")
+		// Spawn channel full - request dropped
 	}
 }
 
 // processSpawnRequest handles a cleaner spawn request
 func (cs *CleanerSystem) processSpawnRequest(req cleanerSpawnRequest) {
-	log.Printf("[CLEANER] Processing spawn request...")
-
 	// Prevent duplicate triggers
 	if cs.isActive.Load() {
-		log.Printf("[CLEANER] Already active - ignoring spawn request")
 		return
 	}
 
@@ -292,17 +285,12 @@ func (cs *CleanerSystem) processSpawnRequest(req cleanerSpawnRequest) {
 	// Scan for rows with Red characters (with mutex protection)
 	redRows := cs.scanRedCharacterRows(req.world)
 
-	log.Printf("[CLEANER] Scanned for Red characters: found %d rows with Red chars", len(redRows))
-
 	if len(redRows) == 0 {
-		log.Printf("[CLEANER] No Red characters to clean - spawn aborted")
 		return
 	}
 
 	// Apply MaxConcurrentCleaners limit if configured
 	if cs.config.MaxConcurrentCleaners > 0 && len(redRows) > cs.config.MaxConcurrentCleaners {
-		log.Printf("[CLEANER] Limiting cleaners from %d to %d (MaxConcurrentCleaners)",
-			len(redRows), cs.config.MaxConcurrentCleaners)
 		redRows = redRows[:cs.config.MaxConcurrentCleaners]
 	}
 
@@ -315,14 +303,11 @@ func (cs *CleanerSystem) processSpawnRequest(req cleanerSpawnRequest) {
 
 	// Activate the system before spawning to ensure updateLoop can see active state
 	cs.isActive.Store(true)
-	log.Printf("[CLEANER] Activated cleaner system - spawning %d cleaners", len(redRows))
 
 	// Spawn cleaner entities for each row
 	for _, row := range redRows {
 		cs.spawnCleanerForRow(req.world, row)
 	}
-
-	log.Printf("[CLEANER] Spawn complete - active cleaner count: %d", cs.activeCleanerCount.Load())
 }
 
 // IsActive returns whether the cleaner animation is currently running
@@ -347,10 +332,13 @@ func (cs *CleanerSystem) scanRedCharacterRows(world *engine.World) []int {
 
 	for _, entity := range entities {
 		seqComp, ok := world.GetComponent(entity, seqType)
+		if !ok || seqComp == nil {
+			continue
+		}
+		seq, ok := seqComp.(components.SequenceComponent)
 		if !ok {
 			continue
 		}
-		seq := seqComp.(components.SequenceComponent)
 
 		// Only care about Red sequences
 		if seq.Type != components.SequenceRed {
@@ -358,10 +346,18 @@ func (cs *CleanerSystem) scanRedCharacterRows(world *engine.World) []int {
 		}
 
 		posComp, ok := world.GetComponent(entity, posType)
+		if !ok || posComp == nil {
+			continue
+		}
+		pos, ok := posComp.(components.PositionComponent)
 		if !ok {
 			continue
 		}
-		pos := posComp.(components.PositionComponent)
+
+		// Bounds check for row
+		if pos.Y < 0 || pos.Y >= cs.gameHeight {
+			continue
+		}
 
 		redRows[pos.Y] = true
 	}
@@ -435,9 +431,6 @@ func (cs *CleanerSystem) spawnCleanerForRow(world *engine.World, row int) {
 
 	// Increment active cleaner count
 	cs.activeCleanerCount.Add(1)
-
-	log.Printf("[CLEANER] Spawned cleaner on row %d (entity=%d, direction=%d, speed=%.2f)",
-		row, entity, direction, speed)
 }
 
 // updateCleanerPositions updates the position of all cleaner entities
@@ -447,10 +440,13 @@ func (cs *CleanerSystem) updateCleanerPositions(world *engine.World, deltaTime f
 
 	for _, entity := range entities {
 		cleanerComp, ok := world.GetComponent(entity, cleanerType)
+		if !ok || cleanerComp == nil {
+			continue
+		}
+		cleaner, ok := cleanerComp.(components.CleanerComponent)
 		if !ok {
 			continue
 		}
-		cleaner := cleanerComp.(components.CleanerComponent)
 
 		// Update position based on speed and direction
 		cleaner.XPosition += cleaner.Speed * float64(cleaner.Direction) * deltaTime
@@ -488,9 +484,20 @@ func (cs *CleanerSystem) updateCleanerPositions(world *engine.World, deltaTime f
 // Phase 7: Simplified collision detection that checks the entire trail continuously
 // Uses integer truncation (no rounding) to avoid skipping characters
 func (cs *CleanerSystem) checkTrailCollisions(world *engine.World, row int, trailPositions []float64) {
+	// Defensive: Check for nil world
+	if world == nil {
+		return
+	}
+
 	cs.mu.RLock()
 	gameWidth := cs.gameWidth
+	gameHeight := cs.gameHeight
 	cs.mu.RUnlock()
+
+	// Bounds check for row
+	if row < 0 || row >= gameHeight {
+		return
+	}
 
 	// Track which integer positions we've already checked to avoid duplicate checks
 	checkedPositions := make(map[int]bool)
@@ -518,6 +525,21 @@ func (cs *CleanerSystem) checkTrailCollisions(world *engine.World, row int, trai
 
 // checkAndDestroyAtPosition checks a specific position for Red characters and destroys them
 func (cs *CleanerSystem) checkAndDestroyAtPosition(world *engine.World, x, y int) {
+	// Defensive: Check for nil world
+	if world == nil {
+		return
+	}
+
+	// Bounds check for position
+	cs.mu.RLock()
+	gameWidth := cs.gameWidth
+	gameHeight := cs.gameHeight
+	cs.mu.RUnlock()
+
+	if x < 0 || x >= gameWidth || y < 0 || y >= gameHeight {
+		return
+	}
+
 	seqType := reflect.TypeOf(components.SequenceComponent{})
 	charType := reflect.TypeOf(components.CharacterComponent{})
 	posType := reflect.TypeOf(components.PositionComponent{})
@@ -660,6 +682,29 @@ func (cs *CleanerSystem) GetCleanerEntities(world *engine.World) []engine.Entity
 	return world.GetEntitiesWith(cleanerType)
 }
 
+// GetCleanerSnapshots returns a thread-safe snapshot of all active cleaners for rendering
+// This prevents race conditions between the concurrent updateLoop and the render thread
+func (cs *CleanerSystem) GetCleanerSnapshots() []render.CleanerSnapshot {
+	cs.stateMu.RLock()
+	defer cs.stateMu.RUnlock()
+
+	snapshots := make([]render.CleanerSnapshot, 0, len(cs.cleanerDataMap))
+	for _, data := range cs.cleanerDataMap {
+		// Create a deep copy of trail positions to avoid sharing the slice
+		trailCopy := make([]float64, len(data.trailPositions))
+		copy(trailCopy, data.trailPositions)
+
+		snapshots = append(snapshots, render.CleanerSnapshot{
+			Row:            data.row,
+			XPosition:      data.xPosition,
+			TrailPositions: trailCopy,
+			Char:           cs.config.Char,
+		})
+	}
+
+	return snapshots
+}
+
 // Shutdown stops the concurrent update loop and cleans up all resources
 func (cs *CleanerSystem) Shutdown() {
 	// Stop the update loop
@@ -693,7 +738,6 @@ func (cs *CleanerSystem) GetSystemState() string {
 // ActivateCleaners initiates the cleaner animation (Phase 6: called by ClockScheduler)
 // This is an alias for TriggerCleaners to match the CleanerSystemInterface
 func (cs *CleanerSystem) ActivateCleaners(world *engine.World) {
-	log.Printf("[CLEANER] ActivateCleaners called via ClockScheduler")
 	cs.TriggerCleaners(world)
 }
 
@@ -717,10 +761,5 @@ func (cs *CleanerSystem) IsAnimationComplete() bool {
 	duration := cs.animationDuration
 	cs.mu.RUnlock()
 
-	isComplete := elapsed >= duration
-	if isComplete {
-		log.Printf("[CLEANER] Animation complete: elapsed=%.2fs, duration=%.2fs", elapsed.Seconds(), duration.Seconds())
-	}
-
-	return isComplete
+	return elapsed >= duration
 }
