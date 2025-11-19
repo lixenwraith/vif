@@ -34,6 +34,10 @@ var (
 	RgbPingBlue      = tcell.NewRGBColor(15, 25, 50)    // Very dark blue for ping on blue char
 	RgbCursorNormal  = tcell.NewRGBColor(255, 165, 0)   // Orange for normal mode
 	RgbCursorInsert  = tcell.NewRGBColor(255, 255, 255) // Bright white for insert mode
+
+	// Nugget colors
+	RgbNuggetOrange = tcell.NewRGBColor(255, 165, 0)  // Same as insert cursor
+	RgbNuggetDark   = tcell.NewRGBColor(101, 67, 33)  // Dark brown for contrast
 	RgbCursorError   = tcell.NewRGBColor(255, 80, 80)   // Red
 	RgbTrailGray     = tcell.NewRGBColor(200, 200, 200) // Light gray base
 
