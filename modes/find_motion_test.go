@@ -1,5 +1,8 @@
 package modes
 
+// Comprehensive tests for find motion functionality (f/F commands, edge cases, Unicode, delete integration).
+// For count-aware state management tests, see count_aware_commands_test.go.
+
 import (
 	"testing"
 

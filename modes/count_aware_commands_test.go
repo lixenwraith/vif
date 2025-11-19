@@ -1,5 +1,8 @@
 package modes
 
+// Tests for count-aware command state management (MotionCount, PendingCount, state transitions).
+// For comprehensive find motion functionality tests, see find_motion_test.go.
+
 import (
 	"testing"
 

@@ -1,5 +1,10 @@
 package systems
 
+// Race condition tests for spawn system and content management.
+// See also:
+//   - cleaner_race_test.go: Cleaner system race conditions
+//   - boost_race_test.go: Boost/heat system race conditions
+
 import (
 	"math/rand"
 	"reflect"
@@ -691,8 +696,9 @@ func TestStressContentSystem(t *testing.T) {
 	}
 }
 
-// TestConcurrentColorCounterUpdates tests the thread-safety of atomic color counters
-// This ensures spawn, score, and decay systems can update counters concurrently
+// TestConcurrentColorCounterUpdates tests cross-system color counter race conditions.
+// Simulates spawn (increment), score (decrement), and render (read) systems accessing counters concurrently.
+// For basic atomic increment tests, see TestColorCountersConcurrency in spawn_file_based_test.go.
 func TestConcurrentColorCounterUpdates(t *testing.T) {
 	screen := tcell.NewSimulationScreen("UTF-8")
 	screen.SetSize(80, 24)

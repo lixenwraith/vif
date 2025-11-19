@@ -1,5 +1,10 @@
 package systems
 
+// Race condition tests for cleaner system (snapshots, state access, flash effects, pool allocation).
+// See also:
+//   - race_condition_comprehensive_test.go: Spawn system and content management race conditions
+//   - boost_race_test.go: Boost/heat system race conditions
+
 import (
 	"reflect"
 	"sync"

@@ -86,7 +86,8 @@ func TestColorCounters(t *testing.T) {
 	}
 }
 
-// TestColorCountersConcurrency tests atomic operations under concurrent access
+// TestColorCountersConcurrency tests basic atomic increment correctness under concurrent access.
+// For comprehensive cross-system race testing, see TestConcurrentColorCounterUpdates in race_condition_comprehensive_test.go.
 func TestColorCountersConcurrency(t *testing.T) {
 	screen := tcell.NewSimulationScreen("UTF-8")
 	screen.SetSize(80, 24)

@@ -1,5 +1,10 @@
 package systems
 
+// Race condition tests for boost/heat system (toggle, expiration, timer updates).
+// See also:
+//   - race_condition_comprehensive_test.go: Spawn system and content management race conditions
+//   - cleaner_race_test.go: Cleaner system race conditions
+
 import (
 	"sync"
 	"testing"

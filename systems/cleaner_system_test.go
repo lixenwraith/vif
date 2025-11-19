@@ -605,9 +605,7 @@ func TestCleanersPoolReuse(t *testing.T) {
 	}
 }
 
-// Removed TestCleanersConcurrentAccess - obsolete test
-// Concurrent access is now validated by ClockScheduler tests
-// Old test pattern (direct TriggerCleaners + synchronous Update) caused race conditions
+// Note: Concurrent access tests moved to race_condition_comprehensive_test.go and cleaner_race_test.go
 
 // TestCleanersRemovalFlashEffect verifies flash effects are created when red characters are removed
 func TestCleanersRemovalFlashEffect(t *testing.T) {
