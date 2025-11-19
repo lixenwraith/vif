@@ -625,7 +625,7 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 **Line**: 0 (start), ^ (first non-space), $ (end)
 **Word**: w, b, e (word), W, B, E (WORD)
 **Screen**: gg (top), G (bottom), go (top-left), H (high), M (middle), L (low)
-**Paragraph**: { (prev empty), } (next empty), % (matching bracket)
+**Paragraph**: { (prev empty), } (next empty), % (matching bracket - supports (), {}, [], <>)
 **Find/Till**: f<char> (find forward), F<char> (find backward), t<char> (till forward), T<char> (till backward), ; (repeat find/till), , (reverse find/till)
 **Search**: / (search), n/N (next/prev match)
 **Delete**: x (char), dd (line), d<motion> (delete with motion), D (to end of line)

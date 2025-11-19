@@ -140,7 +140,7 @@ vi-fighter supports a comprehensive set of vi/vim motion commands for navigation
 ### Paragraph Navigation
 - `{` - Jump to previous empty line
 - `}` - Jump to next empty line
-- `%` - Jump to matching bracket (works with (), {}, [])
+- `%` - Jump to matching bracket (works with (), {}, [], <>)
 
 ### Find & Search
 - `f<char>` / `F<char>` - Find character forward/backward on current line

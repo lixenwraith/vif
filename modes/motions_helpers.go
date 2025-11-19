@@ -58,17 +58,17 @@ func validatePosition(ctx *engine.GameContext, x, y int) (validX, validY int) {
 
 // isBracket returns true if the rune is a bracket character
 func isBracket(r rune) bool {
-	return r == '(' || r == ')' || r == '{' || r == '}' || r == '[' || r == ']'
+	return r == '(' || r == ')' || r == '{' || r == '}' || r == '[' || r == ']' || r == '<' || r == '>'
 }
 
 // isOpeningBracket returns true if the rune is an opening bracket
 func isOpeningBracket(r rune) bool {
-	return r == '(' || r == '{' || r == '['
+	return r == '(' || r == '{' || r == '[' || r == '<'
 }
 
 // isClosingBracket returns true if the rune is a closing bracket
 func isClosingBracket(r rune) bool {
-	return r == ')' || r == '}' || r == ']'
+	return r == ')' || r == '}' || r == ']' || r == '>'
 }
 
 // getMatchingBracket returns the matching bracket for a given bracket
@@ -86,6 +86,10 @@ func getMatchingBracket(r rune) rune {
 		return ']'
 	case ']':
 		return '['
+	case '<':
+		return '>'
+	case '>':
+		return '<'
 	}
 	return 0
 }

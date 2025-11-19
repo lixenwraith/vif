@@ -103,7 +103,7 @@ Examples:
 #### Paragraph Motions
 - **`{`** - Jump to previous empty line
 - **`}`** - Jump to next empty line
-- **`%`** - Jump to matching bracket (works with (), {}, [])
+- **`%`** - Jump to matching bracket (works with (), {}, [], <>)
 
 #### Find & Search
 - **`f<char>`** - Find character forward on current line (moves cursor TO the character)
