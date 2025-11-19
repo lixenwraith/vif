@@ -7,9 +7,9 @@ import (
 
 // RGB color definitions for sequences - dark/normal/bright levels
 var (
-	RgbSequenceGreenDark   = tcell.NewRGBColor(0, 130, 0)     // Dark Green
-	RgbSequenceGreenNormal = tcell.NewRGBColor(0, 200, 0)     // Normal Green
-	RgbSequenceGreenBright = tcell.NewRGBColor(50, 255, 50)   // Bright Green
+	RgbSequenceGreenDark   = tcell.NewRGBColor(0, 130, 0)   // Dark Green
+	RgbSequenceGreenNormal = tcell.NewRGBColor(0, 200, 0)   // Normal Green
+	RgbSequenceGreenBright = tcell.NewRGBColor(50, 255, 50) // Bright Green
 
 	RgbSequenceRedDark   = tcell.NewRGBColor(180, 50, 50)   // Dark Red
 	RgbSequenceRedNormal = tcell.NewRGBColor(255, 80, 80)   // Normal Red
@@ -27,14 +27,14 @@ var (
 	RgbColumnIndicator = tcell.NewRGBColor(180, 180, 180) // Brighter gray
 	RgbBackground      = tcell.NewRGBColor(26, 27, 38)    // Tokyo Night background
 
-	RgbPingHighlight = tcell.NewRGBColor(50, 50, 50) // Very dark gray for ping
-	RgbPingOrange    = tcell.NewRGBColor(60, 40, 0)  // Very dark orange for ping on whitespace
-	RgbPingGreen     = tcell.NewRGBColor(0, 40, 0)   // Very dark green for ping on green char
-	RgbPingRed       = tcell.NewRGBColor(50, 15, 15) // Very dark red for ping on red char
-	RgbPingBlue      = tcell.NewRGBColor(15, 25, 50) // Very dark blue for ping on blue char
-	RgbCursorNormal  = tcell.NewRGBColor(255, 165, 0) // Orange for normal mode
+	RgbPingHighlight = tcell.NewRGBColor(50, 50, 50)    // Very dark gray for ping
+	RgbPingOrange    = tcell.NewRGBColor(60, 40, 0)     // Very dark orange for ping on whitespace
+	RgbPingGreen     = tcell.NewRGBColor(0, 40, 0)      // Very dark green for ping on green char
+	RgbPingRed       = tcell.NewRGBColor(50, 15, 15)    // Very dark red for ping on red char
+	RgbPingBlue      = tcell.NewRGBColor(15, 25, 50)    // Very dark blue for ping on blue char
+	RgbCursorNormal  = tcell.NewRGBColor(255, 165, 0)   // Orange for normal mode
 	RgbCursorInsert  = tcell.NewRGBColor(255, 255, 255) // Bright white for insert mode
-	RgbCursorError   = tcell.NewRGBColor(255, 80, 80)  // Red
+	RgbCursorError   = tcell.NewRGBColor(255, 80, 80)   // Red
 	RgbTrailGray     = tcell.NewRGBColor(200, 200, 200) // Light gray base
 
 	// Status bar backgrounds
@@ -53,19 +53,40 @@ var (
 // This avoids calculating colors on every frame, improving render performance.
 var CleanerTrailGradient [10]tcell.Color
 
-func init() {
-	// Pre-calculate gradient from bright yellow (255, 255, 0) to transparent/black (0, 0, 0)
-	// Trail length is 10 positions (constants.CleanerTrailLength)
-	for i := 0; i < 10; i++ {
-		// Calculate opacity: index 0 = 1.0 (brightest), index 9 = 0.1 (faintest)
-		opacity := 1.0 - (float64(i) / 10.0)
+// func init() {
+// 	// Pre-calculate gradient from bright yellow (255, 255, 0) to transparent/black (0, 0, 0)
+// 	// Trail length is 10 positions (constants.CleanerTrailLength)
+// 	for i := 0; i < 10; i++ {
+// 		// Calculate opacity: index 0 = 1.0 (brightest), index 9 = 0.1 (faintest)
+// 		opacity := 1.0 - (float64(i) / 10.0)
+//
+// 		// Interpolate from bright yellow to black
+// 		red := int32(255 * opacity)
+// 		green := int32(255 * opacity)
+// 		blue := int32(0) // Yellow has no blue component
+//
+// 		CleanerTrailGradient[i] = tcell.NewRGBColor(red, green, blue)
+// 	}
+// }
 
-		// Interpolate from bright yellow to black
-		red := int32(255 * opacity)
-		green := int32(255 * opacity)
-		blue := int32(0) // Yellow has no blue component
+// BuildCleanerGradient constructs the trail gradient based on configuration
+func BuildCleanerGradient(trailLength int, baseColor tcell.Color) {
+	if trailLength > 10 {
+		trailLength = 10 // Cap at array size
+	}
 
+	r, g, b := baseColor.RGB()
+	for i := 0; i < trailLength; i++ {
+		opacity := 1.0 - (float64(i) / float64(trailLength))
+		red := int32(float64(r>>8) * opacity)
+		green := int32(float64(g>>8) * opacity)
+		blue := int32(float64(b>>8) * opacity)
 		CleanerTrailGradient[i] = tcell.NewRGBColor(red, green, blue)
+	}
+
+	// Fill remaining slots with transparent
+	for i := trailLength; i < 10; i++ {
+		CleanerTrailGradient[i] = tcell.NewRGBColor(0, 0, 0)
 	}
 }
 
@@ -156,25 +177,4 @@ func GetStyleForSequence(seqType components.SequenceType, level components.Seque
 		return baseStyle.Foreground(RgbSequenceGold)
 	}
 	return baseStyle
-}
-
-// GetScoreBlinkBackgroundColor returns a bright color suitable for score background
-// These colors are brighter than the foreground colors to provide good contrast with black text
-func GetScoreBlinkBackgroundColor(seqType components.SequenceType, level components.SequenceLevel) tcell.Color {
-	switch seqType {
-	case components.SequenceGreen:
-		// Always use bright green for visibility as background
-		return tcell.NewRGBColor(120, 255, 120) // Brighter green for background
-	case components.SequenceRed:
-		// Always use bright red for visibility as background
-		return tcell.NewRGBColor(255, 140, 140) // Brighter red for background
-	case components.SequenceBlue:
-		// Always use bright blue for visibility as background
-		return tcell.NewRGBColor(160, 210, 255) // Brighter blue for background
-	case components.SequenceGold:
-		// Gold is already bright yellow, perfect for backgrounds
-		return RgbSequenceGold // RGB(255, 255, 0)
-	}
-	// Default to white if unknown type
-	return tcell.NewRGBColor(255, 255, 255)
 }

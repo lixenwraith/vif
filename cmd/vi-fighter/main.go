@@ -119,6 +119,9 @@ func main() {
 
 	// Initialize cleaner system with default configuration
 	cleanerConfig := constants.DefaultCleanerConfig()
+	// Initialize cleaner gradient based on configuration
+	render.BuildCleanerGradient(cleanerConfig.TrailLength, tcell.NewRGBColor(255, 255, 0))
+
 	cleanerSystem := systems.NewCleanerSystem(ctx, ctx.GameWidth, ctx.GameHeight, cleanerConfig)
 	ctx.World.AddSystem(cleanerSystem)
 

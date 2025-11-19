@@ -42,22 +42,22 @@ type cleanerData struct {
 // - Frame-coherent snapshots for thread-safe rendering
 // - sync.Pool for efficient trail slice allocation/deallocation
 type CleanerSystem struct {
-	ctx               *engine.GameContext
-	config            constants.CleanerConfig // Configuration for cleaner behavior
-	mu                sync.RWMutex         // Protects animationDuration
-	stateMu           sync.RWMutex         // Protects cleanerDataMap
-	flashMu           sync.RWMutex         // Protects flashPositions
-	isActive          atomic.Bool          // Atomic flag for cleaner active state
-	firstUpdate       atomic.Bool          // Atomic flag to skip first update (set on activation)
-	activationTime    atomic.Int64         // Unix nano timestamp of activation
-	lastScanTime      atomic.Int64         // Unix nano timestamp of last periodic scan
-	activeCleanerCount atomic.Int64        // Number of active cleaner entities
+	ctx                *engine.GameContext
+	config             constants.CleanerConfig // Configuration for cleaner behavior
+	mu                 sync.RWMutex            // Protects animationDuration
+	stateMu            sync.RWMutex            // Protects cleanerDataMap
+	flashMu            sync.RWMutex            // Protects flashPositions
+	isActive           atomic.Bool             // Atomic flag for cleaner active state
+	firstUpdate        atomic.Bool             // Atomic flag to skip first update (set on activation)
+	activationTime     atomic.Int64            // Unix nano timestamp of activation
+	lastScanTime       atomic.Int64            // Unix nano timestamp of last periodic scan
+	activeCleanerCount atomic.Int64            // Number of active cleaner entities
 	// Removed gameWidth, gameHeight - now read from ctx.GameWidth/GameHeight
-	animationDuration time.Duration        // Protected by mu
-	spawnChan         chan cleanerSpawnRequest // Channel for spawn requests
-	cleanerPool       sync.Pool            // Pool for cleaner trail slice allocation
+	animationDuration time.Duration                  // Protected by mu
+	spawnChan         chan cleanerSpawnRequest       // Channel for spawn requests
+	cleanerPool       sync.Pool                      // Pool for cleaner trail slice allocation
 	cleanerDataMap    map[engine.Entity]*cleanerData // Maps entity to its runtime data
-	flashPositions    map[string]bool      // Tracks active flash positions to prevent duplicates
+	flashPositions    map[string]bool                // Tracks active flash positions to prevent duplicates
 }
 
 // NewCleanerSystem creates a new cleaner system with the specified configuration
@@ -422,7 +422,7 @@ func (cs *CleanerSystem) updateCleanerPositions(world *engine.World, deltaTime f
 		// Update component (after lock is released)
 		world.AddComponent(entity, cleaner)
 
-		//Check all trail positions for collisions (not just head)
+		// Check all trail positions for collisions (not just head)
 		cs.checkTrailCollisions(world, cleaner.Row, cleaner.TrailPositions)
 	}
 }
