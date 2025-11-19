@@ -42,11 +42,8 @@ type CodeBlock struct {
 // SpawnSystem handles character sequence generation and spawning
 // State management delegated to GameState (spawn timing, color counters, sequence IDs)
 type SpawnSystem struct {
-	gameWidth  int
-	gameHeight int
-	cursorX    int // Cached for exclusion zone, synced from ctx.State
-	cursorY    int // Cached for exclusion zone, synced from ctx.State
-	ctx        *engine.GameContext
+	// Removed gameWidth, gameHeight, cursorX, cursorY - now read from ctx
+	ctx *engine.GameContext
 
 	// Content management (implementation detail, not game state)
 	contentManager *content.ContentManager
@@ -64,11 +61,7 @@ type SpawnSystem struct {
 // State is now managed in ctx.State (spawn timing, color counters, sequence IDs)
 func NewSpawnSystem(gameWidth, gameHeight, cursorX, cursorY int, ctx *engine.GameContext) *SpawnSystem {
 	s := &SpawnSystem{
-		gameWidth:  gameWidth,
-		gameHeight: gameHeight,
-		cursorX:    cursorX,
-		cursorY:    cursorY,
-		ctx:        ctx,
+		ctx: ctx,
 	}
 
 	// Initialize content management atomics (not game state)
@@ -527,19 +520,23 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 		return false
 	}
 
+	// Read dimensions from context
+	gameWidth := s.ctx.GameWidth
+	gameHeight := s.ctx.GameHeight
+
 	// Try up to maxPlacementTries times to find a valid position
 	for attempt := 0; attempt < maxPlacementTries; attempt++ {
 		// Random row selection
-		row := rand.Intn(s.gameHeight)
+		row := rand.Intn(gameHeight)
 
 		// Check if line fits and find available columns
-		if lineLength > s.gameWidth {
+		if lineLength > gameWidth {
 			// Line too long for screen, skip
 			continue
 		}
 
 		// Random column selection (must have room for full line)
-		maxStartCol := s.gameWidth - lineLength
+		maxStartCol := gameWidth - lineLength
 		if maxStartCol < 0 {
 			continue
 		}
@@ -617,12 +614,4 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 
 	// Failed to place after maxPlacementTries attempts
 	return false
-}
-
-// UpdateDimensions updates the game area dimensions
-func (s *SpawnSystem) UpdateDimensions(gameWidth, gameHeight, cursorX, cursorY int) {
-	s.gameWidth = gameWidth
-	s.gameHeight = gameHeight
-	s.cursorX = cursorX
-	s.cursorY = cursorY
 }

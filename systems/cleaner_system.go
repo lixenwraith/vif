@@ -44,7 +44,7 @@ type cleanerData struct {
 type CleanerSystem struct {
 	ctx               *engine.GameContext
 	config            constants.CleanerConfig // Configuration for cleaner behavior
-	mu                sync.RWMutex         // Protects gameWidth, gameHeight, animationDuration
+	mu                sync.RWMutex         // Protects animationDuration
 	stateMu           sync.RWMutex         // Protects cleanerDataMap
 	flashMu           sync.RWMutex         // Protects flashPositions
 	isActive          atomic.Bool          // Atomic flag for cleaner active state
@@ -52,8 +52,7 @@ type CleanerSystem struct {
 	activationTime    atomic.Int64         // Unix nano timestamp of activation
 	lastScanTime      atomic.Int64         // Unix nano timestamp of last periodic scan
 	activeCleanerCount atomic.Int64        // Number of active cleaner entities
-	gameWidth         int                  // Protected by mu
-	gameHeight        int                  // Protected by mu
+	// Removed gameWidth, gameHeight - now read from ctx.GameWidth/GameHeight
 	animationDuration time.Duration        // Protected by mu
 	spawnChan         chan cleanerSpawnRequest // Channel for spawn requests
 	cleanerPool       sync.Pool            // Pool for cleaner trail slice allocation
@@ -66,8 +65,6 @@ func NewCleanerSystem(ctx *engine.GameContext, gameWidth, gameHeight int, config
 	cs := &CleanerSystem{
 		ctx:               ctx,
 		config:            config,
-		gameWidth:         gameWidth,
-		gameHeight:        gameHeight,
 		animationDuration: config.AnimationDuration,
 		spawnChan:         make(chan cleanerSpawnRequest, 10), // Buffered channel
 		cleanerDataMap:    make(map[engine.Entity]*cleanerData),
@@ -169,7 +166,7 @@ func (cs *CleanerSystem) updateCleaners(world *engine.World, dt time.Duration) {
 	// Calculate elapsed time since animation started
 	elapsed := time.Duration(nowNano - activationNano)
 
-	// Check if animation is complete
+	// Check if animation is complete (read duration under lock)
 	cs.mu.RLock()
 	duration := cs.animationDuration
 	cs.mu.RUnlock()
@@ -262,10 +259,8 @@ func (cs *CleanerSystem) GetActiveCleanerCount() int64 {
 func (cs *CleanerSystem) scanRedCharacterRows(world *engine.World) []int {
 	redRows := make(map[int]bool)
 
-	// Read dimensions under lock
-	cs.mu.RLock()
-	gameHeight := cs.gameHeight
-	cs.mu.RUnlock()
+	// Read game height from context
+	gameHeight := cs.ctx.GameHeight
 
 	seqType := reflect.TypeOf(components.SequenceComponent{})
 	posType := reflect.TypeOf(components.PositionComponent{})
@@ -315,8 +310,11 @@ func (cs *CleanerSystem) scanRedCharacterRows(world *engine.World) []int {
 
 // spawnCleanerForRow creates a cleaner entity for the given row
 func (cs *CleanerSystem) spawnCleanerForRow(world *engine.World, row int) {
+	// Read game width from context
+	gameWidth := cs.ctx.GameWidth
+
+	// Read animation duration under lock
 	cs.mu.RLock()
-	gameWidth := cs.gameWidth
 	duration := cs.animationDuration
 	cs.mu.RUnlock()
 
@@ -446,10 +444,9 @@ func (cs *CleanerSystem) checkTrailCollisions(world *engine.World, row int, trai
 		return
 	}
 
-	cs.mu.RLock()
-	gameWidth := cs.gameWidth
-	gameHeight := cs.gameHeight
-	cs.mu.RUnlock()
+	// Read dimensions from context
+	gameWidth := cs.ctx.GameWidth
+	gameHeight := cs.ctx.GameHeight
 
 	// Bounds check for row
 	if row < 0 || row >= gameHeight {
@@ -513,11 +510,9 @@ func (cs *CleanerSystem) checkAndDestroyAtPosition(world *engine.World, x, y int
 		return
 	}
 
-	// Bounds check for position
-	cs.mu.RLock()
-	gameWidth := cs.gameWidth
-	gameHeight := cs.gameHeight
-	cs.mu.RUnlock()
+	// Read dimensions from context for bounds check
+	gameWidth := cs.ctx.GameWidth
+	gameHeight := cs.ctx.GameHeight
 
 	if x < 0 || x >= gameWidth || y < 0 || y >= gameHeight {
 		return
@@ -645,14 +640,6 @@ func (cs *CleanerSystem) cleanupCleaners(world *engine.World) {
 		// We could log this if we had a logger, but for now we just verify
 		_ = remainingCleaners // Silence unused variable warning
 	}
-}
-
-// UpdateDimensions updates the game area dimensions
-func (cs *CleanerSystem) UpdateDimensions(gameWidth, gameHeight int) {
-	cs.mu.Lock()
-	defer cs.mu.Unlock()
-	cs.gameWidth = gameWidth
-	cs.gameHeight = gameHeight
 }
 
 // GetCleanerEntities returns all active cleaner entities (for rendering)

@@ -26,10 +26,9 @@ type DecaySystem struct {
 	mu sync.RWMutex // Protects fields below
 	// Removed animating, timerStarted, nextDecayTime - now in GameState
 	// Removed heatIncrement - was causing race condition (cached stale value)
+	// Removed gameWidth, gameHeight - now read from ctx.GameWidth/GameHeight
 	currentRow       int
 	lastUpdate       time.Time
-	gameWidth        int
-	gameHeight       int
 	ctx              *engine.GameContext
 	spawnSystem      *SpawnSystem
 	fallingEntities  []engine.Entity        // Entities representing falling decay characters
@@ -42,8 +41,6 @@ func NewDecaySystem(gameWidth, gameHeight int, ctx *engine.GameContext) *DecaySy
 	s := &DecaySystem{
 		currentRow:       0,
 		lastUpdate:       ctx.TimeProvider.Now(),
-		gameWidth:        gameWidth,
-		gameHeight:       gameHeight,
 		ctx:              ctx,
 		fallingEntities:  make([]engine.Entity, 0),
 		decayedThisFrame: make(map[engine.Entity]bool),
@@ -79,9 +76,8 @@ func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 // updateAnimation progresses the decay animation
 // Uses GameState snapshot for startTime
 func (s *DecaySystem) updateAnimation(world *engine.World) {
-	s.mu.RLock()
-	gameHeight := s.gameHeight
-	s.mu.RUnlock()
+	// Read game height from context
+	gameHeight := s.ctx.GameHeight
 
 	// Read decay state snapshot for consistent startTime access
 	decaySnapshot := s.ctx.State.ReadDecayState()
@@ -227,10 +223,8 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 // spawnFallingEntities creates falling decay character entities
 // One entity is created per column to ensure complete column coverage
 func (s *DecaySystem) spawnFallingEntities(world *engine.World) {
-	// Get gameWidth with lock
-	s.mu.RLock()
-	gameWidth := s.gameWidth
-	s.mu.RUnlock()
+	// Get gameWidth from context
+	gameWidth := s.ctx.GameWidth
 
 	// Create new falling entities list
 	newFallingEntities := make([]engine.Entity, 0, gameWidth)
@@ -269,9 +263,11 @@ func (s *DecaySystem) spawnFallingEntities(world *engine.World) {
 func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64) {
 	fallingType := reflect.TypeOf(components.FallingDecayComponent{})
 
-	// Get fields with lock
+	// Get game height from context
+	gameHeight := s.ctx.GameHeight
+
+	// Get falling entities with lock
 	s.mu.RLock()
-	gameHeight := s.gameHeight
 	fallingEntities := s.fallingEntities
 	s.mu.RUnlock()
 
@@ -395,8 +391,10 @@ func (s *DecaySystem) IsAnimating() bool {
 func (s *DecaySystem) CurrentRow() int {
 	s.mu.RLock()
 	currentRow := s.currentRow
-	gameHeight := s.gameHeight
 	s.mu.RUnlock()
+
+	// Read game height from context
+	gameHeight := s.ctx.GameHeight
 
 	// Read decay state snapshot for consistent check
 	decaySnapshot := s.ctx.State.ReadDecayState()
@@ -423,15 +421,6 @@ func (s *DecaySystem) CurrentRow() int {
 func (s *DecaySystem) GetTimeUntilDecay() float64 {
 	decaySnapshot := s.ctx.State.ReadDecayState()
 	return decaySnapshot.TimeUntil
-}
-
-// UpdateDimensions updates the game dimensions
-func (s *DecaySystem) UpdateDimensions(gameWidth, gameHeight int) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.gameWidth = gameWidth
-	s.gameHeight = gameHeight
 }
 
 // GetSystemState returns the current state of the decay system for debugging

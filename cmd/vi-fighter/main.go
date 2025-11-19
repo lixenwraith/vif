@@ -170,9 +170,6 @@ func main() {
 				return // Exit game
 			}
 
-			// Update spawn system cursor position
-			spawnSystem.UpdateDimensions(ctx.GameWidth, ctx.GameHeight, ctx.CursorX, ctx.CursorY)
-
 			// Update renderer dimensions if screen resized
 			renderer.UpdateDimensions(
 				ctx.Width,
@@ -201,15 +198,6 @@ func main() {
 				// Timer expired, deactivate ping
 				ctx.SetPingActive(false)
 			}
-
-			// Update decay system dimensions
-			decaySystem.UpdateDimensions(ctx.GameWidth, ctx.GameHeight)
-
-			// Update gold sequence system dimensions and cursor position
-			goldSequenceSystem.UpdateDimensions(ctx.GameWidth, ctx.GameHeight, ctx.CursorX, ctx.CursorY)
-
-			// Update cleaner system dimensions
-			cleanerSystem.UpdateDimensions(ctx.GameWidth, ctx.GameHeight)
 
 			// Render frame (all updates guaranteed complete)
 			renderer.RenderFrame(ctx, decaySystem.IsAnimating(), decaySystem.CurrentRow(), decaySystem.GetTimeUntilDecay())

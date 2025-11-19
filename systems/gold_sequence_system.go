@@ -21,10 +21,7 @@ type GoldSequenceSystem struct {
 	ctx         *engine.GameContext
 	decaySystem *DecaySystem
 	characters  string
-	gameWidth   int
-	gameHeight  int
-	cursorX     int
-	cursorY     int
+	// Removed gameWidth, gameHeight, cursorX, cursorY - now read from ctx
 }
 
 // NewGoldSequenceSystem creates a new gold sequence system
@@ -33,10 +30,6 @@ func NewGoldSequenceSystem(ctx *engine.GameContext, decaySystem *DecaySystem, ga
 		ctx:         ctx,
 		decaySystem: decaySystem,
 		characters:  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
-		gameWidth:   gameWidth,
-		gameHeight:  gameHeight,
-		cursorX:     cursorX,
-		cursorY:     cursorY,
 	}
 }
 
@@ -299,13 +292,14 @@ func (s *GoldSequenceSystem) CompleteGoldSequence(world *engine.World) bool {
 }
 
 // findValidPosition finds a valid random position for the gold sequence
-// Requires s.mu lock for reading dimensions
+// Caller holds s.mu lock
 func (s *GoldSequenceSystem) findValidPosition(world *engine.World, seqLength int) (int, int) {
-	// Read dimensions and cursor position (caller holds lock)
-	gameWidth := s.gameWidth
-	gameHeight := s.gameHeight
-	cursorX := s.cursorX
-	cursorY := s.cursorY
+	// Read dimensions from context
+	gameWidth := s.ctx.GameWidth
+	gameHeight := s.ctx.GameHeight
+
+	// Read cursor position from GameState (atomic reads)
+	cursor := s.ctx.State.ReadCursorPosition()
 
 	maxAttempts := 100
 	for attempt := 0; attempt < maxAttempts; attempt++ {
@@ -313,7 +307,7 @@ func (s *GoldSequenceSystem) findValidPosition(world *engine.World, seqLength in
 		y := rand.Intn(gameHeight)
 
 		// Check if far enough from cursor (same exclusion zone as spawn system)
-		if math.Abs(float64(x-cursorX)) <= 5 || math.Abs(float64(y-cursorY)) <= 3 {
+		if math.Abs(float64(x-cursor.X)) <= 5 || math.Abs(float64(y-cursor.Y)) <= 3 {
 			continue
 		}
 
@@ -337,16 +331,6 @@ func (s *GoldSequenceSystem) findValidPosition(world *engine.World, seqLength in
 	}
 
 	return -1, -1 // No valid position found
-}
-
-// UpdateDimensions updates the game area dimensions and cursor position
-func (s *GoldSequenceSystem) UpdateDimensions(gameWidth, gameHeight, cursorX, cursorY int) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.gameWidth = gameWidth
-	s.gameHeight = gameHeight
-	s.cursorX = cursorX
-	s.cursorY = cursorY
 }
 
 // Removed SetCleanerTrigger and TriggerCleanersIfHeatFull
