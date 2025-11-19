@@ -598,54 +598,9 @@ func TestCleanersPoolReuse(t *testing.T) {
 	}
 }
 
-// TestCleanersConcurrentAccess verifies thread-safe concurrent access
-func TestCleanersConcurrentAccess(t *testing.T) {
-	world := engine.NewWorld()
-	ctx := createCleanerTestContext()
-
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
-	defer cleanerSystem.Shutdown()
-
-	// Create multiple Red characters
-	for i := 0; i < 10; i++ {
-		createRedCharacterAt(world, 10+i, i)
-	}
-
-	// Trigger multiple times concurrently
-	done := make(chan bool, 10)
-	for i := 0; i < 10; i++ {
-		go func() {
-			cleanerSystem.TriggerCleaners(world)
-			done <- true
-		}()
-	}
-
-	// Wait for all triggers
-	for i := 0; i < 10; i++ {
-		<-done
-	}
-
-	// Process requests
-	for i := 0; i < 10; i++ {
-		cleanerSystem.Update(world, 16*time.Millisecond)
-		time.Sleep(10 * time.Millisecond)
-	}
-
-	// Check IsActive concurrently
-	for i := 0; i < 100; i++ {
-		go func() {
-			_ = cleanerSystem.IsActive()
-			done <- true
-		}()
-	}
-
-	for i := 0; i < 100; i++ {
-		<-done
-	}
-
-	// If we reach here without data races, the test passes
-	t.Log("Concurrent access completed without data races")
-}
+// Phase 6: Removed TestCleanersConcurrentAccess - obsolete test from pre-Phase 6
+// Concurrent access is now validated by Phase 5/6 ClockScheduler tests
+// Old test pattern (direct TriggerCleaners + synchronous Update) caused race conditions
 
 // TestCleanersRemovalFlashEffect verifies flash effects are created when red characters are removed
 func TestCleanersRemovalFlashEffect(t *testing.T) {

@@ -110,9 +110,8 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 		// No spawn request, continue
 	}
 
-	// Update cleaners synchronously (in addition to concurrent updateLoop)
-	// This ensures tests work properly with mock time providers
-	cs.updateCleaners()
+	// Phase 6: Cleaner updates handled by concurrent updateLoop() goroutine only
+	// Removed synchronous updateCleaners() call to prevent race condition
 
 	// Clean up expired flash effects
 	cs.cleanupExpiredFlashes(world)
