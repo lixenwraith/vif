@@ -83,6 +83,7 @@ type GamePhase int
 const (
     PhaseNormal         // Regular gameplay, content spawning
     PhaseGoldActive     // Gold sequence active with timeout tracking
+    PhaseGoldComplete   // Gold completed, ready for next phase (transient)
     PhaseDecayWait      // Waiting for decay timer (heat-based interval)
     PhaseDecayAnimation // Decay animation running (falling entities)
 )
@@ -548,12 +549,19 @@ cs.stateMu.Unlock()
 4. **Score Monotonicity**: Score can decrease (red chars) but ScoreIncrement >= 0
 5. **Boost Mechanic**: When heat reaches maximum, boost activates with color-matching (Blue or Green) providing x2 heat multiplier. Typing the matching color extends boost duration by 500ms per character, while typing a different color deactivates boost
 6. **Red Spawn Invariant**: Red sequences are NEVER spawned directly, only through decay
-7. **Gold Randomness**: Gold sequences spawn at random positions (not fixed center-top)
+7. **Gold Randomness**: Gold sequences spawn at random positions
 8. **6-Color Limit**: At most 6 Blue/Green color/level combinations present simultaneously
 9. **Counter Accuracy**: Color counters must match actual on-screen character counts
 10. **Atomic Operations**: All color counter updates use atomic operations for thread safety
 
 ## Game Mechanics Details
+
+### Content Management System
+- **ContentManager** (`content/content_manager.go`): Manages Go source file discovery and validation
+- **Auto-discovery**: Scans project directory for `.go` files at initialization
+- **Validation**: Pre-validates all content at startup for performance
+- **Block Selection**: Random 100-500 line blocks, grouped by structure
+- **Refresh Strategy**: Pre-fetches new content at 80% consumption threshold
 
 ### Spawn System
 - **Content Source**: Loads Go source code from `assets/` directory at initialization (automatically located at project root)
@@ -566,6 +574,11 @@ cs.stateMu.Unlock()
   - Uses atomic counters (`atomic.Int64`) for race-free character tracking
   - Only spawns new blocks when fewer than 6 colors are present on screen
   - When all characters of a color/level are cleared, that slot becomes available
+  - Atomic counters track each color/level combination (Blue×3 + Green×3)
+  - SpawnSystem checks counters before spawning: `if count == 0 { spawn enabled }`
+  - ScoreSystem decrements on character typing
+  - DecaySystem updates during transitions
+  - Red sequences explicitly excluded from tracking
 - **Intelligent Placement**:
   - Each line attempts placement up to 3 times
   - Random row and column selection per attempt
@@ -607,7 +620,11 @@ cs.stateMu.Unlock()
   - Typing red or incorrect: Deactivates boost and resets heat to 0
 - **Effect**: Heat gain multiplier of 2× (+2 heat per character instead of +1)
 - **Visual Indicator**: Pink background "Boost: X.Xs" in status bar
-- **Implementation**: Managed within ScoreSystem, not a separate system
+- **Implementation**: Managed within ScoreSystem (not a separate system)
+  - Atomic state: BoostEnabled (Bool), BoostEndTime (Int64), BoostColor (Int32)
+  - Timer checked each frame via `UpdateBoostTimerAtomic()` (CAS pattern)
+  - Color matching: Typing same color extends by 500ms via atomic update
+  - No separate boost entities - pure state management
 
 ### Gold Sequence System
 - **Trigger**: Spawns when decay animation completes

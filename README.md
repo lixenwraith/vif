@@ -268,4 +268,4 @@ See [architecture.md](./architecture.md) for detailed architecture documentation
 
 ## License
 
-BSD-3
+BSD-3 Clause
