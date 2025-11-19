@@ -197,14 +197,16 @@ func TestCleanersRemoveOnlyRedCharacters(t *testing.T) {
 
 	// Move cleaner to each character position and check collision
 	for x := 40; x <= 42; x++ {
-		// Update cleaner position
+		// Update cleaner position and trail
 		cleanerComp, _ := world.GetComponent(cleanerEntity, cleanerType)
 		cleaner := cleanerComp.(components.CleanerComponent)
 		cleaner.XPosition = float64(x)
+		// Update trail with current position
+		cleaner.TrailPositions = []float64{float64(x)}
 		world.AddComponent(cleanerEntity, cleaner)
 
-		// Detect and destroy
-		cleanerSystem.detectAndDestroyRedCharacters(world)
+		// Phase 7: Check collisions via trail
+		cleanerSystem.checkTrailCollisions(world, cleaner.Row, cleaner.TrailPositions)
 	}
 
 	// Verify only Red was destroyed
@@ -631,6 +633,7 @@ func TestCleanersRemovalFlashEffect(t *testing.T) {
 	cleanerComp, _ := world.GetComponent(cleanerEntity, cleanerType)
 	cleaner := cleanerComp.(components.CleanerComponent)
 	cleaner.XPosition = 40.0
+	cleaner.TrailPositions = []float64{40.0}
 	world.AddComponent(cleanerEntity, cleaner)
 
 	// Verify red character exists before removal
@@ -638,8 +641,8 @@ func TestCleanersRemovalFlashEffect(t *testing.T) {
 		t.Fatal("Red character should exist before cleaner contact")
 	}
 
-	// Detect and destroy (should create flash)
-	cleanerSystem.detectAndDestroyRedCharacters(world)
+	// Phase 7: Check collisions via trail (should create flash)
+	cleanerSystem.checkTrailCollisions(world, cleaner.Row, cleaner.TrailPositions)
 
 	// Verify red character was destroyed
 	if entityExists(world, redEntity) {
@@ -708,10 +711,11 @@ func TestCleanersFlashCleanup(t *testing.T) {
 	cleanerComp, _ := world.GetComponent(cleanerEntity, cleanerType)
 	cleaner := cleanerComp.(components.CleanerComponent)
 	cleaner.XPosition = 40.0
+	cleaner.TrailPositions = []float64{40.0}
 	world.AddComponent(cleanerEntity, cleaner)
 
-	// Detect and destroy (creates flash)
-	cleanerSystem.detectAndDestroyRedCharacters(world)
+	// Phase 7: Check collisions via trail (creates flash)
+	cleanerSystem.checkTrailCollisions(world, cleaner.Row, cleaner.TrailPositions)
 
 	// Verify flash was created
 	flashType := reflect.TypeOf(components.RemovalFlashComponent{})
@@ -775,9 +779,11 @@ func TestCleanersNoFlashForBlueGreen(t *testing.T) {
 		cleanerComp, _ := world.GetComponent(cleanerEntity, cleanerType)
 		cleaner := cleanerComp.(components.CleanerComponent)
 		cleaner.XPosition = float64(x)
+		cleaner.TrailPositions = []float64{float64(x)}
 		world.AddComponent(cleanerEntity, cleaner)
 
-		cleanerSystem.detectAndDestroyRedCharacters(world)
+		// Phase 7: Check collisions via trail
+		cleanerSystem.checkTrailCollisions(world, cleaner.Row, cleaner.TrailPositions)
 	}
 
 	// Verify no flash effects were created (only for Red)
@@ -841,9 +847,11 @@ func TestCleanersMultipleFlashEffects(t *testing.T) {
 		cleanerComp, _ := world.GetComponent(cleanerEntity, cleanerType)
 		cleaner := cleanerComp.(components.CleanerComponent)
 		cleaner.XPosition = float64(x)
+		cleaner.TrailPositions = []float64{float64(x)}
 		world.AddComponent(cleanerEntity, cleaner)
 
-		cleanerSystem.detectAndDestroyRedCharacters(world)
+		// Phase 7: Check collisions via trail
+		cleanerSystem.checkTrailCollisions(world, cleaner.Row, cleaner.TrailPositions)
 	}
 
 	// Verify 3 flash effects were created

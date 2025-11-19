@@ -254,8 +254,8 @@ func (cs *CleanerSystem) updateCleaners() {
 	}
 
 	deltaTime := float64(nowNano-lastUpdateNano) / float64(time.Second)
+	// Phase 7: updateCleanerPositions now handles all collision detection via trail
 	cs.updateCleanerPositions(world, deltaTime)
-	cs.detectAndDestroyRedCharacters(world)
 
 	// Update last update time
 	cs.lastUpdateTime.Store(nowNano)
@@ -452,9 +452,6 @@ func (cs *CleanerSystem) updateCleanerPositions(world *engine.World, deltaTime f
 		}
 		cleaner := cleanerComp.(components.CleanerComponent)
 
-		// Store old position before updating
-		oldPosition := cleaner.XPosition
-
 		// Update position based on speed and direction
 		cleaner.XPosition += cleaner.Speed * float64(cleaner.Direction) * deltaTime
 
@@ -474,7 +471,7 @@ func (cs *CleanerSystem) updateCleanerPositions(world *engine.World, deltaTime f
 		// Update component
 		world.AddComponent(entity, cleaner)
 
-		// Update tracked data and check for collisions along the path
+		// Update tracked data
 		cs.stateMu.Lock()
 		if data, exists := cs.cleanerDataMap[entity]; exists {
 			data.xPosition = cleaner.XPosition
@@ -482,44 +479,40 @@ func (cs *CleanerSystem) updateCleanerPositions(world *engine.World, deltaTime f
 		}
 		cs.stateMu.Unlock()
 
-		// Check all integer positions between old and new position for collisions
-		cs.checkCollisionsAlongPath(world, entity, oldPosition, cleaner.XPosition, cleaner.Row, cleaner.Direction)
+		// Phase 7: Check all trail positions for collisions (not just head)
+		cs.checkTrailCollisions(world, cleaner.Row, cleaner.TrailPositions)
 	}
 }
 
-// checkCollisionsAlongPath checks all integer positions between old and new position for collisions
-func (cs *CleanerSystem) checkCollisionsAlongPath(world *engine.World, cleanerEntity engine.Entity, oldX, newX float64, row, direction int) {
+// checkTrailCollisions checks all trail positions for Red character collisions
+// Phase 7: Simplified collision detection that checks the entire trail continuously
+// Uses integer truncation (no rounding) to avoid skipping characters
+func (cs *CleanerSystem) checkTrailCollisions(world *engine.World, row int, trailPositions []float64) {
 	cs.mu.RLock()
 	gameWidth := cs.gameWidth
 	cs.mu.RUnlock()
 
-	// Determine the range of integer positions to check
-	startX := int(oldX + 0.5)
-	endX := int(newX + 0.5)
+	// Track which integer positions we've already checked to avoid duplicate checks
+	checkedPositions := make(map[int]bool)
 
-	// Ensure we check in the correct direction
-	if direction < 0 {
-		// R→L: swap if needed
-		if startX < endX {
-			startX, endX = endX, startX
+	// Check every position in the trail
+	for _, floatPos := range trailPositions {
+		// Phase 7: Use truncation instead of rounding - simpler and more predictable
+		// This means a character slightly ahead of head block may disappear slightly
+		// earlier (one clock tick), which is acceptable per requirements
+		x := int(floatPos)
+
+		// Skip if out of bounds or already checked
+		if x < 0 || x >= gameWidth {
+			continue
 		}
-		// Check from startX down to endX
-		for x := startX; x >= endX; x-- {
-			if x >= 0 && x < gameWidth {
-				cs.checkAndDestroyAtPosition(world, x, row)
-			}
+		if checkedPositions[x] {
+			continue
 		}
-	} else {
-		// L→R
-		if startX > endX {
-			startX, endX = endX, startX
-		}
-		// Check from startX up to endX
-		for x := startX; x <= endX; x++ {
-			if x >= 0 && x < gameWidth {
-				cs.checkAndDestroyAtPosition(world, x, row)
-			}
-		}
+		checkedPositions[x] = true
+
+		// Check and destroy Red character at this position
+		cs.checkAndDestroyAtPosition(world, x, row)
 	}
 }
 
@@ -584,97 +577,8 @@ func (cs *CleanerSystem) checkAndDestroyAtPosition(world *engine.World, x, y int
 	world.SafeDestroyEntity(targetEntity)
 }
 
-// detectAndDestroyRedCharacters checks for Red characters under cleaners and destroys them
-// with optional flash effect for visual feedback
-func (cs *CleanerSystem) detectAndDestroyRedCharacters(world *engine.World) {
-	cleanerType := reflect.TypeOf(components.CleanerComponent{})
-	cleanerEntities := world.GetEntitiesWith(cleanerType)
-
-	seqType := reflect.TypeOf(components.SequenceComponent{})
-	posType := reflect.TypeOf(components.PositionComponent{})
-	charType := reflect.TypeOf(components.CharacterComponent{})
-
-	cs.mu.RLock()
-	gameWidth := cs.gameWidth
-	cs.mu.RUnlock()
-
-	for _, cleanerEntity := range cleanerEntities {
-		cleanerComp, ok := world.GetComponent(cleanerEntity, cleanerType)
-		if !ok || cleanerComp == nil {
-			continue
-		}
-		cleaner, ok := cleanerComp.(components.CleanerComponent)
-		if !ok {
-			continue
-		}
-
-		// Get the integer X position (current cleaner location)
-		cleanerX := int(cleaner.XPosition + 0.5) // Round to nearest integer
-
-		// Skip if out of bounds
-		if cleanerX < 0 || cleanerX >= gameWidth {
-			continue
-		}
-
-		// Check if there's an entity at this position
-		// GetEntityAtPosition already provides thread-safe access
-		targetEntity := world.GetEntityAtPosition(cleanerX, cleaner.Row)
-
-		if targetEntity == 0 {
-			continue
-		}
-
-		// Check if it's a Red character (with nil checks)
-		seqComp, ok := world.GetComponent(targetEntity, seqType)
-		if !ok || seqComp == nil {
-			continue
-		}
-		seq, ok := seqComp.(components.SequenceComponent)
-		if !ok {
-			continue
-		}
-
-		if seq.Type == components.SequenceRed {
-			// Get character info for flash effect before destroying (with nil checks)
-			charComp, hasChar := world.GetComponent(targetEntity, charType)
-			posComp, hasPos := world.GetComponent(targetEntity, posType)
-
-			// Create flash effect at removal location
-			if hasChar && hasPos && charComp != nil && posComp != nil {
-				char, charOk := charComp.(components.CharacterComponent)
-				pos, posOk := posComp.(components.PositionComponent)
-
-				if charOk && posOk {
-					// Check if flash already exists at this position
-					flashKey := fmt.Sprintf("%d,%d", pos.X, pos.Y)
-
-					cs.flashMu.Lock()
-					if !cs.flashPositions[flashKey] {
-						// Mark position as having an active flash
-						cs.flashPositions[flashKey] = true
-						cs.flashMu.Unlock()
-
-						// Create flash entity
-						flashEntity := world.CreateEntity()
-						flash := components.RemovalFlashComponent{
-							X:         pos.X,
-							Y:         pos.Y,
-							Char:      char.Rune,
-							StartTime: cs.ctx.TimeProvider.Now(),
-							Duration:  cs.config.FlashDuration,
-						}
-						world.AddComponent(flashEntity, flash)
-					} else {
-						cs.flashMu.Unlock()
-					}
-				}
-			}
-
-			// Destroy the Red character using SafeDestroyEntity (handles spatial index removal)
-			world.SafeDestroyEntity(targetEntity)
-		}
-	}
-}
+// Phase 7: Removed detectAndDestroyRedCharacters() - replaced by checkTrailCollisions()
+// Old method only checked head position with rounding, new method checks entire trail with truncation
 
 // cleanupCleaners removes all cleaner entities from the world
 func (cs *CleanerSystem) cleanupCleaners(world *engine.World) {

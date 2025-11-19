@@ -232,6 +232,16 @@ defer ticker.Stop()
 - **Key Achievement**: Cleaner triggering now uses the same clock-based pattern as Gold/Decay, eliminating callback dependencies
 - See `PHASE6_REPORT.md` for detailed analysis
 
+**Phase 7 (Complete)**: Gold/Decay/Cleaner integration tests and collision logic fixes
+- ✅ Redesigned cleaner collision detection to check entire trail continuously
+- ✅ Replaced rounding `int(x + 0.5)` with truncation `int(x)` for predictable behavior
+- ✅ Removed duplicate collision detection methods (`detectAndDestroyRedCharacters`)
+- ✅ Consolidated to single `checkTrailCollisions()` method
+- ✅ Added comprehensive Phase 7 integration tests for complete game cycle
+- ✅ All tests pass with race detector (no data races)
+- **Key Achievement**: Simplified collision detection eliminates character skipping and fixes screen corruption issues
+- See `PHASE7_REPORT.md` for detailed analysis
+
 #### Testing
 - `engine/clock_scheduler_test.go`: Scheduler tick tests, phase transition tests
 - `engine/phase3_integration_test.go`: Gold→Decay phase transition tests (Phase 3)
@@ -264,6 +274,16 @@ defer ticker.Stop()
   - `TestClockSchedulerPhaseDecayAnimationDoesNothing`: Animation phase wait behavior
   - `TestClockSchedulerTickRate`: 50ms tick rate verification
   - `TestClockSchedulerIntegrationWithRealTime`: Real-time scheduler integration
+- `engine/phase7_integration_test.go`: Gold/Decay/Cleaner cycle tests (Phase 7)
+  - `TestGoldToCleanerFlow`: Complete flow from gold completion to cleaner activation
+  - `TestCleanerAnimationCompletion`: Cleaner deactivation after animation duration
+  - `TestConcurrentCleanerAndGoldPhases`: Cleaners running in parallel with phases
+  - `TestMultipleCleanerCycles`: Multiple activation/deactivation cycles
+  - `TestCleanerStateSnapshot`: State snapshot consistency
+  - `TestGoldDecayCleanerCompleteCycle`: Complete game cycle with all mechanics
+  - `TestCleanerTrailCollisionLogic`: Trail-based collision detection verification
+  - `TestCleanerWithRapidMovement`: High-speed cleaner behavior
+  - `TestNoSkippedCharacters`: Verification that truncation logic doesn't skip characters
 - All tests pass with `-race` flag
 - Clock runs in goroutine, no memory leaks detected
 - Concurrent phase reads/writes tested (20 goroutines)
@@ -635,6 +655,12 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 - **Direction**: Alternating - odd rows sweep L→R, even rows sweep R→L
 - **Selectivity**: Only destroys Red characters, leaves Blue/Green untouched
 - **Animation**: Configurable block character with fade trail effect
+- **Collision Detection** (Phase 7: Simplified trail-based approach):
+  - Checks all trail positions continuously (not just head block)
+  - Uses integer truncation `int(x)` instead of rounding `int(x + 0.5)`
+  - Single `checkTrailCollisions()` method replaces dual detection logic
+  - Prevents character skipping at fractional positions
+  - Characters may disappear slightly earlier (one clock tick) - acceptable tradeoff
 - **Visual Effects**:
   - Pre-calculated gradient table for trail rendering (bright yellow → transparent)
   - Configurable trail length with smooth opacity falloff
@@ -650,6 +676,7 @@ INSERT / SEARCH ─[ESC]→ NORMAL
   - Pre-calculated color gradients avoid per-frame calculations
   - Batch terminal updates for trail rendering
   - Minimal allocations in render loop (gradient array vs dynamic color creation)
+  - Phase 7: Reduced collision detection overhead (single method vs dual check)
 
 ## Data Files
 

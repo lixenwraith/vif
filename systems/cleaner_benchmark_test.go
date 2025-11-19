@@ -64,8 +64,18 @@ func BenchmarkCleanerDetectAndDestroy(b *testing.B) {
 
 	b.ResetTimer()
 
+	// Phase 7: Benchmark using new trail-based collision detection
+	cleanerType := reflect.TypeOf(components.CleanerComponent{})
 	for i := 0; i < b.N; i++ {
-		cleanerSystem.detectAndDestroyRedCharacters(world)
+		cleaners := world.GetEntitiesWith(cleanerType)
+		for _, entity := range cleaners {
+			cleanerComp, ok := world.GetComponent(entity, cleanerType)
+			if !ok {
+				continue
+			}
+			cleaner := cleanerComp.(components.CleanerComponent)
+			cleanerSystem.checkTrailCollisions(world, cleaner.Row, cleaner.TrailPositions)
+		}
 	}
 }
 
@@ -140,8 +150,18 @@ func BenchmarkFlashEffectCreation(b *testing.B) {
 
 	b.ResetTimer()
 
+	// Phase 7: Benchmark using new trail-based collision detection
+	cleanerType := reflect.TypeOf(components.CleanerComponent{})
 	for i := 0; i < b.N; i++ {
-		cleanerSystem.detectAndDestroyRedCharacters(world)
+		cleaners := world.GetEntitiesWith(cleanerType)
+		for _, entity := range cleaners {
+			cleanerComp, ok := world.GetComponent(entity, cleanerType)
+			if !ok {
+				continue
+			}
+			cleaner := cleanerComp.(components.CleanerComponent)
+			cleanerSystem.checkTrailCollisions(world, cleaner.Row, cleaner.TrailPositions)
+		}
 
 		// Clean up flashes for next iteration
 		flashType := reflect.TypeOf(components.RemovalFlashComponent{})
@@ -245,11 +265,22 @@ func BenchmarkConcurrentCleanerOperations(b *testing.B) {
 	b.ResetTimer()
 
 	b.RunParallel(func(pb *testing.PB) {
+		cleanerType := reflect.TypeOf(components.CleanerComponent{})
 		for pb.Next() {
 			// Mix of operations
 			_ = cleanerSystem.IsActive()
 			_ = cleanerSystem.scanRedCharacterRows(world)
-			cleanerSystem.detectAndDestroyRedCharacters(world)
+
+			// Phase 7: Use new trail-based collision detection
+			cleaners := world.GetEntitiesWith(cleanerType)
+			for _, entity := range cleaners {
+				cleanerComp, ok := world.GetComponent(entity, cleanerType)
+				if !ok {
+					continue
+				}
+				cleaner := cleanerComp.(components.CleanerComponent)
+				cleanerSystem.checkTrailCollisions(world, cleaner.Row, cleaner.TrailPositions)
+			}
 		}
 	})
 }
@@ -420,13 +451,23 @@ func BenchmarkCompleteGoldCleanerPipeline(b *testing.B) {
 
 		// Process cleaners
 		cleanerSystem.Update(world, 16*time.Millisecond)
-		cleanerSystem.detectAndDestroyRedCharacters(world)
+
+		// Phase 7: Check collisions via trail
+		cleanerType := reflect.TypeOf(components.CleanerComponent{})
+		cleaners := world.GetEntitiesWith(cleanerType)
+		for _, entity := range cleaners {
+			cleanerComp, ok := world.GetComponent(entity, cleanerType)
+			if !ok {
+				continue
+			}
+			cleaner := cleanerComp.(components.CleanerComponent)
+			cleanerSystem.checkTrailCollisions(world, cleaner.Row, cleaner.TrailPositions)
+		}
 
 		// Clean up
 		b.StopTimer()
 		goldSystem.CompleteGoldSequence(world)
-		cleanerType := reflect.TypeOf(components.CleanerComponent{})
-		cleaners := world.GetEntitiesWith(cleanerType)
+		cleaners = world.GetEntitiesWith(cleanerType)
 		for _, entity := range cleaners {
 			world.DestroyEntity(entity)
 		}
