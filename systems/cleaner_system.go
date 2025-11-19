@@ -208,6 +208,18 @@ func (cs *CleanerSystem) processSpawnRequest(world *engine.World) {
 	// Scan for rows with Red characters
 	redRows := cs.scanRedCharacterRows(world)
 
+	// CRITICAL: Always set activation state for proper phase transitions
+	// Even if no Red characters exist, cleaners must "activate" to ensure
+	// phase cycle completes correctly (phantom cleaners)
+	now := cs.ctx.TimeProvider.Now()
+	nowNano := now.UnixNano()
+	cs.activationTime.Store(nowNano)
+
+	// Activate the system before spawning and mark for first update skip
+	cs.isActive.Store(true)
+	cs.firstUpdate.Store(true)
+
+	// Only spawn visual entities if Red characters exist
 	if len(redRows) == 0 {
 		return
 	}
@@ -216,15 +228,6 @@ func (cs *CleanerSystem) processSpawnRequest(world *engine.World) {
 	if cs.config.MaxConcurrentCleaners > 0 && len(redRows) > cs.config.MaxConcurrentCleaners {
 		redRows = redRows[:cs.config.MaxConcurrentCleaners]
 	}
-
-	// Set activation time ATOMICALLY BEFORE spawning cleaners to prevent race condition
-	now := cs.ctx.TimeProvider.Now()
-	nowNano := now.UnixNano()
-	cs.activationTime.Store(nowNano)
-
-	// Activate the system before spawning and mark for first update skip
-	cs.isActive.Store(true)
-	cs.firstUpdate.Store(true)
 
 	// Spawn cleaner entities for each row
 	for _, row := range redRows {

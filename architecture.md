@@ -613,6 +613,7 @@ cs.stateMu.Unlock()
   - **Character**: Unicode block character (default: '█')
   - **Flash Duration**: Removal flash duration in ms (default: 150)
 - **Behavior**: Sweeps across rows containing Red characters, removing them on contact
+- **Phantom Cleaners**: System activates even when no Red characters exist to ensure proper phase transitions (no visual cleaners spawned, but animation timer runs normally)
 - **Direction**: Alternating - odd rows sweep L→R, even rows sweep R→L
 - **Selectivity**: Only destroys Red characters, leaves Blue/Green untouched
 - **Animation**: Configurable block character with fade trail effect
@@ -689,6 +690,23 @@ Located in `modes/`:
 - **motions_helpers_test.go**: Helper functions for motion operations
 - **input_test.go**: Input handling and mode switching
 - **delete_operator_test.go**: Delete operation tests
+
+#### Cleaner System Tests
+Located in `systems/cleaner_system_test.go`:
+- **TestCleanerActivationWithoutRed**: Validates phantom cleaner activation when no Red characters exist
+  - Ensures proper phase transitions even without visible cleaners
+  - Verifies isActive state set correctly
+  - Confirms no visual cleaner entities spawned in phantom mode
+  - Tests animation completion timing with phantom cleaners
+  - Validates Blue/Green characters remain untouched
+- **TestCleanersNoRedCharacters**: Verifies phantom cleaner behavior (activation without visual entities)
+- **TestCleanersTriggerConditions**: Heat-based cleaner triggering
+- **TestCleanersDirectionAlternation**: Odd/even row direction verification
+- **TestCleanersRemoveOnlyRedCharacters**: Selectivity tests
+- **TestCleanersAnimationCompletion**: Animation lifecycle validation
+- **TestCleanersTrailTracking**: Trail position management
+- **TestCleanersDuplicateTriggerIgnored**: Duplicate trigger prevention
+- **TestCleanersPoolReuse**: Memory pool efficiency validation
 
 ### Integration Tests
 Located in `systems/integration_test.go`:

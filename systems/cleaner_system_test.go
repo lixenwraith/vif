@@ -359,7 +359,7 @@ func TestCleanersMovementSpeed(t *testing.T) {
 	}
 }
 
-// TestCleanersNoRedCharacters verifies cleaners don't activate when no Red characters exist
+// TestCleanersNoRedCharacters verifies phantom cleaner activation when no Red characters exist
 func TestCleanersNoRedCharacters(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
@@ -380,9 +380,17 @@ func TestCleanersNoRedCharacters(t *testing.T) {
 	// Wait for processing
 	time.Sleep(50 * time.Millisecond)
 
-	// Should not activate since no Red characters
-	if cleanerSystem.IsActive() {
-		t.Error("Cleaners should not activate when no Red characters exist")
+	// NEW BEHAVIOR: Phantom cleaners activate even without Red characters
+	// This ensures proper phase transitions
+	if !cleanerSystem.IsActive() {
+		t.Error("Cleaners should activate (phantom mode) even when no Red characters exist for proper phase transitions")
+	}
+
+	// Verify no visual cleaner entities were spawned (phantom mode)
+	cleanerType := reflect.TypeOf(components.CleanerComponent{})
+	cleaners := world.GetEntitiesWith(cleanerType)
+	if len(cleaners) != 0 {
+		t.Errorf("Expected 0 visual cleaners (phantom mode), got %d", len(cleaners))
 	}
 }
 
@@ -877,6 +885,101 @@ func TestCleanersMultipleFlashEffects(t *testing.T) {
 		if !positions[expectedX] {
 			t.Errorf("Expected flash at X=%d, but not found", expectedX)
 		}
+	}
+}
+
+// TestCleanerActivationWithoutRed verifies cleaners activate even with no Red text (phantom cleaners)
+// This ensures proper phase transitions when no visual cleaners are needed
+func TestCleanerActivationWithoutRed(t *testing.T) {
+	world := engine.NewWorld()
+	ctx := createCleanerTestContext()
+
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
+	defer cleanerSystem.Shutdown()
+
+	// Create only Blue and Green characters (no Red)
+	createBlueCharacterAt(world, 10, 5)
+	createBlueCharacterAt(world, 20, 10)
+	createGreenCharacterAt(world, 30, 15)
+	createGreenCharacterAt(world, 40, 20)
+
+	// Verify no Red characters exist
+	seqType := reflect.TypeOf(components.SequenceComponent{})
+	entities := world.GetEntitiesWith(seqType)
+	for _, entity := range entities {
+		seqComp, ok := world.GetComponent(entity, seqType)
+		if ok {
+			seq := seqComp.(components.SequenceComponent)
+			if seq.Type == components.SequenceRed {
+				t.Fatal("Test setup error: Red character found when none should exist")
+			}
+		}
+	}
+
+	// Trigger cleaners
+	cleanerSystem.TriggerCleaners(world)
+
+	// Process spawn request
+	cleanerSystem.Update(world, 16*time.Millisecond)
+
+	// Wait for processing
+	time.Sleep(50 * time.Millisecond)
+
+	// CRITICAL: Verify isActive = true even though no Red characters exist
+	if !cleanerSystem.IsActive() {
+		t.Error("Expected cleaners to be active (phantom activation) even without Red text")
+	}
+
+	// Verify NO visual cleaner entities were spawned
+	cleanerType := reflect.TypeOf(components.CleanerComponent{})
+	cleaners := world.GetEntitiesWith(cleanerType)
+	if len(cleaners) != 0 {
+		t.Errorf("Expected 0 visual cleaners (phantom mode), got %d", len(cleaners))
+	}
+
+	// Verify phase transitions work properly by checking animation completion
+	// Initially should NOT be complete (animation just started)
+	if cleanerSystem.IsAnimationComplete() {
+		t.Error("Expected animation NOT complete immediately after activation")
+	}
+
+	// Simulate passage of animation duration
+	time.Sleep(constants.DefaultCleanerConfig().AnimationDuration + 100*time.Millisecond)
+
+	// Now animation should be complete
+	if !cleanerSystem.IsAnimationComplete() {
+		t.Error("Expected animation complete after duration elapsed")
+	}
+
+	// Update to trigger cleanup
+	cleanerSystem.Update(world, 16*time.Millisecond)
+
+	// Verify cleaners deactivated after animation completes
+	if cleanerSystem.IsActive() {
+		t.Error("Expected cleaners to be inactive after animation completion")
+	}
+
+	// Verify Blue/Green characters remain untouched
+	entities = world.GetEntitiesWith(seqType)
+	blueCount := 0
+	greenCount := 0
+	for _, entity := range entities {
+		seqComp, ok := world.GetComponent(entity, seqType)
+		if ok {
+			seq := seqComp.(components.SequenceComponent)
+			if seq.Type == components.SequenceBlue {
+				blueCount++
+			} else if seq.Type == components.SequenceGreen {
+				greenCount++
+			}
+		}
+	}
+
+	if blueCount != 2 {
+		t.Errorf("Expected 2 Blue characters to remain, got %d", blueCount)
+	}
+	if greenCount != 2 {
+		t.Errorf("Expected 2 Green characters to remain, got %d", greenCount)
 	}
 }
 
