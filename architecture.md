@@ -898,6 +898,10 @@ cs.stateMu.Unlock()
 
 ## Testing Strategy
 
+### Test Suite Organization
+
+The test suite has been reorganized into smaller, focused files for better maintainability and clarity. Large test files (>30KB) have been split into logical groups.
+
 ### Unit Tests
 - **Component Tests**: Validate individual component data structures
 - **System Tests**: Test system logic in isolation
@@ -922,12 +926,26 @@ Located in `render/heat_display_test.go`:
   - Validates each 10% increment transitions to next segment
 
 #### Motion and Command Tests
-Located in `modes/`:
+The motion tests have been reorganized from a single large file into focused test files:
+
+**Located in `modes/`:**
+- **motions_screen_test.go**: Screen position motions (H/M/L, ^)
+- **motions_word_test.go**: Vim word motions (w, b, e) - basic navigation, transitions, boundaries
+- **motions_bigword_test.go**: WORD motions (W, B, E) - space-delimited word navigation
+- **motions_paragraph_test.go**: Paragraph motions ({, })
+- **motions_simple_test.go**: Simple directional motions (space, h/j/k/l with counts)
+- **motions_count_test.go**: Motion count handling and edge cases
+- **motions_gaps_test.go**: File content and position gap handling
+- **motions_brackets_test.go**: Bracket matching (%, parentheses, braces, square brackets)
+- **motions_angles_test.go**: Angle bracket matching (<, >)
+- **motions_helpers_test.go**: Helper functions and character type detection
+- **find_motion_test.go**: Find/till motions (f, F, t, T, ;, ,)
   - Forward find (`f`) with count support: `fa`, `2fa`, `5fx`
   - Backward find (`F`) with count support: `Fa`, `2Fa`, `3Fb`
   - Edge cases: no match, count exceeds matches, boundary conditions
   - Unicode character support
   - Delete integration: `dfa`, `d2fa`, `dFx`, `d3Fx`
+- **till_motion_test.go**: Till motion tests
 - **regression_test.go**: Ensures no regressions in existing vi commands
   - Basic motions: h, j, k, l, w, b, e, W, B, E
   - Count prefixes: `5h`, `3j`, `10w`
@@ -935,37 +953,63 @@ Located in `modes/`:
   - Cursor validation and boundary checks
   - Race condition tests for motion execution
 - **count_aware_commands_test.go**: Count-aware command state management
-- **motions_test.go**: Core motion functionality
-- **motions_helpers_test.go**: Helper functions for motion operations
 - **input_test.go**: Input handling and mode switching
 - **delete_operator_test.go**: Delete operation tests
 
 #### Cleaner System Tests
-Located in `systems/cleaner_system_test.go`:
-- **TestCleanerActivationWithoutRed**: Validates phantom cleaner activation when no Red characters exist
-  - Ensures proper phase transitions even without visible cleaners
-  - Verifies isActive state set correctly
-  - Confirms no visual cleaner entities spawned in phantom mode
-  - Tests animation completion timing with phantom cleaners
-  - Validates Blue/Green characters remain untouched
-- **TestCleanersNoRedCharacters**: Verifies phantom cleaner behavior (activation without visual entities)
-- **TestCleanersTriggerConditions**: Heat-based cleaner triggering
-- **TestCleanersDirectionAlternation**: Odd/even row direction verification
-- **TestCleanersRemoveOnlyRedCharacters**: Selectivity tests
-- **TestCleanersAnimationCompletion**: Animation lifecycle validation
-- **TestCleanersTrailTracking**: Trail position management
-- **TestCleanersDuplicateTriggerIgnored**: Duplicate trigger prevention
-- **TestCleanersPoolReuse**: Memory pool efficiency validation
-- **TestCleanerCollisionCoverage**: Verifies no position gaps in collision detection
-  - Tests comprehensive range checking between trail points (8.84→10.12 covers position 9)
-  - Validates mathematical scenario: 1.28 char/frame movement at 80 chars/sec, 16ms frames
-  - Ensures all integer positions between consecutive trail points are checked
-- **TestCleanerCollisionReverseDirection**: Verifies gap coverage for R→L cleaners
-  - Tests reverse direction collision detection (72.16→69.88)
-  - Validates bidirectional range checking works correctly
-- **TestCleanerCollisionLongTrail**: Verifies collision coverage across entire trail
-  - Tests long trail with multiple gaps (positions 15-25 with fractional trail points)
-  - Ensures comprehensive coverage regardless of trail length
+The cleaner system tests have been reorganized into focused files:
+
+**Located in `systems/`:**
+- **cleaner_activation_test.go**: Cleaner trigger conditions and activation logic
+  - TestCleanersTriggerConditions: Heat-based cleaner triggering
+  - TestCleanerActivationWithoutRed: Phantom cleaner activation when no Red characters exist
+  - TestCleanersDuplicateTriggerIgnored: Duplicate trigger prevention
+- **cleaner_movement_test.go**: Cleaner movement and direction logic
+  - TestCleanersDirectionAlternation: Odd/even row direction verification
+  - TestCleanersMovementSpeed: Movement speed validation
+  - TestCleanersMultipleRows: Multi-row cleaner behavior
+- **cleaner_collision_test.go**: Collision detection and character removal
+  - TestCleanersRemoveOnlyRedCharacters: Selectivity tests (Red only)
+  - TestCleanersNoRedCharacters: Phantom cleaner behavior
+  - TestCleanerCollisionCoverage: Verifies no position gaps in collision detection
+  - TestCleanerCollisionReverseDirection: Gap coverage for R→L cleaners
+  - TestCleanerCollisionLongTrail: Coverage across entire trail
+- **cleaner_lifecycle_test.go**: Animation lifecycle and resource management
+  - TestCleanersAnimationCompletion: Animation lifecycle validation
+  - TestCleanersTrailTracking: Trail position management
+  - TestCleanersPoolReuse: Memory pool efficiency validation
+- **cleaner_flash_test.go**: Visual flash effects
+  - TestCleanersRemovalFlashEffect: Flash effect creation
+  - TestCleanersFlashCleanup: Flash effect cleanup
+  - TestCleanersNoFlashForBlueGreen: Flash selectivity (Red only)
+  - TestCleanersMultipleFlashEffects: Multiple concurrent flashes
+- **cleaner_test_helpers.go**: Shared helper functions for cleaner tests
+
+#### Spawn System Tests
+The spawn system tests have been reorganized into focused files:
+
+**Located in `systems/`:**
+- **spawn_content_test.go**: Content management and filtering
+  - TestContentManagerIntegration: ContentManager initialization
+  - TestCommentFiltering: Full-line comment filtering
+  - TestEmptyBlockHandling: Empty code block handling
+  - TestBlockGroupingWithShortLines: Block size filtering
+- **spawn_colors_test.go**: Color counter and availability
+  - TestColorCounters: Atomic color counter operations
+  - TestColorCountersConcurrency: Thread-safe counter updates
+  - TestGetAvailableColors: Color availability tracking (max 6)
+  - TestSpawnWithNoAvailableColors: Spawning when all colors in use
+- **spawn_placement_test.go**: Line placement and positioning
+  - TestPlaceLine: Basic line placement
+  - TestPlaceLineNearCursor: Cursor exclusion zone logic
+  - TestPlaceLineSkipsSpaces: Space character handling
+  - TestPlaceLinePositionMaintenance: Position tracking with spaces
+  - TestPlaceLinePackageMd5: Specific line placement testing
+  - TestPlaceLineConstBlockSize: Complex multi-space placement
+- **spawn_blocks_test.go**: Block grouping and spawning
+  - TestGroupIntoBlocks: Logical code block grouping
+  - TestGetIndentLevel: Indentation calculation
+  - TestBlockSpawning: Complete block spawning
 
 ### Integration Tests
 Located in `systems/integration_test.go`:
@@ -977,29 +1021,37 @@ Located in `systems/integration_test.go`:
 Also see `engine/integration_test.go` for phase transition and game cycle integration tests.
 
 ### Race Condition Tests
-Located in `systems/cleaner_race_test.go`:
-- **TestNoRaceCleanerConcurrentRenderUpdate**: Concurrent cleaner updates and snapshot rendering
-- **TestNoRaceRapidCleanerCycles**: Rapid cleaner activation/deactivation cycles
-- **TestNoRaceCleanerStateAccess**: Concurrent reads/writes to cleaner state
-- **TestNoRaceFlashEffectManagement**: Concurrent flash creation/cleanup
-- **TestNoRaceCleanerPoolAllocation**: Thread-safe trail slice pool allocation
-- **TestNoRaceDimensionUpdate**: Dimension updates during active cleaners
-- **TestNoRaceCleanerAnimationCompletion**: Animation completion race conditions
+The race condition tests have been reorganized into focused files:
 
-Located in `systems/race_condition_comprehensive_test.go`:
-- **TestConcurrentContentRefresh**: Concurrent content refresh with spawning
-- **TestRenderWhileSpawning**: Render operations during spawn operations
-- **TestContentSwapDuringRead**: Content swap during concurrent reads
-- **TestStressContentSystem**: Stress testing of content management
-- **TestConcurrentColorCounterUpdates**: Cross-system color counter race conditions
-
-Located in `systems/boost_race_test.go`:
-- **TestBoostRapidToggle**: Rapid boost activation/deactivation
-- **TestBoostConcurrentRead**: Concurrent boost state reads
-- **TestBoostExpirationRace**: Boost expiration race conditions
-- **TestAllAtomicStateAccess**: Comprehensive atomic state access validation
-- **TestConcurrentPingTimerUpdates**: Concurrent ping timer updates
-- **TestConcurrentBoostUpdates**: Concurrent boost state updates
+**Located in `systems/`:**
+- **race_content_test.go**: Content system race conditions
+  - TestConcurrentContentRefresh: Concurrent content refresh with spawning
+  - TestRenderWhileSpawning: Render operations during spawn operations
+  - TestContentSwapDuringRead: Content swap during concurrent reads
+  - TestStressContentSystem: Stress testing of content management
+- **race_counters_test.go**: Color counter race conditions
+  - TestConcurrentColorCounterUpdates: Cross-system color counter race conditions
+- **race_snapshots_test.go**: Snapshot consistency race conditions
+  - TestSnapshotConsistencyUnderRapidChanges: Snapshot consistency during rapid changes
+  - TestSnapshotImmutabilityWithSystemUpdates: Snapshot immutability during system updates
+  - TestNoPartialSnapshotReads: No partial state updates in snapshots
+  - TestPhaseSnapshotConsistency: Phase snapshot consistency
+  - TestMultiSnapshotAtomicity: Multiple snapshot atomicity
+- **cleaner_race_test.go**: Cleaner system race conditions
+  - TestNoRaceCleanerConcurrentRenderUpdate: Concurrent cleaner updates and rendering
+  - TestNoRaceRapidCleanerCycles: Rapid cleaner activation/deactivation
+  - TestNoRaceCleanerStateAccess: Concurrent reads/writes to cleaner state
+  - TestNoRaceFlashEffectManagement: Concurrent flash creation/cleanup
+  - TestNoRaceCleanerPoolAllocation: Thread-safe trail slice pool allocation
+  - TestNoRaceDimensionUpdate: Dimension updates during active cleaners
+  - TestNoRaceCleanerAnimationCompletion: Animation completion race conditions
+- **boost_race_test.go**: Boost system race conditions
+  - TestBoostRapidToggle: Rapid boost activation/deactivation
+  - TestBoostConcurrentRead: Concurrent boost state reads
+  - TestBoostExpirationRace: Boost expiration race conditions
+  - TestAllAtomicStateAccess: Comprehensive atomic state access validation
+  - TestConcurrentPingTimerUpdates: Concurrent ping timer updates
+  - TestConcurrentBoostUpdates: Concurrent boost state updates
 
 ### Deterministic Tests
 Located in `systems/cleaner_deterministic_test.go`:

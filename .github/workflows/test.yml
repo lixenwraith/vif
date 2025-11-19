@@ -41,13 +41,11 @@ jobs:
       env:
         GORACE: "halt_on_error=1"
 
-    - name: Run specific race condition tests
+    - name: Run critical system tests
       run: |
-        go test -race -v -run TestConcurrentContentRefresh ./systems
-        go test -race -v -run TestRenderWhileSpawning ./systems
-        go test -race -v -run TestContentSwapDuringRead ./systems
-        go test -race -v -run TestStressContentSystem ./systems
-        go test -race -v -run TestConcurrentColorCounterUpdates ./systems
+        go test -race -v ./systems -run "TestConcurrent|TestRace|TestSnapshot"
+        go test -race -v ./engine -run "TestIntegration|TestClock|TestPhase"
+        go test -race -v ./systems -run "TestSpawn|TestCleaner|TestScore"
       env:
         GORACE: "halt_on_error=1"
 

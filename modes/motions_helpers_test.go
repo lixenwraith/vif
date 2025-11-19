@@ -369,3 +369,53 @@ func TestGetCharacterTypeAt_SpaceHandling(t *testing.T) {
 		t.Errorf("Expected non-space type for 'a', got CharTypeSpace")
 	}
 }
+
+// Test isWordChar helper
+func TestIsWordChar(t *testing.T) {
+	tests := []struct {
+		r        rune
+		expected bool
+	}{
+		{'a', true},
+		{'Z', true},
+		{'5', true},
+		{'_', true},
+		{' ', false},
+		{'.', false},
+		{',', false},
+		{'(', false},
+		{')', false},
+	}
+
+	for _, tt := range tests {
+		result := isWordChar(tt.r)
+		if result != tt.expected {
+			t.Errorf("isWordChar(%q) = %v, want %v", tt.r, result, tt.expected)
+		}
+	}
+}
+
+// Test isPunctuation helper
+func TestIsPunctuation(t *testing.T) {
+	tests := []struct {
+		r        rune
+		expected bool
+	}{
+		{'.', true},
+		{',', true},
+		{'(', true},
+		{')', true},
+		{'a', false},
+		{'Z', false},
+		{'_', false},
+		{' ', false},
+		{0, false}, // Test that 0 (empty position) is not punctuation
+	}
+
+	for _, tt := range tests {
+		result := isPunctuation(tt.r)
+		if result != tt.expected {
+			t.Errorf("isPunctuation(%q) = %v, want %v", tt.r, result, tt.expected)
+		}
+	}
+}
