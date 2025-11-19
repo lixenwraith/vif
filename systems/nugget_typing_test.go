@@ -34,11 +34,11 @@ func TestNuggetTypingIncreasesHeat(t *testing.T) {
 		t.Fatalf("Initial heat should be 0, got %d", initialHeat)
 	}
 
-	// Create a nugget at position (10, 5)
+	// Create a nugget at position (10, 5) with character 'a'
 	nuggetEntity := world.CreateEntity()
 	world.AddComponent(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
-	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: '●', Style: style})
+	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
 	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
 	world.UpdateSpatialIndex(nuggetEntity, 10, 5)
 	nuggetSystem.activeNugget.Store(uint64(nuggetEntity))
@@ -49,7 +49,7 @@ func TestNuggetTypingIncreasesHeat(t *testing.T) {
 	ctx.State.SetCursorX(10)
 	ctx.State.SetCursorY(5)
 
-	// Type any character on the nugget
+	// Type matching character 'a' on the nugget
 	scoreSystem.HandleCharacterTyping(world, 10, 5, 'a')
 
 	// Verify heat increased by 10% of max (100 / 10 = 10)
@@ -98,11 +98,11 @@ func TestNuggetTypingDestroysAndReturnsSpawn(t *testing.T) {
 	nuggetSystem := NewNuggetSystem(ctx)
 	scoreSystem.SetNuggetSystem(nuggetSystem)
 
-	// Create first nugget
+	// Create first nugget with character 'x'
 	nuggetEntity := world.CreateEntity()
 	world.AddComponent(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
-	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: '●', Style: style})
+	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'x', Style: style})
 	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
 	world.UpdateSpatialIndex(nuggetEntity, 10, 5)
 	nuggetSystem.activeNugget.Store(uint64(nuggetEntity))
@@ -113,7 +113,7 @@ func TestNuggetTypingDestroysAndReturnsSpawn(t *testing.T) {
 	ctx.State.SetCursorX(10)
 	ctx.State.SetCursorY(5)
 
-	// Type to collect nugget
+	// Type matching character to collect nugget
 	scoreSystem.HandleCharacterTyping(world, 10, 5, 'x')
 
 	// Verify nugget was collected
@@ -205,11 +205,11 @@ func TestNuggetTypingNoErrorEffect(t *testing.T) {
 	ctx.Width = 80
 	ctx.GameWidth = 80
 
-	// Create nugget
+	// Create nugget with character 'z'
 	nuggetEntity := world.CreateEntity()
 	world.AddComponent(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
-	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: '●', Style: style})
+	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'z', Style: style})
 	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
 	world.UpdateSpatialIndex(nuggetEntity, 10, 5)
 	nuggetSystem.activeNugget.Store(uint64(nuggetEntity))
@@ -222,7 +222,7 @@ func TestNuggetTypingNoErrorEffect(t *testing.T) {
 	// Ensure no error state initially
 	ctx.State.SetCursorError(false)
 
-	// Collect nugget
+	// Collect nugget with matching character
 	scoreSystem.HandleCharacterTyping(world, 10, 5, 'z')
 
 	// Verify no error cursor was set
@@ -254,11 +254,11 @@ func TestNuggetTypingMultipleCollections(t *testing.T) {
 	nuggetSystem := NewNuggetSystem(ctx)
 	scoreSystem.SetNuggetSystem(nuggetSystem)
 
-	// Collect first nugget
+	// Collect first nugget with character 'a'
 	nugget1 := world.CreateEntity()
 	world.AddComponent(nugget1, components.PositionComponent{X: 10, Y: 5})
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
-	world.AddComponent(nugget1, components.CharacterComponent{Rune: '●', Style: style})
+	world.AddComponent(nugget1, components.CharacterComponent{Rune: 'a', Style: style})
 	world.AddComponent(nugget1, components.NuggetComponent{ID: 1, SpawnTime: mockTime.Now()})
 	world.UpdateSpatialIndex(nugget1, 10, 5)
 	nuggetSystem.activeNugget.Store(uint64(nugget1))
@@ -287,12 +287,19 @@ func TestNuggetTypingMultipleCollections(t *testing.T) {
 	}
 	posComp := pos.(components.PositionComponent)
 
+	// Get the character from the second nugget
+	char, ok := world.GetComponent(nugget2, characterComponentType())
+	if !ok {
+		t.Fatal("New nugget should have character")
+	}
+	charComp := char.(components.CharacterComponent)
+
 	ctx.CursorX = posComp.X
 	ctx.CursorY = posComp.Y
 	ctx.State.SetCursorX(posComp.X)
 	ctx.State.SetCursorY(posComp.Y)
 
-	scoreSystem.HandleCharacterTyping(world, posComp.X, posComp.Y, 'b')
+	scoreSystem.HandleCharacterTyping(world, posComp.X, posComp.Y, charComp.Rune)
 
 	// Second collection: heat = 20
 	if ctx.State.GetHeat() != 20 {
@@ -317,11 +324,11 @@ func TestNuggetTypingWithSmallScreen(t *testing.T) {
 	ctx.Width = 5
 	ctx.GameWidth = 5
 
-	// Create nugget
+	// Create nugget with character 'x'
 	nuggetEntity := world.CreateEntity()
 	world.AddComponent(nuggetEntity, components.PositionComponent{X: 2, Y: 1})
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
-	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: '●', Style: style})
+	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'x', Style: style})
 	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
 	world.UpdateSpatialIndex(nuggetEntity, 2, 1)
 	nuggetSystem.activeNugget.Store(uint64(nuggetEntity))

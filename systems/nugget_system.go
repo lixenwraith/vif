@@ -20,6 +20,15 @@ const (
 	nuggetMaxAttempts          = 100
 )
 
+// Alphanumeric characters that can be used for nuggets
+var nuggetCharacters = []rune{
+	'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
+	'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+	'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+	'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+	'0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+}
+
 // NuggetSystem manages nugget spawn and respawn logic
 type NuggetSystem struct {
 	mu                sync.RWMutex
@@ -92,12 +101,13 @@ func (s *NuggetSystem) spawnNugget(world *engine.World, now time.Time) {
 		Y: y,
 	})
 
-	// Add character component (orange circle)
+	// Add character component (random alphanumeric character with orange color)
+	randomChar := nuggetCharacters[rand.Intn(len(nuggetCharacters))]
 	style := tcell.StyleDefault.
 		Foreground(render.RgbNuggetOrange).
 		Background(render.RgbBackground)
 	world.AddComponent(entity, components.CharacterComponent{
-		Rune:  '●',
+		Rune:  randomChar,
 		Style: style,
 	})
 

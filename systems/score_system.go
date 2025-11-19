@@ -104,8 +104,8 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 	// Check if this is a nugget - handle before sequence logic
 	nuggetType := reflect.TypeOf(components.NuggetComponent{})
 	if _, hasNugget := world.GetComponent(entity, nuggetType); hasNugget && s.nuggetSystem != nil {
-		// Handle nugget collection
-		s.handleNuggetCollection(world, entity, cursorX, cursorY)
+		// Handle nugget collection (requires matching character)
+		s.handleNuggetCollection(world, entity, char, typedRune, cursorX, cursorY)
 		return
 	}
 
@@ -287,8 +287,27 @@ func (s *ScoreSystem) extendBoost(duration time.Duration) {
 	s.ctx.State.SetBoostEnabled(true)
 }
 
-// handleNuggetCollection processes nugget collection (typing any character on nugget)
-func (s *ScoreSystem) handleNuggetCollection(world *engine.World, entity engine.Entity, cursorX, cursorY int) {
+// handleNuggetCollection processes nugget collection (requires typing matching character)
+func (s *ScoreSystem) handleNuggetCollection(world *engine.World, entity engine.Entity, char components.CharacterComponent, typedRune rune, cursorX, cursorY int) {
+	now := s.ctx.TimeProvider.Now()
+
+	// Check if typed character matches the nugget character
+	if char.Rune != typedRune {
+		// Incorrect character - flash error cursor and reset heat
+		s.ctx.State.SetCursorError(true)
+		s.ctx.State.SetCursorErrorTime(now)
+		s.ctx.State.SetHeat(0) // Reset heat on incorrect nugget typing
+		s.ctx.State.SetBoostEnabled(false)
+		s.ctx.State.SetBoostColor(0)
+		// Set score blink to error state (black background with bright red text)
+		s.ctx.State.SetScoreBlinkActive(true)
+		s.ctx.State.SetScoreBlinkType(0)  // 0 = error
+		s.ctx.State.SetScoreBlinkLevel(0) // 0 = dark
+		s.ctx.State.SetScoreBlinkTime(now)
+		return
+	}
+
+	// Correct character - collect nugget
 	// Calculate heat increase: 10% of max heat (screen width)
 	maxHeat := s.ctx.Width
 	if maxHeat < 1 {
@@ -317,7 +336,7 @@ func (s *ScoreSystem) handleNuggetCollection(world *engine.World, entity engine.
 	// Sync cursor position to GameState
 	s.ctx.State.SetCursorX(s.ctx.CursorX)
 
-	// No score effects, no error effects - silent collection
+	// No score effects on successful collection
 }
 
 // handleGoldSequenceTyping processes typing of gold sequence characters
