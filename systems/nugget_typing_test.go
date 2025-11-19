@@ -347,6 +347,70 @@ func TestNuggetTypingWithSmallScreen(t *testing.T) {
 	}
 }
 
+// TestNuggetAlwaysIncreasesVisualBlocks verifies collecting a nugget always increases visual heat blocks by 1
+func TestNuggetAlwaysIncreasesVisualBlocks(t *testing.T) {
+	// Test various screen widths, including those not divisible by 10
+	widths := []int{79, 80, 81, 95, 100, 120}
+
+	for _, width := range widths {
+		t.Run(string(rune('0'+width/10)), func(t *testing.T) {
+			screen := tcell.NewSimulationScreen("UTF-8")
+			screen.Init()
+			defer screen.Fini()
+			screen.SetSize(width, 24)
+
+			ctx := engine.NewGameContext(screen)
+			world := ctx.World
+			scoreSystem := NewScoreSystem(ctx)
+			nuggetSystem := NewNuggetSystem(ctx)
+			scoreSystem.SetNuggetSystem(nuggetSystem)
+
+			ctx.Width = width
+			ctx.GameWidth = width
+
+			// Helper to calculate visual blocks from heat value
+			calcVisualBlocks := func(heat int) int {
+				return int(float64(heat) / float64(width) * 10.0)
+			}
+
+			// Test from 0 heat
+			ctx.State.SetHeat(0)
+			initialBlocks := calcVisualBlocks(0)
+
+			// Create and collect nugget
+			nuggetEntity := world.CreateEntity()
+			world.AddComponent(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
+			style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
+			world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
+			world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
+			world.UpdateSpatialIndex(nuggetEntity, 10, 5)
+			nuggetSystem.activeNugget.Store(uint64(nuggetEntity))
+
+			ctx.CursorX = 10
+			ctx.CursorY = 5
+			ctx.State.SetCursorX(10)
+			ctx.State.SetCursorY(5)
+
+			scoreSystem.HandleCharacterTyping(world, 10, 5, 'a')
+
+			finalHeat := ctx.State.GetHeat()
+			finalBlocks := calcVisualBlocks(finalHeat)
+
+			// Verify at least 1 block increase
+			if finalBlocks-initialBlocks < 1 {
+				t.Errorf("Width %d: Expected at least 1 visual block increase, got %d blocks (heat %d -> %d)",
+					width, finalBlocks-initialBlocks, 0, finalHeat)
+			}
+
+			// Should be exactly 1 block increase from 0
+			if finalBlocks != 1 {
+				t.Errorf("Width %d: Expected exactly 1 visual block from 0 heat, got %d blocks (heat=%d)",
+					width, finalBlocks, finalHeat)
+			}
+		})
+	}
+}
+
 // Helper functions
 
 func nuggetComponentType() reflect.Type {

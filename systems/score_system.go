@@ -1,6 +1,7 @@
 package systems
 
 import (
+	"math"
 	"reflect"
 	"time"
 
@@ -309,11 +310,12 @@ func (s *ScoreSystem) handleNuggetCollection(world *engine.World, entity engine.
 
 	// Correct character - collect nugget
 	// Calculate heat increase: 10% of max heat (screen width)
+	// Use ceiling to ensure at least 10% even for widths not divisible by 10
 	maxHeat := s.ctx.Width
 	if maxHeat < 1 {
 		maxHeat = 1
 	}
-	heatIncrease := maxHeat / 10
+	heatIncrease := int(math.Ceil(float64(maxHeat) / 10.0))
 	if heatIncrease < 1 {
 		heatIncrease = 1 // Minimum increase of 1
 	}
