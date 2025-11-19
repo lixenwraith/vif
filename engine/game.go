@@ -57,7 +57,7 @@ type GameContext struct {
 	MotionCommand       string
 	WaitingForF         bool
 	WaitingForFBackward bool
-	PendingCount        int  // Preserved count for multi-keystroke commands (e.g., 2fa, 3Fb)
+	PendingCount        int // Preserved count for multi-keystroke commands (e.g., 2fa, 3Fb)
 	CommandPrefix       rune
 	StatusMessage       string
 	DeleteOperator      bool
@@ -130,7 +130,6 @@ func (g *GameContext) AddScore(delta int) {
 	g.State.AddScore(delta)
 }
 
-// ScoreIncrement accessors (now Heat in GameState)
 func (g *GameContext) GetScoreIncrement() int {
 	return g.State.GetHeat()
 }

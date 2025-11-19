@@ -20,14 +20,11 @@ type GoldSequenceSystem struct {
 	mu          sync.RWMutex // Protects fields below
 	ctx         *engine.GameContext
 	decaySystem *DecaySystem
-	// Removed active, sequenceID, startTime - now in GameState
-	// Removed cleanerTriggerFunc - now managed by GameState/ClockScheduler
-	// Removed wasDecayAnimating, firstUpdate, initialSpawnTime - now using GameState phase tracking
-	characters string
-	gameWidth  int
-	gameHeight int
-	cursorX    int
-	cursorY    int
+	characters  string
+	gameWidth   int
+	gameHeight  int
+	cursorX     int
+	cursorY     int
 }
 
 // NewGoldSequenceSystem creates a new gold sequence system
@@ -35,12 +32,11 @@ func NewGoldSequenceSystem(ctx *engine.GameContext, decaySystem *DecaySystem, ga
 	return &GoldSequenceSystem{
 		ctx:         ctx,
 		decaySystem: decaySystem,
-		// All state now in GameState (active, sequenceID, startTime, firstUpdate, initialSpawnTime, wasDecayAnimating)
-		characters: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
-		gameWidth:  gameWidth,
-		gameHeight: gameHeight,
-		cursorX:    cursorX,
-		cursorY:    cursorY,
+		characters:  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+		gameWidth:   gameWidth,
+		gameHeight:  gameHeight,
+		cursorX:     cursorX,
+		cursorY:     cursorY,
 	}
 }
 

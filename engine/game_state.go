@@ -832,7 +832,7 @@ func (gs *GameState) StartDecayTimer(screenWidth int, baseSeconds, rangeSeconds 
 	// Read heat atomically (no cached value)
 	heat := int(gs.Heat.Load())
 
-	// Calculate heat bar width (now uses full screen width)
+	// Calculate heat bar width (uses full screen width)
 	heatBarWidth := screenWidth
 	if heatBarWidth < 1 {
 		heatBarWidth = 1

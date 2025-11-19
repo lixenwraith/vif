@@ -16,33 +16,31 @@ import (
 // DecaySystem handles character decay animation and logic
 //
 // GAME FLOW: Decay timer calculation starts AFTER Gold sequence ends
-//Timer and animation state migrated to GameState
+// Timer and animation state migrated to GameState
 // 1. Gold spawns at game start
 // 2. Gold ends (timeout or completion) → GameState.StartDecayTimer() called
 // 3. Timer calculates interval based on heat at Gold end time (no caching!)
 // 4. Decay animation triggered by ClockScheduler when timer expires
 // 5. After decay animation ends → Gold spawns again
 type DecaySystem struct {
-	mu              sync.RWMutex // Protects fields below
-	//Removed animating, timerStarted, nextDecayTime - now in GameState
-	//Removed heatIncrement - was causing race condition (cached stale value)
-	currentRow      int
-	lastUpdate      time.Time
-	gameWidth       int
-	gameHeight      int
-	ctx             *engine.GameContext
-	spawnSystem     *SpawnSystem
-	fallingEntities []engine.Entity // Entities representing falling decay characters
+	mu sync.RWMutex // Protects fields below
+	// Removed animating, timerStarted, nextDecayTime - now in GameState
+	// Removed heatIncrement - was causing race condition (cached stale value)
+	currentRow       int
+	lastUpdate       time.Time
+	gameWidth        int
+	gameHeight       int
+	ctx              *engine.GameContext
+	spawnSystem      *SpawnSystem
+	fallingEntities  []engine.Entity        // Entities representing falling decay characters
 	decayedThisFrame map[engine.Entity]bool // Track which entities were decayed this frame
 }
 
 // NewDecaySystem creates a new decay system
-//Timer and animation state now managed by GameState
-//Removed deprecated heatIncrement parameter (was causing race condition)
+// Timer and animation state now managed by GameState
+// Removed deprecated heatIncrement parameter (was causing race condition)
 func NewDecaySystem(gameWidth, gameHeight int, ctx *engine.GameContext) *DecaySystem {
 	s := &DecaySystem{
-		//animating, timerStarted, nextDecayTime now in GameState
-		//heatIncrement removed - was causing race condition
 		currentRow:       0,
 		lastUpdate:       ctx.TimeProvider.Now(),
 		gameWidth:        gameWidth,
@@ -65,7 +63,7 @@ func (s *DecaySystem) Priority() int {
 }
 
 // Update runs the decay system
-//Animation trigger moved to ClockScheduler, this just updates animation
+// Animation trigger moved to ClockScheduler, this just updates animation
 func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 	// Read decay state snapshot for consistent check
 	decaySnapshot := s.ctx.State.ReadDecayState()
@@ -75,12 +73,12 @@ func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 		s.updateAnimation(world)
 	}
 
-	//Timer checking and animation trigger moved to ClockScheduler
+	// Timer checking and animation trigger moved to ClockScheduler
 	// No need to check timer here
 }
 
 // updateAnimation progresses the decay animation
-//Uses GameState snapshot for startTime
+// Uses GameState snapshot for startTime
 func (s *DecaySystem) updateAnimation(world *engine.World) {
 	s.mu.RLock()
 	gameHeight := s.gameHeight
@@ -374,7 +372,7 @@ func (s *DecaySystem) cleanupFallingEntities(world *engine.World) {
 }
 
 // TriggerDecayAnimation is called by ClockScheduler to start decay animation
-//Required by DecaySystemInterface
+// Required by DecaySystemInterface
 func (s *DecaySystem) TriggerDecayAnimation(world *engine.World) {
 	// Initialize decay tracking map for the entire animation duration
 	s.mu.Lock()
@@ -387,14 +385,14 @@ func (s *DecaySystem) TriggerDecayAnimation(world *engine.World) {
 }
 
 // IsAnimating returns true if decay animation is active
-//Reads from GameState snapshot
+// Reads from GameState snapshot
 func (s *DecaySystem) IsAnimating() bool {
 	decaySnapshot := s.ctx.State.ReadDecayState()
 	return decaySnapshot.Animating
 }
 
 // CurrentRow returns the current decay row being displayed
-//Uses GameState snapshot for animating check
+// Uses GameState snapshot for animating check
 func (s *DecaySystem) CurrentRow() int {
 	s.mu.RLock()
 	currentRow := s.currentRow
@@ -422,31 +420,31 @@ func (s *DecaySystem) CurrentRow() int {
 }
 
 // GetTimeUntilDecay returns seconds until next decay trigger
-//Reads from GameState snapshot
+// Reads from GameState snapshot
 func (s *DecaySystem) GetTimeUntilDecay() float64 {
 	decaySnapshot := s.ctx.State.ReadDecayState()
 	return decaySnapshot.TimeUntil
 }
 
 // UpdateDimensions updates the game dimensions
-//heatIncrement parameter deprecated (no longer used)
+// heatIncrement parameter deprecated (no longer used)
 func (s *DecaySystem) UpdateDimensions(gameWidth, gameHeight, screenWidth, heatIncrement int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.gameWidth = gameWidth
 	s.gameHeight = gameHeight
-	//No longer storing screenWidth or heatIncrement
+	// No longer storing screenWidth or heatIncrement
 }
 
 // GetSystemState returns the current state of the decay system for debugging
-//Uses GameState
+// Uses GameState
 func (s *DecaySystem) GetSystemState() string {
 	s.mu.RLock()
 	fallingCount := len(s.fallingEntities)
 	s.mu.RUnlock()
 
-	//Read from GameState
+	// Read from GameState
 	snapshot := s.ctx.State.ReadDecayState()
 
 	if snapshot.Animating {
