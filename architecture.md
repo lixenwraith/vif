@@ -168,46 +168,22 @@ defer ticker.Stop()
 
 #### Testing
 - `engine/clock_scheduler_test.go`: Scheduler tick tests, phase transition tests
-- `engine/phase3_integration_test.go`: Gold→Decay phase transition tests
-  - `TestGoldToDecayPhaseTransition`: Complete cycle validation
-  - `TestDecayIntervalCalculation`: Heat-based interval formula (60s→10s)
-  - `TestConcurrentPhaseAccess`: Race condition testing
-  - `TestNoHeatCaching`: Validates heat is read atomically (no stale values)
-- `engine/phase5_integration_test.go`: Comprehensive cycle tests
+  - `TestClockSchedulerBasicTicking`: Tick count increment verification
+  - `TestClockSchedulerConcurrentTicking`: Concurrent goroutine safety
+  - `TestClockSchedulerStopIdempotent`: Multiple Stop() calls safety
+  - `TestClockSchedulerTickRate`: 50ms tick rate verification
+  - `TestPhaseTransitions`: Phase transition logic validation
+  - `TestConcurrentPhaseReads`: Concurrent phase access safety
+- `engine/integration_test.go`: Comprehensive cycle and phase tests
   - `TestCompleteGameCycle`: Full Normal→Gold→DecayWait→DecayAnim→Normal cycle
-  - `TestMultipleConsecutiveCycles`: 3 cycles with varying heat (0%, 50%, 100%)
   - `TestGoldCompletionBeforeTimeout`: Early gold completion handling
-  - `TestHeatChangesDuringGoldDontAffectPreviousDecayTimer`: Timer immutability
-  - `TestRapidPhaseTransitions`: 10 rapid cycles stress test
-  - `TestConcurrentPhaseReadsDuringTransitions`: 20 readers × 50 cycles concurrency test
+  - `TestConcurrentPhaseReadsDuringTransitions`: 20 readers × concurrent access test
   - `TestPhaseTimestampConsistency`: Timestamp accuracy verification
   - `TestPhaseDurationCalculation`: Duration calculation accuracy
-  - `TestDecayIntervalBoundaryConditions`: Boundary heat values (0, 1, 93, 94, 100)
-  - `TestStateSnapshotConsistency`: Snapshot data consistency
-  - `TestGoldSequenceIDIncrement`: Sequential ID generation
-- `engine/phase5_clock_scheduler_test.go`: Clock scheduler integration tests
-  - `TestClockSchedulerBasicTicking`: Tick count increment verification
-  - `TestClockSchedulerPhaseTransitionTiming`: Phase transition timing accuracy
-  - `TestClockSchedulerWithoutSystems`: Graceful handling of nil systems
-  - `TestClockSchedulerMultipleGoldTimeouts`: 5 consecutive timeout cycles
-  - `TestClockSchedulerConcurrentTicking`: 10 goroutines × 100 ticks each
-  - `TestClockSchedulerStopIdempotence`: Multiple Stop() calls safety
-  - `TestClockSchedulerPhaseTransitionAtBoundary`: Boundary time transitions
-  - `TestClockSchedulerNoEarlyTransition`: Premature transition prevention
-  - `TestClockSchedulerPhaseNormalDoesNothing`: Normal phase idle behavior
-  - `TestClockSchedulerPhaseDecayAnimationDoesNothing`: Animation phase wait behavior
-  - `TestClockSchedulerTickRate`: 50ms tick rate verification
-  - `TestClockSchedulerIntegrationWithRealTime`: Real-time scheduler integration
-- `engine/phase7_integration_test.go`: Gold/Decay/Cleaner cycle tests
-  - `TestGoldToCleanerFlow`: Complete flow from gold completion to cleaner activation
-  - `TestCleanerAnimationCompletion`: Cleaner deactivation after animation duration
-  - `TestConcurrentCleanerAndGoldPhases`: Cleaners running in parallel with phases
-  - `TestMultipleCleanerCycles`: Multiple activation/deactivation cycles
-  - `TestCleanerStateSnapshot`: State snapshot consistency
-  - `TestGoldDecayCleanerCompleteCycle`: Complete game cycle with all mechanics
   - `TestCleanerTrailCollisionLogic`: Trail-based collision detection verification
-  - `TestCleanerWithRapidMovement`: High-speed cleaner behavior
   - `TestNoSkippedCharacters`: Verification that truncation logic doesn't skip characters
+  - `TestRapidPhaseTransitions`: Rapid phase transition stress test
+  - `TestGoldSequenceIDIncrement`: Sequential ID generation
 - All tests pass with `-race` flag
 - Clock runs in goroutine, no memory leaks detected
 - Concurrent phase reads/writes tested (20 goroutines)
@@ -715,31 +691,38 @@ Located in `modes/`:
 - **delete_operator_test.go**: Delete operation tests
 
 ### Integration Tests
-Located in `systems/cleaner_gold_integration_test.go`:
-- **Concurrent Gold Activation**: Tests gold sequence activation during active cleaners
-- **Multiple Cleaners on Adjacent Lines**: Verifies cleaners on adjacent rows don't interfere
-- **Cleaner Collision with Changing Text**: Tests cleaners hitting characters being modified by decay
-- **Heat Meter State Transitions**: Validates heat changes during cleaner animation
-- **Screen Buffer Modifications**: Tests concurrent buffer reads/writes during cleaner scan
-- **Concurrent Cleaner Spawns**: Verifies thread-safe spawn request handling
-- **Text Color Changes**: Tests decay-induced color changes during cleaner transit
-- **Game State Pause/Resume**: Validates cleaner behavior during time control changes
+Located in `systems/integration_test.go`:
+- **TestDecaySystemCounterUpdates**: Validates color counter updates during decay
+- **TestDecaySystemColorTransitionWithCounters**: Tests color transitions with atomic counter updates
+- **TestScoreSystemCounterDecrement**: Verifies counter decrements when typing characters
+- **TestScoreSystemDoesNotDecrementRedCounter**: Ensures red characters don't affect color counters
+
+Also see `engine/integration_test.go` for phase transition and game cycle integration tests.
 
 ### Race Condition Tests
 Located in `systems/cleaner_race_test.go`:
-- **TestNoRaceCleanerConcurrentRenderUpdate**: 50 goroutines updating, 50 rendering snapshots
-- **TestNoRaceRapidCleanerCycles**: Rapidly trigger/complete cleaner cycles
+- **TestNoRaceCleanerConcurrentRenderUpdate**: Concurrent cleaner updates and snapshot rendering
+- **TestNoRaceRapidCleanerCycles**: Rapid cleaner activation/deactivation cycles
 - **TestNoRaceCleanerStateAccess**: Concurrent reads/writes to cleaner state
 - **TestNoRaceFlashEffectManagement**: Concurrent flash creation/cleanup
+- **TestNoRaceCleanerPoolAllocation**: Thread-safe trail slice pool allocation
+- **TestNoRaceDimensionUpdate**: Dimension updates during active cleaners
+- **TestNoRaceCleanerAnimationCompletion**: Animation completion race conditions
 
-Located in `systems/cleaner_race_stress_test.go`:
-- **Rapid Gold Activation**: Stress tests rapid gold sequence spawning
-- **Maximum Cleaners on Screen**: Tests system with 24 concurrent cleaners
-- **Memory Leak Detection**: Verifies proper cleanup after multiple cycles
-- **Extreme Concurrency**: 20+ goroutines performing various operations
-- **Atomic Operation Consistency**: Validates atomic state management
-- **Flash Effect Stress Test**: Tests flash creation/cleanup under load
-- **Spatial Index Race Conditions**: Tests concurrent spatial index operations
+Located in `systems/race_condition_comprehensive_test.go`:
+- **TestConcurrentContentRefresh**: Concurrent content refresh with spawning
+- **TestRenderWhileSpawning**: Render operations during spawn operations
+- **TestContentSwapDuringRead**: Content swap during concurrent reads
+- **TestStressContentSystem**: Stress testing of content management
+- **TestConcurrentColorCounterUpdates**: Cross-system color counter race conditions
+
+Located in `systems/boost_race_test.go`:
+- **TestBoostRapidToggle**: Rapid boost activation/deactivation
+- **TestBoostConcurrentRead**: Concurrent boost state reads
+- **TestBoostExpirationRace**: Boost expiration race conditions
+- **TestAllAtomicStateAccess**: Comprehensive atomic state access validation
+- **TestConcurrentPingTimerUpdates**: Concurrent ping timer updates
+- **TestConcurrentBoostUpdates**: Concurrent boost state updates
 
 ### Deterministic Tests
 Located in `systems/cleaner_deterministic_test.go`:
