@@ -224,6 +224,9 @@ func TestPlaceLinePositionMaintenance(t *testing.T) {
 	world := engine.NewWorld()
 
 	// Place cursor far from common spawn locations
+	// Sync cursor position to GameState for snapshot pattern
+	ctx.State.SetCursorX(0)
+	ctx.State.SetCursorY(0)
 	spawnSys := NewSpawnSystem(80, 24, 0, 0, ctx)
 
 	line := "a b c"
@@ -291,6 +294,9 @@ func TestPlaceLinePackageMd5(t *testing.T) {
 	world := engine.NewWorld()
 
 	// Place cursor far from spawn area to avoid exclusion zone
+	// Sync cursor position to GameState for snapshot pattern
+	ctx.State.SetCursorX(0)
+	ctx.State.SetCursorY(0)
 	spawnSys := NewSpawnSystem(80, 24, 0, 0, ctx)
 
 	line := "package md5"
@@ -391,6 +397,9 @@ func TestPlaceLineConstBlockSize(t *testing.T) {
 	world := engine.NewWorld()
 
 	// Place cursor far from spawn area
+	// Sync cursor position to GameState for snapshot pattern
+	ctx.State.SetCursorX(0)
+	ctx.State.SetCursorY(0)
 	spawnSys := NewSpawnSystem(80, 24, 0, 0, ctx)
 
 	line := "const BlockSize = 64"
