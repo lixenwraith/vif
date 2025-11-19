@@ -10,16 +10,22 @@ import (
 
 // InputHandler processes user input events
 type InputHandler struct {
-	ctx         *engine.GameContext
-	scoreSystem *systems.ScoreSystem
+	ctx           *engine.GameContext
+	scoreSystem   *systems.ScoreSystem
+	nuggetSystem  *systems.NuggetSystem
 }
 
 // NewInputHandler creates a new input handler
 func NewInputHandler(ctx *engine.GameContext, scoreSystem *systems.ScoreSystem) *InputHandler {
 	return &InputHandler{
-		ctx:         ctx,
-		scoreSystem: scoreSystem,
+		ctx:          ctx,
+		scoreSystem:  scoreSystem,
 	}
+}
+
+// SetNuggetSystem sets the nugget system reference for Tab jump functionality
+func (h *InputHandler) SetNuggetSystem(nuggetSystem *systems.NuggetSystem) {
+	h.nuggetSystem = nuggetSystem
 }
 
 // HandleEvent processes a tcell event and returns false if the game should exit
@@ -99,6 +105,25 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 	case tcell.KeyEnd:
 		h.ctx.CursorX = findLineEnd(h.ctx)
 		h.ctx.State.SetHeat(0)
+		return true
+	case tcell.KeyTab:
+		// Tab: Jump to nugget if score >= 10
+		if h.nuggetSystem != nil {
+			score := h.ctx.State.GetScore()
+			if score >= 10 {
+				// Get nugget position
+				x, y := h.nuggetSystem.JumpToNugget(h.ctx.World)
+				if x >= 0 && y >= 0 {
+					// Deduct 10 from score
+					h.ctx.State.AddScore(-10)
+					// Update cursor position atomically
+					h.ctx.CursorX = x
+					h.ctx.CursorY = y
+					h.ctx.State.SetCursorX(x)
+					h.ctx.State.SetCursorY(y)
+				}
+			}
+		}
 		return true
 	case tcell.KeyRune:
 		// SPACE key: move right without typing, no heat contribution
@@ -180,6 +205,26 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 		h.ctx.CursorX = findLineEnd(h.ctx)
 		h.ctx.State.SetHeat(0)
 		h.ctx.LastCommand = "" // Clear last command on next key
+		return true
+	case tcell.KeyTab:
+		// Tab: Jump to nugget if score >= 10
+		if h.nuggetSystem != nil {
+			score := h.ctx.State.GetScore()
+			if score >= 10 {
+				// Get nugget position
+				x, y := h.nuggetSystem.JumpToNugget(h.ctx.World)
+				if x >= 0 && y >= 0 {
+					// Deduct 10 from score
+					h.ctx.State.AddScore(-10)
+					// Update cursor position atomically
+					h.ctx.CursorX = x
+					h.ctx.CursorY = y
+					h.ctx.State.SetCursorX(x)
+					h.ctx.State.SetCursorY(y)
+				}
+			}
+		}
+		h.ctx.LastCommand = "" // Clear last command
 		return true
 	case tcell.KeyEnter:
 		// Activate ping grid for 1 second

@@ -151,3 +151,24 @@ func (s *NuggetSystem) GetActiveNugget() uint64 {
 func (s *NuggetSystem) ClearActiveNugget() {
 	s.activeNugget.Store(0)
 }
+
+// JumpToNugget returns the position of the active nugget, or (-1, -1) if no nugget exists
+func (s *NuggetSystem) JumpToNugget(world *engine.World) (int, int) {
+	// Get active nugget entity ID
+	activeNuggetEntity := s.activeNugget.Load()
+	if activeNuggetEntity == 0 {
+		return -1, -1
+	}
+
+	// Get position component from entity
+	posType := reflect.TypeOf(components.PositionComponent{})
+	posComp, ok := world.GetComponent(engine.Entity(activeNuggetEntity), posType)
+	if !ok {
+		// No position component (shouldn't happen, but handle gracefully)
+		return -1, -1
+	}
+
+	// Extract position
+	pos := posComp.(components.PositionComponent)
+	return pos.X, pos.Y
+}

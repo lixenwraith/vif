@@ -150,6 +150,7 @@ func main() {
 
 	// Create input handler
 	inputHandler := modes.NewInputHandler(ctx, scoreSystem)
+	inputHandler.SetNuggetSystem(nuggetSystem)
 
 	// Create and start clock scheduler (50ms tick for game logic)
 	// Clock scheduler now handles Gold/Decay phase transitions
