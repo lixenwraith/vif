@@ -626,7 +626,8 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 **Word**: w, b, e (word), W, B, E (WORD)
 **Screen**: gg (top), G (bottom), go (top-left), H (high), M (middle), L (low)
 **Paragraph**: { (prev empty), } (next empty), % (matching bracket)
-**Find/Search**: f<char> (find forward), F<char> (find backward), / (search), n/N (next/prev match)
+**Find/Till**: f<char> (find forward), F<char> (find backward), t<char> (till forward), T<char> (till backward), ; (repeat find/till), , (reverse find/till)
+**Search**: / (search), n/N (next/prev match)
 **Delete**: x (char), dd (line), d<motion> (delete with motion), D (to end of line)
 
 ## Concurrency Model

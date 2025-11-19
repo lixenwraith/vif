@@ -143,7 +143,9 @@ vi-fighter supports a comprehensive set of vi/vim motion commands for navigation
 - `%` - Jump to matching bracket (works with (), {}, [])
 
 ### Find & Search
-- `f<char>` - Find character forward on current line
+- `f<char>` / `F<char>` - Find character forward/backward on current line
+- `t<char>` / `T<char>` - Till character (one position before/after target)
+- `;` / `,` - Repeat last find/till in same/opposite direction
 - `/` - Enter search mode (type pattern, press Enter)
 - `n` / `N` - Repeat last search forward/backward
 

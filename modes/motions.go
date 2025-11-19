@@ -184,6 +184,11 @@ func ExecuteFindChar(ctx *engine.GameContext, targetChar rune, count int) {
 		count = 1
 	}
 
+	// Store last find state for ; and , commands
+	ctx.LastFindChar = targetChar
+	ctx.LastFindForward = true
+	ctx.LastFindType = 'f'
+
 	// Search forward on current line for the character
 	posType := reflect.TypeOf(components.PositionComponent{})
 	charType := reflect.TypeOf(components.CharacterComponent{})
@@ -233,6 +238,11 @@ func ExecuteFindCharBackward(ctx *engine.GameContext, targetChar rune, count int
 		count = 1
 	}
 
+	// Store last find state for ; and , commands
+	ctx.LastFindChar = targetChar
+	ctx.LastFindForward = false
+	ctx.LastFindType = 'F'
+
 	// Search backward on current line for the character
 	posType := reflect.TypeOf(components.PositionComponent{})
 	charType := reflect.TypeOf(components.CharacterComponent{})
@@ -270,6 +280,172 @@ func ExecuteFindCharBackward(ctx *engine.GameContext, targetChar rune, count int
 		ctx.CursorX = firstMatchX
 	}
 	// Otherwise, cursor doesn't move (no matches found)
+}
+
+// ExecuteTillChar executes the 't' (till character) command
+// Finds the Nth occurrence of targetChar on the current line, then moves one position before it
+// If count is 0 or 1, finds the first occurrence
+// If count > 1, finds the Nth occurrence (e.g., 2ta finds the 2nd 'a')
+// If count exceeds available matches, moves one position before the last match found
+func ExecuteTillChar(ctx *engine.GameContext, targetChar rune, count int) {
+	if count == 0 {
+		count = 1
+	}
+
+	// Store last find state for ; and , commands
+	ctx.LastFindChar = targetChar
+	ctx.LastFindForward = true
+	ctx.LastFindType = 't'
+
+	// Search forward on current line for the character
+	posType := reflect.TypeOf(components.PositionComponent{})
+	charType := reflect.TypeOf(components.CharacterComponent{})
+
+	entities := ctx.World.GetEntitiesWith(posType, charType)
+
+	occurrencesFound := 0
+	lastMatchX := -1
+
+	for x := ctx.CursorX + 1; x < ctx.GameWidth; x++ {
+		for _, entity := range entities {
+			posComp, _ := ctx.World.GetComponent(entity, posType)
+			pos := posComp.(components.PositionComponent)
+
+			if pos.Y == ctx.CursorY && pos.X == x {
+				charComp, _ := ctx.World.GetComponent(entity, charType)
+				char := charComp.(components.CharacterComponent)
+
+				if char.Rune == targetChar {
+					occurrencesFound++
+					lastMatchX = x
+					if occurrencesFound == count {
+						// Move to one position before the match
+						if x > ctx.CursorX+1 {
+							ctx.CursorX = x - 1
+						}
+						return
+					}
+				}
+			}
+		}
+	}
+
+	// If count exceeds available matches but we found at least one match,
+	// move to one position before the last match found
+	if lastMatchX != -1 && lastMatchX > ctx.CursorX+1 {
+		ctx.CursorX = lastMatchX - 1
+	}
+	// Otherwise, cursor doesn't move (no matches found or match is too close)
+}
+
+// ExecuteTillCharBackward executes the 'T' (till character backward) command
+// Searches backward from CursorX - 1 to 0 on the current line
+// Finds the Nth occurrence of targetChar, then moves one position after it
+// If count is 0 or 1, finds the first occurrence backward
+// If count > 1, finds the Nth occurrence backward (e.g., 2Ta finds the 2nd 'a' backward)
+// If count exceeds available matches, moves one position after the first match found (furthest back)
+func ExecuteTillCharBackward(ctx *engine.GameContext, targetChar rune, count int) {
+	if count == 0 {
+		count = 1
+	}
+
+	// Store last find state for ; and , commands
+	ctx.LastFindChar = targetChar
+	ctx.LastFindForward = false
+	ctx.LastFindType = 'T'
+
+	// Search backward on current line for the character
+	posType := reflect.TypeOf(components.PositionComponent{})
+	charType := reflect.TypeOf(components.CharacterComponent{})
+
+	entities := ctx.World.GetEntitiesWith(posType, charType)
+
+	occurrencesFound := 0
+	firstMatchX := -1
+
+	// Search backward from CursorX - 1 to 0
+	for x := ctx.CursorX - 1; x >= 0; x-- {
+		for _, entity := range entities {
+			posComp, _ := ctx.World.GetComponent(entity, posType)
+			pos := posComp.(components.PositionComponent)
+
+			if pos.Y == ctx.CursorY && pos.X == x {
+				charComp, _ := ctx.World.GetComponent(entity, charType)
+				char := charComp.(components.CharacterComponent)
+
+				if char.Rune == targetChar {
+					occurrencesFound++
+					firstMatchX = x // Keep track of first (furthest back) match
+					if occurrencesFound == count {
+						// Move to one position after the match
+						if x < ctx.CursorX-1 {
+							ctx.CursorX = x + 1
+						}
+						return
+					}
+				}
+			}
+		}
+	}
+
+	// If count exceeds available matches but we found at least one match,
+	// move to one position after the first match found (furthest back)
+	if firstMatchX != -1 && firstMatchX < ctx.CursorX-1 {
+		ctx.CursorX = firstMatchX + 1
+	}
+	// Otherwise, cursor doesn't move (no matches found or match is too close)
+}
+
+// RepeatFindChar executes the ';' and ',' commands to repeat the last find/till motion
+// If reverse is false (';'), repeats in the same direction as the last find/till
+// If reverse is true (','), repeats in the opposite direction
+func RepeatFindChar(ctx *engine.GameContext, reverse bool) {
+	// If no previous find/till command, do nothing
+	if ctx.LastFindType == 0 {
+		return
+	}
+
+	// Save the original find state (so we don't overwrite it during repeat)
+	originalChar := ctx.LastFindChar
+	originalType := ctx.LastFindType
+	originalForward := ctx.LastFindForward
+
+	// Determine the type to execute
+	var executeType rune
+
+	if reverse {
+		// Reverse the type (f<->F, t<->T)
+		switch ctx.LastFindType {
+		case 'f':
+			executeType = 'F'
+		case 'F':
+			executeType = 'f'
+		case 't':
+			executeType = 'T'
+		case 'T':
+			executeType = 't'
+		}
+	} else {
+		// Same direction
+		executeType = ctx.LastFindType
+	}
+
+	// Execute the appropriate find/till command
+	switch executeType {
+	case 'f':
+		ExecuteFindChar(ctx, ctx.LastFindChar, 1)
+	case 'F':
+		ExecuteFindCharBackward(ctx, ctx.LastFindChar, 1)
+	case 't':
+		ExecuteTillChar(ctx, ctx.LastFindChar, 1)
+	case 'T':
+		ExecuteTillCharBackward(ctx, ctx.LastFindChar, 1)
+	}
+
+	// Restore the original find state (so ; and , don't change the original command)
+	ctx.LastFindChar = originalChar
+	ctx.LastFindType = originalType
+	ctx.LastFindForward = originalForward
 }
 
 // isWordChar returns true if the rune is a word character (alphanumeric or underscore)

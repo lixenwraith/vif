@@ -234,6 +234,46 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 			return true
 		}
 
+		// Handle waiting for 't' character (till forward)
+		if h.ctx.WaitingForT {
+			// Use PendingCount if set, otherwise default to 1
+			count := h.ctx.PendingCount
+			if count == 0 {
+				count = 1
+			}
+
+			// Build command string: [count]t[char]
+			cmd := h.buildCommandString('t', char, count, false)
+			ExecuteTillChar(h.ctx, char, count)
+
+			// Clear multi-keystroke state
+			h.ctx.WaitingForT = false
+			h.ctx.PendingCount = 0
+			h.ctx.MotionCount = 0
+			h.ctx.LastCommand = cmd
+			return true
+		}
+
+		// Handle waiting for 'T' character (till backward)
+		if h.ctx.WaitingForTBackward {
+			// Use PendingCount if set, otherwise default to 1
+			count := h.ctx.PendingCount
+			if count == 0 {
+				count = 1
+			}
+
+			// Build command string: [count]T[char]
+			cmd := h.buildCommandString('T', char, count, false)
+			ExecuteTillCharBackward(h.ctx, char, count)
+
+			// Clear multi-keystroke state
+			h.ctx.WaitingForTBackward = false
+			h.ctx.PendingCount = 0
+			h.ctx.MotionCount = 0
+			h.ctx.LastCommand = cmd
+			return true
+		}
+
 		// Handle numbers for count (BEFORE DeleteOperator check, so d2w works)
 		if char >= '0' && char <= '9' {
 			// Special case: '0' is a motion (line start) when not following a number
@@ -385,6 +425,42 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 			h.ctx.PendingCount = count // Preserve count for when target char is typed
 			// Don't clear MotionCount yet - will be cleared when command completes
 			// Don't set LastCommand yet - waiting for target character
+			return true
+		}
+
+		// Handle 't' command (till character forward - multi-keystroke)
+		if char == 't' {
+			h.ctx.WaitingForT = true
+			h.ctx.PendingCount = count // Preserve count for when target char is typed
+			// Don't clear MotionCount yet - will be cleared when command completes
+			// Don't set LastCommand yet - waiting for target character
+			return true
+		}
+
+		// Handle 'T' command (till character backward - multi-keystroke)
+		if char == 'T' {
+			h.ctx.WaitingForTBackward = true
+			h.ctx.PendingCount = count // Preserve count for when target char is typed
+			// Don't clear MotionCount yet - will be cleared when command completes
+			// Don't set LastCommand yet - waiting for target character
+			return true
+		}
+
+		// Handle ';' command (repeat last find/till in same direction)
+		if char == ';' {
+			RepeatFindChar(h.ctx, false)
+			h.ctx.MotionCount = 0
+			h.ctx.MotionCommand = ""
+			h.ctx.LastCommand = ";"
+			return true
+		}
+
+		// Handle ',' command (repeat last find/till in opposite direction)
+		if char == ',' {
+			RepeatFindChar(h.ctx, true)
+			h.ctx.MotionCount = 0
+			h.ctx.MotionCommand = ""
+			h.ctx.LastCommand = ","
 			return true
 		}
 

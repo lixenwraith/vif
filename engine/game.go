@@ -56,11 +56,18 @@ type GameContext struct {
 	MotionCommand       string
 	WaitingForF         bool
 	WaitingForFBackward bool
+	WaitingForT         bool
+	WaitingForTBackward bool
 	PendingCount        int // Preserved count for multi-keystroke commands (e.g., 2fa, 3Fb)
 	CommandPrefix       rune
 	StatusMessage       string
 	DeleteOperator      bool
 	LastCommand         string // Last executed command for display
+
+	// Find/Till motion state (for ; and , repeat commands)
+	LastFindChar    rune // Character that was searched for
+	LastFindForward bool // true for f/t (forward), false for F/T (backward)
+	LastFindType    rune // Type of last find: 'f', 'F', 't', or 'T'
 
 	// Atomic ping coordinates feature (local to input handling)
 	pingActive    atomic.Bool

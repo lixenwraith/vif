@@ -106,14 +106,27 @@ Examples:
 - **`%`** - Jump to matching bracket (works with (), {}, [])
 
 #### Find & Search
-- **`f<char>`** - Find character forward on current line
+- **`f<char>`** - Find character forward on current line (moves cursor TO the character)
   - Example: `fa` finds next 'a' on the current line
   - **Count-aware**: `2fa` finds the 2nd 'a', `3fb` finds the 3rd 'b'
   - If count exceeds available matches, moves to last match
-- **`F<char>`** - Find character backward on current line
+- **`F<char>`** - Find character backward on current line (moves cursor TO the character)
   - Example: `Fa` finds previous 'a' on the current line
   - **Count-aware**: `2Fa` finds the 2nd 'a' backward, `3Fb` finds the 3rd 'b' backward
   - If count exceeds available matches, moves to first match (furthest back)
+- **`t<char>`** - Till character forward (moves cursor one position BEFORE the character)
+  - Example: `ta` finds next 'a' and stops one position before it
+  - **Count-aware**: `2ta` finds the 2nd 'a', `3tb` finds the 3rd 'b'
+  - Useful for editing: `dta` deletes up to (but not including) the next 'a'
+- **`T<char>`** - Till character backward (moves cursor one position AFTER the character)
+  - Example: `Ta` finds previous 'a' and stops one position after it
+  - **Count-aware**: `2Ta` finds the 2nd 'a' backward, `3Tb` finds the 3rd 'b' backward
+- **`;`** - Repeat last find/till command in the same direction
+  - After `fa`, pressing `;` finds the next 'a' forward
+  - After `Ta`, pressing `;` finds the previous 'a' backward
+- **`,`** - Repeat last find/till command in the opposite direction
+  - After `fa`, pressing `,` finds the previous 'a' backward (reverses to `Fa`)
+  - After `Ta`, pressing `,` finds the next 'a' forward (reverses to `ta`)
 - **`/<pattern>`** - Search for text pattern (enters SEARCH mode)
   - Type pattern, press `Enter` to jump to first match
 - **`n`** - Repeat last search forward
