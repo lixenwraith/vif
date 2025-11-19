@@ -104,8 +104,12 @@ func (s *DecaySystem) updateAnimation(world *engine.World) {
 		// Clean up falling entities and clear decay tracking
 		s.cleanupFallingEntities(world)
 
-		//Stop decay animation in GameState (transitions to PhaseNormal)
-		s.ctx.State.StopDecayAnimation()
+		// Stop decay animation in GameState (transitions to PhaseNormal)
+		if !s.ctx.State.StopDecayAnimation() {
+			// Phase transition failed - this shouldn't happen but log for debugging
+			// Animation cleanup already done, so just return
+			return
+		}
 	}
 }
 

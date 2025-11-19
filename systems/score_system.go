@@ -292,8 +292,11 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 
 		// Request cleaners if heat is already at max
 		// Clock scheduler will trigger cleaners on next tick (within 50ms)
+		// If transition fails (e.g., wrong phase), cleaners won't be triggered
 		if currentHeat >= heatBarWidth {
 			s.ctx.State.RequestCleaners()
+			// Note: If transition fails, CompleteGoldSequence below will still proceed
+			// and transition to PhaseGoldComplete instead
 		}
 
 		// Fill heat to max (if not already higher)

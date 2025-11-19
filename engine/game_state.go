@@ -528,12 +528,48 @@ func (gs *GameState) GetPhase() GamePhase {
 }
 
 // SetPhase updates the current game phase and resets the phase start time
-// Will add validation and phase transition logic
+// DEPRECATED: Use TransitionPhase() for validated transitions
 func (gs *GameState) SetPhase(phase GamePhase) {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
 	gs.CurrentPhase = phase
 	gs.PhaseStartTime = gs.TimeProvider.Now()
+}
+
+// CanTransition checks if a phase transition is valid
+func (gs *GameState) CanTransition(from, to GamePhase) bool {
+	validTransitions := map[GamePhase][]GamePhase{
+		PhaseNormal:         {PhaseGoldActive, PhaseCleanerPending},
+		PhaseGoldActive:     {PhaseGoldComplete, PhaseCleanerPending},
+		PhaseGoldComplete:   {PhaseDecayWait, PhaseCleanerPending},
+		PhaseDecayWait:      {PhaseDecayAnimation},
+		PhaseDecayAnimation: {PhaseNormal},
+		PhaseCleanerPending: {PhaseCleanerActive},
+		PhaseCleanerActive:  {PhaseNormal},
+	}
+
+	allowed := validTransitions[from]
+	for _, phase := range allowed {
+		if phase == to {
+			return true
+		}
+	}
+	return false
+}
+
+// TransitionPhase attempts to transition to a new phase with validation
+// Returns true if transition succeeded, false if transition is invalid
+func (gs *GameState) TransitionPhase(to GamePhase) bool {
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
+
+	if !gs.CanTransition(gs.CurrentPhase, to) {
+		return false
+	}
+
+	gs.CurrentPhase = to
+	gs.PhaseStartTime = gs.TimeProvider.Now()
+	return true
 }
 
 // GetPhaseStartTime returns when the current phase started
@@ -602,9 +638,16 @@ func (gs *GameState) IncrementGoldSequenceID() int {
 }
 
 // ActivateGoldSequence atomically activates a gold sequence with timeout
-func (gs *GameState) ActivateGoldSequence(sequenceID int, duration time.Duration) {
+// Only allowed from PhaseNormal (checked by phase transition validation)
+func (gs *GameState) ActivateGoldSequence(sequenceID int, duration time.Duration) bool {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
+
+	// Validate phase transition
+	if !gs.CanTransition(gs.CurrentPhase, PhaseGoldActive) {
+		return false
+	}
+
 	now := gs.TimeProvider.Now()
 	gs.GoldActive = true
 	gs.GoldSequenceID = sequenceID
@@ -612,15 +655,26 @@ func (gs *GameState) ActivateGoldSequence(sequenceID int, duration time.Duration
 	gs.GoldTimeoutTime = now.Add(duration)
 	gs.CurrentPhase = PhaseGoldActive
 	gs.PhaseStartTime = now
+	return true
 }
 
 // DeactivateGoldSequence atomically deactivates the gold sequence
-func (gs *GameState) DeactivateGoldSequence() {
+// Transitions to PhaseGoldComplete to allow decay or cleaner to start
+func (gs *GameState) DeactivateGoldSequence() bool {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
+
+	// Validate phase transition
+	if !gs.CanTransition(gs.CurrentPhase, PhaseGoldComplete) {
+		return false
+	}
+
 	gs.GoldActive = false
 	gs.GoldStartTime = time.Time{}
 	gs.GoldTimeoutTime = time.Time{}
+	gs.CurrentPhase = PhaseGoldComplete
+	gs.PhaseStartTime = gs.TimeProvider.Now()
+	return true
 }
 
 // GetGoldTimeoutTime returns when the gold sequence will timeout
@@ -686,9 +740,15 @@ func (gs *GameState) GetDecayTimerActive() bool {
 
 // StartDecayTimer starts the decay timer with the given interval
 // Calculates interval based on current heat atomically
-func (gs *GameState) StartDecayTimer(screenWidth int, heatBarIndicatorWidth int, baseSeconds, rangeSeconds float64) {
+// Only allowed from PhaseGoldComplete (checked by phase transition validation)
+func (gs *GameState) StartDecayTimer(screenWidth int, heatBarIndicatorWidth int, baseSeconds, rangeSeconds float64) bool {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
+
+	// Validate phase transition
+	if !gs.CanTransition(gs.CurrentPhase, PhaseDecayWait) {
+		return false
+	}
 
 	// Read heat atomically (no cached value)
 	heat := int(gs.Heat.Load())
@@ -719,6 +779,7 @@ func (gs *GameState) StartDecayTimer(screenWidth int, heatBarIndicatorWidth int,
 	gs.DecayNextTime = now.Add(interval)
 	gs.CurrentPhase = PhaseDecayWait
 	gs.PhaseStartTime = now
+	return true
 }
 
 // GetDecayNextTime returns when the next decay will trigger
@@ -763,26 +824,42 @@ func (gs *GameState) GetDecayAnimating() bool {
 }
 
 // StartDecayAnimation starts the decay animation
-func (gs *GameState) StartDecayAnimation() {
+// Only allowed from PhaseDecayWait (checked by phase transition validation)
+func (gs *GameState) StartDecayAnimation() bool {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
+
+	// Validate phase transition
+	if !gs.CanTransition(gs.CurrentPhase, PhaseDecayAnimation) {
+		return false
+	}
+
 	now := gs.TimeProvider.Now()
 	gs.DecayAnimating = true
 	gs.DecayStartTime = now
 	gs.DecayTimerActive = false // Timer is no longer active once animation starts
 	gs.CurrentPhase = PhaseDecayAnimation
 	gs.PhaseStartTime = now
+	return true
 }
 
 // StopDecayAnimation stops the decay animation and returns to Normal phase
-func (gs *GameState) StopDecayAnimation() {
+// Only allowed from PhaseDecayAnimation (checked by phase transition validation)
+func (gs *GameState) StopDecayAnimation() bool {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
+
+	// Validate phase transition
+	if !gs.CanTransition(gs.CurrentPhase, PhaseNormal) {
+		return false
+	}
+
 	now := gs.TimeProvider.Now()
 	gs.DecayAnimating = false
 	gs.DecayStartTime = time.Time{}
 	gs.CurrentPhase = PhaseNormal
 	gs.PhaseStartTime = now
+	return true
 }
 
 // GetDecayStartTime returns when the decay animation started
@@ -827,10 +904,28 @@ func (gs *GameState) ReadDecayState() DecaySnapshot {
 
 // RequestCleaners requests that cleaners be triggered on the next clock tick
 // Called by ScoreSystem when gold sequence is completed at max heat
-func (gs *GameState) RequestCleaners() {
+// Transitions to PhaseCleanerPending from PhaseGoldActive, PhaseNormal or PhaseGoldComplete
+// Also deactivates gold sequence if it was active
+func (gs *GameState) RequestCleaners() bool {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
+
+	// Validate phase transition
+	if !gs.CanTransition(gs.CurrentPhase, PhaseCleanerPending) {
+		return false
+	}
+
+	// Deactivate gold sequence if it was active
+	if gs.GoldActive {
+		gs.GoldActive = false
+		gs.GoldStartTime = time.Time{}
+		gs.GoldTimeoutTime = time.Time{}
+	}
+
 	gs.CleanerPending = true
+	gs.CurrentPhase = PhaseCleanerPending
+	gs.PhaseStartTime = gs.TimeProvider.Now()
+	return true
 }
 
 // GetCleanerPending returns whether cleaners are pending activation
@@ -842,13 +937,23 @@ func (gs *GameState) GetCleanerPending() bool {
 
 // ActivateCleaners atomically activates cleaners and clears pending flag
 // Called by ClockScheduler when processing pending cleaner request
-func (gs *GameState) ActivateCleaners() {
+// Transitions to PhaseCleanerActive from PhaseCleanerPending
+func (gs *GameState) ActivateCleaners() bool {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
+
+	// Validate phase transition
+	if !gs.CanTransition(gs.CurrentPhase, PhaseCleanerActive) {
+		return false
+	}
+
 	now := gs.TimeProvider.Now()
 	gs.CleanerPending = false
 	gs.CleanerActive = true
 	gs.CleanerStartTime = now
+	gs.CurrentPhase = PhaseCleanerActive
+	gs.PhaseStartTime = now
+	return true
 }
 
 // GetCleanerActive returns whether cleaners are currently active
@@ -860,12 +965,22 @@ func (gs *GameState) GetCleanerActive() bool {
 
 // DeactivateCleaners atomically deactivates cleaners
 // Called by ClockScheduler when cleaner animation completes
-func (gs *GameState) DeactivateCleaners() {
+// Transitions to PhaseNormal from PhaseCleanerActive
+func (gs *GameState) DeactivateCleaners() bool {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
+
+	// Validate phase transition
+	if !gs.CanTransition(gs.CurrentPhase, PhaseNormal) {
+		return false
+	}
+
 	gs.CleanerActive = false
 	gs.CleanerPending = false
 	gs.CleanerStartTime = time.Time{}
+	gs.CurrentPhase = PhaseNormal
+	gs.PhaseStartTime = gs.TimeProvider.Now()
+	return true
 }
 
 // GetCleanerStartTime returns when cleaners were activated

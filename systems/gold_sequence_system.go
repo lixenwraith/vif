@@ -80,33 +80,15 @@ func (s *GoldSequenceSystem) Update(world *engine.World, dt time.Duration) {
 	const initialSpawnDelay = 150 * time.Millisecond
 	if !active && now.Sub(initialSpawnTime) >= initialSpawnDelay && now.Sub(initialSpawnTime) < initialSpawnDelay+100*time.Millisecond {
 		// Spawn initial gold sequence after delay
-		success := s.spawnGoldSequence(world)
-		// EDGE CASE: If first Gold spawn fails, start decay timer anyway
-		if !success {
-			// Start decay timer on GameState (reads heat atomically)
-			s.ctx.State.StartDecayTimer(
-				s.ctx.State.ScreenWidth,
-				constants.HeatBarIndicatorWidth,
-				constants.DecayIntervalBaseSeconds,
-				constants.DecayIntervalRangeSeconds,
-			)
-		}
+		// If spawn fails, system will remain in PhaseNormal and can retry on next update
+		s.spawnGoldSequence(world)
 	}
 
 	// Detect transition from decay animating to not animating (decay just ended)
 	if wasDecayAnimating && !isDecayAnimating {
 		// Decay just ended - spawn gold sequence
-		success := s.spawnGoldSequence(world)
-		// EDGE CASE: If Gold spawn fails after decay, start decay timer anyway
-		if !success {
-			// Start decay timer on GameState (reads heat atomically)
-			s.ctx.State.StartDecayTimer(
-				s.ctx.State.ScreenWidth,
-				constants.HeatBarIndicatorWidth,
-				constants.DecayIntervalBaseSeconds,
-				constants.DecayIntervalRangeSeconds,
-			)
-		}
+		// If spawn fails, system will remain in PhaseNormal and can retry on next update
+		s.spawnGoldSequence(world)
 	}
 
 	// Gold timeout is now handled by ClockScheduler
@@ -116,6 +98,11 @@ func (s *GoldSequenceSystem) Update(world *engine.World, dt time.Duration) {
 // spawnGoldSequence creates a new gold sequence at a random position on the screen
 // Returns true if spawn succeeded, false if spawn failed (e.g., no valid position)
 func (s *GoldSequenceSystem) spawnGoldSequence(world *engine.World) bool {
+	// Phase consistency check: Gold can only spawn in PhaseNormal
+	if s.ctx.State.GetPhase() != engine.PhaseNormal {
+		return false
+	}
+
 	// Check active state from GameState
 	if s.ctx.State.GetGoldActive() {
 		// Already have an active gold sequence
@@ -173,7 +160,16 @@ func (s *GoldSequenceSystem) spawnGoldSequence(world *engine.World) bool {
 	}
 
 	// Activate gold sequence in GameState (sets phase to PhaseGoldActive)
-	s.ctx.State.ActivateGoldSequence(sequenceID, constants.GoldSequenceDuration)
+	if !s.ctx.State.ActivateGoldSequence(sequenceID, constants.GoldSequenceDuration) {
+		// Phase transition failed - clean up created entities
+		for i := 0; i < constants.GoldSequenceLength; i++ {
+			entity := world.GetEntityAtPosition(x+i, y)
+			if entity != 0 {
+				world.SafeDestroyEntity(entity)
+			}
+		}
+		return false
+	}
 	return true
 }
 
@@ -209,16 +205,23 @@ func (s *GoldSequenceSystem) removeGoldSequence(world *engine.World, sequenceID 
 		}
 	}
 
-	// Deactivate gold sequence in GameState
-	s.ctx.State.DeactivateGoldSequence()
+	// Check current phase - if cleaners are pending, don't deactivate gold
+	// (cleaners were requested while gold was active, so we're already in PhaseCleanerPending)
+	currentPhase := s.ctx.State.GetPhase()
+	if currentPhase == engine.PhaseCleanerPending || currentPhase == engine.PhaseCleanerActive {
+		// Cleaners are pending/active - gold entities removed, but stay in cleaner phase
+		// Don't call DeactivateGoldSequence as it would try to transition to PhaseGoldComplete
+		return
+	}
 
-	// Start decay timer on GameState (reads heat atomically, no cached value)
-	s.ctx.State.StartDecayTimer(
-		s.ctx.State.ScreenWidth,
-		constants.HeatBarIndicatorWidth,
-		constants.DecayIntervalBaseSeconds,
-		constants.DecayIntervalRangeSeconds,
-	)
+	// Deactivate gold sequence in GameState (transitions to PhaseGoldComplete)
+	if !s.ctx.State.DeactivateGoldSequence() {
+		// Phase transition failed - this shouldn't happen but log for debugging
+		return
+	}
+
+	// Note: Decay timer will be started by ClockScheduler when it sees PhaseGoldComplete
+	// No need to start it here
 }
 
 // TimeoutGoldSequence is called by ClockScheduler when gold sequence times out

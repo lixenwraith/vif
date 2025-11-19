@@ -18,11 +18,20 @@ const (
 	// PhaseGoldActive - Gold sequence is active and can be typed with timeout tracking
 	PhaseGoldActive
 
+	// PhaseGoldComplete - Gold sequence was completed, ready to transition to decay or cleaner
+	PhaseGoldComplete
+
 	// PhaseDecayWait - Waiting for decay timer to expire after gold completion/timeout (heat-based interval)
 	PhaseDecayWait
 
 	// PhaseDecayAnimation - Decay animation is running with falling entities
 	PhaseDecayAnimation
+
+	// PhaseCleanerPending - Cleaners have been requested and will activate on next clock tick
+	PhaseCleanerPending
+
+	// PhaseCleanerActive - Cleaners are currently running
+	PhaseCleanerActive
 )
 
 // String returns the name of the game phase for debugging
@@ -32,10 +41,16 @@ func (p GamePhase) String() string {
 		return "Normal"
 	case PhaseGoldActive:
 		return "GoldActive"
+	case PhaseGoldComplete:
+		return "GoldComplete"
 	case PhaseDecayWait:
 		return "DecayWait"
 	case PhaseDecayAnimation:
 		return "DecayAnimation"
+	case PhaseCleanerPending:
+		return "CleanerPending"
+	case PhaseCleanerActive:
+		return "CleanerActive"
 	default:
 		return "Unknown"
 	}
@@ -127,7 +142,7 @@ func (cs *ClockScheduler) run() {
 }
 
 // tick executes one clock cycle (called every 50ms)
-// Implements phase transition logic for Gold→Decay→Normal cycle
+// Implements phase transition logic for Gold→GoldComplete→Decay→Normal cycle
 // Implements cleaner trigger logic (parallel to main phase cycle)
 func (cs *ClockScheduler) tick() {
 	cs.mu.Lock()
@@ -137,26 +152,6 @@ func (cs *ClockScheduler) tick() {
 	cleanerSys := cs.cleanerSystem
 	cs.mu.Unlock()
 
-	// Handle cleaner requests (runs in parallel with phase transitions)
-	// Cleaners don't block the main Gold→Decay→Normal cycle
-	if cs.ctx.State.GetCleanerPending() {
-		// Activate cleaners in GameState
-		cs.ctx.State.ActivateCleaners()
-
-		// Trigger cleaner system to spawn cleaners
-		if cleanerSys != nil {
-			cleanerSys.ActivateCleaners(cs.ctx.World)
-		}
-	}
-
-	// Check if cleaner animation has completed
-	if cs.ctx.State.GetCleanerActive() {
-		if cleanerSys != nil && cleanerSys.IsAnimationComplete() {
-			// Deactivate cleaners in GameState
-			cs.ctx.State.DeactivateCleaners()
-		}
-	}
-
 	// Get current phase from GameState
 	phase := cs.ctx.State.GetPhase()
 
@@ -165,13 +160,22 @@ func (cs *ClockScheduler) tick() {
 	case PhaseGoldActive:
 		// Check if gold sequence has timed out
 		if cs.ctx.State.IsGoldTimedOut() {
-			// Gold timeout - transition to DecayWait
-			// Call gold system to remove gold entities
+			// Gold timeout - call gold system to remove gold entities
 			if goldSys != nil {
 				goldSys.TimeoutGoldSequence(cs.ctx.World)
+			} else {
+				// No gold system - just deactivate gold sequence directly
+				cs.ctx.State.DeactivateGoldSequence()
 			}
+		}
 
+	case PhaseGoldComplete:
+		// Gold sequence completed or timed out
+		// Check if cleaners should be triggered (handled by ScoreSystem via RequestCleaners)
+		// If no cleaners pending, start decay timer
+		if !cs.ctx.State.GetCleanerPending() {
 			// Start decay timer (reads heat atomically, no cached value)
+			// This will transition to PhaseDecayWait
 			cs.ctx.State.StartDecayTimer(
 				cs.ctx.State.ScreenWidth,
 				constants.HeatBarIndicatorWidth,
@@ -179,12 +183,12 @@ func (cs *ClockScheduler) tick() {
 				constants.DecayIntervalRangeSeconds,
 			)
 		}
+		// Note: If cleaners are pending, they will be handled below
 
 	case PhaseDecayWait:
 		// Check if decay timer has expired
 		if cs.ctx.State.IsDecayReady() {
 			// Timer expired - transition to DecayAnimation
-			// Start decay animation
 			cs.ctx.State.StartDecayAnimation()
 
 			// Trigger decay system to spawn falling entities
@@ -198,6 +202,23 @@ func (cs *ClockScheduler) tick() {
 		// When animation completes, DecaySystem will call StopDecayAnimation()
 		// which transitions back to PhaseNormal
 		// Nothing to do in clock tick for this phase
+
+	case PhaseCleanerPending:
+		// Activate cleaners
+		// This will transition to PhaseCleanerActive
+		if cs.ctx.State.ActivateCleaners() {
+			// Trigger cleaner system to spawn cleaners
+			if cleanerSys != nil {
+				cleanerSys.ActivateCleaners(cs.ctx.World)
+			}
+		}
+
+	case PhaseCleanerActive:
+		// Check if cleaner animation has completed
+		if cleanerSys != nil && cleanerSys.IsAnimationComplete() {
+			// Deactivate cleaners and transition to PhaseNormal
+			cs.ctx.State.DeactivateCleaners()
+		}
 
 	case PhaseNormal:
 		// Normal gameplay - no phase transitions
