@@ -32,12 +32,14 @@ type cleanerData struct {
 // Cleaners are bright yellow blocks that sweep across rows containing Red characters, removing them
 // on contact while leaving Blue/Green characters unaffected.
 //
-// The system uses:
-// - sync.Pool for efficient cleaner object allocation
-// - Channel for non-blocking spawn requests
-// - Concurrent update loop running in a goroutine
-// - Atomic operations for thread-safe state management
-// - Mutex protection for screen buffer scanning
+// Synchronous Update Model:
+// - Updates run in main game loop via Update() method (no autonomous goroutine)
+// - Uses delta time from frame ticker for smooth animation
+// - Non-blocking spawn requests via buffered channel
+// - Atomic operations for lock-free state checks (isActive, activationTime, activeCleanerCount)
+// - Mutex protection for cleanerDataMap and flashPositions
+// - Frame-coherent snapshots for thread-safe rendering
+// - sync.Pool for efficient trail slice allocation/deallocation
 type CleanerSystem struct {
 	ctx               *engine.GameContext
 	config            constants.CleanerConfig // Configuration for cleaner behavior
@@ -92,7 +94,10 @@ func (cs *CleanerSystem) Priority() int {
 	return 35
 }
 
-// Update runs the cleaner system logic (called from main game loop)
+// Update runs the cleaner system logic synchronously in the main game loop.
+// This method processes spawn requests, updates cleaner positions using delta time,
+// and cleans up expired flash effects. All entity modifications happen here,
+// not in a separate goroutine, eliminating race conditions.
 func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 	// Process spawn requests from channel
 	select {
@@ -242,6 +247,11 @@ func (cs *CleanerSystem) GetActiveCleanerCount() int64 {
 func (cs *CleanerSystem) scanRedCharacterRows(world *engine.World) []int {
 	redRows := make(map[int]bool)
 
+	// Read dimensions under lock
+	cs.mu.RLock()
+	gameHeight := cs.gameHeight
+	cs.mu.RUnlock()
+
 	seqType := reflect.TypeOf(components.SequenceComponent{})
 	posType := reflect.TypeOf(components.PositionComponent{})
 
@@ -272,7 +282,7 @@ func (cs *CleanerSystem) scanRedCharacterRows(world *engine.World) []int {
 		}
 
 		// Bounds check for row
-		if pos.Y < 0 || pos.Y >= cs.gameHeight {
+		if pos.Y < 0 || pos.Y >= gameHeight {
 			continue
 		}
 
@@ -519,8 +529,9 @@ func (cs *CleanerSystem) checkAndDestroyAtPosition(world *engine.World, x, y int
 	world.SafeDestroyEntity(targetEntity)
 }
 
-// Removed detectAndDestroyRedCharacters() - replaced by checkTrailCollisions()
-// Old method only checked head position with rounding, new method checks entire trail with truncation
+// Note: The old detectAndDestroyRedCharacters() method has been replaced by checkTrailCollisions().
+// Old approach: Checked only head position with rounding
+// New approach: Checks entire trail with integer truncation for more reliable collision detection
 
 // cleanupCleaners removes all cleaner entities from the world
 func (cs *CleanerSystem) cleanupCleaners(world *engine.World) {

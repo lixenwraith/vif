@@ -418,6 +418,51 @@ func BenchmarkGoldTriggerCleaners(b *testing.B) {
 	}
 }
 
+// BenchmarkCleanerUpdateSync benchmarks synchronous cleaner updates
+// This validates that the new synchronous model performs well
+func BenchmarkCleanerUpdateSync(b *testing.B) {
+	world := engine.NewWorld()
+	ctx := createCleanerTestContext()
+
+	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
+	defer cleanerSystem.Shutdown()
+
+	// Create Red characters on all 24 rows (maximum cleaners)
+	for row := 0; row < 24; row++ {
+		for x := 10; x < 70; x += 10 {
+			createRedCharacterAt(world, x, row)
+		}
+	}
+
+	// Trigger cleaners to spawn all 24
+	cleanerSystem.TriggerCleaners(world)
+	cleanerSystem.Update(world, 16*time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify we have 24 cleaners
+	cleanerType := reflect.TypeOf(components.CleanerComponent{})
+	cleaners := world.GetEntitiesWith(cleanerType)
+	b.Logf("Benchmarking with %d active cleaners", len(cleaners))
+
+	b.ResetTimer()
+
+	// Benchmark the synchronous update performance
+	for i := 0; i < b.N; i++ {
+		cleanerSystem.Update(world, 16*time.Millisecond)
+	}
+
+	b.StopTimer()
+
+	// Report performance target
+	elapsed := b.Elapsed()
+	avgPerOp := elapsed / time.Duration(b.N)
+	if avgPerOp > time.Millisecond {
+		b.Logf("Warning: Update took %v (target: < 1ms)", avgPerOp)
+	} else {
+		b.Logf("Update performance: %v per operation (within target)", avgPerOp)
+	}
+}
+
 // BenchmarkCompleteGoldCleanerPipeline benchmarks the full pipeline
 func BenchmarkCompleteGoldCleanerPipeline(b *testing.B) {
 	world := engine.NewWorld()

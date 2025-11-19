@@ -440,19 +440,80 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 
 ## Concurrency Model
 
-- Main game loop: Single-threaded ECS updates
-- Input events: Goroutine → channel → main loop
-- **CleanerSystem**: Concurrent update loop running at 60 FPS in separate goroutine
-  - Uses `sync.Pool` for cleaner trail slice allocation/deallocation
-  - Channel-based spawn requests for non-blocking trigger mechanism
-  - Atomic operations (`atomic.Bool`, `atomic.Int64`) for thread-safe state
-  - Mutex protection for screen buffer scanning
-- Use `sync.RWMutex` for all shared state
-- **Atomic Operations**: Color counters use `atomic.Int64` for lock-free updates
+### Main Architecture
+- **Main game loop**: Single-threaded ECS updates (16ms frame tick)
+- **Input events**: Goroutine → channel → main loop
+- **Clock scheduler**: Separate goroutine for phase transitions (50ms tick)
+- **All systems**: Run synchronously in main game loop, no autonomous goroutines
+
+### CleanerSystem Synchronous Model
+- **Update Pattern**: Called from main loop's `Update()` method with delta time
+- **No Goroutine**: Eliminates race conditions from concurrent entity access
+- **Channel-based Triggering**: Non-blocking spawn requests via buffered channel
+- **Atomic State**: `atomic.Bool` and `atomic.Int64` for lock-free state checks
+- **Mutex Protection**:
+  - `stateMu` protects `cleanerDataMap` (cleaner position data)
+  - `flashMu` protects `flashPositions` (flash effect tracking)
+  - Locks held only during data structure updates (not during world access)
+- **Frame-Coherent Rendering**: `GetCleanerSnapshots()` provides immutable snapshot
+- **Memory Pool**: `sync.Pool` for trail slice allocation/deallocation
+
+### Shared State Synchronization
+- **Color Counters**: `atomic.Int64` for lock-free updates
   - `SpawnSystem`: Increments counters when blocks placed
   - `ScoreSystem`: Decrements counters when characters typed
   - `DecaySystem`: Updates counters during decay transitions
   - All counter operations are race-free and thread-safe
+- **GameState**: Uses `sync.RWMutex` for phase state and timing
+- **World**: Thread-safe entity/component access (internal locking)
+
+## Race Condition Prevention
+
+### Design Principles
+1. **Single-Threaded ECS**: All entity/component modifications in main game loop
+2. **No Autonomous Goroutines**: Systems never spawn independent update loops
+3. **Explicit Synchronization**: All cross-thread access uses atomics or mutexes
+4. **Frame-Coherent Snapshots**: Renderer reads immutable snapshots, never live state
+5. **Lock Granularity**: Minimize lock scope - protect data structures, not operations
+
+### CleanerSystem Race Prevention Strategy
+**Problem**: Original implementation had autonomous goroutine modifying entities concurrently with main loop
+
+**Solution**:
+- ✅ **Removed goroutine**: Updates now synchronous in main loop `Update()` method
+- ✅ **Delta time**: Uses frame delta time, not independent timer
+- ✅ **Atomic flags**: `isActive`, `activationTime`, `activeCleanerCount` for lock-free checks
+- ✅ **Mutex protection**: `stateMu` for `cleanerDataMap`, `flashMu` for `flashPositions`
+- ✅ **Snapshot rendering**: `GetCleanerSnapshots()` returns deep-copied data
+- ✅ **Channel triggering**: Non-blocking spawn requests (doesn't block caller)
+
+### Frame Coherence Strategy
+**Rendering Thread Safety**:
+1. Renderer calls `GetCleanerSnapshots()` once per frame
+2. Method acquires `stateMu.RLock()` and copies all trail positions
+3. Renderer uses snapshot data (no shared references)
+4. Main loop updates `cleanerDataMap` under `stateMu.Lock()`
+5. No data races: snapshot is fully independent copy
+
+**Implementation**:
+```go
+// Renderer (terminal_renderer.go)
+snapshots := cleanerSystem.GetCleanerSnapshots()  // Once per frame
+for _, snapshot := range snapshots {
+    // Use snapshot.TrailPositions (independent copy)
+}
+
+// Update (cleaner_system.go)
+cs.stateMu.Lock()
+cs.cleanerDataMap[entity].trailPositions = newTrail
+cs.stateMu.Unlock()
+```
+
+### Testing for Race Conditions
+- All tests must pass with `go test -race`
+- Dedicated race tests in `systems/cleaner_race_test.go`
+- Integration tests verify concurrent scenarios
+- Benchmarks validate performance impact of synchronization
 
 ## Performance Guidelines
 
@@ -461,6 +522,7 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 2. Use spatial index for position lookups
 3. Batch similar operations (e.g., all destroys at end)
 4. Reuse allocated slices where possible
+5. CleanerSystem updates synchronously with frame-accurate delta time
 
 ### Memory Management
 - Pool temporary slices (coordinate lists, entity batches)
@@ -564,6 +626,7 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 
 ### Cleaner System
 - **Trigger**: Activated when gold sequence completed while heat meter already at maximum
+- **Update Model**: **Synchronous** - runs in main game loop, not in separate goroutine
 - **Configuration**: Fully configurable via `constants.CleanerConfig` struct
   - **Animation Duration**: Time to traverse screen (default: 1 second)
   - **Speed**: Characters/second (default: auto-calculated from duration and screen width)
@@ -571,8 +634,6 @@ INSERT / SEARCH ─[ESC]→ NORMAL
   - **Trail Fade Time**: Duration for complete trail fade (default: 0.3 seconds)
   - **Trail Fade Curve**: Linear or exponential interpolation (default: linear)
   - **Max Concurrent Cleaners**: Limit simultaneous cleaners (default: 0/unlimited)
-  - **Scan Interval**: Periodic Red character scanning (default: 0/disabled)
-  - **FPS**: Animation frame rate (default: 60)
   - **Character**: Unicode block character (default: '█')
   - **Flash Duration**: Removal flash duration in ms (default: 150)
 - **Behavior**: Sweeps across rows containing Red characters, removing them on contact
@@ -586,21 +647,22 @@ INSERT / SEARCH ─[ESC]→ NORMAL
   - Prevents character skipping at fractional positions
   - Characters may disappear slightly earlier (one clock tick) - acceptable tradeoff
 - **Visual Effects**:
-  - Pre-calculated gradient table for trail rendering (bright yellow → transparent)
+  - Pre-calculated color gradients avoid per-frame calculations
   - Configurable trail length with smooth opacity falloff
   - Configurable removal flash effect when Red characters destroyed
   - Flash cleanup: Automatic removal of expired flash entities
-- **Concurrency**:
-  - Updates run in separate goroutine at configurable FPS for smooth animation
+- **Thread Safety**:
   - Non-blocking spawn requests via buffered channel
-  - Atomic state management for thread-safe activation/deactivation
+  - Atomic state management for lock-free activation/deactivation checks
+  - Mutex protection for cleanerDataMap and flashPositions
   - Trail slices allocated from `sync.Pool` for efficient memory reuse
-  - Optional periodic scanning for Red characters (configurable interval)
+  - Frame-coherent snapshots for renderer (GetCleanerSnapshots)
 - **Performance**:
+  - Synchronous updates eliminate goroutine overhead
   - Pre-calculated color gradients avoid per-frame calculations
-  - Batch terminal updates for trail rendering
-  - Minimal allocations in render loop (gradient array vs dynamic color creation)
+  - Minimal allocations in update loop (gradient array vs dynamic color creation)
   - Reduced collision detection overhead (single method)
+  - Typical update time: < 1ms for 24 cleaners
 
 ## Data Files
 
@@ -664,6 +726,12 @@ Located in `systems/cleaner_gold_integration_test.go`:
 - **Game State Pause/Resume**: Validates cleaner behavior during time control changes
 
 ### Race Condition Tests
+Located in `systems/cleaner_race_test.go`:
+- **TestNoRaceCleanerConcurrentRenderUpdate**: 50 goroutines updating, 50 rendering snapshots
+- **TestNoRaceRapidCleanerCycles**: Rapidly trigger/complete cleaner cycles
+- **TestNoRaceCleanerStateAccess**: Concurrent reads/writes to cleaner state
+- **TestNoRaceFlashEffectManagement**: Concurrent flash creation/cleanup
+
 Located in `systems/cleaner_race_stress_test.go`:
 - **Rapid Gold Activation**: Stress tests rapid gold sequence spawning
 - **Maximum Cleaners on Screen**: Tests system with 24 concurrent cleaners
@@ -673,16 +741,24 @@ Located in `systems/cleaner_race_stress_test.go`:
 - **Flash Effect Stress Test**: Tests flash creation/cleanup under load
 - **Spatial Index Race Conditions**: Tests concurrent spatial index operations
 
+### Deterministic Tests
+Located in `systems/cleaner_deterministic_test.go`:
+- **TestDeterministicCleanerLifecycle**: Frame-by-frame cleaner behavior verification
+- **TestDeterministicCleanerTiming**: Exact animation duration validation
+- **TestDeterministicCollisionDetection**: Predictable collision timing
+- Uses `MockTimeProvider` for precise time control
+
 ### Benchmark Tests
 Located in `systems/cleaner_benchmark_test.go`:
 - **Cleaner Spawn Performance**: `BenchmarkCleanerSpawn`
 - **Collision Detection**: `BenchmarkCleanerDetectAndDestroy`
 - **Row Scanning**: `BenchmarkCleanerScanRedRows`
-- **Position Updates**: `BenchmarkCleanerUpdate`
+- **Position Updates**: `BenchmarkCleanerUpdate`, `BenchmarkCleanerUpdateSync`
 - **Flash Effects**: `BenchmarkFlashEffectCreation`, `BenchmarkFlashEffectCleanup`
 - **Gold Sequence Operations**: `BenchmarkGoldSequenceSpawn`, `BenchmarkGoldSequenceCompletion`
 - **Concurrent Operations**: `BenchmarkConcurrentCleanerOperations`
 - **Full Pipeline**: `BenchmarkCompleteGoldCleanerPipeline`
+- **Performance Target**: < 1ms for 24 cleaners (synchronous update)
 
 ### Running Tests
 
