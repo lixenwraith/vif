@@ -9,13 +9,13 @@
 - Systems contain ALL logic, operate on component sets
 - World is the single source of truth for all game state
 
-### State Ownership Model (Phase 1: Spawn/Content)
+### State Ownership Model
 
 **GameState** (`engine/game_state.go`) centralizes game state with clear ownership boundaries:
 
 #### Real-Time State (Lock-Free Atomics)
 Updated immediately on user input/spawn events, read by all systems:
-- **Heat** (`atomic.Int64`): Current heat value (formerly scoreIncrement)
+- **Heat** (`atomic.Int64`): Current heat value
 - **Score** (`atomic.Int64`): Player score
 - **Cursor Position** (`atomic.Int32`): CursorX, CursorY for spawn exclusion zone
 - **Color Counters** (6× `atomic.Int64`): Blue/Green × Bright/Normal/Dark tracking
@@ -33,10 +33,15 @@ Updated during scheduled game logic ticks, read by all systems:
 - **Spawn Timing** (`sync.RWMutex`): LastTime, NextTime, RateMultiplier
 - **Screen Density**: EntityCount, ScreenDensity, SpawnEnabled
 - **6-Color Limit**: Enforced via atomic color counter checks
+- **Game Phase State**: CurrentPhase, PhaseStartTime
+- **Gold Sequence State**: GoldActive, GoldSequenceID, GoldStartTime, GoldTimeoutTime
+- **Decay Timer State**: DecayTimerActive, DecayNextTime
+- **Decay Animation State**: DecayAnimating, DecayStartTime
+- **Cleaner State**: CleanerPending, CleanerActive, CleanerStartTime
 
-**Why Mutex**: These values change infrequently (every 2 seconds for spawn) and require:
-- Consistent multi-field reads (spawn timing snapshot)
-- Atomic state transitions (spawn rate adaptation)
+**Why Mutex**: These values change infrequently (every 2 seconds for spawn, or on game events) and require:
+- Consistent multi-field reads (spawn timing snapshot, phase state)
+- Atomic state transitions (spawn rate adaptation, phase changes)
 - Blocking is acceptable (not on hot path)
 
 #### State Access Patterns
@@ -57,46 +62,17 @@ heat := gs.GetHeat()             // Atomic load
 snapshot := gs.ReadSpawnState()  // RLock, no blocking
 ```
 
-#### Migration Status (Phase 6 Complete)
-✅ **Migrated to GameState**:
-- Heat/Score/Cursor (real-time typing feedback)
-- Color counters (spawn/typing/decay coordination)
-- Boost state (heat-triggered multiplier)
-- Spawn timing and rate adaptation
-- Sequence ID generation
-
-✅ **Migrated in Phase 3**:
-- Gold sequence lifecycle (GoldSequenceSystem → GameState)
-- Decay timer and animation (DecaySystem → GameState)
-- **Critical Fix**: Removed heat caching from DecaySystem (was causing race condition)
-
-✅ **Phase 4 Cleanup**:
-- Removed deprecated `heatIncrement` parameter from `NewDecaySystem` (artifact from pre-Phase 3)
-- Verified scoring/input systems remain real-time (event-driven, immediate atomic operations)
-- All tests pass with race detector
-
-✅ **Phase 6 Migration** (Cleaner triggers to clock):
-- Cleaner request/activation state (CleanerSystem → GameState)
-- Removed callback pattern from GoldSequenceSystem
-- Cleaners triggered by ClockScheduler on pending request
-- Animation completion tracked by ClockScheduler
-- All tests pass with race detector
-
-⏳ **Remaining**:
-- Content management (SpawnSystem - implementation detail, not game state)
-
 #### Testing
 - `engine/game_state_test.go`: Unit tests for atomic operations, state snapshots, spawn timing
 - All tests pass with `-race` flag (no data races detected)
-- Reduced stress test volume (10 goroutines × 10 ops) for faster CI
 
-### Clock Scheduler (Phase 2: Infrastructure Complete)
+### Clock Scheduler
 
 **Architecture**: Hybrid real-time/clock-based game loop with separate tickers:
 - **Frame Ticker** (16ms): Real-time input, scoring, cursor movement, rendering
 - **Clock Ticker** (50ms): Game logic phase transitions, spawn decisions
 
-**Purpose**: Solves race conditions in inter-dependent mechanics (Gold→Decay→Cleaner flow) by centralizing phase transitions on a predictable clock tick.
+**Purpose**: Centralizes phase transitions on a predictable clock tick, preventing race conditions in inter-dependent mechanics (Gold→Decay→Cleaner flow).
 
 #### GamePhase State Machine
 
@@ -106,21 +82,19 @@ type GamePhase int
 
 const (
     PhaseNormal         // Regular gameplay, content spawning
-    PhaseGoldActive     // Gold sequence active (Phase 3: timeout tracking)
-    PhaseDecayWait      // Waiting for decay timer (Phase 3: heat-based interval)
-    PhaseDecayAnimation // Decay animation running (Phase 3: falling entities)
+    PhaseGoldActive     // Gold sequence active with timeout tracking
+    PhaseDecayWait      // Waiting for decay timer (heat-based interval)
+    PhaseDecayAnimation // Decay animation running (falling entities)
 )
 ```
 
 **Phase State** (in `GameState`):
 - `CurrentPhase` (`GamePhase`): Current game phase (mutex protected)
 - `PhaseStartTime` (`time.Time`): When current phase started
-- **Phase 3 additions**:
-  - Gold sequence state: `GoldActive`, `GoldSequenceID`, `GoldStartTime`, `GoldTimeoutTime`
-  - Decay timer state: `DecayTimerActive`, `DecayNextTime`
-  - Decay animation state: `DecayAnimating`, `DecayStartTime`
-- **Phase 6 additions**:
-  - Cleaner state: `CleanerPending`, `CleanerActive`, `CleanerStartTime`
+- **Gold sequence state**: `GoldActive`, `GoldSequenceID`, `GoldStartTime`, `GoldTimeoutTime`
+- **Decay timer state**: `DecayTimerActive`, `DecayNextTime`
+- **Decay animation state**: `DecayAnimating`, `DecayStartTime`
+- **Cleaner state**: `CleanerPending`, `CleanerActive`, `CleanerStartTime`
   - Cleaners run in parallel with main phase cycle (non-blocking)
 
 **Phase Access Pattern**:
@@ -140,24 +114,24 @@ snapshot := ctx.State.ReadPhaseState()
 
 #### ClockScheduler (`engine/clock_scheduler.go`)
 
-**Infrastructure** (Phase 2):
+**Infrastructure**:
 - 50ms ticker running in dedicated goroutine
 - Thread-safe start/stop with idempotent Stop()
 - Tick counter for debugging and metrics
 - Graceful shutdown on game exit
 
-**Current Behavior** (Phase 3/6):
+**Behavior**:
 - Ticks every 50ms independently of frame rate
-- **Phase transitions handled on clock tick** (Phase 3):
+- **Phase transitions handled on clock tick**:
   - `PhaseGoldActive`: Check gold timeout → remove gold → start decay timer
   - `PhaseDecayWait`: Check decay ready → start decay animation
   - `PhaseDecayAnimation`: Handled by DecaySystem → return to PhaseNormal
   - `PhaseNormal`: Gold spawning handled by GoldSequenceSystem
-- **Cleaner triggers handled on clock tick** (Phase 6):
+- **Cleaner triggers handled on clock tick**:
   - Check `CleanerPending` → activate cleaners via CleanerSystem
   - Check `CleanerActive` + animation complete → deactivate cleaners
   - Cleaners run in parallel with phase transitions (non-blocking)
-- **Critical fix**: Decay timer reads heat atomically at transition (no caching)
+- **Critical**: Decay timer reads heat atomically at transition (no caching)
 
 **Integration** (`cmd/vi-fighter/main.go`):
 ```go
@@ -166,12 +140,12 @@ clockScheduler := engine.NewClockScheduler(ctx)
 clockScheduler.Start()
 defer clockScheduler.Stop()
 
-// Separate frame ticker for rendering (continues as before)
+// Separate frame ticker for rendering
 ticker := time.NewTicker(16 * time.Millisecond) // ~60 FPS
 defer ticker.Stop()
 ```
 
-#### Phase 2 Architecture Benefits
+#### Architecture Benefits
 
 **Separation of Concerns**:
 - **Real-time layer** (16ms): User input, typing feedback, visual updates (no blocking)
@@ -192,64 +166,14 @@ defer ticker.Stop()
 - Clock logic only runs 3× per frame (50ms vs 16ms)
 - Mutex contention minimized (clock thread vs main thread)
 
-#### Phase 2 vs Phase 3
-
-**Phase 2 (Complete)**: Infrastructure only
-- GamePhase enum and state tracking
-- ClockScheduler with 50ms tick
-- Integration into main game loop
-- Tests for scheduler and phase state
-- No game logic changes (Gold/Decay/Cleaner unchanged)
-
-**Phase 3 (Complete)**: Game logic migration
-- ✅ Moved Gold sequence state to GameState
-- ✅ Moved Decay timer state to GameState
-- ✅ Implemented phase transition logic in clock tick
-- ✅ **Fixed race condition**: Removed heat caching from DecaySystem
-- ✅ Added integration tests for Gold→Decay phase transitions
-- **Key Achievement**: Decay timer now reads heat atomically at phase transition, not stale cached value
-- See `PHASE3_REPORT.md` for detailed analysis
-
-**Phase 5 (Complete)**: Enhanced testing with deterministic clock
-- ✅ Comprehensive integration tests for complete game cycles
-- ✅ Edge case testing (rapid transitions, boundary conditions, heat changes)
-- ✅ Clock scheduler tick behavior verification
-- ✅ Concurrent phase access during transitions (20 goroutines × 50 cycles)
-- ✅ Heat-based interval calculations across multiple cycles
-- ✅ Mock/deterministic time provider for precise time control
-- **Key Achievement**: Full game cycle testing with deterministic time ensures all phase transitions work correctly without race conditions
-- See `PHASE5_REPORT.md` for detailed analysis
-
-**Phase 6 (Complete)**: Cleaner triggers to clock
-- ✅ Moved Cleaner state to GameState (`CleanerPending`, `CleanerActive`, `CleanerStartTime`)
-- ✅ Added CleanerSystemInterface to ClockScheduler
-- ✅ Implemented clock tick logic for cleaner triggers (parallel to main phases)
-- ✅ Updated ScoreSystem to use `GameState.RequestCleaners()`
-- ✅ Removed callback pattern from GoldSequenceSystem
-- ✅ Added `ActivateCleaners()` and `IsAnimationComplete()` methods to CleanerSystem
-- ✅ Updated main.go integration
-- ✅ All tests pass with race detector
-- **Key Achievement**: Cleaner triggering now uses the same clock-based pattern as Gold/Decay, eliminating callback dependencies
-- See `PHASE6_REPORT.md` for detailed analysis
-
-**Phase 7 (Complete)**: Gold/Decay/Cleaner integration tests and collision logic fixes
-- ✅ Redesigned cleaner collision detection to check entire trail continuously
-- ✅ Replaced rounding `int(x + 0.5)` with truncation `int(x)` for predictable behavior
-- ✅ Removed duplicate collision detection methods (`detectAndDestroyRedCharacters`)
-- ✅ Consolidated to single `checkTrailCollisions()` method
-- ✅ Added comprehensive Phase 7 integration tests for complete game cycle
-- ✅ All tests pass with race detector (no data races)
-- **Key Achievement**: Simplified collision detection eliminates character skipping and fixes screen corruption issues
-- See `PHASE7_REPORT.md` for detailed analysis
-
 #### Testing
 - `engine/clock_scheduler_test.go`: Scheduler tick tests, phase transition tests
-- `engine/phase3_integration_test.go`: Gold→Decay phase transition tests (Phase 3)
+- `engine/phase3_integration_test.go`: Gold→Decay phase transition tests
   - `TestGoldToDecayPhaseTransition`: Complete cycle validation
   - `TestDecayIntervalCalculation`: Heat-based interval formula (60s→10s)
   - `TestConcurrentPhaseAccess`: Race condition testing
-  - **`TestNoHeatCaching`**: Validates critical fix (no stale heat)
-- `engine/phase5_integration_test.go`: Comprehensive cycle tests (Phase 5)
+  - `TestNoHeatCaching`: Validates heat is read atomically (no stale values)
+- `engine/phase5_integration_test.go`: Comprehensive cycle tests
   - `TestCompleteGameCycle`: Full Normal→Gold→DecayWait→DecayAnim→Normal cycle
   - `TestMultipleConsecutiveCycles`: 3 cycles with varying heat (0%, 50%, 100%)
   - `TestGoldCompletionBeforeTimeout`: Early gold completion handling
@@ -261,7 +185,7 @@ defer ticker.Stop()
   - `TestDecayIntervalBoundaryConditions`: Boundary heat values (0, 1, 93, 94, 100)
   - `TestStateSnapshotConsistency`: Snapshot data consistency
   - `TestGoldSequenceIDIncrement`: Sequential ID generation
-- `engine/phase5_clock_scheduler_test.go`: Clock scheduler integration tests (Phase 5)
+- `engine/phase5_clock_scheduler_test.go`: Clock scheduler integration tests
   - `TestClockSchedulerBasicTicking`: Tick count increment verification
   - `TestClockSchedulerPhaseTransitionTiming`: Phase transition timing accuracy
   - `TestClockSchedulerWithoutSystems`: Graceful handling of nil systems
@@ -274,7 +198,7 @@ defer ticker.Stop()
   - `TestClockSchedulerPhaseDecayAnimationDoesNothing`: Animation phase wait behavior
   - `TestClockSchedulerTickRate`: 50ms tick rate verification
   - `TestClockSchedulerIntegrationWithRealTime`: Real-time scheduler integration
-- `engine/phase7_integration_test.go`: Gold/Decay/Cleaner cycle tests (Phase 7)
+- `engine/phase7_integration_test.go`: Gold/Decay/Cleaner cycle tests
   - `TestGoldToCleanerFlow`: Complete flow from gold completion to cleaner activation
   - `TestCleanerAnimationCompletion`: Cleaner deactivation after animation duration
   - `TestConcurrentCleanerAndGoldPhases`: Cleaners running in parallel with phases
@@ -655,10 +579,10 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 - **Direction**: Alternating - odd rows sweep L→R, even rows sweep R→L
 - **Selectivity**: Only destroys Red characters, leaves Blue/Green untouched
 - **Animation**: Configurable block character with fade trail effect
-- **Collision Detection** (Phase 7: Simplified trail-based approach):
+- **Collision Detection** (Trail-based approach):
   - Checks all trail positions continuously (not just head block)
-  - Uses integer truncation `int(x)` instead of rounding `int(x + 0.5)`
-  - Single `checkTrailCollisions()` method replaces dual detection logic
+  - Uses integer truncation `int(x)` for predictable behavior
+  - Single `checkTrailCollisions()` method for collision detection
   - Prevents character skipping at fractional positions
   - Characters may disappear slightly earlier (one clock tick) - acceptable tradeoff
 - **Visual Effects**:
@@ -676,7 +600,7 @@ INSERT / SEARCH ─[ESC]→ NORMAL
   - Pre-calculated color gradients avoid per-frame calculations
   - Batch terminal updates for trail rendering
   - Minimal allocations in render loop (gradient array vs dynamic color creation)
-  - Phase 7: Reduced collision detection overhead (single method vs dual check)
+  - Reduced collision detection overhead (single method)
 
 ## Data Files
 

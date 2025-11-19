@@ -20,7 +20,7 @@ const (
 
 // GameContext holds all game state including the ECS world
 type GameContext struct {
-	// Central game state (Phase 1: spawn/content state management)
+	// Central game state (spawn/content/phase state management)
 	State *GameState
 
 	// ECS World

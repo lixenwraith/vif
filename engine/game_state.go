@@ -7,14 +7,13 @@ import (
 )
 
 // GameState centralizes game state with clear ownership boundaries
-// Phase 1: Focus on spawn/content state management
 type GameState struct {
 	// ===== REAL-TIME STATE (lock-free atomics) =====
 	// Updated immediately on user input/spawn, read by all systems
 
 	// Scoring and Heat (typing feedback)
 	Score atomic.Int64 // Current score
-	Heat  atomic.Int64 // Current heat (was scoreIncrement)
+	Heat  atomic.Int64 // Current heat value
 
 	// Cursor position (game coordinates) - needed for spawn exclusion zone
 	CursorX atomic.Int32
@@ -66,27 +65,27 @@ type GameState struct {
 	MaxEntities    int // Maximum allowed entities (200)
 	ScreenDensity  float64 // Percentage of screen filled (0.0-1.0)
 
-	// Phase State (Phase 2: Infrastructure)
+	// Phase State (Infrastructure)
 	// Controls which game mechanic is active (Normal, Gold, Decay Wait, Decay Animation)
-	// Phase 3 will add transition logic between phases
+	// Will add transition logic between phases
 	CurrentPhase GamePhase // Current game phase
 	PhaseStartTime time.Time // When current phase started
 
-	// Gold Sequence State (Phase 3: Migrated from GoldSequenceSystem)
+	// Gold Sequence State (Migrated from GoldSequenceSystem)
 	GoldActive      bool      // Whether gold sequence is active
 	GoldSequenceID  int       // Current gold sequence ID
 	GoldStartTime   time.Time // When gold spawned
 	GoldTimeoutTime time.Time // When gold will timeout (10s from start)
 
-	// Decay Timer State (Phase 3: Migrated from DecaySystem)
+	// Decay Timer State (Migrated from DecaySystem)
 	DecayTimerActive bool      // Whether decay timer has been started
 	DecayNextTime    time.Time // When decay will trigger
 
-	// Decay Animation State (Phase 3: Migrated from DecaySystem)
+	// Decay Animation State (Migrated from DecaySystem)
 	DecayAnimating bool      // Whether decay animation is running
 	DecayStartTime time.Time // When decay animation started
 
-	// Cleaner State (Phase 6: Migrated from CleanerSystem)
+	// Cleaner State (Migrated from CleanerSystem)
 	// Cleaners run in parallel with other phases (not blocking)
 	CleanerPending   bool      // Whether cleaners should be triggered on next clock tick
 	CleanerActive    bool      // Whether cleaners are currently running
@@ -157,11 +156,11 @@ func NewGameState(gameWidth, gameHeight, screenWidth int, timeProvider TimeProvi
 	gs.EntityCount = 0
 	gs.ScreenDensity = 0.0
 
-	// Initialize phase state (Phase 2: Start in Normal phase)
+	// Initialize phase state (Start in Normal phase)
 	gs.CurrentPhase = PhaseNormal
 	gs.PhaseStartTime = now
 
-	// Initialize Gold sequence state (Phase 3)
+	// Initialize Gold sequence state
 	gs.GoldActive = false
 	gs.GoldSequenceID = 0
 	gs.GoldStartTime = time.Time{}
@@ -513,7 +512,7 @@ func (gs *GameState) GetPhase() GamePhase {
 }
 
 // SetPhase updates the current game phase and resets the phase start time
-// Phase 3: Will add validation and phase transition logic
+// Will add validation and phase transition logic
 func (gs *GameState) SetPhase(phase GamePhase) {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()

@@ -8,7 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/constants"
 )
 
-// Phase 5 Integration Tests: Deterministic clock testing for complete game cycles
+// Integration Tests: Deterministic clock testing for complete game cycles
 // These tests use MockTimeProvider to precisely control time advancement and verify
 // that all phase transitions happen deterministically without race conditions.
 

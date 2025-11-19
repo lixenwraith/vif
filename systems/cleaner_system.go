@@ -110,7 +110,7 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 		// No spawn request, continue
 	}
 
-	// Phase 6: Cleaner updates handled by concurrent updateLoop() goroutine only
+	//Cleaner updates handled by concurrent updateLoop() goroutine only
 	// Removed synchronous updateCleaners() call to prevent race condition
 
 	// Clean up expired flash effects
@@ -252,7 +252,7 @@ func (cs *CleanerSystem) updateCleaners() {
 	}
 
 	deltaTime := float64(nowNano-lastUpdateNano) / float64(time.Second)
-	// Phase 7: updateCleanerPositions now handles all collision detection via trail
+	//updateCleanerPositions now handles all collision detection via trail
 	cs.updateCleanerPositions(world, deltaTime)
 
 	// Update last update time
@@ -475,13 +475,13 @@ func (cs *CleanerSystem) updateCleanerPositions(world *engine.World, deltaTime f
 		}
 		cs.stateMu.Unlock()
 
-		// Phase 7: Check all trail positions for collisions (not just head)
+		//Check all trail positions for collisions (not just head)
 		cs.checkTrailCollisions(world, cleaner.Row, cleaner.TrailPositions)
 	}
 }
 
 // checkTrailCollisions checks all trail positions for Red character collisions
-// Phase 7: Simplified collision detection that checks the entire trail continuously
+// Simplified collision detection that checks the entire trail continuously
 // Uses integer truncation (no rounding) to avoid skipping characters
 func (cs *CleanerSystem) checkTrailCollisions(world *engine.World, row int, trailPositions []float64) {
 	// Defensive: Check for nil world
@@ -504,7 +504,7 @@ func (cs *CleanerSystem) checkTrailCollisions(world *engine.World, row int, trai
 
 	// Check every position in the trail
 	for _, floatPos := range trailPositions {
-		// Phase 7: Use truncation instead of rounding - simpler and more predictable
+		//Use truncation instead of rounding - simpler and more predictable
 		// This means a character slightly ahead of head block may disappear slightly
 		// earlier (one clock tick), which is acceptable per requirements
 		x := int(floatPos)
@@ -599,7 +599,7 @@ func (cs *CleanerSystem) checkAndDestroyAtPosition(world *engine.World, x, y int
 	world.SafeDestroyEntity(targetEntity)
 }
 
-// Phase 7: Removed detectAndDestroyRedCharacters() - replaced by checkTrailCollisions()
+// Removed detectAndDestroyRedCharacters() - replaced by checkTrailCollisions()
 // Old method only checked head position with rounding, new method checks entire trail with truncation
 
 // cleanupCleaners removes all cleaner entities from the world
@@ -735,13 +735,13 @@ func (cs *CleanerSystem) GetSystemState() string {
 	return "Cleaner[inactive]"
 }
 
-// ActivateCleaners initiates the cleaner animation (Phase 6: called by ClockScheduler)
+// ActivateCleaners initiates the cleaner animation (called by ClockScheduler)
 // This is an alias for TriggerCleaners to match the CleanerSystemInterface
 func (cs *CleanerSystem) ActivateCleaners(world *engine.World) {
 	cs.TriggerCleaners(world)
 }
 
-// IsAnimationComplete checks if the cleaner animation has finished (Phase 6: for ClockScheduler)
+// IsAnimationComplete checks if the cleaner animation has finished (for ClockScheduler)
 // Returns true if animation duration has elapsed or cleaners are not active
 func (cs *CleanerSystem) IsAnimationComplete() bool {
 	if !cs.isActive.Load() {

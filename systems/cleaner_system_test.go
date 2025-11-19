@@ -57,7 +57,7 @@ func TestCleanersTriggerConditions(t *testing.T) {
 			// Create some Red characters to clean
 			createRedCharacterAt(world, 10, 5)
 
-			// Phase 6: Test cleaner triggering via GameState
+			// Test cleaner triggering via GameState
 			// Simulate gold completion at max heat
 			if tt.currentHeat >= tt.maxHeat {
 				ctx.State.RequestCleaners()
@@ -205,7 +205,7 @@ func TestCleanersRemoveOnlyRedCharacters(t *testing.T) {
 		cleaner.TrailPositions = []float64{float64(x)}
 		world.AddComponent(cleanerEntity, cleaner)
 
-		// Phase 7: Check collisions via trail
+		// Check collisions via trail
 		cleanerSystem.checkTrailCollisions(world, cleaner.Row, cleaner.TrailPositions)
 	}
 
@@ -600,8 +600,8 @@ func TestCleanersPoolReuse(t *testing.T) {
 	}
 }
 
-// Phase 6: Removed TestCleanersConcurrentAccess - obsolete test from pre-Phase 6
-// Concurrent access is now validated by Phase 5/6 ClockScheduler tests
+// Removed TestCleanersConcurrentAccess - obsolete test
+// Concurrent access is now validated by ClockScheduler tests
 // Old test pattern (direct TriggerCleaners + synchronous Update) caused race conditions
 
 // TestCleanersRemovalFlashEffect verifies flash effects are created when red characters are removed
@@ -641,7 +641,7 @@ func TestCleanersRemovalFlashEffect(t *testing.T) {
 		t.Fatal("Red character should exist before cleaner contact")
 	}
 
-	// Phase 7: Check collisions via trail (should create flash)
+	// Check collisions via trail (should create flash)
 	cleanerSystem.checkTrailCollisions(world, cleaner.Row, cleaner.TrailPositions)
 
 	// Verify red character was destroyed
@@ -714,7 +714,7 @@ func TestCleanersFlashCleanup(t *testing.T) {
 	cleaner.TrailPositions = []float64{40.0}
 	world.AddComponent(cleanerEntity, cleaner)
 
-	// Phase 7: Check collisions via trail (creates flash)
+	// Check collisions via trail (creates flash)
 	cleanerSystem.checkTrailCollisions(world, cleaner.Row, cleaner.TrailPositions)
 
 	// Verify flash was created
@@ -782,7 +782,7 @@ func TestCleanersNoFlashForBlueGreen(t *testing.T) {
 		cleaner.TrailPositions = []float64{float64(x)}
 		world.AddComponent(cleanerEntity, cleaner)
 
-		// Phase 7: Check collisions via trail
+		// Check collisions via trail
 		cleanerSystem.checkTrailCollisions(world, cleaner.Row, cleaner.TrailPositions)
 	}
 
@@ -850,7 +850,7 @@ func TestCleanersMultipleFlashEffects(t *testing.T) {
 		cleaner.TrailPositions = []float64{float64(x)}
 		world.AddComponent(cleanerEntity, cleaner)
 
-		// Phase 7: Check collisions via trail
+		// Check collisions via trail
 		cleanerSystem.checkTrailCollisions(world, cleaner.Row, cleaner.TrailPositions)
 	}
 
@@ -886,7 +886,7 @@ func createCleanerTestContext() *engine.GameContext {
 	return &engine.GameContext{
 		World:        world,
 		TimeProvider: timeProvider,
-		State:        engine.NewGameState(80, 24, 100, timeProvider), // Phase 6: Initialize State
+		State:        engine.NewGameState(80, 24, 100, timeProvider), // Initialize State
 		GameWidth:    80,
 		GameHeight:   24,
 	}

@@ -64,7 +64,7 @@ func BenchmarkCleanerDetectAndDestroy(b *testing.B) {
 
 	b.ResetTimer()
 
-	// Phase 7: Benchmark using new trail-based collision detection
+	// Benchmark using trail-based collision detection
 	cleanerType := reflect.TypeOf(components.CleanerComponent{})
 	for i := 0; i < b.N; i++ {
 		cleaners := world.GetEntitiesWith(cleanerType)
@@ -150,7 +150,7 @@ func BenchmarkFlashEffectCreation(b *testing.B) {
 
 	b.ResetTimer()
 
-	// Phase 7: Benchmark using new trail-based collision detection
+	// Benchmark using trail-based collision detection
 	cleanerType := reflect.TypeOf(components.CleanerComponent{})
 	for i := 0; i < b.N; i++ {
 		cleaners := world.GetEntitiesWith(cleanerType)
@@ -271,7 +271,7 @@ func BenchmarkConcurrentCleanerOperations(b *testing.B) {
 			_ = cleanerSystem.IsActive()
 			_ = cleanerSystem.scanRedCharacterRows(world)
 
-			// Phase 7: Use new trail-based collision detection
+			// Use trail-based collision detection
 			cleaners := world.GetEntitiesWith(cleanerType)
 			for _, entity := range cleaners {
 				cleanerComp, ok := world.GetComponent(entity, cleanerType)
@@ -400,7 +400,7 @@ func BenchmarkGoldTriggerCleaners(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		// Phase 6: Trigger cleaners via GameState
+		// Trigger cleaners via GameState
 		ctx.State.RequestCleaners()
 		ctx.State.ActivateCleaners()
 		cleanerSystem.ActivateCleaners(world)
@@ -444,7 +444,7 @@ func BenchmarkCompleteGoldCleanerPipeline(b *testing.B) {
 		// Spawn gold
 		goldSystem.spawnGoldSequence(world)
 
-		// Phase 6: Complete gold (triggers cleaners via GameState)
+		// Complete gold (triggers cleaners via GameState)
 		ctx.State.RequestCleaners()
 		ctx.State.ActivateCleaners()
 		cleanerSystem.ActivateCleaners(world)
@@ -452,7 +452,7 @@ func BenchmarkCompleteGoldCleanerPipeline(b *testing.B) {
 		// Process cleaners
 		cleanerSystem.Update(world, 16*time.Millisecond)
 
-		// Phase 7: Check collisions via trail
+		// Check collisions via trail
 		cleanerType := reflect.TypeOf(components.CleanerComponent{})
 		cleaners := world.GetEntitiesWith(cleanerType)
 		for _, entity := range cleaners {

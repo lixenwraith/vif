@@ -15,14 +15,14 @@ import (
 )
 
 // GoldSequenceSystem manages the gold sequence mechanic
-// Phase 3: Migrated to use GameState for gold state management
+// Migrated to use GameState for gold state management
 type GoldSequenceSystem struct {
 	mu                  sync.RWMutex       // Protects fields below
 	ctx                 *engine.GameContext
 	decaySystem         *DecaySystem
 	wasDecayAnimating   bool
-	// Phase 3: Removed active, sequenceID, startTime - now in GameState
-	// Phase 6: Removed cleanerTriggerFunc - now managed by GameState/ClockScheduler
+	// Removed active, sequenceID, startTime - now in GameState
+	// Removed cleanerTriggerFunc - now managed by GameState/ClockScheduler
 	characters       string
 	gameWidth        int
 	gameHeight       int
@@ -38,7 +38,7 @@ func NewGoldSequenceSystem(ctx *engine.GameContext, decaySystem *DecaySystem, ga
 		ctx:               ctx,
 		decaySystem:       decaySystem,
 		wasDecayAnimating: false,
-		// Phase 3: active, sequenceID, startTime now in GameState
+		// active, sequenceID, startTime now in GameState
 		characters:        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
 		gameWidth:         gameWidth,
 		gameHeight:        gameHeight,
@@ -54,7 +54,7 @@ func (s *GoldSequenceSystem) Priority() int {
 }
 
 // Update runs the gold sequence system logic
-// Phase 3: Gold timeout is now handled by ClockScheduler
+// Gold timeout is now handled by ClockScheduler
 func (s *GoldSequenceSystem) Update(world *engine.World, dt time.Duration) {
 	now := s.ctx.TimeProvider.Now()
 	isDecayAnimating := s.ctx.State.GetDecayAnimating()
@@ -73,7 +73,7 @@ func (s *GoldSequenceSystem) Update(world *engine.World, dt time.Duration) {
 	initialSpawnTime := s.initialSpawnTime
 	s.mu.Unlock()
 
-	// Phase 3: Read active state from GameState
+	// Read active state from GameState
 	active := s.ctx.State.GetGoldActive()
 
 	// Spawn gold sequence at game start with delay (150ms)
@@ -83,7 +83,7 @@ func (s *GoldSequenceSystem) Update(world *engine.World, dt time.Duration) {
 		success := s.spawnGoldSequence(world)
 		// EDGE CASE: If first Gold spawn fails, start decay timer anyway
 		if !success {
-			// Phase 3: Start decay timer on GameState (reads heat atomically)
+			// Start decay timer on GameState (reads heat atomically)
 			s.ctx.State.StartDecayTimer(
 				s.ctx.State.ScreenWidth,
 				constants.HeatBarIndicatorWidth,
@@ -99,7 +99,7 @@ func (s *GoldSequenceSystem) Update(world *engine.World, dt time.Duration) {
 		success := s.spawnGoldSequence(world)
 		// EDGE CASE: If Gold spawn fails after decay, start decay timer anyway
 		if !success {
-			// Phase 3: Start decay timer on GameState (reads heat atomically)
+			// Start decay timer on GameState (reads heat atomically)
 			s.ctx.State.StartDecayTimer(
 				s.ctx.State.ScreenWidth,
 				constants.HeatBarIndicatorWidth,
@@ -109,14 +109,14 @@ func (s *GoldSequenceSystem) Update(world *engine.World, dt time.Duration) {
 		}
 	}
 
-	// Phase 3: Gold timeout is now handled by ClockScheduler
+	// Gold timeout is now handled by ClockScheduler
 	// No need to check timeout here
 }
 
 // spawnGoldSequence creates a new gold sequence at a random position on the screen
 // Returns true if spawn succeeded, false if spawn failed (e.g., no valid position)
 func (s *GoldSequenceSystem) spawnGoldSequence(world *engine.World) bool {
-	// Phase 3: Check active state from GameState
+	// Check active state from GameState
 	if s.ctx.State.GetGoldActive() {
 		// Already have an active gold sequence
 		return false
@@ -138,7 +138,7 @@ func (s *GoldSequenceSystem) spawnGoldSequence(world *engine.World) bool {
 		return false
 	}
 
-	// Phase 3: Get next sequence ID from GameState
+	// Get next sequence ID from GameState
 	sequenceID := s.ctx.State.IncrementGoldSequenceID()
 
 	// Get style for gold sequence
@@ -172,15 +172,15 @@ func (s *GoldSequenceSystem) spawnGoldSequence(world *engine.World) bool {
 		world.UpdateSpatialIndex(entity, x+i, y)
 	}
 
-	// Phase 3: Activate gold sequence in GameState (sets phase to PhaseGoldActive)
+	// Activate gold sequence in GameState (sets phase to PhaseGoldActive)
 	s.ctx.State.ActivateGoldSequence(sequenceID, constants.GoldSequenceDuration)
 	return true
 }
 
 // removeGoldSequence removes all gold sequence entities from the world
-// Phase 3: Now uses GameState for state management
+// Now uses GameState for state management
 func (s *GoldSequenceSystem) removeGoldSequence(world *engine.World, sequenceID int) {
-	// Phase 3: Check active state from GameState
+	// Check active state from GameState
 	if !s.ctx.State.GetGoldActive() {
 		return
 	}
@@ -209,10 +209,10 @@ func (s *GoldSequenceSystem) removeGoldSequence(world *engine.World, sequenceID 
 		}
 	}
 
-	// Phase 3: Deactivate gold sequence in GameState
+	// Deactivate gold sequence in GameState
 	s.ctx.State.DeactivateGoldSequence()
 
-	// Phase 3: Start decay timer on GameState (reads heat atomically, no cached value)
+	// Start decay timer on GameState (reads heat atomically, no cached value)
 	s.ctx.State.StartDecayTimer(
 		s.ctx.State.ScreenWidth,
 		constants.HeatBarIndicatorWidth,
@@ -222,7 +222,7 @@ func (s *GoldSequenceSystem) removeGoldSequence(world *engine.World, sequenceID 
 }
 
 // TimeoutGoldSequence is called by ClockScheduler when gold sequence times out
-// Phase 3: Required by GoldSequenceSystemInterface
+// Required by GoldSequenceSystemInterface
 func (s *GoldSequenceSystem) TimeoutGoldSequence(world *engine.World) {
 	// Get current gold sequence ID from GameState
 	sequenceID := s.ctx.State.GetGoldSequenceID()
@@ -231,22 +231,22 @@ func (s *GoldSequenceSystem) TimeoutGoldSequence(world *engine.World) {
 }
 
 // IsActive returns whether a gold sequence is currently active
-// Phase 3: Reads from GameState
+// Reads from GameState
 func (s *GoldSequenceSystem) IsActive() bool {
 	return s.ctx.State.GetGoldActive()
 }
 
 // GetSequenceID returns the current gold sequence ID
-// Phase 3: Reads from GameState
+// Reads from GameState
 func (s *GoldSequenceSystem) GetSequenceID() int {
 	return s.ctx.State.GetGoldSequenceID()
 }
 
 // GetExpectedCharacter returns the expected character at the given index for the active gold sequence
 // Returns 0 and false if no active gold sequence or index is invalid
-// Phase 3: Uses GameState for active check
+// Uses GameState for active check
 func (s *GoldSequenceSystem) GetExpectedCharacter(sequenceID int, index int) (rune, bool) {
-	// Phase 3: Read from GameState
+	// Read from GameState
 	active := s.ctx.State.GetGoldActive()
 	currentSeqID := s.ctx.State.GetGoldSequenceID()
 
@@ -282,9 +282,9 @@ func (s *GoldSequenceSystem) GetExpectedCharacter(sequenceID int, index int) (ru
 
 // CompleteGoldSequence is called when the gold sequence is successfully completed
 // Gold removal triggers decay timer restart in removeGoldSequence()
-// Phase 3: Uses GameState
+// Uses GameState
 func (s *GoldSequenceSystem) CompleteGoldSequence(world *engine.World) bool {
-	// Phase 3: Read from GameState
+	// Read from GameState
 	if !s.ctx.State.GetGoldActive() {
 		return false
 	}
@@ -299,7 +299,7 @@ func (s *GoldSequenceSystem) CompleteGoldSequence(world *engine.World) bool {
 }
 
 // findValidPosition finds a valid random position for the gold sequence
-// Phase 3: Requires s.mu lock for reading dimensions
+// Requires s.mu lock for reading dimensions
 func (s *GoldSequenceSystem) findValidPosition(world *engine.World, seqLength int) (int, int) {
 	// Read dimensions and cursor position (caller holds lock)
 	gameWidth := s.gameWidth
@@ -349,13 +349,13 @@ func (s *GoldSequenceSystem) UpdateDimensions(gameWidth, gameHeight, cursorX, cu
 	s.cursorY = cursorY
 }
 
-// Phase 6: Removed SetCleanerTrigger and TriggerCleanersIfHeatFull
+// Removed SetCleanerTrigger and TriggerCleanersIfHeatFull
 // Cleaner triggering is now managed by GameState.RequestCleaners() and ClockScheduler
 
 // GetSystemState returns the current state of the gold sequence system for debugging
-// Phase 3: Uses GameState
+// Uses GameState
 func (s *GoldSequenceSystem) GetSystemState() string {
-	// Phase 3: Read from GameState
+	// Read from GameState
 	snapshot := s.ctx.State.ReadGoldState()
 
 	if snapshot.Active {

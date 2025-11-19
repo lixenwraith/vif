@@ -8,7 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/constants"
 )
 
-// Phase 7 Integration Tests: Gold/Decay/Cleaner Flow
+// Integration Tests: Gold/Decay/Cleaner Flow
 // These tests verify the complete game cycle including cleaner mechanics
 
 // TestGoldToCleanerFlow tests the complete flow from gold completion to cleaner activation
@@ -375,7 +375,7 @@ func TestGoldDecayCleanerCompleteCycle(t *testing.T) {
 
 // TestCleanerTrailCollisionLogic tests the new trail-based collision detection
 func TestCleanerTrailCollisionLogic(t *testing.T) {
-	// This test verifies the Phase 7 changes:
+	// This test verifies the trail-based collision changes:
 	// 1. Trail positions are checked continuously
 	// 2. Integer truncation is used (not rounding)
 	// 3. No characters are skipped
@@ -388,7 +388,7 @@ func TestCleanerTrailCollisionLogic(t *testing.T) {
 
 	uniquePositions := make(map[int]bool)
 	for _, pos := range trail {
-		x := int(pos) // Phase 7: truncation instead of rounding
+		x := int(pos) // Truncation instead of rounding
 		uniquePositions[x] = true
 	}
 
@@ -458,11 +458,11 @@ func TestNoSkippedCharacters(t *testing.T) {
 	}
 
 	// Simulate cleaner trail covering these positions with fractional values
-	// Phase 6 (rounding): int(9.6+0.5)=10, int(10.4+0.5)=10 (skips 11!)
-	// Phase 7 (truncation): int(9.6)=9, int(10.4)=10, int(11.3)=11, int(12.1)=12
+	// Old (rounding): int(9.6+0.5)=10, int(10.4+0.5)=10 (skips 11!)
+	// New (truncation): int(9.6)=9, int(10.4)=10, int(11.3)=11, int(12.1)=12
 	trail := []float64{9.6, 10.4, 11.3, 12.1}
 
-	// Using Phase 7 logic
+	// Using truncation logic
 	checkedPositions := make(map[int]bool)
 	for _, pos := range trail {
 		x := int(pos) // Truncation
@@ -472,7 +472,7 @@ func TestNoSkippedCharacters(t *testing.T) {
 	// Verify all Red positions would be checked
 	for _, redX := range redPositions {
 		if !checkedPositions[redX] {
-			t.Errorf("Position %d should be checked but wasn't (Phase 7 truncation)", redX)
+			t.Errorf("Position %d should be checked but wasn't (truncation)", redX)
 		}
 	}
 

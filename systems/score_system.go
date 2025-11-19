@@ -290,7 +290,7 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 
 		currentHeat := s.ctx.GetScoreIncrement()
 
-		// Phase 6: Request cleaners if heat is already at max
+		// Request cleaners if heat is already at max
 		// Clock scheduler will trigger cleaners on next tick (within 50ms)
 		if currentHeat >= heatBarWidth {
 			s.ctx.State.RequestCleaners()

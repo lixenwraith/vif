@@ -102,13 +102,13 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 }
 
 // drawHeatMeter draws the heat meter at the top
-func (r *TerminalRenderer) drawHeatMeter(scoreIncrement int, defaultStyle tcell.Style) {
+func (r *TerminalRenderer) drawHeatMeter(heat int, defaultStyle tcell.Style) {
 	heatBarWidth := r.width - constants.HeatBarIndicatorWidth
 	if heatBarWidth < 1 {
 		heatBarWidth = 1
 	}
 
-	filledChars := scoreIncrement
+	filledChars := heat
 	if filledChars > heatBarWidth {
 		filledChars = heatBarWidth
 	}
@@ -127,7 +127,7 @@ func (r *TerminalRenderer) drawHeatMeter(scoreIncrement int, defaultStyle tcell.
 	}
 
 	// Draw numeric indicator
-	heatValue := scoreIncrement
+	heatValue := heat
 	if heatValue > 9999 {
 		heatValue = 9999
 	}
