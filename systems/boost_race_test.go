@@ -61,9 +61,9 @@ func TestBoostRapidToggle(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < 1000; i++ {
 			// Simulate what the renderer does
-			boostEnabled := ctx.GetBoostEnabled()
+			boostEnabled := ctx.State.GetBoostEnabled()
 			if boostEnabled {
-				endTime := ctx.GetBoostEndTime()
+				endTime := ctx.State.GetBoostEndTime()
 				remaining := endTime.Sub(time.Now()).Seconds()
 				_ = remaining // Use the value
 			}
@@ -77,7 +77,7 @@ func TestBoostRapidToggle(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < 500; i++ {
 			// Check if boost should expire atomically
-			ctx.UpdateBoostTimerAtomic()
+			ctx.State.UpdateBoostTimerAtomic()
 			time.Sleep(1 * time.Millisecond) // Main loop tick
 		}
 	}()
@@ -123,10 +123,10 @@ func TestBoostConcurrentRead(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			for j := 0; j < 100; j++ {
-				enabled := ctx.GetBoostEnabled()
-				endTime := ctx.GetBoostEndTime()
-				scoreInc := ctx.GetHeat()
-				score := ctx.GetScore()
+				enabled := ctx.State.GetBoostEnabled()
+				endTime := ctx.State.GetBoostEndTime()
+				scoreInc := ctx.State.GetHeat()
+				score := ctx.State.GetScore()
 
 				// Use the values to avoid optimization
 				_ = enabled
@@ -153,8 +153,8 @@ func TestBoostExpirationRace(t *testing.T) {
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Set boost to expire soon
-	ctx.SetBoostEnabled(true)
-	ctx.SetBoostEndTime(time.Now().Add(10 * time.Millisecond))
+	ctx.State.SetBoostEnabled(true)
+	ctx.State.SetBoostEndTime(time.Now().Add(10 * time.Millisecond))
 
 	var wg sync.WaitGroup
 
@@ -189,7 +189,7 @@ func TestBoostExpirationRace(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 50; i++ {
-			ctx.UpdateBoostTimerAtomic()
+			ctx.State.UpdateBoostTimerAtomic()
 			time.Sleep(1 * time.Millisecond)
 		}
 	}()
@@ -199,9 +199,9 @@ func TestBoostExpirationRace(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 100; i++ {
-			enabled := ctx.GetBoostEnabled()
+			enabled := ctx.State.GetBoostEnabled()
 			if enabled {
-				endTime := ctx.GetBoostEndTime()
+				endTime := ctx.State.GetBoostEndTime()
 				_ = endTime.Sub(time.Now()).Seconds()
 			}
 			time.Sleep(500 * time.Microsecond)
@@ -224,8 +224,8 @@ func TestBoostWithScoreUpdates(t *testing.T) {
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Activate boost
-	ctx.SetBoostEnabled(true)
-	ctx.SetBoostEndTime(time.Now().Add(100 * time.Millisecond))
+	ctx.State.SetBoostEnabled(true)
+	ctx.State.SetBoostEndTime(time.Now().Add(100 * time.Millisecond))
 
 	var wg sync.WaitGroup
 
@@ -259,9 +259,9 @@ func TestBoostWithScoreUpdates(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 200; i++ {
-			score := ctx.GetScore()
-			scoreInc := ctx.GetHeat()
-			boostEnabled := ctx.GetBoostEnabled()
+			score := ctx.State.GetScore()
+			scoreInc := ctx.State.GetHeat()
+			boostEnabled := ctx.State.GetBoostEnabled()
 
 			// Use values
 			_ = score
@@ -277,7 +277,7 @@ func TestBoostWithScoreUpdates(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 150; i++ {
-			ctx.UpdateBoostTimerAtomic()
+			ctx.State.UpdateBoostTimerAtomic()
 			time.Sleep(1 * time.Millisecond)
 		}
 	}()
@@ -311,7 +311,7 @@ func TestSimulateFullGameLoop(t *testing.T) {
 			select {
 			case <-ticker.C:
 				// Check boost expiration (atomic CAS pattern as in main.go)
-				ctx.UpdateBoostTimerAtomic()
+				ctx.State.UpdateBoostTimerAtomic()
 
 				// Update ping timer atomically (CAS pattern as in main.go)
 				if ctx.UpdatePingGridTimerAtomic(0.016) {
@@ -320,11 +320,11 @@ func TestSimulateFullGameLoop(t *testing.T) {
 				}
 
 				// Simulate rendering
-				_ = ctx.GetScore()
-				_ = ctx.GetHeat()
-				_ = ctx.GetBoostEnabled()
-				if ctx.GetBoostEnabled() {
-					_ = ctx.GetBoostEndTime().Sub(time.Now()).Seconds()
+				_ = ctx.State.GetScore()
+				_ = ctx.State.GetHeat()
+				_ = ctx.State.GetBoostEnabled()
+				if ctx.State.GetBoostEnabled() {
+					_ = ctx.State.GetBoostEndTime().Sub(time.Now()).Seconds()
 				}
 
 			case <-stopCh:
@@ -389,18 +389,19 @@ func TestAllAtomicStateAccess(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 100; i++ {
-			ctx.SetScore(i)
-			ctx.SetHeat(i % 50)
-			ctx.SetBoostEnabled(i%2 == 0)
-			ctx.SetBoostEndTime(time.Now().Add(time.Duration(i) * time.Millisecond))
-			ctx.SetCursorError(i%3 == 0)
-			ctx.SetCursorErrorTime(time.Now())
-			ctx.SetScoreBlinkActive(i%4 == 0)
-			// Use SetScoreBlinkTypeLevel instead of deprecated SetScoreBlinkColor
+			ctx.State.SetScore(i)
+			ctx.State.SetHeat(i % 50)
+			ctx.State.SetBoostEnabled(i%2 == 0)
+			ctx.State.SetBoostEndTime(time.Now().Add(time.Duration(i) * time.Millisecond))
+			ctx.State.SetCursorError(i%3 == 0)
+			ctx.State.SetCursorErrorTime(time.Now())
+			ctx.State.SetScoreBlinkActive(i%4 == 0)
+			// Set score blink type and level
 			seqType := components.SequenceType(i % 4) // 0=Blue, 1=Green, 2=Red, 3=Gold
 			level := components.SequenceLevel(i % 3)  // 0=Bright, 1=Normal, 2=Dark
-			ctx.SetScoreBlinkTypeLevel(seqType, level)
-			ctx.SetScoreBlinkTime(time.Now())
+			ctx.State.SetScoreBlinkType(uint32(seqType))
+			ctx.State.SetScoreBlinkLevel(uint32(level))
+			ctx.State.SetScoreBlinkTime(time.Now())
 			ctx.SetPingActive(i%5 == 0)
 			ctx.SetPingGridTimer(float64(i) / 10.0)
 			time.Sleep(100 * time.Microsecond)
@@ -412,15 +413,15 @@ func TestAllAtomicStateAccess(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 200; i++ {
-			_ = ctx.GetScore()
-			_ = ctx.GetHeat()
-			_ = ctx.GetBoostEnabled()
-			_ = ctx.GetBoostEndTime()
-			_ = ctx.GetCursorError()
-			_ = ctx.GetCursorErrorTime()
-			_ = ctx.GetScoreBlinkActive()
-			_ = ctx.GetScoreBlinkColor()
-			_ = ctx.GetScoreBlinkTime()
+			_ = ctx.State.GetScore()
+			_ = ctx.State.GetHeat()
+			_ = ctx.State.GetBoostEnabled()
+			_ = ctx.State.GetBoostEndTime()
+			_ = ctx.State.GetCursorError()
+			_ = ctx.State.GetCursorErrorTime()
+			_ = ctx.State.GetScoreBlinkActive()
+			_ = ctx.State.GetScoreBlinkType()
+			_ = ctx.State.GetScoreBlinkTime()
 			_ = ctx.GetPingActive()
 			_ = ctx.GetPingGridTimer()
 			time.Sleep(50 * time.Microsecond)
@@ -432,11 +433,11 @@ func TestAllAtomicStateAccess(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 150; i++ {
-			if ctx.GetScore() > 50 {
-				ctx.SetScore(0)
+			if ctx.State.GetScore() > 50 {
+				ctx.State.SetScore(0)
 			}
-			if ctx.GetBoostEnabled() {
-				_ = ctx.GetBoostEndTime()
+			if ctx.State.GetBoostEnabled() {
+				_ = ctx.State.GetBoostEndTime()
 			}
 			if ctx.GetPingActive() {
 				// Use atomic CAS for ping timer update
@@ -523,8 +524,8 @@ func TestBoostTimerAtomicCAS(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 50; i++ {
-			ctx.SetBoostEnabled(true)
-			ctx.SetBoostEndTime(ctx.TimeProvider.Now().Add(5 * time.Millisecond))
+			ctx.State.SetBoostEnabled(true)
+			ctx.State.SetBoostEndTime(ctx.TimeProvider.Now().Add(5 * time.Millisecond))
 			time.Sleep(2 * time.Millisecond)
 		}
 	}()
@@ -534,7 +535,7 @@ func TestBoostTimerAtomicCAS(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 200; i++ {
-			ctx.UpdateBoostTimerAtomic()
+			ctx.State.UpdateBoostTimerAtomic()
 			time.Sleep(500 * time.Microsecond)
 		}
 	}()
@@ -544,9 +545,9 @@ func TestBoostTimerAtomicCAS(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 300; i++ {
-			enabled := ctx.GetBoostEnabled()
+			enabled := ctx.State.GetBoostEnabled()
 			if enabled {
-				_ = ctx.GetBoostEndTime()
+				_ = ctx.State.GetBoostEndTime()
 			}
 			time.Sleep(300 * time.Microsecond)
 		}
@@ -619,8 +620,8 @@ func TestConcurrentBoostUpdates(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 100; i++ {
-			ctx.SetBoostEnabled(true)
-			ctx.SetBoostEndTime(ctx.TimeProvider.Now().Add(10 * time.Millisecond))
+			ctx.State.SetBoostEnabled(true)
+			ctx.State.SetBoostEndTime(ctx.TimeProvider.Now().Add(10 * time.Millisecond))
 			time.Sleep(5 * time.Millisecond)
 		}
 	}()
@@ -630,7 +631,7 @@ func TestConcurrentBoostUpdates(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 200; i++ {
-			ctx.UpdateBoostTimerAtomic()
+			ctx.State.UpdateBoostTimerAtomic()
 			time.Sleep(2 * time.Millisecond)
 		}
 	}()
@@ -640,8 +641,8 @@ func TestConcurrentBoostUpdates(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 50; i++ {
-			if ctx.GetBoostEnabled() {
-				ctx.SetBoostEnabled(false)
+			if ctx.State.GetBoostEnabled() {
+				ctx.State.SetBoostEnabled(false)
 			}
 			time.Sleep(8 * time.Millisecond)
 		}

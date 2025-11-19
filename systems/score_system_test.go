@@ -39,20 +39,20 @@ func TestBoostHeatMultiplier(t *testing.T) {
 	ctx.World.UpdateSpatialIndex(entity, pos.X, pos.Y)
 
 	// Test 1: Without boost, heat should increment by 1
-	ctx.SetBoostEnabled(false)
-	ctx.SetHeat(0)
-	initialScore := ctx.GetScore()
+	ctx.State.SetBoostEnabled(false)
+	ctx.State.SetHeat(0)
+	initialScore := ctx.State.GetScore()
 
 	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
 
-	if ctx.GetHeat() != 1 {
-		t.Errorf("Without boost, expected heat increment of 1, got %d", ctx.GetHeat())
+	if ctx.State.GetHeat() != 1 {
+		t.Errorf("Without boost, expected heat increment of 1, got %d", ctx.State.GetHeat())
 	}
 
 	// Score should be heat * level_multiplier = 1 * 2 = 2
 	expectedScore := initialScore + 2
-	if ctx.GetScore() != expectedScore {
-		t.Errorf("Without boost, expected score %d, got %d", expectedScore, ctx.GetScore())
+	if ctx.State.GetScore() != expectedScore {
+		t.Errorf("Without boost, expected score %d, got %d", expectedScore, ctx.State.GetScore())
 	}
 
 	// Test 2: With boost, heat should increment by 2
@@ -71,20 +71,20 @@ func TestBoostHeatMultiplier(t *testing.T) {
 	ctx.World.AddComponent(entity2, seq2)
 	ctx.World.UpdateSpatialIndex(entity2, pos2.X, pos2.Y)
 
-	ctx.SetBoostEnabled(true)
-	previousHeat := ctx.GetHeat()
-	previousScore := ctx.GetScore()
+	ctx.State.SetBoostEnabled(true)
+	previousHeat := ctx.State.GetHeat()
+	previousScore := ctx.State.GetScore()
 
 	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'b')
 
-	if ctx.GetHeat() != previousHeat+2 {
-		t.Errorf("With boost, expected heat increment of 2 (total %d), got %d", previousHeat+2, ctx.GetHeat())
+	if ctx.State.GetHeat() != previousHeat+2 {
+		t.Errorf("With boost, expected heat increment of 2 (total %d), got %d", previousHeat+2, ctx.State.GetHeat())
 	}
 
 	// Score should increase by (heat * level_multiplier) = (3 * 2) = 6, total = 2 + 6 = 8
-	expectedScore = previousScore + ctx.GetHeat()*2
-	if ctx.GetScore() != expectedScore {
-		t.Errorf("With boost, expected score %d, got %d", expectedScore, ctx.GetScore())
+	expectedScore = previousScore + ctx.State.GetHeat()*2
+	if ctx.State.GetScore() != expectedScore {
+		t.Errorf("With boost, expected score %d, got %d", expectedScore, ctx.State.GetScore())
 	}
 }
 
@@ -107,7 +107,7 @@ func TestBlueCharacterActivatesBoost(t *testing.T) {
 	}
 
 	// Set heat to max - 1 (just below threshold)
-	ctx.SetHeat(maxHeat - 1)
+	ctx.State.SetHeat(maxHeat - 1)
 
 	// Create a blue character at cursor position
 	entity := ctx.World.CreateEntity()
@@ -126,7 +126,7 @@ func TestBlueCharacterActivatesBoost(t *testing.T) {
 	ctx.World.UpdateSpatialIndex(entity, pos.X, pos.Y)
 
 	// Boost should not be active initially
-	if ctx.GetBoostEnabled() {
+	if ctx.State.GetBoostEnabled() {
 		t.Error("Boost should not be active initially")
 	}
 
@@ -134,12 +134,12 @@ func TestBlueCharacterActivatesBoost(t *testing.T) {
 	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
 
 	// Boost should now be active
-	if !ctx.GetBoostEnabled() {
+	if !ctx.State.GetBoostEnabled() {
 		t.Error("Boost should be active after typing blue character and reaching max heat")
 	}
 
 	// Boost end time should be in the future
-	if !ctx.GetBoostEndTime().After(ctx.TimeProvider.Now()) {
+	if !ctx.State.GetBoostEndTime().After(ctx.TimeProvider.Now()) {
 		t.Error("Boost end time should be in the future")
 	}
 }
@@ -163,7 +163,7 @@ func TestBoostExtension(t *testing.T) {
 	}
 
 	// Set heat to max - 1 and activate boost with first character
-	ctx.SetHeat(maxHeat - 1)
+	ctx.State.SetHeat(maxHeat - 1)
 
 	// Create first blue character
 	entity1 := ctx.World.CreateEntity()
@@ -183,10 +183,10 @@ func TestBoostExtension(t *testing.T) {
 
 	// Type first blue character (should activate boost)
 	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
-	firstEndTime := ctx.GetBoostEndTime()
+	firstEndTime := ctx.State.GetBoostEndTime()
 
 	// Verify boost is active
-	if !ctx.GetBoostEnabled() {
+	if !ctx.State.GetBoostEnabled() {
 		t.Fatal("Boost should be active after first character")
 	}
 
@@ -211,7 +211,7 @@ func TestBoostExtension(t *testing.T) {
 
 	// Type second blue character (should extend boost)
 	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'b')
-	secondEndTime := ctx.GetBoostEndTime()
+	secondEndTime := ctx.State.GetBoostEndTime()
 
 	// Second end time should be later than first (extended)
 	if !secondEndTime.After(firstEndTime) {
@@ -242,7 +242,7 @@ func TestRedCharacterResetsHeat(t *testing.T) {
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Set initial heat
-	ctx.SetHeat(10)
+	ctx.State.SetHeat(10)
 
 	// Create a red character at cursor position
 	entity := ctx.World.CreateEntity()
@@ -264,8 +264,8 @@ func TestRedCharacterResetsHeat(t *testing.T) {
 	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
 
 	// Heat should be reset to 0
-	if ctx.GetHeat() != 0 {
-		t.Errorf("Expected heat to be reset to 0, got %d", ctx.GetHeat())
+	if ctx.State.GetHeat() != 0 {
+		t.Errorf("Expected heat to be reset to 0, got %d", ctx.State.GetHeat())
 	}
 }
 
@@ -282,11 +282,11 @@ func TestBoostDoesNotAffectScore(t *testing.T) {
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Reset initial state
-	ctx.SetHeat(0)
-	ctx.SetScore(0)
+	ctx.State.SetHeat(0)
+	ctx.State.SetScore(0)
 
 	// Test with boost disabled
-	ctx.SetBoostEnabled(false)
+	ctx.State.SetBoostEnabled(false)
 
 	// Type 5 green characters without boost
 	for i := 0; i < 5; i++ {
@@ -310,8 +310,8 @@ func TestBoostDoesNotAffectScore(t *testing.T) {
 
 	// Heat should be 5 (1+1+1+1+1)
 	// Score should be sum of (heat * 2): 2 + 4 + 6 + 8 + 10 = 30
-	heatWithoutBoost := ctx.GetHeat()
-	scoreWithoutBoost := ctx.GetScore()
+	heatWithoutBoost := ctx.State.GetHeat()
+	scoreWithoutBoost := ctx.State.GetScore()
 
 	if heatWithoutBoost != 5 {
 		t.Errorf("Without boost, expected heat 5, got %d", heatWithoutBoost)
@@ -321,9 +321,9 @@ func TestBoostDoesNotAffectScore(t *testing.T) {
 	}
 
 	// Reset for boost test
-	ctx.SetHeat(0)
-	ctx.SetScore(0)
-	ctx.SetBoostEnabled(true)
+	ctx.State.SetHeat(0)
+	ctx.State.SetScore(0)
+	ctx.State.SetBoostEnabled(true)
 
 	// Type 5 green characters with boost
 	for i := 0; i < 5; i++ {
@@ -347,8 +347,8 @@ func TestBoostDoesNotAffectScore(t *testing.T) {
 
 	// Heat should be 10 (2+2+2+2+2)
 	// Score should be sum of (heat * 2): 4 + 8 + 12 + 16 + 20 = 60
-	heatWithBoost := ctx.GetHeat()
-	scoreWithBoost := ctx.GetScore()
+	heatWithBoost := ctx.State.GetHeat()
+	scoreWithBoost := ctx.State.GetScore()
 
 	if heatWithBoost != 10 {
 		t.Errorf("With boost, expected heat 10, got %d", heatWithBoost)
@@ -371,7 +371,7 @@ func TestIncorrectCharacterResetsHeat(t *testing.T) {
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Set initial heat
-	ctx.SetHeat(10)
+	ctx.State.SetHeat(10)
 
 	// Create a green character at cursor position
 	entity := ctx.World.CreateEntity()
@@ -393,12 +393,12 @@ func TestIncorrectCharacterResetsHeat(t *testing.T) {
 	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'b')
 
 	// Heat should be reset to 0
-	if ctx.GetHeat() != 0 {
-		t.Errorf("Expected heat to be reset to 0 after incorrect character, got %d", ctx.GetHeat())
+	if ctx.State.GetHeat() != 0 {
+		t.Errorf("Expected heat to be reset to 0 after incorrect character, got %d", ctx.State.GetHeat())
 	}
 
 	// Cursor error should be set
-	if !ctx.GetCursorError() {
+	if !ctx.State.GetCursorError() {
 		t.Error("Expected cursor error to be set after incorrect character")
 	}
 }
@@ -448,18 +448,18 @@ func TestScoreBlinkOnCorrectCharacter(t *testing.T) {
 			scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
 
 			// Score blink should be active
-			if !ctx.GetScoreBlinkActive() {
+			if !ctx.State.GetScoreBlinkActive() {
 				t.Error("Expected score blink to be active after correct character")
 			}
 
-			// Score blink color should match character color (non-zero)
-			blinkColor := ctx.GetScoreBlinkColor()
-			if blinkColor == 0 {
-				t.Error("Expected score blink color to be non-zero (character color)")
+			// Score blink type should match character color (non-error)
+			blinkType := ctx.State.GetScoreBlinkType()
+			if blinkType == 0 {
+				t.Error("Expected score blink type to be non-zero (character color, not error)")
 			}
 
 			// Score blink time should be recent
-			blinkTime := ctx.GetScoreBlinkTime()
+			blinkTime := ctx.State.GetScoreBlinkTime()
 			now := ctx.TimeProvider.Now()
 			if blinkTime.After(now) || now.Sub(blinkTime) > 100*time.Millisecond {
 				t.Errorf("Expected score blink time to be recent, got %v", blinkTime)
@@ -485,15 +485,14 @@ func TestScoreBlinkOnError(t *testing.T) {
 		scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
 
 		// Score blink should be active
-		if !ctx.GetScoreBlinkActive() {
+		if !ctx.State.GetScoreBlinkActive() {
 			t.Error("Expected score blink to be active after error")
 		}
 
-		// Score blink color should be black (RGB(0,0,0)) for error state
-		blinkColor := ctx.GetScoreBlinkColor()
-		expectedColor := tcell.NewRGBColor(0, 0, 0)
-		if blinkColor != expectedColor {
-			t.Errorf("Expected score blink color to be black RGB(0,0,0) for error state, got %v", blinkColor)
+		// Score blink type should be 0 (error state)
+		blinkType := ctx.State.GetScoreBlinkType()
+		if blinkType != 0 {
+			t.Errorf("Expected score blink type to be 0 (error state), got %d", blinkType)
 		}
 	})
 
@@ -519,15 +518,14 @@ func TestScoreBlinkOnError(t *testing.T) {
 		scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'b')
 
 		// Score blink should be active
-		if !ctx.GetScoreBlinkActive() {
+		if !ctx.State.GetScoreBlinkActive() {
 			t.Error("Expected score blink to be active after error")
 		}
 
-		// Score blink color should be black (RGB(0,0,0)) for error state
-		blinkColor := ctx.GetScoreBlinkColor()
-		expectedColor := tcell.NewRGBColor(0, 0, 0)
-		if blinkColor != expectedColor {
-			t.Errorf("Expected score blink color to be black RGB(0,0,0) for error state, got %v", blinkColor)
+		// Score blink type should be 0 (error state)
+		blinkType := ctx.State.GetScoreBlinkType()
+		if blinkType != 0 {
+			t.Errorf("Expected score blink type to be 0 (error state), got %d", blinkType)
 		}
 	})
 }
@@ -569,14 +567,14 @@ func TestScoreBlinkOnGoldCharacter(t *testing.T) {
 	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'x')
 
 	// Score blink should be active
-	if !ctx.GetScoreBlinkActive() {
+	if !ctx.State.GetScoreBlinkActive() {
 		t.Error("Expected score blink to be active after gold character")
 	}
 
-	// Score blink color should be non-zero (gold color)
-	blinkColor := ctx.GetScoreBlinkColor()
-	if blinkColor == 0 {
-		t.Error("Expected score blink color to be non-zero (gold color)")
+	// Score blink type should be non-zero (gold type = 4)
+	blinkType := ctx.State.GetScoreBlinkType()
+	if blinkType == 0 {
+		t.Error("Expected score blink type to be non-zero (gold color, not error)")
 	}
 }
 
@@ -612,7 +610,7 @@ func TestScoreBlinkTimeout(t *testing.T) {
 	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
 
 	// Score blink should be active
-	if !ctx.GetScoreBlinkActive() {
+	if !ctx.State.GetScoreBlinkActive() {
 		t.Fatal("Expected score blink to be active initially")
 	}
 
@@ -623,7 +621,7 @@ func TestScoreBlinkTimeout(t *testing.T) {
 	scoreSystem.Update(ctx.World, 100*time.Millisecond)
 
 	// Score blink should be inactive now
-	if ctx.GetScoreBlinkActive() {
+	if ctx.State.GetScoreBlinkActive() {
 		t.Error("Expected score blink to be inactive after timeout")
 	}
 }
