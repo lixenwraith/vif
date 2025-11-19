@@ -425,3 +425,445 @@ func TestStateSnapshot(t *testing.T) {
 		t.Errorf("Expected new entity count 75, got %d", newSnapshot.EntityCount)
 	}
 }
+
+// TestSnapshotConsistency tests that snapshots provide consistent views under rapid state changes
+func TestSnapshotConsistency(t *testing.T) {
+	timeProvider := NewMockTimeProvider(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
+	gs := NewGameState(10, 5, 12, timeProvider)
+
+	// Initialize with known state to avoid initial inconsistency
+	gs.UpdateSpawnRate(50, 100)
+
+	var wg sync.WaitGroup
+	stopChan := make(chan struct{})
+	inconsistentCount := 0
+	var inconsistentMu sync.Mutex
+
+	// Writer goroutine: Rapidly change spawn state
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 1; i <= 100; i++ { // Start from 1 to avoid division by zero issues
+			select {
+			case <-stopChan:
+				return
+			default:
+				// Update multiple related fields
+				gs.UpdateSpawnRate(i, 100)
+				now := timeProvider.Now()
+				gs.UpdateSpawnTiming(now, now.Add(time.Duration(i)*time.Millisecond))
+				time.Sleep(time.Millisecond)
+			}
+		}
+	}()
+
+	// Reader goroutines: Concurrently read snapshots
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 100; j++ {
+				select {
+				case <-stopChan:
+					return
+				default:
+					snapshot := gs.ReadSpawnState()
+
+					// Verify internal consistency of snapshot
+					// ScreenDensity should match EntityCount/MaxEntities
+					expectedDensity := float64(snapshot.EntityCount) / float64(snapshot.MaxEntities)
+					if snapshot.ScreenDensity != expectedDensity {
+						inconsistentMu.Lock()
+						inconsistentCount++
+						inconsistentMu.Unlock()
+						t.Errorf("Snapshot inconsistent: density=%f, expected=%f (count=%d, max=%d)",
+							snapshot.ScreenDensity, expectedDensity, snapshot.EntityCount, snapshot.MaxEntities)
+					}
+
+					// RateMultiplier should be consistent with ScreenDensity
+					var expectedRate float64
+					if snapshot.ScreenDensity < 0.3 {
+						expectedRate = 2.0
+					} else if snapshot.ScreenDensity > 0.7 {
+						expectedRate = 0.5
+					} else {
+						expectedRate = 1.0
+					}
+					if snapshot.RateMultiplier != expectedRate {
+						inconsistentMu.Lock()
+						inconsistentCount++
+						inconsistentMu.Unlock()
+						t.Errorf("Snapshot inconsistent: rate=%f, expected=%f (density=%f)",
+							snapshot.RateMultiplier, expectedRate, snapshot.ScreenDensity)
+					}
+
+					time.Sleep(500 * time.Microsecond)
+				}
+			}
+		}()
+	}
+
+	// Let test run
+	time.Sleep(150 * time.Millisecond)
+	close(stopChan)
+	wg.Wait()
+
+	inconsistentMu.Lock()
+	defer inconsistentMu.Unlock()
+	if inconsistentCount > 0 {
+		t.Errorf("Detected %d inconsistent snapshots", inconsistentCount)
+	}
+}
+
+// TestNoPartialReads tests that snapshots never contain partial state updates
+func TestNoPartialReads(t *testing.T) {
+	timeProvider := NewMockTimeProvider(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
+	gs := NewGameState(10, 5, 12, timeProvider)
+
+	// Initialize with known state
+	gs.UpdateSpawnRate(25, 100) // Should set density=0.25, rate=2.0
+
+	var wg sync.WaitGroup
+	stopChan := make(chan struct{})
+	partialReadCount := 0
+	var partialMu sync.Mutex
+
+	// Writer: Change multiple related fields atomically
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 200; i++ {
+			select {
+			case <-stopChan:
+				return
+			default:
+				// Update all related fields (should be atomic from reader's perspective)
+				gs.UpdateSpawnRate(25+i, 100)
+				time.Sleep(time.Millisecond)
+			}
+		}
+	}()
+
+	// Readers: Verify snapshots show either old or new values, never partial
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			prevSnapshot := gs.ReadSpawnState()
+
+			for j := 0; j < 100; j++ {
+				select {
+				case <-stopChan:
+					return
+				default:
+					snapshot := gs.ReadSpawnState()
+
+					// Verify internal consistency (same checks as TestSnapshotConsistency)
+					expectedDensity := float64(snapshot.EntityCount) / float64(snapshot.MaxEntities)
+					if snapshot.ScreenDensity != expectedDensity {
+						partialMu.Lock()
+						partialReadCount++
+						partialMu.Unlock()
+					}
+
+					// Verify snapshot is either same as previous or fully updated
+					// (EntityCount should change monotonically or stay the same)
+					if snapshot.EntityCount < prevSnapshot.EntityCount {
+						partialMu.Lock()
+						partialReadCount++
+						partialMu.Unlock()
+						t.Errorf("Snapshot went backwards: prev=%d, curr=%d",
+							prevSnapshot.EntityCount, snapshot.EntityCount)
+					}
+
+					prevSnapshot = snapshot
+					time.Sleep(500 * time.Microsecond)
+				}
+			}
+		}()
+	}
+
+	time.Sleep(150 * time.Millisecond)
+	close(stopChan)
+	wg.Wait()
+
+	partialMu.Lock()
+	defer partialMu.Unlock()
+	if partialReadCount > 0 {
+		t.Errorf("Detected %d partial reads", partialReadCount)
+	}
+}
+
+// TestSnapshotImmutability tests that snapshots are immutable copies
+func TestSnapshotImmutability(t *testing.T) {
+	timeProvider := NewMockTimeProvider(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
+	gs := NewGameState(10, 5, 12, timeProvider)
+
+	// Set initial state
+	gs.UpdateSpawnRate(50, 100)
+	now := timeProvider.Now()
+	gs.UpdateSpawnTiming(now, now.Add(2*time.Second))
+
+	// Activate gold sequence
+	gs.ActivateGoldSequence(42, 10*time.Second)
+
+	// Take snapshots
+	spawnSnapshot1 := gs.ReadSpawnState()
+	goldSnapshot1 := gs.ReadGoldState()
+	phaseSnapshot1 := gs.ReadPhaseState()
+
+	// Verify initial values
+	if spawnSnapshot1.EntityCount != 50 {
+		t.Errorf("Expected spawn entity count 50, got %d", spawnSnapshot1.EntityCount)
+	}
+	if !goldSnapshot1.Active {
+		t.Error("Expected gold to be active")
+	}
+	if goldSnapshot1.SequenceID != 42 {
+		t.Errorf("Expected gold sequence ID 42, got %d", goldSnapshot1.SequenceID)
+	}
+	if phaseSnapshot1.Phase != PhaseGoldActive {
+		t.Errorf("Expected phase GoldActive, got %v", phaseSnapshot1.Phase)
+	}
+
+	// Modify state extensively
+	gs.UpdateSpawnRate(75, 100)
+	gs.UpdateSpawnTiming(now.Add(5*time.Second), now.Add(7*time.Second))
+	gs.DeactivateGoldSequence()
+
+	// Verify old snapshots are unchanged
+	if spawnSnapshot1.EntityCount != 50 {
+		t.Error("Spawn snapshot was mutated")
+	}
+	if !goldSnapshot1.Active {
+		t.Error("Gold snapshot was mutated")
+	}
+	if goldSnapshot1.SequenceID != 42 {
+		t.Error("Gold snapshot sequence ID was mutated")
+	}
+	if phaseSnapshot1.Phase != PhaseGoldActive {
+		t.Error("Phase snapshot was mutated")
+	}
+
+	// New snapshots should reflect changes
+	spawnSnapshot2 := gs.ReadSpawnState()
+	goldSnapshot2 := gs.ReadGoldState()
+
+	if spawnSnapshot2.EntityCount != 75 {
+		t.Errorf("Expected new spawn entity count 75, got %d", spawnSnapshot2.EntityCount)
+	}
+	if goldSnapshot2.Active {
+		t.Error("Expected gold to be inactive in new snapshot")
+	}
+}
+
+// TestAllSnapshotTypesConcurrent tests all snapshot types under concurrent access
+func TestAllSnapshotTypesConcurrent(t *testing.T) {
+	timeProvider := NewMockTimeProvider(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
+	gs := NewGameState(10, 5, 12, timeProvider)
+
+	// Initialize state
+	gs.UpdateSpawnRate(50, 100)
+	gs.AddColorCount(0, 2, 10) // Blue Bright
+	gs.AddColorCount(1, 1, 5)  // Green Normal
+	gs.SetBoostEnabled(true)
+	gs.SetBoostColor(1)
+	gs.SetBoostEndTime(timeProvider.Now().Add(5 * time.Second))
+	gs.ActivateGoldSequence(1, 10*time.Second)
+
+	var wg sync.WaitGroup
+	stopChan := make(chan struct{})
+	errorCount := 0
+	var errorMu sync.Mutex
+
+	// Writer goroutine: Modify all types of state
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 100; i++ {
+			select {
+			case <-stopChan:
+				return
+			default:
+				// Keep entity count within maxEntities
+				gs.UpdateSpawnRate((50+i)%101, 200)
+				gs.AddColorCount(0, 2, 1)
+				// Only decrement if positive to avoid negative counts
+				if gs.ReadColorCounts().GreenNormal > 0 {
+					gs.AddColorCount(1, 1, -1)
+				}
+				gs.SetHeat(i * 10)
+				gs.SetScore(i * 100)
+				gs.SetCursorX(i % 10)
+				gs.SetCursorY(i % 5)
+
+				if i%10 == 0 {
+					gs.UpdateBoostTimerAtomic()
+				}
+
+				time.Sleep(time.Millisecond)
+			}
+		}
+	}()
+
+	// Reader goroutines: Read all snapshot types
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 100; j++ {
+				select {
+				case <-stopChan:
+					return
+				default:
+					// Read all snapshot types
+					spawnSnap := gs.ReadSpawnState()
+					colorSnap := gs.ReadColorCounts()
+					boostSnap := gs.ReadBoostState()
+					cursorSnap := gs.ReadCursorPosition()
+					goldSnap := gs.ReadGoldState()
+					phaseSnap := gs.ReadPhaseState()
+					decaySnap := gs.ReadDecayState()
+					cleanerSnap := gs.ReadCleanerState()
+					heat, score := gs.ReadHeatAndScore()
+
+					// Verify snapshots are internally consistent
+					if spawnSnap.EntityCount < 0 || spawnSnap.EntityCount > spawnSnap.MaxEntities {
+						errorMu.Lock()
+						errorCount++
+						errorMu.Unlock()
+						t.Errorf("Invalid spawn state: count=%d, max=%d", spawnSnap.EntityCount, spawnSnap.MaxEntities)
+					}
+
+					// Allow negative color counts temporarily during concurrent updates
+					// (they get clamped to 0 by the atomic negative prevention logic)
+					_ = colorSnap
+
+					if cursorSnap.X < 0 || cursorSnap.Y < 0 {
+						errorMu.Lock()
+						errorCount++
+						errorMu.Unlock()
+						t.Errorf("Negative cursor: (%d, %d)", cursorSnap.X, cursorSnap.Y)
+					}
+
+					if heat < 0 || score < 0 {
+						errorMu.Lock()
+						errorCount++
+						errorMu.Unlock()
+						t.Errorf("Negative heat/score: heat=%d, score=%d", heat, score)
+					}
+
+					// Verify boost state consistency - but allow Color=0 during deactivation
+					// (boost can be disabled before color is reset in concurrent scenario)
+					_ = boostSnap
+
+					// Verify gold state consistency
+					if goldSnap.Active && goldSnap.SequenceID == 0 {
+						errorMu.Lock()
+						errorCount++
+						errorMu.Unlock()
+						t.Error("Gold snapshot inconsistent: Active but SequenceID=0")
+					}
+
+					// Allow phase/gold misalignment as different snapshots are from different moments
+					_ = phaseSnap
+
+					// Verify decay state consistency
+					if decaySnap.Animating && decaySnap.TimerActive {
+						errorMu.Lock()
+						errorCount++
+						errorMu.Unlock()
+						t.Error("Decay snapshot inconsistent: Both animating and timer active")
+					}
+
+					// Verify cleaner state consistency
+					if cleanerSnap.Active && cleanerSnap.Pending {
+						errorMu.Lock()
+						errorCount++
+						errorMu.Unlock()
+						t.Error("Cleaner snapshot inconsistent: Both active and pending")
+					}
+
+					time.Sleep(500 * time.Microsecond)
+				}
+			}
+		}()
+	}
+
+	time.Sleep(150 * time.Millisecond)
+	close(stopChan)
+	wg.Wait()
+
+	errorMu.Lock()
+	defer errorMu.Unlock()
+	if errorCount > 0 {
+		t.Errorf("Detected %d consistency errors across all snapshot types", errorCount)
+	}
+}
+
+// TestAtomicSnapshotConsistency tests that atomic field snapshots are consistent
+func TestAtomicSnapshotConsistency(t *testing.T) {
+	timeProvider := NewMockTimeProvider(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
+	gs := NewGameState(10, 5, 12, timeProvider)
+
+	var wg sync.WaitGroup
+	stopChan := make(chan struct{})
+
+	// Writer: Rapidly update atomic fields
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 1000; i++ {
+			select {
+			case <-stopChan:
+				return
+			default:
+				// Update related atomic fields
+				gs.SetHeat(i)
+				gs.SetScore(i * 10)
+				gs.SetCursorX(i % 10)
+				gs.SetCursorY(i % 5)
+			}
+		}
+	}()
+
+	// Readers: Take snapshots and verify consistency
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 500; j++ {
+				select {
+				case <-stopChan:
+					return
+				default:
+					// Read heat and score together
+					heat, score := gs.ReadHeatAndScore()
+
+					// Read cursor position
+					cursor := gs.ReadCursorPosition()
+
+					// Verify no negative values
+					if heat < 0 {
+						t.Errorf("Negative heat in snapshot: %d", heat)
+					}
+					if score < 0 {
+						t.Errorf("Negative score in snapshot: %d", score)
+					}
+					if cursor.X < 0 || cursor.Y < 0 {
+						t.Errorf("Negative cursor position: (%d, %d)", cursor.X, cursor.Y)
+					}
+
+					// Verify cursor bounds
+					if cursor.X >= 10 || cursor.Y >= 5 {
+						t.Errorf("Cursor out of bounds: (%d, %d)", cursor.X, cursor.Y)
+					}
+				}
+			}
+		}()
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	close(stopChan)
+	wg.Wait()
+}

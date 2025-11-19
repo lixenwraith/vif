@@ -62,8 +62,187 @@ heat := gs.GetHeat()             // Atomic load
 snapshot := gs.ReadSpawnState()  // RLock, no blocking
 ```
 
+#### Snapshot Pattern
+
+The **snapshot pattern** is the primary mechanism for safely reading multi-field state across concurrent goroutines. All mutex-protected state is accessed through immutable snapshot structures that guarantee internally consistent views.
+
+**Core Principles:**
+1. **Immutability**: Snapshots are value copies, never references
+2. **Atomicity**: All fields in a snapshot come from the same moment in time
+3. **No Partial Reads**: Readers never see half-updated state
+4. **Lock-Free After Capture**: Once a snapshot is taken, no locks are held
+
+**Available Snapshot Types:**
+
+All systems use snapshots to read GameState. The following snapshot types are available:
+
+```go
+// Spawn State (mutex-protected)
+type SpawnStateSnapshot struct {
+    LastTime       time.Time
+    NextTime       time.Time
+    RateMultiplier float64
+    Enabled        bool
+    EntityCount    int
+    MaxEntities    int
+    ScreenDensity  float64
+}
+snapshot := gs.ReadSpawnState() // Used by: SpawnSystem, Renderer
+
+// Color Counter State (atomic fields)
+type ColorCountSnapshot struct {
+    BlueBright  int64
+    BlueNormal  int64
+    BlueDark    int64
+    GreenBright int64
+    GreenNormal int64
+    GreenDark   int64
+}
+snapshot := gs.ReadColorCounts() // Used by: SpawnSystem, DecaySystem, Renderer
+
+// Cursor Position (atomic fields)
+type CursorSnapshot struct {
+    X int
+    Y int
+}
+snapshot := gs.ReadCursorPosition() // Used by: SpawnSystem (exclusion zone), Renderer
+
+// Boost State (atomic fields)
+type BoostSnapshot struct {
+    Enabled   bool
+    EndTime   time.Time
+    Color     int32
+    Remaining time.Duration
+}
+snapshot := gs.ReadBoostState() // Used by: ScoreSystem, Renderer
+
+// Phase State (mutex-protected)
+type PhaseSnapshot struct {
+    Phase     GamePhase
+    StartTime time.Time
+    Duration  time.Duration
+}
+snapshot := gs.ReadPhaseState() // Used by: ClockScheduler, all game systems
+
+// Gold Sequence State (mutex-protected)
+type GoldSnapshot struct {
+    Active      bool
+    SequenceID  int
+    StartTime   time.Time
+    TimeoutTime time.Time
+    Elapsed     time.Duration
+    Remaining   time.Duration
+}
+snapshot := gs.ReadGoldState() // Used by: GoldSequenceSystem, ScoreSystem, Renderer
+
+// Decay State (mutex-protected)
+type DecaySnapshot struct {
+    TimerActive bool
+    NextTime    time.Time
+    Animating   bool
+    StartTime   time.Time
+    TimeUntil   float64
+}
+snapshot := gs.ReadDecayState() // Used by: DecaySystem, Renderer
+
+// Cleaner State (mutex-protected)
+type CleanerSnapshot struct {
+    Pending   bool
+    Active    bool
+    StartTime time.Time
+    Elapsed   time.Duration
+}
+snapshot := gs.ReadCleanerState() // Used by: CleanerSystem, Renderer
+
+// Atomic pairs for related fields
+heat, score := gs.ReadHeatAndScore() // Used by: ScoreSystem, Renderer
+```
+
+**Usage Examples:**
+
+**Correct: Snapshot Pattern**
+```go
+// ✅ GOOD: Read once, use multiple times
+snapshot := gs.ReadSpawnState()
+if snapshot.Enabled && snapshot.EntityCount < snapshot.MaxEntities {
+    density := snapshot.ScreenDensity
+    rate := snapshot.RateMultiplier
+    // All fields guaranteed consistent
+}
+```
+
+**Incorrect: Multiple Individual Reads**
+```go
+// ❌ BAD: Race condition - fields may change between reads
+if gs.ShouldSpawn() {                    // RLock #1
+    count := gs.ReadSpawnState().EntityCount  // RLock #2
+    density := gs.ReadSpawnState().ScreenDensity  // RLock #3
+    // EntityCount and ScreenDensity may be from different updates!
+}
+```
+
+**Correct: Atomic Snapshots**
+```go
+// ✅ GOOD: Atomic fields read together
+heat, score := gs.ReadHeatAndScore()
+if heat > 0 && score > 0 {
+    // heat and score are consistent
+}
+```
+
+**Incorrect: Separate Atomic Reads**
+```go
+// ❌ BAD: heat and score may be from different moments
+heat := gs.GetHeat()   // Atomic read #1
+score := gs.GetScore() // Atomic read #2
+// If another goroutine updates both, we might see heat=new, score=old
+```
+
+**System Usage Map:**
+
+| System | Snapshot Types Used | Purpose |
+|--------|-------------------|---------|
+| SpawnSystem | SpawnState, ColorCounts, CursorPosition | Check spawn conditions, cursor exclusion zone |
+| ScoreSystem | BoostState, GoldState, HeatAndScore | Process typing, update heat/score |
+| GoldSequenceSystem | GoldState, PhaseState | Manage gold sequence lifecycle |
+| DecaySystem | DecayState, PhaseState | Manage decay timer and animation |
+| CleanerSystem | CleanerState, PhaseState | Manage cleaner lifecycle |
+| Renderer | All snapshot types | Render game state without blocking game loop |
+| ClockScheduler | PhaseState, GoldState, DecayState | Manage phase transitions |
+
+**Concurrency Guarantees:**
+
+1. **Mutex-Protected Snapshots** (SpawnState, PhaseState, GoldState, DecayState, CleanerState):
+   - Use `RLock` to read state atomically
+   - All fields copied before returning
+   - Multiple concurrent readers allowed
+   - Writers block only during actual state modification
+
+2. **Atomic Field Snapshots** (ColorCounts, CursorPosition, BoostState, HeatAndScore):
+   - No locks required
+   - Multiple atomic loads in sequence
+   - Still provides consistent view (atomic loads are sequentially consistent)
+   - Trade-off: Very rare possibility of seeing mixed state between loads (acceptable for these use cases)
+
+3. **Immutability After Capture:**
+   - All snapshots are value types (structs)
+   - Modifying snapshot fields doesn't affect GameState
+   - Safe to pass snapshots across goroutine boundaries
+   - No memory aliasing issues
+
 #### Testing
 - `engine/game_state_test.go`: Unit tests for atomic operations, state snapshots, spawn timing
+  - `TestSnapshotConsistency`: Verifies snapshots remain consistent under rapid state changes (10 concurrent readers)
+  - `TestNoPartialReads`: Ensures snapshots never show partial state updates (5 concurrent readers)
+  - `TestSnapshotImmutability`: Confirms snapshots are immutable value copies
+  - `TestAllSnapshotTypesConcurrent`: Tests all snapshot types under concurrent access (5 concurrent readers)
+  - `TestAtomicSnapshotConsistency`: Verifies atomic field snapshots (10 concurrent readers, 1000 rapid updates)
+- `systems/race_condition_comprehensive_test.go`: Snapshot pattern integration tests
+  - `TestSnapshotConsistencyUnderRapidChanges`: Multi-writer (3) + multi-reader (10) snapshot consistency
+  - `TestSnapshotImmutabilityWithSystemUpdates`: Snapshot immutability during active system modifications
+  - `TestNoPartialSnapshotReads`: Verifies no partial reads during rapid updates (8 concurrent readers)
+  - `TestPhaseSnapshotConsistency`: Phase snapshot consistency during rapid transitions (5 concurrent readers)
+  - `TestMultiSnapshotAtomicity`: Multiple snapshot types taken in rapid succession (10 concurrent readers)
 - All tests pass with `-race` flag (no data races detected)
 
 ### Clock Scheduler
@@ -881,12 +1060,123 @@ Set environment variable for verbose race logging:
 VERBOSE_RACE_LOG=1 go test ./systems/... -race -v
 ```
 
-### Debug Helpers
+### Debug Helpers and Race Detection Tools
+
+The codebase includes specialized tools for testing thread-safety and detecting race conditions. These tools are essential for maintaining the correctness of the hybrid real-time/clock-based architecture.
+
 Located in `systems/test_helpers.go`:
-- **RaceDetectionLogger**: Logs concurrent events for race analysis
-- **ConcurrencyMonitor**: Tracks operation concurrency and detects anomalies
-- **AtomicStateValidator**: Validates atomic state consistency
-- **EntityLifecycleTracker**: Detects entity memory leaks
+
+**RaceDetectionLogger** - Event logging for concurrent execution analysis:
+```go
+logger := NewRaceDetectionLogger(enabled bool)
+logger.Log(goroutine, operation, details string)  // Records timestamped events
+events := logger.GetEvents()                      // Retrieves all logged events
+logger.DumpEvents(filename string)                // Exports to file for analysis
+```
+
+Features:
+- Atomic event counter (thread-safe ID generation)
+- Mutex-protected event storage
+- Optional verbose logging via `VERBOSE_RACE_LOG=1` environment variable
+- Timestamp precision for ordering concurrent operations
+- Useful for post-mortem analysis of race condition failures
+
+**ConcurrencyMonitor** - Operation tracking and anomaly detection:
+```go
+monitor := NewConcurrencyMonitor()
+monitor.StartOperation(operation string)  // Track operation start
+monitor.EndOperation(operation string)    // Track operation end
+stats := monitor.GetStats()               // Get concurrency statistics
+```
+
+Tracks:
+- Active operations per type (current concurrent count)
+- Maximum concurrent operations observed
+- Total operation count
+- Anomaly detection (e.g., EndOperation without StartOperation)
+- Thread-safe via mutex protection
+
+Use cases:
+- Verify system calls are properly balanced (start/end pairs)
+- Measure peak concurrency levels
+- Detect operation leaks (operations that start but never end)
+
+**AtomicStateValidator** - State consistency validation:
+```go
+validator := NewAtomicStateValidator()
+validator.ValidateCleanerState(isActive, activationTime, lastUpdateTime)
+validator.ValidateCounterState(colorType, level string, count int64)
+validator.ValidateGoldState(isActive bool, sequenceID int)
+violations := validator.GetViolations()  // Retrieve all recorded violations
+```
+
+Validates:
+- Cleaner state consistency (active state vs. timestamps)
+- Color counter non-negativity
+- Gold sequence state invariants (active implies non-zero sequence ID)
+- Records violations with descriptive messages
+- Atomic validation counter for performance metrics
+
+**EntityLifecycleTracker** - Memory leak detection:
+```go
+tracker := NewEntityLifecycleTracker()
+tracker.TrackCreate(entityID uint64)      // Record entity creation
+tracker.TrackDestroy(entityID uint64)     // Record entity destruction
+leaked := tracker.DetectLeaks()           // Find entities never destroyed
+stats := tracker.GetStats()               // Creation/destruction statistics
+```
+
+Features:
+- Tracks entity creation and destruction timestamps
+- Detects entities created but never destroyed (memory leaks)
+- Thread-safe via mutex protection
+- Atomic operation counters for performance tracking
+- Useful for long-running integration tests
+
+**Usage in Tests:**
+
+These tools are designed for integration into race condition and stress tests:
+
+```go
+func TestConcurrentSystemBehavior(t *testing.T) {
+    logger := NewRaceDetectionLogger(true)
+    monitor := NewConcurrencyMonitor()
+    validator := NewAtomicStateValidator()
+
+    // Test execution with logging
+    monitor.StartOperation("spawn")
+    logger.Log("spawner", "spawn", "Spawning entity...")
+    // ... perform operation ...
+    validator.ValidateCounterState("Blue", "Bright", blueCount)
+    monitor.EndOperation("spawn")
+
+    // Verify no issues
+    if monitor.HasAnomalies() {
+        t.Errorf("Anomalies detected: %v", monitor.GetAnomalies())
+    }
+    if validator.HasViolations() {
+        t.Errorf("State violations: %v", validator.GetViolations())
+    }
+
+    // Optional: Export event log for analysis
+    logger.DumpEvents("race_events.log")
+}
+```
+
+**Why These Tools Matter:**
+
+The vi-fighter architecture uses a hybrid approach:
+- Real-time atomic updates (heat, score, cursor) - lock-free, high frequency
+- Clock-tick mutex updates (spawn, phase, gold, decay) - locked, lower frequency
+
+Race detection tools help verify:
+1. Atomics are never mixed with non-atomic access
+2. Mutexes are properly paired (RLock/RUnlock, Lock/Unlock)
+3. State invariants hold even under concurrent access
+4. No operations are lost or double-counted
+5. Memory is properly released (no entity leaks)
+
+All tests using these tools must pass with `go test -race` flag.
 
 ### Test Coverage Goals
 - **Unit Tests**: >80% coverage for core systems
