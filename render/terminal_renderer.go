@@ -30,34 +30,47 @@ type CleanerSystemInterface interface {
 
 // TerminalRenderer handles all terminal rendering
 type TerminalRenderer struct {
-	screen        tcell.Screen
-	width         int
-	height        int
-	gameX         int
-	gameY         int
-	gameWidth     int
-	gameHeight    int
-	lineNumWidth  int
-	cleanerSystem CleanerSystemInterface
+	screen               tcell.Screen
+	width                int
+	height               int
+	gameX                int
+	gameY                int
+	gameWidth            int
+	gameHeight           int
+	lineNumWidth         int
+	cleanerSystem        CleanerSystemInterface
+	cleanerSnapshots     []CleanerSnapshot
+	cleanerSnapshotFrame int64 // Frame counter for cache invalidation
 }
 
 // NewTerminalRenderer creates a new terminal renderer
 func NewTerminalRenderer(screen tcell.Screen, width, height, gameX, gameY, gameWidth, gameHeight, lineNumWidth int, cleanerSystem CleanerSystemInterface) *TerminalRenderer {
 	return &TerminalRenderer{
-		screen:        screen,
-		width:         width,
-		height:        height,
-		gameX:         gameX,
-		gameY:         gameY,
-		gameWidth:     gameWidth,
-		gameHeight:    gameHeight,
-		lineNumWidth:  lineNumWidth,
-		cleanerSystem: cleanerSystem,
+		screen:               screen,
+		width:                width,
+		height:               height,
+		gameX:                gameX,
+		gameY:                gameY,
+		gameWidth:            gameWidth,
+		gameHeight:           gameHeight,
+		lineNumWidth:         lineNumWidth,
+		cleanerSystem:        cleanerSystem,
+		cleanerSnapshots:     nil,
+		cleanerSnapshotFrame: -1, // Initialize to -1 to force first update
 	}
 }
 
 // RenderFrame renders the entire game frame
 func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating bool, decayRow int, decayTimeRemaining float64) {
+	// Increment frame counter and get frame number
+	frameNum := ctx.IncrementFrameNumber()
+
+	// Update cleaner snapshot cache once per frame
+	if r.cleanerSystem != nil && r.cleanerSnapshotFrame != frameNum {
+		r.cleanerSnapshots = r.cleanerSystem.GetCleanerSnapshots()
+		r.cleanerSnapshotFrame = frameNum
+	}
+
 	r.screen.Clear()
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
 
@@ -438,15 +451,15 @@ func (r *TerminalRenderer) drawFallingDecay(world *engine.World, defaultStyle tc
 }
 
 // drawCleaners draws the cleaner animation with trail effects using pre-calculated gradients
-// Uses thread-safe snapshots from CleanerSystem to avoid race conditions
+// Uses cached snapshots from RenderFrame to ensure single snapshot per frame
 func (r *TerminalRenderer) drawCleaners(defaultStyle tcell.Style) {
 	// Skip if no cleaner system configured
 	if r.cleanerSystem == nil {
 		return
 	}
 
-	// Get thread-safe snapshot of cleaner data
-	snapshots := r.cleanerSystem.GetCleanerSnapshots()
+	// Use cached snapshots from RenderFrame (already fetched once per frame)
+	snapshots := r.cleanerSnapshots
 
 	for _, cleaner := range snapshots {
 		// Bounds check for cleaner row

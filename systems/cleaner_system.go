@@ -368,6 +368,9 @@ func (cs *CleanerSystem) updateCleanerPositions(world *engine.World, deltaTime f
 		// Update position based on speed and direction
 		cleaner.XPosition += cleaner.Speed * float64(cleaner.Direction) * deltaTime
 
+		// Acquire lock BEFORE modifying trail positions since the slice is shared with cleanerDataMap
+		cs.stateMu.Lock()
+
 		// Update trail (add current position to front) while preserving capacity
 		// Use insert-at-front pattern that maintains the original slice capacity from pool
 		if len(cleaner.TrailPositions) < cs.config.TrailLength {
@@ -381,16 +384,16 @@ func (cs *CleanerSystem) updateCleanerPositions(world *engine.World, deltaTime f
 			cleaner.TrailPositions[0] = cleaner.XPosition
 		}
 
-		// Update component
-		world.AddComponent(entity, cleaner)
-
-		// Update tracked data
-		cs.stateMu.Lock()
+		// Update tracked data (already holding lock)
 		if data, exists := cs.cleanerDataMap[entity]; exists {
 			data.xPosition = cleaner.XPosition
 			data.trailPositions = cleaner.TrailPositions
 		}
+
 		cs.stateMu.Unlock()
+
+		// Update component (after lock is released)
+		world.AddComponent(entity, cleaner)
 
 		//Check all trail positions for collisions (not just head)
 		cs.checkTrailCollisions(world, cleaner.Row, cleaner.TrailPositions)

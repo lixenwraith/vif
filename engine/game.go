@@ -358,3 +358,13 @@ func (g *GameContext) IsSearchMode() bool {
 func (g *GameContext) IsNormalMode() bool {
 	return g.Mode == ModeNormal
 }
+
+// GetFrameNumber returns the current frame number
+func (g *GameContext) GetFrameNumber() int64 {
+	return g.State.GetFrameNumber()
+}
+
+// IncrementFrameNumber increments and returns the frame number
+func (g *GameContext) IncrementFrameNumber() int64 {
+	return g.State.IncrementFrameNumber()
+}

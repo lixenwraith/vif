@@ -49,6 +49,9 @@ type GameState struct {
 	// Sequence ID generation (atomic for thread-safety)
 	NextSeqID atomic.Int64
 
+	// Frame counter (atomic for thread-safety, incremented each render)
+	FrameNumber atomic.Int64
+
 	// ===== CLOCK-TICK STATE (mutex protected) =====
 	// Updated only during clock tick, read by all systems
 
@@ -146,6 +149,9 @@ func NewGameState(gameWidth, gameHeight, screenWidth int, timeProvider TimeProvi
 
 	// Initialize sequence ID
 	gs.NextSeqID.Store(1)
+
+	// Initialize frame counter
+	gs.FrameNumber.Store(0)
 
 	// Initialize clock-tick state
 	now := timeProvider.Now()
@@ -310,6 +316,16 @@ func (gs *GameState) GetNextSeqID() int {
 
 func (gs *GameState) IncrementSeqID() int {
 	return int(gs.NextSeqID.Add(1))
+}
+
+// ===== FRAME COUNTER ACCESSORS (atomic) =====
+
+func (gs *GameState) GetFrameNumber() int64 {
+	return gs.FrameNumber.Load()
+}
+
+func (gs *GameState) IncrementFrameNumber() int64 {
+	return gs.FrameNumber.Add(1)
 }
 
 // ===== BOOST ACCESSORS (atomic) =====
