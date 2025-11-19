@@ -131,6 +131,7 @@ func main() {
 	// Wire up system references
 	scoreSystem.SetGoldSequenceSystem(goldSequenceSystem)
 	scoreSystem.SetSpawnSystem(spawnSystem)
+	scoreSystem.SetNuggetSystem(nuggetSystem)
 	decaySystem.SetSpawnSystem(spawnSystem)
 	// Removed goldSequenceSystem.SetCleanerTrigger - now managed by ClockScheduler
 

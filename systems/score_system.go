@@ -16,6 +16,7 @@ type ScoreSystem struct {
 	errorCursorSet    bool
 	goldSequenceSystem *GoldSequenceSystem
 	spawnSystem       *SpawnSystem
+	nuggetSystem      *NuggetSystem
 }
 
 // NewScoreSystem creates a new score system
@@ -39,6 +40,11 @@ func (s *ScoreSystem) SetGoldSequenceSystem(goldSystem *GoldSequenceSystem) {
 // SetSpawnSystem sets the spawn system reference for color counter updates
 func (s *ScoreSystem) SetSpawnSystem(spawnSystem *SpawnSystem) {
 	s.spawnSystem = spawnSystem
+}
+
+// SetNuggetSystem sets the nugget system reference for nugget collection
+func (s *ScoreSystem) SetNuggetSystem(nuggetSystem *NuggetSystem) {
+	s.nuggetSystem = nuggetSystem
 }
 
 // Update runs the score system (unused for now, character typing is event-driven)
@@ -94,6 +100,14 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		return
 	}
 	char := charComp.(components.CharacterComponent)
+
+	// Check if this is a nugget - handle before sequence logic
+	nuggetType := reflect.TypeOf(components.NuggetComponent{})
+	if _, hasNugget := world.GetComponent(entity, nuggetType); hasNugget && s.nuggetSystem != nil {
+		// Handle nugget collection
+		s.handleNuggetCollection(world, entity, cursorX, cursorY)
+		return
+	}
 
 	// Get sequence component
 	seqType := reflect.TypeOf(components.SequenceComponent{})
@@ -271,6 +285,38 @@ func (s *ScoreSystem) extendBoost(duration time.Duration) {
 	}
 
 	s.ctx.State.SetBoostEnabled(true)
+}
+
+// handleNuggetCollection processes nugget collection (typing any character on nugget)
+func (s *ScoreSystem) handleNuggetCollection(world *engine.World, entity engine.Entity, cursorX, cursorY int) {
+	// Calculate heat increase: 10% of max heat (screen width)
+	maxHeat := s.ctx.Width
+	if maxHeat < 1 {
+		maxHeat = 1
+	}
+	heatIncrease := maxHeat / 10
+	if heatIncrease < 1 {
+		heatIncrease = 1 // Minimum increase of 1
+	}
+
+	// Add heat (10% of max)
+	s.ctx.State.AddHeat(heatIncrease)
+
+	// Destroy the nugget entity
+	world.SafeDestroyEntity(entity)
+
+	// Clear the active nugget reference to trigger respawn
+	s.nuggetSystem.ClearActiveNugget()
+
+	// Move cursor right
+	s.ctx.CursorX++
+	if s.ctx.CursorX >= s.ctx.GameWidth {
+		s.ctx.CursorX = s.ctx.GameWidth - 1
+	}
+	// Sync cursor position to GameState
+	s.ctx.State.SetCursorX(s.ctx.CursorX)
+
+	// No score effects, no error effects - silent collection
 }
 
 // handleGoldSequenceTyping processes typing of gold sequence characters
