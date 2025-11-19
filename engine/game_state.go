@@ -95,6 +95,10 @@ type GameState struct {
 	CleanerActive    bool      // Whether cleaners are currently running
 	CleanerStartTime time.Time // When cleaners were activated
 
+	// Game Lifecycle State
+	FirstUpdateTime      time.Time // When the game first started (first Update call)
+	InitialSpawnComplete bool      // Whether initial gold spawn has been attempted
+
 	// ===== CONFIGURATION (read-only after init) =====
 	// Set once at initialization, never mutated
 
@@ -186,6 +190,10 @@ func NewGameState(gameWidth, gameHeight, screenWidth int, timeProvider TimeProvi
 	gs.CleanerPending = false
 	gs.CleanerActive = false
 	gs.CleanerStartTime = time.Time{}
+
+	// Initialize Game Lifecycle state
+	gs.FirstUpdateTime = time.Time{} // Will be set on first Update
+	gs.InitialSpawnComplete = false
 
 	return gs
 }
@@ -1024,4 +1032,37 @@ func (gs *GameState) ReadCleanerState() CleanerSnapshot {
 		StartTime: gs.CleanerStartTime,
 		Elapsed:   elapsed,
 	}
+}
+
+// ===== GAME LIFECYCLE ACCESSORS (mutex protected) =====
+
+// GetFirstUpdateTime returns when the game first started
+func (gs *GameState) GetFirstUpdateTime() time.Time {
+	gs.mu.RLock()
+	defer gs.mu.RUnlock()
+	return gs.FirstUpdateTime
+}
+
+// SetFirstUpdateTime sets when the game first started (should only be called once)
+func (gs *GameState) SetFirstUpdateTime(t time.Time) {
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
+	// Only set if not already set
+	if gs.FirstUpdateTime.IsZero() {
+		gs.FirstUpdateTime = t
+	}
+}
+
+// GetInitialSpawnComplete returns whether initial gold spawn has been attempted
+func (gs *GameState) GetInitialSpawnComplete() bool {
+	gs.mu.RLock()
+	defer gs.mu.RUnlock()
+	return gs.InitialSpawnComplete
+}
+
+// SetInitialSpawnComplete marks that initial gold spawn has been attempted
+func (gs *GameState) SetInitialSpawnComplete() {
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
+	gs.InitialSpawnComplete = true
 }

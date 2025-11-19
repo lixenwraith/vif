@@ -17,34 +17,30 @@ import (
 // GoldSequenceSystem manages the gold sequence mechanic
 // Migrated to use GameState for gold state management
 type GoldSequenceSystem struct {
-	mu                  sync.RWMutex       // Protects fields below
-	ctx                 *engine.GameContext
-	decaySystem         *DecaySystem
-	wasDecayAnimating   bool
+	mu          sync.RWMutex // Protects fields below
+	ctx         *engine.GameContext
+	decaySystem *DecaySystem
 	// Removed active, sequenceID, startTime - now in GameState
 	// Removed cleanerTriggerFunc - now managed by GameState/ClockScheduler
-	characters       string
-	gameWidth        int
-	gameHeight       int
-	cursorX          int
-	cursorY          int
-	firstUpdate      bool      // Tracks if this is the first update
-	initialSpawnTime time.Time // Time of first update (for delayed initial spawn)
+	// Removed wasDecayAnimating, firstUpdate, initialSpawnTime - now using GameState phase tracking
+	characters string
+	gameWidth  int
+	gameHeight int
+	cursorX    int
+	cursorY    int
 }
 
 // NewGoldSequenceSystem creates a new gold sequence system
 func NewGoldSequenceSystem(ctx *engine.GameContext, decaySystem *DecaySystem, gameWidth, gameHeight, cursorX, cursorY int) *GoldSequenceSystem {
 	return &GoldSequenceSystem{
-		ctx:               ctx,
-		decaySystem:       decaySystem,
-		wasDecayAnimating: false,
-		// active, sequenceID, startTime now in GameState
-		characters:        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
-		gameWidth:         gameWidth,
-		gameHeight:        gameHeight,
-		cursorX:           cursorX,
-		cursorY:           cursorY,
-		firstUpdate:       false,
+		ctx:         ctx,
+		decaySystem: decaySystem,
+		// All state now in GameState (active, sequenceID, startTime, firstUpdate, initialSpawnTime, wasDecayAnimating)
+		characters: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+		gameWidth:  gameWidth,
+		gameHeight: gameHeight,
+		cursorX:    cursorX,
+		cursorY:    cursorY,
 	}
 }
 
@@ -57,36 +53,32 @@ func (s *GoldSequenceSystem) Priority() int {
 // Gold timeout is now handled by ClockScheduler
 func (s *GoldSequenceSystem) Update(world *engine.World, dt time.Duration) {
 	now := s.ctx.TimeProvider.Now()
-	isDecayAnimating := s.ctx.State.GetDecayAnimating()
 
-	// Read and update wasDecayAnimating atomically
-	s.mu.Lock()
-	wasDecayAnimating := s.wasDecayAnimating
-	s.wasDecayAnimating = isDecayAnimating
-	firstUpdate := s.firstUpdate
+	// Initialize FirstUpdateTime on first call (using GameState)
+	s.ctx.State.SetFirstUpdateTime(now)
+	firstUpdateTime := s.ctx.State.GetFirstUpdateTime()
 
-	// Handle first update - record time for delayed initial spawn
-	if !firstUpdate {
-		s.firstUpdate = true
-		s.initialSpawnTime = now
-	}
-	initialSpawnTime := s.initialSpawnTime
-	s.mu.Unlock()
-
-	// Read active state from GameState
+	// Read state from GameState
 	active := s.ctx.State.GetGoldActive()
+	initialSpawnComplete := s.ctx.State.GetInitialSpawnComplete()
+	currentPhase := s.ctx.State.GetPhase()
 
 	// Spawn gold sequence at game start with delay (150ms)
 	const initialSpawnDelay = 150 * time.Millisecond
-	if !active && now.Sub(initialSpawnTime) >= initialSpawnDelay && now.Sub(initialSpawnTime) < initialSpawnDelay+100*time.Millisecond {
+	if !active && !initialSpawnComplete && now.Sub(firstUpdateTime) >= initialSpawnDelay {
 		// Spawn initial gold sequence after delay
 		// If spawn fails, system will remain in PhaseNormal and can retry on next update
-		s.spawnGoldSequence(world)
+		if s.spawnGoldSequence(world) {
+			// Mark initial spawn as complete (whether it succeeded or not)
+			s.ctx.State.SetInitialSpawnComplete()
+		}
 	}
 
-	// Detect transition from decay animating to not animating (decay just ended)
-	if wasDecayAnimating && !isDecayAnimating {
-		// Decay just ended - spawn gold sequence
+	// Detect transition from decay animation to normal phase (decay just ended)
+	// Phase transitions: PhaseDecayAnimation -> PhaseNormal (handled by DecaySystem.StopDecayAnimation)
+	// When we detect PhaseNormal and no active gold, spawn new gold
+	if !active && currentPhase == engine.PhaseNormal && initialSpawnComplete {
+		// Decay ended and returned to normal phase - spawn gold sequence
 		// If spawn fails, system will remain in PhaseNormal and can retry on next update
 		s.spawnGoldSequence(world)
 	}
