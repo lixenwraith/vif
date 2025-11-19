@@ -226,6 +226,14 @@ func (gs *GameState) AddScore(delta int) {
 	gs.Score.Add(int64(delta))
 }
 
+// ReadHeatAndScore returns consistent snapshot of both heat and score
+func (gs *GameState) ReadHeatAndScore() (heat int64, score int64) {
+	// Read both atomic values sequentially for consistent view
+	heat = gs.Heat.Load()
+	score = gs.Score.Load()
+	return heat, score
+}
+
 // ===== CURSOR ACCESSORS (atomic) =====
 
 func (gs *GameState) GetCursorX() int {
@@ -242,6 +250,18 @@ func (gs *GameState) GetCursorY() int {
 
 func (gs *GameState) SetCursorY(y int) {
 	gs.CursorY.Store(int32(y))
+}
+
+// ReadCursorPosition returns a consistent snapshot of cursor position
+func (gs *GameState) ReadCursorPosition() CursorSnapshot {
+	// Cursor fields are atomic, so we can read them without mutex
+	x := int(gs.CursorX.Load())
+	y := int(gs.CursorY.Load())
+
+	return CursorSnapshot{
+		X: x,
+		Y: y,
+	}
 }
 
 // ===== COLOR COUNTER ACCESSORS (atomic) =====
@@ -318,6 +338,19 @@ func (gs *GameState) CanSpawnNewColor() bool {
 	return gs.GetTotalColorCount() < 6
 }
 
+// ReadColorCounts returns a consistent snapshot of all color counters
+func (gs *GameState) ReadColorCounts() ColorCountSnapshot {
+	// All color counters are atomic, so we can read them without mutex
+	return ColorCountSnapshot{
+		BlueBright:  gs.BlueCountBright.Load(),
+		BlueNormal:  gs.BlueCountNormal.Load(),
+		BlueDark:    gs.BlueCountDark.Load(),
+		GreenBright: gs.GreenCountBright.Load(),
+		GreenNormal: gs.GreenCountNormal.Load(),
+		GreenDark:   gs.GreenCountDark.Load(),
+	}
+}
+
 // ===== SEQUENCE ID ACCESSORS (atomic) =====
 
 func (gs *GameState) GetNextSeqID() int {
@@ -389,6 +422,34 @@ func (gs *GameState) UpdateBoostTimerAtomic() bool {
 	}
 
 	return false
+}
+
+// ReadBoostState returns a consistent snapshot of the boost state
+func (gs *GameState) ReadBoostState() BoostSnapshot {
+	// All boost fields are atomic, so we can read them without mutex
+	enabled := gs.BoostEnabled.Load()
+	endTimeNano := gs.BoostEndTime.Load()
+	color := gs.BoostColor.Load()
+
+	var endTime time.Time
+	var remaining time.Duration
+
+	if endTimeNano != 0 {
+		endTime = time.Unix(0, endTimeNano)
+		if enabled {
+			remaining = endTime.Sub(gs.TimeProvider.Now())
+			if remaining < 0 {
+				remaining = 0
+			}
+		}
+	}
+
+	return BoostSnapshot{
+		Enabled:   enabled,
+		EndTime:   endTime,
+		Color:     color,
+		Remaining: remaining,
+	}
 }
 
 // ===== SPAWN STATE ACCESSORS (mutex protected) =====
@@ -1014,6 +1075,30 @@ type CleanerSnapshot struct {
 	Active    bool
 	StartTime time.Time
 	Elapsed   time.Duration
+}
+
+// BoostSnapshot provides consistent view of boost state
+type BoostSnapshot struct {
+	Enabled   bool
+	EndTime   time.Time
+	Color     int32 // 0=None, 1=Blue, 2=Green
+	Remaining time.Duration
+}
+
+// CursorSnapshot provides consistent view of cursor position
+type CursorSnapshot struct {
+	X int
+	Y int
+}
+
+// ColorCountSnapshot provides consistent view of all color counters
+type ColorCountSnapshot struct {
+	BlueBright  int64
+	BlueNormal  int64
+	BlueDark    int64
+	GreenBright int64
+	GreenNormal int64
+	GreenDark   int64
 }
 
 // ReadCleanerState returns a consistent snapshot of the cleaner state
