@@ -344,6 +344,10 @@ func (cs *CleanerSystem) spawnCleanerForRow(world *engine.World, row int) {
 	trail := cs.cleanerPool.Get().([]float64)
 	trail = trail[:0] // Reset length
 
+	// Initialize trail with starting position to ensure edge positions are checked
+	// This prevents missing characters at x=0 (L→R) or x=gameWidth-1 (R→L)
+	trail = append(trail, startX)
+
 	// Create cleaner entity
 	entity := world.CreateEntity()
 
@@ -474,11 +478,23 @@ func (cs *CleanerSystem) checkTrailCollisions(world *engine.World, row int, trai
 		minX := int(math.Min(prevPos, currentPos))
 		maxX := int(math.Max(prevPos, currentPos))
 
+		// Clamp range to valid bounds [0, gameWidth-1] to include edge positions
+		// This ensures we check x=0 (L→R) and x=gameWidth-1 (R→L) even when
+		// the trail extends beyond the game area
+		if minX < 0 {
+			minX = 0
+		}
+		if maxX >= gameWidth {
+			maxX = gameWidth - 1
+		}
+
+		// Skip if range is completely out of bounds
+		if minX >= gameWidth || maxX < 0 {
+			continue
+		}
+
 		for x := minX; x <= maxX; x++ {
-			// Skip if out of bounds or already checked
-			if x < 0 || x >= gameWidth {
-				continue
-			}
+			// Skip if already checked
 			if checkedPositions[x] {
 				continue
 			}
