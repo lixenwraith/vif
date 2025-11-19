@@ -268,4 +268,4 @@ See [architecture.md](./architecture.md) for detailed architecture documentation
 
 ## License
 
-MIT License - See LICENSE file for details
+BSD-3
