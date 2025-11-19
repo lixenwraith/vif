@@ -2,6 +2,7 @@ package systems
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -414,8 +415,16 @@ func (cs *CleanerSystem) updateCleanerPositions(world *engine.World, deltaTime f
 }
 
 // checkTrailCollisions checks all trail positions for Red character collisions
-// Simplified collision detection that checks the entire trail continuously
-// Uses integer truncation (no rounding) to avoid skipping characters
+// Comprehensive collision detection that checks ALL integer positions between
+// consecutive trail points to prevent gaps when cleaner moves >1 char per frame.
+//
+// Mathematical basis:
+// - Cleaner speed: ~80 chars/sec (gameWidth=80, duration=1s)
+// - Frame time: 16ms
+// - Movement per frame: 80 × 0.016 = 1.28 characters
+// - Without range checking, positions can be skipped (e.g., 8.84→10.12 skips 9)
+//
+// Solution: Check all integer positions between consecutive trail points
 func (cs *CleanerSystem) checkTrailCollisions(world *engine.World, row int, trailPositions []float64) {
 	// Defensive: Check for nil world
 	if world == nil {
@@ -435,24 +444,38 @@ func (cs *CleanerSystem) checkTrailCollisions(world *engine.World, row int, trai
 	// Track which integer positions we've already checked to avoid duplicate checks
 	checkedPositions := make(map[int]bool)
 
-	// Check every position in the trail
-	for _, floatPos := range trailPositions {
-		//Use truncation instead of rounding - simpler and more predictable
-		// This means a character slightly ahead of head block may disappear slightly
-		// earlier (one clock tick), which is acceptable per requirements
-		x := int(floatPos)
+	// Check positions between consecutive trail points
+	for i := 0; i < len(trailPositions); i++ {
+		currentPos := trailPositions[i]
 
-		// Skip if out of bounds or already checked
-		if x < 0 || x >= gameWidth {
-			continue
+		// For first position, check single point
+		// For subsequent positions, check range between previous and current
+		var prevPos float64
+		if i == 0 {
+			// Current head position - check single point
+			prevPos = currentPos
+		} else {
+			// Check range between previous and current
+			prevPos = trailPositions[i-1]
 		}
-		if checkedPositions[x] {
-			continue
-		}
-		checkedPositions[x] = true
 
-		// Check and destroy Red character at this position
-		cs.checkAndDestroyAtPosition(world, x, row)
+		// Check all integer positions in range [min, max]
+		minX := int(math.Min(prevPos, currentPos))
+		maxX := int(math.Max(prevPos, currentPos))
+
+		for x := minX; x <= maxX; x++ {
+			// Skip if out of bounds or already checked
+			if x < 0 || x >= gameWidth {
+				continue
+			}
+			if checkedPositions[x] {
+				continue
+			}
+			checkedPositions[x] = true
+
+			// Check and destroy Red character at this position
+			cs.checkAndDestroyAtPosition(world, x, row)
+		}
 	}
 }
 

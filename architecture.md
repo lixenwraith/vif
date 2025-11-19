@@ -617,12 +617,13 @@ cs.stateMu.Unlock()
 - **Direction**: Alternating - odd rows sweep L→R, even rows sweep R→L
 - **Selectivity**: Only destroys Red characters, leaves Blue/Green untouched
 - **Animation**: Configurable block character with fade trail effect
-- **Collision Detection** (Trail-based approach):
-  - Checks all trail positions continuously (not just head block)
-  - Uses integer truncation `int(x)` for predictable behavior
-  - Single `checkTrailCollisions()` method for collision detection
-  - Prevents character skipping at fractional positions
-  - Characters may disappear slightly earlier (one clock tick) - acceptable tradeoff
+- **Collision Detection** (Comprehensive range-based approach):
+  - Checks ALL integer positions between consecutive trail points
+  - Prevents position gaps when cleaner moves >1 char/frame (e.g., 8.84→10.12 checks 8, 9, 10)
+  - Mathematical basis: 80 chars/sec × 16ms frame = 1.28 chars/frame movement
+  - Uses `math.Min/Max` for bidirectional range checking (works for both L→R and R→L)
+  - Single `checkTrailCollisions()` method with comprehensive coverage
+  - Negligible performance impact: at most 2-3 extra positions per trail segment
 - **Visual Effects**:
   - Pre-calculated color gradients avoid per-frame calculations
   - Configurable trail length with smooth opacity falloff
@@ -707,6 +708,16 @@ Located in `systems/cleaner_system_test.go`:
 - **TestCleanersTrailTracking**: Trail position management
 - **TestCleanersDuplicateTriggerIgnored**: Duplicate trigger prevention
 - **TestCleanersPoolReuse**: Memory pool efficiency validation
+- **TestCleanerCollisionCoverage**: Verifies no position gaps in collision detection
+  - Tests comprehensive range checking between trail points (8.84→10.12 covers position 9)
+  - Validates mathematical scenario: 1.28 char/frame movement at 80 chars/sec, 16ms frames
+  - Ensures all integer positions between consecutive trail points are checked
+- **TestCleanerCollisionReverseDirection**: Verifies gap coverage for R→L cleaners
+  - Tests reverse direction collision detection (72.16→69.88)
+  - Validates bidirectional range checking works correctly
+- **TestCleanerCollisionLongTrail**: Verifies collision coverage across entire trail
+  - Tests long trail with multiple gaps (positions 15-25 with fractional trail points)
+  - Ensures comprehensive coverage regardless of trail length
 
 ### Integration Tests
 Located in `systems/integration_test.go`:
