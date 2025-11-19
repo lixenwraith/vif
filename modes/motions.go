@@ -166,7 +166,7 @@ func ExecuteMotion(ctx *engine.GameContext, cmd rune, count int) {
 	if cmd == ctx.LastMoveKey && (cmd == 'h' || cmd == 'j' || cmd == 'k' || cmd == 'l') {
 		ctx.ConsecutiveCount++
 		if ctx.ConsecutiveCount > 3 {
-			ctx.SetScoreIncrement(0) // Reset heat after 3+ consecutive moves
+			ctx.SetHeat(0) // Reset heat after 3+ consecutive moves
 		}
 	} else {
 		ctx.LastMoveKey = cmd
@@ -285,7 +285,7 @@ func isPunctuation(r rune) bool {
 // getCharAt returns the character at the given position, or 0 if empty.
 // Returns:
 //   - 0 for empty positions (no entity at position)
-//   - 0 for space character entities (defensive handling for backwards compatibility)
+//   - 0 for space character entities (defensive handling - spaces should not exist as entities)
 //   - The actual rune for all other characters
 func getCharAt(ctx *engine.GameContext, x, y int) rune {
 	posType := reflect.TypeOf(components.PositionComponent{})
@@ -483,7 +483,7 @@ func deleteCharAt(ctx *engine.GameContext, x, y int) {
 	if ok {
 		seq := seqComp.(components.SequenceComponent)
 		if seq.Type == components.SequenceGreen || seq.Type == components.SequenceBlue {
-			ctx.SetScoreIncrement(0) // Reset heat
+			ctx.SetHeat(0) // Reset heat
 		}
 	}
 

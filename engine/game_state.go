@@ -606,15 +606,6 @@ func (gs *GameState) GetPhase() GamePhase {
 	return gs.CurrentPhase
 }
 
-// SetPhase updates the current game phase and resets the phase start time
-// DEPRECATED: Use TransitionPhase() for validated transitions
-func (gs *GameState) SetPhase(phase GamePhase) {
-	gs.mu.Lock()
-	defer gs.mu.Unlock()
-	gs.CurrentPhase = phase
-	gs.PhaseStartTime = gs.TimeProvider.Now()
-}
-
 // CanTransition checks if a phase transition is valid
 func (gs *GameState) CanTransition(from, to GamePhase) bool {
 	validTransitions := map[GamePhase][]GamePhase{

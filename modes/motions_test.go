@@ -1422,7 +1422,7 @@ func TestGetCharAtSpaceHandling(t *testing.T) {
 	}
 
 	// Test 3: Space character entity - should return 0 (defensive handling)
-	// Create an entity with a space character directly (for backwards compatibility testing)
+	// Create an entity with a space character directly (edge case - shouldn't normally exist)
 	entity := ctx.World.CreateEntity()
 	ctx.World.AddComponent(entity, components.PositionComponent{X: 15, Y: 15})
 	ctx.World.AddComponent(entity, components.CharacterComponent{Rune: ' ', Style: tcell.StyleDefault})

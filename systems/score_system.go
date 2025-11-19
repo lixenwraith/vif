@@ -66,7 +66,7 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		// No character at cursor - flash error cursor and deactivate boost
 		s.ctx.SetCursorError(true)
 		s.ctx.SetCursorErrorTime(now)
-		s.ctx.SetScoreIncrement(0) // Reset heat
+		s.ctx.SetHeat(0) // Reset heat
 		s.ctx.SetBoostEnabled(false)
 		s.ctx.SetBoostSequenceColor(0) // 0 = None
 		// Set score blink to error state (black background with bright red text)
@@ -82,7 +82,7 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 	if !ok {
 		s.ctx.SetCursorError(true)
 		s.ctx.SetCursorErrorTime(now)
-		s.ctx.SetScoreIncrement(0)
+		s.ctx.SetHeat(0)
 		s.ctx.SetBoostEnabled(false)
 		s.ctx.SetBoostSequenceColor(0)
 		// Set score blink to error state (black background with bright red text)
@@ -99,7 +99,7 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 	if !ok {
 		s.ctx.SetCursorError(true)
 		s.ctx.SetCursorErrorTime(now)
-		s.ctx.SetScoreIncrement(0)
+		s.ctx.SetHeat(0)
 		s.ctx.SetBoostEnabled(false)
 		s.ctx.SetBoostSequenceColor(0)
 		// Set score blink to error state (black background with bright red text)
@@ -122,7 +122,7 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		// Correct character
 		// RED characters reset heat instead of incrementing it
 		if seq.Type == components.SequenceRed {
-			s.ctx.SetScoreIncrement(0)
+			s.ctx.SetHeat(0)
 			// Red character also deactivates boost
 			s.ctx.SetBoostEnabled(false)
 			s.ctx.SetBoostSequenceColor(0) // 0 = None
@@ -135,7 +135,7 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 			if boostState.Enabled {
 				heatGain = 2
 			}
-			s.ctx.AddScoreIncrement(heatGain)
+			s.ctx.AddHeat(heatGain)
 
 			// Get max heat (heat bar width)
 			heatBarWidth := s.ctx.Width
@@ -144,7 +144,7 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 			}
 
 			// Handle boost activation and maintenance
-			currentHeat := s.ctx.GetScoreIncrement()
+			currentHeat := s.ctx.GetHeat()
 
 			// Convert sequence type to color code: 1=Blue, 2=Green
 			var charColorCode int32
@@ -183,7 +183,7 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 			components.LevelBright: 3,
 		}
 		levelMult := levelMultipliers[seq.Level]
-		points := s.ctx.GetScoreIncrement() * levelMult
+		points := s.ctx.GetHeat() * levelMult
 
 		// Red characters give negative points
 		if seq.Type == components.SequenceRed {
@@ -217,7 +217,7 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		// Incorrect character - flash error cursor, reset heat, and deactivate boost
 		s.ctx.SetCursorError(true)
 		s.ctx.SetCursorErrorTime(now)
-		s.ctx.SetScoreIncrement(0)
+		s.ctx.SetHeat(0)
 		s.ctx.SetBoostEnabled(false)
 		s.ctx.SetBoostSequenceColor(0) // 0 = None
 		// Set score blink to error state (black background with bright red text)
@@ -287,7 +287,7 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 			heatBarWidth = 1
 		}
 
-		currentHeat := s.ctx.GetScoreIncrement()
+		currentHeat := s.ctx.GetHeat()
 
 		// Request cleaners if heat is already at max
 		// Clock scheduler will trigger cleaners on next tick (within 50ms)
@@ -300,7 +300,7 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 
 		// Fill heat to max (if not already higher)
 		if currentHeat < heatBarWidth {
-			s.ctx.SetScoreIncrement(heatBarWidth)
+			s.ctx.SetHeat(heatBarWidth)
 		}
 
 		// Mark gold sequence as complete

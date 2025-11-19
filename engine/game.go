@@ -115,7 +115,7 @@ func NewGameContext(screen tcell.Screen) *GameContext {
 }
 
 // ===== DELEGATED ACCESSORS TO GAMESTATE =====
-// These methods delegate to GameState for backward compatibility
+// These methods delegate to GameState for convenience
 
 // Score accessors
 func (g *GameContext) GetScore() int {
@@ -130,15 +130,15 @@ func (g *GameContext) AddScore(delta int) {
 	g.State.AddScore(delta)
 }
 
-func (g *GameContext) GetScoreIncrement() int {
+func (g *GameContext) GetHeat() int {
 	return g.State.GetHeat()
 }
 
-func (g *GameContext) SetScoreIncrement(increment int) {
+func (g *GameContext) SetHeat(increment int) {
 	g.State.SetHeat(increment)
 }
 
-func (g *GameContext) AddScoreIncrement(delta int) {
+func (g *GameContext) AddHeat(delta int) {
 	g.State.AddHeat(delta)
 }
 
@@ -207,14 +207,6 @@ func (g *GameContext) GetScoreBlinkColor() tcell.Color {
 
 	// Default to white if unknown type
 	return tcell.NewRGBColor(255, 255, 255)
-}
-
-// Deprecated: Use SetScoreBlinkTypeLevel instead
-func (g *GameContext) SetScoreBlinkColor(color tcell.Color) {
-	// This is deprecated but kept for backward compatibility
-	// Set to error state (black)
-	g.State.SetScoreBlinkType(0)
-	g.State.SetScoreBlinkLevel(0)
 }
 
 func (g *GameContext) GetScoreBlinkTime() time.Time {

@@ -74,7 +74,7 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
 
 	// Draw heat meter
-	r.drawHeatMeter(ctx.GetScoreIncrement(), defaultStyle)
+	r.drawHeatMeter(ctx.GetHeat(), defaultStyle)
 
 	// Draw line numbers
 	r.drawLineNumbers(ctx, defaultStyle)

@@ -29,7 +29,7 @@ func TestHeatBasedBoostActivation(t *testing.T) {
 	}
 
 	// Set heat to max - 1 (just below threshold)
-	ctx.SetScoreIncrement(maxHeat - 1)
+	ctx.SetHeat(maxHeat - 1)
 	ctx.SetBoostEnabled(false)
 
 	// Create a blue character at cursor position
@@ -91,7 +91,7 @@ func TestBoostMaintainsSameColor(t *testing.T) {
 	}
 
 	// Set heat to max and activate boost with Blue
-	ctx.SetScoreIncrement(maxHeat)
+	ctx.SetHeat(maxHeat)
 	ctx.SetBoostEnabled(true)
 	ctx.SetBoostSequenceColor(1) // Blue
 	initialEndTime := ctx.TimeProvider.Now().Add(constants.BoostExtensionDuration)
@@ -155,7 +155,7 @@ func TestBoostDeactivatesOnColorSwitch(t *testing.T) {
 	}
 
 	// Set heat to max and activate boost with Blue
-	ctx.SetScoreIncrement(maxHeat)
+	ctx.SetHeat(maxHeat)
 	ctx.SetBoostEnabled(true)
 	ctx.SetBoostSequenceColor(1) // Blue
 	ctx.SetBoostEndTime(ctx.TimeProvider.Now().Add(5 * time.Second))
@@ -192,8 +192,8 @@ func TestBoostDeactivatesOnColorSwitch(t *testing.T) {
 	// Heat should be preserved at max (plus boost multiplier gain)
 	// Since boost was active when we typed, we got +2 heat
 	expectedHeat := maxHeat + 2
-	if ctx.GetScoreIncrement() != expectedHeat {
-		t.Errorf("Heat should be preserved at %d, got %d", expectedHeat, ctx.GetScoreIncrement())
+	if ctx.GetHeat() != expectedHeat {
+		t.Errorf("Heat should be preserved at %d, got %d", expectedHeat, ctx.GetHeat())
 	}
 }
 
@@ -219,7 +219,7 @@ func TestBoostRebuildAfterColorSwitch(t *testing.T) {
 	// - Heat is at max
 	// - Boost is deactivated
 	// - BoostSequenceColor is Green (2)
-	ctx.SetScoreIncrement(maxHeat)
+	ctx.SetHeat(maxHeat)
 	ctx.SetBoostEnabled(false)
 	ctx.SetBoostSequenceColor(2) // Green
 
@@ -267,7 +267,7 @@ func TestBoostDeactivatesOnError(t *testing.T) {
 
 	// Set heat to max and activate boost
 	maxHeat := ctx.Width
-	ctx.SetScoreIncrement(maxHeat)
+	ctx.SetHeat(maxHeat)
 	ctx.SetBoostEnabled(true)
 	ctx.SetBoostSequenceColor(1) // Blue
 	ctx.SetBoostEndTime(ctx.TimeProvider.Now().Add(5 * time.Second))
@@ -302,8 +302,8 @@ func TestBoostDeactivatesOnError(t *testing.T) {
 	}
 
 	// Heat should be reset to 0
-	if ctx.GetScoreIncrement() != 0 {
-		t.Errorf("Heat should be reset to 0, got %d", ctx.GetScoreIncrement())
+	if ctx.GetHeat() != 0 {
+		t.Errorf("Heat should be reset to 0, got %d", ctx.GetHeat())
 	}
 
 	// Cursor error should be set
@@ -326,7 +326,7 @@ func TestBoostDeactivatesOnRedCharacter(t *testing.T) {
 
 	// Set heat to max and activate boost
 	maxHeat := ctx.Width
-	ctx.SetScoreIncrement(maxHeat)
+	ctx.SetHeat(maxHeat)
 	ctx.SetBoostEnabled(true)
 	ctx.SetBoostSequenceColor(1) // Blue
 	ctx.SetBoostEndTime(ctx.TimeProvider.Now().Add(5 * time.Second))
@@ -361,8 +361,8 @@ func TestBoostDeactivatesOnRedCharacter(t *testing.T) {
 	}
 
 	// Heat should be reset to 0
-	if ctx.GetScoreIncrement() != 0 {
-		t.Errorf("Heat should be reset to 0, got %d", ctx.GetScoreIncrement())
+	if ctx.GetHeat() != 0 {
+		t.Errorf("Heat should be reset to 0, got %d", ctx.GetHeat())
 	}
 }
 
@@ -423,7 +423,7 @@ func TestBoostExtensionDuration(t *testing.T) {
 	}
 
 	// Set heat to max and activate boost
-	ctx.SetScoreIncrement(maxHeat)
+	ctx.SetHeat(maxHeat)
 	ctx.SetBoostEnabled(true)
 	ctx.SetBoostSequenceColor(1) // Blue
 	initialEndTime := ctx.TimeProvider.Now().Add(constants.BoostExtensionDuration)
@@ -499,7 +499,7 @@ func TestBoostActivationWithGreen(t *testing.T) {
 	}
 
 	// Set heat to max - 1
-	ctx.SetScoreIncrement(maxHeat - 1)
+	ctx.SetHeat(maxHeat - 1)
 	ctx.SetBoostEnabled(false)
 
 	// Create a green character at cursor position

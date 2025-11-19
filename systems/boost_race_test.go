@@ -125,7 +125,7 @@ func TestBoostConcurrentRead(t *testing.T) {
 			for j := 0; j < 100; j++ {
 				enabled := ctx.GetBoostEnabled()
 				endTime := ctx.GetBoostEndTime()
-				scoreInc := ctx.GetScoreIncrement()
+				scoreInc := ctx.GetHeat()
 				score := ctx.GetScore()
 
 				// Use the values to avoid optimization
@@ -260,7 +260,7 @@ func TestBoostWithScoreUpdates(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < 200; i++ {
 			score := ctx.GetScore()
-			scoreInc := ctx.GetScoreIncrement()
+			scoreInc := ctx.GetHeat()
 			boostEnabled := ctx.GetBoostEnabled()
 
 			// Use values
@@ -321,7 +321,7 @@ func TestSimulateFullGameLoop(t *testing.T) {
 
 				// Simulate rendering
 				_ = ctx.GetScore()
-				_ = ctx.GetScoreIncrement()
+				_ = ctx.GetHeat()
 				_ = ctx.GetBoostEnabled()
 				if ctx.GetBoostEnabled() {
 					_ = ctx.GetBoostEndTime().Sub(time.Now()).Seconds()
@@ -390,13 +390,16 @@ func TestAllAtomicStateAccess(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < 100; i++ {
 			ctx.SetScore(i)
-			ctx.SetScoreIncrement(i % 50)
+			ctx.SetHeat(i % 50)
 			ctx.SetBoostEnabled(i%2 == 0)
 			ctx.SetBoostEndTime(time.Now().Add(time.Duration(i) * time.Millisecond))
 			ctx.SetCursorError(i%3 == 0)
 			ctx.SetCursorErrorTime(time.Now())
 			ctx.SetScoreBlinkActive(i%4 == 0)
-			ctx.SetScoreBlinkColor(tcell.Color(i % 256))
+			// Use SetScoreBlinkTypeLevel instead of deprecated SetScoreBlinkColor
+			seqType := components.SequenceType(i % 4) // 0=Blue, 1=Green, 2=Red, 3=Gold
+			level := components.SequenceLevel(i % 3)  // 0=Bright, 1=Normal, 2=Dark
+			ctx.SetScoreBlinkTypeLevel(seqType, level)
 			ctx.SetScoreBlinkTime(time.Now())
 			ctx.SetPingActive(i%5 == 0)
 			ctx.SetPingGridTimer(float64(i) / 10.0)
@@ -410,7 +413,7 @@ func TestAllAtomicStateAccess(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < 200; i++ {
 			_ = ctx.GetScore()
-			_ = ctx.GetScoreIncrement()
+			_ = ctx.GetHeat()
 			_ = ctx.GetBoostEnabled()
 			_ = ctx.GetBoostEndTime()
 			_ = ctx.GetCursorError()

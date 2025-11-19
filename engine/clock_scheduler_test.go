@@ -141,7 +141,9 @@ func TestPhaseTransitions(t *testing.T) {
 
 	// Transition to GoldActive
 	tp.Advance(1 * time.Second)
-	gs.SetPhase(PhaseGoldActive)
+	if !gs.TransitionPhase(PhaseGoldActive) {
+		t.Fatal("Failed to transition to PhaseGoldActive")
+	}
 	if gs.GetPhase() != PhaseGoldActive {
 		t.Errorf("Expected PhaseGoldActive, got %v", gs.GetPhase())
 	}
@@ -153,9 +155,14 @@ func TestPhaseTransitions(t *testing.T) {
 		t.Errorf("Phase duration = %v, expected ~2s", duration)
 	}
 
-	// Transition to DecayWait
+	// Transition through GoldComplete to DecayWait (valid sequence)
 	tp.Advance(500 * time.Millisecond)
-	gs.SetPhase(PhaseDecayWait)
+	if !gs.TransitionPhase(PhaseGoldComplete) {
+		t.Fatal("Failed to transition to PhaseGoldComplete")
+	}
+	if !gs.TransitionPhase(PhaseDecayWait) {
+		t.Fatal("Failed to transition to PhaseDecayWait")
+	}
 	if gs.GetPhase() != PhaseDecayWait {
 		t.Errorf("Expected PhaseDecayWait, got %v", gs.GetPhase())
 	}
@@ -168,14 +175,18 @@ func TestPhaseTransitions(t *testing.T) {
 
 	// Transition to DecayAnimation
 	tp.Advance(30 * time.Second)
-	gs.SetPhase(PhaseDecayAnimation)
+	if !gs.TransitionPhase(PhaseDecayAnimation) {
+		t.Fatal("Failed to transition to PhaseDecayAnimation")
+	}
 	if gs.GetPhase() != PhaseDecayAnimation {
 		t.Errorf("Expected PhaseDecayAnimation, got %v", gs.GetPhase())
 	}
 
 	// Transition back to Normal (cycle complete)
 	tp.Advance(5 * time.Second)
-	gs.SetPhase(PhaseNormal)
+	if !gs.TransitionPhase(PhaseNormal) {
+		t.Fatal("Failed to transition to PhaseNormal")
+	}
 	if gs.GetPhase() != PhaseNormal {
 		t.Errorf("Expected PhaseNormal, got %v", gs.GetPhase())
 	}
@@ -186,8 +197,10 @@ func TestPhaseSnapshot(t *testing.T) {
 	tp := NewMockTimeProvider(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
 	gs := NewGameState(80, 24, 100, tp)
 
-	// Set to GoldActive
-	gs.SetPhase(PhaseGoldActive)
+	// Transition to GoldActive
+	if !gs.TransitionPhase(PhaseGoldActive) {
+		t.Fatal("Failed to transition to PhaseGoldActive")
+	}
 	tp.Advance(3 * time.Second)
 
 	// Read snapshot
@@ -230,13 +243,21 @@ func TestConcurrentPhaseReads(t *testing.T) {
 		}()
 	}
 
-	// Concurrent writer
+	// Concurrent writer using valid phase transition cycle
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		phases := []GamePhase{PhaseNormal, PhaseGoldActive, PhaseDecayWait, PhaseDecayAnimation}
-		for j := 0; j < 50; j++ {
-			gs.SetPhase(phases[j%len(phases)])
+		// Valid cycle: Normal → GoldActive → GoldComplete → DecayWait → DecayAnimation → Normal
+		for j := 0; j < 10; j++ {
+			gs.TransitionPhase(PhaseGoldActive)
+			time.Sleep(1 * time.Millisecond)
+			gs.TransitionPhase(PhaseGoldComplete)
+			time.Sleep(1 * time.Millisecond)
+			gs.TransitionPhase(PhaseDecayWait)
+			time.Sleep(1 * time.Millisecond)
+			gs.TransitionPhase(PhaseDecayAnimation)
+			time.Sleep(1 * time.Millisecond)
+			gs.TransitionPhase(PhaseNormal)
 			time.Sleep(1 * time.Millisecond)
 		}
 	}()
@@ -504,8 +525,10 @@ func TestPhaseAndClockIntegration(t *testing.T) {
 	// Let it tick for a bit
 	time.Sleep(200 * time.Millisecond)
 
-	// Change phase during ticking
-	ctx.State.SetPhase(PhaseGoldActive)
+	// Change phase during ticking using valid transitions
+	if !ctx.State.TransitionPhase(PhaseGoldActive) {
+		t.Fatal("Failed to transition to PhaseGoldActive")
+	}
 	time.Sleep(100 * time.Millisecond)
 
 	// Verify phase persisted
@@ -513,8 +536,13 @@ func TestPhaseAndClockIntegration(t *testing.T) {
 		t.Errorf("Phase = %v, want PhaseGoldActive", ctx.State.GetPhase())
 	}
 
-	// Change to DecayWait
-	ctx.State.SetPhase(PhaseDecayWait)
+	// Transition through GoldComplete to DecayWait (valid sequence)
+	if !ctx.State.TransitionPhase(PhaseGoldComplete) {
+		t.Fatal("Failed to transition to PhaseGoldComplete")
+	}
+	if !ctx.State.TransitionPhase(PhaseDecayWait) {
+		t.Fatal("Failed to transition to PhaseDecayWait")
+	}
 	time.Sleep(100 * time.Millisecond)
 
 	if ctx.State.GetPhase() != PhaseDecayWait {

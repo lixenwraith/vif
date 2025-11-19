@@ -40,13 +40,13 @@ func TestBoostHeatMultiplier(t *testing.T) {
 
 	// Test 1: Without boost, heat should increment by 1
 	ctx.SetBoostEnabled(false)
-	ctx.SetScoreIncrement(0)
+	ctx.SetHeat(0)
 	initialScore := ctx.GetScore()
 
 	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
 
-	if ctx.GetScoreIncrement() != 1 {
-		t.Errorf("Without boost, expected heat increment of 1, got %d", ctx.GetScoreIncrement())
+	if ctx.GetHeat() != 1 {
+		t.Errorf("Without boost, expected heat increment of 1, got %d", ctx.GetHeat())
 	}
 
 	// Score should be heat * level_multiplier = 1 * 2 = 2
@@ -72,17 +72,17 @@ func TestBoostHeatMultiplier(t *testing.T) {
 	ctx.World.UpdateSpatialIndex(entity2, pos2.X, pos2.Y)
 
 	ctx.SetBoostEnabled(true)
-	previousHeat := ctx.GetScoreIncrement()
+	previousHeat := ctx.GetHeat()
 	previousScore := ctx.GetScore()
 
 	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'b')
 
-	if ctx.GetScoreIncrement() != previousHeat+2 {
-		t.Errorf("With boost, expected heat increment of 2 (total %d), got %d", previousHeat+2, ctx.GetScoreIncrement())
+	if ctx.GetHeat() != previousHeat+2 {
+		t.Errorf("With boost, expected heat increment of 2 (total %d), got %d", previousHeat+2, ctx.GetHeat())
 	}
 
 	// Score should increase by (heat * level_multiplier) = (3 * 2) = 6, total = 2 + 6 = 8
-	expectedScore = previousScore + ctx.GetScoreIncrement()*2
+	expectedScore = previousScore + ctx.GetHeat()*2
 	if ctx.GetScore() != expectedScore {
 		t.Errorf("With boost, expected score %d, got %d", expectedScore, ctx.GetScore())
 	}
@@ -107,7 +107,7 @@ func TestBlueCharacterActivatesBoost(t *testing.T) {
 	}
 
 	// Set heat to max - 1 (just below threshold)
-	ctx.SetScoreIncrement(maxHeat - 1)
+	ctx.SetHeat(maxHeat - 1)
 
 	// Create a blue character at cursor position
 	entity := ctx.World.CreateEntity()
@@ -163,7 +163,7 @@ func TestBoostExtension(t *testing.T) {
 	}
 
 	// Set heat to max - 1 and activate boost with first character
-	ctx.SetScoreIncrement(maxHeat - 1)
+	ctx.SetHeat(maxHeat - 1)
 
 	// Create first blue character
 	entity1 := ctx.World.CreateEntity()
@@ -242,7 +242,7 @@ func TestRedCharacterResetsHeat(t *testing.T) {
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Set initial heat
-	ctx.SetScoreIncrement(10)
+	ctx.SetHeat(10)
 
 	// Create a red character at cursor position
 	entity := ctx.World.CreateEntity()
@@ -264,8 +264,8 @@ func TestRedCharacterResetsHeat(t *testing.T) {
 	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
 
 	// Heat should be reset to 0
-	if ctx.GetScoreIncrement() != 0 {
-		t.Errorf("Expected heat to be reset to 0, got %d", ctx.GetScoreIncrement())
+	if ctx.GetHeat() != 0 {
+		t.Errorf("Expected heat to be reset to 0, got %d", ctx.GetHeat())
 	}
 }
 
@@ -282,7 +282,7 @@ func TestBoostDoesNotAffectScore(t *testing.T) {
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Reset initial state
-	ctx.SetScoreIncrement(0)
+	ctx.SetHeat(0)
 	ctx.SetScore(0)
 
 	// Test with boost disabled
@@ -310,7 +310,7 @@ func TestBoostDoesNotAffectScore(t *testing.T) {
 
 	// Heat should be 5 (1+1+1+1+1)
 	// Score should be sum of (heat * 2): 2 + 4 + 6 + 8 + 10 = 30
-	heatWithoutBoost := ctx.GetScoreIncrement()
+	heatWithoutBoost := ctx.GetHeat()
 	scoreWithoutBoost := ctx.GetScore()
 
 	if heatWithoutBoost != 5 {
@@ -321,7 +321,7 @@ func TestBoostDoesNotAffectScore(t *testing.T) {
 	}
 
 	// Reset for boost test
-	ctx.SetScoreIncrement(0)
+	ctx.SetHeat(0)
 	ctx.SetScore(0)
 	ctx.SetBoostEnabled(true)
 
@@ -347,7 +347,7 @@ func TestBoostDoesNotAffectScore(t *testing.T) {
 
 	// Heat should be 10 (2+2+2+2+2)
 	// Score should be sum of (heat * 2): 4 + 8 + 12 + 16 + 20 = 60
-	heatWithBoost := ctx.GetScoreIncrement()
+	heatWithBoost := ctx.GetHeat()
 	scoreWithBoost := ctx.GetScore()
 
 	if heatWithBoost != 10 {
@@ -371,7 +371,7 @@ func TestIncorrectCharacterResetsHeat(t *testing.T) {
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Set initial heat
-	ctx.SetScoreIncrement(10)
+	ctx.SetHeat(10)
 
 	// Create a green character at cursor position
 	entity := ctx.World.CreateEntity()
@@ -393,8 +393,8 @@ func TestIncorrectCharacterResetsHeat(t *testing.T) {
 	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'b')
 
 	// Heat should be reset to 0
-	if ctx.GetScoreIncrement() != 0 {
-		t.Errorf("Expected heat to be reset to 0 after incorrect character, got %d", ctx.GetScoreIncrement())
+	if ctx.GetHeat() != 0 {
+		t.Errorf("Expected heat to be reset to 0 after incorrect character, got %d", ctx.GetHeat())
 	}
 
 	// Cursor error should be set

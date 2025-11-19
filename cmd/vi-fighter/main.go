@@ -203,7 +203,7 @@ func main() {
 			}
 
 			// Update decay system dimensions
-			decaySystem.UpdateDimensions(ctx.GameWidth, ctx.GameHeight, ctx.Width, ctx.GetScoreIncrement())
+			decaySystem.UpdateDimensions(ctx.GameWidth, ctx.GameHeight)
 
 			// Update gold sequence system dimensions and cursor position
 			goldSequenceSystem.UpdateDimensions(ctx.GameWidth, ctx.GameHeight, ctx.CursorX, ctx.CursorY)

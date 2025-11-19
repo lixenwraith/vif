@@ -282,8 +282,8 @@ const (
 // Read current phase (thread-safe)
 phase := ctx.State.GetPhase()
 
-// Transition to new phase (resets start time)
-ctx.State.SetPhase(PhaseGoldActive)
+// Transition to new phase (validated, resets start time)
+success := ctx.State.TransitionPhase(PhaseGoldActive)
 
 // Get phase duration
 duration := ctx.State.GetPhaseDuration()
@@ -727,7 +727,7 @@ cs.stateMu.Unlock()
 1. **One Entity Per Position**: `spatialIndex[y][x]` holds at most one entity
 2. **Component Consistency**: Entity with SequenceComponent MUST have Position and Character
 3. **Cursor Bounds**: `0 <= CursorX < GameWidth && 0 <= CursorY < GameHeight`
-4. **Score Monotonicity**: Score can decrease (red chars) but ScoreIncrement >= 0
+4. **Heat Non-Negativity**: Heat (typing momentum) is always >= 0
 5. **Boost Mechanic**: When heat reaches maximum, boost activates with color-matching (Blue or Green) providing x2 heat multiplier. Typing the matching color extends boost duration by 500ms per character, while typing a different color deactivates boost
 6. **Red Spawn Invariant**: Red sequences are NEVER spawned directly, only through decay
 7. **Gold Randomness**: Gold sequences spawn at random positions

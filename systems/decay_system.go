@@ -37,8 +37,7 @@ type DecaySystem struct {
 }
 
 // NewDecaySystem creates a new decay system
-// Timer and animation state now managed by GameState
-// Removed deprecated heatIncrement parameter (was causing race condition)
+// Timer and animation state managed by GameState
 func NewDecaySystem(gameWidth, gameHeight int, ctx *engine.GameContext) *DecaySystem {
 	s := &DecaySystem{
 		currentRow:       0,
@@ -427,14 +426,12 @@ func (s *DecaySystem) GetTimeUntilDecay() float64 {
 }
 
 // UpdateDimensions updates the game dimensions
-// heatIncrement parameter deprecated (no longer used)
-func (s *DecaySystem) UpdateDimensions(gameWidth, gameHeight, screenWidth, heatIncrement int) {
+func (s *DecaySystem) UpdateDimensions(gameWidth, gameHeight int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.gameWidth = gameWidth
 	s.gameHeight = gameHeight
-	// No longer storing screenWidth or heatIncrement
 }
 
 // GetSystemState returns the current state of the decay system for debugging
