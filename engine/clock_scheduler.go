@@ -100,9 +100,9 @@ type CleanerSystemInterface interface {
 // NewClockScheduler creates a new clock scheduler with 50ms tick rate
 func NewClockScheduler(ctx *GameContext) *ClockScheduler {
 	return &ClockScheduler{
-		ctx:          ctx,
-		timeProvider: ctx.TimeProvider,
-		ticker:       time.NewTicker(50 * time.Millisecond),
+		ctx:           ctx,
+		timeProvider:  ctx.TimeProvider,
+		ticker:        time.NewTicker(50 * time.Millisecond),
 		stopChan:      make(chan struct{}),
 		tickCount:     0,
 		goldSystem:    nil,
@@ -215,8 +215,16 @@ func (cs *ClockScheduler) tick() {
 	case PhaseCleanerActive:
 		// Check if cleaner animation has completed
 		if cleanerSys != nil && cleanerSys.IsAnimationComplete() {
-			// Deactivate cleaners and transition to PhaseNormal
+			// Deactivate cleaners first
 			cs.ctx.State.DeactivateCleaners()
+
+			// Start decay timer after cleaners complete
+			// This transitions to PhaseDecayWait
+			cs.ctx.State.StartDecayTimer(
+				cs.ctx.State.ScreenWidth,
+				constants.DecayIntervalBaseSeconds,
+				constants.DecayIntervalRangeSeconds,
+			)
 		}
 
 	case PhaseNormal:

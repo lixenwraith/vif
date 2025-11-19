@@ -65,14 +65,14 @@ type GameState struct {
 	SpawnEnabled        bool      // Whether spawning is active
 
 	// Screen fill tracking (for adaptive spawn rate)
-	EntityCount    int // Current number of entities on screen
-	MaxEntities    int // Maximum allowed entities (200)
-	ScreenDensity  float64 // Percentage of screen filled (0.0-1.0)
+	EntityCount   int     // Current number of entities on screen
+	MaxEntities   int     // Maximum allowed entities (200)
+	ScreenDensity float64 // Percentage of screen filled (0.0-1.0)
 
 	// Phase State (Infrastructure)
 	// Controls which game mechanic is active (Normal, Gold, Decay Wait, Decay Animation)
 	// Will add transition logic between phases
-	CurrentPhase GamePhase // Current game phase
+	CurrentPhase   GamePhase // Current game phase
 	PhaseStartTime time.Time // When current phase started
 
 	// Gold Sequence State (Migrated from GoldSequenceSystem)
@@ -555,7 +555,7 @@ func (gs *GameState) CanTransition(from, to GamePhase) bool {
 		PhaseDecayWait:      {PhaseDecayAnimation},
 		PhaseDecayAnimation: {PhaseNormal},
 		PhaseCleanerPending: {PhaseCleanerActive},
-		PhaseCleanerActive:  {PhaseNormal},
+		PhaseCleanerActive:  {PhaseDecayWait},
 	}
 
 	allowed := validTransitions[from]
@@ -988,7 +988,7 @@ func (gs *GameState) DeactivateCleaners() bool {
 	gs.CleanerActive = false
 	gs.CleanerPending = false
 	gs.CleanerStartTime = time.Time{}
-	gs.CurrentPhase = PhaseNormal
+	gs.CurrentPhase = PhaseDecayWait
 	gs.PhaseStartTime = gs.TimeProvider.Now()
 	return true
 }
