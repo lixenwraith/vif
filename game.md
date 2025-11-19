@@ -174,14 +174,15 @@ vi-fighter has three input modes, just like vi/vim:
 
 ### Top Bar (Heat Meter)
 ```
-[████████████████████                    ]  347
- ^                                          ^
- Rainbow colored progress bar              Current heat value
+[████████████████████                    ]
+ ^
+ 10-segment rainbow colored heat bar
 ```
 
-- **Left side**: Colored progress bar showing your heat level
-- **Right side**: Numeric heat value (0 to screen width - 6)
-- **Colors**: Red → Orange → Yellow → Green → Cyan → Blue → Purple (as heat increases)
+- **Display**: 10-segment heat bar spanning full terminal width
+- **Segments**: 0-10 filled blocks representing 0-100% heat
+- **Colors**: Red → Orange → Yellow → Green → Cyan → Blue → Purple (as segments fill)
+- **Calculation**: Each 10% of heat fills one segment (e.g., 50% heat = 5 filled segments)
 
 ### Left Margin (Relative Line Numbers)
 ```
@@ -367,7 +368,7 @@ Heat represents your typing momentum and skill level. It's the most important me
 - **Boost Activation**: Must reach maximum heat to activate boost
 
 **Maximum Heat:**
-Heat caps at screen width minus 6 (typically 74-194 depending on terminal size).
+Heat caps at screen width (typically 80-200 depending on terminal size). The visual heat bar displays 10 segments regardless of actual heat value, with each segment representing 10% of maximum heat.
 
 ### Boost System
 

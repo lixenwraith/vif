@@ -23,7 +23,7 @@ func TestHeatBasedBoostActivation(t *testing.T) {
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Calculate max heat (heat bar width)
-	maxHeat := ctx.Width - constants.HeatBarIndicatorWidth
+	maxHeat := ctx.Width
 	if maxHeat < 1 {
 		maxHeat = 1
 	}
@@ -85,7 +85,7 @@ func TestBoostMaintainsSameColor(t *testing.T) {
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Calculate max heat
-	maxHeat := ctx.Width - constants.HeatBarIndicatorWidth
+	maxHeat := ctx.Width
 	if maxHeat < 1 {
 		maxHeat = 1
 	}
@@ -149,7 +149,7 @@ func TestBoostDeactivatesOnColorSwitch(t *testing.T) {
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Calculate max heat
-	maxHeat := ctx.Width - constants.HeatBarIndicatorWidth
+	maxHeat := ctx.Width
 	if maxHeat < 1 {
 		maxHeat = 1
 	}
@@ -210,7 +210,7 @@ func TestBoostRebuildAfterColorSwitch(t *testing.T) {
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Calculate max heat
-	maxHeat := ctx.Width - constants.HeatBarIndicatorWidth
+	maxHeat := ctx.Width
 	if maxHeat < 1 {
 		maxHeat = 1
 	}
@@ -266,7 +266,7 @@ func TestBoostDeactivatesOnError(t *testing.T) {
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Set heat to max and activate boost
-	maxHeat := ctx.Width - constants.HeatBarIndicatorWidth
+	maxHeat := ctx.Width
 	ctx.SetScoreIncrement(maxHeat)
 	ctx.SetBoostEnabled(true)
 	ctx.SetBoostSequenceColor(1) // Blue
@@ -325,7 +325,7 @@ func TestBoostDeactivatesOnRedCharacter(t *testing.T) {
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Set heat to max and activate boost
-	maxHeat := ctx.Width - constants.HeatBarIndicatorWidth
+	maxHeat := ctx.Width
 	ctx.SetScoreIncrement(maxHeat)
 	ctx.SetBoostEnabled(true)
 	ctx.SetBoostSequenceColor(1) // Blue
@@ -417,7 +417,7 @@ func TestBoostExtensionDuration(t *testing.T) {
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Calculate max heat
-	maxHeat := ctx.Width - constants.HeatBarIndicatorWidth
+	maxHeat := ctx.Width
 	if maxHeat < 1 {
 		maxHeat = 1
 	}
@@ -493,7 +493,7 @@ func TestBoostActivationWithGreen(t *testing.T) {
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Calculate max heat
-	maxHeat := ctx.Width - constants.HeatBarIndicatorWidth
+	maxHeat := ctx.Width
 	if maxHeat < 1 {
 		maxHeat = 1
 	}

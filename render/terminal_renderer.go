@@ -6,7 +6,6 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/components"
-	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
@@ -114,52 +113,47 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 	r.screen.Show()
 }
 
-// drawHeatMeter draws the heat meter at the top
+// drawHeatMeter draws the heat meter at the top as a 10-segment display
 func (r *TerminalRenderer) drawHeatMeter(heat int, defaultStyle tcell.Style) {
-	heatBarWidth := r.width - constants.HeatBarIndicatorWidth
+	heatBarWidth := r.width
 	if heatBarWidth < 1 {
 		heatBarWidth = 1
 	}
 
-	filledChars := heat
-	if filledChars > heatBarWidth {
-		filledChars = heatBarWidth
+	// Calculate display heat: map 0-heatBarWidth to 0-10 segments
+	displayHeat := int(float64(heat) / float64(heatBarWidth) * 10.0)
+	if displayHeat > 10 {
+		displayHeat = 10
+	}
+	if displayHeat < 0 {
+		displayHeat = 0
 	}
 
-	// Draw the heat bar
-	for x := 0; x < heatBarWidth; x++ {
+	// Draw 10-segment heat bar across full terminal width
+	segmentWidth := float64(r.width) / 10.0
+	for segment := 0; segment < 10; segment++ {
+		// Calculate start and end positions for this segment
+		segmentStart := int(float64(segment) * segmentWidth)
+		segmentEnd := int(float64(segment+1) * segmentWidth)
+
+		// Determine if this segment is filled
+		isFilled := segment < displayHeat
+
 		var style tcell.Style
-		if x < filledChars {
-			progress := float64(x+1) / float64(heatBarWidth)
+		if isFilled {
+			// Calculate progress for color gradient (0.0 to 1.0)
+			progress := float64(segment+1) / 10.0
 			color := GetHeatMeterColor(progress)
 			style = defaultStyle.Foreground(color)
 		} else {
+			// Empty segment: black foreground
 			style = defaultStyle.Foreground(tcell.NewRGBColor(0, 0, 0))
 		}
-		r.screen.SetContent(x, 0, '█', nil, style)
-	}
 
-	// Draw numeric indicator
-	heatValue := heat
-	if heatValue > 9999 {
-		heatValue = 9999
-	}
-	heatText := fmt.Sprintf("%4d", heatValue)
-	heatNumStyle := defaultStyle.Foreground(tcell.NewRGBColor(0, 255, 255)).Background(tcell.NewRGBColor(0, 0, 0))
-	startX := r.width - 4
-	if startX < heatBarWidth+2 {
-		startX = heatBarWidth + 2
-	}
-	for i, ch := range heatText {
-		if startX+i < r.width {
-			r.screen.SetContent(startX+i, 0, ch, nil, heatNumStyle)
+		// Draw all characters in this segment
+		for x := segmentStart; x < segmentEnd && x < r.width; x++ {
+			r.screen.SetContent(x, 0, '█', nil, style)
 		}
-	}
-
-	// Draw spaces between bar and number (with black background)
-	blackBgStyle := defaultStyle.Background(tcell.NewRGBColor(0, 0, 0))
-	for i := 0; i < 2 && heatBarWidth+i < startX; i++ {
-		r.screen.SetContent(heatBarWidth+i, 0, ' ', nil, blackBgStyle)
 	}
 }
 

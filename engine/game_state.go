@@ -741,7 +741,7 @@ func (gs *GameState) GetDecayTimerActive() bool {
 // StartDecayTimer starts the decay timer with the given interval
 // Calculates interval based on current heat atomically
 // Only allowed from PhaseGoldComplete (checked by phase transition validation)
-func (gs *GameState) StartDecayTimer(screenWidth int, heatBarIndicatorWidth int, baseSeconds, rangeSeconds float64) bool {
+func (gs *GameState) StartDecayTimer(screenWidth int, baseSeconds, rangeSeconds float64) bool {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
 
@@ -753,8 +753,8 @@ func (gs *GameState) StartDecayTimer(screenWidth int, heatBarIndicatorWidth int,
 	// Read heat atomically (no cached value)
 	heat := int(gs.Heat.Load())
 
-	// Calculate heat bar width
-	heatBarWidth := screenWidth - heatBarIndicatorWidth
+	// Calculate heat bar width (now uses full screen width)
+	heatBarWidth := screenWidth
 	if heatBarWidth < 1 {
 		heatBarWidth = 1
 	}

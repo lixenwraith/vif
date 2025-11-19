@@ -136,7 +136,7 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 			s.ctx.AddScoreIncrement(heatGain)
 
 			// Get max heat (heat bar width)
-			heatBarWidth := s.ctx.Width - constants.HeatBarIndicatorWidth
+			heatBarWidth := s.ctx.Width
 			if heatBarWidth < 1 {
 				heatBarWidth = 1
 			}
@@ -283,7 +283,7 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 
 	if isLastChar {
 		// Gold sequence completed! Check if we should trigger cleaners
-		heatBarWidth := s.ctx.Width - constants.HeatBarIndicatorWidth
+		heatBarWidth := s.ctx.Width
 		if heatBarWidth < 1 {
 			heatBarWidth = 1
 		}

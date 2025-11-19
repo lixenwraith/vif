@@ -178,7 +178,6 @@ func (cs *ClockScheduler) tick() {
 			// This will transition to PhaseDecayWait
 			cs.ctx.State.StartDecayTimer(
 				cs.ctx.State.ScreenWidth,
-				constants.HeatBarIndicatorWidth,
 				constants.DecayIntervalBaseSeconds,
 				constants.DecayIntervalRangeSeconds,
 			)

@@ -52,7 +52,6 @@ func TestCompleteGameCycle(t *testing.T) {
 	decayStartTime := mockTime.Now()
 	state.StartDecayTimer(
 		state.ScreenWidth,
-		constants.HeatBarIndicatorWidth,
 		constants.DecayIntervalBaseSeconds,
 		constants.DecayIntervalRangeSeconds,
 	)
@@ -144,7 +143,6 @@ func TestGoldCompletionBeforeTimeout(t *testing.T) {
 	decayStartTime := mockTime.Now()
 	state.StartDecayTimer(
 		state.ScreenWidth,
-		constants.HeatBarIndicatorWidth,
 		constants.DecayIntervalBaseSeconds,
 		constants.DecayIntervalRangeSeconds,
 	)
@@ -229,7 +227,6 @@ func TestConcurrentPhaseReadsDuringTransitions(t *testing.T) {
 		state.DeactivateGoldSequence()
 		state.StartDecayTimer(
 			state.ScreenWidth,
-			constants.HeatBarIndicatorWidth,
 			constants.DecayIntervalBaseSeconds,
 			constants.DecayIntervalRangeSeconds,
 		)
@@ -280,7 +277,6 @@ func TestPhaseTimestampConsistency(t *testing.T) {
 	state.DeactivateGoldSequence()
 	state.StartDecayTimer(
 		state.ScreenWidth,
-		constants.HeatBarIndicatorWidth,
 		constants.DecayIntervalBaseSeconds,
 		constants.DecayIntervalRangeSeconds,
 	)
@@ -453,7 +449,6 @@ func TestRapidPhaseTransitions(t *testing.T) {
 		state.DeactivateGoldSequence()
 		state.StartDecayTimer(
 			state.ScreenWidth,
-			constants.HeatBarIndicatorWidth,
 			constants.DecayIntervalBaseSeconds,
 			constants.DecayIntervalRangeSeconds,
 		)

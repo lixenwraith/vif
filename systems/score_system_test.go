@@ -101,7 +101,7 @@ func TestBlueCharacterActivatesBoost(t *testing.T) {
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Calculate max heat
-	maxHeat := ctx.Width - constants.HeatBarIndicatorWidth
+	maxHeat := ctx.Width
 	if maxHeat < 1 {
 		maxHeat = 1
 	}
@@ -157,7 +157,7 @@ func TestBoostExtension(t *testing.T) {
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Calculate max heat
-	maxHeat := ctx.Width - constants.HeatBarIndicatorWidth
+	maxHeat := ctx.Width
 	if maxHeat < 1 {
 		maxHeat = 1
 	}

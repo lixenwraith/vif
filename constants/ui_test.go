@@ -76,16 +76,3 @@ func TestUITimingConstants(t *testing.T) {
 		t.Errorf("Expected DecayRowAnimationDuration to be 100ms, got %v", DecayRowAnimationDuration)
 	}
 }
-
-// TestHeatBarIndicatorWidth verifies the heat bar indicator width
-func TestHeatBarIndicatorWidth(t *testing.T) {
-	if HeatBarIndicatorWidth != 6 {
-		t.Errorf("Expected HeatBarIndicatorWidth to be 6, got %d", HeatBarIndicatorWidth)
-	}
-
-	// Verify it's large enough for a 4-digit number plus spacing
-	// Format: " 9999 " = 6 characters
-	if HeatBarIndicatorWidth < 6 {
-		t.Error("HeatBarIndicatorWidth too small for 4-digit heat value display")
-	}
-}

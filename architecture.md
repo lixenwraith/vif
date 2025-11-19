@@ -580,7 +580,7 @@ cs.stateMu.Unlock()
 - **Error Handling**: Incorrect typing resets heat and triggers error cursor
 
 ### Boost System
-- **Activation Condition**: Heat reaches maximum value (screen width - HeatBarIndicatorWidth)
+- **Activation Condition**: Heat reaches maximum value (screen width)
 - **Initial Duration**: 500ms (BoostExtensionDuration constant)
 - **Color Binding**: Boost is tied to the color (Blue or Green) of the character that triggered max heat
 - **Extension Mechanic**:
@@ -672,9 +672,25 @@ cs.stateMu.Unlock()
 - **Helper Tests**: Verify utility functions and time providers
 - **Motion Tests**: Validate vi motion commands and find operations
 
+#### Heat Display Tests
+Located in `render/heat_display_test.go`:
+- **TestHeatPercentageMapping**: Verifies heat display correctly maps percentage to 0-10 range
+  - Tests edge cases: 0%, 25%, 50%, 75%, 100%
+  - Tests different terminal widths (40, 80, 100, 120, 200)
+  - Validates formula: `displayHeat = int(float64(heat) / float64(maxHeat) * 10.0)`
+- **TestHeatDisplayBounds**: Verifies display heat is always within 0-10 range
+  - Tests negative heat, zero heat, normal heat, max heat, and over-max heat
+  - Ensures bounds checking (0 ≤ displayHeat ≤ 10)
+- **TestHeatDisplayEdgeCases**: Verifies boundary conditions in heat calculation
+  - Tests exact percentage boundaries (10%, 20%, etc.)
+  - Tests just below and just above boundaries
+  - Tests clamping behavior for over-max heat
+- **TestHeatDisplayGranularity**: Verifies correct granularity at different heat levels
+  - Tests all 11 heat ranges (0-9%, 10-19%, ..., 90-99%, 100%)
+  - Validates each 10% increment transitions to next segment
+
 #### Motion and Command Tests
 Located in `modes/`:
-- **find_motion_test.go**: Comprehensive tests for find motions
   - Forward find (`f`) with count support: `fa`, `2fa`, `5fx`
   - Backward find (`F`) with count support: `Fa`, `2Fa`, `3Fb`
   - Edge cases: no match, count exceeds matches, boundary conditions

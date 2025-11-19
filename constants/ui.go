@@ -3,10 +3,7 @@ package constants
 import "time"
 
 // UI Layout Constants
-const (
-	// HeatBarIndicatorWidth is the width reserved for the heat value indicator (right side)
-	HeatBarIndicatorWidth = 6
-)
+// (No layout constants currently defined)
 
 // UI Timing Constants (in milliseconds)
 const (
