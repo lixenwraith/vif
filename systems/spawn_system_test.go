@@ -243,6 +243,9 @@ func TestPlaceLineLogicMatchesExclusionZone(t *testing.T) {
 	ctx.GameHeight = gameHeight
 	ctx.CursorX = cursorX
 	ctx.CursorY = cursorY
+	// Sync cursor position to GameState for snapshot pattern
+	ctx.State.SetCursorX(cursorX)
+	ctx.State.SetCursorY(cursorY)
 
 	spawnSys := NewSpawnSystem(gameWidth, gameHeight, cursorX, cursorY, ctx)
 

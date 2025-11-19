@@ -127,9 +127,12 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 			s.ctx.SetBoostEnabled(false)
 			s.ctx.SetBoostSequenceColor(0) // 0 = None
 		} else {
+			// Read boost state snapshot for consistent checks
+			boostState := s.ctx.State.ReadBoostState()
+
 			// Apply heat gain with boost multiplier
 			heatGain := 1
-			if s.ctx.GetBoostEnabled() {
+			if boostState.Enabled {
 				heatGain = 2
 			}
 			s.ctx.AddScoreIncrement(heatGain)
@@ -142,7 +145,6 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 
 			// Handle boost activation and maintenance
 			currentHeat := s.ctx.GetScoreIncrement()
-			currentBoostColor := s.ctx.GetBoostSequenceColor()
 
 			// Convert sequence type to color code: 1=Blue, 2=Green
 			var charColorCode int32
@@ -154,12 +156,12 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 
 			if currentHeat >= heatBarWidth {
 				// Heat is at max
-				if !s.ctx.GetBoostEnabled() {
+				if !boostState.Enabled {
 					// Activate boost for the first time
 					s.ctx.SetBoostEnabled(true)
 					s.ctx.SetBoostSequenceColor(charColorCode)
 					s.ctx.SetBoostEndTime(now.Add(constants.BoostExtensionDuration))
-				} else if currentBoostColor == charColorCode {
+				} else if boostState.Color == charColorCode {
 					// Same color - extend boost timer
 					s.extendBoost(constants.BoostExtensionDuration)
 				} else {

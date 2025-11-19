@@ -248,6 +248,9 @@ func TestPlaceLineNearCursor(t *testing.T) {
 	world := engine.NewWorld()
 
 	cursorX, cursorY := 40, 12
+	// Sync cursor position to GameState for snapshot pattern
+	ctx.State.SetCursorX(cursorX)
+	ctx.State.SetCursorY(cursorY)
 	spawnSys := NewSpawnSystem(80, 24, cursorX, cursorY, ctx)
 
 	// Try many times to place a line - none should be near the cursor

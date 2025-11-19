@@ -342,26 +342,31 @@ func (s *SpawnSystem) AddColorCount(seqType components.SequenceType, level compo
 }
 
 // getAvailableColors returns colors that are not yet on screen
+// Uses ReadColorCounts() snapshot for atomic 6-color limit check
 func (s *SpawnSystem) getAvailableColors() []ColorLevelKey {
 	available := []ColorLevelKey{}
 
-	// Check all 6 combinations
-	colors := []struct {
-		Type  components.SequenceType
-		Level components.SequenceLevel
-	}{
-		{components.SequenceBlue, components.LevelBright},
-		{components.SequenceBlue, components.LevelNormal},
-		{components.SequenceBlue, components.LevelDark},
-		{components.SequenceGreen, components.LevelBright},
-		{components.SequenceGreen, components.LevelNormal},
-		{components.SequenceGreen, components.LevelDark},
-	}
+	// Read color counts snapshot for consistent view of all 6 combinations
+	counts := s.ctx.State.ReadColorCounts()
 
-	for _, c := range colors {
-		if s.GetColorCount(c.Type, c.Level) == 0 {
-			available = append(available, ColorLevelKey{Type: c.Type, Level: c.Level})
-		}
+	// Check all 6 combinations using snapshot (ensures atomicity)
+	if counts.BlueBright == 0 {
+		available = append(available, ColorLevelKey{Type: components.SequenceBlue, Level: components.LevelBright})
+	}
+	if counts.BlueNormal == 0 {
+		available = append(available, ColorLevelKey{Type: components.SequenceBlue, Level: components.LevelNormal})
+	}
+	if counts.BlueDark == 0 {
+		available = append(available, ColorLevelKey{Type: components.SequenceBlue, Level: components.LevelDark})
+	}
+	if counts.GreenBright == 0 {
+		available = append(available, ColorLevelKey{Type: components.SequenceGreen, Level: components.LevelBright})
+	}
+	if counts.GreenNormal == 0 {
+		available = append(available, ColorLevelKey{Type: components.SequenceGreen, Level: components.LevelNormal})
+	}
+	if counts.GreenDark == 0 {
+		available = append(available, ColorLevelKey{Type: components.SequenceGreen, Level: components.LevelDark})
 	}
 
 	return available
@@ -550,10 +555,11 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 			}
 		}
 
-		// Check if too close to cursor
+		// Check if too close to cursor (use snapshot for consistent position)
+		cursor := s.ctx.State.ReadCursorPosition()
 		for i := 0; i < lineLength; i++ {
 			col := startCol + i
-			if math.Abs(float64(col-s.cursorX)) <= 5 && math.Abs(float64(row-s.cursorY)) <= 3 {
+			if math.Abs(float64(col-cursor.X)) <= 5 && math.Abs(float64(row-cursor.Y)) <= 3 {
 				hasOverlap = true
 				break
 			}
