@@ -37,8 +37,9 @@ type GameState struct {
 	CursorError      atomic.Bool
 	CursorErrorTime  atomic.Int64 // UnixNano
 	ScoreBlinkActive atomic.Bool
-	ScoreBlinkColor  atomic.Uint32
-	ScoreBlinkTime   atomic.Int64 // UnixNano
+	ScoreBlinkType   atomic.Uint32 // 0=error, 1=blue, 2=green, 3=red, 4=gold
+	ScoreBlinkLevel  atomic.Uint32 // 0=dark, 1=normal, 2=bright
+	ScoreBlinkTime   atomic.Int64  // UnixNano
 
 	// Ping grid (immediate visual aid)
 	PingActive    atomic.Bool
@@ -138,7 +139,8 @@ func NewGameState(gameWidth, gameHeight, screenWidth int, timeProvider TimeProvi
 	gs.CursorError.Store(false)
 	gs.CursorErrorTime.Store(0)
 	gs.ScoreBlinkActive.Store(false)
-	gs.ScoreBlinkColor.Store(0)
+	gs.ScoreBlinkType.Store(0)
+	gs.ScoreBlinkLevel.Store(0)
 	gs.ScoreBlinkTime.Store(0)
 
 	// Initialize ping grid
@@ -498,12 +500,20 @@ func (gs *GameState) SetScoreBlinkActive(active bool) {
 	gs.ScoreBlinkActive.Store(active)
 }
 
-func (gs *GameState) GetScoreBlinkColor() uint32 {
-	return gs.ScoreBlinkColor.Load()
+func (gs *GameState) GetScoreBlinkType() uint32 {
+	return gs.ScoreBlinkType.Load()
 }
 
-func (gs *GameState) SetScoreBlinkColor(color uint32) {
-	gs.ScoreBlinkColor.Store(color)
+func (gs *GameState) SetScoreBlinkType(seqType uint32) {
+	gs.ScoreBlinkType.Store(seqType)
+}
+
+func (gs *GameState) GetScoreBlinkLevel() uint32 {
+	return gs.ScoreBlinkLevel.Load()
+}
+
+func (gs *GameState) SetScoreBlinkLevel(level uint32) {
+	gs.ScoreBlinkLevel.Store(level)
 }
 
 func (gs *GameState) GetScoreBlinkTime() time.Time {

@@ -7,7 +7,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
-	"github.com/lixenwraith/vi-fighter/render"
 )
 
 // ScoreSystem handles character typing and score calculation
@@ -70,9 +69,9 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.SetScoreIncrement(0) // Reset heat
 		s.ctx.SetBoostEnabled(false)
 		s.ctx.SetBoostSequenceColor(0) // 0 = None
-		// Set score blink to black background with bright red text
+		// Set score blink to error state (black background with bright red text)
 		s.ctx.SetScoreBlinkActive(true)
-		s.ctx.SetScoreBlinkColor(0) // Black background (will be handled specially in renderer)
+		s.ctx.SetScoreBlinkTypeLevel(components.SequenceType(255), components.SequenceLevel(0)) // Error state (255 = invalid type)
 		s.ctx.SetScoreBlinkTime(now)
 		return
 	}
@@ -86,9 +85,9 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.SetScoreIncrement(0)
 		s.ctx.SetBoostEnabled(false)
 		s.ctx.SetBoostSequenceColor(0)
-		// Set score blink to black background with bright red text
+		// Set score blink to error state (black background with bright red text)
 		s.ctx.SetScoreBlinkActive(true)
-		s.ctx.SetScoreBlinkColor(0) // Black background (will be handled specially in renderer)
+		s.ctx.SetScoreBlinkTypeLevel(components.SequenceType(255), components.SequenceLevel(0)) // Error state (255 = invalid type)
 		s.ctx.SetScoreBlinkTime(now)
 		return
 	}
@@ -103,9 +102,9 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.SetScoreIncrement(0)
 		s.ctx.SetBoostEnabled(false)
 		s.ctx.SetBoostSequenceColor(0)
-		// Set score blink to black background with bright red text
+		// Set score blink to error state (black background with bright red text)
 		s.ctx.SetScoreBlinkActive(true)
-		s.ctx.SetScoreBlinkColor(0) // Black background (will be handled specially in renderer)
+		s.ctx.SetScoreBlinkTypeLevel(components.SequenceType(255), components.SequenceLevel(0)) // Error state (255 = invalid type)
 		s.ctx.SetScoreBlinkTime(now)
 		return
 	}
@@ -191,10 +190,9 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 
 		s.ctx.AddScore(points)
 
-		// Trigger score blink with character color (bright version for background)
+		// Trigger score blink with character type and level
 		s.ctx.SetScoreBlinkActive(true)
-		bgColor := render.GetScoreBlinkBackgroundColor(seq.Type, seq.Level)
-		s.ctx.SetScoreBlinkColor(bgColor)
+		s.ctx.SetScoreBlinkTypeLevel(seq.Type, seq.Level)
 		s.ctx.SetScoreBlinkTime(now)
 
 		// Decrement color counter (only for Blue and Green, not Red or Gold)
@@ -220,9 +218,9 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.SetScoreIncrement(0)
 		s.ctx.SetBoostEnabled(false)
 		s.ctx.SetBoostSequenceColor(0) // 0 = None
-		// Set score blink to black background with bright red text
+		// Set score blink to error state (black background with bright red text)
 		s.ctx.SetScoreBlinkActive(true)
-		s.ctx.SetScoreBlinkColor(0) // Black background (will be handled specially in renderer)
+		s.ctx.SetScoreBlinkTypeLevel(components.SequenceType(255), components.SequenceLevel(0)) // Error state (255 = invalid type)
 		s.ctx.SetScoreBlinkTime(now)
 	}
 }
@@ -253,18 +251,17 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 		// Incorrect character - flash error cursor but DON'T reset heat for gold sequence
 		s.ctx.SetCursorError(true)
 		s.ctx.SetCursorErrorTime(now)
-		// Set score blink to black background with bright red text for error
+		// Set score blink to error state (black background with bright red text)
 		s.ctx.SetScoreBlinkActive(true)
-		s.ctx.SetScoreBlinkColor(0) // Black background (will be handled specially in renderer)
+		s.ctx.SetScoreBlinkTypeLevel(components.SequenceType(255), components.SequenceLevel(0)) // Error state (255 = invalid type)
 		s.ctx.SetScoreBlinkTime(now)
 		return
 	}
 
 	// Correct character - remove entity and move cursor
-	// Trigger score blink with Gold color (bright version for background)
+	// Trigger score blink with Gold type and level
 	s.ctx.SetScoreBlinkActive(true)
-	bgColor := render.GetScoreBlinkBackgroundColor(seq.Type, seq.Level)
-	s.ctx.SetScoreBlinkColor(bgColor)
+	s.ctx.SetScoreBlinkTypeLevel(seq.Type, seq.Level)
 	s.ctx.SetScoreBlinkTime(now)
 
 	// Safely destroy the character entity (handles spatial index removal)

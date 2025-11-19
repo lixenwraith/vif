@@ -489,10 +489,11 @@ func TestScoreBlinkOnError(t *testing.T) {
 			t.Error("Expected score blink to be active after error")
 		}
 
-		// Score blink color should be 0 (black background for error)
+		// Score blink color should be black (RGB(0,0,0)) for error state
 		blinkColor := ctx.GetScoreBlinkColor()
-		if blinkColor != 0 {
-			t.Errorf("Expected score blink color to be 0 (error state), got %d", blinkColor)
+		expectedColor := tcell.NewRGBColor(0, 0, 0)
+		if blinkColor != expectedColor {
+			t.Errorf("Expected score blink color to be black RGB(0,0,0) for error state, got %v", blinkColor)
 		}
 	})
 
@@ -522,10 +523,11 @@ func TestScoreBlinkOnError(t *testing.T) {
 			t.Error("Expected score blink to be active after error")
 		}
 
-		// Score blink color should be 0 (black background for error)
+		// Score blink color should be black (RGB(0,0,0)) for error state
 		blinkColor := ctx.GetScoreBlinkColor()
-		if blinkColor != 0 {
-			t.Errorf("Expected score blink color to be 0 (error state), got %d", blinkColor)
+		expectedColor := tcell.NewRGBColor(0, 0, 0)
+		if blinkColor != expectedColor {
+			t.Errorf("Expected score blink color to be black RGB(0,0,0) for error state, got %v", blinkColor)
 		}
 	})
 }

@@ -6,6 +6,7 @@ import (
 	"unsafe"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/core"
 )
 
@@ -151,12 +152,70 @@ func (g *GameContext) SetScoreBlinkActive(active bool) {
 	g.State.SetScoreBlinkActive(active)
 }
 
-func (g *GameContext) GetScoreBlinkColor() tcell.Color {
-	return tcell.Color(g.State.GetScoreBlinkColor())
+func (g *GameContext) SetScoreBlinkTypeLevel(seqType components.SequenceType, level components.SequenceLevel) {
+	// Map sequence types to uint32: 0=error, 1=blue, 2=green, 3=red, 4=gold
+	var typeCode uint32
+	switch seqType {
+	case components.SequenceBlue:
+		typeCode = 1
+	case components.SequenceGreen:
+		typeCode = 2
+	case components.SequenceRed:
+		typeCode = 3
+	case components.SequenceGold:
+		typeCode = 4
+	default:
+		typeCode = 0 // Error state
+	}
+
+	// Map levels to uint32: 0=dark, 1=normal, 2=bright
+	var levelCode uint32
+	switch level {
+	case components.LevelDark:
+		levelCode = 0
+	case components.LevelNormal:
+		levelCode = 1
+	case components.LevelBright:
+		levelCode = 2
+	}
+
+	g.State.SetScoreBlinkType(typeCode)
+	g.State.SetScoreBlinkLevel(levelCode)
 }
 
+func (g *GameContext) GetScoreBlinkColor() tcell.Color {
+	typeCode := g.State.GetScoreBlinkType()
+	// Note: levelCode is stored but not used for score blink colors
+	// All score blink colors use bright versions regardless of level
+
+	// Error state
+	if typeCode == 0 {
+		return tcell.NewRGBColor(0, 0, 0) // Black for error
+	}
+
+	// Map back to sequence type and generate bright background color
+	// These colors match render.GetScoreBlinkBackgroundColor implementation
+	switch typeCode {
+	case 1: // Blue
+		return tcell.NewRGBColor(160, 210, 255) // Brighter blue for background
+	case 2: // Green
+		return tcell.NewRGBColor(120, 255, 120) // Brighter green for background
+	case 3: // Red
+		return tcell.NewRGBColor(255, 140, 140) // Brighter red for background
+	case 4: // Gold
+		return tcell.NewRGBColor(255, 255, 0) // Bright yellow for gold
+	}
+
+	// Default to white if unknown type
+	return tcell.NewRGBColor(255, 255, 255)
+}
+
+// Deprecated: Use SetScoreBlinkTypeLevel instead
 func (g *GameContext) SetScoreBlinkColor(color tcell.Color) {
-	g.State.SetScoreBlinkColor(uint32(color))
+	// This is deprecated but kept for backward compatibility
+	// Set to error state (black)
+	g.State.SetScoreBlinkType(0)
+	g.State.SetScoreBlinkLevel(0)
 }
 
 func (g *GameContext) GetScoreBlinkTime() time.Time {
