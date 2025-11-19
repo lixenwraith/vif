@@ -129,8 +129,9 @@ snapshot := ctx.State.ReadPhaseState()
   - `PhaseNormal`: Gold spawning handled by GoldSequenceSystem
 - **Cleaner triggers handled on clock tick**:
   - Check `CleanerPending` → activate cleaners via CleanerSystem
-  - Check `CleanerActive` + animation complete → deactivate cleaners
+  - Check `CleanerActive` + animation complete → deactivate cleaners and transition to PhaseDecayWait
   - Cleaners run in parallel with phase transitions (non-blocking)
+  - After cleaner completion, decay timer starts automatically (maintains game flow cycle)
 - **Critical**: Decay timer reads heat atomically at transition (no caching)
 
 **Integration** (`cmd/vi-fighter/main.go`):
@@ -237,11 +238,19 @@ The game operates in a continuous cycle managed by three primary systems:
 
 ```
 Gold Sequence → Completion/Timeout → Decay Timer → Decay Animation → Gold Sequence
-     ↓                                                      ↓
- (Optional)                                          (Always happens)
- Cleaner Trigger                                  Characters decay levels
- (if heat maxed)
+     ↓                                      ↑                ↓
+ (Optional)                                 |         (Always happens)
+ Cleaner Trigger                            |       Characters decay levels
+ (if heat maxed)                            |
+     ↓                                      |
+ Cleaner Animation → Completion ────────────┘
+     (transitions to DecayWait, starts decay timer)
 ```
+
+**Key State Transitions:**
+- Gold completion/timeout → PhaseDecayWait (starts decay timer)
+- Cleaner completion → PhaseDecayWait (starts decay timer)
+- Both paths converge at decay timer, ensuring consistent game flow
 
 ### Event Sequencing
 
@@ -346,10 +355,19 @@ GoldSequenceSystem uses `sync.RWMutex` for all state:
 
 ### State Transition Rules
 
+#### Cleaner Phase Transitions
+- **PhaseCleanerPending** → **PhaseCleanerActive**: When cleaners are activated
+- **PhaseCleanerActive** → **PhaseDecayWait**: When cleaner animation completes
+  - After cleaners finish (whether phantom or real), the system always starts the decay timer
+  - This ensures proper game flow cycle: Cleaners → Decay Timer → Decay Animation → Gold → ...
+  - Cleaners DO NOT return to PhaseNormal - they always transition to PhaseDecayWait
+  - The `DeactivateCleaners()` function transitions to PhaseDecayWait and starts the decay timer
+
 #### Invalid Transitions (Prevented)
 - Gold spawning while Gold already active → Ignored
 - Decay animation starting while already animating → Ignored
 - Decay timer restarting during active animation → Blocked
+- CleanerActive → Normal (old behavior, now invalid) → Must go through DecayWait
 - Cleaners triggering while already active → Ignored (queued)
 
 #### Valid Transitions

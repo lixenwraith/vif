@@ -10,7 +10,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
-// TestFallingDecayRenderColor tests that falling decay characters use correct yellow/gold color
+// TestFallingDecayRenderColor tests that falling decay characters use correct dark cyan color
 func TestFallingDecayRenderColor(t *testing.T) {
 	screen := tcell.NewSimulationScreen("UTF-8")
 	screen.SetSize(80, 24)
@@ -52,11 +52,11 @@ func TestFallingDecayRenderColor(t *testing.T) {
 		t.Errorf("Expected character 'X', got %c", mainc)
 	}
 
-	// Verify foreground color (should be bright yellow/gold)
+	// Verify foreground color (should be dark cyan)
 	fg, bg, _ := style.Decompose()
-	expectedFg := RgbSequenceGold
+	expectedFg := RgbDecayFalling
 	if fg != expectedFg {
-		t.Errorf("Expected foreground color %v (gold), got %v", expectedFg, fg)
+		t.Errorf("Expected foreground color %v (dark cyan), got %v", expectedFg, fg)
 	}
 
 	// Verify background color (should match default background)
@@ -121,8 +121,8 @@ func TestFallingDecayRenderAtAllPositions(t *testing.T) {
 
 		// Verify color
 		fg, _, _ := style.Decompose()
-		if fg != RgbSequenceGold {
-			t.Errorf("Position %d (Y=%.1f): expected gold color, got %v", i, yPos, fg)
+		if fg != RgbDecayFalling {
+			t.Errorf("Position %d (Y=%.1f): expected dark cyan color, got %v", i, yPos, fg)
 		}
 	}
 }
@@ -175,8 +175,8 @@ func TestFallingDecayRenderFractionalPositions(t *testing.T) {
 		}
 
 		fg, _, _ := style.Decompose()
-		if fg != RgbSequenceGold {
-			t.Errorf("Fractional position %.2f: expected gold color, got %v", yPos, fg)
+		if fg != RgbDecayFalling {
+			t.Errorf("Fractional position %.2f: expected dark cyan color, got %v", yPos, fg)
 		}
 	}
 }
@@ -307,10 +307,10 @@ func TestFallingDecayRenderZOrder(t *testing.T) {
 		t.Errorf("Expected falling character 'F' on top (z-order), got %c", mainc)
 	}
 
-	// Verify it has the gold color (falling decay color)
+	// Verify it has the dark cyan color (falling decay color)
 	fg, _, _ := style.Decompose()
-	if fg != RgbSequenceGold {
-		t.Errorf("Expected gold foreground for falling character, got %v", fg)
+	if fg != RgbDecayFalling {
+		t.Errorf("Expected dark cyan foreground for falling character, got %v", fg)
 	}
 }
 
@@ -367,8 +367,8 @@ func TestFallingDecayRenderMultipleEntities(t *testing.T) {
 
 			// Verify color
 			fg, _, _ := style.Decompose()
-			if fg != RgbSequenceGold {
-				t.Errorf("Column %d: expected gold color, got %v", col, fg)
+			if fg != RgbDecayFalling {
+				t.Errorf("Column %d: expected dark cyan color, got %v", col, fg)
 			}
 		}
 	}
@@ -421,8 +421,8 @@ func TestFallingDecayRenderConsistency(t *testing.T) {
 		}
 
 		fg, bg, _ := style.Decompose()
-		if fg != RgbSequenceGold {
-			t.Errorf("Frame %d: expected gold foreground, got %v", frame, fg)
+		if fg != RgbDecayFalling {
+			t.Errorf("Frame %d: expected dark cyan foreground, got %v", frame, fg)
 		}
 		if bg != RgbBackground {
 			t.Errorf("Frame %d: expected RgbBackground, got %v", frame, bg)

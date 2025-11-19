@@ -18,7 +18,7 @@ func TestCanTransition(t *testing.T) {
 		PhaseDecayWait:      {PhaseDecayAnimation},
 		PhaseDecayAnimation: {PhaseNormal},
 		PhaseCleanerPending: {PhaseCleanerActive},
-		PhaseCleanerActive:  {PhaseNormal},
+		PhaseCleanerActive:  {PhaseDecayWait},
 	}
 
 	// Test all valid transitions
@@ -140,13 +140,17 @@ func TestTransitionPhaseWithCleaners(t *testing.T) {
 	}
 	t.Logf("✓ Transitioned CleanerPending -> CleanerActive")
 
-	if !state.TransitionPhase(PhaseNormal) {
-		t.Fatal("Failed to transition CleanerActive -> Normal")
+	if !state.TransitionPhase(PhaseDecayWait) {
+		t.Fatal("Failed to transition CleanerActive -> DecayWait")
 	}
-	if state.GetPhase() != PhaseNormal {
-		t.Errorf("Expected phase Normal, got %s", state.GetPhase())
+	if state.GetPhase() != PhaseDecayWait {
+		t.Errorf("Expected phase DecayWait, got %s", state.GetPhase())
 	}
-	t.Logf("✓ Transitioned CleanerActive -> Normal")
+	t.Logf("✓ Transitioned CleanerActive -> DecayWait")
+
+	// Reset to Normal phase for next test
+	state.TransitionPhase(PhaseDecayAnimation)
+	state.TransitionPhase(PhaseNormal)
 
 	// Test cleaner transition from GoldActive
 	state.TransitionPhase(PhaseGoldActive)
@@ -159,6 +163,8 @@ func TestTransitionPhaseWithCleaners(t *testing.T) {
 	t.Logf("✓ Transitioned GoldActive -> CleanerPending")
 
 	state.TransitionPhase(PhaseCleanerActive)
+	state.TransitionPhase(PhaseDecayWait)
+	state.TransitionPhase(PhaseDecayAnimation)
 	state.TransitionPhase(PhaseNormal)
 
 	// Test cleaner transition from GoldComplete
