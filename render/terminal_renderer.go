@@ -788,6 +788,7 @@ func (r *TerminalRenderer) drawCursor(ctx *engine.GameContext, defaultStyle tcel
 	var charAtCursor rune = ' '
 	var charColor tcell.Color
 	hasChar := false
+	isNugget := false
 
 	if entity != 0 {
 		charType := reflect.TypeOf(components.CharacterComponent{})
@@ -797,6 +798,12 @@ func (r *TerminalRenderer) drawCursor(ctx *engine.GameContext, defaultStyle tcel
 			fg, _, _ := char.Style.Decompose()
 			charColor = fg
 			hasChar = true
+		}
+
+		// Check if entity is a nugget
+		nuggetType := reflect.TypeOf(components.NuggetComponent{})
+		if _, ok := ctx.World.GetComponent(entity, nuggetType); ok {
+			isNugget = true
 		}
 	}
 
@@ -809,7 +816,12 @@ func (r *TerminalRenderer) drawCursor(ctx *engine.GameContext, defaultStyle tcel
 		charFgColor = tcell.ColorBlack
 	} else if hasChar {
 		cursorBgColor = charColor
-		charFgColor = tcell.ColorBlack
+		// Use dark foreground for nuggets to provide contrast with orange cursor
+		if isNugget {
+			charFgColor = RgbNuggetDark
+		} else {
+			charFgColor = tcell.ColorBlack
+		}
 	} else {
 		if ctx.IsInsertMode() {
 			cursorBgColor = RgbCursorInsert
