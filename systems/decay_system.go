@@ -31,6 +31,7 @@ type DecaySystem struct {
 	lastUpdate       time.Time
 	ctx              *engine.GameContext
 	spawnSystem      *SpawnSystem
+	nuggetSystem     *NuggetSystem
 	fallingEntities  []engine.Entity        // Entities representing falling decay characters
 	decayedThisFrame map[engine.Entity]bool // Track which entities were decayed this frame
 }
@@ -51,6 +52,11 @@ func NewDecaySystem(gameWidth, gameHeight int, ctx *engine.GameContext) *DecaySy
 // SetSpawnSystem sets the spawn system reference for color counter updates
 func (s *DecaySystem) SetSpawnSystem(spawnSystem *SpawnSystem) {
 	s.spawnSystem = spawnSystem
+}
+
+// SetNuggetSystem sets the nugget system reference for respawn triggering
+func (s *DecaySystem) SetNuggetSystem(nuggetSystem *NuggetSystem) {
+	s.nuggetSystem = nuggetSystem
 }
 
 // Priority returns the system's priority
@@ -323,22 +329,39 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 		// Update component
 		world.AddComponent(entity, fall)
 
-		// Check for character at this position and apply decay
+		// Check for character at this position and apply decay or destroy nuggets
 		targetEntity := world.GetEntityAtPosition(fall.Column, currentRow)
 		if targetEntity != 0 {
-			// Check if already decayed with lock
+			// Check if already processed with lock
 			s.mu.RLock()
-			alreadyDecayed := s.decayedThisFrame[targetEntity]
+			alreadyProcessed := s.decayedThisFrame[targetEntity]
 			s.mu.RUnlock()
 
-			if !alreadyDecayed {
-				// Apply decay to this character
-				s.applyDecayToCharacter(world, targetEntity)
+			if !alreadyProcessed {
+				// Check if this is a nugget entity
+				nuggetType := reflect.TypeOf(components.NuggetComponent{})
+				if _, hasNugget := world.GetComponent(targetEntity, nuggetType); hasNugget {
+					// Destroy the nugget
+					world.SafeDestroyEntity(targetEntity)
 
-				// Mark as decayed with lock
-				s.mu.Lock()
-				s.decayedThisFrame[targetEntity] = true
-				s.mu.Unlock()
+					// Clear active nugget reference to trigger respawn
+					if s.nuggetSystem != nil {
+						s.nuggetSystem.ClearActiveNugget()
+					}
+
+					// Mark as processed with lock
+					s.mu.Lock()
+					s.decayedThisFrame[targetEntity] = true
+					s.mu.Unlock()
+				} else {
+					// Apply decay to this character (not a nugget)
+					s.applyDecayToCharacter(world, targetEntity)
+
+					// Mark as decayed with lock
+					s.mu.Lock()
+					s.decayedThisFrame[targetEntity] = true
+					s.mu.Unlock()
+				}
 			}
 		}
 
