@@ -74,7 +74,7 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
 
 	// Draw heat meter
-	r.drawHeatMeter(ctx.GetHeat(), defaultStyle)
+	r.drawHeatMeter(ctx.State.GetHeat(), defaultStyle)
 
 	// Draw line numbers
 	r.drawLineNumbers(ctx, defaultStyle)
@@ -662,14 +662,14 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 	}
 
 	// Calculate positions and draw timers + score (from right to left: Boost, Grid, Decay, Score)
-	scoreText := fmt.Sprintf(" Score: %d ", ctx.GetScore())
+	scoreText := fmt.Sprintf(" Score: %d ", ctx.State.GetScore())
 	decayText := fmt.Sprintf(" Decay: %.1fs ", decayTimeRemaining)
 	var boostText string
 	var gridText string
 	var totalWidth int
 
-	if ctx.GetBoostEnabled() {
-		remaining := ctx.GetBoostEndTime().Sub(ctx.TimeProvider.Now()).Seconds()
+	if ctx.State.GetBoostEnabled() {
+		remaining := ctx.State.GetBoostEndTime().Sub(ctx.TimeProvider.Now()).Seconds()
 		if remaining < 0 {
 			remaining = 0
 		}
@@ -694,7 +694,7 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 	now := ctx.TimeProvider.Now()
 
 	// Draw boost timer if active (with pink background)
-	if ctx.GetBoostEnabled() {
+	if ctx.State.GetBoostEnabled() {
 		boostStyle := defaultStyle.Foreground(RgbStatusText).Background(RgbBoostBg)
 		for i, ch := range boostText {
 			if startX+i < r.width {
@@ -725,8 +725,25 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 	startX += len(decayText)
 
 	// Draw score (with white background, or blink color if active)
-	if ctx.GetScoreBlinkActive() && now.Sub(ctx.GetScoreBlinkTime()).Milliseconds() < 200 {
-		blinkColor := ctx.GetScoreBlinkColor()
+	if ctx.State.GetScoreBlinkActive() && now.Sub(ctx.State.GetScoreBlinkTime()).Milliseconds() < 200 {
+		// Get score blink type and generate color
+		typeCode := ctx.State.GetScoreBlinkType()
+		var blinkColor tcell.Color
+		// Map back to sequence type and generate bright background color
+		switch typeCode {
+		case 0: // Error state
+			blinkColor = tcell.NewRGBColor(0, 0, 0) // Black for error
+		case 1: // Blue
+			blinkColor = tcell.NewRGBColor(160, 210, 255) // Brighter blue for background
+		case 2: // Green
+			blinkColor = tcell.NewRGBColor(120, 255, 120) // Brighter green for background
+		case 3: // Red
+			blinkColor = tcell.NewRGBColor(255, 140, 140) // Brighter red for background
+		case 4: // Gold
+			blinkColor = tcell.NewRGBColor(255, 255, 0) // Bright yellow for gold
+		default:
+			blinkColor = tcell.NewRGBColor(255, 255, 255) // Default to white
+		}
 		var scoreStyle tcell.Style
 		if blinkColor == 0 {
 			// Error state: black background with bright red text
@@ -762,8 +779,8 @@ func (r *TerminalRenderer) drawCursor(ctx *engine.GameContext, defaultStyle tcel
 
 	// Check for cursor error blink
 	now := ctx.TimeProvider.Now()
-	if ctx.GetCursorError() && now.Sub(ctx.GetCursorErrorTime()).Milliseconds() > errorBlinkMs {
-		ctx.SetCursorError(false)
+	if ctx.State.GetCursorError() && now.Sub(ctx.State.GetCursorErrorTime()).Milliseconds() > errorBlinkMs {
+		ctx.State.SetCursorError(false)
 	}
 
 	// Find character at cursor position
@@ -787,7 +804,7 @@ func (r *TerminalRenderer) drawCursor(ctx *engine.GameContext, defaultStyle tcel
 	var cursorBgColor tcell.Color
 	var charFgColor tcell.Color
 
-	if ctx.GetCursorError() {
+	if ctx.State.GetCursorError() {
 		cursorBgColor = RgbCursorError
 		charFgColor = tcell.ColorBlack
 	} else if hasChar {

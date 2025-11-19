@@ -107,7 +107,7 @@ func ExecuteDeleteMotion(ctx *engine.GameContext, motion rune, count int) {
 
 	// Reset heat only if green or blue was deleted
 	if deletedGreenOrBlue {
-		ctx.SetHeat(0)
+		ctx.State.SetHeat(0)
 	}
 
 	ctx.DeleteOperator = false

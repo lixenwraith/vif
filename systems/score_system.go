@@ -46,13 +46,13 @@ func (s *ScoreSystem) Update(world *engine.World, dt time.Duration) {
 	now := s.ctx.TimeProvider.Now()
 
 	// Clear error cursor after timeout
-	if s.ctx.GetCursorError() && now.Sub(s.ctx.GetCursorErrorTime()) > constants.ErrorCursorTimeout {
-		s.ctx.SetCursorError(false)
+	if s.ctx.State.GetCursorError() && now.Sub(s.ctx.State.GetCursorErrorTime()) > constants.ErrorCursorTimeout {
+		s.ctx.State.SetCursorError(false)
 	}
 
 	// Clear score blink after timeout
-	if s.ctx.GetScoreBlinkActive() && now.Sub(s.ctx.GetScoreBlinkTime()) > constants.ScoreBlinkTimeout {
-		s.ctx.SetScoreBlinkActive(false)
+	if s.ctx.State.GetScoreBlinkActive() && now.Sub(s.ctx.State.GetScoreBlinkTime()) > constants.ScoreBlinkTimeout {
+		s.ctx.State.SetScoreBlinkActive(false)
 	}
 }
 
@@ -64,15 +64,16 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 	entity := world.GetEntityAtPosition(cursorX, cursorY)
 	if entity == 0 {
 		// No character at cursor - flash error cursor and deactivate boost
-		s.ctx.SetCursorError(true)
-		s.ctx.SetCursorErrorTime(now)
-		s.ctx.SetHeat(0) // Reset heat
-		s.ctx.SetBoostEnabled(false)
-		s.ctx.SetBoostSequenceColor(0) // 0 = None
+		s.ctx.State.SetCursorError(true)
+		s.ctx.State.SetCursorErrorTime(now)
+		s.ctx.State.SetHeat(0) // Reset heat
+		s.ctx.State.SetBoostEnabled(false)
+		s.ctx.State.SetBoostColor(0) // 0 = None
 		// Set score blink to error state (black background with bright red text)
-		s.ctx.SetScoreBlinkActive(true)
-		s.ctx.SetScoreBlinkTypeLevel(components.SequenceType(255), components.SequenceLevel(0)) // Error state (255 = invalid type)
-		s.ctx.SetScoreBlinkTime(now)
+		s.ctx.State.SetScoreBlinkActive(true)
+		s.ctx.State.SetScoreBlinkType(0)  // 0 = error
+		s.ctx.State.SetScoreBlinkLevel(0) // 0 = dark
+		s.ctx.State.SetScoreBlinkTime(now)
 		return
 	}
 
@@ -80,15 +81,16 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 	charType := reflect.TypeOf(components.CharacterComponent{})
 	charComp, ok := world.GetComponent(entity, charType)
 	if !ok {
-		s.ctx.SetCursorError(true)
-		s.ctx.SetCursorErrorTime(now)
-		s.ctx.SetHeat(0)
-		s.ctx.SetBoostEnabled(false)
-		s.ctx.SetBoostSequenceColor(0)
+		s.ctx.State.SetCursorError(true)
+		s.ctx.State.SetCursorErrorTime(now)
+		s.ctx.State.SetHeat(0)
+		s.ctx.State.SetBoostEnabled(false)
+		s.ctx.State.SetBoostColor(0)
 		// Set score blink to error state (black background with bright red text)
-		s.ctx.SetScoreBlinkActive(true)
-		s.ctx.SetScoreBlinkTypeLevel(components.SequenceType(255), components.SequenceLevel(0)) // Error state (255 = invalid type)
-		s.ctx.SetScoreBlinkTime(now)
+		s.ctx.State.SetScoreBlinkActive(true)
+		s.ctx.State.SetScoreBlinkType(0)  // 0 = error
+		s.ctx.State.SetScoreBlinkLevel(0) // 0 = dark
+		s.ctx.State.SetScoreBlinkTime(now)
 		return
 	}
 	char := charComp.(components.CharacterComponent)
@@ -97,15 +99,16 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 	seqType := reflect.TypeOf(components.SequenceComponent{})
 	seqComp, ok := world.GetComponent(entity, seqType)
 	if !ok {
-		s.ctx.SetCursorError(true)
-		s.ctx.SetCursorErrorTime(now)
-		s.ctx.SetHeat(0)
-		s.ctx.SetBoostEnabled(false)
-		s.ctx.SetBoostSequenceColor(0)
+		s.ctx.State.SetCursorError(true)
+		s.ctx.State.SetCursorErrorTime(now)
+		s.ctx.State.SetHeat(0)
+		s.ctx.State.SetBoostEnabled(false)
+		s.ctx.State.SetBoostColor(0)
 		// Set score blink to error state (black background with bright red text)
-		s.ctx.SetScoreBlinkActive(true)
-		s.ctx.SetScoreBlinkTypeLevel(components.SequenceType(255), components.SequenceLevel(0)) // Error state (255 = invalid type)
-		s.ctx.SetScoreBlinkTime(now)
+		s.ctx.State.SetScoreBlinkActive(true)
+		s.ctx.State.SetScoreBlinkType(0)  // 0 = error
+		s.ctx.State.SetScoreBlinkLevel(0) // 0 = dark
+		s.ctx.State.SetScoreBlinkTime(now)
 		return
 	}
 	seq := seqComp.(components.SequenceComponent)
@@ -122,10 +125,10 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		// Correct character
 		// RED characters reset heat instead of incrementing it
 		if seq.Type == components.SequenceRed {
-			s.ctx.SetHeat(0)
+			s.ctx.State.SetHeat(0)
 			// Red character also deactivates boost
-			s.ctx.SetBoostEnabled(false)
-			s.ctx.SetBoostSequenceColor(0) // 0 = None
+			s.ctx.State.SetBoostEnabled(false)
+			s.ctx.State.SetBoostColor(0) // 0 = None
 		} else {
 			// Read boost state snapshot for consistent checks
 			boostState := s.ctx.State.ReadBoostState()
@@ -135,7 +138,7 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 			if boostState.Enabled {
 				heatGain = 2
 			}
-			s.ctx.AddHeat(heatGain)
+			s.ctx.State.AddHeat(heatGain)
 
 			// Get max heat (heat bar width)
 			heatBarWidth := s.ctx.Width
@@ -144,7 +147,7 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 			}
 
 			// Handle boost activation and maintenance
-			currentHeat := s.ctx.GetHeat()
+			currentHeat := s.ctx.State.GetHeat()
 
 			// Convert sequence type to color code: 1=Blue, 2=Green
 			var charColorCode int32
@@ -158,19 +161,19 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 				// Heat is at max
 				if !boostState.Enabled {
 					// Activate boost for the first time
-					s.ctx.SetBoostEnabled(true)
-					s.ctx.SetBoostSequenceColor(charColorCode)
-					s.ctx.SetBoostEndTime(now.Add(constants.BoostExtensionDuration))
+					s.ctx.State.SetBoostEnabled(true)
+					s.ctx.State.SetBoostColor(charColorCode)
+					s.ctx.State.SetBoostEndTime(now.Add(constants.BoostExtensionDuration))
 				} else if boostState.Color == charColorCode {
 					// Same color - extend boost timer
 					s.extendBoost(constants.BoostExtensionDuration)
 				} else {
 					// Different color - reset boost timer but keep heat at max
 					// Set timer to current time (effectively deactivates until rebuilt)
-					s.ctx.SetBoostEndTime(now)
-					s.ctx.SetBoostEnabled(false)
+					s.ctx.State.SetBoostEndTime(now)
+					s.ctx.State.SetBoostEnabled(false)
 					// Update color for potential rebuild
-					s.ctx.SetBoostSequenceColor(charColorCode)
+					s.ctx.State.SetBoostColor(charColorCode)
 				}
 			}
 		}
@@ -183,19 +186,44 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 			components.LevelBright: 3,
 		}
 		levelMult := levelMultipliers[seq.Level]
-		points := s.ctx.GetHeat() * levelMult
+		points := s.ctx.State.GetHeat() * levelMult
 
 		// Red characters give negative points
 		if seq.Type == components.SequenceRed {
 			points = -points
 		}
 
-		s.ctx.AddScore(points)
+		s.ctx.State.AddScore(points)
 
 		// Trigger score blink with character type and level
-		s.ctx.SetScoreBlinkActive(true)
-		s.ctx.SetScoreBlinkTypeLevel(seq.Type, seq.Level)
-		s.ctx.SetScoreBlinkTime(now)
+		s.ctx.State.SetScoreBlinkActive(true)
+		// Map sequence types to uint32: 0=error, 1=blue, 2=green, 3=red, 4=gold
+		var typeCode uint32
+		switch seq.Type {
+		case components.SequenceBlue:
+			typeCode = 1
+		case components.SequenceGreen:
+			typeCode = 2
+		case components.SequenceRed:
+			typeCode = 3
+		case components.SequenceGold:
+			typeCode = 4
+		default:
+			typeCode = 0 // Error state
+		}
+		// Map levels to uint32: 0=dark, 1=normal, 2=bright
+		var levelCode uint32
+		switch seq.Level {
+		case components.LevelDark:
+			levelCode = 0
+		case components.LevelNormal:
+			levelCode = 1
+		case components.LevelBright:
+			levelCode = 2
+		}
+		s.ctx.State.SetScoreBlinkType(typeCode)
+		s.ctx.State.SetScoreBlinkLevel(levelCode)
+		s.ctx.State.SetScoreBlinkTime(now)
 
 		// Decrement color counter (only for Blue and Green, not Red or Gold)
 		if s.spawnSystem != nil && (seq.Type == components.SequenceBlue || seq.Type == components.SequenceGreen) {
@@ -215,15 +243,16 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 
 	} else {
 		// Incorrect character - flash error cursor, reset heat, and deactivate boost
-		s.ctx.SetCursorError(true)
-		s.ctx.SetCursorErrorTime(now)
-		s.ctx.SetHeat(0)
-		s.ctx.SetBoostEnabled(false)
-		s.ctx.SetBoostSequenceColor(0) // 0 = None
+		s.ctx.State.SetCursorError(true)
+		s.ctx.State.SetCursorErrorTime(now)
+		s.ctx.State.SetHeat(0)
+		s.ctx.State.SetBoostEnabled(false)
+		s.ctx.State.SetBoostColor(0) // 0 = None
 		// Set score blink to error state (black background with bright red text)
-		s.ctx.SetScoreBlinkActive(true)
-		s.ctx.SetScoreBlinkTypeLevel(components.SequenceType(255), components.SequenceLevel(0)) // Error state (255 = invalid type)
-		s.ctx.SetScoreBlinkTime(now)
+		s.ctx.State.SetScoreBlinkActive(true)
+		s.ctx.State.SetScoreBlinkType(0)  // 0 = error
+		s.ctx.State.SetScoreBlinkLevel(0) // 0 = dark
+		s.ctx.State.SetScoreBlinkTime(now)
 	}
 }
 
@@ -232,16 +261,16 @@ func (s *ScoreSystem) extendBoost(duration time.Duration) {
 	now := s.ctx.TimeProvider.Now()
 
 	// If boost is already active, add to existing end time; otherwise start fresh
-	currentEndTime := s.ctx.GetBoostEndTime()
-	wasActive := s.ctx.GetBoostEnabled() && currentEndTime.After(now)
+	currentEndTime := s.ctx.State.GetBoostEndTime()
+	wasActive := s.ctx.State.GetBoostEnabled() && currentEndTime.After(now)
 
 	if wasActive {
-		s.ctx.SetBoostEndTime(currentEndTime.Add(duration))
+		s.ctx.State.SetBoostEndTime(currentEndTime.Add(duration))
 	} else {
-		s.ctx.SetBoostEndTime(now.Add(duration))
+		s.ctx.State.SetBoostEndTime(now.Add(duration))
 	}
 
-	s.ctx.SetBoostEnabled(true)
+	s.ctx.State.SetBoostEnabled(true)
 }
 
 // handleGoldSequenceTyping processes typing of gold sequence characters
@@ -251,20 +280,46 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 	// Check if typed character matches
 	if char.Rune != typedRune {
 		// Incorrect character - flash error cursor but DON'T reset heat for gold sequence
-		s.ctx.SetCursorError(true)
-		s.ctx.SetCursorErrorTime(now)
+		s.ctx.State.SetCursorError(true)
+		s.ctx.State.SetCursorErrorTime(now)
 		// Set score blink to error state (black background with bright red text)
-		s.ctx.SetScoreBlinkActive(true)
-		s.ctx.SetScoreBlinkTypeLevel(components.SequenceType(255), components.SequenceLevel(0)) // Error state (255 = invalid type)
-		s.ctx.SetScoreBlinkTime(now)
+		s.ctx.State.SetScoreBlinkActive(true)
+		s.ctx.State.SetScoreBlinkType(0)  // 0 = error
+		s.ctx.State.SetScoreBlinkLevel(0) // 0 = dark
+		s.ctx.State.SetScoreBlinkTime(now)
 		return
 	}
 
 	// Correct character - remove entity and move cursor
 	// Trigger score blink with Gold type and level
-	s.ctx.SetScoreBlinkActive(true)
-	s.ctx.SetScoreBlinkTypeLevel(seq.Type, seq.Level)
-	s.ctx.SetScoreBlinkTime(now)
+	s.ctx.State.SetScoreBlinkActive(true)
+	// Map sequence types to uint32: 0=error, 1=blue, 2=green, 3=red, 4=gold
+	var typeCode uint32
+	switch seq.Type {
+	case components.SequenceBlue:
+		typeCode = 1
+	case components.SequenceGreen:
+		typeCode = 2
+	case components.SequenceRed:
+		typeCode = 3
+	case components.SequenceGold:
+		typeCode = 4
+	default:
+		typeCode = 0 // Error state
+	}
+	// Map levels to uint32: 0=dark, 1=normal, 2=bright
+	var levelCode uint32
+	switch seq.Level {
+	case components.LevelDark:
+		levelCode = 0
+	case components.LevelNormal:
+		levelCode = 1
+	case components.LevelBright:
+		levelCode = 2
+	}
+	s.ctx.State.SetScoreBlinkType(typeCode)
+	s.ctx.State.SetScoreBlinkLevel(levelCode)
+	s.ctx.State.SetScoreBlinkTime(now)
 
 	// Safely destroy the character entity (handles spatial index removal)
 	world.SafeDestroyEntity(entity)
@@ -287,7 +342,7 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 			heatBarWidth = 1
 		}
 
-		currentHeat := s.ctx.GetHeat()
+		currentHeat := s.ctx.State.GetHeat()
 
 		// Request cleaners if heat is already at max
 		// Clock scheduler will trigger cleaners on next tick (within 50ms)
@@ -300,7 +355,7 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 
 		// Fill heat to max (if not already higher)
 		if currentHeat < heatBarWidth {
-			s.ctx.SetHeat(heatBarWidth)
+			s.ctx.State.SetHeat(heatBarWidth)
 		}
 
 		// Mark gold sequence as complete

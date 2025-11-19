@@ -72,33 +72,33 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 		if h.ctx.CursorY > 0 {
 			h.ctx.CursorY--
 		}
-		h.ctx.SetHeat(0)
+		h.ctx.State.SetHeat(0)
 		return true
 	case tcell.KeyDown:
 		if h.ctx.CursorY < h.ctx.GameHeight-1 {
 			h.ctx.CursorY++
 		}
-		h.ctx.SetHeat(0)
+		h.ctx.State.SetHeat(0)
 		return true
 	case tcell.KeyLeft:
 		if h.ctx.CursorX > 0 {
 			h.ctx.CursorX--
 		}
-		h.ctx.SetHeat(0)
+		h.ctx.State.SetHeat(0)
 		return true
 	case tcell.KeyRight:
 		if h.ctx.CursorX < h.ctx.GameWidth-1 {
 			h.ctx.CursorX++
 		}
-		h.ctx.SetHeat(0)
+		h.ctx.State.SetHeat(0)
 		return true
 	case tcell.KeyHome:
 		h.ctx.CursorX = 0
-		h.ctx.SetHeat(0)
+		h.ctx.State.SetHeat(0)
 		return true
 	case tcell.KeyEnd:
 		h.ctx.CursorX = findLineEnd(h.ctx)
-		h.ctx.SetHeat(0)
+		h.ctx.State.SetHeat(0)
 		return true
 	case tcell.KeyRune:
 		// SPACE key: move right without typing, no heat contribution
@@ -147,38 +147,38 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 		if h.ctx.CursorY > 0 {
 			h.ctx.CursorY--
 		}
-		h.ctx.SetHeat(0)
+		h.ctx.State.SetHeat(0)
 		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
 	case tcell.KeyDown:
 		if h.ctx.CursorY < h.ctx.GameHeight-1 {
 			h.ctx.CursorY++
 		}
-		h.ctx.SetHeat(0)
+		h.ctx.State.SetHeat(0)
 		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
 	case tcell.KeyLeft:
 		if h.ctx.CursorX > 0 {
 			h.ctx.CursorX--
 		}
-		h.ctx.SetHeat(0)
+		h.ctx.State.SetHeat(0)
 		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
 	case tcell.KeyRight:
 		if h.ctx.CursorX < h.ctx.GameWidth-1 {
 			h.ctx.CursorX++
 		}
-		h.ctx.SetHeat(0)
+		h.ctx.State.SetHeat(0)
 		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
 	case tcell.KeyHome:
 		h.ctx.CursorX = 0
-		h.ctx.SetHeat(0)
+		h.ctx.State.SetHeat(0)
 		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
 	case tcell.KeyEnd:
 		h.ctx.CursorX = findLineEnd(h.ctx)
-		h.ctx.SetHeat(0)
+		h.ctx.State.SetHeat(0)
 		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
 	case tcell.KeyEnter:
