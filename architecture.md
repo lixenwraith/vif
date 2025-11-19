@@ -45,22 +45,37 @@ Updated during scheduled game logic ticks, read by all systems:
 - Blocking is acceptable (not on hot path)
 
 #### State Access Patterns
-```go
-// Real-time (typing): Direct atomic access
-gs.AddHeat(1)                    // No lock, instant
-gs.AddColorCount(Blue, Bright, 1) // Atomic increment
 
-// Clock-tick (spawn): Snapshot pattern
-snapshot := gs.ReadSpawnState()  // RLock, consistent view
-if gs.ShouldSpawn() {            // RLock, check timing
+**Systems access GameState through GameContext:**
+All systems hold a reference to `*engine.GameContext` and access state via `ctx.State`:
+
+```go
+// Real-time (typing): Direct atomic access through GameContext
+ctx.State.AddHeat(1)                    // No lock, instant
+ctx.State.AddColorCount(Blue, Bright, 1) // Atomic increment
+
+// Clock-tick (spawn): Snapshot pattern through GameContext
+snapshot := ctx.State.ReadSpawnState()  // RLock, consistent view
+if ctx.State.ShouldSpawn() {            // RLock, check timing
     // ... spawn logic ...
-    gs.UpdateSpawnTiming(now, next) // Lock, update state
+    ctx.State.UpdateSpawnTiming(now, next) // Lock, update state
 }
 
-// Render: Safe concurrent reads
-heat := gs.GetHeat()             // Atomic load
-snapshot := gs.ReadSpawnState()  // RLock, no blocking
+// Render: Safe concurrent reads through GameContext
+heat := ctx.State.GetHeat()             // Atomic load
+snapshot := ctx.State.ReadSpawnState()  // RLock, no blocking
+
+// Dimensions: Read directly from GameContext (no caching)
+width := ctx.GameWidth   // Always current
+height := ctx.GameHeight // Always current
 ```
+
+**GameContext Role:**
+- GameContext is **NOT** a delegation layer for State
+- It provides direct access to GameState via the `State` field
+- Systems read dimensions directly from `ctx.GameWidth` and `ctx.GameHeight`
+- No local dimension caching - always read current values
+- Input-specific methods (cursor position, mode, motion commands) remain on GameContext
 
 #### Snapshot Pattern
 
@@ -87,7 +102,7 @@ type SpawnStateSnapshot struct {
     MaxEntities    int
     ScreenDensity  float64
 }
-snapshot := gs.ReadSpawnState() // Used by: SpawnSystem, Renderer
+snapshot := ctx.State.ReadSpawnState() // Used by: SpawnSystem, Renderer
 
 // Color Counter State (atomic fields)
 type ColorCountSnapshot struct {
@@ -98,14 +113,14 @@ type ColorCountSnapshot struct {
     GreenNormal int64
     GreenDark   int64
 }
-snapshot := gs.ReadColorCounts() // Used by: SpawnSystem, DecaySystem, Renderer
+snapshot := ctx.State.ReadColorCounts() // Used by: SpawnSystem, DecaySystem, Renderer
 
 // Cursor Position (atomic fields)
 type CursorSnapshot struct {
     X int
     Y int
 }
-snapshot := gs.ReadCursorPosition() // Used by: SpawnSystem (exclusion zone), Renderer
+snapshot := ctx.State.ReadCursorPosition() // Used by: SpawnSystem (exclusion zone), Renderer
 
 // Boost State (atomic fields)
 type BoostSnapshot struct {
@@ -114,7 +129,7 @@ type BoostSnapshot struct {
     Color     int32
     Remaining time.Duration
 }
-snapshot := gs.ReadBoostState() // Used by: ScoreSystem, Renderer
+snapshot := ctx.State.ReadBoostState() // Used by: ScoreSystem, Renderer
 
 // Phase State (mutex-protected)
 type PhaseSnapshot struct {
@@ -122,7 +137,7 @@ type PhaseSnapshot struct {
     StartTime time.Time
     Duration  time.Duration
 }
-snapshot := gs.ReadPhaseState() // Used by: ClockScheduler, all game systems
+snapshot := ctx.State.ReadPhaseState() // Used by: ClockScheduler, all game systems
 
 // Gold Sequence State (mutex-protected)
 type GoldSnapshot struct {
@@ -133,7 +148,7 @@ type GoldSnapshot struct {
     Elapsed     time.Duration
     Remaining   time.Duration
 }
-snapshot := gs.ReadGoldState() // Used by: GoldSequenceSystem, ScoreSystem, Renderer
+snapshot := ctx.State.ReadGoldState() // Used by: GoldSequenceSystem, ScoreSystem, Renderer
 
 // Decay State (mutex-protected)
 type DecaySnapshot struct {
@@ -143,7 +158,7 @@ type DecaySnapshot struct {
     StartTime   time.Time
     TimeUntil   float64
 }
-snapshot := gs.ReadDecayState() // Used by: DecaySystem, Renderer
+snapshot := ctx.State.ReadDecayState() // Used by: DecaySystem, Renderer
 
 // Cleaner State (mutex-protected)
 type CleanerSnapshot struct {
@@ -152,10 +167,10 @@ type CleanerSnapshot struct {
     StartTime time.Time
     Elapsed   time.Duration
 }
-snapshot := gs.ReadCleanerState() // Used by: CleanerSystem, Renderer
+snapshot := ctx.State.ReadCleanerState() // Used by: CleanerSystem, Renderer
 
 // Atomic pairs for related fields
-heat, score := gs.ReadHeatAndScore() // Used by: ScoreSystem, Renderer
+heat, score := ctx.State.ReadHeatAndScore() // Used by: ScoreSystem, Renderer
 ```
 
 **Usage Examples:**
@@ -163,7 +178,7 @@ heat, score := gs.ReadHeatAndScore() // Used by: ScoreSystem, Renderer
 **Correct: Snapshot Pattern**
 ```go
 // ✅ GOOD: Read once, use multiple times
-snapshot := gs.ReadSpawnState()
+snapshot := ctx.State.ReadSpawnState()
 if snapshot.Enabled && snapshot.EntityCount < snapshot.MaxEntities {
     density := snapshot.ScreenDensity
     rate := snapshot.RateMultiplier
@@ -174,9 +189,9 @@ if snapshot.Enabled && snapshot.EntityCount < snapshot.MaxEntities {
 **Incorrect: Multiple Individual Reads**
 ```go
 // ❌ BAD: Race condition - fields may change between reads
-if gs.ShouldSpawn() {                    // RLock #1
-    count := gs.ReadSpawnState().EntityCount  // RLock #2
-    density := gs.ReadSpawnState().ScreenDensity  // RLock #3
+if ctx.State.ShouldSpawn() {                    // RLock #1
+    count := ctx.State.ReadSpawnState().EntityCount  // RLock #2
+    density := ctx.State.ReadSpawnState().ScreenDensity  // RLock #3
     // EntityCount and ScreenDensity may be from different updates!
 }
 ```
@@ -184,7 +199,7 @@ if gs.ShouldSpawn() {                    // RLock #1
 **Correct: Atomic Snapshots**
 ```go
 // ✅ GOOD: Atomic fields read together
-heat, score := gs.ReadHeatAndScore()
+heat, score := ctx.State.ReadHeatAndScore()
 if heat > 0 && score > 0 {
     // heat and score are consistent
 }
@@ -193,8 +208,8 @@ if heat > 0 && score > 0 {
 **Incorrect: Separate Atomic Reads**
 ```go
 // ❌ BAD: heat and score may be from different moments
-heat := gs.GetHeat()   // Atomic read #1
-score := gs.GetScore() // Atomic read #2
+heat := ctx.State.GetHeat()   // Atomic read #1
+score := ctx.State.GetScore() // Atomic read #2
 // If another goroutine updates both, we might see heat=new, score=old
 ```
 
