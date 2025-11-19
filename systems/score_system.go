@@ -306,7 +306,8 @@ func (s *ScoreSystem) handleNuggetCollection(world *engine.World, entity engine.
 	world.SafeDestroyEntity(entity)
 
 	// Clear the active nugget reference to trigger respawn
-	s.nuggetSystem.ClearActiveNugget()
+	// Use CAS to ensure we only clear if this is still the active nugget
+	s.nuggetSystem.ClearActiveNuggetIfMatches(uint64(entity))
 
 	// Move cursor right
 	s.ctx.CursorX++

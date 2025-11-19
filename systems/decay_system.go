@@ -345,8 +345,9 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 					world.SafeDestroyEntity(targetEntity)
 
 					// Clear active nugget reference to trigger respawn
+					// Use CAS to ensure we only clear if this is still the active nugget
 					if s.nuggetSystem != nil {
-						s.nuggetSystem.ClearActiveNugget()
+						s.nuggetSystem.ClearActiveNuggetIfMatches(uint64(targetEntity))
 					}
 
 					// Mark as processed with lock

@@ -4,6 +4,7 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -63,8 +64,9 @@ func (s *NuggetSystem) Update(world *engine.World, dt time.Duration) {
 	// Verify active nugget still exists
 	nuggetType := reflect.TypeOf(components.NuggetComponent{})
 	if !world.HasComponent(engine.Entity(activeNuggetEntity), nuggetType) {
-		// Nugget was removed/destroyed, clear active reference
-		s.activeNugget.Store(0)
+		// Nugget was removed/destroyed, clear active reference only if it's still this entity
+		// Use CAS to prevent clearing a newly spawned nugget
+		s.activeNugget.CompareAndSwap(activeNuggetEntity, 0)
 	}
 }
 
@@ -148,8 +150,36 @@ func (s *NuggetSystem) GetActiveNugget() uint64 {
 }
 
 // ClearActiveNugget clears the active nugget reference (called when collected)
+// This uses unconditional Store(0) for backward compatibility
 func (s *NuggetSystem) ClearActiveNugget() {
 	s.activeNugget.Store(0)
+}
+
+// ClearActiveNuggetIfMatches clears the active nugget reference only if it matches the given entity ID
+// Returns true if the nugget was cleared, false if it was already cleared or a different nugget was active
+// This is the race-safe version that should be preferred when the entity ID is known
+func (s *NuggetSystem) ClearActiveNuggetIfMatches(entityID uint64) bool {
+	return s.activeNugget.CompareAndSwap(entityID, 0)
+}
+
+// GetSystemState returns a debug string describing the current system state
+func (s *NuggetSystem) GetSystemState() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	activeNuggetEntity := s.activeNugget.Load()
+
+	if activeNuggetEntity == 0 {
+		now := s.ctx.TimeProvider.Now()
+		timeSinceLastSpawn := now.Sub(s.lastSpawnAttempt)
+		timeUntilNext := (nuggetSpawnIntervalSeconds * time.Second) - timeSinceLastSpawn
+		if timeUntilNext < 0 {
+			timeUntilNext = 0
+		}
+		return "Nugget[inactive, nextSpawn=" + timeUntilNext.Round(100*time.Millisecond).String() + "]"
+	}
+
+	return "Nugget[active, entityID=" + strconv.Itoa(int(activeNuggetEntity)) + "]"
 }
 
 // JumpToNugget returns the position of the active nugget, or (-1, -1) if no nugget exists
