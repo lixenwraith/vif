@@ -19,15 +19,14 @@ func TestDrainSystem_CollisionWithBlueCharacter(t *testing.T) {
 
 	drainSys := NewDrainSystem(ctx)
 
-	// Spawn drain at position (5, 5)
+	// Spawn drain at a different position
 	ctx.State.SetScore(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
-	// Get drain entity and position
+	// Get drain entity
 	drainEntityID := ctx.State.GetDrainEntity()
 	drainEntity := engine.Entity(drainEntityID)
 
-	// Get drain's actual position
 	drainType := reflect.TypeOf(components.DrainComponent{})
 	drainComp, ok := world.GetComponent(drainEntity, drainType)
 	if !ok {
@@ -35,11 +34,12 @@ func TestDrainSystem_CollisionWithBlueCharacter(t *testing.T) {
 	}
 	drain := drainComp.(components.DrainComponent)
 
-	// Create a blue character at the same position
+	// Create a blue character at a different position (10, 10)
+	charX, charY := 10, 10
 	charEntity := world.CreateEntity()
 	world.AddComponent(charEntity, components.PositionComponent{
-		X: drain.X,
-		Y: drain.Y,
+		X: charX,
+		Y: charY,
 	})
 	world.AddComponent(charEntity, components.CharacterComponent{
 		Rune:  'a',
@@ -52,8 +52,9 @@ func TestDrainSystem_CollisionWithBlueCharacter(t *testing.T) {
 		Level: components.LevelNormal,
 	})
 
+	// Spawn character using spatial transaction
 	tx := world.BeginSpatialTransaction()
-	tx.Spawn(charEntity, drain.X, drain.Y)
+	tx.Spawn(charEntity, charX, charY)
 	tx.Commit()
 
 	// Set color counter to 1
@@ -62,6 +63,13 @@ func TestDrainSystem_CollisionWithBlueCharacter(t *testing.T) {
 	if ctx.State.BlueCountNormal.Load() != 1 {
 		t.Fatal("Expected blue count to be 1")
 	}
+
+	// Move drain to character position (update GameState and component, not spatial index)
+	drain.X = charX
+	drain.Y = charY
+	world.AddComponent(drainEntity, drain)
+	ctx.State.SetDrainX(charX)
+	ctx.State.SetDrainY(charY)
 
 	// Update drain system (should handle collision)
 	drainSys.Update(world, 16*time.Millisecond)
@@ -101,11 +109,12 @@ func TestDrainSystem_CollisionWithGreenCharacter(t *testing.T) {
 	}
 	drain := drainComp.(components.DrainComponent)
 
-	// Create a green character at the same position
+	// Create a green character at a different position (10, 10)
+	charX, charY := 10, 10
 	charEntity := world.CreateEntity()
 	world.AddComponent(charEntity, components.PositionComponent{
-		X: drain.X,
-		Y: drain.Y,
+		X: charX,
+		Y: charY,
 	})
 	world.AddComponent(charEntity, components.CharacterComponent{
 		Rune:  'b',
@@ -118,13 +127,21 @@ func TestDrainSystem_CollisionWithGreenCharacter(t *testing.T) {
 		Level: components.LevelBright,
 	})
 
+	// Spawn character using spatial transaction
 	tx := world.BeginSpatialTransaction()
-	tx.Spawn(charEntity, drain.X, drain.Y)
+	tx.Spawn(charEntity, charX, charY)
 	tx.Commit()
 
 	// Set color counter
 	// GameState mapping: 0=Blue, 1=Green
 	ctx.State.AddColorCount(1, int(components.LevelBright), 1)
+
+	// Move drain to character position (update GameState and component, not spatial index)
+	drain.X = charX
+	drain.Y = charY
+	world.AddComponent(drainEntity, drain)
+	ctx.State.SetDrainX(charX)
+	ctx.State.SetDrainY(charY)
 
 	// Update drain system (should handle collision)
 	drainSys.Update(world, 16*time.Millisecond)
@@ -164,11 +181,12 @@ func TestDrainSystem_CollisionWithRedCharacter(t *testing.T) {
 	}
 	drain := drainComp.(components.DrainComponent)
 
-	// Create a red character at the same position
+	// Create a red character at a different position (10, 10)
+	charX, charY := 10, 10
 	charEntity := world.CreateEntity()
 	world.AddComponent(charEntity, components.PositionComponent{
-		X: drain.X,
-		Y: drain.Y,
+		X: charX,
+		Y: charY,
 	})
 	world.AddComponent(charEntity, components.CharacterComponent{
 		Rune:  'c',
@@ -181,9 +199,17 @@ func TestDrainSystem_CollisionWithRedCharacter(t *testing.T) {
 		Level: components.LevelDark,
 	})
 
+	// Spawn character using spatial transaction
 	tx := world.BeginSpatialTransaction()
-	tx.Spawn(charEntity, drain.X, drain.Y)
+	tx.Spawn(charEntity, charX, charY)
 	tx.Commit()
+
+	// Move drain to character position (update GameState and component, not spatial index)
+	drain.X = charX
+	drain.Y = charY
+	world.AddComponent(drainEntity, drain)
+	ctx.State.SetDrainX(charX)
+	ctx.State.SetDrainY(charY)
 
 	// Update drain system (should handle collision)
 	drainSys.Update(world, 16*time.Millisecond)
@@ -325,11 +351,12 @@ func TestDrainSystem_CollisionMultipleLevels(t *testing.T) {
 			}
 			drain := drainComp.(components.DrainComponent)
 
-			// Create a blue character with the specified level
+			// Create a blue character with the specified level at a different position
+			charX, charY := 10, 10
 			charEntity := world.CreateEntity()
 			world.AddComponent(charEntity, components.PositionComponent{
-				X: drain.X,
-				Y: drain.Y,
+				X: charX,
+				Y: charY,
 			})
 			world.AddComponent(charEntity, components.CharacterComponent{
 				Rune:  'x',
@@ -341,14 +368,22 @@ func TestDrainSystem_CollisionMultipleLevels(t *testing.T) {
 				Type:  components.SequenceBlue,
 				Level: level,
 			})
-		
-	tx := world.BeginSpatialTransaction()
-	tx.Spawn(charEntity, drain.X, drain.Y)
-	tx.Commit()
+
+			// Spawn character using spatial transaction
+			tx := world.BeginSpatialTransaction()
+			tx.Spawn(charEntity, charX, charY)
+			tx.Commit()
 
 			// Set color counter
 			// GameState mapping: 0=Blue, 1=Green
 			ctx.State.AddColorCount(0, int(level), 1)
+
+			// Move drain to character position (update GameState and component, not spatial index)
+			drain.X = charX
+			drain.Y = charY
+			world.AddComponent(drainEntity, drain)
+			ctx.State.SetDrainX(charX)
+			ctx.State.SetDrainY(charY)
 
 			// Update drain system (should handle collision)
 			drainSys.Update(world, 16*time.Millisecond)
@@ -479,33 +514,33 @@ func TestDrainSystem_CollisionAtDifferentPositions(t *testing.T) {
 
 			drainSys := NewDrainSystem(ctx)
 
-			// Spawn drain manually at specific position
+			// Spawn drain manually at a safe position (1, 1)
 			ctx.State.SetScore(100)
 			entity := world.CreateEntity()
 			world.AddComponent(entity, components.PositionComponent{
-				X: pos.x,
-				Y: pos.y,
+				X: 1,
+				Y: 1,
 			})
 			now := ctx.TimeProvider.Now()
 			world.AddComponent(entity, components.DrainComponent{
-				X:             pos.x,
-				Y:             pos.y,
+				X:             1,
+				Y:             1,
 				LastMoveTime:  now,
 				LastDrainTime: now,
 				IsOnCursor:    false,
 			})
-	
-  {
-		tx := world.BeginSpatialTransaction()
-		tx.Spawn(entity, pos.x, pos.y)
-		tx.Commit()
-  }
+
+			{
+				tx := world.BeginSpatialTransaction()
+				tx.Spawn(entity, 1, 1)
+				tx.Commit()
+			}
 			ctx.State.SetDrainActive(true)
 			ctx.State.SetDrainEntity(uint64(entity))
-			ctx.State.SetDrainX(pos.x)
-			ctx.State.SetDrainY(pos.y)
+			ctx.State.SetDrainX(1)
+			ctx.State.SetDrainY(1)
 
-			// Create a blue character at the same position
+			// Create a blue character at the test position
 			charEntity := world.CreateEntity()
 			world.AddComponent(charEntity, components.PositionComponent{
 				X: pos.x,
@@ -521,16 +556,25 @@ func TestDrainSystem_CollisionAtDifferentPositions(t *testing.T) {
 				Type:  components.SequenceBlue,
 				Level: components.LevelNormal,
 			})
-	
-  {
-		tx := world.BeginSpatialTransaction()
-		tx.Spawn(charEntity, pos.x, pos.y)
-		tx.Commit()
-  }
+
+			{
+				tx := world.BeginSpatialTransaction()
+				tx.Spawn(charEntity, pos.x, pos.y)
+				tx.Commit()
+			}
 
 			// Set color counter
 			// GameState mapping: 0=Blue, 1=Green
 			ctx.State.AddColorCount(0, int(components.LevelNormal), 1)
+
+			// Move drain to character position (update GameState and component, not spatial index)
+			drainComp, _ := world.GetComponent(entity, reflect.TypeOf(components.DrainComponent{}))
+			drain := drainComp.(components.DrainComponent)
+			drain.X = pos.x
+			drain.Y = pos.y
+			world.AddComponent(entity, drain)
+			ctx.State.SetDrainX(pos.x)
+			ctx.State.SetDrainY(pos.y)
 
 			// Update drain system
 			drainSys.Update(world, 16*time.Millisecond)
@@ -575,11 +619,12 @@ func TestDrainSystem_CollisionWithNugget(t *testing.T) {
 	}
 	drain := drainComp.(components.DrainComponent)
 
-	// Create a nugget at the same position as drain
+	// Create a nugget at a different position (10, 10)
+	nuggetX, nuggetY := 10, 10
 	nuggetEntity := world.CreateEntity()
 	world.AddComponent(nuggetEntity, components.PositionComponent{
-		X: drain.X,
-		Y: drain.Y,
+		X: nuggetX,
+		Y: nuggetY,
 	})
 	world.AddComponent(nuggetEntity, components.CharacterComponent{
 		Rune:  'N',
@@ -591,7 +636,7 @@ func TestDrainSystem_CollisionWithNugget(t *testing.T) {
 	})
 
 	tx := world.BeginSpatialTransaction()
-	tx.Spawn(nuggetEntity, drain.X, drain.Y)
+	tx.Spawn(nuggetEntity, nuggetX, nuggetY)
 	tx.Commit()
 
 	// Set nugget as active in nugget system
@@ -601,6 +646,13 @@ func TestDrainSystem_CollisionWithNugget(t *testing.T) {
 	if nuggetSys.GetActiveNugget() != uint64(nuggetEntity) {
 		t.Fatal("Expected nugget to be active before collision")
 	}
+
+	// Move drain to nugget position (update GameState and component, not spatial index)
+	drain.X = nuggetX
+	drain.Y = nuggetY
+	world.AddComponent(drainEntity, drain)
+	ctx.State.SetDrainX(nuggetX)
+	ctx.State.SetDrainY(nuggetY)
 
 	// Update drain system (should destroy nugget)
 	drainSys.Update(world, 16*time.Millisecond)
@@ -641,11 +693,12 @@ func TestDrainSystem_NuggetCollisionWithoutSystem(t *testing.T) {
 	}
 	drain := drainComp.(components.DrainComponent)
 
-	// Create a nugget at the same position
+	// Create a nugget at a different position (10, 10)
+	nuggetX, nuggetY := 10, 10
 	nuggetEntity := world.CreateEntity()
 	world.AddComponent(nuggetEntity, components.PositionComponent{
-		X: drain.X,
-		Y: drain.Y,
+		X: nuggetX,
+		Y: nuggetY,
 	})
 	world.AddComponent(nuggetEntity, components.CharacterComponent{
 		Rune:  'N',
@@ -657,8 +710,15 @@ func TestDrainSystem_NuggetCollisionWithoutSystem(t *testing.T) {
 	})
 
 	tx := world.BeginSpatialTransaction()
-	tx.Spawn(nuggetEntity, drain.X, drain.Y)
+	tx.Spawn(nuggetEntity, nuggetX, nuggetY)
 	tx.Commit()
+
+	// Move drain to nugget position (update GameState and component, not spatial index)
+	drain.X = nuggetX
+	drain.Y = nuggetY
+	world.AddComponent(drainEntity, drain)
+	ctx.State.SetDrainX(nuggetX)
+	ctx.State.SetDrainY(nuggetY)
 
 	// Update drain system (should still destroy nugget even without system reference)
 	drainSys.Update(world, 16*time.Millisecond)
@@ -747,21 +807,29 @@ func TestDrainSystem_CollisionWithFallingDecay(t *testing.T) {
 	}
 	drain := drainComp.(components.DrainComponent)
 
-	// Create a falling decay entity at the same position
+	// Create a falling decay entity at a different position (10, 10)
+	decayX, decayY := 10, 10
 	decayEntity := world.CreateEntity()
 	world.AddComponent(decayEntity, components.FallingDecayComponent{
-		Column:        drain.X,
-		YPosition:     float64(drain.Y),
+		Column:        decayX,
+		YPosition:     float64(decayY),
 		Speed:         5.0,
 		Char:          'X',
-		LastChangeRow: drain.Y,
+		LastChangeRow: decayY,
 	})
 	// Note: FallingDecayComponent doesn't use PositionComponent, but we need
 	// spatial index for collision detection
 
 	tx := world.BeginSpatialTransaction()
-	tx.Spawn(decayEntity, drain.X, drain.Y)
+	tx.Spawn(decayEntity, decayX, decayY)
 	tx.Commit()
+
+	// Move drain to decay entity position (update GameState and component, not spatial index)
+	drain.X = decayX
+	drain.Y = decayY
+	world.AddComponent(drainEntity, drain)
+	ctx.State.SetDrainX(decayX)
+	ctx.State.SetDrainY(decayY)
 
 	// Update drain system (should destroy falling decay entity)
 	drainSys.Update(world, 16*time.Millisecond)
@@ -782,10 +850,10 @@ func TestDrainSystem_CollisionWithMultipleFallingDecay(t *testing.T) {
 
 	drainSys := NewDrainSystem(ctx)
 
-	// Spawn drain at position (5, 5)
+	// Spawn drain at position (0, 0)
 	ctx.State.SetScore(100)
 	entity := world.CreateEntity()
-	x, y := 5, 5
+	x, y := 0, 0
 	world.AddComponent(entity, components.PositionComponent{
 		X: x,
 		Y: y,
@@ -799,18 +867,18 @@ func TestDrainSystem_CollisionWithMultipleFallingDecay(t *testing.T) {
 		IsOnCursor:    false,
 	})
 
- {
-	tx := world.BeginSpatialTransaction()
-	tx.Spawn(entity, x, y)
-	tx.Commit()
- }
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(entity, x, y)
+		tx.Commit()
+	}
 
 	ctx.State.SetDrainActive(true)
 	ctx.State.SetDrainEntity(uint64(entity))
 	ctx.State.SetDrainX(x)
 	ctx.State.SetDrainY(y)
 
-	// Create multiple falling decay entities at different positions
+	// Create first decay entity at different position (5, 5)
 	decayEntity1 := world.CreateEntity()
 	world.AddComponent(decayEntity1, components.FallingDecayComponent{
 		Column:        5,
@@ -820,12 +888,13 @@ func TestDrainSystem_CollisionWithMultipleFallingDecay(t *testing.T) {
 		LastChangeRow: 5,
 	})
 
- {
-	tx := world.BeginSpatialTransaction()
-	tx.Spawn(decayEntity1, 5, 5)
-	tx.Commit()
- }
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(decayEntity1, 5, 5)
+		tx.Commit()
+	}
 
+	// Create second decay entity at different position (10, 10)
 	decayEntity2 := world.CreateEntity()
 	world.AddComponent(decayEntity2, components.FallingDecayComponent{
 		Column:        10,
@@ -835,11 +904,20 @@ func TestDrainSystem_CollisionWithMultipleFallingDecay(t *testing.T) {
 		LastChangeRow: 10,
 	})
 
- {
-	tx := world.BeginSpatialTransaction()
-	tx.Spawn(decayEntity2, 10, 10)
-	tx.Commit()
- }
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(decayEntity2, 10, 10)
+		tx.Commit()
+	}
+
+	// Move drain to first decay entity position (5, 5)
+	drainComp, _ := world.GetComponent(entity, reflect.TypeOf(components.DrainComponent{}))
+	drain := drainComp.(components.DrainComponent)
+	drain.X = 5
+	drain.Y = 5
+	world.AddComponent(entity, drain)
+	ctx.State.SetDrainX(5)
+	ctx.State.SetDrainY(5)
 
 	// Update drain system (should only destroy decay entity at drain position)
 	drainSys.Update(world, 16*time.Millisecond)
@@ -877,33 +955,33 @@ func TestDrainSystem_FallingDecayCollisionAtBoundary(t *testing.T) {
 
 			drainSys := NewDrainSystem(ctx)
 
-			// Spawn drain at specific position
+			// Spawn drain at a safe position (1, 1)
 			ctx.State.SetScore(100)
 			entity := world.CreateEntity()
 			world.AddComponent(entity, components.PositionComponent{
-				X: pos.x,
-				Y: pos.y,
+				X: 1,
+				Y: 1,
 			})
 			now := ctx.TimeProvider.Now()
 			world.AddComponent(entity, components.DrainComponent{
-				X:             pos.x,
-				Y:             pos.y,
+				X:             1,
+				Y:             1,
 				LastMoveTime:  now,
 				LastDrainTime: now,
 				IsOnCursor:    false,
 			})
-	
-  {
-		tx := world.BeginSpatialTransaction()
-		tx.Spawn(entity, pos.x, pos.y)
-		tx.Commit()
-  }
+
+			{
+				tx := world.BeginSpatialTransaction()
+				tx.Spawn(entity, 1, 1)
+				tx.Commit()
+			}
 			ctx.State.SetDrainActive(true)
 			ctx.State.SetDrainEntity(uint64(entity))
-			ctx.State.SetDrainX(pos.x)
-			ctx.State.SetDrainY(pos.y)
+			ctx.State.SetDrainX(1)
+			ctx.State.SetDrainY(1)
 
-			// Create falling decay entity at same position
+			// Create falling decay entity at test position
 			decayEntity := world.CreateEntity()
 			world.AddComponent(decayEntity, components.FallingDecayComponent{
 				Column:        pos.x,
@@ -912,12 +990,21 @@ func TestDrainSystem_FallingDecayCollisionAtBoundary(t *testing.T) {
 				Char:          'Z',
 				LastChangeRow: pos.y,
 			})
-	
-  {
-		tx := world.BeginSpatialTransaction()
-		tx.Spawn(decayEntity, pos.x, pos.y)
-		tx.Commit()
-  }
+
+			{
+				tx := world.BeginSpatialTransaction()
+				tx.Spawn(decayEntity, pos.x, pos.y)
+				tx.Commit()
+			}
+
+			// Move drain to decay entity position
+			drainComp, _ := world.GetComponent(entity, reflect.TypeOf(components.DrainComponent{}))
+			drain := drainComp.(components.DrainComponent)
+			drain.X = pos.x
+			drain.Y = pos.y
+			world.AddComponent(entity, drain)
+			ctx.State.SetDrainX(pos.x)
+			ctx.State.SetDrainY(pos.y)
 
 			// Update drain system
 			drainSys.Update(world, 16*time.Millisecond)
@@ -954,21 +1041,22 @@ func TestDrainSystem_DecayCollisionPriorityOverSequence(t *testing.T) {
 	}
 	drain := drainComp.(components.DrainComponent)
 
-	// Create a falling decay entity at drain position
+	// Create a falling decay entity at different position (10, 10)
+	decayX, decayY := 10, 10
 	decayEntity := world.CreateEntity()
 	world.AddComponent(decayEntity, components.FallingDecayComponent{
-		Column:        drain.X,
-		YPosition:     float64(drain.Y),
+		Column:        decayX,
+		YPosition:     float64(decayY),
 		Speed:         6.0,
 		Char:          'D',
-		LastChangeRow: drain.Y,
+		LastChangeRow: decayY,
 	})
 
- {
-	tx := world.BeginSpatialTransaction()
-	tx.Spawn(decayEntity, drain.X, drain.Y)
-	tx.Commit()
- }
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(decayEntity, decayX, decayY)
+		tx.Commit()
+	}
 
 	// Create a blue character at different position
 	charEntity := world.CreateEntity()
@@ -987,14 +1075,21 @@ func TestDrainSystem_DecayCollisionPriorityOverSequence(t *testing.T) {
 		Level: components.LevelNormal,
 	})
 
- {
-	tx := world.BeginSpatialTransaction()
-	tx.Spawn(charEntity, drain.X+1, drain.Y)
-	tx.Commit()
- }
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(charEntity, drain.X+1, drain.Y)
+		tx.Commit()
+	}
 
 	// Set color counter
 	ctx.State.AddColorCount(0, int(components.LevelNormal), 1)
+
+	// Move drain to decay entity position
+	drain.X = decayX
+	drain.Y = decayY
+	world.AddComponent(drainEntity, drain)
+	ctx.State.SetDrainX(decayX)
+	ctx.State.SetDrainY(decayY)
 
 	// Update drain system (should only destroy decay entity at drain position)
 	drainSys.Update(world, 16*time.Millisecond)
@@ -1039,19 +1134,27 @@ func TestDrainSystem_FallingDecayWithDifferentSpeeds(t *testing.T) {
 			}
 			drain := drainComp.(components.DrainComponent)
 
-			// Create falling decay entity with specific speed
+			// Create falling decay entity with specific speed at different position (10, 10)
+			decayX, decayY := 10, 10
 			decayEntity := world.CreateEntity()
 			world.AddComponent(decayEntity, components.FallingDecayComponent{
-				Column:        drain.X,
-				YPosition:     float64(drain.Y),
+				Column:        decayX,
+				YPosition:     float64(decayY),
 				Speed:         speed,
 				Char:          'S',
-				LastChangeRow: drain.Y,
+				LastChangeRow: decayY,
 			})
-		
-	tx := world.BeginSpatialTransaction()
-	tx.Spawn(decayEntity, drain.X, drain.Y)
-	tx.Commit()
+
+			tx := world.BeginSpatialTransaction()
+			tx.Spawn(decayEntity, decayX, decayY)
+			tx.Commit()
+
+			// Move drain to decay entity position
+			drain.X = decayX
+			drain.Y = decayY
+			world.AddComponent(drainEntity, drain)
+			ctx.State.SetDrainX(decayX)
+			ctx.State.SetDrainY(decayY)
 
 			// Update drain system
 			drainSys.Update(world, 16*time.Millisecond)
@@ -1064,4 +1167,3 @@ func TestDrainSystem_FallingDecayWithDifferentSpeeds(t *testing.T) {
 		})
 	}
 }
-

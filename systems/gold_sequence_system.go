@@ -113,13 +113,10 @@ func (s *GoldSequenceSystem) spawnGoldSequence(world *engine.World) bool {
 	// Get style for gold sequence
 	style := render.GetStyleForSequence(components.SequenceGold, components.LevelBright)
 
-	// Begin spatial transaction for atomic gold sequence creation
-	tx := world.BeginSpatialTransaction()
-
-	// Track created entities for cleanup if needed
-	createdEntities := make([]engine.Entity, 0, constants.GoldSequenceLength)
-
 	// Create entities for each character in the gold sequence
+	createdEntities := make([]engine.Entity, 0, constants.GoldSequenceLength)
+	entityPositions := make([]engine.EntityPosition, 0, constants.GoldSequenceLength)
+
 	for i := 0; i < constants.GoldSequenceLength; i++ {
 		entity := world.CreateEntity()
 		createdEntities = append(createdEntities, entity)
@@ -144,16 +141,26 @@ func (s *GoldSequenceSystem) spawnGoldSequence(world *engine.World) bool {
 			Level: components.LevelBright,
 		})
 
-		// Add spawn operation to transaction
-		result := tx.Spawn(entity, x+i, y)
-		if result.HasCollision {
-			// Collision detected - rollback and cleanup
-			tx.Rollback()
-			for _, e := range createdEntities {
-				world.DestroyEntity(e)
-			}
-			return false
+		// Add to batch spawn list
+		entityPositions = append(entityPositions, engine.EntityPosition{
+			Entity: entity,
+			X:      x + i,
+			Y:      y,
+		})
+	}
+
+	// Begin spatial transaction for atomic gold sequence creation
+	tx := world.BeginSpatialTransaction()
+
+	// Use SpawnBatch to validate all positions atomically
+	result := tx.SpawnBatch(entityPositions)
+	if result.HasCollision {
+		// Collision detected - rollback and cleanup all entities
+		tx.Rollback()
+		for _, e := range createdEntities {
+			world.DestroyEntity(e)
 		}
+		return false
 	}
 
 	// Commit spatial transaction atomically
