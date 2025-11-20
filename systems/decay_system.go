@@ -235,16 +235,13 @@ func (s *DecaySystem) spawnFallingEntities(world *engine.World) {
 	// Create new falling entities list
 	newFallingEntities := make([]engine.Entity, 0, gameWidth)
 
-	// Character pool for random selection
-	characters := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-
 	// Create one falling entity per column to ensure complete coverage
 	for column := 0; column < gameWidth; column++ {
 		// Random speed for each entity
 		speed := constants.FallingDecayMinSpeed + rand.Float64()*(constants.FallingDecayMaxSpeed-constants.FallingDecayMinSpeed)
 
 		// Random character for each entity
-		char := rune(characters[rand.Intn(len(characters))])
+		char := constants.AlphanumericRunes[rand.Intn(len(constants.AlphanumericRunes))]
 
 		// Create falling entity
 		entity := world.CreateEntity()
@@ -319,8 +316,7 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 			if rowsSinceLastChange >= constants.FallingDecayMinRowsBetweenChanges {
 				// Random chance to change character (40% probability)
 				if rand.Float64() < constants.FallingDecayChangeChance {
-					characters := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-					fall.Char = rune(characters[rand.Intn(len(characters))])
+					fall.Char = constants.AlphanumericRunes[rand.Intn(len(constants.AlphanumericRunes))]
 				}
 			}
 		}

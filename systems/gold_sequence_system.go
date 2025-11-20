@@ -17,11 +17,9 @@ import (
 // GoldSequenceSystem manages the gold sequence mechanic
 // Migrated to use GameState for gold state management
 type GoldSequenceSystem struct {
-	mu          sync.RWMutex // Protects fields below
+	mu          sync.RWMutex
 	ctx         *engine.GameContext
 	decaySystem *DecaySystem
-	characters  string
-	// Removed gameWidth, gameHeight, cursorX, cursorY - now read from ctx
 }
 
 // NewGoldSequenceSystem creates a new gold sequence system
@@ -29,7 +27,6 @@ func NewGoldSequenceSystem(ctx *engine.GameContext, decaySystem *DecaySystem, ga
 	return &GoldSequenceSystem{
 		ctx:         ctx,
 		decaySystem: decaySystem,
-		characters:  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
 	}
 }
 
@@ -98,7 +95,7 @@ func (s *GoldSequenceSystem) spawnGoldSequence(world *engine.World) bool {
 	// Generate random 10-character sequence
 	sequence := make([]rune, constants.GoldSequenceLength)
 	for i := 0; i < constants.GoldSequenceLength; i++ {
-		sequence[i] = rune(s.characters[rand.Intn(len(s.characters))])
+		sequence[i] = rune(constants.AlphanumericString[rand.Intn(len(constants.AlphanumericString))])
 	}
 
 	// Find random valid position (similar to spawn system)

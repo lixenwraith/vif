@@ -259,7 +259,7 @@ func TestNuggetJumpMultipleTimes(t *testing.T) {
 
 	// Simulate collection (destroy first nugget)
 	ctx.World.SafeDestroyEntity(entity1)
-	nuggetSystem.ClearActiveNugget()
+	nuggetSystem.ClearActiveNuggetIfMatches(uint64(entity1))
 
 	// Second nugget at (25, 10)
 	entity2 := ctx.World.CreateEntity()
@@ -324,7 +324,7 @@ func TestNuggetJumpWithNuggetAtEdge(t *testing.T) {
 			// Clear previous nugget
 			if activeEntity := nuggetSystem.GetActiveNugget(); activeEntity != 0 {
 				ctx.World.SafeDestroyEntity(engine.Entity(activeEntity))
-				nuggetSystem.ClearActiveNugget()
+				nuggetSystem.ClearActiveNuggetIfMatches(activeEntity)
 			}
 
 			// Spawn nugget at test position
@@ -382,7 +382,7 @@ func TestJumpToNuggetMethodReturnsCorrectPosition(t *testing.T) {
 	}
 
 	// Clear active nugget
-	nuggetSystem.ClearActiveNugget()
+	nuggetSystem.ClearActiveNuggetIfMatches(uint64(entity))
 
 	// Should return (-1, -1) again
 	x, y = nuggetSystem.JumpToNugget(ctx.World)

@@ -320,8 +320,13 @@ func (s *ScoreSystem) handleNuggetCollection(world *engine.World, entity engine.
 		heatIncrease = 1 // Minimum increase of 1
 	}
 
-	// Add heat (10% of max)
-	s.ctx.State.AddHeat(heatIncrease)
+	// Add heat (10% of max) with cap
+	currentHeat := s.ctx.State.GetHeat()
+	newHeat := currentHeat + heatIncrease
+	if newHeat > maxHeat {
+		newHeat = maxHeat
+	}
+	s.ctx.State.SetHeat(newHeat)
 
 	// Destroy the nugget entity
 	world.SafeDestroyEntity(entity)

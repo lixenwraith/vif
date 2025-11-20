@@ -11,31 +11,23 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/components"
+	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
 
 const (
-	nuggetSpawnIntervalSeconds = 5 // Attempt spawn every 5 seconds
+	nuggetSpawnIntervalSeconds = 5   // Attempt spawn every 5 seconds
 	nuggetMaxAttempts          = 100
 )
-
-// Alphanumeric characters that can be used for nuggets
-var nuggetCharacters = []rune{
-	'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
-	'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
-	'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
-	'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
-	'0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-}
 
 // NuggetSystem manages nugget spawn and respawn logic
 type NuggetSystem struct {
 	mu                sync.RWMutex
 	ctx               *engine.GameContext
-	activeNugget      atomic.Uint64   // Entity ID of active nugget (0 if none), stored as uint64
-	nuggetID          atomic.Int32    // Atomic counter for unique nugget IDs
-	lastSpawnAttempt  time.Time       // Protected by mu
+	activeNugget      atomic.Uint64
+	nuggetID          atomic.Int32
+	lastSpawnAttempt  time.Time
 }
 
 // NewNuggetSystem creates a new nugget system
@@ -57,12 +49,9 @@ func (s *NuggetSystem) Update(world *engine.World, dt time.Duration) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Check if we have an active nugget
 	activeNuggetEntity := s.activeNugget.Load()
 
-	// If no active nugget, check if it's time to spawn one
 	if activeNuggetEntity == 0 {
-		// Check if enough time has passed since last spawn attempt
 		if now.Sub(s.lastSpawnAttempt) >= nuggetSpawnIntervalSeconds*time.Second {
 			s.lastSpawnAttempt = now
 			s.spawnNugget(world, now)
@@ -70,11 +59,8 @@ func (s *NuggetSystem) Update(world *engine.World, dt time.Duration) {
 		return
 	}
 
-	// Verify active nugget still exists
 	nuggetType := reflect.TypeOf(components.NuggetComponent{})
 	if !world.HasComponent(engine.Entity(activeNuggetEntity), nuggetType) {
-		// Nugget was removed/destroyed, clear active reference only if it's still this entity
-		// Use CAS to prevent clearing a newly spawned nugget
 		s.activeNugget.CompareAndSwap(activeNuggetEntity, 0)
 	}
 }
@@ -82,27 +68,20 @@ func (s *NuggetSystem) Update(world *engine.World, dt time.Duration) {
 // spawnNugget creates a new nugget at a random valid position
 // Caller must hold s.mu lock
 func (s *NuggetSystem) spawnNugget(world *engine.World, now time.Time) {
-	// Find a valid position
 	x, y := s.findValidPosition(world)
 	if x < 0 || y < 0 {
-		// No valid position found
 		return
 	}
 
-	// Get next nugget ID
 	nuggetID := s.nuggetID.Add(1)
-
-	// Create nugget entity
 	entity := world.CreateEntity()
 
-	// Add position component
 	world.AddComponent(entity, components.PositionComponent{
 		X: x,
 		Y: y,
 	})
 
-	// Add character component (random alphanumeric character with orange color)
-	randomChar := nuggetCharacters[rand.Intn(len(nuggetCharacters))]
+	randomChar := constants.AlphanumericRunes[rand.Intn(len(constants.AlphanumericRunes))]
 	style := tcell.StyleDefault.
 		Foreground(render.RgbNuggetOrange).
 		Background(render.RgbBackground)
@@ -111,39 +90,30 @@ func (s *NuggetSystem) spawnNugget(world *engine.World, now time.Time) {
 		Style: style,
 	})
 
-	// Add nugget component
 	world.AddComponent(entity, components.NuggetComponent{
 		ID:        int(nuggetID),
 		SpawnTime: now,
 	})
 
-	// Update spatial index
 	world.UpdateSpatialIndex(entity, x, y)
-
-	// Store active nugget reference
 	s.activeNugget.Store(uint64(entity))
 }
 
 // findValidPosition finds a valid random position for a nugget
 // Caller must hold s.mu lock
 func (s *NuggetSystem) findValidPosition(world *engine.World) (int, int) {
-	// Read dimensions from context
 	gameWidth := s.ctx.GameWidth
 	gameHeight := s.ctx.GameHeight
-
-	// Read cursor position from GameState (atomic reads)
 	cursor := s.ctx.State.ReadCursorPosition()
 
 	for attempt := 0; attempt < nuggetMaxAttempts; attempt++ {
 		x := rand.Intn(gameWidth)
 		y := rand.Intn(gameHeight)
 
-		// Check if far enough from cursor (same exclusion zone as spawn system)
 		if math.Abs(float64(x-cursor.X)) <= 5 || math.Abs(float64(y-cursor.Y)) <= 3 {
 			continue
 		}
 
-		// Check for overlaps with existing characters
 		if world.GetEntityAtPosition(x, y) != 0 {
 			continue
 		}
@@ -151,7 +121,7 @@ func (s *NuggetSystem) findValidPosition(world *engine.World) (int, int) {
 		return x, y
 	}
 
-	return -1, -1 // No valid position found
+	return -1, -1
 }
 
 // GetActiveNugget returns the entity ID of the active nugget (0 if none)
