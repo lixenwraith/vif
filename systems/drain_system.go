@@ -43,6 +43,7 @@ func (s *DrainSystem) Update(world *engine.World, dt time.Duration) {
 	// Movement logic: move drain toward cursor every 250ms
 	if drainActive {
 		s.updateDrainMovement(world)
+		s.updateScoreDrain(world)
 	}
 }
 
@@ -215,6 +216,51 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 	// Update GameState atomics for renderer
 	s.ctx.State.SetDrainX(newX)
 	s.ctx.State.SetDrainY(newY)
+}
+
+// updateScoreDrain handles score draining when drain is on cursor
+func (s *DrainSystem) updateScoreDrain(world *engine.World) {
+	// Get drain entity ID
+	entityID := s.ctx.State.GetDrainEntity()
+	if entityID == 0 {
+		return
+	}
+
+	entity := engine.Entity(entityID)
+
+	// Get drain component
+	drainType := reflect.TypeOf(components.DrainComponent{})
+	drainComp, ok := world.GetComponent(entity, drainType)
+	if !ok {
+		return
+	}
+
+	drain := drainComp.(components.DrainComponent)
+
+	// Get cursor position
+	cursor := s.ctx.State.ReadCursorPosition()
+
+	// Check if drain is on cursor
+	isOnCursor := (drain.X == cursor.X && drain.Y == cursor.Y)
+
+	// Update IsOnCursor state if changed
+	if drain.IsOnCursor != isOnCursor {
+		drain.IsOnCursor = isOnCursor
+		world.AddComponent(entity, drain)
+	}
+
+	// Drain score if on cursor and 250ms has passed
+	if isOnCursor {
+		now := s.ctx.TimeProvider.Now()
+		if now.Sub(drain.LastDrainTime) >= constants.DrainScoreDrainInterval {
+			// Drain score by the configured amount
+			s.ctx.State.AddScore(-constants.DrainScoreDrainAmount)
+
+			// Update last drain time
+			drain.LastDrainTime = now
+			world.AddComponent(entity, drain)
+		}
+	}
 }
 
 // sign returns -1, 0, or 1 depending on the sign of the input
