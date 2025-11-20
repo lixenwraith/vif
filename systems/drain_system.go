@@ -199,6 +199,15 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 		newY = s.ctx.GameHeight - 1
 	}
 
+	// CRITICAL FIX: Handle collision at NEW position BEFORE updating spatial index
+	// This prevents orphaning entities when drain moves to their position
+	targetEntity := world.GetEntityAtPosition(newX, newY)
+	if targetEntity != 0 && uint64(targetEntity) != entityID {
+		// There's an entity at the target position (not the drain itself)
+		// Handle collision before moving
+		s.handleCollisionAtPosition(world, newX, newY, targetEntity)
+	}
+
 	// Update drain component position
 	drain.X = newX
 	drain.Y = newY
@@ -289,7 +298,7 @@ func sign(x int) int {
 	return 0
 }
 
-// handleCollisions detects and processes collisions with entities at the drain's position
+// handleCollisions detects and processes collisions with entities at the drain's current position
 func (s *DrainSystem) handleCollisions(world *engine.World) {
 	// Get drain position from GameState
 	drainX := s.ctx.State.GetDrainX()
@@ -307,6 +316,13 @@ func (s *DrainSystem) handleCollisions(world *engine.World) {
 		return // Don't collide with self
 	}
 
+	// Delegate to position-based collision handler
+	s.handleCollisionAtPosition(world, drainX, drainY, entity)
+}
+
+// handleCollisionAtPosition processes collision with a specific entity at a given position
+// This is extracted to allow collision handling before spatial index updates
+func (s *DrainSystem) handleCollisionAtPosition(world *engine.World, x, y int, entity engine.Entity) {
 	// Check for nugget collision first
 	nuggetType := reflect.TypeOf(components.NuggetComponent{})
 	if world.HasComponent(entity, nuggetType) {
