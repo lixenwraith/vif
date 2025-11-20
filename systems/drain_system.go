@@ -44,6 +44,7 @@ func (s *DrainSystem) Update(world *engine.World, dt time.Duration) {
 	if drainActive {
 		s.updateDrainMovement(world)
 		s.updateScoreDrain(world)
+		s.handleCollisions(world)
 	}
 }
 
@@ -271,4 +272,65 @@ func sign(x int) int {
 		return 1
 	}
 	return 0
+}
+
+// handleCollisions detects and processes collisions with entities at the drain's position
+func (s *DrainSystem) handleCollisions(world *engine.World) {
+	// Get drain position from GameState
+	drainX := s.ctx.State.GetDrainX()
+	drainY := s.ctx.State.GetDrainY()
+
+	// Get entity at drain position
+	entity := world.GetEntityAtPosition(drainX, drainY)
+	if entity == 0 {
+		return // No entity at this position
+	}
+
+	// Check if entity is the drain itself
+	drainEntityID := s.ctx.State.GetDrainEntity()
+	if uint64(entity) == drainEntityID {
+		return // Don't collide with self
+	}
+
+	// Check if entity has SequenceComponent
+	seqType := reflect.TypeOf(components.SequenceComponent{})
+	seqComp, ok := world.GetComponent(entity, seqType)
+	if !ok {
+		return // Not a sequence entity
+	}
+
+	seq := seqComp.(components.SequenceComponent)
+
+	// Part 5: Only handle Blue, Green, and Red sequences
+	// Gold sequences will be handled in Part 6
+	if seq.Type == components.SequenceGold {
+		return // Skip gold sequences for now
+	}
+
+	// Only destroy Blue, Green, and Red sequences
+	if seq.Type == components.SequenceBlue ||
+		seq.Type == components.SequenceGreen ||
+		seq.Type == components.SequenceRed {
+
+		// Convert SequenceType to GameState mapping
+		// GameState expects: 0=Blue, 1=Green
+		// components.SequenceType: Blue=2, Green=0
+		var typeInt int
+		if seq.Type == components.SequenceBlue {
+			typeInt = 0
+		} else if seq.Type == components.SequenceGreen {
+			typeInt = 1
+		} else {
+			// Red sequences don't have color counters in GameState
+			// Just destroy without updating counters
+			world.SafeDestroyEntity(entity)
+			return
+		}
+
+		// Update color counter (decrement by 1)
+		s.ctx.State.AddColorCount(typeInt, int(seq.Level), -1)
+
+		// Destroy the entity
+		world.SafeDestroyEntity(entity)
+	}
 }
