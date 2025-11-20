@@ -87,6 +87,9 @@ func searchForward(ctx *engine.GameContext, grid map[Point]rune, pattern []rune,
 			if matchesPattern(grid, x, y, pattern) {
 				ctx.CursorX = x
 				ctx.CursorY = y
+				// Sync cursor position to GameState for Drain and other systems
+				ctx.State.SetCursorX(x)
+				ctx.State.SetCursorY(y)
 				return true
 			}
 		}
@@ -98,6 +101,9 @@ func searchForward(ctx *engine.GameContext, grid map[Point]rune, pattern []rune,
 			if matchesPattern(grid, x, y, pattern) {
 				ctx.CursorX = x
 				ctx.CursorY = y
+				// Sync cursor position to GameState for Drain and other systems
+				ctx.State.SetCursorX(x)
+				ctx.State.SetCursorY(y)
 				return true
 			}
 		}
@@ -108,6 +114,9 @@ func searchForward(ctx *engine.GameContext, grid map[Point]rune, pattern []rune,
 		if matchesPattern(grid, x, startY, pattern) {
 			ctx.CursorX = x
 			ctx.CursorY = startY
+			// Sync cursor position to GameState for Drain and other systems
+			ctx.State.SetCursorX(x)
+			ctx.State.SetCursorY(startY)
 			return true
 		}
 	}
@@ -128,6 +137,9 @@ func searchBackward(ctx *engine.GameContext, grid map[Point]rune, pattern []rune
 			if matchesPattern(grid, x, y, pattern) {
 				ctx.CursorX = x
 				ctx.CursorY = y
+				// Sync cursor position to GameState for Drain and other systems
+				ctx.State.SetCursorX(x)
+				ctx.State.SetCursorY(y)
 				return true
 			}
 		}
@@ -139,6 +151,9 @@ func searchBackward(ctx *engine.GameContext, grid map[Point]rune, pattern []rune
 			if matchesPattern(grid, x, y, pattern) {
 				ctx.CursorX = x
 				ctx.CursorY = y
+				// Sync cursor position to GameState for Drain and other systems
+				ctx.State.SetCursorX(x)
+				ctx.State.SetCursorY(y)
 				return true
 			}
 		}
@@ -149,6 +164,9 @@ func searchBackward(ctx *engine.GameContext, grid map[Point]rune, pattern []rune
 		if matchesPattern(grid, x, startY, pattern) {
 			ctx.CursorX = x
 			ctx.CursorY = startY
+			// Sync cursor position to GameState for Drain and other systems
+			ctx.State.SetCursorX(x)
+			ctx.State.SetCursorY(startY)
 			return true
 		}
 	}
