@@ -158,7 +158,7 @@ func (s *GoldSequenceSystem) spawnGoldSequence(world *engine.World) bool {
 		// Collision detected - rollback and cleanup all entities
 		tx.Rollback()
 		for _, e := range createdEntities {
-			world.DestroyEntity(e)
+			world.SafeDestroyEntity(e)
 		}
 		return false
 	}
