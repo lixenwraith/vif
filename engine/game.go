@@ -16,6 +16,7 @@ const (
 	ModeNormal GameMode = iota
 	ModeInsert
 	ModeSearch
+	ModeCommand
 )
 
 // GameContext holds all game state including the ECS world
@@ -45,6 +46,7 @@ type GameContext struct {
 	Mode           GameMode
 	SearchText     string
 	LastSearchText string
+	CommandText    string
 
 	// Cursor state (local to input handling)
 	CursorX, CursorY int // These will be synced to State.CursorX/Y
@@ -262,6 +264,11 @@ func (g *GameContext) IsInsertMode() bool {
 // IsSearchMode returns true if in search mode
 func (g *GameContext) IsSearchMode() bool {
 	return g.Mode == ModeSearch
+}
+
+// IsCommandMode returns true if in command mode
+func (g *GameContext) IsCommandMode() bool {
+	return g.Mode == ModeCommand
 }
 
 // IsNormalMode returns true if in normal mode

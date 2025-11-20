@@ -53,6 +53,10 @@ func (h *InputHandler) handleKeyEvent(ev *tcell.EventKey) bool {
 			h.ctx.Mode = engine.ModeNormal
 			h.ctx.SearchText = ""
 			h.ctx.DeleteOperator = false
+		} else if h.ctx.IsCommandMode() {
+			h.ctx.Mode = engine.ModeNormal
+			h.ctx.CommandText = ""
+			h.ctx.DeleteOperator = false
 		} else if h.ctx.IsInsertMode() {
 			h.ctx.Mode = engine.ModeNormal
 			h.ctx.DeleteOperator = false
@@ -65,6 +69,8 @@ func (h *InputHandler) handleKeyEvent(ev *tcell.EventKey) bool {
 		return h.handleInsertMode(ev)
 	} else if h.ctx.IsSearchMode() {
 		return h.handleSearchMode(ev)
+	} else if h.ctx.IsCommandMode() {
+		return h.handleCommandMode(ev)
 	} else {
 		return h.handleNormalMode(ev)
 	}
@@ -167,6 +173,26 @@ func (h *InputHandler) handleSearchMode(ev *tcell.EventKey) bool {
 	}
 	if ev.Key() == tcell.KeyRune {
 		h.ctx.SearchText += string(ev.Rune())
+	}
+	return true
+}
+
+// handleCommandMode handles input in command mode
+func (h *InputHandler) handleCommandMode(ev *tcell.EventKey) bool {
+	if ev.Key() == tcell.KeyEnter {
+		// Prepare for command execution (just clear and exit for now)
+		h.ctx.Mode = engine.ModeNormal
+		h.ctx.CommandText = ""
+		return true
+	}
+	if ev.Key() == tcell.KeyBackspace || ev.Key() == tcell.KeyBackspace2 {
+		if len(h.ctx.CommandText) > 0 {
+			h.ctx.CommandText = h.ctx.CommandText[:len(h.ctx.CommandText)-1]
+		}
+		return true
+	}
+	if ev.Key() == tcell.KeyRune {
+		h.ctx.CommandText += string(ev.Rune())
 	}
 	return true
 }
@@ -379,6 +405,17 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 		if char == '/' {
 			h.ctx.Mode = engine.ModeSearch
 			h.ctx.SearchText = ""
+			h.ctx.MotionCount = 0
+			h.ctx.MotionCommand = ""
+			h.ctx.DeleteOperator = false
+			h.ctx.LastCommand = "" // Clear on mode change
+			return true
+		}
+
+		// Enter command mode
+		if char == ':' {
+			h.ctx.Mode = engine.ModeCommand
+			h.ctx.CommandText = ""
 			h.ctx.MotionCount = 0
 			h.ctx.MotionCommand = ""
 			h.ctx.DeleteOperator = false

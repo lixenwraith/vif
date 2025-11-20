@@ -109,8 +109,8 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 	// Draw status bar
 	r.drawStatusBar(ctx, defaultStyle, decayTimeRemaining)
 
-	// Draw cursor (if not in search mode)
-	if !ctx.IsSearchMode() {
+	// Draw cursor (if not in search or command mode)
+	if !ctx.IsSearchMode() && !ctx.IsCommandMode() {
 		r.drawCursor(ctx, defaultStyle)
 	}
 
@@ -174,7 +174,7 @@ func (r *TerminalRenderer) drawLineNumbers(ctx *engine.GameContext, defaultStyle
 
 		var numStyle tcell.Style
 		if relativeNum == 0 {
-			if ctx.IsSearchMode() {
+			if ctx.IsSearchMode() || ctx.IsCommandMode() {
 				numStyle = defaultStyle.Foreground(RgbCursorNormal)
 			} else {
 				numStyle = defaultStyle.Foreground(tcell.ColorBlack).Background(RgbCursorNormal)
@@ -540,7 +540,7 @@ func (r *TerminalRenderer) drawColumnIndicators(ctx *engine.GameContext, default
 
 		if relativeCol == 0 {
 			ch = '0'
-			if ctx.IsSearchMode() {
+			if ctx.IsSearchMode() || ctx.IsCommandMode() {
 				colStyle = defaultStyle.Foreground(RgbCursorNormal)
 			} else {
 				colStyle = defaultStyle.Foreground(tcell.ColorBlack).Background(RgbCursorNormal)
@@ -583,6 +583,9 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 	if ctx.IsSearchMode() {
 		modeText = " SEARCH "
 		modeBgColor = RgbCursorNormal
+	} else if ctx.IsCommandMode() {
+		modeText = " COMMAND "
+		modeBgColor = tcell.NewRGBColor(128, 0, 128) // Dark purple
 	} else if ctx.IsInsertMode() {
 		modeText = " INSERT "
 		modeBgColor = RgbModeInsertBg
@@ -599,7 +602,7 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 
 	// Draw last command indicator (if present)
 	statusStartX := len(modeText)
-	if ctx.LastCommand != "" && !ctx.IsSearchMode() {
+	if ctx.LastCommand != "" && !ctx.IsSearchMode() && !ctx.IsCommandMode() {
 		statusStartX++
 		lastCmdStyle := defaultStyle.Foreground(tcell.ColorYellow)
 		for i, ch := range ctx.LastCommand {
@@ -612,7 +615,7 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 		statusStartX++
 	}
 
-	// Draw search text or status message
+	// Draw search text, command text, or status message
 	if ctx.IsSearchMode() {
 		searchStyle := defaultStyle.Foreground(tcell.ColorWhite)
 		cursorStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(RgbCursorNormal)
@@ -624,6 +627,20 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 		}
 
 		cursorX := statusStartX + len(ctx.SearchText)
+		if cursorX < r.width {
+			r.screen.SetContent(cursorX, statusY, ' ', nil, cursorStyle)
+		}
+	} else if ctx.IsCommandMode() {
+		commandStyle := defaultStyle.Foreground(tcell.ColorWhite)
+		cursorStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(tcell.NewRGBColor(128, 0, 128))
+
+		for i, ch := range ctx.CommandText {
+			if statusStartX+i < r.width {
+				r.screen.SetContent(statusStartX+i, statusY, ch, nil, commandStyle)
+			}
+		}
+
+		cursorX := statusStartX + len(ctx.CommandText)
 		if cursorX < r.width {
 			r.screen.SetContent(cursorX, statusY, ' ', nil, cursorStyle)
 		}
