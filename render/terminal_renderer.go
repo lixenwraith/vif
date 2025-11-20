@@ -83,11 +83,11 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 	// Get ping color for later use
 	pingColor := r.getPingColor(ctx.World, ctx.CursorX, ctx.CursorY, ctx)
 
-	// Draw characters
-	r.drawCharacters(ctx.World, pingColor, defaultStyle, ctx)
-
-	// Draw ping highlights (cursor row/column) and grid - AFTER characters
+	// Draw ping highlights (cursor row/column) and grid - BEFORE characters
 	r.drawPingHighlights(ctx, pingColor, defaultStyle)
+
+	// Draw characters - will render over grid
+	r.drawCharacters(ctx.World, pingColor, defaultStyle, ctx)
 
 	// Draw falling decay animation if active - AFTER ping highlights
 	if decayAnimating {
@@ -203,59 +203,34 @@ func (r *TerminalRenderer) getPingColor(world *engine.World, cursorX, cursorY in
 // drawPingHighlights draws the cursor row and column highlights
 func (r *TerminalRenderer) drawPingHighlights(ctx *engine.GameContext, pingColor tcell.Color, defaultStyle tcell.Style) {
 	pingStyle := defaultStyle.Background(pingColor)
-	charType := reflect.TypeOf(components.CharacterComponent{})
 
-	// Highlight the row
+	// Highlight the row - draw unconditionally (characters will render on top)
 	for x := 0; x < r.gameWidth; x++ {
 		screenX := r.gameX + x
 		screenY := r.gameY + ctx.CursorY
 		if screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
-			// Check if there's a character entity at this position
-			entity := ctx.World.GetEntityAtPosition(x, ctx.CursorY)
-			hasEntity := false
-			if entity != 0 {
-				if _, ok := ctx.World.GetComponent(entity, charType); ok {
-					hasEntity = true
-				}
-			}
-
-			// Only draw space if there's no entity (entities already have ping background from their draw functions)
-			if !hasEntity {
-				r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
-			}
+			r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
 		}
 	}
 
-	// Highlight the column
+	// Highlight the column - draw unconditionally (characters will render on top)
 	for y := 0; y < r.gameHeight; y++ {
 		screenX := r.gameX + ctx.CursorX
 		screenY := r.gameY + y
 		if screenX >= r.gameX && screenX < r.width && screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
-			// Check if there's a character entity at this position
-			entity := ctx.World.GetEntityAtPosition(ctx.CursorX, y)
-			hasEntity := false
-			if entity != 0 {
-				if _, ok := ctx.World.GetComponent(entity, charType); ok {
-					hasEntity = true
-				}
-			}
-
-			// Only draw space if there's no entity
-			if !hasEntity {
-				r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
-			}
+			r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
 		}
 	}
 
 	// Draw grid lines if ping is active
 	if ctx.GetPingActive() {
-		r.drawPingGrid(ctx, pingStyle, charType)
+		r.drawPingGrid(ctx, pingStyle)
 	}
 }
 
 // drawPingGrid draws coordinate grid lines at 5-column intervals
-func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell.Style, charType reflect.Type) {
-	// Vertical lines
+func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell.Style) {
+	// Vertical lines - draw unconditionally (characters will render on top)
 	for n := 1; ; n++ {
 		offset := 5 * n
 		col := ctx.CursorX + offset
@@ -267,19 +242,7 @@ func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell
 				screenX := r.gameX + col
 				screenY := r.gameY + y
 				if screenX >= r.gameX && screenX < r.width && screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
-					// Check if there's an entity at this position
-					entity := ctx.World.GetEntityAtPosition(col, y)
-					hasEntity := false
-					if entity != 0 {
-						if _, ok := ctx.World.GetComponent(entity, charType); ok {
-							hasEntity = true
-						}
-					}
-
-					// Only draw space if there's no entity
-					if !hasEntity {
-						r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
-					}
+					r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
 				}
 			}
 		}
@@ -289,25 +252,13 @@ func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell
 				screenX := r.gameX + col
 				screenY := r.gameY + y
 				if screenX >= r.gameX && screenX < r.width && screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
-					// Check if there's an entity at this position
-					entity := ctx.World.GetEntityAtPosition(col, y)
-					hasEntity := false
-					if entity != 0 {
-						if _, ok := ctx.World.GetComponent(entity, charType); ok {
-							hasEntity = true
-						}
-					}
-
-					// Only draw space if there's no entity
-					if !hasEntity {
-						r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
-					}
+					r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
 				}
 			}
 		}
 	}
 
-	// Horizontal lines
+	// Horizontal lines - draw unconditionally (characters will render on top)
 	for n := 1; ; n++ {
 		offset := 5 * n
 		row := ctx.CursorY + offset
@@ -319,19 +270,7 @@ func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell
 				screenX := r.gameX + x
 				screenY := r.gameY + row
 				if screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
-					// Check if there's an entity at this position
-					entity := ctx.World.GetEntityAtPosition(x, row)
-					hasEntity := false
-					if entity != 0 {
-						if _, ok := ctx.World.GetComponent(entity, charType); ok {
-							hasEntity = true
-						}
-					}
-
-					// Only draw space if there's no entity
-					if !hasEntity {
-						r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
-					}
+					r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
 				}
 			}
 		}
@@ -341,19 +280,7 @@ func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell
 				screenX := r.gameX + x
 				screenY := r.gameY + row
 				if screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
-					// Check if there's an entity at this position
-					entity := ctx.World.GetEntityAtPosition(x, row)
-					hasEntity := false
-					if entity != 0 {
-						if _, ok := ctx.World.GetComponent(entity, charType); ok {
-							hasEntity = true
-						}
-					}
-
-					// Only draw space if there's no entity
-					if !hasEntity {
-						r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
-					}
+					r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
 				}
 			}
 		}
