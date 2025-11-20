@@ -83,6 +83,14 @@ func (s *DrainSystem) spawnDrain(world *engine.World) {
 		spawnY = s.ctx.GameHeight - 1
 	}
 
+	// CRITICAL FIX: Handle collision at spawn position BEFORE creating drain entity
+	// This prevents orphaning entities when drain spawns on their position
+	targetEntity := world.GetEntityAtPosition(spawnX, spawnY)
+	if targetEntity != 0 {
+		// There's an entity at the spawn position - handle collision before spawning
+		s.handleCollisionAtPosition(world, spawnX, spawnY, targetEntity)
+	}
+
 	// Create drain entity
 	entity := world.CreateEntity()
 
