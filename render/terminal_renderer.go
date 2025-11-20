@@ -99,6 +99,9 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 	// Draw removal flash effects - AFTER cleaners
 	r.drawRemovalFlashes(ctx.World, ctx, defaultStyle)
 
+	// Draw drain entity - AFTER removal flashes, BEFORE cursor
+	r.drawDrain(ctx, defaultStyle)
+
 	// Draw column indicators
 	r.drawColumnIndicators(ctx, defaultStyle)
 
@@ -498,6 +501,50 @@ func (r *TerminalRenderer) drawCleaners(defaultStyle tcell.Style) {
 			r.screen.SetContent(screenX, screenY, cleaner.Char, nil, cleanerStyle)
 		}
 	}
+}
+
+// drawDrain draws the drain entity with transparent background
+func (r *TerminalRenderer) drawDrain(ctx *engine.GameContext, defaultStyle tcell.Style) {
+	// Check if drain is active
+	if !ctx.State.GetDrainActive() {
+		return
+	}
+
+	// Get drain position from GameState atomics
+	drainX := ctx.State.GetDrainX()
+	drainY := ctx.State.GetDrainY()
+
+	// Calculate screen position
+	screenX := r.gameX + drainX
+	screenY := r.gameY + drainY
+
+	// Bounds check
+	if screenX < r.gameX || screenX >= r.width || screenY < r.gameY || screenY >= r.gameY+r.gameHeight {
+		return
+	}
+
+	// Get the current background at this position to inherit it
+	// We read the cell content to preserve the background
+	mainc, _, style, _ := r.screen.GetContent(screenX, screenY)
+	_, bg, _ := style.Decompose()
+
+	// Use 'X' character with magenta foreground, inheriting background
+	drainStyle := defaultStyle.Foreground(RgbDrain).Background(bg)
+
+	// If there's no existing background (e.g., just been cleared), use default background
+	if bg == tcell.ColorDefault {
+		_, defaultBg, _ := defaultStyle.Decompose()
+		drainStyle = defaultStyle.Foreground(RgbDrain).Background(defaultBg)
+	}
+
+	// Preserve the underlying character if it exists, otherwise use 'X'
+	drainChar := 'X'
+	if mainc != 0 && mainc != ' ' {
+		// There's an underlying character, overlay drain on top
+		drainChar = 'X' // Still use X to clearly show drain position
+	}
+
+	r.screen.SetContent(screenX, screenY, drainChar, nil, drainStyle)
 }
 
 // drawRemovalFlashes draws the brief flash effects when red characters are removed
