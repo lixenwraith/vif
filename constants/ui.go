@@ -3,7 +3,16 @@ package constants
 import "time"
 
 // UI Layout Constants
-// (No layout constants currently defined)
+const (
+	// ModeIndicatorWidth is the consistent width for all mode indicators
+	ModeIndicatorWidth = 10
+
+	// Mode indicator text (all padded to ModeIndicatorWidth)
+	ModeTextNormal  = " NORMAL  "
+	ModeTextInsert  = " INSERT  "
+	ModeTextSearch  = " SEARCH  "
+	ModeTextCommand = " COMMAND "
+)
 
 // UI Timing Constants (in milliseconds)
 const (

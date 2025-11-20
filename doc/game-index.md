@@ -57,7 +57,7 @@ The play field where character sequences appear:
 ```
 NORMAL    5j                              Boost: 0.3s  Decay: 45.2s  Score: 1247
 ```
-- Mode indicator (NORMAL/INSERT/SEARCH)
+- Mode indicator (NORMAL/INSERT/SEARCH/COMMAND)
 - Last command executed
 - Boost timer (when active)
 - Decay timer

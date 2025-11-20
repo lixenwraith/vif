@@ -4,6 +4,7 @@
 
 - **`i`** - Enter INSERT mode (start typing sequences)
 - **`/`** - Enter SEARCH mode (find text patterns)
+- **`:`** - Enter COMMAND mode (execute commands)
 - **`ESC`** - Return to NORMAL mode
 - **`Tab`** - Jump to nugget (costs 10 score if score >= 10)
 - **`Enter`** - Activate ping grid for 1 second (shows row/column guides)
@@ -11,14 +12,14 @@
 
 ## Game Modes
 
-vi-fighter has three input modes, just like vi/vim:
+vi-fighter has four input modes, similar to vi/vim:
 
 ### NORMAL Mode (Orange Cursor)
 - **Purpose**: Navigate around the screen
 - **Cursor**: Orange background
 - **Status**: Shows "NORMAL" in light blue at bottom-left
 - **Commands**: All vi motion commands available
-- **Entering**: Press `ESC` from INSERT or SEARCH mode
+- **Entering**: Press `ESC` from INSERT, SEARCH, or COMMAND mode
 
 ### INSERT Mode (White Cursor)
 - **Purpose**: Type character sequences
@@ -33,6 +34,17 @@ vi-fighter has three input modes, just like vi/vim:
 - **Cursor**: Visible only in search input area (bottom status bar)
 - **Entering**: Press `/` from NORMAL mode
 - **Usage**: Type pattern, press `Enter` to jump, then `n`/`N` to cycle matches
+- **Exiting**: Press `ESC` to return to NORMAL mode
+
+### COMMAND Mode (No Cursor in Game Area)
+- **Purpose**: Execute game commands
+- **Status**: Shows "COMMAND" in dark purple at bottom-left
+- **Cursor**: Visible only in command input area (bottom status bar)
+- **Entering**: Press `:` from NORMAL mode
+- **Usage**: Type command, press `Enter` to execute
+- **Available Commands**:
+  - `:quit` or `:q` - Exit the game
+  - `:boost` - Activate boost mode for 10 seconds (2x spawn rate, 2x score)
 - **Exiting**: Press `ESC` to return to NORMAL mode
 
 ## Vi Motion Commands
@@ -186,10 +198,11 @@ When in INSERT mode (white cursor):
 **Safe Actions (No Heat Loss)**:
 - Navigation with `w`, `b`, `e`, `gg`, `G`, `H`, `M`, `L`, `0`, `$`, `{`, `}`
 - Search with `/`, `f`, `F`, `t`, `T`, `n`, `N`, `;`, `,`
-- Mode switching (`i`, `ESC`)
+- Mode switching (`i`, `/`, `:`, `ESC`)
 - Using `Space` in INSERT mode (moves without typing)
 - Deleting red sequences with `x` or `dd`
 - Tab jump to nugget (costs score, not heat)
+- Executing commands in COMMAND mode
 
 ## Motion Efficiency Tips
 

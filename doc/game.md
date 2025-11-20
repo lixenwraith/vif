@@ -157,14 +157,14 @@ When in INSERT mode (white cursor):
 
 ## Game Modes
 
-vi-fighter has three input modes, just like vi/vim:
+vi-fighter has four input modes, similar to vi/vim:
 
 ### NORMAL Mode (Orange Cursor)
 - **Purpose**: Navigate around the screen
 - **Cursor**: Orange background
 - **Status**: Shows "NORMAL" in light blue at bottom-left
 - **Commands**: All vi motion commands available
-- **Entering**: Press `ESC` from INSERT or SEARCH mode
+- **Entering**: Press `ESC` from INSERT, SEARCH, or COMMAND mode
 
 ### INSERT Mode (White Cursor)
 - **Purpose**: Type character sequences
@@ -179,6 +179,17 @@ vi-fighter has three input modes, just like vi/vim:
 - **Cursor**: Visible only in search input area (bottom status bar)
 - **Entering**: Press `/` from NORMAL mode
 - **Usage**: Type pattern, press `Enter` to jump, then `n`/`N` to cycle matches
+- **Exiting**: Press `ESC` to return to NORMAL mode
+
+### COMMAND Mode (No Cursor in Game Area)
+- **Purpose**: Execute game commands
+- **Status**: Shows "COMMAND" in dark purple at bottom-left
+- **Cursor**: Visible only in command input area (bottom status bar)
+- **Entering**: Press `:` from NORMAL mode
+- **Usage**: Type command, press `Enter` to execute
+- **Available Commands**:
+  - `:quit` or `:q` - Exit the game
+  - `:boost` - Activate boost mode for 10 seconds (2x spawn rate, 2x score)
 - **Exiting**: Press `ESC` to return to NORMAL mode
 
 ---
@@ -242,11 +253,12 @@ Mode      Last command                    Boost timer  Decay timer   Total score
 ```
 
 **Left Section**:
-- Mode indicator (NORMAL/INSERT/SEARCH)
+- Mode indicator (NORMAL/INSERT/SEARCH/COMMAND)
 - Last command executed (yellow text)
 
 **Center Section**:
 - Search pattern (when in SEARCH mode)
+- Command text (when in COMMAND mode)
 
 **Right Section** (from right to left):
 - **Score** - White background with black text, flashes character color on correct typing (200ms), total points

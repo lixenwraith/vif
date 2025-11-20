@@ -581,16 +581,16 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 	var modeText string
 	var modeBgColor tcell.Color
 	if ctx.IsSearchMode() {
-		modeText = " SEARCH "
-		modeBgColor = RgbCursorNormal
+		modeText = constants.ModeTextSearch
+		modeBgColor = RgbModeSearchBg
 	} else if ctx.IsCommandMode() {
-		modeText = " COMMAND "
-		modeBgColor = tcell.NewRGBColor(128, 0, 128) // Dark purple
+		modeText = constants.ModeTextCommand
+		modeBgColor = RgbModeCommandBg
 	} else if ctx.IsInsertMode() {
-		modeText = " INSERT "
+		modeText = constants.ModeTextInsert
 		modeBgColor = RgbModeInsertBg
 	} else {
-		modeText = " NORMAL "
+		modeText = constants.ModeTextNormal
 		modeBgColor = RgbModeNormalBg
 	}
 	modeStyle := defaultStyle.Foreground(RgbStatusText).Background(modeBgColor)
@@ -632,7 +632,7 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 		}
 	} else if ctx.IsCommandMode() {
 		commandStyle := defaultStyle.Foreground(tcell.ColorWhite)
-		cursorStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(tcell.NewRGBColor(128, 0, 128))
+		cursorStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(RgbModeCommandBg)
 
 		for i, ch := range ctx.CommandText {
 			if statusStartX+i < r.width {
@@ -707,8 +707,8 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 		startX += len(gridText)
 	}
 
-	// Draw decay timer (always visible, with red background and black text)
-	decayStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(tcell.NewRGBColor(200, 50, 50))
+	// Draw decay timer (always visible)
+	decayStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(RgbDecayTimerBg)
 	for i, ch := range decayText {
 		if startX+i < r.width {
 			r.screen.SetContent(startX+i, statusY, ch, nil, decayStyle)

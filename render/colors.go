@@ -43,11 +43,14 @@ var (
 	RgbTrailGray     = tcell.NewRGBColor(200, 200, 200) // Light gray base
 
 	// Status bar backgrounds
-	RgbModeNormalBg = tcell.NewRGBColor(135, 206, 250) // Light sky blue
-	RgbModeInsertBg = tcell.NewRGBColor(144, 238, 144) // Light grass green
-	RgbScoreBg      = tcell.NewRGBColor(255, 255, 255) // Bright white
-	RgbBoostBg      = tcell.NewRGBColor(255, 192, 203) // Pink for boost timer
-	RgbStatusText   = tcell.NewRGBColor(0, 0, 0)       // Dark text for status
+	RgbModeNormalBg  = tcell.NewRGBColor(135, 206, 250) // Light sky blue
+	RgbModeInsertBg  = tcell.NewRGBColor(144, 238, 144) // Light grass green
+	RgbModeSearchBg  = tcell.NewRGBColor(255, 165, 0)   // Orange
+	RgbModeCommandBg = tcell.NewRGBColor(128, 0, 128)   // Dark purple
+	RgbScoreBg       = tcell.NewRGBColor(255, 255, 255) // Bright white
+	RgbBoostBg       = tcell.NewRGBColor(255, 192, 203) // Pink for boost timer
+	RgbDecayTimerBg  = tcell.NewRGBColor(200, 50, 50)   // Red for decay timer
+	RgbStatusText    = tcell.NewRGBColor(0, 0, 0)       // Dark text for status
 
 	// Cleaner removal flash effect
 	RgbRemovalFlash = tcell.NewRGBColor(255, 255, 200) // Bright yellow-white flash
