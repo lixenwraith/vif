@@ -305,6 +305,13 @@ func (s *DrainSystem) handleCollisions(world *engine.World) {
 		return
 	}
 
+	// Part 7: Check for falling decay collision
+	fallingDecayType := reflect.TypeOf(components.FallingDecayComponent{})
+	if world.HasComponent(entity, fallingDecayType) {
+		s.handleFallingDecayCollision(world, entity)
+		return
+	}
+
 	// Check if entity has SequenceComponent
 	seqType := reflect.TypeOf(components.SequenceComponent{})
 	seqComp, ok := world.GetComponent(entity, seqType)
@@ -394,5 +401,13 @@ func (s *DrainSystem) handleNuggetCollision(world *engine.World, entity engine.E
 	}
 
 	// Destroy the nugget entity
+	world.SafeDestroyEntity(entity)
+}
+
+// handleFallingDecayCollision destroys the falling decay entity
+// Part 7: Collision with falling decay entities during decay animation
+func (s *DrainSystem) handleFallingDecayCollision(world *engine.World, entity engine.Entity) {
+	// Simply destroy the falling decay entity
+	// This maintains decay animation continuity - other falling entities continue
 	world.SafeDestroyEntity(entity)
 }

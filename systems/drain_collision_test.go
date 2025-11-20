@@ -687,3 +687,302 @@ func TestDrainSystem_GoldCollisionInactiveGold(t *testing.T) {
 	}
 }
 
+// TestDrainSystem_CollisionWithFallingDecay tests drain destroys falling decay entities (Part 7)
+func TestDrainSystem_CollisionWithFallingDecay(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+	world := engine.NewWorld()
+
+	drainSys := NewDrainSystem(ctx)
+
+	// Spawn drain at position (0, 0)
+	ctx.State.SetScore(100)
+	drainSys.Update(world, 16*time.Millisecond)
+
+	drainEntityID := ctx.State.GetDrainEntity()
+	drainEntity := engine.Entity(drainEntityID)
+
+	drainType := reflect.TypeOf(components.DrainComponent{})
+	drainComp, ok := world.GetComponent(drainEntity, drainType)
+	if !ok {
+		t.Fatal("Expected drain to have DrainComponent")
+	}
+	drain := drainComp.(components.DrainComponent)
+
+	// Create a falling decay entity at the same position
+	decayEntity := world.CreateEntity()
+	world.AddComponent(decayEntity, components.FallingDecayComponent{
+		Column:        drain.X,
+		YPosition:     float64(drain.Y),
+		Speed:         5.0,
+		Char:          'X',
+		LastChangeRow: drain.Y,
+	})
+	// Note: FallingDecayComponent doesn't use PositionComponent, but we need
+	// spatial index for collision detection
+	world.UpdateSpatialIndex(decayEntity, drain.X, drain.Y)
+
+	// Update drain system (should destroy falling decay entity)
+	drainSys.Update(world, 16*time.Millisecond)
+
+	// Verify falling decay entity was destroyed
+	fallingDecayType := reflect.TypeOf(components.FallingDecayComponent{})
+	if _, ok := world.GetComponent(decayEntity, fallingDecayType); ok {
+		t.Fatal("Expected falling decay entity to be destroyed after collision")
+	}
+}
+
+// TestDrainSystem_CollisionWithMultipleFallingDecay tests drain collides with multiple decay entities
+func TestDrainSystem_CollisionWithMultipleFallingDecay(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+	world := engine.NewWorld()
+
+	drainSys := NewDrainSystem(ctx)
+
+	// Spawn drain at position (5, 5)
+	ctx.State.SetScore(100)
+	entity := world.CreateEntity()
+	x, y := 5, 5
+	world.AddComponent(entity, components.PositionComponent{
+		X: x,
+		Y: y,
+	})
+	now := ctx.TimeProvider.Now()
+	world.AddComponent(entity, components.DrainComponent{
+		X:             x,
+		Y:             y,
+		LastMoveTime:  now,
+		LastDrainTime: now,
+		IsOnCursor:    false,
+	})
+	world.UpdateSpatialIndex(entity, x, y)
+	ctx.State.SetDrainActive(true)
+	ctx.State.SetDrainEntity(uint64(entity))
+	ctx.State.SetDrainX(x)
+	ctx.State.SetDrainY(y)
+
+	// Create multiple falling decay entities at different positions
+	decayEntity1 := world.CreateEntity()
+	world.AddComponent(decayEntity1, components.FallingDecayComponent{
+		Column:        5,
+		YPosition:     5.0,
+		Speed:         5.0,
+		Char:          'A',
+		LastChangeRow: 5,
+	})
+	world.UpdateSpatialIndex(decayEntity1, 5, 5)
+
+	decayEntity2 := world.CreateEntity()
+	world.AddComponent(decayEntity2, components.FallingDecayComponent{
+		Column:        10,
+		YPosition:     10.0,
+		Speed:         3.0,
+		Char:          'B',
+		LastChangeRow: 10,
+	})
+	world.UpdateSpatialIndex(decayEntity2, 10, 10)
+
+	// Update drain system (should only destroy decay entity at drain position)
+	drainSys.Update(world, 16*time.Millisecond)
+
+	// Verify first decay entity was destroyed (at drain position)
+	fallingDecayType := reflect.TypeOf(components.FallingDecayComponent{})
+	if _, ok := world.GetComponent(decayEntity1, fallingDecayType); ok {
+		t.Fatal("Expected decay entity 1 to be destroyed (at drain position)")
+	}
+
+	// Verify second decay entity still exists (not at drain position)
+	if _, ok := world.GetComponent(decayEntity2, fallingDecayType); !ok {
+		t.Fatal("Expected decay entity 2 to still exist (not at drain position)")
+	}
+}
+
+// TestDrainSystem_FallingDecayCollisionAtBoundary tests collision at screen boundaries
+func TestDrainSystem_FallingDecayCollisionAtBoundary(t *testing.T) {
+	positions := []struct {
+		x, y int
+		name string
+	}{
+		{0, 0, "TopLeft"},
+		{79, 0, "TopRight"},
+		{0, 23, "BottomLeft"},
+		{40, 12, "Center"},
+	}
+
+	for _, pos := range positions {
+		t.Run(pos.name, func(t *testing.T) {
+			screen := tcell.NewSimulationScreen("UTF-8")
+			screen.SetSize(80, 24)
+			ctx := engine.NewGameContext(screen)
+			world := engine.NewWorld()
+
+			drainSys := NewDrainSystem(ctx)
+
+			// Spawn drain at specific position
+			ctx.State.SetScore(100)
+			entity := world.CreateEntity()
+			world.AddComponent(entity, components.PositionComponent{
+				X: pos.x,
+				Y: pos.y,
+			})
+			now := ctx.TimeProvider.Now()
+			world.AddComponent(entity, components.DrainComponent{
+				X:             pos.x,
+				Y:             pos.y,
+				LastMoveTime:  now,
+				LastDrainTime: now,
+				IsOnCursor:    false,
+			})
+			world.UpdateSpatialIndex(entity, pos.x, pos.y)
+			ctx.State.SetDrainActive(true)
+			ctx.State.SetDrainEntity(uint64(entity))
+			ctx.State.SetDrainX(pos.x)
+			ctx.State.SetDrainY(pos.y)
+
+			// Create falling decay entity at same position
+			decayEntity := world.CreateEntity()
+			world.AddComponent(decayEntity, components.FallingDecayComponent{
+				Column:        pos.x,
+				YPosition:     float64(pos.y),
+				Speed:         7.0,
+				Char:          'Z',
+				LastChangeRow: pos.y,
+			})
+			world.UpdateSpatialIndex(decayEntity, pos.x, pos.y)
+
+			// Update drain system
+			drainSys.Update(world, 16*time.Millisecond)
+
+			// Verify decay entity was destroyed
+			fallingDecayType := reflect.TypeOf(components.FallingDecayComponent{})
+			if _, ok := world.GetComponent(decayEntity, fallingDecayType); ok {
+				t.Fatalf("Expected decay entity to be destroyed at position (%d, %d)", pos.x, pos.y)
+			}
+		})
+	}
+}
+
+// TestDrainSystem_DecayCollisionPriorityOverSequence tests decay collision happens before sequence collision
+func TestDrainSystem_DecayCollisionPriorityOverSequence(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+	world := engine.NewWorld()
+
+	drainSys := NewDrainSystem(ctx)
+
+	// Spawn drain
+	ctx.State.SetScore(100)
+	drainSys.Update(world, 16*time.Millisecond)
+
+	drainEntityID := ctx.State.GetDrainEntity()
+	drainEntity := engine.Entity(drainEntityID)
+
+	drainType := reflect.TypeOf(components.DrainComponent{})
+	drainComp, ok := world.GetComponent(drainEntity, drainType)
+	if !ok {
+		t.Fatal("Expected drain to have DrainComponent")
+	}
+	drain := drainComp.(components.DrainComponent)
+
+	// Create a falling decay entity at drain position
+	decayEntity := world.CreateEntity()
+	world.AddComponent(decayEntity, components.FallingDecayComponent{
+		Column:        drain.X,
+		YPosition:     float64(drain.Y),
+		Speed:         6.0,
+		Char:          'D',
+		LastChangeRow: drain.Y,
+	})
+	world.UpdateSpatialIndex(decayEntity, drain.X, drain.Y)
+
+	// Create a blue character at different position
+	charEntity := world.CreateEntity()
+	world.AddComponent(charEntity, components.PositionComponent{
+		X: drain.X + 1,
+		Y: drain.Y,
+	})
+	world.AddComponent(charEntity, components.CharacterComponent{
+		Rune:  'a',
+		Style: tcell.StyleDefault,
+	})
+	world.AddComponent(charEntity, components.SequenceComponent{
+		ID:    1,
+		Index: 0,
+		Type:  components.SequenceBlue,
+		Level: components.LevelNormal,
+	})
+	world.UpdateSpatialIndex(charEntity, drain.X+1, drain.Y)
+
+	// Set color counter
+	ctx.State.AddColorCount(0, int(components.LevelNormal), 1)
+
+	// Update drain system (should only destroy decay entity at drain position)
+	drainSys.Update(world, 16*time.Millisecond)
+
+	// Verify decay entity was destroyed
+	fallingDecayType := reflect.TypeOf(components.FallingDecayComponent{})
+	if _, ok := world.GetComponent(decayEntity, fallingDecayType); ok {
+		t.Fatal("Expected decay entity to be destroyed")
+	}
+
+	// Verify blue character still exists (not at drain position)
+	seqType := reflect.TypeOf(components.SequenceComponent{})
+	if _, ok := world.GetComponent(charEntity, seqType); !ok {
+		t.Fatal("Expected blue character to still exist")
+	}
+}
+
+// TestDrainSystem_FallingDecayWithDifferentSpeeds tests collision with decay entities at various speeds
+func TestDrainSystem_FallingDecayWithDifferentSpeeds(t *testing.T) {
+	speeds := []float64{1.0, 5.0, 10.0, 15.0}
+
+	for _, speed := range speeds {
+		t.Run("Speed", func(t *testing.T) {
+			screen := tcell.NewSimulationScreen("UTF-8")
+			screen.SetSize(80, 24)
+			ctx := engine.NewGameContext(screen)
+			world := engine.NewWorld()
+
+			drainSys := NewDrainSystem(ctx)
+
+			// Spawn drain
+			ctx.State.SetScore(100)
+			drainSys.Update(world, 16*time.Millisecond)
+
+			drainEntityID := ctx.State.GetDrainEntity()
+			drainEntity := engine.Entity(drainEntityID)
+
+			drainType := reflect.TypeOf(components.DrainComponent{})
+			drainComp, ok := world.GetComponent(drainEntity, drainType)
+			if !ok {
+				t.Fatal("Expected drain to have DrainComponent")
+			}
+			drain := drainComp.(components.DrainComponent)
+
+			// Create falling decay entity with specific speed
+			decayEntity := world.CreateEntity()
+			world.AddComponent(decayEntity, components.FallingDecayComponent{
+				Column:        drain.X,
+				YPosition:     float64(drain.Y),
+				Speed:         speed,
+				Char:          'S',
+				LastChangeRow: drain.Y,
+			})
+			world.UpdateSpatialIndex(decayEntity, drain.X, drain.Y)
+
+			// Update drain system
+			drainSys.Update(world, 16*time.Millisecond)
+
+			// Verify decay entity was destroyed regardless of speed
+			fallingDecayType := reflect.TypeOf(components.FallingDecayComponent{})
+			if _, ok := world.GetComponent(decayEntity, fallingDecayType); ok {
+				t.Fatalf("Expected decay entity with speed %.1f to be destroyed", speed)
+			}
+		})
+	}
+}
+
