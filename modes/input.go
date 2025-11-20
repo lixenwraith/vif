@@ -180,10 +180,18 @@ func (h *InputHandler) handleSearchMode(ev *tcell.EventKey) bool {
 // handleCommandMode handles input in command mode
 func (h *InputHandler) handleCommandMode(ev *tcell.EventKey) bool {
 	if ev.Key() == tcell.KeyEnter {
-		// Prepare for command execution (just clear and exit for now)
-		h.ctx.Mode = engine.ModeNormal
+		// Execute command
+		command := h.ctx.CommandText
+		shouldContinue := ExecuteCommand(h.ctx, command)
+
+		// Clear command text after execution
 		h.ctx.CommandText = ""
-		return true
+
+		// Return to normal mode
+		h.ctx.Mode = engine.ModeNormal
+
+		// Return the result from ExecuteCommand (false = exit game)
+		return shouldContinue
 	}
 	if ev.Key() == tcell.KeyBackspace || ev.Key() == tcell.KeyBackspace2 {
 		if len(h.ctx.CommandText) > 0 {

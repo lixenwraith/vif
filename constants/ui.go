@@ -24,6 +24,12 @@ const (
 const (
 	// BoostExtensionDuration is how long each matching color character extends the boost
 	BoostExtensionDuration = 500 * time.Millisecond
+
+	// BoostBaseDuration is the initial duration when boost is activated via command
+	BoostBaseDuration = 10 * time.Second
+
+	// CommandStatusMessageTimeout is how long command status messages are displayed
+	CommandStatusMessageTimeout = 2 * time.Second
 )
 
 // Gold Sequence Constants
