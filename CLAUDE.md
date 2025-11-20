@@ -11,12 +11,12 @@ vi-fighter is a terminal-based typing game written in Go using an ECS (Entity Co
   - ECS components in `engine/components.go`
   - Systems in `systems/` directory with `Priority()` method
   - Documentation in `doc/` directory (architecture.md, game.md, etc.)
+  - Constants in `constants/*.go`
   - Assets in `assets/` directory
-  - Constants in `constants/game_constants.go`
 
 ### 2. CONSTANT MANAGEMENT
 **MANDATORY**: Never use hard-coded values. All constants must be:
-- Defined in `constants/game_constants.go` or relevant system constants file
+- Defined in `constants/*.go` or relevant system constants file
 - Named descriptively (e.g., `DecayIntervalMs`, not `50`)
 - Referenced consistently throughout codebase
 - Used in tests via constant references, not literals

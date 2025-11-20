@@ -17,17 +17,17 @@ import (
 )
 
 const (
-	nuggetSpawnIntervalSeconds = 5   // Attempt spawn every 5 seconds
+	nuggetSpawnIntervalSeconds = 5 // Attempt spawn every 5 seconds
 	nuggetMaxAttempts          = 100
 )
 
 // NuggetSystem manages nugget spawn and respawn logic
 type NuggetSystem struct {
-	mu                sync.RWMutex
-	ctx               *engine.GameContext
-	activeNugget      atomic.Uint64
-	nuggetID          atomic.Int32
-	lastSpawnAttempt  time.Time
+	mu               sync.RWMutex
+	ctx              *engine.GameContext
+	activeNugget     atomic.Uint64
+	nuggetID         atomic.Int32
+	lastSpawnAttempt time.Time
 }
 
 // NewNuggetSystem creates a new nugget system
@@ -95,7 +95,14 @@ func (s *NuggetSystem) spawnNugget(world *engine.World, now time.Time) {
 		SpawnTime: now,
 	})
 
-	world.UpdateSpatialIndex(entity, x, y)
+	tx := world.BeginSpatialTransaction()
+	result := tx.Spawn(entity, x, y)
+	if result.HasCollision {
+		// Position was taken while we were creating the nugget
+		world.SafeDestroyEntity(entity)
+		return
+	}
+	tx.Commit()
 	s.activeNugget.Store(uint64(entity))
 }
 
