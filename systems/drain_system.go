@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/components"
+	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
@@ -37,6 +38,11 @@ func (s *DrainSystem) Update(world *engine.World, dt time.Duration) {
 		s.spawnDrain(world)
 	} else if score <= 0 && drainActive {
 		s.despawnDrain(world)
+	}
+
+	// Movement logic: move drain toward cursor every 250ms
+	if drainActive {
+		s.updateDrainMovement(world)
 	}
 }
 
@@ -131,4 +137,92 @@ func (s *DrainSystem) despawnDrain(world *engine.World) {
 	s.ctx.State.SetDrainEntity(0)
 	s.ctx.State.SetDrainX(0)
 	s.ctx.State.SetDrainY(0)
+}
+
+// updateDrainMovement handles drain movement toward cursor every 250ms
+func (s *DrainSystem) updateDrainMovement(world *engine.World) {
+	// Get drain entity ID
+	entityID := s.ctx.State.GetDrainEntity()
+	if entityID == 0 {
+		return
+	}
+
+	entity := engine.Entity(entityID)
+
+	// Get drain component
+	drainType := reflect.TypeOf(components.DrainComponent{})
+	drainComp, ok := world.GetComponent(entity, drainType)
+	if !ok {
+		return
+	}
+
+	drain := drainComp.(components.DrainComponent)
+
+	// Check if 250ms has passed since last move
+	now := s.ctx.TimeProvider.Now()
+	if now.Sub(drain.LastMoveTime) < constants.DrainMoveInterval {
+		return
+	}
+
+	// Get cursor position
+	cursor := s.ctx.State.ReadCursorPosition()
+
+	// Calculate movement direction using Manhattan distance (8-directional)
+	dx := sign(cursor.X - drain.X)
+	dy := sign(cursor.Y - drain.Y)
+
+	// Calculate new position
+	newX := drain.X + dx
+	newY := drain.Y + dy
+
+	// Boundary checks
+	if newX < 0 {
+		newX = 0
+	}
+	if newX >= s.ctx.GameWidth {
+		newX = s.ctx.GameWidth - 1
+	}
+	if newY < 0 {
+		newY = 0
+	}
+	if newY >= s.ctx.GameHeight {
+		newY = s.ctx.GameHeight - 1
+	}
+
+	// Update drain component
+	drain.X = newX
+	drain.Y = newY
+	drain.LastMoveTime = now
+	world.AddComponent(entity, drain)
+
+	// Update position component
+	posType := reflect.TypeOf(components.PositionComponent{})
+	if posComp, ok := world.GetComponent(entity, posType); ok {
+		pos := posComp.(components.PositionComponent)
+
+		// Remove from old spatial index position
+		world.RemoveFromSpatialIndex(pos.X, pos.Y)
+
+		// Update position
+		pos.X = newX
+		pos.Y = newY
+		world.AddComponent(entity, pos)
+
+		// Update spatial index with new position
+		world.UpdateSpatialIndex(entity, newX, newY)
+	}
+
+	// Update GameState atomics for renderer
+	s.ctx.State.SetDrainX(newX)
+	s.ctx.State.SetDrainY(newY)
+}
+
+// sign returns -1, 0, or 1 depending on the sign of the input
+func sign(x int) int {
+	if x < 0 {
+		return -1
+	} else if x > 0 {
+		return 1
+	}
+	return 0
 }
