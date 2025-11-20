@@ -78,32 +78,38 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 		if h.ctx.CursorY > 0 {
 			h.ctx.CursorY--
 		}
+		h.ctx.State.SetCursorY(h.ctx.CursorY)
 		h.ctx.State.SetHeat(0)
 		return true
 	case tcell.KeyDown:
 		if h.ctx.CursorY < h.ctx.GameHeight-1 {
 			h.ctx.CursorY++
 		}
+		h.ctx.State.SetCursorY(h.ctx.CursorY)
 		h.ctx.State.SetHeat(0)
 		return true
 	case tcell.KeyLeft:
 		if h.ctx.CursorX > 0 {
 			h.ctx.CursorX--
 		}
+		h.ctx.State.SetCursorX(h.ctx.CursorX)
 		h.ctx.State.SetHeat(0)
 		return true
 	case tcell.KeyRight:
 		if h.ctx.CursorX < h.ctx.GameWidth-1 {
 			h.ctx.CursorX++
 		}
+		h.ctx.State.SetCursorX(h.ctx.CursorX)
 		h.ctx.State.SetHeat(0)
 		return true
 	case tcell.KeyHome:
 		h.ctx.CursorX = 0
+		h.ctx.State.SetCursorX(h.ctx.CursorX)
 		h.ctx.State.SetHeat(0)
 		return true
 	case tcell.KeyEnd:
 		h.ctx.CursorX = findLineEnd(h.ctx)
+		h.ctx.State.SetCursorX(h.ctx.CursorX)
 		h.ctx.State.SetHeat(0)
 		return true
 	case tcell.KeyTab:
@@ -131,6 +137,7 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 			if h.ctx.CursorX < h.ctx.GameWidth-1 {
 				h.ctx.CursorX++
 			}
+			h.ctx.State.SetCursorX(h.ctx.CursorX)
 			return true
 		}
 		// Delegate character typing to score system
@@ -172,6 +179,7 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 		if h.ctx.CursorY > 0 {
 			h.ctx.CursorY--
 		}
+		h.ctx.State.SetCursorY(h.ctx.CursorY)
 		h.ctx.State.SetHeat(0)
 		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
@@ -179,6 +187,7 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 		if h.ctx.CursorY < h.ctx.GameHeight-1 {
 			h.ctx.CursorY++
 		}
+		h.ctx.State.SetCursorY(h.ctx.CursorY)
 		h.ctx.State.SetHeat(0)
 		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
@@ -186,6 +195,7 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 		if h.ctx.CursorX > 0 {
 			h.ctx.CursorX--
 		}
+		h.ctx.State.SetCursorX(h.ctx.CursorX)
 		h.ctx.State.SetHeat(0)
 		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
@@ -193,16 +203,19 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 		if h.ctx.CursorX < h.ctx.GameWidth-1 {
 			h.ctx.CursorX++
 		}
+		h.ctx.State.SetCursorX(h.ctx.CursorX)
 		h.ctx.State.SetHeat(0)
 		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
 	case tcell.KeyHome:
 		h.ctx.CursorX = 0
+		h.ctx.State.SetCursorX(h.ctx.CursorX)
 		h.ctx.State.SetHeat(0)
 		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
 	case tcell.KeyEnd:
 		h.ctx.CursorX = findLineEnd(h.ctx)
+		h.ctx.State.SetCursorX(h.ctx.CursorX)
 		h.ctx.State.SetHeat(0)
 		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
@@ -426,6 +439,7 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 				// gg - goto top (same column)
 				cmd := h.buildCommandString('g', 'g', count, false)
 				h.ctx.CursorY = 0
+				h.ctx.State.SetCursorY(h.ctx.CursorY)
 				h.ctx.CommandPrefix = 0
 				h.ctx.MotionCount = 0
 				h.ctx.LastCommand = cmd
@@ -435,6 +449,8 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 				cmd := h.buildCommandString('g', 'o', count, false)
 				h.ctx.CursorY = 0
 				h.ctx.CursorX = 0
+				h.ctx.State.SetCursorX(h.ctx.CursorX)
+				h.ctx.State.SetCursorY(h.ctx.CursorY)
 				h.ctx.CommandPrefix = 0
 				h.ctx.MotionCount = 0
 				h.ctx.LastCommand = cmd

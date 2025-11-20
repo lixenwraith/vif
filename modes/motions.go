@@ -162,6 +162,12 @@ func ExecuteMotion(ctx *engine.GameContext, cmd rune, count int) {
 	// Validate cursor position after motion
 	ctx.CursorX, ctx.CursorY = validatePosition(ctx, ctx.CursorX, ctx.CursorY)
 
+	// Sync cursor position to GameState atomics for renderer and other systems (if initialized)
+	if ctx.State != nil {
+		ctx.State.SetCursorX(ctx.CursorX)
+		ctx.State.SetCursorY(ctx.CursorY)
+	}
+
 	// Check for consecutive motion keys (heat penalty)
 	if cmd == ctx.LastMoveKey && (cmd == 'h' || cmd == 'j' || cmd == 'k' || cmd == 'l') {
 		ctx.ConsecutiveCount++
