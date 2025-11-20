@@ -58,13 +58,13 @@ func TestDrainSystem_ScoreDrainWhenOnCursor(t *testing.T) {
 	// Update without advancing time - should not drain yet
 	drainSys.Update(world, 16*time.Millisecond)
 
-	// Score should not change yet (250ms hasn't passed)
+	// Score should not change yet (DrainScoreDrainInterval hasn't passed)
 	if ctx.State.GetScore() != initialScore {
-		t.Errorf("Score should not change before 250ms, got %d, expected %d",
+		t.Errorf("Score should not change before DrainScoreDrainInterval, got %d, expected %d",
 			ctx.State.GetScore(), initialScore)
 	}
 
-	// Advance time by 250ms
+	// Advance time by DrainScoreDrainInterval
 	mockTime.Advance(constants.DrainScoreDrainInterval)
 	drainSys.Update(world, 16*time.Millisecond)
 
@@ -123,7 +123,7 @@ func TestDrainSystem_NoDrainWhenNotOnCursor(t *testing.T) {
 	ctx.State.SetDrainX(drainX)
 	ctx.State.SetDrainY(drainY)
 
-	// Advance time by 250ms
+	// Advance time by DrainScoreDrainInterval
 	mockTime.Advance(constants.DrainScoreDrainInterval)
 	drainSys.Update(world, 16*time.Millisecond)
 
@@ -356,7 +356,7 @@ func TestDrainSystem_NoDrainBeforeInterval(t *testing.T) {
 
 		// Score should NOT have changed
 		if ctx.State.GetScore() != initialScore {
-			t.Errorf("Score should not drain before 250ms (tested at %v), got %d, expected %d",
+			t.Errorf("Score should not drain before DrainScoreDrainInterval (tested at %v), got %d, expected %d",
 				interval, ctx.State.GetScore(), initialScore)
 		}
 	}

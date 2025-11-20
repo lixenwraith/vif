@@ -10,8 +10,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
-// TestDrainSystem_MovementAfter250ms tests that drain moves after DrainMoveInterval
-func TestDrainSystem_MovementAfter250ms(t *testing.T) {
+// TestDrainSystem_MovementAfterInterval tests that drain moves after DrainMoveInterval
+func TestDrainSystem_MovementAfterInterval(t *testing.T) {
 	startTime := time.Now()
 	mockTime := engine.NewMockTimeProvider(startTime)
 
@@ -232,7 +232,7 @@ func TestDrainSystem_MovementBoundaryChecks(t *testing.T) {
 			ctx.State.SetCursorX(tc.cursorX)
 			ctx.State.SetCursorY(tc.cursorY)
 
-			// Advance time by 250ms to trigger movement
+			// Advance time by DrainMoveInterval to trigger movement
 			mockTime.Advance(constants.DrainMoveInterval)
 
 			drainSys := NewDrainSystem(ctx)

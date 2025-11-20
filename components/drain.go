@@ -7,7 +7,7 @@ import "time"
 // The drain entity spawns when score > 0 and despawns when score <= 0.
 type DrainComponent struct {
 	X, Y          int       // Current position in game coordinates
-	LastMoveTime  time.Time // Last time the drain moved (250ms interval)
-	LastDrainTime time.Time // Last time score was drained (250ms interval)
+	LastMoveTime  time.Time // Last time the drain moved (DrainMoveInterval)
+	LastDrainTime time.Time // Last time score was drained (DrainScoreDrainInterval)
 	IsOnCursor    bool      // Cached state for efficient drain checks
 }

@@ -73,13 +73,13 @@ const (
 	// DrainChar is the character used to render the drain entity (╬ - Unicode U+256C)
 	DrainChar = '╬'
 
-	// DrainMoveIntervalMs is the interval between drain movement updates (1000ms for debugging)
+	// DrainMoveIntervalMs is the interval between drain movement updates (in milliseconds)
 	DrainMoveIntervalMs = 1000
 
 	// DrainMoveInterval is the duration between drain movement updates
 	DrainMoveInterval = DrainMoveIntervalMs * time.Millisecond
 
-	// DrainScoreDrainIntervalMs is the interval between score drain ticks (1000ms for debugging)
+	// DrainScoreDrainIntervalMs is the interval between score drain ticks (in milliseconds)
 	DrainScoreDrainIntervalMs = 1000
 
 	// DrainScoreDrainInterval is the duration between score drain ticks

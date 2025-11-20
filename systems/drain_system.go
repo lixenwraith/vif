@@ -256,7 +256,7 @@ func (s *DrainSystem) updateScoreDrain(world *engine.World) {
 		world.AddComponent(entity, drain)
 	}
 
-	// Drain score if on cursor and 250ms has passed
+	// Drain score if on cursor and DrainScoreDrainInterval has passed
 	if isOnCursor {
 		now := s.ctx.TimeProvider.Now()
 		if now.Sub(drain.LastDrainTime) >= constants.DrainScoreDrainInterval {
