@@ -35,6 +35,7 @@ func (s *DrainSystem) Priority() int {
 }
 
 // Update runs the drain system logic
+// Movement is purely clock-based (DrainMoveIntervalMs), independent of input events or frame rate
 func (s *DrainSystem) Update(world *engine.World, dt time.Duration) {
 	score := s.ctx.State.GetScore()
 	drainActive := s.ctx.State.GetDrainActive()
@@ -46,7 +47,7 @@ func (s *DrainSystem) Update(world *engine.World, dt time.Duration) {
 		s.despawnDrain(world)
 	}
 
-	// Movement logic: move drain toward cursor every 250ms
+	// Clock-based updates: movement and score drain occur on fixed intervals
 	if drainActive {
 		s.updateDrainMovement(world)
 		s.updateScoreDrain(world)
@@ -142,7 +143,8 @@ func (s *DrainSystem) despawnDrain(world *engine.World) {
 	s.ctx.State.SetDrainY(0)
 }
 
-// updateDrainMovement handles drain movement toward cursor every 250ms
+// updateDrainMovement handles purely clock-based drain movement toward cursor
+// Movement occurs ONLY on DrainMoveIntervalMs intervals, independent of input events
 func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 	// Get drain entity ID
 	entityID := s.ctx.State.GetDrainEntity()
@@ -161,9 +163,11 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 
 	drain := drainComp.(components.DrainComponent)
 
-	// Check if 250ms has passed since last move
+	// Purely clock-based movement: only move when interval has elapsed
 	now := s.ctx.TimeProvider.Now()
-	if now.Sub(drain.LastMoveTime) < constants.DrainMoveInterval {
+	timeSinceLastMove := now.Sub(drain.LastMoveTime)
+	if timeSinceLastMove < constants.DrainMoveInterval {
+		// Not enough time has passed, skip movement this frame
 		return
 	}
 
@@ -171,6 +175,7 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 	cursor := s.ctx.State.ReadCursorPosition()
 
 	// Calculate movement direction using Manhattan distance (8-directional)
+	// If already on cursor, dx and dy will be 0 (no movement but LastMoveTime still updates)
 	dx := sign(cursor.X - drain.X)
 	dy := sign(cursor.Y - drain.Y)
 

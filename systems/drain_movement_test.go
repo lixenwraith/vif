@@ -10,7 +10,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
-// TestDrainSystem_MovementAfter250ms tests that drain moves after 250ms interval
+// TestDrainSystem_MovementAfter250ms tests that drain moves after DrainMoveInterval
 func TestDrainSystem_MovementAfter250ms(t *testing.T) {
 	startTime := time.Now()
 	mockTime := engine.NewMockTimeProvider(startTime)
@@ -53,18 +53,18 @@ func TestDrainSystem_MovementAfter250ms(t *testing.T) {
 	ctx.State.SetCursorX(5)
 	ctx.State.SetCursorY(3)
 
-	// Advance time by 100ms (not enough for movement)
-	mockTime.Advance(100 * time.Millisecond)
+	// Advance time by less than interval (not enough for movement)
+	mockTime.Advance(constants.DrainMoveInterval / 2)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Drain should NOT have moved yet
 	if ctx.State.GetDrainX() != 0 || ctx.State.GetDrainY() != 0 {
-		t.Errorf("Expected drain to still be at (0, 0) before 250ms, got (%d, %d)",
+		t.Errorf("Expected drain to still be at (0, 0) before interval, got (%d, %d)",
 			ctx.State.GetDrainX(), ctx.State.GetDrainY())
 	}
 
-	// Advance time by 150ms more (total 250ms)
-	mockTime.Advance(150 * time.Millisecond)
+	// Advance time to complete the interval
+	mockTime.Advance(constants.DrainMoveInterval/2 + 1*time.Millisecond)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Drain should have moved one step toward cursor (1, 1) - diagonal movement
@@ -73,7 +73,7 @@ func TestDrainSystem_MovementAfter250ms(t *testing.T) {
 	actualY := ctx.State.GetDrainY()
 
 	if actualX != expectedX || actualY != expectedY {
-		t.Errorf("Expected drain to move to (%d, %d) after 250ms, got (%d, %d)",
+		t.Errorf("Expected drain to move to (%d, %d) after interval, got (%d, %d)",
 			expectedX, expectedY, actualX, actualY)
 	}
 }
@@ -110,12 +110,12 @@ func TestDrainSystem_MovementNoMoveBeforeInterval(t *testing.T) {
 	ctx.State.SetCursorX(50)
 	ctx.State.SetCursorY(20)
 
-	// Advance time by various amounts less than 250ms
+	// Advance time by various amounts less than DrainMoveInterval
 	intervals := []time.Duration{
-		50 * time.Millisecond,
-		100 * time.Millisecond,
-		200 * time.Millisecond,
-		249 * time.Millisecond,
+		constants.DrainMoveInterval / 20,
+		constants.DrainMoveInterval / 10,
+		constants.DrainMoveInterval / 5,
+		constants.DrainMoveInterval - 1*time.Millisecond,
 	}
 
 	for _, interval := range intervals {
@@ -124,7 +124,7 @@ func TestDrainSystem_MovementNoMoveBeforeInterval(t *testing.T) {
 		drainSys.Update(world, 16*time.Millisecond)
 
 		if ctx.State.GetDrainX() != initialX || ctx.State.GetDrainY() != initialY {
-			t.Errorf("Drain moved before 250ms interval at %v", interval)
+			t.Errorf("Drain moved before DrainMoveInterval at %v", interval)
 		}
 	}
 }

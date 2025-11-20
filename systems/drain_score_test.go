@@ -282,7 +282,7 @@ func TestDrainSystem_MultipleDrainTicks(t *testing.T) {
 	}
 }
 
-// TestDrainSystem_NoDrainBeforeInterval tests that drain doesn't occur before 250ms
+// TestDrainSystem_NoDrainBeforeInterval tests that drain doesn't occur before DrainScoreDrainInterval
 func TestDrainSystem_NoDrainBeforeInterval(t *testing.T) {
 	startTime := time.Now()
 	mockTime := engine.NewMockTimeProvider(startTime)
@@ -328,12 +328,12 @@ func TestDrainSystem_NoDrainBeforeInterval(t *testing.T) {
 	ctx.State.SetDrainX(cursorX)
 	ctx.State.SetDrainY(cursorY)
 
-	// Test various time intervals less than 250ms
+	// Test various time intervals less than DrainScoreDrainInterval
 	intervals := []time.Duration{
-		50 * time.Millisecond,
-		100 * time.Millisecond,
-		200 * time.Millisecond,
-		249 * time.Millisecond,
+		constants.DrainScoreDrainInterval / 20,
+		constants.DrainScoreDrainInterval / 10,
+		constants.DrainScoreDrainInterval / 5,
+		constants.DrainScoreDrainInterval - 1*time.Millisecond,
 	}
 
 	for _, interval := range intervals {
