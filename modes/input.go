@@ -57,6 +57,7 @@ func (h *InputHandler) handleKeyEvent(ev *tcell.EventKey) bool {
 			h.ctx.Mode = engine.ModeNormal
 			h.ctx.CommandText = ""
 			h.ctx.DeleteOperator = false
+			h.ctx.SetPaused(false)
 		} else if h.ctx.IsInsertMode() {
 			h.ctx.Mode = engine.ModeNormal
 			h.ctx.DeleteOperator = false
@@ -189,6 +190,9 @@ func (h *InputHandler) handleCommandMode(ev *tcell.EventKey) bool {
 
 		// Return to normal mode
 		h.ctx.Mode = engine.ModeNormal
+
+		// Clear pause state
+		h.ctx.SetPaused(false)
 
 		// Return the result from ExecuteCommand (false = exit game)
 		return shouldContinue
@@ -428,6 +432,7 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 			h.ctx.MotionCommand = ""
 			h.ctx.DeleteOperator = false
 			h.ctx.LastCommand = "" // Clear on mode change
+			h.ctx.SetPaused(true)
 			return true
 		}
 

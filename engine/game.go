@@ -77,6 +77,11 @@ type GameContext struct {
 	PingRow       int
 	PingCol       int
 
+	// Pause state management
+	IsPaused           atomic.Bool
+	PauseStartTime     atomic.Int64 // UnixNano
+	TotalPauseDuration atomic.Int64 // nanoseconds
+
 	// Heat tracking (for consecutive move penalty - input specific)
 	LastMoveKey      rune
 	ConsecutiveCount int
@@ -185,6 +190,44 @@ func (g *GameContext) UpdatePingGridTimerAtomic(delta float64) bool {
 			return newValue <= 0
 		}
 	}
+}
+
+// SetPaused sets the pause state and tracks timing
+func (g *GameContext) SetPaused(paused bool) {
+	wasPaused := g.IsPaused.Load()
+	g.IsPaused.Store(paused)
+
+	if paused && !wasPaused {
+		// Starting pause
+		g.PauseStartTime.Store(g.TimeProvider.Now().UnixNano())
+	} else if !paused && wasPaused {
+		// Ending pause
+		startTime := g.PauseStartTime.Load()
+		if startTime > 0 {
+			pauseDuration := g.TimeProvider.Now().UnixNano() - startTime
+			// Add to total pause duration
+			g.TotalPauseDuration.Add(pauseDuration)
+			// Reset start time
+			g.PauseStartTime.Store(0)
+		}
+	}
+}
+
+// GetPauseDuration returns the current pause duration
+func (g *GameContext) GetPauseDuration() time.Duration {
+	if !g.IsPaused.Load() {
+		return 0
+	}
+	startTime := g.PauseStartTime.Load()
+	if startTime == 0 {
+		return 0
+	}
+	return time.Duration(g.TimeProvider.Now().UnixNano() - startTime)
+}
+
+// GetTotalPauseDuration returns the cumulative pause time
+func (g *GameContext) GetTotalPauseDuration() time.Duration {
+	return time.Duration(g.TotalPauseDuration.Load())
 }
 
 // updateGameArea calculates the game area dimensions
