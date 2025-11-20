@@ -120,6 +120,9 @@ func main() {
 	goldSequenceSystem := systems.NewGoldSequenceSystem(ctx, decaySystem, ctx.GameWidth, ctx.GameHeight, ctx.CursorX, ctx.CursorY)
 	ctx.World.AddSystem(goldSequenceSystem)
 
+	drainSystem := systems.NewDrainSystem(ctx)
+	ctx.World.AddSystem(drainSystem)
+
 	// Initialize cleaner system with default configuration
 	cleanerConfig := constants.DefaultCleanerConfig()
 	// Initialize cleaner gradient based on configuration
