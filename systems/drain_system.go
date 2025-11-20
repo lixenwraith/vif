@@ -37,6 +37,11 @@ func (s *DrainSystem) Priority() int {
 // Update runs the drain system logic
 // Movement is purely clock-based (DrainMoveIntervalMs), independent of input events or frame rate
 func (s *DrainSystem) Update(world *engine.World, dt time.Duration) {
+	// Skip time-based updates when paused
+	if s.ctx.IsPaused.Load() {
+		return
+	}
+
 	score := s.ctx.State.GetScore()
 	drainActive := s.ctx.State.GetDrainActive()
 

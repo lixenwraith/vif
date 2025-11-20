@@ -67,8 +67,16 @@ func (s *DecaySystem) Priority() int {
 // Update runs the decay system
 // Animation trigger moved to ClockScheduler, this just updates animation
 func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
+	// Skip time-based updates when paused
+	if s.ctx.IsPaused.Load() {
+		return
+	}
+
+	// Get total pause duration for timer adjustments
+	pauseDuration := s.ctx.GetTotalPauseDuration()
+
 	// Read decay state snapshot for consistent check
-	decaySnapshot := s.ctx.State.ReadDecayState()
+	decaySnapshot := s.ctx.State.ReadDecayState(pauseDuration)
 
 	// Update animation if active
 	if decaySnapshot.Animating {
@@ -85,8 +93,11 @@ func (s *DecaySystem) updateAnimation(world *engine.World) {
 	// Read game height from context
 	gameHeight := s.ctx.GameHeight
 
+	// Get total pause duration for timer adjustments
+	pauseDuration := s.ctx.GetTotalPauseDuration()
+
 	// Read decay state snapshot for consistent startTime access
-	decaySnapshot := s.ctx.State.ReadDecayState()
+	decaySnapshot := s.ctx.State.ReadDecayState(pauseDuration)
 	elapsed := s.ctx.TimeProvider.Now().Sub(decaySnapshot.StartTime).Seconds()
 
 	// Update falling entity positions and apply decay
@@ -402,7 +413,8 @@ func (s *DecaySystem) TriggerDecayAnimation(world *engine.World) {
 // IsAnimating returns true if decay animation is active
 // Reads from GameState snapshot
 func (s *DecaySystem) IsAnimating() bool {
-	decaySnapshot := s.ctx.State.ReadDecayState()
+	pauseDuration := s.ctx.GetTotalPauseDuration()
+	decaySnapshot := s.ctx.State.ReadDecayState(pauseDuration)
 	return decaySnapshot.Animating
 }
 
@@ -416,8 +428,11 @@ func (s *DecaySystem) CurrentRow() int {
 	// Read game height from context
 	gameHeight := s.ctx.GameHeight
 
+	// Get total pause duration for timer adjustments
+	pauseDuration := s.ctx.GetTotalPauseDuration()
+
 	// Read decay state snapshot for consistent check
-	decaySnapshot := s.ctx.State.ReadDecayState()
+	decaySnapshot := s.ctx.State.ReadDecayState(pauseDuration)
 
 	// When animation is done, currentRow is 0, but we want to avoid displaying row 0
 	// During animation, currentRow is the next row to process
@@ -439,7 +454,8 @@ func (s *DecaySystem) CurrentRow() int {
 // GetTimeUntilDecay returns seconds until next decay trigger
 // Reads from GameState snapshot
 func (s *DecaySystem) GetTimeUntilDecay() float64 {
-	decaySnapshot := s.ctx.State.ReadDecayState()
+	pauseDuration := s.ctx.GetTotalPauseDuration()
+	decaySnapshot := s.ctx.State.ReadDecayState(pauseDuration)
 	return decaySnapshot.TimeUntil
 }
 
@@ -450,8 +466,11 @@ func (s *DecaySystem) GetSystemState() string {
 	fallingCount := len(s.fallingEntities)
 	s.mu.RUnlock()
 
+	// Get total pause duration for timer adjustments
+	pauseDuration := s.ctx.GetTotalPauseDuration()
+
 	// Read from GameState
-	snapshot := s.ctx.State.ReadDecayState()
+	snapshot := s.ctx.State.ReadDecayState(pauseDuration)
 
 	if snapshot.Animating {
 		startTime := snapshot.StartTime

@@ -414,7 +414,8 @@ func (gs *GameState) SetBoostColor(color int32) {
 }
 
 // UpdateBoostTimerAtomic atomically checks if boost should expire and disables it
-func (gs *GameState) UpdateBoostTimerAtomic() bool {
+// pauseDuration should be the total pause duration to adjust boost end time
+func (gs *GameState) UpdateBoostTimerAtomic(pauseDuration time.Duration) bool {
 	if !gs.BoostEnabled.Load() {
 		return false
 	}
@@ -425,8 +426,9 @@ func (gs *GameState) UpdateBoostTimerAtomic() bool {
 		return false
 	}
 	endTime := time.Unix(0, endTimeNano)
+	adjustedEndTime := gs.GetAdjustedTime(endTime, pauseDuration)
 
-	if now.After(endTime) {
+	if now.After(adjustedEndTime) {
 		if gs.BoostEnabled.CompareAndSwap(true, false) {
 			gs.BoostColor.Store(0) // Reset to None
 			return true
@@ -767,13 +769,15 @@ func (gs *GameState) GetGoldTimeoutTime() time.Time {
 }
 
 // IsGoldTimedOut checks if the gold sequence has timed out
-func (gs *GameState) IsGoldTimedOut() bool {
+// pauseDuration should be the total pause duration to adjust timeout
+func (gs *GameState) IsGoldTimedOut(pauseDuration time.Duration) bool {
 	gs.mu.RLock()
 	defer gs.mu.RUnlock()
 	if !gs.GoldActive {
 		return false
 	}
-	return gs.TimeProvider.Now().After(gs.GoldTimeoutTime)
+	adjustedTimeout := gs.GetAdjustedTime(gs.GoldTimeoutTime, pauseDuration)
+	return gs.TimeProvider.Now().After(adjustedTimeout)
 }
 
 // GoldSnapshot provides a consistent view of gold state
@@ -872,24 +876,28 @@ func (gs *GameState) GetDecayNextTime() time.Time {
 }
 
 // IsDecayReady checks if the decay timer has expired
-func (gs *GameState) IsDecayReady() bool {
+// pauseDuration should be the total pause duration to adjust timer
+func (gs *GameState) IsDecayReady(pauseDuration time.Duration) bool {
 	gs.mu.RLock()
 	defer gs.mu.RUnlock()
 	if !gs.DecayTimerActive {
 		return false
 	}
 	now := gs.TimeProvider.Now()
-	return now.After(gs.DecayNextTime) || now.Equal(gs.DecayNextTime)
+	adjustedNextTime := gs.GetAdjustedTime(gs.DecayNextTime, pauseDuration)
+	return now.After(adjustedNextTime) || now.Equal(adjustedNextTime)
 }
 
 // GetTimeUntilDecay returns seconds until next decay trigger
-func (gs *GameState) GetTimeUntilDecay() float64 {
+// pauseDuration should be the total pause duration to adjust calculation
+func (gs *GameState) GetTimeUntilDecay(pauseDuration time.Duration) float64 {
 	gs.mu.RLock()
 	defer gs.mu.RUnlock()
 	if !gs.DecayTimerActive || gs.DecayAnimating {
 		return 0.0
 	}
-	remaining := gs.DecayNextTime.Sub(gs.TimeProvider.Now()).Seconds()
+	adjustedNextTime := gs.GetAdjustedTime(gs.DecayNextTime, pauseDuration)
+	remaining := adjustedNextTime.Sub(gs.TimeProvider.Now()).Seconds()
 	if remaining < 0 {
 		remaining = 0
 	}
@@ -961,13 +969,15 @@ type DecaySnapshot struct {
 }
 
 // ReadDecayState returns a consistent snapshot of the decay state
-func (gs *GameState) ReadDecayState() DecaySnapshot {
+// pauseDuration should be the total pause duration to adjust timer
+func (gs *GameState) ReadDecayState(pauseDuration time.Duration) DecaySnapshot {
 	gs.mu.RLock()
 	defer gs.mu.RUnlock()
 
 	timeUntil := 0.0
 	if gs.DecayTimerActive && !gs.DecayAnimating {
-		remaining := gs.DecayNextTime.Sub(gs.TimeProvider.Now()).Seconds()
+		adjustedNextTime := gs.GetAdjustedTime(gs.DecayNextTime, pauseDuration)
+		remaining := adjustedNextTime.Sub(gs.TimeProvider.Now()).Seconds()
 		if remaining > 0 {
 			timeUntil = remaining
 		}
@@ -1181,6 +1191,18 @@ func (gs *GameState) ReadDrainState() DrainSnapshot {
 		X:        int(gs.DrainX.Load()),
 		Y:        int(gs.DrainY.Load()),
 	}
+}
+
+// ===== PAUSE ADJUSTMENT HELPERS =====
+
+// GetAdjustedTime adjusts a timestamp forward by pause duration
+// This effectively "freezes" timers during pause by extending their target times
+// pauseDuration should be the current pause duration (0 if not paused)
+func (gs *GameState) GetAdjustedTime(timestamp time.Time, pauseDuration time.Duration) time.Time {
+	if timestamp.IsZero() || pauseDuration == 0 {
+		return timestamp
+	}
+	return timestamp.Add(pauseDuration)
 }
 
 // ===== GAME LIFECYCLE ACCESSORS (mutex protected) =====

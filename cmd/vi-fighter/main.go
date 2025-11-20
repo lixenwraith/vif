@@ -195,8 +195,9 @@ func main() {
 			)
 
 		case <-ticker.C:
-			// Check if boost should expire (atomic CAS pattern)
-			ctx.State.UpdateBoostTimerAtomic()
+			// Check if boost should expire (atomic CAS pattern, with pause adjustment)
+			pauseDuration := ctx.GetTotalPauseDuration()
+			ctx.State.UpdateBoostTimerAtomic(pauseDuration)
 
 			// Update all ECS systems
 			dt := 16 * time.Millisecond

@@ -145,6 +145,11 @@ func (cs *ClockScheduler) run() {
 // Implements phase transition logic for Gold→GoldComplete→Decay→Normal cycle
 // Implements cleaner trigger logic (parallel to main phase cycle)
 func (cs *ClockScheduler) tick() {
+	// Skip tick execution when paused
+	if cs.ctx.IsPaused.Load() {
+		return
+	}
+
 	cs.mu.Lock()
 	cs.tickCount++
 	goldSys := cs.goldSystem
@@ -152,14 +157,17 @@ func (cs *ClockScheduler) tick() {
 	cleanerSys := cs.cleanerSystem
 	cs.mu.Unlock()
 
+	// Get total pause duration for timer adjustments
+	pauseDuration := cs.ctx.GetTotalPauseDuration()
+
 	// Get current phase from GameState
 	phase := cs.ctx.State.GetPhase()
 
 	// Handle phase transitions based on current phase
 	switch phase {
 	case PhaseGoldActive:
-		// Check if gold sequence has timed out
-		if cs.ctx.State.IsGoldTimedOut() {
+		// Check if gold sequence has timed out (with pause adjustment)
+		if cs.ctx.State.IsGoldTimedOut(pauseDuration) {
 			// Gold timeout - call gold system to remove gold entities
 			if goldSys != nil {
 				goldSys.TimeoutGoldSequence(cs.ctx.World)
@@ -185,8 +193,8 @@ func (cs *ClockScheduler) tick() {
 		// Note: If cleaners are pending, they will be handled below
 
 	case PhaseDecayWait:
-		// Check if decay timer has expired
-		if cs.ctx.State.IsDecayReady() {
+		// Check if decay timer has expired (with pause adjustment)
+		if cs.ctx.State.IsDecayReady(pauseDuration) {
 			// Timer expired - transition to DecayAnimation
 			cs.ctx.State.StartDecayAnimation()
 
