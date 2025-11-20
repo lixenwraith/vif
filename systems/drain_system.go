@@ -171,13 +171,15 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 		return
 	}
 
-	// Get cursor position
+	// Get current cursor position (fresh data from GameState)
 	cursor := s.ctx.State.ReadCursorPosition()
+	cursorX := cursor.X
+	cursorY := cursor.Y
 
 	// Calculate movement direction using Manhattan distance (8-directional)
 	// If already on cursor, dx and dy will be 0 (no movement but LastMoveTime still updates)
-	dx := sign(cursor.X - drain.X)
-	dy := sign(cursor.Y - drain.Y)
+	dx := sign(cursorX - drain.X)
+	dy := sign(cursorY - drain.Y)
 
 	// Calculate new position
 	newX := drain.X + dx
@@ -197,10 +199,15 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 		newY = s.ctx.GameHeight - 1
 	}
 
-	// Update drain component
+	// Update drain component position
 	drain.X = newX
 	drain.Y = newY
 	drain.LastMoveTime = now
+
+	// Recalculate IsOnCursor after position change using fresh cursor data
+	drain.IsOnCursor = (drain.X == cursorX && drain.Y == cursorY)
+
+	// Save updated drain component
 	world.AddComponent(entity, drain)
 
 	// Update position component
@@ -244,13 +251,15 @@ func (s *DrainSystem) updateScoreDrain(world *engine.World) {
 
 	drain := drainComp.(components.DrainComponent)
 
-	// Get cursor position
+	// Get current cursor position (fresh data from GameState)
 	cursor := s.ctx.State.ReadCursorPosition()
+	cursorX := cursor.X
+	cursorY := cursor.Y
 
-	// Check if drain is on cursor
-	isOnCursor := (drain.X == cursor.X && drain.Y == cursor.Y)
+	// Recalculate IsOnCursor every frame by comparing drain position with current cursor position
+	isOnCursor := (drain.X == cursorX && drain.Y == cursorY)
 
-	// Update IsOnCursor state if changed
+	// Always update IsOnCursor to ensure it stays in sync (recalculated every frame)
 	if drain.IsOnCursor != isOnCursor {
 		drain.IsOnCursor = isOnCursor
 		world.AddComponent(entity, drain)
