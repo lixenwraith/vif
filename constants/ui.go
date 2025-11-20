@@ -68,6 +68,24 @@ const (
 	FallingDecayMinRowsBetweenChanges = 1
 )
 
+// Drain System Constants
+const (
+	// DrainMoveIntervalMs is the interval between drain movement updates (250ms)
+	DrainMoveIntervalMs = 250
+
+	// DrainMoveInterval is the duration between drain movement updates
+	DrainMoveInterval = DrainMoveIntervalMs * time.Millisecond
+
+	// DrainScoreDrainIntervalMs is the interval between score drain ticks (250ms)
+	DrainScoreDrainIntervalMs = 250
+
+	// DrainScoreDrainInterval is the duration between score drain ticks
+	DrainScoreDrainInterval = DrainScoreDrainIntervalMs * time.Millisecond
+
+	// DrainScoreDrainAmount is the amount of score drained per tick (10 points)
+	DrainScoreDrainAmount = 10
+)
+
 // Cleaner System Constants (legacy - use CleanerConfig for new code)
 const (
 	// CleanerAnimationDuration is the total time for a cleaner to sweep across the screen

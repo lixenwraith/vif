@@ -47,6 +47,12 @@ type GameState struct {
 	PingRow       atomic.Int32
 	PingCol       atomic.Int32
 
+	// Drain entity tracking (real-time state for renderer snapshot)
+	DrainActive atomic.Bool    // Whether drain entity exists
+	DrainEntity atomic.Uint64  // Entity ID for quick lookup
+	DrainX      atomic.Int32   // Current X position
+	DrainY      atomic.Int32   // Current Y position
+
 	// Sequence ID generation (atomic for thread-safety)
 	NextSeqID atomic.Int64
 
@@ -152,6 +158,12 @@ func NewGameState(gameWidth, gameHeight, screenWidth int, timeProvider TimeProvi
 	gs.PingGridTimer.Store(0)
 	gs.PingRow.Store(0)
 	gs.PingCol.Store(0)
+
+	// Initialize drain entity tracking
+	gs.DrainActive.Store(false)
+	gs.DrainEntity.Store(0)
+	gs.DrainX.Store(0)
+	gs.DrainY.Store(0)
 
 	// Initialize sequence ID
 	gs.NextSeqID.Store(1)
@@ -1107,6 +1119,67 @@ func (gs *GameState) ReadCleanerState() CleanerSnapshot {
 		Active:    gs.CleanerActive,
 		StartTime: gs.CleanerStartTime,
 		Elapsed:   elapsed,
+	}
+}
+
+// ===== DRAIN ENTITY ACCESSORS (atomic) =====
+
+// GetDrainActive returns whether the drain entity is active
+func (gs *GameState) GetDrainActive() bool {
+	return gs.DrainActive.Load()
+}
+
+// SetDrainActive sets whether the drain entity is active
+func (gs *GameState) SetDrainActive(active bool) {
+	gs.DrainActive.Store(active)
+}
+
+// GetDrainEntity returns the drain entity ID
+func (gs *GameState) GetDrainEntity() uint64 {
+	return gs.DrainEntity.Load()
+}
+
+// SetDrainEntity sets the drain entity ID
+func (gs *GameState) SetDrainEntity(entityID uint64) {
+	gs.DrainEntity.Store(entityID)
+}
+
+// GetDrainX returns the drain entity's X position
+func (gs *GameState) GetDrainX() int {
+	return int(gs.DrainX.Load())
+}
+
+// SetDrainX sets the drain entity's X position
+func (gs *GameState) SetDrainX(x int) {
+	gs.DrainX.Store(int32(x))
+}
+
+// GetDrainY returns the drain entity's Y position
+func (gs *GameState) GetDrainY() int {
+	return int(gs.DrainY.Load())
+}
+
+// SetDrainY sets the drain entity's Y position
+func (gs *GameState) SetDrainY(y int) {
+	gs.DrainY.Store(int32(y))
+}
+
+// DrainSnapshot provides a consistent view of drain entity state
+type DrainSnapshot struct {
+	Active   bool
+	EntityID uint64
+	X        int
+	Y        int
+}
+
+// ReadDrainState returns a consistent snapshot of the drain entity state
+func (gs *GameState) ReadDrainState() DrainSnapshot {
+	// All drain fields are atomic, so we can read them without mutex
+	return DrainSnapshot{
+		Active:   gs.DrainActive.Load(),
+		EntityID: gs.DrainEntity.Load(),
+		X:        int(gs.DrainX.Load()),
+		Y:        int(gs.DrainY.Load()),
 	}
 }
 
