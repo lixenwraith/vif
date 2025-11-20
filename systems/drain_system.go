@@ -98,7 +98,7 @@ func (s *DrainSystem) spawnDrain(world *engine.World) {
 		Y:             spawnY,
 		LastMoveTime:  now,
 		LastDrainTime: now,
-		IsOnCursor:    false,
+		IsOnCursor:    true, // Drain spawns centered on cursor
 	})
 
 	// Update spatial index
