@@ -137,6 +137,7 @@ func main() {
 	scoreSystem.SetNuggetSystem(nuggetSystem)
 	decaySystem.SetSpawnSystem(spawnSystem)
 	decaySystem.SetNuggetSystem(nuggetSystem)
+	drainSystem.SetNuggetSystem(nuggetSystem)
 	// Removed goldSequenceSystem.SetCleanerTrigger - now managed by ClockScheduler
 
 	// Create renderer (with CleanerSystem for thread-safe cleaner rendering)

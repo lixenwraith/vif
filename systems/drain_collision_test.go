@@ -186,8 +186,8 @@ func TestDrainSystem_CollisionWithRedCharacter(t *testing.T) {
 	}
 }
 
-// TestDrainSystem_NoCollisionWithGoldCharacter tests drain does NOT destroy gold characters (Part 6)
-func TestDrainSystem_NoCollisionWithGoldCharacter(t *testing.T) {
+// TestDrainSystem_CollisionWithGoldSequence tests drain destroys entire gold sequence (Part 6)
+func TestDrainSystem_CollisionWithGoldSequence(t *testing.T) {
 	screen := tcell.NewSimulationScreen("UTF-8")
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
@@ -195,7 +195,7 @@ func TestDrainSystem_NoCollisionWithGoldCharacter(t *testing.T) {
 
 	drainSys := NewDrainSystem(ctx)
 
-	// Spawn drain
+	// Spawn drain at position (0, 0)
 	ctx.State.SetScore(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
@@ -209,31 +209,72 @@ func TestDrainSystem_NoCollisionWithGoldCharacter(t *testing.T) {
 	}
 	drain := drainComp.(components.DrainComponent)
 
-	// Create a gold character at the same position
-	charEntity := world.CreateEntity()
-	world.AddComponent(charEntity, components.PositionComponent{
-		X: drain.X,
-		Y: drain.Y,
-	})
-	world.AddComponent(charEntity, components.CharacterComponent{
-		Rune:  'g',
-		Style: tcell.StyleDefault,
-	})
-	world.AddComponent(charEntity, components.SequenceComponent{
-		ID:    1,
-		Index: 0,
-		Type:  components.SequenceGold,
-		Level: components.LevelNormal,
-	})
-	world.UpdateSpatialIndex(charEntity, drain.X, drain.Y)
+	// Activate gold sequence in GameState (simulate gold system spawn)
+	sequenceID := 42
+	ctx.State.ActivateGoldSequence(sequenceID, 5*time.Second)
 
-	// Update drain system (should NOT destroy gold character)
+	// Create a gold sequence with 10 characters
+	goldEntities := make([]engine.Entity, 10)
+	for i := 0; i < 10; i++ {
+		entity := world.CreateEntity()
+		goldEntities[i] = entity
+
+		x := 10 + i
+		y := 5
+
+		world.AddComponent(entity, components.PositionComponent{
+			X: x,
+			Y: y,
+		})
+		world.AddComponent(entity, components.CharacterComponent{
+			Rune:  rune('a' + i),
+			Style: tcell.StyleDefault,
+		})
+		world.AddComponent(entity, components.SequenceComponent{
+			ID:    sequenceID,
+			Index: i,
+			Type:  components.SequenceGold,
+			Level: components.LevelBright,
+		})
+		world.UpdateSpatialIndex(entity, x, y)
+	}
+
+	// Move drain to collide with first gold character (10, 5)
+	// Update drain component position
+	drain.X = 10
+	drain.Y = 5
+	world.AddComponent(drainEntity, drain)
+
+	// Update GameState atomics (this is what the collision check uses)
+	ctx.State.SetDrainX(10)
+	ctx.State.SetDrainY(5)
+
+	// NOTE: We don't update the position component or spatial index
+	// because the spatial index can only hold one entity per position.
+	// The collision detection uses GetDrainX/GetDrainY from GameState,
+	// not the spatial index lookup.
+
+	// Update drain system (should destroy entire gold sequence)
 	drainSys.Update(world, 16*time.Millisecond)
 
-	// Verify character was NOT destroyed
+	// Verify all gold characters were destroyed
 	seqType := reflect.TypeOf(components.SequenceComponent{})
-	if _, ok := world.GetComponent(charEntity, seqType); !ok {
-		t.Fatal("Expected gold character to NOT be destroyed (Part 6 will handle this)")
+	for i, entity := range goldEntities {
+		if _, ok := world.GetComponent(entity, seqType); ok {
+			t.Fatalf("Expected gold character %d to be destroyed after collision", i)
+		}
+	}
+
+	// Verify phase transition to PhaseGoldComplete
+	phaseSnapshot := ctx.State.ReadPhaseState()
+	if phaseSnapshot.Phase != engine.PhaseGoldComplete {
+		t.Fatalf("Expected phase to be PhaseGoldComplete, got %v", phaseSnapshot.Phase)
+	}
+
+	// Verify gold is no longer active
+	goldSnapshot := ctx.State.ReadGoldState()
+	if goldSnapshot.Active {
+		t.Fatal("Expected gold sequence to be inactive after collision")
 	}
 }
 
@@ -477,6 +518,172 @@ func TestDrainSystem_CollisionAtDifferentPositions(t *testing.T) {
 				t.Fatalf("Expected blue count to be 0 at position (%d, %d)", pos.x, pos.y)
 			}
 		})
+	}
+}
+
+// TestDrainSystem_CollisionWithNugget tests drain destroys nugget and clears active nugget (Part 6)
+func TestDrainSystem_CollisionWithNugget(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+	world := engine.NewWorld()
+
+	// Create nugget system and drain system
+	nuggetSys := NewNuggetSystem(ctx)
+	drainSys := NewDrainSystem(ctx)
+	drainSys.SetNuggetSystem(nuggetSys)
+
+	// Spawn drain at position (0, 0)
+	ctx.State.SetScore(100)
+	drainSys.Update(world, 16*time.Millisecond)
+
+	drainEntityID := ctx.State.GetDrainEntity()
+	drainEntity := engine.Entity(drainEntityID)
+
+	drainType := reflect.TypeOf(components.DrainComponent{})
+	drainComp, ok := world.GetComponent(drainEntity, drainType)
+	if !ok {
+		t.Fatal("Expected drain to have DrainComponent")
+	}
+	drain := drainComp.(components.DrainComponent)
+
+	// Create a nugget at the same position as drain
+	nuggetEntity := world.CreateEntity()
+	world.AddComponent(nuggetEntity, components.PositionComponent{
+		X: drain.X,
+		Y: drain.Y,
+	})
+	world.AddComponent(nuggetEntity, components.CharacterComponent{
+		Rune:  'N',
+		Style: tcell.StyleDefault,
+	})
+	world.AddComponent(nuggetEntity, components.NuggetComponent{
+		ID:        1,
+		SpawnTime: ctx.TimeProvider.Now(),
+	})
+	world.UpdateSpatialIndex(nuggetEntity, drain.X, drain.Y)
+
+	// Set nugget as active in nugget system
+	nuggetSys.activeNugget.Store(uint64(nuggetEntity))
+
+	// Verify nugget is active before collision
+	if nuggetSys.GetActiveNugget() != uint64(nuggetEntity) {
+		t.Fatal("Expected nugget to be active before collision")
+	}
+
+	// Update drain system (should destroy nugget)
+	drainSys.Update(world, 16*time.Millisecond)
+
+	// Verify nugget was destroyed
+	nuggetType := reflect.TypeOf(components.NuggetComponent{})
+	if _, ok := world.GetComponent(nuggetEntity, nuggetType); ok {
+		t.Fatal("Expected nugget to be destroyed after collision")
+	}
+
+	// Verify active nugget was cleared
+	if nuggetSys.GetActiveNugget() != 0 {
+		t.Fatalf("Expected active nugget to be cleared, got %d", nuggetSys.GetActiveNugget())
+	}
+}
+
+// TestDrainSystem_NuggetCollisionWithoutSystem tests nugget collision without nugget system reference
+func TestDrainSystem_NuggetCollisionWithoutSystem(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+	world := engine.NewWorld()
+
+	// Create drain system WITHOUT setting nugget system
+	drainSys := NewDrainSystem(ctx)
+
+	// Spawn drain
+	ctx.State.SetScore(100)
+	drainSys.Update(world, 16*time.Millisecond)
+
+	drainEntityID := ctx.State.GetDrainEntity()
+	drainEntity := engine.Entity(drainEntityID)
+
+	drainType := reflect.TypeOf(components.DrainComponent{})
+	drainComp, ok := world.GetComponent(drainEntity, drainType)
+	if !ok {
+		t.Fatal("Expected drain to have DrainComponent")
+	}
+	drain := drainComp.(components.DrainComponent)
+
+	// Create a nugget at the same position
+	nuggetEntity := world.CreateEntity()
+	world.AddComponent(nuggetEntity, components.PositionComponent{
+		X: drain.X,
+		Y: drain.Y,
+	})
+	world.AddComponent(nuggetEntity, components.CharacterComponent{
+		Rune:  'N',
+		Style: tcell.StyleDefault,
+	})
+	world.AddComponent(nuggetEntity, components.NuggetComponent{
+		ID:        1,
+		SpawnTime: ctx.TimeProvider.Now(),
+	})
+	world.UpdateSpatialIndex(nuggetEntity, drain.X, drain.Y)
+
+	// Update drain system (should still destroy nugget even without system reference)
+	drainSys.Update(world, 16*time.Millisecond)
+
+	// Verify nugget was destroyed
+	nuggetType := reflect.TypeOf(components.NuggetComponent{})
+	if _, ok := world.GetComponent(nuggetEntity, nuggetType); ok {
+		t.Fatal("Expected nugget to be destroyed after collision")
+	}
+}
+
+// TestDrainSystem_GoldCollisionInactiveGold tests collision with inactive gold sequence
+func TestDrainSystem_GoldCollisionInactiveGold(t *testing.T) {
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+	ctx := engine.NewGameContext(screen)
+	world := engine.NewWorld()
+
+	drainSys := NewDrainSystem(ctx)
+
+	// Spawn drain
+	ctx.State.SetScore(100)
+	drainSys.Update(world, 16*time.Millisecond)
+
+	drainEntityID := ctx.State.GetDrainEntity()
+	drainEntity := engine.Entity(drainEntityID)
+
+	drainType := reflect.TypeOf(components.DrainComponent{})
+	drainComp, ok := world.GetComponent(drainEntity, drainType)
+	if !ok {
+		t.Fatal("Expected drain to have DrainComponent")
+	}
+	drain := drainComp.(components.DrainComponent)
+
+	// Create a gold character WITHOUT activating gold in GameState
+	goldEntity := world.CreateEntity()
+	world.AddComponent(goldEntity, components.PositionComponent{
+		X: drain.X,
+		Y: drain.Y,
+	})
+	world.AddComponent(goldEntity, components.CharacterComponent{
+		Rune:  'G',
+		Style: tcell.StyleDefault,
+	})
+	world.AddComponent(goldEntity, components.SequenceComponent{
+		ID:    88,
+		Index: 0,
+		Type:  components.SequenceGold,
+		Level: components.LevelBright,
+	})
+	world.UpdateSpatialIndex(goldEntity, drain.X, drain.Y)
+
+	// Update drain system (should NOT destroy gold if not active in GameState)
+	drainSys.Update(world, 16*time.Millisecond)
+
+	// Verify gold was NOT destroyed (gold not active in GameState)
+	seqType := reflect.TypeOf(components.SequenceComponent{})
+	if _, ok := world.GetComponent(goldEntity, seqType); !ok {
+		t.Fatal("Expected gold to NOT be destroyed when not active in GameState")
 	}
 }
 

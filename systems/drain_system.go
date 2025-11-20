@@ -13,7 +13,8 @@ import (
 // The drain entity spawns when score > 0 and despawns when score <= 0
 // Priority: 22 (after GoldSequence:20, before Decay:25)
 type DrainSystem struct {
-	ctx *engine.GameContext
+	ctx          *engine.GameContext
+	nuggetSystem *NuggetSystem
 }
 
 // NewDrainSystem creates a new drain system
@@ -21,6 +22,11 @@ func NewDrainSystem(ctx *engine.GameContext) *DrainSystem {
 	return &DrainSystem{
 		ctx: ctx,
 	}
+}
+
+// SetNuggetSystem sets the nugget system reference for collision handling
+func (s *DrainSystem) SetNuggetSystem(nuggetSystem *NuggetSystem) {
+	s.nuggetSystem = nuggetSystem
 }
 
 // Priority returns the system's priority
@@ -292,6 +298,13 @@ func (s *DrainSystem) handleCollisions(world *engine.World) {
 		return // Don't collide with self
 	}
 
+	// Part 6: Check for nugget collision first
+	nuggetType := reflect.TypeOf(components.NuggetComponent{})
+	if world.HasComponent(entity, nuggetType) {
+		s.handleNuggetCollision(world, entity)
+		return
+	}
+
 	// Check if entity has SequenceComponent
 	seqType := reflect.TypeOf(components.SequenceComponent{})
 	seqComp, ok := world.GetComponent(entity, seqType)
@@ -301,13 +314,13 @@ func (s *DrainSystem) handleCollisions(world *engine.World) {
 
 	seq := seqComp.(components.SequenceComponent)
 
-	// Part 5: Only handle Blue, Green, and Red sequences
-	// Gold sequences will be handled in Part 6
+	// Part 6: Handle gold sequence collision
 	if seq.Type == components.SequenceGold {
-		return // Skip gold sequences for now
+		s.handleGoldSequenceCollision(world, seq.ID)
+		return
 	}
 
-	// Only destroy Blue, Green, and Red sequences
+	// Part 5: Handle Blue, Green, and Red sequences
 	if seq.Type == components.SequenceBlue ||
 		seq.Type == components.SequenceGreen ||
 		seq.Type == components.SequenceRed {
@@ -333,4 +346,53 @@ func (s *DrainSystem) handleCollisions(world *engine.World) {
 		// Destroy the entity
 		world.SafeDestroyEntity(entity)
 	}
+}
+
+// handleGoldSequenceCollision removes all gold sequence entities and triggers phase transition
+func (s *DrainSystem) handleGoldSequenceCollision(world *engine.World, sequenceID int) {
+	// Get current gold state to verify this is the active gold sequence
+	goldSnapshot := s.ctx.State.ReadGoldState()
+	if !goldSnapshot.Active || goldSnapshot.SequenceID != sequenceID {
+		return // Not the active gold sequence
+	}
+
+	// Find and destroy all gold sequence entities with this ID
+	seqType := reflect.TypeOf(components.SequenceComponent{})
+	posType := reflect.TypeOf(components.PositionComponent{})
+
+	entities := world.GetEntitiesWith(seqType, posType)
+
+	for _, entity := range entities {
+		seqComp, ok := world.GetComponent(entity, seqType)
+		if !ok {
+			continue
+		}
+		seq := seqComp.(components.SequenceComponent)
+
+		// Only destroy gold sequence entities with matching ID
+		if seq.Type == components.SequenceGold && seq.ID == sequenceID {
+			world.SafeDestroyEntity(entity)
+		}
+	}
+
+	// Check current phase - if cleaners are pending, don't deactivate gold
+	phaseSnapshot := s.ctx.State.ReadPhaseState()
+	if phaseSnapshot.Phase == engine.PhaseCleanerPending || phaseSnapshot.Phase == engine.PhaseCleanerActive {
+		// Cleaners are pending/active - gold entities removed, but stay in cleaner phase
+		return
+	}
+
+	// Trigger phase transition to PhaseGoldComplete
+	s.ctx.State.DeactivateGoldSequence()
+}
+
+// handleNuggetCollision destroys the nugget entity and clears active nugget state
+func (s *DrainSystem) handleNuggetCollision(world *engine.World, entity engine.Entity) {
+	// Clear active nugget using race-safe method
+	if s.nuggetSystem != nil {
+		s.nuggetSystem.ClearActiveNuggetIfMatches(uint64(entity))
+	}
+
+	// Destroy the nugget entity
+	world.SafeDestroyEntity(entity)
 }
