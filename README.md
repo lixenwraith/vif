@@ -104,9 +104,12 @@ go test ./systems
 - **Movement**: Vi motion commands (h/j/k/l, w/b/e, gg/G/H/M/L, etc.)
 - **Insert Mode**: Press `i` to begin typing sequences
 - **Search Mode**: Press `/` followed by pattern, then `Enter`
-- **Exit Insert/Search**: Press `ESC` to return to NORMAL mode
+- **Command Mode**: Press `:` to enter COMMAND mode (e.g., `:boost`)
+- **Exit Insert/Search/Command**: Press `ESC` to return to NORMAL mode
 - **Ping Grid**: Press `Enter` to show row/column guides (1 second)
 - **Quit**: `Ctrl+C` or `Ctrl+Q`
+
+**Note**: When in COMMAND mode, the game is paused - all characters are dimmed (70% brightness) to indicate the paused state while preserving visibility.
 
 For detailed command reference and gameplay strategies, see [doc/game-index.md](doc/game-index.md).
 

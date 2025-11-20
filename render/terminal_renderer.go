@@ -338,6 +338,18 @@ func (r *TerminalRenderer) drawCharacters(world *engine.World, pingColor tcell.C
 				style = defaultStyle.Foreground(fg).Background(pingColor)
 			}
 
+			// Apply dimming effect when paused
+			if ctx.IsPaused.Load() {
+				fg, bg, attrs := style.Decompose()
+				// Extract RGB components and dim by 0.7
+				r, g, b := fg.RGB()
+				dimmedR := int32(float64(r) * 0.7)
+				dimmedG := int32(float64(g) * 0.7)
+				dimmedB := int32(float64(b) * 0.7)
+				dimmedFg := tcell.NewRGBColor(dimmedR, dimmedG, dimmedB)
+				style = tcell.StyleDefault.Foreground(dimmedFg).Background(bg).Attributes(attrs)
+			}
+
 			r.screen.SetContent(screenX, screenY, char.Rune, nil, style)
 		}
 	}

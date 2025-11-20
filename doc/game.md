@@ -191,6 +191,7 @@ vi-fighter has four input modes, similar to vi/vim:
   - `:quit` or `:q` - Exit the game
   - `:boost` - Activate boost mode for 10 seconds (2x spawn rate, 2x score)
 - **Exiting**: Press `ESC` to return to NORMAL mode
+- **Visual Feedback**: When in COMMAND mode, the game is paused and all characters are dimmed to 70% brightness to indicate the paused state while preserving visibility
 
 ---
 

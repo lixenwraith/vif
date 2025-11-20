@@ -15,6 +15,7 @@ Updated immediately on user input/spawn events, read by all systems:
 - **Boost State** (`atomic.Bool`, `atomic.Int64`, `atomic.Int32`) - Enabled, EndTime, Color
 - **Visual Feedback** - CursorError, ScoreBlink, PingGrid (atomic)
 - **Sequence ID** (`atomic.Int64`) - Thread-safe ID generation
+- **Pause State** (`atomic.Bool`, `atomic.Int64`) - IsPaused flag, PauseStartTime, TotalPauseDuration for time adjustment
 
 **Why Atomic**: These values are accessed on every frame and every keystroke. Atomics provide:
 - Lock-free reads (no contention on render or input threads)

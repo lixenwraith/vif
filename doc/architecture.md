@@ -423,10 +423,20 @@ Component (marker interface)
 1. Clear dirty regions (when implemented)
 2. Draw static UI (heat meter, line numbers)
 3. Draw game entities (characters)
+   - Apply pause dimming effect when `ctx.IsPaused.Load()` is true (70% brightness)
 4. Draw overlays (ping, decay animation)
 5. Draw cleaners with gradient trail effects
 6. Draw removal flash effects
 7. Draw cursor (topmost layer)
+
+### Pause State Visual Feedback
+
+When the game is paused (COMMAND mode), the rendering system provides visual feedback by dimming all character colors:
+
+- **Trigger**: `ctx.IsPaused.Load()` returns true
+- **Effect**: All character foreground colors are multiplied by 0.7 (70% brightness)
+- **Purpose**: Indicates paused state while preserving game visibility
+- **Implementation**: Applied in `drawCharacters()` after ping highlighting, before final rendering
 
 ## System Coordination and Event Flow
 
