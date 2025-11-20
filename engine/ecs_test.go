@@ -18,7 +18,12 @@ func TestSpatialIndexCleanup(t *testing.T) {
 	// Create an entity at position (5, 10)
 	entity := world.CreateEntity()
 	world.AddComponent(entity, TestComponent{X: 5, Y: 10})
-	world.UpdateSpatialIndex(entity, 5, 10)
+
+ {
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(entity, 5, 10)
+	tx.Commit()
+ }
 
 	// Verify entity is in spatial index
 	foundEntity := world.GetEntityAtPosition(5, 10)
@@ -27,7 +32,11 @@ func TestSpatialIndexCleanup(t *testing.T) {
 	}
 
 	// Remove from spatial index
-	world.RemoveFromSpatialIndex(5, 10)
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Destroy(entity, 5, 10)
+		tx.Commit()
+	}
 
 	// Verify entity is no longer in spatial index
 	foundEntity = world.GetEntityAtPosition(5, 10)
@@ -55,7 +64,10 @@ func TestSpatialIndexCleanupOnDestroy(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		entities[i] = world.CreateEntity()
 		world.AddComponent(entities[i], TestComponent{X: positions[i][0], Y: positions[i][1]})
-		world.UpdateSpatialIndex(entities[i], positions[i][0], positions[i][1])
+
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(entities[i], positions[i][0], positions[i][1])
+		tx.Commit()
 	}
 
 	// Verify all entities are in spatial index
@@ -97,10 +109,15 @@ func TestRemoveFromSpatialIndexBeforeDestroy(t *testing.T) {
 	// Create entity at position (10, 20)
 	entity := world.CreateEntity()
 	world.AddComponent(entity, TestComponent{X: 10, Y: 20})
-	world.UpdateSpatialIndex(entity, 10, 20)
+
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(entity, 10, 20)
+	tx.Commit()
 
 	// Manual cleanup: remove from spatial index first
-	world.RemoveFromSpatialIndex(10, 20)
+	tx2 := world.BeginSpatialTransaction()
+	tx2.Destroy(entity, 10, 20)
+	tx2.Commit()
 
 	// Verify removed
 	foundEntity := world.GetEntityAtPosition(10, 20)
@@ -162,7 +179,10 @@ func TestSafeDestroyEntityWithPosition(t *testing.T) {
 	// Create entity with PositionComponent
 	entity := world.CreateEntity()
 	world.AddComponent(entity, PositionComponent{X: 10, Y: 20})
-	world.UpdateSpatialIndex(entity, 10, 20)
+
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(entity, 10, 20)
+	tx.Commit()
 
 	// Verify entity is in spatial index
 	foundEntity := world.GetEntityAtPosition(10, 20)
@@ -218,7 +238,10 @@ func TestSafeDestroyEntityMultipleEntities(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		entities[i] = world.CreateEntity()
 		world.AddComponent(entities[i], PositionComponent{X: positions[i][0], Y: positions[i][1]})
-		world.UpdateSpatialIndex(entities[i], positions[i][0], positions[i][1])
+
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(entities[i], positions[i][0], positions[i][1])
+		tx.Commit()
 	}
 
 	// Verify all entities are in spatial index
@@ -282,11 +305,21 @@ func TestSafeDestroyEntityComponentTypeIndex(t *testing.T) {
 	// Create entities with PositionComponent
 	entity1 := world.CreateEntity()
 	world.AddComponent(entity1, PositionComponent{X: 1, Y: 1})
-	world.UpdateSpatialIndex(entity1, 1, 1)
+
+ {
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(entity1, 1, 1)
+	tx.Commit()
+ }
 
 	entity2 := world.CreateEntity()
 	world.AddComponent(entity2, PositionComponent{X: 2, Y: 2})
-	world.UpdateSpatialIndex(entity2, 2, 2)
+
+ {
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(entity2, 2, 2)
+	tx.Commit()
+ }
 
 	// Get entities with PositionComponent
 	compType := reflect.TypeOf(PositionComponent{})

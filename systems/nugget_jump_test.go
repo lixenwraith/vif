@@ -32,7 +32,11 @@ func TestNuggetJumpWithSufficientScore(t *testing.T) {
 	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
 	ctx.World.AddComponent(entity, components.CharacterComponent{Rune: 'a', Style: style})
 	ctx.World.AddComponent(entity, components.NuggetComponent{ID: 1, SpawnTime: time.Now()})
-	ctx.World.UpdateSpatialIndex(entity, 50, 15)
+	{
+		tx := ctx.World.BeginSpatialTransaction()
+		tx.Spawn(entity, 50, 15)
+		tx.Commit()
+	}
 	nuggetSystem.activeNugget.Store(uint64(entity))
 
 	// Set score to 15
@@ -83,7 +87,11 @@ func TestNuggetJumpWithInsufficientScore(t *testing.T) {
 	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
 	ctx.World.AddComponent(entity, components.CharacterComponent{Rune: 'a', Style: style})
 	ctx.World.AddComponent(entity, components.NuggetComponent{ID: 1, SpawnTime: time.Now()})
-	ctx.World.UpdateSpatialIndex(entity, 50, 15)
+	{
+		tx := ctx.World.BeginSpatialTransaction()
+		tx.Spawn(entity, 50, 15)
+		tx.Commit()
+	}
 	nuggetSystem.activeNugget.Store(uint64(entity))
 
 	// Set score to 5 (insufficient)
@@ -177,7 +185,11 @@ func TestNuggetJumpUpdatesPosition(t *testing.T) {
 	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
 	ctx.World.AddComponent(entity, components.CharacterComponent{Rune: 'a', Style: style})
 	ctx.World.AddComponent(entity, components.NuggetComponent{ID: 1, SpawnTime: time.Now()})
-	ctx.World.UpdateSpatialIndex(entity, 75, 20)
+	{
+		tx := ctx.World.BeginSpatialTransaction()
+		tx.Spawn(entity, 75, 20)
+		tx.Commit()
+	}
 	nuggetSystem.activeNugget.Store(uint64(entity))
 
 	// Set score to 20
@@ -241,7 +253,11 @@ func TestNuggetJumpMultipleTimes(t *testing.T) {
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
 	ctx.World.AddComponent(entity1, components.CharacterComponent{Rune: '●', Style: style})
 	ctx.World.AddComponent(entity1, components.NuggetComponent{ID: 1, SpawnTime: time.Now()})
-	ctx.World.UpdateSpatialIndex(entity1, 50, 15)
+	{
+		tx := ctx.World.BeginSpatialTransaction()
+		tx.Spawn(entity1, 50, 15)
+		tx.Commit()
+	}
 	nuggetSystem.activeNugget.Store(uint64(entity1))
 
 	// Jump to first nugget
@@ -269,7 +285,11 @@ func TestNuggetJumpMultipleTimes(t *testing.T) {
 	ctx.World.AddComponent(entity2, components.PositionComponent{X: 25, Y: 10})
 	ctx.World.AddComponent(entity2, components.CharacterComponent{Rune: '●', Style: style})
 	ctx.World.AddComponent(entity2, components.NuggetComponent{ID: 2, SpawnTime: time.Now()})
-	ctx.World.UpdateSpatialIndex(entity2, 25, 10)
+	{
+		tx := ctx.World.BeginSpatialTransaction()
+		tx.Spawn(entity2, 25, 10)
+		tx.Commit()
+	}
 	nuggetSystem.activeNugget.Store(uint64(entity2))
 
 	// Jump to second nugget
@@ -337,7 +357,11 @@ func TestNuggetJumpWithNuggetAtEdge(t *testing.T) {
 			// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
 	ctx.World.AddComponent(entity, components.CharacterComponent{Rune: 'a', Style: style})
 			ctx.World.AddComponent(entity, components.NuggetComponent{ID: 1, SpawnTime: time.Now()})
-			ctx.World.UpdateSpatialIndex(entity, tc.x, tc.y)
+			{
+				tx := ctx.World.BeginSpatialTransaction()
+				tx.Spawn(entity, tc.x, tc.y)
+				tx.Commit()
+			}
 			nuggetSystem.activeNugget.Store(uint64(entity))
 
 			// Jump to nugget

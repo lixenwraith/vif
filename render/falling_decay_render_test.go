@@ -279,7 +279,10 @@ func TestFallingDecayRenderZOrder(t *testing.T) {
 		Rune:  'G',
 		Style: GetStyleForSequence(components.SequenceGreen, components.LevelBright),
 	})
-	world.UpdateSpatialIndex(gameEntity, 10, 5)
+
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(gameEntity, 10, 5)
+	tx.Commit()
 
 	// Create a falling decay entity at the same position
 	fallingEntity := world.CreateEntity()

@@ -107,7 +107,10 @@ func TestConcurrentSpatialIndexAccess(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		entities[i] = world.CreateEntity()
 		world.AddComponent(entities[i], TestComponent{X: i, Y: i})
-		world.UpdateSpatialIndex(entities[i], i, i)
+
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(entities[i], i, i)
+		tx.Commit()
 	}
 
 	var wg sync.WaitGroup

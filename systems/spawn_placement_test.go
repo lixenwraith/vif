@@ -43,7 +43,10 @@ func TestPlaceLine(t *testing.T) {
 			entity := world.CreateEntity()
 			world.AddComponent(entity, components.PositionComponent{X: x, Y: y})
 			world.AddComponent(entity, components.CharacterComponent{Rune: 'x', Style: style})
-			world.UpdateSpatialIndex(entity, x, y)
+
+			tx := world.BeginSpatialTransaction()
+			tx.Spawn(entity, x, y)
+			tx.Commit()
 		}
 	}
 

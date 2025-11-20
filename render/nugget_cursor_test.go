@@ -39,7 +39,10 @@ func TestNuggetDarkensUnderCursor(t *testing.T) {
 		ID:        1,
 		SpawnTime: time.Now(),
 	})
-	world.UpdateSpatialIndex(nuggetEntity, 10, 5)
+
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(nuggetEntity, 10, 5)
+	tx.Commit()
 
 	// Create renderer
 	renderer := NewTerminalRenderer(screen, 100, 30, 3, 1, 100, 24, 3, nil)
@@ -100,7 +103,10 @@ func TestNormalCharacterStaysBlackUnderCursor(t *testing.T) {
 		Type:  components.SequenceGreen,
 		Level: components.LevelBright,
 	})
-	world.UpdateSpatialIndex(charEntity, 15, 10)
+
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(charEntity, 15, 10)
+	tx.Commit()
 
 	renderer := NewTerminalRenderer(screen, 100, 30, 3, 1, 100, 24, 3, nil)
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
@@ -193,7 +199,10 @@ func TestNuggetContrastInInsertMode(t *testing.T) {
 		ID:        2,
 		SpawnTime: time.Now(),
 	})
-	world.UpdateSpatialIndex(nuggetEntity, 25, 12)
+
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(nuggetEntity, 25, 12)
+	tx.Commit()
 
 	renderer := NewTerminalRenderer(screen, 100, 30, 3, 1, 100, 24, 3, nil)
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
@@ -242,7 +251,10 @@ func TestNuggetOffCursorHasNormalColor(t *testing.T) {
 		ID:        3,
 		SpawnTime: time.Now(),
 	})
-	world.UpdateSpatialIndex(nuggetEntity, 30, 15)
+
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(nuggetEntity, 30, 15)
+	tx.Commit()
 
 	renderer := NewTerminalRenderer(screen, 100, 30, 3, 1, 100, 24, 3, nil)
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
@@ -298,7 +310,10 @@ func TestCursorErrorOverridesNuggetContrast(t *testing.T) {
 		ID:        4,
 		SpawnTime: time.Now(),
 	})
-	world.UpdateSpatialIndex(nuggetEntity, 40, 18)
+
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(nuggetEntity, 40, 18)
+	tx.Commit()
 
 	renderer := NewTerminalRenderer(screen, 100, 30, 3, 1, 100, 24, 3, nil)
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
@@ -333,7 +348,12 @@ func TestNuggetComponentDetectionLogic(t *testing.T) {
 		ID:        5,
 		SpawnTime: time.Now(),
 	})
-	world.UpdateSpatialIndex(nuggetEntity, 5, 5)
+
+ {
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(nuggetEntity, 5, 5)
+	tx.Commit()
+ }
 
 	// Create normal character entity
 	charEntity := world.CreateEntity()
@@ -348,7 +368,12 @@ func TestNuggetComponentDetectionLogic(t *testing.T) {
 		Type:  components.SequenceGreen,
 		Level: components.LevelNormal,
 	})
-	world.UpdateSpatialIndex(charEntity, 10, 10)
+
+ {
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(charEntity, 10, 10)
+	tx.Commit()
+ }
 
 	// Test nugget entity has NuggetComponent
 	nuggetType := reflect.TypeOf(components.NuggetComponent{})
@@ -390,7 +415,10 @@ func TestNuggetLayeringCursorOnTop(t *testing.T) {
 		ID:        6,
 		SpawnTime: time.Now(),
 	})
-	world.UpdateSpatialIndex(nuggetEntity, 50, 20)
+
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(nuggetEntity, 50, 20)
+	tx.Commit()
 
 	renderer := NewTerminalRenderer(screen, 100, 30, 3, 1, 100, 24, 3, nil)
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
@@ -457,7 +485,10 @@ func TestMultipleNuggetInstances(t *testing.T) {
 			ID:        i + 10,
 			SpawnTime: time.Now(),
 		})
-		world.UpdateSpatialIndex(nuggetEntity, pos.x, pos.y)
+
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(nuggetEntity, pos.x, pos.y)
+		tx.Commit()
 	}
 
 	renderer := NewTerminalRenderer(screen, 100, 30, 3, 1, 100, 24, 3, nil)

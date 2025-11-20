@@ -220,7 +220,10 @@ func TestDrainSystem_MovementBoundaryChecks(t *testing.T) {
 				Y:            tc.drainY,
 				LastMoveTime: startTime,
 			})
-			world.UpdateSpatialIndex(entity, tc.drainX, tc.drainY)
+	
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(entity, tc.drainX, tc.drainY)
+		tx.Commit()
 
 			ctx.State.SetDrainActive(true)
 			ctx.State.SetDrainEntity(uint64(entity))
@@ -502,7 +505,10 @@ func TestDrainSystem_MovementDiagonal(t *testing.T) {
 				Y:            tc.drainY,
 				LastMoveTime: startTime,
 			})
-			world.UpdateSpatialIndex(entity, tc.drainX, tc.drainY)
+	
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(entity, tc.drainX, tc.drainY)
+		tx.Commit()
 
 			ctx.State.SetDrainActive(true)
 			ctx.State.SetDrainEntity(uint64(entity))

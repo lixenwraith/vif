@@ -40,7 +40,10 @@ func TestNuggetTypingIncreasesHeat(t *testing.T) {
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
 	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
 	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
-	world.UpdateSpatialIndex(nuggetEntity, 10, 5)
+
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(nuggetEntity, 10, 5)
+	tx.Commit()
 	nuggetSystem.activeNugget.Store(uint64(nuggetEntity))
 
 	// Position cursor on nugget
@@ -104,7 +107,10 @@ func TestNuggetTypingDestroysAndReturnsSpawn(t *testing.T) {
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
 	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'x', Style: style})
 	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
-	world.UpdateSpatialIndex(nuggetEntity, 10, 5)
+
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(nuggetEntity, 10, 5)
+	tx.Commit()
 	nuggetSystem.activeNugget.Store(uint64(nuggetEntity))
 
 	// Position cursor on nugget
@@ -172,7 +178,10 @@ func TestNuggetTypingNoScoreEffect(t *testing.T) {
 	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
 	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
 	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
-	world.UpdateSpatialIndex(nuggetEntity, 10, 5)
+
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(nuggetEntity, 10, 5)
+	tx.Commit()
 	nuggetSystem.activeNugget.Store(uint64(nuggetEntity))
 
 	ctx.CursorX = 10
@@ -212,7 +221,10 @@ func TestNuggetTypingNoErrorEffect(t *testing.T) {
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
 	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'z', Style: style})
 	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
-	world.UpdateSpatialIndex(nuggetEntity, 10, 5)
+
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(nuggetEntity, 10, 5)
+	tx.Commit()
 	nuggetSystem.activeNugget.Store(uint64(nuggetEntity))
 
 	ctx.CursorX = 10
@@ -261,7 +273,10 @@ func TestNuggetTypingMultipleCollections(t *testing.T) {
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
 	world.AddComponent(nugget1, components.CharacterComponent{Rune: 'a', Style: style})
 	world.AddComponent(nugget1, components.NuggetComponent{ID: 1, SpawnTime: mockTime.Now()})
-	world.UpdateSpatialIndex(nugget1, 10, 5)
+
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(nugget1, 10, 5)
+	tx.Commit()
 	nuggetSystem.activeNugget.Store(uint64(nugget1))
 
 	ctx.CursorX = 10
@@ -331,7 +346,10 @@ func TestNuggetTypingWithSmallScreen(t *testing.T) {
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
 	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'x', Style: style})
 	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
-	world.UpdateSpatialIndex(nuggetEntity, 2, 1)
+
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(nuggetEntity, 2, 1)
+	tx.Commit()
 	nuggetSystem.activeNugget.Store(uint64(nuggetEntity))
 
 	ctx.CursorX = 2
@@ -384,7 +402,10 @@ func TestNuggetAlwaysIncreasesVisualBlocks(t *testing.T) {
 			style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
 			world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
 			world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
-			world.UpdateSpatialIndex(nuggetEntity, 10, 5)
+
+			tx := world.BeginSpatialTransaction()
+			tx.Spawn(nuggetEntity, 10, 5)
+			tx.Commit()
 			nuggetSystem.activeNugget.Store(uint64(nuggetEntity))
 
 			ctx.CursorX = 10

@@ -48,7 +48,10 @@ func TestDrainSystem_ScoreDrainWhenOnCursor(t *testing.T) {
 		LastDrainTime: startTime,
 		IsOnCursor:    false,
 	})
-	world.UpdateSpatialIndex(entity, cursorX, cursorY)
+
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(entity, cursorX, cursorY)
+	tx.Commit()
 
 	ctx.State.SetDrainActive(true)
 	ctx.State.SetDrainEntity(uint64(entity))
@@ -116,7 +119,10 @@ func TestDrainSystem_NoDrainWhenNotOnCursor(t *testing.T) {
 		LastDrainTime: startTime,
 		IsOnCursor:    false,
 	})
-	world.UpdateSpatialIndex(entity, drainX, drainY)
+
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(entity, drainX, drainY)
+	tx.Commit()
 
 	ctx.State.SetDrainActive(true)
 	ctx.State.SetDrainEntity(uint64(entity))
@@ -171,7 +177,10 @@ func TestDrainSystem_IsOnCursorStateTracking(t *testing.T) {
 		LastDrainTime: startTime,
 		IsOnCursor:    false, // Initially false
 	})
-	world.UpdateSpatialIndex(entity, cursorX, cursorY)
+
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(entity, cursorX, cursorY)
+	tx.Commit()
 
 	ctx.State.SetDrainActive(true)
 	ctx.State.SetDrainEntity(uint64(entity))
@@ -251,7 +260,10 @@ func TestDrainSystem_MultipleDrainTicks(t *testing.T) {
 		LastDrainTime: startTime,
 		IsOnCursor:    false,
 	})
-	world.UpdateSpatialIndex(entity, cursorX, cursorY)
+
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(entity, cursorX, cursorY)
+	tx.Commit()
 
 	ctx.State.SetDrainActive(true)
 	ctx.State.SetDrainEntity(uint64(entity))
@@ -321,7 +333,10 @@ func TestDrainSystem_NoDrainBeforeInterval(t *testing.T) {
 		LastDrainTime: startTime,
 		IsOnCursor:    false,
 	})
-	world.UpdateSpatialIndex(entity, cursorX, cursorY)
+
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(entity, cursorX, cursorY)
+	tx.Commit()
 
 	ctx.State.SetDrainActive(true)
 	ctx.State.SetDrainEntity(uint64(entity))
@@ -401,7 +416,10 @@ func TestDrainSystem_ScoreDrainDespawnAtZero(t *testing.T) {
 		LastDrainTime: startTime,
 		IsOnCursor:    false,
 	})
-	world.UpdateSpatialIndex(entity, cursorX, cursorY)
+
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(entity, cursorX, cursorY)
+	tx.Commit()
 
 	ctx.State.SetDrainActive(true)
 	ctx.State.SetDrainEntity(uint64(entity))
@@ -476,7 +494,10 @@ func TestDrainSystem_LastDrainTimeUpdated(t *testing.T) {
 		LastDrainTime: startTime,
 		IsOnCursor:    false,
 	})
-	world.UpdateSpatialIndex(entity, cursorX, cursorY)
+
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(entity, cursorX, cursorY)
+	tx.Commit()
 
 	ctx.State.SetDrainActive(true)
 	ctx.State.SetDrainEntity(uint64(entity))

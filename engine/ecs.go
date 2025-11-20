@@ -265,17 +265,6 @@ func (w *World) WaitForUpdates() {
 	w.updateMutex.Unlock()
 }
 
-// UpdateSpatialIndex updates the spatial index for an entity with a position
-func (w *World) UpdateSpatialIndex(entity Entity, x, y int) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if w.spatialIndex[y] == nil {
-		w.spatialIndex[y] = make(map[int]Entity)
-	}
-	w.spatialIndex[y][x] = entity
-}
-
 // GetEntityAtPosition returns the entity at a given position (0 if none)
 func (w *World) GetEntityAtPosition(x, y int) Entity {
 	w.mu.RLock()
@@ -287,16 +276,6 @@ func (w *World) GetEntityAtPosition(x, y int) Entity {
 		}
 	}
 	return 0
-}
-
-// RemoveFromSpatialIndex removes an entity from a position in the spatial index
-func (w *World) RemoveFromSpatialIndex(x, y int) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if row, ok := w.spatialIndex[y]; ok {
-		delete(row, x)
-	}
 }
 
 // addToTypeIndex adds entity to the component type index

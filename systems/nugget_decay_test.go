@@ -31,7 +31,11 @@ func TestDecayDestroysNugget(t *testing.T) {
 	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
 	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
 	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
-	world.UpdateSpatialIndex(nuggetEntity, 10, 5)
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(nuggetEntity, 10, 5)
+		tx.Commit()
+	}
 	nuggetSystem.activeNugget.Store(uint64(nuggetEntity))
 
 	// Verify nugget exists
@@ -98,7 +102,11 @@ func TestDecayDoesNotDestroyNuggetAtDifferentPosition(t *testing.T) {
 	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
 	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
 	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
-	world.UpdateSpatialIndex(nuggetEntity, 10, 10)
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(nuggetEntity, 10, 10)
+		tx.Commit()
+	}
 	nuggetSystem.activeNugget.Store(uint64(nuggetEntity))
 
 	// Start decay animation
@@ -146,14 +154,22 @@ func TestDecayDestroyMultipleNuggetsInDifferentColumns(t *testing.T) {
 	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
 	world.AddComponent(nuggetEntity1, components.CharacterComponent{Rune: 'a', Style: style})
 	world.AddComponent(nuggetEntity1, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
-	world.UpdateSpatialIndex(nuggetEntity1, 10, 5)
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(nuggetEntity1, 10, 5)
+		tx.Commit()
+	}
 
 	nuggetEntity2 := world.CreateEntity()
 	world.AddComponent(nuggetEntity2, components.PositionComponent{X: 20, Y: 5})
 	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
 	world.AddComponent(nuggetEntity2, components.CharacterComponent{Rune: 'b', Style: style})
 	world.AddComponent(nuggetEntity2, components.NuggetComponent{ID: 2, SpawnTime: ctx.TimeProvider.Now()})
-	world.UpdateSpatialIndex(nuggetEntity2, 20, 5)
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(nuggetEntity2, 20, 5)
+		tx.Commit()
+	}
 
 	nuggetSystem.activeNugget.Store(uint64(nuggetEntity1))
 
@@ -212,7 +228,11 @@ func TestDecayDestroyNuggetAndSequence(t *testing.T) {
 	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
 	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: nuggetStyle})
 	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
-	world.UpdateSpatialIndex(nuggetEntity, 10, 5)
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(nuggetEntity, 10, 5)
+		tx.Commit()
+	}
 	nuggetSystem.activeNugget.Store(uint64(nuggetEntity))
 
 	// Create a blue sequence at position (20, 5)
@@ -226,7 +246,11 @@ func TestDecayDestroyNuggetAndSequence(t *testing.T) {
 		Type:  components.SequenceBlue,
 		Level: components.LevelBright,
 	})
-	world.UpdateSpatialIndex(seqEntity, 20, 5)
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(seqEntity, 20, 5)
+		tx.Commit()
+	}
 
 	// Increment color counter for blue bright
 	spawnSystem.AddColorCount(components.SequenceBlue, components.LevelBright, 1)
@@ -314,7 +338,11 @@ func TestDecayNuggetRespawnAfterDestruction(t *testing.T) {
 	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
 	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
 	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: mockTime.Now()})
-	world.UpdateSpatialIndex(nuggetEntity, 10, 5)
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(nuggetEntity, 10, 5)
+		tx.Commit()
+	}
 	nuggetSystem.activeNugget.Store(uint64(nuggetEntity))
 
 	// Start decay animation
@@ -389,7 +417,11 @@ func TestDecayDoesNotProcessSameNuggetTwice(t *testing.T) {
 	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
 	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
 	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
-	world.UpdateSpatialIndex(nuggetEntity, 10, 5)
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(nuggetEntity, 10, 5)
+		tx.Commit()
+	}
 	nuggetSystem.activeNugget.Store(uint64(nuggetEntity))
 
 	// Start decay animation

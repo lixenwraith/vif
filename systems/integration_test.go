@@ -35,7 +35,10 @@ func TestDecaySystemCounterUpdates(t *testing.T) {
 			Type:  components.SequenceBlue,
 			Level: components.LevelBright,
 		})
-		world.UpdateSpatialIndex(entity, i, 0)
+
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(entity, i, 0)
+		tx.Commit()
 	}
 
 	// Manually set the counter
@@ -103,7 +106,10 @@ func TestDecaySystemColorTransitionWithCounters(t *testing.T) {
 			Type:  components.SequenceBlue,
 			Level: components.LevelDark,
 		})
-		world.UpdateSpatialIndex(entity, i, 0)
+
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(entity, i, 0)
+		tx.Commit()
 	}
 
 	spawnSys.AddColorCount(components.SequenceBlue, components.LevelDark, 3)
@@ -181,7 +187,10 @@ func TestScoreSystemCounterDecrement(t *testing.T) {
 		Type:  components.SequenceGreen,
 		Level: components.LevelNormal,
 	})
-	world.UpdateSpatialIndex(entity, ctx.CursorX, ctx.CursorY)
+
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(entity, ctx.CursorX, ctx.CursorY)
+	tx.Commit()
 
 	// Set counter
 	spawnSys.AddColorCount(components.SequenceGreen, components.LevelNormal, 1)
@@ -229,7 +238,10 @@ func TestScoreSystemDoesNotDecrementRedCounter(t *testing.T) {
 		Type:  components.SequenceRed,
 		Level: components.LevelBright,
 	})
-	world.UpdateSpatialIndex(entity, ctx.CursorX, ctx.CursorY)
+
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(entity, ctx.CursorX, ctx.CursorY)
+	tx.Commit()
 
 	// Verify no counters changed (Red is not tracked)
 	allCountsZero := true

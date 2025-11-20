@@ -394,7 +394,10 @@ func TestNoSkippedCharacters(t *testing.T) {
 		world.AddComponent(entity, components.SequenceComponent{
 			Type: components.SequenceRed,
 		})
-		world.UpdateSpatialIndex(entity, x, 5)
+
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(entity, x, 5)
+		tx.Commit()
 	}
 
 	// Simulate cleaner trail covering these positions with fractional values

@@ -21,7 +21,10 @@ func placeCharWithSpatialIndex(ctx *engine.GameContext, x, y int, r rune, seqTyp
 		Level: components.LevelBright,
 	})
 	// Update spatial index
-	ctx.World.UpdateSpatialIndex(entity, x, y)
+
+	tx := ctx.World.BeginSpatialTransaction()
+	tx.Spawn(entity, x, y)
+	tx.Commit()
 	return entity
 }
 

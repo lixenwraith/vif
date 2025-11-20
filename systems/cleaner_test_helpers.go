@@ -38,7 +38,10 @@ func createRedCharacterAt(world *engine.World, x, y int) engine.Entity {
 		Level: components.LevelBright,
 	})
 
-	world.UpdateSpatialIndex(entity, x, y)
+	// Use spatial transaction for atomic spawn
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(entity, x, y)
+	tx.Commit()
 	return entity
 }
 
@@ -57,7 +60,10 @@ func createBlueCharacterAt(world *engine.World, x, y int) engine.Entity {
 		Level: components.LevelBright,
 	})
 
-	world.UpdateSpatialIndex(entity, x, y)
+	// Use spatial transaction for atomic spawn
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(entity, x, y)
+	tx.Commit()
 	return entity
 }
 
@@ -76,7 +82,10 @@ func createGreenCharacterAt(world *engine.World, x, y int) engine.Entity {
 		Level: components.LevelBright,
 	})
 
-	world.UpdateSpatialIndex(entity, x, y)
+	// Use spatial transaction for atomic spawn
+	tx := world.BeginSpatialTransaction()
+	tx.Spawn(entity, x, y)
+	tx.Commit()
 	return entity
 }
 

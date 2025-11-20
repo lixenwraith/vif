@@ -16,7 +16,11 @@ func TestSpatialTransaction_MoveSuccess(t *testing.T) {
 	// Create entity at position (0, 0)
 	entity := world.CreateEntity()
 	world.AddComponent(entity, TestComponent{X: 0, Y: 0})
-	world.UpdateSpatialIndex(entity, 0, 0)
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(entity, 0, 0)
+		tx.Commit()
+	}
 
 	// Verify entity is at (0, 0)
 	if world.GetEntityAtPosition(0, 0) != entity {
@@ -55,11 +59,19 @@ func TestSpatialTransaction_MoveCollision(t *testing.T) {
 	// Create two entities
 	entity1 := world.CreateEntity()
 	world.AddComponent(entity1, TestComponent{X: 0, Y: 0})
-	world.UpdateSpatialIndex(entity1, 0, 0)
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(entity1, 0, 0)
+		tx.Commit()
+	}
 
 	entity2 := world.CreateEntity()
 	world.AddComponent(entity2, TestComponent{X: 5, Y: 5})
-	world.UpdateSpatialIndex(entity2, 5, 5)
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(entity2, 5, 5)
+		tx.Commit()
+	}
 
 	// Try to move entity1 to entity2's position
 	tx := world.BeginSpatialTransaction()
@@ -130,7 +142,11 @@ func TestSpatialTransaction_SpawnCollision(t *testing.T) {
 	// Create and place first entity
 	entity1 := world.CreateEntity()
 	world.AddComponent(entity1, TestComponent{X: 7, Y: 7})
-	world.UpdateSpatialIndex(entity1, 7, 7)
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(entity1, 7, 7)
+		tx.Commit()
+	}
 
 	// Create second entity
 	entity2 := world.CreateEntity()
@@ -167,7 +183,11 @@ func TestSpatialTransaction_Destroy(t *testing.T) {
 	// Create entity at position (3, 3)
 	entity := world.CreateEntity()
 	world.AddComponent(entity, TestComponent{X: 3, Y: 3})
-	world.UpdateSpatialIndex(entity, 3, 3)
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(entity, 3, 3)
+		tx.Commit()
+	}
 
 	// Verify entity exists in spatial index
 	if world.GetEntityAtPosition(3, 3) != entity {
@@ -196,7 +216,11 @@ func TestSpatialTransaction_Rollback(t *testing.T) {
 	// Create entity at (0, 0)
 	entity := world.CreateEntity()
 	world.AddComponent(entity, TestComponent{X: 0, Y: 0})
-	world.UpdateSpatialIndex(entity, 0, 0)
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(entity, 0, 0)
+		tx.Commit()
+	}
 
 	// Create transaction with move
 	tx := world.BeginSpatialTransaction()
@@ -222,11 +246,19 @@ func TestSpatialTransaction_MultipleOperations(t *testing.T) {
 	// Create entities
 	entity1 := world.CreateEntity()
 	world.AddComponent(entity1, TestComponent{X: 0, Y: 0})
-	world.UpdateSpatialIndex(entity1, 0, 0)
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(entity1, 0, 0)
+		tx.Commit()
+	}
 
 	entity2 := world.CreateEntity()
 	world.AddComponent(entity2, TestComponent{X: 1, Y: 1})
-	world.UpdateSpatialIndex(entity2, 1, 1)
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(entity2, 1, 1)
+		tx.Commit()
+	}
 
 	entity3 := world.CreateEntity()
 	world.AddComponent(entity3, TestComponent{X: 10, Y: 10})
@@ -265,7 +297,11 @@ func TestMoveEntitySafe(t *testing.T) {
 	// Create entity
 	entity := world.CreateEntity()
 	world.AddComponent(entity, TestComponent{X: 2, Y: 2})
-	world.UpdateSpatialIndex(entity, 2, 2)
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(entity, 2, 2)
+		tx.Commit()
+	}
 
 	// Move using MoveEntitySafe
 	result := world.MoveEntitySafe(entity, 2, 2, 8, 8)
@@ -291,11 +327,19 @@ func TestMoveEntitySafe_Collision(t *testing.T) {
 	// Create two entities
 	entity1 := world.CreateEntity()
 	world.AddComponent(entity1, TestComponent{X: 0, Y: 0})
-	world.UpdateSpatialIndex(entity1, 0, 0)
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(entity1, 0, 0)
+		tx.Commit()
+	}
 
 	entity2 := world.CreateEntity()
 	world.AddComponent(entity2, TestComponent{X: 5, Y: 5})
-	world.UpdateSpatialIndex(entity2, 5, 5)
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(entity2, 5, 5)
+		tx.Commit()
+	}
 
 	// Try to move entity1 to entity2's position
 	result := world.MoveEntitySafe(entity1, 0, 0, 5, 5)
@@ -322,7 +366,11 @@ func TestValidateSpatialIndex(t *testing.T) {
 	// Create valid entity
 	entity := world.CreateEntity()
 	world.AddComponent(entity, TestComponent{X: 5, Y: 5})
-	world.UpdateSpatialIndex(entity, 5, 5)
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(entity, 5, 5)
+		tx.Commit()
+	}
 
 	// Validate - should have no inconsistencies
 	inconsistencies := world.ValidateSpatialIndex()
@@ -360,7 +408,11 @@ func TestSpatialTransaction_ConcurrentTransactions(t *testing.T) {
 	for i := 0; i < numEntities; i++ {
 		entities[i] = world.CreateEntity()
 		world.AddComponent(entities[i], TestComponent{X: i, Y: 0})
-		world.UpdateSpatialIndex(entities[i], i, 0)
+		{
+			tx := world.BeginSpatialTransaction()
+			tx.Spawn(entities[i], i, 0)
+			tx.Commit()
+		}
 	}
 
 	// Concurrently move all entities
@@ -403,7 +455,11 @@ func TestSpatialTransaction_MoveSelfToSamePosition(t *testing.T) {
 	// Create entity
 	entity := world.CreateEntity()
 	world.AddComponent(entity, TestComponent{X: 5, Y: 5})
-	world.UpdateSpatialIndex(entity, 5, 5)
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(entity, 5, 5)
+		tx.Commit()
+	}
 
 	// Move to same position (should not be a collision)
 	tx := world.BeginSpatialTransaction()
@@ -444,10 +500,18 @@ func TestSpatialTransaction_GetCollisions(t *testing.T) {
 
 	// Create entities at (1,1) and (2,2)
 	entity1 := world.CreateEntity()
-	world.UpdateSpatialIndex(entity1, 1, 1)
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(entity1, 1, 1)
+		tx.Commit()
+	}
 
 	entity2 := world.CreateEntity()
-	world.UpdateSpatialIndex(entity2, 2, 2)
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(entity2, 2, 2)
+		tx.Commit()
+	}
 
 	// Create new entities to spawn at occupied positions
 	entity3 := world.CreateEntity()

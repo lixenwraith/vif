@@ -47,7 +47,10 @@ func TestBoostRapidToggle(t *testing.T) {
 			ctx.World.AddComponent(entity, pos)
 			ctx.World.AddComponent(entity, char)
 			ctx.World.AddComponent(entity, seq)
-			ctx.World.UpdateSpatialIndex(entity, pos.X, pos.Y)
+	
+		tx := ctx.World.BeginSpatialTransaction()
+		tx.Spawn(entity, pos.X, pos.Y)
+		tx.Commit()
 
 			// Type the character to trigger boost extension
 			scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, rune('a'+(i%26)))
@@ -111,7 +114,10 @@ func TestBoostConcurrentRead(t *testing.T) {
 	ctx.World.AddComponent(entity, pos)
 	ctx.World.AddComponent(entity, char)
 	ctx.World.AddComponent(entity, seq)
-	ctx.World.UpdateSpatialIndex(entity, pos.X, pos.Y)
+
+	tx := ctx.World.BeginSpatialTransaction()
+	tx.Spawn(entity, pos.X, pos.Y)
+	tx.Commit()
 
 	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
 
@@ -178,7 +184,10 @@ func TestBoostExpirationRace(t *testing.T) {
 		ctx.World.AddComponent(entity, pos)
 		ctx.World.AddComponent(entity, char)
 		ctx.World.AddComponent(entity, seq)
-		ctx.World.UpdateSpatialIndex(entity, pos.X, pos.Y)
+
+		tx := ctx.World.BeginSpatialTransaction()
+		tx.Spawn(entity, pos.X, pos.Y)
+		tx.Commit()
 
 		// Type to extend boost
 		scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'b')
@@ -247,7 +256,10 @@ func TestBoostWithScoreUpdates(t *testing.T) {
 			ctx.World.AddComponent(entity, pos)
 			ctx.World.AddComponent(entity, char)
 			ctx.World.AddComponent(entity, seq)
-			ctx.World.UpdateSpatialIndex(entity, pos.X, pos.Y)
+	
+		tx := ctx.World.BeginSpatialTransaction()
+		tx.Spawn(entity, pos.X, pos.Y)
+		tx.Commit()
 
 			scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, rune('a'+(i%26)))
 			time.Sleep(1 * time.Millisecond)
@@ -357,7 +369,10 @@ func TestSimulateFullGameLoop(t *testing.T) {
 			ctx.World.AddComponent(entity, pos)
 			ctx.World.AddComponent(entity, char)
 			ctx.World.AddComponent(entity, seq)
-			ctx.World.UpdateSpatialIndex(entity, pos.X, pos.Y)
+	
+		tx := ctx.World.BeginSpatialTransaction()
+		tx.Spawn(entity, pos.X, pos.Y)
+		tx.Commit()
 
 			scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, rune('a'+(i%26)))
 			time.Sleep(10 * time.Millisecond) // Simulate typing speed

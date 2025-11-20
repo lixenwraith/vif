@@ -36,7 +36,11 @@ func TestBoostHeatMultiplier(t *testing.T) {
 	ctx.World.AddComponent(entity, pos)
 	ctx.World.AddComponent(entity, char)
 	ctx.World.AddComponent(entity, seq)
-	ctx.World.UpdateSpatialIndex(entity, pos.X, pos.Y)
+	{
+		tx := ctx.World.BeginSpatialTransaction()
+		tx.Spawn(entity, pos.X, pos.Y)
+		tx.Commit()
+	}
 
 	// Test 1: Without boost, heat should increment by 1
 	ctx.State.SetBoostEnabled(false)
@@ -69,7 +73,11 @@ func TestBoostHeatMultiplier(t *testing.T) {
 	ctx.World.AddComponent(entity2, pos2)
 	ctx.World.AddComponent(entity2, char2)
 	ctx.World.AddComponent(entity2, seq2)
-	ctx.World.UpdateSpatialIndex(entity2, pos2.X, pos2.Y)
+	{
+		tx := ctx.World.BeginSpatialTransaction()
+		tx.Spawn(entity2, pos2.X, pos2.Y)
+		tx.Commit()
+	}
 
 	ctx.State.SetBoostEnabled(true)
 	previousHeat := ctx.State.GetHeat()
@@ -123,7 +131,11 @@ func TestBlueCharacterActivatesBoost(t *testing.T) {
 	ctx.World.AddComponent(entity, pos)
 	ctx.World.AddComponent(entity, char)
 	ctx.World.AddComponent(entity, seq)
-	ctx.World.UpdateSpatialIndex(entity, pos.X, pos.Y)
+	{
+		tx := ctx.World.BeginSpatialTransaction()
+		tx.Spawn(entity, pos.X, pos.Y)
+		tx.Commit()
+	}
 
 	// Boost should not be active initially
 	if ctx.State.GetBoostEnabled() {
@@ -179,7 +191,11 @@ func TestBoostExtension(t *testing.T) {
 	ctx.World.AddComponent(entity1, pos1)
 	ctx.World.AddComponent(entity1, char1)
 	ctx.World.AddComponent(entity1, seq1)
-	ctx.World.UpdateSpatialIndex(entity1, pos1.X, pos1.Y)
+	{
+		tx := ctx.World.BeginSpatialTransaction()
+		tx.Spawn(entity1, pos1.X, pos1.Y)
+		tx.Commit()
+	}
 
 	// Type first blue character (should activate boost)
 	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
@@ -207,7 +223,11 @@ func TestBoostExtension(t *testing.T) {
 	ctx.World.AddComponent(entity2, pos2)
 	ctx.World.AddComponent(entity2, char2)
 	ctx.World.AddComponent(entity2, seq2)
-	ctx.World.UpdateSpatialIndex(entity2, pos2.X, pos2.Y)
+	{
+		tx := ctx.World.BeginSpatialTransaction()
+		tx.Spawn(entity2, pos2.X, pos2.Y)
+		tx.Commit()
+	}
 
 	// Type second blue character (should extend boost)
 	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'b')
@@ -258,7 +278,11 @@ func TestRedCharacterResetsHeat(t *testing.T) {
 	ctx.World.AddComponent(entity, pos)
 	ctx.World.AddComponent(entity, char)
 	ctx.World.AddComponent(entity, seq)
-	ctx.World.UpdateSpatialIndex(entity, pos.X, pos.Y)
+	{
+		tx := ctx.World.BeginSpatialTransaction()
+		tx.Spawn(entity, pos.X, pos.Y)
+		tx.Commit()
+	}
 
 	// Type the red character
 	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
@@ -303,7 +327,11 @@ func TestBoostDoesNotAffectScore(t *testing.T) {
 		ctx.World.AddComponent(entity, pos)
 		ctx.World.AddComponent(entity, char)
 		ctx.World.AddComponent(entity, seq)
-		ctx.World.UpdateSpatialIndex(entity, pos.X, pos.Y)
+		{
+			tx := ctx.World.BeginSpatialTransaction()
+			tx.Spawn(entity, pos.X, pos.Y)
+			tx.Commit()
+		}
 
 		scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, rune('a'+i))
 	}
@@ -340,7 +368,11 @@ func TestBoostDoesNotAffectScore(t *testing.T) {
 		ctx.World.AddComponent(entity, pos)
 		ctx.World.AddComponent(entity, char)
 		ctx.World.AddComponent(entity, seq)
-		ctx.World.UpdateSpatialIndex(entity, pos.X, pos.Y)
+		{
+			tx := ctx.World.BeginSpatialTransaction()
+			tx.Spawn(entity, pos.X, pos.Y)
+			tx.Commit()
+		}
 
 		scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, rune('f'+i))
 	}
@@ -387,7 +419,11 @@ func TestIncorrectCharacterResetsHeat(t *testing.T) {
 	ctx.World.AddComponent(entity, pos)
 	ctx.World.AddComponent(entity, char)
 	ctx.World.AddComponent(entity, seq)
-	ctx.World.UpdateSpatialIndex(entity, pos.X, pos.Y)
+	{
+		tx := ctx.World.BeginSpatialTransaction()
+		tx.Spawn(entity, pos.X, pos.Y)
+		tx.Commit()
+	}
 
 	// Type wrong character
 	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'b')
@@ -442,7 +478,11 @@ func TestScoreBlinkOnCorrectCharacter(t *testing.T) {
 			ctx.World.AddComponent(entity, pos)
 			ctx.World.AddComponent(entity, char)
 			ctx.World.AddComponent(entity, seq)
-			ctx.World.UpdateSpatialIndex(entity, pos.X, pos.Y)
+			{
+				tx := ctx.World.BeginSpatialTransaction()
+				tx.Spawn(entity, pos.X, pos.Y)
+				tx.Commit()
+			}
 
 			// Type correct character
 			scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
@@ -512,7 +552,11 @@ func TestScoreBlinkOnError(t *testing.T) {
 		ctx.World.AddComponent(entity, pos)
 		ctx.World.AddComponent(entity, char)
 		ctx.World.AddComponent(entity, seq)
-		ctx.World.UpdateSpatialIndex(entity, pos.X, pos.Y)
+		{
+			tx := ctx.World.BeginSpatialTransaction()
+			tx.Spawn(entity, pos.X, pos.Y)
+			tx.Commit()
+		}
 
 		// Type wrong character
 		scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'b')
@@ -560,7 +604,11 @@ func TestScoreBlinkOnGoldCharacter(t *testing.T) {
 	ctx.World.AddComponent(entity, pos)
 	ctx.World.AddComponent(entity, char)
 	ctx.World.AddComponent(entity, seq)
-	ctx.World.UpdateSpatialIndex(entity, pos.X, pos.Y)
+	{
+		tx := ctx.World.BeginSpatialTransaction()
+		tx.Spawn(entity, pos.X, pos.Y)
+		tx.Commit()
+	}
 
 	// Type correct gold character (without gold sequence active, it will be treated as regular character)
 	// The character will still trigger score blink with its color
@@ -604,7 +652,11 @@ func TestScoreBlinkTimeout(t *testing.T) {
 	ctx.World.AddComponent(entity, pos)
 	ctx.World.AddComponent(entity, char)
 	ctx.World.AddComponent(entity, seq)
-	ctx.World.UpdateSpatialIndex(entity, pos.X, pos.Y)
+	{
+		tx := ctx.World.BeginSpatialTransaction()
+		tx.Spawn(entity, pos.X, pos.Y)
+		tx.Commit()
+	}
 
 	// Type correct character
 	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')

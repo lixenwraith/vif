@@ -280,7 +280,7 @@ func TestRenderWhileSpawning(t *testing.T) {
 					// Remove from spatial index first (as per architecture requirements)
 					if pos, ok := world.GetComponent(toDestroy, reflect.TypeOf(components.PositionComponent{})); ok {
 						posComp := pos.(components.PositionComponent)
-						world.RemoveFromSpatialIndex(posComp.X, posComp.Y)
+						tx := world.BeginSpatialTransaction(); tx.Destroy(toDestroy, posComp.X, posComp.Y); tx.Commit()
 					}
 
 					world.DestroyEntity(toDestroy)
@@ -628,7 +628,7 @@ func TestStressContentSystem(t *testing.T) {
 						entity := entities[i]
 						if pos, ok := world.GetComponent(entity, reflect.TypeOf(components.PositionComponent{})); ok {
 							posComp := pos.(components.PositionComponent)
-							world.RemoveFromSpatialIndex(posComp.X, posComp.Y)
+							tx := world.BeginSpatialTransaction(); tx.Destroy(entity, posComp.X, posComp.Y); tx.Commit()
 						}
 						world.DestroyEntity(entity)
 					}
