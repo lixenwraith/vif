@@ -397,8 +397,8 @@ Systems execute in priority order (lower = earlier):
 ### Spatial Indexing
 - Primary index: `World.spatialIndex[y][x] -> Entity`
 - Secondary index: `World.componentsByType[Type] -> []Entity`
-- ALWAYS update spatial index on position changes
-- ALWAYS remove from spatial index before entity destruction
+- ALWAYS use spatial transactions for position changes (tx.Move, tx.Spawn, tx.Destroy)
+- SafeDestroyEntity handles spatial index cleanup atomically
 
 ## Component Hierarchy
 ```

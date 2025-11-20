@@ -145,10 +145,10 @@ if atomic.LoadInt64(&blueNormalCount) == 0 {
 
 ## CURRENT ISSUES TO ADDRESS
 
-### Spatial Index Race Condition
-- **Problem**: `UpdateSpatialIndex()` overwrites without checking
-- **Solution**: Implement `engine/spatial_transactions.go`
-- **Pattern**: All spatial updates must use transaction system
+### Spatial Transactions (Implemented)
+- **Solution**: Atomic spatial operations via `engine/spatial_transactions.go`
+- **Pattern**: All spatial updates MUST use transaction system
+- **Status**: ✅ Race condition resolved, legacy methods removed
 
 ### Temporal Desynchronization
 - **Problem**: Different time domains (50ms clock, 16ms render)

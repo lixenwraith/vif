@@ -274,16 +274,9 @@ func TestRenderWhileSpawning(t *testing.T) {
 			default:
 				entities := world.GetEntitiesWith()
 				if len(entities) > 0 {
-					// Destroy random entity
+					// Destroy random entity using SafeDestroyEntity (handles spatial index atomically)
 					toDestroy := entities[rand.Intn(len(entities))]
-
-					// Remove from spatial index first (as per architecture requirements)
-					if pos, ok := world.GetComponent(toDestroy, reflect.TypeOf(components.PositionComponent{})); ok {
-						posComp := pos.(components.PositionComponent)
-						tx := world.BeginSpatialTransaction(); tx.Destroy(toDestroy, posComp.X, posComp.Y); tx.Commit()
-					}
-
-					world.DestroyEntity(toDestroy)
+					world.SafeDestroyEntity(toDestroy)
 				}
 				time.Sleep(15 * time.Millisecond)
 			}
@@ -623,14 +616,9 @@ func TestStressContentSystem(t *testing.T) {
 			default:
 				entities := world.GetEntitiesWith()
 				if len(entities) > 10 {
-					// Destroy several entities
+					// Destroy several entities using SafeDestroyEntity
 					for i := 0; i < 5 && i < len(entities); i++ {
-						entity := entities[i]
-						if pos, ok := world.GetComponent(entity, reflect.TypeOf(components.PositionComponent{})); ok {
-							posComp := pos.(components.PositionComponent)
-							tx := world.BeginSpatialTransaction(); tx.Destroy(entity, posComp.X, posComp.Y); tx.Commit()
-						}
-						world.DestroyEntity(entity)
+						world.SafeDestroyEntity(entities[i])
 					}
 				}
 				time.Sleep(25 * time.Millisecond)
