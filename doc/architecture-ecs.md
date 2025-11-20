@@ -25,6 +25,7 @@ Component (marker interface)
 ├── SequenceComponent {ID, Index, Type, Level}
 ├── GoldSequenceComponent {Active, SequenceID, StartTime, CharSequence, CurrentIndex}
 ├── NuggetComponent {ID, SpawnTime}
+├── DrainComponent {X, Y, LastMoveTime, LastDrainTime, IsOnCursor}
 ├── FallingDecayComponent {Column, YPosition, Speed, Char, LastChangeRow}
 ├── CleanerComponent {Row, XPosition, Speed, Direction, TrailPositions, TrailMaxAge}
 └── RemovalFlashComponent {X, Y, Char, StartTime, Duration}
@@ -52,6 +53,15 @@ Component (marker interface)
 - Spawns randomly every 5 seconds
 - Single nugget invariant (at most one active)
 - Provides heat bonus when collected
+
+**DrainComponent**
+- Marks the drain entity (hostile pressure mechanic)
+- Tracks position, movement timing, and drain timing
+- Single drain invariant (only one drain entity at a time)
+- Spawns when score > 0, despawns when score ≤ 0
+- Pursues cursor using 8-directional pathfinding
+- Drains 10 score/second when positioned on cursor
+- Destroys entities on collision (sequences, nuggets, gold)
 
 ## Sequence Types
 
@@ -234,6 +244,12 @@ newSystem.SetOtherSystem(otherSystem)
 - CharacterComponent: Orange alphanumeric character (from constants.AlphanumericRunes)
 - Single instance enforced by NuggetSystem
 
+**Drain Entity**:
+- MUST have: PositionComponent + DrainComponent
+- Single instance enforced by DrainSystem
+- Lifecycle tied to score (active when score > 0)
+- Position synchronized with GameState atomics for rendering
+
 **Falling Decay Entities**:
 - MUST have: FallingDecayComponent
 - Optional: CharacterComponent (for visual)
@@ -332,6 +348,7 @@ for _, entity := range entities {
 3. **No Orphaned Components**: SafeDestroyEntity removes all components
 4. **Spatial Index Accuracy**: Always matches actual entity positions
 5. **Single Nugget**: At most one nugget entity active (atomic CAS enforcement)
+6. **Single Drain**: At most one drain entity active (controlled by score-based lifecycle)
 
 ---
 

@@ -17,13 +17,33 @@
 
 ## Sequence Types (Descending Priority)
 
-1. **Gold** (timeout in <3s or heat <30)
-2. **Nugget** (orange '●') before decay reaches it
+1. **Gold** (timeout in <3s or heat <30) - but watch for drain collision risk
+2. **Nugget** (orange character) before decay or drain reaches it
 3. **Bright** Green/Blue (heat >70)
 4. **Green (Dark)** near decay timer
 5. **Normal** Green/Blue
 6. **Dark** Green/Blue
 7. **Red** (only if score <1000 or blocking)
+
+## Drain Entity
+
+**Appearance:** Light cyan ╬ (cross character)
+
+**Lifecycle:**
+- Spawns when score > 0 (centered on cursor)
+- Despawns when score ≤ 0
+
+**Behavior:**
+- Moves 1 character/second toward cursor (8-directional)
+- Drains 10 score/second when on cursor
+- Destroys sequences, nuggets, and gold on collision
+- Gold collision triggers gold sequence completion
+
+**Strategy:**
+- Stay mobile to avoid score drain
+- Lead drain away from valuable targets
+- Can use drain to destroy Red sequences strategically
+- Intentionally drop to score 0 to despawn in emergencies
 
 ## Heat Guidelines
 
@@ -176,6 +196,9 @@
 5. ❌ Ignoring nuggets (free heat)
 6. ❌ Letting Green (Dark) decay to Red
 7. ❌ Tab jumping when score < 10 (no effect)
+8. ❌ Staying stationary with drain on cursor (constant score loss)
+9. ❌ Ignoring drain position when planning movement
+10. ❌ Letting drain path intersect with gold sequences
 
 ## Optimal Plays
 
@@ -186,6 +209,9 @@
 5. ✅ Tab jump before decay = Save nugget from destruction
 6. ✅ Red (Dark) sequences = Wait for decay to destroy
 7. ✅ Word motions (`w`/`b`/`e`) = Efficient navigation
+8. ✅ Continuous movement = Avoid drain score loss
+9. ✅ Lead drain toward Red sequences = Free cleanup
+10. ✅ Track drain position = Protect valuable targets
 
 ---
 

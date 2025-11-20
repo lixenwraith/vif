@@ -254,6 +254,16 @@ Mode      Last command                    Boost timer  Decay timer   Total score
 - **Grid** - White text, ping grid timer (only when active)
 - **Boost** - Pink background, boost multiplier timer (only when active)
 
+### Drain Entity
+
+When score is positive, a hostile drain entity appears on screen:
+
+- **Visual**: Light cyan ╬ character (cross)
+- **Position**: Spawns centered on cursor when score > 0
+- **Movement**: Pursues cursor, moving 1 character per second
+- **Effect**: Drains 10 score per second when positioned on cursor
+- **Collisions**: Destroys sequences, nuggets, and gold on contact
+
 ### Visual Effects
 
 **Ping Grid** (Press `Enter` in NORMAL mode):
@@ -547,6 +557,7 @@ When all characters of one color/level are cleared, that slot opens for new spaw
 4. **Let decay happen** - Don't panic about the timer
 5. **Chase gold sequences** aggressively - easiest way to build heat
 6. **Don't use delete** (`x`, `dd`, etc.) - it resets heat
+7. **Understand Drain**: Once score > 0, a cyan ╬ character spawns and chases you - keep moving to avoid losing score
 
 **Motion Practice:**
 - Use `0` and `$` to jump to line edges
@@ -571,6 +582,11 @@ When all characters of one color/level are cleared, that slot opens for new spaw
    - `gg`, `G`, `H`, `M`, `L` for screen jumps
    - `w`, `b`, `e` instead of repeated `l`/`h`
    - `/<pattern>` to find specific text
+5. **Drain management**:
+   - Stay mobile - drain moves 1 character per second
+   - Plan movement paths that keep distance from drain
+   - Avoid letting drain path intersect with gold sequences or high-value targets
+   - Consider drain position when selecting next typing target
 
 **Heat Recovery:**
 - If heat drops below 20, hunt for gold sequence
@@ -624,6 +640,14 @@ When all characters of one color/level are cleared, that slot opens for new spaw
    - Use gold sequences as "panic buttons" for heat recovery
    - Accept small score hits to avoid heat resets
    - Take calculated risks: typing one Red to clear screen space
+
+8. **Advanced drain tactics**:
+   - Track drain position constantly - it moves every second
+   - Use drain movement prediction to clear targets before drain reaches them
+   - Strategic positioning: lead drain away from high-value target clusters
+   - Exploit drain path: intentionally let drain destroy Red sequences (saves typing penalty)
+   - Emergency: if overwhelmed, consider letting score drop to zero to despawn drain and reset
+   - Gold sequence timing: be aware drain can trigger gold completion if it collides with gold
 
 ---
 

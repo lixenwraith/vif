@@ -259,6 +259,56 @@ When all characters of one color/level are cleared, that slot opens for new spaw
 - **Trail Effect**: Configurable trail length (default: 10 positions) with gradient fade (bright yellow → transparent)
 - **Removal Flash**: Configurable flash duration (default: 150ms) appears when Red characters are destroyed
 
+## Drain (Pressure Mechanic)
+
+**What is Drain?**
+A hostile entity that spawns when you have positive score, constantly pursues the cursor, and drains score over time when positioned on top of it.
+
+**Visual Appearance:**
+- **Character**: ╬ (cross character, Unicode U+256C)
+- **Color**: Light Cyan (RGB: 224, 255, 255)
+- **Background**: Transparent - inherits background from underlying layers (grid, cleaner trails, cursor, etc.)
+- **Cursor Overlap**: When on cursor, appears as cyan character on orange background (NORMAL mode) or white background (INSERT mode)
+
+**Spawn & Despawn:**
+- **Spawn Trigger**: Appears when score becomes positive (score > 0)
+- **Spawn Location**: Centered on cursor position at time of spawn
+- **Despawn Trigger**: Disappears when score reaches zero or becomes negative (score ≤ 0)
+- **Lifecycle**: Only one drain entity exists at a time
+
+**Movement Behavior:**
+- **Speed**: Moves 1 character every 1 second (1000ms intervals)
+- **Pathfinding**: Uses 8-directional movement (horizontal, vertical, and diagonal)
+- **Direction Calculation**: Recalculates shortest path to cursor position right before each move
+- **Target**: Always moves toward current cursor position
+- **Cannot be escaped**: Drain continuously tracks and chases the cursor
+
+**Score Drain:**
+- **Drain Rate**: 10 points per second (1000ms intervals)
+- **Activation**: Only drains when drain entity is positioned exactly on cursor
+- **Effect**: Continuously reduces score while on cursor
+- **Consequence**: If score reaches zero, drain despawns
+
+**Collision Interactions:**
+Drain destroys any entity it collides with during movement or at spawn:
+
+- **Blue/Green/Red Sequences**: Entire character disappears on contact, decrements color counters
+- **Gold Sequences**: All characters in the gold sequence are destroyed, triggers phase transition to `PhaseGoldComplete` (same as completing the gold sequence)
+- **Nuggets**: Destroyed immediately on collision
+- **Falling Decay Entities**: Destroyed on collision during decay animation
+- **Cleaners**: No interaction (different rendering layers)
+
+**Strategic Implications:**
+- **Constant Pressure**: Drain adds urgency to gameplay at positive scores
+- **Risk vs. Reward**: Higher scores mean longer drain lifetime and more score loss potential
+- **Movement Tax**: Players must continuously move or accept score drain
+- **Collision Threat**: Valuable targets (Gold, Nuggets, bright sequences) can be destroyed by drain's path
+- **Score Management**: Letting score drop to zero removes drain but resets progress
+- **Gold Interaction**: Drain hitting gold sequences triggers completion - can be strategic or detrimental
+
+**Rendering Order:**
+Drain is rendered after removal flashes but before the cursor, ensuring it's visible but cursor takes priority for visual clarity.
+
 ## Content Management
 
 ### Content Source
