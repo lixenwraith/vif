@@ -82,8 +82,8 @@ Component (marker interface)
 
 ### Nugget Entities
 - **Spawning**: Random position every 5 seconds
-- **Appearance**: Orange '●' (filled circle) character
-- **Collection**: Type any alphanumeric character on nugget position
+- **Appearance**: Orange alphanumeric character (randomly selected from a-z, A-Z, 0-9)
+- **Collection**: Type the matching alphanumeric character shown at nugget position
 - **Reward**: +10% of max heat (minimum 1)
 - **Tab Jump**: Press Tab to jump cursor to nugget (costs 10 score)
 - **Decay**: Falling decay entities destroy nuggets on contact
@@ -231,7 +231,7 @@ newSystem.SetOtherSystem(otherSystem)
 
 **Nuggets**:
 - MUST have: PositionComponent + CharacterComponent + NuggetComponent
-- CharacterComponent: Orange '●' character
+- CharacterComponent: Orange alphanumeric character (from constants.AlphanumericRunes)
 - Single instance enforced by NuggetSystem
 
 **Falling Decay Entities**:

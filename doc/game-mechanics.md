@@ -43,9 +43,9 @@ The game features four types of character sequences, plus collectible nuggets:
 - **Strategy**: **Highest priority target** - can turn around a low-heat situation instantly
 
 ### Nuggets (Collectibles)
-- **Appearance**: Orange '●' (filled circle) character
+- **Appearance**: Orange alphanumeric character (randomly selected from a-z, A-Z, 0-9)
 - **Spawning**: Random position every 5 seconds (only one active at a time)
-- **Collection**: Type **any alphanumeric character** while cursor is on nugget position
+- **Collection**: Type **the matching alphanumeric character** shown at nugget position
 - **Reward**: +10% of max heat (minimum 1, e.g., 80-char screen → +8 heat)
 - **Tab Jump**: Press `Tab` to jump cursor directly to nugget (costs 10 score, requires score >= 10)
 - **Decay Interaction**: Falling decay entities destroy nuggets on contact

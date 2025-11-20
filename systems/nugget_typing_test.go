@@ -121,7 +121,7 @@ func TestNuggetTypingDestroysAndReturnsSpawn(t *testing.T) {
 		t.Fatal("Nugget should have been cleared after collection")
 	}
 
-	// Wait for respawn interval (5 seconds)
+	// Wait for respawn interval (nuggetSpawnIntervalSeconds)
 	mockTime.Advance(6 * time.Second)
 
 	// Update nugget system to trigger respawn
@@ -169,7 +169,8 @@ func TestNuggetTypingNoScoreEffect(t *testing.T) {
 	nuggetEntity := world.CreateEntity()
 	world.AddComponent(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
-	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: '●', Style: style})
+	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
+	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
 	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
 	world.UpdateSpatialIndex(nuggetEntity, 10, 5)
 	nuggetSystem.activeNugget.Store(uint64(nuggetEntity))

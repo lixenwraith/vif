@@ -11,7 +11,7 @@ vi-fighter is a terminal typing game where players type character sequences that
 vi-fighter features a dynamic typing system with multiple sequence types and game mechanics:
 
 - **Sequence Types**: Green, Blue, Red (penalties), and Gold (bonus)
-- **Nuggets**: Collectible orange '●' entities that provide heat bonuses
+- **Nuggets**: Collectible orange alphanumeric characters that provide heat bonuses
 - **Heat System**: Typing momentum that multiplies score and affects decay speed
 - **Boost System**: 2× heat multiplier activated at maximum heat
 - **Decay System**: Automated pressure that degrades sequences over time

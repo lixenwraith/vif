@@ -28,7 +28,8 @@ func TestDecayDestroysNugget(t *testing.T) {
 	nuggetEntity := world.CreateEntity()
 	world.AddComponent(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
-	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: '●', Style: style})
+	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
+	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
 	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
 	world.UpdateSpatialIndex(nuggetEntity, 10, 5)
 	nuggetSystem.activeNugget.Store(uint64(nuggetEntity))
@@ -47,7 +48,7 @@ func TestDecayDestroysNugget(t *testing.T) {
 	// This ensures the falling entity in column 10 will pass through row 5
 	// regardless of its random speed
 	dt := 0.1 // 100ms per frame
-	maxTime := 5.0 // Maximum 5 seconds (should be way more than enough)
+	maxTime := 5.0 // Maximum time to wait (should be way more than enough)
 	for elapsed := dt; elapsed < maxTime; elapsed += dt {
 		decaySystem.updateFallingEntities(world, elapsed)
 
@@ -94,7 +95,8 @@ func TestDecayDoesNotDestroyNuggetAtDifferentPosition(t *testing.T) {
 	nuggetEntity := world.CreateEntity()
 	world.AddComponent(nuggetEntity, components.PositionComponent{X: 10, Y: 10})
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
-	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: '●', Style: style})
+	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
+	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
 	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
 	world.UpdateSpatialIndex(nuggetEntity, 10, 10)
 	nuggetSystem.activeNugget.Store(uint64(nuggetEntity))
@@ -141,13 +143,15 @@ func TestDecayDestroyMultipleNuggetsInDifferentColumns(t *testing.T) {
 	nuggetEntity1 := world.CreateEntity()
 	world.AddComponent(nuggetEntity1, components.PositionComponent{X: 10, Y: 5})
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
-	world.AddComponent(nuggetEntity1, components.CharacterComponent{Rune: '●', Style: style})
+	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
+	world.AddComponent(nuggetEntity1, components.CharacterComponent{Rune: 'a', Style: style})
 	world.AddComponent(nuggetEntity1, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
 	world.UpdateSpatialIndex(nuggetEntity1, 10, 5)
 
 	nuggetEntity2 := world.CreateEntity()
 	world.AddComponent(nuggetEntity2, components.PositionComponent{X: 20, Y: 5})
-	world.AddComponent(nuggetEntity2, components.CharacterComponent{Rune: '●', Style: style})
+	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
+	world.AddComponent(nuggetEntity2, components.CharacterComponent{Rune: 'b', Style: style})
 	world.AddComponent(nuggetEntity2, components.NuggetComponent{ID: 2, SpawnTime: ctx.TimeProvider.Now()})
 	world.UpdateSpatialIndex(nuggetEntity2, 20, 5)
 
@@ -205,7 +209,8 @@ func TestDecayDestroyNuggetAndSequence(t *testing.T) {
 	nuggetEntity := world.CreateEntity()
 	world.AddComponent(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
 	nuggetStyle := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
-	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: '●', Style: nuggetStyle})
+	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
+	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: nuggetStyle})
 	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
 	world.UpdateSpatialIndex(nuggetEntity, 10, 5)
 	nuggetSystem.activeNugget.Store(uint64(nuggetEntity))
@@ -306,7 +311,8 @@ func TestDecayNuggetRespawnAfterDestruction(t *testing.T) {
 	nuggetEntity := world.CreateEntity()
 	world.AddComponent(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
-	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: '●', Style: style})
+	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
+	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
 	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: mockTime.Now()})
 	world.UpdateSpatialIndex(nuggetEntity, 10, 5)
 	nuggetSystem.activeNugget.Store(uint64(nuggetEntity))
@@ -340,8 +346,8 @@ func TestDecayNuggetRespawnAfterDestruction(t *testing.T) {
 		t.Error("Active nugget reference should be cleared")
 	}
 
-	// Advance time by 5 seconds (nugget spawn interval)
-	mockTime.Advance(5 * time.Second)
+	// Advance time by nuggetSpawnIntervalSeconds
+	mockTime.Advance(nuggetSpawnIntervalSeconds * time.Second)
 
 	// Update nugget system (should spawn new nugget)
 	nuggetSystem.Update(world, 100*time.Millisecond)
@@ -349,7 +355,7 @@ func TestDecayNuggetRespawnAfterDestruction(t *testing.T) {
 	// Verify new nugget was spawned
 	newActiveNugget := nuggetSystem.GetActiveNugget()
 	if newActiveNugget == 0 {
-		t.Error("New nugget should be spawned after 5 seconds")
+		t.Error("New nugget should be spawned after nuggetSpawnIntervalSeconds")
 	}
 
 	// Verify new nugget exists and has components
@@ -380,7 +386,8 @@ func TestDecayDoesNotProcessSameNuggetTwice(t *testing.T) {
 	nuggetEntity := world.CreateEntity()
 	world.AddComponent(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
-	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: '●', Style: style})
+	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
+	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
 	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
 	world.UpdateSpatialIndex(nuggetEntity, 10, 5)
 	nuggetSystem.activeNugget.Store(uint64(nuggetEntity))
