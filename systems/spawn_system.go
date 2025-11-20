@@ -567,16 +567,12 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 			// Get sequence ID from GameState (atomic increment)
 			sequenceID := s.ctx.State.IncrementSeqID()
 
-			// Count non-space characters for color counter
-			nonSpaceCount := 0
-
-			// Begin spatial transaction for atomic sequence creation
-			tx := world.BeginSpatialTransaction()
-
+			// Phase 1: Create all entities first (without adding to spatial index)
 			// Track created entities for cleanup if needed
 			createdEntities := make([]engine.Entity, 0, lineLength)
+			entityPositions := make([]engine.EntityPosition, 0, lineLength)
 
-			// Create all entities and add to transaction
+			// Create all entities with their components
 			for i := 0; i < lineLength; i++ {
 				// Skip space characters - don't create entities for them
 				if lineRunes[i] == ' ' {
@@ -606,34 +602,37 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 					Level: seqLevel,
 				})
 
-				// Add spawn operation to transaction
-				result := tx.Spawn(entity, startCol+i, row)
-				if result.HasCollision {
-					// Collision detected during transaction - rollback entire sequence
-					tx.Rollback()
-					// Remove all entities created so far
-					for _, e := range createdEntities {
-						world.DestroyEntity(e)
-					}
-					// Try next attempt
-					hasOverlap = true
-					break
+				// Add to batch for atomic spawn
+				entityPositions = append(entityPositions, engine.EntityPosition{
+					Entity: entity,
+					X:      startCol + i,
+					Y:      row,
+				})
+			}
+
+			// Phase 2: Atomically spawn all entities using batch operation
+			tx := world.BeginSpatialTransaction()
+			result := tx.SpawnBatch(entityPositions)
+
+			if result.HasCollision {
+				// Collision detected during batch spawn - rollback and cleanup
+				tx.Rollback()
+				// Remove all entities created
+				for _, e := range createdEntities {
+					world.DestroyEntity(e)
 				}
-
-				// Increment non-space character count
-				nonSpaceCount++
+				// Try next attempt
+				continue
 			}
 
-			// Only commit if no collisions occurred
-			if !hasOverlap {
-				// Commit spatial transaction atomically
-				tx.Commit()
+			// Phase 3: Commit transaction atomically
+			tx.Commit()
 
-				// Atomically increment the color counter (only non-space characters)
-				s.AddColorCount(seqType, seqLevel, int64(nonSpaceCount))
+			// Atomically increment the color counter (only non-space characters)
+			nonSpaceCount := len(createdEntities)
+			s.AddColorCount(seqType, seqLevel, int64(nonSpaceCount))
 
-				return true
-			}
+			return true
 		}
 	}
 

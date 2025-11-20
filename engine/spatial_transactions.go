@@ -129,6 +129,52 @@ func (tx *SpatialTransaction) Destroy(entity Entity, x, y int) {
 	})
 }
 
+// EntityPosition represents an entity and its spawn position
+type EntityPosition struct {
+	Entity Entity
+	X      int
+	Y      int
+}
+
+// SpawnBatch validates all positions first, then adds all spawn operations atomically
+// This ensures entire batch either succeeds or fails - no partial spawns
+// Returns collision result with information about which position had a collision
+func (tx *SpatialTransaction) SpawnBatch(entities []EntityPosition) CollisionResult {
+	// Phase 1: Validate ALL positions first (before adding any operations)
+	for _, ep := range entities {
+		existingEntity := tx.world.GetEntityAtPosition(ep.X, ep.Y)
+		if existingEntity != 0 {
+			// Collision detected - return immediately without adding any operations
+			result := CollisionResult{
+				HasCollision:    true,
+				CollidingEntity: existingEntity,
+				X:               ep.X,
+				Y:               ep.Y,
+			}
+			tx.collisions = append(tx.collisions, result)
+			return result
+		}
+	}
+
+	// Phase 2: All positions are clear - add all spawn operations to transaction
+	for _, ep := range entities {
+		tx.operations = append(tx.operations, SpatialOperation{
+			Type:   OpSpawn,
+			Entity: ep.Entity,
+			NewX:   ep.X,
+			NewY:   ep.Y,
+		})
+	}
+
+	// Return success result
+	return CollisionResult{
+		HasCollision:    false,
+		CollidingEntity: 0,
+		X:               0,
+		Y:               0,
+	}
+}
+
 // HasCollisions returns true if any operations in the transaction had collisions
 func (tx *SpatialTransaction) HasCollisions() bool {
 	return len(tx.collisions) > 0

@@ -145,12 +145,11 @@ All tests must pass with `go test -race`
 
 ### Spatial Transaction System Race Prevention Strategy
 
-**Problem**: `UpdateSpatialIndex()` overwrites without checking, causing "phantom entities"
-
 **Solution**:
 - ✅ **Spatial transactions**: Atomic operations for move, spawn, destroy
 - ✅ **Collision detection**: Check for existing entities before placement
 - ✅ **Single lock commit**: All operations applied under one mutex
+- ✅ **Batch spawning**: SpawnBatch() validates all positions before creating entities
 - ✅ **MoveEntitySafe()**: Convenience method for common case
 - ✅ **ValidateSpatialIndex()**: Debug helper to detect inconsistencies
 
@@ -163,6 +162,15 @@ if result.HasCollision {
     handleCollision(result.CollidingEntity)
 }
 
+// Batch spawn for atomic sequence creation (all or nothing)
+tx := world.BeginSpatialTransaction()
+result := tx.SpawnBatch(entityPositions)
+if !result.HasCollision {
+    tx.Commit() // All entities spawned atomically
+} else {
+    tx.Rollback() // No entities spawned
+}
+
 // Or use explicit transaction for multiple operations
 tx := world.BeginSpatialTransaction()
 tx.Move(entity1, oldX1, oldY1, newX1, newY1)
@@ -172,13 +180,13 @@ tx.Commit() // All moves applied atomically
 
 **Example Race Scenario (Prevented)**:
 ```
-Thread A: UpdateSpatialIndex(E1, 5, 5)    // Old way - overwrites
-Thread B: UpdateSpatialIndex(E2, 5, 5)    // E1 becomes phantom
-Result:   E1 exists but not in spatial index ✗
-
-Thread A: MoveEntitySafe(E1, 0, 0, 5, 5)  // New way - collision detected
+Thread A: MoveEntitySafe(E1, 0, 0, 5, 5)  // Collision detected
 Thread B: MoveEntitySafe(E2, 1, 1, 5, 5)  // Returns HasCollision=true
 Result:   Both entities tracked correctly ✓
+
+// Batch spawn ensures atomic sequence creation
+tx.SpawnBatch([E1@(0,0), E2@(1,0), E3@(2,0)])
+If E2 position occupied: NO entities spawned (atomic failure) ✓
 ```
 
 ### Common Race Conditions to Test

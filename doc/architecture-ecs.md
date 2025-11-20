@@ -166,6 +166,23 @@ if result.HasCollision {
 }
 ```
 
+**Batch Spawn**:
+```go
+// For atomic sequence creation (all or nothing)
+tx := world.BeginSpatialTransaction()
+entityPositions := []engine.EntityPosition{
+    {Entity: entity1, X: 0, Y: 5},
+    {Entity: entity2, X: 1, Y: 5},
+    {Entity: entity3, X: 2, Y: 5},
+}
+result := tx.SpawnBatch(entityPositions)
+if !result.HasCollision {
+    tx.Commit() // All entities spawned atomically
+} else {
+    tx.Rollback() // No entities spawned
+}
+```
+
 **Example**:
 ```go
 // ✅ GOOD: Use spatial transaction for safe spawn
@@ -186,9 +203,12 @@ if result.HasCollision {
     // Handle collision
 }
 
-// ⚠️ LEGACY: Direct UpdateSpatialIndex (no collision detection)
-// Only use when you've already checked for collisions manually
-world.UpdateSpatialIndex(entity, 10, 5)
+// ✅ GOOD: Use SpawnBatch for atomic sequence creation
+tx := world.BeginSpatialTransaction()
+result := tx.SpawnBatch(entityPositions)
+if !result.HasCollision {
+    tx.Commit() // All entities added to spatial index atomically
+}
 ```
 
 ### Spatial Index Validation
@@ -258,7 +278,11 @@ for _, entity := range entities {
 **Step 3: Update Spatial Index if Position-Related**
 ```go
 if hasPosition {
-    world.UpdateSpatialIndex(entity, x, y)
+    tx := world.BeginSpatialTransaction()
+    result := tx.Spawn(entity, x, y)
+    if !result.HasCollision {
+        tx.Commit()
+    }
 }
 ```
 

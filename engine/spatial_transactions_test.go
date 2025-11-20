@@ -545,3 +545,232 @@ func TestSpatialTransaction_GetCollisions(t *testing.T) {
 		t.Errorf("Expected collisions with entities %d and %d", entity1, entity2)
 	}
 }
+
+// TestSpatialTransaction_SpawnBatchSuccess tests successful batch spawn
+func TestSpatialTransaction_SpawnBatchSuccess(t *testing.T) {
+	world := NewWorld()
+
+	// Create 5 entities for a sequence
+	entities := make([]Entity, 5)
+	batch := make([]EntityPosition, 5)
+
+	for i := 0; i < 5; i++ {
+		entities[i] = world.CreateEntity()
+		batch[i] = EntityPosition{
+			Entity: entities[i],
+			X:      i,
+			Y:      0,
+		}
+	}
+
+	// Spawn batch atomically
+	tx := world.BeginSpatialTransaction()
+	result := tx.SpawnBatch(batch)
+
+	// Verify no collision
+	if result.HasCollision {
+		t.Errorf("Expected no collision, got collision at (%d, %d)", result.X, result.Y)
+	}
+
+	// Commit transaction
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
+	// Verify all entities are in spatial index
+	for i := 0; i < 5; i++ {
+		found := world.GetEntityAtPosition(i, 0)
+		if found != entities[i] {
+			t.Errorf("Expected entity %d at position (%d, 0), got %d", entities[i], i, found)
+		}
+	}
+}
+
+// TestSpatialTransaction_SpawnBatchCollision tests batch spawn with collision
+func TestSpatialTransaction_SpawnBatchCollision(t *testing.T) {
+	world := NewWorld()
+
+	// Place an entity at position (2, 0)
+	existingEntity := world.CreateEntity()
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(existingEntity, 2, 0)
+		tx.Commit()
+	}
+
+	// Try to spawn a batch that includes position (2, 0)
+	entities := make([]Entity, 5)
+	batch := make([]EntityPosition, 5)
+
+	for i := 0; i < 5; i++ {
+		entities[i] = world.CreateEntity()
+		batch[i] = EntityPosition{
+			Entity: entities[i],
+			X:      i,
+			Y:      0,
+		}
+	}
+
+	// Spawn batch - should detect collision at (2, 0)
+	tx := world.BeginSpatialTransaction()
+	result := tx.SpawnBatch(batch)
+
+	// Verify collision detected
+	if !result.HasCollision {
+		t.Errorf("Expected collision at (2, 0)")
+	}
+
+	if result.X != 2 || result.Y != 0 {
+		t.Errorf("Expected collision at (2, 0), got (%d, %d)", result.X, result.Y)
+	}
+
+	if result.CollidingEntity != existingEntity {
+		t.Errorf("Expected collision with entity %d, got %d", existingEntity, result.CollidingEntity)
+	}
+
+	// Verify transaction has collisions
+	if !tx.HasCollisions() {
+		t.Errorf("Transaction should report collisions")
+	}
+
+	// Commit should succeed (no operations were added)
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
+	// Verify NO entities from the batch were spawned (atomic failure)
+	for i := 0; i < 5; i++ {
+		if i == 2 {
+			// Position 2 should still have the existing entity
+			if world.GetEntityAtPosition(i, 0) != existingEntity {
+				t.Errorf("Expected existing entity at (2, 0)")
+			}
+		} else {
+			// All other positions should be empty
+			if world.GetEntityAtPosition(i, 0) != 0 {
+				t.Errorf("Expected no entity at (%d, 0) after batch collision", i)
+			}
+		}
+	}
+}
+
+// TestSpatialTransaction_SpawnBatchRollback tests batch spawn with rollback
+func TestSpatialTransaction_SpawnBatchRollback(t *testing.T) {
+	world := NewWorld()
+
+	// Create batch of entities
+	entities := make([]Entity, 3)
+	batch := make([]EntityPosition, 3)
+
+	for i := 0; i < 3; i++ {
+		entities[i] = world.CreateEntity()
+		batch[i] = EntityPosition{
+			Entity: entities[i],
+			X:      i * 2,
+			Y:      5,
+		}
+	}
+
+	// Spawn batch
+	tx := world.BeginSpatialTransaction()
+	result := tx.SpawnBatch(batch)
+
+	if result.HasCollision {
+		t.Errorf("Expected no collision")
+	}
+
+	// Rollback instead of commit
+	tx.Rollback()
+
+	// Verify NO entities were spawned
+	for i := 0; i < 3; i++ {
+		if world.GetEntityAtPosition(i*2, 5) != 0 {
+			t.Errorf("Expected no entity at (%d, 5) after rollback", i*2)
+		}
+	}
+}
+
+// TestSpatialTransaction_SpawnBatchConcurrent tests concurrent batch spawns
+func TestSpatialTransaction_SpawnBatchConcurrent(t *testing.T) {
+	world := NewWorld()
+
+	// Create multiple batches to spawn concurrently
+	numBatches := 5
+	batchSize := 10
+	var wg sync.WaitGroup
+
+	successCount := 0
+	var successMutex sync.Mutex
+
+	for b := 0; b < numBatches; b++ {
+		wg.Add(1)
+		go func(batchNum int) {
+			defer wg.Done()
+
+			// Small delay to increase concurrency
+			time.Sleep(time.Microsecond * time.Duration(batchNum*10))
+
+			// Create batch - all entities in same row but different columns
+			entities := make([]Entity, batchSize)
+			batch := make([]EntityPosition, batchSize)
+
+			for i := 0; i < batchSize; i++ {
+				entities[i] = world.CreateEntity()
+				batch[i] = EntityPosition{
+					Entity: entities[i],
+					X:      i,
+					Y:      batchNum,
+				}
+			}
+
+			// Spawn batch
+			tx := world.BeginSpatialTransaction()
+			result := tx.SpawnBatch(batch)
+
+			if !result.HasCollision {
+				if err := tx.Commit(); err == nil {
+					successMutex.Lock()
+					successCount++
+					successMutex.Unlock()
+				}
+			}
+		}(b)
+	}
+
+	wg.Wait()
+
+	// Verify all batches succeeded (different rows, no conflicts)
+	if successCount != numBatches {
+		t.Errorf("Expected %d successful batches, got %d", numBatches, successCount)
+	}
+
+	// Verify spatial index has all entities
+	for b := 0; b < numBatches; b++ {
+		for i := 0; i < batchSize; i++ {
+			if world.GetEntityAtPosition(i, b) == 0 {
+				t.Errorf("Expected entity at (%d, %d)", i, b)
+			}
+		}
+	}
+}
+
+// TestSpatialTransaction_SpawnBatchEmpty tests empty batch spawn
+func TestSpatialTransaction_SpawnBatchEmpty(t *testing.T) {
+	world := NewWorld()
+
+	// Create empty batch
+	batch := make([]EntityPosition, 0)
+
+	tx := world.BeginSpatialTransaction()
+	result := tx.SpawnBatch(batch)
+
+	// Should succeed with no collision
+	if result.HasCollision {
+		t.Errorf("Expected no collision for empty batch")
+	}
+
+	// Commit should succeed
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+}
