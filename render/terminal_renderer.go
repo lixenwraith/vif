@@ -528,7 +528,7 @@ func (r *TerminalRenderer) drawDrain(ctx *engine.GameContext, defaultStyle tcell
 	mainc, _, style, _ := r.screen.GetContent(screenX, screenY)
 	_, bg, _ := style.Decompose()
 
-	// Use 'X' character with magenta foreground, inheriting background
+	// Use '╬' character with light cyan foreground, inheriting background
 	drainStyle := defaultStyle.Foreground(RgbDrain).Background(bg)
 
 	// If there's no existing background (e.g., just been cleared), use default background
@@ -537,11 +537,11 @@ func (r *TerminalRenderer) drawDrain(ctx *engine.GameContext, defaultStyle tcell
 		drainStyle = defaultStyle.Foreground(RgbDrain).Background(defaultBg)
 	}
 
-	// Preserve the underlying character if it exists, otherwise use 'X'
-	drainChar := 'X'
+	// Preserve the underlying character if it exists, otherwise use '╬'
+	drainChar := '╬' // Character 206
 	if mainc != 0 && mainc != ' ' {
 		// There's an underlying character, overlay drain on top
-		drainChar = 'X' // Still use X to clearly show drain position
+		drainChar = '╬' // Still use ╬ to clearly show drain position
 	}
 
 	r.screen.SetContent(screenX, screenY, drainChar, nil, drainStyle)

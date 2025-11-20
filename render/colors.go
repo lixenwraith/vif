@@ -20,8 +20,8 @@ var (
 	RgbSequenceBlueBright = tcell.NewRGBColor(140, 190, 255) // Bright Blue
 
 	RgbSequenceGold = tcell.NewRGBColor(255, 255, 0) // Bright Yellow for gold sequence
-	RgbDecayFalling = tcell.NewRGBColor(0, 139, 139) // Dark Cyan for decay animation
-	RgbDrain        = tcell.NewRGBColor(255, 0, 255) // Magenta for drain entity
+	RgbDecayFalling = tcell.NewRGBColor(0, 139, 139)   // Dark Cyan for decay animation
+	RgbDrain        = tcell.NewRGBColor(224, 255, 255) // Light Cyan for drain entity
 
 	RgbLineNumbers     = tcell.NewRGBColor(180, 180, 180) // Brighter gray
 	RgbStatusBar       = tcell.NewRGBColor(255, 255, 255) // White

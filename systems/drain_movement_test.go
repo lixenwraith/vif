@@ -31,12 +31,22 @@ func TestDrainSystem_MovementAfter250ms(t *testing.T) {
 
 	drainSys := NewDrainSystem(ctx)
 
-	// Spawn drain at position (0, 0)
+	// Set cursor to (0, 0) so drain spawns there
+	ctx.State.SetCursorX(0)
+	ctx.State.SetCursorY(0)
+
+	// Spawn drain at cursor position (0, 0)
 	ctx.State.SetScore(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	if !ctx.State.GetDrainActive() {
 		t.Fatal("Expected drain to be active")
+	}
+
+	// Verify drain spawned at cursor position (0, 0)
+	if ctx.State.GetDrainX() != 0 || ctx.State.GetDrainY() != 0 {
+		t.Errorf("Expected drain to spawn at (0, 0), got (%d, %d)",
+			ctx.State.GetDrainX(), ctx.State.GetDrainY())
 	}
 
 	// Set cursor to (5, 3) - drain should move toward it
@@ -543,9 +553,19 @@ func TestDrainSystem_MovementMultipleSteps(t *testing.T) {
 
 	drainSys := NewDrainSystem(ctx)
 
-	// Spawn drain at (0, 0)
+	// Set cursor to (0, 0) so drain spawns there
+	ctx.State.SetCursorX(0)
+	ctx.State.SetCursorY(0)
+
+	// Spawn drain at cursor position (0, 0)
 	ctx.State.SetScore(100)
 	drainSys.Update(world, 16*time.Millisecond)
+
+	// Verify drain spawned at (0, 0)
+	if ctx.State.GetDrainX() != 0 || ctx.State.GetDrainY() != 0 {
+		t.Fatalf("Expected drain to spawn at (0, 0), got (%d, %d)",
+			ctx.State.GetDrainX(), ctx.State.GetDrainY())
+	}
 
 	// Set cursor at (5, 5) - requires 5 steps in each direction
 	ctx.State.SetCursorX(5)

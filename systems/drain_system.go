@@ -54,37 +54,32 @@ func (s *DrainSystem) Update(world *engine.World, dt time.Duration) {
 	}
 }
 
-// spawnDrain creates the drain entity at a random position
+// spawnDrain creates the drain entity centered on the cursor
 func (s *DrainSystem) spawnDrain(world *engine.World) {
 	// Check if drain is already active (double-check for safety)
 	if s.ctx.State.GetDrainActive() {
 		return
 	}
 
-	// Get cursor position for spawn exclusion zone
+	// Get cursor position for spawn location
 	cursor := s.ctx.State.ReadCursorPosition()
 
-	// Find a spawn position that is not at cursor and not occupied
-	// For simplicity, spawn at top-left corner (0, 0) if available
-	// Later parts will improve this logic
-	spawnX := 0
-	spawnY := 0
+	// Spawn drain centered on cursor
+	spawnX := cursor.X
+	spawnY := cursor.Y
 
 	// Basic validation: ensure position is within bounds
-	if spawnX < 0 || spawnX >= s.ctx.GameWidth || spawnY < 0 || spawnY >= s.ctx.GameHeight {
-		// Invalid position, use safe default
+	if spawnX < 0 {
 		spawnX = 0
+	}
+	if spawnX >= s.ctx.GameWidth {
+		spawnX = s.ctx.GameWidth - 1
+	}
+	if spawnY < 0 {
 		spawnY = 0
 	}
-
-	// Avoid spawning directly on cursor
-	if spawnX == cursor.X && spawnY == cursor.Y {
-		// Try alternative position
-		if spawnX+1 < s.ctx.GameWidth {
-			spawnX++
-		} else if spawnY+1 < s.ctx.GameHeight {
-			spawnY++
-		}
+	if spawnY >= s.ctx.GameHeight {
+		spawnY = s.ctx.GameHeight - 1
 	}
 
 	// Create drain entity
