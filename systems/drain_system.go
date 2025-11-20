@@ -83,14 +83,6 @@ func (s *DrainSystem) spawnDrain(world *engine.World) {
 		spawnY = s.ctx.GameHeight - 1
 	}
 
-	// CRITICAL FIX: Handle collision at spawn position BEFORE creating drain entity
-	// This prevents orphaning entities when drain spawns on their position
-	targetEntity := world.GetEntityAtPosition(spawnX, spawnY)
-	if targetEntity != 0 {
-		// There's an entity at the spawn position - handle collision before spawning
-		s.handleCollisionAtPosition(world, spawnX, spawnY, targetEntity)
-	}
-
 	// Create drain entity
 	entity := world.CreateEntity()
 
@@ -110,8 +102,18 @@ func (s *DrainSystem) spawnDrain(world *engine.World) {
 		IsOnCursor:    true, // Drain spawns centered on cursor
 	})
 
-	// Update spatial index
-	world.UpdateSpatialIndex(entity, spawnX, spawnY)
+	// Use spatial transaction to safely add drain to spatial index
+	// This handles collision detection and cleanup atomically
+	tx := world.BeginSpatialTransaction()
+	result := tx.Spawn(entity, spawnX, spawnY)
+
+	// If there's a collision, handle it before committing
+	if result.HasCollision {
+		s.handleCollisionAtPosition(world, spawnX, spawnY, result.CollidingEntity)
+	}
+
+	// Commit the spawn operation
+	tx.Commit()
 
 	// Update GameState atomics
 	s.ctx.State.SetDrainActive(true)
@@ -207,16 +209,25 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 		newY = s.ctx.GameHeight - 1
 	}
 
-	// CRITICAL FIX: Handle collision at NEW position BEFORE updating spatial index
-	// This prevents orphaning entities when drain moves to their position
-	targetEntity := world.GetEntityAtPosition(newX, newY)
-	if targetEntity != 0 && uint64(targetEntity) != entityID {
-		// There's an entity at the target position (not the drain itself)
-		// Handle collision before moving
-		s.handleCollisionAtPosition(world, newX, newY, targetEntity)
+	// Get current position from PositionComponent
+	posType := reflect.TypeOf(components.PositionComponent{})
+	posComp, ok := world.GetComponent(entity, posType)
+	if !ok {
+		return // No position component, can't move
+	}
+	pos := posComp.(components.PositionComponent)
+
+	// Use MoveEntitySafe to atomically handle collision detection and spatial index update
+	result := world.MoveEntitySafe(entity, pos.X, pos.Y, newX, newY)
+
+	// If there's a collision, handle it
+	if result.HasCollision {
+		s.handleCollisionAtPosition(world, newX, newY, result.CollidingEntity)
+		// Don't update position if there was a collision
+		return
 	}
 
-	// Update drain component position
+	// Movement succeeded - update drain component position
 	drain.X = newX
 	drain.Y = newY
 	drain.LastMoveTime = now
@@ -228,21 +239,9 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 	world.AddComponent(entity, drain)
 
 	// Update position component
-	posType := reflect.TypeOf(components.PositionComponent{})
-	if posComp, ok := world.GetComponent(entity, posType); ok {
-		pos := posComp.(components.PositionComponent)
-
-		// Remove from old spatial index position
-		world.RemoveFromSpatialIndex(pos.X, pos.Y)
-
-		// Update position
-		pos.X = newX
-		pos.Y = newY
-		world.AddComponent(entity, pos)
-
-		// Update spatial index with new position
-		world.UpdateSpatialIndex(entity, newX, newY)
-	}
+	pos.X = newX
+	pos.Y = newY
+	world.AddComponent(entity, pos)
 
 	// Update GameState atomics for renderer
 	s.ctx.State.SetDrainX(newX)

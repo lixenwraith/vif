@@ -143,6 +143,44 @@ All tests must pass with `go test -race`
 
 **Benchmarks**: Validate performance impact of synchronization
 
+### Spatial Transaction System Race Prevention Strategy
+
+**Problem**: `UpdateSpatialIndex()` overwrites without checking, causing "phantom entities"
+
+**Solution**:
+- ✅ **Spatial transactions**: Atomic operations for move, spawn, destroy
+- ✅ **Collision detection**: Check for existing entities before placement
+- ✅ **Single lock commit**: All operations applied under one mutex
+- ✅ **MoveEntitySafe()**: Convenience method for common case
+- ✅ **ValidateSpatialIndex()**: Debug helper to detect inconsistencies
+
+**Implementation**:
+```go
+// Safe move with collision detection
+result := world.MoveEntitySafe(entity, oldX, oldY, newX, newY)
+if result.HasCollision {
+    // Handle collision atomically
+    handleCollision(result.CollidingEntity)
+}
+
+// Or use explicit transaction for multiple operations
+tx := world.BeginSpatialTransaction()
+tx.Move(entity1, oldX1, oldY1, newX1, newY1)
+tx.Move(entity2, oldX2, oldY2, newX2, newY2)
+tx.Commit() // All moves applied atomically
+```
+
+**Example Race Scenario (Prevented)**:
+```
+Thread A: UpdateSpatialIndex(E1, 5, 5)    // Old way - overwrites
+Thread B: UpdateSpatialIndex(E2, 5, 5)    // E1 becomes phantom
+Result:   E1 exists but not in spatial index ✗
+
+Thread A: MoveEntitySafe(E1, 0, 0, 5, 5)  // New way - collision detected
+Thread B: MoveEntitySafe(E2, 1, 1, 5, 5)  // Returns HasCollision=true
+Result:   Both entities tracked correctly ✓
+```
+
 ### Common Race Conditions to Test
 
 #### 1. Cleaner System
@@ -165,6 +203,8 @@ All tests must pass with `go test -race`
 - Concurrent reads during entity destruction
 - Position updates during queries
 - Entity removal during iteration
+- **Phantom entities from overwritten spatial index (fixed via transactions)**
+- **Collision detection races (fixed via atomic transaction commit)**
 
 #### 5. Nugget System
 - Concurrent collection and decay destruction

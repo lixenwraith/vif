@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"reflect"
 	"sync"
 	"time"
@@ -330,6 +331,83 @@ func (w *World) EntityCount() int {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return len(w.entities)
+}
+
+// MoveEntitySafe safely moves an entity from one position to another using spatial transactions
+// This prevents race conditions and ensures atomic spatial index updates
+// Returns a CollisionResult indicating if the move succeeded or if there was a collision
+func (w *World) MoveEntitySafe(entity Entity, oldX, oldY, newX, newY int) CollisionResult {
+	// Begin transaction
+	tx := w.BeginSpatialTransaction()
+
+	// Attempt move
+	result := tx.Move(entity, oldX, oldY, newX, newY)
+
+	// If no collision, commit the transaction
+	if !result.HasCollision {
+		tx.Commit()
+	}
+
+	return result
+}
+
+// ValidateSpatialIndex checks the spatial index for consistency
+// Returns a list of inconsistencies found (empty if consistent)
+// This is primarily used for debugging and testing
+func (w *World) ValidateSpatialIndex() []string {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
+	inconsistencies := make([]string, 0)
+
+	// Check that all entities in spatial index actually exist
+	for y, row := range w.spatialIndex {
+		for x, entity := range row {
+			if _, ok := w.entities[entity]; !ok {
+				inconsistencies = append(inconsistencies,
+					fmt.Sprintf("Spatial index at (%d,%d) references non-existent entity %d", x, y, entity))
+			}
+		}
+	}
+
+	// Check that all entities with PositionComponent are in spatial index
+	for entity, components := range w.entities {
+		for compType, comp := range components {
+			if compType.Name() == "PositionComponent" {
+				// Use reflection to get X and Y fields
+				posVal := reflect.ValueOf(comp)
+				if posVal.Kind() == reflect.Struct {
+					xField := posVal.FieldByName("X")
+					yField := posVal.FieldByName("Y")
+					if xField.IsValid() && yField.IsValid() && xField.CanInt() && yField.CanInt() {
+						x := int(xField.Int())
+						y := int(yField.Int())
+
+						// Check if entity is in spatial index at this position
+						if row, ok := w.spatialIndex[y]; ok {
+							if indexedEntity, ok := row[x]; ok {
+								if indexedEntity != entity {
+									inconsistencies = append(inconsistencies,
+										fmt.Sprintf("Entity %d has PositionComponent at (%d,%d) but spatial index has entity %d",
+											entity, x, y, indexedEntity))
+								}
+							} else {
+								inconsistencies = append(inconsistencies,
+									fmt.Sprintf("Entity %d has PositionComponent at (%d,%d) but is not in spatial index",
+										entity, x, y))
+							}
+						} else {
+							inconsistencies = append(inconsistencies,
+								fmt.Sprintf("Entity %d has PositionComponent at (%d,%d) but row %d is not in spatial index",
+									entity, x, y, y))
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return inconsistencies
 }
 
 // EntitySnapshot represents an entity with its components captured atomically

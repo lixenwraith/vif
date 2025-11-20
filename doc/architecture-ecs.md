@@ -127,18 +127,88 @@ World.componentsByType[Type] -> []Entity
 - Changing entity position
 - Destroying entity
 
+### Spatial Transactions
+
+**Purpose**: Atomic spatial index operations to prevent race conditions
+
+The spatial transaction system ensures that all spatial index updates are:
+- **Collision-detected**: Check for existing entities before placement
+- **Atomic**: All operations commit under single lock
+- **Safe**: Prevent phantom entities and spatial index inconsistencies
+
+**Transaction Operations**:
+```go
+// Begin transaction
+tx := world.BeginSpatialTransaction()
+
+// Move entity (checks for collision)
+result := tx.Move(entity, oldX, oldY, newX, newY)
+if result.HasCollision {
+    // Handle collision with result.CollidingEntity
+}
+
+// Spawn entity at position
+result := tx.Spawn(entity, x, y)
+
+// Destroy entity from position
+tx.Destroy(entity, x, y)
+
+// Commit all operations atomically
+tx.Commit()
+```
+
+**Convenience Method**:
+```go
+// For simple moves, use MoveEntitySafe
+result := world.MoveEntitySafe(entity, oldX, oldY, newX, newY)
+if result.HasCollision {
+    // Handle collision
+}
+```
+
 **Example**:
 ```go
-// ✅ GOOD: Update spatial index
+// ✅ GOOD: Use spatial transaction for safe spawn
 entity := world.CreateEntity()
 world.AddComponent(entity, PositionComponent{X: 10, Y: 5})
-world.UpdateSpatialIndex(entity, 10, 5)
 
-// ❌ BAD: Missing spatial index update
-entity := world.CreateEntity()
-world.AddComponent(entity, PositionComponent{X: 10, Y: 5})
-// Entity not findable via GetEntityAtPosition!
+tx := world.BeginSpatialTransaction()
+result := tx.Spawn(entity, 10, 5)
+if result.HasCollision {
+    // Handle existing entity at position
+    handleCollision(result.CollidingEntity)
+}
+tx.Commit()
+
+// ✅ GOOD: Use MoveEntitySafe for safe movement
+result := world.MoveEntitySafe(entity, 10, 5, 15, 8)
+if result.HasCollision {
+    // Handle collision
+}
+
+// ⚠️ LEGACY: Direct UpdateSpatialIndex (no collision detection)
+// Only use when you've already checked for collisions manually
+world.UpdateSpatialIndex(entity, 10, 5)
 ```
+
+### Spatial Index Validation
+
+**Debug Helper**:
+```go
+// Validate spatial index consistency
+inconsistencies := world.ValidateSpatialIndex()
+if len(inconsistencies) > 0 {
+    // Index has inconsistencies - log or panic
+    for _, msg := range inconsistencies {
+        log.Printf("Spatial index error: %s", msg)
+    }
+}
+```
+
+**Checks performed**:
+- All entities in spatial index actually exist
+- All entities with PositionComponent are in spatial index
+- Spatial index positions match component positions
 
 ## Entity Lifecycle
 
