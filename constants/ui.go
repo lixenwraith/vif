@@ -70,6 +70,9 @@ const (
 
 // Drain System Constants
 const (
+	// DrainChar is the character used to render the drain entity (╬ - Unicode U+256C)
+	DrainChar = '╬'
+
 	// DrainMoveIntervalMs is the interval between drain movement updates (250ms)
 	DrainMoveIntervalMs = 250
 

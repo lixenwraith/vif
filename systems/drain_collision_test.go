@@ -186,7 +186,7 @@ func TestDrainSystem_CollisionWithRedCharacter(t *testing.T) {
 	}
 }
 
-// TestDrainSystem_CollisionWithGoldSequence tests drain destroys entire gold sequence (Part 6)
+// TestDrainSystem_CollisionWithGoldSequence tests drain destroys entire gold sequence
 func TestDrainSystem_CollisionWithGoldSequence(t *testing.T) {
 	screen := tcell.NewSimulationScreen("UTF-8")
 	screen.SetSize(80, 24)
@@ -521,7 +521,7 @@ func TestDrainSystem_CollisionAtDifferentPositions(t *testing.T) {
 	}
 }
 
-// TestDrainSystem_CollisionWithNugget tests drain destroys nugget and clears active nugget (Part 6)
+// TestDrainSystem_CollisionWithNugget tests drain destroys nugget and clears active nugget
 func TestDrainSystem_CollisionWithNugget(t *testing.T) {
 	screen := tcell.NewSimulationScreen("UTF-8")
 	screen.SetSize(80, 24)
@@ -687,7 +687,7 @@ func TestDrainSystem_GoldCollisionInactiveGold(t *testing.T) {
 	}
 }
 
-// TestDrainSystem_CollisionWithFallingDecay tests drain destroys falling decay entities (Part 7)
+// TestDrainSystem_CollisionWithFallingDecay tests drain destroys falling decay entities
 func TestDrainSystem_CollisionWithFallingDecay(t *testing.T) {
 	screen := tcell.NewSimulationScreen("UTF-8")
 	screen.SetSize(80, 24)

@@ -293,14 +293,14 @@ func (s *DrainSystem) handleCollisions(world *engine.World) {
 		return // Don't collide with self
 	}
 
-	// Part 6: Check for nugget collision first
+	// Check for nugget collision first
 	nuggetType := reflect.TypeOf(components.NuggetComponent{})
 	if world.HasComponent(entity, nuggetType) {
 		s.handleNuggetCollision(world, entity)
 		return
 	}
 
-	// Part 7: Check for falling decay collision
+	// Check for falling decay collision
 	fallingDecayType := reflect.TypeOf(components.FallingDecayComponent{})
 	if world.HasComponent(entity, fallingDecayType) {
 		s.handleFallingDecayCollision(world, entity)
@@ -316,13 +316,13 @@ func (s *DrainSystem) handleCollisions(world *engine.World) {
 
 	seq := seqComp.(components.SequenceComponent)
 
-	// Part 6: Handle gold sequence collision
+	// Handle gold sequence collision
 	if seq.Type == components.SequenceGold {
 		s.handleGoldSequenceCollision(world, seq.ID)
 		return
 	}
 
-	// Part 5: Handle Blue, Green, and Red sequences
+	// Handle Blue, Green, and Red sequences
 	if seq.Type == components.SequenceBlue ||
 		seq.Type == components.SequenceGreen ||
 		seq.Type == components.SequenceRed {
@@ -400,7 +400,7 @@ func (s *DrainSystem) handleNuggetCollision(world *engine.World, entity engine.E
 }
 
 // handleFallingDecayCollision destroys the falling decay entity
-// Part 7: Collision with falling decay entities during decay animation
+// Collision with falling decay entities during decay animation
 func (s *DrainSystem) handleFallingDecayCollision(world *engine.World, entity engine.Entity) {
 	// Simply destroy the falling decay entity
 	// This maintains decay animation continuity - other falling entities continue

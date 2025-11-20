@@ -6,6 +6,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/components"
+	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
@@ -528,7 +529,7 @@ func (r *TerminalRenderer) drawDrain(ctx *engine.GameContext, defaultStyle tcell
 	mainc, _, style, _ := r.screen.GetContent(screenX, screenY)
 	_, bg, _ := style.Decompose()
 
-	// Use '╬' character with light cyan foreground, inheriting background
+	// Use drain character with light cyan foreground, inheriting background
 	drainStyle := defaultStyle.Foreground(RgbDrain).Background(bg)
 
 	// If there's no existing background (e.g., just been cleared), use default background
@@ -537,11 +538,11 @@ func (r *TerminalRenderer) drawDrain(ctx *engine.GameContext, defaultStyle tcell
 		drainStyle = defaultStyle.Foreground(RgbDrain).Background(defaultBg)
 	}
 
-	// Preserve the underlying character if it exists, otherwise use '╬'
-	drainChar := '╬' // Character 206
+	// Preserve the underlying character if it exists, otherwise use the drain character
+	drainChar := constants.DrainChar
 	if mainc != 0 && mainc != ' ' {
 		// There's an underlying character, overlay drain on top
-		drainChar = '╬' // Still use ╬ to clearly show drain position
+		drainChar = constants.DrainChar // Still use drain character to clearly show drain position
 	}
 
 	r.screen.SetContent(screenX, screenY, drainChar, nil, drainStyle)
