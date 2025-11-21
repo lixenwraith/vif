@@ -2,6 +2,7 @@ package engine
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/constants"
@@ -58,62 +59,64 @@ func (p GamePhase) String() string {
 
 // ClockScheduler manages game logic on a fixed 50ms tick
 // Provides infrastructure for phase transitions and state ownership
+// Handles pause-aware scheduling without busy-wait
 type ClockScheduler struct {
 	ctx          *GameContext
 	timeProvider TimeProvider
 
-	// 50ms ticker for clock-based game logic
-	ticker *time.Ticker
+	// Tick configuration
+	tickInterval     time.Duration
+	lastGameTickTime time.Time // Last tick in game time
 
 	// Control channels
 	stopChan chan struct{}
 	stopOnce sync.Once
 	wg       sync.WaitGroup // Ensures goroutine exits before Stop() returns
+	running  atomic.Bool
 
 	// Tick counter for debugging and metrics
-	tickCount uint64
+	tickCount atomic.Uint64
 	mu        sync.RWMutex
 
 	// System references needed for triggering transitions
 	// These will be set via SetSystems() after scheduler creation
-	goldSystem    GoldSequenceSystemInterface
+	goldSystem    GoldSystemInterface
 	decaySystem   DecaySystemInterface
 	cleanerSystem CleanerSystemInterface
 }
 
-// GoldSequenceSystemInterface defines the methods needed by the clock scheduler
-type GoldSequenceSystemInterface interface {
+// GoldSystemInterface defines the interface for gold sequence system
+type GoldSystemInterface interface {
 	TimeoutGoldSequence(world *World)
 }
 
-// DecaySystemInterface defines the methods needed by the clock scheduler
+// DecaySystemInterface defines the interface for decay system
 type DecaySystemInterface interface {
 	TriggerDecayAnimation(world *World)
 }
 
-// CleanerSystemInterface defines the methods needed by the clock scheduler
+// CleanerSystemInterface defines the interface for cleaner system
 type CleanerSystemInterface interface {
 	ActivateCleaners(world *World)
 	IsAnimationComplete() bool
 }
 
-// NewClockScheduler creates a new clock scheduler with 50ms tick rate
-func NewClockScheduler(ctx *GameContext) *ClockScheduler {
+// NewClockScheduler creates a new clock scheduler with specified tick interval
+// Standard tick interval is 50ms for game logic updates
+func NewClockScheduler(ctx *GameContext, tickInterval time.Duration) *ClockScheduler {
 	return &ClockScheduler{
-		ctx:           ctx,
-		timeProvider:  ctx.TimeProvider,
-		ticker:        time.NewTicker(50 * time.Millisecond),
-		stopChan:      make(chan struct{}),
-		tickCount:     0,
-		goldSystem:    nil,
-		decaySystem:   nil,
-		cleanerSystem: nil,
+		ctx:              ctx,
+		timeProvider:     ctx.TimeProvider,
+		tickInterval:     tickInterval,
+		lastGameTickTime: ctx.TimeProvider.Now(),
+		tickCount:        atomic.Uint64{},
+		stopChan:         make(chan struct{}),
 	}
 }
 
 // SetSystems sets the system references needed for phase transitions
 // Must be called before Start() to enable phase transition logic
-func (cs *ClockScheduler) SetSystems(goldSystem GoldSequenceSystemInterface, decaySystem DecaySystemInterface, cleanerSystem CleanerSystemInterface) {
+func (cs *ClockScheduler) SetSystems(goldSystem GoldSystemInterface, decaySystem DecaySystemInterface, cleanerSystem CleanerSystemInterface) {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 	cs.goldSystem = goldSystem
@@ -121,56 +124,132 @@ func (cs *ClockScheduler) SetSystems(goldSystem GoldSequenceSystemInterface, dec
 	cs.cleanerSystem = cleanerSystem
 }
 
-// Start begins the clock scheduler in a separate goroutine
-// Returns immediately; scheduler runs until Stop() is called
-func (cs *ClockScheduler) Start() {
-	cs.wg.Add(1)
-	go cs.run()
+// SetGoldSequenceSystem sets the gold sequence system for timeout handling
+func (cs *ClockScheduler) SetGoldSequenceSystem(system GoldSystemInterface) {
+	cs.goldSystem = system
 }
 
-// run is the main clock loop (runs in goroutine)
-func (cs *ClockScheduler) run() {
+// SetDecaySystem sets the decay system for animation triggering
+func (cs *ClockScheduler) SetDecaySystem(system DecaySystemInterface) {
+	cs.decaySystem = system
+}
+
+// SetCleanerSystem sets the cleaner system for activation
+func (cs *ClockScheduler) SetCleanerSystem(system CleanerSystemInterface) {
+	cs.cleanerSystem = system
+}
+
+// Start begins the scheduler loop
+func (cs *ClockScheduler) Start() {
+	if cs.running.CompareAndSwap(false, true) {
+		cs.wg.Add(1)
+		go cs.schedulerLoop()
+	}
+}
+
+// Stop halts the scheduler loop and waits for goroutine to exit
+func (cs *ClockScheduler) Stop() {
+	cs.stopOnce.Do(func() {
+		if cs.running.CompareAndSwap(true, false) {
+			close(cs.stopChan)
+			cs.wg.Wait() // Wait for goroutine to fully exit
+		}
+	})
+}
+
+// schedulerLoop runs the main scheduling loop with pause awareness
+// Implements adaptive sleeping that respects pause state to avoid busy-waiting
+func (cs *ClockScheduler) schedulerLoop() {
 	defer cs.wg.Done()
+
+	// Adaptive ticker that respects pause state
 	for {
 		select {
-		case <-cs.ticker.C:
-			cs.tick()
 		case <-cs.stopChan:
+			return
+		default:
+		}
+
+		// Calculate next tick time
+		var sleepDuration time.Duration
+
+		if cs.ctx.IsPaused.Load() {
+			// During pause, sleep longer to avoid busy-wait
+			sleepDuration = 100 * time.Millisecond
+		} else {
+			// Calculate how long until next game tick
+			cs.mu.RLock()
+			lastTick := cs.lastGameTickTime
+			cs.mu.RUnlock()
+
+			gameNow := cs.timeProvider.Now()
+			elapsed := gameNow.Sub(lastTick)
+
+			if elapsed >= cs.tickInterval {
+				// Tick is due, process immediately
+				cs.processTick()
+
+				// Update last tick time
+				cs.mu.Lock()
+				cs.lastGameTickTime = gameNow
+				cs.mu.Unlock()
+
+				// Increment tick counter for debugging/tests
+				cs.tickCount.Add(1)
+
+				sleepDuration = cs.tickInterval
+			} else {
+				// Sleep until next tick
+				sleepDuration = cs.tickInterval - elapsed
+				// Cap sleep duration to avoid oversleeping
+				if sleepDuration > cs.tickInterval {
+					sleepDuration = cs.tickInterval
+				}
+			}
+		}
+
+		// Sleep with interruptible timer
+		timer := time.NewTimer(sleepDuration)
+		select {
+		case <-timer.C:
+			// Continue loop
+		case <-cs.stopChan:
+			timer.Stop()
 			return
 		}
 	}
 }
 
-// tick executes one clock cycle (called every 50ms)
+// processTick executes one clock cycle (called every 50ms when not paused)
 // Implements phase transition logic for Gold→GoldComplete→Decay→Normal cycle
 // Implements cleaner trigger logic (parallel to main phase cycle)
-func (cs *ClockScheduler) tick() {
-	// Skip tick execution when paused
+func (cs *ClockScheduler) processTick() {
+	// Skip tick execution when paused (defensive check)
 	if cs.ctx.IsPaused.Load() {
 		return
 	}
 
-	cs.mu.Lock()
-	cs.tickCount++
+	// Get systems references with mutex protection
+	cs.mu.RLock()
 	goldSys := cs.goldSystem
 	decaySys := cs.decaySystem
 	cleanerSys := cs.cleanerSystem
-	cs.mu.Unlock()
+	cs.mu.RUnlock()
 
-	// Get total pause duration for timer adjustments
-	pauseDuration := cs.ctx.GetTotalPauseDuration()
+	// Get world reference
+	world := cs.ctx.World
 
 	// Get current phase from GameState
-	phase := cs.ctx.State.GetPhase()
+	phaseSnapshot := cs.ctx.State.ReadPhaseState()
 
 	// Handle phase transitions based on current phase
-	switch phase {
+	switch phaseSnapshot.Phase {
 	case PhaseGoldActive:
-		// Check if gold sequence has timed out (with pause adjustment)
-		if cs.ctx.State.IsGoldTimedOut(pauseDuration) {
+		// Check if gold sequence has timed out (pausable clock handles pause adjustment internally)
+		if cs.ctx.State.IsGoldTimedOut() {
 			// Gold timeout - call gold system to remove gold entities
 			if goldSys != nil {
-				goldSys.TimeoutGoldSequence(cs.ctx.World)
+				goldSys.TimeoutGoldSequence(world)
 			} else {
 				// No gold system - just deactivate gold sequence directly
 				cs.ctx.State.DeactivateGoldSequence()
@@ -190,17 +269,17 @@ func (cs *ClockScheduler) tick() {
 				constants.DecayIntervalRangeSeconds,
 			)
 		}
-		// Note: If cleaners are pending, they will be handled below
+		// Note: If cleaners are pending, they will be handled in PhaseCleanerPending
 
 	case PhaseDecayWait:
-		// Check if decay timer has expired (with pause adjustment)
-		if cs.ctx.State.IsDecayReady(pauseDuration) {
+		// Check if decay timer has expired (pausable clock handles pause adjustment internally)
+		if cs.ctx.State.IsDecayReady() {
 			// Timer expired - transition to DecayAnimation
-			cs.ctx.State.StartDecayAnimation()
-
-			// Trigger decay system to spawn falling entities
-			if decaySys != nil {
-				decaySys.TriggerDecayAnimation(cs.ctx.World)
+			if cs.ctx.State.StartDecayAnimation() {
+				// Trigger decay system to spawn falling entities
+				if decaySys != nil {
+					decaySys.TriggerDecayAnimation(world)
+				}
 			}
 		}
 
@@ -216,7 +295,7 @@ func (cs *ClockScheduler) tick() {
 		if cs.ctx.State.ActivateCleaners() {
 			// Trigger cleaner system to spawn cleaners
 			if cleanerSys != nil {
-				cleanerSys.ActivateCleaners(cs.ctx.World)
+				cleanerSys.ActivateCleaners(world)
 			}
 		}
 
@@ -240,23 +319,25 @@ func (cs *ClockScheduler) tick() {
 		// Gold spawning is handled by GoldSequenceSystem's Update() method
 		// Nothing to do in clock tick for this phase
 	}
+
+	// Update boost timer (check for expiration)
+	// Pausable clock handles pause adjustment internally
+	cs.ctx.State.UpdateBoostTimerAtomic()
 }
 
-// Stop halts the clock scheduler gracefully
-// Waits for the goroutine to fully exit before returning
-func (cs *ClockScheduler) Stop() {
-	cs.stopOnce.Do(func() {
-		cs.ticker.Stop()
-		close(cs.stopChan)
-		cs.wg.Wait() // Wait for goroutine to exit
-	})
-}
-
-// GetTickCount returns the number of clock ticks executed (for debugging/testing)
+// GetTickCount returns the current tick count for debugging/testing
 func (cs *ClockScheduler) GetTickCount() uint64 {
-	cs.mu.RLock()
-	defer cs.mu.RUnlock()
-	return cs.tickCount
+	return cs.tickCount.Load()
+}
+
+// IsRunning returns true if the scheduler is running
+func (cs *ClockScheduler) IsRunning() bool {
+	return cs.running.Load()
+}
+
+// GetTickInterval returns the configured tick interval
+func (cs *ClockScheduler) GetTickInterval() time.Duration {
+	return cs.tickInterval
 }
 
 // GetTickRate returns the clock tick interval (always 50ms)

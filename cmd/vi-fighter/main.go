@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"time"
@@ -22,6 +21,12 @@ const (
 	logDir      = "logs"
 	logFileName = "vi-fighter.log"
 	maxLogSize  = 10 * 1024 * 1024 // 10MB
+)
+
+// Fixed timesteps for game updates
+const (
+	gameUpdateDT   = 16 * time.Millisecond // ~60 FPS (frame rate for rendering)
+	gameUpdateTick = 50 * time.Millisecond // game logic tick
 )
 
 // setupLogging configures log output based on debug flag
@@ -74,12 +79,55 @@ func setupLogging(debug bool) *os.File {
 	return logFile
 }
 
+// updateUIElements handles UI updates that need real-time clock (work during pause)
+// This includes cursor blinking, error state timeouts, and other visual feedback
+func updateUIElements(ctx *engine.GameContext, renderer *render.TerminalRenderer, decaySystem *systems.DecaySystem) {
+	// Use real time for UI elements (unaffected by pause)
+	realNow := ctx.GetRealTime()
+
+	// Update cursor blink
+	if realNow.Sub(ctx.CursorBlinkTime) > 500*time.Millisecond {
+		ctx.CursorVisible = !ctx.CursorVisible
+		ctx.CursorBlinkTime = realNow
+	}
+
+	// Clear expired cursor error state using real time
+	if ctx.State.GetCursorError() {
+		errorTime := ctx.State.GetCursorErrorTime()
+		if !errorTime.IsZero() && realNow.Sub(errorTime) > 200*time.Millisecond {
+			ctx.State.SetCursorError(false)
+		}
+	}
+
+	// Update any other UI-specific timers that need real time
+	// (e.g., notification fadeouts, temporary UI highlights)
+}
+
+// processGameUpdate handles the main game logic update (skipped during pause)
+// This includes all game systems, physics, and game state changes
+func processGameUpdate(ctx *engine.GameContext, dt time.Duration) {
+	// Check if boost should expire (uses game time internally)
+	ctx.State.UpdateBoostTimerAtomic()
+
+	// Update all ECS systems
+	ctx.World.Update(dt)
+
+	// Wait for all updates to complete before rendering (frame barrier)
+	// This ensures no entity modifications occur during rendering
+	ctx.World.WaitForUpdates()
+
+	// Update ping grid timer atomically (CAS pattern)
+	// This uses game time for consistent behavior
+	if ctx.UpdatePingGridTimerAtomic(dt.Seconds()) {
+		// Timer expired, deactivate ping
+		ctx.SetPingActive(false)
+	}
+}
+
 func main() {
 	// Parse command-line flags
 	debug := flag.Bool("debug", false, "Enable debug logging to file")
 	flag.Parse()
-
-	rand.Seed(time.Now().UnixNano())
 
 	// Setup logging before any other operations
 	// This ensures no log output goes to stdout/stderr during gameplay
@@ -158,15 +206,14 @@ func main() {
 	inputHandler.SetNuggetSystem(nuggetSystem)
 
 	// Create and start clock scheduler (50ms tick for game logic)
-	// Clock scheduler now handles Gold/Decay phase transitions
-	// Clock scheduler now handles Cleaner triggers
-	clockScheduler := engine.NewClockScheduler(ctx)
+	// Clock scheduler now handles systems phase transitions and triggers
+	clockScheduler := engine.NewClockScheduler(ctx, gameUpdateTick)
 	clockScheduler.SetSystems(goldSequenceSystem, decaySystem, cleanerSystem)
 	clockScheduler.Start()
 	defer clockScheduler.Stop()
 
 	// Main game loop
-	ticker := time.NewTicker(16 * time.Millisecond) // ~60 FPS (frame rate for rendering)
+	ticker := time.NewTicker(gameUpdateDT)
 	defer ticker.Stop()
 
 	eventChan := make(chan tcell.Event, 100)
@@ -179,11 +226,14 @@ func main() {
 	for {
 		select {
 		case ev := <-eventChan:
+			// Input handling always works (even during pause)
+			// InputHandler will pause internally when entering or exiting COMMAND mode
 			if !inputHandler.HandleEvent(ev) {
 				return // Exit game
 			}
 
 			// Update renderer dimensions if screen resized
+			// This needs to work during pause for proper display
 			renderer.UpdateDimensions(
 				ctx.Width,
 				ctx.Height,
@@ -195,23 +245,32 @@ func main() {
 			)
 
 		case <-ticker.C:
-			// Check if boost should expire (atomic CAS pattern, with pause adjustment)
-			pauseDuration := ctx.GetTotalPauseDuration()
-			ctx.State.UpdateBoostTimerAtomic(pauseDuration)
+
+			// Main update tick (16ms intervals using real time)
+
+			// Always update UI elements (use real time, works during pause)
+			updateUIElements(ctx, renderer, decaySystem)
+
+			// Check pause state
+			if ctx.IsPaused.Load() {
+				// During pause: skip game updates but still render
+				// This shows the pause overlay and maintains visual feedback
+				renderer.RenderFrame(ctx, decaySystem.IsAnimating(), decaySystem.CurrentRow(), decaySystem.GetTimeUntilDecay())
+				continue
+			}
+
+			// Not paused - perform full game update
+			processGameUpdate(ctx, gameUpdateDT)
+
+			// Render the current frame
+			renderer.RenderFrame(ctx, decaySystem.IsAnimating(), decaySystem.CurrentRow(), decaySystem.GetTimeUntilDecay())
 
 			// Update all ECS systems
-			dt := 16 * time.Millisecond
-			ctx.World.Update(dt)
+			ctx.World.Update(gameUpdateDT)
 
 			// Wait for all updates to complete before rendering (frame barrier)
 			// This ensures no entity modifications occur during rendering
 			ctx.World.WaitForUpdates()
-
-			// Update ping grid timer atomically (CAS pattern)
-			if ctx.UpdatePingGridTimerAtomic(dt.Seconds()) {
-				// Timer expired, deactivate ping
-				ctx.SetPingActive(false)
-			}
 
 			// Render frame (all updates guaranteed complete)
 			renderer.RenderFrame(ctx, decaySystem.IsAnimating(), decaySystem.CurrentRow(), decaySystem.GetTimeUntilDecay())

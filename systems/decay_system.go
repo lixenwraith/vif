@@ -72,11 +72,8 @@ func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 		return
 	}
 
-	// Get total pause duration for timer adjustments
-	pauseDuration := s.ctx.GetTotalPauseDuration()
-
 	// Read decay state snapshot for consistent check
-	decaySnapshot := s.ctx.State.ReadDecayState(pauseDuration)
+	decaySnapshot := s.ctx.State.ReadDecayState()
 
 	// Update animation if active
 	if decaySnapshot.Animating {
@@ -93,11 +90,8 @@ func (s *DecaySystem) updateAnimation(world *engine.World) {
 	// Read game height from context
 	gameHeight := s.ctx.GameHeight
 
-	// Get total pause duration for timer adjustments
-	pauseDuration := s.ctx.GetTotalPauseDuration()
-
-	// Read decay state snapshot for consistent startTime access
-	decaySnapshot := s.ctx.State.ReadDecayState(pauseDuration)
+	// Read decay state snapshot for consistent startTime access - no pauseDuration
+	decaySnapshot := s.ctx.State.ReadDecayState()
 	elapsed := s.ctx.TimeProvider.Now().Sub(decaySnapshot.StartTime).Seconds()
 
 	// Update falling entity positions and apply decay
@@ -413,8 +407,7 @@ func (s *DecaySystem) TriggerDecayAnimation(world *engine.World) {
 // IsAnimating returns true if decay animation is active
 // Reads from GameState snapshot
 func (s *DecaySystem) IsAnimating() bool {
-	pauseDuration := s.ctx.GetTotalPauseDuration()
-	decaySnapshot := s.ctx.State.ReadDecayState(pauseDuration)
+	decaySnapshot := s.ctx.State.ReadDecayState()
 	return decaySnapshot.Animating
 }
 
@@ -428,11 +421,8 @@ func (s *DecaySystem) CurrentRow() int {
 	// Read game height from context
 	gameHeight := s.ctx.GameHeight
 
-	// Get total pause duration for timer adjustments
-	pauseDuration := s.ctx.GetTotalPauseDuration()
-
 	// Read decay state snapshot for consistent check
-	decaySnapshot := s.ctx.State.ReadDecayState(pauseDuration)
+	decaySnapshot := s.ctx.State.ReadDecayState()
 
 	// When animation is done, currentRow is 0, but we want to avoid displaying row 0
 	// During animation, currentRow is the next row to process
@@ -454,8 +444,7 @@ func (s *DecaySystem) CurrentRow() int {
 // GetTimeUntilDecay returns seconds until next decay trigger
 // Reads from GameState snapshot
 func (s *DecaySystem) GetTimeUntilDecay() float64 {
-	pauseDuration := s.ctx.GetTotalPauseDuration()
-	decaySnapshot := s.ctx.State.ReadDecayState(pauseDuration)
+	decaySnapshot := s.ctx.State.ReadDecayState()
 	return decaySnapshot.TimeUntil
 }
 
@@ -466,11 +455,8 @@ func (s *DecaySystem) GetSystemState() string {
 	fallingCount := len(s.fallingEntities)
 	s.mu.RUnlock()
 
-	// Get total pause duration for timer adjustments
-	pauseDuration := s.ctx.GetTotalPauseDuration()
-
 	// Read from GameState
-	snapshot := s.ctx.State.ReadDecayState(pauseDuration)
+	snapshot := s.ctx.State.ReadDecayState()
 
 	if snapshot.Animating {
 		startTime := snapshot.StartTime

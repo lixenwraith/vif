@@ -32,7 +32,8 @@ type GameContext struct {
 	Buffer *core.Buffer
 
 	// Time provider (monotonic clock for animations)
-	TimeProvider TimeProvider
+	TimeProvider  TimeProvider   // Pausable game time
+	PausableClock *PausableClock // Direct access for pause control
 
 	// Screen dimensions
 	Width, Height int
@@ -77,10 +78,8 @@ type GameContext struct {
 	PingRow       int
 	PingCol       int
 
-	// Pause state management
-	IsPaused           atomic.Bool
-	PauseStartTime     atomic.Int64 // UnixNano
-	TotalPauseDuration atomic.Int64 // nanoseconds
+	// Pause state management (simplified - actual pause handled by PausableClock)
+	IsPaused atomic.Bool
 
 	// Heat tracking (for consecutive move penalty - input specific)
 	LastMoveKey      rune
@@ -90,24 +89,27 @@ type GameContext struct {
 // NewGameContext creates a new game context with initialized ECS world
 func NewGameContext(screen tcell.Screen) *GameContext {
 	width, height := screen.Size()
-	timeProvider := NewMonotonicTimeProvider()
+
+	// Create pausable clock
+	pausableClock := NewPausableClock()
 
 	ctx := &GameContext{
 		World:           NewWorld(),
 		Screen:          screen,
-		TimeProvider:    timeProvider,
+		TimeProvider:    pausableClock, // Use pausable clock as TimeProvider
+		PausableClock:   pausableClock, // Direct reference for pause control
 		Width:           width,
 		Height:          height,
 		Mode:            ModeNormal,
 		CursorVisible:   true,
-		CursorBlinkTime: timeProvider.Now(),
+		CursorBlinkTime: pausableClock.RealTime(), // UI uses real time
 	}
 
 	// Calculate game area first
 	ctx.updateGameArea()
 
-	// Create centralized game state
-	ctx.State = NewGameState(ctx.GameWidth, ctx.GameHeight, ctx.Width, timeProvider)
+	// Create centralized game state with pausable time provider
+	ctx.State = NewGameState(ctx.GameWidth, ctx.GameHeight, ctx.Width, pausableClock)
 
 	// Initialize local cursor position
 	ctx.CursorX = ctx.GameWidth / 2
@@ -120,6 +122,9 @@ func NewGameContext(screen tcell.Screen) *GameContext {
 	// Initialize ping atomic values (still local to input handling)
 	ctx.pingActive.Store(false)
 	ctx.pingGridTimer.Store(0)
+
+	// Initialize pause state
+	ctx.IsPaused.Store(false)
 
 	// Create buffer
 	ctx.Buffer = core.NewBuffer(ctx.GameWidth, ctx.GameHeight)
@@ -192,42 +197,33 @@ func (g *GameContext) UpdatePingGridTimerAtomic(delta float64) bool {
 	}
 }
 
-// SetPaused sets the pause state and tracks timing
+// SetPaused sets the pause state using the pausable clock
 func (g *GameContext) SetPaused(paused bool) {
 	wasPaused := g.IsPaused.Load()
 	g.IsPaused.Store(paused)
 
 	if paused && !wasPaused {
 		// Starting pause
-		g.PauseStartTime.Store(g.TimeProvider.Now().UnixNano())
+		g.PausableClock.Pause()
 	} else if !paused && wasPaused {
 		// Ending pause
-		startTime := g.PauseStartTime.Load()
-		if startTime > 0 {
-			pauseDuration := g.TimeProvider.Now().UnixNano() - startTime
-			// Add to total pause duration
-			g.TotalPauseDuration.Add(pauseDuration)
-			// Reset start time
-			g.PauseStartTime.Store(0)
-		}
+		g.PausableClock.Resume()
 	}
 }
 
 // GetPauseDuration returns the current pause duration
 func (g *GameContext) GetPauseDuration() time.Duration {
-	if !g.IsPaused.Load() {
-		return 0
-	}
-	startTime := g.PauseStartTime.Load()
-	if startTime == 0 {
-		return 0
-	}
-	return time.Duration(g.TimeProvider.Now().UnixNano() - startTime)
+	return g.PausableClock.GetCurrentPauseDuration()
 }
 
 // GetTotalPauseDuration returns the cumulative pause time
 func (g *GameContext) GetTotalPauseDuration() time.Duration {
-	return time.Duration(g.TotalPauseDuration.Load())
+	return g.PausableClock.GetTotalPauseDuration()
+}
+
+// GetRealTime returns wall clock time for UI elements
+func (g *GameContext) GetRealTime() time.Time {
+	return g.PausableClock.RealTime()
 }
 
 // updateGameArea calculates the game area dimensions

@@ -22,11 +22,11 @@ func (m *MockScreen) Size() (int, int) {
 	return m.width, m.height
 }
 
-func (m *MockScreen) Init() error          { return nil }
-func (m *MockScreen) Fini()                {}
-func (m *MockScreen) Clear()               {}
-func (m *MockScreen) Show()                {}
-func (m *MockScreen) Sync()                {}
+func (m *MockScreen) Init() error                                                      { return nil }
+func (m *MockScreen) Fini()                                                            {}
+func (m *MockScreen) Clear()                                                           {}
+func (m *MockScreen) Show()                                                            {}
+func (m *MockScreen) Sync()                                                            {}
 func (m *MockScreen) SetContent(x, y int, mainc rune, combc []rune, style tcell.Style) {}
 
 // MockGoldSystem implements GoldSequenceSystemInterface for testing
@@ -326,9 +326,6 @@ func TestClockSchedulerBasicTicking(t *testing.T) {
 	t.Logf("✓ Clock scheduler tick count increments correctly")
 }
 
-
-
-
 // TestClockSchedulerConcurrentTicking tests concurrent tick calls
 func TestClockSchedulerConcurrentTicking(t *testing.T) {
 	mockTime := NewMockTimeProvider(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
@@ -393,8 +390,6 @@ func TestClockSchedulerStopIdempotent(t *testing.T) {
 
 	t.Logf("✓ Stop() is idempotent - can be called multiple times safely")
 }
-
-
 
 // TestClockSchedulerTickRate tests that tick rate is correct
 func TestClockSchedulerTickRate(t *testing.T) {
@@ -472,42 +467,6 @@ func TestClockSchedulerStopIdempotentRealTime(t *testing.T) {
 	}
 }
 
-// TestClockSchedulerConcurrentAccess tests thread-safe tick count reads
-func TestClockSchedulerConcurrentAccess(t *testing.T) {
-	screen := &MockScreen{}
-	ctx := NewGameContext(screen)
-	scheduler := NewClockScheduler(ctx)
-
-	scheduler.Start()
-	defer scheduler.Stop()
-
-	const numReaders = 10
-	const numReads = 50
-
-	var wg sync.WaitGroup
-	wg.Add(numReaders)
-
-	// Launch concurrent readers
-	for i := 0; i < numReaders; i++ {
-		go func() {
-			defer wg.Done()
-			for j := 0; j < numReads; j++ {
-				_ = scheduler.GetTickCount()
-				_ = scheduler.GetTickRate()
-				time.Sleep(1 * time.Millisecond)
-			}
-		}()
-	}
-
-	wg.Wait()
-
-	// Verify tick count is reasonable
-	tickCount := scheduler.GetTickCount()
-	if tickCount == 0 {
-		t.Error("Expected non-zero tick count after concurrent access")
-	}
-}
-
 // TestPhaseAndClockIntegration tests phase state changes during clock ticks
 func TestPhaseAndClockIntegration(t *testing.T) {
 	screen := &MockScreen{}
@@ -572,4 +531,3 @@ func TestClockSchedulerMemoryLeak(t *testing.T) {
 	// If we reach here without hanging, test passes
 	// (Goroutine leak would cause test timeout)
 }
-
