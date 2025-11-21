@@ -18,10 +18,14 @@ type PausableClock struct {
 	isPaused        atomic.Bool
 	pauseStartTime  time.Time     // When current pause started (real time)
 	totalPausedTime time.Duration // Cumulative pause duration
+	resumeCallbacks []ResumeCallback
 
 	// For external access to real time
 	realTimeProvider TimeProvider
 }
+
+// ResumeCallback is called when clock resumes from pause
+type ResumeCallback func(pauseDuration time.Duration)
 
 // NewPausableClock creates a new pausable clock
 func NewPausableClock() *PausableClock {
@@ -67,14 +71,32 @@ func (pc *PausableClock) Pause() {
 func (pc *PausableClock) Resume() {
 	if pc.isPaused.CompareAndSwap(true, false) {
 		pc.mu.Lock()
-		defer pc.mu.Unlock()
 
 		if !pc.pauseStartTime.IsZero() {
 			pauseDuration := time.Now().Sub(pc.pauseStartTime)
 			pc.totalPausedTime += pauseDuration
 			pc.pauseStartTime = time.Time{}
+
+			// Make a copy of callbacks to call outside lock
+			callbacks := make([]ResumeCallback, len(pc.resumeCallbacks))
+			copy(callbacks, pc.resumeCallbacks)
+			pc.mu.Unlock()
+
+			// Notify listeners about resume (outside lock to prevent deadlock)
+			for _, cb := range callbacks {
+				cb(pauseDuration)
+			}
+		} else {
+			pc.mu.Unlock()
 		}
 	}
+}
+
+// OnResume registers a callback for pause resume events
+func (pc *PausableClock) OnResume(cb ResumeCallback) {
+	pc.mu.Lock()
+	pc.mu.Unlock()
+	pc.resumeCallbacks = append(pc.resumeCallbacks, cb)
 }
 
 // IsPaused returns current pause state

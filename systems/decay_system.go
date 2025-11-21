@@ -67,11 +67,6 @@ func (s *DecaySystem) Priority() int {
 // Update runs the decay system
 // Animation trigger moved to ClockScheduler, this just updates animation
 func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
-	// Skip time-based updates when paused
-	if s.ctx.IsPaused.Load() {
-		return
-	}
-
 	// Read decay state snapshot for consistent check
 	decaySnapshot := s.ctx.State.ReadDecayState()
 

@@ -41,10 +41,10 @@ const (
 	CommandStatusMessageTimeout = 2 * time.Second
 )
 
-// Gold Sequence Constants
+// Gold Constants
 const (
-	// GoldSequenceDuration is how long the gold sequence remains on screen
-	GoldSequenceDuration = 10 * time.Second
+	// GoldDuration is how long the gold sequence remains on screen
+	GoldDuration = 10 * time.Second
 
 	// GoldSequenceLength is the number of characters in the gold sequence
 	GoldSequenceLength = 10

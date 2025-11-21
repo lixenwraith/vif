@@ -254,17 +254,6 @@ func (w *World) Update(dt time.Duration) {
 	}
 }
 
-// WaitForUpdates waits for all pending updates to complete
-// This should be called before rendering to ensure a consistent state
-// This is a no-op if Update is called synchronously, but provides
-// explicit synchronization for future concurrent update scenarios.
-func (w *World) WaitForUpdates() {
-	// Try to acquire and immediately release the update mutex
-	// This ensures any ongoing Update() has completed
-	w.updateMutex.Lock()
-	w.updateMutex.Unlock()
-}
-
 // GetEntityAtPosition returns the entity at a given position (0 if none)
 func (w *World) GetEntityAtPosition(x, y int) Entity {
 	w.mu.RLock()
@@ -388,4 +377,3 @@ func (w *World) ValidateSpatialIndex() []string {
 
 	return inconsistencies
 }
-

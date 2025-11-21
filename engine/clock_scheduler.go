@@ -67,12 +67,17 @@ type ClockScheduler struct {
 	// Tick configuration
 	tickInterval     time.Duration
 	lastGameTickTime time.Time // Last tick in game time
+	nextTickDeadline time.Time // Next tick deadline for drift correction
 
 	// Control channels
 	stopChan chan struct{}
 	stopOnce sync.Once
 	wg       sync.WaitGroup // Ensures goroutine exits before Stop() returns
 	running  atomic.Bool
+
+	// Frame synchronization channels
+	frameReady <-chan struct{} // Receive signal that frame is ready
+	updateDone chan<- struct{} // Send signal that update is complete
 
 	// Tick counter for debugging and metrics
 	tickCount atomic.Uint64
@@ -102,16 +107,24 @@ type CleanerSystemInterface interface {
 }
 
 // NewClockScheduler creates a new clock scheduler with specified tick interval
-// Standard tick interval is 50ms for game logic updates
-func NewClockScheduler(ctx *GameContext, tickInterval time.Duration) *ClockScheduler {
-	return &ClockScheduler{
+func NewClockScheduler(ctx *GameContext, tickInterval time.Duration, frameReady <-chan struct{}) (*ClockScheduler, <-chan struct{}) {
+	updateDone := make(chan struct{}, 1)
+
+	cs := &ClockScheduler{
 		ctx:              ctx,
 		timeProvider:     ctx.TimeProvider,
 		tickInterval:     tickInterval,
 		lastGameTickTime: ctx.TimeProvider.Now(),
+		frameReady:       frameReady,
+		updateDone:       updateDone,
 		tickCount:        atomic.Uint64{},
 		stopChan:         make(chan struct{}),
 	}
+
+	// Register for pause resume notifications to adjust deadline
+	ctx.PausableClock.OnResume(cs.HandlePauseResume)
+
+	return cs, updateDone
 }
 
 // SetSystems sets the system references needed for phase transitions
@@ -162,6 +175,12 @@ func (cs *ClockScheduler) Stop() {
 func (cs *ClockScheduler) schedulerLoop() {
 	defer cs.wg.Done()
 
+	// Initialize next tick deadline
+	cs.mu.Lock()
+	cs.nextTickDeadline = cs.timeProvider.Now().Add(cs.tickInterval)
+	cs.lastGameTickTime = cs.timeProvider.Now()
+	cs.mu.Unlock()
+
 	// Adaptive ticker that respects pause state
 	for {
 		select {
@@ -175,47 +194,79 @@ func (cs *ClockScheduler) schedulerLoop() {
 
 		if cs.ctx.IsPaused.Load() {
 			// During pause, sleep longer to avoid busy-wait
-			sleepDuration = 100 * time.Millisecond
+			sleepDuration = cs.tickInterval * 2
 		} else {
-			// Calculate how long until next game tick
+			gameNow := cs.timeProvider.Now()
+
 			cs.mu.RLock()
-			lastTick := cs.lastGameTickTime
+			deadline := cs.nextTickDeadline
 			cs.mu.RUnlock()
 
-			gameNow := cs.timeProvider.Now()
-			elapsed := gameNow.Sub(lastTick)
+			// Check if we've reached or passed the deadline
+			if !gameNow.Before(deadline) {
+				// Wait for frame ready signal (with timeout to prevent deadlock)
+				select {
+				case <-cs.frameReady:
+					// Frame is ready, proceed with tick
+				case <-time.After(cs.tickInterval * 2):
+					// Timeout - proceed anyway to prevent game freeze
+					// This handles case where renderer is blocked
+				case <-cs.stopChan:
+					return
+				}
 
-			if elapsed >= cs.tickInterval {
 				// Tick is due, process immediately
 				cs.processTick()
 
-				// Update last tick time
+				// Update timing with drift protection
 				cs.mu.Lock()
 				cs.lastGameTickTime = gameNow
+
+				// Advance deadline by exactly one interval (prevents drift)
+				cs.nextTickDeadline = cs.nextTickDeadline.Add(cs.tickInterval)
+
+				// If we're severely behind (>2 intervals), catch up to avoid spiral
+				maxBehind := cs.tickInterval * 2
+				if gameNow.Sub(cs.nextTickDeadline) > maxBehind {
+					// Reset to next interval from current time
+					cs.nextTickDeadline = gameNow.Add(cs.tickInterval)
+				}
+
+				deadline = cs.nextTickDeadline
+
 				cs.mu.Unlock()
 
 				// Increment tick counter for debugging/tests
 				cs.tickCount.Add(1)
 
-				sleepDuration = cs.tickInterval
+				// Signal update complete (non-blocking)
+				select {
+				case cs.updateDone <- struct{}{}:
+				default:
+					// Channel full, renderer will catch up
+				}
+
+				// Sleep until next deadline
+				sleepDuration = deadline.Sub(cs.timeProvider.Now())
+				if sleepDuration < 0 {
+					sleepDuration = 0 // Process next tick immediately if behind
+				}
 			} else {
 				// Sleep until next tick
-				sleepDuration = cs.tickInterval - elapsed
-				// Cap sleep duration to avoid oversleeping
-				if sleepDuration > cs.tickInterval {
-					sleepDuration = cs.tickInterval
-				}
+				sleepDuration = deadline.Sub(gameNow)
 			}
 		}
 
 		// Sleep with interruptible timer
-		timer := time.NewTimer(sleepDuration)
-		select {
-		case <-timer.C:
-			// Continue loop
-		case <-cs.stopChan:
-			timer.Stop()
-			return
+		if sleepDuration > 0 {
+			timer := time.NewTimer(sleepDuration)
+			select {
+			case <-timer.C:
+				// Continue loop
+			case <-cs.stopChan:
+				timer.Stop()
+				return
+			}
 		}
 	}
 }
@@ -227,6 +278,17 @@ func (cs *ClockScheduler) processTick() {
 	// Skip tick execution when paused (defensive check)
 	if cs.ctx.IsPaused.Load() {
 		return
+	}
+
+	// Update all ECS systems
+	cs.ctx.World.Update(cs.tickInterval)
+
+	// Update game-specific timers
+	cs.ctx.State.UpdateBoostTimerAtomic()
+
+	// Update ping grid timer
+	if cs.ctx.UpdatePingGridTimerAtomic(cs.tickInterval.Seconds()) {
+		cs.ctx.SetPingActive(false)
 	}
 
 	// Get systems references with mutex protection
@@ -323,6 +385,16 @@ func (cs *ClockScheduler) processTick() {
 	// Update boost timer (check for expiration)
 	// Pausable clock handles pause adjustment internally
 	cs.ctx.State.UpdateBoostTimerAtomic()
+}
+
+// HandlePauseResume adjusts the tick deadline when resuming from pause
+// Called by PausableClock when resuming
+func (cs *ClockScheduler) HandlePauseResume(pauseDuration time.Duration) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+
+	// Adjust the deadline by the pause duration to maintain rhythm
+	cs.nextTickDeadline = cs.nextTickDeadline.Add(pauseDuration)
 }
 
 // GetTickCount returns the current tick count for debugging/testing

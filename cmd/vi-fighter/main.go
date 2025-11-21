@@ -25,8 +25,8 @@ const (
 
 // Fixed timesteps for game updates
 const (
-	gameUpdateDT   = 16 * time.Millisecond // ~60 FPS (frame rate for rendering)
-	gameUpdateTick = 50 * time.Millisecond // game logic tick
+	frameUpdateDT = 16 * time.Millisecond // ~60 FPS (frame rate for rendering)
+	gameUpdateDT  = 50 * time.Millisecond // game logic tick
 )
 
 // setupLogging configures log output based on debug flag
@@ -81,7 +81,7 @@ func setupLogging(debug bool) *os.File {
 
 // updateUIElements handles UI updates that need real-time clock (work during pause)
 // This includes cursor blinking, error state timeouts, and other visual feedback
-func updateUIElements(ctx *engine.GameContext, renderer *render.TerminalRenderer, decaySystem *systems.DecaySystem) {
+func updateUIElements(ctx *engine.GameContext) {
 	// Use real time for UI elements (unaffected by pause)
 	realNow := ctx.GetRealTime()
 
@@ -101,27 +101,6 @@ func updateUIElements(ctx *engine.GameContext, renderer *render.TerminalRenderer
 
 	// Update any other UI-specific timers that need real time
 	// (e.g., notification fadeouts, temporary UI highlights)
-}
-
-// processGameUpdate handles the main game logic update (skipped during pause)
-// This includes all game systems, physics, and game state changes
-func processGameUpdate(ctx *engine.GameContext, dt time.Duration) {
-	// Check if boost should expire (uses game time internally)
-	ctx.State.UpdateBoostTimerAtomic()
-
-	// Update all ECS systems
-	ctx.World.Update(dt)
-
-	// Wait for all updates to complete before rendering (frame barrier)
-	// This ensures no entity modifications occur during rendering
-	ctx.World.WaitForUpdates()
-
-	// Update ping grid timer atomically (CAS pattern)
-	// This uses game time for consistent behavior
-	if ctx.UpdatePingGridTimerAtomic(dt.Seconds()) {
-		// Timer expired, deactivate ping
-		ctx.SetPingActive(false)
-	}
 }
 
 func main() {
@@ -165,8 +144,8 @@ func main() {
 	decaySystem := systems.NewDecaySystem(ctx.GameWidth, ctx.GameHeight, ctx)
 	ctx.World.AddSystem(decaySystem)
 
-	goldSequenceSystem := systems.NewGoldSequenceSystem(ctx, decaySystem, ctx.GameWidth, ctx.GameHeight, ctx.CursorX, ctx.CursorY)
-	ctx.World.AddSystem(goldSequenceSystem)
+	goldSystem := systems.NewGoldSystem(ctx, decaySystem, ctx.GameWidth, ctx.GameHeight, ctx.CursorX, ctx.CursorY)
+	ctx.World.AddSystem(goldSystem)
 
 	drainSystem := systems.NewDrainSystem(ctx)
 	ctx.World.AddSystem(drainSystem)
@@ -180,13 +159,12 @@ func main() {
 	ctx.World.AddSystem(cleanerSystem)
 
 	// Wire up system references
-	scoreSystem.SetGoldSequenceSystem(goldSequenceSystem)
+	scoreSystem.SetGoldSystem(goldSystem)
 	scoreSystem.SetSpawnSystem(spawnSystem)
 	scoreSystem.SetNuggetSystem(nuggetSystem)
 	decaySystem.SetSpawnSystem(spawnSystem)
 	decaySystem.SetNuggetSystem(nuggetSystem)
 	drainSystem.SetNuggetSystem(nuggetSystem)
-	// Removed goldSequenceSystem.SetCleanerTrigger - now managed by ClockScheduler
 
 	// Create renderer (with CleanerSystem for thread-safe cleaner rendering)
 	renderer := render.NewTerminalRenderer(
@@ -205,16 +183,23 @@ func main() {
 	inputHandler := modes.NewInputHandler(ctx, scoreSystem)
 	inputHandler.SetNuggetSystem(nuggetSystem)
 
-	// Create and start clock scheduler (50ms tick for game logic)
-	// Clock scheduler now handles systems phase transitions and triggers
-	clockScheduler := engine.NewClockScheduler(ctx, gameUpdateTick)
-	clockScheduler.SetSystems(goldSequenceSystem, decaySystem, cleanerSystem)
+	// Create frame synchronization channel
+	frameReady := make(chan struct{}, 1)
+
+	// Create clock scheduler with frame synchronization
+	// Clock scheduler handles systems phase transitions and triggers
+	clockScheduler, gameUpdateDone := engine.NewClockScheduler(ctx, gameUpdateDT, frameReady)
+
+	// Signal initial frame ready
+	frameReady <- struct{}{}
+
+	clockScheduler.SetSystems(goldSystem, decaySystem, cleanerSystem)
 	clockScheduler.Start()
 	defer clockScheduler.Stop()
 
 	// Main game loop
-	ticker := time.NewTicker(gameUpdateDT)
-	defer ticker.Stop()
+	frameTicker := time.NewTicker(frameUpdateDT)
+	defer frameTicker.Stop()
 
 	eventChan := make(chan tcell.Event, 100)
 	go func() {
@@ -223,11 +208,14 @@ func main() {
 		}
 	}()
 
+	// Track last update state for rendering
+	var updatePending bool
+
 	for {
 		select {
 		case ev := <-eventChan:
 			// Input handling always works (even during pause)
-			// InputHandler will pause internally when entering or exiting COMMAND mode
+			// InputHandler will handle pause internally when entering or exiting COMMAND mode
 			if !inputHandler.HandleEvent(ev) {
 				return // Exit game
 			}
@@ -244,36 +232,38 @@ func main() {
 				ctx.LineNumWidth,
 			)
 
-		case <-ticker.C:
-
-			// Main update tick (16ms intervals using real time)
-
+		case <-frameTicker.C:
 			// Always update UI elements (use real time, works during pause)
-			updateUIElements(ctx, renderer, decaySystem)
+			updateUIElements(ctx)
 
-			// Check pause state
+			// During pause: skip game updates but still render
 			if ctx.IsPaused.Load() {
-				// During pause: skip game updates but still render
 				// This shows the pause overlay and maintains visual feedback
 				renderer.RenderFrame(ctx, decaySystem.IsAnimating(), decaySystem.CurrentRow(), decaySystem.GetTimeUntilDecay())
 				continue
 			}
 
-			// Not paused - perform full game update
-			processGameUpdate(ctx, gameUpdateDT)
-
-			// Render the current frame
-			renderer.RenderFrame(ctx, decaySystem.IsAnimating(), decaySystem.CurrentRow(), decaySystem.GetTimeUntilDecay())
-
-			// Update all ECS systems
-			ctx.World.Update(gameUpdateDT)
-
-			// Wait for all updates to complete before rendering (frame barrier)
-			// This ensures no entity modifications occur during rendering
-			ctx.World.WaitForUpdates()
+			// Check if game update completed
+			select {
+			case <-gameUpdateDone:
+				// Update completed since last frame
+				updatePending = false
+			default:
+				// No update or still in progress
+				updatePending = true
+			}
 
 			// Render frame (all updates guaranteed complete)
 			renderer.RenderFrame(ctx, decaySystem.IsAnimating(), decaySystem.CurrentRow(), decaySystem.GetTimeUntilDecay())
+
+			// Signal ready for next update (non-blocking)
+			if !updatePending && !ctx.IsPaused.Load() {
+				select {
+				case frameReady <- struct{}{}:
+				default:
+					// Channel full, skip signal
+				}
+			}
 		}
 	}
 }

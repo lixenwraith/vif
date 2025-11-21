@@ -12,12 +12,12 @@ import (
 
 // ScoreSystem handles character typing and score calculation
 type ScoreSystem struct {
-	ctx               *engine.GameContext
-	lastCorrect       time.Time
-	errorCursorSet    bool
-	goldSequenceSystem *GoldSequenceSystem
-	spawnSystem       *SpawnSystem
-	nuggetSystem      *NuggetSystem
+	ctx                *engine.GameContext
+	lastCorrect        time.Time
+	errorCursorSet     bool
+	goldSequenceSystem *GoldSystem
+	spawnSystem        *SpawnSystem
+	nuggetSystem       *NuggetSystem
 }
 
 // NewScoreSystem creates a new score system
@@ -33,8 +33,8 @@ func (s *ScoreSystem) Priority() int {
 	return 10 // High priority, run before other systems
 }
 
-// SetGoldSequenceSystem sets the gold sequence system reference
-func (s *ScoreSystem) SetGoldSequenceSystem(goldSystem *GoldSequenceSystem) {
+// SetGoldSystem sets the gold sequence system reference
+func (s *ScoreSystem) SetGoldSystem(goldSystem *GoldSystem) {
 	s.goldSequenceSystem = goldSystem
 }
 
@@ -432,6 +432,6 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 		}
 
 		// Mark gold sequence as complete
-		s.goldSequenceSystem.CompleteGoldSequence(world)
+		s.goldSequenceSystem.CompleteGold(world)
 	}
 }
