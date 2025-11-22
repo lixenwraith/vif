@@ -1,4 +1,3 @@
-// FILE: audio/engine.go
 package audio
 
 import (
@@ -14,9 +13,10 @@ import (
 // AudioEngine manages all game audio with thread-safe playback
 type AudioEngine struct {
 	// Configuration
-	config *AudioConfig
+	config      *AudioConfig
+	configMutex sync.RWMutex // Protects config access
 
-	// Channels for command submission (size 1 for overflow protection)
+	// Channels for command submission (increased size for burst handling)
 	realTimeQueue chan AudioCommand // For immediate sounds (errors)
 	stateQueue    chan AudioCommand // For state-based sounds (coins, bells)
 
@@ -24,8 +24,9 @@ type AudioEngine struct {
 	stopChan chan struct{}
 	wg       sync.WaitGroup
 
-	// Current playback state (only accessed by audio goroutine)
-	currentSound    beep.StreamerSeekCloser
+	// Current playback state (protected by playbackMutex)
+	playbackMutex   sync.Mutex
+	currentSound    beep.StreamSeekCloser
 	currentCtrl     *beep.Ctrl
 	lastSoundTime   time.Time
 	soundGeneration uint64
@@ -38,6 +39,7 @@ type AudioEngine struct {
 	// State
 	initialized atomic.Bool
 	running     atomic.Bool
+	muted       atomic.Bool // Audio mute state (Ctrl+S toggle)
 }
 
 // NewAudioEngine creates a new audio engine with the given configuration
@@ -51,19 +53,19 @@ func NewAudioEngine(cfg *AudioConfig) (*AudioEngine, error) {
 	err := speaker.Init(rate, rate.N(time.Second/10))
 	if err != nil {
 		// Speaker might already be initialized, try to use it anyway
-		// This allows for testing and multiple engine creation
 		fmt.Printf("Warning: speaker init failed (may already be initialized): %v\n", err)
 	}
 
 	ae := &AudioEngine{
 		config:        cfg,
-		realTimeQueue: make(chan AudioCommand, 1),
-		stateQueue:    make(chan AudioCommand, 1),
+		realTimeQueue: make(chan AudioCommand, 5),  // Increased from 1 to 5
+		stateQueue:    make(chan AudioCommand, 10), // Increased from 1 to 10 for gold sounds
 		stopChan:      make(chan struct{}),
 		lastSoundTime: time.Now(),
 	}
 
 	ae.initialized.Store(true)
+	ae.muted.Store(true) // Start muted by default
 	return ae, nil
 }
 
@@ -88,17 +90,13 @@ func (ae *AudioEngine) Stop() {
 		ae.wg.Wait()
 
 		// Stop any current sound
-		if ae.currentCtrl != nil {
-			speaker.Lock()
-			ae.currentCtrl.Paused = true
-			speaker.Unlock()
-		}
+		ae.StopCurrentSound()
 	}
 }
 
 // SendRealTime sends a real-time audio command (non-blocking)
 func (ae *AudioEngine) SendRealTime(cmd AudioCommand) bool {
-	if !ae.config.Enabled || !ae.running.Load() {
+	if !ae.IsEnabled() || !ae.running.Load() {
 		return false
 	}
 
@@ -107,13 +105,25 @@ func (ae *AudioEngine) SendRealTime(cmd AudioCommand) bool {
 		return true
 	default:
 		ae.queueOverflows.Add(1)
-		return false
+		// For real-time queue, try to make room by removing oldest
+		select {
+		case <-ae.realTimeQueue:
+			// Removed oldest, try again
+			select {
+			case ae.realTimeQueue <- cmd:
+				return true
+			default:
+				return false
+			}
+		default:
+			return false
+		}
 	}
 }
 
 // SendState sends a state-based audio command (non-blocking)
 func (ae *AudioEngine) SendState(cmd AudioCommand) bool {
-	if !ae.config.Enabled || !ae.running.Load() {
+	if !ae.IsEnabled() || !ae.running.Load() {
 		return false
 	}
 
@@ -122,7 +132,19 @@ func (ae *AudioEngine) SendState(cmd AudioCommand) bool {
 		return true
 	default:
 		ae.queueOverflows.Add(1)
-		return false
+		// For state queue, try to make room
+		select {
+		case <-ae.stateQueue:
+			// Removed oldest, try again
+			select {
+			case ae.stateQueue <- cmd:
+				return true
+			default:
+				return false
+			}
+		default:
+			return false
+		}
 	}
 }
 
@@ -130,7 +152,7 @@ func (ae *AudioEngine) SendState(cmd AudioCommand) bool {
 func (ae *AudioEngine) processLoop() {
 	defer ae.wg.Done()
 
-	ticker := time.NewTicker(10 * time.Millisecond) // Fast tick for responsive audio
+	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 
 	for {
@@ -139,10 +161,14 @@ func (ae *AudioEngine) processLoop() {
 			return
 
 		case cmd := <-ae.realTimeQueue:
-			ae.processCommand(cmd, true)
+			if !ae.muted.Load() {
+				ae.processCommand(cmd, true)
+			}
 
 		case cmd := <-ae.stateQueue:
-			ae.processCommand(cmd, false)
+			if !ae.muted.Load() {
+				ae.processCommand(cmd, false)
+			}
 
 		case <-ticker.C:
 			// Check if current sound has finished
@@ -160,26 +186,52 @@ func (ae *AudioEngine) processCommand(cmd AudioCommand, isRealTime bool) {
 	}
 
 	// Check minimum gap between sounds
-	if time.Since(ae.lastSoundTime) < ae.config.MinSoundGap {
+	ae.configMutex.RLock()
+	minGap := ae.config.MinSoundGap
+	ae.configMutex.RUnlock()
+
+	if time.Since(ae.lastSoundTime) < minGap {
 		ae.soundsDropped.Add(1)
 		return
 	}
 
 	// Stop current sound if playing
-	ae.stopCurrentSound()
+	ae.StopCurrentSound()
 
-	// Drain both queues when playing a new sound
-	ae.drainQueues()
+	// Selective queue draining based on priority
+	if isRealTime {
+		// Real-time sounds drain state queue but not other real-time
+		ae.drainStateQueue()
+	} else {
+		// State sounds only play if no real-time pending
+		select {
+		case <-ae.realTimeQueue:
+			// Real-time sound pending, skip this state sound
+			ae.soundsDropped.Add(1)
+			return
+		default:
+			// No real-time pending, continue
+		}
+	}
 
 	// Create and play the new sound
+	ae.configMutex.RLock()
 	streamer := GetSoundEffect(cmd.Type, ae.config)
+	ae.configMutex.RUnlock()
+
 	if streamer == nil {
 		return
 	}
 
 	// Wrap in controller for stopping
 	ctrl := &beep.Ctrl{Streamer: streamer}
+
+	// Update playback state atomically
+	ae.playbackMutex.Lock()
 	ae.currentCtrl = ctrl
+	ae.lastSoundTime = time.Now()
+	ae.soundGeneration = cmd.Generation
+	ae.playbackMutex.Unlock()
 
 	// Play the sound
 	speaker.Play(beep.Seq(
@@ -189,13 +241,14 @@ func (ae *AudioEngine) processCommand(cmd AudioCommand, isRealTime bool) {
 		}),
 	))
 
-	ae.lastSoundTime = time.Now()
-	ae.soundGeneration = cmd.Generation
 	ae.soundsPlayed.Add(1)
 }
 
-// stopCurrentSound stops the currently playing sound
-func (ae *AudioEngine) stopCurrentSound() {
+// StopCurrentSound stops the currently playing sound (thread-safe)
+func (ae *AudioEngine) StopCurrentSound() {
+	ae.playbackMutex.Lock()
+	defer ae.playbackMutex.Unlock()
+
 	if ae.currentCtrl != nil {
 		speaker.Lock()
 		ae.currentCtrl.Paused = true
@@ -206,27 +259,34 @@ func (ae *AudioEngine) stopCurrentSound() {
 	if ae.currentSound != nil {
 		err := ae.currentSound.Close()
 		if err != nil {
-			// Log but don't fail
 			fmt.Printf("Error closing sound: %v\n", err)
 		}
 		ae.currentSound = nil
 	}
 }
 
-// drainQueues empties both command queues
-func (ae *AudioEngine) drainQueues() {
-	// Drain real-time queue
+// DrainQueues empties both command queues (thread-safe)
+func (ae *AudioEngine) DrainQueues() {
+	// Drain with timeout to prevent infinite loop
+	timeout := time.NewTimer(100 * time.Millisecond)
+	defer timeout.Stop()
+
 	for {
 		select {
 		case <-ae.realTimeQueue:
 			ae.soundsDropped.Add(1)
+		case <-ae.stateQueue:
+			ae.soundsDropped.Add(1)
+		case <-timeout.C:
+			return
 		default:
-			goto drainState
+			return
 		}
 	}
+}
 
-drainState:
-	// Drain state queue
+// drainStateQueue empties only the state queue
+func (ae *AudioEngine) drainStateQueue() {
 	for {
 		select {
 		case <-ae.stateQueue:
@@ -239,21 +299,54 @@ drainState:
 
 // checkCurrentSound checks if the current sound has finished naturally
 func (ae *AudioEngine) checkCurrentSound() {
-	// This is handled by the callback in processCommand
-	// This method is kept for potential future use
+	// Handled by callback in processCommand
 }
 
 // soundComplete is called when a sound finishes playing
 func (ae *AudioEngine) soundComplete() {
+	ae.playbackMutex.Lock()
 	ae.currentCtrl = nil
 	ae.currentSound = nil
+	ae.playbackMutex.Unlock()
+}
+
+// IsRunning returns true if the audio engine is running
+func (ae *AudioEngine) IsRunning() bool {
+	return ae.running.Load()
+}
+
+// IsEnabled returns true if audio is enabled and not muted
+func (ae *AudioEngine) IsEnabled() bool {
+	ae.configMutex.RLock()
+	enabled := ae.config.Enabled
+	ae.configMutex.RUnlock()
+
+	return enabled && !ae.muted.Load()
+}
+
+// ToggleMute toggles the mute state and returns the new state
+func (ae *AudioEngine) ToggleMute() bool {
+	newState := !ae.muted.Load()
+	ae.muted.Store(newState)
+
+	// If muting, stop current sound
+	if newState {
+		ae.StopCurrentSound()
+		ae.DrainQueues()
+	}
+
+	return !newState // Return true if sound is now enabled
 }
 
 // SetConfig updates the audio configuration (thread-safe)
 func (ae *AudioEngine) SetConfig(cfg *AudioConfig) {
-	// In a real implementation, this would need proper synchronization
-	// For now, we just replace the pointer atomically
+	if cfg == nil {
+		return
+	}
+
+	ae.configMutex.Lock()
 	ae.config = cfg
+	ae.configMutex.Unlock()
 }
 
 // GetStats returns audio engine statistics
@@ -269,17 +362,13 @@ func (ae *AudioEngine) SetVolume(volume float64) {
 	if volume > 1 {
 		volume = 1
 	}
+
+	ae.configMutex.Lock()
 	ae.config.MasterVolume = volume
+	ae.configMutex.Unlock()
 }
 
-// ToggleEnabled toggles audio on/off
-func (ae *AudioEngine) ToggleEnabled() bool {
-	ae.config.Enabled = !ae.config.Enabled
-	return ae.config.Enabled
-}
-
-// ProcessTick is called by the game's clock scheduler for synchronization
-func (ae *AudioEngine) ProcessTick() {
-	// This method allows the audio engine to synchronize with game clock
-	// Currently a no-op as sound timing is handled internally
+// IsMuted returns the current mute state
+func (ae *AudioEngine) IsMuted() bool {
+	return ae.muted.Load()
 }
