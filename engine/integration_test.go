@@ -25,7 +25,7 @@ func TestCompleteGameCycle(t *testing.T) {
 
 	// Simulate gold spawn
 	sequenceID := state.IncrementGoldSequenceID()
-	state.ActivateGoldSequence(sequenceID, constants.GoldSequenceDuration)
+	state.ActivateGoldSequence(sequenceID, constants.GoldDuration)
 
 	if phase := state.GetPhase(); phase != PhaseGoldActive {
 		t.Fatalf("Expected PhaseGoldActive after activation, got %v", phase)
@@ -41,9 +41,9 @@ func TestCompleteGameCycle(t *testing.T) {
 	state.SetHeat(75) // 75 out of 94 max
 
 	// Advance time to gold timeout
-	mockTime.Advance(constants.GoldSequenceDuration + 100*time.Millisecond)
+	mockTime.Advance(constants.GoldDuration + 100*time.Millisecond)
 
-	if !state.IsGoldTimedOut(0) {
+	if !state.IsGoldTimedOut() {
 		t.Fatal("Gold should be timed out")
 	}
 
@@ -61,7 +61,7 @@ func TestCompleteGameCycle(t *testing.T) {
 	}
 
 	// Verify decay timer is active and interval is correct for heat=75
-	decaySnapshot := state.ReadDecayState(0)
+	decaySnapshot := state.ReadDecayState()
 	if !decaySnapshot.TimerActive {
 		t.Fatal("Decay timer should be active")
 	}
@@ -78,7 +78,7 @@ func TestCompleteGameCycle(t *testing.T) {
 	// Advance time past decay interval
 	mockTime.Advance(time.Duration(actualInterval+1) * time.Second)
 
-	if !state.IsDecayReady(0) {
+	if !state.IsDecayReady() {
 		t.Fatal("Decay should be ready")
 	}
 
@@ -89,7 +89,7 @@ func TestCompleteGameCycle(t *testing.T) {
 		t.Fatalf("Expected PhaseDecayAnimation, got %v", phase)
 	}
 
-	decaySnapshot = state.ReadDecayState(0)
+	decaySnapshot = state.ReadDecayState()
 	if !decaySnapshot.Animating || decaySnapshot.TimerActive {
 		t.Fatal("Decay animation should be running, timer should be inactive")
 	}
@@ -103,7 +103,7 @@ func TestCompleteGameCycle(t *testing.T) {
 	}
 
 	// Verify all state is clean
-	decaySnapshot = state.ReadDecayState(0)
+	decaySnapshot = state.ReadDecayState()
 	goldSnapshot = state.ReadGoldState()
 
 	if decaySnapshot.Animating || decaySnapshot.TimerActive {
@@ -124,7 +124,7 @@ func TestGoldCompletionBeforeTimeout(t *testing.T) {
 
 	// Activate gold
 	sequenceID := state.IncrementGoldSequenceID()
-	state.ActivateGoldSequence(sequenceID, constants.GoldSequenceDuration)
+	state.ActivateGoldSequence(sequenceID, constants.GoldDuration)
 
 	// Simulate typing during gold
 	state.SetHeat(50)
@@ -133,7 +133,7 @@ func TestGoldCompletionBeforeTimeout(t *testing.T) {
 	mockTime.Advance(3 * time.Second)
 
 	// Gold should NOT be timed out
-	if state.IsGoldTimedOut(0) {
+	if state.IsGoldTimedOut() {
 		t.Fatal("Gold should not be timed out yet")
 	}
 
@@ -153,7 +153,7 @@ func TestGoldCompletionBeforeTimeout(t *testing.T) {
 	}
 
 	// Verify decay timer uses heat at completion time (50)
-	decaySnapshot := state.ReadDecayState(0)
+	decaySnapshot := state.ReadDecayState()
 	actualInterval := decaySnapshot.NextTime.Sub(decayStartTime).Seconds()
 
 	// With heat=50 out of 94: heatPercentage ≈ 0.53
@@ -199,14 +199,14 @@ func TestConcurrentPhaseReadsDuringTransitions(t *testing.T) {
 
 				// Read gold state
 				_ = state.GetGoldActive()
-				_ = state.IsGoldTimedOut(0)
+				_ = state.IsGoldTimedOut()
 				_ = state.ReadGoldState()
 
 				// Read decay state
 				_ = state.GetDecayTimerActive()
 				_ = state.GetDecayAnimating()
-				_ = state.IsDecayReady(0)
-				_ = state.ReadDecayState(0)
+				_ = state.IsDecayReady()
+				_ = state.ReadDecayState()
 
 				// Read heat
 				_ = state.GetHeat()
@@ -221,7 +221,7 @@ func TestConcurrentPhaseReadsDuringTransitions(t *testing.T) {
 
 		// Gold active
 		sequenceID := state.IncrementGoldSequenceID()
-		state.ActivateGoldSequence(sequenceID, constants.GoldSequenceDuration)
+		state.ActivateGoldSequence(sequenceID, constants.GoldDuration)
 
 		// Decay wait
 		state.DeactivateGoldSequence()
@@ -262,7 +262,7 @@ func TestPhaseTimestampConsistency(t *testing.T) {
 	// Activate gold
 	t1 := mockTime.Now()
 	sequenceID := state.IncrementGoldSequenceID()
-	state.ActivateGoldSequence(sequenceID, constants.GoldSequenceDuration)
+	state.ActivateGoldSequence(sequenceID, constants.GoldDuration)
 
 	goldSnapshot := state.ReadGoldState()
 	if !goldSnapshot.StartTime.Equal(t1) {
@@ -293,7 +293,7 @@ func TestPhaseTimestampConsistency(t *testing.T) {
 	t3 := mockTime.Now()
 	state.StartDecayAnimation()
 
-	decaySnapshot := state.ReadDecayState(0)
+	decaySnapshot := state.ReadDecayState()
 	if !decaySnapshot.StartTime.Equal(t3) {
 		t.Errorf("DecayAnimation start time mismatch: expected %v, got %v", t3, decaySnapshot.StartTime)
 	}
@@ -308,7 +308,7 @@ func TestPhaseDurationCalculation(t *testing.T) {
 
 	// Activate gold
 	sequenceID := state.IncrementGoldSequenceID()
-	state.ActivateGoldSequence(sequenceID, constants.GoldSequenceDuration)
+	state.ActivateGoldSequence(sequenceID, constants.GoldDuration)
 
 	// Advance time by 3 seconds
 	mockTime.Advance(3 * time.Second)
@@ -443,10 +443,10 @@ func TestRapidPhaseTransitions(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		// Activate gold
 		sequenceID := state.IncrementGoldSequenceID()
-		state.ActivateGoldSequence(sequenceID, constants.GoldSequenceDuration)
+		state.ActivateGoldSequence(sequenceID, constants.GoldDuration)
 
 		// Immediately timeout (advance gold duration)
-		mockTime.Advance(constants.GoldSequenceDuration + 50*time.Millisecond)
+		mockTime.Advance(constants.GoldDuration + 50*time.Millisecond)
 
 		// Immediately start decay timer
 		state.DeactivateGoldSequence()
@@ -457,7 +457,7 @@ func TestRapidPhaseTransitions(t *testing.T) {
 		)
 
 		// Get decay interval
-		decaySnapshot := state.ReadDecayState(0)
+		decaySnapshot := state.ReadDecayState()
 		interval := decaySnapshot.TimeUntil
 
 		// Immediately trigger decay (advance decay interval)
@@ -489,7 +489,7 @@ func TestGoldSequenceIDIncrement(t *testing.T) {
 		actualIDs = append(actualIDs, id)
 
 		// Activate and immediately deactivate
-		state.ActivateGoldSequence(id, constants.GoldSequenceDuration)
+		state.ActivateGoldSequence(id, constants.GoldDuration)
 		state.DeactivateGoldSequence()
 	}
 

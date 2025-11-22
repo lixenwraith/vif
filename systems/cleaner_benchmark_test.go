@@ -204,45 +204,6 @@ func BenchmarkFlashEffectCleanup(b *testing.B) {
 	}
 }
 
-// BenchmarkGoldSequenceSpawn benchmarks gold sequence spawning
-func BenchmarkGoldSequenceSpawn(b *testing.B) {
-	world := engine.NewWorld()
-	ctx := createCleanerTestContext()
-
-	decaySystem := NewDecaySystem(80, 24, ctx)
-	goldSystem := NewGoldSequenceSystem(ctx, decaySystem, 80, 24, 0, 0)
-
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		goldSystem.spawnGoldSequence(world)
-
-		// Clean up for next iteration
-		b.StopTimer()
-		goldSystem.CompleteGoldSequence(world)
-		b.StartTimer()
-	}
-}
-
-// BenchmarkGoldSequenceCompletion benchmarks gold sequence completion
-func BenchmarkGoldSequenceCompletion(b *testing.B) {
-	world := engine.NewWorld()
-	ctx := createCleanerTestContext()
-
-	decaySystem := NewDecaySystem(80, 24, ctx)
-	goldSystem := NewGoldSequenceSystem(ctx, decaySystem, 80, 24, 0, 0)
-
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		goldSystem.spawnGoldSequence(world)
-		b.StartTimer()
-
-		goldSystem.CompleteGoldSequence(world)
-	}
-}
-
 // BenchmarkConcurrentCleanerOperations benchmarks concurrent cleaner operations
 func BenchmarkConcurrentCleanerOperations(b *testing.B) {
 	world := engine.NewWorld()
@@ -463,60 +424,3 @@ func BenchmarkCleanerUpdateSync(b *testing.B) {
 	}
 }
 
-// BenchmarkCompleteGoldCleanerPipeline benchmarks the full pipeline
-func BenchmarkCompleteGoldCleanerPipeline(b *testing.B) {
-	world := engine.NewWorld()
-	ctx := createCleanerTestContext()
-
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
-	defer cleanerSystem.Shutdown()
-
-	decaySystem := NewDecaySystem(80, 24, ctx)
-	goldSystem := NewGoldSequenceSystem(ctx, decaySystem, 80, 24, 0, 0)
-
-	// Create environment
-	for row := 0; row < 24; row++ {
-		for x := 10; x < 70; x += 10 {
-			if row%2 == 0 {
-				createRedCharacterAt(world, x, row)
-			}
-		}
-	}
-
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		// Spawn gold
-		goldSystem.spawnGoldSequence(world)
-
-		// Complete gold (triggers cleaners via GameState)
-		ctx.State.RequestCleaners()
-		ctx.State.ActivateCleaners()
-		cleanerSystem.ActivateCleaners(world)
-
-		// Process cleaners
-		cleanerSystem.Update(world, 16*time.Millisecond)
-
-		// Check collisions via trail
-		cleanerType := reflect.TypeOf(components.CleanerComponent{})
-		cleaners := world.GetEntitiesWith(cleanerType)
-		for _, entity := range cleaners {
-			cleanerComp, ok := world.GetComponent(entity, cleanerType)
-			if !ok {
-				continue
-			}
-			cleaner := cleanerComp.(components.CleanerComponent)
-			cleanerSystem.checkTrailCollisions(world, cleaner.Row, cleaner.TrailPositions)
-		}
-
-		// Clean up
-		b.StopTimer()
-		goldSystem.CompleteGoldSequence(world)
-		cleaners = world.GetEntitiesWith(cleanerType)
-		for _, entity := range cleaners {
-			world.DestroyEntity(entity)
-		}
-		cleanerSystem.cleanupCleaners(world)
-		b.StartTimer()
-	}
-}

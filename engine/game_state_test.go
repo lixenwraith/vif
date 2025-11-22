@@ -282,13 +282,13 @@ func TestBoostStateTransitions(t *testing.T) {
 	}
 
 	// Boost should not expire yet (no pause duration in tests)
-	if gs.UpdateBoostTimerAtomic(0) {
+	if gs.UpdateBoostTimerAtomic() {
 		t.Error("Boost should not expire before end time")
 	}
 
 	// Advance time past expiration
 	timeProvider.Advance(600 * time.Millisecond)
-	if !gs.UpdateBoostTimerAtomic(0) {
+	if !gs.UpdateBoostTimerAtomic() {
 		t.Error("Boost should expire after end time")
 	}
 
@@ -698,7 +698,7 @@ func TestAllSnapshotTypesConcurrent(t *testing.T) {
 				gs.SetCursorY(i % 5)
 
 				if i%10 == 0 {
-					gs.UpdateBoostTimerAtomic(0)
+					gs.UpdateBoostTimerAtomic()
 				}
 
 				time.Sleep(time.Millisecond)
@@ -723,7 +723,7 @@ func TestAllSnapshotTypesConcurrent(t *testing.T) {
 					cursorSnap := gs.ReadCursorPosition()
 					goldSnap := gs.ReadGoldState()
 					phaseSnap := gs.ReadPhaseState()
-					decaySnap := gs.ReadDecayState(0)
+					decaySnap := gs.ReadDecayState()
 					cleanerSnap := gs.ReadCleanerState()
 					heat, score := gs.ReadHeatAndScore()
 

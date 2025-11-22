@@ -365,7 +365,7 @@ func TestPhaseSnapshotConsistency(t *testing.T) {
 					return
 				default:
 					goldSnap := ctx.State.ReadGoldState()
-					decaySnap := ctx.State.ReadDecayState(0)
+					decaySnap := ctx.State.ReadDecayState()
 
 					// Verify phase-state consistency within each snapshot
 					// Note: Different snapshots might be from different moments,

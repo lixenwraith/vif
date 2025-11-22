@@ -80,7 +80,7 @@ func TestBoostRapidToggle(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < 500; i++ {
 			// Check if boost should expire atomically
-			ctx.State.UpdateBoostTimerAtomic(0)
+			ctx.State.UpdateBoostTimerAtomic()
 			time.Sleep(1 * time.Millisecond) // Main loop tick
 		}
 	}()
@@ -198,7 +198,7 @@ func TestBoostExpirationRace(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 50; i++ {
-			ctx.State.UpdateBoostTimerAtomic(0)
+			ctx.State.UpdateBoostTimerAtomic()
 			time.Sleep(1 * time.Millisecond)
 		}
 	}()
@@ -289,7 +289,7 @@ func TestBoostWithScoreUpdates(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 150; i++ {
-			ctx.State.UpdateBoostTimerAtomic(0)
+			ctx.State.UpdateBoostTimerAtomic()
 			time.Sleep(1 * time.Millisecond)
 		}
 	}()
@@ -323,7 +323,7 @@ func TestSimulateFullGameLoop(t *testing.T) {
 			select {
 			case <-ticker.C:
 				// Check boost expiration (atomic CAS pattern as in main.go)
-				ctx.State.UpdateBoostTimerAtomic(0)
+				ctx.State.UpdateBoostTimerAtomic()
 
 				// Update ping timer atomically (CAS pattern as in main.go)
 				if ctx.UpdatePingGridTimerAtomic(0.016) {
@@ -550,7 +550,7 @@ func TestBoostTimerAtomicCAS(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 200; i++ {
-			ctx.State.UpdateBoostTimerAtomic(0)
+			ctx.State.UpdateBoostTimerAtomic()
 			time.Sleep(500 * time.Microsecond)
 		}
 	}()
@@ -646,7 +646,7 @@ func TestConcurrentBoostUpdates(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 200; i++ {
-			ctx.State.UpdateBoostTimerAtomic(0)
+			ctx.State.UpdateBoostTimerAtomic()
 			time.Sleep(2 * time.Millisecond)
 		}
 	}()

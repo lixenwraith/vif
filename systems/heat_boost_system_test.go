@@ -404,7 +404,7 @@ func TestBoostTimerExpiration(t *testing.T) {
 	time.Sleep(150 * time.Millisecond)
 
 	// Call UpdateBoostTimerAtomic to check expiration
-	expired := ctx.State.UpdateBoostTimerAtomic(0)
+	expired := ctx.State.UpdateBoostTimerAtomic()
 
 	// Should return true (expired)
 	if !expired {

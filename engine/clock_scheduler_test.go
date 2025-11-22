@@ -275,14 +275,11 @@ func TestConcurrentPhaseReads(t *testing.T) {
 func TestClockSchedulerCreation(t *testing.T) {
 	screen := &MockScreen{}
 	ctx := NewGameContext(screen)
-	scheduler := NewClockScheduler(ctx)
+	frameReady := make(chan struct{}, 1)
+	scheduler, _ := NewClockScheduler(ctx, 50*time.Millisecond, frameReady)
 
 	if scheduler.ctx != ctx {
 		t.Error("Scheduler context not set correctly")
-	}
-
-	if scheduler.ticker == nil {
-		t.Error("Scheduler ticker not initialized")
 	}
 
 	if scheduler.GetTickCount() != 0 {
@@ -298,90 +295,19 @@ func TestClockSchedulerCreation(t *testing.T) {
 	scheduler.Stop()
 }
 
-// TestClockSchedulerBasicTicking tests that the clock scheduler ticks correctly
-func TestClockSchedulerBasicTicking(t *testing.T) {
-	mockTime := NewMockTimeProvider(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
-	ctx := &GameContext{
-		State:        NewGameState(80, 24, 100, mockTime),
-		TimeProvider: mockTime,
-		World:        NewWorld(),
-	}
-
-	scheduler := NewClockScheduler(ctx)
-
-	// Verify tick count starts at 0
-	if count := scheduler.GetTickCount(); count != 0 {
-		t.Fatalf("Expected initial tick count 0, got %d", count)
-	}
-
-	// Manually call tick (simulating what the goroutine would do)
-	for i := 1; i <= 10; i++ {
-		scheduler.tick()
-		count := scheduler.GetTickCount()
-		if count != uint64(i) {
-			t.Errorf("After %d ticks, expected count %d, got %d", i, i, count)
-		}
-	}
-
-	t.Logf("✓ Clock scheduler tick count increments correctly")
-}
-
-// TestClockSchedulerConcurrentTicking tests concurrent tick calls
-func TestClockSchedulerConcurrentTicking(t *testing.T) {
-	mockTime := NewMockTimeProvider(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
-	ctx := &GameContext{
-		State:        NewGameState(80, 24, 100, mockTime),
-		TimeProvider: mockTime,
-		World:        NewWorld(),
-	}
-
-	mockGold := &MockGoldSystem{}
-	mockDecay := &MockDecaySystem{}
-	mockCleaner := &MockCleanerSystem{}
-
-	scheduler := NewClockScheduler(ctx)
-	scheduler.SetSystems(mockGold, mockDecay, mockCleaner)
-
-	const numGoroutines = 10
-	const ticksPerGoroutine = 100
-
-	var wg sync.WaitGroup
-	wg.Add(numGoroutines)
-
-	// Concurrent tick calls
-	for i := 0; i < numGoroutines; i++ {
-		go func() {
-			defer wg.Done()
-			for j := 0; j < ticksPerGoroutine; j++ {
-				scheduler.tick()
-			}
-		}()
-	}
-
-	wg.Wait()
-
-	// Verify tick count is correct (all ticks should be counted)
-	expectedTicks := uint64(numGoroutines * ticksPerGoroutine)
-	actualTicks := scheduler.GetTickCount()
-
-	if actualTicks != expectedTicks {
-		t.Errorf("Expected %d total ticks, got %d", expectedTicks, actualTicks)
-	}
-
-	t.Logf("✓ Concurrent ticking handled correctly: %d ticks from %d goroutines",
-		actualTicks, numGoroutines)
-}
-
 // TestClockSchedulerStopIdempotent tests that Stop() can be called multiple times
 func TestClockSchedulerStopIdempotent(t *testing.T) {
 	mockTime := NewMockTimeProvider(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
+	pausableClock := NewPausableClock()
 	ctx := &GameContext{
-		State:        NewGameState(80, 24, 100, mockTime),
-		TimeProvider: mockTime,
-		World:        NewWorld(),
+		State:         NewGameState(80, 24, 100, mockTime),
+		TimeProvider:  mockTime,
+		PausableClock: pausableClock,
+		World:         NewWorld(),
 	}
 
-	scheduler := NewClockScheduler(ctx)
+	frameReady := make(chan struct{}, 1)
+	scheduler, _ := NewClockScheduler(ctx, 50*time.Millisecond, frameReady)
 
 	// Call Stop() multiple times - should not panic or cause issues
 	scheduler.Stop()
@@ -394,13 +320,16 @@ func TestClockSchedulerStopIdempotent(t *testing.T) {
 // TestClockSchedulerTickRate tests that tick rate is correct
 func TestClockSchedulerTickRate(t *testing.T) {
 	mockTime := NewMockTimeProvider(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
+	pausableClock := NewPausableClock()
 	ctx := &GameContext{
-		State:        NewGameState(80, 24, 100, mockTime),
-		TimeProvider: mockTime,
-		World:        NewWorld(),
+		State:         NewGameState(80, 24, 100, mockTime),
+		TimeProvider:  mockTime,
+		PausableClock: pausableClock,
+		World:         NewWorld(),
 	}
 
-	scheduler := NewClockScheduler(ctx)
+	frameReady := make(chan struct{}, 1)
+	scheduler, _ := NewClockScheduler(ctx, 50*time.Millisecond, frameReady)
 
 	tickRate := scheduler.GetTickRate()
 	expectedRate := 50 * time.Millisecond
@@ -420,11 +349,23 @@ func TestClockSchedulerTickRate(t *testing.T) {
 func TestClockSchedulerTicking(t *testing.T) {
 	screen := &MockScreen{}
 	ctx := NewGameContext(screen)
-	scheduler := NewClockScheduler(ctx)
+	frameReady := make(chan struct{}, 1)
+	scheduler, _ := NewClockScheduler(ctx, 50*time.Millisecond, frameReady)
 
 	// Start scheduler
 	scheduler.Start()
 	defer scheduler.Stop()
+
+	// Signal frame ready to allow ticking
+	go func() {
+		for i := 0; i < 20; i++ {
+			time.Sleep(40 * time.Millisecond)
+			select {
+			case frameReady <- struct{}{}:
+			default:
+			}
+		}
+	}()
 
 	// Wait for multiple ticks (50ms × 10 = 500ms)
 	time.Sleep(550 * time.Millisecond)
@@ -445,9 +386,22 @@ func TestClockSchedulerTicking(t *testing.T) {
 func TestClockSchedulerStopIdempotentRealTime(t *testing.T) {
 	screen := &MockScreen{}
 	ctx := NewGameContext(screen)
-	scheduler := NewClockScheduler(ctx)
+	frameReady := make(chan struct{}, 1)
+	scheduler, _ := NewClockScheduler(ctx, 50*time.Millisecond, frameReady)
 
 	scheduler.Start()
+
+	// Signal frame ready to allow ticking
+	go func() {
+		for i := 0; i < 10; i++ {
+			time.Sleep(40 * time.Millisecond)
+			select {
+			case frameReady <- struct{}{}:
+			default:
+			}
+		}
+	}()
+
 	time.Sleep(100 * time.Millisecond)
 
 	// Stop multiple times - should not panic
@@ -471,7 +425,8 @@ func TestClockSchedulerStopIdempotentRealTime(t *testing.T) {
 func TestPhaseAndClockIntegration(t *testing.T) {
 	screen := &MockScreen{}
 	ctx := NewGameContext(screen)
-	scheduler := NewClockScheduler(ctx)
+	frameReady := make(chan struct{}, 1)
+	scheduler, _ := NewClockScheduler(ctx, 50*time.Millisecond, frameReady)
 
 	// Verify initial phase
 	if ctx.State.GetPhase() != PhaseNormal {
@@ -480,6 +435,17 @@ func TestPhaseAndClockIntegration(t *testing.T) {
 
 	scheduler.Start()
 	defer scheduler.Stop()
+
+	// Signal frame ready to allow ticking
+	go func() {
+		for i := 0; i < 20; i++ {
+			time.Sleep(40 * time.Millisecond)
+			select {
+			case frameReady <- struct{}{}:
+			default:
+			}
+		}
+	}()
 
 	// Let it tick for a bit
 	time.Sleep(200 * time.Millisecond)
@@ -522,7 +488,8 @@ func TestClockSchedulerMemoryLeak(t *testing.T) {
 
 	// Create and destroy multiple schedulers
 	for i := 0; i < 10; i++ {
-		scheduler := NewClockScheduler(ctx)
+		frameReady := make(chan struct{}, 1)
+		scheduler, _ := NewClockScheduler(ctx, 50*time.Millisecond, frameReady)
 		scheduler.Start()
 		time.Sleep(20 * time.Millisecond)
 		scheduler.Stop()
