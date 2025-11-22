@@ -80,32 +80,12 @@ func setupLogging(debug bool) *os.File {
 }
 
 // updateUIElements handles UI updates that need real-time clock (work during pause)
-// This includes cursor blinking, error state timeouts, and other visual feedback
+// This includes purely visual UI elements that should animate while paused.
+// Note: Game state feedback (ScoreBlink, CursorError) is handled in ScoreSystem via Game Time.
 func updateUIElements(ctx *engine.GameContext) {
-	// Use real time for UI elements (unaffected by pause)
-	realNow := ctx.GetRealTime()
-
-	// Update cursor blink
-	if realNow.Sub(ctx.CursorBlinkTime) > constants.CursorBlinkTime {
-		ctx.CursorVisible = !ctx.CursorVisible
-		ctx.CursorBlinkTime = realNow
-	}
-
-	// Clear expired cursor error state using real time
-	if ctx.State.GetCursorError() {
-		errorTime := ctx.State.GetCursorErrorTime()
-		if !errorTime.IsZero() && realNow.Sub(errorTime) > constants.ErrorCursorTimeout {
-			ctx.State.SetCursorError(false)
-		}
-	}
-
-	// Clear score blink after timeout using real time
-	if ctx.State.GetScoreBlinkActive() {
-		blinkTime := ctx.State.GetScoreBlinkTime()
-		if !blinkTime.IsZero() && realNow.Sub(blinkTime) > constants.ScoreBlinkTimeout {
-			ctx.State.SetScoreBlinkActive(false)
-		}
-	}
+	// Currently empty as specific game state feedback (blinks/errors)
+	// must freeze during pause and are handled by the ScoreSystem.
+	// Future UI-only animations (like a "PAUSED" text blinker) would go here.
 }
 
 func main() {

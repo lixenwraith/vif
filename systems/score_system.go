@@ -48,10 +48,21 @@ func (s *ScoreSystem) SetNuggetSystem(nuggetSystem *NuggetSystem) {
 	s.nuggetSystem = nuggetSystem
 }
 
-// Update runs the score system (unused for now, character typing is event-driven)
+// Update runs the score system
 func (s *ScoreSystem) Update(world *engine.World, dt time.Duration) {
-	// UI cleanup logic (cursor error, score blink) has been moved to main.go/updateUIElements
-	// to ensure it runs on wall-clock time and updates correctly even when the game is paused.
+	now := s.ctx.TimeProvider.Now()
+
+	// Clear error cursor (red flash) after timeout using Game Time
+	// This ensures the red flash "freezes" if the game is paused
+	if s.ctx.State.GetCursorError() && now.Sub(s.ctx.State.GetCursorErrorTime()) > constants.ErrorCursorTimeout {
+		s.ctx.State.SetCursorError(false)
+	}
+
+	// Clear score blink (background color flash) after timeout using Game Time
+	// This ensures the success flash "freezes" if the game is paused
+	if s.ctx.State.GetScoreBlinkActive() && now.Sub(s.ctx.State.GetScoreBlinkTime()) > constants.ScoreBlinkTimeout {
+		s.ctx.State.SetScoreBlinkActive(false)
+	}
 }
 
 // HandleCharacterTyping processes a character typed in insert mode
