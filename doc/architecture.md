@@ -483,6 +483,42 @@ for {
 - Clock runs in goroutine, no memory leaks detected
 - Concurrent phase reads/writes tested (20 goroutines)
 
+## Audio System
+
+### Overview
+The audio system provides sound effects for game events using a dual-queue architecture with thread-safe playback management.
+
+### Components
+- **AudioEngine**: Core playback engine with two priority queues
+  - `realTimeQueue` (size 5): High-priority sounds like typing errors
+  - `stateQueue` (size 10): Game state sounds (coins, bells, whooshes)
+- **Sound Effects**: Synthesized using beep library
+  - Error: Short harsh buzz (100Hz saw wave)
+  - Bell: Melodic ding for nuggets (880Hz + 1760Hz sine)
+  - Whoosh: Noise burst for cleaners
+  - Coin: Two-note chime for gold completion
+
+### Integration Points
+- **ScoreSystem**: Sends error sounds via realTimeQueue
+- **GoldSystem**: Sends coin sounds via stateQueue
+- **NuggetSystem**: Sends bell sounds via stateQueue (Tab jump)
+- **CleanerSystem**: Sends whoosh sounds via stateQueue
+
+### Pause Behavior
+- Entering COMMAND mode immediately stops current sound
+- Queues are drained to prevent delayed playback
+- No resume on unpause - sounds don't continue
+
+### Controls
+- **Ctrl+S**: Toggle mute (starts muted by default)
+- Status bar shows [MUTED] indicator when muted
+
+### Thread Safety
+- Atomic operations for state flags (running, muted, initialized)
+- Mutex protection for playback state and config access
+- Non-blocking queue sends with overflow handling
+- Generation counter prevents stale command playback
+
 ### System Priorities
 Systems execute in priority order (lower = earlier):
 1. **ScoreSystem (10)**: Process user input, update score (highest priority for input)
