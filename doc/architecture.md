@@ -271,11 +271,13 @@ score := ctx.State.GetScore() // Atomic read #2
 #### PausableClock - Game Time vs Real Time
 
 **Dual Time System**:
-- **Game Time**: Pausable clock used for all game logic (spawning, decay, gold timeouts)
-  - Stops advancing when paused (COMMAND mode)
+- **Game Time**: Pausable clock used for all game logic and game state feedback
+  - Used for: spawning, decay, gold timeouts, score blink, cursor error flash
+  - Stops advancing when paused (COMMAND mode) - visual feedback freezes during pause
   - Accessed via `ctx.TimeProvider.Now()` (returns pausable time)
-- **Real Time**: Wall clock time for UI elements that work during pause
-  - Continues during pause (cursor blink, error state timeouts)
+- **Real Time**: Wall clock time for purely visual UI elements
+  - Currently not used (reserved for future UI animations like "PAUSED" text blinker)
+  - Would continue during pause if implemented
   - Accessed via `ctx.GetRealTime()` (returns wall clock)
 
 **Pause Mechanism** (`engine/pausable_clock.go`):

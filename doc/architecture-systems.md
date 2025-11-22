@@ -4,7 +4,7 @@
 
 Systems execute in priority order (lower number = earlier execution):
 
-1. **ScoreSystem (10)** - Process user input, update score/heat (highest priority for responsiveness)
+1. **ScoreSystem (10)** - Process user input, update score/heat, clear visual feedback timeouts (highest priority for responsiveness)
 2. **SpawnSystem (15)** - Generate new character sequences (Blue and Green only)
 3. **NuggetSystem (18)** - Manage nugget spawn and lifecycle
 4. **GoldSequenceSystem (20)** - Manage gold sequence lifecycle and random placement
@@ -183,6 +183,23 @@ Gold Sequence → Completion/Timeout → Decay Timer → Decay Animation → Gol
 - Falling entities properly cleaned up on completion
 
 ### Score System Integration
+
+#### Update Method - Visual Feedback Timeouts
+The ScoreSystem.Update() method runs every frame to clear expired visual feedback:
+
+```
+ScoreSystem.Update():
+  1. Check cursor error flash timeout (200ms using Game Time)
+     - If expired: Clear cursor error state
+  2. Check score blink timeout (200ms using Game Time)
+     - If expired: Clear score blink state
+```
+
+**Key Behavior**:
+- Uses Game Time (`ctx.TimeProvider.Now()`), so timeouts freeze during pause
+- Ensures visual feedback (red flash, score blink) pauses when game is paused
+- Runs on every frame tick (16ms) for responsive visual updates
+- Constants defined in `constants/ui.go`: `ErrorCursorTimeout`, `ScoreBlinkTimeout`
 
 #### Gold Sequence Typing
 When user types during active gold sequence:

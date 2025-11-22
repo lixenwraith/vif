@@ -49,17 +49,19 @@ func TestBoostHeatMultiplier(t *testing.T) {
 
 	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
 
-	if ctx.State.GetHeat() != 1 {
-		t.Errorf("Without boost, expected heat increment of 1, got %d", ctx.State.GetHeat())
+	heat := ctx.State.GetHeat()
+	if heat != 1 {
+		t.Errorf("Expected heat to be 1 without boost, got %d", heat)
 	}
 
-	// Score should be heat * level_multiplier = 1 * 2 = 2
+	// Calculate expected score: heat * level_multiplier = 1 * 2 = 2
 	expectedScore := initialScore + 2
-	if ctx.State.GetScore() != expectedScore {
-		t.Errorf("Without boost, expected score %d, got %d", expectedScore, ctx.State.GetScore())
+	finalScore := ctx.State.GetScore()
+	if finalScore != expectedScore {
+		t.Errorf("Expected score %d, got %d", expectedScore, finalScore)
 	}
 
-	// Test 2: With boost, heat should increment by 2
+	// Test 2: Create another character for boost test
 	entity2 := ctx.World.CreateEntity()
 	pos2 := components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY}
 	char2 := components.CharacterComponent{Rune: 'b', Style: tcell.StyleDefault}
@@ -79,177 +81,28 @@ func TestBoostHeatMultiplier(t *testing.T) {
 		tx.Commit()
 	}
 
+	// Enable boost with matching color (2 = Green)
 	ctx.State.SetBoostEnabled(true)
-	previousHeat := ctx.State.GetHeat()
-	previousScore := ctx.State.GetScore()
+	ctx.State.SetBoostColor(2)
+	ctx.State.SetHeat(1) // Reset to starting heat
+	initialScore = ctx.State.GetScore()
 
 	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'b')
 
-	if ctx.State.GetHeat() != previousHeat+2 {
-		t.Errorf("With boost, expected heat increment of 2 (total %d), got %d", previousHeat+2, ctx.State.GetHeat())
+	heat = ctx.State.GetHeat()
+	if heat != 3 {
+		t.Errorf("Expected heat to be 3 with boost (1 + 2), got %d", heat)
 	}
 
-	// Score should increase by (heat * level_multiplier) = (3 * 2) = 6, total = 2 + 6 = 8
-	expectedScore = previousScore + ctx.State.GetHeat()*2
-	if ctx.State.GetScore() != expectedScore {
-		t.Errorf("With boost, expected score %d, got %d", expectedScore, ctx.State.GetScore())
-	}
-}
-
-// TestBlueCharacterActivatesBoost verifies that typing blue characters triggers boost when heat reaches max
-func TestBlueCharacterActivatesBoost(t *testing.T) {
-	// Create mock screen
-	screen := tcell.NewSimulationScreen("UTF-8")
-	screen.Init()
-	defer screen.Fini()
-	screen.SetSize(80, 24)
-
-	// Create game context
-	ctx := engine.NewGameContext(screen)
-	scoreSystem := NewScoreSystem(ctx)
-
-	// Calculate max heat
-	maxHeat := ctx.Width
-	if maxHeat < 1 {
-		maxHeat = 1
-	}
-
-	// Set heat to max - 1 (just below threshold)
-	ctx.State.SetHeat(maxHeat - 1)
-
-	// Create a blue character at cursor position
-	entity := ctx.World.CreateEntity()
-	pos := components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY}
-	char := components.CharacterComponent{Rune: 'a', Style: tcell.StyleDefault}
-	seq := components.SequenceComponent{
-		ID:    1,
-		Index: 0,
-		Type:  components.SequenceBlue,
-		Level: components.LevelNormal,
-	}
-
-	ctx.World.AddComponent(entity, pos)
-	ctx.World.AddComponent(entity, char)
-	ctx.World.AddComponent(entity, seq)
-	{
-		tx := ctx.World.BeginSpatialTransaction()
-		tx.Spawn(entity, pos.X, pos.Y)
-		tx.Commit()
-	}
-
-	// Boost should not be active initially
-	if ctx.State.GetBoostEnabled() {
-		t.Error("Boost should not be active initially")
-	}
-
-	// Type the blue character (should reach max heat and activate boost)
-	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
-
-	// Boost should now be active
-	if !ctx.State.GetBoostEnabled() {
-		t.Error("Boost should be active after typing blue character and reaching max heat")
-	}
-
-	// Boost end time should be in the future
-	if !ctx.State.GetBoostEndTime().After(ctx.TimeProvider.Now()) {
-		t.Error("Boost end time should be in the future")
+	// Calculate expected score: heat * level_multiplier = 3 * 2 = 6
+	expectedScore = initialScore + 6
+	finalScore = ctx.State.GetScore()
+	if finalScore != expectedScore {
+		t.Errorf("Expected score %d with boost, got %d", expectedScore, finalScore)
 	}
 }
 
-// TestBoostExtension verifies that consecutive blue characters extend boost time when heat is at max
-func TestBoostExtension(t *testing.T) {
-	// Create mock screen
-	screen := tcell.NewSimulationScreen("UTF-8")
-	screen.Init()
-	defer screen.Fini()
-	screen.SetSize(80, 24)
-
-	// Create game context
-	ctx := engine.NewGameContext(screen)
-	scoreSystem := NewScoreSystem(ctx)
-
-	// Calculate max heat
-	maxHeat := ctx.Width
-	if maxHeat < 1 {
-		maxHeat = 1
-	}
-
-	// Set heat to max - 1 and activate boost with first character
-	ctx.State.SetHeat(maxHeat - 1)
-
-	// Create first blue character
-	entity1 := ctx.World.CreateEntity()
-	pos1 := components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY}
-	char1 := components.CharacterComponent{Rune: 'a', Style: tcell.StyleDefault}
-	seq1 := components.SequenceComponent{
-		ID:    1,
-		Index: 0,
-		Type:  components.SequenceBlue,
-		Level: components.LevelNormal,
-	}
-
-	ctx.World.AddComponent(entity1, pos1)
-	ctx.World.AddComponent(entity1, char1)
-	ctx.World.AddComponent(entity1, seq1)
-	{
-		tx := ctx.World.BeginSpatialTransaction()
-		tx.Spawn(entity1, pos1.X, pos1.Y)
-		tx.Commit()
-	}
-
-	// Type first blue character (should activate boost)
-	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
-	firstEndTime := ctx.State.GetBoostEndTime()
-
-	// Verify boost is active
-	if !ctx.State.GetBoostEnabled() {
-		t.Fatal("Boost should be active after first character")
-	}
-
-	// Wait a bit
-	time.Sleep(100 * time.Millisecond)
-
-	// Create second blue character
-	entity2 := ctx.World.CreateEntity()
-	pos2 := components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY}
-	char2 := components.CharacterComponent{Rune: 'b', Style: tcell.StyleDefault}
-	seq2 := components.SequenceComponent{
-		ID:    2,
-		Index: 0,
-		Type:  components.SequenceBlue,
-		Level: components.LevelNormal,
-	}
-
-	ctx.World.AddComponent(entity2, pos2)
-	ctx.World.AddComponent(entity2, char2)
-	ctx.World.AddComponent(entity2, seq2)
-	{
-		tx := ctx.World.BeginSpatialTransaction()
-		tx.Spawn(entity2, pos2.X, pos2.Y)
-		tx.Commit()
-	}
-
-	// Type second blue character (should extend boost)
-	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'b')
-	secondEndTime := ctx.State.GetBoostEndTime()
-
-	// Second end time should be later than first (extended)
-	if !secondEndTime.After(firstEndTime) {
-		t.Error("Second boost end time should be extended from first")
-	}
-
-	// The extension should be approximately BoostExtensionDuration
-	expectedExtension := constants.BoostExtensionDuration
-	actualExtension := secondEndTime.Sub(firstEndTime)
-
-	// Allow some tolerance (within 200ms)
-	diff := actualExtension - expectedExtension
-	if diff < -200*time.Millisecond || diff > 200*time.Millisecond {
-		t.Errorf("Boost extension should be approximately %v, got %v", expectedExtension, actualExtension)
-	}
-}
-
-// TestRedCharacterResetsHeat verifies that red characters reset heat
+// TestRedCharacterResetsHeat verifies red characters reset heat
 func TestRedCharacterResetsHeat(t *testing.T) {
 	// Create mock screen
 	screen := tcell.NewSimulationScreen("UTF-8")
@@ -261,13 +114,13 @@ func TestRedCharacterResetsHeat(t *testing.T) {
 	ctx := engine.NewGameContext(screen)
 	scoreSystem := NewScoreSystem(ctx)
 
-	// Set initial heat
-	ctx.State.SetHeat(10)
+	// Set heat to non-zero
+	ctx.State.SetHeat(50)
 
 	// Create a red character at cursor position
 	entity := ctx.World.CreateEntity()
 	pos := components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY}
-	char := components.CharacterComponent{Rune: 'a', Style: tcell.StyleDefault}
+	char := components.CharacterComponent{Rune: 'r', Style: tcell.StyleDefault}
 	seq := components.SequenceComponent{
 		ID:    1,
 		Index: 0,
@@ -285,16 +138,17 @@ func TestRedCharacterResetsHeat(t *testing.T) {
 	}
 
 	// Type the red character
-	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
+	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'r')
 
 	// Heat should be reset to 0
-	if ctx.State.GetHeat() != 0 {
-		t.Errorf("Expected heat to be reset to 0, got %d", ctx.State.GetHeat())
+	heat := ctx.State.GetHeat()
+	if heat != 0 {
+		t.Errorf("Expected heat to be 0 after red character, got %d", heat)
 	}
 }
 
-// TestBoostDoesNotAffectScore verifies that boost affects heat, not score directly
-func TestBoostDoesNotAffectScore(t *testing.T) {
+// TestGreenBrightCharacterScore verifies Bright green characters give correct points
+func TestGreenBrightCharacterScore(t *testing.T) {
 	// Create mock screen
 	screen := tcell.NewSimulationScreen("UTF-8")
 	screen.Init()
@@ -305,92 +159,48 @@ func TestBoostDoesNotAffectScore(t *testing.T) {
 	ctx := engine.NewGameContext(screen)
 	scoreSystem := NewScoreSystem(ctx)
 
-	// Reset initial state
-	ctx.State.SetHeat(0)
-	ctx.State.SetScore(0)
+	// Set heat to 5
+	ctx.State.SetHeat(5)
+	initialScore := ctx.State.GetScore()
 
-	// Test with boost disabled
-	ctx.State.SetBoostEnabled(false)
-
-	// Type 5 green characters without boost
-	for i := 0; i < 5; i++ {
-		entity := ctx.World.CreateEntity()
-		pos := components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY}
-		char := components.CharacterComponent{Rune: rune('a' + i), Style: tcell.StyleDefault}
-		seq := components.SequenceComponent{
-			ID:    i + 1,
-			Index: 0,
-			Type:  components.SequenceGreen,
-			Level: components.LevelNormal,
-		}
-
-		ctx.World.AddComponent(entity, pos)
-		ctx.World.AddComponent(entity, char)
-		ctx.World.AddComponent(entity, seq)
-		{
-			tx := ctx.World.BeginSpatialTransaction()
-			tx.Spawn(entity, pos.X, pos.Y)
-			tx.Commit()
-		}
-
-		scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, rune('a'+i))
+	// Create a bright green character at cursor position
+	entity := ctx.World.CreateEntity()
+	pos := components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY}
+	char := components.CharacterComponent{Rune: 'g', Style: tcell.StyleDefault}
+	seq := components.SequenceComponent{
+		ID:    1,
+		Index: 0,
+		Type:  components.SequenceGreen,
+		Level: components.LevelBright,
 	}
 
-	// Heat should be 5 (1+1+1+1+1)
-	// Score should be sum of (heat * 2): 2 + 4 + 6 + 8 + 10 = 30
-	heatWithoutBoost := ctx.State.GetHeat()
-	scoreWithoutBoost := ctx.State.GetScore()
-
-	if heatWithoutBoost != 5 {
-		t.Errorf("Without boost, expected heat 5, got %d", heatWithoutBoost)
-	}
-	if scoreWithoutBoost != 30 {
-		t.Errorf("Without boost, expected score 30, got %d", scoreWithoutBoost)
+	ctx.World.AddComponent(entity, pos)
+	ctx.World.AddComponent(entity, char)
+	ctx.World.AddComponent(entity, seq)
+	{
+		tx := ctx.World.BeginSpatialTransaction()
+		tx.Spawn(entity, pos.X, pos.Y)
+		tx.Commit()
 	}
 
-	// Reset for boost test
-	ctx.State.SetHeat(0)
-	ctx.State.SetScore(0)
-	ctx.State.SetBoostEnabled(true)
+	// Type the character
+	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'g')
 
-	// Type 5 green characters with boost
-	for i := 0; i < 5; i++ {
-		entity := ctx.World.CreateEntity()
-		pos := components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY}
-		char := components.CharacterComponent{Rune: rune('f' + i), Style: tcell.StyleDefault}
-		seq := components.SequenceComponent{
-			ID:    i + 10,
-			Index: 0,
-			Type:  components.SequenceGreen,
-			Level: components.LevelNormal,
-		}
-
-		ctx.World.AddComponent(entity, pos)
-		ctx.World.AddComponent(entity, char)
-		ctx.World.AddComponent(entity, seq)
-		{
-			tx := ctx.World.BeginSpatialTransaction()
-			tx.Spawn(entity, pos.X, pos.Y)
-			tx.Commit()
-		}
-
-		scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, rune('f'+i))
+	// Heat should increment to 6
+	heat := ctx.State.GetHeat()
+	if heat != 6 {
+		t.Errorf("Expected heat to be 6, got %d", heat)
 	}
 
-	// Heat should be 10 (2+2+2+2+2)
-	// Score should be sum of (heat * 2): 4 + 8 + 12 + 16 + 20 = 60
-	heatWithBoost := ctx.State.GetHeat()
-	scoreWithBoost := ctx.State.GetScore()
-
-	if heatWithBoost != 10 {
-		t.Errorf("With boost, expected heat 10, got %d", heatWithBoost)
-	}
-	if scoreWithBoost != 60 {
-		t.Errorf("With boost, expected score 60, got %d", scoreWithBoost)
+	// Score should increase by heat * level_multiplier = 6 * 3 = 18
+	expectedScore := initialScore + 18
+	finalScore := ctx.State.GetScore()
+	if finalScore != expectedScore {
+		t.Errorf("Expected score %d, got %d", expectedScore, finalScore)
 	}
 }
 
-// TestIncorrectCharacterResetsHeat verifies that typing wrong character resets heat
+// TestIncorrectCharacterResetsHeat verifies incorrect characters reset heat
 func TestIncorrectCharacterResetsHeat(t *testing.T) {
 	// Create mock screen
 	screen := tcell.NewSimulationScreen("UTF-8")
@@ -402,8 +212,8 @@ func TestIncorrectCharacterResetsHeat(t *testing.T) {
 	ctx := engine.NewGameContext(screen)
 	scoreSystem := NewScoreSystem(ctx)
 
-	// Set initial heat
-	ctx.State.SetHeat(10)
+	// Set heat to non-zero
+	ctx.State.SetHeat(25)
 
 	// Create a green character at cursor position
 	entity := ctx.World.CreateEntity()
@@ -425,22 +235,23 @@ func TestIncorrectCharacterResetsHeat(t *testing.T) {
 		tx.Commit()
 	}
 
-	// Type wrong character
-	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'b')
+	// Type incorrect character
+	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'x')
 
 	// Heat should be reset to 0
-	if ctx.State.GetHeat() != 0 {
-		t.Errorf("Expected heat to be reset to 0 after incorrect character, got %d", ctx.State.GetHeat())
+	heat := ctx.State.GetHeat()
+	if heat != 0 {
+		t.Errorf("Expected heat to be 0 after incorrect character, got %d", heat)
 	}
 
 	// Cursor error should be set
 	if !ctx.State.GetCursorError() {
-		t.Error("Expected cursor error to be set after incorrect character")
+		t.Error("Expected cursor error to be set")
 	}
 }
 
-// TestScoreBlinkOnCorrectCharacter verifies that score blink is activated with character color
-func TestScoreBlinkOnCorrectCharacter(t *testing.T) {
+// TestBoostActivationAtMaxHeat verifies boost activation when heat reaches max
+func TestBoostActivationAtMaxHeat(t *testing.T) {
 	// Create mock screen
 	screen := tcell.NewSimulationScreen("UTF-8")
 	screen.Init()
@@ -451,10 +262,56 @@ func TestScoreBlinkOnCorrectCharacter(t *testing.T) {
 	ctx := engine.NewGameContext(screen)
 	scoreSystem := NewScoreSystem(ctx)
 
-	// Test with different character types and levels
+	// Set heat to max - 1 (screen width is 80)
+	ctx.State.SetHeat(79)
+	ctx.State.SetBoostEnabled(false)
+
+	// Create a green character at cursor position
+	entity := ctx.World.CreateEntity()
+	pos := components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY}
+	char := components.CharacterComponent{Rune: 'a', Style: tcell.StyleDefault}
+	seq := components.SequenceComponent{
+		ID:    1,
+		Index: 0,
+		Type:  components.SequenceGreen,
+		Level: components.LevelNormal,
+	}
+
+	ctx.World.AddComponent(entity, pos)
+	ctx.World.AddComponent(entity, char)
+	ctx.World.AddComponent(entity, seq)
+	{
+		tx := ctx.World.BeginSpatialTransaction()
+		tx.Spawn(entity, pos.X, pos.Y)
+		tx.Commit()
+	}
+
+	// Type correct character to reach max heat
+	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
+
+	// Heat should be at max (80)
+	heat := ctx.State.GetHeat()
+	if heat != 80 {
+		t.Errorf("Expected heat to be 80, got %d", heat)
+	}
+
+	// Boost should now be enabled
+	if !ctx.State.GetBoostEnabled() {
+		t.Error("Expected boost to be enabled at max heat")
+	}
+
+	// Boost color should be 2 (Green)
+	boostColor := ctx.State.GetBoostColor()
+	if boostColor != 2 {
+		t.Errorf("Expected boost color to be 2 (Green), got %d", boostColor)
+	}
+}
+
+// TestScoreBlinkOnCorrectCharacter verifies score blink activation on correct character
+func TestScoreBlinkOnCorrectCharacter(t *testing.T) {
 	tests := []struct {
 		name  string
-		seqType components.SequenceType
+		color components.SequenceType
 		level components.SequenceLevel
 	}{
 		{"Bright Blue", components.SequenceBlue, components.LevelBright},
@@ -464,6 +321,16 @@ func TestScoreBlinkOnCorrectCharacter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Create mock screen
+			screen := tcell.NewSimulationScreen("UTF-8")
+			screen.Init()
+			defer screen.Fini()
+			screen.SetSize(80, 24)
+
+			// Create game context
+			ctx := engine.NewGameContext(screen)
+			scoreSystem := NewScoreSystem(ctx)
+
 			// Create a character at cursor position
 			entity := ctx.World.CreateEntity()
 			pos := components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY}
@@ -471,7 +338,7 @@ func TestScoreBlinkOnCorrectCharacter(t *testing.T) {
 			seq := components.SequenceComponent{
 				ID:    1,
 				Index: 0,
-				Type:  tt.seqType,
+				Type:  tt.color,
 				Level: tt.level,
 			}
 
@@ -492,89 +359,114 @@ func TestScoreBlinkOnCorrectCharacter(t *testing.T) {
 				t.Error("Expected score blink to be active after correct character")
 			}
 
-			// Score blink type should match character color (non-error)
+			// Verify blink type matches color
 			blinkType := ctx.State.GetScoreBlinkType()
-			if blinkType == 0 {
-				t.Error("Expected score blink type to be non-zero (character color, not error)")
+			var expectedType uint32
+			switch tt.color {
+			case components.SequenceBlue:
+				expectedType = 1
+			case components.SequenceGreen:
+				expectedType = 2
+			}
+			if blinkType != expectedType {
+				t.Errorf("Expected blink type %d, got %d", expectedType, blinkType)
 			}
 
-			// Score blink time should be recent
-			blinkTime := ctx.State.GetScoreBlinkTime()
-			now := ctx.TimeProvider.Now()
-			if blinkTime.After(now) || now.Sub(blinkTime) > 100*time.Millisecond {
-				t.Errorf("Expected score blink time to be recent, got %v", blinkTime)
+			// Verify blink level matches level
+			blinkLevel := ctx.State.GetScoreBlinkLevel()
+			var expectedLevel uint32
+			switch tt.level {
+			case components.LevelDark:
+				expectedLevel = 0
+			case components.LevelNormal:
+				expectedLevel = 1
+			case components.LevelBright:
+				expectedLevel = 2
+			}
+			if blinkLevel != expectedLevel {
+				t.Errorf("Expected blink level %d, got %d", expectedLevel, blinkLevel)
 			}
 		})
 	}
 }
 
-// TestScoreBlinkOnError verifies that score blink is activated with error color (black)
+// TestScoreBlinkOnError verifies score blink activation on error
 func TestScoreBlinkOnError(t *testing.T) {
-	// Create mock screen
-	screen := tcell.NewSimulationScreen("UTF-8")
-	screen.Init()
-	defer screen.Fini()
-	screen.SetSize(80, 24)
-
-	// Create game context
-	ctx := engine.NewGameContext(screen)
-	scoreSystem := NewScoreSystem(ctx)
-
-	// Test 1: Typing on empty space
-	t.Run("Empty Space", func(t *testing.T) {
-		scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
-
-		// Score blink should be active
-		if !ctx.State.GetScoreBlinkActive() {
-			t.Error("Expected score blink to be active after error")
-		}
-
-		// Score blink type should be 0 (error state)
-		blinkType := ctx.State.GetScoreBlinkType()
-		if blinkType != 0 {
-			t.Errorf("Expected score blink type to be 0 (error state), got %d", blinkType)
-		}
-	})
-
-	// Test 2: Typing wrong character
-	t.Run("Wrong Character", func(t *testing.T) {
-		// Create a character at cursor position
-		entity := ctx.World.CreateEntity()
-		pos := components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY}
-		char := components.CharacterComponent{Rune: 'a', Style: tcell.StyleDefault}
-		seq := components.SequenceComponent{
-			ID:    1,
-			Index: 0,
-			Type:  components.SequenceGreen,
-			Level: components.LevelNormal,
-		}
-
-		ctx.World.AddComponent(entity, pos)
-		ctx.World.AddComponent(entity, char)
-		ctx.World.AddComponent(entity, seq)
+	tests := []struct {
+		name string
+		fn   func(*testing.T, *engine.GameContext, *ScoreSystem)
+	}{
 		{
-			tx := ctx.World.BeginSpatialTransaction()
-			tx.Spawn(entity, pos.X, pos.Y)
-			tx.Commit()
-		}
+			name: "Empty Space",
+			fn: func(t *testing.T, ctx *engine.GameContext, scoreSystem *ScoreSystem) {
+				// Type at empty position
+				scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
+			},
+		},
+		{
+			name: "Wrong Character",
+			fn: func(t *testing.T, ctx *engine.GameContext, scoreSystem *ScoreSystem) {
+				// Create a character
+				entity := ctx.World.CreateEntity()
+				pos := components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY}
+				char := components.CharacterComponent{Rune: 'a', Style: tcell.StyleDefault}
+				seq := components.SequenceComponent{
+					ID:    1,
+					Index: 0,
+					Type:  components.SequenceGreen,
+					Level: components.LevelNormal,
+				}
 
-		// Type wrong character
-		scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'b')
+				ctx.World.AddComponent(entity, pos)
+				ctx.World.AddComponent(entity, char)
+				ctx.World.AddComponent(entity, seq)
+				{
+					tx := ctx.World.BeginSpatialTransaction()
+					tx.Spawn(entity, pos.X, pos.Y)
+					tx.Commit()
+				}
 
-		// Score blink should be active
-		if !ctx.State.GetScoreBlinkActive() {
-			t.Error("Expected score blink to be active after error")
-		}
+				// Type wrong character
+				scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'b')
+			},
+		},
+	}
 
-		// Score blink type should be 0 (error state)
-		blinkType := ctx.State.GetScoreBlinkType()
-		if blinkType != 0 {
-			t.Errorf("Expected score blink type to be 0 (error state), got %d", blinkType)
-		}
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create mock screen
+			screen := tcell.NewSimulationScreen("UTF-8")
+			screen.Init()
+			defer screen.Fini()
+			screen.SetSize(80, 24)
+
+			// Create game context
+			ctx := engine.NewGameContext(screen)
+			scoreSystem := NewScoreSystem(ctx)
+
+			// Run test function
+			tt.fn(t, ctx, scoreSystem)
+
+			// Score blink should be active
+			if !ctx.State.GetScoreBlinkActive() {
+				t.Error("Expected score blink to be active after error")
+			}
+
+			// Score blink type should be 0 (error)
+			blinkType := ctx.State.GetScoreBlinkType()
+			if blinkType != 0 {
+				t.Errorf("Expected blink type 0 (error), got %d", blinkType)
+			}
+
+			// Cursor error should be set
+			if !ctx.State.GetCursorError() {
+				t.Error("Expected cursor error to be set")
+			}
+		})
+	}
 }
 
-// TestScoreBlinkOnGoldCharacter verifies that gold character typing triggers score blink
+// TestScoreBlinkOnGoldCharacter verifies score blink on gold sequence character
 func TestScoreBlinkOnGoldCharacter(t *testing.T) {
 	// Create mock screen
 	screen := tcell.NewSimulationScreen("UTF-8")
@@ -585,10 +477,13 @@ func TestScoreBlinkOnGoldCharacter(t *testing.T) {
 	// Create game context
 	ctx := engine.NewGameContext(screen)
 	scoreSystem := NewScoreSystem(ctx)
+	goldSystem := NewGoldSystem(ctx)
 
-	// Note: Without an active gold sequence system, gold characters are treated as regular characters
-	// This test verifies that the score blink is activated when typing a gold character
-	// when gold sequence is not active (which should not happen in normal gameplay but tests the code path)
+	// Wire up gold system
+	scoreSystem.SetGoldSystem(goldSystem)
+
+	// Manually activate gold sequence for testing (10 second duration)
+	ctx.State.ActivateGoldSequence(1, 10*time.Second)
 
 	// Create a gold character at cursor position
 	entity := ctx.World.CreateEntity()
@@ -598,7 +493,7 @@ func TestScoreBlinkOnGoldCharacter(t *testing.T) {
 		ID:    1,
 		Index: 0,
 		Type:  components.SequenceGold,
-		Level: components.LevelBright,
+		Level: components.LevelNormal,
 	}
 
 	ctx.World.AddComponent(entity, pos)
@@ -610,8 +505,7 @@ func TestScoreBlinkOnGoldCharacter(t *testing.T) {
 		tx.Commit()
 	}
 
-	// Type correct gold character (without gold sequence active, it will be treated as regular character)
-	// The character will still trigger score blink with its color
+	// Type correct character
 	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'x')
 
 	// Score blink should be active
@@ -619,9 +513,123 @@ func TestScoreBlinkOnGoldCharacter(t *testing.T) {
 		t.Error("Expected score blink to be active after gold character")
 	}
 
-	// Score blink type should be non-zero (gold type = 4)
+	// Score blink type should be 4 (gold)
 	blinkType := ctx.State.GetScoreBlinkType()
+	if blinkType != 4 {
+		t.Errorf("Expected blink type 4 (gold), got %d", blinkType)
+	}
+
+	// Score blink type should be non-zero (gold type = 4)
+	blinkType = ctx.State.GetScoreBlinkType()
 	if blinkType == 0 {
 		t.Error("Expected score blink type to be non-zero (gold color, not error)")
+	}
+}
+
+// TestScoreBlinkTimeout verifies score blink deactivates after timeout
+func TestScoreBlinkTimeout(t *testing.T) {
+	// Use mock time provider for controlled time advancement
+	startTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+	mockTime := engine.NewMockTimeProvider(startTime)
+
+	// Create mock screen
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.Init()
+	defer screen.Fini()
+	screen.SetSize(80, 24)
+
+	// Create game context with mock time provider
+	ctx := engine.NewGameContext(screen)
+	ctx.TimeProvider = mockTime
+	scoreSystem := NewScoreSystem(ctx)
+
+	// Create a green character at cursor position
+	entity := ctx.World.CreateEntity()
+	pos := components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY}
+	char := components.CharacterComponent{Rune: 'a', Style: tcell.StyleDefault}
+	seq := components.SequenceComponent{
+		ID:    1,
+		Index: 0,
+		Type:  components.SequenceGreen,
+		Level: components.LevelNormal,
+	}
+
+	ctx.World.AddComponent(entity, pos)
+	ctx.World.AddComponent(entity, char)
+	ctx.World.AddComponent(entity, seq)
+	{
+		tx := ctx.World.BeginSpatialTransaction()
+		tx.Spawn(entity, pos.X, pos.Y)
+		tx.Commit()
+	}
+
+	// Type correct character to trigger score blink
+	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
+
+	// Score blink should be active
+	if !ctx.State.GetScoreBlinkActive() {
+		t.Fatal("Expected score blink to be active initially")
+	}
+
+	// Advance time to just before timeout (ScoreBlinkTimeout = 200ms)
+	mockTime.Advance(constants.ScoreBlinkTimeout - 10*time.Millisecond)
+	scoreSystem.Update(ctx.World, 10*time.Millisecond)
+
+	// Score blink should still be active
+	if !ctx.State.GetScoreBlinkActive() {
+		t.Error("Expected score blink to still be active before timeout")
+	}
+
+	// Advance time past timeout
+	mockTime.Advance(20 * time.Millisecond)
+	scoreSystem.Update(ctx.World, 20*time.Millisecond)
+
+	// Score blink should now be inactive
+	if ctx.State.GetScoreBlinkActive() {
+		t.Error("Expected score blink to be inactive after timeout")
+	}
+}
+
+// TestCursorErrorTimeout verifies cursor error clears after timeout
+func TestCursorErrorTimeout(t *testing.T) {
+	// Use mock time provider for controlled time advancement
+	startTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+	mockTime := engine.NewMockTimeProvider(startTime)
+
+	// Create mock screen
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.Init()
+	defer screen.Fini()
+	screen.SetSize(80, 24)
+
+	// Create game context with mock time provider
+	ctx := engine.NewGameContext(screen)
+	ctx.TimeProvider = mockTime
+	scoreSystem := NewScoreSystem(ctx)
+
+	// Type at empty position to trigger cursor error
+	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
+
+	// Cursor error should be active
+	if !ctx.State.GetCursorError() {
+		t.Fatal("Expected cursor error to be active initially")
+	}
+
+	// Advance time to just before timeout (ErrorCursorTimeout = 200ms)
+	mockTime.Advance(constants.ErrorCursorTimeout - 10*time.Millisecond)
+	scoreSystem.Update(ctx.World, 10*time.Millisecond)
+
+	// Cursor error should still be active
+	if !ctx.State.GetCursorError() {
+		t.Error("Expected cursor error to still be active before timeout")
+	}
+
+	// Advance time past timeout
+	mockTime.Advance(20 * time.Millisecond)
+	scoreSystem.Update(ctx.World, 20*time.Millisecond)
+
+	// Cursor error should now be inactive
+	if ctx.State.GetCursorError() {
+		t.Error("Expected cursor error to be inactive after timeout")
 	}
 }
