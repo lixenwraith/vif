@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -199,6 +200,17 @@ func (cs *CleanerSystem) TriggerCleaners(world *engine.World) {
 	cs.activationTime.Store(nowNano)
 	cs.isActive.Store(true)
 	cs.firstUpdate.Store(true)
+
+	// Play whoosh sound for cleaner activation
+	if cs.ctx.AudioEngine != nil {
+		cmd := audio.AudioCommand{
+			Type:       audio.SoundWhoosh,
+			Priority:   1,
+			Generation: uint64(cs.ctx.State.GetFrameNumber()),
+			Timestamp:  now,
+		}
+		cs.ctx.AudioEngine.SendRealTime(cmd)
+	}
 
 	// Send spawn request via channel (non-blocking with select)
 	// World will be passed via Update() method
