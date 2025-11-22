@@ -588,6 +588,20 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 		r.screen.SetContent(x, statusY, ' ', nil, defaultStyle)
 	}
 
+	// Track current x position for status bar elements
+	x := 0
+	y := statusY
+
+	// Audio mute indicator
+	if ctx.AudioEngine != nil && ctx.AudioEngine.IsMuted() {
+		muteStr := "[MUTED] "
+		muteStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(tcell.NewRGBColor(255, 100, 100))
+		for i, ch := range muteStr {
+			r.screen.SetContent(x+i, y, ch, nil, muteStyle)
+		}
+		x += len(muteStr)
+	}
+
 	// Draw mode indicator
 	var modeText string
 	var modeBgColor tcell.Color
@@ -606,13 +620,14 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 	}
 	modeStyle := defaultStyle.Foreground(RgbStatusText).Background(modeBgColor)
 	for i, ch := range modeText {
-		if i < r.width {
-			r.screen.SetContent(i, statusY, ch, nil, modeStyle)
+		if x+i < r.width {
+			r.screen.SetContent(x+i, statusY, ch, nil, modeStyle)
 		}
 	}
+	x += len(modeText)
 
 	// Draw last command indicator (if present)
-	statusStartX := len(modeText)
+	statusStartX := x
 	if ctx.LastCommand != "" && !ctx.IsSearchMode() && !ctx.IsCommandMode() {
 		statusStartX++
 		lastCmdStyle := defaultStyle.Foreground(tcell.ColorYellow)

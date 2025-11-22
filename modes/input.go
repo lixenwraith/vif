@@ -47,6 +47,19 @@ func (h *InputHandler) handleKeyEvent(ev *tcell.EventKey) bool {
 		return false
 	}
 
+	// Handle Ctrl+S - Toggle audio mute
+	if ev.Key() == tcell.KeyCtrlS {
+		if h.ctx.AudioEngine != nil {
+			enabled := h.ctx.ToggleAudioMute()
+			if enabled {
+				h.ctx.StatusMessage = "Audio: ON"
+			} else {
+				h.ctx.StatusMessage = "Audio: MUTED"
+			}
+		}
+		return true
+	}
+
 	// Handle Escape
 	if ev.Key() == tcell.KeyEscape {
 		if h.ctx.IsSearchMode() {
