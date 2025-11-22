@@ -108,8 +108,6 @@ func ExecuteMotion(ctx *engine.GameContext, cmd rune, count int) {
 		ctx.CursorY = ctx.GameHeight - 1
 	case 'g': // Top (when preceded by another 'g')
 		ctx.CursorY = 0
-	// Note: 'f' is handled in input.go handleNormalMode, not here
-	// This is because 'f' is a multi-keystroke command that needs special handling
 	case 'x': // Delete character
 		deleteCharAt(ctx, ctx.CursorX, ctx.CursorY)
 	case 'h': // Left

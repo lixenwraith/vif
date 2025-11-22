@@ -328,7 +328,7 @@ func (cs *ClockScheduler) processTick() {
 				constants.DecayIntervalRangeSeconds,
 			)
 		}
-		// Note: If cleaners are pending, they will be handled in PhaseCleanerPending
+		// If cleaners are pending, they will be handled in PhaseCleanerPending
 
 	case PhaseDecayWait:
 		// Check if decay timer has expired (pausable clock handles pause adjustment internally)

@@ -17,12 +17,12 @@ import (
 )
 
 const (
-	characterSpawnMs = 2000
-	maxCharacters    = 200
-	minBlockLines    = 3
-	maxBlockLines    = 15
-	maxPlacementTries = 3
-	minIndentChange  = 2   // Minimum indent change to start new block
+	characterSpawnMs        = 2000
+	maxCharacters           = 200
+	minBlockLines           = 3
+	maxBlockLines           = 15
+	maxPlacementTries       = 3
+	minIndentChange         = 2   // Minimum indent change to start new block
 	contentRefreshThreshold = 0.8 // Refresh when 80% of content consumed
 )
 
@@ -42,13 +42,12 @@ type CodeBlock struct {
 // SpawnSystem handles character sequence generation and spawning
 // State management delegated to GameState (spawn timing, color counters, sequence IDs)
 type SpawnSystem struct {
-	// Removed gameWidth, gameHeight, cursorX, cursorY - now read from ctx
 	ctx *engine.GameContext
 
 	// Content management (implementation detail, not game state)
 	contentManager *content.ContentManager
 	contentMutex   sync.RWMutex
-	indexMutex     sync.Mutex   // Mutex to protect index update and wraparound operations
+	indexMutex     sync.Mutex // Mutex to protect index update and wraparound operations
 	codeBlocks     []CodeBlock
 	nextBlockIndex atomic.Int32 // Atomic index for thread-safe access
 	totalBlocks    atomic.Int32 // Atomic counter for total blocks
@@ -59,7 +58,7 @@ type SpawnSystem struct {
 
 // NewSpawnSystem creates a new spawn system
 // State is now managed in ctx.State (spawn timing, color counters, sequence IDs)
-func NewSpawnSystem(gameWidth, gameHeight, cursorX, cursorY int, ctx *engine.GameContext) *SpawnSystem {
+func NewSpawnSystem(ctx *engine.GameContext) *SpawnSystem {
 	s := &SpawnSystem{
 		ctx: ctx,
 	}
@@ -619,7 +618,7 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 				tx.Rollback()
 				// Remove all entities created
 				for _, e := range createdEntities {
-					world.DestroyEntity(e)
+					world.SafeDestroyEntity(e)
 				}
 				// Try next attempt
 				continue

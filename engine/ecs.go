@@ -54,31 +54,6 @@ func (w *World) CreateEntity() Entity {
 	return id
 }
 
-// DestroyEntity removes an entity and all its components
-// Note: Prefer using SafeDestroyEntity which handles spatial index cleanup atomically
-func (w *World) DestroyEntity(entity Entity) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	// Remove from component type index
-	if components, ok := w.entities[entity]; ok {
-		for compType := range components {
-			w.removeFromTypeIndex(entity, compType)
-		}
-	}
-
-	delete(w.entities, entity)
-
-	// Clean up spatial index
-	for y := range w.spatialIndex {
-		for x, e := range w.spatialIndex[y] {
-			if e == entity {
-				delete(w.spatialIndex[y], x)
-			}
-		}
-	}
-}
-
 // SafeDestroyEntity safely removes an entity by atomically:
 // 1. Removing from spatial index first (if entity has PositionComponent)
 // 2. Then destroying the entity and cleaning up all component indices

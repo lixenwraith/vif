@@ -503,6 +503,7 @@ func (cs *CleanerSystem) checkTrailCollisions(world *engine.World, row int, trai
 }
 
 // checkAndDestroyAtPosition checks a specific position for Red characters and destroys them
+// Checks entire trail with integer truncation for more reliable collision detection
 func (cs *CleanerSystem) checkAndDestroyAtPosition(world *engine.World, x, y int) {
 	// Defensive: Check for nil world
 	if world == nil {
@@ -575,10 +576,6 @@ func (cs *CleanerSystem) checkAndDestroyAtPosition(world *engine.World, x, y int
 	// Destroy the Red character
 	world.SafeDestroyEntity(targetEntity)
 }
-
-// Note: The old detectAndDestroyRedCharacters() method has been replaced by checkTrailCollisions().
-// Old approach: Checked only head position with rounding
-// New approach: Checks entire trail with integer truncation for more reliable collision detection
 
 // cleanupCleaners removes all cleaner entities from the world
 func (cs *CleanerSystem) cleanupCleaners(world *engine.World) {

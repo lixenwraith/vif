@@ -16,17 +16,14 @@ import (
 // DecaySystem handles character decay animation and logic
 //
 // GAME FLOW: Decay timer calculation starts AFTER Gold sequence ends
-// Timer and animation state migrated to GameState
+// Timer and animation state in GameState
 // 1. Gold spawns at game start
 // 2. Gold ends (timeout or completion) → GameState.StartDecayTimer() called
 // 3. Timer calculates interval based on heat at Gold end time (no caching!)
 // 4. Decay animation triggered by ClockScheduler when timer expires
 // 5. After decay animation ends → Gold spawns again
 type DecaySystem struct {
-	mu sync.RWMutex // Protects fields below
-	// Removed animating, timerStarted, nextDecayTime - now in GameState
-	// Removed heatIncrement - was causing race condition (cached stale value)
-	// Removed gameWidth, gameHeight - now read from ctx.GameWidth/GameHeight
+	mu               sync.RWMutex // Protects fields below
 	currentRow       int
 	lastUpdate       time.Time
 	ctx              *engine.GameContext
@@ -38,7 +35,7 @@ type DecaySystem struct {
 
 // NewDecaySystem creates a new decay system
 // Timer and animation state managed by GameState
-func NewDecaySystem(gameWidth, gameHeight int, ctx *engine.GameContext) *DecaySystem {
+func NewDecaySystem(ctx *engine.GameContext) *DecaySystem {
 	s := &DecaySystem{
 		currentRow:       0,
 		lastUpdate:       ctx.TimeProvider.Now(),
@@ -290,7 +287,7 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 		// Check if entity has passed the bottom boundary
 		if fall.YPosition >= float64(gameHeight) {
 			// Entity has gone beyond the bottom - destroy immediately
-			world.DestroyEntity(entity)
+			world.SafeDestroyEntity(entity)
 			// Don't add to remaining entities
 			continue
 		}
@@ -382,7 +379,7 @@ func (s *DecaySystem) cleanupFallingEntities(world *engine.World) {
 
 	// Destroy entities outside of lock
 	for _, entity := range fallingEntities {
-		world.DestroyEntity(entity)
+		world.SafeDestroyEntity(entity)
 	}
 }
 

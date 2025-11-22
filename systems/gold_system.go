@@ -15,18 +15,15 @@ import (
 )
 
 // GoldSystem manages the gold sequence mechanic
-// Migrated to use GameState for gold state management
 type GoldSystem struct {
-	mu          sync.RWMutex
-	ctx         *engine.GameContext
-	decaySystem *DecaySystem
+	mu  sync.RWMutex
+	ctx *engine.GameContext
 }
 
 // NewGoldSystem creates a new gold sequence system
-func NewGoldSystem(ctx *engine.GameContext, decaySystem *DecaySystem, gameWidth, gameHeight, cursorX, cursorY int) *GoldSystem {
+func NewGoldSystem(ctx *engine.GameContext) *GoldSystem {
 	return &GoldSystem{
-		ctx:         ctx,
-		decaySystem: decaySystem,
+		ctx: ctx,
 	}
 }
 
@@ -50,6 +47,7 @@ func (s *GoldSystem) Update(world *engine.World, dt time.Duration) {
 	initialSpawnComplete := s.ctx.State.GetInitialSpawnComplete()
 
 	// Spawn gold sequence at game start with delay (150ms)
+	// TODO: make constant
 	const initialSpawnDelay = 150 * time.Millisecond
 	if !goldSnapshot.Active && !initialSpawnComplete && now.Sub(firstUpdateTime) >= initialSpawnDelay {
 		// Spawn initial gold sequence after delay

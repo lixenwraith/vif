@@ -64,7 +64,7 @@ type GameState struct {
 
 	mu sync.RWMutex
 
-	// Spawn/Content State (what we're migrating in Phase 1)
+	// Spawn/Content State
 	SpawnLastTime       time.Time // When last spawn occurred
 	SpawnNextTime       time.Time // When next spawn should occur
 	SpawnRateMultiplier float64   // 0.5x, 1.0x, 2.0x based on screen fill
@@ -81,6 +81,7 @@ type GameState struct {
 	CurrentPhase   GamePhase // Current game phase
 	PhaseStartTime time.Time // When current phase started
 
+	// TODO: review and remove Migrated comments
 	// Gold Sequence State (Migrated from GoldSequenceSystem)
 	GoldActive      bool      // Whether gold sequence is active
 	GoldSequenceID  int       // Current gold sequence ID
@@ -190,15 +191,15 @@ func NewGameState(gameWidth, gameHeight, screenWidth int, timeProvider TimeProvi
 	gs.GoldStartTime = time.Time{}
 	gs.GoldTimeoutTime = time.Time{}
 
-	// Initialize Decay timer state (Phase 3)
+	// Initialize Decay timer state
 	gs.DecayTimerActive = false
 	gs.DecayNextTime = time.Time{}
 
-	// Initialize Decay animation state (Phase 3)
+	// Initialize Decay animation state
 	gs.DecayAnimating = false
 	gs.DecayStartTime = time.Time{}
 
-	// Initialize Cleaner state (Phase 6)
+	// Initialize Cleaner state
 	gs.CleanerPending = false
 	gs.CleanerActive = false
 	gs.CleanerStartTime = time.Time{}

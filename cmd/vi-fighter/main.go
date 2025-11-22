@@ -135,7 +135,7 @@ func main() {
 	scoreSystem := systems.NewScoreSystem(ctx)
 	ctx.World.AddSystem(scoreSystem)
 
-	spawnSystem := systems.NewSpawnSystem(ctx.GameWidth, ctx.GameHeight, ctx.CursorX, ctx.CursorY, ctx)
+	spawnSystem := systems.NewSpawnSystem(ctx)
 	ctx.World.AddSystem(spawnSystem)
 
 	boostSystem := systems.NewBoostSystem(ctx)
@@ -144,10 +144,10 @@ func main() {
 	nuggetSystem := systems.NewNuggetSystem(ctx)
 	ctx.World.AddSystem(nuggetSystem)
 
-	decaySystem := systems.NewDecaySystem(ctx.GameWidth, ctx.GameHeight, ctx)
+	decaySystem := systems.NewDecaySystem(ctx)
 	ctx.World.AddSystem(decaySystem)
 
-	goldSystem := systems.NewGoldSystem(ctx, decaySystem, ctx.GameWidth, ctx.GameHeight, ctx.CursorX, ctx.CursorY)
+	goldSystem := systems.NewGoldSystem(ctx)
 	ctx.World.AddSystem(goldSystem)
 
 	drainSystem := systems.NewDrainSystem(ctx)
