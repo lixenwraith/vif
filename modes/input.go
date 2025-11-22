@@ -2,8 +2,10 @@ package modes
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/systems"
 )
@@ -142,6 +144,17 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 					h.ctx.CursorY = y
 					h.ctx.State.SetCursorX(x)
 					h.ctx.State.SetCursorY(y)
+
+					// Play bell sound for nugget collection
+					if h.ctx.AudioEngine != nil {
+						cmd := audio.AudioCommand{
+							Type:       audio.SoundBell,
+							Priority:   1,
+							Generation: uint64(h.ctx.State.GetFrameNumber()),
+							Timestamp:  h.ctx.TimeProvider.Now(),
+						}
+						h.ctx.AudioEngine.SendState(cmd)
+					}
 				}
 			}
 		}
@@ -280,6 +293,17 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 					h.ctx.CursorY = y
 					h.ctx.State.SetCursorX(x)
 					h.ctx.State.SetCursorY(y)
+
+					// Play bell sound for nugget collection
+					if h.ctx.AudioEngine != nil {
+						cmd := audio.AudioCommand{
+							Type:       audio.SoundBell,
+							Priority:   1,
+							Generation: uint64(h.ctx.State.GetFrameNumber()),
+							Timestamp:  h.ctx.TimeProvider.Now(),
+						}
+						h.ctx.AudioEngine.SendState(cmd)
+					}
 				}
 			}
 		}
