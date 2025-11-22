@@ -36,3 +36,8 @@ const (
 	// CommandStatusMessageTimeout is how long command status messages are displayed
 	CommandStatusMessageTimeout = 2 * time.Second
 )
+
+// UI Symbols
+const (
+	AudioStr = "♫ "
+)

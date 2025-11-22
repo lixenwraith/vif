@@ -592,20 +592,19 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 	x := 0
 	y := statusY
 
-	// Audio mute indicator - always visible with bell character
+	// Audio mute indicator - always visible
 	if ctx.AudioEngine != nil {
-		bellStr := "🔔 "
-		var bellBgColor tcell.Color
+		var audioBgColor tcell.Color
 		if ctx.AudioEngine.IsMuted() {
-			bellBgColor = tcell.NewRGBColor(255, 0, 0) // Bright red when muted
+			audioBgColor = tcell.NewRGBColor(255, 0, 0) // Bright red when muted
 		} else {
-			bellBgColor = tcell.NewRGBColor(100, 255, 100) // Bright green when unmuted
+			audioBgColor = tcell.NewRGBColor(0, 255, 0) // Bright green when unmuted
 		}
-		bellStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(bellBgColor)
-		for i, ch := range bellStr {
-			r.screen.SetContent(x+i, y, ch, nil, bellStyle)
+		audioStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(audioBgColor)
+		for _, ch := range constants.AudioStr {
+			r.screen.SetContent(x, y, ch, nil, audioStyle)
+			x++
 		}
-		x += len(bellStr)
 	}
 
 	// Draw mode indicator

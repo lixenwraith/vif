@@ -10,16 +10,16 @@ import (
 
 // InputHandler processes user input events
 type InputHandler struct {
-	ctx           *engine.GameContext
-	scoreSystem   *systems.ScoreSystem
-	nuggetSystem  *systems.NuggetSystem
+	ctx          *engine.GameContext
+	scoreSystem  *systems.ScoreSystem
+	nuggetSystem *systems.NuggetSystem
 }
 
 // NewInputHandler creates a new input handler
 func NewInputHandler(ctx *engine.GameContext, scoreSystem *systems.ScoreSystem) *InputHandler {
 	return &InputHandler{
-		ctx:          ctx,
-		scoreSystem:  scoreSystem,
+		ctx:         ctx,
+		scoreSystem: scoreSystem,
 	}
 }
 
@@ -50,12 +50,7 @@ func (h *InputHandler) handleKeyEvent(ev *tcell.EventKey) bool {
 	// Handle Ctrl+S - Toggle audio mute
 	if ev.Key() == tcell.KeyCtrlS {
 		if h.ctx.AudioEngine != nil {
-			enabled := h.ctx.ToggleAudioMute()
-			if enabled {
-				h.ctx.StatusMessage = "Audio: ON"
-			} else {
-				h.ctx.StatusMessage = "Audio: MUTED"
-			}
+			_ = h.ctx.ToggleAudioMute()
 		}
 		return true
 	}
