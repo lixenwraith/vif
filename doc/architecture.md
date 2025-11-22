@@ -476,7 +476,7 @@ for {
   - `TestConcurrentPhaseReadsDuringTransitions`: 20 readers × concurrent access test
   - `TestPhaseTimestampConsistency`: Timestamp accuracy verification
   - `TestPhaseDurationCalculation`: Duration calculation accuracy
-  - `TestCleanerTrailCollisionLogic`: Trail-based collision detection verification
+  - `TestCleanerTrailCollisionLogic`: Swept segment collision detection verification
   - `TestNoSkippedCharacters`: Verification that truncation logic doesn't skip characters
   - `TestRapidPhaseTransitions`: Rapid phase transition stress test
   - `TestGoldSequenceIDIncrement`: Sequential ID generation
@@ -527,7 +527,7 @@ Systems execute in priority order (lower = earlier):
 3. **SpawnSystem (15)**: Generate new character sequences (Blue and Green only)
 4. **NuggetSystem (18)**: Manage collectible nugget spawning and collection
 5. **GoldSequenceSystem (20)**: Manage gold sequence lifecycle and random placement
-6. **CleanerSystem (22)**: Process cleaner spawn requests (actual updates run concurrently)
+6. **CleanerSystem (22)**: Process cleaner physics, collision, and visual effects
 7. **DrainSystem (25)**: Manage score-draining entity movement and logic
 8. **DecaySystem (30)**: Apply character degradation and color transitions
 
@@ -545,7 +545,7 @@ Component (marker interface)
 ├── SequenceComponent {ID, Index, Type, Level}
 ├── GoldComponent {Active, SequenceID, StartTime, CharSequence, CurrentIndex}
 ├── FallingDecayComponent {Column, YPosition, Speed, Char, LastChangeRow}
-├── CleanerComponent {Row, XPosition, Speed, Direction, TrailPositions, TrailMaxAge}
+├── CleanerComponent {PreciseX, PreciseY, VelocityX, VelocityY, TargetX, TargetY, GridX, GridY, Trail, Char}
 ├── RemovalFlashComponent {X, Y, Char, StartTime, Duration}
 ├── NuggetComponent {ID, SpawnTime}
 └── DrainComponent {X, Y, LastMoveTime, LastDrainTime, IsOnCursor}
@@ -690,15 +690,17 @@ All DecaySystem state is protected by `sync.RWMutex`:
 - Locks released before calling into other systems (prevents deadlock)
 
 #### Atomic Operations (CleanerSystem)
-CleanerSystem uses atomic operations for lock-free state:
-- `isActive`: Cleaner animation active (atomic.Bool)
-- `activationTime`: When cleaners were triggered (atomic.Int64)
-- `activeCleanerCount`: Number of active cleaners (atomic.Int64)
+CleanerSystem uses minimal atomic state:
+- `pendingSpawn`: Activation signal flag (atomic.Bool)
+  - Set by `ActivateCleaners()` from any thread
+  - Cleared by `Update()` in main loop via CAS operation
+  - Ensures spawn happens exactly once per activation
 
 **Benefits**:
-- No lock contention for reads
-- Fast state checks from render thread
-- Concurrent updates without blocking
+- Single atomic flag eliminates complex state tracking
+- Lock-free activation from any thread (e.g., ScoreSystem)
+- All other state managed through ECS components
+- Component queries handled by World's internal synchronization
 
 #### Gold System Synchronization
 GoldSequenceSystem uses `sync.RWMutex` for all state:
@@ -799,14 +801,13 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 ### CleanerSystem Synchronous Model
 - **Update Pattern**: Called from main loop's `Update()` method with delta time
 - **No Goroutine**: Eliminates race conditions from concurrent entity access
-- **Channel-based Triggering**: Non-blocking spawn requests via buffered channel
-- **Atomic State**: `atomic.Bool` and `atomic.Int64` for lock-free state checks
-- **Mutex Protection**:
-  - `stateMu` protects `cleanerDataMap` (cleaner position data)
-  - `flashMu` protects `flashPositions` (flash effect tracking)
-  - Locks held only during data structure updates (not during world access)
-- **Frame-Coherent Rendering**: `GetCleanerSnapshots()` provides immutable snapshot
-- **Memory Pool**: `sync.Pool` for trail slice allocation/deallocation
+- **Atomic Activation**: Single `atomic.Bool` flag (`pendingSpawn`) for spawn triggering
+- **Pure ECS State**: All cleaner state stored in `CleanerComponent` instances
+  - No external state maps or tracking structures
+  - Component data includes physics state, trail history, and rendering info
+  - ECS World provides internal synchronization for component access
+- **Frame-Coherent Rendering**: `GetCleanerSnapshots()` deep-copies trail data for thread-safe rendering
+- **Zero External Locks**: No mutexes required (atomic flag + ECS internal synchronization)
 
 ### Shared State Synchronization
 - **Color Counters**: `atomic.Int64` for lock-free updates
@@ -827,36 +828,56 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 5. **Lock Granularity**: Minimize lock scope - protect data structures, not operations
 
 ### CleanerSystem Race Prevention Strategy
-**Problem**: Original implementation had autonomous goroutine modifying entities concurrently with main loop
+**Problem**: Early implementations had complex state tracking with potential race conditions
 
-**Solution**:
-- ✅ **Removed goroutine**: Updates now synchronous in main loop `Update()` method
-- ✅ **Delta time**: Uses frame delta time, not independent timer
-- ✅ **Atomic flags**: `isActive`, `activationTime`, `activeCleanerCount` for lock-free checks
-- ✅ **Mutex protection**: `stateMu` for `cleanerDataMap`, `flashMu` for `flashPositions`
-- ✅ **Snapshot rendering**: `GetCleanerSnapshots()` returns deep-copied data
-- ✅ **Channel triggering**: Non-blocking spawn requests (doesn't block caller)
+**Solution (Current Pure ECS Implementation)**:
+- ✅ **Pure ECS Pattern**: All state in `CleanerComponent`, no external maps or tracking
+- ✅ **Synchronous Updates**: Main loop `Update()` method with delta time integration
+- ✅ **Single Atomic Flag**: `pendingSpawn` atomic.Bool for activation signal
+- ✅ **Component-Based Physics**: Sub-pixel position, velocity, and trail stored in component
+- ✅ **Snapshot Rendering**: `GetCleanerSnapshots()` deep-copies trail positions for thread safety
+- ✅ **ECS Synchronization**: Leverages World's internal locking for component access
+- ✅ **Zero State Duplication**: Component is the single source of truth
 
 ### Frame Coherence Strategy
 **Rendering Thread Safety**:
-1. Renderer calls `GetCleanerSnapshots()` once per frame
-2. Method acquires `stateMu.RLock()` and copies all trail positions
-3. Renderer uses snapshot data (no shared references)
-4. Main loop updates `cleanerDataMap` under `stateMu.Lock()`
-5. No data races: snapshot is fully independent copy
+1. Renderer caches snapshots with frame number tracking
+2. Calls `GetCleanerSnapshots()` only when frame number changes
+3. Method queries ECS World for all `CleanerComponent` entities
+4. Deep-copies trail slice for each cleaner to prevent data races
+5. Renderer uses snapshot data (no shared references to component state)
+6. Main loop updates components via ECS World's synchronized methods
+7. No data races: snapshots are fully independent copies
 
 **Implementation**:
 ```go
 // Renderer (terminal_renderer.go)
-snapshots := cleanerSystem.GetCleanerSnapshots()  // Once per frame
-for _, snapshot := range snapshots {
-    // Use snapshot.TrailPositions (independent copy)
+// Cache snapshots per frame to avoid redundant queries
+if r.cleanerSnapshotFrame != frameNum {
+    r.cleanerSnapshots = r.cleanerSystem.GetCleanerSnapshots()
+    r.cleanerSnapshotFrame = frameNum
 }
 
-// Update (cleaner_system.go)
-cs.stateMu.Lock()
-cs.cleanerDataMap[entity].trailPositions = newTrail
-cs.stateMu.Unlock()
+// CleanerSystem (cleaner_system.go)
+func (cs *CleanerSystem) GetCleanerSnapshots() []render.CleanerSnapshot {
+    // Query all cleaner entities
+    entities := world.GetEntitiesWith(cleanerType)
+    for _, entity := range entities {
+        c := world.GetComponent(entity, cleanerType).(components.CleanerComponent)
+        // Deep copy trail to avoid race conditions
+        trailCopy := make([]core.Point, len(c.Trail))
+        copy(trailCopy, c.Trail)
+        snapshots = append(snapshots, render.CleanerSnapshot{...})
+    }
+}
+
+// Main Loop Update (cleaner_system.go)
+func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
+    // Update component directly via World (internally synchronized)
+    c.PreciseX += c.VelocityX * dt.Seconds()
+    c.Trail = append([]core.Point{newPoint}, c.Trail...)
+    world.AddComponent(entity, c)  // ECS handles synchronization
+}
 ```
 
 ### Testing for Race Conditions
@@ -871,8 +892,9 @@ cs.stateMu.Unlock()
 1. Cache entity queries per frame
 2. Use spatial index for position lookups
 3. Batch similar operations (e.g., all destroys at end)
-4. Reuse allocated slices where possible
+4. Reuse allocated slices where possible (e.g., trail slices grow/shrink in-place)
 5. CleanerSystem updates synchronously with frame-accurate delta time
+6. Pre-calculate rendering gradients once at initialization (zero per-frame color math)
 
 ### Memory Management
 - Pool temporary slices (coordinate lists, entity batches)
@@ -1009,45 +1031,55 @@ cs.stateMu.Unlock()
 
 ### Cleaner System
 - **Trigger**: Activated when gold completed while heat meter already at maximum
-- **Update Model**: **Synchronous** - runs in main game loop, not in separate goroutine
-- **Configuration**: Fully configurable via `constants.CleanerConfig` struct
-  - **Animation Duration**: Time to traverse screen (default: 1 second)
-  - **Speed**: Characters/second (default: auto-calculated from duration and screen width)
-  - **Trail Length**: Number of trail positions (default: 10)
-  - **Trail Fade Time**: Duration for complete trail fade (default: 0.3 seconds)
-  - **Trail Fade Curve**: Linear or exponential interpolation (default: linear)
-  - **Max Concurrent Cleaners**: Limit simultaneous cleaners (default: 0/unlimited)
-  - **Character**: Unicode block character (default: '█')
-  - **Flash Duration**: Removal flash duration in ms (default: 150)
+- **Update Model**: **Synchronous** - runs in main game loop via ECS Update() method
+- **Architecture**: Pure ECS implementation using vector physics
+  - All state stored in `CleanerComponent` (no external state tracking)
+  - Physics-based movement with sub-pixel precision (`PreciseX`, `PreciseY`)
+  - Velocity-driven updates: `position += velocity × deltaTime`
+  - Frame-rate independent animation via delta time
+- **Configuration**: Direct constants in `constants/cleaners.go`
+  - **CleanerAnimationDuration**: Time to traverse screen (1 second)
+  - **CleanerTrailLength**: Number of trail positions tracked (10)
+  - **CleanerTrailFadeTime**: Trail fade duration (0.3 seconds)
+  - **CleanerChar**: Unicode block character ('█')
+  - **CleanerRemovalFlashDuration**: Flash effect duration (150ms)
 - **Behavior**: Sweeps across rows containing Red characters, removing them on contact
-- **Phantom Cleaners**: System activates even when no Red characters exist to ensure proper phase transitions (no visual cleaners spawned, but animation timer runs normally)
+- **Phantom Cleaners**: If no Red characters exist when activated, no entities spawn (phase transition continues normally)
 - **Direction**: Alternating - odd rows sweep L→R, even rows sweep R→L
 - **Selectivity**: Only destroys Red characters, leaves Blue/Green untouched
-- **Animation**: Configurable block character with fade trail effect
-- **Collision Detection** (Comprehensive range-based approach):
-  - Checks ALL integer positions between consecutive trail points
-  - Prevents position gaps when cleaner moves >1 char/frame (e.g., 8.84→10.12 checks 8, 9, 10)
-  - Mathematical basis: 80 chars/sec × 16ms frame = 1.28 chars/frame movement
-  - Uses `math.Min/Max` for bidirectional range checking (works for both L→R and R→L)
-  - Single `checkTrailCollisions()` method with comprehensive coverage
-  - Negligible performance impact: at most 2-3 extra positions per trail segment
+- **Lifecycle**:
+  - Spawn off-screen (±`CleanerTrailLength` from edges)
+  - Target off-screen opposite side
+  - Destroy when `PreciseX` passes `TargetX`
+  - Ensures trail fully clears screen before entity removal
+- **Physics System**:
+  - **Velocity Calculation**: `baseSpeed = gameWidth / animationDuration`
+  - **Movement Update**: `PreciseX += VelocityX × dt.Seconds()`
+  - **Trail Recording**: New trail point added when cleaner enters new grid cell
+  - **Trail Truncation**: Limited to `CleanerTrailLength` positions (FIFO queue)
+- **Collision Detection** (Swept Segment):
+  - Checks ALL integer positions between previous and current `PreciseX`
+  - Prevents tunneling when cleaner moves >1 char/frame
+  - Uses `math.Min/Max` for bidirectional range (L→R and R→L)
+  - Range clamped to screen bounds before checking
+  - Example: Movement from 8.2→10.7 checks positions [8, 9, 10]
 - **Visual Effects**:
-  - Pre-calculated color gradients avoid per-frame calculations
-  - Configurable trail length with smooth opacity falloff
-  - Configurable removal flash effect when Red characters destroyed
-  - Flash cleanup: Automatic removal of expired flash entities
+  - Pre-calculated gradient in renderer (built once at initialization)
+  - Trail rendered with opacity falloff: 100% at head → 0% at tail
+  - Removal flash spawns as separate `RemovalFlashComponent` entity
+  - Flash cleanup: Automatic removal after `CleanerRemovalFlashDuration`
 - **Thread Safety**:
-  - Non-blocking spawn requests via buffered channel
-  - Atomic state management for lock-free activation/deactivation checks
-  - Mutex protection for cleanerDataMap and flashPositions
-  - Trail slices allocated from `sync.Pool` for efficient memory reuse
-  - Frame-coherent snapshots for renderer (GetCleanerSnapshots)
+  - Atomic `pendingSpawn` flag for activation signal
+  - Component data protected by ECS World's internal synchronization
+  - Snapshot pattern for rendering: deep copy of trail positions per frame
+  - No external mutexes or state maps required
 - **Performance**:
-  - Synchronous updates eliminate goroutine overhead
-  - Pre-calculated color gradients avoid per-frame calculations
-  - Minimal allocations in update loop (gradient array vs dynamic color creation)
-  - Reduced collision detection overhead (single method)
-  - Typical update time: < 1ms for 24 cleaners
+  - Zero goroutine overhead (pure synchronous ECS)
+  - No mutex contention (atomic flag + ECS synchronization)
+  - Single component query per update
+  - Minimal allocations (trail slice grows/shrinks in-place)
+  - Pre-calculated rendering gradients (zero per-frame color math)
+  - Typical update time: < 0.5ms for 24 cleaners
 
 ## Data Files
 
@@ -1213,13 +1245,12 @@ The race condition tests have been reorganized into focused files:
   - TestPhaseSnapshotConsistency: Phase snapshot consistency
   - TestMultiSnapshotAtomicity: Multiple snapshot atomicity
 - **cleaner_race_test.go**: Cleaner system race conditions
-  - TestNoRaceCleanerConcurrentRenderUpdate: Concurrent cleaner updates and rendering
-  - TestNoRaceRapidCleanerCycles: Rapid cleaner activation/deactivation
-  - TestNoRaceCleanerStateAccess: Concurrent reads/writes to cleaner state
-  - TestNoRaceFlashEffectManagement: Concurrent flash creation/cleanup
-  - TestNoRaceCleanerPoolAllocation: Thread-safe trail slice pool allocation
-  - TestNoRaceDimensionUpdate: Dimension updates during active cleaners
-  - TestNoRaceCleanerAnimationCompletion: Animation completion race conditions
+  - TestNoRaceCleanerConcurrentRenderUpdate: Concurrent component updates and snapshot rendering
+  - TestNoRaceRapidCleanerCycles: Rapid activation via atomic pendingSpawn flag
+  - TestNoRaceCleanerStateAccess: Concurrent component reads during ECS queries
+  - TestNoRaceFlashEffectManagement: Concurrent RemovalFlashComponent creation/cleanup
+  - TestNoRaceCleanerPoolAllocation: Trail slice growth/shrinkage during updates
+  - TestNoRaceCleanerAnimationCompletion: Entity destruction during active iteration
 - **boost_race_test.go**: Boost system race conditions
   - TestBoostRapidToggle: Rapid boost activation/deactivation
   - TestBoostConcurrentRead: Concurrent boost state reads
@@ -1240,12 +1271,12 @@ Located in `systems/cleaner_benchmark_test.go`:
 - **Cleaner Spawn Performance**: `BenchmarkCleanerSpawn`
 - **Collision Detection**: `BenchmarkCleanerDetectAndDestroy`
 - **Row Scanning**: `BenchmarkCleanerScanRedRows`
-- **Position Updates**: `BenchmarkCleanerUpdate`, `BenchmarkCleanerUpdateSync`
+- **Physics Updates**: `BenchmarkCleanerUpdate` (position, velocity, trail)
 - **Flash Effects**: `BenchmarkFlashEffectCreation`, `BenchmarkFlashEffectCleanup`
 - **Gold Sequence Operations**: `BenchmarkGoldSequenceSpawn`, `BenchmarkGoldSequenceCompletion`
 - **Concurrent Operations**: `BenchmarkConcurrentCleanerOperations`
 - **Full Pipeline**: `BenchmarkCompleteGoldCleanerPipeline`
-- **Performance Target**: < 1ms for 24 cleaners (synchronous update)
+- **Performance Target**: < 0.5ms for 24 cleaners (pure ECS synchronous update)
 
 ### Running Tests
 
@@ -1429,10 +1460,10 @@ All tests using these tools must pass with `go test -race` flag.
 
 ### Common Race Conditions to Test
 1. **Cleaner System**:
-   - Concurrent spawn requests
-   - Active state checks during cleanup
-   - Trail slice pool allocation/deallocation
-   - Screen buffer scanning during modifications
+   - Concurrent spawn requests (atomic flag operations)
+   - Component updates during snapshot capture
+   - Trail slice modification during deep copy
+   - Entity destruction during iteration
 
 2. **Gold System**:
    - Spawn during active sequence
