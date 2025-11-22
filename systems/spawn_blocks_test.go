@@ -13,14 +13,14 @@ func TestGroupIntoBlocks(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 
-	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 
 	tests := []struct {
-		name          string
-		input         []string
-		minBlocks     int
-		maxBlocks     int
-		checkBraces   bool
+		name        string
+		input       []string
+		minBlocks   int
+		maxBlocks   int
+		checkBraces bool
 	}{
 		{
 			name: "function with braces",
@@ -121,7 +121,7 @@ func TestGetIndentLevel(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 
-	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 
 	tests := []struct {
 		line     string
@@ -149,7 +149,7 @@ func TestBlockSpawning(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 
-	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 
 	// Create test code blocks with proper state
 	testBlocks := []CodeBlock{

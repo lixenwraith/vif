@@ -15,7 +15,7 @@ func TestColorCounters(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 
-	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 
 	// Test initial state (all counters should be 0)
 	if count := spawnSys.GetColorCount(components.SequenceBlue, components.LevelBright); count != 0 {
@@ -51,7 +51,7 @@ func TestColorCountersConcurrency(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 
-	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 
 	const numGoroutines = 100
 	const incrementsPerGoroutine = 100
@@ -85,7 +85,7 @@ func TestGetAvailableColors(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 
-	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 
 	// Initially, all 6 colors should be available
 	available := spawnSys.getAvailableColors()
@@ -126,7 +126,7 @@ func TestSpawnWithNoAvailableColors(t *testing.T) {
 	ctx := engine.NewGameContext(screen)
 	world := engine.NewWorld()
 
-	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 
 	// Simulate all 6 colors being present
 	spawnSys.AddColorCount(components.SequenceBlue, components.LevelBright, 10)

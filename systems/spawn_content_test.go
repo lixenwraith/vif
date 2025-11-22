@@ -14,7 +14,7 @@ func TestContentManagerIntegration(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 
-	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 
 	// The system should have initialized ContentManager
 	if spawnSys.contentManager == nil {
@@ -89,7 +89,7 @@ func TestEmptyBlockHandling(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 
-	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 
 	// Set empty code blocks
 	spawnSys.codeBlocks = []CodeBlock{}
@@ -107,7 +107,7 @@ func TestBlockGroupingWithShortLines(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 
-	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 
 	// Input with blocks shorter than minBlockLines
 	input := []string{

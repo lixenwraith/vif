@@ -25,7 +25,7 @@ func TestConcurrentColorCounterUpdates(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 
-	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 
 	var wg sync.WaitGroup
 	stopChan := make(chan struct{})

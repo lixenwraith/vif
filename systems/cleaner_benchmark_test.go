@@ -38,7 +38,7 @@ func BenchmarkCleanerSpawn(b *testing.B) {
 		cleanerType := reflect.TypeOf(components.CleanerComponent{})
 		cleaners := world.GetEntitiesWith(cleanerType)
 		for _, entity := range cleaners {
-			world.DestroyEntity(entity)
+			world.SafeDestroyEntity(entity)
 		}
 	}
 }
@@ -167,7 +167,7 @@ func BenchmarkFlashEffectCreation(b *testing.B) {
 		flashType := reflect.TypeOf(components.RemovalFlashComponent{})
 		flashes := world.GetEntitiesWith(flashType)
 		for _, entity := range flashes {
-			world.DestroyEntity(entity)
+			world.SafeDestroyEntity(entity)
 		}
 	}
 }
@@ -319,7 +319,7 @@ func BenchmarkCleanerPoolAllocation(b *testing.B) {
 		cleanerType := reflect.TypeOf(components.CleanerComponent{})
 		cleaners := world.GetEntitiesWith(cleanerType)
 		for _, entity := range cleaners {
-			world.DestroyEntity(entity)
+			world.SafeDestroyEntity(entity)
 		}
 		cleanerSystem.cleanupCleaners(world)
 		b.StartTimer()
@@ -372,7 +372,7 @@ func BenchmarkGoldTriggerCleaners(b *testing.B) {
 		cleanerType := reflect.TypeOf(components.CleanerComponent{})
 		cleaners := world.GetEntitiesWith(cleanerType)
 		for _, entity := range cleaners {
-			world.DestroyEntity(entity)
+			world.SafeDestroyEntity(entity)
 		}
 		cleanerSystem.cleanupCleaners(world)
 		b.StartTimer()
@@ -423,4 +423,3 @@ func BenchmarkCleanerUpdateSync(b *testing.B) {
 		b.Logf("Update performance: %v per operation (within target)", avgPerOp)
 	}
 }
-

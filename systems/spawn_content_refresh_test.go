@@ -14,7 +14,7 @@ func TestContentRefreshThreshold(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 
-	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 
 	// Set up test blocks
 	testBlocks := []CodeBlock{
@@ -67,7 +67,7 @@ func TestContentSwapOnWrapAround(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 
-	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 
 	// Set up initial test blocks
 	initialBlocks := []CodeBlock{
@@ -123,7 +123,7 @@ func TestThreadSafeContentSwap(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 
-	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 
 	// Set up test blocks
 	testBlocks := []CodeBlock{
@@ -174,7 +174,7 @@ func TestEmptyContentHandling(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 
-	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 
 	// Manually set empty content
 	spawnSys.contentMutex.Lock()
@@ -205,7 +205,7 @@ func TestContentRefreshDoesNotBlockGameplay(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 
-	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 
 	// Set up test blocks
 	testBlocks := make([]CodeBlock, 10)
@@ -240,7 +240,7 @@ func TestConcurrentSpawningAndContentRefresh(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 
-	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 	world := engine.NewWorld()
 
 	// Set up test blocks
@@ -335,7 +335,7 @@ func TestAtomicIndexOperations(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 
-	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 
 	// Set up test blocks
 	testBlocks := make([]CodeBlock, 5)
@@ -398,7 +398,7 @@ func TestContentSwapDuringConcurrentReads(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 
-	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 
 	// Set up initial small content to trigger frequent swaps
 	initialBlocks := []CodeBlock{

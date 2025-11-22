@@ -17,7 +17,7 @@ func TestPlaceLine(t *testing.T) {
 	ctx := engine.NewGameContext(screen)
 	world := engine.NewWorld()
 
-	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 
 	// Test placing a simple line
 	line := "test line"
@@ -67,7 +67,7 @@ func TestPlaceLineNearCursor(t *testing.T) {
 	// Sync cursor position to GameState for snapshot pattern
 	ctx.State.SetCursorX(cursorX)
 	ctx.State.SetCursorY(cursorY)
-	spawnSys := NewSpawnSystem(80, 24, cursorX, cursorY, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 
 	// Try many times to place a line - none should be near the cursor
 	line := "test"
@@ -151,7 +151,7 @@ func TestPlaceLineSkipsSpaces(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a fresh world for each test
 			world := engine.NewWorld()
-			spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+			spawnSys := NewSpawnSystem(ctx)
 
 			style := tcell.StyleDefault
 			initialCount := spawnSys.GetColorCount(components.SequenceBlue, components.LevelBright)
@@ -230,7 +230,7 @@ func TestPlaceLinePositionMaintenance(t *testing.T) {
 	// Sync cursor position to GameState for snapshot pattern
 	ctx.State.SetCursorX(0)
 	ctx.State.SetCursorY(0)
-	spawnSys := NewSpawnSystem(80, 24, 0, 0, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 
 	line := "a b c"
 	style := tcell.StyleDefault
@@ -300,7 +300,7 @@ func TestPlaceLinePackageMd5(t *testing.T) {
 	// Sync cursor position to GameState for snapshot pattern
 	ctx.State.SetCursorX(0)
 	ctx.State.SetCursorY(0)
-	spawnSys := NewSpawnSystem(80, 24, 0, 0, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 
 	line := "package md5"
 	style := tcell.StyleDefault
@@ -403,7 +403,7 @@ func TestPlaceLineConstBlockSize(t *testing.T) {
 	// Sync cursor position to GameState for snapshot pattern
 	ctx.State.SetCursorX(0)
 	ctx.State.SetCursorY(0)
-	spawnSys := NewSpawnSystem(80, 24, 0, 0, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 
 	line := "const BlockSize = 64"
 	style := tcell.StyleDefault

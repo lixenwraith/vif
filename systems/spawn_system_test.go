@@ -21,9 +21,9 @@ func TestSpawnExclusionZone(t *testing.T) {
 	_ = gameHeight // Used in test logic below
 
 	tests := []struct {
-		name      string
-		x, y      int
-		seqLength int
+		name       string
+		x, y       int
+		seqLength  int
 		shouldFail bool
 		reason     string
 	}{
@@ -136,7 +136,7 @@ func TestSpawnExclusionZone(t *testing.T) {
 			isExcluded := (dx <= 5 || dy <= 3)
 
 			// Also check if sequence would fit
-			wouldFit := (tt.x + tt.seqLength <= gameWidth)
+			wouldFit := (tt.x+tt.seqLength <= gameWidth)
 
 			// Check for overlaps (in this test, no existing entities)
 			hasOverlap := false
@@ -169,43 +169,43 @@ func TestSpawnExclusionZoneAtBoundaries(t *testing.T) {
 	gameHeight := 24
 
 	tests := []struct {
-		name      string
-		cursorX   int
-		cursorY   int
-		testX     int
-		testY     int
+		name          string
+		cursorX       int
+		cursorY       int
+		testX         int
+		testY         int
 		shouldExclude bool
 	}{
 		{
-			name:      "Cursor at origin, spawn too close",
-			cursorX:   0,
-			cursorY:   0,
-			testX:     3,
-			testY:     1,
+			name:          "Cursor at origin, spawn too close",
+			cursorX:       0,
+			cursorY:       0,
+			testX:         3,
+			testY:         1,
 			shouldExclude: true,
 		},
 		{
-			name:      "Cursor at origin, spawn far enough",
-			cursorX:   0,
-			cursorY:   0,
-			testX:     10,
-			testY:     5,
+			name:          "Cursor at origin, spawn far enough",
+			cursorX:       0,
+			cursorY:       0,
+			testX:         10,
+			testY:         5,
 			shouldExclude: false,
 		},
 		{
-			name:      "Cursor at bottom-right, spawn too close",
-			cursorX:   gameWidth - 1,
-			cursorY:   gameHeight - 1,
-			testX:     gameWidth - 4,
-			testY:     gameHeight - 2,
+			name:          "Cursor at bottom-right, spawn too close",
+			cursorX:       gameWidth - 1,
+			cursorY:       gameHeight - 1,
+			testX:         gameWidth - 4,
+			testY:         gameHeight - 2,
 			shouldExclude: true,
 		},
 		{
-			name:      "Cursor at center, spawn at top edge but too close horizontally",
-			cursorX:   40,
-			cursorY:   12,
-			testX:     38,
-			testY:     0,
+			name:          "Cursor at center, spawn at top edge but too close horizontally",
+			cursorX:       40,
+			cursorY:       12,
+			testX:         38,
+			testY:         0,
 			shouldExclude: true,
 		},
 	}
@@ -247,7 +247,7 @@ func TestPlaceLineLogicMatchesExclusionZone(t *testing.T) {
 	ctx.State.SetCursorX(cursorX)
 	ctx.State.SetCursorY(cursorY)
 
-	spawnSys := NewSpawnSystem(gameWidth, gameHeight, cursorX, cursorY, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 
 	// Set up some code blocks for spawning
 	spawnSys.codeBlocks = []CodeBlock{

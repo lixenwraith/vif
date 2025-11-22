@@ -27,7 +27,7 @@ func TestConcurrentContentRefresh(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 
-	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 	world := engine.NewWorld()
 
 	// Set up initial test blocks
@@ -161,7 +161,7 @@ func TestRenderWhileSpawning(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 
-	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 	world := engine.NewWorld()
 
 	// Pre-populate with test blocks
@@ -334,7 +334,7 @@ func TestContentSwapDuringRead(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 
-	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 
 	// Set up small initial content to trigger frequent swaps
 	smallBlocks := []CodeBlock{
@@ -471,7 +471,7 @@ func TestStressContentSystem(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 
-	spawnSys := NewSpawnSystem(80, 24, 40, 12, ctx)
+	spawnSys := NewSpawnSystem(ctx)
 	world := engine.NewWorld()
 
 	// Pre-populate with varied content

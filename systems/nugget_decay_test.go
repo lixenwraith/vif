@@ -21,7 +21,7 @@ func TestDecayDestroysNugget(t *testing.T) {
 	ctx := engine.NewGameContext(screen)
 	world := ctx.World
 	nuggetSystem := NewNuggetSystem(ctx)
-	decaySystem := NewDecaySystem(80, 24, ctx)
+	decaySystem := NewDecaySystem(ctx)
 	decaySystem.SetNuggetSystem(nuggetSystem)
 
 	// Create a nugget at position (10, 5)
@@ -51,7 +51,7 @@ func TestDecayDestroysNugget(t *testing.T) {
 	// Simulate animation frame-by-frame with small time increments
 	// This ensures the falling entity in column 10 will pass through row 5
 	// regardless of its random speed
-	dt := 0.1 // 100ms per frame
+	dt := 0.1      // 100ms per frame
 	maxTime := 5.0 // Maximum time to wait (should be way more than enough)
 	for elapsed := dt; elapsed < maxTime; elapsed += dt {
 		decaySystem.updateFallingEntities(world, elapsed)
@@ -92,7 +92,7 @@ func TestDecayDoesNotDestroyNuggetAtDifferentPosition(t *testing.T) {
 	ctx := engine.NewGameContext(screen)
 	world := ctx.World
 	nuggetSystem := NewNuggetSystem(ctx)
-	decaySystem := NewDecaySystem(80, 24, ctx)
+	decaySystem := NewDecaySystem(ctx)
 	decaySystem.SetNuggetSystem(nuggetSystem)
 
 	// Create a nugget at position (10, 10) - deeper in the screen
@@ -143,7 +143,7 @@ func TestDecayDestroyMultipleNuggetsInDifferentColumns(t *testing.T) {
 	ctx := engine.NewGameContext(screen)
 	world := ctx.World
 	nuggetSystem := NewNuggetSystem(ctx)
-	decaySystem := NewDecaySystem(80, 24, ctx)
+	decaySystem := NewDecaySystem(ctx)
 	decaySystem.SetNuggetSystem(nuggetSystem)
 
 	// Create multiple nugget-like entities at different columns, same row
@@ -216,8 +216,8 @@ func TestDecayDestroyNuggetAndSequence(t *testing.T) {
 	ctx := engine.NewGameContext(screen)
 	world := ctx.World
 	nuggetSystem := NewNuggetSystem(ctx)
-	spawnSystem := NewSpawnSystem(80, 24, 0, 0, ctx)
-	decaySystem := NewDecaySystem(80, 24, ctx)
+	spawnSystem := NewSpawnSystem(ctx)
+	decaySystem := NewDecaySystem(ctx)
 	decaySystem.SetNuggetSystem(nuggetSystem)
 	decaySystem.SetSpawnSystem(spawnSystem)
 
@@ -328,7 +328,7 @@ func TestDecayNuggetRespawnAfterDestruction(t *testing.T) {
 	}
 
 	nuggetSystem := NewNuggetSystem(ctx)
-	decaySystem := NewDecaySystem(80, 24, ctx)
+	decaySystem := NewDecaySystem(ctx)
 	decaySystem.SetNuggetSystem(nuggetSystem)
 
 	// Create a nugget at position (10, 5)
@@ -407,7 +407,7 @@ func TestDecayDoesNotProcessSameNuggetTwice(t *testing.T) {
 	ctx := engine.NewGameContext(screen)
 	world := ctx.World
 	nuggetSystem := NewNuggetSystem(ctx)
-	decaySystem := NewDecaySystem(80, 24, ctx)
+	decaySystem := NewDecaySystem(ctx)
 	decaySystem.SetNuggetSystem(nuggetSystem)
 
 	// Create a nugget at position (10, 5)

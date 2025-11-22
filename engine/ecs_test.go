@@ -31,7 +31,7 @@ func TestComponentTypeIndex(t *testing.T) {
 	}
 
 	// Destroy one entity
-	world.DestroyEntity(entity1)
+	world.SafeDestroyEntity(entity1)
 
 	// Verify type index is updated
 	entities = world.GetEntitiesWith(compType)
@@ -164,7 +164,7 @@ func TestSafeDestroyEntityNonExistent(t *testing.T) {
 
 	// Create and immediately destroy an entity to get a valid ID
 	entity := world.CreateEntity()
-	world.DestroyEntity(entity)
+	world.SafeDestroyEntity(entity)
 
 	// Try to SafeDestroyEntity on already-destroyed entity (should be no-op)
 	world.SafeDestroyEntity(entity)
@@ -183,20 +183,20 @@ func TestSafeDestroyEntityComponentTypeIndex(t *testing.T) {
 	entity1 := world.CreateEntity()
 	world.AddComponent(entity1, PositionComponent{X: 1, Y: 1})
 
- {
-	tx := world.BeginSpatialTransaction()
-	tx.Spawn(entity1, 1, 1)
-	tx.Commit()
- }
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(entity1, 1, 1)
+		tx.Commit()
+	}
 
 	entity2 := world.CreateEntity()
 	world.AddComponent(entity2, PositionComponent{X: 2, Y: 2})
 
- {
-	tx := world.BeginSpatialTransaction()
-	tx.Spawn(entity2, 2, 2)
-	tx.Commit()
- }
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(entity2, 2, 2)
+		tx.Commit()
+	}
 
 	// Get entities with PositionComponent
 	compType := reflect.TypeOf(PositionComponent{})
