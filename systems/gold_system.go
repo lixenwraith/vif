@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -297,6 +298,17 @@ func (s *GoldSystem) CompleteGold(world *engine.World) bool {
 	// Remove gold sequence entities
 	// This will also trigger decay timer restart
 	s.removeGold(world, goldSnapshot.SequenceID)
+
+	// Play coin sound for gold completion
+	if s.ctx.AudioEngine != nil {
+		cmd := audio.AudioCommand{
+			Type:       audio.SoundCoin,
+			Priority:   1,
+			Generation: uint64(s.ctx.State.GetFrameNumber()),
+			Timestamp:  s.ctx.TimeProvider.Now(),
+		}
+		s.ctx.AudioEngine.SendRealTime(cmd)
+	}
 
 	// Fill heat to max (handled by ScoreSystem)
 	return true
