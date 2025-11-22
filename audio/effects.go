@@ -1,4 +1,3 @@
-// FILE: audio/effects.go
 package audio
 
 import (
@@ -7,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gopxl/beep"
+	"github.com/gopxl/beep/effects"
 )
 
 // WaveType defines oscillator wave shapes
@@ -141,6 +141,15 @@ func (e *envelope) Stream(samples [][2]float64) (n int, ok bool) {
 
 func (e *envelope) Err() error { return e.streamer.Err() }
 
+// Helper to create a volume effect safely
+// math.Log2(0) is -Inf, so we handle 0 volume by making it silent
+func newVolume(s beep.Streamer, vol float64) beep.Streamer {
+	if vol <= 0 {
+		return &effects.Volume{Streamer: s, Base: 2, Volume: 0, Silent: true}
+	}
+	return &effects.Volume{Streamer: s, Base: 2, Volume: math.Log2(vol), Silent: false}
+}
+
 // Sound effect generators
 
 // CreateErrorSound generates a short harsh buzz for typing errors
@@ -152,7 +161,7 @@ func CreateErrorSound(cfg *AudioConfig) beep.Streamer {
 	shaped := NewEnvelope(osc, dur, 5*time.Millisecond, 20*time.Millisecond, rate)
 
 	vol := cfg.EffectVolumes[SoundError] * cfg.MasterVolume
-	return &beep.Volume{Streamer: shaped, Base: 2, Volume: math.Log2(vol)}
+	return newVolume(shaped, vol)
 }
 
 // CreateBellSound generates a short ding for nugget collection
@@ -170,12 +179,12 @@ func CreateBellSound(cfg *AudioConfig) beep.Streamer {
 
 	// Mix fundamentals with harmonics
 	mixed := beep.Mix(
-		&beep.Volume{Streamer: fundShaped, Base: 2, Volume: math.Log2(0.7)},
-		&beep.Volume{Streamer: overShaped, Base: 2, Volume: math.Log2(0.3)},
+		newVolume(fundShaped, 0.7),
+		newVolume(overShaped, 0.3),
 	)
 
 	vol := cfg.EffectVolumes[SoundBell] * cfg.MasterVolume
-	return &beep.Volume{Streamer: mixed, Base: 2, Volume: math.Log2(vol)}
+	return newVolume(mixed, vol)
 }
 
 // CreateWhooshSound generates a quick zip noise for cleaner activation
@@ -187,7 +196,7 @@ func CreateWhooshSound(cfg *AudioConfig) beep.Streamer {
 	shaped := NewEnvelope(noise, dur, 150*time.Millisecond, 150*time.Millisecond, rate)
 
 	vol := cfg.EffectVolumes[SoundWhoosh] * cfg.MasterVolume
-	return &beep.Volume{Streamer: shaped, Base: 2, Volume: math.Log2(vol)}
+	return newVolume(shaped, vol)
 }
 
 // CreateCoinSound generates a two-note chime for gold completion
@@ -207,7 +216,7 @@ func CreateCoinSound(cfg *AudioConfig) beep.Streamer {
 	sequence := beep.Seq(n1Shaped, n2Shaped)
 
 	vol := cfg.EffectVolumes[SoundCoin] * cfg.MasterVolume
-	return &beep.Volume{Streamer: sequence, Base: 2, Volume: math.Log2(vol)}
+	return newVolume(sequence, vol)
 }
 
 // GetSoundEffect returns the appropriate sound effect streamer for the given type

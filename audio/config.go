@@ -1,4 +1,3 @@
-// FILE: audio/config.go
 package audio
 
 import (

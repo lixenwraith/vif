@@ -1,4 +1,3 @@
-// FILE: audio/types.go
 package audio
 
 import "time"
