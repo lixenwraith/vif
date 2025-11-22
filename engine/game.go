@@ -81,6 +81,17 @@ type GameContext struct {
 	// Pause state management (simplified - actual pause handled by PausableClock)
 	IsPaused atomic.Bool
 
+	// Audio engine (nil if audio disabled or initialization failed)
+	AudioEngine interface {
+		SendRealTime(cmd interface{}) bool
+		SendState(cmd interface{}) bool
+		StopCurrentSound()
+		DrainQueues()
+		IsRunning() bool
+		ToggleMute() bool
+		IsMuted() bool
+	}
+
 	// Heat tracking (for consecutive move penalty - input specific)
 	LastMoveKey      rune
 	ConsecutiveCount int
@@ -205,6 +216,7 @@ func (g *GameContext) SetPaused(paused bool) {
 	if paused && !wasPaused {
 		// Starting pause
 		g.PausableClock.Pause()
+		g.StopAudio()
 	} else if !paused && wasPaused {
 		// Ending pause
 		g.PausableClock.Resume()
@@ -224,6 +236,23 @@ func (g *GameContext) GetTotalPauseDuration() time.Duration {
 // GetRealTime returns wall clock time for UI elements
 func (g *GameContext) GetRealTime() time.Time {
 	return g.PausableClock.RealTime()
+}
+
+// StopAudio stops the current audio and drains queues if audio engine is available
+func (g *GameContext) StopAudio() {
+	if g.AudioEngine != nil && g.AudioEngine.IsRunning() {
+		g.AudioEngine.StopCurrentSound()
+		g.AudioEngine.DrainQueues()
+	}
+}
+
+// ToggleAudioMute toggles the mute state of the audio engine
+// Returns the new mute state (true if muted, false if unmuted)
+func (g *GameContext) ToggleAudioMute() bool {
+	if g.AudioEngine != nil {
+		return g.AudioEngine.ToggleMute()
+	}
+	return false
 }
 
 // updateGameArea calculates the game area dimensions
