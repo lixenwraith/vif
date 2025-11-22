@@ -16,9 +16,6 @@ const (
 
 // UI Timing Constants (in milliseconds)
 const (
-	// CursorBlinkTime is the blink duration of cursor
-	CursorBlinkTime = 500 * time.Millisecond
-
 	// ErrorCursorTimeoutMs is how long the error cursor flashes
 	ErrorCursorTimeoutMs = 200
 
