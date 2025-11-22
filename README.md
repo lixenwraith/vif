@@ -6,6 +6,11 @@ A terminal-based typing game built with Go that combines vi/vim motion commands 
 
 vi-fighter is a terminal typing game where players type character sequences that appear on screen using vi/vim-style commands and motions. The game features dynamic difficulty scaling through a decay system, multiple sequence types with different behaviors, and a heat mechanic that rewards skilled play.
 
+## Documentation
+
+- **[Game Guide](doc/game.md)** - Player guide with controls, mechanics, and strategies
+- **[Architecture](doc/architecture.md)** - Technical documentation and development guidelines
+
 ## Game Mechanics Overview
 
 vi-fighter features a dynamic typing system with multiple sequence types and game mechanics:
@@ -17,8 +22,6 @@ vi-fighter features a dynamic typing system with multiple sequence types and gam
 - **Decay System**: Automated pressure that degrades sequences over time
 - **Cleaners**: Special mechanic that clears Red sequences when triggered
 - **Drain**: Pressure mechanic that appears at positive score, pursues cursor, and drains score over time
-
-**For complete game mechanics details, see [doc/game-mechanics.md](doc/game-mechanics.md)**
 
 ## Vi Motion Commands
 
@@ -35,8 +38,6 @@ vi-fighter supports a comprehensive set of vi/vim motion commands for navigation
 
 **Note**: Using `h`/`j`/`k`/`l` more than 3 times consecutively resets heat. Use word motions or other movement commands for efficiency.
 
-**For complete command reference and strategies, see [doc/game-index.md](doc/game-index.md)**
-
 ## Technical Architecture
 
 The game strictly follows ECS architecture principles with a hybrid real-time/clock-based game loop:
@@ -47,8 +48,6 @@ The game strictly follows ECS architecture principles with a hybrid real-time/cl
 - **World**: Single source of truth for game state
 - **Concurrency**: Lock-free atomics for real-time state, mutexes for clock-tick state
 - **Rendering**: Built with tcell for cross-platform terminal graphics
-
-**For detailed architecture documentation, see [doc/architecture-index.md](doc/architecture-index.md)**
 
 ## Building and Running
 
@@ -111,8 +110,6 @@ go test ./systems
 
 **Note**: When in COMMAND mode, the game is paused - all characters are dimmed (70% brightness) to indicate the paused state while preserving visibility.
 
-For detailed command reference and gameplay strategies, see [doc/game-index.md](doc/game-index.md).
-
 ## Game Strategy (Quick Tips)
 
 1. **Prioritize Gold**: Gold sequences fill heat to maximum - chase them when they appear
@@ -122,13 +119,6 @@ For detailed command reference and gameplay strategies, see [doc/game-index.md](
 5. **Manage Decay**: Higher heat = faster decay - balance aggressive play with sustainability
 6. **Boost Color Matching**: When boost activates, keep typing the same color to extend it
 7. **Motion Efficiency**: Use `w`/`b`/`e` instead of repeated `h`/`j`/`k`/`l` to avoid heat reset
-
-**For comprehensive strategy guides including beginner, intermediate, and advanced tactics, see [doc/game-strategy.md](doc/game-strategy.md)**
-
-## Documentation
-
-- **[Game Guide](doc/game-index.md)** - Player guide with controls, mechanics, and strategies
-- **[Architecture](doc/architecture-index.md)** - Technical documentation and development guidelines
 
 ## License
 

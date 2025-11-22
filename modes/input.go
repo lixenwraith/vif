@@ -2,7 +2,6 @@ package modes
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/audio"
@@ -637,3 +636,4 @@ func (h *InputHandler) buildCommandString(action rune, motion rune, count int, s
 
 	return cmd
 }
+

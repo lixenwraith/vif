@@ -201,6 +201,7 @@ func (cs *CleanerSystem) TriggerCleaners(world *engine.World) {
 	cs.isActive.Store(true)
 	cs.firstUpdate.Store(true)
 
+	// TODO: No Sound on phantom cleaners, need detection, or change of logic
 	// Play whoosh sound for cleaner activation
 	if cs.ctx.AudioEngine != nil {
 		cmd := audio.AudioCommand{

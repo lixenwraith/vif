@@ -21,6 +21,7 @@ Updated immediately on user input/spawn events, read by all systems:
 - **Color Counters** (6× `atomic.Int64`): Blue/Green × Bright/Normal/Dark tracking
 - **Boost State** (`atomic.Bool`, `atomic.Int64`): Enabled, EndTime, Color
 - **Visual Feedback**: CursorError, ScoreBlink, PingGrid (atomic)
+- **Drain State** (`atomic.Bool`, `atomic.Uint64`, `atomic.Int32`): Active, EntityID, X, Y
 - **Sequence ID** (`atomic.Int64`): Thread-safe ID generation
 
 **Why Atomic**: These values are accessed on every frame and every keystroke. Atomics provide:
@@ -521,11 +522,14 @@ The audio system provides sound effects for game events using a dual-queue archi
 
 ### System Priorities
 Systems execute in priority order (lower = earlier):
-1. **ScoreSystem (10)**: Process user input, update score (highest priority for input)
-2. **SpawnSystem (15)**: Generate new character sequences (Blue and Green only)
-3. **GoldSequenceSystem (20)**: Manage gold sequence lifecycle and random placement
-4. **DecaySystem (25)**: Apply character degradation and color transitions
-5. **CleanerSystem (30)**: Process cleaner spawn requests (actual updates run concurrently)
+1. **BoostSystem (5)**: Handle boost timer expiration (highest priority)
+2. **ScoreSystem (10)**: Process user input, update score
+3. **SpawnSystem (15)**: Generate new character sequences (Blue and Green only)
+4. **NuggetSystem (18)**: Manage collectible nugget spawning and collection
+5. **GoldSequenceSystem (20)**: Manage gold sequence lifecycle and random placement
+6. **DrainSystem (22)**: Manage score-draining entity movement and logic
+7. **DecaySystem (25)**: Apply character degradation and color transitions
+8. **CleanerSystem (30)**: Process cleaner spawn requests (actual updates run concurrently)
 
 **Important**: All priorities must be unique to ensure deterministic execution order. The priority values define the exact order in which systems process game state each frame.
 
@@ -538,13 +542,13 @@ Systems execute in priority order (lower = earlier):
 ## Component Hierarchy
 ```
 Component (marker interface)
-├── PositionComponent {X, Y int}
-├── CharacterComponent {Rune, Style}
 ├── SequenceComponent {ID, Index, Type, Level}
 ├── GoldComponent {Active, SequenceID, StartTime, CharSequence, CurrentIndex}
 ├── FallingDecayComponent {Column, YPosition, Speed, Char, LastChangeRow}
 ├── CleanerComponent {Row, XPosition, Speed, Direction, TrailPositions, TrailMaxAge}
-└── RemovalFlashComponent {X, Y, Char, StartTime, Duration}
+├── RemovalFlashComponent {X, Y, Char, StartTime, Duration}
+├── NuggetComponent {ID, SpawnTime}
+└── DrainComponent {X, Y, LastMoveTime, LastDrainTime, IsOnCursor}
 ```
 
 **Note**: Internal code still uses `GoldSequenceComponent` for the type name, but we refer to it as "Gold" in documentation for brevity.
@@ -772,6 +776,7 @@ INSERT / SEARCH ─[ESC]→ NORMAL
   - See `modes/capabilities.go` for full mapping
 - **Consecutive move penalty**: Using h/j/k/l more than 3 times consecutively resets heat
 - **Arrow keys**: Function like h/j/k/l but always reset heat
+- **Tab**: Jumps cursor directly to active Nugget (Cost: 10 Score, requires Score >= 10)
 
 ### Supported Vi Motions
 **Basic**: h, j, k, l, Space (as l)
@@ -985,6 +990,22 @@ cs.stateMu.Unlock()
 - **Cleaner Trigger**: If heat is already at maximum when gold completed, triggers Cleaner animation
 - **Behavior**: Typing gold chars does not affect heat/score directly
 - **Pause Behavior**: Timeout freezes during COMMAND mode (game time stops)
+
+### Nugget System
+- **Purpose**: Collectible bonus items that spawn randomly.
+- **Behavior**: Spawns every 5 seconds if no nugget is active.
+- **Collection**:
+    - **Typing**: Typing the character displayed on the nugget collects it (handled by ScoreSystem).
+    - **Jump (Tab)**: Pressing `Tab` instantly jumps the cursor to the nugget (requires Score >= 10).
+- **Reward**: Increases Heat by 10% of max heat.
+- **Cost**: Jumping via `Tab` costs 10 Score points.
+
+### Drain System
+- **Purpose**: A hostile entity that drains score if the player is idle or positioned on it.
+- **Trigger**: Spawns when Score > 0. Despawns when Score <= 0.
+- **Movement**: Moves toward the cursor every 1 second (independent of frame rate).
+- **Effect**: If positioned on top of the cursor, drains 10 points every 1 second.
+- **Visual**: Rendered as '╬' (Light Cyan).
 
 ### Cleaner System
 - **Trigger**: Activated when gold completed while heat meter already at maximum
