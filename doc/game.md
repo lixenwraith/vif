@@ -40,7 +40,7 @@ There is no end state - the challenge is to survive as long as possible while th
 
 - Start by typing **bright green or blue sequences** - they give the most points
 - Avoid **red sequences** - they penalize your score
-- Watch for **gold sequences** (bright yellow) - completing them fills your heat meter instantly
+- Watch for **gold** (bright yellow) - completing it fills your heat meter instantly
 - Use simple motions like `h`/`j`/`k`/`l` at first, then graduate to `w`, `e`, `f<char>` for efficiency
 
 ---
@@ -191,7 +191,12 @@ vi-fighter has four input modes, similar to vi/vim:
   - `:quit` or `:q` - Exit the game
   - `:boost` - Activate boost mode for 10 seconds (2x spawn rate, 2x score)
 - **Exiting**: Press `ESC` to return to NORMAL mode
-- **Visual Feedback**: When in COMMAND mode, the game is paused and all characters are dimmed to 70% brightness to indicate the paused state while preserving visibility
+- **Pause Behavior**:
+  - **Game pauses**: All game time stops (decay timer, gold timeout, boost timer freeze)
+  - **UI stays active**: Cursor continues blinking for visual feedback
+  - **Visual dimming**: All characters dimmed to 70% brightness to indicate paused state
+  - **Frame updates continue**: Screen still refreshes to show dimmed characters
+  - **Time preservation**: When you exit COMMAND mode, timers resume from where they stopped
 
 ---
 
@@ -228,7 +233,7 @@ The play field where character sequences appear:
 - **Blue sequences** - Positive scoring, decays to Green
 - **Green sequences** - Positive scoring, decays to Red
 - **Red sequences** - Negative scoring (penalties)
-- **Gold sequences** - Bright yellow, 10 characters, fills heat to max
+- **Gold** - Bright yellow, 10 characters, fills heat to max
 
 Each color has three brightness levels (Bright, Normal, Dark).
 
@@ -333,18 +338,19 @@ The game features four types of character sequences, each with distinct behavior
 - **Heat Effect**: Typing red characters resets heat to zero
 - **Strategy**: Avoid if possible, or clear quickly if score is low
 
-### Gold Sequences
+### Gold
 - **Appearance**: Bright yellow, always 10 characters long
 - **Spawning**: Appears randomly after any decay animation completes
 - **Content**: Random alphanumeric characters (a-z, A-Z, 0-9)
-- **Duration**: 10 seconds before timeout (disappears if not completed)
+- **Duration**: 10 seconds (game time) before timeout - timer freezes during COMMAND mode pause
 - **Reward**: Completing all 10 characters fills heat meter to maximum
 - **Bonus Mechanic**: If heat is already at maximum when gold completed, triggers **Cleaners**
 - **Scoring**: Typing gold characters does NOT affect heat or score during typing
+- **Pause Behavior**: Gold timeout uses game time, so it freezes when you enter COMMAND mode (`:`)
 - **Strategy**: **Highest priority target** - can turn around a low-heat situation instantly
 
 ### Cleaners (Advanced Mechanic)
-- **Trigger**: Automatically activated when you complete a gold sequence while heat meter is already at maximum
+- **Trigger**: Automatically activated when you complete gold while heat meter is already at maximum
 - **Visual**: Bright yellow blocks that sweep horizontally across the screen
 - **Behavior**: Cleaners scan for and automatically destroy Red characters on contact
 - **Pattern**: Alternating sweep direction (odd rows left-to-right, even rows right-to-left)
@@ -352,7 +358,7 @@ The game features four types of character sequences, each with distinct behavior
 - **Selectivity**: **Only removes Red characters** - Blue and Green sequences are completely safe
 - **Effect**: Provides instant relief when overwhelmed by Red penalty sequences
 - **Strategic Use**:
-  - Complete gold sequences at max heat to clear accumulated Red characters
+  - Complete gold at max heat to clear accumulated Red characters
   - Allows aggressive high-heat play without Red penalty accumulation
   - Most effective when multiple Red sequences have decayed across different rows
 - **Animation**: Configurable frame rate (default: 60 FPS) with trailing fade effect for visual clarity
@@ -384,7 +390,7 @@ Heat represents your typing momentum and skill level. It's the most important me
 **Gaining Heat:**
 - +1 for each correct Green or Blue character typed (normal)
 - +2 for each correct Green or Blue character typed (boost active)
-- Instant fill to maximum when completing gold sequences
+- Instant fill to maximum when completing gold
 
 **Losing Heat:**
 - Resets to 0 when:
@@ -474,7 +480,11 @@ An automated pressure mechanic that gradually degrades all sequences on screen, 
 
 **What Gets Decayed:**
 - All Blue, Green, and Red sequences
-- Gold sequences are **immune** to decay
+- Gold is **immune** to decay
+
+**Pause Behavior:**
+- Decay timer uses game time and freezes during COMMAND mode pause
+- When you exit COMMAND mode, decay timer resumes from where it stopped
 
 **Strategy Implications:**
 - Bright sequences are time-sensitive (2 decays until color change)
@@ -568,7 +578,7 @@ When all characters of one color/level are cleared, that slot opens for new spaw
 2. **Start with simple motions**: `h`/`j`/`k`/`l` for navigation
 3. **Avoid red sequences** completely until comfortable
 4. **Let decay happen** - Don't panic about the timer
-5. **Chase gold sequences** aggressively - easiest way to build heat
+5. **Chase gold** aggressively - easiest way to build heat
 6. **Don't use delete** (`x`, `dd`, etc.) - it resets heat
 7. **Understand Drain**: Once score > 0, a cyan ╬ character spawns and chases you - keep moving to avoid losing score
 
@@ -598,11 +608,11 @@ When all characters of one color/level are cleared, that slot opens for new spaw
 5. **Drain management**:
    - Stay mobile - drain moves 1 character per second
    - Plan movement paths that keep distance from drain
-   - Avoid letting drain path intersect with gold sequences or high-value targets
+   - Avoid letting drain path intersect with gold or high-value targets
    - Consider drain position when selecting next typing target
 
 **Heat Recovery:**
-- If heat drops below 20, hunt for gold sequence
+- If heat drops below 20, hunt for gold
 - Use boost to quickly rebuild from mistakes
 - Balance aggression (high heat) with sustainability
 
@@ -650,7 +660,7 @@ When all characters of one color/level are cleared, that slot opens for new spaw
 
 7. **Endurance tactics**:
    - Maintain 50-80% heat for sustainable play
-   - Use gold sequences as "panic buttons" for heat recovery
+   - Use gold as "panic buttons" for heat recovery
    - Accept small score hits to avoid heat resets
    - Take calculated risks: typing one Red to clear screen space
 
@@ -710,7 +720,7 @@ Using `h`/`j`/`k`/`l` more than 3 times in a row resets heat!
 - **Green on screen > Blue**: Trigger boost with Green, commit to Green
 - **Equal amounts**: Choose color with brighter sequences (higher multipliers)
 
-### Gold Sequence Tactics
+### Gold Tactics
 
 **When to Chase Gold:**
 - Heat below 30 (urgent heat recovery)
@@ -725,8 +735,9 @@ Using `h`/`j`/`k`/`l` more than 3 times in a row resets heat!
 
 **Gold Typing Tips:**
 - Use `/` search for first 2-3 characters if far from cursor
-- Gold sequences are always 10 characters - muscle memory the rhythm
+- Gold is always 10 characters - muscle memory the rhythm
 - No heat/score during typing, so type quickly without worry
+- Timer uses game time - pausing (COMMAND mode) stops the countdown
 
 ### Screen Reading
 
@@ -768,11 +779,11 @@ Using `h`/`j`/`k`/`l` more than 3 times in a row resets heat!
 - Type ONLY Bright sequences (maximum return on time)
 - Keep boost active at all costs (need +2 heat to maintain)
 - Consider letting some Green decay to Red, then ignore Red (Dark)
-- Gold sequences become critical for momentary relief
+- Gold becomes critical for momentary relief
 
 **Recovery from Heat Reset:**
 1. Don't panic - decay slows down at low heat (60s intervals)
-2. Locate gold sequence if present (instant recovery)
+2. Locate gold if present (instant recovery)
 3. Type 2-3 Bright sequences to build heat to 30-40 quickly
 4. Re-assess situation: Do you chase max heat again or stabilize?
 
@@ -786,7 +797,7 @@ Using `h`/`j`/`k`/`l` more than 3 times in a row resets heat!
 
 **Speed Drills:**
 - Navigate to 10 different sequences using only `w`/`b`/`e` (no `hjkl`)
-- Complete one gold sequence in under 5 seconds
+- Complete gold in under 5 seconds
 - Maintain boost for 3+ seconds (7+ character extensions)
 - Type 20 characters without heat reset
 

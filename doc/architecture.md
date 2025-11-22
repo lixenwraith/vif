@@ -260,13 +260,54 @@ score := ctx.State.GetScore() // Atomic read #2
   - `TestMultiSnapshotAtomicity`: Multiple snapshot types taken in rapid succession (10 concurrent readers)
 - All tests pass with `-race` flag (no data races detected)
 
-### Clock Scheduler
+### Clock Scheduler and Time Management
 
-**Architecture**: Hybrid real-time/clock-based game loop with separate tickers:
-- **Frame Ticker** (16ms): Real-time input, scoring, cursor movement, rendering
-- **Clock Ticker** (50ms): Game logic phase transitions, spawn decisions
+**Architecture**: Dual-clock system with frame/game synchronization:
+- **Frame Clock** (16ms, ~60 FPS): Rendering, UI updates (cursor blink), input handling
+- **Game Clock** (50ms): Game logic via ClockScheduler - phase transitions, system updates
 
-**Purpose**: Centralizes phase transitions on a predictable clock tick, preventing race conditions in inter-dependent mechanics (Gold→Decay→Cleaner flow).
+**Purpose**: Separates visual updates (frame) from game logic (game) for deterministic gameplay and smooth rendering. The ClockScheduler centralizes phase transitions on a predictable 50ms tick, preventing race conditions in inter-dependent mechanics (Gold→Decay→Cleaner flow).
+
+#### PausableClock - Game Time vs Real Time
+
+**Dual Time System**:
+- **Game Time**: Pausable clock used for all game logic (spawning, decay, gold timeouts)
+  - Stops advancing when paused (COMMAND mode)
+  - Accessed via `ctx.TimeProvider.Now()` (returns pausable time)
+- **Real Time**: Wall clock time for UI elements that work during pause
+  - Continues during pause (cursor blink, error state timeouts)
+  - Accessed via `ctx.GetRealTime()` (returns wall clock)
+
+**Pause Mechanism** (`engine/pausable_clock.go`):
+```go
+// Entering COMMAND mode
+ctx.SetPaused(true)          // Sets IsPaused atomic flag
+ctx.PausableClock.Pause()    // Stops game time advancement
+
+// Game time calculation (when not paused)
+gameTime = realTime - totalPausedTime
+
+// When paused, Now() returns frozen time at pause point
+```
+
+**Resume with Drift Protection**:
+When resuming from pause, the ClockScheduler adjusts its next tick deadline to maintain the 50ms rhythm:
+```go
+// On resume, ClockScheduler.HandlePauseResume() is called
+func (cs *ClockScheduler) HandlePauseResume(pauseDuration time.Duration) {
+    // Shift deadline forward by pause duration
+    cs.nextTickDeadline = cs.nextTickDeadline.Add(pauseDuration)
+}
+```
+
+This ensures no clock drift accumulates from pausing/resuming.
+
+**Frame/Game Synchronization**:
+The main loop coordinates frame rendering with game updates using channels:
+- `frameReady` channel: Main loop signals when frame is ready for next update
+- `updateDone` channel: ClockScheduler signals when game update is complete
+- Rendering waits for game update to complete before drawing (prevents tearing)
+- If update takes too long (>2 tick intervals), scheduler catches up to prevent spiral
 
 #### GamePhase State Machine
 
@@ -286,7 +327,7 @@ const (
 **Phase State** (in `GameState`):
 - `CurrentPhase` (`GamePhase`): Current game phase (mutex protected)
 - `PhaseStartTime` (`time.Time`): When current phase started
-- **Gold sequence state**: `GoldActive`, `GoldSequenceID`, `GoldStartTime`, `GoldTimeoutTime`
+- **Gold state**: `GoldActive`, `GoldSequenceID`, `GoldStartTime`, `GoldTimeoutTime`
 - **Decay timer state**: `DecayTimerActive`, `DecayNextTime`
 - **Decay animation state**: `DecayAnimating`, `DecayStartTime`
 - **Cleaner state**: `CleanerPending`, `CleanerActive`, `CleanerStartTime`
@@ -310,57 +351,113 @@ snapshot := ctx.State.ReadPhaseState()
 #### ClockScheduler (`engine/clock_scheduler.go`)
 
 **Infrastructure**:
-- 50ms ticker running in dedicated goroutine
+- 50ms tick interval running in dedicated goroutine
+- Adaptive sleep that respects pause state (sleeps longer during pause to avoid busy-wait)
+- Frame synchronization via channels (`frameReady`, `updateDone`)
 - Thread-safe start/stop with idempotent Stop()
 - Tick counter for debugging and metrics
 - Graceful shutdown on game exit
+- Pause resume callback registration for drift correction
 
 **Behavior**:
-- Ticks every 50ms independently of frame rate
-- **Phase transitions handled on clock tick**:
-  - `PhaseGoldActive`: Check gold timeout → remove gold → start decay timer
-  - `PhaseDecayWait`: Check decay ready → start decay animation
-  - `PhaseDecayAnimation`: Handled by DecaySystem → return to PhaseNormal
-  - `PhaseNormal`: Gold spawning handled by GoldSequenceSystem
-- **Cleaner triggers handled on clock tick**:
-  - Check `CleanerPending` → activate cleaners via CleanerSystem
-  - Check `CleanerActive` + animation complete → deactivate cleaners and transition to PhaseDecayWait
-  - Cleaners run in parallel with phase transitions (non-blocking)
-  - After cleaner completion, decay timer starts automatically (maintains game flow cycle)
-- **Critical**: Decay timer reads heat atomically at transition (no caching)
+- Ticks every 50ms (game time) when not paused
+- Skips all game logic updates when paused (defensive check in processTick)
+- Waits for frame ready signal before processing tick (prevents update/render conflicts)
+- **Phase transitions handled on clock tick** (via `processTick()`):
+  - `PhaseGoldActive`: Check gold timeout (pausable clock) → timeout via GoldSystem
+  - `PhaseGoldComplete`: Start decay timer (or wait for cleaners if pending)
+  - `PhaseDecayWait`: Check decay ready (pausable clock) → start decay animation
+  - `PhaseDecayAnimation`: Handled by DecaySystem → returns to PhaseNormal when complete
+  - `PhaseCleanerPending`: Activate cleaners via CleanerSystem
+  - `PhaseCleanerActive`: Check animation complete → deactivate + start decay timer
+  - `PhaseNormal`: Gold spawning handled by GoldSystem's Update() method
+- **Drift Protection**:
+  - Advances deadline by exactly one interval (prevents cumulative drift)
+  - If severely behind (>2 intervals), resets to current time + interval
+  - On pause resume, adjusts deadline by pause duration
+- **Critical**: All timers use pausable clock (game time), so they freeze during pause
 
 **Integration** (`cmd/vi-fighter/main.go`):
 ```go
-// Create and start clock scheduler (runs in background goroutine)
-clockScheduler := engine.NewClockScheduler(ctx)
+// Constants for dual-clock system
+const (
+    frameUpdateDT = 16 * time.Millisecond // ~60 FPS (frame rate for rendering)
+    gameUpdateDT  = 50 * time.Millisecond // game logic tick
+)
+
+// Create frame synchronization channel
+frameReady := make(chan struct{}, 1)
+
+// Create clock scheduler with frame synchronization
+clockScheduler, gameUpdateDone := engine.NewClockScheduler(ctx, gameUpdateDT, frameReady)
+
+// Signal initial frame ready
+frameReady <- struct{}{}
+
+clockScheduler.SetSystems(goldSystem, decaySystem, cleanerSystem)
 clockScheduler.Start()
 defer clockScheduler.Stop()
 
-// Separate frame ticker for rendering
-ticker := time.NewTicker(16 * time.Millisecond) // ~60 FPS
-defer ticker.Stop()
+// Main game loop with frame ticker
+frameTicker := time.NewTicker(frameUpdateDT)
+defer frameTicker.Stop()
+
+for {
+    select {
+    case <-frameTicker.C:
+        // Always update UI elements (use real time, works during pause)
+        updateUIElements(ctx)
+
+        // During pause: skip game updates but still render
+        if ctx.IsPaused.Load() {
+            renderer.RenderFrame(...)
+            continue
+        }
+
+        // Wait for update complete, then render
+        <-gameUpdateDone
+        renderer.RenderFrame(...)
+
+        // Signal ready for next update
+        frameReady <- struct{}{}
+    }
+}
 ```
 
 #### Architecture Benefits
 
 **Separation of Concerns**:
-- **Real-time layer** (16ms): User input, typing feedback, visual updates (no blocking)
-- **Game logic layer** (50ms): Phase transitions, spawn decisions (can use mutex safely)
+- **Frame layer** (16ms): Rendering, UI updates (cursor blink), input handling - always responsive
+- **Game logic layer** (50ms): Phase transitions, system updates, spawn decisions - deterministic and pausable
+- **UI elements use real time**: Cursor continues blinking during pause for visual feedback
+- **Game logic uses game time**: All timers (decay, gold timeout) freeze during pause
+
+**Pause-Aware Design**:
+- **COMMAND mode pauses game**: Entering `:` stops game time but keeps UI active
+- **No drift accumulation**: Resume callback adjusts scheduler deadline by pause duration
+- **Visual feedback during pause**: Characters dimmed to 70% brightness, cursor still blinks
+- **Frame updates continue**: Rendering still happens during pause for visual feedback
 
 **Race Condition Prevention**:
 - Phase transitions happen atomically on clock tick
+- Frame synchronization prevents update/render conflicts (channels coordinate timing)
 - Heat snapshots taken at specific moments (not cached)
 - State ownership model eliminates conflicting writes
+- Adaptive sleep during pause avoids busy-wait
 
 **Testability**:
 - Clock tick is deterministic with `MockTimeProvider`
+- Pause/resume can be tested independently
 - Phase transitions can be unit tested independently
 - Integration tests can advance time precisely
+- Frame/game sync can be verified with channels
 
 **Performance**:
-- Real-time input remains responsive (no clock blocking)
-- Clock logic only runs 3× per frame (50ms vs 16ms)
-- Mutex contention minimized (clock thread vs main thread)
+- Frame updates remain responsive (60 FPS independent of game logic)
+- Game logic only runs 3× per frame (50ms vs 16ms) - reduced CPU load
+- Mutex contention minimized (scheduler thread vs main thread)
+- Adaptive sleep during pause reduces CPU usage to near-zero
+- Frame/game synchronization prevents wasted rendering (no tearing)
 
 #### Testing
 - `engine/clock_scheduler_test.go`: Scheduler tick tests, phase transition tests
@@ -406,17 +503,19 @@ Component (marker interface)
 ├── PositionComponent {X, Y int}
 ├── CharacterComponent {Rune, Style}
 ├── SequenceComponent {ID, Index, Type, Level}
-├── GoldSequenceComponent {Active, SequenceID, StartTime, CharSequence, CurrentIndex}
+├── GoldComponent {Active, SequenceID, StartTime, CharSequence, CurrentIndex}
 ├── FallingDecayComponent {Column, YPosition, Speed, Char, LastChangeRow}
 ├── CleanerComponent {Row, XPosition, Speed, Direction, TrailPositions, TrailMaxAge}
 └── RemovalFlashComponent {X, Y, Char, StartTime, Duration}
 ```
 
+**Note**: Internal code still uses `GoldSequenceComponent` for the type name, but we refer to it as "Gold" in documentation for brevity.
+
 ### Sequence Types
 - **Green**: Positive scoring, spawned by SpawnSystem, decays to Red
 - **Blue**: Positive scoring with boost effect, spawned by SpawnSystem, decays to Green
 - **Red**: Negative scoring (penalty), ONLY created through decay (not spawned directly)
-- **Gold**: Bonus sequence, spawned randomly by GoldSequenceSystem after decay animation
+- **Gold**: Bonus sequence, spawned randomly by GoldSystem after decay animation completes
 
 ## Rendering Pipeline
 
@@ -431,12 +530,15 @@ Component (marker interface)
 
 ### Pause State Visual Feedback
 
-When the game is paused (COMMAND mode), the rendering system provides visual feedback by dimming all character colors:
+When the game is paused by entering COMMAND mode (`:` key), the rendering system provides visual feedback:
 
-- **Trigger**: `ctx.IsPaused.Load()` returns true
-- **Effect**: All character foreground colors are multiplied by 0.7 (70% brightness)
-- **Purpose**: Indicates paused state while preserving game visibility
+- **Trigger**: `ctx.IsPaused.Load()` returns true (set when entering COMMAND mode)
+- **Game Time**: Stops advancing - all timers (decay, gold timeout, boost) freeze
+- **UI Time**: Continues - cursor still blinks using real time for visual feedback
+- **Visual Dimming**: All character foreground colors are multiplied by 0.7 (70% brightness)
+- **Purpose**: Clearly indicates paused state while preserving game visibility
 - **Implementation**: Applied in `drawCharacters()` after ping highlighting, before final rendering
+- **Frame Updates**: Continue during pause to show dimmed characters and cursor blink
 
 ## System Coordination and Event Flow
 
@@ -444,14 +546,14 @@ When the game is paused (COMMAND mode), the rendering system provides visual fee
 The game operates in a continuous cycle managed by three primary systems:
 
 ```
-Gold Sequence → Completion/Timeout → Decay Timer → Decay Animation → Gold Sequence
-     ↓                                      ↑                ↓
- (Optional)                                 |         (Always happens)
- Cleaner Trigger                            |       Characters decay levels
- (if heat maxed)                            |
-     ↓                                      |
- Cleaner Animation → Completion ────────────┘
-     (transitions to DecayWait, starts decay timer)
+Gold → Completion/Timeout → Decay Timer → Decay Animation → Gold
+ ↓                               ↑                ↓
+(Optional)                       |         (Always happens)
+Cleaner Trigger                  |       Characters decay levels
+(if heat maxed)                  |
+ ↓                               |
+Cleaner Animation → Completion ──┘
+ (transitions to DecayWait, starts decay timer)
 ```
 
 **Key State Transitions:**
@@ -461,11 +563,11 @@ Gold Sequence → Completion/Timeout → Decay Timer → Decay Animation → Gol
 
 ### Event Sequencing
 
-#### 1. Gold Sequence Phase
-- **Activation**: Gold sequence spawns after decay animation completes
+#### 1. Gold Phase
+- **Activation**: Gold spawns after decay animation completes
 - **Duration**: 10 seconds (constants.GoldSequenceDuration)
 - **Completion**: Either typed correctly or times out
-- **Next Action**: Calls `DecaySystem.StartDecayTimer()`
+- **Next Action**: Transitions to `PhaseGoldComplete`, then starts decay timer
 
 **State Validation**:
 - Gold can only spawn when NOT active
@@ -473,17 +575,18 @@ Gold Sequence → Completion/Timeout → Decay Timer → Decay Animation → Gol
 - Position conflicts with existing entities are avoided
 
 #### 2. Decay Timer Phase
-- **Activation**: Started when Gold sequence ends (completion or timeout)
+- **Activation**: Started when Gold ends (completion or timeout)
 - **Duration**: 60-10 seconds (based on heat percentage at Gold end time)
   - Formula: `60s - (50s * heatPercentage)`
   - Higher heat = faster decay
-- **Purpose**: Creates breathing room between Gold sequences
+- **Purpose**: Creates breathing room between gold spawns
 - **Next Action**: Triggers decay animation when timer expires
 
 **State Validation**:
 - Timer only starts if not already running
 - Timer calculation is atomic (based on heat at specific moment)
 - Timer does not restart during active animation
+- Timer uses pausable clock (freezes during COMMAND mode)
 
 #### 3. Decay Animation Phase
 - **Activation**: Triggered when decay timer expires
@@ -495,17 +598,18 @@ Gold Sequence → Completion/Timeout → Decay Timer → Decay Animation → Gol
   - Entities decay characters they pass over
   - Characters decay one level: Bright → Normal → Dark
   - Dark level triggers color change: Blue→Green, Green→Red
-- **Next Action**: Returns to Gold Sequence Phase
+- **Next Action**: Returns to PhaseNormal (Gold can spawn again)
 
 **State Validation**:
 - Animation cannot start if already animating
 - Each character decayed at most once per animation
 - Falling entities properly cleaned up on completion
+- Animation uses pausable clock (freezes during COMMAND mode)
 
 ### Score System Integration
 
-#### Gold Sequence Typing
-When user types during active gold sequence:
+#### Gold Typing
+When user types during active gold:
 
 ```
 ScoreSystem.handleGoldSequenceTyping():
@@ -525,6 +629,7 @@ ScoreSystem.handleGoldSequenceTyping():
 - Gold typing NEVER resets heat (unlike incorrect regular typing)
 - Cleaners trigger BEFORE heat is filled (to check pre-fill state)
 - Heat is guaranteed to be at max after gold completion
+- Gold timeout uses pausable clock (10 seconds of game time, not real time)
 
 ### Concurrency Guarantees
 
@@ -833,17 +938,18 @@ cs.stateMu.Unlock()
   - Color matching: Typing same color extends by 500ms via atomic update
   - No separate boost entities - pure state management
 
-### Gold Sequence System
-- **Trigger**: Spawns when decay animation completes
+### Gold System
+- **Trigger**: Spawns when decay animation completes (transitions to PhaseNormal)
 - **Position**: Random location avoiding cursor (NOT fixed center-top)
 - **Length**: Fixed 10 alphanumeric characters (randomly generated)
-- **Duration**: 10 seconds before timeout
+- **Duration**: 10 seconds (game time via pausable clock) before timeout
 - **Reward**: Fills heat meter to maximum on completion
 - **Cleaner Trigger**: If heat is already at maximum when gold completed, triggers Cleaner animation
 - **Behavior**: Typing gold chars does not affect heat/score directly
+- **Pause Behavior**: Timeout freezes during COMMAND mode (game time stops)
 
 ### Cleaner System
-- **Trigger**: Activated when gold sequence completed while heat meter already at maximum
+- **Trigger**: Activated when gold completed while heat meter already at maximum
 - **Update Model**: **Synchronous** - runs in main game loop, not in separate goroutine
 - **Configuration**: Fully configurable via `constants.CleanerConfig` struct
   - **Animation Duration**: Time to traverse screen (default: 1 second)
