@@ -232,6 +232,6 @@ func clearAllEntities(world *engine.World) {
 
 	// Now delete all collected entities
 	for entity := range entitiesToDelete {
-		world.SafeDestroyEntity(entity)
+		world.DestroyEntity(entity)
 	}
 }

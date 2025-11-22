@@ -274,7 +274,7 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		}
 
 		// Safely destroy the character entity (handles spatial index removal)
-		world.SafeDestroyEntity(entity)
+		world.DestroyEntity(entity)
 
 		// Move cursor right
 		s.ctx.CursorX++
@@ -367,7 +367,7 @@ func (s *ScoreSystem) handleNuggetCollection(world *engine.World, entity engine.
 	s.ctx.State.SetHeat(newHeat)
 
 	// Destroy the nugget entity
-	world.SafeDestroyEntity(entity)
+	world.DestroyEntity(entity)
 
 	// Clear the active nugget reference to trigger respawn
 	// Use CAS to ensure we only clear if this is still the active nugget
@@ -438,7 +438,7 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 	s.ctx.State.SetScoreBlinkTime(now)
 
 	// Safely destroy the character entity (handles spatial index removal)
-	world.SafeDestroyEntity(entity)
+	world.DestroyEntity(entity)
 
 	// Move cursor right
 	s.ctx.CursorX++

@@ -11,7 +11,6 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/audio"
-	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/modes"
 	"github.com/lixenwraith/vi-fighter/render"
@@ -152,12 +151,7 @@ func main() {
 	drainSystem := systems.NewDrainSystem(ctx)
 	ctx.World.AddSystem(drainSystem)
 
-	// Initialize cleaner system with default configuration
-	cleanerConfig := constants.DefaultCleanerConfig()
-	// Initialize cleaner gradient based on configuration
-	render.BuildCleanerGradient(cleanerConfig.TrailLength, tcell.NewRGBColor(255, 255, 0))
-
-	cleanerSystem := systems.NewCleanerSystem(ctx, ctx.GameWidth, ctx.GameHeight, cleanerConfig)
+	cleanerSystem := systems.NewCleanerSystem(ctx)
 	ctx.World.AddSystem(cleanerSystem)
 
 	// Wire up system references

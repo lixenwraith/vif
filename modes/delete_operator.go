@@ -143,7 +143,7 @@ func deleteAllOnLine(ctx *engine.GameContext, y int) bool {
 
 	// Delete all entities
 	for _, entity := range entitiesToDelete {
-		ctx.World.SafeDestroyEntity(entity)
+		ctx.World.DestroyEntity(entity)
 	}
 
 	return deletedGreenOrBlue
@@ -185,7 +185,7 @@ func deleteRange(ctx *engine.GameContext, startX, endX, y int) bool {
 
 	// Delete all entities in range
 	for _, entity := range entitiesToDelete {
-		ctx.World.SafeDestroyEntity(entity)
+		ctx.World.DestroyEntity(entity)
 	}
 
 	return deletedGreenOrBlue

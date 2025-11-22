@@ -19,7 +19,7 @@ var (
 	RgbSequenceBlueNormal = tcell.NewRGBColor(100, 150, 255) // Normal Blue
 	RgbSequenceBlueBright = tcell.NewRGBColor(140, 190, 255) // Bright Blue
 
-	RgbSequenceGold = tcell.NewRGBColor(255, 255, 0) // Bright Yellow for gold sequence
+	RgbSequenceGold = tcell.NewRGBColor(255, 255, 0)   // Bright Yellow for gold sequence
 	RgbDecayFalling = tcell.NewRGBColor(0, 139, 139)   // Dark Cyan for decay animation
 	RgbDrain        = tcell.NewRGBColor(224, 255, 255) // Light Cyan for drain entity
 
@@ -37,10 +37,10 @@ var (
 	RgbCursorInsert  = tcell.NewRGBColor(255, 255, 255) // Bright white for insert mode
 
 	// Nugget colors
-	RgbNuggetOrange = tcell.NewRGBColor(255, 165, 0)  // Same as insert cursor
-	RgbNuggetDark   = tcell.NewRGBColor(101, 67, 33)  // Dark brown for contrast
-	RgbCursorError   = tcell.NewRGBColor(255, 80, 80)   // Red
-	RgbTrailGray     = tcell.NewRGBColor(200, 200, 200) // Light gray base
+	RgbNuggetOrange = tcell.NewRGBColor(255, 165, 0)   // Same as insert cursor
+	RgbNuggetDark   = tcell.NewRGBColor(101, 67, 33)   // Dark brown for contrast
+	RgbCursorError  = tcell.NewRGBColor(255, 80, 80)   // Red
+	RgbTrailGray    = tcell.NewRGBColor(200, 200, 200) // Light gray base
 
 	// Status bar backgrounds
 	RgbModeNormalBg  = tcell.NewRGBColor(135, 206, 250) // Light sky blue
@@ -52,36 +52,10 @@ var (
 	RgbDecayTimerBg  = tcell.NewRGBColor(200, 50, 50)   // Red for decay timer
 	RgbStatusText    = tcell.NewRGBColor(0, 0, 0)       // Dark text for status
 
-	// Cleaner removal flash effect
+	// Cleaner colors
+	RgbCleanerBase  = tcell.NewRGBColor(255, 255, 0)   // Bright yellow
 	RgbRemovalFlash = tcell.NewRGBColor(255, 255, 200) // Bright yellow-white flash
 )
-
-// CleanerTrailGradient is a pre-calculated gradient table for cleaner trail rendering.
-// Index 0 = newest/brightest (full color), Index 9 = oldest/faded (transparent).
-// This avoids calculating colors on every frame, improving render performance.
-// Must be initialized by calling BuildCleanerGradient before use.
-var CleanerTrailGradient [10]tcell.Color
-
-// BuildCleanerGradient constructs the trail gradient based on configuration
-func BuildCleanerGradient(trailLength int, baseColor tcell.Color) {
-	if trailLength > 10 {
-		trailLength = 10 // Cap at array size
-	}
-
-	r, g, b := baseColor.RGB()
-	for i := 0; i < trailLength; i++ {
-		opacity := 1.0 - (float64(i) / float64(trailLength))
-		red := int32(float64(r) * opacity)
-		green := int32(float64(g) * opacity)
-		blue := int32(float64(b) * opacity)
-		CleanerTrailGradient[i] = tcell.NewRGBColor(red, green, blue)
-	}
-
-	// Fill remaining slots with transparent
-	for i := trailLength; i < 10; i++ {
-		CleanerTrailGradient[i] = tcell.NewRGBColor(0, 0, 0)
-	}
-}
 
 // GetHeatMeterColor returns the color for a given position in the heat meter gradient
 // progress is 0.0 to 1.0, representing position from start to end

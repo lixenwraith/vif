@@ -154,7 +154,7 @@ func (s *GoldSystem) spawnGold(world *engine.World) bool {
 		// Collision detected - rollback and cleanup all entities
 		tx.Rollback()
 		for _, e := range createdEntities {
-			world.SafeDestroyEntity(e)
+			world.DestroyEntity(e)
 		}
 		return false
 	}
@@ -166,7 +166,7 @@ func (s *GoldSystem) spawnGold(world *engine.World) bool {
 	if !s.ctx.State.ActivateGoldSequence(sequenceID, constants.GoldDuration) {
 		// Phase transition failed - clean up created entities
 		for _, entity := range createdEntities {
-			world.SafeDestroyEntity(entity)
+			world.DestroyEntity(entity)
 		}
 		return false
 	}
@@ -204,7 +204,7 @@ func (s *GoldSystem) removeGold(world *engine.World, sequenceID int) {
 		// Only remove gold sequence entities with our ID
 		if seq.Type == components.SequenceGold && seq.ID == sequenceID {
 			// Safely destroy entity (handles spatial index removal)
-			world.SafeDestroyEntity(entity)
+			world.DestroyEntity(entity)
 		}
 	}
 

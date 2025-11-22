@@ -7,6 +7,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
@@ -16,10 +17,9 @@ const (
 
 // CleanerSnapshot represents a thread-safe snapshot of cleaner data for rendering
 type CleanerSnapshot struct {
-	Row            int
-	XPosition      float64
-	TrailPositions []float64
-	Char           rune
+	Row   int
+	Trail []core.Point // Trail points in integer grid coordinates
+	Char  rune
 }
 
 // CleanerSystemInterface provides the interface needed by the renderer
@@ -40,11 +40,12 @@ type TerminalRenderer struct {
 	cleanerSystem        CleanerSystemInterface
 	cleanerSnapshots     []CleanerSnapshot
 	cleanerSnapshotFrame int64 // Frame counter for cache invalidation
+	cleanerGradient      []tcell.Color
 }
 
 // NewTerminalRenderer creates a new terminal renderer
 func NewTerminalRenderer(screen tcell.Screen, width, height, gameX, gameY, gameWidth, gameHeight, lineNumWidth int, cleanerSystem CleanerSystemInterface) *TerminalRenderer {
-	return &TerminalRenderer{
+	r := &TerminalRenderer{
 		screen:               screen,
 		width:                width,
 		height:               height,
@@ -56,6 +57,33 @@ func NewTerminalRenderer(screen tcell.Screen, width, height, gameX, gameY, gameW
 		cleanerSystem:        cleanerSystem,
 		cleanerSnapshots:     nil,
 		cleanerSnapshotFrame: -1, // Initialize to -1 to force first update
+	}
+
+	// Initialize gradient internally
+	r.buildCleanerGradient()
+
+	return r
+}
+
+// buildCleanerGradient internal method to build gradient
+func (r *TerminalRenderer) buildCleanerGradient() {
+	length := constants.CleanerTrailLength
+
+	r.cleanerGradient = make([]tcell.Color, length)
+	red, green, blue := RgbCleanerBase.RGB()
+
+	for i := 0; i < length; i++ {
+		// Opacity fade from 1.0 to 0.0
+		opacity := 1.0 - (float64(i) / float64(length))
+		if opacity < 0 {
+			opacity = 0
+		}
+
+		rVal := int32(float64(red) * opacity)
+		gVal := int32(float64(green) * opacity)
+		bVal := int32(float64(blue) * opacity)
+
+		r.cleanerGradient[i] = tcell.NewRGBColor(rVal, gVal, bVal)
 	}
 }
 
@@ -386,15 +414,14 @@ func (r *TerminalRenderer) drawFallingDecay(world *engine.World, defaultStyle tc
 	}
 }
 
-// drawCleaners draws the cleaner animation with trail effects using pre-calculated gradients
-// Uses cached snapshots from RenderFrame to ensure single snapshot per frame
+// drawCleaners draws the cleaner animation using the trail of grid points.
 func (r *TerminalRenderer) drawCleaners(defaultStyle tcell.Style) {
 	// Skip if no cleaner system configured
 	if r.cleanerSystem == nil {
 		return
 	}
 
-	// Use cached snapshots from RenderFrame (already fetched once per frame)
+	// Use cached snapshots
 	snapshots := r.cleanerSnapshots
 
 	for _, cleaner := range snapshots {
@@ -404,40 +431,30 @@ func (r *TerminalRenderer) drawCleaners(defaultStyle tcell.Style) {
 		}
 		screenY := r.gameY + cleaner.Row
 
-		// Draw trail with fade effect using pre-calculated gradient (from oldest to newest)
-		trailLen := len(cleaner.TrailPositions)
-		for i := trailLen - 1; i >= 0; i-- {
-			trailX := cleaner.TrailPositions[i]
-			x := int(trailX + 0.5) // Round to nearest integer
-
+		// Iterate through the trail
+		// Index 0 is the head (brightest), last index is the tail (faintest)
+		for i, point := range cleaner.Trail {
 			// Skip if out of bounds
-			if x < 0 || x >= r.gameWidth {
+			if point.X < 0 || point.X >= r.gameWidth {
 				continue
 			}
 
-			screenX := r.gameX + x
+			screenX := r.gameX + point.X
 
-			// Use pre-calculated gradient table for trail colors
-			// Index 0 = newest/brightest, higher indices = older/fainter
+			// Use pre-calculated gradient based on index
+			// Ensure we don't go out of bounds of the gradient slice
 			gradientIndex := i
-			if gradientIndex >= len(CleanerTrailGradient) {
-				gradientIndex = len(CleanerTrailGradient) - 1
+			if gradientIndex >= len(r.cleanerGradient) {
+				gradientIndex = len(r.cleanerGradient) - 1
 			}
 
-			// Only draw if color has sufficient opacity
-			if gradientIndex < len(CleanerTrailGradient) {
-				trailColor := CleanerTrailGradient[gradientIndex]
-				trailStyle := defaultStyle.Foreground(trailColor)
-				r.screen.SetContent(screenX, screenY, cleaner.Char, nil, trailStyle)
-			}
-		}
+			// Apply color from gradient
+			color := r.cleanerGradient[gradientIndex]
+			style := defaultStyle.Foreground(color)
 
-		// Draw the main cleaner block (bright yellow, on top of trail)
-		x := int(cleaner.XPosition + 0.5) // Round to nearest integer
-		if x >= 0 && x < r.gameWidth {
-			screenX := r.gameX + x
-			cleanerStyle := defaultStyle.Foreground(RgbSequenceGold)
-			r.screen.SetContent(screenX, screenY, cleaner.Char, nil, cleanerStyle)
+			// Head (index 0) is usually rendered on top, but since we draw
+			// in a single pass here, order doesn't strictly matter for flat chars.
+			r.screen.SetContent(screenX, screenY, cleaner.Char, nil, style)
 		}
 	}
 }

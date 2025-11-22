@@ -296,7 +296,7 @@ func TestGetCharacterTypeAt_AllWordChars(t *testing.T) {
 			t.Errorf("Expected CharTypeWord for '%c', got %d", r, charType)
 		}
 		// Clear for next test
-		ctx.World.SafeDestroyEntity(ctx.World.GetEntityAtPosition(0, 0))
+		ctx.World.DestroyEntity(ctx.World.GetEntityAtPosition(0, 0))
 	}
 
 	// Test all uppercase letters
@@ -306,7 +306,7 @@ func TestGetCharacterTypeAt_AllWordChars(t *testing.T) {
 		if charType != CharTypeWord {
 			t.Errorf("Expected CharTypeWord for '%c', got %d", r, charType)
 		}
-		ctx.World.SafeDestroyEntity(ctx.World.GetEntityAtPosition(0, 0))
+		ctx.World.DestroyEntity(ctx.World.GetEntityAtPosition(0, 0))
 	}
 
 	// Test all digits
@@ -316,7 +316,7 @@ func TestGetCharacterTypeAt_AllWordChars(t *testing.T) {
 		if charType != CharTypeWord {
 			t.Errorf("Expected CharTypeWord for '%c', got %d", r, charType)
 		}
-		ctx.World.SafeDestroyEntity(ctx.World.GetEntityAtPosition(0, 0))
+		ctx.World.DestroyEntity(ctx.World.GetEntityAtPosition(0, 0))
 	}
 }
 
@@ -332,7 +332,7 @@ func TestGetCharacterTypeAt_CommonPunctuation(t *testing.T) {
 		if charType != CharTypePunctuation {
 			t.Errorf("Expected CharTypePunctuation for '%c', got %d", r, charType)
 		}
-		ctx.World.SafeDestroyEntity(ctx.World.GetEntityAtPosition(0, 0))
+		ctx.World.DestroyEntity(ctx.World.GetEntityAtPosition(0, 0))
 	}
 }
 

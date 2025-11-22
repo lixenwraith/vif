@@ -277,7 +277,7 @@ func TestNuggetJumpMultipleTimes(t *testing.T) {
 	}
 
 	// Simulate collection (destroy first nugget)
-	ctx.World.SafeDestroyEntity(entity1)
+	ctx.World.DestroyEntity(entity1)
 	nuggetSystem.ClearActiveNuggetIfMatches(uint64(entity1))
 
 	// Second nugget at (25, 10)
@@ -346,7 +346,7 @@ func TestNuggetJumpWithNuggetAtEdge(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Clear previous nugget
 			if activeEntity := nuggetSystem.GetActiveNugget(); activeEntity != 0 {
-				ctx.World.SafeDestroyEntity(engine.Entity(activeEntity))
+				ctx.World.DestroyEntity(engine.Entity(activeEntity))
 				nuggetSystem.ClearActiveNuggetIfMatches(activeEntity)
 			}
 
@@ -355,7 +355,7 @@ func TestNuggetJumpWithNuggetAtEdge(t *testing.T) {
 			ctx.World.AddComponent(entity, components.PositionComponent{X: tc.x, Y: tc.y})
 			style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
 			// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
-	ctx.World.AddComponent(entity, components.CharacterComponent{Rune: 'a', Style: style})
+			ctx.World.AddComponent(entity, components.CharacterComponent{Rune: 'a', Style: style})
 			ctx.World.AddComponent(entity, components.NuggetComponent{ID: 1, SpawnTime: time.Now()})
 			{
 				tx := ctx.World.BeginSpatialTransaction()

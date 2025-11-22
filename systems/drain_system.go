@@ -31,7 +31,7 @@ func (s *DrainSystem) SetNuggetSystem(nuggetSystem *NuggetSystem) {
 
 // Priority returns the system's priority
 func (s *DrainSystem) Priority() int {
-	return 22 // After GoldSequence:20, before Decay:25
+	return 25
 }
 
 // Update runs the drain system logic
@@ -144,7 +144,7 @@ func (s *DrainSystem) despawnDrain(world *engine.World) {
 	}
 
 	// Destroy the drain entity
-	world.SafeDestroyEntity(entity)
+	world.DestroyEntity(entity)
 
 	// Clear GameState atomics
 	s.ctx.State.SetDrainActive(false)
@@ -375,7 +375,7 @@ func (s *DrainSystem) handleCollisionAtPosition(world *engine.World, x, y int, e
 		} else {
 			// Red sequences don't have color counters in GameState
 			// Just destroy without updating counters
-			world.SafeDestroyEntity(entity)
+			world.DestroyEntity(entity)
 			return
 		}
 
@@ -383,7 +383,7 @@ func (s *DrainSystem) handleCollisionAtPosition(world *engine.World, x, y int, e
 		s.ctx.State.AddColorCount(typeInt, int(seq.Level), -1)
 
 		// Destroy the entity
-		world.SafeDestroyEntity(entity)
+		world.DestroyEntity(entity)
 	}
 }
 
@@ -410,7 +410,7 @@ func (s *DrainSystem) handleGoldSequenceCollision(world *engine.World, sequenceI
 
 		// Only destroy gold sequence entities with matching ID
 		if seq.Type == components.SequenceGold && seq.ID == sequenceID {
-			world.SafeDestroyEntity(entity)
+			world.DestroyEntity(entity)
 		}
 	}
 
@@ -433,7 +433,7 @@ func (s *DrainSystem) handleNuggetCollision(world *engine.World, entity engine.E
 	}
 
 	// Destroy the nugget entity
-	world.SafeDestroyEntity(entity)
+	world.DestroyEntity(entity)
 }
 
 // handleFallingDecayCollision destroys the falling decay entity
@@ -441,5 +441,5 @@ func (s *DrainSystem) handleNuggetCollision(world *engine.World, entity engine.E
 func (s *DrainSystem) handleFallingDecayCollision(world *engine.World, entity engine.Entity) {
 	// Simply destroy the falling decay entity
 	// This maintains decay animation continuity - other falling entities continue
-	world.SafeDestroyEntity(entity)
+	world.DestroyEntity(entity)
 }

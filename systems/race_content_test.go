@@ -274,9 +274,9 @@ func TestRenderWhileSpawning(t *testing.T) {
 			default:
 				entities := world.GetEntitiesWith()
 				if len(entities) > 0 {
-					// Destroy random entity using SafeDestroyEntity (handles spatial index atomically)
+					// Destroy random entity using DestroyEntity (handles spatial index atomically)
 					toDestroy := entities[rand.Intn(len(entities))]
-					world.SafeDestroyEntity(toDestroy)
+					world.DestroyEntity(toDestroy)
 				}
 				time.Sleep(15 * time.Millisecond)
 			}
@@ -616,9 +616,9 @@ func TestStressContentSystem(t *testing.T) {
 			default:
 				entities := world.GetEntitiesWith()
 				if len(entities) > 10 {
-					// Destroy several entities using SafeDestroyEntity
+					// Destroy several entities using DestroyEntity
 					for i := 0; i < 5 && i < len(entities); i++ {
-						world.SafeDestroyEntity(entities[i])
+						world.DestroyEntity(entities[i])
 					}
 				}
 				time.Sleep(25 * time.Millisecond)

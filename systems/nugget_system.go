@@ -99,7 +99,7 @@ func (s *NuggetSystem) spawnNugget(world *engine.World, now time.Time) {
 	result := tx.Spawn(entity, x, y)
 	if result.HasCollision {
 		// Position was taken while we were creating the nugget
-		world.SafeDestroyEntity(entity)
+		world.DestroyEntity(entity)
 		return
 	}
 	tx.Commit()

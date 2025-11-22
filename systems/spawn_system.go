@@ -618,7 +618,7 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 				tx.Rollback()
 				// Remove all entities created
 				for _, e := range createdEntities {
-					world.SafeDestroyEntity(e)
+					world.DestroyEntity(e)
 				}
 				// Try next attempt
 				continue

@@ -96,7 +96,7 @@ func TestPlaceLineNearCursor(t *testing.T) {
 
 			// Clean up for next attempt
 			for _, entity := range entities {
-				world.SafeDestroyEntity(entity)
+				world.DestroyEntity(entity)
 			}
 			spawnSys.AddColorCount(components.SequenceBlue, components.LevelBright, -int64(len(line)))
 		}

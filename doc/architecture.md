@@ -527,9 +527,9 @@ Systems execute in priority order (lower = earlier):
 3. **SpawnSystem (15)**: Generate new character sequences (Blue and Green only)
 4. **NuggetSystem (18)**: Manage collectible nugget spawning and collection
 5. **GoldSequenceSystem (20)**: Manage gold sequence lifecycle and random placement
-6. **DrainSystem (22)**: Manage score-draining entity movement and logic
-7. **DecaySystem (25)**: Apply character degradation and color transitions
-8. **CleanerSystem (30)**: Process cleaner spawn requests (actual updates run concurrently)
+6. **CleanerSystem (22)**: Process cleaner spawn requests (actual updates run concurrently)
+7. **DrainSystem (25)**: Manage score-draining entity movement and logic
+8. **DecaySystem (30)**: Apply character degradation and color transitions
 
 **Important**: All priorities must be unique to ensure deterministic execution order. The priority values define the exact order in which systems process game state each frame.
 

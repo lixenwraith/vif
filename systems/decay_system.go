@@ -58,7 +58,7 @@ func (s *DecaySystem) SetNuggetSystem(nuggetSystem *NuggetSystem) {
 
 // Priority returns the system's priority
 func (s *DecaySystem) Priority() int {
-	return 25
+	return 30
 }
 
 // Update runs the decay system
@@ -218,7 +218,7 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 		} else {
 			// Red at LevelDark - remove entity (no counter change, Red is not tracked)
 			// Safely destroy entity (handles spatial index removal)
-			world.SafeDestroyEntity(entity)
+			world.DestroyEntity(entity)
 		}
 	}
 }
@@ -287,7 +287,7 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 		// Check if entity has passed the bottom boundary
 		if fall.YPosition >= float64(gameHeight) {
 			// Entity has gone beyond the bottom - destroy immediately
-			world.SafeDestroyEntity(entity)
+			world.DestroyEntity(entity)
 			// Don't add to remaining entities
 			continue
 		}
@@ -335,7 +335,7 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 				nuggetType := reflect.TypeOf(components.NuggetComponent{})
 				if _, hasNugget := world.GetComponent(targetEntity, nuggetType); hasNugget {
 					// Destroy the nugget
-					world.SafeDestroyEntity(targetEntity)
+					world.DestroyEntity(targetEntity)
 
 					// Clear active nugget reference to trigger respawn
 					// Use CAS to ensure we only clear if this is still the active nugget
@@ -379,7 +379,7 @@ func (s *DecaySystem) cleanupFallingEntities(world *engine.World) {
 
 	// Destroy entities outside of lock
 	for _, entity := range fallingEntities {
-		world.SafeDestroyEntity(entity)
+		world.DestroyEntity(entity)
 	}
 }
 

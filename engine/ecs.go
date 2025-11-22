@@ -54,12 +54,12 @@ func (w *World) CreateEntity() Entity {
 	return id
 }
 
-// SafeDestroyEntity safely removes an entity by atomically:
+// DestroyEntity safely removes an entity by atomically:
 // 1. Removing from spatial index first (if entity has PositionComponent)
 // 2. Then destroying the entity and cleaning up all component indices
 // This ensures spatial index consistency and prevents race conditions.
 // All operations are performed under a single lock for atomicity.
-func (w *World) SafeDestroyEntity(entity Entity) {
+func (w *World) DestroyEntity(entity Entity) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 

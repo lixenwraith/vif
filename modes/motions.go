@@ -668,7 +668,7 @@ func deleteCharAt(ctx *engine.GameContext, x, y int) {
 	}
 
 	// Safely destroy entity (handles spatial index removal)
-	ctx.World.SafeDestroyEntity(entity)
+	ctx.World.DestroyEntity(entity)
 }
 
 // WORD motion functions (space-delimited, treat all non-space as WORD)

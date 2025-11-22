@@ -84,7 +84,7 @@ func TestNuggetRapidCollectionAndRespawn(t *testing.T) {
 		}
 
 		// Collect nugget (simulate destruction)
-		world.SafeDestroyEntity(engine.Entity(activeNugget))
+		world.DestroyEntity(engine.Entity(activeNugget))
 		cleared := nuggetSystem.ClearActiveNuggetIfMatches(activeNugget)
 		if !cleared {
 			t.Errorf("Cycle %d: ClearActiveNuggetIfMatches should have succeeded", i)
@@ -170,7 +170,7 @@ func TestNuggetDoubleDestruction(t *testing.T) {
 	}
 
 	// First destruction
-	world.SafeDestroyEntity(engine.Entity(activeNugget))
+	world.DestroyEntity(engine.Entity(activeNugget))
 	cleared1 := nuggetSystem.ClearActiveNuggetIfMatches(activeNugget)
 	if !cleared1 {
 		t.Error("First ClearActiveNuggetIfMatches should have succeeded")
@@ -214,7 +214,7 @@ func TestNuggetClearAfterNewSpawn(t *testing.T) {
 	}
 
 	// Destroy first nugget and clear reference
-	world.SafeDestroyEntity(engine.Entity(firstNugget))
+	world.DestroyEntity(engine.Entity(firstNugget))
 	nuggetSystem.ClearActiveNuggetIfMatches(firstNugget)
 
 	// Spawn second nugget
@@ -268,7 +268,7 @@ func TestNuggetVerificationClearsStaleReference(t *testing.T) {
 	}
 
 	// Destroy nugget WITHOUT calling ClearActiveNuggetIfMatches (simulating external destruction)
-	world.SafeDestroyEntity(engine.Entity(activeNugget))
+	world.DestroyEntity(engine.Entity(activeNugget))
 
 	// Next Update() should detect missing component and clear reference
 	nuggetSystem.Update(world, 0)
@@ -325,7 +325,7 @@ func TestNuggetSpawnPositionExclusionZone(t *testing.T) {
 		}
 
 		// Clear for next iteration
-		world.SafeDestroyEntity(engine.Entity(activeNugget))
+		world.DestroyEntity(engine.Entity(activeNugget))
 		nuggetSystem.ClearActiveNuggetIfMatches(activeNugget)
 	}
 }
@@ -366,7 +366,7 @@ func TestNuggetGetSystemState(t *testing.T) {
 
 	// State 3: Destroy nugget
 	activeNugget := nuggetSystem.GetActiveNugget()
-	world.SafeDestroyEntity(engine.Entity(activeNugget))
+	world.DestroyEntity(engine.Entity(activeNugget))
 	nuggetSystem.ClearActiveNuggetIfMatches(activeNugget)
 
 	state3 := nuggetSystem.GetSystemState()

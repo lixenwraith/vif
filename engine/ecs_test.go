@@ -31,7 +31,7 @@ func TestComponentTypeIndex(t *testing.T) {
 	}
 
 	// Destroy one entity
-	world.SafeDestroyEntity(entity1)
+	world.DestroyEntity(entity1)
 
 	// Verify type index is updated
 	entities = world.GetEntitiesWith(compType)
@@ -49,8 +49,8 @@ type PositionComponent struct {
 	X, Y int
 }
 
-// TestSafeDestroyEntityWithPosition tests SafeDestroyEntity with PositionComponent
-func TestSafeDestroyEntityWithPosition(t *testing.T) {
+// TestDestroyEntityWithPosition tests DestroyEntity with PositionComponent
+func TestDestroyEntityWithPosition(t *testing.T) {
 	world := NewWorld()
 
 	// Create entity with PositionComponent
@@ -67,23 +67,23 @@ func TestSafeDestroyEntityWithPosition(t *testing.T) {
 		t.Errorf("Expected entity %d at position (10, 20), got %d", entity, foundEntity)
 	}
 
-	// SafeDestroyEntity should handle spatial index removal
-	world.SafeDestroyEntity(entity)
+	// DestroyEntity should handle spatial index removal
+	world.DestroyEntity(entity)
 
 	// Verify entity is removed from spatial index
 	foundEntity = world.GetEntityAtPosition(10, 20)
 	if foundEntity != 0 {
-		t.Errorf("Expected no entity at position (10, 20) after SafeDestroyEntity, got %d", foundEntity)
+		t.Errorf("Expected no entity at position (10, 20) after DestroyEntity, got %d", foundEntity)
 	}
 
 	// Verify entity is destroyed
 	if world.EntityCount() != 0 {
-		t.Errorf("Expected 0 entities after SafeDestroyEntity, got %d", world.EntityCount())
+		t.Errorf("Expected 0 entities after DestroyEntity, got %d", world.EntityCount())
 	}
 }
 
-// TestSafeDestroyEntityWithoutPosition tests SafeDestroyEntity without PositionComponent
-func TestSafeDestroyEntityWithoutPosition(t *testing.T) {
+// TestDestroyEntityWithoutPosition tests DestroyEntity without PositionComponent
+func TestDestroyEntityWithoutPosition(t *testing.T) {
 	world := NewWorld()
 
 	// Create entity without PositionComponent (just TestComponent)
@@ -95,17 +95,17 @@ func TestSafeDestroyEntityWithoutPosition(t *testing.T) {
 		t.Errorf("Expected 1 entity, got %d", world.EntityCount())
 	}
 
-	// SafeDestroyEntity should still work without PositionComponent
-	world.SafeDestroyEntity(entity)
+	// DestroyEntity should still work without PositionComponent
+	world.DestroyEntity(entity)
 
 	// Verify entity is destroyed
 	if world.EntityCount() != 0 {
-		t.Errorf("Expected 0 entities after SafeDestroyEntity, got %d", world.EntityCount())
+		t.Errorf("Expected 0 entities after DestroyEntity, got %d", world.EntityCount())
 	}
 }
 
-// TestSafeDestroyEntityMultipleEntities tests SafeDestroyEntity with multiple entities
-func TestSafeDestroyEntityMultipleEntities(t *testing.T) {
+// TestDestroyEntityMultipleEntities tests DestroyEntity with multiple entities
+func TestDestroyEntityMultipleEntities(t *testing.T) {
 	world := NewWorld()
 
 	// Create multiple entities at different positions
@@ -130,13 +130,13 @@ func TestSafeDestroyEntityMultipleEntities(t *testing.T) {
 		}
 	}
 
-	// SafeDestroyEntity on middle entity
-	world.SafeDestroyEntity(entities[2])
+	// DestroyEntity on middle entity
+	world.DestroyEntity(entities[2])
 
 	// Verify middle entity is removed from spatial index
 	foundEntity := world.GetEntityAtPosition(positions[2][0], positions[2][1])
 	if foundEntity != 0 {
-		t.Errorf("Expected no entity at position (%d, %d) after SafeDestroyEntity, got %d",
+		t.Errorf("Expected no entity at position (%d, %d) after DestroyEntity, got %d",
 			positions[2][0], positions[2][1], foundEntity)
 	}
 
@@ -158,16 +158,16 @@ func TestSafeDestroyEntityMultipleEntities(t *testing.T) {
 	}
 }
 
-// TestSafeDestroyEntityNonExistent tests SafeDestroyEntity on non-existent entity
-func TestSafeDestroyEntityNonExistent(t *testing.T) {
+// TestDestroyEntityNonExistent tests DestroyEntity on non-existent entity
+func TestDestroyEntityNonExistent(t *testing.T) {
 	world := NewWorld()
 
 	// Create and immediately destroy an entity to get a valid ID
 	entity := world.CreateEntity()
-	world.SafeDestroyEntity(entity)
+	world.DestroyEntity(entity)
 
-	// Try to SafeDestroyEntity on already-destroyed entity (should be no-op)
-	world.SafeDestroyEntity(entity)
+	// Try to DestroyEntity on already-destroyed entity (should be no-op)
+	world.DestroyEntity(entity)
 
 	// Verify no panic and entity count is still 0
 	if world.EntityCount() != 0 {
@@ -175,8 +175,8 @@ func TestSafeDestroyEntityNonExistent(t *testing.T) {
 	}
 }
 
-// TestSafeDestroyEntityComponentTypeIndex tests that component type index is cleaned up
-func TestSafeDestroyEntityComponentTypeIndex(t *testing.T) {
+// TestDestroyEntityComponentTypeIndex tests that component type index is cleaned up
+func TestDestroyEntityComponentTypeIndex(t *testing.T) {
 	world := NewWorld()
 
 	// Create entities with PositionComponent
@@ -206,13 +206,13 @@ func TestSafeDestroyEntityComponentTypeIndex(t *testing.T) {
 		t.Errorf("Expected 2 entities with PositionComponent, got %d", len(entities))
 	}
 
-	// SafeDestroyEntity on first entity
-	world.SafeDestroyEntity(entity1)
+	// DestroyEntity on first entity
+	world.DestroyEntity(entity1)
 
 	// Verify type index is updated
 	entities = world.GetEntitiesWith(compType)
 	if len(entities) != 1 {
-		t.Errorf("Expected 1 entity with PositionComponent after SafeDestroyEntity, got %d", len(entities))
+		t.Errorf("Expected 1 entity with PositionComponent after DestroyEntity, got %d", len(entities))
 	}
 
 	if entities[0] != entity2 {
@@ -222,7 +222,7 @@ func TestSafeDestroyEntityComponentTypeIndex(t *testing.T) {
 	// Verify entity1 is removed from spatial index
 	foundEntity := world.GetEntityAtPosition(1, 1)
 	if foundEntity != 0 {
-		t.Errorf("Expected no entity at position (1, 1) after SafeDestroyEntity, got %d", foundEntity)
+		t.Errorf("Expected no entity at position (1, 1) after DestroyEntity, got %d", foundEntity)
 	}
 
 	// Verify entity2 is still in spatial index
