@@ -414,7 +414,6 @@ func (gs *GameState) SetBoostColor(color int32) {
 }
 
 // UpdateBoostTimerAtomic atomically checks if boost should expire and disables it
-// No pauseDuration parameter - uses game time directly
 func (gs *GameState) UpdateBoostTimerAtomic() bool {
 	if !gs.BoostEnabled.Load() {
 		return false

@@ -138,6 +138,9 @@ func main() {
 	spawnSystem := systems.NewSpawnSystem(ctx.GameWidth, ctx.GameHeight, ctx.CursorX, ctx.CursorY, ctx)
 	ctx.World.AddSystem(spawnSystem)
 
+	boostSystem := systems.NewBoostSystem(ctx)
+	ctx.World.AddSystem(boostSystem)
+
 	nuggetSystem := systems.NewNuggetSystem(ctx)
 	ctx.World.AddSystem(nuggetSystem)
 

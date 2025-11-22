@@ -1,0 +1,26 @@
+package systems
+
+import (
+	"time"
+
+	"github.com/lixenwraith/vi-fighter/engine"
+)
+
+type BoostSystem struct {
+	ctx *engine.GameContext
+}
+
+func NewBoostSystem(ctx *engine.GameContext) *BoostSystem {
+	return &BoostSystem{ctx: ctx}
+}
+
+func (bs *BoostSystem) Priority() int {
+	return 5 // Run early, before score system
+}
+
+func (bs *BoostSystem) Update(world *engine.World, dt time.Duration) {
+	// Check and handle boost expiration
+	if bs.ctx.State.UpdateBoostTimerAtomic() {
+		// Boost expired - could trigger visual feedback here
+	}
+}

@@ -283,9 +283,6 @@ func (cs *ClockScheduler) processTick() {
 	// Update all ECS systems
 	cs.ctx.World.Update(cs.tickInterval)
 
-	// Update game-specific timers
-	cs.ctx.State.UpdateBoostTimerAtomic()
-
 	// Update ping grid timer
 	if cs.ctx.UpdatePingGridTimerAtomic(cs.tickInterval.Seconds()) {
 		cs.ctx.SetPingActive(false)
@@ -383,8 +380,7 @@ func (cs *ClockScheduler) processTick() {
 	}
 
 	// Update boost timer (check for expiration)
-	// Pausable clock handles pause adjustment internally
-	cs.ctx.State.UpdateBoostTimerAtomic()
+	// cs.ctx.State.UpdateBoostTimerAtomic()
 }
 
 // HandlePauseResume adjusts the tick deadline when resuming from pause
