@@ -11,8 +11,7 @@ import (
 )
 
 const (
-	errorBlinkMs  = 500
-	cursorBlinkMs = 500
+	errorBlinkMs = 500
 )
 
 // CleanerSnapshot represents a thread-safe snapshot of cleaner data for rendering

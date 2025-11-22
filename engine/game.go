@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/lixenwraith/vi-fighter/audio"
+	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/core"
 )
 
@@ -51,8 +53,8 @@ type GameContext struct {
 
 	// Cursor state (local to input handling)
 	CursorX, CursorY int // These will be synced to State.CursorX/Y
-	CursorVisible    bool
-	CursorBlinkTime  time.Time
+	// CursorVisible    bool
+	// CursorBlinkTime  time.Time
 
 	// Motion command state (input parsing - not game mechanics)
 	MotionCount         int
@@ -83,8 +85,8 @@ type GameContext struct {
 
 	// Audio engine (nil if audio disabled or initialization failed)
 	AudioEngine interface {
-		SendRealTime(cmd interface{}) bool
-		SendState(cmd interface{}) bool
+		SendRealTime(cmd audio.AudioCommand) bool
+		SendState(cmd audio.AudioCommand) bool
 		StopCurrentSound()
 		DrainQueues()
 		IsRunning() bool
@@ -105,15 +107,15 @@ func NewGameContext(screen tcell.Screen) *GameContext {
 	pausableClock := NewPausableClock()
 
 	ctx := &GameContext{
-		World:           NewWorld(),
-		Screen:          screen,
-		TimeProvider:    pausableClock, // Use pausable clock as TimeProvider
-		PausableClock:   pausableClock, // Direct reference for pause control
-		Width:           width,
-		Height:          height,
-		Mode:            ModeNormal,
-		CursorVisible:   true,
-		CursorBlinkTime: pausableClock.RealTime(), // UI uses real time
+		World:         NewWorld(),
+		Screen:        screen,
+		TimeProvider:  pausableClock, // Use pausable clock as TimeProvider
+		PausableClock: pausableClock, // Direct reference for pause control
+		Width:         width,
+		Height:        height,
+		Mode:          ModeNormal,
+		// CursorVisible:   true,
+		// CursorBlinkTime: pausableClock.RealTime(), // UI uses real time
 	}
 
 	// Calculate game area first
@@ -258,8 +260,7 @@ func (g *GameContext) ToggleAudioMute() bool {
 // updateGameArea calculates the game area dimensions
 func (g *GameContext) updateGameArea() {
 	// Calculate line number width based on height
-	// We need 1 line for heat meter at top, 2 lines for column indicator and status bar at bottom
-	gameHeight := g.Height - 3
+	gameHeight := g.Height - constants.BottomMargin - constants.TopMargin
 	if gameHeight < 1 {
 		gameHeight = 1
 	}
@@ -270,8 +271,8 @@ func (g *GameContext) updateGameArea() {
 	}
 
 	g.LineNumWidth = lineNumWidth
-	g.GameX = lineNumWidth + 1 // line number + 1 space
-	g.GameY = 1                // Start at row 1 (row 0 is for heat meter)
+	g.GameX = lineNumWidth + 1    // line number + 1 space
+	g.GameY = constants.TopMargin // Start at row 1 (row 0 is for heat meter)
 	g.GameWidth = g.Width - g.GameX
 	g.GameHeight = gameHeight
 
@@ -295,6 +296,7 @@ func formatNumber(n int) string {
 	return string(result)
 }
 
+// TODO: Systems don't handle resize
 // HandleResize handles terminal resize events
 func (g *GameContext) HandleResize() {
 	newWidth, newHeight := g.Screen.Size()

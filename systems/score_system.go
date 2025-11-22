@@ -54,7 +54,7 @@ func (s *ScoreSystem) Update(world *engine.World, dt time.Duration) {
 
 	// Clear error cursor (red flash) after timeout using Game Time
 	// This ensures the red flash "freezes" if the game is paused
-	if s.ctx.State.GetCursorError() && now.Sub(s.ctx.State.GetCursorErrorTime()) > constants.ErrorCursorTimeout {
+	if s.ctx.State.GetCursorError() && now.Sub(s.ctx.State.GetCursorErrorTime()) > constants.ErrorBlinkTimeout {
 		s.ctx.State.SetCursorError(false)
 	}
 

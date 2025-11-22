@@ -60,8 +60,8 @@ func TestDecayIntervalBounds(t *testing.T) {
 
 // TestUITimingConstants verifies UI timing constants are reasonable
 func TestUITimingConstants(t *testing.T) {
-	if ErrorCursorTimeout != 200*time.Millisecond {
-		t.Errorf("Expected ErrorCursorTimeout to be 200ms, got %v", ErrorCursorTimeout)
+	if ErrorBlinkTimeout != 200*time.Millisecond {
+		t.Errorf("Expected ErrorBlinkTimeout to be 200ms, got %v", ErrorBlinkTimeout)
 	}
 
 	if ScoreBlinkTimeout != 200*time.Millisecond {

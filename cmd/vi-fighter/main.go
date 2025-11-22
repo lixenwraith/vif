@@ -30,20 +30,6 @@ const (
 	gameUpdateDT  = 50 * time.Millisecond // game logic tick
 )
 
-// AudioEngineAdapter wraps the concrete AudioEngine to satisfy the generic interface
-// expected by the GameContext.
-type AudioEngineAdapter struct {
-	*audio.AudioEngine
-}
-
-// SendRealTime adapts the generic interface{} command to the specific AudioCommand
-func (a *AudioEngineAdapter) SendRealTime(cmd interface{}) bool {
-	if c, ok := cmd.(audio.AudioCommand); ok {
-		return a.AudioEngine.SendRealTime(c)
-	}
-	return false
-}
-
 // setupLogging configures log output based on debug flag
 // If debug is true, logs go to file; otherwise, logging is disabled
 // Returns the log file handle (or nil) that should be closed when done
@@ -135,8 +121,7 @@ func main() {
 	audioCfg := audio.LoadAudioConfig()
 	if audioEngine, err := audio.NewAudioEngine(audioCfg); err == nil {
 		if err := audioEngine.Start(); err == nil {
-			// Fix: Use Adapter to satisfy the interface requirement
-			ctx.AudioEngine = &AudioEngineAdapter{audioEngine}
+			ctx.AudioEngine = audioEngine
 			defer audioEngine.Stop()
 		} else {
 			fmt.Printf("Audio start failed: %v (continuing without audio)\n", err)

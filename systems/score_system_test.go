@@ -615,8 +615,8 @@ func TestCursorErrorTimeout(t *testing.T) {
 		t.Fatal("Expected cursor error to be active initially")
 	}
 
-	// Advance time to just before timeout (ErrorCursorTimeout = 200ms)
-	mockTime.Advance(constants.ErrorCursorTimeout - 10*time.Millisecond)
+	// Advance time to just before timeout (ErrorBlinkTimeout = 200ms)
+	mockTime.Advance(constants.ErrorBlinkTimeout - 10*time.Millisecond)
 	scoreSystem.Update(ctx.World, 10*time.Millisecond)
 
 	// Cursor error should still be active
