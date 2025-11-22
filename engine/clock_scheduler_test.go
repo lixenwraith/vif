@@ -286,11 +286,6 @@ func TestClockSchedulerCreation(t *testing.T) {
 		t.Errorf("Initial tick count = %d, want 0", scheduler.GetTickCount())
 	}
 
-	tickRate := scheduler.GetTickRate()
-	if tickRate != 50*time.Millisecond {
-		t.Errorf("Tick rate = %v, want 50ms", tickRate)
-	}
-
 	// Cleanup
 	scheduler.Stop()
 }
@@ -317,8 +312,8 @@ func TestClockSchedulerStopIdempotent(t *testing.T) {
 	t.Logf("✓ Stop() is idempotent - can be called multiple times safely")
 }
 
-// TestClockSchedulerTickRate tests that tick rate is correct
-func TestClockSchedulerTickRate(t *testing.T) {
+// TestClockSchedulerTickInterval tests that tick rate is correct
+func TestClockSchedulerTickInterval(t *testing.T) {
 	mockTime := NewMockTimeProvider(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
 	pausableClock := NewPausableClock()
 	ctx := &GameContext{
@@ -328,14 +323,14 @@ func TestClockSchedulerTickRate(t *testing.T) {
 		World:         NewWorld(),
 	}
 
+	const arbitraryInterval = 100 * time.Millisecond
 	frameReady := make(chan struct{}, 1)
-	scheduler, _ := NewClockScheduler(ctx, 50*time.Millisecond, frameReady)
+	scheduler, _ := NewClockScheduler(ctx, arbitraryInterval, frameReady)
 
-	tickRate := scheduler.GetTickRate()
-	expectedRate := 50 * time.Millisecond
+	tickRate := scheduler.GetTickInterval()
 
-	if tickRate != expectedRate {
-		t.Errorf("Expected tick rate %v, got %v", expectedRate, tickRate)
+	if tickRate != arbitraryInterval {
+		t.Errorf("Expected tick rate %v, got %v", arbitraryInterval, tickRate)
 	}
 
 	t.Logf("✓ Clock scheduler tick rate is %v (as expected)", tickRate)

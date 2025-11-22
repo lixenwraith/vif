@@ -121,9 +121,6 @@ func NewClockScheduler(ctx *GameContext, tickInterval time.Duration, frameReady 
 		stopChan:         make(chan struct{}),
 	}
 
-	// Register for pause resume notifications to adjust deadline
-	ctx.PausableClock.OnResume(cs.HandlePauseResume)
-
 	return cs, updateDone
 }
 
@@ -180,6 +177,17 @@ func (cs *ClockScheduler) schedulerLoop() {
 	cs.nextTickDeadline = cs.timeProvider.Now().Add(cs.tickInterval)
 	cs.lastGameTickTime = cs.timeProvider.Now()
 	cs.mu.Unlock()
+
+	// Initialize the timer outside the loop to prevent creating garbage on every tick
+	// Starts with 0 and immediately stopped so it is ready for Reset() inside the loop
+	timer := time.NewTimer(0)
+	if !timer.Stop() {
+		select {
+		case <-timer.C:
+		default:
+		}
+	}
+	defer timer.Stop() // Ensure the timer is cleaned up when the function exits
 
 	// Adaptive ticker that respects pause state
 	for {
@@ -259,12 +267,13 @@ func (cs *ClockScheduler) schedulerLoop() {
 
 		// Sleep with interruptible timer
 		if sleepDuration > 0 {
-			timer := time.NewTimer(sleepDuration)
+			// GC Optimization: Reset() existing timer instead of allocating a new one with NewTimer()
+			timer.Reset(sleepDuration)
 			select {
 			case <-timer.C:
 				// Continue loop
 			case <-cs.stopChan:
-				timer.Stop()
+				// No need to Stop() the timer, handled by defer time.Stop()
 				return
 			}
 		}
@@ -383,16 +392,6 @@ func (cs *ClockScheduler) processTick() {
 	// cs.ctx.State.UpdateBoostTimerAtomic()
 }
 
-// HandlePauseResume adjusts the tick deadline when resuming from pause
-// Called by PausableClock when resuming
-func (cs *ClockScheduler) HandlePauseResume(pauseDuration time.Duration) {
-	cs.mu.Lock()
-	defer cs.mu.Unlock()
-
-	// Adjust the deadline by the pause duration to maintain rhythm
-	cs.nextTickDeadline = cs.nextTickDeadline.Add(pauseDuration)
-}
-
 // GetTickCount returns the current tick count for debugging/testing
 func (cs *ClockScheduler) GetTickCount() uint64 {
 	return cs.tickCount.Load()
@@ -406,9 +405,4 @@ func (cs *ClockScheduler) IsRunning() bool {
 // GetTickInterval returns the configured tick interval
 func (cs *ClockScheduler) GetTickInterval() time.Duration {
 	return cs.tickInterval
-}
-
-// GetTickRate returns the clock tick interval (always 50ms)
-func (cs *ClockScheduler) GetTickRate() time.Duration {
-	return 50 * time.Millisecond
 }

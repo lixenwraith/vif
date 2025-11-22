@@ -1,9 +1,9 @@
 package engine
 
 import (
+	"math"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/core"
@@ -147,20 +147,20 @@ func (g *GameContext) SetPingActive(active bool) {
 // Atomic accessor methods for PingGridTimer
 func (g *GameContext) GetPingGridTimer() float64 {
 	bits := g.pingGridTimer.Load()
-	return *(*float64)(unsafe.Pointer(&bits))
+	return math.Float64frombits(bits)
 }
 
 func (g *GameContext) SetPingGridTimer(seconds float64) {
-	bits := *(*uint64)(unsafe.Pointer(&seconds))
+	bits := math.Float64bits(seconds)
 	g.pingGridTimer.Store(bits)
 }
 
 func (g *GameContext) AddPingGridTimer(delta float64) {
 	for {
 		oldBits := g.pingGridTimer.Load()
-		oldValue := *(*float64)(unsafe.Pointer(&oldBits))
+		oldValue := math.Float64frombits(oldBits)
 		newValue := oldValue + delta
-		newBits := *(*uint64)(unsafe.Pointer(&newValue))
+		newBits := math.Float64bits(newValue)
 		if g.pingGridTimer.CompareAndSwap(oldBits, newBits) {
 			break
 		}
@@ -172,7 +172,7 @@ func (g *GameContext) AddPingGridTimer(delta float64) {
 func (g *GameContext) UpdatePingGridTimerAtomic(delta float64) bool {
 	for {
 		oldBits := g.pingGridTimer.Load()
-		oldValue := *(*float64)(unsafe.Pointer(&oldBits))
+		oldValue := math.Float64frombits(oldBits)
 
 		if oldValue <= 0 {
 			// Timer already expired or not active
@@ -184,10 +184,10 @@ func (g *GameContext) UpdatePingGridTimerAtomic(delta float64) bool {
 
 		if newValue <= 0 {
 			// Timer will expire, set to 0
-			newBits = 0
+			newBits = 0 // 0.0 float is 0 uint64
 		} else {
 			// Timer still active
-			newBits = *(*uint64)(unsafe.Pointer(&newValue))
+			newBits = math.Float64bits(newValue)
 		}
 
 		if g.pingGridTimer.CompareAndSwap(oldBits, newBits) {

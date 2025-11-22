@@ -18,14 +18,10 @@ type PausableClock struct {
 	isPaused        atomic.Bool
 	pauseStartTime  time.Time     // When current pause started (real time)
 	totalPausedTime time.Duration // Cumulative pause duration
-	resumeCallbacks []ResumeCallback
 
 	// For external access to real time
 	realTimeProvider TimeProvider
 }
-
-// ResumeCallback is called when clock resumes from pause
-type ResumeCallback func(pauseDuration time.Duration)
 
 // NewPausableClock creates a new pausable clock
 func NewPausableClock() *PausableClock {
@@ -43,11 +39,12 @@ func (pc *PausableClock) Now() time.Time {
 	defer pc.mu.RUnlock()
 
 	if pc.isPaused.Load() {
-		// Return time at pause point
+		// During pause: return frozen time at pause point
 		return pc.gameStartTime.Add(pc.pauseStartTime.Sub(pc.realStartTime) - pc.totalPausedTime)
 	}
 
-	// Calculate game time: current_real_time - start_time - total_paused
+	// After resume or during normal operation:
+	// Game elapsed = real elapsed - total paused time
 	realElapsed := time.Now().Sub(pc.realStartTime)
 	gameElapsed := realElapsed - pc.totalPausedTime
 	return pc.gameStartTime.Add(gameElapsed)
@@ -73,30 +70,17 @@ func (pc *PausableClock) Resume() {
 		pc.mu.Lock()
 
 		if !pc.pauseStartTime.IsZero() {
+			// Calculate pause duration and add to total
 			pauseDuration := time.Now().Sub(pc.pauseStartTime)
 			pc.totalPausedTime += pauseDuration
 			pc.pauseStartTime = time.Time{}
 
-			// Make a copy of callbacks to call outside lock
-			callbacks := make([]ResumeCallback, len(pc.resumeCallbacks))
-			copy(callbacks, pc.resumeCallbacks)
 			pc.mu.Unlock()
 
-			// Notify listeners about resume (outside lock to prevent deadlock)
-			for _, cb := range callbacks {
-				cb(pauseDuration)
-			}
 		} else {
 			pc.mu.Unlock()
 		}
 	}
-}
-
-// OnResume registers a callback for pause resume events
-func (pc *PausableClock) OnResume(cb ResumeCallback) {
-	pc.mu.Lock()
-	pc.mu.Unlock()
-	pc.resumeCallbacks = append(pc.resumeCallbacks, cb)
 }
 
 // IsPaused returns current pause state

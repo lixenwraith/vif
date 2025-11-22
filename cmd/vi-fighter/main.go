@@ -86,7 +86,7 @@ func updateUIElements(ctx *engine.GameContext) {
 	realNow := ctx.GetRealTime()
 
 	// Update cursor blink
-	if realNow.Sub(ctx.CursorBlinkTime) > 500*time.Millisecond {
+	if realNow.Sub(ctx.CursorBlinkTime) > constants.CursorBlinkTime {
 		ctx.CursorVisible = !ctx.CursorVisible
 		ctx.CursorBlinkTime = realNow
 	}
@@ -94,13 +94,18 @@ func updateUIElements(ctx *engine.GameContext) {
 	// Clear expired cursor error state using real time
 	if ctx.State.GetCursorError() {
 		errorTime := ctx.State.GetCursorErrorTime()
-		if !errorTime.IsZero() && realNow.Sub(errorTime) > 200*time.Millisecond {
+		if !errorTime.IsZero() && realNow.Sub(errorTime) > constants.ErrorCursorTimeout {
 			ctx.State.SetCursorError(false)
 		}
 	}
 
-	// Update any other UI-specific timers that need real time
-	// (e.g., notification fadeouts, temporary UI highlights)
+	// Clear score blink after timeout using real time
+	if ctx.State.GetScoreBlinkActive() {
+		blinkTime := ctx.State.GetScoreBlinkTime()
+		if !blinkTime.IsZero() && realNow.Sub(blinkTime) > constants.ScoreBlinkTimeout {
+			ctx.State.SetScoreBlinkActive(false)
+		}
+	}
 }
 
 func main() {
