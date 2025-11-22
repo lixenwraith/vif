@@ -10,6 +10,22 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
+// createAudioCommand creates an audio command without importing audio package
+func createAudioCommand(soundType int, ctx *engine.GameContext) interface{} {
+	// Use reflection to create AudioCommand without importing audio package
+	return struct {
+		Type       int
+		Priority   int
+		Generation uint64
+		Timestamp  time.Time
+	}{
+		Type:       soundType,
+		Priority:   1,
+		Generation: uint64(ctx.State.GetFrameNumber()),
+		Timestamp:  ctx.TimeProvider.Now(),
+	}
+}
+
 // ScoreSystem handles character typing and score calculation
 type ScoreSystem struct {
 	ctx                *engine.GameContext
@@ -83,6 +99,11 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.State.SetScoreBlinkType(0)  // 0 = error
 		s.ctx.State.SetScoreBlinkLevel(0) // 0 = dark
 		s.ctx.State.SetScoreBlinkTime(now)
+		// Trigger error sound
+		if s.ctx.AudioEngine != nil {
+			cmd := createAudioCommand(0, s.ctx) // 0 = SoundError
+			s.ctx.AudioEngine.SendRealTime(cmd)
+		}
 		return
 	}
 
@@ -100,6 +121,11 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.State.SetScoreBlinkType(0)  // 0 = error
 		s.ctx.State.SetScoreBlinkLevel(0) // 0 = dark
 		s.ctx.State.SetScoreBlinkTime(now)
+		// Trigger error sound
+		if s.ctx.AudioEngine != nil {
+			cmd := createAudioCommand(0, s.ctx) // 0 = SoundError
+			s.ctx.AudioEngine.SendRealTime(cmd)
+		}
 		return
 	}
 	char := charComp.(components.CharacterComponent)
@@ -126,6 +152,11 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.State.SetScoreBlinkType(0)  // 0 = error
 		s.ctx.State.SetScoreBlinkLevel(0) // 0 = dark
 		s.ctx.State.SetScoreBlinkTime(now)
+		// Trigger error sound
+		if s.ctx.AudioEngine != nil {
+			cmd := createAudioCommand(0, s.ctx) // 0 = SoundError
+			s.ctx.AudioEngine.SendRealTime(cmd)
+		}
 		return
 	}
 	seq := seqComp.(components.SequenceComponent)
@@ -270,6 +301,11 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.State.SetScoreBlinkType(0)  // 0 = error
 		s.ctx.State.SetScoreBlinkLevel(0) // 0 = dark
 		s.ctx.State.SetScoreBlinkTime(now)
+		// Trigger error sound
+		if s.ctx.AudioEngine != nil {
+			cmd := createAudioCommand(0, s.ctx) // 0 = SoundError
+			s.ctx.AudioEngine.SendRealTime(cmd)
+		}
 	}
 }
 
@@ -307,6 +343,11 @@ func (s *ScoreSystem) handleNuggetCollection(world *engine.World, entity engine.
 		s.ctx.State.SetScoreBlinkType(0)  // 0 = error
 		s.ctx.State.SetScoreBlinkLevel(0) // 0 = dark
 		s.ctx.State.SetScoreBlinkTime(now)
+		// Trigger error sound
+		if s.ctx.AudioEngine != nil {
+			cmd := createAudioCommand(0, s.ctx) // 0 = SoundError
+			s.ctx.AudioEngine.SendRealTime(cmd)
+		}
 		return
 	}
 
@@ -362,6 +403,11 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 		s.ctx.State.SetScoreBlinkType(0)  // 0 = error
 		s.ctx.State.SetScoreBlinkLevel(0) // 0 = dark
 		s.ctx.State.SetScoreBlinkTime(now)
+		// Trigger error sound
+		if s.ctx.AudioEngine != nil {
+			cmd := createAudioCommand(0, s.ctx) // 0 = SoundError
+			s.ctx.AudioEngine.SendRealTime(cmd)
+		}
 		return
 	}
 
