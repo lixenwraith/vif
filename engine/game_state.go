@@ -770,7 +770,6 @@ func (gs *GameState) GetGoldTimeoutTime() time.Time {
 }
 
 // IsGoldTimedOut checks if the gold sequence has timed out
-// No pauseDuration parameter - uses game time directly
 func (gs *GameState) IsGoldTimedOut() bool {
 	gs.mu.RLock()
 	defer gs.mu.RUnlock()
@@ -877,7 +876,6 @@ func (gs *GameState) GetDecayNextTime() time.Time {
 }
 
 // IsDecayReady checks if the decay timer has expired
-// No pauseDuration parameter - uses game time directly
 func (gs *GameState) IsDecayReady() bool {
 	gs.mu.RLock()
 	defer gs.mu.RUnlock()
@@ -889,7 +887,6 @@ func (gs *GameState) IsDecayReady() bool {
 }
 
 // GetTimeUntilDecay returns seconds until next decay trigger
-// No pauseDuration parameter - uses game time directly
 func (gs *GameState) GetTimeUntilDecay() float64 {
 	gs.mu.RLock()
 	defer gs.mu.RUnlock()
@@ -968,7 +965,6 @@ type DecaySnapshot struct {
 }
 
 // ReadDecayState returns a consistent snapshot of the decay state
-// No pauseDuration parameter - uses game time directly
 func (gs *GameState) ReadDecayState() DecaySnapshot {
 	gs.mu.RLock()
 	defer gs.mu.RUnlock()
@@ -1112,23 +1108,23 @@ type ColorCountSnapshot struct {
 	GreenDark   int64
 }
 
-// ReadCleanerState returns a consistent snapshot of the cleaner state
-func (gs *GameState) ReadCleanerState() CleanerSnapshot {
-	gs.mu.RLock()
-	defer gs.mu.RUnlock()
-
-	elapsed := time.Duration(0)
-	if gs.CleanerActive {
-		elapsed = gs.TimeProvider.Now().Sub(gs.CleanerStartTime)
-	}
-
-	return CleanerSnapshot{
-		Pending:   gs.CleanerPending,
-		Active:    gs.CleanerActive,
-		StartTime: gs.CleanerStartTime,
-		Elapsed:   elapsed,
-	}
-}
+// // ReadCleanerState returns a consistent snapshot of the cleaner state
+// func (gs *GameState) ReadCleanerState() CleanerSnapshot {
+// 	gs.mu.RLock()
+// 	defer gs.mu.RUnlock()
+//
+// 	elapsed := time.Duration(0)
+// 	if gs.CleanerActive {
+// 		elapsed = gs.TimeProvider.Now().Sub(gs.CleanerStartTime)
+// 	}
+//
+// 	return CleanerSnapshot{
+// 		Pending:   gs.CleanerPending,
+// 		Active:    gs.CleanerActive,
+// 		StartTime: gs.CleanerStartTime,
+// 		Elapsed:   elapsed,
+// 	}
+// }
 
 // ===== DRAIN ENTITY ACCESSORS (atomic) =====
 

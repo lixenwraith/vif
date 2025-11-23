@@ -79,7 +79,7 @@ func (s *DecaySystem) updateAnimation(world *engine.World) {
 	// Read game height from context
 	gameHeight := s.ctx.GameHeight
 
-	// Read decay state snapshot for consistent startTime access - no pauseDuration
+	// Read decay state snapshot for consistent startTime access
 	decaySnapshot := s.ctx.State.ReadDecayState()
 	elapsed := s.ctx.TimeProvider.Now().Sub(decaySnapshot.StartTime).Seconds()
 

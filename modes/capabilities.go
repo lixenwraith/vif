@@ -5,12 +5,10 @@ type CommandCapability struct {
 	// AcceptsCount indicates if the command can be prefixed with a count (e.g., 5j, 2fa)
 	AcceptsCount bool
 
-	// MultiKeystroke indicates if the command requires additional keystrokes to complete
-	// Examples: 'f' (requires target character), 'd' (requires motion), 'g' (requires second char)
+	// MultiKeystroke indicates if the command requires additional keystrokes to complete (e.g. 'f', 'd', 'g')
 	MultiKeystroke bool
 
-	// RequiresMotion indicates if the command is an operator that requires a motion
-	// Examples: 'd' (delete operator), 'c' (change operator - not yet implemented)
+	// RequiresMotion indicates if the command is an operator that requires a motion (e.g. 'd')
 	RequiresMotion bool
 }
 
@@ -56,9 +54,9 @@ var commandCapabilities = map[rune]CommandCapability{
 	// Future: 't' (till), 'T' (till backward)
 
 	// Delete operations
-	'x': {AcceptsCount: true, MultiKeystroke: false, RequiresMotion: false},  // Delete char
-	'd': {AcceptsCount: true, MultiKeystroke: true, RequiresMotion: true},    // Delete operator
-	'D': {AcceptsCount: true, MultiKeystroke: false, RequiresMotion: false},  // Delete to end of line
+	'x': {AcceptsCount: true, MultiKeystroke: false, RequiresMotion: false}, // Delete char
+	'd': {AcceptsCount: true, MultiKeystroke: true, RequiresMotion: true},   // Delete operator
+	'D': {AcceptsCount: true, MultiKeystroke: false, RequiresMotion: false}, // Delete to end of line
 
 	// Search (no count support in vi-fighter yet)
 	'/': {AcceptsCount: false, MultiKeystroke: false, RequiresMotion: false},
@@ -82,19 +80,4 @@ func GetCommandCapability(cmd rune) CommandCapability {
 		}
 	}
 	return capability
-}
-
-// AcceptsCount returns true if the command accepts a count prefix
-func AcceptsCount(cmd rune) bool {
-	return GetCommandCapability(cmd).AcceptsCount
-}
-
-// IsMultiKeystroke returns true if the command requires additional keystrokes
-func IsMultiKeystroke(cmd rune) bool {
-	return GetCommandCapability(cmd).MultiKeystroke
-}
-
-// RequiresMotion returns true if the command is an operator requiring a motion
-func RequiresMotion(cmd rune) bool {
-	return GetCommandCapability(cmd).RequiresMotion
 }

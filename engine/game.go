@@ -167,17 +167,17 @@ func (g *GameContext) SetPingGridTimer(seconds float64) {
 	g.pingGridTimer.Store(bits)
 }
 
-func (g *GameContext) AddPingGridTimer(delta float64) {
-	for {
-		oldBits := g.pingGridTimer.Load()
-		oldValue := math.Float64frombits(oldBits)
-		newValue := oldValue + delta
-		newBits := math.Float64bits(newValue)
-		if g.pingGridTimer.CompareAndSwap(oldBits, newBits) {
-			break
-		}
-	}
-}
+// func (g *GameContext) AddPingGridTimer(delta float64) {
+// 	for {
+// 		oldBits := g.pingGridTimer.Load()
+// 		oldValue := math.Float64frombits(oldBits)
+// 		newValue := oldValue + delta
+// 		newBits := math.Float64bits(newValue)
+// 		if g.pingGridTimer.CompareAndSwap(oldBits, newBits) {
+// 			break
+// 		}
+// 	}
+// }
 
 // UpdatePingGridTimerAtomic atomically decrements the ping timer and returns true if it expired
 // This method handles the check-then-set atomically to avoid race conditions
