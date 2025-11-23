@@ -76,12 +76,16 @@ func (ae *AudioEngine) Start() error {
 		return fmt.Errorf("audio engine not initialized")
 	}
 
+	// Only starts if it's currently stopped
 	if ae.running.CompareAndSwap(false, true) {
+		// Recreate stop channel because the previous Stop() call closed the channel.
+		ae.stopChan = make(chan struct{})
+
 		ae.wg.Add(1)
 		go ae.processLoop()
+		return nil
 	}
-
-	return nil
+	return fmt.Errorf("audio engine is already running")
 }
 
 // Stop halts the audio engine and waits for cleanup

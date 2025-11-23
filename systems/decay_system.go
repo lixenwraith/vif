@@ -34,7 +34,6 @@ type DecaySystem struct {
 }
 
 // NewDecaySystem creates a new decay system
-// Timer and animation state managed by GameState
 func NewDecaySystem(ctx *engine.GameContext) *DecaySystem {
 	s := &DecaySystem{
 		currentRow:       0,
@@ -61,8 +60,7 @@ func (s *DecaySystem) Priority() int {
 	return 30
 }
 
-// Update runs the decay system
-// Animation trigger moved to ClockScheduler, this just updates animation
+// Update runs the decay system animation update
 func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 	// Read decay state snapshot for consistent check
 	decaySnapshot := s.ctx.State.ReadDecayState()
@@ -77,7 +75,6 @@ func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 }
 
 // updateAnimation progresses the decay animation
-// Uses GameState snapshot for startTime
 func (s *DecaySystem) updateAnimation(world *engine.World) {
 	// Read game height from context
 	gameHeight := s.ctx.GameHeight
@@ -223,8 +220,7 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 	}
 }
 
-// spawnFallingEntities creates falling decay character entities
-// One entity is created per column to ensure complete column coverage
+// spawnFallingEntities creates one falling decay entity per column
 func (s *DecaySystem) spawnFallingEntities(world *engine.World) {
 	// Get gameWidth from context
 	gameWidth := s.ctx.GameWidth
@@ -384,7 +380,7 @@ func (s *DecaySystem) cleanupFallingEntities(world *engine.World) {
 }
 
 // TriggerDecayAnimation is called by ClockScheduler to start decay animation
-// Required by DecaySystemInterface
+// TODO: review DecaySystemInterface and other system interfaces
 func (s *DecaySystem) TriggerDecayAnimation(world *engine.World) {
 	// Initialize decay tracking map for the entire animation duration
 	s.mu.Lock()
@@ -397,14 +393,12 @@ func (s *DecaySystem) TriggerDecayAnimation(world *engine.World) {
 }
 
 // IsAnimating returns true if decay animation is active
-// Reads from GameState snapshot
 func (s *DecaySystem) IsAnimating() bool {
 	decaySnapshot := s.ctx.State.ReadDecayState()
 	return decaySnapshot.Animating
 }
 
 // CurrentRow returns the current decay row being displayed
-// Uses GameState snapshot for animating check
 func (s *DecaySystem) CurrentRow() int {
 	s.mu.RLock()
 	currentRow := s.currentRow
@@ -434,14 +428,12 @@ func (s *DecaySystem) CurrentRow() int {
 }
 
 // GetTimeUntilDecay returns seconds until next decay trigger
-// Reads from GameState snapshot
 func (s *DecaySystem) GetTimeUntilDecay() float64 {
 	decaySnapshot := s.ctx.State.ReadDecayState()
 	return decaySnapshot.TimeUntil
 }
 
 // GetSystemState returns the current state of the decay system for debugging
-// Uses GameState
 func (s *DecaySystem) GetSystemState() string {
 	s.mu.RLock()
 	fallingCount := len(s.fallingEntities)

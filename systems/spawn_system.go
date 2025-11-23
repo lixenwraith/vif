@@ -40,7 +40,6 @@ type CodeBlock struct {
 }
 
 // SpawnSystem handles character sequence generation and spawning
-// State management delegated to GameState (spawn timing, color counters, sequence IDs)
 type SpawnSystem struct {
 	ctx *engine.GameContext
 
@@ -57,7 +56,6 @@ type SpawnSystem struct {
 }
 
 // NewSpawnSystem creates a new spawn system
-// State is now managed in ctx.State (spawn timing, color counters, sequence IDs)
 func NewSpawnSystem(ctx *engine.GameContext) *SpawnSystem {
 	s := &SpawnSystem{
 		ctx: ctx,
@@ -274,7 +272,6 @@ func (s *SpawnSystem) Priority() int {
 }
 
 // GetColorCount returns the character count for a specific color/level combination
-// Delegated to GameState
 func (s *SpawnSystem) GetColorCount(seqType components.SequenceType, level components.SequenceLevel) int64 {
 	// Convert components.SequenceType to int for GameState
 	var typeInt int
@@ -314,7 +311,6 @@ func (s *SpawnSystem) GetColorCount(seqType components.SequenceType, level compo
 }
 
 // AddColorCount atomically increments the counter for a color/level
-// Delegated to GameState
 func (s *SpawnSystem) AddColorCount(seqType components.SequenceType, level components.SequenceLevel, delta int64) {
 	// Convert components.SequenceType to int for GameState
 	var typeInt int
@@ -365,7 +361,6 @@ func (s *SpawnSystem) getAvailableColors() []ColorLevelKey {
 }
 
 // Update runs the spawn system logic
-// Now uses GameState for spawn timing and rate adaptation
 func (s *SpawnSystem) Update(world *engine.World, dt time.Duration) {
 	// Calculate fill percentage and update GameState
 	posType := reflect.TypeOf(components.PositionComponent{})

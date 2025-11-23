@@ -132,7 +132,7 @@ func (cs *CleanerSystem) ActivateCleaners(world *engine.World) {
 	cs.pendingSpawn.Store(true)
 }
 
-// IsAnimationComplete checks if the animation is finished.
+// IsAnimationComplete checks if the animation is finished
 func (cs *CleanerSystem) IsAnimationComplete() bool {
 	// If spawn is pending, we are definitely not done
 	if cs.pendingSpawn.Load() {
@@ -296,6 +296,7 @@ func (cs *CleanerSystem) checkAndDestroyAtPosition(world *engine.World, x, y int
 	}
 }
 
+// spawnRemovalFlash creates a transient visual effect at the position of the destroyed entity
 func (cs *CleanerSystem) spawnRemovalFlash(world *engine.World, targetEntity engine.Entity) {
 	charType := reflect.TypeOf(components.CharacterComponent{})
 	posType := reflect.TypeOf(components.PositionComponent{})
@@ -318,6 +319,7 @@ func (cs *CleanerSystem) spawnRemovalFlash(world *engine.World, targetEntity eng
 	}
 }
 
+// cleanupExpiredFlashes destroys removal flash entities that have exceeded their duration
 func (cs *CleanerSystem) cleanupExpiredFlashes(world *engine.World) {
 	flashType := reflect.TypeOf(components.RemovalFlashComponent{})
 	entities := world.GetEntitiesWith(flashType)

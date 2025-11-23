@@ -146,7 +146,6 @@ func NewGameContext(screen tcell.Screen) *GameContext {
 }
 
 // ===== INPUT-SPECIFIC METHODS =====
-// These methods are specific to GameContext and not delegated to GameState
 
 // Atomic accessor methods for PingActive
 func (g *GameContext) GetPingActive() bool {

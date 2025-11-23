@@ -150,7 +150,6 @@ func deleteAllOnLine(ctx *engine.GameContext, y int) bool {
 }
 
 // deleteRange deletes all characters in a range on a line
-// Now uses spatial index to efficiently handle gaps (positions without entities)
 func deleteRange(ctx *engine.GameContext, startX, endX, y int) bool {
 	seqType := reflect.TypeOf(components.SequenceComponent{})
 

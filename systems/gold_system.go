@@ -172,7 +172,6 @@ func (s *GoldSystem) spawnGold(world *engine.World) bool {
 }
 
 // removeGold removes all gold sequence entities from the world
-// Now uses GameState for state management
 func (s *GoldSystem) removeGold(world *engine.World, sequenceID int) {
 	// Read gold state snapshot for consistent check
 	goldSnapshot := s.ctx.State.ReadGoldState()
