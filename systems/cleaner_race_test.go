@@ -26,8 +26,8 @@ func TestNoRaceSnapshotRendering(t *testing.T) {
 		}
 	}
 
-	// Activate cleaners
-	cleanerSystem.ActivateCleaners(world)
+	// Activate cleaners via event
+	ctx.PushEvent(engine.EventCleanerRequest, nil)
 
 	var wg sync.WaitGroup
 	stopChan := make(chan struct{})
@@ -57,12 +57,17 @@ func TestNoRaceSnapshotRendering(t *testing.T) {
 				case <-stopChan:
 					return
 				default:
-					snapshots := cleanerSystem.GetCleanerSnapshots()
-					// Verify snapshots are valid
-					for _, snapshot := range snapshots {
-						_ = snapshot.Row
-						_ = len(snapshot.Trail)
-						_ = snapshot.Char
+					// Query World directly for cleaner components
+					cleanerType := reflect.TypeOf(components.CleanerComponent{})
+					entities := world.GetEntitiesWith(cleanerType)
+					// Verify components are valid
+					for _, entity := range entities {
+						if comp, ok := world.GetComponent(entity, cleanerType); ok {
+							c := comp.(components.CleanerComponent)
+							_ = c.GridY
+							_ = len(c.Trail)
+							_ = c.Char
+						}
 					}
 					time.Sleep(1 * time.Millisecond)
 				}
@@ -115,7 +120,7 @@ func TestNoRaceActivation(t *testing.T) {
 				case <-stopChan:
 					return
 				default:
-					cleanerSystem.ActivateCleaners(world)
+					ctx.PushEvent(engine.EventCleanerRequest, nil)
 					time.Sleep(5 * time.Millisecond)
 				}
 			}
@@ -132,7 +137,9 @@ func TestNoRaceActivation(t *testing.T) {
 				case <-stopChan:
 					return
 				default:
-					_ = cleanerSystem.IsAnimationComplete()
+					// Check if cleaners exist (replacement for IsAnimationComplete)
+					cleanerType := reflect.TypeOf(components.CleanerComponent{})
+					_ = len(world.GetEntitiesWith(cleanerType)) == 0
 					time.Sleep(2 * time.Millisecond)
 				}
 			}
@@ -182,7 +189,7 @@ func TestNoRaceFlashEffects(t *testing.T) {
 				for i := 0; i < 3; i++ {
 					createRedCharacterAt(world, 10+i*5, i%10)
 				}
-				cleanerSystem.ActivateCleaners(world)
+				ctx.PushEvent(engine.EventCleanerRequest, nil)
 				time.Sleep(50 * time.Millisecond)
 			}
 		}
@@ -224,8 +231,8 @@ func TestNoRaceComponentAccess(t *testing.T) {
 		createRedCharacterAt(world, 10+row*2, row)
 	}
 
-	// Activate cleaners
-	cleanerSystem.ActivateCleaners(world)
+	// Activate cleaners via event
+	ctx.PushEvent(engine.EventCleanerRequest, nil)
 
 	var wg sync.WaitGroup
 	stopChan := make(chan struct{})

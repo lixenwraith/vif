@@ -101,9 +101,9 @@ type DecaySystemInterface interface {
 }
 
 // CleanerSystemInterface defines the interface for cleaner system
+// Note: CleanerSystem now uses event queue, so this interface is no longer used
+// Kept for backwards compatibility during transition
 type CleanerSystemInterface interface {
-	ActivateCleaners(world *World)
-	IsAnimationComplete() bool
 }
 
 // NewClockScheduler creates a new clock scheduler with specified tick interval
@@ -301,11 +301,13 @@ func (cs *ClockScheduler) processTick() {
 	cs.mu.RLock()
 	goldSys := cs.goldSystem
 	decaySys := cs.decaySystem
-	cleanerSys := cs.cleanerSystem
 	cs.mu.RUnlock()
 
 	// Get world reference
 	world := cs.ctx.World
+
+	// Consume events for phase management
+	events := cs.ctx.PeekEvents() // Peek to allow systems to also consume
 
 	// Get current phase from GameState
 	phaseSnapshot := cs.ctx.State.ReadPhaseState()
@@ -326,9 +328,19 @@ func (cs *ClockScheduler) processTick() {
 
 	case PhaseGoldComplete:
 		// Gold sequence completed or timed out
-		// Check if cleaners should be triggered (handled by ScoreSystem via RequestCleaners)
-		// If no cleaners pending, start decay timer
-		if !cs.ctx.State.GetCleanerPending() {
+		// Check if cleaners should be triggered via events
+		hasCleanerRequest := false
+		for _, event := range events {
+			if event.Type == EventCleanerRequest {
+				hasCleanerRequest = true
+				break
+			}
+		}
+
+		if hasCleanerRequest {
+			// Transition to PhaseCleanerPending to activate cleaners
+			cs.ctx.State.TransitionPhase(PhaseCleanerPending)
+		} else if !cs.ctx.State.GetCleanerPending() {
 			// Start decay timer (reads heat atomically, no cached value)
 			// This will transition to PhaseDecayWait
 			cs.ctx.State.StartDecayTimer(
@@ -337,7 +349,6 @@ func (cs *ClockScheduler) processTick() {
 				constants.DecayIntervalRangeSeconds,
 			)
 		}
-		// If cleaners are pending, they will be handled in PhaseCleanerPending
 
 	case PhaseDecayWait:
 		// Check if decay timer has expired (pausable clock handles pause adjustment internally)
@@ -358,18 +369,21 @@ func (cs *ClockScheduler) processTick() {
 		// Nothing to do in clock tick for this phase
 
 	case PhaseCleanerPending:
-		// Activate cleaners
-		// This will transition to PhaseCleanerActive
-		if cs.ctx.State.ActivateCleaners() {
-			// Trigger cleaner system to spawn cleaners
-			if cleanerSys != nil {
-				cleanerSys.ActivateCleaners(world)
+		// Activate cleaners (phase transition only)
+		// CleanerSystem will consume EventCleanerRequest and spawn entities
+		cs.ctx.State.ActivateCleaners()
+
+	case PhaseCleanerActive:
+		// Check if cleaner animation has completed via events
+		hasCleanerFinished := false
+		for _, event := range events {
+			if event.Type == EventCleanerFinished {
+				hasCleanerFinished = true
+				break
 			}
 		}
 
-	case PhaseCleanerActive:
-		// Check if cleaner animation has completed
-		if cleanerSys != nil && cleanerSys.IsAnimationComplete() {
+		if hasCleanerFinished {
 			// Deactivate cleaners first
 			cs.ctx.State.DeactivateCleaners()
 

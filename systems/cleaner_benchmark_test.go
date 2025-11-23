@@ -25,7 +25,7 @@ func BenchmarkCleanerSpawn(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		cleanerSystem.ActivateCleaners(world)
+		ctx.PushEvent(engine.EventCleanerRequest, nil)
 		cleanerSystem.Update(world, 16*time.Millisecond)
 
 		// Clean up for next iteration
@@ -50,8 +50,8 @@ func BenchmarkCleanerUpdate(b *testing.B) {
 		}
 	}
 
-	// Activate cleaners
-	cleanerSystem.ActivateCleaners(world)
+	// Activate cleaners via event
+	ctx.PushEvent(engine.EventCleanerRequest, nil)
 	cleanerSystem.Update(world, 16*time.Millisecond)
 
 	b.ResetTimer()
@@ -61,7 +61,7 @@ func BenchmarkCleanerUpdate(b *testing.B) {
 	}
 }
 
-// BenchmarkCleanerSnapshots benchmarks snapshot generation for rendering
+// BenchmarkCleanerSnapshots benchmarks querying cleaner components from World
 func BenchmarkCleanerSnapshots(b *testing.B) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
@@ -74,14 +74,24 @@ func BenchmarkCleanerSnapshots(b *testing.B) {
 		}
 	}
 
-	// Activate cleaners
-	cleanerSystem.ActivateCleaners(world)
+	// Activate cleaners via event
+	ctx.PushEvent(engine.EventCleanerRequest, nil)
 	cleanerSystem.Update(world, 16*time.Millisecond)
+
+	cleanerType := reflect.TypeOf(components.CleanerComponent{})
 
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_ = cleanerSystem.GetCleanerSnapshots()
+		// Query World directly as renderer does
+		entities := world.GetEntitiesWith(cleanerType)
+		for _, entity := range entities {
+			if comp, ok := world.GetComponent(entity, cleanerType); ok {
+				c := comp.(components.CleanerComponent)
+				_ = c.GridY
+				_ = len(c.Trail)
+			}
+		}
 	}
 }
 
@@ -120,8 +130,8 @@ func BenchmarkFlashEffectCreation(b *testing.B) {
 		// Create Red character
 		redEntity := createRedCharacterAt(world, 40, 5)
 
-		// Activate cleaners
-		cleanerSystem.ActivateCleaners(world)
+		// Activate cleaners via event
+		ctx.PushEvent(engine.EventCleanerRequest, nil)
 
 		// Run a few updates to trigger collision and flash creation
 		for j := 0; j < 10; j++ {
@@ -163,13 +173,18 @@ func BenchmarkCompleteAnimation(b *testing.B) {
 
 		b.StartTimer()
 
-		// Activate cleaners
-		cleanerSystem.ActivateCleaners(world)
+		// Activate cleaners via event
+		ctx.PushEvent(engine.EventCleanerRequest, nil)
 
-		// Run until complete
+		// Run until complete (check for cleaner entities)
+		cleanerType := reflect.TypeOf(components.CleanerComponent{})
 		maxIterations := 1000
-		for j := 0; j < maxIterations && !cleanerSystem.IsAnimationComplete(); j++ {
+		for j := 0; j < maxIterations; j++ {
 			cleanerSystem.Update(world, 16*time.Millisecond)
+			entities := world.GetEntitiesWith(cleanerType)
+			if len(entities) == 0 {
+				break // Animation complete
+			}
 		}
 	}
 }

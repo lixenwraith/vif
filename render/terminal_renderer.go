@@ -22,41 +22,30 @@ type CleanerSnapshot struct {
 	Char  rune
 }
 
-// CleanerSystemInterface provides the interface needed by the renderer
-type CleanerSystemInterface interface {
-	GetCleanerSnapshots() []CleanerSnapshot
-}
-
 // TerminalRenderer handles all terminal rendering
 type TerminalRenderer struct {
-	screen               tcell.Screen
-	width                int
-	height               int
-	gameX                int
-	gameY                int
-	gameWidth            int
-	gameHeight           int
-	lineNumWidth         int
-	cleanerSystem        CleanerSystemInterface
-	cleanerSnapshots     []CleanerSnapshot
-	cleanerSnapshotFrame int64 // Frame counter for cache invalidation
-	cleanerGradient      []tcell.Color
+	screen          tcell.Screen
+	width           int
+	height          int
+	gameX           int
+	gameY           int
+	gameWidth       int
+	gameHeight      int
+	lineNumWidth    int
+	cleanerGradient []tcell.Color
 }
 
 // NewTerminalRenderer creates a new terminal renderer
-func NewTerminalRenderer(screen tcell.Screen, width, height, gameX, gameY, gameWidth, gameHeight, lineNumWidth int, cleanerSystem CleanerSystemInterface) *TerminalRenderer {
+func NewTerminalRenderer(screen tcell.Screen, width, height, gameX, gameY, gameWidth, gameHeight, lineNumWidth int) *TerminalRenderer {
 	r := &TerminalRenderer{
-		screen:               screen,
-		width:                width,
-		height:               height,
-		gameX:                gameX,
-		gameY:                gameY,
-		gameWidth:            gameWidth,
-		gameHeight:           gameHeight,
-		lineNumWidth:         lineNumWidth,
-		cleanerSystem:        cleanerSystem,
-		cleanerSnapshots:     nil,
-		cleanerSnapshotFrame: -1, // Initialize to -1 to force first update
+		screen:       screen,
+		width:        width,
+		height:       height,
+		gameX:        gameX,
+		gameY:        gameY,
+		gameWidth:    gameWidth,
+		gameHeight:   gameHeight,
+		lineNumWidth: lineNumWidth,
 	}
 
 	// Initialize gradient internally
@@ -90,13 +79,7 @@ func (r *TerminalRenderer) buildCleanerGradient() {
 // RenderFrame renders the entire game frame
 func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating bool, decayRow int, decayTimeRemaining float64) {
 	// Increment frame counter and get frame number
-	frameNum := ctx.IncrementFrameNumber()
-
-	// Update cleaner snapshot cache once per frame
-	if r.cleanerSystem != nil && r.cleanerSnapshotFrame != frameNum {
-		r.cleanerSnapshots = r.cleanerSystem.GetCleanerSnapshots()
-		r.cleanerSnapshotFrame = frameNum
-	}
+	ctx.IncrementFrameNumber()
 
 	r.screen.Clear()
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
@@ -122,7 +105,7 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 	}
 
 	// Draw cleaners if active - AFTER decay animation
-	r.drawCleaners(defaultStyle)
+	r.drawCleaners(ctx.World, defaultStyle)
 
 	// Draw removal flash effects - AFTER cleaners
 	r.drawRemovalFlashes(ctx.World, ctx, defaultStyle)
@@ -415,25 +398,30 @@ func (r *TerminalRenderer) drawFallingDecay(world *engine.World, defaultStyle tc
 }
 
 // drawCleaners draws the cleaner animation using the trail of grid points.
-func (r *TerminalRenderer) drawCleaners(defaultStyle tcell.Style) {
-	// Skip if no cleaner system configured
-	if r.cleanerSystem == nil {
-		return
-	}
+func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.Style) {
+	// Query World directly for cleaner components
+	cleanerType := reflect.TypeOf(components.CleanerComponent{})
+	entities := world.GetEntitiesWith(cleanerType)
 
-	// Use cached snapshots
-	snapshots := r.cleanerSnapshots
-
-	for _, cleaner := range snapshots {
-		// Bounds check for cleaner row
-		if cleaner.Row < 0 || cleaner.Row >= r.gameHeight {
+	for _, entity := range entities {
+		compRaw, ok := world.GetComponent(entity, cleanerType)
+		if !ok {
 			continue
 		}
-		screenY := r.gameY + cleaner.Row
+		cleaner := compRaw.(components.CleanerComponent)
+
+		// Deep copy trail to avoid race conditions during rendering
+		trailCopy := make([]core.Point, len(cleaner.Trail))
+		copy(trailCopy, cleaner.Trail)
+		// Bounds check for cleaner row
+		if cleaner.GridY < 0 || cleaner.GridY >= r.gameHeight {
+			continue
+		}
+		screenY := r.gameY + cleaner.GridY
 
 		// Iterate through the trail
 		// Index 0 is the head (brightest), last index is the tail (faintest)
-		for i, point := range cleaner.Trail {
+		for i, point := range trailCopy {
 			// Skip if out of bounds
 			if point.X < 0 || point.X >= r.gameWidth {
 				continue

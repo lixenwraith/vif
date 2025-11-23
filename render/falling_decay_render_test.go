@@ -25,7 +25,7 @@ func TestFallingDecayRenderColor(t *testing.T) {
 	mockTime := engine.NewMockTimeProvider(time.Now())
 	ctx.TimeProvider = mockTime
 
-	renderer := NewTerminalRenderer(screen, 80, 24, 3, 1, 77, 20, 3, nil)
+	renderer := NewTerminalRenderer(screen, 80, 24, 3, 1, 77, 20, 3)
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
 
 	// Create a falling decay entity
@@ -82,7 +82,7 @@ func TestFallingDecayRenderAtAllPositions(t *testing.T) {
 	ctx.TimeProvider = mockTime
 
 	gameHeight := 20
-	renderer := NewTerminalRenderer(screen, 80, 24, 3, 1, 77, gameHeight, 3, nil)
+	renderer := NewTerminalRenderer(screen, 80, 24, 3, 1, 77, gameHeight, 3)
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
 
 	// Create falling entities at all Y positions (integer and fractional)
@@ -142,7 +142,7 @@ func TestFallingDecayRenderFractionalPositions(t *testing.T) {
 	mockTime := engine.NewMockTimeProvider(time.Now())
 	ctx.TimeProvider = mockTime
 
-	renderer := NewTerminalRenderer(screen, 80, 24, 3, 1, 77, 20, 3, nil)
+	renderer := NewTerminalRenderer(screen, 80, 24, 3, 1, 77, 20, 3)
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
 
 	// Test fractional positions that should all render at row 5
@@ -197,7 +197,7 @@ func TestFallingDecayRenderBounds(t *testing.T) {
 	ctx.TimeProvider = mockTime
 
 	gameHeight := 20
-	renderer := NewTerminalRenderer(screen, 80, 24, 3, 1, 77, gameHeight, 3, nil)
+	renderer := NewTerminalRenderer(screen, 80, 24, 3, 1, 77, gameHeight, 3)
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
 
 	// Create entities outside bounds
@@ -269,7 +269,7 @@ func TestFallingDecayRenderZOrder(t *testing.T) {
 	mockTime := engine.NewMockTimeProvider(time.Now())
 	ctx.TimeProvider = mockTime
 
-	renderer := NewTerminalRenderer(screen, 80, 24, 3, 1, 77, 20, 3, nil)
+	renderer := NewTerminalRenderer(screen, 80, 24, 3, 1, 77, 20, 3)
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
 
 	// Create a game character at position (10, 5)
@@ -333,7 +333,7 @@ func TestFallingDecayRenderMultipleEntities(t *testing.T) {
 	ctx.TimeProvider = mockTime
 
 	gameWidth := 77
-	renderer := NewTerminalRenderer(screen, 80, 24, 3, 1, gameWidth, 20, 3, nil)
+	renderer := NewTerminalRenderer(screen, 80, 24, 3, 1, gameWidth, 20, 3)
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
 
 	// Create one falling entity per column (as the decay system does)
@@ -396,7 +396,7 @@ func TestFallingDecayRenderConsistency(t *testing.T) {
 	mockTime := engine.NewMockTimeProvider(time.Now())
 	ctx.TimeProvider = mockTime
 
-	renderer := NewTerminalRenderer(screen, 80, 24, 3, 1, 77, 20, 3, nil)
+	renderer := NewTerminalRenderer(screen, 80, 24, 3, 1, 77, 20, 3)
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
 
 	// Create a falling entity

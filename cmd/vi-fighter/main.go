@@ -90,7 +90,7 @@ func main() {
 	decaySystem.SetNuggetSystem(nuggetSystem)
 	drainSystem.SetNuggetSystem(nuggetSystem)
 
-	// Create renderer (with CleanerSystem for thread-safe cleaner rendering)
+	// Create renderer (queries World directly for cleaner components)
 	renderer := render.NewTerminalRenderer(
 		screen,
 		ctx.Width,
@@ -100,7 +100,6 @@ func main() {
 		ctx.GameWidth,
 		ctx.GameHeight,
 		ctx.LineNumWidth,
-		cleanerSystem,
 	)
 
 	// Create input handler

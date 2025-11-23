@@ -45,7 +45,7 @@ func TestNuggetDarkensUnderCursor(t *testing.T) {
 	tx.Commit()
 
 	// Create renderer
-	renderer := NewTerminalRenderer(screen, 100, 30, 3, 1, 100, 24, 3, nil)
+	renderer := NewTerminalRenderer(screen, 100, 30, 3, 1, 100, 24, 3)
 
 	// Draw cursor
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
@@ -108,7 +108,7 @@ func TestNormalCharacterStaysBlackUnderCursor(t *testing.T) {
 	tx.Spawn(charEntity, 15, 10)
 	tx.Commit()
 
-	renderer := NewTerminalRenderer(screen, 100, 30, 3, 1, 100, 24, 3, nil)
+	renderer := NewTerminalRenderer(screen, 100, 30, 3, 1, 100, 24, 3)
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
 	renderer.drawCursor(ctx, defaultStyle)
 
@@ -148,7 +148,7 @@ func TestCursorWithoutCharacterHasNoContrast(t *testing.T) {
 	ctx.CursorY = 8
 	ctx.Mode = engine.ModeNormal
 
-	renderer := NewTerminalRenderer(screen, 100, 30, 3, 1, 100, 24, 3, nil)
+	renderer := NewTerminalRenderer(screen, 100, 30, 3, 1, 100, 24, 3)
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
 	renderer.drawCursor(ctx, defaultStyle)
 
@@ -204,7 +204,7 @@ func TestNuggetContrastInInsertMode(t *testing.T) {
 	tx.Spawn(nuggetEntity, 25, 12)
 	tx.Commit()
 
-	renderer := NewTerminalRenderer(screen, 100, 30, 3, 1, 100, 24, 3, nil)
+	renderer := NewTerminalRenderer(screen, 100, 30, 3, 1, 100, 24, 3)
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
 	renderer.drawCursor(ctx, defaultStyle)
 
@@ -256,7 +256,7 @@ func TestNuggetOffCursorHasNormalColor(t *testing.T) {
 	tx.Spawn(nuggetEntity, 30, 15)
 	tx.Commit()
 
-	renderer := NewTerminalRenderer(screen, 100, 30, 3, 1, 100, 24, 3, nil)
+	renderer := NewTerminalRenderer(screen, 100, 30, 3, 1, 100, 24, 3)
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
 
 	// Draw characters (not cursor)
@@ -315,7 +315,7 @@ func TestCursorErrorOverridesNuggetContrast(t *testing.T) {
 	tx.Spawn(nuggetEntity, 40, 18)
 	tx.Commit()
 
-	renderer := NewTerminalRenderer(screen, 100, 30, 3, 1, 100, 24, 3, nil)
+	renderer := NewTerminalRenderer(screen, 100, 30, 3, 1, 100, 24, 3)
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
 	renderer.drawCursor(ctx, defaultStyle)
 
@@ -420,7 +420,7 @@ func TestNuggetLayeringCursorOnTop(t *testing.T) {
 	tx.Spawn(nuggetEntity, 50, 20)
 	tx.Commit()
 
-	renderer := NewTerminalRenderer(screen, 100, 30, 3, 1, 100, 24, 3, nil)
+	renderer := NewTerminalRenderer(screen, 100, 30, 3, 1, 100, 24, 3)
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
 
 	// Draw characters first
@@ -491,7 +491,7 @@ func TestMultipleNuggetInstances(t *testing.T) {
 		tx.Commit()
 	}
 
-	renderer := NewTerminalRenderer(screen, 100, 30, 3, 1, 100, 24, 3, nil)
+	renderer := NewTerminalRenderer(screen, 100, 30, 3, 1, 100, 24, 3)
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
 
 	// Test each nugget position

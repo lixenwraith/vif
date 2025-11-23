@@ -3,7 +3,6 @@ package systems
 import (
 	"math"
 	"reflect"
-	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/audio"
@@ -11,19 +10,20 @@ import (
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
-	"github.com/lixenwraith/vi-fighter/render"
 )
 
 // CleanerSystem manages the cleaner animation and logic using vector physics
 type CleanerSystem struct {
-	ctx          *engine.GameContext
-	pendingSpawn atomic.Bool // Simple flag to trigger spawning in the main Update loop
+	ctx               *engine.GameContext
+	spawned           map[int64]bool // Track which frames already spawned cleaners
+	hasSpawnedSession bool           // Track if we spawned cleaners this session
 }
 
 // NewCleanerSystem creates a new cleaner system
 func NewCleanerSystem(ctx *engine.GameContext) *CleanerSystem {
 	return &CleanerSystem{
-		ctx: ctx,
+		ctx:     ctx,
+		spawned: make(map[int64]bool),
 	}
 }
 
@@ -34,16 +34,40 @@ func (cs *CleanerSystem) Priority() int {
 
 // Update handles spawning, movement, collision, and cleanup synchronously
 func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
-	// 1. Handle Pending Spawns
-	if cs.pendingSpawn.CompareAndSwap(true, false) {
-		cs.spawnCleaners(world)
+	// 1. Handle Event Queue - Consume cleaner request events
+	events := cs.ctx.ConsumeEvents()
+	for _, event := range events {
+		if event.Type == engine.EventCleanerRequest {
+			// Check if we already spawned for this frame
+			if !cs.spawned[event.Frame] {
+				cs.spawnCleaners(world)
+				cs.spawned[event.Frame] = true
+				cs.hasSpawnedSession = true
+			}
+		}
 	}
 
-	// 2. Process Active Cleaners
+	// 2. Clean old entries from spawned map (keep last 10 frames)
+	currentFrame := cs.ctx.State.GetFrameNumber()
+	for frame := range cs.spawned {
+		if currentFrame-frame > 10 {
+			delete(cs.spawned, frame)
+		}
+	}
+
+	// 3. Process Active Cleaners
 	cleanerType := reflect.TypeOf(components.CleanerComponent{})
 	entities := world.GetEntitiesWith(cleanerType)
 
-	// If no cleaners and no pending spawn, we can skip processing
+	// If no cleaners exist but we spawned this session, emit finished event
+	if len(entities) == 0 && cs.hasSpawnedSession {
+		cs.ctx.PushEvent(engine.EventCleanerFinished, nil)
+		cs.hasSpawnedSession = false
+		cs.cleanupExpiredFlashes(world)
+		return
+	}
+
+	// If no cleaners, we can skip processing
 	if len(entities) == 0 {
 		cs.cleanupExpiredFlashes(world)
 		return
@@ -123,26 +147,8 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 		}
 	}
 
-	// 3. Cleanup Effects
+	// 4. Cleanup Effects
 	cs.cleanupExpiredFlashes(world)
-}
-
-// ActivateCleaners flags the system to spawn cleaners on the next update
-func (cs *CleanerSystem) ActivateCleaners(world *engine.World) {
-	cs.pendingSpawn.Store(true)
-}
-
-// IsAnimationComplete checks if the animation is finished
-func (cs *CleanerSystem) IsAnimationComplete() bool {
-	// If spawn is pending, we are definitely not done
-	if cs.pendingSpawn.Load() {
-		return false
-	}
-
-	// Check if any active cleaner entities exist in the world
-	cleanerType := reflect.TypeOf(components.CleanerComponent{})
-	entities := cs.ctx.World.GetEntitiesWith(cleanerType)
-	return len(entities) == 0
 }
 
 // spawnCleaners generates cleaner entities for rows with Red characters
@@ -207,31 +213,6 @@ func (cs *CleanerSystem) spawnCleaners(world *engine.World) {
 
 		world.AddComponent(entity, comp)
 	}
-}
-
-// GetCleanerSnapshots returns a thread-safe snapshot of active cleaners for rendering
-func (cs *CleanerSystem) GetCleanerSnapshots() []render.CleanerSnapshot {
-	world := cs.ctx.World
-	cleanerType := reflect.TypeOf(components.CleanerComponent{})
-	entities := world.GetEntitiesWith(cleanerType)
-
-	snapshots := make([]render.CleanerSnapshot, 0, len(entities))
-
-	for _, entity := range entities {
-		if compRaw, ok := world.GetComponent(entity, cleanerType); ok {
-			c := compRaw.(components.CleanerComponent)
-			// Deep copy trail to avoid race conditions during rendering
-			trailCopy := make([]core.Point, len(c.Trail))
-			copy(trailCopy, c.Trail)
-
-			snapshots = append(snapshots, render.CleanerSnapshot{
-				Row:   c.GridY,
-				Trail: trailCopy,
-				Char:  c.Char,
-			})
-		}
-	}
-	return snapshots
 }
 
 // scanRedCharacterRows finds all rows containing Red sequences
