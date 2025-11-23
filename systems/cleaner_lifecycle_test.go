@@ -6,202 +6,134 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/components"
-	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
-// TestCleanersAnimationCompletion verifies cleaners deactivate after animation duration
-func TestCleanersAnimationCompletion(t *testing.T) {
-	// Use mock time provider for controlled time advancement
-	startTime := time.Now()
-	mockTime := engine.NewMockTimeProvider(startTime)
-
-	world := engine.NewWorld()
-	ctx := &engine.GameContext{
-		World:        world,
-		TimeProvider: mockTime,
-		GameWidth:    80,
-		GameHeight:   24,
-	}
-
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
-	defer cleanerSystem.Shutdown()
-
-	// Create Red character
-	createRedCharacterAt(world, 10, 5)
-
-	// Trigger cleaners
-	cleanerSystem.TriggerCleaners(world)
-
-	// Process spawn request
-	cleanerSystem.Update(world, 16*time.Millisecond)
-
-	// Wait for spawn
-	time.Sleep(50 * time.Millisecond)
-
-	if !cleanerSystem.IsActive() {
-		t.Fatal("Cleaners should be active after trigger")
-	}
-
-	// Simulate 900ms of game loop updates at 60fps
-	frameDuration := 16 * time.Millisecond
-	for i := 0; i < 56; i++ { // 56 frames * 16ms = 896ms
-		mockTime.Advance(frameDuration)
-		cleanerSystem.Update(world, frameDuration)
-	}
-
-	if !cleanerSystem.IsActive() {
-		t.Error("Cleaners should still be active before duration expires")
-	}
-
-	// Simulate another 200ms of updates (total: ~1.1 seconds)
-	for i := 0; i < 13; i++ { // 13 frames * 16ms = 208ms
-		mockTime.Advance(frameDuration)
-		cleanerSystem.Update(world, frameDuration)
-	}
-
-	if cleanerSystem.IsActive() {
-		t.Error("Cleaners should be inactive after duration expires")
-	}
-
-	// Verify cleaners were cleaned up
-	cleanerType := reflect.TypeOf(components.CleanerComponent{})
-	cleaners := world.GetEntitiesWith(cleanerType)
-
-	if len(cleaners) != 0 {
-		t.Errorf("Expected 0 cleaners after cleanup, got %d", len(cleaners))
-	}
-}
-
-// TestCleanersTrailTracking verifies trail positions are tracked correctly
-func TestCleanersTrailTracking(t *testing.T) {
+// TestCleanerLifecycle verifies cleaners spawn, move, and destroy correctly
+func TestCleanerLifecycle(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
-
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
-	defer cleanerSystem.Shutdown()
+	cleanerSystem := NewCleanerSystem(ctx)
 
 	// Create Red character
-	createRedCharacterAt(world, 10, 1)
+	createRedCharacterAt(world, 40, 5)
 
-	// Trigger cleaners
-	cleanerSystem.TriggerCleaners(world)
+	// Initial state: animation complete (no cleaners)
+	if !cleanerSystem.IsAnimationComplete() {
+		t.Error("Expected animation to be complete initially")
+	}
 
-	// Process spawn request
+	// Activate cleaners
+	cleanerSystem.ActivateCleaners(world)
+
+	// Process spawn
 	cleanerSystem.Update(world, 16*time.Millisecond)
 
-	// Wait for spawn
-	time.Sleep(100 * time.Millisecond)
-
+	// Verify cleaner was spawned
 	cleanerType := reflect.TypeOf(components.CleanerComponent{})
 	cleaners := world.GetEntitiesWith(cleanerType)
 
 	if len(cleaners) != 1 {
-		t.Fatalf("Expected 1 cleaner, got %d", len(cleaners))
+		t.Fatalf("Expected 1 cleaner after activation, got %d", len(cleaners))
 	}
 
-	entity := cleaners[0]
-
-	// Get initial cleaner component
-	cleanerComp, ok := world.GetComponent(entity, cleanerType)
-	if !ok {
-		t.Fatal("Failed to get cleaner component")
-	}
-	cleaner := cleanerComp.(components.CleanerComponent)
-
-	// Verify cleaner has trail slice allocated (from pool)
-	if cleaner.TrailPositions == nil {
-		t.Error("Trail positions slice should be allocated from pool")
+	// Verify animation is now active
+	if cleanerSystem.IsAnimationComplete() {
+		t.Error("Expected animation to be active after spawning")
 	}
 
-	// Verify trail capacity matches pool allocation
-	if cap(cleaner.TrailPositions) != constants.CleanerTrailLength {
-		t.Errorf("Trail capacity should be %d (from pool), got %d",
-			constants.CleanerTrailLength, cap(cleaner.TrailPositions))
+	// Run animation until complete
+	maxIterations := 1000
+	for i := 0; i < maxIterations && !cleanerSystem.IsAnimationComplete(); i++ {
+		cleanerSystem.Update(world, 16*time.Millisecond)
+		time.Sleep(1 * time.Millisecond)
 	}
 
-	// Trail length should be at most CleanerTrailLength
-	if len(cleaner.TrailPositions) > constants.CleanerTrailLength {
-		t.Errorf("Trail length should be capped at %d, got %d",
-			constants.CleanerTrailLength, len(cleaner.TrailPositions))
+	// Verify animation completed
+	if !cleanerSystem.IsAnimationComplete() {
+		t.Fatal("Animation did not complete in reasonable time")
 	}
 
-	// Note: The concurrent update loop updates trails asynchronously
-	// We verify the structure is correct, actual population depends on timing
-	t.Logf("Trail structure verified: cap=%d, len=%d, XPosition=%f",
-		cap(cleaner.TrailPositions), len(cleaner.TrailPositions), cleaner.XPosition)
+	// Verify cleaners were destroyed
+	cleaners = world.GetEntitiesWith(cleanerType)
+	if len(cleaners) != 0 {
+		t.Errorf("Expected no cleaners after completion, got %d", len(cleaners))
+	}
 }
 
-// TestCleanersPoolReuse verifies sync.Pool is reusing trail slices
-func TestCleanersPoolReuse(t *testing.T) {
-	// Use mock time provider to avoid race condition when swapping TimeProvider
-	startTime := time.Now()
-	mockTime := engine.NewMockTimeProvider(startTime)
-
+// TestCleanerEntityCleanup verifies cleaner entities are destroyed when passing target
+func TestCleanerEntityCleanup(t *testing.T) {
 	world := engine.NewWorld()
-	ctx := &engine.GameContext{
-		World:        world,
-		TimeProvider: mockTime,
-		GameWidth:    80,
-		GameHeight:   24,
-	}
-
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
-	defer cleanerSystem.Shutdown()
+	ctx := createCleanerTestContext()
+	cleanerSystem := NewCleanerSystem(ctx)
 
 	// Create Red character
-	createRedCharacterAt(world, 10, 5)
+	createRedCharacterAt(world, 40, 5)
 
-	// First activation
-	cleanerSystem.TriggerCleaners(world)
+	// Activate and spawn
+	cleanerSystem.ActivateCleaners(world)
 	cleanerSystem.Update(world, 16*time.Millisecond)
-	time.Sleep(50 * time.Millisecond)
 
-	// Get the first cleaner's trail
+	// Track entity count over time
+	cleanerType := reflect.TypeOf(components.CleanerComponent{})
+
+	initialCount := len(world.GetEntitiesWith(cleanerType))
+	if initialCount != 1 {
+		t.Fatalf("Expected 1 cleaner initially, got %d", initialCount)
+	}
+
+	// Run animation until completion
+	maxIterations := 1000
+	for i := 0; i < maxIterations && !cleanerSystem.IsAnimationComplete(); i++ {
+		cleanerSystem.Update(world, 16*time.Millisecond)
+		time.Sleep(1 * time.Millisecond)
+	}
+
+	// Verify entity was destroyed
+	finalCount := len(world.GetEntitiesWith(cleanerType))
+	if finalCount != 0 {
+		t.Errorf("Expected 0 cleaners after completion, got %d", finalCount)
+	}
+}
+
+// TestCleanerReactivation verifies cleaners can be activated multiple times
+func TestCleanerReactivation(t *testing.T) {
+	world := engine.NewWorld()
+	ctx := createCleanerTestContext()
+	cleanerSystem := NewCleanerSystem(ctx)
+
+	// First cycle
+	createRedCharacterAt(world, 40, 5)
+	cleanerSystem.ActivateCleaners(world)
+
+	// Run until complete
+	maxIterations := 1000
+	for i := 0; i < maxIterations; i++ {
+		cleanerSystem.Update(world, 16*time.Millisecond)
+		time.Sleep(1 * time.Millisecond)
+		if cleanerSystem.IsAnimationComplete() {
+			break
+		}
+	}
+
+	if !cleanerSystem.IsAnimationComplete() {
+		t.Fatal("First animation did not complete")
+	}
+
+	// Second cycle
+	createRedCharacterAt(world, 20, 8)
+	cleanerSystem.ActivateCleaners(world)
+	cleanerSystem.Update(world, 16*time.Millisecond)
+
+	// Verify new cleaner was spawned
 	cleanerType := reflect.TypeOf(components.CleanerComponent{})
 	cleaners := world.GetEntitiesWith(cleanerType)
-	if len(cleaners) == 0 {
-		t.Fatal("Expected at least one cleaner")
+
+	if len(cleaners) != 1 {
+		t.Errorf("Expected 1 cleaner in second cycle, got %d", len(cleaners))
 	}
 
-	cleanerComp, _ := world.GetComponent(cleaners[0], cleanerType)
-	cleaner := cleanerComp.(components.CleanerComponent)
-	firstTrail := cleaner.TrailPositions
-
-	// Force cleanup by advancing time beyond animation duration and calling Update
-	frameDuration := 16 * time.Millisecond
-	for i := 0; i < 125; i++ { // 125 frames * 16ms = 2 seconds
-		mockTime.Advance(frameDuration)
-		cleanerSystem.Update(world, frameDuration)
-	}
-
-	// Verify cleanup happened
-	cleaners = world.GetEntitiesWith(cleanerType)
-	if len(cleaners) > 0 {
-		t.Errorf("Expected cleaners to be cleaned up, but found %d", len(cleaners))
-	}
-
-	// Create new Red character for second activation
-	createRedCharacterAt(world, 20, 8)
-
-	// Second activation
-	cleanerSystem.TriggerCleaners(world)
-	cleanerSystem.Update(world, 16*time.Millisecond)
-	time.Sleep(50 * time.Millisecond)
-
-	cleaners = world.GetEntitiesWith(cleanerType)
-	if len(cleaners) == 0 {
-		t.Fatal("Expected at least one cleaner in second activation")
-	}
-
-	cleanerComp, _ = world.GetComponent(cleaners[0], cleanerType)
-	cleaner = cleanerComp.(components.CleanerComponent)
-	secondTrail := cleaner.TrailPositions
-
-	// Trails should have the same capacity (from pool reuse)
-	if cap(firstTrail) == cap(secondTrail) && cap(firstTrail) == constants.CleanerTrailLength {
-		// This suggests pool reuse is working (same capacity)
-		// Note: We can't directly compare pointers since Go doesn't expose that
-		t.Logf("Pool likely reusing slices: cap=%d", cap(secondTrail))
+	if cleanerSystem.IsAnimationComplete() {
+		t.Error("Expected animation to be active in second cycle")
 	}
 }

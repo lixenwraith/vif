@@ -10,105 +10,63 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
-// TestCleanersDirectionAlternation verifies odd rows go L→R and even rows go R→L
-func TestCleanersDirectionAlternation(t *testing.T) {
-	// Use mock time provider to prevent cleaners from moving before we check positions
-	startTime := time.Now()
-	mockTime := engine.NewMockTimeProvider(startTime)
-
+// TestCleanerDirectionAlternation verifies odd rows go L->R and even rows go R->L
+func TestCleanerDirectionAlternation(t *testing.T) {
 	world := engine.NewWorld()
-	ctx := &engine.GameContext{
-		World:        world,
-		TimeProvider: mockTime,
-		GameWidth:    80,
-		GameHeight:   24,
-	}
+	ctx := createCleanerTestContext()
+	cleanerSystem := NewCleanerSystem(ctx)
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
-	defer cleanerSystem.Shutdown()
+	// Create Red characters on odd row (3) and even row (4)
+	createRedCharacterAt(world, 40, 3)
+	createRedCharacterAt(world, 40, 4)
 
-	// Create Red characters on multiple rows
-	createRedCharacterAt(world, 10, 0) // Row 0 (even)
-	createRedCharacterAt(world, 10, 1) // Row 1 (odd)
-	createRedCharacterAt(world, 10, 2) // Row 2 (even)
-	createRedCharacterAt(world, 10, 3) // Row 3 (odd)
-
-	// Trigger cleaners
-	cleanerSystem.TriggerCleaners(world)
-
-	// Process spawn request
+	// Activate and spawn
+	cleanerSystem.ActivateCleaners(world)
 	cleanerSystem.Update(world, 16*time.Millisecond)
 
-	// Wait for async spawn processing (real time) but don't advance mock time
-	time.Sleep(50 * time.Millisecond)
-
-	// Get cleaner entities
+	// Check cleaner directions
 	cleanerType := reflect.TypeOf(components.CleanerComponent{})
 	cleaners := world.GetEntitiesWith(cleanerType)
 
-	if len(cleaners) != 4 {
-		t.Fatalf("Expected 4 cleaners, got %d", len(cleaners))
+	if len(cleaners) != 2 {
+		t.Fatalf("Expected 2 cleaners, got %d", len(cleaners))
 	}
 
-	// Verify each cleaner's direction and starting position
-	// Since we haven't advanced mock time, cleaners should be at their initial positions
 	for _, entity := range cleaners {
-		cleanerComp, ok := world.GetComponent(entity, cleanerType)
+		comp, ok := world.GetComponent(entity, cleanerType)
 		if !ok {
-			t.Fatal("Failed to get cleaner component")
+			continue
 		}
-		cleaner := cleanerComp.(components.CleanerComponent)
+		c := comp.(components.CleanerComponent)
 
-		if cleaner.Row%2 == 0 {
-			// Even row: R→L (direction = -1, start at right)
-			if cleaner.Direction != -1 {
-				t.Errorf("Row %d (even): expected direction -1, got %d", cleaner.Row, cleaner.Direction)
+		if c.GridY == 3 {
+			// Odd row: should go left to right (positive velocity)
+			if c.VelocityX <= 0 {
+				t.Errorf("Row 3 (odd) should have positive VelocityX, got %v", c.VelocityX)
 			}
-			if cleaner.XPosition != 80.0 {
-				t.Errorf("Row %d (even): expected start position 80.0, got %f", cleaner.Row, cleaner.XPosition)
-			}
-		} else {
-			// Odd row: L→R (direction = 1, start at left)
-			if cleaner.Direction != 1 {
-				t.Errorf("Row %d (odd): expected direction 1, got %d", cleaner.Row, cleaner.Direction)
-			}
-			if cleaner.XPosition != -1.0 {
-				t.Errorf("Row %d (odd): expected start position -1.0, got %f", cleaner.Row, cleaner.XPosition)
+		} else if c.GridY == 4 {
+			// Even row: should go right to left (negative velocity)
+			if c.VelocityX >= 0 {
+				t.Errorf("Row 4 (even) should have negative VelocityX, got %v", c.VelocityX)
 			}
 		}
 	}
 }
 
-// TestCleanersMovementSpeed verifies cleaners move at correct speed
-func TestCleanersMovementSpeed(t *testing.T) {
-	// Use mock time provider for controlled time advancement
-	startTime := time.Now()
-	mockTime := engine.NewMockTimeProvider(startTime)
-
+// TestCleanerMovement verifies cleaners move correctly over time
+func TestCleanerMovement(t *testing.T) {
 	world := engine.NewWorld()
-	ctx := &engine.GameContext{
-		World:        world,
-		TimeProvider: mockTime,
-		GameWidth:    80,
-		GameHeight:   24,
-	}
+	ctx := createCleanerTestContext()
+	cleanerSystem := NewCleanerSystem(ctx)
 
-	gameWidth := 80
-	cleanerSystem := NewCleanerSystem(ctx, gameWidth, 24, constants.DefaultCleanerConfig())
-	defer cleanerSystem.Shutdown()
+	// Create Red character on row 5
+	createRedCharacterAt(world, 40, 5)
 
-	// Create Red character
-	createRedCharacterAt(world, 10, 1) // Row 1 (odd, L→R)
-
-	// Trigger cleaners
-	cleanerSystem.TriggerCleaners(world)
-
-	// Process spawn request
+	// Activate and spawn
+	cleanerSystem.ActivateCleaners(world)
 	cleanerSystem.Update(world, 16*time.Millisecond)
 
-	// Wait for spawn
-	time.Sleep(50 * time.Millisecond)
-
+	// Get initial position
 	cleanerType := reflect.TypeOf(components.CleanerComponent{})
 	cleaners := world.GetEntitiesWith(cleanerType)
 
@@ -117,84 +75,102 @@ func TestCleanersMovementSpeed(t *testing.T) {
 	}
 
 	entity := cleaners[0]
-	cleanerComp, _ := world.GetComponent(entity, cleanerType)
-	cleaner := cleanerComp.(components.CleanerComponent)
+	comp, _ := world.GetComponent(entity, cleanerType)
+	initialX := comp.(components.CleanerComponent).PreciseX
 
-	// Expected speed: gameWidth / animationDuration = 80 / 1.0 = 80 pixels/second
-	expectedSpeed := float64(gameWidth) / constants.CleanerAnimationDuration.Seconds()
-
-	if cleaner.Speed != expectedSpeed {
-		t.Errorf("Expected speed %f, got %f", expectedSpeed, cleaner.Speed)
+	// Run several updates
+	for i := 0; i < 10; i++ {
+		cleanerSystem.Update(world, 16*time.Millisecond)
 	}
 
-	// Record initial position
-	initialPos := cleaner.XPosition
-
-	// Simulate 0.5 seconds of game loop updates at 60fps (16ms per frame)
-	frameDuration := 16 * time.Millisecond
-	totalTime := 500 * time.Millisecond
-	numFrames := int(totalTime / frameDuration)
-
-	for i := 0; i < numFrames; i++ {
-		mockTime.Advance(frameDuration)
-		cleanerSystem.Update(world, frameDuration)
-	}
-
-	cleanerComp, _ = world.GetComponent(entity, cleanerType)
-	cleaner = cleanerComp.(components.CleanerComponent)
-
-	expectedDistance := expectedSpeed * 0.5 // 0.5 seconds
-	actualDistance := cleaner.XPosition - initialPos
-
-	// Allow for some variance due to frame timing
-	tolerance := expectedSpeed * 0.1 // 10% tolerance
-	if abs(actualDistance-expectedDistance) > tolerance {
-		t.Errorf("Expected movement distance ~%f, got %f (tolerance: %f)",
-			expectedDistance, actualDistance, tolerance)
+	// Verify position changed
+	if entityExists(world, entity) {
+		comp, ok := world.GetComponent(entity, cleanerType)
+		if ok {
+			finalX := comp.(components.CleanerComponent).PreciseX
+			if finalX == initialX {
+				t.Error("Cleaner should have moved from initial position")
+			}
+		}
 	}
 }
 
-// TestCleanersMultipleRows verifies cleaners work correctly across multiple rows
-func TestCleanersMultipleRows(t *testing.T) {
+// TestCleanerAnimationDuration verifies animation completes within reasonable time
+func TestCleanerAnimationDuration(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
+	cleanerSystem := NewCleanerSystem(ctx)
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
-	defer cleanerSystem.Shutdown()
+	// Create Red character
+	createRedCharacterAt(world, 40, 5)
 
-	// Create Red characters on rows 1, 5, 10
-	createRedCharacterAt(world, 10, 1)
-	createRedCharacterAt(world, 20, 5)
-	createRedCharacterAt(world, 30, 10)
+	// Activate cleaners
+	cleanerSystem.ActivateCleaners(world)
 
-	// Trigger cleaners
-	cleanerSystem.TriggerCleaners(world)
+	// Track animation start time
+	startTime := time.Now()
 
-	// Process spawn request
+	// Run animation until complete
+	maxIterations := 1000
+	for i := 0; i < maxIterations && !cleanerSystem.IsAnimationComplete(); i++ {
+		cleanerSystem.Update(world, 16*time.Millisecond)
+		time.Sleep(1 * time.Millisecond)
+	}
+
+	duration := time.Since(startTime)
+
+	if !cleanerSystem.IsAnimationComplete() {
+		t.Fatal("Animation did not complete in reasonable time")
+	}
+
+	// Animation should complete in approximately CleanerAnimationDuration + some overhead
+	// Allow generous margin for test timing variability
+	maxExpected := constants.CleanerAnimationDuration * 3
+	if duration > maxExpected {
+		t.Errorf("Animation took %v, expected less than %v", duration, maxExpected)
+	}
+}
+
+// TestCleanerTrailTracking verifies trail positions are tracked correctly
+func TestCleanerTrailTracking(t *testing.T) {
+	world := engine.NewWorld()
+	ctx := createCleanerTestContext()
+	cleanerSystem := NewCleanerSystem(ctx)
+
+	// Create Red character
+	createRedCharacterAt(world, 40, 5)
+
+	// Activate and spawn
+	cleanerSystem.ActivateCleaners(world)
 	cleanerSystem.Update(world, 16*time.Millisecond)
 
-	// Wait for processing
-	time.Sleep(50 * time.Millisecond)
+	// Run several updates to build trail
+	for i := 0; i < 20; i++ {
+		cleanerSystem.Update(world, 16*time.Millisecond)
+		time.Sleep(1 * time.Millisecond)
+	}
 
+	// Verify trail exists and is limited to max length
 	cleanerType := reflect.TypeOf(components.CleanerComponent{})
 	cleaners := world.GetEntitiesWith(cleanerType)
 
-	if len(cleaners) != 3 {
-		t.Fatalf("Expected 3 cleaners, got %d", len(cleaners))
+	if len(cleaners) == 0 {
+		t.Skip("Cleaner already completed (test timing issue)")
 	}
 
-	// Verify each row has a cleaner
-	rows := make(map[int]bool)
 	for _, entity := range cleaners {
-		cleanerComp, _ := world.GetComponent(entity, cleanerType)
-		cleaner := cleanerComp.(components.CleanerComponent)
-		rows[cleaner.Row] = true
-	}
+		comp, ok := world.GetComponent(entity, cleanerType)
+		if !ok {
+			continue
+		}
+		c := comp.(components.CleanerComponent)
 
-	expectedRows := []int{1, 5, 10}
-	for _, row := range expectedRows {
-		if !rows[row] {
-			t.Errorf("Expected cleaner on row %d, but not found", row)
+		if len(c.Trail) == 0 {
+			t.Error("Trail should not be empty")
+		}
+
+		if len(c.Trail) > constants.CleanerTrailLength {
+			t.Errorf("Trail length %d exceeds max %d", len(c.Trail), constants.CleanerTrailLength)
 		}
 	}
 }

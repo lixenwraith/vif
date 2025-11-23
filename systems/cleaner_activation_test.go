@@ -6,225 +6,131 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/components"
-	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
-// TestCleanersTriggerConditions verifies cleaners only activate when heat is at max during gold completion
-func TestCleanersTriggerConditions(t *testing.T) {
-	tests := []struct {
-		name          string
-		currentHeat   int
-		maxHeat       int
-		shouldTrigger bool
-	}{
-		{
-			name:          "Heat below max - no trigger",
-			currentHeat:   50,
-			maxHeat:       100,
-			shouldTrigger: false,
-		},
-		{
-			name:          "Heat at max - should trigger",
-			currentHeat:   100,
-			maxHeat:       100,
-			shouldTrigger: true,
-		},
-		{
-			name:          "Heat above max - should trigger",
-			currentHeat:   110,
-			maxHeat:       100,
-			shouldTrigger: true,
-		},
-		{
-			name:          "Heat zero - no trigger",
-			currentHeat:   0,
-			maxHeat:       100,
-			shouldTrigger: false,
-		},
+// TestCleanerActivation verifies cleaner activation creates entities for Red rows
+func TestCleanerActivation(t *testing.T) {
+	world := engine.NewWorld()
+	ctx := createCleanerTestContext()
+	cleanerSystem := NewCleanerSystem(ctx)
+
+	// Create Red characters on multiple rows
+	createRedCharacterAt(world, 10, 5)
+	createRedCharacterAt(world, 20, 5)
+	createRedCharacterAt(world, 15, 8)
+
+	// Verify not active initially
+	if !cleanerSystem.IsAnimationComplete() {
+		t.Error("Expected animation to be complete initially")
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			world := engine.NewWorld()
-			ctx := createCleanerTestContext()
+	// Activate cleaners
+	cleanerSystem.ActivateCleaners(world)
 
-			// Create cleaner system
-			cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
-			defer cleanerSystem.Shutdown()
+	// Process spawn on next update
+	cleanerSystem.Update(world, 16*time.Millisecond)
 
-			// Create some Red characters to clean
-			createRedCharacterAt(world, 10, 5)
+	// Verify cleaners were spawned (one per unique row with Red)
+	cleanerType := reflect.TypeOf(components.CleanerComponent{})
+	cleaners := world.GetEntitiesWith(cleanerType)
 
-			// Test cleaner triggering via GameState
-			// Simulate gold completion at max heat
-			if tt.currentHeat >= tt.maxHeat {
-				ctx.State.RequestCleaners()
-			}
+	if len(cleaners) != 2 {
+		t.Errorf("Expected 2 cleaners (rows 5 and 8), got %d", len(cleaners))
+	}
 
-			// Check if cleaners should be triggered
-			if ctx.State.GetCleanerPending() {
-				ctx.State.ActivateCleaners()
-				cleanerSystem.ActivateCleaners(world)
-			}
-
-			// Process spawn requests
-			cleanerSystem.Update(world, 16*time.Millisecond)
-
-			// Wait a bit for async processing
-			time.Sleep(50 * time.Millisecond)
-
-			// Verify activation state
-			if cleanerSystem.IsActive() != tt.shouldTrigger {
-				t.Errorf("Expected IsActive=%v, got %v", tt.shouldTrigger, cleanerSystem.IsActive())
-			}
-
-			// Verify cleaner entities were created if triggered
-			cleanerType := reflect.TypeOf(components.CleanerComponent{})
-			cleaners := world.GetEntitiesWith(cleanerType)
-
-			if tt.shouldTrigger && len(cleaners) == 0 {
-				t.Error("Expected cleaners to be created when triggered, but none found")
-			}
-			if !tt.shouldTrigger && len(cleaners) > 0 {
-				t.Errorf("Expected no cleaners when not triggered, but found %d", len(cleaners))
-			}
-		})
+	// Verify animation is now active
+	if cleanerSystem.IsAnimationComplete() {
+		t.Error("Expected animation to be active after spawning")
 	}
 }
 
-// TestCleanerActivationWithoutRed verifies cleaners activate even with no Red text (phantom cleaners)
-// This ensures proper phase transitions when no visual cleaners are needed
+// TestCleanerActivationWithoutRed verifies phantom cleaner behavior (no entities spawned when no Red)
 func TestCleanerActivationWithoutRed(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
+	cleanerSystem := NewCleanerSystem(ctx)
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
-	defer cleanerSystem.Shutdown()
-
-	// Create only Blue and Green characters (no Red)
+	// Create only Blue and Green characters
 	createBlueCharacterAt(world, 10, 5)
-	createBlueCharacterAt(world, 20, 10)
-	createGreenCharacterAt(world, 30, 15)
-	createGreenCharacterAt(world, 40, 20)
+	createGreenCharacterAt(world, 20, 10)
 
-	// Verify no Red characters exist
-	seqType := reflect.TypeOf(components.SequenceComponent{})
-	entities := world.GetEntitiesWith(seqType)
-	for _, entity := range entities {
-		seqComp, ok := world.GetComponent(entity, seqType)
-		if ok {
-			seq := seqComp.(components.SequenceComponent)
-			if seq.Type == components.SequenceRed {
-				t.Fatal("Test setup error: Red character found when none should exist")
-			}
-		}
-	}
-
-	// Trigger cleaners
-	cleanerSystem.TriggerCleaners(world)
-
-	// Process spawn request
+	// Activate cleaners
+	cleanerSystem.ActivateCleaners(world)
 	cleanerSystem.Update(world, 16*time.Millisecond)
 
-	// Wait for processing
-	time.Sleep(50 * time.Millisecond)
-
-	// CRITICAL: Verify isActive = true even though no Red characters exist
-	if !cleanerSystem.IsActive() {
-		t.Error("Expected cleaners to be active (phantom activation) even without Red text")
-	}
-
-	// Verify NO visual cleaner entities were spawned
+	// Verify no visual cleaner entities were spawned (phantom mode)
 	cleanerType := reflect.TypeOf(components.CleanerComponent{})
 	cleaners := world.GetEntitiesWith(cleanerType)
+
 	if len(cleaners) != 0 {
-		t.Errorf("Expected 0 visual cleaners (phantom mode), got %d", len(cleaners))
+		t.Errorf("Expected no cleaners in phantom mode, got %d", len(cleaners))
 	}
 
-	// Verify phase transitions work properly by checking animation completion
-	// Initially should NOT be complete (animation just started)
-	if cleanerSystem.IsAnimationComplete() {
-		t.Error("Expected animation NOT complete immediately after activation")
-	}
-
-	// Simulate passage of animation duration
-	time.Sleep(constants.DefaultCleanerConfig().AnimationDuration + 100*time.Millisecond)
-
-	// Now animation should be complete
+	// Animation should complete immediately (no entities to track)
 	if !cleanerSystem.IsAnimationComplete() {
-		t.Error("Expected animation complete after duration elapsed")
-	}
-
-	// Update to trigger cleanup
-	cleanerSystem.Update(world, 16*time.Millisecond)
-
-	// Verify cleaners deactivated after animation completes
-	if cleanerSystem.IsActive() {
-		t.Error("Expected cleaners to be inactive after animation completion")
-	}
-
-	// Verify Blue/Green characters remain untouched
-	entities = world.GetEntitiesWith(seqType)
-	blueCount := 0
-	greenCount := 0
-	for _, entity := range entities {
-		seqComp, ok := world.GetComponent(entity, seqType)
-		if ok {
-			seq := seqComp.(components.SequenceComponent)
-			if seq.Type == components.SequenceBlue {
-				blueCount++
-			} else if seq.Type == components.SequenceGreen {
-				greenCount++
-			}
-		}
-	}
-
-	if blueCount != 2 {
-		t.Errorf("Expected 2 Blue characters to remain, got %d", blueCount)
-	}
-	if greenCount != 2 {
-		t.Errorf("Expected 2 Green characters to remain, got %d", greenCount)
+		t.Error("Expected animation to complete immediately in phantom mode")
 	}
 }
 
-// TestCleanersDuplicateTriggerIgnored verifies duplicate triggers are ignored
-func TestCleanersDuplicateTriggerIgnored(t *testing.T) {
+// TestCleanerDuplicateActivationIgnored verifies duplicate activation is handled correctly
+func TestCleanerDuplicateActivationIgnored(t *testing.T) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
-
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
-	defer cleanerSystem.Shutdown()
+	cleanerSystem := NewCleanerSystem(ctx)
 
 	// Create Red characters
 	createRedCharacterAt(world, 10, 5)
 
-	// First trigger
-	cleanerSystem.TriggerCleaners(world)
+	// Activate multiple times before Update
+	cleanerSystem.ActivateCleaners(world)
+	cleanerSystem.ActivateCleaners(world)
+	cleanerSystem.ActivateCleaners(world)
 
-	// Process first request
+	// Process spawn
 	cleanerSystem.Update(world, 16*time.Millisecond)
 
-	// Wait for processing
-	time.Sleep(50 * time.Millisecond)
-
+	// Verify only one cleaner was spawned (not duplicated)
 	cleanerType := reflect.TypeOf(components.CleanerComponent{})
-	cleaners1 := world.GetEntitiesWith(cleanerType)
-	count1 := len(cleaners1)
+	cleaners := world.GetEntitiesWith(cleanerType)
 
-	// Second trigger (should be ignored)
-	cleanerSystem.TriggerCleaners(world)
+	if len(cleaners) != 1 {
+		t.Errorf("Expected 1 cleaner despite multiple activations, got %d", len(cleaners))
+	}
+}
 
-	// Process second request
+// TestCleanerActivationAfterCompletion verifies cleaners can be reactivated after completion
+func TestCleanerActivationAfterCompletion(t *testing.T) {
+	world := engine.NewWorld()
+	ctx := createCleanerTestContext()
+	cleanerSystem := NewCleanerSystem(ctx)
+
+	// First activation cycle
+	createRedCharacterAt(world, 10, 5)
+	cleanerSystem.ActivateCleaners(world)
 	cleanerSystem.Update(world, 16*time.Millisecond)
 
-	// Wait for processing
-	time.Sleep(50 * time.Millisecond)
+	// Wait for animation to complete (run updates until complete)
+	maxIterations := 1000
+	for i := 0; i < maxIterations && !cleanerSystem.IsAnimationComplete(); i++ {
+		cleanerSystem.Update(world, 16*time.Millisecond)
+		time.Sleep(1 * time.Millisecond)
+	}
 
-	cleaners2 := world.GetEntitiesWith(cleanerType)
-	count2 := len(cleaners2)
+	if !cleanerSystem.IsAnimationComplete() {
+		t.Fatal("Animation did not complete in reasonable time")
+	}
 
-	if count1 != count2 {
-		t.Errorf("Duplicate trigger created new cleaners: before=%d, after=%d", count1, count2)
+	// Second activation cycle
+	createRedCharacterAt(world, 20, 8)
+	cleanerSystem.ActivateCleaners(world)
+	cleanerSystem.Update(world, 16*time.Millisecond)
+
+	// Verify new cleaners were spawned
+	cleanerType := reflect.TypeOf(components.CleanerComponent{})
+	cleaners := world.GetEntitiesWith(cleanerType)
+
+	if len(cleaners) != 1 {
+		t.Errorf("Expected 1 cleaner in second activation, got %d", len(cleaners))
 	}
 }

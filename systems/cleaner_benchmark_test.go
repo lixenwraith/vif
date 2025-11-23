@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/components"
-	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
@@ -14,9 +13,7 @@ import (
 func BenchmarkCleanerSpawn(b *testing.B) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
-
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
-	defer cleanerSystem.Shutdown()
+	cleanerSystem := NewCleanerSystem(ctx)
 
 	// Create Red characters on multiple rows
 	for row := 0; row < 24; row++ {
@@ -28,11 +25,8 @@ func BenchmarkCleanerSpawn(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		cleanerSystem.TriggerCleaners(world)
+		cleanerSystem.ActivateCleaners(world)
 		cleanerSystem.Update(world, 16*time.Millisecond)
-
-		// Wait for spawn to complete
-		time.Sleep(50 * time.Millisecond)
 
 		// Clean up for next iteration
 		cleanerType := reflect.TypeOf(components.CleanerComponent{})
@@ -43,86 +37,69 @@ func BenchmarkCleanerSpawn(b *testing.B) {
 	}
 }
 
-// BenchmarkCleanerDetectAndDestroy benchmarks collision detection and destruction
-func BenchmarkCleanerDetectAndDestroy(b *testing.B) {
+// BenchmarkCleanerUpdate benchmarks cleaner physics updates
+func BenchmarkCleanerUpdate(b *testing.B) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
+	cleanerSystem := NewCleanerSystem(ctx)
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
-	defer cleanerSystem.Shutdown()
-
-	// Setup: Create cleaners and Red characters
-	for row := 0; row < 10; row++ {
-		for x := 10; x < 70; x += 5 {
+	// Create Red characters
+	for row := 0; row < 24; row++ {
+		for x := 10; x < 70; x += 10 {
 			createRedCharacterAt(world, x, row)
 		}
 	}
 
-	cleanerSystem.TriggerCleaners(world)
+	// Activate cleaners
+	cleanerSystem.ActivateCleaners(world)
 	cleanerSystem.Update(world, 16*time.Millisecond)
-	time.Sleep(50 * time.Millisecond)
-
-	b.ResetTimer()
-
-	// Benchmark using trail-based collision detection
-	cleanerType := reflect.TypeOf(components.CleanerComponent{})
-	for i := 0; i < b.N; i++ {
-		cleaners := world.GetEntitiesWith(cleanerType)
-		for _, entity := range cleaners {
-			cleanerComp, ok := world.GetComponent(entity, cleanerType)
-			if !ok {
-				continue
-			}
-			cleaner := cleanerComp.(components.CleanerComponent)
-			cleanerSystem.checkTrailCollisions(world, cleaner.Row, cleaner.TrailPositions)
-		}
-	}
-}
-
-// BenchmarkCleanerScanRedRows benchmarks scanning for Red character rows
-func BenchmarkCleanerScanRedRows(b *testing.B) {
-	world := engine.NewWorld()
-	ctx := createCleanerTestContext()
-
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
-	defer cleanerSystem.Shutdown()
-
-	// Create Red characters scattered across the screen
-	for row := 0; row < 24; row++ {
-		for x := 0; x < 80; x += 8 {
-			if row%3 == 0 {
-				createRedCharacterAt(world, x, row)
-			} else if row%3 == 1 {
-				createBlueCharacterAt(world, x, row)
-			} else {
-				createGreenCharacterAt(world, x, row)
-			}
-		}
-	}
 
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_ = cleanerSystem.scanRedCharacterRows(world)
+		cleanerSystem.Update(world, 16*time.Millisecond)
 	}
 }
 
-// BenchmarkCleanerUpdate benchmarks cleaner position updates
-func BenchmarkCleanerUpdate(b *testing.B) {
+// BenchmarkCleanerSnapshots benchmarks snapshot generation for rendering
+func BenchmarkCleanerSnapshots(b *testing.B) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
+	cleanerSystem := NewCleanerSystem(ctx)
 
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
-	defer cleanerSystem.Shutdown()
-
-	// Create Red characters and spawn cleaners
+	// Create Red characters
 	for row := 0; row < 24; row++ {
-		createRedCharacterAt(world, 40, row)
+		for x := 10; x < 70; x += 10 {
+			createRedCharacterAt(world, x, row)
+		}
 	}
 
-	cleanerSystem.TriggerCleaners(world)
+	// Activate cleaners
+	cleanerSystem.ActivateCleaners(world)
 	cleanerSystem.Update(world, 16*time.Millisecond)
-	time.Sleep(50 * time.Millisecond)
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		_ = cleanerSystem.GetCleanerSnapshots()
+	}
+}
+
+// BenchmarkCleanerCollision benchmarks collision detection performance
+func BenchmarkCleanerCollision(b *testing.B) {
+	world := engine.NewWorld()
+	ctx := createCleanerTestContext()
+	cleanerSystem := NewCleanerSystem(ctx)
+
+	// Create Red characters densely across screen
+	for row := 0; row < 24; row++ {
+		for x := 0; x < 80; x++ {
+			createRedCharacterAt(world, x, row)
+		}
+	}
+
+	// Activate cleaners
+	cleanerSystem.ActivateCleaners(world)
 
 	b.ResetTimer()
 
@@ -135,291 +112,64 @@ func BenchmarkCleanerUpdate(b *testing.B) {
 func BenchmarkFlashEffectCreation(b *testing.B) {
 	world := engine.NewWorld()
 	ctx := createCleanerTestContext()
-
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
-	defer cleanerSystem.Shutdown()
-
-	// Pre-create entities for consistent benchmarking
-	for i := 0; i < 100; i++ {
-		createRedCharacterAt(world, 10+i%70, i%24)
-	}
-
-	cleanerSystem.TriggerCleaners(world)
-	cleanerSystem.Update(world, 16*time.Millisecond)
-	time.Sleep(50 * time.Millisecond)
+	cleanerSystem := NewCleanerSystem(ctx)
 
 	b.ResetTimer()
 
-	// Benchmark using trail-based collision detection
-	cleanerType := reflect.TypeOf(components.CleanerComponent{})
 	for i := 0; i < b.N; i++ {
-		cleaners := world.GetEntitiesWith(cleanerType)
-		for _, entity := range cleaners {
-			cleanerComp, ok := world.GetComponent(entity, cleanerType)
-			if !ok {
-				continue
-			}
-			cleaner := cleanerComp.(components.CleanerComponent)
-			cleanerSystem.checkTrailCollisions(world, cleaner.Row, cleaner.TrailPositions)
+		// Create Red character
+		redEntity := createRedCharacterAt(world, 40, 5)
+
+		// Activate cleaners
+		cleanerSystem.ActivateCleaners(world)
+
+		// Run a few updates to trigger collision and flash creation
+		for j := 0; j < 10; j++ {
+			cleanerSystem.Update(world, 16*time.Millisecond)
 		}
 
-		// Clean up flashes for next iteration
+		// Clean up
+		cleanerType := reflect.TypeOf(components.CleanerComponent{})
+		cleaners := world.GetEntitiesWith(cleanerType)
+		for _, entity := range cleaners {
+			world.DestroyEntity(entity)
+		}
+
 		flashType := reflect.TypeOf(components.RemovalFlashComponent{})
 		flashes := world.GetEntitiesWith(flashType)
 		for _, entity := range flashes {
 			world.DestroyEntity(entity)
 		}
+
+		if entityExists(world, redEntity) {
+			world.DestroyEntity(redEntity)
+		}
 	}
 }
 
-// BenchmarkFlashEffectCleanup benchmarks flash effect cleanup
-func BenchmarkFlashEffectCleanup(b *testing.B) {
-	world := engine.NewWorld()
-	ctx := createCleanerTestContext()
-
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
-	defer cleanerSystem.Shutdown()
-
-	b.ResetTimer()
-
+// BenchmarkCompleteAnimation benchmarks full cleaner animation cycle
+func BenchmarkCompleteAnimation(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
 
-		// Create flash effects
-		for j := 0; j < 50; j++ {
-			flashEntity := world.CreateEntity()
-			flash := components.RemovalFlashComponent{
-				X:         j,
-				Y:         0,
-				Char:      'R',
-				StartTime: ctx.TimeProvider.Now().Add(-200 * time.Millisecond), // Expired
-				Duration:  150,
-			}
-			world.AddComponent(flashEntity, flash)
+		world := engine.NewWorld()
+		ctx := createCleanerTestContext()
+		cleanerSystem := NewCleanerSystem(ctx)
+
+		// Create Red characters
+		for row := 0; row < 10; row++ {
+			createRedCharacterAt(world, 40, row)
 		}
 
 		b.StartTimer()
 
-		cleanerSystem.cleanupExpiredFlashes(world)
-	}
-}
-
-// BenchmarkConcurrentCleanerOperations benchmarks concurrent cleaner operations
-func BenchmarkConcurrentCleanerOperations(b *testing.B) {
-	world := engine.NewWorld()
-	ctx := createCleanerTestContext()
-
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
-	defer cleanerSystem.Shutdown()
-
-	// Create test environment
-	for row := 0; row < 24; row++ {
-		for x := 10; x < 70; x += 10 {
-			createRedCharacterAt(world, x, row)
-		}
-	}
-
-	cleanerSystem.TriggerCleaners(world)
-	cleanerSystem.Update(world, 16*time.Millisecond)
-	time.Sleep(50 * time.Millisecond)
-
-	b.ResetTimer()
-
-	b.RunParallel(func(pb *testing.PB) {
-		cleanerType := reflect.TypeOf(components.CleanerComponent{})
-		for pb.Next() {
-			// Mix of operations
-			_ = cleanerSystem.IsActive()
-			_ = cleanerSystem.scanRedCharacterRows(world)
-
-			// Use trail-based collision detection
-			cleaners := world.GetEntitiesWith(cleanerType)
-			for _, entity := range cleaners {
-				cleanerComp, ok := world.GetComponent(entity, cleanerType)
-				if !ok {
-					continue
-				}
-				cleaner := cleanerComp.(components.CleanerComponent)
-				cleanerSystem.checkTrailCollisions(world, cleaner.Row, cleaner.TrailPositions)
-			}
-		}
-	})
-}
-
-// BenchmarkSpatialIndexAccess benchmarks spatial index access patterns
-func BenchmarkSpatialIndexAccess(b *testing.B) {
-	world := engine.NewWorld()
-
-	// Fill spatial index
-	for y := 0; y < 24; y++ {
-		for x := 0; x < 80; x += 2 {
-			entity := createRedCharacterAt(world, x, y)
-			_ = entity
-		}
-	}
-
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		for y := 0; y < 24; y++ {
-			for x := 0; x < 80; x += 4 {
-				_ = world.GetEntityAtPosition(x, y)
-			}
-		}
-	}
-}
-
-// BenchmarkEntityQueryByType benchmarks entity queries by component type
-func BenchmarkEntityQueryByType(b *testing.B) {
-	world := engine.NewWorld()
-
-	// Create various entities
-	for i := 0; i < 200; i++ {
-		if i%3 == 0 {
-			createRedCharacterAt(world, i%80, i%24)
-		} else if i%3 == 1 {
-			createBlueCharacterAt(world, i%80, i%24)
-		} else {
-			createGreenCharacterAt(world, i%80, i%24)
-		}
-	}
-
-	seqType := reflect.TypeOf(components.SequenceComponent{})
-	posType := reflect.TypeOf(components.PositionComponent{})
-
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		_ = world.GetEntitiesWith(seqType, posType)
-	}
-}
-
-// BenchmarkCleanerPoolAllocation benchmarks pool allocation performance
-func BenchmarkCleanerPoolAllocation(b *testing.B) {
-	world := engine.NewWorld()
-	ctx := createCleanerTestContext()
-
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
-	defer cleanerSystem.Shutdown()
-
-	// Create Red characters
-	for row := 0; row < 10; row++ {
-		createRedCharacterAt(world, 40, row)
-	}
-
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		cleanerSystem.TriggerCleaners(world)
-		cleanerSystem.Update(world, 16*time.Millisecond)
-		time.Sleep(10 * time.Millisecond)
-
-		// Force cleanup to trigger pool return
-		b.StopTimer()
-		cleanerType := reflect.TypeOf(components.CleanerComponent{})
-		cleaners := world.GetEntitiesWith(cleanerType)
-		for _, entity := range cleaners {
-			world.DestroyEntity(entity)
-		}
-		cleanerSystem.cleanupCleaners(world)
-		b.StartTimer()
-	}
-}
-
-// BenchmarkAtomicStateOperations benchmarks atomic state operations
-func BenchmarkAtomicStateOperations(b *testing.B) {
-	world := engine.NewWorld()
-	ctx := createCleanerTestContext()
-
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
-	defer cleanerSystem.Shutdown()
-
-	createRedCharacterAt(world, 40, 5)
-
-	b.ResetTimer()
-
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			_ = cleanerSystem.IsActive()
-		}
-	})
-}
-
-// BenchmarkGoldTriggerCleaners benchmarks triggering cleaners via gold completion
-func BenchmarkGoldTriggerCleaners(b *testing.B) {
-	world := engine.NewWorld()
-	ctx := createCleanerTestContext()
-
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
-	defer cleanerSystem.Shutdown()
-
-	// Create Red characters
-	for i := 0; i < 10; i++ {
-		createRedCharacterAt(world, 10+i*5, 5)
-	}
-
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		// Trigger cleaners via GameState
-		ctx.State.RequestCleaners()
-		ctx.State.ActivateCleaners()
+		// Activate cleaners
 		cleanerSystem.ActivateCleaners(world)
-		cleanerSystem.Update(world, 16*time.Millisecond)
 
-		// Clean up
-		b.StopTimer()
-		cleanerType := reflect.TypeOf(components.CleanerComponent{})
-		cleaners := world.GetEntitiesWith(cleanerType)
-		for _, entity := range cleaners {
-			world.DestroyEntity(entity)
+		// Run until complete
+		maxIterations := 1000
+		for j := 0; j < maxIterations && !cleanerSystem.IsAnimationComplete(); j++ {
+			cleanerSystem.Update(world, 16*time.Millisecond)
 		}
-		cleanerSystem.cleanupCleaners(world)
-		b.StartTimer()
-	}
-}
-
-// BenchmarkCleanerUpdateSync benchmarks synchronous cleaner updates
-// This validates that the new synchronous model performs well
-func BenchmarkCleanerUpdateSync(b *testing.B) {
-	world := engine.NewWorld()
-	ctx := createCleanerTestContext()
-
-	cleanerSystem := NewCleanerSystem(ctx, 80, 24, constants.DefaultCleanerConfig())
-	defer cleanerSystem.Shutdown()
-
-	// Create Red characters on all 24 rows (maximum cleaners)
-	for row := 0; row < 24; row++ {
-		for x := 10; x < 70; x += 10 {
-			createRedCharacterAt(world, x, row)
-		}
-	}
-
-	// Trigger cleaners to spawn all 24
-	cleanerSystem.TriggerCleaners(world)
-	cleanerSystem.Update(world, 16*time.Millisecond)
-	time.Sleep(50 * time.Millisecond)
-
-	// Verify we have 24 cleaners
-	cleanerType := reflect.TypeOf(components.CleanerComponent{})
-	cleaners := world.GetEntitiesWith(cleanerType)
-	b.Logf("Benchmarking with %d active cleaners", len(cleaners))
-
-	b.ResetTimer()
-
-	// Benchmark the synchronous update performance
-	for i := 0; i < b.N; i++ {
-		cleanerSystem.Update(world, 16*time.Millisecond)
-	}
-
-	b.StopTimer()
-
-	// Report performance target
-	elapsed := b.Elapsed()
-	avgPerOp := elapsed / time.Duration(b.N)
-	if avgPerOp > time.Millisecond {
-		b.Logf("Warning: Update took %v (target: < 1ms)", avgPerOp)
-	} else {
-		b.Logf("Update performance: %v per operation (within target)", avgPerOp)
 	}
 }
