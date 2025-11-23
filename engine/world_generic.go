@@ -72,12 +72,15 @@ func (w *WorldGeneric) CreateEntity() Entity {
 }
 
 // DestroyEntity removes all components associated with an entity.
-// This iterates through all stores and removes the entity from each.
+// This removes from the spatial index first, then all other stores.
 func (w *WorldGeneric) DestroyEntity(e Entity) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	// Remove from spatial index first (if entity has PositionComponent)
+	// PositionStore.Remove handles both the spatial index and the underlying store
+	if _, exists := w.Positions.Get(e); exists {
+		w.Positions.Remove(e)
+	}
 
-	// Remove from all stores
+	// Remove from all other stores
 	for _, store := range w.allStores {
 		store.Remove(e)
 	}
@@ -113,4 +116,37 @@ func (w *WorldGeneric) HasAnyComponent(e Entity) bool {
 		}
 	}
 	return false
+}
+
+// MigrateFrom copies all entities and components from the old reflection-based World
+// to this generic World. This is a helper for gradual migration.
+// The old world remains unchanged.
+func (w *WorldGeneric) MigrateFrom(old *World) {
+	old.mu.RLock()
+	defer old.mu.RUnlock()
+
+	for entity, components := range old.entities {
+		for _, comp := range components {
+			switch c := comp.(type) {
+			case components.PositionComponent:
+				w.Positions.Add(entity, c)
+			case components.CharacterComponent:
+				w.Characters.Add(entity, c)
+			case components.SequenceComponent:
+				w.Sequences.Add(entity, c)
+			case components.GoldSequenceComponent:
+				w.GoldSequences.Add(entity, c)
+			case components.FallingDecayComponent:
+				w.FallingDecays.Add(entity, c)
+			case components.CleanerComponent:
+				w.Cleaners.Add(entity, c)
+			case components.RemovalFlashComponent:
+				w.RemovalFlashes.Add(entity, c)
+			case components.NuggetComponent:
+				w.Nuggets.Add(entity, c)
+			case components.DrainComponent:
+				w.Drains.Add(entity, c)
+			}
+		}
+	}
 }

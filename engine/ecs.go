@@ -30,6 +30,10 @@ type World struct {
 	componentsByType map[reflect.Type][]Entity // Reverse index: component type -> entities
 	updateMutex      sync.Mutex                // Frame barrier mutex to prevent concurrent updates
 	isUpdating       bool                      // Flag indicating if update is in progress
+
+	// Migration bridge - runs parallel to old reflection-based implementation
+	generic    *WorldGeneric
+	useGeneric bool // Flag to switch between implementations
 }
 
 // NewWorld creates a new ECS world
@@ -40,6 +44,8 @@ func NewWorld() *World {
 		systems:          make([]System, 0),
 		spatialIndex:     make(map[int]map[int]Entity),
 		componentsByType: make(map[reflect.Type][]Entity),
+		generic:          NewWorldGeneric(),
+		useGeneric:       false, // Start with old implementation
 	}
 }
 
@@ -231,6 +237,11 @@ func (w *World) Update(dt time.Duration) {
 
 // GetEntityAtPosition returns the entity at a given position (0 if none)
 func (w *World) GetEntityAtPosition(x, y int) Entity {
+	// Delegate to generic implementation when enabled
+	if w.useGeneric {
+		return w.generic.Positions.GetEntityAt(x, y)
+	}
+
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
@@ -351,4 +362,15 @@ func (w *World) ValidateSpatialIndex() []string {
 	}
 
 	return inconsistencies
+}
+
+// GetGeneric returns the generic ECS world for migration purposes
+func (w *World) GetGeneric() *WorldGeneric {
+	return w.generic
+}
+
+// CreateEntityGeneric creates a new entity using the generic world
+// This is part of the migration bridge to allow parallel entity creation
+func (w *World) CreateEntityGeneric() Entity {
+	return w.generic.CreateEntity()
 }
