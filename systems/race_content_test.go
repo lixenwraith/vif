@@ -532,8 +532,8 @@ func TestStressContentSystem(t *testing.T) {
 					_ = spawnSys.isRefreshing.Load()
 
 					// Read color counters
-					_ = spawnSys.GetColorCount(components.SequenceBlue, components.LevelBright)
-					_ = spawnSys.GetColorCount(components.SequenceGreen, components.LevelNormal)
+					_ = ctx.State.BlueCountBright.Load()
+					_ = ctx.State.GreenCountNormal.Load()
 
 					ops++
 					if ops%100 == 0 {

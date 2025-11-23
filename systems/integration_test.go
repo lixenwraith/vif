@@ -44,7 +44,7 @@ func TestDecaySystemCounterUpdates(t *testing.T) {
 	// Manually set the counter
 	spawnSys.AddColorCount(components.SequenceBlue, components.LevelBright, 5)
 
-	initialBlueBright := spawnSys.GetColorCount(components.SequenceBlue, components.LevelBright)
+	initialBlueBright := ctx.State.BlueCountBright.Load()
 	if initialBlueBright != 5 {
 		t.Fatalf("Expected initial Blue Bright count of 5, got %d", initialBlueBright)
 	}
@@ -53,8 +53,8 @@ func TestDecaySystemCounterUpdates(t *testing.T) {
 	decaySys.applyDecayToRow(world, 0)
 
 	// Verify counters updated correctly
-	blueBright := spawnSys.GetColorCount(components.SequenceBlue, components.LevelBright)
-	blueNormal := spawnSys.GetColorCount(components.SequenceBlue, components.LevelNormal)
+	blueBright := ctx.State.BlueCountBright.Load()
+	blueNormal := ctx.State.BlueCountNormal.Load()
 
 	if blueBright != 0 {
 		t.Errorf("Expected Blue Bright count of 0 after decay, got %d", blueBright)
@@ -117,8 +117,8 @@ func TestDecaySystemColorTransitionWithCounters(t *testing.T) {
 	// Apply decay - Blue Dark should become Green Bright
 	decaySys.applyDecayToRow(world, 0)
 
-	blueDark := spawnSys.GetColorCount(components.SequenceBlue, components.LevelDark)
-	greenBright := spawnSys.GetColorCount(components.SequenceGreen, components.LevelBright)
+	blueDark := ctx.State.BlueCountDark.Load()
+	greenBright := ctx.State.GreenCountBright.Load()
 
 	if blueDark != 0 {
 		t.Errorf("Expected Blue Dark count of 0 after transition, got %d", blueDark)
@@ -134,7 +134,7 @@ func TestDecaySystemColorTransitionWithCounters(t *testing.T) {
 	}
 
 	// Verify they're now Green Dark
-	greenDark := spawnSys.GetColorCount(components.SequenceGreen, components.LevelDark)
+	greenDark := ctx.State.GreenCountDark.Load()
 	if greenDark != 3 {
 		t.Errorf("Expected Green Dark count of 3 before Red transition, got %d", greenDark)
 	}
@@ -142,7 +142,7 @@ func TestDecaySystemColorTransitionWithCounters(t *testing.T) {
 	// One more decay: Green Dark -> Red Bright (Red is not counted)
 	decaySys.applyDecayToRow(world, 0)
 
-	greenDarkAfter := spawnSys.GetColorCount(components.SequenceGreen, components.LevelDark)
+	greenDarkAfter := ctx.State.GreenCountDark.Load()
 	if greenDarkAfter != 0 {
 		t.Errorf("Expected Green Dark count of 0 after Red transition, got %d", greenDarkAfter)
 	}
@@ -195,7 +195,7 @@ func TestScoreSystemCounterDecrement(t *testing.T) {
 	// Set counter
 	spawnSys.AddColorCount(components.SequenceGreen, components.LevelNormal, 1)
 
-	initialCount := spawnSys.GetColorCount(components.SequenceGreen, components.LevelNormal)
+	initialCount := ctx.State.GreenCountNormal.Load()
 	if initialCount != 1 {
 		t.Fatalf("Expected initial count of 1, got %d", initialCount)
 	}
@@ -204,7 +204,7 @@ func TestScoreSystemCounterDecrement(t *testing.T) {
 	scoreSys.HandleCharacterTyping(world, ctx.CursorX, ctx.CursorY, 'a')
 
 	// Verify counter was decremented
-	finalCount := spawnSys.GetColorCount(components.SequenceGreen, components.LevelNormal)
+	finalCount := ctx.State.GreenCountNormal.Load()
 	if finalCount != 0 {
 		t.Errorf("Expected count to be 0 after typing, got %d", finalCount)
 	}
@@ -244,14 +244,9 @@ func TestScoreSystemDoesNotDecrementRedCounter(t *testing.T) {
 	tx.Commit()
 
 	// Verify no counters changed (Red is not tracked)
-	allCountsZero := true
-	for _, seqType := range []components.SequenceType{components.SequenceBlue, components.SequenceGreen} {
-		for _, level := range []components.SequenceLevel{components.LevelBright, components.LevelNormal, components.LevelDark} {
-			if spawnSys.GetColorCount(seqType, level) != 0 {
-				allCountsZero = false
-			}
-		}
-	}
+	counts := ctx.State.ReadColorCounts()
+	allCountsZero := (counts.BlueBright == 0 && counts.BlueNormal == 0 && counts.BlueDark == 0 &&
+		counts.GreenBright == 0 && counts.GreenNormal == 0 && counts.GreenDark == 0)
 
 	if !allCountsZero {
 		t.Error("Expected all counters to remain 0 for Red character")
@@ -261,12 +256,9 @@ func TestScoreSystemDoesNotDecrementRedCounter(t *testing.T) {
 	scoreSys.HandleCharacterTyping(world, ctx.CursorX, ctx.CursorY, 'r')
 
 	// Verify all counters still zero (Red doesn't affect counters)
-	for _, seqType := range []components.SequenceType{components.SequenceBlue, components.SequenceGreen} {
-		for _, level := range []components.SequenceLevel{components.LevelBright, components.LevelNormal, components.LevelDark} {
-			count := spawnSys.GetColorCount(seqType, level)
-			if count != 0 {
-				t.Errorf("Expected count to remain 0 for %v %v after typing Red, got %d", seqType, level, count)
-			}
-		}
+	countsAfter := ctx.State.ReadColorCounts()
+	if countsAfter.BlueBright != 0 || countsAfter.BlueNormal != 0 || countsAfter.BlueDark != 0 ||
+		countsAfter.GreenBright != 0 || countsAfter.GreenNormal != 0 || countsAfter.GreenDark != 0 {
+		t.Errorf("Expected all counts to remain 0 after typing Red, got %+v", countsAfter)
 	}
 }

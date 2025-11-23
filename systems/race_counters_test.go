@@ -87,12 +87,12 @@ func TestConcurrentColorCounterUpdates(t *testing.T) {
 			case <-stopChan:
 				return
 			default:
-				_ = spawnSys.GetColorCount(components.SequenceBlue, components.LevelBright)
-				_ = spawnSys.GetColorCount(components.SequenceBlue, components.LevelNormal)
-				_ = spawnSys.GetColorCount(components.SequenceBlue, components.LevelDark)
-				_ = spawnSys.GetColorCount(components.SequenceGreen, components.LevelBright)
-				_ = spawnSys.GetColorCount(components.SequenceGreen, components.LevelNormal)
-				_ = spawnSys.GetColorCount(components.SequenceGreen, components.LevelDark)
+				_ = ctx.State.BlueCountBright.Load()
+				_ = ctx.State.BlueCountNormal.Load()
+				_ = ctx.State.BlueCountDark.Load()
+				_ = ctx.State.GreenCountBright.Load()
+				_ = ctx.State.GreenCountNormal.Load()
+				_ = ctx.State.GreenCountDark.Load()
 				time.Sleep(500 * time.Microsecond)
 			}
 		}
@@ -105,8 +105,8 @@ func TestConcurrentColorCounterUpdates(t *testing.T) {
 	wg.Wait()
 
 	// Verify counters are accessible and consistent
-	blueCount := spawnSys.GetColorCount(components.SequenceBlue, components.LevelBright)
-	greenCount := spawnSys.GetColorCount(components.SequenceGreen, components.LevelBright)
+	blueCount := ctx.State.BlueCountBright.Load()
+	greenCount := ctx.State.GreenCountBright.Load()
 
 	t.Logf("Final blue bright count: %d, green bright count: %d", blueCount, greenCount)
 

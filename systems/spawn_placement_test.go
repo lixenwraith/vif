@@ -31,7 +31,7 @@ func TestPlaceLine(t *testing.T) {
 	// Verify counter was incremented (should count only non-space characters)
 	// "test line" has 8 non-space characters ('t','e','s','t','l','i','n','e')
 	expectedCount := int64(len(strings.ReplaceAll(line, " ", "")))
-	count := spawnSys.GetColorCount(components.SequenceBlue, components.LevelBright)
+	count := ctx.State.BlueCountBright.Load()
 	if count != expectedCount {
 		t.Errorf("Expected counter to be %d (non-space chars), got %d", expectedCount, count)
 	}
@@ -154,7 +154,7 @@ func TestPlaceLineSkipsSpaces(t *testing.T) {
 			spawnSys := NewSpawnSystem(ctx)
 
 			style := tcell.StyleDefault
-			initialCount := spawnSys.GetColorCount(components.SequenceBlue, components.LevelBright)
+			initialCount := ctx.State.BlueCountBright.Load()
 
 			// Place the line
 			success := spawnSys.placeLine(world, tt.line, components.SequenceBlue, components.LevelBright, style)
@@ -174,7 +174,7 @@ func TestPlaceLineSkipsSpaces(t *testing.T) {
 			}
 
 			// Verify counter incremented correctly (only non-space characters)
-			finalCount := spawnSys.GetColorCount(components.SequenceBlue, components.LevelBright)
+			finalCount := ctx.State.BlueCountBright.Load()
 			actualCounterInc := int(finalCount - initialCount)
 
 			if actualCounterInc != tt.expectedCounterInc {
@@ -322,7 +322,7 @@ func TestPlaceLinePackageMd5(t *testing.T) {
 	}
 
 	// Verify color counter counts only non-space characters
-	count := spawnSys.GetColorCount(components.SequenceBlue, components.LevelBright)
+	count := ctx.State.BlueCountBright.Load()
 	if count != 10 {
 		t.Errorf("Expected color count 10 (no space counted), got %d", count)
 	}
@@ -434,7 +434,7 @@ func TestPlaceLineConstBlockSize(t *testing.T) {
 	}
 
 	// Verify color counter counts only non-space characters
-	count := spawnSys.GetColorCount(components.SequenceGreen, components.LevelNormal)
+	count := ctx.State.GreenCountNormal.Load()
 	if count != int64(expectedNonSpaceCount) {
 		t.Errorf("Expected color count %d (no spaces counted), got %d", expectedNonSpaceCount, count)
 	}

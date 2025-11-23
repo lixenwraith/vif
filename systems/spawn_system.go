@@ -271,45 +271,6 @@ func (s *SpawnSystem) Priority() int {
 	return 15 // Run early
 }
 
-// GetColorCount returns the character count for a specific color/level combination
-func (s *SpawnSystem) GetColorCount(seqType components.SequenceType, level components.SequenceLevel) int64 {
-	// Convert components.SequenceType to int for GameState
-	var typeInt int
-	if seqType == components.SequenceBlue {
-		typeInt = 0
-	} else if seqType == components.SequenceGreen {
-		typeInt = 1
-	} else {
-		return 0
-	}
-
-	// Convert components.SequenceLevel to int for GameState
-	levelInt := int(level) // 0=Dark, 1=Normal, 2=Bright
-
-	// Read from GameState atomically
-	switch typeInt {
-	case 0: // Blue
-		switch levelInt {
-		case 2: // Bright
-			return s.ctx.State.BlueCountBright.Load()
-		case 1: // Normal
-			return s.ctx.State.BlueCountNormal.Load()
-		case 0: // Dark
-			return s.ctx.State.BlueCountDark.Load()
-		}
-	case 1: // Green
-		switch levelInt {
-		case 2: // Bright
-			return s.ctx.State.GreenCountBright.Load()
-		case 1: // Normal
-			return s.ctx.State.GreenCountNormal.Load()
-		case 0: // Dark
-			return s.ctx.State.GreenCountDark.Load()
-		}
-	}
-	return 0
-}
-
 // AddColorCount atomically increments the counter for a color/level
 func (s *SpawnSystem) AddColorCount(seqType components.SequenceType, level components.SequenceLevel, delta int64) {
 	// Convert components.SequenceType to int for GameState
