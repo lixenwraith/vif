@@ -12,13 +12,11 @@ func TestCanTransition(t *testing.T) {
 
 	// Define all valid transitions according to the state machine
 	validTransitions := map[GamePhase][]GamePhase{
-		PhaseNormal:         {PhaseGoldActive, PhaseCleanerPending},
-		PhaseGoldActive:     {PhaseGoldComplete, PhaseCleanerPending},
-		PhaseGoldComplete:   {PhaseDecayWait, PhaseCleanerPending},
+		PhaseNormal:         {PhaseGoldActive},
+		PhaseGoldActive:     {PhaseGoldComplete},
+		PhaseGoldComplete:   {PhaseDecayWait},
 		PhaseDecayWait:      {PhaseDecayAnimation},
 		PhaseDecayAnimation: {PhaseNormal},
-		PhaseCleanerPending: {PhaseCleanerActive},
-		PhaseCleanerActive:  {PhaseDecayWait},
 	}
 
 	// Test all valid transitions
@@ -46,8 +44,6 @@ func TestCanTransition(t *testing.T) {
 		{PhaseDecayWait, PhaseNormal, "DecayWait -> Normal (must go through DecayAnimation)"},
 		{PhaseDecayAnimation, PhaseDecayWait, "DecayAnimation -> DecayWait (can't go backwards)"},
 		{PhaseDecayAnimation, PhaseGoldActive, "DecayAnimation -> GoldActive (must go through Normal)"},
-		{PhaseCleanerPending, PhaseNormal, "CleanerPending -> Normal (must go through CleanerActive)"},
-		{PhaseCleanerActive, PhaseCleanerPending, "CleanerActive -> CleanerPending (can't go backwards)"},
 	}
 
 	for _, tc := range invalidTransitions {
@@ -118,86 +114,22 @@ func TestTransitionPhase(t *testing.T) {
 	}
 }
 
-// TestTransitionPhaseWithCleaners tests the cleaner phase transitions
-func TestTransitionPhaseWithCleaners(t *testing.T) {
-	mockTime := NewMockTimeProvider(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
-	state := NewGameState(80, 24, 100, mockTime)
-
-	// Test cleaner transition from Normal
-	if !state.TransitionPhase(PhaseCleanerPending) {
-		t.Fatal("Failed to transition Normal -> CleanerPending")
-	}
-	if state.GetPhase() != PhaseCleanerPending {
-		t.Errorf("Expected phase CleanerPending, got %s", state.GetPhase())
-	}
-	t.Logf("✓ Transitioned Normal -> CleanerPending")
-
-	if !state.TransitionPhase(PhaseCleanerActive) {
-		t.Fatal("Failed to transition CleanerPending -> CleanerActive")
-	}
-	if state.GetPhase() != PhaseCleanerActive {
-		t.Errorf("Expected phase CleanerActive, got %s", state.GetPhase())
-	}
-	t.Logf("✓ Transitioned CleanerPending -> CleanerActive")
-
-	if !state.TransitionPhase(PhaseDecayWait) {
-		t.Fatal("Failed to transition CleanerActive -> DecayWait")
-	}
-	if state.GetPhase() != PhaseDecayWait {
-		t.Errorf("Expected phase DecayWait, got %s", state.GetPhase())
-	}
-	t.Logf("✓ Transitioned CleanerActive -> DecayWait")
-
-	// Reset to Normal phase for next test
-	state.TransitionPhase(PhaseDecayAnimation)
-	state.TransitionPhase(PhaseNormal)
-
-	// Test cleaner transition from GoldActive
-	state.TransitionPhase(PhaseGoldActive)
-	if !state.TransitionPhase(PhaseCleanerPending) {
-		t.Fatal("Failed to transition GoldActive -> CleanerPending")
-	}
-	if state.GetPhase() != PhaseCleanerPending {
-		t.Errorf("Expected phase CleanerPending, got %s", state.GetPhase())
-	}
-	t.Logf("✓ Transitioned GoldActive -> CleanerPending")
-
-	state.TransitionPhase(PhaseCleanerActive)
-	state.TransitionPhase(PhaseDecayWait)
-	state.TransitionPhase(PhaseDecayAnimation)
-	state.TransitionPhase(PhaseNormal)
-
-	// Test cleaner transition from GoldComplete
-	state.TransitionPhase(PhaseGoldActive)
-	state.TransitionPhase(PhaseGoldComplete)
-	if !state.TransitionPhase(PhaseCleanerPending) {
-		t.Fatal("Failed to transition GoldComplete -> CleanerPending")
-	}
-	if state.GetPhase() != PhaseCleanerPending {
-		t.Errorf("Expected phase CleanerPending, got %s", state.GetPhase())
-	}
-	t.Logf("✓ Transitioned GoldComplete -> CleanerPending")
-}
-
 // TestPhaseTransitionRace tests concurrent phase transitions (should not race with -race flag)
 func TestPhaseTransitionRace(t *testing.T) {
 	mockTime := NewMockTimeProvider(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
 	state := NewGameState(80, 24, 100, mockTime)
 
-	// Start in GoldActive to have multiple valid transitions
-	state.TransitionPhase(PhaseGoldActive)
-
-	// Try to transition to different phases concurrently
-	// Only one should succeed (the mutex should prevent races)
+	// Try to transition between phases concurrently
+	// The mutex should prevent races
 	done := make(chan bool, 2)
 
 	go func() {
-		state.TransitionPhase(PhaseGoldComplete)
+		state.TransitionPhase(PhaseGoldActive)
 		done <- true
 	}()
 
 	go func() {
-		state.TransitionPhase(PhaseCleanerPending)
+		state.TransitionPhase(PhaseGoldActive)
 		done <- true
 	}()
 
@@ -206,8 +138,8 @@ func TestPhaseTransitionRace(t *testing.T) {
 
 	// Check that we ended up in a valid phase
 	phase := state.GetPhase()
-	if phase != PhaseGoldComplete && phase != PhaseCleanerPending {
-		t.Errorf("Expected phase to be GoldComplete or CleanerPending, got %s", phase)
+	if phase != PhaseGoldActive && phase != PhaseNormal {
+		t.Errorf("Expected phase to be GoldActive or Normal, got %s", phase)
 	} else {
 		t.Logf("✓ Concurrent transitions handled correctly, ended in %s", phase)
 	}

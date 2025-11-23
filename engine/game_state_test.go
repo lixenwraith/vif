@@ -724,7 +724,6 @@ func TestAllSnapshotTypesConcurrent(t *testing.T) {
 					goldSnap := gs.ReadGoldState()
 					phaseSnap := gs.ReadPhaseState()
 					decaySnap := gs.ReadDecayState()
-					cleanerSnap := gs.ReadCleanerState()
 					heat, score := gs.ReadHeatAndScore()
 
 					// Verify snapshots are internally consistent

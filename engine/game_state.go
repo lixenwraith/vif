@@ -99,13 +99,6 @@ type GameState struct {
 	DecayAnimating bool      // Whether decay animation is running
 	DecayStartTime time.Time // When decay animation started
 
-	// Cleaner State
-	// Manages cleaner sweep animation that removes red sequences
-	// Cleaners run in parallel with other phases (not blocking)
-	CleanerPending   bool      // Whether cleaners should be triggered on next clock tick
-	CleanerActive    bool      // Whether cleaners are currently running
-	CleanerStartTime time.Time // When cleaners were activated
-
 	// Game Lifecycle State
 	FirstUpdateTime      time.Time // When the game first started (first Update call)
 	InitialSpawnComplete bool      // Whether initial gold spawn has been attempted
@@ -202,11 +195,6 @@ func NewGameState(gameWidth, gameHeight, screenWidth int, timeProvider TimeProvi
 	// Initialize Decay animation state
 	gs.DecayAnimating = false
 	gs.DecayStartTime = time.Time{}
-
-	// Initialize Cleaner state
-	gs.CleanerPending = false
-	gs.CleanerActive = false
-	gs.CleanerStartTime = time.Time{}
 
 	// Initialize Game Lifecycle state
 	gs.FirstUpdateTime = time.Time{} // Will be set on first Update
@@ -658,13 +646,11 @@ func (gs *GameState) GetPhase() GamePhase {
 // CanTransition checks if a phase transition is valid
 func (gs *GameState) CanTransition(from, to GamePhase) bool {
 	validTransitions := map[GamePhase][]GamePhase{
-		PhaseNormal:         {PhaseGoldActive, PhaseCleanerPending},
-		PhaseGoldActive:     {PhaseGoldComplete, PhaseCleanerPending},
-		PhaseGoldComplete:   {PhaseDecayWait, PhaseCleanerPending},
+		PhaseNormal:         {PhaseGoldActive},
+		PhaseGoldActive:     {PhaseGoldComplete},
+		PhaseGoldComplete:   {PhaseDecayWait},
 		PhaseDecayWait:      {PhaseDecayAnimation},
 		PhaseDecayAnimation: {PhaseNormal},
-		PhaseCleanerPending: {PhaseCleanerActive},
-		PhaseCleanerActive:  {PhaseDecayWait},
 	}
 
 	allowed := validTransitions[from]
@@ -1020,104 +1006,6 @@ func (gs *GameState) ReadDecayState() DecaySnapshot {
 	}
 }
 
-// ===== CLEANER STATE ACCESSORS (mutex protected) =====
-
-// RequestCleaners requests that cleaners be triggered on the next clock tick
-// Called by ScoreSystem when gold sequence is completed at max heat
-// Transitions to PhaseCleanerPending from PhaseGoldActive, PhaseNormal or PhaseGoldComplete
-// Also deactivates gold sequence if it was active
-func (gs *GameState) RequestCleaners() bool {
-	gs.mu.Lock()
-	defer gs.mu.Unlock()
-
-	// Validate phase transition
-	if !gs.CanTransition(gs.CurrentPhase, PhaseCleanerPending) {
-		return false
-	}
-
-	// Deactivate gold sequence if it was active
-	if gs.GoldActive {
-		gs.GoldActive = false
-		gs.GoldStartTime = time.Time{}
-		gs.GoldTimeoutTime = time.Time{}
-	}
-
-	gs.CleanerPending = true
-	gs.CurrentPhase = PhaseCleanerPending
-	gs.PhaseStartTime = gs.TimeProvider.Now()
-	return true
-}
-
-// GetCleanerPending returns whether cleaners are pending activation
-func (gs *GameState) GetCleanerPending() bool {
-	gs.mu.RLock()
-	defer gs.mu.RUnlock()
-	return gs.CleanerPending
-}
-
-// ActivateCleaners atomically activates cleaners and clears pending flag
-// Called by ClockScheduler when processing pending cleaner request
-// Transitions to PhaseCleanerActive from PhaseCleanerPending
-func (gs *GameState) ActivateCleaners() bool {
-	gs.mu.Lock()
-	defer gs.mu.Unlock()
-
-	// Validate phase transition
-	if !gs.CanTransition(gs.CurrentPhase, PhaseCleanerActive) {
-		return false
-	}
-
-	now := gs.TimeProvider.Now()
-	gs.CleanerPending = false
-	gs.CleanerActive = true
-	gs.CleanerStartTime = now
-	gs.CurrentPhase = PhaseCleanerActive
-	gs.PhaseStartTime = now
-	return true
-}
-
-// GetCleanerActive returns whether cleaners are currently active
-func (gs *GameState) GetCleanerActive() bool {
-	gs.mu.RLock()
-	defer gs.mu.RUnlock()
-	return gs.CleanerActive
-}
-
-// DeactivateCleaners atomically deactivates cleaners
-// Called by ClockScheduler when cleaner animation completes
-// Transitions to PhaseNormal from PhaseCleanerActive
-func (gs *GameState) DeactivateCleaners() bool {
-	gs.mu.Lock()
-	defer gs.mu.Unlock()
-
-	// Validate phase transition
-	if !gs.CanTransition(gs.CurrentPhase, PhaseNormal) {
-		return false
-	}
-
-	gs.CleanerActive = false
-	gs.CleanerPending = false
-	gs.CleanerStartTime = time.Time{}
-	gs.CurrentPhase = PhaseDecayWait
-	gs.PhaseStartTime = gs.TimeProvider.Now()
-	return true
-}
-
-// GetCleanerStartTime returns when cleaners were activated
-func (gs *GameState) GetCleanerStartTime() time.Time {
-	gs.mu.RLock()
-	defer gs.mu.RUnlock()
-	return gs.CleanerStartTime
-}
-
-// CleanerSnapshot provides a consistent view of cleaner state
-type CleanerSnapshot struct {
-	Pending   bool
-	Active    bool
-	StartTime time.Time
-	Elapsed   time.Duration
-}
-
 // BoostSnapshot provides consistent view of boost state
 type BoostSnapshot struct {
 	Enabled   bool
@@ -1140,24 +1028,6 @@ type ColorCountSnapshot struct {
 	GreenBright int64
 	GreenNormal int64
 	GreenDark   int64
-}
-
-// ReadCleanerState returns a consistent snapshot of the cleaner state
-func (gs *GameState) ReadCleanerState() CleanerSnapshot {
-	gs.mu.RLock()
-	defer gs.mu.RUnlock()
-
-	elapsed := time.Duration(0)
-	if gs.CleanerActive {
-		elapsed = gs.TimeProvider.Now().Sub(gs.CleanerStartTime)
-	}
-
-	return CleanerSnapshot{
-		Pending:   gs.CleanerPending,
-		Active:    gs.CleanerActive,
-		StartTime: gs.CleanerStartTime,
-		Elapsed:   elapsed,
-	}
 }
 
 // ===== DRAIN ENTITY ACCESSORS (atomic) =====

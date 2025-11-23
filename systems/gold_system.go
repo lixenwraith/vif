@@ -205,15 +205,6 @@ func (s *GoldSystem) removeGold(world *engine.World, sequenceID int) {
 		}
 	}
 
-	// Check current phase - if cleaners are pending, don't deactivate gold
-	// (cleaners were requested while gold was active, so we're already in PhaseCleanerPending)
-	phaseSnapshot := s.ctx.State.ReadPhaseState()
-	if phaseSnapshot.Phase == engine.PhaseCleanerPending || phaseSnapshot.Phase == engine.PhaseCleanerActive {
-		// Cleaners are pending/active - gold entities removed, but stay in cleaner phase
-		// Don't call DeactivateGoldSequence as it would try to transition to PhaseGoldComplete
-		return
-	}
-
 	// Deactivate gold sequence in GameState (transitions to PhaseGoldComplete)
 	if !s.ctx.State.DeactivateGoldSequence() {
 		// Phase transition failed - this shouldn't happen but log for debugging

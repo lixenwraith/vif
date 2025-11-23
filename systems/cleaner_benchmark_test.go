@@ -108,8 +108,10 @@ func BenchmarkCleanerCollision(b *testing.B) {
 		}
 	}
 
-	// Activate cleaners
-	cleanerSystem.ActivateCleaners(world)
+	// Activate cleaners via event
+	ctx.PushEvent(engine.EventCleanerRequest, nil)
+	// Process the event to activate cleaners
+	cleanerSystem.Update(world, 0)
 
 	b.ResetTimer()
 

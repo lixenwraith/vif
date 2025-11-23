@@ -414,13 +414,6 @@ func (s *DrainSystem) handleGoldSequenceCollision(world *engine.World, sequenceI
 		}
 	}
 
-	// Check current phase - if cleaners are pending, don't deactivate gold
-	phaseSnapshot := s.ctx.State.ReadPhaseState()
-	if phaseSnapshot.Phase == engine.PhaseCleanerPending || phaseSnapshot.Phase == engine.PhaseCleanerActive {
-		// Cleaners are pending/active - gold entities removed, but stay in cleaner phase
-		return
-	}
-
 	// Trigger phase transition to PhaseGoldComplete
 	s.ctx.State.DeactivateGoldSequence()
 }
