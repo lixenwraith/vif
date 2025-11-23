@@ -8,6 +8,7 @@ import (
 
 	"github.com/gopxl/beep"
 	"github.com/gopxl/beep/speaker"
+	"github.com/lixenwraith/vi-fighter/constants"
 )
 
 // AudioEngine manages all game audio with thread-safe playback
@@ -152,7 +153,7 @@ func (ae *AudioEngine) SendState(cmd AudioCommand) bool {
 func (ae *AudioEngine) processLoop() {
 	defer ae.wg.Done()
 
-	ticker := time.NewTicker(10 * time.Millisecond)
+	ticker := time.NewTicker(constants.AudioMonitorInterval)
 	defer ticker.Stop()
 
 	for {
@@ -268,7 +269,7 @@ func (ae *AudioEngine) StopCurrentSound() {
 // DrainQueues empties both command queues (thread-safe)
 func (ae *AudioEngine) DrainQueues() {
 	// Drain with timeout to prevent infinite loop
-	timeout := time.NewTimer(100 * time.Millisecond)
+	timeout := time.NewTimer(constants.AudioDrainTimeout)
 	defer timeout.Stop()
 
 	for {

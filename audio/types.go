@@ -1,6 +1,10 @@
 package audio
 
-import "time"
+import (
+	"time"
+
+	"github.com/lixenwraith/vi-fighter/constants"
+)
 
 // SoundType represents different sound effects in the game
 type SoundType int
@@ -40,7 +44,7 @@ func DefaultAudioConfig() *AudioConfig {
 			SoundWhoosh: 0.6,
 			SoundCoin:   0.5,
 		},
-		MinSoundGap: 50 * time.Millisecond, // One clock tick gap
+		MinSoundGap: constants.MinSoundGap, // One clock tick gap
 		SampleRate:  44100,
 	}
 }

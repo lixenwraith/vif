@@ -47,10 +47,8 @@ func (s *GoldSystem) Update(world *engine.World, dt time.Duration) {
 	phaseSnapshot := s.ctx.State.ReadPhaseState()
 	initialSpawnComplete := s.ctx.State.GetInitialSpawnComplete()
 
-	// Spawn gold sequence at game start with delay (150ms)
-	// TODO: make constant
-	const initialSpawnDelay = 150 * time.Millisecond
-	if !goldSnapshot.Active && !initialSpawnComplete && now.Sub(firstUpdateTime) >= initialSpawnDelay {
+	// Spawn gold sequence at game start with delay
+	if !goldSnapshot.Active && !initialSpawnComplete && now.Sub(firstUpdateTime) >= constants.GoldInitialSpawnDelay {
 		// Spawn initial gold sequence after delay
 		// If spawn fails, system will remain in PhaseNormal and can retry on next update
 		if s.spawnGold(world) {

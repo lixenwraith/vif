@@ -7,6 +7,7 @@ import (
 
 	"github.com/gopxl/beep"
 	"github.com/gopxl/beep/effects"
+	"github.com/lixenwraith/vi-fighter/constants"
 )
 
 // WaveType defines oscillator wave shapes
@@ -155,10 +156,9 @@ func newVolume(s beep.Streamer, vol float64) beep.Streamer {
 // CreateErrorSound generates a short harsh buzz for typing errors
 func CreateErrorSound(cfg *AudioConfig) beep.Streamer {
 	rate := beep.SampleRate(cfg.SampleRate)
-	dur := 80 * time.Millisecond
 
-	osc := NewOscillator(100.0, dur, WaveSaw, rate)
-	shaped := NewEnvelope(osc, dur, 5*time.Millisecond, 20*time.Millisecond, rate)
+	osc := NewOscillator(100.0, constants.ErrorSoundDuration, WaveSaw, rate)
+	shaped := NewEnvelope(osc, constants.ErrorSoundDuration, constants.ErrorSoundAttack, constants.ErrorSoundRelease, rate)
 
 	vol := cfg.EffectVolumes[SoundError] * cfg.MasterVolume
 	return newVolume(shaped, vol)
@@ -167,15 +167,14 @@ func CreateErrorSound(cfg *AudioConfig) beep.Streamer {
 // CreateBellSound generates a short ding for nugget collection
 func CreateBellSound(cfg *AudioConfig) beep.Streamer {
 	rate := beep.SampleRate(cfg.SampleRate)
-	dur := 600 * time.Millisecond
 
 	// Fundamental (A5)
-	fund := NewOscillator(880.0, dur, WaveSine, rate)
-	fundShaped := NewEnvelope(fund, dur, 5*time.Millisecond, 550*time.Millisecond, rate)
+	fund := NewOscillator(880.0, constants.BellSoundDuration, WaveSine, rate)
+	fundShaped := NewEnvelope(fund, constants.BellSoundDuration, constants.BellSoundAttack, constants.BellSoundFundamentalRelease, rate)
 
 	// Harmonic (Octave up)
-	over := NewOscillator(1760.0, dur, WaveSine, rate)
-	overShaped := NewEnvelope(over, dur, 5*time.Millisecond, 200*time.Millisecond, rate)
+	over := NewOscillator(1760.0, constants.BellSoundDuration, WaveSine, rate)
+	overShaped := NewEnvelope(over, constants.BellSoundDuration, constants.BellSoundAttack, constants.BellSoundOvertoneRelease, rate)
 
 	// Mix fundamentals with harmonics
 	mixed := beep.Mix(
@@ -190,10 +189,9 @@ func CreateBellSound(cfg *AudioConfig) beep.Streamer {
 // CreateWhooshSound generates a quick zip noise for cleaner activation
 func CreateWhooshSound(cfg *AudioConfig) beep.Streamer {
 	rate := beep.SampleRate(cfg.SampleRate)
-	dur := 300 * time.Millisecond
 
-	noise := NewOscillator(0, dur, WaveNoise, rate)
-	shaped := NewEnvelope(noise, dur, 150*time.Millisecond, 150*time.Millisecond, rate)
+	noise := NewOscillator(0, constants.WhooshSoundDuration, WaveNoise, rate)
+	shaped := NewEnvelope(noise, constants.WhooshSoundDuration, constants.WhooshSoundAttack, constants.WhooshSoundRelease, rate)
 
 	vol := cfg.EffectVolumes[SoundWhoosh] * cfg.MasterVolume
 	return newVolume(shaped, vol)
@@ -204,14 +202,12 @@ func CreateCoinSound(cfg *AudioConfig) beep.Streamer {
 	rate := beep.SampleRate(cfg.SampleRate)
 
 	// First note (B5)
-	note1Dur := 80 * time.Millisecond
-	n1 := NewOscillator(987.77, note1Dur, WaveSquare, rate)
-	n1Shaped := NewEnvelope(n1, note1Dur, 5*time.Millisecond, 40*time.Millisecond, rate)
+	n1 := NewOscillator(987.77, constants.CoinSoundNote1Duration, WaveSquare, rate)
+	n1Shaped := NewEnvelope(n1, constants.CoinSoundNote1Duration, constants.CoinSoundAttack, constants.CoinSoundNote1Release, rate)
 
 	// Second note (E6)
-	note2Dur := 280 * time.Millisecond
-	n2 := NewOscillator(1318.51, note2Dur, WaveSquare, rate)
-	n2Shaped := NewEnvelope(n2, note2Dur, 5*time.Millisecond, 200*time.Millisecond, rate)
+	n2 := NewOscillator(1318.51, constants.CoinSoundNote2Duration, WaveSquare, rate)
+	n2Shaped := NewEnvelope(n2, constants.CoinSoundNote2Duration, constants.CoinSoundAttack, constants.CoinSoundNote2Release, rate)
 
 	sequence := beep.Seq(n1Shaped, n2Shaped)
 

@@ -4,6 +4,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/lixenwraith/vi-fighter/constants"
 )
 
 // GameState centralizes game state with clear ownership boundaries
@@ -175,7 +177,7 @@ func NewGameState(gameWidth, gameHeight, screenWidth int, timeProvider TimeProvi
 	// Initialize clock-tick state
 	now := timeProvider.Now()
 	gs.SpawnLastTime = now
-	gs.SpawnNextTime = now.Add(2 * time.Second) // Initial spawn delay
+	gs.SpawnNextTime = now.Add(constants.InitialSpawnDelay) // Initial spawn delay
 	gs.SpawnRateMultiplier = 1.0
 	gs.SpawnEnabled = true
 	gs.EntityCount = 0

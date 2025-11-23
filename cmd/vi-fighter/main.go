@@ -11,6 +11,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/audio"
+	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/modes"
 	"github.com/lixenwraith/vi-fighter/render"
@@ -21,12 +22,6 @@ const (
 	logDir      = "logs"
 	logFileName = "vi-fighter.log"
 	maxLogSize  = 10 * 1024 * 1024 // 10MB
-)
-
-// Fixed timesteps for game updates
-const (
-	frameUpdateDT = 16 * time.Millisecond // ~60 FPS (frame rate for rendering)
-	gameUpdateDT  = 50 * time.Millisecond // game logic tick
 )
 
 // setupLogging configures log output based on debug flag
@@ -184,7 +179,7 @@ func main() {
 
 	// Create clock scheduler with frame synchronization
 	// Clock scheduler handles systems phase transitions and triggers
-	clockScheduler, gameUpdateDone := engine.NewClockScheduler(ctx, gameUpdateDT, frameReady)
+	clockScheduler, gameUpdateDone := engine.NewClockScheduler(ctx, constants.GameUpdateInterval, frameReady)
 
 	// Signal initial frame ready
 	frameReady <- struct{}{}
@@ -194,7 +189,7 @@ func main() {
 	defer clockScheduler.Stop()
 
 	// Main game loop
-	frameTicker := time.NewTicker(frameUpdateDT)
+	frameTicker := time.NewTicker(constants.FrameUpdateInterval)
 	defer frameTicker.Stop()
 
 	eventChan := make(chan tcell.Event, 100)
