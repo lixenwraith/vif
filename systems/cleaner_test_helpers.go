@@ -11,16 +11,7 @@ import (
 // Helper functions for cleaner system tests
 
 func createCleanerTestContext() *engine.GameContext {
-	timeProvider := engine.NewMonotonicTimeProvider()
-	world := engine.NewWorld()
-
-	return &engine.GameContext{
-		World:        world,
-		TimeProvider: timeProvider,
-		State:        engine.NewGameState(80, 24, 100, timeProvider), // Initialize State
-		GameWidth:    80,
-		GameHeight:   24,
-	}
+	return engine.NewTestGameContext(80, 24, 100)
 }
 
 func createRedCharacterAt(world *engine.World, x, y int) engine.Entity {
