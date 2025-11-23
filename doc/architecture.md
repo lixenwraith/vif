@@ -1164,7 +1164,7 @@ The motion tests have been reorganized from a single large file into focused tes
 - **delete_operator_test.go**: Delete operation tests
 
 #### Cleaner System Tests
-The cleaner system tests have been reorganized into focused files:
+The cleaner system tests have been reorganized into focused files after a major refactoring that simplified the system by ~2500 lines of code. The new pure ECS implementation eliminates complex state tracking, resulting in cleaner, more maintainable tests:
 
 **Located in `systems/`:**
 - **cleaner_activation_test.go**: Cleaner trigger conditions and activation logic
@@ -1217,6 +1217,60 @@ The spawn system tests have been reorganized into focused files:
   - TestGroupIntoBlocks: Logical code block grouping
   - TestGetIndentLevel: Indentation calculation
   - TestBlockSpawning: Complete block spawning
+
+#### Nugget System Tests
+The nugget system tests are organized into focused files:
+
+**Located in `systems/`:**
+- **nugget_edge_cases_test.go**: Nugget lifecycle and edge cases
+  - TestNuggetSingleInvariant: Verifies only one nugget active at a time
+  - TestNuggetRapidCollectionAndRespawn: Tests rapid collection/respawn cycles
+  - TestNuggetClearWithWrongEntityID: Entity ID validation for clearing
+  - TestNuggetDoubleDestruction: Graceful handling of double destruction
+  - TestNuggetClearAfterNewSpawn: Stale entity reference handling
+  - TestNuggetVerificationClearsStaleReference: Automatic stale reference cleanup
+  - TestNuggetSpawnPositionExclusionZone: Cursor exclusion zone enforcement
+  - TestNuggetGetSystemState: Debug state string validation
+  - TestNuggetConcurrentClearAttempts: Atomic CAS operation validation
+- **nugget_decay_test.go**: Decay system interaction with nuggets
+  - TestDecayDestroysNugget: Falling decay entities destroy nuggets
+  - TestDecayDoesNotDestroyNuggetAtDifferentPosition: Position-specific destruction
+  - TestDecayDestroyMultipleNuggetsInDifferentColumns: Multi-column destruction
+  - TestDecayDestroyNuggetAndSequence: Mixed entity type processing
+  - TestDecayNuggetRespawnAfterDestruction: Respawn after decay destruction
+  - TestDecayDoesNotProcessSameNuggetTwice: Idempotent destruction
+  - **Frame Rate Matching**: Uses 16ms time steps (matching real game) to prevent row skipping at high speeds (max 15 rows/s)
+- **nugget_jump_test.go**: Tab key jumping to nuggets
+  - TestNuggetJumpWithSufficientScore: Jump mechanics with score >= 10
+  - TestNuggetJumpWithInsufficientScore: Jump prevention with score < 10
+  - TestNuggetJumpWithNoActiveNugget: Graceful handling when no nugget exists
+  - TestNuggetJumpUpdatesPosition: Cursor position update verification
+  - TestNuggetJumpMultipleTimes: Sequential jump operations
+  - TestNuggetJumpWithNuggetAtEdge: Edge position handling
+  - TestJumpToNuggetMethodReturnsCorrectPosition: Method contract validation
+  - TestJumpToNuggetWithMissingComponent: Graceful degradation
+  - TestJumpToNuggetAtomicCursorUpdate: Atomic state update verification
+  - TestJumpToNuggetEntityStillExists: Non-destructive jump validation
+- **nugget_typing_test.go**: Typing on nuggets
+  - TestNuggetTypingIncreasesHeat: Heat increase by 10% of max
+  - TestNuggetTypingDestroysAndReturnsSpawn: Complete collection/respawn cycle
+  - TestNuggetTypingNoScoreEffect: Score independence verification
+  - TestNuggetTypingNoErrorEffect: No error state on collection
+  - TestNuggetTypingMultipleCollections: Heat accumulation validation
+  - TestNuggetTypingWithSmallScreen: Minimum heat increase of 1
+  - TestNuggetAlwaysIncreasesVisualBlocks: Visual feedback guarantee
+
+**Located in `render/`:**
+- **nugget_cursor_test.go**: Nugget rendering and cursor interaction
+  - TestNuggetDarkensUnderCursor: Contrast enhancement when cursor on nugget
+  - TestNormalCharacterStaysBlackUnderCursor: Normal character behavior unchanged
+  - TestCursorWithoutCharacterHasNoContrast: Empty cursor rendering
+  - TestNuggetContrastInInsertMode: Mode-independent contrast behavior
+  - TestNuggetOffCursorHasNormalColor: Standard rendering when not under cursor
+  - TestCursorErrorOverridesNuggetContrast: Error cursor precedence
+  - TestNuggetComponentDetectionLogic: Component type detection
+  - TestNuggetLayeringCursorOnTop: Render layer ordering
+  - TestMultipleNuggetInstances: Multi-nugget rendering validation
 
 ### Integration Tests
 Located in `systems/integration_test.go`:

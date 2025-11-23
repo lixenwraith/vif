@@ -48,10 +48,9 @@ func TestDecayDestroysNugget(t *testing.T) {
 	ctx.State.StartDecayAnimation()
 	decaySystem.TriggerDecayAnimation(world)
 
-	// Simulate animation frame-by-frame with small time increments
-	// This ensures the falling entity in column 10 will pass through row 5
-	// regardless of its random speed
-	dt := 0.1      // 100ms per frame
+	// Simulate animation frame-by-frame matching real game frame rate (16ms)
+	// This prevents row skipping at high speeds (max 15 rows/s * 0.016s = 0.24 rows per frame)
+	dt := 0.016    // 16ms per frame (real game frame rate)
 	maxTime := 5.0 // Maximum time to wait (should be way more than enough)
 	for elapsed := dt; elapsed < maxTime; elapsed += dt {
 		decaySystem.updateFallingEntities(world, elapsed)
@@ -114,8 +113,8 @@ func TestDecayDoesNotDestroyNuggetAtDifferentPosition(t *testing.T) {
 	decaySystem.TriggerDecayAnimation(world)
 
 	// Simulate only a short time so falling entity is still above the nugget (before row 10)
-	// If elapsed=0.5s and speed=5.0 (min), then YPosition = 2.5 (row 2)
-	elapsed := 0.5
+	// At 16ms frame rate, after ~30 frames (0.48s) at min speed (5.0 rows/s): YPosition = 2.4 (row 2)
+	elapsed := 0.48
 
 	// Update falling entities
 	decaySystem.updateFallingEntities(world, elapsed)
@@ -177,8 +176,8 @@ func TestDecayDestroyMultipleNuggetsInDifferentColumns(t *testing.T) {
 	ctx.State.StartDecayAnimation()
 	decaySystem.TriggerDecayAnimation(world)
 
-	// Simulate animation frame-by-frame with small time increments
-	dt := 0.1
+	// Simulate animation frame-by-frame matching real game frame rate (16ms)
+	dt := 0.016
 	maxTime := 5.0
 	for elapsed := dt; elapsed < maxTime; elapsed += dt {
 		decaySystem.updateFallingEntities(world, elapsed)
@@ -259,8 +258,8 @@ func TestDecayDestroyNuggetAndSequence(t *testing.T) {
 	ctx.State.StartDecayAnimation()
 	decaySystem.TriggerDecayAnimation(world)
 
-	// Simulate animation frame-by-frame with small time increments
-	dt := 0.1
+	// Simulate animation frame-by-frame matching real game frame rate (16ms)
+	dt := 0.016
 	maxTime := 5.0
 	for elapsed := dt; elapsed < maxTime; elapsed += dt {
 		decaySystem.updateFallingEntities(world, elapsed)
@@ -349,8 +348,8 @@ func TestDecayNuggetRespawnAfterDestruction(t *testing.T) {
 	ctx.State.StartDecayAnimation()
 	decaySystem.TriggerDecayAnimation(world)
 
-	// Simulate animation frame-by-frame with small time increments
-	dt := 0.1
+	// Simulate animation frame-by-frame matching real game frame rate (16ms)
+	dt := 0.016
 	maxTime := 5.0
 	for elapsed := dt; elapsed < maxTime; elapsed += dt {
 		decaySystem.updateFallingEntities(world, elapsed)
@@ -428,8 +427,8 @@ func TestDecayDoesNotProcessSameNuggetTwice(t *testing.T) {
 	ctx.State.StartDecayAnimation()
 	decaySystem.TriggerDecayAnimation(world)
 
-	// Simulate animation frame-by-frame with small time increments
-	dt := 0.1
+	// Simulate animation frame-by-frame matching real game frame rate (16ms)
+	dt := 0.016
 	maxTime := 5.0
 	for elapsed := dt; elapsed < maxTime; elapsed += dt {
 		decaySystem.updateFallingEntities(world, elapsed)
