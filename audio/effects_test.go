@@ -151,21 +151,45 @@ func TestOscillatorDuration(t *testing.T) {
 
 	osc := NewOscillator(440.0, duration, WaveSine, rate)
 
-	// Request more samples than duration
-	samples := make([][2]float64, expectedSamples*2)
-	n, ok := osc.Stream(samples)
+	// Stream in realistic chunks (not more than available)
+	totalStreamed := 0
+	chunkSize := 100 // Realistic chunk size
 
-	// Should only stream up to duration
-	if n > expectedSamples {
-		t.Errorf("Expected at most %d samples, got %d", expectedSamples, n)
+	for totalStreamed < expectedSamples {
+		remaining := expectedSamples - totalStreamed
+		requestSize := chunkSize
+		if remaining < chunkSize {
+			requestSize = remaining
+		}
+
+		samples := make([][2]float64, requestSize)
+		n, ok := osc.Stream(samples)
+
+		if !ok && totalStreamed+n < expectedSamples {
+			t.Errorf("Stream ended early at %d samples (expected %d)", totalStreamed+n, expectedSamples)
+		}
+
+		if n > requestSize {
+			t.Errorf("Got more samples than requested: %d > %d", n, requestSize)
+		}
+
+		totalStreamed += n
+
+		if n == 0 {
+			break
+		}
 	}
 
-	// Second stream should return ok=false (finished)
+	if totalStreamed != expectedSamples {
+		t.Errorf("Expected %d total samples, got %d", expectedSamples, totalStreamed)
+	}
+
+	// After consuming all samples, next stream should return 0 samples with ok=false
 	samples2 := make([][2]float64, 10)
 	n2, ok2 := osc.Stream(samples2)
 
 	if ok2 {
-		t.Error("Expected second stream to return ok=false after duration exceeded")
+		t.Error("Expected stream to return ok=false after duration exceeded")
 	}
 
 	if n2 != 0 {

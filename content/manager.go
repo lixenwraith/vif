@@ -3,8 +3,6 @@ package content
 import (
 	"bufio"
 	"fmt"
-	"io"
-	"log"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -26,55 +24,13 @@ const (
 var (
 	// CommentPrefixes defines the prefixes that identify comment lines
 	CommentPrefixes = []string{"//", "#"}
-
-	// testMode indicates if we're running under go test
-	testMode bool
 )
-
-// init detects test mode and suppresses verbose logging during tests
-func init() {
-	// Check if running under go test by examining the executable name
-	// Test binaries have names ending in .test or containing ".test" in the path
-	testMode = isTestMode()
-
-	if testMode {
-		// Suppress all logging in test mode to reduce output clutter
-		// Critical errors will still be visible through test failures
-		log.SetOutput(io.Discard)
-	}
-}
-
-// isTestMode detects if we're running under go test
-func isTestMode() bool {
-	// Check environment variable first (for explicit control)
-	if os.Getenv("GO_TEST_MODE") == "1" {
-		return true
-	}
-
-	// Check if the executable name indicates test mode
-	if len(os.Args) > 0 {
-		// Test binaries typically have ".test" in their name
-		if strings.Contains(os.Args[0], ".test") {
-			return true
-		}
-	}
-
-	// Check if any test flags are present
-	for _, arg := range os.Args {
-		if strings.HasPrefix(arg, "-test.") {
-			return true
-		}
-	}
-
-	return false
-}
 
 // findProjectRoot finds the project root by looking for go.mod
 // Returns the directory containing go.mod, or current directory if not found
 func findProjectRoot() string {
 	dir, err := os.Getwd()
 	if err != nil {
-		log.Printf("Warning: could not get current directory: %v", err)
 		return "."
 	}
 
@@ -88,7 +44,6 @@ func findProjectRoot() string {
 		parent := filepath.Dir(dir)
 		// If we've reached the root, stop
 		if parent == dir {
-			log.Printf("Warning: could not find go.mod, using current directory")
 			return "."
 		}
 		dir = parent
@@ -112,7 +67,6 @@ func (cb *circuitBreaker) recordFailure(err error) {
 
 	if cb.failureCount >= CircuitBreakerThreshold {
 		cb.isOpen = true
-		log.Printf("Circuit breaker OPEN after %d failures. Using default content only.", cb.failureCount)
 	}
 }
 
@@ -163,7 +117,6 @@ func NewContentManager() *ContentManager {
 func (cm *ContentManager) safeOperation(operation func() ([]string, error), operationName string) (lines []string, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("PANIC in %s: %v - returning default content", operationName, r)
 			lines = cm.GetDefaultContent()
 			err = fmt.Errorf("panic in %s: %v", operationName, r)
 			cm.breaker.recordFailure(err)
@@ -247,7 +200,7 @@ func (cm *ContentManager) validateFileEncoding(filePath string) error {
 	// Wrap in panic recovery
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("PANIC in validateFileEncoding for %s: %v", filePath, r)
+			// Silent recovery
 		}
 	}()
 
@@ -269,9 +222,7 @@ func (cm *ContentManager) validateFileEncoding(filePath string) error {
 		}
 
 		// Check for control characters (but don't fail, we'll sanitize instead)
-		if cm.hasControlCharacters(line) {
-			log.Printf("Warning: control characters found in %s at line %d (will be sanitized)", filePath, lineNum)
-		}
+		// Silent - control characters will be sanitized
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -288,13 +239,12 @@ func (cm *ContentManager) DiscoverContentFiles() error {
 	// Wrap in panic recovery
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("PANIC in DiscoverContentFiles: %v - continuing with no files", r)
+			// Silent recovery - continuing with no files
 		}
 	}()
 
 	// Check if assets directory exists
 	if _, err := os.Stat(cm.assetsDir); os.IsNotExist(err) {
-		log.Printf("Assets directory '%s' does not exist, no content files discovered", cm.assetsDir)
 		return nil // Not an error, just no files to discover
 	}
 
@@ -318,7 +268,6 @@ func (cm *ContentManager) DiscoverContentFiles() error {
 
 		// Skip hidden files (starting with .)
 		if strings.HasPrefix(fileName, ".") {
-			log.Printf("Skipping hidden file: %s", fileName)
 			continue
 		}
 
@@ -326,15 +275,7 @@ func (cm *ContentManager) DiscoverContentFiles() error {
 		if strings.HasSuffix(fileName, ".txt") {
 			filePath := filepath.Join(cm.assetsDir, fileName)
 			cm.contentFiles = append(cm.contentFiles, filePath)
-			log.Printf("Discovered content file: %s", filePath)
 		}
-	}
-
-	// Log summary
-	if len(cm.contentFiles) == 0 {
-		log.Printf("No .txt files found in %s", cm.assetsDir)
-	} else {
-		log.Printf("Discovered %d content file(s)", len(cm.contentFiles))
 	}
 
 	return nil
@@ -346,7 +287,7 @@ func (cm *ContentManager) PreValidateAllContent() error {
 	// Wrap in panic recovery
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("PANIC in PreValidateAllContent: %v - cache may be incomplete", r)
+			// Silent recovery - cache may be incomplete
 		}
 	}()
 
@@ -356,29 +297,23 @@ func (cm *ContentManager) PreValidateAllContent() error {
 	cm.validatedCache = []validatedContent{}
 
 	if len(cm.contentFiles) == 0 {
-		log.Printf("No content files to pre-validate")
 		return nil
 	}
-
-	log.Printf("Pre-validating %d content files...", len(cm.contentFiles))
 
 	for _, filePath := range cm.contentFiles {
 		// Validate file encoding
 		if err := cm.validateFileEncoding(filePath); err != nil {
-			log.Printf("Skipping file %s: %v", filePath, err)
 			continue
 		}
 
 		// Try to load and process the entire file
 		lines, err := cm.loadAndProcessFile(filePath)
 		if err != nil {
-			log.Printf("Skipping file %s: %v", filePath, err)
 			continue
 		}
 
 		// Validate the processed content
 		if !cm.ValidateProcessedContent(lines) {
-			log.Printf("Skipping file %s: content validation failed", filePath)
 			continue
 		}
 
@@ -387,11 +322,7 @@ func (cm *ContentManager) PreValidateAllContent() error {
 			lines:    lines,
 			filePath: filePath,
 		})
-
-		log.Printf("Pre-validated and cached: %s (%d lines)", filePath, len(lines))
 	}
-
-	log.Printf("Pre-validation complete: %d/%d files cached", len(cm.validatedCache), len(cm.contentFiles))
 
 	return nil
 }
@@ -401,7 +332,7 @@ func (cm *ContentManager) loadAndProcessFile(filePath string) ([]string, error) 
 	// Wrap in panic recovery
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("PANIC in loadAndProcessFile for %s: %v", filePath, r)
+			// Silent recovery
 		}
 	}()
 
@@ -420,7 +351,6 @@ func (cm *ContentManager) loadAndProcessFile(filePath string) ([]string, error) 
 
 		// Check for maximum block size to prevent memory issues
 		if lineCount > MaxBlockSize {
-			log.Printf("Warning: file %s exceeds MaxBlockSize (%d lines), truncating", filePath, MaxBlockSize)
 			break
 		}
 
@@ -461,7 +391,7 @@ func (cm *ContentManager) LoadContentFile(path string) ([]byte, error) {
 	// Wrap in panic recovery
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("PANIC in LoadContentFile for %s: %v", path, r)
+			// Silent recovery
 		}
 	}()
 
@@ -472,7 +402,6 @@ func (cm *ContentManager) LoadContentFile(path string) ([]byte, error) {
 
 	// Validate file encoding first
 	if err := cm.validateFileEncoding(path); err != nil {
-		log.Printf("File encoding validation failed for %s: %v", path, err)
 		return nil, err
 	}
 
@@ -482,7 +411,6 @@ func (cm *ContentManager) LoadContentFile(path string) ([]byte, error) {
 		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
 
-	log.Printf("LoadContentFile loaded: %s (%d bytes)", path, len(data))
 	return data, nil
 }
 
@@ -510,7 +438,7 @@ func (cm *ContentManager) ProcessContentBlock(lines []string) []string {
 	// Wrap in panic recovery
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("PANIC in ProcessContentBlock: %v - returning empty slice", r)
+			// Silent recovery - returning empty slice
 		}
 	}()
 
@@ -544,15 +472,13 @@ func (cm *ContentManager) ProcessContentBlock(lines []string) []string {
 func (cm *ContentManager) ValidateProcessedContent(lines []string) bool {
 	// Check if we have enough lines
 	if len(lines) < MinProcessedLines {
-		log.Printf("Content validation failed: only %d lines (minimum %d required)", len(lines), MinProcessedLines)
 		return false
 	}
 
 	// All lines should already be within MaxLineLength due to processing
 	// But we can verify for safety
-	for i, line := range lines {
+	for _, line := range lines {
 		if len(line) > MaxLineLength {
-			log.Printf("Content validation failed: line %d exceeds max length (%d > %d)", i, len(line), MaxLineLength)
 			return false
 		}
 	}
@@ -567,7 +493,7 @@ func (cm *ContentManager) GetContentBlock(filePath string, startLine, size int) 
 	// Wrap in panic recovery
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("PANIC in GetContentBlock for %s: %v", filePath, r)
+			// Silent recovery
 		}
 	}()
 
@@ -593,7 +519,6 @@ func (cm *ContentManager) GetContentBlock(filePath string, startLine, size int) 
 
 		// Prevent excessive memory usage
 		if lineCount > MaxBlockSize {
-			log.Printf("Warning: file %s exceeds MaxBlockSize, truncating", filePath)
 			break
 		}
 
@@ -691,7 +616,6 @@ func (cm *ContentManager) selectFromValidatedCache() ([]string, string, error) {
 		block[i] = cached.lines[(startLine+i)%len(cached.lines)]
 	}
 
-	log.Printf("Selected block from validated cache: %s (%d lines)", cached.filePath, len(block))
 	return block, cached.filePath, nil
 }
 
@@ -701,7 +625,7 @@ func (cm *ContentManager) SelectRandomBlock() ([]string, string, error) {
 	// Wrap in panic recovery
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("PANIC in SelectRandomBlock: %v", r)
+			// Silent recovery
 		}
 	}()
 
@@ -760,7 +684,6 @@ func (cm *ContentManager) SelectRandomBlock() ([]string, string, error) {
 		return nil, "", err
 	}
 
-	log.Printf("Selected random block from %s starting at line %d (%d lines)", selectedFile, randomStartLine, len(block))
 	return block, selectedFile, nil
 }
 
@@ -774,13 +697,12 @@ func (cm *ContentManager) SelectRandomBlockWithValidation() ([]string, string, e
 	// Wrap in panic recovery
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("PANIC in SelectRandomBlockWithValidation: %v - returning default content", r)
+			// Silent recovery - returning default content
 		}
 	}()
 
 	// Check if circuit breaker is open
 	if cm.breaker.IsOpen() {
-		log.Printf("Circuit breaker is OPEN, using default content")
 		return cm.GetDefaultContent(), "default", nil
 	}
 
@@ -789,10 +711,8 @@ func (cm *ContentManager) SelectRandomBlockWithValidation() ([]string, string, e
 		block, filePath, err := cm.selectFromValidatedCache()
 		if err == nil && cm.ValidateProcessedContent(block) {
 			cm.breaker.recordSuccess()
-			log.Printf("Using validated cache: %s (%d lines)", filePath, len(block))
 			return block, filePath, nil
 		}
-		log.Printf("Failed to use validated cache: %v, falling back to file loading", err)
 	}
 
 	// Try to get valid content with retries
@@ -802,11 +722,9 @@ func (cm *ContentManager) SelectRandomBlockWithValidation() ([]string, string, e
 		if err != nil {
 			// If we have no content files, fall back immediately
 			if len(cm.contentFiles) == 0 {
-				log.Printf("No content files available, using default content")
 				cm.breaker.recordFailure(err)
 				return cm.GetDefaultContent(), "default", nil
 			}
-			log.Printf("Attempt %d: Error selecting random block: %v", attempt+1, err)
 			continue
 		}
 
@@ -815,16 +733,12 @@ func (cm *ContentManager) SelectRandomBlockWithValidation() ([]string, string, e
 
 		// Validate the processed content
 		if cm.ValidateProcessedContent(processed) {
-			log.Printf("Successfully selected and validated content from %s (%d lines)", filePath, len(processed))
 			cm.breaker.recordSuccess()
 			return processed, filePath, nil
 		}
-
-		log.Printf("Attempt %d: Content from %s did not meet requirements (%d lines)", attempt+1, filePath, len(processed))
 	}
 
 	// All retries failed, fall back to default content
-	log.Printf("All %d attempts failed, falling back to default content", MaxRetries)
 	err := fmt.Errorf("all %d attempts failed to load valid content", MaxRetries)
 	cm.breaker.recordFailure(err)
 	return cm.GetDefaultContent(), "default", nil
