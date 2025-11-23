@@ -1,0 +1,27 @@
+package engine
+
+// AnyStore provides type-erased operations for lifecycle management.
+// This interface allows WorldGeneric to manage all stores uniformly
+// for operations like entity destruction without knowing the concrete type.
+type AnyStore interface {
+	// Remove deletes a component from an entity
+	Remove(e Entity)
+
+	// Has checks if an entity has this component
+	Has(e Entity) bool
+
+	// Count returns the number of entities with this component
+	Count() int
+
+	// Clear removes all components from this store
+	Clear()
+}
+
+// QueryableStore extends AnyStore with query operations needed for
+// the query builder to efficiently intersect component sets.
+type QueryableStore interface {
+	AnyStore
+
+	// All returns all entities that have this component type
+	All() []Entity
+}

@@ -2,6 +2,9 @@ package engine
 
 import "sync"
 
+// Compile-time check to ensure Store implements QueryableStore
+var _ QueryableStore = (*Store[int])(nil)
+
 // Store is a generic container for a specific component type T.
 // Uses sparse set pattern for cache-friendly iteration.
 type Store[T any] struct {
@@ -77,4 +80,12 @@ func (s *Store[T]) Count() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.entities)
+}
+
+// Clear removes all components from this store.
+func (s *Store[T]) Clear() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.components = make(map[Entity]T)
+	s.entities = make([]Entity, 0, 64)
 }
