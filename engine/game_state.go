@@ -215,28 +215,34 @@ func NewGameState(gameWidth, gameHeight, screenWidth int, timeProvider TimeProvi
 
 // ===== HEAT ACCESSORS (atomic) =====
 
+// GetHeat returns the current heat value
 func (gs *GameState) GetHeat() int {
 	return int(gs.Heat.Load())
 }
 
+// SetHeat sets the heat value
 func (gs *GameState) SetHeat(heat int) {
 	gs.Heat.Store(int64(heat))
 }
 
+// AddHeat adds a delta to the current heat value
 func (gs *GameState) AddHeat(delta int) {
 	gs.Heat.Add(int64(delta))
 }
 
 // ===== SCORE ACCESSORS (atomic) =====
 
+// GetScore returns the current score value
 func (gs *GameState) GetScore() int {
 	return int(gs.Score.Load())
 }
 
+// SetScore sets the score value
 func (gs *GameState) SetScore(score int) {
 	gs.Score.Store(int64(score))
 }
 
+// AddScore adds a delta to the current score value
 func (gs *GameState) AddScore(delta int) {
 	gs.Score.Add(int64(delta))
 }
@@ -251,18 +257,22 @@ func (gs *GameState) ReadHeatAndScore() (heat int64, score int64) {
 
 // ===== CURSOR ACCESSORS (atomic) =====
 
+// GetCursorX returns the current cursor X position
 func (gs *GameState) GetCursorX() int {
 	return int(gs.CursorX.Load())
 }
 
+// SetCursorX sets the cursor X position
 func (gs *GameState) SetCursorX(x int) {
 	gs.CursorX.Store(int32(x))
 }
 
+// GetCursorY returns the current cursor Y position
 func (gs *GameState) GetCursorY() int {
 	return int(gs.CursorY.Load())
 }
 
+// SetCursorY sets the cursor Y position
 func (gs *GameState) SetCursorY(y int) {
 	gs.CursorY.Store(int32(y))
 }
@@ -368,34 +378,41 @@ func (gs *GameState) ReadColorCounts() ColorCountSnapshot {
 
 // ===== SEQUENCE ID ACCESSORS (atomic) =====
 
+// GetNextSeqID returns the next sequence ID
 func (gs *GameState) GetNextSeqID() int {
 	return int(gs.NextSeqID.Load())
 }
 
+// IncrementSeqID increments and returns the next sequence ID
 func (gs *GameState) IncrementSeqID() int {
 	return int(gs.NextSeqID.Add(1))
 }
 
 // ===== FRAME COUNTER ACCESSORS (atomic) =====
 
+// GetFrameNumber returns the current frame number
 func (gs *GameState) GetFrameNumber() int64 {
 	return gs.FrameNumber.Load()
 }
 
+// IncrementFrameNumber increments and returns the frame number
 func (gs *GameState) IncrementFrameNumber() int64 {
 	return gs.FrameNumber.Add(1)
 }
 
 // ===== BOOST ACCESSORS (atomic) =====
 
+// GetBoostEnabled returns whether boost is currently enabled
 func (gs *GameState) GetBoostEnabled() bool {
 	return gs.BoostEnabled.Load()
 }
 
+// SetBoostEnabled sets the boost enabled state
 func (gs *GameState) SetBoostEnabled(enabled bool) {
 	gs.BoostEnabled.Store(enabled)
 }
 
+// GetBoostEndTime returns when the boost will end
 func (gs *GameState) GetBoostEndTime() time.Time {
 	nano := gs.BoostEndTime.Load()
 	if nano == 0 {
@@ -404,14 +421,17 @@ func (gs *GameState) GetBoostEndTime() time.Time {
 	return time.Unix(0, nano)
 }
 
+// SetBoostEndTime sets when the boost will end
 func (gs *GameState) SetBoostEndTime(t time.Time) {
 	gs.BoostEndTime.Store(t.UnixNano())
 }
 
+// GetBoostColor returns the current boost color
 func (gs *GameState) GetBoostColor() int32 {
 	return gs.BoostColor.Load()
 }
 
+// SetBoostColor sets the boost color
 func (gs *GameState) SetBoostColor(color int32) {
 	gs.BoostColor.Store(color)
 }
@@ -556,14 +576,17 @@ func (gs *GameState) SetSpawnEnabled(enabled bool) {
 
 // ===== VISUAL FEEDBACK ACCESSORS (atomic) =====
 
+// GetCursorError returns whether a cursor error is active
 func (gs *GameState) GetCursorError() bool {
 	return gs.CursorError.Load()
 }
 
+// SetCursorError sets the cursor error state
 func (gs *GameState) SetCursorError(err bool) {
 	gs.CursorError.Store(err)
 }
 
+// GetCursorErrorTime returns when the cursor error started
 func (gs *GameState) GetCursorErrorTime() time.Time {
 	nano := gs.CursorErrorTime.Load()
 	if nano == 0 {
@@ -572,34 +595,42 @@ func (gs *GameState) GetCursorErrorTime() time.Time {
 	return time.Unix(0, nano)
 }
 
+// SetCursorErrorTime sets when the cursor error started
 func (gs *GameState) SetCursorErrorTime(t time.Time) {
 	gs.CursorErrorTime.Store(t.UnixNano())
 }
 
+// GetScoreBlinkActive returns whether score blink is active
 func (gs *GameState) GetScoreBlinkActive() bool {
 	return gs.ScoreBlinkActive.Load()
 }
 
+// SetScoreBlinkActive sets the score blink active state
 func (gs *GameState) SetScoreBlinkActive(active bool) {
 	gs.ScoreBlinkActive.Store(active)
 }
 
+// GetScoreBlinkType returns the score blink type
 func (gs *GameState) GetScoreBlinkType() uint32 {
 	return gs.ScoreBlinkType.Load()
 }
 
+// SetScoreBlinkType sets the score blink type
 func (gs *GameState) SetScoreBlinkType(seqType uint32) {
 	gs.ScoreBlinkType.Store(seqType)
 }
 
+// GetScoreBlinkLevel returns the score blink level
 func (gs *GameState) GetScoreBlinkLevel() uint32 {
 	return gs.ScoreBlinkLevel.Load()
 }
 
+// SetScoreBlinkLevel sets the score blink level
 func (gs *GameState) SetScoreBlinkLevel(level uint32) {
 	gs.ScoreBlinkLevel.Store(level)
 }
 
+// GetScoreBlinkTime returns when the score blink started
 func (gs *GameState) GetScoreBlinkTime() time.Time {
 	nano := gs.ScoreBlinkTime.Load()
 	if nano == 0 {
@@ -608,6 +639,7 @@ func (gs *GameState) GetScoreBlinkTime() time.Time {
 	return time.Unix(0, nano)
 }
 
+// SetScoreBlinkTime sets when the score blink started
 func (gs *GameState) SetScoreBlinkTime(t time.Time) {
 	gs.ScoreBlinkTime.Store(t.UnixNano())
 }
@@ -1108,23 +1140,23 @@ type ColorCountSnapshot struct {
 	GreenDark   int64
 }
 
-// // ReadCleanerState returns a consistent snapshot of the cleaner state
-// func (gs *GameState) ReadCleanerState() CleanerSnapshot {
-// 	gs.mu.RLock()
-// 	defer gs.mu.RUnlock()
-//
-// 	elapsed := time.Duration(0)
-// 	if gs.CleanerActive {
-// 		elapsed = gs.TimeProvider.Now().Sub(gs.CleanerStartTime)
-// 	}
-//
-// 	return CleanerSnapshot{
-// 		Pending:   gs.CleanerPending,
-// 		Active:    gs.CleanerActive,
-// 		StartTime: gs.CleanerStartTime,
-// 		Elapsed:   elapsed,
-// 	}
-// }
+// ReadCleanerState returns a consistent snapshot of the cleaner state
+func (gs *GameState) ReadCleanerState() CleanerSnapshot {
+	gs.mu.RLock()
+	defer gs.mu.RUnlock()
+
+	elapsed := time.Duration(0)
+	if gs.CleanerActive {
+		elapsed = gs.TimeProvider.Now().Sub(gs.CleanerStartTime)
+	}
+
+	return CleanerSnapshot{
+		Pending:   gs.CleanerPending,
+		Active:    gs.CleanerActive,
+		StartTime: gs.CleanerStartTime,
+		Elapsed:   elapsed,
+	}
+}
 
 // ===== DRAIN ENTITY ACCESSORS (atomic) =====
 

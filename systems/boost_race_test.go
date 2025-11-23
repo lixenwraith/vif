@@ -508,12 +508,12 @@ func TestPingTimerAtomicCAS(t *testing.T) {
 		}
 	}()
 
-	// Goroutine 3: Occasionally add to ping timer (simulate ping activation)
+	// Goroutine 3: Occasionally set ping timer (simulate ping activation)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 10; i++ {
-			ctx.AddPingGridTimer(0.5)
+			ctx.SetPingGridTimer(0.5)
 			time.Sleep(10 * time.Millisecond)
 		}
 	}()

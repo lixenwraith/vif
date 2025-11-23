@@ -147,37 +147,27 @@ func NewGameContext(screen tcell.Screen) *GameContext {
 
 // ===== INPUT-SPECIFIC METHODS =====
 
-// Atomic accessor methods for PingActive
+// GetPingActive returns the current ping active state
 func (g *GameContext) GetPingActive() bool {
 	return g.pingActive.Load()
 }
 
+// SetPingActive sets the ping active state
 func (g *GameContext) SetPingActive(active bool) {
 	g.pingActive.Store(active)
 }
 
-// Atomic accessor methods for PingGridTimer
+// GetPingGridTimer returns the current ping grid timer value in seconds
 func (g *GameContext) GetPingGridTimer() float64 {
 	bits := g.pingGridTimer.Load()
 	return math.Float64frombits(bits)
 }
 
+// SetPingGridTimer sets the ping grid timer to the specified seconds
 func (g *GameContext) SetPingGridTimer(seconds float64) {
 	bits := math.Float64bits(seconds)
 	g.pingGridTimer.Store(bits)
 }
-
-// func (g *GameContext) AddPingGridTimer(delta float64) {
-// 	for {
-// 		oldBits := g.pingGridTimer.Load()
-// 		oldValue := math.Float64frombits(oldBits)
-// 		newValue := oldValue + delta
-// 		newBits := math.Float64bits(newValue)
-// 		if g.pingGridTimer.CompareAndSwap(oldBits, newBits) {
-// 			break
-// 		}
-// 	}
-// }
 
 // UpdatePingGridTimerAtomic atomically decrements the ping timer and returns true if it expired
 // This method handles the check-then-set atomically to avoid race conditions
