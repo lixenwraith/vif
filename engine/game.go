@@ -29,6 +29,9 @@ type GameContext struct {
 	// ECS World
 	World *World
 
+	// Event queue for inter-system communication
+	eventQueue *EventQueue
+
 	// Screen and buffer
 	Screen tcell.Screen
 	Buffer *core.Buffer
@@ -114,6 +117,7 @@ func NewGameContext(screen tcell.Screen) *GameContext {
 		Width:         width,
 		Height:        height,
 		Mode:          ModeNormal,
+		eventQueue:    NewEventQueue(),
 		// CursorVisible:   true,
 		// CursorBlinkTime: pausableClock.RealTime(), // UI uses real time
 	}
@@ -343,4 +347,29 @@ func (g *GameContext) GetFrameNumber() int64 {
 // IncrementFrameNumber increments and returns the frame number
 func (g *GameContext) IncrementFrameNumber() int64 {
 	return g.State.IncrementFrameNumber()
+}
+
+// ===== EVENT QUEUE METHODS =====
+
+// PushEvent adds an event to the event queue with current frame number
+func (g *GameContext) PushEvent(eventType EventType, payload interface{}) {
+	event := GameEvent{
+		Type:      eventType,
+		Payload:   payload,
+		Frame:     g.State.GetFrameNumber(),
+		Timestamp: g.TimeProvider.Now(),
+	}
+	g.eventQueue.Push(event)
+}
+
+// ConsumeEvents returns all pending events and clears the queue
+// This is designed for single-consumer use (the game loop)
+func (g *GameContext) ConsumeEvents() []GameEvent {
+	return g.eventQueue.Consume()
+}
+
+// PeekEvents returns all pending events without removing them
+// Useful for read-only inspection
+func (g *GameContext) PeekEvents() []GameEvent {
+	return g.eventQueue.Peek()
 }
