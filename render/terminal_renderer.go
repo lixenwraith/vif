@@ -2,7 +2,6 @@ package render
 
 import (
 	"fmt"
-	"reflect"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/components"
@@ -292,25 +291,18 @@ func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell
 
 // drawCharacters draws all character entities
 func (r *TerminalRenderer) drawCharacters(world *engine.World, pingColor tcell.Color, defaultStyle tcell.Style, ctx *engine.GameContext) {
-	posType := reflect.TypeOf(components.PositionComponent{})
-	charType := reflect.TypeOf(components.CharacterComponent{})
+	gworld := world.GetGeneric()
 
-	entities := world.GetEntitiesWith(posType, charType)
+	// Query entities with both position and character
+	entities := gworld.Query().
+		With(gworld.Positions).
+		With(gworld.Characters).
+		Execute()
 
+	// Direct iteration - no type assertions needed
 	for _, entity := range entities {
-		// Defensive: Check if entity still exists and has components
-		// Entity could be destroyed between GetEntitiesWith and GetComponent calls
-		posComp, ok := world.GetComponent(entity, posType)
-		if !ok {
-			continue // Entity was destroyed or component removed
-		}
-		pos := posComp.(components.PositionComponent)
-
-		charComp, ok := world.GetComponent(entity, charType)
-		if !ok {
-			continue // Entity was destroyed or component removed
-		}
-		char := charComp.(components.CharacterComponent)
+		pos, _ := gworld.Positions.Get(entity)
+		char, _ := gworld.Characters.Get(entity)
 
 		screenX := r.gameX + pos.X
 		screenY := r.gameY + pos.Y
@@ -360,19 +352,19 @@ func (r *TerminalRenderer) drawCharacters(world *engine.World, pingColor tcell.C
 
 // drawFallingDecay draws the falling decay characters
 func (r *TerminalRenderer) drawFallingDecay(world *engine.World, defaultStyle tcell.Style) {
-	fallingType := reflect.TypeOf(components.FallingDecayComponent{})
-	entities := world.GetEntitiesWith(fallingType)
+	gworld := world.GetGeneric()
+
+	// Direct store access - single component query
+	entities := gworld.FallingDecays.All()
 
 	// Style for falling characters: dark cyan foreground, default background
 	fallingStyle := defaultStyle.Foreground(RgbDecayFalling)
 
 	for _, entity := range entities {
-		// Defensive: Check if entity still exists
-		fallComp, ok := world.GetComponent(entity, fallingType)
-		if !ok {
-			continue // Entity was destroyed between GetEntitiesWith and GetComponent
+		fall, exists := gworld.FallingDecays.Get(entity)
+		if !exists {
+			continue
 		}
-		fall := fallComp.(components.FallingDecayComponent)
 
 		// Calculate screen position
 		y := int(fall.YPosition)
@@ -810,9 +802,8 @@ func (r *TerminalRenderer) drawCursor(ctx *engine.GameContext, defaultStyle tcel
 	isNugget := false
 
 	if entity != 0 {
-		charType := reflect.TypeOf(components.CharacterComponent{})
-		if charComp, ok := ctx.World.GetComponent(entity, charType); ok {
-			char := charComp.(components.CharacterComponent)
+		gworld := ctx.World.GetGeneric()
+		if char, ok := gworld.Characters.Get(entity); ok {
 			charAtCursor = char.Rune
 			fg, _, _ := char.Style.Decompose()
 			charColor = fg
@@ -820,8 +811,7 @@ func (r *TerminalRenderer) drawCursor(ctx *engine.GameContext, defaultStyle tcel
 		}
 
 		// Check if entity is a nugget
-		nuggetType := reflect.TypeOf(components.NuggetComponent{})
-		if _, ok := ctx.World.GetComponent(entity, nuggetType); ok {
+		if _, ok := gworld.Nuggets.Get(entity); ok {
 			isNugget = true
 		}
 	}

@@ -374,3 +374,18 @@ func (w *World) GetGeneric() *WorldGeneric {
 func (w *World) CreateEntityGeneric() Entity {
 	return w.generic.CreateEntity()
 }
+
+// SyncToGeneric synchronizes the reflection-based world to the generic world.
+// This is a temporary method used during migration to keep both worlds in sync
+// for systems that have not yet been migrated to use the generic world.
+// Call this before rendering to ensure the renderer sees the latest state.
+func (w *World) SyncToGeneric() {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
+	// Clear generic world first
+	w.generic.Clear()
+
+	// Copy all entities and their components
+	w.generic.MigrateFrom(w)
+}
