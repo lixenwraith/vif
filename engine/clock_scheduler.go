@@ -85,9 +85,8 @@ type ClockScheduler struct {
 
 	// System references needed for triggering transitions
 	// These will be set via SetSystems() after scheduler creation
-	goldSystem    GoldSystemInterface
-	decaySystem   DecaySystemInterface
-	cleanerSystem CleanerSystemInterface
+	goldSystem  GoldSystemInterface
+	decaySystem DecaySystemInterface
 }
 
 // GoldSystemInterface defines the interface for gold sequence system
@@ -98,12 +97,6 @@ type GoldSystemInterface interface {
 // DecaySystemInterface defines the interface for decay system
 type DecaySystemInterface interface {
 	TriggerDecayAnimation(world *World)
-}
-
-// CleanerSystemInterface defines the interface for cleaner system
-// Note: CleanerSystem now uses event queue, so this interface is no longer used
-// Kept for backwards compatibility during transition
-type CleanerSystemInterface interface {
 }
 
 // NewClockScheduler creates a new clock scheduler with specified tick interval
@@ -126,12 +119,11 @@ func NewClockScheduler(ctx *GameContext, tickInterval time.Duration, frameReady 
 
 // SetSystems sets the system references needed for phase transitions
 // Must be called before Start() to enable phase transition logic
-func (cs *ClockScheduler) SetSystems(goldSystem GoldSystemInterface, decaySystem DecaySystemInterface, cleanerSystem CleanerSystemInterface) {
+func (cs *ClockScheduler) SetSystems(goldSystem GoldSystemInterface, decaySystem DecaySystemInterface) {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 	cs.goldSystem = goldSystem
 	cs.decaySystem = decaySystem
-	cs.cleanerSystem = cleanerSystem
 }
 
 // SetGoldSequenceSystem sets the gold sequence system for timeout handling
@@ -142,11 +134,6 @@ func (cs *ClockScheduler) SetGoldSequenceSystem(system GoldSystemInterface) {
 // SetDecaySystem sets the decay system for animation triggering
 func (cs *ClockScheduler) SetDecaySystem(system DecaySystemInterface) {
 	cs.decaySystem = system
-}
-
-// SetCleanerSystem sets the cleaner system for activation
-func (cs *ClockScheduler) SetCleanerSystem(system CleanerSystemInterface) {
-	cs.cleanerSystem = system
 }
 
 // Start begins the scheduler loop

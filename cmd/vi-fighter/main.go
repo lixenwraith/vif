@@ -116,7 +116,7 @@ func main() {
 	// Signal initial frame ready
 	frameReady <- struct{}{}
 
-	clockScheduler.SetSystems(goldSystem, decaySystem, cleanerSystem)
+	clockScheduler.SetSystems(goldSystem, decaySystem)
 	clockScheduler.Start()
 	defer clockScheduler.Stop()
 

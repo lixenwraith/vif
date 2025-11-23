@@ -15,13 +15,6 @@ const (
 	errorBlinkMs = 500
 )
 
-// CleanerSnapshot represents a thread-safe snapshot of cleaner data for rendering
-type CleanerSnapshot struct {
-	Row   int
-	Trail []core.Point // Trail points in integer grid coordinates
-	Char  rune
-}
-
 // TerminalRenderer handles all terminal rendering
 type TerminalRenderer struct {
 	screen          tcell.Screen

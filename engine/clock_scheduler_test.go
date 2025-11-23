@@ -55,29 +55,6 @@ func (m *MockDecaySystem) GetTriggerCount() int {
 	return int(m.triggerCount.Load())
 }
 
-// MockCleanerSystem implements CleanerSystemInterface for testing
-type MockCleanerSystem struct {
-	activateCount atomic.Int32
-	isComplete    atomic.Bool
-}
-
-func (m *MockCleanerSystem) ActivateCleaners(world *World) {
-	m.activateCount.Add(1)
-	m.isComplete.Store(false) // Animation starts, not complete
-}
-
-func (m *MockCleanerSystem) IsAnimationComplete() bool {
-	return m.isComplete.Load()
-}
-
-func (m *MockCleanerSystem) GetActivateCount() int {
-	return int(m.activateCount.Load())
-}
-
-func (m *MockCleanerSystem) SetComplete(complete bool) {
-	m.isComplete.Store(complete)
-}
-
 // ============================================================================
 // Phase State Tests
 // ============================================================================
