@@ -9,6 +9,75 @@
 - Systems contain ALL logic, operate on component sets
 - World is the single source of truth for all game state
 
+### Event-Driven Communication
+**Architecture**: Systems decouple via `GameContext.EventQueue` for inter-system communication.
+
+**Core Principles:**
+- **Decoupling**: Systems push events instead of calling methods on other systems
+- **Lock-Free**: Ring buffer with atomic operations (no mutexes)
+- **Single Consumer**: Game loop consumes events each frame
+- **Frame Deduplication**: Events include frame number to prevent duplicate processing
+
+**Event Types**:
+- `EventCleanerRequest`: Trigger cleaner spawn (gold completed at max heat)
+- `EventCleanerFinished`: Cleaner animation completed (testing/debugging)
+- `EventGoldSpawned`: Gold sequence created (testing/debugging)
+- `EventGoldComplete`: Gold sequence typed successfully (testing/debugging)
+
+**Producer Pattern**:
+```go
+// ScoreSystem pushes event when gold completed at max heat
+if heatAtMaxBeforeGoldComplete {
+    ctx.PushEvent(engine.EventCleanerRequest, nil)
+}
+```
+
+**Consumer Pattern**:
+```go
+// CleanerSystem polls events each frame
+func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
+    events := cs.ctx.ConsumeEvents()
+    for _, event := range events {
+        if event.Type == engine.EventCleanerRequest {
+            if !cs.spawned[event.Frame] {  // Frame deduplication
+                cs.spawnCleaners(world)
+                cs.spawned[event.Frame] = true
+            }
+        }
+    }
+    // ... rest of update logic
+}
+```
+
+**Why Events Instead of Direct Calls:**
+```go
+// ❌ WRONG: Direct method calls create tight coupling
+cleanerSystem.ActivateCleaners()  // ScoreSystem must hold CleanerSystem reference
+
+// ❌ WRONG: Shared boolean flags create race conditions
+ctx.State.SetCleanerPending(true)  // Requires mutex, hard to test
+
+// ✅ CORRECT: Events decouple systems
+ctx.PushEvent(engine.EventCleanerRequest, nil)  // Lock-free, testable, observable
+```
+
+**Implementation** (`engine/events.go`):
+- `EventQueue`: Fixed-size ring buffer (256 events)
+- `Push()`: Lock-free CAS (Compare-And-Swap) for concurrent producers
+- `Consume()`: Atomically claims and returns all pending events
+- `Peek()`: Read-only inspection for debugging/testing
+
+**Benefits**:
+- **Testability**: Events are observable (can assert event was pushed)
+- **Debuggability**: Event log shows all inter-system communication
+- **Thread-Safety**: Lock-free ring buffer, no contention
+- **Flexibility**: Easy to add new consumers for existing events
+
+**Trade-offs**:
+- **Latency**: Events processed next frame (not immediate)
+- **Indirection**: Event flow less obvious than direct method calls
+- **Deduplication**: Consumers must track processed events by frame
+
 ### State Ownership Model
 
 **GameState** (`engine/game_state.go`) centralizes game state with clear ownership boundaries:
@@ -38,7 +107,6 @@ Updated during scheduled game logic ticks, read by all systems:
 - **Gold Sequence State**: GoldActive, GoldSequenceID, GoldStartTime, GoldTimeoutTime
 - **Decay Timer State**: DecayTimerActive, DecayNextTime
 - **Decay Animation State**: DecayAnimating, DecayStartTime
-- **Cleaner State**: CleanerPending, CleanerActive, CleanerStartTime
 
 **Why Mutex**: These values change infrequently (every 2 seconds for spawn, or on game events) and require:
 - Consistent multi-field reads (spawn timing snapshot, phase state)
@@ -161,15 +229,6 @@ type DecaySnapshot struct {
 }
 snapshot := ctx.State.ReadDecayState() // Used by: DecaySystem, Renderer
 
-// Cleaner State (mutex-protected)
-type CleanerSnapshot struct {
-    Pending   bool
-    Active    bool
-    StartTime time.Time
-    Elapsed   time.Duration
-}
-snapshot := ctx.State.ReadCleanerState() // Used by: CleanerSystem, Renderer
-
 // Atomic pairs for related fields
 heat, score := ctx.State.ReadHeatAndScore() // Used by: ScoreSystem, Renderer
 ```
@@ -222,13 +281,13 @@ score := ctx.State.GetScore() // Atomic read #2
 | ScoreSystem | BoostState, GoldState, HeatAndScore | Process typing, update heat/score |
 | GoldSequenceSystem | GoldState, PhaseState | Manage gold sequence lifecycle |
 | DecaySystem | DecayState, PhaseState | Manage decay timer and animation |
-| CleanerSystem | CleanerState, PhaseState | Manage cleaner lifecycle |
+| CleanerSystem | EventQueue | Event-driven cleaner lifecycle via EventCleanerRequest/Finished |
 | Renderer | All snapshot types | Render game state without blocking game loop |
 | ClockScheduler | PhaseState, GoldState, DecayState | Manage phase transitions |
 
 **Concurrency Guarantees:**
 
-1. **Mutex-Protected Snapshots** (SpawnState, PhaseState, GoldState, DecayState, CleanerState):
+1. **Mutex-Protected Snapshots** (SpawnState, PhaseState, GoldState, DecayState):
    - Use `RLock` to read state atomically
    - All fields copied before returning
    - Multiple concurrent readers allowed
@@ -333,8 +392,8 @@ const (
 - **Gold state**: `GoldActive`, `GoldSequenceID`, `GoldStartTime`, `GoldTimeoutTime`
 - **Decay timer state**: `DecayTimerActive`, `DecayNextTime`
 - **Decay animation state**: `DecayAnimating`, `DecayStartTime`
-- **Cleaner state**: `CleanerPending`, `CleanerActive`, `CleanerStartTime`
-  - Cleaners run in parallel with main phase cycle (non-blocking)
+
+**Note**: Cleaners are triggered via `EventCleanerRequest` and run in parallel with the main phase cycle (non-blocking, event-driven).
 
 **Phase Access Pattern**:
 ```go
@@ -368,12 +427,11 @@ snapshot := ctx.State.ReadPhaseState()
 - Waits for frame ready signal before processing tick (prevents update/render conflicts)
 - **Phase transitions handled on clock tick** (via `processTick()`):
   - `PhaseGoldActive`: Check gold timeout (pausable clock) → timeout via GoldSystem
-  - `PhaseGoldComplete`: Start decay timer (or wait for cleaners if pending)
+  - `PhaseGoldComplete`: Start decay timer
   - `PhaseDecayWait`: Check decay ready (pausable clock) → start decay animation
   - `PhaseDecayAnimation`: Handled by DecaySystem → returns to PhaseNormal when complete
-  - `PhaseCleanerPending`: Activate cleaners via CleanerSystem
-  - `PhaseCleanerActive`: Check animation complete → deactivate + start decay timer
   - `PhaseNormal`: Gold spawning handled by GoldSystem's Update() method
+- **Cleaner Animation**: Triggered via `EventCleanerRequest` (runs in parallel with main phase cycle)
 - **Drift Protection**:
   - Advances deadline by exactly one interval (prevents cumulative drift)
   - If severely behind (>2 intervals), resets to current time + interval
@@ -587,23 +645,24 @@ When the game is paused by entering COMMAND mode (`:` key), the rendering system
 ## System Coordination and Event Flow
 
 ### Complete Game Cycle
-The game operates in a continuous cycle managed by three primary systems:
+The game operates in a continuous cycle managed by the phase system:
 
 ```
-Gold → Completion/Timeout → Decay Timer → Decay Animation → Gold
- ↓                               ↑                ↓
-(Optional)                       |         (Always happens)
-Cleaner Trigger                  |       Characters decay levels
-(if heat maxed)                  |
- ↓                               |
-Cleaner Animation → Completion ──┘
- (transitions to DecayWait, starts decay timer)
+PhaseNormal → PhaseGoldActive → PhaseGoldComplete → PhaseDecayWait → PhaseDecayAnimation → PhaseNormal
+    ↑                                                                         ↓
+    └─────────────────────────────────────────────────────────────────────────┘
+
+Parallel (Event-Driven):
+  EventCleanerRequest → Cleaner Spawn → Cleaner Animation → EventCleanerFinished
+  (triggered when gold completed at max heat, runs independently of phase cycle)
 ```
 
 **Key State Transitions:**
-- Gold completion/timeout → PhaseDecayWait (starts decay timer)
-- Cleaner completion → PhaseDecayWait (starts decay timer)
-- Both paths converge at decay timer, ensuring consistent game flow
+- Gold spawns after decay animation completes → PhaseGoldActive
+- Gold completion/timeout → PhaseGoldComplete → PhaseDecayWait (starts decay timer)
+- Decay timer expires → PhaseDecayAnimation (falling entities decay characters)
+- Decay animation completes → PhaseNormal (ready for next gold)
+- Cleaners run in parallel via event system, do NOT affect phase transitions
 
 ### Event Sequencing
 
@@ -713,25 +772,31 @@ GoldSequenceSystem uses `sync.RWMutex` for all state:
 
 ### State Transition Rules
 
-#### Cleaner Phase Transitions
-- **PhaseCleanerPending** → **PhaseCleanerActive**: When cleaners are activated
-- **PhaseCleanerActive** → **PhaseDecayWait**: When cleaner animation completes
-  - After cleaners finish (whether phantom or real), the system always starts the decay timer
-  - This ensures proper game flow cycle: Cleaners → Decay Timer → Decay Animation → Gold → ...
-  - Cleaners DO NOT return to PhaseNormal - they always transition to PhaseDecayWait
-  - The `DeactivateCleaners()` function transitions to PhaseDecayWait and starts the decay timer
+#### Phase Transitions (Main Game Cycle)
+- **PhaseNormal** → **PhaseGoldActive**: When gold sequence spawns
+- **PhaseGoldActive** → **PhaseGoldComplete**: When gold typed or timeout
+- **PhaseGoldComplete** → **PhaseDecayWait**: Starts decay timer
+- **PhaseDecayWait** → **PhaseDecayAnimation**: When decay timer expires
+- **PhaseDecayAnimation** → **PhaseNormal**: When falling animation completes
+
+#### Cleaner Event Flow (Parallel to Phase Cycle)
+- **EventCleanerRequest** pushed when: Gold completed at max heat
+- **CleanerSystem** consumes event → spawns cleaner entities (or phantom if no Red characters)
+- **Cleaner animation** runs: Entities move across screen, destroy Red characters
+- **EventCleanerFinished** pushed when: All cleaner entities destroyed
+- **No phase transitions**: Cleaners run independently, do not block or modify phase state
 
 #### Invalid Transitions (Prevented)
 - Gold spawning while Gold already active → Ignored
 - Decay animation starting while already animating → Ignored
 - Decay timer restarting during active animation → Blocked
-- CleanerActive → Normal (old behavior, now invalid) → Must go through DecayWait
-- Cleaners triggering while already active → Ignored (queued)
+- Phase transitions during cleaner animation → **Allowed** (cleaners are non-blocking)
 
 #### Valid Transitions
-- Gold End → Decay Timer Start: Always allowed
-- Decay Timer Expire → Animation Start: Atomic transition
-- Animation Complete → Gold Spawn: Automatic, immediate
+- Gold End → Decay Timer Start: Always allowed (independent of cleaners)
+- Decay Timer Expire → Animation Start: Atomic transition (independent of cleaners)
+- Animation Complete → Gold Spawn: Automatic, immediate (independent of cleaners)
+- Cleaner Request → Spawn: Event-driven, any time
 
 ### Debugging Support
 
@@ -808,7 +873,7 @@ INSERT / SEARCH ─[ESC]→ NORMAL
   - No external state maps or tracking structures
   - Component data includes physics state, trail history, and rendering info
   - ECS World provides internal synchronization for component access
-- **Frame-Coherent Rendering**: `GetCleanerSnapshots()` deep-copies trail data for thread-safe rendering
+- **Frame-Coherent Rendering**: Renderer queries World directly and deep-copies trail data for thread-safe rendering
 - **Zero External Locks**: No mutexes required (atomic flag + ECS internal synchronization)
 
 ### Shared State Synchronization
@@ -835,45 +900,44 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 **Solution (Current Pure ECS Implementation)**:
 - ✅ **Pure ECS Pattern**: All state in `CleanerComponent`, no external maps or tracking
 - ✅ **Synchronous Updates**: Main loop `Update()` method with delta time integration
-- ✅ **Single Atomic Flag**: `pendingSpawn` atomic.Bool for activation signal
+- ✅ **Event-Driven Activation**: `EventCleanerRequest` triggers spawning via event queue
 - ✅ **Component-Based Physics**: Sub-pixel position, velocity, and trail stored in component
-- ✅ **Snapshot Rendering**: `GetCleanerSnapshots()` deep-copies trail positions for thread safety
+- ✅ **Snapshot Rendering**: Renderer queries World directly and deep-copies trail positions for thread safety
 - ✅ **ECS Synchronization**: Leverages World's internal locking for component access
 - ✅ **Zero State Duplication**: Component is the single source of truth
 
 ### Frame Coherence Strategy
 **Rendering Thread Safety**:
-1. Renderer caches snapshots with frame number tracking
-2. Calls `GetCleanerSnapshots()` only when frame number changes
-3. Method queries ECS World for all `CleanerComponent` entities
-4. Deep-copies trail slice for each cleaner to prevent data races
-5. Renderer uses snapshot data (no shared references to component state)
-6. Main loop updates components via ECS World's synchronized methods
-7. No data races: snapshots are fully independent copies
+1. Renderer queries World directly for all `CleanerComponent` entities each frame
+2. Deep-copies trail slice for each cleaner to prevent data races with Update thread
+3. Renderer uses trail copy (no shared references to component state)
+4. Main loop updates components via ECS World's synchronized methods
+5. No data races: trail copies are fully independent from component state
 
 **Implementation**:
 ```go
 // Renderer (terminal_renderer.go)
-// Cache snapshots per frame to avoid redundant queries
-if r.cleanerSnapshotFrame != frameNum {
-    r.cleanerSnapshots = r.cleanerSystem.GetCleanerSnapshots()
-    r.cleanerSnapshotFrame = frameNum
-}
-
-// CleanerSystem (cleaner_system.go)
-func (cs *CleanerSystem) GetCleanerSnapshots() []render.CleanerSnapshot {
-    // Query all cleaner entities
+func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.Style) {
+    // Query World directly for cleaner components
+    cleanerType := reflect.TypeOf(components.CleanerComponent{})
     entities := world.GetEntitiesWith(cleanerType)
+
     for _, entity := range entities {
-        c := world.GetComponent(entity, cleanerType).(components.CleanerComponent)
-        // Deep copy trail to avoid race conditions
-        trailCopy := make([]core.Point, len(c.Trail))
-        copy(trailCopy, c.Trail)
-        snapshots = append(snapshots, render.CleanerSnapshot{...})
+        compRaw, ok := world.GetComponent(entity, cleanerType)
+        if !ok {
+            continue
+        }
+        cleaner := compRaw.(components.CleanerComponent)
+
+        // Deep copy trail to avoid race conditions during rendering
+        trailCopy := make([]core.Point, len(cleaner.Trail))
+        copy(trailCopy, cleaner.Trail)
+
+        // Render using trail copy...
     }
 }
 
-// Main Loop Update (cleaner_system.go)
+// CleanerSystem Update (cleaner_system.go)
 func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
     // Update component directly via World (internally synchronized)
     c.PreciseX += c.VelocityX * dt.Seconds()
@@ -1032,7 +1096,10 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 - **Visual**: Rendered as '╬' (Light Cyan).
 
 ### Cleaner System
-- **Trigger**: Activated when gold completed while heat meter already at maximum
+- **Trigger**: Event-driven via `EventCleanerRequest` when gold completed at maximum heat
+  - ScoreSystem pushes event: `ctx.PushEvent(engine.EventCleanerRequest, nil)`
+  - CleanerSystem consumes event in Update() method (event polling pattern)
+  - Frame deduplication: Tracks spawned frames to prevent duplicate activations
 - **Update Model**: **Synchronous** - runs in main game loop via ECS Update() method
 - **Architecture**: Pure ECS implementation using vector physics
   - All state stored in `CleanerComponent` (no external state tracking)
@@ -1046,7 +1113,9 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
   - **CleanerChar**: Unicode block character ('█')
   - **CleanerRemovalFlashDuration**: Flash effect duration (150ms)
 - **Behavior**: Sweeps across rows containing Red characters, removing them on contact
-- **Phantom Cleaners**: If no Red characters exist when activated, no entities spawn (phase transition continues normally)
+- **Phantom Cleaners**: If no Red characters exist when event consumed, no entities spawn
+  - Still pushes `EventCleanerFinished` (marks completion for testing/debugging)
+  - Phase cycle continues independently (cleaners are non-blocking)
 - **Direction**: Alternating - odd rows sweep L→R, even rows sweep R→L
 - **Selectivity**: Only destroys Red characters, leaves Blue/Green untouched
 - **Lifecycle**:
@@ -1071,13 +1140,14 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
   - Removal flash spawns as separate `RemovalFlashComponent` entity
   - Flash cleanup: Automatic removal after `CleanerRemovalFlashDuration`
 - **Thread Safety**:
-  - Atomic `pendingSpawn` flag for activation signal
+  - Event-driven activation via lock-free EventQueue
+  - Frame deduplication map prevents duplicate spawns (`spawned[event.Frame]`)
   - Component data protected by ECS World's internal synchronization
-  - Snapshot pattern for rendering: deep copy of trail positions per frame
-  - No external mutexes or state maps required
+  - Renderer deep-copies trail data directly from components (no snapshots needed)
+  - No external mutexes or state maps required (pure ECS + events)
 - **Performance**:
   - Zero goroutine overhead (pure synchronous ECS)
-  - No mutex contention (atomic flag + ECS synchronization)
+  - No mutex contention (lock-free event queue + ECS synchronization)
   - Single component query per update
   - Minimal allocations (trail slice grows/shrinks in-place)
   - Pre-calculated rendering gradients (zero per-frame color math)
