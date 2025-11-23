@@ -524,12 +524,12 @@ The audio system provides sound effects for game events using a dual-queue archi
 Systems execute in priority order (lower = earlier):
 1. **BoostSystem (5)**: Handle boost timer expiration (highest priority)
 2. **ScoreSystem (10)**: Process user input, update score
-3. **SpawnSystem (15)**: Generate new character sequences (Blue and Green only)
+3. **SpawnSystem (15)**: Generate new sequences (Blue and Green only)
 4. **NuggetSystem (18)**: Manage collectible nugget spawning and collection
-5. **GoldSequenceSystem (20)**: Manage gold sequence lifecycle and random placement
+5. **GoldSystem (20)**: Manage gold sequence lifecycle and random placement
 6. **CleanerSystem (22)**: Process cleaner physics, collision, and visual effects
 7. **DrainSystem (25)**: Manage score-draining entity movement and logic
-8. **DecaySystem (30)**: Apply character degradation and color transitions
+8. **DecaySystem (30)**: Apply sequence degradation and color transitions (lowest priority)
 
 **Important**: All priorities must be unique to ensure deterministic execution order. The priority values define the exact order in which systems process game state each frame.
 
@@ -542,8 +542,10 @@ Systems execute in priority order (lower = earlier):
 ## Component Hierarchy
 ```
 Component (marker interface)
+├── PositionComponent {X, Y}
+├── CharacterComponent {Rune, Style}
 ├── SequenceComponent {ID, Index, Type, Level}
-├── GoldComponent {Active, SequenceID, StartTime, CharSequence, CurrentIndex}
+├── GoldSequenceComponent {Active, SequenceID, StartTimeNano, CharSequence, CurrentIndex}
 ├── FallingDecayComponent {Column, YPosition, Speed, Char, LastChangeRow}
 ├── CleanerComponent {PreciseX, PreciseY, VelocityX, VelocityY, TargetX, TargetY, GridX, GridY, Trail, Char}
 ├── RemovalFlashComponent {X, Y, Char, StartTime, Duration}
@@ -551,13 +553,13 @@ Component (marker interface)
 └── DrainComponent {X, Y, LastMoveTime, LastDrainTime, IsOnCursor}
 ```
 
-**Note**: Internal code still uses `GoldSequenceComponent` for the type name, but we refer to it as "Gold" in documentation for brevity.
+**Note**: GoldSequenceComponent is the full type name used in code (defined in `components/character.go`).
 
 ### Sequence Types
-- **Green**: Positive scoring, spawned by SpawnSystem, decays to Red
-- **Blue**: Positive scoring with boost effect, spawned by SpawnSystem, decays to Green
+- **Green**: Positive scoring, spawned by SpawnSystem, decays Blue→Green→Red
+- **Blue**: Positive scoring, spawned by SpawnSystem, decays to Green when Dark level reached
 - **Red**: Negative scoring (penalty), ONLY created through decay (not spawned directly)
-- **Gold**: Bonus sequence, spawned randomly by GoldSystem after decay animation completes
+- **Gold**: Bonus sequence (10 characters), spawned by GoldSystem after decay animation completes
 
 ## Rendering Pipeline
 
@@ -1271,6 +1273,26 @@ The nugget system tests are organized into focused files:
   - TestNuggetComponentDetectionLogic: Component type detection
   - TestNuggetLayeringCursorOnTop: Render layer ordering
   - TestMultipleNuggetInstances: Multi-nugget rendering validation
+
+#### Drain System Tests
+The drain system tests are organized into focused files:
+
+**Located in `systems/`:**
+- **drain_lifecycle_test.go**: Drain entity spawn and despawn lifecycle
+- **drain_movement_test.go**: Movement toward cursor and pathfinding logic
+- **drain_collision_test.go**: Collision detection with sequences, nuggets, and gold
+- **drain_score_test.go**: Score draining mechanics and timing
+- **drain_integration_test.go**: Integration with other game systems
+- **drain_visualization_test.go**: Rendering and visual feedback
+
+#### Content Manager Tests
+The content manager system tests validate content loading and management:
+
+**Located in `content/`:**
+- **manager_test.go**: Core content manager functionality
+- **integration_test.go**: Integration with spawn system
+- **defensive_test.go**: Error handling and edge cases
+- **example_test.go**: Usage examples and documentation
 
 ### Integration Tests
 Located in `systems/integration_test.go`:

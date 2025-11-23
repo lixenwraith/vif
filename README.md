@@ -43,8 +43,8 @@ vi-fighter supports a comprehensive set of vi/vim motion commands for navigation
 The game strictly follows ECS architecture principles with a hybrid real-time/clock-based game loop:
 
 - **Entities**: Simple uint64 identifiers
-- **Components**: Pure data structures (Position, Character, Sequence, Nugget, Cleaner, etc.)
-- **Systems**: All game logic (Spawn, Score, Gold Sequence, Nugget, Decay, Cleaner)
+- **Components**: Pure data structures (Position, Character, Sequence, Gold, Nugget, Cleaner, Drain, etc.)
+- **Systems**: All game logic (Boost, Score, Spawn, Nugget, Gold, Cleaner, Drain, Decay)
 - **World**: Single source of truth for game state
 - **Concurrency**: Lock-free atomics for real-time state, mutexes for clock-tick state
 - **Rendering**: Built with tcell for cross-platform terminal graphics

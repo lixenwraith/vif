@@ -79,26 +79,28 @@ type GameState struct {
 
 	// Phase State (Infrastructure)
 	// Controls which game mechanic is active (Normal, Gold, Decay Wait, Decay Animation)
-	// Will add transition logic between phases
 	CurrentPhase   GamePhase // Current game phase
 	PhaseStartTime time.Time // When current phase started
 
-	// TODO: review and remove Migrated comments
-	// Gold Sequence State (Migrated from GoldSequenceSystem)
+	// Gold Sequence State
+	// Tracks active gold sequence timing and lifecycle
 	GoldActive      bool      // Whether gold sequence is active
 	GoldSequenceID  int       // Current gold sequence ID
 	GoldStartTime   time.Time // When gold spawned
 	GoldTimeoutTime time.Time // When gold will timeout (10s from start)
 
-	// Decay Timer State (Migrated from DecaySystem)
+	// Decay Timer State
+	// Manages countdown between gold completion and decay animation trigger
 	DecayTimerActive bool      // Whether decay timer has been started
 	DecayNextTime    time.Time // When decay will trigger
 
-	// Decay Animation State (Migrated from DecaySystem)
+	// Decay Animation State
+	// Tracks falling decay animation lifecycle
 	DecayAnimating bool      // Whether decay animation is running
 	DecayStartTime time.Time // When decay animation started
 
-	// Cleaner State (Migrated from CleanerSystem)
+	// Cleaner State
+	// Manages cleaner sweep animation that removes red sequences
 	// Cleaners run in parallel with other phases (not blocking)
 	CleanerPending   bool      // Whether cleaners should be triggered on next clock tick
 	CleanerActive    bool      // Whether cleaners are currently running

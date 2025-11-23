@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	characterSpawnMs        = 2000
-	maxCharacters           = 200
+	spawnIntervalMs         = 2000
+	maxEntities             = 200
 	minBlockLines           = 3
 	maxBlockLines           = 15
 	maxPlacementTries       = 3
@@ -328,12 +328,12 @@ func (s *SpawnSystem) Update(world *engine.World, dt time.Duration) {
 	entities := world.GetEntitiesWith(posType)
 	entityCount := len(entities)
 
-	if entityCount > maxCharacters {
+	if entityCount > maxEntities {
 		return // Already at max capacity
 	}
 
 	// Update spawn rate in GameState based on entity count
-	s.ctx.State.UpdateSpawnRate(entityCount, maxCharacters)
+	s.ctx.State.UpdateSpawnRate(entityCount, maxEntities)
 
 	// Check if it's time to spawn (reads from GameState)
 	if !s.ctx.State.ShouldSpawn() {
@@ -344,7 +344,7 @@ func (s *SpawnSystem) Update(world *engine.World, dt time.Duration) {
 	spawnState := s.ctx.State.ReadSpawnState()
 
 	// Calculate next spawn time based on rate multiplier
-	baseDelay := time.Duration(characterSpawnMs) * time.Millisecond
+	baseDelay := time.Duration(spawnIntervalMs) * time.Millisecond
 	adjustedDelay := time.Duration(float64(baseDelay) / spawnState.RateMultiplier)
 
 	// Generate and spawn a new sequence
