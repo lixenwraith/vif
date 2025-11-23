@@ -1,210 +1,114 @@
 # vi-fighter Development Guide for Claude Code
 
 ## PROJECT CONTEXT
-vi-fighter is a terminal-based typing game written in Go using an ECS (Entity Component System) architecture. The game features spatial indexing, temporal synchronization, and multiple gameplay systems including spawning, scoring, decay, and cleaner mechanics.
+vi-fighter is a terminal-based typing game in Go using a hybrid ECS architecture. It combines real-time lock-free updates (atomics) for input/rendering with a discrete clock-tick system for game logic.
 
-## CRITICAL DIRECTIVES
+## ARCHITECTURAL PILLARS
 
-### 1. CODE STRUCTURE ADHERENCE
-- **NEVER** deviate from existing project structure without explicit request
-- **ALWAYS** follow the established patterns in the codebase:
-  - ECS components in `engine/components.go`
-  - Systems in `systems/` directory with `Priority()` method
-  - Documentation in `doc/` directory (architecture.md, game.md, etc.)
-  - Constants in `constants/*.go`
-  - Assets in `assets/` directory
-
-### 2. CONSTANT MANAGEMENT
-**MANDATORY**: Never use hard-coded values. All constants must be:
-- Defined in `constants/*.go` or relevant system constants file
-- Named descriptively (e.g., `DecayIntervalMs`, not `50`)
-- Referenced consistently throughout codebase
-- Used in tests via constant references, not literals
+### 1. EVENT-DRIVEN COMMUNICATION
+**PATTERN**: Systems decouple via `GameContext.EventQueue`.
+- **Producers**: Push events to queue (e.g., `ScoreSystem` pushes `EventCleanerRequest`).
+- **Consumers**: Poll events in `Update()` (e.g., `CleanerSystem` consumes `EventCleanerRequest`).
+- **State**: Events replace direct method calls or shared boolean flags for triggering one-shot mechanics.
 ```go
-// ❌ WRONG
-if elapsed >= 50 * time.Millisecond
-TestDecayAfter50Ms() // Hard-coded in function name
-
 // ✅ CORRECT
-if elapsed >= DecayInterval
-TestDecayAfterInterval() // Uses constant reference
+ctx.PushEvent(engine.EventCleanerRequest, nil)
+
+// ❌ WRONG
+ctx.State.RequestCleaners() // Direct state mutation for triggers
+otherSystem.Activate()      // Direct coupling
 ```
 
-### 3. SINGLE SOURCE OF TRUTH
-**RULE**: One reference for each concept. No duplicate definitions.
-- Check for existing constants/types before creating new ones
-- If found duplicate (e.g., two sets of alphanumeric characters), consolidate immediately
-- Use type aliases or references, never duplicate data structures
+### 2. ATOMIC STATE PREFERENCE
+**DIRECTIVE**: Prefer lock-free atomics over Mutexes for high-frequency data.
+- **Counters/Flags**: Use `atomic.Int64`, `atomic.Bool`, `atomic.Uint64`.
+- **Snapshots**: Read multiple atomics sequentially for "consistent enough" real-time views.
+- **Mutexes**: Reserved for complex structural changes (maps/slices) or strict transactional logic (Spawn/Phase transitions).
 ```go
-// ❌ WRONG - Multiple definitions
-var AlphaNumRunes = []rune{'a','b','c'...}
-var AlphaNumString = "abc..."
+// ✅ CORRECT
+atomic.AddInt64(&gs.BlueCountBright, 1)
 
-// ✅ CORRECT - Single source
-var AlphaNumRunes = []rune{'a','b','c'...}
-func AlphaNumString() string { return string(AlphaNumRunes) }
+// ❌ WRONG
+gs.mu.Lock(); gs.BlueCountBright++; gs.mu.Unlock() // Unnecessary contention
 ```
 
-### 4. COMMENT SYNCHRONIZATION
-**REQUIREMENT**: Update ALL comments when changing code:
-- Search entire codebase for old terminology when renaming
-- Update function/method comments when behavior changes
-- Keep test descriptions aligned with test implementation
-- Use semantic search to find all references
-```go
-// When renaming "Character" to "Sequence":
-// 1. Update code
-// 2. Search for "character" in all .go files
-// 3. Update every comment, including test descriptions
-// 4. Update documentation in doc/
-```
+### 3. RENDERER DECOUPLING
+**RULE**: Renderer reads **DATA**, never queries **LOGIC**.
+- Renderer must not hold references to Systems.
+- Renderer queries `World` components directly.
+- **Thread Safety**: Renderer must deep-copy mutable reference types (slices/maps) from components within the World's read lock scope to prevent race conditions with Update threads.
 
-### 5. ROOT CAUSE ANALYSIS
-**APPROACH**: Always identify and fix root causes:
-1. When bug found, trace to origin system
-2. Identify systemic pattern causing issue
-3. Fix at architectural level, not symptom level
-4. Add tests for root cause, not just symptom
-
-Example from codebase:
-```go
-// ❌ SYMPTOM FIX: Add collision check in each system
-// ✅ ROOT FIX: Implement spatial transaction system for atomic operations
-```
-
-### 6. TEST MANAGEMENT
-**RULES**:
-- **UPDATE** existing tests when behavior changes - DO NOT add duplicates
-- **REMOVE** obsolete tests when functionality removed
-- **CONSOLIDATE** similar tests into parameterized table tests
-- Test files should be 20-30% of codebase size, not 500%
-```go
-// ❌ WRONG - Adding new test for changed behavior
-func TestOldBehavior(t *testing.T) { ... }
-func TestNewBehavior(t *testing.T) { ... } // Added instead of updating
-
-// ✅ CORRECT - Update existing test
-func TestBehavior(t *testing.T) { 
-    // Updated to reflect new requirements
-}
-```
-
-### 7. DOCUMENTATION UPDATES
-**MANDATORY** after every architectural change:
-1. Update relevant files in `doc/` directory:
-   - `architecture.md` - System design changes
-   - `game.md` - Gameplay mechanic changes
-   - `README.md` - Setup/usage changes
-2. Use consistent terminology across all docs
-3. Include code examples where relevant
-4. Update immediately, not as afterthought
-
-## IMPLEMENTATION PATTERNS
-
-### Spatial Operations
-Always use transaction pattern for spatial index updates:
+### 4. SPATIAL TRANSACTIONS
+**PATTERN**: All position changes use the transaction system.
 ```go
 tx := world.BeginSpatialTransaction()
-result := tx.Move(entity, oldX, oldY, newX, newY)
-if result.HasCollision {
-    // Handle collision
-}
+tx.Spawn(entity, x, y) // or Move/Destroy
 tx.Commit()
 ```
 
-### System Creation
-```go
-type NewSystem struct {
-    world *engine.World
-    // fields...
-}
+## CODING DIRECTIVES
 
-func (s *NewSystem) Priority() int { return PRIORITY_CONSTANT }
-func (s *NewSystem) Update(ctx *engine.GameContext, delta time.Duration) error {
-    // Implementation
+### 1. CONSTANT MANAGEMENT
+**MANDATORY**: No magic numbers.
+- Define in `constants/*.go`.
+- Use descriptive names (`CleanerTrailLength`, not `10`).
+
+### 2. SINGLE SOURCE OF TRUTH
+- **Phase State**: `GameState` is the authority on Phases (Normal, Gold, Decay).
+- **Component Data**: `World` components are the authority on Entity state.
+- **Events**: The `EventQueue` is the authority on transient triggers.
+
+### 3. DOCUMENTATION
+- Update `doc/architecture.md` immediately upon design changes.
+- Ensure `architecture.md` reflects the current Event Queue structure.
+
+## IMPLEMENTATION PATTERNS
+
+### System Event Polling
+```go
+func (s *MySystem) Update(world *engine.World, dt time.Duration) {
+    events := s.ctx.ConsumeEvents() // Atomically claims events
+    for _, e := range events {
+        if e.Type == engine.EventMyTrigger {
+            s.handleTrigger(e)
+        }
+    }
+    // ... rest of logic
 }
 ```
 
-### Component Access
+### Renderer Component Query
 ```go
-// Always check for component existence
-if world.HasComponent(entity, reflect.TypeOf((*SequenceComponent)(nil))) {
-    seq := world.GetComponent(entity, reflect.TypeOf((*SequenceComponent)(nil))).(*SequenceComponent)
-    // Use component
+func (r *Renderer) draw(world *engine.World) {
+    // World.GetEntitiesWith uses RLock internally
+    entities := world.GetEntitiesWith(myType)
+    for _, e := range entities {
+        if c, ok := world.GetComponent(e, myType); ok {
+            comp := c.(MyComponent)
+            // DEEP COPY SLICES if they might change in Update()
+            trail := make([]Point, len(comp.Trail))
+            copy(trail, comp.Trail)
+            r.render(trail)
+        }
+    }
 }
 ```
 
-### Atomic Counter Updates
-```go
-// For thread-safe color counting
-atomic.AddInt64(&blueNormalCount, 1)
-if atomic.LoadInt64(&blueNormalCount) == 0 {
-    // Color available for spawning
-}
-```
-
-## CURRENT ISSUES TO ADDRESS
-
-### Spatial Transactions (Implemented)
-- **Solution**: Atomic spatial operations via `engine/spatial_transactions.go`
-- **Pattern**: All spatial updates MUST use transaction system
-- **Status**: ✅ Race condition resolved, legacy methods removed
-
-### Temporal Desynchronization
-- **Problem**: Different time domains (50ms clock, 16ms render)
-- **Solution**: Implement interpolation for smooth movement
-- **Pattern**: Use `InterpolatedPosition` for cross-domain entities
-
-### Test Time-Step Issues
-- **Problem**: Large time steps cause collision "tunneling"
-- **Solution**: Use smaller time steps (10ms) in tests
-- **Pattern**: `const testTimeStep = 10 * time.Millisecond`
+## VERIFICATION CHECKLIST
+- [ ] **Race Detection**: Run tests with `go test -race ./...`
+- [ ] **Event Loop**: Ensure events are consumed, not just peeked (unless intended).
+- [ ] **Frame Alignment**: Events include Frame ID to prevent processing old triggers.
+- [ ] **Atomic Safety**: No mixing of atomic and non-atomic access on the same field.
+- [ ] **Documentation**: `CLAUDE.md` and `architecture.md` updated.
 
 ## FILE ORGANIZATION
 ```
 vi-fighter/
-├── engine/              # Core ECS engine
-│   ├── components.go    # Component definitions
-│   ├── ecs.go          # World and entity management
-│   └── spatial_transactions.go  # NEW: Atomic spatial operations
-├── systems/            # Game systems
-│   ├── *_system.go    # Individual systems
-│   └── *_test.go      # System tests (keep minimal)
-├── constants/          # All game constants
-│   └── game_constants.go
-├── content/           # Content management
-├── assets/            # Game assets (source code files)
-├── doc/              # Documentation (ALWAYS UPDATE)
-│   ├── architecture.md
-│   ├── game.md
-│   └── analysis/     # Technical analyses
-└── main.go
+├── engine/
+│   ├── events.go        # NEW: Event definitions and Ring Buffer
+│   ├── game_state.go    # Atomic & Shared State
+│   └── game.go          # Context & Event wiring
+├── systems/             # Logic (Event Consumers)
+├── render/              # Visualization (Data Readers)
+└── constants/
 ```
-
-## VERIFICATION CHECKLIST
-
-Before committing any change:
-- [ ] No hard-coded values in code
-- [ ] All comments updated for terminology changes
-- [ ] Tests updated, not duplicated
-- [ ] Documentation in doc/ updated
-- [ ] Root cause addressed, not just symptom
-- [ ] Single source of truth maintained
-- [ ] Follows existing project structure
-
-## COMMON MISTAKES TO AVOID
-
-1. **Creating new constant sets instead of reusing**
-2. **Adding "fix" commits without understanding root cause**
-3. **Leaving outdated comments after refactoring**
-4. **Creating test_new.go instead of updating test.go**
-5. **Implementing workarounds instead of fixing architecture**
-6. **Forgetting to update doc/ after changes**
-7. **Using magic numbers in any context**
-
-## REMEMBER
-- The codebase is the source of truth for patterns
-- When in doubt, search for existing examples
-- Update everything affected by a change in one commit
-- Quality over quantity - fewer, better tests
-- Documentation is not optional
