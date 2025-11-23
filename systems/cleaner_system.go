@@ -47,10 +47,10 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 		}
 	}
 
-	// 2. Clean old entries from spawned map (keep last 10 frames)
+	// 2. Clean old entries from spawned map (keep last CleanerDeduplicationWindow frames)
 	currentFrame := cs.ctx.State.GetFrameNumber()
 	for frame := range cs.spawned {
-		if currentFrame-frame > 10 {
+		if currentFrame-frame > constants.CleanerDeduplicationWindow {
 			delete(cs.spawned, frame)
 		}
 	}
@@ -119,15 +119,31 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 			c.GridX = newGridX
 			c.GridY = newGridY
 
-			// Push new position to the front of the trail
+			// Push new position to the front of the trail using strict copy-on-write
+			// to prevent race conditions with the Renderer reading the trail
 			newPoint := core.Point{X: c.GridX, Y: c.GridY}
-			// Prepend
-			c.Trail = append([]core.Point{newPoint}, c.Trail...)
 
-			// Truncate to max length
-			if len(c.Trail) > constants.CleanerTrailLength {
-				c.Trail = c.Trail[:constants.CleanerTrailLength]
+			// Calculate new trail length (old trail + new point, capped at max)
+			oldLen := len(c.Trail)
+			newLen := oldLen + 1
+			if newLen > constants.CleanerTrailLength {
+				newLen = constants.CleanerTrailLength
 			}
+
+			// Allocate a new slice - this ensures Renderer can't access the same backing array
+			newTrail := make([]core.Point, newLen)
+
+			// Copy new point to front
+			newTrail[0] = newPoint
+
+			// Copy old trail points (up to max length - 1)
+			copyLen := newLen - 1
+			if copyLen > 0 {
+				copy(newTrail[1:], c.Trail[:copyLen])
+			}
+
+			// Assign new slice to component (atomically replaces reference)
+			c.Trail = newTrail
 		}
 
 		// --- Lifecycle Management ---
@@ -145,6 +161,13 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 			// Save updated component state
 			world.AddComponent(entity, c)
 		}
+	}
+
+	// Check again after processing to see if all cleaners finished this frame
+	entities = world.GetEntitiesWith(cleanerType)
+	if len(entities) == 0 && cs.hasSpawnedSession {
+		cs.ctx.PushEvent(engine.EventCleanerFinished, nil)
+		cs.hasSpawnedSession = false
 	}
 
 	// 4. Cleanup Effects

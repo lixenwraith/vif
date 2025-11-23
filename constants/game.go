@@ -13,3 +13,19 @@ const (
 	// InitialSpawnDelay is the delay before first character spawn
 	InitialSpawnDelay = 2 * time.Second
 )
+
+// Event Queue Constants
+const (
+	// EventQueueSize is the fixed capacity of the event ring buffer
+	EventQueueSize = 256
+
+	// EventBufferMask is the bitmask for fast modulo operations (256 - 1)
+	EventBufferMask = 255
+)
+
+// Cleaner System Constants
+const (
+	// CleanerDeduplicationWindow is the number of frames to keep in the spawned map
+	// for preventing duplicate cleaner spawns from the same event
+	CleanerDeduplicationWindow = 10
+)

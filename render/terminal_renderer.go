@@ -412,6 +412,10 @@ func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.
 		}
 		screenY := r.gameY + cleaner.GridY
 
+		// Pre-calculate gradient length outside loop for performance
+		gradientLen := len(r.cleanerGradient)
+		maxGradientIdx := gradientLen - 1
+
 		// Iterate through the trail
 		// Index 0 is the head (brightest), last index is the tail (faintest)
 		for i, point := range trailCopy {
@@ -422,11 +426,10 @@ func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.
 
 			screenX := r.gameX + point.X
 
-			// Use pre-calculated gradient based on index
-			// Ensure we don't go out of bounds of the gradient slice
+			// Use pre-calculated gradient based on index (clamped to valid range)
 			gradientIndex := i
-			if gradientIndex >= len(r.cleanerGradient) {
-				gradientIndex = len(r.cleanerGradient) - 1
+			if gradientIndex > maxGradientIdx {
+				gradientIndex = maxGradientIdx
 			}
 
 			// Apply color from gradient

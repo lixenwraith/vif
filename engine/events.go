@@ -1,6 +1,6 @@
 // Package engine provides core game event infrastructure for vi-fighter.
 //
-// Event System Architecture
+// # Event System Architecture
 //
 // The event system enables decoupled, event-driven communication between game systems.
 // Systems communicate by pushing events to a shared EventQueue rather than calling
@@ -26,25 +26,28 @@
 // - Ring buffer automatically overwrites oldest events when full
 //
 // Usage Example:
-//  // Producer (ScoreSystem triggers cleaners)
-//  if heatAtMax {
-//      ctx.PushEvent(engine.EventCleanerRequest, nil)
-//  }
 //
-//  // Consumer (CleanerSystem spawns cleaners)
-//  func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
-//      events := cs.ctx.ConsumeEvents()
-//      for _, event := range events {
-//          if event.Type == engine.EventCleanerRequest {
-//              cs.spawnCleaners(world)
-//          }
-//      }
-//  }
+//	// Producer (ScoreSystem triggers cleaners)
+//	if heatAtMax {
+//	    ctx.PushEvent(engine.EventCleanerRequest, nil)
+//	}
+//
+//	// Consumer (CleanerSystem spawns cleaners)
+//	func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
+//	    events := cs.ctx.ConsumeEvents()
+//	    for _, event := range events {
+//	        if event.Type == engine.EventCleanerRequest {
+//	            cs.spawnCleaners(world)
+//	        }
+//	    }
+//	}
 package engine
 
 import (
 	"sync/atomic"
 	"time"
+
+	"github.com/lixenwraith/vi-fighter/constants"
 )
 
 // EventType represents the type of game event.
@@ -159,7 +162,7 @@ type GameEvent struct {
 // EventQueue is a lock-free ring buffer for game events.
 //
 // Architecture:
-//   - Fixed-size ring buffer (256 events capacity)
+//   - Fixed-size ring buffer (EventQueueSize events capacity)
 //   - Lock-free push via atomic CAS (Compare-And-Swap) operations
 //   - Single-consumer design for consume operations (game loop)
 //   - Automatic oldest-event overwriting when buffer is full
@@ -178,14 +181,14 @@ type GameEvent struct {
 //   - Zero allocations for push operations (events stored inline)
 //
 // Overflow Behavior:
-//   - When buffer is full (256 events), oldest events are automatically overwritten
+//   - When buffer is full (EventQueueSize events), oldest events are automatically overwritten
 //   - Head pointer is advanced to maintain ring buffer invariants
-//   - Consumers may miss events if they fall behind by > 256 events (rare in practice)
+//   - Consumers may miss events if they fall behind by > EventQueueSize events (rare in practice)
 type EventQueue struct {
-	events    [256]GameEvent   // Fixed-size ring buffer (capacity: 256)
-	published [256]atomic.Bool // Published flags (true = event is fully written and ready to read)
-	head      atomic.Uint64    // Read index (next position to read from)
-	tail      atomic.Uint64    // Write index (next position to write to)
+	events    [constants.EventQueueSize]GameEvent   // Fixed-size ring buffer
+	published [constants.EventQueueSize]atomic.Bool // Published flags (true = event is fully written and ready to read)
+	head      atomic.Uint64                         // Read index (next position to read from)
+	tail      atomic.Uint64                         // Write index (next position to write to)
 }
 
 // NewEventQueue creates a new event queue with empty state.
@@ -222,7 +225,7 @@ func NewEventQueue() *EventQueue {
 //   - Eliminates data race between concurrent Push() and Consume()
 //
 // Overflow Handling:
-//   - If tail is more than 256 ahead of head, advance head (overwrite oldest)
+//   - If tail is more than EventQueueSize ahead of head, advance head (overwrite oldest)
 //   - This is best-effort; consumer will handle stale data via frame checks
 //
 // Thread-Safety:
@@ -245,7 +248,7 @@ func (eq *EventQueue) Push(event GameEvent) {
 
 		// Try to claim this slot
 		if eq.tail.CompareAndSwap(currentTail, nextTail) {
-			idx := currentTail % 256
+			idx := currentTail & constants.EventBufferMask
 
 			// Write event data to claimed slot
 			eq.events[idx] = event
@@ -255,12 +258,12 @@ func (eq *EventQueue) Push(event GameEvent) {
 			eq.published[idx].Store(true)
 
 			// Check if we're overwriting unread events
-			// If head is more than 256 behind tail, advance it
+			// If head is more than EventQueueSize behind tail, advance it
 			currentHead := eq.head.Load()
-			if nextTail-currentHead > 256 {
+			if nextTail-currentHead > constants.EventQueueSize {
 				// Try to advance head to prevent reading stale data
 				// This is best-effort; if it fails, the consumer will handle it
-				eq.head.CompareAndSwap(currentHead, nextTail-256)
+				eq.head.CompareAndSwap(currentHead, nextTail-constants.EventQueueSize)
 			}
 
 			return
@@ -311,15 +314,15 @@ func (eq *EventQueue) Consume() []GameEvent {
 
 	// Calculate maximum available events (cap at buffer size)
 	maxAvailable := currentTail - currentHead
-	if maxAvailable > 256 {
-		maxAvailable = 256
-		currentHead = currentTail - 256
+	if maxAvailable > constants.EventQueueSize {
+		maxAvailable = constants.EventQueueSize
+		currentHead = currentTail - constants.EventQueueSize
 	}
 
 	// Read events one by one, checking published flag
 	result := make([]GameEvent, 0, maxAvailable)
 	for i := uint64(0); i < maxAvailable; i++ {
-		idx := (currentHead + i) % 256
+		idx := (currentHead + i) & constants.EventBufferMask
 
 		// Check if this slot is published (fully written)
 		if !eq.published[idx].Load() {
@@ -387,15 +390,15 @@ func (eq *EventQueue) Peek() []GameEvent {
 
 	// Calculate maximum available events
 	maxAvailable := currentTail - currentHead
-	if maxAvailable > 256 {
-		maxAvailable = 256
-		currentHead = currentTail - 256
+	if maxAvailable > constants.EventQueueSize {
+		maxAvailable = constants.EventQueueSize
+		currentHead = currentTail - constants.EventQueueSize
 	}
 
 	// Read events one by one, checking published flag
 	result := make([]GameEvent, 0, maxAvailable)
 	for i := uint64(0); i < maxAvailable; i++ {
-		idx := (currentHead + i) % 256
+		idx := (currentHead + i) & constants.EventBufferMask
 
 		// Check if this slot is published (fully written)
 		if !eq.published[idx].Load() {
@@ -428,8 +431,8 @@ func (eq *EventQueue) Peek() []GameEvent {
 //   - Concurrent pushes/consumes may change length before caller uses value
 //
 // Return Value:
-//   - int: Number of events currently in queue (0-256)
-//   - Capped at 256 (buffer capacity)
+//   - int: Number of events currently in queue (0-EventQueueSize)
+//   - Capped at EventQueueSize (buffer capacity)
 //
 // Performance:
 //   - O(1): Two atomic loads and arithmetic
@@ -443,8 +446,8 @@ func (eq *EventQueue) Len() int {
 	currentTail := eq.tail.Load()
 	available := currentTail - currentHead
 
-	if available > 256 {
-		return 256
+	if available > constants.EventQueueSize {
+		return constants.EventQueueSize
 	}
 	return int(available)
 }

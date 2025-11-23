@@ -62,8 +62,8 @@ ctx.PushEvent(engine.EventCleanerRequest, nil)  // Lock-free, testable, observab
 ```
 
 **Implementation** (`engine/events.go`):
-- `EventQueue`: Fixed-size ring buffer (256 events)
-- `Push()`: Lock-free CAS (Compare-And-Swap) for concurrent producers
+- `EventQueue`: Fixed-size ring buffer (size defined in `constants.EventQueueSize`)
+- `Push()`: Lock-free CAS (Compare-And-Swap) for concurrent producers using fast bitwise masking (`constants.EventBufferMask`)
 - `Consume()`: Atomically claims and returns all pending events
 - `Peek()`: Read-only inspection for debugging/testing
 
@@ -941,7 +941,13 @@ func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.
 func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
     // Update component directly via World (internally synchronized)
     c.PreciseX += c.VelocityX * dt.Seconds()
-    c.Trail = append([]core.Point{newPoint}, c.Trail...)
+
+    // Strict copy-on-write for Trail to prevent race conditions with Renderer
+    newTrail := make([]core.Point, newLen)
+    newTrail[0] = newPoint
+    copy(newTrail[1:], c.Trail[:copyLen])
+    c.Trail = newTrail  // Atomic reference replacement
+
     world.AddComponent(entity, c)  // ECS handles synchronization
 }
 ```
