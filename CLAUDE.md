@@ -1,7 +1,64 @@
 # vi-fighter Development Guide for Claude Code
 
 ## PROJECT CONTEXT
-vi-fighter is a terminal-based typing game in Go using a hybrid ECS architecture. It combines real-time lock-free updates (atomics) for input/rendering with a discrete clock-tick system for game logic.
+vi-fighter is a terminal-based typing game in Go currently undergoing a major architectural migration from a reflection-based ECS to a compile-time Generics-based ECS (Go 1.18+). The codebase uses a hybrid architecture combining real-time lock-free updates (atomics) for input/rendering with a discrete clock-tick system for game logic.
+Go Toolchain: Go 1.24.7
+
+## MIGRATION OBJECTIVE: GENERICS-BASED ECS
+**GOAL**: Eliminate all `reflect` usage in the hot path (Update/Render) to reduce GC pressure and enforce type safety.
+
+### 1. DATA STRUCTURES
+**PATTERN**: Use explicit, typed stores instead of dynamic maps.
+- **Old**: `world.GetComponent(e, reflect.TypeOf(Position{}))`
+- **New**: `world.Positions.Get(e)`
+
+**World Structure**:
+```go
+type World struct {
+    // Explicit Stores (Public for Systems)
+    Positions      *PositionStore // Specialized store with spatial index
+    Characters     *Store[components.CharacterComponent]
+    Sequences      *Store[components.SequenceComponent]
+    // ... explicit fields for all 9 components
+    
+    // Lifecycle Interface (For DestroyEntity)
+    allStores []AnyStore
+}
+```
+
+### 2. QUERY PATTERN
+**PATTERN**: Use the Query Builder for component intersection.
+- **Optimization**: Intersection logic must start with the smallest store.
+```go
+// ✅ CORRECT: Type-safe, zero-allocation query
+entities := world.Query().
+    With(world.Positions).
+    With(world.Characters).
+    Execute()
+
+for _, e := range entities {
+    pos, _ := world.Positions.Get(e)
+    char, _ := world.Characters.Get(e)
+    // ...
+}
+```
+
+### 3. ENTITY CREATION (BUILDER)
+**PATTERN**: Use the Entity Builder for atomic creation.
+- **Transactional**: ID is reserved, but components are committed only on `Build()`.
+```go
+// ✅ CORRECT
+world.NewEntity().
+    With(world.Positions, pos).
+    With(world.Characters, char).
+    Build()
+```
+
+### 4. SPATIAL INDEXING
+**RULE**: The `SpatialIndex` is internal to `PositionStore`.
+- **Read**: `world.Positions.GetEntityAt(x, y)`
+- **Write**: Only via `world.Positions.Add()` or `world.Positions.Move()`.
+- **Batch**: Use `world.Positions.BeginBatch()` for multi-entity spawns to ensure atomicity and collision detection.
 
 ## ARCHITECTURAL PILLARS
 
@@ -9,106 +66,74 @@ vi-fighter is a terminal-based typing game in Go using a hybrid ECS architecture
 **PATTERN**: Systems decouple via `GameContext.EventQueue`.
 - **Producers**: Push events to queue (e.g., `ScoreSystem` pushes `EventCleanerRequest`).
 - **Consumers**: Poll events in `Update()` (e.g., `CleanerSystem` consumes `EventCleanerRequest`).
-- **State**: Events replace direct method calls or shared boolean flags for triggering one-shot mechanics.
-```go
-// ✅ CORRECT
-ctx.PushEvent(engine.EventCleanerRequest, nil)
-
-// ❌ WRONG
-ctx.State.RequestCleaners() // Direct state mutation for triggers
-otherSystem.Activate()      // Direct coupling
-```
 
 ### 2. ATOMIC STATE PREFERENCE
 **DIRECTIVE**: Prefer lock-free atomics over Mutexes for high-frequency data.
-- **Counters/Flags**: Use `atomic.Int64`, `atomic.Bool`, `atomic.Uint64`.
+- **Counters/Flags**: Use `atomic.Int64`, `atomic.Bool`.
 - **Snapshots**: Read multiple atomics sequentially for "consistent enough" real-time views.
-- **Mutexes**: Reserved for complex structural changes (maps/slices) or strict transactional logic (Spawn/Phase transitions).
-```go
-// ✅ CORRECT
-atomic.AddInt64(&gs.BlueCountBright, 1)
-
-// ❌ WRONG
-gs.mu.Lock(); gs.BlueCountBright++; gs.mu.Unlock() // Unnecessary contention
-```
 
 ### 3. RENDERER DECOUPLING
 **RULE**: Renderer reads **DATA**, never queries **LOGIC**.
-- Renderer must not hold references to Systems.
-- Renderer queries `World` components directly.
-- **Thread Safety**: Renderer must deep-copy mutable reference types (slices/maps) from components within the World's read lock scope to prevent race conditions with Update threads.
-
-### 4. SPATIAL TRANSACTIONS
-**PATTERN**: All position changes use the transaction system.
-```go
-tx := world.BeginSpatialTransaction()
-tx.Spawn(entity, x, y) // or Move/Destroy
-tx.Commit()
-```
+- Renderer queries `World` stores directly (`world.Positions.Get(e)`).
+- **Thread Safety**: Deep-copy mutable reference types (slices/maps) from components within the Store's read lock scope.
 
 ## CODING DIRECTIVES
 
-### 1. CONSTANT MANAGEMENT
-**MANDATORY**: No magic numbers.
-- Define in `constants/*.go`.
-- Use descriptive names (`CleanerTrailLength`, not `10`).
+### 1. MIGRATION SAFETY
+**MANDATORY**: Do not break the build.
+- Use the **Parallel World** pattern: Implement new Generic stores alongside the old Reflection maps until all systems are migrated.
+- Use `world.SyncToGeneric()` temporarily to keep states in sync during the transition.
 
-### 2. SINGLE SOURCE OF TRUTH
-- **Phase State**: `GameState` is the authority on Phases (Normal, Gold, Decay).
-- **Component Data**: `World` components are the authority on Entity state.
-- **Events**: The `EventQueue` is the authority on transient triggers.
+### 2. CONSTANT MANAGEMENT
+**MANDATORY**: No magic numbers. Define in `constants/*.go`.
 
-### 3. DOCUMENTATION
-- Update `doc/architecture.md` immediately upon design changes.
-- Ensure `architecture.md` reflects the current Event Queue structure.
+### 3. NO REFLECTION
+**STRICT PROHIBITION**: Do not import `reflect`. Use type assertions or generic constraints only if absolutely necessary, but prefer concrete types in Stores.
 
 ## IMPLEMENTATION PATTERNS
 
-### System Event Polling
+### Generic System Update
 ```go
 func (s *MySystem) Update(world *engine.World, dt time.Duration) {
-    events := s.ctx.ConsumeEvents() // Atomically claims events
-    for _, e := range events {
-        if e.Type == engine.EventMyTrigger {
-            s.handleTrigger(e)
-        }
+    // Direct Store Access (Fastest)
+    if pos, ok := world.Positions.Get(myEntity); ok {
+        pos.X += 1
+        world.Positions.Add(myEntity, pos)
     }
-    // ... rest of logic
+    
+    // Complex Query (Readable)
+    entities := world.Query().With(world.Positions).With(world.Tags).Execute()
 }
 ```
 
-### Renderer Component Query
+### Position Store Transaction
 ```go
-func (r *Renderer) draw(world *engine.World) {
-    // World.GetEntitiesWith uses RLock internally
-    entities := world.GetEntitiesWith(myType)
-    for _, e := range entities {
-        if c, ok := world.GetComponent(e, myType); ok {
-            comp := c.(MyComponent)
-            // DEEP COPY SLICES if they might change in Update()
-            trail := make([]Point, len(comp.Trail))
-            copy(trail, comp.Trail)
-            r.render(trail)
-        }
-    }
+batch := world.Positions.BeginBatch()
+batch.Add(e1, pos1)
+batch.Add(e2, pos2)
+if err := batch.Commit(); err != nil {
+    // Handle collision
 }
 ```
 
 ## VERIFICATION CHECKLIST
-- [ ] **Race Detection**: Run tests with `go test -race ./...`
-- [ ] **Event Loop**: Ensure events are consumed, not just peeked (unless intended).
-- [ ] **Frame Alignment**: Events include Frame ID to prevent processing old triggers.
-- [ ] **Atomic Safety**: No mixing of atomic and non-atomic access on the same field.
-- [ ] **Documentation**: `CLAUDE.md` and `architecture.md` updated.
+- [ ] **Compilation**: `go build ./...` must pass after every step.
+- [ ] **No Reflection**: Verify no `reflect` usage in modified files.
+- [ ] **Type Safety**: Ensure `Store[T]` prevents storing wrong component types.
+- [ ] **Spatial Integrity**: Verify `PositionStore` updates the internal map on Add/Remove.
+- [ ] **Locking**: Ensure Stores use internal RWMutex correctly (RLock for Reads).
 
-## FILE ORGANIZATION
+## FILE ORGANIZATION (TARGET)
 ```
 vi-fighter/
 ├── engine/
-│   ├── events.go        # NEW: Event definitions and Ring Buffer
-│   ├── game_state.go    # Atomic & Shared State
-│   └── game.go          # Context & Event wiring
-├── systems/             # Logic (Event Consumers)
-├── render/              # Visualization (Data Readers)
-└── constants/
+│   ├── store.go         # Generic Store[T] implementation
+│   ├── position_store.go # Specialized store with Spatial Index
+│   ├── query.go         # Query Builder
+│   ├── entity_builder.go # Entity Builder
+│   ├── world.go         # The new World struct with explicit stores
+│   └── events.go        # Event Queue
+├── systems/             # Logic (Generic implementations)
+├── render/              # Visualization (Generic readers)
+└── components/          # Data Structs
 ```
