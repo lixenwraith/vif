@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
-	"reflect"
 	"sync"
 	"time"
 
@@ -67,7 +66,7 @@ func (s *GoldSystem) Update(world *engine.World, dt time.Duration) {
 	}
 }
 
-// spawnGold creates a new gold sequence at a random position on the screen
+// spawnGold creates a new gold sequence at a random position on the screen using generic stores
 // Returns true if spawn succeeded, false if spawn failed (e.g., no valid position)
 func (s *GoldSystem) spawnGold(world *engine.World) bool {
 	// Read phase and gold state snapshots for consistent checks
@@ -84,6 +83,8 @@ func (s *GoldSystem) spawnGold(world *engine.World) bool {
 		// Already have an active gold sequence
 		return false
 	}
+
+	gworld := world.GetGeneric()
 
 	s.mu.Lock()
 	// Generate random 10-character sequence
@@ -107,71 +108,69 @@ func (s *GoldSystem) spawnGold(world *engine.World) bool {
 	// Get style for gold sequence
 	style := render.GetStyleForSequence(components.SequenceGold, components.LevelBright)
 
-	// Create entities for each character in the gold sequence
-	createdEntities := make([]engine.Entity, 0, constants.GoldSequenceLength)
-	entityPositions := make([]engine.EntityPosition, 0, constants.GoldSequenceLength)
+	// Create entities and components
+	type entityData struct {
+		entity engine.Entity
+		pos    components.PositionComponent
+		char   components.CharacterComponent
+		seq    components.SequenceComponent
+	}
+
+	entities := make([]entityData, 0, constants.GoldSequenceLength)
 
 	for i := 0; i < constants.GoldSequenceLength; i++ {
-		entity := world.CreateEntity()
-		createdEntities = append(createdEntities, entity)
-
-		// Add position component
-		world.AddComponent(entity, components.PositionComponent{
-			X: x + i,
-			Y: y,
-		})
-
-		// Add character component
-		world.AddComponent(entity, components.CharacterComponent{
-			Rune:  sequence[i],
-			Style: style,
-		})
-
-		// Add sequence component
-		world.AddComponent(entity, components.SequenceComponent{
-			ID:    sequenceID,
-			Index: i,
-			Type:  components.SequenceGold,
-			Level: components.LevelBright,
-		})
-
-		// Add to batch spawn list
-		entityPositions = append(entityPositions, engine.EntityPosition{
-			Entity: entity,
-			X:      x + i,
-			Y:      y,
+		entity := gworld.CreateEntity()
+		entities = append(entities, entityData{
+			entity: entity,
+			pos: components.PositionComponent{
+				X: x + i,
+				Y: y,
+			},
+			char: components.CharacterComponent{
+				Rune:  sequence[i],
+				Style: style,
+			},
+			seq: components.SequenceComponent{
+				ID:    sequenceID,
+				Index: i,
+				Type:  components.SequenceGold,
+				Level: components.LevelBright,
+			},
 		})
 	}
 
-	// Begin spatial transaction for atomic gold sequence creation
-	tx := world.BeginSpatialTransaction()
+	// Batch position validation and commit
+	batch := gworld.Positions.BeginBatch()
+	for _, ed := range entities {
+		batch.Add(ed.entity, ed.pos)
+	}
 
-	// Use SpawnBatch to validate all positions atomically
-	result := tx.SpawnBatch(entityPositions)
-	if result.HasCollision {
-		// Collision detected - rollback and cleanup all entities
-		tx.Rollback()
-		for _, e := range createdEntities {
-			world.DestroyEntity(e)
+	if err := batch.Commit(); err != nil {
+		// Collision detected - cleanup entities
+		for _, ed := range entities {
+			gworld.DestroyEntity(ed.entity)
 		}
 		return false
 	}
 
-	// Commit spatial transaction atomically
-	tx.Commit()
+	// Add other components (positions already committed)
+	for _, ed := range entities {
+		gworld.Characters.Add(ed.entity, ed.char)
+		gworld.Sequences.Add(ed.entity, ed.seq)
+	}
 
 	// Activate gold sequence in GameState (sets phase to PhaseGoldActive)
 	if !s.ctx.State.ActivateGoldSequence(sequenceID, constants.GoldDuration) {
 		// Phase transition failed - clean up created entities
-		for _, entity := range createdEntities {
-			world.DestroyEntity(entity)
+		for _, ed := range entities {
+			gworld.DestroyEntity(ed.entity)
 		}
 		return false
 	}
 	return true
 }
 
-// removeGold removes all gold sequence entities from the world
+// removeGold removes all gold sequence entities from the world using generic stores
 func (s *GoldSystem) removeGold(world *engine.World, sequenceID int) {
 	// Read gold state snapshot for consistent check
 	goldSnapshot := s.ctx.State.ReadGoldState()
@@ -186,22 +185,20 @@ func (s *GoldSystem) removeGold(world *engine.World, sequenceID int) {
 		return
 	}
 
-	seqType := reflect.TypeOf(components.SequenceComponent{})
-	posType := reflect.TypeOf(components.PositionComponent{})
+	gworld := world.GetGeneric()
 
-	entities := world.GetEntitiesWith(seqType, posType)
+	// Query entities with sequence components
+	entities := gworld.Sequences.All()
 
 	for _, entity := range entities {
-		seqComp, ok := world.GetComponent(entity, seqType)
+		seq, ok := gworld.Sequences.Get(entity)
 		if !ok {
 			continue
 		}
-		seq := seqComp.(components.SequenceComponent)
 
 		// Only remove gold sequence entities with our ID
 		if seq.Type == components.SequenceGold && seq.ID == sequenceID {
-			// Safely destroy entity (handles spatial index removal)
-			world.DestroyEntity(entity)
+			gworld.DestroyEntity(entity)
 		}
 	}
 
@@ -235,7 +232,7 @@ func (s *GoldSystem) GetSequenceID() int {
 	return goldSnapshot.SequenceID
 }
 
-// GetExpectedCharacter returns the expected character at the given index for the active gold sequence
+// GetExpectedCharacter returns the expected character at the given index for the active gold sequence using generic stores
 // Returns 0 and false if no active gold sequence or index is invalid
 // Uses GameState snapshot for active check
 func (s *GoldSystem) GetExpectedCharacter(sequenceID int, index int) (rune, bool) {
@@ -246,25 +243,25 @@ func (s *GoldSystem) GetExpectedCharacter(sequenceID int, index int) (rune, bool
 		return 0, false
 	}
 
-	// Find the entity with this sequence ID and index
-	seqType := reflect.TypeOf(components.SequenceComponent{})
-	charType := reflect.TypeOf(components.CharacterComponent{})
+	gworld := s.ctx.World.GetGeneric()
 
-	entities := s.ctx.World.GetEntitiesWith(seqType, charType)
+	// Query entities with sequence and character components
+	entities := gworld.Query().
+		With(gworld.Sequences).
+		With(gworld.Characters).
+		Execute()
 
 	for _, entity := range entities {
-		seqComp, ok := s.ctx.World.GetComponent(entity, seqType)
+		seq, ok := gworld.Sequences.Get(entity)
 		if !ok {
 			continue
 		}
-		seq := seqComp.(components.SequenceComponent)
 
 		if seq.Type == components.SequenceGold && seq.ID == sequenceID && seq.Index == index {
-			charComp, ok := s.ctx.World.GetComponent(entity, charType)
+			char, ok := gworld.Characters.Get(entity)
 			if !ok {
 				return 0, false
 			}
-			char := charComp.(components.CharacterComponent)
 			return char.Rune, true
 		}
 	}
@@ -302,10 +299,10 @@ func (s *GoldSystem) CompleteGold(world *engine.World) bool {
 	return true
 }
 
-// findValidPosition finds a valid random position for the gold sequence
+// findValidPosition finds a valid random position for the gold sequence using generic stores
 // Caller holds s.mu lock
 func (s *GoldSystem) findValidPosition(world *engine.World, seqLength int) (int, int) {
-	// Read dimensions from context
+	gworld := world.GetGeneric()
 	gameWidth := s.ctx.GameWidth
 	gameHeight := s.ctx.GameHeight
 
@@ -330,7 +327,7 @@ func (s *GoldSystem) findValidPosition(world *engine.World, seqLength int) (int,
 		// Check for overlaps with existing characters
 		overlaps := false
 		for i := 0; i < seqLength; i++ {
-			if world.GetEntityAtPosition(x+i, y) != 0 {
+			if gworld.Positions.GetEntityAt(x+i, y) != 0 {
 				overlaps = true
 				break
 			}

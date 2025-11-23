@@ -2,7 +2,6 @@ package systems
 
 import (
 	"math"
-	"reflect"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/audio"
@@ -76,12 +75,13 @@ func (s *ScoreSystem) Update(world *engine.World, dt time.Duration) {
 	}
 }
 
-// HandleCharacterTyping processes a character typed in insert mode
+// HandleCharacterTyping processes a character typed in insert mode using generic stores
 func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursorY int, typedRune rune) {
 	now := s.ctx.TimeProvider.Now()
+	gworld := world.GetGeneric()
 
 	// Get entity at cursor position
-	entity := world.GetEntityAtPosition(cursorX, cursorY)
+	entity := gworld.Positions.GetEntityAt(cursorX, cursorY)
 	if entity == 0 {
 		// No character at cursor - flash error cursor and deactivate boost
 		s.ctx.State.SetCursorError(true)
@@ -103,8 +103,7 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 	}
 
 	// Get character component
-	charType := reflect.TypeOf(components.CharacterComponent{})
-	charComp, ok := world.GetComponent(entity, charType)
+	char, ok := gworld.Characters.Get(entity)
 	if !ok {
 		s.ctx.State.SetCursorError(true)
 		s.ctx.State.SetCursorErrorTime(now)
@@ -123,19 +122,16 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		}
 		return
 	}
-	char := charComp.(components.CharacterComponent)
 
 	// Check if this is a nugget - handle before sequence logic
-	nuggetType := reflect.TypeOf(components.NuggetComponent{})
-	if _, hasNugget := world.GetComponent(entity, nuggetType); hasNugget && s.nuggetSystem != nil {
+	if gworld.Nuggets.Has(entity) && s.nuggetSystem != nil {
 		// Handle nugget collection (requires matching character)
 		s.handleNuggetCollection(world, entity, char, typedRune, cursorX, cursorY)
 		return
 	}
 
 	// Get sequence component
-	seqType := reflect.TypeOf(components.SequenceComponent{})
-	seqComp, ok := world.GetComponent(entity, seqType)
+	seq, ok := gworld.Sequences.Get(entity)
 	if !ok {
 		s.ctx.State.SetCursorError(true)
 		s.ctx.State.SetCursorErrorTime(now)
@@ -154,7 +150,6 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		}
 		return
 	}
-	seq := seqComp.(components.SequenceComponent)
 
 	// Check if this is a gold sequence character
 	if seq.Type == components.SequenceGold && s.goldSequenceSystem != nil && s.goldSequenceSystem.IsActive() {
@@ -273,8 +268,8 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 			s.spawnSystem.AddColorCount(seq.Type, seq.Level, -1)
 		}
 
-		// Safely destroy the character entity (handles spatial index removal)
-		world.DestroyEntity(entity)
+		// Safely destroy the character entity using generic world
+		world.GetGeneric().DestroyEntity(entity)
 
 		// Move cursor right
 		s.ctx.CursorX++
@@ -366,8 +361,8 @@ func (s *ScoreSystem) handleNuggetCollection(world *engine.World, entity engine.
 	}
 	s.ctx.State.SetHeat(newHeat)
 
-	// Destroy the nugget entity
-	world.DestroyEntity(entity)
+	// Destroy the nugget entity using generic world
+	world.GetGeneric().DestroyEntity(entity)
 
 	// Clear the active nugget reference to trigger respawn
 	// Use CAS to ensure we only clear if this is still the active nugget
@@ -437,8 +432,8 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 	s.ctx.State.SetScoreBlinkLevel(levelCode)
 	s.ctx.State.SetScoreBlinkTime(now)
 
-	// Safely destroy the character entity (handles spatial index removal)
-	world.DestroyEntity(entity)
+	// Safely destroy the character entity using generic world
+	world.GetGeneric().DestroyEntity(entity)
 
 	// Move cursor right
 	s.ctx.CursorX++

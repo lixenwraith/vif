@@ -3,7 +3,6 @@ package systems
 import (
 	"math"
 	"math/rand"
-	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -323,10 +322,9 @@ func (s *SpawnSystem) getAvailableColors() []ColorLevelKey {
 
 // Update runs the spawn system logic
 func (s *SpawnSystem) Update(world *engine.World, dt time.Duration) {
-	// Calculate fill percentage and update GameState
-	posType := reflect.TypeOf(components.PositionComponent{})
-	entities := world.GetEntitiesWith(posType)
-	entityCount := len(entities)
+	// Calculate fill percentage and update GameState using generic stores
+	gworld := world.GetGeneric()
+	entityCount := gworld.Positions.Count()
 
 	if entityCount > maxEntities {
 		return // Already at max capacity
@@ -462,11 +460,7 @@ func (s *SpawnSystem) getNextBlock() CodeBlock {
 	return block
 }
 
-// placeLine attempts to place a single line on the screen
-// Thread-safety: This method creates multiple entities for a single line.
-// While individual World operations are thread-safe (via mutex), the entire
-// sequence of entity creation is not atomic. Callers should ensure this method
-// is not called concurrently with rendering to avoid seeing partially-created entities.
+// placeLine attempts to place a single line on the screen using generic stores
 func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType components.SequenceType, seqLevel components.SequenceLevel, style tcell.Style) bool {
 	lineRunes := []rune(line)
 	lineLength := len(lineRunes)
@@ -474,6 +468,9 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 	if lineLength == 0 {
 		return false
 	}
+
+	// Get generic world
+	gworld := world.GetGeneric()
 
 	// Read dimensions from context
 	gameWidth := s.ctx.GameWidth
@@ -498,10 +495,10 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 
 		startCol := rand.Intn(maxStartCol + 1)
 
-		// Check for overlaps
+		// Check for overlaps using generic position store
 		hasOverlap := false
 		for i := 0; i < lineLength; i++ {
-			if world.GetEntityAtPosition(startCol+i, row) != 0 {
+			if gworld.Positions.GetEntityAt(startCol+i, row) != 0 {
 				hasOverlap = true
 				break
 			}
@@ -518,73 +515,68 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 		}
 
 		if !hasOverlap {
-			// Valid position found, create entities atomically using spatial transaction
+			// Valid position found, create entities using generic stores
 			// Get sequence ID from GameState (atomic increment)
 			sequenceID := s.ctx.State.IncrementSeqID()
 
-			// Phase 1: Create all entities first (without adding to spatial index)
-			// Track created entities for cleanup if needed
-			createdEntities := make([]engine.Entity, 0, lineLength)
-			entityPositions := make([]engine.EntityPosition, 0, lineLength)
+			// Phase 1: Create entities and prepare components
+			type entityData struct {
+				entity engine.Entity
+				pos    components.PositionComponent
+				char   components.CharacterComponent
+				seq    components.SequenceComponent
+			}
 
-			// Create all entities with their components
+			entities := make([]entityData, 0, lineLength)
+
 			for i := 0; i < lineLength; i++ {
 				// Skip space characters - don't create entities for them
 				if lineRunes[i] == ' ' {
 					continue
 				}
 
-				entity := world.CreateEntity()
-				createdEntities = append(createdEntities, entity)
-
-				// Add position component
-				world.AddComponent(entity, components.PositionComponent{
-					X: startCol + i,
-					Y: row,
-				})
-
-				// Add character component
-				world.AddComponent(entity, components.CharacterComponent{
-					Rune:  lineRunes[i],
-					Style: style,
-				})
-
-				// Add sequence component
-				world.AddComponent(entity, components.SequenceComponent{
-					ID:    sequenceID,
-					Index: i,
-					Type:  seqType,
-					Level: seqLevel,
-				})
-
-				// Add to batch for atomic spawn
-				entityPositions = append(entityPositions, engine.EntityPosition{
-					Entity: entity,
-					X:      startCol + i,
-					Y:      row,
+				entity := gworld.CreateEntity()
+				entities = append(entities, entityData{
+					entity: entity,
+					pos: components.PositionComponent{
+						X: startCol + i,
+						Y: row,
+					},
+					char: components.CharacterComponent{
+						Rune:  lineRunes[i],
+						Style: style,
+					},
+					seq: components.SequenceComponent{
+						ID:    sequenceID,
+						Index: i,
+						Type:  seqType,
+						Level: seqLevel,
+					},
 				})
 			}
 
-			// Phase 2: Atomically spawn all entities using batch operation
-			tx := world.BeginSpatialTransaction()
-			result := tx.SpawnBatch(entityPositions)
+			// Phase 2: Batch position validation and commit
+			batch := gworld.Positions.BeginBatch()
+			for _, ed := range entities {
+				batch.Add(ed.entity, ed.pos)
+			}
 
-			if result.HasCollision {
-				// Collision detected during batch spawn - rollback and cleanup
-				tx.Rollback()
-				// Remove all entities created
-				for _, e := range createdEntities {
-					world.DestroyEntity(e)
+			if err := batch.Commit(); err != nil {
+				// Collision detected - cleanup entities and try next attempt
+				for _, ed := range entities {
+					gworld.DestroyEntity(ed.entity)
 				}
-				// Try next attempt
 				continue
 			}
 
-			// Phase 3: Commit transaction atomically
-			tx.Commit()
+			// Phase 3: Add other components (positions already committed)
+			for _, ed := range entities {
+				gworld.Characters.Add(ed.entity, ed.char)
+				gworld.Sequences.Add(ed.entity, ed.seq)
+			}
 
 			// Atomically increment the color counter (only non-space characters)
-			nonSpaceCount := len(createdEntities)
+			nonSpaceCount := len(entities)
 			s.AddColorCount(seqType, seqLevel, int64(nonSpaceCount))
 
 			return true

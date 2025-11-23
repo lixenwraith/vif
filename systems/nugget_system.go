@@ -3,7 +3,6 @@ package systems
 import (
 	"math"
 	"math/rand"
-	"reflect"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -42,9 +41,10 @@ func (s *NuggetSystem) Priority() int {
 	return 18
 }
 
-// Update runs the nugget system logic
+// Update runs the nugget system logic using generic stores
 func (s *NuggetSystem) Update(world *engine.World, dt time.Duration) {
 	now := s.ctx.TimeProvider.Now()
+	gworld := world.GetGeneric()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -59,56 +59,62 @@ func (s *NuggetSystem) Update(world *engine.World, dt time.Duration) {
 		return
 	}
 
-	nuggetType := reflect.TypeOf(components.NuggetComponent{})
-	if !world.HasComponent(engine.Entity(activeNuggetEntity), nuggetType) {
+	if !gworld.Nuggets.Has(engine.Entity(activeNuggetEntity)) {
 		s.activeNugget.CompareAndSwap(activeNuggetEntity, 0)
 	}
 }
 
-// spawnNugget creates a new nugget at a random valid position
+// spawnNugget creates a new nugget at a random valid position using generic stores
 // Caller must hold s.mu lock
 func (s *NuggetSystem) spawnNugget(world *engine.World, now time.Time) {
+	gworld := world.GetGeneric()
 	x, y := s.findValidPosition(world)
 	if x < 0 || y < 0 {
 		return
 	}
 
 	nuggetID := s.nuggetID.Add(1)
-	entity := world.CreateEntity()
+	entity := gworld.CreateEntity()
 
-	world.AddComponent(entity, components.PositionComponent{
+	pos := components.PositionComponent{
 		X: x,
 		Y: y,
-	})
+	}
 
 	randomChar := constants.AlphanumericRunes[rand.Intn(len(constants.AlphanumericRunes))]
 	style := tcell.StyleDefault.
 		Foreground(render.RgbNuggetOrange).
 		Background(render.RgbBackground)
-	world.AddComponent(entity, components.CharacterComponent{
+	char := components.CharacterComponent{
 		Rune:  randomChar,
 		Style: style,
-	})
+	}
 
-	world.AddComponent(entity, components.NuggetComponent{
+	nugget := components.NuggetComponent{
 		ID:        int(nuggetID),
 		SpawnTime: now,
-	})
+	}
 
-	tx := world.BeginSpatialTransaction()
-	result := tx.Spawn(entity, x, y)
-	if result.HasCollision {
+	// Use batch for atomic position validation
+	batch := gworld.Positions.BeginBatch()
+	batch.Add(entity, pos)
+	if err := batch.Commit(); err != nil {
 		// Position was taken while we were creating the nugget
-		world.DestroyEntity(entity)
+		gworld.DestroyEntity(entity)
 		return
 	}
-	tx.Commit()
+
+	// Add other components after position is committed
+	gworld.Characters.Add(entity, char)
+	gworld.Nuggets.Add(entity, nugget)
+
 	s.activeNugget.Store(uint64(entity))
 }
 
-// findValidPosition finds a valid random position for a nugget
+// findValidPosition finds a valid random position for a nugget using generic stores
 // Caller must hold s.mu lock
 func (s *NuggetSystem) findValidPosition(world *engine.World) (int, int) {
+	gworld := world.GetGeneric()
 	gameWidth := s.ctx.GameWidth
 	gameHeight := s.ctx.GameHeight
 	cursor := s.ctx.State.ReadCursorPosition()
@@ -121,7 +127,7 @@ func (s *NuggetSystem) findValidPosition(world *engine.World) (int, int) {
 			continue
 		}
 
-		if world.GetEntityAtPosition(x, y) != 0 {
+		if gworld.Positions.GetEntityAt(x, y) != 0 {
 			continue
 		}
 
@@ -169,8 +175,10 @@ func (s *NuggetSystem) GetSystemState() string {
 	return "Nugget[active, entityID=" + strconv.Itoa(int(activeNuggetEntity)) + "]"
 }
 
-// JumpToNugget returns the position of the active nugget, or (-1, -1) if no nugget exists
+// JumpToNugget returns the position of the active nugget, or (-1, -1) if no nugget exists using generic stores
 func (s *NuggetSystem) JumpToNugget(world *engine.World) (int, int) {
+	gworld := world.GetGeneric()
+
 	// Get active nugget entity ID
 	activeNuggetEntity := s.activeNugget.Load()
 	if activeNuggetEntity == 0 {
@@ -178,14 +186,11 @@ func (s *NuggetSystem) JumpToNugget(world *engine.World) (int, int) {
 	}
 
 	// Get position component from entity
-	posType := reflect.TypeOf(components.PositionComponent{})
-	posComp, ok := world.GetComponent(engine.Entity(activeNuggetEntity), posType)
+	pos, ok := gworld.Positions.Get(engine.Entity(activeNuggetEntity))
 	if !ok {
 		// No position component (shouldn't happen, but handle gracefully)
 		return -1, -1
 	}
 
-	// Extract position
-	pos := posComp.(components.PositionComponent)
 	return pos.X, pos.Y
 }
