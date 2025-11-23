@@ -163,11 +163,13 @@ type GameEvent struct {
 //   - Lock-free push via atomic CAS (Compare-And-Swap) operations
 //   - Single-consumer design for consume operations (game loop)
 //   - Automatic oldest-event overwriting when buffer is full
+//   - Published flags pattern prevents reading partially-written events
 //
 // Thread-Safety:
 //   - Push: Lock-free CAS loop, safe for multiple concurrent producers
 //   - Consume: Designed for single consumer (game loop), uses CAS for atomicity
 //   - Peek: Safe for concurrent read-only inspection from any thread
+//   - Published flags ensure readers never see partially-written events
 //
 // Performance:
 //   - Push: O(1) amortized (CAS retry on contention)
@@ -180,9 +182,10 @@ type GameEvent struct {
 //   - Head pointer is advanced to maintain ring buffer invariants
 //   - Consumers may miss events if they fall behind by > 256 events (rare in practice)
 type EventQueue struct {
-	events [256]GameEvent  // Fixed-size ring buffer (capacity: 256)
-	head   atomic.Uint64   // Read index (next position to read from)
-	tail   atomic.Uint64   // Write index (next position to write to)
+	events    [256]GameEvent   // Fixed-size ring buffer (capacity: 256)
+	published [256]atomic.Bool // Published flags (true = event is fully written and ready to read)
+	head      atomic.Uint64    // Read index (next position to read from)
+	tail      atomic.Uint64    // Write index (next position to write to)
 }
 
 // NewEventQueue creates a new event queue with empty state.
@@ -200,14 +203,23 @@ func NewEventQueue() *EventQueue {
 	return eq
 }
 
-// Push adds an event to the queue using a lock-free algorithm.
+// Push adds an event to the queue using a lock-free algorithm with published flags.
 //
 // Algorithm:
 //  1. Read current tail position (atomic load)
 //  2. Calculate next tail position (tail + 1)
 //  3. Attempt to claim slot via CAS (Compare-And-Swap)
-//  4. If CAS succeeds: Write event to claimed slot, check for overflow
+//  4. If CAS succeeds:
+//     a. Write event to claimed slot (non-atomic write)
+//     b. Set published flag to true (atomic store) - readers can now see this event
+//     c. Check for overflow and advance head if needed
 //  5. If CAS fails: Retry from step 1 (another thread claimed the slot)
+//
+// Published Flags Pattern:
+//   - Prevents readers from seeing partially-written events
+//   - Writer sets published[index] = true AFTER writing event data
+//   - Reader checks published[index] == true BEFORE reading event data
+//   - Eliminates data race between concurrent Push() and Consume()
 //
 // Overflow Handling:
 //   - If tail is more than 256 ahead of head, advance head (overwrite oldest)
@@ -216,10 +228,11 @@ func NewEventQueue() *EventQueue {
 // Thread-Safety:
 //   - Safe to call from multiple threads concurrently
 //   - Uses atomic CAS for synchronization (no mutexes)
+//   - Published flags prevent reading partially-written events
 //   - Retries automatically on contention
 //
 // Performance:
-//   - Typical case: O(1) with single CAS operation
+//   - Typical case: O(1) with single CAS operation + one atomic store
 //   - High contention: O(k) where k is number of concurrent pushers (retry loop)
 //
 // Parameters:
@@ -232,8 +245,14 @@ func (eq *EventQueue) Push(event GameEvent) {
 
 		// Try to claim this slot
 		if eq.tail.CompareAndSwap(currentTail, nextTail) {
-			// Successfully claimed the slot, write the event
-			eq.events[currentTail%256] = event
+			idx := currentTail % 256
+
+			// Write event data to claimed slot
+			eq.events[idx] = event
+
+			// Mark slot as published (readers can now safely read this event)
+			// This MUST happen AFTER writing event data to prevent data race
+			eq.published[idx].Store(true)
 
 			// Check if we're overwriting unread events
 			// If head is more than 256 behind tail, advance it
@@ -256,19 +275,20 @@ func (eq *EventQueue) Push(event GameEvent) {
 //   - Designed for single-consumer use (the game loop)
 //   - Returns events in FIFO order (oldest first)
 //   - Atomically advances head pointer to mark events as consumed
-//   - Does NOT remove events from buffer (overwritten by future pushes)
+//   - Checks published flags to avoid reading partially-written events
 //
-// Algorithm:
-//  1. Atomically read current head and tail positions
-//  2. Calculate number of available events (tail - head)
-//  3. Cap at buffer size (256) to handle wrap-around
-//  4. Copy events to result slice
-//  5. Advance head pointer via CAS to mark as consumed
+// Algorithm (Published Flags Pattern):
+//  1. Read current head and tail positions
+//  2. Loop from head to tail:
+//     a. Check if published[index] is true
+//     b. If false: Stop consuming (writer hasn't finished writing yet)
+//     c. If true: Read event, reset published[index] to false, add to result
+//  3. Advance head pointer to position successfully read to
 //
 // Thread-Safety:
-//   - Safe to call from game loop thread
-//   - Uses CAS for atomic head advancement
-//   - Concurrent pushes are safe (they modify tail, not head)
+//   - Safe to call from game loop thread (single consumer)
+//   - Published flags prevent reading partially-written events
+//   - Concurrent pushes are safe (they modify tail and published flags atomically)
 //   - Multiple concurrent consumers would conflict (not supported)
 //
 // Return Value:
@@ -278,40 +298,49 @@ func (eq *EventQueue) Push(event GameEvent) {
 // Performance:
 //   - O(n) where n is number of pending events
 //   - Allocates slice for return value (unavoidable for safe API)
+//   - Additional atomic loads for published flags (minimal overhead)
 func (eq *EventQueue) Consume() []GameEvent {
-	// Atomically claim all pending events
+	// Read current positions
 	currentHead := eq.head.Load()
 	currentTail := eq.tail.Load()
 
-	// Calculate number of available events
-	available := currentTail - currentHead
-	if available == 0 {
+	// Check if queue is empty
+	if currentTail == currentHead {
 		return nil
 	}
 
-	// Cap at buffer size to handle wrap-around
-	if available > 256 {
-		available = 256
+	// Calculate maximum available events (cap at buffer size)
+	maxAvailable := currentTail - currentHead
+	if maxAvailable > 256 {
+		maxAvailable = 256
 		currentHead = currentTail - 256
 	}
 
-	// Copy events to result slice
-	result := make([]GameEvent, available)
-	for i := uint64(0); i < available; i++ {
-		result[i] = eq.events[(currentHead+i)%256]
+	// Read events one by one, checking published flag
+	result := make([]GameEvent, 0, maxAvailable)
+	for i := uint64(0); i < maxAvailable; i++ {
+		idx := (currentHead + i) % 256
+
+		// Check if this slot is published (fully written)
+		if !eq.published[idx].Load() {
+			// Writer hasn't finished writing this event yet, stop here
+			break
+		}
+
+		// Read the event (safe now that published flag is true)
+		result = append(result, eq.events[idx])
+
+		// Reset published flag for future reuse
+		eq.published[idx].Store(false)
 	}
 
-	// Advance head to mark events as consumed
-	// Use CAS to ensure atomicity, but we expect this to succeed
-	// since we're the only consumer
-	for !eq.head.CompareAndSwap(currentHead, currentTail) {
-		// If CAS fails, recalculate and retry
-		currentHead = eq.head.Load()
-		currentTail = eq.tail.Load()
-		if currentTail == currentHead {
-			// Queue was emptied by another consumer or became empty
-			return result
-		}
+	// Advance head to mark consumed events
+	newHead := currentHead + uint64(len(result))
+	eq.head.Store(newHead)
+
+	// Return nil if we didn't consume any events
+	if len(result) == 0 {
+		return nil
 	}
 
 	return result
@@ -331,6 +360,7 @@ func (eq *EventQueue) Consume() []GameEvent {
 // Thread-Safety:
 //   - Safe to call from any thread concurrently
 //   - Does not modify queue state (read-only)
+//   - Checks published flags to avoid reading partially-written events
 //   - Concurrent pushes/consumes may cause snapshot to become stale immediately
 //
 // Return Value:
@@ -340,30 +370,46 @@ func (eq *EventQueue) Consume() []GameEvent {
 // Performance:
 //   - O(n) where n is number of pending events
 //   - Allocates slice for return value
+//   - Additional atomic loads for published flags
 //
 // Note:
 //   - Returned slice is a snapshot; queue state may change after call returns
 //   - Events in returned slice may be consumed by Consume() before Peek() caller processes them
+//   - Only returns events with published flag set to true (fully written)
 func (eq *EventQueue) Peek() []GameEvent {
 	currentHead := eq.head.Load()
 	currentTail := eq.tail.Load()
 
-	// Calculate number of available events
-	available := currentTail - currentHead
-	if available == 0 {
+	// Check if queue is empty
+	if currentTail == currentHead {
 		return nil
 	}
 
-	// Cap at buffer size to handle wrap-around
-	if available > 256 {
-		available = 256
+	// Calculate maximum available events
+	maxAvailable := currentTail - currentHead
+	if maxAvailable > 256 {
+		maxAvailable = 256
 		currentHead = currentTail - 256
 	}
 
-	// Copy events to result slice
-	result := make([]GameEvent, available)
-	for i := uint64(0); i < available; i++ {
-		result[i] = eq.events[(currentHead+i)%256]
+	// Read events one by one, checking published flag
+	result := make([]GameEvent, 0, maxAvailable)
+	for i := uint64(0); i < maxAvailable; i++ {
+		idx := (currentHead + i) % 256
+
+		// Check if this slot is published (fully written)
+		if !eq.published[idx].Load() {
+			// Writer hasn't finished writing this event yet, stop here
+			break
+		}
+
+		// Read the event (safe now that published flag is true)
+		result = append(result, eq.events[idx])
+	}
+
+	// Return nil if no published events
+	if len(result) == 0 {
+		return nil
 	}
 
 	return result

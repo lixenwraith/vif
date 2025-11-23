@@ -775,13 +775,7 @@ func TestAllSnapshotTypesConcurrent(t *testing.T) {
 						t.Error("Decay snapshot inconsistent: Both animating and timer active")
 					}
 
-					// Verify cleaner state consistency
-					if cleanerSnap.Active && cleanerSnap.Pending {
-						errorMu.Lock()
-						errorCount++
-						errorMu.Unlock()
-						t.Error("Cleaner snapshot inconsistent: Both active and pending")
-					}
+					// CleanerSystem is event-driven (no snapshot) - validation removed
 
 					time.Sleep(500 * time.Microsecond)
 				}

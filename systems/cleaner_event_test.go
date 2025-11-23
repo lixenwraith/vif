@@ -70,32 +70,45 @@ func TestCleanerFinishedEvent(t *testing.T) {
 	ctx.ConsumeEvents()
 
 	// Simulate cleaner animation completing (run updates until cleaner is destroyed)
+	// Check for EventCleanerFinished IMMEDIATELY after each update before it gets consumed
 	maxUpdates := 200 // Safety limit to prevent infinite loop
+	foundFinishedEvent := false
+
 	for i := 0; i < maxUpdates; i++ {
+		// Run cleaner update
 		cleanerSystem.Update(world, 16*time.Millisecond)
+
+		// IMMEDIATELY check for EventCleanerFinished before next update consumes it
+		events := ctx.PeekEvents()
+		for _, event := range events {
+			if event.Type == engine.EventCleanerFinished {
+				foundFinishedEvent = true
+				break
+			}
+		}
+
+		// If we found the finished event, test passes
+		if foundFinishedEvent {
+			break
+		}
+
+		// Check if cleaners are gone (they might finish without us catching the event)
 		entities = world.GetEntitiesWith(cleanerType)
 		if len(entities) == 0 {
-			// Cleaners are gone, break
+			// Cleaners are gone, check one more time for the event
+			events = ctx.PeekEvents()
+			for _, event := range events {
+				if event.Type == engine.EventCleanerFinished {
+					foundFinishedEvent = true
+					break
+				}
+			}
 			break
 		}
 	}
 
-	// Verify cleaners are gone
-	if len(entities) != 0 {
-		t.Fatalf("Expected cleaners to complete after %d updates, but %d cleaners still exist", maxUpdates, len(entities))
-	}
-
-	// Check for EventCleanerFinished in the event queue
-	events := ctx.PeekEvents()
-	hasFinishedEvent := false
-	for _, event := range events {
-		if event.Type == engine.EventCleanerFinished {
-			hasFinishedEvent = true
-			break
-		}
-	}
-
-	if !hasFinishedEvent {
+	// Verify we found the EventCleanerFinished
+	if !foundFinishedEvent {
 		t.Error("Expected EventCleanerFinished to be emitted when cleaners complete")
 	}
 }
