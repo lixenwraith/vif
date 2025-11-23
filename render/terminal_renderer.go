@@ -392,16 +392,15 @@ func (r *TerminalRenderer) drawFallingDecay(world *engine.World, defaultStyle tc
 
 // drawCleaners draws the cleaner animation using the trail of grid points.
 func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.Style) {
-	// Query World directly for cleaner components
-	cleanerType := reflect.TypeOf(components.CleanerComponent{})
-	entities := world.GetEntitiesWith(cleanerType)
+	// Use generic world for direct store access
+	gworld := world.GetGeneric()
+	entities := gworld.Cleaners.All()
 
 	for _, entity := range entities {
-		compRaw, ok := world.GetComponent(entity, cleanerType)
+		cleaner, ok := gworld.Cleaners.Get(entity)
 		if !ok {
 			continue
 		}
-		cleaner := compRaw.(components.CleanerComponent)
 
 		// Deep copy trail to avoid race conditions during rendering
 		trailCopy := make([]core.Point, len(cleaner.Trail))
@@ -489,18 +488,14 @@ func (r *TerminalRenderer) drawDrain(ctx *engine.GameContext, defaultStyle tcell
 
 // drawRemovalFlashes draws the brief flash effects when red characters are removed
 func (r *TerminalRenderer) drawRemovalFlashes(world *engine.World, ctx *engine.GameContext, defaultStyle tcell.Style) {
-	flashType := reflect.TypeOf(components.RemovalFlashComponent{})
-	entities := world.GetEntitiesWith(flashType)
+	// Use generic world for direct store access
+	gworld := world.GetGeneric()
+	entities := gworld.RemovalFlashes.All()
 
 	for _, entity := range entities {
-		// Defensive: Check if entity still exists
-		flashComp, ok := world.GetComponent(entity, flashType)
-		if !ok || flashComp == nil {
-			continue // Entity was destroyed between GetEntitiesWith and GetComponent
-		}
-		flash, ok := flashComp.(components.RemovalFlashComponent)
+		flash, ok := gworld.RemovalFlashes.Get(entity)
 		if !ok {
-			continue // Type assertion failed
+			continue
 		}
 
 		// Check if position is in bounds
