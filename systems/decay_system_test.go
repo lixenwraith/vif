@@ -67,7 +67,7 @@ func TestDecaySweptCollisionNoTunneling(t *testing.T) {
 		}
 
 		// Update animation (this calculates elapsed from StartTime)
-		decaySystem.updateAnimation(world)
+		decaySystem.updateAnimation(world, frameTime)
 
 		// Check which entities have been decayed
 		for i, entity := range entities {
@@ -177,7 +177,7 @@ func TestDecayCoordinateLatchPreventsReprocessing(t *testing.T) {
 		}
 
 		// Update animation
-		decaySystem.updateAnimation(world)
+		decaySystem.updateAnimation(world, frameTime)
 
 		// Track level after update
 		levelAfter := levelBefore
@@ -270,7 +270,7 @@ func TestDecayDifferentSpeeds(t *testing.T) {
 				}
 
 				// Update animation
-				decaySystem.updateAnimation(world)
+				decaySystem.updateAnimation(world, frameTime)
 
 				// Check if decayed
 				if seq, ok := world.Sequences.Get(entity); ok {
@@ -357,7 +357,7 @@ func TestDecayFallingEntityPhysicsAccuracy(t *testing.T) {
 
 	for frame := 0; frame < framesPerSecond; frame++ {
 		mockTime.Advance(frameTime)
-		decaySystem.updateAnimation(world)
+		decaySystem.updateAnimation(world, frameTime)
 	}
 
 	// Get final state
@@ -422,7 +422,7 @@ func TestDecayMatrixEffectCharacterChanges(t *testing.T) {
 		}
 
 		// Update animation
-		decaySystem.updateAnimation(world)
+		decaySystem.updateAnimation(world, frameTime)
 
 		// Check for character change
 		if fall, ok := world.FallingDecays.Get(testEntity); ok {

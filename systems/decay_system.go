@@ -13,27 +13,16 @@ import (
 )
 
 // DecaySystem handles character decay animation and logic
-//
-// GAME FLOW: Decay timer calculation starts AFTER Gold sequence ends
-// Timer and animation state in GameState
-// 1. Gold spawns at game start
-// 2. Gold ends (timeout or completion) → GameState.StartDecayTimer() called
-// 3. Timer calculates interval based on heat at Gold end time (no caching!)
-// 4. Decay animation triggered by ClockScheduler when timer expires
-// 5. After decay animation ends → Gold spawns again
 type DecaySystem struct {
-	mu               sync.RWMutex // Protects fields below
-	currentRow       int
-	lastUpdate       time.Time
-	ctx              *engine.GameContext
-	spawnSystem      *SpawnSystem
-	nuggetSystem     *NuggetSystem
-	fallingEntities  []engine.Entity        // Entities representing falling decay characters
-	decayedThisFrame map[engine.Entity]bool // Track which entities were decayed this frame
-
-	// Performance optimization: Reused map for swept collision deduplication
-	// Key is flat index: (y * gameWidth) + x
-	processedGridCells map[int]bool
+	mu                 sync.RWMutex
+	currentRow         int
+	lastUpdate         time.Time
+	ctx                *engine.GameContext
+	spawnSystem        *SpawnSystem
+	nuggetSystem       *NuggetSystem
+	fallingEntities    []engine.Entity
+	decayedThisFrame   map[engine.Entity]bool
+	processedGridCells map[int]bool // Key is flat index: (y * gameWidth) + x
 }
 
 // NewDecaySystem creates a new decay system
@@ -71,40 +60,30 @@ func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 
 	// Update animation if active
 	if decaySnapshot.Animating {
-		s.updateAnimation(world)
+		s.updateAnimation(world, dt)
 	}
-
-	// Timer checking and animation trigger moved to ClockScheduler
-	// No need to check timer here
 }
 
 // updateAnimation progresses the decay animation
-func (s *DecaySystem) updateAnimation(world *engine.World) {
-	// Read game height from context
-	gameHeight := s.ctx.GameHeight
+func (s *DecaySystem) updateAnimation(world *engine.World, dt time.Duration) {
+	// Use Delta Time (dt) instead of Total Elapsed Time for physics integration
+	s.updateFallingEntities(world, dt.Seconds())
 
-	// Read decay state snapshot for consistent startTime access
-	decaySnapshot := s.ctx.State.ReadDecayState()
-	elapsed := s.ctx.TimeProvider.Now().Sub(decaySnapshot.StartTime).Seconds()
+	// Check actual entity count instead of calculated duration
+	// This prevents "Zombie Phase" where game waits after all entities are gone
+	s.mu.RLock()
+	count := len(s.fallingEntities)
+	s.mu.RUnlock()
 
-	// Update falling entity positions and apply decay
-	s.updateFallingEntities(world, elapsed)
-
-	// Check if animation complete based on elapsed time
-	// Animation duration is based on the slowest falling entity reaching the bottom
-	animationDuration := float64(gameHeight) / constants.FallingDecayMinSpeed
-	if elapsed >= animationDuration {
+	if count == 0 {
 		s.mu.Lock()
 		s.currentRow = 0
 		s.mu.Unlock()
 
-		// Clean up falling entities and clear decay tracking
 		s.cleanupFallingEntities(world)
 
 		// Stop decay animation in GameState (transitions to PhaseNormal)
 		if !s.ctx.State.StopDecayAnimation() {
-			// Phase transition failed - this shouldn't happen but log for debugging
-			// Animation cleanup already done, so just return
 			return
 		}
 	}
@@ -244,9 +223,15 @@ func (s *DecaySystem) spawnFallingEntities(world *engine.World) {
 }
 
 // updateFallingEntities updates falling entity positions and applies decay using generic stores
-func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64) {
+func (s *DecaySystem) updateFallingEntities(world *engine.World, dtSeconds float64) {
 	gameHeight := s.ctx.GameHeight
 	gameWidth := s.ctx.GameWidth
+
+	// Clamp dt to prevent tunneling on huge lag spikes (e.g. Resume from pause)
+	// Max step 100ms. If the lag is larger, the entity slows down rather than teleporting.
+	if dtSeconds > 0.1 {
+		dtSeconds = 0.1
+	}
 
 	s.mu.RLock()
 	fallingEntities := s.fallingEntities
@@ -260,7 +245,8 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 	for k := range s.processedGridCells {
 		delete(s.processedGridCells, k)
 	}
-	// Note: decayedThisFrame is cleared in Update(), check if that needs consistency
+	// Note: We don't clear decayedThisFrame here because we want to limit
+	// decay to once per ANIMATION for a specific target entity, not once per frame
 
 	for _, entity := range fallingEntities {
 		fall, ok := world.FallingDecays.Get(entity)
@@ -268,9 +254,9 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 			continue
 		}
 
-		// 1. Save state and Update Physics
+		// 1. Update Physics
 		fall.PrevPreciseY = fall.YPosition
-		fall.YPosition += fall.Speed * elapsed
+		fall.YPosition += fall.Speed * dtSeconds // Correct integration
 
 		// Boundary Check
 		if fall.YPosition >= float64(gameHeight) {
@@ -279,40 +265,41 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 		}
 
 		// 2. Swept Traversal
-		// Determine traversal range (handle both Up and Down movement)
 		y1 := int(fall.PrevPreciseY)
 		y2 := int(fall.YPosition)
+
 		startRow, endRow := y1, y2
 		if y1 > y2 {
 			startRow, endRow = y2, y1
 		}
 
-		// Clamp and safety limit
-		if startRow < 0 { startRow = 0 }
-		if endRow >= gameHeight { endRow = gameHeight - 1 }
-		// Cap tunneling speed (limit checks per frame)
-		if endRow - startRow > 10 {
-			// If moving down, cap end; if moving up (y1 > y2), cap start implies logic above handled sort
-			endRow = startRow + 10
+		// No max cells per frame cap
+		// If dt clamp (0.1s) is respected and max speed is ~20, max sweep is 2 rows
+		// Even on extreme lag, sweeping 24 rows is negligible cost
+		// Removing the cap fixes the "Tunneling" bug where physics moved but sweep didn't
+
+		// Clamp to screen
+		if startRow < 0 {
+			startRow = 0
+		}
+		if endRow >= gameHeight {
+			endRow = gameHeight - 1
 		}
 
 		for row := startRow; row <= endRow; row++ {
-			col := fall.Column // Legacy X, will represent current X for sweep
+			col := fall.Column
 
-			// A. COORDINATE LATCH CHECK (The Fix)
-			// If we are in the same integer cell we last processed, skip.
+			// A. COORDINATE LATCH CHECK
+			// Prevents re-processing the same cell if the entity moves slowly (<1 row/frame)
 			if col == fall.LastIntX && row == fall.LastIntY {
-				// DEBUG: Log when latch prevents re-processing
-				// log.Printf("[DEBUG] Entity[%d] Col=%d Row=%d: Latch prevented re-processing (LastIntX=%d, LastIntY=%d)",
-				// 	entity, col, row, fall.LastIntX, fall.LastIntY)
 				continue
 			}
 
-			// Bounds check
-			if col < 0 || col >= gameWidth { continue }
+			if col < 0 || col >= gameWidth {
+				continue
+			}
 
-			// B. Frame Deduplication
-			// Prevent multiple falling particles from hitting the exact same cell in one frame
+			// B. Frame Deduplication (Spatial)
 			flatIdx := (row * gameWidth) + col
 			if s.processedGridCells[flatIdx] {
 				continue
@@ -326,7 +313,6 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 				s.mu.RUnlock()
 
 				if !alreadyHit {
-					// Hit Logic
 					if world.Nuggets.Has(targetEntity) {
 						world.DestroyEntity(targetEntity)
 						if s.nuggetSystem != nil {
@@ -336,10 +322,12 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 						s.applyDecayToCharacter(world, targetEntity)
 					}
 
-					// Mark Hit
 					s.mu.Lock()
 					s.decayedThisFrame[targetEntity] = true
 					s.mu.Unlock()
+
+					// Mark this grid cell as processed for this frame to prevent
+					// stacking falling entities from hitting same target twice
 					s.processedGridCells[flatIdx] = true
 				}
 			}
@@ -348,7 +336,7 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 			fall.LastIntX = col
 			fall.LastIntY = row
 
-			// Matrix visual effect on row change
+			// Matrix visual effect
 			if row != fall.LastChangeRow {
 				fall.LastChangeRow = row
 				if row > 0 && rand.Float64() < constants.FallingDecayChangeChance {
@@ -358,8 +346,6 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 		}
 
 		fall.PrevPreciseX = float64(fall.Column)
-		// YPosition already updated
-
 		world.FallingDecays.Add(entity, fall)
 		remainingEntities = append(remainingEntities, entity)
 	}
@@ -384,7 +370,6 @@ func (s *DecaySystem) cleanupFallingEntities(world *engine.World) {
 }
 
 // TriggerDecayAnimation is called by ClockScheduler to start decay animation
-// TODO: review DecaySystemInterface and other system interfaces
 func (s *DecaySystem) TriggerDecayAnimation(world *engine.World) {
 	// Initialize decay tracking map for the entire animation duration
 	s.mu.Lock()
@@ -458,7 +443,7 @@ func (s *DecaySystem) GetSystemState() string {
 	return "Decay[inactive]"
 }
 
-// GetFallingEntityState returns debug information about falling entities
+// GetFallingEntityState returns debug info
 func (s *DecaySystem) GetFallingEntityState() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
