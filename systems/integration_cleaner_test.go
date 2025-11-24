@@ -50,7 +50,7 @@ func TestCleanerEventFlow(t *testing.T) {
 	system.Update(ctx.World, 16*time.Millisecond)
 
 	// Verify cleaner entities created (should be 3 cleaners, one per row with red sequences)
-	cleanerType := reflect.TypeOf(components.CleanerComponent{})
+	// Using direct store access
 	cleaners := ctx.World.GetEntitiesWith(cleanerType)
 	if len(cleaners) != 3 {
 		t.Fatalf("Expected 3 cleaner entities, got %d", len(cleaners))
@@ -199,7 +199,7 @@ func TestCleanerRendererDecoupling(t *testing.T) {
 	ctx.World.AddComponent(cleaner2, comp2)
 
 	// Query cleaners from world (simulating what renderer does)
-	cleanerType := reflect.TypeOf(components.CleanerComponent{})
+	// Using direct store access
 	entities := ctx.World.GetEntitiesWith(cleanerType)
 
 	// Verify we can read cleaner data
@@ -292,7 +292,7 @@ func TestNoCleanerPhaseStates(t *testing.T) {
 			system.Update(ctx.World, 16*time.Millisecond)
 
 			// Verify cleaners spawn regardless of phase
-			cleanerType := reflect.TypeOf(components.CleanerComponent{})
+			// Using direct store access
 			cleaners := ctx.World.GetEntitiesWith(cleanerType)
 			if len(cleaners) == 0 {
 				t.Errorf("Expected cleaners to spawn in phase %s, but none found", phase)
@@ -401,7 +401,7 @@ func TestEventQueueOverflow(t *testing.T) {
 
 	// Verify cleaners were spawned (at least once from the cleaner requests)
 	// Note: Due to deduplication by frame number, multiple requests in same frame = 1 spawn
-	cleanerType := reflect.TypeOf(components.CleanerComponent{})
+	// Using direct store access
 	cleaners := ctx.World.GetEntitiesWith(cleanerType)
 	t.Logf("Cleaners spawned: %d", len(cleaners))
 

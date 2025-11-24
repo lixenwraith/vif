@@ -27,7 +27,7 @@ func TestDrainSystem_CollisionWithBlueCharacter(t *testing.T) {
 	drainEntityID := ctx.State.GetDrainEntity()
 	drainEntity := engine.Entity(drainEntityID)
 
-	drainType := reflect.TypeOf(components.DrainComponent{})
+	// Using direct store access
 	drainComp, ok := world.GetComponent(drainEntity, drainType)
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
@@ -102,7 +102,7 @@ func TestDrainSystem_CollisionWithGreenCharacter(t *testing.T) {
 	drainEntityID := ctx.State.GetDrainEntity()
 	drainEntity := engine.Entity(drainEntityID)
 
-	drainType := reflect.TypeOf(components.DrainComponent{})
+	// Using direct store access
 	drainComp, ok := world.GetComponent(drainEntity, drainType)
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
@@ -174,7 +174,7 @@ func TestDrainSystem_CollisionWithRedCharacter(t *testing.T) {
 	drainEntityID := ctx.State.GetDrainEntity()
 	drainEntity := engine.Entity(drainEntityID)
 
-	drainType := reflect.TypeOf(components.DrainComponent{})
+	// Using direct store access
 	drainComp, ok := world.GetComponent(drainEntity, drainType)
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
@@ -237,7 +237,7 @@ func TestDrainSystem_CollisionWithGoldSequence(t *testing.T) {
 	drainEntityID := ctx.State.GetDrainEntity()
 	drainEntity := engine.Entity(drainEntityID)
 
-	drainType := reflect.TypeOf(components.DrainComponent{})
+	// Using direct store access
 	drainComp, ok := world.GetComponent(drainEntity, drainType)
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
@@ -344,7 +344,7 @@ func TestDrainSystem_CollisionMultipleLevels(t *testing.T) {
 			drainEntityID := ctx.State.GetDrainEntity()
 			drainEntity := engine.Entity(drainEntityID)
 
-			drainType := reflect.TypeOf(components.DrainComponent{})
+			// Using direct store access
 			drainComp, ok := world.GetComponent(drainEntity, drainType)
 			if !ok {
 				t.Fatal("Expected drain to have DrainComponent")
@@ -428,7 +428,7 @@ func TestDrainSystem_NoCollisionWithNonSequenceEntity(t *testing.T) {
 	drainEntityID := ctx.State.GetDrainEntity()
 	drainEntity := engine.Entity(drainEntityID)
 
-	drainType := reflect.TypeOf(components.DrainComponent{})
+	// Using direct store access
 	drainComp, ok := world.GetComponent(drainEntity, drainType)
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
@@ -522,7 +522,7 @@ func TestDrainSystem_CollisionAtDifferentPositions(t *testing.T) {
 				Y: 1,
 			})
 			now := ctx.TimeProvider.Now()
-			world.AddComponent(entity, components.DrainComponent{
+			world.Drains.Add(entity, components.DrainComponent{
 				X:             1,
 				Y:             1,
 				LastMoveTime:  now,
@@ -612,7 +612,7 @@ func TestDrainSystem_CollisionWithNugget(t *testing.T) {
 	drainEntityID := ctx.State.GetDrainEntity()
 	drainEntity := engine.Entity(drainEntityID)
 
-	drainType := reflect.TypeOf(components.DrainComponent{})
+	// Using direct store access
 	drainComp, ok := world.GetComponent(drainEntity, drainType)
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
@@ -658,7 +658,7 @@ func TestDrainSystem_CollisionWithNugget(t *testing.T) {
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Verify nugget was destroyed
-	nuggetType := reflect.TypeOf(components.NuggetComponent{})
+	// Using direct store access
 	if _, ok := world.GetComponent(nuggetEntity, nuggetType); ok {
 		t.Fatal("Expected nugget to be destroyed after collision")
 	}
@@ -686,7 +686,7 @@ func TestDrainSystem_NuggetCollisionWithoutSystem(t *testing.T) {
 	drainEntityID := ctx.State.GetDrainEntity()
 	drainEntity := engine.Entity(drainEntityID)
 
-	drainType := reflect.TypeOf(components.DrainComponent{})
+	// Using direct store access
 	drainComp, ok := world.GetComponent(drainEntity, drainType)
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
@@ -724,7 +724,7 @@ func TestDrainSystem_NuggetCollisionWithoutSystem(t *testing.T) {
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Verify nugget was destroyed
-	nuggetType := reflect.TypeOf(components.NuggetComponent{})
+	// Using direct store access
 	if _, ok := world.GetComponent(nuggetEntity, nuggetType); ok {
 		t.Fatal("Expected nugget to be destroyed after collision")
 	}
@@ -746,7 +746,7 @@ func TestDrainSystem_GoldCollisionInactiveGold(t *testing.T) {
 	drainEntityID := ctx.State.GetDrainEntity()
 	drainEntity := engine.Entity(drainEntityID)
 
-	drainType := reflect.TypeOf(components.DrainComponent{})
+	// Using direct store access
 	drainComp, ok := world.GetComponent(drainEntity, drainType)
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
@@ -800,7 +800,7 @@ func TestDrainSystem_CollisionWithFallingDecay(t *testing.T) {
 	drainEntityID := ctx.State.GetDrainEntity()
 	drainEntity := engine.Entity(drainEntityID)
 
-	drainType := reflect.TypeOf(components.DrainComponent{})
+	// Using direct store access
 	drainComp, ok := world.GetComponent(drainEntity, drainType)
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
@@ -859,7 +859,7 @@ func TestDrainSystem_CollisionWithMultipleFallingDecay(t *testing.T) {
 		Y: y,
 	})
 	now := ctx.TimeProvider.Now()
-	world.AddComponent(entity, components.DrainComponent{
+	world.Drains.Add(entity, components.DrainComponent{
 		X:             x,
 		Y:             y,
 		LastMoveTime:  now,
@@ -963,7 +963,7 @@ func TestDrainSystem_FallingDecayCollisionAtBoundary(t *testing.T) {
 				Y: 1,
 			})
 			now := ctx.TimeProvider.Now()
-			world.AddComponent(entity, components.DrainComponent{
+			world.Drains.Add(entity, components.DrainComponent{
 				X:             1,
 				Y:             1,
 				LastMoveTime:  now,
@@ -1034,7 +1034,7 @@ func TestDrainSystem_DecayCollisionPriorityOverSequence(t *testing.T) {
 	drainEntityID := ctx.State.GetDrainEntity()
 	drainEntity := engine.Entity(drainEntityID)
 
-	drainType := reflect.TypeOf(components.DrainComponent{})
+	// Using direct store access
 	drainComp, ok := world.GetComponent(drainEntity, drainType)
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
@@ -1127,7 +1127,7 @@ func TestDrainSystem_FallingDecayWithDifferentSpeeds(t *testing.T) {
 			drainEntityID := ctx.State.GetDrainEntity()
 			drainEntity := engine.Entity(drainEntityID)
 
-			drainType := reflect.TypeOf(components.DrainComponent{})
+			// Using direct store access
 			drainComp, ok := world.GetComponent(drainEntity, drainType)
 			if !ok {
 				t.Fatal("Expected drain to have DrainComponent")

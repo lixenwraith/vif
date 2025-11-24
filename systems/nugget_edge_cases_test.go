@@ -47,8 +47,8 @@ func TestNuggetSingleInvariant(t *testing.T) {
 	}
 
 	// Count nugget entities in world by querying all components
-	nuggetType := reflect.TypeOf(components.NuggetComponent{})
-	nuggetEntities := world.GetEntitiesWith(nuggetType)
+	// Using direct store access
+	nuggetEntities := world.Nuggets.All()
 	nuggetCount := len(nuggetEntities)
 
 	if nuggetCount != 1 {
@@ -97,8 +97,8 @@ func TestNuggetRapidCollectionAndRespawn(t *testing.T) {
 	}
 
 	// Verify exactly 0 nuggets remain
-	nuggetType := reflect.TypeOf(components.NuggetComponent{})
-	nuggetEntities := world.GetEntitiesWith(nuggetType)
+	// Using direct store access
+	nuggetEntities := world.Nuggets.All()
 	nuggetCount := len(nuggetEntities)
 
 	if nuggetCount != 0 {

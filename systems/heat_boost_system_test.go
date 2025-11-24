@@ -43,8 +43,8 @@ func TestHeatBasedBoostActivation(t *testing.T) {
 		Level: components.LevelNormal,
 	}
 
-	ctx.World.AddComponent(entity, pos)
-	ctx.World.AddComponent(entity, char)
+	// Spatial transaction handles PositionComponent
+	ctx.World.Characters.Add(entity, char)
 	ctx.World.AddComponent(entity, seq)
 
 	tx := ctx.World.BeginSpatialTransaction()
@@ -114,8 +114,8 @@ func TestBoostMaintainsSameColor(t *testing.T) {
 		Level: components.LevelNormal,
 	}
 
-	ctx.World.AddComponent(entity, pos)
-	ctx.World.AddComponent(entity, char)
+	// Spatial transaction handles PositionComponent
+	ctx.World.Characters.Add(entity, char)
 	ctx.World.AddComponent(entity, seq)
 
 	tx := ctx.World.BeginSpatialTransaction()
@@ -177,8 +177,8 @@ func TestBoostDeactivatesOnColorSwitch(t *testing.T) {
 		Level: components.LevelNormal,
 	}
 
-	ctx.World.AddComponent(entity, pos)
-	ctx.World.AddComponent(entity, char)
+	// Spatial transaction handles PositionComponent
+	ctx.World.Characters.Add(entity, char)
 	ctx.World.AddComponent(entity, seq)
 
 	tx := ctx.World.BeginSpatialTransaction()
@@ -243,8 +243,8 @@ func TestBoostRebuildAfterColorSwitch(t *testing.T) {
 		Level: components.LevelNormal,
 	}
 
-	ctx.World.AddComponent(entity, pos)
-	ctx.World.AddComponent(entity, char)
+	// Spatial transaction handles PositionComponent
+	ctx.World.Characters.Add(entity, char)
 	ctx.World.AddComponent(entity, seq)
 
 	tx := ctx.World.BeginSpatialTransaction()
@@ -295,8 +295,8 @@ func TestBoostDeactivatesOnError(t *testing.T) {
 		Level: components.LevelNormal,
 	}
 
-	ctx.World.AddComponent(entity, pos)
-	ctx.World.AddComponent(entity, char)
+	// Spatial transaction handles PositionComponent
+	ctx.World.Characters.Add(entity, char)
 	ctx.World.AddComponent(entity, seq)
 
 	tx := ctx.World.BeginSpatialTransaction()
@@ -357,8 +357,8 @@ func TestBoostDeactivatesOnRedCharacter(t *testing.T) {
 		Level: components.LevelNormal,
 	}
 
-	ctx.World.AddComponent(entity, pos)
-	ctx.World.AddComponent(entity, char)
+	// Spatial transaction handles PositionComponent
+	ctx.World.Characters.Add(entity, char)
 	ctx.World.AddComponent(entity, seq)
 
 	tx := ctx.World.BeginSpatialTransaction()
@@ -461,8 +461,8 @@ func TestBoostExtensionDuration(t *testing.T) {
 		Level: components.LevelNormal,
 	}
 
-	ctx.World.AddComponent(entity, pos)
-	ctx.World.AddComponent(entity, char)
+	// Spatial transaction handles PositionComponent
+	ctx.World.Characters.Add(entity, char)
 	ctx.World.AddComponent(entity, seq)
 
 	tx := ctx.World.BeginSpatialTransaction()
@@ -534,8 +534,8 @@ func TestBoostActivationWithGreen(t *testing.T) {
 		Level: components.LevelNormal,
 	}
 
-	ctx.World.AddComponent(entity, pos)
-	ctx.World.AddComponent(entity, char)
+	// Spatial transaction handles PositionComponent
+	ctx.World.Characters.Add(entity, char)
 	ctx.World.AddComponent(entity, seq)
 
 	tx := ctx.World.BeginSpatialTransaction()

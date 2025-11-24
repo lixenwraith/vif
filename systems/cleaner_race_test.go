@@ -58,11 +58,11 @@ func TestNoRaceSnapshotRendering(t *testing.T) {
 					return
 				default:
 					// Query World directly for cleaner components
-					cleanerType := reflect.TypeOf(components.CleanerComponent{})
-					entities := world.GetEntitiesWith(cleanerType)
+					// Using direct store access
+					entities := world.Cleaners.All()
 					// Verify components are valid
 					for _, entity := range entities {
-						if comp, ok := world.GetComponent(entity, cleanerType); ok {
+						if comp, ok := world.Cleaners.Get(entity); ok {
 							c := comp.(components.CleanerComponent)
 							_ = c.GridY
 							_ = len(c.Trail)
@@ -138,8 +138,8 @@ func TestNoRaceActivation(t *testing.T) {
 					return
 				default:
 					// Check if cleaners exist (replacement for IsAnimationComplete)
-					cleanerType := reflect.TypeOf(components.CleanerComponent{})
-					_ = len(world.GetEntitiesWith(cleanerType)) == 0
+					// Using direct store access
+					_ = len(world.Cleaners.All()) == 0
 					time.Sleep(2 * time.Millisecond)
 				}
 			}
@@ -253,7 +253,7 @@ func TestNoRaceComponentAccess(t *testing.T) {
 	}()
 
 	// Goroutines 2-21: Read cleaner components
-	cleanerType := reflect.TypeOf(components.CleanerComponent{})
+	// Using direct store access
 	for i := 0; i < 20; i++ {
 		wg.Add(1)
 		go func(id int) {
@@ -263,9 +263,9 @@ func TestNoRaceComponentAccess(t *testing.T) {
 				case <-stopChan:
 					return
 				default:
-					entities := world.GetEntitiesWith(cleanerType)
+					entities := world.Cleaners.All()
 					for _, entity := range entities {
-						if comp, ok := world.GetComponent(entity, cleanerType); ok {
+						if comp, ok := world.Cleaners.Get(entity); ok {
 							c := comp.(components.CleanerComponent)
 							_ = c.PreciseX
 							_ = c.VelocityX

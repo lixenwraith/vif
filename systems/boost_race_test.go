@@ -44,9 +44,9 @@ func TestBoostRapidToggle(t *testing.T) {
 				Level: components.LevelNormal,
 			}
 
-			ctx.World.AddComponent(entity, pos)
-			ctx.World.AddComponent(entity, char)
-			ctx.World.AddComponent(entity, seq)
+			// Spatial transaction handles PositionComponent
+			ctx.World.Characters.Add(entity, char)
+			ctx.World.Sequences.Add(entity, seq)
 
 			tx := ctx.World.BeginSpatialTransaction()
 			tx.Spawn(entity, pos.X, pos.Y)
@@ -111,9 +111,9 @@ func TestBoostConcurrentRead(t *testing.T) {
 		Level: components.LevelNormal,
 	}
 
-	ctx.World.AddComponent(entity, pos)
-	ctx.World.AddComponent(entity, char)
-	ctx.World.AddComponent(entity, seq)
+	// Spatial transaction handles PositionComponent
+	ctx.World.Characters.Add(entity, char)
+	ctx.World.Sequences.Add(entity, seq)
 
 	tx := ctx.World.BeginSpatialTransaction()
 	tx.Spawn(entity, pos.X, pos.Y)
@@ -181,9 +181,9 @@ func TestBoostExpirationRace(t *testing.T) {
 			Level: components.LevelNormal,
 		}
 
-		ctx.World.AddComponent(entity, pos)
-		ctx.World.AddComponent(entity, char)
-		ctx.World.AddComponent(entity, seq)
+		// Spatial transaction handles PositionComponent
+		ctx.World.Characters.Add(entity, char)
+		ctx.World.Sequences.Add(entity, seq)
 
 		tx := ctx.World.BeginSpatialTransaction()
 		tx.Spawn(entity, pos.X, pos.Y)
@@ -253,9 +253,9 @@ func TestBoostWithScoreUpdates(t *testing.T) {
 				Level: components.LevelNormal,
 			}
 
-			ctx.World.AddComponent(entity, pos)
-			ctx.World.AddComponent(entity, char)
-			ctx.World.AddComponent(entity, seq)
+			// Spatial transaction handles PositionComponent
+			ctx.World.Characters.Add(entity, char)
+			ctx.World.Sequences.Add(entity, seq)
 
 			tx := ctx.World.BeginSpatialTransaction()
 			tx.Spawn(entity, pos.X, pos.Y)
@@ -366,9 +366,9 @@ func TestSimulateFullGameLoop(t *testing.T) {
 				Level: components.LevelNormal,
 			}
 
-			ctx.World.AddComponent(entity, pos)
-			ctx.World.AddComponent(entity, char)
-			ctx.World.AddComponent(entity, seq)
+			// Spatial transaction handles PositionComponent
+			ctx.World.Characters.Add(entity, char)
+			ctx.World.Sequences.Add(entity, seq)
 
 			tx := ctx.World.BeginSpatialTransaction()
 			tx.Spawn(entity, pos.X, pos.Y)

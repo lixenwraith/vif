@@ -31,7 +31,7 @@ func TestNuggetJumpWithSufficientScore(t *testing.T) {
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
 	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
 	ctx.World.AddComponent(entity, components.CharacterComponent{Rune: 'a', Style: style})
-	ctx.World.AddComponent(entity, components.NuggetComponent{ID: 1, SpawnTime: time.Now()})
+	ctx.World.Nuggets.Add(entity, components.NuggetComponent{ID: 1, SpawnTime: time.Now()})
 	{
 		tx := ctx.World.BeginSpatialTransaction()
 		tx.Spawn(entity, 50, 15)
@@ -86,7 +86,7 @@ func TestNuggetJumpWithInsufficientScore(t *testing.T) {
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
 	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
 	ctx.World.AddComponent(entity, components.CharacterComponent{Rune: 'a', Style: style})
-	ctx.World.AddComponent(entity, components.NuggetComponent{ID: 1, SpawnTime: time.Now()})
+	ctx.World.Nuggets.Add(entity, components.NuggetComponent{ID: 1, SpawnTime: time.Now()})
 	{
 		tx := ctx.World.BeginSpatialTransaction()
 		tx.Spawn(entity, 50, 15)
@@ -184,7 +184,7 @@ func TestNuggetJumpUpdatesPosition(t *testing.T) {
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
 	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
 	ctx.World.AddComponent(entity, components.CharacterComponent{Rune: 'a', Style: style})
-	ctx.World.AddComponent(entity, components.NuggetComponent{ID: 1, SpawnTime: time.Now()})
+	ctx.World.Nuggets.Add(entity, components.NuggetComponent{ID: 1, SpawnTime: time.Now()})
 	{
 		tx := ctx.World.BeginSpatialTransaction()
 		tx.Spawn(entity, 75, 20)
@@ -356,7 +356,7 @@ func TestNuggetJumpWithNuggetAtEdge(t *testing.T) {
 			style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
 			// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
 			ctx.World.AddComponent(entity, components.CharacterComponent{Rune: 'a', Style: style})
-			ctx.World.AddComponent(entity, components.NuggetComponent{ID: 1, SpawnTime: time.Now()})
+			ctx.World.Nuggets.Add(entity, components.NuggetComponent{ID: 1, SpawnTime: time.Now()})
 			{
 				tx := ctx.World.BeginSpatialTransaction()
 				tx.Spawn(entity, tc.x, tc.y)
@@ -401,7 +401,7 @@ func TestJumpToNuggetMethodReturnsCorrectPosition(t *testing.T) {
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
 	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
 	ctx.World.AddComponent(entity, components.CharacterComponent{Rune: 'a', Style: style})
-	ctx.World.AddComponent(entity, components.NuggetComponent{ID: 1, SpawnTime: time.Now()})
+	ctx.World.Nuggets.Add(entity, components.NuggetComponent{ID: 1, SpawnTime: time.Now()})
 	nuggetSystem.activeNugget.Store(uint64(entity))
 
 	// Should return (30, 12)
@@ -434,7 +434,7 @@ func TestJumpToNuggetWithMissingComponent(t *testing.T) {
 
 	// Create entity without PositionComponent (shouldn't happen in practice)
 	entity := ctx.World.CreateEntity()
-	ctx.World.AddComponent(entity, components.NuggetComponent{ID: 1, SpawnTime: time.Now()})
+	ctx.World.Nuggets.Add(entity, components.NuggetComponent{ID: 1, SpawnTime: time.Now()})
 	nuggetSystem.activeNugget.Store(uint64(entity))
 
 	// Should handle gracefully and return (-1, -1)
@@ -464,7 +464,7 @@ func TestJumpToNuggetAtomicCursorUpdate(t *testing.T) {
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
 	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
 	ctx.World.AddComponent(entity, components.CharacterComponent{Rune: 'a', Style: style})
-	ctx.World.AddComponent(entity, components.NuggetComponent{ID: 1, SpawnTime: time.Now()})
+	ctx.World.Nuggets.Add(entity, components.NuggetComponent{ID: 1, SpawnTime: time.Now()})
 	nuggetSystem.activeNugget.Store(uint64(entity))
 
 	// Set initial cursor
@@ -521,7 +521,7 @@ func TestJumpToNuggetEntityStillExists(t *testing.T) {
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
 	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
 	ctx.World.AddComponent(entity, components.CharacterComponent{Rune: 'a', Style: style})
-	ctx.World.AddComponent(entity, components.NuggetComponent{ID: 1, SpawnTime: time.Now()})
+	ctx.World.Nuggets.Add(entity, components.NuggetComponent{ID: 1, SpawnTime: time.Now()})
 	nuggetSystem.activeNugget.Store(uint64(entity))
 
 	// Jump to nugget
@@ -531,7 +531,7 @@ func TestJumpToNuggetEntityStillExists(t *testing.T) {
 	}
 
 	// Verify nugget still exists (jumping doesn't collect it)
-	nuggetType := reflect.TypeOf(components.NuggetComponent{})
+	// Using direct store access
 	if !ctx.World.HasComponent(entity, nuggetType) {
 		t.Error("Nugget entity should still exist after jump")
 	}

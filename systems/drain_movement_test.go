@@ -215,7 +215,7 @@ func TestDrainSystem_MovementBoundaryChecks(t *testing.T) {
 			// Manually create drain entity at specific position
 			entity := world.CreateEntity()
 			world.AddComponent(entity, components.PositionComponent{X: tc.drainX, Y: tc.drainY})
-			world.AddComponent(entity, components.DrainComponent{
+			world.Drains.Add(entity, components.DrainComponent{
 				X:            tc.drainX,
 				Y:            tc.drainY,
 				LastMoveTime: startTime,
@@ -296,7 +296,7 @@ func TestDrainSystem_MovementUpdatesAllComponents(t *testing.T) {
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Verify DrainComponent was updated
-	drainType := reflect.TypeOf(components.DrainComponent{})
+	// Using direct store access
 	drainComp, ok := world.GetComponent(entity, drainType)
 	if !ok {
 		t.Fatal("Expected entity to have DrainComponent")
@@ -500,7 +500,7 @@ func TestDrainSystem_MovementDiagonal(t *testing.T) {
 			// Manually create drain at specific position
 			entity := world.CreateEntity()
 			world.AddComponent(entity, components.PositionComponent{X: tc.drainX, Y: tc.drainY})
-			world.AddComponent(entity, components.DrainComponent{
+			world.Drains.Add(entity, components.DrainComponent{
 				X:            tc.drainX,
 				Y:            tc.drainY,
 				LastMoveTime: startTime,

@@ -390,8 +390,7 @@ func TestNoSkippedCharacters(t *testing.T) {
 	redPositions := []int{10, 11, 12}
 	for _, x := range redPositions {
 		entity := world.CreateEntity()
-		world.AddComponent(entity, components.PositionComponent{X: x, Y: 5})
-		world.AddComponent(entity, components.SequenceComponent{
+		world.Sequences.Add(entity, components.SequenceComponent{
 			Type: components.SequenceRed,
 		})
 

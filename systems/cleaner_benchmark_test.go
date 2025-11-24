@@ -29,8 +29,8 @@ func BenchmarkCleanerSpawn(b *testing.B) {
 		cleanerSystem.Update(world, 16*time.Millisecond)
 
 		// Clean up for next iteration
-		cleanerType := reflect.TypeOf(components.CleanerComponent{})
-		cleaners := world.GetEntitiesWith(cleanerType)
+		// Using direct store access instead of reflection
+		cleaners := world.Cleaners.All()
 		for _, entity := range cleaners {
 			world.DestroyEntity(entity)
 		}
@@ -78,16 +78,16 @@ func BenchmarkCleanerSnapshots(b *testing.B) {
 	ctx.PushEvent(engine.EventCleanerRequest, nil)
 	cleanerSystem.Update(world, 16*time.Millisecond)
 
-	cleanerType := reflect.TypeOf(components.CleanerComponent{})
+	// Using direct store access instead of reflection
 
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		// Query World directly as renderer does
-		entities := world.GetEntitiesWith(cleanerType)
+		entities := world.Cleaners.All()
 		for _, entity := range entities {
-			if comp, ok := world.GetComponent(entity, cleanerType); ok {
-				c := comp.(components.CleanerComponent)
+			if c, ok := world.Cleaners.Get(entity); ok {
+				// c is already CleanerComponent from Get()
 				_ = c.GridY
 				_ = len(c.Trail)
 			}
@@ -141,8 +141,8 @@ func BenchmarkFlashEffectCreation(b *testing.B) {
 		}
 
 		// Clean up
-		cleanerType := reflect.TypeOf(components.CleanerComponent{})
-		cleaners := world.GetEntitiesWith(cleanerType)
+		// Using direct store access instead of reflection
+		cleaners := world.Cleaners.All()
 		for _, entity := range cleaners {
 			world.DestroyEntity(entity)
 		}
@@ -179,11 +179,11 @@ func BenchmarkCompleteAnimation(b *testing.B) {
 		ctx.PushEvent(engine.EventCleanerRequest, nil)
 
 		// Run until complete (check for cleaner entities)
-		cleanerType := reflect.TypeOf(components.CleanerComponent{})
+		// Using direct store access instead of reflection
 		maxIterations := 1000
 		for j := 0; j < maxIterations; j++ {
 			cleanerSystem.Update(world, 16*time.Millisecond)
-			entities := world.GetEntitiesWith(cleanerType)
+			entities := world.Cleaners.All()
 			if len(entities) == 0 {
 				break // Animation complete
 			}

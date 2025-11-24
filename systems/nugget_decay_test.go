@@ -39,7 +39,7 @@ func TestDecayDestroysNugget(t *testing.T) {
 	nuggetSystem.activeNugget.Store(uint64(nuggetEntity))
 
 	// Verify nugget exists
-	nuggetType := reflect.TypeOf(components.NuggetComponent{})
+	// Using direct store access
 	if !world.HasComponent(nuggetEntity, nuggetType) {
 		t.Fatal("Nugget should exist before decay")
 	}
@@ -56,7 +56,7 @@ func TestDecayDestroysNugget(t *testing.T) {
 		decaySystem.updateFallingEntities(world, elapsed)
 
 		// Check if nugget has been destroyed
-		nuggetType := reflect.TypeOf(components.NuggetComponent{})
+		// Using direct store access
 		if !world.HasComponent(nuggetEntity, nuggetType) {
 			// Nugget destroyed, test successful
 			break
@@ -120,7 +120,7 @@ func TestDecayDoesNotDestroyNuggetAtDifferentPosition(t *testing.T) {
 	decaySystem.updateFallingEntities(world, elapsed)
 
 	// Verify nugget still exists (decay hasn't reached it yet)
-	nuggetType := reflect.TypeOf(components.NuggetComponent{})
+	// Using direct store access
 	if !world.HasComponent(nuggetEntity, nuggetType) {
 		t.Error("Nugget should still exist before decay reaches it")
 	}
@@ -183,14 +183,14 @@ func TestDecayDestroyMultipleNuggetsInDifferentColumns(t *testing.T) {
 		decaySystem.updateFallingEntities(world, elapsed)
 
 		// Check if both nuggets have been destroyed
-		nuggetType := reflect.TypeOf(components.NuggetComponent{})
+		// Using direct store access
 		if !world.HasComponent(nuggetEntity1, nuggetType) && !world.HasComponent(nuggetEntity2, nuggetType) {
 			break
 		}
 	}
 
 	// Verify both nuggets were destroyed
-	nuggetType := reflect.TypeOf(components.NuggetComponent{})
+	// Using direct store access
 	if world.HasComponent(nuggetEntity1, nuggetType) {
 		t.Error("First nugget should be destroyed")
 	}
@@ -265,7 +265,7 @@ func TestDecayDestroyNuggetAndSequence(t *testing.T) {
 		decaySystem.updateFallingEntities(world, elapsed)
 
 		// Check if nugget has been destroyed
-		nuggetType := reflect.TypeOf(components.NuggetComponent{})
+		// Using direct store access
 		seqType := reflect.TypeOf(components.SequenceComponent{})
 
 		nuggetDestroyed := !world.HasComponent(nuggetEntity, nuggetType)
@@ -282,7 +282,7 @@ func TestDecayDestroyNuggetAndSequence(t *testing.T) {
 	}
 
 	// Verify nugget was destroyed
-	nuggetType := reflect.TypeOf(components.NuggetComponent{})
+	// Using direct store access
 	if world.HasComponent(nuggetEntity, nuggetType) {
 		t.Error("Nugget should be destroyed")
 	}
@@ -355,14 +355,14 @@ func TestDecayNuggetRespawnAfterDestruction(t *testing.T) {
 		decaySystem.updateFallingEntities(world, elapsed)
 
 		// Check if nugget has been destroyed
-		nuggetType := reflect.TypeOf(components.NuggetComponent{})
+		// Using direct store access
 		if !world.HasComponent(nuggetEntity, nuggetType) {
 			break
 		}
 	}
 
 	// Verify nugget was destroyed
-	nuggetType := reflect.TypeOf(components.NuggetComponent{})
+	// Using direct store access
 	if world.HasComponent(nuggetEntity, nuggetType) {
 		t.Error("Nugget should be destroyed after decay")
 	}
@@ -434,14 +434,14 @@ func TestDecayDoesNotProcessSameNuggetTwice(t *testing.T) {
 		decaySystem.updateFallingEntities(world, elapsed)
 
 		// Check if nugget has been destroyed
-		nuggetType := reflect.TypeOf(components.NuggetComponent{})
+		// Using direct store access
 		if !world.HasComponent(nuggetEntity, nuggetType) {
 			break
 		}
 	}
 
 	// Verify nugget was destroyed
-	nuggetType := reflect.TypeOf(components.NuggetComponent{})
+	// Using direct store access
 	if world.HasComponent(nuggetEntity, nuggetType) {
 		t.Error("Nugget should be destroyed after first decay pass")
 	}

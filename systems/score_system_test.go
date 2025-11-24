@@ -33,8 +33,8 @@ func TestBoostHeatMultiplier(t *testing.T) {
 		Level: components.LevelNormal,
 	}
 
-	ctx.World.AddComponent(entity, pos)
-	ctx.World.AddComponent(entity, char)
+	// Spatial transaction handles PositionComponent
+	ctx.World.Characters.Add(entity, char)
 	ctx.World.AddComponent(entity, seq)
 	{
 		tx := ctx.World.BeginSpatialTransaction()
@@ -128,8 +128,8 @@ func TestRedCharacterResetsHeat(t *testing.T) {
 		Level: components.LevelNormal,
 	}
 
-	ctx.World.AddComponent(entity, pos)
-	ctx.World.AddComponent(entity, char)
+	// Spatial transaction handles PositionComponent
+	ctx.World.Characters.Add(entity, char)
 	ctx.World.AddComponent(entity, seq)
 	{
 		tx := ctx.World.BeginSpatialTransaction()
@@ -174,8 +174,8 @@ func TestGreenBrightCharacterScore(t *testing.T) {
 		Level: components.LevelBright,
 	}
 
-	ctx.World.AddComponent(entity, pos)
-	ctx.World.AddComponent(entity, char)
+	// Spatial transaction handles PositionComponent
+	ctx.World.Characters.Add(entity, char)
 	ctx.World.AddComponent(entity, seq)
 	{
 		tx := ctx.World.BeginSpatialTransaction()
@@ -226,8 +226,8 @@ func TestIncorrectCharacterResetsHeat(t *testing.T) {
 		Level: components.LevelNormal,
 	}
 
-	ctx.World.AddComponent(entity, pos)
-	ctx.World.AddComponent(entity, char)
+	// Spatial transaction handles PositionComponent
+	ctx.World.Characters.Add(entity, char)
 	ctx.World.AddComponent(entity, seq)
 	{
 		tx := ctx.World.BeginSpatialTransaction()
@@ -277,8 +277,8 @@ func TestBoostActivationAtMaxHeat(t *testing.T) {
 		Level: components.LevelNormal,
 	}
 
-	ctx.World.AddComponent(entity, pos)
-	ctx.World.AddComponent(entity, char)
+	// Spatial transaction handles PositionComponent
+	ctx.World.Characters.Add(entity, char)
 	ctx.World.AddComponent(entity, seq)
 	{
 		tx := ctx.World.BeginSpatialTransaction()
@@ -342,8 +342,8 @@ func TestScoreBlinkOnCorrectCharacter(t *testing.T) {
 				Level: tt.level,
 			}
 
-			ctx.World.AddComponent(entity, pos)
-			ctx.World.AddComponent(entity, char)
+			// Spatial transaction handles PositionComponent
+			ctx.World.Characters.Add(entity, char)
 			ctx.World.AddComponent(entity, seq)
 			{
 				tx := ctx.World.BeginSpatialTransaction()
@@ -417,8 +417,8 @@ func TestScoreBlinkOnError(t *testing.T) {
 					Level: components.LevelNormal,
 				}
 
-				ctx.World.AddComponent(entity, pos)
-				ctx.World.AddComponent(entity, char)
+				// Spatial transaction handles PositionComponent
+				ctx.World.Characters.Add(entity, char)
 				ctx.World.AddComponent(entity, seq)
 				{
 					tx := ctx.World.BeginSpatialTransaction()
@@ -496,8 +496,8 @@ func TestScoreBlinkOnGoldCharacter(t *testing.T) {
 		Level: components.LevelNormal,
 	}
 
-	ctx.World.AddComponent(entity, pos)
-	ctx.World.AddComponent(entity, char)
+	// Spatial transaction handles PositionComponent
+	ctx.World.Characters.Add(entity, char)
 	ctx.World.AddComponent(entity, seq)
 	{
 		tx := ctx.World.BeginSpatialTransaction()
@@ -554,8 +554,8 @@ func TestScoreBlinkTimeout(t *testing.T) {
 		Level: components.LevelNormal,
 	}
 
-	ctx.World.AddComponent(entity, pos)
-	ctx.World.AddComponent(entity, char)
+	// Spatial transaction handles PositionComponent
+	ctx.World.Characters.Add(entity, char)
 	ctx.World.AddComponent(entity, seq)
 	{
 		tx := ctx.World.BeginSpatialTransaction()

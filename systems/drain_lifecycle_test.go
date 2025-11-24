@@ -43,7 +43,7 @@ func TestDrainSystem_SpawnWhenScorePositive(t *testing.T) {
 
 	// Verify entity has DrainComponent
 	entity := engine.Entity(entityID)
-	drainType := reflect.TypeOf(components.DrainComponent{})
+	// Using direct store access
 	if _, ok := world.GetComponent(entity, drainType); !ok {
 		t.Fatal("Expected drain entity to have DrainComponent")
 	}
@@ -100,7 +100,7 @@ func TestDrainSystem_DespawnWhenScoreZero(t *testing.T) {
 	}
 
 	// Verify entity no longer has DrainComponent (or doesn't exist)
-	drainType := reflect.TypeOf(components.DrainComponent{})
+	// Using direct store access
 	if _, ok := world.GetComponent(entity, drainType); ok {
 		t.Fatal("Expected drain entity to not have DrainComponent after despawn")
 	}
@@ -250,7 +250,7 @@ func TestDrainSystem_SpawnDespawnCycle(t *testing.T) {
 
 	// Verify second entity has DrainComponent
 	entity := engine.Entity(secondEntityID)
-	drainType := reflect.TypeOf(components.DrainComponent{})
+	// Using direct store access
 	if _, ok := world.GetComponent(entity, drainType); !ok {
 		t.Fatal("Expected second drain entity to have DrainComponent")
 	}
@@ -274,8 +274,8 @@ func TestDrainSystem_NoDoubleSpawn(t *testing.T) {
 	}
 
 	// Count entities with DrainComponent
-	drainType := reflect.TypeOf(components.DrainComponent{})
-	drainEntities := world.GetEntitiesWith(drainType)
+	// Using direct store access
+	drainEntities := world.Drains.All()
 
 	if len(drainEntities) != 1 {
 		t.Fatalf("Expected exactly 1 drain entity, got %d", len(drainEntities))

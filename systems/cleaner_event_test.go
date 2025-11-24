@@ -21,8 +21,8 @@ func TestCleanerSpawnOnEvent(t *testing.T) {
 	}
 
 	// Verify no cleaners exist initially
-	cleanerType := reflect.TypeOf(components.CleanerComponent{})
-	entities := world.GetEntitiesWith(cleanerType)
+	// Using direct store access
+	entities := world.Cleaners.All()
 	if len(entities) != 0 {
 		t.Fatalf("Expected no cleaners initially, got %d", len(entities))
 	}
@@ -34,7 +34,7 @@ func TestCleanerSpawnOnEvent(t *testing.T) {
 	cleanerSystem.Update(world, 16*time.Millisecond)
 
 	// Verify cleaners were spawned
-	entities = world.GetEntitiesWith(cleanerType)
+	entities = world.Cleaners.All()
 	if len(entities) == 0 {
 		t.Fatal("Expected cleaners to be spawned after EventCleanerRequest")
 	}
@@ -60,8 +60,8 @@ func TestCleanerFinishedEvent(t *testing.T) {
 	cleanerSystem.Update(world, 16*time.Millisecond)
 
 	// Verify cleaner was spawned
-	cleanerType := reflect.TypeOf(components.CleanerComponent{})
-	entities := world.GetEntitiesWith(cleanerType)
+	// Using direct store access
+	entities := world.Cleaners.All()
 	if len(entities) == 0 {
 		t.Fatal("Expected cleaner to be spawned")
 	}
@@ -93,7 +93,7 @@ func TestCleanerFinishedEvent(t *testing.T) {
 		}
 
 		// Check if cleaners are gone (they might finish without us catching the event)
-		entities = world.GetEntitiesWith(cleanerType)
+		entities = world.Cleaners.All()
 		if len(entities) == 0 {
 			// Cleaners are gone, check one more time for the event
 			events = ctx.PeekEvents()
@@ -143,8 +143,8 @@ func TestNoDuplicateSpawnsForSameFrame(t *testing.T) {
 	cleanerSystem.Update(world, 16*time.Millisecond)
 
 	// Verify cleaners were spawned only once (one per row)
-	cleanerType := reflect.TypeOf(components.CleanerComponent{})
-	entities := world.GetEntitiesWith(cleanerType)
+	// Using direct store access
+	entities := world.Cleaners.All()
 	expectedCleaners := 3 // 3 rows with red characters
 
 	if len(entities) != expectedCleaners {
@@ -166,8 +166,8 @@ func TestMultipleFrameEvents(t *testing.T) {
 	ctx.PushEvent(engine.EventCleanerRequest, nil)
 	cleanerSystem.Update(world, 16*time.Millisecond)
 
-	cleanerType := reflect.TypeOf(components.CleanerComponent{})
-	entities := world.GetEntitiesWith(cleanerType)
+	// Using direct store access
+	entities := world.Cleaners.All()
 	firstSpawnCount := len(entities)
 	if firstSpawnCount == 0 {
 		t.Fatal("Expected cleaners to spawn for first frame")
@@ -189,7 +189,7 @@ func TestMultipleFrameEvents(t *testing.T) {
 	ctx.PushEvent(engine.EventCleanerRequest, nil)
 	cleanerSystem.Update(world, 16*time.Millisecond)
 
-	entities = world.GetEntitiesWith(cleanerType)
+	entities = world.Cleaners.All()
 	secondSpawnCount := len(entities)
 	if secondSpawnCount == 0 {
 		t.Fatal("Expected cleaners to spawn for second frame")

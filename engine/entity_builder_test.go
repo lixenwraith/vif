@@ -8,7 +8,7 @@ import (
 
 // TestEntityBuilder verifies that the EntityBuilder compiles and works correctly
 func TestEntityBuilder(t *testing.T) {
-	w := NewWorldGeneric()
+	w := NewWorld()
 
 	// Test basic entity creation with generic With function
 	char := components.CharacterComponent{Rune: 'A'}
@@ -65,7 +65,7 @@ func TestEntityBuilder(t *testing.T) {
 
 // TestEntityBuilder_Panic verifies panic behavior
 func TestEntityBuilder_Panic_With(t *testing.T) {
-	w := NewWorldGeneric()
+	w := NewWorld()
 
 	defer func() {
 		if r := recover(); r == nil {
@@ -79,7 +79,7 @@ func TestEntityBuilder_Panic_With(t *testing.T) {
 }
 
 func TestEntityBuilder_Panic_WithPosition(t *testing.T) {
-	w := NewWorldGeneric()
+	w := NewWorld()
 
 	defer func() {
 		if r := recover(); r == nil {
@@ -94,7 +94,7 @@ func TestEntityBuilder_Panic_WithPosition(t *testing.T) {
 
 // TestEntityBuilder_ComplexScenario tests a real-world entity creation pattern
 func TestEntityBuilder_ComplexScenario(t *testing.T) {
-	w := NewWorldGeneric()
+	w := NewWorld()
 
 	// Create a complete game entity with multiple components
 	entity := With(
@@ -108,7 +108,7 @@ func TestEntityBuilder_ComplexScenario(t *testing.T) {
 			components.PositionComponent{X: 10, Y: 20},
 		),
 		w.Sequences,
-		components.SequenceComponent{Text: "test"},
+		components.SequenceComponent{ID: 42, Index: 0, Type: components.SequenceGreen, Level: components.LevelNormal},
 	).Build()
 
 	// Verify all components were added
@@ -118,7 +118,7 @@ func TestEntityBuilder_ComplexScenario(t *testing.T) {
 	if _, ok := w.Positions.Get(entity); !ok {
 		t.Error("Missing position component")
 	}
-	if seq, ok := w.Sequences.Get(entity); !ok || seq.Text != "test" {
+	if seq, ok := w.Sequences.Get(entity); !ok || seq.ID != 42 {
 		t.Error("Missing or incorrect sequence component")
 	}
 

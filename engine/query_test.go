@@ -8,7 +8,7 @@ import (
 
 // TestQueryBuilder verifies that the QueryBuilder compiles and works correctly
 func TestQueryBuilder(t *testing.T) {
-	w := NewWorldGeneric()
+	w := NewWorld()
 
 	// Create some test entities
 	e1 := w.CreateEntity()
@@ -58,7 +58,7 @@ func TestQueryBuilder(t *testing.T) {
 
 // TestQueryBuilder_Panic verifies panic behavior
 func TestQueryBuilder_Panic(t *testing.T) {
-	w := NewWorldGeneric()
+	w := NewWorld()
 
 	defer func() {
 		if r := recover(); r == nil {

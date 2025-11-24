@@ -1,8 +1,6 @@
 package systems
 
 import (
-	"reflect"
-
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
@@ -17,19 +15,18 @@ func createCleanerTestContext() *engine.GameContext {
 func createRedCharacterAt(world *engine.World, x, y int) engine.Entity {
 	entity := world.CreateEntity()
 
-	world.AddComponent(entity, components.PositionComponent{X: x, Y: y})
-	world.AddComponent(entity, components.CharacterComponent{
+	world.Characters.Add(entity, components.CharacterComponent{
 		Rune:  'R',
 		Style: render.GetStyleForSequence(components.SequenceRed, components.LevelBright),
 	})
-	world.AddComponent(entity, components.SequenceComponent{
+	world.Sequences.Add(entity, components.SequenceComponent{
 		ID:    1,
 		Index: 0,
 		Type:  components.SequenceRed,
 		Level: components.LevelBright,
 	})
 
-	// Use spatial transaction for atomic spawn
+	// Use spatial transaction for atomic spawn (also adds PositionComponent)
 	tx := world.BeginSpatialTransaction()
 	tx.Spawn(entity, x, y)
 	tx.Commit()
@@ -39,19 +36,18 @@ func createRedCharacterAt(world *engine.World, x, y int) engine.Entity {
 func createBlueCharacterAt(world *engine.World, x, y int) engine.Entity {
 	entity := world.CreateEntity()
 
-	world.AddComponent(entity, components.PositionComponent{X: x, Y: y})
-	world.AddComponent(entity, components.CharacterComponent{
+	world.Characters.Add(entity, components.CharacterComponent{
 		Rune:  'B',
 		Style: render.GetStyleForSequence(components.SequenceBlue, components.LevelBright),
 	})
-	world.AddComponent(entity, components.SequenceComponent{
+	world.Sequences.Add(entity, components.SequenceComponent{
 		ID:    2,
 		Index: 0,
 		Type:  components.SequenceBlue,
 		Level: components.LevelBright,
 	})
 
-	// Use spatial transaction for atomic spawn
+	// Use spatial transaction for atomic spawn (also adds PositionComponent)
 	tx := world.BeginSpatialTransaction()
 	tx.Spawn(entity, x, y)
 	tx.Commit()
@@ -61,19 +57,18 @@ func createBlueCharacterAt(world *engine.World, x, y int) engine.Entity {
 func createGreenCharacterAt(world *engine.World, x, y int) engine.Entity {
 	entity := world.CreateEntity()
 
-	world.AddComponent(entity, components.PositionComponent{X: x, Y: y})
-	world.AddComponent(entity, components.CharacterComponent{
+	world.Characters.Add(entity, components.CharacterComponent{
 		Rune:  'G',
 		Style: render.GetStyleForSequence(components.SequenceGreen, components.LevelBright),
 	})
-	world.AddComponent(entity, components.SequenceComponent{
+	world.Sequences.Add(entity, components.SequenceComponent{
 		ID:    3,
 		Index: 0,
 		Type:  components.SequenceGreen,
 		Level: components.LevelBright,
 	})
 
-	// Use spatial transaction for atomic spawn
+	// Use spatial transaction for atomic spawn (also adds PositionComponent)
 	tx := world.BeginSpatialTransaction()
 	tx.Spawn(entity, x, y)
 	tx.Commit()
@@ -81,9 +76,7 @@ func createGreenCharacterAt(world *engine.World, x, y int) engine.Entity {
 }
 
 func entityExists(world *engine.World, entity engine.Entity) bool {
-	posType := reflect.TypeOf(components.PositionComponent{})
-	_, exists := world.GetComponent(entity, posType)
-	return exists
+	return world.HasAnyComponent(entity)
 }
 
 func abs(x float64) float64 {

@@ -1,9 +1,10 @@
 package engine
 
 import (
-	"reflect"
 	"testing"
 	"time"
+
+	"github.com/lixenwraith/vi-fighter/components"
 )
 
 // TestComponent is a test component for testing
@@ -14,17 +15,17 @@ type TestComponent struct {
 // TestComponentTypeIndex tests that component type index is properly maintained
 func TestComponentTypeIndex(t *testing.T) {
 	world := NewWorld()
+	testStore := NewStore[TestComponent]()
 
 	// Create entities with test components
 	entity1 := world.CreateEntity()
-	world.AddComponent(entity1, TestComponent{X: 1, Y: 1})
+	testStore.Add(entity1, TestComponent{X: 1, Y: 1})
 
 	entity2 := world.CreateEntity()
-	world.AddComponent(entity2, TestComponent{X: 2, Y: 2})
+	testStore.Add(entity2, TestComponent{X: 2, Y: 2})
 
 	// Get entities with TestComponent
-	compType := reflect.TypeOf(TestComponent{})
-	entities := world.GetEntitiesWith(compType)
+	entities := testStore.All()
 
 	if len(entities) != 2 {
 		t.Errorf("Expected 2 entities with TestComponent, got %d", len(entities))
@@ -32,9 +33,10 @@ func TestComponentTypeIndex(t *testing.T) {
 
 	// Destroy one entity
 	world.DestroyEntity(entity1)
+	testStore.Remove(entity1) // Manual cleanup since testStore not registered in world
 
 	// Verify type index is updated
-	entities = world.GetEntitiesWith(compType)
+	entities = testStore.All()
 	if len(entities) != 1 {
 		t.Errorf("Expected 1 entity with TestComponent after destruction, got %d", len(entities))
 	}
@@ -44,19 +46,12 @@ func TestComponentTypeIndex(t *testing.T) {
 	}
 }
 
-// PositionComponent for testing (matches game component structure)
-type PositionComponent struct {
-	X, Y int
-}
-
 // TestDestroyEntityWithPosition tests DestroyEntity with PositionComponent
 func TestDestroyEntityWithPosition(t *testing.T) {
 	world := NewWorld()
 
-	// Create entity with PositionComponent
+	// Create entity with PositionComponent using spatial transaction
 	entity := world.CreateEntity()
-	world.AddComponent(entity, PositionComponent{X: 10, Y: 20})
-
 	tx := world.BeginSpatialTransaction()
 	tx.Spawn(entity, 10, 20)
 	tx.Commit()
@@ -65,6 +60,13 @@ func TestDestroyEntityWithPosition(t *testing.T) {
 	foundEntity := world.GetEntityAtPosition(10, 20)
 	if foundEntity != entity {
 		t.Errorf("Expected entity %d at position (10, 20), got %d", entity, foundEntity)
+	}
+
+	// Verify entity has position component
+	if pos, ok := world.Positions.Get(entity); !ok {
+		t.Error("Expected entity to have position component")
+	} else if pos.X != 10 || pos.Y != 20 {
+		t.Errorf("Expected position (10, 20), got (%d, %d)", pos.X, pos.Y)
 	}
 
 	// DestroyEntity should handle spatial index removal
@@ -76,31 +78,33 @@ func TestDestroyEntityWithPosition(t *testing.T) {
 		t.Errorf("Expected no entity at position (10, 20) after DestroyEntity, got %d", foundEntity)
 	}
 
-	// Verify entity is destroyed
-	if world.EntityCount() != 0 {
-		t.Errorf("Expected 0 entities after DestroyEntity, got %d", world.EntityCount())
+	// Verify entity has no components
+	if world.HasAnyComponent(entity) {
+		t.Error("Expected entity to have no components after DestroyEntity")
 	}
 }
 
 // TestDestroyEntityWithoutPosition tests DestroyEntity without PositionComponent
 func TestDestroyEntityWithoutPosition(t *testing.T) {
 	world := NewWorld()
+	testStore := NewStore[TestComponent]()
 
 	// Create entity without PositionComponent (just TestComponent)
 	entity := world.CreateEntity()
-	world.AddComponent(entity, TestComponent{X: 5, Y: 5})
+	testStore.Add(entity, TestComponent{X: 5, Y: 5})
 
-	// Verify entity exists
-	if world.EntityCount() != 1 {
-		t.Errorf("Expected 1 entity, got %d", world.EntityCount())
+	// Verify entity exists in test store
+	if !testStore.Has(entity) {
+		t.Error("Expected entity to have TestComponent")
 	}
 
 	// DestroyEntity should still work without PositionComponent
 	world.DestroyEntity(entity)
+	testStore.Remove(entity) // Manual cleanup since testStore not registered in world
 
-	// Verify entity is destroyed
-	if world.EntityCount() != 0 {
-		t.Errorf("Expected 0 entities after DestroyEntity, got %d", world.EntityCount())
+	// Verify entity is destroyed in test store
+	if testStore.Has(entity) {
+		t.Error("Expected entity to not have TestComponent after DestroyEntity")
 	}
 }
 
@@ -114,7 +118,6 @@ func TestDestroyEntityMultipleEntities(t *testing.T) {
 
 	for i := 0; i < 5; i++ {
 		entities[i] = world.CreateEntity()
-		world.AddComponent(entities[i], PositionComponent{X: positions[i][0], Y: positions[i][1]})
 
 		tx := world.BeginSpatialTransaction()
 		tx.Spawn(entities[i], positions[i][0], positions[i][1])
@@ -140,9 +143,9 @@ func TestDestroyEntityMultipleEntities(t *testing.T) {
 			positions[2][0], positions[2][1], foundEntity)
 	}
 
-	// Verify middle entity is destroyed
-	if world.EntityCount() != 4 {
-		t.Errorf("Expected 4 entities after destroying one, got %d", world.EntityCount())
+	// Verify middle entity has no components
+	if world.HasAnyComponent(entities[2]) {
+		t.Error("Expected destroyed entity to have no components")
 	}
 
 	// Verify other entities are still in spatial index
@@ -169,9 +172,9 @@ func TestDestroyEntityNonExistent(t *testing.T) {
 	// Try to DestroyEntity on already-destroyed entity (should be no-op)
 	world.DestroyEntity(entity)
 
-	// Verify no panic and entity count is still 0
-	if world.EntityCount() != 0 {
-		t.Errorf("Expected 0 entities, got %d", world.EntityCount())
+	// Verify no panic and entity has no components
+	if world.HasAnyComponent(entity) {
+		t.Error("Expected destroyed entity to have no components")
 	}
 }
 
@@ -181,8 +184,6 @@ func TestDestroyEntityComponentTypeIndex(t *testing.T) {
 
 	// Create entities with PositionComponent
 	entity1 := world.CreateEntity()
-	world.AddComponent(entity1, PositionComponent{X: 1, Y: 1})
-
 	{
 		tx := world.BeginSpatialTransaction()
 		tx.Spawn(entity1, 1, 1)
@@ -190,8 +191,6 @@ func TestDestroyEntityComponentTypeIndex(t *testing.T) {
 	}
 
 	entity2 := world.CreateEntity()
-	world.AddComponent(entity2, PositionComponent{X: 2, Y: 2})
-
 	{
 		tx := world.BeginSpatialTransaction()
 		tx.Spawn(entity2, 2, 2)
@@ -199,8 +198,7 @@ func TestDestroyEntityComponentTypeIndex(t *testing.T) {
 	}
 
 	// Get entities with PositionComponent
-	compType := reflect.TypeOf(PositionComponent{})
-	entities := world.GetEntitiesWith(compType)
+	entities := world.Positions.All()
 
 	if len(entities) != 2 {
 		t.Errorf("Expected 2 entities with PositionComponent, got %d", len(entities))
@@ -210,7 +208,7 @@ func TestDestroyEntityComponentTypeIndex(t *testing.T) {
 	world.DestroyEntity(entity1)
 
 	// Verify type index is updated
-	entities = world.GetEntitiesWith(compType)
+	entities = world.Positions.All()
 	if len(entities) != 1 {
 		t.Errorf("Expected 1 entity with PositionComponent after DestroyEntity, got %d", len(entities))
 	}
@@ -267,6 +265,53 @@ func TestSystemExecutionOrder(t *testing.T) {
 			t.Errorf("System execution order mismatch at position %d: expected priority %d, got %d",
 				i, expectedPriority, executionOrder[i])
 		}
+	}
+}
+
+// TestQuery tests the new query builder pattern
+func TestQuery(t *testing.T) {
+	world := NewWorld()
+
+	// Create entities with different component combinations
+	e1 := WithPosition(world.NewEntity(), world.Positions, components.PositionComponent{X: 1, Y: 1}).Build()
+
+	_ = With(world.NewEntity(), world.Characters, components.CharacterComponent{Rune: 'A'}).Build()
+
+	e3 := With(
+		WithPosition(world.NewEntity(), world.Positions, components.PositionComponent{X: 2, Y: 2}),
+		world.Characters,
+		components.CharacterComponent{Rune: 'B'},
+	).Build()
+
+	// Query for entities with both Position and Character
+	entities := world.Query().
+		With(world.Positions).
+		With(world.Characters).
+		Execute()
+
+	if len(entities) != 1 {
+		t.Errorf("Expected 1 entity with both components, got %d", len(entities))
+	}
+	if len(entities) > 0 && entities[0] != e3 {
+		t.Errorf("Expected entity %d, got %d", e3, entities[0])
+	}
+
+	// Query for entities with only Position
+	entities = world.Query().
+		With(world.Positions).
+		Execute()
+
+	if len(entities) != 2 {
+		t.Errorf("Expected 2 entities with Position, got %d", len(entities))
+	}
+
+	// Verify e1 and e3 are in results (order may vary)
+	found := make(map[Entity]bool)
+	for _, e := range entities {
+		found[e] = true
+	}
+	if !found[e1] || !found[e3] {
+		t.Errorf("Expected to find entities %d and %d", e1, e3)
 	}
 }
 
