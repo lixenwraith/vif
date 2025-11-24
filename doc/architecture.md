@@ -1001,7 +1001,7 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 
 ### Decay System
 
-The decay system applies character degradation through a falling entity animation with swept collision detection.
+The decay system applies character degradation through a falling entity animation with swept collision detection. The system uses a **stateless architecture** where falling entities are queried from the `World.FallingDecays` store each frame rather than being tracked internally. This design allows for future extensions such as orbital and magnetic effects on decay entities.
 
 #### Decay Mechanics
 - **Brightness Decay**: Bright → Normal → Dark (reduces score multiplier)
@@ -1018,12 +1018,14 @@ The decay system applies character degradation through a falling entity animatio
 - **Counter Management**: Decrements counters when characters destroyed at Red (Dark) level
 
 #### Falling Entity Animation
-- **Spawn**: One falling entity per column (ensuring complete screen coverage)
+- **Spawn**: One falling entity per column stored as `FallingDecayComponent` in `World.FallingDecays` store (ensuring complete screen coverage)
+- **Stateless Update**: System queries all falling entities via `world.FallingDecays.All()` each frame (no internal entity tracking)
 - **Speed**: Random per entity, between 5.0-15.0 rows/second (FallingDecayMinSpeed/MaxSpeed)
+- **Physics Integration**: Position updated via delta time: `YPosition += Speed × dt.Seconds()`
 - **Character**: Random alphanumeric character per entity
 - **Matrix Effect**: Characters randomly change as they fall (controlled by FallingDecayChangeChance)
 - **Duration**: Based on slowest entity reaching bottom (gameHeight / FallingDecayMinSpeed)
-- **Cleanup**: All falling entities automatically destroyed when animation completes
+- **Cleanup**: All falling entities automatically destroyed when animation completes (`world.FallingDecays.Count() == 0`)
 
 #### Swept Collision Detection (Anti-Tunneling)
 
@@ -1037,9 +1039,8 @@ To prevent fast-moving entities from "tunneling" through characters without dete
 1. Calculate integer row range: `startRow = int(PrevPreciseY)`, `endRow = int(YPosition)`
 2. Sort coordinates to handle bidirectional movement: `if startRow > endRow { swap }`
 3. Clamp to screen bounds: `[0, gameHeight-1]`
-4. Safety limit: Cap traversal to 10 cells per frame (prevents performance issues with extreme speeds)
-5. Iterate through ALL rows in range: `for row := startRow; row <= endRow`
-6. Check collision at each integer grid cell in the path
+4. Iterate through ALL rows in range: `for row := startRow; row <= endRow`
+5. Check collision at each integer grid cell in the path
 
 **Example**:
 - Entity at Y=4.8 in frame N-1, moves to Y=7.3 in frame N
@@ -1078,6 +1079,7 @@ Prevents multiple falling entities from hitting the same position in a single fr
 - Type: `map[int]bool` with integer keys `(row * gameWidth) + col`
 - Scope: Single frame (cleared at start of each `updateFallingEntities` call)
 - Purpose: Track which grid cells have been hit this frame
+- **Zero-Allocation Design**: Map is a persistent field in DecaySystem struct, cleared via `delete()` instead of reallocating
 
 **Pattern**:
 1. Clear map at frame start: `for k := range processedGridCells { delete(processedGridCells, k) }`
@@ -1085,8 +1087,8 @@ Prevents multiple falling entities from hitting the same position in a single fr
 3. Mark after hit: `processedGridCells[flatIdx] = true`
 
 **Performance**:
-- Reuses same map across frames (no allocations)
-- Integer keys via flat indexing (no string formatting)
+- Reuses same map across frames (no allocations in hot path)
+- Integer keys via flat indexing (no `fmt.Sprintf` overhead)
 - O(1) lookup per collision check
 
 #### Entity-Level Deduplication
@@ -1120,8 +1122,11 @@ When a falling entity encounters a target at `(col, row)`:
 8. **Matrix Effect**: Randomly change character on row transition
 
 #### Thread Safety
-- **Mutex Protection**: All DecaySystem state protected by `sync.RWMutex`
-- **Atomic Access**: `decayedThisFrame` read/written under RLock/Lock
+- **Mutex Protection**: DecaySystem state protected by `sync.RWMutex`
+  - `currentRow`: Current decay row for display purposes
+  - `decayedThisFrame`: Entity-level deduplication map
+  - `processedGridCells`: Frame-level spatial deduplication map
+- **Stateless Entity Access**: All falling entities queried from `World.FallingDecays` store (no internal tracking)
 - **Component Access**: World's internal synchronization for Get/Add operations
 
 #### Pause Behavior

@@ -113,6 +113,46 @@ The spawn system tests have been reorganized into focused files:
   - TestGetIndentLevel: Indentation calculation
   - TestBlockSpawning: Complete block spawning
 
+#### Decay System Tests
+The decay system tests validate the stateless decay architecture with swept collision detection:
+
+**Located in `systems/`:**
+- **decay_system_test.go**: Core decay system functionality
+  - **createTestContext()**: Helper to create robust test context with fixed dimensions (80×30, gameHeight=25)
+    - Uses `tcell.NewSimulationScreen("UTF-8")` with explicit SetSize
+    - Forces dimensions to ensure physics bounds checks don't fail
+    - No longer relies on brittle screen initialization
+  - **TestDecaySweptCollisionNoTunneling**: Verifies swept collision prevents tunneling
+    - Creates blue sequences at multiple rows (0, 2, 4, 6)
+    - Spawns single falling entity with high speed (20 rows/sec) at column 10
+    - Simulates physics with 16ms time steps (200 steps to traverse 25 rows)
+    - Verifies all entities were decayed (no tunneling occurred)
+  - **TestDecayCoordinateLatchPreventsReprocessing**: Verifies coordinate latch prevents hitting same cell twice
+    - Creates blue sequence at row 5, column 10
+    - Spawns falling entity just above target (Y=4.8)
+    - Step 1: Move from 4.8 to 5.0 (should hit)
+    - Step 2: Move from 5.0 to 5.2 (should NOT hit due to latch)
+    - Verifies entity was hit exactly once
+  - **TestDecayFrameDeduplicationMap**: Verifies processedGridCells prevents double-hits in same frame
+    - Creates blue sequence at target position
+    - Spawns TWO falling entities hitting same cell (5, 10) in same frame
+    - Verifies target was hit only once (decayed by one level)
+  - **TestDecayDifferentSpeeds**: Verifies decay works correctly with min and max speeds
+    - Tests slow speed (FallingDecayMinSpeed) and fast speed (FallingDecayMaxSpeed)
+    - Creates target at different rows (5 for slow, 20 for fast)
+    - Simulates enough time to pass the row
+    - Verifies entity was decayed at correct speed
+  - **TestDecayFallingEntityPhysicsAccuracy**: Verifies falling entity moves at correct speed
+    - Creates entity with speed 10.0 at Y=5.0
+    - Simulates 100 frames × 16ms = 1.6 seconds
+    - Calculates expected position: `initialY + (speed × elapsed)`
+    - Verifies actual position within 0.01 tolerance
+  - **TestDecayMatrixEffectCharacterChanges**: Verifies Matrix-style character changes occur
+    - Creates entity with initial character 'A'
+    - Simulates movement through multiple rows (50 steps × 0.1s)
+    - Verifies character changed (probabilistic, 40% chance per row)
+    - Logs warning if character didn't change (acceptable due to randomness)
+
 #### Nugget System Tests
 The nugget system tests are organized into focused files:
 
