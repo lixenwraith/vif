@@ -148,7 +148,7 @@ func BenchmarkFlashEffectCreation(b *testing.B) {
 		}
 
 		flashType := reflect.TypeOf(components.RemovalFlashComponent{})
-		flashes := world.GetEntitiesWith(flashType)
+		flashes := world.RemovalFlashes.All()
 		for _, entity := range flashes {
 			world.DestroyEntity(entity)
 		}

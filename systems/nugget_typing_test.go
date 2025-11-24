@@ -36,10 +36,10 @@ func TestNuggetTypingIncreasesHeat(t *testing.T) {
 
 	// Create a nugget at position (10, 5) with character 'a'
 	nuggetEntity := world.CreateEntity()
-	world.AddComponent(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
+	world.Positions.Add(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
-	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
-	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
+	world.Characters.Add(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
+	world.Nuggets.Add(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
 
 	tx := world.BeginSpatialTransaction()
 	tx.Spawn(nuggetEntity, 10, 5)
@@ -63,7 +63,7 @@ func TestNuggetTypingIncreasesHeat(t *testing.T) {
 	}
 
 	// Verify nugget was destroyed
-	if world.HasComponent(nuggetEntity, nuggetComponentType()) {
+	if world.Nuggets.Has(nuggetEntity) {
 		t.Error("Nugget should have been destroyed after collection")
 	}
 
@@ -103,10 +103,10 @@ func TestNuggetTypingDestroysAndReturnsSpawn(t *testing.T) {
 
 	// Create first nugget with character 'x'
 	nuggetEntity := world.CreateEntity()
-	world.AddComponent(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
+	world.Positions.Add(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
-	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'x', Style: style})
-	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
+	world.Characters.Add(nuggetEntity, components.CharacterComponent{Rune: 'x', Style: style})
+	world.Nuggets.Add(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
 
 	tx := world.BeginSpatialTransaction()
 	tx.Spawn(nuggetEntity, 10, 5)
@@ -140,13 +140,13 @@ func TestNuggetTypingDestroysAndReturnsSpawn(t *testing.T) {
 
 	// Verify the new nugget has components
 	newNugget := engine.Entity(nuggetSystem.GetActiveNugget())
-	if !world.HasComponent(newNugget, nuggetComponentType()) {
+	if !world.Nuggets.Has(newNugget) {
 		t.Error("New nugget should have NuggetComponent")
 	}
-	if !world.HasComponent(newNugget, positionComponentType()) {
+	if !world.Positions.Has(newNugget) {
 		t.Error("New nugget should have PositionComponent")
 	}
-	if !world.HasComponent(newNugget, characterComponentType()) {
+	if !world.Characters.Has(newNugget) {
 		t.Error("New nugget should have CharacterComponent")
 	}
 }
@@ -173,11 +173,11 @@ func TestNuggetTypingNoScoreEffect(t *testing.T) {
 
 	// Create nugget
 	nuggetEntity := world.CreateEntity()
-	world.AddComponent(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
+	world.Positions.Add(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
 	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
-	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
-	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
+	world.Characters.Add(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
+	world.Nuggets.Add(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
 
 	tx := world.BeginSpatialTransaction()
 	tx.Spawn(nuggetEntity, 10, 5)
@@ -217,10 +217,10 @@ func TestNuggetTypingNoErrorEffect(t *testing.T) {
 
 	// Create nugget with character 'z'
 	nuggetEntity := world.CreateEntity()
-	world.AddComponent(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
+	world.Positions.Add(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
-	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'z', Style: style})
-	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
+	world.Characters.Add(nuggetEntity, components.CharacterComponent{Rune: 'z', Style: style})
+	world.Nuggets.Add(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
 
 	tx := world.BeginSpatialTransaction()
 	tx.Spawn(nuggetEntity, 10, 5)
@@ -269,10 +269,10 @@ func TestNuggetTypingMultipleCollections(t *testing.T) {
 
 	// Collect first nugget with character 'a'
 	nugget1 := world.CreateEntity()
-	world.AddComponent(nugget1, components.PositionComponent{X: 10, Y: 5})
+	world.Positions.Add(nugget1, components.PositionComponent{X: 10, Y: 5})
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
-	world.AddComponent(nugget1, components.CharacterComponent{Rune: 'a', Style: style})
-	world.AddComponent(nugget1, components.NuggetComponent{ID: 1, SpawnTime: mockTime.Now()})
+	world.Characters.Add(nugget1, components.CharacterComponent{Rune: 'a', Style: style})
+	world.Nuggets.Add(nugget1, components.NuggetComponent{ID: 1, SpawnTime: mockTime.Now()})
 
 	tx := world.BeginSpatialTransaction()
 	tx.Spawn(nugget1, 10, 5)
@@ -297,14 +297,14 @@ func TestNuggetTypingMultipleCollections(t *testing.T) {
 
 	// Find the new nugget and position cursor on it
 	nugget2 := engine.Entity(nuggetSystem.GetActiveNugget())
-	pos, ok := world.GetComponent(nugget2, positionComponentType())
+	pos, ok := world.Positions.Get(nugget2)
 	if !ok {
 		t.Fatal("New nugget should have position")
 	}
 	posComp := pos.(components.PositionComponent)
 
 	// Get the character from the second nugget
-	char, ok := world.GetComponent(nugget2, characterComponentType())
+	char, ok := world.Characters.Get(nugget2)
 	if !ok {
 		t.Fatal("New nugget should have character")
 	}
@@ -342,10 +342,10 @@ func TestNuggetTypingWithSmallScreen(t *testing.T) {
 
 	// Create nugget with character 'x'
 	nuggetEntity := world.CreateEntity()
-	world.AddComponent(nuggetEntity, components.PositionComponent{X: 2, Y: 1})
+	world.Positions.Add(nuggetEntity, components.PositionComponent{X: 2, Y: 1})
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
-	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'x', Style: style})
-	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
+	world.Characters.Add(nuggetEntity, components.CharacterComponent{Rune: 'x', Style: style})
+	world.Nuggets.Add(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
 
 	tx := world.BeginSpatialTransaction()
 	tx.Spawn(nuggetEntity, 2, 1)
@@ -398,10 +398,10 @@ func TestNuggetAlwaysIncreasesVisualBlocks(t *testing.T) {
 
 			// Create and collect nugget
 			nuggetEntity := world.CreateEntity()
-			world.AddComponent(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
+			world.Positions.Add(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
 			style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
-			world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
-			world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
+			world.Characters.Add(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
+			world.Nuggets.Add(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
 
 			tx := world.BeginSpatialTransaction()
 			tx.Spawn(nuggetEntity, 10, 5)

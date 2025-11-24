@@ -41,8 +41,8 @@ func TestPlaceLine(t *testing.T) {
 	for y := 0; y < 24; y++ {
 		for x := 0; x < 80; x++ {
 			entity := world.CreateEntity()
-			world.AddComponent(entity, components.PositionComponent{X: x, Y: y})
-			world.AddComponent(entity, components.CharacterComponent{Rune: 'x', Style: style})
+			world.Positions.Add(entity, components.PositionComponent{X: x, Y: y})
+			world.Characters.Add(entity, components.CharacterComponent{Rune: 'x', Style: style})
 
 			tx := world.BeginSpatialTransaction()
 			tx.Spawn(entity, x, y)
@@ -77,10 +77,9 @@ func TestPlaceLineNearCursor(t *testing.T) {
 		success := spawnSys.placeLine(world, line, components.SequenceBlue, components.LevelBright, style)
 		if success {
 			// Check all placed entities are far from cursor
-			posType := reflect.TypeOf(components.PositionComponent{})
-			entities := world.GetEntitiesWith(posType)
+			entities := world.Positions.All()
 			for _, entity := range entities {
-				posComp, ok := world.GetComponent(entity, posType)
+				posComp, ok := world.Positions.Get(entity)
 				if ok {
 					pos := posComp.(components.PositionComponent)
 					dx := pos.X - cursorX
@@ -165,8 +164,7 @@ func TestPlaceLineSkipsSpaces(t *testing.T) {
 			}
 
 			// Count entities created
-			posType := reflect.TypeOf(components.PositionComponent{})
-			entities := world.GetEntitiesWith(posType)
+			entities := world.Positions.All()
 			actualEntityCount := len(entities)
 
 			if actualEntityCount != tt.expectedEntityCount {
@@ -183,7 +181,7 @@ func TestPlaceLineSkipsSpaces(t *testing.T) {
 
 			// Verify no space entities were created
 			for _, entity := range entities {
-				charComp, ok := world.GetComponent(entity, reflect.TypeOf(components.CharacterComponent{}))
+				charComp, ok := world.Characters.Get(entity)
 				if ok {
 					char := charComp.(components.CharacterComponent)
 					if char.Rune == ' ' {
@@ -196,7 +194,7 @@ func TestPlaceLineSkipsSpaces(t *testing.T) {
 			// Get all positions
 			positions := make(map[int]bool) // Track X positions
 			for _, entity := range entities {
-				posComp, ok := world.GetComponent(entity, posType)
+				posComp, ok := world.Positions.Get(entity)
 				if ok {
 					pos := posComp.(components.PositionComponent)
 					positions[pos.X] = true
@@ -243,8 +241,7 @@ func TestPlaceLinePositionMaintenance(t *testing.T) {
 	}
 
 	// Get all entities
-	posType := reflect.TypeOf(components.PositionComponent{})
-	entities := world.GetEntitiesWith(posType)
+	entities := world.Positions.All()
 
 	if len(entities) != 3 {
 		t.Fatalf("Expected 3 entities (a, b, c), got %d", len(entities))
@@ -255,8 +252,8 @@ func TestPlaceLinePositionMaintenance(t *testing.T) {
 	var startX int
 	minX := 1000
 	for _, entity := range entities {
-		posComp, _ := world.GetComponent(entity, posType)
-		charComp, _ := world.GetComponent(entity, reflect.TypeOf(components.CharacterComponent{}))
+		posComp, _ := world.Positions.Get(entity)
+		charComp, _ := world.Characters.Get(entity)
 
 		pos := posComp.(components.PositionComponent)
 		char := charComp.(components.CharacterComponent)
@@ -313,8 +310,7 @@ func TestPlaceLinePackageMd5(t *testing.T) {
 	}
 
 	// Get all entities
-	posType := reflect.TypeOf(components.PositionComponent{})
-	entities := world.GetEntitiesWith(posType)
+	entities := world.Positions.All()
 
 	// Should have exactly 10 entities (7 for "package" + 3 for "md5"), not 11
 	if len(entities) != 10 {
@@ -332,7 +328,7 @@ func TestPlaceLinePackageMd5(t *testing.T) {
 		t.Fatal("No entities created")
 	}
 
-	firstPosComp, _ := world.GetComponent(entities[0], posType)
+	firstPosComp, _ := world.Positions.Get(entities[0])
 	firstPos := firstPosComp.(components.PositionComponent)
 	startX := firstPos.X
 	startY := firstPos.Y
@@ -346,8 +342,7 @@ func TestPlaceLinePackageMd5(t *testing.T) {
 			continue
 		}
 
-		charType := reflect.TypeOf(components.CharacterComponent{})
-		charComp, ok := world.GetComponent(entity, charType)
+		charComp, ok := world.Characters.Get(entity)
 		if !ok {
 			t.Errorf("Entity at position %d missing CharacterComponent", i)
 			continue
@@ -362,8 +357,7 @@ func TestPlaceLinePackageMd5(t *testing.T) {
 	// Verify NO entity exists at the space position (position 7)
 	spaceEntity := world.GetEntityAtPosition(startX+7, startY)
 	if spaceEntity != 0 {
-		charType := reflect.TypeOf(components.CharacterComponent{})
-		charComp, _ := world.GetComponent(spaceEntity, charType)
+		charComp, _ := world.Characters.Get(spaceEntity)
 		char := charComp.(components.CharacterComponent)
 		t.Errorf("Found entity at space position 7 with character '%c', should be empty", char.Rune)
 	}
@@ -378,8 +372,7 @@ func TestPlaceLinePackageMd5(t *testing.T) {
 			continue
 		}
 
-		charType := reflect.TypeOf(components.CharacterComponent{})
-		charComp, ok := world.GetComponent(entity, charType)
+		charComp, ok := world.Characters.Get(entity)
 		if !ok {
 			t.Errorf("Entity at position %d missing CharacterComponent", pos)
 			continue
@@ -425,8 +418,7 @@ func TestPlaceLineConstBlockSize(t *testing.T) {
 	}
 
 	// Get all entities
-	posType := reflect.TypeOf(components.PositionComponent{})
-	entities := world.GetEntitiesWith(posType)
+	entities := world.Positions.All()
 
 	// Should have exactly expectedNonSpaceCount entities (spaces don't create entities)
 	if len(entities) != expectedNonSpaceCount {
@@ -444,7 +436,7 @@ func TestPlaceLineConstBlockSize(t *testing.T) {
 		t.Fatal("No entities created")
 	}
 
-	firstPosComp, _ := world.GetComponent(entities[0], posType)
+	firstPosComp, _ := world.Positions.Get(entities[0])
 	firstPos := firstPosComp.(components.PositionComponent)
 	startX := firstPos.X
 	startY := firstPos.Y
@@ -457,8 +449,7 @@ func TestPlaceLineConstBlockSize(t *testing.T) {
 		if r == ' ' {
 			// Space position should NOT have an entity
 			if entity != 0 {
-				charType := reflect.TypeOf(components.CharacterComponent{})
-				charComp, _ := world.GetComponent(entity, charType)
+				charComp, _ := world.Characters.Get(entity)
 				char := charComp.(components.CharacterComponent)
 				t.Errorf("Found entity at space position %d with character '%c', should be empty", i, char.Rune)
 			}
@@ -470,8 +461,7 @@ func TestPlaceLineConstBlockSize(t *testing.T) {
 			}
 
 			// Verify the character matches
-			charType := reflect.TypeOf(components.CharacterComponent{})
-			charComp, ok := world.GetComponent(entity, charType)
+			charComp, ok := world.Characters.Get(entity)
 			if !ok {
 				t.Errorf("Entity at position %d missing CharacterComponent", i)
 				continue
@@ -510,8 +500,7 @@ func TestPlaceLineConstBlockSize(t *testing.T) {
 			continue
 		}
 
-		charType := reflect.TypeOf(components.CharacterComponent{})
-		charComp, ok := world.GetComponent(entity, charType)
+		charComp, ok := world.Characters.Get(entity)
 		if !ok {
 			t.Errorf("Entity at position %d missing CharacterComponent", offset)
 			continue

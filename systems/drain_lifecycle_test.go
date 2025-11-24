@@ -44,13 +44,12 @@ func TestDrainSystem_SpawnWhenScorePositive(t *testing.T) {
 	// Verify entity has DrainComponent
 	entity := engine.Entity(entityID)
 	// Using direct store access
-	if _, ok := world.GetComponent(entity, drainType); !ok {
+	if _, ok := world.Drains.Get(entity); !ok {
 		t.Fatal("Expected drain entity to have DrainComponent")
 	}
 
 	// Verify entity has PositionComponent
-	posType := reflect.TypeOf(components.PositionComponent{})
-	if _, ok := world.GetComponent(entity, posType); !ok {
+	if _, ok := world.Positions.Get(entity); !ok {
 		t.Fatal("Expected drain entity to have PositionComponent")
 	}
 
@@ -101,7 +100,7 @@ func TestDrainSystem_DespawnWhenScoreZero(t *testing.T) {
 
 	// Verify entity no longer has DrainComponent (or doesn't exist)
 	// Using direct store access
-	if _, ok := world.GetComponent(entity, drainType); ok {
+	if _, ok := world.Drains.Get(entity); ok {
 		t.Fatal("Expected drain entity to not have DrainComponent after despawn")
 	}
 }
@@ -251,7 +250,7 @@ func TestDrainSystem_SpawnDespawnCycle(t *testing.T) {
 	// Verify second entity has DrainComponent
 	entity := engine.Entity(secondEntityID)
 	// Using direct store access
-	if _, ok := world.GetComponent(entity, drainType); !ok {
+	if _, ok := world.Drains.Get(entity); !ok {
 		t.Fatal("Expected second drain entity to have DrainComponent")
 	}
 }

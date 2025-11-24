@@ -128,11 +128,11 @@ func TestConcurrentContentRefresh(t *testing.T) {
 				return
 			default:
 				// Query entities
-				entities := world.GetEntitiesWith()
+				entities := world.Positions.All()
 				for _, entity := range entities {
 					// Simulate reading entity components
-					_, _ = world.GetComponent(entity, reflect.TypeOf(components.PositionComponent{}))
-					_, _ = world.GetComponent(entity, reflect.TypeOf(components.CharacterComponent{}))
+					_, _ = world.Positions.Get(entity)
+					_, _ = world.Characters.Get(entity)
 				}
 				time.Sleep(8 * time.Millisecond)
 			}
@@ -225,25 +225,25 @@ func TestRenderWhileSpawning(t *testing.T) {
 				return
 			default:
 				// Simulate what the renderer does: read all entities and their components
-				entities := world.GetEntitiesWith()
+				entities := world.Positions.All()
 
 				for _, entity := range entities {
 					// Read position
-					if pos, ok := world.GetComponent(entity, reflect.TypeOf(components.PositionComponent{})); ok {
+					if pos, ok := world.Positions.Get(entity); ok {
 						posComp := pos.(components.PositionComponent)
 						_ = posComp.X
 						_ = posComp.Y
 					}
 
 					// Read character
-					if char, ok := world.GetComponent(entity, reflect.TypeOf(components.CharacterComponent{})); ok {
+					if char, ok := world.Characters.Get(entity); ok {
 						charComp := char.(components.CharacterComponent)
 						_ = charComp.Rune
 						_ = charComp.Style
 					}
 
 					// Read sequence
-					if seq, ok := world.GetComponent(entity, reflect.TypeOf(components.SequenceComponent{})); ok {
+					if seq, ok := world.Sequences.Get(entity); ok {
 						seqComp := seq.(components.SequenceComponent)
 						_ = seqComp.ID
 						_ = seqComp.Type
@@ -272,7 +272,7 @@ func TestRenderWhileSpawning(t *testing.T) {
 			case <-stopChan:
 				return
 			default:
-				entities := world.GetEntitiesWith()
+				entities := world.Positions.All()
 				if len(entities) > 0 {
 					// Destroy random entity using DestroyEntity (handles spatial index atomically)
 					toDestroy := entities[rand.Intn(len(entities))]
@@ -323,7 +323,7 @@ func TestRenderWhileSpawning(t *testing.T) {
 	}
 
 	// Verify system is in consistent state
-	entities := world.GetEntitiesWith()
+	entities := world.Positions.All()
 	t.Logf("Final entity count: %d", len(entities))
 }
 
@@ -614,7 +614,7 @@ func TestStressContentSystem(t *testing.T) {
 			case <-stopChan:
 				return
 			default:
-				entities := world.GetEntitiesWith()
+				entities := world.Positions.All()
 				if len(entities) > 10 {
 					// Destroy several entities using DestroyEntity
 					for i := 0; i < 5 && i < len(entities); i++ {

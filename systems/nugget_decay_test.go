@@ -26,11 +26,10 @@ func TestDecayDestroysNugget(t *testing.T) {
 
 	// Create a nugget at position (10, 5)
 	nuggetEntity := world.CreateEntity()
-	world.AddComponent(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
 	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
-	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
-	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
+	world.Characters.Add(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
+	world.Nuggets.Add(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
 	{
 		tx := world.BeginSpatialTransaction()
 		tx.Spawn(nuggetEntity, 10, 5)
@@ -40,7 +39,7 @@ func TestDecayDestroysNugget(t *testing.T) {
 
 	// Verify nugget exists
 	// Using direct store access
-	if !world.HasComponent(nuggetEntity, nuggetType) {
+	if !world.Nuggets.Has(nuggetEntity) {
 		t.Fatal("Nugget should exist before decay")
 	}
 
@@ -57,14 +56,14 @@ func TestDecayDestroysNugget(t *testing.T) {
 
 		// Check if nugget has been destroyed
 		// Using direct store access
-		if !world.HasComponent(nuggetEntity, nuggetType) {
+		if !world.Nuggets.Has(nuggetEntity) {
 			// Nugget destroyed, test successful
 			break
 		}
 	}
 
 	// Verify nugget was destroyed
-	if world.HasComponent(nuggetEntity, nuggetType) {
+	if world.Nuggets.Has(nuggetEntity) {
 		t.Error("Nugget should be destroyed after decay passes over it")
 	}
 
@@ -96,11 +95,10 @@ func TestDecayDoesNotDestroyNuggetAtDifferentPosition(t *testing.T) {
 
 	// Create a nugget at position (10, 10) - deeper in the screen
 	nuggetEntity := world.CreateEntity()
-	world.AddComponent(nuggetEntity, components.PositionComponent{X: 10, Y: 10})
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
 	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
-	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
-	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
+	world.Characters.Add(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
+	world.Nuggets.Add(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
 	{
 		tx := world.BeginSpatialTransaction()
 		tx.Spawn(nuggetEntity, 10, 10)
@@ -121,7 +119,7 @@ func TestDecayDoesNotDestroyNuggetAtDifferentPosition(t *testing.T) {
 
 	// Verify nugget still exists (decay hasn't reached it yet)
 	// Using direct store access
-	if !world.HasComponent(nuggetEntity, nuggetType) {
+	if !world.Nuggets.Has(nuggetEntity) {
 		t.Error("Nugget should still exist before decay reaches it")
 	}
 
@@ -148,11 +146,11 @@ func TestDecayDestroyMultipleNuggetsInDifferentColumns(t *testing.T) {
 	// Create multiple nugget-like entities at different columns, same row
 	// (Note: Only one can be the "active" nugget, but we can test the destruction logic)
 	nuggetEntity1 := world.CreateEntity()
-	world.AddComponent(nuggetEntity1, components.PositionComponent{X: 10, Y: 5})
+	world.Positions.Add(nuggetEntity1, components.PositionComponent{X: 10, Y: 5})
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
 	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
-	world.AddComponent(nuggetEntity1, components.CharacterComponent{Rune: 'a', Style: style})
-	world.AddComponent(nuggetEntity1, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
+	world.Characters.Add(nuggetEntity1, components.CharacterComponent{Rune: 'a', Style: style})
+	world.Nuggets.Add(nuggetEntity1, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
 	{
 		tx := world.BeginSpatialTransaction()
 		tx.Spawn(nuggetEntity1, 10, 5)
@@ -160,10 +158,10 @@ func TestDecayDestroyMultipleNuggetsInDifferentColumns(t *testing.T) {
 	}
 
 	nuggetEntity2 := world.CreateEntity()
-	world.AddComponent(nuggetEntity2, components.PositionComponent{X: 20, Y: 5})
+	world.Positions.Add(nuggetEntity2, components.PositionComponent{X: 20, Y: 5})
 	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
-	world.AddComponent(nuggetEntity2, components.CharacterComponent{Rune: 'b', Style: style})
-	world.AddComponent(nuggetEntity2, components.NuggetComponent{ID: 2, SpawnTime: ctx.TimeProvider.Now()})
+	world.Characters.Add(nuggetEntity2, components.CharacterComponent{Rune: 'b', Style: style})
+	world.Nuggets.Add(nuggetEntity2, components.NuggetComponent{ID: 2, SpawnTime: ctx.TimeProvider.Now()})
 	{
 		tx := world.BeginSpatialTransaction()
 		tx.Spawn(nuggetEntity2, 20, 5)
@@ -184,17 +182,17 @@ func TestDecayDestroyMultipleNuggetsInDifferentColumns(t *testing.T) {
 
 		// Check if both nuggets have been destroyed
 		// Using direct store access
-		if !world.HasComponent(nuggetEntity1, nuggetType) && !world.HasComponent(nuggetEntity2, nuggetType) {
+		if !world.Nuggets.Has(nuggetEntity1) && !world.Nuggets.Has(nuggetEntity2) {
 			break
 		}
 	}
 
 	// Verify both nuggets were destroyed
 	// Using direct store access
-	if world.HasComponent(nuggetEntity1, nuggetType) {
+	if world.Nuggets.Has(nuggetEntity1) {
 		t.Error("First nugget should be destroyed")
 	}
-	if world.HasComponent(nuggetEntity2, nuggetType) {
+	if world.Nuggets.Has(nuggetEntity2) {
 		t.Error("Second nugget should be destroyed")
 	}
 
@@ -222,11 +220,11 @@ func TestDecayDestroyNuggetAndSequence(t *testing.T) {
 
 	// Create a nugget at position (10, 5)
 	nuggetEntity := world.CreateEntity()
-	world.AddComponent(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
+	world.Positions.Add(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
 	nuggetStyle := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
 	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
-	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: nuggetStyle})
-	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
+	world.Characters.Add(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: nuggetStyle})
+	world.Nuggets.Add(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
 	{
 		tx := world.BeginSpatialTransaction()
 		tx.Spawn(nuggetEntity, 10, 5)
@@ -236,10 +234,10 @@ func TestDecayDestroyNuggetAndSequence(t *testing.T) {
 
 	// Create a blue sequence at position (20, 5)
 	seqEntity := world.CreateEntity()
-	world.AddComponent(seqEntity, components.PositionComponent{X: 20, Y: 5})
+	world.Positions.Add(seqEntity, components.PositionComponent{X: 20, Y: 5})
 	seqStyle := render.GetStyleForSequence(components.SequenceBlue, components.LevelBright)
-	world.AddComponent(seqEntity, components.CharacterComponent{Rune: 'a', Style: seqStyle})
-	world.AddComponent(seqEntity, components.SequenceComponent{
+	world.Characters.Add(seqEntity, components.CharacterComponent{Rune: 'a', Style: seqStyle})
+	world.Sequences.Add(seqEntity, components.SequenceComponent{
 		ID:    1,
 		Index: 0,
 		Type:  components.SequenceBlue,
@@ -266,12 +264,11 @@ func TestDecayDestroyNuggetAndSequence(t *testing.T) {
 
 		// Check if nugget has been destroyed
 		// Using direct store access
-		seqType := reflect.TypeOf(components.SequenceComponent{})
 
-		nuggetDestroyed := !world.HasComponent(nuggetEntity, nuggetType)
+		nuggetDestroyed := !world.Nuggets.Has(nuggetEntity)
 		seqDecayed := false
-		if world.HasComponent(seqEntity, seqType) {
-			seqComp, _ := world.GetComponent(seqEntity, seqType)
+		if world.Sequences.Has(seqEntity) {
+			seqComp, _ := world.Sequences.Get(seqEntity)
 			seq := seqComp.(components.SequenceComponent)
 			seqDecayed = seq.Level == components.LevelNormal
 		}
@@ -283,18 +280,17 @@ func TestDecayDestroyNuggetAndSequence(t *testing.T) {
 
 	// Verify nugget was destroyed
 	// Using direct store access
-	if world.HasComponent(nuggetEntity, nuggetType) {
+	if world.Nuggets.Has(nuggetEntity) {
 		t.Error("Nugget should be destroyed")
 	}
 
 	// Verify sequence was decayed (should still exist but level changed)
-	seqType := reflect.TypeOf(components.SequenceComponent{})
-	if !world.HasComponent(seqEntity, seqType) {
+	if !world.Sequences.Has(seqEntity) {
 		t.Error("Sequence should still exist after decay")
 	}
 
 	// Get sequence component and verify it was decayed
-	seqComp, ok := world.GetComponent(seqEntity, seqType)
+	seqComp, ok := world.Sequences.Get(seqEntity)
 	if !ok {
 		t.Fatal("Failed to get sequence component")
 	}
@@ -332,11 +328,11 @@ func TestDecayNuggetRespawnAfterDestruction(t *testing.T) {
 
 	// Create a nugget at position (10, 5)
 	nuggetEntity := world.CreateEntity()
-	world.AddComponent(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
+	world.Positions.Add(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
 	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
-	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
-	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: mockTime.Now()})
+	world.Characters.Add(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
+	world.Nuggets.Add(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: mockTime.Now()})
 	{
 		tx := world.BeginSpatialTransaction()
 		tx.Spawn(nuggetEntity, 10, 5)
@@ -356,14 +352,14 @@ func TestDecayNuggetRespawnAfterDestruction(t *testing.T) {
 
 		// Check if nugget has been destroyed
 		// Using direct store access
-		if !world.HasComponent(nuggetEntity, nuggetType) {
+		if !world.Nuggets.Has(nuggetEntity) {
 			break
 		}
 	}
 
 	// Verify nugget was destroyed
 	// Using direct store access
-	if world.HasComponent(nuggetEntity, nuggetType) {
+	if world.Nuggets.Has(nuggetEntity) {
 		t.Error("Nugget should be destroyed after decay")
 	}
 
@@ -386,12 +382,11 @@ func TestDecayNuggetRespawnAfterDestruction(t *testing.T) {
 	}
 
 	// Verify new nugget exists and has components
-	if !world.HasComponent(engine.Entity(newActiveNugget), nuggetType) {
+	if !world.Nuggets.Has(engine.Entity(newActiveNugget)) {
 		t.Error("New nugget should have NuggetComponent")
 	}
 
-	posType := reflect.TypeOf(components.PositionComponent{})
-	if !world.HasComponent(engine.Entity(newActiveNugget), posType) {
+	if !world.Positions.Has(engine.Entity(newActiveNugget)) {
 		t.Error("New nugget should have PositionComponent")
 	}
 }
@@ -411,11 +406,11 @@ func TestDecayDoesNotProcessSameNuggetTwice(t *testing.T) {
 
 	// Create a nugget at position (10, 5)
 	nuggetEntity := world.CreateEntity()
-	world.AddComponent(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
+	world.Positions.Add(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
 	style := tcell.StyleDefault.Foreground(render.RgbNuggetOrange).Background(render.RgbBackground)
 	// Use alphanumeric character for nugget (as defined in constants.AlphanumericRunes)
-	world.AddComponent(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
-	world.AddComponent(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
+	world.Characters.Add(nuggetEntity, components.CharacterComponent{Rune: 'a', Style: style})
+	world.Nuggets.Add(nuggetEntity, components.NuggetComponent{ID: 1, SpawnTime: ctx.TimeProvider.Now()})
 	{
 		tx := world.BeginSpatialTransaction()
 		tx.Spawn(nuggetEntity, 10, 5)
@@ -435,14 +430,14 @@ func TestDecayDoesNotProcessSameNuggetTwice(t *testing.T) {
 
 		// Check if nugget has been destroyed
 		// Using direct store access
-		if !world.HasComponent(nuggetEntity, nuggetType) {
+		if !world.Nuggets.Has(nuggetEntity) {
 			break
 		}
 	}
 
 	// Verify nugget was destroyed
 	// Using direct store access
-	if world.HasComponent(nuggetEntity, nuggetType) {
+	if world.Nuggets.Has(nuggetEntity) {
 		t.Error("Nugget should be destroyed after first decay pass")
 	}
 

@@ -30,7 +30,7 @@ func TestFallingDecayRenderColor(t *testing.T) {
 
 	// Create a falling decay entity
 	entity := world.CreateEntity()
-	world.AddComponent(entity, components.FallingDecayComponent{
+	world.FallingDecays.Add(entity, components.FallingDecayComponent{
 		Column:    10,
 		YPosition: 5.0,
 		Speed:     10.0,
@@ -90,7 +90,7 @@ func TestFallingDecayRenderAtAllPositions(t *testing.T) {
 
 	for i, yPos := range testPositions {
 		entity := world.CreateEntity()
-		world.AddComponent(entity, components.FallingDecayComponent{
+		world.FallingDecays.Add(entity, components.FallingDecayComponent{
 			Column:    i * 7, // Spread across columns
 			YPosition: yPos,
 			Speed:     10.0,
@@ -150,7 +150,7 @@ func TestFallingDecayRenderFractionalPositions(t *testing.T) {
 
 	for i, yPos := range fractionalPositions {
 		entity := world.CreateEntity()
-		world.AddComponent(entity, components.FallingDecayComponent{
+		world.FallingDecays.Add(entity, components.FallingDecayComponent{
 			Column:    i * 10,
 			YPosition: yPos,
 			Speed:     10.0,
@@ -215,7 +215,7 @@ func TestFallingDecayRenderBounds(t *testing.T) {
 
 	for _, pos := range outOfBoundsPositions {
 		entity := world.CreateEntity()
-		world.AddComponent(entity, components.FallingDecayComponent{
+		world.FallingDecays.Add(entity, components.FallingDecayComponent{
 			Column:    pos.col,
 			YPosition: pos.yPos,
 			Speed:     10.0,
@@ -274,8 +274,8 @@ func TestFallingDecayRenderZOrder(t *testing.T) {
 
 	// Create a game character at position (10, 5)
 	gameEntity := world.CreateEntity()
-	world.AddComponent(gameEntity, components.PositionComponent{X: 10, Y: 5})
-	world.AddComponent(gameEntity, components.CharacterComponent{
+	world.Positions.Add(gameEntity, components.PositionComponent{X: 10, Y: 5})
+	world.Characters.Add(gameEntity, components.CharacterComponent{
 		Rune:  'G',
 		Style: GetStyleForSequence(components.SequenceGreen, components.LevelBright),
 	})
@@ -286,7 +286,7 @@ func TestFallingDecayRenderZOrder(t *testing.T) {
 
 	// Create a falling decay entity at the same position
 	fallingEntity := world.CreateEntity()
-	world.AddComponent(fallingEntity, components.FallingDecayComponent{
+	world.FallingDecays.Add(fallingEntity, components.FallingDecayComponent{
 		Column:    10,
 		YPosition: 5.0,
 		Speed:     10.0,
@@ -342,7 +342,7 @@ func TestFallingDecayRenderMultipleEntities(t *testing.T) {
 	for col := 0; col < gameWidth; col++ {
 		entity := world.CreateEntity()
 		char := rune(characters[col%len(characters)])
-		world.AddComponent(entity, components.FallingDecayComponent{
+		world.FallingDecays.Add(entity, components.FallingDecayComponent{
 			Column:    col,
 			YPosition: float64(col % 20), // Spread across different rows
 			Speed:     10.0,
@@ -401,7 +401,7 @@ func TestFallingDecayRenderConsistency(t *testing.T) {
 
 	// Create a falling entity
 	entity := world.CreateEntity()
-	world.AddComponent(entity, components.FallingDecayComponent{
+	world.FallingDecays.Add(entity, components.FallingDecayComponent{
 		Column:    15,
 		YPosition: 8.0,
 		Speed:     10.0,
@@ -442,11 +442,11 @@ func TestFallingDecayComponentRetrieval(t *testing.T) {
 
 	// Create entity without FallingDecayComponent
 	entity1 := world.CreateEntity()
-	world.AddComponent(entity1, components.PositionComponent{X: 5, Y: 5})
+	world.Positions.Add(entity1, components.PositionComponent{X: 5, Y: 5})
 
 	// Create entity with FallingDecayComponent
 	entity2 := world.CreateEntity()
-	world.AddComponent(entity2, components.FallingDecayComponent{
+	world.FallingDecays.Add(entity2, components.FallingDecayComponent{
 		Column:    10,
 		YPosition: 3.0,
 		Speed:     8.0,
@@ -454,8 +454,7 @@ func TestFallingDecayComponentRetrieval(t *testing.T) {
 	})
 
 	// Get entities with FallingDecayComponent
-	fallingType := reflect.TypeOf(components.FallingDecayComponent{})
-	entities := world.GetEntitiesWith(fallingType)
+	entities := world.FallingDecays.All()
 
 	// Should only find entity2
 	if len(entities) != 1 {
@@ -467,12 +466,10 @@ func TestFallingDecayComponentRetrieval(t *testing.T) {
 	}
 
 	// Verify component data
-	fallComp, ok := world.GetComponent(entity2, fallingType)
+	fall, ok := world.FallingDecays.Get(entity2)
 	if !ok {
 		t.Fatal("Failed to get FallingDecayComponent from entity2")
 	}
-
-	fall := fallComp.(components.FallingDecayComponent)
 	if fall.Column != 10 {
 		t.Errorf("Expected column 10, got %d", fall.Column)
 	}

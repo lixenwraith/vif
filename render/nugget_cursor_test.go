@@ -30,12 +30,12 @@ func TestNuggetDarkensUnderCursor(t *testing.T) {
 
 	// Create nugget at cursor position
 	nuggetEntity := world.CreateEntity()
-	world.AddComponent(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
-	world.AddComponent(nuggetEntity, components.CharacterComponent{
+	world.Positions.Add(nuggetEntity, components.PositionComponent{X: 10, Y: 5})
+	world.Characters.Add(nuggetEntity, components.CharacterComponent{
 		Rune:  '●',
 		Style: tcell.StyleDefault.Foreground(RgbNuggetOrange),
 	})
-	world.AddComponent(nuggetEntity, components.NuggetComponent{
+	world.Nuggets.Add(nuggetEntity, components.NuggetComponent{
 		ID:        1,
 		SpawnTime: time.Now(),
 	})
@@ -92,12 +92,12 @@ func TestNormalCharacterStaysBlackUnderCursor(t *testing.T) {
 
 	// Create normal green character at cursor position
 	charEntity := world.CreateEntity()
-	world.AddComponent(charEntity, components.PositionComponent{X: 15, Y: 10})
-	world.AddComponent(charEntity, components.CharacterComponent{
+	world.Positions.Add(charEntity, components.PositionComponent{X: 15, Y: 10})
+	world.Characters.Add(charEntity, components.CharacterComponent{
 		Rune:  'a',
 		Style: tcell.StyleDefault.Foreground(RgbSequenceGreenBright),
 	})
-	world.AddComponent(charEntity, components.SequenceComponent{
+	world.Sequences.Add(charEntity, components.SequenceComponent{
 		ID:    1,
 		Index: 0,
 		Type:  components.SequenceGreen,
@@ -190,12 +190,12 @@ func TestNuggetContrastInInsertMode(t *testing.T) {
 
 	// Create nugget at cursor position
 	nuggetEntity := world.CreateEntity()
-	world.AddComponent(nuggetEntity, components.PositionComponent{X: 25, Y: 12})
-	world.AddComponent(nuggetEntity, components.CharacterComponent{
+	world.Positions.Add(nuggetEntity, components.PositionComponent{X: 25, Y: 12})
+	world.Characters.Add(nuggetEntity, components.CharacterComponent{
 		Rune:  '●',
 		Style: tcell.StyleDefault.Foreground(RgbNuggetOrange),
 	})
-	world.AddComponent(nuggetEntity, components.NuggetComponent{
+	world.Nuggets.Add(nuggetEntity, components.NuggetComponent{
 		ID:        2,
 		SpawnTime: time.Now(),
 	})
@@ -242,12 +242,12 @@ func TestNuggetOffCursorHasNormalColor(t *testing.T) {
 
 	// Create nugget NOT at cursor position
 	nuggetEntity := world.CreateEntity()
-	world.AddComponent(nuggetEntity, components.PositionComponent{X: 30, Y: 15})
-	world.AddComponent(nuggetEntity, components.CharacterComponent{
+	world.Positions.Add(nuggetEntity, components.PositionComponent{X: 30, Y: 15})
+	world.Characters.Add(nuggetEntity, components.CharacterComponent{
 		Rune:  '●',
 		Style: tcell.StyleDefault.Foreground(RgbNuggetOrange),
 	})
-	world.AddComponent(nuggetEntity, components.NuggetComponent{
+	world.Nuggets.Add(nuggetEntity, components.NuggetComponent{
 		ID:        3,
 		SpawnTime: time.Now(),
 	})
@@ -301,12 +301,12 @@ func TestCursorErrorOverridesNuggetContrast(t *testing.T) {
 
 	// Create nugget at cursor position
 	nuggetEntity := world.CreateEntity()
-	world.AddComponent(nuggetEntity, components.PositionComponent{X: 40, Y: 18})
-	world.AddComponent(nuggetEntity, components.CharacterComponent{
+	world.Positions.Add(nuggetEntity, components.PositionComponent{X: 40, Y: 18})
+	world.Characters.Add(nuggetEntity, components.CharacterComponent{
 		Rune:  '●',
 		Style: tcell.StyleDefault.Foreground(RgbNuggetOrange),
 	})
-	world.AddComponent(nuggetEntity, components.NuggetComponent{
+	world.Nuggets.Add(nuggetEntity, components.NuggetComponent{
 		ID:        4,
 		SpawnTime: time.Now(),
 	})
@@ -339,12 +339,12 @@ func TestNuggetComponentDetectionLogic(t *testing.T) {
 
 	// Create nugget entity
 	nuggetEntity := world.CreateEntity()
-	world.AddComponent(nuggetEntity, components.PositionComponent{X: 5, Y: 5})
-	world.AddComponent(nuggetEntity, components.CharacterComponent{
+	world.Positions.Add(nuggetEntity, components.PositionComponent{X: 5, Y: 5})
+	world.Characters.Add(nuggetEntity, components.CharacterComponent{
 		Rune:  '●',
 		Style: tcell.StyleDefault.Foreground(RgbNuggetOrange),
 	})
-	world.AddComponent(nuggetEntity, components.NuggetComponent{
+	world.Nuggets.Add(nuggetEntity, components.NuggetComponent{
 		ID:        5,
 		SpawnTime: time.Now(),
 	})
@@ -357,12 +357,12 @@ func TestNuggetComponentDetectionLogic(t *testing.T) {
 
 	// Create normal character entity
 	charEntity := world.CreateEntity()
-	world.AddComponent(charEntity, components.PositionComponent{X: 10, Y: 10})
-	world.AddComponent(charEntity, components.CharacterComponent{
+	world.Positions.Add(charEntity, components.PositionComponent{X: 10, Y: 10})
+	world.Characters.Add(charEntity, components.CharacterComponent{
 		Rune:  'x',
 		Style: tcell.StyleDefault.Foreground(RgbSequenceGreenNormal),
 	})
-	world.AddComponent(charEntity, components.SequenceComponent{
+	world.Sequences.Add(charEntity, components.SequenceComponent{
 		ID:    1,
 		Index: 0,
 		Type:  components.SequenceGreen,
@@ -376,13 +376,12 @@ func TestNuggetComponentDetectionLogic(t *testing.T) {
  }
 
 	// Test nugget entity has NuggetComponent
-	nuggetType := reflect.TypeOf(components.NuggetComponent{})
-	if _, ok := world.GetComponent(nuggetEntity, nuggetType); !ok {
+	if _, ok := world.Nuggets.Get(nuggetEntity); !ok {
 		t.Error("Nugget entity should have NuggetComponent")
 	}
 
 	// Test normal entity does NOT have NuggetComponent
-	if _, ok := world.GetComponent(charEntity, nuggetType); ok {
+	if _, ok := world.Nuggets.Get(charEntity); ok {
 		t.Error("Normal character entity should NOT have NuggetComponent")
 	}
 }
@@ -406,12 +405,12 @@ func TestNuggetLayeringCursorOnTop(t *testing.T) {
 
 	// Create nugget at cursor position
 	nuggetEntity := world.CreateEntity()
-	world.AddComponent(nuggetEntity, components.PositionComponent{X: 50, Y: 20})
-	world.AddComponent(nuggetEntity, components.CharacterComponent{
+	world.Positions.Add(nuggetEntity, components.PositionComponent{X: 50, Y: 20})
+	world.Characters.Add(nuggetEntity, components.CharacterComponent{
 		Rune:  '●',
 		Style: tcell.StyleDefault.Foreground(RgbNuggetOrange),
 	})
-	world.AddComponent(nuggetEntity, components.NuggetComponent{
+	world.Nuggets.Add(nuggetEntity, components.NuggetComponent{
 		ID:        6,
 		SpawnTime: time.Now(),
 	})
@@ -476,12 +475,12 @@ func TestMultipleNuggetInstances(t *testing.T) {
 
 	for i, pos := range positions {
 		nuggetEntity := world.CreateEntity()
-		world.AddComponent(nuggetEntity, components.PositionComponent{X: pos.x, Y: pos.y})
-		world.AddComponent(nuggetEntity, components.CharacterComponent{
+		world.Positions.Add(nuggetEntity, components.PositionComponent{X: pos.x, Y: pos.y})
+		world.Characters.Add(nuggetEntity, components.CharacterComponent{
 			Rune:  '●',
 			Style: tcell.StyleDefault.Foreground(RgbNuggetOrange),
 		})
-		world.AddComponent(nuggetEntity, components.NuggetComponent{
+		world.Nuggets.Add(nuggetEntity, components.NuggetComponent{
 			ID:        i + 10,
 			SpawnTime: time.Now(),
 		})

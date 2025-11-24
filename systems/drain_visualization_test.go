@@ -34,7 +34,7 @@ func createVisualizationTestContext() (*engine.GameContext, *engine.World, *engi
 func getDrainComponent(t *testing.T, world *engine.World, entityID uint64) components.DrainComponent {
 	entity := engine.Entity(entityID)
 	// Using direct store access
-	drainCompInterface, ok := world.GetComponent(entity, drainType)
+	drainCompInterface, ok := world.Drains.Get(entity)
 	if !ok {
 		t.Fatal("Drain component not found")
 	}

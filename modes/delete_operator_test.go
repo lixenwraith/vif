@@ -78,7 +78,6 @@ func TestDeleteRangeWithNoGaps(t *testing.T) {
 	}
 
 	// Verify total entity count
-	posType := reflect.TypeOf(components.PositionComponent{})
 	entities := ctx.World.GetEntitiesWith(posType)
 	if len(entities) != 2 {
 		t.Errorf("Expected 2 entities remaining, got %d", len(entities))
@@ -129,7 +128,6 @@ func TestDeleteRangeWithGaps(t *testing.T) {
 	}
 
 	// Verify total entity count
-	posType := reflect.TypeOf(components.PositionComponent{})
 	entities := ctx.World.GetEntitiesWith(posType)
 	if len(entities) != 2 {
 		t.Errorf("Expected 2 entities remaining, got %d", len(entities))
@@ -160,7 +158,6 @@ func TestDeleteRangeEntirelyGaps(t *testing.T) {
 	}
 
 	// Verify total entity count unchanged
-	posType := reflect.TypeOf(components.PositionComponent{})
 	entities := ctx.World.GetEntitiesWith(posType)
 	if len(entities) != 2 {
 		t.Errorf("Expected 2 entities remaining, got %d", len(entities))
@@ -184,7 +181,6 @@ func TestDeleteRangeRedCharacters(t *testing.T) {
 	}
 
 	// Verify entities were deleted
-	posType := reflect.TypeOf(components.PositionComponent{})
 	entities := ctx.World.GetEntitiesWith(posType)
 	if len(entities) != 0 {
 		t.Errorf("Expected 0 entities remaining, got %d", len(entities))
@@ -209,7 +205,6 @@ func TestDeleteRangeMixedColors(t *testing.T) {
 	}
 
 	// Verify all entities were deleted
-	posType := reflect.TypeOf(components.PositionComponent{})
 	entities := ctx.World.GetEntitiesWith(posType)
 	if len(entities) != 0 {
 		t.Errorf("Expected 0 entities remaining, got %d", len(entities))
@@ -233,7 +228,6 @@ func TestDeleteRangeSwappedBounds(t *testing.T) {
 	}
 
 	// Verify all entities were deleted
-	posType := reflect.TypeOf(components.PositionComponent{})
 	entities := ctx.World.GetEntitiesWith(posType)
 	if len(entities) != 0 {
 		t.Errorf("Expected 0 entities remaining, got %d", len(entities))
@@ -396,7 +390,6 @@ func TestDeleteRangeDoesNotDestroyZeroEntity(t *testing.T) {
 	placeCharWithSpatialIndex(ctx, 5, 0, 'b', components.SequenceGreen)
 
 	// Count entities before
-	posType := reflect.TypeOf(components.PositionComponent{})
 	entitiesBefore := len(ctx.World.GetEntitiesWith(posType))
 
 	// Delete range that includes gaps (positions 1-4 have no entities)

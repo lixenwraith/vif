@@ -27,9 +27,9 @@ func TestDecaySystemCounterUpdates(t *testing.T) {
 
 	for i := 0; i < 5; i++ {
 		entity := world.CreateEntity()
-		world.AddComponent(entity, components.PositionComponent{X: i, Y: 0})
-		world.AddComponent(entity, components.CharacterComponent{Rune: 'x', Style: style})
-		world.AddComponent(entity, components.SequenceComponent{
+		world.Positions.Add(entity, components.PositionComponent{X: i, Y: 0})
+		world.Characters.Add(entity, components.CharacterComponent{Rune: 'x', Style: style})
+		world.Sequences.Add(entity, components.SequenceComponent{
 			ID:    sequenceID,
 			Index: i,
 			Type:  components.SequenceBlue,
@@ -64,12 +64,10 @@ func TestDecaySystemCounterUpdates(t *testing.T) {
 	}
 
 	// Verify entities were updated
-	seqType := reflect.TypeOf(components.SequenceComponent{})
-	posType := reflect.TypeOf(components.PositionComponent{})
-	entities := world.GetEntitiesWith(seqType, posType)
+	entities := world.Query().With(world.Positions).With(world.Sequences).Execute()
 
 	for _, entity := range entities {
-		seqComp, _ := world.GetComponent(entity, seqType)
+		seqComp, _ := world.Sequences.Get(entity)
 		seq := seqComp.(components.SequenceComponent)
 
 		if seq.Type != components.SequenceBlue {
@@ -98,9 +96,9 @@ func TestDecaySystemColorTransitionWithCounters(t *testing.T) {
 
 	for i := 0; i < 3; i++ {
 		entity := world.CreateEntity()
-		world.AddComponent(entity, components.PositionComponent{X: i, Y: 0})
-		world.AddComponent(entity, components.CharacterComponent{Rune: 'x', Style: style})
-		world.AddComponent(entity, components.SequenceComponent{
+		world.Positions.Add(entity, components.PositionComponent{X: i, Y: 0})
+		world.Characters.Add(entity, components.CharacterComponent{Rune: 'x', Style: style})
+		world.Sequences.Add(entity, components.SequenceComponent{
 			ID:    sequenceID,
 			Index: i,
 			Type:  components.SequenceBlue,
@@ -148,15 +146,14 @@ func TestDecaySystemColorTransitionWithCounters(t *testing.T) {
 	}
 
 	// Verify entities are now Red
-	seqType := reflect.TypeOf(components.SequenceComponent{})
-	entities := world.GetEntitiesWith(seqType)
+	entities := world.Sequences.All()
 
 	if len(entities) == 0 {
 		t.Fatal("Expected entities to still exist as Red")
 	}
 
 	for _, entity := range entities {
-		seqComp, _ := world.GetComponent(entity, seqType)
+		seqComp, _ := world.Sequences.Get(entity)
 		seq := seqComp.(components.SequenceComponent)
 
 		if seq.Type != components.SequenceRed {
@@ -179,9 +176,9 @@ func TestScoreSystemCounterDecrement(t *testing.T) {
 	// Create a Green Normal character at cursor position
 	entity := world.CreateEntity()
 	style := render.GetStyleForSequence(components.SequenceGreen, components.LevelNormal)
-	world.AddComponent(entity, components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY})
-	world.AddComponent(entity, components.CharacterComponent{Rune: 'a', Style: style})
-	world.AddComponent(entity, components.SequenceComponent{
+	world.Positions.Add(entity, components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY})
+	world.Characters.Add(entity, components.CharacterComponent{Rune: 'a', Style: style})
+	world.Sequences.Add(entity, components.SequenceComponent{
 		ID:    1,
 		Index: 0,
 		Type:  components.SequenceGreen,
@@ -230,9 +227,9 @@ func TestScoreSystemDoesNotDecrementRedCounter(t *testing.T) {
 	// Create a Red character (Red is not tracked in counters)
 	entity := world.CreateEntity()
 	style := render.GetStyleForSequence(components.SequenceRed, components.LevelBright)
-	world.AddComponent(entity, components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY})
-	world.AddComponent(entity, components.CharacterComponent{Rune: 'r', Style: style})
-	world.AddComponent(entity, components.SequenceComponent{
+	world.Positions.Add(entity, components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY})
+	world.Characters.Add(entity, components.CharacterComponent{Rune: 'r', Style: style})
+	world.Sequences.Add(entity, components.SequenceComponent{
 		ID:    1,
 		Index: 0,
 		Type:  components.SequenceRed,

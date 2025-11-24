@@ -270,10 +270,9 @@ func TestPlaceLineLogicMatchesExclusionZone(t *testing.T) {
 	}
 
 	// Verify all placed entities respect cursor exclusion zone
-	posType := reflect.TypeOf(components.PositionComponent{})
-	entities := world.GetEntitiesWith(posType)
+	entities := world.Positions.All()
 	for _, entity := range entities {
-		posComp, ok := world.GetComponent(entity, posType)
+		posComp, ok := world.Positions.Get(entity)
 		if ok {
 			pos := posComp.(components.PositionComponent)
 			dx := math.Abs(float64(pos.X - cursorX))

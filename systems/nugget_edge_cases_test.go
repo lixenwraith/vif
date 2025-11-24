@@ -312,8 +312,7 @@ func TestNuggetSpawnPositionExclusionZone(t *testing.T) {
 		}
 
 		// Get nugget position
-		posType := reflect.TypeOf(components.PositionComponent{})
-		posComp, ok := world.GetComponent(engine.Entity(activeNugget), posType)
+		posComp, ok := world.Positions.Get(engine.Entity(activeNugget))
 		if !ok {
 			t.Fatal("Expected nugget to have position component")
 		}

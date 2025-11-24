@@ -206,7 +206,7 @@ func TestNoRaceFlashEffects(t *testing.T) {
 				case <-stopChan:
 					return
 				default:
-					flashes := world.GetEntitiesWith(flashType)
+					flashes := world.RemovalFlashes.All()
 					_ = len(flashes)
 					time.Sleep(10 * time.Millisecond)
 				}

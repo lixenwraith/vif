@@ -28,7 +28,7 @@ func TestDrainSystem_CollisionWithBlueCharacter(t *testing.T) {
 	drainEntity := engine.Entity(drainEntityID)
 
 	// Using direct store access
-	drainComp, ok := world.GetComponent(drainEntity, drainType)
+	drainComp, ok := world.Drains.Get(drainEntity)
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
 	}
@@ -37,15 +37,15 @@ func TestDrainSystem_CollisionWithBlueCharacter(t *testing.T) {
 	// Create a blue character at a different position (10, 10)
 	charX, charY := 10, 10
 	charEntity := world.CreateEntity()
-	world.AddComponent(charEntity, components.PositionComponent{
+	world.Positions.Add(charEntity, components.PositionComponent{
 		X: charX,
 		Y: charY,
 	})
-	world.AddComponent(charEntity, components.CharacterComponent{
+	world.Characters.Add(charEntity, components.CharacterComponent{
 		Rune:  'a',
 		Style: tcell.StyleDefault,
 	})
-	world.AddComponent(charEntity, components.SequenceComponent{
+	world.Sequences.Add(charEntity, components.SequenceComponent{
 		ID:    1,
 		Index: 0,
 		Type:  components.SequenceBlue,
@@ -67,7 +67,7 @@ func TestDrainSystem_CollisionWithBlueCharacter(t *testing.T) {
 	// Move drain to character position (update GameState and component, not spatial index)
 	drain.X = charX
 	drain.Y = charY
-	world.AddComponent(drainEntity, drain)
+	world.Drains.Add(drainEntity, drain)
 	ctx.State.SetDrainX(charX)
 	ctx.State.SetDrainY(charY)
 
@@ -75,8 +75,7 @@ func TestDrainSystem_CollisionWithBlueCharacter(t *testing.T) {
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Verify character was destroyed
-	seqType := reflect.TypeOf(components.SequenceComponent{})
-	if _, ok := world.GetComponent(charEntity, seqType); ok {
+	if _, ok := world.Sequences.Get(charEntity); ok {
 		t.Fatal("Expected character to be destroyed after collision")
 	}
 
@@ -103,7 +102,7 @@ func TestDrainSystem_CollisionWithGreenCharacter(t *testing.T) {
 	drainEntity := engine.Entity(drainEntityID)
 
 	// Using direct store access
-	drainComp, ok := world.GetComponent(drainEntity, drainType)
+	drainComp, ok := world.Drains.Get(drainEntity)
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
 	}
@@ -112,15 +111,15 @@ func TestDrainSystem_CollisionWithGreenCharacter(t *testing.T) {
 	// Create a green character at a different position (10, 10)
 	charX, charY := 10, 10
 	charEntity := world.CreateEntity()
-	world.AddComponent(charEntity, components.PositionComponent{
+	world.Positions.Add(charEntity, components.PositionComponent{
 		X: charX,
 		Y: charY,
 	})
-	world.AddComponent(charEntity, components.CharacterComponent{
+	world.Characters.Add(charEntity, components.CharacterComponent{
 		Rune:  'b',
 		Style: tcell.StyleDefault,
 	})
-	world.AddComponent(charEntity, components.SequenceComponent{
+	world.Sequences.Add(charEntity, components.SequenceComponent{
 		ID:    1,
 		Index: 0,
 		Type:  components.SequenceGreen,
@@ -139,7 +138,7 @@ func TestDrainSystem_CollisionWithGreenCharacter(t *testing.T) {
 	// Move drain to character position (update GameState and component, not spatial index)
 	drain.X = charX
 	drain.Y = charY
-	world.AddComponent(drainEntity, drain)
+	world.Drains.Add(drainEntity, drain)
 	ctx.State.SetDrainX(charX)
 	ctx.State.SetDrainY(charY)
 
@@ -147,8 +146,7 @@ func TestDrainSystem_CollisionWithGreenCharacter(t *testing.T) {
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Verify character was destroyed
-	seqType := reflect.TypeOf(components.SequenceComponent{})
-	if _, ok := world.GetComponent(charEntity, seqType); ok {
+	if _, ok := world.Sequences.Get(charEntity); ok {
 		t.Fatal("Expected character to be destroyed after collision")
 	}
 
@@ -175,7 +173,7 @@ func TestDrainSystem_CollisionWithRedCharacter(t *testing.T) {
 	drainEntity := engine.Entity(drainEntityID)
 
 	// Using direct store access
-	drainComp, ok := world.GetComponent(drainEntity, drainType)
+	drainComp, ok := world.Drains.Get(drainEntity)
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
 	}
@@ -184,15 +182,15 @@ func TestDrainSystem_CollisionWithRedCharacter(t *testing.T) {
 	// Create a red character at a different position (10, 10)
 	charX, charY := 10, 10
 	charEntity := world.CreateEntity()
-	world.AddComponent(charEntity, components.PositionComponent{
+	world.Positions.Add(charEntity, components.PositionComponent{
 		X: charX,
 		Y: charY,
 	})
-	world.AddComponent(charEntity, components.CharacterComponent{
+	world.Characters.Add(charEntity, components.CharacterComponent{
 		Rune:  'c',
 		Style: tcell.StyleDefault,
 	})
-	world.AddComponent(charEntity, components.SequenceComponent{
+	world.Sequences.Add(charEntity, components.SequenceComponent{
 		ID:    1,
 		Index: 0,
 		Type:  components.SequenceRed,
@@ -207,7 +205,7 @@ func TestDrainSystem_CollisionWithRedCharacter(t *testing.T) {
 	// Move drain to character position (update GameState and component, not spatial index)
 	drain.X = charX
 	drain.Y = charY
-	world.AddComponent(drainEntity, drain)
+	world.Drains.Add(drainEntity, drain)
 	ctx.State.SetDrainX(charX)
 	ctx.State.SetDrainY(charY)
 
@@ -215,8 +213,7 @@ func TestDrainSystem_CollisionWithRedCharacter(t *testing.T) {
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Verify character was destroyed
-	seqType := reflect.TypeOf(components.SequenceComponent{})
-	if _, ok := world.GetComponent(charEntity, seqType); ok {
+	if _, ok := world.Sequences.Get(charEntity); ok {
 		t.Fatal("Expected character to be destroyed after collision")
 	}
 }
@@ -238,7 +235,7 @@ func TestDrainSystem_CollisionWithGoldSequence(t *testing.T) {
 	drainEntity := engine.Entity(drainEntityID)
 
 	// Using direct store access
-	drainComp, ok := world.GetComponent(drainEntity, drainType)
+	drainComp, ok := world.Drains.Get(drainEntity)
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
 	}
@@ -257,15 +254,15 @@ func TestDrainSystem_CollisionWithGoldSequence(t *testing.T) {
 		x := 10 + i
 		y := 5
 
-		world.AddComponent(entity, components.PositionComponent{
+		world.Positions.Add(entity, components.PositionComponent{
 			X: x,
 			Y: y,
 		})
-		world.AddComponent(entity, components.CharacterComponent{
+		world.Characters.Add(entity, components.CharacterComponent{
 			Rune:  rune('a' + i),
 			Style: tcell.StyleDefault,
 		})
-		world.AddComponent(entity, components.SequenceComponent{
+		world.Sequences.Add(entity, components.SequenceComponent{
 			ID:    sequenceID,
 			Index: i,
 			Type:  components.SequenceGold,
@@ -281,7 +278,7 @@ func TestDrainSystem_CollisionWithGoldSequence(t *testing.T) {
 	// Update drain component position
 	drain.X = 10
 	drain.Y = 5
-	world.AddComponent(drainEntity, drain)
+	world.Drains.Add(drainEntity, drain)
 
 	// Update GameState atomics (this is what the collision check uses)
 	ctx.State.SetDrainX(10)
@@ -296,9 +293,8 @@ func TestDrainSystem_CollisionWithGoldSequence(t *testing.T) {
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Verify all gold characters were destroyed
-	seqType := reflect.TypeOf(components.SequenceComponent{})
 	for i, entity := range goldEntities {
-		if _, ok := world.GetComponent(entity, seqType); ok {
+		if _, ok := world.Sequences.Get(entity); ok {
 			t.Fatalf("Expected gold character %d to be destroyed after collision", i)
 		}
 	}
@@ -345,7 +341,7 @@ func TestDrainSystem_CollisionMultipleLevels(t *testing.T) {
 			drainEntity := engine.Entity(drainEntityID)
 
 			// Using direct store access
-			drainComp, ok := world.GetComponent(drainEntity, drainType)
+			drainComp, ok := world.Drains.Get(drainEntity)
 			if !ok {
 				t.Fatal("Expected drain to have DrainComponent")
 			}
@@ -354,15 +350,15 @@ func TestDrainSystem_CollisionMultipleLevels(t *testing.T) {
 			// Create a blue character with the specified level at a different position
 			charX, charY := 10, 10
 			charEntity := world.CreateEntity()
-			world.AddComponent(charEntity, components.PositionComponent{
+			world.Positions.Add(charEntity, components.PositionComponent{
 				X: charX,
 				Y: charY,
 			})
-			world.AddComponent(charEntity, components.CharacterComponent{
+			world.Characters.Add(charEntity, components.CharacterComponent{
 				Rune:  'x',
 				Style: tcell.StyleDefault,
 			})
-			world.AddComponent(charEntity, components.SequenceComponent{
+			world.Sequences.Add(charEntity, components.SequenceComponent{
 				ID:    1,
 				Index: 0,
 				Type:  components.SequenceBlue,
@@ -381,7 +377,7 @@ func TestDrainSystem_CollisionMultipleLevels(t *testing.T) {
 			// Move drain to character position (update GameState and component, not spatial index)
 			drain.X = charX
 			drain.Y = charY
-			world.AddComponent(drainEntity, drain)
+			world.Drains.Add(drainEntity, drain)
 			ctx.State.SetDrainX(charX)
 			ctx.State.SetDrainY(charY)
 
@@ -389,8 +385,7 @@ func TestDrainSystem_CollisionMultipleLevels(t *testing.T) {
 			drainSys.Update(world, 16*time.Millisecond)
 
 			// Verify character was destroyed
-			seqType := reflect.TypeOf(components.SequenceComponent{})
-			if _, ok := world.GetComponent(charEntity, seqType); ok {
+			if _, ok := world.Sequences.Get(charEntity); ok {
 				t.Fatalf("Expected character with level %v to be destroyed", level)
 			}
 
@@ -429,7 +424,7 @@ func TestDrainSystem_NoCollisionWithNonSequenceEntity(t *testing.T) {
 	drainEntity := engine.Entity(drainEntityID)
 
 	// Using direct store access
-	drainComp, ok := world.GetComponent(drainEntity, drainType)
+	drainComp, ok := world.Drains.Get(drainEntity)
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
 	}
@@ -437,11 +432,11 @@ func TestDrainSystem_NoCollisionWithNonSequenceEntity(t *testing.T) {
 
 	// Create an entity without SequenceComponent at the same position
 	otherEntity := world.CreateEntity()
-	world.AddComponent(otherEntity, components.PositionComponent{
+	world.Positions.Add(otherEntity, components.PositionComponent{
 		X: drain.X,
 		Y: drain.Y,
 	})
-	world.AddComponent(otherEntity, components.CharacterComponent{
+	world.Characters.Add(otherEntity, components.CharacterComponent{
 		Rune:  '?',
 		Style: tcell.StyleDefault,
 	})
@@ -454,8 +449,7 @@ func TestDrainSystem_NoCollisionWithNonSequenceEntity(t *testing.T) {
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Verify entity was NOT destroyed (still has CharacterComponent)
-	charType := reflect.TypeOf(components.CharacterComponent{})
-	if _, ok := world.GetComponent(otherEntity, charType); !ok {
+	if _, ok := world.Characters.Get(otherEntity); !ok {
 		t.Fatal("Expected non-sequence entity to NOT be destroyed")
 	}
 }
@@ -517,7 +511,7 @@ func TestDrainSystem_CollisionAtDifferentPositions(t *testing.T) {
 			// Spawn drain manually at a safe position (1, 1)
 			ctx.State.SetScore(100)
 			entity := world.CreateEntity()
-			world.AddComponent(entity, components.PositionComponent{
+			world.Positions.Add(entity, components.PositionComponent{
 				X: 1,
 				Y: 1,
 			})
@@ -542,15 +536,15 @@ func TestDrainSystem_CollisionAtDifferentPositions(t *testing.T) {
 
 			// Create a blue character at the test position
 			charEntity := world.CreateEntity()
-			world.AddComponent(charEntity, components.PositionComponent{
+			world.Positions.Add(charEntity, components.PositionComponent{
 				X: pos.x,
 				Y: pos.y,
 			})
-			world.AddComponent(charEntity, components.CharacterComponent{
+			world.Characters.Add(charEntity, components.CharacterComponent{
 				Rune:  'p',
 				Style: tcell.StyleDefault,
 			})
-			world.AddComponent(charEntity, components.SequenceComponent{
+			world.Sequences.Add(charEntity, components.SequenceComponent{
 				ID:    1,
 				Index: 0,
 				Type:  components.SequenceBlue,
@@ -568,11 +562,11 @@ func TestDrainSystem_CollisionAtDifferentPositions(t *testing.T) {
 			ctx.State.AddColorCount(0, int(components.LevelNormal), 1)
 
 			// Move drain to character position (update GameState and component, not spatial index)
-			drainComp, _ := world.GetComponent(entity, reflect.TypeOf(components.DrainComponent{}))
+			drainComp, _ := world.Drains.Get(entity)
 			drain := drainComp.(components.DrainComponent)
 			drain.X = pos.x
 			drain.Y = pos.y
-			world.AddComponent(entity, drain)
+			world.Drains.Add(entity, drain)
 			ctx.State.SetDrainX(pos.x)
 			ctx.State.SetDrainY(pos.y)
 
@@ -580,8 +574,7 @@ func TestDrainSystem_CollisionAtDifferentPositions(t *testing.T) {
 			drainSys.Update(world, 16*time.Millisecond)
 
 			// Verify character was destroyed
-			seqType := reflect.TypeOf(components.SequenceComponent{})
-			if _, ok := world.GetComponent(charEntity, seqType); ok {
+			if _, ok := world.Sequences.Get(charEntity); ok {
 				t.Fatalf("Expected character at (%d, %d) to be destroyed", pos.x, pos.y)
 			}
 
@@ -613,7 +606,7 @@ func TestDrainSystem_CollisionWithNugget(t *testing.T) {
 	drainEntity := engine.Entity(drainEntityID)
 
 	// Using direct store access
-	drainComp, ok := world.GetComponent(drainEntity, drainType)
+	drainComp, ok := world.Drains.Get(drainEntity)
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
 	}
@@ -622,15 +615,15 @@ func TestDrainSystem_CollisionWithNugget(t *testing.T) {
 	// Create a nugget at a different position (10, 10)
 	nuggetX, nuggetY := 10, 10
 	nuggetEntity := world.CreateEntity()
-	world.AddComponent(nuggetEntity, components.PositionComponent{
+	world.Positions.Add(nuggetEntity, components.PositionComponent{
 		X: nuggetX,
 		Y: nuggetY,
 	})
-	world.AddComponent(nuggetEntity, components.CharacterComponent{
+	world.Characters.Add(nuggetEntity, components.CharacterComponent{
 		Rune:  'N',
 		Style: tcell.StyleDefault,
 	})
-	world.AddComponent(nuggetEntity, components.NuggetComponent{
+	world.Nuggets.Add(nuggetEntity, components.NuggetComponent{
 		ID:        1,
 		SpawnTime: ctx.TimeProvider.Now(),
 	})
@@ -650,7 +643,7 @@ func TestDrainSystem_CollisionWithNugget(t *testing.T) {
 	// Move drain to nugget position (update GameState and component, not spatial index)
 	drain.X = nuggetX
 	drain.Y = nuggetY
-	world.AddComponent(drainEntity, drain)
+	world.Drains.Add(drainEntity, drain)
 	ctx.State.SetDrainX(nuggetX)
 	ctx.State.SetDrainY(nuggetY)
 
@@ -659,7 +652,7 @@ func TestDrainSystem_CollisionWithNugget(t *testing.T) {
 
 	// Verify nugget was destroyed
 	// Using direct store access
-	if _, ok := world.GetComponent(nuggetEntity, nuggetType); ok {
+	if _, ok := world.Nuggets.Get(nuggetEntity); ok {
 		t.Fatal("Expected nugget to be destroyed after collision")
 	}
 
@@ -687,7 +680,7 @@ func TestDrainSystem_NuggetCollisionWithoutSystem(t *testing.T) {
 	drainEntity := engine.Entity(drainEntityID)
 
 	// Using direct store access
-	drainComp, ok := world.GetComponent(drainEntity, drainType)
+	drainComp, ok := world.Drains.Get(drainEntity)
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
 	}
@@ -696,15 +689,15 @@ func TestDrainSystem_NuggetCollisionWithoutSystem(t *testing.T) {
 	// Create a nugget at a different position (10, 10)
 	nuggetX, nuggetY := 10, 10
 	nuggetEntity := world.CreateEntity()
-	world.AddComponent(nuggetEntity, components.PositionComponent{
+	world.Positions.Add(nuggetEntity, components.PositionComponent{
 		X: nuggetX,
 		Y: nuggetY,
 	})
-	world.AddComponent(nuggetEntity, components.CharacterComponent{
+	world.Characters.Add(nuggetEntity, components.CharacterComponent{
 		Rune:  'N',
 		Style: tcell.StyleDefault,
 	})
-	world.AddComponent(nuggetEntity, components.NuggetComponent{
+	world.Nuggets.Add(nuggetEntity, components.NuggetComponent{
 		ID:        1,
 		SpawnTime: ctx.TimeProvider.Now(),
 	})
@@ -716,7 +709,7 @@ func TestDrainSystem_NuggetCollisionWithoutSystem(t *testing.T) {
 	// Move drain to nugget position (update GameState and component, not spatial index)
 	drain.X = nuggetX
 	drain.Y = nuggetY
-	world.AddComponent(drainEntity, drain)
+	world.Drains.Add(drainEntity, drain)
 	ctx.State.SetDrainX(nuggetX)
 	ctx.State.SetDrainY(nuggetY)
 
@@ -725,7 +718,7 @@ func TestDrainSystem_NuggetCollisionWithoutSystem(t *testing.T) {
 
 	// Verify nugget was destroyed
 	// Using direct store access
-	if _, ok := world.GetComponent(nuggetEntity, nuggetType); ok {
+	if _, ok := world.Nuggets.Get(nuggetEntity); ok {
 		t.Fatal("Expected nugget to be destroyed after collision")
 	}
 }
@@ -747,7 +740,7 @@ func TestDrainSystem_GoldCollisionInactiveGold(t *testing.T) {
 	drainEntity := engine.Entity(drainEntityID)
 
 	// Using direct store access
-	drainComp, ok := world.GetComponent(drainEntity, drainType)
+	drainComp, ok := world.Drains.Get(drainEntity)
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
 	}
@@ -755,15 +748,15 @@ func TestDrainSystem_GoldCollisionInactiveGold(t *testing.T) {
 
 	// Create a gold character WITHOUT activating gold in GameState
 	goldEntity := world.CreateEntity()
-	world.AddComponent(goldEntity, components.PositionComponent{
+	world.Positions.Add(goldEntity, components.PositionComponent{
 		X: drain.X,
 		Y: drain.Y,
 	})
-	world.AddComponent(goldEntity, components.CharacterComponent{
+	world.Characters.Add(goldEntity, components.CharacterComponent{
 		Rune:  'G',
 		Style: tcell.StyleDefault,
 	})
-	world.AddComponent(goldEntity, components.SequenceComponent{
+	world.Sequences.Add(goldEntity, components.SequenceComponent{
 		ID:    88,
 		Index: 0,
 		Type:  components.SequenceGold,
@@ -778,8 +771,7 @@ func TestDrainSystem_GoldCollisionInactiveGold(t *testing.T) {
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Verify gold was NOT destroyed (gold not active in GameState)
-	seqType := reflect.TypeOf(components.SequenceComponent{})
-	if _, ok := world.GetComponent(goldEntity, seqType); !ok {
+	if _, ok := world.Sequences.Get(goldEntity); !ok {
 		t.Fatal("Expected gold to NOT be destroyed when not active in GameState")
 	}
 }
@@ -801,7 +793,7 @@ func TestDrainSystem_CollisionWithFallingDecay(t *testing.T) {
 	drainEntity := engine.Entity(drainEntityID)
 
 	// Using direct store access
-	drainComp, ok := world.GetComponent(drainEntity, drainType)
+	drainComp, ok := world.Drains.Get(drainEntity)
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
 	}
@@ -810,7 +802,7 @@ func TestDrainSystem_CollisionWithFallingDecay(t *testing.T) {
 	// Create a falling decay entity at a different position (10, 10)
 	decayX, decayY := 10, 10
 	decayEntity := world.CreateEntity()
-	world.AddComponent(decayEntity, components.FallingDecayComponent{
+	world.FallingDecays.Add(decayEntity, components.FallingDecayComponent{
 		Column:        decayX,
 		YPosition:     float64(decayY),
 		Speed:         5.0,
@@ -827,7 +819,7 @@ func TestDrainSystem_CollisionWithFallingDecay(t *testing.T) {
 	// Move drain to decay entity position (update GameState and component, not spatial index)
 	drain.X = decayX
 	drain.Y = decayY
-	world.AddComponent(drainEntity, drain)
+	world.Drains.Add(drainEntity, drain)
 	ctx.State.SetDrainX(decayX)
 	ctx.State.SetDrainY(decayY)
 
@@ -835,8 +827,7 @@ func TestDrainSystem_CollisionWithFallingDecay(t *testing.T) {
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Verify falling decay entity was destroyed
-	fallingDecayType := reflect.TypeOf(components.FallingDecayComponent{})
-	if _, ok := world.GetComponent(decayEntity, fallingDecayType); ok {
+	if _, ok := world.FallingDecays.Get(decayEntity); ok {
 		t.Fatal("Expected falling decay entity to be destroyed after collision")
 	}
 }
@@ -854,7 +845,7 @@ func TestDrainSystem_CollisionWithMultipleFallingDecay(t *testing.T) {
 	ctx.State.SetScore(100)
 	entity := world.CreateEntity()
 	x, y := 0, 0
-	world.AddComponent(entity, components.PositionComponent{
+	world.Positions.Add(entity, components.PositionComponent{
 		X: x,
 		Y: y,
 	})
@@ -880,7 +871,7 @@ func TestDrainSystem_CollisionWithMultipleFallingDecay(t *testing.T) {
 
 	// Create first decay entity at different position (5, 5)
 	decayEntity1 := world.CreateEntity()
-	world.AddComponent(decayEntity1, components.FallingDecayComponent{
+	world.FallingDecays.Add(decayEntity1, components.FallingDecayComponent{
 		Column:        5,
 		YPosition:     5.0,
 		Speed:         5.0,
@@ -896,7 +887,7 @@ func TestDrainSystem_CollisionWithMultipleFallingDecay(t *testing.T) {
 
 	// Create second decay entity at different position (10, 10)
 	decayEntity2 := world.CreateEntity()
-	world.AddComponent(decayEntity2, components.FallingDecayComponent{
+	world.FallingDecays.Add(decayEntity2, components.FallingDecayComponent{
 		Column:        10,
 		YPosition:     10.0,
 		Speed:         3.0,
@@ -911,11 +902,11 @@ func TestDrainSystem_CollisionWithMultipleFallingDecay(t *testing.T) {
 	}
 
 	// Move drain to first decay entity position (5, 5)
-	drainComp, _ := world.GetComponent(entity, reflect.TypeOf(components.DrainComponent{}))
+	drainComp, _ := world.Drains.Get(entity)
 	drain := drainComp.(components.DrainComponent)
 	drain.X = 5
 	drain.Y = 5
-	world.AddComponent(entity, drain)
+	world.Drains.Add(entity, drain)
 	ctx.State.SetDrainX(5)
 	ctx.State.SetDrainY(5)
 
@@ -923,13 +914,12 @@ func TestDrainSystem_CollisionWithMultipleFallingDecay(t *testing.T) {
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Verify first decay entity was destroyed (at drain position)
-	fallingDecayType := reflect.TypeOf(components.FallingDecayComponent{})
-	if _, ok := world.GetComponent(decayEntity1, fallingDecayType); ok {
+	if _, ok := world.FallingDecays.Get(decayEntity1); ok {
 		t.Fatal("Expected decay entity 1 to be destroyed (at drain position)")
 	}
 
 	// Verify second decay entity still exists (not at drain position)
-	if _, ok := world.GetComponent(decayEntity2, fallingDecayType); !ok {
+	if _, ok := world.FallingDecays.Get(decayEntity2); !ok {
 		t.Fatal("Expected decay entity 2 to still exist (not at drain position)")
 	}
 }
@@ -958,7 +948,7 @@ func TestDrainSystem_FallingDecayCollisionAtBoundary(t *testing.T) {
 			// Spawn drain at a safe position (1, 1)
 			ctx.State.SetScore(100)
 			entity := world.CreateEntity()
-			world.AddComponent(entity, components.PositionComponent{
+			world.Positions.Add(entity, components.PositionComponent{
 				X: 1,
 				Y: 1,
 			})
@@ -983,7 +973,7 @@ func TestDrainSystem_FallingDecayCollisionAtBoundary(t *testing.T) {
 
 			// Create falling decay entity at test position
 			decayEntity := world.CreateEntity()
-			world.AddComponent(decayEntity, components.FallingDecayComponent{
+			world.FallingDecays.Add(decayEntity, components.FallingDecayComponent{
 				Column:        pos.x,
 				YPosition:     float64(pos.y),
 				Speed:         7.0,
@@ -998,11 +988,11 @@ func TestDrainSystem_FallingDecayCollisionAtBoundary(t *testing.T) {
 			}
 
 			// Move drain to decay entity position
-			drainComp, _ := world.GetComponent(entity, reflect.TypeOf(components.DrainComponent{}))
+			drainComp, _ := world.Drains.Get(entity)
 			drain := drainComp.(components.DrainComponent)
 			drain.X = pos.x
 			drain.Y = pos.y
-			world.AddComponent(entity, drain)
+			world.Drains.Add(entity, drain)
 			ctx.State.SetDrainX(pos.x)
 			ctx.State.SetDrainY(pos.y)
 
@@ -1010,8 +1000,7 @@ func TestDrainSystem_FallingDecayCollisionAtBoundary(t *testing.T) {
 			drainSys.Update(world, 16*time.Millisecond)
 
 			// Verify decay entity was destroyed
-			fallingDecayType := reflect.TypeOf(components.FallingDecayComponent{})
-			if _, ok := world.GetComponent(decayEntity, fallingDecayType); ok {
+			if _, ok := world.FallingDecays.Get(decayEntity); ok {
 				t.Fatalf("Expected decay entity to be destroyed at position (%d, %d)", pos.x, pos.y)
 			}
 		})
@@ -1035,7 +1024,7 @@ func TestDrainSystem_DecayCollisionPriorityOverSequence(t *testing.T) {
 	drainEntity := engine.Entity(drainEntityID)
 
 	// Using direct store access
-	drainComp, ok := world.GetComponent(drainEntity, drainType)
+	drainComp, ok := world.Drains.Get(drainEntity)
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
 	}
@@ -1044,7 +1033,7 @@ func TestDrainSystem_DecayCollisionPriorityOverSequence(t *testing.T) {
 	// Create a falling decay entity at different position (10, 10)
 	decayX, decayY := 10, 10
 	decayEntity := world.CreateEntity()
-	world.AddComponent(decayEntity, components.FallingDecayComponent{
+	world.FallingDecays.Add(decayEntity, components.FallingDecayComponent{
 		Column:        decayX,
 		YPosition:     float64(decayY),
 		Speed:         6.0,
@@ -1060,15 +1049,15 @@ func TestDrainSystem_DecayCollisionPriorityOverSequence(t *testing.T) {
 
 	// Create a blue character at different position
 	charEntity := world.CreateEntity()
-	world.AddComponent(charEntity, components.PositionComponent{
+	world.Positions.Add(charEntity, components.PositionComponent{
 		X: drain.X + 1,
 		Y: drain.Y,
 	})
-	world.AddComponent(charEntity, components.CharacterComponent{
+	world.Characters.Add(charEntity, components.CharacterComponent{
 		Rune:  'a',
 		Style: tcell.StyleDefault,
 	})
-	world.AddComponent(charEntity, components.SequenceComponent{
+	world.Sequences.Add(charEntity, components.SequenceComponent{
 		ID:    1,
 		Index: 0,
 		Type:  components.SequenceBlue,
@@ -1087,7 +1076,7 @@ func TestDrainSystem_DecayCollisionPriorityOverSequence(t *testing.T) {
 	// Move drain to decay entity position
 	drain.X = decayX
 	drain.Y = decayY
-	world.AddComponent(drainEntity, drain)
+	world.Drains.Add(drainEntity, drain)
 	ctx.State.SetDrainX(decayX)
 	ctx.State.SetDrainY(decayY)
 
@@ -1095,14 +1084,12 @@ func TestDrainSystem_DecayCollisionPriorityOverSequence(t *testing.T) {
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Verify decay entity was destroyed
-	fallingDecayType := reflect.TypeOf(components.FallingDecayComponent{})
-	if _, ok := world.GetComponent(decayEntity, fallingDecayType); ok {
+	if _, ok := world.FallingDecays.Get(decayEntity); ok {
 		t.Fatal("Expected decay entity to be destroyed")
 	}
 
 	// Verify blue character still exists (not at drain position)
-	seqType := reflect.TypeOf(components.SequenceComponent{})
-	if _, ok := world.GetComponent(charEntity, seqType); !ok {
+	if _, ok := world.Sequences.Get(charEntity); !ok {
 		t.Fatal("Expected blue character to still exist")
 	}
 }
@@ -1128,7 +1115,7 @@ func TestDrainSystem_FallingDecayWithDifferentSpeeds(t *testing.T) {
 			drainEntity := engine.Entity(drainEntityID)
 
 			// Using direct store access
-			drainComp, ok := world.GetComponent(drainEntity, drainType)
+			drainComp, ok := world.Drains.Get(drainEntity)
 			if !ok {
 				t.Fatal("Expected drain to have DrainComponent")
 			}
@@ -1137,7 +1124,7 @@ func TestDrainSystem_FallingDecayWithDifferentSpeeds(t *testing.T) {
 			// Create falling decay entity with specific speed at different position (10, 10)
 			decayX, decayY := 10, 10
 			decayEntity := world.CreateEntity()
-			world.AddComponent(decayEntity, components.FallingDecayComponent{
+			world.FallingDecays.Add(decayEntity, components.FallingDecayComponent{
 				Column:        decayX,
 				YPosition:     float64(decayY),
 				Speed:         speed,
@@ -1152,7 +1139,7 @@ func TestDrainSystem_FallingDecayWithDifferentSpeeds(t *testing.T) {
 			// Move drain to decay entity position
 			drain.X = decayX
 			drain.Y = decayY
-			world.AddComponent(drainEntity, drain)
+			world.Drains.Add(drainEntity, drain)
 			ctx.State.SetDrainX(decayX)
 			ctx.State.SetDrainY(decayY)
 
@@ -1160,8 +1147,7 @@ func TestDrainSystem_FallingDecayWithDifferentSpeeds(t *testing.T) {
 			drainSys.Update(world, 16*time.Millisecond)
 
 			// Verify decay entity was destroyed regardless of speed
-			fallingDecayType := reflect.TypeOf(components.FallingDecayComponent{})
-			if _, ok := world.GetComponent(decayEntity, fallingDecayType); ok {
+			if _, ok := world.FallingDecays.Get(decayEntity); ok {
 				t.Fatalf("Expected decay entity with speed %.1f to be destroyed", speed)
 			}
 		})

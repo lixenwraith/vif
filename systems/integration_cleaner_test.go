@@ -141,7 +141,6 @@ func TestCleanerEventFlow(t *testing.T) {
 	// Verify red sequences destroyed
 	for i, entity := range redEntities {
 		if entityExists(ctx.World, entity) {
-			posType := reflect.TypeOf(components.PositionComponent{})
 			if pos, ok := ctx.World.GetComponent(entity, posType); ok {
 				p := pos.(components.PositionComponent)
 				t.Errorf("Red entity %d still exists at position (%d, %d) after cleaner sweep", i, p.X, p.Y)

@@ -107,13 +107,13 @@ func TestSpawnWithNoAvailableColors(t *testing.T) {
 	}
 
 	// Get entities before spawn
-	beforeCount := len(world.GetEntitiesWith())
+	beforeCount := len(world.Positions.All())
 
 	// Try to spawn - should do nothing since all colors are present
 	spawnSys.spawnSequence(world)
 
 	// Get entities after spawn
-	afterCount := len(world.GetEntitiesWith())
+	afterCount := len(world.Positions.All())
 
 	if afterCount != beforeCount {
 		t.Errorf("Expected no new entities when all 6 colors present, before=%d, after=%d", beforeCount, afterCount)

@@ -96,11 +96,18 @@ This project relies on `oto` and `beep` for audio, which requires CGO bindings t
 - ❌ `Package alsa was not found` → Install `libasound2-dev` (step 2)
 - ❌ `dial tcp: lookup storage.googleapis.com` → Use `GOPROXY="https://goproxy.io,direct"` (step 1)
 - ❌ `403 Forbidden` on ppa.launchpadcontent.net → Skip `apt-get update`, install directly
+- ❌ Complete network failure / DNS unavailable → Configure DNS (`echo "nameserver 8.8.8.8" > /etc/resolv.conf`) or work offline if dependencies are cached
+
+**Network-Restricted Environments:**
+If the environment has no external network access (all DNS lookups fail), you may need to:
+1. Ensure dependencies are already cached in `$GOPATH/pkg/mod` from a previous session
+2. Work on test code migration/fixes without running the build
+3. Request a different environment with network access for dependency download
 
 **DO NOT:**
 - Modify production code to fix test environment issues
 - Skip tests due to environment problems - fix the environment instead
-- Give up on network errors - use the alternative proxy above
+- Give up on network errors - use the alternative proxy above or configure DNS
 
 ### 2. Running Tests
 Always run with the race detector enabled, as the engine relies heavily on concurrency.

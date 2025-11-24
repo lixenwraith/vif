@@ -40,7 +40,7 @@ func TestDrainSystem_ScoreDrainWhenOnCursor(t *testing.T) {
 
 	// Manually create drain at cursor position
 	entity := world.CreateEntity()
-	world.AddComponent(entity, components.PositionComponent{X: cursorX, Y: cursorY})
+	world.Positions.Add(entity, components.PositionComponent{X: cursorX, Y: cursorY})
 	world.Drains.Add(entity, components.DrainComponent{
 		X:             cursorX,
 		Y:             cursorY,
@@ -111,7 +111,7 @@ func TestDrainSystem_NoDrainWhenNotOnCursor(t *testing.T) {
 	// Create drain at different position (5, 5)
 	drainX, drainY := 5, 5
 	entity := world.CreateEntity()
-	world.AddComponent(entity, components.PositionComponent{X: drainX, Y: drainY})
+	world.Positions.Add(entity, components.PositionComponent{X: drainX, Y: drainY})
 	world.Drains.Add(entity, components.DrainComponent{
 		X:             drainX,
 		Y:             drainY,
@@ -169,7 +169,7 @@ func TestDrainSystem_IsOnCursorStateTracking(t *testing.T) {
 
 	// Create drain at cursor position
 	entity := world.CreateEntity()
-	world.AddComponent(entity, components.PositionComponent{X: cursorX, Y: cursorY})
+	world.Positions.Add(entity, components.PositionComponent{X: cursorX, Y: cursorY})
 	world.Drains.Add(entity, components.DrainComponent{
 		X:             cursorX,
 		Y:             cursorY,
@@ -192,7 +192,7 @@ func TestDrainSystem_IsOnCursorStateTracking(t *testing.T) {
 
 	// Check IsOnCursor is now true
 	// Using direct store access
-	drainComp, ok := world.GetComponent(entity, drainType)
+	drainComp, ok := world.Drains.Get(entity)
 	if !ok {
 		t.Fatal("Expected entity to have DrainComponent")
 	}
@@ -210,7 +210,7 @@ func TestDrainSystem_IsOnCursorStateTracking(t *testing.T) {
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Check IsOnCursor is now false
-	drainComp, ok = world.GetComponent(entity, drainType)
+	drainComp, ok = world.Drains.Get(entity)
 	if !ok {
 		t.Fatal("Expected entity to have DrainComponent")
 	}
@@ -252,7 +252,7 @@ func TestDrainSystem_MultipleDrainTicks(t *testing.T) {
 	ctx.State.SetCursorY(cursorY)
 
 	entity := world.CreateEntity()
-	world.AddComponent(entity, components.PositionComponent{X: cursorX, Y: cursorY})
+	world.Positions.Add(entity, components.PositionComponent{X: cursorX, Y: cursorY})
 	world.Drains.Add(entity, components.DrainComponent{
 		X:             cursorX,
 		Y:             cursorY,
@@ -325,7 +325,7 @@ func TestDrainSystem_NoDrainBeforeInterval(t *testing.T) {
 	ctx.State.SetCursorY(cursorY)
 
 	entity := world.CreateEntity()
-	world.AddComponent(entity, components.PositionComponent{X: cursorX, Y: cursorY})
+	world.Positions.Add(entity, components.PositionComponent{X: cursorX, Y: cursorY})
 	world.Drains.Add(entity, components.DrainComponent{
 		X:             cursorX,
 		Y:             cursorY,
@@ -408,7 +408,7 @@ func TestDrainSystem_ScoreDrainDespawnAtZero(t *testing.T) {
 	ctx.State.SetCursorY(cursorY)
 
 	entity := world.CreateEntity()
-	world.AddComponent(entity, components.PositionComponent{X: cursorX, Y: cursorY})
+	world.Positions.Add(entity, components.PositionComponent{X: cursorX, Y: cursorY})
 	world.Drains.Add(entity, components.DrainComponent{
 		X:             cursorX,
 		Y:             cursorY,
@@ -450,7 +450,7 @@ func TestDrainSystem_ScoreDrainDespawnAtZero(t *testing.T) {
 
 	// Entity should be destroyed
 	// Using direct store access
-	_, ok := world.GetComponent(entity, drainType)
+	_, ok := world.Drains.Get(entity)
 	if ok {
 		t.Error("Drain entity should be destroyed when score <= 0")
 	}
@@ -486,7 +486,7 @@ func TestDrainSystem_LastDrainTimeUpdated(t *testing.T) {
 	ctx.State.SetCursorY(cursorY)
 
 	entity := world.CreateEntity()
-	world.AddComponent(entity, components.PositionComponent{X: cursorX, Y: cursorY})
+	world.Positions.Add(entity, components.PositionComponent{X: cursorX, Y: cursorY})
 	world.Drains.Add(entity, components.DrainComponent{
 		X:             cursorX,
 		Y:             cursorY,
@@ -510,7 +510,7 @@ func TestDrainSystem_LastDrainTimeUpdated(t *testing.T) {
 
 	// Get drain component and verify LastDrainTime was updated
 	// Using direct store access
-	drainComp, ok := world.GetComponent(entity, drainType)
+	drainComp, ok := world.Drains.Get(entity)
 	if !ok {
 		t.Fatal("Expected entity to have DrainComponent")
 	}

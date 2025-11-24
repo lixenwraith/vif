@@ -1,7 +1,6 @@
 package modes
 
 import (
-	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
