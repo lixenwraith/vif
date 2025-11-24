@@ -34,6 +34,8 @@ type World struct {
 	RemovalFlashes *Store[components.RemovalFlashComponent]
 	Nuggets        *Store[components.NuggetComponent]
 	Drains         *Store[components.DrainComponent]
+	Cursors        *Store[components.CursorComponent]
+	Protections    *Store[components.ProtectionComponent]
 
 	allStores []AnyStore // All stores for uniform lifecycle operations
 
@@ -56,6 +58,8 @@ func NewWorld() *World {
 		RemovalFlashes: NewStore[components.RemovalFlashComponent](),
 		Nuggets:        NewStore[components.NuggetComponent](),
 		Drains:         NewStore[components.DrainComponent](),
+		Cursors:        NewStore[components.CursorComponent](),
+		Protections:    NewStore[components.ProtectionComponent](),
 	}
 
 	// Register all stores for lifecycle operations
@@ -69,6 +73,8 @@ func NewWorld() *World {
 		w.RemovalFlashes,
 		w.Nuggets,
 		w.Drains,
+		w.Cursors,
+		w.Protections,
 	}
 
 	return w
@@ -86,6 +92,15 @@ func (w *World) CreateEntity() Entity {
 
 // DestroyEntity removes all components associated with an entity.
 func (w *World) DestroyEntity(e Entity) {
+	// Check protection before destruction
+	if prot, ok := w.Protections.Get(e); ok {
+		if prot.Mask == components.ProtectAll {
+			// Entity is immortal - reject destruction silently
+			// This prevents accidental cursor destruction
+			return
+		}
+	}
+
 	// Remove from all stores (PositionStore.Remove handles spatial index cleanup internally)
 	for _, store := range w.allStores {
 		store.Remove(e)
