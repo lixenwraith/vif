@@ -586,7 +586,7 @@ Component (marker interface)
 ├── CharacterComponent {Rune, Style}
 ├── SequenceComponent {ID, Index, Type, Level}
 ├── GoldSequenceComponent {Active, SequenceID, StartTimeNano, CharSequence, CurrentIndex}
-├── FallingDecayComponent {Column, YPosition, Speed, Char, LastChangeRow}
+├── FallingDecayComponent {Column, YPosition, Speed, Char, LastChangeRow, LastIntX, LastIntY, PrevPreciseX, PrevPreciseY}
 ├── CleanerComponent {PreciseX, PreciseY, VelocityX, VelocityY, TargetX, TargetY, GridX, GridY, Trail, Char}
 ├── RemovalFlashComponent {X, Y, Char, StartTime, Duration}
 ├── NuggetComponent {ID, SpawnTime}
@@ -1000,6 +1000,10 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 - **Generates**: Only Blue and Green sequences (never Red)
 
 ### Decay System
+
+The decay system applies character degradation through a falling entity animation with swept collision detection.
+
+#### Decay Mechanics
 - **Brightness Decay**: Bright → Normal → Dark (reduces score multiplier)
   - Updates color counters atomically: decrements old level, increments new level
 - **Color Decay Chain**:
@@ -1009,8 +1013,121 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
   - Counter updates during color transitions (Blue→Green, Green→Red)
   - Red sequences are not tracked in color counters
 - **Timing**: 10-60 seconds interval based on heat level (higher heat = faster decay)
-- **Animation**: Row-by-row sweep from top to bottom
+  - Calculated when Gold sequence ends: `60s - (50s * heatPercentage)`
+  - Timer uses pausable clock (freezes during COMMAND mode)
 - **Counter Management**: Decrements counters when characters destroyed at Red (Dark) level
+
+#### Falling Entity Animation
+- **Spawn**: One falling entity per column (ensuring complete screen coverage)
+- **Speed**: Random per entity, between 5.0-15.0 rows/second (FallingDecayMinSpeed/MaxSpeed)
+- **Character**: Random alphanumeric character per entity
+- **Matrix Effect**: Characters randomly change as they fall (controlled by FallingDecayChangeChance)
+- **Duration**: Based on slowest entity reaching bottom (gameHeight / FallingDecayMinSpeed)
+- **Cleanup**: All falling entities automatically destroyed when animation completes
+
+#### Swept Collision Detection (Anti-Tunneling)
+
+To prevent fast-moving entities from "tunneling" through characters without detecting collisions, the decay system uses swept segment traversal:
+
+**Physics History Tracking** (`FallingDecayComponent`):
+- `PrevPreciseY`: Y position from previous frame
+- `YPosition`: Current Y position (updated by `YPosition += Speed * elapsed`)
+
+**Swept Traversal Logic**:
+1. Calculate integer row range: `startRow = int(PrevPreciseY)`, `endRow = int(YPosition)`
+2. Sort coordinates to handle bidirectional movement: `if startRow > endRow { swap }`
+3. Clamp to screen bounds: `[0, gameHeight-1]`
+4. Safety limit: Cap traversal to 10 cells per frame (prevents performance issues with extreme speeds)
+5. Iterate through ALL rows in range: `for row := startRow; row <= endRow`
+6. Check collision at each integer grid cell in the path
+
+**Example**:
+- Entity at Y=4.8 in frame N-1, moves to Y=7.3 in frame N
+- Swept traversal checks rows [4, 5, 6, 7]
+- Guarantees collision detection even if entity moves >1 row per frame
+
+#### Coordinate Latching (Anti-Green Artifacts)
+
+Coordinate latching prevents re-processing the same grid cell when an entity lingers:
+
+**Latch State** (`FallingDecayComponent`):
+- `LastIntX`, `LastIntY`: Last processed integer grid coordinates
+- Initialized to `(-1, -1)` to force first-frame processing
+
+**Latch Check Logic**:
+```go
+if col == fall.LastIntX && row == fall.LastIntY {
+    continue // Skip - already processed this cell
+}
+```
+
+**Update After Interaction**:
+- Latch is updated AFTER processing each grid cell
+- Blocks re-processing even if `SpawnSystem` places new entity in same frame
+
+**Result**:
+- Eliminates "Green Artifacts" (lingering collision state)
+- Each grid cell processed exactly once per falling entity
+- New entities spawned at same location will not be hit by latched entity
+
+#### Frame Deduplication (Anti-Double Hits)
+
+Prevents multiple falling entities from hitting the same position in a single frame:
+
+**Deduplication Map** (`DecaySystem.processedGridCells`):
+- Type: `map[int]bool` with integer keys `(row * gameWidth) + col`
+- Scope: Single frame (cleared at start of each `updateFallingEntities` call)
+- Purpose: Track which grid cells have been hit this frame
+
+**Pattern**:
+1. Clear map at frame start: `for k := range processedGridCells { delete(processedGridCells, k) }`
+2. Check before processing: `if processedGridCells[flatIdx] { continue }`
+3. Mark after hit: `processedGridCells[flatIdx] = true`
+
+**Performance**:
+- Reuses same map across frames (no allocations)
+- Integer keys via flat indexing (no string formatting)
+- O(1) lookup per collision check
+
+#### Entity-Level Deduplication
+
+Prevents the same target entity from being hit multiple times:
+
+**Entity Tracking** (`DecaySystem.decayedThisFrame`):
+- Type: `map[engine.Entity]bool`
+- Scope: Entire animation (cleared when animation starts)
+- Purpose: Track which entities have been decayed
+
+**Pattern**:
+1. Initialize at animation start: `decayedThisFrame = make(map[engine.Entity]bool)`
+2. Check before decay: `if decayedThisFrame[targetEntity] { continue }`
+3. Mark after decay: `decayedThisFrame[targetEntity] = true`
+
+#### Collision Interaction Logic
+
+When a falling entity encounters a target at `(col, row)`:
+
+1. **Latch Check**: Skip if `(col, row) == (LastIntX, LastIntY)`
+2. **Bounds Check**: Skip if outside screen
+3. **Frame Deduplication**: Skip if `processedGridCells[flatIdx]` is true
+4. **Spatial Lookup**: Get entity at position via `world.Positions.GetEntityAt(col, row)`
+5. **Entity Deduplication**: Skip if `decayedThisFrame[targetEntity]` is true
+6. **Process Hit**:
+   - If Nugget: Destroy entity, clear active nugget reference
+   - If Character: Apply decay logic (level/color transition)
+   - Mark: `decayedThisFrame[targetEntity] = true`, `processedGridCells[flatIdx] = true`
+7. **Update Latch**: `LastIntX = col`, `LastIntY = row`
+8. **Matrix Effect**: Randomly change character on row transition
+
+#### Thread Safety
+- **Mutex Protection**: All DecaySystem state protected by `sync.RWMutex`
+- **Atomic Access**: `decayedThisFrame` read/written under RLock/Lock
+- **Component Access**: World's internal synchronization for Get/Add operations
+
+#### Pause Behavior
+- **Timer**: Freezes during COMMAND mode (uses pausable clock)
+- **Animation**: Elapsed time calculation based on `decaySnapshot.StartTime` (pausable)
+- **Visual**: Falling entities dim with rest of game (70% brightness)
 
 ### Score System
 - **Character Typing**: Processes user input in insert mode

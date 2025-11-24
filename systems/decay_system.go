@@ -302,6 +302,9 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 			// A. COORDINATE LATCH CHECK (The Fix)
 			// If we are in the same integer cell we last processed, skip.
 			if col == fall.LastIntX && row == fall.LastIntY {
+				// DEBUG: Log when latch prevents re-processing
+				// log.Printf("[DEBUG] Entity[%d] Col=%d Row=%d: Latch prevented re-processing (LastIntX=%d, LastIntY=%d)",
+				// 	entity, col, row, fall.LastIntX, fall.LastIntY)
 				continue
 			}
 
