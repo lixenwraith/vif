@@ -12,7 +12,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/render"
 )
 
-// DecaySystem handles character decay animation and logic
+// DecaySystem handles character decay animation and logic, stateless decay entity list
 type DecaySystem struct {
 	mu                 sync.RWMutex
 	currentRow         int
@@ -20,7 +20,6 @@ type DecaySystem struct {
 	ctx                *engine.GameContext
 	spawnSystem        *SpawnSystem
 	nuggetSystem       *NuggetSystem
-	fallingEntities    []engine.Entity
 	decayedThisFrame   map[engine.Entity]bool
 	processedGridCells map[int]bool // Key is flat index: (y * gameWidth) + x
 }
@@ -31,7 +30,6 @@ func NewDecaySystem(ctx *engine.GameContext) *DecaySystem {
 		currentRow:         0,
 		lastUpdate:         ctx.TimeProvider.Now(),
 		ctx:                ctx,
-		fallingEntities:    make([]engine.Entity, 0),
 		decayedThisFrame:   make(map[engine.Entity]bool),
 		processedGridCells: make(map[int]bool),
 	}
@@ -66,20 +64,19 @@ func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 
 // updateAnimation progresses the decay animation
 func (s *DecaySystem) updateAnimation(world *engine.World, dt time.Duration) {
-	// Use Delta Time (dt) instead of Total Elapsed Time for physics integration
+	// Use Delta Time (dt) for physics integration
 	s.updateFallingEntities(world, dt.Seconds())
 
-	// Check actual entity count instead of calculated duration
-	// This prevents "Zombie Phase" where game waits after all entities are gone
-	s.mu.RLock()
-	count := len(s.fallingEntities)
-	s.mu.RUnlock()
+	// Check actual entity count from the Store
+	// This prevents "Zombie Phase" by ensuring phase ends exactly when entities are gone
+	count := world.FallingDecays.Count()
 
 	if count == 0 {
 		s.mu.Lock()
 		s.currentRow = 0
 		s.mu.Unlock()
 
+		// Ensure cleanup of any artifacts
 		s.cleanupFallingEntities(world)
 
 		// Stop decay animation in GameState (transitions to PhaseNormal)
@@ -89,103 +86,9 @@ func (s *DecaySystem) updateAnimation(world *engine.World, dt time.Duration) {
 	}
 }
 
-// applyDecayToRow applies decay logic to all characters at the given row using generic stores
-func (s *DecaySystem) applyDecayToRow(world *engine.World, row int) {
-	// Query entities with both position and sequence components
-	entities := world.Query().
-		With(world.Positions).
-		With(world.Sequences).
-		Execute()
-
-	for _, entity := range entities {
-		pos, ok := world.Positions.Get(entity)
-		if !ok {
-			continue
-		}
-
-		if pos.Y == row {
-			s.applyDecayToCharacter(world, entity)
-		}
-	}
-}
-
-// applyDecayToCharacter applies decay logic to a single character entity using generic stores
-func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.Entity) {
-	seq, ok := world.Sequences.Get(entity)
-	if !ok {
-		return // Not a sequence entity
-	}
-
-	// Don't decay gold sequences
-	if seq.Type == components.SequenceGold {
-		return
-	}
-
-	// Store old values for counter updates
-	oldType := seq.Type
-	oldLevel := seq.Level
-
-	// Apply decay logic
-	if seq.Level > components.LevelDark {
-		// Reduce level by 1 and update style
-		seq.Level--
-		world.Sequences.Add(entity, seq)
-
-		// Update character style
-		if char, ok := world.Characters.Get(entity); ok {
-			char.Style = render.GetStyleForSequence(seq.Type, seq.Level)
-			world.Characters.Add(entity, char)
-		}
-
-		// Update counters: decrement old level, increment new level (only for Blue/Green)
-		if s.spawnSystem != nil && (oldType == components.SequenceBlue || oldType == components.SequenceGreen) {
-			s.spawnSystem.AddColorCount(oldType, oldLevel, -1)
-			s.spawnSystem.AddColorCount(seq.Type, seq.Level, 1)
-		}
-	} else {
-		// Level is LevelDark - decay color: Blue → Green → Red → disappear
-		if seq.Type == components.SequenceBlue {
-			seq.Type = components.SequenceGreen
-			seq.Level = components.LevelBright
-			world.Sequences.Add(entity, seq)
-
-			if char, ok := world.Characters.Get(entity); ok {
-				char.Style = render.GetStyleForSequence(seq.Type, seq.Level)
-				world.Characters.Add(entity, char)
-			}
-
-			// Update counters: Blue Dark → Green Bright
-			if s.spawnSystem != nil {
-				s.spawnSystem.AddColorCount(oldType, oldLevel, -1)
-				s.spawnSystem.AddColorCount(seq.Type, seq.Level, 1)
-			}
-		} else if seq.Type == components.SequenceGreen {
-			seq.Type = components.SequenceRed
-			seq.Level = components.LevelBright
-			world.Sequences.Add(entity, seq)
-
-			if char, ok := world.Characters.Get(entity); ok {
-				char.Style = render.GetStyleForSequence(seq.Type, seq.Level)
-				world.Characters.Add(entity, char)
-			}
-
-			// Update counters: Green Dark → Red Bright (only decrement Green, Red is not tracked)
-			if s.spawnSystem != nil {
-				s.spawnSystem.AddColorCount(oldType, oldLevel, -1)
-			}
-		} else {
-			// Red at LevelDark - remove entity (no counter change, Red is not tracked)
-			world.DestroyEntity(entity)
-		}
-	}
-}
-
 // spawnFallingEntities creates one falling decay entity per column using generic stores
 func (s *DecaySystem) spawnFallingEntities(world *engine.World) {
 	gameWidth := s.ctx.GameWidth
-
-	// Create new falling entities list
-	newFallingEntities := make([]engine.Entity, 0, gameWidth)
 
 	// Create one falling entity per column to ensure complete coverage
 	for column := 0; column < gameWidth; column++ {
@@ -212,14 +115,7 @@ func (s *DecaySystem) spawnFallingEntities(world *engine.World) {
 			PrevPreciseX: float64(column),
 			PrevPreciseY: 0.0,
 		})
-
-		newFallingEntities = append(newFallingEntities, entity)
 	}
-
-	// Update falling entities list with lock
-	s.mu.Lock()
-	s.fallingEntities = newFallingEntities
-	s.mu.Unlock()
 }
 
 // updateFallingEntities updates falling entity positions and applies decay using generic stores
@@ -228,25 +124,18 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, dtSeconds float
 	gameWidth := s.ctx.GameWidth
 
 	// Clamp dt to prevent tunneling on huge lag spikes (e.g. Resume from pause)
-	// Max step 100ms. If the lag is larger, the entity slows down rather than teleporting.
 	if dtSeconds > 0.1 {
 		dtSeconds = 0.1
 	}
 
-	s.mu.RLock()
-	fallingEntities := s.fallingEntities
-	s.mu.RUnlock()
-
-	remainingEntities := make([]engine.Entity, 0, len(fallingEntities))
+	// Query all falling entities directly from the store (Stateless)
+	fallingEntities := world.FallingDecays.All()
 
 	// Clear deduplication maps for this frame
-	// decayedThisFrame tracks ENTITIES (don't hit same entity twice)
 	// processedGridCells tracks LOCATIONS (don't hit same spot twice this frame)
 	for k := range s.processedGridCells {
 		delete(s.processedGridCells, k)
 	}
-	// Note: We don't clear decayedThisFrame here because we want to limit
-	// decay to once per ANIMATION for a specific target entity, not once per frame
 
 	for _, entity := range fallingEntities {
 		fall, ok := world.FallingDecays.Get(entity)
@@ -255,28 +144,30 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, dtSeconds float
 		}
 
 		// 1. Update Physics
-		fall.PrevPreciseY = fall.YPosition
-		fall.YPosition += fall.Speed * dtSeconds // Correct integration
+		// Store START of frame position as previous for accurate sweeping
+		startY := fall.YPosition
+
+		// Integrate velocity
+		fall.YPosition += fall.Speed * dtSeconds
+
+		// Update PrevPreciseY for history/debug
+		fall.PrevPreciseY = startY
 
 		// Boundary Check
+		// We strictly use GameHeight here. If falling past the game area, destroy.
 		if fall.YPosition >= float64(gameHeight) {
 			world.DestroyEntity(entity)
 			continue
 		}
 
-		// 2. Swept Traversal
-		y1 := int(fall.PrevPreciseY)
+		// 2. Swept Traversal (From StartY to EndY)
+		y1 := int(startY)
 		y2 := int(fall.YPosition)
 
 		startRow, endRow := y1, y2
 		if y1 > y2 {
 			startRow, endRow = y2, y1
 		}
-
-		// No max cells per frame cap
-		// If dt clamp (0.1s) is respected and max speed is ~20, max sweep is 2 rows
-		// Even on extreme lag, sweeping 24 rows is negligible cost
-		// Removing the cap fixes the "Tunneling" bug where physics moved but sweep didn't
 
 		// Clamp to screen
 		if startRow < 0 {
@@ -326,8 +217,7 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, dtSeconds float
 					s.decayedThisFrame[targetEntity] = true
 					s.mu.Unlock()
 
-					// Mark this grid cell as processed for this frame to prevent
-					// stacking falling entities from hitting same target twice
+					// Mark this grid cell as processed for this frame
 					s.processedGridCells[flatIdx] = true
 				}
 			}
@@ -347,33 +237,118 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, dtSeconds float
 
 		fall.PrevPreciseX = float64(fall.Column)
 		world.FallingDecays.Add(entity, fall)
-		remainingEntities = append(remainingEntities, entity)
+	}
+}
+
+// applyDecayToRow applies decay logic to all characters at the given row using generic stores
+func (s *DecaySystem) applyDecayToRow(world *engine.World, row int) {
+	// Query entities with both position and sequence components
+	entities := world.Query().
+		With(world.Positions).
+		With(world.Sequences).
+		Execute()
+
+	for _, entity := range entities {
+		pos, ok := world.Positions.Get(entity)
+		if !ok {
+			continue
+		}
+
+		if pos.Y == row {
+			s.applyDecayToCharacter(world, entity)
+		}
+	}
+}
+
+// applyDecayToCharacter applies decay logic to a single character entity using generic stores
+func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.Entity) {
+	seq, ok := world.Sequences.Get(entity)
+	if !ok {
+		return // Not a sequence entity
 	}
 
-	s.mu.Lock()
-	s.fallingEntities = remainingEntities
-	s.mu.Unlock()
+	// Don't decay gold sequences
+	if seq.Type == components.SequenceGold {
+		return
+	}
+
+	// Store old values for counter updates
+	oldType := seq.Type
+	oldLevel := seq.Level
+
+	// Apply decay logic
+	if seq.Level > components.LevelDark {
+		// Reduce level by 1 when not dark
+		seq.Level--
+		world.Sequences.Add(entity, seq)
+
+		// Update character style
+		if char, ok := world.Characters.Get(entity); ok {
+			char.Style = render.GetStyleForSequence(seq.Type, seq.Level)
+			world.Characters.Add(entity, char)
+		}
+
+		// Update counters: decrement old level, increment new level (only for Blue/Green)
+		if s.spawnSystem != nil && (oldType == components.SequenceBlue || oldType == components.SequenceGreen) {
+			s.spawnSystem.AddColorCount(oldType, oldLevel, -1)
+			s.spawnSystem.AddColorCount(seq.Type, seq.Level, 1)
+		}
+	} else {
+		// Dark level decay color chain: Blue → Green → Red → destroy
+		if seq.Type == components.SequenceBlue {
+			seq.Type = components.SequenceGreen
+			seq.Level = components.LevelBright
+			world.Sequences.Add(entity, seq)
+
+			if char, ok := world.Characters.Get(entity); ok {
+				char.Style = render.GetStyleForSequence(seq.Type, seq.Level)
+				world.Characters.Add(entity, char)
+			}
+
+			// Update counters: Blue Dark → Green Bright
+			if s.spawnSystem != nil {
+				s.spawnSystem.AddColorCount(oldType, oldLevel, -1)
+				s.spawnSystem.AddColorCount(seq.Type, seq.Level, 1)
+			}
+		} else if seq.Type == components.SequenceGreen {
+			seq.Type = components.SequenceRed
+			seq.Level = components.LevelBright
+			world.Sequences.Add(entity, seq)
+
+			if char, ok := world.Characters.Get(entity); ok {
+				char.Style = render.GetStyleForSequence(seq.Type, seq.Level)
+				world.Characters.Add(entity, char)
+			}
+
+			// Update counters: Green Dark → Red Bright (only decrement Green, Red is not tracked)
+			if s.spawnSystem != nil {
+				s.spawnSystem.AddColorCount(oldType, oldLevel, -1)
+			}
+		} else {
+			// Red at LevelDark - remove entity (no counter change, Red is not tracked)
+			world.DestroyEntity(entity)
+		}
+	}
 }
 
 // cleanupFallingEntities removes all falling decay entities using generic stores
 func (s *DecaySystem) cleanupFallingEntities(world *engine.World) {
-	s.mu.Lock()
-	fallingEntities := s.fallingEntities
-	s.fallingEntities = make([]engine.Entity, 0)
-	s.decayedThisFrame = make(map[engine.Entity]bool)
-	s.mu.Unlock()
-
-	// Destroy entities outside of lock
-	for _, entity := range fallingEntities {
+	// Query decay entities from the store (stateless)
+	entities := world.FallingDecays.All()
+	for _, entity := range entities {
 		world.DestroyEntity(entity)
 	}
+
+	s.mu.Lock()
+	s.decayedThisFrame = make(map[engine.Entity]bool)
+	s.mu.Unlock()
 }
 
 // TriggerDecayAnimation is called by ClockScheduler to start decay animation
 func (s *DecaySystem) TriggerDecayAnimation(world *engine.World) {
-	// Initialize decay tracking map for the entire animation duration
 	s.mu.Lock()
 	s.currentRow = 0
+	// Reset the decay tracking map for the new animation sequence
 	s.decayedThisFrame = make(map[engine.Entity]bool)
 	s.mu.Unlock()
 
@@ -393,10 +368,7 @@ func (s *DecaySystem) CurrentRow() int {
 	currentRow := s.currentRow
 	s.mu.RUnlock()
 
-	// Read game height from context
 	gameHeight := s.ctx.GameHeight
-
-	// Read decay state snapshot for consistent check
 	decaySnapshot := s.ctx.State.ReadDecayState()
 
 	// When animation is done, currentRow is 0, but we want to avoid displaying row 0
@@ -424,11 +396,7 @@ func (s *DecaySystem) GetTimeUntilDecay() float64 {
 
 // GetSystemState returns the current state of the decay system for debugging
 func (s *DecaySystem) GetSystemState() string {
-	s.mu.RLock()
-	fallingCount := len(s.fallingEntities)
-	s.mu.RUnlock()
-
-	// Read from GameState
+	fallingCount := s.ctx.World.FallingDecays.Count()
 	snapshot := s.ctx.State.ReadDecayState()
 
 	if snapshot.Animating {
@@ -445,11 +413,9 @@ func (s *DecaySystem) GetSystemState() string {
 
 // GetFallingEntityState returns debug info
 func (s *DecaySystem) GetFallingEntityState() []string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	states := make([]string, 0, len(s.fallingEntities))
-	for _, entity := range s.fallingEntities {
+	entities := s.ctx.World.FallingDecays.All()
+	states := make([]string, 0, len(entities))
+	for _, entity := range entities {
 		if fall, ok := s.ctx.World.FallingDecays.Get(entity); ok {
 			state := fmt.Sprintf("Entity[%d]: Y=%.2f, Latch=(%d,%d), Prev=%.2f",
 				entity, fall.YPosition, fall.LastIntX, fall.LastIntY, fall.PrevPreciseY)

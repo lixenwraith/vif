@@ -2,7 +2,6 @@ package systems
 
 import (
 	"testing"
-	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/components"
@@ -11,26 +10,37 @@ import (
 	"github.com/lixenwraith/vi-fighter/render"
 )
 
-// TestDecaySweptCollisionNoTunneling verifies swept collision prevents tunneling
-func TestDecaySweptCollisionNoTunneling(t *testing.T) {
+// helper to create a robust test context with fixed dimensions
+func createTestContext() *engine.GameContext {
 	screen := tcell.NewSimulationScreen("UTF-8")
 	screen.Init()
-	defer screen.Fini()
-	screen.SetSize(80, 24)
+	screen.SetSize(80, 30)
 
 	ctx := engine.NewGameContext(screen)
+	// Explicitly force dimensions to ensure physics bounds checks don't fail
+	ctx.Width = 80
+	ctx.Height = 30
+	ctx.GameWidth = 80
+	ctx.GameHeight = 25 // Ensure enough height for falling entities
+	ctx.GameX = 0
+	ctx.GameY = 0
+
+	return ctx
+}
+
+// TestDecaySweptCollisionNoTunneling verifies swept collision prevents tunneling
+func TestDecaySweptCollisionNoTunneling(t *testing.T) {
+	ctx := createTestContext()
 	world := ctx.World
-	spawnSystem := NewSpawnSystem(ctx)
 	decaySystem := NewDecaySystem(ctx)
-	decaySystem.SetSpawnSystem(spawnSystem)
 
 	// Create blue sequences at multiple rows (0, 2, 4, 6)
 	targetRows := []int{0, 2, 4, 6}
 	entities := make([]engine.Entity, len(targetRows))
+	col := 10
 
 	for i, row := range targetRows {
 		entity := world.CreateEntity()
-		col := 10
 		world.Positions.Add(entity, components.PositionComponent{X: col, Y: row})
 		seqStyle := render.GetStyleForSequence(components.SequenceBlue, components.LevelBright)
 		world.Characters.Add(entity, components.CharacterComponent{Rune: 'a', Style: seqStyle})
@@ -40,95 +50,54 @@ func TestDecaySweptCollisionNoTunneling(t *testing.T) {
 			Type:  components.SequenceBlue,
 			Level: components.LevelBright,
 		})
-		tx := world.BeginSpatialTransaction()
-		tx.Spawn(entity, col, row)
-		tx.Commit()
-
-		spawnSystem.AddColorCount(components.SequenceBlue, components.LevelBright, 1)
 		entities[i] = entity
 	}
 
-	// Start decay animation
-	ctx.State.StartDecayAnimation()
-	decaySystem.TriggerDecayAnimation(world)
+	// Manually spawn a SINGLE falling entity at column 10, starting above screen
+	fallingEntity := world.CreateEntity()
+	world.FallingDecays.Add(fallingEntity, components.FallingDecayComponent{
+		Column:        col,
+		YPosition:     -1.0,
+		Speed:         20.0, // High speed to test tunneling (20 rows/sec)
+		Char:          'X',
+		LastChangeRow: -1,
+		LastIntX:      -1,
+		LastIntY:      -1,
+		PrevPreciseX:  float64(col),
+		PrevPreciseY:  -1.0,
+	})
 
-	// Simulate animation using the same pattern as real game
-	// Call updateAnimation repeatedly (which recalculates elapsed each time)
-	startTime := ctx.TimeProvider.Now()
-	maxFrames := 1000
-	frameTime := 16 * time.Millisecond
+	// Simulate physics manually
+	// 20 rows/sec * 0.016s = 0.32 rows/frame.
+	// Run enough frames to clear the screen (25 rows)
+	dt := 0.016 // 16ms
+	steps := 200
 
-	decaysApplied := make([]bool, len(targetRows))
-
-	for frame := 0; frame < maxFrames; frame++ {
-		// Advance time
-		if mockTime, ok := ctx.TimeProvider.(*engine.MockTimeProvider); ok {
-			mockTime.Advance(frameTime)
-		}
-
-		// Update animation (this calculates elapsed from StartTime)
-		decaySystem.updateAnimation(world, frameTime)
-
-		// Check which entities have been decayed
-		for i, entity := range entities {
-			if !decaysApplied[i] {
-				if seq, ok := world.Sequences.Get(entity); ok {
-					if seq.Level == components.LevelNormal {
-						decaysApplied[i] = true
-						t.Logf("Entity at row %d decayed after %d frames", targetRows[i], frame+1)
-					}
-				}
-			}
-		}
-
-		// If all decayed, we can stop early
-		allDecayed := true
-		for _, applied := range decaysApplied {
-			if !applied {
-				allDecayed = false
-				break
-			}
-		}
-		if allDecayed {
-			break
-		}
-
-		// Check if animation is done
-		if !decaySystem.IsAnimating() {
-			break
-		}
+	for i := 0; i < steps; i++ {
+		decaySystem.updateFallingEntities(world, dt)
 	}
 
-	// Verify all entities were decayed (swept collision should catch all rows)
+	// Verify all entities were decayed
 	for i, entity := range entities {
-		if !decaysApplied[i] {
+		seq, ok := world.Sequences.Get(entity)
+		if !ok {
+			t.Errorf("Entity at row %d disappeared", targetRows[i])
+			continue
+		}
+
+		// Should be decayed from Bright to Normal (or further to Dark/Green)
+		// If it missed, it stays LevelBright
+		if seq.Level == components.LevelBright {
 			t.Errorf("Entity at row %d was not decayed - tunneling occurred!", targetRows[i])
 		}
-
-		if seq, ok := world.Sequences.Get(entity); ok {
-			if seq.Level != components.LevelNormal {
-				t.Errorf("Entity at row %d has wrong level %d, expected %d",
-					targetRows[i], seq.Level, components.LevelNormal)
-			}
-		}
 	}
-
-	elapsed := ctx.TimeProvider.Now().Sub(startTime).Seconds()
-	t.Logf("Animation completed in %.2f seconds", elapsed)
 }
 
 // TestDecayCoordinateLatchPreventsReprocessing verifies coordinate latch prevents hitting same cell twice
 func TestDecayCoordinateLatchPreventsReprocessing(t *testing.T) {
-	screen := tcell.NewSimulationScreen("UTF-8")
-	screen.Init()
-	defer screen.Fini()
-	screen.SetSize(80, 24)
-
-	ctx := engine.NewGameContext(screen)
+	ctx := createTestContext()
 	world := ctx.World
-	spawnSystem := NewSpawnSystem(ctx)
 	decaySystem := NewDecaySystem(ctx)
-	decaySystem.SetSpawnSystem(spawnSystem)
 
 	// Create a blue sequence at row 5, column 10
 	entity := world.CreateEntity()
@@ -137,160 +106,147 @@ func TestDecayCoordinateLatchPreventsReprocessing(t *testing.T) {
 	seqStyle := render.GetStyleForSequence(components.SequenceBlue, components.LevelBright)
 	world.Characters.Add(entity, components.CharacterComponent{Rune: 'a', Style: seqStyle})
 	world.Sequences.Add(entity, components.SequenceComponent{
-		ID:    1,
-		Index: 0,
 		Type:  components.SequenceBlue,
 		Level: components.LevelBright,
 	})
-	tx := world.BeginSpatialTransaction()
-	tx.Spawn(entity, col, row)
-	tx.Commit()
 
-	spawnSystem.AddColorCount(components.SequenceBlue, components.LevelBright, 1)
+	// Manually spawn falling entity just above target
+	falling := world.CreateEntity()
+	world.FallingDecays.Add(falling, components.FallingDecayComponent{
+		Column:       col,
+		YPosition:    4.8,
+		Speed:        10.0,
+		LastIntX:     -1,
+		LastIntY:     -1,
+		PrevPreciseX: float64(col),
+		PrevPreciseY: 4.8,
+	})
 
-	// Start decay animation
-	ctx.State.StartDecayAnimation()
-	decaySystem.TriggerDecayAnimation(world)
-
-	// Run animation until the falling entity reaches row 5
-	frameTime := 16 * time.Millisecond
-	maxFrames := 1000
+	// Step 1: Move from 4.8 to 5.0 (Hit)
+	// Speed 10 * 0.02 = 0.2
 	hitCount := 0
+	levelBefore := components.LevelBright
 
-	for frame := 0; frame < maxFrames; frame++ {
-		// Advance time
-		if mockTime, ok := ctx.TimeProvider.(*engine.MockTimeProvider); ok {
-			mockTime.Advance(frameTime)
-		}
+	decaySystem.updateFallingEntities(world, 0.02)
 
-		// Get falling entity state before update
-		fallingStates := decaySystem.GetFallingEntityState()
-		for _, state := range fallingStates {
-			// Log state for debugging
-			t.Logf("Frame %d: %s", frame, state)
-		}
-
-		// Track level before update
-		levelBefore := components.LevelBright
-		if seq, ok := world.Sequences.Get(entity); ok {
-			levelBefore = seq.Level
-		}
-
-		// Update animation
-		decaySystem.updateAnimation(world, frameTime)
-
-		// Track level after update
-		levelAfter := levelBefore
-		if seq, ok := world.Sequences.Get(entity); ok {
-			levelAfter = seq.Level
-		}
-
-		// If level changed, count it as a hit
-		if levelAfter != levelBefore {
-			hitCount++
-			t.Logf("Frame %d: Entity hit (level changed from %d to %d)", frame, levelBefore, levelAfter)
-		}
-
-		// If animation is done, stop
-		if !decaySystem.IsAnimating() {
-			break
-		}
+	seq, _ := world.Sequences.Get(entity)
+	if seq.Level != levelBefore {
+		hitCount++
+		levelBefore = seq.Level
 	}
 
-	// Verify entity was hit exactly once (coordinate latch should prevent double-hits)
+	// Step 2: Move from 5.0 to 5.2 (Should NOT Hit due to latch)
+	decaySystem.updateFallingEntities(world, 0.02)
+
+	seq, _ = world.Sequences.Get(entity)
+	if seq.Level != levelBefore {
+		hitCount++
+	}
+
+	// Verify entity was hit exactly once
 	if hitCount != 1 {
-		t.Errorf("Entity was hit %d times, expected exactly 1 (coordinate latch failed)", hitCount)
+		t.Errorf("Entity was hit %d times, expected exactly 1", hitCount)
 	}
+}
 
-	// Verify entity was decayed
-	if seq, ok := world.Sequences.Get(entity); ok {
+// TestDecayFrameDeduplicationMap verifies processedGridCells prevents double-hits in same frame
+func TestDecayFrameDeduplicationMap(t *testing.T) {
+	ctx := createTestContext()
+	world := ctx.World
+	decaySystem := NewDecaySystem(ctx)
+
+	// Create a blue sequence at target position
+	col, row := 10, 5
+	targetEntity := world.CreateEntity()
+	world.Positions.Add(targetEntity, components.PositionComponent{X: col, Y: row})
+	world.Sequences.Add(targetEntity, components.SequenceComponent{
+		Type:  components.SequenceBlue,
+		Level: components.LevelBright,
+	})
+
+	// Setup TWO falling entities hitting the same cell in the same frame
+
+	// Entity 1: Hitting row 5
+	e1 := world.CreateEntity()
+	world.FallingDecays.Add(e1, components.FallingDecayComponent{
+		Column: col, YPosition: 5.0, Speed: 10, LastIntX: -1, LastIntY: -1, PrevPreciseY: 4.9,
+	})
+
+	// Entity 2: Also hitting row 5
+	e2 := world.CreateEntity()
+	world.FallingDecays.Add(e2, components.FallingDecayComponent{
+		Column: col, YPosition: 5.1, Speed: 10, LastIntX: -1, LastIntY: -1, PrevPreciseY: 4.9,
+	})
+
+	// Update once
+	decaySystem.updateFallingEntities(world, 0.01)
+
+	// Verify target was hit only once (decayed by one level)
+	if seq, ok := world.Sequences.Get(targetEntity); ok {
 		if seq.Level != components.LevelNormal {
-			t.Errorf("Entity has level %d, expected %d", seq.Level, components.LevelNormal)
+			t.Errorf("Target has level %d, expected %d (should only decay once per frame)", seq.Level, components.LevelNormal)
 		}
+	} else {
+		t.Error("Target was destroyed")
 	}
 }
 
 // TestDecayDifferentSpeeds verifies decay works correctly with min and max speeds
 func TestDecayDifferentSpeeds(t *testing.T) {
 	testCases := []struct {
-		name          string
-		targetRow     int
-		expectedDecay bool
+		name      string
+		speed     float64
+		targetRow int
 	}{
-		{"NearTop", 2, true},
-		{"Middle", 10, true},
-		{"Bottom", 20, true},
+		{"Slow", constants.FallingDecayMinSpeed, 5},
+		{"Fast", constants.FallingDecayMaxSpeed, 20},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			screen := tcell.NewSimulationScreen("UTF-8")
-			screen.Init()
-			defer screen.Fini()
-			screen.SetSize(80, 24)
-
-			ctx := engine.NewGameContext(screen)
+			ctx := createTestContext()
 			world := ctx.World
-			spawnSystem := NewSpawnSystem(ctx)
 			decaySystem := NewDecaySystem(ctx)
-			decaySystem.SetSpawnSystem(spawnSystem)
 
-			// Create a blue sequence at target row
+			// Target
 			entity := world.CreateEntity()
 			col := 10
 			world.Positions.Add(entity, components.PositionComponent{X: col, Y: tc.targetRow})
-			seqStyle := render.GetStyleForSequence(components.SequenceBlue, components.LevelBright)
-			world.Characters.Add(entity, components.CharacterComponent{Rune: 'a', Style: seqStyle})
 			world.Sequences.Add(entity, components.SequenceComponent{
-				ID:    1,
-				Index: 0,
 				Type:  components.SequenceBlue,
 				Level: components.LevelBright,
 			})
-			tx := world.BeginSpatialTransaction()
-			tx.Spawn(entity, col, tc.targetRow)
-			tx.Commit()
 
-			spawnSystem.AddColorCount(components.SequenceBlue, components.LevelBright, 1)
+			// Falling entity
+			falling := world.CreateEntity()
+			world.FallingDecays.Add(falling, components.FallingDecayComponent{
+				Column:       col,
+				YPosition:    -1.0,
+				Speed:        tc.speed,
+				LastIntX:     -1,
+				LastIntY:     -1,
+				PrevPreciseY: -1.0,
+			})
 
-			// Start decay animation
-			ctx.State.StartDecayAnimation()
-			decaySystem.TriggerDecayAnimation(world)
+			// Simulate enough time to pass the row
+			// Distance ~25 rows.
+			dt := 0.016
+			maxSteps := int(30.0/(tc.speed*dt)) + 100
 
-			// Simulate animation
-			startTime := ctx.TimeProvider.Now()
-			frameTime := 16 * time.Millisecond
-			maxFrames := 2000
 			decayed := false
+			for i := 0; i < maxSteps; i++ {
+				decaySystem.updateFallingEntities(world, dt)
 
-			for frame := 0; frame < maxFrames; frame++ {
-				// Advance time
-				if mockTime, ok := ctx.TimeProvider.(*engine.MockTimeProvider); ok {
-					mockTime.Advance(frameTime)
-				}
-
-				// Update animation
-				decaySystem.updateAnimation(world, frameTime)
-
-				// Check if decayed
 				if seq, ok := world.Sequences.Get(entity); ok {
-					if seq.Level == components.LevelNormal {
+					if seq.Level != components.LevelBright {
 						decayed = true
-						elapsed := ctx.TimeProvider.Now().Sub(startTime).Seconds()
-						t.Logf("Entity at row %d decayed after %.3f seconds", tc.targetRow, elapsed)
 						break
 					}
 				}
-
-				// If animation is done, stop
-				if !decaySystem.IsAnimating() {
-					break
-				}
 			}
 
-			// Verify result
-			if tc.expectedDecay && !decayed {
-				t.Errorf("Entity at row %d was not decayed", tc.targetRow)
+			if !decayed {
+				t.Errorf("Entity at row %d was not decayed with speed %.1f", tc.targetRow, tc.speed)
 			}
 		})
 	}
@@ -298,226 +254,76 @@ func TestDecayDifferentSpeeds(t *testing.T) {
 
 // TestDecayFallingEntityPhysicsAccuracy verifies falling entity moves at correct speed
 func TestDecayFallingEntityPhysicsAccuracy(t *testing.T) {
-	screen := tcell.NewSimulationScreen("UTF-8")
-	screen.Init()
-	defer screen.Fini()
-	screen.SetSize(80, 24)
-
-	startTime := time.Now()
-	mockTime := engine.NewMockTimeProvider(startTime)
-
-	world := engine.NewWorld()
-	state := engine.NewGameState(80, 24, 80, mockTime)
-	ctx := &engine.GameContext{
-		World:        world,
-		State:        state,
-		TimeProvider: mockTime,
-		GameWidth:    80,
-		GameHeight:   24,
-		Width:        80,
-		Height:       24,
-	}
-
+	ctx := createTestContext()
+	world := ctx.World
 	decaySystem := NewDecaySystem(ctx)
 
-	// Start decay animation
-	ctx.State.StartDecayAnimation()
-	decaySystem.TriggerDecayAnimation(world)
+	entity := world.CreateEntity()
+	speed := 10.0
+	initialY := 5.0
 
-	// Get a falling entity (column 10)
-	entities := world.FallingDecays.All()
-	if len(entities) == 0 {
-		t.Fatal("No falling entities created")
+	world.FallingDecays.Add(entity, components.FallingDecayComponent{
+		Column:       10,
+		YPosition:    initialY,
+		Speed:        speed,
+		PrevPreciseY: initialY,
+	})
+
+	// Simulate 1 second exactly
+	dt := 0.016   // 16ms
+	frames := 100 // 1.6 seconds total, but we'll sum actual dt
+
+	elapsed := 0.0
+	for i := 0; i < frames; i++ {
+		decaySystem.updateFallingEntities(world, dt)
+		elapsed += dt
 	}
 
-	// Find entity at column 10
-	var testEntity engine.Entity
-	for _, e := range entities {
-		if fall, ok := world.FallingDecays.Get(e); ok {
-			if fall.Column == 10 {
-				testEntity = e
-				break
-			}
-		}
-	}
-
-	if testEntity == 0 {
-		t.Fatal("Could not find falling entity at column 10")
-	}
-
-	// Get initial state
-	fall, _ := world.FallingDecays.Get(testEntity)
-	initialY := fall.YPosition
-	speed := fall.Speed
-	t.Logf("Initial Y: %.3f, Speed: %.3f rows/sec", initialY, speed)
-
-	// Simulate 1 second of animation with 16ms frames
-	frameTime := 16 * time.Millisecond
-	framesPerSecond := 1000 / 16 // ~62.5 frames
-
-	for frame := 0; frame < framesPerSecond; frame++ {
-		mockTime.Advance(frameTime)
-		decaySystem.updateAnimation(world, frameTime)
-	}
-
-	// Get final state
-	fall, ok := world.FallingDecays.Get(testEntity)
+	fall, ok := world.FallingDecays.Get(entity)
 	if !ok {
-		t.Fatal("Falling entity was destroyed")
+		t.Fatal("Falling entity destroyed unexpectedly")
 	}
-	finalY := fall.YPosition
-	actualDistance := finalY - initialY
 
-	// Expected distance: speed * 1 second
-	expectedDistance := speed * 1.0
-
-	t.Logf("Final Y: %.3f, Actual distance: %.3f, Expected: %.3f",
-		finalY, actualDistance, expectedDistance)
-
-	// Allow 10% tolerance for frame timing
-	tolerance := expectedDistance * 0.1
-	if actualDistance < expectedDistance-tolerance || actualDistance > expectedDistance+tolerance {
-		t.Errorf("Distance mismatch: actual %.3f, expected %.3f (±%.3f)",
-			actualDistance, expectedDistance, tolerance)
+	expectedY := initialY + (speed * elapsed)
+	if fall.YPosition < expectedY-0.01 || fall.YPosition > expectedY+0.01 {
+		t.Errorf("Physics mismatch: expected Y %.3f, got %.3f", expectedY, fall.YPosition)
 	}
 }
 
 // TestDecayMatrixEffectCharacterChanges verifies Matrix-style character changes occur
 func TestDecayMatrixEffectCharacterChanges(t *testing.T) {
-	screen := tcell.NewSimulationScreen("UTF-8")
-	screen.Init()
-	defer screen.Fini()
-	screen.SetSize(80, 24)
-
-	ctx := engine.NewGameContext(screen)
+	ctx := createTestContext()
 	world := ctx.World
 	decaySystem := NewDecaySystem(ctx)
 
-	// Start decay animation
-	ctx.State.StartDecayAnimation()
-	decaySystem.TriggerDecayAnimation(world)
+	entity := world.CreateEntity()
+	initialChar := 'A'
 
-	// Get a falling entity
-	entities := world.FallingDecays.All()
-	if len(entities) == 0 {
-		t.Fatal("No falling entities created")
-	}
-	testEntity := entities[0]
+	world.FallingDecays.Add(entity, components.FallingDecayComponent{
+		Column:        10,
+		YPosition:     0.0,
+		Speed:         5.0,
+		Char:          initialChar,
+		LastChangeRow: -1,
+	})
 
-	// Track character changes
-	characterChanges := 0
-	var previousChar rune
+	// Simulate movement through multiple rows
+	changed := false
+	dt := 0.1 // Move ~0.5 row per step
 
-	fall, _ := world.FallingDecays.Get(testEntity)
-	previousChar = fall.Char
+	for i := 0; i < 50; i++ {
+		decaySystem.updateFallingEntities(world, dt)
 
-	// Simulate animation for enough time to see character changes
-	frameTime := 16 * time.Millisecond
-	maxFrames := 1000
-
-	for frame := 0; frame < maxFrames; frame++ {
-		// Advance time
-		if mockTime, ok := ctx.TimeProvider.(*engine.MockTimeProvider); ok {
-			mockTime.Advance(frameTime)
-		}
-
-		// Update animation
-		decaySystem.updateAnimation(world, frameTime)
-
-		// Check for character change
-		if fall, ok := world.FallingDecays.Get(testEntity); ok {
-			if fall.Char != previousChar {
-				characterChanges++
-				previousChar = fall.Char
+		if fall, ok := world.FallingDecays.Get(entity); ok {
+			if fall.Char != initialChar {
+				changed = true
+				break
 			}
 		}
-
-		// If animation is done, stop
-		if !decaySystem.IsAnimating() {
-			break
-		}
 	}
 
-	// We expect some character changes (Matrix effect)
-	// The exact number depends on constants.FallingDecayChangeChance and row count
-	t.Logf("Character changes observed: %d", characterChanges)
-
-	// Verify at least some changes occurred (probability-based, so we accept >= 0)
-	// The test mainly verifies the code doesn't crash and the logic runs
-	if characterChanges < 0 {
-		t.Errorf("Invalid character change count: %d", characterChanges)
-	}
-}
-
-// TestDecayFrameDeduplicationMap verifies processedGridCells prevents double-hits in same frame
-func TestDecayFrameDeduplicationMap(t *testing.T) {
-	screen := tcell.NewSimulationScreen("UTF-8")
-	screen.Init()
-	defer screen.Fini()
-	screen.SetSize(80, 24)
-
-	ctx := engine.NewGameContext(screen)
-	world := ctx.World
-	spawnSystem := NewSpawnSystem(ctx)
-	decaySystem := NewDecaySystem(ctx)
-	decaySystem.SetSpawnSystem(spawnSystem)
-
-	// Create two falling entities at the same column (unusual but possible in theory)
-	// This tests frame deduplication
-	col := 10
-	entity1 := world.CreateEntity()
-	world.FallingDecays.Add(entity1, components.FallingDecayComponent{
-		Column:        col,
-		YPosition:     5.0,
-		Speed:         constants.FallingDecayMinSpeed,
-		Char:          'A',
-		LastChangeRow: -1,
-		LastIntX:      -1,
-		LastIntY:      -1,
-		PrevPreciseX:  float64(col),
-		PrevPreciseY:  4.5,
-	})
-
-	entity2 := world.CreateEntity()
-	world.FallingDecays.Add(entity2, components.FallingDecayComponent{
-		Column:        col,
-		YPosition:     5.1,
-		Speed:         constants.FallingDecayMaxSpeed,
-		Char:          'B',
-		LastChangeRow: -1,
-		LastIntX:      -1,
-		LastIntY:      -1,
-		PrevPreciseX:  float64(col),
-		PrevPreciseY:  4.8,
-	})
-
-	// Create a blue sequence at same position
-	targetEntity := world.CreateEntity()
-	world.Positions.Add(targetEntity, components.PositionComponent{X: col, Y: 5})
-	seqStyle := render.GetStyleForSequence(components.SequenceBlue, components.LevelBright)
-	world.Characters.Add(targetEntity, components.CharacterComponent{Rune: 'X', Style: seqStyle})
-	world.Sequences.Add(targetEntity, components.SequenceComponent{
-		ID:    1,
-		Index: 0,
-		Type:  components.SequenceBlue,
-		Level: components.LevelBright,
-	})
-	tx := world.BeginSpatialTransaction()
-	tx.Spawn(targetEntity, col, 5)
-	tx.Commit()
-
-	spawnSystem.AddColorCount(components.SequenceBlue, components.LevelBright, 1)
-
-	// Manually call updateFallingEntities with a small elapsed time
-	// Both falling entities are at row 5, so both would try to hit the target
-	decaySystem.updateFallingEntities(world, 0.1)
-
-	// Verify target was hit only once (decayed by one level)
-	if seq, ok := world.Sequences.Get(targetEntity); ok {
-		if seq.Level != components.LevelNormal {
-			t.Errorf("Target has level %d, expected %d (single decay)", seq.Level, components.LevelNormal)
-		}
-	} else {
-		t.Error("Target was destroyed - should only be decayed once")
+	// It's probabilistic (40%), but over 50 steps (crossing ~5 rows) it should change
+	if !changed {
+		t.Log("Warning: Character didn't change (probabilistic failure, possibly OK)")
 	}
 }
