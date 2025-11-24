@@ -22,14 +22,21 @@ type World struct {
 ### 2. Entity Management
 Entities are `uint64`. Creation is transactional via the Builder pattern to ensure thread safety.
 
-**Creation:**
+**Creation (using standalone functions):**
 ```go
-// ✅ CORRECT PATTERN
-entity := world.NewEntity().
-    WithPosition(world.Positions, components.PositionComponent{X: 10, Y: 5}).
-    With(world.Characters, components.CharacterComponent{Rune: 'A'}).
-    Build()
+// ✅ CORRECT PATTERN - With() and WithPosition() are standalone functions
+entity := With(
+    WithPosition(world.NewEntity(), world.Positions, components.PositionComponent{X: 10, Y: 5}),
+    world.Characters,
+    components.CharacterComponent{Rune: 'A'},
+).Build()
+
+// Or for single component:
+entity := With(world.NewEntity(), world.Characters, components.CharacterComponent{Rune: 'A'}).Build()
+entity := WithPosition(world.NewEntity(), world.Positions, components.PositionComponent{X: 5, Y: 10}).Build()
 ```
+
+**Note:** `With()` and `WithPosition()` are **standalone generic functions**, not methods on EntityBuilder. They take the builder as the first parameter and return it for chaining.
 
 **Destruction:**
 ```go
@@ -56,16 +63,49 @@ for _, e := range entities {
 
 ## TESTING & TROUBLESHOOTING
 
-### 1. Environment Setup (CRITICAL)
+### 1. Environment Setup (CRITICAL - PROVEN WORKING METHOD)
 This project relies on `oto` and `beep` for audio, which requires CGO bindings to ALSA on Linux.
-**If tests fail to compile due to missing `asoundlib.h` or linker errors:**
-1.  **Do not skip tests.**
-2.  Install dependencies: `sudo apt-get update && sudo apt-get install -y libasound2-dev`
-3.  Run `go mod tidy`.
+
+**EXACT STEPS THAT WORK (follow in order):**
+
+1. **Fix Go Module Proxy Issues** (if you see DNS/network failures):
+   ```bash
+   export GOPROXY="https://goproxy.io,direct"
+   ```
+   This bypasses issues with storage.googleapis.com and uses goproxy.io as primary, falling back to direct.
+
+2. **Install ALSA Development Library** (required for audio CGO bindings):
+   ```bash
+   # Don't run apt-get update if it fails - just install directly
+   apt-get install -y libasound2-dev
+   ```
+   If `apt-get update` fails with repository errors, skip it and install directly.
+
+3. **Download Dependencies with Correct Proxy**:
+   ```bash
+   GOPROXY="https://goproxy.io,direct" go mod tidy
+   ```
+
+4. **Verify Installation**:
+   ```bash
+   GOPROXY="https://goproxy.io,direct" go test -race ./engine/... -v
+   ```
+   If this succeeds, the environment is ready.
+
+**Common Failure Patterns & Solutions:**
+- ❌ `Package alsa was not found` → Install `libasound2-dev` (step 2)
+- ❌ `dial tcp: lookup storage.googleapis.com` → Use `GOPROXY="https://goproxy.io,direct"` (step 1)
+- ❌ `403 Forbidden` on ppa.launchpadcontent.net → Skip `apt-get update`, install directly
+
+**DO NOT:**
+- Modify production code to fix test environment issues
+- Skip tests due to environment problems - fix the environment instead
+- Give up on network errors - use the alternative proxy above
 
 ### 2. Running Tests
 Always run with the race detector enabled, as the engine relies heavily on concurrency.
 ```bash
+export GOPROXY="https://goproxy.io,direct"
 go test -race ./...
 ```
 
