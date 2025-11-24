@@ -2,9 +2,7 @@ package engine
 
 import "sort"
 
-// QueryBuilder provides a fluent interface for querying entities based on component intersection.
-// It uses the sparse set pattern from stores to efficiently find entities that have all specified components.
-// The query optimizes by starting with the smallest store and filtering through larger ones.
+// QueryBuilder queries entities by component intersection, optimizing by starting with the smallest store.
 type QueryBuilder struct {
 	world    *World
 	stores   []QueryableStore
@@ -29,10 +27,7 @@ func (w *World) Query() *QueryBuilder {
 	}
 }
 
-// With adds a component store to the query filter.
-// The resulting query will only return entities that have components in ALL specified stores.
-// Returns the QueryBuilder for method chaining.
-//
+// With filters entities that have components in ALL specified stores.
 // Panics if called after Execute().
 func (qb *QueryBuilder) With(store QueryableStore) *QueryBuilder {
 	if qb.executed {
@@ -42,13 +37,8 @@ func (qb *QueryBuilder) With(store QueryableStore) *QueryBuilder {
 	return qb
 }
 
-// Execute runs the query and returns all entities that have components in all specified stores.
-// The query is optimized by sorting stores by size (smallest first) to minimize intersection work.
-// Calling Execute() multiple times returns the cached result.
-//
-// Returns:
-//   - Empty slice if no stores were specified
-//   - Slice of entities that exist in ALL specified stores
+// Execute runs the query, returning entities in all specified stores.
+// Optimizes by sorting stores by size. Results are cached on subsequent calls.
 func (qb *QueryBuilder) Execute() []Entity {
 	if qb.executed {
 		return qb.results

@@ -27,7 +27,6 @@ func BenchmarkCleanerSpawn(b *testing.B) {
 		cleanerSystem.Update(world, 16*time.Millisecond)
 
 		// Clean up for next iteration
-		// Using direct store access instead of reflection
 		cleaners := world.Cleaners.All()
 		for _, entity := range cleaners {
 			world.DestroyEntity(entity)
@@ -75,8 +74,6 @@ func BenchmarkCleanerSnapshots(b *testing.B) {
 	// Activate cleaners via event
 	ctx.PushEvent(engine.EventCleanerRequest, nil)
 	cleanerSystem.Update(world, 16*time.Millisecond)
-
-	// Using direct store access instead of reflection
 
 	b.ResetTimer()
 
@@ -139,7 +136,6 @@ func BenchmarkFlashEffectCreation(b *testing.B) {
 		}
 
 		// Clean up
-		// Using direct store access instead of reflection
 		cleaners := world.Cleaners.All()
 		for _, entity := range cleaners {
 			world.DestroyEntity(entity)
@@ -175,8 +171,7 @@ func BenchmarkCompleteAnimation(b *testing.B) {
 		// Activate cleaners via event
 		ctx.PushEvent(engine.EventCleanerRequest, nil)
 
-		// Run until complete (check for cleaner entities)
-		// Using direct store access instead of reflection
+		// Run until complete
 		maxIterations := 1000
 		for j := 0; j < maxIterations; j++ {
 			cleanerSystem.Update(world, 16*time.Millisecond)

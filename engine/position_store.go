@@ -7,10 +7,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/components"
 )
 
-// PositionStore is a specialized store for PositionComponent that maintains
-// a spatial index for fast position-based queries. This store ensures that
-// the spatial index is always consistent with the component data by using
-// a single mutex to protect both the component data and spatial index.
+// PositionStore maintains a spatial index for fast position-based queries.
+// A single mutex protects both component data and spatial index consistency.
 type PositionStore struct {
 	mu           sync.RWMutex // Single mutex for all operations
 	components   map[Entity]components.PositionComponent
@@ -27,8 +25,7 @@ func NewPositionStore() *PositionStore {
 	}
 }
 
-// Add performs atomic update of both component store and spatial index.
-// This method ensures atomic updates of both the component data and spatial index.
+// Add atomically updates component and spatial index.
 func (ps *PositionStore) Add(e Entity, pos components.PositionComponent) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
@@ -102,8 +99,7 @@ func (ps *PositionStore) GetEntityAt(x, y int) Entity {
 }
 
 // Move atomically updates position with collision detection.
-// This is more efficient than separate Get/Add calls and ensures atomicity.
-// Returns an error if the target position is already occupied.
+// Returns error if target position is occupied.
 func (ps *PositionStore) Move(e Entity, newPos components.PositionComponent) error {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
@@ -141,8 +137,7 @@ func (ps *PositionStore) Move(e Entity, newPos components.PositionComponent) err
 	return nil
 }
 
-// PositionBatch provides transactional batch operations for position updates.
-// This is useful for spawning multiple entities atomically with collision detection.
+// PositionBatch provides transactional batch operations with collision detection.
 type PositionBatch struct {
 	store     *PositionStore
 	additions []positionAddition

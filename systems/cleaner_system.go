@@ -55,7 +55,7 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 		}
 	}
 
-	// 3. Process Active Cleaners - using generic stores
+	// 3. Process Active Cleaners
 	entities := world.Cleaners.All()
 
 	// If no cleaners exist but we spawned this session, emit finished event

@@ -194,11 +194,9 @@ func (tx *SpatialTransaction) Commit() error {
 	}
 
 	// NOTE: We do NOT lock tx.world.mu here.
-	// 1. World no longer holds the spatial data directly.
-	// 2. PositionStore has its own internal RWMutex.
-	// 3. Operations are applied sequentially here; if we need atomic batching
-	//    for the whole set, PositionStore would need a specific ApplyBatch method.
-	//    For now, applying them sequentially via the public API is the safest migration path.
+	// PositionStore has its own internal RWMutex for thread-safe operations.
+	// Operations are applied sequentially; for atomic batching of multiple operations,
+	// use PositionStore's batch API instead.
 
 	posStore := tx.world.Positions
 

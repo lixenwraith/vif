@@ -19,8 +19,7 @@ type System interface {
 	Priority() int // Lower values run first
 }
 
-// World contains all entities and their components using generics-based ECS.
-// This eliminates reflection for compile-time type safety and better performance.
+// World contains all entities and their components using compile-time typed stores.
 type World struct {
 	mu           sync.RWMutex
 	nextEntityID Entity
@@ -36,13 +35,11 @@ type World struct {
 	Nuggets        *Store[components.NuggetComponent]
 	Drains         *Store[components.DrainComponent]
 
-	// Lifecycle registry - all stores implement AnyStore for uniform cleanup
-	allStores []AnyStore
+	allStores []AnyStore // All stores for uniform lifecycle operations
 
-	// System management
 	systems     []System
-	updateMutex sync.Mutex // Frame barrier mutex to prevent concurrent updates
-	isUpdating  bool       // Flag indicating if update is in progress
+	updateMutex sync.Mutex // Prevents concurrent updates
+	isUpdating  bool
 }
 
 // NewWorld creates a new ECS world with all component stores initialized.
@@ -62,7 +59,6 @@ func NewWorld() *World {
 	}
 
 	// Register all stores for lifecycle operations
-	// Note: PositionStore implements AnyStore directly
 	w.allStores = []AnyStore{
 		w.Positions,
 		w.Characters,
@@ -78,8 +74,7 @@ func NewWorld() *World {
 	return w
 }
 
-// CreateEntity reserves a new entity ID without adding any components.
-// Use NewEntity() builder for transactional entity creation with components.
+// CreateEntity reserves a new entity ID. Use NewEntity() builder for transactional creation.
 func (w *World) CreateEntity() Entity {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -90,7 +85,6 @@ func (w *World) CreateEntity() Entity {
 }
 
 // DestroyEntity removes all components associated with an entity.
-// All stores (including PositionStore with spatial index) are cleaned via allStores iteration.
 func (w *World) DestroyEntity(e Entity) {
 	// Remove from all stores (PositionStore.Remove handles spatial index cleanup internally)
 	for _, store := range w.allStores {
@@ -115,10 +109,7 @@ func (w *World) AddSystem(system System) {
 	}
 }
 
-// Update runs all systems
-// This method ensures all system updates complete before returning,
-// providing a frame barrier for safe rendering after updates.
-// Only one update cycle can run at a time.
+// Update runs all systems sequentially. Only one update cycle can run at a time.
 func (w *World) Update(dt time.Duration) {
 	// Acquire update mutex to ensure only one update runs at a time
 	w.updateMutex.Lock()
@@ -139,18 +130,15 @@ func (w *World) GetEntityAtPosition(x, y int) Entity {
 	return w.Positions.GetEntityAt(x, y)
 }
 
-// EntityCount returns the approximate number of entities in the world.
-// This is calculated from the highest entity ID, not the actual count of
-// entities with components. For accurate counts, query specific stores.
+// EntityCount returns approximate entity count from highest ID.
+// For accurate counts, query specific stores.
 func (w *World) EntityCount() int {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return int(w.nextEntityID - 1)
 }
 
-// MoveEntitySafe safely moves an entity from one position to another using spatial transactions
-// This prevents race conditions and ensures atomic spatial index updates
-// Returns a CollisionResult indicating if the move succeeded or if there was a collision
+// MoveEntitySafe atomically moves an entity with collision detection via spatial transactions.
 func (w *World) MoveEntitySafe(entity Entity, oldX, oldY, newX, newY int) CollisionResult {
 	// Begin transaction
 	tx := w.BeginSpatialTransaction()
@@ -167,7 +155,6 @@ func (w *World) MoveEntitySafe(entity Entity, oldX, oldY, newX, newY int) Collis
 }
 
 // Clear removes all entities and components from the world.
-// This is useful for resetting game state or cleaning up during tests.
 func (w *World) Clear() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -179,7 +166,6 @@ func (w *World) Clear() {
 }
 
 // HasAnyComponent checks if an entity has at least one component.
-// This is useful for validating entity existence.
 func (w *World) HasAnyComponent(e Entity) bool {
 	for _, store := range w.allStores {
 		if store.Has(e) {
