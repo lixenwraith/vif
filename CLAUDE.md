@@ -4,39 +4,52 @@
 vi-fighter is a terminal-based typing game in Go using a compile-time Generics-based ECS (Go 1.18+). The architecture combines real-time lock-free updates (atomics) for input/rendering with a discrete clock-tick system for game logic.
 **Go Version:** 1.24+
 
+## CURRENT MISSION: Decay System Refactor
+**Objective:** Eliminate "Green Artifacts" (lingering collision) and fix tunneling for fast/orbiting entities.
+**Core Pattern:** Coordinate Latching with Swept Traversal.
+
+### Implementation Patterns
+1.  **Coordinate Latching:**
+    *   Falling entities must track the last grid coordinate `(LastIntX, LastIntY)` they successfully processed.
+    *   **Rule:** If `CurrentGridX == LastIntX` AND `CurrentGridY == LastIntY`, skip interaction.
+    *   **Init:** Initialize latch to `(-1, -1)` to ensure the first frame always processes.
+
+2.  **Swept Collision (Segment Traversal):**
+    *   Do not check just point `(X, Y)`.
+    *   Calculate integer grid cells between `PrevPreciseY` and `CurrentY`.
+    *   Iterate through *all* cells in that segment to prevent tunneling.
+    *   **Robustness:** Ensure loop handles `Prev > Current` (upward movement) by sorting start/end rows.
+
+3.  **Performance Optimization (No Allocations):**
+    *   **Reusable Maps:** Do not allocate `map[int]bool` inside `Update()`. Use a persistent field in the System struct (`processedGridCells`) and `delete()` keys to clear it.
+    *   **Integer Keys:** Do not use `fmt.Sprintf` for map keys. Use flat indexing: `key = row * width + col`.
+
 ## ARCHITECTURE OVERVIEW
 
 ### 1. The World (Generics)
-The `World` struct no longer uses maps of `interface{}`. It uses explicit, typed generic stores.
+The `World` struct uses explicit, typed generic stores.
 
 ```go
 type World struct {
-    // Explicit Stores
     Positions      *PositionStore // Specialized (Spatial Index + Mutex)
-    Characters     *Store[components.CharacterComponent] // Generic RWMutex Store
-    Sequences      *Store[components.SequenceComponent]
-    // ...
+    Characters     *Store[components.CharacterComponent]
+    FallingDecays  *Store[components.FallingDecayComponent]
+// ...
 }
 ```
 
 ### 2. Entity Management
-Entities are `uint64`. Creation is transactional via the Builder pattern to ensure thread safety.
+Entities are `uint64`. Creation is transactional.
 
-**Creation (using standalone functions):**
+**Creation Pattern (Strict):**
+Use standalone functions `With()` and `WithPosition()`, not method chaining on the builder itself.
 ```go
-// ✅ CORRECT PATTERN - With() and WithPosition() are standalone functions
 entity := With(
     WithPosition(world.NewEntity(), world.Positions, components.PositionComponent{X: 10, Y: 5}),
-    world.Characters,
-    components.CharacterComponent{Rune: 'A'},
-).Build()
-
-// Or for single component:
-entity := With(world.NewEntity(), world.Characters, components.CharacterComponent{Rune: 'A'}).Build()
-entity := WithPosition(world.NewEntity(), world.Positions, components.PositionComponent{X: 5, Y: 10}).Build()
+    world.FallingDecays,
+    components.FallingDecayComponent{...}, 
+    ).Build()
 ```
-
-**Note:** `With()` and `WithPosition()` are **standalone generic functions**, not methods on EntityBuilder. They take the builder as the first parameter and return it for chaining.
 
 **Destruction:**
 ```go
@@ -127,25 +140,24 @@ func TestMovement(t *testing.T) {
 ```
 
 ### 4. Common Pitfalls
-*   **Spatial Index:** Never manually manipulate `world.Positions.spatialIndex`. Use `world.Positions.Move()` or `Add()`.
-*   **Component Pointers:** Stores hold values, not pointers. modifying a component returned by `Get()` does **not** update the store. You must call `Add()` again to save changes.
+*   **Update Loops:** Do not allocate memory (maps/slices) in `Update()`. Re-use struct fields.
+*   **Component Pointers:** `Get()` returns a copy. You **MUST** call `Add()` to save changes back to the store.
     ```go
     val, _ := store.Get(e)
-    val.Count++
-    store.Add(e, val) // <--- Mandatory write-back
+    val.YPosition += speed // Modification on local copy
+    store.Add(e, val)      // <--- Mandatory write-back
     ```
-*   **Race Conditions:** If the race detector fails on a map access, check if you are writing to a component map while another system is querying it. Ensure `world.Update` locks are respected or use Atomics for high-frequency data (like Score/Heat).
+*   **Latching Logic:** When implementing the Decay fix, ensure the Latch is updated *only* after a successful cell processing step, and ensure it blocks interaction even if `SpawnSystem` puts a new entity there in the same frame.
 
 ## FILE STRUCTURE
 ```
 vi-fighter/
 ├── engine/
-│   ├── store.go          # Generic Store[T] implementation
-│   ├── position_store.go # Spatially indexed store
-│   ├── world.go          # Registry of all stores
-│   └── game_state.go     # Atomic-based real-time state (Score, Heat)
-├── systems/              # Game Logic (Update loops)
-├── components/           # Pure data structs
-├── constants/            # Config and Magic Numbers
-└── cmd/                  # Main entry point
+│   ├── store.go          # Generic Store[T]
+│   └── position_store.go # Spatial Index
+├── systems/
+│   ├── decay_system.go   # TARGET FOR REFACTOR
+│   └── spawn_system.go   
+├── components/
+│   └── falling_decay.go  # TARGET FOR REFACTOR
 ```
