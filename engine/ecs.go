@@ -63,9 +63,9 @@ func NewWorld() *World {
 	}
 
 	// Register all stores for lifecycle operations
-	// Note: PositionStore.Store is registered (the underlying generic store)
+	// Note: PositionStore implements AnyStore directly
 	w.allStores = []AnyStore{
-		w.Positions.Store,
+		w.Positions,
 		w.Characters,
 		w.Sequences,
 		w.GoldSequences,
@@ -91,15 +91,9 @@ func (w *World) CreateEntity() Entity {
 }
 
 // DestroyEntity removes all components associated with an entity.
-// This removes from the spatial index first, then all other stores.
+// All stores (including PositionStore with spatial index) are cleaned via allStores iteration.
 func (w *World) DestroyEntity(e Entity) {
-	// Remove from spatial index first (if entity has PositionComponent)
-	// PositionStore.Remove handles both the spatial index and the underlying store
-	if _, exists := w.Positions.Get(e); exists {
-		w.Positions.Remove(e)
-	}
-
-	// Remove from all other stores
+	// Remove from all stores (PositionStore.Remove handles spatial index cleanup internally)
 	for _, store := range w.allStores {
 		store.Remove(e)
 	}
