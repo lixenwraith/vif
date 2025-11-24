@@ -4,12 +4,10 @@ package systems
 // Run with: go test -race ./systems/... -run TestNoRace
 
 import (
-	"reflect"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
@@ -57,7 +55,6 @@ func TestNoRaceSnapshotRendering(t *testing.T) {
 				case <-stopChan:
 					return
 				default:
-					// Query World directly for cleaner components
 					// Using direct store access
 					entities := world.Cleaners.All()
 					// Verify components are valid
@@ -196,7 +193,6 @@ func TestNoRaceFlashEffects(t *testing.T) {
 	}()
 
 	// Goroutines 3-12: Read flash effects
-	flashType := reflect.TypeOf(components.RemovalFlashComponent{})
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func(id int) {

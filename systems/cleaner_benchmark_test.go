@@ -1,11 +1,9 @@
 package systems
 
 import (
-	"reflect"
 	"testing"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
@@ -147,7 +145,6 @@ func BenchmarkFlashEffectCreation(b *testing.B) {
 			world.DestroyEntity(entity)
 		}
 
-		flashType := reflect.TypeOf(components.RemovalFlashComponent{})
 		flashes := world.RemovalFlashes.All()
 		for _, entity := range flashes {
 			world.DestroyEntity(entity)

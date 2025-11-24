@@ -1,7 +1,6 @@
 package modes
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"

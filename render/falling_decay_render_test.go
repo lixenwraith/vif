@@ -1,7 +1,6 @@
 package render
 
 import (
-	"reflect"
 	"testing"
 	"time"
 
@@ -109,7 +108,7 @@ func TestFallingDecayRenderAtAllPositions(t *testing.T) {
 			continue // Out of bounds
 		}
 
-		screenX := 3 + (i * 7) // gameX + column
+		screenX := 3 + (i * 7)   // gameX + column
 		screenY := 1 + expectedY // gameY + Y
 
 		mainc, _, style, _ := screen.GetContent(screenX, screenY)
@@ -207,10 +206,10 @@ func TestFallingDecayRenderBounds(t *testing.T) {
 		col  int
 		char rune
 	}{
-		{-1.0, 10, 'A'},    // Negative Y (int(-1.0) = -1, out of bounds)
-		{20.0, 30, 'C'},    // At boundary (should not render)
-		{25.0, 40, 'D'},    // Beyond boundary
-		{100.0, 50, 'E'},   // Far beyond
+		{-1.0, 10, 'A'},  // Negative Y (int(-1.0) = -1, out of bounds)
+		{20.0, 30, 'C'},  // At boundary (should not render)
+		{25.0, 40, 'D'},  // Beyond boundary
+		{100.0, 50, 'E'}, // Far beyond
 	}
 
 	for _, pos := range outOfBoundsPositions {

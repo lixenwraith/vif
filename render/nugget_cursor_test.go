@@ -1,7 +1,6 @@
 package render
 
 import (
-	"reflect"
 	"testing"
 	"time"
 
@@ -349,11 +348,11 @@ func TestNuggetComponentDetectionLogic(t *testing.T) {
 		SpawnTime: time.Now(),
 	})
 
- {
-	tx := world.BeginSpatialTransaction()
-	tx.Spawn(nuggetEntity, 5, 5)
-	tx.Commit()
- }
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(nuggetEntity, 5, 5)
+		tx.Commit()
+	}
 
 	// Create normal character entity
 	charEntity := world.CreateEntity()
@@ -369,11 +368,11 @@ func TestNuggetComponentDetectionLogic(t *testing.T) {
 		Level: components.LevelNormal,
 	})
 
- {
-	tx := world.BeginSpatialTransaction()
-	tx.Spawn(charEntity, 10, 10)
-	tx.Commit()
- }
+	{
+		tx := world.BeginSpatialTransaction()
+		tx.Spawn(charEntity, 10, 10)
+		tx.Commit()
+	}
 
 	// Test nugget entity has NuggetComponent
 	if _, ok := world.Nuggets.Get(nuggetEntity); !ok {

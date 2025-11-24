@@ -1,7 +1,6 @@
 package systems
 
 import (
-	"reflect"
 	"testing"
 	"time"
 
@@ -494,9 +493,9 @@ func TestDrainSystem_CollisionAtDifferentPositions(t *testing.T) {
 	positions := []struct {
 		x, y int
 	}{
-		{0, 0},     // Top-left
-		{10, 10},   // Middle
-		{79, 23},   // Bottom-right (within bounds)
+		{0, 0},   // Top-left
+		{10, 10}, // Middle
+		{79, 23}, // Bottom-right (within bounds)
 	}
 
 	for _, pos := range positions {
