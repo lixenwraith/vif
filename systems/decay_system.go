@@ -279,13 +279,22 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 		}
 
 		// 2. Swept Traversal
-		startRow := int(fall.PrevPreciseY)
-		endRow := int(fall.YPosition)
+		// Determine traversal range (handle both Up and Down movement)
+		y1 := int(fall.PrevPreciseY)
+		y2 := int(fall.YPosition)
+		startRow, endRow := y1, y2
+		if y1 > y2 {
+			startRow, endRow = y2, y1
+		}
 
 		// Clamp and safety limit
 		if startRow < 0 { startRow = 0 }
 		if endRow >= gameHeight { endRow = gameHeight - 1 }
-		if endRow - startRow > 10 { endRow = startRow + 10 } // Cap tunneling speed
+		// Cap tunneling speed (limit checks per frame)
+		if endRow - startRow > 10 {
+			// If moving down, cap end; if moving up (y1 > y2), cap start implies logic above handled sort
+			endRow = startRow + 10
+		}
 
 		for row := startRow; row <= endRow; row++ {
 			col := fall.Column // Legacy X, will represent current X for sweep
