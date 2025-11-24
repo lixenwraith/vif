@@ -30,16 +30,21 @@ type DecaySystem struct {
 	nuggetSystem     *NuggetSystem
 	fallingEntities  []engine.Entity        // Entities representing falling decay characters
 	decayedThisFrame map[engine.Entity]bool // Track which entities were decayed this frame
+
+	// Performance optimization: Reused map for swept collision deduplication
+	// Key is flat index: (y * gameWidth) + x
+	processedGridCells map[int]bool
 }
 
 // NewDecaySystem creates a new decay system
 func NewDecaySystem(ctx *engine.GameContext) *DecaySystem {
 	s := &DecaySystem{
-		currentRow:       0,
-		lastUpdate:       ctx.TimeProvider.Now(),
-		ctx:              ctx,
-		fallingEntities:  make([]engine.Entity, 0),
-		decayedThisFrame: make(map[engine.Entity]bool),
+		currentRow:         0,
+		lastUpdate:         ctx.TimeProvider.Now(),
+		ctx:                ctx,
+		fallingEntities:    make([]engine.Entity, 0),
+		decayedThisFrame:   make(map[engine.Entity]bool),
+		processedGridCells: make(map[int]bool),
 	}
 	return s
 }
@@ -218,7 +223,15 @@ func (s *DecaySystem) spawnFallingEntities(world *engine.World) {
 			YPosition:     0.0,
 			Speed:         speed,
 			Char:          char,
-			LastChangeRow: -1, // Initialize to -1 to trigger change on first row
+			LastChangeRow: -1,
+
+			// Initialize coordinate latch to force first-frame processing
+			LastIntX: -1,
+			LastIntY: -1,
+
+			// Initialize physics history to spawn position
+			PrevPreciseX: float64(column),
+			PrevPreciseY: 0.0,
 		})
 
 		newFallingEntities = append(newFallingEntities, entity)
