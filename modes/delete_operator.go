@@ -1,8 +1,6 @@
 package modes
 
 import (
-	"reflect"
-
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
@@ -115,23 +113,17 @@ func ExecuteDeleteMotion(ctx *engine.GameContext, motion rune, count int) {
 
 // deleteAllOnLine deletes all characters on a line
 func deleteAllOnLine(ctx *engine.GameContext, y int) bool {
-	posType := reflect.TypeOf(components.PositionComponent{})
-	seqType := reflect.TypeOf(components.SequenceComponent{})
-
-	entities := ctx.World.GetEntitiesWith(posType)
+	gworld := ctx.World.GetGeneric()
+	entities := gworld.Query().With(gworld.Positions).Execute()
 
 	deletedGreenOrBlue := false
 	entitiesToDelete := make([]engine.Entity, 0)
 
 	for _, entity := range entities {
-		posComp, _ := ctx.World.GetComponent(entity, posType)
-		pos := posComp.(components.PositionComponent)
-
+		pos, _ := gworld.Positions.Get(entity)
 		if pos.Y == y {
 			// Check if green or blue
-			seqComp, ok := ctx.World.GetComponent(entity, seqType)
-			if ok {
-				seq := seqComp.(components.SequenceComponent)
+			if seq, ok := gworld.Sequences.Get(entity); ok {
 				if seq.Type == components.SequenceGreen || seq.Type == components.SequenceBlue {
 					deletedGreenOrBlue = true
 				}
@@ -143,7 +135,7 @@ func deleteAllOnLine(ctx *engine.GameContext, y int) bool {
 
 	// Delete all entities
 	for _, entity := range entitiesToDelete {
-		ctx.World.DestroyEntity(entity)
+		gworld.DestroyEntity(entity)
 	}
 
 	return deletedGreenOrBlue
@@ -151,8 +143,7 @@ func deleteAllOnLine(ctx *engine.GameContext, y int) bool {
 
 // deleteRange deletes all characters in a range on a line
 func deleteRange(ctx *engine.GameContext, startX, endX, y int) bool {
-	seqType := reflect.TypeOf(components.SequenceComponent{})
-
+	gworld := ctx.World.GetGeneric()
 	deletedGreenOrBlue := false
 	entitiesToDelete := make([]engine.Entity, 0)
 
@@ -163,7 +154,7 @@ func deleteRange(ctx *engine.GameContext, startX, endX, y int) bool {
 
 	// Iterate through the position range and use spatial index to find entities
 	for x := startX; x <= endX; x++ {
-		entity := ctx.World.GetEntityAtPosition(x, y)
+		entity := gworld.Positions.GetEntityAt(x, y)
 
 		// Skip positions without entities (gaps, including spaces)
 		if entity == 0 {
@@ -171,9 +162,7 @@ func deleteRange(ctx *engine.GameContext, startX, endX, y int) bool {
 		}
 
 		// Check if green or blue
-		seqComp, ok := ctx.World.GetComponent(entity, seqType)
-		if ok {
-			seq := seqComp.(components.SequenceComponent)
+		if seq, ok := gworld.Sequences.Get(entity); ok {
 			if seq.Type == components.SequenceGreen || seq.Type == components.SequenceBlue {
 				deletedGreenOrBlue = true
 			}
@@ -184,7 +173,7 @@ func deleteRange(ctx *engine.GameContext, startX, endX, y int) bool {
 
 	// Delete all entities in range
 	for _, entity := range entitiesToDelete {
-		ctx.World.DestroyEntity(entity)
+		gworld.DestroyEntity(entity)
 	}
 
 	return deletedGreenOrBlue

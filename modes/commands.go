@@ -2,12 +2,10 @@ package modes
 
 import (
 	"fmt"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
@@ -177,61 +175,7 @@ func setCommandError(ctx *engine.GameContext, message string) {
 
 // clearAllEntities removes all entities from the world
 func clearAllEntities(world *engine.World) {
-	// Collect all unique entity IDs from different component queries
-	// Use a map to avoid duplicates since some entities have multiple components
-	entitiesToDelete := make(map[engine.Entity]bool)
-
-	// Query for all entities with PositionComponent (most game entities)
-	posType := reflect.TypeOf(components.PositionComponent{})
-	posEntities := world.GetEntitiesWith(posType)
-	for _, entity := range posEntities {
-		entitiesToDelete[entity] = true
-	}
-
-	// Query for entities with SequenceComponent (characters, sequences)
-	seqType := reflect.TypeOf(components.SequenceComponent{})
-	seqEntities := world.GetEntitiesWith(seqType)
-	for _, entity := range seqEntities {
-		entitiesToDelete[entity] = true
-	}
-
-	// Query for entities with FallingDecayComponent (falling decay)
-	fallingType := reflect.TypeOf(components.FallingDecayComponent{})
-	fallingEntities := world.GetEntitiesWith(fallingType)
-	for _, entity := range fallingEntities {
-		entitiesToDelete[entity] = true
-	}
-
-	// Query for cleaners
-	cleanerType := reflect.TypeOf(components.CleanerComponent{})
-	cleanerEntities := world.GetEntitiesWith(cleanerType)
-	for _, entity := range cleanerEntities {
-		entitiesToDelete[entity] = true
-	}
-
-	// Query for nuggets
-	nuggetType := reflect.TypeOf(components.NuggetComponent{})
-	nuggetEntities := world.GetEntitiesWith(nuggetType)
-	for _, entity := range nuggetEntities {
-		entitiesToDelete[entity] = true
-	}
-
-	// Query for drain entities
-	drainType := reflect.TypeOf(components.DrainComponent{})
-	drainEntities := world.GetEntitiesWith(drainType)
-	for _, entity := range drainEntities {
-		entitiesToDelete[entity] = true
-	}
-
-	// Query for removal flash effects
-	flashType := reflect.TypeOf(components.RemovalFlashComponent{})
-	flashEntities := world.GetEntitiesWith(flashType)
-	for _, entity := range flashEntities {
-		entitiesToDelete[entity] = true
-	}
-
-	// Now delete all collected entities
-	for entity := range entitiesToDelete {
-		world.DestroyEntity(entity)
-	}
+	// Use the generic world's Clear method to remove all entities
+	gworld := world.GetGeneric()
+	gworld.Clear()
 }

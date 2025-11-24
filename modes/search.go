@@ -1,8 +1,6 @@
 package modes
 
 import (
-	"reflect"
-
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
@@ -57,17 +55,15 @@ func RepeatSearch(ctx *engine.GameContext, forward bool) bool {
 func buildCharacterGrid(ctx *engine.GameContext) map[Point]rune {
 	grid := make(map[Point]rune)
 
-	posType := reflect.TypeOf(components.PositionComponent{})
-	charType := reflect.TypeOf(components.CharacterComponent{})
+	gworld := ctx.World.GetGeneric()
+	entities := gworld.Query().
+		With(gworld.Positions).
+		With(gworld.Characters).
+		Execute()
 
-	entities := ctx.World.GetEntitiesWith(posType, charType)
 	for _, entity := range entities {
-		posComp, _ := ctx.World.GetComponent(entity, posType)
-		pos := posComp.(components.PositionComponent)
-
-		charComp, _ := ctx.World.GetComponent(entity, charType)
-		char := charComp.(components.CharacterComponent)
-
+		pos, _ := gworld.Positions.Get(entity)
+		char, _ := gworld.Characters.Get(entity)
 		grid[Point{pos.X, pos.Y}] = char.Rune
 	}
 

@@ -1,8 +1,6 @@
 package modes
 
 import (
-	"reflect"
-
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
@@ -194,23 +192,20 @@ func ExecuteFindChar(ctx *engine.GameContext, targetChar rune, count int) {
 	ctx.LastFindType = 'f'
 
 	// Search forward on current line for the character
-	posType := reflect.TypeOf(components.PositionComponent{})
-	charType := reflect.TypeOf(components.CharacterComponent{})
-
-	entities := ctx.World.GetEntitiesWith(posType, charType)
+	gworld := ctx.World.GetGeneric()
+	entities := gworld.Query().
+		With(gworld.Positions).
+		With(gworld.Characters).
+		Execute()
 
 	occurrencesFound := 0
 	lastMatchX := -1
 
 	for x := ctx.CursorX + 1; x < ctx.GameWidth; x++ {
 		for _, entity := range entities {
-			posComp, _ := ctx.World.GetComponent(entity, posType)
-			pos := posComp.(components.PositionComponent)
-
+			pos, _ := gworld.Positions.Get(entity)
 			if pos.Y == ctx.CursorY && pos.X == x {
-				charComp, _ := ctx.World.GetComponent(entity, charType)
-				char := charComp.(components.CharacterComponent)
-
+				char, _ := gworld.Characters.Get(entity)
 				if char.Rune == targetChar {
 					occurrencesFound++
 					lastMatchX = x
@@ -248,10 +243,11 @@ func ExecuteFindCharBackward(ctx *engine.GameContext, targetChar rune, count int
 	ctx.LastFindType = 'F'
 
 	// Search backward on current line for the character
-	posType := reflect.TypeOf(components.PositionComponent{})
-	charType := reflect.TypeOf(components.CharacterComponent{})
-
-	entities := ctx.World.GetEntitiesWith(posType, charType)
+	gworld := ctx.World.GetGeneric()
+	entities := gworld.Query().
+		With(gworld.Positions).
+		With(gworld.Characters).
+		Execute()
 
 	occurrencesFound := 0
 	firstMatchX := -1
@@ -259,13 +255,9 @@ func ExecuteFindCharBackward(ctx *engine.GameContext, targetChar rune, count int
 	// Search backward from CursorX - 1 to 0
 	for x := ctx.CursorX - 1; x >= 0; x-- {
 		for _, entity := range entities {
-			posComp, _ := ctx.World.GetComponent(entity, posType)
-			pos := posComp.(components.PositionComponent)
-
+			pos, _ := gworld.Positions.Get(entity)
 			if pos.Y == ctx.CursorY && pos.X == x {
-				charComp, _ := ctx.World.GetComponent(entity, charType)
-				char := charComp.(components.CharacterComponent)
-
+				char, _ := gworld.Characters.Get(entity)
 				if char.Rune == targetChar {
 					occurrencesFound++
 					firstMatchX = x // Keep track of first (furthest back) match
@@ -302,23 +294,20 @@ func ExecuteTillChar(ctx *engine.GameContext, targetChar rune, count int) {
 	ctx.LastFindType = 't'
 
 	// Search forward on current line for the character
-	posType := reflect.TypeOf(components.PositionComponent{})
-	charType := reflect.TypeOf(components.CharacterComponent{})
-
-	entities := ctx.World.GetEntitiesWith(posType, charType)
+	gworld := ctx.World.GetGeneric()
+	entities := gworld.Query().
+		With(gworld.Positions).
+		With(gworld.Characters).
+		Execute()
 
 	occurrencesFound := 0
 	lastMatchX := -1
 
 	for x := ctx.CursorX + 1; x < ctx.GameWidth; x++ {
 		for _, entity := range entities {
-			posComp, _ := ctx.World.GetComponent(entity, posType)
-			pos := posComp.(components.PositionComponent)
-
+			pos, _ := gworld.Positions.Get(entity)
 			if pos.Y == ctx.CursorY && pos.X == x {
-				charComp, _ := ctx.World.GetComponent(entity, charType)
-				char := charComp.(components.CharacterComponent)
-
+				char, _ := gworld.Characters.Get(entity)
 				if char.Rune == targetChar {
 					occurrencesFound++
 					lastMatchX = x
@@ -359,10 +348,11 @@ func ExecuteTillCharBackward(ctx *engine.GameContext, targetChar rune, count int
 	ctx.LastFindType = 'T'
 
 	// Search backward on current line for the character
-	posType := reflect.TypeOf(components.PositionComponent{})
-	charType := reflect.TypeOf(components.CharacterComponent{})
-
-	entities := ctx.World.GetEntitiesWith(posType, charType)
+	gworld := ctx.World.GetGeneric()
+	entities := gworld.Query().
+		With(gworld.Positions).
+		With(gworld.Characters).
+		Execute()
 
 	occurrencesFound := 0
 	firstMatchX := -1
@@ -370,13 +360,9 @@ func ExecuteTillCharBackward(ctx *engine.GameContext, targetChar rune, count int
 	// Search backward from CursorX - 1 to 0
 	for x := ctx.CursorX - 1; x >= 0; x-- {
 		for _, entity := range entities {
-			posComp, _ := ctx.World.GetComponent(entity, posType)
-			pos := posComp.(components.PositionComponent)
-
+			pos, _ := gworld.Positions.Get(entity)
 			if pos.Y == ctx.CursorY && pos.X == x {
-				charComp, _ := ctx.World.GetComponent(entity, charType)
-				char := charComp.(components.CharacterComponent)
-
+				char, _ := gworld.Characters.Get(entity)
 				if char.Rune == targetChar {
 					occurrencesFound++
 					firstMatchX = x // Keep track of first (furthest back) match
@@ -468,25 +454,20 @@ func isPunctuation(r rune) bool {
 //   - 0 for space character entities (defensive handling - spaces should not exist as entities)
 //   - The actual rune for all other characters
 func getCharAt(ctx *engine.GameContext, x, y int) rune {
-	posType := reflect.TypeOf(components.PositionComponent{})
-	charType := reflect.TypeOf(components.CharacterComponent{})
-
-	entities := ctx.World.GetEntitiesWith(posType, charType)
-	for _, entity := range entities {
-		posComp, _ := ctx.World.GetComponent(entity, posType)
-		pos := posComp.(components.PositionComponent)
-
-		if pos.Y == y && pos.X == x {
-			charComp, _ := ctx.World.GetComponent(entity, charType)
-			char := charComp.(components.CharacterComponent)
-			// Treat space characters as empty positions
-			if char.Rune == ' ' {
-				return 0
-			}
-			return char.Rune
-		}
+	gworld := ctx.World.GetGeneric()
+	entity := gworld.Positions.GetEntityAt(x, y)
+	if entity == 0 {
+		return 0
 	}
-	return 0 // No character at position (space)
+
+	if char, ok := gworld.Characters.Get(entity); ok {
+		// Treat space characters as empty positions
+		if char.Rune == ' ' {
+			return 0
+		}
+		return char.Rune
+	}
+	return 0
 }
 
 // findNextWordStartVim finds the start of the next word (Vim-style: considers punctuation)
@@ -630,15 +611,12 @@ func findPrevWordStartVim(ctx *engine.GameContext) int {
 
 // findLineEnd finds the rightmost character on the current line
 func findLineEnd(ctx *engine.GameContext) int {
-	posType := reflect.TypeOf(components.PositionComponent{})
-
-	entities := ctx.World.GetEntitiesWith(posType)
+	gworld := ctx.World.GetGeneric()
+	entities := gworld.Query().With(gworld.Positions).Execute()
 
 	maxX := 0
 	for _, entity := range entities {
-		posComp, _ := ctx.World.GetComponent(entity, posType)
-		pos := posComp.(components.PositionComponent)
-
+		pos, _ := gworld.Positions.Get(entity)
 		if pos.Y == ctx.CursorY && pos.X > maxX {
 			maxX = pos.X
 		}
@@ -652,23 +630,21 @@ func findLineEnd(ctx *engine.GameContext) int {
 
 // deleteCharAt deletes the character at the given position
 func deleteCharAt(ctx *engine.GameContext, x, y int) {
-	entity := ctx.World.GetEntityAtPosition(x, y)
+	gworld := ctx.World.GetGeneric()
+	entity := gworld.Positions.GetEntityAt(x, y)
 	if entity == 0 {
 		return // No entity at position
 	}
 
 	// Check if it's green or blue to reset heat
-	seqType := reflect.TypeOf(components.SequenceComponent{})
-	seqComp, ok := ctx.World.GetComponent(entity, seqType)
-	if ok {
-		seq := seqComp.(components.SequenceComponent)
+	if seq, ok := gworld.Sequences.Get(entity); ok {
 		if seq.Type == components.SequenceGreen || seq.Type == components.SequenceBlue {
 			ctx.State.SetHeat(0) // Reset heat
 		}
 	}
 
 	// Safely destroy entity (handles spatial index removal)
-	ctx.World.DestroyEntity(entity)
+	gworld.DestroyEntity(entity)
 }
 
 // WORD motion functions (space-delimited, treat all non-space as WORD)
@@ -790,16 +766,15 @@ func findFirstNonWhitespace(ctx *engine.GameContext) int {
 
 // findPrevEmptyLine finds the previous empty line (paragraph backward)
 func findPrevEmptyLine(ctx *engine.GameContext) int {
-	posType := reflect.TypeOf(components.PositionComponent{})
+	gworld := ctx.World.GetGeneric()
+	entities := gworld.Query().With(gworld.Positions).Execute()
 
 	// Start searching from the line above current
 	for y := ctx.CursorY - 1; y >= 0; y-- {
 		// Check if this line has any characters
 		hasChar := false
-		entities := ctx.World.GetEntitiesWith(posType)
 		for _, entity := range entities {
-			posComp, _ := ctx.World.GetComponent(entity, posType)
-			pos := posComp.(components.PositionComponent)
+			pos, _ := gworld.Positions.Get(entity)
 			if pos.Y == y {
 				hasChar = true
 				break
@@ -816,16 +791,15 @@ func findPrevEmptyLine(ctx *engine.GameContext) int {
 
 // findNextEmptyLine finds the next empty line (paragraph forward)
 func findNextEmptyLine(ctx *engine.GameContext) int {
-	posType := reflect.TypeOf(components.PositionComponent{})
+	gworld := ctx.World.GetGeneric()
+	entities := gworld.Query().With(gworld.Positions).Execute()
 
 	// Start searching from the line below current
 	for y := ctx.CursorY + 1; y < ctx.GameHeight; y++ {
 		// Check if this line has any characters
 		hasChar := false
-		entities := ctx.World.GetEntitiesWith(posType)
 		for _, entity := range entities {
-			posComp, _ := ctx.World.GetComponent(entity, posType)
-			pos := posComp.(components.PositionComponent)
+			pos, _ := gworld.Positions.Get(entity)
 			if pos.Y == y {
 				hasChar = true
 				break
