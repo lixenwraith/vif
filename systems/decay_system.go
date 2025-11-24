@@ -254,8 +254,13 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 
 	remainingEntities := make([]engine.Entity, 0, len(fallingEntities))
 
-	// Track positions processed this frame to prevent double-hits
-	processedPositions := make(map[string]bool)
+	// Clear deduplication maps for this frame
+	// decayedThisFrame tracks ENTITIES (don't hit same entity twice)
+	// processedGridCells tracks LOCATIONS (don't hit same spot twice this frame)
+	for k := range s.processedGridCells {
+		delete(s.processedGridCells, k)
+	}
+	// Note: decayedThisFrame is cleared in Update(), check if that needs consistency
 
 	for _, entity := range fallingEntities {
 		fall, ok := world.FallingDecays.Get(entity)
@@ -263,66 +268,53 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 			continue
 		}
 
-		// Store previous position for sweep calculation
-		prevY := fall.YPosition
-
-		// Update physics
+		// 1. Save state and Update Physics
+		fall.PrevPreciseY = fall.YPosition
 		fall.YPosition += fall.Speed * elapsed
 
-		// Check if entity has left the screen
+		// Boundary Check
 		if fall.YPosition >= float64(gameHeight) {
 			world.DestroyEntity(entity)
 			continue
 		}
 
-		// SWEPT COLLISION: Process all grid cells from previous to current position
-		startRow := int(prevY)
+		// 2. Swept Traversal
+		startRow := int(fall.PrevPreciseY)
 		endRow := int(fall.YPosition)
 
-		// Clamp to valid range
-		if startRow < 0 {
-			startRow = 0
-		}
-		if endRow >= gameHeight {
-			endRow = gameHeight - 1
-		}
+		// Clamp and safety limit
+		if startRow < 0 { startRow = 0 }
+		if endRow >= gameHeight { endRow = gameHeight - 1 }
+		if endRow - startRow > 10 { endRow = startRow + 10 } // Cap tunneling speed
 
-		// Limit traversal to prevent performance issues with very fast entities
-		const maxCellsPerFrame = 10
-		if endRow-startRow > maxCellsPerFrame {
-			endRow = startRow + maxCellsPerFrame
-		}
-
-		// Process each row in the movement path
 		for row := startRow; row <= endRow; row++ {
-			col := fall.Column
+			col := fall.Column // Legacy X, will represent current X for sweep
 
-			// COORDINATE LATCH: Skip if we already processed this cell
+			// A. COORDINATE LATCH CHECK (The Fix)
+			// If we are in the same integer cell we last processed, skip.
 			if col == fall.LastIntX && row == fall.LastIntY {
 				continue
 			}
 
-			// Check bounds
-			if col < 0 || col >= gameWidth || row < 0 || row >= gameHeight {
+			// Bounds check
+			if col < 0 || col >= gameWidth { continue }
+
+			// B. Frame Deduplication
+			// Prevent multiple falling particles from hitting the exact same cell in one frame
+			flatIdx := (row * gameWidth) + col
+			if s.processedGridCells[flatIdx] {
 				continue
 			}
 
-			// Build position key for frame-wide deduplication
-			posKey := fmt.Sprintf("%d,%d", col, row)
-			if processedPositions[posKey] {
-				continue
-			}
-
-			// Check for entity at this position
+			// C. Interaction
 			targetEntity := world.Positions.GetEntityAt(col, row)
 			if targetEntity != 0 {
-				// Check if already processed this frame (by another falling entity)
 				s.mu.RLock()
-				alreadyProcessed := s.decayedThisFrame[targetEntity]
+				alreadyHit := s.decayedThisFrame[targetEntity]
 				s.mu.RUnlock()
 
-				if !alreadyProcessed {
-					// Process the collision
+				if !alreadyHit {
+					// Hit Logic
 					if world.Nuggets.Has(targetEntity) {
 						world.DestroyEntity(targetEntity)
 						if s.nuggetSystem != nil {
@@ -332,33 +324,30 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 						s.applyDecayToCharacter(world, targetEntity)
 					}
 
-					// Mark as processed
+					// Mark Hit
 					s.mu.Lock()
 					s.decayedThisFrame[targetEntity] = true
 					s.mu.Unlock()
-
-					processedPositions[posKey] = true
+					s.processedGridCells[flatIdx] = true
 				}
 			}
 
-			// Update latch - this cell has been processed
+			// D. Update Latch & Visuals
 			fall.LastIntX = col
 			fall.LastIntY = row
 
-			// Matrix-style character change on cell transition
-			if row != fall.LastChangeRow && row > 0 {
+			// Matrix visual effect on row change
+			if row != fall.LastChangeRow {
 				fall.LastChangeRow = row
-				if rand.Float64() < constants.FallingDecayChangeChance {
+				if row > 0 && rand.Float64() < constants.FallingDecayChangeChance {
 					fall.Char = constants.AlphanumericRunes[rand.Intn(len(constants.AlphanumericRunes))]
 				}
 			}
 		}
 
-		// Update physics history for next frame
 		fall.PrevPreciseX = float64(fall.Column)
-		fall.PrevPreciseY = fall.YPosition
+		// YPosition already updated
 
-		// Save updated component
 		world.FallingDecays.Add(entity, fall)
 		remainingEntities = append(remainingEntities, entity)
 	}
@@ -455,4 +444,20 @@ func (s *DecaySystem) GetSystemState() string {
 			snapshot.TimeUntil, snapshot.NextTime)
 	}
 	return "Decay[inactive]"
+}
+
+// GetFallingEntityState returns debug information about falling entities
+func (s *DecaySystem) GetFallingEntityState() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	states := make([]string, 0, len(s.fallingEntities))
+	for _, entity := range s.fallingEntities {
+		if fall, ok := s.ctx.World.FallingDecays.Get(entity); ok {
+			state := fmt.Sprintf("Entity[%d]: Y=%.2f, Latch=(%d,%d), Prev=%.2f",
+				entity, fall.YPosition, fall.LastIntX, fall.LastIntY, fall.PrevPreciseY)
+			states = append(states, state)
+		}
+	}
+	return states
 }
