@@ -4,25 +4,14 @@
 vi-fighter is a terminal-based typing game in Go using a compile-time Generics-based ECS (Go 1.18+). The architecture combines real-time lock-free updates (atomics) for input/rendering with a discrete clock-tick system for game logic.
 **Go Version:** 1.24+
 
-## CURRENT MISSION: Decay System Refactor
-**Objective:** Eliminate "Green Artifacts" (lingering collision) and fix tunneling for fast/orbiting entities.
-**Core Pattern:** Coordinate Latching with Swept Traversal.
+## CURRENT MISSION: Pure ECS Migration & Protection Systems
+**Objective:** Migrate cursor state and spawn tracking to a pure ECS model to improve consistency and support advanced mechanics.
+**Core Change:** Replace Global Atomics with ECS Components.
 
-### Implementation Patterns
-1.  **Coordinate Latching:**
-    *   Falling entities must track the last grid coordinate `(LastIntX, LastIntY)` they successfully processed.
-    *   **Rule:** If `CurrentGridX == LastIntX` AND `CurrentGridY == LastIntY`, skip interaction.
-    *   **Init:** Initialize latch to `(-1, -1)` to ensure the first frame always processes.
-
-2.  **Swept Collision (Segment Traversal):**
-    *   Do not check just point `(X, Y)`.
-    *   Calculate integer grid cells between `PrevPreciseY` and `CurrentY`.
-    *   Iterate through *all* cells in that segment to prevent tunneling.
-    *   **Robustness:** Ensure loop handles `Prev > Current` (upward movement) by sorting start/end rows.
-
-3.  **Performance Optimization (No Allocations):**
-    *   **Reusable Maps:** Do not allocate `map[int]bool` inside `Update()`. Use a persistent field in the System struct (`processedGridCells`) and `delete()` keys to clear it.
-    *   **Integer Keys:** Do not use `fmt.Sprintf` for map keys. Use flat indexing: `key = row * width + col`.
+### Implementation Phases
+1.  **Infrastructure:** Create `ProtectionComponent`, `CursorComponent`, and associated stores. Update `World` to support protection (indestructible entities).
+2.  **Cursor Migration:** Replace `GameState.CursorX/Y` with `PositionStore`. Refactor InputHandler to write directly to ECS (0-latency).
+3.  **Spawn Census:** Replace atomic color counters with per-frame O(n) iteration of entities to enforce spawn limits without drift.
 
 ## ARCHITECTURE OVERVIEW
 
@@ -33,8 +22,9 @@ The `World` struct uses explicit, typed generic stores.
 type World struct {
     Positions      *PositionStore // Specialized (Spatial Index + Mutex)
     Characters     *Store[components.CharacterComponent]
-    FallingDecays  *Store[components.FallingDecayComponent]
-// ...
+    Cursors        *Store[components.CursorComponent]
+    Protections    *Store[components.ProtectionComponent]
+    // ...
 }
 ```
 
@@ -46,15 +36,14 @@ Use standalone functions `With()` and `WithPosition()`, not method chaining on t
 ```go
 entity := With(
     WithPosition(world.NewEntity(), world.Positions, components.PositionComponent{X: 10, Y: 5}),
-    world.FallingDecays,
-    components.FallingDecayComponent{...}, 
+    world.Protections,
+    components.ProtectionComponent{Mask: components.ProtectAll}, 
     ).Build()
 ```
 
 **Destruction:**
-```go
-world.DestroyEntity(entity) // Automatically cleans up from ALL stores
-```
+`World.DestroyEntity(e)` cleans up from ALL stores.
+*Critical:* It MUST respect `ProtectionComponent.Mask == ProtectAll` and refuse to destroy such entities.
 
 ### 3. Querying
 Iterate over entities using the `QueryBuilder`. It optimizes intersection by starting with the smallest store.
@@ -154,10 +143,11 @@ func TestMovement(t *testing.T) {
 vi-fighter/
 ├── engine/
 │   ├── store.go          # Generic Store[T]
-│   └── position_store.go # Spatial Index
-├── systems/
-│   ├── decay_system.go   # TARGET FOR REFACTOR
-│   └── spawn_system.go   
+│   ├── position_store.go # Spatial Index
+│   └── world.go          # World struct, DestroyEntity
 ├── components/
-│   └── falling_decay.go  # TARGET FOR REFACTOR
+│   ├── protection.go     # NEW: ProtectionComponent & Flags
+│   └── cursor.go         # NEW: CursorComponent
+├── systems/
+│   └── spawn_system.go   # TARGET: Census implementation
 ```
