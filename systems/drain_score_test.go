@@ -3,6 +3,7 @@ package systems
 import (
 	"testing"
 	"time"
+
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"

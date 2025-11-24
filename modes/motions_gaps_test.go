@@ -7,6 +7,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/components"
 )
 
+// TestWordMotionsWithFileContent tests word motions with file-based content placement
+// This simulates how the game actually places characters from files - with position GAPS
 func TestWordMotionsWithFileContent(t *testing.T) {
 	ctx := createTestContext()
 
@@ -67,7 +69,6 @@ func TestWordMotionsWithFileContent(t *testing.T) {
 }
 
 // TestMultipleWPressesWithGaps tests that multiple 'w' presses work correctly with position gaps
-
 func TestMultipleWPressesWithGaps(t *testing.T) {
 	ctx := createTestContext()
 
@@ -125,7 +126,6 @@ func TestMultipleWPressesWithGaps(t *testing.T) {
 }
 
 // TestWordMotionsWithLargeGaps tests word motions with very large gaps between words
-
 func TestWordMotionsWithLargeGaps(t *testing.T) {
 	ctx := createTestContext()
 
@@ -192,7 +192,6 @@ func TestWordMotionsWithLargeGaps(t *testing.T) {
 }
 
 // TestWordMotionsStartingFromGap tests motions when cursor starts in a gap position
-
 func TestWordMotionsStartingFromGap(t *testing.T) {
 	ctx := createTestContext()
 
@@ -235,7 +234,6 @@ func TestWordMotionsStartingFromGap(t *testing.T) {
 }
 
 // TestWORDMotionsWithFileContentGaps tests WORD motions with file-based gaps
-
 func TestWORDMotionsWithFileContentGaps(t *testing.T) {
 	ctx := createTestContext()
 
@@ -358,6 +356,3 @@ func TestGetCharAtSpaceHandling(t *testing.T) {
 		t.Errorf("getCharAt with '!': expected '!', got %q", getCharAt(ctx, 22, 5))
 	}
 }
-
-// TestWordMotionsWithFileContent tests word motions with file-based content placement
-// This simulates how the game actually places characters from files - with position GAPS

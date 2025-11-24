@@ -2,7 +2,6 @@ package engine
 
 import (
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,32 +27,6 @@ func (m *MockScreen) Clear()                                                    
 func (m *MockScreen) Show()                                                            {}
 func (m *MockScreen) Sync()                                                            {}
 func (m *MockScreen) SetContent(x, y int, mainc rune, combc []rune, style tcell.Style) {}
-
-// MockGoldSystem implements GoldSequenceSystemInterface for testing
-type MockGoldSystem struct {
-	timeoutCount atomic.Int32
-}
-
-func (m *MockGoldSystem) TimeoutGoldSequence(world *World) {
-	m.timeoutCount.Add(1)
-}
-
-func (m *MockGoldSystem) GetTimeoutCount() int {
-	return int(m.timeoutCount.Load())
-}
-
-// MockDecaySystem implements DecaySystemInterface for testing
-type MockDecaySystem struct {
-	triggerCount atomic.Int32
-}
-
-func (m *MockDecaySystem) TriggerDecayAnimation(world *World) {
-	m.triggerCount.Add(1)
-}
-
-func (m *MockDecaySystem) GetTriggerCount() int {
-	return int(m.triggerCount.Load())
-}
 
 // ============================================================================
 // Phase State Tests

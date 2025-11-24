@@ -3,6 +3,7 @@ package systems
 import (
 	"math"
 	"testing"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
