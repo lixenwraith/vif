@@ -30,10 +30,15 @@ func TestFallingDecayRenderColor(t *testing.T) {
 	// Create a falling decay entity
 	entity := world.CreateEntity()
 	world.FallingDecays.Add(entity, components.FallingDecayComponent{
-		Column:    10,
-		YPosition: 5.0,
-		Speed:     10.0,
-		Char:      'X',
+		Column:        10,
+		YPosition:     5.0,
+		Speed:         10.0,
+		Char:          'X',
+		LastChangeRow: -1,
+		LastIntX:      -1,
+		LastIntY:      -1,
+		PrevPreciseX:  10.0,
+		PrevPreciseY:  5.0,
 	})
 
 	// Render the falling decay
@@ -89,11 +94,17 @@ func TestFallingDecayRenderAtAllPositions(t *testing.T) {
 
 	for i, yPos := range testPositions {
 		entity := world.CreateEntity()
+		col := i * 7
 		world.FallingDecays.Add(entity, components.FallingDecayComponent{
-			Column:    i * 7, // Spread across columns
-			YPosition: yPos,
-			Speed:     10.0,
-			Char:      rune('A' + i),
+			Column:        col, // Spread across columns
+			YPosition:     yPos,
+			Speed:         10.0,
+			Char:          rune('A' + i),
+			LastChangeRow: -1,
+			LastIntX:      -1,
+			LastIntY:      -1,
+			PrevPreciseX:  float64(col),
+			PrevPreciseY:  yPos,
 		})
 	}
 
@@ -149,11 +160,17 @@ func TestFallingDecayRenderFractionalPositions(t *testing.T) {
 
 	for i, yPos := range fractionalPositions {
 		entity := world.CreateEntity()
+		col := i * 10
 		world.FallingDecays.Add(entity, components.FallingDecayComponent{
-			Column:    i * 10,
-			YPosition: yPos,
-			Speed:     10.0,
-			Char:      rune('0' + i),
+			Column:        col,
+			YPosition:     yPos,
+			Speed:         10.0,
+			Char:          rune('0' + i),
+			LastChangeRow: -1,
+			LastIntX:      -1,
+			LastIntY:      -1,
+			PrevPreciseX:  float64(col),
+			PrevPreciseY:  yPos,
 		})
 	}
 
@@ -215,10 +232,15 @@ func TestFallingDecayRenderBounds(t *testing.T) {
 	for _, pos := range outOfBoundsPositions {
 		entity := world.CreateEntity()
 		world.FallingDecays.Add(entity, components.FallingDecayComponent{
-			Column:    pos.col,
-			YPosition: pos.yPos,
-			Speed:     10.0,
-			Char:      pos.char,
+			Column:        pos.col,
+			YPosition:     pos.yPos,
+			Speed:         10.0,
+			Char:          pos.char,
+			LastChangeRow: -1,
+			LastIntX:      -1,
+			LastIntY:      -1,
+			PrevPreciseX:  float64(pos.col),
+			PrevPreciseY:  pos.yPos,
 		})
 	}
 
@@ -286,10 +308,15 @@ func TestFallingDecayRenderZOrder(t *testing.T) {
 	// Create a falling decay entity at the same position
 	fallingEntity := world.CreateEntity()
 	world.FallingDecays.Add(fallingEntity, components.FallingDecayComponent{
-		Column:    10,
-		YPosition: 5.0,
-		Speed:     10.0,
-		Char:      'F',
+		Column:        10,
+		YPosition:     5.0,
+		Speed:         10.0,
+		Char:          'F',
+		LastChangeRow: -1,
+		LastIntX:      -1,
+		LastIntY:      -1,
+		PrevPreciseX:  10.0,
+		PrevPreciseY:  5.0,
 	})
 
 	// Draw in the correct order: characters first, then falling decay
@@ -341,11 +368,17 @@ func TestFallingDecayRenderMultipleEntities(t *testing.T) {
 	for col := 0; col < gameWidth; col++ {
 		entity := world.CreateEntity()
 		char := rune(characters[col%len(characters)])
+		yPos := float64(col % 20)
 		world.FallingDecays.Add(entity, components.FallingDecayComponent{
-			Column:    col,
-			YPosition: float64(col % 20), // Spread across different rows
-			Speed:     10.0,
-			Char:      char,
+			Column:        col,
+			YPosition:     yPos, // Spread across different rows
+			Speed:         10.0,
+			Char:          char,
+			LastChangeRow: -1,
+			LastIntX:      -1,
+			LastIntY:      -1,
+			PrevPreciseX:  float64(col),
+			PrevPreciseY:  yPos,
 		})
 	}
 
@@ -401,10 +434,15 @@ func TestFallingDecayRenderConsistency(t *testing.T) {
 	// Create a falling entity
 	entity := world.CreateEntity()
 	world.FallingDecays.Add(entity, components.FallingDecayComponent{
-		Column:    15,
-		YPosition: 8.0,
-		Speed:     10.0,
-		Char:      'T',
+		Column:        15,
+		YPosition:     8.0,
+		Speed:         10.0,
+		Char:          'T',
+		LastChangeRow: -1,
+		LastIntX:      -1,
+		LastIntY:      -1,
+		PrevPreciseX:  15.0,
+		PrevPreciseY:  8.0,
 	})
 
 	// Render multiple times and verify consistency
@@ -446,10 +484,15 @@ func TestFallingDecayComponentRetrieval(t *testing.T) {
 	// Create entity with FallingDecayComponent
 	entity2 := world.CreateEntity()
 	world.FallingDecays.Add(entity2, components.FallingDecayComponent{
-		Column:    10,
-		YPosition: 3.0,
-		Speed:     8.0,
-		Char:      'X',
+		Column:        10,
+		YPosition:     3.0,
+		Speed:         8.0,
+		Char:          'X',
+		LastChangeRow: -1,
+		LastIntX:      -1,
+		LastIntY:      -1,
+		PrevPreciseX:  10.0,
+		PrevPreciseY:  3.0,
 	})
 
 	// Get entities with FallingDecayComponent

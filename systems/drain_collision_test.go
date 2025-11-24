@@ -807,6 +807,10 @@ func TestDrainSystem_CollisionWithFallingDecay(t *testing.T) {
 		Speed:         5.0,
 		Char:          'X',
 		LastChangeRow: decayY,
+		LastIntX:      -1,
+		LastIntY:      -1,
+		PrevPreciseX:  float64(decayX),
+		PrevPreciseY:  float64(decayY),
 	})
 	// Note: FallingDecayComponent doesn't use PositionComponent, but we need
 	// spatial index for collision detection
@@ -876,6 +880,10 @@ func TestDrainSystem_CollisionWithMultipleFallingDecay(t *testing.T) {
 		Speed:         5.0,
 		Char:          'A',
 		LastChangeRow: 5,
+		LastIntX:      -1,
+		LastIntY:      -1,
+		PrevPreciseX:  5.0,
+		PrevPreciseY:  5.0,
 	})
 
 	{
@@ -892,6 +900,10 @@ func TestDrainSystem_CollisionWithMultipleFallingDecay(t *testing.T) {
 		Speed:         3.0,
 		Char:          'B',
 		LastChangeRow: 10,
+		LastIntX:      -1,
+		LastIntY:      -1,
+		PrevPreciseX:  10.0,
+		PrevPreciseY:  10.0,
 	})
 
 	{
@@ -978,6 +990,10 @@ func TestDrainSystem_FallingDecayCollisionAtBoundary(t *testing.T) {
 				Speed:         7.0,
 				Char:          'Z',
 				LastChangeRow: pos.y,
+				LastIntX:      -1,
+				LastIntY:      -1,
+				PrevPreciseX:  float64(pos.x),
+				PrevPreciseY:  float64(pos.y),
 			})
 
 			{
@@ -1038,6 +1054,10 @@ func TestDrainSystem_DecayCollisionPriorityOverSequence(t *testing.T) {
 		Speed:         6.0,
 		Char:          'D',
 		LastChangeRow: decayY,
+		LastIntX:      -1,
+		LastIntY:      -1,
+		PrevPreciseX:  float64(decayX),
+		PrevPreciseY:  float64(decayY),
 	})
 
 	{
@@ -1129,6 +1149,10 @@ func TestDrainSystem_FallingDecayWithDifferentSpeeds(t *testing.T) {
 				Speed:         speed,
 				Char:          'S',
 				LastChangeRow: decayY,
+				LastIntX:      -1,
+				LastIntY:      -1,
+				PrevPreciseX:  float64(decayX),
+				PrevPreciseY:  float64(decayY),
 			})
 
 			tx := world.BeginSpatialTransaction()
