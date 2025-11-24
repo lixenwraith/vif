@@ -246,14 +246,16 @@ func (s *DecaySystem) spawnFallingEntities(world *engine.World) {
 // updateFallingEntities updates falling entity positions and applies decay using generic stores
 func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64) {
 	gameHeight := s.ctx.GameHeight
+	gameWidth := s.ctx.GameWidth
 
-	// Get falling entities with lock
 	s.mu.RLock()
 	fallingEntities := s.fallingEntities
 	s.mu.RUnlock()
 
-	// Track entities to destroy and keep
 	remainingEntities := make([]engine.Entity, 0, len(fallingEntities))
+
+	// Track positions processed this frame to prevent double-hits
+	processedPositions := make(map[string]bool)
 
 	for _, entity := range fallingEntities {
 		fall, ok := world.FallingDecays.Get(entity)
@@ -261,88 +263,106 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 			continue
 		}
 
-		// Update Y position based on speed and elapsed time
-		fall.YPosition = fall.Speed * elapsed
+		// Store previous position for sweep calculation
+		prevY := fall.YPosition
 
-		// Check if entity has passed the bottom boundary
+		// Update physics
+		fall.YPosition += fall.Speed * elapsed
+
+		// Check if entity has left the screen
 		if fall.YPosition >= float64(gameHeight) {
-			// Entity has gone beyond the bottom - destroy immediately using world
 			world.DestroyEntity(entity)
-			// Don't add to remaining entities
 			continue
 		}
 
-		// Calculate current row
-		currentRow := int(fall.YPosition)
+		// SWEPT COLLISION: Process all grid cells from previous to current position
+		startRow := int(prevY)
+		endRow := int(fall.YPosition)
 
-		// Matrix-style character change: when crossing row boundaries, randomly change character
-		// Note: LastChangeRow tracks the last row we checked to ensure we only attempt
-		// one change per row. It must be updated on every row to prevent re-checking.
-		if currentRow != fall.LastChangeRow {
-			// Calculate distance since last row check
-			rowsSinceLastChange := currentRow - fall.LastChangeRow
-			// Handle initial case when LastChangeRow is -1
-			if fall.LastChangeRow < 0 {
-				rowsSinceLastChange = currentRow + 1
+		// Clamp to valid range
+		if startRow < 0 {
+			startRow = 0
+		}
+		if endRow >= gameHeight {
+			endRow = gameHeight - 1
+		}
+
+		// Limit traversal to prevent performance issues with very fast entities
+		const maxCellsPerFrame = 10
+		if endRow-startRow > maxCellsPerFrame {
+			endRow = startRow + maxCellsPerFrame
+		}
+
+		// Process each row in the movement path
+		for row := startRow; row <= endRow; row++ {
+			col := fall.Column
+
+			// COORDINATE LATCH: Skip if we already processed this cell
+			if col == fall.LastIntX && row == fall.LastIntY {
+				continue
 			}
 
-			// Always update LastChangeRow to current row to prevent re-checking same row
-			fall.LastChangeRow = currentRow
+			// Check bounds
+			if col < 0 || col >= gameWidth || row < 0 || row >= gameHeight {
+				continue
+			}
 
-			// Only consider changing if minimum rows have passed since last check
-			if rowsSinceLastChange >= constants.FallingDecayMinRowsBetweenChanges {
-				// Random chance to change character (40% probability)
+			// Build position key for frame-wide deduplication
+			posKey := fmt.Sprintf("%d,%d", col, row)
+			if processedPositions[posKey] {
+				continue
+			}
+
+			// Check for entity at this position
+			targetEntity := world.Positions.GetEntityAt(col, row)
+			if targetEntity != 0 {
+				// Check if already processed this frame (by another falling entity)
+				s.mu.RLock()
+				alreadyProcessed := s.decayedThisFrame[targetEntity]
+				s.mu.RUnlock()
+
+				if !alreadyProcessed {
+					// Process the collision
+					if world.Nuggets.Has(targetEntity) {
+						world.DestroyEntity(targetEntity)
+						if s.nuggetSystem != nil {
+							s.nuggetSystem.ClearActiveNuggetIfMatches(uint64(targetEntity))
+						}
+					} else {
+						s.applyDecayToCharacter(world, targetEntity)
+					}
+
+					// Mark as processed
+					s.mu.Lock()
+					s.decayedThisFrame[targetEntity] = true
+					s.mu.Unlock()
+
+					processedPositions[posKey] = true
+				}
+			}
+
+			// Update latch - this cell has been processed
+			fall.LastIntX = col
+			fall.LastIntY = row
+
+			// Matrix-style character change on cell transition
+			if row != fall.LastChangeRow && row > 0 {
+				fall.LastChangeRow = row
 				if rand.Float64() < constants.FallingDecayChangeChance {
 					fall.Char = constants.AlphanumericRunes[rand.Intn(len(constants.AlphanumericRunes))]
 				}
 			}
 		}
 
-		// Entity is still within bounds
-		// Update component
+		// Update physics history for next frame
+		fall.PrevPreciseX = float64(fall.Column)
+		fall.PrevPreciseY = fall.YPosition
+
+		// Save updated component
 		world.FallingDecays.Add(entity, fall)
-
-		// Check for character at this position and apply decay or destroy nuggets
-		targetEntity := world.Positions.GetEntityAt(fall.Column, currentRow)
-		if targetEntity != 0 {
-			// Check if already processed with lock
-			s.mu.RLock()
-			alreadyProcessed := s.decayedThisFrame[targetEntity]
-			s.mu.RUnlock()
-
-			if !alreadyProcessed {
-				// Check if this is a nugget entity
-				if world.Nuggets.Has(targetEntity) {
-					// Destroy the nugget
-					world.DestroyEntity(targetEntity)
-
-					// Clear active nugget reference to trigger respawn
-					// Use CAS to ensure we only clear if this is still the active nugget
-					if s.nuggetSystem != nil {
-						s.nuggetSystem.ClearActiveNuggetIfMatches(uint64(targetEntity))
-					}
-
-					// Mark as processed with lock
-					s.mu.Lock()
-					s.decayedThisFrame[targetEntity] = true
-					s.mu.Unlock()
-				} else {
-					// Apply decay to this character (not a nugget)
-					s.applyDecayToCharacter(world, targetEntity)
-
-					// Mark as decayed with lock
-					s.mu.Lock()
-					s.decayedThisFrame[targetEntity] = true
-					s.mu.Unlock()
-				}
-			}
-		}
-
-		// Keep this entity in the list
 		remainingEntities = append(remainingEntities, entity)
 	}
 
-	// Update the falling entities list with lock
 	s.mu.Lock()
 	s.fallingEntities = remainingEntities
 	s.mu.Unlock()
