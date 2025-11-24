@@ -161,8 +161,6 @@ func main() {
 
 			// During pause: skip game updates but still render
 			if ctx.IsPaused.Load() {
-				// Sync to generic world before rendering
-				ctx.World.SyncToGeneric()
 				// This shows the pause overlay and maintains visual feedback
 				renderer.RenderFrame(ctx, decaySystem.IsAnimating(), decaySystem.CurrentRow(), decaySystem.GetTimeUntilDecay())
 				continue
@@ -178,8 +176,6 @@ func main() {
 				updatePending = true
 			}
 
-			// Sync to generic world before rendering
-			ctx.World.SyncToGeneric()
 			// Render frame (all updates guaranteed complete)
 			renderer.RenderFrame(ctx, decaySystem.IsAnimating(), decaySystem.CurrentRow(), decaySystem.GetTimeUntilDecay())
 

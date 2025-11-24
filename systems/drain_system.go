@@ -61,7 +61,7 @@ func (s *DrainSystem) spawnDrain(world *engine.World) {
 		return
 	}
 
-	gworld := world.GetGeneric()
+	
 
 	// Get cursor position for spawn location
 	cursor := s.ctx.State.ReadCursorPosition()
@@ -85,7 +85,7 @@ func (s *DrainSystem) spawnDrain(world *engine.World) {
 	}
 
 	// Create drain entity
-	entity := gworld.CreateEntity()
+	entity := world.CreateEntity()
 
 	pos := components.PositionComponent{
 		X: spawnX,
@@ -103,14 +103,14 @@ func (s *DrainSystem) spawnDrain(world *engine.World) {
 	}
 
 	// Check if position is occupied and handle collision
-	collidingEntity := gworld.Positions.GetEntityAt(spawnX, spawnY)
+	collidingEntity := world.Positions.GetEntityAt(spawnX, spawnY)
 	if collidingEntity != 0 {
 		s.handleCollisionAtPosition(world, spawnX, spawnY, collidingEntity)
 	}
 
 	// Add components (position first for spatial index)
-	gworld.Positions.Add(entity, pos)
-	gworld.Drains.Add(entity, drain)
+	world.Positions.Add(entity, pos)
+	world.Drains.Add(entity, drain)
 
 	// Update GameState atomics
 	s.ctx.State.SetDrainActive(true)
@@ -121,7 +121,7 @@ func (s *DrainSystem) spawnDrain(world *engine.World) {
 
 // despawnDrain removes the drain entity using generic stores
 func (s *DrainSystem) despawnDrain(world *engine.World) {
-	gworld := world.GetGeneric()
+	
 
 	// Get drain entity ID from GameState
 	entityID := s.ctx.State.GetDrainEntity()
@@ -134,7 +134,7 @@ func (s *DrainSystem) despawnDrain(world *engine.World) {
 	entity := engine.Entity(entityID)
 
 	// Verify entity exists and has DrainComponent
-	if !gworld.Drains.Has(entity) {
+	if !world.Drains.Has(entity) {
 		// Entity doesn't have drain component, clear state and return
 		s.ctx.State.SetDrainActive(false)
 		s.ctx.State.SetDrainEntity(0)
@@ -142,7 +142,7 @@ func (s *DrainSystem) despawnDrain(world *engine.World) {
 	}
 
 	// Destroy the drain entity
-	gworld.DestroyEntity(entity)
+	world.DestroyEntity(entity)
 
 	// Clear GameState atomics
 	s.ctx.State.SetDrainActive(false)
@@ -154,7 +154,7 @@ func (s *DrainSystem) despawnDrain(world *engine.World) {
 // updateDrainMovement handles purely clock-based drain movement toward cursor using generic stores
 // Movement occurs ONLY on DrainMoveIntervalMs intervals, independent of input events
 func (s *DrainSystem) updateDrainMovement(world *engine.World) {
-	gworld := world.GetGeneric()
+	
 
 	// Get drain entity ID
 	entityID := s.ctx.State.GetDrainEntity()
@@ -165,7 +165,7 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 	entity := engine.Entity(entityID)
 
 	// Get drain component
-	drain, ok := gworld.Drains.Get(entity)
+	drain, ok := world.Drains.Get(entity)
 	if !ok {
 		return
 	}
@@ -208,13 +208,13 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 	}
 
 	// Get current position from PositionComponent
-	pos, ok := gworld.Positions.Get(entity)
+	pos, ok := world.Positions.Get(entity)
 	if !ok {
 		return // No position component, can't move
 	}
 
 	// Check for collision at new position
-	collidingEntity := gworld.Positions.GetEntityAt(newX, newY)
+	collidingEntity := world.Positions.GetEntityAt(newX, newY)
 	if collidingEntity != 0 && collidingEntity != entity {
 		s.handleCollisionAtPosition(world, newX, newY, collidingEntity)
 		// Don't update position if there was a collision
@@ -232,10 +232,10 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 	// Update position (this handles spatial index)
 	pos.X = newX
 	pos.Y = newY
-	gworld.Positions.Add(entity, pos)
+	world.Positions.Add(entity, pos)
 
 	// Save updated drain component
-	gworld.Drains.Add(entity, drain)
+	world.Drains.Add(entity, drain)
 
 	// Update GameState atomics for renderer
 	s.ctx.State.SetDrainX(newX)
@@ -244,7 +244,7 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 
 // updateScoreDrain handles score draining when drain is on cursor using generic stores
 func (s *DrainSystem) updateScoreDrain(world *engine.World) {
-	gworld := world.GetGeneric()
+	
 
 	// Get drain entity ID
 	entityID := s.ctx.State.GetDrainEntity()
@@ -255,7 +255,7 @@ func (s *DrainSystem) updateScoreDrain(world *engine.World) {
 	entity := engine.Entity(entityID)
 
 	// Get drain component
-	drain, ok := gworld.Drains.Get(entity)
+	drain, ok := world.Drains.Get(entity)
 	if !ok {
 		return
 	}
@@ -271,7 +271,7 @@ func (s *DrainSystem) updateScoreDrain(world *engine.World) {
 	// Always update IsOnCursor to ensure it stays in sync (recalculated every frame)
 	if drain.IsOnCursor != isOnCursor {
 		drain.IsOnCursor = isOnCursor
-		gworld.Drains.Add(entity, drain)
+		world.Drains.Add(entity, drain)
 	}
 
 	// Drain score if on cursor and DrainScoreDrainInterval has passed
@@ -283,7 +283,7 @@ func (s *DrainSystem) updateScoreDrain(world *engine.World) {
 
 			// Update last drain time
 			drain.LastDrainTime = now
-			gworld.Drains.Add(entity, drain)
+			world.Drains.Add(entity, drain)
 		}
 	}
 }
@@ -300,14 +300,14 @@ func sign(x int) int {
 
 // handleCollisions detects and processes collisions with entities at the drain's current position using generic stores
 func (s *DrainSystem) handleCollisions(world *engine.World) {
-	gworld := world.GetGeneric()
+	
 
 	// Get drain position from GameState
 	drainX := s.ctx.State.GetDrainX()
 	drainY := s.ctx.State.GetDrainY()
 
 	// Get entity at drain position
-	entity := gworld.Positions.GetEntityAt(drainX, drainY)
+	entity := world.Positions.GetEntityAt(drainX, drainY)
 	if entity == 0 {
 		return // No entity at this position
 	}
@@ -325,22 +325,22 @@ func (s *DrainSystem) handleCollisions(world *engine.World) {
 // handleCollisionAtPosition processes collision with a specific entity at a given position using generic stores
 // This is extracted to allow collision handling before spatial index updates
 func (s *DrainSystem) handleCollisionAtPosition(world *engine.World, x, y int, entity engine.Entity) {
-	gworld := world.GetGeneric()
+	
 
 	// Check for nugget collision first
-	if gworld.Nuggets.Has(entity) {
+	if world.Nuggets.Has(entity) {
 		s.handleNuggetCollision(world, entity)
 		return
 	}
 
 	// Check for falling decay collision
-	if gworld.FallingDecays.Has(entity) {
+	if world.FallingDecays.Has(entity) {
 		s.handleFallingDecayCollision(world, entity)
 		return
 	}
 
 	// Check if entity has SequenceComponent
-	seq, ok := gworld.Sequences.Get(entity)
+	seq, ok := world.Sequences.Get(entity)
 	if !ok {
 		return // Not a sequence entity
 	}
@@ -375,13 +375,13 @@ func (s *DrainSystem) handleCollisionAtPosition(world *engine.World, x, y int, e
 		s.ctx.State.AddColorCount(typeInt, int(seq.Level), -1)
 
 		// Destroy the entity using generic world
-		gworld.DestroyEntity(entity)
+		world.DestroyEntity(entity)
 	}
 }
 
 // handleGoldSequenceCollision removes all gold sequence entities and triggers phase transition using generic stores
 func (s *DrainSystem) handleGoldSequenceCollision(world *engine.World, sequenceID int) {
-	gworld := world.GetGeneric()
+	
 
 	// Get current gold state to verify this is the active gold sequence
 	goldSnapshot := s.ctx.State.ReadGoldState()
@@ -390,17 +390,17 @@ func (s *DrainSystem) handleGoldSequenceCollision(world *engine.World, sequenceI
 	}
 
 	// Find and destroy all gold sequence entities with this ID
-	entities := gworld.Sequences.All()
+	entities := world.Sequences.All()
 
 	for _, entity := range entities {
-		seq, ok := gworld.Sequences.Get(entity)
+		seq, ok := world.Sequences.Get(entity)
 		if !ok {
 			continue
 		}
 
 		// Only destroy gold sequence entities with matching ID
 		if seq.Type == components.SequenceGold && seq.ID == sequenceID {
-			gworld.DestroyEntity(entity)
+			world.DestroyEntity(entity)
 		}
 	}
 
@@ -410,7 +410,7 @@ func (s *DrainSystem) handleGoldSequenceCollision(world *engine.World, sequenceI
 
 // handleNuggetCollision destroys the nugget entity and clears active nugget state using generic stores
 func (s *DrainSystem) handleNuggetCollision(world *engine.World, entity engine.Entity) {
-	gworld := world.GetGeneric()
+	
 
 	// Clear active nugget using race-safe method
 	if s.nuggetSystem != nil {
@@ -418,15 +418,15 @@ func (s *DrainSystem) handleNuggetCollision(world *engine.World, entity engine.E
 	}
 
 	// Destroy the nugget entity
-	gworld.DestroyEntity(entity)
+	world.DestroyEntity(entity)
 }
 
 // handleFallingDecayCollision destroys the falling decay entity using generic stores
 // Collision with falling decay entities during decay animation
 func (s *DrainSystem) handleFallingDecayCollision(world *engine.World, entity engine.Entity) {
-	gworld := world.GetGeneric()
+	
 
 	// Simply destroy the falling decay entity
 	// This maintains decay animation continuity - other falling entities continue
-	gworld.DestroyEntity(entity)
+	world.DestroyEntity(entity)
 }

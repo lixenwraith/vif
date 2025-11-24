@@ -107,16 +107,14 @@ func (s *DecaySystem) updateAnimation(world *engine.World) {
 
 // applyDecayToRow applies decay logic to all characters at the given row using generic stores
 func (s *DecaySystem) applyDecayToRow(world *engine.World, row int) {
-	gworld := world.GetGeneric()
-
 	// Query entities with both position and sequence components
-	entities := gworld.Query().
-		With(gworld.Positions).
-		With(gworld.Sequences).
+	entities := world.Query().
+		With(world.Positions).
+		With(world.Sequences).
 		Execute()
 
 	for _, entity := range entities {
-		pos, ok := gworld.Positions.Get(entity)
+		pos, ok := world.Positions.Get(entity)
 		if !ok {
 			continue
 		}
@@ -129,9 +127,7 @@ func (s *DecaySystem) applyDecayToRow(world *engine.World, row int) {
 
 // applyDecayToCharacter applies decay logic to a single character entity using generic stores
 func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.Entity) {
-	gworld := world.GetGeneric()
-
-	seq, ok := gworld.Sequences.Get(entity)
+	seq, ok := world.Sequences.Get(entity)
 	if !ok {
 		return // Not a sequence entity
 	}
@@ -149,12 +145,12 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 	if seq.Level > components.LevelDark {
 		// Reduce level by 1 and update style
 		seq.Level--
-		gworld.Sequences.Add(entity, seq)
+		world.Sequences.Add(entity, seq)
 
 		// Update character style
-		if char, ok := gworld.Characters.Get(entity); ok {
+		if char, ok := world.Characters.Get(entity); ok {
 			char.Style = render.GetStyleForSequence(seq.Type, seq.Level)
-			gworld.Characters.Add(entity, char)
+			world.Characters.Add(entity, char)
 		}
 
 		// Update counters: decrement old level, increment new level (only for Blue/Green)
@@ -167,11 +163,11 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 		if seq.Type == components.SequenceBlue {
 			seq.Type = components.SequenceGreen
 			seq.Level = components.LevelBright
-			gworld.Sequences.Add(entity, seq)
+			world.Sequences.Add(entity, seq)
 
-			if char, ok := gworld.Characters.Get(entity); ok {
+			if char, ok := world.Characters.Get(entity); ok {
 				char.Style = render.GetStyleForSequence(seq.Type, seq.Level)
-				gworld.Characters.Add(entity, char)
+				world.Characters.Add(entity, char)
 			}
 
 			// Update counters: Blue Dark → Green Bright
@@ -182,11 +178,11 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 		} else if seq.Type == components.SequenceGreen {
 			seq.Type = components.SequenceRed
 			seq.Level = components.LevelBright
-			gworld.Sequences.Add(entity, seq)
+			world.Sequences.Add(entity, seq)
 
-			if char, ok := gworld.Characters.Get(entity); ok {
+			if char, ok := world.Characters.Get(entity); ok {
 				char.Style = render.GetStyleForSequence(seq.Type, seq.Level)
-				gworld.Characters.Add(entity, char)
+				world.Characters.Add(entity, char)
 			}
 
 			// Update counters: Green Dark → Red Bright (only decrement Green, Red is not tracked)
@@ -195,14 +191,13 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 			}
 		} else {
 			// Red at LevelDark - remove entity (no counter change, Red is not tracked)
-			gworld.DestroyEntity(entity)
+			world.DestroyEntity(entity)
 		}
 	}
 }
 
 // spawnFallingEntities creates one falling decay entity per column using generic stores
 func (s *DecaySystem) spawnFallingEntities(world *engine.World) {
-	gworld := world.GetGeneric()
 	gameWidth := s.ctx.GameWidth
 
 	// Create new falling entities list
@@ -216,9 +211,9 @@ func (s *DecaySystem) spawnFallingEntities(world *engine.World) {
 		// Random character for each entity
 		char := constants.AlphanumericRunes[rand.Intn(len(constants.AlphanumericRunes))]
 
-		// Create falling entity using generic world
-		entity := gworld.CreateEntity()
-		gworld.FallingDecays.Add(entity, components.FallingDecayComponent{
+		// Create falling entity using world
+		entity := world.CreateEntity()
+		world.FallingDecays.Add(entity, components.FallingDecayComponent{
 			Column:        column,
 			YPosition:     0.0,
 			Speed:         speed,
@@ -237,7 +232,6 @@ func (s *DecaySystem) spawnFallingEntities(world *engine.World) {
 
 // updateFallingEntities updates falling entity positions and applies decay using generic stores
 func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64) {
-	gworld := world.GetGeneric()
 	gameHeight := s.ctx.GameHeight
 
 	// Get falling entities with lock
@@ -249,7 +243,7 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 	remainingEntities := make([]engine.Entity, 0, len(fallingEntities))
 
 	for _, entity := range fallingEntities {
-		fall, ok := gworld.FallingDecays.Get(entity)
+		fall, ok := world.FallingDecays.Get(entity)
 		if !ok {
 			continue
 		}
@@ -259,8 +253,8 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 
 		// Check if entity has passed the bottom boundary
 		if fall.YPosition >= float64(gameHeight) {
-			// Entity has gone beyond the bottom - destroy immediately using generic world
-			gworld.DestroyEntity(entity)
+			// Entity has gone beyond the bottom - destroy immediately using world
+			world.DestroyEntity(entity)
 			// Don't add to remaining entities
 			continue
 		}
@@ -293,10 +287,10 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 
 		// Entity is still within bounds
 		// Update component
-		gworld.FallingDecays.Add(entity, fall)
+		world.FallingDecays.Add(entity, fall)
 
 		// Check for character at this position and apply decay or destroy nuggets
-		targetEntity := gworld.Positions.GetEntityAt(fall.Column, currentRow)
+		targetEntity := world.Positions.GetEntityAt(fall.Column, currentRow)
 		if targetEntity != 0 {
 			// Check if already processed with lock
 			s.mu.RLock()
@@ -305,9 +299,9 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 
 			if !alreadyProcessed {
 				// Check if this is a nugget entity
-				if gworld.Nuggets.Has(targetEntity) {
+				if world.Nuggets.Has(targetEntity) {
 					// Destroy the nugget
-					gworld.DestroyEntity(targetEntity)
+					world.DestroyEntity(targetEntity)
 
 					// Clear active nugget reference to trigger respawn
 					// Use CAS to ensure we only clear if this is still the active nugget
@@ -343,8 +337,6 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, elapsed float64
 
 // cleanupFallingEntities removes all falling decay entities using generic stores
 func (s *DecaySystem) cleanupFallingEntities(world *engine.World) {
-	gworld := world.GetGeneric()
-
 	s.mu.Lock()
 	fallingEntities := s.fallingEntities
 	s.fallingEntities = make([]engine.Entity, 0)
@@ -353,7 +345,7 @@ func (s *DecaySystem) cleanupFallingEntities(world *engine.World) {
 
 	// Destroy entities outside of lock
 	for _, entity := range fallingEntities {
-		gworld.DestroyEntity(entity)
+		world.DestroyEntity(entity)
 	}
 }
 

@@ -291,18 +291,16 @@ func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell
 
 // drawCharacters draws all character entities
 func (r *TerminalRenderer) drawCharacters(world *engine.World, pingColor tcell.Color, defaultStyle tcell.Style, ctx *engine.GameContext) {
-	gworld := world.GetGeneric()
-
 	// Query entities with both position and character
-	entities := gworld.Query().
-		With(gworld.Positions).
-		With(gworld.Characters).
+	entities := world.Query().
+		With(world.Positions).
+		With(world.Characters).
 		Execute()
 
 	// Direct iteration - no type assertions needed
 	for _, entity := range entities {
-		pos, _ := gworld.Positions.Get(entity)
-		char, _ := gworld.Characters.Get(entity)
+		pos, _ := world.Positions.Get(entity)
+		char, _ := world.Characters.Get(entity)
 
 		screenX := r.gameX + pos.X
 		screenY := r.gameY + pos.Y
@@ -352,16 +350,14 @@ func (r *TerminalRenderer) drawCharacters(world *engine.World, pingColor tcell.C
 
 // drawFallingDecay draws the falling decay characters
 func (r *TerminalRenderer) drawFallingDecay(world *engine.World, defaultStyle tcell.Style) {
-	gworld := world.GetGeneric()
-
 	// Direct store access - single component query
-	entities := gworld.FallingDecays.All()
+	entities := world.FallingDecays.All()
 
 	// Style for falling characters: dark cyan foreground, default background
 	fallingStyle := defaultStyle.Foreground(RgbDecayFalling)
 
 	for _, entity := range entities {
-		fall, exists := gworld.FallingDecays.Get(entity)
+		fall, exists := world.FallingDecays.Get(entity)
 		if !exists {
 			continue
 		}
@@ -384,12 +380,11 @@ func (r *TerminalRenderer) drawFallingDecay(world *engine.World, defaultStyle tc
 
 // drawCleaners draws the cleaner animation using the trail of grid points.
 func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.Style) {
-	// Use generic world for direct store access
-	gworld := world.GetGeneric()
-	entities := gworld.Cleaners.All()
+	// Use world for direct store access
+	entities := world.Cleaners.All()
 
 	for _, entity := range entities {
-		cleaner, ok := gworld.Cleaners.Get(entity)
+		cleaner, ok := world.Cleaners.Get(entity)
 		if !ok {
 			continue
 		}
@@ -480,12 +475,11 @@ func (r *TerminalRenderer) drawDrain(ctx *engine.GameContext, defaultStyle tcell
 
 // drawRemovalFlashes draws the brief flash effects when red characters are removed
 func (r *TerminalRenderer) drawRemovalFlashes(world *engine.World, ctx *engine.GameContext, defaultStyle tcell.Style) {
-	// Use generic world for direct store access
-	gworld := world.GetGeneric()
-	entities := gworld.RemovalFlashes.All()
+	// Use world for direct store access
+	entities := world.RemovalFlashes.All()
 
 	for _, entity := range entities {
-		flash, ok := gworld.RemovalFlashes.Get(entity)
+		flash, ok := world.RemovalFlashes.Get(entity)
 		if !ok {
 			continue
 		}
@@ -802,8 +796,7 @@ func (r *TerminalRenderer) drawCursor(ctx *engine.GameContext, defaultStyle tcel
 	isNugget := false
 
 	if entity != 0 {
-		gworld := ctx.World.GetGeneric()
-		if char, ok := gworld.Characters.Get(entity); ok {
+		if char, ok := ctx.World.Characters.Get(entity); ok {
 			charAtCursor = char.Rune
 			fg, _, _ := char.Style.Decompose()
 			charColor = fg
@@ -811,7 +804,7 @@ func (r *TerminalRenderer) drawCursor(ctx *engine.GameContext, defaultStyle tcel
 		}
 
 		// Check if entity is a nugget
-		if _, ok := gworld.Nuggets.Get(entity); ok {
+		if _, ok := ctx.World.Nuggets.Get(entity); ok {
 			isNugget = true
 		}
 	}

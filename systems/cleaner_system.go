@@ -2,7 +2,6 @@ package systems
 
 import (
 	"math"
-	"reflect"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/audio"
@@ -34,8 +33,6 @@ func (cs *CleanerSystem) Priority() int {
 
 // Update handles spawning, movement, collision, and cleanup synchronously
 func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
-	// Get generic world
-	gworld := world.GetGeneric()
 
 	// 1. Handle Event Queue - Consume cleaner request events
 	events := cs.ctx.ConsumeEvents()
@@ -43,7 +40,7 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 		if event.Type == engine.EventCleanerRequest {
 			// Check if we already spawned for this frame
 			if !cs.spawned[event.Frame] {
-				cs.spawnCleanersGeneric(gworld)
+				cs.spawnCleaners(world)
 				cs.spawned[event.Frame] = true
 				cs.hasSpawnedSession = true
 			}
@@ -59,19 +56,19 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 	}
 
 	// 3. Process Active Cleaners - using generic stores
-	entities := gworld.Cleaners.All()
+	entities := world.Cleaners.All()
 
 	// If no cleaners exist but we spawned this session, emit finished event
 	if len(entities) == 0 && cs.hasSpawnedSession {
 		cs.ctx.PushEvent(engine.EventCleanerFinished, nil)
 		cs.hasSpawnedSession = false
-		cs.cleanupExpiredFlashesGeneric(gworld)
+		cs.cleanupExpiredFlashes(world)
 		return
 	}
 
 	// If no cleaners, we can skip processing
 	if len(entities) == 0 {
-		cs.cleanupExpiredFlashesGeneric(gworld)
+		cs.cleanupExpiredFlashes(world)
 		return
 	}
 
@@ -79,7 +76,7 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 	gameWidth := cs.ctx.GameWidth
 
 	for _, entity := range entities {
-		c, ok := gworld.Cleaners.Get(entity)
+		c, ok := world.Cleaners.Get(entity)
 		if !ok {
 			continue
 		}
@@ -107,7 +104,7 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 
 		if checkStart <= checkEnd {
 			for x := checkStart; x <= checkEnd; x++ {
-				cs.checkAndDestroyAtPositionGeneric(gworld, x, c.GridY)
+				cs.checkAndDestroyAtPosition(world, x, c.GridY)
 			}
 		}
 
@@ -157,200 +154,27 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 		}
 
 		if shouldDestroy {
-			gworld.DestroyEntity(entity)
+			world.DestroyEntity(entity)
 		} else {
 			// Save updated component state
-			gworld.Cleaners.Add(entity, c)
+			world.Cleaners.Add(entity, c)
 		}
 	}
 
 	// Check again after processing to see if all cleaners finished this frame
-	entities = gworld.Cleaners.All()
+	entities = world.Cleaners.All()
 	if len(entities) == 0 && cs.hasSpawnedSession {
 		cs.ctx.PushEvent(engine.EventCleanerFinished, nil)
 		cs.hasSpawnedSession = false
 	}
 
 	// 4. Cleanup Effects
-	cs.cleanupExpiredFlashesGeneric(gworld)
+	cs.cleanupExpiredFlashes(world)
 }
 
-// spawnCleaners generates cleaner entities for rows with Red characters
+// spawnCleaners generates cleaner entities using generic stores
 func (cs *CleanerSystem) spawnCleaners(world *engine.World) {
 	redRows := cs.scanRedCharacterRows(world)
-	if len(redRows) == 0 {
-		return
-	}
-
-	// Play sound ONLY if spawning actual cleaners
-	if cs.ctx.AudioEngine != nil {
-		cs.ctx.AudioEngine.SendRealTime(audio.AudioCommand{
-			Type:       audio.SoundWhoosh,
-			Priority:   1,
-			Generation: uint64(cs.ctx.State.GetFrameNumber()),
-			Timestamp:  cs.ctx.TimeProvider.Now(),
-		})
-	}
-
-	gameWidth := float64(cs.ctx.GameWidth)
-	duration := constants.CleanerAnimationDuration.Seconds()
-	// Calculate base speed to traverse width in duration
-	baseSpeed := gameWidth / duration
-
-	trailLen := float64(constants.CleanerTrailLength)
-
-	for _, row := range redRows {
-		entity := world.CreateEntity()
-
-		var startX, targetX, velX float64
-
-		if row%2 != 0 {
-			// Odd Rows: Left -> Right
-			// Start off-screen left, End off-screen right
-			startX = -trailLen
-			targetX = gameWidth + trailLen
-			velX = baseSpeed
-		} else {
-			// Even Rows: Right -> Left
-			// Start off-screen right, End off-screen left
-			startX = gameWidth + trailLen
-			targetX = -trailLen
-			velX = -baseSpeed
-		}
-
-		// Initial trail point
-		startGridX := int(startX)
-		trail := []core.Point{{X: startGridX, Y: row}}
-
-		comp := components.CleanerComponent{
-			PreciseX:  startX,
-			PreciseY:  float64(row),
-			VelocityX: velX,
-			VelocityY: 0, // Horizontal only
-			TargetX:   targetX,
-			TargetY:   float64(row),
-			GridX:     startGridX,
-			GridY:     row,
-			Trail:     trail,
-			Char:      constants.CleanerChar,
-		}
-
-		world.AddComponent(entity, comp)
-	}
-}
-
-// scanRedCharacterRows finds all rows containing Red sequences
-func (cs *CleanerSystem) scanRedCharacterRows(world *engine.World) []int {
-	redRows := make(map[int]bool)
-	gameHeight := cs.ctx.GameHeight
-
-	seqType := reflect.TypeOf(components.SequenceComponent{})
-	posType := reflect.TypeOf(components.PositionComponent{})
-
-	entities := world.GetEntitiesWith(seqType, posType)
-
-	for _, entity := range entities {
-		seqRaw, hasSeq := world.GetComponent(entity, seqType)
-		if !hasSeq {
-			continue // Entity might have been destroyed concurrently
-		}
-
-		// Type assertion
-		seq := seqRaw.(components.SequenceComponent)
-		if seq.Type != components.SequenceRed {
-			continue
-		}
-
-		// Retrieve Position
-		posRaw, hasPos := world.GetComponent(entity, posType)
-		if !hasPos {
-			continue
-		}
-
-		pos := posRaw.(components.PositionComponent)
-
-		// Add row if in bounds
-		if pos.Y >= 0 && pos.Y < gameHeight {
-			redRows[pos.Y] = true
-		}
-	}
-
-	rows := make([]int, 0, len(redRows))
-	for row := range redRows {
-		rows = append(rows, row)
-	}
-	return rows
-}
-
-// checkAndDestroyAtPosition handles collision logic and flash spawning
-func (cs *CleanerSystem) checkAndDestroyAtPosition(world *engine.World, x, y int) {
-	targetEntity := world.GetEntityAtPosition(x, y)
-	if targetEntity == 0 {
-		return
-	}
-
-	// Verify it's a Red character
-	seqType := reflect.TypeOf(components.SequenceComponent{})
-	if seqComp, ok := world.GetComponent(targetEntity, seqType); ok {
-		if seqComp.(components.SequenceComponent).Type == components.SequenceRed {
-			// Spawn flash effect
-			cs.spawnRemovalFlash(world, targetEntity)
-			// Destroy target
-			world.DestroyEntity(targetEntity)
-		}
-	}
-}
-
-// spawnRemovalFlash creates a transient visual effect at the position of the destroyed entity
-func (cs *CleanerSystem) spawnRemovalFlash(world *engine.World, targetEntity engine.Entity) {
-	charType := reflect.TypeOf(components.CharacterComponent{})
-	posType := reflect.TypeOf(components.PositionComponent{})
-
-	if charComp, ok := world.GetComponent(targetEntity, charType); ok {
-		if posComp, ok := world.GetComponent(targetEntity, posType); ok {
-			char := charComp.(components.CharacterComponent)
-			pos := posComp.(components.PositionComponent)
-
-			flashEntity := world.CreateEntity()
-			flash := components.RemovalFlashComponent{
-				X:         pos.X,
-				Y:         pos.Y,
-				Char:      char.Rune,
-				StartTime: cs.ctx.TimeProvider.Now(),
-				Duration:  constants.CleanerRemovalFlashDuration,
-			}
-			world.AddComponent(flashEntity, flash)
-		}
-	}
-}
-
-// cleanupExpiredFlashes destroys removal flash entities that have exceeded their duration
-func (cs *CleanerSystem) cleanupExpiredFlashes(world *engine.World) {
-	flashType := reflect.TypeOf(components.RemovalFlashComponent{})
-	entities := world.GetEntitiesWith(flashType)
-	now := cs.ctx.TimeProvider.Now()
-
-	for _, entity := range entities {
-		flashRaw, ok := world.GetComponent(entity, flashType)
-		if !ok {
-			continue
-		}
-
-		flash := flashRaw.(components.RemovalFlashComponent)
-
-		if now.Sub(flash.StartTime).Milliseconds() >= int64(flash.Duration) {
-			world.DestroyEntity(entity)
-		}
-	}
-}
-
-// ============================================================================
-// GENERIC METHODS - Migration to generics-based ECS
-// ============================================================================
-
-// spawnCleanersGeneric generates cleaner entities using generic stores
-func (cs *CleanerSystem) spawnCleanersGeneric(world *engine.WorldGeneric) {
-	redRows := cs.scanRedCharacterRowsGeneric(world)
 	if len(redRows) == 0 {
 		return
 	}
@@ -412,8 +236,8 @@ func (cs *CleanerSystem) spawnCleanersGeneric(world *engine.WorldGeneric) {
 	}
 }
 
-// scanRedCharacterRowsGeneric finds all rows containing Red sequences using query builder
-func (cs *CleanerSystem) scanRedCharacterRowsGeneric(world *engine.WorldGeneric) []int {
+// scanRedCharacterRows finds all rows containing Red sequences using query builder
+func (cs *CleanerSystem) scanRedCharacterRows(world *engine.World) []int {
 	redRows := make(map[int]bool)
 	gameHeight := cs.ctx.GameHeight
 
@@ -452,8 +276,8 @@ func (cs *CleanerSystem) scanRedCharacterRowsGeneric(world *engine.WorldGeneric)
 	return rows
 }
 
-// checkAndDestroyAtPositionGeneric handles collision logic using spatial index
-func (cs *CleanerSystem) checkAndDestroyAtPositionGeneric(world *engine.WorldGeneric, x, y int) {
+// checkAndDestroyAtPosition handles collision logic using spatial index
+func (cs *CleanerSystem) checkAndDestroyAtPosition(world *engine.World, x, y int) {
 	targetEntity := world.Positions.GetEntityAt(x, y)
 	if targetEntity == 0 {
 		return
@@ -463,15 +287,15 @@ func (cs *CleanerSystem) checkAndDestroyAtPositionGeneric(world *engine.WorldGen
 	if seqComp, ok := world.Sequences.Get(targetEntity); ok {
 		if seqComp.Type == components.SequenceRed {
 			// Spawn flash effect
-			cs.spawnRemovalFlashGeneric(world, targetEntity)
+			cs.spawnRemovalFlash(world, targetEntity)
 			// Destroy target
 			world.DestroyEntity(targetEntity)
 		}
 	}
 }
 
-// spawnRemovalFlashGeneric creates a transient visual effect using generic stores
-func (cs *CleanerSystem) spawnRemovalFlashGeneric(world *engine.WorldGeneric, targetEntity engine.Entity) {
+// spawnRemovalFlash creates a transient visual effect using generic stores
+func (cs *CleanerSystem) spawnRemovalFlash(world *engine.World, targetEntity engine.Entity) {
 	if charComp, ok := world.Characters.Get(targetEntity); ok {
 		if posComp, ok := world.Positions.Get(targetEntity); ok {
 			flash := components.RemovalFlashComponent{
@@ -488,8 +312,8 @@ func (cs *CleanerSystem) spawnRemovalFlashGeneric(world *engine.WorldGeneric, ta
 	}
 }
 
-// cleanupExpiredFlashesGeneric destroys expired removal flash entities using generic stores
-func (cs *CleanerSystem) cleanupExpiredFlashesGeneric(world *engine.WorldGeneric) {
+// cleanupExpiredFlashes destroys expired removal flash entities using generic stores
+func (cs *CleanerSystem) cleanupExpiredFlashes(world *engine.World) {
 	entities := world.RemovalFlashes.All()
 	now := cs.ctx.TimeProvider.Now()
 

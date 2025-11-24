@@ -175,7 +175,6 @@ func setCommandError(ctx *engine.GameContext, message string) {
 
 // clearAllEntities removes all entities from the world
 func clearAllEntities(world *engine.World) {
-	// Use the generic world's Clear method to remove all entities
-	gworld := world.GetGeneric()
-	gworld.Clear()
+	// Use the world's Clear method to remove all entities
+	world.Clear()
 }

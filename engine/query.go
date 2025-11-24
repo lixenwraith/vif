@@ -6,7 +6,7 @@ import "sort"
 // It uses the sparse set pattern from stores to efficiently find entities that have all specified components.
 // The query optimizes by starting with the smallest store and filtering through larger ones.
 type QueryBuilder struct {
-	world    *WorldGeneric
+	world    *World
 	stores   []QueryableStore
 	executed bool
 	results  []Entity
@@ -20,7 +20,7 @@ type QueryBuilder struct {
 //       With(world.Positions).
 //       With(world.Characters).
 //       Execute()
-func (w *WorldGeneric) Query() *QueryBuilder {
+func (w *World) Query() *QueryBuilder {
 	return &QueryBuilder{
 		world:   w,
 		stores:  make([]QueryableStore, 0, 4), // Pre-allocate for common case

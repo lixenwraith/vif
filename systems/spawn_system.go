@@ -323,8 +323,8 @@ func (s *SpawnSystem) getAvailableColors() []ColorLevelKey {
 // Update runs the spawn system logic
 func (s *SpawnSystem) Update(world *engine.World, dt time.Duration) {
 	// Calculate fill percentage and update GameState using generic stores
-	gworld := world.GetGeneric()
-	entityCount := gworld.Positions.Count()
+	
+	entityCount := world.Positions.Count()
 
 	if entityCount > maxEntities {
 		return // Already at max capacity
@@ -470,7 +470,7 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 	}
 
 	// Get generic world
-	gworld := world.GetGeneric()
+	
 
 	// Read dimensions from context
 	gameWidth := s.ctx.GameWidth
@@ -498,7 +498,7 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 		// Check for overlaps using generic position store
 		hasOverlap := false
 		for i := 0; i < lineLength; i++ {
-			if gworld.Positions.GetEntityAt(startCol+i, row) != 0 {
+			if world.Positions.GetEntityAt(startCol+i, row) != 0 {
 				hasOverlap = true
 				break
 			}
@@ -535,7 +535,7 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 					continue
 				}
 
-				entity := gworld.CreateEntity()
+				entity := world.CreateEntity()
 				entities = append(entities, entityData{
 					entity: entity,
 					pos: components.PositionComponent{
@@ -556,7 +556,7 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 			}
 
 			// Phase 2: Batch position validation and commit
-			batch := gworld.Positions.BeginBatch()
+			batch := world.Positions.BeginBatch()
 			for _, ed := range entities {
 				batch.Add(ed.entity, ed.pos)
 			}
@@ -564,15 +564,15 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 			if err := batch.Commit(); err != nil {
 				// Collision detected - cleanup entities and try next attempt
 				for _, ed := range entities {
-					gworld.DestroyEntity(ed.entity)
+					world.DestroyEntity(ed.entity)
 				}
 				continue
 			}
 
 			// Phase 3: Add other components (positions already committed)
 			for _, ed := range entities {
-				gworld.Characters.Add(ed.entity, ed.char)
-				gworld.Sequences.Add(ed.entity, ed.seq)
+				world.Characters.Add(ed.entity, ed.char)
+				world.Sequences.Add(ed.entity, ed.seq)
 			}
 
 			// Atomically increment the color counter (only non-space characters)

@@ -44,7 +44,6 @@ func (s *NuggetSystem) Priority() int {
 // Update runs the nugget system logic using generic stores
 func (s *NuggetSystem) Update(world *engine.World, dt time.Duration) {
 	now := s.ctx.TimeProvider.Now()
-	gworld := world.GetGeneric()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -59,7 +58,7 @@ func (s *NuggetSystem) Update(world *engine.World, dt time.Duration) {
 		return
 	}
 
-	if !gworld.Nuggets.Has(engine.Entity(activeNuggetEntity)) {
+	if !world.Nuggets.Has(engine.Entity(activeNuggetEntity)) {
 		s.activeNugget.CompareAndSwap(activeNuggetEntity, 0)
 	}
 }
@@ -67,14 +66,13 @@ func (s *NuggetSystem) Update(world *engine.World, dt time.Duration) {
 // spawnNugget creates a new nugget at a random valid position using generic stores
 // Caller must hold s.mu lock
 func (s *NuggetSystem) spawnNugget(world *engine.World, now time.Time) {
-	gworld := world.GetGeneric()
 	x, y := s.findValidPosition(world)
 	if x < 0 || y < 0 {
 		return
 	}
 
 	nuggetID := s.nuggetID.Add(1)
-	entity := gworld.CreateEntity()
+	entity := world.CreateEntity()
 
 	pos := components.PositionComponent{
 		X: x,
@@ -96,17 +94,17 @@ func (s *NuggetSystem) spawnNugget(world *engine.World, now time.Time) {
 	}
 
 	// Use batch for atomic position validation
-	batch := gworld.Positions.BeginBatch()
+	batch := world.Positions.BeginBatch()
 	batch.Add(entity, pos)
 	if err := batch.Commit(); err != nil {
 		// Position was taken while we were creating the nugget
-		gworld.DestroyEntity(entity)
+		world.DestroyEntity(entity)
 		return
 	}
 
 	// Add other components after position is committed
-	gworld.Characters.Add(entity, char)
-	gworld.Nuggets.Add(entity, nugget)
+	world.Characters.Add(entity, char)
+	world.Nuggets.Add(entity, nugget)
 
 	s.activeNugget.Store(uint64(entity))
 }
@@ -114,7 +112,6 @@ func (s *NuggetSystem) spawnNugget(world *engine.World, now time.Time) {
 // findValidPosition finds a valid random position for a nugget using generic stores
 // Caller must hold s.mu lock
 func (s *NuggetSystem) findValidPosition(world *engine.World) (int, int) {
-	gworld := world.GetGeneric()
 	gameWidth := s.ctx.GameWidth
 	gameHeight := s.ctx.GameHeight
 	cursor := s.ctx.State.ReadCursorPosition()
@@ -127,7 +124,7 @@ func (s *NuggetSystem) findValidPosition(world *engine.World) (int, int) {
 			continue
 		}
 
-		if gworld.Positions.GetEntityAt(x, y) != 0 {
+		if world.Positions.GetEntityAt(x, y) != 0 {
 			continue
 		}
 
@@ -177,8 +174,6 @@ func (s *NuggetSystem) GetSystemState() string {
 
 // JumpToNugget returns the position of the active nugget, or (-1, -1) if no nugget exists using generic stores
 func (s *NuggetSystem) JumpToNugget(world *engine.World) (int, int) {
-	gworld := world.GetGeneric()
-
 	// Get active nugget entity ID
 	activeNuggetEntity := s.activeNugget.Load()
 	if activeNuggetEntity == 0 {
@@ -186,7 +181,7 @@ func (s *NuggetSystem) JumpToNugget(world *engine.World) (int, int) {
 	}
 
 	// Get position component from entity
-	pos, ok := gworld.Positions.Get(engine.Entity(activeNuggetEntity))
+	pos, ok := world.Positions.Get(engine.Entity(activeNuggetEntity))
 	if !ok {
 		// No position component (shouldn't happen, but handle gracefully)
 		return -1, -1

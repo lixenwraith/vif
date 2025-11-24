@@ -12,7 +12,7 @@ import "github.com/lixenwraith/vi-fighter/components"
 //       WithPosition(world.Positions, positionComponent).
 //       Build()
 type EntityBuilder struct {
-	world  *WorldGeneric
+	world  *World
 	entity Entity
 	built  bool
 }
@@ -22,7 +22,7 @@ type EntityBuilder struct {
 // until Build() is called. This ensures atomic entity creation.
 //
 // Returns a new EntityBuilder ready for component assignment via With() methods.
-func (w *WorldGeneric) NewEntity() *EntityBuilder {
+func (w *World) NewEntity() *EntityBuilder {
 	return &EntityBuilder{
 		world:  w,
 		entity: w.reserveEntityID(),
@@ -88,7 +88,7 @@ func (eb *EntityBuilder) Build() Entity {
 // This is used internally by NewEntity() to reserve an ID before components are added.
 //
 // Returns a unique entity ID that has never been used before in this world.
-func (w *WorldGeneric) reserveEntityID() Entity {
+func (w *World) reserveEntityID() Entity {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 

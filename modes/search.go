@@ -55,15 +55,14 @@ func RepeatSearch(ctx *engine.GameContext, forward bool) bool {
 func buildCharacterGrid(ctx *engine.GameContext) map[Point]rune {
 	grid := make(map[Point]rune)
 
-	gworld := ctx.World.GetGeneric()
-	entities := gworld.Query().
-		With(gworld.Positions).
-		With(gworld.Characters).
+	entities := ctx.World.Query().
+		With(ctx.World.Positions).
+		With(ctx.World.Characters).
 		Execute()
 
 	for _, entity := range entities {
-		pos, _ := gworld.Positions.Get(entity)
-		char, _ := gworld.Characters.Get(entity)
+		pos, _ := ctx.World.Positions.Get(entity)
+		char, _ := ctx.World.Characters.Get(entity)
 		grid[Point{pos.X, pos.Y}] = char.Rune
 	}
 

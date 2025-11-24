@@ -2,9 +2,10 @@ package engine
 
 import (
 	"fmt"
-	"reflect"
 	"sync"
 	"time"
+
+	"github.com/lixenwraith/vi-fighter/components"
 )
 
 // Entity is a unique identifier for an entity
@@ -19,185 +20,91 @@ type System interface {
 	Priority() int // Lower values run first
 }
 
-// World contains all entities and their components
+// World contains all entities and their components using generics-based ECS.
+// This eliminates reflection for compile-time type safety and better performance.
 type World struct {
-	mu               sync.RWMutex
-	nextEntityID     Entity
-	entities         map[Entity]map[reflect.Type]Component
-	systems          []System
-	spatialIndex     map[int]map[int]Entity // [y][x] -> Entity for position queries
-	positionType     reflect.Type
-	componentsByType map[reflect.Type][]Entity // Reverse index: component type -> entities
-	updateMutex      sync.Mutex                // Frame barrier mutex to prevent concurrent updates
-	isUpdating       bool                      // Flag indicating if update is in progress
+	mu           sync.RWMutex
+	nextEntityID Entity
 
-	// Migration bridge - runs parallel to old reflection-based implementation
-	generic    *WorldGeneric
-	useGeneric bool // Flag to switch between implementations
+	// Component Stores (Public for direct system access)
+	Positions      *PositionStore
+	Characters     *Store[components.CharacterComponent]
+	Sequences      *Store[components.SequenceComponent]
+	GoldSequences  *Store[components.GoldSequenceComponent]
+	FallingDecays  *Store[components.FallingDecayComponent]
+	Cleaners       *Store[components.CleanerComponent]
+	RemovalFlashes *Store[components.RemovalFlashComponent]
+	Nuggets        *Store[components.NuggetComponent]
+	Drains         *Store[components.DrainComponent]
+
+	// Lifecycle registry - all stores implement AnyStore for uniform cleanup
+	allStores []AnyStore
+
+	// System management
+	systems     []System
+	updateMutex sync.Mutex // Frame barrier mutex to prevent concurrent updates
+	isUpdating  bool       // Flag indicating if update is in progress
 }
 
-// NewWorld creates a new ECS world
+// NewWorld creates a new ECS world with all component stores initialized.
 func NewWorld() *World {
-	return &World{
-		nextEntityID:     1,
-		entities:         make(map[Entity]map[reflect.Type]Component),
-		systems:          make([]System, 0),
-		spatialIndex:     make(map[int]map[int]Entity),
-		componentsByType: make(map[reflect.Type][]Entity),
-		generic:          NewWorldGeneric(),
-		useGeneric:       false, // Start with old implementation
+	w := &World{
+		nextEntityID:   1,
+		systems:        make([]System, 0),
+		Positions:      NewPositionStore(),
+		Characters:     NewStore[components.CharacterComponent](),
+		Sequences:      NewStore[components.SequenceComponent](),
+		GoldSequences:  NewStore[components.GoldSequenceComponent](),
+		FallingDecays:  NewStore[components.FallingDecayComponent](),
+		Cleaners:       NewStore[components.CleanerComponent](),
+		RemovalFlashes: NewStore[components.RemovalFlashComponent](),
+		Nuggets:        NewStore[components.NuggetComponent](),
+		Drains:         NewStore[components.DrainComponent](),
 	}
+
+	// Register all stores for lifecycle operations
+	// Note: PositionStore.Store is registered (the underlying generic store)
+	w.allStores = []AnyStore{
+		w.Positions.Store,
+		w.Characters,
+		w.Sequences,
+		w.GoldSequences,
+		w.FallingDecays,
+		w.Cleaners,
+		w.RemovalFlashes,
+		w.Nuggets,
+		w.Drains,
+	}
+
+	return w
 }
 
-// CreateEntity creates a new entity and returns its ID
+// CreateEntity reserves a new entity ID without adding any components.
+// Use NewEntity() builder for transactional entity creation with components.
 func (w *World) CreateEntity() Entity {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
 	id := w.nextEntityID
 	w.nextEntityID++
-	w.entities[id] = make(map[reflect.Type]Component)
 	return id
 }
 
-// DestroyEntity safely removes an entity by atomically:
-// 1. Removing from spatial index first (if entity has PositionComponent)
-// 2. Then destroying the entity and cleaning up all component indices
-// This ensures spatial index consistency and prevents race conditions.
-// All operations are performed under a single lock for atomicity.
-func (w *World) DestroyEntity(entity Entity) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	// Check if entity exists
-	components, ok := w.entities[entity]
-	if !ok {
-		return // Entity doesn't exist
+// DestroyEntity removes all components associated with an entity.
+// This removes from the spatial index first, then all other stores.
+func (w *World) DestroyEntity(e Entity) {
+	// Remove from spatial index first (if entity has PositionComponent)
+	// PositionStore.Remove handles both the spatial index and the underlying store
+	if _, exists := w.Positions.Get(e); exists {
+		w.Positions.Remove(e)
 	}
 
-	// First, remove from spatial index if entity has a position
-	// We need to find PositionComponent type from the components
-	for compType, comp := range components {
-		// Check if this is a PositionComponent by type name
-		if compType.Name() == "PositionComponent" {
-			// Use reflection to get X and Y fields
-			posVal := reflect.ValueOf(comp)
-			if posVal.Kind() == reflect.Struct {
-				xField := posVal.FieldByName("X")
-				yField := posVal.FieldByName("Y")
-				if xField.IsValid() && yField.IsValid() && xField.CanInt() && yField.CanInt() {
-					x := int(xField.Int())
-					y := int(yField.Int())
-					if row, exists := w.spatialIndex[y]; exists {
-						delete(row, x)
-					}
-				}
-			}
-			break // Only one PositionComponent per entity
-		}
-	}
-
-	// Remove from component type index
-	for compType := range components {
-		w.removeFromTypeIndex(entity, compType)
-	}
-
-	// Delete entity
-	delete(w.entities, entity)
-}
-
-// AddComponent adds a component to an entity
-func (w *World) AddComponent(entity Entity, component Component) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if _, ok := w.entities[entity]; !ok {
-		return // Entity doesn't exist
-	}
-
-	compType := reflect.TypeOf(component)
-	w.entities[entity][compType] = component
-
-	// Add to component type index
-	w.addToTypeIndex(entity, compType)
-}
-
-// GetComponent retrieves a component from an entity
-func (w *World) GetComponent(entity Entity, componentType reflect.Type) (Component, bool) {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-
-	if components, ok := w.entities[entity]; ok {
-		if comp, ok := components[componentType]; ok {
-			return comp, true
-		}
-	}
-	return nil, false
-}
-
-// RemoveComponent removes a component from an entity
-func (w *World) RemoveComponent(entity Entity, componentType reflect.Type) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if components, ok := w.entities[entity]; ok {
-		delete(components, componentType)
-		w.removeFromTypeIndex(entity, componentType)
+	// Remove from all other stores
+	for _, store := range w.allStores {
+		store.Remove(e)
 	}
 }
 
-// HasComponent checks if an entity has a specific component
-func (w *World) HasComponent(entity Entity, componentType reflect.Type) bool {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-
-	if components, ok := w.entities[entity]; ok {
-		_, ok := components[componentType]
-		return ok
-	}
-	return false
-}
-
-// GetEntitiesWith returns all entities that have the specified component types
-func (w *World) GetEntitiesWith(componentTypes ...reflect.Type) []Entity {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-
-	if len(componentTypes) == 0 {
-		return nil
-	}
-
-	// Start with entities that have the first component type
-	candidates := w.componentsByType[componentTypes[0]]
-	if candidates == nil {
-		return nil
-	}
-
-	result := make([]Entity, 0)
-	for _, entity := range candidates {
-		hasAll := true
-		for _, compType := range componentTypes {
-			if !w.hasComponentUnsafe(entity, compType) {
-				hasAll = false
-				break
-			}
-		}
-		if hasAll {
-			result = append(result, entity)
-		}
-	}
-
-	return result
-}
-
-// hasComponentUnsafe checks for component without locking (assumes lock is held)
-func (w *World) hasComponentUnsafe(entity Entity, componentType reflect.Type) bool {
-	if components, ok := w.entities[entity]; ok {
-		_, ok := components[componentType]
-		return ok
-	}
-	return false
-}
 
 // AddSystem adds a system to the world and sorts by priority
 func (w *World) AddSystem(system System) {
@@ -237,54 +144,16 @@ func (w *World) Update(dt time.Duration) {
 
 // GetEntityAtPosition returns the entity at a given position (0 if none)
 func (w *World) GetEntityAtPosition(x, y int) Entity {
-	// Delegate to generic implementation when enabled
-	if w.useGeneric {
-		return w.generic.Positions.GetEntityAt(x, y)
-	}
-
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-
-	if row, ok := w.spatialIndex[y]; ok {
-		if entity, ok := row[x]; ok {
-			return entity
-		}
-	}
-	return 0
+	return w.Positions.GetEntityAt(x, y)
 }
 
-// addToTypeIndex adds entity to the component type index
-func (w *World) addToTypeIndex(entity Entity, componentType reflect.Type) {
-	entities := w.componentsByType[componentType]
-
-	// Check if already in list
-	for _, e := range entities {
-		if e == entity {
-			return
-		}
-	}
-
-	w.componentsByType[componentType] = append(entities, entity)
-}
-
-// removeFromTypeIndex removes entity from the component type index
-func (w *World) removeFromTypeIndex(entity Entity, componentType reflect.Type) {
-	entities := w.componentsByType[componentType]
-	for i, e := range entities {
-		if e == entity {
-			// Remove by swapping with last element and truncating
-			w.componentsByType[componentType][i] = w.componentsByType[componentType][len(entities)-1]
-			w.componentsByType[componentType] = w.componentsByType[componentType][:len(entities)-1]
-			return
-		}
-	}
-}
-
-// EntityCount returns the number of entities in the world
+// EntityCount returns the approximate number of entities in the world.
+// This is calculated from the highest entity ID, not the actual count of
+// entities with components. For accurate counts, query specific stores.
 func (w *World) EntityCount() int {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	return len(w.entities)
+	return int(w.nextEntityID - 1)
 }
 
 // MoveEntitySafe safely moves an entity from one position to another using spatial transactions
@@ -305,87 +174,25 @@ func (w *World) MoveEntitySafe(entity Entity, oldX, oldY, newX, newY int) Collis
 	return result
 }
 
-// ValidateSpatialIndex checks the spatial index for consistency
-// Returns a list of inconsistencies found (empty if consistent)
-// This is primarily used for debugging and testing
-func (w *World) ValidateSpatialIndex() []string {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
+// Clear removes all entities and components from the world.
+// This is useful for resetting game state or cleaning up during tests.
+func (w *World) Clear() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 
-	inconsistencies := make([]string, 0)
+	w.nextEntityID = 1
+	for _, store := range w.allStores {
+		store.Clear()
+	}
+}
 
-	// Check that all entities in spatial index actually exist
-	for y, row := range w.spatialIndex {
-		for x, entity := range row {
-			if _, ok := w.entities[entity]; !ok {
-				inconsistencies = append(inconsistencies,
-					fmt.Sprintf("Spatial index at (%d,%d) references non-existent entity %d", x, y, entity))
-			}
+// HasAnyComponent checks if an entity has at least one component.
+// This is useful for validating entity existence.
+func (w *World) HasAnyComponent(e Entity) bool {
+	for _, store := range w.allStores {
+		if store.Has(e) {
+			return true
 		}
 	}
-
-	// Check that all entities with PositionComponent are in spatial index
-	for entity, components := range w.entities {
-		for compType, comp := range components {
-			if compType.Name() == "PositionComponent" {
-				// Use reflection to get X and Y fields
-				posVal := reflect.ValueOf(comp)
-				if posVal.Kind() == reflect.Struct {
-					xField := posVal.FieldByName("X")
-					yField := posVal.FieldByName("Y")
-					if xField.IsValid() && yField.IsValid() && xField.CanInt() && yField.CanInt() {
-						x := int(xField.Int())
-						y := int(yField.Int())
-
-						// Check if entity is in spatial index at this position
-						if row, ok := w.spatialIndex[y]; ok {
-							if indexedEntity, ok := row[x]; ok {
-								if indexedEntity != entity {
-									inconsistencies = append(inconsistencies,
-										fmt.Sprintf("Entity %d has PositionComponent at (%d,%d) but spatial index has entity %d",
-											entity, x, y, indexedEntity))
-								}
-							} else {
-								inconsistencies = append(inconsistencies,
-									fmt.Sprintf("Entity %d has PositionComponent at (%d,%d) but is not in spatial index",
-										entity, x, y))
-							}
-						} else {
-							inconsistencies = append(inconsistencies,
-								fmt.Sprintf("Entity %d has PositionComponent at (%d,%d) but row %d is not in spatial index",
-									entity, x, y, y))
-						}
-					}
-				}
-			}
-		}
-	}
-
-	return inconsistencies
-}
-
-// GetGeneric returns the generic ECS world for migration purposes
-func (w *World) GetGeneric() *WorldGeneric {
-	return w.generic
-}
-
-// CreateEntityGeneric creates a new entity using the generic world
-// This is part of the migration bridge to allow parallel entity creation
-func (w *World) CreateEntityGeneric() Entity {
-	return w.generic.CreateEntity()
-}
-
-// SyncToGeneric synchronizes the reflection-based world to the generic world.
-// This is a temporary method used during migration to keep both worlds in sync
-// for systems that have not yet been migrated to use the generic world.
-// Call this before rendering to ensure the renderer sees the latest state.
-func (w *World) SyncToGeneric() {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-
-	// Clear generic world first
-	w.generic.Clear()
-
-	// Copy all entities and their components
-	w.generic.MigrateFrom(w)
+	return false
 }
