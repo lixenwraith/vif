@@ -57,18 +57,12 @@ type World struct {
 }
 ```
 
-**Benefits:**
-- **Type Safety**: Compile-time errors for component type mismatches
-- **Performance**: Zero reflection overhead, direct memory access
-- **Clarity**: Explicit component relationships visible in code
-- **Tooling**: IDE autocomplete and type checking for all component access
-
 ### Event-Driven Communication
-**Architecture**: Systems decouple via `GameContext.EventQueue` for inter-system communication.
+Systems communicate through `GameContext.EventQueue`, a lock-free ring buffer that decouples producers and consumers.
 
 **Core Principles:**
 - **Decoupling**: Systems push events instead of calling methods on other systems
-- **Lock-Free**: Ring buffer with atomic operations (no mutexes)
+- **Lock-Free**: Ring buffer with atomic CAS operations (no mutexes)
 - **Single Consumer**: Game loop consumes events each frame
 - **Frame Deduplication**: Events include frame number to prevent duplicate processing
 
@@ -103,34 +97,11 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 }
 ```
 
-**Why Events Instead of Direct Calls:**
-```go
-// ❌ WRONG: Direct method calls create tight coupling
-cleanerSystem.ActivateCleaners()  // ScoreSystem must hold CleanerSystem reference
-
-// ❌ WRONG: Shared boolean flags create race conditions
-ctx.State.SetCleanerPending(true)  // Requires mutex, hard to test
-
-// ✅ CORRECT: Events decouple systems
-ctx.PushEvent(engine.EventCleanerRequest, nil)  // Lock-free, testable, observable
-```
-
 **Implementation** (`engine/events.go`):
 - `EventQueue`: Fixed-size ring buffer (size defined in `constants.EventQueueSize`)
 - `Push()`: Lock-free CAS (Compare-And-Swap) for concurrent producers using fast bitwise masking (`constants.EventBufferMask`)
 - `Consume()`: Atomically claims and returns all pending events
 - `Peek()`: Read-only inspection for debugging/testing
-
-**Benefits**:
-- **Testability**: Events are observable (can assert event was pushed)
-- **Debuggability**: Event log shows all inter-system communication
-- **Thread-Safety**: Lock-free ring buffer, no contention
-- **Flexibility**: Easy to add new consumers for existing events
-
-**Trade-offs**:
-- **Latency**: Events processed next frame (not immediate)
-- **Indirection**: Event flow less obvious than direct method calls
-- **Deduplication**: Consumers must track processed events by frame
 
 ### State Ownership Model
 
@@ -147,10 +118,7 @@ Updated immediately on user input/spawn events, read by all systems:
 - **Drain State** (`atomic.Bool`, `atomic.Uint64`, `atomic.Int32`): Active, EntityID, X, Y
 - **Sequence ID** (`atomic.Int64`): Thread-safe ID generation
 
-**Why Atomic**: These values are accessed on every frame and every keystroke. Atomics provide:
-- Lock-free reads (no contention on render or input threads)
-- Immediate consistency (typing feedback feels instant)
-- Race-free updates without blocking
+Atomics are used for high-frequency access (every frame and keystroke) to avoid lock contention while ensuring immediate consistency and race-free updates.
 
 #### Clock-Tick State (Mutex Protected)
 Updated during scheduled game logic ticks, read by all systems:
@@ -162,10 +130,7 @@ Updated during scheduled game logic ticks, read by all systems:
 - **Decay Timer State**: DecayTimerActive, DecayNextTime
 - **Decay Animation State**: DecayAnimating, DecayStartTime
 
-**Why Mutex**: These values change infrequently (every 2 seconds for spawn, or on game events) and require:
-- Consistent multi-field reads (spawn timing snapshot, phase state)
-- Atomic state transitions (spawn rate adaptation, phase changes)
-- Blocking is acceptable (not on hot path)
+Mutexes protect infrequently-changed state that requires consistent multi-field reads and atomic state transitions (spawn timing, phase changes). Blocking is acceptable since these are not on the hot path.
 
 #### State Access Patterns
 
@@ -358,21 +323,6 @@ score := ctx.State.GetScore() // Atomic read #2
    - Modifying snapshot fields doesn't affect GameState
    - Safe to pass snapshots across goroutine boundaries
    - No memory aliasing issues
-
-#### Testing
-- `engine/game_state_test.go`: Unit tests for atomic operations, state snapshots, spawn timing
-  - `TestSnapshotConsistency`: Verifies snapshots remain consistent under rapid state changes (10 concurrent readers)
-  - `TestNoPartialReads`: Ensures snapshots never show partial state updates (5 concurrent readers)
-  - `TestSnapshotImmutability`: Confirms snapshots are immutable value copies
-  - `TestAllSnapshotTypesConcurrent`: Tests all snapshot types under concurrent access (5 concurrent readers)
-  - `TestAtomicSnapshotConsistency`: Verifies atomic field snapshots (10 concurrent readers, 1000 rapid updates)
-- `systems/race_condition_comprehensive_test.go`: Snapshot pattern integration tests
-  - `TestSnapshotConsistencyUnderRapidChanges`: Multi-writer (3) + multi-reader (10) snapshot consistency
-  - `TestSnapshotImmutabilityWithSystemUpdates`: Snapshot immutability during active system modifications
-  - `TestNoPartialSnapshotReads`: Verifies no partial reads during rapid updates (8 concurrent readers)
-  - `TestPhaseSnapshotConsistency`: Phase snapshot consistency during rapid transitions (5 concurrent readers)
-  - `TestMultiSnapshotAtomicity`: Multiple snapshot types taken in rapid succession (10 concurrent readers)
-- All tests pass with `-race` flag (no data races detected)
 
 ### Clock Scheduler and Time Management
 
@@ -573,28 +523,6 @@ for {
 - Mutex contention minimized (scheduler thread vs main thread)
 - Adaptive sleep during pause reduces CPU usage to near-zero
 - Frame/game synchronization prevents wasted rendering (no tearing)
-
-#### Testing
-- `engine/clock_scheduler_test.go`: Scheduler tick tests, phase transition tests
-  - `TestClockSchedulerBasicTicking`: Tick count increment verification
-  - `TestClockSchedulerConcurrentTicking`: Concurrent goroutine safety
-  - `TestClockSchedulerStopIdempotent`: Multiple Stop() calls safety
-  - `TestClockSchedulerTickRate`: 50ms tick rate verification
-  - `TestPhaseTransitions`: Phase transition logic validation
-  - `TestConcurrentPhaseReads`: Concurrent phase access safety
-- `engine/integration_test.go`: Comprehensive cycle and phase tests
-  - `TestCompleteGameCycle`: Full Normal→Gold→DecayWait→DecayAnim→Normal cycle
-  - `TestGoldCompletionBeforeTimeout`: Early gold completion handling
-  - `TestConcurrentPhaseReadsDuringTransitions`: 20 readers × concurrent access test
-  - `TestPhaseTimestampConsistency`: Timestamp accuracy verification
-  - `TestPhaseDurationCalculation`: Duration calculation accuracy
-  - `TestCleanerTrailCollisionLogic`: Swept segment collision detection verification
-  - `TestNoSkippedCharacters`: Verification that truncation logic doesn't skip characters
-  - `TestRapidPhaseTransitions`: Rapid phase transition stress test
-  - `TestGoldSequenceIDIncrement`: Sequential ID generation
-- All tests pass with `-race` flag
-- Clock runs in goroutine, no memory leaks detected
-- Concurrent phase reads/writes tested (20 goroutines)
 
 ## Audio System
 
@@ -920,17 +848,6 @@ NORMAL -[:]→ COMMAND (game paused) -[ESC/ENTER]→ NORMAL
 - **Clock scheduler**: Separate goroutine for phase transitions (50ms tick)
 - **All systems**: Run synchronously in main game loop, no autonomous goroutines
 
-### CleanerSystem Synchronous Model
-- **Update Pattern**: Called from main loop's `Update()` method with delta time
-- **No Goroutine**: Eliminates race conditions from concurrent entity access
-- **Atomic Activation**: Single `atomic.Bool` flag (`pendingSpawn`) for spawn triggering
-- **Pure ECS State**: All cleaner state stored in `CleanerComponent` instances
-  - No external state maps or tracking structures
-  - Component data includes physics state, trail history, and rendering info
-  - ECS World provides internal synchronization for component access
-- **Frame-Coherent Rendering**: Renderer queries World directly and deep-copies trail data for thread-safe rendering
-- **Zero External Locks**: No mutexes required (atomic flag + ECS internal synchronization)
-
 ### Shared State Synchronization
 - **Color Counters**: `atomic.Int64` for lock-free updates
   - `SpawnSystem`: Increments counters when blocks placed
@@ -949,17 +866,16 @@ NORMAL -[:]→ COMMAND (game paused) -[ESC/ENTER]→ NORMAL
 4. **Frame-Coherent Snapshots**: Renderer reads immutable snapshots, never live state
 5. **Lock Granularity**: Minimize lock scope - protect data structures, not operations
 
-### CleanerSystem Race Prevention Strategy
-**Problem**: Early implementations had complex state tracking with potential race conditions
+### CleanerSystem Concurrency Model
+The CleanerSystem uses a pure ECS pattern with careful synchronization:
 
-**Solution (Current Pure ECS Implementation)**:
-- ✅ **Pure ECS Pattern**: All state in `CleanerComponent`, no external maps or tracking
-- ✅ **Synchronous Updates**: Main loop `Update()` method with delta time integration
-- ✅ **Event-Driven Activation**: `EventCleanerRequest` triggers spawning via event queue
-- ✅ **Component-Based Physics**: Sub-pixel position, velocity, and trail stored in component
-- ✅ **Snapshot Rendering**: Renderer queries World directly and deep-copies trail positions for thread safety
-- ✅ **ECS Synchronization**: Leverages World's internal locking for component access
-- ✅ **Zero State Duplication**: Component is the single source of truth
+- **Pure ECS Pattern**: All state in `CleanerComponent`, no external maps or tracking
+- **Synchronous Updates**: Main loop `Update()` method with delta time integration
+- **Event-Driven Activation**: `EventCleanerRequest` triggers spawning via event queue
+- **Component-Based Physics**: Sub-pixel position, velocity, and trail stored in component
+- **Snapshot Rendering**: Renderer queries World directly and deep-copies trail positions for thread safety
+- **ECS Synchronization**: Leverages World's internal locking for component access
+- **Zero State Duplication**: Component is the single source of truth
 
 ### Frame Coherence Strategy
 **Rendering Thread Safety**:
@@ -1002,12 +918,6 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
     world.AddComponent(entity, c)  // ECS handles synchronization
 }
 ```
-
-### Testing for Race Conditions
-- All tests must pass with `go test -race`
-- Dedicated race tests in `systems/cleaner_race_test.go`
-- Integration tests verify concurrent scenarios
-- Benchmarks validate performance impact of synchronization
 
 ## Performance Guidelines
 

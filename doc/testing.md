@@ -274,3 +274,47 @@ Located in `systems/cleaner_benchmark_test.go`:
    - Concurrent reads during entity destruction
    - Position updates during queries
    - Entity removal during iteration
+
+### Architecture Component Tests
+
+#### State Ownership Model Tests
+Located in `engine/game_state_test.go`:
+- **TestSnapshotConsistency**: Verifies snapshots remain consistent under rapid state changes (10 concurrent readers)
+- **TestNoPartialReads**: Ensures snapshots never show partial state updates (5 concurrent readers)
+- **TestSnapshotImmutability**: Confirms snapshots are immutable value copies
+- **TestAllSnapshotTypesConcurrent**: Tests all snapshot types under concurrent access (5 concurrent readers)
+- **TestAtomicSnapshotConsistency**: Verifies atomic field snapshots (10 concurrent readers, 1000 rapid updates)
+
+Located in `systems/race_condition_comprehensive_test.go`:
+- **TestSnapshotConsistencyUnderRapidChanges**: Multi-writer (3) + multi-reader (10) snapshot consistency
+- **TestSnapshotImmutabilityWithSystemUpdates**: Snapshot immutability during active system modifications
+- **TestNoPartialSnapshotReads**: Verifies no partial reads during rapid updates (8 concurrent readers)
+- **TestPhaseSnapshotConsistency**: Phase snapshot consistency during rapid transitions (5 concurrent readers)
+- **TestMultiSnapshotAtomicity**: Multiple snapshot types taken in rapid succession (10 concurrent readers)
+
+All tests pass with `-race` flag (no data races detected).
+
+#### Clock Scheduler Tests
+Located in `engine/clock_scheduler_test.go`:
+- **TestClockSchedulerBasicTicking**: Tick count increment verification
+- **TestClockSchedulerConcurrentTicking**: Concurrent goroutine safety
+- **TestClockSchedulerStopIdempotent**: Multiple Stop() calls safety
+- **TestClockSchedulerTickRate**: 50ms tick rate verification
+- **TestPhaseTransitions**: Phase transition logic validation
+- **TestConcurrentPhaseReads**: Concurrent phase access safety
+
+Located in `engine/integration_test.go`:
+- **TestCompleteGameCycle**: Full Normal→Gold→DecayWait→DecayAnim→Normal cycle
+- **TestGoldCompletionBeforeTimeout**: Early gold completion handling
+- **TestConcurrentPhaseReadsDuringTransitions**: 20 readers × concurrent access test
+- **TestPhaseTimestampConsistency**: Timestamp accuracy verification
+- **TestPhaseDurationCalculation**: Duration calculation accuracy
+- **TestCleanerTrailCollisionLogic**: Swept segment collision detection verification
+- **TestNoSkippedCharacters**: Verification that truncation logic doesn't skip characters
+- **TestRapidPhaseTransitions**: Rapid phase transition stress test
+- **TestGoldSequenceIDIncrement**: Sequential ID generation
+
+All tests pass with `-race` flag. Clock runs in goroutine, no memory leaks detected. Concurrent phase reads/writes tested (20 goroutines).
+
+#### Race Condition Testing Guidelines
+All tests must pass with `go test -race`. Dedicated race tests exist in multiple files to ensure proper synchronization of shared state. The race detector must be enabled for all test runs to catch potential concurrency issues.
