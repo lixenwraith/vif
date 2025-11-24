@@ -9,6 +9,60 @@
 - Systems contain ALL logic, operate on component sets
 - World is the single source of truth for all game state
 
+### Generic ECS Architecture
+
+Vi-fighter uses a **compile-time generics-based ECS** (Go 1.18+) that eliminates reflection from the hot path, providing type safety and improved performance.
+
+**Core Components:**
+
+1. **Generic Stores** (`Store[T]`):
+   - Typed component storage with compile-time type checking
+   - Operations: `Add(entity, component)`, `Get(entity)`, `Remove(entity)`, `All()`
+   - Thread-safe via internal `sync.RWMutex`
+   - Zero allocations for component access (no type assertions needed)
+
+2. **PositionStore** (Specialized):
+   - Extends `Store[PositionComponent]` with spatial indexing capabilities
+   - Internal spatial hash map for O(1) position-based queries
+   - Operations: `GetEntityAt(x, y)`, `Move(...)`, `BeginBatch()`
+   - Batch operations ensure atomicity for multi-entity spawning with collision detection
+
+3. **Query System** (`QueryBuilder`):
+   - Type-safe component intersection queries
+   - Uses sparse set intersection starting with smallest store for optimal performance
+   - Example: `world.Query().With(world.Positions).With(world.Characters).Execute()`
+   - Returns entity slice for iteration
+
+4. **Entity Builder**:
+   - Transactional entity creation pattern
+   - Example: `world.NewEntity().With(world.Positions, pos).With(world.Characters, char).Build()`
+   - Reserves entity ID upfront, commits components atomically on `Build()`
+
+**World Structure:**
+```go
+type World struct {
+    // Explicit typed stores (public for system access)
+    Positions      *PositionStore
+    Characters     *Store[CharacterComponent]
+    Sequences      *Store[SequenceComponent]
+    GoldSequences  *Store[GoldSequenceComponent]
+    Cleaners       *Store[CleanerComponent]
+    FallingDecays  *Store[FallingDecayComponent]
+    RemovalFlashes *Store[RemovalFlashComponent]
+    Nuggets        *Store[NuggetComponent]
+    Drains         *Store[DrainComponent]
+
+    // Lifecycle management
+    allStores []AnyStore  // For bulk operations like DestroyEntity
+}
+```
+
+**Benefits:**
+- **Type Safety**: Compile-time errors for component type mismatches
+- **Performance**: Zero reflection overhead, direct memory access
+- **Clarity**: Explicit component relationships visible in code
+- **Tooling**: IDE autocomplete and type checking for all component access
+
 ### Event-Driven Communication
 **Architecture**: Systems decouple via `GameContext.EventQueue` for inter-system communication.
 
@@ -592,10 +646,10 @@ Systems execute in priority order (lower = earlier):
 **Important**: All priorities must be unique to ensure deterministic execution order. The priority values define the exact order in which systems process game state each frame.
 
 ### Spatial Indexing
-- Primary index: `World.spatialIndex[y][x] -> Entity`
-- Secondary index: `World.componentsByType[Type] -> []Entity`
-- ALWAYS use spatial transactions for position changes (tx.Move, tx.Spawn, tx.Destroy)
-- SafeDestroyEntity handles spatial index cleanup atomically
+- Primary index: Encapsulated within `PositionStore` (Internal `spatialIndex`)
+- Access: `world.Positions.GetEntityAt(x, y)`
+- Updates: `world.Positions.Move(...)` or `world.Positions.Add(...)`
+- Batching: `world.Positions.BeginBatch()` for atomic multi-entity spawning
 
 ## Component Hierarchy
 ```
@@ -919,16 +973,12 @@ NORMAL -[:]→ COMMAND (game paused) -[ESC/ENTER]→ NORMAL
 ```go
 // Renderer (terminal_renderer.go)
 func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.Style) {
-    // Query World directly for cleaner components
-    cleanerType := reflect.TypeOf(components.CleanerComponent{})
-    entities := world.GetEntitiesWith(cleanerType)
+    // Direct store access
+    entities := world.Cleaners.All()
 
     for _, entity := range entities {
-        compRaw, ok := world.GetComponent(entity, cleanerType)
-        if !ok {
-            continue
-        }
-        cleaner := compRaw.(components.CleanerComponent)
+        cleaner, ok := world.Cleaners.Get(entity)
+        if !ok { continue }
 
         // Deep copy trail to avoid race conditions during rendering
         trailCopy := make([]core.Point, len(cleaner.Trail))
@@ -962,8 +1012,8 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 ## Performance Guidelines
 
 ### Hot Path Optimizations
-1. Cache entity queries per frame
-2. Use spatial index for position lookups
+1. Use generics-based queries for type-safe, zero-allocation component access
+2. Use spatial index for position lookups via PositionStore
 3. Batch similar operations (e.g., all destroys at end)
 4. Reuse allocated slices where possible (e.g., trail slices grow/shrink in-place)
 5. CleanerSystem updates synchronously with frame-accurate delta time
