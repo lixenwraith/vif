@@ -13,12 +13,12 @@ func TestBasicMotionsStillWork(t *testing.T) {
 	ctx := createMinimalTestContext(80, 24)
 
 	tests := []struct {
-		name       string
-		motion     rune
-		initialX   int
-		initialY   int
-		expectedX  int
-		expectedY  int
+		name      string
+		motion    rune
+		initialX  int
+		initialY  int
+		expectedX int
+		expectedY int
 	}{
 		{"h moves left", 'h', 10, 10, 9, 10},
 		{"j moves down", 'j', 10, 10, 10, 11},
@@ -53,11 +53,11 @@ func TestWordMotionsStillWork(t *testing.T) {
 	placeTextAt(ctx, 0, 5, "hello-world foo_bar baz")
 
 	tests := []struct {
-		name       string
-		motion     rune
-		initialX   int
-		expectedX  int
-		desc       string
+		name      string
+		motion    rune
+		initialX  int
+		expectedX int
+		desc      string
 	}{
 		{"w from start", 'w', 0, 5, "should move to '-' (punctuation)"},
 		{"w from punctuation", 'w', 5, 6, "should move to 'w' after punctuation"},
@@ -90,11 +90,11 @@ func TestLineMotionsStillWork(t *testing.T) {
 	placeTextAt(ctx, 0, 7, "  hello world")
 
 	tests := []struct {
-		name       string
-		motion     rune
-		initialX   int
-		expectedX  int
-		desc       string
+		name      string
+		motion    rune
+		initialX  int
+		expectedX int
+		desc      string
 	}{
 		{"$ goes to end", '$', 5, 12, "should move to last char 'd'"},
 		{"0 goes to start", '0', 5, 0, "should move to column 0"},
@@ -120,12 +120,12 @@ func TestScreenMotionsStillWork(t *testing.T) {
 	ctx := createMinimalTestContext(80, 24)
 
 	tests := []struct {
-		name       string
-		motion     rune
-		initialX   int
-		initialY   int
-		expectedX  int
-		expectedY  int
+		name      string
+		motion    rune
+		initialX  int
+		initialY  int
+		expectedX int
+		expectedY int
 	}{
 		{"H moves to top", 'H', 10, 15, 10, 0},
 		{"M moves to middle", 'M', 10, 5, 10, 12},
@@ -159,10 +159,10 @@ func TestParagraphMotionsStillWork(t *testing.T) {
 	placeTextAt(ctx, 0, 7, "line7")
 
 	tests := []struct {
-		name       string
-		motion     rune
-		initialY   int
-		expectedY  int
+		name      string
+		motion    rune
+		initialY  int
+		expectedY int
 	}{
 		{"} finds next empty line", '}', 2, 3},
 		{"} finds next empty line from 5", '}', 5, 6},
@@ -193,13 +193,13 @@ func TestCountWithBasicMotions(t *testing.T) {
 	ctx := createMinimalTestContext(80, 24)
 
 	tests := []struct {
-		name       string
-		motion     rune
-		count      int
-		initialX   int
-		initialY   int
-		expectedX  int
-		expectedY  int
+		name      string
+		motion    rune
+		count     int
+		initialX  int
+		initialY  int
+		expectedX int
+		expectedY int
 	}{
 		{"5h moves left 5 times", 'h', 5, 20, 10, 15, 10},
 		{"3j moves down 3 times", 'j', 3, 10, 5, 10, 8},
@@ -229,12 +229,12 @@ func TestCountWithWordMotions(t *testing.T) {
 	placeTextAt(ctx, 0, 8, "one two three four five")
 
 	tests := []struct {
-		name       string
-		motion     rune
-		count      int
-		initialX   int
+		name         string
+		motion       rune
+		count        int
+		initialX     int
 		minExpectedX int
-		desc       string
+		desc         string
 	}{
 		{"3w from start", 'w', 3, 0, 10, "should jump forward 3 words"},
 		{"2e from start", 'e', 2, 0, 6, "should jump to 2nd word end"},
@@ -311,10 +311,10 @@ func TestBracketMatchingStillWorks(t *testing.T) {
 	placeTextAt(ctx, 0, 10, "if (x == 1) { return }")
 
 	tests := []struct {
-		name       string
-		startX     int
-		expectedX  int
-		desc       string
+		name      string
+		startX    int
+		expectedX int
+		desc      string
 	}{
 		{"% from ( to )", 3, 10, "should jump from '(' to ')'"},
 		{"% from ) to (", 10, 3, "should jump from ')' to '('"},
@@ -531,9 +531,9 @@ func TestMotionCountPreservation(t *testing.T) {
 	ctx := createMinimalTestContext(80, 24)
 
 	tests := []struct {
-		name         string
-		motion       rune
-		count        int
+		name          string
+		motion        rune
+		count         int
 		verifyMinMove int
 	}{
 		{"5l moves at least 5", 'l', 5, 5},

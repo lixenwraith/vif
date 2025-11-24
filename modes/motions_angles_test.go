@@ -4,8 +4,6 @@ import (
 	"testing"
 )
 
-
-
 func TestBracketMatchingAngleBrackets(t *testing.T) {
 	ctx := createTestContext()
 
@@ -35,7 +33,6 @@ func TestBracketMatchingAngleBrackets(t *testing.T) {
 		t.Errorf("%% from '>': expected (0, 0), got (%d, %d)", ctx.CursorX, ctx.CursorY)
 	}
 }
-
 
 func TestBracketMatchingNestedAngleBrackets(t *testing.T) {
 	ctx := createTestContext()
@@ -77,7 +74,6 @@ func TestBracketMatchingNestedAngleBrackets(t *testing.T) {
 		t.Errorf("%% from outer '>': expected (0, 0), got (%d, %d)", ctx.CursorX, ctx.CursorY)
 	}
 }
-
 
 func TestBracketMatchingMixedTypesWithAngles(t *testing.T) {
 	ctx := createTestContext()
@@ -123,7 +119,6 @@ func TestBracketMatchingMixedTypesWithAngles(t *testing.T) {
 	}
 }
 
-
 func TestBracketMatchingUnmatchedAngleBrackets(t *testing.T) {
 	ctx := createTestContext()
 
@@ -153,7 +148,6 @@ func TestBracketMatchingUnmatchedAngleBrackets(t *testing.T) {
 		t.Errorf("%% from unmatched '>': expected (5, 0), got (%d, %d)", ctx.CursorX, ctx.CursorY)
 	}
 }
-
 
 func TestBracketMatchingAngleBracketsMultiLine(t *testing.T) {
 	ctx := createTestContext()
@@ -188,7 +182,6 @@ func TestBracketMatchingAngleBracketsMultiLine(t *testing.T) {
 		t.Errorf("%% from '>' at line 3: expected (0, 0), got (%d, %d)", ctx.CursorX, ctx.CursorY)
 	}
 }
-
 
 func TestBracketMatchingMismatchedAngleBrackets(t *testing.T) {
 	ctx := createTestContext()

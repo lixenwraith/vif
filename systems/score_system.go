@@ -78,7 +78,6 @@ func (s *ScoreSystem) Update(world *engine.World, dt time.Duration) {
 // HandleCharacterTyping processes a character typed in insert mode using generic stores
 func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursorY int, typedRune rune) {
 	now := s.ctx.TimeProvider.Now()
-	
 
 	// Get entity at cursor position
 	entity := world.Positions.GetEntityAt(cursorX, cursorY)

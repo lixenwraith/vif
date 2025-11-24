@@ -323,7 +323,7 @@ func (s *SpawnSystem) getAvailableColors() []ColorLevelKey {
 // Update runs the spawn system logic
 func (s *SpawnSystem) Update(world *engine.World, dt time.Duration) {
 	// Calculate fill percentage and update GameState using generic stores
-	
+
 	entityCount := world.Positions.Count()
 
 	if entityCount > maxEntities {
@@ -470,7 +470,6 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 	}
 
 	// Get generic world
-	
 
 	// Read dimensions from context
 	gameWidth := s.ctx.GameWidth

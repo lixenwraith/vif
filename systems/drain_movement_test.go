@@ -1,10 +1,8 @@
 package systems
 
 import (
-	"reflect"
 	"testing"
 	"time"
-
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -220,10 +218,10 @@ func TestDrainSystem_MovementBoundaryChecks(t *testing.T) {
 				Y:            tc.drainY,
 				LastMoveTime: startTime,
 			})
-	
-		tx := world.BeginSpatialTransaction()
-		tx.Spawn(entity, tc.drainX, tc.drainY)
-		tx.Commit()
+
+			tx := world.BeginSpatialTransaction()
+			tx.Spawn(entity, tc.drainX, tc.drainY)
+			tx.Commit()
 
 			ctx.State.SetDrainActive(true)
 			ctx.State.SetDrainEntity(uint64(entity))
@@ -301,14 +299,14 @@ func TestDrainSystem_MovementUpdatesAllComponents(t *testing.T) {
 	if !ok {
 		t.Fatal("Expected entity to have DrainComponent")
 	}
-	drain := drainComp.(components.DrainComponent)
+	drain := drainComp
 
 	// Verify PositionComponent was updated
 	posComp, ok := world.Positions.Get(entity)
 	if !ok {
 		t.Fatal("Expected entity to have PositionComponent")
 	}
-	pos := posComp.(components.PositionComponent)
+	pos := posComp
 
 	// All position fields should match
 	stateX := ctx.State.GetDrainX()
@@ -370,8 +368,8 @@ func TestDrainSystem_MovementUpdatesSpatialIndex(t *testing.T) {
 	}
 
 	// Set cursor to trigger movement
-	ctx.State.SetCursorX(initialX+5)
-	ctx.State.SetCursorY(initialY+5)
+	ctx.State.SetCursorX(initialX + 5)
+	ctx.State.SetCursorY(initialY + 5)
 
 	// Advance time to trigger movement
 	mockTime.Advance(constants.DrainMoveInterval)
@@ -504,10 +502,10 @@ func TestDrainSystem_MovementDiagonal(t *testing.T) {
 				Y:            tc.drainY,
 				LastMoveTime: startTime,
 			})
-	
-		tx := world.BeginSpatialTransaction()
-		tx.Spawn(entity, tc.drainX, tc.drainY)
-		tx.Commit()
+
+			tx := world.BeginSpatialTransaction()
+			tx.Spawn(entity, tc.drainX, tc.drainY)
+			tx.Commit()
 
 			ctx.State.SetDrainActive(true)
 			ctx.State.SetDrainEntity(uint64(entity))

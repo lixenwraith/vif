@@ -636,4 +636,3 @@ func (h *InputHandler) buildCommandString(action rune, motion rune, count int, s
 
 	return cmd
 }
-

@@ -9,14 +9,12 @@ package systems
 
 import (
 	"math/rand"
-	"reflect"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
@@ -230,24 +228,21 @@ func TestRenderWhileSpawning(t *testing.T) {
 				for _, entity := range entities {
 					// Read position
 					if pos, ok := world.Positions.Get(entity); ok {
-						posComp := pos.(components.PositionComponent)
-						_ = posComp.X
-						_ = posComp.Y
+						_ = pos.X
+						_ = pos.Y
 					}
 
 					// Read character
 					if char, ok := world.Characters.Get(entity); ok {
-						charComp := char.(components.CharacterComponent)
-						_ = charComp.Rune
-						_ = charComp.Style
+						_ = char.Rune
+						_ = char.Style
 					}
 
 					// Read sequence
 					if seq, ok := world.Sequences.Get(entity); ok {
-						seqComp := seq.(components.SequenceComponent)
-						_ = seqComp.ID
-						_ = seqComp.Type
-						_ = seqComp.Level
+						_ = seq.ID
+						_ = seq.Type
+						_ = seq.Level
 					}
 				}
 

@@ -4,8 +4,6 @@ import (
 	"testing"
 )
 
-
-
 func TestMotionWithCount(t *testing.T) {
 	ctx := createTestContext()
 
@@ -101,7 +99,6 @@ func TestMotionCountHandling(t *testing.T) {
 	}
 }
 
-
 func TestMotionCountBoundaryHandling(t *testing.T) {
 	ctx := createTestContext()
 
@@ -165,7 +162,6 @@ func TestMotionCountBoundaryHandling(t *testing.T) {
 	}
 }
 
-
 func TestMotionCountMixedContent(t *testing.T) {
 	ctx := createTestContext()
 
@@ -212,7 +208,6 @@ func TestMotionCountMixedContent(t *testing.T) {
 	}
 }
 
-
 func TestMotionCountZeroDefaultsToOne(t *testing.T) {
 	ctx := createTestContext()
 
@@ -239,7 +234,6 @@ func TestMotionCountZeroDefaultsToOne(t *testing.T) {
 		t.Errorf("0h motion (should default to 1): expected X=4, got X=%d", ctx.CursorX)
 	}
 }
-
 
 func TestMotionEdgeCases(t *testing.T) {
 	ctx := createTestContext()

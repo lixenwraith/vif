@@ -254,10 +254,10 @@ func TestSpatialTransaction_MultipleOperations(t *testing.T) {
 
 	// Create transaction with multiple operations
 	tx := world.BeginSpatialTransaction()
-	tx.Move(entity1, 0, 0, 5, 5)    // Move entity1
-	tx.Move(entity2, 1, 1, 6, 6)    // Move entity2
-	tx.Spawn(entity3, 10, 10)        // Spawn entity3
-	tx.Destroy(entity1, 5, 5)        // Remove entity1 after moving it
+	tx.Move(entity1, 0, 0, 5, 5) // Move entity1
+	tx.Move(entity2, 1, 1, 6, 6) // Move entity2
+	tx.Spawn(entity3, 10, 10)    // Spawn entity3
+	tx.Destroy(entity1, 5, 5)    // Remove entity1 after moving it
 
 	// Commit all operations
 	if err := tx.Commit(); err != nil {

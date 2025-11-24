@@ -1,10 +1,8 @@
 package systems
 
 import (
-	"reflect"
 	"testing"
 	"time"
-
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/core"
@@ -51,7 +49,7 @@ func TestCleanerEventFlow(t *testing.T) {
 
 	// Verify cleaner entities created (should be 3 cleaners, one per row with red sequences)
 	// Using direct store access
-	cleaners := ctx.World.GetEntitiesWith(cleanerType)
+	cleaners := ctx.World.Cleaners.All()
 	if len(cleaners) != 3 {
 		t.Fatalf("Expected 3 cleaner entities, got %d", len(cleaners))
 	}
@@ -59,11 +57,11 @@ func TestCleanerEventFlow(t *testing.T) {
 	// Verify cleaners are on correct rows
 	foundRows := make(map[int]bool)
 	for _, cleaner := range cleaners {
-		comp, ok := ctx.World.GetComponent(cleaner, cleanerType)
+		comp, ok := ctx.World.Cleaners.Get(cleaner)
 		if !ok {
 			t.Fatalf("Cleaner entity %d has no CleanerComponent", cleaner)
 		}
-		c := comp.(components.CleanerComponent)
+		c := comp
 		foundRows[c.GridY] = true
 
 		// Verify cleaner has proper physics setup
@@ -120,13 +118,13 @@ func TestCleanerEventFlow(t *testing.T) {
 	}
 
 	// Verify cleaners have been destroyed (animation complete)
-	cleaners = ctx.World.GetEntitiesWith(cleanerType)
+	cleaners = ctx.World.Cleaners.All()
 	if len(cleaners) != 0 {
 		t.Errorf("Expected all cleaners to be destroyed after animation, got %d remaining", len(cleaners))
 		// Debug: Print cleaner positions
 		for _, cleaner := range cleaners {
-			if comp, ok := ctx.World.GetComponent(cleaner, cleanerType); ok {
-				c := comp.(components.CleanerComponent)
+			if comp, ok := ctx.World.Cleaners.Get(cleaner); ok {
+				c := comp
 				t.Logf("Remaining cleaner: GridY=%d, PreciseX=%.2f, TargetX=%.2f, VelocityX=%.2f",
 					c.GridY, c.PreciseX, c.TargetX, c.VelocityX)
 			}
@@ -141,8 +139,8 @@ func TestCleanerEventFlow(t *testing.T) {
 	// Verify red sequences destroyed
 	for i, entity := range redEntities {
 		if entityExists(ctx.World, entity) {
-			if pos, ok := ctx.World.GetComponent(entity, posType); ok {
-				p := pos.(components.PositionComponent)
+			if pos, ok := ctx.World.Positions.Get(entity); ok {
+				p := pos
 				t.Errorf("Red entity %d still exists at position (%d, %d) after cleaner sweep", i, p.X, p.Y)
 			}
 		}
@@ -175,7 +173,7 @@ func TestCleanerRendererDecoupling(t *testing.T) {
 		Trail:     trail1,
 		Char:      constants.CleanerChar,
 	}
-	ctx.World.AddComponent(cleaner1, comp1)
+	ctx.World.Cleaners.Add(cleaner1, comp1)
 
 	cleaner2 := ctx.World.CreateEntity()
 	trail2 := []core.Point{
@@ -195,11 +193,11 @@ func TestCleanerRendererDecoupling(t *testing.T) {
 		Trail:     trail2,
 		Char:      constants.CleanerChar,
 	}
-	ctx.World.AddComponent(cleaner2, comp2)
+	ctx.World.Cleaners.Add(cleaner2, comp2)
 
 	// Query cleaners from world (simulating what renderer does)
 	// Using direct store access
-	entities := ctx.World.GetEntitiesWith(cleanerType)
+	entities := ctx.World.Cleaners.All()
 
 	// Verify we can read cleaner data
 	if len(entities) != 2 {
@@ -208,12 +206,10 @@ func TestCleanerRendererDecoupling(t *testing.T) {
 
 	// Verify we can read components and deep-copy trails (as renderer would)
 	for _, entity := range entities {
-		compRaw, ok := ctx.World.GetComponent(entity, cleanerType)
+		cleaner, ok := ctx.World.Cleaners.Get(entity)
 		if !ok {
 			t.Fatalf("Failed to get CleanerComponent for entity %d", entity)
 		}
-
-		cleaner := compRaw.(components.CleanerComponent)
 
 		// Deep copy trail to avoid race conditions (as renderer does)
 		trailCopy := make([]core.Point, len(cleaner.Trail))
@@ -242,14 +238,13 @@ func TestCleanerRendererDecoupling(t *testing.T) {
 	}
 	comp1.GridX = 11
 	comp1.PreciseX = 11.5
-	ctx.World.AddComponent(cleaner1, comp1)
+	ctx.World.Cleaners.Add(cleaner1, comp1)
 
 	// Query again and verify renderer gets updated data
-	compRaw, ok := ctx.World.GetComponent(cleaner1, cleanerType)
+	updatedComp, ok := ctx.World.Cleaners.Get(cleaner1)
 	if !ok {
 		t.Fatal("Failed to get updated CleanerComponent")
 	}
-	updatedComp := compRaw.(components.CleanerComponent)
 
 	if updatedComp.GridX != 11 {
 		t.Errorf("Expected updated GridX to be 11, got %d", updatedComp.GridX)
@@ -292,7 +287,7 @@ func TestNoCleanerPhaseStates(t *testing.T) {
 
 			// Verify cleaners spawn regardless of phase
 			// Using direct store access
-			cleaners := ctx.World.GetEntitiesWith(cleanerType)
+			cleaners := ctx.World.Cleaners.All()
 			if len(cleaners) == 0 {
 				t.Errorf("Expected cleaners to spawn in phase %s, but none found", phase)
 			}
@@ -401,7 +396,7 @@ func TestEventQueueOverflow(t *testing.T) {
 	// Verify cleaners were spawned (at least once from the cleaner requests)
 	// Note: Due to deduplication by frame number, multiple requests in same frame = 1 spawn
 	// Using direct store access
-	cleaners := ctx.World.GetEntitiesWith(cleanerType)
+	cleaners := ctx.World.Cleaners.All()
 	t.Logf("Cleaners spawned: %d", len(cleaners))
 
 	// Key verification: No panic, no deadlock, events processed successfully

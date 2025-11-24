@@ -11,9 +11,9 @@ import (
 // Helper function to place a character at a position with spatial index update
 func placeCharWithSpatialIndex(ctx *engine.GameContext, x, y int, r rune, seqType components.SequenceType) engine.Entity {
 	entity := ctx.World.CreateEntity()
-	ctx.World.AddComponent(entity, components.PositionComponent{X: x, Y: y})
-	ctx.World.AddComponent(entity, components.CharacterComponent{Rune: r, Style: tcell.StyleDefault})
-	ctx.World.AddComponent(entity, components.SequenceComponent{
+	ctx.World.Positions.Add(entity, components.PositionComponent{X: x, Y: y})
+	ctx.World.Characters.Add(entity, components.CharacterComponent{Rune: r, Style: tcell.StyleDefault})
+	ctx.World.Sequences.Add(entity, components.SequenceComponent{
 		ID:    1,
 		Index: 0,
 		Type:  seqType,
@@ -77,7 +77,7 @@ func TestDeleteRangeWithNoGaps(t *testing.T) {
 	}
 
 	// Verify total entity count
-	entities := ctx.World.GetEntitiesWith(posType)
+	entities := ctx.World.Positions.All()
 	if len(entities) != 2 {
 		t.Errorf("Expected 2 entities remaining, got %d", len(entities))
 	}
@@ -127,7 +127,7 @@ func TestDeleteRangeWithGaps(t *testing.T) {
 	}
 
 	// Verify total entity count
-	entities := ctx.World.GetEntitiesWith(posType)
+	entities := ctx.World.Positions.All()
 	if len(entities) != 2 {
 		t.Errorf("Expected 2 entities remaining, got %d", len(entities))
 	}
@@ -157,7 +157,7 @@ func TestDeleteRangeEntirelyGaps(t *testing.T) {
 	}
 
 	// Verify total entity count unchanged
-	entities := ctx.World.GetEntitiesWith(posType)
+	entities := ctx.World.Positions.All()
 	if len(entities) != 2 {
 		t.Errorf("Expected 2 entities remaining, got %d", len(entities))
 	}
@@ -180,7 +180,7 @@ func TestDeleteRangeRedCharacters(t *testing.T) {
 	}
 
 	// Verify entities were deleted
-	entities := ctx.World.GetEntitiesWith(posType)
+	entities := ctx.World.Positions.All()
 	if len(entities) != 0 {
 		t.Errorf("Expected 0 entities remaining, got %d", len(entities))
 	}
@@ -204,7 +204,7 @@ func TestDeleteRangeMixedColors(t *testing.T) {
 	}
 
 	// Verify all entities were deleted
-	entities := ctx.World.GetEntitiesWith(posType)
+	entities := ctx.World.Positions.All()
 	if len(entities) != 0 {
 		t.Errorf("Expected 0 entities remaining, got %d", len(entities))
 	}
@@ -227,7 +227,7 @@ func TestDeleteRangeSwappedBounds(t *testing.T) {
 	}
 
 	// Verify all entities were deleted
-	entities := ctx.World.GetEntitiesWith(posType)
+	entities := ctx.World.Positions.All()
 	if len(entities) != 0 {
 		t.Errorf("Expected 0 entities remaining, got %d", len(entities))
 	}
@@ -389,13 +389,13 @@ func TestDeleteRangeDoesNotDestroyZeroEntity(t *testing.T) {
 	placeCharWithSpatialIndex(ctx, 5, 0, 'b', components.SequenceGreen)
 
 	// Count entities before
-	entitiesBefore := len(ctx.World.GetEntitiesWith(posType))
+	entitiesBefore := len(ctx.World.Positions.All())
 
 	// Delete range that includes gaps (positions 1-4 have no entities)
 	deleteRange(ctx, 0, 5, 0)
 
 	// All entities should be deleted
-	entitiesAfter := len(ctx.World.GetEntitiesWith(posType))
+	entitiesAfter := len(ctx.World.Positions.All())
 	if entitiesAfter != 0 {
 		t.Errorf("Expected 0 entities after deletion, got %d", entitiesAfter)
 	}

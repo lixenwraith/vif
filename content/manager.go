@@ -13,12 +13,12 @@ import (
 )
 
 const (
-	ContentBlockSize = 30 // Default number of lines per content block (20-50 range)
-	MinProcessedLines = 10 // Minimum number of valid lines required after processing
-	MaxLineLength    = 80 // Maximum line length to match game width
-	MaxRetries       = 5  // Maximum number of retries when selecting content blocks
-	MaxBlockSize     = 1000 // Maximum number of lines in a content block to prevent memory issues
-	CircuitBreakerThreshold = 10 // Number of consecutive failures before circuit breaker trips
+	ContentBlockSize        = 30   // Default number of lines per content block (20-50 range)
+	MinProcessedLines       = 10   // Minimum number of valid lines required after processing
+	MaxLineLength           = 80   // Maximum line length to match game width
+	MaxRetries              = 5    // Maximum number of retries when selecting content blocks
+	MaxBlockSize            = 1000 // Maximum number of lines in a content block to prevent memory issues
+	CircuitBreakerThreshold = 10   // Number of consecutive failures before circuit breaker trips
 )
 
 var (
@@ -92,11 +92,11 @@ type validatedContent struct {
 
 // ContentManager handles discovery and loading of content files
 type ContentManager struct {
-	contentFiles     []string
-	breaker          circuitBreaker
-	validatedCache   []validatedContent
-	cacheMu          sync.RWMutex
-	assetsDir        string
+	contentFiles   []string
+	breaker        circuitBreaker
+	validatedCache []validatedContent
+	cacheMu        sync.RWMutex
+	assetsDir      string
 }
 
 // NewContentManager creates a new content manager

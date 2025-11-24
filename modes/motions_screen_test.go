@@ -25,9 +25,9 @@ func createTestContext() *engine.GameContext {
 // Helper function to place a character at a position
 func placeChar(ctx *engine.GameContext, x, y int, r rune) {
 	entity := ctx.World.CreateEntity()
-	ctx.World.AddComponent(entity, components.PositionComponent{X: x, Y: y})
-	ctx.World.AddComponent(entity, components.CharacterComponent{Rune: r, Style: tcell.StyleDefault})
-	ctx.World.AddComponent(entity, components.SequenceComponent{
+	ctx.World.Positions.Add(entity, components.PositionComponent{X: x, Y: y})
+	ctx.World.Characters.Add(entity, components.CharacterComponent{Rune: r, Style: tcell.StyleDefault})
+	ctx.World.Sequences.Add(entity, components.SequenceComponent{
 		ID:    1,
 		Index: 0,
 		Type:  components.SequenceGreen,

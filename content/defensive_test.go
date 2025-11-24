@@ -207,10 +207,10 @@ func TestPreValidateAllContent(t *testing.T) {
 
 	// Create test files with varying quality
 	testFiles := map[string]string{
-		"valid.txt": generateFileContent(MinProcessedLines + 5),
-		"invalid_utf8.txt": string([]byte{0xff, 0xfe, 0xfd}),
+		"valid.txt":         generateFileContent(MinProcessedLines + 5),
+		"invalid_utf8.txt":  string([]byte{0xff, 0xfe, 0xfd}),
 		"too_few_lines.txt": "Line 1\nLine 2",
-		"good.txt": generateFileContent(MinProcessedLines + 10),
+		"good.txt":          generateFileContent(MinProcessedLines + 10),
 	}
 
 	for name, content := range testFiles {

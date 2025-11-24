@@ -60,10 +60,9 @@ func TestNoRaceSnapshotRendering(t *testing.T) {
 					// Verify components are valid
 					for _, entity := range entities {
 						if comp, ok := world.Cleaners.Get(entity); ok {
-							c := comp.(components.CleanerComponent)
-							_ = c.GridY
-							_ = len(c.Trail)
-							_ = c.Char
+							_ = comp.GridY
+							_ = len(comp.Trail)
+							_ = comp.Char
 						}
 					}
 					time.Sleep(1 * time.Millisecond)
@@ -262,10 +261,9 @@ func TestNoRaceComponentAccess(t *testing.T) {
 					entities := world.Cleaners.All()
 					for _, entity := range entities {
 						if comp, ok := world.Cleaners.Get(entity); ok {
-							c := comp.(components.CleanerComponent)
-							_ = c.PreciseX
-							_ = c.VelocityX
-							_ = len(c.Trail)
+							_ = comp.PreciseX
+							_ = comp.VelocityX
+							_ = len(comp.Trail)
 						}
 					}
 					time.Sleep(1 * time.Millisecond)

@@ -137,10 +137,10 @@ func TestLoadAudioConfigMasterVolumeClamp(t *testing.T) {
 		value    string
 		expected float64
 	}{
-		{"-50", 0.0},   // Should clamp to 0
-		{"150", 1.0},   // Should clamp to 1
-		{"-100", 0.0},  // Should clamp to 0
-		{"200", 1.0},   // Should clamp to 1
+		{"-50", 0.0},  // Should clamp to 0
+		{"150", 1.0},  // Should clamp to 1
+		{"-100", 0.0}, // Should clamp to 0
+		{"200", 1.0},  // Should clamp to 1
 	}
 
 	for _, tc := range testCases {

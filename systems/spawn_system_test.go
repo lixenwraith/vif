@@ -2,9 +2,7 @@ package systems
 
 import (
 	"math"
-	"reflect"
 	"testing"
-
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -272,9 +270,8 @@ func TestPlaceLineLogicMatchesExclusionZone(t *testing.T) {
 	// Verify all placed entities respect cursor exclusion zone
 	entities := world.Positions.All()
 	for _, entity := range entities {
-		posComp, ok := world.Positions.Get(entity)
+		pos, ok := world.Positions.Get(entity)
 		if ok {
-			pos := posComp.(components.PositionComponent)
 			dx := math.Abs(float64(pos.X - cursorX))
 			dy := math.Abs(float64(pos.Y - cursorY))
 

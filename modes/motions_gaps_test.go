@@ -7,8 +7,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/components"
 )
 
-
-
 func TestWordMotionsWithFileContent(t *testing.T) {
 	ctx := createTestContext()
 
@@ -291,7 +289,6 @@ func TestWORDMotionsWithFileContentGaps(t *testing.T) {
 	}
 }
 
-
 func TestGetCharAtSpaceHandling(t *testing.T) {
 	ctx := createTestContext()
 
@@ -311,9 +308,9 @@ func TestGetCharAtSpaceHandling(t *testing.T) {
 	// Test 3: Space character entity - should return 0 (defensive handling)
 	// Create an entity with a space character directly (edge case - shouldn't normally exist)
 	entity := ctx.World.CreateEntity()
-	ctx.World.AddComponent(entity, components.PositionComponent{X: 15, Y: 15})
-	ctx.World.AddComponent(entity, components.CharacterComponent{Rune: ' ', Style: tcell.StyleDefault})
-	ctx.World.AddComponent(entity, components.SequenceComponent{
+	ctx.World.Positions.Add(entity, components.PositionComponent{X: 15, Y: 15})
+	ctx.World.Characters.Add(entity, components.CharacterComponent{Rune: ' ', Style: tcell.StyleDefault})
+	ctx.World.Sequences.Add(entity, components.SequenceComponent{
 		ID:    1,
 		Index: 0,
 		Type:  components.SequenceGreen,

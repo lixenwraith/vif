@@ -4,8 +4,6 @@ import (
 	"testing"
 )
 
-
-
 func TestVimWordMotions(t *testing.T) {
 	ctx := createTestContext()
 
@@ -135,7 +133,6 @@ func TestVimWordMotionsPunctuationTransitions(t *testing.T) {
 	}
 }
 
-
 func TestVimWordMotionsBoundaries(t *testing.T) {
 	ctx := createTestContext()
 
@@ -178,7 +175,6 @@ func TestVimWordMotionsBoundaries(t *testing.T) {
 		t.Errorf("b at left edge: expected X=0, got X=%d", ctx.CursorX)
 	}
 }
-
 
 func TestVimWordMotionsConsecutive(t *testing.T) {
 	ctx := createTestContext()
@@ -228,7 +224,6 @@ func TestVimWordMotionsConsecutive(t *testing.T) {
 	}
 }
 
-
 func TestRepeatedWPresses(t *testing.T) {
 	ctx := createTestContext()
 
@@ -264,7 +259,6 @@ func TestRepeatedWPresses(t *testing.T) {
 		t.Errorf("Third w press at end: expected X=%d (stay in place), got X=%d", startX, ctx.CursorX)
 	}
 }
-
 
 func TestWordMotionsMixedContent(t *testing.T) {
 	ctx := createTestContext()
@@ -347,7 +341,6 @@ func TestWordMotionsMixedContent(t *testing.T) {
 		t.Errorf("b from q: expected X=12 (at '.'), got X=%d", ctx.CursorX)
 	}
 }
-
 
 func TestWordMotionsEdgeCases(t *testing.T) {
 	ctx := createTestContext()
@@ -472,4 +465,3 @@ func TestWordMotionsEdgeCases(t *testing.T) {
 		t.Errorf("w past consecutive punct: expected X=7 (at 'm'), got X=%d", ctx.CursorX)
 	}
 }
-

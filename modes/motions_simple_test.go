@@ -4,8 +4,6 @@ import (
 	"testing"
 )
 
-
-
 func TestSpaceMotion(t *testing.T) {
 	ctx := createTestContext()
 	ctx.CursorX = 5
@@ -71,4 +69,3 @@ func TestSimpleMotionCountHandling(t *testing.T) {
 		t.Errorf("5 space motion: expected X=8, got X=%d", ctx.CursorX)
 	}
 }
-

@@ -4,8 +4,6 @@ import (
 	"testing"
 )
 
-
-
 func TestWORDMotions(t *testing.T) {
 	ctx := createTestContext()
 
@@ -76,7 +74,6 @@ func TestWORDMotionsFromSpace(t *testing.T) {
 	}
 }
 
-
 func TestWORDMotionsWithPunctuation(t *testing.T) {
 	ctx := createTestContext()
 
@@ -111,7 +108,6 @@ func TestWORDMotionsWithPunctuation(t *testing.T) {
 		t.Errorf("E from middle: expected X=7 (at ','), got X=%d", ctx.CursorX)
 	}
 }
-
 
 func TestWORDMotionsBoundaries(t *testing.T) {
 	ctx := createTestContext()
@@ -155,7 +151,6 @@ func TestWORDMotionsBoundaries(t *testing.T) {
 	}
 }
 
-
 func TestWORDMotionsConsecutive(t *testing.T) {
 	ctx := createTestContext()
 
@@ -189,7 +184,6 @@ func TestWORDMotionsConsecutive(t *testing.T) {
 	}
 }
 
-
 func TestWORDEndEdgeCases(t *testing.T) {
 	ctx := createTestContext()
 
@@ -221,7 +215,6 @@ func TestWORDEndEdgeCases(t *testing.T) {
 		t.Errorf("E at last WORD: expected X=6, got X=%d", ctx.CursorX)
 	}
 }
-
 
 func TestWORDMotionsMixedContent(t *testing.T) {
 	ctx := createTestContext()
@@ -276,7 +269,6 @@ func TestWORDMotionsMixedContent(t *testing.T) {
 		t.Errorf("B to start: expected X=0 (at 'f'), got X=%d", ctx.CursorX)
 	}
 }
-
 
 func TestWORDMotionsEdgeCasesComprehensive(t *testing.T) {
 	ctx := createTestContext()
@@ -364,4 +356,3 @@ func TestWORDMotionsEdgeCasesComprehensive(t *testing.T) {
 		t.Errorf("B from middle of spaces: expected X=0 (at 'f'), got X=%d", ctx.CursorX)
 	}
 }
-

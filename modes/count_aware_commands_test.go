@@ -32,45 +32,45 @@ func TestFindCharWithCount(t *testing.T) {
 	ctx.CursorY = 10
 
 	tests := []struct {
-		name           string
-		count          int
-		targetChar     rune
-		expectedX      int
+		name                 string
+		count                int
+		targetChar           rune
+		expectedX            int
 		expectedPendingCount int
 	}{
 		{
-			name:           "fa finds first 'a'",
-			count:          1,
-			targetChar:     'a',
-			expectedX:      1,
+			name:                 "fa finds first 'a'",
+			count:                1,
+			targetChar:           'a',
+			expectedX:            1,
 			expectedPendingCount: 0, // Should be cleared after execution
 		},
 		{
-			name:           "2fa finds second 'a'",
-			count:          2,
-			targetChar:     'a',
-			expectedX:      2,
+			name:                 "2fa finds second 'a'",
+			count:                2,
+			targetChar:           'a',
+			expectedX:            2,
 			expectedPendingCount: 0,
 		},
 		{
-			name:           "3fa finds third 'a'",
-			count:          3,
-			targetChar:     'a',
-			expectedX:      4,
+			name:                 "3fa finds third 'a'",
+			count:                3,
+			targetChar:           'a',
+			expectedX:            4,
 			expectedPendingCount: 0,
 		},
 		{
-			name:           "5fa finds fifth 'a'",
-			count:          5,
-			targetChar:     'a',
-			expectedX:      7,
+			name:                 "5fa finds fifth 'a'",
+			count:                5,
+			targetChar:           'a',
+			expectedX:            7,
 			expectedPendingCount: 0,
 		},
 		{
-			name:           "10fa moves to last match (only 7 'a's after cursor)",
-			count:          10,
-			targetChar:     'a',
-			expectedX:      9, // Should move to last 'a' when count exceeds matches
+			name:                 "10fa moves to last match (only 7 'a's after cursor)",
+			count:                10,
+			targetChar:           'a',
+			expectedX:            9, // Should move to last 'a' when count exceeds matches
 			expectedPendingCount: 0,
 		},
 	}
@@ -190,52 +190,52 @@ func TestFindCharBackwardWithCount(t *testing.T) {
 	ctx.CursorY = 10
 
 	tests := []struct {
-		name           string
-		count          int
-		targetChar     rune
-		expectedX      int
+		name                 string
+		count                int
+		targetChar           rune
+		expectedX            int
 		expectedPendingCount int
 	}{
 		{
-			name:           "Fa finds first 'a' backward",
-			count:          1,
-			targetChar:     'a',
-			expectedX:      8,
+			name:                 "Fa finds first 'a' backward",
+			count:                1,
+			targetChar:           'a',
+			expectedX:            8,
 			expectedPendingCount: 0,
 		},
 		{
-			name:           "2Fa finds second 'a' backward",
-			count:          2,
-			targetChar:     'a',
-			expectedX:      7,
+			name:                 "2Fa finds second 'a' backward",
+			count:                2,
+			targetChar:           'a',
+			expectedX:            7,
 			expectedPendingCount: 0,
 		},
 		{
-			name:           "3Fa finds third 'a' backward",
-			count:          3,
-			targetChar:     'a',
-			expectedX:      5,
+			name:                 "3Fa finds third 'a' backward",
+			count:                3,
+			targetChar:           'a',
+			expectedX:            5,
 			expectedPendingCount: 0,
 		},
 		{
-			name:           "5Fa finds fifth 'a' backward",
-			count:          5,
-			targetChar:     'a',
-			expectedX:      2,
+			name:                 "5Fa finds fifth 'a' backward",
+			count:                5,
+			targetChar:           'a',
+			expectedX:            2,
 			expectedPendingCount: 0,
 		},
 		{
-			name:           "10Fa moves to first match (only 7 'a's before cursor)",
-			count:          10,
-			targetChar:     'a',
-			expectedX:      0, // Should move to first 'a' when count exceeds matches
+			name:                 "10Fa moves to first match (only 7 'a's before cursor)",
+			count:                10,
+			targetChar:           'a',
+			expectedX:            0, // Should move to first 'a' when count exceeds matches
 			expectedPendingCount: 0,
 		},
 		{
-			name:           "Fx finds 'x' (not found, cursor doesn't move)",
-			count:          1,
-			targetChar:     'x',
-			expectedX:      9, // Cursor should not move when character not found
+			name:                 "Fx finds 'x' (not found, cursor doesn't move)",
+			count:                1,
+			targetChar:           'x',
+			expectedX:            9, // Cursor should not move when character not found
 			expectedPendingCount: 0,
 		},
 	}
@@ -500,7 +500,7 @@ func createMinimalTestContext(width, height int) *engine.GameContext {
 // Helper function to create a character at a position for testing
 func createTestChar(ctx *engine.GameContext, x, y int, char rune) engine.Entity {
 	entity := ctx.World.CreateEntity()
-	ctx.World.AddComponent(entity, components.PositionComponent{X: x, Y: y})
-	ctx.World.AddComponent(entity, components.CharacterComponent{Rune: char})
+	ctx.World.Positions.Add(entity, components.PositionComponent{X: x, Y: y})
+	ctx.World.Characters.Add(entity, components.CharacterComponent{Rune: char})
 	return entity
 }

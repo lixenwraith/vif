@@ -7,10 +7,11 @@ import "github.com/lixenwraith/vi-fighter/components"
 // committing the entity to the world via Build().
 //
 // Example usage:
-//   entity := world.NewEntity().
-//       With(world.Characters, characterComponent).
-//       WithPosition(world.Positions, positionComponent).
-//       Build()
+//
+//	entity := world.NewEntity().
+//	    With(world.Characters, characterComponent).
+//	    WithPosition(world.Positions, positionComponent).
+//	    Build()
 type EntityBuilder struct {
 	world  *World
 	entity Entity
@@ -43,7 +44,8 @@ func (w *World) NewEntity() *EntityBuilder {
 // Panics if called after Build().
 //
 // Example:
-//   builder.With(world.Characters, components.CharacterComponent{Rune: 'A'})
+//
+//	builder.With(world.Characters, components.CharacterComponent{Rune: 'A'})
 func With[T any](eb *EntityBuilder, store *Store[T], component T) *EntityBuilder {
 	if eb.built {
 		panic("entity already built - cannot add components after Build()")
@@ -65,7 +67,8 @@ func With[T any](eb *EntityBuilder, store *Store[T], component T) *EntityBuilder
 // Panics if called after Build().
 //
 // Example:
-//   builder.WithPosition(world.Positions, components.PositionComponent{X: 10, Y: 5})
+//
+//	builder.WithPosition(world.Positions, components.PositionComponent{X: 10, Y: 5})
 func WithPosition(eb *EntityBuilder, store *PositionStore, component components.PositionComponent) *EntityBuilder {
 	if eb.built {
 		panic("entity already built - cannot add components after Build()")

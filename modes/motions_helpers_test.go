@@ -25,8 +25,8 @@ func createSimpleTestContext() *engine.GameContext {
 // Helper function to place a character without full sequence setup
 func placeSimpleChar(ctx *engine.GameContext, x, y int, r rune) {
 	entity := ctx.World.CreateEntity()
-	ctx.World.AddComponent(entity, components.PositionComponent{X: x, Y: y})
-	ctx.World.AddComponent(entity, components.CharacterComponent{Rune: r, Style: tcell.StyleDefault})
+	ctx.World.Positions.Add(entity, components.PositionComponent{X: x, Y: y})
+	ctx.World.Characters.Add(entity, components.CharacterComponent{Rune: r, Style: tcell.StyleDefault})
 }
 
 // TestGetCharacterTypeAt tests character type classification

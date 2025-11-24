@@ -135,7 +135,7 @@ func TestColorCounterNegativePrevention(t *testing.T) {
 	gs := NewGameState(10, 5, 12, timeProvider)
 
 	// Try to remove more than available
-	gs.AddColorCount(0, 2, 5)  // Add 5
+	gs.AddColorCount(0, 2, 5)   // Add 5
 	gs.AddColorCount(0, 2, -10) // Try to remove 10
 
 	// Should be clamped to 0, not negative

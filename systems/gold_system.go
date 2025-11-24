@@ -84,8 +84,6 @@ func (s *GoldSystem) spawnGold(world *engine.World) bool {
 		return false
 	}
 
-	
-
 	s.mu.Lock()
 	// Generate random 10-character sequence
 	sequence := make([]rune, constants.GoldSequenceLength)
@@ -184,8 +182,6 @@ func (s *GoldSystem) removeGold(world *engine.World, sequenceID int) {
 	if sequenceID != goldSnapshot.SequenceID {
 		return
 	}
-
-	
 
 	// Query entities with sequence components
 	entities := world.Sequences.All()
@@ -300,7 +296,7 @@ func (s *GoldSystem) CompleteGold(world *engine.World) bool {
 // findValidPosition finds a valid random position for the gold sequence using generic stores
 // Caller holds s.mu lock
 func (s *GoldSystem) findValidPosition(world *engine.World, seqLength int) (int, int) {
-	
+
 	gameWidth := s.ctx.GameWidth
 	gameHeight := s.ctx.GameHeight
 

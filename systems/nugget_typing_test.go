@@ -1,7 +1,6 @@
 package systems
 
 import (
-	"reflect"
 	"testing"
 	"time"
 
@@ -301,21 +300,19 @@ func TestNuggetTypingMultipleCollections(t *testing.T) {
 	if !ok {
 		t.Fatal("New nugget should have position")
 	}
-	posComp := pos.(components.PositionComponent)
 
 	// Get the character from the second nugget
 	char, ok := world.Characters.Get(nugget2)
 	if !ok {
 		t.Fatal("New nugget should have character")
 	}
-	charComp := char.(components.CharacterComponent)
 
-	ctx.CursorX = posComp.X
-	ctx.CursorY = posComp.Y
-	ctx.State.SetCursorX(posComp.X)
-	ctx.State.SetCursorY(posComp.Y)
+	ctx.CursorX = pos.X
+	ctx.CursorY = pos.Y
+	ctx.State.SetCursorX(pos.X)
+	ctx.State.SetCursorY(pos.Y)
 
-	scoreSystem.HandleCharacterTyping(world, posComp.X, posComp.Y, charComp.Rune)
+	scoreSystem.HandleCharacterTyping(world, pos.X, pos.Y, char.Rune)
 
 	// Second collection: heat = 20
 	if ctx.State.GetHeat() != 20 {
@@ -434,15 +431,3 @@ func TestNuggetAlwaysIncreasesVisualBlocks(t *testing.T) {
 }
 
 // Helper functions
-
-func nuggetComponentType() reflect.Type {
-	return reflect.TypeOf(components.NuggetComponent{})
-}
-
-func positionComponentType() reflect.Type {
-	return reflect.TypeOf(components.PositionComponent{})
-}
-
-func characterComponentType() reflect.Type {
-	return reflect.TypeOf(components.CharacterComponent{})
-}

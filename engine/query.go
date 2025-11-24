@@ -16,10 +16,11 @@ type QueryBuilder struct {
 // Use With() to add component filters, then Execute() to get the results.
 //
 // Example:
-//   entities := world.Query().
-//       With(world.Positions).
-//       With(world.Characters).
-//       Execute()
+//
+//	entities := world.Query().
+//	    With(world.Positions).
+//	    With(world.Characters).
+//	    Execute()
 func (w *World) Query() *QueryBuilder {
 	return &QueryBuilder{
 		world:   w,

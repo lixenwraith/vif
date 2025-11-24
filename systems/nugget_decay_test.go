@@ -1,10 +1,8 @@
 package systems
 
 import (
-	"reflect"
 	"testing"
 	"time"
-
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -268,8 +266,7 @@ func TestDecayDestroyNuggetAndSequence(t *testing.T) {
 		nuggetDestroyed := !world.Nuggets.Has(nuggetEntity)
 		seqDecayed := false
 		if world.Sequences.Has(seqEntity) {
-			seqComp, _ := world.Sequences.Get(seqEntity)
-			seq := seqComp.(components.SequenceComponent)
+			seq, _ := world.Sequences.Get(seqEntity)
 			seqDecayed = seq.Level == components.LevelNormal
 		}
 
@@ -290,11 +287,10 @@ func TestDecayDestroyNuggetAndSequence(t *testing.T) {
 	}
 
 	// Get sequence component and verify it was decayed
-	seqComp, ok := world.Sequences.Get(seqEntity)
+	seq, ok := world.Sequences.Get(seqEntity)
 	if !ok {
 		t.Fatal("Failed to get sequence component")
 	}
-	seq := seqComp.(components.SequenceComponent)
 	if seq.Level != components.LevelNormal {
 		t.Errorf("Sequence should decay to LevelNormal, got %d", seq.Level)
 	}

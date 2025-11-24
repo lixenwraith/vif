@@ -1,13 +1,11 @@
 package systems
 
 import (
-	"reflect"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
@@ -312,11 +310,10 @@ func TestNuggetSpawnPositionExclusionZone(t *testing.T) {
 		}
 
 		// Get nugget position
-		posComp, ok := world.Positions.Get(engine.Entity(activeNugget))
+		pos, ok := world.Positions.Get(engine.Entity(activeNugget))
 		if !ok {
 			t.Fatal("Expected nugget to have position component")
 		}
-		pos := posComp.(components.PositionComponent)
 
 		// Verify not within exclusion zone
 		if abs(float64(pos.X-50)) <= 5 && abs(float64(pos.Y-15)) <= 3 {

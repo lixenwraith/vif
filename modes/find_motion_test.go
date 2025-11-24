@@ -15,8 +15,8 @@ func placeTextAt(ctx *engine.GameContext, x, y int, text string) {
 	for i, r := range text {
 		if r != ' ' { // Skip spaces
 			entity := ctx.World.CreateEntity()
-			ctx.World.AddComponent(entity, components.PositionComponent{X: x + i, Y: y})
-			ctx.World.AddComponent(entity, components.CharacterComponent{Rune: r})
+			ctx.World.Positions.Add(entity, components.PositionComponent{X: x + i, Y: y})
+			ctx.World.Characters.Add(entity, components.CharacterComponent{Rune: r})
 		}
 	}
 }

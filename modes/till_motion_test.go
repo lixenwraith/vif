@@ -23,12 +23,12 @@ func TestTillCharBasic(t *testing.T) {
 		targetChar rune
 		expectedX  int
 	}{
-		{"till first 'e' (moves to position before)", 0, 'e', 0},      // 'e' is at 1, till moves to 0 (too close, stays)
-		{"till first 'o' from start", 0, 'o', 3},                      // 'o' is at 4, till moves to 3
-		{"till 'w' from start", 0, 'w', 5},                            // 'w' is at 6, till moves to 5
-		{"till 'l' from position 2", 2, 'l', 2},                       // 'l' is at 3, till moves to 2 (already there)
-		{"till second 'o' from position 5", 5, 'o', 6},                // second 'o' is at 7, till moves to 6
-		{"till 'd' from start", 0, 'd', 9},                            // 'd' is at 10, till moves to 9
+		{"till first 'e' (moves to position before)", 0, 'e', 0}, // 'e' is at 1, till moves to 0 (too close, stays)
+		{"till first 'o' from start", 0, 'o', 3},                 // 'o' is at 4, till moves to 3
+		{"till 'w' from start", 0, 'w', 5},                       // 'w' is at 6, till moves to 5
+		{"till 'l' from position 2", 2, 'l', 2},                  // 'l' is at 3, till moves to 2 (already there)
+		{"till second 'o' from position 5", 5, 'o', 6},           // second 'o' is at 7, till moves to 6
+		{"till 'd' from start", 0, 'd', 9},                       // 'd' is at 10, till moves to 9
 	}
 
 	for _, tt := range tests {

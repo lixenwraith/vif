@@ -1,9 +1,7 @@
 package systems
 
 import (
-	"reflect"
 	"testing"
-
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -67,8 +65,7 @@ func TestDecaySystemCounterUpdates(t *testing.T) {
 	entities := world.Query().With(world.Positions).With(world.Sequences).Execute()
 
 	for _, entity := range entities {
-		seqComp, _ := world.Sequences.Get(entity)
-		seq := seqComp.(components.SequenceComponent)
+		seq, _ := world.Sequences.Get(entity)
 
 		if seq.Type != components.SequenceBlue {
 			t.Errorf("Expected entity type to still be Blue, got %v", seq.Type)
@@ -153,8 +150,7 @@ func TestDecaySystemColorTransitionWithCounters(t *testing.T) {
 	}
 
 	for _, entity := range entities {
-		seqComp, _ := world.Sequences.Get(entity)
-		seq := seqComp.(components.SequenceComponent)
+		seq, _ := world.Sequences.Get(entity)
 
 		if seq.Type != components.SequenceRed {
 			t.Errorf("Expected entity type to be Red, got %v", seq.Type)

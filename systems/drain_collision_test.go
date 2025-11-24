@@ -31,7 +31,7 @@ func TestDrainSystem_CollisionWithBlueCharacter(t *testing.T) {
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
 	}
-	drain := drainComp.(components.DrainComponent)
+	drain := drainComp
 
 	// Create a blue character at a different position (10, 10)
 	charX, charY := 10, 10
@@ -105,7 +105,7 @@ func TestDrainSystem_CollisionWithGreenCharacter(t *testing.T) {
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
 	}
-	drain := drainComp.(components.DrainComponent)
+	drain := drainComp
 
 	// Create a green character at a different position (10, 10)
 	charX, charY := 10, 10
@@ -176,7 +176,7 @@ func TestDrainSystem_CollisionWithRedCharacter(t *testing.T) {
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
 	}
-	drain := drainComp.(components.DrainComponent)
+	drain := drainComp
 
 	// Create a red character at a different position (10, 10)
 	charX, charY := 10, 10
@@ -238,7 +238,7 @@ func TestDrainSystem_CollisionWithGoldSequence(t *testing.T) {
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
 	}
-	drain := drainComp.(components.DrainComponent)
+	drain := drainComp
 
 	// Activate gold sequence in GameState (simulate gold system spawn)
 	sequenceID := 42
@@ -344,7 +344,7 @@ func TestDrainSystem_CollisionMultipleLevels(t *testing.T) {
 			if !ok {
 				t.Fatal("Expected drain to have DrainComponent")
 			}
-			drain := drainComp.(components.DrainComponent)
+			drain := drainComp
 
 			// Create a blue character with the specified level at a different position
 			charX, charY := 10, 10
@@ -427,7 +427,7 @@ func TestDrainSystem_NoCollisionWithNonSequenceEntity(t *testing.T) {
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
 	}
-	drain := drainComp.(components.DrainComponent)
+	drain := drainComp
 
 	// Create an entity without SequenceComponent at the same position
 	otherEntity := world.CreateEntity()
@@ -562,7 +562,7 @@ func TestDrainSystem_CollisionAtDifferentPositions(t *testing.T) {
 
 			// Move drain to character position (update GameState and component, not spatial index)
 			drainComp, _ := world.Drains.Get(entity)
-			drain := drainComp.(components.DrainComponent)
+			drain := drainComp
 			drain.X = pos.x
 			drain.Y = pos.y
 			world.Drains.Add(entity, drain)
@@ -609,7 +609,7 @@ func TestDrainSystem_CollisionWithNugget(t *testing.T) {
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
 	}
-	drain := drainComp.(components.DrainComponent)
+	drain := drainComp
 
 	// Create a nugget at a different position (10, 10)
 	nuggetX, nuggetY := 10, 10
@@ -683,7 +683,7 @@ func TestDrainSystem_NuggetCollisionWithoutSystem(t *testing.T) {
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
 	}
-	drain := drainComp.(components.DrainComponent)
+	drain := drainComp
 
 	// Create a nugget at a different position (10, 10)
 	nuggetX, nuggetY := 10, 10
@@ -743,7 +743,7 @@ func TestDrainSystem_GoldCollisionInactiveGold(t *testing.T) {
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
 	}
-	drain := drainComp.(components.DrainComponent)
+	drain := drainComp
 
 	// Create a gold character WITHOUT activating gold in GameState
 	goldEntity := world.CreateEntity()
@@ -796,7 +796,7 @@ func TestDrainSystem_CollisionWithFallingDecay(t *testing.T) {
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
 	}
-	drain := drainComp.(components.DrainComponent)
+	drain := drainComp
 
 	// Create a falling decay entity at a different position (10, 10)
 	decayX, decayY := 10, 10
@@ -902,7 +902,7 @@ func TestDrainSystem_CollisionWithMultipleFallingDecay(t *testing.T) {
 
 	// Move drain to first decay entity position (5, 5)
 	drainComp, _ := world.Drains.Get(entity)
-	drain := drainComp.(components.DrainComponent)
+	drain := drainComp
 	drain.X = 5
 	drain.Y = 5
 	world.Drains.Add(entity, drain)
@@ -988,7 +988,7 @@ func TestDrainSystem_FallingDecayCollisionAtBoundary(t *testing.T) {
 
 			// Move drain to decay entity position
 			drainComp, _ := world.Drains.Get(entity)
-			drain := drainComp.(components.DrainComponent)
+			drain := drainComp
 			drain.X = pos.x
 			drain.Y = pos.y
 			world.Drains.Add(entity, drain)
@@ -1027,7 +1027,7 @@ func TestDrainSystem_DecayCollisionPriorityOverSequence(t *testing.T) {
 	if !ok {
 		t.Fatal("Expected drain to have DrainComponent")
 	}
-	drain := drainComp.(components.DrainComponent)
+	drain := drainComp
 
 	// Create a falling decay entity at different position (10, 10)
 	decayX, decayY := 10, 10
@@ -1118,7 +1118,7 @@ func TestDrainSystem_FallingDecayWithDifferentSpeeds(t *testing.T) {
 			if !ok {
 				t.Fatal("Expected drain to have DrainComponent")
 			}
-			drain := drainComp.(components.DrainComponent)
+			drain := drainComp
 
 			// Create falling decay entity with specific speed at different position (10, 10)
 			decayX, decayY := 10, 10

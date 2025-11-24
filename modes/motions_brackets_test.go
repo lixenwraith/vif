@@ -4,8 +4,6 @@ import (
 	"testing"
 )
 
-
-
 func TestBracketMatchingParentheses(t *testing.T) {
 	ctx := createTestContext()
 
@@ -34,7 +32,6 @@ func TestBracketMatchingParentheses(t *testing.T) {
 	}
 }
 
-
 func TestBracketMatchingCurlyBraces(t *testing.T) {
 	ctx := createTestContext()
 
@@ -60,7 +57,6 @@ func TestBracketMatchingCurlyBraces(t *testing.T) {
 		t.Errorf("%% from '}': expected (0, 0), got (%d, %d)", ctx.CursorX, ctx.CursorY)
 	}
 }
-
 
 func TestBracketMatchingSquareBrackets(t *testing.T) {
 	ctx := createTestContext()
@@ -88,7 +84,6 @@ func TestBracketMatchingSquareBrackets(t *testing.T) {
 		t.Errorf("%% from ']': expected (0, 0), got (%d, %d)", ctx.CursorX, ctx.CursorY)
 	}
 }
-
 
 func TestBracketMatchingNested(t *testing.T) {
 	ctx := createTestContext()
@@ -131,7 +126,6 @@ func TestBracketMatchingNested(t *testing.T) {
 	}
 }
 
-
 func TestBracketMatchingMultiLine(t *testing.T) {
 	ctx := createTestContext()
 
@@ -165,7 +159,6 @@ func TestBracketMatchingMultiLine(t *testing.T) {
 		t.Errorf("%% from '}' at line 3: expected (0, 0), got (%d, %d)", ctx.CursorX, ctx.CursorY)
 	}
 }
-
 
 func TestBracketMatchingMixedTypes(t *testing.T) {
 	ctx := createTestContext()
@@ -202,7 +195,6 @@ func TestBracketMatchingMixedTypes(t *testing.T) {
 	}
 }
 
-
 func TestBracketMatchingNonBracket(t *testing.T) {
 	ctx := createTestContext()
 
@@ -221,7 +213,6 @@ func TestBracketMatchingNonBracket(t *testing.T) {
 		t.Errorf("%% from non-bracket: expected (2, 0), got (%d, %d)", ctx.CursorX, ctx.CursorY)
 	}
 }
-
 
 func TestBracketMatchingNoMatch(t *testing.T) {
 	ctx := createTestContext()
@@ -252,7 +243,6 @@ func TestBracketMatchingNoMatch(t *testing.T) {
 		t.Errorf("%% from unmatched ')': expected (5, 0), got (%d, %d)", ctx.CursorX, ctx.CursorY)
 	}
 }
-
 
 func TestBracketMatchingDeeplyNested(t *testing.T) {
 	ctx := createTestContext()
@@ -293,7 +283,6 @@ func TestBracketMatchingDeeplyNested(t *testing.T) {
 		t.Errorf("%% from outermost ')': expected (0, 0), got (%d, %d)", ctx.CursorX, ctx.CursorY)
 	}
 }
-
 
 func TestBracketMatchingComplexMultiLine(t *testing.T) {
 	ctx := createTestContext()
@@ -360,7 +349,6 @@ func TestBracketMatchingComplexMultiLine(t *testing.T) {
 	}
 }
 
-
 func TestBracketMatchingWithGaps(t *testing.T) {
 	ctx := createTestContext()
 
@@ -382,7 +370,6 @@ func TestBracketMatchingWithGaps(t *testing.T) {
 		t.Errorf("%% from ')' with gap: expected (0, 0), got (%d, %d)", ctx.CursorX, ctx.CursorY)
 	}
 }
-
 
 func TestBracketMatchingMismatchedTypes(t *testing.T) {
 	ctx := createTestContext()
@@ -413,4 +400,3 @@ func TestBracketMatchingMismatchedTypes(t *testing.T) {
 		t.Errorf("%% from '[' with mismatched '}': expected (0, 1), got (%d, %d)", ctx.CursorX, ctx.CursorY)
 	}
 }
-

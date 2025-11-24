@@ -1,12 +1,10 @@
 package systems
 
 import (
-	"reflect"
 	"testing"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 

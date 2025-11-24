@@ -1,10 +1,8 @@
 package systems
 
 import (
-	"reflect"
 	"testing"
 	"time"
-
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -196,7 +194,7 @@ func TestDrainSystem_IsOnCursorStateTracking(t *testing.T) {
 	if !ok {
 		t.Fatal("Expected entity to have DrainComponent")
 	}
-	drain := drainComp.(components.DrainComponent)
+	drain := drainComp
 
 	if !drain.IsOnCursor {
 		t.Error("Expected IsOnCursor to be true when drain is on cursor")
@@ -214,7 +212,7 @@ func TestDrainSystem_IsOnCursorStateTracking(t *testing.T) {
 	if !ok {
 		t.Fatal("Expected entity to have DrainComponent")
 	}
-	drain = drainComp.(components.DrainComponent)
+	drain = drainComp
 
 	if drain.IsOnCursor {
 		t.Error("Expected IsOnCursor to be false when drain is not on cursor")
@@ -514,7 +512,7 @@ func TestDrainSystem_LastDrainTimeUpdated(t *testing.T) {
 	if !ok {
 		t.Fatal("Expected entity to have DrainComponent")
 	}
-	drain := drainComp.(components.DrainComponent)
+	drain := drainComp
 
 	// LastDrainTime should be updated (not equal to startTime)
 	if drain.LastDrainTime.Equal(startTime) {

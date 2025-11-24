@@ -116,7 +116,6 @@ func TestCompleteGameCycle(t *testing.T) {
 	t.Logf("✓ Complete game cycle successful: Normal → Gold → DecayWait → DecayAnim → Normal")
 }
 
-
 // TestGoldCompletionBeforeTimeout tests gold completion (not timeout) transition
 func TestGoldCompletionBeforeTimeout(t *testing.T) {
 	mockTime := NewMockTimeProvider(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
@@ -168,9 +167,6 @@ func TestGoldCompletionBeforeTimeout(t *testing.T) {
 // ============================================================================
 // Decay Interval Calculation Tests
 // ============================================================================
-
-
-
 
 // ============================================================================
 // Concurrent Access Tests
@@ -345,8 +341,6 @@ func TestPhaseDurationCalculation(t *testing.T) {
 // ============================================================================
 // Cleaner Integration Tests
 // ============================================================================
-
-
 
 // ============================================================================
 // Trail Collision Logic Tests

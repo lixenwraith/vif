@@ -4,8 +4,6 @@ import (
 	"testing"
 )
 
-
-
 func TestParagraphMotions(t *testing.T) {
 	ctx := createTestContext()
 
@@ -96,4 +94,3 @@ func TestParagraphMotionCountHandling(t *testing.T) {
 		t.Errorf("100} motion: expected Y>=12 (stopped at boundary), got Y=%d", ctx.CursorY)
 	}
 }
-

@@ -18,11 +18,11 @@ type Cell struct {
 
 // Buffer represents a 2D grid of cells with spatial indexing
 type Buffer struct {
-	width  int
-	height int
-	lines  [][]Cell           // 2D grid of cells
-	dirty  map[Point]bool     // Changed cells for efficient rendering
-	spatial map[Point]uint64  // Spatial index: position -> entity ID
+	width   int
+	height  int
+	lines   [][]Cell         // 2D grid of cells
+	dirty   map[Point]bool   // Changed cells for efficient rendering
+	spatial map[Point]uint64 // Spatial index: position -> entity ID
 }
 
 // NewBuffer creates a new buffer with the given dimensions
