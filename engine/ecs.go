@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -98,7 +97,6 @@ func (w *World) DestroyEntity(e Entity) {
 		store.Remove(e)
 	}
 }
-
 
 // AddSystem adds a system to the world and sorts by priority
 func (w *World) AddSystem(system System) {
