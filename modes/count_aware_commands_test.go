@@ -28,8 +28,7 @@ func TestFindCharWithCount(t *testing.T) {
 	createTestChar(ctx, 9, 10, 'a')
 
 	// Set cursor at position 0, line 10
-	ctx.CursorX = 0
-	ctx.CursorY = 10
+	setCursorPosition(ctx, 0, 10)
 
 	tests := []struct {
 		name                 string
@@ -78,8 +77,7 @@ func TestFindCharWithCount(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Reset cursor to start position
-			ctx.CursorX = 0
-			ctx.CursorY = 10
+			setCursorPosition(ctx, 0, 10)
 			ctx.PendingCount = 0
 			ctx.MotionCount = 0
 
@@ -124,8 +122,7 @@ func TestFindCharStateTransition(t *testing.T) {
 	createTestChar(ctx, 4, 10, 'x')
 	createTestChar(ctx, 5, 10, 'a')
 
-	ctx.CursorX = 0
-	ctx.CursorY = 10
+	setCursorPosition(ctx, 0, 10)
 
 	// Simulate "2fa" command
 	// Step 1: User types "2"
@@ -186,8 +183,7 @@ func TestFindCharBackwardWithCount(t *testing.T) {
 	createTestChar(ctx, 9, 10, 'b')
 
 	// Set cursor at position 9, line 10 (at the end)
-	ctx.CursorX = 9
-	ctx.CursorY = 10
+	setCursorPosition(ctx, 9, 10)
 
 	tests := []struct {
 		name                 string
@@ -243,8 +239,7 @@ func TestFindCharBackwardWithCount(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Reset cursor to start position
-			ctx.CursorX = 9
-			ctx.CursorY = 10
+			setCursorPosition(ctx, 9, 10)
 			ctx.PendingCount = 0
 			ctx.MotionCount = 0
 
@@ -289,8 +284,7 @@ func TestFindCharBackwardStateTransition(t *testing.T) {
 	createTestChar(ctx, 4, 10, 'a')
 	createTestChar(ctx, 5, 10, 'x')
 
-	ctx.CursorX = 5
-	ctx.CursorY = 10
+	setCursorPosition(ctx, 5, 10)
 
 	// Simulate "2Fa" command
 	// Step 1: User types "2"
@@ -386,8 +380,7 @@ func TestSingleKeystrokeCommandsStillWork(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx.CursorX = tt.initialX
-			ctx.CursorY = tt.initialY
+			setCursorPosition(ctx, tt.initialX, tt.initialY)
 			ctx.MotionCount = 0
 			ctx.PendingCount = 0
 
@@ -416,8 +409,7 @@ func TestInvalidCommandResetsCount(t *testing.T) {
 	// Create test line with one 'a'
 	createTestChar(ctx, 5, 10, 'a')
 
-	ctx.CursorX = 0
-	ctx.CursorY = 10
+	setCursorPosition(ctx, 0, 10)
 
 	// Simulate "5fx" where 'x' doesn't exist (should not move cursor)
 	ctx.MotionCount = 5
@@ -494,6 +486,30 @@ func createMinimalTestContext(width, height int) *engine.GameContext {
 		GameWidth:  width,
 		GameHeight: height,
 	}
+
+	// Create cursor entity (required after Phase 2 migration)
+	ctx.CursorEntity = engine.With(
+		engine.WithPosition(
+			world.NewEntity(),
+			world.Positions,
+			components.PositionComponent{X: width / 2, Y: height / 2},
+		),
+		world.Cursors,
+		components.CursorComponent{},
+	).Build()
+
+	// Make cursor indestructible
+	world.Protections.Add(ctx.CursorEntity, components.ProtectionComponent{
+		Mask:      components.ProtectAll,
+		ExpiresAt: 0,
+	})
+
+	// Initialize cursor cache (synced with ECS)
+	if pos, ok := world.Positions.Get(ctx.CursorEntity); ok {
+		ctx.CursorX = pos.X
+		ctx.CursorY = pos.Y
+	}
+
 	return ctx
 }
 
@@ -503,4 +519,14 @@ func createTestChar(ctx *engine.GameContext, x, y int, char rune) engine.Entity 
 	ctx.World.Positions.Add(entity, components.PositionComponent{X: x, Y: y})
 	ctx.World.Characters.Add(entity, components.CharacterComponent{Rune: char})
 	return entity
+}
+
+// Helper function to set cursor position in ECS (for testing after Phase 2 migration)
+// This syncs the position to both ECS and the cache
+func setCursorPosition(ctx *engine.GameContext, x, y int) {
+	// Set in ECS (primary source)
+	ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{X: x, Y: y})
+	// Sync to cache
+	ctx.CursorX = x
+	ctx.CursorY = y
 }

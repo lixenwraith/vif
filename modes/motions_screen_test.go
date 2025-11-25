@@ -17,9 +17,18 @@ func createTestContext() *engine.GameContext {
 	ctx := engine.NewGameContext(screen)
 	ctx.GameWidth = 80
 	ctx.GameHeight = 20
-	ctx.CursorX = 0
-	ctx.CursorY = 0
+
+	// Set cursor position in ECS (required after Phase 2 migration)
+	setTestCursorPosition(ctx, 0, 0)
 	return ctx
+}
+
+// Helper function to set cursor position in ECS (for testing after Phase 2 migration)
+// Note: This is specific to motions_screen_test.go
+func setTestCursorPosition(ctx *engine.GameContext, x, y int) {
+	ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{X: x, Y: y})
+	ctx.CursorX = x
+	ctx.CursorY = y
 }
 
 // Helper function to place a character at a position
@@ -37,8 +46,7 @@ func placeChar(ctx *engine.GameContext, x, y int, r rune) {
 
 func TestHMLMotions(t *testing.T) {
 	ctx := createTestContext()
-	ctx.CursorX = 10
-	ctx.CursorY = 10
+	setTestCursorPosition(ctx, 10, 10)
 
 	// Test H - jump to top
 	ExecuteMotion(ctx, 'H', 1)
@@ -50,7 +58,7 @@ func TestHMLMotions(t *testing.T) {
 	}
 
 	// Test M - jump to middle
-	ctx.CursorY = 0
+	setTestCursorPosition(ctx, ctx.CursorX, 0)
 	ExecuteMotion(ctx, 'M', 1)
 	expectedMiddle := ctx.GameHeight / 2
 	if ctx.CursorY != expectedMiddle {
@@ -58,7 +66,7 @@ func TestHMLMotions(t *testing.T) {
 	}
 
 	// Test L - jump to bottom
-	ctx.CursorY = 0
+	setTestCursorPosition(ctx, ctx.CursorX, 0)
 	ExecuteMotion(ctx, 'L', 1)
 	expectedBottom := ctx.GameHeight - 1
 	if ctx.CursorY != expectedBottom {
@@ -77,16 +85,14 @@ func TestCaretMotion(t *testing.T) {
 	placeChar(ctx, 7, 0, 'o')
 
 	// Test ^ - should jump to first non-whitespace
-	ctx.CursorX = 10
-	ctx.CursorY = 0
+	setTestCursorPosition(ctx, 10, 0)
 	ExecuteMotion(ctx, '^', 1)
 	if ctx.CursorX != 3 {
 		t.Errorf("^ motion failed: expected X=3, got X=%d", ctx.CursorX)
 	}
 
 	// Test on empty line - should go to position 0
-	ctx.CursorX = 10
-	ctx.CursorY = 1 // Empty line
+	setTestCursorPosition(ctx, 10, 1) // Empty line
 	ExecuteMotion(ctx, '^', 1)
 	if ctx.CursorX != 0 {
 		t.Errorf("^ motion on empty line: expected X=0, got X=%d", ctx.CursorX)

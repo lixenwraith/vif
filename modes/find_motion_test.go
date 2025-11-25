@@ -66,8 +66,8 @@ func TestFindCharBasic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx.CursorX = tt.startX
-			ctx.CursorY = 0
+			setCursorPosition(ctx, tt.startX, 0)
+	
 
 			ExecuteFindChar(ctx, tt.targetChar, 1)
 
@@ -103,8 +103,8 @@ func TestFindCharWithCountComprehensive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx.CursorX = tt.startX
-			ctx.CursorY = 5
+			setCursorPosition(ctx, tt.startX, 0)
+
 
 			ExecuteFindChar(ctx, tt.targetChar, tt.count)
 
@@ -135,7 +135,7 @@ func TestFindCharCountExceedsMatches(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx.CursorX = tt.startX
+			setCursorPosition(ctx, tt.startX, 0)
 			ctx.CursorY = 10
 
 			ExecuteFindChar(ctx, tt.targetChar, tt.count)
@@ -166,7 +166,7 @@ func TestFindCharNoMatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx.CursorX = tt.startX
+			setCursorPosition(ctx, tt.startX, 0)
 			ctx.CursorY = 3
 			originalX := tt.startX
 
@@ -200,7 +200,7 @@ func TestFindCharAtBoundary(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx.CursorX = tt.startX
+			setCursorPosition(ctx, tt.startX, 0)
 			ctx.CursorY = 8
 
 			ExecuteFindChar(ctx, tt.targetChar, 1)
@@ -235,7 +235,7 @@ func TestFindCharBackwardBasic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx.CursorX = tt.startX
+			setCursorPosition(ctx, tt.startX, 0)
 			ctx.CursorY = 2
 
 			ExecuteFindCharBackward(ctx, tt.targetChar, 1)
@@ -270,7 +270,7 @@ func TestFindCharBackwardWithCountComprehensive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx.CursorX = tt.startX
+			setCursorPosition(ctx, tt.startX, 0)
 			ctx.CursorY = 7
 
 			ExecuteFindCharBackward(ctx, tt.targetChar, tt.count)
@@ -299,7 +299,7 @@ func TestFindCharBackwardFromStart(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx.CursorX = tt.startX
+			setCursorPosition(ctx, tt.startX, 0)
 			ctx.CursorY = 4
 			originalX := tt.startX
 
@@ -334,7 +334,7 @@ func TestFindCharBackwardCountExceedsMatches(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx.CursorX = tt.startX
+			setCursorPosition(ctx, tt.startX, 0)
 			ctx.CursorY = 11
 
 			ExecuteFindCharBackward(ctx, tt.targetChar, tt.count)
@@ -356,7 +356,7 @@ func TestDeleteWithFind(t *testing.T) {
 		// Create test line: "xyzabc"
 		placeTextAt(ctx, 0, 0, "xyzabc")
 		ctx.CursorX = 0
-		ctx.CursorY = 0
+
 
 		// Simulate "dfa" - delete to first 'a'
 		ExecuteDeleteWithMotion(ctx, 'f', 1, 'a')
@@ -372,8 +372,7 @@ func TestDeleteWithFind(t *testing.T) {
 		ctx = createMinimalTestContext(80, 24)
 		// Create test line: "xayaza"
 		placeTextAt(ctx, 0, 1, "xayaza")
-		ctx.CursorX = 0
-		ctx.CursorY = 1
+		setCursorPosition(ctx, 0, 1)
 
 		// Simulate "d2fa" - delete to 2nd 'a'
 		ExecuteDeleteWithMotion(ctx, 'f', 2, 'a')
@@ -387,8 +386,7 @@ func TestDeleteWithFind(t *testing.T) {
 		ctx = createMinimalTestContext(80, 24)
 		// Create test line: "abxyz"
 		placeTextAt(ctx, 0, 2, "abxyz")
-		ctx.CursorX = 4 // At 'z'
-		ctx.CursorY = 2
+		setCursorPosition(ctx, 4 // At 'z', 2)
 
 		// Simulate "dFx" - delete backward to 'x'
 		ExecuteDeleteWithMotionBackward(ctx, 'F', 1, 'x')
@@ -402,8 +400,7 @@ func TestDeleteWithFind(t *testing.T) {
 		ctx = createMinimalTestContext(80, 24)
 		// Create test line: "xaxbxcx"
 		placeTextAt(ctx, 0, 3, "xaxbxcx")
-		ctx.CursorX = 6 // At last 'x'
-		ctx.CursorY = 3
+		setCursorPosition(ctx, 6 // At last 'x', 3)
 
 		// Simulate "d3Fx" - delete backward to 3rd 'x' from current position
 		ExecuteDeleteWithMotionBackward(ctx, 'F', 3, 'x')
@@ -422,8 +419,7 @@ func TestFindAfterMotion(t *testing.T) {
 	placeTextAt(ctx, 0, 6, "hello aaa bbb ccc")
 
 	t.Run("w then 2fa", func(t *testing.T) {
-		ctx.CursorX = 0
-		ctx.CursorY = 6
+		setCursorPosition(ctx, 0, 6)
 
 		// Execute 'w' to move to next word (position 6, first 'a')
 		ExecuteMotion(ctx, 'w', 1)
@@ -435,8 +431,7 @@ func TestFindAfterMotion(t *testing.T) {
 	})
 
 	t.Run("$ then Fa", func(t *testing.T) {
-		ctx.CursorX = 0
-		ctx.CursorY = 6
+		setCursorPosition(ctx, 0, 6)
 
 		// Execute '$' to go to end of line
 		ExecuteMotion(ctx, '$', 1)
@@ -452,8 +447,7 @@ func TestFindWithEmptyLine(t *testing.T) {
 	ctx := createMinimalTestContext(80, 24)
 
 	// Line 0 is empty (no characters placed)
-	ctx.CursorX = 5
-	ctx.CursorY = 0
+	setCursorPosition(ctx, 5, 0)
 
 	t.Run("fa on empty line", func(t *testing.T) {
 		originalX := ctx.CursorX
@@ -488,24 +482,21 @@ func TestFindWithSingleCharacter(t *testing.T) {
 	placeTextAt(ctx, 5, 9, "x")
 
 	t.Run("fx from before single char", func(t *testing.T) {
-		ctx.CursorX = 0
-		ctx.CursorY = 9
+		setCursorPosition(ctx, 0, 9)
 
 		ExecuteFindChar(ctx, 'x', 1)
 		assertCursorAt(t, ctx, 5, 9)
 	})
 
 	t.Run("Fx from after single char", func(t *testing.T) {
-		ctx.CursorX = 10
-		ctx.CursorY = 9
+		setCursorPosition(ctx, 10, 9)
 
 		ExecuteFindCharBackward(ctx, 'x', 1)
 		assertCursorAt(t, ctx, 5, 9)
 	})
 
 	t.Run("fx when already on char", func(t *testing.T) {
-		ctx.CursorX = 5
-		ctx.CursorY = 9
+		setCursorPosition(ctx, 5, 9)
 		originalX := ctx.CursorX
 
 		ExecuteFindChar(ctx, 'x', 1)
@@ -523,16 +514,14 @@ func TestFindWithUnicodeCharacters(t *testing.T) {
 	placeTextAt(ctx, 0, 12, "hello世界test")
 
 	t.Run("find Unicode char forward", func(t *testing.T) {
-		ctx.CursorX = 0
-		ctx.CursorY = 12
+		setCursorPosition(ctx, 0, 12)
 
 		ExecuteFindChar(ctx, '世', 1)
 		assertCursorAt(t, ctx, 5, 12)
 	})
 
 	t.Run("find Unicode char backward", func(t *testing.T) {
-		ctx.CursorX = 10
-		ctx.CursorY = 12
+		setCursorPosition(ctx, 10, 12)
 
 		ExecuteFindCharBackward(ctx, '世', 1)
 		// Note: Unicode characters are stored at their positions in the string
@@ -553,8 +542,7 @@ func TestFindWithCountZero(t *testing.T) {
 	placeTextAt(ctx, 0, 13, "abc")
 
 	t.Run("fa with count=0", func(t *testing.T) {
-		ctx.CursorX = 0
-		ctx.CursorY = 13
+		setCursorPosition(ctx, 0, 13)
 
 		ExecuteFindChar(ctx, 'a', 0)
 
@@ -563,8 +551,7 @@ func TestFindWithCountZero(t *testing.T) {
 	})
 
 	t.Run("fb with count=0", func(t *testing.T) {
-		ctx.CursorX = 2
-		ctx.CursorY = 13
+		setCursorPosition(ctx, 2, 13)
 
 		ExecuteFindCharBackward(ctx, 'b', 0)
 
@@ -581,8 +568,7 @@ func TestFindWithLargeCount(t *testing.T) {
 	placeTextAt(ctx, 0, 14, "aaa")
 
 	t.Run("999fa with only 3 matches", func(t *testing.T) {
-		ctx.CursorX = 0
-		ctx.CursorY = 14
+		setCursorPosition(ctx, 0, 14)
 
 		ExecuteFindChar(ctx, 'a', 999)
 
@@ -591,8 +577,7 @@ func TestFindWithLargeCount(t *testing.T) {
 	})
 
 	t.Run("999Fa with only 3 matches", func(t *testing.T) {
-		ctx.CursorX = 2
-		ctx.CursorY = 14
+		setCursorPosition(ctx, 2, 14)
 
 		ExecuteFindCharBackward(ctx, 'a', 999)
 
