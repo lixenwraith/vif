@@ -11,12 +11,12 @@ import (
 )
 
 // createAudioCommand creates an audio command for sound playback
-func createAudioCommand(soundType audio.SoundType, ctx *engine.GameContext) audio.AudioCommand {
+func createAudioCommand(soundType audio.SoundType, timestamp time.Time, frameNumber uint64) audio.AudioCommand {
 	return audio.AudioCommand{
 		Type:       soundType,
 		Priority:   1,
-		Generation: uint64(ctx.State.GetFrameNumber()),
-		Timestamp:  ctx.TimeProvider.Now(),
+		Generation: frameNumber,
+		Timestamp:  timestamp,
 	}
 }
 
@@ -60,7 +60,9 @@ func (s *ScoreSystem) SetNuggetSystem(nuggetSystem *NuggetSystem) {
 
 // Update runs the score system
 func (s *ScoreSystem) Update(world *engine.World, dt time.Duration) {
-	now := s.ctx.TimeProvider.Now()
+	// Fetch time resource
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+	now := timeRes.GameTime
 
 	// Clear error flash (red cursor) after timeout using Game Time
 	// This ensures the red flash "freezes" if the game is paused
@@ -79,7 +81,11 @@ func (s *ScoreSystem) Update(world *engine.World, dt time.Duration) {
 
 // HandleCharacterTyping processes a character typed in insert mode using generic stores
 func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursorY int, typedRune rune) {
-	now := s.ctx.TimeProvider.Now()
+	// Fetch resources
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+	now := timeRes.GameTime
+	frameNumber := uint64(s.ctx.State.GetFrameNumber())
 
 	// Find character at cursor position using Query
 	// We cannot use GetEntityAt because the Cursor entity masks the character in the spatial index
@@ -119,7 +125,7 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.State.SetScoreBlinkTime(now)
 		// Trigger error sound
 		if s.ctx.AudioEngine != nil {
-			cmd := createAudioCommand(audio.SoundError, s.ctx)
+			cmd := createAudioCommand(audio.SoundError, now, frameNumber)
 			s.ctx.AudioEngine.SendRealTime(cmd)
 		}
 		return
@@ -148,7 +154,7 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.State.SetScoreBlinkTime(now)
 		// Trigger error sound
 		if s.ctx.AudioEngine != nil {
-			cmd := createAudioCommand(audio.SoundError, s.ctx)
+			cmd := createAudioCommand(audio.SoundError, now, frameNumber)
 			s.ctx.AudioEngine.SendRealTime(cmd)
 		}
 		return
@@ -182,7 +188,7 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 			s.ctx.State.AddHeat(heatGain)
 
 			// Get max heat (heat bar width)
-			heatBarWidth := s.ctx.Width
+			heatBarWidth := config.ScreenWidth
 			if heatBarWidth < 1 {
 				heatBarWidth = 1
 			}
@@ -207,7 +213,7 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 					s.ctx.State.SetBoostEndTime(now.Add(constants.BoostExtensionDuration))
 				} else if boostState.Color == charColorCode {
 					// Same color - extend boost timer
-					s.extendBoost(constants.BoostExtensionDuration)
+					s.extendBoost(now, constants.BoostExtensionDuration)
 				} else {
 					// Different color - reset boost timer but keep heat at max
 					// Set timer to current time (effectively deactivates until rebuilt)
@@ -272,7 +278,7 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		// Move cursor right in ECS
 		cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
 		if ok {
-			if cursorPos.X < s.ctx.GameWidth-1 {
+			if cursorPos.X < config.GameWidth-1 {
 				cursorPos.X++
 			}
 			world.Positions.Add(s.ctx.CursorEntity, cursorPos)
@@ -293,16 +299,14 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.State.SetScoreBlinkTime(now)
 		// Trigger error sound
 		if s.ctx.AudioEngine != nil {
-			cmd := createAudioCommand(audio.SoundError, s.ctx)
+			cmd := createAudioCommand(audio.SoundError, now, frameNumber)
 			s.ctx.AudioEngine.SendRealTime(cmd)
 		}
 	}
 }
 
 // extendBoost extends the boost timer by the given duration
-func (s *ScoreSystem) extendBoost(duration time.Duration) {
-	now := s.ctx.TimeProvider.Now()
-
+func (s *ScoreSystem) extendBoost(now time.Time, duration time.Duration) {
 	// If boost is already active, add to existing end time; otherwise start fresh
 	currentEndTime := s.ctx.State.GetBoostEndTime()
 	wasActive := s.ctx.State.GetBoostEnabled() && currentEndTime.After(now)
@@ -318,7 +322,11 @@ func (s *ScoreSystem) extendBoost(duration time.Duration) {
 
 // handleNuggetCollection processes nugget collection (requires typing matching character)
 func (s *ScoreSystem) handleNuggetCollection(world *engine.World, entity engine.Entity, char components.CharacterComponent, typedRune rune, cursorX, cursorY int) {
-	now := s.ctx.TimeProvider.Now()
+	// Fetch resources
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+	now := timeRes.GameTime
+	frameNumber := uint64(s.ctx.State.GetFrameNumber())
 
 	// Check if typed character matches the nugget character
 	if char.Rune != typedRune {
@@ -336,7 +344,7 @@ func (s *ScoreSystem) handleNuggetCollection(world *engine.World, entity engine.
 		s.ctx.State.SetScoreBlinkTime(now)
 		// Trigger error sound
 		if s.ctx.AudioEngine != nil {
-			cmd := createAudioCommand(audio.SoundError, s.ctx)
+			cmd := createAudioCommand(audio.SoundError, now, frameNumber)
 			s.ctx.AudioEngine.SendRealTime(cmd)
 		}
 		return
@@ -345,7 +353,7 @@ func (s *ScoreSystem) handleNuggetCollection(world *engine.World, entity engine.
 	// Correct character - collect nugget
 	// Calculate heat increase: 10% of max heat (screen width)
 	// Use ceiling to ensure at least 10% even for widths not divisible by 10
-	maxHeat := s.ctx.Width
+	maxHeat := config.ScreenWidth
 	if maxHeat < 1 {
 		maxHeat = 1
 	}
@@ -372,7 +380,7 @@ func (s *ScoreSystem) handleNuggetCollection(world *engine.World, entity engine.
 	// Move cursor right in ECS
 	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
 	if ok {
-		if cursorPos.X < s.ctx.GameWidth-1 {
+		if cursorPos.X < config.GameWidth-1 {
 			cursorPos.X++
 		}
 		world.Positions.Add(s.ctx.CursorEntity, cursorPos)
@@ -383,7 +391,11 @@ func (s *ScoreSystem) handleNuggetCollection(world *engine.World, entity engine.
 
 // handleGoldSequenceTyping processes typing of gold sequence characters
 func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engine.Entity, char components.CharacterComponent, seq components.SequenceComponent, typedRune rune, cursorX, cursorY int) {
-	now := s.ctx.TimeProvider.Now()
+	// Fetch resources
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+	now := timeRes.GameTime
+	frameNumber := uint64(s.ctx.State.GetFrameNumber())
 
 	// Check if typed character matches
 	if char.Rune != typedRune {
@@ -398,7 +410,7 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 		s.ctx.State.SetScoreBlinkTime(now)
 		// Trigger error sound
 		if s.ctx.AudioEngine != nil {
-			cmd := createAudioCommand(audio.SoundError, s.ctx)
+			cmd := createAudioCommand(audio.SoundError, now, frameNumber)
 			s.ctx.AudioEngine.SendRealTime(cmd)
 		}
 		return
@@ -441,7 +453,7 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 	// Move cursor right in ECS
 	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
 	if ok {
-		if cursorPos.X < s.ctx.GameWidth-1 {
+		if cursorPos.X < config.GameWidth-1 {
 			cursorPos.X++
 		}
 		world.Positions.Add(s.ctx.CursorEntity, cursorPos)
@@ -452,7 +464,7 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 
 	if isLastChar {
 		// Gold sequence completed! Check if we should trigger cleaners
-		heatBarWidth := s.ctx.Width
+		heatBarWidth := config.ScreenWidth
 		if heatBarWidth < 1 {
 			heatBarWidth = 1
 		}
