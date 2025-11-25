@@ -43,7 +43,8 @@ func (s *NuggetSystem) Priority() int {
 
 // Update runs the nugget system logic using generic stores
 func (s *NuggetSystem) Update(world *engine.World, dt time.Duration) {
-	now := s.ctx.TimeProvider.Now()
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+	now := timeRes.GameTime
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -112,8 +113,9 @@ func (s *NuggetSystem) spawnNugget(world *engine.World, now time.Time) {
 // findValidPosition finds a valid random position for a nugget using generic stores
 // Caller must hold s.mu lock
 func (s *NuggetSystem) findValidPosition(world *engine.World) (int, int) {
-	gameWidth := s.ctx.GameWidth
-	gameHeight := s.ctx.GameHeight
+	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+	gameWidth := config.GameWidth
+	gameHeight := config.GameHeight
 	cursor := s.ctx.State.ReadCursorPosition()
 
 	for attempt := 0; attempt < nuggetMaxAttempts; attempt++ {
@@ -160,7 +162,7 @@ func (s *NuggetSystem) GetSystemState() string {
 	activeNuggetEntity := s.activeNugget.Load()
 
 	if activeNuggetEntity == 0 {
-		now := s.ctx.TimeProvider.Now()
+		now := time.Now()
 		timeSinceLastSpawn := now.Sub(s.lastSpawnAttempt)
 		timeUntilNext := (nuggetSpawnIntervalSeconds * time.Second) - timeSinceLastSpawn
 		if timeUntilNext < 0 {
