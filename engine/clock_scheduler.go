@@ -282,20 +282,23 @@ func (cs *ClockScheduler) processTick() {
 	// Get world reference
 	world := cs.ctx.World
 
+	// Use the scheduler's tracked game time
+	gameNow := cs.lastGameTickTime
+
 	// Get current phase from GameState
-	phaseSnapshot := cs.ctx.State.ReadPhaseState()
+	phaseSnapshot := cs.ctx.State.ReadPhaseState(gameNow)
 
 	// Handle phase transitions based on current phase
 	switch phaseSnapshot.Phase {
 	case PhaseGoldActive:
 		// Check if gold sequence has timed out (pausable clock handles pause adjustment internally)
-		if cs.ctx.State.IsGoldTimedOut() {
+		if cs.ctx.State.IsGoldTimedOut(gameNow) {
 			// Gold timeout - call gold system to remove gold entities
 			if goldSys != nil {
 				goldSys.TimeoutGoldSequence(world)
 			} else {
 				// No gold system - just deactivate gold sequence directly
-				cs.ctx.State.DeactivateGoldSequence()
+				cs.ctx.State.DeactivateGoldSequence(gameNow)
 			}
 		}
 
@@ -303,16 +306,16 @@ func (cs *ClockScheduler) processTick() {
 		// Gold sequence completed or timed out - start decay timer
 		// This will transition to PhaseDecayWait
 		cs.ctx.State.StartDecayTimer(
-			cs.ctx.State.ScreenWidth,
 			constants.DecayIntervalBaseSeconds,
 			constants.DecayIntervalRangeSeconds,
+			gameNow,
 		)
 
 	case PhaseDecayWait:
 		// Check if decay timer has expired (pausable clock handles pause adjustment internally)
-		if cs.ctx.State.IsDecayReady() {
+		if cs.ctx.State.IsDecayReady(gameNow) {
 			// Timer expired - transition to DecayAnimation
-			if cs.ctx.State.StartDecayAnimation() {
+			if cs.ctx.State.StartDecayAnimation(gameNow) {
 				// Trigger decay system to spawn falling entities
 				if decaySys != nil {
 					decaySys.TriggerDecayAnimation(world)

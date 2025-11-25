@@ -425,7 +425,7 @@ func TestContentSwapDuringConcurrentReads(t *testing.T) {
 	const numReaders = 20
 	const readsPerReader = 50
 	done := make(chan bool, numReaders)
-	panics := make(chan interface{}, numReaders)
+	panics := make(chan any, numReaders)
 
 	for i := 0; i < numReaders; i++ {
 		go func() {

@@ -405,8 +405,8 @@ func (s *SpawnSystem) Update(world *engine.World, dt time.Duration) {
 	// Update spawn rate in GameState based on entity count
 	s.ctx.State.UpdateSpawnRate(entityCount, maxEntities)
 
-	// Check if it's time to spawn (reads from GameState)
-	if !s.ctx.State.ShouldSpawn() {
+	// Check if it's time to spawn
+	if !s.ctx.State.ShouldSpawn(timeRes.GameTime) {
 		return
 	}
 

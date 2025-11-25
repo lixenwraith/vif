@@ -18,7 +18,7 @@ type AnyStore interface {
 }
 
 // QueryableStore extends AnyStore with query operations needed for
-// the query builder to efficiently intersect component sets.
+// the query builder to efficiently intersect component sets
 type QueryableStore interface {
 	AnyStore
 

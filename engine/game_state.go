@@ -95,18 +95,20 @@ type GameState struct {
 	GameHeight  int
 	ScreenWidth int
 
+	// DEPRECATED: TimeProvider should be removed in Phase 3 cleanup
+	// Logic methods now accept time.Time explicitly
 	// Time provider (for consistent timing)
-	TimeProvider TimeProvider
+	// TimeProvider TimeProvider
 }
 
 // NewGameState creates a new centralized game state
 func NewGameState(gameWidth, gameHeight, screenWidth int, timeProvider TimeProvider) *GameState {
 	gs := &GameState{
-		GameWidth:    gameWidth,
-		GameHeight:   gameHeight,
-		ScreenWidth:  screenWidth,
-		TimeProvider: timeProvider,
-		MaxEntities:  constants.MaxEntities,
+		GameWidth:   gameWidth,
+		GameHeight:  gameHeight,
+		ScreenWidth: screenWidth,
+		// TimeProvider: timeProvider,
+		MaxEntities: constants.MaxEntities,
 	}
 
 	// Initialize atomics to zero values
@@ -276,12 +278,11 @@ func (gs *GameState) SetBoostColor(color int32) {
 }
 
 // UpdateBoostTimerAtomic atomically checks if boost should expire and disables it
-func (gs *GameState) UpdateBoostTimerAtomic() bool {
+func (gs *GameState) UpdateBoostTimerAtomic(now time.Time) bool {
 	if !gs.BoostEnabled.Load() {
 		return false
 	}
 
-	now := gs.TimeProvider.Now()
 	endTimeNano := gs.BoostEndTime.Load()
 	if endTimeNano == 0 {
 		return false
@@ -299,7 +300,7 @@ func (gs *GameState) UpdateBoostTimerAtomic() bool {
 }
 
 // ReadBoostState returns a consistent snapshot of the boost state
-func (gs *GameState) ReadBoostState() BoostSnapshot {
+func (gs *GameState) ReadBoostState(now time.Time) BoostSnapshot {
 	// All boost fields are atomic, so we can read them without mutex
 	enabled := gs.BoostEnabled.Load()
 	endTimeNano := gs.BoostEndTime.Load()
@@ -311,7 +312,7 @@ func (gs *GameState) ReadBoostState() BoostSnapshot {
 	if endTimeNano != 0 {
 		endTime = time.Unix(0, endTimeNano)
 		if enabled {
-			remaining = endTime.Sub(gs.TimeProvider.Now())
+			remaining = endTime.Sub(now)
 			if remaining < 0 {
 				remaining = 0
 			}
@@ -393,7 +394,7 @@ func (gs *GameState) UpdateSpawnRate(entityCount, maxEntities int) {
 }
 
 // ShouldSpawn checks if it's time to spawn new content
-func (gs *GameState) ShouldSpawn() bool {
+func (gs *GameState) ShouldSpawn(now time.Time) bool {
 	gs.mu.RLock()
 	defer gs.mu.RUnlock()
 
@@ -401,7 +402,6 @@ func (gs *GameState) ShouldSpawn() bool {
 		return false
 	}
 
-	now := gs.TimeProvider.Now()
 	return now.After(gs.SpawnNextTime) || now.Equal(gs.SpawnNextTime)
 }
 
@@ -513,7 +513,7 @@ func (gs *GameState) CanTransition(from, to GamePhase) bool {
 
 // TransitionPhase attempts to transition to a new phase with validation
 // Returns true if transition succeeded, false if transition is invalid
-func (gs *GameState) TransitionPhase(to GamePhase) bool {
+func (gs *GameState) TransitionPhase(to GamePhase, now time.Time) bool {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
 
@@ -522,7 +522,7 @@ func (gs *GameState) TransitionPhase(to GamePhase) bool {
 	}
 
 	gs.CurrentPhase = to
-	gs.PhaseStartTime = gs.TimeProvider.Now()
+	gs.PhaseStartTime = now
 	return true
 }
 
@@ -534,10 +534,10 @@ func (gs *GameState) GetPhaseStartTime() time.Time {
 }
 
 // GetPhaseDuration returns how long the current phase has been active
-func (gs *GameState) GetPhaseDuration() time.Duration {
+func (gs *GameState) GetPhaseDuration(now time.Time) time.Duration {
 	gs.mu.RLock()
 	defer gs.mu.RUnlock()
-	return gs.TimeProvider.Now().Sub(gs.PhaseStartTime)
+	return now.Sub(gs.PhaseStartTime)
 }
 
 // PhaseSnapshot provides a consistent view of phase state
@@ -548,11 +548,10 @@ type PhaseSnapshot struct {
 }
 
 // ReadPhaseState returns a consistent snapshot of the current phase state
-func (gs *GameState) ReadPhaseState() PhaseSnapshot {
+func (gs *GameState) ReadPhaseState(now time.Time) PhaseSnapshot {
 	gs.mu.RLock()
 	defer gs.mu.RUnlock()
 
-	now := gs.TimeProvider.Now()
 	return PhaseSnapshot{
 		Phase:     gs.CurrentPhase,
 		StartTime: gs.PhaseStartTime,
@@ -593,7 +592,7 @@ func (gs *GameState) IncrementGoldSequenceID() int {
 
 // ActivateGoldSequence atomically activates a gold sequence with timeout
 // Only allowed from PhaseNormal (checked by phase transition validation)
-func (gs *GameState) ActivateGoldSequence(sequenceID int, duration time.Duration) bool {
+func (gs *GameState) ActivateGoldSequence(sequenceID int, duration time.Duration, now time.Time) bool {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
 
@@ -602,7 +601,6 @@ func (gs *GameState) ActivateGoldSequence(sequenceID int, duration time.Duration
 		return false
 	}
 
-	now := gs.TimeProvider.Now()
 	gs.GoldActive = true
 	gs.GoldSequenceID = sequenceID
 	gs.GoldStartTime = now
@@ -614,7 +612,7 @@ func (gs *GameState) ActivateGoldSequence(sequenceID int, duration time.Duration
 
 // DeactivateGoldSequence atomically deactivates the gold sequence
 // Transitions to PhaseGoldComplete to allow decay or cleaner to start
-func (gs *GameState) DeactivateGoldSequence() bool {
+func (gs *GameState) DeactivateGoldSequence(now time.Time) bool {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
 
@@ -627,7 +625,7 @@ func (gs *GameState) DeactivateGoldSequence() bool {
 	gs.GoldStartTime = time.Time{}
 	gs.GoldTimeoutTime = time.Time{}
 	gs.CurrentPhase = PhaseGoldComplete
-	gs.PhaseStartTime = gs.TimeProvider.Now()
+	gs.PhaseStartTime = now
 	return true
 }
 
@@ -639,14 +637,14 @@ func (gs *GameState) GetGoldTimeoutTime() time.Time {
 }
 
 // IsGoldTimedOut checks if the gold sequence has timed out
-func (gs *GameState) IsGoldTimedOut() bool {
+func (gs *GameState) IsGoldTimedOut(now time.Time) bool {
 	gs.mu.RLock()
 	defer gs.mu.RUnlock()
 	if !gs.GoldActive {
 		return false
 	}
 	// Direct comparison - both timestamps are on the same timeline
-	return gs.TimeProvider.Now().After(gs.GoldTimeoutTime)
+	return now.After(gs.GoldTimeoutTime)
 }
 
 // GoldSnapshot provides a consistent view of gold state
@@ -660,11 +658,10 @@ type GoldSnapshot struct {
 }
 
 // ReadGoldState returns a consistent snapshot of the gold sequence state
-func (gs *GameState) ReadGoldState() GoldSnapshot {
+func (gs *GameState) ReadGoldState(now time.Time) GoldSnapshot {
 	gs.mu.RLock()
 	defer gs.mu.RUnlock()
 
-	now := gs.TimeProvider.Now()
 	var elapsed, remaining time.Duration
 	if gs.GoldActive {
 		elapsed = now.Sub(gs.GoldStartTime)
@@ -696,7 +693,7 @@ func (gs *GameState) GetDecayTimerActive() bool {
 // StartDecayTimer starts the decay timer with the given interval
 // Calculates interval based on current heat atomically
 // Only allowed from PhaseGoldComplete (checked by phase transition validation)
-func (gs *GameState) StartDecayTimer(screenWidth int, baseSeconds, rangeSeconds float64) bool {
+func (gs *GameState) StartDecayTimer(baseSeconds, rangeSeconds float64, now time.Time) bool {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
 
@@ -705,10 +702,8 @@ func (gs *GameState) StartDecayTimer(screenWidth int, baseSeconds, rangeSeconds 
 		return false
 	}
 
-	// Read heat atomically (no cached value)
+	// Calculate decay timer based on heat percentage
 	heat := int(gs.Heat.Load())
-
-	// Calculate heat percentage
 	heatPercentage := float64(heat) / float64(constants.MaxHeat)
 	if heatPercentage > 1.0 {
 		heatPercentage = 1.0
@@ -723,7 +718,6 @@ func (gs *GameState) StartDecayTimer(screenWidth int, baseSeconds, rangeSeconds 
 	intervalSeconds := baseSeconds - rangeSeconds*heatPercentage
 	interval := time.Duration(intervalSeconds * float64(time.Second))
 
-	now := gs.TimeProvider.Now()
 	gs.DecayTimerActive = true
 	gs.DecayNextTime = now.Add(interval)
 	gs.CurrentPhase = PhaseDecayWait
@@ -739,24 +733,23 @@ func (gs *GameState) GetDecayNextTime() time.Time {
 }
 
 // IsDecayReady checks if the decay timer has expired
-func (gs *GameState) IsDecayReady() bool {
+func (gs *GameState) IsDecayReady(now time.Time) bool {
 	gs.mu.RLock()
 	defer gs.mu.RUnlock()
 	if !gs.DecayTimerActive {
 		return false
 	}
-	now := gs.TimeProvider.Now()
 	return now.After(gs.DecayNextTime) || now.Equal(gs.DecayNextTime)
 }
 
 // GetTimeUntilDecay returns seconds until next decay trigger
-func (gs *GameState) GetTimeUntilDecay() float64 {
+func (gs *GameState) GetTimeUntilDecay(now time.Time) float64 {
 	gs.mu.RLock()
 	defer gs.mu.RUnlock()
 	if !gs.DecayTimerActive || gs.DecayAnimating {
 		return 0.0
 	}
-	remaining := gs.DecayNextTime.Sub(gs.TimeProvider.Now()).Seconds()
+	remaining := gs.DecayNextTime.Sub(now).Seconds()
 	if remaining < 0 {
 		remaining = 0
 	}
@@ -774,7 +767,7 @@ func (gs *GameState) GetDecayAnimating() bool {
 
 // StartDecayAnimation starts the decay animation
 // Only allowed from PhaseDecayWait (checked by phase transition validation)
-func (gs *GameState) StartDecayAnimation() bool {
+func (gs *GameState) StartDecayAnimation(now time.Time) bool {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
 
@@ -783,7 +776,6 @@ func (gs *GameState) StartDecayAnimation() bool {
 		return false
 	}
 
-	now := gs.TimeProvider.Now()
 	gs.DecayAnimating = true
 	gs.DecayStartTime = now
 	gs.DecayTimerActive = false // Timer is no longer active once animation starts
@@ -794,7 +786,7 @@ func (gs *GameState) StartDecayAnimation() bool {
 
 // StopDecayAnimation stops the decay animation and returns to Normal phase
 // Only allowed from PhaseDecayAnimation (checked by phase transition validation)
-func (gs *GameState) StopDecayAnimation() bool {
+func (gs *GameState) StopDecayAnimation(now time.Time) bool {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
 
@@ -803,7 +795,6 @@ func (gs *GameState) StopDecayAnimation() bool {
 		return false
 	}
 
-	now := gs.TimeProvider.Now()
 	gs.DecayAnimating = false
 	gs.DecayStartTime = time.Time{}
 	gs.CurrentPhase = PhaseNormal
@@ -828,13 +819,13 @@ type DecaySnapshot struct {
 }
 
 // ReadDecayState returns a consistent snapshot of the decay state
-func (gs *GameState) ReadDecayState() DecaySnapshot {
+func (gs *GameState) ReadDecayState(now time.Time) DecaySnapshot {
 	gs.mu.RLock()
 	defer gs.mu.RUnlock()
 
 	timeUntil := 0.0
 	if gs.DecayTimerActive && !gs.DecayAnimating {
-		remaining := gs.DecayNextTime.Sub(gs.TimeProvider.Now()).Seconds()
+		remaining := gs.DecayNextTime.Sub(now).Seconds()
 		if remaining > 0 {
 			timeUntil = remaining
 		}
@@ -857,11 +848,11 @@ type BoostSnapshot struct {
 	Remaining time.Duration
 }
 
-// CursorSnapshot provides consistent view of cursor position
-type CursorSnapshot struct {
-	X int
-	Y int
-}
+// // CursorSnapshot provides consistent view of cursor position
+// type CursorSnapshot struct {
+// 	X int
+// 	Y int
+// }
 
 // ===== GAME LIFECYCLE ACCESSORS (mutex protected) =====
 

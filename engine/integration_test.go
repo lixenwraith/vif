@@ -51,9 +51,9 @@ func TestCompleteGameCycle(t *testing.T) {
 	state.DeactivateGoldSequence()
 	decayStartTime := mockTime.Now()
 	state.StartDecayTimer(
-		state.ScreenWidth,
 		constants.DecayIntervalBaseSeconds,
 		constants.DecayIntervalRangeSeconds,
+		decayStartTime,
 	)
 
 	if phase := state.GetPhase(); phase != PhaseDecayWait {

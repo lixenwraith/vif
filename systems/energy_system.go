@@ -177,7 +177,7 @@ func (s *EnergySystem) HandleCharacterTyping(world *engine.World, cursorX, curso
 			s.ctx.State.SetBoostColor(0) // 0 = None
 		} else {
 			// Read boost state snapshot for consistent checks
-			boostState := s.ctx.State.ReadBoostState()
+			boostState := s.ctx.State.ReadBoostState(timeRes.GameTime)
 
 			// Apply heat gain with boost multiplier
 			heatGain := 1
@@ -455,7 +455,7 @@ func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity engi
 		// Request cleaners if heat is already at max
 		// Push event to trigger cleaners on next update
 		if currentHeat >= heatBarWidth {
-			s.ctx.PushEvent(engine.EventCleanerRequest, nil)
+			s.ctx.PushEvent(engine.EventCleanerRequest, nil, timeRes.GameTime)
 		}
 
 		// Fill heat to max (if not already higher)

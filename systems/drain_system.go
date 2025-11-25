@@ -326,9 +326,10 @@ func (s *DrainSystem) handleCollisionAtPosition(world *engine.World, x, y int, e
 
 // handleGoldSequenceCollision removes all gold sequence entities and triggers phase transition using generic stores
 func (s *DrainSystem) handleGoldSequenceCollision(world *engine.World, sequenceID int) {
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 
 	// Get current gold state to verify this is the active gold sequence
-	goldSnapshot := s.ctx.State.ReadGoldState()
+	goldSnapshot := s.ctx.State.ReadGoldState(timeRes.GameTime)
 	if !goldSnapshot.Active || goldSnapshot.SequenceID != sequenceID {
 		return // Not the active gold sequence
 	}
@@ -349,7 +350,7 @@ func (s *DrainSystem) handleGoldSequenceCollision(world *engine.World, sequenceI
 	}
 
 	// Trigger phase transition to PhaseGoldComplete
-	s.ctx.State.DeactivateGoldSequence()
+	s.ctx.State.DeactivateGoldSequence(timeRes.GameTime)
 }
 
 // handleNuggetCollision destroys the nugget entity and clears active nugget state using generic stores

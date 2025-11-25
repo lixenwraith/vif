@@ -54,8 +54,9 @@ func (s *DecaySystem) Priority() int {
 
 // Update runs the decay system animation update
 func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	// Read decay state snapshot for consistent check
-	decaySnapshot := s.ctx.State.ReadDecayState()
+	decaySnapshot := s.ctx.State.ReadDecayState(timeRes.GameTime)
 
 	// Update animation if active
 	if decaySnapshot.Animating {
@@ -65,6 +66,7 @@ func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 
 // updateAnimation progresses the decay animation
 func (s *DecaySystem) updateAnimation(world *engine.World, dt time.Duration) {
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	// Use Delta Time (dt) for physics integration
 	s.updateFallingEntities(world, dt.Seconds())
 
@@ -81,7 +83,7 @@ func (s *DecaySystem) updateAnimation(world *engine.World, dt time.Duration) {
 		s.cleanupFallingEntities(world)
 
 		// Stop decay animation in GameState (transitions to PhaseNormal)
-		if !s.ctx.State.StopDecayAnimation() {
+		if !s.ctx.State.StopDecayAnimation(timeRes.GameTime) {
 			return
 		}
 	}
@@ -339,24 +341,23 @@ func (s *DecaySystem) TriggerDecayAnimation(world *engine.World) {
 }
 
 // IsAnimating returns true if decay animation is active
-func (s *DecaySystem) IsAnimating() bool {
-	decaySnapshot := s.ctx.State.ReadDecayState()
+func (s *DecaySystem) IsAnimating(now time.Time) bool {
+	decaySnapshot := s.ctx.State.ReadDecayState(now)
 	return decaySnapshot.Animating
 }
 
 // CurrentRow returns the current decay row being displayed
-func (s *DecaySystem) CurrentRow() int {
+func (s *DecaySystem) CurrentRow(now time.Time) int {
 	s.mu.RLock()
 	currentRow := s.currentRow
 	s.mu.RUnlock()
 
-	// CHANGED: Retrieve ConfigResource to get dimensions
 	// Note: We use the world from s.ctx for now to get resources,
 	// eventually s.ctx will be removed entirely in in next phases
 	config := engine.MustGetResource[*engine.ConfigResource](s.ctx.World.Resources)
 	gameHeight := config.GameHeight
 
-	decaySnapshot := s.ctx.State.ReadDecayState()
+	decaySnapshot := s.ctx.State.ReadDecayState(now)
 
 	// When animation is done, currentRow is 0, but we want to avoid displaying row 0
 	// During animation, currentRow is the next row to process
@@ -376,15 +377,15 @@ func (s *DecaySystem) CurrentRow() int {
 }
 
 // GetTimeUntilDecay returns seconds until next decay trigger
-func (s *DecaySystem) GetTimeUntilDecay() float64 {
-	decaySnapshot := s.ctx.State.ReadDecayState()
+func (s *DecaySystem) GetTimeUntilDecay(now time.Time) float64 {
+	decaySnapshot := s.ctx.State.ReadDecayState(now)
 	return decaySnapshot.TimeUntil
 }
 
 // GetSystemState returns the current state of the decay system for debugging
-func (s *DecaySystem) GetSystemState() string {
+func (s *DecaySystem) GetSystemState(now time.Time) string {
 	fallingCount := s.ctx.World.FallingDecays.Count()
-	snapshot := s.ctx.State.ReadDecayState()
+	snapshot := s.ctx.State.ReadDecayState(now)
 
 	if snapshot.Animating {
 		startTime := snapshot.StartTime

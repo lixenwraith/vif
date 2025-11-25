@@ -34,6 +34,7 @@ func (cs *CleanerSystem) Priority() int {
 // Update handles spawning, movement, collision, and cleanup synchronously
 func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 	// Fetch dependencies from world resources
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 
 	// 1. Handle Event Queue - Consume cleaner request events
@@ -62,7 +63,7 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 
 	// If no cleaners exist but we spawned this session, emit finished event
 	if len(entities) == 0 && cs.hasSpawnedSession {
-		cs.ctx.PushEvent(engine.EventCleanerFinished, nil)
+		cs.ctx.PushEvent(engine.EventCleanerFinished, nil, timeRes.GameTime)
 		cs.hasSpawnedSession = false
 		cs.cleanupExpiredFlashes(world)
 		return
@@ -166,7 +167,7 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 	// Check again after processing to see if all cleaners finished this frame
 	entities = world.Cleaners.All()
 	if len(entities) == 0 && cs.hasSpawnedSession {
-		cs.ctx.PushEvent(engine.EventCleanerFinished, nil)
+		cs.ctx.PushEvent(engine.EventCleanerFinished, nil, timeRes.GameTime)
 		cs.hasSpawnedSession = false
 	}
 

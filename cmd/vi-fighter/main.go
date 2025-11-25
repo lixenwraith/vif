@@ -170,7 +170,7 @@ func main() {
 			// During pause: skip game updates but still render
 			if ctx.IsPaused.Load() {
 				// This shows the pause overlay and maintains visual feedback
-				renderer.RenderFrame(ctx, decaySystem.IsAnimating(), decaySystem.CurrentRow(), decaySystem.GetTimeUntilDecay())
+				renderer.RenderFrame(ctx, decaySystem.IsAnimating(timeRes.GameTime), decaySystem.GetTimeUntilDecay(timeRes.GameTime))
 				continue
 			}
 
@@ -185,7 +185,7 @@ func main() {
 			}
 
 			// Render frame (all updates guaranteed complete)
-			renderer.RenderFrame(ctx, decaySystem.IsAnimating(), decaySystem.CurrentRow(), decaySystem.GetTimeUntilDecay())
+			renderer.RenderFrame(ctx, decaySystem.IsAnimating(timeRes.GameTime), decaySystem.GetTimeUntilDecay(timeRes.GameTime))
 
 			// Signal ready for next update (non-blocking)
 			if !updatePending && !ctx.IsPaused.Load() {

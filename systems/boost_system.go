@@ -19,8 +19,9 @@ func (bs *BoostSystem) Priority() int {
 }
 
 func (bs *BoostSystem) Update(world *engine.World, dt time.Duration) {
-	// Check and handle boost expiration
-	if bs.ctx.State.UpdateBoostTimerAtomic() {
-		// Boost expired - could trigger visual feedback here
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+
+	if bs.ctx.State.UpdateBoostTimerAtomic(timeRes.GameTime) {
+		// Boost expired
 	}
 }

@@ -64,7 +64,7 @@ func (r *TerminalRenderer) buildCleanerGradient() {
 }
 
 // RenderFrame renders the entire game frame
-func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating bool, decayRow int, decayTimeRemaining float64) {
+func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating bool, decayTimeRemaining float64) {
 	// Increment frame counter and get frame number
 	ctx.IncrementFrameNumber()
 

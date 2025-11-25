@@ -153,10 +153,10 @@ func (e EventType) String() string {
 // The Frame field enables deduplication (prevent processing same event multiple times).
 // The Timestamp field enables debugging and performance analysis.
 type GameEvent struct {
-	Type      EventType   // Type of event (determines semantic meaning)
-	Payload   interface{} // Optional event-specific data (currently unused, reserved for future)
-	Frame     int64       // Frame number when event was created (for deduplication)
-	Timestamp time.Time   // Creation timestamp (for debugging and metrics)
+	Type      EventType // Type of event (determines semantic meaning)
+	Payload   any       // Optional event-specific data (currently unused, reserved for future)
+	Frame     int64     // Frame number when event was created (for deduplication)
+	Timestamp time.Time // Creation timestamp (for debugging and metrics)
 }
 
 // EventQueue is a lock-free ring buffer for game events.

@@ -408,13 +408,13 @@ func (g *GameContext) IncrementFrameNumber() int64 {
 
 // ===== EVENT QUEUE METHODS =====
 
-// PushEvent adds an event to the event queue with current frame number
-func (g *GameContext) PushEvent(eventType EventType, payload interface{}) {
+// PushEvent adds an event to the event queue with current frame number and provided timestamp
+func (g *GameContext) PushEvent(eventType EventType, payload any, now time.Time) {
 	event := GameEvent{
 		Type:      eventType,
 		Payload:   payload,
 		Frame:     g.State.GetFrameNumber(),
-		Timestamp: g.TimeProvider.Now(),
+		Timestamp: now,
 	}
 	g.eventQueue.Push(event)
 }
