@@ -2,6 +2,7 @@ package systems
 
 import (
 	"testing"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/components"
@@ -24,6 +25,18 @@ func createTestContext() *engine.GameContext {
 	ctx.GameHeight = 25 // Ensure enough height for falling entities
 	ctx.GameX = 0
 	ctx.GameY = 0
+
+	// Inject required resources for migrated systems
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth:    80,
+		GameHeight:   25,
+		ScreenWidth:  80,
+		ScreenHeight: 30,
+	})
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime:  time.Now(),
+		DeltaTime: 16 * time.Millisecond,
+	})
 
 	return ctx
 }
