@@ -5,6 +5,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/audio"
+	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/systems"
 )
@@ -91,41 +92,65 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 	// Handle arrow keys (reset heat)
 	switch ev.Key() {
 	case tcell.KeyUp:
-		if h.ctx.CursorY > 0 {
-			h.ctx.CursorY--
+		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+		if !ok {
+			return true
 		}
-		h.ctx.State.SetCursorY(h.ctx.CursorY)
+		if pos.Y > 0 {
+			pos.Y--
+			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
+		}
 		h.ctx.State.SetHeat(0)
 		return true
 	case tcell.KeyDown:
-		if h.ctx.CursorY < h.ctx.GameHeight-1 {
-			h.ctx.CursorY++
+		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+		if !ok {
+			return true
 		}
-		h.ctx.State.SetCursorY(h.ctx.CursorY)
+		if pos.Y < h.ctx.GameHeight-1 {
+			pos.Y++
+			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
+		}
 		h.ctx.State.SetHeat(0)
 		return true
 	case tcell.KeyLeft:
-		if h.ctx.CursorX > 0 {
-			h.ctx.CursorX--
+		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+		if !ok {
+			return true
 		}
-		h.ctx.State.SetCursorX(h.ctx.CursorX)
+		if pos.X > 0 {
+			pos.X--
+			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
+		}
 		h.ctx.State.SetHeat(0)
 		return true
 	case tcell.KeyRight:
-		if h.ctx.CursorX < h.ctx.GameWidth-1 {
-			h.ctx.CursorX++
+		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+		if !ok {
+			return true
 		}
-		h.ctx.State.SetCursorX(h.ctx.CursorX)
+		if pos.X < h.ctx.GameWidth-1 {
+			pos.X++
+			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
+		}
 		h.ctx.State.SetHeat(0)
 		return true
 	case tcell.KeyHome:
-		h.ctx.CursorX = 0
-		h.ctx.State.SetCursorX(h.ctx.CursorX)
+		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+		if !ok {
+			return true
+		}
+		pos.X = 0
+		h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
 		h.ctx.State.SetHeat(0)
 		return true
 	case tcell.KeyEnd:
-		h.ctx.CursorX = findLineEnd(h.ctx)
-		h.ctx.State.SetCursorX(h.ctx.CursorX)
+		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+		if !ok {
+			return true
+		}
+		pos.X = findLineEnd(h.ctx)
+		h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
 		h.ctx.State.SetHeat(0)
 		return true
 	case tcell.KeyTab:
@@ -138,11 +163,11 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 				if x >= 0 && y >= 0 {
 					// Deduct 10 from score
 					h.ctx.State.AddScore(-10)
-					// Update cursor position atomically
-					h.ctx.CursorX = x
-					h.ctx.CursorY = y
-					h.ctx.State.SetCursorX(x)
-					h.ctx.State.SetCursorY(y)
+					// Update cursor position in ECS
+					h.ctx.World.Positions.Add(h.ctx.CursorEntity, components.PositionComponent{
+						X: x,
+						Y: y,
+					})
 
 					// Play bell sound for nugget collection
 					if h.ctx.AudioEngine != nil {
@@ -161,14 +186,16 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 	case tcell.KeyRune:
 		// SPACE key: move right without typing, no heat contribution
 		if ev.Rune() == ' ' {
-			if h.ctx.CursorX < h.ctx.GameWidth-1 {
-				h.ctx.CursorX++
+			pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+			if ok && pos.X < h.ctx.GameWidth-1 {
+				pos.X++
+				h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
 			}
-			h.ctx.State.SetCursorX(h.ctx.CursorX)
 			return true
 		}
-		// Delegate character typing to score system
-		h.scoreSystem.HandleCharacterTyping(h.ctx.World, h.ctx.CursorX, h.ctx.CursorY, ev.Rune())
+		// Delegate character typing to score system (reads from ECS)
+		pos, _ := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+		h.scoreSystem.HandleCharacterTyping(h.ctx.World, pos.X, pos.Y, ev.Rune())
 	}
 	return true
 }
@@ -234,46 +261,56 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 	// Handle arrow keys (work like h/j/k/l, but reset heat)
 	switch ev.Key() {
 	case tcell.KeyUp:
-		if h.ctx.CursorY > 0 {
-			h.ctx.CursorY--
+		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+		if ok && pos.Y > 0 {
+			pos.Y--
+			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
 		}
-		h.ctx.State.SetCursorY(h.ctx.CursorY)
 		h.ctx.State.SetHeat(0)
 		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
 	case tcell.KeyDown:
-		if h.ctx.CursorY < h.ctx.GameHeight-1 {
-			h.ctx.CursorY++
+		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+		if ok && pos.Y < h.ctx.GameHeight-1 {
+			pos.Y++
+			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
 		}
-		h.ctx.State.SetCursorY(h.ctx.CursorY)
 		h.ctx.State.SetHeat(0)
 		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
 	case tcell.KeyLeft:
-		if h.ctx.CursorX > 0 {
-			h.ctx.CursorX--
+		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+		if ok && pos.X > 0 {
+			pos.X--
+			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
 		}
-		h.ctx.State.SetCursorX(h.ctx.CursorX)
 		h.ctx.State.SetHeat(0)
 		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
 	case tcell.KeyRight:
-		if h.ctx.CursorX < h.ctx.GameWidth-1 {
-			h.ctx.CursorX++
+		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+		if ok && pos.X < h.ctx.GameWidth-1 {
+			pos.X++
+			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
 		}
-		h.ctx.State.SetCursorX(h.ctx.CursorX)
 		h.ctx.State.SetHeat(0)
 		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
 	case tcell.KeyHome:
-		h.ctx.CursorX = 0
-		h.ctx.State.SetCursorX(h.ctx.CursorX)
+		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+		if ok {
+			pos.X = 0
+			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
+		}
 		h.ctx.State.SetHeat(0)
 		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
 	case tcell.KeyEnd:
-		h.ctx.CursorX = findLineEnd(h.ctx)
-		h.ctx.State.SetCursorX(h.ctx.CursorX)
+		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+		if ok {
+			pos.X = findLineEnd(h.ctx)
+			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
+		}
 		h.ctx.State.SetHeat(0)
 		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
@@ -287,11 +324,11 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 				if x >= 0 && y >= 0 {
 					// Deduct 10 from score
 					h.ctx.State.AddScore(-10)
-					// Update cursor position atomically
-					h.ctx.CursorX = x
-					h.ctx.CursorY = y
-					h.ctx.State.SetCursorX(x)
-					h.ctx.State.SetCursorY(y)
+					// Update cursor position in ECS
+					h.ctx.World.Positions.Add(h.ctx.CursorEntity, components.PositionComponent{
+						X: x,
+						Y: y,
+					})
 
 					// Play bell sound for nugget collection
 					if h.ctx.AudioEngine != nil {
@@ -519,8 +556,11 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 			if char == 'g' {
 				// gg - goto top (same column)
 				cmd := h.buildCommandString('g', 'g', count, false)
-				h.ctx.CursorY = 0
-				h.ctx.State.SetCursorY(h.ctx.CursorY)
+				pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+				if ok {
+					pos.Y = 0
+					h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
+				}
 				h.ctx.CommandPrefix = 0
 				h.ctx.MotionCount = 0
 				h.ctx.LastCommand = cmd
@@ -528,10 +568,10 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 			} else if char == 'o' {
 				// go - goto top left (first row, first column)
 				cmd := h.buildCommandString('g', 'o', count, false)
-				h.ctx.CursorY = 0
-				h.ctx.CursorX = 0
-				h.ctx.State.SetCursorX(h.ctx.CursorX)
-				h.ctx.State.SetCursorY(h.ctx.CursorY)
+				h.ctx.World.Positions.Add(h.ctx.CursorEntity, components.PositionComponent{
+					X: 0,
+					Y: 0,
+				})
 				h.ctx.CommandPrefix = 0
 				h.ctx.MotionCount = 0
 				h.ctx.LastCommand = cmd

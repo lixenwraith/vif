@@ -78,17 +78,25 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 	// Draw heat meter
 	r.drawHeatMeter(ctx.State.GetHeat(), defaultStyle)
 
+	// Read cursor position from ECS for rendering
+	cursorPos, ok := ctx.World.Positions.Get(ctx.CursorEntity)
+	if !ok {
+		return // Cursor entity missing - should never happen
+	}
+	cursorX := cursorPos.X
+	cursorY := cursorPos.Y
+
 	// Draw line numbers
-	r.drawLineNumbers(ctx, defaultStyle)
+	r.drawLineNumbers(cursorY, ctx, defaultStyle)
 
 	// Get ping color for later use
-	pingColor := r.getPingColor(ctx.World, ctx.CursorX, ctx.CursorY, ctx)
+	pingColor := r.getPingColor(ctx.World, cursorX, cursorY, ctx)
 
 	// Draw ping highlights (cursor row/column) and grid - BEFORE characters
-	r.drawPingHighlights(ctx, pingColor, defaultStyle)
+	r.drawPingHighlights(cursorX, cursorY, ctx, pingColor, defaultStyle)
 
 	// Draw characters - will render over grid
-	r.drawCharacters(ctx.World, pingColor, defaultStyle, ctx)
+	r.drawCharacters(ctx.World, cursorX, cursorY, pingColor, defaultStyle, ctx)
 
 	// Draw falling decay animation if active - AFTER ping highlights
 	if decayAnimating {
@@ -105,14 +113,14 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 	r.drawDrain(ctx, defaultStyle)
 
 	// Draw column indicators
-	r.drawColumnIndicators(ctx, defaultStyle)
+	r.drawColumnIndicators(cursorX, ctx, defaultStyle)
 
 	// Draw status bar
 	r.drawStatusBar(ctx, defaultStyle, decayTimeRemaining)
 
 	// Draw cursor (if not in search or command mode)
 	if !ctx.IsSearchMode() && !ctx.IsCommandMode() {
-		r.drawCursor(ctx, defaultStyle)
+		r.drawCursor(cursorX, cursorY, ctx, defaultStyle)
 	}
 
 	r.screen.Show()
@@ -163,11 +171,11 @@ func (r *TerminalRenderer) drawHeatMeter(heat int, defaultStyle tcell.Style) {
 }
 
 // drawLineNumbers draws relative line numbers
-func (r *TerminalRenderer) drawLineNumbers(ctx *engine.GameContext, defaultStyle tcell.Style) {
+func (r *TerminalRenderer) drawLineNumbers(cursorY int, ctx *engine.GameContext, defaultStyle tcell.Style) {
 	lineNumStyle := defaultStyle.Foreground(RgbLineNumbers)
 
 	for y := 0; y < r.gameHeight; y++ {
-		relativeNum := y - ctx.CursorY
+		relativeNum := y - cursorY
 		if relativeNum < 0 {
 			relativeNum = -relativeNum
 		}
@@ -202,13 +210,13 @@ func (r *TerminalRenderer) getPingColor(world *engine.World, cursorX, cursorY in
 }
 
 // drawPingHighlights draws the cursor row and column highlights
-func (r *TerminalRenderer) drawPingHighlights(ctx *engine.GameContext, pingColor tcell.Color, defaultStyle tcell.Style) {
+func (r *TerminalRenderer) drawPingHighlights(cursorX, cursorY int, ctx *engine.GameContext, pingColor tcell.Color, defaultStyle tcell.Style) {
 	pingStyle := defaultStyle.Background(pingColor)
 
 	// Highlight the row - draw unconditionally (characters will render on top)
 	for x := 0; x < r.gameWidth; x++ {
 		screenX := r.gameX + x
-		screenY := r.gameY + ctx.CursorY
+		screenY := r.gameY + cursorY
 		if screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
 			r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
 		}
@@ -216,7 +224,7 @@ func (r *TerminalRenderer) drawPingHighlights(ctx *engine.GameContext, pingColor
 
 	// Highlight the column - draw unconditionally (characters will render on top)
 	for y := 0; y < r.gameHeight; y++ {
-		screenX := r.gameX + ctx.CursorX
+		screenX := r.gameX + cursorX
 		screenY := r.gameY + y
 		if screenX >= r.gameX && screenX < r.width && screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
 			r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
@@ -225,17 +233,17 @@ func (r *TerminalRenderer) drawPingHighlights(ctx *engine.GameContext, pingColor
 
 	// Draw grid lines if ping is active
 	if ctx.GetPingActive() {
-		r.drawPingGrid(ctx, pingStyle)
+		r.drawPingGrid(cursorX, cursorY, ctx, pingStyle)
 	}
 }
 
 // drawPingGrid draws coordinate grid lines at 5-column intervals
-func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell.Style) {
+func (r *TerminalRenderer) drawPingGrid(cursorX, cursorY int, ctx *engine.GameContext, pingStyle tcell.Style) {
 	// Vertical lines - draw unconditionally (characters will render on top)
 	for n := 1; ; n++ {
 		offset := 5 * n
-		col := ctx.CursorX + offset
-		if col >= r.gameWidth && ctx.CursorX-offset < 0 {
+		col := cursorX + offset
+		if col >= r.gameWidth && cursorX-offset < 0 {
 			break
 		}
 		if col < r.gameWidth {
@@ -247,7 +255,7 @@ func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell
 				}
 			}
 		}
-		col = ctx.CursorX - offset
+		col = cursorX - offset
 		if col >= 0 {
 			for y := 0; y < r.gameHeight; y++ {
 				screenX := r.gameX + col
@@ -262,8 +270,8 @@ func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell
 	// Horizontal lines - draw unconditionally (characters will render on top)
 	for n := 1; ; n++ {
 		offset := 5 * n
-		row := ctx.CursorY + offset
-		if row >= r.gameHeight && ctx.CursorY-offset < 0 {
+		row := cursorY + offset
+		if row >= r.gameHeight && cursorY-offset < 0 {
 			break
 		}
 		if row < r.gameHeight {
@@ -275,7 +283,7 @@ func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell
 				}
 			}
 		}
-		row = ctx.CursorY - offset
+		row = cursorY - offset
 		if row >= 0 {
 			for x := 0; x < r.gameWidth; x++ {
 				screenX := r.gameX + x
@@ -289,7 +297,7 @@ func (r *TerminalRenderer) drawPingGrid(ctx *engine.GameContext, pingStyle tcell
 }
 
 // drawCharacters draws all character entities
-func (r *TerminalRenderer) drawCharacters(world *engine.World, pingColor tcell.Color, defaultStyle tcell.Style, ctx *engine.GameContext) {
+func (r *TerminalRenderer) drawCharacters(world *engine.World, cursorX, cursorY int, pingColor tcell.Color, defaultStyle tcell.Style, ctx *engine.GameContext) {
 	// Query entities with both position and character
 	entities := world.Query().
 		With(world.Positions).
@@ -308,17 +316,17 @@ func (r *TerminalRenderer) drawCharacters(world *engine.World, pingColor tcell.C
 			style := char.Style
 
 			// Check if character is on a ping line (cursor row or column)
-			onPingLine := (pos.Y == ctx.CursorY) || (pos.X == ctx.CursorX)
+			onPingLine := (pos.Y == cursorY) || (pos.X == cursorX)
 
 			// Also check if on ping grid lines when ping is active
 			if !onPingLine && ctx.GetPingActive() {
 				// Check if on vertical grid line (columns at ±5, ±10, ±15, etc.)
-				deltaX := pos.X - ctx.CursorX
+				deltaX := pos.X - cursorX
 				if deltaX%5 == 0 && deltaX != 0 {
 					onPingLine = true
 				}
 				// Check if on horizontal grid line (rows at ±5, ±10, ±15, etc.)
-				deltaY := pos.Y - ctx.CursorY
+				deltaY := pos.Y - cursorY
 				if deltaY%5 == 0 && deltaY != 0 {
 					onPingLine = true
 				}
@@ -520,13 +528,13 @@ func (r *TerminalRenderer) drawRemovalFlashes(world *engine.World, ctx *engine.G
 }
 
 // drawColumnIndicators draws column position indicators
-func (r *TerminalRenderer) drawColumnIndicators(ctx *engine.GameContext, defaultStyle tcell.Style) {
+func (r *TerminalRenderer) drawColumnIndicators(cursorX int, ctx *engine.GameContext, defaultStyle tcell.Style) {
 	indicatorY := r.gameY + r.gameHeight
 	indicatorStyle := defaultStyle.Foreground(RgbColumnIndicator)
 
 	for x := 0; x < r.gameWidth; x++ {
 		screenX := r.gameX + x
-		relativeCol := x - ctx.CursorX
+		relativeCol := x - cursorX
 		var ch rune
 		var colStyle tcell.Style
 
@@ -773,22 +781,20 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 }
 
 // drawCursor draws the cursor
-func (r *TerminalRenderer) drawCursor(ctx *engine.GameContext, defaultStyle tcell.Style) {
-	screenX := r.gameX + ctx.CursorX
-	screenY := r.gameY + ctx.CursorY
+func (r *TerminalRenderer) drawCursor(cursorX, cursorY int, ctx *engine.GameContext, defaultStyle tcell.Style) {
+	screenX := r.gameX + cursorX
+	screenY := r.gameY + cursorY
 
 	if screenX < r.gameX || screenX >= r.width || screenY < r.gameY || screenY >= r.gameY+r.gameHeight {
 		return
 	}
 
-	// Check for cursor error blink
+	// Read cursor component for error flash
+	cursor, _ := ctx.World.Cursors.Get(ctx.CursorEntity)
 	now := ctx.TimeProvider.Now()
-	if ctx.State.GetCursorError() && now.Sub(ctx.State.GetCursorErrorTime()).Milliseconds() > errorBlinkMs {
-		ctx.State.SetCursorError(false)
-	}
 
 	// Find character at cursor position
-	entity := ctx.World.GetEntityAtPosition(ctx.CursorX, ctx.CursorY)
+	entity := ctx.World.GetEntityAtPosition(cursorX, cursorY)
 	var charAtCursor rune = ' '
 	var charColor tcell.Color
 	hasChar := false
@@ -812,7 +818,10 @@ func (r *TerminalRenderer) drawCursor(ctx *engine.GameContext, defaultStyle tcel
 	var cursorBgColor tcell.Color
 	var charFgColor tcell.Color
 
-	if ctx.State.GetCursorError() {
+	// Check for error flash using CursorComponent
+	hasErrorFlash := cursor.ErrorFlashEnd > 0 && now.UnixNano() < cursor.ErrorFlashEnd
+
+	if hasErrorFlash {
 		cursorBgColor = RgbCursorError
 		charFgColor = tcell.ColorBlack
 	} else if hasChar {

@@ -62,10 +62,12 @@ func (s *ScoreSystem) SetNuggetSystem(nuggetSystem *NuggetSystem) {
 func (s *ScoreSystem) Update(world *engine.World, dt time.Duration) {
 	now := s.ctx.TimeProvider.Now()
 
-	// Clear error cursor (red flash) after timeout using Game Time
+	// Clear error flash (red cursor) after timeout using Game Time
 	// This ensures the red flash "freezes" if the game is paused
-	if s.ctx.State.GetCursorError() && now.Sub(s.ctx.State.GetCursorErrorTime()) > constants.ErrorBlinkTimeout {
-		s.ctx.State.SetCursorError(false)
+	cursor, ok := world.Cursors.Get(s.ctx.CursorEntity)
+	if ok && cursor.ErrorFlashEnd > 0 && now.UnixNano() >= cursor.ErrorFlashEnd {
+		cursor.ErrorFlashEnd = 0
+		world.Cursors.Add(s.ctx.CursorEntity, cursor)
 	}
 
 	// Clear score blink (background color flash) after timeout using Game Time
@@ -83,8 +85,9 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 	entity := world.Positions.GetEntityAt(cursorX, cursorY)
 	if entity == 0 {
 		// No character at cursor - flash error cursor and deactivate boost
-		s.ctx.State.SetCursorError(true)
-		s.ctx.State.SetCursorErrorTime(now)
+		cursor, _ := world.Cursors.Get(s.ctx.CursorEntity)
+		cursor.ErrorFlashEnd = now.Add(constants.ErrorBlinkTimeout).UnixNano()
+		world.Cursors.Add(s.ctx.CursorEntity, cursor)
 		s.ctx.State.SetHeat(0) // Reset heat
 		s.ctx.State.SetBoostEnabled(false)
 		s.ctx.State.SetBoostColor(0) // 0 = None
@@ -104,8 +107,9 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 	// Get character component
 	char, ok := world.Characters.Get(entity)
 	if !ok {
-		s.ctx.State.SetCursorError(true)
-		s.ctx.State.SetCursorErrorTime(now)
+		cursor, _ := world.Cursors.Get(s.ctx.CursorEntity)
+		cursor.ErrorFlashEnd = now.Add(constants.ErrorBlinkTimeout).UnixNano()
+		world.Cursors.Add(s.ctx.CursorEntity, cursor)
 		s.ctx.State.SetHeat(0)
 		s.ctx.State.SetBoostEnabled(false)
 		s.ctx.State.SetBoostColor(0)
@@ -132,8 +136,9 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 	// Get sequence component
 	seq, ok := world.Sequences.Get(entity)
 	if !ok {
-		s.ctx.State.SetCursorError(true)
-		s.ctx.State.SetCursorErrorTime(now)
+		cursor, _ := world.Cursors.Get(s.ctx.CursorEntity)
+		cursor.ErrorFlashEnd = now.Add(constants.ErrorBlinkTimeout).UnixNano()
+		world.Cursors.Add(s.ctx.CursorEntity, cursor)
 		s.ctx.State.SetHeat(0)
 		s.ctx.State.SetBoostEnabled(false)
 		s.ctx.State.SetBoostColor(0)
@@ -270,18 +275,20 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		// Safely destroy the character entity
 		world.DestroyEntity(entity)
 
-		// Move cursor right
-		s.ctx.CursorX++
-		if s.ctx.CursorX >= s.ctx.GameWidth {
-			s.ctx.CursorX = s.ctx.GameWidth - 1
+		// Move cursor right in ECS
+		cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
+		if ok {
+			if cursorPos.X < s.ctx.GameWidth-1 {
+				cursorPos.X++
+			}
+			world.Positions.Add(s.ctx.CursorEntity, cursorPos)
 		}
-		// Sync cursor position to GameState
-		s.ctx.State.SetCursorX(s.ctx.CursorX)
 
 	} else {
 		// Incorrect character - flash error cursor, reset heat, and deactivate boost
-		s.ctx.State.SetCursorError(true)
-		s.ctx.State.SetCursorErrorTime(now)
+		cursor, _ := world.Cursors.Get(s.ctx.CursorEntity)
+		cursor.ErrorFlashEnd = now.Add(constants.ErrorBlinkTimeout).UnixNano()
+		world.Cursors.Add(s.ctx.CursorEntity, cursor)
 		s.ctx.State.SetHeat(0)
 		s.ctx.State.SetBoostEnabled(false)
 		s.ctx.State.SetBoostColor(0) // 0 = None
@@ -322,8 +329,9 @@ func (s *ScoreSystem) handleNuggetCollection(world *engine.World, entity engine.
 	// Check if typed character matches the nugget character
 	if char.Rune != typedRune {
 		// Incorrect character - flash error cursor and reset heat
-		s.ctx.State.SetCursorError(true)
-		s.ctx.State.SetCursorErrorTime(now)
+		cursor, _ := world.Cursors.Get(s.ctx.CursorEntity)
+		cursor.ErrorFlashEnd = now.Add(constants.ErrorBlinkTimeout).UnixNano()
+		world.Cursors.Add(s.ctx.CursorEntity, cursor)
 		s.ctx.State.SetHeat(0) // Reset heat on incorrect nugget typing
 		s.ctx.State.SetBoostEnabled(false)
 		s.ctx.State.SetBoostColor(0)
@@ -367,13 +375,14 @@ func (s *ScoreSystem) handleNuggetCollection(world *engine.World, entity engine.
 	// Use CAS to ensure we only clear if this is still the active nugget
 	s.nuggetSystem.ClearActiveNuggetIfMatches(uint64(entity))
 
-	// Move cursor right
-	s.ctx.CursorX++
-	if s.ctx.CursorX >= s.ctx.GameWidth {
-		s.ctx.CursorX = s.ctx.GameWidth - 1
+	// Move cursor right in ECS
+	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
+	if ok {
+		if cursorPos.X < s.ctx.GameWidth-1 {
+			cursorPos.X++
+		}
+		world.Positions.Add(s.ctx.CursorEntity, cursorPos)
 	}
-	// Sync cursor position to GameState
-	s.ctx.State.SetCursorX(s.ctx.CursorX)
 
 	// No score effects on successful collection
 }
@@ -385,8 +394,9 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 	// Check if typed character matches
 	if char.Rune != typedRune {
 		// Incorrect character - flash error cursor but DON'T reset heat for gold sequence
-		s.ctx.State.SetCursorError(true)
-		s.ctx.State.SetCursorErrorTime(now)
+		cursor, _ := world.Cursors.Get(s.ctx.CursorEntity)
+		cursor.ErrorFlashEnd = now.Add(constants.ErrorBlinkTimeout).UnixNano()
+		world.Cursors.Add(s.ctx.CursorEntity, cursor)
 		// Set score blink to error state (black background with bright red text)
 		s.ctx.State.SetScoreBlinkActive(true)
 		s.ctx.State.SetScoreBlinkType(0)  // 0 = error
@@ -434,13 +444,14 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 	// Safely destroy the character entity
 	world.DestroyEntity(entity)
 
-	// Move cursor right
-	s.ctx.CursorX++
-	if s.ctx.CursorX >= s.ctx.GameWidth {
-		s.ctx.CursorX = s.ctx.GameWidth - 1
+	// Move cursor right in ECS
+	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
+	if ok {
+		if cursorPos.X < s.ctx.GameWidth-1 {
+			cursorPos.X++
+		}
+		world.Positions.Add(s.ctx.CursorEntity, cursorPos)
 	}
-	// Sync cursor position to GameState
-	s.ctx.State.SetCursorX(s.ctx.CursorX)
 
 	// Check if this was the last character of the gold sequence
 	isLastChar := (seq.Index == constants.GoldSequenceLength-1)

@@ -503,11 +503,15 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 			}
 		}
 
-		// Check if too close to cursor (use snapshot for consistent position)
-		cursor := s.ctx.State.ReadCursorPosition()
+		// Check if too close to cursor (read from ECS)
+		cursorPos, ok := s.ctx.World.Positions.Get(s.ctx.CursorEntity)
+		if !ok {
+			// Cursor missing - should never happen, skip overlap check
+			cursorPos = components.PositionComponent{X: -100, Y: -100}
+		}
 		for i := 0; i < lineLength; i++ {
 			col := startCol + i
-			if math.Abs(float64(col-cursor.X)) <= 5 && math.Abs(float64(row-cursor.Y)) <= 3 {
+			if math.Abs(float64(col-cursorPos.X)) <= 5 && math.Abs(float64(row-cursorPos.Y)) <= 3 {
 				hasOverlap = true
 				break
 			}

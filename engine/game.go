@@ -7,6 +7,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/audio"
+	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/core"
 )
@@ -48,16 +49,14 @@ type GameContext struct {
 	GameWidth, GameHeight int
 	LineNumWidth          int
 
+	// Cursor entity (singleton)
+	CursorEntity Entity
+
 	// Mode state
 	Mode           GameMode
 	SearchText     string
 	LastSearchText string
 	CommandText    string
-
-	// Cursor state (local to input handling)
-	CursorX, CursorY int // These will be synced to State.CursorX/Y
-	// CursorVisible    bool
-	// CursorBlinkTime  time.Time
 
 	// Motion command state (input parsing - not game mechanics)
 	MotionCount         int
@@ -128,13 +127,25 @@ func NewGameContext(screen tcell.Screen) *GameContext {
 	// Create centralized game state with pausable time provider
 	ctx.State = NewGameState(ctx.GameWidth, ctx.GameHeight, ctx.Width, pausableClock)
 
-	// Initialize local cursor position
-	ctx.CursorX = ctx.GameWidth / 2
-	ctx.CursorY = ctx.GameHeight / 2
+	// Create cursor entity (singleton, protected)
+	ctx.CursorEntity = With(
+		WithPosition(
+			ctx.World.NewEntity(),
+			ctx.World.Positions,
+			components.PositionComponent{
+				X: ctx.GameWidth / 2,
+				Y: ctx.GameHeight / 2,
+			},
+		),
+		ctx.World.Cursors,
+		components.CursorComponent{},
+	).Build()
 
-	// Sync cursor to game state
-	ctx.State.SetCursorX(ctx.CursorX)
-	ctx.State.SetCursorY(ctx.CursorY)
+	// Make cursor indestructible
+	ctx.World.Protections.Add(ctx.CursorEntity, components.ProtectionComponent{
+		Mask:      components.ProtectAll,
+		ExpiresAt: 0, // Permanent
+	})
 
 	// Initialize ping atomic values (still local to input handling)
 	ctx.pingActive.Store(false)
@@ -303,18 +314,21 @@ func (g *GameContext) HandleResize() {
 			g.Buffer.Resize(g.GameWidth, g.GameHeight)
 		}
 
-		// Clamp cursor position
-		if g.CursorX >= g.GameWidth {
-			g.CursorX = g.GameWidth - 1
-		}
-		if g.CursorY >= g.GameHeight {
-			g.CursorY = g.GameHeight - 1
-		}
-		if g.CursorX < 0 {
-			g.CursorX = 0
-		}
-		if g.CursorY < 0 {
-			g.CursorY = 0
+		// Clamp cursor position in ECS
+		if pos, ok := g.World.Positions.Get(g.CursorEntity); ok {
+			if pos.X >= g.GameWidth {
+				pos.X = g.GameWidth - 1
+			}
+			if pos.Y >= g.GameHeight {
+				pos.Y = g.GameHeight - 1
+			}
+			if pos.X < 0 {
+				pos.X = 0
+			}
+			if pos.Y < 0 {
+				pos.Y = 0
+			}
+			g.World.Positions.Add(g.CursorEntity, pos)
 		}
 	}
 }
