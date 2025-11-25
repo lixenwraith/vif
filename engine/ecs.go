@@ -24,6 +24,9 @@ type World struct {
 	mu           sync.RWMutex
 	nextEntityID Entity
 
+	// Global Resources (New)
+	Resources *ResourceStore
+
 	// Component Stores (Public for direct system access)
 	Positions      *PositionStore
 	Characters     *Store[components.CharacterComponent]
@@ -48,6 +51,7 @@ type World struct {
 func NewWorld() *World {
 	w := &World{
 		nextEntityID:   1,
+		Resources:      NewResourceStore(),
 		systems:        make([]System, 0),
 		Positions:      NewPositionStore(),
 		Characters:     NewStore[components.CharacterComponent](),

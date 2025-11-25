@@ -124,6 +124,37 @@ func NewGameContext(screen tcell.Screen) *GameContext {
 	// Calculate game area first
 	ctx.updateGameArea()
 
+	// --- MIGRATION START ---
+	// Initialize Core Resources
+
+	// 1. Config Resource
+	configRes := &ConfigResource{
+		ScreenWidth:  ctx.Width,
+		ScreenHeight: ctx.Height,
+		GameWidth:    ctx.GameWidth,
+		GameHeight:   ctx.GameHeight,
+		GameX:        ctx.GameX,
+		GameY:        ctx.GameY,
+	}
+	AddResource(ctx.World.Resources, configRes)
+
+	// 2. Time Resource (Initial state)
+	timeRes := &TimeResource{
+		GameTime:    pausableClock.Now(),
+		RealTime:    pausableClock.RealTime(),
+		DeltaTime:   0,
+		FrameNumber: 0,
+	}
+	AddResource(ctx.World.Resources, timeRes)
+
+	// 3. Input Resource (Initial state)
+	inputRes := &InputResource{
+		GameMode: ResourceModeNormal,
+		IsPaused: false,
+	}
+	AddResource(ctx.World.Resources, inputRes)
+	// --- MIGRATION END ---
+
 	// Create centralized game state with pausable time provider
 	ctx.State = NewGameState(ctx.GameWidth, ctx.GameHeight, ctx.Width, pausableClock)
 
@@ -300,7 +331,6 @@ func formatNumber(n int) string {
 	return string(result)
 }
 
-// TODO: Systems don't handle resize
 // HandleResize handles terminal resize events
 func (g *GameContext) HandleResize() {
 	newWidth, newHeight := g.Screen.Size()
@@ -308,6 +338,17 @@ func (g *GameContext) HandleResize() {
 		g.Width = newWidth
 		g.Height = newHeight
 		g.updateGameArea()
+
+		// Update ConfigResource
+		configRes := &ConfigResource{
+			ScreenWidth:  g.Width,
+			ScreenHeight: g.Height,
+			GameWidth:    g.GameWidth,
+			GameHeight:   g.GameHeight,
+			GameX:        g.GameX,
+			GameY:        g.GameY,
+		}
+		AddResource(g.World.Resources, configRes)
 
 		// Resize buffer
 		if g.Buffer != nil {

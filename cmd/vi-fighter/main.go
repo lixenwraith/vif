@@ -15,15 +15,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/systems"
 )
 
-// updateUIElements handles UI updates that need real-time clock (work during pause)
-// This includes purely visual UI elements that should animate while paused.
-// Note: Game state feedback (ScoreBlink, CursorError) is handled in ScoreSystem via Game Time.
-func updateUIElements(ctx *engine.GameContext) {
-	// Currently empty as specific game state feedback (blinks/errors)
-	// must freeze during pause and are handled by the ScoreSystem.
-	// Future UI-only animations (like a "PAUSED" text blinker) would go here.
-}
-
 func main() {
 	// Parse command-line flags (keeping flag parsing infrastructure)
 	flag.Parse()
@@ -137,6 +128,16 @@ func main() {
 	for {
 		select {
 		case ev := <-eventChan:
+			// Update Input Resource from Context
+			// This is a temporary bridge until InputHandler writes directly to Resources
+			inputRes := &engine.InputResource{
+				GameMode:    int(ctx.Mode),
+				CommandText: ctx.CommandText,
+				SearchText:  ctx.SearchText,
+				IsPaused:    ctx.IsPaused.Load(),
+			}
+			engine.AddResource(ctx.World.Resources, inputRes)
+
 			// Input handling always works (even during pause)
 			// InputHandler will handle pause internally when entering or exiting COMMAND mode
 			if !inputHandler.HandleEvent(ev) {
@@ -156,8 +157,15 @@ func main() {
 			)
 
 		case <-frameTicker.C:
-			// Always update UI elements (use real time, works during pause)
-			updateUIElements(ctx)
+			// Update Time Resource
+			// We calculate this based on the context's providers
+			timeRes := &engine.TimeResource{
+				GameTime:    ctx.TimeProvider.Now(),
+				RealTime:    ctx.GetRealTime(),
+				DeltaTime:   constants.FrameUpdateInterval, // Approximation for fixed step
+				FrameNumber: ctx.GetFrameNumber(),
+			}
+			engine.AddResource(ctx.World.Resources, timeRes)
 
 			// During pause: skip game updates but still render
 			if ctx.IsPaused.Load() {
