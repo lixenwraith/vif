@@ -593,6 +593,9 @@ Systems execute in priority order (lower = earlier):
 - Access: `world.Positions.GetEntityAt(x, y)`
 - Updates: `world.Positions.Move(...)` or `world.Positions.Add(...)`
 - Batching: `world.Positions.BeginBatch()` for atomic multi-entity spawning
+- **Limitation**: Single entity per cell - only one entity can occupy a given (x, y) position
+  - When Cursor Entity is at a position, it effectively "masks" other entities in the spatial index
+  - Systems requiring collision detection with masked entities must use Query Pattern instead of spatial lookups
 
 ## Component Hierarchy
 ```
@@ -824,6 +827,34 @@ INSERT / SEARCH ─[ESC]→ NORMAL
 NORMAL -[:]→ COMMAND (game paused) -[ESC/ENTER]→ NORMAL
 ```
 
+### Commands
+
+**`:new` - New Game**
+- **Behavior**: Clears the ECS World and resets game state for a fresh game
+- **Critical Requirement**: Cursor Entity Restoration
+  - `World.Clear()` is destructive and removes ALL entities including the Cursor Entity
+  - After clear, the Cursor Entity's components must be explicitly restored:
+    - `CursorComponent`: Tracks cursor-specific state (error flash timing, etc.)
+    - `ProtectionComponent`: Marks cursor as indestructible (Mask: `ProtectAll`)
+    - `PositionComponent`: Sets initial cursor position (typically 0, 0)
+  - **Failure to restore causes "Zombie Cursor"**: Rendering system expects cursor entity to exist
+  - **Implementation Pattern**:
+    ```go
+    // Clear world (destroys all entities including cursor)
+    world.Clear()
+
+    // MUST restore cursor entity with all required components
+    cursorEntity := world.NewEntity()
+    world.Positions.Add(cursorEntity, components.PositionComponent{X: 0, Y: 0})
+    world.Cursors.Add(cursorEntity, components.CursorComponent{})
+    world.Protections.Add(cursorEntity, components.ProtectionComponent{
+        Mask: components.ProtectAll,
+    })
+
+    // Update context reference
+    ctx.CursorEntity = cursorEntity
+    ```
+
 ### Motion Commands (NORMAL Mode)
 - **Single character**: Direct execution (h, j, k, l, w, b, e, etc.)
 - **Prefix commands**: Build state (`g`, `d`, `f`, `F`) then wait for completion
@@ -978,6 +1009,38 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 8. **6-Color Limit**: At most 6 Blue/Green color/level combinations present simultaneously
 9. **Counter Accuracy**: Color counters must match actual on-screen character counts
 10. **Atomic Operations**: All color counter updates use atomic operations for thread safety
+
+## Known Constraints and Limitations
+
+### PositionStore Single-Entity Limitation
+
+The `PositionStore` spatial index enforces a **single entity per cell** constraint:
+
+**Constraint**: `spatialIndex[y][x]` can only hold one entity at position (x, y)
+
+**Implications**:
+1. **Cursor Masking**: When the Cursor Entity occupies a cell, it replaces any previous entity in the spatial index
+   - Other entities at that position become "masked" and unreachable via `GetEntityAt(x, y)`
+   - The masked entities still exist in the World and other component stores
+   - Only the spatial index reference is overwritten
+
+2. **Hit Detection Workaround**: Systems requiring collision detection at cursor position must use Query Pattern
+   - **Spatial Lookup** (`GetEntityAt`): Fast O(1) but returns only the topmost entity (cursor)
+   - **Query Pattern** (`Query().With(...).Execute()`): Slower O(n) but finds all entities including masked ones
+   - See "Score System > Hit Detection Strategy" for implementation details
+
+3. **Entity Spawning**: SpawnSystem must check spatial index before placement to avoid conflicts
+   - Cursor exclusion zone prevents spawning near cursor (5 horizontal, 3 vertical)
+   - Collision detection ensures characters don't spawn on occupied cells
+
+4. **Cursor Entity Protection**: Cursor must have `ProtectionComponent` with `Mask: ProtectAll`
+   - Prevents accidental destruction by systems that clean up entities
+   - Critical after `World.Clear()` operations (see `:new` command requirements)
+
+**Design Rationale**:
+- Simplifies rendering (no z-ordering required for most entities)
+- Efficient O(1) position lookups for spawning and movement
+- Trade-off: Requires Query Pattern for collision detection at cursor position
 
 ## Game Mechanics Details
 
@@ -1156,6 +1219,37 @@ When a falling entity encounters a target at `(col, row)`:
   - Red and Gold characters do not affect color counters
 - **Heat Updates**: Typing correct characters increases heat (with boost multiplier if active)
 - **Error Handling**: Incorrect typing resets heat and triggers error cursor
+
+#### Hit Detection Strategy
+
+Due to `PositionStore` limitations (single entity per cell), the Cursor Entity effectively "masks" characters at the same position in the spatial index. Therefore, hit detection for typing uses a **Query Pattern** rather than simple spatial lookups:
+
+**Implementation Pattern**:
+```go
+// ❌ INCORRECT: Spatial lookup fails when cursor masks character
+entity, ok := world.Positions.GetEntityAt(cursorX, cursorY)
+// Returns cursor entity, not the character underneath
+
+// ✅ CORRECT: Query pattern iterates all Position+Character entities
+entities := world.Query().
+    With(world.Positions).
+    With(world.Characters).
+    Execute()
+
+for _, entity := range entities {
+    pos, _ := world.Positions.Get(entity)
+    char, _ := world.Characters.Get(entity)
+    if pos.X == cursorX && pos.Y == cursorY {
+        // Found character at cursor position
+        // Process typing logic...
+    }
+}
+```
+
+**Trade-offs**:
+- **Spatial Lookup**: O(1) but fails when cursor masks character
+- **Query Pattern**: O(n) but reliable for all entities at cursor position
+- Query pattern is used for typing interactions where correctness is critical
 
 ### Boost System
 - **Activation Condition**: Heat reaches maximum value (screen width)
