@@ -21,6 +21,11 @@ func TestNuggetJumpWithSufficientScore(t *testing.T) {
 	ctx.GameWidth = 100
 	ctx.GameHeight = 30
 
+	// Inject ConfigResource
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 100, GameHeight: 30, ScreenWidth: 100, ScreenHeight: 30,
+	})
+
 	// Create nugget system
 	nuggetSystem := NewNuggetSystem(ctx)
 
@@ -75,6 +80,11 @@ func TestNuggetJumpWithInsufficientScore(t *testing.T) {
 	ctx := engine.NewGameContext(screen)
 	ctx.GameWidth = 100
 	ctx.GameHeight = 30
+
+	// Inject ConfigResource
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 100, GameHeight: 30, ScreenWidth: 100, ScreenHeight: 30,
+	})
 
 	// Create nugget system
 	nuggetSystem := NewNuggetSystem(ctx)
@@ -174,6 +184,11 @@ func TestNuggetJumpUpdatesPosition(t *testing.T) {
 	ctx.GameWidth = 100
 	ctx.GameHeight = 30
 
+	// Inject ConfigResource
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 100, GameHeight: 30, ScreenWidth: 100, ScreenHeight: 30,
+	})
+
 	// Create nugget system
 	nuggetSystem := NewNuggetSystem(ctx)
 
@@ -239,6 +254,11 @@ func TestNuggetJumpMultipleTimes(t *testing.T) {
 	ctx := engine.NewGameContext(screen)
 	ctx.GameWidth = 100
 	ctx.GameHeight = 30
+
+	// Inject ConfigResource
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 100, GameHeight: 30, ScreenWidth: 100, ScreenHeight: 30,
+	})
 
 	// Create nugget system
 	nuggetSystem := NewNuggetSystem(ctx)
@@ -319,6 +339,11 @@ func TestNuggetJumpWithNuggetAtEdge(t *testing.T) {
 	ctx.GameWidth = 100
 	ctx.GameHeight = 30
 
+	// Inject ConfigResource
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 100, GameHeight: 30, ScreenWidth: 100, ScreenHeight: 30,
+	})
+
 	// Create nugget system
 	nuggetSystem := NewNuggetSystem(ctx)
 
@@ -384,6 +409,11 @@ func TestJumpToNuggetMethodReturnsCorrectPosition(t *testing.T) {
 	ctx := engine.NewGameContext(screen)
 	ctx.GameWidth = 100
 	ctx.GameHeight = 30
+
+	// Inject ConfigResource
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 100, GameHeight: 30, ScreenWidth: 100, ScreenHeight: 30,
+	})
 
 	// Create nugget system
 	nuggetSystem := NewNuggetSystem(ctx)
@@ -454,6 +484,11 @@ func TestJumpToNuggetAtomicCursorUpdate(t *testing.T) {
 	ctx.GameWidth = 100
 	ctx.GameHeight = 30
 
+	// Inject ConfigResource
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 100, GameHeight: 30, ScreenWidth: 100, ScreenHeight: 30,
+	})
+
 	// Create nugget system
 	nuggetSystem := NewNuggetSystem(ctx)
 
@@ -510,6 +545,11 @@ func TestJumpToNuggetEntityStillExists(t *testing.T) {
 	ctx := engine.NewGameContext(screen)
 	ctx.GameWidth = 100
 	ctx.GameHeight = 30
+
+	// Inject ConfigResource
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 100, GameHeight: 30, ScreenWidth: 100, ScreenHeight: 30,
+	})
 
 	// Create nugget system
 	nuggetSystem := NewNuggetSystem(ctx)

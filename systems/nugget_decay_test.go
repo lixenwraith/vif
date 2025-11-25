@@ -19,6 +19,15 @@ func TestDecayDestroysNugget(t *testing.T) {
 
 	ctx := engine.NewGameContext(screen)
 	world := ctx.World
+
+	// Inject ConfigResource and TimeResource
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
+
 	nuggetSystem := NewNuggetSystem(ctx)
 	decaySystem := NewDecaySystem(ctx)
 	decaySystem.SetNuggetSystem(nuggetSystem)
@@ -88,6 +97,15 @@ func TestDecayDoesNotDestroyNuggetAtDifferentPosition(t *testing.T) {
 
 	ctx := engine.NewGameContext(screen)
 	world := ctx.World
+
+	// Inject ConfigResource and TimeResource
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
+
 	nuggetSystem := NewNuggetSystem(ctx)
 	decaySystem := NewDecaySystem(ctx)
 	decaySystem.SetNuggetSystem(nuggetSystem)
@@ -138,6 +156,15 @@ func TestDecayDestroyMultipleNuggetsInDifferentColumns(t *testing.T) {
 
 	ctx := engine.NewGameContext(screen)
 	world := ctx.World
+
+	// Inject ConfigResource and TimeResource
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
+
 	nuggetSystem := NewNuggetSystem(ctx)
 	decaySystem := NewDecaySystem(ctx)
 	decaySystem.SetNuggetSystem(nuggetSystem)
@@ -211,6 +238,15 @@ func TestDecayDestroyNuggetAndSequence(t *testing.T) {
 
 	ctx := engine.NewGameContext(screen)
 	world := ctx.World
+
+	// Inject ConfigResource and TimeResource
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
+
 	nuggetSystem := NewNuggetSystem(ctx)
 	spawnSystem := NewSpawnSystem(ctx)
 	decaySystem := NewDecaySystem(ctx)
@@ -308,6 +344,14 @@ func TestDecayNuggetRespawnAfterDestruction(t *testing.T) {
 	mockTime := engine.NewMockTimeProvider(startTime)
 
 	world := engine.NewWorld()
+	// Inject ConfigResource and TimeResource
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	engine.AddResource(world.Resources, &engine.TimeResource{
+		GameTime: startTime, DeltaTime: 16 * time.Millisecond,
+	})
+
 	state := engine.NewGameState(80, 24, 80, mockTime)
 	ctx := &engine.GameContext{
 		World:        world,
@@ -397,6 +441,15 @@ func TestDecayDoesNotProcessSameNuggetTwice(t *testing.T) {
 
 	ctx := engine.NewGameContext(screen)
 	world := ctx.World
+
+	// Inject ConfigResource and TimeResource
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
+
 	nuggetSystem := NewNuggetSystem(ctx)
 	decaySystem := NewDecaySystem(ctx)
 	decaySystem.SetNuggetSystem(nuggetSystem)

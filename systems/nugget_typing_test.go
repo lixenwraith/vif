@@ -19,13 +19,22 @@ func TestNuggetTypingIncreasesHeat(t *testing.T) {
 
 	ctx := engine.NewGameContext(screen)
 	world := ctx.World
-	scoreSystem := NewScoreSystem(ctx)
-	nuggetSystem := NewNuggetSystem(ctx)
-	scoreSystem.SetNuggetSystem(nuggetSystem)
 
 	// Set screen width to 100 for easy calculation
 	ctx.Width = 100
 	ctx.GameWidth = 100
+
+	// Inject ConfigResource and TimeResource
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 100, GameHeight: 24, ScreenWidth: 100, ScreenHeight: 24,
+	})
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
+
+	scoreSystem := NewScoreSystem(ctx)
+	nuggetSystem := NewNuggetSystem(ctx)
+	scoreSystem.SetNuggetSystem(nuggetSystem)
 
 	// Initial heat should be 0
 	initialHeat := ctx.State.GetHeat()
@@ -83,6 +92,14 @@ func TestNuggetTypingDestroysAndReturnsSpawn(t *testing.T) {
 	mockTime := engine.NewMockTimeProvider(startTime)
 
 	world := engine.NewWorld()
+	// Inject ConfigResource and TimeResource
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	engine.AddResource(world.Resources, &engine.TimeResource{
+		GameTime: startTime, DeltaTime: 16 * time.Millisecond,
+	})
+
 	state := engine.NewGameState(80, 24, 80, mockTime)
 	ctx := &engine.GameContext{
 		World:        world,
@@ -159,12 +176,21 @@ func TestNuggetTypingNoScoreEffect(t *testing.T) {
 
 	ctx := engine.NewGameContext(screen)
 	world := ctx.World
-	scoreSystem := NewScoreSystem(ctx)
-	nuggetSystem := NewNuggetSystem(ctx)
-	scoreSystem.SetNuggetSystem(nuggetSystem)
 
 	ctx.Width = 80
 	ctx.GameWidth = 80
+
+	// Inject ConfigResource and TimeResource
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
+
+	scoreSystem := NewScoreSystem(ctx)
+	nuggetSystem := NewNuggetSystem(ctx)
+	scoreSystem.SetNuggetSystem(nuggetSystem)
 
 	// Set initial score
 	initialScore := 100
@@ -207,12 +233,21 @@ func TestNuggetTypingNoErrorEffect(t *testing.T) {
 
 	ctx := engine.NewGameContext(screen)
 	world := ctx.World
-	scoreSystem := NewScoreSystem(ctx)
-	nuggetSystem := NewNuggetSystem(ctx)
-	scoreSystem.SetNuggetSystem(nuggetSystem)
 
 	ctx.Width = 80
 	ctx.GameWidth = 80
+
+	// Inject ConfigResource and TimeResource
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
+
+	scoreSystem := NewScoreSystem(ctx)
+	nuggetSystem := NewNuggetSystem(ctx)
+	scoreSystem.SetNuggetSystem(nuggetSystem)
 
 	// Create nugget with character 'z'
 	nuggetEntity := world.CreateEntity()
@@ -249,6 +284,14 @@ func TestNuggetTypingMultipleCollections(t *testing.T) {
 	mockTime := engine.NewMockTimeProvider(startTime)
 
 	world := engine.NewWorld()
+	// Inject ConfigResource and TimeResource
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth: 100, GameHeight: 24, ScreenWidth: 100, ScreenHeight: 24,
+	})
+	engine.AddResource(world.Resources, &engine.TimeResource{
+		GameTime: startTime, DeltaTime: 16 * time.Millisecond,
+	})
+
 	state := engine.NewGameState(100, 24, 100, mockTime)
 	ctx := &engine.GameContext{
 		World:        world,
@@ -329,13 +372,22 @@ func TestNuggetTypingWithSmallScreen(t *testing.T) {
 
 	ctx := engine.NewGameContext(screen)
 	world := ctx.World
-	scoreSystem := NewScoreSystem(ctx)
-	nuggetSystem := NewNuggetSystem(ctx)
-	scoreSystem.SetNuggetSystem(nuggetSystem)
 
 	// Set very small screen width (less than 10)
 	ctx.Width = 5
 	ctx.GameWidth = 5
+
+	// Inject ConfigResource and TimeResource
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 5, GameHeight: 24, ScreenWidth: 5, ScreenHeight: 24,
+	})
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
+
+	scoreSystem := NewScoreSystem(ctx)
+	nuggetSystem := NewNuggetSystem(ctx)
+	scoreSystem.SetNuggetSystem(nuggetSystem)
 
 	// Create nugget with character 'x'
 	nuggetEntity := world.CreateEntity()
@@ -377,12 +429,21 @@ func TestNuggetAlwaysIncreasesVisualBlocks(t *testing.T) {
 
 			ctx := engine.NewGameContext(screen)
 			world := ctx.World
-			scoreSystem := NewScoreSystem(ctx)
-			nuggetSystem := NewNuggetSystem(ctx)
-			scoreSystem.SetNuggetSystem(nuggetSystem)
 
 			ctx.Width = width
 			ctx.GameWidth = width
+
+			// Inject ConfigResource and TimeResource
+			engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+				GameWidth: width, GameHeight: 24, ScreenWidth: width, ScreenHeight: 24,
+			})
+			engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+				GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+			})
+
+			scoreSystem := NewScoreSystem(ctx)
+			nuggetSystem := NewNuggetSystem(ctx)
+			scoreSystem.SetNuggetSystem(nuggetSystem)
 
 			// Helper to calculate visual blocks from heat value
 			calcVisualBlocks := func(heat int) int {

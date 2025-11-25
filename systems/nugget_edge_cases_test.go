@@ -23,6 +23,11 @@ func TestNuggetSingleInvariant(t *testing.T) {
 	timeProvider := engine.NewMockTimeProvider(time.Now())
 	ctx.TimeProvider = timeProvider
 
+	// Inject ConfigResource
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 100, GameHeight: 30, ScreenWidth: 100, ScreenHeight: 30,
+	})
+
 	nuggetSystem := NewNuggetSystem(ctx)
 
 	// Spawn first nugget
@@ -67,6 +72,11 @@ func TestNuggetRapidCollectionAndRespawn(t *testing.T) {
 	world := ctx.World
 	timeProvider := engine.NewMockTimeProvider(time.Now())
 	ctx.TimeProvider = timeProvider
+
+	// Inject ConfigResource
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 100, GameHeight: 30, ScreenWidth: 100, ScreenHeight: 30,
+	})
 
 	nuggetSystem := NewNuggetSystem(ctx)
 
@@ -118,6 +128,11 @@ func TestNuggetClearWithWrongEntityID(t *testing.T) {
 	timeProvider := engine.NewMockTimeProvider(time.Now())
 	ctx.TimeProvider = timeProvider
 
+	// Inject ConfigResource
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 100, GameHeight: 30, ScreenWidth: 100, ScreenHeight: 30,
+	})
+
 	nuggetSystem := NewNuggetSystem(ctx)
 
 	// Spawn nugget
@@ -155,6 +170,11 @@ func TestNuggetDoubleDestruction(t *testing.T) {
 	world := ctx.World
 	timeProvider := engine.NewMockTimeProvider(time.Now())
 	ctx.TimeProvider = timeProvider
+
+	// Inject ConfigResource
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 100, GameHeight: 30, ScreenWidth: 100, ScreenHeight: 30,
+	})
 
 	nuggetSystem := NewNuggetSystem(ctx)
 
@@ -199,6 +219,11 @@ func TestNuggetClearAfterNewSpawn(t *testing.T) {
 	world := ctx.World
 	timeProvider := engine.NewMockTimeProvider(time.Now())
 	ctx.TimeProvider = timeProvider
+
+	// Inject ConfigResource
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 100, GameHeight: 30, ScreenWidth: 100, ScreenHeight: 30,
+	})
 
 	nuggetSystem := NewNuggetSystem(ctx)
 
@@ -254,6 +279,11 @@ func TestNuggetVerificationClearsStaleReference(t *testing.T) {
 	timeProvider := engine.NewMockTimeProvider(time.Now())
 	ctx.TimeProvider = timeProvider
 
+	// Inject ConfigResource
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 100, GameHeight: 30, ScreenWidth: 100, ScreenHeight: 30,
+	})
+
 	nuggetSystem := NewNuggetSystem(ctx)
 
 	// Spawn nugget
@@ -290,6 +320,11 @@ func TestNuggetSpawnPositionExclusionZone(t *testing.T) {
 	world := ctx.World
 	timeProvider := engine.NewMockTimeProvider(time.Now())
 	ctx.TimeProvider = timeProvider
+
+	// Inject ConfigResource
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 100, GameHeight: 30, ScreenWidth: 100, ScreenHeight: 30,
+	})
 
 	// Set cursor position
 	ctx.CursorX = 50
@@ -340,6 +375,11 @@ func TestNuggetGetSystemState(t *testing.T) {
 	timeProvider := engine.NewMockTimeProvider(time.Now())
 	ctx.TimeProvider = timeProvider
 
+	// Inject ConfigResource
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 100, GameHeight: 30, ScreenWidth: 100, ScreenHeight: 30,
+	})
+
 	nuggetSystem := NewNuggetSystem(ctx)
 
 	// State 1: No nugget, recent update
@@ -384,6 +424,11 @@ func TestNuggetConcurrentClearAttempts(t *testing.T) {
 	world := ctx.World
 	timeProvider := engine.NewMockTimeProvider(time.Now())
 	ctx.TimeProvider = timeProvider
+
+	// Inject ConfigResource
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 100, GameHeight: 30, ScreenWidth: 100, ScreenHeight: 30,
+	})
 
 	nuggetSystem := NewNuggetSystem(ctx)
 
