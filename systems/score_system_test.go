@@ -20,6 +20,17 @@ func TestBoostHeatMultiplier(t *testing.T) {
 
 	// Create game context
 	ctx := engine.NewGameContext(screen)
+	// Inject required resources for migrated systems
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth:    80,
+		GameHeight:   24,
+		ScreenWidth:  80,
+		ScreenHeight: 24,
+	})
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime:  time.Now(),
+		DeltaTime: 16 * time.Millisecond,
+	})
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Create a green character at cursor position
@@ -112,6 +123,17 @@ func TestRedCharacterResetsHeat(t *testing.T) {
 
 	// Create game context
 	ctx := engine.NewGameContext(screen)
+	// Inject required resources for migrated systems
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth:    80,
+		GameHeight:   24,
+		ScreenWidth:  80,
+		ScreenHeight: 24,
+	})
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime:  time.Now(),
+		DeltaTime: 16 * time.Millisecond,
+	})
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Set heat to non-zero
@@ -157,6 +179,17 @@ func TestGreenBrightCharacterScore(t *testing.T) {
 
 	// Create game context
 	ctx := engine.NewGameContext(screen)
+	// Inject required resources for migrated systems
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth:    80,
+		GameHeight:   24,
+		ScreenWidth:  80,
+		ScreenHeight: 24,
+	})
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime:  time.Now(),
+		DeltaTime: 16 * time.Millisecond,
+	})
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Set heat to 5
@@ -210,6 +243,17 @@ func TestIncorrectCharacterResetsHeat(t *testing.T) {
 
 	// Create game context
 	ctx := engine.NewGameContext(screen)
+	// Inject required resources for migrated systems
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth:    80,
+		GameHeight:   24,
+		ScreenWidth:  80,
+		ScreenHeight: 24,
+	})
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime:  time.Now(),
+		DeltaTime: 16 * time.Millisecond,
+	})
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Set heat to non-zero
@@ -260,6 +304,17 @@ func TestBoostActivationAtMaxHeat(t *testing.T) {
 
 	// Create game context
 	ctx := engine.NewGameContext(screen)
+	// Inject required resources for migrated systems
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth:    80,
+		GameHeight:   24,
+		ScreenWidth:  80,
+		ScreenHeight: 24,
+	})
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime:  time.Now(),
+		DeltaTime: 16 * time.Millisecond,
+	})
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Set heat to max - 1 (screen width is 80)
@@ -329,6 +384,17 @@ func TestScoreBlinkOnCorrectCharacter(t *testing.T) {
 
 			// Create game context
 			ctx := engine.NewGameContext(screen)
+			// Inject required resources for migrated systems
+			engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+				GameWidth:    80,
+				GameHeight:   24,
+				ScreenWidth:  80,
+				ScreenHeight: 24,
+			})
+			engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+				GameTime:  time.Now(),
+				DeltaTime: 16 * time.Millisecond,
+			})
 			scoreSystem := NewScoreSystem(ctx)
 
 			// Create a character at cursor position
@@ -442,6 +508,17 @@ func TestScoreBlinkOnError(t *testing.T) {
 
 			// Create game context
 			ctx := engine.NewGameContext(screen)
+			// Inject required resources for migrated systems
+			engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+				GameWidth:    80,
+				GameHeight:   24,
+				ScreenWidth:  80,
+				ScreenHeight: 24,
+			})
+			engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+				GameTime:  time.Now(),
+				DeltaTime: 16 * time.Millisecond,
+			})
 			scoreSystem := NewScoreSystem(ctx)
 
 			// Run test function
@@ -476,6 +553,17 @@ func TestScoreBlinkOnGoldCharacter(t *testing.T) {
 
 	// Create game context
 	ctx := engine.NewGameContext(screen)
+	// Inject required resources for migrated systems
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth:    80,
+		GameHeight:   24,
+		ScreenWidth:  80,
+		ScreenHeight: 24,
+	})
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime:  time.Now(),
+		DeltaTime: 16 * time.Millisecond,
+	})
 	scoreSystem := NewScoreSystem(ctx)
 	goldSystem := NewGoldSystem(ctx)
 
@@ -541,6 +629,17 @@ func TestScoreBlinkTimeout(t *testing.T) {
 	// Create game context with mock time provider
 	ctx := engine.NewGameContext(screen)
 	ctx.TimeProvider = mockTime
+	// Inject required resources for migrated systems
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth:    80,
+		GameHeight:   24,
+		ScreenWidth:  80,
+		ScreenHeight: 24,
+	})
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime:  mockTime.Now(),
+		DeltaTime: 16 * time.Millisecond,
+	})
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Create a green character at cursor position
@@ -605,6 +704,17 @@ func TestCursorErrorTimeout(t *testing.T) {
 	// Create game context with mock time provider
 	ctx := engine.NewGameContext(screen)
 	ctx.TimeProvider = mockTime
+	// Inject required resources for migrated systems
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth:    80,
+		GameHeight:   24,
+		ScreenWidth:  80,
+		ScreenHeight: 24,
+	})
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime:  mockTime.Now(),
+		DeltaTime: 16 * time.Millisecond,
+	})
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Type at empty position to trigger cursor error
