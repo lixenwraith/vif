@@ -27,8 +27,9 @@ type DecaySystem struct {
 // NewDecaySystem creates a new decay system
 func NewDecaySystem(ctx *engine.GameContext) *DecaySystem {
 	s := &DecaySystem{
-		currentRow:         0,
-		lastUpdate:         ctx.TimeProvider.Now(),
+		currentRow: 0,
+		lastUpdate: time.Time{},
+		// lastUpdate:         ctx.TimeProvider.Now(), // Removed for decoupling from ctx, to be tested with pause
 		ctx:                ctx,
 		decayedThisFrame:   make(map[engine.Entity]bool),
 		processedGridCells: make(map[int]bool),
@@ -349,7 +350,12 @@ func (s *DecaySystem) CurrentRow() int {
 	currentRow := s.currentRow
 	s.mu.RUnlock()
 
-	gameHeight := s.ctx.GameHeight
+	// CHANGED: Retrieve ConfigResource to get dimensions
+	// Note: We use the world from s.ctx for now to get resources,
+	// eventually s.ctx will be removed entirely in in next phases
+	config := engine.MustGetResource[*engine.ConfigResource](s.ctx.World.Resources)
+	gameHeight := config.GameHeight
+
 	decaySnapshot := s.ctx.State.ReadDecayState()
 
 	// When animation is done, currentRow is 0, but we want to avoid displaying row 0

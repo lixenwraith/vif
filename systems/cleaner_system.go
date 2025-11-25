@@ -177,10 +177,15 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 // spawnCleaners generates cleaner entities using generic stores
 func (cs *CleanerSystem) spawnCleaners(world *engine.World) {
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+
+	// No-op if there are no red entities
 	redRows := cs.scanRedCharacterRows(world)
 	if len(redRows) == 0 {
 		return
 	}
+
+	// Fetch TimeResource for audio timestamp
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 
 	// Play sound ONLY if spawning actual cleaners
 	if cs.ctx.AudioEngine != nil {
@@ -188,7 +193,7 @@ func (cs *CleanerSystem) spawnCleaners(world *engine.World) {
 			Type:       audio.SoundWhoosh,
 			Priority:   1,
 			Generation: uint64(cs.ctx.State.GetFrameNumber()),
-			Timestamp:  cs.ctx.TimeProvider.Now(),
+			Timestamp:  timeRes.GameTime,
 		})
 	}
 

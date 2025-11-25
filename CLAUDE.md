@@ -4,19 +4,26 @@
 vi-fighter is a terminal-based typing game in Go using a compile-time Generics-based ECS (Go 1.18+). The architecture combines real-time lock-free updates (atomics) for input/rendering with a discrete clock-tick system for game logic.
 **Go Version:** 1.24+
 
-## CURRENT MISSION: Pure ECS Phase 2 - Resource System
-**Objective:** Decouple systems from the `GameContext` God Object by introducing a generic Resource System.
-**Core Change:** Move global state (Time, Config, Input) from `GameContext` to `World.Resources`.
+## CURRENT MISSION: Phase 2.5 - Core System Migration
+**Objective:** Complete the decoupling of core logic systems from `GameContext` by fully utilizing the Resource System.
+**Status:** Infrastructure is live. `Decay`, `Cleaner`, and `Drain` systems are migrated.
+**Immediate Targets (Priority Order):**
+1.  **`SpawnSystem`**: Heaviest user of dimensions (`placeLine` logic).
+2.  **`NuggetSystem`**: Standard migration.
+3.  **`ScoreSystem`**: Uses Time heavily for audio timestamps.
+4.  **`BoostSystem`**: Simple timer migration.
+5.  **`GoldSystem`**: Standard migration.
 
-### Implementation Phases
-1.  **Infrastructure:** Implement `ResourceStore` and add it to `World`. (Done)
-2.  **Migration:** systematically update systems (`Decay`, `Cleaner`, `Drain`, `Spawn`) to fetch data from `World.Resources` instead of `ctx`.
-3.  **Cleanup:** Eventually remove these fields from `GameContext` once all consumers are migrated.
+### Implementation Pattern
+For each target system:
+1.  **Fetch:** Retrieve `*ConfigResource` and `*TimeResource` at the start of `Update()` using `engine.MustGetResource`.
+2.  **Replace:** Swap all `s.ctx.GameWidth/Height` with `config.GameWidth/Height` and `s.ctx.TimeProvider.Now()` with `timeRes.GameTime`.
+3.  **Verify:** Ensure `s.ctx` is *only* used for `State` (GameState), `AudioEngine`, or `Events`.
 
 ## ARCHITECTURE OVERVIEW
 
 ### 1. The World & Resources
-The `World` struct now contains a `ResourceStore` for global data that doesn't fit into Components.
+The `World` struct contains a `ResourceStore` for global data.
 
 ```go
 type World struct {
@@ -95,10 +102,11 @@ go test -race ./...
 
 ### 3. Test Helpers
 Use `NewTestGameContext` to initialize a valid ECS world.
-*Note:* When testing migrated systems, ensure you manually populate the `ResourceStore` in your test setup if `NewTestGameContext` doesn't cover the specific resource state you need.
+*Note:* When testing migrated systems, ensure you manually populate the `ResourceStore` in your test setup.
 
 ### 4. Common Pitfalls
-*   **Context Usage:** Do NOT use `s.ctx.GameWidth` or `s.ctx.TimeProvider` in updated systems. Use `world.Resources`.
+*   **The "Sin" Check:** Do NOT use `s.ctx.GameWidth` or `s.ctx.TimeProvider` in logic methods. Usage should be zero.
+*   **Helper Methods:** Ensure private helper methods (e.g., `placeLine`, `findValidPosition`) also use resources passed from `Update`, or fetch them locally. Do not fall back to `s.ctx`.
 *   **Resource Pointers:** Resources are stored as pointers (e.g., `*ConfigResource`). Always request the pointer type.
 *   **Component Pointers:** `Get()` returns a copy. You **MUST** call `Add()` to save changes back to the store.
 
@@ -106,11 +114,12 @@ Use `NewTestGameContext` to initialize a valid ECS world.
 ```
 vi-fighter/
 ├── engine/
-│   ├── resources.go      # NEW: ResourceStore & definitions
-│   ├── world.go          # Updated with Resources field
+│   ├── resources.go      # Resource definitions
 │   └── game.go           # Context initialization
 ├── systems/
-│   ├── decay_system.go   # Migration Target
-│   ├── cleaner_system.go # Migration Target
-│   └── drain_system.go   # Migration Target
+│   ├── spawn_system.go   # TARGET: Priority 1
+│   ├── nugget_system.go  # TARGET: Priority 2
+│   ├── score_system.go   # TARGET: Priority 3
+│   ├── boost_system.go   # TARGET: Priority 4
+│   └── gold_system.go    # TARGET: Priority 5
 ```
