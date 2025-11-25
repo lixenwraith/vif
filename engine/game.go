@@ -52,6 +52,11 @@ type GameContext struct {
 	// Cursor entity (singleton)
 	CursorEntity Entity
 
+	// Cursor position cache (synced with ECS PositionComponent)
+	// These fields cache the cursor position for motion/command handlers
+	// CRITICAL: Must be synced FROM ECS before use, TO ECS after modification
+	CursorX, CursorY int
+
 	// Mode state
 	Mode           GameMode
 	SearchText     string

@@ -111,10 +111,13 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 Updated immediately on user input/spawn events, read by all systems:
 - **Heat** (`atomic.Int64`): Current heat value
 - **Score** (`atomic.Int64`): Player score
-- **Cursor Position** (`atomic.Int32`): CursorX, CursorY for spawn exclusion zone
-- **Color Counters** (6× `atomic.Int64`): Blue/Green × Bright/Normal/Dark tracking
+- **Cursor Position**: NOW IN ECS as cursor entity with PositionComponent and CursorComponent
+  - Legacy atomics (CursorX, CursorY) still exist in GameState for backward compatibility
+  - GameContext has non-atomic cache fields (CursorX, CursorY) synced with ECS
+- **Color Tracking**: NOW CENSUS-BASED via per-frame O(n) entity iteration
+  - Legacy atomic counters removed from GameState (eliminating drift)
 - **Boost State** (`atomic.Bool`, `atomic.Int64`): Enabled, EndTime, Color
-- **Visual Feedback**: CursorError, ScoreBlink, PingGrid (atomic)
+- **Visual Feedback**: CursorError (via CursorComponent.ErrorFlashEnd), ScoreBlink, PingGrid (atomic)
 - **Drain State** (`atomic.Bool`, `atomic.Uint64`, `atomic.Int32`): Active, EntityID, X, Y
 - **Sequence ID** (`atomic.Int64`): Thread-safe ID generation
 
@@ -124,7 +127,7 @@ Atomics are used for high-frequency access (every frame and keystroke) to avoid 
 Updated during scheduled game logic ticks, read by all systems:
 - **Spawn Timing** (`sync.RWMutex`): LastTime, NextTime, RateMultiplier
 - **Screen Density**: EntityCount, ScreenDensity, SpawnEnabled
-- **6-Color Limit**: Enforced via atomic color counter checks
+- **6-Color Limit**: NOW ENFORCED VIA CENSUS (per-frame entity iteration, no atomic drift)
 - **Game Phase State**: CurrentPhase, PhaseStartTime
 - **Gold Sequence State**: GoldActive, GoldSequenceID, GoldStartTime, GoldTimeoutTime
 - **Decay Timer State**: DecayTimerActive, DecayNextTime
@@ -163,7 +166,10 @@ height := ctx.GameHeight // Always current
 - It provides direct access to GameState via the `State` field
 - Systems read dimensions directly from `ctx.GameWidth` and `ctx.GameHeight`
 - No local dimension caching - always read current values
-- Input-specific methods (cursor position, mode, motion commands) remain on GameContext
+- Input-specific methods (mode, motion commands) remain on GameContext
+- **Cursor Position Cache**: `CursorX`, `CursorY` fields cache ECS position for motion handlers
+  - MUST be synced FROM ECS before use: `pos, _ := ctx.World.Positions.Get(ctx.CursorEntity); ctx.CursorX = pos.X`
+  - MUST be synced TO ECS after modification: `ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY})`
 
 #### Snapshot Pattern
 
@@ -203,12 +209,16 @@ type ColorCountSnapshot struct {
 }
 snapshot := ctx.State.ReadColorCounts() // Used by: SpawnSystem, DecaySystem, Renderer
 
-// Cursor Position (atomic fields)
+// Cursor Position (ECS-based, legacy atomics deprecated)
+// PRIMARY SOURCE: ctx.World.Positions.Get(ctx.CursorEntity)
+// DEPRECATED: GameState.CursorX/Y atomics (kept for backward compatibility)
 type CursorSnapshot struct {
     X int
     Y int
 }
-snapshot := ctx.State.ReadCursorPosition() // Used by: SpawnSystem (exclusion zone), Renderer
+// PREFERRED: Read directly from ECS
+pos, ok := ctx.World.Positions.Get(ctx.CursorEntity)
+// LEGACY: snapshot := ctx.State.ReadCursorPosition() // Used by: Renderer (legacy)
 
 // Boost State (atomic fields)
 type BoostSnapshot struct {
@@ -296,7 +306,7 @@ score := ctx.State.GetScore() // Atomic read #2
 
 | System | Snapshot Types Used | Purpose |
 |--------|-------------------|---------|
-| SpawnSystem | SpawnState, ColorCounts, CursorPosition | Check spawn conditions, cursor exclusion zone |
+| SpawnSystem | SpawnState, Census (entity iteration), ECS Cursor | Check spawn conditions, cursor exclusion zone |
 | ScoreSystem | BoostState, GoldState, HeatAndScore | Process typing, update heat/score |
 | GoldSequenceSystem | GoldState, PhaseState | Manage gold sequence lifecycle |
 | DecaySystem | DecayState, PhaseState | Manage decay timer and animation |
@@ -312,13 +322,18 @@ score := ctx.State.GetScore() // Atomic read #2
    - Multiple concurrent readers allowed
    - Writers block only during actual state modification
 
-2. **Atomic Field Snapshots** (ColorCounts, CursorPosition, BoostState, HeatAndScore):
+2. **Atomic Field Snapshots** (BoostState, HeatAndScore):
    - No locks required
    - Multiple atomic loads in sequence
    - Still provides consistent view (atomic loads are sequentially consistent)
    - Trade-off: Very rare possibility of seeing mixed state between loads (acceptable for these use cases)
 
-3. **Immutability After Capture:**
+3. **ECS-Based State** (Cursor Position, Color Tracking):
+   - Cursor position: Read via `ctx.World.Positions.Get(ctx.CursorEntity)`
+   - Color tracking: Per-frame census via entity iteration (no atomic drift)
+   - Thread-safe via PositionStore's internal RWMutex
+
+4. **Immutability After Capture:**
    - All snapshots are value types (structs)
    - Modifying snapshot fields doesn't affect GameState
    - Safe to pass snapshots across goroutine boundaries

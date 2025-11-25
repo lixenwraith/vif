@@ -11,6 +11,12 @@ func ExecuteMotion(ctx *engine.GameContext, cmd rune, count int) {
 		count = 1
 	}
 
+	// Sync cursor position FROM ECS to cache
+	if pos, ok := ctx.World.Positions.Get(ctx.CursorEntity); ok {
+		ctx.CursorX = pos.X
+		ctx.CursorY = pos.Y
+	}
+
 	switch cmd {
 	case 'w': // Word forward (vim-style: considers punctuation)
 		for i := 0; i < count; i++ {
@@ -158,11 +164,11 @@ func ExecuteMotion(ctx *engine.GameContext, cmd rune, count int) {
 	// Validate cursor position after motion
 	ctx.CursorX, ctx.CursorY = validatePosition(ctx, ctx.CursorX, ctx.CursorY)
 
-	// Sync cursor position to GameState atomics for renderer and other systems (if initialized)
-	if ctx.State != nil {
-		ctx.State.SetCursorX(ctx.CursorX)
-		ctx.State.SetCursorY(ctx.CursorY)
-	}
+	// Sync cursor position TO ECS
+	ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
+		X: ctx.CursorX,
+		Y: ctx.CursorY,
+	})
 
 	// Check for consecutive motion keys (heat penalty)
 	if cmd == ctx.LastMoveKey && (cmd == 'h' || cmd == 'j' || cmd == 'k' || cmd == 'l') {
@@ -184,6 +190,12 @@ func ExecuteMotion(ctx *engine.GameContext, cmd rune, count int) {
 func ExecuteFindChar(ctx *engine.GameContext, targetChar rune, count int) {
 	if count == 0 {
 		count = 1
+	}
+
+	// Sync cursor position FROM ECS to cache
+	if pos, ok := ctx.World.Positions.Get(ctx.CursorEntity); ok {
+		ctx.CursorX = pos.X
+		ctx.CursorY = pos.Y
 	}
 
 	// Store last find state for ; and , commands
@@ -223,6 +235,12 @@ func ExecuteFindChar(ctx *engine.GameContext, targetChar rune, count int) {
 		ctx.CursorX = lastMatchX
 	}
 	// Otherwise, cursor doesn't move (no matches found)
+
+	// Sync cursor position TO ECS
+	ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
+		X: ctx.CursorX,
+		Y: ctx.CursorY,
+	})
 }
 
 // ExecuteFindCharBackward executes the 'F' (find character backward) command
@@ -234,6 +252,12 @@ func ExecuteFindChar(ctx *engine.GameContext, targetChar rune, count int) {
 func ExecuteFindCharBackward(ctx *engine.GameContext, targetChar rune, count int) {
 	if count == 0 {
 		count = 1
+	}
+
+	// Sync cursor position FROM ECS to cache
+	if pos, ok := ctx.World.Positions.Get(ctx.CursorEntity); ok {
+		ctx.CursorX = pos.X
+		ctx.CursorY = pos.Y
 	}
 
 	// Store last find state for ; and , commands
@@ -274,6 +298,12 @@ func ExecuteFindCharBackward(ctx *engine.GameContext, targetChar rune, count int
 		ctx.CursorX = firstMatchX
 	}
 	// Otherwise, cursor doesn't move (no matches found)
+
+	// Sync cursor position TO ECS
+	ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
+		X: ctx.CursorX,
+		Y: ctx.CursorY,
+	})
 }
 
 // ExecuteTillChar executes the 't' (till character) command
@@ -284,6 +314,12 @@ func ExecuteFindCharBackward(ctx *engine.GameContext, targetChar rune, count int
 func ExecuteTillChar(ctx *engine.GameContext, targetChar rune, count int) {
 	if count == 0 {
 		count = 1
+	}
+
+	// Sync cursor position FROM ECS to cache
+	if pos, ok := ctx.World.Positions.Get(ctx.CursorEntity); ok {
+		ctx.CursorX = pos.X
+		ctx.CursorY = pos.Y
 	}
 
 	// Store last find state for ; and , commands
@@ -326,6 +362,12 @@ func ExecuteTillChar(ctx *engine.GameContext, targetChar rune, count int) {
 		ctx.CursorX = lastMatchX - 1
 	}
 	// Otherwise, cursor doesn't move (no matches found or match is too close)
+
+	// Sync cursor position TO ECS
+	ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
+		X: ctx.CursorX,
+		Y: ctx.CursorY,
+	})
 }
 
 // ExecuteTillCharBackward executes the 'T' (till character backward) command
@@ -337,6 +379,12 @@ func ExecuteTillChar(ctx *engine.GameContext, targetChar rune, count int) {
 func ExecuteTillCharBackward(ctx *engine.GameContext, targetChar rune, count int) {
 	if count == 0 {
 		count = 1
+	}
+
+	// Sync cursor position FROM ECS to cache
+	if pos, ok := ctx.World.Positions.Get(ctx.CursorEntity); ok {
+		ctx.CursorX = pos.X
+		ctx.CursorY = pos.Y
 	}
 
 	// Store last find state for ; and , commands
@@ -380,6 +428,12 @@ func ExecuteTillCharBackward(ctx *engine.GameContext, targetChar rune, count int
 		ctx.CursorX = firstMatchX + 1
 	}
 	// Otherwise, cursor doesn't move (no matches found or match is too close)
+
+	// Sync cursor position TO ECS
+	ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
+		X: ctx.CursorX,
+		Y: ctx.CursorY,
+	})
 }
 
 // RepeatFindChar executes the ';' and ',' commands to repeat the last find/till motion

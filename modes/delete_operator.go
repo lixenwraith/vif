@@ -11,12 +11,18 @@ func ExecuteDeleteMotion(ctx *engine.GameContext, motion rune, count int) {
 		count = 1
 	}
 
-	startX, startY := ctx.CursorX, ctx.CursorY
+	// Get current cursor position from ECS
+	pos, ok := ctx.World.Positions.Get(ctx.CursorEntity)
+	if !ok {
+		return // No cursor position available
+	}
+
+	startX, startY := pos.X, pos.Y
 	deletedGreenOrBlue := false
 
 	switch motion {
 	case 'd': // dd - delete line
-		deletedGreenOrBlue = deleteAllOnLine(ctx, ctx.CursorY)
+		deletedGreenOrBlue = deleteAllOnLine(ctx, startY)
 
 	case '0': // d0 - delete to line start
 		deletedGreenOrBlue = deleteRange(ctx, 0, startX, startY)

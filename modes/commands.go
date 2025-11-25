@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
@@ -57,11 +58,11 @@ func handleNewCommand(ctx *engine.GameContext) bool {
 	// Clear all entities from the world
 	clearAllEntities(ctx.World)
 
-	// Reset cursor position to center
-	ctx.CursorX = ctx.GameWidth / 2
-	ctx.CursorY = ctx.GameHeight / 2
-	ctx.State.SetCursorX(ctx.CursorX)
-	ctx.State.SetCursorY(ctx.CursorY)
+	// Reset cursor position to center (using ECS)
+	ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
+		X: ctx.GameWidth / 2,
+		Y: ctx.GameHeight / 2,
+	})
 
 	// Reset boost state
 	ctx.State.SetBoostEnabled(false)

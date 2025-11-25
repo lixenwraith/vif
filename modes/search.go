@@ -1,6 +1,7 @@
 package modes
 
 import (
+	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
@@ -19,6 +20,12 @@ func PerformSearch(ctx *engine.GameContext, searchText string, forward bool) boo
 
 	// Build character grid from ECS
 	grid := buildCharacterGrid(ctx)
+
+	// Sync cursor position FROM ECS to cache
+	if pos, ok := ctx.World.Positions.Get(ctx.CursorEntity); ok {
+		ctx.CursorX = pos.X
+		ctx.CursorY = pos.Y
+	}
 
 	// Determine search start position
 	startX, startY := ctx.CursorX, ctx.CursorY
@@ -81,9 +88,11 @@ func searchForward(ctx *engine.GameContext, grid map[Point]rune, pattern []rune,
 			if matchesPattern(grid, x, y, pattern) {
 				ctx.CursorX = x
 				ctx.CursorY = y
-				// Sync cursor position to GameState for Drain and other systems
-				ctx.State.SetCursorX(x)
-				ctx.State.SetCursorY(y)
+				// Sync cursor position TO ECS
+				ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
+					X: x,
+					Y: y,
+				})
 				return true
 			}
 		}
@@ -95,9 +104,11 @@ func searchForward(ctx *engine.GameContext, grid map[Point]rune, pattern []rune,
 			if matchesPattern(grid, x, y, pattern) {
 				ctx.CursorX = x
 				ctx.CursorY = y
-				// Sync cursor position to GameState for Drain and other systems
-				ctx.State.SetCursorX(x)
-				ctx.State.SetCursorY(y)
+				// Sync cursor position TO ECS
+				ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
+					X: x,
+					Y: y,
+				})
 				return true
 			}
 		}
@@ -108,9 +119,11 @@ func searchForward(ctx *engine.GameContext, grid map[Point]rune, pattern []rune,
 		if matchesPattern(grid, x, startY, pattern) {
 			ctx.CursorX = x
 			ctx.CursorY = startY
-			// Sync cursor position to GameState for Drain and other systems
-			ctx.State.SetCursorX(x)
-			ctx.State.SetCursorY(startY)
+			// Sync cursor position TO ECS
+			ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
+				X: x,
+				Y: startY,
+			})
 			return true
 		}
 	}
@@ -131,9 +144,11 @@ func searchBackward(ctx *engine.GameContext, grid map[Point]rune, pattern []rune
 			if matchesPattern(grid, x, y, pattern) {
 				ctx.CursorX = x
 				ctx.CursorY = y
-				// Sync cursor position to GameState for Drain and other systems
-				ctx.State.SetCursorX(x)
-				ctx.State.SetCursorY(y)
+				// Sync cursor position TO ECS
+				ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
+					X: x,
+					Y: y,
+				})
 				return true
 			}
 		}
@@ -145,9 +160,11 @@ func searchBackward(ctx *engine.GameContext, grid map[Point]rune, pattern []rune
 			if matchesPattern(grid, x, y, pattern) {
 				ctx.CursorX = x
 				ctx.CursorY = y
-				// Sync cursor position to GameState for Drain and other systems
-				ctx.State.SetCursorX(x)
-				ctx.State.SetCursorY(y)
+				// Sync cursor position TO ECS
+				ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
+					X: x,
+					Y: y,
+				})
 				return true
 			}
 		}
@@ -158,9 +175,11 @@ func searchBackward(ctx *engine.GameContext, grid map[Point]rune, pattern []rune
 		if matchesPattern(grid, x, startY, pattern) {
 			ctx.CursorX = x
 			ctx.CursorY = startY
-			// Sync cursor position to GameState for Drain and other systems
-			ctx.State.SetCursorX(x)
-			ctx.State.SetCursorY(startY)
+			// Sync cursor position TO ECS
+			ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
+				X: x,
+				Y: startY,
+			})
 			return true
 		}
 	}
