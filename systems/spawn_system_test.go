@@ -233,6 +233,13 @@ func TestPlaceLineLogicMatchesExclusionZone(t *testing.T) {
 	cursorY := 12
 
 	world := engine.NewWorld()
+	// Initialize Resources for the SpawnSystem
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth:    gameWidth,
+		GameHeight:   gameHeight,
+		ScreenWidth:  80,
+		ScreenHeight: 24,
+	})
 
 	// Create a simulation screen for testing
 	screen := tcell.NewSimulationScreen("UTF-8")
