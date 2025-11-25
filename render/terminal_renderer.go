@@ -734,32 +734,31 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 
 	// Draw score (with white background, or blink color if active)
 	if ctx.State.GetScoreBlinkActive() && now.Sub(ctx.State.GetScoreBlinkTime()).Milliseconds() < 200 {
-		// Get score blink type and generate color
 		typeCode := ctx.State.GetScoreBlinkType()
-		var blinkColor tcell.Color
-		// Map back to sequence type and generate bright background color
-		switch typeCode {
-		case 0: // Error state
-			blinkColor = tcell.NewRGBColor(0, 0, 0) // Black for error
-		case 1: // Blue
-			blinkColor = tcell.NewRGBColor(160, 210, 255) // Brighter blue for background
-		case 2: // Green
-			blinkColor = tcell.NewRGBColor(120, 255, 120) // Brighter green for background
-		case 3: // Red
-			blinkColor = tcell.NewRGBColor(255, 140, 140) // Brighter red for background
-		case 4: // Gold
-			blinkColor = tcell.NewRGBColor(255, 255, 0) // Bright yellow for gold
-		default:
-			blinkColor = tcell.NewRGBColor(255, 255, 255) // Default to white
-		}
 		var scoreStyle tcell.Style
-		if blinkColor == 0 {
-			// Error state: black background with bright red text
-			scoreStyle = defaultStyle.Foreground(tcell.NewRGBColor(255, 100, 100)).Background(tcell.NewRGBColor(0, 0, 0))
+
+		if typeCode == 0 {
+			// ERROR STATE: Bright Red Text on Black Background
+			// We define this explicitly to avoid TCell color comparison issues
+			scoreStyle = defaultStyle.Foreground(tcell.NewRGBColor(255, 0, 0)).Background(tcell.NewRGBColor(0, 0, 0))
 		} else {
-			// Success state: character color background with black text
+			// SUCCESS STATES: Black Text on Colored Background
+			var blinkColor tcell.Color
+			switch typeCode {
+			case 1: // Blue
+				blinkColor = tcell.NewRGBColor(160, 210, 255)
+			case 2: // Green
+				blinkColor = tcell.NewRGBColor(120, 255, 120)
+			case 3: // Red
+				blinkColor = tcell.NewRGBColor(255, 140, 140)
+			case 4: // Gold
+				blinkColor = tcell.NewRGBColor(255, 255, 0)
+			default:
+				blinkColor = tcell.NewRGBColor(255, 255, 255)
+			}
 			scoreStyle = defaultStyle.Foreground(tcell.NewRGBColor(0, 0, 0)).Background(blinkColor)
 		}
+
 		for i, ch := range scoreText {
 			if startX+i < r.width {
 				r.screen.SetContent(startX+i, statusY, ch, nil, scoreStyle)

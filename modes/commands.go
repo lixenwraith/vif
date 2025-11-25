@@ -117,23 +117,34 @@ func handleScoreCommand(ctx *engine.GameContext, args []string) bool {
 
 // handleHeatCommand sets the heat to a specified value
 func handleHeatCommand(ctx *engine.GameContext, args []string) bool {
+	// 1. Argument Validation
 	if len(args) != 1 {
-		setCommandError(ctx, "Invalid arguments for heat")
+		setCommandError(ctx, "Usage: :heat <0-100>")
 		return true
 	}
 
+	// 2. Parse Value
 	value, err := strconv.Atoi(args[0])
 	if err != nil {
-		setCommandError(ctx, "Invalid arguments for heat")
+		setCommandError(ctx, "Invalid number format")
 		return true
 	}
 
-	if value < 0 || value > 100 {
-		setCommandError(ctx, "Value out of range for heat")
-		return true
+	// 3. Logic Validation (Max heat is effectively screen width, but we clamp to sane inputs)
+	// We allow setting it up to GameWidth because that is the trigger for Boost.
+	if value < 0 {
+		value = 0
 	}
 
+	// Clamp to a reasonable max (e.g. screen width or 100)
+	if value > 100 {
+		value = 100
+	}
+
+	// 4. Update State
 	ctx.State.SetHeat(value)
+
+	// 5. Update Feedback
 	ctx.LastCommand = fmt.Sprintf(":heat %d", value)
 	return true
 }
@@ -175,10 +186,9 @@ func handleSpawnCommand(ctx *engine.GameContext, args []string) bool {
 }
 
 // setCommandError sets an error message in the status message
+// This string will be cleared by InputHandler on the next keystroke.
 func setCommandError(ctx *engine.GameContext, message string) {
 	ctx.StatusMessage = message
-	// Note: The status message timeout will be handled by the renderer
-	// which should check the message timestamp and clear it after 2 seconds
 }
 
 // clearAllEntities removes all entities from the world

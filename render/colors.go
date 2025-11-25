@@ -39,7 +39,7 @@ var (
 	// Nugget colors
 	RgbNuggetOrange = tcell.NewRGBColor(255, 165, 0)   // Same as insert cursor
 	RgbNuggetDark   = tcell.NewRGBColor(101, 67, 33)   // Dark brown for contrast
-	RgbCursorError  = tcell.NewRGBColor(255, 80, 80)   // Red
+	RgbCursorError  = tcell.NewRGBColor(255, 0, 0)     // Error Red
 	RgbTrailGray    = tcell.NewRGBColor(200, 200, 200) // Light gray base
 
 	// Status bar backgrounds

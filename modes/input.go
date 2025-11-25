@@ -34,6 +34,12 @@ func (h *InputHandler) SetNuggetSystem(nuggetSystem *systems.NuggetSystem) {
 func (h *InputHandler) HandleEvent(ev tcell.Event) bool {
 	switch ev := ev.(type) {
 	case *tcell.EventKey:
+		// Clear status message on any new key press interaction
+		// This ensures error messages like "Unknown command" don't persist forever
+		// We do this before processing the key so the user sees the clear immediately upon acting
+		if h.ctx.StatusMessage != "" {
+			h.ctx.StatusMessage = ""
+		}
 		return h.handleKeyEvent(ev)
 	case *tcell.EventResize:
 		h.ctx.HandleResize()
