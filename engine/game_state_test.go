@@ -42,11 +42,6 @@ func TestGameStateInitialization(t *testing.T) {
 		t.Errorf("Expected cursor Y %d, got %d", expectedY, gs.GetCursorY())
 	}
 
-	// Verify color counters are zero
-	if gs.GetTotalColorCount() != 0 {
-		t.Errorf("Expected 0 color combinations, got %d", gs.GetTotalColorCount())
-	}
-
 	// Verify spawn state
 	spawnState := gs.ReadSpawnState()
 	if !spawnState.Enabled {
@@ -84,65 +79,15 @@ func TestHeatOperationsAtomic(t *testing.T) {
 	}
 }
 
-// TestColorCounterOperations tests color counter updates
+// TestColorCounterOperations - REMOVED: Color counters replaced by census in Phase 3
+// Color counting is now done via SpawnSystem.runCensus() instead of atomic counters
 func TestColorCounterOperations(t *testing.T) {
-	timeProvider := NewMockTimeProvider(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
-	gs := NewGameState(10, 5, 12, timeProvider)
-
-	// Test adding blue bright characters
-	gs.AddColorCount(0, 2, 5) // type=0 (Blue), level=2 (Bright), count=5
-	if gs.BlueCountBright.Load() != 5 {
-		t.Errorf("Expected BlueCountBright 5, got %d", gs.BlueCountBright.Load())
-	}
-
-	// Test total color count (should be 1 combination present)
-	if gs.GetTotalColorCount() != 1 {
-		t.Errorf("Expected 1 color combination, got %d", gs.GetTotalColorCount())
-	}
-
-	// Add green normal characters
-	gs.AddColorCount(1, 1, 3) // type=1 (Green), level=1 (Normal), count=3
-	if gs.GreenCountNormal.Load() != 3 {
-		t.Errorf("Expected GreenCountNormal 3, got %d", gs.GreenCountNormal.Load())
-	}
-
-	// Now should have 2 combinations
-	if gs.GetTotalColorCount() != 2 {
-		t.Errorf("Expected 2 color combinations, got %d", gs.GetTotalColorCount())
-	}
-
-	// Test removal (typing characters)
-	gs.AddColorCount(0, 2, -2) // Remove 2 blue bright
-	if gs.BlueCountBright.Load() != 3 {
-		t.Errorf("Expected BlueCountBright 3 after removal, got %d", gs.BlueCountBright.Load())
-	}
-
-	// Remove all green normal
-	gs.AddColorCount(1, 1, -3)
-	if gs.GreenCountNormal.Load() != 0 {
-		t.Errorf("Expected GreenCountNormal 0 after removal, got %d", gs.GreenCountNormal.Load())
-	}
-
-	// Should be back to 1 combination (Blue Bright only)
-	if gs.GetTotalColorCount() != 1 {
-		t.Errorf("Expected 1 color combination after removal, got %d", gs.GetTotalColorCount())
-	}
+	t.Skip("Color counter atomics removed in Phase 3 - replaced by census")
 }
 
-// TestColorCounterNegativePrevention tests that counters don't go negative
+// TestColorCounterNegativePrevention - REMOVED: Color counters replaced by census in Phase 3
 func TestColorCounterNegativePrevention(t *testing.T) {
-	timeProvider := NewMockTimeProvider(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
-	gs := NewGameState(10, 5, 12, timeProvider)
-
-	// Try to remove more than available
-	gs.AddColorCount(0, 2, 5)   // Add 5
-	gs.AddColorCount(0, 2, -10) // Try to remove 10
-
-	// Should be clamped to 0, not negative
-	count := gs.BlueCountBright.Load()
-	if count < 0 {
-		t.Errorf("Color counter went negative: %d", count)
-	}
+	t.Skip("Color counter atomics removed in Phase 3 - replaced by census")
 }
 
 // TestSpawnRateAdaptation tests adaptive spawn rate based on screen density
@@ -302,42 +247,9 @@ func TestBoostStateTransitions(t *testing.T) {
 }
 
 // TestCanSpawnNewColor tests the 6-color limit
+// TestCanSpawnNewColor - REMOVED: Color counters replaced by census in Phase 3
 func TestCanSpawnNewColor(t *testing.T) {
-	timeProvider := NewMockTimeProvider(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
-	gs := NewGameState(10, 5, 12, timeProvider)
-
-	// Should be able to spawn (0 colors present)
-	if !gs.CanSpawnNewColor() {
-		t.Error("Should be able to spawn with 0 colors")
-	}
-
-	// Add 5 different color/level combinations
-	gs.AddColorCount(0, 2, 1) // Blue Bright
-	gs.AddColorCount(0, 1, 1) // Blue Normal
-	gs.AddColorCount(0, 0, 1) // Blue Dark
-	gs.AddColorCount(1, 2, 1) // Green Bright
-	gs.AddColorCount(1, 1, 1) // Green Normal
-
-	// Should still be able to spawn (5 < 6)
-	if !gs.CanSpawnNewColor() {
-		t.Error("Should be able to spawn with 5 colors")
-	}
-
-	// Add 6th combination
-	gs.AddColorCount(1, 0, 1) // Green Dark
-
-	// Now should NOT be able to spawn (6 colors present)
-	if gs.CanSpawnNewColor() {
-		t.Error("Should not be able to spawn with 6 colors")
-	}
-
-	// Remove one combination
-	gs.AddColorCount(1, 0, -1) // Remove Green Dark
-
-	// Should be able to spawn again
-	if !gs.CanSpawnNewColor() {
-		t.Error("Should be able to spawn after removing a color")
-	}
+	t.Skip("Color counter atomics removed in Phase 3 - replaced by census")
 }
 
 // TestConcurrentStateReads tests concurrent reads don't cause issues
@@ -347,8 +259,6 @@ func TestConcurrentStateReads(t *testing.T) {
 
 	// Set up some state
 	gs.SetHeat(50)
-	gs.AddColorCount(0, 2, 5)
-	gs.AddColorCount(1, 1, 3)
 	gs.UpdateSpawnRate(40, 100)
 
 	var wg sync.WaitGroup
@@ -362,9 +272,7 @@ func TestConcurrentStateReads(t *testing.T) {
 				// Read various state
 				_ = gs.GetHeat()
 				_ = gs.GetScore()
-				_ = gs.GetTotalColorCount()
 				_ = gs.ReadSpawnState()
-				_ = gs.CanSpawnNewColor()
 			}
 		}()
 	}
@@ -664,8 +572,6 @@ func TestAllSnapshotTypesConcurrent(t *testing.T) {
 
 	// Initialize state
 	gs.UpdateSpawnRate(50, 100)
-	gs.AddColorCount(0, 2, 10) // Blue Bright
-	gs.AddColorCount(1, 1, 5)  // Green Normal
 	gs.SetBoostEnabled(true)
 	gs.SetBoostColor(1)
 	gs.SetBoostEndTime(timeProvider.Now().Add(5 * time.Second))
@@ -687,11 +593,6 @@ func TestAllSnapshotTypesConcurrent(t *testing.T) {
 			default:
 				// Keep entity count within maxEntities
 				gs.UpdateSpawnRate((50+i)%101, 200)
-				gs.AddColorCount(0, 2, 1)
-				// Only decrement if positive to avoid negative counts
-				if gs.ReadColorCounts().GreenNormal > 0 {
-					gs.AddColorCount(1, 1, -1)
-				}
 				gs.SetHeat(i * 10)
 				gs.SetScore(i * 100)
 				gs.SetCursorX(i % 10)
@@ -718,7 +619,6 @@ func TestAllSnapshotTypesConcurrent(t *testing.T) {
 				default:
 					// Read all snapshot types
 					spawnSnap := gs.ReadSpawnState()
-					colorSnap := gs.ReadColorCounts()
 					boostSnap := gs.ReadBoostState()
 					cursorSnap := gs.ReadCursorPosition()
 					goldSnap := gs.ReadGoldState()
@@ -733,10 +633,6 @@ func TestAllSnapshotTypesConcurrent(t *testing.T) {
 						errorMu.Unlock()
 						t.Errorf("Invalid spawn state: count=%d, max=%d", spawnSnap.EntityCount, spawnSnap.MaxEntities)
 					}
-
-					// Allow negative color counts temporarily during concurrent updates
-					// (they get clamped to 0 by the atomic negative prevention logic)
-					_ = colorSnap
 
 					if cursorSnap.X < 0 || cursorSnap.Y < 0 {
 						errorMu.Lock()

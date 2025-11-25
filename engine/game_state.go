@@ -21,15 +21,6 @@ type GameState struct {
 	CursorX atomic.Int32
 	CursorY atomic.Int32
 
-	// Color tracking counters (6 states: Blue×3 + Green×3)
-	// Updated atomically on spawn, typing, and decay
-	BlueCountBright  atomic.Int64
-	BlueCountNormal  atomic.Int64
-	BlueCountDark    atomic.Int64
-	GreenCountBright atomic.Int64
-	GreenCountNormal atomic.Int64
-	GreenCountDark   atomic.Int64
-
 	// Boost state (real-time feedback)
 	BoostEnabled atomic.Bool
 	BoostEndTime atomic.Int64 // UnixNano
@@ -129,14 +120,6 @@ func NewGameState(gameWidth, gameHeight, screenWidth int, timeProvider TimeProvi
 	gs.Heat.Store(0)
 	gs.CursorX.Store(int32(gameWidth / 2))
 	gs.CursorY.Store(int32(gameHeight / 2))
-
-	// Initialize color counters to 0
-	gs.BlueCountBright.Store(0)
-	gs.BlueCountNormal.Store(0)
-	gs.BlueCountDark.Store(0)
-	gs.GreenCountBright.Store(0)
-	gs.GreenCountNormal.Store(0)
-	gs.GreenCountDark.Store(0)
 
 	// Initialize boost state
 	gs.BoostEnabled.Store(false)
@@ -276,93 +259,6 @@ func (gs *GameState) ReadCursorPosition() CursorSnapshot {
 	return CursorSnapshot{
 		X: x,
 		Y: y,
-	}
-}
-
-// ===== COLOR COUNTER ACCESSORS (atomic) =====
-
-// AddColorCount atomically updates the color counter for a given type and level
-func (gs *GameState) AddColorCount(seqType, seqLevel int, delta int) {
-	// seqType: 0=Blue, 1=Green (simplified from components.SequenceType)
-	// seqLevel: 0=Dark, 1=Normal, 2=Bright (simplified from components.SequenceLevel)
-
-	var counter *atomic.Int64
-
-	if seqType == 0 { // Blue
-		switch seqLevel {
-		case 2: // Bright
-			counter = &gs.BlueCountBright
-		case 1: // Normal
-			counter = &gs.BlueCountNormal
-		case 0: // Dark
-			counter = &gs.BlueCountDark
-		}
-	} else if seqType == 1 { // Green
-		switch seqLevel {
-		case 2: // Bright
-			counter = &gs.GreenCountBright
-		case 1: // Normal
-			counter = &gs.GreenCountNormal
-		case 0: // Dark
-			counter = &gs.GreenCountDark
-		}
-	}
-
-	if counter != nil {
-		counter.Add(int64(delta))
-		// Prevent negative counts
-		for {
-			current := counter.Load()
-			if current >= 0 {
-				break
-			}
-			if counter.CompareAndSwap(current, 0) {
-				break
-			}
-		}
-	}
-}
-
-// GetTotalColorCount returns the total number of tracked color/level combinations
-func (gs *GameState) GetTotalColorCount() int {
-	total := 0
-	if gs.BlueCountBright.Load() > 0 {
-		total++
-	}
-	if gs.BlueCountNormal.Load() > 0 {
-		total++
-	}
-	if gs.BlueCountDark.Load() > 0 {
-		total++
-	}
-	if gs.GreenCountBright.Load() > 0 {
-		total++
-	}
-	if gs.GreenCountNormal.Load() > 0 {
-		total++
-	}
-	if gs.GreenCountDark.Load() > 0 {
-		total++
-	}
-	return total
-}
-
-// CanSpawnNewColor returns true if a new color/level combination can be spawned
-// Limited to 6 color/level combinations (Blue×3 + Green×3)
-func (gs *GameState) CanSpawnNewColor() bool {
-	return gs.GetTotalColorCount() < 6
-}
-
-// ReadColorCounts returns a consistent snapshot of all color counters
-func (gs *GameState) ReadColorCounts() ColorCountSnapshot {
-	// All color counters are atomic, so we can read them without mutex
-	return ColorCountSnapshot{
-		BlueBright:  gs.BlueCountBright.Load(),
-		BlueNormal:  gs.BlueCountNormal.Load(),
-		BlueDark:    gs.BlueCountDark.Load(),
-		GreenBright: gs.GreenCountBright.Load(),
-		GreenNormal: gs.GreenCountNormal.Load(),
-		GreenDark:   gs.GreenCountDark.Load(),
 	}
 }
 
@@ -1018,16 +914,6 @@ type BoostSnapshot struct {
 type CursorSnapshot struct {
 	X int
 	Y int
-}
-
-// ColorCountSnapshot provides consistent view of all color counters
-type ColorCountSnapshot struct {
-	BlueBright  int64
-	BlueNormal  int64
-	BlueDark    int64
-	GreenBright int64
-	GreenNormal int64
-	GreenDark   int64
 }
 
 // ===== DRAIN ENTITY ACCESSORS (atomic) =====

@@ -267,11 +267,6 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.State.SetScoreBlinkLevel(levelCode)
 		s.ctx.State.SetScoreBlinkTime(now)
 
-		// Decrement color counter (only for Blue and Green, not Red or Gold)
-		if s.spawnSystem != nil && (seq.Type == components.SequenceBlue || seq.Type == components.SequenceGreen) {
-			s.spawnSystem.AddColorCount(seq.Type, seq.Level, -1)
-		}
-
 		// Safely destroy the character entity
 		world.DestroyEntity(entity)
 

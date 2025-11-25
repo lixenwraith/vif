@@ -348,24 +348,6 @@ func (s *DrainSystem) handleCollisionAtPosition(world *engine.World, x, y int, e
 		seq.Type == components.SequenceGreen ||
 		seq.Type == components.SequenceRed {
 
-		// Convert SequenceType to GameState mapping
-		// GameState expects: 0=Blue, 1=Green
-		// components.SequenceType: Blue=2, Green=0
-		var typeInt int
-		if seq.Type == components.SequenceBlue {
-			typeInt = 0
-		} else if seq.Type == components.SequenceGreen {
-			typeInt = 1
-		} else {
-			// Red sequences don't have color counters in GameState
-			// Just destroy without updating counters
-			world.DestroyEntity(entity)
-			return
-		}
-
-		// Update color counter (decrement by 1)
-		s.ctx.State.AddColorCount(typeInt, int(seq.Level), -1)
-
 		// Destroy the entity using generic world
 		world.DestroyEntity(entity)
 	}

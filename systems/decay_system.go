@@ -272,10 +272,6 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 		return
 	}
 
-	// Store old values for counter updates
-	oldType := seq.Type
-	oldLevel := seq.Level
-
 	// Apply decay logic
 	if seq.Level > components.LevelDark {
 		// Reduce level by 1 when not dark
@@ -286,12 +282,6 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 		if char, ok := world.Characters.Get(entity); ok {
 			char.Style = render.GetStyleForSequence(seq.Type, seq.Level)
 			world.Characters.Add(entity, char)
-		}
-
-		// Update counters: decrement old level, increment new level (only for Blue/Green)
-		if s.spawnSystem != nil && (oldType == components.SequenceBlue || oldType == components.SequenceGreen) {
-			s.spawnSystem.AddColorCount(oldType, oldLevel, -1)
-			s.spawnSystem.AddColorCount(seq.Type, seq.Level, 1)
 		}
 	} else {
 		// Dark level decay color chain: Blue → Green → Red → destroy
@@ -304,12 +294,6 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 				char.Style = render.GetStyleForSequence(seq.Type, seq.Level)
 				world.Characters.Add(entity, char)
 			}
-
-			// Update counters: Blue Dark → Green Bright
-			if s.spawnSystem != nil {
-				s.spawnSystem.AddColorCount(oldType, oldLevel, -1)
-				s.spawnSystem.AddColorCount(seq.Type, seq.Level, 1)
-			}
 		} else if seq.Type == components.SequenceGreen {
 			seq.Type = components.SequenceRed
 			seq.Level = components.LevelBright
@@ -319,13 +303,8 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 				char.Style = render.GetStyleForSequence(seq.Type, seq.Level)
 				world.Characters.Add(entity, char)
 			}
-
-			// Update counters: Green Dark → Red Bright (only decrement Green, Red is not tracked)
-			if s.spawnSystem != nil {
-				s.spawnSystem.AddColorCount(oldType, oldLevel, -1)
-			}
 		} else {
-			// Red at LevelDark - remove entity (no counter change, Red is not tracked)
+			// Red at LevelDark - remove entity
 			world.DestroyEntity(entity)
 		}
 	}

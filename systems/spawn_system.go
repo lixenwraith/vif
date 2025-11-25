@@ -31,6 +31,47 @@ type ColorLevelKey struct {
 	Level components.SequenceLevel
 }
 
+// ColorCensus holds entity counts for each color/level combination.
+// Used for 6-color spawn limit enforcement.
+type ColorCensus struct {
+	BlueBright  int
+	BlueNormal  int
+	BlueDark    int
+	GreenBright int
+	GreenNormal int
+	GreenDark   int
+}
+
+// Total returns sum of all tracked colors.
+func (c ColorCensus) Total() int {
+	return c.BlueBright + c.BlueNormal + c.BlueDark +
+		c.GreenBright + c.GreenNormal + c.GreenDark
+}
+
+// ActiveColors returns count of non-zero color/level combinations.
+func (c ColorCensus) ActiveColors() int {
+	count := 0
+	if c.BlueBright > 0 {
+		count++
+	}
+	if c.BlueNormal > 0 {
+		count++
+	}
+	if c.BlueDark > 0 {
+		count++
+	}
+	if c.GreenBright > 0 {
+		count++
+	}
+	if c.GreenNormal > 0 {
+		count++
+	}
+	if c.GreenDark > 0 {
+		count++
+	}
+	return count
+}
+
 // CodeBlock represents a logical group of related lines
 type CodeBlock struct {
 	Lines       []string
@@ -270,51 +311,78 @@ func (s *SpawnSystem) Priority() int {
 	return 15 // Run early
 }
 
-// AddColorCount atomically increments the counter for a color/level
-func (s *SpawnSystem) AddColorCount(seqType components.SequenceType, level components.SequenceLevel, delta int64) {
-	// Convert components.SequenceType to int for GameState
-	var typeInt int
-	if seqType == components.SequenceBlue {
-		typeInt = 0
-	} else if seqType == components.SequenceGreen {
-		typeInt = 1
-	} else {
-		return
+// runCensus iterates all sequence entities and counts colors.
+// O(n) where n ≈ 200 max entities. Called once per spawn check.
+func (s *SpawnSystem) runCensus(world *engine.World) ColorCensus {
+	var census ColorCensus
+
+	entities := world.Sequences.All()
+	for _, entity := range entities {
+		seq, ok := world.Sequences.Get(entity)
+		if !ok {
+			continue
+		}
+
+		// Only count Blue and Green (Red and Gold excluded from 6-color limit)
+		switch seq.Type {
+		case components.SequenceBlue:
+			switch seq.Level {
+			case components.LevelBright:
+				census.BlueBright++
+			case components.LevelNormal:
+				census.BlueNormal++
+			case components.LevelDark:
+				census.BlueDark++
+			}
+		case components.SequenceGreen:
+			switch seq.Level {
+			case components.LevelBright:
+				census.GreenBright++
+			case components.LevelNormal:
+				census.GreenNormal++
+			case components.LevelDark:
+				census.GreenDark++
+			}
+		// SequenceRed, SequenceGold: intentionally not counted
+		}
 	}
 
-	// Convert components.SequenceLevel to int for GameState
-	levelInt := int(level) // 0=Dark, 1=Normal, 2=Bright
-
-	// Update GameState atomically
-	s.ctx.State.AddColorCount(typeInt, levelInt, int(delta))
+	return census
 }
 
-// getAvailableColors returns colors that are not yet on screen
-// Uses ReadColorCounts() snapshot for atomic 6-color limit check
-func (s *SpawnSystem) getAvailableColors() []ColorLevelKey {
-	available := []ColorLevelKey{}
+// getAvailableColorsFromCensus returns color/level combinations not present on screen.
+func (s *SpawnSystem) getAvailableColorsFromCensus(census ColorCensus) []ColorLevelKey {
+	available := make([]ColorLevelKey, 0, 6)
 
-	// Read color counts snapshot for consistent view of all 6 combinations
-	counts := s.ctx.State.ReadColorCounts()
-
-	// Check all 6 combinations using snapshot (ensures atomicity)
-	if counts.BlueBright == 0 {
-		available = append(available, ColorLevelKey{Type: components.SequenceBlue, Level: components.LevelBright})
+	if census.BlueBright == 0 {
+		available = append(available, ColorLevelKey{
+			Type: components.SequenceBlue, Level: components.LevelBright,
+		})
 	}
-	if counts.BlueNormal == 0 {
-		available = append(available, ColorLevelKey{Type: components.SequenceBlue, Level: components.LevelNormal})
+	if census.BlueNormal == 0 {
+		available = append(available, ColorLevelKey{
+			Type: components.SequenceBlue, Level: components.LevelNormal,
+		})
 	}
-	if counts.BlueDark == 0 {
-		available = append(available, ColorLevelKey{Type: components.SequenceBlue, Level: components.LevelDark})
+	if census.BlueDark == 0 {
+		available = append(available, ColorLevelKey{
+			Type: components.SequenceBlue, Level: components.LevelDark,
+		})
 	}
-	if counts.GreenBright == 0 {
-		available = append(available, ColorLevelKey{Type: components.SequenceGreen, Level: components.LevelBright})
+	if census.GreenBright == 0 {
+		available = append(available, ColorLevelKey{
+			Type: components.SequenceGreen, Level: components.LevelBright,
+		})
 	}
-	if counts.GreenNormal == 0 {
-		available = append(available, ColorLevelKey{Type: components.SequenceGreen, Level: components.LevelNormal})
+	if census.GreenNormal == 0 {
+		available = append(available, ColorLevelKey{
+			Type: components.SequenceGreen, Level: components.LevelNormal,
+		})
 	}
-	if counts.GreenDark == 0 {
-		available = append(available, ColorLevelKey{Type: components.SequenceGreen, Level: components.LevelDark})
+	if census.GreenDark == 0 {
+		available = append(available, ColorLevelKey{
+			Type: components.SequenceGreen, Level: components.LevelDark,
+		})
 	}
 
 	return available
@@ -356,8 +424,10 @@ func (s *SpawnSystem) Update(world *engine.World, dt time.Duration) {
 
 // spawnSequence generates and spawns a new character block from file
 func (s *SpawnSystem) spawnSequence(world *engine.World) {
-	// Check if we have any available colors (less than 6 colors on screen)
-	availableColors := s.getAvailableColors()
+	// CHANGED: Use census instead of atomic counters
+	census := s.runCensus(world)
+	availableColors := s.getAvailableColorsFromCensus(census)
+
 	if len(availableColors) == 0 {
 		// All 6 color combinations are present, don't spawn
 		return
@@ -577,10 +647,6 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 				world.Characters.Add(ed.entity, ed.char)
 				world.Sequences.Add(ed.entity, ed.seq)
 			}
-
-			// Atomically increment the color counter (only non-space characters)
-			nonSpaceCount := len(entities)
-			s.AddColorCount(seqType, seqLevel, int64(nonSpaceCount))
 
 			return true
 		}
