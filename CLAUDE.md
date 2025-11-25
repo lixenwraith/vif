@@ -10,7 +10,7 @@ vi-fighter is a terminal-based typing game in Go using a compile-time Generics-b
 **Immediate Targets (Priority Order):**
 1.  **`SpawnSystem`**: Heaviest user of dimensions (`placeLine` logic).
 2.  **`NuggetSystem`**: Standard migration.
-3.  **`ScoreSystem`**: Uses Time heavily for audio timestamps.
+3.  **`EnergySystem`**: Uses Time heavily for audio timestamps.
 4.  **`BoostSystem`**: Simple timer migration.
 5.  **`GoldSystem`**: Standard migration.
 
@@ -119,7 +119,7 @@ vi-fighter/
 ├── systems/
 │   ├── spawn_system.go   # TARGET: Priority 1
 │   ├── nugget_system.go  # TARGET: Priority 2
-│   ├── score_system.go   # TARGET: Priority 3
+│   ├── energy_system.go   # TARGET: Priority 3
 │   ├── boost_system.go   # TARGET: Priority 4
 │   └── gold_system.go    # TARGET: Priority 5
 ```

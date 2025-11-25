@@ -10,7 +10,7 @@ import (
 )
 
 // DrainSystem manages the drain entity lifecycle
-// The drain entity spawns when score > 0 and despawns when score <= 0
+// The drain entity spawns when energy > 0 and despawns when energy <= 0
 // Priority: 22 (after GoldSequence:20, before Decay:25)
 type DrainSystem struct {
 	ctx          *engine.GameContext
@@ -37,20 +37,20 @@ func (s *DrainSystem) Priority() int {
 // Update runs the drain system logic
 // Movement is purely clock-based (DrainMoveIntervalMs), independent of input events or frame rate
 func (s *DrainSystem) Update(world *engine.World, dt time.Duration) {
-	score := s.ctx.State.GetScore()
+	energy := s.ctx.State.GetEnergy()
 
 	drainActive := world.Drains.Count() > 0
-	// Lifecycle logic: spawn when score > 0, despawn when score <= 0
-	if score > 0 && !drainActive {
+	// Lifecycle logic: spawn when energy > 0, despawn when energy <= 0
+	if energy > 0 && !drainActive {
 		s.spawnDrain(world)
-	} else if score <= 0 && drainActive {
+	} else if energy <= 0 && drainActive {
 		s.despawnDrain(world)
 	}
 
-	// Clock-based updates: movement and score drain occur on fixed intervals
+	// Clock-based updates: movement and energy drain occur on fixed intervals
 	if drainActive {
 		s.updateDrainMovement(world)
-		s.updateScoreDrain(world)
+		s.updateEnergyDrain(world)
 		s.handleCollisions(world)
 	}
 }
@@ -105,7 +105,7 @@ func (s *DrainSystem) spawnDrain(world *engine.World) {
 
 	// Check if position is occupied and handle collision
 	collidingEntity := world.Positions.GetEntityAt(spawnX, spawnY)
-	// TODO: (2-second) delayed spawn on score > 0, with spawn animation
+	// TODO: (2-second) delayed spawn on energy > 0, with spawn animation
 	// Do not trigger collision logic against the cursor itself (Drain spawns on top of it)
 	if collidingEntity != 0 && collidingEntity != s.ctx.CursorEntity {
 		s.handleCollisionAtPosition(world, spawnX, spawnY, collidingEntity)
@@ -211,8 +211,8 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 	}
 }
 
-// updateScoreDrain handles score draining when drain is on cursor using generic stores
-func (s *DrainSystem) updateScoreDrain(world *engine.World) {
+// updateEnergyDrain handles energy draining when drain is on cursor using generic stores
+func (s *DrainSystem) updateEnergyDrain(world *engine.World) {
 	// Fetch resources
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 
@@ -240,12 +240,12 @@ func (s *DrainSystem) updateScoreDrain(world *engine.World) {
 			world.Drains.Add(entity, drain)
 		}
 
-		// Drain score if on cursor and DrainScoreDrainInterval has passed
+		// Drain energy if on cursor and DrainEnergyDrainInterval has passed
 		if isOnCursor {
 			now := timeRes.GameTime
-			if now.Sub(drain.LastDrainTime) >= constants.DrainScoreDrainInterval {
-				// Drain score by the configured amount
-				s.ctx.State.AddScore(-constants.DrainScoreDrainAmount)
+			if now.Sub(drain.LastDrainTime) >= constants.DrainEnergyDrainInterval {
+				// Drain energy by the configured amount
+				s.ctx.State.AddEnergy(-constants.DrainEnergyDrainAmount)
 
 				// Update last drain time
 				drain.LastDrainTime = now

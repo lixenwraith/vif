@@ -10,7 +10,7 @@ type CharType int
 const (
 	// CharTypeSpace represents empty space (no character)
 	CharTypeSpace CharType = 0
-	// CharTypeWord represents alphanumeric characters and underscore
+	// CharTypeWord represents alphanumeric characters and underenergy
 	CharTypeWord CharType = 1
 	// CharTypePunctuation represents all other visible characters
 	CharTypePunctuation CharType = 2

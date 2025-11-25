@@ -28,7 +28,7 @@ func TestHeatBasedBoostActivation(t *testing.T) {
 	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
 		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
 	})
-	scoreSystem := NewScoreSystem(ctx)
+	energySystem := NewEnergySystem(ctx)
 
 	// Calculate max heat (heat bar width)
 	maxHeat := ctx.Width
@@ -65,7 +65,7 @@ func TestHeatBasedBoostActivation(t *testing.T) {
 	}
 
 	// Type the blue character - this should push heat to max and activate boost
-	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
+	energySystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
 
 	// Boost should now be active
 	if !ctx.State.GetBoostEnabled() {
@@ -101,7 +101,7 @@ func TestBoostMaintainsSameColor(t *testing.T) {
 	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
 		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
 	})
-	scoreSystem := NewScoreSystem(ctx)
+	energySystem := NewEnergySystem(ctx)
 
 	// Calculate max heat
 	maxHeat := ctx.Width
@@ -139,7 +139,7 @@ func TestBoostMaintainsSameColor(t *testing.T) {
 	tx.Commit()
 
 	// Type the blue character - should extend boost timer
-	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'b')
+	energySystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'b')
 
 	// Boost should still be active
 	if !ctx.State.GetBoostEnabled() {
@@ -176,7 +176,7 @@ func TestBoostDeactivatesOnColorSwitch(t *testing.T) {
 	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
 		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
 	})
-	scoreSystem := NewScoreSystem(ctx)
+	energySystem := NewEnergySystem(ctx)
 
 	// Calculate max heat
 	maxHeat := ctx.Width
@@ -210,7 +210,7 @@ func TestBoostDeactivatesOnColorSwitch(t *testing.T) {
 	tx.Commit()
 
 	// Type the green character - should reset boost timer but preserve heat
-	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
+	energySystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
 
 	// Boost should be deactivated (timer reset)
 	if ctx.State.GetBoostEnabled() {
@@ -248,7 +248,7 @@ func TestBoostRebuildAfterColorSwitch(t *testing.T) {
 	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
 		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
 	})
-	scoreSystem := NewScoreSystem(ctx)
+	energySystem := NewEnergySystem(ctx)
 
 	// Calculate max heat
 	maxHeat := ctx.Width
@@ -284,7 +284,7 @@ func TestBoostRebuildAfterColorSwitch(t *testing.T) {
 	tx.Commit()
 
 	// Type the green character - should reactivate boost
-	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
+	energySystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
 
 	// Boost should be reactivated
 	if !ctx.State.GetBoostEnabled() {
@@ -315,7 +315,7 @@ func TestBoostDeactivatesOnError(t *testing.T) {
 	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
 		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
 	})
-	scoreSystem := NewScoreSystem(ctx)
+	energySystem := NewEnergySystem(ctx)
 
 	// Set heat to max and activate boost
 	maxHeat := ctx.Width
@@ -344,7 +344,7 @@ func TestBoostDeactivatesOnError(t *testing.T) {
 	tx.Commit()
 
 	// Type wrong character
-	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'b')
+	energySystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'b')
 
 	// Boost should be deactivated
 	if ctx.State.GetBoostEnabled() {
@@ -385,7 +385,7 @@ func TestBoostDeactivatesOnRedCharacter(t *testing.T) {
 	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
 		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
 	})
-	scoreSystem := NewScoreSystem(ctx)
+	energySystem := NewEnergySystem(ctx)
 
 	// Set heat to max and activate boost
 	maxHeat := ctx.Width
@@ -414,7 +414,7 @@ func TestBoostDeactivatesOnRedCharacter(t *testing.T) {
 	tx.Commit()
 
 	// Type the red character
-	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
+	energySystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
 
 	// Boost should be deactivated
 	if ctx.State.GetBoostEnabled() {
@@ -496,7 +496,7 @@ func TestBoostExtensionDuration(t *testing.T) {
 	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
 		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
 	})
-	scoreSystem := NewScoreSystem(ctx)
+	energySystem := NewEnergySystem(ctx)
 
 	// Calculate max heat
 	maxHeat := ctx.Width
@@ -534,7 +534,7 @@ func TestBoostExtensionDuration(t *testing.T) {
 	tx.Commit()
 
 	// Type the blue character
-	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
+	energySystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
 
 	// Get new end time
 	newEndTime := ctx.State.GetBoostEndTime()
@@ -557,11 +557,11 @@ func TestBoostExtensionDuration(t *testing.T) {
 
 // TestGoldSequenceDoesNotAffectBoost verifies gold sequence doesn't interfere with boost
 // This is a manual test - gold sequences are handled separately in handleGoldSequenceTyping
-// and should not affect boost state. The implementation in score_system.go handles this
+// and should not affect boost state. The implementation in energy_system.go handles this
 // by returning early for gold sequences before boost logic is executed.
 func TestGoldSequenceDoesNotAffectBoost(t *testing.T) {
 	t.Skip("Gold sequence integration test - requires full gold system setup")
-	// The key invariant is that handleGoldSequenceTyping returns early (line 100 in score_system.go)
+	// The key invariant is that handleGoldSequenceTyping returns early (line 100 in energy_system.go)
 	// before any boost logic is executed, ensuring gold sequences don't interfere with boost state.
 }
 
@@ -583,7 +583,7 @@ func TestBoostActivationWithGreen(t *testing.T) {
 	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
 		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
 	})
-	scoreSystem := NewScoreSystem(ctx)
+	energySystem := NewEnergySystem(ctx)
 
 	// Calculate max heat
 	maxHeat := ctx.Width
@@ -615,7 +615,7 @@ func TestBoostActivationWithGreen(t *testing.T) {
 	tx.Commit()
 
 	// Type the green character - should activate boost with Green
-	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
+	energySystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
 
 	// Boost should be active
 	if !ctx.State.GetBoostEnabled() {

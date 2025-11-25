@@ -35,7 +35,7 @@ func TestDrainSystem_MovementAfterInterval(t *testing.T) {
 	ctx.State.SetCursorY(0)
 
 	// Spawn drain at cursor position (0, 0)
-	ctx.State.SetScore(100)
+	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	if !ctx.State.GetDrainActive() {
@@ -99,7 +99,7 @@ func TestDrainSystem_MovementNoMoveBeforeInterval(t *testing.T) {
 	drainSys := NewDrainSystem(ctx)
 
 	// Spawn drain
-	ctx.State.SetScore(100)
+	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	initialX := ctx.State.GetDrainX()
@@ -228,7 +228,7 @@ func TestDrainSystem_MovementBoundaryChecks(t *testing.T) {
 			ctx.State.SetDrainEntity(uint64(entity))
 			ctx.State.SetDrainX(tc.drainX)
 			ctx.State.SetDrainY(tc.drainY)
-			ctx.State.SetScore(100) // Keep drain active
+			ctx.State.SetEnergy(100) // Keep drain active
 
 			// Set cursor position
 			ctx.State.SetCursorX(tc.cursorX)
@@ -280,7 +280,7 @@ func TestDrainSystem_MovementUpdatesAllComponents(t *testing.T) {
 	drainSys := NewDrainSystem(ctx)
 
 	// Spawn drain
-	ctx.State.SetScore(100)
+	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	entityID := ctx.State.GetDrainEntity()
@@ -351,7 +351,7 @@ func TestDrainSystem_MovementUpdatesSpatialIndex(t *testing.T) {
 	drainSys := NewDrainSystem(ctx)
 
 	// Spawn drain
-	ctx.State.SetScore(100)
+	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	entityID := ctx.State.GetDrainEntity()
@@ -512,7 +512,7 @@ func TestDrainSystem_MovementDiagonal(t *testing.T) {
 			ctx.State.SetDrainEntity(uint64(entity))
 			ctx.State.SetDrainX(tc.drainX)
 			ctx.State.SetDrainY(tc.drainY)
-			ctx.State.SetScore(100)
+			ctx.State.SetEnergy(100)
 
 			// Set cursor position
 			ctx.State.SetCursorX(tc.cursorX)
@@ -562,7 +562,7 @@ func TestDrainSystem_MovementMultipleSteps(t *testing.T) {
 	ctx.State.SetCursorY(0)
 
 	// Spawn drain at cursor position (0, 0)
-	ctx.State.SetScore(100)
+	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Verify drain spawned at (0, 0)

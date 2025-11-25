@@ -13,15 +13,15 @@ import (
 // InputHandler processes user input events
 type InputHandler struct {
 	ctx          *engine.GameContext
-	scoreSystem  *systems.ScoreSystem
+	energySystem *systems.EnergySystem
 	nuggetSystem *systems.NuggetSystem
 }
 
 // NewInputHandler creates a new input handler
-func NewInputHandler(ctx *engine.GameContext, scoreSystem *systems.ScoreSystem) *InputHandler {
+func NewInputHandler(ctx *engine.GameContext, energySystem *systems.EnergySystem) *InputHandler {
 	return &InputHandler{
-		ctx:         ctx,
-		scoreSystem: scoreSystem,
+		ctx:          ctx,
+		energySystem: energySystem,
 	}
 }
 
@@ -160,15 +160,15 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 		h.ctx.State.SetHeat(0)
 		return true
 	case tcell.KeyTab:
-		// Tab: Jump to nugget if score >= 10
+		// Tab: Jump to nugget if energy >= 10
 		if h.nuggetSystem != nil {
-			score := h.ctx.State.GetScore()
-			if score >= 10 {
+			energy := h.ctx.State.GetEnergy()
+			if energy >= 10 {
 				// Get nugget position
 				x, y := h.nuggetSystem.JumpToNugget(h.ctx.World)
 				if x >= 0 && y >= 0 {
-					// Deduct 10 from score
-					h.ctx.State.AddScore(-10)
+					// Deduct 10 from energy
+					h.ctx.State.AddEnergy(-10)
 					// Update cursor position in ECS
 					h.ctx.World.Positions.Add(h.ctx.CursorEntity, components.PositionComponent{
 						X: x,
@@ -199,9 +199,9 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 			}
 			return true
 		}
-		// Delegate character typing to score system (reads from ECS)
+		// Delegate character typing to energy system (reads from ECS)
 		pos, _ := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
-		h.scoreSystem.HandleCharacterTyping(h.ctx.World, pos.X, pos.Y, ev.Rune())
+		h.energySystem.HandleCharacterTyping(h.ctx.World, pos.X, pos.Y, ev.Rune())
 	}
 	return true
 }
@@ -321,15 +321,15 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 		h.ctx.LastCommand = "" // Clear last command on next key
 		return true
 	case tcell.KeyTab:
-		// Tab: Jump to nugget if score >= 10
+		// Tab: Jump to nugget if energy >= 10
 		if h.nuggetSystem != nil {
-			score := h.ctx.State.GetScore()
-			if score >= 10 {
+			energy := h.ctx.State.GetEnergy()
+			if energy >= 10 {
 				// Get nugget position
 				x, y := h.nuggetSystem.JumpToNugget(h.ctx.World)
 				if x >= 0 && y >= 0 {
-					// Deduct 10 from score
-					h.ctx.State.AddScore(-10)
+					// Deduct 10 from energy
+					h.ctx.State.AddEnergy(-10)
 					// Update cursor position in ECS
 					h.ctx.World.Positions.Add(h.ctx.CursorEntity, components.PositionComponent{
 						X: x,

@@ -158,7 +158,7 @@ func TestColorConstants(t *testing.T) {
 		{"RgbCursorError", RgbCursorError},
 		{"RgbModeNormalBg", RgbModeNormalBg},
 		{"RgbModeInsertBg", RgbModeInsertBg},
-		{"RgbScoreBg", RgbScoreBg},
+		{"RgbEnergyBg", RgbEnergyBg},
 		{"RgbBoostBg", RgbBoostBg},
 		{"RgbStatusText", RgbStatusText},
 	}

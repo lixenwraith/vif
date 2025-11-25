@@ -49,8 +49,8 @@ func main() {
 	}
 
 	// Create and add systems to the ECS world
-	scoreSystem := systems.NewScoreSystem(ctx)
-	ctx.World.AddSystem(scoreSystem)
+	energySystem := systems.NewEnergySystem(ctx)
+	ctx.World.AddSystem(energySystem)
 
 	spawnSystem := systems.NewSpawnSystem(ctx)
 	ctx.World.AddSystem(spawnSystem)
@@ -74,9 +74,9 @@ func main() {
 	ctx.World.AddSystem(cleanerSystem)
 
 	// Wire up system references
-	scoreSystem.SetGoldSystem(goldSystem)
-	scoreSystem.SetSpawnSystem(spawnSystem)
-	scoreSystem.SetNuggetSystem(nuggetSystem)
+	energySystem.SetGoldSystem(goldSystem)
+	energySystem.SetSpawnSystem(spawnSystem)
+	energySystem.SetNuggetSystem(nuggetSystem)
 	decaySystem.SetSpawnSystem(spawnSystem)
 	decaySystem.SetNuggetSystem(nuggetSystem)
 	drainSystem.SetNuggetSystem(nuggetSystem)
@@ -94,7 +94,7 @@ func main() {
 	)
 
 	// Create input handler
-	inputHandler := modes.NewInputHandler(ctx, scoreSystem)
+	inputHandler := modes.NewInputHandler(ctx, energySystem)
 	inputHandler.SetNuggetSystem(nuggetSystem)
 
 	// Create frame synchronization channel

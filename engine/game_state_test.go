@@ -28,8 +28,8 @@ func TestGameStateInitialization(t *testing.T) {
 	if gs.GetHeat() != 0 {
 		t.Errorf("Expected initial heat 0, got %d", gs.GetHeat())
 	}
-	if gs.GetScore() != 0 {
-		t.Errorf("Expected initial score 0, got %d", gs.GetScore())
+	if gs.GetEnergy() != 0 {
+		t.Errorf("Expected initial energy 0, got %d", gs.GetEnergy())
 	}
 
 	// Verify cursor initialization
@@ -271,7 +271,7 @@ func TestConcurrentStateReads(t *testing.T) {
 			for j := 0; j < 10; j++ {
 				// Read various state
 				_ = gs.GetHeat()
-				_ = gs.GetScore()
+				_ = gs.GetEnergy()
 				_ = gs.ReadSpawnState()
 			}
 		}()
@@ -594,7 +594,7 @@ func TestAllSnapshotTypesConcurrent(t *testing.T) {
 				// Keep entity count within maxEntities
 				gs.UpdateSpawnRate((50+i)%101, 200)
 				gs.SetHeat(i * 10)
-				gs.SetScore(i * 100)
+				gs.SetEnergy(i * 100)
 				gs.SetCursorX(i % 10)
 				gs.SetCursorY(i % 5)
 
@@ -624,7 +624,7 @@ func TestAllSnapshotTypesConcurrent(t *testing.T) {
 					goldSnap := gs.ReadGoldState()
 					phaseSnap := gs.ReadPhaseState()
 					decaySnap := gs.ReadDecayState()
-					heat, score := gs.ReadHeatAndScore()
+					heat, energy := gs.ReadHeatAndEnergy()
 
 					// Verify snapshots are internally consistent
 					if spawnSnap.EntityCount < 0 || spawnSnap.EntityCount > spawnSnap.MaxEntities {
@@ -641,11 +641,11 @@ func TestAllSnapshotTypesConcurrent(t *testing.T) {
 						t.Errorf("Negative cursor: (%d, %d)", cursorSnap.X, cursorSnap.Y)
 					}
 
-					if heat < 0 || score < 0 {
+					if heat < 0 || energy < 0 {
 						errorMu.Lock()
 						errorCount++
 						errorMu.Unlock()
-						t.Errorf("Negative heat/score: heat=%d, score=%d", heat, score)
+						t.Errorf("Negative heat/energy: heat=%d, energy=%d", heat, energy)
 					}
 
 					// Verify boost state consistency - but allow Color=0 during deactivation
@@ -709,7 +709,7 @@ func TestAtomicSnapshotConsistency(t *testing.T) {
 			default:
 				// Update related atomic fields
 				gs.SetHeat(i)
-				gs.SetScore(i * 10)
+				gs.SetEnergy(i * 10)
 				gs.SetCursorX(i % 10)
 				gs.SetCursorY(i % 5)
 			}
@@ -726,8 +726,8 @@ func TestAtomicSnapshotConsistency(t *testing.T) {
 				case <-stopChan:
 					return
 				default:
-					// Read heat and score together
-					heat, score := gs.ReadHeatAndScore()
+					// Read heat and energy together
+					heat, energy := gs.ReadHeatAndEnergy()
 
 					// Read cursor position
 					cursor := gs.ReadCursorPosition()
@@ -736,8 +736,8 @@ func TestAtomicSnapshotConsistency(t *testing.T) {
 					if heat < 0 {
 						t.Errorf("Negative heat in snapshot: %d", heat)
 					}
-					if score < 0 {
-						t.Errorf("Negative score in snapshot: %d", score)
+					if energy < 0 {
+						t.Errorf("Negative energy in snapshot: %d", energy)
 					}
 					if cursor.X < 0 || cursor.Y < 0 {
 						t.Errorf("Negative cursor position: (%d, %d)", cursor.X, cursor.Y)

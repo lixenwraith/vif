@@ -18,7 +18,7 @@ import (
 )
 
 // TestConcurrentColorCounterUpdates tests cross-system color counter race conditions.
-// Simulates spawn (increment), score (decrement), and render (read) systems accessing counters concurrently.
+// Simulates spawn (increment), energy (decrement), and render (read) systems accessing counters concurrently.
 // For basic atomic increment tests, see TestColorCountersConcurrency in spawn_file_based_test.go.
 func TestConcurrentColorCounterUpdates(t *testing.T) {
 	screen := tcell.NewSimulationScreen("UTF-8")

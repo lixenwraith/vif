@@ -27,7 +27,7 @@
 //
 // Usage Example:
 //
-//	// Producer (ScoreSystem triggers cleaners)
+//	// Producer (EnergySystem triggers cleaners)
 //	if heatAtMax {
 //	    ctx.PushEvent(engine.EventCleanerRequest, nil)
 //	}
@@ -59,7 +59,7 @@ const (
 	//
 	// Triggered When:
 	//   - Gold sequence completed while heat meter is at maximum
-	//   - ScoreSystem detects this condition after gold character typed
+	//   - EnergySystem detects this condition after gold character typed
 	//
 	// Consumed By:
 	//   - CleanerSystem.Update() polls EventQueue each frame
@@ -73,7 +73,7 @@ const (
 	//   - Multiple EventCleanerRequest in same frame → single spawn
 	//
 	// Thread-Safety:
-	//   - Can be pushed from any thread (ScoreSystem runs in main loop)
+	//   - Can be pushed from any thread (EnergySystem runs in main loop)
 	//   - Consumed only by main game loop (single consumer)
 	EventCleanerRequest EventType = iota
 
@@ -116,7 +116,7 @@ const (
 	//
 	// Triggered When:
 	//   - Player types the final character of an active gold sequence
-	//   - ScoreSystem handles final character and validates completion
+	//   - EnergySystem handles final character and validates completion
 	//
 	// Consumed By:
 	//   - Currently used for testing and debugging

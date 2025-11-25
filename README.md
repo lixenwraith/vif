@@ -17,11 +17,11 @@ vi-fighter features a dynamic typing system with multiple sequence types and gam
 
 - **Sequence Types**: Green, Blue, Red (penalties), and Gold (bonus)
 - **Nuggets**: Collectible orange alphanumeric characters that provide heat bonuses
-- **Heat System**: Typing momentum that multiplies score and affects decay speed
+- **Heat System**: Typing momentum that multiplies energy and affects decay speed
 - **Boost System**: 2× heat multiplier activated at maximum heat
 - **Decay System**: Automated pressure that degrades sequences over time
 - **Cleaners**: Special mechanic that clears Red sequences when triggered
-- **Drain**: Pressure mechanic that appears at positive score, pursues cursor, and drains score over time
+- **Drain**: Pressure mechanic that appears at positive energy, pursues cursor, and drains energy over time
 
 ## Vi Motion Commands
 
@@ -44,7 +44,7 @@ The game strictly follows ECS architecture principles with a hybrid real-time/cl
 
 - **Entities**: Simple uint64 identifiers
 - **Components**: Pure data structures (Position, Character, Sequence, Gold, Nugget, Cleaner, Drain, etc.)
-- **Systems**: All game logic (Boost, Score, Spawn, Nugget, Gold, Cleaner, Drain, Decay)
+- **Systems**: All game logic (Boost, Energy, Spawn, Nugget, Gold, Cleaner, Drain, Decay)
 - **World**: Single source of truth for game state
 - **Concurrency**: Lock-free atomics for real-time state, mutexes for clock-tick state
 - **Rendering**: Built with tcell for cross-platform terminal graphics
@@ -114,7 +114,7 @@ go test ./systems
 
 1. **Prioritize Gold**: Gold sequences fill heat to maximum - chase them when they appear
 2. **Collect Nuggets**: Free heat boost (+10% max heat) - use Tab to jump to them
-3. **Avoid Red**: Red sequences penalize your score and reset heat
+3. **Avoid Red**: Red sequences penalize your energy and reset heat
 4. **Type Bright When Hot**: Bright sequences at high heat give maximum points (Heat × 3)
 5. **Manage Decay**: Higher heat = faster decay - balance aggressive play with sustainability
 6. **Boost Color Matching**: When boost activates, keep typing the same color to extend it

@@ -43,7 +43,7 @@ func TestSnapshotConsistencyUnderRapidChanges(t *testing.T) {
 		}
 	}()
 
-	// Writer 2: Rapidly update atomic state (heat, score, cursor)
+	// Writer 2: Rapidly update atomic state (heat, energy, cursor)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -53,7 +53,7 @@ func TestSnapshotConsistencyUnderRapidChanges(t *testing.T) {
 				return
 			default:
 				ctx.State.SetHeat(i % 80)
-				ctx.State.SetScore(i * 10)
+				ctx.State.SetEnergy(i * 10)
 				ctx.State.SetCursorX(i % 80)
 				ctx.State.SetCursorY(i % 24)
 				time.Sleep(500 * time.Microsecond)
@@ -94,7 +94,7 @@ func TestSnapshotConsistencyUnderRapidChanges(t *testing.T) {
 					spawnSnap := ctx.State.ReadSpawnState()
 					colorSnap := ctx.State.ReadColorCounts()
 					cursorSnap := ctx.State.ReadCursorPosition()
-					heat, score := ctx.State.ReadHeatAndScore()
+					heat, energy := ctx.State.ReadHeatAndEnergy()
 
 					// Verify spawn snapshot internal consistency
 					expectedDensity := float64(spawnSnap.EntityCount) / float64(spawnSnap.MaxEntities)
@@ -115,9 +115,9 @@ func TestSnapshotConsistencyUnderRapidChanges(t *testing.T) {
 						t.Errorf("Reader %d: Cursor negative: (%d, %d)", readerID, cursorSnap.X, cursorSnap.Y)
 					}
 
-					if heat < 0 || score < 0 {
+					if heat < 0 || energy < 0 {
 						inconsistencyCount.Add(1)
-						t.Errorf("Reader %d: Heat or score negative: heat=%d, score=%d", readerID, heat, score)
+						t.Errorf("Reader %d: Heat or energy negative: heat=%d, energy=%d", readerID, heat, energy)
 					}
 
 					// Verify cursor bounds
@@ -153,12 +153,12 @@ func TestSnapshotImmutabilityWithSystemUpdates(t *testing.T) {
 	ctx.State.UpdateSpawnRate(50, 100)
 	ctx.State.ActivateGoldSequence(42, 10*time.Second)
 	ctx.State.SetHeat(50)
-	ctx.State.SetScore(1000)
+	ctx.State.SetEnergy(1000)
 
 	// Take initial snapshots
 	initialSpawn := ctx.State.ReadSpawnState()
 	initialGold := ctx.State.ReadGoldState()
-	initialHeat, initialScore := ctx.State.ReadHeatAndScore()
+	initialHeat, initialEnergy := ctx.State.ReadHeatAndEnergy()
 
 	// Verify initial values
 	if initialSpawn.EntityCount != 50 {
@@ -167,8 +167,8 @@ func TestSnapshotImmutabilityWithSystemUpdates(t *testing.T) {
 	if !initialGold.Active {
 		t.Fatal("Expected gold to be initially active")
 	}
-	if initialHeat != 50 || initialScore != 1000 {
-		t.Fatalf("Expected heat=50, score=1000, got heat=%d, score=%d", initialHeat, initialScore)
+	if initialHeat != 50 || initialEnergy != 1000 {
+		t.Fatalf("Expected heat=50, energy=1000, got heat=%d, energy=%d", initialHeat, initialEnergy)
 	}
 
 	var wg sync.WaitGroup
@@ -185,7 +185,7 @@ func TestSnapshotImmutabilityWithSystemUpdates(t *testing.T) {
 			default:
 				ctx.State.UpdateSpawnRate(i, 100)
 				ctx.State.SetHeat(i * 10)
-				ctx.State.SetScore(i * 100)
+				ctx.State.SetEnergy(i * 100)
 				time.Sleep(time.Millisecond)
 			}
 		}
@@ -225,8 +225,8 @@ func TestSnapshotImmutabilityWithSystemUpdates(t *testing.T) {
 	if initialHeat != 50 {
 		t.Errorf("Initial heat mutated: expected 50, got %d", initialHeat)
 	}
-	if initialScore != 1000 {
-		t.Errorf("Initial score mutated: expected 1000, got %d", initialScore)
+	if initialEnergy != 1000 {
+		t.Errorf("Initial energy mutated: expected 1000, got %d", initialEnergy)
 	}
 
 	// Verify new snapshots show changed state
@@ -410,7 +410,7 @@ func TestMultiSnapshotAtomicity(t *testing.T) {
 	ctx.State.UpdateSpawnRate(50, 100)
 	ctx.State.AddColorCount(0, 2, 10) // Blue Bright
 	ctx.State.SetHeat(50)
-	ctx.State.SetScore(500)
+	ctx.State.SetEnergy(500)
 
 	var wg sync.WaitGroup
 	stopChan := make(chan struct{})
@@ -428,7 +428,7 @@ func TestMultiSnapshotAtomicity(t *testing.T) {
 				ctx.State.UpdateSpawnRate(i%100, 100)
 				ctx.State.AddColorCount(0, 2, 1)
 				ctx.State.SetHeat((i * 3) % 80)
-				ctx.State.SetScore(i * 10)
+				ctx.State.SetEnergy(i * 10)
 				time.Sleep(500 * time.Microsecond)
 			}
 		}
@@ -447,7 +447,7 @@ func TestMultiSnapshotAtomicity(t *testing.T) {
 					// Take multiple snapshots in rapid succession
 					spawn1 := ctx.State.ReadSpawnState()
 					color1 := ctx.State.ReadColorCounts()
-					heat1, score1 := ctx.State.ReadHeatAndScore()
+					heat1, energy1 := ctx.State.ReadHeatAndEnergy()
 
 					// Each snapshot should be internally valid
 					if spawn1.EntityCount < 0 || spawn1.EntityCount > spawn1.MaxEntities {
@@ -458,7 +458,7 @@ func TestMultiSnapshotAtomicity(t *testing.T) {
 						errorCount.Add(1)
 					}
 
-					if heat1 < 0 || score1 < 0 {
+					if heat1 < 0 || energy1 < 0 {
 						errorCount.Add(1)
 					}
 

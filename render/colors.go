@@ -47,7 +47,7 @@ var (
 	RgbModeInsertBg  = tcell.NewRGBColor(144, 238, 144) // Light grass green
 	RgbModeSearchBg  = tcell.NewRGBColor(255, 165, 0)   // Orange
 	RgbModeCommandBg = tcell.NewRGBColor(128, 0, 128)   // Dark purple
-	RgbScoreBg       = tcell.NewRGBColor(255, 255, 255) // Bright white
+	RgbEnergyBg      = tcell.NewRGBColor(255, 255, 255) // Bright white
 	RgbBoostBg       = tcell.NewRGBColor(255, 192, 203) // Pink for boost timer
 	RgbDecayTimerBg  = tcell.NewRGBColor(200, 50, 50)   // Red for decay timer
 	RgbStatusText    = tcell.NewRGBColor(0, 0, 0)       // Dark text for status

@@ -10,8 +10,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/render"
 )
 
-// TestNuggetJumpWithSufficientScore tests jumping to nugget when score >= 10
-func TestNuggetJumpWithSufficientScore(t *testing.T) {
+// TestNuggetJumpWithSufficientEnergy tests jumping to nugget when energy >= 10
+func TestNuggetJumpWithSufficientEnergy(t *testing.T) {
 	// Setup
 	screen := tcell.NewSimulationScreen("UTF-8")
 	screen.Init()
@@ -43,8 +43,8 @@ func TestNuggetJumpWithSufficientScore(t *testing.T) {
 	}
 	nuggetSystem.activeNugget.Store(uint64(entity))
 
-	// Set score to 15
-	ctx.State.SetScore(15)
+	// Set energy to 15
+	ctx.State.SetEnergy(15)
 
 	// Set cursor to (10, 10)
 	ctx.CursorX = 10
@@ -60,18 +60,18 @@ func TestNuggetJumpWithSufficientScore(t *testing.T) {
 		t.Errorf("Expected position (50, 15), got (%d, %d)", x, y)
 	}
 
-	// Simulate score deduction (would normally be done by InputHandler)
-	ctx.State.AddScore(-10)
+	// Simulate energy deduction (would normally be done by InputHandler)
+	ctx.State.AddEnergy(-10)
 
-	// Verify score deducted
-	score := ctx.State.GetScore()
-	if score != 5 {
-		t.Errorf("Expected score 5 after deduction, got %d", score)
+	// Verify energy deducted
+	energy := ctx.State.GetEnergy()
+	if energy != 5 {
+		t.Errorf("Expected energy 5 after deduction, got %d", energy)
 	}
 }
 
-// TestNuggetJumpWithInsufficientScore tests that jump doesn't happen when score < 10
-func TestNuggetJumpWithInsufficientScore(t *testing.T) {
+// TestNuggetJumpWithInsufficientEnergy tests that jump doesn't happen when energy < 10
+func TestNuggetJumpWithInsufficientEnergy(t *testing.T) {
 	// Setup
 	screen := tcell.NewSimulationScreen("UTF-8")
 	screen.Init()
@@ -103,8 +103,8 @@ func TestNuggetJumpWithInsufficientScore(t *testing.T) {
 	}
 	nuggetSystem.activeNugget.Store(uint64(entity))
 
-	// Set score to 5 (insufficient)
-	ctx.State.SetScore(5)
+	// Set energy to 5 (insufficient)
+	ctx.State.SetEnergy(5)
 
 	// Set cursor to (10, 10)
 	ctx.CursorX = 10
@@ -112,24 +112,24 @@ func TestNuggetJumpWithInsufficientScore(t *testing.T) {
 	ctx.State.SetCursorX(10)
 	ctx.State.SetCursorY(10)
 
-	// Verify score is insufficient
-	score := ctx.State.GetScore()
-	if score < 10 {
-		// This is expected - score check would prevent jump in InputHandler
+	// Verify energy is insufficient
+	energy := ctx.State.GetEnergy()
+	if energy < 10 {
+		// This is expected - energy check would prevent jump in InputHandler
 		// JumpToNugget can still return position, but InputHandler wouldn't use it
 	}
 
 	// Get position (for testing the method itself)
 	x, y := nuggetSystem.JumpToNugget(ctx.World)
 
-	// Verify position is still returned (method doesn't check score)
+	// Verify position is still returned (method doesn't check energy)
 	if x != 50 || y != 15 {
 		t.Errorf("Expected position (50, 15), got (%d, %d)", x, y)
 	}
 
-	// Verify score unchanged (no deduction happens when score < 10 in InputHandler)
-	if ctx.State.GetScore() != 5 {
-		t.Errorf("Expected score 5 (unchanged), got %d", ctx.State.GetScore())
+	// Verify energy unchanged (no deduction happens when energy < 10 in InputHandler)
+	if ctx.State.GetEnergy() != 5 {
+		t.Errorf("Expected energy 5 (unchanged), got %d", ctx.State.GetEnergy())
 	}
 }
 
@@ -147,8 +147,8 @@ func TestNuggetJumpWithNoActiveNugget(t *testing.T) {
 	// Create nugget system (no nugget spawned)
 	nuggetSystem := NewNuggetSystem(ctx)
 
-	// Set score to 15
-	ctx.State.SetScore(15)
+	// Set energy to 15
+	ctx.State.SetEnergy(15)
 
 	// Set cursor to (10, 10)
 	ctx.CursorX = 10
@@ -167,9 +167,9 @@ func TestNuggetJumpWithNoActiveNugget(t *testing.T) {
 		t.Errorf("Expected cursor unchanged at (10, 10), got (%d, %d)", ctx.CursorX, ctx.CursorY)
 	}
 
-	// Verify score unchanged
-	if ctx.State.GetScore() != 15 {
-		t.Errorf("Expected score 15 (unchanged), got %d", ctx.State.GetScore())
+	// Verify energy unchanged
+	if ctx.State.GetEnergy() != 15 {
+		t.Errorf("Expected energy 15 (unchanged), got %d", ctx.State.GetEnergy())
 	}
 }
 
@@ -206,8 +206,8 @@ func TestNuggetJumpUpdatesPosition(t *testing.T) {
 	}
 	nuggetSystem.activeNugget.Store(uint64(entity))
 
-	// Set score to 20
-	ctx.State.SetScore(20)
+	// Set energy to 20
+	ctx.State.SetEnergy(20)
 
 	// Set cursor to (5, 5)
 	ctx.CursorX = 5
@@ -224,7 +224,7 @@ func TestNuggetJumpUpdatesPosition(t *testing.T) {
 		ctx.CursorY = y
 		ctx.State.SetCursorX(x)
 		ctx.State.SetCursorY(y)
-		ctx.State.AddScore(-10)
+		ctx.State.AddEnergy(-10)
 	}
 
 	// Verify cursor position updated
@@ -238,9 +238,9 @@ func TestNuggetJumpUpdatesPosition(t *testing.T) {
 		t.Errorf("Expected atomic cursor at (75, 20), got (%d, %d)", cursorSnap.X, cursorSnap.Y)
 	}
 
-	// Verify score deducted
-	if ctx.State.GetScore() != 10 {
-		t.Errorf("Expected score 10, got %d", ctx.State.GetScore())
+	// Verify energy deducted
+	if ctx.State.GetEnergy() != 10 {
+		t.Errorf("Expected energy 10, got %d", ctx.State.GetEnergy())
 	}
 }
 
@@ -263,8 +263,8 @@ func TestNuggetJumpMultipleTimes(t *testing.T) {
 	// Create nugget system
 	nuggetSystem := NewNuggetSystem(ctx)
 
-	// Set score to 30
-	ctx.State.SetScore(30)
+	// Set energy to 30
+	ctx.State.SetEnergy(30)
 
 	// First nugget at (50, 15)
 	entity1 := ctx.World.CreateEntity()
@@ -284,15 +284,15 @@ func TestNuggetJumpMultipleTimes(t *testing.T) {
 	if x >= 0 && y >= 0 {
 		ctx.CursorX = x
 		ctx.CursorY = y
-		ctx.State.AddScore(-10)
+		ctx.State.AddEnergy(-10)
 	}
 
 	// Verify first jump
 	if ctx.CursorX != 50 || ctx.CursorY != 15 {
 		t.Errorf("First jump: expected cursor at (50, 15), got (%d, %d)", ctx.CursorX, ctx.CursorY)
 	}
-	if ctx.State.GetScore() != 20 {
-		t.Errorf("First jump: expected score 20, got %d", ctx.State.GetScore())
+	if ctx.State.GetEnergy() != 20 {
+		t.Errorf("First jump: expected energy 20, got %d", ctx.State.GetEnergy())
 	}
 
 	// Simulate collection (destroy first nugget)
@@ -316,15 +316,15 @@ func TestNuggetJumpMultipleTimes(t *testing.T) {
 	if x >= 0 && y >= 0 {
 		ctx.CursorX = x
 		ctx.CursorY = y
-		ctx.State.AddScore(-10)
+		ctx.State.AddEnergy(-10)
 	}
 
 	// Verify second jump
 	if ctx.CursorX != 25 || ctx.CursorY != 10 {
 		t.Errorf("Second jump: expected cursor at (25, 10), got (%d, %d)", ctx.CursorX, ctx.CursorY)
 	}
-	if ctx.State.GetScore() != 10 {
-		t.Errorf("Second jump: expected score 10, got %d", ctx.State.GetScore())
+	if ctx.State.GetEnergy() != 10 {
+		t.Errorf("Second jump: expected energy 10, got %d", ctx.State.GetEnergy())
 	}
 }
 
@@ -347,8 +347,8 @@ func TestNuggetJumpWithNuggetAtEdge(t *testing.T) {
 	// Create nugget system
 	nuggetSystem := NewNuggetSystem(ctx)
 
-	// Set score to 15
-	ctx.State.SetScore(15)
+	// Set energy to 15
+	ctx.State.SetEnergy(15)
 
 	// Test cases: nuggets at different edges
 	testCases := []struct {

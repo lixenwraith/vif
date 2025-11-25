@@ -518,7 +518,7 @@ func RepeatFindChar(ctx *engine.GameContext, reverse bool) {
 	ctx.LastFindForward = originalForward
 }
 
-// isWordChar returns true if the rune is a word character (alphanumeric or underscore)
+// isWordChar returns true if the rune is a word character (alphanumeric or underenergy)
 func isWordChar(r rune) bool {
 	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_'
 }

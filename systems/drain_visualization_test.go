@@ -51,8 +51,8 @@ func TestDrainSystem_VisualizationYCoordinateSync(t *testing.T) {
 	ctx.State.SetCursorX(cursorX)
 	ctx.State.SetCursorY(cursorY)
 
-	// Add score to trigger drain spawn
-	ctx.State.AddScore(100)
+	// Add energy to trigger drain spawn
+	ctx.State.AddEnergy(100)
 
 	// Run drain system to spawn drain
 	drainSystem.Update(world, time.Millisecond*16)
@@ -81,8 +81,8 @@ func TestDrainSystem_VisualizationFollowsCursor(t *testing.T) {
 	ctx.State.SetCursorX(10)
 	ctx.State.SetCursorY(initialY)
 
-	// Add score to trigger drain spawn
-	ctx.State.AddScore(100)
+	// Add energy to trigger drain spawn
+	ctx.State.AddEnergy(100)
 
 	// Spawn drain
 	drainSystem.Update(world, time.Millisecond*16)
@@ -141,8 +141,8 @@ func TestDrainSystem_VisualizationAtScreenEdges(t *testing.T) {
 			ctx.State.SetCursorX(10)
 			ctx.State.SetCursorY(tt.cursorY)
 
-			// Add score to trigger drain spawn
-			ctx.State.AddScore(100)
+			// Add energy to trigger drain spawn
+			ctx.State.AddEnergy(100)
 
 			// Spawn drain
 			drainSystem.Update(world, time.Millisecond*16)
@@ -175,8 +175,8 @@ func TestDrainSystem_VisualizationXYBothUpdate(t *testing.T) {
 	ctx.State.SetCursorX(initialX)
 	ctx.State.SetCursorY(initialY)
 
-	// Add score and spawn drain
-	ctx.State.AddScore(100)
+	// Add energy and spawn drain
+	ctx.State.AddEnergy(100)
 	drainSystem.Update(world, time.Millisecond*16)
 
 	// Move cursor to diagonal position (northeast)
@@ -229,14 +229,14 @@ func TestDrainSystem_VisualizationNeverStuckAtMiddle(t *testing.T) {
 
 		// Reset state
 		ctx.State.SetDrainActive(false)
-		ctx.State.SetScore(0)
+		ctx.State.SetEnergy(0)
 
 		// Set cursor at non-middle position
 		ctx.State.SetCursorX(10)
 		ctx.State.SetCursorY(cursorY)
 
-		// Add score and spawn drain
-		ctx.State.AddScore(100)
+		// Add energy and spawn drain
+		ctx.State.AddEnergy(100)
 		drainSystem.Update(world, time.Millisecond*16)
 
 		// Verify drain is NOT stuck at middle

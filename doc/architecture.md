@@ -130,7 +130,7 @@ Resources are updated at the start of each frame/tick by the main game loop and 
 
 **Migration Status:**
 The Resource System is being gradually adopted across all systems (Phase 2.5):
-- ✅ **Migrated**: DecaySystem, CleanerSystem, DrainSystem, SpawnSystem, NuggetSystem, ScoreSystem, BoostSystem, GoldSystem
+- ✅ **Migrated**: DecaySystem, CleanerSystem, DrainSystem, SpawnSystem, NuggetSystem, EnergySystem, BoostSystem, GoldSystem
 - 🔄 **In Progress**: (All core systems migrated as of Phase 2.5)
 - **Legacy Fields**: `GameContext.GameWidth`, `GameContext.GameHeight`, `GameContext.TimeProvider` remain for backward compatibility but are deprecated
 
@@ -153,9 +153,9 @@ The Resource System is being gradually adopted across all systems (Phase 2.5):
 │        ├─> config := MustGetResource[*ConfigResource]()    │
 │        ├─> timeRes := MustGetResource[*TimeResource]()     │
 │        └─> Use config.GameWidth, timeRes.GameTime          │
-│    └─> ScoreSystem.Update()                                │
+│    └─> EnergySystem.Update()                                │
 │        ├─> config := MustGetResource[*ConfigResource]()    │
-│        └─> Access ctx.State for Heat/Score                 │
+│        └─> Access ctx.State for Heat/Energy                 │
 │    └─> [Other Systems...]                                  │
 │                                                             │
 │ 3. Clock Scheduler (50ms tick, separate goroutine)         │
@@ -186,7 +186,7 @@ Systems communicate through `GameContext.EventQueue`, a lock-free ring buffer th
 
 **Producer Pattern**:
 ```go
-// ScoreSystem pushes event when gold completed at max heat
+// EnergySystem pushes event when gold completed at max heat
 if heatAtMaxBeforeGoldComplete {
     ctx.PushEvent(engine.EventCleanerRequest, nil)
 }
@@ -222,14 +222,14 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 #### Real-Time State (Lock-Free Atomics)
 Updated immediately on user input/spawn events, read by all systems:
 - **Heat** (`atomic.Int64`): Current heat value
-- **Score** (`atomic.Int64`): Player score
+- **Energy** (`atomic.Int64`): Player energy
 - **Cursor Position**: NOW IN ECS as cursor entity with PositionComponent and CursorComponent
   - Legacy atomics (CursorX, CursorY) still exist in GameState for backward compatibility
   - GameContext has non-atomic cache fields (CursorX, CursorY) synced with ECS
 - **Color Tracking**: NOW CENSUS-BASED via per-frame O(n) entity iteration
   - Legacy atomic counters removed from GameState (eliminating drift)
 - **Boost State** (`atomic.Bool`, `atomic.Int64`): Enabled, EndTime, Color
-- **Visual Feedback**: CursorError (via CursorComponent.ErrorFlashEnd), ScoreBlink, PingGrid (atomic)
+- **Visual Feedback**: CursorError (via CursorComponent.ErrorFlashEnd), EnergyBlink, PingGrid (atomic)
 - **Drain State** (`atomic.Bool`, `atomic.Uint64`, `atomic.Int32`): Active, EntityID, X, Y
 - **Sequence ID** (`atomic.Int64`): Thread-safe ID generation
 
@@ -286,7 +286,7 @@ now := s.ctx.TimeProvider.Now()       // Use TimeResource instead
 **GameContext Role (Post-Migration):**
 - **Primary Purpose**: OS/Window management, Event routing, State orchestration
 - **Retained Responsibilities**:
-  - `GameState` access via `ctx.State` (Heat, Score, Boost, Phase, etc.)
+  - `GameState` access via `ctx.State` (Heat, Energy, Boost, Phase, etc.)
   - `EventQueue` access via `ctx.PushEvent()` / `ctx.ConsumeEvents()`
   - `AudioEngine` access via `ctx.AudioEngine.PlaySound()`
   - Input handling methods (mode transitions, motion commands)
@@ -355,7 +355,7 @@ type BoostSnapshot struct {
     Color     int32
     Remaining time.Duration
 }
-snapshot := ctx.State.ReadBoostState() // Used by: ScoreSystem, Renderer
+snapshot := ctx.State.ReadBoostState() // Used by: EnergySystem, Renderer
 
 // Phase State (mutex-protected)
 type PhaseSnapshot struct {
@@ -374,7 +374,7 @@ type GoldSnapshot struct {
     Elapsed     time.Duration
     Remaining   time.Duration
 }
-snapshot := ctx.State.ReadGoldState() // Used by: GoldSequenceSystem, ScoreSystem, Renderer
+snapshot := ctx.State.ReadGoldState() // Used by: GoldSequenceSystem, EnergySystem, Renderer
 
 // Decay State (mutex-protected)
 type DecaySnapshot struct {
@@ -387,7 +387,7 @@ type DecaySnapshot struct {
 snapshot := ctx.State.ReadDecayState() // Used by: DecaySystem, Renderer
 
 // Atomic pairs for related fields
-heat, score := ctx.State.ReadHeatAndScore() // Used by: ScoreSystem, Renderer
+heat, energy := ctx.State.ReadHeatAndEnergy() // Used by: EnergySystem, Renderer
 ```
 
 **Usage Examples:**
@@ -416,18 +416,18 @@ if ctx.State.ShouldSpawn() {                    // RLock #1
 **Correct: Atomic Snapshots**
 ```go
 // ✅ GOOD: Atomic fields read together
-heat, score := ctx.State.ReadHeatAndScore()
-if heat > 0 && score > 0 {
-    // heat and score are consistent
+heat, energy := ctx.State.ReadHeatAndEnergy()
+if heat > 0 && energy > 0 {
+    // heat and energy are consistent
 }
 ```
 
 **Incorrect: Separate Atomic Reads**
 ```go
-// ❌ BAD: heat and score may be from different moments
+// ❌ BAD: heat and energy may be from different moments
 heat := ctx.State.GetHeat()   // Atomic read #1
-score := ctx.State.GetScore() // Atomic read #2
-// If another goroutine updates both, we might see heat=new, score=old
+energy := ctx.State.GetEnergy() // Atomic read #2
+// If another goroutine updates both, we might see heat=new, energy=old
 ```
 
 **System Usage Map:**
@@ -435,7 +435,7 @@ score := ctx.State.GetScore() // Atomic read #2
 | System | Snapshot Types Used | Purpose |
 |--------|-------------------|---------|
 | SpawnSystem | SpawnState, Census (entity iteration), ECS Cursor | Check spawn conditions, cursor exclusion zone |
-| ScoreSystem | BoostState, GoldState, HeatAndScore | Process typing, update heat/score |
+| EnergySystem | BoostState, GoldState, HeatAndEnergy | Process typing, update heat/energy |
 | GoldSequenceSystem | GoldState, PhaseState | Manage gold sequence lifecycle |
 | DecaySystem | DecayState, PhaseState | Manage decay timer and animation |
 | CleanerSystem | EventQueue | Event-driven cleaner lifecycle via EventCleanerRequest/Finished |
@@ -450,7 +450,7 @@ score := ctx.State.GetScore() // Atomic read #2
    - Multiple concurrent readers allowed
    - Writers block only during actual state modification
 
-2. **Atomic Field Snapshots** (BoostState, HeatAndScore):
+2. **Atomic Field Snapshots** (BoostState, HeatAndEnergy):
    - No locks required
    - Multiple atomic loads in sequence
    - Still provides consistent view (atomic loads are sequentially consistent)
@@ -479,7 +479,7 @@ score := ctx.State.GetScore() // Atomic read #2
 
 **Dual Time System**:
 - **Game Time**: Pausable clock used for all game logic and game state feedback
-  - Used for: spawning, decay, gold timeouts, score blink, cursor error flash
+  - Used for: spawning, decay, gold timeouts, energy blink, cursor error flash
   - Stops advancing when paused (COMMAND mode) - visual feedback freezes during pause
   - Accessed via `ctx.TimeProvider.Now()` (returns pausable time)
 - **Real Time**: Wall clock time for purely visual UI elements
@@ -683,7 +683,7 @@ The audio system provides sound effects for game events using a dual-queue archi
   - Coin: Two-note chime for gold completion
 
 ### Integration Points
-- **ScoreSystem**: Sends error sounds via realTimeQueue
+- **EnergySystem**: Sends error sounds via realTimeQueue
 - **GoldSystem**: Sends coin sounds via stateQueue
 - **NuggetSystem**: Sends bell sounds via stateQueue (Tab jump)
 - **CleanerSystem**: Sends whoosh sounds via stateQueue
@@ -706,12 +706,12 @@ The audio system provides sound effects for game events using a dual-queue archi
 ### System Priorities
 Systems execute in priority order (lower = earlier):
 1. **BoostSystem (5)**: Handle boost timer expiration (highest priority)
-2. **ScoreSystem (10)**: Process user input, update score
+2. **EnergySystem (10)**: Process user input, update energy
 3. **SpawnSystem (15)**: Generate new sequences (Blue and Green only)
 4. **NuggetSystem (18)**: Manage collectible nugget spawning and collection
 5. **GoldSystem (20)**: Manage gold sequence lifecycle and random placement
 6. **CleanerSystem (22)**: Process cleaner physics, collision, and visual effects
-7. **DrainSystem (25)**: Manage score-draining entity movement and logic
+7. **DrainSystem (25)**: Manage energy-draining entity movement and logic
 8. **DecaySystem (30)**: Apply sequence degradation and color transitions (lowest priority)
 
 **Important**: All priorities must be unique to ensure deterministic execution order. The priority values define the exact order in which systems process game state each frame.
@@ -837,13 +837,13 @@ Parallel (Event-Driven):
 - Falling entities properly cleaned up on completion
 - Animation uses pausable clock (freezes during COMMAND mode)
 
-### Score System Integration
+### Energy System Integration
 
 #### Gold Typing
 When user types during active gold:
 
 ```
-ScoreSystem.handleGoldSequenceTyping():
+EnergySystem.handleGoldSequenceTyping():
   1. Verify character matches expected gold character
   2. If incorrect: Flash error, DO NOT reset heat
   3. If correct:
@@ -887,7 +887,7 @@ CleanerSystem uses minimal atomic state:
 
 **Benefits**:
 - Single atomic flag eliminates complex state tracking
-- Lock-free activation from any thread (e.g., ScoreSystem)
+- Lock-free activation from any thread (e.g., EnergySystem)
 - All other state managed through ECS components
 - Component queries handled by World's internal synchronization
 
@@ -1002,7 +1002,7 @@ NORMAL -[:]→ COMMAND (game paused) -[ESC/ENTER]→ NORMAL
   - See `modes/capabilities.go` for full mapping
 - **Consecutive move penalty**: Using h/j/k/l more than 3 times consecutively resets heat
 - **Arrow keys**: Function like h/j/k/l but always reset heat
-- **Tab**: Jumps cursor directly to active Nugget (Cost: 10 Score, requires Score >= 10)
+- **Tab**: Jumps cursor directly to active Nugget (Cost: 10 Energy, requires Energy >= 10)
 
 ### Supported Vi Motions
 **Basic**: h, j, k, l, Space (as l)
@@ -1025,7 +1025,7 @@ NORMAL -[:]→ COMMAND (game paused) -[ESC/ENTER]→ NORMAL
 ### Shared State Synchronization
 - **Color Counters**: `atomic.Int64` for lock-free updates
   - `SpawnSystem`: Increments counters when blocks placed
-  - `ScoreSystem`: Decrements counters when characters typed
+  - `EnergySystem`: Decrements counters when characters typed
   - `DecaySystem`: Updates counters during decay transitions
   - All counter operations are race-free and thread-safe
 - **GameState**: Uses `sync.RWMutex` for phase state and timing
@@ -1156,7 +1156,7 @@ The `PositionStore` spatial index enforces a **single entity per cell** constrai
 2. **Hit Detection Workaround**: Systems requiring collision detection at cursor position must use Query Pattern
    - **Spatial Lookup** (`GetEntityAt`): Fast O(1) but returns only the topmost entity (cursor)
    - **Query Pattern** (`Query().With(...).Execute()`): Slower O(n) but finds all entities including masked ones
-   - See "Score System > Hit Detection Strategy" for implementation details
+   - See "Energy System > Hit Detection Strategy" for implementation details
 
 3. **Entity Spawning**: SpawnSystem must check spatial index before placement to avoid conflicts
    - Cursor exclusion zone prevents spawning near cursor (5 horizontal, 3 vertical)
@@ -1193,7 +1193,7 @@ The `PositionStore` spatial index enforces a **single entity per cell** constrai
   - When all characters of a color/level are cleared, that slot becomes available
   - Atomic counters track each color/level combination (Blue×3 + Green×3)
   - SpawnSystem checks counters before spawning: `if count == 0 { spawn enabled }`
-  - ScoreSystem decrements on character typing
+  - EnergySystem decrements on character typing
   - DecaySystem updates during transitions
   - Red sequences explicitly excluded from tracking
 - **Intelligent Placement**:
@@ -1211,7 +1211,7 @@ The `PositionStore` spatial index enforces a **single entity per cell** constrai
 The decay system applies character degradation through a falling entity animation with swept collision detection. The system uses a **stateless architecture** where falling entities are queried from the `World.FallingDecays` store each frame rather than being tracked internally. This design allows for future extensions such as orbital and magnetic effects on decay entities.
 
 #### Decay Mechanics
-- **Brightness Decay**: Bright → Normal → Dark (reduces score multiplier)
+- **Brightness Decay**: Bright → Normal → Dark (reduces energy multiplier)
   - Updates color counters atomically: decrements old level, increments new level
 - **Color Decay Chain**:
   - Blue (Dark) → Green (Bright)
@@ -1341,7 +1341,7 @@ When a falling entity encounters a target at `(col, row)`:
 - **Animation**: Elapsed time calculation based on `decaySnapshot.StartTime` (pausable)
 - **Visual**: Falling entities dim with rest of game (70% brightness)
 
-### Score System
+### Energy System
 - **Character Typing**: Processes user input in insert mode
 - **Counter Management**:
   - Atomically decrements color counters when Blue/Green characters typed
@@ -1390,7 +1390,7 @@ for _, entity := range entities {
   - Typing red or incorrect: Deactivates boost and resets heat to 0
 - **Effect**: Heat gain multiplier of 2× (+2 heat per character instead of +1)
 - **Visual Indicator**: Pink background "Boost: X.Xs" in status bar
-- **Implementation**: Managed within ScoreSystem (not a separate system)
+- **Implementation**: Managed within EnergySystem (not a separate system)
   - Atomic state: BoostEnabled (Bool), BoostEndTime (Int64), BoostColor (Int32)
   - Timer checked each frame via `UpdateBoostTimerAtomic()` (CAS pattern)
   - Color matching: Typing same color extends by 500ms via atomic update
@@ -1403,28 +1403,28 @@ for _, entity := range entities {
 - **Duration**: 10 seconds (game time via pausable clock) before timeout
 - **Reward**: Fills heat meter to maximum on completion
 - **Cleaner Trigger**: If heat is already at maximum when gold completed, triggers Cleaner animation
-- **Behavior**: Typing gold chars does not affect heat/score directly
+- **Behavior**: Typing gold chars does not affect heat/energy directly
 - **Pause Behavior**: Timeout freezes during COMMAND mode (game time stops)
 
 ### Nugget System
 - **Purpose**: Collectible bonus items that spawn randomly.
 - **Behavior**: Spawns every 5 seconds if no nugget is active.
 - **Collection**:
-    - **Typing**: Typing the character displayed on the nugget collects it (handled by ScoreSystem).
-    - **Jump (Tab)**: Pressing `Tab` instantly jumps the cursor to the nugget (requires Score >= 10).
+    - **Typing**: Typing the character displayed on the nugget collects it (handled by EnergySystem).
+    - **Jump (Tab)**: Pressing `Tab` instantly jumps the cursor to the nugget (requires Energy >= 10).
 - **Reward**: Increases Heat by 10% of max heat.
-- **Cost**: Jumping via `Tab` costs 10 Score points.
+- **Cost**: Jumping via `Tab` costs 10 Energy points.
 
 ### Drain System
-- **Purpose**: A hostile entity that drains score if the player is idle or positioned on it.
-- **Trigger**: Spawns when Score > 0. Despawns when Score <= 0.
+- **Purpose**: A hostile entity that drains energy if the player is idle or positioned on it.
+- **Trigger**: Spawns when Energy > 0. Despawns when Energy <= 0.
 - **Movement**: Moves toward the cursor every 1 second (independent of frame rate).
 - **Effect**: If positioned on top of the cursor, drains 10 points every 1 second.
 - **Visual**: Rendered as '╬' (Light Cyan).
 
 ### Cleaner System
 - **Trigger**: Event-driven via `EventCleanerRequest` when gold completed at maximum heat
-  - ScoreSystem pushes event: `ctx.PushEvent(engine.EventCleanerRequest, nil)`
+  - EnergySystem pushes event: `ctx.PushEvent(engine.EventCleanerRequest, nil)`
   - CleanerSystem consumes event in Update() method (event polling pattern)
   - Frame deduplication: Tracks spawned frames to prevent duplicate activations
 - **Update Model**: **Synchronous** - runs in main game loop via ECS Update() method

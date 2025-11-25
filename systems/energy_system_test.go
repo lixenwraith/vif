@@ -31,7 +31,7 @@ func TestBoostHeatMultiplier(t *testing.T) {
 		GameTime:  time.Now(),
 		DeltaTime: 16 * time.Millisecond,
 	})
-	scoreSystem := NewScoreSystem(ctx)
+	energySystem := NewEnergySystem(ctx)
 
 	// Create a green character at cursor position
 	entity := ctx.World.CreateEntity()
@@ -56,20 +56,20 @@ func TestBoostHeatMultiplier(t *testing.T) {
 	// Test 1: Without boost, heat should increment by 1
 	ctx.State.SetBoostEnabled(false)
 	ctx.State.SetHeat(0)
-	initialScore := ctx.State.GetScore()
+	initialEnergy := ctx.State.GetEnergy()
 
-	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
+	energySystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
 
 	heat := ctx.State.GetHeat()
 	if heat != 1 {
 		t.Errorf("Expected heat to be 1 without boost, got %d", heat)
 	}
 
-	// Calculate expected score: heat * level_multiplier = 1 * 2 = 2
-	expectedScore := initialScore + 2
-	finalScore := ctx.State.GetScore()
-	if finalScore != expectedScore {
-		t.Errorf("Expected score %d, got %d", expectedScore, finalScore)
+	// Calculate expected energy: heat * level_multiplier = 1 * 2 = 2
+	expectedEnergy := initialEnergy + 2
+	finalEnergy := ctx.State.GetEnergy()
+	if finalEnergy != expectedEnergy {
+		t.Errorf("Expected energy %d, got %d", expectedEnergy, finalEnergy)
 	}
 
 	// Test 2: Create another character for boost test
@@ -96,20 +96,20 @@ func TestBoostHeatMultiplier(t *testing.T) {
 	ctx.State.SetBoostEnabled(true)
 	ctx.State.SetBoostColor(2)
 	ctx.State.SetHeat(1) // Reset to starting heat
-	initialScore = ctx.State.GetScore()
+	initialEnergy = ctx.State.GetEnergy()
 
-	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'b')
+	energySystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'b')
 
 	heat = ctx.State.GetHeat()
 	if heat != 3 {
 		t.Errorf("Expected heat to be 3 with boost (1 + 2), got %d", heat)
 	}
 
-	// Calculate expected score: heat * level_multiplier = 3 * 2 = 6
-	expectedScore = initialScore + 6
-	finalScore = ctx.State.GetScore()
-	if finalScore != expectedScore {
-		t.Errorf("Expected score %d with boost, got %d", expectedScore, finalScore)
+	// Calculate expected energy: heat * level_multiplier = 3 * 2 = 6
+	expectedEnergy = initialEnergy + 6
+	finalEnergy = ctx.State.GetEnergy()
+	if finalEnergy != expectedEnergy {
+		t.Errorf("Expected energy %d with boost, got %d", expectedEnergy, finalEnergy)
 	}
 }
 
@@ -134,7 +134,7 @@ func TestRedCharacterResetsHeat(t *testing.T) {
 		GameTime:  time.Now(),
 		DeltaTime: 16 * time.Millisecond,
 	})
-	scoreSystem := NewScoreSystem(ctx)
+	energySystem := NewEnergySystem(ctx)
 
 	// Set heat to non-zero
 	ctx.State.SetHeat(50)
@@ -160,7 +160,7 @@ func TestRedCharacterResetsHeat(t *testing.T) {
 	}
 
 	// Type the red character
-	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'r')
+	energySystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'r')
 
 	// Heat should be reset to 0
 	heat := ctx.State.GetHeat()
@@ -169,8 +169,8 @@ func TestRedCharacterResetsHeat(t *testing.T) {
 	}
 }
 
-// TestGreenBrightCharacterScore verifies Bright green characters give correct points
-func TestGreenBrightCharacterScore(t *testing.T) {
+// TestGreenBrightCharacterEnergy verifies Bright green characters give correct points
+func TestGreenBrightCharacterEnergy(t *testing.T) {
 	// Create mock screen
 	screen := tcell.NewSimulationScreen("UTF-8")
 	screen.Init()
@@ -190,11 +190,11 @@ func TestGreenBrightCharacterScore(t *testing.T) {
 		GameTime:  time.Now(),
 		DeltaTime: 16 * time.Millisecond,
 	})
-	scoreSystem := NewScoreSystem(ctx)
+	energySystem := NewEnergySystem(ctx)
 
 	// Set heat to 5
 	ctx.State.SetHeat(5)
-	initialScore := ctx.State.GetScore()
+	initialEnergy := ctx.State.GetEnergy()
 
 	// Create a bright green character at cursor position
 	entity := ctx.World.CreateEntity()
@@ -217,7 +217,7 @@ func TestGreenBrightCharacterScore(t *testing.T) {
 	}
 
 	// Type the character
-	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'g')
+	energySystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'g')
 
 	// Heat should increment to 6
 	heat := ctx.State.GetHeat()
@@ -225,11 +225,11 @@ func TestGreenBrightCharacterScore(t *testing.T) {
 		t.Errorf("Expected heat to be 6, got %d", heat)
 	}
 
-	// Score should increase by heat * level_multiplier = 6 * 3 = 18
-	expectedScore := initialScore + 18
-	finalScore := ctx.State.GetScore()
-	if finalScore != expectedScore {
-		t.Errorf("Expected score %d, got %d", expectedScore, finalScore)
+	// Energy should increase by heat * level_multiplier = 6 * 3 = 18
+	expectedEnergy := initialEnergy + 18
+	finalEnergy := ctx.State.GetEnergy()
+	if finalEnergy != expectedEnergy {
+		t.Errorf("Expected energy %d, got %d", expectedEnergy, finalEnergy)
 	}
 }
 
@@ -254,7 +254,7 @@ func TestIncorrectCharacterResetsHeat(t *testing.T) {
 		GameTime:  time.Now(),
 		DeltaTime: 16 * time.Millisecond,
 	})
-	scoreSystem := NewScoreSystem(ctx)
+	energySystem := NewEnergySystem(ctx)
 
 	// Set heat to non-zero
 	ctx.State.SetHeat(25)
@@ -280,7 +280,7 @@ func TestIncorrectCharacterResetsHeat(t *testing.T) {
 	}
 
 	// Type incorrect character
-	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'x')
+	energySystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'x')
 
 	// Heat should be reset to 0
 	heat := ctx.State.GetHeat()
@@ -315,7 +315,7 @@ func TestBoostActivationAtMaxHeat(t *testing.T) {
 		GameTime:  time.Now(),
 		DeltaTime: 16 * time.Millisecond,
 	})
-	scoreSystem := NewScoreSystem(ctx)
+	energySystem := NewEnergySystem(ctx)
 
 	// Set heat to max - 1 (screen width is 80)
 	ctx.State.SetHeat(79)
@@ -342,7 +342,7 @@ func TestBoostActivationAtMaxHeat(t *testing.T) {
 	}
 
 	// Type correct character to reach max heat
-	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
+	energySystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
 
 	// Heat should be at max (80)
 	heat := ctx.State.GetHeat()
@@ -362,8 +362,8 @@ func TestBoostActivationAtMaxHeat(t *testing.T) {
 	}
 }
 
-// TestScoreBlinkOnCorrectCharacter verifies score blink activation on correct character
-func TestScoreBlinkOnCorrectCharacter(t *testing.T) {
+// TestEnergyBlinkOnCorrectCharacter verifies energy blink activation on correct character
+func TestEnergyBlinkOnCorrectCharacter(t *testing.T) {
 	tests := []struct {
 		name  string
 		color components.SequenceType
@@ -395,7 +395,7 @@ func TestScoreBlinkOnCorrectCharacter(t *testing.T) {
 				GameTime:  time.Now(),
 				DeltaTime: 16 * time.Millisecond,
 			})
-			scoreSystem := NewScoreSystem(ctx)
+			energySystem := NewEnergySystem(ctx)
 
 			// Create a character at cursor position
 			entity := ctx.World.CreateEntity()
@@ -418,15 +418,15 @@ func TestScoreBlinkOnCorrectCharacter(t *testing.T) {
 			}
 
 			// Type correct character
-			scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
+			energySystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
 
-			// Score blink should be active
-			if !ctx.State.GetScoreBlinkActive() {
-				t.Error("Expected score blink to be active after correct character")
+			// Energy blink should be active
+			if !ctx.State.GetEnergyBlinkActive() {
+				t.Error("Expected energy blink to be active after correct character")
 			}
 
 			// Verify blink type matches color
-			blinkType := ctx.State.GetScoreBlinkType()
+			blinkType := ctx.State.GetEnergyBlinkType()
 			var expectedType uint32
 			switch tt.color {
 			case components.SequenceBlue:
@@ -439,7 +439,7 @@ func TestScoreBlinkOnCorrectCharacter(t *testing.T) {
 			}
 
 			// Verify blink level matches level
-			blinkLevel := ctx.State.GetScoreBlinkLevel()
+			blinkLevel := ctx.State.GetEnergyBlinkLevel()
 			var expectedLevel uint32
 			switch tt.level {
 			case components.LevelDark:
@@ -456,22 +456,22 @@ func TestScoreBlinkOnCorrectCharacter(t *testing.T) {
 	}
 }
 
-// TestScoreBlinkOnError verifies score blink activation on error
-func TestScoreBlinkOnError(t *testing.T) {
+// TestEnergyBlinkOnError verifies energy blink activation on error
+func TestEnergyBlinkOnError(t *testing.T) {
 	tests := []struct {
 		name string
-		fn   func(*testing.T, *engine.GameContext, *ScoreSystem)
+		fn   func(*testing.T, *engine.GameContext, *EnergySystem)
 	}{
 		{
 			name: "Empty Space",
-			fn: func(t *testing.T, ctx *engine.GameContext, scoreSystem *ScoreSystem) {
+			fn: func(t *testing.T, ctx *engine.GameContext, energySystem *EnergySystem) {
 				// Type at empty position
-				scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
+				energySystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
 			},
 		},
 		{
 			name: "Wrong Character",
-			fn: func(t *testing.T, ctx *engine.GameContext, scoreSystem *ScoreSystem) {
+			fn: func(t *testing.T, ctx *engine.GameContext, energySystem *EnergySystem) {
 				// Create a character
 				entity := ctx.World.CreateEntity()
 				pos := components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY}
@@ -493,7 +493,7 @@ func TestScoreBlinkOnError(t *testing.T) {
 				}
 
 				// Type wrong character
-				scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'b')
+				energySystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'b')
 			},
 		},
 	}
@@ -519,18 +519,18 @@ func TestScoreBlinkOnError(t *testing.T) {
 				GameTime:  time.Now(),
 				DeltaTime: 16 * time.Millisecond,
 			})
-			scoreSystem := NewScoreSystem(ctx)
+			energySystem := NewEnergySystem(ctx)
 
 			// Run test function
-			tt.fn(t, ctx, scoreSystem)
+			tt.fn(t, ctx, energySystem)
 
-			// Score blink should be active
-			if !ctx.State.GetScoreBlinkActive() {
-				t.Error("Expected score blink to be active after error")
+			// Energy blink should be active
+			if !ctx.State.GetEnergyBlinkActive() {
+				t.Error("Expected energy blink to be active after error")
 			}
 
-			// Score blink type should be 0 (error)
-			blinkType := ctx.State.GetScoreBlinkType()
+			// Energy blink type should be 0 (error)
+			blinkType := ctx.State.GetEnergyBlinkType()
 			if blinkType != 0 {
 				t.Errorf("Expected blink type 0 (error), got %d", blinkType)
 			}
@@ -543,8 +543,8 @@ func TestScoreBlinkOnError(t *testing.T) {
 	}
 }
 
-// TestScoreBlinkOnGoldCharacter verifies score blink on gold sequence character
-func TestScoreBlinkOnGoldCharacter(t *testing.T) {
+// TestEnergyBlinkOnGoldCharacter verifies energy blink on gold sequence character
+func TestEnergyBlinkOnGoldCharacter(t *testing.T) {
 	// Create mock screen
 	screen := tcell.NewSimulationScreen("UTF-8")
 	screen.Init()
@@ -564,11 +564,11 @@ func TestScoreBlinkOnGoldCharacter(t *testing.T) {
 		GameTime:  time.Now(),
 		DeltaTime: 16 * time.Millisecond,
 	})
-	scoreSystem := NewScoreSystem(ctx)
+	energySystem := NewEnergySystem(ctx)
 	goldSystem := NewGoldSystem(ctx)
 
 	// Wire up gold system
-	scoreSystem.SetGoldSystem(goldSystem)
+	energySystem.SetGoldSystem(goldSystem)
 
 	// Manually activate gold sequence for testing (10 second duration)
 	ctx.State.ActivateGoldSequence(1, 10*time.Second)
@@ -594,28 +594,28 @@ func TestScoreBlinkOnGoldCharacter(t *testing.T) {
 	}
 
 	// Type correct character
-	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'x')
+	energySystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'x')
 
-	// Score blink should be active
-	if !ctx.State.GetScoreBlinkActive() {
-		t.Error("Expected score blink to be active after gold character")
+	// Energy blink should be active
+	if !ctx.State.GetEnergyBlinkActive() {
+		t.Error("Expected energy blink to be active after gold character")
 	}
 
-	// Score blink type should be 4 (gold)
-	blinkType := ctx.State.GetScoreBlinkType()
+	// Energy blink type should be 4 (gold)
+	blinkType := ctx.State.GetEnergyBlinkType()
 	if blinkType != 4 {
 		t.Errorf("Expected blink type 4 (gold), got %d", blinkType)
 	}
 
-	// Score blink type should be non-zero (gold type = 4)
-	blinkType = ctx.State.GetScoreBlinkType()
+	// Energy blink type should be non-zero (gold type = 4)
+	blinkType = ctx.State.GetEnergyBlinkType()
 	if blinkType == 0 {
-		t.Error("Expected score blink type to be non-zero (gold color, not error)")
+		t.Error("Expected energy blink type to be non-zero (gold color, not error)")
 	}
 }
 
-// TestScoreBlinkTimeout verifies score blink deactivates after timeout
-func TestScoreBlinkTimeout(t *testing.T) {
+// TestEnergyBlinkTimeout verifies energy blink deactivates after timeout
+func TestEnergyBlinkTimeout(t *testing.T) {
 	// Use mock time provider for controlled time advancement
 	startTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 	mockTime := engine.NewMockTimeProvider(startTime)
@@ -640,7 +640,7 @@ func TestScoreBlinkTimeout(t *testing.T) {
 		GameTime:  mockTime.Now(),
 		DeltaTime: 16 * time.Millisecond,
 	})
-	scoreSystem := NewScoreSystem(ctx)
+	energySystem := NewEnergySystem(ctx)
 
 	// Create a green character at cursor position
 	entity := ctx.World.CreateEntity()
@@ -662,30 +662,30 @@ func TestScoreBlinkTimeout(t *testing.T) {
 		tx.Commit()
 	}
 
-	// Type correct character to trigger score blink
-	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
+	// Type correct character to trigger energy blink
+	energySystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
 
-	// Score blink should be active
-	if !ctx.State.GetScoreBlinkActive() {
-		t.Fatal("Expected score blink to be active initially")
+	// Energy blink should be active
+	if !ctx.State.GetEnergyBlinkActive() {
+		t.Fatal("Expected energy blink to be active initially")
 	}
 
-	// Advance time to just before timeout (ScoreBlinkTimeout = 200ms)
-	mockTime.Advance(constants.ScoreBlinkTimeout - 10*time.Millisecond)
-	scoreSystem.Update(ctx.World, 10*time.Millisecond)
+	// Advance time to just before timeout (EnergyBlinkTimeout = 200ms)
+	mockTime.Advance(constants.EnergyBlinkTimeout - 10*time.Millisecond)
+	energySystem.Update(ctx.World, 10*time.Millisecond)
 
-	// Score blink should still be active
-	if !ctx.State.GetScoreBlinkActive() {
-		t.Error("Expected score blink to still be active before timeout")
+	// Energy blink should still be active
+	if !ctx.State.GetEnergyBlinkActive() {
+		t.Error("Expected energy blink to still be active before timeout")
 	}
 
 	// Advance time past timeout
 	mockTime.Advance(20 * time.Millisecond)
-	scoreSystem.Update(ctx.World, 20*time.Millisecond)
+	energySystem.Update(ctx.World, 20*time.Millisecond)
 
-	// Score blink should now be inactive
-	if ctx.State.GetScoreBlinkActive() {
-		t.Error("Expected score blink to be inactive after timeout")
+	// Energy blink should now be inactive
+	if ctx.State.GetEnergyBlinkActive() {
+		t.Error("Expected energy blink to be inactive after timeout")
 	}
 }
 
@@ -715,10 +715,10 @@ func TestCursorErrorTimeout(t *testing.T) {
 		GameTime:  mockTime.Now(),
 		DeltaTime: 16 * time.Millisecond,
 	})
-	scoreSystem := NewScoreSystem(ctx)
+	energySystem := NewEnergySystem(ctx)
 
 	// Type at empty position to trigger cursor error
-	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
+	energySystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
 
 	// Cursor error should be active
 	if !ctx.State.GetCursorError() {
@@ -727,7 +727,7 @@ func TestCursorErrorTimeout(t *testing.T) {
 
 	// Advance time to just before timeout (ErrorBlinkTimeout = 200ms)
 	mockTime.Advance(constants.ErrorBlinkTimeout - 10*time.Millisecond)
-	scoreSystem.Update(ctx.World, 10*time.Millisecond)
+	energySystem.Update(ctx.World, 10*time.Millisecond)
 
 	// Cursor error should still be active
 	if !ctx.State.GetCursorError() {
@@ -736,7 +736,7 @@ func TestCursorErrorTimeout(t *testing.T) {
 
 	// Advance time past timeout
 	mockTime.Advance(20 * time.Millisecond)
-	scoreSystem.Update(ctx.World, 20*time.Millisecond)
+	energySystem.Update(ctx.World, 20*time.Millisecond)
 
 	// Cursor error should now be inactive
 	if ctx.State.GetCursorError() {

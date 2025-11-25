@@ -15,7 +15,7 @@ func NewBoostSystem(ctx *engine.GameContext) *BoostSystem {
 }
 
 func (bs *BoostSystem) Priority() int {
-	return 5 // Run early, before score system
+	return 5 // Run early, before energy system
 }
 
 func (bs *BoostSystem) Update(world *engine.World, dt time.Duration) {

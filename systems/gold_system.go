@@ -294,7 +294,7 @@ func (s *GoldSystem) CompleteGold(world *engine.World) bool {
 		s.ctx.AudioEngine.SendRealTime(cmd)
 	}
 
-	// Fill heat to max (handled by ScoreSystem)
+	// Fill heat to max (handled by EnergySystem)
 	return true
 }
 

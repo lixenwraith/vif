@@ -64,8 +64,8 @@ func TestUITimingConstants(t *testing.T) {
 		t.Errorf("Expected ErrorBlinkTimeout to be 200ms, got %v", ErrorBlinkTimeout)
 	}
 
-	if ScoreBlinkTimeout != 200*time.Millisecond {
-		t.Errorf("Expected ScoreBlinkTimeout to be 200ms, got %v", ScoreBlinkTimeout)
+	if EnergyBlinkTimeout != 200*time.Millisecond {
+		t.Errorf("Expected EnergyBlinkTimeout to be 200ms, got %v", EnergyBlinkTimeout)
 	}
 
 	if BoostExtensionDuration != 500*time.Millisecond {

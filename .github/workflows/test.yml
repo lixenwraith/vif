@@ -48,7 +48,7 @@ jobs:
       run: |
         go test -race -v ./systems -run "TestConcurrent|TestRace|TestSnapshot"
         go test -race -v ./engine -run "TestIntegration|TestClock|TestPhase"
-        go test -race -v ./systems -run "TestSpawn|TestCleaner|TestScore"
+        go test -race -v ./systems -run "TestSpawn|TestCleaner|TestEnergy"
       env:
         GORACE: "halt_on_error=1"
 

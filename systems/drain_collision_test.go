@@ -19,7 +19,7 @@ func TestDrainSystem_CollisionWithBlueCharacter(t *testing.T) {
 	drainSys := NewDrainSystem(ctx)
 
 	// Spawn drain at a different position
-	ctx.State.SetScore(100)
+	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Get drain entity
@@ -94,7 +94,7 @@ func TestDrainSystem_CollisionWithGreenCharacter(t *testing.T) {
 	drainSys := NewDrainSystem(ctx)
 
 	// Spawn drain
-	ctx.State.SetScore(100)
+	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	drainEntityID := ctx.State.GetDrainEntity()
@@ -165,7 +165,7 @@ func TestDrainSystem_CollisionWithRedCharacter(t *testing.T) {
 	drainSys := NewDrainSystem(ctx)
 
 	// Spawn drain
-	ctx.State.SetScore(100)
+	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	drainEntityID := ctx.State.GetDrainEntity()
@@ -227,7 +227,7 @@ func TestDrainSystem_CollisionWithGoldSequence(t *testing.T) {
 	drainSys := NewDrainSystem(ctx)
 
 	// Spawn drain at position (0, 0)
-	ctx.State.SetScore(100)
+	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	drainEntityID := ctx.State.GetDrainEntity()
@@ -333,7 +333,7 @@ func TestDrainSystem_CollisionMultipleLevels(t *testing.T) {
 			drainSys := NewDrainSystem(ctx)
 
 			// Spawn drain
-			ctx.State.SetScore(100)
+			ctx.State.SetEnergy(100)
 			drainSys.Update(world, 16*time.Millisecond)
 
 			drainEntityID := ctx.State.GetDrainEntity()
@@ -416,7 +416,7 @@ func TestDrainSystem_NoCollisionWithNonSequenceEntity(t *testing.T) {
 	drainSys := NewDrainSystem(ctx)
 
 	// Spawn drain
-	ctx.State.SetScore(100)
+	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	drainEntityID := ctx.State.GetDrainEntity()
@@ -463,7 +463,7 @@ func TestDrainSystem_NoSelfCollision(t *testing.T) {
 	drainSys := NewDrainSystem(ctx)
 
 	// Spawn drain
-	ctx.State.SetScore(100)
+	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	if !ctx.State.GetDrainActive() {
@@ -508,7 +508,7 @@ func TestDrainSystem_CollisionAtDifferentPositions(t *testing.T) {
 			drainSys := NewDrainSystem(ctx)
 
 			// Spawn drain manually at a safe position (1, 1)
-			ctx.State.SetScore(100)
+			ctx.State.SetEnergy(100)
 			entity := world.CreateEntity()
 			world.Positions.Add(entity, components.PositionComponent{
 				X: 1,
@@ -598,7 +598,7 @@ func TestDrainSystem_CollisionWithNugget(t *testing.T) {
 	drainSys.SetNuggetSystem(nuggetSys)
 
 	// Spawn drain at position (0, 0)
-	ctx.State.SetScore(100)
+	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	drainEntityID := ctx.State.GetDrainEntity()
@@ -672,7 +672,7 @@ func TestDrainSystem_NuggetCollisionWithoutSystem(t *testing.T) {
 	drainSys := NewDrainSystem(ctx)
 
 	// Spawn drain
-	ctx.State.SetScore(100)
+	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	drainEntityID := ctx.State.GetDrainEntity()
@@ -732,7 +732,7 @@ func TestDrainSystem_GoldCollisionInactiveGold(t *testing.T) {
 	drainSys := NewDrainSystem(ctx)
 
 	// Spawn drain
-	ctx.State.SetScore(100)
+	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	drainEntityID := ctx.State.GetDrainEntity()
@@ -785,7 +785,7 @@ func TestDrainSystem_CollisionWithFallingDecay(t *testing.T) {
 	drainSys := NewDrainSystem(ctx)
 
 	// Spawn drain at position (0, 0)
-	ctx.State.SetScore(100)
+	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	drainEntityID := ctx.State.GetDrainEntity()
@@ -845,7 +845,7 @@ func TestDrainSystem_CollisionWithMultipleFallingDecay(t *testing.T) {
 	drainSys := NewDrainSystem(ctx)
 
 	// Spawn drain at position (0, 0)
-	ctx.State.SetScore(100)
+	ctx.State.SetEnergy(100)
 	entity := world.CreateEntity()
 	x, y := 0, 0
 	world.Positions.Add(entity, components.PositionComponent{
@@ -957,7 +957,7 @@ func TestDrainSystem_FallingDecayCollisionAtBoundary(t *testing.T) {
 			drainSys := NewDrainSystem(ctx)
 
 			// Spawn drain at a safe position (1, 1)
-			ctx.State.SetScore(100)
+			ctx.State.SetEnergy(100)
 			entity := world.CreateEntity()
 			world.Positions.Add(entity, components.PositionComponent{
 				X: 1,
@@ -1032,7 +1032,7 @@ func TestDrainSystem_DecayCollisionPriorityOverSequence(t *testing.T) {
 	drainSys := NewDrainSystem(ctx)
 
 	// Spawn drain
-	ctx.State.SetScore(100)
+	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	drainEntityID := ctx.State.GetDrainEntity()
@@ -1127,7 +1127,7 @@ func TestDrainSystem_FallingDecayWithDifferentSpeeds(t *testing.T) {
 			drainSys := NewDrainSystem(ctx)
 
 			// Spawn drain
-			ctx.State.SetScore(100)
+			ctx.State.SetEnergy(100)
 			drainSys.Update(world, 16*time.Millisecond)
 
 			drainEntityID := ctx.State.GetDrainEntity()

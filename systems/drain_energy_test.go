@@ -9,8 +9,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
-// TestDrainSystem_ScoreDrainWhenOnCursor tests score drain when drain is on cursor
-func TestDrainSystem_ScoreDrainWhenOnCursor(t *testing.T) {
+// TestDrainSystem_EnergyDrainWhenOnCursor tests energy drain when drain is on cursor
+func TestDrainSystem_EnergyDrainWhenOnCursor(t *testing.T) {
 	startTime := time.Now()
 	mockTime := engine.NewMockTimeProvider(startTime)
 
@@ -30,10 +30,10 @@ func TestDrainSystem_ScoreDrainWhenOnCursor(t *testing.T) {
 
 	drainSys := NewDrainSystem(ctx)
 
-	// Set initial score and cursor
-	initialScore := 100
+	// Set initial energy and cursor
+	initialEnergy := 100
 	cursorX, cursorY := 10, 10
-	ctx.State.SetScore(initialScore)
+	ctx.State.SetEnergy(initialEnergy)
 	ctx.State.SetCursorX(cursorX)
 	ctx.State.SetCursorY(cursorY)
 
@@ -60,25 +60,25 @@ func TestDrainSystem_ScoreDrainWhenOnCursor(t *testing.T) {
 	// Update without advancing time - should not drain yet
 	drainSys.Update(world, 16*time.Millisecond)
 
-	// Score should not change yet (DrainScoreDrainInterval hasn't passed)
-	if ctx.State.GetScore() != initialScore {
-		t.Errorf("Score should not change before DrainScoreDrainInterval, got %d, expected %d",
-			ctx.State.GetScore(), initialScore)
+	// Energy should not change yet (DrainEnergyDrainInterval hasn't passed)
+	if ctx.State.GetEnergy() != initialEnergy {
+		t.Errorf("Energy should not change before DrainEnergyDrainInterval, got %d, expected %d",
+			ctx.State.GetEnergy(), initialEnergy)
 	}
 
-	// Advance time by DrainScoreDrainInterval
-	mockTime.Advance(constants.DrainScoreDrainInterval)
+	// Advance time by DrainEnergyDrainInterval
+	mockTime.Advance(constants.DrainEnergyDrainInterval)
 	drainSys.Update(world, 16*time.Millisecond)
 
-	// Score should be reduced by DrainScoreDrainAmount (10)
-	expectedScore := initialScore - constants.DrainScoreDrainAmount
-	actualScore := ctx.State.GetScore()
-	if actualScore != expectedScore {
-		t.Errorf("Expected score %d after drain, got %d", expectedScore, actualScore)
+	// Energy should be reduced by DrainEnergyDrainAmount (10)
+	expectedEnergy := initialEnergy - constants.DrainEnergyDrainAmount
+	actualEnergy := ctx.State.GetEnergy()
+	if actualEnergy != expectedEnergy {
+		t.Errorf("Expected energy %d after drain, got %d", expectedEnergy, actualEnergy)
 	}
 }
 
-// TestDrainSystem_NoDrainWhenNotOnCursor tests that score is not drained when drain is not on cursor
+// TestDrainSystem_NoDrainWhenNotOnCursor tests that energy is not drained when drain is not on cursor
 func TestDrainSystem_NoDrainWhenNotOnCursor(t *testing.T) {
 	startTime := time.Now()
 	mockTime := engine.NewMockTimeProvider(startTime)
@@ -99,9 +99,9 @@ func TestDrainSystem_NoDrainWhenNotOnCursor(t *testing.T) {
 
 	drainSys := NewDrainSystem(ctx)
 
-	// Set initial score
-	initialScore := 100
-	ctx.State.SetScore(initialScore)
+	// Set initial energy
+	initialEnergy := 100
+	ctx.State.SetEnergy(initialEnergy)
 
 	// Place cursor at (10, 10)
 	ctx.State.SetCursorX(10)
@@ -128,14 +128,14 @@ func TestDrainSystem_NoDrainWhenNotOnCursor(t *testing.T) {
 	ctx.State.SetDrainX(drainX)
 	ctx.State.SetDrainY(drainY)
 
-	// Advance time by DrainScoreDrainInterval
-	mockTime.Advance(constants.DrainScoreDrainInterval)
+	// Advance time by DrainEnergyDrainInterval
+	mockTime.Advance(constants.DrainEnergyDrainInterval)
 	drainSys.Update(world, 16*time.Millisecond)
 
-	// Score should NOT change (drain not on cursor)
-	if ctx.State.GetScore() != initialScore {
-		t.Errorf("Score should not change when drain is not on cursor, got %d, expected %d",
-			ctx.State.GetScore(), initialScore)
+	// Energy should NOT change (drain not on cursor)
+	if ctx.State.GetEnergy() != initialEnergy {
+		t.Errorf("Energy should not change when drain is not on cursor, got %d, expected %d",
+			ctx.State.GetEnergy(), initialEnergy)
 	}
 }
 
@@ -160,8 +160,8 @@ func TestDrainSystem_IsOnCursorStateTracking(t *testing.T) {
 
 	drainSys := NewDrainSystem(ctx)
 
-	// Set score and cursor
-	ctx.State.SetScore(100)
+	// Set energy and cursor
+	ctx.State.SetEnergy(100)
 	cursorX, cursorY := 10, 10
 	ctx.State.SetCursorX(cursorX)
 	ctx.State.SetCursorY(cursorY)
@@ -220,7 +220,7 @@ func TestDrainSystem_IsOnCursorStateTracking(t *testing.T) {
 	}
 }
 
-// TestDrainSystem_MultipleDrainTicks tests multiple score drain ticks
+// TestDrainSystem_MultipleDrainTicks tests multiple energy drain ticks
 func TestDrainSystem_MultipleDrainTicks(t *testing.T) {
 	startTime := time.Now()
 	mockTime := engine.NewMockTimeProvider(startTime)
@@ -241,9 +241,9 @@ func TestDrainSystem_MultipleDrainTicks(t *testing.T) {
 
 	drainSys := NewDrainSystem(ctx)
 
-	// Set initial score
-	initialScore := 100
-	ctx.State.SetScore(initialScore)
+	// Set initial energy
+	initialEnergy := 100
+	ctx.State.SetEnergy(initialEnergy)
 
 	// Place cursor and drain at same position
 	cursorX, cursorY := 10, 10
@@ -273,27 +273,27 @@ func TestDrainSystem_MultipleDrainTicks(t *testing.T) {
 	numTicks := 5
 	for i := 0; i < numTicks; i++ {
 		// Advance time by drain interval
-		mockTime.Advance(constants.DrainScoreDrainInterval)
+		mockTime.Advance(constants.DrainEnergyDrainInterval)
 		drainSys.Update(world, 16*time.Millisecond)
 
-		// Verify score decreased
-		expectedScore := initialScore - (i+1)*constants.DrainScoreDrainAmount
-		actualScore := ctx.State.GetScore()
-		if actualScore != expectedScore {
-			t.Errorf("After tick %d: expected score %d, got %d",
-				i+1, expectedScore, actualScore)
+		// Verify energy decreased
+		expectedEnergy := initialEnergy - (i+1)*constants.DrainEnergyDrainAmount
+		actualEnergy := ctx.State.GetEnergy()
+		if actualEnergy != expectedEnergy {
+			t.Errorf("After tick %d: expected energy %d, got %d",
+				i+1, expectedEnergy, actualEnergy)
 		}
 	}
 
-	// Final score should be initialScore - (numTicks * DrainAmount)
-	expectedFinalScore := initialScore - (numTicks * constants.DrainScoreDrainAmount)
-	if ctx.State.GetScore() != expectedFinalScore {
-		t.Errorf("Final score should be %d, got %d",
-			expectedFinalScore, ctx.State.GetScore())
+	// Final energy should be initialEnergy - (numTicks * DrainAmount)
+	expectedFinalEnergy := initialEnergy - (numTicks * constants.DrainEnergyDrainAmount)
+	if ctx.State.GetEnergy() != expectedFinalEnergy {
+		t.Errorf("Final energy should be %d, got %d",
+			expectedFinalEnergy, ctx.State.GetEnergy())
 	}
 }
 
-// TestDrainSystem_NoDrainBeforeInterval tests that drain doesn't occur before DrainScoreDrainInterval
+// TestDrainSystem_NoDrainBeforeInterval tests that drain doesn't occur before DrainEnergyDrainInterval
 func TestDrainSystem_NoDrainBeforeInterval(t *testing.T) {
 	startTime := time.Now()
 	mockTime := engine.NewMockTimeProvider(startTime)
@@ -314,9 +314,9 @@ func TestDrainSystem_NoDrainBeforeInterval(t *testing.T) {
 
 	drainSys := NewDrainSystem(ctx)
 
-	// Set initial score
-	initialScore := 100
-	ctx.State.SetScore(initialScore)
+	// Set initial energy
+	initialEnergy := 100
+	ctx.State.SetEnergy(initialEnergy)
 
 	// Place cursor and drain at same position
 	cursorX, cursorY := 10, 10
@@ -342,18 +342,18 @@ func TestDrainSystem_NoDrainBeforeInterval(t *testing.T) {
 	ctx.State.SetDrainX(cursorX)
 	ctx.State.SetDrainY(cursorY)
 
-	// Test various time intervals less than DrainScoreDrainInterval
+	// Test various time intervals less than DrainEnergyDrainInterval
 	intervals := []time.Duration{
-		constants.DrainScoreDrainInterval / 20,
-		constants.DrainScoreDrainInterval / 10,
-		constants.DrainScoreDrainInterval / 5,
-		constants.DrainScoreDrainInterval - 1*time.Millisecond,
+		constants.DrainEnergyDrainInterval / 20,
+		constants.DrainEnergyDrainInterval / 10,
+		constants.DrainEnergyDrainInterval / 5,
+		constants.DrainEnergyDrainInterval - 1*time.Millisecond,
 	}
 
 	for _, interval := range intervals {
-		// Reset time and score
+		// Reset time and energy
 		mockTime.SetTime(startTime)
-		ctx.State.SetScore(initialScore)
+		ctx.State.SetEnergy(initialEnergy)
 
 		// Recreate drain component with fresh times
 		world.Drains.Add(entity, components.DrainComponent{
@@ -368,16 +368,16 @@ func TestDrainSystem_NoDrainBeforeInterval(t *testing.T) {
 		mockTime.Advance(interval)
 		drainSys.Update(world, 16*time.Millisecond)
 
-		// Score should NOT have changed
-		if ctx.State.GetScore() != initialScore {
-			t.Errorf("Score should not drain before DrainScoreDrainInterval (tested at %v), got %d, expected %d",
-				interval, ctx.State.GetScore(), initialScore)
+		// Energy should NOT have changed
+		if ctx.State.GetEnergy() != initialEnergy {
+			t.Errorf("Energy should not drain before DrainEnergyDrainInterval (tested at %v), got %d, expected %d",
+				interval, ctx.State.GetEnergy(), initialEnergy)
 		}
 	}
 }
 
-// TestDrainSystem_ScoreDrainDespawnAtZero tests that drain despawns when score reaches zero
-func TestDrainSystem_ScoreDrainDespawnAtZero(t *testing.T) {
+// TestDrainSystem_EnergyDrainDespawnAtZero tests that drain despawns when energy reaches zero
+func TestDrainSystem_EnergyDrainDespawnAtZero(t *testing.T) {
 	startTime := time.Now()
 	mockTime := engine.NewMockTimeProvider(startTime)
 
@@ -397,9 +397,9 @@ func TestDrainSystem_ScoreDrainDespawnAtZero(t *testing.T) {
 
 	drainSys := NewDrainSystem(ctx)
 
-	// Set initial score to exactly DrainScoreDrainAmount (10)
-	initialScore := constants.DrainScoreDrainAmount
-	ctx.State.SetScore(initialScore)
+	// Set initial energy to exactly DrainEnergyDrainAmount (10)
+	initialEnergy := constants.DrainEnergyDrainAmount
+	ctx.State.SetEnergy(initialEnergy)
 
 	// Place cursor and drain at same position
 	cursorX, cursorY := 10, 10
@@ -426,12 +426,12 @@ func TestDrainSystem_ScoreDrainDespawnAtZero(t *testing.T) {
 	ctx.State.SetDrainY(cursorY)
 
 	// Advance time to trigger drain
-	mockTime.Advance(constants.DrainScoreDrainInterval)
+	mockTime.Advance(constants.DrainEnergyDrainInterval)
 	drainSys.Update(world, 16*time.Millisecond)
 
-	// Score should now be 0
-	if ctx.State.GetScore() != 0 {
-		t.Errorf("Expected score to be 0, got %d", ctx.State.GetScore())
+	// Energy should now be 0
+	if ctx.State.GetEnergy() != 0 {
+		t.Errorf("Expected energy to be 0, got %d", ctx.State.GetEnergy())
 	}
 
 	// Drain should still be active (despawn check happens on next update)
@@ -444,14 +444,14 @@ func TestDrainSystem_ScoreDrainDespawnAtZero(t *testing.T) {
 
 	// Drain should now be inactive
 	if ctx.State.GetDrainActive() {
-		t.Error("Drain should be despawned when score <= 0")
+		t.Error("Drain should be despawned when energy <= 0")
 	}
 
 	// Entity should be destroyed
 	// Using direct store access
 	_, ok := world.Drains.Get(entity)
 	if ok {
-		t.Error("Drain entity should be destroyed when score <= 0")
+		t.Error("Drain entity should be destroyed when energy <= 0")
 	}
 }
 
@@ -476,8 +476,8 @@ func TestDrainSystem_LastDrainTimeUpdated(t *testing.T) {
 
 	drainSys := NewDrainSystem(ctx)
 
-	// Set score
-	ctx.State.SetScore(100)
+	// Set energy
+	ctx.State.SetEnergy(100)
 
 	// Place cursor and drain at same position
 	cursorX, cursorY := 10, 10
@@ -504,7 +504,7 @@ func TestDrainSystem_LastDrainTimeUpdated(t *testing.T) {
 	ctx.State.SetDrainY(cursorY)
 
 	// Advance time and trigger drain
-	mockTime.Advance(constants.DrainScoreDrainInterval)
+	mockTime.Advance(constants.DrainEnergyDrainInterval)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Get drain component and verify LastDrainTime was updated

@@ -32,7 +32,7 @@ func TestBoostRapidToggle(t *testing.T) {
 	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
 		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
 	})
-	scoreSystem := NewScoreSystem(ctx)
+	energySystem := NewEnergySystem(ctx)
 
 	var wg sync.WaitGroup
 
@@ -64,7 +64,7 @@ func TestBoostRapidToggle(t *testing.T) {
 			tx.Commit()
 
 			// Type the character to trigger boost extension
-			scoreSystem.HandleCharacterTyping(ctx.World, cursorPos.X, cursorPos.Y, rune('a'+(i%26)))
+			energySystem.HandleCharacterTyping(ctx.World, cursorPos.X, cursorPos.Y, rune('a'+(i%26)))
 			time.Sleep(1 * time.Millisecond) // Small delay
 		}
 	}()
@@ -117,7 +117,7 @@ func TestBoostConcurrentRead(t *testing.T) {
 	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
 		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
 	})
-	scoreSystem := NewScoreSystem(ctx)
+	energySystem := NewEnergySystem(ctx)
 
 	// Get cursor position from ECS
 	cursorPos, _ := ctx.World.Positions.Get(ctx.CursorEntity)
@@ -141,7 +141,7 @@ func TestBoostConcurrentRead(t *testing.T) {
 	tx.Spawn(entity, pos.X, pos.Y)
 	tx.Commit()
 
-	scoreSystem.HandleCharacterTyping(ctx.World, cursorPos.X, cursorPos.Y, 'a')
+	energySystem.HandleCharacterTyping(ctx.World, cursorPos.X, cursorPos.Y, 'a')
 
 	var wg sync.WaitGroup
 
@@ -153,14 +153,14 @@ func TestBoostConcurrentRead(t *testing.T) {
 			for j := 0; j < 100; j++ {
 				enabled := ctx.State.GetBoostEnabled()
 				endTime := ctx.State.GetBoostEndTime()
-				scoreInc := ctx.State.GetHeat()
-				score := ctx.State.GetScore()
+				energyInc := ctx.State.GetHeat()
+				energy := ctx.State.GetEnergy()
 
 				// Use the values to avoid optimization
 				_ = enabled
 				_ = endTime
-				_ = scoreInc
-				_ = score
+				_ = energyInc
+				_ = energy
 			}
 		}(i)
 	}
@@ -186,7 +186,7 @@ func TestBoostExpirationRace(t *testing.T) {
 	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
 		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
 	})
-	scoreSystem := NewScoreSystem(ctx)
+	energySystem := NewEnergySystem(ctx)
 
 	// Set boost to expire soon
 	ctx.State.SetBoostEnabled(true)
@@ -223,7 +223,7 @@ func TestBoostExpirationRace(t *testing.T) {
 		tx.Commit()
 
 		// Type to extend boost
-		scoreSystem.HandleCharacterTyping(ctx.World, cursorPos.X, cursorPos.Y, 'b')
+		energySystem.HandleCharacterTyping(ctx.World, cursorPos.X, cursorPos.Y, 'b')
 	}()
 
 	// Goroutine 2: Check for expiration (using atomic CAS)
@@ -255,8 +255,8 @@ func TestBoostExpirationRace(t *testing.T) {
 	// Test passes if no race is detected
 }
 
-// TestBoostWithScoreUpdates tests boost concurrent with score modifications
-func TestBoostWithScoreUpdates(t *testing.T) {
+// TestBoostWithEnergyUpdates tests boost concurrent with energy modifications
+func TestBoostWithEnergyUpdates(t *testing.T) {
 	screen := tcell.NewSimulationScreen("UTF-8")
 	screen.Init()
 	defer screen.Fini()
@@ -271,7 +271,7 @@ func TestBoostWithScoreUpdates(t *testing.T) {
 	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
 		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
 	})
-	scoreSystem := NewScoreSystem(ctx)
+	energySystem := NewEnergySystem(ctx)
 
 	// Activate boost
 	ctx.State.SetBoostEnabled(true)
@@ -279,7 +279,7 @@ func TestBoostWithScoreUpdates(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	// Goroutine 1: Type green characters to increase score/heat
+	// Goroutine 1: Type green characters to increase energy/heat
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -305,23 +305,23 @@ func TestBoostWithScoreUpdates(t *testing.T) {
 			tx.Spawn(entity, pos.X, pos.Y)
 			tx.Commit()
 
-			scoreSystem.HandleCharacterTyping(ctx.World, cursorPos.X, cursorPos.Y, rune('a'+(i%26)))
+			energySystem.HandleCharacterTyping(ctx.World, cursorPos.X, cursorPos.Y, rune('a'+(i%26)))
 			time.Sleep(1 * time.Millisecond)
 		}
 	}()
 
-	// Goroutine 2: Read score and boost state (renderer)
+	// Goroutine 2: Read energy and boost state (renderer)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 200; i++ {
-			score := ctx.State.GetScore()
-			scoreInc := ctx.State.GetHeat()
+			energy := ctx.State.GetEnergy()
+			energyInc := ctx.State.GetHeat()
 			boostEnabled := ctx.State.GetBoostEnabled()
 
 			// Use values
-			_ = score
-			_ = scoreInc
+			_ = energy
+			_ = energyInc
 			_ = boostEnabled
 
 			time.Sleep(500 * time.Microsecond)
@@ -359,7 +359,7 @@ func TestSimulateFullGameLoop(t *testing.T) {
 	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
 		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
 	})
-	scoreSystem := NewScoreSystem(ctx)
+	energySystem := NewEnergySystem(ctx)
 
 	var wg sync.WaitGroup
 
@@ -384,7 +384,7 @@ func TestSimulateFullGameLoop(t *testing.T) {
 				}
 
 				// Simulate rendering
-				_ = ctx.State.GetScore()
+				_ = ctx.State.GetEnergy()
 				_ = ctx.State.GetHeat()
 				_ = ctx.State.GetBoostEnabled()
 				if ctx.State.GetBoostEnabled() {
@@ -429,7 +429,7 @@ func TestSimulateFullGameLoop(t *testing.T) {
 			tx.Spawn(entity, pos.X, pos.Y)
 			tx.Commit()
 
-			scoreSystem.HandleCharacterTyping(ctx.World, cursorPos.X, cursorPos.Y, rune('a'+(i%26)))
+			energySystem.HandleCharacterTyping(ctx.World, cursorPos.X, cursorPos.Y, rune('a'+(i%26)))
 			time.Sleep(10 * time.Millisecond) // Simulate typing speed
 		}
 
@@ -467,19 +467,19 @@ func TestAllAtomicStateAccess(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 100; i++ {
-			ctx.State.SetScore(i)
+			ctx.State.SetEnergy(i)
 			ctx.State.SetHeat(i % 50)
 			ctx.State.SetBoostEnabled(i%2 == 0)
 			ctx.State.SetBoostEndTime(time.Now().Add(time.Duration(i) * time.Millisecond))
 			ctx.State.SetCursorError(i%3 == 0)
 			ctx.State.SetCursorErrorTime(time.Now())
-			ctx.State.SetScoreBlinkActive(i%4 == 0)
-			// Set score blink type and level
+			ctx.State.SetEnergyBlinkActive(i%4 == 0)
+			// Set energy blink type and level
 			seqType := components.SequenceType(i % 4) // 0=Blue, 1=Green, 2=Red, 3=Gold
 			level := components.SequenceLevel(i % 3)  // 0=Bright, 1=Normal, 2=Dark
-			ctx.State.SetScoreBlinkType(uint32(seqType))
-			ctx.State.SetScoreBlinkLevel(uint32(level))
-			ctx.State.SetScoreBlinkTime(time.Now())
+			ctx.State.SetEnergyBlinkType(uint32(seqType))
+			ctx.State.SetEnergyBlinkLevel(uint32(level))
+			ctx.State.SetEnergyBlinkTime(time.Now())
 			ctx.SetPingActive(i%5 == 0)
 			ctx.SetPingGridTimer(float64(i) / 10.0)
 			time.Sleep(100 * time.Microsecond)
@@ -491,15 +491,15 @@ func TestAllAtomicStateAccess(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 200; i++ {
-			_ = ctx.State.GetScore()
+			_ = ctx.State.GetEnergy()
 			_ = ctx.State.GetHeat()
 			_ = ctx.State.GetBoostEnabled()
 			_ = ctx.State.GetBoostEndTime()
 			_ = ctx.State.GetCursorError()
 			_ = ctx.State.GetCursorErrorTime()
-			_ = ctx.State.GetScoreBlinkActive()
-			_ = ctx.State.GetScoreBlinkType()
-			_ = ctx.State.GetScoreBlinkTime()
+			_ = ctx.State.GetEnergyBlinkActive()
+			_ = ctx.State.GetEnergyBlinkType()
+			_ = ctx.State.GetEnergyBlinkTime()
 			_ = ctx.GetPingActive()
 			_ = ctx.GetPingGridTimer()
 			time.Sleep(50 * time.Microsecond)
@@ -511,8 +511,8 @@ func TestAllAtomicStateAccess(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 150; i++ {
-			if ctx.State.GetScore() > 50 {
-				ctx.State.SetScore(0)
+			if ctx.State.GetEnergy() > 50 {
+				ctx.State.SetEnergy(0)
 			}
 			if ctx.State.GetBoostEnabled() {
 				_ = ctx.State.GetBoostEndTime()

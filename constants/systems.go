@@ -4,13 +4,13 @@ import (
 	"time"
 )
 
-// Score System
+// Energy System
 const (
 	// ErrorBlinkTimeout is the duration for error cursor flash
 	ErrorBlinkTimeout = 200 * time.Millisecond
 
-	// ScoreBlinkTimeout is the duration for score blink
-	ScoreBlinkTimeout = 200 * time.Millisecond
+	// EnergyBlinkTimeout is the duration for energy blink
+	EnergyBlinkTimeout = 200 * time.Millisecond
 )
 
 // Gold System
@@ -69,12 +69,12 @@ const (
 	// DrainMoveInterval is the duration between drain movement updates
 	DrainMoveInterval = DrainMoveIntervalMs * time.Millisecond
 
-	// DrainScoreDrainIntervalMs is the interval between score drain ticks (in milliseconds)
-	DrainScoreDrainIntervalMs = 1000
+	// DrainEnergyDrainIntervalMs is the interval between energy drain ticks (in milliseconds)
+	DrainEnergyDrainIntervalMs = 1000
 
-	// DrainScoreDrainInterval is the duration between score drain ticks
-	DrainScoreDrainInterval = DrainScoreDrainIntervalMs * time.Millisecond
+	// DrainEnergyDrainInterval is the duration between energy drain ticks
+	DrainEnergyDrainInterval = DrainEnergyDrainIntervalMs * time.Millisecond
 
-	// DrainScoreDrainAmount is the amount of score drained per tick (10 points)
-	DrainScoreDrainAmount = 10
+	// DrainEnergyDrainAmount is the amount of energy drained per tick (10 points)
+	DrainEnergyDrainAmount = 10
 )

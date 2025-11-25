@@ -176,8 +176,8 @@ The nugget system tests are organized into focused files:
   - TestDecayDoesNotProcessSameNuggetTwice: Idempotent destruction
   - **Frame Rate Matching**: Uses 16ms time steps (matching real game) to prevent row skipping at high speeds (max 15 rows/s)
 - **nugget_jump_test.go**: Tab key jumping to nuggets
-  - TestNuggetJumpWithSufficientScore: Jump mechanics with score >= 10
-  - TestNuggetJumpWithInsufficientScore: Jump prevention with score < 10
+  - TestNuggetJumpWithSufficientEnergy: Jump mechanics with energy >= 10
+  - TestNuggetJumpWithInsufficientEnergy: Jump prevention with energy < 10
   - TestNuggetJumpWithNoActiveNugget: Graceful handling when no nugget exists
   - TestNuggetJumpUpdatesPosition: Cursor position update verification
   - TestNuggetJumpMultipleTimes: Sequential jump operations
@@ -189,7 +189,7 @@ The nugget system tests are organized into focused files:
 - **nugget_typing_test.go**: Typing on nuggets
   - TestNuggetTypingIncreasesHeat: Heat increase by 10% of max
   - TestNuggetTypingDestroysAndReturnsSpawn: Complete collection/respawn cycle
-  - TestNuggetTypingNoScoreEffect: Score independence verification
+  - TestNuggetTypingNoEnergyEffect: Energy independence verification
   - TestNuggetTypingNoErrorEffect: No error state on collection
   - TestNuggetTypingMultipleCollections: Heat accumulation validation
   - TestNuggetTypingWithSmallScreen: Minimum heat increase of 1
@@ -214,7 +214,7 @@ The drain system tests are organized into focused files:
 - **drain_lifecycle_test.go**: Drain entity spawn and despawn lifecycle
 - **drain_movement_test.go**: Movement toward cursor and pathfinding logic
 - **drain_collision_test.go**: Collision detection with sequences, nuggets, and gold
-- **drain_score_test.go**: Score draining mechanics and timing
+- **drain_energy_test.go**: Energy draining mechanics and timing
 - **drain_integration_test.go**: Integration with other game systems
 - **drain_visualization_test.go**: Rendering and visual feedback
 
@@ -231,8 +231,8 @@ The content manager system tests validate content loading and management:
 Located in `systems/integration_test.go`:
 - **TestDecaySystemCounterUpdates**: Validates color counter updates during decay
 - **TestDecaySystemColorTransitionWithCounters**: Tests color transitions with atomic counter updates
-- **TestScoreSystemCounterDecrement**: Verifies counter decrements when typing characters
-- **TestScoreSystemDoesNotDecrementRedCounter**: Ensures red characters don't affect color counters
+- **TestEnergySystemCounterDecrement**: Verifies counter decrements when typing characters
+- **TestEnergySystemDoesNotDecrementRedCounter**: Ensures red characters don't affect color counters
 
 Also see `engine/integration_test.go` for phase transition and game cycle integration tests.
 
@@ -306,7 +306,7 @@ Located in `systems/cleaner_benchmark_test.go`:
    - Cleaner triggering race conditions
 
 3. **Color Counters**:
-   - Concurrent increment/decrement (spawn vs. score vs. decay)
+   - Concurrent increment/decrement (spawn vs. energy vs. decay)
    - Read during modification
    - Negative counter prevention
 

@@ -182,8 +182,8 @@ func TestDecaySystemColorTransitionWithCounters(t *testing.T) {
 	}
 }
 
-// TestScoreSystemCounterDecrement tests that score system decrements counters when typing
-func TestScoreSystemCounterDecrement(t *testing.T) {
+// TestEnergySystemCounterDecrement tests that energy system decrements counters when typing
+func TestEnergySystemCounterDecrement(t *testing.T) {
 	screen := tcell.NewSimulationScreen("UTF-8")
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
@@ -201,8 +201,8 @@ func TestScoreSystemCounterDecrement(t *testing.T) {
 	})
 
 	spawnSys := NewSpawnSystem(ctx)
-	scoreSys := NewScoreSystem(ctx)
-	scoreSys.SetSpawnSystem(spawnSys)
+	energySys := NewEnergySystem(ctx)
+	energySys.SetSpawnSystem(spawnSys)
 
 	// Create a Green Normal character at cursor position
 	entity := world.CreateEntity()
@@ -229,7 +229,7 @@ func TestScoreSystemCounterDecrement(t *testing.T) {
 	}
 
 	// Type the correct character
-	scoreSys.HandleCharacterTyping(world, ctx.CursorX, ctx.CursorY, 'a')
+	energySys.HandleCharacterTyping(world, ctx.CursorX, ctx.CursorY, 'a')
 
 	// Verify counter was decremented
 	finalCount := ctx.State.GreenCountNormal.Load()
@@ -244,8 +244,8 @@ func TestScoreSystemCounterDecrement(t *testing.T) {
 	}
 }
 
-// TestScoreSystemDoesNotDecrementRedCounter tests that Red characters don't affect counters
-func TestScoreSystemDoesNotDecrementRedCounter(t *testing.T) {
+// TestEnergySystemDoesNotDecrementRedCounter tests that Red characters don't affect counters
+func TestEnergySystemDoesNotDecrementRedCounter(t *testing.T) {
 	screen := tcell.NewSimulationScreen("UTF-8")
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
@@ -263,8 +263,8 @@ func TestScoreSystemDoesNotDecrementRedCounter(t *testing.T) {
 	})
 
 	spawnSys := NewSpawnSystem(ctx)
-	scoreSys := NewScoreSystem(ctx)
-	scoreSys.SetSpawnSystem(spawnSys)
+	energySys := NewEnergySystem(ctx)
+	energySys.SetSpawnSystem(spawnSys)
 
 	// Create a Red character (Red is not tracked in counters)
 	entity := world.CreateEntity()
@@ -292,7 +292,7 @@ func TestScoreSystemDoesNotDecrementRedCounter(t *testing.T) {
 	}
 
 	// Type the character
-	scoreSys.HandleCharacterTyping(world, ctx.CursorX, ctx.CursorY, 'r')
+	energySys.HandleCharacterTyping(world, ctx.CursorX, ctx.CursorY, 'r')
 
 	// Verify all counters still zero (Red doesn't affect counters)
 	countsAfter := ctx.State.ReadColorCounts()

@@ -669,8 +669,8 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 		}
 	}
 
-	// Calculate positions and draw timers + score (from right to left: Boost, Grid, Decay, Score)
-	scoreText := fmt.Sprintf(" Score: %d ", ctx.State.GetScore())
+	// Calculate positions and draw timers + energy (from right to left: Boost, Grid, Decay, Energy)
+	energyText := fmt.Sprintf(" Energy: %d ", ctx.State.GetEnergy())
 	decayText := fmt.Sprintf(" Decay: %.1fs ", decayTimeRemaining)
 	var boostText string
 	var gridText string
@@ -692,7 +692,7 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 		gridText = fmt.Sprintf(" Grid: %.1fs ", gridRemaining)
 	}
 
-	totalWidth = len(boostText) + len(gridText) + len(decayText) + len(scoreText)
+	totalWidth = len(boostText) + len(gridText) + len(decayText) + len(energyText)
 
 	startX := r.width - totalWidth
 	if startX < 0 {
@@ -732,15 +732,15 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 	}
 	startX += len(decayText)
 
-	// Draw score (with white background, or blink color if active)
-	if ctx.State.GetScoreBlinkActive() && now.Sub(ctx.State.GetScoreBlinkTime()).Milliseconds() < 200 {
-		typeCode := ctx.State.GetScoreBlinkType()
-		var scoreStyle tcell.Style
+	// Draw energy (with white background, or blink color if active)
+	if ctx.State.GetEnergyBlinkActive() && now.Sub(ctx.State.GetEnergyBlinkTime()).Milliseconds() < 200 {
+		typeCode := ctx.State.GetEnergyBlinkType()
+		var energyStyle tcell.Style
 
 		if typeCode == 0 {
 			// ERROR STATE: Bright Red Text on Black Background
 			// We define this explicitly to avoid TCell color comparison issues
-			scoreStyle = defaultStyle.Foreground(tcell.NewRGBColor(255, 0, 0)).Background(tcell.NewRGBColor(0, 0, 0))
+			energyStyle = defaultStyle.Foreground(tcell.NewRGBColor(255, 0, 0)).Background(tcell.NewRGBColor(0, 0, 0))
 		} else {
 			// SUCCESS STATES: Black Text on Colored Background
 			var blinkColor tcell.Color
@@ -756,20 +756,20 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 			default:
 				blinkColor = tcell.NewRGBColor(255, 255, 255)
 			}
-			scoreStyle = defaultStyle.Foreground(tcell.NewRGBColor(0, 0, 0)).Background(blinkColor)
+			energyStyle = defaultStyle.Foreground(tcell.NewRGBColor(0, 0, 0)).Background(blinkColor)
 		}
 
-		for i, ch := range scoreText {
+		for i, ch := range energyText {
 			if startX+i < r.width {
-				r.screen.SetContent(startX+i, statusY, ch, nil, scoreStyle)
+				r.screen.SetContent(startX+i, statusY, ch, nil, energyStyle)
 			}
 		}
 	} else {
 		// Default: white background with black text
-		scoreStyle := defaultStyle.Foreground(tcell.NewRGBColor(0, 0, 0)).Background(RgbScoreBg)
-		for i, ch := range scoreText {
+		energyStyle := defaultStyle.Foreground(tcell.NewRGBColor(0, 0, 0)).Background(RgbEnergyBg)
+		for i, ch := range energyText {
 			if startX+i < r.width {
-				r.screen.SetContent(startX+i, statusY, ch, nil, scoreStyle)
+				r.screen.SetContent(startX+i, statusY, ch, nil, energyStyle)
 			}
 		}
 	}

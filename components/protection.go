@@ -11,7 +11,7 @@ const (
 	// ProtectFromDecay makes entity immune to falling decay characters.
 	ProtectFromDecay ProtectionFlags = 1 << iota
 
-	// ProtectFromDrain makes entity immune to score drain mechanic.
+	// ProtectFromDrain makes entity immune to energy drain mechanic.
 	ProtectFromDrain
 
 	// ProtectFromCull makes entity immune to out-of-bounds cleanup.

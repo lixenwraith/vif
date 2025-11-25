@@ -30,8 +30,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) bool {
 		return handleQuitCommand(ctx)
 	case "n", "new":
 		return handleNewCommand(ctx)
-	case "score":
-		return handleScoreCommand(ctx, args)
+	case "energy":
+		return handleEnergyCommand(ctx, args)
 	case "heat":
 		return handleHeatCommand(ctx, args)
 	case "boost":
@@ -51,8 +51,8 @@ func handleQuitCommand(ctx *engine.GameContext) bool {
 
 // handleNewCommand resets the game state
 func handleNewCommand(ctx *engine.GameContext) bool {
-	// Reset score and heat
-	ctx.State.SetScore(0)
+	// Reset energy and heat
+	ctx.State.SetEnergy(0)
 	ctx.State.SetHeat(0)
 
 	// Clear all entities from the world
@@ -82,11 +82,11 @@ func handleNewCommand(ctx *engine.GameContext) bool {
 	ctx.State.SetBoostEndTime(time.Time{})
 	ctx.State.SetBoostColor(0)
 
-	// TODO: Drains: Score reset should despawn drains, but think about something clever to do here
+	// TODO: Drains: Energy reset should despawn drains, but think about something clever to do here
 
 	// Reset visual feedback
 	ctx.State.SetCursorError(false)
-	ctx.State.SetScoreBlinkActive(false)
+	ctx.State.SetEnergyBlinkActive(false)
 
 	// Reset game lifecycle flags
 	ctx.State.SetInitialSpawnComplete()
@@ -96,26 +96,26 @@ func handleNewCommand(ctx *engine.GameContext) bool {
 	return true
 }
 
-// handleScoreCommand sets the score to a specified value
-func handleScoreCommand(ctx *engine.GameContext, args []string) bool {
+// handleEnergyCommand sets the energy to a specified value
+func handleEnergyCommand(ctx *engine.GameContext, args []string) bool {
 	if len(args) != 1 {
-		setCommandError(ctx, "Invalid arguments for score")
+		setCommandError(ctx, "Invalid arguments for energy")
 		return true
 	}
 
 	value, err := strconv.Atoi(args[0])
 	if err != nil {
-		setCommandError(ctx, "Invalid arguments for score")
+		setCommandError(ctx, "Invalid arguments for energy")
 		return true
 	}
 
 	if value < 0 {
-		setCommandError(ctx, "Value out of range for score")
+		setCommandError(ctx, "Value out of range for energy")
 		return true
 	}
 
-	ctx.State.SetScore(value)
-	ctx.LastCommand = fmt.Sprintf(":score %d", value)
+	ctx.State.SetEnergy(value)
+	ctx.LastCommand = fmt.Sprintf(":energy %d", value)
 	return true
 }
 

@@ -19,8 +19,8 @@ func createAudioCommand(soundType audio.SoundType, timestamp time.Time, frameNum
 	}
 }
 
-// ScoreSystem handles character typing and score calculation
-type ScoreSystem struct {
+// EnergySystem handles character typing and energy calculation
+type EnergySystem struct {
 	ctx                *engine.GameContext
 	lastCorrect        time.Time
 	errorCursorSet     bool
@@ -29,36 +29,36 @@ type ScoreSystem struct {
 	nuggetSystem       *NuggetSystem
 }
 
-// NewScoreSystem creates a new score system
-func NewScoreSystem(ctx *engine.GameContext) *ScoreSystem {
-	return &ScoreSystem{
+// NewEnergySystem creates a new energy system
+func NewEnergySystem(ctx *engine.GameContext) *EnergySystem {
+	return &EnergySystem{
 		ctx:         ctx,
 		lastCorrect: ctx.TimeProvider.Now(),
 	}
 }
 
 // Priority returns the system's priority
-func (s *ScoreSystem) Priority() int {
+func (s *EnergySystem) Priority() int {
 	return 10 // High priority, run before other systems
 }
 
 // SetGoldSystem sets the gold sequence system reference
-func (s *ScoreSystem) SetGoldSystem(goldSystem *GoldSystem) {
+func (s *EnergySystem) SetGoldSystem(goldSystem *GoldSystem) {
 	s.goldSequenceSystem = goldSystem
 }
 
 // SetSpawnSystem sets the spawn system reference for color counter updates
-func (s *ScoreSystem) SetSpawnSystem(spawnSystem *SpawnSystem) {
+func (s *EnergySystem) SetSpawnSystem(spawnSystem *SpawnSystem) {
 	s.spawnSystem = spawnSystem
 }
 
 // SetNuggetSystem sets the nugget system reference for nugget collection
-func (s *ScoreSystem) SetNuggetSystem(nuggetSystem *NuggetSystem) {
+func (s *EnergySystem) SetNuggetSystem(nuggetSystem *NuggetSystem) {
 	s.nuggetSystem = nuggetSystem
 }
 
-// Update runs the score system
-func (s *ScoreSystem) Update(world *engine.World, dt time.Duration) {
+// Update runs the energy system
+func (s *EnergySystem) Update(world *engine.World, dt time.Duration) {
 	// Fetch time resource
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	now := timeRes.GameTime
@@ -71,15 +71,15 @@ func (s *ScoreSystem) Update(world *engine.World, dt time.Duration) {
 		world.Cursors.Add(s.ctx.CursorEntity, cursor)
 	}
 
-	// Clear score blink (background color flash) after timeout using Game Time
+	// Clear energy blink (background color flash) after timeout using Game Time
 	// This ensures the success flash "freezes" if the game is paused
-	if s.ctx.State.GetScoreBlinkActive() && now.Sub(s.ctx.State.GetScoreBlinkTime()) > constants.ScoreBlinkTimeout {
-		s.ctx.State.SetScoreBlinkActive(false)
+	if s.ctx.State.GetEnergyBlinkActive() && now.Sub(s.ctx.State.GetEnergyBlinkTime()) > constants.EnergyBlinkTimeout {
+		s.ctx.State.SetEnergyBlinkActive(false)
 	}
 }
 
 // HandleCharacterTyping processes a character typed in insert mode
-func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursorY int, typedRune rune) {
+func (s *EnergySystem) HandleCharacterTyping(world *engine.World, cursorX, cursorY int, typedRune rune) {
 	// Fetch resources
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
@@ -117,11 +117,11 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.State.SetHeat(0) // Reset heat
 		s.ctx.State.SetBoostEnabled(false)
 		s.ctx.State.SetBoostColor(0) // 0 = None
-		// Set score blink to error state (black background with bright red text)
-		s.ctx.State.SetScoreBlinkActive(true)
-		s.ctx.State.SetScoreBlinkType(0)  // 0 = error
-		s.ctx.State.SetScoreBlinkLevel(0) // 0 = dark
-		s.ctx.State.SetScoreBlinkTime(now)
+		// Set energy blink to error state (black background with bright red text)
+		s.ctx.State.SetEnergyBlinkActive(true)
+		s.ctx.State.SetEnergyBlinkType(0)  // 0 = error
+		s.ctx.State.SetEnergyBlinkLevel(0) // 0 = dark
+		s.ctx.State.SetEnergyBlinkTime(now)
 		// Trigger error sound
 		if s.ctx.AudioEngine != nil {
 			cmd := createAudioCommand(audio.SoundError, now, frameNumber)
@@ -146,11 +146,11 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.State.SetHeat(0)
 		s.ctx.State.SetBoostEnabled(false)
 		s.ctx.State.SetBoostColor(0)
-		// Set score blink to error state (black background with bright red text)
-		s.ctx.State.SetScoreBlinkActive(true)
-		s.ctx.State.SetScoreBlinkType(0)  // 0 = error
-		s.ctx.State.SetScoreBlinkLevel(0) // 0 = dark
-		s.ctx.State.SetScoreBlinkTime(now)
+		// Set energy blink to error state (black background with bright red text)
+		s.ctx.State.SetEnergyBlinkActive(true)
+		s.ctx.State.SetEnergyBlinkType(0)  // 0 = error
+		s.ctx.State.SetEnergyBlinkLevel(0) // 0 = dark
+		s.ctx.State.SetEnergyBlinkTime(now)
 		// Trigger error sound
 		if s.ctx.AudioEngine != nil {
 			cmd := createAudioCommand(audio.SoundError, now, frameNumber)
@@ -233,10 +233,10 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 			points = -points
 		}
 
-		s.ctx.State.AddScore(points)
+		s.ctx.State.AddEnergy(points)
 
-		// Trigger score blink with character type and level
-		s.ctx.State.SetScoreBlinkActive(true)
+		// Trigger energy blink with character type and level
+		s.ctx.State.SetEnergyBlinkActive(true)
 		// Map sequence types to uint32: 0=error, 1=blue, 2=green, 3=red, 4=gold
 		var typeCode uint32
 		switch seq.Type {
@@ -261,9 +261,9 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		case components.LevelBright:
 			levelCode = 2
 		}
-		s.ctx.State.SetScoreBlinkType(typeCode)
-		s.ctx.State.SetScoreBlinkLevel(levelCode)
-		s.ctx.State.SetScoreBlinkTime(now)
+		s.ctx.State.SetEnergyBlinkType(typeCode)
+		s.ctx.State.SetEnergyBlinkLevel(levelCode)
+		s.ctx.State.SetEnergyBlinkTime(now)
 
 		// Safely destroy the character entity
 		world.DestroyEntity(entity)
@@ -285,11 +285,11 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.State.SetHeat(0)
 		s.ctx.State.SetBoostEnabled(false)
 		s.ctx.State.SetBoostColor(0) // 0 = None
-		// Set score blink to error state (black background with bright red text)
-		s.ctx.State.SetScoreBlinkActive(true)
-		s.ctx.State.SetScoreBlinkType(0)  // 0 = error
-		s.ctx.State.SetScoreBlinkLevel(0) // 0 = dark
-		s.ctx.State.SetScoreBlinkTime(now)
+		// Set energy blink to error state (black background with bright red text)
+		s.ctx.State.SetEnergyBlinkActive(true)
+		s.ctx.State.SetEnergyBlinkType(0)  // 0 = error
+		s.ctx.State.SetEnergyBlinkLevel(0) // 0 = dark
+		s.ctx.State.SetEnergyBlinkTime(now)
 		// Trigger error sound
 		if s.ctx.AudioEngine != nil {
 			cmd := createAudioCommand(audio.SoundError, now, frameNumber)
@@ -299,7 +299,7 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 }
 
 // extendBoost extends the boost timer by the given duration
-func (s *ScoreSystem) extendBoost(now time.Time, duration time.Duration) {
+func (s *EnergySystem) extendBoost(now time.Time, duration time.Duration) {
 	// If boost is already active, add to existing end time; otherwise start fresh
 	currentEndTime := s.ctx.State.GetBoostEndTime()
 	wasActive := s.ctx.State.GetBoostEnabled() && currentEndTime.After(now)
@@ -314,7 +314,7 @@ func (s *ScoreSystem) extendBoost(now time.Time, duration time.Duration) {
 }
 
 // handleNuggetCollection processes nugget collection (requires typing matching character)
-func (s *ScoreSystem) handleNuggetCollection(world *engine.World, entity engine.Entity, char components.CharacterComponent, typedRune rune, cursorX, cursorY int) {
+func (s *EnergySystem) handleNuggetCollection(world *engine.World, entity engine.Entity, char components.CharacterComponent, typedRune rune, cursorX, cursorY int) {
 	// Fetch resources
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
@@ -330,11 +330,11 @@ func (s *ScoreSystem) handleNuggetCollection(world *engine.World, entity engine.
 		s.ctx.State.SetHeat(0) // Reset heat on incorrect nugget typing
 		s.ctx.State.SetBoostEnabled(false)
 		s.ctx.State.SetBoostColor(0)
-		// Set score blink to error state (black background with bright red text)
-		s.ctx.State.SetScoreBlinkActive(true)
-		s.ctx.State.SetScoreBlinkType(0)  // 0 = error
-		s.ctx.State.SetScoreBlinkLevel(0) // 0 = dark
-		s.ctx.State.SetScoreBlinkTime(now)
+		// Set energy blink to error state (black background with bright red text)
+		s.ctx.State.SetEnergyBlinkActive(true)
+		s.ctx.State.SetEnergyBlinkType(0)  // 0 = error
+		s.ctx.State.SetEnergyBlinkLevel(0) // 0 = dark
+		s.ctx.State.SetEnergyBlinkTime(now)
 		// Trigger error sound
 		if s.ctx.AudioEngine != nil {
 			cmd := createAudioCommand(audio.SoundError, now, frameNumber)
@@ -367,11 +367,11 @@ func (s *ScoreSystem) handleNuggetCollection(world *engine.World, entity engine.
 		world.Positions.Add(s.ctx.CursorEntity, cursorPos)
 	}
 
-	// No score effects on successful collection
+	// No energy effects on successful collection
 }
 
 // handleGoldSequenceTyping processes typing of gold sequence characters
-func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engine.Entity, char components.CharacterComponent, seq components.SequenceComponent, typedRune rune, cursorX, cursorY int) {
+func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity engine.Entity, char components.CharacterComponent, seq components.SequenceComponent, typedRune rune, cursorX, cursorY int) {
 	// Fetch resources
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
@@ -384,11 +384,11 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 		cursor, _ := world.Cursors.Get(s.ctx.CursorEntity)
 		cursor.ErrorFlashEnd = now.Add(constants.ErrorBlinkTimeout).UnixNano()
 		world.Cursors.Add(s.ctx.CursorEntity, cursor)
-		// Set score blink to error state (black background with bright red text)
-		s.ctx.State.SetScoreBlinkActive(true)
-		s.ctx.State.SetScoreBlinkType(0)  // 0 = error
-		s.ctx.State.SetScoreBlinkLevel(0) // 0 = dark
-		s.ctx.State.SetScoreBlinkTime(now)
+		// Set energy blink to error state (black background with bright red text)
+		s.ctx.State.SetEnergyBlinkActive(true)
+		s.ctx.State.SetEnergyBlinkType(0)  // 0 = error
+		s.ctx.State.SetEnergyBlinkLevel(0) // 0 = dark
+		s.ctx.State.SetEnergyBlinkTime(now)
 		// Trigger error sound
 		if s.ctx.AudioEngine != nil {
 			cmd := createAudioCommand(audio.SoundError, now, frameNumber)
@@ -398,8 +398,8 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 	}
 
 	// Correct character - remove entity and move cursor
-	// Trigger score blink with Gold type and level
-	s.ctx.State.SetScoreBlinkActive(true)
+	// Trigger energy blink with Gold type and level
+	s.ctx.State.SetEnergyBlinkActive(true)
 	// Map sequence types to uint32: 0=error, 1=blue, 2=green, 3=red, 4=gold
 	var typeCode uint32
 	switch seq.Type {
@@ -424,9 +424,9 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 	case components.LevelBright:
 		levelCode = 2
 	}
-	s.ctx.State.SetScoreBlinkType(typeCode)
-	s.ctx.State.SetScoreBlinkLevel(levelCode)
-	s.ctx.State.SetScoreBlinkTime(now)
+	s.ctx.State.SetEnergyBlinkType(typeCode)
+	s.ctx.State.SetEnergyBlinkLevel(levelCode)
+	s.ctx.State.SetEnergyBlinkTime(now)
 
 	// Safely destroy the character entity
 	world.DestroyEntity(entity)

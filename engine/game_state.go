@@ -13,21 +13,21 @@ type GameState struct {
 	// ===== REAL-TIME STATE (lock-free atomics) =====
 
 	// Scoring and Heat (typing feedback)
-	Score atomic.Int64 // Current score
-	Heat  atomic.Int64 // Current heat value
+	Energy atomic.Int64 // Current energy
+	Heat   atomic.Int64 // Current heat value
 
 	// Boost state (real-time feedback)
 	BoostEnabled atomic.Bool
 	BoostEndTime atomic.Int64 // UnixNano
 	BoostColor   atomic.Int32 // 0=None, 1=Blue, 2=Green
 
-	// Visual feedback (error flash, score blink)
-	CursorError      atomic.Bool
-	CursorErrorTime  atomic.Int64 // UnixNano
-	ScoreBlinkActive atomic.Bool
-	ScoreBlinkType   atomic.Uint32 // 0=error, 1=blue, 2=green, 3=red, 4=gold
-	ScoreBlinkLevel  atomic.Uint32 // 0=dark, 1=normal, 2=bright
-	ScoreBlinkTime   atomic.Int64  // UnixNano
+	// Visual feedback (error flash, energy blink)
+	CursorError       atomic.Bool
+	CursorErrorTime   atomic.Int64 // UnixNano
+	EnergyBlinkActive atomic.Bool
+	EnergyBlinkType   atomic.Uint32 // 0=error, 1=blue, 2=green, 3=red, 4=gold
+	EnergyBlinkLevel  atomic.Uint32 // 0=dark, 1=normal, 2=bright
+	EnergyBlinkTime   atomic.Int64  // UnixNano
 
 	// Ping grid (immediate visual aid)
 	PingActive    atomic.Bool
@@ -110,7 +110,7 @@ func NewGameState(gameWidth, gameHeight, screenWidth int, timeProvider TimeProvi
 	}
 
 	// Initialize atomics to zero values
-	gs.Score.Store(0)
+	gs.Energy.Store(0)
 	gs.Heat.Store(0)
 
 	// Initialize boost state
@@ -121,10 +121,10 @@ func NewGameState(gameWidth, gameHeight, screenWidth int, timeProvider TimeProvi
 	// Initialize visual feedback
 	gs.CursorError.Store(false)
 	gs.CursorErrorTime.Store(0)
-	gs.ScoreBlinkActive.Store(false)
-	gs.ScoreBlinkType.Store(0)
-	gs.ScoreBlinkLevel.Store(0)
-	gs.ScoreBlinkTime.Store(0)
+	gs.EnergyBlinkActive.Store(false)
+	gs.EnergyBlinkType.Store(0)
+	gs.EnergyBlinkLevel.Store(0)
+	gs.EnergyBlinkTime.Store(0)
 
 	// Initialize ping grid
 	gs.PingActive.Store(false)
@@ -192,27 +192,27 @@ func (gs *GameState) AddHeat(delta int) {
 
 // ===== SCORE ACCESSORS (atomic) =====
 
-// GetScore returns the current score value
-func (gs *GameState) GetScore() int {
-	return int(gs.Score.Load())
+// GetEnergy returns the current energy value
+func (gs *GameState) GetEnergy() int {
+	return int(gs.Energy.Load())
 }
 
-// SetScore sets the score value
-func (gs *GameState) SetScore(score int) {
-	gs.Score.Store(int64(score))
+// SetEnergy sets the energy value
+func (gs *GameState) SetEnergy(energy int) {
+	gs.Energy.Store(int64(energy))
 }
 
-// AddScore adds a delta to the current score value
-func (gs *GameState) AddScore(delta int) {
-	gs.Score.Add(int64(delta))
+// AddEnergy adds a delta to the current energy value
+func (gs *GameState) AddEnergy(delta int) {
+	gs.Energy.Add(int64(delta))
 }
 
-// ReadHeatAndScore returns consistent snapshot of both heat and score
-func (gs *GameState) ReadHeatAndScore() (heat int64, score int64) {
+// ReadHeatAndEnergy returns consistent snapshot of both heat and energy
+func (gs *GameState) ReadHeatAndEnergy() (heat int64, energy int64) {
 	// Read both atomic values sequentially for consistent view
 	heat = gs.Heat.Load()
-	score = gs.Score.Load()
-	return heat, score
+	energy = gs.Energy.Load()
+	return heat, energy
 }
 
 // ===== SEQUENCE ID ACCESSORS (atomic) =====
@@ -439,48 +439,48 @@ func (gs *GameState) SetCursorErrorTime(t time.Time) {
 	gs.CursorErrorTime.Store(t.UnixNano())
 }
 
-// GetScoreBlinkActive returns whether score blink is active
-func (gs *GameState) GetScoreBlinkActive() bool {
-	return gs.ScoreBlinkActive.Load()
+// GetEnergyBlinkActive returns whether energy blink is active
+func (gs *GameState) GetEnergyBlinkActive() bool {
+	return gs.EnergyBlinkActive.Load()
 }
 
-// SetScoreBlinkActive sets the score blink active state
-func (gs *GameState) SetScoreBlinkActive(active bool) {
-	gs.ScoreBlinkActive.Store(active)
+// SetEnergyBlinkActive sets the energy blink active state
+func (gs *GameState) SetEnergyBlinkActive(active bool) {
+	gs.EnergyBlinkActive.Store(active)
 }
 
-// GetScoreBlinkType returns the score blink type
-func (gs *GameState) GetScoreBlinkType() uint32 {
-	return gs.ScoreBlinkType.Load()
+// GetEnergyBlinkType returns the energy blink type
+func (gs *GameState) GetEnergyBlinkType() uint32 {
+	return gs.EnergyBlinkType.Load()
 }
 
-// SetScoreBlinkType sets the score blink type
-func (gs *GameState) SetScoreBlinkType(seqType uint32) {
-	gs.ScoreBlinkType.Store(seqType)
+// SetEnergyBlinkType sets the energy blink type
+func (gs *GameState) SetEnergyBlinkType(seqType uint32) {
+	gs.EnergyBlinkType.Store(seqType)
 }
 
-// GetScoreBlinkLevel returns the score blink level
-func (gs *GameState) GetScoreBlinkLevel() uint32 {
-	return gs.ScoreBlinkLevel.Load()
+// GetEnergyBlinkLevel returns the energy blink level
+func (gs *GameState) GetEnergyBlinkLevel() uint32 {
+	return gs.EnergyBlinkLevel.Load()
 }
 
-// SetScoreBlinkLevel sets the score blink level
-func (gs *GameState) SetScoreBlinkLevel(level uint32) {
-	gs.ScoreBlinkLevel.Store(level)
+// SetEnergyBlinkLevel sets the energy blink level
+func (gs *GameState) SetEnergyBlinkLevel(level uint32) {
+	gs.EnergyBlinkLevel.Store(level)
 }
 
-// GetScoreBlinkTime returns when the score blink started
-func (gs *GameState) GetScoreBlinkTime() time.Time {
-	nano := gs.ScoreBlinkTime.Load()
+// GetEnergyBlinkTime returns when the energy blink started
+func (gs *GameState) GetEnergyBlinkTime() time.Time {
+	nano := gs.EnergyBlinkTime.Load()
 	if nano == 0 {
 		return time.Time{}
 	}
 	return time.Unix(0, nano)
 }
 
-// SetScoreBlinkTime sets when the score blink started
-func (gs *GameState) SetScoreBlinkTime(t time.Time) {
-	gs.ScoreBlinkTime.Store(t.UnixNano())
+// SetEnergyBlinkTime sets when the energy blink started
+func (gs *GameState) SetEnergyBlinkTime(t time.Time) {
+	gs.EnergyBlinkTime.Store(t.UnixNano())
 }
 
 // ===== PHASE STATE ACCESSORS (mutex protected) =====

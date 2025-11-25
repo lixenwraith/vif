@@ -32,9 +32,9 @@ func TestNuggetTypingIncreasesHeat(t *testing.T) {
 		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
 	})
 
-	scoreSystem := NewScoreSystem(ctx)
+	energySystem := NewEnergySystem(ctx)
 	nuggetSystem := NewNuggetSystem(ctx)
-	scoreSystem.SetNuggetSystem(nuggetSystem)
+	energySystem.SetNuggetSystem(nuggetSystem)
 
 	// Initial heat should be 0
 	initialHeat := ctx.State.GetHeat()
@@ -61,7 +61,7 @@ func TestNuggetTypingIncreasesHeat(t *testing.T) {
 	ctx.State.SetCursorY(5)
 
 	// Type matching character 'a' on the nugget
-	scoreSystem.HandleCharacterTyping(world, 10, 5, 'a')
+	energySystem.HandleCharacterTyping(world, 10, 5, 'a')
 
 	// Verify heat increased by 10% of max (100 / 10 = 10)
 	expectedHeat := 10
@@ -113,9 +113,9 @@ func TestNuggetTypingDestroysAndReturnsSpawn(t *testing.T) {
 		CursorY:      0,
 	}
 
-	scoreSystem := NewScoreSystem(ctx)
+	energySystem := NewEnergySystem(ctx)
 	nuggetSystem := NewNuggetSystem(ctx)
-	scoreSystem.SetNuggetSystem(nuggetSystem)
+	energySystem.SetNuggetSystem(nuggetSystem)
 
 	// Create first nugget with character 'x'
 	nuggetEntity := world.CreateEntity()
@@ -136,7 +136,7 @@ func TestNuggetTypingDestroysAndReturnsSpawn(t *testing.T) {
 	ctx.State.SetCursorY(5)
 
 	// Type matching character to collect nugget
-	scoreSystem.HandleCharacterTyping(world, 10, 5, 'x')
+	energySystem.HandleCharacterTyping(world, 10, 5, 'x')
 
 	// Verify nugget was collected
 	if nuggetSystem.GetActiveNugget() != 0 {
@@ -167,8 +167,8 @@ func TestNuggetTypingDestroysAndReturnsSpawn(t *testing.T) {
 	}
 }
 
-// TestNuggetTypingNoScoreEffect verifies nugget collection doesn't affect score
-func TestNuggetTypingNoScoreEffect(t *testing.T) {
+// TestNuggetTypingNoEnergyEffect verifies nugget collection doesn't affect energy
+func TestNuggetTypingNoEnergyEffect(t *testing.T) {
 	screen := tcell.NewSimulationScreen("UTF-8")
 	screen.Init()
 	defer screen.Fini()
@@ -188,13 +188,13 @@ func TestNuggetTypingNoScoreEffect(t *testing.T) {
 		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
 	})
 
-	scoreSystem := NewScoreSystem(ctx)
+	energySystem := NewEnergySystem(ctx)
 	nuggetSystem := NewNuggetSystem(ctx)
-	scoreSystem.SetNuggetSystem(nuggetSystem)
+	energySystem.SetNuggetSystem(nuggetSystem)
 
-	// Set initial score
-	initialScore := 100
-	ctx.State.SetScore(initialScore)
+	// Set initial energy
+	initialEnergy := 100
+	ctx.State.SetEnergy(initialEnergy)
 
 	// Create nugget
 	nuggetEntity := world.CreateEntity()
@@ -215,12 +215,12 @@ func TestNuggetTypingNoScoreEffect(t *testing.T) {
 	ctx.State.SetCursorY(5)
 
 	// Collect nugget
-	scoreSystem.HandleCharacterTyping(world, 10, 5, 'q')
+	energySystem.HandleCharacterTyping(world, 10, 5, 'q')
 
-	// Verify score unchanged
-	finalScore := ctx.State.GetScore()
-	if finalScore != initialScore {
-		t.Errorf("Score should remain unchanged after nugget collection, expected %d, got %d", initialScore, finalScore)
+	// Verify energy unchanged
+	finalEnergy := ctx.State.GetEnergy()
+	if finalEnergy != initialEnergy {
+		t.Errorf("Energy should remain unchanged after nugget collection, expected %d, got %d", initialEnergy, finalEnergy)
 	}
 }
 
@@ -245,9 +245,9 @@ func TestNuggetTypingNoErrorEffect(t *testing.T) {
 		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
 	})
 
-	scoreSystem := NewScoreSystem(ctx)
+	energySystem := NewEnergySystem(ctx)
 	nuggetSystem := NewNuggetSystem(ctx)
-	scoreSystem.SetNuggetSystem(nuggetSystem)
+	energySystem.SetNuggetSystem(nuggetSystem)
 
 	// Create nugget with character 'z'
 	nuggetEntity := world.CreateEntity()
@@ -270,7 +270,7 @@ func TestNuggetTypingNoErrorEffect(t *testing.T) {
 	ctx.State.SetCursorError(false)
 
 	// Collect nugget with matching character
-	scoreSystem.HandleCharacterTyping(world, 10, 5, 'z')
+	energySystem.HandleCharacterTyping(world, 10, 5, 'z')
 
 	// Verify no error cursor was set
 	if ctx.State.GetCursorError() {
@@ -305,9 +305,9 @@ func TestNuggetTypingMultipleCollections(t *testing.T) {
 		CursorY:      0,
 	}
 
-	scoreSystem := NewScoreSystem(ctx)
+	energySystem := NewEnergySystem(ctx)
 	nuggetSystem := NewNuggetSystem(ctx)
-	scoreSystem.SetNuggetSystem(nuggetSystem)
+	energySystem.SetNuggetSystem(nuggetSystem)
 
 	// Collect first nugget with character 'a'
 	nugget1 := world.CreateEntity()
@@ -326,7 +326,7 @@ func TestNuggetTypingMultipleCollections(t *testing.T) {
 	ctx.State.SetCursorX(10)
 	ctx.State.SetCursorY(5)
 
-	scoreSystem.HandleCharacterTyping(world, 10, 5, 'a')
+	energySystem.HandleCharacterTyping(world, 10, 5, 'a')
 
 	// First collection: heat = 10
 	if ctx.State.GetHeat() != 10 {
@@ -355,7 +355,7 @@ func TestNuggetTypingMultipleCollections(t *testing.T) {
 	ctx.State.SetCursorX(pos.X)
 	ctx.State.SetCursorY(pos.Y)
 
-	scoreSystem.HandleCharacterTyping(world, pos.X, pos.Y, char.Rune)
+	energySystem.HandleCharacterTyping(world, pos.X, pos.Y, char.Rune)
 
 	// Second collection: heat = 20
 	if ctx.State.GetHeat() != 20 {
@@ -385,9 +385,9 @@ func TestNuggetTypingWithSmallScreen(t *testing.T) {
 		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
 	})
 
-	scoreSystem := NewScoreSystem(ctx)
+	energySystem := NewEnergySystem(ctx)
 	nuggetSystem := NewNuggetSystem(ctx)
-	scoreSystem.SetNuggetSystem(nuggetSystem)
+	energySystem.SetNuggetSystem(nuggetSystem)
 
 	// Create nugget with character 'x'
 	nuggetEntity := world.CreateEntity()
@@ -406,7 +406,7 @@ func TestNuggetTypingWithSmallScreen(t *testing.T) {
 	ctx.State.SetCursorX(2)
 	ctx.State.SetCursorY(1)
 
-	scoreSystem.HandleCharacterTyping(world, 2, 1, 'x')
+	energySystem.HandleCharacterTyping(world, 2, 1, 'x')
 
 	// Even with width 5, 10% = 0, but we enforce minimum of 1
 	finalHeat := ctx.State.GetHeat()
@@ -441,9 +441,9 @@ func TestNuggetAlwaysIncreasesVisualBlocks(t *testing.T) {
 				GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
 			})
 
-			scoreSystem := NewScoreSystem(ctx)
+			energySystem := NewEnergySystem(ctx)
 			nuggetSystem := NewNuggetSystem(ctx)
-			scoreSystem.SetNuggetSystem(nuggetSystem)
+			energySystem.SetNuggetSystem(nuggetSystem)
 
 			// Helper to calculate visual blocks from heat value
 			calcVisualBlocks := func(heat int) int {
@@ -471,7 +471,7 @@ func TestNuggetAlwaysIncreasesVisualBlocks(t *testing.T) {
 			ctx.State.SetCursorX(10)
 			ctx.State.SetCursorY(5)
 
-			scoreSystem.HandleCharacterTyping(world, 10, 5, 'a')
+			energySystem.HandleCharacterTyping(world, 10, 5, 'a')
 
 			finalHeat := ctx.State.GetHeat()
 			finalBlocks := calcVisualBlocks(finalHeat)

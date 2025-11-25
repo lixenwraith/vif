@@ -19,7 +19,7 @@ Welcome to vi-fighter, a terminal-based typing game that challenges your vi/vim 
 
 ## Game Objective
 
-**vi-fighter is a high-score endurance game.** Your goal is to maximize your score by typing character sequences that appear on screen while managing heat (your typing momentum) and avoiding penalties from the dynamic decay system.
+**vi-fighter is a high-energy endurance game.** Your goal is to maximize your energy by typing character sequences that appear on screen while managing heat (your typing momentum) and avoiding penalties from the dynamic decay system.
 
 There is no end state - the challenge is to survive as long as possible while the game gradually increases pressure through faster decay cycles.
 
@@ -32,14 +32,14 @@ There is no end state - the challenge is to survive as long as possible while th
 1. **Navigate** to a character using vi/vim motion commands
 2. Press **`i`** to enter INSERT mode
 3. **Type** the character under the cursor
-4. If correct, the character disappears and your score increases
+4. If correct, the character disappears and your energy increases
 5. Continue typing the rest of the sequence
 6. Press **`ESC`** to return to NORMAL mode and navigate to new targets
 
 ### Quick Tips for Beginners
 
 - Start by typing **bright green or blue sequences** - they give the most points
-- Avoid **red sequences** - they penalize your score
+- Avoid **red sequences** - they penalize your energy
 - Watch for **gold** (bright yellow) - completing it fills your heat meter instantly
 - Use simple motions like `h`/`j`/`k`/`l` at first, then graduate to `w`, `e`, `f<char>` for efficiency
 
@@ -148,8 +148,8 @@ Examples:
 
 When in INSERT mode (white cursor):
 
-- **Type matching character** - Character disappears, score increases, cursor moves right, score background flashes character color (200ms)
-- **Type wrong character** - Red cursor flash (200ms), heat resets to zero, boost deactivates, score background flashes black with red text (200ms)
+- **Type matching character** - Character disappears, energy increases, cursor moves right, energy background flashes character color (200ms)
+- **Type wrong character** - Red cursor flash (200ms), heat resets to zero, boost deactivates, energy background flashes black with red text (200ms)
 - **`Space`** - Move right without typing (no heat change)
 - **`ESC`** - Return to NORMAL mode
 
@@ -189,7 +189,7 @@ vi-fighter has four input modes, similar to vi/vim:
 - **Usage**: Type command, press `Enter` to execute
 - **Available Commands**:
   - `:quit` or `:q` - Exit the game
-  - `:boost` - Activate boost mode for 10 seconds (2x spawn rate, 2x score)
+  - `:boost` - Activate boost mode for 10 seconds (2x spawn rate, 2x energy)
 - **Exiting**: Press `ESC` to return to NORMAL mode
 - **Pause Behavior**:
   - **Game pauses**: All game time stops (decay timer, gold timeout, boost timer freeze)
@@ -253,9 +253,9 @@ Shows relative column positions from cursor:
 ### Bottom Status Bar
 
 ```
-NORMAL    5j                              Boost: 0.3s  Decay: 45.2s  Score: 1247
+NORMAL    5j                              Boost: 0.3s  Decay: 45.2s  Energy: 1247
 ^         ^                               ^            ^             ^
-Mode      Last command                    Boost timer  Decay timer   Total score
+Mode      Last command                    Boost timer  Decay timer   Total energy
 ```
 
 **Left Section**:
@@ -267,19 +267,19 @@ Mode      Last command                    Boost timer  Decay timer   Total score
 - Command text (when in COMMAND mode)
 
 **Right Section** (from right to left):
-- **Score** - White background with black text, flashes character color on correct typing (200ms), total points
+- **Energy** - White background with black text, flashes character color on correct typing (200ms), total points
 - **Decay** - Red background, countdown to next decay
 - **Grid** - White text, ping grid timer (only when active)
 - **Boost** - Pink background, boost multiplier timer (only when active)
 
 ### Drain Entity
 
-When score is positive, a hostile drain entity appears on screen:
+When energy is positive, a hostile drain entity appears on screen:
 
 - **Visual**: Light cyan ╬ character (cross)
-- **Position**: Spawns centered on cursor when score > 0
+- **Position**: Spawns centered on cursor when energy > 0
 - **Movement**: Pursues cursor, moving 1 character per second
-- **Effect**: Drains 10 score per second when positioned on cursor
+- **Effect**: Drains 10 energy per second when positioned on cursor
 - **Collisions**: Destroys sequences, nuggets, and gold on contact
 
 ### Visual Effects
@@ -298,7 +298,7 @@ When score is positive, a hostile drain entity appears on screen:
 - Red background flash for 200ms
 - Appears when typing incorrect character in INSERT mode
 
-**Score Display Feedback**:
+**Energy Display Feedback**:
 - **Default**: White background with black text
 - **Correct Character**: Flashes the character's color (Blue, Green, or Gold) for 200ms
 - **Error**: Flashes black background with bright red text for 200ms
@@ -336,7 +336,7 @@ The game features four types of character sequences, each with distinct behavior
 - **Level Multipliers**: Bright ×3, Normal ×2, Dark ×1 (but all negative!)
 - **Decay Path**: Bright → Normal → Dark → **Destroyed** (removed from screen)
 - **Heat Effect**: Typing red characters resets heat to zero
-- **Strategy**: Avoid if possible, or clear quickly if score is low
+- **Strategy**: Avoid if possible, or clear quickly if energy is low
 
 ### Gold
 - **Appearance**: Bright yellow, always 10 characters long
@@ -345,7 +345,7 @@ The game features four types of character sequences, each with distinct behavior
 - **Duration**: 10 seconds (game time) before timeout - timer freezes during COMMAND mode pause
 - **Reward**: Completing all 10 characters fills heat meter to maximum
 - **Bonus Mechanic**: If heat is already at maximum when gold completed, triggers **Cleaners**
-- **Scoring**: Typing gold characters does NOT affect heat or score during typing
+- **Scoring**: Typing gold characters does NOT affect heat or energy during typing
 - **Pause Behavior**: Gold timeout uses game time, so it freezes when you enter COMMAND mode (`:`)
 - **Strategy**: **Highest priority target** - can turn around a low-heat situation instantly
 
@@ -401,7 +401,7 @@ Heat represents your typing momentum and skill level. It's the most important me
   - Using `h`/`j`/`k`/`l` more than 3 times consecutively
 
 **Heat Effects:**
-- **Scoring**: Heat directly multiplies your score per character
+- **Scoring**: Heat directly multiplies your energy per character
   - Example: At heat 50, typing a Bright Green character = 50 × 3 = 150 points
 - **Decay Speed**: Higher heat means faster decay (more pressure)
   - 0% heat: 60 seconds between decays
@@ -430,7 +430,7 @@ A 2× multiplier for heat gain that activates when you reach maximum heat and ty
 **Effects:**
 - +2 heat per character instead of +1
 - Allows faster heat rebuilding after mistakes
-- **Does NOT multiply score** - only affects heat gain
+- **Does NOT multiply energy** - only affects heat gain
 
 **Deactivation:**
 - Timer expires (no same-color typing within 0.5 seconds)
@@ -522,7 +522,7 @@ When all characters of one color/level are cleared, that slot opens for new spaw
 
 ## Scoring System
 
-### Score Formula
+### Energy Formula
 
 **Points = Heat × Level Multiplier × Type Modifier**
 
@@ -534,37 +534,37 @@ When all characters of one color/level are cleared, that slot opens for new spaw
 **Type Modifiers:**
 - Green/Blue sequences: ×1 (positive)
 - Red sequences: ×1 (but negative!)
-- Gold sequences: No score during typing
+- Gold sequences: No energy during typing
 
 ### Example Calculations
 
 **Example 1**: Heat at 50, typing Bright Green character
-- Score = 50 × 3 × 1 = **+150 points**
+- Energy = 50 × 3 × 1 = **+150 points**
 
 **Example 2**: Heat at 30, typing Normal Blue character
-- Score = 30 × 2 × 1 = **+60 points**
+- Energy = 30 × 2 × 1 = **+60 points**
 
 **Example 3**: Heat at 80, typing Dark Red character (penalty!)
-- Score = 80 × 1 × (-1) = **-80 points**
+- Energy = 80 × 1 × (-1) = **-80 points**
 - Plus heat resets to 0!
 
 **Example 4**: Heat at 100 (max), boost active, typing Bright Blue
 - Heat gain = +2 (boost multiplier)
-- Score = 100 × 3 × 1 = **+300 points**
+- Energy = 100 × 3 × 1 = **+300 points**
 - New heat = 102, boost extends +0.5s
 
 ### Scoring Strategy
 
-**Maximize Score:**
+**Maximize Energy:**
 1. Build heat as high as possible before typing bright sequences
 2. Type Bright sequences (×3) > Normal (×2) > Dark (×1)
 3. Use boost to quickly rebuild heat after mistakes
 4. Avoid red sequences (negative scoring + heat reset)
 
-**Score vs. Heat Trade-off:**
-- Low heat + Bright sequence = Modest score, +1 heat
-- High heat + Dark sequence = Good score, +1 heat
-- **Optimal**: High heat + Bright sequence = Maximum score!
+**Energy vs. Heat Trade-off:**
+- Low heat + Bright sequence = Modest energy, +1 heat
+- High heat + Dark sequence = Good energy, +1 heat
+- **Optimal**: High heat + Bright sequence = Maximum energy!
 
 ---
 
@@ -580,7 +580,7 @@ When all characters of one color/level are cleared, that slot opens for new spaw
 4. **Let decay happen** - Don't panic about the timer
 5. **Chase gold** aggressively - easiest way to build heat
 6. **Don't use delete** (`x`, `dd`, etc.) - it resets heat
-7. **Understand Drain**: Once score > 0, a cyan ╬ character spawns and chases you - keep moving to avoid losing score
+7. **Understand Drain**: Once energy > 0, a cyan ╬ character spawns and chases you - keep moving to avoid losing energy
 
 **Motion Practice:**
 - Use `0` and `$` to jump to line edges
@@ -592,7 +592,7 @@ When all characters of one color/level are cleared, that slot opens for new spaw
 **Goal**: Master heat management and boost activation
 
 1. **Prioritize bright sequences** when heat is high (50+)
-   - Bright Green/Blue at high heat = massive score
+   - Bright Green/Blue at high heat = massive energy
 2. **Activate boost deliberately**:
    - Build heat to max
    - Scan screen for clusters of same color (Blue or Green)
@@ -635,7 +635,7 @@ When all characters of one color/level are cleared, that slot opens for new spaw
    - **Immediate priority**:
      - Gold sequences (10s timeout)
      - Green (Dark) near decay timer (about to become Red)
-     - Red sequences when score is low
+     - Red sequences when energy is low
    - **High priority**: Bright sequences when heat >70
    - **Medium priority**: Normal sequences, Blue (Dark)
    - **Low priority**: Dark sequences, Red (Dark) that will decay away
@@ -652,16 +652,16 @@ When all characters of one color/level are cleared, that slot opens for new spaw
    - Search (`/`) for rare characters to jump across screen
    - `go` to reset to top-left when screen gets chaotic
 
-6. **Score optimization**:
+6. **Energy optimization**:
    - Never type Dark sequences at low heat (<20) - poor return
    - Type Bright sequences ONLY at 70+ heat (×3 multiplier = 210+ points)
-   - Clear Red sequences immediately if score <1000 (big percentage loss)
+   - Clear Red sequences immediately if energy <1000 (big percentage loss)
    - Let Red (Dark) decay away instead of typing (no heat reset)
 
 7. **Endurance tactics**:
    - Maintain 50-80% heat for sustainable play
    - Use gold as "panic buttons" for heat recovery
-   - Accept small score hits to avoid heat resets
+   - Accept small energy hits to avoid heat resets
    - Take calculated risks: typing one Red to clear screen space
 
 8. **Advanced drain tactics**:
@@ -669,7 +669,7 @@ When all characters of one color/level are cleared, that slot opens for new spaw
    - Use drain movement prediction to clear targets before drain reaches them
    - Strategic positioning: lead drain away from high-value target clusters
    - Exploit drain path: intentionally let drain destroy Red sequences (saves typing penalty)
-   - Emergency: if overwhelmed, consider letting score drop to zero to despawn drain and reset
+   - Emergency: if overwhelmed, consider letting energy drop to zero to despawn drain and reset
    - Gold sequence timing: be aware drain can trigger gold completion if it collides with gold
 
 ---
@@ -736,7 +736,7 @@ Using `h`/`j`/`k`/`l` more than 3 times in a row resets heat!
 **Gold Typing Tips:**
 - Use `/` search for first 2-3 characters if far from cursor
 - Gold is always 10 characters - muscle memory the rhythm
-- No heat/score during typing, so type quickly without worry
+- No heat/energy during typing, so type quickly without worry
 - Timer uses game time - pausing (COMMAND mode) stops the countdown
 
 ### Screen Reading
@@ -761,14 +761,14 @@ Using `h`/`j`/`k`/`l` more than 3 times in a row resets heat!
 ### Risk Management
 
 **When to Type Red Sequences:**
-- Your score is very low (< 500) - percentage impact is small
+- Your energy is very low (< 500) - percentage impact is small
 - Red is blocking path to high-value Bright sequence
 - Screen is overcrowded (>70% full) - need to clear space
 - Red is Bright level and your heat is low (paradox: penalty, but you're resetting soon anyway)
 
 **When to Avoid Red:**
 - Heat is high (50+) - you'll lose valuable momentum
-- Score is high (2000+) - big point penalties hurt
+- Energy is high (2000+) - big point penalties hurt
 - Red is Dark level - will disappear next decay (just wait)
 - Currently on boost streak (red breaks boost)
 
@@ -824,7 +824,7 @@ Using `h`/`j`/`k`/`l` more than 3 times in a row resets heat!
 3. **Green (Dark)** near decay timer
 4. **Normal** Green/Blue
 5. **Dark** Green/Blue
-6. **Red** (only if score <1000 or blocking)
+6. **Red** (only if energy <1000 or blocking)
 
 ### Heat Guidelines
 | Heat % | Decay Timer | Risk Level | Strategy |

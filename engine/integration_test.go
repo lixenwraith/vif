@@ -137,7 +137,7 @@ func TestGoldCompletionBeforeTimeout(t *testing.T) {
 	}
 
 	// Simulate user completing the gold sequence early
-	// (In real game, ScoreSystem would call this)
+	// (In real game, EnergySystem would call this)
 	state.DeactivateGoldSequence()
 	decayStartTime := mockTime.Now()
 	state.StartDecayTimer(

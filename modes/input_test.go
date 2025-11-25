@@ -41,8 +41,8 @@ func (m *MockScreen) Sync() {
 func TestDeleteOperatorResetOnModeTransitions(t *testing.T) {
 	mockScreen := &MockScreen{width: 80, height: 24}
 	ctx := engine.NewGameContext(mockScreen)
-	scoreSystem := systems.NewScoreSystem(ctx)
-	handler := NewInputHandler(ctx, scoreSystem)
+	energySystem := systems.NewEnergySystem(ctx)
+	handler := NewInputHandler(ctx, energySystem)
 
 	// Test 1: DeleteOperator reset when pressing 'i' (treated as invalid motion, doesn't enter insert mode)
 	ctx.Mode = engine.ModeNormal
@@ -100,8 +100,8 @@ func TestDeleteOperatorResetOnModeTransitions(t *testing.T) {
 func TestDeleteOperatorPersistenceWithinNormalMode(t *testing.T) {
 	mockScreen := &MockScreen{width: 80, height: 24}
 	ctx := engine.NewGameContext(mockScreen)
-	scoreSystem := systems.NewScoreSystem(ctx)
-	handler := NewInputHandler(ctx, scoreSystem)
+	energySystem := systems.NewEnergySystem(ctx)
+	handler := NewInputHandler(ctx, energySystem)
 
 	// Start in normal mode
 	ctx.Mode = engine.ModeNormal
@@ -127,8 +127,8 @@ func TestDeleteOperatorPersistenceWithinNormalMode(t *testing.T) {
 func TestDeleteOperatorResetSequence(t *testing.T) {
 	mockScreen := &MockScreen{width: 80, height: 24}
 	ctx := engine.NewGameContext(mockScreen)
-	scoreSystem := systems.NewScoreSystem(ctx)
-	handler := NewInputHandler(ctx, scoreSystem)
+	energySystem := systems.NewEnergySystem(ctx)
+	handler := NewInputHandler(ctx, energySystem)
 
 	tests := []struct {
 		name         string

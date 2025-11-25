@@ -8,8 +8,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
-// TestDrainSystem_SpawnWhenScorePositive tests that drain spawns when score > 0
-func TestDrainSystem_SpawnWhenScorePositive(t *testing.T) {
+// TestDrainSystem_SpawnWhenEnergyPositive tests that drain spawns when energy > 0
+func TestDrainSystem_SpawnWhenEnergyPositive(t *testing.T) {
 	screen := tcell.NewSimulationScreen("UTF-8")
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
@@ -22,15 +22,15 @@ func TestDrainSystem_SpawnWhenScorePositive(t *testing.T) {
 		t.Fatal("Expected drain to not be active initially")
 	}
 
-	// Set score > 0
-	ctx.State.SetScore(100)
+	// Set energy > 0
+	ctx.State.SetEnergy(100)
 
 	// Run system update
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Verify drain is now active
 	if !ctx.State.GetDrainActive() {
-		t.Fatal("Expected drain to be active after score > 0")
+		t.Fatal("Expected drain to be active after energy > 0")
 	}
 
 	// Verify drain entity exists
@@ -59,8 +59,8 @@ func TestDrainSystem_SpawnWhenScorePositive(t *testing.T) {
 	}
 }
 
-// TestDrainSystem_DespawnWhenScoreZero tests that drain despawns when score <= 0
-func TestDrainSystem_DespawnWhenScoreZero(t *testing.T) {
+// TestDrainSystem_DespawnWhenEnergyZero tests that drain despawns when energy <= 0
+func TestDrainSystem_DespawnWhenEnergyZero(t *testing.T) {
 	screen := tcell.NewSimulationScreen("UTF-8")
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
@@ -68,8 +68,8 @@ func TestDrainSystem_DespawnWhenScoreZero(t *testing.T) {
 
 	drainSys := NewDrainSystem(ctx)
 
-	// Set score > 0 to spawn drain
-	ctx.State.SetScore(100)
+	// Set energy > 0 to spawn drain
+	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Verify drain is active
@@ -80,15 +80,15 @@ func TestDrainSystem_DespawnWhenScoreZero(t *testing.T) {
 	entityID := ctx.State.GetDrainEntity()
 	entity := engine.Entity(entityID)
 
-	// Set score to 0
-	ctx.State.SetScore(0)
+	// Set energy to 0
+	ctx.State.SetEnergy(0)
 
 	// Run system update
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Verify drain is no longer active
 	if ctx.State.GetDrainActive() {
-		t.Fatal("Expected drain to not be active after score <= 0")
+		t.Fatal("Expected drain to not be active after energy <= 0")
 	}
 
 	// Verify drain entity ID is cleared
@@ -103,8 +103,8 @@ func TestDrainSystem_DespawnWhenScoreZero(t *testing.T) {
 	}
 }
 
-// TestDrainSystem_DespawnWhenScoreNegative tests that drain despawns when score < 0
-func TestDrainSystem_DespawnWhenScoreNegative(t *testing.T) {
+// TestDrainSystem_DespawnWhenEnergyNegative tests that drain despawns when energy < 0
+func TestDrainSystem_DespawnWhenEnergyNegative(t *testing.T) {
 	screen := tcell.NewSimulationScreen("UTF-8")
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
@@ -112,8 +112,8 @@ func TestDrainSystem_DespawnWhenScoreNegative(t *testing.T) {
 
 	drainSys := NewDrainSystem(ctx)
 
-	// Set score > 0 to spawn drain
-	ctx.State.SetScore(50)
+	// Set energy > 0 to spawn drain
+	ctx.State.SetEnergy(50)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Verify drain is active
@@ -121,15 +121,15 @@ func TestDrainSystem_DespawnWhenScoreNegative(t *testing.T) {
 		t.Fatal("Expected drain to be active after spawn")
 	}
 
-	// Set score to negative value
-	ctx.State.SetScore(-10)
+	// Set energy to negative value
+	ctx.State.SetEnergy(-10)
 
 	// Run system update
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Verify drain is no longer active
 	if ctx.State.GetDrainActive() {
-		t.Fatal("Expected drain to not be active after score < 0")
+		t.Fatal("Expected drain to not be active after energy < 0")
 	}
 
 	// Verify drain entity ID is cleared
@@ -138,8 +138,8 @@ func TestDrainSystem_DespawnWhenScoreNegative(t *testing.T) {
 	}
 }
 
-// TestDrainSystem_NoSpawnWhenScoreZero tests that drain doesn't spawn when score = 0
-func TestDrainSystem_NoSpawnWhenScoreZero(t *testing.T) {
+// TestDrainSystem_NoSpawnWhenEnergyZero tests that drain doesn't spawn when energy = 0
+func TestDrainSystem_NoSpawnWhenEnergyZero(t *testing.T) {
 	screen := tcell.NewSimulationScreen("UTF-8")
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
@@ -147,25 +147,25 @@ func TestDrainSystem_NoSpawnWhenScoreZero(t *testing.T) {
 
 	drainSys := NewDrainSystem(ctx)
 
-	// Set score to 0
-	ctx.State.SetScore(0)
+	// Set energy to 0
+	ctx.State.SetEnergy(0)
 
 	// Run system update
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Verify drain is not active
 	if ctx.State.GetDrainActive() {
-		t.Fatal("Expected drain to not be active when score = 0")
+		t.Fatal("Expected drain to not be active when energy = 0")
 	}
 
 	// Verify no drain entity
 	if ctx.State.GetDrainEntity() != 0 {
-		t.Fatal("Expected no drain entity when score = 0")
+		t.Fatal("Expected no drain entity when energy = 0")
 	}
 }
 
-// TestDrainSystem_NoDespawnWhenScoreStaysPositive tests that drain persists when score > 0
-func TestDrainSystem_NoDespawnWhenScoreStaysPositive(t *testing.T) {
+// TestDrainSystem_NoDespawnWhenEnergyStaysPositive tests that drain persists when energy > 0
+func TestDrainSystem_NoDespawnWhenEnergyStaysPositive(t *testing.T) {
 	screen := tcell.NewSimulationScreen("UTF-8")
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
@@ -173,8 +173,8 @@ func TestDrainSystem_NoDespawnWhenScoreStaysPositive(t *testing.T) {
 
 	drainSys := NewDrainSystem(ctx)
 
-	// Set score > 0 to spawn drain
-	ctx.State.SetScore(100)
+	// Set energy > 0 to spawn drain
+	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Verify drain is active
@@ -184,8 +184,8 @@ func TestDrainSystem_NoDespawnWhenScoreStaysPositive(t *testing.T) {
 
 	originalEntityID := ctx.State.GetDrainEntity()
 
-	// Update score but keep it positive
-	ctx.State.SetScore(50)
+	// Update energy but keep it positive
+	ctx.State.SetEnergy(50)
 
 	// Run system update multiple times
 	for i := 0; i < 5; i++ {
@@ -194,12 +194,12 @@ func TestDrainSystem_NoDespawnWhenScoreStaysPositive(t *testing.T) {
 
 	// Verify drain is still active
 	if !ctx.State.GetDrainActive() {
-		t.Fatal("Expected drain to remain active when score > 0")
+		t.Fatal("Expected drain to remain active when energy > 0")
 	}
 
 	// Verify same entity ID (no respawn)
 	if ctx.State.GetDrainEntity() != originalEntityID {
-		t.Fatal("Expected drain entity to remain the same when score > 0")
+		t.Fatal("Expected drain entity to remain the same when energy > 0")
 	}
 }
 
@@ -212,8 +212,8 @@ func TestDrainSystem_SpawnDespawnCycle(t *testing.T) {
 
 	drainSys := NewDrainSystem(ctx)
 
-	// First spawn: score > 0
-	ctx.State.SetScore(100)
+	// First spawn: energy > 0
+	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	if !ctx.State.GetDrainActive() {
@@ -222,16 +222,16 @@ func TestDrainSystem_SpawnDespawnCycle(t *testing.T) {
 
 	firstEntityID := ctx.State.GetDrainEntity()
 
-	// Despawn: score <= 0
-	ctx.State.SetScore(0)
+	// Despawn: energy <= 0
+	ctx.State.SetEnergy(0)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	if ctx.State.GetDrainActive() {
 		t.Fatal("Expected drain to not be active after despawn")
 	}
 
-	// Second spawn: score > 0 again
-	ctx.State.SetScore(50)
+	// Second spawn: energy > 0 again
+	ctx.State.SetEnergy(50)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	if !ctx.State.GetDrainActive() {
@@ -262,8 +262,8 @@ func TestDrainSystem_NoDoubleSpawn(t *testing.T) {
 
 	drainSys := NewDrainSystem(ctx)
 
-	// Set score > 0
-	ctx.State.SetScore(100)
+	// Set energy > 0
+	ctx.State.SetEnergy(100)
 
 	// Run system update multiple times
 	for i := 0; i < 10; i++ {
