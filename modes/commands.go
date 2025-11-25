@@ -64,6 +64,13 @@ func handleNewCommand(ctx *engine.GameContext) bool {
 		Y: ctx.GameHeight / 2,
 	})
 
+	// Restore Cursor Identity and Protection
+	ctx.World.Cursors.Add(ctx.CursorEntity, components.CursorComponent{})
+	ctx.World.Protections.Add(ctx.CursorEntity, components.ProtectionComponent{
+		Mask:      components.ProtectAll,
+		ExpiresAt: 0,
+	})
+
 	// Reset boost state
 	ctx.State.SetBoostEnabled(false)
 	ctx.State.SetBoostEndTime(time.Time{})

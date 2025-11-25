@@ -23,9 +23,10 @@ func TestNuggetDarkensUnderCursor(t *testing.T) {
 	world := ctx.World
 	mockTime := engine.NewMockTimeProvider(time.Now())
 	ctx.TimeProvider = mockTime
-	ctx.CursorX = 10
-	ctx.CursorY = 5
 	ctx.Mode = engine.ModeNormal
+
+	// Set cursor position in ECS
+	world.Positions.Add(ctx.CursorEntity, components.PositionComponent{X: 10, Y: 5})
 
 	// Create nugget at cursor position
 	nuggetEntity := world.CreateEntity()
@@ -48,7 +49,8 @@ func TestNuggetDarkensUnderCursor(t *testing.T) {
 
 	// Draw cursor
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
-	renderer.drawCursor(ctx, defaultStyle)
+	cursorPos, _ := world.Positions.Get(ctx.CursorEntity)
+	renderer.drawCursor(cursorPos.X, cursorPos.Y, ctx, defaultStyle)
 
 	// Get the cell content at cursor position
 	screenX := 3 + 10
@@ -85,9 +87,10 @@ func TestNormalCharacterStaysBlackUnderCursor(t *testing.T) {
 	world := ctx.World
 	mockTime := engine.NewMockTimeProvider(time.Now())
 	ctx.TimeProvider = mockTime
-	ctx.CursorX = 15
-	ctx.CursorY = 10
 	ctx.Mode = engine.ModeNormal
+
+	// Set cursor position in ECS
+	world.Positions.Add(ctx.CursorEntity, components.PositionComponent{X: 15, Y: 10})
 
 	// Create normal green character at cursor position
 	charEntity := world.CreateEntity()
@@ -109,7 +112,8 @@ func TestNormalCharacterStaysBlackUnderCursor(t *testing.T) {
 
 	renderer := NewTerminalRenderer(screen, 100, 30, 3, 1, 100, 24, 3)
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
-	renderer.drawCursor(ctx, defaultStyle)
+	cursorPos, _ := world.Positions.Get(ctx.CursorEntity)
+	renderer.drawCursor(cursorPos.X, cursorPos.Y, ctx, defaultStyle)
 
 	screenX := 3 + 15
 	screenY := 1 + 10
@@ -143,13 +147,15 @@ func TestCursorWithoutCharacterHasNoContrast(t *testing.T) {
 	ctx := engine.NewGameContext(screen)
 	mockTime := engine.NewMockTimeProvider(time.Now())
 	ctx.TimeProvider = mockTime
-	ctx.CursorX = 20
-	ctx.CursorY = 8
 	ctx.Mode = engine.ModeNormal
+
+	// Set cursor position in ECS
+	ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{X: 20, Y: 8})
 
 	renderer := NewTerminalRenderer(screen, 100, 30, 3, 1, 100, 24, 3)
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
-	renderer.drawCursor(ctx, defaultStyle)
+	cursorPos, _ := ctx.World.Positions.Get(ctx.CursorEntity)
+	renderer.drawCursor(cursorPos.X, cursorPos.Y, ctx, defaultStyle)
 
 	screenX := 3 + 20
 	screenY := 1 + 8
@@ -183,9 +189,10 @@ func TestNuggetContrastInInsertMode(t *testing.T) {
 	world := ctx.World
 	mockTime := engine.NewMockTimeProvider(time.Now())
 	ctx.TimeProvider = mockTime
-	ctx.CursorX = 25
-	ctx.CursorY = 12
 	ctx.Mode = engine.ModeInsert
+
+	// Set cursor position in ECS
+	world.Positions.Add(ctx.CursorEntity, components.PositionComponent{X: 25, Y: 12})
 
 	// Create nugget at cursor position
 	nuggetEntity := world.CreateEntity()
@@ -205,7 +212,8 @@ func TestNuggetContrastInInsertMode(t *testing.T) {
 
 	renderer := NewTerminalRenderer(screen, 100, 30, 3, 1, 100, 24, 3)
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
-	renderer.drawCursor(ctx, defaultStyle)
+	cursorPos, _ := world.Positions.Get(ctx.CursorEntity)
+	renderer.drawCursor(cursorPos.X, cursorPos.Y, ctx, defaultStyle)
 
 	screenX := 3 + 25
 	screenY := 1 + 12
@@ -236,8 +244,9 @@ func TestNuggetOffCursorHasNormalColor(t *testing.T) {
 	world := ctx.World
 	mockTime := engine.NewMockTimeProvider(time.Now())
 	ctx.TimeProvider = mockTime
-	ctx.CursorX = 10
-	ctx.CursorY = 5
+
+	// Set cursor position in ECS
+	world.Positions.Add(ctx.CursorEntity, components.PositionComponent{X: 10, Y: 5})
 
 	// Create nugget NOT at cursor position
 	nuggetEntity := world.CreateEntity()
@@ -259,7 +268,8 @@ func TestNuggetOffCursorHasNormalColor(t *testing.T) {
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
 
 	// Draw characters (not cursor)
-	renderer.drawCharacters(world, tcell.NewRGBColor(5, 5, 5), defaultStyle, ctx)
+	cursorPos, _ := world.Positions.Get(ctx.CursorEntity)
+	renderer.drawCharacters(world, cursorPos.X, cursorPos.Y, tcell.NewRGBColor(5, 5, 5), defaultStyle, ctx)
 
 	// Get the nugget cell content (not at cursor)
 	screenX := 3 + 30
@@ -290,9 +300,10 @@ func TestCursorErrorOverridesNuggetContrast(t *testing.T) {
 	world := ctx.World
 	mockTime := engine.NewMockTimeProvider(time.Now())
 	ctx.TimeProvider = mockTime
-	ctx.CursorX = 40
-	ctx.CursorY = 18
 	ctx.Mode = engine.ModeInsert
+
+	// Set cursor position in ECS
+	world.Positions.Add(ctx.CursorEntity, components.PositionComponent{X: 40, Y: 18})
 
 	// Trigger error cursor
 	ctx.State.SetCursorError(true)
@@ -316,7 +327,8 @@ func TestCursorErrorOverridesNuggetContrast(t *testing.T) {
 
 	renderer := NewTerminalRenderer(screen, 100, 30, 3, 1, 100, 24, 3)
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
-	renderer.drawCursor(ctx, defaultStyle)
+	cursorPos, _ := world.Positions.Get(ctx.CursorEntity)
+	renderer.drawCursor(cursorPos.X, cursorPos.Y, ctx, defaultStyle)
 
 	screenX := 3 + 40
 	screenY := 1 + 18
@@ -398,9 +410,10 @@ func TestNuggetLayeringCursorOnTop(t *testing.T) {
 	world := ctx.World
 	mockTime := engine.NewMockTimeProvider(time.Now())
 	ctx.TimeProvider = mockTime
-	ctx.CursorX = 50
-	ctx.CursorY = 20
 	ctx.Mode = engine.ModeNormal
+
+	// Set cursor position in ECS
+	world.Positions.Add(ctx.CursorEntity, components.PositionComponent{X: 50, Y: 20})
 
 	// Create nugget at cursor position
 	nuggetEntity := world.CreateEntity()
@@ -422,7 +435,8 @@ func TestNuggetLayeringCursorOnTop(t *testing.T) {
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
 
 	// Draw characters first
-	renderer.drawCharacters(world, tcell.NewRGBColor(5, 5, 5), defaultStyle, ctx)
+	cursorPos, _ := world.Positions.Get(ctx.CursorEntity)
+	renderer.drawCharacters(world, cursorPos.X, cursorPos.Y, tcell.NewRGBColor(5, 5, 5), defaultStyle, ctx)
 
 	// Get content after drawing characters
 	screenX := 3 + 50
@@ -435,8 +449,8 @@ func TestNuggetLayeringCursorOnTop(t *testing.T) {
 		t.Errorf("Before cursor draw, expected orange foreground, got %v", fgBefore)
 	}
 
-	// Draw cursor on top
-	renderer.drawCursor(ctx, defaultStyle)
+	// Draw cursor on top (cursorPos already declared above)
+	renderer.drawCursor(cursorPos.X, cursorPos.Y, ctx, defaultStyle)
 
 	// Get content after drawing cursor
 	_, _, styleAfterCursor, _ := screen.GetContent(screenX, screenY)
@@ -494,13 +508,13 @@ func TestMultipleNuggetInstances(t *testing.T) {
 
 	// Test each nugget position
 	for _, pos := range positions {
-		// Move cursor to nugget
-		ctx.CursorX = pos.x
-		ctx.CursorY = pos.y
+		// Move cursor to nugget in ECS
+		world.Positions.Add(ctx.CursorEntity, components.PositionComponent{X: pos.x, Y: pos.y})
 
 		// Clear screen and redraw
 		screen.Clear()
-		renderer.drawCursor(ctx, defaultStyle)
+		cursorPos, _ := world.Positions.Get(ctx.CursorEntity)
+		renderer.drawCursor(cursorPos.X, cursorPos.Y, ctx, defaultStyle)
 
 		screenX := 3 + pos.x
 		screenY := 1 + pos.y

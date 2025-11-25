@@ -33,9 +33,12 @@ func TestBoostRapidToggle(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 100; i++ {
+			// Get cursor position from ECS
+			cursorPos, _ := ctx.World.Positions.Get(ctx.CursorEntity)
+
 			// Create blue character
 			entity := ctx.World.CreateEntity()
-			pos := components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY}
+			pos := components.PositionComponent{X: cursorPos.X, Y: cursorPos.Y}
 			char := components.CharacterComponent{Rune: rune('a' + (i % 26)), Style: tcell.StyleDefault}
 			seq := components.SequenceComponent{
 				ID:    i,
@@ -53,7 +56,7 @@ func TestBoostRapidToggle(t *testing.T) {
 			tx.Commit()
 
 			// Type the character to trigger boost extension
-			scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, rune('a'+(i%26)))
+			scoreSystem.HandleCharacterTyping(ctx.World, cursorPos.X, cursorPos.Y, rune('a'+(i%26)))
 			time.Sleep(1 * time.Millisecond) // Small delay
 		}
 	}()
@@ -100,9 +103,12 @@ func TestBoostConcurrentRead(t *testing.T) {
 	ctx := engine.NewGameContext(screen)
 	scoreSystem := NewScoreSystem(ctx)
 
+	// Get cursor position from ECS
+	cursorPos, _ := ctx.World.Positions.Get(ctx.CursorEntity)
+
 	// Activate boost
 	entity := ctx.World.CreateEntity()
-	pos := components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY}
+	pos := components.PositionComponent{X: cursorPos.X, Y: cursorPos.Y}
 	char := components.CharacterComponent{Rune: 'a', Style: tcell.StyleDefault}
 	seq := components.SequenceComponent{
 		ID:    1,
@@ -119,7 +125,7 @@ func TestBoostConcurrentRead(t *testing.T) {
 	tx.Spawn(entity, pos.X, pos.Y)
 	tx.Commit()
 
-	scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'a')
+	scoreSystem.HandleCharacterTyping(ctx.World, cursorPos.X, cursorPos.Y, 'a')
 
 	var wg sync.WaitGroup
 
@@ -170,9 +176,12 @@ func TestBoostExpirationRace(t *testing.T) {
 		defer wg.Done()
 		time.Sleep(5 * time.Millisecond) // Let it almost expire
 
+		// Get cursor position from ECS
+		cursorPos, _ := ctx.World.Positions.Get(ctx.CursorEntity)
+
 		// Create blue character
 		entity := ctx.World.CreateEntity()
-		pos := components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY}
+		pos := components.PositionComponent{X: cursorPos.X, Y: cursorPos.Y}
 		char := components.CharacterComponent{Rune: 'b', Style: tcell.StyleDefault}
 		seq := components.SequenceComponent{
 			ID:    1,
@@ -190,7 +199,7 @@ func TestBoostExpirationRace(t *testing.T) {
 		tx.Commit()
 
 		// Type to extend boost
-		scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, 'b')
+		scoreSystem.HandleCharacterTyping(ctx.World, cursorPos.X, cursorPos.Y, 'b')
 	}()
 
 	// Goroutine 2: Check for expiration (using atomic CAS)
@@ -243,8 +252,11 @@ func TestBoostWithScoreUpdates(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 50; i++ {
+			// Get cursor position from ECS
+			cursorPos, _ := ctx.World.Positions.Get(ctx.CursorEntity)
+
 			entity := ctx.World.CreateEntity()
-			pos := components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY}
+			pos := components.PositionComponent{X: cursorPos.X, Y: cursorPos.Y}
 			char := components.CharacterComponent{Rune: rune('a' + (i % 26)), Style: tcell.StyleDefault}
 			seq := components.SequenceComponent{
 				ID:    i,
@@ -261,7 +273,7 @@ func TestBoostWithScoreUpdates(t *testing.T) {
 			tx.Spawn(entity, pos.X, pos.Y)
 			tx.Commit()
 
-			scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, rune('a'+(i%26)))
+			scoreSystem.HandleCharacterTyping(ctx.World, cursorPos.X, cursorPos.Y, rune('a'+(i%26)))
 			time.Sleep(1 * time.Millisecond)
 		}
 	}()
@@ -350,6 +362,9 @@ func TestSimulateFullGameLoop(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 20; i++ {
+			// Get cursor position from ECS
+			cursorPos, _ := ctx.World.Positions.Get(ctx.CursorEntity)
+
 			// Alternate between blue and green characters
 			charType := components.SequenceGreen
 			if i%5 == 0 {
@@ -357,7 +372,7 @@ func TestSimulateFullGameLoop(t *testing.T) {
 			}
 
 			entity := ctx.World.CreateEntity()
-			pos := components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY}
+			pos := components.PositionComponent{X: cursorPos.X, Y: cursorPos.Y}
 			char := components.CharacterComponent{Rune: rune('a' + (i % 26)), Style: tcell.StyleDefault}
 			seq := components.SequenceComponent{
 				ID:    i,
@@ -374,7 +389,7 @@ func TestSimulateFullGameLoop(t *testing.T) {
 			tx.Spawn(entity, pos.X, pos.Y)
 			tx.Commit()
 
-			scoreSystem.HandleCharacterTyping(ctx.World, ctx.CursorX, ctx.CursorY, rune('a'+(i%26)))
+			scoreSystem.HandleCharacterTyping(ctx.World, cursorPos.X, cursorPos.Y, rune('a'+(i%26)))
 			time.Sleep(10 * time.Millisecond) // Simulate typing speed
 		}
 

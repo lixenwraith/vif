@@ -81,9 +81,30 @@ func (s *ScoreSystem) Update(world *engine.World, dt time.Duration) {
 func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursorY int, typedRune rune) {
 	now := s.ctx.TimeProvider.Now()
 
-	// Get entity at cursor position
-	entity := world.Positions.GetEntityAt(cursorX, cursorY)
-	if entity == 0 {
+	// Find character at cursor position using Query
+	// We cannot use GetEntityAt because the Cursor entity masks the character in the spatial index
+	var entity engine.Entity
+	var char components.CharacterComponent
+	found := false
+
+	// Query all entities with Position and Character components
+	entities := world.Query().
+		With(world.Positions).
+		With(world.Characters).
+		Execute()
+
+	// Scan for the one at our specific coordinates
+	for _, e := range entities {
+		pos, _ := world.Positions.Get(e)
+		if pos.X == cursorX && pos.Y == cursorY {
+			char, _ = world.Characters.Get(e)
+			entity = e
+			found = true
+			break
+		}
+	}
+
+	if !found {
 		// No character at cursor - flash error cursor and deactivate boost
 		cursor, _ := world.Cursors.Get(s.ctx.CursorEntity)
 		cursor.ErrorFlashEnd = now.Add(constants.ErrorBlinkTimeout).UnixNano()
@@ -91,28 +112,6 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 		s.ctx.State.SetHeat(0) // Reset heat
 		s.ctx.State.SetBoostEnabled(false)
 		s.ctx.State.SetBoostColor(0) // 0 = None
-		// Set score blink to error state (black background with bright red text)
-		s.ctx.State.SetScoreBlinkActive(true)
-		s.ctx.State.SetScoreBlinkType(0)  // 0 = error
-		s.ctx.State.SetScoreBlinkLevel(0) // 0 = dark
-		s.ctx.State.SetScoreBlinkTime(now)
-		// Trigger error sound
-		if s.ctx.AudioEngine != nil {
-			cmd := createAudioCommand(audio.SoundError, s.ctx)
-			s.ctx.AudioEngine.SendRealTime(cmd)
-		}
-		return
-	}
-
-	// Get character component
-	char, ok := world.Characters.Get(entity)
-	if !ok {
-		cursor, _ := world.Cursors.Get(s.ctx.CursorEntity)
-		cursor.ErrorFlashEnd = now.Add(constants.ErrorBlinkTimeout).UnixNano()
-		world.Cursors.Add(s.ctx.CursorEntity, cursor)
-		s.ctx.State.SetHeat(0)
-		s.ctx.State.SetBoostEnabled(false)
-		s.ctx.State.SetBoostColor(0)
 		// Set score blink to error state (black background with bright red text)
 		s.ctx.State.SetScoreBlinkActive(true)
 		s.ctx.State.SetScoreBlinkType(0)  // 0 = error

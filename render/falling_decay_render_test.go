@@ -321,7 +321,8 @@ func TestFallingDecayRenderZOrder(t *testing.T) {
 
 	// Draw in the correct order: characters first, then falling decay
 	screen.Clear()
-	renderer.drawCharacters(world, tcell.NewRGBColor(50, 50, 50), defaultStyle, ctx)
+	cursorPos, _ := world.Positions.Get(ctx.CursorEntity)
+	renderer.drawCharacters(world, cursorPos.X, cursorPos.Y, tcell.NewRGBColor(50, 50, 50), defaultStyle, ctx)
 	renderer.drawFallingDecay(world, defaultStyle)
 	screen.Show()
 
