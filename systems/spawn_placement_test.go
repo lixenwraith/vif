@@ -15,6 +15,13 @@ func TestPlaceLine(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 	world := engine.NewWorld()
+	// Initialize Resources for the SpawnSystem
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth:    80,
+		GameHeight:   24,
+		ScreenWidth:  80,
+		ScreenHeight: 24,
+	})
 
 	spawnSys := NewSpawnSystem(ctx)
 
@@ -61,6 +68,13 @@ func TestPlaceLineNearCursor(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 	world := engine.NewWorld()
+	// Initialize Resources for the SpawnSystem
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth:    80,
+		GameHeight:   24,
+		ScreenWidth:  80,
+		ScreenHeight: 24,
+	})
 
 	cursorX, cursorY := 40, 12
 	// Sync cursor position to GameState for snapshot pattern
@@ -148,6 +162,13 @@ func TestPlaceLineSkipsSpaces(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a fresh world for each test
 			world := engine.NewWorld()
+			// Initialize Resources for the SpawnSystem
+			engine.AddResource(world.Resources, &engine.ConfigResource{
+				GameWidth:    80,
+				GameHeight:   24,
+				ScreenWidth:  80,
+				ScreenHeight: 24,
+			})
 			spawnSys := NewSpawnSystem(ctx)
 
 			style := tcell.StyleDefault
@@ -219,6 +240,13 @@ func TestPlaceLinePositionMaintenance(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 	world := engine.NewWorld()
+	// Initialize Resources for the SpawnSystem
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth:    80,
+		GameHeight:   24,
+		ScreenWidth:  80,
+		ScreenHeight: 24,
+	})
 
 	// Place cursor far from common spawn locations
 	// Sync cursor position to GameState for snapshot pattern
@@ -285,6 +313,13 @@ func TestPlaceLinePackageMd5(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 	world := engine.NewWorld()
+	// Initialize Resources for the SpawnSystem
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth:    80,
+		GameHeight:   24,
+		ScreenWidth:  80,
+		ScreenHeight: 24,
+	})
 
 	// Place cursor far from spawn area to avoid exclusion zone
 	// Sync cursor position to GameState for snapshot pattern
@@ -379,6 +414,13 @@ func TestPlaceLineConstBlockSize(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 	world := engine.NewWorld()
+	// Initialize Resources for the SpawnSystem
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth:    80,
+		GameHeight:   24,
+		ScreenWidth:  80,
+		ScreenHeight: 24,
+	})
 
 	// Place cursor far from spawn area
 	// Sync cursor position to GameState for snapshot pattern

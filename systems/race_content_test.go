@@ -27,6 +27,13 @@ func TestConcurrentContentRefresh(t *testing.T) {
 
 	spawnSys := NewSpawnSystem(ctx)
 	world := engine.NewWorld()
+	// Initialize Resources for the SpawnSystem
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth:    80,
+		GameHeight:   24,
+		ScreenWidth:  80,
+		ScreenHeight: 24,
+	})
 
 	// Set up initial test blocks
 	initialBlocks := make([]CodeBlock, 10)
@@ -161,6 +168,13 @@ func TestRenderWhileSpawning(t *testing.T) {
 
 	spawnSys := NewSpawnSystem(ctx)
 	world := engine.NewWorld()
+	// Initialize Resources for the SpawnSystem
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth:    80,
+		GameHeight:   24,
+		ScreenWidth:  80,
+		ScreenHeight: 24,
+	})
 
 	// Pre-populate with test blocks
 	testBlocks := make([]CodeBlock, 5)
@@ -468,6 +482,13 @@ func TestStressContentSystem(t *testing.T) {
 
 	spawnSys := NewSpawnSystem(ctx)
 	world := engine.NewWorld()
+	// Initialize Resources for the SpawnSystem
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth:    80,
+		GameHeight:   24,
+		ScreenWidth:  80,
+		ScreenHeight: 24,
+	})
 
 	// Pre-populate with varied content
 	testBlocks := make([]CodeBlock, 15)

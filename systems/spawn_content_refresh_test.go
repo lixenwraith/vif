@@ -242,6 +242,13 @@ func TestConcurrentSpawningAndContentRefresh(t *testing.T) {
 
 	spawnSys := NewSpawnSystem(ctx)
 	world := engine.NewWorld()
+	// Initialize Resources for the SpawnSystem
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth:    80,
+		GameHeight:   24,
+		ScreenWidth:  80,
+		ScreenHeight: 24,
+	})
 
 	// Set up test blocks
 	testBlocks := make([]CodeBlock, 20)

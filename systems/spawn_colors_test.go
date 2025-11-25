@@ -90,6 +90,13 @@ func TestSpawnWithNoAvailableColors(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 	world := engine.NewWorld()
+	// Initialize Resources for the SpawnSystem
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth:    80,
+		GameHeight:   24,
+		ScreenWidth:  80,
+		ScreenHeight: 24,
+	})
 
 	spawnSys := NewSpawnSystem(ctx)
 
