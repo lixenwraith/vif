@@ -9,10 +9,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
-const (
-	errorBlinkMs = 500
-)
-
 // TerminalRenderer handles all terminal rendering
 type TerminalRenderer struct {
 	screen          tcell.Screen
@@ -780,69 +776,128 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 	}
 }
 
-// drawCursor draws the cursor
+// drawCursor draws the cursor handling complex overlaps with masked entities
 func (r *TerminalRenderer) drawCursor(cursorX, cursorY int, ctx *engine.GameContext, defaultStyle tcell.Style) {
 	screenX := r.gameX + cursorX
 	screenY := r.gameY + cursorY
 
+	// Bounds check
 	if screenX < r.gameX || screenX >= r.width || screenY < r.gameY || screenY >= r.gameY+r.gameHeight {
 		return
 	}
 
-	// Read cursor component for error flash
-	cursor, _ := ctx.World.Cursors.Get(ctx.CursorEntity)
-	now := ctx.TimeProvider.Now()
-
-	// Find character at cursor position
-	entity := ctx.World.GetEntityAtPosition(cursorX, cursorY)
+	// 1. Determine Default State (Empty Cell)
 	var charAtCursor rune = ' '
-	var charColor tcell.Color
-	hasChar := false
-	isNugget := false
+	var cursorBgColor tcell.Color
 
-	if entity != 0 {
-		if char, ok := ctx.World.Characters.Get(entity); ok {
-			charAtCursor = char.Rune
-			fg, _, _ := char.Style.Decompose()
-			charColor = fg
-			hasChar = true
-		}
+	// Default background based on mode
+	if ctx.IsInsertMode() {
+		cursorBgColor = RgbCursorInsert
+	} else {
+		cursorBgColor = RgbCursorNormal
+	}
 
-		// Check if entity is a nugget
-		if _, ok := ctx.World.Nuggets.Get(entity); ok {
-			isNugget = true
+	var charFgColor tcell.Color = tcell.ColorBlack
+
+	// 2. Scan for Overlapping Entities
+	// Because the PositionStore limits 1 entity per cell, the Cursor Entity "masks"
+	// other entities at this location. We must explicitly query/iterate to find them.
+
+	// Check for Drain (Highest Priority Entity)
+	// Drain destroys other items, so if it exists here, it takes precedence.
+	isDrain := false
+	if ctx.State.GetDrainActive() {
+		if ctx.State.GetDrainX() == cursorX && ctx.State.GetDrainY() == cursorY {
+			isDrain = true
 		}
 	}
 
-	// Determine cursor colors
-	var cursorBgColor tcell.Color
-	var charFgColor tcell.Color
+	// Check for Characters (Spawned, Gold, Nugget)
+	// We use the Query pattern to find any entity at this specific coordinate
+	// that is NOT the cursor itself.
+	var charStyle tcell.Style
+	hasChar := false
+	isNugget := false
 
-	// Check for error flash using CursorComponent
-	hasErrorFlash := cursor.ErrorFlashEnd > 0 && now.UnixNano() < cursor.ErrorFlashEnd
+	if !isDrain {
+		// Only search for characters if drain isn't overlapping (drain destroys characters)
+		candidates := ctx.World.Query().
+			With(ctx.World.Positions).
+			With(ctx.World.Characters).
+			Execute()
 
-	if hasErrorFlash {
-		cursorBgColor = RgbCursorError
+		for _, e := range candidates {
+			if e == ctx.CursorEntity {
+				continue
+			}
+
+			pos, _ := ctx.World.Positions.Get(e)
+			if pos.X == cursorX && pos.Y == cursorY {
+				charComp, _ := ctx.World.Characters.Get(e)
+				charAtCursor = charComp.Rune
+				charStyle = charComp.Style
+				hasChar = true
+
+				if ctx.World.Nuggets.Has(e) {
+					isNugget = true
+				}
+				break // Found the masked character
+			}
+		}
+	}
+
+	// Check for Decay (Lowest Priority Entity)
+	// Only checked if no standard character or drain is present.
+	// This makes cursor "transparent" to decay if sitting on empty space.
+	hasDecay := false
+	if !isDrain && !hasChar {
+		decayEntities := ctx.World.FallingDecays.All()
+		for _, e := range decayEntities {
+			decay, ok := ctx.World.FallingDecays.Get(e)
+			if ok && decay.Column == cursorX && int(decay.YPosition) == cursorY {
+				charAtCursor = decay.Char
+				hasDecay = true
+				break
+			}
+		}
+	}
+
+	// 3. Resolve Final Visuals based on priority
+	if isDrain {
+		// Drain overrides everything
+		charAtCursor = constants.DrainChar
+		cursorBgColor = RgbDrain
 		charFgColor = tcell.ColorBlack
 	} else if hasChar {
-		cursorBgColor = charColor
-		// Use dark foreground for nuggets to provide contrast with orange cursor
+		// Character found (Blue/Green/Red/Gold/Nugget)
+		// Inherit background from character's foreground color
+		fg, _, _ := charStyle.Decompose()
+		cursorBgColor = fg
+
 		if isNugget {
 			charFgColor = RgbNuggetDark
 		} else {
 			charFgColor = tcell.ColorBlack
 		}
-	} else {
-		if ctx.IsInsertMode() {
-			cursorBgColor = RgbCursorInsert
-		} else {
-			cursorBgColor = RgbCursorNormal
-		}
+	} else if hasDecay {
+		// Decay found on empty space
+		cursorBgColor = RgbDecayFalling
 		charFgColor = tcell.ColorBlack
 	}
 
-	cursorStyle := defaultStyle.Foreground(charFgColor).Background(cursorBgColor)
-	r.screen.SetContent(screenX, screenY, charAtCursor, nil, cursorStyle)
+	// 4. Error Flash Overlay (Absolute Highest Priority for Background)
+	// Reads component directly to ensure flash works during pause
+	cursorComp, ok := ctx.World.Cursors.Get(ctx.CursorEntity)
+	if ok && cursorComp.ErrorFlashEnd > 0 {
+		if ctx.TimeProvider.Now().UnixNano() < cursorComp.ErrorFlashEnd {
+			cursorBgColor = RgbCursorError
+			charFgColor = tcell.ColorBlack
+		}
+	}
+
+	// 5. Render
+	style := defaultStyle.Foreground(charFgColor).Background(cursorBgColor)
+	r.screen.SetContent(screenX, screenY, charAtCursor, nil, style)
 }
 
 // UpdateDimensions updates the renderer dimensions

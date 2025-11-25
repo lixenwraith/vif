@@ -61,12 +61,15 @@ func (s *DrainSystem) spawnDrain(world *engine.World) {
 		return
 	}
 
-	// Get cursor position for spawn location
-	cursor := s.ctx.State.ReadCursorPosition()
+	// Read cursor position directly from ECS (Source of Truth)
+	// instead of stale GameState atomics
+	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
+	if !ok {
+		return // Should never happen if CursorEntity is initialized correctly
+	}
 
-	// Spawn drain centered on cursor
-	spawnX := cursor.X
-	spawnY := cursor.Y
+	spawnX := cursorPos.X
+	spawnY := cursorPos.Y
 
 	// Basic validation: ensure position is within bounds
 	if spawnX < 0 {
@@ -102,7 +105,9 @@ func (s *DrainSystem) spawnDrain(world *engine.World) {
 
 	// Check if position is occupied and handle collision
 	collidingEntity := world.Positions.GetEntityAt(spawnX, spawnY)
-	if collidingEntity != 0 {
+	// TODO: (2-second) delayed spawn on score > 0, with spawn animation
+	// Do not trigger collision logic against the cursor itself (Drain spawns on top of it)
+	if collidingEntity != 0 && collidingEntity != s.ctx.CursorEntity {
 		s.handleCollisionAtPosition(world, spawnX, spawnY, collidingEntity)
 	}
 
@@ -174,10 +179,13 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 		return
 	}
 
-	// Get current cursor position (fresh data from GameState)
-	cursor := s.ctx.State.ReadCursorPosition()
-	cursorX := cursor.X
-	cursorY := cursor.Y
+	// Read cursor position directly from ECS
+	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
+	if !ok {
+		return
+	}
+	cursorX := cursorPos.X
+	cursorY := cursorPos.Y
 
 	// Calculate movement direction using Manhattan distance (8-directional)
 	// If already on cursor, dx and dy will be 0 (no movement but LastMoveTime still updates)
@@ -210,9 +218,12 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 
 	// Check for collision at new position
 	collidingEntity := world.Positions.GetEntityAt(newX, newY)
-	if collidingEntity != 0 && collidingEntity != entity {
+
+	// FIX: Allow moving onto the Cursor Entity
+	// We check if the colliding entity exists, is not self, AND is not the cursor.
+	if collidingEntity != 0 && collidingEntity != entity && collidingEntity != s.ctx.CursorEntity {
 		s.handleCollisionAtPosition(world, newX, newY, collidingEntity)
-		// Don't update position if there was a collision
+		// Don't update position if there was a blocking collision
 		return
 	}
 
@@ -222,7 +233,7 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 	drain.LastMoveTime = now
 
 	// Recalculate IsOnCursor after position change using fresh cursor data
-	drain.IsOnCursor = (drain.X == cursorX && drain.Y == cursorY)
+	drain.IsOnCursor = drain.X == cursorX && drain.Y == cursorY
 
 	// Update position (this handles spatial index)
 	pos.X = newX
@@ -254,10 +265,13 @@ func (s *DrainSystem) updateScoreDrain(world *engine.World) {
 		return
 	}
 
-	// Get current cursor position (fresh data from GameState)
-	cursor := s.ctx.State.ReadCursorPosition()
-	cursorX := cursor.X
-	cursorY := cursor.Y
+	// FIX: Read cursor position directly from ECS
+	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
+	if !ok {
+		return
+	}
+	cursorX := cursorPos.X
+	cursorY := cursorPos.Y
 
 	// Recalculate IsOnCursor every frame by comparing drain position with current cursor position
 	isOnCursor := (drain.X == cursorX && drain.Y == cursorY)
