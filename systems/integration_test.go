@@ -2,6 +2,7 @@ package systems
 
 import (
 	"testing"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/components"
@@ -15,6 +16,17 @@ func TestDecaySystemCounterUpdates(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 	world := engine.NewWorld()
+	// Inject required resources for migrated systems
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth:    80,
+		GameHeight:   24,
+		ScreenWidth:  80,
+		ScreenHeight: 24,
+	})
+	engine.AddResource(world.Resources, &engine.TimeResource{
+		GameTime:  time.Now(),
+		DeltaTime: 16 * time.Millisecond,
+	})
 
 	spawnSys := NewSpawnSystem(ctx)
 	decaySys := NewDecaySystem(ctx)
@@ -83,6 +95,17 @@ func TestDecaySystemColorTransitionWithCounters(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 	world := engine.NewWorld()
+	// Inject required resources for migrated systems
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth:    80,
+		GameHeight:   24,
+		ScreenWidth:  80,
+		ScreenHeight: 24,
+	})
+	engine.AddResource(world.Resources, &engine.TimeResource{
+		GameTime:  time.Now(),
+		DeltaTime: 16 * time.Millisecond,
+	})
 
 	spawnSys := NewSpawnSystem(ctx)
 	decaySys := NewDecaySystem(ctx)
@@ -165,6 +188,17 @@ func TestScoreSystemCounterDecrement(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 	world := engine.NewWorld()
+	// Inject required resources for migrated systems
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth:    80,
+		GameHeight:   24,
+		ScreenWidth:  80,
+		ScreenHeight: 24,
+	})
+	engine.AddResource(world.Resources, &engine.TimeResource{
+		GameTime:  time.Now(),
+		DeltaTime: 16 * time.Millisecond,
+	})
 
 	spawnSys := NewSpawnSystem(ctx)
 	scoreSys := NewScoreSystem(ctx)
@@ -216,6 +250,17 @@ func TestScoreSystemDoesNotDecrementRedCounter(t *testing.T) {
 	screen.SetSize(80, 24)
 	ctx := engine.NewGameContext(screen)
 	world := engine.NewWorld()
+	// Inject required resources for migrated systems
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth:    80,
+		GameHeight:   24,
+		ScreenWidth:  80,
+		ScreenHeight: 24,
+	})
+	engine.AddResource(world.Resources, &engine.TimeResource{
+		GameTime:  time.Now(),
+		DeltaTime: 16 * time.Millisecond,
+	})
 
 	spawnSys := NewSpawnSystem(ctx)
 	scoreSys := NewScoreSystem(ctx)

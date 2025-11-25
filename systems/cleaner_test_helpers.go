@@ -1,6 +1,8 @@
 package systems
 
 import (
+	"time"
+
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
@@ -9,7 +11,19 @@ import (
 // Helper functions for cleaner system tests
 
 func createCleanerTestContext() *engine.GameContext {
-	return engine.NewTestGameContext(80, 24, 100)
+	ctx := engine.NewTestGameContext(80, 24, 100)
+	// Inject required resources for migrated systems
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth:    80,
+		GameHeight:   24,
+		ScreenWidth:  80,
+		ScreenHeight: 24,
+	})
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime:  time.Now(),
+		DeltaTime: 16 * time.Millisecond,
+	})
+	return ctx
 }
 
 func createRedCharacterAt(world *engine.World, x, y int) engine.Entity {
