@@ -88,7 +88,8 @@ func (s *DecaySystem) updateAnimation(world *engine.World, dt time.Duration) {
 
 // spawnFallingEntities creates one falling decay entity per column using generic stores
 func (s *DecaySystem) spawnFallingEntities(world *engine.World) {
-	gameWidth := s.ctx.GameWidth
+	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+	gameWidth := config.GameWidth
 
 	// Create one falling entity per column to ensure complete coverage
 	for column := 0; column < gameWidth; column++ {
@@ -120,8 +121,9 @@ func (s *DecaySystem) spawnFallingEntities(world *engine.World) {
 
 // updateFallingEntities updates falling entity positions and applies decay using generic stores
 func (s *DecaySystem) updateFallingEntities(world *engine.World, dtSeconds float64) {
-	gameHeight := s.ctx.GameHeight
-	gameWidth := s.ctx.GameWidth
+	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+	gameHeight := config.GameHeight
+	gameWidth := config.GameWidth
 
 	// Clamp dt to prevent tunneling on huge lag spikes (e.g. Resume from pause)
 	if dtSeconds > 0.1 {
