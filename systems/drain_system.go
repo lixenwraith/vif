@@ -56,6 +56,10 @@ func (s *DrainSystem) Update(world *engine.World, dt time.Duration) {
 
 // spawnDrain creates the drain entity centered on the cursor using generic stores
 func (s *DrainSystem) spawnDrain(world *engine.World) {
+	// Fetch resources
+	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+
 	// Check if drain is already active (double-check for safety)
 	if s.ctx.State.GetDrainActive() {
 		return
@@ -75,14 +79,14 @@ func (s *DrainSystem) spawnDrain(world *engine.World) {
 	if spawnX < 0 {
 		spawnX = 0
 	}
-	if spawnX >= s.ctx.GameWidth {
-		spawnX = s.ctx.GameWidth - 1
+	if spawnX >= config.GameWidth {
+		spawnX = config.GameWidth - 1
 	}
 	if spawnY < 0 {
 		spawnY = 0
 	}
-	if spawnY >= s.ctx.GameHeight {
-		spawnY = s.ctx.GameHeight - 1
+	if spawnY >= config.GameHeight {
+		spawnY = config.GameHeight - 1
 	}
 
 	// Create drain entity
@@ -94,7 +98,7 @@ func (s *DrainSystem) spawnDrain(world *engine.World) {
 	}
 
 	// Add drain component with initial state
-	now := s.ctx.TimeProvider.Now()
+	now := timeRes.GameTime
 	drain := components.DrainComponent{
 		X:             spawnX,
 		Y:             spawnY,
@@ -156,6 +160,9 @@ func (s *DrainSystem) despawnDrain(world *engine.World) {
 // updateDrainMovement handles purely clock-based drain movement toward cursor using generic stores
 // Movement occurs ONLY on DrainMoveIntervalMs intervals, independent of input events
 func (s *DrainSystem) updateDrainMovement(world *engine.World) {
+	// Fetch resources
+	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 
 	// Get drain entity ID
 	entityID := s.ctx.State.GetDrainEntity()
@@ -172,7 +179,7 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 	}
 
 	// Purely clock-based movement: only move when interval has elapsed
-	now := s.ctx.TimeProvider.Now()
+	now := timeRes.GameTime
 	timeSinceLastMove := now.Sub(drain.LastMoveTime)
 	if timeSinceLastMove < constants.DrainMoveInterval {
 		// Not enough time has passed, skip movement this frame
@@ -200,14 +207,14 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 	if newX < 0 {
 		newX = 0
 	}
-	if newX >= s.ctx.GameWidth {
-		newX = s.ctx.GameWidth - 1
+	if newX >= config.GameWidth {
+		newX = config.GameWidth - 1
 	}
 	if newY < 0 {
 		newY = 0
 	}
-	if newY >= s.ctx.GameHeight {
-		newY = s.ctx.GameHeight - 1
+	if newY >= config.GameHeight {
+		newY = config.GameHeight - 1
 	}
 
 	// Get current position from PositionComponent
@@ -250,6 +257,8 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 
 // updateScoreDrain handles score draining when drain is on cursor using generic stores
 func (s *DrainSystem) updateScoreDrain(world *engine.World) {
+	// Fetch resources
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 
 	// Get drain entity ID
 	entityID := s.ctx.State.GetDrainEntity()
@@ -284,7 +293,7 @@ func (s *DrainSystem) updateScoreDrain(world *engine.World) {
 
 	// Drain score if on cursor and DrainScoreDrainInterval has passed
 	if isOnCursor {
-		now := s.ctx.TimeProvider.Now()
+		now := timeRes.GameTime
 		if now.Sub(drain.LastDrainTime) >= constants.DrainScoreDrainInterval {
 			// Drain score by the configured amount
 			s.ctx.State.AddScore(-constants.DrainScoreDrainAmount)
