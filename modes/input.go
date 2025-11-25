@@ -149,7 +149,7 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 		if !ok {
 			return true
 		}
-		pos.X = findLineEnd(h.ctx)
+		pos.X = findLineEnd(h.ctx, pos.Y)
 		h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
 		h.ctx.State.SetHeat(0)
 		return true
@@ -308,7 +308,7 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 	case tcell.KeyEnd:
 		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
 		if ok {
-			pos.X = findLineEnd(h.ctx)
+			pos.X = findLineEnd(h.ctx, pos.Y)
 			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
 		}
 		h.ctx.State.SetHeat(0)

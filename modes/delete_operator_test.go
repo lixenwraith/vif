@@ -236,8 +236,7 @@ func TestDeleteRangeSwappedBounds(t *testing.T) {
 // TestExecuteDeleteMotionDW tests dw (delete word) with gaps
 func TestExecuteDeleteMotionDW(t *testing.T) {
 	ctx := createTestContext()
-	ctx.CursorX = 0
-	ctx.CursorY = 0
+	setCursorPosition(ctx, 0, 0)
 
 	// Place "foo bar" with gap at positions 3-4
 	placeCharWithSpatialIndex(ctx, 0, 0, 'f', components.SequenceGreen)
@@ -278,8 +277,7 @@ func TestExecuteDeleteMotionDW(t *testing.T) {
 // TestExecuteDeleteMotionDE tests de (delete to end of word) with gaps
 func TestExecuteDeleteMotionDE(t *testing.T) {
 	ctx := createTestContext()
-	ctx.CursorX = 5
-	ctx.CursorY = 0
+	setCursorPosition(ctx, 5, 0)
 
 	// Place "foo bar" with gap at positions 3-4
 	placeCharWithSpatialIndex(ctx, 0, 0, 'f', components.SequenceGreen)
@@ -319,8 +317,7 @@ func TestExecuteDeleteMotionDE(t *testing.T) {
 // TestExecuteDeleteMotionDollarSign tests d$ with gaps
 func TestExecuteDeleteMotionDollarSign(t *testing.T) {
 	ctx := createTestContext()
-	ctx.CursorX = 1
-	ctx.CursorY = 0
+	setCursorPosition(ctx, 1, 0)
 
 	// Place "a bc d" with gaps
 	placeCharWithSpatialIndex(ctx, 0, 0, 'a', components.SequenceGreen)

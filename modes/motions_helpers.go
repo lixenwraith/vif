@@ -96,9 +96,9 @@ func getMatchingBracket(r rune) rune {
 
 // findMatchingBracket finds the matching bracket for the bracket at cursor position
 // Returns the new cursor position (x, y) or (-1, -1) if no match found
-func findMatchingBracket(ctx *engine.GameContext) (int, int) {
+func findMatchingBracket(ctx *engine.GameContext, cursorX, cursorY int) (int, int) {
 	// Get character at current cursor position
-	currentChar := getCharAt(ctx, ctx.CursorX, ctx.CursorY)
+	currentChar := getCharAt(ctx, cursorX, cursorY)
 
 	// Check if cursor is on a bracket
 	if !isBracket(currentChar) {
@@ -110,10 +110,10 @@ func findMatchingBracket(ctx *engine.GameContext) (int, int) {
 	// Determine search direction
 	if isOpeningBracket(currentChar) {
 		// Search forward for matching closing bracket
-		return findMatchingBracketForward(ctx, ctx.CursorX, ctx.CursorY, currentChar, matchingChar)
+		return findMatchingBracketForward(ctx, cursorX, cursorY, currentChar, matchingChar)
 	} else {
 		// Search backward for matching opening bracket
-		return findMatchingBracketBackward(ctx, ctx.CursorX, ctx.CursorY, currentChar, matchingChar)
+		return findMatchingBracketBackward(ctx, cursorX, cursorY, currentChar, matchingChar)
 	}
 }
 

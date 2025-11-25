@@ -98,8 +98,8 @@ func TestFindCharWithCount(t *testing.T) {
 			ctx.MotionCount = 0
 
 			// Verify cursor position
-			if ctx.CursorX != tt.expectedX {
-				t.Errorf("Expected cursor at X=%d, got X=%d", tt.expectedX, ctx.CursorX)
+			if getCursorX(ctx) != tt.expectedX {
+				t.Errorf("Expected cursor at X=%d, got X=%d", tt.expectedX, getCursorX(ctx))
 			}
 
 			// Verify PendingCount was cleared
@@ -151,8 +151,8 @@ func TestFindCharStateTransition(t *testing.T) {
 	ctx.MotionCount = 0
 
 	// Verify final state
-	if ctx.CursorX != 3 {
-		t.Errorf("Expected cursor at X=3 (second 'a'), got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 3 {
+		t.Errorf("Expected cursor at X=3 (second 'a'), got X=%d", getCursorX(ctx))
 	}
 	if ctx.WaitingForF {
 		t.Error("WaitingForF should be false after completion")
@@ -260,8 +260,8 @@ func TestFindCharBackwardWithCount(t *testing.T) {
 			ctx.MotionCount = 0
 
 			// Verify cursor position
-			if ctx.CursorX != tt.expectedX {
-				t.Errorf("Expected cursor at X=%d, got X=%d", tt.expectedX, ctx.CursorX)
+			if getCursorX(ctx) != tt.expectedX {
+				t.Errorf("Expected cursor at X=%d, got X=%d", tt.expectedX, getCursorX(ctx))
 			}
 
 			// Verify PendingCount was cleared
@@ -313,8 +313,8 @@ func TestFindCharBackwardStateTransition(t *testing.T) {
 	ctx.MotionCount = 0
 
 	// Verify final state
-	if ctx.CursorX != 2 {
-		t.Errorf("Expected cursor at X=2 (second 'a' backward), got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 2 {
+		t.Errorf("Expected cursor at X=2 (second 'a' backward), got X=%d", getCursorX(ctx))
 	}
 	if ctx.WaitingForFBackward {
 		t.Error("WaitingForFBackward should be false after completion")
@@ -387,11 +387,11 @@ func TestSingleKeystrokeCommandsStillWork(t *testing.T) {
 			// Execute motion
 			ExecuteMotion(ctx, tt.command, tt.count)
 
-			if ctx.CursorX != tt.expectedX {
-				t.Errorf("Expected X=%d, got X=%d", tt.expectedX, ctx.CursorX)
+			if getCursorX(ctx) != tt.expectedX {
+				t.Errorf("Expected X=%d, got X=%d", tt.expectedX, getCursorX(ctx))
 			}
-			if ctx.CursorY != tt.expectedY {
-				t.Errorf("Expected Y=%d, got Y=%d", tt.expectedY, ctx.CursorY)
+			if getCursorY(ctx) != tt.expectedY {
+				t.Errorf("Expected Y=%d, got Y=%d", tt.expectedY, getCursorY(ctx))
 			}
 
 			// Verify PendingCount was not affected
@@ -420,8 +420,8 @@ func TestInvalidCommandResetsCount(t *testing.T) {
 	ExecuteFindChar(ctx, 'x', ctx.PendingCount)
 
 	// Cursor should not move
-	if ctx.CursorX != 0 {
-		t.Errorf("Cursor should not move when character not found, got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 0 {
+		t.Errorf("Cursor should not move when character not found, got X=%d", getCursorX(ctx))
 	}
 
 	// Clean up state
@@ -506,8 +506,7 @@ func createMinimalTestContext(width, height int) *engine.GameContext {
 
 	// Initialize cursor cache (synced with ECS)
 	if pos, ok := world.Positions.Get(ctx.CursorEntity); ok {
-		ctx.CursorX = pos.X
-		ctx.CursorY = pos.Y
+		setCursorPosition(ctx, pos.X, pos.Y)
 	}
 
 	return ctx
@@ -521,12 +520,4 @@ func createTestChar(ctx *engine.GameContext, x, y int, char rune) engine.Entity 
 	return entity
 }
 
-// Helper function to set cursor position in ECS (for testing after Phase 2 migration)
-// This syncs the position to both ECS and the cache
-func setCursorPosition(ctx *engine.GameContext, x, y int) {
-	// Set in ECS (primary source)
-	ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{X: x, Y: y})
-	// Sync to cache
-	ctx.CursorX = x
-	ctx.CursorY = y
-}
+// Helper to set cursor position removed - now using shared helper from test_helpers.go

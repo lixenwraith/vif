@@ -34,37 +34,36 @@ func TestWordMotionsWithFileContent(t *testing.T) {
 	placeChar(ctx, 10, 0, '5')
 
 	// Test 'w' from position 0 - should jump over the gap to 'm' at position 8
-	ctx.CursorX = 0
-	ctx.CursorY = 0
+	setCursorPosition(ctx, 0, 0)
 	ExecuteMotion(ctx, 'w', 1)
-	if ctx.CursorX != 8 {
-		t.Errorf("w from start of 'package': expected X=8 (at 'm' in 'md5'), got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 8 {
+		t.Errorf("w from start of 'package': expected X=8 (at 'm' in 'md5'), got X=%d", getCursorX(ctx))
 	}
 
 	// Test 'b' from position 10 - should jump back to 'm' at position 8
-	ctx.CursorX = 10
+	setCursorPosition(ctx, 10, getCursorY(ctx))
 	ExecuteMotion(ctx, 'b', 1)
-	if ctx.CursorX != 8 {
-		t.Errorf("b from '5': expected X=8 (at 'm'), got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 8 {
+		t.Errorf("b from '5': expected X=8 (at 'm'), got X=%d", getCursorX(ctx))
 	}
 
 	// Test 'b' again from position 8 - should jump back to 'p' at position 0
 	ExecuteMotion(ctx, 'b', 1)
-	if ctx.CursorX != 0 {
-		t.Errorf("b from 'm': expected X=0 (at 'p' in 'package'), got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 0 {
+		t.Errorf("b from 'm': expected X=0 (at 'p' in 'package'), got X=%d", getCursorX(ctx))
 	}
 
 	// Test 'e' from position 0 - should find end of "package" at position 6
-	ctx.CursorX = 0
+	setCursorPosition(ctx, 0, getCursorY(ctx))
 	ExecuteMotion(ctx, 'e', 1)
-	if ctx.CursorX != 6 {
-		t.Errorf("e from 'p': expected X=6 (at 'e' in 'package'), got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 6 {
+		t.Errorf("e from 'p': expected X=6 (at 'e' in 'package'), got X=%d", getCursorX(ctx))
 	}
 
 	// Test 'e' again - should jump over gap to end of "md5" at position 10
 	ExecuteMotion(ctx, 'e', 1)
-	if ctx.CursorX != 10 {
-		t.Errorf("e from end of 'package': expected X=10 (at '5' in 'md5'), got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 10 {
+		t.Errorf("e from end of 'package': expected X=10 (at '5' in 'md5'), got X=%d", getCursorX(ctx))
 	}
 }
 
@@ -94,34 +93,33 @@ func TestMultipleWPressesWithGaps(t *testing.T) {
 	placeChar(ctx, 14, 0, 'o')
 
 	// Start at 'i' (position 0)
-	ctx.CursorX = 0
-	ctx.CursorY = 0
+	setCursorPosition(ctx, 0, 0)
 
 	// First 'w' press - should move to 'c' at position 9 (skipping the gap)
 	ExecuteMotion(ctx, 'w', 1)
-	if ctx.CursorX != 9 {
-		t.Errorf("First w press: expected X=9 (at 'c' in 'crypto'), got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 9 {
+		t.Errorf("First w press: expected X=9 (at 'c' in 'crypto'), got X=%d", getCursorX(ctx))
 	}
 
 	// Second 'w' press - should stay at 9 (no more words)
-	prevX := ctx.CursorX
+	prevX := getCursorX(ctx)
 	ExecuteMotion(ctx, 'w', 1)
-	if ctx.CursorX != prevX {
-		t.Errorf("Second w press at end: expected X=%d (stay in place), got X=%d", prevX, ctx.CursorX)
+	if getCursorX(ctx) != prevX {
+		t.Errorf("Second w press at end: expected X=%d (stay in place), got X=%d", prevX, getCursorX(ctx))
 	}
 
 	// Test multiple 'w' presses from start with count
-	ctx.CursorX = 0
+	setCursorPosition(ctx, 0, getCursorY(ctx))
 	ExecuteMotion(ctx, 'w', 2)
 	// First w: 0 -> 9, second w: stays at 9
-	if ctx.CursorX != 9 {
-		t.Errorf("2w from start: expected X=9 (at 'c'), got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 9 {
+		t.Errorf("2w from start: expected X=9 (at 'c'), got X=%d", getCursorX(ctx))
 	}
 
 	// Verify we can navigate back through the gap
 	ExecuteMotion(ctx, 'b', 1)
-	if ctx.CursorX != 0 {
-		t.Errorf("b from 'crypto': expected X=0 (at 'i' in 'import'), got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 0 {
+		t.Errorf("b from 'crypto': expected X=0 (at 'i' in 'import'), got X=%d", getCursorX(ctx))
 	}
 }
 
@@ -149,45 +147,44 @@ func TestWordMotionsWithLargeGaps(t *testing.T) {
 	placeChar(ctx, 52, 0, 'z')
 
 	// Test 'w' across large gaps
-	ctx.CursorX = 0
-	ctx.CursorY = 0
+	setCursorPosition(ctx, 0, 0)
 
 	ExecuteMotion(ctx, 'w', 1)
-	if ctx.CursorX != 20 {
-		t.Errorf("w over large gap: expected X=20 (at 'b' in 'bar'), got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 20 {
+		t.Errorf("w over large gap: expected X=20 (at 'b' in 'bar'), got X=%d", getCursorX(ctx))
 	}
 
 	ExecuteMotion(ctx, 'w', 1)
-	if ctx.CursorX != 50 {
-		t.Errorf("w over second large gap: expected X=50 (at 'b' in 'baz'), got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 50 {
+		t.Errorf("w over second large gap: expected X=50 (at 'b' in 'baz'), got X=%d", getCursorX(ctx))
 	}
 
 	// Test 'b' back across large gaps
 	ExecuteMotion(ctx, 'b', 1)
-	if ctx.CursorX != 20 {
-		t.Errorf("b over large gap: expected X=20 (at 'b' in 'bar'), got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 20 {
+		t.Errorf("b over large gap: expected X=20 (at 'b' in 'bar'), got X=%d", getCursorX(ctx))
 	}
 
 	ExecuteMotion(ctx, 'b', 1)
-	if ctx.CursorX != 0 {
-		t.Errorf("b over second large gap: expected X=0 (at 'f' in 'foo'), got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 0 {
+		t.Errorf("b over second large gap: expected X=0 (at 'f' in 'foo'), got X=%d", getCursorX(ctx))
 	}
 
 	// Test 'e' across large gaps
-	ctx.CursorX = 0
+	setCursorPosition(ctx, 0, getCursorY(ctx))
 	ExecuteMotion(ctx, 'e', 1)
-	if ctx.CursorX != 2 {
-		t.Errorf("e in first word: expected X=2 (at 'o' in 'foo'), got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 2 {
+		t.Errorf("e in first word: expected X=2 (at 'o' in 'foo'), got X=%d", getCursorX(ctx))
 	}
 
 	ExecuteMotion(ctx, 'e', 1)
-	if ctx.CursorX != 22 {
-		t.Errorf("e over large gap: expected X=22 (at 'r' in 'bar'), got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 22 {
+		t.Errorf("e over large gap: expected X=22 (at 'r' in 'bar'), got X=%d", getCursorX(ctx))
 	}
 
 	ExecuteMotion(ctx, 'e', 1)
-	if ctx.CursorX != 52 {
-		t.Errorf("e over second large gap: expected X=52 (at 'z' in 'baz'), got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 52 {
+		t.Errorf("e over second large gap: expected X=52 (at 'z' in 'baz'), got X=%d", getCursorX(ctx))
 	}
 }
 
@@ -209,27 +206,26 @@ func TestWordMotionsStartingFromGap(t *testing.T) {
 	placeChar(ctx, 14, 0, 'd')
 
 	// Start cursor in the middle of a gap (position 7)
-	ctx.CursorX = 7
-	ctx.CursorY = 0
+	setCursorPosition(ctx, 7, 0)
 
 	// 'w' from gap should find next word
 	ExecuteMotion(ctx, 'w', 1)
-	if ctx.CursorX != 10 {
-		t.Errorf("w from gap: expected X=10 (at 'w' in 'world'), got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 10 {
+		t.Errorf("w from gap: expected X=10 (at 'w' in 'world'), got X=%d", getCursorX(ctx))
 	}
 
 	// 'b' from gap should find previous word
-	ctx.CursorX = 7
+	setCursorPosition(ctx, 7, getCursorY(ctx))
 	ExecuteMotion(ctx, 'b', 1)
-	if ctx.CursorX != 0 {
-		t.Errorf("b from gap: expected X=0 (at 'h' in 'hello'), got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 0 {
+		t.Errorf("b from gap: expected X=0 (at 'h' in 'hello'), got X=%d", getCursorX(ctx))
 	}
 
 	// 'e' from gap should find end of next word
-	ctx.CursorX = 7
+	setCursorPosition(ctx, 7, getCursorY(ctx))
 	ExecuteMotion(ctx, 'e', 1)
-	if ctx.CursorX != 14 {
-		t.Errorf("e from gap: expected X=14 (at 'd' in 'world'), got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 14 {
+		t.Errorf("e from gap: expected X=14 (at 'd' in 'world'), got X=%d", getCursorX(ctx))
 	}
 }
 
@@ -260,30 +256,29 @@ func TestWORDMotionsWithFileContentGaps(t *testing.T) {
 	placeChar(ctx, 17, 0, 'n')
 
 	// Test 'W' - should treat "func(x,y)" as one WORD and jump to "return"
-	ctx.CursorX = 0
-	ctx.CursorY = 0
+	setCursorPosition(ctx, 0, 0)
 	ExecuteMotion(ctx, 'W', 1)
-	if ctx.CursorX != 12 {
-		t.Errorf("W over gap: expected X=12 (at 'r' in 'return'), got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 12 {
+		t.Errorf("W over gap: expected X=12 (at 'r' in 'return'), got X=%d", getCursorX(ctx))
 	}
 
 	// Test 'B' back
 	ExecuteMotion(ctx, 'B', 1)
-	if ctx.CursorX != 0 {
-		t.Errorf("B over gap: expected X=0 (at 'f' in 'func'), got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 0 {
+		t.Errorf("B over gap: expected X=0 (at 'f' in 'func'), got X=%d", getCursorX(ctx))
 	}
 
 	// Test 'E' - should find end of "func(x,y)" at ')'
-	ctx.CursorX = 0
+	setCursorPosition(ctx, 0, getCursorY(ctx))
 	ExecuteMotion(ctx, 'E', 1)
-	if ctx.CursorX != 8 {
-		t.Errorf("E in first WORD: expected X=8 (at ')'), got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 8 {
+		t.Errorf("E in first WORD: expected X=8 (at ')'), got X=%d", getCursorX(ctx))
 	}
 
 	// Test 'E' again - should jump over gap to end of "return"
 	ExecuteMotion(ctx, 'E', 1)
-	if ctx.CursorX != 17 {
-		t.Errorf("E over gap: expected X=17 (at 'n' in 'return'), got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 17 {
+		t.Errorf("E over gap: expected X=17 (at 'n' in 'return'), got X=%d", getCursorX(ctx))
 	}
 }
 

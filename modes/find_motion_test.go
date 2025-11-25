@@ -24,8 +24,8 @@ func placeTextAt(ctx *engine.GameContext, x, y int, text string) {
 // Test helper: assertCursorAt verifies cursor position
 func assertCursorAt(t *testing.T, ctx *engine.GameContext, expectedX, expectedY int) {
 	t.Helper()
-	if ctx.CursorX != expectedX || ctx.CursorY != expectedY {
-		t.Errorf("Expected cursor at (%d, %d), got (%d, %d)", expectedX, expectedY, ctx.CursorX, ctx.CursorY)
+	if getCursorX(ctx) != expectedX || getCursorY(ctx) != expectedY {
+		t.Errorf("Expected cursor at (%d, %d), got (%d, %d)", expectedX, expectedY, getCursorX(ctx), getCursorY(ctx))
 	}
 }
 
@@ -136,12 +136,12 @@ func TestFindCharCountExceedsMatches(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			setCursorPosition(ctx, tt.startX, 0)
-			ctx.CursorY = 10
+			setCursorPosition(ctx, getCursorX(ctx), 10)
 
 			ExecuteFindChar(ctx, tt.targetChar, tt.count)
 
-			if ctx.CursorX != tt.expectedX {
-				t.Errorf("%s: expected X=%d, got X=%d", tt.desc, tt.expectedX, ctx.CursorX)
+			if getCursorX(ctx) != tt.expectedX {
+				t.Errorf("%s: expected X=%d, got X=%d", tt.desc, tt.expectedX, getCursorX(ctx))
 			}
 		})
 	}
@@ -167,14 +167,14 @@ func TestFindCharNoMatch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			setCursorPosition(ctx, tt.startX, 0)
-			ctx.CursorY = 3
+			setCursorPosition(ctx, getCursorX(ctx), 3)
 			originalX := tt.startX
 
 			ExecuteFindChar(ctx, tt.targetChar, 1)
 
 			// Cursor should not move when character not found
-			if ctx.CursorX != originalX {
-				t.Errorf("Cursor should not move when character not found. Started at X=%d, ended at X=%d", originalX, ctx.CursorX)
+			if getCursorX(ctx) != originalX {
+				t.Errorf("Cursor should not move when character not found. Started at X=%d, ended at X=%d", originalX, getCursorX(ctx))
 			}
 		})
 	}
@@ -201,7 +201,7 @@ func TestFindCharAtBoundary(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			setCursorPosition(ctx, tt.startX, 0)
-			ctx.CursorY = 8
+			setCursorPosition(ctx, getCursorX(ctx), 8)
 
 			ExecuteFindChar(ctx, tt.targetChar, 1)
 
@@ -236,7 +236,7 @@ func TestFindCharBackwardBasic(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			setCursorPosition(ctx, tt.startX, 0)
-			ctx.CursorY = 2
+			setCursorPosition(ctx, getCursorX(ctx), 2)
 
 			ExecuteFindCharBackward(ctx, tt.targetChar, 1)
 
@@ -271,7 +271,7 @@ func TestFindCharBackwardWithCountComprehensive(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			setCursorPosition(ctx, tt.startX, 0)
-			ctx.CursorY = 7
+			setCursorPosition(ctx, getCursorX(ctx), 7)
 
 			ExecuteFindCharBackward(ctx, tt.targetChar, tt.count)
 
@@ -300,14 +300,14 @@ func TestFindCharBackwardFromStart(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			setCursorPosition(ctx, tt.startX, 0)
-			ctx.CursorY = 4
+			setCursorPosition(ctx, getCursorX(ctx), 4)
 			originalX := tt.startX
 
 			ExecuteFindCharBackward(ctx, tt.targetChar, 1)
 
 			// Cursor should not move
-			if ctx.CursorX != originalX {
-				t.Errorf("Cursor should not move. Started at X=%d, ended at X=%d", originalX, ctx.CursorX)
+			if getCursorX(ctx) != originalX {
+				t.Errorf("Cursor should not move. Started at X=%d, ended at X=%d", originalX, getCursorX(ctx))
 			}
 		})
 	}
@@ -335,7 +335,7 @@ func TestFindCharBackwardCountExceedsMatches(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			setCursorPosition(ctx, tt.startX, 0)
-			ctx.CursorY = 11
+			setCursorPosition(ctx, getCursorX(ctx), 11)
 
 			ExecuteFindCharBackward(ctx, tt.targetChar, tt.count)
 
@@ -355,7 +355,7 @@ func TestDeleteWithFind(t *testing.T) {
 	t.Run("dfa deletes up to and including first 'a'", func(t *testing.T) {
 		// Create test line: "xyzabc"
 		placeTextAt(ctx, 0, 0, "xyzabc")
-		ctx.CursorX = 0
+		setCursorPosition(ctx, 0, getCursorY(ctx))
 
 
 		// Simulate "dfa" - delete to first 'a'
@@ -386,7 +386,7 @@ func TestDeleteWithFind(t *testing.T) {
 		ctx = createMinimalTestContext(80, 24)
 		// Create test line: "abxyz"
 		placeTextAt(ctx, 0, 2, "abxyz")
-		setCursorPosition(ctx, 4 // At 'z', 2)
+		setCursorPosition(ctx, 4, 2) // At 'z'
 
 		// Simulate "dFx" - delete backward to 'x'
 		ExecuteDeleteWithMotionBackward(ctx, 'F', 1, 'x')
@@ -400,7 +400,7 @@ func TestDeleteWithFind(t *testing.T) {
 		ctx = createMinimalTestContext(80, 24)
 		// Create test line: "xaxbxcx"
 		placeTextAt(ctx, 0, 3, "xaxbxcx")
-		setCursorPosition(ctx, 6 // At last 'x', 3)
+		setCursorPosition(ctx, 6, 3) // At last 'x'
 
 		// Simulate "d3Fx" - delete backward to 3rd 'x' from current position
 		ExecuteDeleteWithMotionBackward(ctx, 'F', 3, 'x')
@@ -450,22 +450,22 @@ func TestFindWithEmptyLine(t *testing.T) {
 	setCursorPosition(ctx, 5, 0)
 
 	t.Run("fa on empty line", func(t *testing.T) {
-		originalX := ctx.CursorX
+		originalX := getCursorX(ctx)
 		ExecuteFindChar(ctx, 'a', 1)
 
 		// Cursor should not move
-		if ctx.CursorX != originalX {
-			t.Errorf("Cursor should not move on empty line. Started at X=%d, ended at X=%d", originalX, ctx.CursorX)
+		if getCursorX(ctx) != originalX {
+			t.Errorf("Cursor should not move on empty line. Started at X=%d, ended at X=%d", originalX, getCursorX(ctx))
 		}
 	})
 
 	t.Run("Fa on empty line", func(t *testing.T) {
-		originalX := ctx.CursorX
+		originalX := getCursorX(ctx)
 		ExecuteFindCharBackward(ctx, 'a', 1)
 
 		// Cursor should not move
-		if ctx.CursorX != originalX {
-			t.Errorf("Cursor should not move on empty line. Started at X=%d, ended at X=%d", originalX, ctx.CursorX)
+		if getCursorX(ctx) != originalX {
+			t.Errorf("Cursor should not move on empty line. Started at X=%d, ended at X=%d", originalX, getCursorX(ctx))
 		}
 	})
 }
@@ -497,7 +497,7 @@ func TestFindWithSingleCharacter(t *testing.T) {
 
 	t.Run("fx when already on char", func(t *testing.T) {
 		setCursorPosition(ctx, 5, 9)
-		originalX := ctx.CursorX
+		originalX := getCursorX(ctx)
 
 		ExecuteFindChar(ctx, 'x', 1)
 
@@ -528,8 +528,8 @@ func TestFindWithUnicodeCharacters(t *testing.T) {
 		// "hello世界test" - '世' is at position 5, '界' is at position 6
 		// But due to how placeTextAt works with Unicode, we search for '世' which should be at position 5
 		// However, the actual position may vary. Let's just verify it moved backward.
-		if ctx.CursorX >= 10 {
-			t.Errorf("Cursor should have moved backward from 10, got X=%d", ctx.CursorX)
+		if getCursorX(ctx) >= 10 {
+			t.Errorf("Cursor should have moved backward from 10, got X=%d", getCursorX(ctx))
 		}
 	})
 }
@@ -592,15 +592,15 @@ func TestFindWithLargeCount(t *testing.T) {
 
 // ExecuteDeleteWithMotion simulates delete with find motion (e.g., dfa, d2fb)
 func ExecuteDeleteWithMotion(ctx *engine.GameContext, motionCmd rune, count int, targetChar rune) {
-	startX := ctx.CursorX
-	startY := ctx.CursorY
+	startX := getCursorX(ctx)
+	startY := getCursorY(ctx)
 
 	// Execute the find motion to determine end position
 	if motionCmd == 'f' {
 		ExecuteFindChar(ctx, targetChar, count)
 	}
 
-	endX := ctx.CursorX
+	endX := getCursorX(ctx)
 
 	// Delete characters from startX to endX (inclusive)
 	for x := startX; x <= endX; x++ {
@@ -608,20 +608,20 @@ func ExecuteDeleteWithMotion(ctx *engine.GameContext, motionCmd rune, count int,
 	}
 
 	// Move cursor back to start position
-	ctx.CursorX = startX
+	setCursorPosition(ctx, startX, getCursorY(ctx))
 }
 
 // ExecuteDeleteWithMotionBackward simulates delete with backward find motion (e.g., dFx, d3Fb)
 func ExecuteDeleteWithMotionBackward(ctx *engine.GameContext, motionCmd rune, count int, targetChar rune) {
-	startX := ctx.CursorX
-	startY := ctx.CursorY
+	startX := getCursorX(ctx)
+	startY := getCursorY(ctx)
 
 	// Execute the backward find motion to determine end position
 	if motionCmd == 'F' {
 		ExecuteFindCharBackward(ctx, targetChar, count)
 	}
 
-	endX := ctx.CursorX
+	endX := getCursorX(ctx)
 
 	// Delete characters from endX to startX (inclusive)
 	for x := endX; x <= startX; x++ {
@@ -629,5 +629,5 @@ func ExecuteDeleteWithMotionBackward(ctx *engine.GameContext, motionCmd rune, co
 	}
 
 	// Move cursor to the beginning of deleted region
-	ctx.CursorX = endX
+	setCursorPosition(ctx, endX, getCursorY(ctx))
 }

@@ -38,12 +38,6 @@ func NewTestGameContext(gameWidth, gameHeight, screenWidth int) *GameContext {
 		ExpiresAt: 0, // Permanent
 	})
 
-	// Initialize cursor cache (synced with ECS)
-	if pos, ok := ctx.World.Positions.Get(ctx.CursorEntity); ok {
-		ctx.CursorX = pos.X
-		ctx.CursorY = pos.Y
-	}
-
 	// Initialize atomic values
 	ctx.pingActive.Store(false)
 	ctx.pingGridTimer.Store(0)

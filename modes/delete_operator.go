@@ -28,43 +28,43 @@ func ExecuteDeleteMotion(ctx *engine.GameContext, motion rune, count int) {
 		deletedGreenOrBlue = deleteRange(ctx, 0, startX, startY)
 
 	case '^': // d^ - delete to first non-whitespace
-		firstNonWS := findFirstNonWhitespace(ctx)
+		firstNonWS := findFirstNonWhitespace(ctx, startY)
 		deletedGreenOrBlue = deleteRange(ctx, firstNonWS, startX, startY)
 
 	case '$': // d$ - delete to line end
-		endX := findLineEnd(ctx)
+		endX := findLineEnd(ctx, startY)
 		deletedGreenOrBlue = deleteRange(ctx, startX, endX, startY)
 
 	case 'w': // dw - delete word (vim-style)
-		endX := findNextWordStartVim(ctx)
+		endX := findNextWordStartVim(ctx, startX, startY)
 		if endX > startX {
 			deletedGreenOrBlue = deleteRange(ctx, startX, endX-1, startY)
 		}
 
 	case 'W': // dW - delete WORD (space-delimited)
-		endX := findNextWORDStart(ctx)
+		endX := findNextWORDStart(ctx, startX, startY)
 		if endX > startX {
 			deletedGreenOrBlue = deleteRange(ctx, startX, endX-1, startY)
 		}
 
 	case 'e': // de - delete to end of word (vim-style)
-		endX := findWordEndVim(ctx)
+		endX := findWordEndVim(ctx, startX, startY)
 		deletedGreenOrBlue = deleteRange(ctx, startX, endX, startY)
 
 	case 'E': // dE - delete to end of WORD (space-delimited)
-		endX := findWORDEnd(ctx)
+		endX := findWORDEnd(ctx, startX, startY)
 		deletedGreenOrBlue = deleteRange(ctx, startX, endX, startY)
 
 	case 'b': // db - delete word backward (vim-style)
-		startWordX := findPrevWordStartVim(ctx)
+		startWordX := findPrevWordStartVim(ctx, startX, startY)
 		deletedGreenOrBlue = deleteRange(ctx, startWordX, startX, startY)
 
 	case 'B': // dB - delete WORD backward (space-delimited)
-		startWordX := findPrevWORDStart(ctx)
+		startWordX := findPrevWORDStart(ctx, startX, startY)
 		deletedGreenOrBlue = deleteRange(ctx, startWordX, startX, startY)
 
 	case '{': // d{ - delete to previous empty line
-		targetY := findPrevEmptyLine(ctx)
+		targetY := findPrevEmptyLine(ctx, startY)
 		for y := targetY; y <= startY; y++ {
 			if deleteAllOnLine(ctx, y) {
 				deletedGreenOrBlue = true
@@ -72,7 +72,7 @@ func ExecuteDeleteMotion(ctx *engine.GameContext, motion rune, count int) {
 		}
 
 	case '}': // d} - delete to next empty line
-		targetY := findNextEmptyLine(ctx)
+		targetY := findNextEmptyLine(ctx, startY)
 		for y := startY; y <= targetY; y++ {
 			if deleteAllOnLine(ctx, y) {
 				deletedGreenOrBlue = true

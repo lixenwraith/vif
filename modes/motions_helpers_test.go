@@ -17,8 +17,7 @@ func createSimpleTestContext() *engine.GameContext {
 	ctx := engine.NewGameContext(screen)
 	ctx.GameWidth = 80
 	ctx.GameHeight = 20
-	ctx.CursorX = 0
-	ctx.CursorY = 0
+	setCursorPosition(ctx, 0, 0)
 	return ctx
 }
 
@@ -238,34 +237,33 @@ func TestValidatePosition_WithMotion(t *testing.T) {
 	}
 
 	// Test that cursor position is validated after motion
-	ctx.CursorX = 78
-	ctx.CursorY = 0
+	setCursorPosition(ctx, 78, 0)
 
 	// Move right - should be clamped to GameWidth-1
 	ExecuteMotion(ctx, 'l', 5)
-	if ctx.CursorX != 79 {
-		t.Errorf("Expected X to be clamped to 79, got %d", ctx.CursorX)
+	if getCursorX(ctx) != 79 {
+		t.Errorf("Expected X to be clamped to 79, got %d", getCursorX(ctx))
 	}
 
 	// Move down from near bottom
-	ctx.CursorY = 18
+	setCursorPosition(ctx, getCursorX(ctx), 18)
 	ExecuteMotion(ctx, 'j', 5)
-	if ctx.CursorY != 19 {
-		t.Errorf("Expected Y to be clamped to 19, got %d", ctx.CursorY)
+	if getCursorY(ctx) != 19 {
+		t.Errorf("Expected Y to be clamped to 19, got %d", getCursorY(ctx))
 	}
 
 	// Move left from left edge
-	ctx.CursorX = 2
+	setCursorPosition(ctx, 2, getCursorY(ctx))
 	ExecuteMotion(ctx, 'h', 5)
-	if ctx.CursorX != 0 {
-		t.Errorf("Expected X to be clamped to 0, got %d", ctx.CursorX)
+	if getCursorX(ctx) != 0 {
+		t.Errorf("Expected X to be clamped to 0, got %d", getCursorX(ctx))
 	}
 
 	// Move up from near top
-	ctx.CursorY = 2
+	setCursorPosition(ctx, getCursorX(ctx), 2)
 	ExecuteMotion(ctx, 'k', 5)
-	if ctx.CursorY != 0 {
-		t.Errorf("Expected Y to be clamped to 0, got %d", ctx.CursorY)
+	if getCursorY(ctx) != 0 {
+		t.Errorf("Expected Y to be clamped to 0, got %d", getCursorY(ctx))
 	}
 }
 

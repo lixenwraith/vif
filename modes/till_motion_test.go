@@ -33,8 +33,8 @@ func TestTillCharBasic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx.CursorX = tt.startX
-			ctx.CursorY = 0
+			setCursorPosition(ctx, tt.startX, getCursorY(ctx))
+			setCursorPosition(ctx, getCursorX(ctx), 0)
 
 			ExecuteTillChar(ctx, tt.targetChar, 1)
 
@@ -69,13 +69,13 @@ func TestTillCharWithCountComprehensive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx.CursorX = tt.startX
-			ctx.CursorY = 5
+			setCursorPosition(ctx, tt.startX, getCursorY(ctx))
+			setCursorPosition(ctx, getCursorX(ctx), 5)
 
 			ExecuteTillChar(ctx, tt.targetChar, tt.count)
 
-			if ctx.CursorX != tt.expectedX {
-				t.Errorf("%s: expected X=%d, got X=%d", tt.desc, tt.expectedX, ctx.CursorX)
+			if getCursorX(ctx) != tt.expectedX {
+				t.Errorf("%s: expected X=%d, got X=%d", tt.desc, tt.expectedX, getCursorX(ctx))
 			}
 		})
 	}
@@ -103,13 +103,13 @@ func TestTillCharCountExceedsMatches(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx.CursorX = tt.startX
-			ctx.CursorY = 10
+			setCursorPosition(ctx, tt.startX, getCursorY(ctx))
+			setCursorPosition(ctx, getCursorX(ctx), 10)
 
 			ExecuteTillChar(ctx, tt.targetChar, tt.count)
 
-			if ctx.CursorX != tt.expectedX {
-				t.Errorf("%s: expected X=%d, got X=%d", tt.desc, tt.expectedX, ctx.CursorX)
+			if getCursorX(ctx) != tt.expectedX {
+				t.Errorf("%s: expected X=%d, got X=%d", tt.desc, tt.expectedX, getCursorX(ctx))
 			}
 		})
 	}
@@ -134,15 +134,15 @@ func TestTillCharNoMatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx.CursorX = tt.startX
-			ctx.CursorY = 3
+			setCursorPosition(ctx, tt.startX, getCursorY(ctx))
+			setCursorPosition(ctx, getCursorX(ctx), 3)
 			originalX := tt.startX
 
 			ExecuteTillChar(ctx, tt.targetChar, 1)
 
 			// Cursor should not move when character not found
-			if ctx.CursorX != originalX {
-				t.Errorf("Cursor should not move when character not found. Started at X=%d, ended at X=%d", originalX, ctx.CursorX)
+			if getCursorX(ctx) != originalX {
+				t.Errorf("Cursor should not move when character not found. Started at X=%d, ended at X=%d", originalX, getCursorX(ctx))
 			}
 		})
 	}
@@ -156,16 +156,16 @@ func TestTillCharTooClose(t *testing.T) {
 	placeTextAt(ctx, 0, 8, "ab")
 
 	t.Run("ta when 'a' is at next position", func(t *testing.T) {
-		ctx.CursorX = 0
-		ctx.CursorY = 8
-		originalX := ctx.CursorX
+		setCursorPosition(ctx, 0, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 8)
+		originalX := getCursorX(ctx)
 
 		ExecuteTillChar(ctx, 'b', 1) // 'b' is at position 1 (cursor+1)
 
 		// Can't move to position before 'b' because we're already past it
 		// Should stay in place
-		if ctx.CursorX != originalX {
-			t.Errorf("Cursor should not move when target is too close. Started at X=%d, ended at X=%d", originalX, ctx.CursorX)
+		if getCursorX(ctx) != originalX {
+			t.Errorf("Cursor should not move when target is too close. Started at X=%d, ended at X=%d", originalX, getCursorX(ctx))
 		}
 	})
 }
@@ -196,13 +196,13 @@ func TestTillCharBackwardBasic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx.CursorX = tt.startX
-			ctx.CursorY = 2
+			setCursorPosition(ctx, tt.startX, getCursorY(ctx))
+			setCursorPosition(ctx, getCursorX(ctx), 2)
 
 			ExecuteTillCharBackward(ctx, tt.targetChar, 1)
 
-			if ctx.CursorX != tt.expectedX {
-				t.Errorf("%s: expected X=%d, got X=%d", tt.desc, tt.expectedX, ctx.CursorX)
+			if getCursorX(ctx) != tt.expectedX {
+				t.Errorf("%s: expected X=%d, got X=%d", tt.desc, tt.expectedX, getCursorX(ctx))
 			}
 		})
 	}
@@ -233,13 +233,13 @@ func TestTillCharBackwardWithCountComprehensive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx.CursorX = tt.startX
-			ctx.CursorY = 7
+			setCursorPosition(ctx, tt.startX, getCursorY(ctx))
+			setCursorPosition(ctx, getCursorX(ctx), 7)
 
 			ExecuteTillCharBackward(ctx, tt.targetChar, tt.count)
 
-			if ctx.CursorX != tt.expectedX {
-				t.Errorf("%s: expected X=%d, got X=%d", tt.desc, tt.expectedX, ctx.CursorX)
+			if getCursorX(ctx) != tt.expectedX {
+				t.Errorf("%s: expected X=%d, got X=%d", tt.desc, tt.expectedX, getCursorX(ctx))
 			}
 		})
 	}
@@ -264,15 +264,15 @@ func TestTillCharBackwardFromStart(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx.CursorX = tt.startX
-			ctx.CursorY = 4
+			setCursorPosition(ctx, tt.startX, getCursorY(ctx))
+			setCursorPosition(ctx, getCursorX(ctx), 4)
 			originalX := tt.startX
 
 			ExecuteTillCharBackward(ctx, tt.targetChar, 1)
 
 			// Cursor should not move
-			if ctx.CursorX != originalX {
-				t.Errorf("Cursor should not move. Started at X=%d, ended at X=%d", originalX, ctx.CursorX)
+			if getCursorX(ctx) != originalX {
+				t.Errorf("Cursor should not move. Started at X=%d, ended at X=%d", originalX, getCursorX(ctx))
 			}
 		})
 	}
@@ -300,13 +300,13 @@ func TestTillCharBackwardCountExceedsMatches(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx.CursorX = tt.startX
-			ctx.CursorY = 11
+			setCursorPosition(ctx, tt.startX, getCursorY(ctx))
+			setCursorPosition(ctx, getCursorX(ctx), 11)
 
 			ExecuteTillCharBackward(ctx, tt.targetChar, tt.count)
 
-			if ctx.CursorX != tt.expectedX {
-				t.Errorf("%s: expected X=%d, got X=%d", tt.desc, tt.expectedX, ctx.CursorX)
+			if getCursorX(ctx) != tt.expectedX {
+				t.Errorf("%s: expected X=%d, got X=%d", tt.desc, tt.expectedX, getCursorX(ctx))
 			}
 		})
 	}
@@ -320,16 +320,16 @@ func TestTillCharBackwardTooClose(t *testing.T) {
 	placeTextAt(ctx, 0, 9, "ab")
 
 	t.Run("Ta when 'a' is at previous position", func(t *testing.T) {
-		ctx.CursorX = 1 // At 'b'
-		ctx.CursorY = 9
-		originalX := ctx.CursorX
+		setCursorPosition(ctx, 1, getCursorY(ctx)) // At 'b'
+		setCursorPosition(ctx, getCursorX(ctx), 9)
+		originalX := getCursorX(ctx)
 
 		ExecuteTillCharBackward(ctx, 'a', 1) // 'a' is at position 0 (cursor-1)
 
 		// Can't move to position after 'a' because we'd be at cursor position
 		// Should stay in place
-		if ctx.CursorX != originalX {
-			t.Errorf("Cursor should not move when target is too close. Started at X=%d, ended at X=%d", originalX, ctx.CursorX)
+		if getCursorX(ctx) != originalX {
+			t.Errorf("Cursor should not move when target is too close. Started at X=%d, ended at X=%d", originalX, getCursorX(ctx))
 		}
 	})
 }
@@ -346,8 +346,8 @@ func TestRepeatFindCharForward(t *testing.T) {
 	placeTextAt(ctx, 0, 0, "abcabcabc")
 
 	t.Run("fa then ; (repeat find forward)", func(t *testing.T) {
-		ctx.CursorX = 0
-		ctx.CursorY = 0
+		setCursorPosition(ctx, 0, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 0)
 
 		// First: fa (find 'a' from position 0, which searches from position 1 onward)
 		ExecuteFindChar(ctx, 'a', 1)
@@ -359,15 +359,15 @@ func TestRepeatFindCharForward(t *testing.T) {
 	})
 
 	t.Run("ta then ; (repeat till forward)", func(t *testing.T) {
-		ctx.CursorX = 0
-		ctx.CursorY = 0
+		setCursorPosition(ctx, 0, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 0)
 
 		// First: tb (till 'b' from position 0)
 		ExecuteTillChar(ctx, 'b', 1)
 		assertCursorAt(t, ctx, 0, 0) // 'b' at 1, till moves to 0 (too close, stays at 0)
 
 		// Move to position 1 to test repeat (past the first 'b')
-		ctx.CursorX = 1
+		setCursorPosition(ctx, 1, getCursorY(ctx))
 
 		// Execute tb again to set up the last find state
 		ExecuteTillChar(ctx, 'b', 1)
@@ -379,8 +379,8 @@ func TestRepeatFindCharForward(t *testing.T) {
 	})
 
 	t.Run("Fa then ; (repeat find backward, same direction)", func(t *testing.T) {
-		ctx.CursorX = 8
-		ctx.CursorY = 0
+		setCursorPosition(ctx, 8, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 0)
 
 		// First: Fa (find 'a' backward)
 		ExecuteFindCharBackward(ctx, 'a', 1)
@@ -392,8 +392,8 @@ func TestRepeatFindCharForward(t *testing.T) {
 	})
 
 	t.Run("Ta then ; (repeat till backward, same direction)", func(t *testing.T) {
-		ctx.CursorX = 8
-		ctx.CursorY = 0
+		setCursorPosition(ctx, 8, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 0)
 
 		// First: Ta (till 'a' backward)
 		ExecuteTillCharBackward(ctx, 'a', 1)
@@ -413,8 +413,8 @@ func TestRepeatFindCharReverse(t *testing.T) {
 	placeTextAt(ctx, 0, 1, "abcabcabc")
 
 	t.Run("fa then , (reverse to Fa)", func(t *testing.T) {
-		ctx.CursorX = 3
-		ctx.CursorY = 1
+		setCursorPosition(ctx, 3, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 1)
 
 		// First: fa (find 'a' forward)
 		ExecuteFindChar(ctx, 'a', 1)
@@ -426,8 +426,8 @@ func TestRepeatFindCharReverse(t *testing.T) {
 	})
 
 	t.Run("ta then , (reverse to Ta)", func(t *testing.T) {
-		ctx.CursorX = 3
-		ctx.CursorY = 1
+		setCursorPosition(ctx, 3, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 1)
 
 		// First: tb (till 'b' forward)
 		ExecuteTillChar(ctx, 'b', 1)
@@ -439,8 +439,8 @@ func TestRepeatFindCharReverse(t *testing.T) {
 	})
 
 	t.Run("Fa then , (reverse to fa)", func(t *testing.T) {
-		ctx.CursorX = 6
-		ctx.CursorY = 1
+		setCursorPosition(ctx, 6, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 1)
 
 		// First: Fa (find 'a' backward)
 		ExecuteFindCharBackward(ctx, 'a', 1)
@@ -452,8 +452,8 @@ func TestRepeatFindCharReverse(t *testing.T) {
 	})
 
 	t.Run("Ta then , (reverse to ta)", func(t *testing.T) {
-		ctx.CursorX = 6
-		ctx.CursorY = 1
+		setCursorPosition(ctx, 6, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 1)
 
 		// First: Ta (till 'a' backward)
 		ExecuteTillCharBackward(ctx, 'a', 1)
@@ -473,30 +473,30 @@ func TestRepeatFindCharNoLastFind(t *testing.T) {
 	placeTextAt(ctx, 0, 5, "abc")
 
 	t.Run("; with no previous find", func(t *testing.T) {
-		ctx.CursorX = 0
-		ctx.CursorY = 5
-		originalX := ctx.CursorX
+		setCursorPosition(ctx, 0, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 5)
+		originalX := getCursorX(ctx)
 
 		// Execute ; without any previous find
 		RepeatFindChar(ctx, false)
 
 		// Cursor should not move
-		if ctx.CursorX != originalX {
-			t.Errorf("Cursor should not move when no previous find. Started at X=%d, ended at X=%d", originalX, ctx.CursorX)
+		if getCursorX(ctx) != originalX {
+			t.Errorf("Cursor should not move when no previous find. Started at X=%d, ended at X=%d", originalX, getCursorX(ctx))
 		}
 	})
 
 	t.Run(", with no previous find", func(t *testing.T) {
-		ctx.CursorX = 0
-		ctx.CursorY = 5
-		originalX := ctx.CursorX
+		setCursorPosition(ctx, 0, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 5)
+		originalX := getCursorX(ctx)
 
 		// Execute , without any previous find
 		RepeatFindChar(ctx, true)
 
 		// Cursor should not move
-		if ctx.CursorX != originalX {
-			t.Errorf("Cursor should not move when no previous find. Started at X=%d, ended at X=%d", originalX, ctx.CursorX)
+		if getCursorX(ctx) != originalX {
+			t.Errorf("Cursor should not move when no previous find. Started at X=%d, ended at X=%d", originalX, getCursorX(ctx))
 		}
 	})
 }
@@ -509,8 +509,8 @@ func TestRepeatFindCharMultipleTimes(t *testing.T) {
 	placeTextAt(ctx, 0, 6, "aaaaa")
 
 	t.Run("fa then ;;; (three forward repeats)", func(t *testing.T) {
-		ctx.CursorX = 0
-		ctx.CursorY = 6
+		setCursorPosition(ctx, 0, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 6)
 
 		// fa (from position 0, searches from position 1 onward, finds 'a' at position 1)
 		ExecuteFindChar(ctx, 'a', 1)
@@ -530,8 +530,8 @@ func TestRepeatFindCharMultipleTimes(t *testing.T) {
 	})
 
 	t.Run("fa then ;,;, (forward, back, forward, back)", func(t *testing.T) {
-		ctx.CursorX = 0
-		ctx.CursorY = 6
+		setCursorPosition(ctx, 0, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 6)
 
 		// fa (set up last find) - from position 0, finds 'a' at position 1
 		ExecuteFindChar(ctx, 'a', 1)
@@ -573,8 +573,8 @@ func TestFindTillStatePreservation(t *testing.T) {
 	placeTextAt(ctx, 0, 7, "abc xyz")
 
 	t.Run("verify LastFindChar is stored", func(t *testing.T) {
-		ctx.CursorX = 0
-		ctx.CursorY = 7
+		setCursorPosition(ctx, 0, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 7)
 
 		// Execute fa
 		ExecuteFindChar(ctx, 'a', 1)
@@ -592,8 +592,8 @@ func TestFindTillStatePreservation(t *testing.T) {
 	})
 
 	t.Run("verify LastFindType changes for t/T/F", func(t *testing.T) {
-		ctx.CursorX = 0
-		ctx.CursorY = 7
+		setCursorPosition(ctx, 0, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 7)
 
 		// Execute tb
 		ExecuteTillChar(ctx, 'b', 1)
@@ -602,7 +602,7 @@ func TestFindTillStatePreservation(t *testing.T) {
 		}
 
 		// Execute Fc
-		ctx.CursorX = 5
+		setCursorPosition(ctx, 5, getCursorY(ctx))
 		ExecuteFindCharBackward(ctx, 'c', 1)
 		if ctx.LastFindType != 'F' {
 			t.Errorf("Expected LastFindType='F', got '%c'", ctx.LastFindType)
@@ -628,25 +628,24 @@ func TestTillWithEmptyLine(t *testing.T) {
 	ctx := createMinimalTestContext(80, 24)
 
 	// Line 0 is empty
-	ctx.CursorX = 5
-	ctx.CursorY = 0
+	setCursorPosition(ctx, 5, 0)
 
 	t.Run("ta on empty line", func(t *testing.T) {
-		originalX := ctx.CursorX
+		originalX := getCursorX(ctx)
 		ExecuteTillChar(ctx, 'a', 1)
 
 		// Cursor should not move
-		if ctx.CursorX != originalX {
+		if getCursorX(ctx) != originalX {
 			t.Errorf("Cursor should not move on empty line")
 		}
 	})
 
 	t.Run("Ta on empty line", func(t *testing.T) {
-		originalX := ctx.CursorX
+		originalX := getCursorX(ctx)
 		ExecuteTillCharBackward(ctx, 'a', 1)
 
 		// Cursor should not move
-		if ctx.CursorX != originalX {
+		if getCursorX(ctx) != originalX {
 			t.Errorf("Cursor should not move on empty line")
 		}
 	})
@@ -660,24 +659,24 @@ func TestTillWithUnicodeCharacters(t *testing.T) {
 	placeTextAt(ctx, 0, 12, "hello世界test")
 
 	t.Run("till Unicode char forward", func(t *testing.T) {
-		ctx.CursorX = 0
-		ctx.CursorY = 12
+		setCursorPosition(ctx, 0, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 12)
 
 		ExecuteTillChar(ctx, '世', 1)
 		// '世' should be at position 5, till moves to 4
-		if ctx.CursorX >= 5 {
-			t.Errorf("Cursor should have moved to position before '世', got X=%d", ctx.CursorX)
+		if getCursorX(ctx) >= 5 {
+			t.Errorf("Cursor should have moved to position before '世', got X=%d", getCursorX(ctx))
 		}
 	})
 
 	t.Run("till Unicode char backward", func(t *testing.T) {
-		ctx.CursorX = 10
-		ctx.CursorY = 12
+		setCursorPosition(ctx, 10, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 12)
 
 		ExecuteTillCharBackward(ctx, '世', 1)
 		// '世' at position 5, till backward moves to 6
-		if ctx.CursorX <= 5 {
-			t.Errorf("Cursor should have moved to position after '世', got X=%d", ctx.CursorX)
+		if getCursorX(ctx) <= 5 {
+			t.Errorf("Cursor should have moved to position after '世', got X=%d", getCursorX(ctx))
 		}
 	})
 }
@@ -690,8 +689,8 @@ func TestTillWithCountZero(t *testing.T) {
 	placeTextAt(ctx, 0, 13, "abcd")
 
 	t.Run("ta with count=0", func(t *testing.T) {
-		ctx.CursorX = 0
-		ctx.CursorY = 13
+		setCursorPosition(ctx, 0, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 13)
 
 		ExecuteTillChar(ctx, 'c', 0)
 
@@ -701,8 +700,8 @@ func TestTillWithCountZero(t *testing.T) {
 	})
 
 	t.Run("Tb with count=0", func(t *testing.T) {
-		ctx.CursorX = 3
-		ctx.CursorY = 13
+		setCursorPosition(ctx, 3, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 13)
 
 		ExecuteTillCharBackward(ctx, 'b', 0)
 

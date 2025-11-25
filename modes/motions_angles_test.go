@@ -20,17 +20,16 @@ func TestBracketMatchingAngleBrackets(t *testing.T) {
 	placeChar(ctx, 9, 0, '>')
 
 	// Test % from opening angle bracket
-	ctx.CursorX = 0
-	ctx.CursorY = 0
+	setCursorPosition(ctx, 0, 0)
 	ExecuteMotion(ctx, '%', 1)
-	if ctx.CursorX != 9 || ctx.CursorY != 0 {
-		t.Errorf("%% from '<': expected (9, 0), got (%d, %d)", ctx.CursorX, ctx.CursorY)
+	if getCursorX(ctx) != 9 || getCursorY(ctx) != 0 {
+		t.Errorf("%% from '<': expected (9, 0), got (%d, %d)", getCursorX(ctx), getCursorY(ctx))
 	}
 
 	// Test % from closing angle bracket
 	ExecuteMotion(ctx, '%', 1)
-	if ctx.CursorX != 0 || ctx.CursorY != 0 {
-		t.Errorf("%% from '>': expected (0, 0), got (%d, %d)", ctx.CursorX, ctx.CursorY)
+	if getCursorX(ctx) != 0 || getCursorY(ctx) != 0 {
+		t.Errorf("%% from '>': expected (0, 0), got (%d, %d)", getCursorX(ctx), getCursorY(ctx))
 	}
 }
 
@@ -46,32 +45,31 @@ func TestBracketMatchingNestedAngleBrackets(t *testing.T) {
 	placeChar(ctx, 4, 0, '>')
 
 	// Test % from first opening angle bracket - should match last closing
-	ctx.CursorX = 0
-	ctx.CursorY = 0
+	setCursorPosition(ctx, 0, 0)
 	ExecuteMotion(ctx, '%', 1)
-	if ctx.CursorX != 4 || ctx.CursorY != 0 {
-		t.Errorf("%% from outer '<': expected (4, 0), got (%d, %d)", ctx.CursorX, ctx.CursorY)
+	if getCursorX(ctx) != 4 || getCursorY(ctx) != 0 {
+		t.Errorf("%% from outer '<': expected (4, 0), got (%d, %d)", getCursorX(ctx), getCursorY(ctx))
 	}
 
 	// Test % from second opening angle bracket - should match first closing
-	ctx.CursorX = 1
+	setCursorPosition(ctx, 1, getCursorY(ctx))
 	ExecuteMotion(ctx, '%', 1)
-	if ctx.CursorX != 3 || ctx.CursorY != 0 {
-		t.Errorf("%% from inner '<': expected (3, 0), got (%d, %d)", ctx.CursorX, ctx.CursorY)
+	if getCursorX(ctx) != 3 || getCursorY(ctx) != 0 {
+		t.Errorf("%% from inner '<': expected (3, 0), got (%d, %d)", getCursorX(ctx), getCursorY(ctx))
 	}
 
 	// Test % from first closing angle bracket - should match second opening
-	ctx.CursorX = 3
+	setCursorPosition(ctx, 3, getCursorY(ctx))
 	ExecuteMotion(ctx, '%', 1)
-	if ctx.CursorX != 1 || ctx.CursorY != 0 {
-		t.Errorf("%% from first '>': expected (1, 0), got (%d, %d)", ctx.CursorX, ctx.CursorY)
+	if getCursorX(ctx) != 1 || getCursorY(ctx) != 0 {
+		t.Errorf("%% from first '>': expected (1, 0), got (%d, %d)", getCursorX(ctx), getCursorY(ctx))
 	}
 
 	// Test % from last closing angle bracket - should match first opening
-	ctx.CursorX = 4
+	setCursorPosition(ctx, 4, getCursorY(ctx))
 	ExecuteMotion(ctx, '%', 1)
-	if ctx.CursorX != 0 || ctx.CursorY != 0 {
-		t.Errorf("%% from outer '>': expected (0, 0), got (%d, %d)", ctx.CursorX, ctx.CursorY)
+	if getCursorX(ctx) != 0 || getCursorY(ctx) != 0 {
+		t.Errorf("%% from outer '>': expected (0, 0), got (%d, %d)", getCursorX(ctx), getCursorY(ctx))
 	}
 }
 
@@ -90,32 +88,31 @@ func TestBracketMatchingMixedTypesWithAngles(t *testing.T) {
 	placeChar(ctx, 7, 0, ']')
 
 	// Test % from '[' - should match ']'
-	ctx.CursorX = 0
-	ctx.CursorY = 0
+	setCursorPosition(ctx, 0, 0)
 	ExecuteMotion(ctx, '%', 1)
-	if ctx.CursorX != 7 || ctx.CursorY != 0 {
-		t.Errorf("%% from '[': expected (7, 0), got (%d, %d)", ctx.CursorX, ctx.CursorY)
+	if getCursorX(ctx) != 7 || getCursorY(ctx) != 0 {
+		t.Errorf("%% from '[': expected (7, 0), got (%d, %d)", getCursorX(ctx), getCursorY(ctx))
 	}
 
 	// Test % from '{' - should match '}'
-	ctx.CursorX = 1
+	setCursorPosition(ctx, 1, getCursorY(ctx))
 	ExecuteMotion(ctx, '%', 1)
-	if ctx.CursorX != 6 || ctx.CursorY != 0 {
-		t.Errorf("%% from '{': expected (6, 0), got (%d, %d)", ctx.CursorX, ctx.CursorY)
+	if getCursorX(ctx) != 6 || getCursorY(ctx) != 0 {
+		t.Errorf("%% from '{': expected (6, 0), got (%d, %d)", getCursorX(ctx), getCursorY(ctx))
 	}
 
 	// Test % from '<' - should match '>'
-	ctx.CursorX = 2
+	setCursorPosition(ctx, 2, getCursorY(ctx))
 	ExecuteMotion(ctx, '%', 1)
-	if ctx.CursorX != 5 || ctx.CursorY != 0 {
-		t.Errorf("%% from '<': expected (5, 0), got (%d, %d)", ctx.CursorX, ctx.CursorY)
+	if getCursorX(ctx) != 5 || getCursorY(ctx) != 0 {
+		t.Errorf("%% from '<': expected (5, 0), got (%d, %d)", getCursorX(ctx), getCursorY(ctx))
 	}
 
 	// Test % from '(' - should match ')'
-	ctx.CursorX = 3
+	setCursorPosition(ctx, 3, getCursorY(ctx))
 	ExecuteMotion(ctx, '%', 1)
-	if ctx.CursorX != 4 || ctx.CursorY != 0 {
-		t.Errorf("%% from '(': expected (4, 0), got (%d, %d)", ctx.CursorX, ctx.CursorY)
+	if getCursorX(ctx) != 4 || getCursorY(ctx) != 0 {
+		t.Errorf("%% from '(': expected (4, 0), got (%d, %d)", getCursorX(ctx), getCursorY(ctx))
 	}
 }
 
@@ -129,11 +126,10 @@ func TestBracketMatchingUnmatchedAngleBrackets(t *testing.T) {
 	placeChar(ctx, 3, 0, 'c')
 
 	// Test % from opening angle bracket with no match - should stay in place
-	ctx.CursorX = 0
-	ctx.CursorY = 0
+	setCursorPosition(ctx, 0, 0)
 	ExecuteMotion(ctx, '%', 1)
-	if ctx.CursorX != 0 || ctx.CursorY != 0 {
-		t.Errorf("%% from unmatched '<': expected (0, 0), got (%d, %d)", ctx.CursorX, ctx.CursorY)
+	if getCursorX(ctx) != 0 || getCursorY(ctx) != 0 {
+		t.Errorf("%% from unmatched '<': expected (0, 0), got (%d, %d)", getCursorX(ctx), getCursorY(ctx))
 	}
 
 	// Setup: ">" at (5,0) with no opening angle bracket
@@ -141,11 +137,10 @@ func TestBracketMatchingUnmatchedAngleBrackets(t *testing.T) {
 	placeChar(ctx, 5, 0, '>')
 	placeChar(ctx, 6, 0, 'x')
 
-	ctx.CursorX = 5
-	ctx.CursorY = 0
+	setCursorPosition(ctx, 5, 0)
 	ExecuteMotion(ctx, '%', 1)
-	if ctx.CursorX != 5 || ctx.CursorY != 0 {
-		t.Errorf("%% from unmatched '>': expected (5, 0), got (%d, %d)", ctx.CursorX, ctx.CursorY)
+	if getCursorX(ctx) != 5 || getCursorY(ctx) != 0 {
+		t.Errorf("%% from unmatched '>': expected (5, 0), got (%d, %d)", getCursorX(ctx), getCursorY(ctx))
 	}
 }
 
@@ -169,17 +164,16 @@ func TestBracketMatchingAngleBracketsMultiLine(t *testing.T) {
 	placeChar(ctx, 0, 3, '>')
 
 	// Test % from opening angle bracket on line 0
-	ctx.CursorX = 0
-	ctx.CursorY = 0
+	setCursorPosition(ctx, 0, 0)
 	ExecuteMotion(ctx, '%', 1)
-	if ctx.CursorX != 0 || ctx.CursorY != 3 {
-		t.Errorf("%% from '<' at line 0: expected (0, 3), got (%d, %d)", ctx.CursorX, ctx.CursorY)
+	if getCursorX(ctx) != 0 || getCursorY(ctx) != 3 {
+		t.Errorf("%% from '<' at line 0: expected (0, 3), got (%d, %d)", getCursorX(ctx), getCursorY(ctx))
 	}
 
 	// Test % from closing angle bracket on line 3
 	ExecuteMotion(ctx, '%', 1)
-	if ctx.CursorX != 0 || ctx.CursorY != 0 {
-		t.Errorf("%% from '>' at line 3: expected (0, 0), got (%d, %d)", ctx.CursorX, ctx.CursorY)
+	if getCursorX(ctx) != 0 || getCursorY(ctx) != 0 {
+		t.Errorf("%% from '>' at line 3: expected (0, 0), got (%d, %d)", getCursorX(ctx), getCursorY(ctx))
 	}
 }
 
@@ -192,11 +186,10 @@ func TestBracketMatchingMismatchedAngleBrackets(t *testing.T) {
 	placeChar(ctx, 2, 0, ']')
 
 	// Test % from '<' - should not match ']', should stay in place
-	ctx.CursorX = 0
-	ctx.CursorY = 0
+	setCursorPosition(ctx, 0, 0)
 	ExecuteMotion(ctx, '%', 1)
-	if ctx.CursorX != 0 || ctx.CursorY != 0 {
-		t.Errorf("%% from '<' with mismatched ']': expected (0, 0), got (%d, %d)", ctx.CursorX, ctx.CursorY)
+	if getCursorX(ctx) != 0 || getCursorY(ctx) != 0 {
+		t.Errorf("%% from '<' with mismatched ']': expected (0, 0), got (%d, %d)", getCursorX(ctx), getCursorY(ctx))
 	}
 
 	// Setup: "< }" at y=1 - mismatched types
@@ -205,10 +198,9 @@ func TestBracketMatchingMismatchedAngleBrackets(t *testing.T) {
 	placeChar(ctx, 2, 1, '}')
 
 	// Test % from '<' - should not match '}', should stay in place
-	ctx.CursorX = 0
-	ctx.CursorY = 1
+	setCursorPosition(ctx, 0, 1)
 	ExecuteMotion(ctx, '%', 1)
-	if ctx.CursorX != 0 || ctx.CursorY != 1 {
-		t.Errorf("%% from '<' with mismatched '}': expected (0, 1), got (%d, %d)", ctx.CursorX, ctx.CursorY)
+	if getCursorX(ctx) != 0 || getCursorY(ctx) != 1 {
+		t.Errorf("%% from '<' with mismatched '}': expected (0, 1), got (%d, %d)", getCursorX(ctx), getCursorY(ctx))
 	}
 }

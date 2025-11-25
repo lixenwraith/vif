@@ -27,8 +27,6 @@ func createTestContext() *engine.GameContext {
 // Note: This is specific to motions_screen_test.go
 func setTestCursorPosition(ctx *engine.GameContext, x, y int) {
 	ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{X: x, Y: y})
-	ctx.CursorX = x
-	ctx.CursorY = y
 }
 
 // Helper function to place a character at a position
@@ -50,27 +48,27 @@ func TestHMLMotions(t *testing.T) {
 
 	// Test H - jump to top
 	ExecuteMotion(ctx, 'H', 1)
-	if ctx.CursorY != 0 {
-		t.Errorf("H motion failed: expected Y=0, got Y=%d", ctx.CursorY)
+	if getCursorY(ctx) != 0 {
+		t.Errorf("H motion failed: expected Y=0, got Y=%d", getCursorY(ctx))
 	}
-	if ctx.CursorX != 10 {
-		t.Errorf("H motion changed X: expected X=10, got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 10 {
+		t.Errorf("H motion changed X: expected X=10, got X=%d", getCursorX(ctx))
 	}
 
 	// Test M - jump to middle
-	setTestCursorPosition(ctx, ctx.CursorX, 0)
+	setTestCursorPosition(ctx, getCursorX(ctx), 0)
 	ExecuteMotion(ctx, 'M', 1)
 	expectedMiddle := ctx.GameHeight / 2
-	if ctx.CursorY != expectedMiddle {
-		t.Errorf("M motion failed: expected Y=%d, got Y=%d", expectedMiddle, ctx.CursorY)
+	if getCursorY(ctx) != expectedMiddle {
+		t.Errorf("M motion failed: expected Y=%d, got Y=%d", expectedMiddle, getCursorY(ctx))
 	}
 
 	// Test L - jump to bottom
-	setTestCursorPosition(ctx, ctx.CursorX, 0)
+	setTestCursorPosition(ctx, getCursorX(ctx), 0)
 	ExecuteMotion(ctx, 'L', 1)
 	expectedBottom := ctx.GameHeight - 1
-	if ctx.CursorY != expectedBottom {
-		t.Errorf("L motion failed: expected Y=%d, got Y=%d", expectedBottom, ctx.CursorY)
+	if getCursorY(ctx) != expectedBottom {
+		t.Errorf("L motion failed: expected Y=%d, got Y=%d", expectedBottom, getCursorY(ctx))
 	}
 }
 
@@ -87,14 +85,14 @@ func TestCaretMotion(t *testing.T) {
 	// Test ^ - should jump to first non-whitespace
 	setTestCursorPosition(ctx, 10, 0)
 	ExecuteMotion(ctx, '^', 1)
-	if ctx.CursorX != 3 {
-		t.Errorf("^ motion failed: expected X=3, got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 3 {
+		t.Errorf("^ motion failed: expected X=3, got X=%d", getCursorX(ctx))
 	}
 
 	// Test on empty line - should go to position 0
 	setTestCursorPosition(ctx, 10, 1) // Empty line
 	ExecuteMotion(ctx, '^', 1)
-	if ctx.CursorX != 0 {
-		t.Errorf("^ motion on empty line: expected X=0, got X=%d", ctx.CursorX)
+	if getCursorX(ctx) != 0 {
+		t.Errorf("^ motion on empty line: expected X=0, got X=%d", getCursorX(ctx))
 	}
 }

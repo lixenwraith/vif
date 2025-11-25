@@ -33,8 +33,7 @@ func TestBasicMotionsStillWork(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx.CursorX = tt.initialX
-			ctx.CursorY = tt.initialY
+			setCursorPosition(ctx, tt.initialX, tt.initialY)
 
 			ExecuteMotion(ctx, tt.motion, 1)
 
@@ -70,13 +69,13 @@ func TestWordMotionsStillWork(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx.CursorX = tt.initialX
-			ctx.CursorY = 5
+			setCursorPosition(ctx, tt.initialX, getCursorY(ctx))
+			setCursorPosition(ctx, getCursorX(ctx), 5)
 
 			ExecuteMotion(ctx, tt.motion, 1)
 
-			if ctx.CursorX != tt.expectedX {
-				t.Errorf("%s: expected X=%d, got X=%d", tt.desc, tt.expectedX, ctx.CursorX)
+			if getCursorX(ctx) != tt.expectedX {
+				t.Errorf("%s: expected X=%d, got X=%d", tt.desc, tt.expectedX, getCursorX(ctx))
 			}
 		})
 	}
@@ -103,13 +102,13 @@ func TestLineMotionsStillWork(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx.CursorX = tt.initialX
-			ctx.CursorY = 7
+			setCursorPosition(ctx, tt.initialX, getCursorY(ctx))
+			setCursorPosition(ctx, getCursorX(ctx), 7)
 
 			ExecuteMotion(ctx, tt.motion, 1)
 
-			if ctx.CursorX != tt.expectedX {
-				t.Errorf("%s: expected X=%d, got X=%d", tt.desc, tt.expectedX, ctx.CursorX)
+			if getCursorX(ctx) != tt.expectedX {
+				t.Errorf("%s: expected X=%d, got X=%d", tt.desc, tt.expectedX, getCursorX(ctx))
 			}
 		})
 	}
@@ -136,8 +135,7 @@ func TestScreenMotionsStillWork(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx.CursorX = tt.initialX
-			ctx.CursorY = tt.initialY
+			setCursorPosition(ctx, tt.initialX, tt.initialY)
 
 			ExecuteMotion(ctx, tt.motion, 1)
 
@@ -172,13 +170,13 @@ func TestParagraphMotionsStillWork(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx.CursorX = 0
-			ctx.CursorY = tt.initialY
+			setCursorPosition(ctx, 0, getCursorY(ctx))
+			setCursorPosition(ctx, getCursorX(ctx), tt.initialY)
 
 			ExecuteMotion(ctx, tt.motion, 1)
 
-			if ctx.CursorY != tt.expectedY {
-				t.Errorf("expected Y=%d, got Y=%d", tt.expectedY, ctx.CursorY)
+			if getCursorY(ctx) != tt.expectedY {
+				t.Errorf("expected Y=%d, got Y=%d", tt.expectedY, getCursorY(ctx))
 			}
 		})
 	}
@@ -211,8 +209,8 @@ func TestCountWithBasicMotions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx.CursorX = tt.initialX
-			ctx.CursorY = tt.initialY
+			setCursorPosition(ctx, tt.initialX, getCursorY(ctx))
+			setCursorPosition(ctx, getCursorX(ctx), tt.initialY)
 
 			ExecuteMotion(ctx, tt.motion, tt.count)
 
@@ -243,14 +241,14 @@ func TestCountWithWordMotions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx.CursorX = tt.initialX
-			ctx.CursorY = 8
+			setCursorPosition(ctx, tt.initialX, getCursorY(ctx))
+			setCursorPosition(ctx, getCursorX(ctx), 8)
 
 			ExecuteMotion(ctx, tt.motion, tt.count)
 
 			// Check that cursor moved at least to expected position
-			if ctx.CursorX < tt.minExpectedX {
-				t.Errorf("%s: expected X>=%d, got X=%d", tt.desc, tt.minExpectedX, ctx.CursorX)
+			if getCursorX(ctx) < tt.minExpectedX {
+				t.Errorf("%s: expected X>=%d, got X=%d", tt.desc, tt.minExpectedX, getCursorX(ctx))
 			}
 		})
 	}
@@ -265,8 +263,8 @@ func TestSpecialCommandsStillWork(t *testing.T) {
 	ctx := createMinimalTestContext(80, 24)
 
 	t.Run("gg goes to top-left", func(t *testing.T) {
-		ctx.CursorX = 40
-		ctx.CursorY = 15
+		setCursorPosition(ctx, 40, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 15)
 
 		// Simulate "gg" (two g presses)
 		ExecuteMotion(ctx, 'g', 1)
@@ -275,8 +273,8 @@ func TestSpecialCommandsStillWork(t *testing.T) {
 	})
 
 	t.Run("G goes to bottom", func(t *testing.T) {
-		ctx.CursorX = 40
-		ctx.CursorY = 5
+		setCursorPosition(ctx, 40, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 5)
 
 		ExecuteMotion(ctx, 'G', 1)
 
@@ -286,8 +284,8 @@ func TestSpecialCommandsStillWork(t *testing.T) {
 	t.Run("x deletes character", func(t *testing.T) {
 		// Create test character
 		placeTextAt(ctx, 10, 3, "x")
-		ctx.CursorX = 10
-		ctx.CursorY = 3
+		setCursorPosition(ctx, 10, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 3)
 
 		ExecuteMotion(ctx, 'x', 1)
 
@@ -324,13 +322,13 @@ func TestBracketMatchingStillWorks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx.CursorX = tt.startX
-			ctx.CursorY = 10
+			setCursorPosition(ctx, tt.startX, getCursorY(ctx))
+			setCursorPosition(ctx, getCursorX(ctx), 10)
 
 			ExecuteMotion(ctx, '%', 1)
 
-			if ctx.CursorX != tt.expectedX {
-				t.Errorf("%s: expected X=%d, got X=%d", tt.desc, tt.expectedX, ctx.CursorX)
+			if getCursorX(ctx) != tt.expectedX {
+				t.Errorf("%s: expected X=%d, got X=%d", tt.desc, tt.expectedX, getCursorX(ctx))
 			}
 		})
 	}
@@ -345,8 +343,8 @@ func TestCursorValidationStillWorks(t *testing.T) {
 	ctx := createMinimalTestContext(80, 24)
 
 	t.Run("excessive left movement stops at 0", func(t *testing.T) {
-		ctx.CursorX = 5
-		ctx.CursorY = 10
+		setCursorPosition(ctx, 5, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 10)
 
 		ExecuteMotion(ctx, 'h', 100)
 
@@ -354,8 +352,8 @@ func TestCursorValidationStillWorks(t *testing.T) {
 	})
 
 	t.Run("excessive right movement stops at width-1", func(t *testing.T) {
-		ctx.CursorX = 70
-		ctx.CursorY = 10
+		setCursorPosition(ctx, 70, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 10)
 
 		ExecuteMotion(ctx, 'l', 100)
 
@@ -363,8 +361,8 @@ func TestCursorValidationStillWorks(t *testing.T) {
 	})
 
 	t.Run("excessive up movement stops at 0", func(t *testing.T) {
-		ctx.CursorX = 10
-		ctx.CursorY = 5
+		setCursorPosition(ctx, 10, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 5)
 
 		ExecuteMotion(ctx, 'k', 100)
 
@@ -372,8 +370,8 @@ func TestCursorValidationStillWorks(t *testing.T) {
 	})
 
 	t.Run("excessive down movement stops at height-1", func(t *testing.T) {
-		ctx.CursorX = 10
-		ctx.CursorY = 20
+		setCursorPosition(ctx, 10, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 20)
 
 		ExecuteMotion(ctx, 'j', 100)
 
@@ -429,8 +427,7 @@ func TestConcurrentMotionUpdates(t *testing.T) {
 	// and don't cause data races when accessed concurrently
 
 	// Set initial position
-	ctx.CursorX = 10
-	ctx.CursorY = 10
+	setCursorPosition(ctx, 10, 10)
 
 	// Execute a series of motions
 	for i := 0; i < 10; i++ {
@@ -441,11 +438,11 @@ func TestConcurrentMotionUpdates(t *testing.T) {
 	}
 
 	// Verify cursor is still within valid bounds
-	if ctx.CursorX < 0 || ctx.CursorX >= ctx.GameWidth {
-		t.Errorf("CursorX out of bounds: %d", ctx.CursorX)
+	if getCursorX(ctx) < 0 || getCursorX(ctx) >= ctx.GameWidth {
+		t.Errorf("CursorX out of bounds: %d", getCursorX(ctx))
 	}
-	if ctx.CursorY < 0 || ctx.CursorY >= ctx.GameHeight {
-		t.Errorf("CursorY out of bounds: %d", ctx.CursorY)
+	if getCursorY(ctx) < 0 || getCursorY(ctx) >= ctx.GameHeight {
+		t.Errorf("CursorY out of bounds: %d", getCursorY(ctx))
 	}
 
 	t.Log("Concurrent motion updates completed without race conditions")
@@ -466,8 +463,8 @@ func TestComplexCommandSequences(t *testing.T) {
 	placeTextAt(ctx, 0, 3, "}")
 
 	t.Run("navigate to function name and back", func(t *testing.T) {
-		ctx.CursorX = 0
-		ctx.CursorY = 0
+		setCursorPosition(ctx, 0, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 0)
 
 		// Move to 'main'
 		ExecuteMotion(ctx, 'w', 1)
@@ -482,20 +479,20 @@ func TestComplexCommandSequences(t *testing.T) {
 	})
 
 	t.Run("navigate down and to end of line", func(t *testing.T) {
-		ctx.CursorX = 0
-		ctx.CursorY = 0
+		setCursorPosition(ctx, 0, getCursorY(ctx))
+		setCursorPosition(ctx, getCursorX(ctx), 0)
 
 		// Move down 2 lines
 		ExecuteMotion(ctx, 'j', 2)
 		// Move to end of line
 		ExecuteMotion(ctx, '$', 1)
 
-		if ctx.CursorY != 2 {
-			t.Errorf("Expected Y=2, got Y=%d", ctx.CursorY)
+		if getCursorY(ctx) != 2 {
+			t.Errorf("Expected Y=2, got Y=%d", getCursorY(ctx))
 		}
 		// X should be at last character
-		if ctx.CursorX < 6 {
-			t.Errorf("Expected X>=6 (near end), got X=%d", ctx.CursorX)
+		if getCursorX(ctx) < 6 {
+			t.Errorf("Expected X>=6 (near end), got X=%d", getCursorX(ctx))
 		}
 	})
 }
@@ -545,29 +542,29 @@ func TestMotionCountPreservation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			startX := 20
 			startY := 15
-			ctx.CursorX = startX
-			ctx.CursorY = startY
+			setCursorPosition(ctx, startX, getCursorY(ctx))
+			setCursorPosition(ctx, getCursorX(ctx), startY)
 
 			ExecuteMotion(ctx, tt.motion, tt.count)
 
 			var moved int
 			switch tt.motion {
 			case 'l':
-				moved = ctx.CursorX - startX
+				moved = getCursorX(ctx) - startX
 			case 'j':
-				moved = ctx.CursorY - startY
+				moved = getCursorY(ctx) - startY
 			case 'k':
-				moved = startY - ctx.CursorY
+				moved = startY - getCursorY(ctx)
 			case 'h':
-				moved = startX - ctx.CursorX
+				moved = startX - getCursorX(ctx)
 			}
 
 			if moved < tt.verifyMinMove && moved >= 0 {
 				// Allow for boundary conditions
-				if (tt.motion == 'l' && ctx.CursorX == ctx.GameWidth-1) ||
-					(tt.motion == 'j' && ctx.CursorY == ctx.GameHeight-1) ||
-					(tt.motion == 'k' && ctx.CursorY == 0) ||
-					(tt.motion == 'h' && ctx.CursorX == 0) {
+				if (tt.motion == 'l' && getCursorX(ctx) == ctx.GameWidth-1) ||
+					(tt.motion == 'j' && getCursorY(ctx) == ctx.GameHeight-1) ||
+					(tt.motion == 'k' && getCursorY(ctx) == 0) ||
+					(tt.motion == 'h' && getCursorX(ctx) == 0) {
 					// Hit boundary, acceptable
 					return
 				}
