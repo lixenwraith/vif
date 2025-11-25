@@ -24,6 +24,14 @@ func TestBoostRapidToggle(t *testing.T) {
 	screen.SetSize(80, 24)
 
 	ctx := engine.NewGameContext(screen)
+	// Inject Config
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	// Inject Time
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 	scoreSystem := NewScoreSystem(ctx)
 
 	var wg sync.WaitGroup
@@ -101,6 +109,14 @@ func TestBoostConcurrentRead(t *testing.T) {
 	screen.SetSize(80, 24)
 
 	ctx := engine.NewGameContext(screen)
+	// Inject Config
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	// Inject Time
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Get cursor position from ECS
@@ -162,6 +178,14 @@ func TestBoostExpirationRace(t *testing.T) {
 	screen.SetSize(80, 24)
 
 	ctx := engine.NewGameContext(screen)
+	// Inject Config
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	// Inject Time
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Set boost to expire soon
@@ -239,6 +263,14 @@ func TestBoostWithScoreUpdates(t *testing.T) {
 	screen.SetSize(80, 24)
 
 	ctx := engine.NewGameContext(screen)
+	// Inject Config
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	// Inject Time
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Activate boost
@@ -319,6 +351,14 @@ func TestSimulateFullGameLoop(t *testing.T) {
 	screen.SetSize(80, 24)
 
 	ctx := engine.NewGameContext(screen)
+	// Inject Config
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	// Inject Time
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 	scoreSystem := NewScoreSystem(ctx)
 
 	var wg sync.WaitGroup
@@ -411,6 +451,14 @@ func TestAllAtomicStateAccess(t *testing.T) {
 	screen.SetSize(80, 24)
 
 	ctx := engine.NewGameContext(screen)
+	// Inject Config
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	// Inject Time
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 
 	var wg sync.WaitGroup
 
@@ -490,6 +538,14 @@ func TestPingTimerAtomicCAS(t *testing.T) {
 	screen.SetSize(80, 24)
 
 	ctx := engine.NewGameContext(screen)
+	// Inject Config
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	// Inject Time
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 
 	// Set initial ping timer
 	ctx.SetPingGridTimer(1.0) // 1 second
@@ -546,6 +602,14 @@ func TestBoostTimerAtomicCAS(t *testing.T) {
 	screen.SetSize(80, 24)
 
 	ctx := engine.NewGameContext(screen)
+	// Inject Config
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	// Inject Time
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 
 	var wg sync.WaitGroup
 
@@ -596,6 +660,14 @@ func TestConcurrentPingTimerUpdates(t *testing.T) {
 	screen.SetSize(80, 24)
 
 	ctx := engine.NewGameContext(screen)
+	// Inject Config
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	// Inject Time
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 
 	// Set initial timer
 	ctx.SetPingGridTimer(10.0)
@@ -642,6 +714,14 @@ func TestConcurrentBoostUpdates(t *testing.T) {
 	screen.SetSize(80, 24)
 
 	ctx := engine.NewGameContext(screen)
+	// Inject Config
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	// Inject Time
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 
 	var wg sync.WaitGroup
 

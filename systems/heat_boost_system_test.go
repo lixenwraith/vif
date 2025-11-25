@@ -20,6 +20,14 @@ func TestHeatBasedBoostActivation(t *testing.T) {
 
 	// Create game context
 	ctx := engine.NewGameContext(screen)
+	// Inject Config
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	// Inject Time
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Calculate max heat (heat bar width)
@@ -85,6 +93,14 @@ func TestBoostMaintainsSameColor(t *testing.T) {
 
 	// Create game context
 	ctx := engine.NewGameContext(screen)
+	// Inject Config
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	// Inject Time
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Calculate max heat
@@ -152,6 +168,14 @@ func TestBoostDeactivatesOnColorSwitch(t *testing.T) {
 
 	// Create game context
 	ctx := engine.NewGameContext(screen)
+	// Inject Config
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	// Inject Time
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Calculate max heat
@@ -216,6 +240,14 @@ func TestBoostRebuildAfterColorSwitch(t *testing.T) {
 
 	// Create game context
 	ctx := engine.NewGameContext(screen)
+	// Inject Config
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	// Inject Time
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Calculate max heat
@@ -275,6 +307,14 @@ func TestBoostDeactivatesOnError(t *testing.T) {
 
 	// Create game context
 	ctx := engine.NewGameContext(screen)
+	// Inject Config
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	// Inject Time
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Set heat to max and activate boost
@@ -337,6 +377,14 @@ func TestBoostDeactivatesOnRedCharacter(t *testing.T) {
 
 	// Create game context
 	ctx := engine.NewGameContext(screen)
+	// Inject Config
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	// Inject Time
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Set heat to max and activate boost
@@ -394,6 +442,14 @@ func TestBoostTimerExpiration(t *testing.T) {
 
 	// Create game context
 	ctx := engine.NewGameContext(screen)
+	// Inject Config
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	// Inject Time
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 
 	// Set boost with short expiration time
 	ctx.State.SetBoostEnabled(true)
@@ -432,6 +488,14 @@ func TestBoostExtensionDuration(t *testing.T) {
 
 	// Create game context
 	ctx := engine.NewGameContext(screen)
+	// Inject Config
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	// Inject Time
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Calculate max heat
@@ -511,6 +575,14 @@ func TestBoostActivationWithGreen(t *testing.T) {
 
 	// Create game context
 	ctx := engine.NewGameContext(screen)
+	// Inject Config
+	engine.AddResource(ctx.World.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	// Inject Time
+	engine.AddResource(ctx.World.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 	scoreSystem := NewScoreSystem(ctx)
 
 	// Calculate max heat
