@@ -32,15 +32,8 @@ func TestGameStateInitialization(t *testing.T) {
 		t.Errorf("Expected initial energy 0, got %d", gs.GetEnergy())
 	}
 
-	// Verify cursor initialization
-	expectedX := gameWidth / 2
-	expectedY := gameHeight / 2
-	if gs.GetCursorX() != expectedX {
-		t.Errorf("Expected cursor X %d, got %d", expectedX, gs.GetCursorX())
-	}
-	if gs.GetCursorY() != expectedY {
-		t.Errorf("Expected cursor Y %d, got %d", expectedY, gs.GetCursorY())
-	}
+	// NOTE: Cursor position tests removed - cursor is now managed by ECS World,
+	// not GameState. See cursor-related tests in modes/ and systems/ packages.
 
 	// Verify spawn state
 	spawnState := gs.ReadSpawnState()
@@ -595,8 +588,7 @@ func TestAllSnapshotTypesConcurrent(t *testing.T) {
 				gs.UpdateSpawnRate((50+i)%101, 200)
 				gs.SetHeat(i * 10)
 				gs.SetEnergy(i * 100)
-				gs.SetCursorX(i % 10)
-				gs.SetCursorY(i % 5)
+				// NOTE: Cursor position updates removed - cursor is now managed by ECS World
 
 				if i%10 == 0 {
 					gs.UpdateBoostTimerAtomic()
@@ -620,7 +612,7 @@ func TestAllSnapshotTypesConcurrent(t *testing.T) {
 					// Read all snapshot types
 					spawnSnap := gs.ReadSpawnState()
 					boostSnap := gs.ReadBoostState()
-					cursorSnap := gs.ReadCursorPosition()
+					// NOTE: Cursor position snapshot removed - cursor is now managed by ECS World
 					goldSnap := gs.ReadGoldState()
 					phaseSnap := gs.ReadPhaseState()
 					decaySnap := gs.ReadDecayState()
@@ -634,12 +626,7 @@ func TestAllSnapshotTypesConcurrent(t *testing.T) {
 						t.Errorf("Invalid spawn state: count=%d, max=%d", spawnSnap.EntityCount, spawnSnap.MaxEntities)
 					}
 
-					if cursorSnap.X < 0 || cursorSnap.Y < 0 {
-						errorMu.Lock()
-						errorCount++
-						errorMu.Unlock()
-						t.Errorf("Negative cursor: (%d, %d)", cursorSnap.X, cursorSnap.Y)
-					}
+					// NOTE: Cursor bounds check removed - cursor is now managed by ECS World
 
 					if heat < 0 || energy < 0 {
 						errorMu.Lock()
@@ -710,8 +697,7 @@ func TestAtomicSnapshotConsistency(t *testing.T) {
 				// Update related atomic fields
 				gs.SetHeat(i)
 				gs.SetEnergy(i * 10)
-				gs.SetCursorX(i % 10)
-				gs.SetCursorY(i % 5)
+				// NOTE: Cursor position updates removed - cursor is now managed by ECS World
 			}
 		}
 	}()
@@ -729,8 +715,7 @@ func TestAtomicSnapshotConsistency(t *testing.T) {
 					// Read heat and energy together
 					heat, energy := gs.ReadHeatAndEnergy()
 
-					// Read cursor position
-					cursor := gs.ReadCursorPosition()
+					// NOTE: Cursor position snapshot removed - cursor is now managed by ECS World
 
 					// Verify no negative values
 					if heat < 0 {
@@ -739,14 +724,7 @@ func TestAtomicSnapshotConsistency(t *testing.T) {
 					if energy < 0 {
 						t.Errorf("Negative energy in snapshot: %d", energy)
 					}
-					if cursor.X < 0 || cursor.Y < 0 {
-						t.Errorf("Negative cursor position: (%d, %d)", cursor.X, cursor.Y)
-					}
-
-					// Verify cursor bounds
-					if cursor.X >= 10 || cursor.Y >= 5 {
-						t.Errorf("Cursor out of bounds: (%d, %d)", cursor.X, cursor.Y)
-					}
+					// NOTE: Cursor bounds checks removed - cursor is now managed by ECS World
 				}
 			}
 		}()

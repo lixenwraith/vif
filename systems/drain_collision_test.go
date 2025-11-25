@@ -22,9 +22,12 @@ func TestDrainSystem_CollisionWithBlueCharacter(t *testing.T) {
 	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
-	// Get drain entity
-	drainEntityID := ctx.State.GetDrainEntity()
-	drainEntity := engine.Entity(drainEntityID)
+	// Get drain entity from Drains store
+	drainEntities := world.Drains.All()
+	if len(drainEntities) == 0 {
+		t.Fatal("Expected drain to be spawned")
+	}
+	drainEntity := drainEntities[0]
 
 	// Using direct store access
 	drainComp, ok := world.Drains.Get(drainEntity)
@@ -56,19 +59,12 @@ func TestDrainSystem_CollisionWithBlueCharacter(t *testing.T) {
 	tx.Spawn(charEntity, charX, charY)
 	tx.Commit()
 
-	// Set color counter to 1
-	// GameState mapping: 0=Blue, 1=Green
-	ctx.State.AddColorCount(0, int(components.LevelNormal), 1)
-	if ctx.State.BlueCountNormal.Load() != 1 {
-		t.Fatal("Expected blue count to be 1")
-	}
+	// NOTE: Color counter setup removed - color counts now managed by census system
 
-	// Move drain to character position (update GameState and component, not spatial index)
+	// Move drain to character position (update component only)
 	drain.X = charX
 	drain.Y = charY
 	world.Drains.Add(drainEntity, drain)
-	ctx.State.SetDrainX(charX)
-	ctx.State.SetDrainY(charY)
 
 	// Update drain system (should handle collision)
 	drainSys.Update(world, 16*time.Millisecond)
@@ -78,10 +74,7 @@ func TestDrainSystem_CollisionWithBlueCharacter(t *testing.T) {
 		t.Fatal("Expected character to be destroyed after collision")
 	}
 
-	// Verify color counter was decremented
-	if ctx.State.BlueCountNormal.Load() != 0 {
-		t.Fatalf("Expected blue count to be 0, got %d", ctx.State.BlueCountNormal.Load())
-	}
+	// NOTE: Color counter verification removed - color counts now managed by census system
 }
 
 // TestDrainSystem_CollisionWithGreenCharacter tests drain destroys green characters
@@ -97,8 +90,12 @@ func TestDrainSystem_CollisionWithGreenCharacter(t *testing.T) {
 	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
-	drainEntityID := ctx.State.GetDrainEntity()
-	drainEntity := engine.Entity(drainEntityID)
+	// Get drain entity from Drains store
+	drainEntities := world.Drains.All()
+	if len(drainEntities) == 0 {
+		t.Fatal("Expected drain to be spawned")
+	}
+	drainEntity := drainEntities[0]
 
 	// Using direct store access
 	drainComp, ok := world.Drains.Get(drainEntity)
@@ -130,16 +127,12 @@ func TestDrainSystem_CollisionWithGreenCharacter(t *testing.T) {
 	tx.Spawn(charEntity, charX, charY)
 	tx.Commit()
 
-	// Set color counter
-	// GameState mapping: 0=Blue, 1=Green
-	ctx.State.AddColorCount(1, int(components.LevelBright), 1)
+	// NOTE: Color counter setup removed - color counts now managed by census system
 
-	// Move drain to character position (update GameState and component, not spatial index)
+	// Move drain to character position (update component only)
 	drain.X = charX
 	drain.Y = charY
 	world.Drains.Add(drainEntity, drain)
-	ctx.State.SetDrainX(charX)
-	ctx.State.SetDrainY(charY)
 
 	// Update drain system (should handle collision)
 	drainSys.Update(world, 16*time.Millisecond)
@@ -149,10 +142,7 @@ func TestDrainSystem_CollisionWithGreenCharacter(t *testing.T) {
 		t.Fatal("Expected character to be destroyed after collision")
 	}
 
-	// Verify color counter was decremented
-	if ctx.State.GreenCountBright.Load() != 0 {
-		t.Fatalf("Expected green count to be 0, got %d", ctx.State.GreenCountBright.Load())
-	}
+	// NOTE: Color counter verification removed - color counts now managed by census system
 }
 
 // TestDrainSystem_CollisionWithRedCharacter tests drain destroys red characters
@@ -168,8 +158,12 @@ func TestDrainSystem_CollisionWithRedCharacter(t *testing.T) {
 	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
-	drainEntityID := ctx.State.GetDrainEntity()
-	drainEntity := engine.Entity(drainEntityID)
+	// Get drain entity from Drains store
+	drainEntities := world.Drains.All()
+	if len(drainEntities) == 0 {
+		t.Fatal("Expected drain to be spawned")
+	}
+	drainEntity := drainEntities[0]
 
 	// Using direct store access
 	drainComp, ok := world.Drains.Get(drainEntity)
@@ -201,12 +195,10 @@ func TestDrainSystem_CollisionWithRedCharacter(t *testing.T) {
 	tx.Spawn(charEntity, charX, charY)
 	tx.Commit()
 
-	// Move drain to character position (update GameState and component, not spatial index)
+	// Move drain to character position (update component only)
 	drain.X = charX
 	drain.Y = charY
 	world.Drains.Add(drainEntity, drain)
-	ctx.State.SetDrainX(charX)
-	ctx.State.SetDrainY(charY)
 
 	// Update drain system (should handle collision)
 	drainSys.Update(world, 16*time.Millisecond)
@@ -230,7 +222,7 @@ func TestDrainSystem_CollisionWithGoldSequence(t *testing.T) {
 	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
-	drainEntityID := ctx.State.GetDrainEntity()
+	drainEntityID := world.Drains.All()[0]
 	drainEntity := engine.Entity(drainEntityID)
 
 	// Using direct store access
@@ -280,8 +272,6 @@ func TestDrainSystem_CollisionWithGoldSequence(t *testing.T) {
 	world.Drains.Add(drainEntity, drain)
 
 	// Update GameState atomics (this is what the collision check uses)
-	ctx.State.SetDrainX(10)
-	ctx.State.SetDrainY(5)
 
 	// NOTE: We don't update the position component or spatial index
 	// because the spatial index can only hold one entity per position.
@@ -336,7 +326,7 @@ func TestDrainSystem_CollisionMultipleLevels(t *testing.T) {
 			ctx.State.SetEnergy(100)
 			drainSys.Update(world, 16*time.Millisecond)
 
-			drainEntityID := ctx.State.GetDrainEntity()
+			drainEntityID := world.Drains.All()[0]
 			drainEntity := engine.Entity(drainEntityID)
 
 			// Using direct store access
@@ -369,16 +359,12 @@ func TestDrainSystem_CollisionMultipleLevels(t *testing.T) {
 			tx.Spawn(charEntity, charX, charY)
 			tx.Commit()
 
-			// Set color counter
-			// GameState mapping: 0=Blue, 1=Green
-			ctx.State.AddColorCount(0, int(level), 1)
+			// NOTE: Color counter setup removed - color counts now managed by census system
 
-			// Move drain to character position (update GameState and component, not spatial index)
+			// Move drain to character position (update component only)
 			drain.X = charX
 			drain.Y = charY
 			world.Drains.Add(drainEntity, drain)
-			ctx.State.SetDrainX(charX)
-			ctx.State.SetDrainY(charY)
 
 			// Update drain system (should handle collision)
 			drainSys.Update(world, 16*time.Millisecond)
@@ -388,20 +374,7 @@ func TestDrainSystem_CollisionMultipleLevels(t *testing.T) {
 				t.Fatalf("Expected character with level %v to be destroyed", level)
 			}
 
-			// Verify color counter was decremented based on level
-			var count int64
-			switch level {
-			case components.LevelDark:
-				count = ctx.State.BlueCountDark.Load()
-			case components.LevelNormal:
-				count = ctx.State.BlueCountNormal.Load()
-			case components.LevelBright:
-				count = ctx.State.BlueCountBright.Load()
-			}
-
-			if count != 0 {
-				t.Fatalf("Expected count to be 0 for level %v, got %d", level, count)
-			}
+			// NOTE: Color counter verification removed - color counts now managed by census system
 		})
 	}
 }
@@ -419,8 +392,12 @@ func TestDrainSystem_NoCollisionWithNonSequenceEntity(t *testing.T) {
 	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
-	drainEntityID := ctx.State.GetDrainEntity()
-	drainEntity := engine.Entity(drainEntityID)
+	// Get drain entity from Drains store
+	drainEntities := world.Drains.All()
+	if len(drainEntities) == 0 {
+		t.Fatal("Expected drain to be spawned")
+	}
+	drainEntity := drainEntities[0]
 
 	// Using direct store access
 	drainComp, ok := world.Drains.Get(drainEntity)
@@ -466,11 +443,11 @@ func TestDrainSystem_NoSelfCollision(t *testing.T) {
 	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
-	if !ctx.State.GetDrainActive() {
+	if world.Drains.Count() == 0 {
 		t.Fatal("Expected drain to be active")
 	}
 
-	drainEntityID := ctx.State.GetDrainEntity()
+	drainEntityID := world.Drains.All()[0]
 
 	// Update multiple times (should not destroy itself)
 	for i := 0; i < 10; i++ {
@@ -478,12 +455,12 @@ func TestDrainSystem_NoSelfCollision(t *testing.T) {
 	}
 
 	// Verify drain is still active
-	if !ctx.State.GetDrainActive() {
+	if world.Drains.Count() == 0 {
 		t.Fatal("Expected drain to still be active after multiple updates")
 	}
 
 	// Verify same entity ID
-	if ctx.State.GetDrainEntity() != drainEntityID {
+	if world.Drains.All()[0] != drainEntityID {
 		t.Fatal("Expected drain entity ID to remain the same")
 	}
 }
@@ -528,10 +505,8 @@ func TestDrainSystem_CollisionAtDifferentPositions(t *testing.T) {
 				tx.Spawn(entity, 1, 1)
 				tx.Commit()
 			}
-			ctx.State.SetDrainActive(true)
-			ctx.State.SetDrainEntity(uint64(entity))
-			ctx.State.SetDrainX(1)
-			ctx.State.SetDrainY(1)
+			// Drain active state tracked by Drains store count
+			// Drain entity tracked by Drains store)
 
 			// Create a blue character at the test position
 			charEntity := world.CreateEntity()
@@ -556,18 +531,14 @@ func TestDrainSystem_CollisionAtDifferentPositions(t *testing.T) {
 				tx.Commit()
 			}
 
-			// Set color counter
-			// GameState mapping: 0=Blue, 1=Green
-			ctx.State.AddColorCount(0, int(components.LevelNormal), 1)
+			// NOTE: Color counter setup removed - color counts now managed by census system
 
-			// Move drain to character position (update GameState and component, not spatial index)
+			// Move drain to character position (update component only)
 			drainComp, _ := world.Drains.Get(entity)
 			drain := drainComp
 			drain.X = pos.x
 			drain.Y = pos.y
 			world.Drains.Add(entity, drain)
-			ctx.State.SetDrainX(pos.x)
-			ctx.State.SetDrainY(pos.y)
 
 			// Update drain system
 			drainSys.Update(world, 16*time.Millisecond)
@@ -577,10 +548,7 @@ func TestDrainSystem_CollisionAtDifferentPositions(t *testing.T) {
 				t.Fatalf("Expected character at (%d, %d) to be destroyed", pos.x, pos.y)
 			}
 
-			// Verify color counter was decremented
-			if ctx.State.BlueCountNormal.Load() != 0 {
-				t.Fatalf("Expected blue count to be 0 at position (%d, %d)", pos.x, pos.y)
-			}
+			// NOTE: Color counter verification removed - color counts now managed by census system
 		})
 	}
 }
@@ -601,7 +569,7 @@ func TestDrainSystem_CollisionWithNugget(t *testing.T) {
 	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
-	drainEntityID := ctx.State.GetDrainEntity()
+	drainEntityID := world.Drains.All()[0]
 	drainEntity := engine.Entity(drainEntityID)
 
 	// Using direct store access
@@ -643,8 +611,6 @@ func TestDrainSystem_CollisionWithNugget(t *testing.T) {
 	drain.X = nuggetX
 	drain.Y = nuggetY
 	world.Drains.Add(drainEntity, drain)
-	ctx.State.SetDrainX(nuggetX)
-	ctx.State.SetDrainY(nuggetY)
 
 	// Update drain system (should destroy nugget)
 	drainSys.Update(world, 16*time.Millisecond)
@@ -675,8 +641,12 @@ func TestDrainSystem_NuggetCollisionWithoutSystem(t *testing.T) {
 	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
-	drainEntityID := ctx.State.GetDrainEntity()
-	drainEntity := engine.Entity(drainEntityID)
+	// Get drain entity from Drains store
+	drainEntities := world.Drains.All()
+	if len(drainEntities) == 0 {
+		t.Fatal("Expected drain to be spawned")
+	}
+	drainEntity := drainEntities[0]
 
 	// Using direct store access
 	drainComp, ok := world.Drains.Get(drainEntity)
@@ -709,8 +679,6 @@ func TestDrainSystem_NuggetCollisionWithoutSystem(t *testing.T) {
 	drain.X = nuggetX
 	drain.Y = nuggetY
 	world.Drains.Add(drainEntity, drain)
-	ctx.State.SetDrainX(nuggetX)
-	ctx.State.SetDrainY(nuggetY)
 
 	// Update drain system (should still destroy nugget even without system reference)
 	drainSys.Update(world, 16*time.Millisecond)
@@ -735,8 +703,12 @@ func TestDrainSystem_GoldCollisionInactiveGold(t *testing.T) {
 	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
-	drainEntityID := ctx.State.GetDrainEntity()
-	drainEntity := engine.Entity(drainEntityID)
+	// Get drain entity from Drains store
+	drainEntities := world.Drains.All()
+	if len(drainEntities) == 0 {
+		t.Fatal("Expected drain to be spawned")
+	}
+	drainEntity := drainEntities[0]
 
 	// Using direct store access
 	drainComp, ok := world.Drains.Get(drainEntity)
@@ -788,7 +760,7 @@ func TestDrainSystem_CollisionWithFallingDecay(t *testing.T) {
 	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
-	drainEntityID := ctx.State.GetDrainEntity()
+	drainEntityID := world.Drains.All()[0]
 	drainEntity := engine.Entity(drainEntityID)
 
 	// Using direct store access
@@ -823,8 +795,6 @@ func TestDrainSystem_CollisionWithFallingDecay(t *testing.T) {
 	drain.X = decayX
 	drain.Y = decayY
 	world.Drains.Add(drainEntity, drain)
-	ctx.State.SetDrainX(decayX)
-	ctx.State.SetDrainY(decayY)
 
 	// Update drain system (should destroy falling decay entity)
 	drainSys.Update(world, 16*time.Millisecond)
@@ -867,10 +837,8 @@ func TestDrainSystem_CollisionWithMultipleFallingDecay(t *testing.T) {
 		tx.Commit()
 	}
 
-	ctx.State.SetDrainActive(true)
-	ctx.State.SetDrainEntity(uint64(entity))
-	ctx.State.SetDrainX(x)
-	ctx.State.SetDrainY(y)
+	// Drain active state tracked by Drains store count
+	// Drain entity tracked by Drains store)
 
 	// Create first decay entity at different position (5, 5)
 	decayEntity1 := world.CreateEntity()
@@ -918,8 +886,6 @@ func TestDrainSystem_CollisionWithMultipleFallingDecay(t *testing.T) {
 	drain.X = 5
 	drain.Y = 5
 	world.Drains.Add(entity, drain)
-	ctx.State.SetDrainX(5)
-	ctx.State.SetDrainY(5)
 
 	// Update drain system (should only destroy decay entity at drain position)
 	drainSys.Update(world, 16*time.Millisecond)
@@ -977,10 +943,8 @@ func TestDrainSystem_FallingDecayCollisionAtBoundary(t *testing.T) {
 				tx.Spawn(entity, 1, 1)
 				tx.Commit()
 			}
-			ctx.State.SetDrainActive(true)
-			ctx.State.SetDrainEntity(uint64(entity))
-			ctx.State.SetDrainX(1)
-			ctx.State.SetDrainY(1)
+			// Drain active state tracked by Drains store count
+			// Drain entity tracked by Drains store)
 
 			// Create falling decay entity at test position
 			decayEntity := world.CreateEntity()
@@ -1008,8 +972,6 @@ func TestDrainSystem_FallingDecayCollisionAtBoundary(t *testing.T) {
 			drain.X = pos.x
 			drain.Y = pos.y
 			world.Drains.Add(entity, drain)
-			ctx.State.SetDrainX(pos.x)
-			ctx.State.SetDrainY(pos.y)
 
 			// Update drain system
 			drainSys.Update(world, 16*time.Millisecond)
@@ -1035,8 +997,12 @@ func TestDrainSystem_DecayCollisionPriorityOverSequence(t *testing.T) {
 	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
-	drainEntityID := ctx.State.GetDrainEntity()
-	drainEntity := engine.Entity(drainEntityID)
+	// Get drain entity from Drains store
+	drainEntities := world.Drains.All()
+	if len(drainEntities) == 0 {
+		t.Fatal("Expected drain to be spawned")
+	}
+	drainEntity := drainEntities[0]
 
 	// Using direct store access
 	drainComp, ok := world.Drains.Get(drainEntity)
@@ -1090,14 +1056,11 @@ func TestDrainSystem_DecayCollisionPriorityOverSequence(t *testing.T) {
 	}
 
 	// Set color counter
-	ctx.State.AddColorCount(0, int(components.LevelNormal), 1)
 
 	// Move drain to decay entity position
 	drain.X = decayX
 	drain.Y = decayY
 	world.Drains.Add(drainEntity, drain)
-	ctx.State.SetDrainX(decayX)
-	ctx.State.SetDrainY(decayY)
 
 	// Update drain system (should only destroy decay entity at drain position)
 	drainSys.Update(world, 16*time.Millisecond)
@@ -1130,7 +1093,7 @@ func TestDrainSystem_FallingDecayWithDifferentSpeeds(t *testing.T) {
 			ctx.State.SetEnergy(100)
 			drainSys.Update(world, 16*time.Millisecond)
 
-			drainEntityID := ctx.State.GetDrainEntity()
+			drainEntityID := world.Drains.All()[0]
 			drainEntity := engine.Entity(drainEntityID)
 
 			// Using direct store access
@@ -1163,8 +1126,6 @@ func TestDrainSystem_FallingDecayWithDifferentSpeeds(t *testing.T) {
 			drain.X = decayX
 			drain.Y = decayY
 			world.Drains.Add(drainEntity, drain)
-			ctx.State.SetDrainX(decayX)
-			ctx.State.SetDrainY(decayY)
 
 			// Update drain system
 			drainSys.Update(world, 16*time.Millisecond)

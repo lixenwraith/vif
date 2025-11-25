@@ -39,6 +39,17 @@ func countEntitiesInRange(ctx *engine.GameContext, startX, endX, y int) int {
 	return count
 }
 
+// Helper to count non-cursor entities with positions (for tests after ECS migration)
+func countNonCursorEntities(ctx *engine.GameContext) int {
+	count := 0
+	for _, entity := range ctx.World.Positions.All() {
+		if entity != ctx.CursorEntity {
+			count++
+		}
+	}
+	return count
+}
+
 // TestDeleteRangeWithNoGaps tests deleting a continuous range of characters
 func TestDeleteRangeWithNoGaps(t *testing.T) {
 	ctx := createTestContext()
@@ -76,10 +87,10 @@ func TestDeleteRangeWithNoGaps(t *testing.T) {
 		t.Error("Position 4 should still have entity 'o'")
 	}
 
-	// Verify total entity count
-	entities := ctx.World.Positions.All()
-	if len(entities) != 2 {
-		t.Errorf("Expected 2 entities remaining, got %d", len(entities))
+	// Verify total entity count (excluding cursor)
+	entityCount := countNonCursorEntities(ctx)
+	if entityCount != 2 {
+		t.Errorf("Expected 2 entities remaining, got %d", entityCount)
 	}
 }
 
@@ -126,10 +137,10 @@ func TestDeleteRangeWithGaps(t *testing.T) {
 		t.Error("Position 6 should be empty after deletion")
 	}
 
-	// Verify total entity count
-	entities := ctx.World.Positions.All()
-	if len(entities) != 2 {
-		t.Errorf("Expected 2 entities remaining, got %d", len(entities))
+	// Verify total entity count (excluding cursor)
+	entityCount := countNonCursorEntities(ctx)
+	if entityCount != 2 {
+		t.Errorf("Expected 2 entities remaining, got %d", entityCount)
 	}
 }
 
@@ -156,10 +167,10 @@ func TestDeleteRangeEntirelyGaps(t *testing.T) {
 		t.Error("Position 10 should still have entity 'b'")
 	}
 
-	// Verify total entity count unchanged
-	entities := ctx.World.Positions.All()
-	if len(entities) != 2 {
-		t.Errorf("Expected 2 entities remaining, got %d", len(entities))
+	// Verify total entity count unchanged (excluding cursor)
+	entityCount := countNonCursorEntities(ctx)
+	if entityCount != 2 {
+		t.Errorf("Expected 2 entities remaining, got %d", entityCount)
 	}
 }
 
@@ -180,9 +191,9 @@ func TestDeleteRangeRedCharacters(t *testing.T) {
 	}
 
 	// Verify entities were deleted
-	entities := ctx.World.Positions.All()
-	if len(entities) != 0 {
-		t.Errorf("Expected 0 entities remaining, got %d", len(entities))
+	entityCount := countNonCursorEntities(ctx)
+	if entityCount != 0 {
+		t.Errorf("Expected 0 entities remaining, got %d", entityCount)
 	}
 }
 
@@ -204,9 +215,9 @@ func TestDeleteRangeMixedColors(t *testing.T) {
 	}
 
 	// Verify all entities were deleted
-	entities := ctx.World.Positions.All()
-	if len(entities) != 0 {
-		t.Errorf("Expected 0 entities remaining, got %d", len(entities))
+	entityCount := countNonCursorEntities(ctx)
+	if entityCount != 0 {
+		t.Errorf("Expected 0 entities remaining, got %d", entityCount)
 	}
 }
 
@@ -227,9 +238,9 @@ func TestDeleteRangeSwappedBounds(t *testing.T) {
 	}
 
 	// Verify all entities were deleted
-	entities := ctx.World.Positions.All()
-	if len(entities) != 0 {
-		t.Errorf("Expected 0 entities remaining, got %d", len(entities))
+	entityCount := countNonCursorEntities(ctx)
+	if entityCount != 0 {
+		t.Errorf("Expected 0 entities remaining, got %d", entityCount)
 	}
 }
 

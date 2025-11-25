@@ -12,13 +12,16 @@ import (
 
 // Test helper: placeTextAt creates characters at specified position
 func placeTextAt(ctx *engine.GameContext, x, y int, text string) {
+	tx := ctx.World.BeginSpatialTransaction()
 	for i, r := range text {
 		if r != ' ' { // Skip spaces
 			entity := ctx.World.CreateEntity()
 			ctx.World.Positions.Add(entity, components.PositionComponent{X: x + i, Y: y})
 			ctx.World.Characters.Add(entity, components.CharacterComponent{Rune: r})
+			tx.Spawn(entity, x+i, y)
 		}
 	}
+	tx.Commit()
 }
 
 // Test helper: assertCursorAt verifies cursor position
@@ -103,7 +106,7 @@ func TestFindCharWithCountComprehensive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			setCursorPosition(ctx, tt.startX, 0)
+			setCursorPosition(ctx, tt.startX, 5)
 
 
 			ExecuteFindChar(ctx, tt.targetChar, tt.count)

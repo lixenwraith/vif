@@ -27,8 +27,6 @@ func TestDrainSystem_IntegrationWithEnergySystem(t *testing.T) {
 		GameHeight:   24,
 		Width:        80,
 		Height:       24,
-		CursorX:      0,
-		CursorY:      0,
 	}
 
 	// Create systems
@@ -40,7 +38,7 @@ func TestDrainSystem_IntegrationWithEnergySystem(t *testing.T) {
 	}
 
 	// No drain should be active at energy 0
-	if ctx.State.GetDrainActive() {
+	if world.Drains.Count() > 0 {
 		t.Error("Drain should not be active when energy is 0")
 	}
 
@@ -52,7 +50,7 @@ func TestDrainSystem_IntegrationWithEnergySystem(t *testing.T) {
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Drain should now be active
-	if !ctx.State.GetDrainActive() {
+	if !world.Drains.Count() > 0 {
 		t.Fatal("Drain should be active when energy > 0")
 	}
 
@@ -62,10 +60,6 @@ func TestDrainSystem_IntegrationWithEnergySystem(t *testing.T) {
 	}
 
 	// Move cursor to drain position to trigger draining
-	drainX := ctx.State.GetDrainX()
-	drainY := ctx.State.GetDrainY()
-	ctx.State.SetCursorX(drainX)
-	ctx.State.SetCursorY(drainY)
 
 	// Update drain system (should update IsOnCursor state)
 	drainSys.Update(world, 16*time.Millisecond)
@@ -93,8 +87,6 @@ func TestDrainSystem_IntegrationWithEnergySystem(t *testing.T) {
 	}
 
 	// Move cursor away from drain
-	ctx.State.SetCursorX(drainX + 10)
-	ctx.State.SetCursorY(drainY + 10)
 
 	// Advance time again
 	mockTime.Advance(constants.DrainEnergyDrainInterval)
@@ -107,8 +99,6 @@ func TestDrainSystem_IntegrationWithEnergySystem(t *testing.T) {
 	}
 
 	// Move cursor back to drain
-	ctx.State.SetCursorX(drainX)
-	ctx.State.SetCursorY(drainY)
 
 	// Let drain catch up to cursor (it might have moved while cursor was away)
 	// Run movement updates until drain reaches cursor
@@ -117,8 +107,6 @@ func TestDrainSystem_IntegrationWithEnergySystem(t *testing.T) {
 		mockTime.Advance(constants.DrainMoveInterval)
 		drainSys.Update(world, 16*time.Millisecond)
 
-		currentDrainX := ctx.State.GetDrainX()
-		currentDrainY := ctx.State.GetDrainY()
 
 		if currentDrainX == drainX && currentDrainY == drainY {
 			break
@@ -156,30 +144,24 @@ func TestDrainSystem_EnergyDrainSpawnDespawnCycle(t *testing.T) {
 		GameHeight:   24,
 		Width:        80,
 		Height:       24,
-		CursorX:      0,
-		CursorY:      0,
 	}
 
 	drainSys := NewDrainSystem(ctx)
 
 	// Start with energy 0 - no drain
 	drainSys.Update(world, 16*time.Millisecond)
-	if ctx.State.GetDrainActive() {
+	if world.Drains.Count() > 0 {
 		t.Error("Drain should not spawn at energy 0")
 	}
 
 	// Earn some energy - drain should spawn
 	ctx.State.SetEnergy(50)
 	drainSys.Update(world, 16*time.Millisecond)
-	if !ctx.State.GetDrainActive() {
+	if !world.Drains.Count() > 0 {
 		t.Error("Drain should spawn when energy > 0")
 	}
 
 	// Position cursor on drain
-	drainX := ctx.State.GetDrainX()
-	drainY := ctx.State.GetDrainY()
-	ctx.State.SetCursorX(drainX)
-	ctx.State.SetCursorY(drainY)
 
 	// Drain energy to 0
 	maxDrainTicks := 100 // Safety limit
@@ -200,14 +182,14 @@ func TestDrainSystem_EnergyDrainSpawnDespawnCycle(t *testing.T) {
 
 	// Drain should despawn on next update
 	drainSys.Update(world, 16*time.Millisecond)
-	if ctx.State.GetDrainActive() {
+	if world.Drains.Count() > 0 {
 		t.Error("Drain should despawn when energy <= 0")
 	}
 
 	// Add energy again - drain should respawn
 	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
-	if !ctx.State.GetDrainActive() {
+	if !world.Drains.Count() > 0 {
 		t.Error("Drain should respawn when energy > 0 again")
 	}
 }
@@ -227,8 +209,6 @@ func TestDrainSystem_ContinuousDrainUntilZero(t *testing.T) {
 		GameHeight:   24,
 		Width:        80,
 		Height:       24,
-		CursorX:      0,
-		CursorY:      0,
 	}
 
 	drainSys := NewDrainSystem(ctx)
@@ -239,15 +219,11 @@ func TestDrainSystem_ContinuousDrainUntilZero(t *testing.T) {
 
 	// Spawn drain
 	drainSys.Update(world, 16*time.Millisecond)
-	if !ctx.State.GetDrainActive() {
+	if !world.Drains.Count() > 0 {
 		t.Fatal("Drain should be active")
 	}
 
 	// Position cursor on drain
-	drainX := ctx.State.GetDrainX()
-	drainY := ctx.State.GetDrainY()
-	ctx.State.SetCursorX(drainX)
-	ctx.State.SetCursorY(drainY)
 
 	// Calculate expected number of drain ticks to reach 0
 	expectedTicks := (initialEnergy + constants.DrainEnergyDrainAmount - 1) / constants.DrainEnergyDrainAmount
@@ -277,7 +253,7 @@ func TestDrainSystem_ContinuousDrainUntilZero(t *testing.T) {
 
 	// Next update should despawn drain
 	drainSys.Update(world, 16*time.Millisecond)
-	if ctx.State.GetDrainActive() {
+	if world.Drains.Count() > 0 {
 		t.Error("Drain should be despawned after energy reaches 0")
 	}
 }
@@ -297,8 +273,6 @@ func TestDrainSystem_AlternatingEnergyChanges(t *testing.T) {
 		GameHeight:   24,
 		Width:        80,
 		Height:       24,
-		CursorX:      0,
-		CursorY:      0,
 	}
 
 	drainSys := NewDrainSystem(ctx)
@@ -307,15 +281,11 @@ func TestDrainSystem_AlternatingEnergyChanges(t *testing.T) {
 	ctx.State.SetEnergy(50)
 	drainSys.Update(world, 16*time.Millisecond)
 
-	if !ctx.State.GetDrainActive() {
+	if !world.Drains.Count() > 0 {
 		t.Fatal("Drain should be active")
 	}
 
 	// Get drain position and move cursor there
-	drainX := ctx.State.GetDrainX()
-	drainY := ctx.State.GetDrainY()
-	ctx.State.SetCursorX(drainX)
-	ctx.State.SetCursorY(drainY)
 
 	// Drain some energy
 	mockTime.Advance(constants.DrainEnergyDrainInterval)
@@ -350,7 +320,7 @@ func TestDrainSystem_AlternatingEnergyChanges(t *testing.T) {
 	}
 
 	// Verify drain is still active
-	if !ctx.State.GetDrainActive() {
+	if !world.Drains.Count() > 0 {
 		t.Error("Drain should remain active while energy > 0")
 	}
 }

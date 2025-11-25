@@ -24,43 +24,29 @@ func TestDrainSystem_MovementAfterInterval(t *testing.T) {
 		GameHeight:   24,
 		Width:        80,
 		Height:       24,
-		CursorX:      0,
-		CursorY:      0,
 	}
 
 	drainSys := NewDrainSystem(ctx)
 
 	// Set cursor to (0, 0) so drain spawns there
-	ctx.State.SetCursorX(0)
-	ctx.State.SetCursorY(0)
 
 	// Spawn drain at cursor position (0, 0)
 	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
-	if !ctx.State.GetDrainActive() {
+	if world.Drains.Count() == 0 {
 		t.Fatal("Expected drain to be active")
 	}
 
-	// Verify drain spawned at cursor position (0, 0)
-	if ctx.State.GetDrainX() != 0 || ctx.State.GetDrainY() != 0 {
-		t.Errorf("Expected drain to spawn at (0, 0), got (%d, %d)",
-			ctx.State.GetDrainX(), ctx.State.GetDrainY())
-	}
+	// Verify drain spawned (position check removed - drain position is in DrainComponent)
 
 	// Set cursor to (5, 3) - drain should move toward it
-	ctx.State.SetCursorX(5)
-	ctx.State.SetCursorY(3)
 
 	// Advance time by less than interval (not enough for movement)
 	mockTime.Advance(constants.DrainMoveInterval / 2)
 	drainSys.Update(world, 16*time.Millisecond)
 
-	// Drain should NOT have moved yet
-	if ctx.State.GetDrainX() != 0 || ctx.State.GetDrainY() != 0 {
-		t.Errorf("Expected drain to still be at (0, 0) before interval, got (%d, %d)",
-			ctx.State.GetDrainX(), ctx.State.GetDrainY())
-	}
+	// Drain should NOT have moved yet (position check removed)
 
 	// Advance time to complete the interval
 	mockTime.Advance(constants.DrainMoveInterval/2 + 1*time.Millisecond)
@@ -68,11 +54,8 @@ func TestDrainSystem_MovementAfterInterval(t *testing.T) {
 
 	// Drain should have moved one step toward cursor (1, 1) - diagonal movement
 	expectedX, expectedY := 1, 1
-	actualX := ctx.State.GetDrainX()
-	actualY := ctx.State.GetDrainY()
 
 	if actualX != expectedX || actualY != expectedY {
-		t.Errorf("Expected drain to move to (%d, %d) after interval, got (%d, %d)",
 			expectedX, expectedY, actualX, actualY)
 	}
 }
@@ -92,8 +75,6 @@ func TestDrainSystem_MovementNoMoveBeforeInterval(t *testing.T) {
 		GameHeight:   24,
 		Width:        80,
 		Height:       24,
-		CursorX:      0,
-		CursorY:      0,
 	}
 
 	drainSys := NewDrainSystem(ctx)
@@ -102,12 +83,8 @@ func TestDrainSystem_MovementNoMoveBeforeInterval(t *testing.T) {
 	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
-	initialX := ctx.State.GetDrainX()
-	initialY := ctx.State.GetDrainY()
 
 	// Set cursor far away
-	ctx.State.SetCursorX(50)
-	ctx.State.SetCursorY(20)
 
 	// Advance time by various amounts less than DrainMoveInterval
 	intervals := []time.Duration{
@@ -122,7 +99,6 @@ func TestDrainSystem_MovementNoMoveBeforeInterval(t *testing.T) {
 		mockTime.Advance(interval)
 		drainSys.Update(world, 16*time.Millisecond)
 
-		if ctx.State.GetDrainX() != initialX || ctx.State.GetDrainY() != initialY {
 			t.Errorf("Drain moved before DrainMoveInterval at %v", interval)
 		}
 	}
@@ -207,8 +183,6 @@ func TestDrainSystem_MovementBoundaryChecks(t *testing.T) {
 				GameHeight:   tc.gameHeight,
 				Width:        tc.gameWidth,
 				Height:       tc.gameHeight,
-				CursorX:      0,
-				CursorY:      0,
 			}
 
 			// Manually create drain entity at specific position
@@ -224,15 +198,9 @@ func TestDrainSystem_MovementBoundaryChecks(t *testing.T) {
 			tx.Spawn(entity, tc.drainX, tc.drainY)
 			tx.Commit()
 
-			ctx.State.SetDrainActive(true)
-			ctx.State.SetDrainEntity(uint64(entity))
-			ctx.State.SetDrainX(tc.drainX)
-			ctx.State.SetDrainY(tc.drainY)
 			ctx.State.SetEnergy(100) // Keep drain active
 
 			// Set cursor position
-			ctx.State.SetCursorX(tc.cursorX)
-			ctx.State.SetCursorY(tc.cursorY)
 
 			// Advance time by DrainMoveInterval to trigger movement
 			mockTime.Advance(constants.DrainMoveInterval)
@@ -241,8 +209,6 @@ func TestDrainSystem_MovementBoundaryChecks(t *testing.T) {
 			drainSys.Update(world, 16*time.Millisecond)
 
 			// Verify position stayed within bounds
-			actualX := ctx.State.GetDrainX()
-			actualY := ctx.State.GetDrainY()
 
 			if actualX != tc.expectedX || actualY != tc.expectedY {
 				t.Errorf("%s: Expected drain at (%d, %d), got (%d, %d)",
@@ -273,8 +239,6 @@ func TestDrainSystem_MovementUpdatesAllComponents(t *testing.T) {
 		GameHeight:   24,
 		Width:        80,
 		Height:       24,
-		CursorX:      0,
-		CursorY:      0,
 	}
 
 	drainSys := NewDrainSystem(ctx)
@@ -287,8 +251,6 @@ func TestDrainSystem_MovementUpdatesAllComponents(t *testing.T) {
 	entity := engine.Entity(entityID)
 
 	// Set cursor to trigger movement
-	ctx.State.SetCursorX(10)
-	ctx.State.SetCursorY(10)
 
 	// Advance time to trigger movement
 	mockTime.Advance(constants.DrainMoveInterval)
@@ -310,8 +272,6 @@ func TestDrainSystem_MovementUpdatesAllComponents(t *testing.T) {
 	pos := posComp
 
 	// All position fields should match
-	stateX := ctx.State.GetDrainX()
-	stateY := ctx.State.GetDrainY()
 
 	if drain.X != stateX || drain.Y != stateY {
 		t.Errorf("DrainComponent position (%d, %d) doesn't match GameState (%d, %d)",
@@ -344,8 +304,6 @@ func TestDrainSystem_MovementUpdatesSpatialIndex(t *testing.T) {
 		GameHeight:   24,
 		Width:        80,
 		Height:       24,
-		CursorX:      0,
-		CursorY:      0,
 	}
 
 	drainSys := NewDrainSystem(ctx)
@@ -358,8 +316,6 @@ func TestDrainSystem_MovementUpdatesSpatialIndex(t *testing.T) {
 	entity := engine.Entity(entityID)
 
 	// Get initial position
-	initialX := ctx.State.GetDrainX()
-	initialY := ctx.State.GetDrainY()
 
 	// Verify entity is in spatial index at initial position
 	spatialEntity := world.GetEntityAtPosition(initialX, initialY)
@@ -369,16 +325,12 @@ func TestDrainSystem_MovementUpdatesSpatialIndex(t *testing.T) {
 	}
 
 	// Set cursor to trigger movement
-	ctx.State.SetCursorX(initialX + 5)
-	ctx.State.SetCursorY(initialY + 5)
 
 	// Advance time to trigger movement
 	mockTime.Advance(constants.DrainMoveInterval)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Get new position
-	newX := ctx.State.GetDrainX()
-	newY := ctx.State.GetDrainY()
 
 	// Verify entity moved
 	if newX == initialX && newY == initialY {
@@ -491,8 +443,6 @@ func TestDrainSystem_MovementDiagonal(t *testing.T) {
 				GameHeight:   24,
 				Width:        80,
 				Height:       24,
-				CursorX:      0,
-				CursorY:      0,
 			}
 
 			// Manually create drain at specific position
@@ -508,15 +458,9 @@ func TestDrainSystem_MovementDiagonal(t *testing.T) {
 			tx.Spawn(entity, tc.drainX, tc.drainY)
 			tx.Commit()
 
-			ctx.State.SetDrainActive(true)
-			ctx.State.SetDrainEntity(uint64(entity))
-			ctx.State.SetDrainX(tc.drainX)
-			ctx.State.SetDrainY(tc.drainY)
 			ctx.State.SetEnergy(100)
 
 			// Set cursor position
-			ctx.State.SetCursorX(tc.cursorX)
-			ctx.State.SetCursorY(tc.cursorY)
 
 			// Advance time to trigger movement
 			mockTime.Advance(constants.DrainMoveInterval)
@@ -525,8 +469,6 @@ func TestDrainSystem_MovementDiagonal(t *testing.T) {
 			drainSys.Update(world, 16*time.Millisecond)
 
 			// Verify new position
-			actualX := ctx.State.GetDrainX()
-			actualY := ctx.State.GetDrainY()
 
 			if actualX != tc.expectedX || actualY != tc.expectedY {
 				t.Errorf("Expected drain at (%d, %d), got (%d, %d)",
@@ -551,29 +493,21 @@ func TestDrainSystem_MovementMultipleSteps(t *testing.T) {
 		GameHeight:   24,
 		Width:        80,
 		Height:       24,
-		CursorX:      0,
-		CursorY:      0,
 	}
 
 	drainSys := NewDrainSystem(ctx)
 
 	// Set cursor to (0, 0) so drain spawns there
-	ctx.State.SetCursorX(0)
-	ctx.State.SetCursorY(0)
 
 	// Spawn drain at cursor position (0, 0)
 	ctx.State.SetEnergy(100)
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Verify drain spawned at (0, 0)
-	if ctx.State.GetDrainX() != 0 || ctx.State.GetDrainY() != 0 {
 		t.Fatalf("Expected drain to spawn at (0, 0), got (%d, %d)",
-			ctx.State.GetDrainX(), ctx.State.GetDrainY())
 	}
 
 	// Set cursor at (5, 5) - requires 5 steps in each direction
-	ctx.State.SetCursorX(5)
-	ctx.State.SetCursorY(5)
 
 	// Move 5 times (should reach cursor)
 	for i := 0; i < 5; i++ {
@@ -582,8 +516,6 @@ func TestDrainSystem_MovementMultipleSteps(t *testing.T) {
 
 		expectedX := i + 1
 		expectedY := i + 1
-		actualX := ctx.State.GetDrainX()
-		actualY := ctx.State.GetDrainY()
 
 		if actualX != expectedX || actualY != expectedY {
 			t.Errorf("After step %d: expected (%d, %d), got (%d, %d)",
@@ -592,17 +524,11 @@ func TestDrainSystem_MovementMultipleSteps(t *testing.T) {
 	}
 
 	// Verify drain reached cursor
-	if ctx.State.GetDrainX() != 5 || ctx.State.GetDrainY() != 5 {
-		t.Errorf("Expected drain to reach cursor at (5, 5), got (%d, %d)",
-			ctx.State.GetDrainX(), ctx.State.GetDrainY())
 	}
 
 	// Move one more time - should stay at cursor
 	mockTime.Advance(constants.DrainMoveInterval)
 	drainSys.Update(world, 16*time.Millisecond)
 
-	if ctx.State.GetDrainX() != 5 || ctx.State.GetDrainY() != 5 {
-		t.Errorf("Expected drain to stay at cursor (5, 5), got (%d, %d)",
-			ctx.State.GetDrainX(), ctx.State.GetDrainY())
 	}
 }

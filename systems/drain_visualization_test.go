@@ -23,8 +23,6 @@ func createVisualizationTestContext() (*engine.GameContext, *engine.World, *engi
 		GameHeight:   24,
 		Width:        80,
 		Height:       24,
-		CursorX:      0,
-		CursorY:      0,
 	}
 	return ctx, world, mockTime
 }

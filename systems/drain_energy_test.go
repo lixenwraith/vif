@@ -24,8 +24,6 @@ func TestDrainSystem_EnergyDrainWhenOnCursor(t *testing.T) {
 		GameHeight:   24,
 		Width:        80,
 		Height:       24,
-		CursorX:      0,
-		CursorY:      0,
 	}
 
 	drainSys := NewDrainSystem(ctx)
@@ -34,8 +32,6 @@ func TestDrainSystem_EnergyDrainWhenOnCursor(t *testing.T) {
 	initialEnergy := 100
 	cursorX, cursorY := 10, 10
 	ctx.State.SetEnergy(initialEnergy)
-	ctx.State.SetCursorX(cursorX)
-	ctx.State.SetCursorY(cursorY)
 
 	// Manually create drain at cursor position
 	entity := world.CreateEntity()
@@ -52,10 +48,6 @@ func TestDrainSystem_EnergyDrainWhenOnCursor(t *testing.T) {
 	tx.Spawn(entity, cursorX, cursorY)
 	tx.Commit()
 
-	ctx.State.SetDrainActive(true)
-	ctx.State.SetDrainEntity(uint64(entity))
-	ctx.State.SetDrainX(cursorX)
-	ctx.State.SetDrainY(cursorY)
 
 	// Update without advancing time - should not drain yet
 	drainSys.Update(world, 16*time.Millisecond)
@@ -93,8 +85,6 @@ func TestDrainSystem_NoDrainWhenNotOnCursor(t *testing.T) {
 		GameHeight:   24,
 		Width:        80,
 		Height:       24,
-		CursorX:      0,
-		CursorY:      0,
 	}
 
 	drainSys := NewDrainSystem(ctx)
@@ -104,8 +94,6 @@ func TestDrainSystem_NoDrainWhenNotOnCursor(t *testing.T) {
 	ctx.State.SetEnergy(initialEnergy)
 
 	// Place cursor at (10, 10)
-	ctx.State.SetCursorX(10)
-	ctx.State.SetCursorY(10)
 
 	// Create drain at different position (5, 5)
 	drainX, drainY := 5, 5
@@ -123,10 +111,6 @@ func TestDrainSystem_NoDrainWhenNotOnCursor(t *testing.T) {
 	tx.Spawn(entity, drainX, drainY)
 	tx.Commit()
 
-	ctx.State.SetDrainActive(true)
-	ctx.State.SetDrainEntity(uint64(entity))
-	ctx.State.SetDrainX(drainX)
-	ctx.State.SetDrainY(drainY)
 
 	// Advance time by DrainEnergyDrainInterval
 	mockTime.Advance(constants.DrainEnergyDrainInterval)
@@ -154,8 +138,6 @@ func TestDrainSystem_IsOnCursorStateTracking(t *testing.T) {
 		GameHeight:   24,
 		Width:        80,
 		Height:       24,
-		CursorX:      0,
-		CursorY:      0,
 	}
 
 	drainSys := NewDrainSystem(ctx)
@@ -163,8 +145,6 @@ func TestDrainSystem_IsOnCursorStateTracking(t *testing.T) {
 	// Set energy and cursor
 	ctx.State.SetEnergy(100)
 	cursorX, cursorY := 10, 10
-	ctx.State.SetCursorX(cursorX)
-	ctx.State.SetCursorY(cursorY)
 
 	// Create drain at cursor position
 	entity := world.CreateEntity()
@@ -181,10 +161,6 @@ func TestDrainSystem_IsOnCursorStateTracking(t *testing.T) {
 	tx.Spawn(entity, cursorX, cursorY)
 	tx.Commit()
 
-	ctx.State.SetDrainActive(true)
-	ctx.State.SetDrainEntity(uint64(entity))
-	ctx.State.SetDrainX(cursorX)
-	ctx.State.SetDrainY(cursorY)
 
 	// Update - should set IsOnCursor to true
 	drainSys.Update(world, 16*time.Millisecond)
@@ -202,8 +178,6 @@ func TestDrainSystem_IsOnCursorStateTracking(t *testing.T) {
 	}
 
 	// Move cursor away
-	ctx.State.SetCursorX(15)
-	ctx.State.SetCursorY(15)
 
 	// Update - should set IsOnCursor to false
 	drainSys.Update(world, 16*time.Millisecond)
@@ -235,8 +209,6 @@ func TestDrainSystem_MultipleDrainTicks(t *testing.T) {
 		GameHeight:   24,
 		Width:        80,
 		Height:       24,
-		CursorX:      0,
-		CursorY:      0,
 	}
 
 	drainSys := NewDrainSystem(ctx)
@@ -247,8 +219,6 @@ func TestDrainSystem_MultipleDrainTicks(t *testing.T) {
 
 	// Place cursor and drain at same position
 	cursorX, cursorY := 10, 10
-	ctx.State.SetCursorX(cursorX)
-	ctx.State.SetCursorY(cursorY)
 
 	entity := world.CreateEntity()
 	world.Positions.Add(entity, components.PositionComponent{X: cursorX, Y: cursorY})
@@ -264,10 +234,6 @@ func TestDrainSystem_MultipleDrainTicks(t *testing.T) {
 	tx.Spawn(entity, cursorX, cursorY)
 	tx.Commit()
 
-	ctx.State.SetDrainActive(true)
-	ctx.State.SetDrainEntity(uint64(entity))
-	ctx.State.SetDrainX(cursorX)
-	ctx.State.SetDrainY(cursorY)
 
 	// Perform 5 drain ticks
 	numTicks := 5
@@ -308,8 +274,6 @@ func TestDrainSystem_NoDrainBeforeInterval(t *testing.T) {
 		GameHeight:   24,
 		Width:        80,
 		Height:       24,
-		CursorX:      0,
-		CursorY:      0,
 	}
 
 	drainSys := NewDrainSystem(ctx)
@@ -320,8 +284,6 @@ func TestDrainSystem_NoDrainBeforeInterval(t *testing.T) {
 
 	// Place cursor and drain at same position
 	cursorX, cursorY := 10, 10
-	ctx.State.SetCursorX(cursorX)
-	ctx.State.SetCursorY(cursorY)
 
 	entity := world.CreateEntity()
 	world.Positions.Add(entity, components.PositionComponent{X: cursorX, Y: cursorY})
@@ -337,10 +299,6 @@ func TestDrainSystem_NoDrainBeforeInterval(t *testing.T) {
 	tx.Spawn(entity, cursorX, cursorY)
 	tx.Commit()
 
-	ctx.State.SetDrainActive(true)
-	ctx.State.SetDrainEntity(uint64(entity))
-	ctx.State.SetDrainX(cursorX)
-	ctx.State.SetDrainY(cursorY)
 
 	// Test various time intervals less than DrainEnergyDrainInterval
 	intervals := []time.Duration{
@@ -391,8 +349,6 @@ func TestDrainSystem_EnergyDrainDespawnAtZero(t *testing.T) {
 		GameHeight:   24,
 		Width:        80,
 		Height:       24,
-		CursorX:      0,
-		CursorY:      0,
 	}
 
 	drainSys := NewDrainSystem(ctx)
@@ -403,8 +359,6 @@ func TestDrainSystem_EnergyDrainDespawnAtZero(t *testing.T) {
 
 	// Place cursor and drain at same position
 	cursorX, cursorY := 10, 10
-	ctx.State.SetCursorX(cursorX)
-	ctx.State.SetCursorY(cursorY)
 
 	entity := world.CreateEntity()
 	world.Positions.Add(entity, components.PositionComponent{X: cursorX, Y: cursorY})
@@ -420,10 +374,6 @@ func TestDrainSystem_EnergyDrainDespawnAtZero(t *testing.T) {
 	tx.Spawn(entity, cursorX, cursorY)
 	tx.Commit()
 
-	ctx.State.SetDrainActive(true)
-	ctx.State.SetDrainEntity(uint64(entity))
-	ctx.State.SetDrainX(cursorX)
-	ctx.State.SetDrainY(cursorY)
 
 	// Advance time to trigger drain
 	mockTime.Advance(constants.DrainEnergyDrainInterval)
@@ -435,7 +385,7 @@ func TestDrainSystem_EnergyDrainDespawnAtZero(t *testing.T) {
 	}
 
 	// Drain should still be active (despawn check happens on next update)
-	if !ctx.State.GetDrainActive() {
+	if !world.Drains.Count() > 0 {
 		t.Error("Drain should still be active after first update")
 	}
 
@@ -443,7 +393,7 @@ func TestDrainSystem_EnergyDrainDespawnAtZero(t *testing.T) {
 	drainSys.Update(world, 16*time.Millisecond)
 
 	// Drain should now be inactive
-	if ctx.State.GetDrainActive() {
+	if world.Drains.Count() > 0 {
 		t.Error("Drain should be despawned when energy <= 0")
 	}
 
@@ -470,8 +420,6 @@ func TestDrainSystem_LastDrainTimeUpdated(t *testing.T) {
 		GameHeight:   24,
 		Width:        80,
 		Height:       24,
-		CursorX:      0,
-		CursorY:      0,
 	}
 
 	drainSys := NewDrainSystem(ctx)
@@ -481,8 +429,6 @@ func TestDrainSystem_LastDrainTimeUpdated(t *testing.T) {
 
 	// Place cursor and drain at same position
 	cursorX, cursorY := 10, 10
-	ctx.State.SetCursorX(cursorX)
-	ctx.State.SetCursorY(cursorY)
 
 	entity := world.CreateEntity()
 	world.Positions.Add(entity, components.PositionComponent{X: cursorX, Y: cursorY})
@@ -498,10 +444,6 @@ func TestDrainSystem_LastDrainTimeUpdated(t *testing.T) {
 	tx.Spawn(entity, cursorX, cursorY)
 	tx.Commit()
 
-	ctx.State.SetDrainActive(true)
-	ctx.State.SetDrainEntity(uint64(entity))
-	ctx.State.SetDrainX(cursorX)
-	ctx.State.SetDrainY(cursorY)
 
 	// Advance time and trigger drain
 	mockTime.Advance(constants.DrainEnergyDrainInterval)
