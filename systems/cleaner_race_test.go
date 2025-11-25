@@ -14,6 +14,13 @@ import (
 // TestNoRaceSnapshotRendering verifies no race conditions between updates and snapshot reads
 func TestNoRaceSnapshotRendering(t *testing.T) {
 	world := engine.NewWorld()
+	// Inject resources required by CleanerSystem
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	engine.AddResource(world.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 	ctx := createCleanerTestContext()
 	cleanerSystem := NewCleanerSystem(ctx)
 
@@ -80,6 +87,13 @@ func TestNoRaceSnapshotRendering(t *testing.T) {
 // TestNoRaceActivation tests concurrent activation calls
 func TestNoRaceActivation(t *testing.T) {
 	world := engine.NewWorld()
+	// Inject resources required by CleanerSystem
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	engine.AddResource(world.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 	ctx := createCleanerTestContext()
 	cleanerSystem := NewCleanerSystem(ctx)
 
@@ -151,6 +165,13 @@ func TestNoRaceActivation(t *testing.T) {
 // TestNoRaceFlashEffects tests concurrent flash effect creation and reading
 func TestNoRaceFlashEffects(t *testing.T) {
 	world := engine.NewWorld()
+	// Inject resources required by CleanerSystem
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	engine.AddResource(world.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 	ctx := createCleanerTestContext()
 	cleanerSystem := NewCleanerSystem(ctx)
 
@@ -218,6 +239,13 @@ func TestNoRaceFlashEffects(t *testing.T) {
 // TestNoRaceComponentAccess tests concurrent component reads during updates
 func TestNoRaceComponentAccess(t *testing.T) {
 	world := engine.NewWorld()
+	// Inject resources required by CleanerSystem
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	engine.AddResource(world.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 	ctx := createCleanerTestContext()
 	cleanerSystem := NewCleanerSystem(ctx)
 

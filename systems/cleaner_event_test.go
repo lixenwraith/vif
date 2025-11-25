@@ -10,6 +10,13 @@ import (
 // TestCleanerSpawnOnEvent verifies that cleaners spawn when EventCleanerRequest is pushed
 func TestCleanerSpawnOnEvent(t *testing.T) {
 	world := engine.NewWorld()
+	// Inject resources required by CleanerSystem
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	engine.AddResource(world.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 	ctx := createCleanerTestContext()
 	cleanerSystem := NewCleanerSystem(ctx)
 
@@ -47,6 +54,13 @@ func TestCleanerSpawnOnEvent(t *testing.T) {
 // TestCleanerFinishedEvent verifies that EventCleanerFinished is emitted when cleaners complete
 func TestCleanerFinishedEvent(t *testing.T) {
 	world := engine.NewWorld()
+	// Inject resources required by CleanerSystem
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	engine.AddResource(world.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 	ctx := createCleanerTestContext()
 	cleanerSystem := NewCleanerSystem(ctx)
 
@@ -114,6 +128,13 @@ func TestCleanerFinishedEvent(t *testing.T) {
 // TestNoDuplicateSpawnsForSameFrame verifies that duplicate events for the same frame don't cause double spawning
 func TestNoDuplicateSpawnsForSameFrame(t *testing.T) {
 	world := engine.NewWorld()
+	// Inject resources required by CleanerSystem
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	engine.AddResource(world.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 	ctx := createCleanerTestContext()
 	cleanerSystem := NewCleanerSystem(ctx)
 
@@ -153,6 +174,13 @@ func TestNoDuplicateSpawnsForSameFrame(t *testing.T) {
 // TestMultipleFrameEvents verifies that events from different frames can spawn cleaners multiple times
 func TestMultipleFrameEvents(t *testing.T) {
 	world := engine.NewWorld()
+	// Inject resources required by CleanerSystem
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	engine.AddResource(world.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 	ctx := createCleanerTestContext()
 	cleanerSystem := NewCleanerSystem(ctx)
 
@@ -202,6 +230,13 @@ func TestMultipleFrameEvents(t *testing.T) {
 // TestEventFrameTracking verifies that the spawned map correctly tracks frames
 func TestEventFrameTracking(t *testing.T) {
 	world := engine.NewWorld()
+	// Inject resources required by CleanerSystem
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	engine.AddResource(world.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 	ctx := createCleanerTestContext()
 	cleanerSystem := NewCleanerSystem(ctx)
 

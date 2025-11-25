@@ -10,6 +10,13 @@ import (
 // BenchmarkCleanerSpawn benchmarks cleaner spawning performance
 func BenchmarkCleanerSpawn(b *testing.B) {
 	world := engine.NewWorld()
+	// Inject resources required by CleanerSystem
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	engine.AddResource(world.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 	ctx := createCleanerTestContext()
 	cleanerSystem := NewCleanerSystem(ctx)
 
@@ -37,6 +44,13 @@ func BenchmarkCleanerSpawn(b *testing.B) {
 // BenchmarkCleanerUpdate benchmarks cleaner physics updates
 func BenchmarkCleanerUpdate(b *testing.B) {
 	world := engine.NewWorld()
+	// Inject resources required by CleanerSystem
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	engine.AddResource(world.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 	ctx := createCleanerTestContext()
 	cleanerSystem := NewCleanerSystem(ctx)
 
@@ -61,6 +75,13 @@ func BenchmarkCleanerUpdate(b *testing.B) {
 // BenchmarkCleanerSnapshots benchmarks querying cleaner components from World
 func BenchmarkCleanerSnapshots(b *testing.B) {
 	world := engine.NewWorld()
+	// Inject resources required by CleanerSystem
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	engine.AddResource(world.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 	ctx := createCleanerTestContext()
 	cleanerSystem := NewCleanerSystem(ctx)
 
@@ -93,6 +114,13 @@ func BenchmarkCleanerSnapshots(b *testing.B) {
 // BenchmarkCleanerCollision benchmarks collision detection performance
 func BenchmarkCleanerCollision(b *testing.B) {
 	world := engine.NewWorld()
+	// Inject resources required by CleanerSystem
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	engine.AddResource(world.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 	ctx := createCleanerTestContext()
 	cleanerSystem := NewCleanerSystem(ctx)
 
@@ -118,6 +146,13 @@ func BenchmarkCleanerCollision(b *testing.B) {
 // BenchmarkFlashEffectCreation benchmarks flash effect creation
 func BenchmarkFlashEffectCreation(b *testing.B) {
 	world := engine.NewWorld()
+	// Inject resources required by CleanerSystem
+	engine.AddResource(world.Resources, &engine.ConfigResource{
+		GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+	})
+	engine.AddResource(world.Resources, &engine.TimeResource{
+		GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+	})
 	ctx := createCleanerTestContext()
 	cleanerSystem := NewCleanerSystem(ctx)
 
@@ -158,6 +193,13 @@ func BenchmarkCompleteAnimation(b *testing.B) {
 		b.StopTimer()
 
 		world := engine.NewWorld()
+		// Inject resources required by CleanerSystem
+		engine.AddResource(world.Resources, &engine.ConfigResource{
+			GameWidth: 80, GameHeight: 24, ScreenWidth: 80, ScreenHeight: 24,
+		})
+		engine.AddResource(world.Resources, &engine.TimeResource{
+			GameTime: time.Now(), DeltaTime: 16 * time.Millisecond,
+		})
 		ctx := createCleanerTestContext()
 		cleanerSystem := NewCleanerSystem(ctx)
 
