@@ -390,6 +390,9 @@ func (s *SpawnSystem) getAvailableColorsFromCensus(census ColorCensus) []ColorLe
 
 // Update runs the spawn system logic
 func (s *SpawnSystem) Update(world *engine.World, dt time.Duration) {
+	// Fetch resources
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+
 	// Calculate fill percentage and update GameState using generic stores
 
 	entityCount := world.Positions.Count()
@@ -417,7 +420,7 @@ func (s *SpawnSystem) Update(world *engine.World, dt time.Duration) {
 	s.spawnSequence(world)
 
 	// Update spawn timing in GameState
-	now := s.ctx.TimeProvider.Now()
+	now := timeRes.GameTime
 	nextTime := now.Add(adjustedDelay)
 	s.ctx.State.UpdateSpawnTiming(now, nextTime)
 }
@@ -539,11 +542,10 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 		return false
 	}
 
-	// Get generic world
-
-	// Read dimensions from context
-	gameWidth := s.ctx.GameWidth
-	gameHeight := s.ctx.GameHeight
+	// Fetch dimensions from ConfigResource
+	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+	gameWidth := config.GameWidth
+	gameHeight := config.GameHeight
 
 	// Try up to maxPlacementTries times to find a valid position
 	for attempt := 0; attempt < maxPlacementTries; attempt++ {
