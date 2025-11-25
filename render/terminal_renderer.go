@@ -124,13 +124,8 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 
 // drawHeatMeter draws the heat meter at the top as a 10-segment display
 func (r *TerminalRenderer) drawHeatMeter(heat int, defaultStyle tcell.Style) {
-	heatBarWidth := r.width
-	if heatBarWidth < 1 {
-		heatBarWidth = 1
-	}
-
-	// Calculate display heat: map 0-heatBarWidth to 0-10 segments
-	displayHeat := int(float64(heat) / float64(heatBarWidth) * 10.0)
+	// Calculate display heat: map 0-MaxHeat to 0-10 segments
+	displayHeat := int(float64(heat) / float64(constants.MaxHeat) * 10.0)
 	if displayHeat > 10 {
 		displayHeat = 10
 	}

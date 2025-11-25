@@ -534,18 +534,30 @@ func isPunctuation(r rune) bool {
 //   - 0 for space character entities (defensive handling - spaces should not exist as entities)
 //   - The actual rune for all other characters
 func getCharAt(ctx *engine.GameContext, x, y int) rune {
-	entity := ctx.World.Positions.GetEntityAt(x, y)
-	if entity == 0 {
-		return 0
+	// We iterate all entities with Position + Character components
+	// While O(N), N is small (max 200 entities), making this acceptable for input handling
+	entities := ctx.World.Query().
+		With(ctx.World.Positions).
+		With(ctx.World.Characters).
+		Execute()
+
+	for _, entity := range entities {
+		// Explicitly skip the cursor entity to see what's underneath
+		if entity == ctx.CursorEntity {
+			continue
+		}
+
+		pos, _ := ctx.World.Positions.Get(entity)
+		if pos.X == x && pos.Y == y {
+			char, _ := ctx.World.Characters.Get(entity)
+			// Treat space characters as empty positions
+			if char.Rune == ' ' {
+				return 0
+			}
+			return char.Rune
+		}
 	}
 
-	if char, ok := ctx.World.Characters.Get(entity); ok {
-		// Treat space characters as empty positions
-		if char.Rune == ' ' {
-			return 0
-		}
-		return char.Rune
-	}
 	return 0
 }
 

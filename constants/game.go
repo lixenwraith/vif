@@ -23,6 +23,14 @@ const (
 	EventBufferMask = 255
 )
 
+// Game Mechanics Constants
+const (
+	// MaxHeat is the maximum value for the heat meter (100%)
+	MaxHeat = 100
+
+	NuggetHeatIncrease = 10
+)
+
 // Cleaner System Constants
 const (
 	// CleanerDeduplicationWindow is the number of frames to keep in the spawned map

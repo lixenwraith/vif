@@ -1,7 +1,6 @@
 package systems
 
 import (
-	"math"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/audio"
@@ -79,7 +78,7 @@ func (s *ScoreSystem) Update(world *engine.World, dt time.Duration) {
 	}
 }
 
-// HandleCharacterTyping processes a character typed in insert mode using generic stores
+// HandleCharacterTyping processes a character typed in insert mode
 func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursorY int, typedRune rune) {
 	// Fetch resources
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
@@ -187,12 +186,6 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 			}
 			s.ctx.State.AddHeat(heatGain)
 
-			// Get max heat (heat bar width)
-			heatBarWidth := config.ScreenWidth
-			if heatBarWidth < 1 {
-				heatBarWidth = 1
-			}
-
 			// Handle boost activation and maintenance
 			currentHeat := s.ctx.State.GetHeat()
 
@@ -204,7 +197,7 @@ func (s *ScoreSystem) HandleCharacterTyping(world *engine.World, cursorX, cursor
 				charColorCode = 2
 			}
 
-			if currentHeat >= heatBarWidth {
+			if currentHeat >= constants.MaxHeat {
 				// Heat is at max
 				if !boostState.Enabled {
 					// Activate boost for the first time
@@ -350,23 +343,11 @@ func (s *ScoreSystem) handleNuggetCollection(world *engine.World, entity engine.
 		return
 	}
 
-	// Correct character - collect nugget
-	// Calculate heat increase: 10% of max heat (screen width)
-	// Use ceiling to ensure at least 10% even for widths not divisible by 10
-	maxHeat := config.ScreenWidth
-	if maxHeat < 1 {
-		maxHeat = 1
-	}
-	heatIncrease := int(math.Ceil(float64(maxHeat) / 10.0))
-	if heatIncrease < 1 {
-		heatIncrease = 1 // Minimum increase of 1
-	}
-
-	// Add heat (10% of max) with cap
+	// Correct character - collect nugget and add nugget heat with cap
 	currentHeat := s.ctx.State.GetHeat()
-	newHeat := currentHeat + heatIncrease
-	if newHeat > maxHeat {
-		newHeat = maxHeat
+	newHeat := currentHeat + constants.NuggetHeatIncrease
+	if newHeat > constants.MaxHeat {
+		newHeat = constants.MaxHeat
 	}
 	s.ctx.State.SetHeat(newHeat)
 

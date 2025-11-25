@@ -58,14 +58,20 @@ func handleNewCommand(ctx *engine.GameContext) bool {
 	// Clear all entities from the world
 	clearAllEntities(ctx.World)
 
-	// Reset cursor position to center (using ECS)
+	// Use Entity Builder for singleton CursorEntity creation
+	// 1. Create new entity ID
+	newCursorID := ctx.World.NewEntity().Build()
+	ctx.CursorEntity = newCursorID
+
+	// 2. Add Components
 	ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
 		X: ctx.GameWidth / 2,
 		Y: ctx.GameHeight / 2,
 	})
 
-	// Restore Cursor Identity and Protection
 	ctx.World.Cursors.Add(ctx.CursorEntity, components.CursorComponent{})
+
+	// 3. Restore Protection (Critical for DestroyEntity checks)
 	ctx.World.Protections.Add(ctx.CursorEntity, components.ProtectionComponent{
 		Mask:      components.ProtectAll,
 		ExpiresAt: 0,
@@ -130,15 +136,13 @@ func handleHeatCommand(ctx *engine.GameContext, args []string) bool {
 		return true
 	}
 
-	// 3. Logic Validation (Max heat is effectively screen width, but we clamp to sane inputs)
+	// 3. Logic Validation (0-MaxHeat)
 	// We allow setting it up to GameWidth because that is the trigger for Boost.
 	if value < 0 {
 		value = 0
 	}
-
-	// Clamp to a reasonable max (e.g. screen width or 100)
-	if value > 100 {
-		value = 100
+	if value > constants.MaxHeat {
+		value = constants.MaxHeat
 	}
 
 	// 4. Update State

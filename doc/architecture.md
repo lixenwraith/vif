@@ -808,7 +808,7 @@ Parallel (Event-Driven):
 #### 2. Decay Timer Phase
 - **Activation**: Started when Gold ends (completion or timeout)
 - **Duration**: 60-10 seconds (based on heat percentage at Gold end time)
-  - Formula: `60s - (50s * heatPercentage)`
+  - Formula: `60s - (50s * (CurrentHeat / MaxHeat))`
   - Higher heat = faster decay
 - **Purpose**: Creates breathing room between gold spawns
 - **Next Action**: Triggers decay animation when timer expires
@@ -1130,8 +1130,8 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 1. **One Entity Per Position**: `spatialIndex[y][x]` holds at most one entity
 2. **Component Consistency**: Entity with SequenceComponent MUST have Position and Character
 3. **Cursor Bounds**: `0 <= CursorX < GameWidth && 0 <= CursorY < GameHeight`
-4. **Heat Non-Negativity**: Heat (typing momentum) is always >= 0
-5. **Boost Mechanic**: When heat reaches maximum, boost activates with color-matching (Blue or Green) providing x2 heat multiplier. Typing the matching color extends boost duration by 500ms per character, while typing a different color deactivates boost
+4. **Heat Mechanics**: Heat is normalized to a fixed range (0-100). Max Heat is always 100
+5. **Boost Mechanic**: When heat reaches maximum (100), boost activates with color-matching (Blue or Green) providing x2 heat multiplier. Typing the matching color extends boost duration by 500ms per character, while typing a different color deactivates boost
 6. **Red Spawn Invariant**: Red sequences are NEVER spawned directly, only through decay
 7. **Gold Randomness**: Gold sequences spawn at random positions
 8. **6-Color Limit**: At most 6 Blue/Green color/level combinations present simultaneously
@@ -1147,7 +1147,8 @@ The `PositionStore` spatial index enforces a **single entity per cell** constrai
 **Constraint**: `spatialIndex[y][x]` can only hold one entity at position (x, y)
 
 **Implications**:
-1. **Cursor Masking**: When the Cursor Entity occupies a cell, it replaces any previous entity in the spatial index
+1.  **Cursor Masking**: The spatial index (GetEntityAt) returns the topmost entity. The Cursor masks characters.
+   - **Systems must use Query()** to inspect characters under the cursor, never GetEntityAt()
    - Other entities at that position become "masked" and unreachable via `GetEntityAt(x, y)`
    - The masked entities still exist in the World and other component stores
    - Only the spatial index reference is overwritten
@@ -1493,4 +1494,3 @@ for _, entity := range entities {
   - Empty lines and comments ignored
   - Files must have at least 10 valid lines after processing
   - Content blocks are selected randomly from validated cache
-

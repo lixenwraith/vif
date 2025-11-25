@@ -755,14 +755,8 @@ func (gs *GameState) StartDecayTimer(screenWidth int, baseSeconds, rangeSeconds 
 	// Read heat atomically (no cached value)
 	heat := int(gs.Heat.Load())
 
-	// Calculate heat bar width (uses full screen width)
-	heatBarWidth := screenWidth
-	if heatBarWidth < 1 {
-		heatBarWidth = 1
-	}
-
 	// Calculate heat percentage
-	heatPercentage := float64(heat) / float64(heatBarWidth)
+	heatPercentage := float64(heat) / float64(constants.MaxHeat)
 	if heatPercentage > 1.0 {
 		heatPercentage = 1.0
 	}
