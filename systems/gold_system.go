@@ -35,7 +35,9 @@ func (s *GoldSystem) Priority() int {
 // Update runs the gold sequence system logic
 // Gold timeout is now handled by ClockScheduler
 func (s *GoldSystem) Update(world *engine.World, dt time.Duration) {
-	now := s.ctx.TimeProvider.Now()
+	// Fetch time resource for consistent timing
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+	now := timeRes.GameTime
 
 	// Initialize FirstUpdateTime on first call (using GameState)
 	s.ctx.State.SetFirstUpdateTime(now)
@@ -280,11 +282,13 @@ func (s *GoldSystem) CompleteGold(world *engine.World) bool {
 
 	// Play coin sound for gold completion
 	if s.ctx.AudioEngine != nil {
+		// Fetch time resource for audio timestamp
+		timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 		cmd := audio.AudioCommand{
 			Type:       audio.SoundCoin,
 			Priority:   1,
 			Generation: uint64(s.ctx.State.GetFrameNumber()),
-			Timestamp:  s.ctx.TimeProvider.Now(),
+			Timestamp:  timeRes.GameTime,
 		}
 		s.ctx.AudioEngine.SendRealTime(cmd)
 	}
@@ -296,9 +300,10 @@ func (s *GoldSystem) CompleteGold(world *engine.World) bool {
 // findValidPosition finds a valid random position for the gold sequence using generic stores
 // Caller holds s.mu lock
 func (s *GoldSystem) findValidPosition(world *engine.World, seqLength int) (int, int) {
-
-	gameWidth := s.ctx.GameWidth
-	gameHeight := s.ctx.GameHeight
+	// Fetch config resource for dimensions
+	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+	gameWidth := config.GameWidth
+	gameHeight := config.GameHeight
 
 	// Read cursor position from GameState (atomic reads)
 	cursor := s.ctx.State.ReadCursorPosition()
