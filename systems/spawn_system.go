@@ -1,6 +1,7 @@
 package systems
 
 import (
+	"fmt"
 	"math"
 	"math/rand"
 	"strings"
@@ -343,7 +344,7 @@ func (s *SpawnSystem) runCensus(world *engine.World) ColorCensus {
 			case components.LevelDark:
 				census.GreenDark++
 			}
-		// SequenceRed, SequenceGold: intentionally not counted
+			// SequenceRed, SequenceGold: intentionally not counted
 		}
 	}
 
@@ -542,24 +543,22 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 		return false
 	}
 
-	// Fetch dimensions from ConfigResource
+	// Fetch dimensions from resources
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
-	gameWidth := config.GameWidth
-	gameHeight := config.GameHeight
 
 	// Try up to maxPlacementTries times to find a valid position
 	for attempt := 0; attempt < maxPlacementTries; attempt++ {
 		// Random row selection
-		row := rand.Intn(gameHeight)
+		row := rand.Intn(config.GameHeight)
 
 		// Check if line fits and find available columns
-		if lineLength > gameWidth {
+		if lineLength > config.GameWidth {
 			// Line too long for screen, skip
 			continue
 		}
 
 		// Random column selection (must have room for full line)
-		maxStartCol := gameWidth - lineLength
+		maxStartCol := config.GameWidth - lineLength
 		if maxStartCol < 0 {
 			continue
 		}
@@ -578,8 +577,7 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 		// Check if too close to cursor (read from ECS)
 		cursorPos, ok := s.ctx.World.Positions.Get(s.ctx.CursorEntity)
 		if !ok {
-			// Cursor missing - should never happen, skip overlap check
-			cursorPos = components.PositionComponent{X: -100, Y: -100}
+			panic(fmt.Errorf("cursor destroyed"))
 		}
 		for i := 0; i < lineLength; i++ {
 			col := startCol + i

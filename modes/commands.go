@@ -82,9 +82,7 @@ func handleNewCommand(ctx *engine.GameContext) bool {
 	ctx.State.SetBoostEndTime(time.Time{})
 	ctx.State.SetBoostColor(0)
 
-	// Reset drain state
-	ctx.State.SetDrainActive(false)
-	ctx.State.SetDrainEntity(0)
+	// TODO: Drains: Score reset should despawn drains, but think about something clever to do here
 
 	// Reset visual feedback
 	ctx.State.SetCursorError(false)

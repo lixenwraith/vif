@@ -11,15 +11,10 @@ import (
 // GameState centralizes game state with clear ownership boundaries
 type GameState struct {
 	// ===== REAL-TIME STATE (lock-free atomics) =====
-	// Updated immediately on user input/spawn, read by all systems
 
 	// Scoring and Heat (typing feedback)
 	Score atomic.Int64 // Current score
 	Heat  atomic.Int64 // Current heat value
-
-	// Cursor position (game coordinates) - needed for spawn exclusion zone
-	CursorX atomic.Int32
-	CursorY atomic.Int32
 
 	// Boost state (real-time feedback)
 	BoostEnabled atomic.Bool
@@ -37,14 +32,9 @@ type GameState struct {
 	// Ping grid (immediate visual aid)
 	PingActive    atomic.Bool
 	PingGridTimer atomic.Uint64 // float64 bits
-	PingRow       atomic.Int32
-	PingCol       atomic.Int32
 
 	// Drain entity tracking (real-time state for renderer snapshot)
-	DrainActive atomic.Bool   // Whether drain entity exists
-	DrainEntity atomic.Uint64 // Entity ID for quick lookup
-	DrainX      atomic.Int32  // Current X position
-	DrainY      atomic.Int32  // Current Y position
+	DrainActive atomic.Bool // Whether drain entity exists
 
 	// Sequence ID generation (atomic for thread-safety)
 	NextSeqID atomic.Int64
@@ -95,6 +85,10 @@ type GameState struct {
 	InitialSpawnComplete bool      // Whether initial gold spawn has been attempted
 
 	// ===== CONFIGURATION (read-only after init) =====
+	// NOTE: These should ideally be removed in favor of ConfigResource,
+	// but kept here strictly for GameState internal calculations if necessary.
+	// Systems should use Resources.
+
 	// Set once at initialization, never mutated
 
 	GameWidth   int
@@ -112,14 +106,12 @@ func NewGameState(gameWidth, gameHeight, screenWidth int, timeProvider TimeProvi
 		GameHeight:   gameHeight,
 		ScreenWidth:  screenWidth,
 		TimeProvider: timeProvider,
-		MaxEntities:  200, // constants.MAX_CHARACTERS
+		MaxEntities:  constants.MaxEntities,
 	}
 
 	// Initialize atomics to zero values
 	gs.Score.Store(0)
 	gs.Heat.Store(0)
-	gs.CursorX.Store(int32(gameWidth / 2))
-	gs.CursorY.Store(int32(gameHeight / 2))
 
 	// Initialize boost state
 	gs.BoostEnabled.Store(false)
@@ -137,14 +129,9 @@ func NewGameState(gameWidth, gameHeight, screenWidth int, timeProvider TimeProvi
 	// Initialize ping grid
 	gs.PingActive.Store(false)
 	gs.PingGridTimer.Store(0)
-	gs.PingRow.Store(0)
-	gs.PingCol.Store(0)
 
 	// Initialize drain entity tracking
 	gs.DrainActive.Store(false)
-	gs.DrainEntity.Store(0)
-	gs.DrainX.Store(0)
-	gs.DrainY.Store(0)
 
 	// Initialize sequence ID
 	gs.NextSeqID.Store(1)
@@ -226,40 +213,6 @@ func (gs *GameState) ReadHeatAndScore() (heat int64, score int64) {
 	heat = gs.Heat.Load()
 	score = gs.Score.Load()
 	return heat, score
-}
-
-// ===== CURSOR ACCESSORS (atomic) =====
-
-// GetCursorX returns the current cursor X position
-func (gs *GameState) GetCursorX() int {
-	return int(gs.CursorX.Load())
-}
-
-// SetCursorX sets the cursor X position
-func (gs *GameState) SetCursorX(x int) {
-	gs.CursorX.Store(int32(x))
-}
-
-// GetCursorY returns the current cursor Y position
-func (gs *GameState) GetCursorY() int {
-	return int(gs.CursorY.Load())
-}
-
-// SetCursorY sets the cursor Y position
-func (gs *GameState) SetCursorY(y int) {
-	gs.CursorY.Store(int32(y))
-}
-
-// ReadCursorPosition returns a consistent snapshot of cursor position
-func (gs *GameState) ReadCursorPosition() CursorSnapshot {
-	// Cursor fields are atomic, so we can read them without mutex
-	x := int(gs.CursorX.Load())
-	y := int(gs.CursorY.Load())
-
-	return CursorSnapshot{
-		X: x,
-		Y: y,
-	}
 }
 
 // ===== SEQUENCE ID ACCESSORS (atomic) =====
@@ -908,67 +861,6 @@ type BoostSnapshot struct {
 type CursorSnapshot struct {
 	X int
 	Y int
-}
-
-// ===== DRAIN ENTITY ACCESSORS (atomic) =====
-
-// GetDrainActive returns whether the drain entity is active
-func (gs *GameState) GetDrainActive() bool {
-	return gs.DrainActive.Load()
-}
-
-// SetDrainActive sets whether the drain entity is active
-func (gs *GameState) SetDrainActive(active bool) {
-	gs.DrainActive.Store(active)
-}
-
-// GetDrainEntity returns the drain entity ID
-func (gs *GameState) GetDrainEntity() uint64 {
-	return gs.DrainEntity.Load()
-}
-
-// SetDrainEntity sets the drain entity ID
-func (gs *GameState) SetDrainEntity(entityID uint64) {
-	gs.DrainEntity.Store(entityID)
-}
-
-// GetDrainX returns the drain entity's X position
-func (gs *GameState) GetDrainX() int {
-	return int(gs.DrainX.Load())
-}
-
-// SetDrainX sets the drain entity's X position
-func (gs *GameState) SetDrainX(x int) {
-	gs.DrainX.Store(int32(x))
-}
-
-// GetDrainY returns the drain entity's Y position
-func (gs *GameState) GetDrainY() int {
-	return int(gs.DrainY.Load())
-}
-
-// SetDrainY sets the drain entity's Y position
-func (gs *GameState) SetDrainY(y int) {
-	gs.DrainY.Store(int32(y))
-}
-
-// DrainSnapshot provides a consistent view of drain entity state
-type DrainSnapshot struct {
-	Active   bool
-	EntityID uint64
-	X        int
-	Y        int
-}
-
-// ReadDrainState returns a consistent snapshot of the drain entity state
-func (gs *GameState) ReadDrainState() DrainSnapshot {
-	// All drain fields are atomic, so we can read them without mutex
-	return DrainSnapshot{
-		Active:   gs.DrainActive.Load(),
-		EntityID: gs.DrainEntity.Load(),
-		X:        int(gs.DrainX.Load()),
-		Y:        int(gs.DrainY.Load()),
-	}
 }
 
 // ===== GAME LIFECYCLE ACCESSORS (mutex protected) =====

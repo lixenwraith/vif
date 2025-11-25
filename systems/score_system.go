@@ -441,7 +441,7 @@ func (s *ScoreSystem) handleGoldSequenceTyping(world *engine.World, entity engin
 	}
 
 	// Check if this was the last character of the gold sequence
-	isLastChar := (seq.Index == constants.GoldSequenceLength-1)
+	isLastChar := seq.Index == constants.GoldSequenceLength-1
 
 	if isLastChar {
 		// Gold sequence completed! Check if we should trigger cleaners

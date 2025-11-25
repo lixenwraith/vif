@@ -2,7 +2,12 @@ package constants
 
 import "time"
 
-// Game Loop Timing Constants
+// Game Entity
+const (
+	MaxEntities = 200
+)
+
+// Game Loop Timing
 const (
 	// FrameUpdateInterval is the rendering frame rate interval (~60 FPS)
 	FrameUpdateInterval = 16 * time.Millisecond
@@ -14,7 +19,7 @@ const (
 	InitialSpawnDelay = 2 * time.Second
 )
 
-// Event Queue Constants
+// Event Queue
 const (
 	// EventQueueSize is the fixed capacity of the event ring buffer
 	EventQueueSize = 256
@@ -23,15 +28,16 @@ const (
 	EventBufferMask = 255
 )
 
-// Game Mechanics Constants
+// Game Mechanics
 const (
 	// MaxHeat is the maximum value for the heat meter (100%)
 	MaxHeat = 100
 
+	// NuggetHeatIncrease is the amount of heat increased by consuming a nugget
 	NuggetHeatIncrease = 10
 )
 
-// Cleaner System Constants
+// Cleaner System
 const (
 	// CleanerDeduplicationWindow is the number of frames to keep in the spawned map
 	// for preventing duplicate cleaner spawns from the same event

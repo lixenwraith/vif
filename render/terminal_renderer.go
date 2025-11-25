@@ -77,22 +77,21 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 	// Read cursor position from ECS for rendering
 	cursorPos, ok := ctx.World.Positions.Get(ctx.CursorEntity)
 	if !ok {
-		return // Cursor entity missing - should never happen
+		// return
+		panic(fmt.Errorf("cursor destroyed"))
 	}
-	cursorX := cursorPos.X
-	cursorY := cursorPos.Y
 
 	// Draw line numbers
-	r.drawLineNumbers(cursorY, ctx, defaultStyle)
+	r.drawLineNumbers(cursorPos.Y, ctx, defaultStyle)
 
 	// Get ping color for later use
-	pingColor := r.getPingColor(ctx.World, cursorX, cursorY, ctx)
+	pingColor := r.getPingColor(ctx.World, cursorPos.X, cursorPos.Y, ctx)
 
 	// Draw ping highlights (cursor row/column) and grid - BEFORE characters
-	r.drawPingHighlights(cursorX, cursorY, ctx, pingColor, defaultStyle)
+	r.drawPingHighlights(cursorPos.X, cursorPos.Y, ctx, pingColor, defaultStyle)
 
 	// Draw characters - will render over grid
-	r.drawCharacters(ctx.World, cursorX, cursorY, pingColor, defaultStyle, ctx)
+	r.drawCharacters(ctx.World, cursorPos.X, cursorPos.Y, pingColor, defaultStyle, ctx)
 
 	// Draw falling decay animation if active - AFTER ping highlights
 	if decayAnimating {
@@ -106,17 +105,17 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 	r.drawRemovalFlashes(ctx.World, ctx, defaultStyle)
 
 	// Draw drain entity - AFTER removal flashes, BEFORE cursor
-	r.drawDrain(ctx, defaultStyle)
+	r.drawDrain(ctx.World, defaultStyle)
 
 	// Draw column indicators
-	r.drawColumnIndicators(cursorX, ctx, defaultStyle)
+	r.drawColumnIndicators(cursorPos.X, ctx, defaultStyle)
 
 	// Draw status bar
 	r.drawStatusBar(ctx, defaultStyle, decayTimeRemaining)
 
 	// Draw cursor (if not in search or command mode)
 	if !ctx.IsSearchMode() && !ctx.IsCommandMode() {
-		r.drawCursor(cursorX, cursorY, ctx, defaultStyle)
+		r.drawCursor(cursorPos.X, cursorPos.Y, ctx, defaultStyle)
 	}
 
 	r.screen.Show()
@@ -428,47 +427,53 @@ func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.
 }
 
 // drawDrain draws the drain entity with transparent background
-func (r *TerminalRenderer) drawDrain(ctx *engine.GameContext, defaultStyle tcell.Style) {
-	// Check if drain is active
-	if !ctx.State.GetDrainActive() {
+func (r *TerminalRenderer) drawDrain(world *engine.World, defaultStyle tcell.Style) {
+	// Get all drains
+	drains := world.Drains.All()
+	if len(drains) == 0 {
 		return
 	}
 
-	// Get drain position from GameState atomics
-	drainX := ctx.State.GetDrainX()
-	drainY := ctx.State.GetDrainY()
+	// Iterate on all drains
+	for _, entity := range drains {
+		drain, ok := world.Drains.Get(entity)
+		if !ok {
+			continue
+		}
 
-	// Calculate screen position
-	screenX := r.gameX + drainX
-	screenY := r.gameY + drainY
+		// Calculate screen position
+		screenX := r.gameX + drain.X
+		screenY := r.gameY + drain.Y
 
-	// Bounds check
-	if screenX < r.gameX || screenX >= r.width || screenY < r.gameY || screenY >= r.gameY+r.gameHeight {
-		return
+		// Bounds check
+		if screenX < r.gameX || screenX >= r.width || screenY < r.gameY || screenY >= r.gameY+r.gameHeight {
+			return
+		}
+
+		// Get the current background at this position to inherit it
+		// We read the cell content to preserve the background
+		mainc, _, style, _ := r.screen.GetContent(screenX, screenY)
+		_, bg, _ := style.Decompose()
+
+		// Use drain character with light cyan foreground, inheriting background
+		drainStyle := defaultStyle.Foreground(RgbDrain).Background(bg)
+
+		// If there's no existing background (e.g., just been cleared), use default background
+		if bg == tcell.ColorDefault {
+			_, defaultBg, _ := defaultStyle.Decompose()
+			drainStyle = defaultStyle.Foreground(RgbDrain).Background(defaultBg)
+		}
+
+		// TODO: delete unless drain overlapping other characters (cleaners?) needs it
+		// Preserve the underlying character if it exists, otherwise use the drain character
+		drainChar := constants.DrainChar
+		if mainc != 0 && mainc != ' ' {
+			// There's an underlying character, overlay drain on top
+			drainChar = constants.DrainChar // Still use drain character to clearly show drain position
+		}
+
+		r.screen.SetContent(screenX, screenY, drainChar, nil, drainStyle)
 	}
-
-	// Get the current background at this position to inherit it
-	// We read the cell content to preserve the background
-	mainc, _, style, _ := r.screen.GetContent(screenX, screenY)
-	_, bg, _ := style.Decompose()
-
-	// Use drain character with light cyan foreground, inheriting background
-	drainStyle := defaultStyle.Foreground(RgbDrain).Background(bg)
-
-	// If there's no existing background (e.g., just been cleared), use default background
-	if bg == tcell.ColorDefault {
-		_, defaultBg, _ := defaultStyle.Decompose()
-		drainStyle = defaultStyle.Foreground(RgbDrain).Background(defaultBg)
-	}
-
-	// Preserve the underlying character if it exists, otherwise use the drain character
-	drainChar := constants.DrainChar
-	if mainc != 0 && mainc != ' ' {
-		// There's an underlying character, overlay drain on top
-		drainChar = constants.DrainChar // Still use drain character to clearly show drain position
-	}
-
-	r.screen.SetContent(screenX, screenY, drainChar, nil, drainStyle)
 }
 
 // drawRemovalFlashes draws the brief flash effects when red characters are removed
@@ -795,20 +800,22 @@ func (r *TerminalRenderer) drawCursor(cursorX, cursorY int, ctx *engine.GameCont
 
 	// 2. Scan for Overlapping Entities
 	// Because the PositionStore limits 1 entity per cell, the Cursor Entity "masks"
-	// other entities at this location. We must explicitly query/iterate to find them.
+	// other entities at this location. We must explicitly query/iterate to find them
 
-	// Check for Drain (Highest Priority Entity)
-	// Drain destroys other items, so if it exists here, it takes precedence.
+	// Drain destroys other items, so if it exists here, it takes precedence
 	isDrain := false
-	if ctx.State.GetDrainActive() {
-		if ctx.State.GetDrainX() == cursorX && ctx.State.GetDrainY() == cursorY {
+	drainEntities := ctx.World.Drains.All()
+	for _, e := range drainEntities {
+		drain, ok := ctx.World.Drains.Get(e)
+		if ok && drain.X == cursorX && drain.Y == cursorY {
 			isDrain = true
+			break
 		}
 	}
 
 	// Check for Characters (Spawned, Gold, Nugget)
 	// We use the Query pattern to find any entity at this specific coordinate
-	// that is NOT the cursor itself.
+	// that is NOT the cursor itself
 	var charStyle tcell.Style
 	hasChar := false
 	isNugget := false

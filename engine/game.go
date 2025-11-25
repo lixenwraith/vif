@@ -49,6 +49,7 @@ type GameContext struct {
 	GameWidth, GameHeight int
 	LineNumWidth          int
 
+	// TODO: Any reason for this to still exist?
 	// Cursor entity (singleton)
 	CursorEntity Entity
 
@@ -76,6 +77,7 @@ type GameContext struct {
 	LastFindForward bool // true for f/t (forward), false for F/T (backward)
 	LastFindType    rune // Type of last find: 'f', 'F', 't', or 'T'
 
+	// TODO: Remove?
 	// Atomic ping coordinates feature (local to input handling)
 	pingActive    atomic.Bool
 	pingGridTimer atomic.Uint64 // float64 bits for seconds

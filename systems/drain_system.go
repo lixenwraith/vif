@@ -1,6 +1,7 @@
 package systems
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/components"
@@ -37,8 +38,8 @@ func (s *DrainSystem) Priority() int {
 // Movement is purely clock-based (DrainMoveIntervalMs), independent of input events or frame rate
 func (s *DrainSystem) Update(world *engine.World, dt time.Duration) {
 	score := s.ctx.State.GetScore()
-	drainActive := s.ctx.State.GetDrainActive()
 
+	drainActive := world.Drains.Count() > 0
 	// Lifecycle logic: spawn when score > 0, despawn when score <= 0
 	if score > 0 && !drainActive {
 		s.spawnDrain(world)
@@ -60,16 +61,11 @@ func (s *DrainSystem) spawnDrain(world *engine.World) {
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 
-	// Check if drain is already active (double-check for safety)
-	if s.ctx.State.GetDrainActive() {
-		return
-	}
-
 	// Read cursor position directly from ECS (Source of Truth)
 	// instead of stale GameState atomics
 	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
 	if !ok {
-		return // Should never happen if CursorEntity is initialized correctly
+		panic(fmt.Errorf("cursor destroyed"))
 	}
 
 	spawnX := cursorPos.X
@@ -118,141 +114,101 @@ func (s *DrainSystem) spawnDrain(world *engine.World) {
 	// Add components (position first for spatial index)
 	world.Positions.Add(entity, pos)
 	world.Drains.Add(entity, drain)
-
-	// Update GameState atomics
-	s.ctx.State.SetDrainActive(true)
-	s.ctx.State.SetDrainEntity(uint64(entity))
-	s.ctx.State.SetDrainX(spawnX)
-	s.ctx.State.SetDrainY(spawnY)
 }
 
 // despawnDrain removes the drain entity using generic stores
 func (s *DrainSystem) despawnDrain(world *engine.World) {
-
-	// Get drain entity ID from GameState
-	entityID := s.ctx.State.GetDrainEntity()
-	if entityID == 0 {
-		// No drain entity to despawn
-		s.ctx.State.SetDrainActive(false)
-		return
+	drains := world.Drains.All()
+	for _, e := range drains {
+		world.DestroyEntity(e)
 	}
-
-	entity := engine.Entity(entityID)
-
-	// Verify entity exists and has DrainComponent
-	if !world.Drains.Has(entity) {
-		// Entity doesn't have drain component, clear state and return
-		s.ctx.State.SetDrainActive(false)
-		s.ctx.State.SetDrainEntity(0)
-		return
-	}
-
-	// Destroy the drain entity
-	world.DestroyEntity(entity)
-
-	// Clear GameState atomics
-	s.ctx.State.SetDrainActive(false)
-	s.ctx.State.SetDrainEntity(0)
-	s.ctx.State.SetDrainX(0)
-	s.ctx.State.SetDrainY(0)
 }
 
 // updateDrainMovement handles purely clock-based drain movement toward cursor using generic stores
-// Movement occurs ONLY on DrainMoveIntervalMs intervals, independent of input events
 func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 	// Fetch resources
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 
-	// Get drain entity ID
-	entityID := s.ctx.State.GetDrainEntity()
-	if entityID == 0 {
-		return
+	// Get and iterate on all drains
+	entities := world.Drains.All()
+	for _, entity := range entities {
+		drain, ok := world.Drains.Get(entity)
+		if !ok {
+			continue
+		}
+
+		// Purely clock-based movement: only move when interval has elapsed
+		now := timeRes.GameTime
+		timeSinceLastMove := now.Sub(drain.LastMoveTime)
+		if timeSinceLastMove < constants.DrainMoveInterval {
+			// Not enough time has passed, skip movement this frame
+			return
+		}
+
+		// Read cursor position directly from ECS
+		cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
+		if !ok {
+			panic(fmt.Errorf("cursor destroyed"))
+		}
+
+		// Calculate movement direction using Manhattan distance (8-directional)
+		// If already on cursor, dx and dy will be 0 (no movement but LastMoveTime still updates)
+		dx := sign(cursorPos.X - drain.X)
+		dy := sign(cursorPos.Y - drain.Y)
+
+		// Calculate new position
+		newX := drain.X + dx
+		newY := drain.Y + dy
+
+		// Boundary checks
+		if newX < 0 {
+			newX = 0
+		}
+		if newX >= config.GameWidth {
+			newX = config.GameWidth - 1
+		}
+		if newY < 0 {
+			newY = 0
+		}
+		if newY >= config.GameHeight {
+			newY = config.GameHeight - 1
+		}
+
+		// Get current position from PositionComponent
+		pos, ok := world.Positions.Get(entity)
+		if !ok {
+			// return // No position component, can't move
+			panic(fmt.Errorf("drain destroyed"))
+		}
+
+		// Check for collision at new position
+		collidingEntity := world.Positions.GetEntityAt(newX, newY)
+
+		// FIX: Allow moving onto the Cursor Entity
+		// We check if the colliding entity exists, is not self, AND is not the cursor.
+		if collidingEntity != 0 && collidingEntity != entity && collidingEntity != s.ctx.CursorEntity {
+			s.handleCollisionAtPosition(world, newX, newY, collidingEntity)
+			// Don't update position if there was a blocking collision
+			return
+		}
+
+		// Movement succeeded - update components
+		drain.X = newX
+		drain.Y = newY
+		drain.LastMoveTime = now
+
+		// Recalculate IsOnCursor after position change using fresh cursor data
+		drain.IsOnCursor = drain.X == cursorPos.X && drain.Y == cursorPos.Y
+
+		// Update position (this handles spatial index)
+		pos.X = newX
+		pos.Y = newY
+		world.Positions.Add(entity, pos)
+
+		// Save updated drain component
+		world.Drains.Add(entity, drain)
 	}
-
-	entity := engine.Entity(entityID)
-
-	// Get drain component
-	drain, ok := world.Drains.Get(entity)
-	if !ok {
-		return
-	}
-
-	// Purely clock-based movement: only move when interval has elapsed
-	now := timeRes.GameTime
-	timeSinceLastMove := now.Sub(drain.LastMoveTime)
-	if timeSinceLastMove < constants.DrainMoveInterval {
-		// Not enough time has passed, skip movement this frame
-		return
-	}
-
-	// Read cursor position directly from ECS
-	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
-	if !ok {
-		return
-	}
-	cursorX := cursorPos.X
-	cursorY := cursorPos.Y
-
-	// Calculate movement direction using Manhattan distance (8-directional)
-	// If already on cursor, dx and dy will be 0 (no movement but LastMoveTime still updates)
-	dx := sign(cursorX - drain.X)
-	dy := sign(cursorY - drain.Y)
-
-	// Calculate new position
-	newX := drain.X + dx
-	newY := drain.Y + dy
-
-	// Boundary checks
-	if newX < 0 {
-		newX = 0
-	}
-	if newX >= config.GameWidth {
-		newX = config.GameWidth - 1
-	}
-	if newY < 0 {
-		newY = 0
-	}
-	if newY >= config.GameHeight {
-		newY = config.GameHeight - 1
-	}
-
-	// Get current position from PositionComponent
-	pos, ok := world.Positions.Get(entity)
-	if !ok {
-		return // No position component, can't move
-	}
-
-	// Check for collision at new position
-	collidingEntity := world.Positions.GetEntityAt(newX, newY)
-
-	// FIX: Allow moving onto the Cursor Entity
-	// We check if the colliding entity exists, is not self, AND is not the cursor.
-	if collidingEntity != 0 && collidingEntity != entity && collidingEntity != s.ctx.CursorEntity {
-		s.handleCollisionAtPosition(world, newX, newY, collidingEntity)
-		// Don't update position if there was a blocking collision
-		return
-	}
-
-	// Movement succeeded - update components
-	drain.X = newX
-	drain.Y = newY
-	drain.LastMoveTime = now
-
-	// Recalculate IsOnCursor after position change using fresh cursor data
-	drain.IsOnCursor = drain.X == cursorX && drain.Y == cursorY
-
-	// Update position (this handles spatial index)
-	pos.X = newX
-	pos.Y = newY
-	world.Positions.Add(entity, pos)
-
-	// Save updated drain component
-	world.Drains.Add(entity, drain)
-
-	// Update GameState atomics for renderer
-	s.ctx.State.SetDrainX(newX)
-	s.ctx.State.SetDrainY(newY)
 }
 
 // updateScoreDrain handles score draining when drain is on cursor using generic stores
@@ -260,47 +216,41 @@ func (s *DrainSystem) updateScoreDrain(world *engine.World) {
 	// Fetch resources
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 
-	// Get drain entity ID
-	entityID := s.ctx.State.GetDrainEntity()
-	if entityID == 0 {
-		return
-	}
+	// Get and iterate on all drains
+	entities := world.Drains.All()
+	for _, entity := range entities {
+		drain, ok := world.Drains.Get(entity)
+		if !ok {
+			continue
+		}
 
-	entity := engine.Entity(entityID)
+		// Read cursor position directly from ECS
+		cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
+		if !ok {
+			// return
+			panic(fmt.Errorf("cursor destroyed"))
+		}
 
-	// Get drain component
-	drain, ok := world.Drains.Get(entity)
-	if !ok {
-		return
-	}
+		// Recalculate IsOnCursor every frame by comparing drain position with current cursor position
+		isOnCursor := drain.X == cursorPos.X && drain.Y == cursorPos.Y
 
-	// FIX: Read cursor position directly from ECS
-	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
-	if !ok {
-		return
-	}
-	cursorX := cursorPos.X
-	cursorY := cursorPos.Y
-
-	// Recalculate IsOnCursor every frame by comparing drain position with current cursor position
-	isOnCursor := (drain.X == cursorX && drain.Y == cursorY)
-
-	// Always update IsOnCursor to ensure it stays in sync (recalculated every frame)
-	if drain.IsOnCursor != isOnCursor {
-		drain.IsOnCursor = isOnCursor
-		world.Drains.Add(entity, drain)
-	}
-
-	// Drain score if on cursor and DrainScoreDrainInterval has passed
-	if isOnCursor {
-		now := timeRes.GameTime
-		if now.Sub(drain.LastDrainTime) >= constants.DrainScoreDrainInterval {
-			// Drain score by the configured amount
-			s.ctx.State.AddScore(-constants.DrainScoreDrainAmount)
-
-			// Update last drain time
-			drain.LastDrainTime = now
+		// Always update IsOnCursor to ensure it stays in sync (recalculated every frame)
+		if drain.IsOnCursor != isOnCursor {
+			drain.IsOnCursor = isOnCursor
 			world.Drains.Add(entity, drain)
+		}
+
+		// Drain score if on cursor and DrainScoreDrainInterval has passed
+		if isOnCursor {
+			now := timeRes.GameTime
+			if now.Sub(drain.LastDrainTime) >= constants.DrainScoreDrainInterval {
+				// Drain score by the configured amount
+				s.ctx.State.AddScore(-constants.DrainScoreDrainAmount)
+
+				// Update last drain time
+				drain.LastDrainTime = now
+				world.Drains.Add(entity, drain)
+			}
 		}
 	}
 }
@@ -317,25 +267,23 @@ func sign(x int) int {
 
 // handleCollisions detects and processes collisions with entities at the drain's current position using generic stores
 func (s *DrainSystem) handleCollisions(world *engine.World) {
+	// Get and iterate on all drains
+	entities := world.Drains.All()
+	for _, entity := range entities {
+		drain, ok := world.Drains.Get(entity)
+		if !ok {
+			continue
+		}
 
-	// Get drain position from GameState
-	drainX := s.ctx.State.GetDrainX()
-	drainY := s.ctx.State.GetDrainY()
+		// Check for entity at drain position
+		target := world.Positions.GetEntityAt(drain.X, drain.Y)
+		if target == 0 || target == entity {
+			continue
+		}
 
-	// Get entity at drain position
-	entity := world.Positions.GetEntityAt(drainX, drainY)
-	if entity == 0 {
-		return // No entity at this position
+		// Delegate to position-based collision handler
+		s.handleCollisionAtPosition(world, drain.X, drain.Y, target)
 	}
-
-	// Check if entity is the drain itself
-	drainEntityID := s.ctx.State.GetDrainEntity()
-	if uint64(entity) == drainEntityID {
-		return // Don't collide with self
-	}
-
-	// Delegate to position-based collision handler
-	s.handleCollisionAtPosition(world, drainX, drainY, entity)
 }
 
 // handleCollisionAtPosition processes collision with a specific entity at a given position using generic stores

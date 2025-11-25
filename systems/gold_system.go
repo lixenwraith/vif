@@ -54,6 +54,7 @@ func (s *GoldSystem) Update(world *engine.World, dt time.Duration) {
 		// If spawn fails, system will remain in PhaseNormal and can retry on next update
 		if s.spawnGold(world) {
 			// Mark initial spawn as complete (whether it succeeded or not)
+			// TODO: Gold need not be part of bootstrap; it is an entity that spawns early
 			s.ctx.State.SetInitialSpawnComplete()
 		}
 	}
@@ -302,24 +303,26 @@ func (s *GoldSystem) CompleteGold(world *engine.World) bool {
 func (s *GoldSystem) findValidPosition(world *engine.World, seqLength int) (int, int) {
 	// Fetch config resource for dimensions
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
-	gameWidth := config.GameWidth
-	gameHeight := config.GameHeight
 
-	// Read cursor position from GameState (atomic reads)
-	cursor := s.ctx.State.ReadCursorPosition()
+	// Read cursor directly from ECS
+	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
+	if !ok {
+		panic(fmt.Errorf("cursor destroyed"))
+	}
 
 	maxAttempts := 100
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		x := rand.Intn(gameWidth)
-		y := rand.Intn(gameHeight)
+		x := rand.Intn(config.GameWidth)
+		y := rand.Intn(config.GameHeight)
 
 		// Check if far enough from cursor (same exclusion zone as spawn system)
-		if math.Abs(float64(x-cursor.X)) <= 5 || math.Abs(float64(y-cursor.Y)) <= 3 {
+		// TODO: Exclusion zone rule is arbitrary, to be set in constants
+		if math.Abs(float64(x-cursorPos.X)) <= 5 || math.Abs(float64(y-cursorPos.Y)) <= 3 {
 			continue
 		}
 
 		// Check if sequence fits within game width
-		if x+seqLength > gameWidth {
+		if x+seqLength > config.GameWidth {
 			continue
 		}
 

@@ -1,6 +1,7 @@
 package systems
 
 import (
+	"fmt"
 	"math"
 	"math/rand"
 	"strconv"
@@ -114,15 +115,16 @@ func (s *NuggetSystem) spawnNugget(world *engine.World, now time.Time) {
 // Caller must hold s.mu lock
 func (s *NuggetSystem) findValidPosition(world *engine.World) (int, int) {
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
-	gameWidth := config.GameWidth
-	gameHeight := config.GameHeight
-	cursor := s.ctx.State.ReadCursorPosition()
+	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
+	if !ok {
+		panic(fmt.Errorf("cursor destroyed"))
+	}
 
 	for attempt := 0; attempt < nuggetMaxAttempts; attempt++ {
-		x := rand.Intn(gameWidth)
-		y := rand.Intn(gameHeight)
+		x := rand.Intn(config.GameWidth)
+		y := rand.Intn(config.GameHeight)
 
-		if math.Abs(float64(x-cursor.X)) <= 5 || math.Abs(float64(y-cursor.Y)) <= 3 {
+		if math.Abs(float64(x-cursorPos.X)) <= 5 || math.Abs(float64(y-cursorPos.Y)) <= 3 {
 			continue
 		}
 
