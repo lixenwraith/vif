@@ -57,11 +57,13 @@ type World struct {
     Characters     *Store[CharacterComponent]
     Sequences      *Store[SequenceComponent]
     GoldSequences  *Store[GoldSequenceComponent]
-    Cleaners       *Store[CleanerComponent]
     FallingDecays  *Store[FallingDecayComponent]
-    RemovalFlashes *Store[RemovalFlashComponent]
+    Cleaners       *Store[CleanerComponent]
+    Flashes        *Store[FlashComponent]
     Nuggets        *Store[NuggetComponent]
     Drains         *Store[DrainComponent]
+    Cursors        *Store[CursorComponent]
+    Protections    *Store[ProtectionComponent]
 
     // Lifecycle management
     allStores []AnyStore  // For bulk operations like DestroyEntity
@@ -653,12 +655,12 @@ for {
 - State ownership model eliminates conflicting writes
 - Adaptive sleep during pause avoids busy-wait
 
-**Testability**:
-- Clock tick is deterministic with `MockTimeProvider`
-- Pause/resume can be tested independently
-- Phase transitions can be unit tested independently
-- Integration tests can advance time precisely
-- Frame/game sync can be verified with channels
+**Design Principles**:
+- Clock tick is deterministic and reproducible
+- Pause/resume logic is isolated and verifiable
+- Phase transitions are atomic and well-defined
+- Time advancement is precise via pausable clock
+- Frame/game sync coordinated via channels
 
 **Performance**:
 - Frame updates remain responsive (60 FPS independent of game logic)
@@ -734,12 +736,14 @@ Component (marker interface)
 ├── GoldSequenceComponent {Active, SequenceID, StartTimeNano, CharSequence, CurrentIndex}
 ├── FallingDecayComponent {Column, YPosition, Speed, Char, LastChangeRow, LastIntX, LastIntY, PrevPreciseX, PrevPreciseY}
 ├── CleanerComponent {PreciseX, PreciseY, VelocityX, VelocityY, TargetX, TargetY, GridX, GridY, Trail, Char}
-├── RemovalFlashComponent {X, Y, Char, StartTime, Duration}
+├── FlashComponent {X, Y, Char, StartTime, Duration}
 ├── NuggetComponent {ID, SpawnTime}
-└── DrainComponent {X, Y, LastMoveTime, LastDrainTime, IsOnCursor}
+├── DrainComponent {X, Y, LastMoveTime, LastDrainTime, IsOnCursor}
+├── CursorComponent {ErrorFlashEnd, HeatDisplay}
+└── ProtectionComponent {Mask, ExpiresAt}
 ```
 
-**Note**: GoldSequenceComponent is the full type name used in code (defined in `components/character.go`).
+**Note**: All component types are defined in the `components/` directory.
 
 ### Sequence Types
 - **Green**: Positive scoring, spawned by SpawnSystem, decays Blue→Green→Red
@@ -1464,7 +1468,7 @@ for _, entity := range entities {
 - **Visual Effects**:
   - Pre-calculated gradient in renderer (built once at initialization)
   - Trail rendered with opacity falloff: 100% at head → 0% at tail
-  - Removal flash spawns as separate `RemovalFlashComponent` entity
+  - Removal flash spawns as separate `FlashComponent` entity
   - Flash cleanup: Automatic removal after `CleanerRemovalFlashDuration`
 - **Thread Safety**:
   - Event-driven activation via lock-free EventQueue
