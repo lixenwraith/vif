@@ -9,6 +9,14 @@
 - Systems contain ALL logic, operate on component sets
 - World is the single source of truth for all game state
 
+### Resource System (Phase 2 Architecture)
+**Global Data Pattern:**
+- **Resources** store shared, global data (Time, Configuration, Input State)
+- **ResourceStore** (`World.Resources`) provides thread-safe, generic access
+- **Systems fetch dependencies** at start of `Update()` via `engine.MustGetResource[T](world.Resources)`
+- **Decouples systems** from "God Object" GameContext for basic data needs
+- **Separation of Concerns**: GameContext handles orchestration, Resources handle data
+
 ### Generic ECS Architecture
 
 Vi-fighter uses a **compile-time generics-based ECS** (Go 1.18+) that eliminates reflection from the hot path, providing type safety and improved performance.
@@ -41,6 +49,9 @@ Vi-fighter uses a **compile-time generics-based ECS** (Go 1.18+) that eliminates
 **World Structure:**
 ```go
 type World struct {
+    // Global resource store (Phase 2: Resource System)
+    Resources      *ResourceStore  // Thread-safe global data (Time, Config, Input)
+
     // Explicit typed stores (public for system access)
     Positions      *PositionStore
     Characters     *Store[CharacterComponent]
@@ -56,6 +67,107 @@ type World struct {
     allStores []AnyStore  // For bulk operations like DestroyEntity
 }
 ```
+
+### Resource System (Phase 2: Global Data Decoupling)
+
+The Resource System provides a generic, thread-safe mechanism for systems to access global shared data without coupling to `GameContext`. Resources are stored in `World.Resources` and accessed via type-safe generics.
+
+**Architecture Goals:**
+- **Decouple Systems from GameContext**: Systems no longer depend on "God Object" context fields
+- **Type-Safe Access**: Generic resource retrieval eliminates type assertions
+- **Thread-Safe by Default**: Internal RWMutex ensures safe concurrent access
+- **Centralized Updates**: Resources updated at frame/tick boundaries for consistency
+
+**Core Resources:**
+
+1. **`TimeResource`** - Time data for all systems:
+   - `GameTime` (time.Time): Current game time (pausable, stops in COMMAND mode)
+   - `RealTime` (time.Time): Wall clock time (always advances)
+   - `DeltaTime` (time.Duration): Time since last update
+   - `FrameNumber` (int64): Current frame count
+
+2. **`ConfigResource`** - Immutable configuration data:
+   - `GameWidth`, `GameHeight`: Game area dimensions
+   - `ScreenWidth`, `ScreenHeight`: Terminal screen dimensions
+   - `GameX`, `GameY`: Game area offset
+
+3. **`InputResource`** - Current input state:
+   - `GameMode` (int): Current mode (Normal, Insert, Search, Command)
+   - `CommandText` (string): Command buffer text
+   - `SearchText` (string): Search buffer text
+   - `IsPaused` (bool): Pause state
+
+**Resource Access Pattern:**
+```go
+// ✅ CORRECT: Fetch resources at start of Update()
+func (s *MySystem) Update(world *engine.World, dt time.Duration) {
+    // Fetch dependencies
+    config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+    timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+
+    // Use directly in logic
+    width := config.GameWidth
+    height := config.GameHeight
+    now := timeRes.GameTime
+
+    // ... system logic using resources ...
+}
+
+// ❌ INCORRECT: Accessing via GameContext (legacy pattern)
+func (s *MySystem) Update(world *engine.World, dt time.Duration) {
+    width := s.ctx.GameWidth   // DEPRECATED - use ConfigResource instead
+    now := s.ctx.TimeProvider.Now()  // DEPRECATED - use TimeResource instead
+}
+```
+
+**Resource Update Cycle:**
+Resources are updated at the start of each frame/tick by the main game loop and ClockScheduler:
+
+1. **Frame Start** (main.go): Update `TimeResource` with current frame time
+2. **Input Processing**: Update `InputResource` with current mode and command text
+3. **System Updates**: Systems read from Resources via `MustGetResource`
+4. **Tick Updates** (ClockScheduler): Update `TimeResource` for scheduled systems
+
+**Migration Status:**
+The Resource System is being gradually adopted across all systems (Phase 2.5):
+- ✅ **Migrated**: DecaySystem, CleanerSystem, DrainSystem, SpawnSystem, NuggetSystem, ScoreSystem, BoostSystem, GoldSystem
+- 🔄 **In Progress**: (All core systems migrated as of Phase 2.5)
+- **Legacy Fields**: `GameContext.GameWidth`, `GameContext.GameHeight`, `GameContext.TimeProvider` remain for backward compatibility but are deprecated
+
+**Thread Safety:**
+- **ResourceStore**: Protected by internal `sync.RWMutex`
+- **Concurrent Reads**: Multiple systems can read resources simultaneously
+- **Write Coordination**: Only main loop/scheduler updates resources (single writer pattern)
+
+**Data Flow:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Main Game Loop (cmd/vi-fighter/main.go)                    │
+│                                                             │
+│ 1. Frame Start                                              │
+│    └─> Update TimeResource (GameTime, RealTime, DeltaTime) │
+│    └─> Update InputResource (GameMode, IsPaused)           │
+│                                                             │
+│ 2. System Updates (via World.Update())                     │
+│    └─> SpawnSystem.Update()                                │
+│        ├─> config := MustGetResource[*ConfigResource]()    │
+│        ├─> timeRes := MustGetResource[*TimeResource]()     │
+│        └─> Use config.GameWidth, timeRes.GameTime          │
+│    └─> ScoreSystem.Update()                                │
+│        ├─> config := MustGetResource[*ConfigResource]()    │
+│        └─> Access ctx.State for Heat/Score                 │
+│    └─> [Other Systems...]                                  │
+│                                                             │
+│ 3. Clock Scheduler (50ms tick, separate goroutine)         │
+│    └─> Update TimeResource for scheduled systems           │
+│    └─> GoldSystem, DecaySystem, CleanerSystem updates      │
+│                                                             │
+│ 4. Render                                                   │
+│    └─> Read Resources via snapshots (frame-coherent)       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+Systems **read** from Resources, never write to them. All Resource updates happen in the main loop or ClockScheduler before system updates run, ensuring frame-coherent data access.
 
 ### Event-Driven Communication
 Systems communicate through `GameContext.EventQueue`, a lock-free ring buffer that decouples producers and consumers.
@@ -137,36 +249,52 @@ Mutexes protect infrequently-changed state that requires consistent multi-field 
 
 #### State Access Patterns
 
-**Systems access GameState through GameContext:**
-All systems hold a reference to `*engine.GameContext` and access state via `ctx.State`:
+**Phase 2: Resource-Based Access (Current Pattern):**
+Systems fetch global data (Time, Config, Input) from `World.Resources`, and game state from `GameContext.State`:
 
 ```go
-// Real-time (typing): Direct atomic access through GameContext
-ctx.State.AddHeat(1)                    // No lock, instant
-ctx.State.AddColorCount(Blue, Bright, 1) // Atomic increment
+func (s *MySystem) Update(world *engine.World, dt time.Duration) {
+    // ✅ PHASE 2: Fetch resources at start of Update()
+    config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+    timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 
-// Clock-tick (spawn): Snapshot pattern through GameContext
-snapshot := ctx.State.ReadSpawnState()  // RLock, consistent view
-if ctx.State.ShouldSpawn() {            // RLock, check timing
-    // ... spawn logic ...
-    ctx.State.UpdateSpawnTiming(now, next) // Lock, update state
+    // Access dimensions and time from resources
+    width := config.GameWidth
+    height := config.GameHeight
+    now := timeRes.GameTime
+
+    // Access game state through GameContext (real-time state)
+    s.ctx.State.AddHeat(1)                       // Atomic increment
+    snapshot := s.ctx.State.ReadSpawnState()     // Mutex-protected snapshot
+
+    // Access event queue through GameContext
+    s.ctx.PushEvent(engine.EventCleanerRequest, nil)
+
+    // Access audio engine through GameContext
+    s.ctx.AudioEngine.PlaySound(audio.SoundTypeError)
 }
-
-// Render: Safe concurrent reads through GameContext
-heat := ctx.State.GetHeat()             // Atomic load
-snapshot := ctx.State.ReadSpawnState()  // RLock, no blocking
-
-// Dimensions: Read directly from GameContext (no caching)
-width := ctx.GameWidth   // Always current
-height := ctx.GameHeight // Always current
 ```
 
-**GameContext Role:**
-- GameContext is **NOT** a delegation layer for State
-- It provides direct access to GameState via the `State` field
-- Systems read dimensions directly from `ctx.GameWidth` and `ctx.GameHeight`
-- No local dimension caching - always read current values
-- Input-specific methods (mode, motion commands) remain on GameContext
+**Legacy Pattern (Deprecated - Phase 1):**
+```go
+// ❌ DEPRECATED: Accessing dimensions/time via GameContext
+width := s.ctx.GameWidth              // Use ConfigResource instead
+height := s.ctx.GameHeight            // Use ConfigResource instead
+now := s.ctx.TimeProvider.Now()       // Use TimeResource instead
+```
+
+**GameContext Role (Post-Migration):**
+- **Primary Purpose**: OS/Window management, Event routing, State orchestration
+- **Retained Responsibilities**:
+  - `GameState` access via `ctx.State` (Heat, Score, Boost, Phase, etc.)
+  - `EventQueue` access via `ctx.PushEvent()` / `ctx.ConsumeEvents()`
+  - `AudioEngine` access via `ctx.AudioEngine.PlaySound()`
+  - Input handling methods (mode transitions, motion commands)
+  - `World` reference (ECS access)
+- **Deprecated Fields** (Use Resources instead):
+  - ~~`ctx.GameWidth`~~ → Use `ConfigResource.GameWidth`
+  - ~~`ctx.GameHeight`~~ → Use `ConfigResource.GameHeight`
+  - ~~`ctx.TimeProvider.Now()`~~ → Use `TimeResource.GameTime`
 - **Cursor Position Cache**: `CursorX`, `CursorY` fields cache ECS position for motion handlers
   - MUST be synced FROM ECS before use: `pos, _ := ctx.World.Positions.Get(ctx.CursorEntity); ctx.CursorX = pos.X`
   - MUST be synced TO ECS after modification: `ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY})`
