@@ -33,6 +33,8 @@ func (cs *CleanerSystem) Priority() int {
 
 // Update handles spawning, movement, collision, and cleanup synchronously
 func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
+	// Fetch dependencies from world resources
+	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 
 	// 1. Handle Event Queue - Consume cleaner request events
 	events := cs.ctx.ConsumeEvents()
@@ -73,7 +75,7 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 	}
 
 	dtSec := dt.Seconds()
-	gameWidth := cs.ctx.GameWidth
+	gameWidth := config.GameWidth
 
 	for _, entity := range entities {
 		c, ok := world.Cleaners.Get(entity)
@@ -174,6 +176,7 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 
 // spawnCleaners generates cleaner entities using generic stores
 func (cs *CleanerSystem) spawnCleaners(world *engine.World) {
+	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 	redRows := cs.scanRedCharacterRows(world)
 	if len(redRows) == 0 {
 		return
@@ -189,7 +192,7 @@ func (cs *CleanerSystem) spawnCleaners(world *engine.World) {
 		})
 	}
 
-	gameWidth := float64(cs.ctx.GameWidth)
+	gameWidth := float64(config.GameWidth)
 	duration := constants.CleanerAnimationDuration.Seconds()
 	// Calculate base speed to traverse width in duration
 	baseSpeed := gameWidth / duration
@@ -238,8 +241,9 @@ func (cs *CleanerSystem) spawnCleaners(world *engine.World) {
 
 // scanRedCharacterRows finds all rows containing Red sequences using query builder
 func (cs *CleanerSystem) scanRedCharacterRows(world *engine.World) []int {
+	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 	redRows := make(map[int]bool)
-	gameHeight := cs.ctx.GameHeight
+	gameHeight := config.GameHeight
 
 	// Query entities with both Sequences and Positions
 	entities := world.Query().
@@ -296,13 +300,14 @@ func (cs *CleanerSystem) checkAndDestroyAtPosition(world *engine.World, x, y int
 
 // spawnRemovalFlash creates a transient visual effect using generic stores
 func (cs *CleanerSystem) spawnRemovalFlash(world *engine.World, targetEntity engine.Entity) {
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	if charComp, ok := world.Characters.Get(targetEntity); ok {
 		if posComp, ok := world.Positions.Get(targetEntity); ok {
 			flash := components.RemovalFlashComponent{
 				X:         posComp.X,
 				Y:         posComp.Y,
 				Char:      charComp.Rune,
-				StartTime: cs.ctx.TimeProvider.Now(),
+				StartTime: timeRes.GameTime,
 				Duration:  constants.CleanerRemovalFlashDuration,
 			}
 
@@ -314,8 +319,9 @@ func (cs *CleanerSystem) spawnRemovalFlash(world *engine.World, targetEntity eng
 
 // cleanupExpiredFlashes destroys expired removal flash entities using generic stores
 func (cs *CleanerSystem) cleanupExpiredFlashes(world *engine.World) {
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	entities := world.RemovalFlashes.All()
-	now := cs.ctx.TimeProvider.Now()
+	now := timeRes.GameTime
 
 	for _, entity := range entities {
 		flash, ok := world.RemovalFlashes.Get(entity)
