@@ -67,6 +67,7 @@ var commandCapabilities = map[rune]CommandCapability{
 	'i': {AcceptsCount: false, MultiKeystroke: false, RequiresMotion: false},
 }
 
+// TODO: motion expand
 // GetCommandCapability returns the capability for a given command
 // Returns a zero-value CommandCapability if the command is not registered
 func GetCommandCapability(cmd rune) CommandCapability {

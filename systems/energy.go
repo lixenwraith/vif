@@ -33,7 +33,7 @@ type EnergySystem struct {
 func NewEnergySystem(ctx *engine.GameContext) *EnergySystem {
 	return &EnergySystem{
 		ctx:         ctx,
-		lastCorrect: ctx.TimeProvider.Now(),
+		lastCorrect: time.Time{},
 	}
 }
 
@@ -61,19 +61,18 @@ func (s *EnergySystem) SetNuggetSystem(nuggetSystem *NuggetSystem) {
 func (s *EnergySystem) Update(world *engine.World, dt time.Duration) {
 	// Fetch time resource
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-	now := timeRes.GameTime
 
 	// Clear error flash (red cursor) after timeout using Game Time
 	// This ensures the red flash "freezes" if the game is paused
 	cursor, ok := world.Cursors.Get(s.ctx.CursorEntity)
-	if ok && cursor.ErrorFlashEnd > 0 && now.UnixNano() >= cursor.ErrorFlashEnd {
+	if ok && cursor.ErrorFlashEnd > 0 && timeRes.GameTime.UnixNano() >= cursor.ErrorFlashEnd {
 		cursor.ErrorFlashEnd = 0
 		world.Cursors.Add(s.ctx.CursorEntity, cursor)
 	}
 
 	// Clear energy blink (background color flash) after timeout using Game Time
 	// This ensures the success flash "freezes" if the game is paused
-	if s.ctx.State.GetEnergyBlinkActive() && now.Sub(s.ctx.State.GetEnergyBlinkTime()) > constants.EnergyBlinkTimeout {
+	if s.ctx.State.GetEnergyBlinkActive() && timeRes.GameTime.Sub(s.ctx.State.GetEnergyBlinkTime()) > constants.EnergyBlinkTimeout {
 		s.ctx.State.SetEnergyBlinkActive(false)
 	}
 }

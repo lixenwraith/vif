@@ -4,21 +4,8 @@
 vi-fighter is a terminal-based typing game in Go using a compile-time Generics-based ECS (Go 1.18+). The architecture combines real-time lock-free updates (atomics) for input/rendering with a discrete clock-tick system for game logic.
 **Go Version:** 1.24+
 
-## CURRENT MISSION: Phase 2.5 - Core System Migration
-**Objective:** Complete the decoupling of core logic systems from `GameContext` by fully utilizing the Resource System.
-**Status:** Infrastructure is live. `Decay`, `Cleaner`, and `Drain` systems are migrated.
-**Immediate Targets (Priority Order):**
-1.  **`SpawnSystem`**: Heaviest user of dimensions (`placeLine` logic).
-2.  **`NuggetSystem`**: Standard migration.
-3.  **`EnergySystem`**: Uses Time heavily for audio timestamps.
-4.  **`BoostSystem`**: Simple timer migration.
-5.  **`GoldSystem`**: Standard migration.
-
 ### Implementation Pattern
-For each target system:
-1.  **Fetch:** Retrieve `*ConfigResource` and `*TimeResource` at the start of `Update()` using `engine.MustGetResource`.
-2.  **Replace:** Swap all `s.ctx.GameWidth/Height` with `config.GameWidth/Height` and `s.ctx.TimeProvider.Now()` with `timeRes.GameTime`.
-3.  **Verify:** Ensure `s.ctx` is *only* used for `State` (GameState), `AudioEngine`, or `Events`.
+
 
 ## ARCHITECTURE OVERVIEW
 
@@ -101,25 +88,7 @@ go test -race ./...
 ```
 
 ### 3. Test Helpers
-Use `NewTestGameContext` to initialize a valid ECS world.
-*Note:* When testing migrated systems, ensure you manually populate the `ResourceStore` in your test setup.
 
 ### 4. Common Pitfalls
-*   **The "Sin" Check:** Do NOT use `s.ctx.GameWidth` or `s.ctx.TimeProvider` in logic methods. Usage should be zero.
-*   **Helper Methods:** Ensure private helper methods (e.g., `placeLine`, `findValidPosition`) also use resources passed from `Update`, or fetch them locally. Do not fall back to `s.ctx`.
-*   **Resource Pointers:** Resources are stored as pointers (e.g., `*ConfigResource`). Always request the pointer type.
-*   **Component Pointers:** `Get()` returns a copy. You **MUST** call `Add()` to save changes back to the store.
 
 ## FILE STRUCTURE
-```
-vi-fighter/
-├── engine/
-│   ├── resources.go      # Resource definitions
-│   └── game.go           # Context initialization
-├── systems/
-│   ├── spawn_system.go   # TARGET: Priority 1
-│   ├── nugget_system.go  # TARGET: Priority 2
-│   ├── energy_system.go   # TARGET: Priority 3
-│   ├── boost_system.go   # TARGET: Priority 4
-│   └── gold_system.go    # TARGET: Priority 5
-```

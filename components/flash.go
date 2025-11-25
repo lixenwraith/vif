@@ -2,9 +2,8 @@ package components
 
 import "time"
 
-// RemovalFlashComponent represents a brief visual flash effect when a red character
-// is removed by a cleaner. The flash provides visual feedback for the removal action.
-type RemovalFlashComponent struct {
+// FlashComponent represents a brief visual flash effect when a character is removed by a cleaner
+type FlashComponent struct {
 	X         int       // X position of the flash
 	Y         int       // Y position of the flash
 	Char      rune      // Character that was removed

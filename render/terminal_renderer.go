@@ -479,10 +479,10 @@ func (r *TerminalRenderer) drawDrain(world *engine.World, defaultStyle tcell.Sty
 // drawRemovalFlashes draws the brief flash effects when red characters are removed
 func (r *TerminalRenderer) drawRemovalFlashes(world *engine.World, ctx *engine.GameContext, defaultStyle tcell.Style) {
 	// Use world for direct store access
-	entities := world.RemovalFlashes.All()
+	entities := world.Flashes.All()
 
 	for _, entity := range entities {
-		flash, ok := world.RemovalFlashes.Get(entity)
+		flash, ok := world.Flashes.Get(entity)
 		if !ok {
 			continue
 		}
@@ -786,7 +786,7 @@ func (r *TerminalRenderer) drawCursor(cursorX, cursorY int, ctx *engine.GameCont
 	}
 
 	// 1. Determine Default State (Empty Cell)
-	var charAtCursor rune = ' '
+	var charAtCursor = ' '
 	var cursorBgColor tcell.Color
 
 	// Default background based on mode

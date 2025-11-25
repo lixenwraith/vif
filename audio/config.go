@@ -59,30 +59,3 @@ func LoadAudioConfig() *AudioConfig {
 
 	return cfg
 }
-
-// SaveAudioConfig saves audio configuration to environment variables
-func SaveAudioConfig(cfg *AudioConfig) error {
-	// Set enabled flag
-	os.Setenv("VI_FIGHTER_AUDIO_ENABLED", strconv.FormatBool(cfg.Enabled))
-
-	// Set master volume (0.0-1.0 converted to 0-100)
-	volume := int(cfg.MasterVolume * 100)
-	os.Setenv("VI_FIGHTER_MASTER_VOLUME", strconv.Itoa(volume))
-
-	// Set effect volumes as JSON
-	volumes := map[string]float64{
-		"error":  cfg.EffectVolumes[SoundError],
-		"bell":   cfg.EffectVolumes[SoundBell],
-		"whoosh": cfg.EffectVolumes[SoundWhoosh],
-		"coin":   cfg.EffectVolumes[SoundCoin],
-	}
-
-	if data, err := json.Marshal(volumes); err == nil {
-		os.Setenv("VI_FIGHTER_SFX_VOLUMES", string(data))
-	}
-
-	// Set sample rate
-	os.Setenv("VI_FIGHTER_SAMPLE_RATE", strconv.Itoa(cfg.SampleRate))
-
-	return nil
-}

@@ -1,46 +1,3 @@
-// Package engine provides core game event infrastructure for vi-fighter.
-//
-// # Event System Architecture
-//
-// The event system enables decoupled, event-driven communication between game systems.
-// Systems communicate by pushing events to a shared EventQueue rather than calling
-// methods directly on other systems or mutating shared state flags.
-//
-// Key Benefits:
-// - Decoupling: Systems don't hold references to each other
-// - Thread-Safety: Lock-free ring buffer with atomic operations
-// - Testability: Events can be inspected and verified in tests
-// - Debuggability: All system interactions are observable via event log
-//
-// Event Flow Pattern:
-//  1. Producer system pushes event: ctx.PushEvent(EventType, payload)
-//  2. Event stored in lock-free ring buffer (capacity: 256 events)
-//  3. Consumer system polls events: events := ctx.ConsumeEvents()
-//  4. Consumer processes events in Update() method
-//
-// Thread-Safety Guarantees:
-// - Push operations are lock-free (CAS loop with retry)
-// - Consume operations are designed for single consumer (game loop)
-// - Peek operations are safe for concurrent read-only inspection
-// - Events include Frame ID to prevent processing stale events
-// - Ring buffer automatically overwrites oldest events when full
-//
-// Usage Example:
-//
-//	// Producer (EnergySystem triggers cleaners)
-//	if heatAtMax {
-//	    ctx.PushEvent(engine.EventCleanerRequest, nil)
-//	}
-//
-//	// Consumer (CleanerSystem spawns cleaners)
-//	func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
-//	    events := cs.ctx.ConsumeEvents()
-//	    for _, event := range events {
-//	        if event.Type == engine.EventCleanerRequest {
-//	            cs.spawnCleaners(world)
-//	        }
-//	    }
-//	}
 package engine
 
 import (
@@ -146,6 +103,12 @@ func (e EventType) String() string {
 		return "Unknown"
 	}
 }
+
+// Event Flow Pattern:
+//  1. Producer system pushes event: ctx.PushEvent(EventType, payload)
+//  2. Event stored in lock-free ring buffer (capacity: 256 events)
+//  3. Consumer system polls events: events := ctx.ConsumeEvents()
+//  4. Consumer processes events in Update() method
 
 // GameEvent represents a single game event with associated metadata.
 //

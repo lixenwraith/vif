@@ -27,9 +27,8 @@ type DecaySystem struct {
 // NewDecaySystem creates a new decay system
 func NewDecaySystem(ctx *engine.GameContext) *DecaySystem {
 	s := &DecaySystem{
-		currentRow: 0,
-		lastUpdate: time.Time{},
-		// lastUpdate:         ctx.TimeProvider.Now(), // Removed for decoupling from ctx, to be tested with pause
+		currentRow:         0,
+		lastUpdate:         time.Time{},
 		ctx:                ctx,
 		decayedThisFrame:   make(map[engine.Entity]bool),
 		processedGridCells: make(map[int]bool),

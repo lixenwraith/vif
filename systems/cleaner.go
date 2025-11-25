@@ -309,7 +309,7 @@ func (cs *CleanerSystem) spawnRemovalFlash(world *engine.World, targetEntity eng
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	if charComp, ok := world.Characters.Get(targetEntity); ok {
 		if posComp, ok := world.Positions.Get(targetEntity); ok {
-			flash := components.RemovalFlashComponent{
+			flash := components.FlashComponent{
 				X:         posComp.X,
 				Y:         posComp.Y,
 				Char:      charComp.Rune,
@@ -318,7 +318,7 @@ func (cs *CleanerSystem) spawnRemovalFlash(world *engine.World, targetEntity eng
 			}
 
 			flashEntity := world.NewEntity().Build()
-			world.RemovalFlashes.Add(flashEntity, flash)
+			world.Flashes.Add(flashEntity, flash)
 		}
 	}
 }
@@ -326,11 +326,11 @@ func (cs *CleanerSystem) spawnRemovalFlash(world *engine.World, targetEntity eng
 // cleanupExpiredFlashes destroys expired removal flash entities using generic stores
 func (cs *CleanerSystem) cleanupExpiredFlashes(world *engine.World) {
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-	entities := world.RemovalFlashes.All()
+	entities := world.Flashes.All()
 	now := timeRes.GameTime
 
 	for _, entity := range entities {
-		flash, ok := world.RemovalFlashes.Get(entity)
+		flash, ok := world.Flashes.Get(entity)
 		if !ok {
 			continue
 		}

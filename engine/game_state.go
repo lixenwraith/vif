@@ -55,7 +55,7 @@ type GameState struct {
 
 	// Screen fill tracking (for adaptive spawn rate)
 	EntityCount   int     // Current number of entities on screen
-	MaxEntities   int     // Maximum allowed entities (200)
+	MaxEntities   int     // Maximum allowed entities
 	ScreenDensity float64 // Percentage of screen filled (0.0-1.0)
 
 	// Phase State (Infrastructure)
@@ -68,7 +68,7 @@ type GameState struct {
 	GoldActive      bool      // Whether gold sequence is active
 	GoldSequenceID  int       // Current gold sequence ID
 	GoldStartTime   time.Time // When gold spawned
-	GoldTimeoutTime time.Time // When gold will timeout (10s from start)
+	GoldTimeoutTime time.Time // When gold will timeout
 
 	// Decay Timer State
 	// Manages countdown between gold completion and decay animation trigger
@@ -85,20 +85,12 @@ type GameState struct {
 	InitialSpawnComplete bool      // Whether initial gold spawn has been attempted
 
 	// ===== CONFIGURATION (read-only after init) =====
-	// NOTE: These should ideally be removed in favor of ConfigResource,
-	// but kept here strictly for GameState internal calculations if necessary.
-	// Systems should use Resources.
+	// NOTE: These should ideally be removed in favor of ConfigResource, migrating gradually
 
-	// Set once at initialization, never mutated
-
+	// Set once at initialization, never mutated (WRONG ASSUMPTION, SCREEN CAN BE RESIZED)
 	GameWidth   int
 	GameHeight  int
 	ScreenWidth int
-
-	// DEPRECATED: TimeProvider should be removed in Phase 3 cleanup
-	// Logic methods now accept time.Time explicitly
-	// Time provider (for consistent timing)
-	// TimeProvider TimeProvider
 }
 
 // NewGameState creates a new centralized game state

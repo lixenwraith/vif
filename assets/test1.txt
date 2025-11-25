@@ -1,9 +1,0 @@
-func TestFunction() {
-    fmt.Println("Test content 1")
-    return true
-}
-
-type TestStruct struct {
-    Name string
-    Value int
-}

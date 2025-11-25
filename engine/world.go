@@ -16,17 +16,17 @@ type World struct {
 	Resources *ResourceStore
 
 	// Component Stores (Public for direct system access)
-	Positions      *PositionStore
-	Characters     *Store[components.CharacterComponent]
-	Sequences      *Store[components.SequenceComponent]
-	GoldSequences  *Store[components.GoldSequenceComponent]
-	FallingDecays  *Store[components.FallingDecayComponent]
-	Cleaners       *Store[components.CleanerComponent]
-	RemovalFlashes *Store[components.RemovalFlashComponent]
-	Nuggets        *Store[components.NuggetComponent]
-	Drains         *Store[components.DrainComponent]
-	Cursors        *Store[components.CursorComponent]
-	Protections    *Store[components.ProtectionComponent]
+	Positions     *PositionStore
+	Characters    *Store[components.CharacterComponent]
+	Sequences     *Store[components.SequenceComponent]
+	GoldSequences *Store[components.GoldSequenceComponent]
+	FallingDecays *Store[components.FallingDecayComponent]
+	Cleaners      *Store[components.CleanerComponent]
+	Flashes       *Store[components.FlashComponent]
+	Nuggets       *Store[components.NuggetComponent]
+	Drains        *Store[components.DrainComponent]
+	Cursors       *Store[components.CursorComponent]
+	Protections   *Store[components.ProtectionComponent]
 
 	allStores []AnyStore // All stores for uniform lifecycle operations
 
@@ -38,20 +38,20 @@ type World struct {
 // NewWorld creates a new ECS world with all component stores initialized
 func NewWorld() *World {
 	w := &World{
-		nextEntityID:   1,
-		Resources:      NewResourceStore(),
-		systems:        make([]System, 0),
-		Positions:      NewPositionStore(),
-		Characters:     NewStore[components.CharacterComponent](),
-		Sequences:      NewStore[components.SequenceComponent](),
-		GoldSequences:  NewStore[components.GoldSequenceComponent](),
-		FallingDecays:  NewStore[components.FallingDecayComponent](),
-		Cleaners:       NewStore[components.CleanerComponent](),
-		RemovalFlashes: NewStore[components.RemovalFlashComponent](),
-		Nuggets:        NewStore[components.NuggetComponent](),
-		Drains:         NewStore[components.DrainComponent](),
-		Cursors:        NewStore[components.CursorComponent](),
-		Protections:    NewStore[components.ProtectionComponent](),
+		nextEntityID:  1,
+		Resources:     NewResourceStore(),
+		systems:       make([]System, 0),
+		Positions:     NewPositionStore(),
+		Characters:    NewStore[components.CharacterComponent](),
+		Sequences:     NewStore[components.SequenceComponent](),
+		GoldSequences: NewStore[components.GoldSequenceComponent](),
+		FallingDecays: NewStore[components.FallingDecayComponent](),
+		Cleaners:      NewStore[components.CleanerComponent](),
+		Flashes:       NewStore[components.FlashComponent](),
+		Nuggets:       NewStore[components.NuggetComponent](),
+		Drains:        NewStore[components.DrainComponent](),
+		Cursors:       NewStore[components.CursorComponent](),
+		Protections:   NewStore[components.ProtectionComponent](),
 	}
 
 	// Register all stores for lifecycle operations
@@ -62,7 +62,7 @@ func NewWorld() *World {
 		w.GoldSequences,
 		w.FallingDecays,
 		w.Cleaners,
-		w.RemovalFlashes,
+		w.Flashes,
 		w.Nuggets,
 		w.Drains,
 		w.Cursors,
