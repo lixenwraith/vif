@@ -17,6 +17,7 @@ const (
 	PriorityCleaner = 22
 	PriorityDrain   = 25
 	PriorityDecay   = 30
+	PriorityFlash   = 35
 )
 
 // Spawn Exclusion Zone

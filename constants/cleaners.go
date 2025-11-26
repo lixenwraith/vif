@@ -23,4 +23,8 @@ const (
 
 	// CleanerRemovalFlashDuration is how long the removal flash effect lasts in milliseconds
 	CleanerRemovalFlashDuration = 150
+
+	// DestructionFlashDuration is how long the destruction flash effect lasts in milliseconds.
+	// Used globally for all destruction effects (drain collision, decay terminal, cleaner sweep).
+	DestructionFlashDuration = 300
 )
