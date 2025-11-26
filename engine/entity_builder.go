@@ -16,8 +16,9 @@ type EntityBuilder struct {
 	built  bool
 }
 
-// NewEntity reserves an entity ID and returns a builder for component assignment.
-// Components are committed atomically when Build() is called.
+// TODO: decide fate: all entity creation in World.CreateEntity or mirate all to EntitiyBuilder - New migrated entities use builder, early implementation is with CreateEntity
+// NewEntity reserves an entity ID and returns a builder for component assignment
+// Build() only flips the flag; components are not committed atomically (fix once a path is chosen)
 func (w *World) NewEntity() *EntityBuilder {
 	return &EntityBuilder{
 		world:  w,
@@ -32,6 +33,7 @@ func With[T any](eb *EntityBuilder, store *Store[T], component T) *EntityBuilder
 	if eb.built {
 		panic("entity already built - cannot add components after Build()")
 	}
+	// TODO: design bug, it adds entity before Build(), no issue now because of correct use
 	store.Add(eb.entity, component)
 	return eb
 }
@@ -42,6 +44,7 @@ func WithPosition(eb *EntityBuilder, store *PositionStore, component components.
 	if eb.built {
 		panic("entity already built - cannot add components after Build()")
 	}
+	// TODO: design bug, it adds entity before Build(), no issue now because of correct use
 	store.Add(eb.entity, component)
 	return eb
 }

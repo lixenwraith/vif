@@ -32,7 +32,6 @@ type World struct {
 
 	systems     []System
 	updateMutex sync.Mutex // Prevents concurrent updates
-	isUpdating  bool
 }
 
 // NewWorld creates a new ECS world with all component stores initialized

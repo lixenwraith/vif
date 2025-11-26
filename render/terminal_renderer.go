@@ -831,8 +831,9 @@ func (r *TerminalRenderer) drawCursor(cursorX, cursorY int, ctx *engine.GameCont
 
 	// Priority 3: Decay (Lowest Priority)
 	// Only checked if no standard character or drain is present
-	// TODO: assumed to be FallingDecay; verify
-	// We scan manually because Decay entities might not be fully integrated into PositionStore yet
+	// We scan manually because Decay entities are not fully integrated into PositionStore
+	// Because of sub-pixel precision requirement of position
+	// TODO: find a clever way around it for uniformity
 	hasDecay := false
 	if !isDrain && !hasChar {
 		decayEntities := ctx.World.FallingDecays.All()

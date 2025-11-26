@@ -138,7 +138,6 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	now := timeRes.GameTime
 
-	// TODO: Use for super drain (3x3)
 	// Optimization buffer reusable for this scope
 	var collisionBuf [engine.MaxEntitiesPerCell]engine.Entity
 
@@ -202,13 +201,12 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 		for _, collidingEntity := range collidingEntities {
 			if collidingEntity != 0 && collidingEntity != drainEntity && collidingEntity != s.ctx.CursorEntity {
 				s.handleCollisionAtPosition(world, collidingEntity)
-				// TODO: Check how block feels with ember, for now speed up drain or disable cuz it's gonna be slow
 				blocked = true
 			}
 		}
 
 		if blocked {
-			return
+			continue
 		}
 
 		// Movement succeeded - update components
@@ -218,9 +216,7 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 		// Recalculate IsOnCursor after position change using fresh cursor data
 		drain.IsOnCursor = drainPos.X == cursorPos.X && drainPos.Y == cursorPos.Y
 
-		// Update position (this handles spatial index)
-		drainPos.X = newX
-		drainPos.Y = newY
+		// Update position
 		world.Positions.Add(drainEntity, drainPos)
 
 		// Save updated drain component
