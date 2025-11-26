@@ -16,10 +16,11 @@ type TerminalRenderer struct {
 	height          int
 	gameX           int
 	gameY           int
-	gameWidth       int
-	gameHeight      int
-	lineNumWidth    int
-	cleanerGradient []tcell.Color
+	gameWidth          int
+	gameHeight         int
+	lineNumWidth       int
+	cleanerGradient    []tcell.Color
+	materializeGradient []tcell.Color
 }
 
 // NewTerminalRenderer creates a new terminal renderer
@@ -37,6 +38,7 @@ func NewTerminalRenderer(screen tcell.Screen, width, height, gameX, gameY, gameW
 
 	// Initialize gradient internally
 	r.buildCleanerGradient()
+	r.buildMaterializeGradient()
 
 	return r
 }
@@ -60,6 +62,28 @@ func (r *TerminalRenderer) buildCleanerGradient() {
 		bVal := int32(float64(blue) * opacity)
 
 		r.cleanerGradient[i] = tcell.NewRGBColor(rVal, gVal, bVal)
+	}
+}
+
+// buildMaterializeGradient internal method to build materialize gradient
+func (r *TerminalRenderer) buildMaterializeGradient() {
+	length := constants.MaterializeTrailLength
+
+	r.materializeGradient = make([]tcell.Color, length)
+	red, green, blue := RgbMaterialize.RGB()
+
+	for i := 0; i < length; i++ {
+		// Opacity fade from 1.0 to 0.0
+		opacity := 1.0 - (float64(i) / float64(length))
+		if opacity < 0 {
+			opacity = 0
+		}
+
+		rVal := int32(float64(red) * opacity)
+		gVal := int32(float64(green) * opacity)
+		bVal := int32(float64(blue) * opacity)
+
+		r.materializeGradient[i] = tcell.NewRGBColor(rVal, gVal, bVal)
 	}
 }
 
@@ -103,6 +127,9 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 
 	// Draw removal flash effects - AFTER cleaners
 	r.drawRemovalFlashes(ctx.World, ctx, defaultStyle)
+
+	// Draw materialize animation if active - BEFORE drain
+	r.drawMaterializers(ctx.World, defaultStyle)
 
 	// Draw drain entity - AFTER removal flashes, BEFORE cursor
 	r.drawDrain(ctx.World, defaultStyle)
@@ -425,6 +452,54 @@ func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.
 			// Head (index 0) is usually rendered on top, but since we draw
 			// in a single pass here, order doesn't strictly matter for flat chars.
 			r.screen.SetContent(screenX, screenY, cleaner.Char, nil, style)
+		}
+	}
+}
+
+// drawMaterializers draws the materialize animation using the trail of grid points.
+func (r *TerminalRenderer) drawMaterializers(world *engine.World, defaultStyle tcell.Style) {
+	// Use world for direct store access
+	entities := world.Materializers.All()
+	if len(entities) == 0 {
+		return
+	}
+
+	// Pre-calculate gradient length outside loop for performance
+	gradientLen := len(r.materializeGradient)
+	maxGradientIdx := gradientLen - 1
+
+	for _, entity := range entities {
+		mat, ok := world.Materializers.Get(entity)
+		if !ok {
+			continue
+		}
+
+		// Deep copy trail to avoid race conditions during rendering
+		trailCopy := make([]core.Point, len(mat.Trail))
+		copy(trailCopy, mat.Trail)
+
+		// Iterate through the trail
+		// Index 0 is the head (brightest), last index is the tail (faintest)
+		for i, point := range trailCopy {
+			// Skip if out of bounds
+			if point.X < 0 || point.X >= r.gameWidth || point.Y < 0 || point.Y >= r.gameHeight {
+				continue
+			}
+
+			screenX := r.gameX + point.X
+			screenY := r.gameY + point.Y
+
+			// Use pre-calculated gradient based on index (clamped to valid range)
+			gradientIndex := i
+			if gradientIndex > maxGradientIdx {
+				gradientIndex = maxGradientIdx
+			}
+
+			// Apply color from gradient
+			color := r.materializeGradient[gradientIndex]
+			style := defaultStyle.Foreground(color)
+
+			r.screen.SetContent(screenX, screenY, mat.Char, nil, style)
 		}
 	}
 }
