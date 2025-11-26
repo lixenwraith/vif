@@ -71,7 +71,7 @@ func NewWorld() *World {
 	return w
 }
 
-// CreateEntity reserves a new entity ID. Use NewEntity() builder for transactional creation
+// CreateEntity reserves a new entity ID
 func (w *World) CreateEntity() Entity {
 	w.mu.Lock()
 	defer w.mu.Unlock()

@@ -65,10 +65,8 @@ func handleNewCommand(ctx *engine.GameContext) bool {
 	// Clear all entities from the world
 	clearAllEntities(ctx.World)
 
-	// Use Entity Builder for singleton CursorEntity creation
-	// 1. Create new entity ID
-	newCursorID := ctx.World.NewEntity().Build()
-	ctx.CursorEntity = newCursorID
+	// 1. Create new entity
+	ctx.CursorEntity = ctx.World.CreateEntity()
 
 	// 2. Add Components
 	ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{

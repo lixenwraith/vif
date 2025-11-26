@@ -240,8 +240,8 @@ func (cs *CleanerSystem) spawnCleaners(world *engine.World) {
 			Char:      constants.CleanerChar,
 		}
 
-		// Use entity builder pattern
-		entity := world.NewEntity().Build()
+		// Create cleaner entity and add to store
+		entity := world.CreateEntity()
 		world.Cleaners.Add(entity, comp)
 	}
 }
@@ -333,7 +333,8 @@ func (cs *CleanerSystem) spawnRemovalFlash(world *engine.World, targetEntity eng
 				Duration:  constants.CleanerRemovalFlashDuration,
 			}
 
-			flashEntity := world.NewEntity().Build()
+			// Create flash entity and add it to store
+			flashEntity := world.CreateEntity()
 			world.Flashes.Add(flashEntity, flash)
 		}
 	}

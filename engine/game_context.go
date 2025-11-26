@@ -152,19 +152,13 @@ func NewGameContext(screen tcell.Screen) *GameContext {
 	// Create centralized game state with pausable time provider
 	ctx.State = NewGameState(constants.MaxEntities, pausableClock.Now())
 
-	// Create cursor entity (singleton, protected)
-	ctx.CursorEntity = With(
-		WithPosition(
-			ctx.World.NewEntity(),
-			ctx.World.Positions,
-			components.PositionComponent{
-				X: ctx.GameWidth / 2,
-				Y: ctx.GameHeight / 2,
-			},
-		),
-		ctx.World.Cursors,
-		components.CursorComponent{},
-	).Build()
+	// Create cursor entity at the center of the screen
+	ctx.CursorEntity = ctx.World.CreateEntity()
+	ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
+		X: ctx.GameWidth / 2,
+		Y: ctx.GameHeight / 2,
+	})
+	ctx.World.Cursors.Add(ctx.CursorEntity, components.CursorComponent{})
 
 	// Make cursor indestructible
 	ctx.World.Protections.Add(ctx.CursorEntity, components.ProtectionComponent{
