@@ -121,8 +121,7 @@ func NewGameContext(screen tcell.Screen) *GameContext {
 	// Calculate game area first
 	ctx.updateGameArea()
 
-	// --- MIGRATION START ---
-	// Initialize Core Resources
+	// -- Initialize Core Resources --
 
 	// 1. Config Resource
 	configRes := &ConfigResource{
@@ -150,7 +149,6 @@ func NewGameContext(screen tcell.Screen) *GameContext {
 		IsPaused: false,
 	}
 	AddResource(ctx.World.Resources, inputRes)
-	// --- MIGRATION END ---
 
 	// Create centralized game state with pausable time provider
 	ctx.State = NewGameState(constants.MaxEntities, pausableClock.Now())
