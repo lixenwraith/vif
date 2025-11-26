@@ -16,11 +16,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/render"
 )
 
-const (
-	nuggetSpawnIntervalSeconds = 5 // Attempt spawn every 5 seconds
-	nuggetMaxAttempts          = 100
-)
-
 // NuggetSystem manages nugget spawn and respawn logic
 type NuggetSystem struct {
 	mu               sync.RWMutex
@@ -37,9 +32,9 @@ func NewNuggetSystem(ctx *engine.GameContext) *NuggetSystem {
 	}
 }
 
-// Priority returns the system's priority (between SpawnSystem and GoldSequenceSystem)
+// Priority returns the system's priority
 func (s *NuggetSystem) Priority() int {
-	return 18
+	return constants.PriorityNugget
 }
 
 // Update runs the nugget system logic using generic stores
@@ -54,7 +49,7 @@ func (s *NuggetSystem) Update(world *engine.World, dt time.Duration) {
 	activeNuggetEntity := s.activeNugget.Load()
 
 	if activeNuggetEntity == 0 {
-		if now.Sub(s.lastSpawnAttempt) >= nuggetSpawnIntervalSeconds*time.Second {
+		if now.Sub(s.lastSpawnAttempt) >= constants.NuggetSpawnIntervalSeconds*time.Second {
 			s.lastSpawnAttempt = now
 			s.spawnNugget(world, now)
 		}
@@ -121,11 +116,11 @@ func (s *NuggetSystem) findValidPosition(world *engine.World) (int, int) {
 		panic(fmt.Errorf("cursor destroyed"))
 	}
 
-	for attempt := 0; attempt < nuggetMaxAttempts; attempt++ {
+	for attempt := 0; attempt < constants.NuggetMaxAttempts; attempt++ {
 		x := rand.Intn(config.GameWidth)
 		y := rand.Intn(config.GameHeight)
 
-		if math.Abs(float64(x-cursorPos.X)) <= 5 || math.Abs(float64(y-cursorPos.Y)) <= 3 {
+		if math.Abs(float64(x-cursorPos.X)) <= constants.CursorExclusionX || math.Abs(float64(y-cursorPos.Y)) <= constants.CursorExclusionY {
 			continue
 		}
 
@@ -166,7 +161,7 @@ func (s *NuggetSystem) GetSystemState() string {
 	if activeNuggetEntity == 0 {
 		now := time.Now()
 		timeSinceLastSpawn := now.Sub(s.lastSpawnAttempt)
-		timeUntilNext := (nuggetSpawnIntervalSeconds * time.Second) - timeSinceLastSpawn
+		timeUntilNext := (constants.NuggetSpawnIntervalSeconds * time.Second) - timeSinceLastSpawn
 		if timeUntilNext < 0 {
 			timeUntilNext = 0
 		}

@@ -3,6 +3,7 @@ package systems
 import (
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
@@ -14,8 +15,9 @@ func NewBoostSystem(ctx *engine.GameContext) *BoostSystem {
 	return &BoostSystem{ctx: ctx}
 }
 
+// Priority returns the system's priority
 func (bs *BoostSystem) Priority() int {
-	return 5 // Run early, before energy system
+	return constants.PriorityBoost
 }
 
 func (bs *BoostSystem) Update(world *engine.World, dt time.Duration) {

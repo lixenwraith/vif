@@ -27,9 +27,9 @@ func NewGoldSystem(ctx *engine.GameContext) *GoldSystem {
 	}
 }
 
-// Priority returns the system's priority (runs between spawn and decay)
+// Priority returns the system's priority
 func (s *GoldSystem) Priority() int {
-	return 20
+	return constants.PriorityGold
 }
 
 // Update runs the gold sequence system logic

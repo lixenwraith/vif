@@ -17,16 +17,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/render"
 )
 
-const (
-	spawnIntervalMs         = 2000
-	maxEntities             = 200
-	minBlockLines           = 3
-	maxBlockLines           = 15
-	maxPlacementTries       = 3
-	minIndentChange         = 2   // Minimum indent change to start new block
-	contentRefreshThreshold = 0.8 // Refresh when 80% of content consumed
-)
-
 // ColorLevelKey represents a unique color+level combination
 type ColorLevelKey struct {
 	Type  components.SequenceType
@@ -174,7 +164,7 @@ func (s *SpawnSystem) checkAndTriggerRefresh() {
 	consumptionRatio := float64(blocksConsumed) / float64(totalBlocks)
 
 	// If we've consumed 80% and not already refreshing, start pre-fetch
-	if consumptionRatio >= contentRefreshThreshold && !s.isRefreshing.Load() {
+	if consumptionRatio >= constants.ContentRefreshThreshold && !s.isRefreshing.Load() {
 		s.isRefreshing.Store(true)
 		go s.preFetchNextContent()
 	}
@@ -243,16 +233,16 @@ func (s *SpawnSystem) groupIntoBlocks(lines []string) []CodeBlock {
 
 		// Start new block if:
 		// 1. Current block is empty (first line)
-		// 2. Significant indent change (>= minIndentChange) and brace depth is 0
+		// 2. Significant indent change (>= MinIndentChange) and brace depth is 0
 		// 3. Current block reached max size
 		shouldStartNewBlock := len(currentBlock) == 0 ||
-			(len(currentBlock) >= maxBlockLines) ||
-			(braceDepth == 0 && len(currentBlock) >= minBlockLines &&
-				(indent < currentIndent-minIndentChange || indent > currentIndent+minIndentChange))
+			(len(currentBlock) >= constants.MaxBlockLines) ||
+			(braceDepth == 0 && len(currentBlock) >= constants.MinBlockLines &&
+				(indent < currentIndent-constants.MinIndentChange || indent > currentIndent+constants.MinIndentChange))
 
 		if shouldStartNewBlock && len(currentBlock) > 0 {
 			// Save current block if it meets minimum size
-			if len(currentBlock) >= minBlockLines {
+			if len(currentBlock) >= constants.MinBlockLines {
 				blocks = append(blocks, CodeBlock{
 					Lines:       currentBlock,
 					IndentLevel: currentIndent,
@@ -271,7 +261,7 @@ func (s *SpawnSystem) groupIntoBlocks(lines []string) []CodeBlock {
 	}
 
 	// Add final block if it meets minimum size
-	if len(currentBlock) >= minBlockLines {
+	if len(currentBlock) >= constants.MinBlockLines {
 		blocks = append(blocks, CodeBlock{
 			Lines:       currentBlock,
 			IndentLevel: currentIndent,
@@ -307,9 +297,9 @@ func (s *SpawnSystem) hasBracesInBlock(lines []string) bool {
 	return false
 }
 
-// Priority returns the system's priority (lower runs first)
+// Priority returns the system's priority
 func (s *SpawnSystem) Priority() int {
-	return 15 // Run early
+	return constants.PrioritySpawn
 }
 
 // runCensus iterates all sequence entities and counts colors.
@@ -399,12 +389,12 @@ func (s *SpawnSystem) Update(world *engine.World, dt time.Duration) {
 
 	entityCount := world.Positions.Count()
 
-	if entityCount > maxEntities {
+	if entityCount > constants.MaxEntities {
 		return // Already at max capacity
 	}
 
 	// Update spawn rate in GameState based on entity count
-	s.ctx.State.UpdateSpawnRate(entityCount, maxEntities)
+	s.ctx.State.UpdateSpawnRate(entityCount, constants.MaxEntities)
 
 	// Check if it's time to spawn
 	if !s.ctx.State.GetSpawnEnabled() {
@@ -419,7 +409,7 @@ func (s *SpawnSystem) Update(world *engine.World, dt time.Duration) {
 	spawnState := s.ctx.State.ReadSpawnState()
 
 	// Calculate next spawn time based on rate multiplier
-	baseDelay := time.Duration(spawnIntervalMs) * time.Millisecond
+	baseDelay := time.Duration(constants.SpawnIntervalMs) * time.Millisecond
 	adjustedDelay := time.Duration(float64(baseDelay) / spawnState.RateMultiplier)
 
 	// Generate and spawn a new sequence
@@ -550,8 +540,8 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 		return false
 	}
 
-	// Try up to maxPlacementTries times to find a valid position
-	for attempt := 0; attempt < maxPlacementTries; attempt++ {
+	// Try up to MaxPlacementTries times to find a valid position
+	for attempt := 0; attempt < constants.MaxPlacementTries; attempt++ {
 		// Random row selection
 		row := rand.Intn(config.GameHeight)
 
@@ -656,6 +646,6 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 		}
 	}
 
-	// Failed to place after maxPlacementTries attempts
+	// Failed to place after MaxPlacementTries attempts
 	return false
 }

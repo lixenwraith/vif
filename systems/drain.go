@@ -32,7 +32,7 @@ func (s *DrainSystem) SetNuggetSystem(nuggetSystem *NuggetSystem) {
 
 // Priority returns the system's priority
 func (s *DrainSystem) Priority() int {
-	return 25
+	return constants.PriorityDrain
 }
 
 // Update runs the drain system logic

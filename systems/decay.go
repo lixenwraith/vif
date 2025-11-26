@@ -47,7 +47,7 @@ func (s *DecaySystem) SetNuggetSystem(nuggetSystem *NuggetSystem) {
 
 // Priority returns the system's priority
 func (s *DecaySystem) Priority() int {
-	return 30
+	return constants.PriorityDecay
 }
 
 // Update runs the decay system animation update

@@ -39,7 +39,7 @@ func NewEnergySystem(ctx *engine.GameContext) *EnergySystem {
 
 // Priority returns the system's priority
 func (s *EnergySystem) Priority() int {
-	return 10 // High priority, run before other systems
+	return constants.PriorityEnergy
 }
 
 // SetGoldSystem sets the gold sequence system reference

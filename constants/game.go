@@ -7,7 +7,7 @@ const (
 	MaxEntities = 200
 )
 
-// System Priorities
+// System Priorities (lower runs first)
 const (
 	PriorityBoost   = 5
 	PriorityEnergy  = 10
@@ -25,6 +25,22 @@ const (
 	CursorExclusionX = 5
 	// CursorExclusionY is vertical distance from cursor that blocks spawn
 	CursorExclusionY = 3
+)
+
+// Spawn System
+const (
+	SpawnIntervalMs         = 2000
+	MinBlockLines           = 3
+	MaxBlockLines           = 15
+	MaxPlacementTries       = 3
+	MinIndentChange         = 2
+	ContentRefreshThreshold = 0.8
+)
+
+// Nugget System
+const (
+	NuggetSpawnIntervalSeconds = 5
+	NuggetMaxAttempts          = 100
 )
 
 // Game Loop Timing

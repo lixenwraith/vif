@@ -26,9 +26,9 @@ func NewCleanerSystem(ctx *engine.GameContext) *CleanerSystem {
 	}
 }
 
-// Priority returns the system's priority (runs after decay system)
+// Priority returns the system's priority
 func (cs *CleanerSystem) Priority() int {
-	return 22
+	return constants.PriorityCleaner
 }
 
 // Update handles spawning, movement, collision, and cleanup synchronously
