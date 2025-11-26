@@ -8,8 +8,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/components"
 )
 
-// PositionStore maintains a spatial index using a fixed-capacity dense grid.
-// It supports multiple entities per cell (up to 15).
+// PositionStore maintains a spatial index using a fixed-capacity dense grid
+// It supports multiple entities per cell (up to 15)
 type PositionStore struct {
 	mu         sync.RWMutex
 	components map[Entity]components.PositionComponent
@@ -17,7 +17,7 @@ type PositionStore struct {
 	grid       *SpatialGrid
 }
 
-// NewPositionStore creates a new position store with spatial indexing.
+// NewPositionStore creates a new position store with spatial indexing
 func NewPositionStore() *PositionStore {
 	// Default grid size, will be resized by GameContext if needed
 	return &PositionStore{
@@ -27,8 +27,8 @@ func NewPositionStore() *PositionStore {
 	}
 }
 
-// Add inserts or updates an entity's position.
-// This handles the "cursor ghosting" bug by allowing multiple entities at the same location.
+// Add inserts or updates an entity's position
+// This handles the "cursor ghosting" bug by allowing multiple entities at the same location
 func (ps *PositionStore) Add(e Entity, pos components.PositionComponent) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
@@ -48,7 +48,7 @@ func (ps *PositionStore) Add(e Entity, pos components.PositionComponent) {
 	ps.grid.Add(e, pos.X, pos.Y)
 }
 
-// Remove deletes an entity from the store and grid.
+// Remove deletes an entity from the store and grid
 func (ps *PositionStore) Remove(e Entity) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
@@ -71,9 +71,9 @@ func (ps *PositionStore) Remove(e Entity) {
 	}
 }
 
-// Move updates position atomically.
-// Note: This version ignores collisions at the Store level.
-// Systems should use HasAny() or GetAllAt() for collision logic before moving if needed.
+// Move updates position atomically
+// Note: This version ignores collisions at the Store level
+// Systems should use HasAny() or GetAllAt() for collision logic before moving if needed
 func (ps *PositionStore) Move(e Entity, newPos components.PositionComponent) error {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()

@@ -13,7 +13,7 @@ type Store[T any] struct {
 	entities   []Entity // Dense array of entities that have this component
 }
 
-// NewStore creates a new component store for type T.
+// NewStore creates a new component store for type T
 func NewStore[T any]() *Store[T] {
 	return &Store[T]{
 		components: make(map[Entity]T),
@@ -21,7 +21,7 @@ func NewStore[T any]() *Store[T] {
 	}
 }
 
-// Add inserts or updates a component for an entity.
+// Add inserts or updates a component for an entity
 func (s *Store[T]) Add(e Entity, val T) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -32,7 +32,7 @@ func (s *Store[T]) Add(e Entity, val T) {
 	s.components[e] = val
 }
 
-// Get retrieves a component for an entity.
+// Get retrieves a component for an entity
 func (s *Store[T]) Get(e Entity) (T, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -40,7 +40,7 @@ func (s *Store[T]) Get(e Entity) (T, bool) {
 	return val, ok
 }
 
-// Remove deletes a component from an entity.
+// Remove deletes a component from an entity
 func (s *Store[T]) Remove(e Entity) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -58,7 +58,7 @@ func (s *Store[T]) Remove(e Entity) {
 	}
 }
 
-// Has checks if entity has this component.
+// Has checks if entity has this component
 func (s *Store[T]) Has(e Entity) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -66,7 +66,7 @@ func (s *Store[T]) Has(e Entity) bool {
 	return ok
 }
 
-// All returns all entities with this component type.
+// All returns all entities with this component type
 func (s *Store[T]) All() []Entity {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -75,14 +75,14 @@ func (s *Store[T]) All() []Entity {
 	return result
 }
 
-// Count returns number of entities with this component.
+// Count returns number of entities with this component
 func (s *Store[T]) Count() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.entities)
 }
 
-// Clear removes all components from this store.
+// Clear removes all components from this store
 func (s *Store[T]) Clear() {
 	s.mu.Lock()
 	defer s.mu.Unlock()

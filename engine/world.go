@@ -132,37 +132,6 @@ func (w *World) Update(dt time.Duration) {
 	}
 }
 
-// GetEntityAtPosition returns the "top" entity at a given position based on Z-Index
-// Used primarily for rendering logic or interactions where a single target is needed
-func (w *World) GetEntityAtPosition(x, y int) Entity {
-	entities := w.Positions.GetAllAt(x, y)
-	return SelectTopEntity(entities, w)
-}
-
-// EntityCount returns approximate entity count from highest ID
-// For accurate counts, query specific stores
-func (w *World) EntityCount() int {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	return int(w.nextEntityID - 1)
-}
-
-// MoveEntitySafe atomically moves an entity with collision detection via spatial transactions
-func (w *World) MoveEntitySafe(entity Entity, oldX, oldY, newX, newY int) CollisionResult {
-	// Begin transaction
-	tx := w.BeginSpatialTransaction()
-
-	// Attempt move
-	result := tx.Move(entity, oldX, oldY, newX, newY)
-
-	// If no collision, commit the transaction
-	if !result.HasCollision {
-		tx.Commit()
-	}
-
-	return result
-}
-
 // Clear removes all entities and components from the world
 func (w *World) Clear() {
 	w.mu.Lock()
@@ -172,14 +141,4 @@ func (w *World) Clear() {
 	for _, store := range w.allStores {
 		store.Clear()
 	}
-}
-
-// HasAnyComponent checks if an entity has at least one component
-func (w *World) HasAnyComponent(e Entity) bool {
-	for _, store := range w.allStores {
-		if store.Has(e) {
-			return true
-		}
-	}
-	return false
 }

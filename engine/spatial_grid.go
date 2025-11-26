@@ -74,12 +74,6 @@ func (g *SpatialGrid) Remove(e Entity, x, y int) {
 	}
 }
 
-// Move atomically updates an entity's position in the grid
-func (g *SpatialGrid) Move(e Entity, oldX, oldY, newX, newY int) {
-	g.Remove(e, oldX, oldY)
-	g.Add(e, newX, newY)
-}
-
 // GetAllAt returns a slice view of entities at (x, y)
 // INTERNAL USE ONLY - callers must copy or hold external lock
 // O(1), returns nil if empty or out of bounds
@@ -104,6 +98,7 @@ func (g *SpatialGrid) HasAny(x, y int) bool {
 	return g.Cells[y*g.Width+x].Count > 0
 }
 
+// TODO: unused, delete after resize fixes
 // Clear resets all cells in the grid
 func (g *SpatialGrid) Clear() {
 	// Zeroing the entire slice is faster than iterating rows for fixed size

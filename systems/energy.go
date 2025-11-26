@@ -162,7 +162,7 @@ func (s *EnergySystem) HandleCharacterTyping(world *engine.World, cursorX, curso
 	// Check if this is a gold sequence character
 	if seq.Type == components.SequenceGold && s.goldSequenceSystem != nil && s.goldSequenceSystem.IsActive() {
 		// Handle gold sequence typing
-		s.handleGoldSequenceTyping(world, entity, char, seq, typedRune, cursorX, cursorY)
+		s.handleGoldSequenceTyping(world, entity, char, seq, typedRune)
 		return
 	}
 
@@ -371,7 +371,7 @@ func (s *EnergySystem) handleNuggetCollection(world *engine.World, entity engine
 }
 
 // handleGoldSequenceTyping processes typing of gold sequence characters
-func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity engine.Entity, char components.CharacterComponent, seq components.SequenceComponent, typedRune rune, cursorX, cursorY int) {
+func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity engine.Entity, char components.CharacterComponent, seq components.SequenceComponent, typedRune rune) {
 	// Fetch resources
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)

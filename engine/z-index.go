@@ -1,7 +1,7 @@
 package engine
 
-// Z-Index constants determine priority for spatial queries and rendering.
-// Higher values are "on top".
+// Z-Index constants determine priority for spatial queries and rendering
+// Higher values are "on top"
 const (
 	ZIndexSpawnChar = 0
 	ZIndexNugget    = 100
@@ -12,8 +12,8 @@ const (
 	ZIndexCursor    = 1000
 )
 
-// GetZIndex returns the Z-index for an entity based on its components.
-// It checks stores in the World to determine the entity type.
+// GetZIndex returns the Z-index for an entity based on its components
+// It checks stores in the World to determine the entity type
 func GetZIndex(world *World, e Entity) int {
 	// Check highest priority first to fail fast
 	if world.Cursors.Has(e) {
@@ -36,8 +36,8 @@ func GetZIndex(world *World, e Entity) int {
 	return ZIndexSpawnChar
 }
 
-// SelectTopEntity returns the entity with the highest Z-index from a slice.
-// Returns 0 if the slice is empty.
+// SelectTopEntity returns the entity with the highest Z-index from a slice
+// Returns 0 if the slice is empty
 func SelectTopEntity(entities []Entity, world *World) Entity {
 	if len(entities) == 0 {
 		return 0

@@ -42,6 +42,7 @@ func (s *DrainSystem) Update(world *engine.World, dt time.Duration) {
 
 	// TODO: need better lifecycle management, prep for ember
 	drainActive := world.Drains.Count() > 0
+	// drainActive := world.Drains.Count() > 50 // Stress test spatial grid
 	// Lifecycle logic: spawn when energy > 0, despawn when energy <= 0
 	if energy > 0 && !drainActive {
 		s.spawnDrain(world)
@@ -137,7 +138,7 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	now := timeRes.GameTime
 
-	// TODO: Use for super drain
+	// TODO: Use for super drain (3x3)
 	// Optimization buffer reusable for this scope
 	var collisionBuf [engine.MaxEntitiesPerCell]engine.Entity
 
@@ -213,7 +214,6 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 		// Movement succeeded - update components
 		drainPos.X = newX
 		drainPos.Y = newY
-		drain.LastMoveTime = now
 
 		// Recalculate IsOnCursor after position change using fresh cursor data
 		drain.IsOnCursor = drainPos.X == cursorPos.X && drainPos.Y == cursorPos.Y
@@ -224,6 +224,7 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 		world.Positions.Add(drainEntity, drainPos)
 
 		// Save updated drain component
+		drain.LastMoveTime = now
 		world.Drains.Add(drainEntity, drain)
 	}
 }

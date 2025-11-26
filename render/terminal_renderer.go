@@ -381,10 +381,10 @@ func (r *TerminalRenderer) drawFallingDecay(world *engine.World, defaultStyle tc
 // drawCleaners draws the cleaner animation using the trail of grid points.
 func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.Style) {
 	// Use world for direct store access
-	entities := world.Cleaners.All()
+	cleanerEntities := world.Cleaners.All()
 
-	for _, entity := range entities {
-		cleaner, ok := world.Cleaners.Get(entity)
+	for _, cleanerEntity := range cleanerEntities {
+		cleaner, ok := world.Cleaners.Get(cleanerEntity)
 		if !ok {
 			continue
 		}
@@ -454,30 +454,14 @@ func (r *TerminalRenderer) drawDrain(world *engine.World, defaultStyle tcell.Sty
 			return
 		}
 
-		// TODO: this seems an unnecessary logic for now, useful later?
-		// Get the current background at this position to inherit it
-		// We read the cell content to preserve the background
-		mainc, _, style, _ := r.screen.GetContent(screenX, screenY)
+		// Draw the drain character with transparent background
+		_, _, style, _ := r.screen.GetContent(screenX, screenY)
 		_, bg, _ := style.Decompose()
 
-		// Use drain character with light cyan foreground, inheriting background
 		drainStyle := defaultStyle.Foreground(RgbDrain).Background(bg)
 
-		// If there's no existing background (e.g., just been cleared), use default background
-		if bg == tcell.ColorDefault {
-			_, defaultBg, _ := defaultStyle.Decompose()
-			drainStyle = defaultStyle.Foreground(RgbDrain).Background(defaultBg)
-		}
-
-		// TODO: delete unless drain overlapping other characters (cleaners?) needs it
-		// Preserve the underlying character if it exists, otherwise use the drain character
-		drainChar := constants.DrainChar
-		if mainc != 0 && mainc != ' ' {
-			// There's an underlying character, overlay drain on top
-			drainChar = constants.DrainChar // Still use drain character to clearly show drain position
-		}
-
-		r.screen.SetContent(screenX, screenY, drainChar, nil, drainStyle)
+		// TODO: for now keep constant char, drain will change later
+		r.screen.SetContent(screenX, screenY, constants.DrainChar, nil, drainStyle)
 	}
 }
 

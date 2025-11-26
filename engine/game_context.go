@@ -48,7 +48,6 @@ type GameContext struct {
 	GameWidth, GameHeight int
 	LineNumWidth          int
 
-	// TODO: Any reason for this to still exist?
 	// Cursor entity (singleton)
 	CursorEntity Entity
 

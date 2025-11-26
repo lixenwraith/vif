@@ -23,8 +23,8 @@ type ColorLevelKey struct {
 	Level components.SequenceLevel
 }
 
-// ColorCensus holds entity counts for each color/level combination.
-// Used for 6-color spawn limit enforcement.
+// ColorCensus holds entity counts for each color/level combination
+// Used for 6-color spawn limit enforcement
 type ColorCensus struct {
 	BlueBright  int
 	BlueNormal  int
@@ -40,7 +40,7 @@ func (c ColorCensus) Total() int {
 		c.GreenBright + c.GreenNormal + c.GreenDark
 }
 
-// ActiveColors returns count of non-zero color/level combinations.
+// ActiveColors returns count of non-zero color/level combinations
 func (c ColorCensus) ActiveColors() int {
 	count := 0
 	if c.BlueBright > 0 {
@@ -302,8 +302,8 @@ func (s *SpawnSystem) Priority() int {
 	return constants.PrioritySpawn
 }
 
-// runCensus iterates all sequence entities and counts colors.
-// O(n) where n ≈ 200 max entities. Called once per spawn check.
+// runCensus iterates all sequence entities and counts colors
+// O(n) where n ≈ 200 max entities. Called once per spawn check
 func (s *SpawnSystem) runCensus(world *engine.World) ColorCensus {
 	var census ColorCensus
 
@@ -341,7 +341,7 @@ func (s *SpawnSystem) runCensus(world *engine.World) ColorCensus {
 	return census
 }
 
-// getAvailableColorsFromCensus returns color/level combinations not present on screen.
+// getAvailableColorsFromCensus returns color/level combinations not present on screen
 func (s *SpawnSystem) getAvailableColorsFromCensus(census ColorCensus) []ColorLevelKey {
 	available := make([]ColorLevelKey, 0, 6)
 
