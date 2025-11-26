@@ -227,14 +227,9 @@ func (tx *SpatialTransaction) Commit() error {
 	return nil
 }
 
+// TODO: Why do we need this?
 // Rollback clears all pending operations without applying them
 func (tx *SpatialTransaction) Rollback() {
 	tx.operations = nil
 	tx.collisions = nil
-}
-
-// String returns a string representation of the transaction for debugging
-func (tx *SpatialTransaction) String() string {
-	return fmt.Sprintf("SpatialTransaction{operations: %d, collisions: %d}",
-		len(tx.operations), len(tx.collisions))
 }

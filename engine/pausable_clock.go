@@ -20,7 +20,7 @@ type PausableClock struct {
 	totalPausedTime time.Duration // Cumulative pause duration
 
 	// For external access to real time
-	realTimeProvider TimeProvider
+	realTimeProvider *TimeProvider
 }
 
 // NewPausableClock creates a new pausable clock
@@ -29,7 +29,7 @@ func NewPausableClock() *PausableClock {
 	return &PausableClock{
 		realStartTime:    now,
 		gameStartTime:    now,
-		realTimeProvider: NewMonotonicTimeProvider(),
+		realTimeProvider: NewTimeProvider(),
 	}
 }
 

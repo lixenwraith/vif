@@ -44,6 +44,7 @@ func (s *NuggetSystem) Priority() int {
 
 // Update runs the nugget system logic using generic stores
 func (s *NuggetSystem) Update(world *engine.World, dt time.Duration) {
+	// Fetch resources
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	now := timeRes.GameTime
 

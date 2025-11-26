@@ -44,13 +44,14 @@ type AudioEngine struct {
 }
 
 // NewAudioEngine creates a new audio engine with the given configuration
-func NewAudioEngine(cfg *AudioConfig) (*AudioEngine, error) {
-	if cfg == nil {
-		cfg = DefaultAudioConfig()
+func NewAudioEngine(cfg ...*AudioConfig) (*AudioEngine, error) {
+	config := &AudioConfig{}
+	if len(cfg) == 0 || cfg[0] == nil {
+		config = DefaultAudioConfig()
 	}
 
 	// Initialize speaker if not already done
-	rate := beep.SampleRate(cfg.SampleRate)
+	rate := beep.SampleRate(config.SampleRate)
 	err := speaker.Init(rate, rate.N(time.Second/10))
 	if err != nil {
 		// Speaker might already be initialized, try to use it anyway
@@ -58,7 +59,7 @@ func NewAudioEngine(cfg *AudioConfig) (*AudioEngine, error) {
 	}
 
 	ae := &AudioEngine{
-		config:        cfg,
+		config:        config,
 		realTimeQueue: make(chan AudioCommand, 5),  // Increased from 1 to 5
 		stateQueue:    make(chan AudioCommand, 10), // Increased from 1 to 10 for gold sounds
 		stopChan:      make(chan struct{}),

@@ -52,7 +52,7 @@ func (p GamePhase) String() string {
 // Handles pause-aware scheduling without busy-wait
 type ClockScheduler struct {
 	ctx          *GameContext
-	timeProvider TimeProvider
+	timeProvider *PausableClock
 
 	// Tick configuration
 	tickInterval     time.Duration
@@ -95,9 +95,9 @@ func NewClockScheduler(ctx *GameContext, tickInterval time.Duration, frameReady 
 
 	cs := &ClockScheduler{
 		ctx:              ctx,
-		timeProvider:     ctx.TimeProvider,
+		timeProvider:     ctx.PausableClock,
 		tickInterval:     tickInterval,
-		lastGameTickTime: ctx.TimeProvider.Now(),
+		lastGameTickTime: ctx.PausableClock.Now(),
 		frameReady:       frameReady,
 		updateDone:       updateDone,
 		tickCount:        atomic.Uint64{},
@@ -292,9 +292,10 @@ func (cs *ClockScheduler) processTick() {
 	switch phaseSnapshot.Phase {
 	case PhaseGoldActive:
 		// Check if gold sequence has timed out (pausable clock handles pause adjustment internally)
-		if cs.ctx.State.IsGoldTimedOut(gameNow) {
-			// Gold timeout - call gold system to remove gold entities
+		goldSnapshot := cs.ctx.State.ReadGoldState(gameNow)
+		if goldSnapshot.Active && gameNow.After(goldSnapshot.TimeoutTime) {
 			if goldSys != nil {
+				// Gold timeout - call gold system to remove gold entities
 				goldSys.TimeoutGoldSequence(world)
 			} else {
 				// No gold system - just deactivate gold sequence directly
@@ -313,7 +314,8 @@ func (cs *ClockScheduler) processTick() {
 
 	case PhaseDecayWait:
 		// Check if decay timer has expired (pausable clock handles pause adjustment internally)
-		if cs.ctx.State.IsDecayReady(gameNow) {
+		decaySnapshot := cs.ctx.State.ReadDecayState(gameNow)
+		if decaySnapshot.TimerActive && gameNow.After(decaySnapshot.NextTime) {
 			// Timer expired - transition to DecayAnimation
 			if cs.ctx.State.StartDecayAnimation(gameNow) {
 				// Trigger decay system to spawn falling entities

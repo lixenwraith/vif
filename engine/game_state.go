@@ -87,19 +87,18 @@ type GameState struct {
 	// ===== CONFIGURATION (read-only after init) =====
 	// NOTE: These should ideally be removed in favor of ConfigResource, migrating gradually
 
-	// Set once at initialization, never mutated (WRONG ASSUMPTION, SCREEN CAN BE RESIZED)
+	// Set once at initialization, never mutated
 	GameWidth   int
 	GameHeight  int
 	ScreenWidth int
 }
 
 // NewGameState creates a new centralized game state
-func NewGameState(gameWidth, gameHeight, screenWidth int, timeProvider TimeProvider) *GameState {
+func NewGameState(gameWidth, gameHeight, screenWidth int, now time.Time) *GameState {
 	gs := &GameState{
 		GameWidth:   gameWidth,
 		GameHeight:  gameHeight,
 		ScreenWidth: screenWidth,
-		// TimeProvider: timeProvider,
 		MaxEntities: constants.MaxEntities,
 	}
 
@@ -134,7 +133,6 @@ func NewGameState(gameWidth, gameHeight, screenWidth int, timeProvider TimeProvi
 	gs.FrameNumber.Store(0)
 
 	// Initialize clock-tick state
-	now := timeProvider.Now()
 	gs.SpawnLastTime = now
 	gs.SpawnNextTime = now.Add(constants.InitialSpawnDelay) // Initial spawn delay
 	gs.SpawnRateMultiplier = 1.0
@@ -385,16 +383,18 @@ func (gs *GameState) UpdateSpawnRate(entityCount, maxEntities int) {
 	}
 }
 
-// ShouldSpawn checks if it's time to spawn new content
-func (gs *GameState) ShouldSpawn(now time.Time) bool {
+// GetSpawnNextTime checks if it's time to spawn new content
+func (gs *GameState) GetSpawnNextTime() time.Time {
 	gs.mu.RLock()
 	defer gs.mu.RUnlock()
+	return gs.SpawnNextTime
+}
 
-	if !gs.SpawnEnabled {
-		return false
-	}
-
-	return now.After(gs.SpawnNextTime) || now.Equal(gs.SpawnNextTime)
+// GetSpawnEnabled returns if content spawn is enabled
+func (gs *GameState) GetSpawnEnabled() bool {
+	gs.mu.RLock()
+	defer gs.mu.RUnlock()
+	return gs.SpawnEnabled
 }
 
 // SetSpawnEnabled enables or disables spawning
@@ -553,27 +553,6 @@ func (gs *GameState) ReadPhaseState(now time.Time) PhaseSnapshot {
 
 // ===== GOLD SEQUENCE STATE ACCESSORS (mutex protected) =====
 
-// GetGoldActive returns whether a gold sequence is active
-func (gs *GameState) GetGoldActive() bool {
-	gs.mu.RLock()
-	defer gs.mu.RUnlock()
-	return gs.GoldActive
-}
-
-// SetGoldActive sets whether a gold sequence is active
-func (gs *GameState) SetGoldActive(active bool) {
-	gs.mu.Lock()
-	defer gs.mu.Unlock()
-	gs.GoldActive = active
-}
-
-// GetGoldSequenceID returns the current gold sequence ID
-func (gs *GameState) GetGoldSequenceID() int {
-	gs.mu.RLock()
-	defer gs.mu.RUnlock()
-	return gs.GoldSequenceID
-}
-
 // IncrementGoldSequenceID increments and returns the next gold sequence ID
 func (gs *GameState) IncrementGoldSequenceID() int {
 	gs.mu.Lock()
@@ -626,17 +605,6 @@ func (gs *GameState) GetGoldTimeoutTime() time.Time {
 	gs.mu.RLock()
 	defer gs.mu.RUnlock()
 	return gs.GoldTimeoutTime
-}
-
-// IsGoldTimedOut checks if the gold sequence has timed out
-func (gs *GameState) IsGoldTimedOut(now time.Time) bool {
-	gs.mu.RLock()
-	defer gs.mu.RUnlock()
-	if !gs.GoldActive {
-		return false
-	}
-	// Direct comparison - both timestamps are on the same timeline
-	return now.After(gs.GoldTimeoutTime)
 }
 
 // GoldSnapshot provides a consistent view of gold state
@@ -722,16 +690,6 @@ func (gs *GameState) GetDecayNextTime() time.Time {
 	gs.mu.RLock()
 	defer gs.mu.RUnlock()
 	return gs.DecayNextTime
-}
-
-// IsDecayReady checks if the decay timer has expired
-func (gs *GameState) IsDecayReady(now time.Time) bool {
-	gs.mu.RLock()
-	defer gs.mu.RUnlock()
-	if !gs.DecayTimerActive {
-		return false
-	}
-	return now.After(gs.DecayNextTime) || now.Equal(gs.DecayNextTime)
 }
 
 // GetTimeUntilDecay returns seconds until next decay trigger

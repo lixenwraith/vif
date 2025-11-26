@@ -393,6 +393,7 @@ func (s *SpawnSystem) getAvailableColorsFromCensus(census ColorCensus) []ColorLe
 func (s *SpawnSystem) Update(world *engine.World, dt time.Duration) {
 	// Fetch resources
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+	now := timeRes.GameTime
 
 	// Calculate fill percentage and update GameState using generic stores
 
@@ -406,7 +407,11 @@ func (s *SpawnSystem) Update(world *engine.World, dt time.Duration) {
 	s.ctx.State.UpdateSpawnRate(entityCount, maxEntities)
 
 	// Check if it's time to spawn
-	if !s.ctx.State.ShouldSpawn(timeRes.GameTime) {
+	if !s.ctx.State.GetSpawnEnabled() {
+		return
+	}
+	nextTime := s.ctx.State.GetSpawnNextTime()
+	if now.Before(nextTime) {
 		return
 	}
 
@@ -421,9 +426,8 @@ func (s *SpawnSystem) Update(world *engine.World, dt time.Duration) {
 	s.spawnSequence(world)
 
 	// Update spawn timing in GameState
-	now := timeRes.GameTime
-	nextTime := now.Add(adjustedDelay)
-	s.ctx.State.UpdateSpawnTiming(now, nextTime)
+	timeAdjust := now.Add(adjustedDelay)
+	s.ctx.State.UpdateSpawnTiming(now, timeAdjust)
 }
 
 // spawnSequence generates and spawns a new character block from file

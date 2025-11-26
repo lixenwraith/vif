@@ -55,6 +55,13 @@ func handleNewCommand(ctx *engine.GameContext) bool {
 	ctx.State.SetEnergy(0)
 	ctx.State.SetHeat(0)
 
+	// Despawn drain entities before clearing world
+	// Energy=0 will trigger despawn on next DrainSystem.Update(), but explicit cleanup is safer
+	drains := ctx.World.Drains.All()
+	for _, e := range drains {
+		ctx.World.DestroyEntity(e)
+	}
+
 	// Clear all entities from the world
 	clearAllEntities(ctx.World)
 
@@ -81,8 +88,6 @@ func handleNewCommand(ctx *engine.GameContext) bool {
 	ctx.State.SetBoostEnabled(false)
 	ctx.State.SetBoostEndTime(time.Time{})
 	ctx.State.SetBoostColor(0)
-
-	// TODO: Drains: Energy reset should despawn drains, but think about something clever to do here
 
 	// Reset visual feedback
 	ctx.State.SetCursorError(false)
@@ -153,7 +158,7 @@ func handleHeatCommand(ctx *engine.GameContext, args []string) bool {
 
 // handleBoostCommand enables boost for 10 seconds
 func handleBoostCommand(ctx *engine.GameContext) bool {
-	now := ctx.TimeProvider.Now()
+	now := ctx.PausableClock.Now()
 	endTime := now.Add(constants.BoostBaseDuration)
 
 	ctx.State.SetBoostEnabled(true)

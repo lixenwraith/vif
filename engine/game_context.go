@@ -37,9 +37,8 @@ type GameContext struct {
 	Screen tcell.Screen
 	Buffer *core.Buffer
 
-	// Time provider (monotonic clock for animations)
-	TimeProvider  TimeProvider   // Pausable game time
-	PausableClock *PausableClock // Direct access for pause control
+	// Pausable Clock time provider
+	PausableClock *PausableClock
 
 	// Screen dimensions
 	Width, Height int
@@ -113,8 +112,7 @@ func NewGameContext(screen tcell.Screen) *GameContext {
 	ctx := &GameContext{
 		World:         NewWorld(),
 		Screen:        screen,
-		TimeProvider:  pausableClock, // Use pausable clock as TimeProvider
-		PausableClock: pausableClock, // Direct reference for pause control
+		PausableClock: pausableClock,
 		Width:         width,
 		Height:        height,
 		Mode:          ModeNormal,
@@ -158,7 +156,7 @@ func NewGameContext(screen tcell.Screen) *GameContext {
 	// --- MIGRATION END ---
 
 	// Create centralized game state with pausable time provider
-	ctx.State = NewGameState(ctx.GameWidth, ctx.GameHeight, ctx.Width, pausableClock)
+	ctx.State = NewGameState(ctx.GameWidth, ctx.GameHeight, ctx.Width, pausableClock.Now())
 
 	// Create cursor entity (singleton, protected)
 	ctx.CursorEntity = With(

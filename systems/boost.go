@@ -19,9 +19,11 @@ func (bs *BoostSystem) Priority() int {
 }
 
 func (bs *BoostSystem) Update(world *engine.World, dt time.Duration) {
+	// Fetch resources
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+	now := timeRes.GameTime
 
-	if bs.ctx.State.UpdateBoostTimerAtomic(timeRes.GameTime) {
+	if bs.ctx.State.UpdateBoostTimerAtomic(now) {
 		// Boost expired
 	}
 }

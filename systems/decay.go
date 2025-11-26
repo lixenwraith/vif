@@ -1,7 +1,6 @@
 package systems
 
 import (
-	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -53,9 +52,12 @@ func (s *DecaySystem) Priority() int {
 
 // Update runs the decay system animation update
 func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
+	// Fetch resources
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+	now := timeRes.GameTime
+
 	// Read decay state snapshot for consistent check
-	decaySnapshot := s.ctx.State.ReadDecayState(timeRes.GameTime)
+	decaySnapshot := s.ctx.State.ReadDecayState(now)
 
 	// Update animation if active
 	if decaySnapshot.Animating {
@@ -65,7 +67,10 @@ func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 
 // updateAnimation progresses the decay animation
 func (s *DecaySystem) updateAnimation(world *engine.World, dt time.Duration) {
+	// Fetch resources
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+	now := timeRes.GameTime
+
 	// Use Delta Time (dt) for physics integration
 	s.updateFallingEntities(world, dt.Seconds())
 
@@ -82,7 +87,7 @@ func (s *DecaySystem) updateAnimation(world *engine.World, dt time.Duration) {
 		s.cleanupFallingEntities(world)
 
 		// Stop decay animation in GameState (transitions to PhaseNormal)
-		if !s.ctx.State.StopDecayAnimation(timeRes.GameTime) {
+		if !s.ctx.State.StopDecayAnimation(now) {
 			return
 		}
 	}
@@ -90,6 +95,7 @@ func (s *DecaySystem) updateAnimation(world *engine.World, dt time.Duration) {
 
 // spawnFallingEntities creates one falling decay entity per column using generic stores
 func (s *DecaySystem) spawnFallingEntities(world *engine.World) {
+	// Fetch resources
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 	gameWidth := config.GameWidth
 
@@ -123,6 +129,7 @@ func (s *DecaySystem) spawnFallingEntities(world *engine.World) {
 
 // updateFallingEntities updates falling entity positions and applies decay using generic stores
 func (s *DecaySystem) updateFallingEntities(world *engine.World, dtSeconds float64) {
+	// Fetch resources
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 	gameHeight := config.GameHeight
 	gameWidth := config.GameWidth
@@ -316,7 +323,7 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 
 // cleanupFallingEntities removes all falling decay entities using generic stores
 func (s *DecaySystem) cleanupFallingEntities(world *engine.World) {
-	// Query decay entities from the store (stateless)
+	// Get all falling decays and iterate to destroy
 	entities := world.FallingDecays.All()
 	for _, entity := range entities {
 		world.DestroyEntity(entity)
@@ -379,35 +386,4 @@ func (s *DecaySystem) CurrentRow(now time.Time) int {
 func (s *DecaySystem) GetTimeUntilDecay(now time.Time) float64 {
 	decaySnapshot := s.ctx.State.ReadDecayState(now)
 	return decaySnapshot.TimeUntil
-}
-
-// GetSystemState returns the current state of the decay system for debugging
-func (s *DecaySystem) GetSystemState(now time.Time) string {
-	fallingCount := s.ctx.World.FallingDecays.Count()
-	snapshot := s.ctx.State.ReadDecayState(now)
-
-	if snapshot.Animating {
-		startTime := snapshot.StartTime
-		elapsed := s.ctx.TimeProvider.Now().Sub(startTime).Seconds()
-		return fmt.Sprintf("Decay[animating=true, elapsed=%.2fs, fallingEntities=%d]",
-			elapsed, fallingCount)
-	} else if snapshot.TimerActive {
-		return fmt.Sprintf("Decay[timer=active, timeUntil=%.2fs, nextDecay=%v]",
-			snapshot.TimeUntil, snapshot.NextTime)
-	}
-	return "Decay[inactive]"
-}
-
-// GetFallingEntityState returns debug info
-func (s *DecaySystem) GetFallingEntityState() []string {
-	entities := s.ctx.World.FallingDecays.All()
-	states := make([]string, 0, len(entities))
-	for _, entity := range entities {
-		if fall, ok := s.ctx.World.FallingDecays.Get(entity); ok {
-			state := fmt.Sprintf("Entity[%d]: Y=%.2f, Latch=(%d,%d), Prev=%.2f",
-				entity, fall.YPosition, fall.LastIntX, fall.LastIntY, fall.PrevPreciseY)
-			states = append(states, state)
-		}
-	}
-	return states
 }

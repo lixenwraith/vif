@@ -35,9 +35,8 @@ func main() {
 	// Create game context with ECS world
 	ctx := engine.NewGameContext(screen)
 
-	// Initialize audio engine (graceful failure)
-	audioCfg := audio.LoadAudioConfig()
-	if audioEngine, err := audio.NewAudioEngine(audioCfg); err == nil {
+	// Initialize audio engine
+	if audioEngine, err := audio.NewAudioEngine(); err == nil {
 		if err := audioEngine.Start(); err == nil {
 			ctx.AudioEngine = audioEngine
 			defer audioEngine.Stop()
@@ -157,12 +156,11 @@ func main() {
 			)
 
 		case <-frameTicker.C:
-			// Update Time Resource
-			// We calculate this based on the context's providers
+			// Update time resource based on context pausable clock
 			timeRes := &engine.TimeResource{
-				GameTime:    ctx.TimeProvider.Now(),
+				GameTime:    ctx.PausableClock.Now(),
 				RealTime:    ctx.GetRealTime(),
-				DeltaTime:   constants.FrameUpdateInterval, // Approximation for fixed step
+				DeltaTime:   constants.FrameUpdateInterval,
 				FrameNumber: ctx.GetFrameNumber(),
 			}
 			engine.AddResource(ctx.World.Resources, timeRes)

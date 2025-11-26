@@ -7,6 +7,26 @@ const (
 	MaxEntities = 200
 )
 
+// System Priorities
+const (
+	PriorityBoost   = 5
+	PriorityEnergy  = 10
+	PrioritySpawn   = 15
+	PriorityNugget  = 18
+	PriorityGold    = 20
+	PriorityCleaner = 22
+	PriorityDrain   = 25
+	PriorityDecay   = 30
+)
+
+// Spawn Exclusion Zone
+const (
+	// CursorExclusionX is horizontal distance from cursor that blocks spawn
+	CursorExclusionX = 5
+	// CursorExclusionY is vertical distance from cursor that blocks spawn
+	CursorExclusionY = 3
+)
+
 // Game Loop Timing
 const (
 	// FrameUpdateInterval is the rendering frame rate interval (~60 FPS)

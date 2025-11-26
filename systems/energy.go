@@ -59,20 +59,21 @@ func (s *EnergySystem) SetNuggetSystem(nuggetSystem *NuggetSystem) {
 
 // Update runs the energy system
 func (s *EnergySystem) Update(world *engine.World, dt time.Duration) {
-	// Fetch time resource
+	// Fetch resources
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+	now := timeRes.GameTime
 
 	// Clear error flash (red cursor) after timeout using Game Time
 	// This ensures the red flash "freezes" if the game is paused
 	cursor, ok := world.Cursors.Get(s.ctx.CursorEntity)
-	if ok && cursor.ErrorFlashEnd > 0 && timeRes.GameTime.UnixNano() >= cursor.ErrorFlashEnd {
+	if ok && cursor.ErrorFlashEnd > 0 && now.UnixNano() >= cursor.ErrorFlashEnd {
 		cursor.ErrorFlashEnd = 0
 		world.Cursors.Add(s.ctx.CursorEntity, cursor)
 	}
 
 	// Clear energy blink (background color flash) after timeout using Game Time
 	// This ensures the success flash "freezes" if the game is paused
-	if s.ctx.State.GetEnergyBlinkActive() && timeRes.GameTime.Sub(s.ctx.State.GetEnergyBlinkTime()) > constants.EnergyBlinkTimeout {
+	if s.ctx.State.GetEnergyBlinkActive() && now.Sub(s.ctx.State.GetEnergyBlinkTime()) > constants.EnergyBlinkTimeout {
 		s.ctx.State.SetEnergyBlinkActive(false)
 	}
 }
@@ -80,8 +81,8 @@ func (s *EnergySystem) Update(world *engine.World, dt time.Duration) {
 // HandleCharacterTyping processes a character typed in insert mode
 func (s *EnergySystem) HandleCharacterTyping(world *engine.World, cursorX, cursorY int, typedRune rune) {
 	// Fetch resources
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	now := timeRes.GameTime
 	frameNumber := uint64(s.ctx.State.GetFrameNumber())
 
@@ -132,7 +133,7 @@ func (s *EnergySystem) HandleCharacterTyping(world *engine.World, cursorX, curso
 	// Check if this is a nugget - handle before sequence logic
 	if world.Nuggets.Has(entity) && s.nuggetSystem != nil {
 		// Handle nugget collection (requires matching character)
-		s.handleNuggetCollection(world, entity, char, typedRune, cursorX, cursorY)
+		s.handleNuggetCollection(world, entity, char, typedRune)
 		return
 	}
 
@@ -313,10 +314,10 @@ func (s *EnergySystem) extendBoost(now time.Time, duration time.Duration) {
 }
 
 // handleNuggetCollection processes nugget collection (requires typing matching character)
-func (s *EnergySystem) handleNuggetCollection(world *engine.World, entity engine.Entity, char components.CharacterComponent, typedRune rune, cursorX, cursorY int) {
+func (s *EnergySystem) handleNuggetCollection(world *engine.World, entity engine.Entity, char components.CharacterComponent, typedRune rune) {
 	// Fetch resources
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	now := timeRes.GameTime
 	frameNumber := uint64(s.ctx.State.GetFrameNumber())
 
@@ -444,22 +445,17 @@ func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity engi
 
 	if isLastChar {
 		// Gold sequence completed! Check if we should trigger cleaners
-		heatBarWidth := config.ScreenWidth
-		if heatBarWidth < 1 {
-			heatBarWidth = 1
-		}
-
 		currentHeat := s.ctx.State.GetHeat()
 
 		// Request cleaners if heat is already at max
 		// Push event to trigger cleaners on next update
-		if currentHeat >= heatBarWidth {
+		if currentHeat >= constants.MaxHeat {
 			s.ctx.PushEvent(engine.EventCleanerRequest, nil, timeRes.GameTime)
 		}
 
 		// Fill heat to max (if not already higher)
-		if currentHeat < heatBarWidth {
-			s.ctx.State.SetHeat(heatBarWidth)
+		if currentHeat < constants.MaxHeat {
+			s.ctx.State.SetHeat(constants.MaxHeat)
 		}
 
 		// Mark gold sequence as complete

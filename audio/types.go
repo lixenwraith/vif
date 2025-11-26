@@ -2,8 +2,6 @@ package audio
 
 import (
 	"time"
-
-	"github.com/lixenwraith/vi-fighter/constants"
 )
 
 // SoundType represents different sound effects in the game
@@ -31,20 +29,4 @@ type AudioConfig struct {
 	EffectVolumes map[SoundType]float64 // Per-effect volume multipliers
 	MinSoundGap   time.Duration         // Minimum gap between sounds
 	SampleRate    int                   // Audio sample rate
-}
-
-// DefaultAudioConfig returns default audio configuration
-func DefaultAudioConfig() *AudioConfig {
-	return &AudioConfig{
-		Enabled:      true,
-		MasterVolume: 0.5,
-		EffectVolumes: map[SoundType]float64{
-			SoundError:  0.8,
-			SoundBell:   1.0,
-			SoundWhoosh: 0.6,
-			SoundCoin:   0.5,
-		},
-		MinSoundGap: constants.MinSoundGap, // One clock tick gap
-		SampleRate:  44100,
-	}
 }

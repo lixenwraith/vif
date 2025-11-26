@@ -181,7 +181,7 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 							Type:       audio.SoundBell,
 							Priority:   1,
 							Generation: uint64(h.ctx.State.GetFrameNumber()),
-							Timestamp:  h.ctx.TimeProvider.Now(),
+							Timestamp:  h.ctx.PausableClock.Now(),
 						}
 						h.ctx.AudioEngine.SendState(cmd)
 					}
@@ -342,7 +342,7 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 							Type:       audio.SoundBell,
 							Priority:   1,
 							Generation: uint64(h.ctx.State.GetFrameNumber()),
-							Timestamp:  h.ctx.TimeProvider.Now(),
+							Timestamp:  h.ctx.PausableClock.Now(),
 						}
 						h.ctx.AudioEngine.SendState(cmd)
 					}

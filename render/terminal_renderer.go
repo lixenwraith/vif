@@ -223,12 +223,12 @@ func (r *TerminalRenderer) drawPingHighlights(cursorX, cursorY int, ctx *engine.
 
 	// Draw grid lines if ping is active
 	if ctx.GetPingActive() {
-		r.drawPingGrid(cursorX, cursorY, ctx, pingStyle)
+		r.drawPingGrid(cursorX, cursorY, pingStyle)
 	}
 }
 
 // drawPingGrid draws coordinate grid lines at 5-column intervals
-func (r *TerminalRenderer) drawPingGrid(cursorX, cursorY int, ctx *engine.GameContext, pingStyle tcell.Style) {
+func (r *TerminalRenderer) drawPingGrid(cursorX, cursorY int, pingStyle tcell.Style) {
 	// Vertical lines - draw unconditionally (characters will render on top)
 	for n := 1; ; n++ {
 		offset := 5 * n
@@ -296,8 +296,11 @@ func (r *TerminalRenderer) drawCharacters(world *engine.World, cursorX, cursorY 
 
 	// Direct iteration - no type assertions needed
 	for _, entity := range entities {
-		pos, _ := world.Positions.Get(entity)
-		char, _ := world.Characters.Get(entity)
+		pos, okP := world.Positions.Get(entity)
+		char, okC := world.Characters.Get(entity)
+		if !okP || !okC {
+			continue // Entity destroyed mid-iteration
+		}
 
 		screenX := r.gameX + pos.X
 		screenY := r.gameY + pos.Y
@@ -429,27 +432,29 @@ func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.
 // drawDrain draws the drain entity with transparent background
 func (r *TerminalRenderer) drawDrain(world *engine.World, defaultStyle tcell.Style) {
 	// Get all drains
-	drains := world.Drains.All()
-	if len(drains) == 0 {
+	drainEntities := world.Drains.All()
+	if len(drainEntities) == 0 {
 		return
 	}
 
 	// Iterate on all drains
-	for _, entity := range drains {
-		drain, ok := world.Drains.Get(entity)
+	for _, drainEntity := range drainEntities {
+		// Get current position
+		drainPos, ok := world.Positions.Get(drainEntity)
 		if !ok {
-			continue
+			panic(fmt.Errorf("drain destroyed"))
 		}
 
 		// Calculate screen position
-		screenX := r.gameX + drain.X
-		screenY := r.gameY + drain.Y
+		screenX := r.gameX + drainPos.X
+		screenY := r.gameY + drainPos.Y
 
 		// Bounds check
 		if screenX < r.gameX || screenX >= r.width || screenY < r.gameY || screenY >= r.gameY+r.gameHeight {
 			return
 		}
 
+		// TODO: this seems an unnecessary logic for now, useful later?
 		// Get the current background at this position to inherit it
 		// We read the cell content to preserve the background
 		mainc, _, style, _ := r.screen.GetContent(screenX, screenY)
@@ -493,7 +498,7 @@ func (r *TerminalRenderer) drawRemovalFlashes(world *engine.World, ctx *engine.G
 		}
 
 		// Calculate elapsed time for fade effect
-		now := ctx.TimeProvider.Now()
+		now := ctx.PausableClock.Now()
 		elapsed := now.Sub(flash.StartTime).Milliseconds()
 
 		// Skip if flash has expired (cleanup will handle removal)
@@ -677,7 +682,7 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 	var totalWidth int
 
 	if ctx.State.GetBoostEnabled() {
-		remaining := ctx.State.GetBoostEndTime().Sub(ctx.TimeProvider.Now()).Seconds()
+		remaining := ctx.State.GetBoostEndTime().Sub(ctx.PausableClock.Now()).Seconds()
 		if remaining < 0 {
 			remaining = 0
 		}
@@ -699,7 +704,7 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 		startX = 0
 	}
 
-	now := ctx.TimeProvider.Now()
+	now := ctx.PausableClock.Now()
 
 	// Draw boost timer if active (with pink background)
 	if ctx.State.GetBoostEnabled() {
@@ -805,9 +810,14 @@ func (r *TerminalRenderer) drawCursor(cursorX, cursorY int, ctx *engine.GameCont
 	// Drain destroys other items, so if it exists here, it takes precedence
 	isDrain := false
 	drainEntities := ctx.World.Drains.All()
-	for _, e := range drainEntities {
-		drain, ok := ctx.World.Drains.Get(e)
-		if ok && drain.X == cursorX && drain.Y == cursorY {
+	for _, drainEntity := range drainEntities {
+		// Get current position
+		drainPos, ok := ctx.World.Positions.Get(drainEntity)
+		if !ok {
+			panic(fmt.Errorf("drain destroyed"))
+		}
+
+		if drainPos.X == cursorX && drainPos.Y == cursorY {
 			isDrain = true
 			break
 		}
@@ -832,6 +842,7 @@ func (r *TerminalRenderer) drawCursor(cursorX, cursorY int, ctx *engine.GameCont
 				continue
 			}
 
+			// TODO: Handle ok
 			pos, _ := ctx.World.Positions.Get(e)
 			if pos.X == cursorX && pos.Y == cursorY {
 				charComp, _ := ctx.World.Characters.Get(e)
@@ -890,7 +901,7 @@ func (r *TerminalRenderer) drawCursor(cursorX, cursorY int, ctx *engine.GameCont
 	// Reads component directly to ensure flash works during pause
 	cursorComp, ok := ctx.World.Cursors.Get(ctx.CursorEntity)
 	if ok && cursorComp.ErrorFlashEnd > 0 {
-		if ctx.TimeProvider.Now().UnixNano() < cursorComp.ErrorFlashEnd {
+		if ctx.PausableClock.Now().UnixNano() < cursorComp.ErrorFlashEnd {
 			cursorBgColor = RgbCursorError
 			charFgColor = tcell.ColorBlack
 		}
