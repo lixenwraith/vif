@@ -1,6 +1,7 @@
 package systems
 
 import (
+	"cmp"
 	"fmt"
 	"time"
 
@@ -39,6 +40,7 @@ func (s *DrainSystem) Priority() int {
 func (s *DrainSystem) Update(world *engine.World, dt time.Duration) {
 	energy := s.ctx.State.GetEnergy()
 
+	// TODO: need better lifecycle management, prep for ember
 	drainActive := world.Drains.Count() > 0
 	// Lifecycle logic: spawn when energy > 0, despawn when energy <= 0
 	if energy > 0 && !drainActive {
@@ -62,8 +64,7 @@ func (s *DrainSystem) spawnDrain(world *engine.World) {
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	now := timeRes.GameTime
 
-	// Read cursor position directly from ECS (Source of Truth)
-	// instead of stale GameState atomics
+	// Read cursor position
 	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
 	if !ok {
 		panic(fmt.Errorf("cursor destroyed"))
@@ -103,8 +104,9 @@ func (s *DrainSystem) spawnDrain(world *engine.World) {
 
 	// Check if position is occupied and handle collision
 	collidingEntity := world.Positions.GetEntityAt(spawnX, spawnY)
-	// TODO: (2-second) delayed spawn on energy > 0, with spawn animation
-	// Do not trigger collision logic against the cursor itself (Drain spawns on top of it)
+	// TODO: (2-second) delayed spawn, with spawn animation: materialize system
+	// TODO: this check seems unnecessary, cursor is protected entity, check iteration on multiple overlaps (cursor+sequence+decay) that it destroys them all correctly
+	// Do not trigger collision logic against the cursor itself (Drain currently spawns on top of it with no delay)
 	if collidingEntity != 0 && collidingEntity != s.ctx.CursorEntity {
 		s.handleCollisionAtPosition(world, collidingEntity)
 	}
@@ -130,9 +132,9 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 	now := timeRes.GameTime
 
 	// Get and iterate on all drains
-	entities := world.Drains.All()
-	for _, entity := range entities {
-		drain, ok := world.Drains.Get(entity)
+	drainEntities := world.Drains.All()
+	for _, drainEntity := range drainEntities {
+		drain, ok := world.Drains.Get(drainEntity)
 		if !ok {
 			continue
 		}
@@ -140,26 +142,26 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 		// Purely clock-based movement: only move when interval has elapsed
 		timeSinceLastMove := now.Sub(drain.LastMoveTime)
 		if timeSinceLastMove < constants.DrainMoveInterval {
-			// Not enough time has passed, skip movement this frame
-			return
+			// Not enough time has passed, skip movement this frame and check the others
+			continue
 		}
 
-		// Read cursor position directly from ECS
+		// Read cursor position
 		cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
 		if !ok {
 			panic(fmt.Errorf("cursor destroyed"))
 		}
 
 		// Get current position
-		drainPos, ok := world.Positions.Get(entity)
+		drainPos, ok := world.Positions.Get(drainEntity)
 		if !ok {
 			panic(fmt.Errorf("drain destroyed"))
 		}
 
 		// Calculate movement direction using Manhattan distance (8-directional)
 		// If already on cursor, dx and dy will be 0 (no movement but LastMoveTime still updates)
-		dx := sign(cursorPos.X - drainPos.X)
-		dy := sign(cursorPos.Y - drainPos.Y)
+		dx := cmp.Compare(cursorPos.X, drainPos.X)
+		dy := cmp.Compare(cursorPos.Y, drainPos.Y)
 
 		// Calculate new position
 		newX := drainPos.X + dx
@@ -184,7 +186,7 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 
 		// FIX: Allow moving onto the Cursor Entity
 		// We check if the colliding entity exists, is not self, AND is not the cursor.
-		if collidingEntity != 0 && collidingEntity != entity && collidingEntity != s.ctx.CursorEntity {
+		if collidingEntity != 0 && collidingEntity != drainEntity && collidingEntity != s.ctx.CursorEntity {
 			s.handleCollisionAtPosition(world, collidingEntity)
 			// Don't update position if there was a blocking collision
 			return
@@ -201,10 +203,10 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 		// Update position (this handles spatial index)
 		drainPos.X = newX
 		drainPos.Y = newY
-		world.Positions.Add(entity, drainPos)
+		world.Positions.Add(drainEntity, drainPos)
 
 		// Save updated drain component
-		world.Drains.Add(entity, drain)
+		world.Drains.Add(drainEntity, drain)
 	}
 }
 
@@ -214,21 +216,21 @@ func (s *DrainSystem) updateEnergyDrain(world *engine.World) {
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 
 	// Get and iterate on all drains
-	entities := world.Drains.All()
-	for _, entity := range entities {
-		drain, ok := world.Drains.Get(entity)
+	drainEntities := world.Drains.All()
+	for _, drainEntity := range drainEntities {
+		drain, ok := world.Drains.Get(drainEntity)
 		if !ok {
 			continue
 		}
 
-		// Read cursor position directly from ECS
+		// Read cursor position
 		cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
 		if !ok {
 			panic(fmt.Errorf("cursor destroyed"))
 		}
 
 		// Get current position
-		drainPos, ok := world.Positions.Get(entity)
+		drainPos, ok := world.Positions.Get(drainEntity)
 		if !ok {
 			panic(fmt.Errorf("drain destroyed"))
 		}
@@ -239,7 +241,7 @@ func (s *DrainSystem) updateEnergyDrain(world *engine.World) {
 		// Always update IsOnCursor to ensure it stays in sync (recalculated every frame)
 		if drain.IsOnCursor != isOnCursor {
 			drain.IsOnCursor = isOnCursor
-			world.Drains.Add(entity, drain)
+			world.Drains.Add(drainEntity, drain)
 		}
 
 		// Drain energy if on cursor and DrainEnergyDrainInterval has passed
@@ -251,20 +253,10 @@ func (s *DrainSystem) updateEnergyDrain(world *engine.World) {
 
 				// Update last drain time
 				drain.LastDrainTime = now
-				world.Drains.Add(entity, drain)
+				world.Drains.Add(drainEntity, drain)
 			}
 		}
 	}
-}
-
-// sign returns -1, 0, or 1 depending on the sign of the input
-func sign(x int) int {
-	if x < 0 {
-		return -1
-	} else if x > 0 {
-		return 1
-	}
-	return 0
 }
 
 // handleCollisions detects and processes collisions with entities at the drain's current position using generic stores
@@ -348,15 +340,15 @@ func (s *DrainSystem) handleGoldSequenceCollision(world *engine.World, entity en
 
 	// Find and destroy all gold sequence entities with this ID
 	goldSequenceEntities := world.Sequences.All()
-	for _, goldCharEntity := range goldSequenceEntities {
-		seq, ok := world.Sequences.Get(goldCharEntity)
+	for _, goldSequenceEntity := range goldSequenceEntities {
+		seq, ok := world.Sequences.Get(goldSequenceEntity)
 		if !ok {
 			continue // Already destroyed or typed
 		}
 
 		// Only destroy gold sequence entities with matching ID
 		if seq.Type == components.SequenceGold && seq.ID == sequenceID {
-			world.DestroyEntity(goldCharEntity)
+			world.DestroyEntity(goldSequenceEntity)
 		}
 	}
 
@@ -367,9 +359,9 @@ func (s *DrainSystem) handleGoldSequenceCollision(world *engine.World, entity en
 // handleNuggetCollision destroys the nugget entity and clears active nugget state using generic stores
 func (s *DrainSystem) handleNuggetCollision(world *engine.World, entity engine.Entity) {
 
-	// Clear active nugget using race-safe method
+	// Clear active nugget
 	if s.nuggetSystem != nil {
-		s.nuggetSystem.ClearActiveNuggetIfMatches(uint64(entity))
+		s.nuggetSystem.ClearActiveNuggetIfMatches(entity)
 	}
 
 	// Destroy the nugget entity

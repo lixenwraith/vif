@@ -43,7 +43,7 @@ type GameState struct {
 	FrameNumber atomic.Int64
 
 	// ===== CLOCK-TICK STATE (mutex protected) =====
-	// Updated only during clock tick, read by all systems
+	// Updated during clock tick cycles, read by systems via snapshot methods
 
 	mu sync.RWMutex
 
@@ -83,23 +83,12 @@ type GameState struct {
 	// Game Lifecycle State
 	FirstUpdateTime      time.Time // When the game first started (first Update call)
 	InitialSpawnComplete bool      // Whether initial gold spawn has been attempted
-
-	// ===== CONFIGURATION (read-only after init) =====
-	// NOTE: These should ideally be removed in favor of ConfigResource, migrating gradually
-
-	// Set once at initialization, never mutated
-	GameWidth   int
-	GameHeight  int
-	ScreenWidth int
 }
 
 // NewGameState creates a new centralized game state
-func NewGameState(gameWidth, gameHeight, screenWidth int, now time.Time) *GameState {
+func NewGameState(maxEntities int, now time.Time) *GameState {
 	gs := &GameState{
-		GameWidth:   gameWidth,
-		GameHeight:  gameHeight,
-		ScreenWidth: screenWidth,
-		MaxEntities: constants.MaxEntities,
+		MaxEntities: maxEntities,
 	}
 
 	// Initialize atomics to zero values
@@ -797,12 +786,6 @@ type BoostSnapshot struct {
 	Color     int32 // 0=None, 1=Blue, 2=Green
 	Remaining time.Duration
 }
-
-// // CursorSnapshot provides consistent view of cursor position
-// type CursorSnapshot struct {
-// 	X int
-// 	Y int
-// }
 
 // ===== GAME LIFECYCLE ACCESSORS (mutex protected) =====
 

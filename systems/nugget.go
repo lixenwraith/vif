@@ -150,11 +150,10 @@ func (s *NuggetSystem) ClearActiveNugget() {
 	s.activeNugget.Store(0)
 }
 
-// ClearActiveNuggetIfMatches clears the active nugget reference only if it matches the given entity ID
-// Returns true if the nugget was cleared, false if it was already cleared or a different nugget was active
-// This is the race-safe version that should be preferred when the entity ID is known
-func (s *NuggetSystem) ClearActiveNuggetIfMatches(entityID uint64) bool {
-	return s.activeNugget.CompareAndSwap(entityID, 0)
+// ClearActiveNuggetIfMatches clears the active nugget if it matches the entity
+// Returns true if cleared, false if already cleared or a different nugget was active
+func (s *NuggetSystem) ClearActiveNuggetIfMatches(entity engine.Entity) bool {
+	return s.activeNugget.CompareAndSwap(uint64(entity), 0)
 }
 
 // GetSystemState returns a debug string describing the current system state

@@ -76,12 +76,9 @@ type GameContext struct {
 	LastFindForward bool // true for f/t (forward), false for F/T (backward)
 	LastFindType    rune // Type of last find: 'f', 'F', 't', or 'T'
 
-	// TODO: Remove?
 	// Atomic ping coordinates feature (local to input handling)
 	pingActive    atomic.Bool
 	pingGridTimer atomic.Uint64 // float64 bits for seconds
-	PingRow       int
-	PingCol       int
 
 	// Pause state management (simplified - actual pause handled by PausableClock)
 	IsPaused atomic.Bool
@@ -156,7 +153,7 @@ func NewGameContext(screen tcell.Screen) *GameContext {
 	// --- MIGRATION END ---
 
 	// Create centralized game state with pausable time provider
-	ctx.State = NewGameState(ctx.GameWidth, ctx.GameHeight, ctx.Width, pausableClock.Now())
+	ctx.State = NewGameState(constants.MaxEntities, pausableClock.Now())
 
 	// Create cursor entity (singleton, protected)
 	ctx.CursorEntity = With(
@@ -300,7 +297,7 @@ func (g *GameContext) updateGameArea() {
 		gameHeight = 1
 	}
 
-	lineNumWidth := len(formatNumber(gameHeight))
+	lineNumWidth := formatNumber(gameHeight)
 	if lineNumWidth < 1 {
 		lineNumWidth = 1
 	}
@@ -316,19 +313,17 @@ func (g *GameContext) updateGameArea() {
 	}
 }
 
-// formatNumber is a helper to format line numbers
-func formatNumber(n int) string {
-	// Simple implementation - just count digits
+// formatNumber returns the number of digits needed to display n
+func formatNumber(n int) int {
 	if n == 0 {
-		return "0"
+		return 1
 	}
 	digits := 0
 	for n > 0 {
 		digits++
 		n /= 10
 	}
-	result := make([]byte, digits)
-	return string(result)
+	return digits
 }
 
 // HandleResize handles terminal resize events
@@ -355,20 +350,10 @@ func (g *GameContext) HandleResize() {
 			g.Buffer.Resize(g.GameWidth, g.GameHeight)
 		}
 
-		// Clamp cursor position in ECS
+		// Clamp cursor position
 		if pos, ok := g.World.Positions.Get(g.CursorEntity); ok {
-			if pos.X >= g.GameWidth {
-				pos.X = g.GameWidth - 1
-			}
-			if pos.Y >= g.GameHeight {
-				pos.Y = g.GameHeight - 1
-			}
-			if pos.X < 0 {
-				pos.X = 0
-			}
-			if pos.Y < 0 {
-				pos.Y = 0
-			}
+			pos.X = max(0, min(pos.X, g.GameWidth-1))
+			pos.Y = max(0, min(pos.Y, g.GameHeight-1))
 			g.World.Positions.Add(g.CursorEntity, pos)
 		}
 	}

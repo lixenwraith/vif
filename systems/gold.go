@@ -326,7 +326,7 @@ func (s *GoldSystem) findValidPosition(world *engine.World, seqLength int) (int,
 	// Fetch resources
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 
-	// Read cursor directly from ECS
+	// Read cursor position
 	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
 	if !ok {
 		panic(fmt.Errorf("cursor destroyed"))
@@ -337,8 +337,7 @@ func (s *GoldSystem) findValidPosition(world *engine.World, seqLength int) (int,
 		x := rand.Intn(config.GameWidth)
 		y := rand.Intn(config.GameHeight)
 
-		// Check if far enough from cursor (same exclusion zone as spawn system)
-		// TODO: Exclusion zone rule is arbitrary, to be set in constants
+		// Check if far enough from cursor
 		if math.Abs(float64(x-cursorPos.X)) <= constants.CursorExclusionX || math.Abs(float64(y-cursorPos.Y)) <= constants.CursorExclusionY {
 			continue
 		}

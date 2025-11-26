@@ -139,7 +139,7 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, dtSeconds float
 		dtSeconds = 0.1
 	}
 
-	// Query all falling entities directly from the store (Stateless)
+	// Query all falling entities
 	fallingEntities := world.FallingDecays.All()
 
 	// Clear deduplication maps for this frame
@@ -218,7 +218,7 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, dtSeconds float
 					if world.Nuggets.Has(targetEntity) {
 						world.DestroyEntity(targetEntity)
 						if s.nuggetSystem != nil {
-							s.nuggetSystem.ClearActiveNuggetIfMatches(uint64(targetEntity))
+							s.nuggetSystem.ClearActiveNuggetIfMatches(targetEntity)
 						}
 					} else {
 						s.applyDecayToCharacter(world, targetEntity)

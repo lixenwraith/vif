@@ -74,7 +74,7 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 	// Draw heat meter
 	r.drawHeatMeter(ctx.State.GetHeat(), defaultStyle)
 
-	// Read cursor position from ECS for rendering
+	// Read cursor position
 	cursorPos, ok := ctx.World.Positions.Get(ctx.CursorEntity)
 	if !ok {
 		// return

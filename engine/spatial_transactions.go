@@ -226,10 +226,3 @@ func (tx *SpatialTransaction) Commit() error {
 
 	return nil
 }
-
-// TODO: Why do we need this?
-// Rollback clears all pending operations without applying them
-func (tx *SpatialTransaction) Rollback() {
-	tx.operations = nil
-	tx.collisions = nil
-}

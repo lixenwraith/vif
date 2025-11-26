@@ -11,6 +11,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/components"
+	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/content"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
@@ -84,14 +85,14 @@ type CodeBlock struct {
 type SpawnSystem struct {
 	ctx *engine.GameContext
 
-	// Content management (implementation detail, not game state)
+	// Content management
 	contentManager *content.ContentManager
 	contentMutex   sync.RWMutex
-	indexMutex     sync.Mutex // Mutex to protect index update and wraparound operations
+	indexMutex     sync.Mutex // Protect index update and wraparound operations
 	codeBlocks     []CodeBlock
-	nextBlockIndex atomic.Int32 // Atomic index for thread-safe access
-	totalBlocks    atomic.Int32 // Atomic counter for total blocks
-	blocksConsumed atomic.Int32 // Atomic counter for consumed blocks
+	nextBlockIndex atomic.Int32 // Index for thread-safe access
+	totalBlocks    atomic.Int32 // Counter for total blocks
+	blocksConsumed atomic.Int32 // Counter for consumed blocks
 	nextContent    []CodeBlock  // Pre-fetched content for seamless transition
 	isRefreshing   atomic.Bool
 }
@@ -111,8 +112,8 @@ func NewSpawnSystem(ctx *engine.GameContext) *SpawnSystem {
 	// Initialize ContentManager
 	s.contentManager = content.NewContentManager()
 	if err := s.contentManager.DiscoverContentFiles(); err != nil {
-		// Log error but continue with empty content
-		// System will handle gracefully
+		// Continues gracefully with empty content
+		// TODO: add status bar error message
 	}
 
 	// Pre-validate all discovered content files and build cache
@@ -135,7 +136,6 @@ func (s *SpawnSystem) loadContentFromManager() {
 	lines, _, err := s.contentManager.SelectRandomBlockWithValidation()
 	if err != nil || len(lines) == 0 {
 		// If no content available, use empty slice
-		// System will gracefully handle this by not spawning file-based blocks
 		s.contentMutex.Lock()
 		s.codeBlocks = []CodeBlock{}
 		s.contentMutex.Unlock()
@@ -162,7 +162,7 @@ func (s *SpawnSystem) loadContentFromManager() {
 
 // checkAndTriggerRefresh checks if content refresh is needed and triggers pre-fetch
 func (s *SpawnSystem) checkAndTriggerRefresh() {
-	// Read current state using atomic operations
+	// Read current state
 	totalBlocks := s.totalBlocks.Load()
 	blocksConsumed := s.blocksConsumed.Load()
 
@@ -199,7 +199,7 @@ func (s *SpawnSystem) preFetchNextContent() {
 	s.contentMutex.Unlock()
 }
 
-// swapToNextContent performs thread-safe content swap when current content is exhausted
+// swapToNextContent performs content swap when current content is exhausted
 func (s *SpawnSystem) swapToNextContent() {
 	s.contentMutex.Lock()
 
@@ -211,7 +211,7 @@ func (s *SpawnSystem) swapToNextContent() {
 		s.nextContent = nil
 		s.contentMutex.Unlock()
 
-		// Update atomic counters after releasing lock
+		// Update counters after releasing lock
 		s.totalBlocks.Store(newTotalBlocks)
 		s.nextBlockIndex.Store(0)
 		s.blocksConsumed.Store(0)
@@ -432,7 +432,7 @@ func (s *SpawnSystem) Update(world *engine.World, dt time.Duration) {
 
 // spawnSequence generates and spawns a new character block from file
 func (s *SpawnSystem) spawnSequence(world *engine.World) {
-	// CHANGED: Use census instead of atomic counters
+	// Census for color counters
 	census := s.runCensus(world)
 	availableColors := s.getAvailableColorsFromCensus(census)
 
@@ -496,7 +496,7 @@ func (s *SpawnSystem) getNextBlock() CodeBlock {
 	block := s.codeBlocks[currentIndex]
 	s.contentMutex.RUnlock()
 
-	// Use mutex to protect the critical section where we update index and check for wraparound
+	// Mutex protection of the section where index is updated and checked for wraparound
 	// This prevents race conditions where blocksConsumed could exceed totalBlocks
 	s.indexMutex.Lock()
 
@@ -540,15 +540,15 @@ func (s *SpawnSystem) getNextBlock() CodeBlock {
 
 // placeLine attempts to place a single line on the screen using generic stores
 func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType components.SequenceType, seqLevel components.SequenceLevel, style tcell.Style) bool {
+	// Fetch resources
+	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+
 	lineRunes := []rune(line)
 	lineLength := len(lineRunes)
 
 	if lineLength == 0 {
 		return false
 	}
-
-	// Fetch dimensions from resources
-	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 
 	// Try up to maxPlacementTries times to find a valid position
 	for attempt := 0; attempt < maxPlacementTries; attempt++ {
@@ -585,14 +585,14 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 		}
 		for i := 0; i < lineLength; i++ {
 			col := startCol + i
-			if math.Abs(float64(col-cursorPos.X)) <= 5 && math.Abs(float64(row-cursorPos.Y)) <= 3 {
+			if math.Abs(float64(col-cursorPos.X)) <= constants.CursorExclusionX && math.Abs(float64(row-cursorPos.Y)) <= constants.CursorExclusionY {
 				hasOverlap = true
 				break
 			}
 		}
 
 		if !hasOverlap {
-			// Valid position found, create entities using generic stores
+			// Valid position found, create entities
 			// Get sequence ID from GameState (atomic increment)
 			sequenceID := s.ctx.State.IncrementSeqID()
 
