@@ -42,11 +42,54 @@ Vi-fighter uses a **compile-time generics-based ECS** (Go 1.18+) that eliminates
    - Uses sparse set intersection starting with smallest store for optimal performance
    - Example: `world.Query().With(world.Positions).With(world.Characters).Execute()`
    - Returns entity slice for iteration
+   - Note: Query's `.With()` method filters existing entities by components (distinct from entity creation)
 
-4. **Entity Builder**:
-   - Transactional entity creation pattern
-   - Example: `world.NewEntity().With(world.Positions, pos).With(world.Characters, char).Build()`
-   - Reserves entity ID upfront, commits components atomically on `Build()`
+4. **Entity Creation Pattern**:
+   Entities are created using a simple three-step pattern:
+   - Step 1: Reserve entity ID via `world.CreateEntity()`
+   - Step 2: Prepare component instances with data
+   - Step 3: Add components to stores, using batches for collision validation
+
+   **Basic Pattern** (no collision checking):
+   ```go
+   entity := world.CreateEntity()
+   world.Positions.Add(entity, components.PositionComponent{X: x, Y: y})
+   world.Characters.Add(entity, components.CharacterComponent{Rune: r, Style: s})
+   world.Sequences.Add(entity, components.SequenceComponent{...})
+   ```
+
+   **Batch Pattern** (for collision-sensitive spawning):
+   ```go
+   // Phase 1: Create entities and prepare components
+   entities := make([]engine.Entity, 0, count)
+   positions := make([]components.PositionComponent, 0, count)
+
+   for i := 0; i < count; i++ {
+       entity := world.CreateEntity()
+       entities = append(entities, entity)
+       positions = append(positions, components.PositionComponent{X: x+i, Y: y})
+   }
+
+   // Phase 2: Batch position validation and commit
+   batch := world.Positions.BeginBatch()
+   for i, entity := range entities {
+       batch.Add(entity, positions[i])
+   }
+
+   if err := batch.Commit(); err != nil {
+       // Collision detected - cleanup entities
+       for _, entity := range entities {
+           world.DestroyEntity(entity)
+       }
+       return false
+   }
+
+   // Phase 3: Add other components (positions already committed)
+   for i, entity := range entities {
+       world.Characters.Add(entity, characters[i])
+       world.Sequences.Add(entity, sequences[i])
+   }
+   ```
 
 **World Structure:**
 ```go
@@ -1017,7 +1060,7 @@ NORMAL -[:]→ COMMAND (game paused) -[ESC/ENTER]→ NORMAL
     world.Clear()
 
     // MUST restore cursor entity with all required components
-    cursorEntity := world.NewEntity()
+    cursorEntity := world.CreateEntity()
     world.Positions.Add(cursorEntity, components.PositionComponent{X: 0, Y: 0})
     world.Cursors.Add(cursorEntity, components.CursorComponent{})
     world.Protections.Add(cursorEntity, components.ProtectionComponent{

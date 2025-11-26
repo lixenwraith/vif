@@ -42,14 +42,24 @@ func (s *MySystem) Update(world *engine.World, dt time.Duration) {
 *   **`*engine.InputResource`**: Input state (`GameMode`, `CommandText`, `IsPaused`).
 
 ### 3. Entity Management
-Entities are `uint64`. Creation is transactional.
+Entities are `uint64`. Use the simple three-step creation pattern:
 
 ```go
-entity := With(
-    WithPosition(world.NewEntity(), world.Positions, components.PositionComponent{X: 10, Y: 5}),
-    world.Protections,
-    components.ProtectionComponent{Mask: components.ProtectAll}, 
-    ).Build()
+// Step 1: Create entity
+entity := world.CreateEntity()
+
+// Step 2: Add components
+world.Positions.Add(entity, components.PositionComponent{X: 10, Y: 5})
+world.Protections.Add(entity, components.ProtectionComponent{Mask: components.ProtectAll})
+
+// For collision-sensitive spawning, use batches:
+batch := world.Positions.BeginBatch()
+batch.Add(entity, pos)
+if err := batch.Commit(); err != nil {
+    world.DestroyEntity(entity)  // Cleanup on collision
+    return false
+}
+// Then add other components after positions are committed
 ```
 
 ## TESTING & TROUBLESHOOTING
