@@ -30,9 +30,11 @@ Vi-fighter uses a **compile-time generics-based ECS** (Go 1.18+) that eliminates
    - Zero allocations for component access (no type assertions needed)
 
 2. **PositionStore** (Specialized):
-   - Extends `Store[PositionComponent]` with spatial indexing capabilities
-   - Internal spatial hash map for O(1) position-based queries
-   - Operations: `GetEntityAt(x, y)`, `Move(...)`, `BeginBatch()`
+   - Extends `Store[PositionComponent]` with spatial indexing capabilities via `SpatialGrid`
+   - Dense 2D grid with fixed-capacity cells (max 15 entities per cell)
+   - Operations: `GetAllAt(x, y)`, `GetAllAtInto(x, y, buf)`, `HasAny(x, y)`, `Move(...)`, `BeginBatch()`
+   - Zero-allocation queries via `GetAllAtInto()` with caller-provided buffers
+   - Multi-entity support enables proper cursor/character overlap handling
    - Batch operations ensure atomicity for multi-entity spawning with collision detection
 
 3. **Query System** (`QueryBuilder`):
@@ -708,14 +710,63 @@ Systems execute in priority order (lower = earlier):
 
 **Important**: All priorities must be unique to ensure deterministic execution order. The priority values define the exact order in which systems process game state each frame.
 
-### Spatial Indexing
-- Primary index: Encapsulated within `PositionStore` (Internal `spatialIndex`)
-- Access: `world.Positions.GetEntityAt(x, y)`
-- Updates: `world.Positions.Move(...)` or `world.Positions.Add(...)`
-- Batching: `world.Positions.BeginBatch()` for atomic multi-entity spawning
-- **Limitation**: Single entity per cell - only one entity can occupy a given (x, y) position
-  - When Cursor Entity is at a position, it effectively "masks" other entities in the spatial index
-  - Systems requiring collision detection with masked entities must use Query Pattern instead of spatial lookups
+### Spatial Indexing with SpatialGrid
+
+Vi-fighter uses a **dense 2D grid** (`SpatialGrid`) for O(1) spatial queries with multi-entity support.
+
+**Architecture** (`engine/spatial_grid.go`):
+- **Cell Structure**: Fixed-size value type (128 bytes = 2 cache lines)
+  - Stores up to 15 entities per cell (`MaxEntitiesPerCell`)
+  - Contains `Count` (uint8) and `Entities` array ([15]Entity)
+  - Explicit padding for 8-byte alignment and cache optimization
+- **Layout**: 1D contiguous array indexed as `cells[y*width + x]`
+- **Memory**: Cache-friendly contiguous layout, zero-allocation operations
+- **Overflow Handling**: Soft clipping when cell is full (ignores 16th+ entity, no allocation spikes)
+
+**PositionStore Integration** (`engine/position_store.go`):
+- Wraps `SpatialGrid` with thread-safe operations (`sync.RWMutex`)
+- Maintains bidirectional mapping: components map + dense entities array + spatial grid
+
+**Access Patterns**:
+```go
+// Query all entities at position (allocates slice)
+entities := world.Positions.GetAllAt(x, y)  // []Entity or nil
+
+// Zero-allocation query with caller-provided buffer (hot path)
+var buf [engine.MaxEntitiesPerCell]engine.Entity
+count := world.Positions.GetAllAtInto(x, y, buf[:])
+entitiesAtPos := buf[:count]
+
+// Fast existence check
+if world.Positions.HasAny(x, y) {
+    // At least one entity present
+}
+
+// Updates
+world.Positions.Add(entity, pos)        // Add/update position
+world.Positions.Move(entity, newPos)    // Atomic move
+world.Positions.Remove(entity)          // Remove from grid and store
+```
+
+**Batch Operations**:
+```go
+batch := world.Positions.BeginBatch()
+batch.Add(entity1, pos1)
+batch.Add(entity2, pos2)
+batch.Commit()  // Atomic, validates no conflicts
+```
+
+**Multi-Entity Support**:
+- **Multiple entities per cell**: Up to 15 entities can occupy the same (x, y) position
+- **Cursor overlap**: Cursor and characters can coexist at the same position without masking
+- **Collision queries**: Systems query all entities at a position for proper collision detection
+- **Rendering**: Renderer queries all entities at cursor position to determine what's visible
+
+**Performance Characteristics**:
+- **GetAllAt/Into**: O(1) - direct cell access, max 15 entities returned
+- **HasAny**: O(1) - checks cell count only
+- **Add/Remove**: O(1) average, O(k) worst case where k ≤ 15
+- **Memory**: Width × Height × 128 bytes (e.g., 80×24 = 245KB for typical terminal)
 
 ## Component Hierarchy
 ```
@@ -1090,11 +1141,12 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 
 ### Hot Path Optimizations
 1. Use generics-based queries for type-safe, zero-allocation component access
-2. Use spatial index for position lookups via PositionStore
-3. Batch similar operations (e.g., all destroys at end)
-4. Reuse allocated slices where possible (e.g., trail slices grow/shrink in-place)
-5. CleanerSystem updates synchronously with frame-accurate delta time
-6. Pre-calculate rendering gradients once at initialization (zero per-frame color math)
+2. Use `GetAllAtInto()` with stack buffers for zero-allocation spatial queries
+3. Leverage SpatialGrid's cache-friendly 128-byte cell layout (2 cache lines)
+4. Batch similar operations (e.g., all destroys at end)
+5. Reuse allocated slices where possible (e.g., trail slices grow/shrink in-place)
+6. CleanerSystem updates synchronously with frame-accurate delta time
+7. Pre-calculate rendering gradients once at initialization (zero per-frame color math)
 
 ### Memory Management
 - Pool temporary slices (coordinate lists, entity batches)
@@ -1106,7 +1158,7 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 ### Adding New Components
 1. Define data struct implementing `Component`
 2. Register type in relevant systems
-3. Update spatial index if position-related
+3. If position-related, ensure proper `PositionStore` integration
 
 ### Adding New Systems
 1. Implement `System` interface
@@ -1120,7 +1172,7 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 
 ## Invariants to Maintain
 
-1. **One Entity Per Position**: `spatialIndex[y][x]` holds at most one entity
+1. **Multi-Entity Cells**: Each `SpatialGrid` cell can hold up to 15 entities (`MaxEntitiesPerCell`)
 2. **Component Consistency**: Entity with SequenceComponent MUST have Position and Character
 3. **Cursor Bounds**: `0 <= CursorX < GameWidth && 0 <= CursorY < GameHeight`
 4. **Heat Mechanics**: Heat is normalized to a fixed range (0-100). Max Heat is always 100
@@ -1132,36 +1184,31 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 
 ## Known Constraints and Limitations
 
-### PositionStore Single-Entity Limitation
+### SpatialGrid Cell Capacity
 
-The `PositionStore` spatial index enforces a **single entity per cell** constraint:
+The `SpatialGrid` enforces a **maximum of 15 entities per cell**:
 
-**Constraint**: `spatialIndex[y][x]` can only hold one entity at position (x, y)
+**Constraint**: Each cell can hold up to `MaxEntitiesPerCell` (15) entities at position (x, y)
 
 **Implications**:
-1.  **Cursor Masking**: The spatial index (GetEntityAt) returns the topmost entity. The Cursor masks characters.
-   - **Systems must use Query()** to inspect characters under the cursor, never GetEntityAt()
-   - Other entities at that position become "masked" and unreachable via `GetEntityAt(x, y)`
-   - The masked entities still exist in the World and other component stores
-   - Only the spatial index reference is overwritten
+1. **Soft Clipping**: When a cell is full, additional `Add()` calls are silently ignored (no-op)
+   - Prevents allocation spikes during extreme entity overlap scenarios
+   - Systems should not rely on all entities being successfully added to grid
+   - In practice, 15 entities per cell is sufficient for all gameplay scenarios
 
-2. **Hit Detection Workaround**: Systems requiring collision detection at cursor position must use Query Pattern
-   - **Spatial Lookup** (`GetEntityAt`): Fast O(1) but returns only the topmost entity (cursor)
-   - **Query Pattern** (`Query().With(...).Execute()`): Slower O(n) but finds all entities including masked ones
-   - See "Energy System > Hit Detection Strategy" for implementation details
-
-3. **Entity Spawning**: SpawnSystem must check spatial index before placement to avoid conflicts
+2. **Entity Spawning**: SpawnSystem validates positions before placement
    - Cursor exclusion zone prevents spawning near cursor (5 horizontal, 3 vertical)
-   - Collision detection ensures characters don't spawn on occupied cells
+   - Collision detection via `HasAny()` ensures characters don't spawn on occupied cells
+   - Batch operations validate conflicts before committing
 
-4. **Cursor Entity Protection**: Cursor must have `ProtectionComponent` with `Mask: ProtectAll`
+3. **Cursor Entity Protection**: Cursor must have `ProtectionComponent` with `Mask: ProtectAll`
    - Prevents accidental destruction by systems that clean up entities
    - Critical after `World.Clear()` operations (see `:new` command requirements)
 
 **Design Rationale**:
-- Simplifies rendering (no z-ordering required for most entities)
-- Efficient O(1) position lookups for spawning and movement
-- Trade-off: Requires Query Pattern for collision detection at cursor position
+- Fixed capacity enables value-type cells with contiguous memory layout (cache-friendly)
+- 128-byte cell size aligns with 2 cache lines for optimal performance
+- Trade-off: Simplicity and performance vs. unlimited entity overlap
 
 ## Game Mechanics Details
 
@@ -1310,7 +1357,9 @@ When a falling entity encounters a target at `(col, row)`:
 1. **Latch Check**: Skip if `(col, row) == (LastIntX, LastIntY)`
 2. **Bounds Check**: Skip if outside screen
 3. **Frame Deduplication**: Skip if `processedGridCells[flatIdx]` is true
-4. **Spatial Lookup**: Get entity at position via `world.Positions.GetEntityAt(col, row)`
+4. **Spatial Lookup**: Query entities at position via `world.Positions.GetAllAt(col, row)`
+   - Iterates through all entities at the position (multi-entity support)
+   - Typically 1-2 entities (character + potentially cursor/other overlays)
 5. **Entity Deduplication**: Skip if `decayedThisFrame[targetEntity]` is true
 6. **Process Hit**:
    - If Nugget: Destroy entity, clear active nugget reference
@@ -1340,34 +1389,35 @@ When a falling entity encounters a target at `(col, row)`:
 
 #### Hit Detection Strategy
 
-Due to `PositionStore` limitations (single entity per cell), the Cursor Entity effectively "masks" characters at the same position in the spatial index. Therefore, hit detection for typing uses a **Query Pattern** rather than simple spatial lookups:
+The EnergySystem uses `GetAllAtInto()` for zero-allocation hit detection at the cursor position:
 
 **Implementation Pattern**:
 ```go
-// ❌ INCORRECT: Spatial lookup fails when cursor masks character
-entity, ok := world.Positions.GetEntityAt(cursorX, cursorY)
-// Returns cursor entity, not the character underneath
+// Zero-allocation spatial query with stack buffer
+var entityBuf [engine.MaxEntitiesPerCell]engine.Entity
+count := world.Positions.GetAllAtInto(cursorX, cursorY, entityBuf[:])
+entitiesAtCursor := entityBuf[:count]
 
-// ✅ CORRECT: Query pattern iterates all Position+Character entities
-entities := world.Query().
-    With(world.Positions).
-    With(world.Characters).
-    Execute()
+// Iterate through all entities at cursor position
+for _, entity := range entitiesAtCursor {
+    // Skip cursor entity itself
+    if entity == s.ctx.CursorEntity {
+        continue
+    }
 
-for _, entity := range entities {
-    pos, _ := world.Positions.Get(entity)
-    char, _ := world.Characters.Get(entity)
-    if pos.X == cursorX && pos.Y == cursorY {
-        // Found character at cursor position
-        // Process typing logic...
+    // Check for character component
+    if char, ok := world.Characters.Get(entity); ok {
+        if seq, ok := world.Sequences.Get(entity); ok {
+            // Process typing logic for this character...
+        }
     }
 }
 ```
 
-**Trade-offs**:
-- **Spatial Lookup**: O(1) but fails when cursor masks character
-- **Query Pattern**: O(n) but reliable for all entities at cursor position
-- Query pattern is used for typing interactions where correctness is critical
+**Performance Characteristics**:
+- **GetAllAtInto**: O(1) spatial lookup, max 15 entities at position
+- **Zero allocations**: Stack buffer reused across frames
+- **Multi-entity support**: Properly handles cursor/character overlap without masking
 
 ### Boost System
 - **Activation Condition**: Heat reaches maximum value (screen width)
