@@ -144,7 +144,7 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 				copy(newTrail[1:], c.Trail[:copyLen])
 			}
 
-			// Assign new slice to component (atomically replaces reference)
+			// Assign new slice to component
 			c.Trail = newTrail
 		}
 

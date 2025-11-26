@@ -205,8 +205,9 @@ func (s *DrainSystem) updateMaterializers(world *engine.World, dt time.Duration)
 
 			newTrail := make([]core.Point, newLen)
 			newTrail[0] = newPoint
-			if newLen > 1 {
-				copy(newTrail[1:], mat.Trail[:newLen-1])
+			copyLen := newLen - 1
+			if copyLen > 0 {
+				copy(newTrail[1:], mat.Trail[:copyLen])
 			}
 			mat.Trail = newTrail
 		}
