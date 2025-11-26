@@ -225,11 +225,12 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 Updated immediately on user input/spawn events, read by all systems:
 - **Heat** (`atomic.Int64`): Current heat value
 - **Energy** (`atomic.Int64`): Player energy
-- **Cursor Position**: NOW IN ECS as cursor entity with PositionComponent and CursorComponent
-  - Legacy atomics (CursorX, CursorY) still exist in GameState for backward compatibility
-  - GameContext has non-atomic cache fields (CursorX, CursorY) synced with ECS
-- **Color Tracking**: NOW CENSUS-BASED via per-frame O(n) entity iteration
-  - Legacy atomic counters removed from GameState (eliminating drift)
+- **Cursor Position**: Managed in ECS as cursor entity with PositionComponent and CursorComponent
+  - GameContext has cache fields (CursorX, CursorY) synced with ECS cursor entity
+  - Motion handlers sync FROM ECS before use and TO ECS after modification
+- **Color Tracking**: Census-based via per-frame entity iteration
+  - SpawnSystem runs census by querying all SequenceComponent entities
+  - No atomic counters (eliminates drift, provides accurate on-screen counts)
 - **Boost State** (`atomic.Bool`, `atomic.Int64`): Enabled, EndTime, Color
 - **Visual Feedback**: CursorError (via CursorComponent.ErrorFlashEnd), EnergyBlink, PingGrid (atomic)
 - **Drain State** (`atomic.Bool`, `atomic.Uint64`, `atomic.Int32`): Active, EntityID, X, Y
@@ -241,7 +242,7 @@ Atomics are used for high-frequency access (every frame and keystroke) to avoid 
 Updated during scheduled game logic ticks, read by all systems:
 - **Spawn Timing** (`sync.RWMutex`): LastTime, NextTime, RateMultiplier
 - **Screen Density**: EntityCount, ScreenDensity, SpawnEnabled
-- **6-Color Limit**: NOW ENFORCED VIA CENSUS (per-frame entity iteration, no atomic drift)
+- **6-Color Limit**: Enforced via census (per-frame entity iteration)
 - **Game Phase State**: CurrentPhase, PhaseStartTime
 - **Gold Sequence State**: GoldActive, GoldSequenceID, GoldStartTime, GoldTimeoutTime
 - **Decay Timer State**: DecayTimerActive, DecayNextTime
@@ -328,27 +329,16 @@ type SpawnStateSnapshot struct {
 }
 snapshot := ctx.State.ReadSpawnState() // Used by: SpawnSystem, Renderer
 
-// Color Counter State (atomic fields)
-type ColorCountSnapshot struct {
-    BlueBright  int64
-    BlueNormal  int64
-    BlueDark    int64
-    GreenBright int64
-    GreenNormal int64
-    GreenDark   int64
-}
-snapshot := ctx.State.ReadColorCounts() // Used by: SpawnSystem, DecaySystem, Renderer
+// Color Census (ECS query, no snapshot needed)
+// SpawnSystem runs census via entity iteration:
+census := spawnSystem.runCensus(world)
+// Returns: ColorCensus{BlueBright: 5, BlueNormal: 3, ...}
+// Used by: SpawnSystem for 6-color limit enforcement
 
 // Cursor Position (ECS-based, legacy atomics deprecated)
-// PRIMARY SOURCE: ctx.World.Positions.Get(ctx.CursorEntity)
-// DEPRECATED: GameState.CursorX/Y atomics (kept for backward compatibility)
-type CursorSnapshot struct {
-    X int
-    Y int
-}
-// PREFERRED: Read directly from ECS
+// Read directly from ECS (cursor entity with PositionComponent)
 pos, ok := ctx.World.Positions.Get(ctx.CursorEntity)
-// LEGACY: snapshot := ctx.State.ReadCursorPosition() // Used by: Renderer (legacy)
+// GameContext caches position for motion handlers (synced from/to ECS)
 
 // Boost State (atomic fields)
 type BoostSnapshot struct {
@@ -436,9 +426,9 @@ energy := ctx.State.GetEnergy() // Atomic read #2
 
 | System | Snapshot Types Used | Purpose |
 |--------|-------------------|---------|
-| SpawnSystem | SpawnState, Census (entity iteration), ECS Cursor | Check spawn conditions, cursor exclusion zone |
+| SpawnSystem | SpawnState, ColorCensus (ECS query), ECS Cursor Position | Check spawn conditions, 6-color limit, cursor exclusion zone |
 | EnergySystem | BoostState, GoldState, HeatAndEnergy | Process typing, update heat/energy |
-| GoldSequenceSystem | GoldState, PhaseState | Manage gold sequence lifecycle |
+| GoldSystem | GoldState, PhaseState | Manage gold sequence lifecycle |
 | DecaySystem | DecayState, PhaseState | Manage decay timer and animation |
 | CleanerSystem | EventQueue | Event-driven cleaner lifecycle via EventCleanerRequest/Finished |
 | Renderer | All snapshot types | Render game state without blocking game loop |
@@ -458,10 +448,10 @@ energy := ctx.State.GetEnergy() // Atomic read #2
    - Still provides consistent view (atomic loads are sequentially consistent)
    - Trade-off: Very rare possibility of seeing mixed state between loads (acceptable for these use cases)
 
-3. **ECS-Based State** (Cursor Position, Color Tracking):
-   - Cursor position: Read via `ctx.World.Positions.Get(ctx.CursorEntity)`
-   - Color tracking: Per-frame census via entity iteration (no atomic drift)
-   - Thread-safe via PositionStore's internal RWMutex
+3. **ECS-Based State** (Cursor Position, Color Census):
+   - Cursor position: Read via `ctx.World.Positions.Get(ctx.CursorEntity)` or cached in GameContext
+   - Color census: Per-frame entity iteration via `SpawnSystem.runCensus(world)`
+   - Thread-safe via World's component stores' internal synchronization
 
 4. **Immutability After Capture:**
    - All snapshots are value types (structs)
@@ -1027,13 +1017,12 @@ NORMAL -[:]→ COMMAND (game paused) -[ESC/ENTER]→ NORMAL
 - **All systems**: Run synchronously in main game loop, no autonomous goroutines
 
 ### Shared State Synchronization
-- **Color Counters**: `atomic.Int64` for lock-free updates
-  - `SpawnSystem`: Increments counters when blocks placed
-  - `EnergySystem`: Decrements counters when characters typed
-  - `DecaySystem`: Updates counters during decay transitions
-  - All counter operations are race-free and thread-safe
+- **Color Census**: Per-frame entity iteration (no shared counters)
+  - `SpawnSystem`: Runs census by querying all SequenceComponent entities
+  - Returns accurate on-screen color/level counts without drift
+  - O(n) complexity where n ≈ 200 max entities
 - **GameState**: Uses `sync.RWMutex` for phase state and timing
-- **World**: Thread-safe entity/component access (internal locking)
+- **World**: Thread-safe entity/component access (internal locking per store)
 
 ## Race Condition Prevention
 
@@ -1139,8 +1128,7 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 6. **Red Spawn Invariant**: Red sequences are NEVER spawned directly, only through decay
 7. **Gold Randomness**: Gold sequences spawn at random positions
 8. **6-Color Limit**: At most 6 Blue/Green color/level combinations present simultaneously
-9. **Counter Accuracy**: Color counters must match actual on-screen character counts
-10. **Atomic Operations**: All color counter updates use atomic operations for thread safety
+9. **Census Accuracy**: Color census via entity iteration provides exact on-screen counts
 
 ## Known Constraints and Limitations
 
@@ -1178,28 +1166,27 @@ The `PositionStore` spatial index enforces a **single entity per cell** constrai
 ## Game Mechanics Details
 
 ### Content Management System
-- **ContentManager** (`content/content_manager.go`): Manages Go source file discovery and validation
-- **Auto-discovery**: Scans project directory for `.go` files at initialization
+- **ContentManager** (`content/manager.go`): Manages content file discovery and validation
+- **Auto-discovery**: Scans `assets/` directory for `.txt` files at initialization
 - **Validation**: Pre-validates all content at startup for performance
-- **Block Selection**: Random 100-500 line blocks, grouped by structure
+- **Block Selection**: Random blocks grouped by structure (3-15 lines per spawn)
 - **Refresh Strategy**: Pre-fetches new content at 80% consumption threshold
+- **Location**: Automatically locates project root by searching for `go.mod`, then uses `assets/` subdirectory
 
 ### Spawn System
-- **Content Source**: Loads Go source code from `assets/` directory at initialization (automatically located at project root)
+- **Content Source**: Loads content from `.txt` files in `assets/` directory (discovered by ContentManager)
 - **Block Generation**:
   - Selects random 3-15 consecutive lines from file per spawn (grouped by indent level and structure)
   - Lines are trimmed of whitespace before placement
   - Line order within block doesn't need to be preserved
 - **6-Color Limit**:
   - Tracks 6 color/level combinations: Blue×3 (Bright, Normal, Dark) + Green×3 (Bright, Normal, Dark)
-  - Uses atomic counters (`atomic.Int64`) for race-free character tracking
-  - Only spawns new blocks when fewer than 6 colors are present on screen
-  - When all characters of a color/level are cleared, that slot becomes available
-  - Atomic counters track each color/level combination (Blue×3 + Green×3)
-  - SpawnSystem checks counters before spawning: `if count == 0 { spawn enabled }`
-  - EnergySystem decrements on character typing
-  - DecaySystem updates during transitions
-  - Red sequences explicitly excluded from tracking
+  - Uses **census-based tracking** via per-frame entity iteration (no atomic drift)
+  - SpawnSystem runs census by iterating all `SequenceComponent` entities to count active colors
+  - Only spawns new blocks when fewer than 6 color/level combinations are present on screen
+  - When all characters of a color/level are cleared, that slot becomes available for spawning
+  - Census function: `runCensus(world)` returns `ColorCensus` struct with counts for each combination
+  - Red and Gold sequences explicitly excluded from 6-color limit tracking
 - **Intelligent Placement**:
   - Each line attempts placement up to 3 times
   - Random row and column selection per attempt
@@ -1216,17 +1203,17 @@ The decay system applies character degradation through a falling entity animatio
 
 #### Decay Mechanics
 - **Brightness Decay**: Bright → Normal → Dark (reduces energy multiplier)
-  - Updates color counters atomically: decrements old level, increments new level
+  - Modifies SequenceComponent level in-place (ECS update)
 - **Color Decay Chain**:
   - Blue (Dark) → Green (Bright)
   - Green (Dark) → Red (Bright) ← **Only source of Red sequences**
   - Red (Dark) → Destroyed
-  - Counter updates during color transitions (Blue→Green, Green→Red)
-  - Red sequences are not tracked in color counters
+  - Updates SequenceComponent type during color transitions
+  - Red sequences not tracked in 6-color census (spawn limit doesn't apply)
 - **Timing**: 10-60 seconds interval based on heat level (higher heat = faster decay)
   - Calculated when Gold sequence ends: `60s - (50s * heatPercentage)`
   - Timer uses pausable clock (freezes during COMMAND mode)
-- **Counter Management**: Decrements counters when characters destroyed at Red (Dark) level
+- **Census Impact**: Decay changes entity counts for next spawn census
 
 #### Falling Entity Animation
 - **Spawn**: One falling entity per column stored as `FallingDecayComponent` in `World.FallingDecays` store (ensuring complete screen coverage)
@@ -1347,11 +1334,9 @@ When a falling entity encounters a target at `(col, row)`:
 
 ### Energy System
 - **Character Typing**: Processes user input in insert mode
-- **Counter Management**:
-  - Atomically decrements color counters when Blue/Green characters typed
-  - Red and Gold characters do not affect color counters
 - **Heat Updates**: Typing correct characters increases heat (with boost multiplier if active)
 - **Error Handling**: Incorrect typing resets heat and triggers error cursor
+- **Census Impact**: Character destruction affects next spawn census (no manual counter updates needed)
 
 #### Hit Detection Strategy
 
@@ -1484,17 +1469,18 @@ for _, entity := range entities {
   - Pre-calculated rendering gradients (zero per-frame color math)
   - Typical update time: < 0.5ms for 24 cleaners
 
-## Data Files
+## Content Files
 
 ### assets/ directory
-- **Purpose**: Contains `.txt` files with game content (code blocks)
-- **Format**: Plain text files containing source code
-- **Location**: Automatically located at project root by searching for `go.mod`
-- **Content**: Source code files (e.g., Go standard library code like crypto/md5)
+- **Purpose**: Contains `.txt` files with game content (code blocks, prose)
+- **Format**: Plain text files containing source code or other text content
+- **Location**: Automatically located at project root by searching for `go.mod`, then `assets/` subdirectory
+- **Content**: Text files (e.g., Go standard library code, technical prose)
 - **Discovery**: ContentManager scans for all `.txt` files (excluding hidden files starting with `.`)
 - **Processing**:
   - All valid files are pre-validated and cached at initialization
-  - Lines trimmed of whitespace
-  - Empty lines and comments ignored
+  - Lines trimmed of whitespace before placement
+  - Empty lines and comments can be included in blocks
   - Files must have at least 10 valid lines after processing
   - Content blocks are selected randomly from validated cache
+- **Block Grouping**: Lines grouped into logical code blocks (3-15 lines) based on indent level and brace depth
