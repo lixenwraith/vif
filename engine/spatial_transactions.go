@@ -54,10 +54,11 @@ func (w *World) BeginSpatialTransaction() *SpatialTransaction {
 }
 
 // Move adds a move operation to the transaction
-// Returns collision information if the target position is occupied
+// It checks for collisions at the target (new) position using the multi-entity grid
 func (tx *SpatialTransaction) Move(entity Entity, oldX, oldY, newX, newY int) CollisionResult {
-	// Check for collision at new position
-	existingEntity := tx.world.GetEntityAtPosition(newX, newY)
+	// Phase 1: Check for collision at new position
+	// We use GetAllAt because multiple entities might exist at the target
+	existingEntities := tx.world.Positions.GetAllAt(newX, newY)
 
 	result := CollisionResult{
 		HasCollision:    false,
@@ -66,16 +67,25 @@ func (tx *SpatialTransaction) Move(entity Entity, oldX, oldY, newX, newY int) Co
 		Y:               newY,
 	}
 
-	// Collision if there's an entity at the target position that's not the entity being moved
-	if existingEntity != 0 && existingEntity != entity {
-		result.HasCollision = true
-		result.CollidingEntity = existingEntity
-		tx.collisions = append(tx.collisions, result)
-		// Do not add operation if there's a collision
-		return result
+	// Check if ANY entity at the target position blocks us
+	// Since the grid allows overlaps, we must check the list
+	for _, target := range existingEntities {
+		// Ignore 0 (empty slots) and self (we don't collide with ourselves)
+		if target != 0 && target != entity {
+			result.HasCollision = true
+			result.CollidingEntity = target
+			tx.collisions = append(tx.collisions, result)
+
+			// If a collision is found, we do NOT add the operation to the transaction
+			// We return immediately.
+			return result
+		}
 	}
 
-	// No collision - add move operation
+	// Phase 2: No collision - add move operation to the transaction list
+	// TODO: if old position is unused and has no meaningful usage other than debugging, deprecate to simplify
+	// oldX/oldY are stored here for the record of the operation,
+	// even if collision detection didn't require them
 	tx.operations = append(tx.operations, SpatialOperation{
 		Type:   OpMove,
 		Entity: entity,
@@ -91,9 +101,6 @@ func (tx *SpatialTransaction) Move(entity Entity, oldX, oldY, newX, newY int) Co
 // Spawn adds a spawn operation to the transaction
 // Returns collision information if the target position is occupied
 func (tx *SpatialTransaction) Spawn(entity Entity, x, y int) CollisionResult {
-	// Check for collision at spawn position
-	existingEntity := tx.world.GetEntityAtPosition(x, y)
-
 	result := CollisionResult{
 		HasCollision:    false,
 		CollidingEntity: 0,
@@ -101,11 +108,12 @@ func (tx *SpatialTransaction) Spawn(entity Entity, x, y int) CollisionResult {
 		Y:               y,
 	}
 
-	if existingEntity != 0 {
+	// Check for collision with any entity
+	if tx.world.Positions.HasAny(x, y) {
 		result.HasCollision = true
-		result.CollidingEntity = existingEntity
+		// Can't return which entity without iteration
+		// Simple HasAny is faster than GetAllAt
 		tx.collisions = append(tx.collisions, result)
-		// Do not add operation if there's a collision
 		return result
 	}
 
@@ -144,12 +152,11 @@ type EntityPosition struct {
 func (tx *SpatialTransaction) SpawnBatch(entities []EntityPosition) CollisionResult {
 	// Phase 1: Validate ALL positions first (before adding any operations)
 	for _, ep := range entities {
-		existingEntity := tx.world.GetEntityAtPosition(ep.X, ep.Y)
-		if existingEntity != 0 {
+		if tx.world.Positions.HasAny(ep.X, ep.Y) {
 			// Collision detected - return immediately without adding any operations
 			result := CollisionResult{
 				HasCollision:    true,
-				CollidingEntity: existingEntity,
+				CollidingEntity: 0, // 0 indicates generic collision (occupied)
 				X:               ep.X,
 				Y:               ep.Y,
 			}
@@ -187,16 +194,16 @@ func (tx *SpatialTransaction) GetCollisions() []CollisionResult {
 	return tx.collisions
 }
 
-// Commit applies all pending operations using the PositionStore's thread-safe API.
+// Commit applies all pending operations using the PositionStore's thread-safe API
 func (tx *SpatialTransaction) Commit() error {
 	if len(tx.operations) == 0 {
 		return nil // Nothing to commit
 	}
 
-	// NOTE: We do NOT lock tx.world.mu here.
-	// PositionStore has its own internal RWMutex for thread-safe operations.
-	// Operations are applied sequentially; for atomic batching of multiple operations,
-	// use PositionStore's batch API instead.
+	// NOTE: We do NOT lock tx.world.mu here
+	// PositionStore has its own internal RWMutex for thread-safe operations
+	// Operations are applied sequentially; for atomic batching of multiple operations
+	// use PositionStore's batch API instead
 
 	posStore := tx.world.Positions
 

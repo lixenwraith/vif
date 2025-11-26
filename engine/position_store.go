@@ -1,3 +1,4 @@
+// FILE: engine/position_store.go
 package engine
 
 import (
@@ -7,38 +8,34 @@ import (
 	"github.com/lixenwraith/vi-fighter/components"
 )
 
-// PositionStore maintains a spatial index for fast position-based queries.
-// A single mutex protects both component data and spatial index consistency.
+// PositionStore maintains a spatial index using a fixed-capacity dense grid.
+// It supports multiple entities per cell (up to 15).
 type PositionStore struct {
-	mu           sync.RWMutex // Single mutex for all operations
-	components   map[Entity]components.PositionComponent
-	entities     []Entity               // Dense array for cache-friendly iteration
-	spatialIndex map[int]map[int]Entity // [y][x] -> Entity
+	mu         sync.RWMutex
+	components map[Entity]components.PositionComponent
+	entities   []Entity // Dense array for cache-friendly iteration
+	grid       *SpatialGrid
 }
 
 // NewPositionStore creates a new position store with spatial indexing.
 func NewPositionStore() *PositionStore {
+	// Default grid size, will be resized by GameContext if needed
 	return &PositionStore{
-		components:   make(map[Entity]components.PositionComponent),
-		entities:     make([]Entity, 0, 64),
-		spatialIndex: make(map[int]map[int]Entity),
+		components: make(map[Entity]components.PositionComponent),
+		entities:   make([]Entity, 0, 64),
+		grid:       NewSpatialGrid(200, 60), // Default safe size
 	}
 }
 
-// Add atomically updates component and spatial index.
+// Add inserts or updates an entity's position.
+// This handles the "cursor ghosting" bug by allowing multiple entities at the same location.
 func (ps *PositionStore) Add(e Entity, pos components.PositionComponent) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 
-	// Remove old position from spatial index if entity already has a position
+	// If entity already has a position, remove it from old grid location
 	if oldPos, exists := ps.components[e]; exists {
-		if row, ok := ps.spatialIndex[oldPos.Y]; ok {
-			delete(row, oldPos.X)
-			// Clean up empty rows
-			if len(row) == 0 {
-				delete(ps.spatialIndex, oldPos.Y)
-			}
-		}
+		ps.grid.Remove(e, oldPos.X, oldPos.Y)
 	} else {
 		// New entity, add to dense array
 		ps.entities = append(ps.entities, e)
@@ -47,28 +44,18 @@ func (ps *PositionStore) Add(e Entity, pos components.PositionComponent) {
 	// Update component
 	ps.components[e] = pos
 
-	// Update spatial index with new position
-	if ps.spatialIndex[pos.Y] == nil {
-		ps.spatialIndex[pos.Y] = make(map[int]Entity)
-	}
-	ps.spatialIndex[pos.Y][pos.X] = e
+	// Add to new grid location
+	ps.grid.Add(e, pos.X, pos.Y)
 }
 
-// Remove deletes a position component from an entity and updates the spatial index.
+// Remove deletes an entity from the store and grid.
 func (ps *PositionStore) Remove(e Entity) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 
-	// Get position before removing
 	if pos, exists := ps.components[e]; exists {
-		// Remove from spatial index
-		if row, ok := ps.spatialIndex[pos.Y]; ok {
-			delete(row, pos.X)
-			// Clean up empty rows
-			if len(row) == 0 {
-				delete(ps.spatialIndex, pos.Y)
-			}
-		}
+		// Remove from spatial grid
+		ps.grid.Remove(e, pos.X, pos.Y)
 
 		// Remove from components map
 		delete(ps.components, e)
@@ -84,60 +71,126 @@ func (ps *PositionStore) Remove(e Entity) {
 	}
 }
 
-// GetEntityAt returns the entity at the specified grid position.
-// Returns 0 if no entity exists at that position.
-func (ps *PositionStore) GetEntityAt(x, y int) Entity {
-	ps.mu.RLock()
-	defer ps.mu.RUnlock()
-
-	if row, ok := ps.spatialIndex[y]; ok {
-		if entity, ok := row[x]; ok {
-			return entity
-		}
-	}
-	return 0
-}
-
-// Move atomically updates position with collision detection.
-// Returns error if target position is occupied.
+// Move updates position atomically.
+// Note: This version ignores collisions at the Store level.
+// Systems should use HasAny() or GetAllAt() for collision logic before moving if needed.
 func (ps *PositionStore) Move(e Entity, newPos components.PositionComponent) error {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 
-	// Get old position
 	oldPos, exists := ps.components[e]
 	if !exists {
 		return fmt.Errorf("entity %d does not have a position component", e)
 	}
 
-	// Check if target position is occupied by a different entity
-	if row, ok := ps.spatialIndex[newPos.Y]; ok {
-		if existingEntity, ok := row[newPos.X]; ok && existingEntity != e {
-			return fmt.Errorf("position (%d,%d) is occupied by entity %d", newPos.X, newPos.Y, existingEntity)
-		}
-	}
-
-	// Remove from old position in spatial index
-	if row, ok := ps.spatialIndex[oldPos.Y]; ok {
-		delete(row, oldPos.X)
-		if len(row) == 0 {
-			delete(ps.spatialIndex, oldPos.Y)
-		}
-	}
+	// Remove from old grid pos
+	ps.grid.Remove(e, oldPos.X, oldPos.Y)
 
 	// Update component
 	ps.components[e] = newPos
 
-	// Add to new position in spatial index
-	if ps.spatialIndex[newPos.Y] == nil {
-		ps.spatialIndex[newPos.Y] = make(map[int]Entity)
-	}
-	ps.spatialIndex[newPos.Y][newPos.X] = e
+	// Add to new grid pos
+	ps.grid.Add(e, newPos.X, newPos.Y)
 
 	return nil
 }
 
-// PositionBatch provides transactional batch operations with collision detection.
+// GetAllAt returns a COPY of entities at the given coordinates
+// SAFE but allocates memory
+// Use for UI/Input logic
+func (ps *PositionStore) GetAllAt(x, y int) []Entity {
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+
+	view := ps.grid.GetAllAt(x, y)
+	if len(view) == 0 {
+		return nil
+	}
+
+	// Allocate new slice to detach from grid memory
+	result := make([]Entity, len(view))
+	copy(result, view)
+	return result
+}
+
+// GetAllAtInto copies entities into a caller-provided buffer and returns number of entities copied
+// SAFE and ZERO-ALLOCATION if buf is on stack
+// Use for Render/Physics
+func (ps *PositionStore) GetAllAtInto(x, y int, buf []Entity) int {
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+
+	view := ps.grid.GetAllAt(x, y)
+	// Copy min(len(buf), len(view))
+	return copy(buf, view)
+}
+
+// HasAny O(1) returns true if any entity exists at the given coordinates
+func (ps *PositionStore) HasAny(x, y int) bool {
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+	return ps.grid.HasAny(x, y)
+}
+
+// ResizeGrid resizes the internal spatial grid.
+func (ps *PositionStore) ResizeGrid(width, height int) {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+
+	// Create new grid
+	ps.grid.Resize(width, height)
+
+	// Re-populate grid from components map
+	// This ensures consistency even if grid size changes
+	for e, pos := range ps.components {
+		ps.grid.Add(e, pos.X, pos.Y)
+	}
+}
+
+// Get retrieves a position component
+func (ps *PositionStore) Get(e Entity) (components.PositionComponent, bool) {
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+	val, ok := ps.components[e]
+	return val, ok
+}
+
+// Has checks if an entity has a position component
+func (ps *PositionStore) Has(e Entity) bool {
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+	_, ok := ps.components[e]
+	return ok
+}
+
+// All returns all entities with position components
+func (ps *PositionStore) All() []Entity {
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+	result := make([]Entity, len(ps.entities))
+	copy(result, ps.entities)
+	return result
+}
+
+// Count returns the number of entities
+func (ps *PositionStore) Count() int {
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+	return len(ps.entities)
+}
+
+// Clear removes all data
+func (ps *PositionStore) Clear() {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+
+	ps.components = make(map[Entity]components.PositionComponent)
+	ps.entities = make([]Entity, 0, 64)
+	ps.grid.Clear()
+}
+
+// --- Batch Implementation ---
+
 type PositionBatch struct {
 	store     *PositionStore
 	additions []positionAddition
@@ -149,7 +202,6 @@ type positionAddition struct {
 	pos    components.PositionComponent
 }
 
-// BeginBatch starts a new batch transaction for position updates.
 func (ps *PositionStore) BeginBatch() *PositionBatch {
 	return &PositionBatch{
 		store:     ps,
@@ -157,13 +209,12 @@ func (ps *PositionStore) BeginBatch() *PositionBatch {
 	}
 }
 
-// Add queues an entity position for addition in this batch.
 func (pb *PositionBatch) Add(e Entity, pos components.PositionComponent) {
 	pb.additions = append(pb.additions, positionAddition{entity: e, pos: pos})
 }
 
-// Commit applies all batched position additions atomically.
-// Returns an error if any position collides with existing entities or other batch additions.
+// Commit applies all batched additions
+// Checks with HasAny only to prevent unintended spawns on existing entities
 func (pb *PositionBatch) Commit() error {
 	if pb.committed {
 		return fmt.Errorf("batch already committed")
@@ -173,92 +224,39 @@ func (pb *PositionBatch) Commit() error {
 	pb.store.mu.Lock()
 	defer pb.store.mu.Unlock()
 
-	// First pass: check for collisions with existing entities and within batch
-	occupied := make(map[int]map[int]bool)
+	// 1. Validation phase (Gameplay logic: don't spawn on top of things)
+	// Check both the current grid AND the pending batch for conflicts
+	batchOccupied := make(map[int]map[int]bool)
+
 	for _, add := range pb.additions {
-		// Check collision with existing entities
-		if row, ok := pb.store.spatialIndex[add.pos.Y]; ok {
-			if existingEntity, ok := row[add.pos.X]; ok && existingEntity != add.entity {
-				return fmt.Errorf("position (%d,%d) is occupied by entity %d", add.pos.X, add.pos.Y, existingEntity)
-			}
+		// Check against existing entities
+		if pb.store.grid.HasAny(add.pos.X, add.pos.Y) {
+			// Collision found in world
+			return fmt.Errorf("position (%d,%d) is occupied", add.pos.X, add.pos.Y)
 		}
 
-		// Check collision within batch
-		if occupied[add.pos.Y] == nil {
-			occupied[add.pos.Y] = make(map[int]bool)
+		// Check against other items in this batch
+		if batchOccupied[add.pos.Y] == nil {
+			batchOccupied[add.pos.Y] = make(map[int]bool)
 		}
-		if occupied[add.pos.Y][add.pos.X] {
-			return fmt.Errorf("batch contains multiple additions at position (%d,%d)", add.pos.X, add.pos.Y)
+		if batchOccupied[add.pos.Y][add.pos.X] {
+			return fmt.Errorf("batch conflict at position (%d,%d)", add.pos.X, add.pos.Y)
 		}
-		occupied[add.pos.Y][add.pos.X] = true
+		batchOccupied[add.pos.Y][add.pos.X] = true
 	}
 
-	// Second pass: apply all additions (no more checks needed)
+	// 2. Application phase
 	for _, add := range pb.additions {
-		// Remove old position if entity already exists
+		// Remove old position if exists
 		if oldPos, exists := pb.store.components[add.entity]; exists {
-			if row, ok := pb.store.spatialIndex[oldPos.Y]; ok {
-				delete(row, oldPos.X)
-				if len(row) == 0 {
-					delete(pb.store.spatialIndex, oldPos.Y)
-				}
-			}
+			pb.store.grid.Remove(add.entity, oldPos.X, oldPos.Y)
 		} else {
-			// New entity, add to dense array
 			pb.store.entities = append(pb.store.entities, add.entity)
 		}
 
-		// Update component
 		pb.store.components[add.entity] = add.pos
-
-		// Update spatial index
-		if pb.store.spatialIndex[add.pos.Y] == nil {
-			pb.store.spatialIndex[add.pos.Y] = make(map[int]Entity)
-		}
-		pb.store.spatialIndex[add.pos.Y][add.pos.X] = add.entity
+		pb.store.grid.Add(add.entity, add.pos.X, add.pos.Y)
 	}
 
 	return nil
-}
-
-// Get retrieves a position component for an entity.
-func (ps *PositionStore) Get(e Entity) (components.PositionComponent, bool) {
-	ps.mu.RLock()
-	defer ps.mu.RUnlock()
-	val, ok := ps.components[e]
-	return val, ok
-}
-
-// Has checks if an entity has a position component.
-func (ps *PositionStore) Has(e Entity) bool {
-	ps.mu.RLock()
-	defer ps.mu.RUnlock()
-	_, ok := ps.components[e]
-	return ok
-}
-
-// All returns all entities with position components.
-func (ps *PositionStore) All() []Entity {
-	ps.mu.RLock()
-	defer ps.mu.RUnlock()
-	result := make([]Entity, len(ps.entities))
-	copy(result, ps.entities)
-	return result
-}
-
-// Count returns the number of entities with position components.
-func (ps *PositionStore) Count() int {
-	ps.mu.RLock()
-	defer ps.mu.RUnlock()
-	return len(ps.entities)
-}
-
-// Clear removes all position components and clears the spatial index.
-func (ps *PositionStore) Clear() {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
-
-	ps.components = make(map[Entity]components.PositionComponent)
-	ps.entities = make([]Entity, 0, 64)
-	ps.spatialIndex = make(map[int]map[int]Entity)
 }

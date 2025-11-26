@@ -208,8 +208,18 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, dtSeconds float
 			}
 
 			// C. Interaction
-			targetEntity := world.Positions.GetEntityAt(col, row)
-			if targetEntity != 0 {
+			// Retrieve all entities at this location (supporting multiples)
+			targetEntities := world.Positions.GetAllAt(col, row)
+
+			// Collect candidates to avoid iteration invalidation
+			var candidates []engine.Entity
+			for _, targetEntity := range targetEntities {
+				if targetEntity != 0 {
+					candidates = append(candidates, targetEntity)
+				}
+			}
+
+			for _, targetEntity := range candidates {
 				s.mu.RLock()
 				alreadyHit := s.decayedThisFrame[targetEntity]
 				s.mu.RUnlock()
@@ -228,7 +238,7 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, dtSeconds float
 					s.decayedThisFrame[targetEntity] = true
 					s.mu.Unlock()
 
-					// Mark this grid cell as processed for this frame
+					// We hit something, mark grid cell processed (even if we hit multiple things)
 					s.processedGridCells[flatIdx] = true
 				}
 			}

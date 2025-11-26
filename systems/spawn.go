@@ -559,16 +559,16 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 
 		startCol := rand.Intn(maxStartCol + 1)
 
-		// Check for overlaps using generic position store
+		// Check for overlaps using HasAny
 		hasOverlap := false
 		for i := 0; i < lineLength; i++ {
-			if world.Positions.GetEntityAt(startCol+i, row) != 0 {
+			if world.Positions.HasAny(startCol+i, row) {
 				hasOverlap = true
 				break
 			}
 		}
 
-		// Check if too close to cursor (read from ECS)
+		// Check if too close to cursor
 		cursorPos, ok := s.ctx.World.Positions.Get(s.ctx.CursorEntity)
 		if !ok {
 			panic(fmt.Errorf("cursor destroyed"))

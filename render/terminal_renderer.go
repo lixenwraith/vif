@@ -804,63 +804,51 @@ func (r *TerminalRenderer) drawCursor(cursorX, cursorY int, ctx *engine.GameCont
 	var charFgColor tcell.Color = tcell.ColorBlack
 
 	// 2. Scan for Overlapping Entities
-	// Because the PositionStore limits 1 entity per cell, the Cursor Entity "masks"
-	// other entities at this location. We must explicitly query/iterate to find them
 
-	// Drain destroys other items, so if it exists here, it takes precedence
+	// Stack allocation of buffer (size 15), NO GC overhead
+	var entityBuf [engine.MaxEntitiesPerCell]engine.Entity
+
+	// Copy data into stack buffer
+	count := ctx.World.Positions.GetAllAtInto(cursorX, cursorY, entityBuf[:])
+
+	// Create a slice view of our valid data
+	entitiesAtCursor := entityBuf[:count]
+
 	isDrain := false
-	drainEntities := ctx.World.Drains.All()
-	for _, drainEntity := range drainEntities {
-		// Get current position
-		drainPos, ok := ctx.World.Positions.Get(drainEntity)
-		if !ok {
-			panic(fmt.Errorf("drain destroyed"))
+	hasChar := false
+	isNugget := false
+	var charStyle tcell.Style
+
+	for _, e := range entitiesAtCursor {
+		if e == ctx.CursorEntity {
+			continue
 		}
 
-		if drainPos.X == cursorX && drainPos.Y == cursorY {
+		// Priority 1: Drain
+		// Drain masks everything else
+		if ctx.World.Drains.Has(e) {
 			isDrain = true
 			break
 		}
-	}
 
-	// Check for Characters (Spawned, Gold, Nugget)
-	// We use the Query pattern to find any entity at this specific coordinate
-	// that is NOT the cursor itself
-	var charStyle tcell.Style
-	hasChar := false
-	isNugget := false
-
-	if !isDrain {
-		// Only search for characters if drain isn't overlapping (drain destroys characters)
-		candidates := ctx.World.Query().
-			With(ctx.World.Positions).
-			With(ctx.World.Characters).
-			Execute()
-
-		for _, e := range candidates {
-			if e == ctx.CursorEntity {
-				continue
-			}
-
-			// TODO: Handle ok
-			pos, _ := ctx.World.Positions.Get(e)
-			if pos.X == cursorX && pos.Y == cursorY {
-				charComp, _ := ctx.World.Characters.Get(e)
+		// Priority 2: Characters (Spawned, Gold, Nugget)
+		if !hasChar {
+			if charComp, ok := ctx.World.Characters.Get(e); ok {
+				hasChar = true
 				charAtCursor = charComp.Rune
 				charStyle = charComp.Style
-				hasChar = true
-
 				if ctx.World.Nuggets.Has(e) {
 					isNugget = true
 				}
-				break // Found the masked character
+				// Do not break here; a Drain might still be in the list
 			}
 		}
 	}
 
-	// Check for Decay (Lowest Priority Entity)
-	// Only checked if no standard character or drain is present.
-	// This makes cursor "transparent" to decay if sitting on empty space.
+	// Priority 3: Decay (Lowest Priority)
+	// Only checked if no standard character or drain is present
+	// TODO: assumed to be FallingDecay; verify
+	// We scan manually because Decay entities might not be fully integrated into PositionStore yet
 	hasDecay := false
 	if !isDrain && !hasChar {
 		decayEntities := ctx.World.FallingDecays.All()

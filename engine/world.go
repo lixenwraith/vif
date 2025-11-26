@@ -132,13 +132,15 @@ func (w *World) Update(dt time.Duration) {
 	}
 }
 
-// GetEntityAtPosition returns the entity at a given position (0 if none)
+// GetEntityAtPosition returns the "top" entity at a given position based on Z-Index
+// Used primarily for rendering logic or interactions where a single target is needed
 func (w *World) GetEntityAtPosition(x, y int) Entity {
-	return w.Positions.GetEntityAt(x, y)
+	entities := w.Positions.GetAllAt(x, y)
+	return SelectTopEntity(entities, w)
 }
 
-// EntityCount returns approximate entity count from highest ID.
-// For accurate counts, query specific stores.
+// EntityCount returns approximate entity count from highest ID
+// For accurate counts, query specific stores
 func (w *World) EntityCount() int {
 	w.mu.RLock()
 	defer w.mu.RUnlock()

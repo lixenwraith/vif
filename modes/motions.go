@@ -1,6 +1,8 @@
 package modes
 
 import (
+	"fmt"
+
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
@@ -194,7 +196,7 @@ func ExecuteFindChar(ctx *engine.GameContext, targetChar rune, count int) {
 		count = 1
 	}
 
-	// Get cursor position from ECS
+	// Get cursor position
 	pos, ok := ctx.World.Positions.Get(ctx.CursorEntity)
 	if !ok {
 		return // Cursor entity missing - should never happen
@@ -207,32 +209,28 @@ func ExecuteFindChar(ctx *engine.GameContext, targetChar rune, count int) {
 	ctx.LastFindForward = true
 	ctx.LastFindType = 'f'
 
-	// Search forward on current line for the character
-	entities := ctx.World.Query().
-		With(ctx.World.Positions).
-		With(ctx.World.Characters).
-		Execute()
-
 	occurrencesFound := 0
 	lastMatchX := -1
 
 	for x := cursorX + 1; x < ctx.GameWidth; x++ {
+		// O(1) lookup of entities at position
+		entities := ctx.World.Positions.GetAllAt(x, cursorY)
+
 		for _, entity := range entities {
-			pos, _ := ctx.World.Positions.Get(entity)
-			if pos.Y == cursorY && pos.X == x {
-				char, _ := ctx.World.Characters.Get(entity)
-				if char.Rune == targetChar {
-					occurrencesFound++
-					lastMatchX = x
-					if occurrencesFound == count {
-						cursorX = x
-						// Write cursor position to ECS
-						ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
-							X: cursorX,
-							Y: cursorY,
-						})
-						return
-					}
+			if entity == 0 {
+				continue
+			}
+			char, ok := ctx.World.Characters.Get(entity)
+			if ok && char.Rune == targetChar {
+				occurrencesFound++
+				lastMatchX = x
+				if occurrencesFound == count {
+					cursorX = x
+					ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
+						X: cursorX,
+						Y: cursorY,
+					})
+					return
 				}
 			}
 		}
@@ -266,7 +264,7 @@ func ExecuteFindCharBackward(ctx *engine.GameContext, targetChar rune, count int
 	// Get cursor position from ECS
 	pos, ok := ctx.World.Positions.Get(ctx.CursorEntity)
 	if !ok {
-		return // Cursor entity missing - should never happen
+		panic(fmt.Errorf("cursor destroyed"))
 	}
 	cursorX := pos.X
 	cursorY := pos.Y
@@ -276,33 +274,28 @@ func ExecuteFindCharBackward(ctx *engine.GameContext, targetChar rune, count int
 	ctx.LastFindForward = false
 	ctx.LastFindType = 'F'
 
-	// Search backward on current line for the character
-	entities := ctx.World.Query().
-		With(ctx.World.Positions).
-		With(ctx.World.Characters).
-		Execute()
-
 	occurrencesFound := 0
 	firstMatchX := -1
 
 	// Search backward from CursorX - 1 to 0
 	for x := cursorX - 1; x >= 0; x-- {
+		entities := ctx.World.Positions.GetAllAt(x, cursorY)
+
 		for _, entity := range entities {
-			pos, _ := ctx.World.Positions.Get(entity)
-			if pos.Y == cursorY && pos.X == x {
-				char, _ := ctx.World.Characters.Get(entity)
-				if char.Rune == targetChar {
-					occurrencesFound++
-					firstMatchX = x // Keep track of first (furthest back) match
-					if occurrencesFound == count {
-						cursorX = x
-						// Write cursor position to ECS
-						ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
-							X: cursorX,
-							Y: cursorY,
-						})
-						return
-					}
+			if entity == 0 {
+				continue
+			}
+			char, ok := ctx.World.Characters.Get(entity)
+			if ok && char.Rune == targetChar {
+				occurrencesFound++
+				firstMatchX = x
+				if occurrencesFound == count {
+					cursorX = x
+					ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
+						X: cursorX,
+						Y: cursorY,
+					})
+					return
 				}
 			}
 		}
@@ -345,35 +338,30 @@ func ExecuteTillChar(ctx *engine.GameContext, targetChar rune, count int) {
 	ctx.LastFindForward = true
 	ctx.LastFindType = 't'
 
-	// Search forward on current line for the character
-	entities := ctx.World.Query().
-		With(ctx.World.Positions).
-		With(ctx.World.Characters).
-		Execute()
-
 	occurrencesFound := 0
 	lastMatchX := -1
 
 	for x := cursorX + 1; x < ctx.GameWidth; x++ {
+		entities := ctx.World.Positions.GetAllAt(x, cursorY)
+
 		for _, entity := range entities {
-			pos, _ := ctx.World.Positions.Get(entity)
-			if pos.Y == cursorY && pos.X == x {
-				char, _ := ctx.World.Characters.Get(entity)
-				if char.Rune == targetChar {
-					occurrencesFound++
-					lastMatchX = x
-					if occurrencesFound == count {
-						// Move to one position before the match
-						if x > cursorX+1 {
-							cursorX = x - 1
-						}
-						// Write cursor position to ECS
-						ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
-							X: cursorX,
-							Y: cursorY,
-						})
-						return
+			if entity == 0 {
+				continue
+			}
+			char, ok := ctx.World.Characters.Get(entity)
+			if ok && char.Rune == targetChar {
+				occurrencesFound++
+				lastMatchX = x
+				if occurrencesFound == count {
+					// Move to one position before the match
+					if x > cursorX+1 {
+						cursorX = x - 1
 					}
+					ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
+						X: cursorX,
+						Y: cursorY,
+					})
+					return
 				}
 			}
 		}
@@ -417,36 +405,31 @@ func ExecuteTillCharBackward(ctx *engine.GameContext, targetChar rune, count int
 	ctx.LastFindForward = false
 	ctx.LastFindType = 'T'
 
-	// Search backward on current line for the character
-	entities := ctx.World.Query().
-		With(ctx.World.Positions).
-		With(ctx.World.Characters).
-		Execute()
-
 	occurrencesFound := 0
 	firstMatchX := -1
 
 	// Search backward from CursorX - 1 to 0
 	for x := cursorX - 1; x >= 0; x-- {
+		entities := ctx.World.Positions.GetAllAt(x, cursorY)
+
 		for _, entity := range entities {
-			pos, _ := ctx.World.Positions.Get(entity)
-			if pos.Y == cursorY && pos.X == x {
-				char, _ := ctx.World.Characters.Get(entity)
-				if char.Rune == targetChar {
-					occurrencesFound++
-					firstMatchX = x // Keep track of first (furthest back) match
-					if occurrencesFound == count {
-						// Move to one position after the match
-						if x < cursorX-1 {
-							cursorX = x + 1
-						}
-						// Write cursor position to ECS
-						ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
-							X: cursorX,
-							Y: cursorY,
-						})
-						return
+			if entity == 0 {
+				continue
+			}
+			char, ok := ctx.World.Characters.Get(entity)
+			if ok && char.Rune == targetChar {
+				occurrencesFound++
+				firstMatchX = x
+				if occurrencesFound == count {
+					// Move to one position after the match
+					if x < cursorX-1 {
+						cursorX = x + 1
 					}
+					ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
+						X: cursorX,
+						Y: cursorY,
+					})
+					return
 				}
 			}
 		}
@@ -518,14 +501,9 @@ func RepeatFindChar(ctx *engine.GameContext, reverse bool) {
 	ctx.LastFindForward = originalForward
 }
 
-// isWordChar returns true if the rune is a word character (alphanumeric or underenergy)
+// isWordChar returns true if the rune is a word character (alphanumeric or underscore)
 func isWordChar(r rune) bool {
 	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_'
-}
-
-// isPunctuation returns true if the rune is punctuation (not word char, not space)
-func isPunctuation(r rune) bool {
-	return r != 0 && r != ' ' && !isWordChar(r)
 }
 
 // getCharAt returns the character at the given position, or 0 if empty.
@@ -534,22 +512,18 @@ func isPunctuation(r rune) bool {
 //   - 0 for space character entities (defensive handling - spaces should not exist as entities)
 //   - The actual rune for all other characters
 func getCharAt(ctx *engine.GameContext, x, y int) rune {
-	// We iterate all entities with Position + Character components
-	// While O(N), N is small (max 200 entities), making this acceptable for input handling
-	entities := ctx.World.Query().
-		With(ctx.World.Positions).
-		With(ctx.World.Characters).
-		Execute()
+	// Use spatial grid to find entities at this position
+	entities := ctx.World.Positions.GetAllAt(x, y)
 
 	for _, entity := range entities {
 		// Explicitly skip the cursor entity to see what's underneath
-		if entity == ctx.CursorEntity {
+		// Also skip 0/invalid entities
+		if entity == ctx.CursorEntity || entity == 0 {
 			continue
 		}
 
-		pos, _ := ctx.World.Positions.Get(entity)
-		if pos.X == x && pos.Y == y {
-			char, _ := ctx.World.Characters.Get(entity)
+		char, ok := ctx.World.Characters.Get(entity)
+		if ok {
 			// Treat space characters as empty positions
 			if char.Rune == ' ' {
 				return 0
@@ -720,20 +694,36 @@ func findLineEnd(ctx *engine.GameContext, cursorY int) int {
 
 // deleteCharAt deletes the character at the given position
 func deleteCharAt(ctx *engine.GameContext, x, y int) {
-	entity := ctx.World.Positions.GetEntityAt(x, y)
-	if entity == 0 {
-		return // No entity at position
+	// Get all entities to find the actual character/nugget, ignoring cursor/drain
+	entities := ctx.World.Positions.GetAllAt(x, y)
+
+	var targetEntity engine.Entity
+
+	for _, e := range entities {
+		if e == 0 || e == ctx.CursorEntity {
+			continue
+		}
+
+		// Prioritize deleting nuggets or sequences
+		if ctx.World.Nuggets.Has(e) || ctx.World.Sequences.Has(e) {
+			targetEntity = e
+			break
+		}
+	}
+
+	if targetEntity == 0 {
+		return // Nothing deletable found
 	}
 
 	// Check if it's green or blue to reset heat
-	if seq, ok := ctx.World.Sequences.Get(entity); ok {
+	if seq, ok := ctx.World.Sequences.Get(targetEntity); ok {
 		if seq.Type == components.SequenceGreen || seq.Type == components.SequenceBlue {
 			ctx.State.SetHeat(0) // Reset heat
 		}
 	}
 
 	// Safely destroy entity (handles spatial index removal)
-	ctx.World.DestroyEntity(entity)
+	ctx.World.DestroyEntity(targetEntity)
 }
 
 // WORD motion functions (space-delimited, treat all non-space as WORD)

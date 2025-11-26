@@ -124,7 +124,7 @@ func (s *NuggetSystem) findValidPosition(world *engine.World) (int, int) {
 			continue
 		}
 
-		if world.Positions.GetEntityAt(x, y) != 0 {
+		if world.Positions.HasAny(x, y) {
 			continue
 		}
 

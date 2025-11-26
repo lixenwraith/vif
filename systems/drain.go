@@ -57,7 +57,7 @@ func (s *DrainSystem) Update(world *engine.World, dt time.Duration) {
 	}
 }
 
-// spawnDrain creates the drain entity centered on the cursor using generic stores
+// spawnDrain creates the drain entity centered on the cursor
 func (s *DrainSystem) spawnDrain(world *engine.World) {
 	// Fetch resources
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
@@ -102,13 +102,19 @@ func (s *DrainSystem) spawnDrain(world *engine.World) {
 		IsOnCursor:    true, // Drain spawns centered on cursor
 	}
 
-	// Check if position is occupied and handle collision
-	collidingEntity := world.Positions.GetEntityAt(spawnX, spawnY)
 	// TODO: (2-second) delayed spawn, with spawn animation: materialize system
-	// TODO: this check seems unnecessary, cursor is protected entity, check iteration on multiple overlaps (cursor+sequence+decay) that it destroys them all correctly
-	// Do not trigger collision logic against the cursor itself (Drain currently spawns on top of it with no delay)
-	if collidingEntity != 0 && collidingEntity != s.ctx.CursorEntity {
-		s.handleCollisionAtPosition(world, collidingEntity)
+	// Collect collision candidates for Collect-Then-Destroy
+	entitiesAtSpawn := world.Positions.GetAllAt(spawnX, spawnY)
+	var toProcess []engine.Entity
+	for _, e := range entitiesAtSpawn {
+		if e != s.ctx.CursorEntity {
+			toProcess = append(toProcess, e)
+		}
+	}
+
+	// Process collisions safely outside the spatial grid iteration loop
+	for _, e := range toProcess {
+		s.handleCollisionAtPosition(world, e)
 	}
 
 	// Add components (position first for spatial index)
@@ -116,7 +122,7 @@ func (s *DrainSystem) spawnDrain(world *engine.World) {
 	world.Drains.Add(entity, drain)
 }
 
-// despawnDrain removes the drain entity using generic stores
+// despawnDrain removes the drain entity
 func (s *DrainSystem) despawnDrain(world *engine.World) {
 	drains := world.Drains.All()
 	for _, e := range drains {
@@ -124,12 +130,16 @@ func (s *DrainSystem) despawnDrain(world *engine.World) {
 	}
 }
 
-// updateDrainMovement handles purely clock-based drain movement toward cursor using generic stores
+// updateDrainMovement handles purely clock-based drain movement toward cursor
 func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 	// Fetch resources
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	now := timeRes.GameTime
+
+	// TODO: Use for super drain
+	// Optimization buffer reusable for this scope
+	var collisionBuf [engine.MaxEntitiesPerCell]engine.Entity
 
 	// Get and iterate on all drains
 	drainEntities := world.Drains.All()
@@ -181,14 +191,22 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 			newY = config.GameHeight - 1
 		}
 
-		// Check for collision at new position
-		collidingEntity := world.Positions.GetEntityAt(newX, newY)
+		// Use Zero-Alloc check
+		count := world.Positions.GetAllAtInto(newX, newY, collisionBuf[:])
+		collidingEntities := collisionBuf[:count]
 
-		// FIX: Allow moving onto the Cursor Entity
-		// We check if the colliding entity exists, is not self, AND is not the cursor.
-		if collidingEntity != 0 && collidingEntity != drainEntity && collidingEntity != s.ctx.CursorEntity {
-			s.handleCollisionAtPosition(world, collidingEntity)
-			// Don't update position if there was a blocking collision
+		blocked := false
+
+		// Process collisions safely
+		for _, collidingEntity := range collidingEntities {
+			if collidingEntity != 0 && collidingEntity != drainEntity && collidingEntity != s.ctx.CursorEntity {
+				s.handleCollisionAtPosition(world, collidingEntity)
+				// TODO: Check how block feels with ember, for now speed up drain or disable cuz it's gonna be slow
+				blocked = true
+			}
+		}
+
+		if blocked {
 			return
 		}
 
@@ -270,14 +288,21 @@ func (s *DrainSystem) handleCollisions(world *engine.World) {
 			panic(fmt.Errorf("drain destroyed"))
 		}
 
-		// Check for entity at drain position
-		target := world.Positions.GetEntityAt(drainPos.X, drainPos.Y)
-		if target == 0 || target == entity {
-			continue
+		// Check for collision at new position
+		targets := world.Positions.GetAllAt(drainPos.X, drainPos.Y)
+
+		// Collect collision candidates for Collect-Then-Destroy
+		var toProcess []engine.Entity
+		for _, target := range targets {
+			if target != 0 && target != entity {
+				toProcess = append(toProcess, target)
+			}
 		}
 
-		// Delegate to position-based collision handler
-		s.handleCollisionAtPosition(world, target)
+		// Process collisions safely outside the spatial grid iteration loop
+		for _, target := range toProcess {
+			s.handleCollisionAtPosition(world, target)
+		}
 	}
 }
 

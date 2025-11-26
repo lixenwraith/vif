@@ -289,19 +289,32 @@ func (cs *CleanerSystem) scanRedCharacterRows(world *engine.World) []int {
 
 // checkAndDestroyAtPosition handles collision logic using spatial index
 func (cs *CleanerSystem) checkAndDestroyAtPosition(world *engine.World, x, y int) {
-	targetEntity := world.Positions.GetEntityAt(x, y)
-	if targetEntity == 0 {
-		return
+	// Get all entities at this position
+	targetEntities := world.Positions.GetAllAt(x, y)
+
+	// Create a copy or iterate carefully since we might destroy entities
+	// Destroying modifies the grid, so standard range loop on the slice
+	// returned by GetAllAt (which is a view of backing array) is unsafe if the backing array shifts.
+	// However, PositionStore.Remove modifies the array in place
+	// Safer to collect candidates first
+	var toDestroy []engine.Entity
+
+	for _, e := range targetEntities {
+		if e == 0 {
+			continue
+		}
+		// Verify it's a Red character
+		if seqComp, ok := world.Sequences.Get(e); ok {
+			if seqComp.Type == components.SequenceRed {
+				toDestroy = append(toDestroy, e)
+			}
+		}
 	}
 
-	// Verify it's a Red character
-	if seqComp, ok := world.Sequences.Get(targetEntity); ok {
-		if seqComp.Type == components.SequenceRed {
-			// Spawn flash effect
-			cs.spawnRemovalFlash(world, targetEntity)
-			// Destroy target
-			world.DestroyEntity(targetEntity)
-		}
+	// Spawn flash effect and destroy all marked to destroy
+	for _, e := range toDestroy {
+		cs.spawnRemovalFlash(world, e)
+		world.DestroyEntity(e)
 	}
 }
 

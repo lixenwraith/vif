@@ -158,21 +158,23 @@ func deleteRange(ctx *engine.GameContext, startX, endX, y int) bool {
 
 	// Iterate through the position range and use spatial index to find entities
 	for x := startX; x <= endX; x++ {
-		entity := ctx.World.Positions.GetEntityAt(x, y)
+		// We must check all entities at this position and find the ones that are destructible sequences.
+		entities := ctx.World.Positions.GetAllAt(x, y)
 
-		// Skip positions without entities (gaps, including spaces)
-		if entity == 0 {
-			continue
-		}
+		for _, entity := range entities {
+			if entity == 0 || entity == ctx.CursorEntity {
+				continue
+			}
 
-		// Check if green or blue
-		if seq, ok := ctx.World.Sequences.Get(entity); ok {
-			if seq.Type == components.SequenceGreen || seq.Type == components.SequenceBlue {
-				deletedGreenOrBlue = true
+			// Check if green or blue
+			if seq, ok := ctx.World.Sequences.Get(entity); ok {
+				if seq.Type == components.SequenceGreen || seq.Type == components.SequenceBlue {
+					deletedGreenOrBlue = true
+				}
+				// It's a sequence, mark for deletion
+				entitiesToDelete = append(entitiesToDelete, entity)
 			}
 		}
-
-		entitiesToDelete = append(entitiesToDelete, entity)
 	}
 
 	// Delete all entities in range

@@ -350,7 +350,7 @@ func (s *GoldSystem) findValidPosition(world *engine.World, seqLength int) (int,
 		// Check for overlaps with existing characters
 		overlaps := false
 		for i := 0; i < seqLength; i++ {
-			if world.Positions.GetEntityAt(x+i, y) != 0 {
+			if world.Positions.HasAny(x+i, y) {
 				overlaps = true
 				break
 			}
