@@ -104,6 +104,7 @@ type World struct {
     GoldSequences  *Store[GoldSequenceComponent]
     FallingDecays  *Store[FallingDecayComponent]
     Cleaners       *Store[CleanerComponent]
+    Materializers  *Store[MaterializeComponent]
     Flashes        *Store[FlashComponent]
     Nuggets        *Store[NuggetComponent]
     Drains         *Store[DrainComponent]
@@ -820,6 +821,7 @@ Component (marker interface)
 ├── GoldSequenceComponent {Active, SequenceID, StartTimeNano, CharSequence, CurrentIndex}
 ├── FallingDecayComponent {Column, YPosition, Speed, Char, LastChangeRow, LastIntX, LastIntY, PrevPreciseX, PrevPreciseY}
 ├── CleanerComponent {PreciseX, PreciseY, VelocityX, VelocityY, TargetX, TargetY, GridX, GridY, Trail, Char}
+├── MaterializeComponent {PreciseX, PreciseY, VelocityX, VelocityY, TargetX, TargetY, GridX, GridY, Trail, Direction, Char, Arrived}
 ├── FlashComponent {X, Y, Char, StartTime, Duration}
 ├── NuggetComponent {ID, SpawnTime}
 ├── DrainComponent {X, Y, LastMoveTime, LastDrainTime, IsOnCursor}
@@ -1500,9 +1502,17 @@ for _, entity := range entitiesAtCursor {
 ### Drain System
 - **Purpose**: A hostile entity that drains energy if the player is idle or positioned on it.
 - **Trigger**: Spawns when Energy > 0. Despawns when Energy <= 0.
+- **Materialize Animation**: Before drain spawns, a 1-second visual telegraph animation occurs
+  - Four cyan block characters ('█') converge from screen edges (top, bottom, left, right)
+  - Spawners originate from off-screen positions and move toward locked target position
+  - Physics-based movement with sub-pixel precision and gradient trail effects
+  - Target position locked at animation start (cursor position at trigger time)
+  - Drain materializes at target position when all four spawners converge
+  - Animation pattern follows CleanerSystem physics model (velocity integration, trail rendering)
 - **Movement**: Moves toward the cursor every 1 second (independent of frame rate).
 - **Effect**: If positioned on top of the cursor, drains 10 points every 1 second.
 - **Visual**: Rendered as '╬' (Light Cyan).
+- **Lifecycle**: DrainSystem manages materialize animation internally via MaterializeComponent entities
 
 ### Cleaner System
 - **Trigger**: Event-driven via `EventCleanerRequest` when gold completed at maximum heat

@@ -276,8 +276,13 @@ Mode      Last command                    Boost timer  Decay timer   Total energ
 
 When energy is positive, a hostile drain entity appears on screen:
 
+- **Spawn Telegraph**: Before the drain appears, watch for a 1-second warning animation
+  - Four bright cyan blocks ('█') converge from the screen edges
+  - The blocks move toward where your cursor was when you gained energy
+  - Trail effects show the path of each converging block
+  - The drain materializes at the convergence point
+  - **Strategic Note**: The spawn location is locked when the animation starts, so moving your cursor won't change where the drain appears
 - **Visual**: Light cyan ╬ character (cross)
-- **Position**: Spawns centered on cursor when energy > 0
 - **Movement**: Pursues cursor, moving 1 character per second
 - **Effect**: Drains 10 energy per second when positioned on cursor
 - **Collisions**: Destroys sequences, nuggets, and gold on contact
@@ -580,7 +585,7 @@ When all characters of one color/level are cleared, that slot opens for new spaw
 4. **Let decay happen** - Don't panic about the timer
 5. **Chase gold** aggressively - easiest way to build heat
 6. **Don't use delete** (`x`, `dd`, etc.) - it resets heat
-7. **Understand Drain**: Once energy > 0, a cyan ╬ character spawns and chases you - keep moving to avoid losing energy
+7. **Understand Drain**: Once energy > 0, watch for four cyan blocks converging (1-second warning), then a cyan ╬ character spawns at the convergence point and chases you - keep moving to avoid losing energy
 
 **Motion Practice:**
 - Use `0` and `$` to jump to line edges
@@ -665,6 +670,8 @@ When all characters of one color/level are cleared, that slot opens for new spaw
    - Take calculated risks: typing one Red to clear screen space
 
 8. **Advanced drain tactics**:
+   - **Telegraph awareness**: The 1-second materialize animation gives you time to reposition before drain spawns
+   - **Target lock exploit**: Spawn location is locked at animation start - move cursor away from high-value areas before gaining energy
    - Track drain position constantly - it moves every second
    - Use drain movement prediction to clear targets before drain reaches them
    - Strategic positioning: lead drain away from high-value target clusters
