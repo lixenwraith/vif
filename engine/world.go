@@ -25,6 +25,7 @@ type World struct {
 	Flashes       *Store[components.FlashComponent]
 	Nuggets       *Store[components.NuggetComponent]
 	Drains        *Store[components.DrainComponent]
+	Materializers *Store[components.MaterializeComponent]
 	Cursors       *Store[components.CursorComponent]
 	Protections   *Store[components.ProtectionComponent]
 
@@ -49,6 +50,7 @@ func NewWorld() *World {
 		Flashes:       NewStore[components.FlashComponent](),
 		Nuggets:       NewStore[components.NuggetComponent](),
 		Drains:        NewStore[components.DrainComponent](),
+		Materializers: NewStore[components.MaterializeComponent](),
 		Cursors:       NewStore[components.CursorComponent](),
 		Protections:   NewStore[components.ProtectionComponent](),
 	}
@@ -64,6 +66,7 @@ func NewWorld() *World {
 		w.Flashes,
 		w.Nuggets,
 		w.Drains,
+		w.Materializers,
 		w.Cursors,
 		w.Protections,
 	}
