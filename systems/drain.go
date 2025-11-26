@@ -7,6 +7,7 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
@@ -14,8 +15,11 @@ import (
 // The drain entity spawns when energy > 0 and despawns when energy <= 0
 // Priority: 25 (after CleanerSystem:22, before DecaySystem:30)
 type DrainSystem struct {
-	ctx          *engine.GameContext
-	nuggetSystem *NuggetSystem
+	ctx                *engine.GameContext
+	nuggetSystem       *NuggetSystem
+	materializeActive  bool
+	materializeTargetX int
+	materializeTargetY int
 }
 
 // NewDrainSystem creates a new drain system
@@ -42,12 +46,18 @@ func (s *DrainSystem) Update(world *engine.World, dt time.Duration) {
 
 	// TODO: need better lifecycle management, prep for ember
 	drainActive := world.Drains.Count() > 0
+	materializersExist := world.Materializers.Count() > 0
 	// drainActive := world.Drains.Count() > 50 // Stress test spatial grid
 	// Lifecycle logic: spawn when energy > 0, despawn when energy <= 0
-	if energy > 0 && !drainActive {
-		s.spawnDrain(world)
+	if energy > 0 && !drainActive && !s.materializeActive && !materializersExist {
+		s.startMaterialize(world)
 	} else if energy <= 0 && drainActive {
 		s.despawnDrain(world)
+	}
+
+	// Update materialize animation if active
+	if materializersExist {
+		s.updateMaterializers(world, dt)
 	}
 
 	// Clock-based updates: movement and energy drain occur on fixed intervals
@@ -58,23 +68,170 @@ func (s *DrainSystem) Update(world *engine.World, dt time.Duration) {
 	}
 }
 
-// spawnDrain creates the drain entity centered on the cursor
-func (s *DrainSystem) spawnDrain(world *engine.World) {
-	// Fetch resources
-	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-	now := timeRes.GameTime
+// despawnDrain removes the drain entity
+func (s *DrainSystem) despawnDrain(world *engine.World) {
+	drains := world.Drains.All()
+	for _, e := range drains {
+		world.DestroyEntity(e)
+	}
+}
 
-	// Read cursor position
+// startMaterialize initiates the materialize animation by spawning 4 converging spawner entities
+func (s *DrainSystem) startMaterialize(world *engine.World) {
+	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+
 	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
 	if !ok {
 		panic(fmt.Errorf("cursor destroyed"))
 	}
 
-	spawnX := cursorPos.X
-	spawnY := cursorPos.Y
+	// Lock target position
+	s.materializeTargetX = cursorPos.X
+	s.materializeTargetY = cursorPos.Y
+	s.materializeActive = true
 
-	// Basic validation: ensure position is within bounds
+	// Clamp to bounds
+	if s.materializeTargetX < 0 {
+		s.materializeTargetX = 0
+	}
+	if s.materializeTargetX >= config.GameWidth {
+		s.materializeTargetX = config.GameWidth - 1
+	}
+	if s.materializeTargetY < 0 {
+		s.materializeTargetY = 0
+	}
+	if s.materializeTargetY >= config.GameHeight {
+		s.materializeTargetY = config.GameHeight - 1
+	}
+
+	gameWidth := float64(config.GameWidth)
+	gameHeight := float64(config.GameHeight)
+	targetX := float64(s.materializeTargetX)
+	targetY := float64(s.materializeTargetY)
+	duration := constants.MaterializeAnimationDuration.Seconds()
+
+	type spawnerDef struct {
+		startX, startY float64
+		dir            components.MaterializeDirection
+	}
+
+	spawners := []spawnerDef{
+		{targetX, -1, components.MaterializeFromTop},
+		{targetX, gameHeight, components.MaterializeFromBottom},
+		{-1, targetY, components.MaterializeFromLeft},
+		{gameWidth, targetY, components.MaterializeFromRight},
+	}
+
+	for _, def := range spawners {
+		velX := (targetX - def.startX) / duration
+		velY := (targetY - def.startY) / duration
+
+		comp := components.MaterializeComponent{
+			PreciseX:  def.startX,
+			PreciseY:  def.startY,
+			VelocityX: velX,
+			VelocityY: velY,
+			TargetX:   s.materializeTargetX,
+			TargetY:   s.materializeTargetY,
+			GridX:     int(def.startX),
+			GridY:     int(def.startY),
+			Trail:     []core.Point{{X: int(def.startX), Y: int(def.startY)}},
+			Direction: def.dir,
+			Char:      constants.MaterializeChar,
+			Arrived:   false,
+		}
+
+		entity := world.CreateEntity()
+		world.Materializers.Add(entity, comp)
+	}
+}
+
+// updateMaterializers updates the materialize spawner entities and triggers drain spawn when all converge
+func (s *DrainSystem) updateMaterializers(world *engine.World, dt time.Duration) {
+	dtSeconds := dt.Seconds()
+	if dtSeconds > 0.1 {
+		dtSeconds = 0.1
+	}
+
+	entities := world.Materializers.All()
+	allArrived := true
+
+	for _, entity := range entities {
+		mat, ok := world.Materializers.Get(entity)
+		if !ok {
+			continue
+		}
+
+		if mat.Arrived {
+			continue
+		}
+
+		mat.PreciseX += mat.VelocityX * dtSeconds
+		mat.PreciseY += mat.VelocityY * dtSeconds
+
+		arrived := false
+		switch mat.Direction {
+		case components.MaterializeFromTop:
+			arrived = mat.PreciseY >= float64(mat.TargetY)
+		case components.MaterializeFromBottom:
+			arrived = mat.PreciseY <= float64(mat.TargetY)
+		case components.MaterializeFromLeft:
+			arrived = mat.PreciseX >= float64(mat.TargetX)
+		case components.MaterializeFromRight:
+			arrived = mat.PreciseX <= float64(mat.TargetX)
+		}
+
+		if arrived {
+			mat.PreciseX = float64(mat.TargetX)
+			mat.PreciseY = float64(mat.TargetY)
+			mat.Arrived = true
+		} else {
+			allArrived = false
+		}
+
+		newGridX := int(mat.PreciseX)
+		newGridY := int(mat.PreciseY)
+
+		if newGridX != mat.GridX || newGridY != mat.GridY {
+			mat.GridX = newGridX
+			mat.GridY = newGridY
+
+			newPoint := core.Point{X: mat.GridX, Y: mat.GridY}
+			oldLen := len(mat.Trail)
+			newLen := oldLen + 1
+			if newLen > constants.MaterializeTrailLength {
+				newLen = constants.MaterializeTrailLength
+			}
+
+			newTrail := make([]core.Point, newLen)
+			newTrail[0] = newPoint
+			if newLen > 1 {
+				copy(newTrail[1:], mat.Trail[:newLen-1])
+			}
+			mat.Trail = newTrail
+		}
+
+		world.Materializers.Add(entity, mat)
+	}
+
+	if allArrived && len(entities) > 0 {
+		for _, entity := range entities {
+			world.DestroyEntity(entity)
+		}
+		s.materializeActive = false
+		s.materializeDrain(world)
+	}
+}
+
+// materializeDrain creates the drain entity at the locked materialize target position
+func (s *DrainSystem) materializeDrain(world *engine.World) {
+	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+	now := timeRes.GameTime
+
+	spawnX := s.materializeTargetX
+	spawnY := s.materializeTargetY
+
 	if spawnX < 0 {
 		spawnX = 0
 	}
@@ -88,7 +245,6 @@ func (s *DrainSystem) spawnDrain(world *engine.World) {
 		spawnY = config.GameHeight - 1
 	}
 
-	// Create drain entity
 	entity := world.CreateEntity()
 
 	pos := components.PositionComponent{
@@ -96,15 +252,18 @@ func (s *DrainSystem) spawnDrain(world *engine.World) {
 		Y: spawnY,
 	}
 
-	// Add drain component with initial state
+	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
+	if !ok {
+		panic(fmt.Errorf("cursor destroyed"))
+	}
+
 	drain := components.DrainComponent{
 		LastMoveTime:  now,
 		LastDrainTime: now,
-		IsOnCursor:    true, // Drain spawns centered on cursor
+		IsOnCursor:    spawnX == cursorPos.X && spawnY == cursorPos.Y,
 	}
 
-	// TODO: (2-second) delayed spawn, with spawn animation: materialize system
-	// Collect collision candidates for Collect-Then-Destroy
+	// Handle collisions at spawn position
 	entitiesAtSpawn := world.Positions.GetAllAt(spawnX, spawnY)
 	var toProcess []engine.Entity
 	for _, e := range entitiesAtSpawn {
@@ -112,23 +271,12 @@ func (s *DrainSystem) spawnDrain(world *engine.World) {
 			toProcess = append(toProcess, e)
 		}
 	}
-
-	// Process collisions safely outside the spatial grid iteration loop
 	for _, e := range toProcess {
 		s.handleCollisionAtPosition(world, e)
 	}
 
-	// Add components (position first for spatial index)
 	world.Positions.Add(entity, pos)
 	world.Drains.Add(entity, drain)
-}
-
-// despawnDrain removes the drain entity
-func (s *DrainSystem) despawnDrain(world *engine.World) {
-	drains := world.Drains.All()
-	for _, e := range drains {
-		world.DestroyEntity(e)
-	}
 }
 
 // updateDrainMovement handles purely clock-based drain movement toward cursor
