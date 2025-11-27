@@ -31,6 +31,36 @@ func (cs *CleanerSystem) Priority() int {
 	return constants.PriorityCleaner
 }
 
+// EventTypes returns the event types CleanerSystem handles
+func (cs *CleanerSystem) EventTypes() []engine.EventType {
+	return []engine.EventType{
+		engine.EventCleanerRequest,
+		engine.EventDirectionalCleanerRequest,
+	}
+}
+
+// HandleEvent processes cleaner-related events from the router
+func (cs *CleanerSystem) HandleEvent(world *engine.World, event engine.GameEvent) {
+	// Check if we already spawned for this frame (deduplication)
+	if cs.spawned[event.Frame] {
+		return
+	}
+
+	switch event.Type {
+	case engine.EventCleanerRequest:
+		cs.spawnCleaners(world)
+		cs.spawned[event.Frame] = true
+		cs.hasSpawnedSession = true
+
+	case engine.EventDirectionalCleanerRequest:
+		if payload, ok := event.Payload.(*engine.DirectionalCleanerPayload); ok {
+			cs.spawnDirectionalCleaners(world, payload.OriginX, payload.OriginY)
+			cs.spawned[event.Frame] = true
+			cs.hasSpawnedSession = true
+		}
+	}
+}
+
 // Update handles spawning, movement, collision, and cleanup synchronously
 func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 	// Fetch resources
@@ -38,30 +68,7 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	now := timeRes.GameTime
 
-	// 1. Handle Event Queue - Consume cleaner request events
-	events := cs.ctx.ConsumeEvents()
-	for _, event := range events {
-		if event.Type == engine.EventCleanerRequest {
-			// Check if we already spawned for this frame
-			if !cs.spawned[event.Frame] {
-				cs.spawnCleaners(world)
-				cs.spawned[event.Frame] = true
-				cs.hasSpawnedSession = true
-			}
-		} else if event.Type == engine.EventDirectionalCleanerRequest {
-			// Check if we already spawned for this frame
-			if !cs.spawned[event.Frame] {
-				// Extract payload
-				if payload, ok := event.Payload.(*engine.DirectionalCleanerPayload); ok {
-					cs.spawnDirectionalCleaners(world, payload.OriginX, payload.OriginY)
-					cs.spawned[event.Frame] = true
-					cs.hasSpawnedSession = true
-				}
-			}
-		}
-	}
-
-	// 2. Clean old entries from spawned map (keep last CleanerDeduplicationWindow frames)
+	// 1. Clean old entries from spawned map (keep last CleanerDeduplicationWindow frames)
 	currentFrame := cs.ctx.State.GetFrameNumber()
 	for frame := range cs.spawned {
 		if currentFrame-frame > constants.CleanerDeduplicationWindow {
@@ -69,7 +76,7 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 		}
 	}
 
-	// 3. Process Active Cleaners
+	// 2. Process Active Cleaners
 	entities := world.Cleaners.All()
 
 	// If no cleaners exist but we spawned this session, emit finished event

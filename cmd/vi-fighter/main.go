@@ -110,6 +110,7 @@ func main() {
 	frameReady <- struct{}{}
 
 	clockScheduler.SetSystems(goldSystem, decaySystem)
+	clockScheduler.RegisterEventHandler(cleanerSystem)
 	clockScheduler.Start()
 	defer clockScheduler.Stop()
 
