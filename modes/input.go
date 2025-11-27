@@ -80,6 +80,10 @@ func (h *InputHandler) handleKeyEvent(ev *tcell.EventKey) bool {
 		} else if h.ctx.IsInsertMode() {
 			h.ctx.Mode = engine.ModeNormal
 			h.ctx.DeleteOperator = false
+		} else {
+			// Normal mode - activate ping grid
+			h.ctx.SetPingActive(true)
+			h.ctx.SetPingGridTimer(1.0)
 		}
 		return true
 	}
@@ -355,9 +359,24 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 		h.ctx.LastCommand = "" // Clear last command
 		return true
 	case tcell.KeyEnter:
-		// Activate ping grid for 1 second
-		h.ctx.SetPingActive(true)
-		h.ctx.SetPingGridTimer(1.0)
+		// Directional cleaners if heat >= 10
+		currentHeat := h.ctx.State.GetHeat()
+		if currentHeat >= 10 {
+			// Reduce heat by 10
+			h.ctx.State.AddHeat(-10)
+
+			// Get cursor position for cleaner origin
+			cursorPos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+			if ok {
+				// Push directional cleaner event
+				payload := &engine.DirectionalCleanerPayload{
+					OriginX: cursorPos.X,
+					OriginY: cursorPos.Y,
+				}
+				h.ctx.PushEvent(engine.EventDirectionalCleanerRequest, payload, h.ctx.PausableClock.Now())
+			}
+		}
+		// Clear motion state regardless
 		h.ctx.MotionCount = 0
 		h.ctx.MotionCommand = ""
 		h.ctx.LastCommand = ""
