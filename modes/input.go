@@ -16,15 +16,13 @@ import (
 // InputHandler processes user input events
 type InputHandler struct {
 	ctx          *engine.GameContext
-	energySystem *systems.EnergySystem
 	nuggetSystem *systems.NuggetSystem
 }
 
 // NewInputHandler creates a new input handler
-func NewInputHandler(ctx *engine.GameContext, energySystem *systems.EnergySystem) *InputHandler {
+func NewInputHandler(ctx *engine.GameContext) *InputHandler {
 	return &InputHandler{
-		ctx:          ctx,
-		energySystem: energySystem,
+		ctx: ctx,
 	}
 }
 
@@ -206,9 +204,14 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 			}
 			return true
 		}
-		// Delegate character typing to energy system (reads from ECS)
+		// Push typing event to queue (processed by EnergySystem via EventRouter)
 		pos, _ := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
-		h.energySystem.HandleCharacterTyping(h.ctx.World, pos.X, pos.Y, ev.Rune())
+		payload := &engine.CharacterTypedPayload{
+			Char: ev.Rune(),
+			X:    pos.X,
+			Y:    pos.Y,
+		}
+		h.ctx.PushEvent(engine.EventCharacterTyped, payload, h.ctx.PausableClock.Now())
 	}
 	return true
 }

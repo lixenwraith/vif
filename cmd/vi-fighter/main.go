@@ -96,7 +96,7 @@ func main() {
 	)
 
 	// Create input handler
-	inputHandler := modes.NewInputHandler(ctx, energySystem)
+	inputHandler := modes.NewInputHandler(ctx)
 	inputHandler.SetNuggetSystem(nuggetSystem)
 
 	// Create frame synchronization channel
