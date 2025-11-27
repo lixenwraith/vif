@@ -72,6 +72,9 @@ func main() {
 	cleanerSystem := systems.NewCleanerSystem(ctx)
 	ctx.World.AddSystem(cleanerSystem)
 
+	flashSystem := systems.NewFlashSystem(ctx)
+	ctx.World.AddSystem(flashSystem)
+
 	// Wire up system references
 	energySystem.SetGoldSystem(goldSystem)
 	energySystem.SetSpawnSystem(spawnSystem)

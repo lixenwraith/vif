@@ -464,12 +464,24 @@ func (s *DrainSystem) handleCollisionAtPosition(world *engine.World, entity engi
 
 	// Check for nugget collision first
 	if world.Nuggets.Has(entity) {
+		// Flash for nugget destruction
+		if pos, ok := world.Positions.Get(entity); ok {
+			if char, ok := world.Characters.Get(entity); ok {
+				timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+				SpawnDestructionFlash(world, pos.X, pos.Y, char.Rune, timeRes.GameTime)
+			}
+		}
 		s.handleNuggetCollision(world, entity)
 		return
 	}
 
 	// Check for falling decay collision
 	if world.FallingDecays.Has(entity) {
+		// Flash for falling decay destruction
+		if decay, ok := world.FallingDecays.Get(entity); ok {
+			timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+			SpawnDestructionFlash(world, decay.Column, int(decay.YPosition), decay.Char, timeRes.GameTime)
+		}
 		s.handleFallingDecayCollision(world, entity)
 		return
 	}
@@ -491,7 +503,13 @@ func (s *DrainSystem) handleCollisionAtPosition(world *engine.World, entity engi
 		seq.Type == components.SequenceGreen ||
 		seq.Type == components.SequenceRed {
 
-		// Destroy the spawn character entity
+		// Flash for sequence character destruction
+		if pos, ok := world.Positions.Get(entity); ok {
+			if char, ok := world.Characters.Get(entity); ok {
+				timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+				SpawnDestructionFlash(world, pos.X, pos.Y, char.Rune, timeRes.GameTime)
+			}
+		}
 		world.DestroyEntity(entity)
 	}
 }
@@ -519,6 +537,12 @@ func (s *DrainSystem) handleGoldSequenceCollision(world *engine.World, entity en
 
 		// Only destroy gold sequence entities with matching ID
 		if seq.Type == components.SequenceGold && seq.ID == sequenceID {
+			// Flash for gold character destruction
+			if pos, ok := world.Positions.Get(goldSequenceEntity); ok {
+				if char, ok := world.Characters.Get(goldSequenceEntity); ok {
+					SpawnDestructionFlash(world, pos.X, pos.Y, char.Rune, now)
+				}
+			}
 			world.DestroyEntity(goldSequenceEntity)
 		}
 	}

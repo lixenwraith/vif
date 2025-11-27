@@ -66,13 +66,11 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 	if len(entities) == 0 && cs.hasSpawnedSession {
 		cs.ctx.PushEvent(engine.EventCleanerFinished, nil, now)
 		cs.hasSpawnedSession = false
-		cs.cleanupExpiredFlashes(world)
 		return
 	}
 
 	// If no cleaners, we can skip processing
 	if len(entities) == 0 {
-		cs.cleanupExpiredFlashes(world)
 		return
 	}
 
@@ -171,9 +169,6 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 		cs.ctx.PushEvent(engine.EventCleanerFinished, nil, now)
 		cs.hasSpawnedSession = false
 	}
-
-	// 4. Cleanup Effects
-	cs.cleanupExpiredFlashes(world)
 }
 
 // spawnCleaners generates cleaner entities using generic stores
@@ -325,38 +320,8 @@ func (cs *CleanerSystem) spawnRemovalFlash(world *engine.World, targetEntity eng
 
 	if charComp, ok := world.Characters.Get(targetEntity); ok {
 		if posComp, ok := world.Positions.Get(targetEntity); ok {
-			flash := components.FlashComponent{
-				X:         posComp.X,
-				Y:         posComp.Y,
-				Char:      charComp.Rune,
-				StartTime: now,
-				Duration:  constants.CleanerRemovalFlashDuration,
-			}
-
-			// Create flash entity and add it to store
-			flashEntity := world.CreateEntity()
-			world.Flashes.Add(flashEntity, flash)
+			SpawnDestructionFlash(world, posComp.X, posComp.Y, charComp.Rune, now)
 		}
 	}
 }
 
-// cleanupExpiredFlashes destroys expired removal flash entities using generic stores
-func (cs *CleanerSystem) cleanupExpiredFlashes(world *engine.World) {
-	// Fetch resources
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-	now := timeRes.GameTime
-
-	// Get and iterate on all flashes
-	entities := world.Flashes.All()
-	for _, entity := range entities {
-		flash, ok := world.Flashes.Get(entity)
-		if !ok {
-			continue
-		}
-
-		// Destroy flash if time expired
-		if now.Sub(flash.StartTime).Milliseconds() >= int64(flash.Duration) {
-			world.DestroyEntity(entity)
-		}
-	}
-}

@@ -226,6 +226,11 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, dtSeconds float
 
 				if !alreadyHit {
 					if world.Nuggets.Has(targetEntity) {
+						// Flash for nugget destruction
+						if char, ok := world.Characters.Get(targetEntity); ok {
+							timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+							SpawnDestructionFlash(world, col, row, char.Rune, timeRes.GameTime)
+						}
 						world.DestroyEntity(targetEntity)
 						if s.nuggetSystem != nil {
 							s.nuggetSystem.ClearActiveNuggetIfMatches(targetEntity)
@@ -325,7 +330,13 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 				world.Characters.Add(entity, char)
 			}
 		} else {
-			// Red at LevelDark - remove entity
+			// Red at LevelDark - spawn flash then remove entity
+			if pos, ok := world.Positions.Get(entity); ok {
+				if char, ok := world.Characters.Get(entity); ok {
+					timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+					SpawnDestructionFlash(world, pos.X, pos.Y, char.Rune, timeRes.GameTime)
+				}
+			}
 			world.DestroyEntity(entity)
 		}
 	}
