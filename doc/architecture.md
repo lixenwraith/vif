@@ -227,7 +227,8 @@ Systems communicate through `GameContext.EventQueue`, a lock-free ring buffer th
 - **Frame Deduplication**: Events include frame number to prevent duplicate processing
 
 **Event Types**:
-- `EventCleanerRequest`: Trigger cleaner spawn (gold completed at max heat)
+- `EventCleanerRequest`: Trigger horizontal row cleaner spawn (gold completed at max heat)
+- `EventDirectionalCleanerRequest`: Trigger 4-directional cleaner spawn (nugget at max heat, Enter key in Normal mode)
 - `EventCleanerFinished`: Cleaner animation completed (testing/debugging)
 - `EventGoldSpawned`: Gold sequence created (testing/debugging)
 - `EventGoldComplete`: Gold sequence typed successfully (testing/debugging)
@@ -1094,6 +1095,8 @@ NORMAL -[:]→ COMMAND (game paused) -[ESC/ENTER]→ NORMAL
 - **Consecutive move penalty**: Using h/j/k/l more than 3 times consecutively resets heat
 - **Arrow keys**: Function like h/j/k/l but always reset heat
 - **Tab**: Jumps cursor directly to active Nugget (Cost: 10 Energy, requires Energy >= 10)
+- **ESC**: Activates ping grid for 1 second (row/column highlight)
+- **Enter**: Spawns 4-directional cleaners from cursor (requires heat ≥ 10, costs 10 heat)
 
 ### Supported Vi Motions
 **Basic**: h, j, k, l, Space (as l)
@@ -1498,6 +1501,7 @@ for _, entity := range entitiesAtCursor {
     - **Typing**: Typing the character displayed on the nugget collects it (handled by EnergySystem).
     - **Jump (Tab)**: Pressing `Tab` instantly jumps the cursor to the nugget (requires Energy >= 10).
 - **Reward**: Increases Heat by 10% of max heat.
+- **Bonus Mechanic**: If heat is at maximum (100) when nugget is collected, spawns 4 directional cleaners from cursor position.
 - **Cost**: Jumping via `Tab` costs 10 Energy points.
 
 ### Drain System
@@ -1516,10 +1520,35 @@ for _, entity := range entitiesAtCursor {
 - **Lifecycle**: DrainSystem manages materialize animation internally via MaterializeComponent entities
 
 ### Cleaner System
+
+The system supports two types of cleaners:
+
+#### Horizontal Row Cleaners
 - **Trigger**: Event-driven via `EventCleanerRequest` when gold completed at maximum heat
   - EnergySystem pushes event: `ctx.PushEvent(engine.EventCleanerRequest, nil)`
   - CleanerSystem consumes event in Update() method (event polling pattern)
   - Frame deduplication: Tracks spawned frames to prevent duplicate activations
+- **Behavior**: Sweeps across rows containing Red characters, removing them on contact
+- **Phantom Cleaners**: If no Red characters exist when event consumed, no entities spawn
+  - Still pushes `EventCleanerFinished` (marks completion for testing/debugging)
+  - Phase cycle continues independently (cleaners are non-blocking)
+- **Direction**: Alternating - odd rows sweep L→R, even rows sweep R→L
+- **Selectivity**: Only destroys Red characters, leaves Blue/Green untouched
+
+#### Directional Cleaners (4-Way)
+- **Trigger**: Event-driven via `EventDirectionalCleanerRequest`:
+  - Nugget collection at maximum heat (100): EnergySystem pushes event with cursor position
+  - Enter key in Normal mode (heat ≥ 10): Input handler pushes event, reduces heat by 10
+  - Event payload: `DirectionalCleanerPayload{OriginX, OriginY int}`
+- **Behavior**: Spawns 4 cleaners from origin position moving right, left, down, up
+- **Position Lock**: Each cleaner locks its row (horizontal) or column (vertical) at spawn time
+  - Horizontal cleaners (VelocityX ≠ 0): Row locked, X varies
+  - Vertical cleaners (VelocityY ≠ 0): Column locked, Y varies
+  - Cursor movement after spawn does not affect cleaner paths
+- **Direction Detection**: Implicit via velocity components (VelocityX==0 → vertical)
+- **Selectivity**: Only destroys Red characters, leaves Blue/Green untouched
+
+#### Common Architecture
 - **Update Model**: **Synchronous** - runs in main game loop via ECS Update() method
 - **Architecture**: Pure ECS implementation using vector physics
   - All state stored in `CleanerComponent` (no external state tracking)
@@ -1532,16 +1561,10 @@ for _, entity := range entitiesAtCursor {
   - **CleanerTrailFadeTime**: Trail fade duration (0.3 seconds)
   - **CleanerChar**: Unicode block character ('█')
   - **CleanerRemovalFlashDuration**: Flash effect duration (150ms)
-- **Behavior**: Sweeps across rows containing Red characters, removing them on contact
-- **Phantom Cleaners**: If no Red characters exist when event consumed, no entities spawn
-  - Still pushes `EventCleanerFinished` (marks completion for testing/debugging)
-  - Phase cycle continues independently (cleaners are non-blocking)
-- **Direction**: Alternating - odd rows sweep L→R, even rows sweep R→L
-- **Selectivity**: Only destroys Red characters, leaves Blue/Green untouched
 - **Lifecycle**:
   - Spawn off-screen (±`CleanerTrailLength` from edges)
   - Target off-screen opposite side
-  - Destroy when `PreciseX` passes `TargetX`
+  - Destroy when head passes target (horizontal: `PreciseX` passes `TargetX`, vertical: `PreciseY` passes `TargetY`)
   - Ensures trail fully clears screen before entity removal
 - **Physics System**:
   - **Velocity Calculation**: `baseSpeed = gameWidth / animationDuration`
@@ -1549,11 +1572,13 @@ for _, entity := range entitiesAtCursor {
   - **Trail Recording**: New trail point added when cleaner enters new grid cell
   - **Trail Truncation**: Limited to `CleanerTrailLength` positions (FIFO queue)
 - **Collision Detection** (Swept Segment):
-  - Checks ALL integer positions between previous and current `PreciseX`
+  - Checks ALL integer positions between previous and current position
+  - Horizontal cleaners: Check X range at fixed Y (row locked)
+  - Vertical cleaners: Check Y range at fixed X (column locked)
   - Prevents tunneling when cleaner moves >1 char/frame
-  - Uses `math.Min/Max` for bidirectional range (L→R and R→L)
+  - Uses `math.Min/Max` for bidirectional range (supports all directions)
   - Range clamped to screen bounds before checking
-  - Example: Movement from 8.2→10.7 checks positions [8, 9, 10]
+  - Example: Horizontal movement from 8.2→10.7 checks positions [8, 9, 10] on locked row
 - **Visual Effects**:
   - Pre-calculated gradient in renderer (built once at initialization)
   - Trail rendered with opacity falloff: 100% at head → 0% at tail

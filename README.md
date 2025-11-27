@@ -20,7 +20,7 @@ vi-fighter features a dynamic typing system with multiple sequence types and gam
 - **Heat System**: Typing momentum that multiplies energy and affects decay speed
 - **Boost System**: 2× heat multiplier activated at maximum heat
 - **Decay System**: Automated pressure that degrades sequences over time
-- **Cleaners**: Special mechanic that clears Red sequences when triggered
+- **Cleaners**: Special mechanic that clears Red sequences - horizontal sweeps (gold at max heat) or 4-directional bursts (nugget at max heat, Enter key)
 - **Drain**: Pressure mechanic with visual telegraph animation, appears at positive energy, pursues cursor, and drains energy over time
 
 ## Vi Motion Commands
@@ -105,7 +105,8 @@ go test ./systems
 - **Search Mode**: Press `/` followed by pattern, then `Enter`
 - **Command Mode**: Press `:` to enter COMMAND mode (e.g., `:boost`)
 - **Exit Insert/Search/Command**: Press `ESC` to return to NORMAL mode
-- **Ping Grid**: Press `Enter` to show row/column guides (1 second)
+- **Ping Grid**: Press `ESC` in NORMAL mode to show row/column guides (1 second)
+- **Directional Cleaners**: Press `Enter` in NORMAL mode (requires heat ≥ 10, costs 10 heat) to spawn 4-directional cleaners from cursor
 - **Quit**: `Ctrl+C` or `Ctrl+Q`
 
 **Note**: When in COMMAND mode, the game is paused - all characters are dimmed (70% brightness) to indicate the paused state while preserving visibility.
@@ -113,12 +114,13 @@ go test ./systems
 ## Game Strategy (Quick Tips)
 
 1. **Prioritize Gold**: Gold sequences fill heat to maximum - chase them when they appear
-2. **Collect Nuggets**: Free heat boost (+10% max heat) - use Tab to jump to them
+2. **Collect Nuggets**: Free heat boost (+10% max heat) - collect at max heat to spawn directional cleaners
 3. **Avoid Red**: Red sequences penalize your energy and reset heat
 4. **Type Bright When Hot**: Bright sequences at high heat give maximum points (Heat × 3)
 5. **Manage Decay**: Higher heat = faster decay - balance aggressive play with sustainability
 6. **Boost Color Matching**: When boost activates, keep typing the same color to extend it
 7. **Motion Efficiency**: Use `w`/`b`/`e` instead of repeated `h`/`j`/`k`/`l` to avoid heat reset
+8. **Use Cleaners**: Gold at max heat → horizontal row cleaners; Nugget at max heat or Enter key → 4-directional cleaners from cursor
 
 ## License
 

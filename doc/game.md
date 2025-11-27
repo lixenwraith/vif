@@ -51,8 +51,8 @@ There is no end state - the challenge is to survive as long as possible while th
 
 - **`i`** - Enter INSERT mode (start typing sequences)
 - **`/`** - Enter SEARCH mode (find text patterns)
-- **`ESC`** - Return to NORMAL mode
-- **`Enter`** - Activate ping grid for 1 second (shows row/column guides)
+- **`ESC`** - Return to NORMAL mode from Insert/Search/Command; activate ping grid in NORMAL mode (1 second)
+- **`Enter`** - In NORMAL mode: Spawn 4-directional cleaners from cursor (requires heat ≥ 10, costs 10 heat)
 - **`Ctrl+C`** or **`Ctrl+Q`** - Quit game
 
 ### Basic Navigation (NORMAL Mode)
@@ -164,6 +164,9 @@ vi-fighter has four input modes, similar to vi/vim:
 - **Cursor**: Orange background
 - **Status**: Shows "NORMAL" in light blue at bottom-left
 - **Commands**: All vi motion commands available
+- **Special Actions**:
+  - `ESC` - Activate ping grid for 1 second (row/column highlight)
+  - `Enter` - Spawn 4-directional cleaners from cursor (requires heat ≥ 10, costs 10 heat)
 - **Entering**: Press `ESC` from INSERT, SEARCH, or COMMAND mode
 
 ### INSERT Mode (White Cursor)
@@ -289,7 +292,7 @@ When energy is positive, a hostile drain entity appears on screen:
 
 ### Visual Effects
 
-**Ping Grid** (Press `Enter` in NORMAL mode):
+**Ping Grid** (Press `ESC` in NORMAL mode):
 - Almost black background (RGB: 5,5,5) highlights cursor's row and column
 - Lasts 1 second
 - Helps locate cursor position quickly
@@ -355,6 +358,10 @@ The game features four types of character sequences, each with distinct behavior
 - **Strategy**: **Highest priority target** - can turn around a low-heat situation instantly
 
 ### Cleaners (Advanced Mechanic)
+
+The game features two types of cleaner mechanics:
+
+#### Horizontal Row Cleaners
 - **Trigger**: Automatically activated when you complete gold while heat meter is already at maximum
 - **Visual**: Bright yellow blocks that sweep horizontally across the screen
 - **Behavior**: Cleaners scan for and automatically destroy Red characters on contact
@@ -369,6 +376,22 @@ The game features four types of character sequences, each with distinct behavior
 - **Animation**: Configurable frame rate (default: 60 FPS) with trailing fade effect for visual clarity
 - **Trail Effect**: Configurable trail length (default: 10 positions) with gradient fade (bright yellow → transparent)
 - **Removal Flash**: Configurable flash duration (default: 150ms) appears when Red characters are destroyed
+
+#### Directional Cleaners (4-Way Burst)
+- **Triggers**:
+  - Collect a nugget when heat is at maximum (100)
+  - Press `Enter` in NORMAL mode when heat ≥ 10 (costs 10 heat)
+- **Visual**: Four bright yellow blocks spawning outward from cursor position
+- **Direction**: Simultaneously move right, left, down, and up from origin
+- **Position Lock**: Each cleaner locks its row (horizontal) or column (vertical) at spawn time - cursor movement after spawn doesn't affect cleaner paths
+- **Behavior**: Each cleaner destroys Red characters in its path (row or column)
+- **Duration**: Same animation duration as horizontal cleaners (default: 1 second)
+- **Selectivity**: **Only removes Red characters** - Blue and Green sequences are completely safe
+- **Strategic Use**:
+  - Manual activation via Enter key gives control over timing
+  - Collect nuggets at max heat for free 4-directional clear
+  - Position cursor strategically before spawning for maximum Red coverage
+  - Useful when Red sequences are scattered across multiple rows and columns
 
 #### Cleaner Configuration
 The Cleaner system supports the following configurable parameters (see `constants/ui.go`):
