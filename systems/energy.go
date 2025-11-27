@@ -351,6 +351,18 @@ func (s *EnergySystem) handleNuggetCollection(world *engine.World, entity engine
 	}
 	s.ctx.State.SetHeat(newHeat)
 
+	// Spawn directional cleaners if we just hit max heat
+	if newHeat >= constants.MaxHeat {
+		cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
+		if ok {
+			payload := &engine.DirectionalCleanerPayload{
+				OriginX: cursorPos.X,
+				OriginY: cursorPos.Y,
+			}
+			s.ctx.PushEvent(engine.EventDirectionalCleanerRequest, payload, now)
+		}
+	}
+
 	// Destroy the nugget entity
 	world.DestroyEntity(entity)
 
