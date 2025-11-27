@@ -83,7 +83,9 @@ func (h *InputHandler) handleKeyEvent(ev *tcell.EventKey) bool {
 	}
 
 	// Mode-specific handling
-	if h.ctx.IsInsertMode() {
+	if h.ctx.IsOverlayMode() {
+		return h.handleOverlayMode(ev)
+	} else if h.ctx.IsInsertMode() {
 		return h.handleInsertMode(ev)
 	} else if h.ctx.IsSearchMode() {
 		return h.handleSearchMode(ev)
@@ -278,6 +280,39 @@ func (h *InputHandler) handleCommandMode(ev *tcell.EventKey) bool {
 	if ev.Key() == tcell.KeyRune {
 		h.ctx.CommandText += string(ev.Rune())
 	}
+	return true
+}
+
+// handleOverlayMode handles input in overlay mode
+func (h *InputHandler) handleOverlayMode(ev *tcell.EventKey) bool {
+	// ESC or ENTER closes the overlay
+	if ev.Key() == tcell.KeyEscape || ev.Key() == tcell.KeyEnter {
+		h.ctx.OverlayActive = false
+		h.ctx.OverlayTitle = ""
+		h.ctx.OverlayContent = nil
+		h.ctx.OverlayScroll = 0
+		h.ctx.Mode = engine.ModeNormal
+		h.ctx.SetPaused(false)
+		return true
+	}
+
+	// TODO: Future enhancement - scroll with arrow keys or j/k
+	// Handle up/down scrolling
+	if ev.Key() == tcell.KeyUp || (ev.Key() == tcell.KeyRune && ev.Rune() == 'k') {
+		if h.ctx.OverlayScroll > 0 {
+			h.ctx.OverlayScroll--
+		}
+		return true
+	}
+
+	if ev.Key() == tcell.KeyDown || (ev.Key() == tcell.KeyRune && ev.Rune() == 'j') {
+		// Only scroll if there's more content to show
+		if h.ctx.OverlayScroll < len(h.ctx.OverlayContent)-1 {
+			h.ctx.OverlayScroll++
+		}
+		return true
+	}
+
 	return true
 }
 

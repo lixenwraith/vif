@@ -41,3 +41,18 @@ const (
 const (
 	AudioStr = "♫ "
 )
+
+// Overlay Layout Constants
+const (
+	// OverlayWidthPercent is the percentage of screen width the overlay covers
+	OverlayWidthPercent = 0.8
+
+	// OverlayHeightPercent is the percentage of screen height the overlay covers
+	OverlayHeightPercent = 0.8
+
+	// OverlayPaddingX is the horizontal padding inside the overlay
+	OverlayPaddingX = 2
+
+	// OverlayPaddingY is the vertical padding inside the overlay
+	OverlayPaddingY = 1
+)

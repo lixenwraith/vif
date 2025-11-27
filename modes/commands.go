@@ -38,6 +38,10 @@ func ExecuteCommand(ctx *engine.GameContext, command string) bool {
 		return handleBoostCommand(ctx)
 	case "spawn":
 		return handleSpawnCommand(ctx, args)
+	case "d", "debug":
+		return handleDebugCommand(ctx)
+	case "h", "help", "?":
+		return handleHelpCommand(ctx)
 	default:
 		setCommandError(ctx, fmt.Sprintf("Unknown command: %s", cmd))
 		return true
@@ -203,4 +207,114 @@ func setCommandError(ctx *engine.GameContext, message string) {
 func clearAllEntities(world *engine.World) {
 	// Use the world's Clear method to remove all entities
 	world.Clear()
+}
+
+// handleDebugCommand shows debug information overlay
+func handleDebugCommand(ctx *engine.GameContext) bool {
+	// Gather debug stats
+	debugContent := []string{
+		"=== DEBUG INFORMATION ===",
+		"",
+		fmt.Sprintf("Energy:        %d", ctx.State.GetEnergy()),
+		fmt.Sprintf("Heat:          %d / %d", ctx.State.GetHeat(), constants.MaxHeat),
+		fmt.Sprintf("FPS:           %d", ctx.State.GetGameTicks()), // Approximate
+		fmt.Sprintf("Game Ticks:    %d", ctx.State.GetGameTicks()),
+		fmt.Sprintf("APM:           %d", ctx.State.GetAPM()),
+		fmt.Sprintf("Frame Number:  %d", ctx.GetFrameNumber()),
+		"",
+		fmt.Sprintf("Screen Size:   %dx%d", ctx.Width, ctx.Height),
+		fmt.Sprintf("Game Area:     %dx%d", ctx.GameWidth, ctx.GameHeight),
+		fmt.Sprintf("Game Offset:   (%d, %d)", ctx.GameX, ctx.GameY),
+		"",
+		fmt.Sprintf("Spawn Enabled: %v", ctx.State.GetSpawnEnabled()),
+		fmt.Sprintf("Boost Active:  %v", ctx.State.GetBoostEnabled()),
+		fmt.Sprintf("Paused:        %v", ctx.IsPaused.Load()),
+		"",
+		"Entity Counts:",
+		fmt.Sprintf("  Characters:  %d", len(ctx.World.Characters.All())),
+		fmt.Sprintf("  Nuggets:     %d", len(ctx.World.Nuggets.All())),
+		fmt.Sprintf("  Drains:      %d", len(ctx.World.Drains.All())),
+		fmt.Sprintf("  Cleaners:    %d", len(ctx.World.Cleaners.All())),
+		fmt.Sprintf("  Decays:      %d", len(ctx.World.Decays.All())),
+		"",
+		"Press ESC or ENTER to close",
+	}
+
+	// Set overlay state
+	ctx.OverlayActive = true
+	ctx.OverlayTitle = " DEBUG "
+	ctx.OverlayContent = debugContent
+	ctx.OverlayScroll = 0
+
+	// Switch to overlay mode
+	ctx.Mode = engine.ModeOverlay
+
+	return true
+}
+
+// handleHelpCommand shows help information overlay
+func handleHelpCommand(ctx *engine.GameContext) bool {
+	// Build help content
+	helpContent := []string{
+		"=== VI-FIGHTER HELP ===",
+		"",
+		"MODES:",
+		"  i         - Enter INSERT mode",
+		"  ESC       - Return to NORMAL mode / Show grid",
+		"  /         - Enter SEARCH mode",
+		"  :         - Enter COMMAND mode",
+		"",
+		"MOVEMENT (Normal Mode):",
+		"  h/j/k/l   - Move left/down/up/right",
+		"  w/b       - Move forward/backward by word",
+		"  0/$       - Move to start/end of line",
+		"  gg        - Go to top",
+		"  G         - Go to bottom",
+		"  f{char}   - Find character forward",
+		"  F{char}   - Find character backward",
+		"  t{char}   - Till character forward",
+		"  T{char}   - Till character backward",
+		"  ;         - Repeat last find/till",
+		"  ,         - Repeat last find/till (reverse)",
+		"",
+		"DELETE (Normal Mode):",
+		"  d{motion} - Delete with motion (dw, d$, etc.)",
+		"  dd        - Delete current line",
+		"  D         - Delete to end of line",
+		"",
+		"GAME MECHANICS:",
+		"  TAB       - Jump to nugget (costs 10 energy)",
+		"  ENTER     - Fire directional cleaners (costs 10 heat)",
+		"",
+		"SEARCH:",
+		"  /text     - Search for text",
+		"  n         - Next match",
+		"  N         - Previous match",
+		"",
+		"COMMANDS:",
+		"  :q        - Quit game",
+		"  :n        - New game",
+		"  :energy N - Set energy to N",
+		"  :heat N   - Set heat to N",
+		"  :boost    - Enable boost for 10s",
+		"  :spawn on/off - Enable/disable spawning",
+		"  :d/:debug - Show debug info",
+		"  :h/:help  - Show this help",
+		"",
+		"AUDIO:",
+		"  Ctrl+S    - Toggle mute",
+		"",
+		"Press ESC or ENTER to close",
+	}
+
+	// Set overlay state
+	ctx.OverlayActive = true
+	ctx.OverlayTitle = " HELP "
+	ctx.OverlayContent = helpContent
+	ctx.OverlayScroll = 0
+
+	// Switch to overlay mode
+	ctx.Mode = engine.ModeOverlay
+
+	return true
 }

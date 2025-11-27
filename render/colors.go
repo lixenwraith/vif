@@ -75,6 +75,12 @@ var (
 	RgbEnergyBlinkGreen = tcell.NewRGBColor(120, 255, 120) // Green blink
 	RgbEnergyBlinkRed   = tcell.NewRGBColor(255, 140, 140) // Red blink
 	RgbEnergyBlinkWhite = tcell.NewRGBColor(255, 255, 255) // White blink
+
+	// Overlay colors
+	RgbOverlayBorder = tcell.NewRGBColor(0, 255, 255)   // Bright Cyan for border
+	RgbOverlayBg     = tcell.NewRGBColor(20, 20, 30)    // Dark background
+	RgbOverlayText   = tcell.NewRGBColor(255, 255, 255) // White text for high contrast
+	RgbOverlayTitle  = tcell.NewRGBColor(255, 255, 0)   // Yellow for title
 )
 
 // GetHeatMeterColor returns the color for a given position in the heat meter gradient

@@ -20,6 +20,7 @@ const (
 	ModeInsert
 	ModeSearch
 	ModeCommand
+	ModeOverlay
 )
 
 // GameContext holds all game state including the ECS world
@@ -56,6 +57,12 @@ type GameContext struct {
 	SearchText     string
 	LastSearchText string
 	CommandText    string
+
+	// Overlay state
+	OverlayActive  bool
+	OverlayTitle   string
+	OverlayContent []string
+	OverlayScroll  int
 
 	// Motion command state (input parsing - not game mechanics)
 	MotionCount         int
@@ -368,6 +375,11 @@ func (g *GameContext) IsCommandMode() bool {
 // IsNormalMode returns true if in normal mode
 func (g *GameContext) IsNormalMode() bool {
 	return g.Mode == ModeNormal
+}
+
+// IsOverlayMode returns true if in overlay mode
+func (g *GameContext) IsOverlayMode() bool {
+	return g.Mode == ModeOverlay
 }
 
 // GetFrameNumber returns the current frame number

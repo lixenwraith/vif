@@ -161,6 +161,11 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 		r.drawCursor(cursorPos.X, cursorPos.Y, ctx, defaultStyle)
 	}
 
+	// Draw overlay on top of everything if active
+	if ctx.IsOverlayMode() && ctx.OverlayActive {
+		r.drawOverlay(ctx, defaultStyle)
+	}
+
 	r.screen.Show()
 }
 
@@ -1012,4 +1017,122 @@ func (r *TerminalRenderer) UpdateDimensions(width, height, gameX, gameY, gameWid
 	r.gameWidth = gameWidth
 	r.gameHeight = gameHeight
 	r.lineNumWidth = lineNumWidth
+}
+
+// drawOverlay draws the modal overlay window with borders
+func (r *TerminalRenderer) drawOverlay(ctx *engine.GameContext, defaultStyle tcell.Style) {
+	// Calculate overlay dimensions (80% of screen)
+	overlayWidth := int(float64(r.width) * constants.OverlayWidthPercent)
+	overlayHeight := int(float64(r.height) * constants.OverlayHeightPercent)
+
+	// Ensure minimum dimensions
+	if overlayWidth < 20 {
+		overlayWidth = 20
+	}
+	if overlayHeight < 10 {
+		overlayHeight = 10
+	}
+
+	// Ensure it fits on screen
+	if overlayWidth > r.width-4 {
+		overlayWidth = r.width - 4
+	}
+	if overlayHeight > r.height-4 {
+		overlayHeight = r.height - 4
+	}
+
+	// Calculate centered position
+	startX := (r.width - overlayWidth) / 2
+	startY := (r.height - overlayHeight) / 2
+
+	// Define styles
+	borderStyle := defaultStyle.Foreground(RgbOverlayBorder).Background(RgbOverlayBg)
+	bgStyle := defaultStyle.Foreground(RgbOverlayText).Background(RgbOverlayBg)
+	titleStyle := defaultStyle.Foreground(RgbOverlayTitle).Background(RgbOverlayBg)
+
+	// Draw top border with title
+	r.screen.SetContent(startX, startY, '╔', nil, borderStyle)
+	for x := 1; x < overlayWidth-1; x++ {
+		r.screen.SetContent(startX+x, startY, '═', nil, borderStyle)
+	}
+	r.screen.SetContent(startX+overlayWidth-1, startY, '╗', nil, borderStyle)
+
+	// Draw title centered on top border
+	if ctx.OverlayTitle != "" {
+		titleX := startX + (overlayWidth-len(ctx.OverlayTitle))/2
+		if titleX > startX {
+			for i, ch := range ctx.OverlayTitle {
+				if titleX+i < startX+overlayWidth-1 {
+					r.screen.SetContent(titleX+i, startY, ch, nil, titleStyle)
+				}
+			}
+		}
+	}
+
+	// Draw content area and side borders
+	contentHeight := overlayHeight - 2
+	contentWidth := overlayWidth - 2
+
+	for y := 1; y < overlayHeight-1; y++ {
+		// Left border
+		r.screen.SetContent(startX, startY+y, '║', nil, borderStyle)
+
+		// Fill background
+		for x := 1; x < overlayWidth-1; x++ {
+			r.screen.SetContent(startX+x, startY+y, ' ', nil, bgStyle)
+		}
+
+		// Right border
+		r.screen.SetContent(startX+overlayWidth-1, startY+y, '║', nil, borderStyle)
+	}
+
+	// Draw bottom border
+	r.screen.SetContent(startX, startY+overlayHeight-1, '╚', nil, borderStyle)
+	for x := 1; x < overlayWidth-1; x++ {
+		r.screen.SetContent(startX+x, startY+overlayHeight-1, '═', nil, borderStyle)
+	}
+	r.screen.SetContent(startX+overlayWidth-1, startY+overlayHeight-1, '╝', nil, borderStyle)
+
+	// Draw content lines
+	contentStartY := startY + 1 + constants.OverlayPaddingY
+	contentStartX := startX + constants.OverlayPaddingX
+	maxContentLines := contentHeight - 2*constants.OverlayPaddingY
+
+	// Calculate visible range based on scroll
+	startLine := ctx.OverlayScroll
+	endLine := startLine + maxContentLines
+	if endLine > len(ctx.OverlayContent) {
+		endLine = len(ctx.OverlayContent)
+	}
+
+	// Draw visible content lines
+	lineY := contentStartY
+	for i := startLine; i < endLine && lineY < startY+overlayHeight-1-constants.OverlayPaddingY; i++ {
+		line := ctx.OverlayContent[i]
+		maxLineWidth := contentWidth - 2*constants.OverlayPaddingX
+
+		// Truncate line if too long
+		displayLine := line
+		if len(line) > maxLineWidth {
+			displayLine = line[:maxLineWidth]
+		}
+
+		// Draw the line
+		for j, ch := range displayLine {
+			if contentStartX+j < startX+overlayWidth-1-constants.OverlayPaddingX {
+				r.screen.SetContent(contentStartX+j, lineY, ch, nil, bgStyle)
+			}
+		}
+		lineY++
+	}
+
+	// Draw scroll indicator if content is scrollable
+	if len(ctx.OverlayContent) > maxContentLines {
+		scrollInfo := fmt.Sprintf("[%d/%d]", ctx.OverlayScroll+1, len(ctx.OverlayContent)-maxContentLines+1)
+		scrollX := startX + overlayWidth - len(scrollInfo) - 2
+		scrollY := startY + overlayHeight - 1
+		for i, ch := range scrollInfo {
+			r.screen.SetContent(scrollX+i, scrollY, ch, nil, borderStyle)
+		}
+	}
 }
