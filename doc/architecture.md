@@ -750,7 +750,8 @@ Systems execute in priority order (lower = earlier):
 5. **GoldSystem (20)**: Manage gold sequence lifecycle and random placement
 6. **CleanerSystem (22)**: Process cleaner physics, collision, and visual effects
 7. **DrainSystem (25)**: Manage energy-draining entity movement and logic
-8. **DecaySystem (30)**: Apply sequence degradation and color transitions (lowest priority)
+8. **DecaySystem (30)**: Apply sequence degradation and color transitions
+9. **FlashSystem (35)**: Manage destruction flash effect lifecycle (lowest priority)
 
 **Important**: All priorities must be unique to ensure deterministic execution order. The priority values define the exact order in which systems process game state each frame.
 
@@ -1571,6 +1572,47 @@ for _, entity := range entitiesAtCursor {
   - Minimal allocations (trail slice grows/shrinks in-place)
   - Pre-calculated rendering gradients (zero per-frame color math)
   - Typical update time: < 0.5ms for 24 cleaners
+
+### Flash System
+- **Purpose**: Centralized management of visual flash effects for entity destruction
+- **Update Model**: **Synchronous** - runs in main game loop via ECS Update() method
+- **Architecture**: Pure ECS implementation with time-based lifecycle
+  - All state stored in `FlashComponent` (X, Y, Char, StartTime, Duration)
+  - Minimal system logic - only checks expiration and destroys entities
+  - Frame-rate independent via time-based duration checks
+- **Configuration**: Direct constants in `constants/cleaners.go`
+  - **DestructionFlashDuration**: Flash effect duration (300ms, increased from 150ms for visibility)
+- **Spawn Pattern**: Package-level helper function `SpawnDestructionFlash()`
+  - Called by any system when destroying an entity with visual feedback
+  - Creates flash entity at destruction position with character appearance
+  - Flash automatically cleaned up by FlashSystem after duration expires
+- **Usage Locations**:
+  - **CleanerSystem**: Flash on Red character removal (line sweep collision)
+  - **DrainSystem**: Flash on all collision types
+    - Sequence collisions (Blue/Green/Gold characters)
+    - Nugget collisions
+    - Falling decay collisions
+    - Gold sequence destruction (all characters in sequence)
+  - **DecaySystem**: Flash on terminal decay and nugget hits
+    - Terminal decay: Red characters at Dark level → destroyed with flash
+    - Falling decay hits nugget → flash at nugget position
+- **Lifecycle**:
+  - **Spawn**: `SpawnDestructionFlash(world, x, y, char, now)` creates flash entity
+  - **Update**: FlashSystem checks `now - StartTime >= Duration` each frame
+  - **Cleanup**: Entity destroyed when duration expires (300ms default)
+- **Visual Rendering**:
+  - Flash entities rendered with character appearance at death position
+  - Rendered in dedicated flash rendering layer (after game entities, before cursor)
+  - No gradient or fade - simple character display for full duration
+- **Thread Safety**:
+  - Component data protected by ECS World's internal synchronization
+  - Time-based expiration uses `TimeResource.GameTime` (pausable clock)
+  - No external mutexes required (pure ECS pattern)
+- **Performance**:
+  - Zero goroutine overhead (pure synchronous ECS)
+  - Minimal overhead - single component query per update
+  - Typical active flashes: 1-10 entities (short duration limits accumulation)
+  - Automatic cleanup prevents flash entity buildup
 
 ## Content Files
 
