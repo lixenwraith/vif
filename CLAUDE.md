@@ -47,6 +47,11 @@ vi-fighter/
 **NO TEST FILES IN REPO**
 - Check if the app compiles
 
+## DOCUMENTATION
+- Update `doc/architecutre.md`
+- Update `doc/game.md` if change affects gameplay
+- Update `README.md` abstract repo document if applicable (no low-level details)
+
 ## ENVIRONMENT
 
 This project relies on `oto` and `beep` for audio, which requires CGO bindings to ALSA on Linux.
