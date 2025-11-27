@@ -26,7 +26,7 @@ func GetZIndex(world *World, e Entity) int {
 		return ZIndexDrain
 	}
 	// Shield check would go here (future)
-	if world.FallingDecays.Has(e) {
+	if world.Decays.Has(e) {
 		return ZIndexDecay
 	}
 	if world.Nuggets.Has(e) {

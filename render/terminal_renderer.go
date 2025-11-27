@@ -135,7 +135,7 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 
 	// Draw falling decay animation if active - AFTER ping highlights
 	if decayAnimating {
-		r.drawFallingDecay(ctx.World, defaultStyle)
+		r.drawDecay(ctx.World, defaultStyle)
 	}
 
 	// Draw cleaners if active - AFTER decay animation
@@ -193,7 +193,7 @@ func (r *TerminalRenderer) drawHeatMeter(heat int, defaultStyle tcell.Style) {
 			style = defaultStyle.Foreground(color)
 		} else {
 			// Empty segment: black foreground
-			style = defaultStyle.Foreground(tcell.NewRGBColor(0, 0, 0))
+			style = defaultStyle.Foreground(RgbBlack)
 		}
 
 		// Draw all characters in this segment
@@ -239,7 +239,7 @@ func (r *TerminalRenderer) getPingColor(world *engine.World, cursorX, cursorY in
 	if ctx.IsInsertMode() {
 		return RgbPingHighlight // Dark gray (50,50,50)
 	}
-	return tcell.NewRGBColor(5, 5, 5) // Almost black for NORMAL and SEARCH modes
+	return RgbPingNormal // Almost black for NORMAL and SEARCH modes
 }
 
 // drawPingHighlights draws the cursor row and column highlights
@@ -391,16 +391,16 @@ func (r *TerminalRenderer) drawCharacters(world *engine.World, cursorX, cursorY 
 	}
 }
 
-// drawFallingDecay draws the falling decay characters
-func (r *TerminalRenderer) drawFallingDecay(world *engine.World, defaultStyle tcell.Style) {
+// drawDecay draws the falling decay characters
+func (r *TerminalRenderer) drawDecay(world *engine.World, defaultStyle tcell.Style) {
 	// Direct store access - single component query
-	entities := world.FallingDecays.All()
+	entities := world.Decays.All()
 
 	// Style for falling characters: dark cyan foreground, default background
 	fallingStyle := defaultStyle.Foreground(RgbDecayFalling)
 
 	for _, entity := range entities {
-		fall, exists := world.FallingDecays.Get(entity)
+		fall, exists := world.Decays.Get(entity)
 		if !exists {
 			continue
 		}
@@ -657,9 +657,9 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 	if ctx.AudioEngine != nil {
 		var audioBgColor tcell.Color
 		if ctx.AudioEngine.IsMuted() {
-			audioBgColor = tcell.NewRGBColor(255, 0, 0) // Bright red when muted
+			audioBgColor = RgbAudioMuted // Bright red when muted
 		} else {
-			audioBgColor = tcell.NewRGBColor(0, 255, 0) // Bright green when unmuted
+			audioBgColor = RgbAudioUnmuted // Bright green when unmuted
 		}
 		audioStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(audioBgColor)
 		for _, ch := range constants.AudioStr {
@@ -823,22 +823,22 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 		var energyStyle tcell.Style
 
 		if typeCode == 0 {
-			energyStyle = defaultStyle.Foreground(tcell.NewRGBColor(255, 0, 0)).Background(tcell.NewRGBColor(0, 0, 0))
+			energyStyle = defaultStyle.Foreground(RgbCursorError).Background(RgbBlack)
 		} else {
 			var blinkColor tcell.Color
 			switch typeCode {
 			case 1:
-				blinkColor = tcell.NewRGBColor(160, 210, 255) // Blue
+				blinkColor = RgbEnergyBlinkBlue // Blue
 			case 2:
-				blinkColor = tcell.NewRGBColor(120, 255, 120) // Green
+				blinkColor = RgbEnergyBlinkGreen // Green
 			case 3:
-				blinkColor = tcell.NewRGBColor(255, 140, 140) // Red
+				blinkColor = RgbEnergyBlinkRed // Red
 			case 4:
-				blinkColor = tcell.NewRGBColor(255, 255, 0) // Gold
+				blinkColor = RgbSequenceGold // Gold
 			default:
-				blinkColor = tcell.NewRGBColor(255, 255, 255)
+				blinkColor = RgbEnergyBlinkWhite
 			}
-			energyStyle = defaultStyle.Foreground(tcell.NewRGBColor(0, 0, 0)).Background(blinkColor)
+			energyStyle = defaultStyle.Foreground(RgbBlack).Background(blinkColor)
 		}
 		for i, ch := range energyText {
 			if startX+i < r.width {
@@ -846,7 +846,7 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 			}
 		}
 	} else {
-		energyStyle := defaultStyle.Foreground(tcell.NewRGBColor(0, 0, 0)).Background(RgbEnergyBg)
+		energyStyle := defaultStyle.Foreground(RgbBlack).Background(RgbEnergyBg)
 		for i, ch := range energyText {
 			if startX+i < r.width {
 				r.screen.SetContent(startX+i, statusY, ch, nil, energyStyle)
@@ -954,9 +954,9 @@ func (r *TerminalRenderer) drawCursor(cursorX, cursorY int, ctx *engine.GameCont
 	// TODO: find a clever way around it for uniformity
 	hasDecay := false
 	if !isDrain && !hasChar {
-		decayEntities := ctx.World.FallingDecays.All()
+		decayEntities := ctx.World.Decays.All()
 		for _, e := range decayEntities {
-			decay, ok := ctx.World.FallingDecays.Get(e)
+			decay, ok := ctx.World.Decays.Get(e)
 			if ok && decay.Column == cursorX && int(decay.YPosition) == cursorY {
 				charAtCursor = decay.Char
 				hasDecay = true

@@ -66,11 +66,11 @@ func (s *DecaySystem) updateAnimation(world *engine.World, dt time.Duration) {
 	now := timeRes.GameTime
 
 	// Use Delta Time (dt) for physics integration
-	s.updateFallingEntities(world, dt.Seconds())
+	s.updateDecayEntities(world, dt.Seconds())
 
 	// Check actual entity count from the Store
 	// This prevents "Zombie Phase" by ensuring phase ends exactly when entities are gone
-	count := world.FallingDecays.Count()
+	count := world.Decays.Count()
 
 	if count == 0 {
 		s.mu.Lock()
@@ -78,7 +78,7 @@ func (s *DecaySystem) updateAnimation(world *engine.World, dt time.Duration) {
 		s.mu.Unlock()
 
 		// Ensure cleanup of any artifacts
-		s.cleanupFallingEntities(world)
+		s.cleanupDecayEntities(world)
 
 		// Stop decay animation in GameState (transitions to PhaseNormal)
 		if !s.ctx.State.StopDecayAnimation(now) {
@@ -87,8 +87,8 @@ func (s *DecaySystem) updateAnimation(world *engine.World, dt time.Duration) {
 	}
 }
 
-// spawnFallingEntities creates one falling decay entity per column using generic stores
-func (s *DecaySystem) spawnFallingEntities(world *engine.World) {
+// spawnDecayEntities creates one falling decay entity per column using generic stores
+func (s *DecaySystem) spawnDecayEntities(world *engine.World) {
 	// Fetch resources
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 	gameWidth := config.GameWidth
@@ -96,14 +96,14 @@ func (s *DecaySystem) spawnFallingEntities(world *engine.World) {
 	// Create one falling entity per column to ensure complete coverage
 	for column := 0; column < gameWidth; column++ {
 		// Random speed for each entity
-		speed := constants.FallingDecayMinSpeed + rand.Float64()*(constants.FallingDecayMaxSpeed-constants.FallingDecayMinSpeed)
+		speed := constants.DecayMinSpeed + rand.Float64()*(constants.DecayMaxSpeed-constants.DecayMinSpeed)
 
 		// Random character for each entity
 		char := constants.AlphanumericRunes[rand.Intn(len(constants.AlphanumericRunes))]
 
 		// Create falling entity using world
 		entity := world.CreateEntity()
-		world.FallingDecays.Add(entity, components.FallingDecayComponent{
+		world.Decays.Add(entity, components.DecayComponent{
 			Column:        column,
 			YPosition:     0.0,
 			Speed:         speed,
@@ -121,8 +121,8 @@ func (s *DecaySystem) spawnFallingEntities(world *engine.World) {
 	}
 }
 
-// updateFallingEntities updates falling entity positions and applies decay using generic stores
-func (s *DecaySystem) updateFallingEntities(world *engine.World, dtSeconds float64) {
+// updateDecayEntities updates falling entity positions and applies decay using generic stores
+func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64) {
 	// Fetch resources
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 	gameHeight := config.GameHeight
@@ -134,7 +134,7 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, dtSeconds float
 	}
 
 	// Query all falling entities
-	fallingEntities := world.FallingDecays.All()
+	fallingEntities := world.Decays.All()
 
 	// Clear deduplication maps for this frame
 	// processedGridCells tracks LOCATIONS (don't hit same spot twice this frame)
@@ -143,7 +143,7 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, dtSeconds float
 	}
 
 	for _, entity := range fallingEntities {
-		fall, ok := world.FallingDecays.Get(entity)
+		fall, ok := world.Decays.Get(entity)
 		if !ok {
 			continue
 		}
@@ -247,14 +247,14 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, dtSeconds float
 			// Matrix visual effect
 			if row != fall.LastChangeRow {
 				fall.LastChangeRow = row
-				if row > 0 && rand.Float64() < constants.FallingDecayChangeChance {
+				if row > 0 && rand.Float64() < constants.DecayChangeChance {
 					fall.Char = constants.AlphanumericRunes[rand.Intn(len(constants.AlphanumericRunes))]
 				}
 			}
 		}
 
 		fall.PrevPreciseX = float64(fall.Column)
-		world.FallingDecays.Add(entity, fall)
+		world.Decays.Add(entity, fall)
 	}
 }
 
@@ -334,10 +334,10 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 	}
 }
 
-// cleanupFallingEntities removes all falling decay entities using generic stores
-func (s *DecaySystem) cleanupFallingEntities(world *engine.World) {
+// cleanupDecayEntities removes all falling decay entities using generic stores
+func (s *DecaySystem) cleanupDecayEntities(world *engine.World) {
 	// Get all falling decays and iterate to destroy
-	entities := world.FallingDecays.All()
+	entities := world.Decays.All()
 	for _, entity := range entities {
 		world.DestroyEntity(entity)
 	}
@@ -356,7 +356,7 @@ func (s *DecaySystem) TriggerDecayAnimation(world *engine.World) {
 	s.mu.Unlock()
 
 	// Spawn falling decay entities
-	s.spawnFallingEntities(world)
+	s.spawnDecayEntities(world)
 }
 
 // IsAnimating returns true if decay animation is active

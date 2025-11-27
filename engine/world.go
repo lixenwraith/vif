@@ -20,7 +20,7 @@ type World struct {
 	Characters    *Store[components.CharacterComponent]
 	Sequences     *Store[components.SequenceComponent]
 	GoldSequences *Store[components.GoldSequenceComponent]
-	FallingDecays *Store[components.FallingDecayComponent]
+	Decays        *Store[components.DecayComponent]
 	Cleaners      *Store[components.CleanerComponent]
 	Flashes       *Store[components.FlashComponent]
 	Nuggets       *Store[components.NuggetComponent]
@@ -45,7 +45,7 @@ func NewWorld() *World {
 		Characters:    NewStore[components.CharacterComponent](),
 		Sequences:     NewStore[components.SequenceComponent](),
 		GoldSequences: NewStore[components.GoldSequenceComponent](),
-		FallingDecays: NewStore[components.FallingDecayComponent](),
+		Decays:        NewStore[components.DecayComponent](),
 		Cleaners:      NewStore[components.CleanerComponent](),
 		Flashes:       NewStore[components.FlashComponent](),
 		Nuggets:       NewStore[components.NuggetComponent](),
@@ -61,7 +61,7 @@ func NewWorld() *World {
 		w.Characters,
 		w.Sequences,
 		w.GoldSequences,
-		w.FallingDecays,
+		w.Decays,
 		w.Cleaners,
 		w.Flashes,
 		w.Nuggets,

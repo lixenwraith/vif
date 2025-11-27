@@ -1,7 +1,7 @@
 package components
 
-// FallingDecayComponent represents a falling decay character entity
-type FallingDecayComponent struct {
+// DecayComponent represents a falling decay character entity
+type DecayComponent struct {
 	// Position (float for smooth movement, future magnetic support)
 	Column        int     // Current column (legacy, keep for compatibility)
 	YPosition     float64 // Current Y position

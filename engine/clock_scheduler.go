@@ -371,18 +371,3 @@ func (cs *ClockScheduler) processTick() {
 		cs.ctx.State.UpdateAPM()
 	}
 }
-
-// GetTickCount returns the current tick count for debugging/testing
-func (cs *ClockScheduler) GetTickCount() uint64 {
-	return cs.tickCount.Load()
-}
-
-// IsRunning returns true if the scheduler is running
-func (cs *ClockScheduler) IsRunning() bool {
-	return cs.running.Load()
-}
-
-// GetTickInterval returns the configured tick interval
-func (cs *ClockScheduler) GetTickInterval() time.Duration {
-	return cs.tickInterval
-}

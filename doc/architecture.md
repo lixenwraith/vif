@@ -102,7 +102,7 @@ type World struct {
     Characters     *Store[CharacterComponent]
     Sequences      *Store[SequenceComponent]
     GoldSequences  *Store[GoldSequenceComponent]
-    FallingDecays  *Store[FallingDecayComponent]
+    Decays         *Store[DecayComponent]
     Cleaners       *Store[CleanerComponent]
     Materializers  *Store[MaterializeComponent]
     Flashes        *Store[FlashComponent]
@@ -875,7 +875,7 @@ Component (marker interface)
 ├── CharacterComponent {Rune, Style}
 ├── SequenceComponent {ID, Index, Type, Level}
 ├── GoldSequenceComponent {Active, SequenceID, StartTimeNano, CharSequence, CurrentIndex}
-├── FallingDecayComponent {Column, YPosition, Speed, Char, LastChangeRow, LastIntX, LastIntY, PrevPreciseX, PrevPreciseY}
+├── DecayComponent {Column, YPosition, Speed, Char, LastChangeRow, LastIntX, LastIntY, PrevPreciseX, PrevPreciseY}
 ├── CleanerComponent {PreciseX, PreciseY, VelocityX, VelocityY, TargetX, TargetY, GridX, GridY, Trail, Char}
 ├── MaterializeComponent {PreciseX, PreciseY, VelocityX, VelocityY, TargetX, TargetY, GridX, GridY, Trail, Direction, Char, Arrived}
 ├── FlashComponent {X, Y, Char, StartTime, Duration}
@@ -1351,7 +1351,7 @@ The `SpatialGrid` enforces a **maximum of 15 entities per cell**:
 
 ### Decay System
 
-The decay system applies character degradation through a falling entity animation with swept collision detection. The system uses a **stateless architecture** where falling entities are queried from the `World.FallingDecays` store each frame rather than being tracked internally. This design allows for future extensions such as orbital and magnetic effects on decay entities.
+The decay system applies character degradation through a falling entity animation with swept collision detection. The system uses a **stateless architecture** where falling entities are queried from the `World.Decays` store each frame rather than being tracked internally. This design allows for future extensions such as orbital and magnetic effects on decay entities.
 
 #### Decay Mechanics
 - **Brightness Decay**: Bright → Normal → Dark (reduces energy multiplier)
@@ -1368,20 +1368,20 @@ The decay system applies character degradation through a falling entity animatio
 - **Census Impact**: Decay changes entity counts for next spawn census
 
 #### Falling Entity Animation
-- **Spawn**: One falling entity per column stored as `FallingDecayComponent` in `World.FallingDecays` store (ensuring complete screen coverage)
-- **Stateless Update**: System queries all falling entities via `world.FallingDecays.All()` each frame (no internal entity tracking)
-- **Speed**: Random per entity, between 5.0-15.0 rows/second (FallingDecayMinSpeed/MaxSpeed)
+- **Spawn**: One falling entity per column stored as `DecayComponent` in `World.Decays` store (ensuring complete screen coverage)
+- **Stateless Update**: System queries all falling entities via `world.Decays.All()` each frame (no internal entity tracking)
+- **Speed**: Random per entity, between 5.0-15.0 rows/second (DecayMinSpeed/MaxSpeed)
 - **Physics Integration**: Position updated via delta time: `YPosition += Speed × dt.Seconds()`
 - **Character**: Random alphanumeric character per entity
-- **Matrix Effect**: Characters randomly change as they fall (controlled by FallingDecayChangeChance)
-- **Duration**: Based on slowest entity reaching bottom (gameHeight / FallingDecayMinSpeed)
-- **Cleanup**: All falling entities automatically destroyed when animation completes (`world.FallingDecays.Count() == 0`)
+- **Matrix Effect**: Characters randomly change as they fall (controlled by DecayChangeChance)
+- **Duration**: Based on slowest entity reaching bottom (gameHeight / DecayMinSpeed)
+- **Cleanup**: All falling entities automatically destroyed when animation completes (`world.Decays.Count() == 0`)
 
 #### Swept Collision Detection (Anti-Tunneling)
 
 To prevent fast-moving entities from "tunneling" through characters without detecting collisions, the decay system uses swept segment traversal:
 
-**Physics History Tracking** (`FallingDecayComponent`):
+**Physics History Tracking** (`DecayComponent`):
 - `PrevPreciseY`: Y position from previous frame
 - `YPosition`: Current Y position (updated by `YPosition += Speed * elapsed`)
 
@@ -1401,7 +1401,7 @@ To prevent fast-moving entities from "tunneling" through characters without dete
 
 Coordinate latching prevents re-processing the same grid cell when an entity lingers:
 
-**Latch State** (`FallingDecayComponent`):
+**Latch State** (`DecayComponent`):
 - `LastIntX`, `LastIntY`: Last processed integer grid coordinates
 - Initialized to `(-1, -1)` to force first-frame processing
 
@@ -1478,7 +1478,7 @@ When a falling entity encounters a target at `(col, row)`:
   - `currentRow`: Current decay row for display purposes
   - `decayedThisFrame`: Entity-level deduplication map
   - `processedGridCells`: Frame-level spatial deduplication map
-- **Stateless Entity Access**: All falling entities queried from `World.FallingDecays` store (no internal tracking)
+- **Stateless Entity Access**: All falling entities queried from `World.Decays` store (no internal tracking)
 - **Component Access**: World's internal synchronization for Get/Add operations
 
 #### Pause Behavior
@@ -1673,11 +1673,11 @@ The system supports two types of cleaners:
   - **DrainSystem**: Flash on all collision types
     - Sequence collisions (Blue/Green/Gold characters)
     - Nugget collisions
-    - Falling decay collisions
+    - Decay collisions
     - Gold sequence destruction (all characters in sequence)
   - **DecaySystem**: Flash on terminal decay and nugget hits
     - Terminal decay: Red characters at Dark level → destroyed with flash
-    - Falling decay hits nugget → flash at nugget position
+    - Decay hits nugget → flash at nugget position
 - **Lifecycle**:
   - **Spawn**: `SpawnDestructionFlash(world, x, y, char, now)` creates flash entity
   - **Update**: FlashSystem checks `now - StartTime >= Duration` each frame

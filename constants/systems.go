@@ -42,20 +42,20 @@ const (
 	// DecayIntervalMinSeconds is the minimum decay interval at max heat
 	DecayIntervalMinSeconds = DecayIntervalBaseSeconds - DecayIntervalRangeSeconds // 10 seconds
 
-	// FallingDecayMinSpeed is the minimum falling speed in rows per second
-	FallingDecayMinSpeed = 5.0
+	// DecayMinSpeed is the minimum falling speed in rows per second
+	DecayMinSpeed = 5.0
 
-	// FallingDecayMaxSpeed is the maximum falling speed in rows per second
+	// DecayMaxSpeed is the maximum falling speed in rows per second
 	// One falling entity is spawned per column with random speeds between min and max
-	FallingDecayMaxSpeed = 15.0
+	DecayMaxSpeed = 15.0
 
-	// FallingDecayChangeChance is the probability (0.0-1.0) that a falling character
+	// DecayChangeChance is the probability (0.0-1.0) that a falling character
 	// will change to a new random character when eligible (Matrix-style effect)
-	FallingDecayChangeChance = 0.4
+	DecayChangeChance = 0.4
 
-	// FallingDecayMinRowsBetweenChanges is the minimum number of rows that must pass
+	// DecayMinRowsBetweenChanges is the minimum number of rows that must pass
 	// before a falling character is eligible to change again
-	FallingDecayMinRowsBetweenChanges = 1
+	DecayMinRowsBetweenChanges = 1
 )
 
 // Drain System

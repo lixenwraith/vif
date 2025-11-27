@@ -30,6 +30,7 @@ var (
 	RgbBackground      = tcell.NewRGBColor(26, 27, 38)    // Tokyo Night background
 
 	RgbPingHighlight = tcell.NewRGBColor(50, 50, 50)    // Very dark gray for ping
+	RgbPingNormal    = tcell.NewRGBColor(5, 5, 5)       // Almost black for NORMAL/SEARCH ping
 	RgbPingOrange    = tcell.NewRGBColor(60, 40, 0)     // Very dark orange for ping on whitespace
 	RgbPingGreen     = tcell.NewRGBColor(0, 40, 0)      // Very dark green for ping on green char
 	RgbPingRed       = tcell.NewRGBColor(50, 15, 15)    // Very dark red for ping on red char
@@ -61,6 +62,19 @@ var (
 	// Cleaner colors
 	RgbCleanerBase  = tcell.NewRGBColor(255, 255, 0)   // Bright yellow
 	RgbRemovalFlash = tcell.NewRGBColor(255, 255, 200) // Bright yellow-white flash
+
+	// General colors
+	RgbBlack = tcell.NewRGBColor(0, 0, 0) // Black for various uses
+
+	// Audio indicator colors
+	RgbAudioMuted   = tcell.NewRGBColor(255, 0, 0) // Bright red when muted
+	RgbAudioUnmuted = tcell.NewRGBColor(0, 255, 0) // Bright green when unmuted
+
+	// Energy meter blink colors
+	RgbEnergyBlinkBlue  = tcell.NewRGBColor(160, 210, 255) // Blue blink
+	RgbEnergyBlinkGreen = tcell.NewRGBColor(120, 255, 120) // Green blink
+	RgbEnergyBlinkRed   = tcell.NewRGBColor(255, 140, 140) // Red blink
+	RgbEnergyBlinkWhite = tcell.NewRGBColor(255, 255, 255) // White blink
 )
 
 // GetHeatMeterColor returns the color for a given position in the heat meter gradient
