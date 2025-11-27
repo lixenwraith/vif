@@ -218,51 +218,93 @@ The Resource System is being gradually adopted across all systems (Phase 2.5):
 Systems **read** from Resources, never write to them. All Resource updates happen in the main loop or ClockScheduler before system updates run, ensuring frame-coherent data access.
 
 ### Event-Driven Communication
-Systems communicate through `GameContext.EventQueue`, a lock-free ring buffer that decouples producers and consumers.
+
+The game uses an **EventRouter** pattern for decoupled system communication, where events are dispatched to registered handlers before system updates.
+
+**Architecture Flow:**
+```
+Producer → EventQueue → ClockScheduler → EventRouter → EventHandler → Systems
+(InputHandler)          (lock-free)     (tick loop)   (dispatch)    (consume)
+```
 
 **Core Principles:**
-- **Decoupling**: Systems push events instead of calling methods on other systems
-- **Lock-Free**: Ring buffer with atomic CAS operations (no mutexes)
-- **Single Consumer**: Game loop consumes events each frame
+- **Decoupling**: Systems never call each other's methods directly
+- **Lock-Free Queue**: Ring buffer with atomic CAS operations and published flags
+- **Centralized Dispatch**: EventRouter routes events to registered handlers
+- **Synchronous Handling**: Events processed BEFORE World.Update() runs
 - **Frame Deduplication**: Events include frame number to prevent duplicate processing
 
-**Event Types**:
-- `EventCleanerRequest`: Trigger horizontal row cleaner spawn (gold completed at max heat)
-- `EventDirectionalCleanerRequest`: Trigger 4-directional cleaner spawn (nugget at max heat, Enter key in Normal mode)
-- `EventCleanerFinished`: Cleaner animation completed (testing/debugging)
-- `EventGoldSpawned`: Gold sequence created (testing/debugging)
-- `EventGoldComplete`: Gold sequence typed successfully (testing/debugging)
+**Event Types:**
 
-**Producer Pattern**:
+| Event | Producer | Consumer | Payload |
+|-------|----------|----------|---------|
+| `EventCharacterTyped` | InputHandler | EnergySystem | `*CharacterTypedPayload{Char, X, Y}` |
+| `EventEnergyTransaction` | InputHandler | EnergySystem | `*EnergyTransactionPayload{Amount, Source}` |
+| `EventCleanerRequest` | EnergySystem | CleanerSystem | `nil` |
+| `EventDirectionalCleanerRequest` | InputHandler, EnergySystem | CleanerSystem | `*DirectionalCleanerPayload{OriginX, OriginY}` |
+| `EventCleanerFinished` | CleanerSystem | (observers) | `nil` |
+| `EventGoldSpawned` | GoldSystem | (observers) | `nil` |
+| `EventGoldComplete` | EnergySystem | (observers) | `nil` |
+
+**Producer Pattern:**
 ```go
-// EnergySystem pushes event when gold completed at max heat
-if heatAtMaxBeforeGoldComplete {
-    ctx.PushEvent(engine.EventCleanerRequest, nil)
-}
+// InputHandler pushes typing event
+payload := &engine.CharacterTypedPayload{Char: r, X: x, Y: y}
+h.ctx.PushEvent(engine.EventCharacterTyped, payload, h.ctx.PausableClock.Now())
+
+// EnergySystem pushes cleaner request
+h.ctx.PushEvent(engine.EventCleanerRequest, nil, h.ctx.PausableClock.Now())
 ```
 
-**Consumer Pattern**:
+**Consumer Pattern (EventHandler Interface):**
 ```go
-// CleanerSystem polls events each frame
-func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
-    events := cs.ctx.ConsumeEvents()
-    for _, event := range events {
-        if event.Type == engine.EventCleanerRequest {
-            if !cs.spawned[event.Frame] {  // Frame deduplication
-                cs.spawnCleaners(world)
-                cs.spawned[event.Frame] = true
-            }
+// Systems implement EventHandler to receive events
+func (s *EnergySystem) EventTypes() []engine.EventType {
+    return []engine.EventType{
+        engine.EventCharacterTyped,
+        engine.EventEnergyTransaction,
+    }
+}
+
+func (s *EnergySystem) HandleEvent(world *engine.World, event engine.GameEvent) {
+    switch event.Type {
+    case engine.EventCharacterTyped:
+        if payload, ok := event.Payload.(*engine.CharacterTypedPayload); ok {
+            s.handleCharacterTyping(world, payload.X, payload.Y, payload.Char)
+        }
+    case engine.EventEnergyTransaction:
+        if payload, ok := event.Payload.(*engine.EnergyTransactionPayload); ok {
+            s.ctx.State.AddEnergy(payload.Amount)
         }
     }
-    // ... rest of update logic
 }
 ```
 
-**Implementation** (`engine/events.go`):
+**Registration Pattern:**
+```go
+// In main.go, register systems with ClockScheduler's EventRouter
+clockScheduler.RegisterEventHandler(energySystem)
+clockScheduler.RegisterEventHandler(cleanerSystem)
+```
+
+**Dispatch Flow:**
+```go
+// ClockScheduler.processTick() dispatches events BEFORE system updates
+func (cs *ClockScheduler) processTick() {
+    // 1. Dispatch all pending events to registered handlers
+    cs.eventRouter.DispatchAll(cs.ctx.World)
+
+    // 2. Run system updates
+    cs.ctx.World.Update(deltaTime)
+}
+```
+
+**Implementation** (`engine/events.go`, `engine/event_router.go`):
 - `EventQueue`: Fixed-size ring buffer (size defined in `constants.EventQueueSize`)
-- `Push()`: Lock-free CAS (Compare-And-Swap) for concurrent producers using fast bitwise masking (`constants.EventBufferMask`)
+- `Push()`: Lock-free CAS with published flags pattern (prevents partial reads)
 - `Consume()`: Atomically claims and returns all pending events
-- `Peek()`: Read-only inspection for debugging/testing
+- `EventRouter`: Routes consumed events to registered EventHandler implementations
+- `DispatchAll()`: Processes all pending events before World.Update()
 
 ### State Ownership Model
 
@@ -337,7 +379,7 @@ now := s.ctx.TimeProvider.Now()       // Use TimeResource instead
 - **Primary Purpose**: OS/Window management, Event routing, State orchestration
 - **Retained Responsibilities**:
   - `GameState` access via `ctx.State` (Heat, Energy, Boost, Phase, etc.)
-  - `EventQueue` access via `ctx.PushEvent()` / `ctx.ConsumeEvents()`
+  - `EventQueue` access via `ctx.PushEvent()` (consumption handled by EventRouter)
   - `AudioEngine` access via `ctx.AudioEngine.PlaySound()`
   - Input handling methods (mode transitions, motion commands)
   - `World` reference (ECS access)
@@ -1526,7 +1568,8 @@ The system supports two types of cleaners:
 #### Horizontal Row Cleaners
 - **Trigger**: Event-driven via `EventCleanerRequest` when gold completed at maximum heat
   - EnergySystem pushes event: `ctx.PushEvent(engine.EventCleanerRequest, nil)`
-  - CleanerSystem consumes event in Update() method (event polling pattern)
+  - CleanerSystem implements `EventHandler` interface, receives event via `HandleEvent()`
+  - EventRouter dispatches event before World.Update() runs
   - Frame deduplication: Tracks spawned frames to prevent duplicate activations
 - **Behavior**: Sweeps across rows containing Red characters, removing them on contact
 - **Phantom Cleaners**: If no Red characters exist when event consumed, no entities spawn
