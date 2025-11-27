@@ -324,6 +324,10 @@ Updated immediately on user input/spawn events, read by all systems:
 - **Visual Feedback**: CursorError (via CursorComponent.ErrorFlashEnd), EnergyBlink, PingGrid (atomic)
 - **Drain State** (`atomic.Bool`, `atomic.Uint64`, `atomic.Int32`): Active, EntityID, X, Y
 - **Sequence ID** (`atomic.Int64`): Thread-safe ID generation
+- **Runtime Metrics** (`atomic.Uint64`): GameTicks, CurrentAPM, PendingActions
+  - GameTicks: Total game tick count, incremented every 50ms clock tick
+  - CurrentAPM: Actions Per Minute, calculated from 60-second rolling window
+  - PendingActions: Current second's action count (swapped atomically during APM update)
 
 Atomics are used for high-frequency access (every frame and keystroke) to avoid lock contention while ensuring immediate consistency and race-free updates.
 
@@ -336,6 +340,10 @@ Updated during scheduled game logic ticks, read by all systems:
 - **Gold Sequence State**: GoldActive, GoldSequenceID, GoldStartTime, GoldTimeoutTime
 - **Decay Timer State**: DecayTimerActive, DecayNextTime
 - **Decay Animation State**: DecayAnimating, DecayStartTime
+- **APM History** (`sync.RWMutex`): apmHistory[60], apmHistoryIndex
+  - 60-second rolling window for action counts
+  - Updated every 20 ticks (~1 second) by ClockScheduler
+  - Protected by mutex for concurrent access
 
 Mutexes protect infrequently-changed state that requires consistent multi-field reads and atomic state transitions (spawn timing, phase changes). Blocking is acceptable since these are not on the hot path.
 
@@ -660,6 +668,10 @@ snapshot := ctx.State.ReadPhaseState()
   - `PhaseDecayAnimation`: Handled by DecaySystem → returns to PhaseNormal when complete
   - `PhaseNormal`: Gold spawning handled by GoldSystem's Update() method
 - **Cleaner Animation**: Triggered via `EventCleanerRequest` (runs in parallel with main phase cycle)
+- **Runtime Metrics Updates**:
+  - Increments GameTicks counter every tick (50ms interval)
+  - Updates APM every 20 ticks (~1 second) via `UpdateAPM()`
+  - APM calculation: sums 60-second rolling window of action counts
 - **Drift Protection**:
   - Advances deadline by exactly one interval (prevents cumulative drift)
   - If severely behind (>2 intervals), resets to current time + interval
@@ -883,14 +895,16 @@ Component (marker interface)
 
 ## Rendering Pipeline
 
-1. Clear dirty regions (when implemented)
-2. Draw static UI (heat meter, line numbers)
-3. Draw game entities (characters)
+1. Calculate FPS (increments frameCount, updates currentFps every second)
+2. Clear dirty regions (when implemented)
+3. Draw static UI (heat meter, line numbers)
+4. Draw game entities (characters)
    - Apply pause dimming effect when `ctx.IsPaused.Load()` is true (70% brightness)
-4. Draw overlays (ping, decay animation)
-5. Draw cleaners with gradient trail effects
-6. Draw removal flash effects
-7. Draw cursor (topmost layer)
+5. Draw overlays (ping, decay animation)
+6. Draw cleaners with gradient trail effects
+7. Draw removal flash effects
+8. Draw cursor (topmost layer)
+9. Draw status bar with runtime metrics (FPS, GT, APM)
 
 ### Pause State Visual Feedback
 

@@ -4,7 +4,7 @@ A terminal-based typing game built with Go that combines vi/vim motion commands 
 
 ## Overview
 
-vi-fighter is a terminal typing game where players type character sequences that appear on screen using vi/vim-style commands and motions. The game features dynamic difficulty scaling through a decay system, multiple sequence types with different behaviors, and a heat mechanic that rewards skilled play.
+vi-fighter is a terminal typing game where players type character sequences that appear on screen using vi/vim-style commands and motions. The game features dynamic difficulty scaling through a decay system, multiple sequence types with different behaviors, a heat mechanic that rewards skilled play, and real-time performance metrics (FPS, Game Ticks, Actions Per Minute).
 
 ## Documentation
 
@@ -22,6 +22,7 @@ vi-fighter features a dynamic typing system with multiple sequence types and gam
 - **Decay System**: Automated pressure that degrades sequences over time
 - **Cleaners**: Special mechanic that clears Red sequences - horizontal sweeps (gold at max heat) or 4-directional bursts (nugget at max heat, Enter key)
 - **Drain**: Pressure mechanic with visual telegraph animation, appears at positive energy, pursues cursor, and drains energy over time
+- **Runtime Metrics**: Real-time performance tracking (FPS, Game Ticks, APM) displayed in status bar
 
 ## Vi Motion Commands
 

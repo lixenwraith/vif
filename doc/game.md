@@ -256,9 +256,10 @@ Shows relative column positions from cursor:
 ### Bottom Status Bar
 
 ```
-NORMAL    5j                              Boost: 0.3s  Decay: 45.2s  Energy: 1247
-^         ^                               ^            ^             ^
-Mode      Last command                    Boost timer  Decay timer   Total energy
+NORMAL    5j                    Boost: 0.3s  Decay: 45.2s  Energy: 1247  APM: 180  GT: 1234  FPS: 60
+^         ^                     ^            ^             ^             ^         ^         ^
+Mode      Last command          Boost timer  Decay timer   Total energy  Actions   Game      Frames
+                                                                          /Minute   Ticks     /Second
 ```
 
 **Left Section**:
@@ -270,6 +271,9 @@ Mode      Last command                    Boost timer  Decay timer   Total energ
 - Command text (when in COMMAND mode)
 
 **Right Section** (from right to left):
+- **FPS** - Cyan background, frames per second (rendering performance)
+- **GT** - Light orange background, total game ticks since start (50ms intervals)
+- **APM** - Lime green background, actions per minute (60-second rolling average)
 - **Energy** - White background with black text, flashes character color on correct typing (200ms), total points
 - **Decay** - Red background, countdown to next decay
 - **Grid** - White text, ping grid timer (only when active)
