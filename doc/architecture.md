@@ -1101,7 +1101,24 @@ NORMAL ─[i]→ INSERT
 NORMAL ─[/]→ SEARCH
 INSERT / SEARCH ─[ESC]→ NORMAL
 NORMAL -[:]→ COMMAND (game paused) -[ESC/ENTER]→ NORMAL
+COMMAND -[:debug/:help]→ OVERLAY (modal popup) -[ESC/ENTER]→ NORMAL
 ```
+
+**Mode Transitions:**
+- **NORMAL → OVERLAY**: Triggered by `:debug` or `:help` commands in COMMAND mode
+- **OVERLAY → NORMAL**: Pressing `ESC` or `ENTER` closes overlay and resumes game
+- **Overlay Behavior**:
+  - Hijacks input - all keys except ESC/ENTER are used for overlay interaction (scroll)
+  - Renders modal window covering ~80% of screen with bordered frame
+  - Game remains paused during overlay display
+  - Supports scrolling with arrow keys or j/k
+
+**ESC Key Handling Priority** (in `modes/input.go:HandleEvent`):
+1. **Search Mode**: ESC → clears search text, returns to NORMAL
+2. **Command Mode**: ESC → clears command text, unpauses, returns to NORMAL
+3. **Insert Mode**: ESC → returns to NORMAL
+4. **Overlay Mode**: ESC → closes overlay, unpauses, returns to NORMAL
+5. **Normal Mode**: ESC → activates ping grid animation (1 second)
 
 ### Commands
 

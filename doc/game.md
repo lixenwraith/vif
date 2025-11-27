@@ -193,6 +193,8 @@ vi-fighter has four input modes, similar to vi/vim:
 - **Available Commands**:
   - `:quit` or `:q` - Exit the game
   - `:boost` - Activate boost mode for 10 seconds (2x spawn rate, 2x energy)
+  - `:debug` or `:d` - Show debug overlay with system state information
+  - `:help` or `:h` - Show help overlay with game instructions
 - **Exiting**: Press `ESC` to return to NORMAL mode
 - **Pause Behavior**:
   - **Game pauses**: All game time stops (decay timer, gold timeout, boost timer freeze)
@@ -200,6 +202,18 @@ vi-fighter has four input modes, similar to vi/vim:
   - **Visual dimming**: All characters dimmed to 70% brightness to indicate paused state
   - **Frame updates continue**: Screen still refreshes to show dimmed characters
   - **Time preservation**: When you exit COMMAND mode, timers resume from where they stopped
+
+### OVERLAY Mode (Modal Window)
+- **Purpose**: Display debug information or help content in a modal popup
+- **Status**: Shows "OVERLAY" in status bar
+- **Entering**: Execute `:debug` or `:help` command from COMMAND mode
+- **Display**: Bordered window covering ~80% of screen with title and scrollable content
+- **Controls**:
+  - **ESC** or **ENTER**: Close overlay and return to NORMAL mode
+  - **Up Arrow** or **k**: Scroll content up
+  - **Down Arrow** or **j**: Scroll content down
+- **Pause Behavior**: Game remains paused while overlay is displayed (same as COMMAND mode)
+- **Input Hijacking**: All input is captured by overlay - no game commands available while overlay is active
 
 ---
 

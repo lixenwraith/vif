@@ -74,6 +74,14 @@ func (h *InputHandler) handleKeyEvent(ev *tcell.EventKey) bool {
 		} else if h.ctx.IsInsertMode() {
 			h.ctx.Mode = engine.ModeNormal
 			h.ctx.DeleteOperator = false
+		} else if h.ctx.IsOverlayMode() {
+			// Overlay mode - close overlay and return to normal mode
+			h.ctx.OverlayActive = false
+			h.ctx.OverlayTitle = ""
+			h.ctx.OverlayContent = nil
+			h.ctx.OverlayScroll = 0
+			h.ctx.Mode = engine.ModeNormal
+			h.ctx.SetPaused(false)
 		} else {
 			// Normal mode - activate ping grid
 			h.ctx.SetPingActive(true)

@@ -104,13 +104,14 @@ go test ./systems
 - **Movement**: Vi motion commands (h/j/k/l, w/b/e, gg/G/H/M/L, etc.)
 - **Insert Mode**: Press `i` to begin typing sequences
 - **Search Mode**: Press `/` followed by pattern, then `Enter`
-- **Command Mode**: Press `:` to enter COMMAND mode (e.g., `:boost`)
-- **Exit Insert/Search/Command**: Press `ESC` to return to NORMAL mode
+- **Command Mode**: Press `:` to enter COMMAND mode (e.g., `:boost`, `:debug`, `:help`)
+- **Overlay Mode**: `:debug` or `:help` commands open modal popups with information
+- **Exit Insert/Search/Command/Overlay**: Press `ESC` to return to NORMAL mode
 - **Ping Grid**: Press `ESC` in NORMAL mode to show row/column guides (1 second)
 - **Directional Cleaners**: Press `Enter` in NORMAL mode (requires heat ≥ 10, costs 10 heat) to spawn 4-directional cleaners from cursor
 - **Quit**: `Ctrl+C` or `Ctrl+Q`
 
-**Note**: When in COMMAND mode, the game is paused - all characters are dimmed (70% brightness) to indicate the paused state while preserving visibility.
+**Note**: When in COMMAND or OVERLAY mode, the game is paused - all characters are dimmed (70% brightness) to indicate the paused state while preserving visibility.
 
 ## Game Strategy (Quick Tips)
 
