@@ -262,11 +262,16 @@ func (h *InputHandler) handleCommandMode(ev *tcell.EventKey) bool {
 		// Clear command text after execution
 		h.ctx.CommandText = ""
 
-		// Return to normal mode
-		h.ctx.Mode = engine.ModeNormal
-
-		// Clear pause state
-		h.ctx.SetPaused(false)
+		// Check if command switched to a different mode (e.g., :debug or :help activates overlay)
+		// Only reset to normal mode if we're still in command mode
+		if h.ctx.Mode == engine.ModeOverlay {
+			// Command switched to Overlay mode - preserve mode and pause state
+			// The overlay handler will manage cleanup when user exits
+		} else {
+			// Standard command finished - return to normal mode
+			h.ctx.Mode = engine.ModeNormal
+			h.ctx.SetPaused(false)
+		}
 
 		// Return the result from ExecuteCommand (false = exit game)
 		return shouldContinue
