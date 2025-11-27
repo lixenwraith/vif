@@ -34,6 +34,24 @@ const (
 	//   - Consumed only by main game loop (single consumer)
 	EventCleanerRequest EventType = iota
 
+	// EventDirectionalCleanerRequest signals that directional cleaner entities should be spawned.
+	//
+	// Triggered When:
+	//   - Nugget collected while heat meter is at maximum
+	//   - Enter key pressed in Normal mode with heat >= 10
+	//
+	// Consumed By:
+	//   - CleanerSystem.Update() polls EventQueue each frame
+	//   - Spawns 4 cleaner entities from origin position (up/down/left/right)
+	//
+	// Payload: *DirectionalCleanerPayload containing origin coordinates
+	//
+	// Animation:
+	//   - Each cleaner locks its row (horizontal) or column (vertical) at spawn
+	//   - Cleaners clear entities in their path and despawn at screen edge
+	//   - Same animation duration as EventCleanerRequest cleaners
+	EventDirectionalCleanerRequest
+
 	// EventCleanerFinished signals that cleaner animation has completed.
 	//
 	// Triggered When:
@@ -93,6 +111,8 @@ func (e EventType) String() string {
 	switch e {
 	case EventCleanerRequest:
 		return "CleanerRequest"
+	case EventDirectionalCleanerRequest:
+		return "DirectionalCleanerRequest"
 	case EventCleanerFinished:
 		return "CleanerFinished"
 	case EventGoldSpawned:
@@ -102,6 +122,20 @@ func (e EventType) String() string {
 	default:
 		return "Unknown"
 	}
+}
+
+// DirectionalCleanerPayload contains origin coordinates for directional cleaner spawning.
+//
+// Used By:
+//   - EventDirectionalCleanerRequest events
+//   - CleanerSystem.spawnDirectionalCleaners()
+//
+// Fields:
+//   - OriginX: X coordinate where 4-way cleaners spawn from
+//   - OriginY: Y coordinate where 4-way cleaners spawn from
+type DirectionalCleanerPayload struct {
+	OriginX int
+	OriginY int
 }
 
 // Event Flow Pattern:

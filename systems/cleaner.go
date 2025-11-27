@@ -48,6 +48,16 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 				cs.spawned[event.Frame] = true
 				cs.hasSpawnedSession = true
 			}
+		} else if event.Type == engine.EventDirectionalCleanerRequest {
+			// Check if we already spawned for this frame
+			if !cs.spawned[event.Frame] {
+				// Extract payload
+				if payload, ok := event.Payload.(*engine.DirectionalCleanerPayload); ok {
+					cs.spawnDirectionalCleaners(world, payload.OriginX, payload.OriginY)
+					cs.spawned[event.Frame] = true
+					cs.hasSpawnedSession = true
+				}
+			}
 		}
 	}
 
@@ -85,28 +95,54 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 
 		// --- Physics Update ---
 		prevPreciseX := c.PreciseX
+		prevPreciseY := c.PreciseY
 		c.PreciseX += c.VelocityX * dtSec
 		c.PreciseY += c.VelocityY * dtSec
 
 		// --- Collision Detection (Swept Segment) ---
 		// Check all integer grid points covered during this frame's movement
 		// to prevent tunneling at high speeds.
-		startX := int(math.Min(prevPreciseX, c.PreciseX))
-		endX := int(math.Max(prevPreciseX, c.PreciseX))
+		// Vertical cleaners sweep Y positions, horizontal cleaners sweep X positions
+		if c.VelocityY != 0 && c.VelocityX == 0 {
+			// Vertical cleaner - sweep Y positions at fixed X
+			startY := int(math.Min(prevPreciseY, c.PreciseY))
+			endY := int(math.Max(prevPreciseY, c.PreciseY))
 
-		// Clamp check range to screen bounds
-		checkStart := startX
-		if checkStart < 0 {
-			checkStart = 0
-		}
-		checkEnd := endX
-		if checkEnd >= gameWidth {
-			checkEnd = gameWidth - 1
-		}
+			// Clamp check range to screen bounds
+			gameHeight := config.GameHeight
+			checkStart := startY
+			if checkStart < 0 {
+				checkStart = 0
+			}
+			checkEnd := endY
+			if checkEnd >= gameHeight {
+				checkEnd = gameHeight - 1
+			}
 
-		if checkStart <= checkEnd {
-			for x := checkStart; x <= checkEnd; x++ {
-				cs.checkAndDestroyAtPosition(world, x, c.GridY)
+			if checkStart <= checkEnd {
+				for y := checkStart; y <= checkEnd; y++ {
+					cs.checkAndDestroyAtPosition(world, c.GridX, y)
+				}
+			}
+		} else if c.VelocityX != 0 {
+			// Horizontal cleaner - sweep X positions at fixed Y
+			startX := int(math.Min(prevPreciseX, c.PreciseX))
+			endX := int(math.Max(prevPreciseX, c.PreciseX))
+
+			// Clamp check range to screen bounds
+			checkStart := startX
+			if checkStart < 0 {
+				checkStart = 0
+			}
+			checkEnd := endX
+			if checkEnd >= gameWidth {
+				checkEnd = gameWidth - 1
+			}
+
+			if checkStart <= checkEnd {
+				for x := checkStart; x <= checkEnd; x++ {
+					cs.checkAndDestroyAtPosition(world, x, c.GridY)
+				}
 			}
 		}
 
@@ -147,11 +183,15 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 		}
 
 		// --- Lifecycle Management ---
-		// Destroy entity only when it passes the TargetX (clearing the screen)
+		// Destroy entity when it passes its target (clearing the screen + trail)
 		shouldDestroy := false
 		if c.VelocityX > 0 && c.PreciseX >= c.TargetX {
 			shouldDestroy = true
 		} else if c.VelocityX < 0 && c.PreciseX <= c.TargetX {
+			shouldDestroy = true
+		} else if c.VelocityY > 0 && c.PreciseY >= c.TargetY {
+			shouldDestroy = true
+		} else if c.VelocityY < 0 && c.PreciseY <= c.TargetY {
 			shouldDestroy = true
 		}
 
@@ -236,6 +276,107 @@ func (cs *CleanerSystem) spawnCleaners(world *engine.World) {
 		}
 
 		// Create cleaner entity and add to store
+		entity := world.CreateEntity()
+		world.Cleaners.Add(entity, comp)
+	}
+}
+
+// spawnDirectionalCleaners generates 4 cleaner entities from origin position (up/down/left/right)
+func (cs *CleanerSystem) spawnDirectionalCleaners(world *engine.World, originX, originY int) {
+	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+
+	// Play whoosh sound once for all 4 cleaners
+	if cs.ctx.AudioEngine != nil {
+		cs.ctx.AudioEngine.SendRealTime(audio.AudioCommand{
+			Type:       audio.SoundWhoosh,
+			Priority:   1,
+			Generation: uint64(cs.ctx.State.GetFrameNumber()),
+			Timestamp:  timeRes.GameTime,
+		})
+	}
+
+	gameWidth := float64(config.GameWidth)
+	gameHeight := float64(config.GameHeight)
+	trailLen := float64(constants.CleanerTrailLength)
+
+	// Calculate speeds based on animation duration
+	horizontalSpeed := gameWidth / constants.CleanerAnimationDuration.Seconds()
+	verticalSpeed := gameHeight / constants.CleanerAnimationDuration.Seconds()
+
+	// Origin as floats
+	ox := float64(originX)
+	oy := float64(originY)
+
+	// Spawn 4 cleaners: right, left, down, up
+	directions := []struct {
+		velocityX, velocityY float64
+		startX, startY       float64
+		targetX, targetY     float64
+		gridX, gridY         int
+	}{
+		// Right: horizontal cleaner moving right
+		{
+			velocityX: horizontalSpeed,
+			velocityY: 0,
+			startX:    ox,
+			startY:    oy,
+			targetX:   gameWidth + trailLen,
+			targetY:   oy,
+			gridX:     originX,
+			gridY:     originY,
+		},
+		// Left: horizontal cleaner moving left
+		{
+			velocityX: -horizontalSpeed,
+			velocityY: 0,
+			startX:    ox,
+			startY:    oy,
+			targetX:   -trailLen,
+			targetY:   oy,
+			gridX:     originX,
+			gridY:     originY,
+		},
+		// Down: vertical cleaner moving down
+		{
+			velocityX: 0,
+			velocityY: verticalSpeed,
+			startX:    ox,
+			startY:    oy,
+			targetX:   ox,
+			targetY:   gameHeight + trailLen,
+			gridX:     originX,
+			gridY:     originY,
+		},
+		// Up: vertical cleaner moving up
+		{
+			velocityX: 0,
+			velocityY: -verticalSpeed,
+			startX:    ox,
+			startY:    oy,
+			targetX:   ox,
+			targetY:   -trailLen,
+			gridX:     originX,
+			gridY:     originY,
+		},
+	}
+
+	for _, dir := range directions {
+		trail := []core.Point{{X: dir.gridX, Y: dir.gridY}}
+
+		comp := components.CleanerComponent{
+			PreciseX:  dir.startX,
+			PreciseY:  dir.startY,
+			VelocityX: dir.velocityX,
+			VelocityY: dir.velocityY,
+			TargetX:   dir.targetX,
+			TargetY:   dir.targetY,
+			GridX:     dir.gridX,
+			GridY:     dir.gridY,
+			Trail:     trail,
+			Char:      constants.CleanerChar,
+		}
+
 		entity := world.CreateEntity()
 		world.Cleaners.Add(entity, comp)
 	}
