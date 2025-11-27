@@ -42,10 +42,19 @@ type GameState struct {
 	// Frame counter (atomic for thread-safety, incremented each render)
 	FrameNumber atomic.Int64
 
+	// Runtime Metrics
+	GameTicks      atomic.Uint64
+	CurrentAPM     atomic.Uint64
+	PendingActions atomic.Uint64 // Actions in the current second bucket
+
 	// ===== CLOCK-TICK STATE (mutex protected) =====
 	// Updated during clock tick cycles, read by systems via snapshot methods
 
 	mu sync.RWMutex
+
+	// APM History (mutex protected)
+	apmHistory      [60]uint64
+	apmHistoryIndex int
 
 	// Spawn/Content State
 	SpawnLastTime       time.Time // When last spawn occurred
@@ -123,6 +132,11 @@ func NewGameState(maxEntities int, now time.Time) *GameState {
 
 	// Initialize frame counter
 	gs.FrameNumber.Store(0)
+
+	// Initialize runtime metrics
+	gs.GameTicks.Store(0)
+	gs.CurrentAPM.Store(0)
+	gs.PendingActions.Store(0)
 
 	// Initialize clock-tick state
 	gs.SpawnLastTime = now
@@ -839,4 +853,60 @@ func (gs *GameState) SetInitialSpawnComplete() {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
 	gs.InitialSpawnComplete = true
+}
+
+// ===== RUNTIME METRICS ACCESSORS =====
+
+// IncrementGameTicks increments the game tick counter
+func (gs *GameState) IncrementGameTicks() {
+	gs.GameTicks.Add(1)
+}
+
+// GetGameTicks returns the current game tick count
+func (gs *GameState) GetGameTicks() uint64 {
+	return gs.GameTicks.Load()
+}
+
+// RecordAction increments the pending action counter for APM calculation
+func (gs *GameState) RecordAction() {
+	gs.PendingActions.Add(1)
+}
+
+// GetAPM returns the current calculated APM
+func (gs *GameState) GetAPM() uint64 {
+	return gs.CurrentAPM.Load()
+}
+
+// UpdateAPM rolls the action history window and recalculates APM
+// Should be called approximately every second by the scheduler
+func (gs *GameState) UpdateAPM() {
+	// atomically swap pending actions to 0 to start new bucket
+	actions := gs.PendingActions.Swap(0)
+
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
+
+	// Update history ring buffer
+	gs.apmHistory[gs.apmHistoryIndex] = actions
+	gs.apmHistoryIndex = (gs.apmHistoryIndex + 1) % len(gs.apmHistory)
+
+	// Calculate total over last 60 seconds
+	var total uint64
+	for _, count := range gs.apmHistory {
+		total += count
+	}
+
+	gs.CurrentAPM.Store(total)
+}
+
+// ResetRuntimeStats resets Ticks and APM statistics (for new game)
+func (gs *GameState) ResetRuntimeStats() {
+	gs.GameTicks.Store(0)
+	gs.CurrentAPM.Store(0)
+	gs.PendingActions.Store(0)
+
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
+	gs.apmHistory = [60]uint64{}
+	gs.apmHistoryIndex = 0
 }

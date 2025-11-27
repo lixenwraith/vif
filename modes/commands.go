@@ -55,6 +55,9 @@ func handleNewCommand(ctx *engine.GameContext) bool {
 	ctx.State.SetEnergy(0)
 	ctx.State.SetHeat(0)
 
+	// Reset runtime metrics (GT, APM)
+	ctx.State.ResetRuntimeStats()
+
 	// Despawn drain entities before clearing world
 	// Energy=0 will trigger despawn on next DrainSystem.Update(), but explicit cleanup is safer
 	drains := ctx.World.Drains.All()

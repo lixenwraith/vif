@@ -2,6 +2,7 @@ package render
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/constants"
@@ -11,29 +12,35 @@ import (
 
 // TerminalRenderer handles all terminal rendering
 type TerminalRenderer struct {
-	screen          tcell.Screen
-	width           int
-	height          int
-	gameX           int
-	gameY           int
-	gameWidth          int
-	gameHeight         int
-	lineNumWidth       int
-	cleanerGradient    []tcell.Color
+	screen              tcell.Screen
+	width               int
+	height              int
+	gameX               int
+	gameY               int
+	gameWidth           int
+	gameHeight          int
+	lineNumWidth        int
+	cleanerGradient     []tcell.Color
 	materializeGradient []tcell.Color
+
+	// FPS Tracking
+	frameCount    int
+	lastFpsUpdate time.Time
+	currentFps    int
 }
 
 // NewTerminalRenderer creates a new terminal renderer
 func NewTerminalRenderer(screen tcell.Screen, width, height, gameX, gameY, gameWidth, gameHeight, lineNumWidth int) *TerminalRenderer {
 	r := &TerminalRenderer{
-		screen:       screen,
-		width:        width,
-		height:       height,
-		gameX:        gameX,
-		gameY:        gameY,
-		gameWidth:    gameWidth,
-		gameHeight:   gameHeight,
-		lineNumWidth: lineNumWidth,
+		screen:        screen,
+		width:         width,
+		height:        height,
+		gameX:         gameX,
+		gameY:         gameY,
+		gameWidth:     gameWidth,
+		gameHeight:    gameHeight,
+		lineNumWidth:  lineNumWidth,
+		lastFpsUpdate: time.Now(),
 	}
 
 	// Initialize gradient internally
@@ -89,6 +96,15 @@ func (r *TerminalRenderer) buildMaterializeGradient() {
 
 // RenderFrame renders the entire game frame
 func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating bool, decayTimeRemaining float64) {
+	// FPS Calculation
+	r.frameCount++
+	now := time.Now()
+	if now.Sub(r.lastFpsUpdate) >= time.Second {
+		r.currentFps = r.frameCount
+		r.frameCount = 0
+		r.lastFpsUpdate = now
+	}
+
 	// Increment frame counter and get frame number
 	ctx.IncrementFrameNumber()
 
@@ -729,13 +745,13 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 		}
 	}
 
-	// Calculate positions and draw timers + energy (from right to left: Boost, Grid, Decay, Energy)
+	// --- RIGHT SIDE METRICS ---
+
+	// Prepare strings for all right-aligned components
 	energyText := fmt.Sprintf(" Energy: %d ", ctx.State.GetEnergy())
 	decayText := fmt.Sprintf(" Decay: %.1fs ", decayTimeRemaining)
-	var boostText string
-	var gridText string
-	var totalWidth int
 
+	var boostText string
 	if ctx.State.GetBoostEnabled() {
 		remaining := ctx.State.GetBoostEndTime().Sub(ctx.PausableClock.Now()).Seconds()
 		if remaining < 0 {
@@ -744,6 +760,7 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 		boostText = fmt.Sprintf(" Boost: %.1fs ", remaining)
 	}
 
+	var gridText string
 	if ctx.GetPingActive() {
 		gridRemaining := ctx.GetPingGridTimer()
 		if gridRemaining < 0 {
@@ -752,16 +769,24 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 		gridText = fmt.Sprintf(" Grid: %.1fs ", gridRemaining)
 	}
 
-	totalWidth = len(boostText) + len(gridText) + len(decayText) + len(energyText)
+	// New Metrics
+	fpsStr := fmt.Sprintf(" FPS: %d ", r.currentFps)
+	gtStr := fmt.Sprintf(" GT: %d ", ctx.State.GetGameTicks())
+	apmStr := fmt.Sprintf(" APM: %d ", ctx.State.GetAPM())
+
+	// Calculate total width to determine start position
+	// Order from Left to Right: [Boost] [Grid] [Decay] [Energy] [APM] [GT] [FPS]
+	totalWidth := len(boostText) + len(gridText) + len(decayText) + len(energyText) + len(apmStr) + len(gtStr) + len(fpsStr)
 
 	startX := r.width - totalWidth
-	if startX < 0 {
-		startX = 0
+	// Clamp so we don't overwrite the left side if window is too small
+	if startX < statusStartX {
+		startX = statusStartX
 	}
 
 	now := ctx.PausableClock.Now()
 
-	// Draw boost timer if active (with pink background)
+	// 1. Boost
 	if ctx.State.GetBoostEnabled() {
 		boostStyle := defaultStyle.Foreground(RgbStatusText).Background(RgbBoostBg)
 		for i, ch := range boostText {
@@ -772,7 +797,7 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 		startX += len(boostText)
 	}
 
-	// Draw grid timer if active (with default background and white text)
+	// 2. Grid
 	if ctx.GetPingActive() {
 		gridStyle := defaultStyle.Foreground(tcell.ColorWhite)
 		for i, ch := range gridText {
@@ -783,7 +808,7 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 		startX += len(gridText)
 	}
 
-	// Draw decay timer (always visible)
+	// 3. Decay
 	decayStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(RgbDecayTimerBg)
 	for i, ch := range decayText {
 		if startX+i < r.width {
@@ -792,45 +817,67 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 	}
 	startX += len(decayText)
 
-	// Draw energy (with white background, or blink color if active)
+	// 4. Energy
 	if ctx.State.GetEnergyBlinkActive() && now.Sub(ctx.State.GetEnergyBlinkTime()).Milliseconds() < 200 {
 		typeCode := ctx.State.GetEnergyBlinkType()
 		var energyStyle tcell.Style
 
 		if typeCode == 0 {
-			// ERROR STATE: Bright Red Text on Black Background
-			// We define this explicitly to avoid TCell color comparison issues
 			energyStyle = defaultStyle.Foreground(tcell.NewRGBColor(255, 0, 0)).Background(tcell.NewRGBColor(0, 0, 0))
 		} else {
-			// SUCCESS STATES: Black Text on Colored Background
 			var blinkColor tcell.Color
 			switch typeCode {
-			case 1: // Blue
-				blinkColor = tcell.NewRGBColor(160, 210, 255)
-			case 2: // Green
-				blinkColor = tcell.NewRGBColor(120, 255, 120)
-			case 3: // Red
-				blinkColor = tcell.NewRGBColor(255, 140, 140)
-			case 4: // Gold
-				blinkColor = tcell.NewRGBColor(255, 255, 0)
+			case 1:
+				blinkColor = tcell.NewRGBColor(160, 210, 255) // Blue
+			case 2:
+				blinkColor = tcell.NewRGBColor(120, 255, 120) // Green
+			case 3:
+				blinkColor = tcell.NewRGBColor(255, 140, 140) // Red
+			case 4:
+				blinkColor = tcell.NewRGBColor(255, 255, 0) // Gold
 			default:
 				blinkColor = tcell.NewRGBColor(255, 255, 255)
 			}
 			energyStyle = defaultStyle.Foreground(tcell.NewRGBColor(0, 0, 0)).Background(blinkColor)
 		}
-
 		for i, ch := range energyText {
 			if startX+i < r.width {
 				r.screen.SetContent(startX+i, statusY, ch, nil, energyStyle)
 			}
 		}
 	} else {
-		// Default: white background with black text
 		energyStyle := defaultStyle.Foreground(tcell.NewRGBColor(0, 0, 0)).Background(RgbEnergyBg)
 		for i, ch := range energyText {
 			if startX+i < r.width {
 				r.screen.SetContent(startX+i, statusY, ch, nil, energyStyle)
 			}
+		}
+	}
+	startX += len(energyText)
+
+	// 5. APM
+	apmStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(RgbApmBg)
+	for i, ch := range apmStr {
+		if startX+i < r.width {
+			r.screen.SetContent(startX+i, statusY, ch, nil, apmStyle)
+		}
+	}
+	startX += len(apmStr)
+
+	// 6. GT
+	gtStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(RgbGtBg)
+	for i, ch := range gtStr {
+		if startX+i < r.width {
+			r.screen.SetContent(startX+i, statusY, ch, nil, gtStyle)
+		}
+	}
+	startX += len(gtStr)
+
+	// 7. FPS
+	fpsStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(RgbFpsBg)
+	for i, ch := range fpsStr {
+		if startX+i < r.width {
+			r.screen.SetContent(startX+i, statusY, ch, nil, fpsStyle)
 		}
 	}
 }

@@ -43,6 +43,10 @@ func (h *InputHandler) HandleEvent(ev tcell.Event) bool {
 
 // handleKeyEvent processes keyboard events
 func (h *InputHandler) handleKeyEvent(ev *tcell.EventKey) bool {
+	// Record action for APM calculation on any valid key event
+	// We do this early to capture all interactions
+	h.ctx.State.RecordAction()
+
 	// Handle exit keys
 	if ev.Key() == tcell.KeyCtrlQ || ev.Key() == tcell.KeyCtrlC {
 		return false

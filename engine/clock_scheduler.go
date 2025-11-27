@@ -360,6 +360,16 @@ func (cs *ClockScheduler) processTick() {
 
 	// Update boost timer (check for expiration)
 	// cs.ctx.State.UpdateBoostTimerAtomic()
+
+	// Update Game Ticks
+	cs.ctx.State.IncrementGameTicks()
+
+	// Update APM every 20 ticks (approx 1 second)
+	// We use the tick count from the scheduler which resets only on restart or wraps,
+	// but calculating modulo on the localized tick count is safe for this interval.
+	if cs.tickCount.Load()%20 == 0 {
+		cs.ctx.State.UpdateAPM()
+	}
 }
 
 // GetTickCount returns the current tick count for debugging/testing

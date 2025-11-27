@@ -53,6 +53,11 @@ var (
 	RgbDecayTimerBg  = tcell.NewRGBColor(200, 50, 50)   // Red for decay timer
 	RgbStatusText    = tcell.NewRGBColor(0, 0, 0)       // Dark text for status
 
+	// Runtime Metrics Backgrounds
+	RgbFpsBg = tcell.NewRGBColor(0, 255, 255)   // Cyan for FPS
+	RgbGtBg  = tcell.NewRGBColor(255, 200, 100) // Light Orange for Game Ticks
+	RgbApmBg = tcell.NewRGBColor(50, 205, 50)   // Lime Green for APM
+
 	// Cleaner colors
 	RgbCleanerBase  = tcell.NewRGBColor(255, 255, 0)   // Bright yellow
 	RgbRemovalFlash = tcell.NewRGBColor(255, 255, 200) // Bright yellow-white flash
