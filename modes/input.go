@@ -211,11 +211,11 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 		}
 		// Push typing event to queue (processed by EnergySystem via EventRouter)
 		pos, _ := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
-		payload := &engine.CharacterTypedPayload{
-			Char: ev.Rune(),
-			X:    pos.X,
-			Y:    pos.Y,
-		}
+		// Acquire payload from pool to minimize GC pressure
+		payload := engine.CharacterTypedPayloadPool.Get().(*engine.CharacterTypedPayload)
+		payload.Char = ev.Rune()
+		payload.X = pos.X
+		payload.Y = pos.Y
 		h.ctx.PushEvent(engine.EventCharacterTyped, payload, h.ctx.PausableClock.Now())
 	}
 	return true

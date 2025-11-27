@@ -482,7 +482,11 @@ func (s *EnergySystem) HandleEvent(world *engine.World, event engine.GameEvent) 
 	switch event.Type {
 	case engine.EventCharacterTyped:
 		if payload, ok := event.Payload.(*engine.CharacterTypedPayload); ok {
+			// Process the event
 			s.handleCharacterTyping(world, payload.X, payload.Y, payload.Char)
+
+			// Return payload to pool to reduce allocations
+			engine.CharacterTypedPayloadPool.Put(payload)
 		}
 
 	case engine.EventEnergyTransaction:

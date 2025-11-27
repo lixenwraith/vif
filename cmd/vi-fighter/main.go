@@ -144,6 +144,9 @@ func main() {
 				return // Exit game
 			}
 
+			// Dispatch input events immediately, bypassing 50ms tick wait
+			clockScheduler.DispatchEventsImmediately()
+
 			// Update renderer dimensions if screen resized
 			// This needs to work during pause for proper display
 			renderer.UpdateDimensions(

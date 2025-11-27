@@ -118,12 +118,24 @@ func (w *World) AddSystem(system System) {
 	}
 }
 
-// Update runs all systems sequentially. Only one update cycle can run at a time
-func (w *World) Update(dt time.Duration) {
-	// Acquire update mutex to ensure only one update runs at a time
+// RunSafe executes a function while holding the world's update lock
+// Use for any operation that mutates world state outside of standard Update cycles
+func (w *World) RunSafe(fn func()) {
 	w.updateMutex.Lock()
 	defer w.updateMutex.Unlock()
+	fn()
+}
 
+// Update runs all systems sequentially. Only one update cycle can run at a time
+func (w *World) Update(dt time.Duration) {
+	w.RunSafe(func() {
+		w.UpdateLocked(dt)
+	})
+}
+
+// UpdateLocked runs all systems assuming the caller already holds updateMutex
+// Internal use only: call Update() for standard usage, or wrap in RunSafe()
+func (w *World) UpdateLocked(dt time.Duration) {
 	w.mu.RLock()
 	systems := make([]System, len(w.systems))
 	copy(systems, w.systems)

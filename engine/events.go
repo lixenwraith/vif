@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -19,7 +20,7 @@ const (
 	//   - EnergySystem detects this condition after gold character typed
 	//
 	// Consumed By:
-	//   - CleanerSystem.Update() polls EventQueue each frame
+	//   - CleanerSystem.HandleEvent() via EventRouter
 	//   - Spawns cleaner entities on rows containing Red characters
 	//   - If no Red characters exist, performs "phantom spawn" (no entities created)
 	//
@@ -41,7 +42,7 @@ const (
 	//   - Enter key pressed in Normal mode with heat >= 10
 	//
 	// Consumed By:
-	//   - CleanerSystem.Update() polls EventQueue each frame
+	//   - CleanerSystem.HandleEvent() via EventRouter
 	//   - Spawns 4 cleaner entities from origin position (up/down/left/right)
 	//
 	// Payload: *DirectionalCleanerPayload containing origin coordinates
@@ -176,8 +177,8 @@ type DirectionalCleanerPayload struct {
 // Event Flow Pattern:
 //  1. Producer system pushes event: ctx.PushEvent(EventType, payload)
 //  2. Event stored in lock-free ring buffer (capacity: 256 events)
-//  3. Consumer system polls events: events := ctx.ConsumeEvents()
-//  4. Consumer processes events in Update() method
+//  3. ClockScheduler triggers EventRouter.DispatchAll()
+//  4. EventRouter invokes HandleEvent() on registered handlers synchronously
 
 // GameEvent represents a single game event with associated metadata.
 //
@@ -231,6 +232,14 @@ type CharacterTypedPayload struct {
 	Char rune // The character typed by the user
 	X    int  // Cursor X position when typed
 	Y    int  // Cursor Y position when typed
+}
+
+// CharacterTypedPayloadPool recycles payload objects to reduce GC pressure during high-frequency typing
+// NOTE: Likely not a real issue, but useful for stress testing
+var CharacterTypedPayloadPool = sync.Pool{
+	New: func() any {
+		return &CharacterTypedPayload{}
+	},
 }
 
 // EnergyTransactionPayload contains data for EventEnergyTransaction
@@ -429,6 +438,8 @@ func (eq *EventQueue) Consume() []GameEvent {
 //   - Returned slice is a snapshot; queue state may change after call returns
 //   - Events in returned slice may be consumed by Consume() before Peek() caller processes them
 //   - Only returns events with published flag set to true (fully written)
+//
+// NOTE: Currently dead code, kept for debugging
 func (eq *EventQueue) Peek() []GameEvent {
 	currentHead := eq.head.Load()
 	currentTail := eq.tail.Load()

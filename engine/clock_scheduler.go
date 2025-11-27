@@ -267,6 +267,14 @@ func (cs *ClockScheduler) schedulerLoop() {
 	}
 }
 
+// DispatchEventsImmediately processes all pending events synchronously
+// Call from main loop after input handling to eliminate input latency
+func (cs *ClockScheduler) DispatchEventsImmediately() {
+	cs.ctx.World.RunSafe(func() {
+		cs.eventRouter.DispatchAll(cs.ctx.World)
+	})
+}
+
 // processTick executes one clock cycle (called every 50ms when not paused)
 // Implements phase transition logic for Gold→GoldComplete→Decay→Normal cycle
 func (cs *ClockScheduler) processTick() {
@@ -275,12 +283,11 @@ func (cs *ClockScheduler) processTick() {
 		return
 	}
 
-	// Dispatch all pending events BEFORE system updates
-	// This ensures events are processed in the same tick they arrive
-	cs.eventRouter.DispatchAll(cs.ctx.World)
-
-	// Update all ECS systems
-	cs.ctx.World.Update(cs.tickInterval)
+	// Dispatch + Update under single lock to serialize with DispatchEventsImmediately
+	cs.ctx.World.RunSafe(func() {
+		cs.eventRouter.DispatchAll(cs.ctx.World)
+		cs.ctx.World.UpdateLocked(cs.tickInterval)
+	})
 
 	// Update ping grid timer
 	if cs.ctx.UpdatePingGridTimerAtomic(cs.tickInterval.Seconds()) {

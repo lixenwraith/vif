@@ -392,15 +392,3 @@ func (g *GameContext) PushEvent(eventType EventType, payload any, now time.Time)
 	}
 	g.eventQueue.Push(event)
 }
-
-// ConsumeEvents returns all pending events and clears the queue
-// This is designed for single-consumer use (the game loop)
-func (g *GameContext) ConsumeEvents() []GameEvent {
-	return g.eventQueue.Consume()
-}
-
-// PeekEvents returns all pending events without removing them
-// Useful for read-only inspection
-func (g *GameContext) PeekEvents() []GameEvent {
-	return g.eventQueue.Peek()
-}
