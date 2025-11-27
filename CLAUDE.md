@@ -60,6 +60,8 @@ InputHandler ──push──▶ EventQueue ──consume──▶ EventRouter �
 | `ActiveNuggetID` | `atomic.Uint64` | Current nugget entity ID |
 | `BoostEnabled` | `atomic.Bool` | Speed boost active |
 | `FrameNumber` | `atomic.Int64` | Current frame |
+| `GameTicks` | `atomic.Uint64` | Total clock ticks since start |
+| `CurrentAPM` | `atomic.Uint64` | Actions Per Minute (calculated) |
 
 ---
 
@@ -176,7 +178,9 @@ h.ctx.PushEvent(engine.EventDirectionalCleanerRequest, payload, h.ctx.PausableCl
 
 ---
 
-## TESTING CHECKLIST
+## VERIFICATION CHECKLIST
+
+Trace the flow to confirm.
 
 ### Event Flow
 - [ ] Typing in Insert mode triggers `EventCharacterTyped`
@@ -220,4 +224,3 @@ systems/
 modes/
 ├── input.go            # InputHandler (event producer, no system deps)
 └── ...
-```
