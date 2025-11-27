@@ -111,6 +111,7 @@ func main() {
 
 	clockScheduler.SetSystems(goldSystem, decaySystem)
 	clockScheduler.RegisterEventHandler(cleanerSystem)
+	clockScheduler.RegisterEventHandler(energySystem)
 	clockScheduler.Start()
 	defer clockScheduler.Stop()
 

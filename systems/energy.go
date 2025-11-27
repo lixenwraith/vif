@@ -474,3 +474,26 @@ func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity engi
 		s.goldSequenceSystem.CompleteGold(world)
 	}
 }
+
+// EventTypes returns the event types EnergySystem handles
+func (s *EnergySystem) EventTypes() []engine.EventType {
+	return []engine.EventType{
+		engine.EventCharacterTyped,
+		engine.EventEnergyTransaction,
+	}
+}
+
+// HandleEvent processes input-related events from the router
+func (s *EnergySystem) HandleEvent(world *engine.World, event engine.GameEvent) {
+	switch event.Type {
+	case engine.EventCharacterTyped:
+		if payload, ok := event.Payload.(*engine.CharacterTypedPayload); ok {
+			s.HandleCharacterTyping(world, payload.X, payload.Y, payload.Char)
+		}
+
+	case engine.EventEnergyTransaction:
+		if payload, ok := event.Payload.(*engine.EnergyTransactionPayload); ok {
+			s.ctx.State.AddEnergy(payload.Amount)
+		}
+	}
+}
