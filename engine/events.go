@@ -104,6 +104,37 @@ const (
 	//   - EventCleanerRequest pushed if heat was already at max
 	//   - GoldActive flag cleared in GameState
 	EventGoldComplete
+
+	// EventCharacterTyped signals that a character was typed in insert mode.
+	//
+	// Triggered When:
+	//   - User presses a printable key in Insert mode
+	//   - InputHandler captures the keystroke and cursor position
+	//
+	// Consumed By:
+	//   - EnergySystem via EventRouter
+	//   - Processes character match, scoring, cursor movement, effects
+	//
+	// Payload: *CharacterTypedPayload containing typed rune and position
+	//
+	// Latency:
+	//   - Event pushed immediately on keypress
+	//   - Processed on next game tick (max 50ms delay)
+	//   - Visual feedback (cursor move, entity destroy) occurs after processing
+	EventCharacterTyped
+
+	// EventEnergyTransaction signals an energy change request.
+	//
+	// Triggered When:
+	//   - Nugget jump costs energy (-10)
+	//   - Future: power-ups, penalties, etc.
+	//
+	// Consumed By:
+	//   - EnergySystem via EventRouter
+	//   - Applies atomic energy delta
+	//
+	// Payload: *EnergyTransactionPayload containing amount
+	EventEnergyTransaction
 )
 
 // String returns the name of the event type for debugging
@@ -119,6 +150,10 @@ func (e EventType) String() string {
 		return "GoldSpawned"
 	case EventGoldComplete:
 		return "GoldComplete"
+	case EventCharacterTyped:
+		return "CharacterTyped"
+	case EventEnergyTransaction:
+		return "EnergyTransaction"
 	default:
 		return "Unknown"
 	}
@@ -186,6 +221,24 @@ type EventQueue struct {
 	published [constants.EventQueueSize]atomic.Bool // Published flags (true = event is fully written and ready to read)
 	head      atomic.Uint64                         // Read index (next position to read from)
 	tail      atomic.Uint64                         // Write index (next position to write to)
+}
+
+// CharacterTypedPayload contains data for EventCharacterTyped
+//
+// Fields capture the state at the moment of keypress
+// EnergySystem uses X,Y to find the target entity
+type CharacterTypedPayload struct {
+	Char rune // The character typed by the user
+	X    int  // Cursor X position when typed
+	Y    int  // Cursor Y position when typed
+}
+
+// EnergyTransactionPayload contains data for EventEnergyTransaction
+//
+// Positive Amount = gain, Negative Amount = cost
+type EnergyTransactionPayload struct {
+	Amount int    // Energy delta (can be negative)
+	Source string // Debug identifier (e.g., "NuggetJump", "Penalty")
 }
 
 // NewEventQueue creates a new event queue with empty state.

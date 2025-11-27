@@ -73,6 +73,9 @@ type ClockScheduler struct {
 	tickCount atomic.Uint64
 	mu        sync.RWMutex
 
+	// Event routing
+	eventRouter *EventRouter
+
 	// System references needed for triggering transitions
 	// These will be set via SetSystems() after scheduler creation
 	goldSystem  GoldSystemInterface
@@ -98,6 +101,7 @@ func NewClockScheduler(ctx *GameContext, tickInterval time.Duration, frameReady 
 		timeProvider:     ctx.PausableClock,
 		tickInterval:     tickInterval,
 		lastGameTickTime: ctx.PausableClock.Now(),
+		eventRouter:      NewEventRouter(ctx.eventQueue),
 		frameReady:       frameReady,
 		updateDone:       updateDone,
 		tickCount:        atomic.Uint64{},
@@ -105,6 +109,12 @@ func NewClockScheduler(ctx *GameContext, tickInterval time.Duration, frameReady 
 	}
 
 	return cs, updateDone
+}
+
+// RegisterEventHandler adds an event handler to the router
+// Must be called before Start()
+func (cs *ClockScheduler) RegisterEventHandler(handler EventHandler) {
+	cs.eventRouter.Register(handler)
 }
 
 // SetSystems sets the system references needed for phase transitions
@@ -264,6 +274,10 @@ func (cs *ClockScheduler) processTick() {
 	if cs.ctx.IsPaused.Load() {
 		return
 	}
+
+	// Dispatch all pending events BEFORE system updates
+	// This ensures events are processed in the same tick they arrive
+	cs.eventRouter.DispatchAll(cs.ctx.World)
 
 	// Update all ECS systems
 	cs.ctx.World.Update(cs.tickInterval)

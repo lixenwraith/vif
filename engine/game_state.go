@@ -70,6 +70,9 @@ type GameState struct {
 	GoldStartTime   time.Time // When gold spawned
 	GoldTimeoutTime time.Time // When gold will timeout
 
+	// Stores the Entity ID of the currently active nugget, or 0 if none
+	ActiveNuggetID atomic.Uint64
+
 	// Decay Timer State
 	// Manages countdown between gold completion and decay animation trigger
 	DecayTimerActive bool      // Whether decay timer has been started
@@ -628,6 +631,24 @@ func (gs *GameState) ReadGoldState(now time.Time) GoldSnapshot {
 		Elapsed:     elapsed,
 		Remaining:   remaining,
 	}
+}
+
+// ===== ACTIVE NUGGET ACCESSORS (atomic) =====
+
+// GetActiveNuggetID returns the entity ID of the active nugget (0 if none)
+func (gs *GameState) GetActiveNuggetID() uint64 {
+	return gs.ActiveNuggetID.Load()
+}
+
+// SetActiveNuggetID sets the active nugget entity ID
+func (gs *GameState) SetActiveNuggetID(id uint64) {
+	gs.ActiveNuggetID.Store(id)
+}
+
+// ClearActiveNuggetID atomically clears the active nugget if it matches expected
+// Returns true if cleared, false if already changed.
+func (gs *GameState) ClearActiveNuggetID(expected uint64) bool {
+	return gs.ActiveNuggetID.CompareAndSwap(expected, 0)
 }
 
 // ===== DECAY TIMER STATE ACCESSORS (mutex protected) =====

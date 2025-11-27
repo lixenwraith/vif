@@ -2,150 +2,193 @@
 
 ## PROJECT CONTEXT
 vi-fighter is a terminal-based typing game in Go using a compile-time Generics-based ECS (Go 1.24+). The architecture combines real-time lock-free updates (atomics) for input/rendering with a discrete clock-tick system for game logic.
+
 **Go Version:** 1.24+
 
-## CURRENT TASK: Directional Cleaners & Input Remapping
+## ARCHITECTURE OVERVIEW
 
-### Overview
-Expand cleaner system to support 4-directional spawning from cursor position. Remap Enter/ESC keys in Normal mode.
+### Event-Driven Communication
+The game uses an **EventRouter** pattern for decoupled system communication:
+```
+InputHandler ──push──▶ EventQueue ──consume──▶ EventRouter ──dispatch──▶ Systems
+                                                    │
+                                                    ├──▶ EnergySystem (typing, transactions)
+                                                    └──▶ CleanerSystem (spawn requests)
+```
 
-### Design Decisions
+**Key Principle**: Systems do NOT call each other directly. They communicate via:
+1. **Events** (async, via EventQueue/EventRouter)
+2. **GameState** (shared atomics for cross-system state)
+3. **World queries** (read component data)
 
-| Aspect | Decision |
-|--------|----------|
-| Direction Detection | Implicit via velocity (VelocityX==0 → vertical) |
-| Position Lock | Row/column locked at spawn time in component |
-| Event Payload | `DirectionalCleanerPayload{OriginX, OriginY int}` |
-| Trigger Sources | Nugget at max heat, Enter key at heat≥10 |
-| Animation Duration | Same as existing cleaner (`CleanerAnimationDuration`) |
+### System Execution Order
+```
+1. ClockScheduler.processTick()
+   ├── EventRouter.DispatchAll()     # Events processed FIRST
+   │   ├── EnergySystem.HandleEvent()
+   │   └── CleanerSystem.HandleEvent()
+   └── World.Update()                # Systems run in priority order
+       ├── BoostSystem      (5)
+       ├── EnergySystem     (10)     # Time-based logic only
+       ├── SpawnSystem      (15)
+       ├── NuggetSystem     (18)
+       ├── GoldSystem       (20)
+       ├── CleanerSystem    (22)     # Physics only, no event consumption
+       ├── DrainSystem      (25)
+       ├── DecaySystem      (30)
+       └── FlashSystem      (35)
+```
 
-### Files to Modify
+### Event Types
 
-| File | Action | Description |
-|------|--------|-------------|
-| `engine/events.go` | **MODIFY** | Add `EventDirectionalCleanerRequest` + payload struct |
-| `systems/cleaner.go` | **MODIFY** | Add `spawnDirectionalCleaners()`, vertical collision, lifecycle |
-| `render/terminal.go` | **MODIFY** | Fix `drawCleaners()` for vertical trail rendering |
-| `modes/input.go` | **MODIFY** | Remap Enter→cleaners, ESC→ping |
-| `systems/energy.go` | **MODIFY** | Nugget max heat→directional cleaners |
+| Event | Producer | Consumer | Payload |
+|-------|----------|----------|---------|
+| `EventCharacterTyped` | InputHandler | EnergySystem | `*CharacterTypedPayload{Char, X, Y}` |
+| `EventEnergyTransaction` | InputHandler | EnergySystem | `*EnergyTransactionPayload{Amount, Source}` |
+| `EventCleanerRequest` | EnergySystem | CleanerSystem | `nil` |
+| `EventDirectionalCleanerRequest` | InputHandler, EnergySystem | CleanerSystem | `*DirectionalCleanerPayload{OriginX, OriginY}` |
+| `EventCleanerFinished` | CleanerSystem | (observers) | `nil` |
+| `EventGoldSpawned` | GoldSystem | (observers) | `nil` |
+| `EventGoldComplete` | EnergySystem | (observers) | `nil` |
+
+### Shared State (GameState)
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `Energy` | `atomic.Int64` | Player score |
+| `Heat` | `atomic.Int64` | Combo meter (0-100) |
+| `ActiveNuggetID` | `atomic.Uint64` | Current nugget entity ID |
+| `BoostEnabled` | `atomic.Bool` | Speed boost active |
+| `FrameNumber` | `atomic.Int64` | Current frame |
 
 ---
 
 ## MODIFICATION PATTERNS
 
-### Event Payload Pattern
+### Adding a New Event Type
+
+1. **Define in `engine/events.go`**:
 ```go
-// In engine/events.go
-type DirectionalCleanerPayload struct {
-    OriginX int
-    OriginY int
+const (
+    // ... existing ...
+    EventMyNewEvent
+)
+
+type MyNewEventPayload struct {
+    Field1 int
+    Field2 string
 }
 
-// Push event with payload
-payload := &DirectionalCleanerPayload{OriginX: cursorX, OriginY: cursorY}
-ctx.PushEvent(engine.EventDirectionalCleanerRequest, payload, now)
+// Update String() method
 ```
 
-### Directional Cleaner Spawn Pattern
+2. **Push from producer**:
 ```go
-// 4 cleaners: right, left, down, up from origin
-// Each locks its row (horizontal) or column (vertical) at spawn
-// VelocityX!=0 → horizontal (row locked)
-// VelocityY!=0 → vertical (column locked)
+payload := &engine.MyNewEventPayload{Field1: 42}
+ctx.PushEvent(engine.EventMyNewEvent, payload, ctx.PausableClock.Now())
 ```
 
-### Vertical Collision Sweep
+3. **Consume in system** (implement EventHandler):
 ```go
-// Detect direction from velocity
-if c.VelocityY != 0 {
-    // Vertical: sweep Y, fixed X
-    startY := int(math.Min(prevPreciseY, c.PreciseY))
-    endY := int(math.Max(prevPreciseY, c.PreciseY))
-    // Clamp and iterate Y
-} else {
-    // Horizontal: sweep X, fixed Y (existing logic)
+func (s *MySystem) EventTypes() []engine.EventType {
+    return []engine.EventType{engine.EventMyNewEvent}
 }
-```
 
-### Trail Rendering (Both Directions)
-```go
-// Use point.Y instead of cleaner.GridY for screen position
-for i, point := range trailCopy {
-    if point.X < 0 || point.X >= r.gameWidth || point.Y < 0 || point.Y >= r.gameHeight {
-        continue
+func (s *MySystem) HandleEvent(world *engine.World, event engine.GameEvent) {
+    if payload, ok := event.Payload.(*engine.MyNewEventPayload); ok {
+        // Process
     }
-    screenX := r.gameX + point.X
-    screenY := r.gameY + point.Y  // NOT cleaner.GridY
-    r.screen.SetContent(screenX, screenY, cleaner.Char, nil, style)
 }
 ```
 
-### Lifecycle Destruction (Both Directions)
+4. **Register with router** (in `main.go`):
 ```go
-shouldDestroy := false
-// Horizontal
-if c.VelocityX > 0 && c.PreciseX >= c.TargetX { shouldDestroy = true }
-if c.VelocityX < 0 && c.PreciseX <= c.TargetX { shouldDestroy = true }
-// Vertical
-if c.VelocityY > 0 && c.PreciseY >= c.TargetY { shouldDestroy = true }
-if c.VelocityY < 0 && c.PreciseY <= c.TargetY { shouldDestroy = true }
+clockScheduler.RegisterEventHandler(mySystem)
+```
+
+### Reading Cross-System State
+```go
+// From InputHandler or any non-system code:
+nuggetID := engine.Entity(h.ctx.State.GetActiveNuggetID())
+if nuggetID != 0 {
+    pos, ok := h.ctx.World.Positions.Get(nuggetID)
+}
+
+// From a System:
+energy := s.ctx.State.GetEnergy()
+heat := s.ctx.State.GetHeat()
+```
+
+### Pushing Events from InputHandler
+```go
+// Typing event
+payload := &engine.CharacterTypedPayload{Char: r, X: x, Y: y}
+h.ctx.PushEvent(engine.EventCharacterTyped, payload, h.ctx.PausableClock.Now())
+
+// Energy cost
+payload := &engine.EnergyTransactionPayload{Amount: -10, Source: "Jump"}
+h.ctx.PushEvent(engine.EventEnergyTransaction, payload, h.ctx.PausableClock.Now())
+
+// Directional cleaners
+payload := &engine.DirectionalCleanerPayload{OriginX: x, OriginY: y}
+h.ctx.PushEvent(engine.EventDirectionalCleanerRequest, payload, h.ctx.PausableClock.Now())
 ```
 
 ---
 
-## ARCHITECTURE REFERENCE
+## DECOUPLING RULES
 
-### Resource Access Pattern
-```go
-timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
-```
+### InputHandler Independence
+- **NEVER** hold System references (no `*EnergySystem`, `*NuggetSystem`, etc.)
+- **NEVER** call System methods directly
+- **DO** read from `GameState` for shared state
+- **DO** query `World` for entity/component data
+- **DO** push events for actions that affect game state
 
-### Event Types (Updated)
-```go
-EventCleanerRequest            // Horizontal sweep on red rows
-EventDirectionalCleanerRequest // 4-way from cursor position
-EventCleanerFinished
-```
+### System Independence
+- **NEVER** call other System methods directly (except via DI for tightly coupled logic like GoldSystem↔EnergySystem)
+- **DO** implement `EventHandler` interface for event consumption
+- **DO** push events to trigger other systems
+- **DO** read/write `GameState` for shared atomics
 
-### System Priorities
-```
-PriorityBoost   = 5
-PriorityEnergy  = 10
-PrioritySpawn   = 15
-PriorityNugget  = 18
-PriorityGold    = 20
-PriorityCleaner = 22  // Handles both cleaner types
-PriorityDrain   = 25
-PriorityDecay   = 30
-PriorityFlash   = 35
-```
+### Event vs Direct Call Decision
 
-### Heat Constants
-```go
-MaxHeat            = 100  // Full heat bar
-NuggetHeatIncrease = 10   // Per nugget
-// Enter key costs 10 heat (10%)
-```
+| Scenario | Use Event | Use Direct |
+|----------|-----------|------------|
+| Cross-system trigger | ✅ | ❌ |
+| Atomic state change | ❌ | ✅ (`GameState`) |
+| Input → System | ✅ | ❌ |
+| System → System (same tick) | ✅ | ❌ |
+| Reading component data | ❌ | ✅ (`World.Query()`) |
+
+---
+
+## CURRENT TASK CONTEXT
+
+### Event Router Migration (Completed)
+- CleanerSystem uses EventRouter for spawn events
+- EnergySystem uses EventRouter for typing/transaction events
+- InputHandler pushes events, no system dependencies
+
+### Pending Cleanup
+- Evaluate DrainSystem/DecaySystem nuggetSystem references
+- Consider future event types for gold sequence completion
 
 ---
 
 ## TESTING CHECKLIST
 
-### Directional Cleaners
-- [ ] Nugget collection at max heat spawns 4 cleaners from cursor
-- [ ] Cleaners maintain locked row/column as cursor moves
-- [ ] Vertical cleaners destroy entities in column
-- [ ] Horizontal cleaners destroy entities in row
-- [ ] Trail renders correctly for vertical movement
-- [ ] All 4 cleaners animate simultaneously
-- [ ] Cleaners despawn after clearing screen edge + trail
+### Event Flow
+- [ ] Typing in Insert mode triggers `EventCharacterTyped`
+- [ ] Tab jump triggers `EventEnergyTransaction`
+- [ ] Enter at heat≥10 triggers `EventDirectionalCleanerRequest`
+- [ ] Gold completion at max heat triggers `EventCleanerRequest`
+- [ ] Nugget at max heat triggers `EventDirectionalCleanerRequest`
 
-### Input Changes
-- [ ] Enter at heat<10 does nothing
-- [ ] Enter at heat≥10 reduces heat by 10, spawns cleaners
-- [ ] ESC in Normal mode activates ping grid
-- [ ] ESC in Insert/Search/Command unchanged
+### State Consistency
+- [ ] `GameState.ActiveNuggetID` updates on nugget spawn/clear
+- [ ] Energy deduction visible after ~50ms (event processing delay)
+- [ ] Heat updates immediately on typing
 
 ---
 
@@ -155,4 +198,26 @@ export GOPROXY="https://goproxy.io,direct"
 apt-get install -y libasound2-dev
 go mod tidy
 go build ./...
+```
+
+## FILE STRUCTURE
+```
+engine/
+├── ecs.go              # Entity, System interface
+├── events.go           # EventType, payloads, EventQueue
+├── event_router.go     # EventHandler interface, EventRouter
+├── game_context.go     # GameContext (World, State, queues)
+├── game_state.go       # GameState (atomics, snapshots)
+├── clock_scheduler.go  # ClockScheduler (tick loop, event dispatch)
+└── ...
+
+systems/
+├── energy.go           # EnergySystem (typing logic, EventHandler)
+├── cleaner.go          # CleanerSystem (spawn/physics, EventHandler)
+├── nugget.go           # NuggetSystem (spawn logic)
+└── ...
+
+modes/
+├── input.go            # InputHandler (event producer, no system deps)
+└── ...
 ```
