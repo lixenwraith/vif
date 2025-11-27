@@ -1,141 +1,95 @@
-## Updated CLAUDE.md
-
-```markdown
 # vi-fighter Development Guide for Claude Code
 
 ## PROJECT CONTEXT
 vi-fighter is a terminal-based typing game in Go using a compile-time Generics-based ECS (Go 1.24+). The architecture combines real-time lock-free updates (atomics) for input/rendering with a discrete clock-tick system for game logic.
 **Go Version:** 1.24+
 
-## CURRENT TASK: Flash System Expansion
+## CURRENT TASK: Directional Cleaners & Input Remapping
 
 ### Overview
-Expand the destruction flash effect (currently only on cleaner sweep) to all entity destruction events:
-- Drain collisions (sequences, nuggets, falling decay, gold)
-- Decay terminal destruction (Red at LevelDark)
-- Nugget collisions from falling decay
+Expand cleaner system to support 4-directional spawning from cursor position. Remap Enter/ESC keys in Normal mode.
 
 ### Design Decisions
 
 | Aspect | Decision |
 |--------|----------|
-| Flash Duration | 300ms (increased from 150ms for visibility) |
-| Centralization | New FlashSystem (Priority 35) handles cleanup |
-| Spawn Helper | Package-level `SpawnDestructionFlash` in systems package |
-| CleanerSystem | Delegates to helper; no longer manages flash lifecycle |
+| Direction Detection | Implicit via velocity (VelocityX==0 → vertical) |
+| Position Lock | Row/column locked at spawn time in component |
+| Event Payload | `DirectionalCleanerPayload{OriginX, OriginY int}` |
+| Trigger Sources | Nugget at max heat, Enter key at heat≥10 |
+| Animation Duration | Same as existing cleaner (`CleanerAnimationDuration`) |
 
 ### Files to Modify
 
 | File | Action | Description |
 |------|--------|-------------|
-| `constants/cleaners.go` | **MODIFY** | Add `DestructionFlashDuration = 300` |
-| `constants/game.go` | **MODIFY** | Add `PriorityFlash = 35` |
-| `systems/flash.go` | **NEW** | FlashSystem + SpawnDestructionFlash helper |
-| `cmd/vi-fighter/main.go` | **MODIFY** | Register FlashSystem |
-| `systems/cleaner.go` | **MODIFY** | Use helper, remove cleanup |
-| `systems/decay.go` | **MODIFY** | Add flash on terminal decay + nugget hit |
-| `systems/drain.go` | **MODIFY** | Add flash on all collision types |
-
----
-
-## NEW FILE: systems/flash.go
-
-```go
-package systems
-
-import (
-	"time"
-
-	"github.com/lixenwraith/vi-fighter/components"
-	"github.com/lixenwraith/vi-fighter/constants"
-	"github.com/lixenwraith/vi-fighter/engine"
-)
-
-// FlashSystem manages the lifecycle of visual flash effects
-type FlashSystem struct {
-	ctx *engine.GameContext
-}
-
-func NewFlashSystem(ctx *engine.GameContext) *FlashSystem {
-	return &FlashSystem{ctx: ctx}
-}
-
-func (s *FlashSystem) Priority() int {
-	return constants.PriorityFlash
-}
-
-func (s *FlashSystem) Update(world *engine.World, dt time.Duration) {
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-	now := timeRes.GameTime
-
-	entities := world.Flashes.All()
-	for _, entity := range entities {
-		flash, ok := world.Flashes.Get(entity)
-		if !ok {
-			continue
-		}
-
-		if now.Sub(flash.StartTime).Milliseconds() >= int64(flash.Duration) {
-			world.DestroyEntity(entity)
-		}
-	}
-}
-
-// SpawnDestructionFlash creates a flash effect at the given position.
-// Call from any system when destroying an entity with visual feedback.
-func SpawnDestructionFlash(world *engine.World, x, y int, char rune, now time.Time) {
-	flash := components.FlashComponent{
-		X:         x,
-		Y:         y,
-		Char:      char,
-		StartTime: now,
-		Duration:  constants.DestructionFlashDuration,
-	}
-
-	entity := world.CreateEntity()
-	world.Flashes.Add(entity, flash)
-}
-```
+| `engine/events.go` | **MODIFY** | Add `EventDirectionalCleanerRequest` + payload struct |
+| `systems/cleaner.go` | **MODIFY** | Add `spawnDirectionalCleaners()`, vertical collision, lifecycle |
+| `render/terminal.go` | **MODIFY** | Fix `drawCleaners()` for vertical trail rendering |
+| `modes/input.go` | **MODIFY** | Remap Enter→cleaners, ESC→ping |
+| `systems/energy.go` | **MODIFY** | Nugget max heat→directional cleaners |
 
 ---
 
 ## MODIFICATION PATTERNS
 
-### Spawn Flash Before Destroy
+### Event Payload Pattern
 ```go
-// Pattern: get position/char before destruction
-if pos, ok := world.Positions.Get(entity); ok {
-    if char, ok := world.Characters.Get(entity); ok {
-        timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-        SpawnDestructionFlash(world, pos.X, pos.Y, char.Rune, timeRes.GameTime)
+// In engine/events.go
+type DirectionalCleanerPayload struct {
+    OriginX int
+    OriginY int
+}
+
+// Push event with payload
+payload := &DirectionalCleanerPayload{OriginX: cursorX, OriginY: cursorY}
+ctx.PushEvent(engine.EventDirectionalCleanerRequest, payload, now)
+```
+
+### Directional Cleaner Spawn Pattern
+```go
+// 4 cleaners: right, left, down, up from origin
+// Each locks its row (horizontal) or column (vertical) at spawn
+// VelocityX!=0 → horizontal (row locked)
+// VelocityY!=0 → vertical (column locked)
+```
+
+### Vertical Collision Sweep
+```go
+// Detect direction from velocity
+if c.VelocityY != 0 {
+    // Vertical: sweep Y, fixed X
+    startY := int(math.Min(prevPreciseY, c.PreciseY))
+    endY := int(math.Max(prevPreciseY, c.PreciseY))
+    // Clamp and iterate Y
+} else {
+    // Horizontal: sweep X, fixed Y (existing logic)
+}
+```
+
+### Trail Rendering (Both Directions)
+```go
+// Use point.Y instead of cleaner.GridY for screen position
+for i, point := range trailCopy {
+    if point.X < 0 || point.X >= r.gameWidth || point.Y < 0 || point.Y >= r.gameHeight {
+        continue
     }
+    screenX := r.gameX + point.X
+    screenY := r.gameY + point.Y  // NOT cleaner.GridY
+    r.screen.SetContent(screenX, screenY, cleaner.Char, nil, style)
 }
-world.DestroyEntity(entity)
 ```
 
-### Spawn Flash for FallingDecay
+### Lifecycle Destruction (Both Directions)
 ```go
-// FallingDecay has position in component, not PositionStore
-if decay, ok := world.FallingDecays.Get(entity); ok {
-    timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-    SpawnDestructionFlash(world, decay.Column, int(decay.YPosition), decay.Char, timeRes.GameTime)
-}
+shouldDestroy := false
+// Horizontal
+if c.VelocityX > 0 && c.PreciseX >= c.TargetX { shouldDestroy = true }
+if c.VelocityX < 0 && c.PreciseX <= c.TargetX { shouldDestroy = true }
+// Vertical
+if c.VelocityY > 0 && c.PreciseY >= c.TargetY { shouldDestroy = true }
+if c.VelocityY < 0 && c.PreciseY <= c.TargetY { shouldDestroy = true }
 ```
-
----
-
-## VERIFICATION
-
-```bash
-go build ./...
-```
-
-Visual test:
-1. Start game, let drain spawn and collide with sequences → flash
-2. Let decay animation destroy Red/Dark characters → flash
-3. Collect nugget with drain → flash
-4. Let falling decay hit nugget → flash
-5. Drain collides with gold sequence → all characters flash
 
 ---
 
@@ -144,7 +98,14 @@ Visual test:
 ### Resource Access Pattern
 ```go
 timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-now := timeRes.GameTime
+config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+```
+
+### Event Types (Updated)
+```go
+EventCleanerRequest            // Horizontal sweep on red rows
+EventDirectionalCleanerRequest // 4-way from cursor position
+EventCleanerFinished
 ```
 
 ### System Priorities
@@ -154,44 +115,44 @@ PriorityEnergy  = 10
 PrioritySpawn   = 15
 PriorityNugget  = 18
 PriorityGold    = 20
-PriorityCleaner = 22
+PriorityCleaner = 22  // Handles both cleaner types
 PriorityDrain   = 25
 PriorityDecay   = 30
-PriorityFlash   = 35  // NEW - runs last to clean up expired flashes
+PriorityFlash   = 35
+```
+
+### Heat Constants
+```go
+MaxHeat            = 100  // Full heat bar
+NuggetHeatIncrease = 10   // Per nugget
+// Enter key costs 10 heat (10%)
 ```
 
 ---
 
-## TESTING & TROUBLESHOOTING
+## TESTING CHECKLIST
 
-### Environment Setup
+### Directional Cleaners
+- [ ] Nugget collection at max heat spawns 4 cleaners from cursor
+- [ ] Cleaners maintain locked row/column as cursor moves
+- [ ] Vertical cleaners destroy entities in column
+- [ ] Horizontal cleaners destroy entities in row
+- [ ] Trail renders correctly for vertical movement
+- [ ] All 4 cleaners animate simultaneously
+- [ ] Cleaners despawn after clearing screen edge + trail
+
+### Input Changes
+- [ ] Enter at heat<10 does nothing
+- [ ] Enter at heat≥10 reduces heat by 10, spawns cleaners
+- [ ] ESC in Normal mode activates ping grid
+- [ ] ESC in Insert/Search/Command unchanged
+
+---
+
+## ENVIRONMENT
 ```bash
 export GOPROXY="https://goproxy.io,direct"
 apt-get install -y libasound2-dev
 go mod tidy
-```
-
-### Build Check
-```bash
 go build ./...
-```
-
----
-
-## FILE STRUCTURE
-
-```
-vi-fighter/
-├── components/
-│   └── flash.go          # FlashComponent (existing)
-├── constants/
-│   ├── cleaners.go       # MODIFY: add DestructionFlashDuration
-│   └── game.go           # MODIFY: add PriorityFlash
-├── systems/
-│   ├── flash.go          # NEW: FlashSystem + SpawnDestructionFlash
-│   ├── cleaner.go        # MODIFY: use helper, remove cleanup
-│   ├── decay.go          # MODIFY: add flash spawning
-│   └── drain.go          # MODIFY: add flash spawning
-└── cmd/vi-fighter/
-    └── main.go           # MODIFY: register FlashSystem
 ```
