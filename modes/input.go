@@ -7,7 +7,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
-	"github.com/lixenwraith/vi-fighter/systems"
 )
 
 // TODO: this file is becoming a god object; move to capabilities or deprecate it
@@ -15,8 +14,7 @@ import (
 // TODO: use events to remove these dependency injections and decouple
 // InputHandler processes user input events
 type InputHandler struct {
-	ctx          *engine.GameContext
-	nuggetSystem *systems.NuggetSystem
+	ctx *engine.GameContext
 }
 
 // NewInputHandler creates a new input handler
@@ -24,11 +22,6 @@ func NewInputHandler(ctx *engine.GameContext) *InputHandler {
 	return &InputHandler{
 		ctx: ctx,
 	}
-}
-
-// SetNuggetSystem sets the nugget system reference for Tab jump functionality
-func (h *InputHandler) SetNuggetSystem(nuggetSystem *systems.NuggetSystem) {
-	h.nuggetSystem = nuggetSystem
 }
 
 // HandleEvent processes a tcell event and returns false if the game should exit
@@ -166,32 +159,45 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 		return true
 	case tcell.KeyTab:
 		// Tab: Jump to nugget if energy >= 10
-		if h.nuggetSystem != nil {
-			energy := h.ctx.State.GetEnergy()
-			if energy >= 10 {
-				// Get nugget position
-				x, y := h.nuggetSystem.JumpToNugget(h.ctx.World)
-				if x >= 0 && y >= 0 {
-					// Deduct 10 from energy
-					h.ctx.State.AddEnergy(-10)
-					// Update cursor position in ECS
-					h.ctx.World.Positions.Add(h.ctx.CursorEntity, components.PositionComponent{
-						X: x,
-						Y: y,
-					})
+		energy := h.ctx.State.GetEnergy()
+		if energy < 10 {
+			return true
+		}
 
-					// Play bell sound for nugget collection
-					if h.ctx.AudioEngine != nil {
-						cmd := audio.AudioCommand{
-							Type:       audio.SoundBell,
-							Priority:   1,
-							Generation: uint64(h.ctx.State.GetFrameNumber()),
-							Timestamp:  h.ctx.PausableClock.Now(),
-						}
-						h.ctx.AudioEngine.SendState(cmd)
-					}
-				}
+		// Get active nugget from centralized state
+		nuggetID := engine.Entity(h.ctx.State.GetActiveNuggetID())
+		if nuggetID == 0 {
+			return true
+		}
+
+		// Query nugget position from World
+		nuggetPos, ok := h.ctx.World.Positions.Get(nuggetID)
+		if !ok {
+			return true
+		}
+
+		// Move cursor to nugget position
+		h.ctx.World.Positions.Add(h.ctx.CursorEntity, components.PositionComponent{
+			X: nuggetPos.X,
+			Y: nuggetPos.Y,
+		})
+
+		// Deduct energy via event
+		payload := &engine.EnergyTransactionPayload{
+			Amount: -10,
+			Source: "NuggetJump",
+		}
+		h.ctx.PushEvent(engine.EventEnergyTransaction, payload, h.ctx.PausableClock.Now())
+
+		// Play bell sound
+		if h.ctx.AudioEngine != nil {
+			cmd := audio.AudioCommand{
+				Type:       audio.SoundBell,
+				Priority:   1,
+				Generation: uint64(h.ctx.State.GetFrameNumber()),
+				Timestamp:  h.ctx.PausableClock.Now(),
 			}
+			h.ctx.AudioEngine.SendState(cmd)
 		}
 		return true
 	case tcell.KeyRune:
@@ -332,32 +338,48 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 		return true
 	case tcell.KeyTab:
 		// Tab: Jump to nugget if energy >= 10
-		if h.nuggetSystem != nil {
-			energy := h.ctx.State.GetEnergy()
-			if energy >= 10 {
-				// Get nugget position
-				x, y := h.nuggetSystem.JumpToNugget(h.ctx.World)
-				if x >= 0 && y >= 0 {
-					// Deduct 10 from energy
-					h.ctx.State.AddEnergy(-10)
-					// Update cursor position in ECS
-					h.ctx.World.Positions.Add(h.ctx.CursorEntity, components.PositionComponent{
-						X: x,
-						Y: y,
-					})
+		energy := h.ctx.State.GetEnergy()
+		if energy < 10 {
+			h.ctx.LastCommand = "" // Clear last command
+			return true
+		}
 
-					// Play bell sound for nugget collection
-					if h.ctx.AudioEngine != nil {
-						cmd := audio.AudioCommand{
-							Type:       audio.SoundBell,
-							Priority:   1,
-							Generation: uint64(h.ctx.State.GetFrameNumber()),
-							Timestamp:  h.ctx.PausableClock.Now(),
-						}
-						h.ctx.AudioEngine.SendState(cmd)
-					}
-				}
+		// Get active nugget from centralized state
+		nuggetID := engine.Entity(h.ctx.State.GetActiveNuggetID())
+		if nuggetID == 0 {
+			h.ctx.LastCommand = "" // Clear last command
+			return true
+		}
+
+		// Query nugget position from World
+		nuggetPos, ok := h.ctx.World.Positions.Get(nuggetID)
+		if !ok {
+			h.ctx.LastCommand = "" // Clear last command
+			return true
+		}
+
+		// Move cursor to nugget position
+		h.ctx.World.Positions.Add(h.ctx.CursorEntity, components.PositionComponent{
+			X: nuggetPos.X,
+			Y: nuggetPos.Y,
+		})
+
+		// Deduct energy via event
+		payload := &engine.EnergyTransactionPayload{
+			Amount: -10,
+			Source: "NuggetJump",
+		}
+		h.ctx.PushEvent(engine.EventEnergyTransaction, payload, h.ctx.PausableClock.Now())
+
+		// Play bell sound
+		if h.ctx.AudioEngine != nil {
+			cmd := audio.AudioCommand{
+				Type:       audio.SoundBell,
+				Priority:   1,
+				Generation: uint64(h.ctx.State.GetFrameNumber()),
+				Timestamp:  h.ctx.PausableClock.Now(),
 			}
+			h.ctx.AudioEngine.SendState(cmd)
 		}
 		h.ctx.LastCommand = "" // Clear last command
 		return true
