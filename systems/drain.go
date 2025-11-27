@@ -16,7 +16,6 @@ import (
 // Priority: 25 (after CleanerSystem:22, before DecaySystem:30)
 type DrainSystem struct {
 	ctx                *engine.GameContext
-	nuggetSystem       *NuggetSystem
 	materializeActive  bool
 	materializeTargetX int
 	materializeTargetY int
@@ -27,11 +26,6 @@ func NewDrainSystem(ctx *engine.GameContext) *DrainSystem {
 	return &DrainSystem{
 		ctx: ctx,
 	}
-}
-
-// SetNuggetSystem sets the nugget system reference for collision handling
-func (s *DrainSystem) SetNuggetSystem(nuggetSystem *NuggetSystem) {
-	s.nuggetSystem = nuggetSystem
 }
 
 // Priority returns the system's priority
@@ -553,11 +547,8 @@ func (s *DrainSystem) handleGoldSequenceCollision(world *engine.World, entity en
 
 // handleNuggetCollision destroys the nugget entity and clears active nugget state using generic stores
 func (s *DrainSystem) handleNuggetCollision(world *engine.World, entity engine.Entity) {
-
 	// Clear active nugget
-	if s.nuggetSystem != nil {
-		s.nuggetSystem.ClearActiveNuggetIfMatches(entity)
-	}
+	s.ctx.State.ClearActiveNuggetID(uint64(entity))
 
 	// Destroy the nugget entity
 	world.DestroyEntity(entity)

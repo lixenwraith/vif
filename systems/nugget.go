@@ -133,11 +133,6 @@ func (s *NuggetSystem) findValidPosition(world *engine.World) (int, int) {
 	return -1, -1
 }
 
-// GetActiveNugget returns the entity ID of the active nugget (0 if none)
-func (s *NuggetSystem) GetActiveNugget() uint64 {
-	return s.ctx.State.GetActiveNuggetID()
-}
-
 // ClearActiveNugget clears the active nugget reference (called when collected)
 // This uses unconditional Store(0) for backward compatibility
 func (s *NuggetSystem) ClearActiveNugget() {
@@ -168,22 +163,4 @@ func (s *NuggetSystem) GetSystemState() string {
 	}
 
 	return "Nugget[active, entityID=" + strconv.Itoa(int(activeNuggetEntity)) + "]"
-}
-
-// JumpToNugget returns the position of the active nugget, or (-1, -1) if no nugget exists using generic stores
-func (s *NuggetSystem) JumpToNugget(world *engine.World) (int, int) {
-	// Get active nugget entity ID
-	activeNuggetEntity := s.ctx.State.GetActiveNuggetID()
-	if activeNuggetEntity == 0 {
-		return -1, -1
-	}
-
-	// Get position component from entity
-	pos, ok := world.Positions.Get(engine.Entity(activeNuggetEntity))
-	if !ok {
-		// No position component (shouldn't happen, but handle gracefully)
-		return -1, -1
-	}
-
-	return pos.X, pos.Y
 }

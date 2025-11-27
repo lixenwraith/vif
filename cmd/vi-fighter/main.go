@@ -78,10 +78,7 @@ func main() {
 	// Wire up system references
 	energySystem.SetGoldSystem(goldSystem)
 	energySystem.SetSpawnSystem(spawnSystem)
-	energySystem.SetNuggetSystem(nuggetSystem)
 	decaySystem.SetSpawnSystem(spawnSystem)
-	decaySystem.SetNuggetSystem(nuggetSystem)
-	drainSystem.SetNuggetSystem(nuggetSystem)
 
 	// Create renderer (queries World directly for cleaner components)
 	renderer := render.NewTerminalRenderer(

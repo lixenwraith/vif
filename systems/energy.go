@@ -26,7 +26,6 @@ type EnergySystem struct {
 	errorCursorSet     bool
 	goldSequenceSystem *GoldSystem
 	spawnSystem        *SpawnSystem
-	nuggetSystem       *NuggetSystem
 }
 
 // NewEnergySystem creates a new energy system
@@ -52,11 +51,6 @@ func (s *EnergySystem) SetSpawnSystem(spawnSystem *SpawnSystem) {
 	s.spawnSystem = spawnSystem
 }
 
-// SetNuggetSystem sets the nugget system reference for nugget collection
-func (s *EnergySystem) SetNuggetSystem(nuggetSystem *NuggetSystem) {
-	s.nuggetSystem = nuggetSystem
-}
-
 // Update runs the energy system
 func (s *EnergySystem) Update(world *engine.World, dt time.Duration) {
 	// Fetch resources
@@ -78,8 +72,8 @@ func (s *EnergySystem) Update(world *engine.World, dt time.Duration) {
 	}
 }
 
-// HandleCharacterTyping processes a character typed in insert mode
-func (s *EnergySystem) HandleCharacterTyping(world *engine.World, cursorX, cursorY int, typedRune rune) {
+// handleCharacterTyping processes a character typed in insert mode
+func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, cursorY int, typedRune rune) {
 	// Fetch resources
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
@@ -131,7 +125,7 @@ func (s *EnergySystem) HandleCharacterTyping(world *engine.World, cursorX, curso
 	}
 
 	// Check if this is a nugget - handle before sequence logic
-	if world.Nuggets.Has(entity) && s.nuggetSystem != nil {
+	if world.Nuggets.Has(entity) {
 		// Handle nugget collection (requires matching character)
 		s.handleNuggetCollection(world, entity, char, typedRune)
 		return
@@ -368,7 +362,7 @@ func (s *EnergySystem) handleNuggetCollection(world *engine.World, entity engine
 
 	// Clear the active nugget reference to trigger respawn
 	// Use CAS to ensure we only clear if this is still the active nugget
-	s.nuggetSystem.ClearActiveNuggetIfMatches(entity)
+	s.ctx.State.ClearActiveNuggetID(uint64(entity))
 
 	// Move cursor right in ECS
 	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
@@ -488,7 +482,7 @@ func (s *EnergySystem) HandleEvent(world *engine.World, event engine.GameEvent) 
 	switch event.Type {
 	case engine.EventCharacterTyped:
 		if payload, ok := event.Payload.(*engine.CharacterTypedPayload); ok {
-			s.HandleCharacterTyping(world, payload.X, payload.Y, payload.Char)
+			s.handleCharacterTyping(world, payload.X, payload.Y, payload.Char)
 		}
 
 	case engine.EventEnergyTransaction:

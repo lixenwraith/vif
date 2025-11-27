@@ -18,7 +18,6 @@ type DecaySystem struct {
 	lastUpdate         time.Time
 	ctx                *engine.GameContext
 	spawnSystem        *SpawnSystem
-	nuggetSystem       *NuggetSystem
 	decayedThisFrame   map[engine.Entity]bool
 	processedGridCells map[int]bool // Key is flat index: (y * gameWidth) + x
 }
@@ -38,11 +37,6 @@ func NewDecaySystem(ctx *engine.GameContext) *DecaySystem {
 // SetSpawnSystem sets the spawn system reference for color counter updates
 func (s *DecaySystem) SetSpawnSystem(spawnSystem *SpawnSystem) {
 	s.spawnSystem = spawnSystem
-}
-
-// SetNuggetSystem sets the nugget system reference for respawn triggering
-func (s *DecaySystem) SetNuggetSystem(nuggetSystem *NuggetSystem) {
-	s.nuggetSystem = nuggetSystem
 }
 
 // Priority returns the system's priority
@@ -232,9 +226,7 @@ func (s *DecaySystem) updateFallingEntities(world *engine.World, dtSeconds float
 							SpawnDestructionFlash(world, col, row, char.Rune, timeRes.GameTime)
 						}
 						world.DestroyEntity(targetEntity)
-						if s.nuggetSystem != nil {
-							s.nuggetSystem.ClearActiveNuggetIfMatches(targetEntity)
-						}
+						s.ctx.State.ClearActiveNuggetID(uint64(targetEntity))
 					} else {
 						s.applyDecayToCharacter(world, targetEntity)
 					}
