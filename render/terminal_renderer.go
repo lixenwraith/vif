@@ -419,11 +419,6 @@ func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.
 		// Deep copy trail to avoid race conditions during rendering
 		trailCopy := make([]core.Point, len(cleaner.Trail))
 		copy(trailCopy, cleaner.Trail)
-		// Bounds check for cleaner row
-		if cleaner.GridY < 0 || cleaner.GridY >= r.gameHeight {
-			continue
-		}
-		screenY := r.gameY + cleaner.GridY
 
 		// Pre-calculate gradient length outside loop for performance
 		gradientLen := len(r.cleanerGradient)
@@ -432,12 +427,13 @@ func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.
 		// Iterate through the trail
 		// Index 0 is the head (brightest), last index is the tail (faintest)
 		for i, point := range trailCopy {
-			// Skip if out of bounds
-			if point.X < 0 || point.X >= r.gameWidth {
+			// Bounds check both X and Y
+			if point.X < 0 || point.X >= r.gameWidth || point.Y < 0 || point.Y >= r.gameHeight {
 				continue
 			}
 
 			screenX := r.gameX + point.X
+			screenY := r.gameY + point.Y
 
 			// Use pre-calculated gradient based on index (clamped to valid range)
 			gradientIndex := i
