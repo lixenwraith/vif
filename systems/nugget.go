@@ -20,7 +20,6 @@ import (
 type NuggetSystem struct {
 	mu               sync.RWMutex
 	ctx              *engine.GameContext
-	activeNugget     atomic.Uint64
 	nuggetID         atomic.Int32
 	lastSpawnAttempt time.Time
 }
@@ -46,7 +45,7 @@ func (s *NuggetSystem) Update(world *engine.World, dt time.Duration) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	activeNuggetEntity := s.activeNugget.Load()
+	activeNuggetEntity := s.ctx.State.GetActiveNuggetID()
 
 	if activeNuggetEntity == 0 {
 		if now.Sub(s.lastSpawnAttempt) >= constants.NuggetSpawnIntervalSeconds*time.Second {
@@ -57,7 +56,7 @@ func (s *NuggetSystem) Update(world *engine.World, dt time.Duration) {
 	}
 
 	if !world.Nuggets.Has(engine.Entity(activeNuggetEntity)) {
-		s.activeNugget.CompareAndSwap(activeNuggetEntity, 0)
+		s.ctx.State.ClearActiveNuggetID(activeNuggetEntity)
 	}
 }
 
@@ -104,7 +103,7 @@ func (s *NuggetSystem) spawnNugget(world *engine.World, now time.Time) {
 	world.Characters.Add(entity, char)
 	world.Nuggets.Add(entity, nugget)
 
-	s.activeNugget.Store(uint64(entity))
+	s.ctx.State.SetActiveNuggetID(uint64(entity))
 }
 
 // findValidPosition finds a valid random position for a nugget using generic stores
@@ -136,19 +135,19 @@ func (s *NuggetSystem) findValidPosition(world *engine.World) (int, int) {
 
 // GetActiveNugget returns the entity ID of the active nugget (0 if none)
 func (s *NuggetSystem) GetActiveNugget() uint64 {
-	return s.activeNugget.Load()
+	return s.ctx.State.GetActiveNuggetID()
 }
 
 // ClearActiveNugget clears the active nugget reference (called when collected)
 // This uses unconditional Store(0) for backward compatibility
 func (s *NuggetSystem) ClearActiveNugget() {
-	s.activeNugget.Store(0)
+	s.ctx.State.SetActiveNuggetID(0)
 }
 
 // ClearActiveNuggetIfMatches clears the active nugget if it matches the entity
 // Returns true if cleared, false if already cleared or a different nugget was active
 func (s *NuggetSystem) ClearActiveNuggetIfMatches(entity engine.Entity) bool {
-	return s.activeNugget.CompareAndSwap(uint64(entity), 0)
+	return s.ctx.State.ClearActiveNuggetID(uint64(entity))
 }
 
 // GetSystemState returns a debug string describing the current system state
@@ -156,7 +155,7 @@ func (s *NuggetSystem) GetSystemState() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	activeNuggetEntity := s.activeNugget.Load()
+	activeNuggetEntity := s.ctx.State.GetActiveNuggetID()
 
 	if activeNuggetEntity == 0 {
 		now := time.Now()
@@ -174,7 +173,7 @@ func (s *NuggetSystem) GetSystemState() string {
 // JumpToNugget returns the position of the active nugget, or (-1, -1) if no nugget exists using generic stores
 func (s *NuggetSystem) JumpToNugget(world *engine.World) (int, int) {
 	// Get active nugget entity ID
-	activeNuggetEntity := s.activeNugget.Load()
+	activeNuggetEntity := s.ctx.State.GetActiveNuggetID()
 	if activeNuggetEntity == 0 {
 		return -1, -1
 	}
