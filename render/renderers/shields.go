@@ -18,8 +18,7 @@ func NewShieldRenderer() *ShieldRenderer {
 
 // Render draws all active shields.
 func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
-	// DEBUG MODE: Temporarily bypasses blending for visual tuning.
-	const useBlending = false // Toggle for debugging
+	const useBlending = true
 
 	shields := world.Shields.All()
 
