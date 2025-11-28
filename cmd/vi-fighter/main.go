@@ -185,7 +185,9 @@ func main() {
 				ctx.GameHeight,
 				ctx.LineNumWidth,
 			)
-			orchestrator.Resize(ctx.Width, ctx.Height)
+			if _, isResize := ev.(*tcell.EventResize); isResize {
+				orchestrator.Resize(ctx.Width, ctx.Height)
+			}
 
 		case <-frameTicker.C:
 			// Update time resource based on context pausable clock
