@@ -78,7 +78,7 @@ const (
 const (
 	// CleanerDeduplicationWindow is the number of frames to keep in the spawned map
 	// for preventing duplicate cleaner spawns from the same event
-	CleanerDeduplicationWindow = 10
+	CleanerDeduplicationWindow = 30
 )
 
 // Shield Constants

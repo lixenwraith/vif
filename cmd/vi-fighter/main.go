@@ -192,6 +192,9 @@ func main() {
 			}
 
 		case <-frameTicker.C:
+			// Increment frame number at the start of the frame cycle
+			ctx.IncrementFrameNumber()
+
 			// Update time resource based on context pausable clock
 			timeRes := &engine.TimeResource{
 				GameTime:    ctx.PausableClock.Now(),
