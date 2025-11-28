@@ -882,7 +882,8 @@ Component (marker interface)
 ├── NuggetComponent {ID, SpawnTime}
 ├── DrainComponent {X, Y, LastMoveTime, LastDrainTime, IsOnCursor}
 ├── CursorComponent {ErrorFlashEnd, HeatDisplay}
-└── ProtectionComponent {Mask, ExpiresAt}
+├── ProtectionComponent {Mask, ExpiresAt}
+└── ShieldComponent {Active, RadiusX, RadiusY, Color, MaxOpacity}
 ```
 
 **Note**: All component types are defined in the `components/` directory.
@@ -895,16 +896,50 @@ Component (marker interface)
 
 ## Rendering Pipeline
 
-1. Calculate FPS (increments frameCount, updates currentFps every second)
-2. Clear dirty regions (when implemented)
-3. Draw static UI (heat meter, line numbers)
-4. Draw game entities (characters)
-   - Apply pause dimming effect when `ctx.IsPaused.Load()` is true (70% brightness)
-5. Draw overlays (ping, decay animation)
-6. Draw cleaners with gradient trail effects
-7. Draw removal flash effects
-8. Draw cursor (topmost layer)
-9. Draw status bar with runtime metrics (FPS, GT, APM)
+The game uses a **System Render Interface** pattern where each system owns its rendering logic through specialized `SystemRenderer` implementations.
+
+### Architecture
+
+**Core Types:**
+- `RenderOrchestrator`: Coordinates render pipeline lifecycle
+- `RenderBuffer`: Dense grid for compositing (zero-alloc after init)
+- `SystemRenderer`: Interface for individual renderers
+- `RenderPriority`: Constants determine render order (lower first)
+- `RenderContext`: Frame data passed to all renderers
+
+**Render Flow:**
+1. `RenderOrchestrator.RenderFrame()` clears buffer
+2. Renderers execute in priority order (low → high)
+3. Buffer flushes to tcell.Screen
+4. Screen.Show() presents frame
+
+**Priority Layers** (constants/priority.go):
+- **Background (0)**: Clear and base layer
+- **Grid (100)**: Ping highlights and grid lines
+- **Entities (200)**: Characters (position-based rendering)
+- **Effects (300)**: Shields, decay, cleaners, flashes, materializers
+- **Drain (350)**: Drain entity (above effects, below UI)
+- **UI (400)**: Heat meter, line numbers, column indicators, status bar, cursor
+- **Overlay (500)**: Modal windows (debug, help)
+
+**Individual Renderers** (render/renderers/):
+- `HeatMeterRenderer`: 10-segment rainbow heat bar
+- `LineNumbersRenderer`: Relative line numbers
+- `ColumnIndicatorsRenderer`: Column position markers
+- `StatusBarRenderer`: Mode, commands, metrics
+- `PingGridRenderer`: Row/column highlights and grid lines
+- `ShieldRenderer`: Protective field effects around characters
+- `CharactersRenderer`: All character entities with ping integration
+- `EffectsRenderer`: Decay, cleaners, removal flashes, materializers
+- `DrainRenderer`: Energy-draining entity
+- `CursorRenderer`: Cursor with visibility toggle
+- `OverlayRenderer`: Modal popups with visibility toggle
+
+**Adding New Visual Elements:**
+1. Create struct implementing `SystemRenderer`
+2. Choose appropriate `RenderPriority`
+3. Register with orchestrator in main.go
+4. Optionally implement `VisibilityToggle` for conditional rendering
 
 ### Pause State Visual Feedback
 
@@ -1712,6 +1747,44 @@ The system supports two types of cleaners:
   - Minimal overhead - single component query per update
   - Typical active flashes: 1-10 entities (short duration limits accumulation)
   - Automatic cleanup prevents flash entity buildup
+
+### Shield System
+- **Purpose**: Visual protective field effects rendered around entities
+- **Rendering**: Pure rendering system - no Update() method, only visual effect
+- **Architecture**: Component-based visual system with elliptical field gradients
+  - All state stored in `ShieldComponent` (Active, RadiusX, RadiusY, Color, MaxOpacity)
+  - Rendering uses geometric field function for opacity calculation per cell
+  - Blends shield color with existing cell background based on distance from center
+  - No game logic or collision detection - purely visual effect
+- **Visual Characteristics**:
+  - **Shape**: Elliptical field with independent X/Y radii
+  - **Gradient**: Center (full opacity) → Edge (transparent), based on normalized distance
+  - **Blending**: Shield color alpha-blended with existing background colors
+  - **Opacity Falloff**: Linear gradient `alpha = (1.0 - distance) × MaxOpacity`
+- **Rendering Details** (`render/renderers/shields.go`):
+  - **Priority**: Rendered at `PriorityEffects` (300) - after grid, before UI
+  - **Bounding Box**: Only processes cells within elliptical radius bounds
+  - **Distance Formula**: `(dx/rx)² + (dy/ry)² <= 1.0` for elliptical containment
+  - **Background Preservation**: Reads existing background color before blending
+  - **Foreground Preservation**: Maintains original character and foreground color
+  - **Multi-shield Support**: Multiple shields can overlap with additive blending
+- **Component Fields**:
+  - `Active` (bool): Shield enabled/disabled toggle
+  - `RadiusX` (float64): Horizontal ellipse radius in characters
+  - `RadiusY` (float64): Vertical ellipse radius in characters
+  - `Color` (tcell.Color): Shield tint color (RGB)
+  - `MaxOpacity` (float64): Maximum opacity at center (0.0-1.0)
+- **Usage Pattern**:
+  - Attach `ShieldComponent` to any entity with `PositionComponent`
+  - Shield renders centered at entity's position
+  - Toggle `Active` field to show/hide shield without removing component
+  - Adjust `RadiusX`/`RadiusY` for different shield sizes and shapes
+  - Modify `Color` and `MaxOpacity` for different visual effects
+- **Performance**:
+  - No Update() overhead - rendering only when visible
+  - Bounding box optimization limits cell processing to visible area
+  - Pre-calculated color blending formulas (no math.Sqrt in hot path)
+  - Typical cost: 50-200 cells per shield depending on radius
 
 ## Content Files
 

@@ -21,6 +21,7 @@ vi-fighter features a dynamic typing system with multiple sequence types and gam
 - **Boost System**: 2× heat multiplier activated at maximum heat
 - **Decay System**: Automated pressure that degrades sequences over time
 - **Cleaners**: Special mechanic that clears Red sequences - horizontal sweeps (gold at max heat) or 4-directional bursts (nugget at max heat, Enter key)
+- **Shields**: Visual protective field effects with elliptical gradients that can be attached to entities
 - **Drain**: Pressure mechanic with visual telegraph animation, appears at positive energy, pursues cursor, and drains energy over time
 - **Runtime Metrics**: Real-time performance tracking (FPS, Game Ticks, APM) displayed in status bar
 

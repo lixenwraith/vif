@@ -81,28 +81,12 @@ func main() {
 	energySystem.SetSpawnSystem(spawnSystem)
 	decaySystem.SetSpawnSystem(spawnSystem)
 
-	// Create renderer (queries World directly for cleaner components)
-	renderer := render.NewTerminalRenderer(
-		screen,
-		ctx.Width,
-		ctx.Height,
-		ctx.GameX,
-		ctx.GameY,
-		ctx.GameWidth,
-		ctx.GameHeight,
-		ctx.LineNumWidth,
-	)
-
 	// Create render orchestrator
 	orchestrator := render.NewRenderOrchestrator(
 		screen,
 		ctx.Width,
 		ctx.Height,
 	)
-
-	// Create legacy adapter and register with orchestrator
-	legacyAdapter := render.NewLegacyAdapter(renderer, ctx)
-	orchestrator.Register(legacyAdapter, render.PriorityBackground)
 
 	// Create and register renderers in priority order
 	var decayTimeRemaining float64
@@ -201,17 +185,8 @@ func main() {
 			// Dispatch input events immediately, bypassing 50ms tick wait
 			clockScheduler.DispatchEventsImmediately()
 
-			// Update renderer dimensions if screen resized
+			// Update orchestrator dimensions if screen resized
 			// This needs to work during pause for proper display
-			renderer.UpdateDimensions(
-				ctx.Width,
-				ctx.Height,
-				ctx.GameX,
-				ctx.GameY,
-				ctx.GameWidth,
-				ctx.GameHeight,
-				ctx.LineNumWidth,
-			)
 			if _, isResize := ev.(*tcell.EventResize); isResize {
 				orchestrator.Resize(ctx.Width, ctx.Height)
 			}
@@ -229,9 +204,8 @@ func main() {
 			// During pause: skip game updates but still render
 			if ctx.IsPaused.Load() {
 				// This shows the pause overlay and maintains visual feedback
-				// Update legacy renderer state
+				// Update decay time for status bar renderer
 				decayTimeRemaining = decaySystem.GetTimeUntilDecay(timeRes.GameTime)
-				renderer.SetDecayState(decaySystem.IsAnimating(timeRes.GameTime), decayTimeRemaining)
 
 				cursorPos, _ := ctx.World.Positions.Get(ctx.CursorEntity)
 				renderCtx := render.NewRenderContextFromGame(ctx, timeRes, cursorPos.X, cursorPos.Y)
@@ -250,9 +224,8 @@ func main() {
 			}
 
 			// Render frame (all updates guaranteed complete)
-			// Update legacy renderer state
+			// Update decay time for status bar renderer
 			decayTimeRemaining = decaySystem.GetTimeUntilDecay(timeRes.GameTime)
-			renderer.SetDecayState(decaySystem.IsAnimating(timeRes.GameTime), decayTimeRemaining)
 
 			cursorPos, _ := ctx.World.Positions.Get(ctx.CursorEntity)
 			renderCtx := render.NewRenderContextFromGame(ctx, timeRes, cursorPos.X, cursorPos.Y)

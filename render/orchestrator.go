@@ -72,8 +72,3 @@ func (o *RenderOrchestrator) RenderFrame(ctx RenderContext, world *engine.World)
 	o.buffer.Flush(o.screen)
 	o.screen.Show()
 }
-
-// Buffer returns the underlying buffer for legacy adapter access.
-func (o *RenderOrchestrator) Buffer() *RenderBuffer {
-	return o.buffer
-}
