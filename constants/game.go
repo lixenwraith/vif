@@ -80,3 +80,10 @@ const (
 	// for preventing duplicate cleaner spawns from the same event
 	CleanerDeduplicationWindow = 10
 )
+
+// Shield Constants
+const (
+	ShieldRadiusX    = 10.0
+	ShieldRadiusY    = 5.0
+	ShieldMaxOpacity = 0.6
+)

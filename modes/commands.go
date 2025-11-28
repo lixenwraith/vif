@@ -145,7 +145,6 @@ func handleHeatCommand(ctx *engine.GameContext, args []string) bool {
 	}
 
 	// 3. Logic Validation (0-MaxHeat)
-	// We allow setting it up to GameWidth because that is the trigger for Boost.
 	if value < 0 {
 		value = 0
 	}
@@ -153,11 +152,12 @@ func handleHeatCommand(ctx *engine.GameContext, args []string) bool {
 		value = constants.MaxHeat
 	}
 
-	// 4. Update State
+	// 4. Update Feedback first (visible immediately)
+	ctx.LastCommand = fmt.Sprintf(":heat %d", value)
+
+	// 5. Update State last (atomic, takes effect on next tick)
 	ctx.State.SetHeat(value)
 
-	// 5. Update Feedback
-	ctx.LastCommand = fmt.Sprintf(":heat %d", value)
 	return true
 }
 
@@ -166,10 +166,16 @@ func handleBoostCommand(ctx *engine.GameContext) bool {
 	now := ctx.PausableClock.Now()
 	endTime := now.Add(constants.BoostBaseDuration)
 
-	ctx.State.SetBoostEnabled(true)
+	// Maximize heat to ensure consistent gameplay state (Boost implies Max Heat)
+	ctx.State.SetHeat(constants.MaxHeat)
+
+	// CRITICAL: Set end time BEFORE enabling boost to prevent race condition.
+	// BoostSystem.UpdateBoostTimerAtomic() checks Enabled first, then reads EndTime.
+	// If we set Enabled=true before EndTime, the system may read stale EndTime
+	// and immediately disable boost.
 	ctx.State.SetBoostEndTime(endTime)
-	// Default to blue boost (1)
-	ctx.State.SetBoostColor(1)
+	ctx.State.SetBoostColor(1) // Default to blue boost
+	ctx.State.SetBoostEnabled(true)
 
 	ctx.LastCommand = ":boost"
 	return true

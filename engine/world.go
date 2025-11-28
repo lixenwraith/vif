@@ -28,6 +28,7 @@ type World struct {
 	Materializers *Store[components.MaterializeComponent]
 	Cursors       *Store[components.CursorComponent]
 	Protections   *Store[components.ProtectionComponent]
+	Shields       *Store[components.ShieldComponent]
 
 	allStores []AnyStore // All stores for uniform lifecycle operations
 
@@ -53,6 +54,7 @@ func NewWorld() *World {
 		Materializers: NewStore[components.MaterializeComponent](),
 		Cursors:       NewStore[components.CursorComponent](),
 		Protections:   NewStore[components.ProtectionComponent](),
+		Shields:       NewStore[components.ShieldComponent](),
 	}
 
 	// Register all stores for lifecycle operations
@@ -69,6 +71,7 @@ func NewWorld() *World {
 		w.Materializers,
 		w.Cursors,
 		w.Protections,
+		w.Shields,
 	}
 
 	return w

@@ -469,7 +469,7 @@ func (s *DrainSystem) handleCollisionAtPosition(world *engine.World, entity engi
 		return
 	}
 
-	// Check for falling decay collision
+	// Check for decay collision
 	if world.Decays.Has(entity) {
 		// Flash for falling decay destruction
 		if decay, ok := world.Decays.Get(entity); ok {
@@ -554,7 +554,7 @@ func (s *DrainSystem) handleNuggetCollision(world *engine.World, entity engine.E
 	world.DestroyEntity(entity)
 }
 
-// handleDecayCollision destroys the entity colliding with falling decay
+// handleDecayCollision destroys the entity colliding with decay
 func (s *DrainSystem) handleDecayCollision(world *engine.World, entity engine.Entity) {
 	world.DestroyEntity(entity)
 }

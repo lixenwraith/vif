@@ -20,7 +20,7 @@ var (
 	RgbSequenceBlueBright = tcell.NewRGBColor(140, 190, 255) // Bright Blue
 
 	RgbSequenceGold = tcell.NewRGBColor(255, 255, 0) // Bright Yellow for gold sequence
-	RgbDecayFalling = tcell.NewRGBColor(0, 139, 139) // Dark Cyan for decay animation
+	RgbDecay        = tcell.NewRGBColor(0, 139, 139) // Dark Cyan for decay animation
 	RgbDrain        = tcell.NewRGBColor(0, 200, 200) // Vibrant Cyan for drain entity
 	RgbMaterialize  = tcell.NewRGBColor(0, 220, 220) // Bright cyan for materialize head
 
@@ -62,6 +62,9 @@ var (
 	// Cleaner colors
 	RgbCleanerBase  = tcell.NewRGBColor(255, 255, 0)   // Bright yellow
 	RgbRemovalFlash = tcell.NewRGBColor(255, 255, 200) // Bright yellow-white flash
+
+	// Shield Colors
+	RgbShieldBase = tcell.NewRGBColor(180, 0, 150) // Deep Magenta
 
 	// General colors
 	RgbBlack = tcell.NewRGBColor(0, 0, 0) // Black for various uses

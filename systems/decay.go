@@ -87,7 +87,7 @@ func (s *DecaySystem) updateAnimation(world *engine.World, dt time.Duration) {
 	}
 }
 
-// spawnDecayEntities creates one falling decay entity per column using generic stores
+// spawnDecayEntities creates one decay entity per column using generic stores
 func (s *DecaySystem) spawnDecayEntities(world *engine.World) {
 	// Fetch resources
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
@@ -121,7 +121,7 @@ func (s *DecaySystem) spawnDecayEntities(world *engine.World) {
 	}
 }
 
-// updateDecayEntities updates falling entity positions and applies decay using generic stores
+// updateDecayEntities updates entity positions and applies decay using generic stores
 func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64) {
 	// Fetch resources
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
@@ -134,7 +134,7 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 	}
 
 	// Query all falling entities
-	fallingEntities := world.Decays.All()
+	decayEntities := world.Decays.All()
 
 	// Clear deduplication maps for this frame
 	// processedGridCells tracks LOCATIONS (don't hit same spot twice this frame)
@@ -142,7 +142,7 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 		delete(s.processedGridCells, k)
 	}
 
-	for _, entity := range fallingEntities {
+	for _, entity := range decayEntities {
 		fall, ok := world.Decays.Get(entity)
 		if !ok {
 			continue
@@ -334,7 +334,7 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 	}
 }
 
-// cleanupDecayEntities removes all falling decay entities using generic stores
+// cleanupDecayEntities removes all decay entities using generic stores
 func (s *DecaySystem) cleanupDecayEntities(world *engine.World) {
 	// Get all falling decays and iterate to destroy
 	entities := world.Decays.All()

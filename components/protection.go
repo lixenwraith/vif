@@ -8,7 +8,7 @@ const (
 	// ProtectNone provides no immunity (default).
 	ProtectNone ProtectionFlags = 0
 
-	// ProtectFromDecay makes entity immune to falling decay characters.
+	// ProtectFromDecay makes entity immune to decay characters.
 	ProtectFromDecay ProtectionFlags = 1 << iota
 
 	// ProtectFromDrain makes entity immune to energy drain mechanic.

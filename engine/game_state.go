@@ -88,7 +88,7 @@ type GameState struct {
 	DecayNextTime    time.Time // When decay will trigger
 
 	// Decay Animation State
-	// Tracks falling decay animation lifecycle
+	// Tracks decay animation lifecycle
 	DecayAnimating bool      // Whether decay animation is running
 	DecayStartTime time.Time // When decay animation started
 

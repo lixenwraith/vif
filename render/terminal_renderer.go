@@ -2,6 +2,7 @@ package render
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -130,10 +131,13 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 	// Draw ping highlights (cursor row/column) and grid - BEFORE characters
 	r.drawPingHighlights(cursorPos.X, cursorPos.Y, ctx, pingColor, defaultStyle)
 
+	// Draw Shields (blends with background/ping) - BEFORE characters
+	r.drawShields(ctx.World)
+
 	// Draw characters - will render over grid
 	r.drawCharacters(ctx.World, cursorPos.X, cursorPos.Y, pingColor, defaultStyle, ctx)
 
-	// Draw falling decay animation if active - AFTER ping highlights
+	// Draw decay animation if active - AFTER ping highlights
 	if decayAnimating {
 		r.drawDecay(ctx.World, defaultStyle)
 	}
@@ -248,36 +252,58 @@ func (r *TerminalRenderer) getPingColor(world *engine.World, cursorX, cursorY in
 }
 
 // drawPingHighlights draws the cursor row and column highlights
+// Draws ONLY on cells with default/black background to avoid overwriting shield
 func (r *TerminalRenderer) drawPingHighlights(cursorX, cursorY int, ctx *engine.GameContext, pingColor tcell.Color, defaultStyle tcell.Style) {
 	pingStyle := defaultStyle.Background(pingColor)
 
-	// Highlight the row - draw unconditionally (characters will render on top)
-	for x := 0; x < r.gameWidth; x++ {
-		screenX := r.gameX + x
-		screenY := r.gameY + cursorY
-		if screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
+	// Helper to draw ping only if cell has default background
+	drawPingCell := func(screenX, screenY int) {
+		_, _, existingStyle, _ := r.screen.GetContent(screenX, screenY)
+		_, bg, _ := existingStyle.Decompose()
+		// Only draw ping if background is default/black (don't overwrite shield)
+		if bg == tcell.ColorDefault || bg == RgbBackground {
 			r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
 		}
 	}
 
-	// Highlight the column - draw unconditionally (characters will render on top)
+	// Highlight the row
+	for x := 0; x < r.gameWidth; x++ {
+		screenX := r.gameX + x
+		screenY := r.gameY + cursorY
+		if screenX >= r.gameX && screenX < r.width && screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
+			drawPingCell(screenX, screenY)
+		}
+	}
+
+	// Highlight the column
 	for y := 0; y < r.gameHeight; y++ {
 		screenX := r.gameX + cursorX
 		screenY := r.gameY + y
 		if screenX >= r.gameX && screenX < r.width && screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
-			r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+			drawPingCell(screenX, screenY)
 		}
 	}
 
 	// Draw grid lines if ping is active
 	if ctx.GetPingActive() {
-		r.drawPingGrid(cursorX, cursorY, pingStyle)
+		r.drawPingGrid(cursorX, cursorY, defaultStyle)
 	}
 }
 
 // drawPingGrid draws coordinate grid lines at 5-column intervals
+// Only draws on cells with default background
 func (r *TerminalRenderer) drawPingGrid(cursorX, cursorY int, pingStyle tcell.Style) {
-	// Vertical lines - draw unconditionally (characters will render on top)
+
+	// Helper to draw ping only if cell has default background
+	drawPingCell := func(screenX, screenY int) {
+		_, _, existingStyle, _ := r.screen.GetContent(screenX, screenY)
+		_, bg, _ := existingStyle.Decompose()
+		if bg == tcell.ColorDefault || bg == RgbBackground {
+			r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+		}
+	}
+
+	// Vertical lines
 	for n := 1; ; n++ {
 		offset := 5 * n
 		col := cursorX + offset
@@ -289,7 +315,7 @@ func (r *TerminalRenderer) drawPingGrid(cursorX, cursorY int, pingStyle tcell.St
 				screenX := r.gameX + col
 				screenY := r.gameY + y
 				if screenX >= r.gameX && screenX < r.width && screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
-					r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+					drawPingCell(screenX, screenY)
 				}
 			}
 		}
@@ -298,14 +324,14 @@ func (r *TerminalRenderer) drawPingGrid(cursorX, cursorY int, pingStyle tcell.St
 			for y := 0; y < r.gameHeight; y++ {
 				screenX := r.gameX + col
 				screenY := r.gameY + y
-				if screenX >= r.gameX && screenX < r.width && screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
-					r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+				if screenX >= r.gameX && screenX < r.width && screenY >= r.gameY && screenY < r.gameHeight {
+					drawPingCell(screenX, screenY)
 				}
 			}
 		}
 	}
 
-	// Horizontal lines - draw unconditionally (characters will render on top)
+	// Horizontal lines
 	for n := 1; ; n++ {
 		offset := 5 * n
 		row := cursorY + offset
@@ -317,7 +343,7 @@ func (r *TerminalRenderer) drawPingGrid(cursorX, cursorY int, pingStyle tcell.St
 				screenX := r.gameX + x
 				screenY := r.gameY + row
 				if screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
-					r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+					drawPingCell(screenX, screenY)
 				}
 			}
 		}
@@ -327,7 +353,7 @@ func (r *TerminalRenderer) drawPingGrid(cursorX, cursorY int, pingStyle tcell.St
 				screenX := r.gameX + x
 				screenY := r.gameY + row
 				if screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
-					r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+					drawPingCell(screenX, screenY)
 				}
 			}
 		}
@@ -342,7 +368,7 @@ func (r *TerminalRenderer) drawCharacters(world *engine.World, cursorX, cursorY 
 		With(world.Characters).
 		Execute()
 
-	// Direct iteration - no type assertions needed
+	// Direct iteration
 	for _, entity := range entities {
 		pos, okP := world.Positions.Get(entity)
 		char, okC := world.Characters.Get(entity)
@@ -353,83 +379,113 @@ func (r *TerminalRenderer) drawCharacters(world *engine.World, cursorX, cursorY 
 		screenX := r.gameX + pos.X
 		screenY := r.gameY + pos.Y
 
-		if screenX >= r.gameX && screenX < r.width && screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
-			style := char.Style
-
-			// Check if character is on a ping line (cursor row or column)
-			onPingLine := (pos.Y == cursorY) || (pos.X == cursorX)
-
-			// Also check if on ping grid lines when ping is active
-			if !onPingLine && ctx.GetPingActive() {
-				// Check if on vertical grid line (columns at ±5, ±10, ±15, etc.)
-				deltaX := pos.X - cursorX
-				if deltaX%5 == 0 && deltaX != 0 {
-					onPingLine = true
-				}
-				// Check if on horizontal grid line (rows at ±5, ±10, ±15, etc.)
-				deltaY := pos.Y - cursorY
-				if deltaY%5 == 0 && deltaY != 0 {
-					onPingLine = true
-				}
-			}
-
-			// If on ping line, use ping background color
-			if onPingLine {
-				fg, _, _ := style.Decompose()
-				style = defaultStyle.Foreground(fg).Background(pingColor)
-			}
-
-			// Apply dimming effect when paused
-			if ctx.IsPaused.Load() {
-				fg, bg, attrs := style.Decompose()
-				// Extract RGB components and dim by 0.7
-				r, g, b := fg.RGB()
-				dimmedR := int32(float64(r) * 0.7)
-				dimmedG := int32(float64(g) * 0.7)
-				dimmedB := int32(float64(b) * 0.7)
-				dimmedFg := tcell.NewRGBColor(dimmedR, dimmedG, dimmedB)
-				style = tcell.StyleDefault.Foreground(dimmedFg).Background(bg).Attributes(attrs)
-			}
-
-			r.screen.SetContent(screenX, screenY, char.Rune, nil, style)
+		if screenX < r.gameX || screenX >= r.width || screenY < r.gameY || screenY >= r.gameY+r.gameHeight {
+			continue
 		}
+
+		// Get existing content to preserve background (e.g., Shield color)
+		_, _, existingStyle, _ := r.screen.GetContent(screenX, screenY)
+		_, bg, _ := existingStyle.Decompose()
+
+		// Handle default background case
+		if bg == tcell.ColorDefault {
+			bg = RgbBackground
+		}
+
+		// Extract foreground from character's defined style
+		fg, _, attrs := char.Style.Decompose()
+
+		// Check if character is on a ping line (cursor row or column)
+		onPingLine := (pos.Y == cursorY) || (pos.X == cursorX)
+
+		// Also check if on ping grid lines when ping is active
+		if !onPingLine && ctx.GetPingActive() {
+			// Check if on vertical grid line (columns at ±5, ±10, ±15, etc.)
+			deltaX := pos.X - cursorX
+			if deltaX%5 == 0 && deltaX != 0 {
+				onPingLine = true
+			}
+			// Check if on horizontal grid line (rows at ±5, ±10, ±15, etc.)
+			deltaY := pos.Y - cursorY
+			if deltaY%5 == 0 && deltaY != 0 {
+				onPingLine = true
+			}
+		}
+
+		// Logic to determine final background:
+		// 1. Existing background takes priority (Shield, etc.)
+		// 2. If existing is default black AND on ping line -> Ping Color
+		// 3. Otherwise -> Preserve existing background
+		finalBg := bg
+		if onPingLine && bg == RgbBackground {
+			finalBg = pingColor
+		}
+
+		finalStyle := defaultStyle.Foreground(fg).Background(finalBg).Attributes(attrs)
+
+		// Apply dimming effect when paused
+		if ctx.IsPaused.Load() {
+			red, green, blue := fg.RGB()
+			dimmedR := int32(float64(red) * 0.7)
+			dimmedG := int32(float64(green) * 0.7)
+			dimmedB := int32(float64(blue) * 0.7)
+			dimmedFg := tcell.NewRGBColor(dimmedR, dimmedG, dimmedB)
+			finalStyle = tcell.StyleDefault.Foreground(dimmedFg).Background(finalBg).Attributes(attrs)
+		}
+
+		r.screen.SetContent(screenX, screenY, char.Rune, nil, finalStyle)
 	}
 }
 
 // drawDecay draws the falling decay characters
 func (r *TerminalRenderer) drawDecay(world *engine.World, defaultStyle tcell.Style) {
 	// Direct store access - single component query
-	entities := world.Decays.All()
+	decayEntities := world.Decays.All()
 
-	// Style for falling characters: dark cyan foreground, default background
-	fallingStyle := defaultStyle.Foreground(RgbDecayFalling)
+	fgColor := RgbDecay
 
-	for _, entity := range entities {
-		fall, exists := world.Decays.Get(entity)
+	for _, decayEntity := range decayEntities {
+		decay, exists := world.Decays.Get(decayEntity)
 		if !exists {
 			continue
 		}
 
 		// Calculate screen position
-		y := int(fall.YPosition)
+		y := int(decay.YPosition)
 		if y < 0 || y >= r.gameHeight {
 			continue
 		}
 
-		screenX := r.gameX + fall.Column
+		screenX := r.gameX + decay.Column
 		screenY := r.gameY + y
 
-		if screenX >= r.gameX && screenX < r.width && screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
-			// Draw the falling character with no background (preserves existing background)
-			r.screen.SetContent(screenX, screenY, fall.Char, nil, fallingStyle)
+		if screenX < r.gameX || screenX >= r.width || screenY < r.gameY || screenY >= r.gameY+r.gameHeight {
+			continue
 		}
+
+		// Preserve existing background (e.g., Shield)
+		_, _, existingStyle, _ := r.screen.GetContent(screenX, screenY)
+		_, bg, _ := existingStyle.Decompose()
+
+		if bg == tcell.ColorDefault {
+			bg = RgbBackground
+		}
+
+		// Combine decay foreground with existing background
+		decayStyle := defaultStyle.Foreground(fgColor).Background(bg)
+
+		r.screen.SetContent(screenX, screenY, decay.Char, nil, decayStyle)
 	}
 }
 
 // drawCleaners draws the cleaner animation using the trail of grid points.
+// Cleaners are opaque and render ON TOP of everything (occlude shield).
 func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.Style) {
-	// Use world for direct store access
 	cleanerEntities := world.Cleaners.All()
+
+	// Calculate gradient length
+	gradientLen := len(r.cleanerGradient)
+	maxGradientIdx := gradientLen - 1
 
 	for _, cleanerEntity := range cleanerEntities {
 		cleaner, ok := world.Cleaners.Get(cleanerEntity)
@@ -440,10 +496,6 @@ func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.
 		// Deep copy trail to avoid race conditions during rendering
 		trailCopy := make([]core.Point, len(cleaner.Trail))
 		copy(trailCopy, cleaner.Trail)
-
-		// Pre-calculate gradient length outside loop for performance
-		gradientLen := len(r.cleanerGradient)
-		maxGradientIdx := gradientLen - 1
 
 		// Iterate through the trail
 		// Index 0 is the head (brightest), last index is the tail (faintest)
@@ -456,18 +508,16 @@ func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.
 			screenX := r.gameX + point.X
 			screenY := r.gameY + point.Y
 
-			// Use pre-calculated gradient based on index (clamped to valid range)
+			// Use gradient based on index (clamped to valid range)
 			gradientIndex := i
 			if gradientIndex > maxGradientIdx {
 				gradientIndex = maxGradientIdx
 			}
 
-			// Apply color from gradient
+			// Apply color from gradient - cleaners are OPAQUE (solid background)
 			color := r.cleanerGradient[gradientIndex]
-			style := defaultStyle.Foreground(color)
+			style := defaultStyle.Foreground(color).Background(RgbBackground)
 
-			// Head (index 0) is usually rendered on top, but since we draw
-			// in a single pass here, order doesn't strictly matter for flat chars.
 			r.screen.SetContent(screenX, screenY, cleaner.Char, nil, style)
 		}
 	}
@@ -475,7 +525,6 @@ func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.
 
 // drawMaterializers draws the materialize animation using the trail of grid points.
 func (r *TerminalRenderer) drawMaterializers(world *engine.World, defaultStyle tcell.Style) {
-	// Use world for direct store access
 	entities := world.Materializers.All()
 	if len(entities) == 0 {
 		return
@@ -514,8 +563,16 @@ func (r *TerminalRenderer) drawMaterializers(world *engine.World, defaultStyle t
 
 			// Apply color from gradient
 			color := r.materializeGradient[gradientIndex]
-			style := defaultStyle.Foreground(color)
 
+			// Preserve existing background (e.g., Shield color)
+			_, _, existingStyle, _ := r.screen.GetContent(screenX, screenY)
+			_, bg, _ := existingStyle.Decompose()
+
+			if bg == tcell.ColorDefault {
+				bg = RgbBackground
+			}
+
+			style := defaultStyle.Foreground(color).Background(bg)
 			r.screen.SetContent(screenX, screenY, mat.Char, nil, style)
 		}
 	}
@@ -543,16 +600,18 @@ func (r *TerminalRenderer) drawDrain(world *engine.World, defaultStyle tcell.Sty
 
 		// Bounds check
 		if screenX < r.gameX || screenX >= r.width || screenY < r.gameY || screenY >= r.gameY+r.gameHeight {
-			return
+			continue
 		}
 
 		// Draw the drain character with transparent background
 		_, _, style, _ := r.screen.GetContent(screenX, screenY)
 		_, bg, _ := style.Decompose()
 
-		drainStyle := defaultStyle.Foreground(RgbDrain).Background(bg)
+		if bg == tcell.ColorDefault {
+			bg = RgbBackground
+		}
 
-		// TODO: for now keep constant char, drain will change later
+		drainStyle := defaultStyle.Foreground(RgbDrain).Background(bg)
 		r.screen.SetContent(screenX, screenY, constants.DrainChar, nil, drainStyle)
 	}
 }
@@ -588,18 +647,25 @@ func (r *TerminalRenderer) drawRemovalFlashes(world *engine.World, ctx *engine.G
 			opacity = 0.0
 		}
 
-		// Interpolate flash color from bright yellow-white to transparent
-		// Start: RGB(255, 255, 200) -> End: RGB(255, 255, 0)
+		// Flash color: bright yellow-white fading to yellow
 		red := int32(255)
 		green := int32(255)
-		blue := int32(200 * opacity) // Fade blue component for yellow transition
+		blue := int32(200 * opacity)
 
 		flashColor := tcell.NewRGBColor(red, green, blue)
-		flashStyle := defaultStyle.Foreground(flashColor)
 
 		screenX := r.gameX + flash.X
 		screenY := r.gameY + flash.Y
 
+		// Preserve existing background
+		_, _, existingStyle, _ := r.screen.GetContent(screenX, screenY)
+		_, bg, _ := existingStyle.Decompose()
+
+		if bg == tcell.ColorDefault {
+			bg = RgbBackground
+		}
+
+		flashStyle := defaultStyle.Foreground(flashColor).Background(bg)
 		r.screen.SetContent(screenX, screenY, flash.Char, nil, flashStyle)
 	}
 }
@@ -989,7 +1055,7 @@ func (r *TerminalRenderer) drawCursor(cursorX, cursorY int, ctx *engine.GameCont
 		}
 	} else if hasDecay {
 		// Decay found on empty space
-		cursorBgColor = RgbDecayFalling
+		cursorBgColor = RgbDecay
 		charFgColor = tcell.ColorBlack
 	}
 
@@ -1135,4 +1201,133 @@ func (r *TerminalRenderer) drawOverlay(ctx *engine.GameContext, defaultStyle tce
 			r.screen.SetContent(scrollX+i, scrollY, ch, nil, borderStyle)
 		}
 	}
+}
+
+// blendColors blends two colors based on alpha.
+// alpha is 0.0 (fully background) to 1.0 (fully foreground).
+func (r *TerminalRenderer) blendColors(bg, fg tcell.Color, alpha float64) tcell.Color {
+	if alpha <= 0 {
+		return bg
+	}
+	if alpha >= 1 {
+		return fg
+	}
+
+	// Safeguard: treat ColorDefault as RgbBackground to prevent negative RGB math
+	if bg == tcell.ColorDefault {
+		bg = RgbBackground
+	}
+	if fg == tcell.ColorDefault {
+		fg = RgbBackground
+	}
+
+	r1, g1, b1 := bg.RGB()
+	r2, g2, b2 := fg.RGB()
+
+	rOut := int32(float64(r1)*(1.0-alpha) + float64(r2)*alpha)
+	gOut := int32(float64(g1)*(1.0-alpha) + float64(g2)*alpha)
+	bOut := int32(float64(b1)*(1.0-alpha) + float64(b2)*alpha)
+
+	return tcell.NewRGBColor(rOut, gOut, bOut)
+}
+
+// drawShields renders active shields by blending their color with the existing background.
+// It uses a geometric field function to calculate opacity per cell.
+func (r *TerminalRenderer) drawShields(world *engine.World) {
+	// DEBUG MODE: Temporarily bypasses blending for visual tuning.
+	const useBlending = false // Toggle for debugging
+
+	shields := world.Shields.All()
+
+	for _, entity := range shields {
+		shield, okS := world.Shields.Get(entity)
+		pos, okP := world.Positions.Get(entity)
+
+		if !okS || !okP || !shield.Active {
+			continue
+		}
+
+		// Bounding box
+		startX := int(float64(pos.X) - shield.RadiusX)
+		endX := int(float64(pos.X) + shield.RadiusX)
+		startY := int(float64(pos.Y) - shield.RadiusY)
+		endY := int(float64(pos.Y) + shield.RadiusY)
+
+		// Clamp to screen bounds
+		if startX < 0 {
+			startX = 0
+		}
+		if endX >= r.gameWidth {
+			endX = r.gameWidth - 1
+		}
+		if startY < 0 {
+			startY = 0
+		}
+		if endY >= r.gameHeight {
+			endY = r.gameHeight - 1
+		}
+
+		// Pre-extract shield base color components
+		shieldR, shieldG, shieldB := shield.Color.RGB()
+
+		for y := startY; y <= endY; y++ {
+			for x := startX; x <= endX; x++ {
+				screenX := r.gameX + x
+				screenY := r.gameY + y
+
+				dx := float64(x - pos.X)
+				dy := float64(y - pos.Y)
+
+				// Elliptical distance: (dx/rx)^2 + (dy/ry)^2
+				normalizedDistSq := (dx*dx)/(shield.RadiusX*shield.RadiusX) + (dy*dy)/(shield.RadiusY*shield.RadiusY)
+
+				if normalizedDistSq > 1.0 {
+					continue // Outside shield
+				}
+
+				dist := math.Sqrt(normalizedDistSq)
+
+				// Alpha: 1.0 at center, 0.0 at edge, scaled by MaxOpacity
+				alpha := (1.0 - dist) * shield.MaxOpacity
+
+				// Get existing content
+				mainc, combc, style, _ := r.screen.GetContent(screenX, screenY)
+				fg, bg, attrs := style.Decompose()
+
+				// Normalize ColorDefault
+				if bg == tcell.ColorDefault {
+					bg = RgbBackground
+				}
+
+				var newBg tcell.Color
+
+				if useBlending {
+					// Production: blend shield with existing background
+					newBg = r.blendColors(bg, shield.Color, alpha)
+				} else {
+					// Debug: direct alpha-scaled shield color (no blending)
+					// This shows the pure shield gradient without interference
+					newBg = tcell.NewRGBColor(
+						int32(float64(shieldR)*alpha),
+						int32(float64(shieldG)*alpha),
+						int32(float64(shieldB)*alpha),
+					)
+				}
+
+				newStyle := tcell.StyleDefault.Foreground(fg).Background(newBg).Attributes(attrs)
+				r.screen.SetContent(screenX, screenY, mainc, combc, newStyle)
+			}
+		}
+	}
+}
+
+// dimColor reduces color intensity by factor (0.0-1.0)
+// TODO: to be integrated with all component draws in pause, currently only characters dim
+func (r *TerminalRenderer) dimColor(c tcell.Color, factor float64) tcell.Color {
+	red, green, blue := c.RGB()
+	return tcell.NewRGBColor(
+		int32(float64(red)*factor),
+		int32(float64(green)*factor),
+		int32(float64(blue)*factor),
+	)
 }

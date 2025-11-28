@@ -26,5 +26,5 @@ const (
 
 	// DestructionFlashDuration is how long the destruction flash effect lasts in milliseconds.
 	// Used globally for all destruction effects (drain collision, decay terminal, cleaner sweep).
-	DestructionFlashDuration = 300
+	DestructionFlashDuration = 500
 )
