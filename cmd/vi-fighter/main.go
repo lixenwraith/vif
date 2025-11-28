@@ -12,6 +12,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/modes"
 	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/vi-fighter/render/renderers"
 	"github.com/lixenwraith/vi-fighter/systems"
 )
 
@@ -103,6 +104,21 @@ func main() {
 	legacyAdapter := render.NewLegacyAdapter(renderer, ctx)
 	orchestrator.Register(legacyAdapter, render.PriorityBackground)
 
+	// Create and register UI renderers (Phase 3a)
+	var decayTimeRemaining float64
+
+	heatMeterRenderer := renderers.NewHeatMeterRenderer(ctx.State)
+	orchestrator.Register(heatMeterRenderer, render.PriorityUI)
+
+	lineNumbersRenderer := renderers.NewLineNumbersRenderer(ctx.LineNumWidth, ctx)
+	orchestrator.Register(lineNumbersRenderer, render.PriorityUI)
+
+	columnIndicatorsRenderer := renderers.NewColumnIndicatorsRenderer(ctx)
+	orchestrator.Register(columnIndicatorsRenderer, render.PriorityUI)
+
+	statusBarRenderer := renderers.NewStatusBarRenderer(ctx, &decayTimeRemaining)
+	orchestrator.Register(statusBarRenderer, render.PriorityUI)
+
 	// Create input handler
 	inputHandler := modes.NewInputHandler(ctx)
 
@@ -185,7 +201,8 @@ func main() {
 			if ctx.IsPaused.Load() {
 				// This shows the pause overlay and maintains visual feedback
 				// Update legacy renderer state
-				renderer.SetDecayState(decaySystem.IsAnimating(timeRes.GameTime), decaySystem.GetTimeUntilDecay(timeRes.GameTime))
+				decayTimeRemaining = decaySystem.GetTimeUntilDecay(timeRes.GameTime)
+				renderer.SetDecayState(decaySystem.IsAnimating(timeRes.GameTime), decayTimeRemaining)
 
 				cursorPos, _ := ctx.World.Positions.Get(ctx.CursorEntity)
 				renderCtx := render.NewRenderContextFromGame(ctx, timeRes, cursorPos.X, cursorPos.Y)
@@ -205,7 +222,8 @@ func main() {
 
 			// Render frame (all updates guaranteed complete)
 			// Update legacy renderer state
-			renderer.SetDecayState(decaySystem.IsAnimating(timeRes.GameTime), decaySystem.GetTimeUntilDecay(timeRes.GameTime))
+			decayTimeRemaining = decaySystem.GetTimeUntilDecay(timeRes.GameTime)
+			renderer.SetDecayState(decaySystem.IsAnimating(timeRes.GameTime), decayTimeRemaining)
 
 			cursorPos, _ := ctx.World.Positions.Get(ctx.CursorEntity)
 			renderCtx := render.NewRenderContextFromGame(ctx, timeRes, cursorPos.X, cursorPos.Y)

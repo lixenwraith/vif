@@ -165,7 +165,8 @@ func (r *TerminalRenderer) renderToWriter(ctx *engine.GameContext, sw screenWrit
 	}
 
 	// Draw heat meter
-	r.drawHeatMeterTo(ctx.State.GetHeat(), defaultStyle, sw)
+	// Migrated to HeatMeterRenderer
+	// r.drawHeatMeterTo(ctx.State.GetHeat(), defaultStyle, sw)
 
 	// Read cursor position
 	cursorPos, ok := ctx.World.Positions.Get(ctx.CursorEntity)
@@ -174,7 +175,8 @@ func (r *TerminalRenderer) renderToWriter(ctx *engine.GameContext, sw screenWrit
 	}
 
 	// Draw line numbers
-	r.drawLineNumbersTo(cursorPos.Y, ctx, defaultStyle, sw)
+	// Migrated to LineNumbersRenderer
+	// r.drawLineNumbersTo(cursorPos.Y, ctx, defaultStyle, sw)
 
 	// Get ping color
 	pingColor := r.getPingColorTo(ctx.World, cursorPos.X, cursorPos.Y, ctx, sw)
@@ -206,10 +208,12 @@ func (r *TerminalRenderer) renderToWriter(ctx *engine.GameContext, sw screenWrit
 	r.drawDrainTo(ctx.World, defaultStyle, sw)
 
 	// Draw column indicators
-	r.drawColumnIndicatorsTo(cursorPos.X, ctx, defaultStyle, sw)
+	// Migrated to ColumnIndicatorsRenderer
+	// r.drawColumnIndicatorsTo(cursorPos.X, ctx, defaultStyle, sw)
 
 	// Draw status bar
-	r.drawStatusBarTo(ctx, defaultStyle, r.decayTimeRemaining, sw)
+	// Migrated to StatusBarRenderer
+	// r.drawStatusBarTo(ctx, defaultStyle, r.decayTimeRemaining, sw)
 
 	// Draw cursor
 	if !ctx.IsSearchMode() && !ctx.IsCommandMode() {
