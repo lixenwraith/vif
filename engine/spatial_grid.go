@@ -98,16 +98,6 @@ func (g *SpatialGrid) HasAny(x, y int) bool {
 	return g.Cells[y*g.Width+x].Count > 0
 }
 
-// TODO: unused, delete after resize fixes
-// Clear resets all cells in the grid
-func (g *SpatialGrid) Clear() {
-	// Zeroing the entire slice is faster than iterating rows for fixed size
-	for i := range g.Cells {
-		g.Cells[i].Count = 0
-		// No need to zero Entities array, Count controls access
-	}
-}
-
 // Resize resizes the grid, clearing all data
 // This does NOT preserve entities because re-mapping them from components
 // is the responsibility of the PositionStore
