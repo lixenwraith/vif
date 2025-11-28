@@ -169,43 +169,53 @@ func (r *TerminalRenderer) renderToWriter(ctx *engine.GameContext, sw screenWrit
 	// r.drawHeatMeterTo(ctx.State.GetHeat(), defaultStyle, sw)
 
 	// Read cursor position
-	cursorPos, ok := ctx.World.Positions.Get(ctx.CursorEntity)
-	if !ok {
-		panic(fmt.Errorf("cursor destroyed"))
-	}
+	// No longer needed - all draw functions migrated to SystemRenderers
+	// cursorPos, ok := ctx.World.Positions.Get(ctx.CursorEntity)
+	// if !ok {
+	// 	panic(fmt.Errorf("cursor destroyed"))
+	// }
 
 	// Draw line numbers
 	// Migrated to LineNumbersRenderer
 	// r.drawLineNumbersTo(cursorPos.Y, ctx, defaultStyle, sw)
 
 	// Get ping color
-	pingColor := r.getPingColorTo(ctx.World, cursorPos.X, cursorPos.Y, ctx, sw)
+	// Migrated to PingGridRenderer and CharactersRenderer
+	// pingColor := r.getPingColorTo(ctx.World, cursorPos.X, cursorPos.Y, ctx, sw)
 
 	// Draw ping highlights and grid
-	r.drawPingHighlightsTo(cursorPos.X, cursorPos.Y, ctx, pingColor, defaultStyle, sw)
+	// Migrated to PingGridRenderer
+	// r.drawPingHighlightsTo(cursorPos.X, cursorPos.Y, ctx, pingColor, defaultStyle, sw)
 
 	// Draw shields
-	r.drawShieldsTo(ctx.World, sw)
+	// Migrated to ShieldRenderer
+	// r.drawShieldsTo(ctx.World, sw)
 
 	// Draw characters
-	r.drawCharactersTo(ctx.World, cursorPos.X, cursorPos.Y, pingColor, defaultStyle, ctx, sw)
+	// Migrated to CharactersRenderer
+	// r.drawCharactersTo(ctx.World, cursorPos.X, cursorPos.Y, pingColor, defaultStyle, ctx, sw)
 
 	// Draw decay
-	if r.decayAnimating {
-		r.drawDecayTo(ctx.World, defaultStyle, sw)
-	}
+	// Migrated to EffectsRenderer
+	// if r.decayAnimating {
+	// 	r.drawDecayTo(ctx.World, defaultStyle, sw)
+	// }
 
 	// Draw cleaners
-	r.drawCleanersTo(ctx.World, defaultStyle, sw)
+	// Migrated to EffectsRenderer
+	// r.drawCleanersTo(ctx.World, defaultStyle, sw)
 
 	// Draw removal flashes
-	r.drawRemovalFlashesTo(ctx.World, ctx, defaultStyle, sw)
+	// Migrated to EffectsRenderer
+	// r.drawRemovalFlashesTo(ctx.World, ctx, defaultStyle, sw)
 
 	// Draw materializers
-	r.drawMaterializersTo(ctx.World, defaultStyle, sw)
+	// Migrated to EffectsRenderer
+	// r.drawMaterializersTo(ctx.World, defaultStyle, sw)
 
 	// Draw drain
-	r.drawDrainTo(ctx.World, defaultStyle, sw)
+	// Migrated to DrainRenderer
+	// r.drawDrainTo(ctx.World, defaultStyle, sw)
 
 	// Draw column indicators
 	// Migrated to ColumnIndicatorsRenderer
@@ -216,14 +226,16 @@ func (r *TerminalRenderer) renderToWriter(ctx *engine.GameContext, sw screenWrit
 	// r.drawStatusBarTo(ctx, defaultStyle, r.decayTimeRemaining, sw)
 
 	// Draw cursor
-	if !ctx.IsSearchMode() && !ctx.IsCommandMode() {
-		r.drawCursorTo(cursorPos.X, cursorPos.Y, ctx, defaultStyle, sw)
-	}
+	// Migrated to CursorRenderer (with VisibilityToggle)
+	// if !ctx.IsSearchMode() && !ctx.IsCommandMode() {
+	// 	r.drawCursorTo(cursorPos.X, cursorPos.Y, ctx, defaultStyle, sw)
+	// }
 
 	// Draw overlay
-	if ctx.IsOverlayMode() && ctx.OverlayActive {
-		r.drawOverlayTo(ctx, defaultStyle, sw)
-	}
+	// Migrated to OverlayRenderer (with VisibilityToggle)
+	// if ctx.IsOverlayMode() && ctx.OverlayActive {
+	// 	r.drawOverlayTo(ctx, defaultStyle, sw)
+	// }
 }
 
 // drawHeatMeterTo draws the heat meter at the top as a 10-segment display

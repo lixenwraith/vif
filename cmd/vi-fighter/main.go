@@ -104,9 +104,29 @@ func main() {
 	legacyAdapter := render.NewLegacyAdapter(renderer, ctx)
 	orchestrator.Register(legacyAdapter, render.PriorityBackground)
 
-	// Create and register UI renderers (Phase 3a)
+	// Create and register renderers in priority order
 	var decayTimeRemaining float64
 
+	// Grid (100)
+	pingGridRenderer := renderers.NewPingGridRenderer(ctx)
+	orchestrator.Register(pingGridRenderer, render.PriorityGrid)
+
+	// Entities (200)
+	charactersRenderer := renderers.NewCharactersRenderer(ctx)
+	orchestrator.Register(charactersRenderer, render.PriorityEntities)
+
+	// Effects (300)
+	shieldRenderer := renderers.NewShieldRenderer()
+	orchestrator.Register(shieldRenderer, render.PriorityEffects)
+
+	effectsRenderer := renderers.NewEffectsRenderer(ctx)
+	orchestrator.Register(effectsRenderer, render.PriorityEffects)
+
+	// Drain (350)
+	drainRenderer := renderers.NewDrainRenderer()
+	orchestrator.Register(drainRenderer, render.PriorityDrain)
+
+	// UI (400)
 	heatMeterRenderer := renderers.NewHeatMeterRenderer(ctx.State)
 	orchestrator.Register(heatMeterRenderer, render.PriorityUI)
 
@@ -118,6 +138,13 @@ func main() {
 
 	statusBarRenderer := renderers.NewStatusBarRenderer(ctx, &decayTimeRemaining)
 	orchestrator.Register(statusBarRenderer, render.PriorityUI)
+
+	cursorRenderer := renderers.NewCursorRenderer(ctx)
+	orchestrator.Register(cursorRenderer, render.PriorityUI)
+
+	// Overlay (500)
+	overlayRenderer := renderers.NewOverlayRenderer(ctx)
+	orchestrator.Register(overlayRenderer, render.PriorityOverlay)
 
 	// Create input handler
 	inputHandler := modes.NewInputHandler(ctx)
