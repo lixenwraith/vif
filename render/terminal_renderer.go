@@ -11,6 +11,23 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
+// Implicit z-order
+// 0. Clear Screen
+// 1. drawHeatMeter
+// 2. drawLineNumbers
+// 3. drawPingHighlights / drawPingGrid
+// 4. drawShields
+// 5. drawCharacters
+// 6. drawDecay
+// 7. drawCleaners
+// 8. drawRemovalFlashes
+// 9. drawMaterializers
+// 10. drawDrain
+// 11. drawColumnIndicators
+// 12. drawStatusBar
+// 13. drawCursor
+// 14. drawOverlay
+
 // TerminalRenderer handles all terminal rendering
 type TerminalRenderer struct {
 	screen              tcell.Screen

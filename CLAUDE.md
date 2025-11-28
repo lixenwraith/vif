@@ -7,74 +7,118 @@ vi-fighter is a terminal-based typing game in Go using a compile-time Generics-b
 
 ### Core Systems
 - **ECS**: Generics-based `World` with `Store[T]` and `PositionStore` (spatial hash).
-- **Game Loop**: Fixed 50ms tick (`ClockScheduler`) decoupled from rendering (`TerminalRenderer`).
+- **Game Loop**: Fixed 50ms tick (`ClockScheduler`) decoupled from rendering.
+- **Render Pipeline**: `RenderOrchestrator` coordinates `SystemRenderer` implementations.
 - **Input**: `InputHandler` processes `tcell` events, managing state transitions between Modes.
 
 ### Resources
 - **Context**: `GameContext` acts as the root state container.
 - **Resources**: `TimeResource`, `ConfigResource`, `InputResource` stored in `World.Resources`.
 
-### Overlay Management
-- **State**: `GameContext` holds `OverlayState` (Active, Title, Content).
-- **Mode**: `ModeOverlay` hijacks input for modal interactions.
-- **Render**: `TerminalRenderer` draws overlay on top of all other layers.
+### Render Architecture
+- **Orchestrator**: `RenderOrchestrator` manages render pipeline lifecycle.
+- **Buffer**: `RenderBuffer` is a dense grid for compositing; zero-alloc after init.
+- **Renderers**: Individual `SystemRenderer` implementations in `render/renderers/`.
+- **Priority**: `RenderPriority` constants determine render order (lower first).
 
-## TASK:
+## CURRENT TASK: Renderer Migration
 
-### 1. Feature: Interactive Debug/Help Overlay
-**Goal**:
-- Create a modal popup system triggered by commands.
-- Support `:d`/`:debug` and `:h`/`:help` commands.
-- Hijack input/render loop to show a bordered window covering 80% of the screen.
+### Objective
+Migrate from monolithic `TerminalRenderer` to System Render Interface pattern where each system owns its rendering logic.
+
+### Reference Document
+`RENDER_MIGRATION.md` at repo root contains:
+- Phase status tracking
+- Core type signatures
+- Legacy function mapping to new renderers
+- Migration rules and patterns
+
+### Key Types
+```go
+type RenderPriority int  // 0=Background, 100=Grid, 200=Entities, 300=Effects, 350=Drain, 400=UI, 500=Overlay
+
+type RenderContext struct {
+    GameTime, FrameNumber, DeltaTime, IsPaused
+    CursorX, CursorY, GameX, GameY, GameWidth, GameHeight, Width, Height
+}
+
+type SystemRenderer interface {
+    Render(ctx RenderContext, world *engine.World, buf *RenderBuffer)
+}
+
+type VisibilityToggle interface {
+    IsVisible() bool
+}
+```
+
+### Migration Pattern
+1. Create renderer struct in `render/renderers/`
+2. Implement `SystemRenderer.Render()` method
+3. Register with orchestrator at appropriate priority
+4. Comment out corresponding legacy draw call
+5. Verify visual correctness
 
 ## FILE STRUCTURE
-- File in scope of task
 ```
 vi-fighter/
-├── engine/
-│   └── game_context.go    # MODIFY: Add ModeOverlay and Overlay state fields
 ├── render/
-│   ├── colors.go          # MODIFY: Add overlay specific colors
-│   └── terminal_renderer.go # MODIFY: Implement drawOverlay method
-├── modes/
-│   ├── input.go           # MODIFY: Add handleOverlayMode dispatch logic
-│   └── commands.go        # MODIFY: Add handlers for debug/help commands
-└── constants/
-    └── ui.go              # MODIFY: Add Overlay layout constants
+│   ├── priority.go        # RenderPriority type and constants
+│   ├── context.go         # RenderContext struct
+│   ├── cell.go            # RenderCell type
+│   ├── buffer.go          # RenderBuffer implementation
+│   ├── interface.go       # SystemRenderer, VisibilityToggle interfaces
+│   ├── orchestrator.go    # RenderOrchestrator
+│   ├── buffer_screen.go   # BufferScreen migration shim
+│   ├── legacy_adapter.go  # LegacyAdapter for transition
+│   ├── terminal_renderer.go # Legacy renderer (being deprecated)
+│   ├── colors.go          # Color constants
+│   └── renderers/         # New SystemRenderer implementations
+│       ├── heat_meter.go
+│       ├── line_numbers.go
+│       ├── column_indicators.go
+│       ├── status_bar.go
+│       ├── ping_grid.go
+│       ├── shields.go
+│       ├── characters.go
+│       ├── effects.go
+│       ├── drain.go
+│       ├── cursor.go
+│       └── overlay.go
+├── engine/
+│   ├── world.go           # ECS World with component stores
+│   ├── game_context.go    # GameContext root state
+│   └── resources.go       # TimeResource, ConfigResource
+├── main.go                # Game loop, orchestrator wiring
+└── RENDER_MIGRATION.md    # Migration reference document
 ```
 
 ## VERIFICATION
-**NO TEST FILES IN REPO**
-- Check if the app compiles
-
-## DOCUMENTATION
-- Update `doc/architecutre.md`
-- Update `doc/game.md` if change affects gameplay
-- Update `README.md` abstract repo document if applicable (no low-level details)
+- `go build .` must succeed
+- Visual verification: game renders correctly
+- No panics on resize or mode transitions
 
 ## ENVIRONMENT
 
 This project relies on `oto` and `beep` for audio, which requires CGO bindings to ALSA on Linux.
 
-**EXACT STEPS THAT WORK (follow in order):**
+**Setup steps:**
 
-1. **Fix Go Module Proxy Issues** (if you see DNS/network failures):
-   ```bash
+1. **Fix Go Module Proxy Issues** (if DNS/network failures):
+```bash
    export GOPROXY="https://goproxy.io,direct"
-   ```
+```
 
-2. **Install ALSA Development Library** (required for audio CGO bindings):
-   ```bash
-   # Don't run apt-get update if it fails - just install directly
+2. **Install ALSA Development Library**:
+```bash
    apt-get install -y libasound2-dev
-   ```
+```
 
 3. **Download Dependencies**:
-   ```bash
+```bash
    GOPROXY="https://goproxy.io,direct" go mod tidy
-   ```
+```
 
-4. **Verify Installation**:
-   ```bash
-   GOPROXY="https://goproxy.io,direct" go test -race ./... -v
-   ```
+4. **Build**:
+```bash
+   GOPROXY="https://goproxy.io,direct" go build .
+```

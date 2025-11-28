@@ -6,7 +6,7 @@ const (
 	ZIndexSpawnChar = 0
 	ZIndexNugget    = 100
 	ZIndexDecay     = 200
-	ZIndexShield    = 300 // Future proofing
+	ZIndexShield    = 300 // TODO: integrate
 	ZIndexDrain     = 400
 	ZIndexCleaner   = 500
 	ZIndexCursor    = 1000
