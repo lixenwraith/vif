@@ -99,6 +99,10 @@ func main() {
 		ctx.Height,
 	)
 
+	// Create legacy adapter and register with orchestrator
+	legacyAdapter := render.NewLegacyAdapter(renderer, ctx)
+	orchestrator.Register(legacyAdapter, render.PriorityBackground)
+
 	// Create input handler
 	inputHandler := modes.NewInputHandler(ctx)
 
@@ -180,6 +184,9 @@ func main() {
 			// During pause: skip game updates but still render
 			if ctx.IsPaused.Load() {
 				// This shows the pause overlay and maintains visual feedback
+				// Update legacy renderer state
+				renderer.SetDecayState(decaySystem.IsAnimating(timeRes.GameTime), decaySystem.GetTimeUntilDecay(timeRes.GameTime))
+
 				cursorPos, _ := ctx.World.Positions.Get(ctx.CursorEntity)
 				renderCtx := render.NewRenderContextFromGame(ctx, timeRes, cursorPos.X, cursorPos.Y)
 				orchestrator.RenderFrame(renderCtx, ctx.World)
@@ -197,6 +204,9 @@ func main() {
 			}
 
 			// Render frame (all updates guaranteed complete)
+			// Update legacy renderer state
+			renderer.SetDecayState(decaySystem.IsAnimating(timeRes.GameTime), decaySystem.GetTimeUntilDecay(timeRes.GameTime))
+
 			cursorPos, _ := ctx.World.Positions.Get(ctx.CursorEntity)
 			renderCtx := render.NewRenderContextFromGame(ctx, timeRes, cursorPos.X, cursorPos.Y)
 			orchestrator.RenderFrame(renderCtx, ctx.World)

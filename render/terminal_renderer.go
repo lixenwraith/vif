@@ -11,6 +11,13 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
+// screenWriter abstracts tcell.Screen for buffer compatibility.
+type screenWriter interface {
+	SetContent(x, y int, primary rune, combining []rune, style tcell.Style)
+	GetContent(x, y int) (primary rune, combining []rune, style tcell.Style, width int)
+	Size() (width, height int)
+}
+
 // Implicit z-order
 // 0. Clear Screen
 // 1. drawHeatMeter
@@ -45,6 +52,10 @@ type TerminalRenderer struct {
 	frameCount    int
 	lastFpsUpdate time.Time
 	currentFps    int
+
+	// For legacy adapter compatibility
+	decayAnimating     bool
+	decayTimeRemaining float64
 }
 
 // NewTerminalRenderer creates a new terminal renderer
@@ -112,8 +123,26 @@ func (r *TerminalRenderer) buildMaterializeGradient() {
 	}
 }
 
-// RenderFrame renders the entire game frame
+// RenderFrame renders the entire game frame to tcell.Screen.
 func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating bool, decayTimeRemaining float64) {
+	r.decayAnimating = decayAnimating
+	r.decayTimeRemaining = decayTimeRemaining
+
+	r.screen.Clear()
+	r.renderToWriter(ctx, r.screen)
+	r.screen.Show()
+}
+
+// RenderFrameToScreen renders to a BufferScreen for orchestrator integration.
+// Implements LegacyRenderer interface.
+func (r *TerminalRenderer) RenderFrameToScreen(ctx *engine.GameContext, screen *BufferScreen) {
+	// Use interface to allow both tcell.Screen and BufferScreen
+	var sw screenWriter = screen
+	r.renderToWriter(ctx, sw)
+}
+
+// renderToWriter is the shared implementation for both render paths.
+func (r *TerminalRenderer) renderToWriter(ctx *engine.GameContext, sw screenWriter) {
 	// FPS Calculation
 	r.frameCount++
 	now := time.Now()
@@ -123,75 +152,78 @@ func (r *TerminalRenderer) RenderFrame(ctx *engine.GameContext, decayAnimating b
 		r.lastFpsUpdate = now
 	}
 
-	// Increment frame counter and get frame number
+	// Increment frame counter
 	ctx.IncrementFrameNumber()
 
-	r.screen.Clear()
+	// Clear via setting each cell (BufferScreen has no Clear method)
 	defaultStyle := tcell.StyleDefault.Background(RgbBackground)
+	width, height := sw.Size()
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			sw.SetContent(x, y, ' ', nil, defaultStyle)
+		}
+	}
 
 	// Draw heat meter
-	r.drawHeatMeter(ctx.State.GetHeat(), defaultStyle)
+	r.drawHeatMeterTo(ctx.State.GetHeat(), defaultStyle, sw)
 
 	// Read cursor position
 	cursorPos, ok := ctx.World.Positions.Get(ctx.CursorEntity)
 	if !ok {
-		// return
 		panic(fmt.Errorf("cursor destroyed"))
 	}
 
 	// Draw line numbers
-	r.drawLineNumbers(cursorPos.Y, ctx, defaultStyle)
+	r.drawLineNumbersTo(cursorPos.Y, ctx, defaultStyle, sw)
 
-	// Get ping color for later use
-	pingColor := r.getPingColor(ctx.World, cursorPos.X, cursorPos.Y, ctx)
+	// Get ping color
+	pingColor := r.getPingColorTo(ctx.World, cursorPos.X, cursorPos.Y, ctx, sw)
 
-	// Draw ping highlights (cursor row/column) and grid - BEFORE characters
-	r.drawPingHighlights(cursorPos.X, cursorPos.Y, ctx, pingColor, defaultStyle)
+	// Draw ping highlights and grid
+	r.drawPingHighlightsTo(cursorPos.X, cursorPos.Y, ctx, pingColor, defaultStyle, sw)
 
-	// Draw Shields (blends with background/ping) - BEFORE characters
-	r.drawShields(ctx.World)
+	// Draw shields
+	r.drawShieldsTo(ctx.World, sw)
 
-	// Draw characters - will render over grid
-	r.drawCharacters(ctx.World, cursorPos.X, cursorPos.Y, pingColor, defaultStyle, ctx)
+	// Draw characters
+	r.drawCharactersTo(ctx.World, cursorPos.X, cursorPos.Y, pingColor, defaultStyle, ctx, sw)
 
-	// Draw decay animation if active - AFTER ping highlights
-	if decayAnimating {
-		r.drawDecay(ctx.World, defaultStyle)
+	// Draw decay
+	if r.decayAnimating {
+		r.drawDecayTo(ctx.World, defaultStyle, sw)
 	}
 
-	// Draw cleaners if active - AFTER decay animation
-	r.drawCleaners(ctx.World, defaultStyle)
+	// Draw cleaners
+	r.drawCleanersTo(ctx.World, defaultStyle, sw)
 
-	// Draw removal flash effects - AFTER cleaners
-	r.drawRemovalFlashes(ctx.World, ctx, defaultStyle)
+	// Draw removal flashes
+	r.drawRemovalFlashesTo(ctx.World, ctx, defaultStyle, sw)
 
-	// Draw materialize animation if active - BEFORE drain
-	r.drawMaterializers(ctx.World, defaultStyle)
+	// Draw materializers
+	r.drawMaterializersTo(ctx.World, defaultStyle, sw)
 
-	// Draw drain entity - AFTER removal flashes, BEFORE cursor
-	r.drawDrain(ctx.World, defaultStyle)
+	// Draw drain
+	r.drawDrainTo(ctx.World, defaultStyle, sw)
 
 	// Draw column indicators
-	r.drawColumnIndicators(cursorPos.X, ctx, defaultStyle)
+	r.drawColumnIndicatorsTo(cursorPos.X, ctx, defaultStyle, sw)
 
 	// Draw status bar
-	r.drawStatusBar(ctx, defaultStyle, decayTimeRemaining)
+	r.drawStatusBarTo(ctx, defaultStyle, r.decayTimeRemaining, sw)
 
-	// Draw cursor (if not in search or command mode)
+	// Draw cursor
 	if !ctx.IsSearchMode() && !ctx.IsCommandMode() {
-		r.drawCursor(cursorPos.X, cursorPos.Y, ctx, defaultStyle)
+		r.drawCursorTo(cursorPos.X, cursorPos.Y, ctx, defaultStyle, sw)
 	}
 
-	// Draw overlay on top of everything if active
+	// Draw overlay
 	if ctx.IsOverlayMode() && ctx.OverlayActive {
-		r.drawOverlay(ctx, defaultStyle)
+		r.drawOverlayTo(ctx, defaultStyle, sw)
 	}
-
-	r.screen.Show()
 }
 
-// drawHeatMeter draws the heat meter at the top as a 10-segment display
-func (r *TerminalRenderer) drawHeatMeter(heat int, defaultStyle tcell.Style) {
+// drawHeatMeterTo draws the heat meter at the top as a 10-segment display
+func (r *TerminalRenderer) drawHeatMeterTo(heat int, defaultStyle tcell.Style, sw screenWriter) {
 	// Calculate display heat: map 0-MaxHeat to 0-10 segments
 	displayHeat := int(float64(heat) / float64(constants.MaxHeat) * 10.0)
 	if displayHeat > 10 {
@@ -224,13 +256,18 @@ func (r *TerminalRenderer) drawHeatMeter(heat int, defaultStyle tcell.Style) {
 
 		// Draw all characters in this segment
 		for x := segmentStart; x < segmentEnd && x < r.width; x++ {
-			r.screen.SetContent(x, 0, '█', nil, style)
+			sw.SetContent(x, 0, '█', nil, style)
 		}
 	}
 }
 
-// drawLineNumbers draws relative line numbers
-func (r *TerminalRenderer) drawLineNumbers(cursorY int, ctx *engine.GameContext, defaultStyle tcell.Style) {
+// drawHeatMeter draws the heat meter (legacy wrapper)
+func (r *TerminalRenderer) drawHeatMeter(heat int, defaultStyle tcell.Style) {
+	r.drawHeatMeterTo(heat, defaultStyle, r.screen)
+}
+
+// drawLineNumbersTo draws relative line numbers
+func (r *TerminalRenderer) drawLineNumbersTo(cursorY int, ctx *engine.GameContext, defaultStyle tcell.Style, sw screenWriter) {
 	lineNumStyle := defaultStyle.Foreground(RgbLineNumbers)
 
 	for y := 0; y < r.gameHeight; y++ {
@@ -253,13 +290,18 @@ func (r *TerminalRenderer) drawLineNumbers(cursorY int, ctx *engine.GameContext,
 
 		screenY := r.gameY + y
 		for i, ch := range lineNum {
-			r.screen.SetContent(i, screenY, ch, nil, numStyle)
+			sw.SetContent(i, screenY, ch, nil, numStyle)
 		}
 	}
 }
 
-// getPingColor determines the ping highlight color based on game mode
-func (r *TerminalRenderer) getPingColor(world *engine.World, cursorX, cursorY int, ctx *engine.GameContext) tcell.Color {
+// drawLineNumbers draws relative line numbers (legacy wrapper)
+func (r *TerminalRenderer) drawLineNumbers(cursorY int, ctx *engine.GameContext, defaultStyle tcell.Style) {
+	r.drawLineNumbersTo(cursorY, ctx, defaultStyle, r.screen)
+}
+
+// getPingColorTo determines the ping highlight color based on game mode
+func (r *TerminalRenderer) getPingColorTo(world *engine.World, cursorX, cursorY int, ctx *engine.GameContext, sw screenWriter) tcell.Color {
 	// INSERT mode: use whitespace color (dark gray)
 	// NORMAL/SEARCH mode: use character color (almost black)
 	if ctx.IsInsertMode() {
@@ -268,18 +310,23 @@ func (r *TerminalRenderer) getPingColor(world *engine.World, cursorX, cursorY in
 	return RgbPingNormal // Almost black for NORMAL and SEARCH modes
 }
 
-// drawPingHighlights draws the cursor row and column highlights
+// getPingColor determines the ping highlight color based on game mode (legacy wrapper)
+func (r *TerminalRenderer) getPingColor(world *engine.World, cursorX, cursorY int, ctx *engine.GameContext) tcell.Color {
+	return r.getPingColorTo(world, cursorX, cursorY, ctx, r.screen)
+}
+
+// drawPingHighlightsTo draws the cursor row and column highlights
 // Draws ONLY on cells with default/black background to avoid overwriting shield
-func (r *TerminalRenderer) drawPingHighlights(cursorX, cursorY int, ctx *engine.GameContext, pingColor tcell.Color, defaultStyle tcell.Style) {
+func (r *TerminalRenderer) drawPingHighlightsTo(cursorX, cursorY int, ctx *engine.GameContext, pingColor tcell.Color, defaultStyle tcell.Style, sw screenWriter) {
 	pingStyle := defaultStyle.Background(pingColor)
 
 	// Helper to draw ping only if cell has default background
 	drawPingCell := func(screenX, screenY int) {
-		_, _, existingStyle, _ := r.screen.GetContent(screenX, screenY)
+		_, _, existingStyle, _ := sw.GetContent(screenX, screenY)
 		_, bg, _ := existingStyle.Decompose()
 		// Only draw ping if background is default/black (don't overwrite shield)
 		if bg == tcell.ColorDefault || bg == RgbBackground {
-			r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+			sw.SetContent(screenX, screenY, ' ', nil, pingStyle)
 		}
 	}
 
@@ -303,20 +350,25 @@ func (r *TerminalRenderer) drawPingHighlights(cursorX, cursorY int, ctx *engine.
 
 	// Draw grid lines if ping is active
 	if ctx.GetPingActive() {
-		r.drawPingGrid(cursorX, cursorY, defaultStyle)
+		r.drawPingGridTo(cursorX, cursorY, defaultStyle, sw)
 	}
 }
 
-// drawPingGrid draws coordinate grid lines at 5-column intervals
+// drawPingHighlights draws the cursor row and column highlights (legacy wrapper)
+func (r *TerminalRenderer) drawPingHighlights(cursorX, cursorY int, ctx *engine.GameContext, pingColor tcell.Color, defaultStyle tcell.Style) {
+	r.drawPingHighlightsTo(cursorX, cursorY, ctx, pingColor, defaultStyle, r.screen)
+}
+
+// drawPingGridTo draws coordinate grid lines at 5-column intervals
 // Only draws on cells with default background
-func (r *TerminalRenderer) drawPingGrid(cursorX, cursorY int, pingStyle tcell.Style) {
+func (r *TerminalRenderer) drawPingGridTo(cursorX, cursorY int, pingStyle tcell.Style, sw screenWriter) {
 
 	// Helper to draw ping only if cell has default background
 	drawPingCell := func(screenX, screenY int) {
-		_, _, existingStyle, _ := r.screen.GetContent(screenX, screenY)
+		_, _, existingStyle, _ := sw.GetContent(screenX, screenY)
 		_, bg, _ := existingStyle.Decompose()
 		if bg == tcell.ColorDefault || bg == RgbBackground {
-			r.screen.SetContent(screenX, screenY, ' ', nil, pingStyle)
+			sw.SetContent(screenX, screenY, ' ', nil, pingStyle)
 		}
 	}
 
@@ -341,7 +393,7 @@ func (r *TerminalRenderer) drawPingGrid(cursorX, cursorY int, pingStyle tcell.St
 			for y := 0; y < r.gameHeight; y++ {
 				screenX := r.gameX + col
 				screenY := r.gameY + y
-				if screenX >= r.gameX && screenX < r.width && screenY >= r.gameY && screenY < r.gameHeight {
+				if screenX >= r.gameX && screenX < r.width && screenY >= r.gameY && screenY < r.gameY+r.gameHeight {
 					drawPingCell(screenX, screenY)
 				}
 			}
@@ -377,8 +429,13 @@ func (r *TerminalRenderer) drawPingGrid(cursorX, cursorY int, pingStyle tcell.St
 	}
 }
 
-// drawCharacters draws all character entities
-func (r *TerminalRenderer) drawCharacters(world *engine.World, cursorX, cursorY int, pingColor tcell.Color, defaultStyle tcell.Style, ctx *engine.GameContext) {
+// drawPingGrid draws coordinate grid lines at 5-column intervals (legacy wrapper)
+func (r *TerminalRenderer) drawPingGrid(cursorX, cursorY int, pingStyle tcell.Style) {
+	r.drawPingGridTo(cursorX, cursorY, pingStyle, r.screen)
+}
+
+// drawCharactersTo draws all character entities
+func (r *TerminalRenderer) drawCharactersTo(world *engine.World, cursorX, cursorY int, pingColor tcell.Color, defaultStyle tcell.Style, ctx *engine.GameContext, sw screenWriter) {
 	// Query entities with both position and character
 	entities := world.Query().
 		With(world.Positions).
@@ -401,7 +458,7 @@ func (r *TerminalRenderer) drawCharacters(world *engine.World, cursorX, cursorY 
 		}
 
 		// Get existing content to preserve background (e.g., Shield color)
-		_, _, existingStyle, _ := r.screen.GetContent(screenX, screenY)
+		_, _, existingStyle, _ := sw.GetContent(screenX, screenY)
 		_, bg, _ := existingStyle.Decompose()
 
 		// Handle default background case
@@ -450,12 +507,17 @@ func (r *TerminalRenderer) drawCharacters(world *engine.World, cursorX, cursorY 
 			finalStyle = tcell.StyleDefault.Foreground(dimmedFg).Background(finalBg).Attributes(attrs)
 		}
 
-		r.screen.SetContent(screenX, screenY, char.Rune, nil, finalStyle)
+		sw.SetContent(screenX, screenY, char.Rune, nil, finalStyle)
 	}
 }
 
-// drawDecay draws the falling decay characters
-func (r *TerminalRenderer) drawDecay(world *engine.World, defaultStyle tcell.Style) {
+// drawCharacters draws all character entities (legacy wrapper)
+func (r *TerminalRenderer) drawCharacters(world *engine.World, cursorX, cursorY int, pingColor tcell.Color, defaultStyle tcell.Style, ctx *engine.GameContext) {
+	r.drawCharactersTo(world, cursorX, cursorY, pingColor, defaultStyle, ctx, r.screen)
+}
+
+// drawDecayTo draws the falling decay characters
+func (r *TerminalRenderer) drawDecayTo(world *engine.World, defaultStyle tcell.Style, sw screenWriter) {
 	// Direct store access - single component query
 	decayEntities := world.Decays.All()
 
@@ -481,7 +543,7 @@ func (r *TerminalRenderer) drawDecay(world *engine.World, defaultStyle tcell.Sty
 		}
 
 		// Preserve existing background (e.g., Shield)
-		_, _, existingStyle, _ := r.screen.GetContent(screenX, screenY)
+		_, _, existingStyle, _ := sw.GetContent(screenX, screenY)
 		_, bg, _ := existingStyle.Decompose()
 
 		if bg == tcell.ColorDefault {
@@ -491,13 +553,18 @@ func (r *TerminalRenderer) drawDecay(world *engine.World, defaultStyle tcell.Sty
 		// Combine decay foreground with existing background
 		decayStyle := defaultStyle.Foreground(fgColor).Background(bg)
 
-		r.screen.SetContent(screenX, screenY, decay.Char, nil, decayStyle)
+		sw.SetContent(screenX, screenY, decay.Char, nil, decayStyle)
 	}
 }
 
-// drawCleaners draws the cleaner animation using the trail of grid points.
+// drawDecay draws the falling decay characters (legacy wrapper)
+func (r *TerminalRenderer) drawDecay(world *engine.World, defaultStyle tcell.Style) {
+	r.drawDecayTo(world, defaultStyle, r.screen)
+}
+
+// drawCleanersTo draws the cleaner animation using the trail of grid points.
 // Cleaners are opaque and render ON TOP of everything (occlude shield).
-func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.Style) {
+func (r *TerminalRenderer) drawCleanersTo(world *engine.World, defaultStyle tcell.Style, sw screenWriter) {
 	cleanerEntities := world.Cleaners.All()
 
 	// Calculate gradient length
@@ -535,13 +602,19 @@ func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.
 			color := r.cleanerGradient[gradientIndex]
 			style := defaultStyle.Foreground(color).Background(RgbBackground)
 
-			r.screen.SetContent(screenX, screenY, cleaner.Char, nil, style)
+			sw.SetContent(screenX, screenY, cleaner.Char, nil, style)
 		}
 	}
 }
 
-// drawMaterializers draws the materialize animation using the trail of grid points.
-func (r *TerminalRenderer) drawMaterializers(world *engine.World, defaultStyle tcell.Style) {
+// drawCleaners draws the cleaner animation using the trail of grid points (legacy wrapper).
+// Cleaners are opaque and render ON TOP of everything (occlude shield).
+func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.Style) {
+	r.drawCleanersTo(world, defaultStyle, r.screen)
+}
+
+// drawMaterializersTo draws the materialize animation using the trail of grid points.
+func (r *TerminalRenderer) drawMaterializersTo(world *engine.World, defaultStyle tcell.Style, sw screenWriter) {
 	entities := world.Materializers.All()
 	if len(entities) == 0 {
 		return
@@ -582,7 +655,7 @@ func (r *TerminalRenderer) drawMaterializers(world *engine.World, defaultStyle t
 			color := r.materializeGradient[gradientIndex]
 
 			// Preserve existing background (e.g., Shield color)
-			_, _, existingStyle, _ := r.screen.GetContent(screenX, screenY)
+			_, _, existingStyle, _ := sw.GetContent(screenX, screenY)
 			_, bg, _ := existingStyle.Decompose()
 
 			if bg == tcell.ColorDefault {
@@ -590,13 +663,18 @@ func (r *TerminalRenderer) drawMaterializers(world *engine.World, defaultStyle t
 			}
 
 			style := defaultStyle.Foreground(color).Background(bg)
-			r.screen.SetContent(screenX, screenY, mat.Char, nil, style)
+			sw.SetContent(screenX, screenY, mat.Char, nil, style)
 		}
 	}
 }
 
-// drawDrain draws the drain entity with transparent background
-func (r *TerminalRenderer) drawDrain(world *engine.World, defaultStyle tcell.Style) {
+// drawMaterializers draws the materialize animation using the trail of grid points (legacy wrapper).
+func (r *TerminalRenderer) drawMaterializers(world *engine.World, defaultStyle tcell.Style) {
+	r.drawMaterializersTo(world, defaultStyle, r.screen)
+}
+
+// drawDrainTo draws the drain entity with transparent background
+func (r *TerminalRenderer) drawDrainTo(world *engine.World, defaultStyle tcell.Style, sw screenWriter) {
 	// Get all drains
 	drainEntities := world.Drains.All()
 	if len(drainEntities) == 0 {
@@ -621,7 +699,7 @@ func (r *TerminalRenderer) drawDrain(world *engine.World, defaultStyle tcell.Sty
 		}
 
 		// Draw the drain character with transparent background
-		_, _, style, _ := r.screen.GetContent(screenX, screenY)
+		_, _, style, _ := sw.GetContent(screenX, screenY)
 		_, bg, _ := style.Decompose()
 
 		if bg == tcell.ColorDefault {
@@ -629,12 +707,17 @@ func (r *TerminalRenderer) drawDrain(world *engine.World, defaultStyle tcell.Sty
 		}
 
 		drainStyle := defaultStyle.Foreground(RgbDrain).Background(bg)
-		r.screen.SetContent(screenX, screenY, constants.DrainChar, nil, drainStyle)
+		sw.SetContent(screenX, screenY, constants.DrainChar, nil, drainStyle)
 	}
 }
 
-// drawRemovalFlashes draws the brief flash effects when red characters are removed
-func (r *TerminalRenderer) drawRemovalFlashes(world *engine.World, ctx *engine.GameContext, defaultStyle tcell.Style) {
+// drawDrain draws the drain entity with transparent background (legacy wrapper)
+func (r *TerminalRenderer) drawDrain(world *engine.World, defaultStyle tcell.Style) {
+	r.drawDrainTo(world, defaultStyle, r.screen)
+}
+
+// drawRemovalFlashesTo draws the brief flash effects when red characters are removed
+func (r *TerminalRenderer) drawRemovalFlashesTo(world *engine.World, ctx *engine.GameContext, defaultStyle tcell.Style, sw screenWriter) {
 	// Use world for direct store access
 	entities := world.Flashes.All()
 
@@ -675,7 +758,7 @@ func (r *TerminalRenderer) drawRemovalFlashes(world *engine.World, ctx *engine.G
 		screenY := r.gameY + flash.Y
 
 		// Preserve existing background
-		_, _, existingStyle, _ := r.screen.GetContent(screenX, screenY)
+		_, _, existingStyle, _ := sw.GetContent(screenX, screenY)
 		_, bg, _ := existingStyle.Decompose()
 
 		if bg == tcell.ColorDefault {
@@ -683,12 +766,17 @@ func (r *TerminalRenderer) drawRemovalFlashes(world *engine.World, ctx *engine.G
 		}
 
 		flashStyle := defaultStyle.Foreground(flashColor).Background(bg)
-		r.screen.SetContent(screenX, screenY, flash.Char, nil, flashStyle)
+		sw.SetContent(screenX, screenY, flash.Char, nil, flashStyle)
 	}
 }
 
-// drawColumnIndicators draws column position indicators
-func (r *TerminalRenderer) drawColumnIndicators(cursorX int, ctx *engine.GameContext, defaultStyle tcell.Style) {
+// drawRemovalFlashes draws the brief flash effects when red characters are removed (legacy wrapper)
+func (r *TerminalRenderer) drawRemovalFlashes(world *engine.World, ctx *engine.GameContext, defaultStyle tcell.Style) {
+	r.drawRemovalFlashesTo(world, ctx, defaultStyle, r.screen)
+}
+
+// drawColumnIndicatorsTo draws column position indicators
+func (r *TerminalRenderer) drawColumnIndicatorsTo(cursorX int, ctx *engine.GameContext, defaultStyle tcell.Style, sw screenWriter) {
 	indicatorY := r.gameY + r.gameHeight
 	indicatorStyle := defaultStyle.Foreground(RgbColumnIndicator)
 
@@ -719,22 +807,27 @@ func (r *TerminalRenderer) drawColumnIndicators(cursorX int, ctx *engine.GameCon
 			}
 			colStyle = indicatorStyle
 		}
-		r.screen.SetContent(screenX, indicatorY, ch, nil, colStyle)
+		sw.SetContent(screenX, indicatorY, ch, nil, colStyle)
 	}
 
 	// Clear line number area for indicator row
 	for i := 0; i < r.gameX; i++ {
-		r.screen.SetContent(i, indicatorY, ' ', nil, defaultStyle)
+		sw.SetContent(i, indicatorY, ' ', nil, defaultStyle)
 	}
 }
 
-// drawStatusBar draws the status bar
-func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle tcell.Style, decayTimeRemaining float64) {
+// drawColumnIndicators draws column position indicators (legacy wrapper)
+func (r *TerminalRenderer) drawColumnIndicators(cursorX int, ctx *engine.GameContext, defaultStyle tcell.Style) {
+	r.drawColumnIndicatorsTo(cursorX, ctx, defaultStyle, r.screen)
+}
+
+// drawStatusBarTo draws the status bar
+func (r *TerminalRenderer) drawStatusBarTo(ctx *engine.GameContext, defaultStyle tcell.Style, decayTimeRemaining float64, sw screenWriter) {
 	statusY := r.gameY + r.gameHeight + 1
 
 	// Clear status bar
 	for x := 0; x < r.width; x++ {
-		r.screen.SetContent(x, statusY, ' ', nil, defaultStyle)
+		sw.SetContent(x, statusY, ' ', nil, defaultStyle)
 	}
 
 	// Track current x position for status bar elements
@@ -751,7 +844,7 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 		}
 		audioStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(audioBgColor)
 		for _, ch := range constants.AudioStr {
-			r.screen.SetContent(x, y, ch, nil, audioStyle)
+			sw.SetContent(x, y, ch, nil, audioStyle)
 			x++
 		}
 	}
@@ -775,7 +868,7 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 	modeStyle := defaultStyle.Foreground(RgbStatusText).Background(modeBgColor)
 	for i, ch := range modeText {
 		if x+i < r.width {
-			r.screen.SetContent(x+i, statusY, ch, nil, modeStyle)
+			sw.SetContent(x+i, statusY, ch, nil, modeStyle)
 		}
 	}
 	x += len(modeText)
@@ -787,7 +880,7 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 		lastCmdStyle := defaultStyle.Foreground(tcell.ColorYellow)
 		for i, ch := range ctx.LastCommand {
 			if statusStartX+i < r.width {
-				r.screen.SetContent(statusStartX+i, statusY, ch, nil, lastCmdStyle)
+				sw.SetContent(statusStartX+i, statusY, ch, nil, lastCmdStyle)
 			}
 		}
 		statusStartX += len(ctx.LastCommand) + 1
@@ -802,13 +895,13 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 
 		for i, ch := range ctx.SearchText {
 			if statusStartX+i < r.width {
-				r.screen.SetContent(statusStartX+i, statusY, ch, nil, searchStyle)
+				sw.SetContent(statusStartX+i, statusY, ch, nil, searchStyle)
 			}
 		}
 
 		cursorX := statusStartX + len(ctx.SearchText)
 		if cursorX < r.width {
-			r.screen.SetContent(cursorX, statusY, ' ', nil, cursorStyle)
+			sw.SetContent(cursorX, statusY, ' ', nil, cursorStyle)
 		}
 	} else if ctx.IsCommandMode() {
 		commandStyle := defaultStyle.Foreground(tcell.ColorWhite)
@@ -816,19 +909,19 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 
 		for i, ch := range ctx.CommandText {
 			if statusStartX+i < r.width {
-				r.screen.SetContent(statusStartX+i, statusY, ch, nil, commandStyle)
+				sw.SetContent(statusStartX+i, statusY, ch, nil, commandStyle)
 			}
 		}
 
 		cursorX := statusStartX + len(ctx.CommandText)
 		if cursorX < r.width {
-			r.screen.SetContent(cursorX, statusY, ' ', nil, cursorStyle)
+			sw.SetContent(cursorX, statusY, ' ', nil, cursorStyle)
 		}
 	} else {
 		statusStyle := defaultStyle.Foreground(RgbStatusBar)
 		for i, ch := range ctx.StatusMessage {
 			if statusStartX+i < r.width {
-				r.screen.SetContent(statusStartX+i, statusY, ch, nil, statusStyle)
+				sw.SetContent(statusStartX+i, statusY, ch, nil, statusStyle)
 			}
 		}
 	}
@@ -879,7 +972,7 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 		boostStyle := defaultStyle.Foreground(RgbStatusText).Background(RgbBoostBg)
 		for i, ch := range boostText {
 			if startX+i < r.width {
-				r.screen.SetContent(startX+i, statusY, ch, nil, boostStyle)
+				sw.SetContent(startX+i, statusY, ch, nil, boostStyle)
 			}
 		}
 		startX += len(boostText)
@@ -890,7 +983,7 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 		gridStyle := defaultStyle.Foreground(tcell.ColorWhite)
 		for i, ch := range gridText {
 			if startX+i < r.width {
-				r.screen.SetContent(startX+i, statusY, ch, nil, gridStyle)
+				sw.SetContent(startX+i, statusY, ch, nil, gridStyle)
 			}
 		}
 		startX += len(gridText)
@@ -900,7 +993,7 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 	decayStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(RgbDecayTimerBg)
 	for i, ch := range decayText {
 		if startX+i < r.width {
-			r.screen.SetContent(startX+i, statusY, ch, nil, decayStyle)
+			sw.SetContent(startX+i, statusY, ch, nil, decayStyle)
 		}
 	}
 	startX += len(decayText)
@@ -930,14 +1023,14 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 		}
 		for i, ch := range energyText {
 			if startX+i < r.width {
-				r.screen.SetContent(startX+i, statusY, ch, nil, energyStyle)
+				sw.SetContent(startX+i, statusY, ch, nil, energyStyle)
 			}
 		}
 	} else {
 		energyStyle := defaultStyle.Foreground(RgbBlack).Background(RgbEnergyBg)
 		for i, ch := range energyText {
 			if startX+i < r.width {
-				r.screen.SetContent(startX+i, statusY, ch, nil, energyStyle)
+				sw.SetContent(startX+i, statusY, ch, nil, energyStyle)
 			}
 		}
 	}
@@ -947,7 +1040,7 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 	apmStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(RgbApmBg)
 	for i, ch := range apmStr {
 		if startX+i < r.width {
-			r.screen.SetContent(startX+i, statusY, ch, nil, apmStyle)
+			sw.SetContent(startX+i, statusY, ch, nil, apmStyle)
 		}
 	}
 	startX += len(apmStr)
@@ -956,7 +1049,7 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 	gtStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(RgbGtBg)
 	for i, ch := range gtStr {
 		if startX+i < r.width {
-			r.screen.SetContent(startX+i, statusY, ch, nil, gtStyle)
+			sw.SetContent(startX+i, statusY, ch, nil, gtStyle)
 		}
 	}
 	startX += len(gtStr)
@@ -965,13 +1058,18 @@ func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle t
 	fpsStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(RgbFpsBg)
 	for i, ch := range fpsStr {
 		if startX+i < r.width {
-			r.screen.SetContent(startX+i, statusY, ch, nil, fpsStyle)
+			sw.SetContent(startX+i, statusY, ch, nil, fpsStyle)
 		}
 	}
 }
 
-// drawCursor draws the cursor handling complex overlaps with masked entities
-func (r *TerminalRenderer) drawCursor(cursorX, cursorY int, ctx *engine.GameContext, defaultStyle tcell.Style) {
+// drawStatusBar draws the status bar (legacy wrapper)
+func (r *TerminalRenderer) drawStatusBar(ctx *engine.GameContext, defaultStyle tcell.Style, decayTimeRemaining float64) {
+	r.drawStatusBarTo(ctx, defaultStyle, decayTimeRemaining, r.screen)
+}
+
+// drawCursorTo draws the cursor handling complex overlaps with masked entities
+func (r *TerminalRenderer) drawCursorTo(cursorX, cursorY int, ctx *engine.GameContext, defaultStyle tcell.Style, sw screenWriter) {
 	screenX := r.gameX + cursorX
 	screenY := r.gameY + cursorY
 
@@ -1088,7 +1186,12 @@ func (r *TerminalRenderer) drawCursor(cursorX, cursorY int, ctx *engine.GameCont
 
 	// 5. Render
 	style := defaultStyle.Foreground(charFgColor).Background(cursorBgColor)
-	r.screen.SetContent(screenX, screenY, charAtCursor, nil, style)
+	sw.SetContent(screenX, screenY, charAtCursor, nil, style)
+}
+
+// drawCursor draws the cursor handling complex overlaps with masked entities (legacy wrapper)
+func (r *TerminalRenderer) drawCursor(cursorX, cursorY int, ctx *engine.GameContext, defaultStyle tcell.Style) {
+	r.drawCursorTo(cursorX, cursorY, ctx, defaultStyle, r.screen)
 }
 
 // UpdateDimensions updates the renderer dimensions
@@ -1102,8 +1205,14 @@ func (r *TerminalRenderer) UpdateDimensions(width, height, gameX, gameY, gameWid
 	r.lineNumWidth = lineNumWidth
 }
 
-// drawOverlay draws the modal overlay window with borders
-func (r *TerminalRenderer) drawOverlay(ctx *engine.GameContext, defaultStyle tcell.Style) {
+// SetDecayState updates decay animation state for legacy rendering.
+func (r *TerminalRenderer) SetDecayState(animating bool, timeRemaining float64) {
+	r.decayAnimating = animating
+	r.decayTimeRemaining = timeRemaining
+}
+
+// drawOverlayTo draws the modal overlay window with borders
+func (r *TerminalRenderer) drawOverlayTo(ctx *engine.GameContext, defaultStyle tcell.Style, sw screenWriter) {
 	// Calculate overlay dimensions (80% of screen)
 	overlayWidth := int(float64(r.width) * constants.OverlayWidthPercent)
 	overlayHeight := int(float64(r.height) * constants.OverlayHeightPercent)
@@ -1134,11 +1243,11 @@ func (r *TerminalRenderer) drawOverlay(ctx *engine.GameContext, defaultStyle tce
 	titleStyle := defaultStyle.Foreground(RgbOverlayTitle).Background(RgbOverlayBg)
 
 	// Draw top border with title
-	r.screen.SetContent(startX, startY, '╔', nil, borderStyle)
+	sw.SetContent(startX, startY, '╔', nil, borderStyle)
 	for x := 1; x < overlayWidth-1; x++ {
-		r.screen.SetContent(startX+x, startY, '═', nil, borderStyle)
+		sw.SetContent(startX+x, startY, '═', nil, borderStyle)
 	}
-	r.screen.SetContent(startX+overlayWidth-1, startY, '╗', nil, borderStyle)
+	sw.SetContent(startX+overlayWidth-1, startY, '╗', nil, borderStyle)
 
 	// Draw title centered on top border
 	if ctx.OverlayTitle != "" {
@@ -1146,7 +1255,7 @@ func (r *TerminalRenderer) drawOverlay(ctx *engine.GameContext, defaultStyle tce
 		if titleX > startX {
 			for i, ch := range ctx.OverlayTitle {
 				if titleX+i < startX+overlayWidth-1 {
-					r.screen.SetContent(titleX+i, startY, ch, nil, titleStyle)
+					sw.SetContent(titleX+i, startY, ch, nil, titleStyle)
 				}
 			}
 		}
@@ -1158,23 +1267,23 @@ func (r *TerminalRenderer) drawOverlay(ctx *engine.GameContext, defaultStyle tce
 
 	for y := 1; y < overlayHeight-1; y++ {
 		// Left border
-		r.screen.SetContent(startX, startY+y, '║', nil, borderStyle)
+		sw.SetContent(startX, startY+y, '║', nil, borderStyle)
 
 		// Fill background
 		for x := 1; x < overlayWidth-1; x++ {
-			r.screen.SetContent(startX+x, startY+y, ' ', nil, bgStyle)
+			sw.SetContent(startX+x, startY+y, ' ', nil, bgStyle)
 		}
 
 		// Right border
-		r.screen.SetContent(startX+overlayWidth-1, startY+y, '║', nil, borderStyle)
+		sw.SetContent(startX+overlayWidth-1, startY+y, '║', nil, borderStyle)
 	}
 
 	// Draw bottom border
-	r.screen.SetContent(startX, startY+overlayHeight-1, '╚', nil, borderStyle)
+	sw.SetContent(startX, startY+overlayHeight-1, '╚', nil, borderStyle)
 	for x := 1; x < overlayWidth-1; x++ {
-		r.screen.SetContent(startX+x, startY+overlayHeight-1, '═', nil, borderStyle)
+		sw.SetContent(startX+x, startY+overlayHeight-1, '═', nil, borderStyle)
 	}
-	r.screen.SetContent(startX+overlayWidth-1, startY+overlayHeight-1, '╝', nil, borderStyle)
+	sw.SetContent(startX+overlayWidth-1, startY+overlayHeight-1, '╝', nil, borderStyle)
 
 	// Draw content lines
 	contentStartY := startY + 1 + constants.OverlayPaddingY
@@ -1203,7 +1312,7 @@ func (r *TerminalRenderer) drawOverlay(ctx *engine.GameContext, defaultStyle tce
 		// Draw the line
 		for j, ch := range displayLine {
 			if contentStartX+j < startX+overlayWidth-1-constants.OverlayPaddingX {
-				r.screen.SetContent(contentStartX+j, lineY, ch, nil, bgStyle)
+				sw.SetContent(contentStartX+j, lineY, ch, nil, bgStyle)
 			}
 		}
 		lineY++
@@ -1215,9 +1324,14 @@ func (r *TerminalRenderer) drawOverlay(ctx *engine.GameContext, defaultStyle tce
 		scrollX := startX + overlayWidth - len(scrollInfo) - 2
 		scrollY := startY + overlayHeight - 1
 		for i, ch := range scrollInfo {
-			r.screen.SetContent(scrollX+i, scrollY, ch, nil, borderStyle)
+			sw.SetContent(scrollX+i, scrollY, ch, nil, borderStyle)
 		}
 	}
+}
+
+// drawOverlay draws the modal overlay window with borders (legacy wrapper)
+func (r *TerminalRenderer) drawOverlay(ctx *engine.GameContext, defaultStyle tcell.Style) {
+	r.drawOverlayTo(ctx, defaultStyle, r.screen)
 }
 
 // blendColors blends two colors based on alpha.
@@ -1248,9 +1362,9 @@ func (r *TerminalRenderer) blendColors(bg, fg tcell.Color, alpha float64) tcell.
 	return tcell.NewRGBColor(rOut, gOut, bOut)
 }
 
-// drawShields renders active shields by blending their color with the existing background.
+// drawShieldsTo renders active shields by blending their color with the existing background.
 // It uses a geometric field function to calculate opacity per cell.
-func (r *TerminalRenderer) drawShields(world *engine.World) {
+func (r *TerminalRenderer) drawShieldsTo(world *engine.World, sw screenWriter) {
 	// DEBUG MODE: Temporarily bypasses blending for visual tuning.
 	const useBlending = false // Toggle for debugging
 
@@ -1308,7 +1422,7 @@ func (r *TerminalRenderer) drawShields(world *engine.World) {
 				alpha := (1.0 - dist) * shield.MaxOpacity
 
 				// Get existing content
-				mainc, combc, style, _ := r.screen.GetContent(screenX, screenY)
+				mainc, combc, style, _ := sw.GetContent(screenX, screenY)
 				fg, bg, attrs := style.Decompose()
 
 				// Normalize ColorDefault
@@ -1332,10 +1446,16 @@ func (r *TerminalRenderer) drawShields(world *engine.World) {
 				}
 
 				newStyle := tcell.StyleDefault.Foreground(fg).Background(newBg).Attributes(attrs)
-				r.screen.SetContent(screenX, screenY, mainc, combc, newStyle)
+				sw.SetContent(screenX, screenY, mainc, combc, newStyle)
 			}
 		}
 	}
+}
+
+// drawShields renders active shields by blending their color with the existing background (legacy wrapper).
+// It uses a geometric field function to calculate opacity per cell.
+func (r *TerminalRenderer) drawShields(world *engine.World) {
+	r.drawShieldsTo(world, r.screen)
 }
 
 // dimColor reduces color intensity by factor (0.0-1.0)
