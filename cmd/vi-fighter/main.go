@@ -92,6 +92,13 @@ func main() {
 		ctx.LineNumWidth,
 	)
 
+	// Create render orchestrator
+	orchestrator := render.NewRenderOrchestrator(
+		screen,
+		ctx.Width,
+		ctx.Height,
+	)
+
 	// Create input handler
 	inputHandler := modes.NewInputHandler(ctx)
 
@@ -158,6 +165,7 @@ func main() {
 				ctx.GameHeight,
 				ctx.LineNumWidth,
 			)
+			orchestrator.Resize(ctx.Width, ctx.Height)
 
 		case <-frameTicker.C:
 			// Update time resource based on context pausable clock
@@ -172,7 +180,9 @@ func main() {
 			// During pause: skip game updates but still render
 			if ctx.IsPaused.Load() {
 				// This shows the pause overlay and maintains visual feedback
-				renderer.RenderFrame(ctx, decaySystem.IsAnimating(timeRes.GameTime), decaySystem.GetTimeUntilDecay(timeRes.GameTime))
+				cursorPos, _ := ctx.World.Positions.Get(ctx.CursorEntity)
+				renderCtx := render.NewRenderContextFromGame(ctx, timeRes, cursorPos.X, cursorPos.Y)
+				orchestrator.RenderFrame(renderCtx, ctx.World)
 				continue
 			}
 
@@ -187,7 +197,9 @@ func main() {
 			}
 
 			// Render frame (all updates guaranteed complete)
-			renderer.RenderFrame(ctx, decaySystem.IsAnimating(timeRes.GameTime), decaySystem.GetTimeUntilDecay(timeRes.GameTime))
+			cursorPos, _ := ctx.World.Positions.Get(ctx.CursorEntity)
+			renderCtx := render.NewRenderContextFromGame(ctx, timeRes, cursorPos.X, cursorPos.Y)
+			orchestrator.RenderFrame(renderCtx, ctx.World)
 
 			// Signal ready for next update (non-blocking)
 			if !updatePending && !ctx.IsPaused.Load() {

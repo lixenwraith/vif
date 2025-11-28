@@ -1,6 +1,10 @@
 package render
 
-import "time"
+import (
+	"time"
+
+	"github.com/lixenwraith/vi-fighter/engine"
+)
 
 // RenderContext provides frame state. Passed by value.
 type RenderContext struct {
@@ -16,4 +20,22 @@ type RenderContext struct {
 	GameHeight  int
 	Width       int
 	Height      int
+}
+
+// NewRenderContextFromGame creates a RenderContext from engine.GameContext and TimeResource.
+func NewRenderContextFromGame(ctx *engine.GameContext, timeRes *engine.TimeResource, cursorX, cursorY int) RenderContext {
+	return RenderContext{
+		GameTime:    timeRes.GameTime,
+		FrameNumber: timeRes.FrameNumber,
+		DeltaTime:   timeRes.DeltaTime.Seconds(),
+		IsPaused:    ctx.IsPaused.Load(),
+		CursorX:     cursorX,
+		CursorY:     cursorY,
+		GameX:       ctx.GameX,
+		GameY:       ctx.GameY,
+		GameWidth:   ctx.GameWidth,
+		GameHeight:  ctx.GameHeight,
+		Width:       ctx.Width,
+		Height:      ctx.Height,
+	}
 }
