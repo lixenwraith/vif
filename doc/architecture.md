@@ -1263,7 +1263,7 @@ The input handling system for NORMAL mode uses a **state machine with binding ta
 **Core Components** (`modes/` directory):
 
 1. **InputMachine** (`modes/machine.go`):
-   - 5-state machine managing input parsing flow
+   - 7-state machine managing input parsing flow
    - Tracks count accumulation (count1/count2 for compound counts like `2d3w`)
    - Manages operator/character/prefix state
    - Dispatches actions via binding table lookup
@@ -1271,8 +1271,26 @@ The input handling system for NORMAL mode uses a **state machine with binding ta
 2. **BindingTable** (`modes/bindings.go`):
    - Maps keys to action types and metadata
    - Separate tables for: `normal[]`, `operatorMotions[]`, `prefixG[]`
-   - Action metadata: type, character, acceptsCount flag, custom handler
    - Created via `DefaultBindings()` function
+
+   **Binding Structure:**
+   ```go
+   type Binding struct {
+       Action       ActionType                    // Type of action (motion, operator, etc.)
+       Target       rune                          // Canonical command (for remapping)
+       AcceptsCount bool                          // Whether this accepts count prefix
+       Executor     func(*engine.GameContext, int) // Custom executor function
+   }
+   ```
+
+   **ActionType Enum:**
+   - `ActionNone` - No action
+   - `ActionMotion` - Immediate motion (h,j,k,l,w,b,etc)
+   - `ActionCharWait` - Wait for target char (f,F,t,T)
+   - `ActionOperator` - Wait for motion (d)
+   - `ActionPrefix` - Wait for second key (g)
+   - `ActionModeSwitch` - Change mode (i,/,:)
+   - `ActionSpecial` - Immediate with special handling (x,D,n,N,;,comma)
 
 3. **Action Executors** (`modes/actions.go`):
    - Execute specific actions based on binding lookups
@@ -1312,38 +1330,54 @@ The input handling system for NORMAL mode uses a **state machine with binding ta
 
 | State | Description | Next State Triggers |
 |-------|-------------|---------------------|
-| `StateNormal` | Awaiting input | Digit → count accumulation<br>Operator → `StateOperatorWait`<br>Prefix → `StatePrefix`<br>Motion → execute<br>Mode key → `StateModeSwitch` |
-| `StateOperatorWait` | Operator pending motion | Digit → count2 accumulation<br>Motion → execute operator+motion<br>Doubled operator → execute line action<br>ESC → reset to `StateNormal` |
-| `StateCharWait` | Awaiting character (f/F/t/T) | Any char → execute find/till<br>ESC → reset to `StateNormal` |
-| `StatePrefix` | Prefix command (g) pending | Second char → execute prefix command<br>ESC → reset to `StateNormal` |
-| `StateModeSwitch` | Mode change in progress | Immediate execution, return to `StateNormal` |
+| `StateIdle` | Awaiting first input | Digit (1-9) → `StateCount`<br>Operator (d) → `StateOperatorWait`<br>Prefix (g) → `StatePrefixG`<br>CharWait (f/F/t/T) → `StateCharWait`<br>Motion → execute, stay `StateIdle`<br>Mode key (i/:) → execute mode change, stay `StateIdle` |
+| `StateCount` | Accumulating count digits | Digit (1-9 or 0) → stay `StateCount`<br>Operator (d) → `StateOperatorWait`<br>Prefix (g) → `StatePrefixG`<br>CharWait (f/F/t/T) → `StateCharWait`<br>Motion → execute with count, reset to `StateIdle`<br>ESC → reset to `StateIdle` |
+| `StateOperatorWait` | Operator pending motion | Digit (1-9) → accumulate count2, stay<br>Doubled operator (dd) → execute line action<br>Prefix (g) → `StateOperatorPrefixG`<br>CharWait (f/F/t/T) → `StateOperatorCharWait`<br>Motion → execute operator+motion, reset to `StateIdle`<br>ESC → reset to `StateIdle` |
+| `StateOperatorCharWait` | Operator + char command waiting for target | Any char → execute operator+char motion, reset to `StateIdle`<br>ESC → reset to `StateIdle` |
+| `StateCharWait` | Awaiting target character | Any char → execute find/till motion, reset to `StateIdle`<br>ESC → reset to `StateIdle` |
+| `StatePrefixG` | Prefix 'g' pending second char | Second char (g, o) → execute prefix command, reset to `StateIdle`<br>ESC → reset to `StateIdle` |
+| `StateOperatorPrefixG` | Operator + 'g' prefix pending | Second char (g, o) → execute operator+prefix motion, reset to `StateIdle`<br>ESC → reset to `StateIdle` |
+
+**ProcessResult Structure** (`modes/machine.go`):
+
+The state machine returns a `ProcessResult` struct from each key processing operation:
+
+```go
+type ProcessResult struct {
+    Handled       bool                         // Whether the key was handled
+    Continue      bool                         // false = exit game (for quit command)
+    ModeChange    engine.GameMode              // 0 = no mode change
+    Action        func(*engine.GameContext)    // nil = no action to execute
+    CommandString string                       // Captured command string for tracking
+}
+```
 
 **Data Flow Example** (typing `2d3w` - delete 6 words):
 
-1. `'2'` → StateNormal → accumulate count1=2
-2. `'d'` → StateOperatorWait → store operator='d', move count1→pendingCount
-3. `'3'` → StateOperatorWait → accumulate count2=3
-4. `'w'` → Lookup operatorMotions['w'] → Execute `DeleteMotion(ctx, 'w', 6)` → Reset state
+1. `'2'` → `StateIdle` → `StateCount`, accumulate count1=2
+2. `'d'` → `StateCount` → `StateOperatorWait`, store operator='d'
+3. `'3'` → `StateOperatorWait` → stay, accumulate count2=3
+4. `'w'` → Lookup operatorMotions['w'] → Execute `DeleteMotion(ctx, 'w', 6)` → Reset to `StateIdle`
 
 **Binding Lookup Pattern:**
 ```go
-// In machine.go:processNormal()
+// In machine.go:processIdleOrCount()
 binding, ok := m.bindings.normal[key]
 if !ok {
     return ProcessResult{Handled: false}
 }
 
-switch binding.ActionType {
+switch binding.Action {
 case ActionMotion:
     return ProcessResult{
         Handled: true,
         Action: func(ctx *engine.GameContext) {
-            ExecuteMotion(ctx, binding.Char, m.count1)
+            ExecuteMotion(ctx, binding.Target, m.count1)
         },
     }
 case ActionOperator:
     m.state = StateOperatorWait
-    m.operator = binding.Char
+    m.operator = binding.Target
     // ... count handling
     return ProcessResult{Handled: true, Continue: true}
 }
@@ -1354,7 +1388,7 @@ case ActionOperator:
 | Aspect | Old (enum+switch) | New (state machine+bindings) |
 |--------|-------------------|------------------------------|
 | State Management | 9 boolean/int fields in GameContext | 1 InputMachine struct (private) |
-| Dispatch Logic | 30+ if/else branches | 5-state machine with table lookup |
+| Dispatch Logic | 30+ if/else branches | 7-state machine with table lookup |
 | Invalid States | Possible (flag combinations) | Impossible (explicit enum) |
 | Count Handling | Duplicated 30+ times | Single location (machine.go) |
 | Key→Action Mapping | Hardcoded in switch | BindingTable (configurable) |
@@ -1370,11 +1404,11 @@ To add a new motion command (e.g., `'p'` to move to previous word):
 
 1. **Add binding entry** in `modes/bindings.go` → `DefaultBindings()`:
 ```go
-bindings.normal['p'] = Binding{
-    ActionType:   ActionMotion,
-    Char:         'p',
+bindings.normal['p'] = &Binding{
+    Action:       ActionMotion,
+    Target:       'p',
     AcceptsCount: true,
-    Handler:      nil, // Use default ExecuteMotion
+    Executor:     wrapMotion('p'), // Wraps ExecuteMotion
 }
 ```
 
@@ -1395,22 +1429,17 @@ To add a new operator (e.g., `'c'` for change):
 
 1. **Add operator binding** in `modes/bindings.go` → `DefaultBindings()`:
 ```go
-bindings.normal['c'] = Binding{
-    ActionType:   ActionOperator,
-    Char:         'c',
+bindings.normal['c'] = &Binding{
+    Action:       ActionOperator,
+    Target:       'c',
     AcceptsCount: true,
-    Handler:      nil,
+    Executor:     nil, // Handled by state machine
 }
 ```
 
-2. **Add operator motions** (same as delete operator):
-```go
-bindings.operatorMotions['w'] = Binding{ActionType: ActionMotion, Char: 'w', AcceptsCount: true, Handler: nil}
-bindings.operatorMotions['b'] = Binding{ActionType: ActionMotion, Char: 'b', AcceptsCount: true, Handler: nil}
-// ... copy all motion bindings from 'd' operator
-```
+2. **Operator motions are shared** - the `operatorMotions` table is already populated with all valid motions (w, b, e, $, etc.) that work with any operator
 
-3. **Implement executor** in `modes/delete_operator.go` (or new file):
+3. **Implement executor** in a new file or extend existing operator file:
 ```go
 func ExecuteChangeMotion(ctx *engine.GameContext, motionChar rune, count int) {
     // 1. Delete using existing ExecuteDeleteMotion
@@ -1437,7 +1466,7 @@ case 'c':
     return ProcessResult{
         Handled: true,
         Action: func(ctx *engine.GameContext) {
-            ExecuteChangeMotion(ctx, binding.Char, finalCount)
+            ExecuteChangeMotion(ctx, binding.Target, finalCount)
         },
         ModeChange: engine.ModeInsert,
     }
@@ -1449,15 +1478,15 @@ To add `'a'` (append mode - move cursor right then enter insert):
 
 1. **Add binding** in `modes/bindings.go`:
 ```go
-bindings.normal['a'] = Binding{
-    ActionType:   ActionModeSwitch,
-    Char:         'a',
+bindings.normal['a'] = &Binding{
+    Action:       ActionModeSwitch,
+    Target:       'a',
     AcceptsCount: false,
-    Handler:      nil,
+    Executor:     nil, // Handled by state machine
 }
 ```
 
-2. **Implement handler** in `modes/machine.go` → `handleModeSwitch()`:
+2. **Implement handler** in `modes/machine.go` → state machine logic:
 ```go
 case 'a':
     return ProcessResult{
