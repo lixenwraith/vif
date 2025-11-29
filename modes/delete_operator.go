@@ -11,80 +11,175 @@ func ExecuteDeleteMotion(ctx *engine.GameContext, motion rune, count int) {
 		count = 1
 	}
 
-	// Get current cursor position from ECS
 	pos, ok := ctx.World.Positions.Get(ctx.CursorEntity)
 	if !ok {
-		return // No cursor position available
+		return
 	}
 
 	startX, startY := pos.X, pos.Y
 	deletedGreenOrBlue := false
 
 	switch motion {
-	case 'd': // dd - delete line
+	case 'd':
 		deletedGreenOrBlue = deleteAllOnLine(ctx, startY)
 
-	case '0': // d0 - delete to line start
+	case 'x', 'l', ' ':
+		endDel := startX + count - 1
+		deletedGreenOrBlue = deleteRange(ctx, startX, endDel, startY)
+
+	case 'h':
+		startDel := startX - count
+		if startDel < 0 {
+			startDel = 0
+		}
+		if startDel < startX {
+			deletedGreenOrBlue = deleteRange(ctx, startDel, startX-1, startY)
+			ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{X: startDel, Y: startY})
+		}
+
+	case '0':
 		deletedGreenOrBlue = deleteRange(ctx, 0, startX, startY)
 
-	case '^': // d^ - delete to first non-whitespace
+	case '^':
 		firstNonWS := findFirstNonWhitespace(ctx, startY)
 		deletedGreenOrBlue = deleteRange(ctx, firstNonWS, startX, startY)
 
-	case '$': // d$ - delete to line end
+	case '$':
 		endX := findLineEnd(ctx, startY)
 		deletedGreenOrBlue = deleteRange(ctx, startX, endX, startY)
 
-	case 'w': // dw - delete word (vim-style)
-		endX := findNextWordStartVim(ctx, startX, startY)
+	case 'w':
+		endX := startX
+		for i := 0; i < count; i++ {
+			prevX := endX
+			endX = findNextWordStartVim(ctx, endX, startY)
+			if endX == prevX {
+				break
+			}
+		}
 		if endX > startX {
 			deletedGreenOrBlue = deleteRange(ctx, startX, endX-1, startY)
 		}
 
-	case 'W': // dW - delete WORD (space-delimited)
-		endX := findNextWORDStart(ctx, startX, startY)
+	case 'W':
+		endX := startX
+		for i := 0; i < count; i++ {
+			prevX := endX
+			endX = findNextWORDStart(ctx, endX, startY)
+			if endX == prevX {
+				break
+			}
+		}
 		if endX > startX {
 			deletedGreenOrBlue = deleteRange(ctx, startX, endX-1, startY)
 		}
 
-	case 'e': // de - delete to end of word (vim-style)
-		endX := findWordEndVim(ctx, startX, startY)
+	case 'e':
+		endX := startX
+		for i := 0; i < count; i++ {
+			prevX := endX
+			endX = findWordEndVim(ctx, endX, startY)
+			if endX == prevX {
+				break
+			}
+		}
 		deletedGreenOrBlue = deleteRange(ctx, startX, endX, startY)
 
-	case 'E': // dE - delete to end of WORD (space-delimited)
-		endX := findWORDEnd(ctx, startX, startY)
+	case 'E':
+		endX := startX
+		for i := 0; i < count; i++ {
+			prevX := endX
+			endX = findWORDEnd(ctx, endX, startY)
+			if endX == prevX {
+				break
+			}
+		}
 		deletedGreenOrBlue = deleteRange(ctx, startX, endX, startY)
 
-	case 'b': // db - delete word backward (vim-style)
-		startWordX := findPrevWordStartVim(ctx, startX, startY)
+	case 'b':
+		startWordX := startX
+		for i := 0; i < count; i++ {
+			prevX := startWordX
+			startWordX = findPrevWordStartVim(ctx, startWordX, startY)
+			if startWordX == prevX {
+				break
+			}
+		}
 		deletedGreenOrBlue = deleteRange(ctx, startWordX, startX, startY)
 
-	case 'B': // dB - delete WORD backward (space-delimited)
-		startWordX := findPrevWORDStart(ctx, startX, startY)
+	case 'B':
+		startWordX := startX
+		for i := 0; i < count; i++ {
+			prevX := startWordX
+			startWordX = findPrevWORDStart(ctx, startWordX, startY)
+			if startWordX == prevX {
+				break
+			}
+		}
 		deletedGreenOrBlue = deleteRange(ctx, startWordX, startX, startY)
 
-	case '{': // d{ - delete to previous empty line
-		targetY := findPrevEmptyLine(ctx, startY)
-		for y := targetY; y <= startY; y++ {
+	case 'j':
+		for i := 0; i <= count; i++ {
+			y := startY + i
+			if y < ctx.GameHeight {
+				if deleteAllOnLine(ctx, y) {
+					deletedGreenOrBlue = true
+				}
+			}
+		}
+
+	case 'k':
+		for i := 0; i <= count; i++ {
+			y := startY - i
+			if y >= 0 {
+				if deleteAllOnLine(ctx, y) {
+					deletedGreenOrBlue = true
+				}
+			}
+		}
+
+	case '{':
+		targetY := startY
+		for i := 0; i < count; i++ {
+			prevY := targetY
+			targetY = findPrevEmptyLine(ctx, targetY)
+			if targetY == prevY {
+				break
+			}
+		}
+		startRange, endRange := targetY, startY
+		if startRange > endRange {
+			startRange, endRange = endRange, startRange
+		}
+		for y := startRange; y <= endRange; y++ {
 			if deleteAllOnLine(ctx, y) {
 				deletedGreenOrBlue = true
 			}
 		}
 
-	case '}': // d} - delete to next empty line
-		targetY := findNextEmptyLine(ctx, startY)
-		for y := startY; y <= targetY; y++ {
+	case '}':
+		targetY := startY
+		for i := 0; i < count; i++ {
+			prevY := targetY
+			targetY = findNextEmptyLine(ctx, targetY)
+			if targetY == prevY {
+				break
+			}
+		}
+		startRange, endRange := startY, targetY
+		if startRange > endRange {
+			startRange, endRange = endRange, startRange
+		}
+		for y := startRange; y <= endRange; y++ {
 			if deleteAllOnLine(ctx, y) {
 				deletedGreenOrBlue = true
 			}
 		}
 
-	case 'G': // dG - delete to end of file
-		// Delete from cursor to end of screen
+	case 'G':
 		for y := startY; y < ctx.GameHeight; y++ {
 			if y == startY {
-				endX := ctx.GameWidth - 1
-				if deleteRange(ctx, startX, endX, y) {
+				if deleteRange(ctx, startX, ctx.GameWidth-1, y) {
 					deletedGreenOrBlue = true
 				}
 			} else {
@@ -94,8 +189,7 @@ func ExecuteDeleteMotion(ctx *engine.GameContext, motion rune, count int) {
 			}
 		}
 
-	case 'g': // dgg - delete to beginning of file (when count==2 for 'gg')
-		// Delete from beginning to cursor
+	case 'g':
 		for y := 0; y <= startY; y++ {
 			if y == startY {
 				if deleteRange(ctx, 0, startX, y) {
@@ -109,13 +203,12 @@ func ExecuteDeleteMotion(ctx *engine.GameContext, motion rune, count int) {
 		}
 	}
 
-	// Reset heat only if green or blue was deleted
 	if deletedGreenOrBlue {
 		ctx.State.SetHeat(0)
 	}
 }
 
-// deleteAllOnLine deletes all characters on a line
+// deleteAllOnLine deletes all interactable entities on a line
 func deleteAllOnLine(ctx *engine.GameContext, y int) bool {
 	entities := ctx.World.Query().With(ctx.World.Positions).Execute()
 
@@ -124,19 +217,20 @@ func deleteAllOnLine(ctx *engine.GameContext, y int) bool {
 
 	for _, entity := range entities {
 		pos, _ := ctx.World.Positions.Get(entity)
-		if pos.Y == y {
-			// Check if green or blue
-			if seq, ok := ctx.World.Sequences.Get(entity); ok {
-				if seq.Type == components.SequenceGreen || seq.Type == components.SequenceBlue {
-					deletedGreenOrBlue = true
-				}
-			}
-
-			entitiesToDelete = append(entitiesToDelete, entity)
+		if pos.Y != y {
+			continue
 		}
+		if !engine.IsInteractable(ctx.World, entity) {
+			continue
+		}
+		if seq, ok := ctx.World.Sequences.Get(entity); ok {
+			if seq.Type == components.SequenceGreen || seq.Type == components.SequenceBlue {
+				deletedGreenOrBlue = true
+			}
+		}
+		entitiesToDelete = append(entitiesToDelete, entity)
 	}
 
-	// Delete all entities
 	for _, entity := range entitiesToDelete {
 		ctx.World.DestroyEntity(entity)
 	}
@@ -144,38 +238,30 @@ func deleteAllOnLine(ctx *engine.GameContext, y int) bool {
 	return deletedGreenOrBlue
 }
 
-// deleteRange deletes all characters in a range on a line
+// deleteRange deletes all interactable entities in a range on a line
 func deleteRange(ctx *engine.GameContext, startX, endX, y int) bool {
 	deletedGreenOrBlue := false
 	entitiesToDelete := make([]engine.Entity, 0)
 
-	// Ensure startX <= endX
 	if startX > endX {
 		startX, endX = endX, startX
 	}
 
-	// Iterate through the position range and use spatial index to find entities
 	for x := startX; x <= endX; x++ {
-		// We must check all entities at this position and find the ones that are destructible sequences
 		entities := ctx.World.Positions.GetAllAt(x, y)
-
 		for _, entity := range entities {
-			if entity == 0 || entity == ctx.CursorEntity {
+			if !engine.IsInteractable(ctx.World, entity) {
 				continue
 			}
-
-			// Check if green or blue
 			if seq, ok := ctx.World.Sequences.Get(entity); ok {
 				if seq.Type == components.SequenceGreen || seq.Type == components.SequenceBlue {
 					deletedGreenOrBlue = true
 				}
-				// It's a sequence, mark for deletion
-				entitiesToDelete = append(entitiesToDelete, entity)
 			}
+			entitiesToDelete = append(entitiesToDelete, entity)
 		}
 	}
 
-	// Delete all entities in range
 	for _, entity := range entitiesToDelete {
 		ctx.World.DestroyEntity(entity)
 	}

@@ -17,7 +17,6 @@ func execCharMotion(ctx *engine.GameContext, cmd rune, target rune, count int) {
 	case 'T':
 		ExecuteTillCharBackward(ctx, target, count)
 	}
-	// Store for ; and , repeat (already done in Execute* functions, but ensure consistency)
 	ctx.LastFindChar = target
 	ctx.LastFindType = cmd
 	ctx.LastFindForward = (cmd == 'f' || cmd == 't')
@@ -29,115 +28,36 @@ func execDeleteWithCharMotion(ctx *engine.GameContext, charCmd rune, target rune
 	if !ok {
 		return
 	}
-	startX := pos.X
-	startY := pos.Y
-
-	// Find target position
-	var endX int
-	found := false
+	startX, startY := pos.X, pos.Y
 
 	switch charCmd {
 	case 'f':
-		// Find forward, delete up to and including target
-		endX, found = findCharForward(ctx, startX, startY, target, count)
+		endX, found := findCharInDirection(ctx, startX, startY, target, count, true)
+		if found && endX >= startX {
+			deleteRange(ctx, startX, endX, startY)
+		}
 	case 't':
-		// Till forward, delete up to but not including target
-		endX, found = findCharForward(ctx, startX, startY, target, count)
-		if found && endX > startX {
-			endX--
+		endX, found := findCharInDirection(ctx, startX, startY, target, count, true)
+		if found && endX > startX+1 {
+			deleteRange(ctx, startX, endX-1, startY)
 		}
 	case 'F':
-		// Find backward, delete from target to cursor (exclusive of cursor)
-		endX, found = findCharBackward(ctx, startX, startY, target, count)
+		endX, found := findCharInDirection(ctx, startX, startY, target, count, false)
 		if found {
-			// Delete from endX to startX-1
 			deleteRange(ctx, endX, startX-1, startY)
-			// Move cursor to endX
 			ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{X: endX, Y: startY})
-			return
 		}
 	case 'T':
-		// Till backward, delete from after target to cursor (exclusive of cursor)
-		endX, found = findCharBackward(ctx, startX, startY, target, count)
+		endX, found := findCharInDirection(ctx, startX, startY, target, count, false)
 		if found && endX < startX-1 {
-			endX++
-			deleteRange(ctx, endX, startX-1, startY)
-			ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{X: endX, Y: startY})
-			return
+			deleteRange(ctx, endX+1, startX-1, startY)
+			ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{X: endX + 1, Y: startY})
 		}
-		return
 	}
 
-	if found && endX >= startX {
-		deleteRange(ctx, startX, endX, startY)
-	}
-
-	// Store for ; and , repeat
 	ctx.LastFindChar = target
 	ctx.LastFindType = charCmd
 	ctx.LastFindForward = (charCmd == 'f' || charCmd == 't')
-}
-
-// findCharForward finds the Nth occurrence of target char forward from startX
-// Returns x position and whether found
-func findCharForward(ctx *engine.GameContext, startX, startY int, target rune, count int) (int, bool) {
-	occurrences := 0
-	lastX := -1
-
-	for x := startX + 1; x < ctx.GameWidth; x++ {
-		entities := ctx.World.Positions.GetAllAt(x, startY)
-		for _, entity := range entities {
-			if entity == 0 {
-				continue
-			}
-			char, ok := ctx.World.Characters.Get(entity)
-			if ok && char.Rune == target {
-				occurrences++
-				lastX = x
-				if occurrences == count {
-					return x, true
-				}
-			}
-		}
-	}
-
-	// Return last found if count exceeded available
-	if lastX != -1 {
-		return lastX, true
-	}
-	return -1, false
-}
-
-// findCharBackward finds the Nth occurrence of target char backward from startX
-// Returns x position and whether found
-func findCharBackward(ctx *engine.GameContext, startX, startY int, target rune, count int) (int, bool) {
-	occurrences := 0
-	firstX := -1
-
-	for x := startX - 1; x >= 0; x-- {
-		entities := ctx.World.Positions.GetAllAt(x, startY)
-		for _, entity := range entities {
-			if entity == 0 {
-				continue
-			}
-			char, ok := ctx.World.Characters.Get(entity)
-			if ok && char.Rune == target {
-				occurrences++
-				if firstX == -1 {
-					firstX = x
-				}
-				if occurrences == count {
-					return x, true
-				}
-			}
-		}
-	}
-
-	// Return first found (furthest back) if count exceeded available
-	if firstX != -1 {
-		return firstX, true
-	}
-	return -1, false
 }
 
 func execDeleteChar(ctx *engine.GameContext, count int) {

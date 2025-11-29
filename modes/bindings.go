@@ -92,6 +92,7 @@ func DefaultBindings() *BindingTable {
 			';': {ActionSpecial, ';', true, execRepeatFind},
 			',': {ActionSpecial, ',', true, execRepeatFindReverse},
 		},
+		// DON'T refactor nil Executor, future plan
 		operatorMotions: map[rune]*Binding{
 			// Motions valid after 'd'
 			'w': {ActionMotion, 'w', true, nil},
@@ -108,6 +109,12 @@ func DefaultBindings() *BindingTable {
 			'{': {ActionMotion, '{', true, nil},
 			'}': {ActionMotion, '}', true, nil},
 			'%': {ActionMotion, '%', false, nil},
+			// Directional motions
+			'h': {ActionMotion, 'h', true, nil},
+			'j': {ActionMotion, 'j', true, nil},
+			'k': {ActionMotion, 'k', true, nil},
+			'l': {ActionMotion, 'l', true, nil},
+			' ': {ActionMotion, ' ', true, nil},
 			// Char motions after operator
 			'f': {ActionCharWait, 'f', true, nil},
 			'F': {ActionCharWait, 'F', true, nil},

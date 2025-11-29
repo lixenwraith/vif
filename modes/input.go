@@ -1,8 +1,6 @@
 package modes
 
 import (
-	"fmt"
-
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/components"
@@ -134,6 +132,9 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 
 	// Execute action
 	if result.Action != nil {
+		if result.CommandString != "" {
+			h.ctx.LastCommand = result.CommandString
+		}
 		result.Action(h.ctx)
 	}
 
@@ -144,61 +145,37 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 func (h *InputHandler) handleNormalModeSpecialKeys(ev *tcell.EventKey) bool {
 	switch ev.Key() {
 	case tcell.KeyUp:
-		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
-		if ok && pos.Y > 0 {
-			pos.Y--
-			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
-		}
+		ExecuteMotion(h.ctx, 'k', 1)
 		h.ctx.State.SetHeat(0)
 		h.ctx.LastCommand = ""
 		return true
 
 	case tcell.KeyDown:
-		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
-		if ok && pos.Y < h.ctx.GameHeight-1 {
-			pos.Y++
-			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
-		}
+		ExecuteMotion(h.ctx, 'j', 1)
 		h.ctx.State.SetHeat(0)
 		h.ctx.LastCommand = ""
 		return true
 
 	case tcell.KeyLeft:
-		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
-		if ok && pos.X > 0 {
-			pos.X--
-			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
-		}
+		ExecuteMotion(h.ctx, 'h', 1)
 		h.ctx.State.SetHeat(0)
 		h.ctx.LastCommand = ""
 		return true
 
 	case tcell.KeyRight:
-		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
-		if ok && pos.X < h.ctx.GameWidth-1 {
-			pos.X++
-			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
-		}
+		ExecuteMotion(h.ctx, 'l', 1)
 		h.ctx.State.SetHeat(0)
 		h.ctx.LastCommand = ""
 		return true
 
 	case tcell.KeyHome:
-		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
-		if ok {
-			pos.X = 0
-			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
-		}
+		ExecuteMotion(h.ctx, '0', 1)
 		h.ctx.State.SetHeat(0)
 		h.ctx.LastCommand = ""
 		return true
 
 	case tcell.KeyEnd:
-		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
-		if ok {
-			pos.X = findLineEnd(h.ctx, pos.Y)
-			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
-		}
+		ExecuteMotion(h.ctx, '$', 1)
 		h.ctx.State.SetHeat(0)
 		h.ctx.LastCommand = ""
 		return true
@@ -273,65 +250,27 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 	// Handle arrow keys (reset heat)
 	switch ev.Key() {
 	case tcell.KeyUp:
-		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
-		if !ok {
-			return true
-		}
-		if pos.Y > 0 {
-			pos.Y--
-			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
-		}
+		ExecuteMotion(h.ctx, 'k', 1)
 		h.ctx.State.SetHeat(0)
 		return true
 	case tcell.KeyDown:
-		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
-		if !ok {
-			return true
-		}
-		if pos.Y < h.ctx.GameHeight-1 {
-			pos.Y++
-			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
-		}
+		ExecuteMotion(h.ctx, 'j', 1)
 		h.ctx.State.SetHeat(0)
 		return true
 	case tcell.KeyLeft:
-		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
-		if !ok {
-			return true
-		}
-		if pos.X > 0 {
-			pos.X--
-			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
-		}
+		ExecuteMotion(h.ctx, 'h', 1)
 		h.ctx.State.SetHeat(0)
 		return true
 	case tcell.KeyRight:
-		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
-		if !ok {
-			return true
-		}
-		if pos.X < h.ctx.GameWidth-1 {
-			pos.X++
-			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
-		}
+		ExecuteMotion(h.ctx, 'l', 1)
 		h.ctx.State.SetHeat(0)
 		return true
 	case tcell.KeyHome:
-		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
-		if !ok {
-			return true
-		}
-		pos.X = 0
-		h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
+		ExecuteMotion(h.ctx, '0', 1)
 		h.ctx.State.SetHeat(0)
 		return true
 	case tcell.KeyEnd:
-		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
-		if !ok {
-			return true
-		}
-		pos.X = findLineEnd(h.ctx, pos.Y)
-		h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
+		ExecuteMotion(h.ctx, '$', 1)
 		h.ctx.State.SetHeat(0)
 		return true
 	case tcell.KeyTab:
@@ -473,7 +412,6 @@ func (h *InputHandler) handleOverlayMode(ev *tcell.EventKey) bool {
 		return true
 	}
 
-	// TODO: Future enhancement - scroll with arrow keys or j/k
 	// Handle up/down scrolling
 	if ev.Key() == tcell.KeyUp || (ev.Key() == tcell.KeyRune && ev.Rune() == 'k') {
 		if h.ctx.OverlayScroll > 0 {
@@ -491,24 +429,4 @@ func (h *InputHandler) handleOverlayMode(ev *tcell.EventKey) bool {
 	}
 
 	return true
-}
-
-// buildCommandString builds a display string for the last command
-func (h *InputHandler) buildCommandString(action rune, motion rune, count int, singleChar bool) string {
-	var cmd string
-
-	// Add count prefix if present
-	if count > 1 {
-		cmd = fmt.Sprintf("%d", count)
-	}
-
-	// Add action
-	cmd += string(action)
-
-	// Add motion if present
-	if !singleChar && motion != 0 {
-		cmd += string(motion)
-	}
-
-	return cmd
 }

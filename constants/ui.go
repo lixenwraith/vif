@@ -2,47 +2,34 @@ package constants
 
 import "time"
 
-// UI Layout Constants
+// Layout & Margins
+const (
+	// BottomMargin for status bar (1 line for X coords, 1 line for status bar)
+	BottomMargin = 2
+
+	// TopMargin for status bar (1 line for heat meter)
+	TopMargin = 1
+)
+
+// Status Bar & Modes
 const (
 	// ModeIndicatorWidth is the consistent width for all mode indicators
 	ModeIndicatorWidth = 10
 
-	// Mode indicator text (all padded to ModeIndicatorWidth)
+	// Mode indicator text (padded to ModeIndicatorWidth)
 	ModeTextNormal  = " NORMAL  "
 	ModeTextInsert  = " INSERT  "
 	ModeTextSearch  = " SEARCH  "
 	ModeTextCommand = " COMMAND "
-)
 
-// UI Element Sizes
-const (
-	// BottomMargin for status bar, X coordinates
-	// 1 line for X coordinates, 1 line for status bar
-	BottomMargin = 2
-
-	// TopMargin for status bar
-	// 1 line for heat meter at top
-	TopMargin = 1
-)
-
-// Game Timing Constants
-const (
-	// BoostExtensionDuration is how long each matching color character extends the boost
-	BoostExtensionDuration = 500 * time.Millisecond
-
-	// BoostBaseDuration is the initial duration when boost is activated via command
-	BoostBaseDuration = 10 * time.Second
+	// UI Symbols
+	AudioStr = "♫ "
 
 	// CommandStatusMessageTimeout is how long command status messages are displayed
 	CommandStatusMessageTimeout = 2 * time.Second
 )
 
-// UI Symbols
-const (
-	AudioStr = "♫ "
-)
-
-// Overlay Layout Constants
+// Overlay Configuration
 const (
 	// OverlayWidthPercent is the percentage of screen width the overlay covers
 	OverlayWidthPercent = 0.8

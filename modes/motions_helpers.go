@@ -8,70 +8,354 @@ import (
 type CharType int
 
 const (
-	// CharTypeSpace represents empty space (no character)
-	CharTypeSpace CharType = 0
-	// CharTypeWord represents alphanumeric characters and underscore
-	CharTypeWord CharType = 1
-	// CharTypePunctuation represents all other visible characters
+	CharTypeSpace       CharType = 0
+	CharTypeWord        CharType = 1
 	CharTypePunctuation CharType = 2
 )
 
+// getCharAt returns the character at the given position, or 0 if empty
+func getCharAt(ctx *engine.GameContext, x, y int) rune {
+	entities := ctx.World.Positions.GetAllAt(x, y)
+
+	for _, entity := range entities {
+		if entity == ctx.CursorEntity || entity == 0 {
+			continue
+		}
+		char, ok := ctx.World.Characters.Get(entity)
+		if ok {
+			if char.Rune == ' ' {
+				return 0
+			}
+			return char.Rune
+		}
+	}
+	return 0
+}
+
+// isWordChar returns true if the rune is a word character
+func isWordChar(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_'
+}
+
 // getCharacterTypeAt returns the character type at the given position
-// This replaces inline character type checking for clearer, more maintainable code
 func getCharacterTypeAt(ctx *engine.GameContext, x, y int) CharType {
 	ch := getCharAt(ctx, x, y)
-
-	// Both 0 (no entity) and ' ' (space entity) are spaces
 	if ch == 0 || ch == ' ' {
 		return CharTypeSpace
 	}
-
 	if isWordChar(ch) {
 		return CharTypeWord
 	}
-
 	return CharTypePunctuation
 }
 
-// validatePosition ensures the cursor position is valid after a motion
-// Returns the validated position that is guaranteed to be within bounds
+// validatePosition ensures the cursor position is within bounds
 func validatePosition(ctx *engine.GameContext, x, y int) (validX, validY int) {
-	validX = x
-	validY = y
-
-	// Ensure X is within bounds
+	validX, validY = x, y
 	if validX < 0 {
 		validX = 0
 	} else if validX >= ctx.GameWidth {
 		validX = ctx.GameWidth - 1
 	}
-
-	// Ensure Y is within bounds
 	if validY < 0 {
 		validY = 0
 	} else if validY >= ctx.GameHeight {
 		validY = ctx.GameHeight - 1
 	}
-
 	return validX, validY
 }
 
-// isBracket returns true if the rune is a bracket character
+// findCharInDirection finds the Nth occurrence of target in direction (forward=true)
+// Returns (x position, found). If count exceeds matches, returns last match found
+func findCharInDirection(ctx *engine.GameContext, startX, startY int, target rune, count int, forward bool) (int, bool) {
+	occurrences := 0
+	lastMatch := -1
+
+	if forward {
+		for x := startX + 1; x < ctx.GameWidth; x++ {
+			entities := ctx.World.Positions.GetAllAt(x, startY)
+			for _, entity := range entities {
+				if entity == 0 {
+					continue
+				}
+				char, ok := ctx.World.Characters.Get(entity)
+				if ok && char.Rune == target {
+					occurrences++
+					lastMatch = x
+					if occurrences == count {
+						return x, true
+					}
+				}
+			}
+		}
+	} else {
+		for x := startX - 1; x >= 0; x-- {
+			entities := ctx.World.Positions.GetAllAt(x, startY)
+			for _, entity := range entities {
+				if entity == 0 {
+					continue
+				}
+				char, ok := ctx.World.Characters.Get(entity)
+				if ok && char.Rune == target {
+					occurrences++
+					lastMatch = x
+					if occurrences == count {
+						return x, true
+					}
+				}
+			}
+		}
+	}
+
+	if lastMatch != -1 {
+		return lastMatch, true
+	}
+	return -1, false
+}
+
+// --- Word Motion Helpers ---
+
+func findNextWordStartVim(ctx *engine.GameContext, cursorX, cursorY int) int {
+	x := cursorX
+	currentType := getCharacterTypeAt(ctx, x, cursorY)
+
+	if currentType != CharTypeSpace {
+		for x < ctx.GameWidth && getCharacterTypeAt(ctx, x, cursorY) == currentType {
+			x++
+		}
+	} else {
+		x++
+	}
+
+	for x < ctx.GameWidth && getCharacterTypeAt(ctx, x, cursorY) == CharTypeSpace {
+		x++
+	}
+
+	if x >= ctx.GameWidth {
+		return cursorX
+	}
+	if x == cursorX {
+		x++
+		if x >= ctx.GameWidth {
+			return cursorX
+		}
+	}
+
+	validX, _ := validatePosition(ctx, x, cursorY)
+	return validX
+}
+
+func findWordEndVim(ctx *engine.GameContext, cursorX, cursorY int) int {
+	x := cursorX + 1
+	if x >= ctx.GameWidth {
+		return cursorX
+	}
+
+	for x < ctx.GameWidth && getCharacterTypeAt(ctx, x, cursorY) == CharTypeSpace {
+		x++
+	}
+	if x >= ctx.GameWidth {
+		return cursorX
+	}
+
+	currentType := getCharacterTypeAt(ctx, x, cursorY)
+	for x < ctx.GameWidth {
+		nextType := getCharacterTypeAt(ctx, x+1, cursorY)
+		if nextType == CharTypeSpace || nextType != currentType {
+			break
+		}
+		x++
+	}
+
+	validX, _ := validatePosition(ctx, x, cursorY)
+	return validX
+}
+
+func findPrevWordStartVim(ctx *engine.GameContext, cursorX, cursorY int) int {
+	x := cursorX - 1
+	if x < 0 {
+		return cursorX
+	}
+
+	for x >= 0 && getCharacterTypeAt(ctx, x, cursorY) == CharTypeSpace {
+		x--
+	}
+	if x < 0 {
+		return cursorX
+	}
+
+	currentType := getCharacterTypeAt(ctx, x, cursorY)
+	for x > 0 {
+		prevType := getCharacterTypeAt(ctx, x-1, cursorY)
+		if prevType == CharTypeSpace || prevType != currentType {
+			break
+		}
+		x--
+	}
+
+	validX, _ := validatePosition(ctx, x, cursorY)
+	return validX
+}
+
+func findNextWORDStart(ctx *engine.GameContext, cursorX, cursorY int) int {
+	x := cursorX
+	currentType := getCharacterTypeAt(ctx, x, cursorY)
+
+	if currentType != CharTypeSpace {
+		for x < ctx.GameWidth && getCharacterTypeAt(ctx, x, cursorY) != CharTypeSpace {
+			x++
+		}
+	} else {
+		x++
+	}
+
+	for x < ctx.GameWidth && getCharacterTypeAt(ctx, x, cursorY) == CharTypeSpace {
+		x++
+	}
+
+	if x >= ctx.GameWidth {
+		return cursorX
+	}
+	if x == cursorX {
+		x++
+		if x >= ctx.GameWidth {
+			return cursorX
+		}
+	}
+
+	validX, _ := validatePosition(ctx, x, cursorY)
+	return validX
+}
+
+func findWORDEnd(ctx *engine.GameContext, cursorX, cursorY int) int {
+	x := cursorX + 1
+	if x >= ctx.GameWidth {
+		return cursorX
+	}
+
+	for x < ctx.GameWidth && getCharacterTypeAt(ctx, x, cursorY) == CharTypeSpace {
+		x++
+	}
+	if x >= ctx.GameWidth {
+		return cursorX
+	}
+
+	for x < ctx.GameWidth {
+		nextType := getCharacterTypeAt(ctx, x+1, cursorY)
+		if nextType == CharTypeSpace {
+			break
+		}
+		x++
+	}
+
+	validX, _ := validatePosition(ctx, x, cursorY)
+	return validX
+}
+
+func findPrevWORDStart(ctx *engine.GameContext, cursorX, cursorY int) int {
+	x := cursorX - 1
+	if x < 0 {
+		return cursorX
+	}
+
+	for x >= 0 && getCharacterTypeAt(ctx, x, cursorY) == CharTypeSpace {
+		x--
+	}
+	if x < 0 {
+		return cursorX
+	}
+
+	for x > 0 {
+		prevType := getCharacterTypeAt(ctx, x-1, cursorY)
+		if prevType == CharTypeSpace {
+			break
+		}
+		x--
+	}
+
+	validX, _ := validatePosition(ctx, x, cursorY)
+	return validX
+}
+
+// --- Line Helpers ---
+
+func findLineEnd(ctx *engine.GameContext, cursorY int) int {
+	entities := ctx.World.Query().With(ctx.World.Positions).Execute()
+
+	maxX := 0
+	for _, entity := range entities {
+		pos, _ := ctx.World.Positions.Get(entity)
+		if pos.Y == cursorY && pos.X > maxX {
+			maxX = pos.X
+		}
+	}
+
+	if maxX == 0 {
+		return ctx.GameWidth - 1
+	}
+	return maxX
+}
+
+func findFirstNonWhitespace(ctx *engine.GameContext, cursorY int) int {
+	for x := 0; x < ctx.GameWidth; x++ {
+		if getCharacterTypeAt(ctx, x, cursorY) != CharTypeSpace {
+			validX, _ := validatePosition(ctx, x, cursorY)
+			return validX
+		}
+	}
+	return 0
+}
+
+// --- Paragraph Helpers ---
+
+func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
+	entities := ctx.World.Query().With(ctx.World.Positions).Execute()
+
+	for y := cursorY - 1; y >= 0; y-- {
+		hasChar := false
+		for _, entity := range entities {
+			pos, _ := ctx.World.Positions.Get(entity)
+			if pos.Y == y {
+				hasChar = true
+				break
+			}
+		}
+		if !hasChar {
+			return y
+		}
+	}
+	return 0
+}
+
+func findNextEmptyLine(ctx *engine.GameContext, cursorY int) int {
+	entities := ctx.World.Query().With(ctx.World.Positions).Execute()
+
+	for y := cursorY + 1; y < ctx.GameHeight; y++ {
+		hasChar := false
+		for _, entity := range entities {
+			pos, _ := ctx.World.Positions.Get(entity)
+			if pos.Y == y {
+				hasChar = true
+				break
+			}
+		}
+		if !hasChar {
+			return y
+		}
+	}
+	return ctx.GameHeight - 1
+}
+
+// --- Bracket Helpers ---
+
 func isBracket(r rune) bool {
 	return r == '(' || r == ')' || r == '{' || r == '}' || r == '[' || r == ']' || r == '<' || r == '>'
 }
 
-// isOpeningBracket returns true if the rune is an opening bracket
 func isOpeningBracket(r rune) bool {
 	return r == '(' || r == '{' || r == '[' || r == '<'
 }
 
-// isClosingBracket returns true if the rune is a closing bracket
-func isClosingBracket(r rune) bool {
-	return r == ')' || r == '}' || r == ']' || r == '>'
-}
-
-// getMatchingBracket returns the matching bracket for a given bracket
 func getMatchingBracket(r rune) rune {
 	switch r {
 	case '(':
@@ -94,79 +378,51 @@ func getMatchingBracket(r rune) rune {
 	return 0
 }
 
-// findMatchingBracket finds the matching bracket for the bracket at cursor position
-// Returns the new cursor position (x, y) or (-1, -1) if no match found
 func findMatchingBracket(ctx *engine.GameContext, cursorX, cursorY int) (int, int) {
-	// Get character at current cursor position
 	currentChar := getCharAt(ctx, cursorX, cursorY)
-
-	// Check if cursor is on a bracket
 	if !isBracket(currentChar) {
 		return -1, -1
 	}
 
 	matchingChar := getMatchingBracket(currentChar)
-
-	// Determine search direction
 	if isOpeningBracket(currentChar) {
-		// Search forward for matching closing bracket
 		return findMatchingBracketForward(ctx, cursorX, cursorY, currentChar, matchingChar)
-	} else {
-		// Search backward for matching opening bracket
-		return findMatchingBracketBackward(ctx, cursorX, cursorY, currentChar, matchingChar)
 	}
+	return findMatchingBracketBackward(ctx, cursorX, cursorY, currentChar, matchingChar)
 }
 
-// findMatchingBracketForward searches forward for matching closing bracket using a stack
 func findMatchingBracketForward(ctx *engine.GameContext, startX, startY int, openChar, closeChar rune) (int, int) {
 	depth := 0
+	x, y := startX+1, startY
 
-	// Start from the position after the opening bracket
-	x := startX
-	y := startY
-
-	// Move to next position
-	x++
 	if x >= ctx.GameWidth {
 		x = 0
 		y++
 	}
 
-	// Search through all positions forward
 	for y < ctx.GameHeight {
 		for x < ctx.GameWidth {
 			ch := getCharAt(ctx, x, y)
-
 			if ch == openChar {
 				depth++
 			} else if ch == closeChar {
 				if depth == 0 {
-					// Found matching bracket
 					return x, y
 				}
 				depth--
 			}
-
 			x++
 		}
 		x = 0
 		y++
 	}
-
-	// No match found
 	return -1, -1
 }
 
-// findMatchingBracketBackward searches backward for matching opening bracket using a stack
 func findMatchingBracketBackward(ctx *engine.GameContext, startX, startY int, closeChar, openChar rune) (int, int) {
 	depth := 0
+	x, y := startX-1, startY
 
-	// Start from the position before the closing bracket
-	x := startX
-	y := startY
-
-	// Move to previous position
-	x--
 	if x < 0 {
 		y--
 		if y >= 0 {
@@ -174,21 +430,17 @@ func findMatchingBracketBackward(ctx *engine.GameContext, startX, startY int, cl
 		}
 	}
 
-	// Search through all positions backward
 	for y >= 0 {
 		for x >= 0 {
 			ch := getCharAt(ctx, x, y)
-
 			if ch == closeChar {
 				depth++
 			} else if ch == openChar {
 				if depth == 0 {
-					// Found matching bracket
 					return x, y
 				}
 				depth--
 			}
-
 			x--
 		}
 		y--
@@ -196,7 +448,5 @@ func findMatchingBracketBackward(ctx *engine.GameContext, startX, startY int, cl
 			x = ctx.GameWidth - 1
 		}
 	}
-
-	// No match found
 	return -1, -1
 }

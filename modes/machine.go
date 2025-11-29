@@ -14,30 +14,36 @@ const (
 	StateOperatorWait
 	StateOperatorCharWait // Operator + char command (e.g., dfa)
 	StatePrefixG
+	StateOperatorPrefixG
 )
 
 // InputMachine encapsulates all normal-mode input state
 // Private to InputHandler; GameContext never sees internals
 type InputMachine struct {
-	state    InputState
-	count1   int  // Count before operator
-	count2   int  // Count after operator (for d2w)
-	operator rune // Pending operator ('d')
-	charCmd  rune // Pending char command ('f', 'F', 't', 'T')
-	prefix   rune // Pending prefix ('g')
+	state     InputState
+	count1    int    // Count before operator
+	count2    int    // Count after operator (for d2w)
+	operator  rune   // Pending operator ('d')
+	charCmd   rune   // Pending char command ('f', 'F', 't', 'T')
+	prefix    rune   // Pending prefix ('g')
+	cmdBuffer []rune // Buffer for current command keystrokes
 }
 
 // ProcessResult contains the outcome of processing a key
 type ProcessResult struct {
-	Handled    bool
-	Continue   bool                      // false = exit game
-	ModeChange engine.GameMode           // 0 = no change
-	Action     func(*engine.GameContext) // nil = no action
+	Handled       bool
+	Continue      bool                      // false = exit game
+	ModeChange    engine.GameMode           // 0 = no change
+	Action        func(*engine.GameContext) // nil = no action
+	CommandString string                    // Captured command string on success
 }
 
 // NewInputMachine creates a new input machine in idle state
 func NewInputMachine() *InputMachine {
-	return &InputMachine{state: StateIdle}
+	return &InputMachine{
+		state:     StateIdle,
+		cmdBuffer: make([]rune, 0, 8),
+	}
 }
 
 // Reset clears all state (ESC handler)
@@ -48,6 +54,12 @@ func (m *InputMachine) Reset() {
 	m.operator = 0
 	m.charCmd = 0
 	m.prefix = 0
+	m.cmdBuffer = m.cmdBuffer[:0]
+}
+
+// captureCommand returns the current buffer as string
+func (m *InputMachine) captureCommand() string {
+	return string(m.cmdBuffer)
 }
 
 // EffectiveCount returns the multiplied count (count1 * count2, minimum 1)
@@ -72,6 +84,9 @@ func (m *InputMachine) State() InputState {
 // - Makes `Process()` dispatch uniform
 // - Allows future extension (e.g., configurable cancel keys in char-wait state)
 func (m *InputMachine) Process(key rune, bindings *BindingTable) ProcessResult {
+	// Append key to buffer
+	m.cmdBuffer = append(m.cmdBuffer, key)
+
 	switch m.state {
 	case StateIdle, StateCount:
 		return m.processIdleOrCount(key, bindings)
@@ -83,6 +98,8 @@ func (m *InputMachine) Process(key rune, bindings *BindingTable) ProcessResult {
 		return m.processOperatorCharWait(key, bindings)
 	case StatePrefixG:
 		return m.processPrefixG(key, bindings)
+	case StateOperatorPrefixG:
+		return m.processOperatorPrefixG(key, bindings)
 	}
 	return ProcessResult{Handled: false, Continue: true}
 }
@@ -110,11 +127,13 @@ func (m *InputMachine) processIdleOrCount(key rune, bindings *BindingTable) Proc
 	switch binding.Action {
 	case ActionMotion:
 		count := m.EffectiveCount()
+		cmdStr := m.captureCommand()
 		m.Reset()
 		executor := binding.Executor
 		return ProcessResult{
-			Handled:  true,
-			Continue: true,
+			Handled:       true,
+			Continue:      true,
+			CommandString: cmdStr,
 			Action: func(ctx *engine.GameContext) {
 				executor(ctx, count)
 			},
@@ -137,16 +156,19 @@ func (m *InputMachine) processIdleOrCount(key rune, bindings *BindingTable) Proc
 
 	case ActionModeSwitch:
 		mode := binding.Target
+		// Mode switch resets buffer
 		m.Reset()
 		return m.handleModeSwitch(mode)
 
 	case ActionSpecial:
 		count := m.EffectiveCount()
+		cmdStr := m.captureCommand()
 		m.Reset()
 		executor := binding.Executor
 		return ProcessResult{
-			Handled:  true,
-			Continue: true,
+			Handled:       true,
+			Continue:      true,
+			CommandString: cmdStr,
 			Action: func(ctx *engine.GameContext) {
 				executor(ctx, count)
 			},
@@ -161,11 +183,13 @@ func (m *InputMachine) processCharWait(key rune, bindings *BindingTable) Process
 	// Any printable character is the target
 	count := m.EffectiveCount()
 	charCmd := m.charCmd
+	cmdStr := m.captureCommand()
 	m.Reset()
 
 	return ProcessResult{
-		Handled:  true,
-		Continue: true,
+		Handled:       true,
+		Continue:      true,
+		CommandString: cmdStr,
 		Action: func(ctx *engine.GameContext) {
 			execCharMotion(ctx, charCmd, key, count)
 		},
@@ -188,14 +212,23 @@ func (m *InputMachine) processOperatorWait(key rune, bindings *BindingTable) Pro
 	if key == m.operator {
 		count := m.EffectiveCount()
 		op := m.operator
+		cmdStr := m.captureCommand()
 		m.Reset()
 		return ProcessResult{
-			Handled:  true,
-			Continue: true,
+			Handled:       true,
+			Continue:      true,
+			CommandString: cmdStr,
 			Action: func(ctx *engine.GameContext) {
 				ExecuteDeleteMotion(ctx, op, count)
 			},
 		}
+	}
+
+	// Handle 'g' prefix (dgg, dgo)
+	if key == 'g' {
+		m.prefix = 'g'
+		m.state = StateOperatorPrefixG
+		return ProcessResult{Handled: true, Continue: true}
 	}
 
 	// Look up motion binding
@@ -215,10 +248,12 @@ func (m *InputMachine) processOperatorWait(key rune, bindings *BindingTable) Pro
 	// Execute operator + motion
 	count := m.EffectiveCount()
 	motion := binding.Target
+	cmdStr := m.captureCommand()
 	m.Reset()
 	return ProcessResult{
-		Handled:  true,
-		Continue: true,
+		Handled:       true,
+		Continue:      true,
+		CommandString: cmdStr,
 		Action: func(ctx *engine.GameContext) {
 			ExecuteDeleteMotion(ctx, motion, count)
 		},
@@ -230,11 +265,13 @@ func (m *InputMachine) processOperatorCharWait(key rune, bindings *BindingTable)
 	// Target character for df{char}, dt{char}, etc
 	count := m.EffectiveCount()
 	charCmd := m.charCmd
+	cmdStr := m.captureCommand()
 	m.Reset()
 
 	return ProcessResult{
-		Handled:  true,
-		Continue: true,
+		Handled:       true,
+		Continue:      true,
+		CommandString: cmdStr,
 		Action: func(ctx *engine.GameContext) {
 			execDeleteWithCharMotion(ctx, charCmd, key, count)
 		},
@@ -261,6 +298,29 @@ func (m *InputMachine) processPrefixG(key rune, bindings *BindingTable) ProcessR
 	}
 }
 
+// processOperatorPrefixG handles operator's second character input after g prefix
+func (m *InputMachine) processOperatorPrefixG(key rune, bindings *BindingTable) ProcessResult {
+	binding, ok := bindings.prefixG[key]
+	if !ok {
+		m.Reset()
+		return ProcessResult{Handled: false, Continue: true}
+	}
+
+	count := m.EffectiveCount()
+	motion := binding.Target
+	cmdStr := m.captureCommand()
+	m.Reset()
+
+	return ProcessResult{
+		Handled:       true,
+		Continue:      true,
+		CommandString: cmdStr,
+		Action: func(ctx *engine.GameContext) {
+			ExecuteDeleteMotion(ctx, motion, count)
+		},
+	}
+}
+
 // accumulateCount1 adds a digit to the primary count (before operator)
 func (m *InputMachine) accumulateCount1(key rune) {
 	m.count1 = m.count1*10 + int(key-'0')
@@ -277,6 +337,7 @@ func (m *InputMachine) accumulateCount2(key rune) {
 	}
 }
 
+// handleModeSwitch changes mode (enum)
 func (m *InputMachine) handleModeSwitch(target rune) ProcessResult {
 	switch target {
 	case 'i':
