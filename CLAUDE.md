@@ -21,79 +21,89 @@ vi-fighter is a terminal-based typing game in Go using a compile-time Generics-b
 - **Renderers**: Individual `SystemRenderer` implementations in `render/renderers/`.
 - **Priority**: `RenderPriority` constants determine render order (lower first).
 
-## CURRENT TASK: Z-Index Engine Integration
+## CURRENT TASK: Gold Bootstrap Decoupling
 
 ### Objective
-Activate and enhance `engine/z-index.go` to be the single source of truth for entity layering. Modify `PositionStore` to support multiple entities per cell with z-index-based selection.
+Move game initialization delay from `GoldSystem.Update()` to `ClockScheduler` using a new `PhaseBootstrap` phase. Remove `FirstUpdateTime` and `InitialSpawnComplete` from GameState.
 
 ### Reference Document
-- `engine/z-index.go` - Existing stub with constants and `SelectTopEntity`
-- `engine/position_store.go` - Current single-entity-per-cell implementation
+- `engine/clock_scheduler.go` - GamePhase enum and processTick switch
+- `engine/game_state.go` - GameState struct with phase management
+- `systems/gold.go` - Current bootstrap logic to remove
 
 ### Key Types
 ```go
-// Z-Index constants (higher = on top)
+// Updated GamePhase enum
 const (
-    ZIndexBackground = 0
-    ZIndexSpawnChar  = 100
-    ZIndexNugget     = 200
-    ZIndexDecay      = 300
-    ZIndexDrain      = 400
-    ZIndexShield     = 500
-    ZIndexCursor     = 1000
+    PhaseBootstrap GamePhase = iota  // NEW: Initial delay state
+    PhaseNormal
+    PhaseGoldActive
+    PhaseGoldComplete
+    PhaseDecayWait
+    PhaseDecayAnimation
 )
 
-// Enhanced Cell struct
-type Cell struct {
-    Entities  []Entity  // All entities at position
-    TopEntity Entity    // Cached highest z-index
-    TopZIndex int       // Cached z-index value
+// GameState changes
+type GameState struct {
+    // ADD:
+    GameStartTime time.Time
+    
+    // REMOVE:
+    // FirstUpdateTime time.Time
+    // InitialSpawnComplete bool
 }
 
-// New API methods
-func GetZIndex(world *World, e Entity) int
-func SelectTopEntity(entities []Entity, world *World) Entity
-func SelectTopEntityFiltered(entities []Entity, world *World, filter func(Entity) bool) Entity
-func IsInteractable(world *World, e Entity) bool
-
-// PositionStore new methods
-func (ps *PositionStore) GetAllEntitiesAt(x, y int) []Entity
-func (ps *PositionStore) GetTopEntityFiltered(x, y int, world *World, filter func(Entity) bool) Entity
-func (ps *PositionStore) SetWorld(w *World)
+// New GameState methods
+func (gs *GameState) GetGameStartTime() time.Time
+func (gs *GameState) ResetGameStart(now time.Time)  // For :new command
+func (gs *GameState) TransitionPhase(to GamePhase, now time.Time) bool
 ```
 
 ### Implementation Pattern
 ```go
-// Z-index check order in GetZIndex (highest first for early exit)
-if world.Cursors.Has(e)  { return ZIndexCursor }
-if world.Shields.Has(e)  { return ZIndexShield }
-if world.Drains.Has(e)   { return ZIndexDrain }
-if world.Decays.Has(e)   { return ZIndexDecay }
-if world.Nuggets.Has(e)  { return ZIndexNugget }
-return ZIndexSpawnChar
+// ClockScheduler.processTick - new case
+case PhaseBootstrap:
+    if gameNow.Sub(cs.ctx.State.GetGameStartTime()) >= constants.GoldInitialSpawnDelay {
+        cs.ctx.State.TransitionPhase(PhaseNormal, gameNow)
+    }
 
-// IsInteractable: only Characters with Sequence OR Nuggets
-func IsInteractable(world *World, e Entity) bool {
-    if world.Nuggets.Has(e) { return true }
-    return world.Characters.Has(e) && world.Sequences.Has(e)
+// GoldSystem.Update - simplified logic
+func (s *GoldSystem) Update(world *engine.World, dt time.Duration) {
+    timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+    now := timeRes.GameTime
+    
+    goldSnapshot := s.ctx.State.ReadGoldState(now)
+    phaseSnapshot := s.ctx.State.ReadPhaseState(now)
+    
+    // Only spawn in Normal phase when no gold active
+    if phaseSnapshot.Phase == engine.PhaseNormal && !goldSnapshot.Active {
+        s.spawnGold(world)
+    }
 }
 
-// Consumer pattern (EnergySystem)
-entity := world.Positions.GetTopEntityFiltered(x, y, world, engine.IsInteractable)
+// :new command reset
+ctx.State.ResetGameStart(ctx.PausableClock.Now())
 
-// Consumer pattern (CursorRenderer)
-entities := world.Positions.GetAllEntitiesAt(x, y)
-displayEntity := engine.SelectTopEntityFiltered(entities, world, func(e engine.Entity) bool {
-    return e != cursorEntity && world.Characters.Has(e)
-})
+// CanTransition update
+case PhaseBootstrap:
+    return to == PhaseNormal
+```
+
+### Phase Flow
+```
+PhaseBootstrap ──[delay]──> PhaseNormal ──[gold spawns]──> PhaseGoldActive
+      ^                                                          │
+      │                                                          v
+      │                     PhaseDecayAnimation <── PhaseDecayWait <── PhaseGoldComplete
+      │                            │
+      └────────[:new cmd]──────────┘
 ```
 
 ### Files to Modify
-1. `engine/z-index.go` - Add constants, enhance functions
-2. `engine/position_store.go` - Multi-entity cells, new methods
-3. `engine/world.go` - Wire PositionStore with World reference
-4. `systems/energy.go` - Use GetTopEntityFiltered
-5. `render/renderers/cursor.go` - Use z-index selection
+1. `engine/clock_scheduler.go` - Add PhaseBootstrap const, case in processTick
+2. `engine/game_state.go` - Add GameStartTime, remove old fields, add methods
+3. `systems/gold.go` - Strip all bootstrap logic
+4. `modes/commands.go` - Update handleNewCommand
 
 ## VERIFICATION
 - `go build .` must succeed
