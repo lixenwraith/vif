@@ -80,30 +80,12 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 	now := timeRes.GameTime
 	frameNumber := uint64(s.ctx.State.GetFrameNumber())
 
-	// Find character at cursor position using Query
-	// We cannot use GetEntityAt because the Cursor entity masks the character in the spatial index
-	var entity engine.Entity
-	var char components.CharacterComponent
-	found := false
+	// Find interactable entity at cursor position using z-index filtered lookup
+	entity := world.Positions.GetTopEntityFiltered(cursorX, cursorY, world, func(e engine.Entity) bool {
+		return engine.IsInteractable(world, e)
+	})
 
-	// Query all entities with Position and Character components
-	entities := world.Query().
-		With(world.Positions).
-		With(world.Characters).
-		Execute()
-
-	// Scan for the one at our specific coordinates
-	for _, e := range entities {
-		pos, _ := world.Positions.Get(e)
-		if pos.X == cursorX && pos.Y == cursorY {
-			char, _ = world.Characters.Get(e)
-			entity = e
-			found = true
-			break
-		}
-	}
-
-	if !found {
+	if entity == 0 {
 		// No character at cursor - flash error cursor and deactivate boost
 		cursor, _ := world.Cursors.Get(s.ctx.CursorEntity)
 		cursor.ErrorFlashEnd = now.Add(constants.ErrorBlinkTimeout).UnixNano()
@@ -122,6 +104,11 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 			s.ctx.AudioEngine.SendRealTime(cmd)
 		}
 		return
+	}
+
+	char, ok := world.Characters.Get(entity)
+	if !ok {
+		return // Entity has no character component (shouldn't happen for interactable)
 	}
 
 	// Check if this is a nugget - handle before sequence logic

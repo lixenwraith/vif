@@ -49,44 +49,40 @@ func (c *CursorRenderer) Render(ctx render.RenderContext, world *engine.World, b
 
 	var charFgColor tcell.Color = tcell.ColorBlack
 
-	// 2. Scan for Overlapping Entities
+	// 2. Get entities at cursor position using z-index selection
 
-	// Stack allocation of buffer (size 15), NO GC overhead
-	var entityBuf [engine.MaxEntitiesPerCell]engine.Entity
+	// Get all entities at cursor position
+	entities := world.Positions.GetAllEntitiesAt(ctx.CursorX, ctx.CursorY)
 
-	// Copy data into stack buffer
-	count := world.Positions.GetAllAtInto(ctx.CursorX, ctx.CursorY, entityBuf[:])
-
-	// Create a slice view of our valid data
-	entitiesAtCursor := entityBuf[:count]
-
+	// Check for Drain (highest priority overlay, masks everything)
 	isDrain := false
-	hasChar := false
-	isNugget := false
-	var charStyle tcell.Style
-
-	for _, e := range entitiesAtCursor {
-		if e == c.gameCtx.CursorEntity {
-			continue
-		}
-
-		// Priority 1: Drain
-		// Drain masks everything else
+	for _, e := range entities {
 		if world.Drains.Has(e) {
 			isDrain = true
 			break
 		}
+	}
 
-		// Priority 2: Characters (Spawned, Gold, Nugget)
-		if !hasChar {
-			if charComp, ok := world.Characters.Get(e); ok {
-				hasChar = true
-				charAtCursor = charComp.Rune
-				charStyle = charComp.Style
-				if world.Nuggets.Has(e) {
-					isNugget = true
-				}
-				// Do not break here; a Drain might still be in the list
+	// Get the highest priority character entity for display (excluding cursor and non-character entities)
+	displayEntity := engine.SelectTopEntityFiltered(entities, world, func(e engine.Entity) bool {
+		// Exclude cursor itself and non-character entities
+		if e == c.gameCtx.CursorEntity {
+			return false
+		}
+		// Only consider entities with characters
+		return world.Characters.Has(e)
+	})
+
+	hasChar := displayEntity != 0
+	isNugget := false
+	var charStyle tcell.Style
+
+	if hasChar {
+		if charComp, ok := world.Characters.Get(displayEntity); ok {
+			charAtCursor = charComp.Rune
+			charStyle = charComp.Style
+			if world.Nuggets.Has(displayEntity) {
+				isNugget = true
 			}
 		}
 	}
