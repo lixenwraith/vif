@@ -8,14 +8,14 @@ import (
 	"github.com/lixenwraith/vi-fighter/render"
 )
 
-// EffectsRenderer draws decay, cleaners, removal flashes, and materializers.
+// EffectsRenderer draws decay, cleaners, removal flashes, and materializers
 type EffectsRenderer struct {
 	gameCtx             *engine.GameContext
 	cleanerGradient     []tcell.Color
 	materializeGradient []tcell.Color
 }
 
-// NewEffectsRenderer creates a new effects renderer with gradient generation.
+// NewEffectsRenderer creates a new effects renderer with gradient generation
 func NewEffectsRenderer(gameCtx *engine.GameContext) *EffectsRenderer {
 	e := &EffectsRenderer{
 		gameCtx: gameCtx,
@@ -25,7 +25,7 @@ func NewEffectsRenderer(gameCtx *engine.GameContext) *EffectsRenderer {
 	return e
 }
 
-// buildCleanerGradient builds the gradient for cleaner trail rendering.
+// buildCleanerGradient builds the gradient for cleaner trail rendering
 func (e *EffectsRenderer) buildCleanerGradient() {
 	length := constants.CleanerTrailLength
 
@@ -47,7 +47,7 @@ func (e *EffectsRenderer) buildCleanerGradient() {
 	}
 }
 
-// buildMaterializeGradient builds the gradient for materialize trail rendering.
+// buildMaterializeGradient builds the gradient for materialize trail rendering
 func (e *EffectsRenderer) buildMaterializeGradient() {
 	length := constants.MaterializeTrailLength
 
@@ -86,7 +86,7 @@ func (e *EffectsRenderer) Render(ctx render.RenderContext, world *engine.World, 
 	e.drawMaterializers(ctx, world, buf, defaultStyle)
 }
 
-// drawDecay draws the falling decay characters.
+// drawDecay draws the falling decay characters
 func (e *EffectsRenderer) drawDecay(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer, defaultStyle tcell.Style) {
 	// Direct store access - single component query
 	decayEntities := world.Decays.All()
@@ -126,8 +126,8 @@ func (e *EffectsRenderer) drawDecay(ctx render.RenderContext, world *engine.Worl
 	}
 }
 
-// drawCleaners draws the cleaner animation using the trail of grid points.
-// Cleaners are opaque and render ON TOP of everything (occlude shield).
+// drawCleaners draws the cleaner animation using the trail of grid points
+// Cleaners are opaque and render ON TOP of everything (occlude shield)
 func (e *EffectsRenderer) drawCleaners(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer, defaultStyle tcell.Style) {
 	cleanerEntities := world.Cleaners.All()
 
@@ -171,7 +171,7 @@ func (e *EffectsRenderer) drawCleaners(ctx render.RenderContext, world *engine.W
 	}
 }
 
-// drawRemovalFlashes draws the brief flash effects when red characters are removed.
+// drawRemovalFlashes draws the brief flash effects when red characters are removed
 func (e *EffectsRenderer) drawRemovalFlashes(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer, defaultStyle tcell.Style) {
 	// Use world for direct store access
 	entities := world.Flashes.All()
@@ -223,7 +223,7 @@ func (e *EffectsRenderer) drawRemovalFlashes(ctx render.RenderContext, world *en
 	}
 }
 
-// drawMaterializers draws the materialize animation using the trail of grid points.
+// drawMaterializers draws the materialize animation using the trail of grid points
 func (e *EffectsRenderer) drawMaterializers(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer, defaultStyle tcell.Style) {
 	entities := world.Materializers.All()
 	if len(entities) == 0 {

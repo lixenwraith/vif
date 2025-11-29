@@ -9,24 +9,24 @@ import (
 	"github.com/lixenwraith/vi-fighter/render"
 )
 
-// OverlayRenderer draws the modal overlay window.
+// OverlayRenderer draws the modal overlay window
 type OverlayRenderer struct {
 	gameCtx *engine.GameContext
 }
 
-// NewOverlayRenderer creates a new overlay renderer.
+// NewOverlayRenderer creates a new overlay renderer
 func NewOverlayRenderer(gameCtx *engine.GameContext) *OverlayRenderer {
 	return &OverlayRenderer{
 		gameCtx: gameCtx,
 	}
 }
 
-// IsVisible returns true when the overlay should be rendered.
+// IsVisible returns true when the overlay should be rendered
 func (o *OverlayRenderer) IsVisible() bool {
 	return o.gameCtx.IsOverlayMode() && o.gameCtx.OverlayActive
 }
 
-// Render draws the overlay window.
+// Render draws the overlay window
 func (o *OverlayRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	defaultStyle := tcell.StyleDefault.Background(render.RgbBackground)
 

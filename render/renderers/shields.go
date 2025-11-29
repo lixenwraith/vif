@@ -8,15 +8,15 @@ import (
 	"github.com/lixenwraith/vi-fighter/render"
 )
 
-// ShieldRenderer renders active shields by blending their color with the existing background.
+// ShieldRenderer renders active shields by blending their color with the existing background
 type ShieldRenderer struct{}
 
-// NewShieldRenderer creates a new shield renderer.
+// NewShieldRenderer creates a new shield renderer
 func NewShieldRenderer() *ShieldRenderer {
 	return &ShieldRenderer{}
 }
 
-// Render draws all active shields.
+// Render draws all active shields
 func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	const useBlending = true
 
@@ -104,8 +104,8 @@ func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, b
 	}
 }
 
-// blendColors blends two colors based on alpha.
-// alpha is 0.0 (fully background) to 1.0 (fully foreground).
+// blendColors blends two colors based on alpha
+// alpha is 0.0 (fully background) to 1.0 (fully foreground)
 func (s *ShieldRenderer) blendColors(bg, fg tcell.Color, alpha float64) tcell.Color {
 	if alpha <= 0 {
 		return bg

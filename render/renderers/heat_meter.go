@@ -7,17 +7,17 @@ import (
 	"github.com/lixenwraith/vi-fighter/render"
 )
 
-// HeatMeterRenderer draws the heat meter bar at the top of the screen.
+// HeatMeterRenderer draws the heat meter bar at the top of the screen
 type HeatMeterRenderer struct {
 	state *engine.GameState
 }
 
-// NewHeatMeterRenderer creates a heat meter renderer.
+// NewHeatMeterRenderer creates a heat meter renderer
 func NewHeatMeterRenderer(state *engine.GameState) *HeatMeterRenderer {
 	return &HeatMeterRenderer{state: state}
 }
 
-// Render implements SystemRenderer.
+// Render implements SystemRenderer
 func (h *HeatMeterRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	heat := h.state.GetHeat()
 	defaultStyle := tcell.StyleDefault.Background(render.RgbBackground)

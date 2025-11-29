@@ -2,14 +2,14 @@ package render
 
 import "github.com/gdamore/tcell/v2"
 
-// RenderBuffer is a dense grid for compositing render output.
+// RenderBuffer is a dense grid for compositing render output
 type RenderBuffer struct {
 	cells  []RenderCell
 	width  int
 	height int
 }
 
-// NewRenderBuffer creates a buffer with the specified dimensions.
+// NewRenderBuffer creates a buffer with the specified dimensions
 func NewRenderBuffer(width, height int) *RenderBuffer {
 	size := width * height
 	cells := make([]RenderCell, size)
@@ -23,7 +23,7 @@ func NewRenderBuffer(width, height int) *RenderBuffer {
 	}
 }
 
-// Resize adjusts buffer dimensions. Reallocates only if capacity insufficient.
+// Resize adjusts buffer dimensions, reallocates only if capacity insufficient
 func (b *RenderBuffer) Resize(width, height int) {
 	size := width * height
 	if cap(b.cells) < size {
@@ -36,7 +36,7 @@ func (b *RenderBuffer) Resize(width, height int) {
 	b.Clear()
 }
 
-// Clear resets all cells to empty using exponential copy.
+// Clear resets all cells to empty using exponential copy
 func (b *RenderBuffer) Clear() {
 	if len(b.cells) == 0 {
 		return
@@ -47,7 +47,7 @@ func (b *RenderBuffer) Clear() {
 	}
 }
 
-// Set writes a rune and style at (x, y). Silent no-op on OOB.
+// Set writes a rune and style at (x, y), Silent no-op on OOB
 func (b *RenderBuffer) Set(x, y int, r rune, style tcell.Style) {
 	if x < 0 || x >= b.width || y < 0 || y >= b.height {
 		return
@@ -55,7 +55,7 @@ func (b *RenderBuffer) Set(x, y int, r rune, style tcell.Style) {
 	b.cells[y*b.width+x] = RenderCell{Rune: r, Style: style}
 }
 
-// SetRune writes a rune at (x, y) preserving existing style. Silent no-op on OOB.
+// SetRune writes a rune at (x, y) preserving existing style, Silent no-op on OOB
 func (b *RenderBuffer) SetRune(x, y int, r rune) {
 	if x < 0 || x >= b.width || y < 0 || y >= b.height {
 		return
@@ -64,7 +64,7 @@ func (b *RenderBuffer) SetRune(x, y int, r rune) {
 	b.cells[idx].Rune = r
 }
 
-// SetString writes a string starting at (x, y). Returns runes written.
+// SetString writes a string starting at (x, y) and returns runes written
 func (b *RenderBuffer) SetString(x, y int, s string, style tcell.Style) int {
 	if y < 0 || y >= b.height {
 		return 0
@@ -83,7 +83,7 @@ func (b *RenderBuffer) SetString(x, y int, s string, style tcell.Style) int {
 	return written
 }
 
-// Get returns the cell at (x, y). Returns emptyCell on OOB.
+// Get returns the cell at (x, y) and returns emptyCell on OOB
 func (b *RenderBuffer) Get(x, y int) RenderCell {
 	if x < 0 || x >= b.width || y < 0 || y >= b.height {
 		return emptyCell
@@ -91,13 +91,13 @@ func (b *RenderBuffer) Get(x, y int) RenderCell {
 	return b.cells[y*b.width+x]
 }
 
-// DecomposeAt returns fg, bg, attrs at (x, y). Returns defaults on OOB.
+// DecomposeAt returns fg, bg, attrs at (x, y) and returns defaults on OOB
 func (b *RenderBuffer) DecomposeAt(x, y int) (fg, bg tcell.Color, attrs tcell.AttrMask) {
 	cell := b.Get(x, y)
 	return cell.Style.Decompose()
 }
 
-// Flush writes buffer contents to tcell.Screen.
+// Flush writes buffer contents to tcell.Screen
 func (b *RenderBuffer) Flush(screen tcell.Screen) {
 	for y := 0; y < b.height; y++ {
 		row := y * b.width
@@ -108,7 +108,7 @@ func (b *RenderBuffer) Flush(screen tcell.Screen) {
 	}
 }
 
-// Bounds returns buffer dimensions.
+// Bounds returns buffer dimensions
 func (b *RenderBuffer) Bounds() (width, height int) {
 	return b.width, b.height
 }

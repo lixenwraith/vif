@@ -10,7 +10,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/render"
 )
 
-// StatusBarRenderer draws the status bar at the bottom.
+// StatusBarRenderer draws the status bar at the bottom
 type StatusBarRenderer struct {
 	gameCtx *engine.GameContext
 
@@ -20,7 +20,7 @@ type StatusBarRenderer struct {
 	currentFps    int
 }
 
-// NewStatusBarRenderer creates a status bar renderer.
+// NewStatusBarRenderer creates a status bar renderer
 func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 	return &StatusBarRenderer{
 		gameCtx:       gameCtx,
@@ -28,7 +28,7 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 	}
 }
 
-// Render implements SystemRenderer.
+// Render implements SystemRenderer
 func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	// FPS Calculation
 	s.frameCount++

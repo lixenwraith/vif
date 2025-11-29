@@ -107,8 +107,7 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 		c.PreciseY += c.VelocityY * dtSec
 
 		// --- Collision Detection (Swept Segment) ---
-		// Check all integer grid points covered during this frame's movement
-		// to prevent tunneling at high speeds.
+		// Check all integer grid points covered during this frame's movement to prevent tunneling at high speeds
 		// Vertical cleaners sweep Y positions, horizontal cleaners sweep X positions
 		if c.VelocityY != 0 && c.VelocityX == 0 {
 			// Vertical cleaner - sweep Y positions at fixed X
@@ -437,7 +436,7 @@ func (cs *CleanerSystem) checkAndDestroyAtPosition(world *engine.World, x, y int
 
 	// Create a copy or iterate carefully since we might destroy entities
 	// Destroying modifies the grid, so standard range loop on the slice
-	// returned by GetAllAt (which is a view of backing array) is unsafe if the backing array shifts.
+	// returned by GetAllAt (which is a view of backing array) is unsafe if the backing array shifts
 	// However, PositionStore.Remove modifies the array in place
 	// Safer to collect candidates first
 	var toDestroy []engine.Entity
@@ -472,4 +471,3 @@ func (cs *CleanerSystem) spawnRemovalFlash(world *engine.World, targetEntity eng
 		}
 	}
 }
-

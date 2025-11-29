@@ -6,19 +6,19 @@ import (
 	"github.com/lixenwraith/vi-fighter/render"
 )
 
-// PingGridRenderer draws cursor row/column highlights and optional grid lines.
+// PingGridRenderer draws cursor row/column highlights and optional grid lines
 type PingGridRenderer struct {
 	gameCtx *engine.GameContext
 }
 
-// NewPingGridRenderer creates a new ping grid renderer.
+// NewPingGridRenderer creates a new ping grid renderer
 func NewPingGridRenderer(gameCtx *engine.GameContext) *PingGridRenderer {
 	return &PingGridRenderer{
 		gameCtx: gameCtx,
 	}
 }
 
-// Render draws the ping highlights and grid.
+// Render draws the ping highlights and grid
 func (p *PingGridRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	defaultStyle := tcell.StyleDefault.Background(render.RgbBackground)
 
@@ -35,7 +35,7 @@ func (p *PingGridRenderer) Render(ctx render.RenderContext, world *engine.World,
 	}
 }
 
-// getPingColor determines the ping highlight color based on game mode.
+// getPingColor determines the ping highlight color based on game mode
 func (p *PingGridRenderer) getPingColor() tcell.Color {
 	// INSERT mode: use whitespace color (dark gray)
 	// NORMAL/SEARCH mode: use character color (almost black)
@@ -45,8 +45,8 @@ func (p *PingGridRenderer) getPingColor() tcell.Color {
 	return render.RgbPingNormal // Almost black for NORMAL and SEARCH modes
 }
 
-// drawPingHighlights draws the cursor row and column highlights.
-// Draws ONLY on cells with default/black background to avoid overwriting shield.
+// drawPingHighlights draws the cursor row and column highlights
+// Draws ONLY on cells with default/black background to avoid overwriting shield
 func (p *PingGridRenderer) drawPingHighlights(ctx render.RenderContext, buf *render.RenderBuffer, pingStyle tcell.Style, pingColor tcell.Color) {
 	// Helper to draw ping only if cell has default background
 	drawPingCell := func(x, y int) {
@@ -77,8 +77,8 @@ func (p *PingGridRenderer) drawPingHighlights(ctx render.RenderContext, buf *ren
 	}
 }
 
-// drawPingGrid draws coordinate grid lines at 5-column intervals.
-// Only draws on cells with default background.
+// drawPingGrid draws coordinate grid lines at 5-column intervals
+// Only draws on cells with default background
 func (p *PingGridRenderer) drawPingGrid(ctx render.RenderContext, buf *render.RenderBuffer, pingStyle tcell.Style) {
 	// Helper to draw ping only if cell has default background
 	drawPingCell := func(screenX, screenY int) {

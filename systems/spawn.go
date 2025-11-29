@@ -34,7 +34,7 @@ type ColorCensus struct {
 	GreenDark   int
 }
 
-// Total returns sum of all tracked colors.
+// Total returns sum of all tracked colors
 func (c ColorCensus) Total() int {
 	return c.BlueBright + c.BlueNormal + c.BlueDark +
 		c.GreenBright + c.GreenNormal + c.GreenDark
@@ -303,7 +303,7 @@ func (s *SpawnSystem) Priority() int {
 }
 
 // runCensus iterates all sequence entities and counts colors
-// O(n) where n ≈ 200 max entities. Called once per spawn check
+// Called once per spawn check, O(n) where n ≈ 200 max entities
 func (s *SpawnSystem) runCensus(world *engine.World) ColorCensus {
 	var census ColorCensus
 

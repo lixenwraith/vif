@@ -21,81 +21,82 @@ vi-fighter is a terminal-based typing game in Go using a compile-time Generics-b
 - **Renderers**: Individual `SystemRenderer` implementations in `render/renderers/`.
 - **Priority**: `RenderPriority` constants determine render order (lower first).
 
-## CURRENT TASK: Renderer Migration
+## CURRENT TASK: Z-Index Engine Integration
 
 ### Objective
-Migrate from monolithic `TerminalRenderer` to System Render Interface pattern where each system owns its rendering logic.
+Activate and enhance `engine/z-index.go` to be the single source of truth for entity layering. Modify `PositionStore` to support multiple entities per cell with z-index-based selection.
 
 ### Reference Document
-`RENDER_MIGRATION.md` at repo root contains:
-- Phase status tracking
-- Core type signatures
-- Legacy function mapping to new renderers
-- Migration rules and patterns
+- `engine/z-index.go` - Existing stub with constants and `SelectTopEntity`
+- `engine/position_store.go` - Current single-entity-per-cell implementation
 
 ### Key Types
 ```go
-type RenderPriority int  // 0=Background, 100=Grid, 200=Entities, 300=Effects, 350=Drain, 400=UI, 500=Overlay
+// Z-Index constants (higher = on top)
+const (
+    ZIndexBackground = 0
+    ZIndexSpawnChar  = 100
+    ZIndexNugget     = 200
+    ZIndexDecay      = 300
+    ZIndexDrain      = 400
+    ZIndexShield     = 500
+    ZIndexCursor     = 1000
+)
 
-type RenderContext struct {
-    GameTime, FrameNumber, DeltaTime, IsPaused
-    CursorX, CursorY, GameX, GameY, GameWidth, GameHeight, Width, Height
+// Enhanced Cell struct
+type Cell struct {
+    Entities  []Entity  // All entities at position
+    TopEntity Entity    // Cached highest z-index
+    TopZIndex int       // Cached z-index value
 }
 
-type SystemRenderer interface {
-    Render(ctx RenderContext, world *engine.World, buf *RenderBuffer)
+// New API methods
+func GetZIndex(world *World, e Entity) int
+func SelectTopEntity(entities []Entity, world *World) Entity
+func SelectTopEntityFiltered(entities []Entity, world *World, filter func(Entity) bool) Entity
+func IsInteractable(world *World, e Entity) bool
+
+// PositionStore new methods
+func (ps *PositionStore) GetAllEntitiesAt(x, y int) []Entity
+func (ps *PositionStore) GetTopEntityFiltered(x, y int, world *World, filter func(Entity) bool) Entity
+func (ps *PositionStore) SetWorld(w *World)
+```
+
+### Implementation Pattern
+```go
+// Z-index check order in GetZIndex (highest first for early exit)
+if world.Cursors.Has(e)  { return ZIndexCursor }
+if world.Shields.Has(e)  { return ZIndexShield }
+if world.Drains.Has(e)   { return ZIndexDrain }
+if world.Decays.Has(e)   { return ZIndexDecay }
+if world.Nuggets.Has(e)  { return ZIndexNugget }
+return ZIndexSpawnChar
+
+// IsInteractable: only Characters with Sequence OR Nuggets
+func IsInteractable(world *World, e Entity) bool {
+    if world.Nuggets.Has(e) { return true }
+    return world.Characters.Has(e) && world.Sequences.Has(e)
 }
 
-type VisibilityToggle interface {
-    IsVisible() bool
-}
+// Consumer pattern (EnergySystem)
+entity := world.Positions.GetTopEntityFiltered(x, y, world, engine.IsInteractable)
+
+// Consumer pattern (CursorRenderer)
+entities := world.Positions.GetAllEntitiesAt(x, y)
+displayEntity := engine.SelectTopEntityFiltered(entities, world, func(e engine.Entity) bool {
+    return e != cursorEntity && world.Characters.Has(e)
+})
 ```
 
-### Migration Pattern
-1. Create renderer struct in `render/renderers/`
-2. Implement `SystemRenderer.Render()` method
-3. Register with orchestrator at appropriate priority
-4. Comment out corresponding legacy draw call
-5. Verify visual correctness
-
-## FILE STRUCTURE
-```
-vi-fighter/
-├── render/
-│   ├── priority.go        # RenderPriority type and constants
-│   ├── context.go         # RenderContext struct
-│   ├── cell.go            # RenderCell type
-│   ├── buffer.go          # RenderBuffer implementation
-│   ├── interface.go       # SystemRenderer, VisibilityToggle interfaces
-│   ├── orchestrator.go    # RenderOrchestrator
-│   ├── buffer_screen.go   # BufferScreen migration shim
-│   ├── legacy_adapter.go  # LegacyAdapter for transition
-│   ├── terminal_renderer.go # Legacy renderer (being deprecated)
-│   ├── colors.go          # Color constants
-│   └── renderers/         # New SystemRenderer implementations
-│       ├── heat_meter.go
-│       ├── line_numbers.go
-│       ├── column_indicators.go
-│       ├── status_bar.go
-│       ├── ping_grid.go
-│       ├── shields.go
-│       ├── characters.go
-│       ├── effects.go
-│       ├── drain.go
-│       ├── cursor.go
-│       └── overlay.go
-├── engine/
-│   ├── world.go           # ECS World with component stores
-│   ├── game_context.go    # GameContext root state
-│   └── resources.go       # TimeResource, ConfigResource
-├── main.go                # Game loop, orchestrator wiring
-└── RENDER_MIGRATION.md    # Migration reference document
-```
+### Files to Modify
+1. `engine/z-index.go` - Add constants, enhance functions
+2. `engine/position_store.go` - Multi-entity cells, new methods
+3. `engine/world.go` - Wire PositionStore with World reference
+4. `systems/energy.go` - Use GetTopEntityFiltered
+5. `render/renderers/cursor.go` - Use z-index selection
 
 ## VERIFICATION
 - `go build .` must succeed
-- Visual verification: game renders correctly
-- No panics on resize or mode transitions
 
 ## ENVIRONMENT
 

@@ -6,19 +6,19 @@ import (
 	"github.com/lixenwraith/vi-fighter/render"
 )
 
-// CharactersRenderer draws all character entities.
+// CharactersRenderer draws all character entities
 type CharactersRenderer struct {
 	gameCtx *engine.GameContext
 }
 
-// NewCharactersRenderer creates a new characters renderer.
+// NewCharactersRenderer creates a new characters renderer
 func NewCharactersRenderer(gameCtx *engine.GameContext) *CharactersRenderer {
 	return &CharactersRenderer{
 		gameCtx: gameCtx,
 	}
 }
 
-// Render draws all character entities.
+// Render draws all character entities
 func (c *CharactersRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	defaultStyle := tcell.StyleDefault.Background(render.RgbBackground)
 
@@ -99,7 +99,7 @@ func (c *CharactersRenderer) Render(ctx render.RenderContext, world *engine.Worl
 	}
 }
 
-// getPingColor determines the ping highlight color based on game mode.
+// getPingColor determines the ping highlight color based on game mode
 func (c *CharactersRenderer) getPingColor() tcell.Color {
 	// INSERT mode: use whitespace color (dark gray)
 	// NORMAL/SEARCH mode: use character color (almost black)

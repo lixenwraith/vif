@@ -7,24 +7,24 @@ import (
 	"github.com/lixenwraith/vi-fighter/render"
 )
 
-// CursorRenderer draws the cursor with complex entity overlap handling.
+// CursorRenderer draws the cursor with complex entity overlap handling
 type CursorRenderer struct {
 	gameCtx *engine.GameContext
 }
 
-// NewCursorRenderer creates a new cursor renderer.
+// NewCursorRenderer creates a new cursor renderer
 func NewCursorRenderer(gameCtx *engine.GameContext) *CursorRenderer {
 	return &CursorRenderer{
 		gameCtx: gameCtx,
 	}
 }
 
-// IsVisible returns true when the cursor should be rendered.
+// IsVisible returns true when the cursor should be rendered
 func (c *CursorRenderer) IsVisible() bool {
 	return !c.gameCtx.IsSearchMode() && !c.gameCtx.IsCommandMode()
 }
 
-// Render draws the cursor.
+// Render draws the cursor
 func (c *CursorRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	defaultStyle := tcell.StyleDefault.Background(render.RgbBackground)
 

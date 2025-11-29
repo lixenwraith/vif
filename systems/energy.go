@@ -437,7 +437,7 @@ func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity engi
 	// Safely destroy the character entity
 	world.DestroyEntity(entity)
 
-	// Move cursor right in ECS
+	// Move cursor right
 	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
 	if ok {
 		if cursorPos.X < config.GameWidth-1 {

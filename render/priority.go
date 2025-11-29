@@ -1,6 +1,6 @@
 package render
 
-// RenderPriority determines render order. Lower values render first.
+// RenderPriority determines render order. Lower values render first
 type RenderPriority int
 
 const (

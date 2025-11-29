@@ -28,7 +28,7 @@ func NewRenderOrchestrator(screen tcell.Screen, width, height int) *RenderOrches
 	}
 }
 
-// Register adds a renderer at the specified priority. Maintains sorted order via insertion sort.
+// Register adds a renderer at the specified priority. Maintains sorted order via insertion sort
 func (o *RenderOrchestrator) Register(r SystemRenderer, priority RenderPriority) {
 	entry := rendererEntry{
 		renderer: r,
@@ -51,13 +51,13 @@ func (o *RenderOrchestrator) Register(r SystemRenderer, priority RenderPriority)
 	o.renderers[pos] = entry
 }
 
-// Resize updates buffer dimensions and syncs screen.
+// Resize updates buffer dimensions and syncs screen
 func (o *RenderOrchestrator) Resize(width, height int) {
 	o.buffer.Resize(width, height)
 	o.screen.Sync()
 }
 
-// RenderFrame executes the render pipeline: clear, render all, flush, show.
+// RenderFrame executes the render pipeline: clear, render all, flush, show
 func (o *RenderOrchestrator) RenderFrame(ctx RenderContext, world *engine.World) {
 	world.RLock()
 	defer world.RUnlock()

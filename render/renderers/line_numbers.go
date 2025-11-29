@@ -8,13 +8,13 @@ import (
 	"github.com/lixenwraith/vi-fighter/render"
 )
 
-// LineNumbersRenderer draws relative line numbers.
+// LineNumbersRenderer draws relative line numbers
 type LineNumbersRenderer struct {
 	lineNumWidth int
 	gameCtx      *engine.GameContext
 }
 
-// NewLineNumbersRenderer creates a line numbers renderer.
+// NewLineNumbersRenderer creates a line numbers renderer
 func NewLineNumbersRenderer(lineNumWidth int, gameCtx *engine.GameContext) *LineNumbersRenderer {
 	return &LineNumbersRenderer{
 		lineNumWidth: lineNumWidth,
@@ -52,7 +52,7 @@ func (l *LineNumbersRenderer) Render(ctx render.RenderContext, world *engine.Wor
 	}
 }
 
-// UpdateLineNumWidth updates the line number column width.
+// UpdateLineNumWidth updates the line number column width
 func (l *LineNumbersRenderer) UpdateLineNumWidth(width int) {
 	l.lineNumWidth = width
 }

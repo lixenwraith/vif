@@ -6,7 +6,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
-// RenderContext provides frame state. Passed by value.
+// RenderContext provides frame state. Passed by value
 type RenderContext struct {
 	GameTime    time.Time
 	FrameNumber int64
@@ -22,7 +22,7 @@ type RenderContext struct {
 	Height      int
 }
 
-// NewRenderContextFromGame creates a RenderContext from engine.GameContext and TimeResource.
+// NewRenderContextFromGame creates a RenderContext from engine.GameContext and TimeResource
 func NewRenderContextFromGame(ctx *engine.GameContext, timeRes *engine.TimeResource, cursorX, cursorY int) RenderContext {
 	return RenderContext{
 		GameTime:    timeRes.GameTime,

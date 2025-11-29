@@ -9,15 +9,15 @@ import (
 	"github.com/lixenwraith/vi-fighter/render"
 )
 
-// DrainRenderer draws the drain entity with transparent background.
+// DrainRenderer draws the drain entity with transparent background
 type DrainRenderer struct{}
 
-// NewDrainRenderer creates a new drain renderer.
+// NewDrainRenderer creates a new drain renderer
 func NewDrainRenderer() *DrainRenderer {
 	return &DrainRenderer{}
 }
 
-// Render draws all drain entities.
+// Render draws all drain entities
 func (d *DrainRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	defaultStyle := tcell.StyleDefault.Background(render.RgbBackground)
 

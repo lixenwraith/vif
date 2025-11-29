@@ -6,19 +6,19 @@ import (
 	"github.com/lixenwraith/vi-fighter/render"
 )
 
-// ColumnIndicatorsRenderer draws column position indicators.
+// ColumnIndicatorsRenderer draws column position indicators
 type ColumnIndicatorsRenderer struct {
 	gameCtx *engine.GameContext
 }
 
-// NewColumnIndicatorsRenderer creates a column indicators renderer.
+// NewColumnIndicatorsRenderer creates a column indicators renderer
 func NewColumnIndicatorsRenderer(gameCtx *engine.GameContext) *ColumnIndicatorsRenderer {
 	return &ColumnIndicatorsRenderer{
 		gameCtx: gameCtx,
 	}
 }
 
-// Render implements SystemRenderer.
+// Render implements SystemRenderer
 func (c *ColumnIndicatorsRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	defaultStyle := tcell.StyleDefault.Background(render.RgbBackground)
 	indicatorStyle := defaultStyle.Foreground(render.RgbColumnIndicator)
