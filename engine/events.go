@@ -336,7 +336,7 @@ func (eq *EventQueue) Push(event GameEvent) {
 // Design:
 //   - Designed for single-consumer use (the game loop)
 //   - Returns events in FIFO order (oldest first)
-//   - Atomically advances head pointer to mark events as consumed
+//   - Atomically advances head pointer using CAS to prevent regression
 //   - Checks published flags to avoid reading partially-written events
 //
 // Algorithm (Published Flags Pattern):
@@ -345,67 +345,64 @@ func (eq *EventQueue) Push(event GameEvent) {
 //     a. Check if published[index] is true
 //     b. If false: Stop consuming (writer hasn't finished writing yet)
 //     c. If true: Read event, reset published[index] to false, add to result
-//  3. Advance head pointer to position successfully read to
+//  3. CAS loop to advance head pointer (prevents regression from concurrent Push overflow)
 //
 // Thread-Safety:
 //   - Safe to call from game loop thread (single consumer)
 //   - Published flags prevent reading partially-written events
-//   - Concurrent pushes are safe (they modify tail and published flags atomically)
+//   - CAS ensures head never regresses even under producer overflow pressure
 //   - Multiple concurrent consumers would conflict (not supported)
 //
 // Return Value:
 //   - nil: If queue is empty (no events to consume)
 //   - []GameEvent: Slice of pending events (FIFO order)
-//
-// Performance:
-//   - O(n) where n is number of pending events
-//   - Allocates slice for return value (unavoidable for safe API)
-//   - Additional atomic loads for published flags (minimal overhead)
 func (eq *EventQueue) Consume() []GameEvent {
-	// Read current positions
-	currentHead := eq.head.Load()
-	currentTail := eq.tail.Load()
+	for {
+		// Read current positions
+		currentHead := eq.head.Load()
+		currentTail := eq.tail.Load()
 
-	// Check if queue is empty
-	if currentTail == currentHead {
-		return nil
-	}
-
-	// Calculate maximum available events (cap at buffer size)
-	maxAvailable := currentTail - currentHead
-	if maxAvailable > constants.EventQueueSize {
-		maxAvailable = constants.EventQueueSize
-		currentHead = currentTail - constants.EventQueueSize
-	}
-
-	// Read events one by one, checking published flag
-	result := make([]GameEvent, 0, maxAvailable)
-	for i := uint64(0); i < maxAvailable; i++ {
-		idx := (currentHead + i) & constants.EventBufferMask
-
-		// Check if this slot is published (fully written)
-		if !eq.published[idx].Load() {
-			// Writer hasn't finished writing this event yet, stop here
-			break
+		// Check if queue is empty
+		if currentTail == currentHead {
+			return nil
 		}
 
-		// Read the event (safe now that published flag is true)
-		result = append(result, eq.events[idx])
+		// Calculate maximum available events (cap at buffer size)
+		maxAvailable := currentTail - currentHead
+		if maxAvailable > constants.EventQueueSize {
+			maxAvailable = constants.EventQueueSize
+			currentHead = currentTail - constants.EventQueueSize
+		}
 
-		// Reset published flag for future reuse
-		eq.published[idx].Store(false)
+		// Read events one by one, checking published flag
+		result := make([]GameEvent, 0, maxAvailable)
+		for i := uint64(0); i < maxAvailable; i++ {
+			idx := (currentHead + i) & constants.EventBufferMask
+
+			// Check if this slot is published (fully written)
+			if !eq.published[idx].Load() {
+				// Writer hasn't finished writing this event yet, stop here
+				break
+			}
+
+			// Read the event (safe now that published flag is true)
+			result = append(result, eq.events[idx])
+
+			// Reset published flag for future reuse
+			eq.published[idx].Store(false)
+		}
+
+		// Advance head atomically using CAS to prevent regression
+		// If Push advanced head due to overflow, our CAS will fail and we retry
+		newHead := currentHead + uint64(len(result))
+		if eq.head.CompareAndSwap(currentHead, newHead) {
+			if len(result) == 0 {
+				return nil
+			}
+			return result
+		}
+		// CAS failed: head was modified by Push overflow, retry with fresh state
 	}
-
-	// Advance head to mark consumed events
-	newHead := currentHead + uint64(len(result))
-	eq.head.Store(newHead)
-
-	// Return nil if we didn't consume any events
-	if len(result) == 0 {
-		return nil
-	}
-
-	return result
 }
 
 // Peek returns all pending events without consuming them (read-only inspection).

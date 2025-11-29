@@ -21,89 +21,25 @@ vi-fighter is a terminal-based typing game in Go using a compile-time Generics-b
 - **Renderers**: Individual `SystemRenderer` implementations in `render/renderers/`.
 - **Priority**: `RenderPriority` constants determine render order (lower first).
 
-## CURRENT TASK: Gold Bootstrap Decoupling
+## CURRENT TASK:
 
 ### Objective
-Move game initialization delay from `GoldSystem.Update()` to `ClockScheduler` using a new `PhaseBootstrap` phase. Remove `FirstUpdateTime` and `InitialSpawnComplete` from GameState.
+
 
 ### Reference Document
-- `engine/clock_scheduler.go` - GamePhase enum and processTick switch
-- `engine/game_state.go` - GameState struct with phase management
-- `systems/gold.go` - Current bootstrap logic to remove
+
 
 ### Key Types
-```go
-// Updated GamePhase enum
-const (
-    PhaseBootstrap GamePhase = iota  // NEW: Initial delay state
-    PhaseNormal
-    PhaseGoldActive
-    PhaseGoldComplete
-    PhaseDecayWait
-    PhaseDecayAnimation
-)
 
-// GameState changes
-type GameState struct {
-    // ADD:
-    GameStartTime time.Time
-    
-    // REMOVE:
-    // FirstUpdateTime time.Time
-    // InitialSpawnComplete bool
-}
-
-// New GameState methods
-func (gs *GameState) GetGameStartTime() time.Time
-func (gs *GameState) ResetGameStart(now time.Time)  // For :new command
-func (gs *GameState) TransitionPhase(to GamePhase, now time.Time) bool
-```
 
 ### Implementation Pattern
-```go
-// ClockScheduler.processTick - new case
-case PhaseBootstrap:
-    if gameNow.Sub(cs.ctx.State.GetGameStartTime()) >= constants.GoldInitialSpawnDelay {
-        cs.ctx.State.TransitionPhase(PhaseNormal, gameNow)
-    }
 
-// GoldSystem.Update - simplified logic
-func (s *GoldSystem) Update(world *engine.World, dt time.Duration) {
-    timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-    now := timeRes.GameTime
-    
-    goldSnapshot := s.ctx.State.ReadGoldState(now)
-    phaseSnapshot := s.ctx.State.ReadPhaseState(now)
-    
-    // Only spawn in Normal phase when no gold active
-    if phaseSnapshot.Phase == engine.PhaseNormal && !goldSnapshot.Active {
-        s.spawnGold(world)
-    }
-}
-
-// :new command reset
-ctx.State.ResetGameStart(ctx.PausableClock.Now())
-
-// CanTransition update
-case PhaseBootstrap:
-    return to == PhaseNormal
-```
 
 ### Phase Flow
-```
-PhaseBootstrap ──[delay]──> PhaseNormal ──[gold spawns]──> PhaseGoldActive
-      ^                                                          │
-      │                                                          v
-      │                     PhaseDecayAnimation <── PhaseDecayWait <── PhaseGoldComplete
-      │                            │
-      └────────[:new cmd]──────────┘
-```
+
 
 ### Files to Modify
-1. `engine/clock_scheduler.go` - Add PhaseBootstrap const, case in processTick
-2. `engine/game_state.go` - Add GameStartTime, remove old fields, add methods
-3. `systems/gold.go` - Strip all bootstrap logic
-4. `modes/commands.go` - Update handleNewCommand
+
 
 ## VERIFICATION
 - `go build .` must succeed

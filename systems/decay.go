@@ -133,14 +133,18 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 		dtSeconds = 0.1
 	}
 
-	// Query all falling entities
+	// Query all decay entities
 	decayEntities := world.Decays.All()
 
 	// Clear deduplication maps for this frame
-	// processedGridCells tracks LOCATIONS (don't hit same spot twice this frame)
+	// processedGridCells: prevents same cell being processed by multiple decay entities
+	// decayedThisFrame: prevents same target being decayed twice (by any decay entity)
 	for k := range s.processedGridCells {
 		delete(s.processedGridCells, k)
 	}
+
+	// Stack-allocated buffer for spatial queries (zero allocation)
+	var collisionBuf [engine.MaxEntitiesPerCell]engine.Entity
 
 	for _, entity := range decayEntities {
 		fall, ok := world.Decays.Get(entity)
@@ -149,17 +153,11 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 		}
 
 		// 1. Update Physics
-		// Store START of frame position as previous for accurate sweeping
 		startY := fall.YPosition
-
-		// Integrate velocity
 		fall.YPosition += fall.Speed * dtSeconds
-
-		// Update PrevPreciseY for history/debug
 		fall.PrevPreciseY = startY
 
 		// Boundary Check
-		// We strictly use GameHeight here. If falling past the game area, destroy.
 		if fall.YPosition >= float64(gameHeight) {
 			world.DestroyEntity(entity)
 			continue
@@ -185,8 +183,7 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 		for row := startRow; row <= endRow; row++ {
 			col := fall.Column
 
-			// A. COORDINATE LATCH CHECK
-			// Prevents re-processing the same cell if the entity moves slowly (<1 row/frame)
+			// A. Coordinate latch check
 			if col == fall.LastIntX && row == fall.LastIntY {
 				continue
 			}
@@ -195,56 +192,59 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 				continue
 			}
 
-			// B. Frame Deduplication (Spatial)
+			// B. Frame deduplication (spatial)
+			// If another decay entity already processed this cell this frame, skip
 			flatIdx := (row * gameWidth) + col
 			if s.processedGridCells[flatIdx] {
 				continue
 			}
 
-			// C. Interaction
-			// Retrieve all entities at this location (supporting multiples)
-			targetEntities := world.Positions.GetAllAt(col, row)
+			// C. Interaction - use zero-alloc buffer
+			n := world.Positions.GetAllAtInto(col, row, collisionBuf[:])
 
-			// Collect candidates to avoid iteration invalidation
-			var candidates []engine.Entity
-			for _, targetEntity := range targetEntities {
-				if targetEntity != 0 {
-					candidates = append(candidates, targetEntity)
+			// Process all targets at this cell
+			for i := 0; i < n; i++ {
+				targetEntity := collisionBuf[i]
+				if targetEntity == 0 {
+					continue
 				}
-			}
 
-			for _, targetEntity := range candidates {
+				// Check if this target was already decayed this frame (by any decay entity)
 				s.mu.RLock()
 				alreadyHit := s.decayedThisFrame[targetEntity]
 				s.mu.RUnlock()
 
-				if !alreadyHit {
-					if world.Nuggets.Has(targetEntity) {
-						// Flash for nugget destruction
-						if char, ok := world.Characters.Get(targetEntity); ok {
-							timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-							SpawnDestructionFlash(world, col, row, char.Rune, timeRes.GameTime)
-						}
-						world.DestroyEntity(targetEntity)
-						s.ctx.State.ClearActiveNuggetID(uint64(targetEntity))
-					} else {
-						s.applyDecayToCharacter(world, targetEntity)
-					}
-
-					s.mu.Lock()
-					s.decayedThisFrame[targetEntity] = true
-					s.mu.Unlock()
-
-					// We hit something, mark grid cell processed (even if we hit multiple things)
-					s.processedGridCells[flatIdx] = true
+				if alreadyHit {
+					continue
 				}
+
+				// Apply decay effect to target
+				if world.Nuggets.Has(targetEntity) {
+					if char, ok := world.Characters.Get(targetEntity); ok {
+						timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+						SpawnDestructionFlash(world, col, row, char.Rune, timeRes.GameTime)
+					}
+					world.DestroyEntity(targetEntity)
+					s.ctx.State.ClearActiveNuggetID(uint64(targetEntity))
+				} else {
+					s.applyDecayToCharacter(world, targetEntity)
+				}
+
+				// Mark target as processed for this frame
+				s.mu.Lock()
+				s.decayedThisFrame[targetEntity] = true
+				s.mu.Unlock()
 			}
 
-			// D. Update Latch & Visuals
+			// D. Mark cell as processed AFTER handling all targets
+			// This ensures: if 2 decay entities hit same cell, first one processes all targets,
+			// second one skips entirely (correct behavior - decay applies once per cell per frame)
+			s.processedGridCells[flatIdx] = true
+
+			// E. Update latch & visuals
 			fall.LastIntX = col
 			fall.LastIntY = row
 
-			// Matrix visual effect
 			if row != fall.LastChangeRow {
 				fall.LastChangeRow = row
 				if row > 0 && rand.Float64() < constants.DecayChangeChance {

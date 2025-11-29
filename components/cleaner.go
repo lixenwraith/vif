@@ -4,14 +4,16 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 )
 
-// CleanerComponent represents a horizontal line-clearing animation entity.
-// Cleaners sweep across rows containing Red characters, removing them on contact.
+// CleanerTrailCapacity matches constants.CleanerTrailLength for fixed-size ring buffer
+const CleanerTrailCapacity = 10
+
+// CleanerComponent tracks cleaner entity movement and trail
 type CleanerComponent struct {
-	// Physics state (sub-pixel precision)
+	// Physics state (sub-pixel precision for smooth animation)
 	PreciseX float64
 	PreciseY float64
 
-	// Movement vector (units per second)
+	// Movement vector (pixels per second)
 	VelocityX float64
 	VelocityY float64
 
@@ -31,3 +33,28 @@ type CleanerComponent struct {
 	// Character used to render the cleaner block
 	Char rune
 }
+
+// TODO: Update to ring buffer trail
+// // CleanerComponent tracks cleaner entity movement and trail
+// type CleanerComponent struct {
+// 	// Physics state (sub-pixel precision for smooth animation)
+// 	PreciseX float64
+// 	PreciseY float64
+//
+// 	// Velocity (pixels per second)
+// 	VelocityX float64
+// 	VelocityY float64
+//
+// 	// Target position (for lifecycle management)
+// 	TargetX float64
+// 	TargetY float64
+//
+// 	// Last integer grid position (for trail updates)
+// 	GridX int
+// 	GridY int
+//
+// 	// Fixed-size ring buffer trail (zero allocation during updates)
+// 	TrailRing [CleanerTrailCapacity]core.Point
+// 	TrailHead int // Index of newest point
+// 	TrailLen  int // Current number of points in trail (0 to CleanerTrailCapacity)
+// }

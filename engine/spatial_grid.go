@@ -30,10 +30,10 @@ func NewSpatialGrid(width, height int) *SpatialGrid {
 }
 
 // Add inserts an entity into the grid at (x, y)
-// O(1), No-op if bounds are invalid or cell is full (soft clip)
-func (g *SpatialGrid) Add(e Entity, x, y int) {
+// O(1), Returns false if bounds invalid or cell full (soft clip)
+func (g *SpatialGrid) Add(e Entity, x, y int) bool {
 	if x < 0 || x >= g.Width || y < 0 || y >= g.Height {
-		return
+		return false
 	}
 
 	idx := y*g.Width + x
@@ -42,9 +42,9 @@ func (g *SpatialGrid) Add(e Entity, x, y int) {
 	if cell.Count < MaxEntitiesPerCell {
 		cell.Entities[cell.Count] = e
 		cell.Count++
+		return true
 	}
-	// Soft clip: if cell is full (15 entities), ignores 16th+
-	// Prevents allocation spikes during extreme overlaps
+	return false
 }
 
 // Remove deletes an entity from the grid at (x, y)

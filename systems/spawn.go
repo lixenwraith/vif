@@ -529,6 +529,7 @@ func (s *SpawnSystem) getNextBlock() CodeBlock {
 }
 
 // placeLine attempts to place a single line on the screen using generic stores
+// Lines exceeding GameWidth are cropped to fit available space
 func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType components.SequenceType, seqLevel components.SequenceLevel, style tcell.Style) bool {
 	// Fetch resources
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
@@ -538,6 +539,12 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 
 	if lineLength == 0 {
 		return false
+	}
+
+	// Crop line if it exceeds game width
+	if lineLength > config.GameWidth {
+		lineRunes = lineRunes[:config.GameWidth]
+		lineLength = config.GameWidth
 	}
 
 	// Try up to MaxPlacementTries times to find a valid position
@@ -554,7 +561,8 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 		// Random column selection (must have room for full line)
 		maxStartCol := config.GameWidth - lineLength
 		if maxStartCol < 0 {
-			continue
+			// Line still too long after crop, skip
+			return false
 		}
 
 		startCol := rand.Intn(maxStartCol + 1)

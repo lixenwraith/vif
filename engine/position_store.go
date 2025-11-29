@@ -46,7 +46,10 @@ func (ps *PositionStore) Add(e Entity, pos components.PositionComponent) {
 	ps.components[e] = pos
 
 	// Add to new grid location
-	ps.grid.Add(e, pos.X, pos.Y)
+	// NOTE: Grid overflow is silently ignored. In real gameplay, 15 entities per cell
+	// is sufficient. If this becomes an issue, expand MaxEntitiesPerCell or implement
+	// cell chaining. Current design prioritizes cache locality over edge case handling.
+	_ = ps.grid.Add(e, pos.X, pos.Y)
 }
 
 // Remove deletes an entity from the store and grid
@@ -91,7 +94,8 @@ func (ps *PositionStore) Move(e Entity, newPos components.PositionComponent) err
 	ps.components[e] = newPos
 
 	// Add to new grid pos
-	ps.grid.Add(e, newPos.X, newPos.Y)
+	// Note: explicit ignore for OOB and Cell full
+	_ = ps.grid.Add(e, newPos.X, newPos.Y)
 
 	return nil
 }
@@ -144,7 +148,8 @@ func (ps *PositionStore) ResizeGrid(width, height int) {
 	// Re-populate grid from components map
 	// This ensures consistency even if grid size changes
 	for e, pos := range ps.components {
-		ps.grid.Add(e, pos.X, pos.Y)
+		// Note: explicit ignore for OOB and Cell full
+		_ = ps.grid.Add(e, pos.X, pos.Y)
 	}
 }
 
@@ -284,7 +289,8 @@ func (pb *PositionBatch) Commit() error {
 		}
 
 		pb.store.components[add.entity] = add.pos
-		pb.store.grid.Add(add.entity, add.pos.X, add.pos.Y)
+		// Note: explicit ignore for OOB and Cell full
+		_ = pb.store.grid.Add(add.entity, add.pos.X, add.pos.Y)
 	}
 
 	return nil
