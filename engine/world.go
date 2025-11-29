@@ -74,6 +74,9 @@ func NewWorld() *World {
 		w.Shields,
 	}
 
+	// Set world reference for z-index lookups
+	w.Positions.SetWorld(w)
+
 	return w
 }
 

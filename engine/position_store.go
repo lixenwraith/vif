@@ -15,6 +15,7 @@ type PositionStore struct {
 	components map[Entity]components.PositionComponent
 	entities   []Entity // Dense array for cache-friendly iteration
 	grid       *SpatialGrid
+	world      *World // Reference for z-index lookups
 }
 
 // NewPositionStore creates a new position store with spatial indexing
@@ -187,6 +188,34 @@ func (ps *PositionStore) Clear() {
 	ps.components = make(map[Entity]components.PositionComponent)
 	ps.entities = make([]Entity, 0, 64)
 	ps.grid.Clear()
+}
+
+// SetWorld sets the world reference for z-index lookups
+func (ps *PositionStore) SetWorld(w *World) {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	ps.world = w
+}
+
+// GetAllEntitiesAt returns all entities at the given position
+// Returns nil if position is out of bounds or empty
+// The returned slice is a copy and safe for concurrent use
+func (ps *PositionStore) GetAllEntitiesAt(x, y int) []Entity {
+	return ps.GetAllAt(x, y)
+}
+
+// GetTopEntityFiltered returns the highest z-index entity at position that passes filter
+// Returns 0 if no matching entity found
+func (ps *PositionStore) GetTopEntityFiltered(x, y int, world *World, filter func(Entity) bool) Entity {
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+
+	view := ps.grid.GetAllAt(x, y)
+	if len(view) == 0 {
+		return 0
+	}
+
+	return SelectTopEntityFiltered(view, world, filter)
 }
 
 // --- Batch Implementation ---
