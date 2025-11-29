@@ -129,6 +129,18 @@ func (w *World) RunSafe(fn func()) {
 	fn()
 }
 
+// RLock acquires a read lock on the world's update mutex.
+// Use for read-only operations that must not interleave with updates.
+// Must be paired with RUnlock().
+func (w *World) RLock() {
+	w.updateMutex.Lock()
+}
+
+// RUnlock releases the update mutex.
+func (w *World) RUnlock() {
+	w.updateMutex.Unlock()
+}
+
 // Update runs all systems sequentially. Only one update cycle can run at a time
 func (w *World) Update(dt time.Duration) {
 	w.RunSafe(func() {

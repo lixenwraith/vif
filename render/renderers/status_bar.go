@@ -12,8 +12,7 @@ import (
 
 // StatusBarRenderer draws the status bar at the bottom.
 type StatusBarRenderer struct {
-	gameCtx            *engine.GameContext
-	decayTimeRemaining *float64
+	gameCtx *engine.GameContext
 
 	// FPS Tracking
 	frameCount    int
@@ -22,11 +21,10 @@ type StatusBarRenderer struct {
 }
 
 // NewStatusBarRenderer creates a status bar renderer.
-func NewStatusBarRenderer(gameCtx *engine.GameContext, decayTimeRemaining *float64) *StatusBarRenderer {
+func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 	return &StatusBarRenderer{
-		gameCtx:            gameCtx,
-		decayTimeRemaining: decayTimeRemaining,
-		lastFpsUpdate:      time.Now(),
+		gameCtx:       gameCtx,
+		lastFpsUpdate: time.Now(),
 	}
 }
 
@@ -149,7 +147,8 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 
 	// Prepare strings for all right-aligned components
 	energyText := fmt.Sprintf(" Energy: %d ", s.gameCtx.State.GetEnergy())
-	decayText := fmt.Sprintf(" Decay: %.1fs ", *s.decayTimeRemaining)
+	decaySnapshot := s.gameCtx.State.ReadDecayState(ctx.GameTime)
+	decayText := fmt.Sprintf(" Decay: %.1fs ", decaySnapshot.TimeUntil)
 
 	var boostText string
 	if s.gameCtx.State.GetBoostEnabled() {

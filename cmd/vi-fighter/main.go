@@ -89,7 +89,6 @@ func main() {
 	)
 
 	// Create and register renderers in priority order
-	var decayTimeRemaining float64
 
 	// Grid (100)
 	pingGridRenderer := renderers.NewPingGridRenderer(ctx)
@@ -120,7 +119,7 @@ func main() {
 	columnIndicatorsRenderer := renderers.NewColumnIndicatorsRenderer(ctx)
 	orchestrator.Register(columnIndicatorsRenderer, render.PriorityUI)
 
-	statusBarRenderer := renderers.NewStatusBarRenderer(ctx, &decayTimeRemaining)
+	statusBarRenderer := renderers.NewStatusBarRenderer(ctx)
 	orchestrator.Register(statusBarRenderer, render.PriorityUI)
 
 	cursorRenderer := renderers.NewCursorRenderer(ctx)
@@ -207,8 +206,6 @@ func main() {
 			// During pause: skip game updates but still render
 			if ctx.IsPaused.Load() {
 				// This shows the pause overlay and maintains visual feedback
-				// Update decay time for status bar renderer
-				decayTimeRemaining = decaySystem.GetTimeUntilDecay(timeRes.GameTime)
 
 				cursorPos, _ := ctx.World.Positions.Get(ctx.CursorEntity)
 				renderCtx := render.NewRenderContextFromGame(ctx, timeRes, cursorPos.X, cursorPos.Y)
@@ -227,8 +224,6 @@ func main() {
 			}
 
 			// Render frame (all updates guaranteed complete)
-			// Update decay time for status bar renderer
-			decayTimeRemaining = decaySystem.GetTimeUntilDecay(timeRes.GameTime)
 
 			cursorPos, _ := ctx.World.Positions.Get(ctx.CursorEntity)
 			renderCtx := render.NewRenderContextFromGame(ctx, timeRes, cursorPos.X, cursorPos.Y)

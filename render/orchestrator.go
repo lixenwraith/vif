@@ -59,6 +59,9 @@ func (o *RenderOrchestrator) Resize(width, height int) {
 
 // RenderFrame executes the render pipeline: clear, render all, flush, show.
 func (o *RenderOrchestrator) RenderFrame(ctx RenderContext, world *engine.World) {
+	world.RLock()
+	defer world.RUnlock()
+
 	o.buffer.Clear()
 
 	for _, entry := range o.renderers {

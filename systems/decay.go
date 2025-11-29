@@ -343,7 +343,7 @@ func (s *DecaySystem) cleanupDecayEntities(world *engine.World) {
 	}
 
 	s.mu.Lock()
-	s.decayedThisFrame = make(map[engine.Entity]bool)
+	clear(s.decayedThisFrame)
 	s.mu.Unlock()
 }
 
@@ -352,7 +352,7 @@ func (s *DecaySystem) TriggerDecayAnimation(world *engine.World) {
 	s.mu.Lock()
 	s.currentRow = 0
 	// Reset the decay tracking map for the new animation sequence
-	s.decayedThisFrame = make(map[engine.Entity]bool)
+	clear(s.decayedThisFrame)
 	s.mu.Unlock()
 
 	// Spawn falling decay entities
@@ -371,8 +371,6 @@ func (s *DecaySystem) CurrentRow(now time.Time) int {
 	currentRow := s.currentRow
 	s.mu.RUnlock()
 
-	// Note: We use the world from s.ctx for now to get resources,
-	// eventually s.ctx will be removed entirely in in next phases
 	config := engine.MustGetResource[*engine.ConfigResource](s.ctx.World.Resources)
 	gameHeight := config.GameHeight
 

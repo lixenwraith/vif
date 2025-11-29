@@ -358,9 +358,6 @@ func (cs *ClockScheduler) processTick() {
 		// Nothing to do in clock tick for this phase
 	}
 
-	// Update boost timer (check for expiration)
-	// cs.ctx.State.UpdateBoostTimerAtomic()
-
 	// Update Game Ticks
 	cs.ctx.State.IncrementGameTicks()
 

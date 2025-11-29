@@ -2,8 +2,8 @@ package components
 
 import "time"
 
-// TODO: Use it for all character destruction effect, not only cleaner, i.e. decay, drain
-// FlashComponent represents a brief visual flash effect when a character is removed
+// FlashComponent represents a brief visual flash effect when a character is removed.
+// Used by decay destruction, cleaner removal, and other visual feedback.
 type FlashComponent struct {
 	X         int       // X position of the flash
 	Y         int       // Y position of the flash
