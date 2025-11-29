@@ -98,8 +98,8 @@ func handleNewCommand(ctx *engine.GameContext) bool {
 	ctx.State.SetCursorError(false)
 	ctx.State.SetEnergyBlinkActive(false)
 
-	// Reset game lifecycle flags
-	ctx.State.SetInitialSpawnComplete()
+	// Reset game lifecycle - restart bootstrap phase
+	ctx.State.ResetGameStart(ctx.PausableClock.Now())
 
 	// Display success message
 	ctx.LastCommand = ":new"

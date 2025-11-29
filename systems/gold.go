@@ -39,32 +39,13 @@ func (s *GoldSystem) Update(world *engine.World, dt time.Duration) {
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	now := timeRes.GameTime
 
-	// Initialize FirstUpdateTime on first call (using GameState)
-	s.ctx.State.SetFirstUpdateTime(now)
-	firstUpdateTime := s.ctx.State.GetFirstUpdateTime()
-
-	// Read state snapshots from GameState for consistent reads
+	// Read state snapshots
 	goldSnapshot := s.ctx.State.ReadGoldState(now)
 	phaseSnapshot := s.ctx.State.ReadPhaseState(now)
-	initialSpawnComplete := s.ctx.State.GetInitialSpawnComplete()
 
-	// Spawn gold sequence at game start with delay
-	if !goldSnapshot.Active && !initialSpawnComplete && now.Sub(firstUpdateTime) >= constants.GoldInitialSpawnDelay {
-		// Spawn initial gold sequence after delay
-		// If spawn fails, system will remain in PhaseNormal and can retry on next update
-		if s.spawnGold(world) {
-			// Mark initial spawn as complete (whether it succeeded or not)
-			// TODO: decouple by refactoring into a proper bootstrap process of GameState instead of here
-			s.ctx.State.SetInitialSpawnComplete()
-		}
-	}
-
-	// Detect transition from decay animation to normal phase (decay just ended)
-	// Phase transitions: PhaseDecayAnimation -> PhaseNormal (handled by DecaySystem.StopDecayAnimation)
-	// When we detect PhaseNormal and no active gold, spawn new gold
-	if !goldSnapshot.Active && phaseSnapshot.Phase == engine.PhaseNormal && initialSpawnComplete {
-		// Decay ended and returned to normal phase - spawn gold sequence
-		// If spawn fails, system will remain in PhaseNormal and can retry on next update
+	// Gold spawning: Only in PhaseNormal when no gold is active
+	// Bootstrap delay is handled by ClockScheduler (PhaseBootstrap -> PhaseNormal transition)
+	if phaseSnapshot.Phase == engine.PhaseNormal && !goldSnapshot.Active {
 		s.spawnGold(world)
 	}
 }
