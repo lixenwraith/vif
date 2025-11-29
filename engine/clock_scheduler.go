@@ -316,6 +316,14 @@ func (cs *ClockScheduler) processTick() {
 
 	// Handle phase transitions based on current phase
 	switch phaseSnapshot.Phase {
+	case PhaseBootstrap:
+		// Check if bootstrap delay has elapsed
+		bootstrapDelay := constants.GoldInitialSpawnDelay
+		if gameNow.Sub(cs.ctx.State.GetGameStartTime()) >= bootstrapDelay {
+			// Transition to Normal phase - gold system will handle spawning
+			cs.ctx.State.TransitionPhase(PhaseNormal, gameNow)
+		}
+
 	case PhaseGoldActive:
 		// Check if gold sequence has timed out (pausable clock handles pause adjustment internally)
 		goldSnapshot := cs.ctx.State.ReadGoldState(gameNow)
