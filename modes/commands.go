@@ -62,6 +62,17 @@ func handleNewCommand(ctx *engine.GameContext) bool {
 	// Reset runtime metrics (GT, APM)
 	ctx.State.ResetRuntimeStats()
 
+	// Reset game start time and return to bootstrap phase
+	// This triggers the initial spawn delay sequence
+	ctx.State.ResetGameStart(ctx.PausableClock.Now())
+
+	// Reset gold sequence state (in case one was active)
+	// The world clear will destroy entities, but GameState needs explicit reset
+	goldSnapshot := ctx.State.ReadGoldState(ctx.PausableClock.Now())
+	if goldSnapshot.Active {
+		ctx.State.DeactivateGoldSequence(ctx.PausableClock.Now())
+	}
+
 	// Despawn drain entities before clearing world
 	// Energy=0 will trigger despawn on next DrainSystem.Update(), but explicit cleanup is safer
 	drains := ctx.World.Drains.All()
@@ -97,9 +108,6 @@ func handleNewCommand(ctx *engine.GameContext) bool {
 	// Reset visual feedback
 	ctx.State.SetCursorError(false)
 	ctx.State.SetEnergyBlinkActive(false)
-
-	// Reset game lifecycle - restart bootstrap phase
-	ctx.State.ResetGameStart(ctx.PausableClock.Now())
 
 	// Display success message
 	ctx.LastCommand = ":new"
