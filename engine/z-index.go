@@ -3,29 +3,28 @@ package engine
 // Z-Index constants determine priority for spatial queries and rendering
 // Higher values are "on top"
 const (
-	ZIndexSpawnChar = 0
-	ZIndexNugget    = 100
-	ZIndexDecay     = 200
-	ZIndexShield    = 300 // TODO: integrate
-	ZIndexDrain     = 400
-	ZIndexCleaner   = 500
-	ZIndexCursor    = 1000
+	ZIndexBackground = 0
+	ZIndexSpawnChar  = 100
+	ZIndexNugget     = 200
+	ZIndexDecay      = 300
+	ZIndexDrain      = 400
+	ZIndexShield     = 500
+	ZIndexCursor     = 1000
 )
 
 // GetZIndex returns the Z-index for an entity based on its components
 // It checks stores in the World to determine the entity type
 func GetZIndex(world *World, e Entity) int {
-	// Check highest priority first to fail fast
+	// Check highest priority first for early exit
 	if world.Cursors.Has(e) {
 		return ZIndexCursor
 	}
-	if world.Cleaners.Has(e) {
-		return ZIndexCleaner
+	if world.Shields.Has(e) {
+		return ZIndexShield
 	}
 	if world.Drains.Has(e) {
 		return ZIndexDrain
 	}
-	// Shield check would go here (future)
 	if world.Decays.Has(e) {
 		return ZIndexDecay
 	}
@@ -57,4 +56,38 @@ func SelectTopEntity(entities []Entity, world *World) Entity {
 		}
 	}
 	return top
+}
+
+// SelectTopEntityFiltered returns the entity with highest z-index that passes the filter
+// Returns 0 if no entities pass the filter or slice is empty
+// Filter receives entity and returns true if entity should be considered
+func SelectTopEntityFiltered(entities []Entity, world *World, filter func(Entity) bool) Entity {
+	if len(entities) == 0 {
+		return 0
+	}
+
+	var top Entity
+	maxZ := -1
+
+	for _, e := range entities {
+		if !filter(e) {
+			continue
+		}
+		z := GetZIndex(world, e)
+		if z > maxZ {
+			maxZ = z
+			top = e
+		}
+	}
+	return top
+}
+
+// IsInteractable returns true if the entity is an interactable game element
+// Interactable entities: Characters (with SequenceComponent), Nuggets
+// Non-interactable: Cursor, Drain, Decay, Shield, Flash
+func IsInteractable(world *World, e Entity) bool {
+	if world.Nuggets.Has(e) {
+		return true
+	}
+	return world.Characters.Has(e) && world.Sequences.Has(e)
 }
