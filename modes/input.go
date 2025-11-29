@@ -9,17 +9,20 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
-// TODO: this file is becoming a god object; move to capabilities or deprecate it
-
 // InputHandler processes user input events
 type InputHandler struct {
-	ctx *engine.GameContext
+	ctx      *engine.GameContext
+	machine  *InputMachine
+	bindings *BindingTable
 }
 
 // NewInputHandler creates a new input handler
 func NewInputHandler(ctx *engine.GameContext) *InputHandler {
+	bindings, _ := LoadBindings("")
 	return &InputHandler{
-		ctx: ctx,
+		ctx:      ctx,
+		machine:  NewInputMachine(),
+		bindings: bindings,
 	}
 }
 
@@ -44,7 +47,6 @@ func (h *InputHandler) HandleEvent(ev tcell.Event) bool {
 // handleKeyEvent processes keyboard events
 func (h *InputHandler) handleKeyEvent(ev *tcell.EventKey) bool {
 	// Record action for APM calculation on any valid key event
-	// We do this early to capture all interactions
 	h.ctx.State.RecordAction()
 
 	// Handle exit keys
@@ -62,20 +64,19 @@ func (h *InputHandler) handleKeyEvent(ev *tcell.EventKey) bool {
 
 	// Handle Escape
 	if ev.Key() == tcell.KeyEscape {
+		// Reset state machine on any ESC
+		h.machine.Reset()
+
 		if h.ctx.IsSearchMode() {
 			h.ctx.Mode = engine.ModeNormal
 			h.ctx.SearchText = ""
-			h.ctx.DeleteOperator = false
 		} else if h.ctx.IsCommandMode() {
 			h.ctx.Mode = engine.ModeNormal
 			h.ctx.CommandText = ""
-			h.ctx.DeleteOperator = false
 			h.ctx.SetPaused(false)
 		} else if h.ctx.IsInsertMode() {
 			h.ctx.Mode = engine.ModeNormal
-			h.ctx.DeleteOperator = false
 		} else if h.ctx.IsOverlayMode() {
-			// Overlay mode - close overlay and return to normal mode
 			h.ctx.OverlayActive = false
 			h.ctx.OverlayTitle = ""
 			h.ctx.OverlayContent = nil
@@ -102,6 +103,169 @@ func (h *InputHandler) handleKeyEvent(ev *tcell.EventKey) bool {
 	} else {
 		return h.handleNormalMode(ev)
 	}
+}
+
+// handleNormalMode handles input in normal mode
+func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
+	// Handle special keys (arrows, Tab, Enter, etc.)
+	switch ev.Key() {
+	case tcell.KeyUp, tcell.KeyDown, tcell.KeyLeft, tcell.KeyRight,
+		tcell.KeyHome, tcell.KeyEnd, tcell.KeyTab, tcell.KeyEnter:
+		return h.handleNormalModeSpecialKeys(ev)
+	}
+
+	// Only process rune keys through state machine
+	if ev.Key() != tcell.KeyRune {
+		return true
+	}
+
+	// Delegate to state machine
+	result := h.machine.Process(ev.Rune(), h.bindings)
+
+	// Handle mode change
+	if result.ModeChange != 0 {
+		h.ctx.Mode = result.ModeChange
+		if result.ModeChange == engine.ModeSearch {
+			h.ctx.SearchText = ""
+		} else if result.ModeChange == engine.ModeCommand {
+			h.ctx.CommandText = ""
+		}
+	}
+
+	// Execute action
+	if result.Action != nil {
+		result.Action(h.ctx)
+	}
+
+	return result.Continue
+}
+
+// handleNormalModeSpecialKeys handles non-rune keys in normal mode (arrows, Tab, Enter, etc.)
+func (h *InputHandler) handleNormalModeSpecialKeys(ev *tcell.EventKey) bool {
+	switch ev.Key() {
+	case tcell.KeyUp:
+		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+		if ok && pos.Y > 0 {
+			pos.Y--
+			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
+		}
+		h.ctx.State.SetHeat(0)
+		h.ctx.LastCommand = ""
+		return true
+
+	case tcell.KeyDown:
+		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+		if ok && pos.Y < h.ctx.GameHeight-1 {
+			pos.Y++
+			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
+		}
+		h.ctx.State.SetHeat(0)
+		h.ctx.LastCommand = ""
+		return true
+
+	case tcell.KeyLeft:
+		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+		if ok && pos.X > 0 {
+			pos.X--
+			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
+		}
+		h.ctx.State.SetHeat(0)
+		h.ctx.LastCommand = ""
+		return true
+
+	case tcell.KeyRight:
+		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+		if ok && pos.X < h.ctx.GameWidth-1 {
+			pos.X++
+			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
+		}
+		h.ctx.State.SetHeat(0)
+		h.ctx.LastCommand = ""
+		return true
+
+	case tcell.KeyHome:
+		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+		if ok {
+			pos.X = 0
+			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
+		}
+		h.ctx.State.SetHeat(0)
+		h.ctx.LastCommand = ""
+		return true
+
+	case tcell.KeyEnd:
+		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+		if ok {
+			pos.X = findLineEnd(h.ctx, pos.Y)
+			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
+		}
+		h.ctx.State.SetHeat(0)
+		h.ctx.LastCommand = ""
+		return true
+
+	case tcell.KeyTab:
+		// Tab: Jump to nugget if energy >= 10
+		energy := h.ctx.State.GetEnergy()
+		if energy < 10 {
+			h.ctx.LastCommand = ""
+			return true
+		}
+
+		nuggetID := engine.Entity(h.ctx.State.GetActiveNuggetID())
+		if nuggetID == 0 {
+			h.ctx.LastCommand = ""
+			return true
+		}
+
+		nuggetPos, ok := h.ctx.World.Positions.Get(nuggetID)
+		if !ok {
+			h.ctx.LastCommand = ""
+			return true
+		}
+
+		h.ctx.World.Positions.Add(h.ctx.CursorEntity, components.PositionComponent{
+			X: nuggetPos.X,
+			Y: nuggetPos.Y,
+		})
+
+		payload := &engine.EnergyTransactionPayload{
+			Amount: -10,
+			Source: "NuggetJump",
+		}
+		h.ctx.PushEvent(engine.EventEnergyTransaction, payload, h.ctx.PausableClock.Now())
+
+		if h.ctx.AudioEngine != nil {
+			cmd := audio.AudioCommand{
+				Type:       audio.SoundBell,
+				Priority:   1,
+				Generation: uint64(h.ctx.State.GetFrameNumber()),
+				Timestamp:  h.ctx.PausableClock.Now(),
+			}
+			h.ctx.AudioEngine.SendState(cmd)
+		}
+		h.ctx.LastCommand = ""
+		return true
+
+	case tcell.KeyEnter:
+		// Directional cleaners if heat >= 10
+		currentHeat := h.ctx.State.GetHeat()
+		if currentHeat >= 10 {
+			h.ctx.State.AddHeat(-10)
+
+			cursorPos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+			if ok {
+				payload := &engine.DirectionalCleanerPayload{
+					OriginX: cursorPos.X,
+					OriginY: cursorPos.Y,
+				}
+				h.ctx.PushEvent(engine.EventDirectionalCleanerRequest, payload, h.ctx.PausableClock.Now())
+			}
+		}
+		h.ctx.LastCommand = ""
+		return true
+	}
+
+	return true
 }
 
 // handleInsertMode handles input in insert mode
@@ -326,438 +490,6 @@ func (h *InputHandler) handleOverlayMode(ev *tcell.EventKey) bool {
 		return true
 	}
 
-	return true
-}
-
-// handleNormalMode handles input in normal mode
-func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
-	// Handle arrow keys (work like h/j/k/l, but reset heat)
-	switch ev.Key() {
-	case tcell.KeyUp:
-		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
-		if ok && pos.Y > 0 {
-			pos.Y--
-			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
-		}
-		h.ctx.State.SetHeat(0)
-		h.ctx.LastCommand = "" // Clear last command on next key
-		return true
-	case tcell.KeyDown:
-		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
-		if ok && pos.Y < h.ctx.GameHeight-1 {
-			pos.Y++
-			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
-		}
-		h.ctx.State.SetHeat(0)
-		h.ctx.LastCommand = "" // Clear last command on next key
-		return true
-	case tcell.KeyLeft:
-		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
-		if ok && pos.X > 0 {
-			pos.X--
-			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
-		}
-		h.ctx.State.SetHeat(0)
-		h.ctx.LastCommand = "" // Clear last command on next key
-		return true
-	case tcell.KeyRight:
-		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
-		if ok && pos.X < h.ctx.GameWidth-1 {
-			pos.X++
-			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
-		}
-		h.ctx.State.SetHeat(0)
-		h.ctx.LastCommand = "" // Clear last command on next key
-		return true
-	case tcell.KeyHome:
-		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
-		if ok {
-			pos.X = 0
-			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
-		}
-		h.ctx.State.SetHeat(0)
-		h.ctx.LastCommand = "" // Clear last command on next key
-		return true
-	case tcell.KeyEnd:
-		pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
-		if ok {
-			pos.X = findLineEnd(h.ctx, pos.Y)
-			h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
-		}
-		h.ctx.State.SetHeat(0)
-		h.ctx.LastCommand = "" // Clear last command on next key
-		return true
-	case tcell.KeyTab:
-		// Tab: Jump to nugget if energy >= 10
-		energy := h.ctx.State.GetEnergy()
-		if energy < 10 {
-			h.ctx.LastCommand = "" // Clear last command
-			return true
-		}
-
-		// Get active nugget from centralized state
-		nuggetID := engine.Entity(h.ctx.State.GetActiveNuggetID())
-		if nuggetID == 0 {
-			h.ctx.LastCommand = "" // Clear last command
-			return true
-		}
-
-		// Query nugget position from World
-		nuggetPos, ok := h.ctx.World.Positions.Get(nuggetID)
-		if !ok {
-			h.ctx.LastCommand = "" // Clear last command
-			return true
-		}
-
-		// Move cursor to nugget position
-		h.ctx.World.Positions.Add(h.ctx.CursorEntity, components.PositionComponent{
-			X: nuggetPos.X,
-			Y: nuggetPos.Y,
-		})
-
-		// Deduct energy via event
-		payload := &engine.EnergyTransactionPayload{
-			Amount: -10,
-			Source: "NuggetJump",
-		}
-		h.ctx.PushEvent(engine.EventEnergyTransaction, payload, h.ctx.PausableClock.Now())
-
-		// Play bell sound
-		if h.ctx.AudioEngine != nil {
-			cmd := audio.AudioCommand{
-				Type:       audio.SoundBell,
-				Priority:   1,
-				Generation: uint64(h.ctx.State.GetFrameNumber()),
-				Timestamp:  h.ctx.PausableClock.Now(),
-			}
-			h.ctx.AudioEngine.SendState(cmd)
-		}
-		h.ctx.LastCommand = "" // Clear last command
-		return true
-	case tcell.KeyEnter:
-		// Directional cleaners if heat >= 10
-		currentHeat := h.ctx.State.GetHeat()
-		if currentHeat >= 10 {
-			// Reduce heat by 10
-			h.ctx.State.AddHeat(-10)
-
-			// Get cursor position for cleaner origin
-			cursorPos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
-			if ok {
-				// Push directional cleaner event
-				payload := &engine.DirectionalCleanerPayload{
-					OriginX: cursorPos.X,
-					OriginY: cursorPos.Y,
-				}
-				h.ctx.PushEvent(engine.EventDirectionalCleanerRequest, payload, h.ctx.PausableClock.Now())
-			}
-		}
-		// Clear motion state regardless
-		h.ctx.MotionCount = 0
-		h.ctx.MotionCommand = ""
-		h.ctx.LastCommand = ""
-		return true
-	}
-
-	if ev.Key() == tcell.KeyRune {
-		char := ev.Rune()
-
-		// Handle waiting for 'f' character
-		if h.ctx.WaitingForF {
-			// Use PendingCount if set, otherwise default to 1
-			count := h.ctx.PendingCount
-			if count == 0 {
-				count = 1
-			}
-
-			// Build command string: [count]f[char]
-			cmd := h.buildCommandString('f', char, count, false)
-			ExecuteFindChar(h.ctx, char, count)
-
-			// Clear multi-keystroke state
-			h.ctx.WaitingForF = false
-			h.ctx.PendingCount = 0
-			h.ctx.MotionCount = 0
-			h.ctx.LastCommand = cmd
-			return true
-		}
-
-		// Handle waiting for 'F' character (backward find)
-		if h.ctx.WaitingForFBackward {
-			// Use PendingCount if set, otherwise default to 1
-			count := h.ctx.PendingCount
-			if count == 0 {
-				count = 1
-			}
-
-			// Build command string: [count]F[char]
-			cmd := h.buildCommandString('F', char, count, false)
-			ExecuteFindCharBackward(h.ctx, char, count)
-
-			// Clear multi-keystroke state
-			h.ctx.WaitingForFBackward = false
-			h.ctx.PendingCount = 0
-			h.ctx.MotionCount = 0
-			h.ctx.LastCommand = cmd
-			return true
-		}
-
-		// Handle waiting for 't' character (till forward)
-		if h.ctx.WaitingForT {
-			// Use PendingCount if set, otherwise default to 1
-			count := h.ctx.PendingCount
-			if count == 0 {
-				count = 1
-			}
-
-			// Build command string: [count]t[char]
-			cmd := h.buildCommandString('t', char, count, false)
-			ExecuteTillChar(h.ctx, char, count)
-
-			// Clear multi-keystroke state
-			h.ctx.WaitingForT = false
-			h.ctx.PendingCount = 0
-			h.ctx.MotionCount = 0
-			h.ctx.LastCommand = cmd
-			return true
-		}
-
-		// Handle waiting for 'T' character (till backward)
-		if h.ctx.WaitingForTBackward {
-			// Use PendingCount if set, otherwise default to 1
-			count := h.ctx.PendingCount
-			if count == 0 {
-				count = 1
-			}
-
-			// Build command string: [count]T[char]
-			cmd := h.buildCommandString('T', char, count, false)
-			ExecuteTillCharBackward(h.ctx, char, count)
-
-			// Clear multi-keystroke state
-			h.ctx.WaitingForTBackward = false
-			h.ctx.PendingCount = 0
-			h.ctx.MotionCount = 0
-			h.ctx.LastCommand = cmd
-			return true
-		}
-
-		// Handle numbers for count (BEFORE DeleteOperator check, so d2w works)
-		if char >= '0' && char <= '9' {
-			// Special case: '0' is a motion (line start) when not following a number
-			// and not in delete operator mode
-			if char == '0' && h.ctx.MotionCount == 0 && !h.ctx.DeleteOperator {
-				ExecuteMotion(h.ctx, char, 1)
-				h.ctx.MotionCommand = ""
-				h.ctx.LastCommand = "0"
-				return true
-			}
-			h.ctx.MotionCount = h.ctx.MotionCount*10 + int(char-'0')
-			// Don't clear LastCommand when building count
-			return true
-		}
-
-		// Handle delete operator
-		if h.ctx.DeleteOperator {
-			// Build command string: [count]d[motion]
-			cmd := h.buildCommandString('d', char, h.ctx.MotionCount, false)
-			ExecuteDeleteMotion(h.ctx, char, h.ctx.MotionCount)
-			h.ctx.MotionCount = 0
-			h.ctx.MotionCommand = ""
-			h.ctx.CommandPrefix = 0
-			h.ctx.LastCommand = cmd
-			return true
-		}
-
-		// Get count (default to 1 if not specified)
-		count := h.ctx.MotionCount
-		if count == 0 {
-			count = 1
-		}
-
-		// Enter insert mode
-		if char == 'i' {
-			h.ctx.Mode = engine.ModeInsert
-			h.ctx.MotionCount = 0
-			h.ctx.MotionCommand = ""
-			h.ctx.DeleteOperator = false
-			h.ctx.LastCommand = "" // Clear on mode change
-			return true
-		}
-
-		// Enter search mode
-		if char == '/' {
-			h.ctx.Mode = engine.ModeSearch
-			h.ctx.SearchText = ""
-			h.ctx.MotionCount = 0
-			h.ctx.MotionCommand = ""
-			h.ctx.DeleteOperator = false
-			h.ctx.LastCommand = "" // Clear on mode change
-			return true
-		}
-
-		// Enter command mode
-		if char == ':' {
-			h.ctx.Mode = engine.ModeCommand
-			h.ctx.CommandText = ""
-			h.ctx.MotionCount = 0
-			h.ctx.MotionCommand = ""
-			h.ctx.DeleteOperator = false
-			h.ctx.LastCommand = "" // Clear on mode change
-			h.ctx.SetPaused(true)
-			return true
-		}
-
-		// Repeat search
-		if char == 'n' {
-			RepeatSearch(h.ctx, true)
-			h.ctx.MotionCount = 0
-			h.ctx.MotionCommand = ""
-			h.ctx.LastCommand = "n"
-			return true
-		}
-
-		if char == 'N' {
-			RepeatSearch(h.ctx, false)
-			h.ctx.MotionCount = 0
-			h.ctx.MotionCommand = ""
-			h.ctx.LastCommand = "N"
-			return true
-		}
-
-		// D - delete to end of line (equivalent to d$)
-		if char == 'D' {
-			cmd := h.buildCommandString('D', 0, count, true)
-			ExecuteDeleteMotion(h.ctx, '$', count)
-			h.ctx.MotionCount = 0
-			h.ctx.MotionCommand = ""
-			h.ctx.CommandPrefix = 0
-			h.ctx.LastCommand = cmd
-			return true
-		}
-
-		// Delete operator
-		if char == 'd' {
-			if h.ctx.CommandPrefix == 'd' {
-				// dd - delete line
-				cmd := h.buildCommandString('d', 'd', count, false)
-				ExecuteDeleteMotion(h.ctx, 'd', count)
-				h.ctx.MotionCount = 0
-				h.ctx.MotionCommand = ""
-				h.ctx.CommandPrefix = 0
-				h.ctx.LastCommand = cmd
-			} else {
-				h.ctx.DeleteOperator = true
-				h.ctx.CommandPrefix = 'd'
-				// Don't clear LastCommand yet - waiting for motion
-			}
-			return true
-		}
-
-		// Handle 'g' prefix commands
-		if h.ctx.CommandPrefix == 'g' {
-			// Second character after 'g'
-			if char == 'g' {
-				// gg - goto top (same column)
-				cmd := h.buildCommandString('g', 'g', count, false)
-				pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
-				if ok {
-					pos.Y = 0
-					h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
-				}
-				h.ctx.CommandPrefix = 0
-				h.ctx.MotionCount = 0
-				h.ctx.LastCommand = cmd
-				return true
-			} else if char == 'o' {
-				// go - goto top left (first row, first column)
-				cmd := h.buildCommandString('g', 'o', count, false)
-				h.ctx.World.Positions.Add(h.ctx.CursorEntity, components.PositionComponent{
-					X: 0,
-					Y: 0,
-				})
-				h.ctx.CommandPrefix = 0
-				h.ctx.MotionCount = 0
-				h.ctx.LastCommand = cmd
-				return true
-			} else {
-				// Unknown 'g' command, reset
-				h.ctx.CommandPrefix = 0
-				h.ctx.MotionCount = 0
-				h.ctx.LastCommand = "" // Clear on error
-				return true
-			}
-		}
-
-		// Start 'g' prefix
-		if char == 'g' {
-			h.ctx.CommandPrefix = 'g'
-			// Don't clear LastCommand yet - waiting for second char
-			return true
-		}
-
-		// Handle 'f' command (find character - multi-keystroke)
-		if char == 'f' {
-			h.ctx.WaitingForF = true
-			h.ctx.PendingCount = count // Preserve count for when target char is typed
-			// Don't clear MotionCount yet - will be cleared when command completes
-			// Don't set LastCommand yet - waiting for target character
-			return true
-		}
-
-		// Handle 'F' command (find character backward - multi-keystroke)
-		if char == 'F' {
-			h.ctx.WaitingForFBackward = true
-			h.ctx.PendingCount = count // Preserve count for when target char is typed
-			// Don't clear MotionCount yet - will be cleared when command completes
-			// Don't set LastCommand yet - waiting for target character
-			return true
-		}
-
-		// Handle 't' command (till character forward - multi-keystroke)
-		if char == 't' {
-			h.ctx.WaitingForT = true
-			h.ctx.PendingCount = count // Preserve count for when target char is typed
-			// Don't clear MotionCount yet - will be cleared when command completes
-			// Don't set LastCommand yet - waiting for target character
-			return true
-		}
-
-		// Handle 'T' command (till character backward - multi-keystroke)
-		if char == 'T' {
-			h.ctx.WaitingForTBackward = true
-			h.ctx.PendingCount = count // Preserve count for when target char is typed
-			// Don't clear MotionCount yet - will be cleared when command completes
-			// Don't set LastCommand yet - waiting for target character
-			return true
-		}
-
-		// Handle ';' command (repeat last find/till in same direction)
-		if char == ';' {
-			RepeatFindChar(h.ctx, false)
-			h.ctx.MotionCount = 0
-			h.ctx.MotionCommand = ""
-			h.ctx.LastCommand = ";"
-			return true
-		}
-
-		// Handle ',' command (repeat last find/till in opposite direction)
-		if char == ',' {
-			RepeatFindChar(h.ctx, true)
-			h.ctx.MotionCount = 0
-			h.ctx.MotionCommand = ""
-			h.ctx.LastCommand = ","
-			return true
-		}
-
-		// Execute motion commands
-		cmd := h.buildCommandString(char, 0, count, true)
-		ExecuteMotion(h.ctx, char, count)
-		h.ctx.MotionCount = 0
-		h.ctx.MotionCommand = ""
-		h.ctx.CommandPrefix = 0
-		h.ctx.LastCommand = cmd
-	}
 	return true
 }
 

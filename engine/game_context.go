@@ -65,17 +65,8 @@ type GameContext struct {
 	OverlayScroll  int
 
 	// Motion command state (input parsing - not game mechanics)
-	MotionCount         int
-	MotionCommand       string
-	WaitingForF         bool
-	WaitingForFBackward bool
-	WaitingForT         bool
-	WaitingForTBackward bool
-	PendingCount        int // Preserved count for multi-keystroke commands (e.g., 2fa, 3Fb)
-	CommandPrefix       rune
-	StatusMessage       string
-	DeleteOperator      bool
-	LastCommand         string // Last executed command for display
+	StatusMessage string
+	LastCommand   string // Last executed command for display
 
 	// Find/Till motion state (for ; and , repeat commands)
 	LastFindChar    rune // Character that was searched for
