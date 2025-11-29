@@ -614,6 +614,7 @@ The main loop coordinates frame rendering with game updates using channels:
 type GamePhase int
 
 const (
+    PhaseBootstrap      // Initial delay state (2 seconds before first spawn)
     PhaseNormal         // Regular gameplay, content spawning
     PhaseGoldActive     // Gold sequence active with timeout tracking
     PhaseGoldComplete   // Gold completed, ready for next phase (transient)
@@ -625,6 +626,7 @@ const (
 **Phase State** (in `GameState`):
 - `CurrentPhase` (`GamePhase`): Current game phase (mutex protected)
 - `PhaseStartTime` (`time.Time`): When current phase started
+- `GameStartTime` (`time.Time`): When the game started (for bootstrap delay)
 - **Gold state**: `GoldActive`, `GoldSequenceID`, `GoldStartTime`, `GoldTimeoutTime`
 - **Decay timer state**: `DecayTimerActive`, `DecayNextTime`
 - **Decay animation state**: `DecayAnimating`, `DecayStartTime`
@@ -662,6 +664,7 @@ snapshot := ctx.State.ReadPhaseState()
 - Skips all game logic updates when paused (defensive check in processTick)
 - Waits for frame ready signal before processing tick (prevents update/render conflicts)
 - **Phase transitions handled on clock tick** (via `processTick()`):
+  - `PhaseBootstrap`: Wait for initial delay (2 seconds) → transition to PhaseNormal
   - `PhaseGoldActive`: Check gold timeout (pausable clock) → timeout via GoldSystem
   - `PhaseGoldComplete`: Start decay timer
   - `PhaseDecayWait`: Check decay ready (pausable clock) → start decay animation
@@ -959,9 +962,11 @@ When the game is paused by entering COMMAND mode (`:` key), the rendering system
 The game operates in a continuous cycle managed by the phase system:
 
 ```
-PhaseNormal → PhaseGoldActive → PhaseGoldComplete → PhaseDecayWait → PhaseDecayAnimation → PhaseNormal
-    ↑                                                                         ↓
-    └─────────────────────────────────────────────────────────────────────────┘
+PhaseBootstrap → PhaseNormal → PhaseGoldActive → PhaseGoldComplete → PhaseDecayWait → PhaseDecayAnimation → PhaseNormal
+      ↑             |                                                                         ↓
+      |             └─────────────────────────────────────────────────────────────────────────┘
+      |
+      └─── [:new command] ────┘
 
 Parallel (Event-Driven):
   EventCleanerRequest → Cleaner Spawn → Cleaner Animation → EventCleanerFinished
@@ -969,10 +974,13 @@ Parallel (Event-Driven):
 ```
 
 **Key State Transitions:**
+- Game starts in PhaseBootstrap (initial 2-second delay before content spawns)
+- Bootstrap delay expires → PhaseNormal (content spawning begins)
 - Gold spawns after decay animation completes → PhaseGoldActive
 - Gold completion/timeout → PhaseGoldComplete → PhaseDecayWait (starts decay timer)
 - Decay timer expires → PhaseDecayAnimation (falling entities decay characters)
 - Decay animation completes → PhaseNormal (ready for next gold)
+- :new command resets game to PhaseBootstrap
 - Cleaners run in parallel via event system, do NOT affect phase transitions
 
 ### Event Sequencing
@@ -1084,6 +1092,7 @@ GoldSequenceSystem uses `sync.RWMutex` for all state:
 ### State Transition Rules
 
 #### Phase Transitions (Main Game Cycle)
+- **PhaseBootstrap** → **PhaseNormal**: When initial delay (2 seconds) expires
 - **PhaseNormal** → **PhaseGoldActive**: When gold sequence spawns
 - **PhaseGoldActive** → **PhaseGoldComplete**: When gold typed or timeout
 - **PhaseGoldComplete** → **PhaseDecayWait**: Starts decay timer
@@ -1159,6 +1168,7 @@ COMMAND -[:debug/:help]→ OVERLAY (modal popup) -[ESC/ENTER]→ NORMAL
 
 **`:new` - New Game**
 - **Behavior**: Clears the ECS World and resets game state for a fresh game
+- **Phase Reset**: Transitions to PhaseBootstrap with 2-second delay before content spawns
 - **Critical Requirement**: Cursor Entity Restoration
   - `World.Clear()` is destructive and removes ALL entities including the Cursor Entity
   - After clear, the Cursor Entity's components must be explicitly restored:
@@ -1181,6 +1191,9 @@ COMMAND -[:debug/:help]→ OVERLAY (modal popup) -[ESC/ENTER]→ NORMAL
 
     // Update context reference
     ctx.CursorEntity = cursorEntity
+
+    // Reset game start time for bootstrap phase
+    ctx.State.ResetGameStart(ctx.PausableClock.Now())
     ```
 
 ### Motion Commands (NORMAL Mode)
