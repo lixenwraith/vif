@@ -113,8 +113,6 @@ func ExecuteDeleteMotion(ctx *engine.GameContext, motion rune, count int) {
 	if deletedGreenOrBlue {
 		ctx.State.SetHeat(0)
 	}
-
-	ctx.DeleteOperator = false
 }
 
 // deleteAllOnLine deletes all characters on a line

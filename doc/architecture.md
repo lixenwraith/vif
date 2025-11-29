@@ -1230,6 +1230,8 @@ cleanerSystem.GetSystemState()
 **Usage**: Call during test failures or production debugging to understand system state.
 
 ## Input State Machine
+
+### Game Mode State Machine
 ```
 NORMAL ─[i]→ INSERT
 NORMAL ─[/]→ SEARCH
@@ -1253,6 +1255,287 @@ COMMAND -[:debug/:help]→ OVERLAY (modal popup) -[ESC/ENTER]→ NORMAL
 3. **Insert Mode**: ESC → returns to NORMAL
 4. **Overlay Mode**: ESC → closes overlay, unpauses, returns to NORMAL
 5. **Normal Mode**: ESC → activates ping grid animation (1 second)
+
+### Input Dispatch Architecture (NORMAL Mode)
+
+The input handling system for NORMAL mode uses a **state machine with binding table** architecture, replacing the previous enum+switch pattern with a more maintainable and extensible design.
+
+**Core Components** (`modes/` directory):
+
+1. **InputMachine** (`modes/machine.go`):
+   - 5-state machine managing input parsing flow
+   - Tracks count accumulation (count1/count2 for compound counts like `2d3w`)
+   - Manages operator/character/prefix state
+   - Dispatches actions via binding table lookup
+
+2. **BindingTable** (`modes/bindings.go`):
+   - Maps keys to action types and metadata
+   - Separate tables for: `normal[]`, `operatorMotions[]`, `prefixG[]`
+   - Action metadata: type, character, acceptsCount flag, custom handler
+   - Created via `DefaultBindings()` function
+
+3. **Action Executors** (`modes/actions.go`):
+   - Execute specific actions based on binding lookups
+   - Motion helpers for character commands (find/till)
+   - Separated from dispatch logic for clarity
+
+4. **InputHandler** (`modes/input.go`):
+   - Owns InputMachine and BindingTable (private fields)
+   - Delegates NORMAL mode key handling to `machine.Process(key)`
+   - Returns `ProcessResult` with action closure
+
+**Architecture Diagram:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        InputHandler                          │
+│  ┌─────────────────┐  ┌─────────────────┐                   │
+│  │  InputMachine   │  │  BindingTable   │                   │
+│  │  (private)      │  │  (private)      │                   │
+│  │                 │  │                 │                   │
+│  │  state          │  │  normal[]       │                   │
+│  │  count1/count2  │  │  operatorMotions│                   │
+│  │  operator       │  │  prefixG[]      │                   │
+│  │  charCmd        │  │                 │                   │
+│  │  prefix         │  │                 │                   │
+│  └────────┬────────┘  └────────┬────────┘                   │
+│           │                    │                             │
+│           └──────┬─────────────┘                             │
+│                  ▼                                           │
+│           Process(key) → ProcessResult                       │
+│                  │                                           │
+│                  ▼                                           │
+│           Action(ctx) ──────────────────────────────────────┼──► GameContext
+└─────────────────────────────────────────────────────────────┘     (Mode only)
+```
+
+**State Machine States** (`InputState` enum in `modes/machine.go`):
+
+| State | Description | Next State Triggers |
+|-------|-------------|---------------------|
+| `StateNormal` | Awaiting input | Digit → count accumulation<br>Operator → `StateOperatorWait`<br>Prefix → `StatePrefix`<br>Motion → execute<br>Mode key → `StateModeSwitch` |
+| `StateOperatorWait` | Operator pending motion | Digit → count2 accumulation<br>Motion → execute operator+motion<br>Doubled operator → execute line action<br>ESC → reset to `StateNormal` |
+| `StateCharWait` | Awaiting character (f/F/t/T) | Any char → execute find/till<br>ESC → reset to `StateNormal` |
+| `StatePrefix` | Prefix command (g) pending | Second char → execute prefix command<br>ESC → reset to `StateNormal` |
+| `StateModeSwitch` | Mode change in progress | Immediate execution, return to `StateNormal` |
+
+**Data Flow Example** (typing `2d3w` - delete 6 words):
+
+1. `'2'` → StateNormal → accumulate count1=2
+2. `'d'` → StateOperatorWait → store operator='d', move count1→pendingCount
+3. `'3'` → StateOperatorWait → accumulate count2=3
+4. `'w'` → Lookup operatorMotions['w'] → Execute `DeleteMotion(ctx, 'w', 6)` → Reset state
+
+**Binding Lookup Pattern:**
+```go
+// In machine.go:processNormal()
+binding, ok := m.bindings.normal[key]
+if !ok {
+    return ProcessResult{Handled: false}
+}
+
+switch binding.ActionType {
+case ActionMotion:
+    return ProcessResult{
+        Handled: true,
+        Action: func(ctx *engine.GameContext) {
+            ExecuteMotion(ctx, binding.Char, m.count1)
+        },
+    }
+case ActionOperator:
+    m.state = StateOperatorWait
+    m.operator = binding.Char
+    // ... count handling
+    return ProcessResult{Handled: true, Continue: true}
+}
+```
+
+**Benefits Over Previous Design:**
+
+| Aspect | Old (enum+switch) | New (state machine+bindings) |
+|--------|-------------------|------------------------------|
+| State Management | 9 boolean/int fields in GameContext | 1 InputMachine struct (private) |
+| Dispatch Logic | 30+ if/else branches | 5-state machine with table lookup |
+| Invalid States | Possible (flag combinations) | Impossible (explicit enum) |
+| Count Handling | Duplicated 30+ times | Single location (machine.go) |
+| Key→Action Mapping | Hardcoded in switch | BindingTable (configurable) |
+| Extensibility | Add code in multiple locations | Add binding entry + executor |
+
+### Adding New Bindings
+
+The binding table architecture makes it straightforward to add new commands or extend existing functionality.
+
+#### Adding a New Motion
+
+To add a new motion command (e.g., `'p'` to move to previous word):
+
+1. **Add binding entry** in `modes/bindings.go` → `DefaultBindings()`:
+```go
+bindings.normal['p'] = Binding{
+    ActionType:   ActionMotion,
+    Char:         'p',
+    AcceptsCount: true,
+    Handler:      nil, // Use default ExecuteMotion
+}
+```
+
+2. **Implement motion logic** in `modes/motions.go` → `ExecuteMotion()`:
+```go
+case 'p':
+    // Move to previous word
+    for i := 0; i < count; i++ {
+        // ... motion implementation
+    }
+```
+
+**That's it!** The state machine handles count accumulation and dispatch automatically.
+
+#### Adding a New Operator
+
+To add a new operator (e.g., `'c'` for change):
+
+1. **Add operator binding** in `modes/bindings.go` → `DefaultBindings()`:
+```go
+bindings.normal['c'] = Binding{
+    ActionType:   ActionOperator,
+    Char:         'c',
+    AcceptsCount: true,
+    Handler:      nil,
+}
+```
+
+2. **Add operator motions** (same as delete operator):
+```go
+bindings.operatorMotions['w'] = Binding{ActionType: ActionMotion, Char: 'w', AcceptsCount: true, Handler: nil}
+bindings.operatorMotions['b'] = Binding{ActionType: ActionMotion, Char: 'b', AcceptsCount: true, Handler: nil}
+// ... copy all motion bindings from 'd' operator
+```
+
+3. **Implement executor** in `modes/delete_operator.go` (or new file):
+```go
+func ExecuteChangeMotion(ctx *engine.GameContext, motionChar rune, count int) {
+    // 1. Delete using existing ExecuteDeleteMotion
+    ExecuteDeleteMotion(ctx, motionChar, count)
+
+    // 2. Switch to insert mode
+    // (mode switch handled by ProcessResult.ModeChange)
+}
+```
+
+4. **Handle in state machine** in `modes/machine.go` → `processOperatorWait()`:
+```go
+case 'c':
+    if key == 'c' { // Doubled: 'cc' for change line
+        return ProcessResult{
+            Handled: true,
+            Action: func(ctx *engine.GameContext) {
+                ExecuteChangeMotion(ctx, '$', finalCount) // Change to end of line
+            },
+            ModeChange: engine.ModeInsert,
+        }
+    }
+    // Handle c + motion
+    return ProcessResult{
+        Handled: true,
+        Action: func(ctx *engine.GameContext) {
+            ExecuteChangeMotion(ctx, binding.Char, finalCount)
+        },
+        ModeChange: engine.ModeInsert,
+    }
+```
+
+#### Adding a New Mode Switch Command
+
+To add `'a'` (append mode - move cursor right then enter insert):
+
+1. **Add binding** in `modes/bindings.go`:
+```go
+bindings.normal['a'] = Binding{
+    ActionType:   ActionModeSwitch,
+    Char:         'a',
+    AcceptsCount: false,
+    Handler:      nil,
+}
+```
+
+2. **Implement handler** in `modes/machine.go` → `handleModeSwitch()`:
+```go
+case 'a':
+    return ProcessResult{
+        Handled:    true,
+        Continue:   true,
+        ModeChange: engine.ModeInsert,
+        Action: func(ctx *engine.GameContext) {
+            // Move cursor right before entering insert mode
+            pos, ok := ctx.World.Positions.Get(ctx.CursorEntity)
+            if ok && pos.X < ctx.GameWidth-1 {
+                pos.X++
+                ctx.World.Positions.Add(ctx.CursorEntity, pos)
+            }
+        },
+    }
+```
+
+#### Adding Configurable Bindings (Future Extension)
+
+The current system uses hardcoded bindings via `DefaultBindings()`. To support user-configurable bindings:
+
+1. **Implement `LoadBindings()`** in `modes/bindings.go`:
+```go
+func LoadBindings(path string) (*BindingTable, error) {
+    // 1. Load JSON config: {"p": "f"} means 'p' acts like 'f'
+    // 2. Clone DefaultBindings()
+    // 3. For each remap, copy binding from source key to target key
+    // 4. Return modified binding table
+}
+```
+
+2. **Update InputHandler** in `modes/input.go`:
+```go
+func NewInputHandler(ctx *engine.GameContext, configPath string) *InputHandler {
+    bindings := DefaultBindings()
+    if configPath != "" {
+        if custom, err := LoadBindings(configPath); err == nil {
+            bindings = custom
+        }
+    }
+    // ... create machine with bindings
+}
+```
+
+This allows users to remap keys without modifying code.
+
+#### Testing New Bindings
+
+Manual verification checklist for new bindings:
+
+| Test | Keys | Expected Behavior |
+|------|------|-------------------|
+| Basic | `p` | Execute motion once |
+| With count | `5p` | Execute motion 5 times |
+| With operator | `dp` | Execute operator+motion |
+| Compound count | `2d3p` | Execute with count=6 |
+| ESC reset | `3d` ESC `p` | Motion executes once (count cleared) |
+| Edge cases | `0`, doubled operators | Verify special handling |
+
+**Refactoring Philosophy:**
+
+The migration **refactored the dispatch layer** (state management, key→action routing) while **preserving the execution layer** (motion logic, deletion logic, etc.). The execution functions in `modes/motions.go`, `modes/delete_operator.go`, and `modes/search.go` were already well-structured - they just needed better dispatch infrastructure.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  REFACTORED: Dispatch Layer (machine.go, bindings.go)       │
+│                                                             │
+│  Key → State Machine → Binding Lookup → ProcessResult       │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│  UNCHANGED: Execution Layer (motions.go, delete_operator.go)│
+│                                                             │
+│  ExecuteMotion(), ExecuteDeleteMotion(), ExecuteFindChar()  │
+│  (These implement actual cursor/entity manipulation)        │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ### Commands
 
