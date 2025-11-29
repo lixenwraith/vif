@@ -93,8 +93,7 @@ type GameState struct {
 	DecayStartTime time.Time // When decay animation started
 
 	// Game Lifecycle State
-	FirstUpdateTime      time.Time // When the game first started (first Update call)
-	InitialSpawnComplete bool      // Whether initial gold spawn has been attempted
+	GameStartTime time.Time // When game/round started (for bootstrap delay)
 }
 
 // NewGameState creates a new centralized game state
@@ -146,8 +145,8 @@ func NewGameState(maxEntities int, now time.Time) *GameState {
 	gs.EntityCount = 0
 	gs.ScreenDensity = 0.0
 
-	// Initialize phase state (Start in Normal phase)
-	gs.CurrentPhase = PhaseNormal
+	// Initialize phase state (Start in Bootstrap phase)
+	gs.CurrentPhase = PhaseBootstrap
 	gs.PhaseStartTime = now
 
 	// Initialize Gold sequence state
@@ -165,8 +164,7 @@ func NewGameState(maxEntities int, now time.Time) *GameState {
 	gs.DecayStartTime = time.Time{}
 
 	// Initialize Game Lifecycle state
-	gs.FirstUpdateTime = time.Time{} // Will be set on first Update
-	gs.InitialSpawnComplete = false
+	gs.GameStartTime = now
 
 	return gs
 }
@@ -493,6 +491,7 @@ func (gs *GameState) GetPhase() GamePhase {
 // CanTransition checks if a phase transition is valid
 func (gs *GameState) CanTransition(from, to GamePhase) bool {
 	validTransitions := map[GamePhase][]GamePhase{
+		PhaseBootstrap:      {PhaseNormal},
 		PhaseNormal:         {PhaseGoldActive},
 		PhaseGoldActive:     {PhaseGoldComplete},
 		PhaseGoldComplete:   {PhaseDecayWait},
@@ -824,35 +823,21 @@ type BoostSnapshot struct {
 
 // ===== GAME LIFECYCLE ACCESSORS (mutex protected) =====
 
-// GetFirstUpdateTime returns when the game first started
-func (gs *GameState) GetFirstUpdateTime() time.Time {
+// GetGameStartTime returns when the current game/round started
+func (gs *GameState) GetGameStartTime() time.Time {
 	gs.mu.RLock()
 	defer gs.mu.RUnlock()
-	return gs.FirstUpdateTime
+	return gs.GameStartTime
 }
 
-// SetFirstUpdateTime sets when the game first started (should only be called once)
-func (gs *GameState) SetFirstUpdateTime(t time.Time) {
+// ResetGameStart resets the game start time and returns to bootstrap phase
+// Used by :new command for clean game reset
+func (gs *GameState) ResetGameStart(now time.Time) {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
-	// Only set if not already set
-	if gs.FirstUpdateTime.IsZero() {
-		gs.FirstUpdateTime = t
-	}
-}
-
-// GetInitialSpawnComplete returns whether initial gold spawn has been attempted
-func (gs *GameState) GetInitialSpawnComplete() bool {
-	gs.mu.RLock()
-	defer gs.mu.RUnlock()
-	return gs.InitialSpawnComplete
-}
-
-// SetInitialSpawnComplete marks that initial gold spawn has been attempted
-func (gs *GameState) SetInitialSpawnComplete() {
-	gs.mu.Lock()
-	defer gs.mu.Unlock()
-	gs.InitialSpawnComplete = true
+	gs.GameStartTime = now
+	gs.CurrentPhase = PhaseBootstrap
+	gs.PhaseStartTime = now
 }
 
 // ===== RUNTIME METRICS ACCESSORS =====

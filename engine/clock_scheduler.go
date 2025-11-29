@@ -13,8 +13,11 @@ import (
 type GamePhase int
 
 const (
+	// PhaseBootstrap - Initial state, waiting for game start delay
+	PhaseBootstrap GamePhase = iota
+
 	// PhaseNormal - Regular gameplay, spawning content, no special mechanics active
-	PhaseNormal GamePhase = iota
+	PhaseNormal
 
 	// PhaseGoldActive - Gold sequence is active and can be typed with timeout tracking
 	PhaseGoldActive
@@ -32,6 +35,8 @@ const (
 // String returns the name of the game phase for debugging
 func (p GamePhase) String() string {
 	switch p {
+	case PhaseBootstrap:
+		return "Bootstrap"
 	case PhaseNormal:
 		return "Normal"
 	case PhaseGoldActive:
