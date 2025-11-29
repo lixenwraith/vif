@@ -829,6 +829,7 @@ Vi-fighter uses a **dense 2D grid** (`SpatialGrid`) for O(1) spatial queries wit
 **PositionStore Integration** (`engine/position_store.go`):
 - Wraps `SpatialGrid` with thread-safe operations (`sync.RWMutex`)
 - Maintains bidirectional mapping: components map + dense entities array + spatial grid
+- **World Reference**: Stores `*World` reference for z-index lookups (`SetWorld()` called during initialization)
 
 **Access Patterns**:
 ```go
@@ -844,6 +845,11 @@ entitiesAtPos := buf[:count]
 if world.Positions.HasAny(x, y) {
     // At least one entity present
 }
+
+// Query top entity with filter (z-index based)
+entity := world.Positions.GetTopEntityFiltered(x, y, world, func(e engine.Entity) bool {
+    return engine.IsInteractable(world, e)
+})
 
 // Updates
 world.Positions.Add(entity, pos)        // Add/update position
@@ -864,12 +870,96 @@ batch.Commit()  // Atomic, validates no conflicts
 - **Cursor overlap**: Cursor and characters can coexist at the same position without masking
 - **Collision queries**: Systems query all entities at a position for proper collision detection
 - **Rendering**: Renderer queries all entities at cursor position to determine what's visible
+- **Z-Index Selection**: Top entity determined by z-index priority (see Z-Index System below)
 
 **Performance Characteristics**:
 - **GetAllAt/Into**: O(1) - direct cell access, max 15 entities returned
+- **GetTopEntityFiltered**: O(k) where k ≤ 15 entities at position
 - **HasAny**: O(1) - checks cell count only
 - **Add/Remove**: O(1) average, O(k) worst case where k ≤ 15
 - **Memory**: Width × Height × 128 bytes (e.g., 80×24 = 245KB for typical terminal)
+
+### Z-Index System
+
+The **Z-Index System** (`engine/z-index.go`) provides priority-based entity selection when multiple entities occupy the same position.
+
+**Purpose**: Resolves ambiguity in overlapping entities for rendering and interaction logic. For example, when the cursor overlaps a character, the renderer must decide which entity's appearance to display; when typing, the input system must determine which entity to interact with.
+
+**Z-Index Constants** (Priority: Higher = On Top):
+```go
+const (
+    ZIndexBackground = 0     // Empty space
+    ZIndexSpawnChar  = 100   // Regular spawned characters
+    ZIndexNugget     = 200   // Collectible nuggets
+    ZIndexDecay      = 300   // Falling decay entities
+    ZIndexDrain      = 400   // Energy drain entity
+    ZIndexShield     = 500   // Protective shield effects
+    ZIndexCursor     = 1000  // Player cursor (highest)
+)
+```
+
+**Core Functions**:
+
+1. **`GetZIndex(world *World, e Entity) int`**:
+   - Returns z-index for an entity based on its components
+   - Checks component stores in priority order (highest first for early exit)
+   - Default: `ZIndexSpawnChar` for entities with no special components
+
+2. **`SelectTopEntity(entities []Entity, world *World) Entity`**:
+   - Selects highest z-index entity from a slice
+   - Returns `0` if slice is empty
+   - Uses linear search (acceptable for max 15 entities per cell)
+
+3. **`SelectTopEntityFiltered(entities []Entity, world *World, filter func(Entity) bool) Entity`**:
+   - Selects highest z-index entity that passes filter
+   - Returns `0` if no entities match filter
+   - Used for interaction logic (e.g., find interactable entity at cursor)
+
+4. **`IsInteractable(world *World, e Entity) bool`**:
+   - Returns true for entities that can be interacted with (typed on)
+   - Interactable: Characters with SequenceComponent, Nuggets
+   - Non-interactable: Cursor, Drain, Decay, Shield, Flash
+
+**Integration Points**:
+
+**PositionStore** (`engine/position_store.go`):
+- `GetTopEntityFiltered(x, y, world, filter)`: Query top entity at position with filter
+- Uses `SelectTopEntityFiltered` internally for z-index selection
+- World reference stored via `SetWorld()` during initialization
+
+**EnergySystem** (`systems/energy.go`):
+- Uses `GetTopEntityFiltered` to find interactable entity at cursor position
+- Filter: `IsInteractable(world, e)` to exclude non-interactable entities
+- Replaces old manual entity loop pattern
+
+**CursorRenderer** (`render/renderers/cursor.go`):
+- Uses `GetAllEntitiesAt` to query all entities at cursor position
+- Uses `SelectTopEntityFiltered` to find top character for display
+- Filter: Excludes cursor entity itself, only considers entities with CharacterComponent
+- Determines which character rune to display inside cursor
+
+**Design Benefits**:
+- **Eliminates hardcoded priority checks**: Systems use `IsInteractable()` instead of manual component checks
+- **Consistent priority across codebase**: Single source of truth for entity layering
+- **Extensible**: New entity types add z-index constant + component check in `GetZIndex()`
+- **Performance**: O(k) selection where k ≤ 15 entities per cell (negligible overhead)
+
+**Example Usage**:
+```go
+// Find interactable entity at cursor (typing logic)
+entity := world.Positions.GetTopEntityFiltered(cursorX, cursorY, world, func(e engine.Entity) bool {
+    return engine.IsInteractable(world, e)
+})
+if entity == 0 {
+    // No interactable entity at cursor - error feedback
+}
+
+// Find top character for cursor display (rendering logic)
+entities := world.Positions.GetAllEntitiesAt(cursorX, cursorY)
+displayEntity := engine.SelectTopEntityFiltered(entities, world, func(e engine.Entity) bool {
+    return e != cursorEntity && world.Characters.Has(e)
+})
+```
 
 ## Component Hierarchy
 ```
