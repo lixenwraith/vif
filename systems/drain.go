@@ -498,10 +498,117 @@ func (s *DrainSystem) materializeDrainAt(world *engine.World, slot, spawnX, spaw
 	world.Drains.Add(entity, drain)
 }
 
-// handleDrainInteractions handles energy drain and collisions
+// isShieldActive checks if shield is functionally active
+func (s *DrainSystem) isShieldActive(world *engine.World) bool {
+	shield, ok := world.Shields.Get(s.ctx.CursorEntity)
+	if !ok {
+		return false
+	}
+	return shield.Sources != 0 && s.ctx.State.GetEnergy() > 0
+}
+
+// handleDrainInteractions processes all drain interactions per tick
 func (s *DrainSystem) handleDrainInteractions(world *engine.World) {
-	s.updateEnergyDrain(world)
-	s.handleCollisions(world)
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+	now := timeRes.GameTime
+
+	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
+	if !ok {
+		return
+	}
+
+	shieldActive := s.isShieldActive(world)
+
+	// Phase 1: Detect drain-drain collisions (same cell)
+	s.handleDrainDrainCollisions(world)
+
+	// Phase 2: Handle cursor interactions for surviving drains
+	drainEntities := world.Drains.All()
+	for _, drainEntity := range drainEntities {
+		drain, ok := world.Drains.Get(drainEntity)
+		if !ok {
+			continue
+		}
+
+		drainPos, ok := world.Positions.Get(drainEntity)
+		if !ok {
+			continue
+		}
+
+		isOnCursor := drainPos.X == cursorPos.X && drainPos.Y == cursorPos.Y
+
+		// Update cached state
+		if drain.IsOnCursor != isOnCursor {
+			drain.IsOnCursor = isOnCursor
+			world.Drains.Add(drainEntity, drain)
+		}
+
+		if isOnCursor {
+			if shieldActive {
+				// Shield active: drain energy, no heat loss, drain persists
+				if now.Sub(drain.LastDrainTime) >= constants.DrainEnergyDrainInterval {
+					s.ctx.State.AddEnergy(-constants.DrainShieldEnergyDrainAmount)
+					drain.LastDrainTime = now
+					world.Drains.Add(drainEntity, drain)
+				}
+			} else {
+				// No shield: reduce heat and despawn drain
+				s.ctx.State.AddHeat(-constants.DrainHeatReductionAmount)
+				s.despawnDrainWithFlash(world, drainEntity)
+			}
+		}
+	}
+
+	// Phase 3: Handle non-cursor entity collisions (characters, etc)
+	s.handleEntityCollisions(world)
+}
+
+// handleDrainDrainCollisions detects and removes all drains sharing a cell
+func (s *DrainSystem) handleDrainDrainCollisions(world *engine.World) {
+	// Build position -> drain entities map
+	drainPositions := make(map[uint64][]engine.Entity)
+
+	drainEntities := world.Drains.All()
+	for _, drainEntity := range drainEntities {
+		pos, ok := world.Positions.Get(drainEntity)
+		if !ok {
+			continue
+		}
+		key := uint64(pos.X)<<32 | uint64(pos.Y)
+		drainPositions[key] = append(drainPositions[key], drainEntity)
+	}
+
+	// Find and destroy all drains at cells with multiple drains
+	for _, entities := range drainPositions {
+		if len(entities) > 1 {
+			for _, e := range entities {
+				s.despawnDrainWithFlash(world, e)
+			}
+		}
+	}
+}
+
+// handleEntityCollisions processes collisions with non-drain entities
+func (s *DrainSystem) handleEntityCollisions(world *engine.World) {
+	entities := world.Drains.All()
+	for _, entity := range entities {
+		drainPos, ok := world.Positions.Get(entity)
+		if !ok {
+			continue
+		}
+
+		targets := world.Positions.GetAllAt(drainPos.X, drainPos.Y)
+
+		for _, target := range targets {
+			if target != 0 && target != entity && target != s.ctx.CursorEntity {
+				// Skip other drains (handled separately)
+				if _, ok := world.Drains.Get(target); ok {
+					continue
+				}
+				s.handleCollisionAtPosition(world, target)
+			}
+		}
+	}
 }
 
 // updateDrainMovement handles purely clock-based drain movement toward cursor
@@ -593,69 +700,6 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 		// Save updated drain component
 		drain.LastMoveTime = now
 		world.Drains.Add(drainEntity, drain)
-	}
-}
-
-// updateEnergyDrain handles energy draining when drain is on cursor
-func (s *DrainSystem) updateEnergyDrain(world *engine.World) {
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-
-	drainEntities := world.Drains.All()
-	for _, drainEntity := range drainEntities {
-		drain, ok := world.Drains.Get(drainEntity)
-		if !ok {
-			continue
-		}
-
-		cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
-		if !ok {
-			panic(fmt.Errorf("cursor destroyed"))
-		}
-
-		drainPos, ok := world.Positions.Get(drainEntity)
-		if !ok {
-			panic(fmt.Errorf("drain destroyed"))
-		}
-
-		isOnCursor := drainPos.X == cursorPos.X && drainPos.Y == cursorPos.Y
-
-		if drain.IsOnCursor != isOnCursor {
-			drain.IsOnCursor = isOnCursor
-			world.Drains.Add(drainEntity, drain)
-		}
-
-		if isOnCursor {
-			now := timeRes.GameTime
-			if now.Sub(drain.LastDrainTime) >= constants.DrainEnergyDrainInterval {
-				s.ctx.State.AddEnergy(-constants.DrainEnergyDrainAmount)
-				drain.LastDrainTime = now
-				world.Drains.Add(drainEntity, drain)
-			}
-		}
-	}
-}
-
-// handleCollisions detects and processes collisions with entities at the drain's current position
-func (s *DrainSystem) handleCollisions(world *engine.World) {
-	entities := world.Drains.All()
-	for _, entity := range entities {
-		drainPos, ok := world.Positions.Get(entity)
-		if !ok {
-			panic(fmt.Errorf("drain destroyed"))
-		}
-
-		targets := world.Positions.GetAllAt(drainPos.X, drainPos.Y)
-
-		var toProcess []engine.Entity
-		for _, target := range targets {
-			if target != 0 && target != entity {
-				toProcess = append(toProcess, target)
-			}
-		}
-
-		for _, target := range toProcess {
-			s.handleCollisionAtPosition(world, target)
-		}
 	}
 }
 
