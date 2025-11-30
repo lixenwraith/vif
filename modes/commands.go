@@ -66,7 +66,7 @@ func handleNewCommand(ctx *engine.GameContext) bool {
 	// Clear any pending events from previous session
 	ctx.ResetEventQueue()
 
-	// Reset entire game state (handles all state including phase transition to Warmup)
+	// Reset entire game state using unified initState() method (same as app start)
 	ctx.State.Reset(ctx.PausableClock.Now())
 
 	// Recreate cursor entity

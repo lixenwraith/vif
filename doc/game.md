@@ -194,6 +194,7 @@ vi-fighter has four input modes, similar to vi/vim:
 - **Usage**: Type command, press `Enter` to execute
 - **Available Commands**:
   - `:quit` or `:q` - Exit the game
+  - `:new` or `:n` - Start a new game (instant restart, clears all entities and state)
   - `:boost` - Activate boost mode for 10 seconds (2x spawn rate, 2x energy)
   - `:debug` or `:d` - Show debug overlay with system state information
   - `:help` or `:h` - Show help overlay with game instructions
