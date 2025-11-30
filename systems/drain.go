@@ -48,11 +48,8 @@ func (s *DrainSystem) Priority() int {
 }
 
 // Update runs the drain system logic
-// Movement is purely clock-based (DrainMoveIntervalMs), independent of input events or frame rate
 func (s *DrainSystem) Update(world *engine.World, dt time.Duration) {
-	energy := s.ctx.State.GetEnergy()
-
-	// Process pending spawn queue first (staggered materialization)
+	// Process pending spawn queue first
 	s.processPendingSpawns(world)
 
 	// Update materialize animation if active
@@ -60,35 +57,25 @@ func (s *DrainSystem) Update(world *engine.World, dt time.Duration) {
 		s.updateMaterializers(world, dt)
 	}
 
-	// Multi-drain lifecycle based on energy and heat
+	// Multi-drain lifecycle based on heat (energy check removed - handled in Phase 6)
 	currentCount := world.Drains.Count()
 	pendingCount := len(s.pendingSpawns) + s.countActiveMaterializations(world)
 
-	if energy <= 0 {
-		// No energy: despawn all drains and cancel pending
-		if currentCount > 0 {
-			s.despawnAllDrains(world)
-		}
-		s.pendingSpawns = s.pendingSpawns[:0]
-	} else {
-		// Energy > 0: adjust drain count to match heat breakpoints
-		targetCount := s.calcTargetDrainCount()
-		effectiveCount := currentCount + pendingCount
+	targetCount := s.calcTargetDrainCount()
+	effectiveCount := currentCount + pendingCount
 
-		if effectiveCount < targetCount {
-			// Need more drains
-			s.queueDrainSpawns(world, targetCount-effectiveCount)
-		} else if currentCount > targetCount {
-			// Too many drains (heat dropped)
-			s.despawnExcessDrains(world, currentCount-targetCount)
-		}
+	if effectiveCount < targetCount {
+		// Need more drains
+		s.queueDrainSpawns(world, targetCount-effectiveCount)
+	} else if currentCount > targetCount {
+		// Too many drains (heat dropped)
+		s.despawnExcessDrains(world, currentCount-targetCount)
 	}
 
 	// Clock-based updates for active drains
 	if world.Drains.Count() > 0 {
 		s.updateDrainMovement(world)
-		s.updateEnergyDrain(world)
-		s.handleCollisions(world)
+		s.handleDrainInteractions(world) // Renamed from updateEnergyDrain + collisions
 	}
 }
 
@@ -131,10 +118,10 @@ func (s *DrainSystem) queueDrainSpawn(slot, targetX, targetY int, staggerIndex i
 }
 
 // calcTargetDrainCount returns the desired number of drains based on current heat
-// Formula: floor(heat / DrainBreakpointSize), capped at DrainMaxCount
+// Formula: floor(heat / 10), capped at DrainMaxCount
 func (s *DrainSystem) calcTargetDrainCount() int {
 	heat := s.ctx.State.GetHeat()
-	count := heat / constants.DrainBreakpointSize
+	count := heat / 10 // Integer division = floor
 	if count > constants.DrainMaxCount {
 		count = constants.DrainMaxCount
 	}
@@ -177,29 +164,48 @@ func (s *DrainSystem) getActiveDrainsBySpawnOrder(world *engine.World) []engine.
 	return result
 }
 
-// randomSpawnOffset returns a position with random ±DrainSpawnOffsetMax offset, clamped to bounds
-func (s *DrainSystem) randomSpawnOffset(baseX, baseY int, config *engine.ConfigResource) (int, int) {
-	offsetX := rand.Intn(constants.DrainSpawnOffsetMax*2+1) - constants.DrainSpawnOffsetMax
-	offsetY := rand.Intn(constants.DrainSpawnOffsetMax*2+1) - constants.DrainSpawnOffsetMax
+// randomSpawnOffset returns a valid position with random offset, clamped to bounds
+// Retries up to 10 times to find unoccupied cell
+func (s *DrainSystem) randomSpawnOffset(world *engine.World, baseX, baseY int, config *engine.ConfigResource) (int, int, bool) {
+	const maxRetries = 10
 
-	x := baseX + offsetX
-	y := baseY + offsetY
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		offsetX := rand.Intn(constants.DrainSpawnOffsetMax*2+1) - constants.DrainSpawnOffsetMax
+		offsetY := rand.Intn(constants.DrainSpawnOffsetMax*2+1) - constants.DrainSpawnOffsetMax
 
-	// Clamp to game bounds
-	if x < 0 {
-		x = 0
-	}
-	if x >= config.GameWidth {
-		x = config.GameWidth - 1
-	}
-	if y < 0 {
-		y = 0
-	}
-	if y >= config.GameHeight {
-		y = config.GameHeight - 1
+		x := baseX + offsetX
+		y := baseY + offsetY
+
+		// Clamp to game bounds
+		if x < 0 {
+			x = 0
+		}
+		if x >= config.GameWidth {
+			x = config.GameWidth - 1
+		}
+		if y < 0 {
+			y = 0
+		}
+		if y >= config.GameHeight {
+			y = config.GameHeight - 1
+		}
+
+		// Check if cell is occupied by another drain
+		entities := world.Positions.GetAllAt(x, y)
+		hasExistingDrain := false
+		for _, e := range entities {
+			if _, ok := world.Drains.Get(e); ok {
+				hasExistingDrain = true
+				break
+			}
+		}
+
+		if !hasExistingDrain {
+			return x, y, true
+		}
 	}
 
-	return x, y
+	return 0, 0, false // Failed to find valid position
 }
 
 // countActiveMaterializations returns number of drain slots currently materializing
@@ -223,9 +229,13 @@ func (s *DrainSystem) queueDrainSpawns(world *engine.World, count int) {
 		return
 	}
 
+	queued := 0
 	for i := 0; i < count; i++ {
-		targetX, targetY := s.randomSpawnOffset(cursorPos.X, cursorPos.Y, config)
-		s.queueDrainSpawn(i, targetX, targetY, i)
+		targetX, targetY, valid := s.randomSpawnOffset(world, cursorPos.X, cursorPos.Y, config)
+		if valid {
+			s.queueDrainSpawn(queued, targetX, targetY, queued)
+			queued++
+		}
 	}
 }
 
@@ -486,6 +496,12 @@ func (s *DrainSystem) materializeDrainAt(world *engine.World, slot, spawnX, spaw
 
 	world.Positions.Add(entity, pos)
 	world.Drains.Add(entity, drain)
+}
+
+// handleDrainInteractions handles energy drain and collisions
+func (s *DrainSystem) handleDrainInteractions(world *engine.World) {
+	s.updateEnergyDrain(world)
+	s.handleCollisions(world)
 }
 
 // updateDrainMovement handles purely clock-based drain movement toward cursor
