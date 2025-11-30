@@ -52,26 +52,40 @@ func (s *DrainSystem) Priority() int {
 func (s *DrainSystem) Update(world *engine.World, dt time.Duration) {
 	energy := s.ctx.State.GetEnergy()
 
-	drainActive := world.Drains.Count() > 0
-	materializersExist := world.Materializers.Count() > 0
-
-	// Lifecycle logic: spawn when energy > 0, despawn when energy <= 0
-	if energy > 0 && !drainActive && !s.hasPendingSpawns() && !materializersExist {
-		s.startMaterialize(world, 0) // slot 0 for single drain compatibility
-	} else if energy <= 0 && drainActive {
-		s.despawnAllDrains(world)
-	}
-
-	// Process pending spawn queue (staggered materialization)
+	// Process pending spawn queue first (staggered materialization)
 	s.processPendingSpawns(world)
 
 	// Update materialize animation if active
-	if materializersExist {
+	if world.Materializers.Count() > 0 {
 		s.updateMaterializers(world, dt)
 	}
 
-	// Clock-based updates: movement and energy drain occur on fixed intervals
-	if drainActive {
+	// Multi-drain lifecycle based on energy and heat
+	currentCount := world.Drains.Count()
+	pendingCount := len(s.pendingSpawns) + s.countActiveMaterializations(world)
+
+	if energy <= 0 {
+		// No energy: despawn all drains and cancel pending
+		if currentCount > 0 {
+			s.despawnAllDrains(world)
+		}
+		s.pendingSpawns = s.pendingSpawns[:0]
+	} else {
+		// Energy > 0: adjust drain count to match heat breakpoints
+		targetCount := s.calcTargetDrainCount()
+		effectiveCount := currentCount + pendingCount
+
+		if effectiveCount < targetCount {
+			// Need more drains
+			s.queueDrainSpawns(world, targetCount-effectiveCount)
+		} else if currentCount > targetCount {
+			// Too many drains (heat dropped)
+			s.despawnExcessDrains(world, currentCount-targetCount)
+		}
+	}
+
+	// Clock-based updates for active drains
+	if world.Drains.Count() > 0 {
 		s.updateDrainMovement(world)
 		s.updateEnergyDrain(world)
 		s.handleCollisions(world)
@@ -106,7 +120,7 @@ func (s *DrainSystem) processPendingSpawns(world *engine.World) {
 // queueDrainSpawn adds a drain spawn to the pending queue with stagger timing
 func (s *DrainSystem) queueDrainSpawn(slot, targetX, targetY int, staggerIndex int) {
 	currentTick := s.ctx.State.GetGameTicks()
-	scheduledTick := currentTick + uint64(staggerIndex*constants.DrainSpawnStaggerTicks)
+	scheduledTick := currentTick + uint64(staggerIndex)*uint64(constants.DrainSpawnStaggerTicks)
 
 	s.pendingSpawns = append(s.pendingSpawns, pendingDrainSpawn{
 		slot:          slot,
@@ -188,6 +202,50 @@ func (s *DrainSystem) randomSpawnOffset(baseX, baseY int, config *engine.ConfigR
 	return x, y
 }
 
+// countActiveMaterializations returns number of drain slots currently materializing
+func (s *DrainSystem) countActiveMaterializations(world *engine.World) int {
+	slots := make(map[int]bool)
+	entities := world.Materializers.All()
+	for _, e := range entities {
+		if mat, ok := world.Materializers.Get(e); ok {
+			slots[mat.DrainSlot] = true
+		}
+	}
+	return len(slots)
+}
+
+// queueDrainSpawns queues multiple drain spawns with stagger timing
+func (s *DrainSystem) queueDrainSpawns(world *engine.World, count int) {
+	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+
+	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
+	if !ok {
+		return
+	}
+
+	for i := 0; i < count; i++ {
+		targetX, targetY := s.randomSpawnOffset(cursorPos.X, cursorPos.Y, config)
+		s.queueDrainSpawn(i, targetX, targetY, i)
+	}
+}
+
+// despawnExcessDrains removes N drains using LIFO ordering (newest first)
+func (s *DrainSystem) despawnExcessDrains(world *engine.World, count int) {
+	if count <= 0 {
+		return
+	}
+
+	ordered := s.getActiveDrainsBySpawnOrder(world)
+	toRemove := count
+	if toRemove > len(ordered) {
+		toRemove = len(ordered)
+	}
+
+	for i := 0; i < toRemove; i++ {
+		s.despawnDrainWithFlash(world, ordered[i])
+	}
+}
+
 // despawnAllDrains removes all drain entities with flash effect
 func (s *DrainSystem) despawnAllDrains(world *engine.World) {
 	drains := world.Drains.All()
@@ -206,37 +264,9 @@ func (s *DrainSystem) despawnDrainWithFlash(world *engine.World, entity engine.E
 }
 
 // triggerDespawnFlash triggers a destruction flash effect at the given position
-// TODO: Integrate with FlashSystem when implementing visual effects
 func (s *DrainSystem) triggerDespawnFlash(world *engine.World, x, y int) {
-	// Placeholder for flash effect integration
-	// Will be connected to FlashSystem or similar visual effect mechanism
-	_ = world
-	_ = x
-	_ = y
-}
-
-// despawnDrain removes the drain entity
-func (s *DrainSystem) despawnDrain(world *engine.World) {
-	drains := world.Drains.All()
-	for _, e := range drains {
-		world.DestroyEntity(e)
-	}
-}
-
-// startMaterialize initiates materialization at cursor position for a given slot
-// Preserved for backward compatibility with single-drain behavior
-func (s *DrainSystem) startMaterialize(world *engine.World, slot int) {
-	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
-
-	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
-	if !ok {
-		panic(fmt.Errorf("cursor destroyed"))
-	}
-
-	// Apply random offset for multi-drain spawn distribution
-	targetX, targetY := s.randomSpawnOffset(cursorPos.X, cursorPos.Y, config)
-
-	s.startMaterializeAt(world, slot, targetX, targetY)
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+	SpawnDestructionFlash(world, x, y, constants.DrainChar, timeRes.GameTime)
 }
 
 // startMaterializeAt initiates the materialize animation for a specific slot and position
@@ -456,8 +486,6 @@ func (s *DrainSystem) materializeDrainAt(world *engine.World, slot, spawnX, spaw
 
 	world.Positions.Add(entity, pos)
 	world.Drains.Add(entity, drain)
-
-	_ = slot // Slot used for tracking, drain component doesn't need it
 }
 
 // updateDrainMovement handles purely clock-based drain movement toward cursor

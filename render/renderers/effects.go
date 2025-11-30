@@ -188,10 +188,10 @@ func (e *EffectsRenderer) drawRemovalFlashes(ctx render.RenderContext, world *en
 		}
 
 		// Calculate elapsed time for fade effect
-		elapsed := ctx.GameTime.Sub(flash.StartTime).Milliseconds()
+		elapsed := ctx.GameTime.Sub(flash.StartTime)
 
 		// Skip if flash has expired (cleanup will handle removal)
-		if elapsed >= int64(flash.Duration) {
+		if elapsed >= flash.Duration {
 			continue
 		}
 

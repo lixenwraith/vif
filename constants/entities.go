@@ -77,5 +77,5 @@ const (
 const (
 	// DestructionFlashDuration is how long the destruction flash effect lasts in milliseconds
 	// Used for drain collision, decay terminal, cleaner sweep
-	DestructionFlashDuration = 500
+	DestructionFlashDuration = 500 * time.Millisecond
 )

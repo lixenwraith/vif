@@ -32,7 +32,7 @@ func (s *FlashSystem) Update(world *engine.World, dt time.Duration) {
 			continue
 		}
 
-		if now.Sub(flash.StartTime).Milliseconds() >= int64(flash.Duration) {
+		if now.Sub(flash.StartTime) >= flash.Duration {
 			world.DestroyEntity(entity)
 		}
 	}

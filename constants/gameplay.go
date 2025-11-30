@@ -71,9 +71,9 @@ const (
 	DrainBreakpointSize = 10
 
 	// DrainSpawnOffsetMax is the maximum random offset from cursor position (±N)
-	DrainSpawnOffsetMax = 5
+	DrainSpawnOffsetMax = 10
 
 	// DrainSpawnStaggerTicks is game ticks between staggered spawns
 	// Set to 0 for simultaneous spawning
-	DrainSpawnStaggerTicks = 1
+	DrainSpawnStaggerTicks = 4
 )
