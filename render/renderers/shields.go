@@ -26,7 +26,17 @@ func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, b
 		shield, okS := world.Shields.Get(entity)
 		pos, okP := world.Positions.Get(entity)
 
-		if !okS || !okP || !shield.Active {
+		if !okS || !okP {
+			continue
+		}
+
+		// Shield only renders if Sources != 0 AND Energy > 0
+		if shield.Sources == 0 {
+			continue
+		}
+
+		// Check Energy via RenderContext
+		if ctx.Energy <= 0 {
 			continue
 		}
 

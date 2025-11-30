@@ -10,7 +10,6 @@ import (
 // It is a geometric field effect that modifies visual rendering and physics interactions
 // Shield is active when Sources != 0 AND Energy > 0
 type ShieldComponent struct {
-	Active        bool        // DEPRECATED: Will be removed in Phase 2
 	Sources       uint8       // Bitmask of active sources (ShieldSourceBoost, etc)
 	RadiusX       float64     // Horizontal radius in grid cells
 	RadiusY       float64     // Vertical radius in grid cells

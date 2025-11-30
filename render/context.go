@@ -20,6 +20,7 @@ type RenderContext struct {
 	GameHeight  int
 	Width       int
 	Height      int
+	Energy      int // Current energy for shield visibility check
 }
 
 // NewRenderContextFromGame creates a RenderContext from engine.GameContext and TimeResource
@@ -37,5 +38,6 @@ func NewRenderContextFromGame(ctx *engine.GameContext, timeRes *engine.TimeResou
 		GameHeight:  ctx.GameHeight,
 		Width:       ctx.Width,
 		Height:      ctx.Height,
+		Energy:      ctx.State.GetEnergy(),
 	}
 }

@@ -22,37 +22,54 @@ func (bs *BoostSystem) Priority() int {
 	return constants.PriorityBoost
 }
 
-// Update handles status bar timer update and shield component lifecycle anchored on cursor
+// Update handles boost timer and shield Sources bitmask management
 func (bs *BoostSystem) Update(world *engine.World, dt time.Duration) {
-	// Fetch resources
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	now := timeRes.GameTime
 
-	// Update timer state
 	bs.ctx.State.UpdateBoostTimerAtomic(now)
 
-	// Sync Shield component with Boost state
 	boostEnabled := bs.ctx.State.GetBoostEnabled()
 	cursorEntity := bs.ctx.CursorEntity
 
-	hasShield := world.Shields.Has(cursorEntity)
+	shield, hasShield := world.Shields.Get(cursorEntity)
 
 	if boostEnabled {
 		if !hasShield {
-			// Create shield component
-			shield := components.ShieldComponent{
-				Active:     true,
-				RadiusX:    constants.ShieldRadiusX,
-				RadiusY:    constants.ShieldRadiusY,
-				Color:      render.RgbShieldBase,
-				MaxOpacity: constants.ShieldMaxOpacity,
+			// Create shield with SourceBoost set
+			shield = components.ShieldComponent{
+				Sources:       constants.ShieldSourceBoost,
+				RadiusX:       constants.ShieldRadiusX,
+				RadiusY:       constants.ShieldRadiusY,
+				Color:         render.RgbShieldBase,
+				MaxOpacity:    constants.ShieldMaxOpacity,
+				LastDrainTime: now,
 			}
+			world.Shields.Add(cursorEntity, shield)
+		} else if shield.Sources&constants.ShieldSourceBoost == 0 {
+			// Add SourceBoost to existing shield
+			shield.Sources |= constants.ShieldSourceBoost
 			world.Shields.Add(cursorEntity, shield)
 		}
 	} else {
-		if hasShield {
-			// Remove shield when boost is disabled
-			world.Shields.Remove(cursorEntity)
+		if hasShield && shield.Sources&constants.ShieldSourceBoost != 0 {
+			// Clear SourceBoost flag
+			shield.Sources &^= constants.ShieldSourceBoost
+			if shield.Sources == 0 {
+				// No sources remain - remove component
+				world.Shields.Remove(cursorEntity)
+			} else {
+				world.Shields.Add(cursorEntity, shield)
+			}
 		}
 	}
+}
+
+// IsShieldActive returns true if shield has sources AND energy > 0
+func IsShieldActive(world *engine.World, cursorEntity engine.Entity, state *engine.GameState) bool {
+	shield, ok := world.Shields.Get(cursorEntity)
+	if !ok {
+		return false
+	}
+	return shield.Sources != 0 && state.GetEnergy() > 0
 }
