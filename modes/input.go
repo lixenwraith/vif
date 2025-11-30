@@ -96,7 +96,8 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 	// Special keys - wrapped in RunSafe
 	switch ev.Key() {
 	case tcell.KeyUp, tcell.KeyDown, tcell.KeyLeft, tcell.KeyRight,
-		tcell.KeyHome, tcell.KeyEnd, tcell.KeyTab, tcell.KeyEnter:
+		tcell.KeyHome, tcell.KeyEnd, tcell.KeyTab, tcell.KeyEnter,
+		tcell.KeyBackspace, tcell.KeyBackspace2:
 		h.ctx.World.RunSafe(func() {
 			h.handleNormalModeSpecialKeys(ev)
 		})
@@ -166,6 +167,10 @@ func (h *InputHandler) handleNormalModeSpecialKeys(ev *tcell.EventKey) {
 		result := MotionLineEnd(h.ctx, pos.X, pos.Y, 1)
 		OpMove(h.ctx, result, '$')
 		h.ctx.State.SetHeat(0)
+
+	case tcell.KeyBackspace, tcell.KeyBackspace2:
+		result := MotionLeft(h.ctx, pos.X, pos.Y, 1)
+		OpMove(h.ctx, result, 'h')
 
 	case tcell.KeyTab:
 		energy := h.ctx.State.GetEnergy()
@@ -278,6 +283,16 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 		})
 		return true
 
+	case tcell.KeyBackspace, tcell.KeyBackspace2:
+		h.ctx.World.RunSafe(func() {
+			p, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+			if ok && p.X > 0 {
+				p.X--
+				h.ctx.World.Positions.Add(h.ctx.CursorEntity, p)
+			}
+		})
+		return true
+
 	case tcell.KeyTab:
 		h.ctx.World.RunSafe(func() {
 			energy := h.ctx.State.GetEnergy()
@@ -314,6 +329,24 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 					Timestamp:  h.ctx.PausableClock.Now(),
 				}
 				h.ctx.AudioEngine.SendState(cmd)
+			}
+		})
+		return true
+
+	case tcell.KeyEnter:
+		h.ctx.World.RunSafe(func() {
+			currentHeat := h.ctx.State.GetHeat()
+			if currentHeat >= 10 {
+				h.ctx.State.AddHeat(-10)
+
+				cursorPos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+				if ok {
+					payload := &engine.DirectionalCleanerPayload{
+						OriginX: cursorPos.X,
+						OriginY: cursorPos.Y,
+					}
+					h.ctx.PushEvent(engine.EventDirectionalCleanerRequest, payload, h.ctx.PausableClock.Now())
+				}
 			}
 		})
 		return true
