@@ -63,6 +63,9 @@ func handleNewCommand(ctx *engine.GameContext) bool {
 	// Clear all entities from the world
 	clearAllEntities(ctx.World)
 
+	// Clear any pending events from previous session
+	ctx.ResetEventQueue()
+
 	// Reset entire game state (handles all state including phase transition to Warmup)
 	ctx.State.Reset(ctx.PausableClock.Now())
 

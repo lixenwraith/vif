@@ -509,3 +509,18 @@ func (eq *EventQueue) Len() int {
 	}
 	return int(available)
 }
+
+// Reset clears the event queue, removing all pending events
+// Not thread-safe against concurrent Push/Consume operations;
+// MUST be called within a safe context (e.g., world lock during reset)
+func (eq *EventQueue) Reset() {
+	eq.head.Store(0)
+	eq.tail.Store(0)
+
+	// Reset published flags and clear events to release references
+	var zeroEvent GameEvent
+	for i := range eq.events {
+		eq.published[i].Store(false)
+		eq.events[i] = zeroEvent
+	}
+}

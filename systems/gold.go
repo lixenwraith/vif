@@ -44,7 +44,6 @@ func (s *GoldSystem) Update(world *engine.World, dt time.Duration) {
 	phaseSnapshot := s.ctx.State.ReadPhaseState(now)
 
 	// Gold spawning: Only in PhaseNormal when no gold is active
-	// Bootstrap delay is handled by ClockScheduler (PhaseBootstrap -> PhaseNormal transition)
 	if phaseSnapshot.Phase == engine.PhaseNormal && !goldSnapshot.Active {
 		s.spawnGold(world)
 	}

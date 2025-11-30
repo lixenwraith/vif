@@ -395,3 +395,9 @@ func (ctx *GameContext) PushEvent(eventType EventType, payload any, now time.Tim
 	}
 	ctx.eventQueue.Push(event)
 }
+
+// ResetEventQueue clears all pending events from the queue
+// Must be called inside a RunSafe block or during initialization
+func (ctx *GameContext) ResetEventQueue() {
+	ctx.eventQueue.Reset()
+}
