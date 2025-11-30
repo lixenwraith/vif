@@ -94,7 +94,7 @@ Vi-fighter uses a **compile-time generics-based ECS** (Go 1.18+) that eliminates
 **World Structure:**
 ```go
 type World struct {
-    // Global resource store (Phase 2: Resource System)
+    // Global resource store
     Resources      *ResourceStore  // Thread-safe global data (Time, Config, Input)
 
     // Explicit typed stores (public for system access)
@@ -160,12 +160,6 @@ func (s *MySystem) Update(world *engine.World, dt time.Duration) {
 
     // ... system logic using resources ...
 }
-
-// ❌ INCORRECT: Accessing via GameContext (legacy pattern)
-func (s *MySystem) Update(world *engine.World, dt time.Duration) {
-    width := s.ctx.GameWidth   // DEPRECATED - use ConfigResource instead
-    now := s.ctx.TimeProvider.Now()  // DEPRECATED - use TimeResource instead
-}
 ```
 
 **Resource Update Cycle:**
@@ -175,12 +169,6 @@ Resources are updated at the start of each frame/tick by the main game loop and 
 2. **Input Processing**: Update `InputResource` with current mode and command text
 3. **System Updates**: Systems read from Resources via `MustGetResource`
 4. **Tick Updates** (ClockScheduler): Update `TimeResource` for scheduled systems
-
-**Migration Status:**
-The Resource System is being gradually adopted across all systems (Phase 2.5):
-- ✅ **Migrated**: DecaySystem, CleanerSystem, DrainSystem, SpawnSystem, NuggetSystem, EnergySystem, BoostSystem, GoldSystem
-- 🔄 **In Progress**: (All core systems migrated as of Phase 2.5)
-- **Legacy Fields**: `GameContext.GameWidth`, `GameContext.GameHeight`, `GameContext.TimeProvider` remain for backward compatibility but are deprecated
 
 **Thread Safety:**
 - **ResourceStore**: Protected by internal `sync.RWMutex`
@@ -396,12 +384,12 @@ func (gs *GameState) Reset(now time.Time) {
 
 #### State Access Patterns
 
-**Phase 2: Resource-Based Access (Current Pattern):**
+**Resource-Based Access:**
 Systems fetch global data (Time, Config, Input) from `World.Resources`, and game state from `GameContext.State`:
 
 ```go
 func (s *MySystem) Update(world *engine.World, dt time.Duration) {
-    // ✅ PHASE 2: Fetch resources at start of Update()
+    // ✅ Fetch resources at start of Update()
     config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
     timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 
@@ -422,27 +410,16 @@ func (s *MySystem) Update(world *engine.World, dt time.Duration) {
 }
 ```
 
-**Legacy Pattern (Deprecated - Phase 1):**
-```go
-// ❌ DEPRECATED: Accessing dimensions/time via GameContext
-width := s.ctx.GameWidth              // Use ConfigResource instead
-height := s.ctx.GameHeight            // Use ConfigResource instead
-now := s.ctx.TimeProvider.Now()       // Use TimeResource instead
-```
-
-**GameContext Role (Post-Migration):**
+**GameContext Role:**
 - **Primary Purpose**: OS/Window management, Event routing, State orchestration
-- **Retained Responsibilities**:
+- **Responsibilities**:
   - `GameState` access via `ctx.State` (Heat, Energy, Boost, Phase, etc.)
   - `EventQueue` access via `ctx.PushEvent()` (consumption handled by EventRouter)
   - `AudioEngine` access via `ctx.AudioEngine.PlaySound()`
   - Input handling methods (mode transitions, motion commands)
   - `World` reference (ECS access)
-- **Deprecated Fields** (Use Resources instead):
-  - ~~`ctx.GameWidth`~~ → Use `ConfigResource.GameWidth`
-  - ~~`ctx.GameHeight`~~ → Use `ConfigResource.GameHeight`
-  - ~~`ctx.TimeProvider.Now()`~~ → Use `TimeResource.GameTime`
-- **Cursor Position Cache**: `CursorX`, `CursorY` fields cache ECS position for motion handlers
+  - `CursorX`, `CursorY` fields cache ECS position for motion handlers
+- **Note**: Global data (dimensions, time) accessed via Resources, not GameContext
   - MUST be synced FROM ECS before use: `pos, _ := ctx.World.Positions.Get(ctx.CursorEntity); ctx.CursorX = pos.X`
   - MUST be synced TO ECS after modification: `ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY})`
 
@@ -479,7 +456,7 @@ census := spawnSystem.runCensus(world)
 // Returns: ColorCensus{BlueBright: 5, BlueNormal: 3, ...}
 // Used by: SpawnSystem for 6-color limit enforcement
 
-// Cursor Position (ECS-based, legacy atomics deprecated)
+// Cursor Position (ECS-based)
 // Read directly from ECS (cursor entity with PositionComponent)
 pos, ok := ctx.World.Positions.Get(ctx.CursorEntity)
 // GameContext caches position for motion handlers (synced from/to ECS)
@@ -2096,19 +2073,34 @@ for _, entity := range entitiesAtCursor {
 - **Cost**: Jumping via `Tab` costs 10 Energy points.
 
 ### Drain System
-- **Purpose**: A hostile entity that drains energy if the player is idle or positioned on it.
-- **Trigger**: Spawns when Energy > 0. Despawns when Energy <= 0.
-- **Materialize Animation**: Before drain spawns, a 1-second visual telegraph animation occurs
+- **Purpose**: Hostile entities that drain energy, with count scaling based on heat meter.
+- **Multi-Drain Mechanics**:
+  - **Spawn Condition**: Energy > 0 AND Heat >= 10
+  - **Drain Count**: `floor(Heat / DrainBreakpointSize)`, maximum `DrainMaxCount` (10)
+  - **Spawn Position**: Random offset (±`DrainSpawnOffsetMax`) from cursor position
+  - **Staggered Spawns**: Drains spawn sequentially with `DrainSpawnStaggerTicks` game ticks between each
+  - **LIFO Ordering**: SpawnOrder field tracks spawn sequence for despawn priority
+  - **Despawn Triggers**:
+    - All drains despawn when Energy <= 0
+    - Excess drains despawn (LIFO - newest first) when heat decreases below breakpoints
+    - Despawn triggers destruction flash effect
+- **Materialize Animation**: Before each drain spawns, a 1-second visual telegraph animation occurs
   - Four cyan block characters ('█') converge from screen edges (top, bottom, left, right)
   - Spawners originate from off-screen positions and move toward locked target position
   - Physics-based movement with sub-pixel precision and gradient trail effects
   - Target position locked at animation start (cursor position at trigger time)
   - Drain materializes at target position when all four spawners converge
   - Animation pattern follows CleanerSystem physics model (velocity integration, trail rendering)
-- **Movement**: Moves toward the cursor every 1 second (independent of frame rate).
-- **Effect**: If positioned on top of the cursor, drains 10 points every 1 second.
+  - Integration with MaterializeComponent (DrainSlot grouping)
+- **Movement**: Each drain moves toward the cursor every 1 second (independent of frame rate).
+- **Effect**: Each drain positioned on top of the cursor drains 10 points every 1 second.
 - **Visual**: Rendered as '╬' (Light Cyan).
-- **Lifecycle**: DrainSystem manages materialize animation internally via MaterializeComponent entities
+- **Lifecycle**: DrainSystem manages heat-based spawn/despawn logic with pending spawn queue
+- **Constants** (`constants/gameplay.go`):
+  - `DrainMaxCount`: 10 (maximum drains at 100% heat)
+  - `DrainBreakpointSize`: 10 (heat units per drain slot)
+  - `DrainSpawnOffsetMax`: 10 (random position offset range)
+  - `DrainSpawnStaggerTicks`: 4 (game ticks between spawns)
 
 ### Cleaner System
 

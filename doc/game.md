@@ -300,20 +300,29 @@ Mode      Last command          Boost timer  Decay timer   Total energy  Actions
 - **Grid** - White text, ping grid timer (only when active)
 - **Boost** - Pink background, boost multiplier timer (only when active)
 
-### Drain Entity
+### Drain Entities
 
-When energy is positive, a hostile drain entity appears on screen:
+When energy is positive and heat is high, hostile drain entities appear on screen:
 
-- **Spawn Telegraph**: Before the drain appears, watch for a 1-second warning animation
+- **Spawn Conditions**:
+  - Energy > 0 AND Heat >= 10
+  - Number of drains scales with heat: one drain per 10 heat (0-10 drains maximum)
+  - Example: 25 heat = 2 drains, 50 heat = 5 drains, 100 heat = 10 drains
+- **Spawn Telegraph**: Before each drain appears, watch for a 1-second warning animation
   - Four bright cyan blocks ('█') converge from the screen edges
-  - The blocks move toward where your cursor was when you gained energy
+  - The blocks move toward a random position near your cursor (±10 characters offset)
   - Trail effects show the path of each converging block
   - The drain materializes at the convergence point
   - **Strategic Note**: The spawn location is locked when the animation starts, so moving your cursor won't change where the drain appears
+  - **Staggered Spawns**: Multiple drains spawn sequentially (4 game ticks apart) for visual clarity
 - **Visual**: Light cyan ╬ character (cross)
-- **Movement**: Pursues cursor, moving 1 character per second
-- **Effect**: Drains 10 energy per second when positioned on cursor
+- **Movement**: Each drain pursues cursor independently, moving 1 character per second
+- **Effect**: Each drain drains 10 energy per second when positioned on cursor (multiple drains stack!)
 - **Collisions**: Destroys sequences, nuggets, and gold on contact
+- **Despawn Triggers**:
+  - All drains despawn when energy drops to 0 or below
+  - Excess drains despawn when heat decreases (newest drains removed first)
+  - Each despawn triggers a destruction flash effect
 
 ### Visual Effects
 
@@ -633,7 +642,7 @@ When all characters of one color/level are cleared, that slot opens for new spaw
 4. **Let decay happen** - Don't panic about the timer
 5. **Chase gold** aggressively - easiest way to build heat
 6. **Don't use delete** (`x`, `dd`, etc.) - it resets heat
-7. **Understand Drain**: Once energy > 0, watch for four cyan blocks converging (1-second warning), then a cyan ╬ character spawns at the convergence point and chases you - keep moving to avoid losing energy
+7. **Understand Drains**: When energy > 0 and heat >= 10, drains start spawning - watch for cyan blocks converging (1-second warning), then cyan ╬ characters spawn and chase you. Higher heat = more drains (up to 10 at max heat). Keep moving to avoid energy loss!
 
 **Motion Practice:**
 - Use `0` and `$` to jump to line edges
@@ -659,10 +668,13 @@ When all characters of one color/level are cleared, that slot opens for new spaw
    - `w`, `b`, `e` instead of repeated `l`/`h`
    - `/<pattern>` to find specific text
 5. **Drain management**:
-   - Stay mobile - drain moves 1 character per second
-   - Plan movement paths that keep distance from drain
-   - Avoid letting drain path intersect with gold or high-value targets
-   - Consider drain position when selecting next typing target
+   - Stay mobile - each drain moves 1 character per second
+   - Higher heat = more drains (1 per 10 heat, up to 10 drains at max heat)
+   - Multiple drains can stack damage (10 energy/sec each)
+   - Plan movement paths that keep distance from all active drains
+   - Avoid letting drain paths intersect with gold or high-value targets
+   - Consider all drain positions when selecting next typing target
+   - Heat management affects drain count - lowering heat despawns excess drains
 
 **Heat Recovery:**
 - If heat drops below 20, hunt for gold
@@ -718,13 +730,17 @@ When all characters of one color/level are cleared, that slot opens for new spaw
    - Take calculated risks: typing one Red to clear screen space
 
 8. **Advanced drain tactics**:
-   - **Telegraph awareness**: The 1-second materialize animation gives you time to reposition before drain spawns
-   - **Target lock exploit**: Spawn location is locked at animation start - move cursor away from high-value areas before gaining energy
-   - Track drain position constantly - it moves every second
-   - Use drain movement prediction to clear targets before drain reaches them
-   - Strategic positioning: lead drain away from high-value target clusters
-   - Exploit drain path: intentionally let drain destroy Red sequences (saves typing penalty)
-   - Emergency: if overwhelmed, consider letting energy drop to zero to despawn drain and reset
+   - **Heat-based spawn control**: Drain count = floor(heat / 10) - manage heat to control pressure
+   - **Telegraph awareness**: The 1-second materialize animation per drain gives you time to reposition before each spawns
+   - **Stagger timing**: Drains spawn 4 game ticks apart (200ms) - use this window to reposition between spawns
+   - **Target lock exploit**: Each spawn location is locked at animation start - move cursor away from high-value areas before gaining energy
+   - **Multi-drain tracking**: Track all drain positions constantly - each moves independently every second
+   - **Stacking prevention**: Avoid positions where multiple drains converge (10 energy/sec × drain count)
+   - **Heat manipulation**: Intentionally lower heat to despawn excess drains (newest despawn first)
+   - **Strategic positioning**: Lead drains away from high-value target clusters, creating safe typing zones
+   - **Exploit drain paths**: Intentionally let drains destroy Red sequences (saves typing penalty)
+   - **Emergency reset**: If overwhelmed by drains, consider letting energy drop to zero to despawn all drains and restart
+   - **Maximum pressure**: At 100 heat with 10 drains active, staying still costs 100 energy/sec - constant movement is mandatory
    - Gold sequence timing: be aware drain can trigger gold completion if it collides with gold
 
 ---

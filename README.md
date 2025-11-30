@@ -22,7 +22,7 @@ vi-fighter features a dynamic typing system with multiple sequence types and gam
 - **Decay System**: Automated pressure that degrades sequences over time
 - **Cleaners**: Special mechanic that clears Red sequences - horizontal sweeps (gold at max heat) or 4-directional bursts (nugget at max heat, Enter key)
 - **Shields**: Visual protective field effects with elliptical gradients that can be attached to entities
-- **Drain**: Pressure mechanic with visual telegraph animation, appears at positive energy, pursues cursor, and drains energy over time
+- **Multi-Drain System**: Heat-based hostile entities (0-10 drains scaling with heat meter), spawn with staggered telegraph animations at random offset from cursor, pursue player and drain energy, despawn with LIFO ordering when heat decreases, and trigger destruction flash effects
 - **Runtime Metrics**: Real-time performance tracking (FPS, Game Ticks, APM) displayed in status bar
 
 ## Vi Motion Commands
