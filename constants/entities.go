@@ -10,17 +10,8 @@ const (
 	// CleanerAnimationDuration is the total time for a cleaner to sweep across the screen
 	CleanerAnimationDuration = 1.0 * time.Second
 
-	// CleanerTrailFadeTime is how long the trail takes to fade (seconds)
-	CleanerTrailFadeTime = 0.3
-
 	// CleanerTrailLength is the number of previous positions tracked for the fade trail effect
 	CleanerTrailLength = 10
-
-	// CleanerFPS is the target frame rate for smooth cleaner animation
-	CleanerFPS = 60
-
-	// CleanerRemovalFlashDuration is how long the removal flash effect lasts in milliseconds
-	CleanerRemovalFlashDuration = 150
 
 	// CleanerDeduplicationWindow is the number of frames to prevent duplicate spawns
 	CleanerDeduplicationWindow = 30

@@ -61,3 +61,19 @@ const (
 	// CursorExclusionY is vertical distance from cursor that blocks spawn
 	CursorExclusionY = 3
 )
+
+// Drain System
+const (
+	// DrainMaxCount is the maximum number of drain entities (at 100% heat)
+	DrainMaxCount = 10
+
+	// DrainBreakpointSize is heat units per drain slot (100 heat / 10 drains)
+	DrainBreakpointSize = 10
+
+	// DrainSpawnOffsetMax is the maximum random offset from cursor position (±N)
+	DrainSpawnOffsetMax = 5
+
+	// DrainSpawnStaggerTicks is game ticks between staggered spawns
+	// Set to 0 for simultaneous spawning
+	DrainSpawnStaggerTicks = 1
+)

@@ -15,24 +15,23 @@ const (
 	MaterializeFromRight
 )
 
-// MaterializeComponent represents a converging spawn animation entity
-// Four spawners (one per edge) converge to a target position before
-// the actual drain entity materializes
+// MaterializeComponent represents a spawner entity that converges toward a target position
+// Used for drain materialization animation (4 spawners converge from screen edges)
+// Multiple sets of materializers can be active simultaneously (grouped by DrainSlot)
 type MaterializeComponent struct {
 	// Physics state (sub-pixel precision)
 	PreciseX float64
 	PreciseY float64
 
-	// Movement vector (units per second)
+	// Movement vector (pixels per second)
 	VelocityX float64
 	VelocityY float64
 
-	// Target coordinates where spawner converges
+	// Target position (where spawners converge)
 	TargetX int
 	TargetY int
 
 	// Ring buffer trail (zero-allocation updates)
-	// Index 0 is the current head position
 	TrailRing [constants.MaterializeTrailLength]core.Point
 	TrailHead int // Most recent point index
 	TrailLen  int // Valid point count
@@ -49,4 +48,7 @@ type MaterializeComponent struct {
 
 	// Arrived flag - set when spawner reaches target
 	Arrived bool
+
+	// Drain slot association (-1 for non-drain materializers, 0-9 for drain slots)
+	DrainSlot int
 }

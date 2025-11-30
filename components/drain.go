@@ -9,4 +9,5 @@ type DrainComponent struct {
 	LastMoveTime  time.Time // Last time the drain moved (DrainMoveInterval)
 	LastDrainTime time.Time // Last time energy was drained (DrainEnergyDrainInterval)
 	IsOnCursor    bool      // Cached state for efficient drain checks
+	SpawnOrder    int64     // Monotonic counter for LIFO despawn ordering (higher = newer)
 }
