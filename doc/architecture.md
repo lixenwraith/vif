@@ -915,7 +915,7 @@ Component (marker interface)
 ├── DrainComponent {X, Y, LastMoveTime, LastDrainTime, IsOnCursor}
 ├── CursorComponent {ErrorFlashEnd, HeatDisplay}
 ├── ProtectionComponent {Mask, ExpiresAt}
-└── ShieldComponent {Active, RadiusX, RadiusY, Color, MaxOpacity}
+└── ShieldComponent {Sources, RadiusX, RadiusY, Color, MaxOpacity, LastDrainTime}
 ```
 
 **Note**: All component types are defined in the `components/` directory.
@@ -1931,20 +1931,21 @@ for _, entity := range entitiesAtCursor {
 - **Multi-entity support**: Properly handles cursor/character overlap without masking
 
 ### Boost System
-- **Activation Condition**: Heat reaches maximum value (screen width)
+- **Activation Condition**: Heat reaches maximum (100)
 - **Initial Duration**: 500ms (BoostExtensionDuration constant)
-- **Color Binding**: Boost is tied to the color (Blue or Green) of the character that triggered max heat
+- **Color Binding**: Tied to color (Blue or Green) that triggered max heat
 - **Extension Mechanic**:
-  - Typing matching color: Extends boost timer by 500ms per character
-  - Typing different color: Deactivates boost immediately (heat remains at max)
-  - Typing red or incorrect: Deactivates boost and resets heat to 0
-- **Effect**: Heat gain multiplier of 2× (+2 heat per character instead of +1)
+  - Matching color: +500ms per character
+  - Different color: Deactivates immediately (heat remains max)
+  - Red or incorrect: Deactivates and resets heat to 0
+- **Effects**:
+  - Heat gain multiplier: 2× (+2 per character)
+  - Shield activation: Sets `ShieldSourceBoost` in ShieldComponent.Sources
 - **Visual Indicator**: Pink background "Boost: X.Xs" in status bar
-- **Implementation**: Managed within EnergySystem (not a separate system)
-  - Atomic state: BoostEnabled (Bool), BoostEndTime (Int64), BoostColor (Int32)
-  - Timer checked each frame via `UpdateBoostTimerAtomic()` (CAS pattern)
-  - Color matching: Typing same color extends by 500ms via atomic update
-  - No separate boost entities - pure state management
+- **Implementation**: BoostSystem (priority 5) manages lifecycle
+  - Sets/clears `ShieldSourceBoost` flag on activation/deactivation
+  - Shield component persists; only Sources bitmask changes
+  - Timer expiration checked each tick
 
 ### Gold System
 - **Trigger**: Spawns when decay animation completes (transitions to PhaseNormal)
@@ -1969,32 +1970,33 @@ for _, entity := range entitiesAtCursor {
 ### Drain System
 - **Purpose**: Hostile entities that drain energy, with count scaling based on heat meter.
 - **Multi-Drain Mechanics**:
-  - **Spawn Condition**: Energy > 0 AND Heat >= 10
-  - **Drain Count**: `floor(Heat / DrainBreakpointSize)`, maximum `DrainMaxCount` (10)
-  - **Spawn Position**: Random offset (±`DrainSpawnOffsetMax`) from cursor position
-  - **Staggered Spawns**: Drains spawn sequentially with `DrainSpawnStaggerTicks` game ticks between each
+  - **Spawn Condition**: Heat >= 10
+  - **Drain Count**: `floor(Heat / 10)`, maximum 10
+  - **Spawn Position**: Random offset (±10) from cursor, skips occupied cells
+  - **Staggered Spawns**: 4 game ticks between spawns
   - **LIFO Ordering**: SpawnOrder field tracks spawn sequence for despawn priority
   - **Despawn Triggers**:
-    - All drains despawn when Energy <= 0
-    - Excess drains despawn (LIFO - newest first) when heat decreases below breakpoints
+    - Energy <= 0 AND Shield inactive (Sources == 0 OR Energy <= 0)
+    - Excess drains despawn (LIFO - newest first) when heat decreases
+    - Cursor collision without shield active
+    - Drain-drain collision (multiple drains same cell)
     - Despawn triggers destruction flash effect
-- **Materialize Animation**: Before each drain spawns, a 1-second visual telegraph animation occurs
-  - Four cyan block characters ('█') converge from screen edges (top, bottom, left, right)
-  - Spawners originate from off-screen positions and move toward locked target position
-  - Physics-based movement with sub-pixel precision and gradient trail effects
-  - Target position locked at animation start (cursor position at trigger time)
-  - Drain materializes at target position when all four spawners converge
-  - Animation pattern follows CleanerSystem physics model (velocity integration, trail rendering)
-  - Integration with MaterializeComponent (DrainSlot grouping)
-- **Movement**: Each drain moves toward the cursor every 1 second (independent of frame rate).
-- **Effect**: Each drain positioned on top of the cursor drains 10 points every 1 second.
-- **Visual**: Rendered as '╬' (Light Cyan).
-- **Lifecycle**: DrainSystem manages heat-based spawn/despawn logic with pending spawn queue
+- **Materialize Animation**: 1-second visual telegraph before spawn
+  - Four cyan blocks ('█') converge from screen edges
+  - Physics-based movement with sub-pixel precision and gradient trails
+  - Target position locked at animation start
+- **Movement**: Toward cursor every 1 second (clock-based).
+- **Collision Mechanics**:
+  - **Drain-Drain**: Multiple drains at same cell mutually destroy
+  - **Cursor (No Shield)**: -10 Heat, drain despawns
+  - **Cursor (Shield Active)**: Energy drain only, no heat loss, drain persists
+  - **Shield Zone**: Drains inside shield ellipse drain 100 energy/tick
+- **Visual**: '╬' (Light Cyan).
 - **Constants** (`constants/gameplay.go`):
-  - `DrainMaxCount`: 10 (maximum drains at 100% heat)
-  - `DrainBreakpointSize`: 10 (heat units per drain slot)
-  - `DrainSpawnOffsetMax`: 10 (random position offset range)
-  - `DrainSpawnStaggerTicks`: 4 (game ticks between spawns)
+  - `DrainMaxCount`: 10, `DrainBreakpointSize`: 10
+  - `DrainSpawnOffsetMax`: 10, `DrainSpawnStaggerTicks`: 4
+  - `DrainShieldEnergyDrainAmount`: 100 (shield zone cost)
+  - `DrainHeatReductionAmount`: 10 (unshielded collision)
 
 ### Cleaner System
 
@@ -2118,42 +2120,35 @@ The system supports two types of cleaners:
   - Automatic cleanup prevents flash entity buildup
 
 ### Shield System
-- **Purpose**: Visual protective field effects rendered around entities
-- **Rendering**: Pure rendering system - no Update() method, only visual effect
-- **Architecture**: Component-based visual system with elliptical field gradients
-  - All state stored in `ShieldComponent` (Active, RadiusX, RadiusY, Color, MaxOpacity)
-  - Rendering uses geometric field function for opacity calculation per cell
-  - Blends shield color with existing cell background based on distance from center
-  - No game logic or collision detection - purely visual effect
-- **Visual Characteristics**:
+- **Purpose**: Energy-powered protective field providing drain defense
+- **Activation**: Sources != 0 AND Energy > 0
+  - `Sources` is bitmask (`ShieldSourceBoost` = 1<<0, etc.)
+  - BoostSystem sets/clears `ShieldSourceBoost` flag
+  - Component persists; only Sources field changes
+- **Energy Costs**:
+  - **Passive Drain**: 1 energy/second while active
+  - **Shield Zone Defense**: 100 energy/tick per drain in ellipse
+  - Tracked via `ShieldComponent.LastDrainTime`
+- **Defense Mechanics**:
+  - Drains inside shield ellipse drain energy (not health)
+  - Drains persist while shield active (no heat loss)
+  - Shield deactivates when Energy <= 0
+- **Visual Rendering**:
   - **Shape**: Elliptical field with independent X/Y radii
-  - **Gradient**: Center (full opacity) → Edge (transparent), based on normalized distance
-  - **Blending**: Shield color alpha-blended with existing background colors
-  - **Opacity Falloff**: Linear gradient `alpha = (1.0 - distance) × MaxOpacity`
-- **Rendering Details** (`render/renderers/shields.go`):
-  - **Priority**: Rendered at `PriorityEffects` (300) - after grid, before UI
-  - **Bounding Box**: Only processes cells within elliptical radius bounds
-  - **Distance Formula**: `(dx/rx)² + (dy/ry)² <= 1.0` for elliptical containment
-  - **Background Preservation**: Reads existing background color before blending
-  - **Foreground Preservation**: Maintains original character and foreground color
-  - **Multi-shield Support**: Multiple shields can overlap with additive blending
+  - **Gradient**: Linear opacity falloff from center
+  - **Ellipse Check**: `(dx/rx)² + (dy/ry)² <= 1.0`
+  - **Visibility**: Only renders when `IsShieldActive()` returns true
 - **Component Fields**:
-  - `Active` (bool): Shield enabled/disabled toggle
-  - `RadiusX` (float64): Horizontal ellipse radius in characters
-  - `RadiusY` (float64): Vertical ellipse radius in characters
-  - `Color` (tcell.Color): Shield tint color (RGB)
-  - `MaxOpacity` (float64): Maximum opacity at center (0.0-1.0)
-- **Usage Pattern**:
-  - Attach `ShieldComponent` to any entity with `PositionComponent`
-  - Shield renders centered at entity's position
-  - Toggle `Active` field to show/hide shield without removing component
-  - Adjust `RadiusX`/`RadiusY` for different shield sizes and shapes
-  - Modify `Color` and `MaxOpacity` for different visual effects
-- **Performance**:
-  - No Update() overhead - rendering only when visible
-  - Bounding box optimization limits cell processing to visible area
-  - Pre-calculated color blending formulas (no math.Sqrt in hot path)
-  - Typical cost: 50-200 cells per shield depending on radius
+  - `Sources` (uint8): Bitmask of activation sources
+  - `RadiusX`, `RadiusY` (float64): Ellipse dimensions
+  - `Color` (tcell.Color): Shield tint
+  - `MaxOpacity` (float64): Center opacity (0.0-1.0)
+  - `LastDrainTime` (time.Time): Passive drain tracker
+- **Constants** (`constants/gameplay.go`):
+  - `ShieldPassiveDrainAmount`: 1 (energy/second)
+  - `ShieldPassiveDrainInterval`: 1 second
+  - `ShieldSourceBoost`: 1<<0 (boost bitmask flag)
+- **Rendering Priority**: 300 (after grid, before UI)
 
 ## Content Files
 

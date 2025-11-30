@@ -49,12 +49,27 @@ func (s *DrainSystem) Priority() int {
 
 // Update runs the drain system logic
 func (s *DrainSystem) Update(world *engine.World, dt time.Duration) {
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+	now := timeRes.GameTime
+
+	// Passive shield energy drain (1/sec while active)
+	s.handlePassiveShieldDrain(world, now)
+
 	// Process pending spawn queue first
 	s.processPendingSpawns(world)
 
 	// Update materialize animation if active
 	if world.Materializers.Count() > 0 {
 		s.updateMaterializers(world, dt)
+	}
+
+	// Check for energy-zero despawn condition
+	if s.ctx.State.GetEnergy() <= 0 && !s.isShieldActive(world) {
+		if world.Drains.Count() > 0 {
+			s.despawnAllDrains(world)
+		}
+		s.pendingSpawns = s.pendingSpawns[:0]
+		return
 	}
 
 	// Multi-drain lifecycle based on heat (energy check removed - handled in Phase 6)
@@ -505,6 +520,26 @@ func (s *DrainSystem) isShieldActive(world *engine.World) bool {
 		return false
 	}
 	return shield.Sources != 0 && s.ctx.State.GetEnergy() > 0
+}
+
+// handlePassiveShieldDrain applies 1 energy/second cost while shield is active
+func (s *DrainSystem) handlePassiveShieldDrain(world *engine.World, now time.Time) {
+	shield, ok := world.Shields.Get(s.ctx.CursorEntity)
+	if !ok {
+		return
+	}
+
+	// Shield must have sources and energy > 0 for passive drain
+	if shield.Sources == 0 || s.ctx.State.GetEnergy() <= 0 {
+		return
+	}
+
+	// Check passive drain interval
+	if now.Sub(shield.LastDrainTime) >= constants.ShieldPassiveDrainInterval {
+		s.ctx.State.AddEnergy(-constants.ShieldPassiveDrainAmount)
+		shield.LastDrainTime = now
+		world.Shields.Add(s.ctx.CursorEntity, shield)
+	}
 }
 
 // isInsideShieldEllipse checks if position is within the shield ellipse

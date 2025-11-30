@@ -302,27 +302,33 @@ Mode      Last command          Boost timer  Decay timer   Total energy  Actions
 
 ### Drain Entities
 
-When energy is positive and heat is high, hostile drain entities appear on screen:
+Hostile drain entities that scale with heat:
 
 - **Spawn Conditions**:
-  - Energy > 0 AND Heat >= 10
-  - Number of drains scales with heat: one drain per 10 heat (0-10 drains maximum)
-  - Example: 25 heat = 2 drains, 50 heat = 5 drains, 100 heat = 10 drains
-- **Spawn Telegraph**: Before each drain appears, watch for a 1-second warning animation
-  - Four bright cyan blocks ('█') converge from the screen edges
-  - The blocks move toward a random position near your cursor (±10 characters offset)
-  - Trail effects show the path of each converging block
-  - The drain materializes at the convergence point
-  - **Strategic Note**: The spawn location is locked when the animation starts, so moving your cursor won't change where the drain appears
-  - **Staggered Spawns**: Multiple drains spawn sequentially (4 game ticks apart) for visual clarity
-- **Visual**: Light cyan ╬ character (cross)
-- **Movement**: Each drain pursues cursor independently, moving 1 character per second
-- **Effect**: Each drain drains 10 energy per second when positioned on cursor (multiple drains stack!)
-- **Collisions**: Destroys sequences, nuggets, and gold on contact
+  - Heat >= 10
+  - Count = floor(Heat / 10), max 10 drains
+  - Example: 25 heat = 2 drains, 100 heat = 10 drains
+- **Spawn Telegraph**: 1-second materialize animation per drain
+  - Four cyan blocks ('█') converge from screen edges
+  - Random position near cursor (±10 offset), skips occupied cells
+  - Location locked at animation start
+  - Staggered spawns (4 game ticks apart)
+- **Visual**: Light cyan ╬ character
+- **Movement**: Toward cursor, 1 cell/second
+- **Shield Interaction**:
+  - **Shield Active**: Drains inside shield drain 100 energy/tick, persist
+  - **Shield Inactive**: Cursor collision costs 10 heat, drain despawns
+  - **Drain-Drain**: Multiple drains same cell mutually destroy
 - **Despawn Triggers**:
-  - All drains despawn when energy drops to 0 or below
-  - Excess drains despawn when heat decreases (newest drains removed first)
-  - Each despawn triggers a destruction flash effect
+  - Energy <= 0 AND Shield inactive
+  - Heat decreases (LIFO - newest first)
+  - Cursor collision without shield
+  - Drain-drain collision
+- **Strategic Notes**:
+  - Shield protection has energy cost (passive 1/sec + zone 100/tick/drain)
+  - Shield deactivates when Energy <= 0
+  - Can lead drains to destroy Red sequences
+  - Heat management controls drain count
 
 ### Visual Effects
 
@@ -477,37 +483,47 @@ Heat caps at 100. The visual heat bar displays 10 segments, with each segment re
 ### Boost System
 
 **What is Boost?**
-A 2× multiplier for heat gain that activates when you reach maximum heat and type matching color sequences.
+A 2× heat multiplier plus shield activation at maximum heat.
 
 **Activation:**
-1. Fill heat bar to maximum (type Green/Blue characters correctly)
-2. Boost activates automatically with 0.5 second timer
-3. Boost is tied to the color of the LAST character that maxed out heat
+1. Heat reaches maximum (100)
+2. Boost activates with 0.5s timer
+3. Tied to color of last character that maxed heat
+4. **Shield activates** (Sources bitmask set)
 
-**Color Matching Mechanic:**
-- Typing the **same color** (Blue or Green) extends boost by 0.5 seconds per character
-- Typing a **different color** deactivates boost immediately
-- Example: If Blue triggered boost, keep typing Blue sequences to maintain it
+**Color Matching:**
+- Same color (Blue or Green): +0.5s extension
+- Different color: Deactivates immediately
+- Example: Blue triggered boost → keep typing Blue
 
 **Effects:**
-- +2 heat per character instead of +1
-- Allows faster heat rebuilding after mistakes
-- **Does NOT multiply energy** - only affects heat gain
+- +2 heat per character (instead of +1)
+- Shield activation provides drain defense
+- Faster heat rebuilding after mistakes
+- **Does NOT multiply energy** - only heat gain
+
+**Shield During Boost:**
+- **Activation**: Sources != 0 AND Energy > 0
+- **Passive Cost**: 1 energy/second while active
+- **Defense Cost**: 100 energy/tick per drain in shield
+- **Protection**: Drains inside shield don't reduce heat
+- **Deactivation**: Energy <= 0 or boost ends
 
 **Deactivation:**
-- Timer expires (no same-color typing within 0.5 seconds)
+- Timer expires (no same-color typing within 0.5s)
 - Typing incorrect character
 - Typing red character
 - Using arrow keys
 - Typing different color at max heat
 
-**Visual Indicator:**
-Pink background showing "Boost: X.Xs" in bottom-right status bar.
+**Visual Indicators:**
+- Pink "Boost: X.Xs" in status bar
+- Shield ellipse visible when Energy > 0
 
 **Strategy:**
-- Commit to one color (Blue or Green) when boost activates
-- Scan ahead for same-color sequences to maintain boost
-- Boost is most valuable when recovering from heat loss
+- Commit to one color when boost activates
+- Monitor energy - shield costs can drain fast
+- Shield most valuable with multiple drains active
 
 ### Decay System
 
@@ -642,7 +658,7 @@ When all characters of one color/level are cleared, that slot opens for new spaw
 4. **Let decay happen** - Don't panic about the timer
 5. **Chase gold** aggressively - easiest way to build heat
 6. **Don't use delete** (`x`, `dd`, etc.) - it resets heat
-7. **Understand Drains**: When energy > 0 and heat >= 10, drains start spawning - watch for cyan blocks converging (1-second warning), then cyan ╬ characters spawn and chase you. Higher heat = more drains (up to 10 at max heat). Keep moving to avoid energy loss!
+7. **Understand Drains**: When heat >= 10, drains spawn (count = floor(heat/10), max 10). Watch for cyan blocks converging (1-second warning). Shield activates during boost for protection, but costs energy (1/sec passive + 100/tick per drain in shield).
 
 **Motion Practice:**
 - Use `0` and `$` to jump to line edges
@@ -667,14 +683,15 @@ When all characters of one color/level are cleared, that slot opens for new spaw
    - `gg`, `G`, `H`, `M`, `L` for screen jumps
    - `w`, `b`, `e` instead of repeated `l`/`h`
    - `/<pattern>` to find specific text
-5. **Drain management**:
-   - Stay mobile - each drain moves 1 character per second
-   - Higher heat = more drains (1 per 10 heat, up to 10 drains at max heat)
-   - Multiple drains can stack damage (10 energy/sec each)
-   - Plan movement paths that keep distance from all active drains
-   - Avoid letting drain paths intersect with gold or high-value targets
-   - Consider all drain positions when selecting next typing target
-   - Heat management affects drain count - lowering heat despawns excess drains
+5. **Drain & Shield management**:
+   - Drains spawn at heat >= 10 (count = floor(heat/10))
+   - Shield activates during boost (Sources != 0 AND Energy > 0)
+   - **Without shield**: Cursor collision costs 10 heat, drain despawns
+   - **With shield**: Drains in shield cost 100 energy/tick, persist
+   - Shield passive cost: 1 energy/second
+   - Lower heat to despawn excess drains (newest first)
+   - Shield most valuable with multiple drains clustered
+   - Energy management critical when shield active
 
 **Heat Recovery:**
 - If heat drops below 20, hunt for gold
@@ -729,19 +746,22 @@ When all characters of one color/level are cleared, that slot opens for new spaw
    - Accept small energy hits to avoid heat resets
    - Take calculated risks: typing one Red to clear screen space
 
-8. **Advanced drain tactics**:
-   - **Heat-based spawn control**: Drain count = floor(heat / 10) - manage heat to control pressure
-   - **Telegraph awareness**: The 1-second materialize animation per drain gives you time to reposition before each spawns
-   - **Stagger timing**: Drains spawn 4 game ticks apart (200ms) - use this window to reposition between spawns
-   - **Target lock exploit**: Each spawn location is locked at animation start - move cursor away from high-value areas before gaining energy
-   - **Multi-drain tracking**: Track all drain positions constantly - each moves independently every second
-   - **Stacking prevention**: Avoid positions where multiple drains converge (10 energy/sec × drain count)
-   - **Heat manipulation**: Intentionally lower heat to despawn excess drains (newest despawn first)
-   - **Strategic positioning**: Lead drains away from high-value target clusters, creating safe typing zones
-   - **Exploit drain paths**: Intentionally let drains destroy Red sequences (saves typing penalty)
-   - **Emergency reset**: If overwhelmed by drains, consider letting energy drop to zero to despawn all drains and restart
-   - **Maximum pressure**: At 100 heat with 10 drains active, staying still costs 100 energy/sec - constant movement is mandatory
-   - Gold sequence timing: be aware drain can trigger gold completion if it collides with gold
+8. **Advanced drain & shield tactics**:
+   - **Heat-based spawn control**: floor(heat/10) = drain count - manage heat to control pressure
+   - **Telegraph timing**: 1-second materialize animation, 4 ticks stagger between spawns
+   - **Shield energy economics**:
+     - Passive: 1 energy/sec while active
+     - Defense: 100 energy/tick per drain in shield ellipse
+     - Break-even: Shield worth it when drains would cost >101 energy/sec without it
+   - **Shield zone positioning**: Position cursor to maximize drains inside shield ellipse
+   - **Energy-zero despawn**: Drains despawn when Energy <= 0 AND Shield inactive
+   - **Collision tactics**:
+     - Without shield: -10 heat per drain collision, drain despawns
+     - With shield: Energy cost only, no heat loss, drain persists
+     - Drain-drain: Multiple drains same cell mutually destroy
+   - **Strategic shield use**: Activate boost near drain clusters for maximum protection value
+   - **Heat manipulation**: Lower heat to despawn excess drains (LIFO - newest first)
+   - **Exploit drain paths**: Let drains destroy Red sequences (saves typing penalty)
 
 ---
 

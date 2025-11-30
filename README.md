@@ -18,11 +18,11 @@ vi-fighter features a dynamic typing system with multiple sequence types and gam
 - **Sequence Types**: Green, Blue, Red (penalties), and Gold (bonus)
 - **Nuggets**: Collectible orange alphanumeric characters that provide heat bonuses
 - **Heat System**: Typing momentum that multiplies energy and affects decay speed
-- **Boost System**: 2× heat multiplier activated at maximum heat
+- **Boost System**: 2× heat multiplier + shield activation at maximum heat
+- **Shield System**: Energy-powered defense during boost (Sources bitmask, passive 1/sec + zone 100/tick/drain costs)
 - **Decay System**: Automated pressure that degrades sequences over time
-- **Cleaners**: Special mechanic that clears Red sequences - horizontal sweeps (gold at max heat) or 4-directional bursts (nugget at max heat, Enter key)
-- **Shields**: Visual protective field effects with elliptical gradients that can be attached to entities
-- **Multi-Drain System**: Heat-based hostile entities (0-10 drains scaling with heat meter), spawn with staggered telegraph animations at random offset from cursor, pursue player and drain energy, despawn with LIFO ordering when heat decreases, and trigger destruction flash effects
+- **Cleaners**: Clears Red sequences - horizontal sweeps (gold at max heat) or 4-directional bursts (nugget at max heat, Enter key)
+- **Multi-Drain System**: Heat-based hostile entities (floor(heat/10), max 10), staggered spawns with materialize animations, shield interaction (energy cost vs heat loss), drain-drain collisions, despawn when Energy <= 0 AND Shield inactive
 - **Runtime Metrics**: Real-time performance tracking (FPS, Game Ticks, APM) displayed in status bar
 
 ## Vi Motion Commands
