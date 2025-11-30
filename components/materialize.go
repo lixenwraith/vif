@@ -1,6 +1,7 @@
 package components
 
 import (
+	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/core"
 )
 
@@ -30,9 +31,11 @@ type MaterializeComponent struct {
 	TargetX int
 	TargetY int
 
-	// Trail history for rendering (integer grid coordinates)
+	// Ring buffer trail (zero-allocation updates)
 	// Index 0 is the current head position
-	Trail []core.Point
+	TrailRing [constants.MaterializeTrailLength]core.Point
+	TrailHead int // Most recent point index
+	TrailLen  int // Valid point count
 
 	// Current grid position (for detecting cell changes)
 	GridX int

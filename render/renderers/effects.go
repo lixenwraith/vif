@@ -3,7 +3,6 @@ package renderers
 import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/constants"
-	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -141,13 +140,14 @@ func (e *EffectsRenderer) drawCleaners(ctx render.RenderContext, world *engine.W
 			continue
 		}
 
-		// Deep copy trail to avoid race conditions during rendering
-		trailCopy := make([]core.Point, len(cleaner.Trail))
-		copy(trailCopy, cleaner.Trail)
+		cl := constants.CleanerTrailLength
 
 		// Iterate through the trail
 		// Index 0 is the head (brightest), last index is the tail (faintest)
-		for i, point := range trailCopy {
+		for i := 0; i < cleaner.TrailLen; i++ {
+			// Walk backwards from head in the ring buffer
+			idx := (cleaner.TrailHead - i + cl) % cl
+			point := cleaner.TrailRing[idx]
 			// Bounds check both X and Y
 			if point.X < 0 || point.X >= ctx.GameWidth || point.Y < 0 || point.Y >= ctx.GameHeight {
 				continue
@@ -240,13 +240,14 @@ func (e *EffectsRenderer) drawMaterializers(ctx render.RenderContext, world *eng
 			continue
 		}
 
-		// Deep copy trail to avoid race conditions during rendering
-		trailCopy := make([]core.Point, len(mat.Trail))
-		copy(trailCopy, mat.Trail)
+		ml := constants.MaterializeTrailLength
 
 		// Iterate through the trail
 		// Index 0 is the head (brightest), last index is the tail (faintest)
-		for i, point := range trailCopy {
+		for i := 0; i < mat.TrailLen; i++ {
+			// Walk backwards from head in the ring buffer
+			idx := (mat.TrailHead - i + ml) % ml
+			point := mat.TrailRing[idx]
 			// Skip if out of bounds
 			if point.X < 0 || point.X >= ctx.GameWidth || point.Y < 0 || point.Y >= ctx.GameHeight {
 				continue

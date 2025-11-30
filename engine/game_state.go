@@ -93,7 +93,7 @@ type GameState struct {
 	DecayStartTime time.Time // When decay animation started
 
 	// Game Lifecycle State
-	GameStartTime time.Time // When game/round started (for bootstrap delay)
+	GameStartTime time.Time // When game started
 }
 
 // initState initializes all game state fields to starting values

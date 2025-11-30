@@ -120,6 +120,9 @@ func (s *DrainSystem) startMaterialize(world *engine.World) {
 		velX := (targetX - def.startX) / duration
 		velY := (targetY - def.startY) / duration
 
+		var trailRing [constants.MaterializeTrailLength]core.Point
+		trailRing[0] = core.Point{X: int(def.startX), Y: int(def.startY)}
+
 		comp := components.MaterializeComponent{
 			PreciseX:  def.startX,
 			PreciseY:  def.startY,
@@ -129,7 +132,9 @@ func (s *DrainSystem) startMaterialize(world *engine.World) {
 			TargetY:   s.materializeTargetY,
 			GridX:     int(def.startX),
 			GridY:     int(def.startY),
-			Trail:     []core.Point{{X: int(def.startX), Y: int(def.startY)}},
+			TrailRing: trailRing,
+			TrailHead: 0,
+			TrailLen:  1,
 			Direction: def.dir,
 			Char:      constants.MaterializeChar,
 			Arrived:   false,
@@ -190,20 +195,11 @@ func (s *DrainSystem) updateMaterializers(world *engine.World, dt time.Duration)
 			mat.GridX = newGridX
 			mat.GridY = newGridY
 
-			newPoint := core.Point{X: mat.GridX, Y: mat.GridY}
-			oldLen := len(mat.Trail)
-			newLen := oldLen + 1
-			if newLen > constants.MaterializeTrailLength {
-				newLen = constants.MaterializeTrailLength
+			mat.TrailHead = (mat.TrailHead + 1) % constants.MaterializeTrailLength
+			mat.TrailRing[mat.TrailHead] = core.Point{X: mat.GridX, Y: mat.GridY}
+			if mat.TrailLen < constants.MaterializeTrailLength {
+				mat.TrailLen++
 			}
-
-			newTrail := make([]core.Point, newLen)
-			newTrail[0] = newPoint
-			copyLen := newLen - 1
-			if copyLen > 0 {
-				copy(newTrail[1:], mat.Trail[:copyLen])
-			}
-			mat.Trail = newTrail
 		}
 
 		world.Materializers.Add(entity, mat)

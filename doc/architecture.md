@@ -9,7 +9,7 @@
 - Systems contain ALL logic, operate on component sets
 - World is the single source of truth for all game state
 
-### Resource System (Phase 2 Architecture)
+### Resource System
 **Global Data Pattern:**
 - **Resources** store shared, global data (Time, Configuration, Input State)
 - **ResourceStore** (`World.Resources`) provides thread-safe, generic access
@@ -116,7 +116,7 @@ type World struct {
 }
 ```
 
-### Resource System (Phase 2: Global Data Decoupling)
+### Resource System
 
 The Resource System provides a generic, thread-safe mechanism for systems to access global shared data without coupling to `GameContext`. Resources are stored in `World.Resources` and accessed via type-safe generics.
 

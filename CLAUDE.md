@@ -42,6 +42,7 @@ vi-fighter is a terminal-based typing game in Go using a compile-time Generics-b
 
 
 ## VERIFICATION
+- **DO NOT TRY TO TEST OR BUILD ANY PART OF THE CODE IF THE SCOPE IS DOCUMENTATION UPDATE**
 - `go build .` must succeed
 - Delegate to user manual test on first network error.
 

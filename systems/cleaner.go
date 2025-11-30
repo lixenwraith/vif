@@ -161,32 +161,15 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 			c.GridX = newGridX
 			c.GridY = newGridY
 
-			// Push new position to the front of the trail using strict copy-on-write
-			// to prevent race conditions with the Renderer reading the trail
-			newPoint := core.Point{X: c.GridX, Y: c.GridY}
-
-			// Calculate new trail length (old trail + new point, capped at max)
-			oldLen := len(c.Trail)
-			newLen := oldLen + 1
-			if newLen > constants.CleanerTrailLength {
-				newLen = constants.CleanerTrailLength
+			c.TrailHead = (c.TrailHead + 1) % constants.CleanerTrailLength
+			c.TrailRing[c.TrailHead] = core.Point{X: c.GridX, Y: c.GridY}
+			if c.TrailLen < constants.CleanerTrailLength {
+				c.TrailLen++
 			}
-
-			// Allocate a new slice - this ensures Renderer can't access the same backing array
-			newTrail := make([]core.Point, newLen)
-
-			// Copy new point to front
-			newTrail[0] = newPoint
-
-			// Copy old trail points (up to max length - 1)
-			copyLen := newLen - 1
-			if copyLen > 0 {
-				copy(newTrail[1:], c.Trail[:copyLen])
-			}
-
-			// Assign new slice to component
-			c.Trail = newTrail
 		}
+
+		// Write back mutated component
+		world.Cleaners.Add(entity, c)
 
 		// --- Lifecycle Management ---
 		// Destroy entity when it passes its target (clearing the screen + trail)
@@ -266,7 +249,9 @@ func (cs *CleanerSystem) spawnCleaners(world *engine.World) {
 
 		// Initial trail point
 		startGridX := int(startX)
-		trail := []core.Point{{X: startGridX, Y: row}}
+
+		var trailRing [constants.CleanerTrailLength]core.Point
+		trailRing[0] = core.Point{X: startGridX, Y: row}
 
 		comp := components.CleanerComponent{
 			PreciseX:  startX,
@@ -277,7 +262,9 @@ func (cs *CleanerSystem) spawnCleaners(world *engine.World) {
 			TargetY:   float64(row),
 			GridX:     startGridX,
 			GridY:     row,
-			Trail:     trail,
+			TrailRing: trailRing,
+			TrailHead: 0,
+			TrailLen:  1,
 			Char:      constants.CleanerChar,
 		}
 
@@ -368,7 +355,8 @@ func (cs *CleanerSystem) spawnDirectionalCleaners(world *engine.World, originX, 
 	}
 
 	for _, dir := range directions {
-		trail := []core.Point{{X: dir.gridX, Y: dir.gridY}}
+		var trailRing [constants.CleanerTrailLength]core.Point
+		trailRing[0] = core.Point{X: dir.gridX, Y: dir.gridY}
 
 		comp := components.CleanerComponent{
 			PreciseX:  dir.startX,
@@ -379,7 +367,9 @@ func (cs *CleanerSystem) spawnDirectionalCleaners(world *engine.World, originX, 
 			TargetY:   dir.targetY,
 			GridX:     dir.gridX,
 			GridY:     dir.gridY,
-			Trail:     trail,
+			TrailRing: trailRing,
+			TrailHead: 0,
+			TrailLen:  1,
 			Char:      constants.CleanerChar,
 		}
 
