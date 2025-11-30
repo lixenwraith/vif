@@ -273,7 +273,7 @@ func (e *EffectsRenderer) drawMaterializers(ctx render.RenderContext, world *eng
 			}
 
 			style := defaultStyle.Foreground(color).Background(bg)
-			buf.Set(screenX, screenY, mat.Char, style)
+			buf.SetMax(screenX, screenY, mat.Char, style)
 		}
 	}
 }

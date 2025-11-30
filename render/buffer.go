@@ -83,6 +83,48 @@ func (b *RenderBuffer) SetString(x, y int, s string, style tcell.Style) int {
 	return written
 }
 
+// SetMax writes a cell using max-per-component color blending
+// Used for overlapping effects (materializers, flashes) to preserve brightest color
+func (b *RenderBuffer) SetMax(x, y int, r rune, style tcell.Style) {
+	if x < 0 || x >= b.width || y < 0 || y >= b.height {
+		return
+	}
+
+	idx := y*b.width + x
+	existing := b.cells[idx]
+
+	// Decompose colors
+	existingFg, existingBg, _ := existing.Style.Decompose()
+	newFg, newBg, _ := style.Decompose()
+
+	// Max-blend foreground RGB
+	r1, g1, b1 := existingFg.RGB()
+	r2, g2, b2 := newFg.RGB()
+
+	blendedFg := tcell.NewRGBColor(
+		max(r1, r2),
+		max(g1, g2),
+		max(b1, b2),
+	)
+
+	// Preserve existing background unless new is explicitly set
+	finalBg := existingBg
+	if newBg != tcell.ColorDefault {
+		finalBg = newBg
+	}
+
+	// Take new rune only if non-space (preserve existing character if just adding glow)
+	finalRune := r
+	if r == ' ' && existing.Rune != ' ' {
+		finalRune = existing.Rune
+	}
+
+	b.cells[idx] = RenderCell{
+		Rune:  finalRune,
+		Style: tcell.StyleDefault.Foreground(blendedFg).Background(finalBg),
+	}
+}
+
 // Get returns the cell at (x, y) and returns emptyCell on OOB
 func (b *RenderBuffer) Get(x, y int) RenderCell {
 	if x < 0 || x >= b.width || y < 0 || y >= b.height {

@@ -67,14 +67,14 @@ This project relies on `oto` and `beep` for audio, which requires CGO bindings t
 
 **Setup steps:**
 
-1. **Fix Go Module Proxy Issues** (if DNS/network failures):
-```bash
-   export GOPROXY="https://goproxy.io,direct"
-```
-
-2. **Install ALSA Development Library**:
+1. **Install ALSA Development Library**:
 ```bash
    apt-get install -y libasound2-dev
+```
+
+**Fix Go Module Proxy Issues** (if DNS/network failures):
+```bash
+   export GOPROXY="https://goproxy.io,direct"
 ```
 
 3. **Download Dependencies**:
