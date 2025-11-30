@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
@@ -55,26 +54,7 @@ func handleQuitCommand(ctx *engine.GameContext) bool {
 
 // handleNewCommand resets the game state
 func handleNewCommand(ctx *engine.GameContext) bool {
-	// Reset energy and heat
-	ctx.State.SetEnergy(0)
-	ctx.State.SetHeat(0)
-
-	// Reset runtime metrics (GT, APM)
-	ctx.State.ResetRuntimeStats()
-
-	// Reset game start time and return to bootstrap phase
-	// This triggers the initial spawn delay sequence
-	ctx.State.ResetGameStart(ctx.PausableClock.Now())
-
-	// Reset gold sequence state (in case one was active)
-	// The world clear will destroy entities, but GameState needs explicit reset
-	goldSnapshot := ctx.State.ReadGoldState(ctx.PausableClock.Now())
-	if goldSnapshot.Active {
-		ctx.State.DeactivateGoldSequence(ctx.PausableClock.Now())
-	}
-
 	// Despawn drain entities before clearing world
-	// Energy=0 will trigger despawn on next DrainSystem.Update(), but explicit cleanup is safer
 	drains := ctx.World.Drains.All()
 	for _, e := range drains {
 		ctx.World.DestroyEntity(e)
@@ -83,10 +63,12 @@ func handleNewCommand(ctx *engine.GameContext) bool {
 	// Clear all entities from the world
 	clearAllEntities(ctx.World)
 
-	// 1. Create new entity
+	// Reset entire game state (handles all state including phase transition to Warmup)
+	ctx.State.Reset(ctx.PausableClock.Now())
+
+	// Recreate cursor entity
 	ctx.CursorEntity = ctx.World.CreateEntity()
 
-	// 2. Add Components
 	ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
 		X: ctx.GameWidth / 2,
 		Y: ctx.GameHeight / 2,
@@ -94,22 +76,11 @@ func handleNewCommand(ctx *engine.GameContext) bool {
 
 	ctx.World.Cursors.Add(ctx.CursorEntity, components.CursorComponent{})
 
-	// 3. Restore Protection (Critical for DestroyEntity checks)
 	ctx.World.Protections.Add(ctx.CursorEntity, components.ProtectionComponent{
 		Mask:      components.ProtectAll,
 		ExpiresAt: 0,
 	})
 
-	// Reset boost state
-	ctx.State.SetBoostEnabled(false)
-	ctx.State.SetBoostEndTime(time.Time{})
-	ctx.State.SetBoostColor(0)
-
-	// Reset visual feedback
-	ctx.State.SetCursorError(false)
-	ctx.State.SetEnergyBlinkActive(false)
-
-	// Display success message
 	ctx.LastCommand = ":new"
 	return true
 }

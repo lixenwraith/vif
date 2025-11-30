@@ -36,9 +36,6 @@ const (
 
 	// GoldSequenceLength is the number of characters in the gold sequence
 	GoldSequenceLength = 10
-
-	// GoldInitialSpawnDelay is the delay before spawning the first gold sequence
-	GoldInitialSpawnDelay = 150 * time.Millisecond
 )
 
 // Nugget Spawning Mechanics

@@ -180,32 +180,32 @@ func NewGameContext(screen tcell.Screen) *GameContext {
 // ===== INPUT-SPECIFIC METHODS =====
 
 // GetPingActive returns the current ping active state
-func (g *GameContext) GetPingActive() bool {
-	return g.pingActive.Load()
+func (ctx *GameContext) GetPingActive() bool {
+	return ctx.pingActive.Load()
 }
 
 // SetPingActive sets the ping active state
-func (g *GameContext) SetPingActive(active bool) {
-	g.pingActive.Store(active)
+func (ctx *GameContext) SetPingActive(active bool) {
+	ctx.pingActive.Store(active)
 }
 
 // GetPingGridTimer returns the current ping grid timer value in seconds
-func (g *GameContext) GetPingGridTimer() float64 {
-	bits := g.pingGridTimer.Load()
+func (ctx *GameContext) GetPingGridTimer() float64 {
+	bits := ctx.pingGridTimer.Load()
 	return math.Float64frombits(bits)
 }
 
 // SetPingGridTimer sets the ping grid timer to the specified seconds
-func (g *GameContext) SetPingGridTimer(seconds float64) {
+func (ctx *GameContext) SetPingGridTimer(seconds float64) {
 	bits := math.Float64bits(seconds)
-	g.pingGridTimer.Store(bits)
+	ctx.pingGridTimer.Store(bits)
 }
 
 // UpdatePingGridTimerAtomic atomically decrements the ping timer and returns true if it expired
 // This method handles the check-then-set atomically to avoid race conditions
-func (g *GameContext) UpdatePingGridTimerAtomic(delta float64) bool {
+func (ctx *GameContext) UpdatePingGridTimerAtomic(delta float64) bool {
 	for {
-		oldBits := g.pingGridTimer.Load()
+		oldBits := ctx.pingGridTimer.Load()
 		oldValue := math.Float64frombits(oldBits)
 
 		if oldValue <= 0 {
@@ -224,7 +224,7 @@ func (g *GameContext) UpdatePingGridTimerAtomic(delta float64) bool {
 			newBits = math.Float64bits(newValue)
 		}
 
-		if g.pingGridTimer.CompareAndSwap(oldBits, newBits) {
+		if ctx.pingGridTimer.CompareAndSwap(oldBits, newBits) {
 			// Successfully updated, return true if timer expired
 			return newValue <= 0
 		}
@@ -232,56 +232,56 @@ func (g *GameContext) UpdatePingGridTimerAtomic(delta float64) bool {
 }
 
 // SetPaused sets the pause state using the pausable clock
-func (g *GameContext) SetPaused(paused bool) {
-	wasPaused := g.IsPaused.Load()
-	g.IsPaused.Store(paused)
+func (ctx *GameContext) SetPaused(paused bool) {
+	wasPaused := ctx.IsPaused.Load()
+	ctx.IsPaused.Store(paused)
 
 	if paused && !wasPaused {
 		// Starting pause
-		g.PausableClock.Pause()
-		g.StopAudio()
+		ctx.PausableClock.Pause()
+		ctx.StopAudio()
 	} else if !paused && wasPaused {
 		// Ending pause
-		g.PausableClock.Resume()
+		ctx.PausableClock.Resume()
 	}
 }
 
 // GetPauseDuration returns the current pause duration
-func (g *GameContext) GetPauseDuration() time.Duration {
-	return g.PausableClock.GetCurrentPauseDuration()
+func (ctx *GameContext) GetPauseDuration() time.Duration {
+	return ctx.PausableClock.GetCurrentPauseDuration()
 }
 
 // GetTotalPauseDuration returns the cumulative pause time
-func (g *GameContext) GetTotalPauseDuration() time.Duration {
-	return g.PausableClock.GetTotalPauseDuration()
+func (ctx *GameContext) GetTotalPauseDuration() time.Duration {
+	return ctx.PausableClock.GetTotalPauseDuration()
 }
 
 // GetRealTime returns wall clock time for UI elements
-func (g *GameContext) GetRealTime() time.Time {
-	return g.PausableClock.RealTime()
+func (ctx *GameContext) GetRealTime() time.Time {
+	return ctx.PausableClock.RealTime()
 }
 
 // StopAudio stops the current audio and drains queues if audio engine is available
-func (g *GameContext) StopAudio() {
-	if g.AudioEngine != nil && g.AudioEngine.IsRunning() {
-		g.AudioEngine.StopCurrentSound()
-		g.AudioEngine.DrainQueues()
+func (ctx *GameContext) StopAudio() {
+	if ctx.AudioEngine != nil && ctx.AudioEngine.IsRunning() {
+		ctx.AudioEngine.StopCurrentSound()
+		ctx.AudioEngine.DrainQueues()
 	}
 }
 
 // ToggleAudioMute toggles the mute state of the audio engine
 // Returns the new mute state (true if muted, false if unmuted)
-func (g *GameContext) ToggleAudioMute() bool {
-	if g.AudioEngine != nil {
-		return g.AudioEngine.ToggleMute()
+func (ctx *GameContext) ToggleAudioMute() bool {
+	if ctx.AudioEngine != nil {
+		return ctx.AudioEngine.ToggleMute()
 	}
 	return false
 }
 
 // updateGameArea calculates the game area dimensions
-func (g *GameContext) updateGameArea() {
+func (ctx *GameContext) updateGameArea() {
 	// Calculate line number width based on height
-	gameHeight := g.Height - constants.BottomMargin - constants.TopMargin
+	gameHeight := ctx.Height - constants.BottomMargin - constants.TopMargin
 	if gameHeight < 1 {
 		gameHeight = 1
 	}
@@ -291,14 +291,14 @@ func (g *GameContext) updateGameArea() {
 		lineNumWidth = 1
 	}
 
-	g.LineNumWidth = lineNumWidth
-	g.GameX = lineNumWidth + 1    // line number + 1 space
-	g.GameY = constants.TopMargin // Start at row 1 (row 0 is for heat meter)
-	g.GameWidth = g.Width - g.GameX
-	g.GameHeight = gameHeight
+	ctx.LineNumWidth = lineNumWidth
+	ctx.GameX = lineNumWidth + 1    // line number + 1 space
+	ctx.GameY = constants.TopMargin // Start at row 1 (row 0 is for heat meter)
+	ctx.GameWidth = ctx.Width - ctx.GameX
+	ctx.GameHeight = gameHeight
 
-	if g.GameWidth < 1 {
-		g.GameWidth = 1
+	if ctx.GameWidth < 1 {
+		ctx.GameWidth = 1
 	}
 }
 
@@ -316,82 +316,82 @@ func formatNumber(n int) int {
 }
 
 // HandleResize handles terminal resize events
-func (g *GameContext) HandleResize() {
-	newWidth, newHeight := g.Screen.Size()
-	if newWidth != g.Width || newHeight != g.Height {
-		g.Width = newWidth
-		g.Height = newHeight
-		g.updateGameArea()
+func (ctx *GameContext) HandleResize() {
+	newWidth, newHeight := ctx.Screen.Size()
+	if newWidth != ctx.Width || newHeight != ctx.Height {
+		ctx.Width = newWidth
+		ctx.Height = newHeight
+		ctx.updateGameArea()
 
 		// Update ConfigResource
 		configRes := &ConfigResource{
-			ScreenWidth:  g.Width,
-			ScreenHeight: g.Height,
-			GameWidth:    g.GameWidth,
-			GameHeight:   g.GameHeight,
-			GameX:        g.GameX,
-			GameY:        g.GameY,
+			ScreenWidth:  ctx.Width,
+			ScreenHeight: ctx.Height,
+			GameWidth:    ctx.GameWidth,
+			GameHeight:   ctx.GameHeight,
+			GameX:        ctx.GameX,
+			GameY:        ctx.GameY,
 		}
-		AddResource(g.World.Resources, configRes)
+		AddResource(ctx.World.Resources, configRes)
 
 		// Resize buffer
-		if g.Buffer != nil {
-			g.Buffer.Resize(g.GameWidth, g.GameHeight)
+		if ctx.Buffer != nil {
+			ctx.Buffer.Resize(ctx.GameWidth, ctx.GameHeight)
 		}
 
 		// Clamp cursor position
-		if pos, ok := g.World.Positions.Get(g.CursorEntity); ok {
-			pos.X = max(0, min(pos.X, g.GameWidth-1))
-			pos.Y = max(0, min(pos.Y, g.GameHeight-1))
-			g.World.Positions.Add(g.CursorEntity, pos)
+		if pos, ok := ctx.World.Positions.Get(ctx.CursorEntity); ok {
+			pos.X = max(0, min(pos.X, ctx.GameWidth-1))
+			pos.Y = max(0, min(pos.Y, ctx.GameHeight-1))
+			ctx.World.Positions.Add(ctx.CursorEntity, pos)
 		}
 	}
 }
 
 // IsInsertMode returns true if in insert mode
-func (g *GameContext) IsInsertMode() bool {
-	return g.Mode == ModeInsert
+func (ctx *GameContext) IsInsertMode() bool {
+	return ctx.Mode == ModeInsert
 }
 
 // IsSearchMode returns true if in search mode
-func (g *GameContext) IsSearchMode() bool {
-	return g.Mode == ModeSearch
+func (ctx *GameContext) IsSearchMode() bool {
+	return ctx.Mode == ModeSearch
 }
 
 // IsCommandMode returns true if in command mode
-func (g *GameContext) IsCommandMode() bool {
-	return g.Mode == ModeCommand
+func (ctx *GameContext) IsCommandMode() bool {
+	return ctx.Mode == ModeCommand
 }
 
 // IsNormalMode returns true if in normal mode
-func (g *GameContext) IsNormalMode() bool {
-	return g.Mode == ModeNormal
+func (ctx *GameContext) IsNormalMode() bool {
+	return ctx.Mode == ModeNormal
 }
 
 // IsOverlayMode returns true if in overlay mode
-func (g *GameContext) IsOverlayMode() bool {
-	return g.Mode == ModeOverlay
+func (ctx *GameContext) IsOverlayMode() bool {
+	return ctx.Mode == ModeOverlay
 }
 
 // GetFrameNumber returns the current frame number
-func (g *GameContext) GetFrameNumber() int64 {
-	return g.State.GetFrameNumber()
+func (ctx *GameContext) GetFrameNumber() int64 {
+	return ctx.State.GetFrameNumber()
 }
 
 // IncrementFrameNumber increments and returns the frame number
-func (g *GameContext) IncrementFrameNumber() int64 {
-	return g.State.IncrementFrameNumber()
+func (ctx *GameContext) IncrementFrameNumber() int64 {
+	return ctx.State.IncrementFrameNumber()
 }
 
 // ===== EVENT QUEUE METHODS =====
 
 // PushEvent adds an event to the event queue with current frame number and provided timestamp
-func (g *GameContext) PushEvent(eventType EventType, payload any, now time.Time) {
+func (ctx *GameContext) PushEvent(eventType EventType, payload any, now time.Time) {
 	event := GameEvent{
 		Type:      eventType,
 		Payload:   payload,
-		Frame:     g.State.GetFrameNumber(),
+		Frame:     ctx.State.GetFrameNumber(),
 		Timestamp: now,
 	}
-	g.eventQueue.Push(event)
+	ctx.eventQueue.Push(event)
 }

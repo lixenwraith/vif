@@ -96,77 +96,78 @@ type GameState struct {
 	GameStartTime time.Time // When game/round started (for bootstrap delay)
 }
 
-// NewGameState creates a new centralized game state
-func NewGameState(maxEntities int, now time.Time) *GameState {
-	gs := &GameState{
-		MaxEntities: maxEntities,
-	}
-
-	// Initialize atomics to zero values
+// initState initializes all game state fields to starting values
+// Called by both NewGameState and Reset to avoid duplication
+func (gs *GameState) initState(now time.Time) {
+	// Reset atomics
 	gs.Energy.Store(0)
 	gs.Heat.Store(0)
-
-	// Initialize boost state
 	gs.BoostEnabled.Store(false)
 	gs.BoostEndTime.Store(0)
 	gs.BoostColor.Store(0)
-
-	// Initialize visual feedback
 	gs.CursorError.Store(false)
 	gs.CursorErrorTime.Store(0)
 	gs.EnergyBlinkActive.Store(false)
 	gs.EnergyBlinkType.Store(0)
 	gs.EnergyBlinkLevel.Store(0)
 	gs.EnergyBlinkTime.Store(0)
-
-	// Initialize ping grid
 	gs.PingActive.Store(false)
 	gs.PingGridTimer.Store(0)
-
-	// Initialize drain entity tracking
 	gs.DrainActive.Store(false)
-
-	// Initialize sequence ID
 	gs.NextSeqID.Store(1)
-
-	// Initialize frame counter
 	gs.FrameNumber.Store(0)
+	gs.ActiveNuggetID.Store(0)
 
-	// Initialize runtime metrics
+	// Reset metrics
 	gs.GameTicks.Store(0)
 	gs.CurrentAPM.Store(0)
 	gs.PendingActions.Store(0)
 
-	// Initialize clock-tick state
+	// Mutex-protected fields (caller may or may not hold lock)
+	gs.apmHistory = [60]uint64{}
+	gs.apmHistoryIndex = 0
+
+	// Spawn state
 	gs.SpawnLastTime = now
-	gs.SpawnNextTime = now.Add(constants.InitialSpawnDelay) // Initial spawn delay
+	gs.SpawnNextTime = now
 	gs.SpawnRateMultiplier = 1.0
 	gs.SpawnEnabled = true
 	gs.EntityCount = 0
 	gs.ScreenDensity = 0.0
 
-	// Initialize phase state (Start in Bootstrap phase)
-	gs.CurrentPhase = PhaseBootstrap
-	gs.PhaseStartTime = now
-
-	// Initialize Gold sequence state
+	// Gold state
 	gs.GoldActive = false
 	gs.GoldSequenceID = 0
 	gs.GoldStartTime = time.Time{}
 	gs.GoldTimeoutTime = time.Time{}
 
-	// Initialize Decay timer state
+	// Decay state
 	gs.DecayTimerActive = false
 	gs.DecayNextTime = time.Time{}
-
-	// Initialize Decay animation state
 	gs.DecayAnimating = false
 	gs.DecayStartTime = time.Time{}
 
-	// Initialize Game Lifecycle state
+	// Phase state
 	gs.GameStartTime = now
+	gs.CurrentPhase = PhaseNormal
+	gs.PhaseStartTime = now
+}
 
+// NewGameState creates a new centralized game state
+func NewGameState(maxEntities int, now time.Time) *GameState {
+	gs := &GameState{
+		MaxEntities: maxEntities,
+	}
+	gs.initState(now)
 	return gs
+}
+
+// Reset resets the game state for a new game
+// Ensures clean state for :new command without recreation
+func (gs *GameState) Reset(now time.Time) {
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
+	gs.initState(now)
 }
 
 // ===== HEAT ACCESSORS (atomic) =====
@@ -509,7 +510,6 @@ func (gs *GameState) GetPhase() GamePhase {
 // CanTransition checks if a phase transition is valid
 func (gs *GameState) CanTransition(from, to GamePhase) bool {
 	validTransitions := map[GamePhase][]GamePhase{
-		PhaseBootstrap:      {PhaseNormal},
 		PhaseNormal:         {PhaseGoldActive},
 		PhaseGoldActive:     {PhaseGoldComplete},
 		PhaseGoldComplete:   {PhaseDecayWait},
@@ -846,16 +846,6 @@ func (gs *GameState) GetGameStartTime() time.Time {
 	gs.mu.RLock()
 	defer gs.mu.RUnlock()
 	return gs.GameStartTime
-}
-
-// ResetGameStart resets the game start time and returns to bootstrap phase
-// Used by :new command for clean game reset
-func (gs *GameState) ResetGameStart(now time.Time) {
-	gs.mu.Lock()
-	defer gs.mu.Unlock()
-	gs.GameStartTime = now
-	gs.CurrentPhase = PhaseBootstrap
-	gs.PhaseStartTime = now
 }
 
 // ===== RUNTIME METRICS ACCESSORS =====

@@ -9,9 +9,6 @@ const (
 
 	// GameUpdateInterval is the game logic update interval (clock tick)
 	GameUpdateInterval = 50 * time.Millisecond
-
-	// InitialSpawnDelay is the delay before first character spawn
-	InitialSpawnDelay = 2 * time.Second
 )
 
 // ECS & Resource Limits

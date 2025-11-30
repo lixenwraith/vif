@@ -13,11 +13,8 @@ import (
 type GamePhase int
 
 const (
-	// PhaseBootstrap - Initial state, waiting for game start delay
-	PhaseBootstrap GamePhase = iota
-
 	// PhaseNormal - Regular gameplay, spawning content, no special mechanics active
-	PhaseNormal
+	PhaseNormal GamePhase = iota
 
 	// PhaseGoldActive - Gold sequence is active and can be typed with timeout tracking
 	PhaseGoldActive
@@ -35,8 +32,6 @@ const (
 // String returns the name of the game phase for debugging
 func (p GamePhase) String() string {
 	switch p {
-	case PhaseBootstrap:
-		return "Bootstrap"
 	case PhaseNormal:
 		return "Normal"
 	case PhaseGoldActive:
@@ -316,14 +311,6 @@ func (cs *ClockScheduler) processTick() {
 
 	// Handle phase transitions based on current phase
 	switch phaseSnapshot.Phase {
-	case PhaseBootstrap:
-		// Check if bootstrap delay has elapsed
-		bootstrapDelay := constants.GoldInitialSpawnDelay
-		if gameNow.Sub(cs.ctx.State.GetGameStartTime()) >= bootstrapDelay {
-			// Transition to Normal phase - gold system will handle spawning
-			cs.ctx.State.TransitionPhase(PhaseNormal, gameNow)
-		}
-
 	case PhaseGoldActive:
 		// Check if gold sequence has timed out (pausable clock handles pause adjustment internally)
 		goldSnapshot := cs.ctx.State.ReadGoldState(gameNow)
