@@ -178,12 +178,30 @@ func (gs *GameState) GetHeat() int {
 
 // SetHeat sets the heat value
 func (gs *GameState) SetHeat(heat int) {
+	if heat < 0 {
+		heat = 0
+	}
+	if heat > constants.MaxHeat {
+		heat = constants.MaxHeat
+	}
 	gs.Heat.Store(int64(heat))
 }
 
 // AddHeat adds a delta to the current heat value
 func (gs *GameState) AddHeat(delta int) {
-	gs.Heat.Add(int64(delta))
+	for {
+		current := gs.Heat.Load()
+		newVal := current + int64(delta)
+		if newVal < 0 {
+			newVal = 0
+		}
+		if newVal > int64(constants.MaxHeat) {
+			newVal = int64(constants.MaxHeat)
+		}
+		if gs.Heat.CompareAndSwap(current, newVal) {
+			return
+		}
+	}
 }
 
 // ===== SCORE ACCESSORS (atomic) =====

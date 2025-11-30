@@ -2,7 +2,6 @@ package renderers
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -22,13 +21,10 @@ func (h *HeatMeterRenderer) Render(ctx render.RenderContext, world *engine.World
 	heat := h.state.GetHeat()
 	defaultStyle := tcell.StyleDefault.Background(render.RgbBackground)
 
-	// Calculate display heat: map 0-MaxHeat to 0-10 segments
-	displayHeat := int(float64(heat) / float64(constants.MaxHeat) * 10.0)
+	// Calculate display segments: 0-9=0, 10-19=1, ..., 90-99=9, 100=10
+	displayHeat := heat / 10
 	if displayHeat > 10 {
 		displayHeat = 10
-	}
-	if displayHeat < 0 {
-		displayHeat = 0
 	}
 
 	// Draw 10-segment heat bar across full terminal width

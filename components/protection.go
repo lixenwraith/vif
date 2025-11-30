@@ -17,6 +17,9 @@ const (
 	// ProtectFromCull makes entity immune to out-of-bounds cleanup.
 	ProtectFromCull
 
+	// ProtectFromDelete makes entity immune to delete operators.
+	ProtectFromDelete
+
 	// ProtectAll makes entity completely indestructible.
 	// Used for Cursor entity. World.DestroyEntity() will reject destruction.
 	ProtectAll ProtectionFlags = 0xFF

@@ -223,6 +223,12 @@ func deleteAllOnLine(ctx *engine.GameContext, y int) bool {
 		if !engine.IsInteractable(ctx.World, entity) {
 			continue
 		}
+		// Check delete protection
+		if prot, ok := ctx.World.Protections.Get(entity); ok {
+			if prot.Mask.Has(components.ProtectFromDelete) || prot.Mask == components.ProtectAll {
+				continue
+			}
+		}
 		if seq, ok := ctx.World.Sequences.Get(entity); ok {
 			if seq.Type == components.SequenceGreen || seq.Type == components.SequenceBlue {
 				deletedGreenOrBlue = true
@@ -252,6 +258,12 @@ func deleteRange(ctx *engine.GameContext, startX, endX, y int) bool {
 		for _, entity := range entities {
 			if !engine.IsInteractable(ctx.World, entity) {
 				continue
+			}
+			// Check delete protection
+			if prot, ok := ctx.World.Protections.Get(entity); ok {
+				if prot.Mask.Has(components.ProtectFromDelete) || prot.Mask == components.ProtectAll {
+					continue
+				}
 			}
 			if seq, ok := ctx.World.Sequences.Get(entity); ok {
 				if seq.Type == components.SequenceGreen || seq.Type == components.SequenceBlue {

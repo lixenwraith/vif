@@ -136,6 +136,8 @@ Examples:
 
 **Warning**: Deleting Green or Blue sequences resets your heat!
 
+**Note**: Gold sequences are protected and cannot be deleted with delete operators.
+
 - **`x`** - Delete character at cursor
 - **`dd`** - Delete entire line
 - **`d<motion>`** - Delete with motion
@@ -227,9 +229,13 @@ vi-fighter has four input modes, similar to vi/vim:
 ```
 
 - **Display**: 10-segment heat bar spanning full terminal width
-- **Segments**: 0-10 filled blocks representing 0-100% heat
+- **Segments**: 0-10 filled blocks representing heat levels
 - **Colors**: Red → Orange → Yellow → Green → Cyan → Blue → Purple (as segments fill)
-- **Calculation**: Each 10% of heat fills one segment (e.g., 50% heat = 5 filled segments)
+- **Calculation**: Heat divided by 10 determines filled segments
+  - Heat 0-9: 0 segments filled
+  - Heat 10-19: 1 segment filled
+  - Heat 90-99: 9 segments filled
+  - Heat 100 (max): 10 segments filled (all segments)
 
 ### Left Margin (Relative Line Numbers)
 ```
@@ -456,7 +462,7 @@ Heat represents your typing momentum and skill level. It's the most important me
 - **Boost Activation**: Must reach maximum heat to activate boost
 
 **Maximum Heat:**
-Heat caps at screen width (typically 80-200 depending on terminal size). The visual heat bar displays 10 segments regardless of actual heat value, with each segment representing 10% of maximum heat.
+Heat caps at 100. The visual heat bar displays 10 segments, with each segment representing a 10-point range (first segment fills at heat 10, second at heat 20, etc., with all 10 segments filled only at heat 100).
 
 ### Boost System
 

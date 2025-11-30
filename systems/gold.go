@@ -143,6 +143,10 @@ func (s *GoldSystem) spawnGold(world *engine.World) bool {
 	for _, ed := range entities {
 		world.Characters.Add(ed.entity, ed.char)
 		world.Sequences.Add(ed.entity, ed.seq)
+		// Protect gold entities from delete operators
+		world.Protections.Add(ed.entity, components.ProtectionComponent{
+			Mask: components.ProtectFromDelete,
+		})
 	}
 
 	// Activate gold sequence in GameState (sets phase to PhaseGoldActive)
