@@ -507,6 +507,26 @@ func (s *DrainSystem) isShieldActive(world *engine.World) bool {
 	return shield.Sources != 0 && s.ctx.State.GetEnergy() > 0
 }
 
+// isInsideShieldEllipse checks if position is within the shield ellipse
+func (s *DrainSystem) isInsideShieldEllipse(world *engine.World, x, y int) bool {
+	shield, ok := world.Shields.Get(s.ctx.CursorEntity)
+	if !ok {
+		return false
+	}
+
+	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
+	if !ok {
+		return false
+	}
+
+	dx := float64(x - cursorPos.X)
+	dy := float64(y - cursorPos.Y)
+
+	// Ellipse equation: (dx/rx)^2 + (dy/ry)^2 <= 1
+	normalizedDistSq := (dx*dx)/(shield.RadiusX*shield.RadiusX) + (dy*dy)/(shield.RadiusY*shield.RadiusY)
+	return normalizedDistSq <= 1.0
+}
+
 // handleDrainInteractions processes all drain interactions per tick
 func (s *DrainSystem) handleDrainInteractions(world *engine.World) {
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
@@ -522,7 +542,7 @@ func (s *DrainSystem) handleDrainInteractions(world *engine.World) {
 	// Phase 1: Detect drain-drain collisions (same cell)
 	s.handleDrainDrainCollisions(world)
 
-	// Phase 2: Handle cursor interactions for surviving drains
+	// Phase 2: Handle shield zone and cursor interactions
 	drainEntities := world.Drains.All()
 	for _, drainEntity := range drainEntities {
 		drain, ok := world.Drains.Get(drainEntity)
@@ -543,23 +563,26 @@ func (s *DrainSystem) handleDrainInteractions(world *engine.World) {
 			world.Drains.Add(drainEntity, drain)
 		}
 
-		if isOnCursor {
-			if shieldActive {
-				// Shield active: drain energy, no heat loss, drain persists
-				if now.Sub(drain.LastDrainTime) >= constants.DrainEnergyDrainInterval {
-					s.ctx.State.AddEnergy(-constants.DrainShieldEnergyDrainAmount)
-					drain.LastDrainTime = now
-					world.Drains.Add(drainEntity, drain)
-				}
-			} else {
-				// No shield: reduce heat and despawn drain
-				s.ctx.State.AddHeat(-constants.DrainHeatReductionAmount)
-				s.despawnDrainWithFlash(world, drainEntity)
+		// Shield zone energy drain (applies to drains anywhere in shield ellipse)
+		if shieldActive && s.isInsideShieldEllipse(world, drainPos.X, drainPos.Y) {
+			if now.Sub(drain.LastDrainTime) >= constants.DrainEnergyDrainInterval {
+				s.ctx.State.AddEnergy(-constants.DrainShieldEnergyDrainAmount)
+				drain.LastDrainTime = now
+				world.Drains.Add(drainEntity, drain)
 			}
+			// Drain persists when shield is active
+			continue
+		}
+
+		// Cursor collision (shield not active or drain outside shield)
+		if isOnCursor {
+			// No shield protection: reduce heat and despawn
+			s.ctx.State.AddHeat(-constants.DrainHeatReductionAmount)
+			s.despawnDrainWithFlash(world, drainEntity)
 		}
 	}
 
-	// Phase 3: Handle non-cursor entity collisions (characters, etc)
+	// Phase 3: Handle non-drain entity collisions
 	s.handleEntityCollisions(world)
 }
 
