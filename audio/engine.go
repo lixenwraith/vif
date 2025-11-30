@@ -79,7 +79,7 @@ func (ae *AudioEngine) Start() error {
 
 	// Only starts if it's currently stopped
 	if ae.running.CompareAndSwap(false, true) {
-		// Recreate stop channel because the previous Stop() call closed the channel.
+		// Recreate stop channel because the previous Stop() call closed the channel
 		ae.stopChan = make(chan struct{})
 
 		ae.wg.Add(1)

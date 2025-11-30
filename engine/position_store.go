@@ -1,4 +1,3 @@
-// FILE: engine/position_store.go
 package engine
 
 import (
@@ -46,9 +45,10 @@ func (ps *PositionStore) Add(e Entity, pos components.PositionComponent) {
 	ps.components[e] = pos
 
 	// Add to new grid location
-	// NOTE: Grid overflow is silently ignored. In real gameplay, 15 entities per cell
-	// is sufficient. If this becomes an issue, expand MaxEntitiesPerCell or implement
-	// cell chaining. Current design prioritizes cache locality over edge case handling.
+	// NOTE: Grid overflow is silently ignored
+	// In real gameplay, 15 entities per cell is sufficient
+	// If this becomes an issue, expand MaxEntitiesPerCell or implement cell chaining
+	// Current design prioritizes cache locality over edge case handling
 	_ = ps.grid.Add(e, pos.X, pos.Y)
 }
 
@@ -137,7 +137,7 @@ func (ps *PositionStore) HasAny(x, y int) bool {
 	return ps.grid.HasAny(x, y)
 }
 
-// ResizeGrid resizes the internal spatial grid.
+// ResizeGrid resizes the internal spatial grid
 func (ps *PositionStore) ResizeGrid(width, height int) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()

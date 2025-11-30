@@ -6,7 +6,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
-// RenderContext provides frame state. Passed by value
+// RenderContext provides frame state, passed by value
 type RenderContext struct {
 	GameTime    time.Time
 	FrameNumber int64

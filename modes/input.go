@@ -16,7 +16,7 @@ type InputHandler struct {
 
 // NewInputHandler creates a new input handler
 func NewInputHandler(ctx *engine.GameContext) *InputHandler {
-	bindings, _ := LoadBindings("")
+	bindings := DefaultBindings()
 	return &InputHandler{
 		ctx:      ctx,
 		machine:  NewInputMachine(),
@@ -28,9 +28,6 @@ func NewInputHandler(ctx *engine.GameContext) *InputHandler {
 func (h *InputHandler) HandleEvent(ev tcell.Event) bool {
 	switch ev := ev.(type) {
 	case *tcell.EventKey:
-		// Clear status message on any new key press interaction
-		// This ensures error messages like "Unknown command" don't persist forever
-		// We do this before processing the key so the user sees the clear immediately upon acting
 		if h.ctx.StatusMessage != "" {
 			h.ctx.StatusMessage = ""
 		}
@@ -42,17 +39,13 @@ func (h *InputHandler) HandleEvent(ev tcell.Event) bool {
 	return true
 }
 
-// handleKeyEvent processes keyboard events
 func (h *InputHandler) handleKeyEvent(ev *tcell.EventKey) bool {
-	// Record action for APM calculation on any valid key event
 	h.ctx.State.RecordAction()
 
-	// Handle exit keys
 	if ev.Key() == tcell.KeyCtrlQ || ev.Key() == tcell.KeyCtrlC {
 		return false
 	}
 
-	// Handle Ctrl+S - Toggle audio mute
 	if ev.Key() == tcell.KeyCtrlS {
 		if h.ctx.AudioEngine != nil {
 			_ = h.ctx.ToggleAudioMute()
@@ -60,9 +53,7 @@ func (h *InputHandler) handleKeyEvent(ev *tcell.EventKey) bool {
 		return true
 	}
 
-	// Handle Escape
 	if ev.Key() == tcell.KeyEscape {
-		// Reset state machine on any ESC
 		h.machine.Reset()
 
 		if h.ctx.IsSearchMode() {
@@ -82,14 +73,12 @@ func (h *InputHandler) handleKeyEvent(ev *tcell.EventKey) bool {
 			h.ctx.Mode = engine.ModeNormal
 			h.ctx.SetPaused(false)
 		} else {
-			// Normal mode - activate ping grid
 			h.ctx.SetPingActive(true)
 			h.ctx.SetPingGridTimer(1.0)
 		}
 		return true
 	}
 
-	// Mode-specific handling
 	if h.ctx.IsOverlayMode() {
 		return h.handleOverlayMode(ev)
 	} else if h.ctx.IsInsertMode() {
@@ -103,24 +92,23 @@ func (h *InputHandler) handleKeyEvent(ev *tcell.EventKey) bool {
 	}
 }
 
-// handleNormalMode handles input in normal mode
 func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
-	// Handle special keys (arrows, Tab, Enter, etc.)
+	// Special keys - wrapped in RunSafe
 	switch ev.Key() {
 	case tcell.KeyUp, tcell.KeyDown, tcell.KeyLeft, tcell.KeyRight,
 		tcell.KeyHome, tcell.KeyEnd, tcell.KeyTab, tcell.KeyEnter:
-		return h.handleNormalModeSpecialKeys(ev)
+		h.ctx.World.RunSafe(func() {
+			h.handleNormalModeSpecialKeys(ev)
+		})
+		return true
 	}
 
-	// Only process rune keys through state machine
 	if ev.Key() != tcell.KeyRune {
 		return true
 	}
 
-	// Delegate to state machine
 	result := h.machine.Process(ev.Rune(), h.bindings)
 
-	// Handle mode change
 	if result.ModeChange != 0 {
 		h.ctx.Mode = result.ModeChange
 		if result.ModeChange == engine.ModeSearch {
@@ -130,74 +118,69 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 		}
 	}
 
-	// Execute action
 	if result.Action != nil {
 		if result.CommandString != "" {
 			h.ctx.LastCommand = result.CommandString
 		}
-		result.Action(h.ctx)
+		h.ctx.World.RunSafe(func() {
+			result.Action(h.ctx)
+		})
 	}
 
 	return result.Continue
 }
 
-// handleNormalModeSpecialKeys handles non-rune keys in normal mode (arrows, Tab, Enter, etc.)
-func (h *InputHandler) handleNormalModeSpecialKeys(ev *tcell.EventKey) bool {
+func (h *InputHandler) handleNormalModeSpecialKeys(ev *tcell.EventKey) {
+	pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+	if !ok {
+		return
+	}
+
 	switch ev.Key() {
 	case tcell.KeyUp:
-		ExecuteMotion(h.ctx, 'k', 1)
+		result := MotionUp(h.ctx, pos.X, pos.Y, 1)
+		OpMove(h.ctx, result, 'k')
 		h.ctx.State.SetHeat(0)
-		h.ctx.LastCommand = ""
-		return true
 
 	case tcell.KeyDown:
-		ExecuteMotion(h.ctx, 'j', 1)
+		result := MotionDown(h.ctx, pos.X, pos.Y, 1)
+		OpMove(h.ctx, result, 'j')
 		h.ctx.State.SetHeat(0)
-		h.ctx.LastCommand = ""
-		return true
 
 	case tcell.KeyLeft:
-		ExecuteMotion(h.ctx, 'h', 1)
+		result := MotionLeft(h.ctx, pos.X, pos.Y, 1)
+		OpMove(h.ctx, result, 'h')
 		h.ctx.State.SetHeat(0)
-		h.ctx.LastCommand = ""
-		return true
 
 	case tcell.KeyRight:
-		ExecuteMotion(h.ctx, 'l', 1)
+		result := MotionRight(h.ctx, pos.X, pos.Y, 1)
+		OpMove(h.ctx, result, 'l')
 		h.ctx.State.SetHeat(0)
-		h.ctx.LastCommand = ""
-		return true
 
 	case tcell.KeyHome:
-		ExecuteMotion(h.ctx, '0', 1)
+		result := MotionLineStart(h.ctx, pos.X, pos.Y, 1)
+		OpMove(h.ctx, result, '0')
 		h.ctx.State.SetHeat(0)
-		h.ctx.LastCommand = ""
-		return true
 
 	case tcell.KeyEnd:
-		ExecuteMotion(h.ctx, '$', 1)
+		result := MotionLineEnd(h.ctx, pos.X, pos.Y, 1)
+		OpMove(h.ctx, result, '$')
 		h.ctx.State.SetHeat(0)
-		h.ctx.LastCommand = ""
-		return true
 
 	case tcell.KeyTab:
-		// Tab: Jump to nugget if energy >= 10
 		energy := h.ctx.State.GetEnergy()
 		if energy < 10 {
-			h.ctx.LastCommand = ""
-			return true
+			return
 		}
 
 		nuggetID := engine.Entity(h.ctx.State.GetActiveNuggetID())
 		if nuggetID == 0 {
-			h.ctx.LastCommand = ""
-			return true
+			return
 		}
 
 		nuggetPos, ok := h.ctx.World.Positions.Get(nuggetID)
 		if !ok {
-			h.ctx.LastCommand = ""
-			return true
+			return
 		}
 
 		h.ctx.World.Positions.Add(h.ctx.CursorEntity, components.PositionComponent{
@@ -220,11 +203,8 @@ func (h *InputHandler) handleNormalModeSpecialKeys(ev *tcell.EventKey) bool {
 			}
 			h.ctx.AudioEngine.SendState(cmd)
 		}
-		h.ctx.LastCommand = ""
-		return true
 
 	case tcell.KeyEnter:
-		// Directional cleaners if heat >= 10
 		currentHeat := h.ctx.State.GetHeat()
 		if currentHeat >= 10 {
 			h.ctx.State.AddHeat(-10)
@@ -238,97 +218,118 @@ func (h *InputHandler) handleNormalModeSpecialKeys(ev *tcell.EventKey) bool {
 				h.ctx.PushEvent(engine.EventDirectionalCleanerRequest, payload, h.ctx.PausableClock.Now())
 			}
 		}
-		h.ctx.LastCommand = ""
+	}
+
+	h.ctx.LastCommand = ""
+}
+
+func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
+	pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+	if !ok {
 		return true
 	}
 
-	return true
-}
-
-// handleInsertMode handles input in insert mode
-func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
-	// Handle arrow keys (reset heat)
 	switch ev.Key() {
 	case tcell.KeyUp:
-		ExecuteMotion(h.ctx, 'k', 1)
-		h.ctx.State.SetHeat(0)
-		return true
-	case tcell.KeyDown:
-		ExecuteMotion(h.ctx, 'j', 1)
-		h.ctx.State.SetHeat(0)
-		return true
-	case tcell.KeyLeft:
-		ExecuteMotion(h.ctx, 'h', 1)
-		h.ctx.State.SetHeat(0)
-		return true
-	case tcell.KeyRight:
-		ExecuteMotion(h.ctx, 'l', 1)
-		h.ctx.State.SetHeat(0)
-		return true
-	case tcell.KeyHome:
-		ExecuteMotion(h.ctx, '0', 1)
-		h.ctx.State.SetHeat(0)
-		return true
-	case tcell.KeyEnd:
-		ExecuteMotion(h.ctx, '$', 1)
-		h.ctx.State.SetHeat(0)
-		return true
-	case tcell.KeyTab:
-		// Tab: Jump to nugget if energy >= 10
-		energy := h.ctx.State.GetEnergy()
-		if energy < 10 {
-			return true
-		}
-
-		// Get active nugget from centralized state
-		nuggetID := engine.Entity(h.ctx.State.GetActiveNuggetID())
-		if nuggetID == 0 {
-			return true
-		}
-
-		// Query nugget position from World
-		nuggetPos, ok := h.ctx.World.Positions.Get(nuggetID)
-		if !ok {
-			return true
-		}
-
-		// Move cursor to nugget position
-		h.ctx.World.Positions.Add(h.ctx.CursorEntity, components.PositionComponent{
-			X: nuggetPos.X,
-			Y: nuggetPos.Y,
+		h.ctx.World.RunSafe(func() {
+			result := MotionUp(h.ctx, pos.X, pos.Y, 1)
+			OpMove(h.ctx, result, 'k')
+			h.ctx.State.SetHeat(0)
 		})
-
-		// Deduct energy via event
-		payload := &engine.EnergyTransactionPayload{
-			Amount: -10,
-			Source: "NuggetJump",
-		}
-		h.ctx.PushEvent(engine.EventEnergyTransaction, payload, h.ctx.PausableClock.Now())
-
-		// Play bell sound
-		if h.ctx.AudioEngine != nil {
-			cmd := audio.AudioCommand{
-				Type:       audio.SoundBell,
-				Priority:   1,
-				Generation: uint64(h.ctx.State.GetFrameNumber()),
-				Timestamp:  h.ctx.PausableClock.Now(),
-			}
-			h.ctx.AudioEngine.SendState(cmd)
-		}
 		return true
-	case tcell.KeyRune:
-		// SPACE key: move right without typing, no heat contribution
-		if ev.Rune() == ' ' {
-			pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
-			if ok && pos.X < h.ctx.GameWidth-1 {
-				pos.X++
-				h.ctx.World.Positions.Add(h.ctx.CursorEntity, pos)
+
+	case tcell.KeyDown:
+		h.ctx.World.RunSafe(func() {
+			result := MotionDown(h.ctx, pos.X, pos.Y, 1)
+			OpMove(h.ctx, result, 'j')
+			h.ctx.State.SetHeat(0)
+		})
+		return true
+
+	case tcell.KeyLeft:
+		h.ctx.World.RunSafe(func() {
+			result := MotionLeft(h.ctx, pos.X, pos.Y, 1)
+			OpMove(h.ctx, result, 'h')
+			h.ctx.State.SetHeat(0)
+		})
+		return true
+
+	case tcell.KeyRight:
+		h.ctx.World.RunSafe(func() {
+			result := MotionRight(h.ctx, pos.X, pos.Y, 1)
+			OpMove(h.ctx, result, 'l')
+			h.ctx.State.SetHeat(0)
+		})
+		return true
+
+	case tcell.KeyHome:
+		h.ctx.World.RunSafe(func() {
+			result := MotionLineStart(h.ctx, pos.X, pos.Y, 1)
+			OpMove(h.ctx, result, '0')
+			h.ctx.State.SetHeat(0)
+		})
+		return true
+
+	case tcell.KeyEnd:
+		h.ctx.World.RunSafe(func() {
+			result := MotionLineEnd(h.ctx, pos.X, pos.Y, 1)
+			OpMove(h.ctx, result, '$')
+			h.ctx.State.SetHeat(0)
+		})
+		return true
+
+	case tcell.KeyTab:
+		h.ctx.World.RunSafe(func() {
+			energy := h.ctx.State.GetEnergy()
+			if energy < 10 {
+				return
 			}
+
+			nuggetID := engine.Entity(h.ctx.State.GetActiveNuggetID())
+			if nuggetID == 0 {
+				return
+			}
+
+			nuggetPos, ok := h.ctx.World.Positions.Get(nuggetID)
+			if !ok {
+				return
+			}
+
+			h.ctx.World.Positions.Add(h.ctx.CursorEntity, components.PositionComponent{
+				X: nuggetPos.X,
+				Y: nuggetPos.Y,
+			})
+
+			payload := &engine.EnergyTransactionPayload{
+				Amount: -10,
+				Source: "NuggetJump",
+			}
+			h.ctx.PushEvent(engine.EventEnergyTransaction, payload, h.ctx.PausableClock.Now())
+
+			if h.ctx.AudioEngine != nil {
+				cmd := audio.AudioCommand{
+					Type:       audio.SoundBell,
+					Priority:   1,
+					Generation: uint64(h.ctx.State.GetFrameNumber()),
+					Timestamp:  h.ctx.PausableClock.Now(),
+				}
+				h.ctx.AudioEngine.SendState(cmd)
+			}
+		})
+		return true
+
+	case tcell.KeyRune:
+		if ev.Rune() == ' ' {
+			h.ctx.World.RunSafe(func() {
+				p, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
+				if ok && p.X < h.ctx.GameWidth-1 {
+					p.X++
+					h.ctx.World.Positions.Add(h.ctx.CursorEntity, p)
+				}
+			})
 			return true
 		}
-		// Push typing event to queue (processed by EnergySystem via EventRouter)
-		pos, _ := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
-		// Acquire payload from pool to minimize GC pressure
+		// Push typing event (processed by EnergySystem via EventRouter)
 		payload := engine.CharacterTypedPayloadPool.Get().(*engine.CharacterTypedPayload)
 		payload.Char = ev.Rune()
 		payload.X = pos.X
@@ -338,14 +339,15 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 	return true
 }
 
-// handleSearchMode handles input in search mode
 func (h *InputHandler) handleSearchMode(ev *tcell.EventKey) bool {
 	if ev.Key() == tcell.KeyEnter {
-		// Execute search
 		if h.ctx.SearchText != "" {
-			if PerformSearch(h.ctx, h.ctx.SearchText, true) {
-				h.ctx.LastSearchText = h.ctx.SearchText
-			}
+			// Wrap in RunSafe as PerformSearch writes to ECS
+			h.ctx.World.RunSafe(func() {
+				if PerformSearch(h.ctx, h.ctx.SearchText, true) {
+					h.ctx.LastSearchText = h.ctx.SearchText
+				}
+			})
 		}
 		h.ctx.Mode = engine.ModeNormal
 		h.ctx.SearchText = ""
@@ -363,28 +365,25 @@ func (h *InputHandler) handleSearchMode(ev *tcell.EventKey) bool {
 	return true
 }
 
-// handleCommandMode handles input in command mode
 func (h *InputHandler) handleCommandMode(ev *tcell.EventKey) bool {
 	if ev.Key() == tcell.KeyEnter {
-		// Execute command
 		command := h.ctx.CommandText
-		shouldContinue := ExecuteCommand(h.ctx, command)
+		var shouldContinue bool
 
-		// Clear command text after execution
+		// Wrap in RunSafe as commands like :new mutate world
+		h.ctx.World.RunSafe(func() {
+			shouldContinue = ExecuteCommand(h.ctx, command)
+		})
+
 		h.ctx.CommandText = ""
 
-		// Check if command switched to a different mode (e.g., :debug or :help activates overlay)
-		// Only reset to normal mode if we're still in command mode
 		if h.ctx.Mode == engine.ModeOverlay {
-			// Command switched to Overlay mode - preserve mode and pause state
-			// The overlay handler will manage cleanup when user exits
+			// Command switched to Overlay mode
 		} else {
-			// Standard command finished - return to normal mode
 			h.ctx.Mode = engine.ModeNormal
 			h.ctx.SetPaused(false)
 		}
 
-		// Return the result from ExecuteCommand (false = exit game)
 		return shouldContinue
 	}
 	if ev.Key() == tcell.KeyBackspace || ev.Key() == tcell.KeyBackspace2 {
@@ -399,9 +398,7 @@ func (h *InputHandler) handleCommandMode(ev *tcell.EventKey) bool {
 	return true
 }
 
-// handleOverlayMode handles input in overlay mode
 func (h *InputHandler) handleOverlayMode(ev *tcell.EventKey) bool {
-	// ESC or ENTER closes the overlay
 	if ev.Key() == tcell.KeyEscape || ev.Key() == tcell.KeyEnter {
 		h.ctx.OverlayActive = false
 		h.ctx.OverlayTitle = ""
@@ -412,7 +409,6 @@ func (h *InputHandler) handleOverlayMode(ev *tcell.EventKey) bool {
 		return true
 	}
 
-	// Handle up/down scrolling
 	if ev.Key() == tcell.KeyUp || (ev.Key() == tcell.KeyRune && ev.Rune() == 'k') {
 		if h.ctx.OverlayScroll > 0 {
 			h.ctx.OverlayScroll--
@@ -421,7 +417,6 @@ func (h *InputHandler) handleOverlayMode(ev *tcell.EventKey) bool {
 	}
 
 	if ev.Key() == tcell.KeyDown || (ev.Key() == tcell.KeyRune && ev.Rune() == 'j') {
-		// Only scroll if there's more content to show
 		if h.ctx.OverlayScroll < len(h.ctx.OverlayContent)-1 {
 			h.ctx.OverlayScroll++
 		}

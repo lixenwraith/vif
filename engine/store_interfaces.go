@@ -1,8 +1,8 @@
 package engine
 
-// AnyStore provides type-erased operations for lifecycle management.
+// AnyStore provides type-erased operations for lifecycle management
 // This interface allows World to manage all stores uniformly
-// for operations like entity destruction without knowing the concrete type.
+// for operations like entity destruction without knowing the concrete type
 type AnyStore interface {
 	// Remove deletes a component from an entity
 	Remove(e Entity)

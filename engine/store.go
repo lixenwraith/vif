@@ -5,8 +5,8 @@ import "sync"
 // Compile-time check to ensure Store implements QueryableStore
 var _ QueryableStore = (*Store[int])(nil)
 
-// Store is a generic container for a specific component type T.
-// Uses sparse set pattern for cache-friendly iteration.
+// Store is a generic container for a specific component type T
+// Uses sparse set pattern for cache-friendly iteration
 type Store[T any] struct {
 	mu         sync.RWMutex
 	components map[Entity]T

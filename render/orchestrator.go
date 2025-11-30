@@ -11,7 +11,7 @@ type rendererEntry struct {
 	index    int // registration order for stable sort
 }
 
-// RenderOrchestrator coordinates the render pipeline.
+// RenderOrchestrator coordinates the render pipeline
 type RenderOrchestrator struct {
 	screen    tcell.Screen
 	buffer    *RenderBuffer
@@ -19,7 +19,7 @@ type RenderOrchestrator struct {
 	regCount  int
 }
 
-// NewRenderOrchestrator creates an orchestrator with the given screen and dimensions.
+// NewRenderOrchestrator creates an orchestrator with the given screen and dimensions
 func NewRenderOrchestrator(screen tcell.Screen, width, height int) *RenderOrchestrator {
 	return &RenderOrchestrator{
 		screen:    screen,

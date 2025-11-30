@@ -376,7 +376,7 @@ func (cs *ClockScheduler) processTick() {
 
 	// Update APM every 20 ticks (approx 1 second)
 	// We use the tick count from the scheduler which resets only on restart or wraps,
-	// but calculating modulo on the localized tick count is safe for this interval.
+	// but calculating modulo on the localized tick count is safe for this interval
 	if cs.tickCount.Load()%20 == 0 {
 		cs.ctx.State.UpdateAPM()
 	}

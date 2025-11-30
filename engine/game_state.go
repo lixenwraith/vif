@@ -677,7 +677,7 @@ func (gs *GameState) SetActiveNuggetID(id uint64) {
 }
 
 // ClearActiveNuggetID atomically clears the active nugget if it matches expected
-// Returns true if cleared, false if already changed.
+// Returns true if cleared, false if already changed
 func (gs *GameState) ClearActiveNuggetID(expected uint64) bool {
 	return gs.ActiveNuggetID.CompareAndSwap(expected, 0)
 }

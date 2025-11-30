@@ -2,7 +2,7 @@ package engine
 
 import "sort"
 
-// QueryBuilder queries entities by component intersection, optimizing by starting with the smallest store.
+// QueryBuilder queries entities by component intersection, optimizing by starting with the smallest store
 type QueryBuilder struct {
 	world    *World
 	stores   []QueryableStore
@@ -10,8 +10,8 @@ type QueryBuilder struct {
 	results  []Entity
 }
 
-// Query creates a new QueryBuilder for finding entities with specific component combinations.
-// Use With() to add component filters, then Execute() to get the results.
+// Query creates a new QueryBuilder for finding entities with specific component combinations
+// Use With() to add component filters, then Execute() to get the results
 //
 // Example:
 //
@@ -27,8 +27,8 @@ func (w *World) Query() *QueryBuilder {
 	}
 }
 
-// With filters entities that have components in ALL specified stores.
-// Panics if called after Execute().
+// With filters entities that have components in ALL specified stores
+// Panics if called after Execute()
 func (qb *QueryBuilder) With(store QueryableStore) *QueryBuilder {
 	if qb.executed {
 		panic("query already executed - cannot modify after Execute()")
@@ -37,8 +37,8 @@ func (qb *QueryBuilder) With(store QueryableStore) *QueryBuilder {
 	return qb
 }
 
-// Execute runs the query, returning entities in all specified stores.
-// Optimizes by sorting stores by size. Results are cached on subsequent calls.
+// Execute runs the query, returning entities in all specified stores
+// Optimizes by sorting stores by size. Results are cached on subsequent calls
 func (qb *QueryBuilder) Execute() []Entity {
 	if qb.executed {
 		return qb.results

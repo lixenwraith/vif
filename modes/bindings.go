@@ -1,7 +1,5 @@
 package modes
 
-import "github.com/lixenwraith/vi-fighter/engine"
-
 // ActionType classifies key behaviors for state machine logic
 type ActionType uint8
 
@@ -17,10 +15,10 @@ const (
 
 // Binding maps a key to its behavior
 type Binding struct {
-	Action       ActionType
-	Target       rune // Canonical command (for remapping)
-	AcceptsCount bool
-	Executor     func(*engine.GameContext, int)
+	Action     ActionType
+	Target     rune           // Canonical command identifier
+	Motion     MotionFunc     // For standard motions
+	CharMotion CharMotionFunc // For f/F/t/T
 }
 
 // BindingTable holds all key bindings
@@ -35,109 +33,92 @@ func DefaultBindings() *BindingTable {
 	return &BindingTable{
 		normal: map[rune]*Binding{
 			// Basic motions
-			'h': {ActionMotion, 'h', true, wrapMotion('h')},
-			'j': {ActionMotion, 'j', true, wrapMotion('j')},
-			'k': {ActionMotion, 'k', true, wrapMotion('k')},
-			'l': {ActionMotion, 'l', true, wrapMotion('l')},
-			' ': {ActionMotion, ' ', true, wrapMotion(' ')},
+			'h': {ActionMotion, 'h', MotionLeft, nil},
+			'j': {ActionMotion, 'j', MotionDown, nil},
+			'k': {ActionMotion, 'k', MotionUp, nil},
+			'l': {ActionMotion, 'l', MotionRight, nil},
+			' ': {ActionMotion, ' ', MotionRight, nil},
 
 			// Word motions
-			'w': {ActionMotion, 'w', true, wrapMotion('w')},
-			'W': {ActionMotion, 'W', true, wrapMotion('W')},
-			'b': {ActionMotion, 'b', true, wrapMotion('b')},
-			'B': {ActionMotion, 'B', true, wrapMotion('B')},
-			'e': {ActionMotion, 'e', true, wrapMotion('e')},
-			'E': {ActionMotion, 'E', true, wrapMotion('E')},
+			'w': {ActionMotion, 'w', MotionWordForward, nil},
+			'W': {ActionMotion, 'W', MotionWORDForward, nil},
+			'b': {ActionMotion, 'b', MotionWordBack, nil},
+			'B': {ActionMotion, 'B', MotionWORDBack, nil},
+			'e': {ActionMotion, 'e', MotionWordEnd, nil},
+			'E': {ActionMotion, 'E', MotionWORDEnd, nil},
 
 			// Line motions
-			'0': {ActionMotion, '0', false, wrapMotion('0')},
-			'^': {ActionMotion, '^', false, wrapMotion('^')},
-			'$': {ActionMotion, '$', true, wrapMotion('$')},
+			'0': {ActionMotion, '0', MotionLineStart, nil},
+			'^': {ActionMotion, '^', MotionFirstNonWS, nil},
+			'$': {ActionMotion, '$', MotionLineEnd, nil},
 
 			// Screen motions
-			'H': {ActionMotion, 'H', true, wrapMotion('H')},
-			'M': {ActionMotion, 'M', false, wrapMotion('M')},
-			'L': {ActionMotion, 'L', true, wrapMotion('L')},
-			'G': {ActionMotion, 'G', true, wrapMotion('G')},
+			'H': {ActionMotion, 'H', MotionScreenTop, nil},
+			'M': {ActionMotion, 'M', MotionScreenMid, nil},
+			'L': {ActionMotion, 'L', MotionScreenBot, nil},
+			'G': {ActionMotion, 'G', MotionFileEnd, nil},
 
 			// Paragraph motions
-			'{': {ActionMotion, '{', true, wrapMotion('{')},
-			'}': {ActionMotion, '}', true, wrapMotion('}')},
+			'{': {ActionMotion, '{', MotionParaBack, nil},
+			'}': {ActionMotion, '}', MotionParaForward, nil},
 
 			// Bracket matching
-			'%': {ActionMotion, '%', false, wrapMotion('%')},
+			'%': {ActionMotion, '%', MotionMatchBracket, nil},
 
 			// Char-wait commands
-			'f': {ActionCharWait, 'f', true, nil},
-			'F': {ActionCharWait, 'F', true, nil},
-			't': {ActionCharWait, 't', true, nil},
-			'T': {ActionCharWait, 'T', true, nil},
+			'f': {ActionCharWait, 'f', nil, MotionFindForward},
+			'F': {ActionCharWait, 'F', nil, MotionFindBack},
+			't': {ActionCharWait, 't', nil, MotionTillForward},
+			'T': {ActionCharWait, 'T', nil, MotionTillBack},
 
 			// Operator
-			'd': {ActionOperator, 'd', true, nil},
+			'd': {ActionOperator, 'd', nil, nil},
 
 			// Prefix
-			'g': {ActionPrefix, 'g', true, nil},
+			'g': {ActionPrefix, 'g', nil, nil},
 
 			// Mode switches
-			'i': {ActionModeSwitch, 'i', false, nil},
-			'/': {ActionModeSwitch, '/', false, nil},
-			':': {ActionModeSwitch, ':', false, nil},
+			'i': {ActionModeSwitch, 'i', nil, nil},
+			'/': {ActionModeSwitch, '/', nil, nil},
+			':': {ActionModeSwitch, ':', nil, nil},
 
 			// Special commands
-			'x': {ActionSpecial, 'x', true, execDeleteChar},
-			'D': {ActionSpecial, 'D', true, execDeleteToEOL},
-			'n': {ActionSpecial, 'n', false, execSearchNext},
-			'N': {ActionSpecial, 'N', false, execSearchPrev},
-			';': {ActionSpecial, ';', true, execRepeatFind},
-			',': {ActionSpecial, ',', true, execRepeatFindReverse},
+			'x': {ActionSpecial, 'x', nil, nil},
+			'D': {ActionSpecial, 'D', nil, nil},
+			'n': {ActionSpecial, 'n', nil, nil},
+			'N': {ActionSpecial, 'N', nil, nil},
+			';': {ActionSpecial, ';', nil, nil},
+			',': {ActionSpecial, ',', nil, nil},
 		},
-		// DON'T refactor nil Executor, future plan
 		operatorMotions: map[rune]*Binding{
 			// Motions valid after 'd'
-			'w': {ActionMotion, 'w', true, nil},
-			'W': {ActionMotion, 'W', true, nil},
-			'b': {ActionMotion, 'b', true, nil},
-			'B': {ActionMotion, 'B', true, nil},
-			'e': {ActionMotion, 'e', true, nil},
-			'E': {ActionMotion, 'E', true, nil},
-			'0': {ActionMotion, '0', false, nil},
-			'^': {ActionMotion, '^', false, nil},
-			'$': {ActionMotion, '$', true, nil},
-			'd': {ActionMotion, 'd', true, nil}, // dd
-			'G': {ActionMotion, 'G', true, nil},
-			'{': {ActionMotion, '{', true, nil},
-			'}': {ActionMotion, '}', true, nil},
-			'%': {ActionMotion, '%', false, nil},
-			// Directional motions
-			'h': {ActionMotion, 'h', true, nil},
-			'j': {ActionMotion, 'j', true, nil},
-			'k': {ActionMotion, 'k', true, nil},
-			'l': {ActionMotion, 'l', true, nil},
-			' ': {ActionMotion, ' ', true, nil},
+			'w': {ActionMotion, 'w', MotionWordForward, nil},
+			'W': {ActionMotion, 'W', MotionWORDForward, nil},
+			'b': {ActionMotion, 'b', MotionWordBack, nil},
+			'B': {ActionMotion, 'B', MotionWORDBack, nil},
+			'e': {ActionMotion, 'e', MotionWordEnd, nil},
+			'E': {ActionMotion, 'E', MotionWORDEnd, nil},
+			'0': {ActionMotion, '0', MotionLineStart, nil},
+			'^': {ActionMotion, '^', MotionFirstNonWS, nil},
+			'$': {ActionMotion, '$', MotionLineEnd, nil},
+			'G': {ActionMotion, 'G', MotionFileEnd, nil},
+			'{': {ActionMotion, '{', MotionParaBack, nil},
+			'}': {ActionMotion, '}', MotionParaForward, nil},
+			'%': {ActionMotion, '%', MotionMatchBracket, nil},
+			'h': {ActionMotion, 'h', MotionLeft, nil},
+			'j': {ActionMotion, 'j', MotionDown, nil},
+			'k': {ActionMotion, 'k', MotionUp, nil},
+			'l': {ActionMotion, 'l', MotionRight, nil},
+			' ': {ActionMotion, ' ', MotionRight, nil},
 			// Char motions after operator
-			'f': {ActionCharWait, 'f', true, nil},
-			'F': {ActionCharWait, 'F', true, nil},
-			't': {ActionCharWait, 't', true, nil},
-			'T': {ActionCharWait, 'T', true, nil},
+			'f': {ActionCharWait, 'f', nil, MotionFindForward},
+			'F': {ActionCharWait, 'F', nil, MotionFindBack},
+			't': {ActionCharWait, 't', nil, MotionTillForward},
+			'T': {ActionCharWait, 'T', nil, MotionTillBack},
 		},
 		prefixG: map[rune]*Binding{
-			'g': {ActionMotion, 'g', true, execGotoTop},
-			'o': {ActionMotion, 'o', true, execGotoOrigin},
+			'g': {ActionMotion, 'g', MotionFileStart, nil},
+			'o': {ActionMotion, 'o', MotionOrigin, nil},
 		},
-	}
-}
-
-// LoadBindings loads bindings from config file (placeholder)
-// Format: JSON/TOML key-value where key is source rune, value is target behavior
-func LoadBindings(path string) (*BindingTable, error) {
-	// TODO: implement config loading
-	return DefaultBindings(), nil
-}
-
-// wrapMotion creates an executor that calls ExecuteMotion
-func wrapMotion(cmd rune) func(*engine.GameContext, int) {
-	return func(ctx *engine.GameContext, count int) {
-		ExecuteMotion(ctx, cmd, count)
 	}
 }

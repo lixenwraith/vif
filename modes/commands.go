@@ -177,10 +177,10 @@ func handleBoostCommand(ctx *engine.GameContext) bool {
 	// Maximize heat to ensure consistent gameplay state (Boost implies Max Heat)
 	ctx.State.SetHeat(constants.MaxHeat)
 
-	// CRITICAL: Set end time BEFORE enabling boost to prevent race condition.
-	// BoostSystem.UpdateBoostTimerAtomic() checks Enabled first, then reads EndTime.
+	// CRITICAL: Set end time BEFORE enabling boost to prevent race condition
+	// BoostSystem.UpdateBoostTimerAtomic() checks Enabled first, then reads EndTime
 	// If we set Enabled=true before EndTime, the system may read stale EndTime
-	// and immediately disable boost.
+	// and immediately disable boost
 	ctx.State.SetBoostEndTime(endTime)
 	ctx.State.SetBoostColor(1) // Default to blue boost
 	ctx.State.SetBoostEnabled(true)
@@ -212,7 +212,7 @@ func handleSpawnCommand(ctx *engine.GameContext, args []string) bool {
 }
 
 // setCommandError sets an error message in the status message
-// This string will be cleared by InputHandler on the next keystroke.
+// This string will be cleared by InputHandler on the next keystroke
 func setCommandError(ctx *engine.GameContext, message string) {
 	ctx.StatusMessage = message
 }

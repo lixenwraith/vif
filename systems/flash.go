@@ -38,8 +38,8 @@ func (s *FlashSystem) Update(world *engine.World, dt time.Duration) {
 	}
 }
 
-// SpawnDestructionFlash creates a flash effect at the given position.
-// Call from any system when destroying an entity with visual feedback.
+// SpawnDestructionFlash creates a flash effect at the given position
+// Call from any system when destroying an entity with visual feedback
 func SpawnDestructionFlash(world *engine.World, x, y int, char rune, now time.Time) {
 	flash := components.FlashComponent{
 		X:         x,

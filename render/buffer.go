@@ -94,6 +94,7 @@ func (b *RenderBuffer) Get(x, y int) RenderCell {
 // DecomposeAt returns fg, bg, attrs at (x, y) and returns defaults on OOB
 func (b *RenderBuffer) DecomposeAt(x, y int) (fg, bg tcell.Color, attrs tcell.AttrMask) {
 	cell := b.Get(x, y)
+	// TODO: Why is there still a Decompose use?
 	return cell.Style.Decompose()
 }
 

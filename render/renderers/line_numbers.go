@@ -22,7 +22,7 @@ func NewLineNumbersRenderer(lineNumWidth int, gameCtx *engine.GameContext) *Line
 	}
 }
 
-// Render implements SystemRenderer.
+// Render implements SystemRenderer
 func (l *LineNumbersRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	defaultStyle := tcell.StyleDefault.Background(render.RgbBackground)
 	lineNumStyle := defaultStyle.Foreground(render.RgbLineNumbers)

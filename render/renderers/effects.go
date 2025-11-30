@@ -69,7 +69,7 @@ func (e *EffectsRenderer) buildMaterializeGradient() {
 	}
 }
 
-// Render draws all visual effects.
+// Render draws all visual effects
 func (e *EffectsRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	defaultStyle := tcell.StyleDefault.Background(render.RgbBackground)
 

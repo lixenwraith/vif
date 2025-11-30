@@ -14,9 +14,9 @@ const (
 	MaterializeFromRight
 )
 
-// MaterializeComponent represents a converging spawn animation entity.
+// MaterializeComponent represents a converging spawn animation entity
 // Four spawners (one per edge) converge to a target position before
-// the actual drain entity materializes.
+// the actual drain entity materializes
 type MaterializeComponent struct {
 	// Physics state (sub-pixel precision)
 	PreciseX float64

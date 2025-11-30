@@ -8,7 +8,7 @@ import (
 
 // ResourceStore is a thread-safe container for global game resources
 // It allows systems to access shared data (Time, Config, Input) without
-// coupling to the GameContext.
+// coupling to the GameContext
 type ResourceStore struct {
 	mu        sync.RWMutex
 	resources map[reflect.Type]any
@@ -63,7 +63,7 @@ func MustGetResource[T any](rs *ResourceStore) T {
 
 // --- Core Resources ---
 
-// TimeResource wraps time data for systems.
+// TimeResource wraps time data for systems
 // It is updated by the GameContext/ClockScheduler at the start of a frame/tick
 type TimeResource struct {
 	// GameTime is the current time in the game world (affected by pause)

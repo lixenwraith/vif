@@ -2,8 +2,8 @@ package components
 
 import "github.com/gdamore/tcell/v2"
 
-// ShieldComponent represents a circular/elliptical energy shield.
-// It is a geometric field effect that modifies visual rendering and physics interactions.
+// ShieldComponent represents a circular/elliptical energy shield
+// It is a geometric field effect that modifies visual rendering and physics interactions
 type ShieldComponent struct {
 	Active     bool
 	RadiusX    float64     // Horizontal radius in grid cells

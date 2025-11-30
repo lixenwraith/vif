@@ -2,8 +2,8 @@ package components
 
 import "time"
 
-// FlashComponent represents a brief visual flash effect when a character is removed.
-// Used by decay destruction, cleaner removal, and other visual feedback.
+// FlashComponent represents a brief visual flash effect when a character is removed
+// Used by decay destruction, cleaner removal, and other visual feedback
 type FlashComponent struct {
 	X         int       // X position of the flash
 	Y         int       // Y position of the flash

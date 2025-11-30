@@ -1,313 +1,403 @@
 package modes
 
-import (
-	"github.com/lixenwraith/vi-fighter/components"
-	"github.com/lixenwraith/vi-fighter/engine"
-)
+import "github.com/lixenwraith/vi-fighter/engine"
 
-// ExecuteMotion executes a vi motion command
-func ExecuteMotion(ctx *engine.GameContext, cmd rune, count int) {
-	if count == 0 {
-		count = 1
+// MotionLeft implements 'h' motion
+func MotionLeft(ctx *engine.GameContext, x, y, count int) MotionResult {
+	endX := x
+	for i := 0; i < count && endX > 0; i++ {
+		endX--
 	}
-
-	// Get cursor position
-	pos, ok := ctx.World.Positions.Get(ctx.CursorEntity)
-	if !ok {
-		return // Cursor entity missing - should never happen
-	}
-	cursorX := pos.X
-	cursorY := pos.Y
-
-	switch cmd {
-	case 'w': // Word forward (vim-style: considers punctuation)
-		for i := 0; i < count; i++ {
-			prevX := cursorX
-			cursorX = findNextWordStartVim(ctx, cursorX, cursorY)
-			// Break if cursor didn't move (can't advance further)
-			if cursorX == prevX {
-				break
-			}
-		}
-	case 'W': // WORD forward (space-delimited)
-		for i := 0; i < count; i++ {
-			prevX := cursorX
-			cursorX = findNextWORDStart(ctx, cursorX, cursorY)
-			// Break if cursor didn't move (can't advance further)
-			if cursorX == prevX {
-				break
-			}
-		}
-	case 'e': // Word end (vim-style: considers punctuation)
-		for i := 0; i < count; i++ {
-			prevX := cursorX
-			cursorX = findWordEndVim(ctx, cursorX, cursorY)
-			// Break if cursor didn't move (can't advance further)
-			if cursorX == prevX {
-				break
-			}
-		}
-	case 'E': // WORD end (space-delimited)
-		for i := 0; i < count; i++ {
-			prevX := cursorX
-			cursorX = findWORDEnd(ctx, cursorX, cursorY)
-			// Break if cursor didn't move (can't advance further)
-			if cursorX == prevX {
-				break
-			}
-		}
-	case 'b': // Word backward (vim-style: considers punctuation)
-		for i := 0; i < count; i++ {
-			prevX := cursorX
-			cursorX = findPrevWordStartVim(ctx, cursorX, cursorY)
-			// Break if cursor didn't move (can't advance further)
-			if cursorX == prevX {
-				break
-			}
-		}
-	case 'B': // WORD backward (space-delimited)
-		for i := 0; i < count; i++ {
-			prevX := cursorX
-			cursorX = findPrevWORDStart(ctx, cursorX, cursorY)
-			// Break if cursor didn't move (can't advance further)
-			if cursorX == prevX {
-				break
-			}
-		}
-	case '0': // Line start
-		cursorX = 0
-	case '^': // First non-whitespace character
-		cursorX = findFirstNonWhitespace(ctx, cursorY)
-	case '$': // Line end (rightmost character)
-		cursorX = findLineEnd(ctx, cursorY)
-	case 'H': // Top of screen (same column)
-		cursorY = 0
-	case 'M': // Middle of screen (same column)
-		cursorY = ctx.GameHeight / 2
-	case 'L': // Bottom of screen (same column)
-		cursorY = ctx.GameHeight - 1
-	case '{': // Previous empty line (paragraph backward)
-		for i := 0; i < count; i++ {
-			prevY := cursorY
-			cursorY = findPrevEmptyLine(ctx, cursorY)
-			// Break if cursor didn't move (can't advance further)
-			if cursorY == prevY {
-				break
-			}
-		}
-	case '}': // Next empty line (paragraph forward)
-		for i := 0; i < count; i++ {
-			prevY := cursorY
-			cursorY = findNextEmptyLine(ctx, cursorY)
-			// Break if cursor didn't move (can't advance further)
-			if cursorY == prevY {
-				break
-			}
-		}
-	case '%': // Matching bracket
-		newX, newY := findMatchingBracket(ctx, cursorX, cursorY)
-		if newX != -1 && newY != -1 {
-			cursorX = newX
-			cursorY = newY
-		}
-	case 'G': // Bottom
-		cursorY = ctx.GameHeight - 1
-	case 'h': // Left
-		for i := 0; i < count; i++ {
-			if cursorX > 0 {
-				cursorX--
-			} else {
-				// Break early if we can't move further left
-				break
-			}
-		}
-	case 'j': // Down
-		for i := 0; i < count; i++ {
-			if cursorY < ctx.GameHeight-1 {
-				cursorY++
-			} else {
-				// Break early if we can't move further down
-				break
-			}
-		}
-	case 'k': // Up
-		for i := 0; i < count; i++ {
-			if cursorY > 0 {
-				cursorY--
-			} else {
-				// Break early if we can't move further up
-				break
-			}
-		}
-	case 'l', ' ': // Right
-		for i := 0; i < count; i++ {
-			if cursorX < ctx.GameWidth-1 {
-				cursorX++
-			} else {
-				// Break early if we can't move further right
-				break
-			}
-		}
-	}
-
-	// Validate cursor position after motion
-	cursorX, cursorY = validatePosition(ctx, cursorX, cursorY)
-
-	// Write cursor position TO ECS
-	ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
-		X: cursorX,
-		Y: cursorY,
-	})
-
-	// Check for consecutive motion keys (heat penalty)
-	if cmd == ctx.LastMoveKey && (cmd == 'h' || cmd == 'j' || cmd == 'k' || cmd == 'l') {
-		ctx.ConsecutiveCount++
-		// TODO: Expand to everything, not only vi-keys
-		if ctx.ConsecutiveCount > 3 {
-			ctx.State.SetHeat(0) // Reset heat after 3+ consecutive moves
-		}
-	} else {
-		ctx.LastMoveKey = cmd
-		ctx.ConsecutiveCount = 1
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: endX, EndY: y,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: endX != x,
 	}
 }
 
-// ExecuteFindChar executes the 'f' (find character) command
-func ExecuteFindChar(ctx *engine.GameContext, targetChar rune, count int) {
-	if count == 0 {
-		count = 1
+// MotionDown implements 'j' motion
+func MotionDown(ctx *engine.GameContext, x, y, count int) MotionResult {
+	endY := y
+	for i := 0; i < count && endY < ctx.GameHeight-1; i++ {
+		endY++
 	}
-
-	pos, ok := ctx.World.Positions.Get(ctx.CursorEntity)
-	if !ok {
-		return
-	}
-
-	ctx.LastFindChar = targetChar
-	ctx.LastFindForward = true
-	ctx.LastFindType = 'f'
-
-	newX, found := findCharInDirection(ctx, pos.X, pos.Y, targetChar, count, true)
-	if found {
-		ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
-			X: newX,
-			Y: pos.Y,
-		})
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: x, EndY: endY,
+		Type: RangeLine, Style: StyleInclusive,
+		Valid: endY != y,
 	}
 }
 
-// ExecuteFindCharBackward executes the 'F' (find character backward) command
-func ExecuteFindCharBackward(ctx *engine.GameContext, targetChar rune, count int) {
-	if count == 0 {
-		count = 1
+// MotionUp implements 'k' motion
+func MotionUp(ctx *engine.GameContext, x, y, count int) MotionResult {
+	endY := y
+	for i := 0; i < count && endY > 0; i++ {
+		endY--
 	}
-
-	pos, ok := ctx.World.Positions.Get(ctx.CursorEntity)
-	if !ok {
-		return
-	}
-
-	ctx.LastFindChar = targetChar
-	ctx.LastFindForward = false
-	ctx.LastFindType = 'F'
-
-	newX, found := findCharInDirection(ctx, pos.X, pos.Y, targetChar, count, false)
-	if found {
-		ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
-			X: newX,
-			Y: pos.Y,
-		})
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: x, EndY: endY,
+		Type: RangeLine, Style: StyleInclusive,
+		Valid: endY != y,
 	}
 }
 
-// ExecuteTillChar executes the 't' (till character) command
-func ExecuteTillChar(ctx *engine.GameContext, targetChar rune, count int) {
-	if count == 0 {
-		count = 1
+// MotionRight implements 'l' and space motion
+func MotionRight(ctx *engine.GameContext, x, y, count int) MotionResult {
+	endX := x
+	for i := 0; i < count && endX < ctx.GameWidth-1; i++ {
+		endX++
 	}
-
-	pos, ok := ctx.World.Positions.Get(ctx.CursorEntity)
-	if !ok {
-		return
-	}
-
-	ctx.LastFindChar = targetChar
-	ctx.LastFindForward = true
-	ctx.LastFindType = 't'
-
-	newX, found := findCharInDirection(ctx, pos.X, pos.Y, targetChar, count, true)
-	if found && newX > pos.X+1 {
-		ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
-			X: newX - 1,
-			Y: pos.Y,
-		})
-	} else if found && newX == pos.X+1 {
-		// Target is adjacent, cursor doesn't move for 't'
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: endX, EndY: y,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: endX != x,
 	}
 }
 
-// ExecuteTillCharBackward executes the 'T' (till character backward) command
-func ExecuteTillCharBackward(ctx *engine.GameContext, targetChar rune, count int) {
-	if count == 0 {
-		count = 1
-	}
-
-	pos, ok := ctx.World.Positions.Get(ctx.CursorEntity)
-	if !ok {
-		return
-	}
-
-	ctx.LastFindChar = targetChar
-	ctx.LastFindForward = false
-	ctx.LastFindType = 'T'
-
-	newX, found := findCharInDirection(ctx, pos.X, pos.Y, targetChar, count, false)
-	if found && newX < pos.X-1 {
-		ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
-			X: newX + 1,
-			Y: pos.Y,
-		})
-	}
-}
-
-// RepeatFindChar executes the ';' and ',' commands
-func RepeatFindChar(ctx *engine.GameContext, reverse bool) {
-	if ctx.LastFindType == 0 {
-		return
-	}
-
-	originalChar := ctx.LastFindChar
-	originalType := ctx.LastFindType
-	originalForward := ctx.LastFindForward
-
-	var executeType rune
-	if reverse {
-		switch ctx.LastFindType {
-		case 'f':
-			executeType = 'F'
-		case 'F':
-			executeType = 'f'
-		case 't':
-			executeType = 'T'
-		case 'T':
-			executeType = 't'
+// MotionWordForward implements 'w' motion
+func MotionWordForward(ctx *engine.GameContext, x, y, count int) MotionResult {
+	endX := x
+	for i := 0; i < count; i++ {
+		prev := endX
+		endX = findNextWordStartVim(ctx, endX, y)
+		if endX == prev {
+			break
 		}
-	} else {
-		executeType = ctx.LastFindType
 	}
-
-	switch executeType {
-	case 'f':
-		ExecuteFindChar(ctx, ctx.LastFindChar, 1)
-	case 'F':
-		ExecuteFindCharBackward(ctx, ctx.LastFindChar, 1)
-	case 't':
-		ExecuteTillChar(ctx, ctx.LastFindChar, 1)
-	case 'T':
-		ExecuteTillCharBackward(ctx, ctx.LastFindChar, 1)
+	endX, y = validatePosition(ctx, endX, y)
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: endX, EndY: y,
+		Type: RangeChar, Style: StyleExclusive,
+		Valid: endX != x,
 	}
+}
 
-	ctx.LastFindChar = originalChar
-	ctx.LastFindType = originalType
-	ctx.LastFindForward = originalForward
+// MotionWORDForward implements 'W' motion
+func MotionWORDForward(ctx *engine.GameContext, x, y, count int) MotionResult {
+	endX := x
+	for i := 0; i < count; i++ {
+		prev := endX
+		endX = findNextWORDStart(ctx, endX, y)
+		if endX == prev {
+			break
+		}
+	}
+	endX, y = validatePosition(ctx, endX, y)
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: endX, EndY: y,
+		Type: RangeChar, Style: StyleExclusive,
+		Valid: endX != x,
+	}
+}
+
+// MotionWordEnd implements 'e' motion
+func MotionWordEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
+	endX := x
+	for i := 0; i < count; i++ {
+		prev := endX
+		endX = findWordEndVim(ctx, endX, y)
+		if endX == prev {
+			break
+		}
+	}
+	endX, y = validatePosition(ctx, endX, y)
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: endX, EndY: y,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: endX != x,
+	}
+}
+
+// MotionWORDEnd implements 'E' motion
+func MotionWORDEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
+	endX := x
+	for i := 0; i < count; i++ {
+		prev := endX
+		endX = findWORDEnd(ctx, endX, y)
+		if endX == prev {
+			break
+		}
+	}
+	endX, y = validatePosition(ctx, endX, y)
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: endX, EndY: y,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: endX != x,
+	}
+}
+
+// MotionWordBack implements 'b' motion
+func MotionWordBack(ctx *engine.GameContext, x, y, count int) MotionResult {
+	endX := x
+	for i := 0; i < count; i++ {
+		prev := endX
+		endX = findPrevWordStartVim(ctx, endX, y)
+		if endX == prev {
+			break
+		}
+	}
+	endX, y = validatePosition(ctx, endX, y)
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: endX, EndY: y,
+		Type: RangeChar, Style: StyleExclusive,
+		Valid: endX != x,
+	}
+}
+
+// MotionWORDBack implements 'B' motion
+func MotionWORDBack(ctx *engine.GameContext, x, y, count int) MotionResult {
+	endX := x
+	for i := 0; i < count; i++ {
+		prev := endX
+		endX = findPrevWORDStart(ctx, endX, y)
+		if endX == prev {
+			break
+		}
+	}
+	endX, y = validatePosition(ctx, endX, y)
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: endX, EndY: y,
+		Type: RangeChar, Style: StyleExclusive,
+		Valid: endX != x,
+	}
+}
+
+// MotionLineStart implements '0' motion
+func MotionLineStart(ctx *engine.GameContext, x, y, count int) MotionResult {
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: 0, EndY: y,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: x != 0,
+	}
+}
+
+// MotionFirstNonWS implements '^' motion
+func MotionFirstNonWS(ctx *engine.GameContext, x, y, count int) MotionResult {
+	endX := findFirstNonWhitespace(ctx, y)
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: endX, EndY: y,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: endX != x,
+	}
+}
+
+// MotionLineEnd implements '$' motion
+func MotionLineEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
+	endX := findLineEnd(ctx, y)
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: endX, EndY: y,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: true,
+	}
+}
+
+// MotionScreenTop implements 'H' motion
+func MotionScreenTop(ctx *engine.GameContext, x, y, count int) MotionResult {
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: x, EndY: 0,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: y != 0,
+	}
+}
+
+// MotionScreenMid implements 'M' motion
+func MotionScreenMid(ctx *engine.GameContext, x, y, count int) MotionResult {
+	midY := ctx.GameHeight / 2
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: x, EndY: midY,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: y != midY,
+	}
+}
+
+// MotionScreenBot implements 'L' motion
+func MotionScreenBot(ctx *engine.GameContext, x, y, count int) MotionResult {
+	botY := ctx.GameHeight - 1
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: x, EndY: botY,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: y != botY,
+	}
+}
+
+// MotionParaBack implements '{' motion
+func MotionParaBack(ctx *engine.GameContext, x, y, count int) MotionResult {
+	endY := y
+	for i := 0; i < count; i++ {
+		prev := endY
+		endY = findPrevEmptyLine(ctx, endY)
+		if endY == prev {
+			break
+		}
+	}
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: x, EndY: endY,
+		Type: RangeLine, Style: StyleInclusive,
+		Valid: endY != y,
+	}
+}
+
+// MotionParaForward implements '}' motion
+func MotionParaForward(ctx *engine.GameContext, x, y, count int) MotionResult {
+	endY := y
+	for i := 0; i < count; i++ {
+		prev := endY
+		endY = findNextEmptyLine(ctx, endY)
+		if endY == prev {
+			break
+		}
+	}
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: x, EndY: endY,
+		Type: RangeLine, Style: StyleInclusive,
+		Valid: endY != y,
+	}
+}
+
+// MotionMatchBracket implements '%' motion
+func MotionMatchBracket(ctx *engine.GameContext, x, y, count int) MotionResult {
+	endX, endY := findMatchingBracket(ctx, x, y)
+	if endX == -1 || endY == -1 {
+		return MotionResult{
+			StartX: x, StartY: y,
+			EndX: x, EndY: y,
+			Type: RangeChar, Style: StyleInclusive,
+			Valid: false,
+		}
+	}
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: endX, EndY: endY,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: true,
+	}
+}
+
+// MotionFileEnd implements 'G' motion
+func MotionFileEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
+	endY := ctx.GameHeight - 1
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: x, EndY: endY,
+		Type: RangeLine, Style: StyleInclusive,
+		Valid: y != endY,
+	}
+}
+
+// MotionFileStart implements 'gg' motion
+func MotionFileStart(ctx *engine.GameContext, x, y, count int) MotionResult {
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: x, EndY: 0,
+		Type: RangeLine, Style: StyleInclusive,
+		Valid: y != 0,
+	}
+}
+
+// MotionOrigin implements 'go' motion (0,0)
+func MotionOrigin(ctx *engine.GameContext, x, y, count int) MotionResult {
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: 0, EndY: 0,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: x != 0 || y != 0,
+	}
+}
+
+// MotionFindForward implements 'f' motion (CharMotionFunc)
+func MotionFindForward(ctx *engine.GameContext, x, y, count int, char rune) MotionResult {
+	endX, found := findCharInDirection(ctx, x, y, char, count, true)
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: endX, EndY: y,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: found,
+	}
+}
+
+// MotionFindBack implements 'F' motion (CharMotionFunc)
+func MotionFindBack(ctx *engine.GameContext, x, y, count int, char rune) MotionResult {
+	endX, found := findCharInDirection(ctx, x, y, char, count, false)
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: endX, EndY: y,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: found,
+	}
+}
+
+// MotionTillForward implements 't' motion (CharMotionFunc)
+// Returns adjusted position (target-1) with StyleInclusive per clarification
+func MotionTillForward(ctx *engine.GameContext, x, y, count int, char rune) MotionResult {
+	endX, found := findCharInDirection(ctx, x, y, char, count, true)
+	if !found {
+		return MotionResult{
+			StartX: x, StartY: y,
+			EndX: x, EndY: y,
+			Type: RangeChar, Style: StyleInclusive,
+			Valid: false,
+		}
+	}
+	// Adjacent target: no valid motion (Vim behavior)
+	if endX <= x+1 {
+		return MotionResult{
+			StartX: x, StartY: y,
+			EndX: x, EndY: y,
+			Type: RangeChar, Style: StyleInclusive,
+			Valid: false,
+		}
+	}
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: endX - 1, EndY: y,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: true,
+	}
+}
+
+// MotionTillBack implements 'T' motion (CharMotionFunc)
+// Returns adjusted position (target+1) with StyleInclusive per clarification
+func MotionTillBack(ctx *engine.GameContext, x, y, count int, char rune) MotionResult {
+	endX, found := findCharInDirection(ctx, x, y, char, count, false)
+	if !found {
+		return MotionResult{
+			StartX: x, StartY: y,
+			EndX: x, EndY: y,
+			Type: RangeChar, Style: StyleInclusive,
+			Valid: false,
+		}
+	}
+	// Adjacent target: no valid motion (Vim behavior)
+	if endX >= x-1 {
+		return MotionResult{
+			StartX: x, StartY: y,
+			EndX: x, EndY: y,
+			Type: RangeChar, Style: StyleInclusive,
+			Valid: false,
+		}
+	}
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: endX + 1, EndY: y,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: true,
+	}
 }
