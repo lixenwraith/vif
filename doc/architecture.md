@@ -147,7 +147,7 @@ The Resource System provides a generic, thread-safe mechanism for systems to acc
 
 **Resource Access Pattern:**
 ```go
-// ✅ CORRECT: Fetch resources at start of Update()
+// Fetch resources at start of Update()
 func (s *MySystem) Update(world *engine.World, dt time.Duration) {
     // Fetch dependencies
     config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
@@ -178,28 +178,28 @@ Resources are updated at the start of each frame/tick by the main game loop and 
 **Data Flow:**
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Main Game Loop (cmd/vi-fighter/main.go)                    │
+│ Main Game Loop (cmd/vi-fighter/main.go)                     │
 │                                                             │
 │ 1. Frame Start                                              │
-│    └─> Update TimeResource (GameTime, RealTime, DeltaTime) │
-│    └─> Update InputResource (GameMode, IsPaused)           │
+│    └─> Update TimeResource (GameTime, RealTime, DeltaTime)  │
+│    └─> Update InputResource (GameMode, IsPaused)            │
 │                                                             │
-│ 2. System Updates (via World.Update())                     │
-│    └─> SpawnSystem.Update()                                │
-│        ├─> config := MustGetResource[*ConfigResource]()    │
-│        ├─> timeRes := MustGetResource[*TimeResource]()     │
-│        └─> Use config.GameWidth, timeRes.GameTime          │
+│ 2. System Updates (via World.Update())                      │
+│    └─> SpawnSystem.Update()                                 │
+│        ├─> config := MustGetResource[*ConfigResource]()     │
+│        ├─> timeRes := MustGetResource[*TimeResource]()      │
+│        └─> Use config.GameWidth, timeRes.GameTime           │
 │    └─> EnergySystem.Update()                                │
-│        ├─> config := MustGetResource[*ConfigResource]()    │
+│        ├─> config := MustGetResource[*ConfigResource]()     │
 │        └─> Access ctx.State for Heat/Energy                 │
-│    └─> [Other Systems...]                                  │
+│    └─> [Other Systems...]                                   │
 │                                                             │
-│ 3. Clock Scheduler (50ms tick, separate goroutine)         │
-│    └─> Update TimeResource for scheduled systems           │
-│    └─> GoldSystem, DecaySystem, CleanerSystem updates      │
+│ 3. Clock Scheduler (50ms tick, separate goroutine)          │
+│    └─> Update TimeResource for scheduled systems            │
+│    └─> GoldSystem, DecaySystem, CleanerSystem updates       │
 │                                                             │
 │ 4. Render                                                   │
-│    └─> Read Resources via snapshots (frame-coherent)       │
+│    └─> Read Resources via snapshots (frame-coherent)        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -384,7 +384,7 @@ Systems fetch global data (Time, Config, Input) from `World.Resources`, and game
 
 ```go
 func (s *MySystem) Update(world *engine.World, dt time.Duration) {
-    // ✅ Fetch resources at start of Update()
+    // Fetch resources at start of Update()
     config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
     timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 
@@ -496,46 +496,6 @@ snapshot := ctx.State.ReadDecayState() // Used by: DecaySystem, Renderer
 
 // Atomic pairs for related fields
 heat, energy := ctx.State.ReadHeatAndEnergy() // Used by: EnergySystem, Renderer
-```
-
-**Usage Examples:**
-
-**Correct: Snapshot Pattern**
-```go
-// ✅ GOOD: Read once, use multiple times
-snapshot := ctx.State.ReadSpawnState()
-if snapshot.Enabled && snapshot.EntityCount < snapshot.MaxEntities {
-    density := snapshot.ScreenDensity
-    rate := snapshot.RateMultiplier
-    // All fields guaranteed consistent
-}
-```
-
-**Incorrect: Multiple Individual Reads**
-```go
-// ❌ BAD: Race condition - fields may change between reads
-if ctx.State.ShouldSpawn() {                    // RLock #1
-    count := ctx.State.ReadSpawnState().EntityCount  // RLock #2
-    density := ctx.State.ReadSpawnState().ScreenDensity  // RLock #3
-    // EntityCount and ScreenDensity may be from different updates!
-}
-```
-
-**Correct: Atomic Snapshots**
-```go
-// ✅ GOOD: Atomic fields read together
-heat, energy := ctx.State.ReadHeatAndEnergy()
-if heat > 0 && energy > 0 {
-    // heat and energy are consistent
-}
-```
-
-**Incorrect: Separate Atomic Reads**
-```go
-// ❌ BAD: heat and energy may be from different moments
-heat := ctx.State.GetHeat()   // Atomic read #1
-energy := ctx.State.GetEnergy() // Atomic read #2
-// If another goroutine updates both, we might see heat=new, energy=old
 ```
 
 **System Usage Map:**
@@ -1282,26 +1242,26 @@ The input handling system for NORMAL mode uses a **state machine with binding ta
 
 **Architecture Diagram:**
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        InputHandler                          │
-│  ┌─────────────────┐  ┌─────────────────┐                   │
-│  │  InputMachine   │  │  BindingTable   │                   │
-│  │  (private)      │  │  (private)      │                   │
-│  │                 │  │                 │                   │
-│  │  state          │  │  normal[]       │                   │
-│  │  count1/count2  │  │  operatorMotions│                   │
-│  │  operator       │  │  prefixG[]      │                   │
-│  │  charCmd        │  │                 │                   │
-│  │  prefix         │  │                 │                   │
-│  └────────┬────────┘  └────────┬────────┘                   │
-│           │                    │                             │
-│           └──────┬─────────────┘                             │
-│                  ▼                                           │
-│           Process(key) → ProcessResult                       │
-│                  │                                           │
-│                  ▼                                           │
-│           Action(ctx) ──────────────────────────────────────┼──► GameContext
-└─────────────────────────────────────────────────────────────┘     (Mode only)
+┌─────────────────────────────────────────────────┐
+│                           InputHandler          │
+│  ┌─────────────────┐  ┌─────────────────┐       │
+│  │  InputMachine   │  │  BindingTable   │       │
+│  │  (private)      │  │  (private)      │       │
+│  │                 │  │                 │       │
+│  │  state          │  │  normal[]       │       │
+│  │  count1/count2  │  │  operatorMotions│       │
+│  │  operator       │  │  prefixG[]      │       │
+│  │  charCmd        │  │                 │       │
+│  │  prefix         │  │                 │       │
+│  └────────┬────────┘  └────────┬────────┘       │
+│           │                    │                │
+│           └──────┬─────────────┘                │
+│                  ▼                              │
+│           Process(key) → ProcessResult          │
+│                  │                              │
+│                  ▼                              │
+│           Action(ctx) ──────────────────────────┼──► GameContext
+└─────────────────────────────────────────────────┘     (Mode only)
 ```
 
 **State Machine States** (`InputState` enum in `modes/machine.go`):
@@ -1537,19 +1497,19 @@ The input handler has undergone major refactoring for improved organization and 
 
 **Architecture:**
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  Dispatch Layer (machine.go, bindings.go, actions.go)       │
-│                                                             │
-│  Key → State Machine → Binding Lookup → ProcessResult       │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│  Dispatch Layer (machine.go, bindings.go, actions.go)   │
+│                                                         │
+│  Key → State Machine → Binding Lookup → ProcessResult   │
+└─────────────────────────────────────────────────────────┘
                           │
                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│  Execution Layer (motions.go, operators.go, search.go)      │
-│                                                             │
-│  Motion Functions, OpMove(), OpDelete(), FindChar()         │
-│  (These implement actual cursor/entity manipulation)        │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│  Execution Layer (motions.go, operators.go, search.go)  │
+│                                                         │
+│  Motion Functions, OpMove(), OpDelete(), FindChar()     │
+│  (These implement actual cursor/entity manipulation)    │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ### Commands
