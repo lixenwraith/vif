@@ -231,8 +231,9 @@ Producer → EventQueue → ClockScheduler → EventRouter → EventHandler → 
 | `EventCleanerRequest` | EnergySystem | CleanerSystem | `nil` |
 | `EventDirectionalCleanerRequest` | InputHandler, EnergySystem | CleanerSystem | `*DirectionalCleanerPayload{OriginX, OriginY}` |
 | `EventCleanerFinished` | CleanerSystem | (observers) | `nil` |
-| `EventGoldSpawned` | GoldSystem | (observers) | `nil` |
 | `EventGoldComplete` | EnergySystem | (observers) | `nil` |
+
+**Note**: `EventGoldSpawned` is defined in `engine/events.go` but is not currently triggered by any system. Gold sequence activation is managed via `GameState.ActivateGoldSequence()` which directly transitions the game phase.
 
 **Producer Pattern:**
 ```go
@@ -276,16 +277,10 @@ clockScheduler.RegisterEventHandler(cleanerSystem)
 ```
 
 **Dispatch Flow:**
-```go
-// ClockScheduler.processTick() dispatches events BEFORE system updates
-func (cs *ClockScheduler) processTick() {
-    // 1. Dispatch all pending events to registered handlers
-    cs.eventRouter.DispatchAll(cs.ctx.World)
-
-    // 2. Run system updates
-    cs.ctx.World.Update(deltaTime)
-}
-```
+- `ClockScheduler.processTick()` dispatches events BEFORE system updates
+- Step 1: `eventRouter.DispatchAll(world)` routes events to registered handlers
+- Step 2: `world.Update(deltaTime)` runs all systems
+- See `engine/clock_scheduler.go` for implementation details
 
 **Implementation** (`engine/events.go`, `engine/event_router.go`):
 - `EventQueue`: Fixed-size ring buffer (size defined in `constants.EventQueueSize`)
@@ -638,8 +633,7 @@ The main loop coordinates frame rendering with game updates using channels:
 type GamePhase int
 
 const (
-    PhaseBootstrap      // Initial delay state (2 seconds before first spawn)
-    PhaseNormal         // Regular gameplay, content spawning
+    PhaseNormal         // Regular gameplay, content spawning (iota = 0, initial state)
     PhaseGoldActive     // Gold sequence active with timeout tracking
     PhaseGoldComplete   // Gold completed, ready for next phase (transient)
     PhaseDecayWait      // Waiting for decay timer (heat-based interval)
@@ -688,12 +682,11 @@ snapshot := ctx.State.ReadPhaseState()
 - Skips all game logic updates when paused (defensive check in processTick)
 - Waits for frame ready signal before processing tick (prevents update/render conflicts)
 - **Phase transitions handled on clock tick** (via `processTick()`):
-  - `PhaseBootstrap`: Wait for initial delay (2 seconds) → transition to PhaseNormal
+  - `PhaseNormal`: Gold spawning handled by GoldSystem's Update() method (initial/default state)
   - `PhaseGoldActive`: Check gold timeout (pausable clock) → timeout via GoldSystem
-  - `PhaseGoldComplete`: Start decay timer
+  - `PhaseGoldComplete`: Start decay timer (transient state, immediately transitions to PhaseDecayWait)
   - `PhaseDecayWait`: Check decay ready (pausable clock) → start decay animation
   - `PhaseDecayAnimation`: Handled by DecaySystem → returns to PhaseNormal when complete
-  - `PhaseNormal`: Gold spawning handled by GoldSystem's Update() method
 - **Cleaner Animation**: Triggered via `EventCleanerRequest` (runs in parallel with main phase cycle)
 - **Runtime Metrics Updates**:
   - Increments GameTicks counter every tick (50ms interval)
@@ -706,51 +699,12 @@ snapshot := ctx.State.ReadPhaseState()
 - **Critical**: All timers use pausable clock (game time), so they freeze during pause
 
 **Integration** (`cmd/vi-fighter/main.go`):
-```go
-// Constants for dual-clock system
-const (
-    frameUpdateDT = 16 * time.Millisecond // ~60 FPS (frame rate for rendering)
-    gameUpdateDT  = 50 * time.Millisecond // game logic tick
-)
-
-// Create frame synchronization channel
-frameReady := make(chan struct{}, 1)
-
-// Create clock scheduler with frame synchronization
-clockScheduler, gameUpdateDone := engine.NewClockScheduler(ctx, gameUpdateDT, frameReady)
-
-// Signal initial frame ready
-frameReady <- struct{}{}
-
-clockScheduler.SetSystems(goldSystem, decaySystem, cleanerSystem)
-clockScheduler.Start()
-defer clockScheduler.Stop()
-
-// Main game loop with frame ticker
-frameTicker := time.NewTicker(frameUpdateDT)
-defer frameTicker.Stop()
-
-for {
-    select {
-    case <-frameTicker.C:
-        // Always update UI elements (use real time, works during pause)
-        updateUIElements(ctx)
-
-        // During pause: skip game updates but still render
-        if ctx.IsPaused.Load() {
-            renderer.RenderFrame(...)
-            continue
-        }
-
-        // Wait for update complete, then render
-        <-gameUpdateDone
-        renderer.RenderFrame(...)
-
-        // Signal ready for next update
-        frameReady <- struct{}{}
-    }
-}
-```
+- Frame ticker: 16ms (60 FPS rendering)
+- Game logic tick: 50ms (ClockScheduler)
+- Synchronization: `frameReady` and `gameUpdateDone` channels coordinate timing
+- Main loop: Frame ticker drives rendering, waits for game update completion before rendering
+- Pause handling: Skip game updates but continue rendering UI during pause
+- See `cmd/vi-fighter/main.go` for complete implementation
 
 #### Architecture Benefits
 
@@ -796,11 +750,12 @@ The audio system provides sound effects for game events using a dual-queue archi
 - **AudioEngine**: Core playback engine with two priority queues
   - `realTimeQueue` (size 5): High-priority sounds like typing errors
   - `stateQueue` (size 10): Game state sounds (coins, bells, whooshes)
-- **Sound Effects**: Synthesized using beep library
-  - Error: Short harsh buzz (100Hz saw wave)
-  - Bell: Melodic ding for nuggets (880Hz + 1760Hz sine)
-  - Whoosh: Noise burst for cleaners
-  - Coin: Two-note chime for gold completion
+- **Sound Types** (triggered via `AudioCommand` with `SoundType` enum):
+  - `SoundError`: Short harsh buzz (internal synthesis: 100Hz saw wave)
+  - `SoundBell`: Melodic ding for nuggets (internal synthesis: 880Hz + 1760Hz sine)
+  - `SoundWhoosh`: Noise burst for cleaners
+  - `SoundCoin`: Two-note chime for gold completion
+- **Note**: Systems send `AudioCommand{Type: audio.SoundType, ...}` to the engine; frequency synthesis is handled internally by the audio package
 
 ### Integration Points
 - **EnergySystem**: Sends error sounds via realTimeQueue
@@ -994,7 +949,7 @@ Component (marker interface)
 ├── GoldSequenceComponent {Active, SequenceID, StartTimeNano, CharSequence, CurrentIndex}
 ├── DecayComponent {Column, YPosition, Speed, Char, LastChangeRow, LastIntX, LastIntY, PrevPreciseX, PrevPreciseY}
 ├── CleanerComponent {PreciseX, PreciseY, VelocityX, VelocityY, TargetX, TargetY, GridX, GridY, Trail, Char}
-├── MaterializeComponent {PreciseX, PreciseY, VelocityX, VelocityY, TargetX, TargetY, GridX, GridY, Trail, Direction, Char, Arrived}
+├── MaterializeComponent {PreciseX, PreciseY, VelocityX, VelocityY, TargetX, TargetY, GridX, GridY, TrailRing, TrailHead, TrailLen, Direction, Char, Arrived, DrainSlot}
 ├── FlashComponent {X, Y, Char, StartTime, Duration}
 ├── NuggetComponent {ID, SpawnTime}
 ├── DrainComponent {X, Y, LastMoveTime, LastDrainTime, IsOnCursor}
@@ -1657,9 +1612,13 @@ The input handler has undergone major refactoring for improved organization and 
   - `MotionCount` → `PendingCount` when entering multi-keystroke state
   - `PendingCount` used when completing the command
   - Both cleared after execution
-- **CommandCapabilities system**: Systematic mapping of which commands accept counts
-  - Flags: `AcceptsCount`, `MultiKeystroke`, `RequiresMotion`
-  - See `modes/capabilities.go` for full mapping
+- **ActionType system** (`modes/bindings.go`): Each key binding has an ActionType that determines state machine behavior
+  - `ActionMotion`: Immediate execution (h, j, k, l, w, b, etc.)
+  - `ActionCharWait`: Wait for target character (f, F, t, T)
+  - `ActionOperator`: Wait for motion (d)
+  - `ActionPrefix`: Wait for second key (g)
+  - `ActionModeSwitch`: Change mode (i, /, :)
+  - `ActionSpecial`: Immediate with special handling (x, D, n, N, ;, ,)
 - **Consecutive move penalty**: Using h/j/k/l more than 3 times consecutively resets heat
 - **Arrow keys**: Function like h/j/k/l but always reset heat
 - **Tab**: Jumps cursor directly to active Nugget (Cost: 10 Energy, requires Energy >= 10)
@@ -1720,39 +1679,10 @@ The CleanerSystem uses a pure ECS pattern with careful synchronization:
 4. Main loop updates components via ECS World's synchronized methods
 5. No data races: trail copies are fully independent from component state
 
-**Implementation**:
-```go
-// Renderer (terminal_renderer.go)
-func (r *TerminalRenderer) drawCleaners(world *engine.World, defaultStyle tcell.Style) {
-    // Direct store access
-    entities := world.Cleaners.All()
-
-    for _, entity := range entities {
-        cleaner, ok := world.Cleaners.Get(entity)
-        if !ok { continue }
-
-        // Deep copy trail to avoid race conditions during rendering
-        trailCopy := make([]core.Point, len(cleaner.Trail))
-        copy(trailCopy, cleaner.Trail)
-
-        // Render using trail copy...
-    }
-}
-
-// CleanerSystem Update (cleaner_system.go)
-func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
-    // Update component directly via World (internally synchronized)
-    c.PreciseX += c.VelocityX * dt.Seconds()
-
-    // Strict copy-on-write for Trail to prevent race conditions with Renderer
-    newTrail := make([]core.Point, newLen)
-    newTrail[0] = newPoint
-    copy(newTrail[1:], c.Trail[:copyLen])
-    c.Trail = newTrail  // Atomic reference replacement
-
-    world.AddComponent(entity, c)  // ECS handles synchronization
-}
-```
+**Key Techniques**:
+- Renderer: Deep-copies trail positions to prevent data races (see `terminal_renderer.go`)
+- System: Uses copy-on-write for trail updates with atomic reference replacement (see `systems/cleaner.go`)
+- World's internal locking handles component access synchronization
 
 ## Performance Guidelines
 
@@ -1863,7 +1793,11 @@ The `SpatialGrid` enforces a **maximum of 15 entities per cell**:
 
 ### Decay System
 
-The decay system applies character degradation through a falling entity animation with swept collision detection. The system uses a **stateless architecture** where falling entities are queried from the `World.Decays` store each frame rather than being tracked internally. This design allows for future extensions such as orbital and magnetic effects on decay entities.
+The decay system applies character degradation through a falling entity animation with swept collision detection. The system queries falling entities from the `World.Decays` store each frame (no internal entity tracking), but maintains **internal state maps** for deduplication logic:
+- `decayedThisFrame`: Prevents same entity from being decayed twice during the entire animation
+- `processedGridCells`: Prevents multiple decay entities from hitting the same grid cell in a single frame
+
+This architecture allows for future extensions such as orbital and magnetic effects on decay entities.
 
 #### Decay Mechanics
 - **Brightness Decay**: Bright → Normal → Dark (reduces energy multiplier)
@@ -1881,7 +1815,7 @@ The decay system applies character degradation through a falling entity animatio
 
 #### Falling Entity Animation
 - **Spawn**: One falling entity per column stored as `DecayComponent` in `World.Decays` store (ensuring complete screen coverage)
-- **Stateless Update**: System queries all falling entities via `world.Decays.All()` each frame (no internal entity tracking)
+- **Entity Query**: System queries all falling entities via `world.Decays.All()` each frame (no internal entity tracking, only deduplication maps)
 - **Speed**: Random per entity, between 5.0-15.0 rows/second (DecayMinSpeed/MaxSpeed)
 - **Physics Integration**: Position updated via delta time: `YPosition += Speed × dt.Seconds()`
 - **Character**: Random alphanumeric character per entity
@@ -1988,9 +1922,9 @@ When a falling entity encounters a target at `(col, row)`:
 #### Thread Safety
 - **Mutex Protection**: DecaySystem state protected by `sync.RWMutex`
   - `currentRow`: Current decay row for display purposes
-  - `decayedThisFrame`: Entity-level deduplication map
-  - `processedGridCells`: Frame-level spatial deduplication map
-- **Stateless Entity Access**: All falling entities queried from `World.Decays` store (no internal tracking)
+  - `decayedThisFrame`: Entity-level deduplication map (system internal state)
+  - `processedGridCells`: Frame-level spatial deduplication map (system internal state)
+- **Entity Access**: All falling entities queried from `World.Decays` store (no internal entity tracking)
 - **Component Access**: World's internal synchronization for Get/Add operations
 
 #### Pause Behavior
