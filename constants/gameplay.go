@@ -77,3 +77,24 @@ const (
 	// Set to 0 for simultaneous spawning
 	DrainSpawnStaggerTicks = 4
 )
+
+// Shield Defense Costs
+const (
+	// DrainShieldEnergyDrainAmount is energy cost per tick per drain inside shield
+	DrainShieldEnergyDrainAmount = 100
+
+	// DrainHeatReductionAmount is heat penalty when drain hits cursor without shield
+	DrainHeatReductionAmount = 10
+
+	// ShieldPassiveDrainAmount is energy cost per second while shield is active
+	ShieldPassiveDrainAmount = 1
+
+	// ShieldPassiveDrainInterval is the interval for passive shield drain
+	ShieldPassiveDrainInterval = 1 * time.Second
+)
+
+// Shield Source Flags (bitmask)
+const (
+	ShieldSourceNone  uint8 = 0
+	ShieldSourceBoost uint8 = 1 << 0
+)
