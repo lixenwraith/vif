@@ -18,8 +18,6 @@ func NewShieldRenderer() *ShieldRenderer {
 
 // Render draws all active shields
 func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
-	const useBlending = true
-
 	shields := world.Shields.All()
 
 	for _, entity := range shields {
@@ -60,8 +58,8 @@ func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, b
 			endY = ctx.GameHeight - 1
 		}
 
-		// Pre-extract shield base color components
-		shieldR, shieldG, shieldB := shield.Color.RGB()
+		// Convert shield color to RGB once
+		shieldRGB := render.TcellToRGB(shield.Color)
 
 		for y := startY; y <= endY; y++ {
 			for x := startX; x <= endX; x++ {
@@ -83,32 +81,11 @@ func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, b
 				// Alpha: 1.0 at center, 0.0 at edge, scaled by MaxOpacity
 				alpha := (1.0 - dist) * shield.MaxOpacity
 
-				// Get existing content
-				cell := buf.Get(screenX, screenY)
-				fg, bg, attrs := cell.Style.Decompose()
+				// Use compositor alpha blending
 
-				// Normalize ColorDefault
-				if bg == tcell.ColorDefault {
-					bg = render.RgbBackground
-				}
-
-				var newBg tcell.Color
-
-				if useBlending {
-					// Production: blend shield with existing background
-					newBg = s.blendColors(bg, shield.Color, alpha)
-				} else {
-					// Debug: direct alpha-scaled shield color (no blending)
-					// This shows the pure shield gradient without interference
-					newBg = tcell.NewRGBColor(
-						int32(float64(shieldR)*alpha),
-						int32(float64(shieldG)*alpha),
-						int32(float64(shieldB)*alpha),
-					)
-				}
-
-				newStyle := tcell.StyleDefault.Foreground(fg).Background(newBg).Attributes(attrs)
-				buf.Set(screenX, screenY, cell.Rune, newStyle)
+				// mainRune=0 preserves existing rune
+				// BlendAlpha blends only the background
+				buf.SetPixel(screenX, screenY, 0, render.RGBBlack, shieldRGB, render.BlendAlpha, alpha, tcell.AttrNone)
 			}
 		}
 	}

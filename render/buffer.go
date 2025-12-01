@@ -2,9 +2,10 @@ package render
 
 import "github.com/gdamore/tcell/v2"
 
-// RenderBuffer is a dense grid for compositing render output
+// RenderBuffer is a compositor backed by RGB cells
+// Single source of truth - all methods write to the same backing store
 type RenderBuffer struct {
-	cells  []RenderCell
+	cells  []CompositorCell
 	width  int
 	height int
 }
@@ -12,22 +13,18 @@ type RenderBuffer struct {
 // NewRenderBuffer creates a buffer with the specified dimensions
 func NewRenderBuffer(width, height int) *RenderBuffer {
 	size := width * height
-	cells := make([]RenderCell, size)
+	cells := make([]CompositorCell, size)
 	for i := range cells {
 		cells[i] = emptyCell
 	}
-	return &RenderBuffer{
-		cells:  cells,
-		width:  width,
-		height: height,
-	}
+	return &RenderBuffer{cells: cells, width: width, height: height}
 }
 
 // Resize adjusts buffer dimensions, reallocates only if capacity insufficient
 func (b *RenderBuffer) Resize(width, height int) {
 	size := width * height
 	if cap(b.cells) < size {
-		b.cells = make([]RenderCell, size)
+		b.cells = make([]CompositorCell, size)
 	} else {
 		b.cells = b.cells[:size]
 	}
@@ -47,35 +44,113 @@ func (b *RenderBuffer) Clear() {
 	}
 }
 
-// Set writes a rune and style at (x, y), Silent no-op on OOB
-func (b *RenderBuffer) Set(x, y int, r rune, style tcell.Style) {
-	if x < 0 || x >= b.width || y < 0 || y >= b.height {
-		return
-	}
-	b.cells[y*b.width+x] = RenderCell{Rune: r, Style: style}
+// Bounds returns buffer dimensions
+func (b *RenderBuffer) Bounds() (width, height int) {
+	return b.width, b.height
 }
 
-// SetRune writes a rune at (x, y) preserving existing style, Silent no-op on OOB
-func (b *RenderBuffer) SetRune(x, y int, r rune) {
-	if x < 0 || x >= b.width || y < 0 || y >= b.height {
+func (b *RenderBuffer) inBounds(x, y int) bool {
+	return x >= 0 && x < b.width && y >= 0 && y < b.height
+}
+
+// =============================================================================
+// COMPOSITOR API (New)
+// =============================================================================
+
+// SetPixel composites a pixel with specified blend mode
+// mainRune: character to draw (0 preserves existing rune)
+// fg, bg: foreground and background RGB colors
+// mode: blending algorithm
+// alpha: blend factor for BlendAlpha (0.0 = keep dst, 1.0 = use src)
+// attrs: text attributes (preserved exactly)
+func (b *RenderBuffer) SetPixel(x, y int, mainRune rune, fg, bg RGB, mode BlendMode, alpha float64, attrs tcell.AttrMask) {
+	if !b.inBounds(x, y) {
 		return
 	}
 	idx := y*b.width + x
-	b.cells[idx].Rune = r
+	dst := &b.cells[idx]
+
+	// Background blending
+	switch mode {
+	case BlendReplace:
+		dst.Bg = bg
+	case BlendAlpha:
+		dst.Bg = dst.Bg.Blend(bg, alpha)
+	case BlendAdd:
+		dst.Bg = dst.Bg.Add(bg)
+	case BlendMax:
+		dst.Bg = dst.Bg.Max(bg)
+	}
+
+	// Foreground handling
+	if mainRune != 0 {
+		// New rune provided: set rune, fg, and attrs
+		dst.Rune = mainRune
+		dst.Fg = fg
+		dst.Attrs = attrs
+	} else {
+		// No rune: blend effects only
+		switch mode {
+		case BlendAdd:
+			dst.Fg = dst.Fg.Add(fg)
+		case BlendMax:
+			dst.Fg = dst.Fg.Max(fg)
+		}
+		// BlendReplace/BlendAlpha with rune=0: preserve existing fg/attrs
+	}
 }
 
-// SetString writes a string starting at (x, y) and returns runes written
+// SetSolid is convenience for opaque BlendReplace
+func (b *RenderBuffer) SetSolid(x, y int, mainRune rune, fg, bg RGB, attrs tcell.AttrMask) {
+	b.SetPixel(x, y, mainRune, fg, bg, BlendReplace, 1.0, attrs)
+}
+
+// Get returns cell at (x,y), returns emptyCell on OOB
+func (b *RenderBuffer) Get(x, y int) CompositorCell {
+	if !b.inBounds(x, y) {
+		return emptyCell
+	}
+	return b.cells[y*b.width+x]
+}
+
+// GetRGB returns fg and bg as RGB at (x,y)
+func (b *RenderBuffer) GetRGB(x, y int) (fg, bg RGB, attrs tcell.AttrMask) {
+	cell := b.Get(x, y)
+	return cell.Fg, cell.Bg, cell.Attrs
+}
+
+// =============================================================================
+// LEGACY BRIDGE API (Temporary - calls compositor internally)
+// =============================================================================
+
+// Set writes a rune and style (legacy API, converts tcell.Style to RGB)
+func (b *RenderBuffer) Set(x, y int, r rune, style tcell.Style) {
+	fgC, bgC, attrs := style.Decompose()
+	b.SetPixel(x, y, r, TcellToRGB(fgC), TcellToRGB(bgC), BlendReplace, 1.0, attrs)
+}
+
+// SetRune writes a rune preserving existing colors and attrs
+func (b *RenderBuffer) SetRune(x, y int, r rune) {
+	if !b.inBounds(x, y) {
+		return
+	}
+	b.cells[y*b.width+x].Rune = r
+}
+
+// SetString writes a string starting at (x, y), returns runes written
 func (b *RenderBuffer) SetString(x, y int, s string, style tcell.Style) int {
 	if y < 0 || y >= b.height {
 		return 0
 	}
+	fgC, bgC, attrs := style.Decompose()
+	fg, bg := TcellToRGB(fgC), TcellToRGB(bgC)
 	written := 0
 	for _, r := range s {
 		if x >= b.width {
 			break
 		}
 		if x >= 0 {
-			b.cells[y*b.width+x] = RenderCell{Rune: r, Style: style}
+			b.SetPixel(x, y, r, fg, bg, BlendReplace, 1.0, attrs)
 			written++
 		}
 		x++
@@ -83,62 +158,21 @@ func (b *RenderBuffer) SetString(x, y int, s string, style tcell.Style) int {
 	return written
 }
 
-// SetMax writes a cell using max-per-component color blending
-// Used for overlapping effects (materializers, flashes) to preserve brightest color
+// SetMax writes with max-blend (legacy API for materializers/flashes)
 func (b *RenderBuffer) SetMax(x, y int, r rune, style tcell.Style) {
-	if x < 0 || x >= b.width || y < 0 || y >= b.height {
-		return
-	}
-
-	idx := y*b.width + x
-	existing := b.cells[idx]
-
-	// Decompose colors
-	existingFg, existingBg, _ := existing.Style.Decompose()
-	newFg, newBg, _ := style.Decompose()
-
-	// Max-blend foreground RGB
-	r1, g1, b1 := existingFg.RGB()
-	r2, g2, b2 := newFg.RGB()
-
-	blendedFg := tcell.NewRGBColor(
-		max(r1, r2),
-		max(g1, g2),
-		max(b1, b2),
-	)
-
-	// Preserve existing background unless new is explicitly set
-	finalBg := existingBg
-	if newBg != tcell.ColorDefault {
-		finalBg = newBg
-	}
-
-	// Take new rune only if non-space (preserve existing character if just adding glow)
-	finalRune := r
-	if r == ' ' && existing.Rune != ' ' {
-		finalRune = existing.Rune
-	}
-
-	b.cells[idx] = RenderCell{
-		Rune:  finalRune,
-		Style: tcell.StyleDefault.Foreground(blendedFg).Background(finalBg),
-	}
+	fgC, bgC, attrs := style.Decompose()
+	b.SetPixel(x, y, r, TcellToRGB(fgC), TcellToRGB(bgC), BlendMax, 1.0, attrs)
 }
 
-// Get returns the cell at (x, y) and returns emptyCell on OOB
-func (b *RenderBuffer) Get(x, y int) RenderCell {
-	if x < 0 || x >= b.width || y < 0 || y >= b.height {
-		return emptyCell
-	}
-	return b.cells[y*b.width+x]
-}
-
-// DecomposeAt returns fg, bg, attrs at (x, y) and returns defaults on OOB
+// DecomposeAt returns fg, bg, attrs as tcell types (legacy bridge for reading)
 func (b *RenderBuffer) DecomposeAt(x, y int) (fg, bg tcell.Color, attrs tcell.AttrMask) {
 	cell := b.Get(x, y)
-	// TODO: Why is there still a Decompose use?
-	return cell.Style.Decompose()
+	return RGBToTcell(cell.Fg), RGBToTcell(cell.Bg), cell.Attrs
 }
+
+// =============================================================================
+// OUTPUT
+// =============================================================================
 
 // Flush writes buffer contents to tcell.Screen
 func (b *RenderBuffer) Flush(screen tcell.Screen) {
@@ -146,12 +180,11 @@ func (b *RenderBuffer) Flush(screen tcell.Screen) {
 		row := y * b.width
 		for x := 0; x < b.width; x++ {
 			c := b.cells[row+x]
-			screen.SetContent(x, y, c.Rune, nil, c.Style)
+			style := tcell.StyleDefault.
+				Foreground(RGBToTcell(c.Fg)).
+				Background(RGBToTcell(c.Bg)).
+				Attributes(c.Attrs)
+			screen.SetContent(x, y, c.Rune, nil, style)
 		}
 	}
-}
-
-// Bounds returns buffer dimensions
-func (b *RenderBuffer) Bounds() (width, height int) {
-	return b.width, b.height
 }

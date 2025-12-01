@@ -27,7 +27,7 @@ func (p *PingGridRenderer) Render(ctx render.RenderContext, world *engine.World,
 	pingStyle := defaultStyle.Background(pingColor)
 
 	// Draw row and column highlights
-	p.drawPingHighlights(ctx, buf, pingStyle, pingColor)
+	p.drawPingHighlights(ctx, buf, pingStyle)
 
 	// Draw grid lines if ping is active
 	if p.gameCtx.GetPingActive() {
@@ -47,13 +47,12 @@ func (p *PingGridRenderer) getPingColor() tcell.Color {
 
 // drawPingHighlights draws the cursor row and column highlights
 // Draws ONLY on cells with default/black background to avoid overwriting shield
-func (p *PingGridRenderer) drawPingHighlights(ctx render.RenderContext, buf *render.RenderBuffer, pingStyle tcell.Style, pingColor tcell.Color) {
+func (p *PingGridRenderer) drawPingHighlights(ctx render.RenderContext, buf *render.RenderBuffer, pingStyle tcell.Style) {
 	// Helper to draw ping only if cell has default background
 	drawPingCell := func(x, y int) {
 		cell := buf.Get(x, y)
-		_, bg, _ := cell.Style.Decompose()
-		// Only draw ping if background is default/black (don't overwrite shield)
-		if bg == tcell.ColorDefault || bg == render.RgbBackground {
+		// Only draw ping if background is default (don't overwrite shield)
+		if cell.Bg == render.DefaultBgRGB {
 			buf.Set(x, y, ' ', pingStyle)
 		}
 	}
@@ -83,8 +82,7 @@ func (p *PingGridRenderer) drawPingGrid(ctx render.RenderContext, buf *render.Re
 	// Helper to draw ping only if cell has default background
 	drawPingCell := func(screenX, screenY int) {
 		cell := buf.Get(screenX, screenY)
-		_, bg, _ := cell.Style.Decompose()
-		if bg == tcell.ColorDefault || bg == render.RgbBackground {
+		if cell.Bg == render.DefaultBgRGB {
 			buf.Set(screenX, screenY, ' ', pingStyle)
 		}
 	}

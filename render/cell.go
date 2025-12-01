@@ -2,18 +2,26 @@ package render
 
 import "github.com/gdamore/tcell/v2"
 
-// RenderCell represents terminal cell state
-type RenderCell struct {
+// CompositorCell is the authoritative cell state
+// Stores RGB colors directly, attributes preserved as tcell.AttrMask
+type CompositorCell struct {
 	Rune  rune
-	Style tcell.Style
+	Fg    RGB
+	Bg    RGB
+	Attrs tcell.AttrMask // Preserved exactly - includes bit 31 (AttrInvalid)
 }
 
-var emptyCell = RenderCell{
+// DefaultBgRGB is the default background color (Tokyo Night)
+var DefaultBgRGB = RGB{26, 27, 38}
+
+var emptyCell = CompositorCell{
 	Rune:  ' ',
-	Style: tcell.StyleDefault,
+	Fg:    DefaultBgRGB,
+	Bg:    DefaultBgRGB,
+	Attrs: tcell.AttrNone,
 }
 
 // EmptyCell returns a copy of the empty cell sentinel
-func EmptyCell() RenderCell {
+func EmptyCell() CompositorCell {
 	return emptyCell
 }
