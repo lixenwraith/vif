@@ -6,7 +6,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
-	"github.com/lixenwraith/vi-fighter/render"
 )
 
 type BoostSystem struct {
@@ -41,7 +40,7 @@ func (bs *BoostSystem) Update(world *engine.World, dt time.Duration) {
 				Sources:       constants.ShieldSourceBoost,
 				RadiusX:       constants.ShieldRadiusX,
 				RadiusY:       constants.ShieldRadiusY,
-				Color:         render.RgbShieldBase,
+				Color:         components.ColorShield,
 				MaxOpacity:    constants.ShieldMaxOpacity,
 				LastDrainTime: now,
 			}

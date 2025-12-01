@@ -11,7 +11,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
-	"github.com/lixenwraith/vi-fighter/render"
 )
 
 // GoldSystem manages the gold sequence mechanic
@@ -90,9 +89,6 @@ func (s *GoldSystem) spawnGold(world *engine.World) bool {
 	// Get next sequence ID from GameState
 	sequenceID := s.ctx.State.IncrementGoldSequenceID()
 
-	// Get style for gold sequence
-	style := render.GetFgForSequence(components.SequenceGold, components.LevelBright)
-
 	// Create entities and components
 	type entityData struct {
 		entity engine.Entity
@@ -113,7 +109,10 @@ func (s *GoldSystem) spawnGold(world *engine.World) bool {
 			},
 			char: components.CharacterComponent{
 				Rune: sequence[i],
-				Fg:   style,
+				// Color defaults to ColorNone, renderer uses SeqType/SeqLevel
+				Style:    components.StyleNormal,
+				SeqType:  components.SequenceGold,
+				SeqLevel: components.LevelBright,
 			},
 			seq: components.SequenceComponent{
 				ID:    sequenceID,

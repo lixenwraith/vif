@@ -3,6 +3,7 @@ package renderers
 import (
 	"fmt"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
@@ -41,10 +42,7 @@ func (d *DrainRenderer) Render(ctx render.RenderContext, world *engine.World, bu
 			continue
 		}
 
-		// Preserve existing background (e.g., Shield)
-		cell := buf.Get(screenX, screenY)
-		bg := cell.Bg
-
-		buf.SetWithBg(screenX, screenY, constants.DrainChar, render.RgbDrain, bg)
+		// Drain floats over backgrounds - use SetFgOnly
+		buf.SetFgOnly(screenX, screenY, constants.DrainChar, render.RgbDrain, tcell.AttrNone)
 	}
 }

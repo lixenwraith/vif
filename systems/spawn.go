@@ -12,9 +12,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/content"
-	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
-	"github.com/lixenwraith/vi-fighter/render"
 )
 
 // ColorLevelKey represents a unique color+level combination
@@ -446,9 +444,6 @@ func (s *SpawnSystem) spawnSequence(world *engine.World) {
 	seqType := colorKey.Type
 	seqLevel := colorKey.Level
 
-	// Get style for this sequence
-	style := render.GetFgForSequence(seqType, seqLevel)
-
 	// Get next logical code block
 	block := s.getNextBlock()
 	if len(block.Lines) == 0 {
@@ -458,7 +453,7 @@ func (s *SpawnSystem) spawnSequence(world *engine.World) {
 	// Try to place each line from the block on the screen
 	placedCount := 0
 	for _, line := range block.Lines {
-		if s.placeLine(world, line, seqType, seqLevel, style) {
+		if s.placeLine(world, line, seqType, seqLevel) {
 			placedCount++
 		}
 	}
@@ -530,7 +525,7 @@ func (s *SpawnSystem) getNextBlock() CodeBlock {
 
 // placeLine attempts to place a single line on the screen using generic stores
 // Lines exceeding GameWidth are cropped to fit available space
-func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType components.SequenceType, seqLevel components.SequenceLevel, fg core.RGB) bool {
+func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType components.SequenceType, seqLevel components.SequenceLevel) bool {
 	// Fetch resources
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 
@@ -619,7 +614,10 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 					},
 					char: components.CharacterComponent{
 						Rune: lineRunes[i],
-						Fg:   fg,
+						// Color defaults to ColorNone (0), signaling renderer to use SeqType/SeqLevel
+						Style:    components.StyleNormal,
+						SeqType:  seqType,
+						SeqLevel: seqLevel,
 					},
 					seq: components.SequenceComponent{
 						ID:    sequenceID,

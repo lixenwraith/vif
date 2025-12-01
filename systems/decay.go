@@ -8,7 +8,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
-	"github.com/lixenwraith/vi-fighter/render"
 )
 
 // DecaySystem handles character decay animation and logic, stateless decay entity list
@@ -296,9 +295,9 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 		seq.Level--
 		world.Sequences.Add(entity, seq)
 
-		// Update character style
+		// Update character semantic info (renderer resolves color)
 		if char, ok := world.Characters.Get(entity); ok {
-			char.Fg = render.GetFgForSequence(seq.Type, seq.Level)
+			char.SeqLevel = seq.Level
 			world.Characters.Add(entity, char)
 		}
 	} else {
@@ -309,7 +308,8 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 			world.Sequences.Add(entity, seq)
 
 			if char, ok := world.Characters.Get(entity); ok {
-				char.Fg = render.GetFgForSequence(seq.Type, seq.Level)
+				char.SeqType = seq.Type
+				char.SeqLevel = seq.Level
 				world.Characters.Add(entity, char)
 			}
 		} else if seq.Type == components.SequenceGreen {
@@ -318,7 +318,8 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 			world.Sequences.Add(entity, seq)
 
 			if char, ok := world.Characters.Get(entity); ok {
-				char.Fg = render.GetFgForSequence(seq.Type, seq.Level)
+				char.SeqType = seq.Type
+				char.SeqLevel = seq.Level
 				world.Characters.Add(entity, char)
 			}
 		} else {

@@ -1,7 +1,6 @@
 package renderers
 
 import (
-	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -27,7 +26,7 @@ func (c *ColumnIndicatorsRenderer) Render(ctx render.RenderContext, world *engin
 		relativeCol := x - ctx.CursorX
 
 		var ch rune
-		var fg, bg core.RGB
+		var fg, bg render.RGB
 
 		if relativeCol == 0 {
 			if c.gameCtx.IsSearchMode() || c.gameCtx.IsCommandMode() {

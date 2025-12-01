@@ -2,7 +2,6 @@ package renderers
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -21,7 +20,6 @@ func NewPingGridRenderer(gameCtx *engine.GameContext) *PingGridRenderer {
 
 // Render draws the ping highlights and grid
 func (p *PingGridRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
-
 	// Get ping color based on mode
 	pingColor := p.getPingColor()
 
@@ -35,33 +33,24 @@ func (p *PingGridRenderer) Render(ctx render.RenderContext, world *engine.World,
 }
 
 // getPingColor determines the ping highlight color based on game mode
-func (p *PingGridRenderer) getPingColor() core.RGB {
-	// INSERT mode: use whitespace color (dark gray)
-	// NORMAL/SEARCH mode: use character color (almost black)
+func (p *PingGridRenderer) getPingColor() render.RGB {
 	if p.gameCtx.IsInsertMode() {
-		return render.RgbPingHighlight // Dark gray (50,50,50)
+		return render.RgbPingHighlight
 	}
-	return render.RgbPingNormal // Almost black for NORMAL and SEARCH modes
+	return render.RgbPingNormal
 }
 
-// drawPingHighlights draws the cursor row and column highlights
-// Draws ONLY on cells with default/black background to avoid overwriting shield
-func (p *PingGridRenderer) drawPingHighlights(ctx render.RenderContext, buf *render.RenderBuffer, pingColor core.RGB) {
-	// Helper to draw ping only if cell has default background
-	drawPingCell := func(x, y int) {
-		cell := buf.Get(x, y)
-		// Only draw ping if background is default (don't overwrite shield)
-		if cell.Bg == render.DefaultBgRGB {
-			buf.SetPixel(x, y, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, tcell.AttrNone)
-		}
-	}
-
+// drawPingHighlights - write-only, no buf.Get
+// Grid is layer 100, renders first. Just emit all highlights unconditionally.
+// Higher layers (shields at 300) will blend over as needed.
+func (p *PingGridRenderer) drawPingHighlights(ctx render.RenderContext, buf *render.RenderBuffer, pingColor render.RGB) {
 	// Highlight the row
 	for x := 0; x < ctx.GameWidth; x++ {
 		screenX := ctx.GameX + x
 		screenY := ctx.GameY + ctx.CursorY
-		if screenX >= ctx.GameX && screenX < ctx.Width && screenY >= ctx.GameY && screenY < ctx.GameY+ctx.GameHeight {
-			drawPingCell(screenX, screenY)
+		if screenX >= ctx.GameX && screenX < ctx.Width &&
+			screenY >= ctx.GameY && screenY < ctx.GameY+ctx.GameHeight {
+			buf.Set(screenX, screenY, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, tcell.AttrNone)
 		}
 	}
 
@@ -69,75 +58,58 @@ func (p *PingGridRenderer) drawPingHighlights(ctx render.RenderContext, buf *ren
 	for y := 0; y < ctx.GameHeight; y++ {
 		screenX := ctx.GameX + ctx.CursorX
 		screenY := ctx.GameY + y
-		if screenX >= ctx.GameX && screenX < ctx.Width && screenY >= ctx.GameY && screenY < ctx.GameY+ctx.GameHeight {
-			drawPingCell(screenX, screenY)
+		if screenX >= ctx.GameX && screenX < ctx.Width &&
+			screenY >= ctx.GameY && screenY < ctx.GameY+ctx.GameHeight {
+			buf.Set(screenX, screenY, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, tcell.AttrNone)
 		}
 	}
 }
 
 // drawPingGrid draws coordinate grid lines at 5-column intervals
 // Only draws on cells with default background
-func (p *PingGridRenderer) drawPingGrid(ctx render.RenderContext, buf *render.RenderBuffer, pingColor core.RGB) {
-	// Helper to draw ping only if cell has default background
-	drawPingCell := func(screenX, screenY int) {
-		cell := buf.Get(screenX, screenY)
-		if cell.Bg == render.DefaultBgRGB {
-			buf.SetPixel(screenX, screenY, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, tcell.AttrNone)
-		}
-	}
-
-	// Vertical lines
+func (p *PingGridRenderer) drawPingGrid(ctx render.RenderContext, buf *render.RenderBuffer, pingColor render.RGB) {
+	// Vertical lines at ±5, ±10, ±15, etc from cursor
 	for n := 1; ; n++ {
 		offset := 5 * n
-		col := ctx.CursorX + offset
-		if col >= ctx.GameWidth && ctx.CursorX-offset < 0 {
+		colRight := ctx.CursorX + offset
+		colLeft := ctx.CursorX - offset
+
+		if colRight >= ctx.GameWidth && colLeft < 0 {
 			break
 		}
-		if col < ctx.GameWidth {
+
+		if colRight < ctx.GameWidth {
 			for y := 0; y < ctx.GameHeight; y++ {
-				screenX := ctx.GameX + col
-				screenY := ctx.GameY + y
-				if screenX >= ctx.GameX && screenX < ctx.Width && screenY >= ctx.GameY && screenY < ctx.GameY+ctx.GameHeight {
-					drawPingCell(screenX, screenY)
-				}
+				buf.Set(ctx.GameX+colRight, ctx.GameY+y, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, tcell.AttrNone)
 			}
 		}
-		col = ctx.CursorX - offset
-		if col >= 0 {
+
+		if colLeft >= 0 {
 			for y := 0; y < ctx.GameHeight; y++ {
-				screenX := ctx.GameX + col
-				screenY := ctx.GameY + y
-				if screenX >= ctx.GameX && screenX < ctx.Width && screenY >= ctx.GameY && screenY < ctx.GameY+ctx.GameHeight {
-					drawPingCell(screenX, screenY)
-				}
+				buf.Set(ctx.GameX+colLeft, ctx.GameY+y, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, tcell.AttrNone)
 			}
 		}
 	}
 
-	// Horizontal lines
+	// Horizontal lines at ±5, ±10, ±15, etc from cursor
 	for n := 1; ; n++ {
 		offset := 5 * n
-		row := ctx.CursorY + offset
-		if row >= ctx.GameHeight && ctx.CursorY-offset < 0 {
+		rowDown := ctx.CursorY + offset
+		rowUp := ctx.CursorY - offset
+
+		if rowDown >= ctx.GameHeight && rowUp < 0 {
 			break
 		}
-		if row < ctx.GameHeight {
+
+		if rowDown < ctx.GameHeight {
 			for x := 0; x < ctx.GameWidth; x++ {
-				screenX := ctx.GameX + x
-				screenY := ctx.GameY + row
-				if screenY >= ctx.GameY && screenY < ctx.GameY+ctx.GameHeight {
-					drawPingCell(screenX, screenY)
-				}
+				buf.Set(ctx.GameX+x, ctx.GameY+rowDown, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, tcell.AttrNone)
 			}
 		}
-		row = ctx.CursorY - offset
-		if row >= 0 {
+
+		if rowUp >= 0 {
 			for x := 0; x < ctx.GameWidth; x++ {
-				screenX := ctx.GameX + x
-				screenY := ctx.GameY + row
-				if screenY >= ctx.GameY && screenY < ctx.GameY+ctx.GameHeight {
-					drawPingCell(screenX, screenY)
-				}
+				buf.Set(ctx.GameX+x, ctx.GameY+rowUp, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, tcell.AttrNone)
 			}
 		}
 	}

@@ -1,6 +1,6 @@
-package core
+package render
 
-// RGB stores explicit 8-bit color channels, decoupled from tcell
+// RGB stores explicit 8-bit color channels
 type RGB struct {
 	R, G, B uint8
 }

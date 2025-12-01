@@ -14,7 +14,6 @@ import (
 
 // pendingDrainSpawn represents a queued drain spawn awaiting materialization
 type pendingDrainSpawn struct {
-	slot          int    // Drain slot (0-9)
 	targetX       int    // Spawn position X
 	targetY       int    // Spawn position Y
 	scheduledTick uint64 // Game tick when materialization should start
@@ -125,7 +124,7 @@ func (s *DrainSystem) processPendingSpawns(world *engine.World) {
 
 	for _, spawn := range s.pendingSpawns {
 		if currentTick >= spawn.scheduledTick {
-			s.startMaterializeAt(world, spawn.slot, spawn.targetX, spawn.targetY)
+			s.startMaterializeAt(world, spawn.targetX, spawn.targetY)
 		} else {
 			remaining = append(remaining, spawn)
 		}
@@ -140,7 +139,6 @@ func (s *DrainSystem) queueDrainSpawn(slot, targetX, targetY int, staggerIndex i
 	scheduledTick := currentTick + uint64(staggerIndex)*uint64(constants.DrainSpawnStaggerTicks)
 
 	s.pendingSpawns = append(s.pendingSpawns, pendingDrainSpawn{
-		slot:          slot,
 		targetX:       targetX,
 		targetY:       targetY,
 		scheduledTick: scheduledTick,
@@ -274,14 +272,7 @@ func (s *DrainSystem) randomSpawnOffset(world *engine.World, baseX, baseY int, c
 
 // countActiveMaterializations returns number of drain slots currently materializing
 func (s *DrainSystem) countActiveMaterializations(world *engine.World) int {
-	slots := make(map[int]bool)
-	entities := world.Materializers.All()
-	for _, e := range entities {
-		if mat, ok := world.Materializers.Get(e); ok {
-			slots[mat.DrainSlot] = true
-		}
-	}
-	return len(slots)
+	return world.Materializers.Count() / 4
 }
 
 // queueDrainSpawns queues multiple drain spawns with stagger timing
@@ -381,7 +372,7 @@ func (s *DrainSystem) triggerDespawnFlash(world *engine.World, x, y int) {
 }
 
 // startMaterializeAt initiates the materialize animation for a specific slot and position
-func (s *DrainSystem) startMaterializeAt(world *engine.World, slot, targetX, targetY int) {
+func (s *DrainSystem) startMaterializeAt(world *engine.World, targetX, targetY int) {
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 
 	// Clamp to bounds
@@ -438,7 +429,6 @@ func (s *DrainSystem) startMaterializeAt(world *engine.World, slot, targetX, tar
 			Direction: def.dir,
 			Char:      constants.MaterializeChar,
 			Arrived:   false,
-			DrainSlot: slot,
 		}
 
 		entity := world.CreateEntity()
@@ -447,6 +437,7 @@ func (s *DrainSystem) startMaterializeAt(world *engine.World, slot, targetX, tar
 }
 
 // updateMaterializers updates the materialize spawner entities and triggers drain spawn when groups converge
+// updateMaterializers updates materialize spawner entities and triggers drain spawn when groups converge
 func (s *DrainSystem) updateMaterializers(world *engine.World, dt time.Duration) {
 	dtSeconds := dt.Seconds()
 	if dtSeconds > 0.1 {
@@ -455,14 +446,12 @@ func (s *DrainSystem) updateMaterializers(world *engine.World, dt time.Duration)
 
 	entities := world.Materializers.All()
 
-	// Group materializers by slot and track arrival status
-	type slotState struct {
+	// Group materializers by target position
+	type targetState struct {
 		entities   []engine.Entity
 		allArrived bool
-		targetX    int
-		targetY    int
 	}
-	slots := make(map[int]*slotState)
+	targets := make(map[uint64]*targetState)
 
 	for _, entity := range entities {
 		mat, ok := world.Materializers.Get(entity)
@@ -470,17 +459,15 @@ func (s *DrainSystem) updateMaterializers(world *engine.World, dt time.Duration)
 			continue
 		}
 
-		// Initialize slot state if needed
-		if slots[mat.DrainSlot] == nil {
-			slots[mat.DrainSlot] = &slotState{
+		key := uint64(mat.TargetX)<<32 | uint64(mat.TargetY)
+		if targets[key] == nil {
+			targets[key] = &targetState{
 				entities:   make([]engine.Entity, 0, 4),
 				allArrived: true,
-				targetX:    mat.TargetX,
-				targetY:    mat.TargetY,
 			}
 		}
 
-		state := slots[mat.DrainSlot]
+		state := targets[key]
 		state.entities = append(state.entities, entity)
 
 		if mat.Arrived {
@@ -528,21 +515,21 @@ func (s *DrainSystem) updateMaterializers(world *engine.World, dt time.Duration)
 		world.Materializers.Add(entity, mat)
 	}
 
-	// Process completed slots
-	for slot, state := range slots {
+	// Process completed targets
+	for key, state := range targets {
 		if state.allArrived && len(state.entities) > 0 {
-			// Destroy materializers for this slot
 			for _, entity := range state.entities {
 				world.DestroyEntity(entity)
 			}
-			// Spawn drain at target position
-			s.materializeDrainAt(world, slot, state.targetX, state.targetY)
+			targetX := int(key >> 32)
+			targetY := int(key & 0xFFFFFFFF)
+			s.materializeDrainAt(world, targetX, targetY)
 		}
 	}
 }
 
 // materializeDrainAt creates a drain entity at the specified position
-func (s *DrainSystem) materializeDrainAt(world *engine.World, slot, spawnX, spawnY int) {
+func (s *DrainSystem) materializeDrainAt(world *engine.World, spawnX, spawnY int) {
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	now := timeRes.GameTime
@@ -559,6 +546,16 @@ func (s *DrainSystem) materializeDrainAt(world *engine.World, slot, spawnX, spaw
 	}
 	if spawnY >= config.GameHeight {
 		spawnY = config.GameHeight - 1
+	}
+
+	// TODO: this check is likely unnecessary
+	// Check for existing drain at spawn position - abort if occupied
+	entitiesAtSpawn := world.Positions.GetAllAt(spawnX, spawnY)
+	for _, e := range entitiesAtSpawn {
+		if _, isDrain := world.Drains.Get(e); isDrain {
+			// Drain already at target - abort spawn to prevent flash flood
+			return
+		}
 	}
 
 	entity := world.CreateEntity()
@@ -584,7 +581,7 @@ func (s *DrainSystem) materializeDrainAt(world *engine.World, slot, spawnX, spaw
 	}
 
 	// Handle collisions at spawn position
-	entitiesAtSpawn := world.Positions.GetAllAt(spawnX, spawnY)
+	// entitiesAtSpawn := world.Positions.GetAllAt(spawnX, spawnY)
 	var toProcess []engine.Entity
 	for _, e := range entitiesAtSpawn {
 		if e != s.ctx.CursorEntity {
@@ -705,6 +702,9 @@ func (s *DrainSystem) handleDrainInteractions(world *engine.World) {
 
 	// Phase 3: Handle non-drain entity collisions
 	s.handleEntityCollisions(world)
+
+	// Phase 4: Handle decay entity collisions
+	s.handleDecayCollisions(world)
 }
 
 // handleDrainDrainCollisions detects and removes all drains sharing a cell
@@ -751,6 +751,50 @@ func (s *DrainSystem) handleEntityCollisions(world *engine.World) {
 				}
 				s.handleCollisionAtPosition(world, target)
 			}
+		}
+	}
+}
+
+// handleDecayCollisions detects and processes drain-decay collisions
+// Decay entities don't have PositionComponent, must iterate and check manually
+// TODO: fix this, related to another TODO item
+func (s *DrainSystem) handleDecayCollisions(world *engine.World) {
+	decayEntities := world.Decays.All()
+	if len(decayEntities) == 0 {
+		return
+	}
+
+	drainEntities := world.Drains.All()
+	if len(drainEntities) == 0 {
+		return
+	}
+
+	// Build drain position lookup for O(1) collision check
+	drainPositions := make(map[uint64]bool, len(drainEntities))
+	for _, drainEntity := range drainEntities {
+		pos, ok := world.Positions.Get(drainEntity)
+		if !ok {
+			continue
+		}
+		key := uint64(pos.X)<<32 | uint64(pos.Y)
+		drainPositions[key] = true
+	}
+
+	// Check each decay entity against drain positions
+	for _, decayEntity := range decayEntities {
+		decay, ok := world.Decays.Get(decayEntity)
+		if !ok {
+			continue
+		}
+
+		// Decay position is Column (x) and int(YPosition) (y)
+		decayX := decay.Column
+		decayY := int(decay.YPosition)
+
+		key := uint64(decayX)<<32 | uint64(decayY)
+		if drainPositions[key] {
+			// Drain collides with decay - destroy decay entity
+			world.DestroyEntity(decayEntity)
 		}
 	}
 }
@@ -817,8 +861,6 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 		count := world.Positions.GetAllAtInto(newX, newY, collisionBuf[:])
 		collidingEntities := collisionBuf[:count]
 
-		blocked := false
-
 		// Process collisions
 		for _, collidingEntity := range collidingEntities {
 			if collidingEntity != 0 && collidingEntity != drainEntity && collidingEntity != s.ctx.CursorEntity {
@@ -827,12 +869,7 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 					continue
 				}
 				s.handleCollisionAtPosition(world, collidingEntity)
-				blocked = true
 			}
-		}
-
-		if blocked {
-			continue
 		}
 
 		// Movement succeeded - update components
@@ -866,9 +903,17 @@ func (s *DrainSystem) handleCollisionAtPosition(world *engine.World, entity engi
 		return
 	}
 
-	// Skip other drains (they block but don't destroy each other yet)
+	// Skip other drains - handleDrainDrainCollisions destroys all colliding drains
 	if _, ok := world.Drains.Get(entity); ok {
 		return
+	}
+
+	// Check if this is a gold sequence entity - destroy entire sequence
+	if seq, ok := world.Sequences.Get(entity); ok {
+		if seq.Type == components.SequenceGold {
+			s.handleGoldSequenceCollision(world, entity, seq.ID)
+			return
+		}
 	}
 
 	// Destroy the entity
@@ -918,10 +963,5 @@ func (s *DrainSystem) handleNuggetCollision(world *engine.World, entity engine.E
 	s.ctx.State.ClearActiveNuggetID(uint64(entity))
 
 	// Destroy the nugget entity
-	world.DestroyEntity(entity)
-}
-
-// handleDecayCollision destroys the entity colliding with decay
-func (s *DrainSystem) handleDecayCollision(world *engine.World, entity engine.Entity) {
 	world.DestroyEntity(entity)
 }

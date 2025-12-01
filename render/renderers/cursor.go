@@ -2,7 +2,6 @@ package renderers
 
 import (
 	"github.com/lixenwraith/vi-fighter/constants"
-	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -36,7 +35,7 @@ func (c *CursorRenderer) Render(ctx render.RenderContext, world *engine.World, b
 
 	// 1. Determine Default State (Empty Cell)
 	var charAtCursor = ' '
-	var cursorBgColor core.RGB
+	var cursorBgColor render.RGB
 
 	// Default background based on mode
 	if c.gameCtx.IsInsertMode() {
@@ -73,12 +72,13 @@ func (c *CursorRenderer) Render(ctx render.RenderContext, world *engine.World, b
 
 	hasChar := displayEntity != 0
 	isNugget := false
-	var charFg core.RGB
+	var charFg render.RGB
 
 	if hasChar {
 		if charComp, ok := world.Characters.Get(displayEntity); ok {
 			charAtCursor = charComp.Rune
-			charFg = charComp.Fg
+			// Resolve color from semantic fields
+			charFg = resolveCharacterColor(charComp)
 			if world.Nuggets.Has(displayEntity) {
 				isNugget = true
 			}

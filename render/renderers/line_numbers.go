@@ -3,7 +3,6 @@ package renderers
 import (
 	"fmt"
 
-	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -31,7 +30,7 @@ func (l *LineNumbersRenderer) Render(ctx render.RenderContext, world *engine.Wor
 		}
 		lineNum := fmt.Sprintf("%*d", l.lineNumWidth, relativeNum)
 
-		var fg, bg core.RGB
+		var fg, bg render.RGB
 		if relativeNum == 0 {
 			if l.gameCtx.IsSearchMode() || l.gameCtx.IsCommandMode() {
 				fg = render.RgbCursorNormal

@@ -12,7 +12,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
-	"github.com/lixenwraith/vi-fighter/render"
 )
 
 // NuggetSystem manages nugget spawn and respawn logic
@@ -78,7 +77,10 @@ func (s *NuggetSystem) spawnNugget(world *engine.World, now time.Time) {
 	randomChar := constants.AlphanumericRunes[rand.Intn(len(constants.AlphanumericRunes))]
 	char := components.CharacterComponent{
 		Rune: randomChar,
-		Fg:   render.RgbNuggetOrange,
+		// Use semantic color
+		Color: components.ColorNugget,
+		Style: components.StyleNormal,
+		// SeqType/SeqLevel default to zero values (unused for nuggets)
 	}
 
 	nugget := components.NuggetComponent{

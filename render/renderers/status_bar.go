@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/constants"
-	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -52,7 +51,7 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 
 	// Audio mute indicator - always visible
 	if s.gameCtx.AudioEngine != nil {
-		var audioBgColor core.RGB
+		var audioBgColor render.RGB
 		if s.gameCtx.AudioEngine.IsMuted() {
 			audioBgColor = render.RgbAudioMuted // Bright red when muted
 		} else {
@@ -66,7 +65,7 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 
 	// Draw mode indicator
 	var modeText string
-	var modeBgColor core.RGB
+	var modeBgColor render.RGB
 	if s.gameCtx.IsSearchMode() {
 		modeText = constants.ModeTextSearch
 		modeBgColor = render.RgbModeSearchBg
@@ -93,7 +92,7 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 		statusStartX++
 		for _, ch := range s.gameCtx.LastCommand {
 			if statusStartX < ctx.Width {
-				buf.SetWithBg(statusStartX, statusY, ch, core.RGB{255, 255, 0}, render.RgbBackground) // TODO: reference color var
+				buf.SetWithBg(statusStartX, statusY, ch, render.RGB{255, 255, 0}, render.RgbBackground) // TODO: reference color var
 				statusStartX++
 			}
 		}
@@ -108,7 +107,7 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 		searchText := "/" + s.gameCtx.SearchText
 		for _, ch := range searchText {
 			if statusStartX < ctx.Width {
-				buf.SetWithBg(statusStartX, statusY, ch, core.RGB{255, 255, 255}, render.RgbBackground)
+				buf.SetWithBg(statusStartX, statusY, ch, render.RGB{255, 255, 255}, render.RgbBackground)
 				statusStartX++
 			}
 		}
@@ -116,14 +115,14 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 		cmdText := ":" + s.gameCtx.CommandText
 		for _, ch := range cmdText {
 			if statusStartX < ctx.Width {
-				buf.SetWithBg(statusStartX, statusY, ch, core.RGB{255, 255, 255}, render.RgbBackground)
+				buf.SetWithBg(statusStartX, statusY, ch, render.RGB{255, 255, 255}, render.RgbBackground)
 				statusStartX++
 			}
 		}
 	} else if s.gameCtx.StatusMessage != "" {
 		for _, ch := range s.gameCtx.StatusMessage {
 			if statusStartX < ctx.Width {
-				buf.SetWithBg(statusStartX, statusY, ch, core.RGB{200, 200, 200}, render.RgbBackground)
+				buf.SetWithBg(statusStartX, statusY, ch, render.RGB{200, 200, 200}, render.RgbBackground)
 				statusStartX++
 			}
 		}
@@ -184,7 +183,7 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 	if s.gameCtx.GetPingActive() {
 		for _, ch := range gridText {
 			if startX < ctx.Width {
-				buf.SetWithBg(startX, statusY, ch, core.RGB{255, 255, 255}, render.RgbBackground)
+				buf.SetWithBg(startX, statusY, ch, render.RGB{255, 255, 255}, render.RgbBackground)
 				startX++
 			}
 		}
@@ -202,13 +201,13 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 	// TODO: hardcode time to const
 	if s.gameCtx.State.GetEnergyBlinkActive() && clockNow.Sub(s.gameCtx.State.GetEnergyBlinkTime()).Milliseconds() < 200 {
 		typeCode := s.gameCtx.State.GetEnergyBlinkType()
-		var energyFg, energyBg core.RGB
+		var energyFg, energyBg render.RGB
 
 		if typeCode == 0 {
 			energyFg = render.RgbCursorError
 			energyBg = render.RgbBlack
 		} else {
-			var blinkColor core.RGB
+			var blinkColor render.RGB
 			switch typeCode {
 			case 1:
 				blinkColor = render.RgbEnergyBlinkBlue

@@ -4,7 +4,7 @@ import (
 	"math"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -30,12 +30,7 @@ func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, b
 		}
 
 		// Shield only renders if Sources != 0 AND Energy > 0
-		if shield.Sources == 0 {
-			continue
-		}
-
-		// Check Energy via RenderContext
-		if ctx.Energy <= 0 {
+		if shield.Sources == 0 || ctx.Energy <= 0 {
 			continue
 		}
 
@@ -59,8 +54,8 @@ func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, b
 			endY = ctx.GameHeight - 1
 		}
 
-		// Convert shield color to RGB once
-		shieldRGB := shield.Color
+		// Resolve shield color from semantic ColorClass
+		shieldRGB := resolveShieldColor(shield.Color)
 
 		for y := startY; y <= endY; y++ {
 			for x := startX; x <= endX; x++ {
@@ -82,12 +77,19 @@ func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, b
 				// Alpha: 1.0 at center, 0.0 at edge, scaled by MaxOpacity
 				alpha := (1.0 - dist) * shield.MaxOpacity
 
-				// Use compositor alpha blending
-
-				// mainRune=0 preserves existing rune
-				// BlendAlpha blends only the background
-				buf.SetPixel(screenX, screenY, 0, core.RGBBlack, shieldRGB, render.BlendAlpha, alpha, tcell.AttrNone)
+				// BlendAlpha on background only, rune=0 preserves existing text
+				buf.Set(screenX, screenY, 0, render.RGBBlack, shieldRGB, render.BlendAlpha, alpha, tcell.AttrNone)
 			}
 		}
+	}
+}
+
+// resolveShieldColor maps semantic color info to concrete RGB
+func resolveShieldColor(color components.ColorClass) render.RGB {
+	switch color {
+	case components.ColorShield:
+		return render.RgbShieldBase
+	default:
+		return render.RgbShieldBase
 	}
 }

@@ -3,7 +3,6 @@ package renderers
 import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/constants"
-	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -11,8 +10,8 @@ import (
 // EffectsRenderer draws decay, cleaners, removal flashes, and materializers
 type EffectsRenderer struct {
 	gameCtx             *engine.GameContext
-	cleanerGradient     []core.RGB
-	materializeGradient []core.RGB
+	cleanerGradient     []render.RGB
+	materializeGradient []render.RGB
 }
 
 // NewEffectsRenderer creates a new effects renderer with gradient generation
@@ -29,7 +28,7 @@ func NewEffectsRenderer(gameCtx *engine.GameContext) *EffectsRenderer {
 func (e *EffectsRenderer) buildCleanerGradient() {
 	length := constants.CleanerTrailLength
 
-	e.cleanerGradient = make([]core.RGB, length)
+	e.cleanerGradient = make([]render.RGB, length)
 
 	for i := 0; i < length; i++ {
 		// Opacity fade from 1.0 to 0.0
@@ -45,7 +44,7 @@ func (e *EffectsRenderer) buildCleanerGradient() {
 func (e *EffectsRenderer) buildMaterializeGradient() {
 	length := constants.MaterializeTrailLength
 
-	e.materializeGradient = make([]core.RGB, length)
+	e.materializeGradient = make([]render.RGB, length)
 
 	for i := 0; i < length; i++ {
 		// Opacity fade from 1.0 to 0.0
@@ -95,9 +94,8 @@ func (e *EffectsRenderer) drawDecay(ctx render.RenderContext, world *engine.Worl
 			continue
 		}
 
-		// Preserve existing background (e.g., Shield)
-		cell := buf.Get(screenX, screenY)
-		buf.SetWithBg(screenX, screenY, decay.Char, render.RgbDecay, cell.Bg)
+		// Decay floats over backgrounds - use SetFgOnly
+		buf.SetFgOnly(screenX, screenY, decay.Char, render.RgbDecay, tcell.AttrNone)
 	}
 }
 
@@ -158,7 +156,6 @@ func (e *EffectsRenderer) drawRemovalFlashes(ctx render.RenderContext, world *en
 		}
 
 		elapsed := ctx.GameTime.Sub(flash.StartTime)
-
 		if elapsed >= flash.Duration {
 			continue
 		}
@@ -169,19 +166,19 @@ func (e *EffectsRenderer) drawRemovalFlashes(ctx render.RenderContext, world *en
 			opacity = 0.0
 		}
 
-		// Flash color: bright yellow-white fading to yellow
-		flashColor := core.RGB{
-			R: 255,
-			G: 255,
+		// Flash contribution for additive blending
+		// TODO: remove hard-coded colors
+		flashColor := render.RGB{
+			R: uint8(255 * opacity),
+			G: uint8(255 * opacity),
 			B: uint8(200 * opacity),
 		}
 
 		screenX := ctx.GameX + flash.X
 		screenY := ctx.GameY + flash.Y
 
-		// Preserve existing background
-		cell := buf.Get(screenX, screenY)
-		buf.SetWithBg(screenX, screenY, flash.Char, flashColor, cell.Bg)
+		// Use BlendAdd to brighten underlying pixels (write-only)
+		buf.Set(screenX, screenY, flash.Char, flashColor, flashColor, render.BlendAdd, 1.0, tcell.AttrNone)
 	}
 }
 
@@ -224,11 +221,8 @@ func (e *EffectsRenderer) drawMaterializers(ctx render.RenderContext, world *eng
 
 			color := e.materializeGradient[gradientIndex]
 
-			// Preserve existing background (e.g., Shield color)
-			cell := buf.Get(screenX, screenY)
-
-			// Use SetMax for non-destructive bright overlay
-			buf.SetPixel(screenX, screenY, mat.Char, color, cell.Bg, render.BlendMax, 1.0, tcell.AttrNone)
+			// BlendMax with SrcBg=Black preserves destination bg: Max(Dst, 0) = Dst
+			buf.Set(screenX, screenY, mat.Char, color, render.RGBBlack, render.BlendMax, 1.0, tcell.AttrNone)
 		}
 	}
 }

@@ -1,10 +1,5 @@
 package components
 
-import (
-	"github.com/gdamore/tcell/v2"
-	"github.com/lixenwraith/vi-fighter/core"
-)
-
 // SequenceType represents the type of character sequence
 type SequenceType int
 
@@ -25,10 +20,14 @@ const (
 )
 
 // CharacterComponent represents a character entity
+// Uses semantic types resolved at render time
 type CharacterComponent struct {
 	Rune  rune
-	Fg    core.RGB
-	Attrs tcell.AttrMask
+	Color ColorClass // Semantic color, resolved by renderer
+	Style TextStyle  // Semantic style, resolved by renderer
+	// Sequence info used to derive actual color
+	SeqType  SequenceType
+	SeqLevel SequenceLevel
 }
 
 // SequenceComponent represents membership in a character sequence

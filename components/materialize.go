@@ -48,7 +48,4 @@ type MaterializeComponent struct {
 
 	// Arrived flag - set when spawner reaches target
 	Arrived bool
-
-	// Drain slot association (-1 for non-drain materializers, 0-9 for drain slots)
-	DrainSlot int
 }
