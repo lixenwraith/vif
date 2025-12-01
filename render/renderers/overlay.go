@@ -3,7 +3,6 @@ package renderers
 import (
 	"fmt"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
@@ -28,8 +27,6 @@ func (o *OverlayRenderer) IsVisible() bool {
 
 // Render draws the overlay window
 func (o *OverlayRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
-	defaultStyle := tcell.StyleDefault.Background(render.RgbBackground)
-
 	// Calculate overlay dimensions (80% of screen)
 	overlayWidth := int(float64(ctx.Width) * constants.OverlayWidthPercent)
 	overlayHeight := int(float64(ctx.Height) * constants.OverlayHeightPercent)
@@ -54,17 +51,12 @@ func (o *OverlayRenderer) Render(ctx render.RenderContext, world *engine.World, 
 	startX := (ctx.Width - overlayWidth) / 2
 	startY := (ctx.Height - overlayHeight) / 2
 
-	// Define styles
-	borderStyle := defaultStyle.Foreground(render.RgbOverlayBorder).Background(render.RgbOverlayBg)
-	bgStyle := defaultStyle.Foreground(render.RgbOverlayText).Background(render.RgbOverlayBg)
-	titleStyle := defaultStyle.Foreground(render.RgbOverlayTitle).Background(render.RgbOverlayBg)
-
 	// Draw top border with title
-	buf.Set(startX, startY, '╔', borderStyle)
+	buf.SetWithBg(startX, startY, '╔', render.RgbOverlayBorder, render.RgbOverlayBg)
 	for x := 1; x < overlayWidth-1; x++ {
-		buf.Set(startX+x, startY, '═', borderStyle)
+		buf.SetWithBg(startX+x, startY, '═', render.RgbOverlayBorder, render.RgbOverlayBg)
 	}
-	buf.Set(startX+overlayWidth-1, startY, '╗', borderStyle)
+	buf.SetWithBg(startX+overlayWidth-1, startY, '╗', render.RgbOverlayBorder, render.RgbOverlayBg)
 
 	// Draw title centered on top border
 	if o.gameCtx.OverlayTitle != "" {
@@ -72,7 +64,7 @@ func (o *OverlayRenderer) Render(ctx render.RenderContext, world *engine.World, 
 		if titleX > startX {
 			for i, ch := range o.gameCtx.OverlayTitle {
 				if titleX+i < startX+overlayWidth-1 {
-					buf.Set(titleX+i, startY, ch, titleStyle)
+					buf.SetWithBg(titleX+i, startY, ch, render.RgbOverlayTitle, render.RgbOverlayBg)
 				}
 			}
 		}
@@ -83,24 +75,23 @@ func (o *OverlayRenderer) Render(ctx render.RenderContext, world *engine.World, 
 	contentWidth := overlayWidth - 2
 
 	for y := 1; y < overlayHeight-1; y++ {
+		screenY := startY + y
 		// Left border
-		buf.Set(startX, startY+y, '║', borderStyle)
-
-		// Fill background
+		buf.SetWithBg(startX, screenY, '║', render.RgbOverlayBorder, render.RgbOverlayBg)
+		// Content area
 		for x := 1; x < overlayWidth-1; x++ {
-			buf.Set(startX+x, startY+y, ' ', bgStyle)
+			buf.SetWithBg(startX+x, screenY, ' ', render.RgbOverlayText, render.RgbOverlayBg)
 		}
-
 		// Right border
-		buf.Set(startX+overlayWidth-1, startY+y, '║', borderStyle)
+		buf.SetWithBg(startX+overlayWidth-1, screenY, '║', render.RgbOverlayBorder, render.RgbOverlayBg)
 	}
 
 	// Draw bottom border
-	buf.Set(startX, startY+overlayHeight-1, '╚', borderStyle)
+	buf.SetWithBg(startX, startY+overlayHeight-1, '╚', render.RgbOverlayBorder, render.RgbOverlayBg)
 	for x := 1; x < overlayWidth-1; x++ {
-		buf.Set(startX+x, startY+overlayHeight-1, '═', borderStyle)
+		buf.SetWithBg(startX+x, startY+overlayHeight-1, '═', render.RgbOverlayBorder, render.RgbOverlayBg)
 	}
-	buf.Set(startX+overlayWidth-1, startY+overlayHeight-1, '╝', borderStyle)
+	buf.SetWithBg(startX+overlayWidth-1, startY+overlayHeight-1, '╝', render.RgbOverlayBorder, render.RgbOverlayBg)
 
 	// Draw content lines
 	contentStartY := startY + 1 + constants.OverlayPaddingY
@@ -129,7 +120,7 @@ func (o *OverlayRenderer) Render(ctx render.RenderContext, world *engine.World, 
 		// Draw the line
 		for j, ch := range displayLine {
 			if contentStartX+j < startX+overlayWidth-1-constants.OverlayPaddingX {
-				buf.Set(contentStartX+j, lineY, ch, bgStyle)
+				buf.SetWithBg(contentStartX+j, lineY, ch, render.RgbOverlayText, render.RgbOverlayBg)
 			}
 		}
 		lineY++
@@ -141,7 +132,7 @@ func (o *OverlayRenderer) Render(ctx render.RenderContext, world *engine.World, 
 		scrollX := startX + overlayWidth - len(scrollInfo) - 2
 		scrollY := startY + overlayHeight - 1
 		for i, ch := range scrollInfo {
-			buf.Set(scrollX+i, scrollY, ch, borderStyle)
+			buf.SetWithBg(scrollX+i, scrollY, ch, render.RgbOverlayBorder, render.RgbOverlayBg)
 		}
 	}
 }

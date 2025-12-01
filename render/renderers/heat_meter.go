@@ -2,6 +2,7 @@ package renderers
 
 import (
 	"github.com/gdamore/tcell/v2"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -19,7 +20,6 @@ func NewHeatMeterRenderer(state *engine.GameState) *HeatMeterRenderer {
 // Render implements SystemRenderer
 func (h *HeatMeterRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	heat := h.state.GetHeat()
-	defaultStyle := tcell.StyleDefault.Background(render.RgbBackground)
 
 	// Calculate display segments: 0-9=0, 10-19=1, ..., 90-99=9, 100=10
 	displayHeat := heat / 10
@@ -37,20 +37,19 @@ func (h *HeatMeterRenderer) Render(ctx render.RenderContext, world *engine.World
 		// Determine if this segment is filled
 		isFilled := segment < displayHeat
 
-		var style tcell.Style
+		var color core.RGB
 		if isFilled {
 			// Calculate progress for color gradient (0.0 to 1.0)
 			progress := float64(segment+1) / 10.0
-			color := render.GetHeatMeterColor(progress)
-			style = defaultStyle.Foreground(color)
+			color = render.GetHeatMeterColor(progress)
 		} else {
 			// Empty segment: black foreground
-			style = defaultStyle.Foreground(render.RgbBlack)
+			color = render.RgbBlack
 		}
 
 		// Draw all characters in this segment
 		for x := segmentStart; x < segmentEnd && x < ctx.Width; x++ {
-			buf.Set(x, 0, '█', style)
+			buf.SetPixel(x, 0, '█', color, render.DefaultBgRGB, render.BlendReplace, 1.0, tcell.AttrNone)
 		}
 	}
 }

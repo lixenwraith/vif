@@ -9,7 +9,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -77,12 +76,9 @@ func (s *NuggetSystem) spawnNugget(world *engine.World, now time.Time) {
 	}
 
 	randomChar := constants.AlphanumericRunes[rand.Intn(len(constants.AlphanumericRunes))]
-	style := tcell.StyleDefault.
-		Foreground(render.RgbNuggetOrange).
-		Background(render.RgbBackground)
 	char := components.CharacterComponent{
-		Rune:  randomChar,
-		Style: style,
+		Rune: randomChar,
+		Fg:   render.RgbNuggetOrange,
 	}
 
 	nugget := components.NuggetComponent{

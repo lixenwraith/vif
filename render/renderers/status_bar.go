@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -39,36 +39,34 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 		s.lastFpsUpdate = now
 	}
 
-	defaultStyle := tcell.StyleDefault.Background(render.RgbBackground)
 	statusY := ctx.GameY + ctx.GameHeight + 1
 
 	// Clear status bar
 	for x := 0; x < ctx.Width; x++ {
-		buf.Set(x, statusY, ' ', defaultStyle)
+		buf.SetWithBg(x, statusY, ' ', render.RgbBackground, render.RgbBackground)
 	}
 
 	// Track current x position for status bar elements
 	x := 0
-	y := statusY
+	// y := statusY
 
 	// Audio mute indicator - always visible
 	if s.gameCtx.AudioEngine != nil {
-		var audioBgColor tcell.Color
+		var audioBgColor core.RGB
 		if s.gameCtx.AudioEngine.IsMuted() {
 			audioBgColor = render.RgbAudioMuted // Bright red when muted
 		} else {
 			audioBgColor = render.RgbAudioUnmuted // Bright green when unmuted
 		}
-		audioStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(audioBgColor)
 		for _, ch := range constants.AudioStr {
-			buf.Set(x, y, ch, audioStyle)
+			buf.SetWithBg(x, statusY, ch, render.RgbBlack, audioBgColor)
 			x++
 		}
 	}
 
 	// Draw mode indicator
 	var modeText string
-	var modeBgColor tcell.Color
+	var modeBgColor core.RGB
 	if s.gameCtx.IsSearchMode() {
 		modeText = constants.ModeTextSearch
 		modeBgColor = render.RgbModeSearchBg
@@ -82,68 +80,57 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 		modeText = constants.ModeTextNormal
 		modeBgColor = render.RgbModeNormalBg
 	}
-	modeStyle := defaultStyle.Foreground(render.RgbStatusText).Background(modeBgColor)
-	for i, ch := range modeText {
-		if x+i < ctx.Width {
-			buf.Set(x+i, statusY, ch, modeStyle)
+	for _, ch := range modeText {
+		if x < ctx.Width {
+			buf.SetWithBg(x, statusY, ch, render.RgbStatusText, modeBgColor)
+			x++
 		}
 	}
-	x += len(modeText)
 
 	// Draw last command indicator (if present)
 	statusStartX := x
 	if s.gameCtx.LastCommand != "" && !s.gameCtx.IsSearchMode() && !s.gameCtx.IsCommandMode() {
 		statusStartX++
-		lastCmdStyle := defaultStyle.Foreground(tcell.ColorYellow)
-		for i, ch := range s.gameCtx.LastCommand {
-			if statusStartX+i < ctx.Width {
-				buf.Set(statusStartX+i, statusY, ch, lastCmdStyle)
+		for _, ch := range s.gameCtx.LastCommand {
+			if statusStartX < ctx.Width {
+				buf.SetWithBg(statusStartX, statusY, ch, core.RGB{255, 255, 0}, render.RgbBackground) // TODO: reference color var
+				statusStartX++
 			}
 		}
-		statusStartX += len(s.gameCtx.LastCommand) + 1
+		statusStartX++
 	} else {
 		statusStartX++
 	}
 
 	// Draw search text, command text, or status message
+	// TODO: change to color var
 	if s.gameCtx.IsSearchMode() {
-		searchStyle := defaultStyle.Foreground(tcell.ColorWhite)
-		cursorStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(render.RgbCursorNormal)
-
-		for i, ch := range s.gameCtx.SearchText {
-			if statusStartX+i < ctx.Width {
-				buf.Set(statusStartX+i, statusY, ch, searchStyle)
+		searchText := "/" + s.gameCtx.SearchText
+		for _, ch := range searchText {
+			if statusStartX < ctx.Width {
+				buf.SetWithBg(statusStartX, statusY, ch, core.RGB{255, 255, 255}, render.RgbBackground)
+				statusStartX++
 			}
-		}
-
-		cursorX := statusStartX + len(s.gameCtx.SearchText)
-		if cursorX < ctx.Width {
-			buf.Set(cursorX, statusY, ' ', cursorStyle)
 		}
 	} else if s.gameCtx.IsCommandMode() {
-		commandStyle := defaultStyle.Foreground(tcell.ColorWhite)
-		cursorStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(render.RgbModeCommandBg)
-
-		for i, ch := range s.gameCtx.CommandText {
-			if statusStartX+i < ctx.Width {
-				buf.Set(statusStartX+i, statusY, ch, commandStyle)
+		cmdText := ":" + s.gameCtx.CommandText
+		for _, ch := range cmdText {
+			if statusStartX < ctx.Width {
+				buf.SetWithBg(statusStartX, statusY, ch, core.RGB{255, 255, 255}, render.RgbBackground)
+				statusStartX++
 			}
 		}
-
-		cursorX := statusStartX + len(s.gameCtx.CommandText)
-		if cursorX < ctx.Width {
-			buf.Set(cursorX, statusY, ' ', cursorStyle)
-		}
-	} else {
-		statusStyle := defaultStyle.Foreground(render.RgbStatusBar)
-		for i, ch := range s.gameCtx.StatusMessage {
-			if statusStartX+i < ctx.Width {
-				buf.Set(statusStartX+i, statusY, ch, statusStyle)
+	} else if s.gameCtx.StatusMessage != "" {
+		for _, ch := range s.gameCtx.StatusMessage {
+			if statusStartX < ctx.Width {
+				buf.SetWithBg(statusStartX, statusY, ch, core.RGB{200, 200, 200}, render.RgbBackground)
+				statusStartX++
 			}
 		}
 	}
 
 	// --- RIGHT SIDE METRICS ---
+	clockNow := s.gameCtx.PausableClock.Now()
 
 	// Prepare strings for all right-aligned components
 	energyText := fmt.Sprintf(" Energy: %d ", s.gameCtx.State.GetEnergy())
@@ -152,7 +139,7 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 
 	var boostText string
 	if s.gameCtx.State.GetBoostEnabled() {
-		remaining := s.gameCtx.State.GetBoostEndTime().Sub(s.gameCtx.PausableClock.Now()).Seconds()
+		remaining := s.gameCtx.State.GetBoostEndTime().Sub(clockNow).Seconds()
 		if remaining < 0 {
 			remaining = 0
 		}
@@ -168,7 +155,6 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 		gridText = fmt.Sprintf(" Grid: %.1fs ", gridRemaining)
 	}
 
-	// New Metrics
 	fpsStr := fmt.Sprintf(" FPS: %d ", s.currentFps)
 	gtStr := fmt.Sprintf(" GT: %d ", s.gameCtx.State.GetGameTicks())
 	apmStr := fmt.Sprintf(" APM: %d ", s.gameCtx.State.GetAPM())
@@ -183,100 +169,97 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 		startX = statusStartX
 	}
 
-	clockNow := s.gameCtx.PausableClock.Now()
-
 	// 1. Boost
 	if s.gameCtx.State.GetBoostEnabled() {
-		boostStyle := defaultStyle.Foreground(render.RgbStatusText).Background(render.RgbBoostBg)
-		for i, ch := range boostText {
-			if startX+i < ctx.Width {
-				buf.Set(startX+i, statusY, ch, boostStyle)
+		for _, ch := range boostText {
+			if startX < ctx.Width {
+				buf.SetWithBg(startX, statusY, ch, render.RgbStatusText, render.RgbBoostBg)
+				startX++
 			}
 		}
-		startX += len(boostText)
 	}
 
 	// 2. Grid
+	// TODO: var instead of color
 	if s.gameCtx.GetPingActive() {
-		gridStyle := defaultStyle.Foreground(tcell.ColorWhite)
-		for i, ch := range gridText {
-			if startX+i < ctx.Width {
-				buf.Set(startX+i, statusY, ch, gridStyle)
+		for _, ch := range gridText {
+			if startX < ctx.Width {
+				buf.SetWithBg(startX, statusY, ch, core.RGB{255, 255, 255}, render.RgbBackground)
+				startX++
 			}
 		}
-		startX += len(gridText)
 	}
 
 	// 3. Decay
-	decayStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(render.RgbDecayTimerBg)
-	for i, ch := range decayText {
-		if startX+i < ctx.Width {
-			buf.Set(startX+i, statusY, ch, decayStyle)
+	for _, ch := range decayText {
+		if startX < ctx.Width {
+			buf.SetWithBg(startX, statusY, ch, render.RgbBlack, render.RgbDecayTimerBg)
+			startX++
 		}
 	}
-	startX += len(decayText)
 
 	// 4. Energy
+	// TODO: hardcode time to const
 	if s.gameCtx.State.GetEnergyBlinkActive() && clockNow.Sub(s.gameCtx.State.GetEnergyBlinkTime()).Milliseconds() < 200 {
 		typeCode := s.gameCtx.State.GetEnergyBlinkType()
-		var energyStyle tcell.Style
+		var energyFg, energyBg core.RGB
 
 		if typeCode == 0 {
-			energyStyle = defaultStyle.Foreground(render.RgbCursorError).Background(render.RgbBlack)
+			energyFg = render.RgbCursorError
+			energyBg = render.RgbBlack
 		} else {
-			var blinkColor tcell.Color
+			var blinkColor core.RGB
 			switch typeCode {
 			case 1:
-				blinkColor = render.RgbEnergyBlinkBlue // Blue
+				blinkColor = render.RgbEnergyBlinkBlue
 			case 2:
-				blinkColor = render.RgbEnergyBlinkGreen // Green
+				blinkColor = render.RgbEnergyBlinkGreen
 			case 3:
-				blinkColor = render.RgbEnergyBlinkRed // Red
+				blinkColor = render.RgbEnergyBlinkRed
 			case 4:
-				blinkColor = render.RgbSequenceGold // Gold
+				blinkColor = render.RgbSequenceGold
 			default:
 				blinkColor = render.RgbEnergyBlinkWhite
 			}
-			energyStyle = defaultStyle.Foreground(render.RgbBlack).Background(blinkColor)
+			energyFg = render.RgbBlack
+			energyBg = blinkColor
 		}
-		for i, ch := range energyText {
-			if startX+i < ctx.Width {
-				buf.Set(startX+i, statusY, ch, energyStyle)
+		for _, ch := range energyText {
+			if startX < ctx.Width {
+				buf.SetWithBg(startX, statusY, ch, energyFg, energyBg)
+				startX++
 			}
 		}
 	} else {
-		energyStyle := defaultStyle.Foreground(render.RgbBlack).Background(render.RgbEnergyBg)
-		for i, ch := range energyText {
-			if startX+i < ctx.Width {
-				buf.Set(startX+i, statusY, ch, energyStyle)
+		for _, ch := range energyText {
+			if startX < ctx.Width {
+				buf.SetWithBg(startX, statusY, ch, render.RgbBlack, render.RgbEnergyBg)
+				startX++
 			}
 		}
 	}
-	startX += len(energyText)
 
 	// 5. APM
-	apmStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(render.RgbApmBg)
-	for i, ch := range apmStr {
-		if startX+i < ctx.Width {
-			buf.Set(startX+i, statusY, ch, apmStyle)
+	for _, ch := range apmStr {
+		if startX < ctx.Width {
+			buf.SetWithBg(startX, statusY, ch, render.RgbBlack, render.RgbApmBg)
+			startX++
 		}
 	}
-	startX += len(apmStr)
 
 	// 6. GT
-	gtStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(render.RgbGtBg)
-	for i, ch := range gtStr {
-		if startX+i < ctx.Width {
-			buf.Set(startX+i, statusY, ch, gtStyle)
+	for _, ch := range gtStr {
+		if startX < ctx.Width {
+			buf.SetWithBg(startX, statusY, ch, render.RgbBlack, render.RgbGtBg)
+			startX++
 		}
 	}
-	startX += len(gtStr)
 
 	// 7. FPS
-	fpsStyle := defaultStyle.Foreground(tcell.ColorBlack).Background(render.RgbFpsBg)
-	for i, ch := range fpsStr {
-		if startX+i < ctx.Width {
-			buf.Set(startX+i, statusY, ch, fpsStyle)
+	for _, ch := range fpsStr {
+		if startX < ctx.Width {
+			buf.SetWithBg(startX, statusY, ch, render.RgbBlack, render.RgbFpsBg)
+			startX++
 		}
 	}
 }

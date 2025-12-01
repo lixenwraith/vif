@@ -3,7 +3,7 @@ package renderers
 import (
 	"fmt"
 
-	"github.com/gdamore/tcell/v2"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -24,9 +24,6 @@ func NewLineNumbersRenderer(lineNumWidth int, gameCtx *engine.GameContext) *Line
 
 // Render implements SystemRenderer
 func (l *LineNumbersRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
-	defaultStyle := tcell.StyleDefault.Background(render.RgbBackground)
-	lineNumStyle := defaultStyle.Foreground(render.RgbLineNumbers)
-
 	for y := 0; y < ctx.GameHeight; y++ {
 		relativeNum := y - ctx.CursorY
 		if relativeNum < 0 {
@@ -34,20 +31,23 @@ func (l *LineNumbersRenderer) Render(ctx render.RenderContext, world *engine.Wor
 		}
 		lineNum := fmt.Sprintf("%*d", l.lineNumWidth, relativeNum)
 
-		var numStyle tcell.Style
+		var fg, bg core.RGB
 		if relativeNum == 0 {
 			if l.gameCtx.IsSearchMode() || l.gameCtx.IsCommandMode() {
-				numStyle = defaultStyle.Foreground(render.RgbCursorNormal)
+				fg = render.RgbCursorNormal
+				bg = render.RgbBackground
 			} else {
-				numStyle = defaultStyle.Foreground(tcell.ColorBlack).Background(render.RgbCursorNormal)
+				fg = render.RgbBlack
+				bg = render.RgbCursorNormal
 			}
 		} else {
-			numStyle = lineNumStyle
+			fg = render.RgbLineNumbers
+			bg = render.RgbBackground
 		}
 
 		screenY := ctx.GameY + y
 		for i, ch := range lineNum {
-			buf.Set(i, screenY, ch, numStyle)
+			buf.SetWithBg(i, screenY, ch, fg, bg)
 		}
 	}
 }

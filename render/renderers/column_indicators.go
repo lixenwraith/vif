@@ -1,7 +1,7 @@
 package renderers
 
 import (
-	"github.com/gdamore/tcell/v2"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -20,23 +20,22 @@ func NewColumnIndicatorsRenderer(gameCtx *engine.GameContext) *ColumnIndicatorsR
 
 // Render implements SystemRenderer
 func (c *ColumnIndicatorsRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
-	defaultStyle := tcell.StyleDefault.Background(render.RgbBackground)
-	indicatorStyle := defaultStyle.Foreground(render.RgbColumnIndicator)
-
 	indicatorY := ctx.GameY + ctx.GameHeight
 
 	for x := 0; x < ctx.GameWidth; x++ {
 		screenX := ctx.GameX + x
 		relativeCol := x - ctx.CursorX
+
 		var ch rune
-		var colStyle tcell.Style
+		var fg, bg core.RGB
 
 		if relativeCol == 0 {
-			ch = '0'
 			if c.gameCtx.IsSearchMode() || c.gameCtx.IsCommandMode() {
-				colStyle = defaultStyle.Foreground(render.RgbCursorNormal)
+				fg = render.RgbCursorNormal
+				bg = render.RgbBackground
 			} else {
-				colStyle = defaultStyle.Foreground(tcell.ColorBlack).Background(render.RgbCursorNormal)
+				fg = render.RgbBlack
+				bg = render.RgbCursorNormal
 			}
 		} else {
 			absRelative := relativeCol
@@ -50,13 +49,14 @@ func (c *ColumnIndicatorsRenderer) Render(ctx render.RenderContext, world *engin
 			} else {
 				ch = ' '
 			}
-			colStyle = indicatorStyle
+			fg = render.RgbColumnIndicator
+			bg = render.RgbBackground
 		}
-		buf.Set(screenX, indicatorY, ch, colStyle)
+		buf.SetWithBg(screenX, indicatorY, ch, fg, bg)
 	}
 
 	// Clear line number area for indicator row
 	for i := 0; i < ctx.GameX; i++ {
-		buf.Set(i, indicatorY, ' ', defaultStyle)
+		buf.SetWithBg(i, indicatorY, ' ', render.RgbBackground, render.RgbBackground)
 	}
 }

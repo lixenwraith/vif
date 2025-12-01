@@ -3,7 +3,6 @@ package renderers
 import (
 	"fmt"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
@@ -19,8 +18,6 @@ func NewDrainRenderer() *DrainRenderer {
 
 // Render draws all drain entities
 func (d *DrainRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
-	defaultStyle := tcell.StyleDefault.Background(render.RgbBackground)
-
 	// Get all drains
 	drainEntities := world.Drains.All()
 	if len(drainEntities) == 0 {
@@ -44,14 +41,10 @@ func (d *DrainRenderer) Render(ctx render.RenderContext, world *engine.World, bu
 			continue
 		}
 
-		// Draw the drain character with transparent background
-		_, bg, _ := buf.DecomposeAt(screenX, screenY)
+		// Preserve existing background (e.g., Shield)
+		cell := buf.Get(screenX, screenY)
+		bg := cell.Bg
 
-		if bg == tcell.ColorDefault {
-			bg = render.RgbBackground
-		}
-
-		drainStyle := defaultStyle.Foreground(render.RgbDrain).Background(bg)
-		buf.Set(screenX, screenY, constants.DrainChar, drainStyle)
+		buf.SetWithBg(screenX, screenY, constants.DrainChar, render.RgbDrain, bg)
 	}
 }

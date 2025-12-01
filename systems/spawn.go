@@ -9,10 +9,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/content"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -447,7 +447,7 @@ func (s *SpawnSystem) spawnSequence(world *engine.World) {
 	seqLevel := colorKey.Level
 
 	// Get style for this sequence
-	style := render.GetStyleForSequence(seqType, seqLevel)
+	style := render.GetFgForSequence(seqType, seqLevel)
 
 	// Get next logical code block
 	block := s.getNextBlock()
@@ -530,7 +530,7 @@ func (s *SpawnSystem) getNextBlock() CodeBlock {
 
 // placeLine attempts to place a single line on the screen using generic stores
 // Lines exceeding GameWidth are cropped to fit available space
-func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType components.SequenceType, seqLevel components.SequenceLevel, style tcell.Style) bool {
+func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType components.SequenceType, seqLevel components.SequenceLevel, fg core.RGB) bool {
 	// Fetch resources
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 
@@ -618,8 +618,8 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 						Y: row,
 					},
 					char: components.CharacterComponent{
-						Rune:  lineRunes[i],
-						Style: style,
+						Rune: lineRunes[i],
+						Fg:   fg,
 					},
 					seq: components.SequenceComponent{
 						ID:    sequenceID,

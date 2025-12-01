@@ -298,7 +298,7 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 
 		// Update character style
 		if char, ok := world.Characters.Get(entity); ok {
-			char.Style = render.GetStyleForSequence(seq.Type, seq.Level)
+			char.Fg = render.GetFgForSequence(seq.Type, seq.Level)
 			world.Characters.Add(entity, char)
 		}
 	} else {
@@ -309,7 +309,7 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 			world.Sequences.Add(entity, seq)
 
 			if char, ok := world.Characters.Get(entity); ok {
-				char.Style = render.GetStyleForSequence(seq.Type, seq.Level)
+				char.Fg = render.GetFgForSequence(seq.Type, seq.Level)
 				world.Characters.Add(entity, char)
 			}
 		} else if seq.Type == components.SequenceGreen {
@@ -318,7 +318,7 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 			world.Sequences.Add(entity, seq)
 
 			if char, ok := world.Characters.Get(entity); ok {
-				char.Style = render.GetStyleForSequence(seq.Type, seq.Level)
+				char.Fg = render.GetFgForSequence(seq.Type, seq.Level)
 				world.Characters.Add(entity, char)
 			}
 		} else {

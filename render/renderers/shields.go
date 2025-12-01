@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -59,7 +60,7 @@ func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, b
 		}
 
 		// Convert shield color to RGB once
-		shieldRGB := render.TcellToRGB(shield.Color)
+		shieldRGB := shield.Color
 
 		for y := startY; y <= endY; y++ {
 			for x := startX; x <= endX; x++ {
@@ -85,36 +86,8 @@ func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, b
 
 				// mainRune=0 preserves existing rune
 				// BlendAlpha blends only the background
-				buf.SetPixel(screenX, screenY, 0, render.RGBBlack, shieldRGB, render.BlendAlpha, alpha, tcell.AttrNone)
+				buf.SetPixel(screenX, screenY, 0, core.RGBBlack, shieldRGB, render.BlendAlpha, alpha, tcell.AttrNone)
 			}
 		}
 	}
-}
-
-// blendColors blends two colors based on alpha
-// alpha is 0.0 (fully background) to 1.0 (fully foreground)
-func (s *ShieldRenderer) blendColors(bg, fg tcell.Color, alpha float64) tcell.Color {
-	if alpha <= 0 {
-		return bg
-	}
-	if alpha >= 1 {
-		return fg
-	}
-
-	// Safeguard: treat ColorDefault as RgbBackground to prevent negative RGB math
-	if bg == tcell.ColorDefault {
-		bg = render.RgbBackground
-	}
-	if fg == tcell.ColorDefault {
-		fg = render.RgbBackground
-	}
-
-	r1, g1, b1 := bg.RGB()
-	r2, g2, b2 := fg.RGB()
-
-	rOut := int32(float64(r1)*(1.0-alpha) + float64(r2)*alpha)
-	gOut := int32(float64(g1)*(1.0-alpha) + float64(g2)*alpha)
-	bOut := int32(float64(b1)*(1.0-alpha) + float64(b2)*alpha)
-
-	return tcell.NewRGBColor(rOut, gOut, bOut)
 }

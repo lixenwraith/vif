@@ -1,6 +1,9 @@
 package render
 
-import "github.com/gdamore/tcell/v2"
+import (
+	"github.com/gdamore/tcell/v2"
+	"github.com/lixenwraith/vi-fighter/core"
+)
 
 // RenderBuffer is a compositor backed by RGB cells
 // Single source of truth - all methods write to the same backing store
@@ -54,7 +57,7 @@ func (b *RenderBuffer) inBounds(x, y int) bool {
 }
 
 // =============================================================================
-// COMPOSITOR API (New)
+// COMPOSITOR API
 // =============================================================================
 
 // SetPixel composites a pixel with specified blend mode
@@ -63,7 +66,7 @@ func (b *RenderBuffer) inBounds(x, y int) bool {
 // mode: blending algorithm
 // alpha: blend factor for BlendAlpha (0.0 = keep dst, 1.0 = use src)
 // attrs: text attributes (preserved exactly)
-func (b *RenderBuffer) SetPixel(x, y int, mainRune rune, fg, bg RGB, mode BlendMode, alpha float64, attrs tcell.AttrMask) {
+func (b *RenderBuffer) SetPixel(x, y int, mainRune rune, fg, bg core.RGB, mode BlendMode, alpha float64, attrs tcell.AttrMask) {
 	if !b.inBounds(x, y) {
 		return
 	}
@@ -100,11 +103,6 @@ func (b *RenderBuffer) SetPixel(x, y int, mainRune rune, fg, bg RGB, mode BlendM
 	}
 }
 
-// SetSolid is convenience for opaque BlendReplace
-func (b *RenderBuffer) SetSolid(x, y int, mainRune rune, fg, bg RGB, attrs tcell.AttrMask) {
-	b.SetPixel(x, y, mainRune, fg, bg, BlendReplace, 1.0, attrs)
-}
-
 // Get returns cell at (x,y), returns emptyCell on OOB
 func (b *RenderBuffer) Get(x, y int) CompositorCell {
 	if !b.inBounds(x, y) {
@@ -113,62 +111,28 @@ func (b *RenderBuffer) Get(x, y int) CompositorCell {
 	return b.cells[y*b.width+x]
 }
 
-// GetRGB returns fg and bg as RGB at (x,y)
-func (b *RenderBuffer) GetRGB(x, y int) (fg, bg RGB, attrs tcell.AttrMask) {
-	cell := b.Get(x, y)
-	return cell.Fg, cell.Bg, cell.Attrs
+// =============================================================================
+// LEGACY BRIDGE API (Temporary - to be removed after full migration)
+// =============================================================================
+
+// Set writes a rune with fg/bg colors (legacy bridge)
+func (b *RenderBuffer) Set(x, y int, r rune, fg core.RGB) {
+	b.SetPixel(x, y, r, fg, DefaultBgRGB, BlendReplace, 1.0, tcell.AttrNone)
+}
+
+// SetWithBg writes a rune with explicit fg and bg colors
+func (b *RenderBuffer) SetWithBg(x, y int, r rune, fg, bg core.RGB) {
+	b.SetPixel(x, y, r, fg, bg, BlendReplace, 1.0, tcell.AttrNone)
+}
+
+// SetWithAttrs writes a rune with fg, bg, and attributes
+func (b *RenderBuffer) SetWithAttrs(x, y int, r rune, fg, bg core.RGB, attrs tcell.AttrMask) {
+	b.SetPixel(x, y, r, fg, bg, BlendReplace, 1.0, attrs)
 }
 
 // =============================================================================
-// LEGACY BRIDGE API (Temporary - calls compositor internally)
+// OUTPUT
 // =============================================================================
-
-// Set writes a rune and style (legacy API, converts tcell.Style to RGB)
-func (b *RenderBuffer) Set(x, y int, r rune, style tcell.Style) {
-	fgC, bgC, attrs := style.Decompose()
-	b.SetPixel(x, y, r, TcellToRGB(fgC), TcellToRGB(bgC), BlendReplace, 1.0, attrs)
-}
-
-// SetRune writes a rune preserving existing colors and attrs
-func (b *RenderBuffer) SetRune(x, y int, r rune) {
-	if !b.inBounds(x, y) {
-		return
-	}
-	b.cells[y*b.width+x].Rune = r
-}
-
-// SetString writes a string starting at (x, y), returns runes written
-func (b *RenderBuffer) SetString(x, y int, s string, style tcell.Style) int {
-	if y < 0 || y >= b.height {
-		return 0
-	}
-	fgC, bgC, attrs := style.Decompose()
-	fg, bg := TcellToRGB(fgC), TcellToRGB(bgC)
-	written := 0
-	for _, r := range s {
-		if x >= b.width {
-			break
-		}
-		if x >= 0 {
-			b.SetPixel(x, y, r, fg, bg, BlendReplace, 1.0, attrs)
-			written++
-		}
-		x++
-	}
-	return written
-}
-
-// SetMax writes with max-blend (legacy API for materializers/flashes)
-func (b *RenderBuffer) SetMax(x, y int, r rune, style tcell.Style) {
-	fgC, bgC, attrs := style.Decompose()
-	b.SetPixel(x, y, r, TcellToRGB(fgC), TcellToRGB(bgC), BlendMax, 1.0, attrs)
-}
-
-// DecomposeAt returns fg, bg, attrs as tcell types (legacy bridge for reading)
-func (b *RenderBuffer) DecomposeAt(x, y int) (fg, bg tcell.Color, attrs tcell.AttrMask) {
-	cell := b.Get(x, y)
-	return RGBToTcell(cell.Fg), RGBToTcell(cell.Bg), cell.Attrs
-}
 
 // =============================================================================
 // OUTPUT
@@ -187,4 +151,9 @@ func (b *RenderBuffer) Flush(screen tcell.Screen) {
 			screen.SetContent(x, y, c.Rune, nil, style)
 		}
 	}
+}
+
+// RGBToTcell converts RGB to tcell.Color (used only in Flush)
+func RGBToTcell(rgb core.RGB) tcell.Color {
+	return tcell.NewRGBColor(int32(rgb.R), int32(rgb.G), int32(rgb.B))
 }

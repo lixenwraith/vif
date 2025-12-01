@@ -1,7 +1,7 @@
 package renderers
 
 import (
-	"github.com/gdamore/tcell/v2"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -20,8 +20,6 @@ func NewCharactersRenderer(gameCtx *engine.GameContext) *CharactersRenderer {
 
 // Render draws all character entities
 func (c *CharactersRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
-	defaultStyle := tcell.StyleDefault.Background(render.RgbBackground)
-
 	// Get ping color based on mode
 	pingColor := c.getPingColor()
 
@@ -46,16 +44,13 @@ func (c *CharactersRenderer) Render(ctx render.RenderContext, world *engine.Worl
 			continue
 		}
 
-		// Get existing content to preserve background (e.g., Shield color)
-		_, bg, _ := buf.DecomposeAt(screenX, screenY)
+		// Get existing background from compositor (preserves Shield, etc)
+		cell := buf.Get(screenX, screenY)
+		bg := cell.Bg
 
-		// Handle default background case
-		if bg == tcell.ColorDefault {
-			bg = render.RgbBackground
-		}
-
-		// Extract foreground from character's defined style
-		fg, _, attrs := char.Style.Decompose()
+		// Extract foreground and attrs from character component
+		fg := char.Fg
+		attrs := char.Attrs
 
 		// Check if character is on a ping line (cursor row or column)
 		onPingLine := (pos.Y == ctx.CursorY) || (pos.X == ctx.CursorX)
@@ -83,24 +78,18 @@ func (c *CharactersRenderer) Render(ctx render.RenderContext, world *engine.Worl
 			finalBg = pingColor
 		}
 
-		finalStyle := defaultStyle.Foreground(fg).Background(finalBg).Attributes(attrs)
-
 		// Apply dimming effect when paused
+		finalFg := fg
 		if c.gameCtx.IsPaused.Load() {
-			red, green, blue := fg.RGB()
-			dimmedR := int32(float64(red) * 0.7)
-			dimmedG := int32(float64(green) * 0.7)
-			dimmedB := int32(float64(blue) * 0.7)
-			dimmedFg := tcell.NewRGBColor(dimmedR, dimmedG, dimmedB)
-			finalStyle = tcell.StyleDefault.Foreground(dimmedFg).Background(finalBg).Attributes(attrs)
+			finalFg = fg.Scale(0.7)
 		}
 
-		buf.Set(screenX, screenY, char.Rune, finalStyle)
+		buf.SetWithAttrs(screenX, screenY, char.Rune, finalFg, finalBg, attrs)
 	}
 }
 
 // getPingColor determines the ping highlight color based on game mode
-func (c *CharactersRenderer) getPingColor() tcell.Color {
+func (c *CharactersRenderer) getPingColor() core.RGB {
 	// INSERT mode: use whitespace color (dark gray)
 	// NORMAL/SEARCH mode: use character color (almost black)
 	if c.gameCtx.IsInsertMode() {

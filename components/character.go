@@ -1,6 +1,9 @@
 package components
 
-import "github.com/gdamore/tcell/v2"
+import (
+	"github.com/gdamore/tcell/v2"
+	"github.com/lixenwraith/vi-fighter/core"
+)
 
 // SequenceType represents the type of character sequence
 type SequenceType int
@@ -24,7 +27,8 @@ const (
 // CharacterComponent represents a character entity
 type CharacterComponent struct {
 	Rune  rune
-	Style tcell.Style
+	Fg    core.RGB
+	Attrs tcell.AttrMask
 }
 
 // SequenceComponent represents membership in a character sequence

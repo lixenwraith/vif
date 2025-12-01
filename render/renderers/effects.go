@@ -3,6 +3,7 @@ package renderers
 import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -10,8 +11,8 @@ import (
 // EffectsRenderer draws decay, cleaners, removal flashes, and materializers
 type EffectsRenderer struct {
 	gameCtx             *engine.GameContext
-	cleanerGradient     []tcell.Color
-	materializeGradient []tcell.Color
+	cleanerGradient     []core.RGB
+	materializeGradient []core.RGB
 }
 
 // NewEffectsRenderer creates a new effects renderer with gradient generation
@@ -28,8 +29,7 @@ func NewEffectsRenderer(gameCtx *engine.GameContext) *EffectsRenderer {
 func (e *EffectsRenderer) buildCleanerGradient() {
 	length := constants.CleanerTrailLength
 
-	e.cleanerGradient = make([]tcell.Color, length)
-	red, green, blue := render.RgbCleanerBase.RGB()
+	e.cleanerGradient = make([]core.RGB, length)
 
 	for i := 0; i < length; i++ {
 		// Opacity fade from 1.0 to 0.0
@@ -37,12 +37,7 @@ func (e *EffectsRenderer) buildCleanerGradient() {
 		if opacity < 0 {
 			opacity = 0
 		}
-
-		rVal := int32(float64(red) * opacity)
-		gVal := int32(float64(green) * opacity)
-		bVal := int32(float64(blue) * opacity)
-
-		e.cleanerGradient[i] = tcell.NewRGBColor(rVal, gVal, bVal)
+		e.cleanerGradient[i] = render.RgbCleanerBase.Scale(opacity)
 	}
 }
 
@@ -50,8 +45,7 @@ func (e *EffectsRenderer) buildCleanerGradient() {
 func (e *EffectsRenderer) buildMaterializeGradient() {
 	length := constants.MaterializeTrailLength
 
-	e.materializeGradient = make([]tcell.Color, length)
-	red, green, blue := render.RgbMaterialize.RGB()
+	e.materializeGradient = make([]core.RGB, length)
 
 	for i := 0; i < length; i++ {
 		// Opacity fade from 1.0 to 0.0
@@ -59,38 +53,28 @@ func (e *EffectsRenderer) buildMaterializeGradient() {
 		if opacity < 0 {
 			opacity = 0
 		}
-
-		rVal := int32(float64(red) * opacity)
-		gVal := int32(float64(green) * opacity)
-		bVal := int32(float64(blue) * opacity)
-
-		e.materializeGradient[i] = tcell.NewRGBColor(rVal, gVal, bVal)
+		e.materializeGradient[i] = render.RgbMaterialize.Scale(opacity)
 	}
 }
 
 // Render draws all visual effects
 func (e *EffectsRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
-	defaultStyle := tcell.StyleDefault.Background(render.RgbBackground)
-
 	// Draw decay (only if there are decay entities)
-	e.drawDecay(ctx, world, buf, defaultStyle)
+	e.drawDecay(ctx, world, buf)
 
 	// Draw cleaners
-	e.drawCleaners(ctx, world, buf, defaultStyle)
+	e.drawCleaners(ctx, world, buf)
 
 	// Draw removal flashes
-	e.drawRemovalFlashes(ctx, world, buf, defaultStyle)
+	e.drawRemovalFlashes(ctx, world, buf)
 
 	// Draw materializers
-	e.drawMaterializers(ctx, world, buf, defaultStyle)
+	e.drawMaterializers(ctx, world, buf)
 }
 
-// drawDecay draws the falling decay characters
-func (e *EffectsRenderer) drawDecay(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer, defaultStyle tcell.Style) {
-	// Direct store access - single component query
+// drawDecay draws the decay characters
+func (e *EffectsRenderer) drawDecay(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	decayEntities := world.Decays.All()
-
-	fgColor := render.RgbDecay
 
 	for _, decayEntity := range decayEntities {
 		decay, exists := world.Decays.Get(decayEntity)
@@ -112,25 +96,16 @@ func (e *EffectsRenderer) drawDecay(ctx render.RenderContext, world *engine.Worl
 		}
 
 		// Preserve existing background (e.g., Shield)
-		_, bg, _ := buf.DecomposeAt(screenX, screenY)
-
-		if bg == tcell.ColorDefault {
-			bg = render.RgbBackground
-		}
-
-		// Combine decay foreground with existing background
-		decayStyle := defaultStyle.Foreground(fgColor).Background(bg)
-
-		buf.Set(screenX, screenY, decay.Char, decayStyle)
+		cell := buf.Get(screenX, screenY)
+		buf.SetWithBg(screenX, screenY, decay.Char, render.RgbDecay, cell.Bg)
 	}
 }
 
 // drawCleaners draws the cleaner animation using the trail of grid points
 // Cleaners are opaque and render ON TOP of everything (occlude shield)
-func (e *EffectsRenderer) drawCleaners(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer, defaultStyle tcell.Style) {
+func (e *EffectsRenderer) drawCleaners(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	cleanerEntities := world.Cleaners.All()
 
-	// Calculate gradient length
 	gradientLen := len(e.cleanerGradient)
 	maxGradientIdx := gradientLen - 1
 
@@ -148,7 +123,7 @@ func (e *EffectsRenderer) drawCleaners(ctx render.RenderContext, world *engine.W
 			// Walk backwards from head in the ring buffer
 			idx := (cleaner.TrailHead - i + cl) % cl
 			point := cleaner.TrailRing[idx]
-			// Bounds check both X and Y
+
 			if point.X < 0 || point.X >= ctx.GameWidth || point.Y < 0 || point.Y >= ctx.GameHeight {
 				continue
 			}
@@ -156,24 +131,20 @@ func (e *EffectsRenderer) drawCleaners(ctx render.RenderContext, world *engine.W
 			screenX := ctx.GameX + point.X
 			screenY := ctx.GameY + point.Y
 
-			// Use gradient based on index (clamped to valid range)
 			gradientIndex := i
 			if gradientIndex > maxGradientIdx {
 				gradientIndex = maxGradientIdx
 			}
 
-			// Apply color from gradient - cleaners are OPAQUE (solid background)
+			// Cleaners are OPAQUE (solid background)
 			color := e.cleanerGradient[gradientIndex]
-			style := defaultStyle.Foreground(color).Background(render.RgbBackground)
-
-			buf.Set(screenX, screenY, cleaner.Char, style)
+			buf.SetWithBg(screenX, screenY, cleaner.Char, color, render.RgbBackground)
 		}
 	}
 }
 
 // drawRemovalFlashes draws the brief flash effects when red characters are removed
-func (e *EffectsRenderer) drawRemovalFlashes(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer, defaultStyle tcell.Style) {
-	// Use world for direct store access
+func (e *EffectsRenderer) drawRemovalFlashes(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	entities := world.Flashes.All()
 
 	for _, entity := range entities {
@@ -182,15 +153,12 @@ func (e *EffectsRenderer) drawRemovalFlashes(ctx render.RenderContext, world *en
 			continue
 		}
 
-		// Check if position is in bounds
 		if flash.Y < 0 || flash.Y >= ctx.GameHeight || flash.X < 0 || flash.X >= ctx.GameWidth {
 			continue
 		}
 
-		// Calculate elapsed time for fade effect
 		elapsed := ctx.GameTime.Sub(flash.StartTime)
 
-		// Skip if flash has expired (cleanup will handle removal)
 		if elapsed >= flash.Duration {
 			continue
 		}
@@ -202,35 +170,28 @@ func (e *EffectsRenderer) drawRemovalFlashes(ctx render.RenderContext, world *en
 		}
 
 		// Flash color: bright yellow-white fading to yellow
-		red := int32(255)
-		green := int32(255)
-		blue := int32(200 * opacity)
-
-		flashColor := tcell.NewRGBColor(red, green, blue)
+		flashColor := core.RGB{
+			R: 255,
+			G: 255,
+			B: uint8(200 * opacity),
+		}
 
 		screenX := ctx.GameX + flash.X
 		screenY := ctx.GameY + flash.Y
 
 		// Preserve existing background
-		_, bg, _ := buf.DecomposeAt(screenX, screenY)
-
-		if bg == tcell.ColorDefault {
-			bg = render.RgbBackground
-		}
-
-		flashStyle := defaultStyle.Foreground(flashColor).Background(bg)
-		buf.Set(screenX, screenY, flash.Char, flashStyle)
+		cell := buf.Get(screenX, screenY)
+		buf.SetWithBg(screenX, screenY, flash.Char, flashColor, cell.Bg)
 	}
 }
 
 // drawMaterializers draws the materialize animation using the trail of grid points
-func (e *EffectsRenderer) drawMaterializers(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer, defaultStyle tcell.Style) {
+func (e *EffectsRenderer) drawMaterializers(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	entities := world.Materializers.All()
 	if len(entities) == 0 {
 		return
 	}
 
-	// Pre-calculate gradient length outside loop for performance
 	gradientLen := len(e.materializeGradient)
 	maxGradientIdx := gradientLen - 1
 
@@ -248,7 +209,7 @@ func (e *EffectsRenderer) drawMaterializers(ctx render.RenderContext, world *eng
 			// Walk backwards from head in the ring buffer
 			idx := (mat.TrailHead - i + ml) % ml
 			point := mat.TrailRing[idx]
-			// Skip if out of bounds
+
 			if point.X < 0 || point.X >= ctx.GameWidth || point.Y < 0 || point.Y >= ctx.GameHeight {
 				continue
 			}
@@ -256,24 +217,18 @@ func (e *EffectsRenderer) drawMaterializers(ctx render.RenderContext, world *eng
 			screenX := ctx.GameX + point.X
 			screenY := ctx.GameY + point.Y
 
-			// Use pre-calculated gradient based on index (clamped to valid range)
 			gradientIndex := i
 			if gradientIndex > maxGradientIdx {
 				gradientIndex = maxGradientIdx
 			}
 
-			// Apply color from gradient
 			color := e.materializeGradient[gradientIndex]
 
 			// Preserve existing background (e.g., Shield color)
-			_, bg, _ := buf.DecomposeAt(screenX, screenY)
+			cell := buf.Get(screenX, screenY)
 
-			if bg == tcell.ColorDefault {
-				bg = render.RgbBackground
-			}
-
-			style := defaultStyle.Foreground(color).Background(bg)
-			buf.SetMax(screenX, screenY, mat.Char, style)
+			// Use SetMax for non-destructive bright overlay
+			buf.SetPixel(screenX, screenY, mat.Char, color, cell.Bg, render.BlendMax, 1.0, tcell.AttrNone)
 		}
 	}
 }

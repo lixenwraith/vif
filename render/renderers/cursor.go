@@ -1,8 +1,8 @@
 package renderers
 
 import (
-	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -26,8 +26,6 @@ func (c *CursorRenderer) IsVisible() bool {
 
 // Render draws the cursor
 func (c *CursorRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
-	defaultStyle := tcell.StyleDefault.Background(render.RgbBackground)
-
 	screenX := ctx.GameX + ctx.CursorX
 	screenY := ctx.GameY + ctx.CursorY
 
@@ -38,7 +36,7 @@ func (c *CursorRenderer) Render(ctx render.RenderContext, world *engine.World, b
 
 	// 1. Determine Default State (Empty Cell)
 	var charAtCursor = ' '
-	var cursorBgColor tcell.Color
+	var cursorBgColor core.RGB
 
 	// Default background based on mode
 	if c.gameCtx.IsInsertMode() {
@@ -47,7 +45,7 @@ func (c *CursorRenderer) Render(ctx render.RenderContext, world *engine.World, b
 		cursorBgColor = render.RgbCursorNormal
 	}
 
-	var charFgColor tcell.Color = tcell.ColorBlack
+	var charFgColor = render.RgbBlack
 
 	// 2. Get entities at cursor position using z-index selection
 
@@ -75,12 +73,12 @@ func (c *CursorRenderer) Render(ctx render.RenderContext, world *engine.World, b
 
 	hasChar := displayEntity != 0
 	isNugget := false
-	var charStyle tcell.Style
+	var charFg core.RGB
 
 	if hasChar {
 		if charComp, ok := world.Characters.Get(displayEntity); ok {
 			charAtCursor = charComp.Rune
-			charStyle = charComp.Style
+			charFg = charComp.Fg
 			if world.Nuggets.Has(displayEntity) {
 				isNugget = true
 			}
@@ -91,7 +89,7 @@ func (c *CursorRenderer) Render(ctx render.RenderContext, world *engine.World, b
 	// Only checked if no standard character or drain is present
 	// We scan manually because Decay entities are not fully integrated into PositionStore
 	// Because of sub-pixel precision requirement of position
-	// TODO: find a clever way around it for uniformity
+	// TODO: find a way around it for uniformity
 	hasDecay := false
 	if !isDrain && !hasChar {
 		decayEntities := world.Decays.All()
@@ -110,22 +108,19 @@ func (c *CursorRenderer) Render(ctx render.RenderContext, world *engine.World, b
 		// Drain overrides everything
 		charAtCursor = constants.DrainChar
 		cursorBgColor = render.RgbDrain
-		charFgColor = tcell.ColorBlack
+		charFgColor = render.RgbBlack
 	} else if hasChar {
-		// Character found (Blue/Green/Red/Gold/Nugget)
-		// Inherit background from character's foreground color
-		fg, _, _ := charStyle.Decompose()
-		cursorBgColor = fg
-
+		// Character found - inherit background from character's foreground color
+		cursorBgColor = charFg
 		if isNugget {
 			charFgColor = render.RgbNuggetDark
 		} else {
-			charFgColor = tcell.ColorBlack
+			charFgColor = render.RgbBlack
 		}
 	} else if hasDecay {
 		// Decay found on empty space
 		cursorBgColor = render.RgbDecay
-		charFgColor = tcell.ColorBlack
+		charFgColor = render.RgbBlack
 	}
 
 	// 4. Error Flash Overlay (Absolute Highest Priority for Background)
@@ -134,11 +129,10 @@ func (c *CursorRenderer) Render(ctx render.RenderContext, world *engine.World, b
 	if ok && cursorComp.ErrorFlashEnd > 0 {
 		if c.gameCtx.PausableClock.Now().UnixNano() < cursorComp.ErrorFlashEnd {
 			cursorBgColor = render.RgbCursorError
-			charFgColor = tcell.ColorBlack
+			charFgColor = render.RgbBlack
 		}
 	}
 
 	// 5. Render
-	style := defaultStyle.Foreground(charFgColor).Background(cursorBgColor)
-	buf.Set(screenX, screenY, charAtCursor, style)
+	buf.SetWithBg(screenX, screenY, charAtCursor, charFgColor, cursorBgColor)
 }

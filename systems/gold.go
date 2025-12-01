@@ -91,7 +91,7 @@ func (s *GoldSystem) spawnGold(world *engine.World) bool {
 	sequenceID := s.ctx.State.IncrementGoldSequenceID()
 
 	// Get style for gold sequence
-	style := render.GetStyleForSequence(components.SequenceGold, components.LevelBright)
+	style := render.GetFgForSequence(components.SequenceGold, components.LevelBright)
 
 	// Create entities and components
 	type entityData struct {
@@ -112,8 +112,8 @@ func (s *GoldSystem) spawnGold(world *engine.World) bool {
 				Y: y,
 			},
 			char: components.CharacterComponent{
-				Rune:  sequence[i],
-				Style: style,
+				Rune: sequence[i],
+				Fg:   style,
 			},
 			seq: components.SequenceComponent{
 				ID:    sequenceID,

@@ -2,6 +2,7 @@ package renderers
 
 import (
 	"github.com/gdamore/tcell/v2"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -20,23 +21,21 @@ func NewPingGridRenderer(gameCtx *engine.GameContext) *PingGridRenderer {
 
 // Render draws the ping highlights and grid
 func (p *PingGridRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
-	defaultStyle := tcell.StyleDefault.Background(render.RgbBackground)
 
 	// Get ping color based on mode
 	pingColor := p.getPingColor()
-	pingStyle := defaultStyle.Background(pingColor)
 
 	// Draw row and column highlights
-	p.drawPingHighlights(ctx, buf, pingStyle)
+	p.drawPingHighlights(ctx, buf, pingColor)
 
 	// Draw grid lines if ping is active
 	if p.gameCtx.GetPingActive() {
-		p.drawPingGrid(ctx, buf, pingStyle)
+		p.drawPingGrid(ctx, buf, pingColor)
 	}
 }
 
 // getPingColor determines the ping highlight color based on game mode
-func (p *PingGridRenderer) getPingColor() tcell.Color {
+func (p *PingGridRenderer) getPingColor() core.RGB {
 	// INSERT mode: use whitespace color (dark gray)
 	// NORMAL/SEARCH mode: use character color (almost black)
 	if p.gameCtx.IsInsertMode() {
@@ -47,13 +46,13 @@ func (p *PingGridRenderer) getPingColor() tcell.Color {
 
 // drawPingHighlights draws the cursor row and column highlights
 // Draws ONLY on cells with default/black background to avoid overwriting shield
-func (p *PingGridRenderer) drawPingHighlights(ctx render.RenderContext, buf *render.RenderBuffer, pingStyle tcell.Style) {
+func (p *PingGridRenderer) drawPingHighlights(ctx render.RenderContext, buf *render.RenderBuffer, pingColor core.RGB) {
 	// Helper to draw ping only if cell has default background
 	drawPingCell := func(x, y int) {
 		cell := buf.Get(x, y)
 		// Only draw ping if background is default (don't overwrite shield)
 		if cell.Bg == render.DefaultBgRGB {
-			buf.Set(x, y, ' ', pingStyle)
+			buf.SetPixel(x, y, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, tcell.AttrNone)
 		}
 	}
 
@@ -78,12 +77,12 @@ func (p *PingGridRenderer) drawPingHighlights(ctx render.RenderContext, buf *ren
 
 // drawPingGrid draws coordinate grid lines at 5-column intervals
 // Only draws on cells with default background
-func (p *PingGridRenderer) drawPingGrid(ctx render.RenderContext, buf *render.RenderBuffer, pingStyle tcell.Style) {
+func (p *PingGridRenderer) drawPingGrid(ctx render.RenderContext, buf *render.RenderBuffer, pingColor core.RGB) {
 	// Helper to draw ping only if cell has default background
 	drawPingCell := func(screenX, screenY int) {
 		cell := buf.Get(screenX, screenY)
 		if cell.Bg == render.DefaultBgRGB {
-			buf.Set(screenX, screenY, ' ', pingStyle)
+			buf.SetPixel(screenX, screenY, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, tcell.AttrNone)
 		}
 	}
 
