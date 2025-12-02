@@ -2,7 +2,6 @@ package terminal
 
 import (
 	"bufio"
-	"strconv"
 )
 
 // Pre-allocated ANSI sequence fragments (avoid allocations during render)
@@ -42,92 +41,72 @@ var (
 	csiAttrReverse   = []byte("\x1b[7m")
 )
 
-// writeInt writes an integer to the buffer without allocation
+// writeInt writes an integer without allocation
+// Optimized for terminal values (0-255 common, 0-999 typical max)
 func writeInt(w *bufio.Writer, n int) {
 	if n < 0 {
 		n = 0
 	}
 	if n < 10 {
-		w.WriteByte('0' + byte(n))
+		w.WriteByte(byte(n) + '0')
 		return
 	}
 	if n < 100 {
-		w.WriteByte('0' + byte(n/10))
-		w.WriteByte('0' + byte(n%10))
+		w.WriteByte(byte(n/10) + '0')
+		w.WriteByte(byte(n%10) + '0')
 		return
 	}
 	if n < 1000 {
-		w.WriteByte('0' + byte(n/100))
-		w.WriteByte('0' + byte((n/10)%10))
-		w.WriteByte('0' + byte(n%10))
+		w.WriteByte(byte(n/100) + '0')
+		w.WriteByte(byte(n/10%10) + '0')
+		w.WriteByte(byte(n%10) + '0')
 		return
 	}
-
-	var buf [20]byte
-	b := strconv.AppendInt(buf[:0], int64(n), 10)
-	w.Write(b)
+	// Fallback for >999 (rare)
+	var buf [5]byte
+	i := 4
+	for n > 0 {
+		buf[i] = byte(n%10) + '0'
+		n /= 10
+		i--
+	}
+	w.Write(buf[i+1:])
 }
 
-// writeFgColor writes foreground color sequence
-func writeFgColor(w *bufio.Writer, c RGB, mode ColorMode) {
-	if mode == ColorModeTrueColor {
-		w.Write(csiFgRGB)
-		writeInt(w, int(c.R))
-		w.WriteByte(';')
-		writeInt(w, int(c.G))
-		w.WriteByte(';')
-		writeInt(w, int(c.B))
-		w.WriteByte('m')
-	} else {
-		w.Write(csiFg256)
-		writeInt(w, int(RGBTo256(c)))
-		w.WriteByte('m')
+// writeIntBytes writes integer to byte slice, returns bytes written
+func writeIntBytes(buf []byte, n int) int {
+	if n < 0 {
+		n = 0
 	}
+	if n < 10 {
+		buf[0] = byte(n) + '0'
+		return 1
+	}
+	if n < 100 {
+		buf[0] = byte(n/10) + '0'
+		buf[1] = byte(n%10) + '0'
+		return 2
+	}
+	if n < 1000 {
+		buf[0] = byte(n/100) + '0'
+		buf[1] = byte(n/10%10) + '0'
+		buf[2] = byte(n%10) + '0'
+		return 3
+	}
+	i := 0
+	tmp := n
+	for tmp > 0 {
+		tmp /= 10
+		i++
+	}
+	for j := i - 1; j >= 0; j-- {
+		buf[j] = byte(n%10) + '0'
+		n /= 10
+	}
+	return i
 }
 
-// writeBgColor writes background color sequence
-func writeBgColor(w *bufio.Writer, c RGB, mode ColorMode) {
-	if mode == ColorModeTrueColor {
-		w.Write(csiBgRGB)
-		writeInt(w, int(c.R))
-		w.WriteByte(';')
-		writeInt(w, int(c.G))
-		w.WriteByte(';')
-		writeInt(w, int(c.B))
-		w.WriteByte('m')
-	} else {
-		w.Write(csiBg256)
-		writeInt(w, int(RGBTo256(c)))
-		w.WriteByte('m')
-	}
-}
-
-// writeAttrs writes attribute sequences for changed attributes
-func writeAttrs(w *bufio.Writer, attrs Attr) {
-	if attrs == AttrNone {
-		return
-	}
-	if attrs&AttrBold != 0 {
-		w.Write(csiAttrBold)
-	}
-	if attrs&AttrDim != 0 {
-		w.Write(csiAttrDim)
-	}
-	if attrs&AttrItalic != 0 {
-		w.Write(csiAttrItalic)
-	}
-	if attrs&AttrUnderline != 0 {
-		w.Write(csiAttrUnderline)
-	}
-	if attrs&AttrBlink != 0 {
-		w.Write(csiAttrBlink)
-	}
-	if attrs&AttrReverse != 0 {
-		w.Write(csiAttrReverse)
-	}
-}
-
-// writeCursorPos writes cursor positioning sequence (0-indexed input, 1-indexed output)
+// writeCursorPos writes cursor positioning sequence (0-indexed input)
 func writeCursorPos(w *bufio.Writer, x, y int) {
 	w.Write(csiCursorPos)
 	writeInt(w, y+1)
@@ -148,9 +127,4 @@ func writeCursorForward(w *bufio.Writer, n int) {
 	w.Write(csi)
 	writeInt(w, n)
 	w.WriteByte('C')
-}
-
-// writeRune writes a rune as UTF-8 bytes
-func writeRune(w *bufio.Writer, r rune) {
-	w.WriteRune(r)
 }

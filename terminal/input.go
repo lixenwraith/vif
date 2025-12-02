@@ -38,6 +38,9 @@ type inputReader struct {
 	doneCh  chan struct{}
 	mu      sync.Mutex
 	running bool
+
+	// Embedded buffers for zero-alloc escape handling
+	escBuf [16]byte
 }
 
 // escapeTimeout is the duration to wait after ESC to distinguish
@@ -166,7 +169,9 @@ func (r *inputReader) pollRead(timeoutMs int) (bool, error) {
 // parseInput parses raw bytes into events
 func (r *inputReader) parseInput(data []byte) {
 	i := 0
-	for i < len(data) {
+	n := len(data)
+
+	for i < n {
 		select {
 		case <-r.stopCh:
 			return
@@ -175,16 +180,21 @@ func (r *inputReader) parseInput(data []byte) {
 
 		b := data[i]
 
-		// Check for escape sequence
+		// Fast path: printable ASCII
+		if b >= 0x20 && b < 0x7f {
+			r.sendEvent(Event{Type: EventKey, Key: KeyRune, Rune: rune(b)})
+			i++
+			continue
+		}
+
+		// Escape sequence
 		if b == 0x1b {
-			// Try to parse escape sequence
 			consumed, ev := r.parseEscape(data[i:])
 			if consumed > 0 {
 				r.sendEvent(ev)
 				i += consumed
 				continue
 			}
-			// Standalone ESC
 			r.sendEvent(Event{Type: EventKey, Key: KeyEscape})
 			i++
 			continue
@@ -192,8 +202,7 @@ func (r *inputReader) parseInput(data []byte) {
 
 		// Control characters
 		if b < 0x20 {
-			ev := r.parseControl(b)
-			r.sendEvent(ev)
+			r.sendEvent(r.parseControl(b))
 			i++
 			continue
 		}
@@ -205,100 +214,83 @@ func (r *inputReader) parseInput(data []byte) {
 			continue
 		}
 
-		// Regular character or UTF-8
-		if b < 0x80 {
-			r.sendEvent(Event{Type: EventKey, Key: KeyRune, Rune: rune(b)})
-			i++
-			continue
-		}
-
-		// UTF-8 multi-byte
+		// UTF-8
 		rn, size := decodeRune(data[i:])
 		if size > 0 {
 			r.sendEvent(Event{Type: EventKey, Key: KeyRune, Rune: rn})
 			i += size
 		} else {
-			i++ // Skip invalid byte
+			i++
 		}
 	}
 }
 
 // parseEscape attempts to parse an escape sequence
-// Returns (bytes consumed, event) or (0, empty) if not a sequence
 func (r *inputReader) parseEscape(data []byte) (int, Event) {
 	if len(data) < 2 {
-		// Need more data, try to read with timeout
 		extra := r.readMoreWithTimeout()
-		if len(extra) == 0 {
-			return 0, Event{} // Standalone ESC
+		if extra == 0 {
+			return 0, Event{}
 		}
-		data = append(data, extra...)
+		// Rare: split packet, must allocate
+		combined := make([]byte, len(data)+extra)
+		copy(combined, data)
+		copy(combined[len(data):], r.escBuf[:extra])
+		data = combined
 	}
 
-	// CSI sequence: ESC [
 	if data[1] == '[' {
 		return r.parseCSI(data)
 	}
-
-	// SS3 sequence: ESC O
 	if data[1] == 'O' {
 		return r.parseSS3(data)
 	}
-
-	// Alt+key: ESC followed by printable
 	if data[1] >= 0x20 && data[1] < 0x7f {
-		return 2, Event{
-			Type:      EventKey,
-			Key:       KeyRune,
-			Rune:      rune(data[1]),
-			Modifiers: ModAlt,
-		}
+		return 2, Event{Type: EventKey, Key: KeyRune, Rune: rune(data[1]), Modifiers: ModAlt}
 	}
 
-	return 0, Event{} // Unknown, treat ESC as standalone
+	return 0, Event{}
 }
 
-// parseCSI parses a CSI sequence (ESC [ ...)
+// parseCSI parses CSI sequence without allocation
 func (r *inputReader) parseCSI(data []byte) (int, Event) {
-	// Minimum: ESC [ X
 	if len(data) < 3 {
 		return 0, Event{}
 	}
 
-	// Find end of sequence (letter or ~)
 	end := 2
-	for end < len(data) && end < 16 {
+	maxScan := len(data)
+	if maxScan > 16 {
+		maxScan = 16
+	}
+
+	for end < maxScan {
 		b := data[end]
 		if (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || b == '~' {
 			end++
 			break
 		}
 		if b < 0x20 || b > 0x7e {
-			// Invalid character in sequence
 			return 0, Event{}
 		}
 		end++
 	}
 
-	seq := string(data[2:end])
-	if key, mod, ok := lookupCSI(seq); ok {
+	if key, mod, ok := lookupCSI(data[2:end]); ok {
 		return end, Event{Type: EventKey, Key: key, Modifiers: mod}
 	}
 
-	return 0, Event{} // Unknown CSI sequence
+	return 0, Event{}
 }
 
-// parseSS3 parses an SS3 sequence (ESC O ...)
+// parseSS3 parses SS3 sequence without allocation
 func (r *inputReader) parseSS3(data []byte) (int, Event) {
 	if len(data) < 3 {
 		return 0, Event{}
 	}
-
-	seq := string(data[2:3])
-	if key, mod, ok := lookupSS3(seq); ok {
+	if key, mod, ok := lookupSS3(data[2:3]); ok {
 		return 3, Event{Type: EventKey, Key: key, Modifiers: mod}
 	}
-
 	return 0, Event{}
 }
 
@@ -371,22 +363,18 @@ func (r *inputReader) parseControl(b byte) Event {
 	return Event{Type: EventKey, Key: KeyNone}
 }
 
-// readMoreWithTimeout attempts to read more data with a short timeout
-func (r *inputReader) readMoreWithTimeout() []byte {
+// readMoreWithTimeout reads into embedded buffer, returns bytes read
+func (r *inputReader) readMoreWithTimeout() int {
 	ready, err := r.pollRead(int(escapeTimeout / time.Millisecond))
 	if err != nil || !ready {
-		return nil
+		return 0
 	}
 
-	// Optimization: Reuse a small buffer on stack or pool if possible
-	// For escape sequences, 16 bytes is usually enough
-	// Since we return the slice, it must be allocated, but we can avoid large buffers
-	buf := make([]byte, 16)
-	n, err := unix.Read(r.fd, buf)
+	n, err := unix.Read(r.fd, r.escBuf[:])
 	if err != nil || n == 0 {
-		return nil
+		return 0
 	}
-	return buf[:n]
+	return n
 }
 
 // sendEvent sends an event to the channel, non-blocking

@@ -20,7 +20,12 @@ const (
 	AttrUnderline Attr = 1 << 3
 	AttrBlink     Attr = 1 << 4
 	AttrReverse   Attr = 1 << 5
+	AttrFg256     Attr = 1 << 6 // Fg.R is 256-color palette index
+	AttrBg256     Attr = 1 << 7 // Bg.R is 256-color palette index
 )
+
+// AttrStyle masks only the style bits (excludes color mode flags)
+const AttrStyle Attr = AttrBold | AttrDim | AttrItalic | AttrUnderline | AttrBlink | AttrReverse
 
 // Cell represents a single terminal cell
 type Cell struct {
@@ -218,46 +223,70 @@ func (t *termImpl) ColorMode() ColorMode {
 }
 
 // Flush writes cell buffer to terminal
+// Holds lock for entire operation to prevent race with Clear/MoveCursor
 func (t *termImpl) Flush(cells []Cell, width, height int) {
 	t.mu.Lock()
-	// Update dimensions if changed
+	defer t.mu.Unlock()
+
+	if !t.initialized || t.finalized {
+		return
+	}
+
 	if width != t.width || height != t.height {
 		t.width = width
 		t.height = height
 	}
-	t.mu.Unlock()
 
 	t.output.flush(cells, width, height)
 }
 
 // Clear fills screen with background color
 func (t *termImpl) Clear(bg RGB) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if !t.initialized || t.finalized {
+		return
+	}
+
 	t.output.clear(bg)
 }
 
 // SetCursorVisible shows/hides cursor
 func (t *termImpl) SetCursorVisible(visible bool) {
 	if t.cursorVisible.Swap(visible) == visible {
-		return // No change
+		return
 	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if !t.initialized || t.finalized {
+		return
+	}
+
+	w := t.output.writer
 	if visible {
-		t.writeRaw(csiCursorShow)
+		w.Write(csiCursorShow)
 	} else {
-		t.writeRaw(csiCursorHide)
+		w.Write(csiCursorHide)
 	}
+	w.Flush()
 }
 
-// MoveCursor positions cursor
+// MoveCursor positions cursor (0-indexed)
 func (t *termImpl) MoveCursor(x, y int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	// Invalidate buffer cursor tracking since we are bypassing it
+	if !t.initialized || t.finalized {
+		return
+	}
+
 	if t.output != nil {
 		t.output.invalidateCursor()
 	}
 
-	// Clamp to bounds
 	if x < 0 {
 		x = 0
 	}
@@ -271,26 +300,24 @@ func (t *termImpl) MoveCursor(x, y int) {
 		y = t.height - 1
 	}
 
-	// Write cursor position (1-indexed)
-	var buf [32]byte
-	n := 0
-	n += copy(buf[n:], csiCursorPos)
-	n += writeIntBuf(buf[n:], y+1)
-	buf[n] = ';'
-	n++
-	n += writeIntBuf(buf[n:], x+1)
-	buf[n] = 'H'
-	n++
-	t.out.Write(buf[:n])
+	// Write through buffered writer to maintain stream order
+	w := t.output.writer
+	writeCursorPos(w, x, y)
+	w.Flush()
 }
 
 // Sync forces full redraw
 func (t *termImpl) Sync() {
 	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if !t.initialized || t.finalized {
+		return
+	}
+
 	w, h := getTerminalSize(t.outFd)
 	t.width = w
 	t.height = h
-	t.mu.Unlock()
 
 	t.output.resize(w, h)
 	t.output.forceFullRedraw()
@@ -336,35 +363,6 @@ func (t *termImpl) PostEvent(ev Event) {
 // writeRaw writes raw bytes to output
 func (t *termImpl) writeRaw(data []byte) {
 	t.out.Write(data)
-}
-
-// writeIntBuf writes an integer to a byte buffer, returns bytes written
-func writeIntBuf(buf []byte, n int) int {
-	if n < 10 {
-		buf[0] = '0' + byte(n)
-		return 1
-	}
-	if n < 100 {
-		buf[0] = '0' + byte(n/10)
-		buf[1] = '0' + byte(n%10)
-		return 2
-	}
-	if n < 1000 {
-		buf[0] = '0' + byte(n/100)
-		buf[1] = '0' + byte((n/10)%10)
-		buf[2] = '0' + byte(n%10)
-		return 3
-	}
-	// Fallback for larger numbers
-	i := len(buf) - 1
-	for n > 0 && i >= 0 {
-		buf[i] = '0' + byte(n%10)
-		n /= 10
-		i--
-	}
-	start := i + 1
-	copy(buf, buf[start:])
-	return len(buf) - start
 }
 
 // EmergencyReset attempts to restore terminal to sane state

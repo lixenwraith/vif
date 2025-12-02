@@ -7,28 +7,27 @@ import (
 
 // outputBuffer manages double-buffered terminal output with diffing
 type outputBuffer struct {
-	front     []Cell // What's currently on screen
+	front     []Cell
 	width     int
 	height    int
 	colorMode ColorMode
 	writer    *bufio.Writer
 
-	// State tracking for optimization
-	cursorX   int
-	cursorY   int
+	cursorX     int
+	cursorY     int
+	cursorValid bool
+
+	// Style state for coalescing
 	lastFg    RGB
 	lastBg    RGB
 	lastAttr  Attr
-	lastValid bool // Whether last* values are valid
-
-	// Tracks if cursor position is known to match valid X/Y
-	cursorValid bool
+	lastValid bool
 }
 
 // newOutputBuffer creates a new output buffer
 func newOutputBuffer(w io.Writer, colorMode ColorMode) *outputBuffer {
 	return &outputBuffer{
-		writer:    bufio.NewWriterSize(w, 65536), // 64KB buffer
+		writer:    bufio.NewWriterSize(w, 131072), // 128KB buffer
 		colorMode: colorMode,
 	}
 }
@@ -44,11 +43,22 @@ func (o *outputBuffer) resize(width, height int) {
 	o.width = width
 	o.height = height
 
-	// Clear front buffer to force full redraw
 	for i := range o.front {
-		o.front[i] = Cell{Rune: 0} // Invalid rune forces redraw
+		o.front[i] = Cell{Rune: 0}
 	}
 	o.lastValid = false
+	o.cursorValid = false
+}
+
+// cellEqual compares two cells for equality (standalone for inlining)
+func cellEqual(a, b Cell) bool {
+	if a.Rune != b.Rune || a.Attrs != b.Attrs {
+		return false
+	}
+	if a.Rune == 0 {
+		return a.Bg == b.Bg
+	}
+	return a.Fg == b.Fg && a.Bg == b.Bg
 }
 
 // flush writes the back buffer to terminal, diffing against front buffer
@@ -64,9 +74,6 @@ func (o *outputBuffer) flush(cells []Cell, width, height int) {
 
 	w := o.writer
 
-	// We track cursor persistence
-	// If cursor state is invalid (e.g. after clear), we simply ensure the first write generates a move
-
 	for y := 0; y < height; y++ {
 		rowStart := y * width
 		x := 0
@@ -74,122 +81,149 @@ func (o *outputBuffer) flush(cells []Cell, width, height int) {
 		for x < width {
 			idx := rowStart + x
 			newCell := cells[idx]
-			oldCell := o.front[idx]
 
-			// Check if cell changed
-			if o.cellEqual(newCell, oldCell) {
+			if cellEqual(newCell, o.front[idx]) {
 				x++
 				continue
 			}
 
-			// Find run of changed cells
-			runEnd := x + 1
-			for runEnd < width {
-				runIdx := rowStart + runEnd
-				if o.cellEqual(cells[runIdx], o.front[runIdx]) {
-					break
-				}
-				nextCell := cells[runIdx]
-				if !newCell.Fg.Equal(nextCell.Fg) ||
-					!newCell.Bg.Equal(nextCell.Bg) ||
-					newCell.Attrs != nextCell.Attrs {
-					break
-				}
-				runEnd++
-			}
-
-			// Move cursor if needed
+			// Position cursor once for this dirty region
 			if !o.cursorValid || x != o.cursorX || y != o.cursorY {
-				// Optimization: Check for horizontal jump on same line
 				if o.cursorValid && y == o.cursorY && x > o.cursorX {
 					gap := x - o.cursorX
 					if gap < 4 {
-						// Small gap: write spaces (1-3 bytes)
 						for i := 0; i < gap; i++ {
 							w.WriteByte(' ')
 						}
 					} else {
-						// Large gap: use relative move forward (smaller sequence than absolute move)
 						writeCursorForward(w, gap)
 					}
-					o.cursorX = x
 				} else {
-					// Different line or backward jump: absolute position
 					writeCursorPos(w, x, y)
-					o.cursorX = x
-					o.cursorY = y
-					o.cursorValid = true
 				}
+				o.cursorX = x
+				o.cursorY = y
+				o.cursorValid = true
 			}
 
-			// Write style if changed
-			o.writeStyle(w, newCell.Fg, newCell.Bg, newCell.Attrs)
+			// Write all contiguous dirty cells, emitting style only when changed
+			for x < width {
+				cidx := rowStart + x
+				c := cells[cidx]
 
-			// Write the run
-			for i := x; i < runEnd; i++ {
-				c := cells[rowStart+i]
+				if cellEqual(c, o.front[cidx]) {
+					break
+				}
+
+				o.writeStyleCoalesced(w, c.Fg, c.Bg, c.Attrs)
+
 				r := c.Rune
 				if r == 0 {
 					r = ' '
 				}
-				writeRune(w, r)
-				o.front[rowStart+i] = c
-			}
+				if r < 0x80 {
+					w.WriteByte(byte(r))
+				} else {
+					w.WriteRune(r)
+				}
 
-			o.cursorX = runEnd
-			x = runEnd
+				o.front[cidx] = c
+				o.cursorX++
+				x++
+			}
 		}
 	}
 
-	// Reset attributes at end of frame to be safe, but keep cursor position valid
 	w.Write(csiSGR0)
-	o.lastValid = false // Invalidate style cache
+	o.lastValid = false
 
 	w.Flush()
 }
 
-// forceFullRedraw clears front buffer to force complete redraw
-func (o *outputBuffer) forceFullRedraw() {
-	for i := range o.front {
-		o.front[i] = Cell{Rune: 0}
-	}
-	o.lastValid = false
-}
-
-// cellEqual compares two cells for equality
-func (o *outputBuffer) cellEqual(a, b Cell) bool {
-	if a.Rune != b.Rune {
-		return false
-	}
-	if a.Rune == 0 && b.Rune == 0 {
-		// Both empty, compare backgrounds only
-		return a.Bg.Equal(b.Bg)
-	}
-	return a.Fg.Equal(b.Fg) && a.Bg.Equal(b.Bg) && a.Attrs == b.Attrs
-}
-
-// writeStyle writes color and attribute codes if changed
-func (o *outputBuffer) writeStyle(w *bufio.Writer, fg, bg RGB, attr Attr) {
-	fgChanged := !o.lastValid || !fg.Equal(o.lastFg)
-	bgChanged := !o.lastValid || !bg.Equal(o.lastBg)
-	attrChanged := !o.lastValid || attr != o.lastAttr
+// writeStyleCoalesced emits a single combined SGR sequence when style changes
+func (o *outputBuffer) writeStyleCoalesced(w *bufio.Writer, fg, bg RGB, attr Attr) {
+	// Check what changed
+	fgChanged := !o.lastValid || fg != o.lastFg || (attr&AttrFg256) != (o.lastAttr&AttrFg256)
+	bgChanged := !o.lastValid || bg != o.lastBg || (attr&AttrBg256) != (o.lastAttr&AttrBg256)
+	styleAttr := attr & AttrStyle
+	lastStyleAttr := o.lastAttr & AttrStyle
+	attrChanged := !o.lastValid || styleAttr != lastStyleAttr
 
 	if !fgChanged && !bgChanged && !attrChanged {
 		return
 	}
 
-	// If attributes changed, reset and reapply everything
+	// If attributes changed, must reset first
 	if attrChanged {
-		w.Write(csiSGR0)
-		writeAttrs(w, attr)
-		writeFgColor(w, fg, o.colorMode)
-		writeBgColor(w, bg, o.colorMode)
-	} else {
-		if fgChanged {
-			writeFgColor(w, fg, o.colorMode)
+		w.Write(csi) // \x1b[
+		first := true
+
+		// Reset
+		w.WriteByte('0')
+		first = false
+
+		// Style attributes
+		if styleAttr&AttrBold != 0 {
+			if !first {
+				w.WriteByte(';')
+			}
+			w.WriteByte('1')
+			first = false
 		}
-		if bgChanged {
-			writeBgColor(w, bg, o.colorMode)
+		if styleAttr&AttrDim != 0 {
+			if !first {
+				w.WriteByte(';')
+			}
+			w.WriteByte('2')
+			first = false
+		}
+		if styleAttr&AttrItalic != 0 {
+			if !first {
+				w.WriteByte(';')
+			}
+			w.WriteByte('3')
+			first = false
+		}
+		if styleAttr&AttrUnderline != 0 {
+			if !first {
+				w.WriteByte(';')
+			}
+			w.WriteByte('4')
+			first = false
+		}
+		if styleAttr&AttrBlink != 0 {
+			if !first {
+				w.WriteByte(';')
+			}
+			w.WriteByte('5')
+			first = false
+		}
+		if styleAttr&AttrReverse != 0 {
+			if !first {
+				w.WriteByte(';')
+			}
+			w.WriteByte('7')
+			first = false
+		}
+
+		// Foreground
+		o.writeFgInline(w, fg, attr)
+
+		// Background
+		o.writeBgInline(w, bg, attr)
+
+		w.WriteByte('m')
+	} else {
+		// Only colors changed, emit minimal sequence
+		if fgChanged && bgChanged {
+			w.Write(csi)
+			o.writeFgInline(w, fg, attr)
+			o.writeBgInline(w, bg, attr)
+			w.WriteByte('m')
+		} else if fgChanged {
+			o.writeFgFull(w, fg, attr)
+		} else if bgChanged {
+			o.writeBgFull(w, bg, attr)
 		}
 	}
 
@@ -199,25 +233,118 @@ func (o *outputBuffer) writeStyle(w *bufio.Writer, fg, bg RGB, attr Attr) {
 	o.lastValid = true
 }
 
+// writeFgInline writes fg color parameters (no CSI prefix, no 'm' suffix)
+func (o *outputBuffer) writeFgInline(w *bufio.Writer, fg RGB, attr Attr) {
+	w.WriteByte(';')
+	if attr&AttrFg256 != 0 {
+		// 256-color: 38;5;N
+		w.Write([]byte("38;5;"))
+		writeInt(w, int(fg.R))
+	} else if o.colorMode == ColorModeTrueColor {
+		// True color: 38;2;R;G;B
+		w.Write([]byte("38;2;"))
+		writeInt(w, int(fg.R))
+		w.WriteByte(';')
+		writeInt(w, int(fg.G))
+		w.WriteByte(';')
+		writeInt(w, int(fg.B))
+	} else {
+		// Fallback 256: 38;5;N
+		w.Write([]byte("38;5;"))
+		writeInt(w, int(RGBTo256(fg)))
+	}
+}
+
+// writeBgInline writes bg color parameters (no CSI prefix, no 'm' suffix)
+func (o *outputBuffer) writeBgInline(w *bufio.Writer, bg RGB, attr Attr) {
+	w.WriteByte(';')
+	if attr&AttrBg256 != 0 {
+		// 256-color: 48;5;N
+		w.Write([]byte("48;5;"))
+		writeInt(w, int(bg.R))
+	} else if o.colorMode == ColorModeTrueColor {
+		// True color: 48;2;R;G;B
+		w.Write([]byte("48;2;"))
+		writeInt(w, int(bg.R))
+		w.WriteByte(';')
+		writeInt(w, int(bg.G))
+		w.WriteByte(';')
+		writeInt(w, int(bg.B))
+	} else {
+		// Fallback 256: 48;5;N
+		w.Write([]byte("48;5;"))
+		writeInt(w, int(RGBTo256(bg)))
+	}
+}
+
+// writeFgFull writes complete fg color sequence
+func (o *outputBuffer) writeFgFull(w *bufio.Writer, fg RGB, attr Attr) {
+	if attr&AttrFg256 != 0 {
+		w.Write(csiFg256)
+		writeInt(w, int(fg.R))
+		w.WriteByte('m')
+	} else if o.colorMode == ColorModeTrueColor {
+		w.Write(csiFgRGB)
+		writeInt(w, int(fg.R))
+		w.WriteByte(';')
+		writeInt(w, int(fg.G))
+		w.WriteByte(';')
+		writeInt(w, int(fg.B))
+		w.WriteByte('m')
+	} else {
+		w.Write(csiFg256)
+		writeInt(w, int(RGBTo256(fg)))
+		w.WriteByte('m')
+	}
+}
+
+// writeBgFull writes complete bg color sequence
+func (o *outputBuffer) writeBgFull(w *bufio.Writer, bg RGB, attr Attr) {
+	if attr&AttrBg256 != 0 {
+		w.Write(csiBg256)
+		writeInt(w, int(bg.R))
+		w.WriteByte('m')
+	} else if o.colorMode == ColorModeTrueColor {
+		w.Write(csiBgRGB)
+		writeInt(w, int(bg.R))
+		w.WriteByte(';')
+		writeInt(w, int(bg.G))
+		w.WriteByte(';')
+		writeInt(w, int(bg.B))
+		w.WriteByte('m')
+	} else {
+		w.Write(csiBg256)
+		writeInt(w, int(RGBTo256(bg)))
+		w.WriteByte('m')
+	}
+}
+
+// forceFullRedraw clears front buffer to force complete redraw
+func (o *outputBuffer) forceFullRedraw() {
+	for i := range o.front {
+		o.front[i] = Cell{Rune: 0}
+	}
+	o.lastValid = false
+	o.cursorValid = false
+}
+
 // clear writes a clear screen with specified background
 func (o *outputBuffer) clear(bg RGB) {
 	w := o.writer
 	w.Write(csiSGR0)
-	writeBgColor(w, bg, o.colorMode)
+	o.writeBgFull(w, bg, 0)
 	w.Write(csiClear)
 
 	o.lastValid = false
-	o.cursorValid = false // Cursor position lost after clear
+	o.cursorValid = false
 	w.Flush()
 
-	// Update front buffer to match
 	for i := range o.front {
 		o.front[i] = Cell{Rune: ' ', Bg: bg}
 	}
 }
 
-// invalidateCursor marks the cursor position as unknown
-// Call this if external writes move the cursor
+// invalidateCursor marks cursor position as unknown
 func (o *outputBuffer) invalidateCursor() {
 	o.cursorValid = false
 }

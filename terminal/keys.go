@@ -164,7 +164,9 @@ var ss3Sequences = []escapeSequence{
 	{"S", KeyF4, ModNone},
 }
 
-// buildSequenceMap creates a map for O(1) sequence lookup
+var csiMap = buildSequenceMap(csiSequences)
+var ss3Map = buildSequenceMap(ss3Sequences)
+
 func buildSequenceMap(seqs []escapeSequence) map[string]escapeSequence {
 	m := make(map[string]escapeSequence, len(seqs))
 	for _, s := range seqs {
@@ -173,20 +175,18 @@ func buildSequenceMap(seqs []escapeSequence) map[string]escapeSequence {
 	return m
 }
 
-var csiMap = buildSequenceMap(csiSequences)
-var ss3Map = buildSequenceMap(ss3Sequences)
-
-// lookupCSI looks up a CSI sequence
-func lookupCSI(seq string) (Key, Modifier, bool) {
-	if s, ok := csiMap[seq]; ok {
+// lookupCSI performs zero-alloc map lookup via compiler optimization
+// The string([]byte) conversion inline in map access does not allocate
+func lookupCSI(seq []byte) (Key, Modifier, bool) {
+	if s, ok := csiMap[string(seq)]; ok {
 		return s.key, s.mod, true
 	}
 	return KeyNone, ModNone, false
 }
 
-// lookupSS3 looks up an SS3 sequence
-func lookupSS3(seq string) (Key, Modifier, bool) {
-	if s, ok := ss3Map[seq]; ok {
+// lookupSS3 performs zero-alloc map lookup
+func lookupSS3(seq []byte) (Key, Modifier, bool) {
+	if s, ok := ss3Map[string(seq)]; ok {
 		return s.key, s.mod, true
 	}
 	return KeyNone, ModNone, false
