@@ -40,11 +40,11 @@ Direct ANSI terminal control library replacing `gdamore/tcell/v2`. Provides true
 | Component | File | Role |
 |-----------|------|------|
 | `termImpl` | terminal.go | Lifecycle, state coordination, public API |
-| `outputBuffer` | output.go | Double buffering, diff computation, ANSI emission |
-| `inputReader` | input.go | Non-blocking stdin, escape sequence parsing |
+| `outputBuffer` | output.go | Double buffering, diff computation, coalesced ANSI emission |
+| `inputReader` | input.go | Non-blocking stdin, zero-alloc escape sequence parsing |
 | `resizeHandler` | resize_unix.go | SIGWINCH signal handling, dimension queries |
 | ANSI helpers | ansi.go | Zero-allocation sequence builders |
-| Color logic | color.go | Detection, RGB→256 LUT |
+| Color logic | color.go | Detection, compute-based RGB→256 conversion |
 
 ---
 
@@ -67,7 +67,7 @@ Single terminal cell. `Rune == 0` treated as space. Attrs are bitmask-combinable
 type RGB struct { R, G, B uint8 }
 ```
 
-24-bit color. `Equal()` method for fast comparison. Zero value is black.
+24-bit color. Compared using direct struct equality (`c == other`). Zero value is black.
 
 ### Attr
 ```go
@@ -80,10 +80,15 @@ const (
     AttrUnderline Attr = 1 << 3
     AttrBlink     Attr = 1 << 4
     AttrReverse   Attr = 1 << 5
+    AttrFg256     Attr = 1 << 6  // Fg.R is 256-color palette index
+    AttrBg256     Attr = 1 << 7  // Bg.R is 256-color palette index
 )
+
+// AttrStyle masks only the style bits (excludes color mode flags)
+const AttrStyle Attr = AttrBold | AttrDim | AttrItalic | AttrUnderline | AttrBlink | AttrReverse
 ```
 
-Bitmask for text attributes. OR-able for combinations.
+Bitmask for text attributes. OR-able for combinations. `AttrFg256`/`AttrBg256` flags indicate 256-color palette mode (where Fg.R/Bg.R holds palette index).
 
 ### Event
 ```go
@@ -119,7 +124,7 @@ Application         outputBuffer              Terminal
     │                    │                        │
     │              ┌─────┴─────┐                  │
     │              │ Emit ANSI │                  │
-    │              │ for diffs │                  │
+    │              │ coalesced │                  │
     │              └─────┬─────┘                  │
     │                    │                        │
     │                    │  Write to bufio.Writer │
@@ -138,48 +143,61 @@ Application         outputBuffer              Terminal
 ### Diff Algorithm
 ```
 for each cell (y, x):
-    if front[y][x] == cells[y][x]:
+    if cellEqual(front[y][x], cells[y][x]):
         skip  // No change
     else:
         if cursor not at (x, y):
             emit cursor move OR spaces (whichever cheaper)
-        if style changed:
-            emit SGR sequences
-        emit rune
-        update front[y][x]
+
+        for each contiguous dirty cell:
+            if style changed from last:
+                emit coalesced SGR sequence (attrs+colors)
+            emit rune
+            update front cell
 ```
 
 **Cursor Move Optimization:** For gaps < 4 cells on same row, emit spaces instead of CSI sequence (fewer bytes).
 
-**Style Coalescing:** Only emit color/attr codes when changed from previous cell.
+**Style Coalescing:** Single combined SGR sequence emits reset + attributes + foreground + background when style changes. Minimizes escape sequence overhead.
 
-### ANSI Emission (Zero-Alloc)
+### Coalesced SGR Rendering
 ```go
-// Pre-allocated byte slices
-var csiFgRGB = []byte("\x1b[38;2;")  // True color foreground prefix
+// Single escape sequence combines all changes:
+// \x1b[0;1;38;2;R;G;B;48;2;R;G;Bm
+//      │ │ └─fg────┘ └─bg────┘
+//      │ └─ bold
+//      └─ reset
 
-// Integer writing without fmt.Sprintf
-func writeInt(w *bufio.Writer, n int) {
-    if n < 10 {
-        w.WriteByte('0' + byte(n))
-        return
+func (o *outputBuffer) writeStyleCoalesced(w *bufio.Writer, fg, bg RGB, attr Attr) {
+    if attrChanged {
+        // Emit: reset + style attrs + inline fg + inline bg
+        w.Write(csi)
+        w.WriteByte('0')  // reset
+        // ... emit style attributes
+        o.writeFgInline(w, fg, attr)  // ;38;2;R;G;B or ;38;5;N
+        o.writeBgInline(w, bg, attr)  // ;48;2;R;G;B or ;48;5;N
+        w.WriteByte('m')
+    } else {
+        // Minimal update for color-only changes
+        // ...
     }
-    // ... direct digit extraction
 }
 ```
 
-All sequences built by writing to `bufio.Writer` (64KB buffer). No intermediate string allocations.
+**Zero-Alloc:** All sequences built by writing directly to `bufio.Writer` (128KB buffer). No intermediate string allocations.
 
 ### Color Mode Handling
 ```
 Flush path:
-    if ColorModeTrueColor:
-        emit \x1b[38;2;R;G;Bm
+    if attr & AttrFg256:
+        emit \x1b[38;5;{Fg.R}m          // 256-color palette index
+    else if ColorModeTrueColor:
+        emit \x1b[38;2;{Fg.R};{Fg.G};{Fg.B}m
     else:
-        emit \x1b[38;5;{LUT[R][G][B]}m
+        emit \x1b[38;5;{RGBTo256(Fg)}m  // Compute-based conversion
 ```
 
-Mode determined once at `Init()`. Output functions branch on mode.
+Mode determined once at `Init()`. Output functions branch on mode and attribute flags.
 
 ---
 
@@ -210,10 +228,55 @@ Mode determined once at `Init()`. Output functions branch on mode.
 ┌─────────┐                                      │
 │         │                                      │
 │  Parse  │──────────────────────────────────────┘
-│  Seq    │    Lookup in csiMap/ss3Map
+│  Seq    │    Zero-alloc lookup in csiMap/ss3Map
 │         │    Emit Key + Modifiers
 └─────────┘
 ```
+
+### Fast Path for Printable ASCII
+```go
+func (r *inputReader) parseInput(data []byte) {
+    for i < len(data) {
+        b := data[i]
+
+        // Fast path: printable ASCII (most common case)
+        if b >= 0x20 && b < 0x7f {
+            r.sendEvent(Event{Type: EventKey, Key: KeyRune, Rune: rune(b)})
+            i++
+            continue
+        }
+
+        // Handle ESC, control chars, UTF-8...
+    }
+}
+```
+
+**Optimization:** Single comparison eliminates most complex parsing for typical text input.
+
+### Zero-Alloc Escape Parsing
+```go
+type inputReader struct {
+    // ...
+    escBuf [16]byte  // Embedded buffer for escape sequences
+}
+
+func (r *inputReader) parseEscape(data []byte) (int, Event) {
+    if len(data) < 2 {
+        extra := r.readMoreWithTimeout()  // Reads into escBuf
+        if extra == 0 {
+            return 0, Event{}  // Standalone ESC
+        }
+        // Rare: split packet, must allocate
+        combined := make([]byte, len(data)+extra)
+        copy(combined, data)
+        copy(combined[len(data):], r.escBuf[:extra])
+        data = combined
+    }
+    // ...
+}
+```
+
+**Allocation avoidance:** 16-byte embedded buffer handles complete escape sequences in typical cases.
 
 ### Non-Blocking Read with Poll
 ```go
@@ -224,13 +287,13 @@ func (r *inputReader) readLoop() {
             return
         default:
         }
-        
+
         // Poll with 100ms timeout
         ready, _ := r.pollRead(100)
         if !ready {
             continue  // Check stopCh again
         }
-        
+
         n, _ := unix.Read(r.fd, buf)
         r.parseInput(buf[:n])
     }
@@ -256,10 +319,18 @@ var csiSequences = []escapeSequence{
     // ...
 }
 
-var csiMap = buildSequenceMap(csiSequences)  // O(1) lookup
+var csiMap = buildSequenceMap(csiSequences)  // Built at init
+
+// Zero-alloc lookup via compiler optimization
+func lookupCSI(seq []byte) (Key, Modifier, bool) {
+    if s, ok := csiMap[string(seq)]; ok {  // No allocation
+        return s.key, s.mod, true
+    }
+    return KeyNone, ModNone, false
+}
 ```
 
-**Extensibility:** Add entries to `csiSequences` or `ss3Sequences` for new key support.
+**Extensibility:** Add entries to `csiSequences` or `ss3Sequences` for new key support. Map lookup converts `[]byte` to `string` without allocation (compiler optimization).
 
 ---
 
@@ -270,9 +341,10 @@ var csiMap = buildSequenceMap(csiSequences)  // O(1) lookup
 1. COLORTERM="truecolor" | "24bit"     → TrueColor
 2. Terminal-specific env vars:
    - KITTY_WINDOW_ID
-   - KONSOLE_VERSION  
+   - KONSOLE_VERSION
    - ITERM_SESSION_ID
    - ALACRITTY_WINDOW_ID
+   - ALACRITTY_LOG
    - WEZTERM_PANE                      → TrueColor
 3. TERM contains "truecolor|24bit|direct" → TrueColor
 4. Default                             → 256-Color
@@ -280,17 +352,38 @@ var csiMap = buildSequenceMap(csiSequences)  // O(1) lookup
 
 **Rationale:** `COLORTERM` is the modern standard. tcell's TERM-first approach causes quantization in terminals that set `TERM=screen-256color` inside tmux but support true color.
 
-### RGB → 256 Lookup Table
+### RGB → 256 Compute-Based Conversion
 ```go
-var rgb256LUT [256][256][256]uint8  // 16MB, computed at init
+func RGBTo256(c RGB) uint8 {
+    r, g, b := int(c.R), int(c.G), int(c.B)
+
+    // Exact grayscale fast path
+    if r == g && g == b {
+        if r < 8 { return 16 }
+        if r > 238 { return 231 }
+        return uint8(232 + (r-8)/10)
+    }
+
+    // Near-grayscale check (threshold 6)
+    avg := (r + g + b) / 3
+    dr, dg, db := abs(r-avg), abs(g-avg), abs(b-avg)
+    if dr < 6 && dg < 6 && db < 6 {
+        // Use grayscale ramp (232-255)
+        // ...
+    }
+
+    // 6×6×6 color cube (16-231)
+    return 16 + 36*cubeIndex[r] + 6*cubeIndex[g] + cubeIndex[b]
+}
 ```
 
-**Trade-off:** 16MB memory for O(1) conversion. Computed once at package init.
+**Performance:** ~20 ALU ops, cache-friendly. Pre-computed `cubeIndex` lookup table (256 bytes) maps 0-255 to nearest cube level 0-5.
 
 **Algorithm:**
-1. Check if color is near-grayscale (R ≈ G ≈ B)
-2. If yes, compare grayscale ramp (232-255) vs color cube distance
-3. Otherwise, map to nearest 6×6×6 cube index (16-231)
+1. Fast path for exact grayscale (r == g == b)
+2. Near-grayscale check with threshold 6
+3. Map to grayscale ramp (232-255) if close to gray
+4. Otherwise use 6×6×6 color cube (16-231)
 
 ---
 
@@ -327,7 +420,7 @@ var rgb256LUT [256][256][256]uint8  // 16MB, computed at init
 1. DetectColorMode()
 2. getTerminalSize()
 3. term.MakeRaw(stdin)     → Save old state
-4. Create outputBuffer (64KB bufio.Writer)
+4. Create outputBuffer (128KB bufio.Writer)
 5. Create inputReader
 6. Create resizeHandler
 7. Emit: alternate screen, hide cursor
@@ -347,6 +440,8 @@ var rgb256LUT [256][256][256]uint8  // 16MB, computed at init
 ```
 
 **Idempotency:** `finalized` flag prevents double-cleanup.
+
+**Thread Safety:** All public methods acquire `mu` lock and check `initialized`/`finalized` flags.
 
 ### Panic Recovery
 ```go
@@ -378,18 +473,26 @@ defer func() {
 | Allocation | Size | Frequency |
 |------------|------|-----------|
 | Front buffer | W×H×32 bytes | Once per resize |
-| bufio.Writer | 64KB | Once at init |
-| RGB→256 LUT | 16MB | Once at package init |
+| bufio.Writer | 128KB | Once at init |
+| cubeIndex table | 256 bytes | Once at package init |
 | Input buffer | 256 bytes | Once at init |
+| Escape buffer | 16 bytes | Embedded in inputReader |
 
 ### CPU
 
 | Operation | Complexity |
 |-----------|------------|
 | Cell comparison | O(1) |
-| RGB→256 conversion | O(1) table lookup |
+| RGB→256 conversion | O(1) compute (~20 ALU ops) |
 | Escape sequence lookup | O(1) map lookup |
 | Flush (diff) | O(W×H) |
+
+### Zero-Allocation Paths
+
+- **Input parsing:** Embedded `escBuf[16]` avoids allocation for complete escape sequences
+- **Map lookups:** `lookupCSI([]byte)` and `lookupSS3([]byte)` use compiler optimization for zero-alloc string conversion
+- **ANSI emission:** All sequences written directly to `bufio.Writer`
+- **Integer formatting:** `writeInt()` uses direct digit extraction (no `strconv`)
 
 ---
 
@@ -430,14 +533,7 @@ const (
     ColorMode16  // ← Basic 16-color mode
 )
 
-// ansi.go - Add emission path:
-func writeFgColor(w *bufio.Writer, c RGB, mode ColorMode) {
-    switch mode {
-    case ColorMode16:
-        // Map to SGR 30-37, 90-97
-    // ...
-    }
-}
+// output.go - Add emission path in writeStyleCoalesced
 ```
 
 ---
@@ -450,7 +546,6 @@ func writeFgColor(w *bufio.Writer, c RGB, mode ColorMode) {
 | No mouse support | Scope control; can be added via escape sequence parsing |
 | No bracketed paste | Scope control; requires mode enable/disable sequences |
 | No Unicode width | Caller responsibility; would require wcwidth table |
-| 16MB LUT memory | Trade-off for O(1) color conversion; acceptable for game use |
 | 100ms input poll | Balance between responsiveness and CPU usage |
 
 ---
@@ -459,11 +554,11 @@ func writeFgColor(w *bufio.Writer, c RGB, mode ColorMode) {
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| terminal.go | ~250 | Interface, lifecycle, coordination |
-| output.go | ~180 | Double buffer, diff, flush |
-| input.go | ~280 | Raw read, escape parsing, events |
-| keys.go | ~180 | Key constants, sequence tables |
-| ansi.go | ~150 | Sequence builders, UTF-8 encoding |
-| color.go | ~130 | Detection, LUT generation |
+| terminal.go | ~350 | Interface, lifecycle, coordination, locking |
+| output.go | ~350 | Double buffer, diff, coalesced flush |
+| input.go | ~390 | Raw read, zero-alloc escape parsing, events |
+| keys.go | ~195 | Key constants, sequence tables, zero-alloc lookups |
+| ansi.go | ~130 | Sequence builders, integer formatting |
+| color.go | ~110 | Detection, compute-based RGB→256 |
 | resize_unix.go | ~80 | SIGWINCH, ioctl |
 | compat.go | ~50 | tcell migration helpers |
