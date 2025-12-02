@@ -903,22 +903,56 @@ displayEntity := engine.SelectTopEntityFiltered(entities, world, func(e engine.E
 ## Component Hierarchy
 ```
 Component (marker interface)
-├── PositionComponent {X, Y}
-├── CharacterComponent {Rune, Style}
-├── SequenceComponent {ID, Index, Type, Level}
-├── GoldSequenceComponent {Active, SequenceID, StartTimeNano, CharSequence, CurrentIndex}
-├── DecayComponent {Column, YPosition, Speed, Char, LastChangeRow, LastIntX, LastIntY, PrevPreciseX, PrevPreciseY}
-├── CleanerComponent {PreciseX, PreciseY, VelocityX, VelocityY, TargetX, TargetY, GridX, GridY, Trail, Char}
-├── MaterializeComponent {PreciseX, PreciseY, VelocityX, VelocityY, TargetX, TargetY, GridX, GridY, TrailRing, TrailHead, TrailLen, Direction, Char, Arrived, DrainSlot}
-├── FlashComponent {X, Y, Char, StartTime, Duration}
-├── NuggetComponent {ID, SpawnTime}
-├── DrainComponent {X, Y, LastMoveTime, LastDrainTime, IsOnCursor}
-├── CursorComponent {ErrorFlashEnd, HeatDisplay}
-├── ProtectionComponent {Mask, ExpiresAt}
-└── ShieldComponent {Sources, RadiusX, RadiusY, Color, MaxOpacity, LastDrainTime}
+├── PositionComponent {X, Y int}
+│   Simple grid-aligned position component
+│
+├── CharacterComponent {Rune rune, Color ColorClass, Style TextStyle, SeqType SequenceType, SeqLevel SequenceLevel}
+│   Displayable character with semantic rendering properties (resolved to RGB by renderer)
+│
+├── SequenceComponent {ID int, Index int, Type SequenceType, Level SequenceLevel}
+│   Tracks membership in character sequences (Green/Red/Blue/Gold) with position and scoring levels
+│
+├── GoldSequenceComponent {Active bool, SequenceID int, StartTimeNano int64, CharSequence []rune, CurrentIndex int}
+│   Active gold sequence state (10-character bonus sequences that fill heat to max)
+│
+├── DecayComponent {Column int, YPosition float64, Speed float64, Char rune, LastChangeRow int, LastIntX int, LastIntY int, PrevPreciseX float64, PrevPreciseY float64}
+│   Falling decay entities with sub-pixel physics, swept collision, and coordinate latching
+│
+├── CleanerComponent {PreciseX/Y float64, VelocityX/Y float64, TargetX/Y float64, TrailRing [Length]Point, TrailHead int, TrailLen int, GridX int, GridY int, Char rune}
+│   Destructive cleaners with zero-allocation ring buffer trail (clear Red sequences)
+│
+├── MaterializeComponent {PreciseX/Y float64, VelocityX/Y float64, TargetX/Y int, TrailRing [Length]Point, TrailHead int, TrailLen int, GridX int, GridY int, Direction MaterializeDirection, Char rune, Arrived bool}
+│   Drain spawn animation (4 entities converge from screen edges using ring buffer trail)
+│
+├── FlashComponent {X int, Y int, Char rune, StartTime time.Time, Duration time.Duration}
+│   Visual feedback effects for entity destruction (300ms default duration)
+│
+├── NuggetComponent {ID int, SpawnTime time.Time}
+│   Collectible nugget entities with respawn tracking (+10% max heat bonus)
+│
+├── DrainComponent {LastMoveTime time.Time, LastDrainTime time.Time, IsOnCursor bool, SpawnOrder int64}
+│   Heat-based drain entities (movement toward cursor, LIFO despawn via SpawnOrder)
+│
+├── CursorComponent {ErrorFlashEnd int64, HeatDisplay int}
+│   Singleton player cursor state (error flash timing, cached heat for render)
+│
+├── ProtectionComponent {Mask ProtectionFlags, ExpiresAt int64}
+│   Configurable immunity system with bitmask flags (Decay/Drain/Cull/Delete protection)
+│
+└── ShieldComponent {Sources uint8, RadiusX float64, RadiusY float64, Color ColorClass, MaxOpacity float64, LastDrainTime time.Time}
+    Energy-powered protective field (Sources bitmask: SourceBoost=1<<0, active when Sources!=0 AND Energy>0)
 ```
 
 **Note**: All component types are defined in the `components/` directory.
+
+**Component Design Patterns:**
+- **Semantic Rendering**: CharacterComponent and ShieldComponent use `ColorClass` enum (resolved to RGB by renderer)
+- **Sub-pixel Physics**: DecayComponent, CleanerComponent, MaterializeComponent use float64 for smooth movement
+- **Ring Buffer Trails**: CleanerComponent and MaterializeComponent use zero-allocation ring buffers
+- **Time-Based Lifecycle**: FlashComponent, NuggetComponent use time.Time for expiration/spawning
+- **Bitmask Flags**: ProtectionComponent (immunity flags) and ShieldComponent (source flags) use bitwise operations
+- **Coordinate Latching**: DecayComponent prevents re-processing same grid cells via LastIntX/LastIntY
+- **LIFO Ordering**: DrainComponent uses SpawnOrder (monotonic counter) for despawn priority
 
 ### Sequence Types
 - **Green**: Positive scoring, spawned by SpawnSystem, decays Blue→Green→Red
@@ -928,50 +962,92 @@ Component (marker interface)
 
 ## Rendering Pipeline
 
-The game uses a **System Render Interface** pattern where each system owns its rendering logic through specialized `SystemRenderer` implementations.
+The game uses a **System Render Interface** pattern where each system owns its rendering logic through specialized `SystemRenderer` implementations. The rendering architecture was significantly refactored in commit c7dab79 to centralize color management and encapsulate tcell usage exclusively within the render package.
 
 ### Architecture
 
 **Core Types:**
-- `RenderOrchestrator`: Coordinates render pipeline lifecycle
-- `RenderBuffer`: Dense grid for compositing (zero-alloc after init)
-- `SystemRenderer`: Interface for individual renderers
-- `RenderPriority`: Constants determine render order (lower first)
-- `RenderContext`: Frame data passed to all renderers
+- `RenderOrchestrator` (`render/orchestrator.go`): Coordinates render pipeline lifecycle with insertion-sort priority ordering
+- `RenderBuffer` (`render/buffer.go`): Dense grid compositor with blend modes (zero-alloc after init)
+- `SystemRenderer` (`render/interface.go`): Interface for individual renderers
+- `RenderPriority` (`render/priority.go`): Constants determine render order (lower renders first)
+- `RenderContext` (`render/context.go`): Frame data snapshot passed by value to all renderers
+- `RGB` (`render/rgb.go`): Explicit 8-bit color channels with blend operations
+- `CompositorCell` (`render/cell.go`): Authoritative cell state (Rune, Fg RGB, Bg RGB, Attrs)
+
+**Color Management (Refactored in c7dab79):**
+- **Centralized Colors** (`render/colors.go`): 60+ named RGB color variables organized by semantic category
+  - Sequence colors: Green/Red/Blue (Dark/Normal/Bright levels)
+  - Entity colors: Gold, Decay, Drain, Materialize, Nugget, Cleaner, Flash
+  - UI colors: Line numbers, status bar, column indicators, cursor, ping
+  - Effect colors: Energy meter, shields, audio indicators
+  - Modal colors: Overlay borders/backgrounds
+- **Color Resolution**: Semantic color mapping functions
+  - `GetFgForSequence(seqType, level)` → resolves sequence appearance
+  - `GetHeatMeterColor(progress float64)` → rainbow gradient generator
+  - `resolveCharacterColor()`, `resolveShieldColor()` → renderer-specific resolution
+- **tcell Encapsulation**: tcell only imported in render package, not by individual renderers
+  - `RGBToTcell()` conversion in buffer.go during flush
+  - Systems use semantic `ColorClass` enum, renderer resolves to RGB
+
+**Blend Modes** (`render/blender.go`):
+- `BlendReplace`: Opaque overwrite (default)
+- `BlendAlpha`: src*α + dst*(1-α) for transparency
+- `BlendAdd`: clamp(dst+src, 255) for light accumulation
+- `BlendMax`: per-channel maximum for non-destructive highlights
+- `BlendFgOnly`: Update text only, preserve background exactly
 
 **Render Flow:**
-1. `RenderOrchestrator.RenderFrame()` clears buffer
-2. Renderers execute in priority order (low → high)
-3. Buffer flushes to tcell.Screen
-4. Screen.Show() presents frame
+1. `RenderOrchestrator.RenderFrame()` acquires World lock and clears buffer
+2. Renderers execute in priority order (low → high), skip if `VisibilityToggle.IsVisible()` returns false
+3. Each renderer calls buffer methods: `Set()`, `SetFgOnly()`, `SetWithBg()`
+4. Buffer flushes to tcell.Screen with RGB→tcell conversion
+5. Screen.Show() presents frame
 
-**Priority Layers** (constants/priority.go):
-- **Background (0)**: Clear and base layer
-- **Grid (100)**: Ping highlights and grid lines
-- **Entities (200)**: Characters (position-based rendering)
-- **Effects (300)**: Shields, decay, cleaners, flashes, materializers
-- **Drain (350)**: Drain entity (above effects, below UI)
-- **UI (400)**: Heat meter, line numbers, column indicators, status bar, cursor
-- **Overlay (500)**: Modal windows (debug, help)
+**Priority Layers** (`render/priority.go`):
+- **PriorityBackground (0)**: Clear and base layer
+- **PriorityGrid (100)**: Ping highlights and grid lines
+- **PriorityEntities (200)**: Characters (position-based rendering)
+- **PriorityEffects (300)**: Shields, decay, cleaners, flashes, materializers
+- **PriorityDrain (350)**: Drain entity (above effects, below UI)
+- **PriorityUI (400)**: Heat meter, line numbers, column indicators, status bar, cursor
+- **PriorityOverlay (500)**: Modal windows (debug, help)
+- **PriorityDebug (1000)**: Debug overlays (highest)
 
-**Individual Renderers** (render/renderers/):
-- `HeatMeterRenderer`: 10-segment rainbow heat bar
-- `LineNumbersRenderer`: Relative line numbers
-- `ColumnIndicatorsRenderer`: Column position markers
-- `StatusBarRenderer`: Mode, commands, metrics
-- `PingGridRenderer`: Row/column highlights and grid lines
-- `ShieldRenderer`: Protective field effects around characters
-- `CharactersRenderer`: All character entities with ping integration
-- `EffectsRenderer`: Decay, cleaners, removal flashes, materializers
-- `DrainRenderer`: Energy-draining entity
-- `CursorRenderer`: Cursor with visibility toggle
-- `OverlayRenderer`: Modal popups with visibility toggle
+**Individual Renderers** (`render/renderers/`):
+- `HeatMeterRenderer`: 10-segment rainbow heat bar (priority 0)
+- `LineNumbersRenderer`: Relative line numbers (priority 400)
+- `ColumnIndicatorsRenderer`: Column position markers (priority 400)
+- `StatusBarRenderer`: Mode, commands, metrics, FPS (priority 400)
+- `PingGridRenderer`: Row/column highlights and grid lines (priority 100)
+- `ShieldRenderer`: Protective field effects around characters (priority 300)
+- `CharactersRenderer`: All character entities with semantic color resolution (priority 200)
+- `EffectsRenderer`: Decay, cleaners, removal flashes, materializers with pre-built gradients (priority 300)
+- `DrainRenderer`: Energy-draining entity overlay (priority 350)
+- `CursorRenderer`: Cursor with z-index entity selection and visibility toggle (priority 500)
+- `OverlayRenderer`: Modal popups with visibility toggle (priority 500)
+
+**RenderBuffer Write Methods:**
+- `Set(x, y, rune, fg, bg, mode, alpha, attrs)`: Full compositing with blend mode and alpha
+- `SetFgOnly(x, y, rune, fg, attrs)`: Text overlay preserving background (used by most text)
+- `SetWithBg(x, y, rune, fg, bg)`: Opaque cell replacement (BlendReplace)
+- `Clear()`: Exponential copy algorithm for fast reset
+- `Flush(screen)`: RGB→tcell conversion and screen update
+
+**Performance Optimizations:**
+- Zero-alloc buffer after initialization (capacity pre-allocated)
+- Exponential copy for Clear() (2x each iteration)
+- Pre-built gradients in EffectsRenderer (zero per-frame color math)
+- Ring buffers in trail systems (cleaner, materializer)
+- Write-only buffer operations where possible (no read-modify-write)
 
 **Adding New Visual Elements:**
-1. Create struct implementing `SystemRenderer`
-2. Choose appropriate `RenderPriority`
-3. Register with orchestrator in main.go
-4. Optionally implement `VisibilityToggle` for conditional rendering
+1. Create struct implementing `SystemRenderer` in `render/renderers/`
+2. Choose appropriate `RenderPriority` constant
+3. Implement `Render(ctx RenderContext, world *World, buf *RenderBuffer)` method
+4. Use semantic color resolution (ColorClass → RGB via render/colors.go)
+5. Register with orchestrator in main.go via `orchestrator.Register(renderer, priority)`
+6. Optionally implement `VisibilityToggle` interface for conditional rendering
 
 ### Pause State Visual Feedback
 
