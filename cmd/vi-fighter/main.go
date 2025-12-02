@@ -99,7 +99,7 @@ func main() {
 	orchestrator.Register(charactersRenderer, render.PriorityEntities)
 
 	// Effects (300)
-	shieldRenderer := renderers.NewShieldRenderer()
+	shieldRenderer := renderers.NewShieldRenderer(ctx)
 	orchestrator.Register(shieldRenderer, render.PriorityEffects)
 
 	effectsRenderer := renderers.NewEffectsRenderer(ctx)

@@ -134,7 +134,7 @@ func (s *DrainSystem) processPendingSpawns(world *engine.World) {
 }
 
 // queueDrainSpawn adds a drain spawn to the pending queue with stagger timing
-func (s *DrainSystem) queueDrainSpawn(slot, targetX, targetY int, staggerIndex int) {
+func (s *DrainSystem) queueDrainSpawn(targetX, targetY int, staggerIndex int) {
 	currentTick := s.ctx.State.GetGameTicks()
 	scheduledTick := currentTick + uint64(staggerIndex)*uint64(constants.DrainSpawnStaggerTicks)
 
@@ -270,7 +270,7 @@ func (s *DrainSystem) randomSpawnOffset(world *engine.World, baseX, baseY int, c
 	return 0, 0, false
 }
 
-// countActiveMaterializations returns number of drain slots currently materializing
+// countActiveMaterializations returns number of drain spawns currently materializing
 func (s *DrainSystem) countActiveMaterializations(world *engine.World) int {
 	return world.Materializers.Count() / 4
 }
@@ -324,7 +324,7 @@ func (s *DrainSystem) queueDrainSpawns(world *engine.World, count int) int {
 		key := uint64(targetX)<<32 | uint64(targetY)
 		queuedPositions[key] = true
 
-		s.queueDrainSpawn(queued, targetX, targetY, queued)
+		s.queueDrainSpawn(targetX, targetY, queued)
 		queued++
 	}
 
@@ -371,7 +371,7 @@ func (s *DrainSystem) triggerDespawnFlash(world *engine.World, x, y int) {
 	SpawnDestructionFlash(world, x, y, constants.DrainChar, timeRes.GameTime)
 }
 
-// startMaterializeAt initiates the materialize animation for a specific slot and position
+// startMaterializeAt initiates the materialize animation for a specific position
 func (s *DrainSystem) startMaterializeAt(world *engine.World, targetX, targetY int) {
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 
@@ -436,7 +436,6 @@ func (s *DrainSystem) startMaterializeAt(world *engine.World, targetX, targetY i
 	}
 }
 
-// updateMaterializers updates the materialize spawner entities and triggers drain spawn when groups converge
 // updateMaterializers updates materialize spawner entities and triggers drain spawn when groups converge
 func (s *DrainSystem) updateMaterializers(world *engine.World, dt time.Duration) {
 	dtSeconds := dt.Seconds()

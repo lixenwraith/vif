@@ -33,7 +33,12 @@ type GameState struct {
 	PingActive    atomic.Bool
 	PingGridTimer atomic.Uint64 // float64 bits
 
+	// Last typed character sequence info for shield color
+	LastTypedSeqType  atomic.Int32 // 0=None, 1=Blue, 2=Green
+	LastTypedSeqLevel atomic.Int32 // 0=Dark, 1=Normal, 2=Bright
+
 	// Drain entity tracking (real-time state for renderer snapshot)
+	// TODO: Is this still required in multi-drain state? Seems redundant.
 	DrainActive atomic.Bool // Whether drain entity exists
 
 	// Sequence ID generation (atomic for thread-safety)
@@ -105,6 +110,8 @@ func (gs *GameState) initState(now time.Time) {
 	gs.BoostEnabled.Store(false)
 	gs.BoostEndTime.Store(0)
 	gs.BoostColor.Store(0)
+	gs.LastTypedSeqType.Store(0)
+	gs.LastTypedSeqLevel.Store(0)
 	gs.CursorError.Store(false)
 	gs.CursorErrorTime.Store(0)
 	gs.EnergyBlinkActive.Store(false)
@@ -252,6 +259,28 @@ func (gs *GameState) GetFrameNumber() int64 {
 // IncrementFrameNumber increments and returns the frame number
 func (gs *GameState) IncrementFrameNumber() int64 {
 	return gs.FrameNumber.Add(1)
+}
+
+// ===== LAST TYPED SEQUENCE ACCESSORS (atomic) =====
+
+// GetLastTypedSeqType returns the last typed sequence type (0=None, 1=Blue, 2=Green)
+func (gs *GameState) GetLastTypedSeqType() int32 {
+	return gs.LastTypedSeqType.Load()
+}
+
+// SetLastTypedSeqType sets the last typed sequence type
+func (gs *GameState) SetLastTypedSeqType(seqType int32) {
+	gs.LastTypedSeqType.Store(seqType)
+}
+
+// GetLastTypedSeqLevel returns the last typed sequence level (0=Dark, 1=Normal, 2=Bright)
+func (gs *GameState) GetLastTypedSeqLevel() int32 {
+	return gs.LastTypedSeqLevel.Load()
+}
+
+// SetLastTypedSeqLevel sets the last typed sequence level
+func (gs *GameState) SetLastTypedSeqLevel(seqLevel int32) {
+	gs.LastTypedSeqLevel.Store(seqLevel)
 }
 
 // ===== BOOST ACCESSORS (atomic) =====

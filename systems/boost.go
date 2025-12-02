@@ -35,12 +35,12 @@ func (bs *BoostSystem) Update(world *engine.World, dt time.Duration) {
 
 	if boostEnabled {
 		if !hasShield {
-			// Create shield with SourceBoost set
+			// Create shield with no color override (derive from GameState)
 			shield = components.ShieldComponent{
 				Sources:       constants.ShieldSourceBoost,
 				RadiusX:       constants.ShieldRadiusX,
 				RadiusY:       constants.ShieldRadiusY,
-				Color:         components.ColorShield,
+				OverrideColor: components.ColorNone,
 				MaxOpacity:    constants.ShieldMaxOpacity,
 				LastDrainTime: now,
 			}

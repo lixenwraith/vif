@@ -70,7 +70,7 @@ const (
 const (
 	ShieldRadiusX    = 10.0
 	ShieldRadiusY    = 5.0
-	ShieldMaxOpacity = 0.6
+	ShieldMaxOpacity = 0.5
 )
 
 // --- Global Visual Effects ---

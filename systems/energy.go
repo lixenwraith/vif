@@ -149,14 +149,20 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 
 	// Check if typed character matches
 	if char.Rune == typedRune {
-		// Correct character
+		// Track last typed sequence for shield color (Blue and Green only)
+		if seq.Type == components.SequenceBlue || seq.Type == components.SequenceGreen {
+			var seqTypeCode int32
+			if seq.Type == components.SequenceBlue {
+				seqTypeCode = 1
+			} else {
+				seqTypeCode = 2
+			}
+			s.ctx.State.SetLastTypedSeqType(seqTypeCode)
+			s.ctx.State.SetLastTypedSeqLevel(int32(seq.Level))
+		}
+
 		// RED characters reset heat instead of incrementing it
 		if seq.Type == components.SequenceRed {
-			s.ctx.State.SetHeat(0)
-			// Red character also deactivates boost
-			s.ctx.State.SetBoostEnabled(false)
-			s.ctx.State.SetBoostColor(0) // 0 = None
-		} else {
 			// Read boost state snapshot for consistent checks
 			boostState := s.ctx.State.ReadBoostState(timeRes.GameTime)
 
@@ -189,11 +195,7 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 					// Same color - extend boost timer
 					s.extendBoost(now, constants.BoostExtensionDuration)
 				} else {
-					// Different color - reset boost timer but keep heat at max
-					// Set timer to current time (effectively deactivates until rebuilt)
-					s.ctx.State.SetBoostEndTime(now)
-					s.ctx.State.SetBoostEnabled(false)
-					// Update color for potential rebuild
+					// Different color - reset color and don't extend timer
 					s.ctx.State.SetBoostColor(charColorCode)
 				}
 			}

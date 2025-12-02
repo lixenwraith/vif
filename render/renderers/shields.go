@@ -9,15 +9,17 @@ import (
 	"github.com/lixenwraith/vi-fighter/render"
 )
 
-// ShieldRenderer renders active shields by blending their color with the existing background
-type ShieldRenderer struct{}
-
-// NewShieldRenderer creates a new shield renderer
-func NewShieldRenderer() *ShieldRenderer {
-	return &ShieldRenderer{}
+// ShieldRenderer renders active shields with dynamic color from GameState
+type ShieldRenderer struct {
+	gameCtx *engine.GameContext
 }
 
-// Render draws all active shields
+// NewShieldRenderer creates a new shield renderer
+func NewShieldRenderer(gameCtx *engine.GameContext) *ShieldRenderer {
+	return &ShieldRenderer{gameCtx: gameCtx}
+}
+
+// Render draws all active shields with quadratic falloff gradient
 func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	shields := world.Shields.All()
 
@@ -33,6 +35,9 @@ func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, b
 		if shield.Sources == 0 || ctx.Energy <= 0 {
 			continue
 		}
+
+		// Resolve shield color
+		shieldRGB := s.resolveShieldColor(shield)
 
 		// Bounding box
 		startX := int(float64(pos.X) - shield.RadiusX)
@@ -54,18 +59,20 @@ func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, b
 			endY = ctx.GameHeight - 1
 		}
 
-		// Resolve shield color from semantic ColorClass
-		shieldRGB := resolveShieldColor(shield.Color)
-
 		for y := startY; y <= endY; y++ {
 			for x := startX; x <= endX; x++ {
+				// Skip cursor position - cursor is absolute top
+				if x == ctx.CursorX && y == ctx.CursorY {
+					continue
+				}
+
 				screenX := ctx.GameX + x
 				screenY := ctx.GameY + y
 
 				dx := float64(x - pos.X)
 				dy := float64(y - pos.Y)
 
-				// Elliptical distance: (dx/rx)^2 + (dy/ry)^2
+				// Elliptical distance: (dx/rx)² + (dy/ry)²
 				normalizedDistSq := (dx*dx)/(shield.RadiusX*shield.RadiusX) + (dy*dy)/(shield.RadiusY*shield.RadiusY)
 
 				if normalizedDistSq > 1.0 {
@@ -74,8 +81,9 @@ func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, b
 
 				dist := math.Sqrt(normalizedDistSq)
 
-				// Alpha: 1.0 at center, 0.0 at edge, scaled by MaxOpacity
-				alpha := (1.0 - dist) * shield.MaxOpacity
+				// Quadratic soft falloff: (1-d)² * MaxOpacity
+				falloff := (1.0 - dist) * (1.0 - dist)
+				alpha := falloff * shield.MaxOpacity
 
 				// BlendAlpha on background only, rune=0 preserves existing text
 				buf.Set(screenX, screenY, 0, render.RGBBlack, shieldRGB, render.BlendAlpha, alpha, tcell.AttrNone)
@@ -84,11 +92,54 @@ func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, b
 	}
 }
 
-// resolveShieldColor maps semantic color info to concrete RGB
-func resolveShieldColor(color components.ColorClass) render.RGB {
+// resolveShieldColor determines the shield color from override or GameState
+func (s *ShieldRenderer) resolveShieldColor(shield components.ShieldComponent) render.RGB {
+	// Check override first
+	if shield.OverrideColor != components.ColorNone {
+		return s.colorClassToRGB(shield.OverrideColor)
+	}
+
+	// Derive from GameState
+	seqType := s.gameCtx.State.GetLastTypedSeqType()
+	seqLevel := s.gameCtx.State.GetLastTypedSeqLevel()
+
+	return s.getColorFromSequence(seqType, seqLevel)
+}
+
+// getColorFromSequence maps sequence type/level to RGB
+func (s *ShieldRenderer) getColorFromSequence(seqType, seqLevel int32) render.RGB {
+	// 0=None, 1=Blue, 2=Green
+	switch seqType {
+	case 1: // Blue
+		switch seqLevel {
+		case 0:
+			return render.RgbSequenceBlueDark
+		case 1:
+			return render.RgbSequenceBlueNormal
+		case 2:
+			return render.RgbSequenceBlueBright
+		}
+	case 2: // Green
+		switch seqLevel {
+		case 0:
+			return render.RgbSequenceGreenDark
+		case 1:
+			return render.RgbSequenceGreenNormal
+		case 2:
+			return render.RgbSequenceGreenBright
+		}
+	}
+	// Default: neutral gray when no character typed yet
+	return render.RGB{R: 128, G: 128, B: 128}
+}
+
+// colorClassToRGB maps ColorClass overrides to RGB (for future super modes)
+func (s *ShieldRenderer) colorClassToRGB(color components.ColorClass) render.RGB {
 	switch color {
 	case components.ColorShield:
 		return render.RgbShieldBase
+	case components.ColorNugget:
+		return render.RgbNuggetOrange
 	default:
 		return render.RgbShieldBase
 	}

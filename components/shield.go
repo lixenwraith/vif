@@ -11,7 +11,7 @@ type ShieldComponent struct {
 	Sources       uint8      // Bitmask of active sources (ShieldSourceBoost, etc)
 	RadiusX       float64    // Horizontal radius in grid cells
 	RadiusY       float64    // Vertical radius in grid cells
-	Color         ColorClass // Semantic color, resolved by renderer
+	OverrideColor ColorClass // ColorNone = derive from GameState, else use this color
 	MaxOpacity    float64    // Maximum opacity at center (0.0 to 1.0)
 	LastDrainTime time.Time  // Last passive drain tick (for 1/sec cost)
 }
