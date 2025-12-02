@@ -29,6 +29,7 @@ func (c *ColumnIndicatorsRenderer) Render(ctx render.RenderContext, world *engin
 		var fg, bg render.RGB
 
 		if relativeCol == 0 {
+			ch = '0'
 			if c.gameCtx.IsSearchMode() || c.gameCtx.IsCommandMode() {
 				fg = render.RgbCursorNormal
 				bg = render.RgbBackground

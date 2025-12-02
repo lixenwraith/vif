@@ -97,6 +97,15 @@ func (b *RenderBuffer) Set(x, y int, mainRune rune, fg, bg RGB, mode BlendMode, 
 	case BlendMax:
 		dst.Bg = dst.Bg.Max(bg)
 		b.touched[idx] = true
+	case BlendSoftLight:
+		dst.Bg = dst.Bg.SoftLight(bg, alpha)
+		b.touched[idx] = true
+	case BlendScreen:
+		dst.Bg = dst.Bg.Screen(bg)
+		b.touched[idx] = true
+	case BlendOverlay:
+		dst.Bg = dst.Bg.Overlay(bg)
+		b.touched[idx] = true
 	case BlendFgOnly:
 		// Explicitly preserve destination background, do not mark touched
 	}

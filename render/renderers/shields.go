@@ -85,8 +85,8 @@ func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, b
 				falloff := (1.0 - dist) * (1.0 - dist)
 				alpha := falloff * shield.MaxOpacity
 
-				// BlendAlpha on background only, rune=0 preserves existing text
-				buf.Set(screenX, screenY, 0, render.RGBBlack, shieldRGB, render.BlendAlpha, alpha, tcell.AttrNone)
+				// SoftLight blend for gentler falloff
+				buf.Set(screenX, screenY, 0, render.RGBBlack, shieldRGB, render.BlendSoftLight, alpha, tcell.AttrNone)
 			}
 		}
 	}

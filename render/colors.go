@@ -4,19 +4,20 @@ import (
 	"github.com/lixenwraith/vi-fighter/components"
 )
 
-// RGB color definitions for sequences - dark/normal/bright levels
+// RGB color definitions for all game systems
 var (
-	RgbSequenceGreenDark   = RGB{0, 130, 0}   // Dark Green
-	RgbSequenceGreenNormal = RGB{0, 200, 0}   // Normal Green
-	RgbSequenceGreenBright = RGB{50, 255, 50} // Bright Green
+	// RGB color definitions for sequences - all dark/normal/bright levels have minimum floor to prevent perceptual blackout at low alpha
+	RgbSequenceGreenDark   = RGB{15, 130, 15} // Floor R/B to prevent blackout
+	RgbSequenceGreenNormal = RGB{20, 200, 20}
+	RgbSequenceGreenBright = RGB{50, 255, 50}
 
-	RgbSequenceRedDark   = RGB{180, 50, 50}   // Dark Red
-	RgbSequenceRedNormal = RGB{255, 80, 80}   // Normal Red
-	RgbSequenceRedBright = RGB{255, 120, 120} // Bright Red
+	RgbSequenceRedDark   = RGB{180, 40, 40} // Floor G/B
+	RgbSequenceRedNormal = RGB{255, 60, 60}
+	RgbSequenceRedBright = RGB{255, 100, 100}
 
-	RgbSequenceBlueDark   = RGB{60, 100, 200}  // Dark Blue
-	RgbSequenceBlueNormal = RGB{100, 150, 255} // Normal Blue
-	RgbSequenceBlueBright = RGB{140, 190, 255} // Bright Blue
+	RgbSequenceBlueDark   = RGB{50, 80, 200} // Floor R/G
+	RgbSequenceBlueNormal = RGB{80, 130, 255}
+	RgbSequenceBlueBright = RGB{120, 170, 255}
 
 	RgbSequenceGold = RGB{255, 255, 0} // Bright Yellow for gold sequence
 	RgbDecay        = RGB{0, 139, 139} // Dark Cyan for decay animation
@@ -28,8 +29,8 @@ var (
 	RgbColumnIndicator = RGB{180, 180, 180} // Brighter gray
 	RgbBackground      = RGB{26, 27, 38}    // Tokyo Night background
 
-	RgbPingHighlight = RGB{60, 40, 0}     // Dark orange for INSERT mode ping
-	RgbPingNormal    = RGB{5, 5, 5}       // Almost black for NORMAL/SEARCH ping
+	RgbPingHighlight = RGB{5, 5, 5}       // Almost Black for INSERT mode ping
+	RgbPingNormal    = RGB{60, 60, 10}    // Dark Olack for NORMAL/SEARCH ping
 	RgbPingOrange    = RGB{60, 40, 0}     // Very dark orange for ping on whitespace
 	RgbPingGreen     = RGB{0, 40, 0}      // Very dark green for ping on green char
 	RgbPingRed       = RGB{50, 15, 15}    // Very dark red for ping on red char

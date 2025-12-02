@@ -33,6 +33,10 @@ func main() {
 	}
 	defer screen.Fini()
 
+	// Force true color mode - tcell defaults to palette quantization
+	screen.SetStyle(tcell.StyleDefault.Background(tcell.ColorReset).Foreground(tcell.ColorReset))
+	screen.EnablePaste()
+
 	// Create game context with ECS world
 	ctx := engine.NewGameContext(screen)
 

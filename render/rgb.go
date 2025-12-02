@@ -1,24 +1,98 @@
 package render
 
+import (
+	"math"
+)
+
 // RGB stores explicit 8-bit color channels
 type RGB struct {
 	R, G, B uint8
 }
 
-// Predefined colors
+// Predefined default color
 var (
 	RGBBlack = RGB{0, 0, 0}
 )
 
-// Blend performs alpha blending: result = src*alpha + dst*(1-alpha)
-func (c RGB) Blend(src RGB, alpha float64) RGB {
-	if alpha <= 0 {
-		return c
+// Lookup tables array access (no pointers) for speed
+var (
+	softLightG  [256]float64
+	softLightDF [256]float64
+)
+
+// Go automatically calls init() before main starts
+// No need for sync.Once checks in the pixel loop
+func init() {
+	for i := 0; i < 256; i++ {
+		df := float64(i) / 255.0
+		softLightDF[i] = df
+
+		// Pre-compute the Perez function 'G' term
+		if df <= 0.25 {
+			softLightG[i] = ((16.0*df-12.0)*df + 4.0) * df
+		} else {
+			softLightG[i] = math.Sqrt(df)
+		}
 	}
-	if alpha >= 1 {
+}
+
+// clamp converts float to uint8 efficiently
+func clamp(v float64) uint8 {
+	if v >= 255.0 {
+		return 255
+	}
+	if v <= 0.0 {
+		return 0
+	}
+	return uint8(v)
+}
+
+// softLightChannel is designed to be inlined and uses the global LUTs directly
+// Pre-computed LUT to avoid repeated sqrt/division in render loops
+func softLightChannel(d, s uint8, intensity float64) uint8 {
+	df := softLightDF[d]
+	sf := softLightDF[s]
+
+	var result float64
+	if sf < 0.5 {
+		// Pure math, 2 multiplications
+		result = df - (1.0-2.0*sf)*df*(1.0-df)
+	} else {
+		// LUT lookup replaces math.Sqrt
+		result = df + (2.0*sf-1.0)*(softLightG[d]-df)
+	}
+
+	// Mix with intensity
+	// Lerp: df*(1-intensity) + result*intensity = df + (result-df)*intensity
+	// This reduces dependency chains slightly
+	result = df + (result-df)*intensity
+
+	// Clamp to [0, 255]
+	return clamp(result*255.0 + 0.5) // +0.5 for rounding
+}
+
+// SoftLight applies Perez soft light blend - gentler than linear alpha
+func (c RGB) SoftLight(src RGB, intensity float64) RGB {
+	return RGB{
+		R: softLightChannel(c.R, src.R, intensity),
+		G: softLightChannel(c.G, src.G, intensity),
+		B: softLightChannel(c.B, src.B, intensity),
+	}
+}
+
+// Blend optimizes alpha blending
+// If alpha is 1.0 or 0.0, we return early to save math
+func (c RGB) Blend(src RGB, alpha float64) RGB {
+	if alpha >= 1.0 {
 		return src
 	}
+	if alpha <= 0.0 {
+		return c
+	}
+
+	// Pre-calculate invariant
 	inv := 1.0 - alpha
+
 	return RGB{
 		R: uint8(float64(src.R)*alpha + float64(c.R)*inv),
 		G: uint8(float64(src.G)*alpha + float64(c.G)*inv),
@@ -26,7 +100,7 @@ func (c RGB) Blend(src RGB, alpha float64) RGB {
 	}
 }
 
-// Max returns per-channel maximum (non-destructive highlight)
+// Max returns per-channel maximum
 func (c RGB) Max(src RGB) RGB {
 	return RGB{
 		R: max(c.R, src.R),
@@ -35,26 +109,72 @@ func (c RGB) Max(src RGB) RGB {
 	}
 }
 
+// add is addition with clamping
+func add(a, b uint8) uint8 {
+	sum := int(a) + int(b)
+	if sum > 255 {
+		return 255
+	}
+	return uint8(sum)
+}
+
 // Add performs additive blend with clamping (light accumulation)
 func (c RGB) Add(src RGB) RGB {
 	return RGB{
-		R: uint8(min(int(c.R)+int(src.R), 255)),
-		G: uint8(min(int(c.G)+int(src.G), 255)),
-		B: uint8(min(int(c.B)+int(src.B), 255)),
+		R: add(c.R, src.R),
+		G: add(c.G, src.G),
+		B: add(c.B, src.B),
 	}
 }
 
-// Scale multiplies each channel by factor (for fading effects)
-func (c RGB) Scale(factor float64) RGB {
-	if factor <= 0 {
-		return RGBBlack
-	}
-	if factor >= 1 {
-		return c
-	}
+// fastDiv255 approximates x / 255 using integer math
+// Formula: (x + (x >> 8) + 1) >> 8
+// This is significantly faster than the DIV instruction
+func fastDiv255(x int) int {
+	return (x + (x >> 8) + 1) >> 8
+}
+
+// Screen blend: 1 - (1-Dst)*(1-Src) - lightens, good for glow
+func (c RGB) Screen(src RGB) RGB {
 	return RGB{
-		R: uint8(float64(c.R) * factor),
-		G: uint8(float64(c.G) * factor),
-		B: uint8(float64(c.B) * factor),
+		R: uint8(255 - fastDiv255((255-int(c.R))*(255-int(src.R)))),
+		G: uint8(255 - fastDiv255((255-int(c.G))*(255-int(src.G)))),
+		B: uint8(255 - fastDiv255((255-int(c.B))*(255-int(src.B)))),
+	}
+}
+
+// overlayChannel combines Multiply and Screen blend modes
+// It uses the destination color (d) to determine the mix:
+// - If d < 0.5 (128): Acts like Multiply (darkens)
+// - If d >= 0.5 (128): Acts like Screen (lightens)
+// This preserves the highlights and shadows of the destination
+func overlayChannel(d, s uint8) uint8 {
+	if d < 128 {
+		// Multiply mode: (2 * d * s) / 255
+		val := 2 * int(d) * int(s)
+		return uint8(fastDiv255(val))
+	}
+	// Screen mode: 1 - 2 * (1 - d) * (1 - s)
+	// In 255 space: 255 - (2 * (255-d) * (255-s)) / 255
+	val := 2 * (255 - int(d)) * (255 - int(s))
+	return uint8(255 - fastDiv255(val))
+}
+
+// Overlay combines multiply (darks) and screen (lights)
+func (c RGB) Overlay(src RGB) RGB {
+	return RGB{
+		R: overlayChannel(c.R, src.R),
+		G: overlayChannel(c.G, src.G),
+		B: overlayChannel(c.B, src.B),
+	}
+}
+
+// Scale multiplies all channels by factor (0.0-1.0)
+func (c RGB) Scale(factor float64) RGB {
+	// Clamp to not wrap on factor > 1.0
+	return RGB{
+		R: clamp(float64(c.R) * factor),
+		G: clamp(float64(c.G) * factor),
+		B: clamp(float64(c.B) * factor),
 	}
 }

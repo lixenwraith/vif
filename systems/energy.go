@@ -163,10 +163,13 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 
 		// RED characters reset heat instead of incrementing it
 		if seq.Type == components.SequenceRed {
-			// Read boost state snapshot for consistent checks
+			s.ctx.State.SetHeat(0)
+			s.ctx.State.SetBoostEnabled(false)
+			s.ctx.State.SetBoostColor(0)
+		} else {
+			// Blue/Green: Apply heat gain with boost multiplier
 			boostState := s.ctx.State.ReadBoostState(timeRes.GameTime)
 
-			// Apply heat gain with boost multiplier
 			heatGain := 1
 			if boostState.Enabled {
 				heatGain = 2
@@ -185,17 +188,13 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 			}
 
 			if currentHeat >= constants.MaxHeat {
-				// Heat is at max
 				if !boostState.Enabled {
-					// Activate boost for the first time
 					s.ctx.State.SetBoostEnabled(true)
 					s.ctx.State.SetBoostColor(charColorCode)
 					s.ctx.State.SetBoostEndTime(now.Add(constants.BoostExtensionDuration))
 				} else if boostState.Color == charColorCode {
-					// Same color - extend boost timer
 					s.extendBoost(now, constants.BoostExtensionDuration)
 				} else {
-					// Different color - reset color and don't extend timer
 					s.ctx.State.SetBoostColor(charColorCode)
 				}
 			}
