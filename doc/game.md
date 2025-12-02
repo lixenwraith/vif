@@ -333,7 +333,8 @@ Hostile drain entities that scale with heat:
 ### Visual Effects
 
 **Ping Grid** (Press `ESC` in NORMAL mode):
-- Almost black background (RGB: 5,5,5) highlights cursor's row and column
+- Highlights cursor's row and column
+- Color: Almost-black (RGB: 5,5,5) in Normal mode, dark orange (RGB: 60,40,0) in Insert mode
 - Lasts 1 second
 - Helps locate cursor position quickly
 
@@ -492,9 +493,9 @@ A 2× heat multiplier plus shield activation at maximum heat.
 4. **Shield activates** (Sources bitmask set)
 
 **Color Matching:**
-- Same color (Blue or Green): +0.5s extension
-- Different color: Deactivates immediately
-- Example: Blue triggered boost → keep typing Blue
+- Same color (Blue or Green): +0.5s extension (timer extended)
+- Different color: Timer continues unchanged, BoostColor updates to new color (allows future extension)
+- Example: Blue triggered boost → typing Green changes BoostColor to Green but timer keeps running
 
 **Effects:**
 - +2 heat per character (instead of +1)
@@ -504,26 +505,28 @@ A 2× heat multiplier plus shield activation at maximum heat.
 
 **Shield During Boost:**
 - **Activation**: Sources != 0 AND Energy > 0
+- **Color**: Derived from last typed Blue/Green character's sequence type and level (fallback: neutral gray)
+- **Visual**: Quadratic soft gradient for smooth appearance
 - **Passive Cost**: 1 energy/second while active
 - **Defense Cost**: 100 energy/tick per drain in shield
 - **Protection**: Drains inside shield don't reduce heat
 - **Deactivation**: Energy <= 0 or boost ends
 
 **Deactivation:**
-- Timer expires (no same-color typing within 0.5s)
+- Timer expires (no extension within 0.5s)
 - Typing incorrect character
 - Typing red character
 - Using arrow keys
-- Typing different color at max heat
 
 **Visual Indicators:**
 - Pink "Boost: X.Xs" in status bar
 - Shield ellipse visible when Energy > 0
 
 **Strategy:**
-- Commit to one color when boost activates
+- Type same color to extend boost timer; different colors update BoostColor without penalty
 - Monitor energy - shield costs can drain fast
 - Shield most valuable with multiple drains active
+- Shield color reflects your last Blue/Green character typed
 
 ### Decay System
 
@@ -702,11 +705,12 @@ When all characters of one color/level are cleared, that slot opens for new spaw
 
 **Goal**: Survive extreme decay pressure and maximize multipliers
 
-1. **Color commitment during boost**:
-   - Mentally note which color triggered boost (Blue or Green)
-   - Scan 2-3 sequences ahead for same color
-   - Navigate to next same-color target BEFORE finishing current sequence
-   - Aim for 5+ boost extensions (2.5+ seconds of boost time)
+1. **Color management during boost**:
+   - Type same color to extend timer (+0.5s per character)
+   - Different colors update BoostColor but timer continues (no penalty)
+   - Scan 2-3 sequences ahead for matching color opportunities
+   - Navigate to next target BEFORE finishing current sequence
+   - Aim for 5+ extensions (2.5+ seconds of boost time)
 
 2. **Dynamic heat management**:
    - **70-90% heat**: Optimal zone - high scoring, manageable decay (15-20s)
@@ -800,16 +804,16 @@ Using `h`/`j`/`k`/`l` more than 3 times in a row resets heat!
 ### Boost Mastery
 
 **Maximizing Boost Duration:**
-1. Before reaching max heat, scan screen for color clusters
-2. If more Blue sequences visible, type Blue to trigger boost
-3. If more Green sequences visible, type Green
-4. Once boost active, navigate to next same-color target during typing
-5. Use `f<char>` to quickly find same-color characters on current line
+1. Before reaching max heat, scan screen for color availability
+2. Once boost active, type same color to extend timer (+0.5s per character)
+3. Can switch colors without timer penalty - BoostColor updates for future extensions
+4. Navigate to next target during typing to maintain momentum
+5. Use `f<char>` to quickly find matching characters on current line
 
-**Boost Decision Matrix:**
-- **Blue on screen > Green**: Trigger boost with Blue, commit to Blue
-- **Green on screen > Blue**: Trigger boost with Green, commit to Green
-- **Equal amounts**: Choose color with brighter sequences (higher multipliers)
+**Boost Timing Strategy:**
+- **Abundant same-color sequences**: Focus on extensions for maximum boost time
+- **Mixed colors available**: Type whatever's closest, return to matching color when convenient
+- **Color flexibility**: Timer persists when switching, allowing adaptive play
 
 ### Gold Tactics
 

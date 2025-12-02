@@ -304,6 +304,7 @@ Updated immediately on user input/spawn events, read by all systems:
   - SpawnSystem runs census by querying all SequenceComponent entities
   - No atomic counters (eliminates drift, provides accurate on-screen counts)
 - **Boost State** (`atomic.Bool`, `atomic.Int64`): Enabled, EndTime, Color
+- **Shield Color Tracking** (`atomic.Int32`): LastTypedSeqType, LastTypedSeqLevel (tracks most recent Blue/Green character for shield color derivation)
 - **Visual Feedback**: CursorError (via CursorComponent.ErrorFlashEnd), EnergyBlink, PingGrid (atomic)
 - **Drain State** (`atomic.Bool`, `atomic.Uint64`, `atomic.Int32`): Active, EntityID, X, Y
 - **Sequence ID** (`atomic.Int64`): Thread-safe ID generation
@@ -939,14 +940,15 @@ Component (marker interface)
 ├── ProtectionComponent {Mask ProtectionFlags, ExpiresAt int64}
 │   Configurable immunity system with bitmask flags (Decay/Drain/Cull/Delete protection)
 │
-└── ShieldComponent {Sources uint8, RadiusX float64, RadiusY float64, Color ColorClass, MaxOpacity float64, LastDrainTime time.Time}
+└── ShieldComponent {Sources uint8, RadiusX float64, RadiusY float64, OverrideColor ColorClass, MaxOpacity float64, LastDrainTime time.Time}
     Energy-powered protective field (Sources bitmask: SourceBoost=1<<0, active when Sources!=0 AND Energy>0)
+    Color: Derived from GameState.LastTypedSeqType/Level when OverrideColor==ColorNone, otherwise uses OverrideColor
 ```
 
 **Note**: All component types are defined in the `components/` directory.
 
 **Component Design Patterns:**
-- **Semantic Rendering**: CharacterComponent and ShieldComponent use `ColorClass` enum (resolved to RGB by renderer)
+- **Semantic Rendering**: CharacterComponent and ShieldComponent use `ColorClass` enum (resolved to RGB by renderer; shield derives from GameState when OverrideColor==ColorNone)
 - **Sub-pixel Physics**: DecayComponent, CleanerComponent, MaterializeComponent use float64 for smooth movement
 - **Ring Buffer Trails**: CleanerComponent and MaterializeComponent use zero-allocation ring buffers
 - **Time-Based Lifecycle**: FlashComponent, NuggetComponent use time.Time for expiration/spawning
@@ -980,6 +982,8 @@ The game uses a **System Render Interface** pattern where each system owns its r
   - Sequence colors: Green/Red/Blue (Dark/Normal/Bright levels)
   - Entity colors: Gold, Decay, Drain, Materialize, Nugget, Cleaner, Flash
   - UI colors: Line numbers, status bar, column indicators, cursor, ping
+    - `RgbPingNormal`: Almost-black (5,5,5) for Normal mode
+    - `RgbPingHighlight`: Dark orange (60,40,0) for Insert mode (differentiation from Normal)
   - Effect colors: Energy meter, shields, audio indicators
   - Modal colors: Overlay borders/backgrounds
 - **Color Resolution**: Semantic color mapping functions
@@ -1021,6 +1025,8 @@ The game uses a **System Render Interface** pattern where each system owns its r
 - `StatusBarRenderer`: Mode, commands, metrics, FPS (priority 400)
 - `PingGridRenderer`: Row/column highlights and grid lines (priority 100)
 - `ShieldRenderer`: Protective field effects around characters (priority 300)
+  - Color: Derived from GameState.LastTypedSeqType/Level (last Blue/Green typed), fallback to neutral gray (128,128,128)
+  - Gradient: Quadratic soft falloff `(1-d)²*0.5` for smooth appearance (MaxOpacity: 0.5)
 - `CharactersRenderer`: All character entities with semantic color resolution (priority 200)
 - `EffectsRenderer`: Decay, cleaners, removal flashes, materializers with pre-built gradients (priority 300)
 - `DrainRenderer`: Energy-draining entity overlay (priority 350)
@@ -1028,11 +1034,19 @@ The game uses a **System Render Interface** pattern where each system owns its r
 - `OverlayRenderer`: Modal popups with visibility toggle (priority 500)
 
 **RenderBuffer Write Methods:**
-- `Set(x, y, rune, fg, bg, mode, alpha, attrs)`: Full compositing with blend mode and alpha
-- `SetFgOnly(x, y, rune, fg, attrs)`: Text overlay preserving background (used by most text)
-- `SetWithBg(x, y, rune, fg, bg)`: Opaque cell replacement (BlendReplace)
+- `Set(x, y, rune, fg, bg, mode, alpha, attrs)`: Full compositing with blend mode and alpha (marks cell as touched)
+- `SetFgOnly(x, y, rune, fg, attrs)`: Text overlay preserving background (does NOT mark as touched)
+- `SetWithBg(x, y, rune, fg, bg)`: Opaque cell replacement (BlendReplace, marks cell as touched)
 - `Clear()`: Exponential copy algorithm for fast reset
 - `Flush(screen)`: RGB→tcell conversion and screen update
+
+**Dirty Tracking Mechanism:**
+- Each cell has a `touched` boolean flag tracked in parallel grid
+- Cells start with black (0,0,0) background after Clear()
+- Background-modifying blend modes (Replace, Alpha, Add, Max) mark cells as touched
+- BlendFgOnly does not mark cells as touched (preserves background state)
+- At Flush(), only untouched cells receive Tokyo Night background (26,27,38)
+- Enables proper overlay blending (shield, effects) against black while maintaining themed empty space
 
 **Performance Optimizations:**
 - Zero-alloc buffer after initialization (capacity pre-allocated)
@@ -1759,7 +1773,7 @@ The CleanerSystem uses a pure ECS pattern with careful synchronization:
 2. **Component Consistency**: Entity with SequenceComponent MUST have Position and Character
 3. **Cursor Bounds**: `0 <= CursorX < GameWidth && 0 <= CursorY < GameHeight`
 4. **Heat Mechanics**: Heat is normalized to a fixed range (0-100). Max Heat is always 100
-5. **Boost Mechanic**: When heat reaches maximum (100), boost activates with color-matching (Blue or Green) providing x2 heat multiplier. Typing the matching color extends boost duration by 500ms per character, while typing a different color deactivates boost
+5. **Boost Mechanic**: When heat reaches maximum (100), boost activates with color-matching (Blue or Green) providing x2 heat multiplier. Typing the matching color extends boost duration by 500ms per character, while typing a different color updates BoostColor but leaves timer unchanged (no reset)
 6. **Red Spawn Invariant**: Red sequences are NEVER spawned directly, only through decay
 7. **Gold Randomness**: Gold sequences spawn at random positions
 8. **6-Color Limit**: At most 6 Blue/Green color/level combinations present simultaneously
@@ -2011,8 +2025,8 @@ for _, entity := range entitiesAtCursor {
 - **Initial Duration**: 500ms (BoostExtensionDuration constant)
 - **Color Binding**: Tied to color (Blue or Green) that triggered max heat
 - **Extension Mechanic**:
-  - Matching color: +500ms per character
-  - Different color: Deactivates immediately (heat remains max)
+  - Matching color: +500ms per character (extends timer)
+  - Different color: Timer continues unchanged, BoostColor updates to new color (no extension, no reset)
   - Red or incorrect: Deactivates and resets heat to 0
 - **Effects**:
   - Heat gain multiplier: 2× (+2 per character)

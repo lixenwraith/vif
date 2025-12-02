@@ -121,7 +121,7 @@ go test ./systems
 3. **Avoid Red**: Red sequences penalize your energy and reset heat
 4. **Type Bright When Hot**: Bright sequences at high heat give maximum points (Heat × 3)
 5. **Manage Decay**: Higher heat = faster decay - balance aggressive play with sustainability
-6. **Boost Color Matching**: When boost activates, keep typing the same color to extend it
+6. **Boost Color Matching**: When boost activates, type same color to extend timer; different colors update BoostColor without penalty
 7. **Motion Efficiency**: Use `w`/`b`/`e` instead of repeated `h`/`j`/`k`/`l` to avoid heat reset
 8. **Use Cleaners**: Gold at max heat → horizontal row cleaners; Nugget at max heat or Enter key → 4-directional cleaners from cursor
 
