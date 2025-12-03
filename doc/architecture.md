@@ -9,17 +9,9 @@
 - Systems contain ALL logic, operate on component sets
 - World is the single source of truth for all game state
 
-### Resource System
-**Global Data Pattern:**
-- **Resources** store shared, global data (Time, Configuration, Input State)
-- **ResourceStore** (`World.Resources`) provides thread-safe, generic access
-- **Systems fetch dependencies** at start of `Update()` via `engine.MustGetResource[T](world.Resources)`
-- **Decouples systems** from "God Object" GameContext for basic data needs
-- **Separation of Concerns**: GameContext handles orchestration, Resources handle data
-
 ### Generic ECS Architecture
 
-Vi-fighter uses a **compile-time generics-based ECS** (Go 1.18+) that eliminates reflection from the hot path, providing type safety and improved performance.
+Vi-fighter uses **compile-time generics-based ECS** (Go 1.18+) that eliminates reflection from the hot path.
 
 **Core Components:**
 
@@ -27,40 +19,30 @@ Vi-fighter uses a **compile-time generics-based ECS** (Go 1.18+) that eliminates
    - Typed component storage with compile-time type checking
    - Operations: `Add(entity, component)`, `Get(entity)`, `Remove(entity)`, `All()`
    - Thread-safe via internal `sync.RWMutex`
-   - Zero allocations for component access (no type assertions needed)
+   - Zero allocations for component access
 
 2. **PositionStore** (Specialized):
-   - Extends `Store[PositionComponent]` with spatial indexing capabilities via `SpatialGrid`
+   - Extends `Store[PositionComponent]` with spatial indexing via `SpatialGrid`
    - Dense 2D grid with fixed-capacity cells (max 15 entities per cell)
-   - Operations: `GetAllAt(x, y)`, `GetAllAtInto(x, y, buf)`, `HasAny(x, y)`, `Move(...)`, `BeginBatch()`
+   - Operations: `GetAllAt(x, y)`, `GetAllAtInto(x, y, buf)`, `HasAny(x, y)`, `Move(...)`
    - Zero-allocation queries via `GetAllAtInto()` with caller-provided buffers
-   - Multi-entity support enables proper cursor/character overlap handling
-   - Batch operations ensure atomicity for multi-entity spawning with collision detection
+   - Multi-entity support enables cursor/character overlap handling
 
 3. **Query System** (`QueryBuilder`):
    - Type-safe component intersection queries
-   - Uses sparse set intersection starting with smallest store for optimal performance
+   - Uses sparse set intersection starting with smallest store
    - Example: `world.Query().With(world.Positions).With(world.Characters).Execute()`
-   - Returns entity slice for iteration
-   - Note: Query's `.With()` method filters existing entities by components (distinct from entity creation)
 
 4. **Entity Creation Pattern**:
-   Entities are created using a simple three-step pattern:
-   - Step 1: Reserve entity ID via `world.CreateEntity()`
-   - Step 2: Prepare component instances with data
-   - Step 3: Add components to stores, using batches for collision validation
-
-   **Basic Pattern** (no collision checking):
    ```go
+   // Basic Pattern (no collision checking)
    entity := world.CreateEntity()
    world.Positions.Add(entity, components.PositionComponent{X: x, Y: y})
    world.Characters.Add(entity, components.CharacterComponent{Rune: r, Style: s})
-   world.Sequences.Add(entity, components.SequenceComponent{...})
    ```
 
    **Batch Pattern** (for collision-sensitive spawning):
    ```go
-   // Phase 1: Create entities and prepare components
    entities := make([]engine.Entity, 0, count)
    positions := make([]components.PositionComponent, 0, count)
 
@@ -70,34 +52,28 @@ Vi-fighter uses a **compile-time generics-based ECS** (Go 1.18+) that eliminates
        positions = append(positions, components.PositionComponent{X: x+i, Y: y})
    }
 
-   // Phase 2: Batch position validation and commit
    batch := world.Positions.BeginBatch()
    for i, entity := range entities {
        batch.Add(entity, positions[i])
    }
 
    if err := batch.Commit(); err != nil {
-       // Collision detected - cleanup entities
        for _, entity := range entities {
            world.DestroyEntity(entity)
        }
        return false
    }
 
-   // Phase 3: Add other components (positions already committed)
    for i, entity := range entities {
        world.Characters.Add(entity, characters[i])
-       world.Sequences.Add(entity, sequences[i])
    }
    ```
 
 **World Structure:**
 ```go
 type World struct {
-    // Global resource store
-    Resources      *ResourceStore  // Thread-safe global data (Time, Config, Input)
+    Resources      *ResourceStore  // Thread-safe global data
 
-    // Explicit typed stores (public for system access)
     Positions      *PositionStore
     Characters     *Store[CharacterComponent]
     Sequences      *Store[SequenceComponent]
@@ -110,117 +86,74 @@ type World struct {
     Drains         *Store[DrainComponent]
     Cursors        *Store[CursorComponent]
     Protections    *Store[ProtectionComponent]
+    Shields        *Store[ShieldComponent]
 
-    // Lifecycle management
-    allStores []AnyStore  // For bulk operations like DestroyEntity
+    allStores []AnyStore
 }
 ```
 
 ### Resource System
 
-The Resource System provides a generic, thread-safe mechanism for systems to access global shared data without coupling to `GameContext`. Resources are stored in `World.Resources` and accessed via type-safe generics.
-
-**Architecture Goals:**
-- **Decouple Systems from GameContext**: Systems no longer depend on "God Object" context fields
-- **Type-Safe Access**: Generic resource retrieval eliminates type assertions
-- **Thread-Safe by Default**: Internal RWMutex ensures safe concurrent access
-- **Centralized Updates**: Resources updated at frame/tick boundaries for consistency
+The Resource System provides generic, thread-safe access to global shared data without coupling systems to `GameContext`.
 
 **Core Resources:**
 
-1. **`TimeResource`** - Time data for all systems:
+1. **`TimeResource`** - Time data:
    - `GameTime` (time.Time): Current game time (pausable, stops in COMMAND mode)
    - `RealTime` (time.Time): Wall clock time (always advances)
    - `DeltaTime` (time.Duration): Time since last update
    - `FrameNumber` (int64): Current frame count
 
-2. **`ConfigResource`** - Immutable configuration data:
+2. **`ConfigResource`** - Immutable configuration:
    - `GameWidth`, `GameHeight`: Game area dimensions
-   - `ScreenWidth`, `ScreenHeight`: Terminal screen dimensions
+   - `ScreenWidth`, `ScreenHeight`: Terminal dimensions
    - `GameX`, `GameY`: Game area offset
 
 3. **`InputResource`** - Current input state:
    - `GameMode` (int): Current mode (Normal, Insert, Search, Command)
-   - `CommandText` (string): Command buffer text
-   - `SearchText` (string): Search buffer text
+   - `CommandText`, `SearchText` (string): Buffer text
    - `IsPaused` (bool): Pause state
 
-**Resource Access Pattern:**
+**Access Pattern:**
 ```go
-// Fetch resources at start of Update()
 func (s *MySystem) Update(world *engine.World, dt time.Duration) {
-    // Fetch dependencies
     config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
     timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 
-    // Use directly in logic
     width := config.GameWidth
-    height := config.GameHeight
     now := timeRes.GameTime
 
-    // ... system logic using resources ...
+    // Access game state through GameContext
+    s.ctx.State.AddHeat(1)
+    snapshot := s.ctx.State.ReadSpawnState()
 }
 ```
 
-**Resource Update Cycle:**
-Resources are updated at the start of each frame/tick by the main game loop and ClockScheduler:
-
-1. **Frame Start** (main.go): Update `TimeResource` with current frame time
-2. **Input Processing**: Update `InputResource` with current mode and command text
-3. **System Updates**: Systems read from Resources via `MustGetResource`
-4. **Tick Updates** (ClockScheduler): Update `TimeResource` for scheduled systems
-
-**Thread Safety:**
-- **ResourceStore**: Protected by internal `sync.RWMutex`
-- **Concurrent Reads**: Multiple systems can read resources simultaneously
-- **Write Coordination**: Only main loop/scheduler updates resources (single writer pattern)
-
-**Data Flow:**
-```
-┌─────────────────────────────────────────────────────────────┐
-│ Main Game Loop (cmd/vi-fighter/main.go)                     │
-│                                                             │
-│ 1. Frame Start                                              │
-│    └─> Update TimeResource (GameTime, RealTime, DeltaTime)  │
-│    └─> Update InputResource (GameMode, IsPaused)            │
-│                                                             │
-│ 2. System Updates (via World.Update())                      │
-│    └─> SpawnSystem.Update()                                 │
-│        ├─> config := MustGetResource[*ConfigResource]()     │
-│        ├─> timeRes := MustGetResource[*TimeResource]()      │
-│        └─> Use config.GameWidth, timeRes.GameTime           │
-│    └─> EnergySystem.Update()                                │
-│        ├─> config := MustGetResource[*ConfigResource]()     │
-│        └─> Access ctx.State for Heat/Energy                 │
-│    └─> [Other Systems...]                                   │
-│                                                             │
-│ 3. Clock Scheduler (50ms tick, separate goroutine)          │
-│    └─> Update TimeResource for scheduled systems            │
-│    └─> GoldSystem, DecaySystem, CleanerSystem updates       │
-│                                                             │
-│ 4. Render                                                   │
-│    └─> Read Resources via snapshots (frame-coherent)        │
-└─────────────────────────────────────────────────────────────┘
-```
-
-Systems **read** from Resources, never write to them. All Resource updates happen in the main loop or ClockScheduler before system updates run, ensuring frame-coherent data access.
+**GameContext Role:**
+- OS/Window management, Event routing, State orchestration
+- `GameState` access via `ctx.State`
+- `EventQueue` access via `ctx.PushEvent()`
+- `AudioEngine` access via `ctx.AudioEngine.PlaySound()`
+- Input handling methods (mode transitions, motion commands)
+- `CursorX`, `CursorY` fields cache ECS position for motion handlers
+  - MUST sync FROM ECS before use: `pos, _ := ctx.World.Positions.Get(ctx.CursorEntity); ctx.CursorX = pos.X`
+  - MUST sync TO ECS after modification
 
 ### Event-Driven Communication
 
-The game uses an **EventRouter** pattern for decoupled system communication, where events are dispatched to registered handlers before system updates.
+**EventRouter** pattern for decoupled system communication:
 
 **Architecture Flow:**
 ```
 Producer → EventQueue → ClockScheduler → EventRouter → EventHandler → Systems
-(InputHandler)          (lock-free)     (tick loop)   (dispatch)    (consume)
+(InputHandler)  (lock-free)   (tick loop)    (dispatch)   (consume)
 ```
 
 **Core Principles:**
-- **Decoupling**: Systems never call each other's methods directly
-- **Lock-Free Queue**: Ring buffer with atomic CAS operations and published flags
-- **Centralized Dispatch**: EventRouter routes events to registered handlers
-- **Synchronous Handling**: Events processed BEFORE World.Update() runs
-- **Frame Deduplication**: Events include frame number to prevent duplicate processing
+- Systems never call each other's methods directly
+- Lock-free queue with atomic CAS operations
+- Centralized dispatch before World.Update()
+- Frame deduplication to prevent duplicate processing
 
 **Event Types:**
 
@@ -233,26 +166,16 @@ Producer → EventQueue → ClockScheduler → EventRouter → EventHandler → 
 | `EventCleanerFinished` | CleanerSystem | (observers) | `nil` |
 | `EventGoldComplete` | EnergySystem | (observers) | `nil` |
 
-**Note**: `EventGoldSpawned` is defined in `engine/events.go` but is not currently triggered by any system. Gold sequence activation is managed via `GameState.ActivateGoldSequence()` which directly transitions the game phase.
-
 **Producer Pattern:**
 ```go
-// InputHandler pushes typing event
 payload := &engine.CharacterTypedPayload{Char: r, X: x, Y: y}
 h.ctx.PushEvent(engine.EventCharacterTyped, payload, h.ctx.PausableClock.Now())
-
-// EnergySystem pushes cleaner request
-h.ctx.PushEvent(engine.EventCleanerRequest, nil, h.ctx.PausableClock.Now())
 ```
 
-**Consumer Pattern (EventHandler Interface):**
+**Consumer Pattern:**
 ```go
-// Systems implement EventHandler to receive events
 func (s *EnergySystem) EventTypes() []engine.EventType {
-    return []engine.EventType{
-        engine.EventCharacterTyped,
-        engine.EventEnergyTransaction,
-    }
+    return []engine.EventType{engine.EventCharacterTyped, engine.EventEnergyTransaction}
 }
 
 func (s *EnergySystem) HandleEvent(world *engine.World, event engine.GameEvent) {
@@ -261,106 +184,50 @@ func (s *EnergySystem) HandleEvent(world *engine.World, event engine.GameEvent) 
         if payload, ok := event.Payload.(*engine.CharacterTypedPayload); ok {
             s.handleCharacterTyping(world, payload.X, payload.Y, payload.Char)
         }
-    case engine.EventEnergyTransaction:
-        if payload, ok := event.Payload.(*engine.EnergyTransactionPayload); ok {
-            s.ctx.State.AddEnergy(payload.Amount)
-        }
     }
 }
 ```
-
-**Registration Pattern:**
-```go
-// In main.go, register systems with ClockScheduler's EventRouter
-clockScheduler.RegisterEventHandler(energySystem)
-clockScheduler.RegisterEventHandler(cleanerSystem)
-```
-
-**Dispatch Flow:**
-- `ClockScheduler.processTick()` dispatches events BEFORE system updates
-- Step 1: `eventRouter.DispatchAll(world)` routes events to registered handlers
-- Step 2: `world.Update(deltaTime)` runs all systems
-- See `engine/clock_scheduler.go` for implementation details
-
-**Implementation** (`engine/events.go`, `engine/event_router.go`):
-- `EventQueue`: Fixed-size ring buffer (size defined in `constants.EventQueueSize`)
-- `Push()`: Lock-free CAS with published flags pattern (prevents partial reads)
-- `Consume()`: Atomically claims and returns all pending events
-- `EventRouter`: Routes consumed events to registered EventHandler implementations
-- `DispatchAll()`: Processes all pending events before World.Update()
 
 ### State Ownership Model
 
 **GameState** (`engine/game_state.go`) centralizes game state with clear ownership boundaries:
 
 #### Real-Time State (Lock-Free Atomics)
-Updated immediately on user input/spawn events, read by all systems:
-- **Heat** (`atomic.Int64`): Current heat value
-- **Energy** (`atomic.Int64`): Player energy
-- **Cursor Position**: Managed in ECS as cursor entity with PositionComponent and CursorComponent
-  - GameContext has cache fields (CursorX, CursorY) synced with ECS cursor entity
-  - Motion handlers sync FROM ECS before use and TO ECS after modification
-- **Color Tracking**: Census-based via per-frame entity iteration
-  - SpawnSystem runs census by querying all SequenceComponent entities
-  - No atomic counters (eliminates drift, provides accurate on-screen counts)
+- **Heat**, **Energy** (`atomic.Int64`): Current values
+- **Cursor Position**: Managed in ECS, cached in GameContext
 - **Boost State** (`atomic.Bool`, `atomic.Int64`): Enabled, EndTime, Color
-- **Shield Color Tracking** (`atomic.Int32`): LastTypedSeqType, LastTypedSeqLevel (tracks most recent Blue/Green character for shield color derivation)
-- **Visual Feedback**: CursorError (via CursorComponent.ErrorFlashEnd), EnergyBlink, PingGrid (atomic)
+- **Shield Color Tracking** (`atomic.Int32`): LastTypedSeqType, LastTypedSeqLevel
 - **Drain State** (`atomic.Bool`, `atomic.Uint64`, `atomic.Int32`): Active, EntityID, X, Y
 - **Sequence ID** (`atomic.Int64`): Thread-safe ID generation
 - **Runtime Metrics** (`atomic.Uint64`): GameTicks, CurrentAPM, PendingActions
-  - GameTicks: Total game tick count, incremented every 50ms clock tick
-  - CurrentAPM: Actions Per Minute, calculated from 60-second rolling window
-  - PendingActions: Current second's action count (swapped atomically during APM update)
-
-Atomics are used for high-frequency access (every frame and keystroke) to avoid lock contention while ensuring immediate consistency and race-free updates.
 
 #### Clock-Tick State (Mutex Protected)
-Updated during scheduled game logic ticks, read by all systems:
 - **Spawn Timing** (`sync.RWMutex`): LastTime, NextTime, RateMultiplier
 - **Screen Density**: EntityCount, ScreenDensity, SpawnEnabled
-- **6-Color Limit**: Enforced via census (per-frame entity iteration)
 - **Game Phase State**: CurrentPhase, PhaseStartTime
 - **Gold Sequence State**: GoldActive, GoldSequenceID, GoldStartTime, GoldTimeoutTime
 - **Decay Timer State**: DecayTimerActive, DecayNextTime
 - **Decay Animation State**: DecayAnimating, DecayStartTime
 - **APM History** (`sync.RWMutex`): apmHistory[60], apmHistoryIndex
-  - 60-second rolling window for action counts
-  - Updated every 20 ticks (~1 second) by ClockScheduler
-  - Protected by mutex for concurrent access
-
-Mutexes protect infrequently-changed state that requires consistent multi-field reads and atomic state transitions (spawn timing, phase changes). Blocking is acceptable since these are not on the hot path.
 
 #### State Initialization (Unified Pattern)
 
-The game uses a **unified initialization method** (`GameState.initState()`) to ensure consistent state setup for both application start and new game:
+The game uses `GameState.initState()` for both app start and :new command:
 
-**Implementation:**
 ```go
-// engine/game_state.go
 func (gs *GameState) initState(now time.Time) {
-    // Reset all atomic fields
     gs.Energy.Store(0)
     gs.Heat.Store(0)
     gs.BoostEnabled.Store(false)
-    // ... (all atomic state)
-
-    // Reset mutex-protected fields
-    gs.SpawnEnabled = true
-    gs.CurrentPhase = PhaseNormal
-    gs.PhaseStartTime = now
-    gs.GameStartTime = now
-    // ... (all mutex-protected state)
+    // ... all atomic and mutex-protected state
 }
 
-// Called by constructor
 func NewGameState(maxEntities int, now time.Time) *GameState {
     gs := &GameState{MaxEntities: maxEntities}
     gs.initState(now)
     return gs
 }
 
-// Called by :new command
 func (gs *GameState) Reset(now time.Time) {
     gs.mu.Lock()
     defer gs.mu.Unlock()
@@ -368,1890 +235,801 @@ func (gs *GameState) Reset(now time.Time) {
 }
 ```
 
-**Benefits:**
-- **No Duplication**: Single source of truth for initial state values
-- **Consistency**: App start and :new command use identical initialization logic
-- **Maintainability**: Changes to initial state only need to be made once
-- **Bug Prevention**: Eliminates divergence between initialization paths
-
-**Usage:**
-- **App Start**: `NewGameState()` → calls `initState()` internally
-- **New Game**: `:new` command → calls `Reset()` → calls `initState()` under mutex lock
-
-#### State Access Patterns
-
-**Resource-Based Access:**
-Systems fetch global data (Time, Config, Input) from `World.Resources`, and game state from `GameContext.State`:
-
-```go
-func (s *MySystem) Update(world *engine.World, dt time.Duration) {
-    // Fetch resources at start of Update()
-    config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
-    timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-
-    // Access dimensions and time from resources
-    width := config.GameWidth
-    height := config.GameHeight
-    now := timeRes.GameTime
-
-    // Access game state through GameContext (real-time state)
-    s.ctx.State.AddHeat(1)                       // Atomic increment
-    snapshot := s.ctx.State.ReadSpawnState()     // Mutex-protected snapshot
-
-    // Access event queue through GameContext
-    s.ctx.PushEvent(engine.EventCleanerRequest, nil)
-
-    // Access audio engine through GameContext
-    s.ctx.AudioEngine.PlaySound(audio.SoundTypeError)
-}
-```
-
-**GameContext Role:**
-- **Primary Purpose**: OS/Window management, Event routing, State orchestration
-- **Responsibilities**:
-  - `GameState` access via `ctx.State` (Heat, Energy, Boost, Phase, etc.)
-  - `EventQueue` access via `ctx.PushEvent()` (consumption handled by EventRouter)
-  - `AudioEngine` access via `ctx.AudioEngine.PlaySound()`
-  - Input handling methods (mode transitions, motion commands)
-  - `World` reference (ECS access)
-  - `CursorX`, `CursorY` fields cache ECS position for motion handlers
-- **Note**: Global data (dimensions, time) accessed via Resources, not GameContext
-  - MUST be synced FROM ECS before use: `pos, _ := ctx.World.Positions.Get(ctx.CursorEntity); ctx.CursorX = pos.X`
-  - MUST be synced TO ECS after modification: `ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{X: ctx.CursorX, Y: ctx.CursorY})`
-
 #### Snapshot Pattern
 
-The **snapshot pattern** is the primary mechanism for safely reading multi-field state across concurrent goroutines. All mutex-protected state is accessed through immutable snapshot structures that guarantee internally consistent views.
-
-**Core Principles:**
-1. **Immutability**: Snapshots are value copies, never references
-2. **Atomicity**: All fields in a snapshot come from the same moment in time
-3. **No Partial Reads**: Readers never see half-updated state
-4. **Lock-Free After Capture**: Once a snapshot is taken, no locks are held
-
-**Available Snapshot Types:**
-
-All systems use snapshots to read GameState. The following snapshot types are available:
+**Snapshot pattern** provides safe multi-field state reads:
 
 ```go
-// Spawn State (mutex-protected)
+// Spawn State
 type SpawnStateSnapshot struct {
-    LastTime       time.Time
-    NextTime       time.Time
+    LastTime, NextTime time.Time
     RateMultiplier float64
-    Enabled        bool
-    EntityCount    int
-    MaxEntities    int
-    ScreenDensity  float64
+    Enabled bool
+    EntityCount, MaxEntities int
+    ScreenDensity float64
 }
-snapshot := ctx.State.ReadSpawnState() // Used by: SpawnSystem, Renderer
-
-// Color Census (ECS query, no snapshot needed)
-// SpawnSystem runs census via entity iteration:
-census := spawnSystem.runCensus(world)
-// Returns: ColorCensus{BlueBright: 5, BlueNormal: 3, ...}
-// Used by: SpawnSystem for 6-color limit enforcement
-
-// Cursor Position (ECS-based)
-// Read directly from ECS (cursor entity with PositionComponent)
-pos, ok := ctx.World.Positions.Get(ctx.CursorEntity)
-// GameContext caches position for motion handlers (synced from/to ECS)
+snapshot := ctx.State.ReadSpawnState()
 
 // Boost State (atomic fields)
 type BoostSnapshot struct {
-    Enabled   bool
-    EndTime   time.Time
-    Color     int32
+    Enabled bool
+    EndTime time.Time
+    Color int32
     Remaining time.Duration
 }
-snapshot := ctx.State.ReadBoostState() // Used by: EnergySystem, Renderer
+snapshot := ctx.State.ReadBoostState()
 
-// Phase State (mutex-protected)
-type PhaseSnapshot struct {
-    Phase     GamePhase
-    StartTime time.Time
-    Duration  time.Duration
-}
-snapshot := ctx.State.ReadPhaseState() // Used by: ClockScheduler, all game systems
+// Gold State
+snapshot := ctx.State.ReadGoldState()
 
-// Gold Sequence State (mutex-protected)
-type GoldSnapshot struct {
-    Active      bool
-    SequenceID  int
-    StartTime   time.Time
-    TimeoutTime time.Time
-    Elapsed     time.Duration
-    Remaining   time.Duration
-}
-snapshot := ctx.State.ReadGoldState() // Used by: GoldSequenceSystem, EnergySystem, Renderer
+// Decay State
+snapshot := ctx.State.ReadDecayState()
 
-// Decay State (mutex-protected)
-type DecaySnapshot struct {
-    TimerActive bool
-    NextTime    time.Time
-    Animating   bool
-    StartTime   time.Time
-    TimeUntil   float64
-}
-snapshot := ctx.State.ReadDecayState() // Used by: DecaySystem, Renderer
-
-// Atomic pairs for related fields
-heat, energy := ctx.State.ReadHeatAndEnergy() // Used by: EnergySystem, Renderer
+// Phase State
+snapshot := ctx.State.ReadPhaseState()
 ```
-
-**System Usage Map:**
-
-| System | Snapshot Types Used | Purpose |
-|--------|-------------------|---------|
-| SpawnSystem | SpawnState, ColorCensus (ECS query), ECS Cursor Position | Check spawn conditions, 6-color limit, cursor exclusion zone |
-| EnergySystem | BoostState, GoldState, HeatAndEnergy | Process typing, update heat/energy |
-| GoldSystem | GoldState, PhaseState | Manage gold sequence lifecycle |
-| DecaySystem | DecayState, PhaseState | Manage decay timer and animation |
-| CleanerSystem | EventQueue | Event-driven cleaner lifecycle via EventCleanerRequest/Finished |
-| Renderer | All snapshot types | Render game state without blocking game loop |
-| ClockScheduler | PhaseState, GoldState, DecayState | Manage phase transitions |
-
-**Concurrency Guarantees:**
-
-1. **Mutex-Protected Snapshots** (SpawnState, PhaseState, GoldState, DecayState):
-   - Use `RLock` to read state atomically
-   - All fields copied before returning
-   - Multiple concurrent readers allowed
-   - Writers block only during actual state modification
-
-2. **Atomic Field Snapshots** (BoostState, HeatAndEnergy):
-   - No locks required
-   - Multiple atomic loads in sequence
-   - Still provides consistent view (atomic loads are sequentially consistent)
-   - Trade-off: Very rare possibility of seeing mixed state between loads (acceptable for these use cases)
-
-3. **ECS-Based State** (Cursor Position, Color Census):
-   - Cursor position: Read via `ctx.World.Positions.Get(ctx.CursorEntity)` or cached in GameContext
-   - Color census: Per-frame entity iteration via `SpawnSystem.runCensus(world)`
-   - Thread-safe via World's component stores' internal synchronization
-
-4. **Immutability After Capture:**
-   - All snapshots are value types (structs)
-   - Modifying snapshot fields doesn't affect GameState
-   - Safe to pass snapshots across goroutine boundaries
-   - No memory aliasing issues
 
 ### Clock Scheduler and Time Management
 
-**Architecture**: Dual-clock system with frame/game synchronization:
-- **Frame Clock** (16ms, ~60 FPS): Rendering, UI updates (cursor blink), input handling
-- **Game Clock** (50ms): Game logic via ClockScheduler - phase transitions, system updates
-
-**Purpose**: Separates visual updates (frame) from game logic (game) for deterministic gameplay and smooth rendering. The ClockScheduler centralizes phase transitions on a predictable 50ms tick, preventing race conditions in inter-dependent mechanics (Gold→Decay→Cleaner flow).
+**Dual-clock system** with frame/game synchronization:
+- **Frame Clock** (16ms, ~60 FPS): Rendering, UI updates, input handling
+- **Game Clock** (50ms): Game logic via ClockScheduler
 
 #### PausableClock - Game Time vs Real Time
 
 **Dual Time System**:
-- **Game Time**: Pausable clock used for all game logic and game state feedback
-  - Used for: spawning, decay, gold timeouts, energy blink, cursor error flash
-  - Stops advancing when paused (COMMAND mode) - visual feedback freezes during pause
-  - Accessed via `ctx.TimeProvider.Now()` (returns pausable time)
-- **Real Time**: Wall clock time for purely visual UI elements
-  - Currently not used (reserved for future UI animations like "PAUSED" text blinker)
-  - Would continue during pause if implemented
-  - Accessed via `ctx.GetRealTime()` (returns wall clock)
+- **Game Time**: Pausable clock for all game logic (spawning, decay, gold timeouts)
+  - Stops during COMMAND mode
+  - Accessed via `ctx.TimeProvider.Now()`
+- **Real Time**: Wall clock for UI elements (cursor blink)
+  - Continues during pause
+  - Accessed via `ctx.GetRealTime()`
 
-**Pause Mechanism** (`engine/pausable_clock.go`):
+**Pause Mechanism:**
 ```go
-// Entering COMMAND mode
 ctx.SetPaused(true)          // Sets IsPaused atomic flag
-ctx.PausableClock.Pause()    // Stops game time advancement
-
-// Game time calculation (when not paused)
-gameTime = realTime - totalPausedTime
-
-// When paused, Now() returns frozen time at pause point
+ctx.PausableClock.Pause()    // Stops game time
+// gameTime = realTime - totalPausedTime
 ```
 
-**Resume with Drift Protection**:
-When resuming from pause, the ClockScheduler adjusts its next tick deadline to maintain the 50ms rhythm:
+**Resume with Drift Protection:**
 ```go
-// On resume, ClockScheduler.HandlePauseResume() is called
 func (cs *ClockScheduler) HandlePauseResume(pauseDuration time.Duration) {
-    // Shift deadline forward by pause duration
     cs.nextTickDeadline = cs.nextTickDeadline.Add(pauseDuration)
 }
 ```
 
-This ensures no clock drift accumulates from pausing/resuming.
-
-**Frame/Game Synchronization**:
-The main loop coordinates frame rendering with game updates using channels:
-- `frameReady` channel: Main loop signals when frame is ready for next update
-- `updateDone` channel: ClockScheduler signals when game update is complete
-- Rendering waits for game update to complete before drawing (prevents tearing)
-- If update takes too long (>2 tick intervals), scheduler catches up to prevent spiral
-
 #### GamePhase State Machine
 
-**Phase Enum** (`engine/clock_scheduler.go`):
 ```go
-type GamePhase int
-
 const (
-    PhaseNormal         // Regular gameplay, content spawning (iota = 0, initial state)
-    PhaseGoldActive     // Gold sequence active with timeout tracking
-    PhaseGoldComplete   // Gold completed, ready for next phase (transient)
-    PhaseDecayWait      // Waiting for decay timer (heat-based interval)
-    PhaseDecayAnimation // Decay animation running (falling entities)
+    PhaseNormal         // Regular gameplay, content spawning
+    PhaseGoldActive     // Gold sequence active
+    PhaseGoldComplete   // Gold completed (transient)
+    PhaseDecayWait      // Waiting for decay timer
+    PhaseDecayAnimation // Decay animation running
 )
 ```
 
-**Phase State** (in `GameState`):
-- `CurrentPhase` (`GamePhase`): Current game phase (mutex protected)
-- `PhaseStartTime` (`time.Time`): When current phase started
-- `GameStartTime` (`time.Time`): When the game started (for bootstrap delay)
-- **Gold state**: `GoldActive`, `GoldSequenceID`, `GoldStartTime`, `GoldTimeoutTime`
-- **Decay timer state**: `DecayTimerActive`, `DecayNextTime`
-- **Decay animation state**: `DecayAnimating`, `DecayStartTime`
+**Phase transitions handled on 50ms clock tick:**
+- `PhaseNormal`: Default state, content spawning active
+- `PhaseGoldActive`: Check timeout → GoldSystem handles timeout
+- `PhaseGoldComplete`: Start decay timer → transition to PhaseDecayWait
+- `PhaseDecayWait`: Check decay ready → start animation
+- `PhaseDecayAnimation`: DecaySystem manages → returns to PhaseNormal
 
-**Note**: Cleaners are triggered via `EventCleanerRequest` and run in parallel with the main phase cycle (non-blocking, event-driven).
+**Cleaners run in parallel** via event system (non-blocking, independent of phases)
 
-**Phase Access Pattern**:
-```go
-// Read current phase (thread-safe)
-phase := ctx.State.GetPhase()
+#### ClockScheduler
 
-// Transition to new phase (validated, resets start time)
-success := ctx.State.TransitionPhase(PhaseGoldActive)
-
-// Get phase duration
-duration := ctx.State.GetPhaseDuration()
-
-// Consistent snapshot
-snapshot := ctx.State.ReadPhaseState()
-```
-
-#### ClockScheduler (`engine/clock_scheduler.go`)
-
-**Infrastructure**:
-- 50ms tick interval running in dedicated goroutine
-- Adaptive sleep that respects pause state (sleeps longer during pause to avoid busy-wait)
+**Infrastructure:**
+- 50ms tick interval in dedicated goroutine
+- Adaptive sleep respecting pause state
 - Frame synchronization via channels (`frameReady`, `updateDone`)
-- Thread-safe start/stop with idempotent Stop()
-- Tick counter for debugging and metrics
-- Graceful shutdown on game exit
-- Pause resume callback registration for drift correction
+- Tick counter for metrics
+- Pause resume callback for drift correction
 
-**Behavior**:
-- Ticks every 50ms (game time) when not paused
-- Skips all game logic updates when paused (defensive check in processTick)
-- Waits for frame ready signal before processing tick (prevents update/render conflicts)
-- **Phase transitions handled on clock tick** (via `processTick()`):
-  - `PhaseNormal`: Gold spawning handled by GoldSystem's Update() method (initial/default state)
-  - `PhaseGoldActive`: Check gold timeout (pausable clock) → timeout via GoldSystem
-  - `PhaseGoldComplete`: Start decay timer (transient state, immediately transitions to PhaseDecayWait)
-  - `PhaseDecayWait`: Check decay ready (pausable clock) → start decay animation
-  - `PhaseDecayAnimation`: Handled by DecaySystem → returns to PhaseNormal when complete
-- **Cleaner Animation**: Triggered via `EventCleanerRequest` (runs in parallel with main phase cycle)
-- **Runtime Metrics Updates**:
-  - Increments GameTicks counter every tick (50ms interval)
-  - Updates APM every 20 ticks (~1 second) via `UpdateAPM()`
-  - APM calculation: sums 60-second rolling window of action counts
-- **Drift Protection**:
-  - Advances deadline by exactly one interval (prevents cumulative drift)
-  - If severely behind (>2 intervals), resets to current time + interval
-  - On pause resume, adjusts deadline by pause duration
-- **Critical**: All timers use pausable clock (game time), so they freeze during pause
-
-**Integration** (`cmd/vi-fighter/main.go`):
-- Frame ticker: 16ms (60 FPS rendering)
-- Game logic tick: 50ms (ClockScheduler)
-- Synchronization: `frameReady` and `gameUpdateDone` channels coordinate timing
-- Main loop: Frame ticker drives rendering, waits for game update completion before rendering
-- Pause handling: Skip game updates but continue rendering UI during pause
-- See `cmd/vi-fighter/main.go` for complete implementation
-
-#### Architecture Benefits
-
-**Separation of Concerns**:
-- **Frame layer** (16ms): Rendering, UI updates (cursor blink), input handling - always responsive
-- **Game logic layer** (50ms): Phase transitions, system updates, spawn decisions - deterministic and pausable
-- **UI elements use real time**: Cursor continues blinking during pause for visual feedback
-- **Game logic uses game time**: All timers (decay, gold timeout) freeze during pause
-
-**Pause-Aware Design**:
-- **COMMAND mode pauses game**: Entering `:` stops game time but keeps UI active
-- **No drift accumulation**: Resume callback adjusts scheduler deadline by pause duration
-- **Visual feedback during pause**: Characters dimmed to 70% brightness, cursor still blinks
-- **Frame updates continue**: Rendering still happens during pause for visual feedback
-
-**Race Condition Prevention**:
-- Phase transitions happen atomically on clock tick
-- Frame synchronization prevents update/render conflicts (channels coordinate timing)
-- Heat snapshots taken at specific moments (not cached)
-- State ownership model eliminates conflicting writes
-- Adaptive sleep during pause avoids busy-wait
-
-**Design Principles**:
-- Clock tick is deterministic and reproducible
-- Pause/resume logic is isolated and verifiable
-- Phase transitions are atomic and well-defined
-- Time advancement is precise via pausable clock
-- Frame/game sync coordinated via channels
-
-**Performance**:
-- Frame updates remain responsive (60 FPS independent of game logic)
-- Game logic only runs 3× per frame (50ms vs 16ms) - reduced CPU load
-- Mutex contention minimized (scheduler thread vs main thread)
-- Adaptive sleep during pause reduces CPU usage to near-zero
-- Frame/game synchronization prevents wasted rendering (no tearing)
-
-## Audio System
-
-### Overview
-The audio system provides sound effects for game events using a dual-queue architecture with thread-safe playback management.
-
-### Components
-- **AudioEngine**: Core playback engine with two priority queues
-  - `realTimeQueue` (size 5): High-priority sounds like typing errors
-  - `stateQueue` (size 10): Game state sounds (coins, bells, whooshes)
-- **Sound Types** (triggered via `AudioCommand` with `SoundType` enum):
-  - `SoundError`: Short harsh buzz (internal synthesis: 100Hz saw wave)
-  - `SoundBell`: Melodic ding for nuggets (internal synthesis: 880Hz + 1760Hz sine)
-  - `SoundWhoosh`: Noise burst for cleaners
-  - `SoundCoin`: Two-note chime for gold completion
-- **Note**: Systems send `AudioCommand{Type: audio.SoundType, ...}` to the engine; frequency synthesis is handled internally by the audio package
-
-### Integration Points
-- **EnergySystem**: Sends error sounds via realTimeQueue
-- **GoldSystem**: Sends coin sounds via stateQueue
-- **NuggetSystem**: Sends bell sounds via stateQueue (Tab jump)
-- **CleanerSystem**: Sends whoosh sounds via stateQueue
-
-### Pause Behavior
-- Entering COMMAND mode immediately stops current sound
-- Queues are drained to prevent delayed playback
-- No resume on unpause - sounds don't continue
-
-### Controls
-- **Ctrl+S**: Toggle mute (starts muted by default)
-- Status bar shows [MUTED] indicator when muted
-
-### Thread Safety
-- Atomic operations for state flags (running, muted, initialized)
-- Mutex protection for playback state and config access
-- Non-blocking queue sends with overflow handling
-- Generation counter prevents stale command playback
-
-### System Priorities
-Systems execute in priority order (lower = earlier):
-1. **BoostSystem (5)**: Handle boost timer expiration (highest priority)
-2. **EnergySystem (10)**: Process user input, update energy
-3. **SpawnSystem (15)**: Generate new sequences (Blue and Green only)
-4. **NuggetSystem (18)**: Manage collectible nugget spawning and collection
-5. **GoldSystem (20)**: Manage gold sequence lifecycle and random placement
-6. **CleanerSystem (22)**: Process cleaner physics, collision, and visual effects
-7. **DrainSystem (25)**: Manage energy-draining entity movement and logic
-8. **DecaySystem (30)**: Apply sequence degradation and color transitions
-9. **FlashSystem (35)**: Manage destruction flash effect lifecycle (lowest priority)
-
-**Important**: All priorities must be unique to ensure deterministic execution order. The priority values define the exact order in which systems process game state each frame.
+**Runtime Metrics:**
+- Increments GameTicks every tick
+- Updates APM every 20 ticks (~1 second)
+- APM = sum of 60-second rolling window
 
 ### Spatial Indexing with SpatialGrid
 
-Vi-fighter uses a **dense 2D grid** (`SpatialGrid`) for O(1) spatial queries with multi-entity support.
+Dense 2D grid for O(1) spatial queries with multi-entity support.
 
 **Architecture** (`engine/spatial_grid.go`):
-- **Cell Structure**: Fixed-size value type (128 bytes = 2 cache lines)
-  - Stores up to 15 entities per cell (`MaxEntitiesPerCell`)
-  - Contains `Count` (uint8) and `Entities` array ([15]Entity)
-  - Explicit padding for 8-byte alignment and cache optimization
-- **Layout**: 1D contiguous array indexed as `cells[y*width + x]`
-- **Memory**: Cache-friendly contiguous layout, zero-allocation operations
-- **Overflow Handling**: Soft clipping when cell is full (ignores 16th+ entity, no allocation spikes)
+- Fixed-size cells (128 bytes = 2 cache lines)
+- Stores up to 15 entities per cell
+- 1D contiguous array indexed as `cells[y*width + x]`
+- Soft clipping when full (no allocation spikes)
 
-**PositionStore Integration** (`engine/position_store.go`):
-- Wraps `SpatialGrid` with thread-safe operations (`sync.RWMutex`)
-- Maintains bidirectional mapping: components map + dense entities array + spatial grid
-- **World Reference**: Stores `*World` reference for z-index lookups (`SetWorld()` called during initialization)
+**PositionStore Integration:**
+- Wraps `SpatialGrid` with thread-safe operations
+- Maintains bidirectional mapping
+- Stores `*World` reference for z-index lookups
 
-**Access Patterns**:
+**Access Patterns:**
 ```go
-// Query all entities at position (allocates slice)
-entities := world.Positions.GetAllAt(x, y)  // []Entity or nil
+entities := world.Positions.GetAllAt(x, y)
 
-// Zero-allocation query with caller-provided buffer (hot path)
 var buf [engine.MaxEntitiesPerCell]engine.Entity
 count := world.Positions.GetAllAtInto(x, y, buf[:])
 entitiesAtPos := buf[:count]
 
-// Fast existence check
 if world.Positions.HasAny(x, y) {
     // At least one entity present
 }
 
-// Query top entity with filter (z-index based)
 entity := world.Positions.GetTopEntityFiltered(x, y, world, func(e engine.Entity) bool {
     return engine.IsInteractable(world, e)
 })
-
-// Updates
-world.Positions.Add(entity, pos)        // Add/update position
-world.Positions.Move(entity, newPos)    // Atomic move
-world.Positions.Remove(entity)          // Remove from grid and store
 ```
-
-**Batch Operations**:
-```go
-batch := world.Positions.BeginBatch()
-batch.Add(entity1, pos1)
-batch.Add(entity2, pos2)
-batch.Commit()  // Atomic, validates no conflicts
-```
-
-**Multi-Entity Support**:
-- **Multiple entities per cell**: Up to 15 entities can occupy the same (x, y) position
-- **Cursor overlap**: Cursor and characters can coexist at the same position without masking
-- **Collision queries**: Systems query all entities at a position for proper collision detection
-- **Rendering**: Renderer queries all entities at cursor position to determine what's visible
-- **Z-Index Selection**: Top entity determined by z-index priority (see Z-Index System below)
-
-**Performance Characteristics**:
-- **GetAllAt/Into**: O(1) - direct cell access, max 15 entities returned
-- **GetTopEntityFiltered**: O(k) where k ≤ 15 entities at position
-- **HasAny**: O(1) - checks cell count only
-- **Add/Remove**: O(1) average, O(k) worst case where k ≤ 15
-- **Memory**: Width × Height × 128 bytes (e.g., 80×24 = 245KB for typical terminal)
 
 ### Z-Index System
 
-The **Z-Index System** (`engine/z-index.go`) provides priority-based entity selection when multiple entities occupy the same position.
+**Z-Index System** (`engine/z-index.go`) provides priority-based entity selection.
 
-**Purpose**: Resolves ambiguity in overlapping entities for rendering and interaction logic. For example, when the cursor overlaps a character, the renderer must decide which entity's appearance to display; when typing, the input system must determine which entity to interact with.
-
-**Z-Index Constants** (Priority: Higher = On Top):
+**Z-Index Constants** (Higher = On Top):
 ```go
 const (
-    ZIndexBackground = 0     // Empty space
-    ZIndexSpawnChar  = 100   // Regular spawned characters
-    ZIndexNugget     = 200   // Collectible nuggets
-    ZIndexDecay      = 300   // Falling decay entities
-    ZIndexDrain      = 400   // Energy drain entity
-    ZIndexShield     = 500   // Protective shield effects
-    ZIndexCursor     = 1000  // Player cursor (highest)
+    ZIndexBackground = 0
+    ZIndexSpawnChar  = 100
+    ZIndexNugget     = 200
+    ZIndexDecay      = 300
+    ZIndexDrain      = 400
+    ZIndexShield     = 500
+    ZIndexCursor     = 1000
 )
 ```
 
-**Core Functions**:
+**Core Functions:**
+- `GetZIndex(world, entity)`: Returns z-index based on components
+- `SelectTopEntity(entities, world)`: Selects highest z-index
+- `SelectTopEntityFiltered(entities, world, filter)`: Top entity passing filter
+- `IsInteractable(world, entity)`: Returns true for typed entities
 
-1. **`GetZIndex(world *World, e Entity) int`**:
-   - Returns z-index for an entity based on its components
-   - Checks component stores in priority order (highest first for early exit)
-   - Default: `ZIndexSpawnChar` for entities with no special components
-
-2. **`SelectTopEntity(entities []Entity, world *World) Entity`**:
-   - Selects highest z-index entity from a slice
-   - Returns `0` if slice is empty
-   - Uses linear search (acceptable for max 15 entities per cell)
-
-3. **`SelectTopEntityFiltered(entities []Entity, world *World, filter func(Entity) bool) Entity`**:
-   - Selects highest z-index entity that passes filter
-   - Returns `0` if no entities match filter
-   - Used for interaction logic (e.g., find interactable entity at cursor)
-
-4. **`IsInteractable(world *World, e Entity) bool`**:
-   - Returns true for entities that can be interacted with (typed on)
-   - Interactable: Characters with SequenceComponent, Nuggets
-   - Non-interactable: Cursor, Drain, Decay, Shield, Flash
-
-**Integration Points**:
-
-**PositionStore** (`engine/position_store.go`):
-- `GetTopEntityFiltered(x, y, world, filter)`: Query top entity at position with filter
-- Uses `SelectTopEntityFiltered` internally for z-index selection
-- World reference stored via `SetWorld()` during initialization
-
-**EnergySystem** (`systems/energy.go`):
-- Uses `GetTopEntityFiltered` to find interactable entity at cursor position
-- Filter: `IsInteractable(world, e)` to exclude non-interactable entities
-- Replaces old manual entity loop pattern
-
-**CursorRenderer** (`render/renderers/cursor.go`):
-- Uses `GetAllEntitiesAt` to query all entities at cursor position
-- Uses `SelectTopEntityFiltered` to find top character for display
-- Filter: Excludes cursor entity itself, only considers entities with CharacterComponent
-- Determines which character rune to display inside cursor
-
-**Design Benefits**:
-- **Eliminates hardcoded priority checks**: Systems use `IsInteractable()` instead of manual component checks
-- **Consistent priority across codebase**: Single source of truth for entity layering
-- **Extensible**: New entity types add z-index constant + component check in `GetZIndex()`
-- **Performance**: O(k) selection where k ≤ 15 entities per cell (negligible overhead)
-
-**Example Usage**:
-```go
-// Find interactable entity at cursor (typing logic)
-entity := world.Positions.GetTopEntityFiltered(cursorX, cursorY, world, func(e engine.Entity) bool {
-    return engine.IsInteractable(world, e)
-})
-if entity == 0 {
-    // No interactable entity at cursor - error feedback
-}
-
-// Find top character for cursor display (rendering logic)
-entities := world.Positions.GetAllEntitiesAt(cursorX, cursorY)
-displayEntity := engine.SelectTopEntityFiltered(entities, world, func(e engine.Entity) bool {
-    return e != cursorEntity && world.Characters.Has(e)
-})
-```
+**Integration Points:**
+- **PositionStore**: `GetTopEntityFiltered(x, y, world, filter)`
+- **EnergySystem**: Find interactable entity at cursor
+- **CursorRenderer**: Determine which character to display
 
 ## Component Hierarchy
+
 ```
 Component (marker interface)
 ├── PositionComponent {X, Y int}
-│   Simple grid-aligned position component
-│
-├── CharacterComponent {Rune rune, Color ColorClass, Style TextStyle, SeqType SequenceType, SeqLevel SequenceLevel}
-│   Displayable character with semantic rendering properties (resolved to RGB by renderer)
-│
-├── SequenceComponent {ID int, Index int, Type SequenceType, Level SequenceLevel}
-│   Tracks membership in character sequences (Green/Red/Blue/Gold) with position and scoring levels
-│
+├── CharacterComponent {Rune rune, Color ColorClass, Style TextStyle, SeqType, SeqLevel}
+├── SequenceComponent {ID, Index int, Type SequenceType, Level SequenceLevel}
 ├── GoldSequenceComponent {Active bool, SequenceID int, StartTimeNano int64, CharSequence []rune, CurrentIndex int}
-│   Active gold sequence state (10-character bonus sequences that fill heat to max)
-│
-├── DecayComponent {Column int, YPosition float64, Speed float64, Char rune, LastChangeRow int, LastIntX int, LastIntY int, PrevPreciseX float64, PrevPreciseY float64}
-│   Falling decay entities with sub-pixel physics, swept collision, and coordinate latching
-│
-├── CleanerComponent {PreciseX/Y float64, VelocityX/Y float64, TargetX/Y float64, TrailRing [Length]Point, TrailHead int, TrailLen int, GridX int, GridY int, Char rune}
-│   Destructive cleaners with zero-allocation ring buffer trail (clear Red sequences)
-│
-├── MaterializeComponent {PreciseX/Y float64, VelocityX/Y float64, TargetX/Y int, TrailRing [Length]Point, TrailHead int, TrailLen int, GridX int, GridY int, Direction MaterializeDirection, Char rune, Arrived bool}
-│   Drain spawn animation (4 entities converge from screen edges using ring buffer trail)
-│
-├── FlashComponent {X int, Y int, Char rune, StartTime time.Time, Duration time.Duration}
-│   Visual feedback effects for entity destruction (300ms default duration)
-│
+├── DecayComponent {Column int, YPosition float64, Speed float64, Char rune, LastChangeRow, LastIntX, LastIntY int, PrevPreciseX, PrevPreciseY float64}
+├── CleanerComponent {PreciseX/Y float64, VelocityX/Y float64, TargetX/Y float64, TrailRing [Length]Point, TrailHead, TrailLen, GridX, GridY int, Char rune}
+├── MaterializeComponent {PreciseX/Y float64, VelocityX/Y float64, TargetX, TargetY int, TrailRing [Length]Point, TrailHead, TrailLen, GridX, GridY int, Direction MaterializeDirection, Char rune, Arrived bool}
+├── FlashComponent {X, Y int, Char rune, StartTime time.Time, Duration time.Duration}
 ├── NuggetComponent {ID int, SpawnTime time.Time}
-│   Collectible nugget entities with respawn tracking (+10% max heat bonus)
-│
-├── DrainComponent {LastMoveTime time.Time, LastDrainTime time.Time, IsOnCursor bool, SpawnOrder int64}
-│   Heat-based drain entities (movement toward cursor, LIFO despawn via SpawnOrder)
-│
+├── DrainComponent {LastMoveTime, LastDrainTime time.Time, IsOnCursor bool, SpawnOrder int64}
 ├── CursorComponent {ErrorFlashEnd int64, HeatDisplay int}
-│   Singleton player cursor state (error flash timing, cached heat for render)
-│
 ├── ProtectionComponent {Mask ProtectionFlags, ExpiresAt int64}
-│   Configurable immunity system with bitmask flags (Decay/Drain/Cull/Delete protection)
-│
-└── ShieldComponent {Sources uint8, RadiusX float64, RadiusY float64, OverrideColor ColorClass, MaxOpacity float64, LastDrainTime time.Time}
-    Energy-powered protective field (Sources bitmask: SourceBoost=1<<0, active when Sources!=0 AND Energy>0)
-    Color: Derived from GameState.LastTypedSeqType/Level when OverrideColor==ColorNone, otherwise uses OverrideColor
+└── ShieldComponent {Sources uint8, RadiusX, RadiusY float64, OverrideColor ColorClass, MaxOpacity float64, LastDrainTime time.Time}
 ```
 
-**Note**: All component types are defined in the `components/` directory.
+**Sequence Types:**
+- **Green**: Positive scoring, spawned by SpawnSystem
+- **Blue**: Positive scoring, spawned by SpawnSystem
+- **Red**: Penalty, ONLY created through decay
+- **Gold**: 10-character bonus sequence
 
-**Component Design Patterns:**
-- **Semantic Rendering**: CharacterComponent and ShieldComponent use `ColorClass` enum (resolved to RGB by renderer; shield derives from GameState when OverrideColor==ColorNone)
-- **Sub-pixel Physics**: DecayComponent, CleanerComponent, MaterializeComponent use float64 for smooth movement
-- **Ring Buffer Trails**: CleanerComponent and MaterializeComponent use zero-allocation ring buffers
-- **Time-Based Lifecycle**: FlashComponent, NuggetComponent use time.Time for expiration/spawning
-- **Bitmask Flags**: ProtectionComponent (immunity flags) and ShieldComponent (source flags) use bitwise operations
-- **Coordinate Latching**: DecayComponent prevents re-processing same grid cells via LastIntX/LastIntY
-- **LIFO Ordering**: DrainComponent uses SpawnOrder (monotonic counter) for despawn priority
+## Rendering Architecture
 
-### Sequence Types
-- **Green**: Positive scoring, spawned by SpawnSystem, decays Blue→Green→Red
-- **Blue**: Positive scoring, spawned by SpawnSystem, decays to Green when Dark level reached
-- **Red**: Negative scoring (penalty), ONLY created through decay (not spawned directly)
-- **Gold**: Bonus sequence (10 characters), spawned by GoldSystem after decay animation completes
+The game uses **direct terminal rendering** via a custom `terminal` package and `RenderOrchestrator` pattern.
 
-## Rendering Pipeline
+### Terminal Package
 
-The game uses a **System Render Interface** pattern where each system owns its rendering logic through specialized `SystemRenderer` implementations. The rendering architecture was significantly refactored in commit c7dab79 to centralize color management and encapsulate tcell usage exclusively within the render package.
+**Terminal Interface** (`terminal/terminal.go`):
+- High-level contract for terminal control
+- Methods: `Init/Fini`, `Size/ResizeChan`, `Flush`, `Clear/Sync`, `PollEvent/PostEvent`
 
-### Architecture
+**termImpl** - Concrete implementation:
+- **input**: inputReader for stdin parsing
+- **output**: outputBuffer for double-buffered rendering
+- **resize**: resizeHandler for SIGWINCH detection
+- Thread-safe with sync.Mutex
+- Flush race protection: queries OS dimensions before flush
+
+**outputBuffer** (`terminal/output.go`):
+- Double-buffered output with cell-level diffing
+- Front buffer: tracks current terminal state
+- Back buffer: new frame to render
+- Style coalescing: only emits SGR when fg/bg/attrs change
+- True color (24-bit RGB) or 256-color fallback
+- 128KB buffered writer
+
+**inputReader** (`terminal/input.go`):
+- Raw stdin parsing in dedicated goroutine
+- Non-blocking: uses unix.Poll with 100ms timeout
+- Escape sequence handling (50ms escapeTimeout)
+- Zero-allocation: manual UTF-8 decoding, embedded buffers
+
+**Cell** (`terminal/terminal.go`):
+```go
+type Cell struct {
+    Rune  rune
+    Fg, Bg RGB
+    Attrs Attr
+}
+```
+
+**Key Patterns:**
+1. **Double Buffering with Diffing**: Compares front vs back, emits only changed cells
+2. **Style State Tracking**: Avoids redundant SGR sequences
+3. **Zero-Allocation Input**: Manual UTF-8 decoding, no allocations
+4. **Graceful Shutdown**: inputReader checks stopCh periodically
+5. **Auto-Wrap Disable**: Prevents scroll on bottom-right corner
+
+### Render Package
 
 **Core Types:**
-- `RenderOrchestrator` (`render/orchestrator.go`): Coordinates render pipeline lifecycle with insertion-sort priority ordering
-- `RenderBuffer` (`render/buffer.go`): Dense grid compositor with blend modes (zero-alloc after init)
-- `SystemRenderer` (`render/interface.go`): Interface for individual renderers
-- `RenderPriority` (`render/priority.go`): Constants determine render order (lower renders first)
-- `RenderContext` (`render/context.go`): Frame data snapshot passed by value to all renderers
-- `RGB` (`render/rgb.go`): Explicit 8-bit color channels with blend operations
-- `CompositorCell` (`render/cell.go`): Authoritative cell state (Rune, Fg RGB, Bg RGB, Attrs)
+- `RenderOrchestrator` (`render/orchestrator.go`): Coordinates render pipeline with priority ordering
+- `RenderBuffer` (`render/buffer.go`): Dense grid compositor with blend modes
+- `SystemRenderer` (`render/interface.go`): Interface for renderers
+- `RenderPriority` (`render/priority.go`): Render order constants (lower first)
+- `RenderContext` (`render/context.go`): Frame data passed by value
+- `RGB` (`render/rgb.go`): Explicit 8-bit color with blend operations
+- `Cell`: Type alias to `terminal.Cell` (zero-copy coupling)
 
-**Color Management (Refactored in c7dab79):**
-- **Centralized Colors** (`render/colors.go`): 60+ named RGB color variables organized by semantic category
-  - Sequence colors: Green/Red/Blue (Dark/Normal/Bright levels)
-  - Entity colors: Gold, Decay, Drain, Materialize, Nugget, Cleaner, Flash
-  - UI colors: Line numbers, status bar, column indicators, cursor, ping
-    - `RgbPingNormal`: Almost-black (5,5,5) for Normal mode
-    - `RgbPingHighlight`: Dark orange (60,40,0) for Insert mode (differentiation from Normal)
-  - Effect colors: Energy meter, shields, audio indicators
-  - Modal colors: Overlay borders/backgrounds
-- **Color Resolution**: Semantic color mapping functions
-  - `GetFgForSequence(seqType, level)` → resolves sequence appearance
-  - `GetHeatMeterColor(progress float64)` → rainbow gradient generator
-  - `resolveCharacterColor()`, `resolveShieldColor()` → renderer-specific resolution
-- **tcell Encapsulation**: tcell only imported in render package, not by individual renderers
-  - `RGBToTcell()` conversion in buffer.go during flush
-  - Systems use semantic `ColorClass` enum, renderer resolves to RGB
+**Color Management** (`render/colors.go`):
+- 60+ named RGB color variables
+- Centralized color definitions: sequences, entities, UI, effects, modals
+- Resolution functions: `GetFgForSequence(seqType, level)`, `GetHeatMeterColor(progress)`
+- Systems use semantic `ColorClass` enum, renderer resolves to RGB
 
 **Blend Modes** (`render/blender.go`):
-- `BlendReplace`: Opaque overwrite (default)
-- `BlendAlpha`: src*α + dst*(1-α) for transparency
+- `BlendReplace`: Opaque overwrite
+- `BlendAlpha`: src*α + dst*(1-α)
 - `BlendAdd`: clamp(dst+src, 255) for light accumulation
-- `BlendMax`: per-channel maximum for non-destructive highlights
-- `BlendFgOnly`: Update text only, preserve background exactly
+- `BlendMax`: per-channel maximum
+- `BlendFgOnly`: Update text only, preserve background
+- `BlendSoftLight`: Gentle overlay with lookup tables
 
 **Render Flow:**
-1. `RenderOrchestrator.RenderFrame()` acquires World lock and clears buffer
-2. Renderers execute in priority order (low → high), skip if `VisibilityToggle.IsVisible()` returns false
-3. Each renderer calls buffer methods: `Set()`, `SetFgOnly()`, `SetWithBg()`
-4. Buffer flushes to tcell.Screen with RGB→tcell conversion
-5. Screen.Show() presents frame
+1. `RenderOrchestrator.RenderFrame()` locks World and clears buffer
+2. Renderers execute in priority order (skip if `VisibilityToggle.IsVisible()` returns false)
+3. Each renderer writes to buffer: `Set()`, `SetFgOnly()`, `SetWithBg()`
+4. `RenderBuffer.FlushToTerminal()` passes `[]terminal.Cell` to terminal (zero-copy)
 
-**Priority Layers** (`render/priority.go`):
-- **PriorityBackground (0)**: Clear and base layer
-- **PriorityGrid (100)**: Ping highlights and grid lines
-- **PriorityEntities (200)**: Characters (position-based rendering)
-- **PriorityEffects (300)**: Shields, decay, cleaners, flashes, materializers
-- **PriorityDrain (350)**: Drain entity (above effects, below UI)
-- **PriorityUI (400)**: Heat meter, line numbers, column indicators, status bar, cursor
-- **PriorityOverlay (500)**: Modal windows (debug, help)
-- **PriorityDebug (1000)**: Debug overlays (highest)
+**Priority Layers:**
+- **PriorityBackground (0)**: Base layer
+- **PriorityGrid (100)**: Ping highlights
+- **PriorityEntities (200)**: Characters
+- **PriorityEffects (300)**: Shields, decay, cleaners, flashes
+- **PriorityDrain (350)**: Drain entity
+- **PriorityUI (400)**: Heat meter, line numbers, status bar, cursor
+- **PriorityOverlay (500)**: Modal windows
+- **PriorityDebug (1000)**: Debug overlays
 
 **Individual Renderers** (`render/renderers/`):
-- `HeatMeterRenderer`: 10-segment rainbow heat bar (priority 0)
-- `LineNumbersRenderer`: Relative line numbers (priority 400)
-- `ColumnIndicatorsRenderer`: Column position markers (priority 400)
-- `StatusBarRenderer`: Mode, commands, metrics, FPS (priority 400)
-- `PingGridRenderer`: Row/column highlights and grid lines (priority 100)
-- `ShieldRenderer`: Protective field effects around characters (priority 300)
-  - Color: Derived from GameState.LastTypedSeqType/Level (last Blue/Green typed), fallback to neutral gray (128,128,128)
-  - Gradient: Quadratic soft falloff `(1-d)²*0.5` for smooth appearance (MaxOpacity: 0.5)
-- `CharactersRenderer`: All character entities with semantic color resolution (priority 200)
-- `EffectsRenderer`: Decay, cleaners, removal flashes, materializers with pre-built gradients (priority 300)
-- `DrainRenderer`: Energy-draining entity overlay (priority 350)
-- `CursorRenderer`: Cursor with z-index entity selection and visibility toggle (priority 500)
-- `OverlayRenderer`: Modal popups with visibility toggle (priority 500)
+- `HeatMeterRenderer`, `LineNumbersRenderer`, `ColumnIndicatorsRenderer`
+- `StatusBarRenderer`: Mode, commands, metrics, FPS
+- `PingGridRenderer`: Row/column highlights
+- `ShieldRenderer`: Protective field with gradient (derived from GameState.LastTypedSeqType/Level)
+- `CharactersRenderer`: All character entities
+- `EffectsRenderer`: Decay, cleaners, flashes, materializers with pre-built gradients
+- `DrainRenderer`, `CursorRenderer`, `OverlayRenderer`
 
-**RenderBuffer Write Methods:**
-- `Set(x, y, rune, fg, bg, mode, alpha, attrs)`: Full compositing with blend mode and alpha (marks cell as touched)
-- `SetFgOnly(x, y, rune, fg, attrs)`: Text overlay preserving background (does NOT mark as touched)
-- `SetWithBg(x, y, rune, fg, bg)`: Opaque cell replacement (BlendReplace, marks cell as touched)
-- `Clear()`: Exponential copy algorithm for fast reset
-- `Flush(screen)`: RGB→tcell conversion and screen update
+**RenderBuffer Methods:**
+- `Set(x, y, rune, fg, bg, mode, alpha, attrs)`: Full compositing (marks touched)
+- `SetFgOnly(x, y, rune, fg, attrs)`: Text overlay (does NOT mark touched)
+- `SetWithBg(x, y, rune, fg, bg)`: Opaque replacement (marks touched)
+- `Clear()`: Exponential copy algorithm
+- `FlushToTerminal(term)`: Zero-copy pass to terminal
 
-**Dirty Tracking Mechanism:**
-- Each cell has a `touched` boolean flag tracked in parallel grid
+**Dirty Tracking:**
+- Each cell has `touched` flag
 - Cells start with black (0,0,0) background after Clear()
-- Background-modifying blend modes (Replace, Alpha, Add, Max) mark cells as touched
-- BlendFgOnly does not mark cells as touched (preserves background state)
-- At Flush(), only untouched cells receive Tokyo Night background (26,27,38)
-- Enables proper overlay blending (shield, effects) against black while maintaining themed empty space
+- Background-modifying blends mark cells as touched
+- BlendFgOnly preserves background state
+- At Flush(), untouched cells receive Tokyo Night background (26,27,38)
 
 **Performance Optimizations:**
-- Zero-alloc buffer after initialization (capacity pre-allocated)
-- Exponential copy for Clear() (2x each iteration)
-- Pre-built gradients in EffectsRenderer (zero per-frame color math)
-- Ring buffers in trail systems (cleaner, materializer)
-- Write-only buffer operations where possible (no read-modify-write)
+- Zero-alloc buffer after init
+- Exponential copy for Clear()
+- Pre-built gradients in renderers
+- Ring buffers in trail systems
+- Zero-copy export to terminal (uses `terminal.Cell` directly)
 
 **Adding New Visual Elements:**
 1. Create struct implementing `SystemRenderer` in `render/renderers/`
 2. Choose appropriate `RenderPriority` constant
-3. Implement `Render(ctx RenderContext, world *World, buf *RenderBuffer)` method
+3. Implement `Render(ctx RenderContext, world *World, buf *RenderBuffer)`
 4. Use semantic color resolution (ColorClass → RGB via render/colors.go)
-5. Register with orchestrator in main.go via `orchestrator.Register(renderer, priority)`
-6. Optionally implement `VisibilityToggle` interface for conditional rendering
+5. Register with orchestrator: `orchestrator.Register(renderer, priority)`
+6. Optionally implement `VisibilityToggle` for conditional rendering
 
 ### Pause State Visual Feedback
 
-When the game is paused by entering COMMAND mode (`:` key), the rendering system provides visual feedback:
-
-- **Trigger**: `ctx.IsPaused.Load()` returns true (set when entering COMMAND mode)
-- **Game Time**: Stops advancing - all timers (decay, gold timeout, boost) freeze
-- **UI Time**: Continues - cursor still blinks using real time for visual feedback
-- **Visual Dimming**: All character foreground colors are multiplied by 0.7 (70% brightness)
-- **Purpose**: Clearly indicates paused state while preserving game visibility
-- **Implementation**: Applied in `drawCharacters()` after ping highlighting, before final rendering
-- **Frame Updates**: Continue during pause to show dimmed characters and cursor blink
+When paused (COMMAND mode):
+- Game time stops (all timers freeze)
+- UI time continues (cursor blinks)
+- Characters dimmed to 70% brightness
+- Frame updates continue
 
 ## System Coordination and Event Flow
 
 ### Complete Game Cycle
-The game operates in a continuous cycle managed by the phase system:
 
 ```
 PhaseNormal → PhaseGoldActive → PhaseGoldComplete → PhaseDecayWait → PhaseDecayAnimation → PhaseNormal
-    ↑             |                                                                         ↓
-    |             └─────────────────────────────────────────────────────────────────────────┘
-    |
-    └─── [:new command / app start] ────┘
 
 Parallel (Event-Driven):
-  EventCleanerRequest → Cleaner Spawn → Cleaner Animation → EventCleanerFinished
-  (triggered when gold completed at max heat, runs independently of phase cycle)
+  EventCleanerRequest → Cleaner Animation → EventCleanerFinished
 ```
 
-**Key State Transitions:**
-- Game starts in PhaseNormal (instant spawn, no delay)
-- Gold spawns after decay animation completes → PhaseGoldActive
-- Gold completion/timeout → PhaseGoldComplete → PhaseDecayWait (starts decay timer)
-- Decay timer expires → PhaseDecayAnimation (falling entities decay characters)
-- Decay animation completes → PhaseNormal (ready for next gold)
-- :new command resets game to PhaseNormal (instant restart, drains event queue)
-- Cleaners run in parallel via event system, do NOT affect phase transitions
+**Key Transitions:**
+- Game starts in PhaseNormal (instant spawn)
+- Gold spawns after decay → PhaseGoldActive
+- Gold completion/timeout → PhaseGoldComplete → PhaseDecayWait
+- Decay timer expires → PhaseDecayAnimation
+- Animation completes → PhaseNormal
+- :new command resets to PhaseNormal
+- Cleaners run in parallel, don't affect phases
 
 ### Event Sequencing
 
-#### 1. Gold Phase
-- **Activation**: Gold spawns after decay animation completes
-- **Duration**: 10 seconds (constants.GoldSequenceDuration)
-- **Completion**: Either typed correctly or times out
-- **Next Action**: Transitions to `PhaseGoldComplete`, then starts decay timer
+**Gold Phase:**
+- Duration: 10 seconds
+- Completion: typed correctly or times out
+- Next: PhaseGoldComplete → decay timer starts
 
-**State Validation**:
-- Gold can only spawn when NOT active
-- Gold entities have unique sequence IDs
-- Position conflicts with existing entities are avoided
+**Decay Timer Phase:**
+- Duration: 60-10 seconds based on heat percentage
+- Formula: `60s - (50s * (CurrentHeat / MaxHeat))`
+- Next: Triggers animation
 
-#### 2. Decay Timer Phase
-- **Activation**: Started when Gold ends (completion or timeout)
-- **Duration**: 60-10 seconds (based on heat percentage at Gold end time)
-  - Formula: `60s - (50s * (CurrentHeat / MaxHeat))`
-  - Higher heat = faster decay
-- **Purpose**: Creates breathing room between gold spawns
-- **Next Action**: Triggers decay animation when timer expires
-
-**State Validation**:
-- Timer only starts if not already running
-- Timer calculation is atomic (based on heat at specific moment)
-- Timer does not restart during active animation
-- Timer uses pausable clock (freezes during COMMAND mode)
-
-#### 3. Decay Animation Phase
-- **Activation**: Triggered when decay timer expires
-- **Duration**: Based on falling entity speed (4.8-1.6 seconds)
-  - Slowest entity: 24 rows / 5.0 rows/sec = 4.8s
-  - Fastest entity: 24 rows / 15.0 rows/sec = 1.6s
-- **Effects**:
-  - Spawns falling entities (one per column)
-  - Entities decay characters they pass over
-  - Characters decay one level: Bright → Normal → Dark
-  - Dark level triggers color change: Blue→Green, Green→Red
-- **Next Action**: Returns to PhaseNormal (Gold can spawn again)
-
-**State Validation**:
-- Animation cannot start if already animating
-- Each character decayed at most once per animation
-- Falling entities properly cleaned up on completion
-- Animation uses pausable clock (freezes during COMMAND mode)
+**Decay Animation Phase:**
+- Duration: Based on falling speed (4.8-1.6 seconds)
+- Effects: Spawns falling entities, decays characters
+- Character decay: Bright → Normal → Dark, Blue→Green→Red
+- Next: Returns to PhaseNormal
 
 ### Energy System Integration
 
-#### Gold Typing
-When user types during active gold:
+**Gold Typing:**
+1. Verify character matches
+2. If incorrect: Flash error, DON'T reset heat
+3. If correct: Destroy character, move cursor
+4. If last character:
+   - Check if heat at maximum
+   - If yes: Trigger cleaners immediately
+   - Fill heat to maximum
+   - Mark gold complete
 
-```
-EnergySystem.handleGoldSequenceTyping():
-  1. Verify character matches expected gold character
-  2. If incorrect: Flash error, DO NOT reset heat
-  3. If correct:
-     - Destroy character entity
-     - Move cursor right
-  4. If last character:
-     - Check if heat is at maximum
-     - If yes: Trigger cleaners immediately
-     - Fill heat to maximum (if not already)
-     - Mark gold sequence as complete
-```
-
-**Key Behavior**:
-- Gold typing NEVER resets heat (unlike incorrect regular typing)
-- Cleaners trigger BEFORE heat is filled (to check pre-fill state)
-- Heat is guaranteed to be at max after gold completion
-- Gold timeout uses pausable clock (10 seconds of game time, not real time)
+**Key Behavior:**
+- Gold typing NEVER resets heat
+- Cleaners trigger BEFORE heat fill
+- Gold timeout uses pausable clock
 
 ### Concurrency Guarantees
 
-#### Mutex Protection (DecaySystem)
-All DecaySystem state is protected by `sync.RWMutex`:
-- `animating`: Animation active state
-- `timerStarted`: Whether decay timer has been initialized
-- `fallingEntities`: List of active falling entities
-- `decayedThisFrame`: Map tracking which entities were decayed
-- `startTime`, `nextDecayTime`: Timing information
-- `gameWidth`, `gameHeight`: Dimension information
+**Mutex Protection:**
+- DecaySystem: `sync.RWMutex` protects animation state
+- GoldSystem: `sync.RWMutex` protects sequence state
 
-**Lock Patterns**:
-- RLock for reads: Allows concurrent readers
-- Lock for writes: Exclusive access for modifications
-- Locks released before calling into other systems (prevents deadlock)
-
-#### Atomic Operations (CleanerSystem)
-CleanerSystem uses minimal atomic state:
-- `pendingSpawn`: Activation signal flag (atomic.Bool)
-  - Set by `ActivateCleaners()` from any thread
-  - Cleared by `Update()` in main loop via CAS operation
-  - Ensures spawn happens exactly once per activation
-
-**Benefits**:
-- Single atomic flag eliminates complex state tracking
-- Lock-free activation from any thread (e.g., EnergySystem)
-- All other state managed through ECS components
-- Component queries handled by World's internal synchronization
-
-#### Gold System Synchronization
-GoldSequenceSystem uses `sync.RWMutex` for all state:
-- `active`: Gold sequence active state
-- `sequenceID`: Current sequence identifier
-- `startTime`: When sequence was spawned
-- Cleaner trigger function reference
+**Atomic Operations:**
+- CleanerSystem: `pendingSpawn` flag (lock-free activation)
+- All atomic state in GameState
 
 ### State Transition Rules
 
-#### Phase Transitions (Main Game Cycle)
-- **Game Start** → **PhaseNormal**: Instant start, no delay (app launch or :new command)
-- **PhaseNormal** → **PhaseGoldActive**: When gold sequence spawns
-- **PhaseGoldActive** → **PhaseGoldComplete**: When gold typed or timeout
-- **PhaseGoldComplete** → **PhaseDecayWait**: Starts decay timer
-- **PhaseDecayWait** → **PhaseDecayAnimation**: When decay timer expires
-- **PhaseDecayAnimation** → **PhaseNormal**: When falling animation completes
+**Phase Transitions:**
+- **Game Start** → **PhaseNormal**: Instant start
+- **PhaseNormal** → **PhaseGoldActive**: Gold spawns
+- **PhaseGoldActive** → **PhaseGoldComplete**: Gold ends
+- **PhaseGoldComplete** → **PhaseDecayWait**: Timer starts
+- **PhaseDecayWait** → **PhaseDecayAnimation**: Timer expires
+- **PhaseDecayAnimation** → **PhaseNormal**: Animation complete
 
-#### Cleaner Event Flow (Parallel to Phase Cycle)
-- **EventCleanerRequest** pushed when: Gold completed at max heat
-- **CleanerSystem** consumes event → spawns cleaner entities (or phantom if no Red characters)
-- **Cleaner animation** runs: Entities move across screen, destroy Red characters
-- **EventCleanerFinished** pushed when: All cleaner entities destroyed
-- **No phase transitions**: Cleaners run independently, do not block or modify phase state
-
-#### Invalid Transitions (Prevented)
-- Gold spawning while Gold already active → Ignored
-- Decay animation starting while already animating → Ignored
-- Decay timer restarting during active animation → Blocked
-- Phase transitions during cleaner animation → **Allowed** (cleaners are non-blocking)
-
-#### Valid Transitions
-- Gold End → Decay Timer Start: Always allowed (independent of cleaners)
-- Decay Timer Expire → Animation Start: Atomic transition (independent of cleaners)
-- Animation Complete → Gold Spawn: Automatic, immediate (independent of cleaners)
-- Cleaner Request → Spawn: Event-driven, any time
-
-### Debugging Support
-
-All major systems provide `GetSystemState()` for debugging:
-
-```go
-decaySystem.GetSystemState()
-// Returns: "Decay[animating=true, elapsed=2.30s, fallingEntities=80]"
-// or: "Decay[timer=active, timeUntil=45.20s, nextDecay=...]"
-// or: "Decay[inactive]"
-
-goldSystem.GetSystemState()
-// Returns: "Gold[active=true, sequenceID=123, timeRemaining=7.50s]"
-// or: "Gold[inactive]"
-
-cleanerSystem.GetSystemState()
-// Returns: "Cleaner[active=true, count=5, elapsed=1.20s]"
-// or: "Cleaner[inactive]"
-```
-
-**Usage**: Call during test failures or production debugging to understand system state.
+**Cleaner Event Flow:**
+- `EventCleanerRequest` → spawn entities (or phantom if no Red)
+- Animation runs in parallel
+- `EventCleanerFinished` on completion
+- No phase transitions blocked
 
 ## Input State Machine
 
 ### Game Mode State Machine
+
 ```
 NORMAL ─[i]→ INSERT
 NORMAL ─[/]→ SEARCH
 INSERT / SEARCH ─[ESC]→ NORMAL
-NORMAL -[:]→ COMMAND (game paused) -[ESC/ENTER]→ NORMAL
-COMMAND -[:debug/:help]→ OVERLAY (modal popup) -[ESC/ENTER]→ NORMAL
+NORMAL ─[:]→ COMMAND (paused) ─[ESC/ENTER]→ NORMAL
+COMMAND ─[:debug/:help]→ OVERLAY (modal) ─[ESC/ENTER]→ NORMAL
 ```
 
-**Mode Transitions:**
-- **NORMAL → OVERLAY**: Triggered by `:debug` or `:help` commands in COMMAND mode
-- **OVERLAY → NORMAL**: Pressing `ESC` or `ENTER` closes overlay and resumes game
-- **Overlay Behavior**:
-  - Hijacks input - all keys except ESC/ENTER are used for overlay interaction (scroll)
-  - Renders modal window covering ~80% of screen with bordered frame
-  - Game remains paused during overlay display
-  - Supports scrolling with arrow keys or j/k
-
-**ESC Key Handling Priority** (in `modes/input.go:HandleEvent`):
-1. **Search Mode**: ESC → clears search text, returns to NORMAL
-2. **Command Mode**: ESC → clears command text, unpauses, returns to NORMAL
-3. **Insert Mode**: ESC → returns to NORMAL
-4. **Overlay Mode**: ESC → closes overlay, unpauses, returns to NORMAL
-5. **Normal Mode**: ESC → activates ping grid animation (1 second)
+**ESC Key Priority:**
+1. Search Mode: Clear text → NORMAL
+2. Command Mode: Clear text, unpause → NORMAL
+3. Insert Mode: → NORMAL
+4. Overlay Mode: Close overlay, unpause → NORMAL
+5. Normal Mode: Activate ping grid (1 second)
 
 ### Input Dispatch Architecture (NORMAL Mode)
 
-The input handling system for NORMAL mode uses a **state machine with binding table** architecture, replacing the previous enum+switch pattern with a more maintainable and extensible design.
+**State machine with binding table** replaces enum+switch pattern.
 
-**Core Components** (`modes/` directory):
+**Core Components:**
 
 1. **InputMachine** (`modes/machine.go`):
-   - 7-state machine managing input parsing flow
-   - Tracks count accumulation (count1/count2 for compound counts like `2d3w`)
-   - Manages operator/character/prefix state
-   - Dispatches actions via binding table lookup
+   - 7-state machine managing input parsing
+   - Tracks count accumulation (count1/count2 for `2d3w`)
+   - Dispatches via binding table lookup
 
 2. **BindingTable** (`modes/bindings.go`):
-   - Maps keys to action types and metadata
-   - Separate tables for: `normal[]`, `operatorMotions[]`, `prefixG[]`
-   - Created via `DefaultBindings()` function
+   - Maps keys to action types
+   - Tables: `normal[]`, `operatorMotions[]`, `prefixG[]`
 
-   **Binding Structure:**
    ```go
    type Binding struct {
-       Action       ActionType                    // Type of action (motion, operator, etc.)
-       Target       rune                          // Canonical command (for remapping)
-       AcceptsCount bool                          // Whether this accepts count prefix
-       Executor     func(*engine.GameContext, int) // Custom executor function
+       Action       ActionType
+       Target       rune
+       AcceptsCount bool
+       Executor     func(*engine.GameContext, int)
    }
    ```
 
-   **ActionType Enum:**
-   - `ActionNone` - No action
-   - `ActionMotion` - Immediate motion (h,j,k,l,w,b,etc)
-   - `ActionCharWait` - Wait for target char (f,F,t,T)
-   - `ActionOperator` - Wait for motion (d)
-   - `ActionPrefix` - Wait for second key (g)
-   - `ActionModeSwitch` - Change mode (i,/,:)
-   - `ActionSpecial` - Immediate with special handling (x,D,n,N,;,comma)
+3. **ActionType Enum:**
+   - `ActionMotion`: Immediate (h,j,k,l,w,b)
+   - `ActionCharWait`: Wait for target (f,F,t,T)
+   - `ActionOperator`: Wait for motion (d)
+   - `ActionPrefix`: Wait for second key (g)
+   - `ActionModeSwitch`: Change mode (i,/,:)
+   - `ActionSpecial`: Immediate with special handling (x,D,n,N)
 
-3. **Action Executors** (`modes/actions.go`):
-   - Execute specific actions based on binding lookups
-   - Motion helpers for character commands (find/till)
-   - Separated from dispatch logic for clarity
+**State Machine States:**
 
-4. **InputHandler** (`modes/input.go`):
-   - Owns InputMachine and BindingTable (private fields)
-   - Delegates NORMAL mode key handling to `machine.Process(key)`
-   - Returns `ProcessResult` with action closure
+| State | Description | Transitions |
+|-------|-------------|-------------|
+| `StateIdle` | Awaiting input | Digit→StateCount, Operator→StateOperatorWait, Motion→execute |
+| `StateCount` | Accumulating count | Continue accumulating or execute with count |
+| `StateOperatorWait` | Operator pending | Motion→execute operator+motion |
+| `StateOperatorCharWait` | Operator + char wait | Char→execute |
+| `StateCharWait` | Awaiting target char | Char→execute find/till |
+| `StatePrefixG` | Prefix 'g' pending | Second char→execute |
+| `StateOperatorPrefixG` | Operator + 'g' | Second char→execute |
 
-**Architecture Diagram:**
-```
-┌─────────────────────────────────────────────────┐
-│                           InputHandler          │
-│  ┌─────────────────┐  ┌─────────────────┐       │
-│  │  InputMachine   │  │  BindingTable   │       │
-│  │  (private)      │  │  (private)      │       │
-│  │                 │  │                 │       │
-│  │  state          │  │  normal[]       │       │
-│  │  count1/count2  │  │  operatorMotions│       │
-│  │  operator       │  │  prefixG[]      │       │
-│  │  charCmd        │  │                 │       │
-│  │  prefix         │  │                 │       │
-│  └────────┬────────┘  └────────┬────────┘       │
-│           │                    │                │
-│           └──────┬─────────────┘                │
-│                  ▼                              │
-│           Process(key) → ProcessResult          │
-│                  │                              │
-│                  ▼                              │
-│           Action(ctx) ──────────────────────────┼──► GameContext
-└─────────────────────────────────────────────────┘     (Mode only)
-```
-
-**State Machine States** (`InputState` enum in `modes/machine.go`):
-
-| State | Description | Next State Triggers |
-|-------|-------------|---------------------|
-| `StateIdle` | Awaiting first input | Digit (1-9) → `StateCount`<br>Operator (d) → `StateOperatorWait`<br>Prefix (g) → `StatePrefixG`<br>CharWait (f/F/t/T) → `StateCharWait`<br>Motion → execute, stay `StateIdle`<br>Mode key (i/:) → execute mode change, stay `StateIdle` |
-| `StateCount` | Accumulating count digits | Digit (1-9 or 0) → stay `StateCount`<br>Operator (d) → `StateOperatorWait`<br>Prefix (g) → `StatePrefixG`<br>CharWait (f/F/t/T) → `StateCharWait`<br>Motion → execute with count, reset to `StateIdle`<br>ESC → reset to `StateIdle` |
-| `StateOperatorWait` | Operator pending motion | Digit (1-9) → accumulate count2, stay<br>Doubled operator (dd) → execute line action<br>Prefix (g) → `StateOperatorPrefixG`<br>CharWait (f/F/t/T) → `StateOperatorCharWait`<br>Motion → execute operator+motion, reset to `StateIdle`<br>ESC → reset to `StateIdle` |
-| `StateOperatorCharWait` | Operator + char command waiting for target | Any char → execute operator+char motion, reset to `StateIdle`<br>ESC → reset to `StateIdle` |
-| `StateCharWait` | Awaiting target character | Any char → execute find/till motion, reset to `StateIdle`<br>ESC → reset to `StateIdle` |
-| `StatePrefixG` | Prefix 'g' pending second char | Second char (g, o) → execute prefix command, reset to `StateIdle`<br>ESC → reset to `StateIdle` |
-| `StateOperatorPrefixG` | Operator + 'g' prefix pending | Second char (g, o) → execute operator+prefix motion, reset to `StateIdle`<br>ESC → reset to `StateIdle` |
-
-**ProcessResult Structure** (`modes/machine.go`):
-
-The state machine returns a `ProcessResult` struct from each key processing operation:
-
-```go
-type ProcessResult struct {
-    Handled       bool                         // Whether the key was handled
-    Continue      bool                         // false = exit game (for quit command)
-    ModeChange    engine.GameMode              // 0 = no mode change
-    Action        func(*engine.GameContext)    // nil = no action to execute
-    CommandString string                       // Captured command string for tracking
-}
-```
-
-**Data Flow Example** (typing `2d3w` - delete 6 words):
-
-1. `'2'` → `StateIdle` → `StateCount`, accumulate count1=2
-2. `'d'` → `StateCount` → `StateOperatorWait`, store operator='d'
-3. `'3'` → `StateOperatorWait` → stay, accumulate count2=3
-4. `'w'` → Lookup operatorMotions['w'] → Execute `DeleteMotion(ctx, 'w', 6)` → Reset to `StateIdle`
-
-**Binding Lookup Pattern:**
-```go
-// In machine.go:processIdleOrCount()
-binding, ok := m.bindings.normal[key]
-if !ok {
-    return ProcessResult{Handled: false}
-}
-
-switch binding.Action {
-case ActionMotion:
-    return ProcessResult{
-        Handled: true,
-        Action: func(ctx *engine.GameContext) {
-            ExecuteMotion(ctx, binding.Target, m.count1)
-        },
-    }
-case ActionOperator:
-    m.state = StateOperatorWait
-    m.operator = binding.Target
-    // ... count handling
-    return ProcessResult{Handled: true, Continue: true}
-}
-```
-
-**Benefits Over Previous Design:**
-
-| Aspect | Old (enum+switch) | New (state machine+bindings) |
-|--------|-------------------|------------------------------|
-| State Management | 9 boolean/int fields in GameContext | 1 InputMachine struct (private) |
-| Dispatch Logic | 30+ if/else branches | 7-state machine with table lookup |
-| Invalid States | Possible (flag combinations) | Impossible (explicit enum) |
-| Count Handling | Duplicated 30+ times | Single location (machine.go) |
-| Key→Action Mapping | Hardcoded in switch | BindingTable (configurable) |
-| Extensibility | Add code in multiple locations | Add binding entry + executor |
-
-### Adding New Bindings
-
-The binding table architecture makes it straightforward to add new commands or extend existing functionality.
-
-#### Adding a New Motion
-
-To add a new motion command (e.g., `'p'` to move to previous word):
-
-1. **Add binding entry** in `modes/bindings.go` → `DefaultBindings()`:
-```go
-bindings.normal['p'] = &Binding{
-    Action:       ActionMotion,
-    Target:       'p',
-    AcceptsCount: true,
-    Executor:     wrapMotion('p'), // Wraps ExecuteMotion
-}
-```
-
-2. **Implement motion logic** in `modes/motions.go` → `ExecuteMotion()`:
-```go
-case 'p':
-    // Move to previous word
-    for i := 0; i < count; i++ {
-        // ... motion implementation
-    }
-```
-
-**That's it!** The state machine handles count accumulation and dispatch automatically.
-
-#### Adding a New Operator
-
-To add a new operator (e.g., `'c'` for change):
-
-1. **Add operator binding** in `modes/bindings.go` → `DefaultBindings()`:
-```go
-bindings.normal['c'] = &Binding{
-    Action:       ActionOperator,
-    Target:       'c',
-    AcceptsCount: true,
-    Executor:     nil, // Handled by state machine
-}
-```
-
-2. **Operator motions are shared** - the `operatorMotions` table is already populated with all valid motions (w, b, e, $, etc.) that work with any operator
-
-3. **Implement executor** in a new file or extend existing operator file:
-```go
-func ExecuteChangeMotion(ctx *engine.GameContext, motionChar rune, count int) {
-    // 1. Delete using existing ExecuteDeleteMotion
-    ExecuteDeleteMotion(ctx, motionChar, count)
-
-    // 2. Switch to insert mode
-    // (mode switch handled by ProcessResult.ModeChange)
-}
-```
-
-4. **Handle in state machine** in `modes/machine.go` → `processOperatorWait()`:
-```go
-case 'c':
-    if key == 'c' { // Doubled: 'cc' for change line
-        return ProcessResult{
-            Handled: true,
-            Action: func(ctx *engine.GameContext) {
-                ExecuteChangeMotion(ctx, '$', finalCount) // Change to end of line
-            },
-            ModeChange: engine.ModeInsert,
-        }
-    }
-    // Handle c + motion
-    return ProcessResult{
-        Handled: true,
-        Action: func(ctx *engine.GameContext) {
-            ExecuteChangeMotion(ctx, binding.Target, finalCount)
-        },
-        ModeChange: engine.ModeInsert,
-    }
-```
-
-#### Adding a New Mode Switch Command
-
-To add `'a'` (append mode - move cursor right then enter insert):
-
-1. **Add binding** in `modes/bindings.go`:
-```go
-bindings.normal['a'] = &Binding{
-    Action:       ActionModeSwitch,
-    Target:       'a',
-    AcceptsCount: false,
-    Executor:     nil, // Handled by state machine
-}
-```
-
-2. **Implement handler** in `modes/machine.go` → state machine logic:
-```go
-case 'a':
-    return ProcessResult{
-        Handled:    true,
-        Continue:   true,
-        ModeChange: engine.ModeInsert,
-        Action: func(ctx *engine.GameContext) {
-            // Move cursor right before entering insert mode
-            pos, ok := ctx.World.Positions.Get(ctx.CursorEntity)
-            if ok && pos.X < ctx.GameWidth-1 {
-                pos.X++
-                ctx.World.Positions.Add(ctx.CursorEntity, pos)
-            }
-        },
-    }
-```
-
-#### Adding Configurable Bindings (Future Extension)
-
-The current system uses hardcoded bindings via `DefaultBindings()`. To support user-configurable bindings:
-
-1. **Implement `LoadBindings()`** in `modes/bindings.go`:
-```go
-func LoadBindings(path string) (*BindingTable, error) {
-    // 1. Load JSON config: {"p": "f"} means 'p' acts like 'f'
-    // 2. Clone DefaultBindings()
-    // 3. For each remap, copy binding from source key to target key
-    // 4. Return modified binding table
-}
-```
-
-2. **Update InputHandler** in `modes/input.go`:
-```go
-func NewInputHandler(ctx *engine.GameContext, configPath string) *InputHandler {
-    bindings := DefaultBindings()
-    if configPath != "" {
-        if custom, err := LoadBindings(configPath); err == nil {
-            bindings = custom
-        }
-    }
-    // ... create machine with bindings
-}
-```
-
-This allows users to remap keys without modifying code.
-
-#### Testing New Bindings
-
-Manual verification checklist for new bindings:
-
-| Test | Keys | Expected Behavior |
-|------|------|-------------------|
-| Basic | `p` | Execute motion once |
-| With count | `5p` | Execute motion 5 times |
-| With operator | `dp` | Execute operator+motion |
-| Compound count | `2d3p` | Execute with count=6 |
-| ESC reset | `3d` ESC `p` | Motion executes once (count cleared) |
-| Edge cases | `0`, doubled operators | Verify special handling |
-
-**Refactoring Philosophy:**
-
-The input handler has undergone major refactoring for improved organization and reduced duplication:
-
-**File Structure Changes:**
-- `modes/delete_operator.go` → Deleted, logic moved to `modes/operators.go`
-- `modes/types.go` → Created for shared type definitions
-- `modes/motions.go` → Refactored for logic deduplication
-- `modes/machine.go` → Enhanced state machine with cleaner transitions
-- `modes/bindings.go` → Improved binding table organization
-
-**Architecture:**
-```
-┌─────────────────────────────────────────────────────────┐
-│  Dispatch Layer (machine.go, bindings.go, actions.go)   │
-│                                                         │
-│  Key → State Machine → Binding Lookup → ProcessResult   │
-└─────────────────────────────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────┐
-│  Execution Layer (motions.go, operators.go, search.go)  │
-│                                                         │
-│  Motion Functions, OpMove(), OpDelete(), FindChar()     │
-│  (These implement actual cursor/entity manipulation)    │
-└─────────────────────────────────────────────────────────┘
-```
+**Example Flow** (typing `2d3w` - delete 6 words):
+1. `'2'` → StateIdle → StateCount, count1=2
+2. `'d'` → StateCount → StateOperatorWait, operator='d'
+3. `'3'` → StateOperatorWait → stay, count2=3
+4. `'w'` → Execute `DeleteMotion(ctx, 'w', 6)` → StateIdle
 
 ### Commands
 
-**`:new` - New Game**
-- **Behavior**: Clears the ECS World and resets game state for a fresh game
-- **Phase Reset**: Transitions to PhaseNormal (instant start, no delay)
-- **Event Queue**: Drains all pending events to prevent state carryover from previous session
-- **Critical Requirement**: Cursor Entity Restoration
-  - `World.Clear()` is destructive and removes ALL entities including the Cursor Entity
-  - After clear, the Cursor Entity's components must be explicitly restored:
-    - `CursorComponent`: Tracks cursor-specific state (error flash timing, etc.)
-    - `ProtectionComponent`: Marks cursor as indestructible (Mask: `ProtectAll`)
-    - `PositionComponent`: Sets initial cursor position (typically game area center)
-  - **Failure to restore causes "Zombie Cursor"**: Rendering system expects cursor entity to exist
-  - **Implementation Pattern**:
-    ```go
-    // Despawn drain entities before clearing world
-    drains := world.Drains.All()
-    for _, e := range drains {
-        world.DestroyEntity(e)
-    }
+**`:new` - New Game:**
+- Clears ECS World and resets game state
+- Phase: Transitions to PhaseNormal
+- Event Queue: Drains all pending events
+- **Critical**: Restore Cursor Entity after `World.Clear()`:
+  ```go
+  world.Clear()
+  ctx.ResetEventQueue()
+  ctx.State.Reset(ctx.PausableClock.Now())
 
-    // Clear world (destroys all entities including cursor)
-    world.Clear()
-
-    // Drain event queue to prevent state carryover
-    ctx.ResetEventQueue()
-
-    // Reset game state using unified initState() method (same as app start)
-    ctx.State.Reset(ctx.PausableClock.Now())
-
-    // MUST restore cursor entity with all required components
-    cursorEntity := world.CreateEntity()
-    world.Positions.Add(cursorEntity, components.PositionComponent{
-        X: ctx.GameWidth / 2,
-        Y: ctx.GameHeight / 2,
-    })
-    world.Cursors.Add(cursorEntity, components.CursorComponent{})
-    world.Protections.Add(cursorEntity, components.ProtectionComponent{
-        Mask: components.ProtectAll,
-        ExpiresAt: 0, // Permanent protection
-    })
-
-    // Update context reference
-    ctx.CursorEntity = cursorEntity
-    ```
+  cursorEntity := world.CreateEntity()
+  world.Positions.Add(cursorEntity, components.PositionComponent{
+      X: ctx.GameWidth / 2,
+      Y: ctx.GameHeight / 2,
+  })
+  world.Cursors.Add(cursorEntity, components.CursorComponent{})
+  world.Protections.Add(cursorEntity, components.ProtectionComponent{
+      Mask: components.ProtectAll,
+      ExpiresAt: 0,
+  })
+  ctx.CursorEntity = cursorEntity
+  ```
 
 ### Motion Commands (NORMAL Mode)
-- **Single character**: Direct execution (h, j, k, l, w, b, e, etc.)
-- **Prefix commands**: Build state (`g`, `d`, `f`, `F`) then wait for completion
-  - `gg` - Jump to top
-  - `go` - Jump to top-left corner
-  - `dd` - Delete line
-  - `dw`, `d$`, `d<motion>` - Delete with motion
-  - `f<char>` - Find character forward on line (count-aware: `2fa` finds 2nd 'a')
-  - `F<char>` - Find character backward on line (count-aware: `2Fa` finds 2nd 'a' backward)
-- **Count prefix**: Accumulate digits until motion (e.g., `5j`, `10l`, `3w`, `2fa`, `3Fb`)
-- **Count-aware multi-keystroke commands**: Commands like `f` and `F` preserve count through phases
-  - `MotionCount` → `PendingCount` when entering multi-keystroke state
-  - `PendingCount` used when completing the command
-  - Both cleared after execution
-- **ActionType system** (`modes/bindings.go`): Each key binding has an ActionType that determines state machine behavior
-  - `ActionMotion`: Immediate execution (h, j, k, l, w, b, etc.)
-  - `ActionCharWait`: Wait for target character (f, F, t, T)
-  - `ActionOperator`: Wait for motion (d)
-  - `ActionPrefix`: Wait for second key (g)
-  - `ActionModeSwitch`: Change mode (i, /, :)
-  - `ActionSpecial`: Immediate with special handling (x, D, n, N, ;, ,)
-- **Consecutive move penalty**: Using h/j/k/l more than 3 times consecutively resets heat
-- **Arrow keys**: Function like h/j/k/l but always reset heat
-- **Tab**: Jumps cursor directly to active Nugget (Cost: 10 Energy, requires Energy >= 10)
-- **ESC**: Activates ping grid for 1 second (row/column highlight)
-- **Enter**: Spawns 4-directional cleaners from cursor (requires heat ≥ 10, costs 10 heat)
+
+**Single character**: h, j, k, l, w, b, e, etc.
+**Prefix commands**: `gg`, `go`, `dd`, `dw`, `d$`, `f<char>`, `F<char>`
+**Count prefix**: `5j`, `10l`, `3w`, `2fa`, `3Fb`
+**Consecutive move penalty**: h/j/k/l >3 times resets heat
+**Arrow keys**: Function like h/j/k/l but always reset heat
+**Tab**: Jumps to active Nugget (Cost: 10 Energy)
+**ESC**: Ping grid for 1 second
+**Enter**: 4-directional cleaners from cursor (heat ≥ 10, costs 10)
 
 ### Supported Vi Motions
-**Basic**: h, j, k, l, Space (as l)
+
+**Basic**: h, j, k, l, Space
 **Line**: 0 (start), ^ (first non-space), $ (end)
 **Word**: w, b, e (word), W, B, E (WORD)
-**Screen**: gg (top), G (bottom), go (top-left), H (high), M (middle), L (low)
-**Paragraph**: { (prev empty), } (next empty), % (matching bracket - supports (), {}, [], <>)
-**Find/Till**: f<char> (find forward), F<char> (find backward), t<char> (till forward), T<char> (till backward), ; (repeat find/till), , (reverse find/till)
+**Screen**: gg (top), G (bottom), go (top-left), H, M, L
+**Paragraph**: { (prev empty), } (next empty), % (matching bracket)
+**Find/Till**: f<char>, F<char>, t<char>, T<char>, ; (repeat), , (reverse)
 **Search**: / (search), n/N (next/prev match)
-**Delete**: x (char), dd (line), d<motion> (delete with motion), D (to end of line)
+**Delete**: x (char), dd (line), d<motion>, D (to end)
 
 ## Concurrency Model
 
 ### Main Architecture
-- **Main game loop**: Single-threaded ECS updates (16ms frame tick)
+- **Main loop**: Single-threaded ECS updates (16ms frame tick)
 - **Input events**: Goroutine → channel → main loop
-- **Clock scheduler**: Separate goroutine for phase transitions (50ms tick)
-- **All systems**: Run synchronously in main game loop, no autonomous goroutines
+- **Clock scheduler**: Separate goroutine (50ms tick)
+- **All systems**: Run synchronously in main loop
 
 ### Shared State Synchronization
 - **Color Census**: Per-frame entity iteration (no shared counters)
-  - `SpawnSystem`: Runs census by querying all SequenceComponent entities
-  - Returns accurate on-screen color/level counts without drift
-  - O(n) complexity where n ≈ 200 max entities
-- **GameState**: Uses `sync.RWMutex` for phase state and timing
-- **World**: Thread-safe entity/component access (internal locking per store)
+- **GameState**: `sync.RWMutex` for phase/timing
+- **World**: Thread-safe per store (internal locking)
 
 ## Race Condition Prevention
 
 ### Design Principles
-1. **Single-Threaded ECS**: All entity/component modifications in main game loop
-2. **No Autonomous Goroutines**: Systems never spawn independent update loops
-3. **Explicit Synchronization**: All cross-thread access uses atomics or mutexes
-4. **Frame-Coherent Snapshots**: Renderer reads immutable snapshots, never live state
-5. **Lock Granularity**: Minimize lock scope - protect data structures, not operations
+1. Single-threaded ECS
+2. No autonomous goroutines
+3. Explicit synchronization (atomics/mutexes)
+4. Frame-coherent snapshots
+5. Minimal lock scope
 
-### CleanerSystem Concurrency Model
-The CleanerSystem uses a pure ECS pattern with careful synchronization:
-
-- **Pure ECS Pattern**: All state in `CleanerComponent`, no external maps or tracking
-- **Synchronous Updates**: Main loop `Update()` method with delta time integration
-- **Event-Driven Activation**: `EventCleanerRequest` triggers spawning via event queue
-- **Component-Based Physics**: Sub-pixel position, velocity, and trail stored in component
-- **Snapshot Rendering**: Renderer queries World directly and deep-copies trail positions for thread safety
-- **ECS Synchronization**: Leverages World's internal locking for component access
-- **Zero State Duplication**: Component is the single source of truth
+### CleanerSystem Concurrency
+- Pure ECS pattern (state in `CleanerComponent`)
+- Synchronous updates in main loop
+- Event-driven activation
+- Component-based physics
+- Snapshot rendering (deep-copy trails)
+- Zero state duplication
 
 ### Frame Coherence Strategy
-**Rendering Thread Safety**:
-1. Renderer queries World directly for all `CleanerComponent` entities each frame
-2. Deep-copies trail slice for each cleaner to prevent data races with Update thread
-3. Renderer uses trail copy (no shared references to component state)
-4. Main loop updates components via ECS World's synchronized methods
-5. No data races: trail copies are fully independent from component state
-
-**Key Techniques**:
-- Renderer: Deep-copies trail positions to prevent data races (see `terminal_renderer.go`)
-- System: Uses copy-on-write for trail updates with atomic reference replacement (see `systems/cleaner.go`)
-- World's internal locking handles component access synchronization
+1. Renderer queries World for all `CleanerComponent` entities
+2. Deep-copies trail slice per cleaner
+3. Renderer uses trail copy (no shared references)
+4. Main loop updates via ECS synchronized methods
+5. No data races
 
 ## Performance Guidelines
 
 ### Hot Path Optimizations
-1. Use generics-based queries for type-safe, zero-allocation component access
-2. Use `GetAllAtInto()` with stack buffers for zero-allocation spatial queries
-3. Leverage SpatialGrid's cache-friendly 128-byte cell layout (2 cache lines)
-4. Batch similar operations (e.g., all destroys at end)
-5. Reuse allocated slices where possible (e.g., trail slices grow/shrink in-place)
-6. CleanerSystem updates synchronously with frame-accurate delta time
-7. Pre-calculate rendering gradients once at initialization (zero per-frame color math)
+1. Generics-based queries (zero-allocation)
+2. `GetAllAtInto()` with stack buffers
+3. SpatialGrid's cache-friendly layout (128-byte cells)
+4. Batch similar operations
+5. Reuse allocated slices
+6. Synchronous CleanerSystem updates
+7. Pre-calculated rendering gradients
 
 ### Memory Management
-- Pool temporary slices (coordinate lists, entity batches)
+- Pool temporary slices
 - Clear references before destroying entities
 - Limit total entity count (MAX_CHARACTERS = 200)
+
+## Game Systems
+
+### System Priorities
+
+Systems execute in priority order (lower = earlier):
+1. **BoostSystem (5)**: Boost timer expiration
+2. **EnergySystem (10)**: Process input, update energy
+3. **SpawnSystem (15)**: Generate Blue/Green sequences
+4. **NuggetSystem (18)**: Nugget spawning/collection
+5. **GoldSystem (20)**: Gold lifecycle
+6. **CleanerSystem (22)**: Cleaner physics/collision
+7. **DrainSystem (25)**: Drain movement/logic
+8. **DecaySystem (30)**: Sequence degradation
+9. **FlashSystem (35)**: Flash effect lifecycle
+
+### Content Management System
+- **ContentManager** (`content/manager.go`): Manages content files
+- Auto-discovery: Scans `assets/` for `.txt` files
+- Validation: Pre-validates at startup
+- Block Selection: Random blocks (3-15 lines)
+- Location: Auto-locates project root via `go.mod`
+
+### Spawn System
+- **Content Source**: `.txt` files in `assets/`
+- **Block Generation**: 3-15 consecutive lines, trimmed
+- **6-Color Limit**: Tracks Blue×3 + Green×3 combinations
+  - Census-based: per-frame entity iteration
+  - SpawnSystem runs `runCensus(world)` returning `ColorCensus`
+  - Only spawns when <6 combinations present
+  - Red/Gold excluded from limit
+- **Placement**: Random locations, 3 attempts per line
+  - Collision detection
+  - Cursor exclusion zone (5H, 3V)
+  - Failed attempts discarded
+- **Rate**: 2s base, adaptive (1-4s)
+- **Generates**: Only Blue and Green
+
+### Decay System
+
+Applies degradation through falling entity animation.
+
+**Decay Mechanics:**
+- **Brightness**: Bright → Normal → Dark
+- **Color Chain**:
+  - Blue (Dark) → Green (Bright)
+  - Green (Dark) → Red (Bright) ← ONLY source of Red
+  - Red (Dark) → Destroyed
+- **Timing**: 10-60s based on heat
+- **Formula**: `60s - (50s * heatPercentage)`
+
+**Falling Animation:**
+- One entity per column (`DecayComponent` in `World.Decays`)
+- Speed: Random 5.0-15.0 rows/sec
+- Physics: `YPosition += Speed × dt.Seconds()`
+- Matrix effect: Random character changes
+- Cleanup: Auto-destroy when done
+
+**Collision Detection:**
+- **Swept traversal**: Checks all rows between prev/current position (anti-tunneling)
+- **Coordinate latching**: `LastIntX`, `LastIntY` prevent re-processing (anti-green artifacts)
+- **Frame deduplication**: `processedGridCells` map prevents double-hits
+- **Entity deduplication**: `decayedThisFrame` map prevents repeat decay
+
+**Thread Safety:**
+- `sync.RWMutex` protects system state
+- Falling entities queried from `World.Decays` (no internal tracking)
+- Deduplication maps are system-internal state
+
+### Energy System
+- Character typing in insert mode
+- Heat updates (with boost multiplier)
+- Error handling (resets heat)
+- Census impact: destruction affects next spawn
+
+**Hit Detection:**
+```go
+var entityBuf [engine.MaxEntitiesPerCell]engine.Entity
+count := world.Positions.GetAllAtInto(cursorX, cursorY, entityBuf[:])
+entitiesAtCursor := entityBuf[:count]
+
+for _, entity := range entitiesAtCursor {
+    if entity == s.ctx.CursorEntity {
+        continue
+    }
+    // Process typing...
+}
+```
+
+### Boost System
+- **Activation**: Heat reaches 100
+- **Duration**: 500ms initial
+- **Color Binding**: Tied to triggering color
+- **Extension**: +500ms per matching color
+- **Effects**: 2× heat multiplier, shield activation
+- **Visual**: Pink "Boost: X.Xs" in status bar
+
+### Gold System
+- **Trigger**: Spawns after decay animation
+- **Position**: Random location avoiding cursor
+- **Length**: 10 alphanumeric characters
+- **Duration**: 10 seconds (pausable)
+- **Reward**: Fills heat to max
+- **Cleaner Trigger**: If heat already max when completed
+
+### Nugget System
+- **Behavior**: Spawns every 5 seconds if no active nugget
+- **Collection**:
+  - Typing: Type character on nugget
+  - Jump (Tab): Instant jump to nugget (10 Energy cost)
+- **Reward**: +10% max heat
+- **Bonus**: 4 cleaners if heat at max when collected
+
+### Drain System
+- **Purpose**: Hostile entities scaling with heat
+- **Spawn**: Heat ≥ 10, count = `floor(Heat/10)`, max 10
+- **Position**: Random offset (±10) from cursor
+- **Staggered**: 4 ticks between spawns
+- **LIFO**: SpawnOrder tracks despawn priority
+- **Despawn**: Energy ≤ 0 AND Shield inactive, OR excess drains, OR collisions
+- **Materialize**: 1s cyan block animation from edges
+- **Movement**: Toward cursor every 1s
+- **Collisions**:
+  - Drain-Drain: Mutual destruction
+  - Cursor (No Shield): -10 Heat, drain despawns
+  - Cursor (Shield): Energy drain, no heat loss, drain persists
+  - Shield Zone: 100 energy/tick drain
+
+### Cleaner System
+
+**Horizontal Row Cleaners:**
+- Trigger: `EventCleanerRequest` when gold at max heat
+- Behavior: Sweeps rows with Red characters
+- Phantom: No spawn if no Red (still pushes EventCleanerFinished)
+- Direction: Alternating L→R / R→L
+- Selectivity: Only destroys Red
+
+**Directional Cleaners (4-Way):**
+- Trigger: `EventDirectionalCleanerRequest`
+  - Nugget at max heat: EnergySystem
+  - Enter key (heat ≥ 10): Input handler, costs 10 heat
+- Behavior: 4 cleaners from origin (right, left, down, up)
+- Position Lock: Row/column locked at spawn
+- Selectivity: Only destroys Red
+
+**Common Architecture:**
+- Pure ECS (state in `CleanerComponent`)
+- Vector physics: `position += velocity × dt`
+- Trail: Ring buffer (10 positions, FIFO)
+- Lifecycle: Spawn off-screen → target opposite side → destroy
+- Collision: Swept segment (anti-tunneling)
+- Visual: Pre-calculated gradients, opacity falloff
+- Thread Safety: Event-driven, lock-free queue, ECS sync
+
+### Flash System
+- **Purpose**: Visual flash for entity destruction
+- **Architecture**: Pure ECS (`FlashComponent`)
+- **Duration**: 300ms default
+- **Spawn**: `SpawnDestructionFlash(world, x, y, char, now)`
+- **Usage**: CleanerSystem, DrainSystem, DecaySystem
+- **Lifecycle**: Automatic cleanup after duration
+
+### Shield System
+- **Purpose**: Energy-powered protective field
+- **Activation**: Sources != 0 AND Energy > 0
+- **Energy Costs**:
+  - Passive: 1/second
+  - Shield Zone: 100/tick per drain
+- **Defense**: Drains drain energy (not heat) while active
+- **Visual**:
+  - Elliptical field with linear gradient
+  - Color derived from GameState.LastTypedSeqType/Level
+  - Only renders when `IsShieldActive()` true
+- **Component**: `{Sources uint8, RadiusX, RadiusY float64, OverrideColor ColorClass, MaxOpacity float64, LastDrainTime time.Time}`
+
+### Audio System
+- **AudioEngine**: Dual-queue (realTimeQueue size 5, stateQueue size 10)
+- **Sound Types**: Error (buzz), Bell (nugget), Whoosh (cleaner), Coin (gold)
+- **Integration**: EnergySystem, GoldSystem, NuggetSystem, CleanerSystem
+- **Pause**: Stops sound, drains queues
+- **Controls**: Ctrl+S toggle mute (starts muted)
+- **Thread Safety**: Atomic flags, mutex for playback
 
 ## Extension Points
 
 ### Adding New Components
 1. Define data struct implementing `Component`
-2. Register type in relevant systems
-3. If position-related, ensure proper `PositionStore` integration
+2. Register in relevant systems
+3. Ensure proper `PositionStore` integration if position-related
 
 ### Adding New Systems
 1. Implement `System` interface
 2. Define `Priority()` for execution order
-3. Register in `main.go` after context creation
+3. Register in `main.go`
 
 ### Adding New Visual Effects
 1. Create component for effect data
-2. Add rendering logic to `TerminalRenderer`
-3. Ensure proper layer ordering
+2. Create `SystemRenderer` in `render/renderers/`
+3. Register with orchestrator
 
 ## Invariants to Maintain
 
-1. **Multi-Entity Cells**: Each `SpatialGrid` cell can hold up to 15 entities (`MaxEntitiesPerCell`)
-2. **Component Consistency**: Entity with SequenceComponent MUST have Position and Character
+1. **Multi-Entity Cells**: Max 15 entities per cell
+2. **Component Consistency**: SequenceComponent entities MUST have Position and Character
 3. **Cursor Bounds**: `0 <= CursorX < GameWidth && 0 <= CursorY < GameHeight`
-4. **Heat Mechanics**: Heat is normalized to a fixed range (0-100). Max Heat is always 100
-5. **Boost Mechanic**: When heat reaches maximum (100), boost activates with color-matching (Blue or Green) providing x2 heat multiplier. Typing the matching color extends boost duration by 500ms per character, while typing a different color updates BoostColor but leaves timer unchanged (no reset)
-6. **Red Spawn Invariant**: Red sequences are NEVER spawned directly, only through decay
-7. **Gold Randomness**: Gold sequences spawn at random positions
-8. **6-Color Limit**: At most 6 Blue/Green color/level combinations present simultaneously
-9. **Census Accuracy**: Color census via entity iteration provides exact on-screen counts
+4. **Heat Range**: 0-100 (normalized, max always 100)
+5. **Boost Mechanic**: Heat reaches 100 → boost activates, matching color extends timer
+6. **Red Spawn Invariant**: Red NEVER spawned directly, only via decay
+7. **Gold Randomness**: Random positions
+8. **6-Color Limit**: Max 6 Blue/Green color/level combinations
+9. **Census Accuracy**: Entity iteration provides exact counts
 
 ## Known Constraints and Limitations
 
 ### SpatialGrid Cell Capacity
 
-The `SpatialGrid` enforces a **maximum of 15 entities per cell**:
-
-**Constraint**: Each cell can hold up to `MaxEntitiesPerCell` (15) entities at position (x, y)
-
-**Implications**:
-1. **Soft Clipping**: When a cell is full, additional `Add()` calls are silently ignored (no-op)
-   - Prevents allocation spikes during extreme entity overlap scenarios
-   - Systems should not rely on all entities being successfully added to grid
-   - In practice, 15 entities per cell is sufficient for all gameplay scenarios
-
-2. **Entity Spawning**: SpawnSystem validates positions before placement
-   - Cursor exclusion zone prevents spawning near cursor (5 horizontal, 3 vertical)
-   - Collision detection via `HasAny()` ensures characters don't spawn on occupied cells
-   - Batch operations validate conflicts before committing
-
-3. **Cursor Entity Protection**: Cursor must have `ProtectionComponent` with `Mask: ProtectAll`
-   - Prevents accidental destruction by systems that clean up entities
-   - Critical after `World.Clear()` operations (see `:new` command requirements)
-
-**Design Rationale**:
-- Fixed capacity enables value-type cells with contiguous memory layout (cache-friendly)
-- 128-byte cell size aligns with 2 cache lines for optimal performance
-- Trade-off: Simplicity and performance vs. unlimited entity overlap
-
-## Game Mechanics Details
-
-### Content Management System
-- **ContentManager** (`content/manager.go`): Manages content file discovery and validation
-- **Auto-discovery**: Scans `assets/` directory for `.txt` files at initialization
-- **Validation**: Pre-validates all content at startup for performance
-- **Block Selection**: Random blocks grouped by structure (3-15 lines per spawn)
-- **Refresh Strategy**: Pre-fetches new content at 80% consumption threshold
-- **Location**: Automatically locates project root by searching for `go.mod`, then uses `assets/` subdirectory
-
-### Spawn System
-- **Content Source**: Loads content from `.txt` files in `assets/` directory (discovered by ContentManager)
-- **Block Generation**:
-  - Selects random 3-15 consecutive lines from file per spawn (grouped by indent level and structure)
-  - Lines are trimmed of whitespace before placement
-  - Line order within block doesn't need to be preserved
-- **6-Color Limit**:
-  - Tracks 6 color/level combinations: Blue×3 (Bright, Normal, Dark) + Green×3 (Bright, Normal, Dark)
-  - Uses **census-based tracking** via per-frame entity iteration (no atomic drift)
-  - SpawnSystem runs census by iterating all `SequenceComponent` entities to count active colors
-  - Only spawns new blocks when fewer than 6 color/level combinations are present on screen
-  - When all characters of a color/level are cleared, that slot becomes available for spawning
-  - Census function: `runCensus(world)` returns `ColorCensus` struct with counts for each combination
-  - Red and Gold sequences explicitly excluded from 6-color limit tracking
-- **Intelligent Placement**:
-  - Each line attempts placement up to 3 times
-  - Random row and column selection per attempt
-  - Collision detection with existing characters
-  - Cursor exclusion zone (5 horizontal, 3 vertical)
-  - Lines that fail placement after 3 attempts are discarded
-- **Position**: Random locations across screen avoiding collisions and cursor
-- **Rate**: 2 seconds base, adaptive based on screen fill (1-4 seconds)
-- **Generates**: Only Blue and Green sequences (never Red)
-
-### Decay System
-
-The decay system applies character degradation through a falling entity animation with swept collision detection. The system queries falling entities from the `World.Decays` store each frame (no internal entity tracking), but maintains **internal state maps** for deduplication logic:
-- `decayedThisFrame`: Prevents same entity from being decayed twice during the entire animation
-- `processedGridCells`: Prevents multiple decay entities from hitting the same grid cell in a single frame
-
-This architecture allows for future extensions such as orbital and magnetic effects on decay entities.
-
-#### Decay Mechanics
-- **Brightness Decay**: Bright → Normal → Dark (reduces energy multiplier)
-  - Modifies SequenceComponent level in-place (ECS update)
-- **Color Decay Chain**:
-  - Blue (Dark) → Green (Bright)
-  - Green (Dark) → Red (Bright) ← **Only source of Red sequences**
-  - Red (Dark) → Destroyed
-  - Updates SequenceComponent type during color transitions
-  - Red sequences not tracked in 6-color census (spawn limit doesn't apply)
-- **Timing**: 10-60 seconds interval based on heat level (higher heat = faster decay)
-  - Calculated when Gold sequence ends: `60s - (50s * heatPercentage)`
-  - Timer uses pausable clock (freezes during COMMAND mode)
-- **Census Impact**: Decay changes entity counts for next spawn census
-
-#### Falling Entity Animation
-- **Spawn**: One falling entity per column stored as `DecayComponent` in `World.Decays` store (ensuring complete screen coverage)
-- **Entity Query**: System queries all falling entities via `world.Decays.All()` each frame (no internal entity tracking, only deduplication maps)
-- **Speed**: Random per entity, between 5.0-15.0 rows/second (DecayMinSpeed/MaxSpeed)
-- **Physics Integration**: Position updated via delta time: `YPosition += Speed × dt.Seconds()`
-- **Character**: Random alphanumeric character per entity
-- **Matrix Effect**: Characters randomly change as they fall (controlled by DecayChangeChance)
-- **Duration**: Based on slowest entity reaching bottom (gameHeight / DecayMinSpeed)
-- **Cleanup**: All falling entities automatically destroyed when animation completes (`world.Decays.Count() == 0`)
-
-#### Swept Collision Detection (Anti-Tunneling)
-
-To prevent fast-moving entities from "tunneling" through characters without detecting collisions, the decay system uses swept segment traversal:
-
-**Physics History Tracking** (`DecayComponent`):
-- `PrevPreciseY`: Y position from previous frame
-- `YPosition`: Current Y position (updated by `YPosition += Speed * elapsed`)
-
-**Swept Traversal Logic**:
-1. Calculate integer row range: `startRow = int(PrevPreciseY)`, `endRow = int(YPosition)`
-2. Sort coordinates to handle bidirectional movement: `if startRow > endRow { swap }`
-3. Clamp to screen bounds: `[0, gameHeight-1]`
-4. Iterate through ALL rows in range: `for row := startRow; row <= endRow`
-5. Check collision at each integer grid cell in the path
-
-**Example**:
-- Entity at Y=4.8 in frame N-1, moves to Y=7.3 in frame N
-- Swept traversal checks rows [4, 5, 6, 7]
-- Guarantees collision detection even if entity moves >1 row per frame
-
-#### Coordinate Latching (Anti-Green Artifacts)
-
-Coordinate latching prevents re-processing the same grid cell when an entity lingers:
-
-**Latch State** (`DecayComponent`):
-- `LastIntX`, `LastIntY`: Last processed integer grid coordinates
-- Initialized to `(-1, -1)` to force first-frame processing
-
-**Latch Check Logic**:
-```go
-if col == fall.LastIntX && row == fall.LastIntY {
-    continue // Skip - already processed this cell
-}
-```
-
-**Update After Interaction**:
-- Latch is updated AFTER processing each grid cell
-- Blocks re-processing even if `SpawnSystem` places new entity in same frame
-
-**Result**:
-- Eliminates "Green Artifacts" (lingering collision state)
-- Each grid cell processed exactly once per falling entity
-- New entities spawned at same location will not be hit by latched entity
-
-#### Frame Deduplication (Anti-Double Hits)
-
-Prevents multiple falling entities from hitting the same position in a single frame:
-
-**Deduplication Map** (`DecaySystem.processedGridCells`):
-- Type: `map[int]bool` with integer keys `(row * gameWidth) + col`
-- Scope: Single frame (cleared at start of each `updateFallingEntities` call)
-- Purpose: Track which grid cells have been hit this frame
-- **Zero-Allocation Design**: Map is a persistent field in DecaySystem struct, cleared via `delete()` instead of reallocating
-
-**Pattern**:
-1. Clear map at frame start: `for k := range processedGridCells { delete(processedGridCells, k) }`
-2. Check before processing: `if processedGridCells[flatIdx] { continue }`
-3. Mark after hit: `processedGridCells[flatIdx] = true`
-
-**Performance**:
-- Reuses same map across frames (no allocations in hot path)
-- Integer keys via flat indexing (no `fmt.Sprintf` overhead)
-- O(1) lookup per collision check
-
-#### Entity-Level Deduplication
-
-Prevents the same target entity from being hit multiple times:
-
-**Entity Tracking** (`DecaySystem.decayedThisFrame`):
-- Type: `map[engine.Entity]bool`
-- Scope: Entire animation (cleared when animation starts)
-- Purpose: Track which entities have been decayed
-
-**Pattern**:
-1. Initialize at animation start: `decayedThisFrame = make(map[engine.Entity]bool)`
-2. Check before decay: `if decayedThisFrame[targetEntity] { continue }`
-3. Mark after decay: `decayedThisFrame[targetEntity] = true`
-
-#### Collision Interaction Logic
-
-When a falling entity encounters a target at `(col, row)`:
-
-1. **Latch Check**: Skip if `(col, row) == (LastIntX, LastIntY)`
-2. **Bounds Check**: Skip if outside screen
-3. **Frame Deduplication**: Skip if `processedGridCells[flatIdx]` is true
-4. **Spatial Lookup**: Query entities at position via `world.Positions.GetAllAt(col, row)`
-   - Iterates through all entities at the position (multi-entity support)
-   - Typically 1-2 entities (character + potentially cursor/other overlays)
-5. **Entity Deduplication**: Skip if `decayedThisFrame[targetEntity]` is true
-6. **Process Hit**:
-   - If Nugget: Destroy entity, clear active nugget reference
-   - If Character: Apply decay logic (level/color transition)
-   - Mark: `decayedThisFrame[targetEntity] = true`, `processedGridCells[flatIdx] = true`
-7. **Update Latch**: `LastIntX = col`, `LastIntY = row`
-8. **Matrix Effect**: Randomly change character on row transition
-
-#### Thread Safety
-- **Mutex Protection**: DecaySystem state protected by `sync.RWMutex`
-  - `currentRow`: Current decay row for display purposes
-  - `decayedThisFrame`: Entity-level deduplication map (system internal state)
-  - `processedGridCells`: Frame-level spatial deduplication map (system internal state)
-- **Entity Access**: All falling entities queried from `World.Decays` store (no internal entity tracking)
-- **Component Access**: World's internal synchronization for Get/Add operations
-
-#### Pause Behavior
-- **Timer**: Freezes during COMMAND mode (uses pausable clock)
-- **Animation**: Elapsed time calculation based on `decaySnapshot.StartTime` (pausable)
-- **Visual**: Falling entities dim with rest of game (70% brightness)
-
-### Energy System
-- **Character Typing**: Processes user input in insert mode
-- **Heat Updates**: Typing correct characters increases heat (with boost multiplier if active)
-- **Error Handling**: Incorrect typing resets heat and triggers error cursor
-- **Census Impact**: Character destruction affects next spawn census (no manual counter updates needed)
-
-#### Hit Detection Strategy
-
-The EnergySystem uses `GetAllAtInto()` for zero-allocation hit detection at the cursor position:
-
-**Implementation Pattern**:
-```go
-// Zero-allocation spatial query with stack buffer
-var entityBuf [engine.MaxEntitiesPerCell]engine.Entity
-count := world.Positions.GetAllAtInto(cursorX, cursorY, entityBuf[:])
-entitiesAtCursor := entityBuf[:count]
-
-// Iterate through all entities at cursor position
-for _, entity := range entitiesAtCursor {
-    // Skip cursor entity itself
-    if entity == s.ctx.CursorEntity {
-        continue
-    }
-
-    // Check for character component
-    if char, ok := world.Characters.Get(entity); ok {
-        if seq, ok := world.Sequences.Get(entity); ok {
-            // Process typing logic for this character...
-        }
-    }
-}
-```
-
-**Performance Characteristics**:
-- **GetAllAtInto**: O(1) spatial lookup, max 15 entities at position
-- **Zero allocations**: Stack buffer reused across frames
-- **Multi-entity support**: Properly handles cursor/character overlap without masking
-
-### Boost System
-- **Activation Condition**: Heat reaches maximum (100)
-- **Initial Duration**: 500ms (BoostExtensionDuration constant)
-- **Color Binding**: Tied to color (Blue or Green) that triggered max heat
-- **Extension Mechanic**:
-  - Matching color: +500ms per character (extends timer)
-  - Different color: Timer continues unchanged, BoostColor updates to new color (no extension, no reset)
-  - Red or incorrect: Deactivates and resets heat to 0
-- **Effects**:
-  - Heat gain multiplier: 2× (+2 per character)
-  - Shield activation: Sets `ShieldSourceBoost` in ShieldComponent.Sources
-- **Visual Indicator**: Pink background "Boost: X.Xs" in status bar
-- **Implementation**: BoostSystem (priority 5) manages lifecycle
-  - Sets/clears `ShieldSourceBoost` flag on activation/deactivation
-  - Shield component persists; only Sources bitmask changes
-  - Timer expiration checked each tick
-
-### Gold System
-- **Trigger**: Spawns when decay animation completes (transitions to PhaseNormal)
-- **Position**: Random location avoiding cursor (NOT fixed center-top)
-- **Length**: Fixed 10 alphanumeric characters (randomly generated)
-- **Duration**: 10 seconds (game time via pausable clock) before timeout
-- **Reward**: Fills heat meter to maximum on completion
-- **Cleaner Trigger**: If heat is already at maximum when gold completed, triggers Cleaner animation
-- **Behavior**: Typing gold chars does not affect heat/energy directly
-- **Pause Behavior**: Timeout freezes during COMMAND mode (game time stops)
-
-### Nugget System
-- **Purpose**: Collectible bonus items that spawn randomly.
-- **Behavior**: Spawns every 5 seconds if no nugget is active.
-- **Collection**:
-    - **Typing**: Typing the character displayed on the nugget collects it (handled by EnergySystem).
-    - **Jump (Tab)**: Pressing `Tab` instantly jumps the cursor to the nugget (requires Energy >= 10).
-- **Reward**: Increases Heat by 10% of max heat.
-- **Bonus Mechanic**: If heat is at maximum (100) when nugget is collected, spawns 4 directional cleaners from cursor position.
-- **Cost**: Jumping via `Tab` costs 10 Energy points.
-
-### Drain System
-- **Purpose**: Hostile entities that drain energy, with count scaling based on heat meter.
-- **Multi-Drain Mechanics**:
-  - **Spawn Condition**: Heat >= 10
-  - **Drain Count**: `floor(Heat / 10)`, maximum 10
-  - **Spawn Position**: Random offset (±10) from cursor, skips occupied cells
-  - **Staggered Spawns**: 4 game ticks between spawns
-  - **LIFO Ordering**: SpawnOrder field tracks spawn sequence for despawn priority
-  - **Despawn Triggers**:
-    - Energy <= 0 AND Shield inactive (Sources == 0 OR Energy <= 0)
-    - Excess drains despawn (LIFO - newest first) when heat decreases
-    - Cursor collision without shield active
-    - Drain-drain collision (multiple drains same cell)
-    - Despawn triggers destruction flash effect
-- **Materialize Animation**: 1-second visual telegraph before spawn
-  - Four cyan blocks ('█') converge from screen edges
-  - Physics-based movement with sub-pixel precision and gradient trails
-  - Target position locked at animation start
-- **Movement**: Toward cursor every 1 second (clock-based).
-- **Collision Mechanics**:
-  - **Drain-Drain**: Multiple drains at same cell mutually destroy
-  - **Cursor (No Shield)**: -10 Heat, drain despawns
-  - **Cursor (Shield Active)**: Energy drain only, no heat loss, drain persists
-  - **Shield Zone**: Drains inside shield ellipse drain 100 energy/tick
-- **Visual**: '╬' (Light Cyan).
-- **Constants** (`constants/gameplay.go`):
-  - `DrainMaxCount`: 10, `DrainBreakpointSize`: 10
-  - `DrainSpawnOffsetMax`: 10, `DrainSpawnStaggerTicks`: 4
-  - `DrainShieldEnergyDrainAmount`: 100 (shield zone cost)
-  - `DrainHeatReductionAmount`: 10 (unshielded collision)
-
-### Cleaner System
-
-The system supports two types of cleaners:
-
-#### Horizontal Row Cleaners
-- **Trigger**: Event-driven via `EventCleanerRequest` when gold completed at maximum heat
-  - EnergySystem pushes event: `ctx.PushEvent(engine.EventCleanerRequest, nil)`
-  - CleanerSystem implements `EventHandler` interface, receives event via `HandleEvent()`
-  - EventRouter dispatches event before World.Update() runs
-  - Frame deduplication: Tracks spawned frames to prevent duplicate activations
-- **Behavior**: Sweeps across rows containing Red characters, removing them on contact
-- **Phantom Cleaners**: If no Red characters exist when event consumed, no entities spawn
-  - Still pushes `EventCleanerFinished` (marks completion for testing/debugging)
-  - Phase cycle continues independently (cleaners are non-blocking)
-- **Direction**: Alternating - odd rows sweep L→R, even rows sweep R→L
-- **Selectivity**: Only destroys Red characters, leaves Blue/Green untouched
-
-#### Directional Cleaners (4-Way)
-- **Trigger**: Event-driven via `EventDirectionalCleanerRequest`:
-  - Nugget collection at maximum heat (100): EnergySystem pushes event with cursor position
-  - Enter key in Normal mode (heat ≥ 10): Input handler pushes event, reduces heat by 10
-  - Event payload: `DirectionalCleanerPayload{OriginX, OriginY int}`
-- **Behavior**: Spawns 4 cleaners from origin position moving right, left, down, up
-- **Position Lock**: Each cleaner locks its row (horizontal) or column (vertical) at spawn time
-  - Horizontal cleaners (VelocityX ≠ 0): Row locked, X varies
-  - Vertical cleaners (VelocityY ≠ 0): Column locked, Y varies
-  - Cursor movement after spawn does not affect cleaner paths
-- **Direction Detection**: Implicit via velocity components (VelocityX==0 → vertical)
-- **Selectivity**: Only destroys Red characters, leaves Blue/Green untouched
-
-#### Common Architecture
-- **Update Model**: **Synchronous** - runs in main game loop via ECS Update() method
-- **Architecture**: Pure ECS implementation using vector physics
-  - All state stored in `CleanerComponent` (no external state tracking)
-  - Physics-based movement with sub-pixel precision (`PreciseX`, `PreciseY`)
-  - Velocity-driven updates: `position += velocity × deltaTime`
-  - Frame-rate independent animation via delta time
-- **Configuration**: Direct constants in `constants/cleaners.go`
-  - **CleanerAnimationDuration**: Time to traverse screen (1 second)
-  - **CleanerTrailLength**: Number of trail positions tracked (10)
-  - **CleanerTrailFadeTime**: Trail fade duration (0.3 seconds)
-  - **CleanerChar**: Unicode block character ('█')
-  - **CleanerRemovalFlashDuration**: Flash effect duration (150ms)
-- **Lifecycle**:
-  - Spawn off-screen (±`CleanerTrailLength` from edges)
-  - Target off-screen opposite side
-  - Destroy when head passes target (horizontal: `PreciseX` passes `TargetX`, vertical: `PreciseY` passes `TargetY`)
-  - Ensures trail fully clears screen before entity removal
-- **Physics System**:
-  - **Velocity Calculation**: `baseSpeed = gameWidth / animationDuration`
-  - **Movement Update**: `PreciseX += VelocityX × dt.Seconds()`
-  - **Trail Recording**: New trail point added when cleaner enters new grid cell
-  - **Trail Truncation**: Limited to `CleanerTrailLength` positions (FIFO queue)
-- **Collision Detection** (Swept Segment):
-  - Checks ALL integer positions between previous and current position
-  - Horizontal cleaners: Check X range at fixed Y (row locked)
-  - Vertical cleaners: Check Y range at fixed X (column locked)
-  - Prevents tunneling when cleaner moves >1 char/frame
-  - Uses `math.Min/Max` for bidirectional range (supports all directions)
-  - Range clamped to screen bounds before checking
-  - Example: Horizontal movement from 8.2→10.7 checks positions [8, 9, 10] on locked row
-- **Visual Effects**:
-  - Pre-calculated gradient in renderer (built once at initialization)
-  - Trail rendered with opacity falloff: 100% at head → 0% at tail
-  - Removal flash spawns as separate `FlashComponent` entity
-  - Flash cleanup: Automatic removal after `CleanerRemovalFlashDuration`
-- **Thread Safety**:
-  - Event-driven activation via lock-free EventQueue
-  - Frame deduplication map prevents duplicate spawns (`spawned[event.Frame]`)
-  - Component data protected by ECS World's internal synchronization
-  - Renderer deep-copies trail data directly from components (no snapshots needed)
-  - No external mutexes or state maps required (pure ECS + events)
-- **Performance**:
-  - Zero goroutine overhead (pure synchronous ECS)
-  - No mutex contention (lock-free event queue + ECS synchronization)
-  - Single component query per update
-  - Minimal allocations (trail slice grows/shrinks in-place)
-  - Pre-calculated rendering gradients (zero per-frame color math)
-  - Typical update time: < 0.5ms for 24 cleaners
-
-### Flash System
-- **Purpose**: Centralized management of visual flash effects for entity destruction
-- **Update Model**: **Synchronous** - runs in main game loop via ECS Update() method
-- **Architecture**: Pure ECS implementation with time-based lifecycle
-  - All state stored in `FlashComponent` (X, Y, Char, StartTime, Duration)
-  - Minimal system logic - only checks expiration and destroys entities
-  - Frame-rate independent via time-based duration checks
-- **Configuration**: Direct constants in `constants/cleaners.go`
-  - **DestructionFlashDuration**: Flash effect duration (300ms, increased from 150ms for visibility)
-- **Spawn Pattern**: Package-level helper function `SpawnDestructionFlash()`
-  - Called by any system when destroying an entity with visual feedback
-  - Creates flash entity at destruction position with character appearance
-  - Flash automatically cleaned up by FlashSystem after duration expires
-- **Usage Locations**:
-  - **CleanerSystem**: Flash on Red character removal (line sweep collision)
-  - **DrainSystem**: Flash on all collision types
-    - Sequence collisions (Blue/Green/Gold characters)
-    - Nugget collisions
-    - Decay collisions
-    - Gold sequence destruction (all characters in sequence)
-  - **DecaySystem**: Flash on terminal decay and nugget hits
-    - Terminal decay: Red characters at Dark level → destroyed with flash
-    - Decay hits nugget → flash at nugget position
-- **Lifecycle**:
-  - **Spawn**: `SpawnDestructionFlash(world, x, y, char, now)` creates flash entity
-  - **Update**: FlashSystem checks `now - StartTime >= Duration` each frame
-  - **Cleanup**: Entity destroyed when duration expires (300ms default)
-- **Visual Rendering**:
-  - Flash entities rendered with character appearance at death position
-  - Rendered in dedicated flash rendering layer (after game entities, before cursor)
-  - No gradient or fade - simple character display for full duration
-- **Thread Safety**:
-  - Component data protected by ECS World's internal synchronization
-  - Time-based expiration uses `TimeResource.GameTime` (pausable clock)
-  - No external mutexes required (pure ECS pattern)
-- **Performance**:
-  - Zero goroutine overhead (pure synchronous ECS)
-  - Minimal overhead - single component query per update
-  - Typical active flashes: 1-10 entities (short duration limits accumulation)
-  - Automatic cleanup prevents flash entity buildup
-
-### Shield System
-- **Purpose**: Energy-powered protective field providing drain defense
-- **Activation**: Sources != 0 AND Energy > 0
-  - `Sources` is bitmask (`ShieldSourceBoost` = 1<<0, etc.)
-  - BoostSystem sets/clears `ShieldSourceBoost` flag
-  - Component persists; only Sources field changes
-- **Energy Costs**:
-  - **Passive Drain**: 1 energy/second while active
-  - **Shield Zone Defense**: 100 energy/tick per drain in ellipse
-  - Tracked via `ShieldComponent.LastDrainTime`
-- **Defense Mechanics**:
-  - Drains inside shield ellipse drain energy (not health)
-  - Drains persist while shield active (no heat loss)
-  - Shield deactivates when Energy <= 0
-- **Visual Rendering**:
-  - **Shape**: Elliptical field with independent X/Y radii
-  - **Gradient**: Linear opacity falloff from center
-  - **Ellipse Check**: `(dx/rx)² + (dy/ry)² <= 1.0`
-  - **Visibility**: Only renders when `IsShieldActive()` returns true
-- **Component Fields**:
-  - `Sources` (uint8): Bitmask of activation sources
-  - `RadiusX`, `RadiusY` (float64): Ellipse dimensions
-  - `Color` (tcell.Color): Shield tint
-  - `MaxOpacity` (float64): Center opacity (0.0-1.0)
-  - `LastDrainTime` (time.Time): Passive drain tracker
-- **Constants** (`constants/gameplay.go`):
-  - `ShieldPassiveDrainAmount`: 1 (energy/second)
-  - `ShieldPassiveDrainInterval`: 1 second
-  - `ShieldSourceBoost`: 1<<0 (boost bitmask flag)
-- **Rendering Priority**: 300 (after grid, before UI)
+Max 15 entities per cell:
+- **Soft Clipping**: Full cells ignore additional `Add()` calls
+- **Spawn Validation**: Cursor exclusion, collision detection, batch operations
+- **Cursor Protection**: MUST have `ProtectionComponent` with `Mask: ProtectAll`
+- **Rationale**: Fixed capacity enables value-type cells (cache-friendly, 128-byte = 2 cache lines)
 
 ## Content Files
 
 ### assets/ directory
-- **Purpose**: Contains `.txt` files with game content (code blocks, prose)
-- **Format**: Plain text files containing source code or other text content
-- **Location**: Automatically located at project root by searching for `go.mod`, then `assets/` subdirectory
-- **Content**: Text files (e.g., Go standard library code, technical prose)
-- **Discovery**: ContentManager scans for all `.txt` files (excluding hidden files starting with `.`)
-- **Processing**:
-  - All valid files are pre-validated and cached at initialization
-  - Lines trimmed of whitespace before placement
-  - Empty lines and comments can be included in blocks
-  - Files must have at least 10 valid lines after processing
-  - Content blocks are selected randomly from validated cache
-- **Block Grouping**: Lines grouped into logical code blocks (3-15 lines) based on indent level and brace depth
+- **Purpose**: `.txt` files with game content
+- **Format**: Plain text (code blocks, prose)
+- **Location**: Project root, auto-located via `go.mod`
+- **Discovery**: ContentManager scans all `.txt` (excludes hidden)
+- **Processing**: Pre-validated, cached at init, lines trimmed, min 10 valid lines
+- **Block Grouping**: 3-15 lines based on indent/brace depth

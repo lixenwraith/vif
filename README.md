@@ -49,7 +49,7 @@ The game strictly follows ECS architecture principles with a hybrid real-time/cl
 - **Systems**: All game logic (Boost, Energy, Spawn, Nugget, Gold, Cleaner, Drain, Decay)
 - **World**: Single source of truth for game state
 - **Concurrency**: Lock-free atomics for real-time state, mutexes for clock-tick state
-- **Rendering**: Built with tcell for cross-platform terminal graphics
+- **Rendering**: Direct terminal rendering with custom terminal package and RenderOrchestrator
 
 ## Building and Running
 
