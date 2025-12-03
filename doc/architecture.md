@@ -423,48 +423,29 @@ Component (marker interface)
 
 The game uses **direct terminal rendering** via a custom `terminal` package and `RenderOrchestrator` pattern.
 
-### Terminal Package
+### Terminal Integration
 
-**Terminal Interface** (`terminal/terminal.go`):
-- High-level contract for terminal control
-- Methods: `Init/Fini`, `Size/ResizeChan`, `Flush`, `Clear/Sync`, `PollEvent/PostEvent`
+Vi-fighter uses a custom **terminal package** for direct ANSI terminal control, replacing tcell. The terminal package is designed to be independently usable and provides true color rendering, double-buffered output with cell-level diffing, and raw stdin parsing.
 
-**termImpl** - Concrete implementation:
-- **input**: inputReader for stdin parsing
-- **output**: outputBuffer for double-buffered rendering
-- **resize**: resizeHandler for SIGWINCH detection
-- Thread-safe with sync.Mutex
-- Flush race protection: queries OS dimensions before flush
+**Integration Points:**
 
-**outputBuffer** (`terminal/output.go`):
-- Double-buffered output with cell-level diffing
-- Front buffer: tracks current terminal state
-- Back buffer: new frame to render
-- Style coalescing: only emits SGR when fg/bg/attrs change
-- True color (24-bit RGB) or 256-color fallback
-- 128KB buffered writer
+- **RenderBuffer → Terminal**: Zero-copy cell export via type alias (`render.Cell` = `terminal.Cell`)
+- **Input Handling**: `InputHandler` consumes `terminal.Event` from `PollEvent()`
+- **Lifecycle**: Main loop coordinates `Init()`, event polling, and `Fini()`
+- **Resize Events**: Terminal dimension changes propagate via `EventResize`
 
-**inputReader** (`terminal/input.go`):
-- Raw stdin parsing in dedicated goroutine
-- Non-blocking: uses unix.Poll with 100ms timeout
-- Escape sequence handling (50ms escapeTimeout)
-- Zero-allocation: manual UTF-8 decoding, embedded buffers
-
-**Cell** (`terminal/terminal.go`):
+**Terminal Cell Structure:**
 ```go
 type Cell struct {
-    Rune  rune
-    Fg, Bg RGB
-    Attrs Attr
+    Rune  rune    // Character to display
+    Fg, Bg RGB    // 24-bit colors
+    Attrs Attr    // Style attributes (bold, dim, etc.)
 }
 ```
 
-**Key Patterns:**
-1. **Double Buffering with Diffing**: Compares front vs back, emits only changed cells
-2. **Style State Tracking**: Avoids redundant SGR sequences
-3. **Zero-Allocation Input**: Manual UTF-8 decoding, no allocations
-4. **Graceful Shutdown**: inputReader checks stopCh periodically
-5. **Auto-Wrap Disable**: Prevents scroll on bottom-right corner
+The render package uses `terminal.Cell` directly in `RenderBuffer`, enabling zero-copy transfer via `FlushToTerminal()`. This tight coupling optimizes the render pipeline while keeping the terminal package independently usable.
+
+**For complete terminal package documentation**, see [terminal.md](./terminal.md).
 
 ### Render Package
 
