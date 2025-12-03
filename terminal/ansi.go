@@ -20,9 +20,13 @@ var (
 	csiCursorShow = []byte("\x1b[?25h")
 	csiCursorPos  = []byte("\x1b[") // followed by row;colH
 
-	// Alternate screen buffer
+	// Screen modes
 	csiAltScreenEnter = []byte("\x1b[?1049h")
 	csiAltScreenExit  = []byte("\x1b[?1049l")
+	// DECAWM: Auto-Wrap Mode. ?7l disables wrapping (cursor sticks at right edge),
+	// preventing scroll when writing to bottom-right corner.
+	csiAutoWrapOn  = []byte("\x1b[?7h")
+	csiAutoWrapOff = []byte("\x1b[?7l")
 
 	// Color prefixes
 	csiFg256     = []byte("\x1b[38;5;") // followed by N;m

@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime/debug"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/audio"
@@ -17,6 +18,19 @@ import (
 )
 
 func main() {
+	// Panic Recovery: Ensure terminal is reset even if the game crashes
+	defer func() {
+		if r := recover(); r != nil {
+			// Restore terminal to sane state immediately
+			terminal.EmergencyReset(os.Stdout)
+
+			// Print error and stack trace to stderr so it's visible after reset
+			fmt.Fprintf(os.Stderr, "\n\x1b[31mVI-FIGHTER CRASHED: %v\x1b[0m\n", r)
+			fmt.Fprintf(os.Stderr, "Stack Trace:\n%s\n", debug.Stack())
+			os.Exit(1)
+		}
+	}()
+
 	// Parse command-line flags (keeping flag parsing infrastructure)
 	flag.Parse()
 
@@ -26,6 +40,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Failed to initialize terminal: %v\n", err)
 		os.Exit(1)
 	}
+	// Normal exit terminal cleanup
 	defer term.Fini()
 
 	// Create game context with ECS world

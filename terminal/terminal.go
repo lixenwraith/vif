@@ -158,6 +158,12 @@ func (t *termImpl) Init() error {
 	// Enter alternate screen, hide cursor
 	t.writeRaw(csiAltScreenEnter)
 	t.writeRaw(csiCursorHide)
+
+	// DISABLE AUTO-WRAP
+	// Physically prevents terminal scroll/wrap on bottom-right corner write
+	t.writeRaw(csiAutoWrapOff)
+
+	// Invisible cursor
 	t.cursorVisible.Store(false)
 
 	// Clear screen
@@ -194,6 +200,9 @@ func (t *termImpl) Fini() {
 	// Exit alternate screen
 	t.writeRaw(csiAltScreenExit)
 
+	// Re-enable Auto-Wrap AFTER exiting alt screen to ensure the main buffer has wrap enabled
+	t.writeRaw(csiAutoWrapOn)
+
 	// Reset attributes
 	t.writeRaw(csiSGR0)
 
@@ -229,6 +238,14 @@ func (t *termImpl) Flush(cells []Cell, width, height int) {
 	defer t.mu.Unlock()
 
 	if !t.initialized || t.finalized {
+		return
+	}
+
+	// Atomic frame validation: query OS for actual dimensions
+	// If mismatch, drop frame to prevent resize race corruption
+	currW, currH := getTerminalSize(t.outFd)
+	if currW != width || currH != height {
+		// Mismatch detected: resize happened but logic hasn't caught up, Abort with frame drop!
 		return
 	}
 
@@ -323,7 +340,6 @@ func (t *termImpl) Sync() {
 
 	// Physically clear terminal before full redraw
 	// Diff-based rendering assumes physical terminal matches front buffer state
-	// Breaks on resize expand and needs a reset
 	t.output.clear(RGBBlack)
 	t.output.forceFullRedraw()
 }
@@ -376,5 +392,6 @@ func EmergencyReset(w io.Writer) {
 	w.Write(csiCursorShow)
 	w.Write(csiAltScreenExit)
 	w.Write(csiSGR0)
-	w.Write(csiRIS) // Full reset as last resort
+	w.Write(csiAutoWrapOn) // Ensure auto-wrap restored even on crash
+	w.Write(csiRIS)        // Full reset as last resort
 }

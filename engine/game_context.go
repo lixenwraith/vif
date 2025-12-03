@@ -336,6 +336,12 @@ func (ctx *GameContext) HandleResize() {
 		}
 		AddResource(ctx.World.Resources, configRes)
 
+		// TODO: Optional disable (world.crop)
+		// Cleanup entities outside new bounds to prevent ghosting/resource usage
+		// This uses GameWidth/Height because that is the valid coordinate space for entities.
+		// CRITICAL: This also resizes the spatial grid. Must be done BEFORE buffering logic.
+		ctx.cleanupOutOfBoundsEntities(ctx.GameWidth, ctx.GameHeight)
+
 		// Resize buffer
 		if ctx.Buffer != nil {
 			ctx.Buffer.Resize(ctx.GameWidth, ctx.GameHeight)
@@ -348,6 +354,64 @@ func (ctx *GameContext) HandleResize() {
 			ctx.World.Positions.Add(ctx.CursorEntity, pos)
 		}
 	}
+}
+
+// cleanupOutOfBoundsEntities removes entities that are outside the valid game area
+// and resizes the spatial grid to match new dimensions
+func (ctx *GameContext) cleanupOutOfBoundsEntities(width, height int) {
+	// 1. Clean PositionStore entities (Characters, Nuggets, Drains, Shields, etc.)
+	// We iterate copy of all entities to safely modify
+	allEntities := ctx.World.Positions.All()
+	for _, e := range allEntities {
+		// Skip cursor, it was already clamped
+		if e == ctx.CursorEntity {
+			continue
+		}
+
+		// Skip entities protected from culling
+		if prot, ok := ctx.World.Protections.Get(e); ok {
+			if prot.Mask.Has(components.ProtectFromCull) || prot.Mask == components.ProtectAll {
+				continue
+			}
+		}
+
+		pos, _ := ctx.World.Positions.Get(e)
+		if pos.X >= width || pos.Y >= height {
+			ctx.World.DestroyEntity(e)
+		}
+	}
+
+	// 2. Clean Decay entities (Separate store, floating point Y)
+	decayEntities := ctx.World.Decays.All()
+	for _, e := range decayEntities {
+		decay, _ := ctx.World.Decays.Get(e)
+		if decay.Column >= width || int(decay.YPosition) >= height {
+			ctx.World.DestroyEntity(e)
+		}
+	}
+
+	// 3. Clean Materializer entities (Separate store, grid/float)
+	matEntities := ctx.World.Materializers.All()
+	for _, e := range matEntities {
+		mat, _ := ctx.World.Materializers.Get(e)
+		// Check grid coordinates which are used for logic
+		if mat.GridX >= width || mat.GridY >= height {
+			ctx.World.DestroyEntity(e)
+		}
+	}
+
+	// 4. Clean Cleaner entities (Separate store, grid coords)
+	cleanerEntities := ctx.World.Cleaners.All()
+	for _, e := range cleanerEntities {
+		cl, _ := ctx.World.Cleaners.Get(e)
+		if cl.GridX >= width || cl.GridY >= height {
+			ctx.World.DestroyEntity(e)
+		}
+	}
+
+	// 5. Resize spatial grid to match new dimensions
+	// This ensures subsequent PositionStore.Add calls use the correct grid size
+	ctx.World.Positions.ResizeGrid(width, height)
 }
 
 // IsInsertMode returns true if in insert mode
