@@ -3,10 +3,10 @@ package renderers
 import (
 	"math"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // ShieldRenderer renders active shields with dynamic color from GameState
@@ -86,7 +86,7 @@ func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, b
 				alpha := falloff * shield.MaxOpacity
 
 				// SoftLight blend for gentler falloff
-				buf.Set(screenX, screenY, 0, render.RGBBlack, shieldRGB, render.BlendSoftLight, alpha, tcell.AttrNone)
+				buf.Set(screenX, screenY, 0, render.RGBBlack, shieldRGB, render.BlendSoftLight, alpha, terminal.AttrNone)
 			}
 		}
 	}

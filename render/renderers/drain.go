@@ -3,10 +3,10 @@ package renderers
 import (
 	"fmt"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // DrainRenderer draws the drain entity with transparent background
@@ -43,6 +43,6 @@ func (d *DrainRenderer) Render(ctx render.RenderContext, world *engine.World, bu
 		}
 
 		// Drain floats over backgrounds - use SetFgOnly
-		buf.SetFgOnly(screenX, screenY, constants.DrainChar, render.RgbDrain, tcell.AttrNone)
+		buf.SetFgOnly(screenX, screenY, constants.DrainChar, render.RgbDrain, terminal.AttrNone)
 	}
 }

@@ -1,16 +1,16 @@
 package render
 
 import (
-	"github.com/gdamore/tcell/v2"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // CompositorCell is the authoritative cell state
-// Stores RGB colors directly, attributes preserved as tcell.AttrMask
+// Stores RGB colors directly, attributes preserved as terminal.Attr
 type CompositorCell struct {
 	Rune  rune
 	Fg    RGB
 	Bg    RGB
-	Attrs tcell.AttrMask
+	Attrs terminal.Attr
 }
 
 // DefaultBgRGB is the default background color (Tokyo Night)
@@ -20,7 +20,7 @@ var emptyCell = CompositorCell{
 	Rune:  ' ',
 	Fg:    DefaultBgRGB,
 	Bg:    DefaultBgRGB,
-	Attrs: tcell.AttrNone,
+	Attrs: terminal.AttrNone,
 }
 
 // EmptyCell returns a copy of the empty cell sentinel

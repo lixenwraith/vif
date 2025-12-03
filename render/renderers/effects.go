@@ -1,10 +1,10 @@
 package renderers
 
 import (
-	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // EffectsRenderer draws decay, cleaners, removal flashes, and materializers
@@ -95,7 +95,7 @@ func (e *EffectsRenderer) drawDecay(ctx render.RenderContext, world *engine.Worl
 		}
 
 		// Decay floats over backgrounds - use SetFgOnly
-		buf.SetFgOnly(screenX, screenY, decay.Char, render.RgbDecay, tcell.AttrNone)
+		buf.SetFgOnly(screenX, screenY, decay.Char, render.RgbDecay, terminal.AttrNone)
 	}
 }
 
@@ -178,7 +178,7 @@ func (e *EffectsRenderer) drawRemovalFlashes(ctx render.RenderContext, world *en
 		screenY := ctx.GameY + flash.Y
 
 		// Use BlendAdd to brighten underlying pixels (write-only)
-		buf.Set(screenX, screenY, flash.Char, flashColor, flashColor, render.BlendAdd, 1.0, tcell.AttrNone)
+		buf.Set(screenX, screenY, flash.Char, flashColor, flashColor, render.BlendAdd, 1.0, terminal.AttrNone)
 	}
 }
 
@@ -222,7 +222,7 @@ func (e *EffectsRenderer) drawMaterializers(ctx render.RenderContext, world *eng
 			color := e.materializeGradient[gradientIndex]
 
 			// BlendMax with SrcBg=Black preserves destination bg: Max(Dst, 0) = Dst
-			buf.Set(screenX, screenY, mat.Char, color, render.RGBBlack, render.BlendMax, 1.0, tcell.AttrNone)
+			buf.Set(screenX, screenY, mat.Char, color, render.RGBBlack, render.BlendMax, 1.0, terminal.AttrNone)
 		}
 	}
 }

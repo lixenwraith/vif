@@ -6,7 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -14,31 +13,23 @@ import (
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/render/renderers"
 	"github.com/lixenwraith/vi-fighter/systems"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 func main() {
 	// Parse command-line flags (keeping flag parsing infrastructure)
 	flag.Parse()
 
-	// Initialize screen
-	screen, err := tcell.NewScreen()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create screen: %v\n", err)
+	// Initialize terminal
+	term := terminal.New()
+	if err := term.Init(); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize terminal: %v\n", err)
 		os.Exit(1)
 	}
-
-	if err := screen.Init(); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to initialize screen: %v\n", err)
-		os.Exit(1)
-	}
-	defer screen.Fini()
-
-	// Force true color mode - tcell defaults to palette quantization
-	screen.SetStyle(tcell.StyleDefault.Background(tcell.ColorReset).Foreground(tcell.ColorReset))
-	screen.EnablePaste()
+	defer term.Fini()
 
 	// Create game context with ECS world
-	ctx := engine.NewGameContext(screen)
+	ctx := engine.NewGameContext(term)
 
 	// Initialize audio engine
 	if audioEngine, err := audio.NewAudioEngine(); err == nil {
@@ -87,7 +78,7 @@ func main() {
 
 	// Create render orchestrator
 	orchestrator := render.NewRenderOrchestrator(
-		screen,
+		term,
 		ctx.Width,
 		ctx.Height,
 	)
@@ -117,6 +108,7 @@ func main() {
 	heatMeterRenderer := renderers.NewHeatMeterRenderer(ctx.State)
 	orchestrator.Register(heatMeterRenderer, render.PriorityUI)
 
+	// TODO: check LineNumWidth arg
 	lineNumbersRenderer := renderers.NewLineNumbersRenderer(ctx.LineNumWidth, ctx)
 	orchestrator.Register(lineNumbersRenderer, render.PriorityUI)
 
@@ -156,10 +148,10 @@ func main() {
 	frameTicker := time.NewTicker(constants.FrameUpdateInterval)
 	defer frameTicker.Stop()
 
-	eventChan := make(chan tcell.Event, 100)
+	eventChan := make(chan terminal.Event, 256)
 	go func() {
 		for {
-			eventChan <- screen.PollEvent()
+			eventChan <- term.PollEvent()
 		}
 	}()
 
@@ -189,8 +181,11 @@ func main() {
 			clockScheduler.DispatchEventsImmediately()
 
 			// Update orchestrator dimensions if screen resized
-			// This needs to work during pause for proper display
-			if _, isResize := ev.(*tcell.EventResize); isResize {
+			// TODO: it should work during pause
+			if ev.Type == terminal.EventResize {
+				ctx.Width = ev.Width
+				ctx.Height = ev.Height
+				ctx.HandleResize()
 				orchestrator.Resize(ctx.Width, ctx.Height)
 			}
 
@@ -209,8 +204,7 @@ func main() {
 
 			// During pause: skip game updates but still render
 			if ctx.IsPaused.Load() {
-				// This shows the pause overlay and maintains visual feedback
-
+				// Show pause overlay and maintains visual feedback
 				cursorPos, _ := ctx.World.Positions.Get(ctx.CursorEntity)
 				renderCtx := render.NewRenderContextFromGame(ctx, timeRes, cursorPos.X, cursorPos.Y)
 				orchestrator.RenderFrame(renderCtx, ctx.World)

@@ -1,9 +1,9 @@
 package renderers
 
 import (
-	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // HeatMeterRenderer draws the heat meter bar at the top of the screen
@@ -48,7 +48,7 @@ func (h *HeatMeterRenderer) Render(ctx render.RenderContext, world *engine.World
 
 		// Draw all characters in this segment
 		for x := segmentStart; x < segmentEnd && x < ctx.Width; x++ {
-			buf.Set(x, 0, '█', color, render.DefaultBgRGB, render.BlendReplace, 1.0, tcell.AttrNone)
+			buf.Set(x, 0, '█', color, render.DefaultBgRGB, render.BlendReplace, 1.0, terminal.AttrNone)
 		}
 	}
 }

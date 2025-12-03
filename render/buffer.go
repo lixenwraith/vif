@@ -1,7 +1,7 @@
 package render
 
 import (
-	"github.com/gdamore/tcell/v2"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // RenderBuffer is a compositor backed by RGB cells with dirty tracking
@@ -20,10 +20,10 @@ func NewRenderBuffer(width, height int) *RenderBuffer {
 	touched := make([]bool, size)
 	for i := range cells {
 		cells[i] = CompositorCell{
-			Rune:  ' ',
+			Rune:  0,
 			Fg:    DefaultBgRGB,
 			Bg:    RGBBlack,
-			Attrs: tcell.AttrNone,
+			Attrs: terminal.AttrNone,
 		}
 		touched[i] = false
 	}
@@ -52,10 +52,10 @@ func (b *RenderBuffer) Clear() {
 	}
 	// Initialize first cell
 	b.cells[0] = CompositorCell{
-		Rune:  ' ',
+		Rune:  0,
 		Fg:    DefaultBgRGB,
 		Bg:    RGBBlack,
-		Attrs: tcell.AttrNone,
+		Attrs: terminal.AttrNone,
 	}
 	b.touched[0] = false
 	// Exponential copy for cells
@@ -76,7 +76,7 @@ func (b *RenderBuffer) inBounds(x, y int) bool {
 // ===== COMPOSITOR API =====
 
 // Set composites a cell with specified blend mode
-func (b *RenderBuffer) Set(x, y int, mainRune rune, fg, bg RGB, mode BlendMode, alpha float64, attrs tcell.AttrMask) {
+func (b *RenderBuffer) Set(x, y int, mainRune rune, fg, bg RGB, mode BlendMode, alpha float64, attrs terminal.Attr) {
 	if !b.inBounds(x, y) {
 		return
 	}
@@ -127,13 +127,13 @@ func (b *RenderBuffer) Set(x, y int, mainRune rune, fg, bg RGB, mode BlendMode, 
 
 // SetFgOnly writes rune, foreground, and attrs while preserving existing background
 // Use for text that floats over backgrounds (grid, shields)
-func (b *RenderBuffer) SetFgOnly(x, y int, r rune, fg RGB, attrs tcell.AttrMask) {
+func (b *RenderBuffer) SetFgOnly(x, y int, r rune, fg RGB, attrs terminal.Attr) {
 	b.Set(x, y, r, fg, RGBBlack, BlendFgOnly, 0, attrs)
 }
 
 // SetWithBg writes a rune with explicit fg and bg colors (opaque replace)
 func (b *RenderBuffer) SetWithBg(x, y int, r rune, fg, bg RGB) {
-	b.Set(x, y, r, fg, bg, BlendReplace, 1.0, tcell.AttrNone)
+	b.Set(x, y, r, fg, bg, BlendReplace, 1.0, terminal.AttrNone)
 }
 
 // ===== OUTPUT =====
@@ -147,23 +147,23 @@ func (b *RenderBuffer) finalize() {
 	}
 }
 
-// Flush writes render buffer (full screen frame) to tcell.Screen
-func (b *RenderBuffer) Flush(screen tcell.Screen) {
+// ToTerminalCells converts compositor cells to terminal cells for output
+func (b *RenderBuffer) ToTerminalCells() []terminal.Cell {
 	b.finalize()
-	for y := 0; y < b.height; y++ {
-		row := y * b.width
-		for x := 0; x < b.width; x++ {
-			c := b.cells[row+x]
-			style := tcell.StyleDefault.
-				Foreground(RGBToTcell(c.Fg)).
-				Background(RGBToTcell(c.Bg)).
-				Attributes(c.Attrs)
-			screen.SetContent(x, y, c.Rune, nil, style)
+	out := make([]terminal.Cell, len(b.cells))
+	for i, c := range b.cells {
+		out[i] = terminal.Cell{
+			Rune:  c.Rune,
+			Fg:    terminal.RGB{R: c.Fg.R, G: c.Fg.G, B: c.Fg.B},
+			Bg:    terminal.RGB{R: c.Bg.R, G: c.Bg.G, B: c.Bg.B},
+			Attrs: c.Attrs,
 		}
 	}
+	return out
 }
 
-// RGBToTcell converts RGB to tcell.Color
-func RGBToTcell(rgb RGB) tcell.Color {
-	return tcell.NewRGBColor(int32(rgb.R), int32(rgb.G), int32(rgb.B))
+// FlushToTerminal writes render buffer to terminal
+func (b *RenderBuffer) FlushToTerminal(term terminal.Terminal) {
+	cells := b.ToTerminalCells()
+	term.Flush(cells, b.width, b.height)
 }

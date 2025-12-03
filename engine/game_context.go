@@ -5,11 +5,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // GameMode represents the current input mode
@@ -34,8 +34,10 @@ type GameContext struct {
 	// Event queue for inter-system communication
 	eventQueue *EventQueue
 
-	// Screen and buffer
-	Screen tcell.Screen
+	// Terminal interface
+	Terminal terminal.Terminal
+
+	// Terminal screen buffer
 	Buffer *core.Buffer
 
 	// Pausable Clock time provider
@@ -97,15 +99,15 @@ type GameContext struct {
 }
 
 // NewGameContext creates a new game context with initialized ECS world
-func NewGameContext(screen tcell.Screen) *GameContext {
-	width, height := screen.Size()
+func NewGameContext(term terminal.Terminal) *GameContext {
+	width, height := term.Size()
 
 	// Create pausable clock
 	pausableClock := NewPausableClock()
 
 	ctx := &GameContext{
 		World:         NewWorld(),
-		Screen:        screen,
+		Terminal:      term,
 		PausableClock: pausableClock,
 		Width:         width,
 		Height:        height,
@@ -317,7 +319,7 @@ func formatNumber(n int) int {
 
 // HandleResize handles terminal resize events
 func (ctx *GameContext) HandleResize() {
-	newWidth, newHeight := ctx.Screen.Size()
+	newWidth, newHeight := ctx.Terminal.Size()
 	if newWidth != ctx.Width || newHeight != ctx.Height {
 		ctx.Width = newWidth
 		ctx.Height = newHeight

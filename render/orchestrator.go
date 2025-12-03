@@ -1,8 +1,8 @@
 package render
 
 import (
-	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 type rendererEntry struct {
@@ -13,16 +13,16 @@ type rendererEntry struct {
 
 // RenderOrchestrator coordinates the render pipeline
 type RenderOrchestrator struct {
-	screen    tcell.Screen
+	term      terminal.Terminal
 	buffer    *RenderBuffer
 	renderers []rendererEntry
 	regCount  int
 }
 
-// NewRenderOrchestrator creates an orchestrator with the given screen and dimensions
-func NewRenderOrchestrator(screen tcell.Screen, width, height int) *RenderOrchestrator {
+// NewRenderOrchestrator creates an orchestrator with the given terminal and dimensions
+func NewRenderOrchestrator(term terminal.Terminal, width, height int) *RenderOrchestrator {
 	return &RenderOrchestrator{
-		screen:    screen,
+		term:      term,
 		buffer:    NewRenderBuffer(width, height),
 		renderers: make([]rendererEntry, 0, 16),
 	}
@@ -51,10 +51,10 @@ func (o *RenderOrchestrator) Register(r SystemRenderer, priority RenderPriority)
 	o.renderers[pos] = entry
 }
 
-// Resize updates buffer dimensions and syncs screen
+// Resize updates buffer dimensions and syncs terminal
 func (o *RenderOrchestrator) Resize(width, height int) {
 	o.buffer.Resize(width, height)
-	o.screen.Sync()
+	o.term.Sync()
 }
 
 // RenderFrame executes the render pipeline: clear, render all, flush, show
@@ -72,6 +72,5 @@ func (o *RenderOrchestrator) RenderFrame(ctx RenderContext, world *engine.World)
 		entry.renderer.Render(ctx, world, o.buffer)
 	}
 
-	o.buffer.Flush(o.screen)
-	o.screen.Show()
+	o.buffer.FlushToTerminal(o.term)
 }

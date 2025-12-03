@@ -1,10 +1,10 @@
 package modes
 
 import (
-	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // InputHandler processes user input events
@@ -24,36 +24,36 @@ func NewInputHandler(ctx *engine.GameContext) *InputHandler {
 	}
 }
 
-// HandleEvent processes a tcell event and returns false if the game should exit
-func (h *InputHandler) HandleEvent(ev tcell.Event) bool {
-	switch ev := ev.(type) {
-	case *tcell.EventKey:
+// HandleEvent processes a terminal event and returns false if the game should exit
+func (h *InputHandler) HandleEvent(ev terminal.Event) bool {
+	switch ev.Type {
+	case terminal.EventKey:
 		if h.ctx.StatusMessage != "" {
 			h.ctx.StatusMessage = ""
 		}
 		return h.handleKeyEvent(ev)
-	case *tcell.EventResize:
+	case terminal.EventResize:
 		h.ctx.HandleResize()
 		return true
 	}
 	return true
 }
 
-func (h *InputHandler) handleKeyEvent(ev *tcell.EventKey) bool {
+func (h *InputHandler) handleKeyEvent(ev terminal.Event) bool {
 	h.ctx.State.RecordAction()
 
-	if ev.Key() == tcell.KeyCtrlQ || ev.Key() == tcell.KeyCtrlC {
+	if ev.Key == terminal.KeyCtrlQ || ev.Key == terminal.KeyCtrlC {
 		return false
 	}
 
-	if ev.Key() == tcell.KeyCtrlS {
+	if ev.Key == terminal.KeyCtrlS {
 		if h.ctx.AudioEngine != nil {
 			_ = h.ctx.ToggleAudioMute()
 		}
 		return true
 	}
 
-	if ev.Key() == tcell.KeyEscape {
+	if ev.Key == terminal.KeyEscape {
 		h.machine.Reset()
 
 		if h.ctx.IsSearchMode() {
@@ -92,23 +92,23 @@ func (h *InputHandler) handleKeyEvent(ev *tcell.EventKey) bool {
 	}
 }
 
-func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
+func (h *InputHandler) handleNormalMode(ev terminal.Event) bool {
 	// Special keys - wrapped in RunSafe
-	switch ev.Key() {
-	case tcell.KeyUp, tcell.KeyDown, tcell.KeyLeft, tcell.KeyRight,
-		tcell.KeyHome, tcell.KeyEnd, tcell.KeyTab, tcell.KeyEnter,
-		tcell.KeyBackspace, tcell.KeyBackspace2:
+	switch ev.Key {
+	case terminal.KeyUp, terminal.KeyDown, terminal.KeyLeft, terminal.KeyRight,
+		terminal.KeyHome, terminal.KeyEnd, terminal.KeyTab, terminal.KeyEnter,
+		terminal.KeyBackspace:
 		h.ctx.World.RunSafe(func() {
 			h.handleNormalModeSpecialKeys(ev)
 		})
 		return true
 	}
 
-	if ev.Key() != tcell.KeyRune {
+	if ev.Key != terminal.KeyRune {
 		return true
 	}
 
-	result := h.machine.Process(ev.Rune(), h.bindings)
+	result := h.machine.Process(ev.Rune, h.bindings)
 
 	if result.ModeChange != 0 {
 		h.ctx.Mode = result.ModeChange
@@ -131,48 +131,48 @@ func (h *InputHandler) handleNormalMode(ev *tcell.EventKey) bool {
 	return result.Continue
 }
 
-func (h *InputHandler) handleNormalModeSpecialKeys(ev *tcell.EventKey) {
+func (h *InputHandler) handleNormalModeSpecialKeys(ev terminal.Event) {
 	pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
 	if !ok {
 		return
 	}
 
-	switch ev.Key() {
-	case tcell.KeyUp:
+	switch ev.Key {
+	case terminal.KeyUp:
 		result := MotionUp(h.ctx, pos.X, pos.Y, 1)
 		OpMove(h.ctx, result, 'k')
 		h.ctx.State.SetHeat(0)
 
-	case tcell.KeyDown:
+	case terminal.KeyDown:
 		result := MotionDown(h.ctx, pos.X, pos.Y, 1)
 		OpMove(h.ctx, result, 'j')
 		h.ctx.State.SetHeat(0)
 
-	case tcell.KeyLeft:
+	case terminal.KeyLeft:
 		result := MotionLeft(h.ctx, pos.X, pos.Y, 1)
 		OpMove(h.ctx, result, 'h')
 		h.ctx.State.SetHeat(0)
 
-	case tcell.KeyRight:
+	case terminal.KeyRight:
 		result := MotionRight(h.ctx, pos.X, pos.Y, 1)
 		OpMove(h.ctx, result, 'l')
 		h.ctx.State.SetHeat(0)
 
-	case tcell.KeyHome:
+	case terminal.KeyHome:
 		result := MotionLineStart(h.ctx, pos.X, pos.Y, 1)
 		OpMove(h.ctx, result, '0')
 		h.ctx.State.SetHeat(0)
 
-	case tcell.KeyEnd:
+	case terminal.KeyEnd:
 		result := MotionLineEnd(h.ctx, pos.X, pos.Y, 1)
 		OpMove(h.ctx, result, '$')
 		h.ctx.State.SetHeat(0)
 
-	case tcell.KeyBackspace, tcell.KeyBackspace2:
+	case terminal.KeyBackspace:
 		result := MotionLeft(h.ctx, pos.X, pos.Y, 1)
 		OpMove(h.ctx, result, 'h')
 
-	case tcell.KeyTab:
+	case terminal.KeyTab:
 		energy := h.ctx.State.GetEnergy()
 		if energy < 10 {
 			return
@@ -209,7 +209,7 @@ func (h *InputHandler) handleNormalModeSpecialKeys(ev *tcell.EventKey) {
 			h.ctx.AudioEngine.SendState(cmd)
 		}
 
-	case tcell.KeyEnter:
+	case terminal.KeyEnter:
 		currentHeat := h.ctx.State.GetHeat()
 		if currentHeat >= 10 {
 			h.ctx.State.AddHeat(-10)
@@ -228,14 +228,14 @@ func (h *InputHandler) handleNormalModeSpecialKeys(ev *tcell.EventKey) {
 	h.ctx.LastCommand = ""
 }
 
-func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
+func (h *InputHandler) handleInsertMode(ev terminal.Event) bool {
 	pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
 	if !ok {
 		return true
 	}
 
-	switch ev.Key() {
-	case tcell.KeyUp:
+	switch ev.Key {
+	case terminal.KeyUp:
 		h.ctx.World.RunSafe(func() {
 			result := MotionUp(h.ctx, pos.X, pos.Y, 1)
 			OpMove(h.ctx, result, 'k')
@@ -243,7 +243,7 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 		})
 		return true
 
-	case tcell.KeyDown:
+	case terminal.KeyDown:
 		h.ctx.World.RunSafe(func() {
 			result := MotionDown(h.ctx, pos.X, pos.Y, 1)
 			OpMove(h.ctx, result, 'j')
@@ -251,7 +251,7 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 		})
 		return true
 
-	case tcell.KeyLeft:
+	case terminal.KeyLeft:
 		h.ctx.World.RunSafe(func() {
 			result := MotionLeft(h.ctx, pos.X, pos.Y, 1)
 			OpMove(h.ctx, result, 'h')
@@ -259,7 +259,7 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 		})
 		return true
 
-	case tcell.KeyRight:
+	case terminal.KeyRight:
 		h.ctx.World.RunSafe(func() {
 			result := MotionRight(h.ctx, pos.X, pos.Y, 1)
 			OpMove(h.ctx, result, 'l')
@@ -267,7 +267,7 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 		})
 		return true
 
-	case tcell.KeyHome:
+	case terminal.KeyHome:
 		h.ctx.World.RunSafe(func() {
 			result := MotionLineStart(h.ctx, pos.X, pos.Y, 1)
 			OpMove(h.ctx, result, '0')
@@ -275,7 +275,7 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 		})
 		return true
 
-	case tcell.KeyEnd:
+	case terminal.KeyEnd:
 		h.ctx.World.RunSafe(func() {
 			result := MotionLineEnd(h.ctx, pos.X, pos.Y, 1)
 			OpMove(h.ctx, result, '$')
@@ -283,7 +283,7 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 		})
 		return true
 
-	case tcell.KeyBackspace, tcell.KeyBackspace2:
+	case terminal.KeyBackspace:
 		h.ctx.World.RunSafe(func() {
 			p, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
 			if ok && p.X > 0 {
@@ -293,7 +293,7 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 		})
 		return true
 
-	case tcell.KeyTab:
+	case terminal.KeyTab:
 		h.ctx.World.RunSafe(func() {
 			energy := h.ctx.State.GetEnergy()
 			if energy < 10 {
@@ -333,7 +333,7 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 		})
 		return true
 
-	case tcell.KeyEnter:
+	case terminal.KeyEnter:
 		h.ctx.World.RunSafe(func() {
 			currentHeat := h.ctx.State.GetHeat()
 			if currentHeat >= 10 {
@@ -351,8 +351,8 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 		})
 		return true
 
-	case tcell.KeyRune:
-		if ev.Rune() == ' ' {
+	case terminal.KeyRune:
+		if ev.Rune == ' ' {
 			h.ctx.World.RunSafe(func() {
 				p, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
 				if ok && p.X < h.ctx.GameWidth-1 {
@@ -364,7 +364,7 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 		}
 		// Push typing event (processed by EnergySystem via EventRouter)
 		payload := engine.CharacterTypedPayloadPool.Get().(*engine.CharacterTypedPayload)
-		payload.Char = ev.Rune()
+		payload.Char = ev.Rune
 		payload.X = pos.X
 		payload.Y = pos.Y
 		h.ctx.PushEvent(engine.EventCharacterTyped, payload, h.ctx.PausableClock.Now())
@@ -372,8 +372,8 @@ func (h *InputHandler) handleInsertMode(ev *tcell.EventKey) bool {
 	return true
 }
 
-func (h *InputHandler) handleSearchMode(ev *tcell.EventKey) bool {
-	if ev.Key() == tcell.KeyEnter {
+func (h *InputHandler) handleSearchMode(ev terminal.Event) bool {
+	if ev.Key == terminal.KeyEnter {
 		if h.ctx.SearchText != "" {
 			// Wrap in RunSafe as PerformSearch writes to ECS
 			h.ctx.World.RunSafe(func() {
@@ -386,20 +386,20 @@ func (h *InputHandler) handleSearchMode(ev *tcell.EventKey) bool {
 		h.ctx.SearchText = ""
 		return true
 	}
-	if ev.Key() == tcell.KeyBackspace || ev.Key() == tcell.KeyBackspace2 {
+	if ev.Key == terminal.KeyBackspace {
 		if len(h.ctx.SearchText) > 0 {
 			h.ctx.SearchText = h.ctx.SearchText[:len(h.ctx.SearchText)-1]
 		}
 		return true
 	}
-	if ev.Key() == tcell.KeyRune {
-		h.ctx.SearchText += string(ev.Rune())
+	if ev.Key == terminal.KeyRune {
+		h.ctx.SearchText += string(ev.Rune)
 	}
 	return true
 }
 
-func (h *InputHandler) handleCommandMode(ev *tcell.EventKey) bool {
-	if ev.Key() == tcell.KeyEnter {
+func (h *InputHandler) handleCommandMode(ev terminal.Event) bool {
+	if ev.Key == terminal.KeyEnter {
 		command := h.ctx.CommandText
 		var shouldContinue bool
 
@@ -419,20 +419,20 @@ func (h *InputHandler) handleCommandMode(ev *tcell.EventKey) bool {
 
 		return shouldContinue
 	}
-	if ev.Key() == tcell.KeyBackspace || ev.Key() == tcell.KeyBackspace2 {
+	if ev.Key == terminal.KeyBackspace {
 		if len(h.ctx.CommandText) > 0 {
 			h.ctx.CommandText = h.ctx.CommandText[:len(h.ctx.CommandText)-1]
 		}
 		return true
 	}
-	if ev.Key() == tcell.KeyRune {
-		h.ctx.CommandText += string(ev.Rune())
+	if ev.Key == terminal.KeyRune {
+		h.ctx.CommandText += string(ev.Rune)
 	}
 	return true
 }
 
-func (h *InputHandler) handleOverlayMode(ev *tcell.EventKey) bool {
-	if ev.Key() == tcell.KeyEscape || ev.Key() == tcell.KeyEnter {
+func (h *InputHandler) handleOverlayMode(ev terminal.Event) bool {
+	if ev.Key == terminal.KeyEscape || ev.Key == terminal.KeyEnter {
 		h.ctx.OverlayActive = false
 		h.ctx.OverlayTitle = ""
 		h.ctx.OverlayContent = nil
@@ -442,14 +442,14 @@ func (h *InputHandler) handleOverlayMode(ev *tcell.EventKey) bool {
 		return true
 	}
 
-	if ev.Key() == tcell.KeyUp || (ev.Key() == tcell.KeyRune && ev.Rune() == 'k') {
+	if ev.Key == terminal.KeyUp || (ev.Key == terminal.KeyRune && ev.Rune == 'k') {
 		if h.ctx.OverlayScroll > 0 {
 			h.ctx.OverlayScroll--
 		}
 		return true
 	}
 
-	if ev.Key() == tcell.KeyDown || (ev.Key() == tcell.KeyRune && ev.Rune() == 'j') {
+	if ev.Key == terminal.KeyDown || (ev.Key == terminal.KeyRune && ev.Rune == 'j') {
 		if h.ctx.OverlayScroll < len(h.ctx.OverlayContent)-1 {
 			h.ctx.OverlayScroll++
 		}

@@ -1,9 +1,9 @@
 package renderers
 
 import (
-	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // PingGridRenderer draws cursor row/column highlights and optional grid lines
@@ -50,7 +50,7 @@ func (p *PingGridRenderer) drawPingHighlights(ctx render.RenderContext, buf *ren
 		screenY := ctx.GameY + ctx.CursorY
 		if screenX >= ctx.GameX && screenX < ctx.Width &&
 			screenY >= ctx.GameY && screenY < ctx.GameY+ctx.GameHeight {
-			buf.Set(screenX, screenY, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, tcell.AttrNone)
+			buf.Set(screenX, screenY, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, terminal.AttrNone)
 		}
 	}
 
@@ -60,7 +60,7 @@ func (p *PingGridRenderer) drawPingHighlights(ctx render.RenderContext, buf *ren
 		screenY := ctx.GameY + y
 		if screenX >= ctx.GameX && screenX < ctx.Width &&
 			screenY >= ctx.GameY && screenY < ctx.GameY+ctx.GameHeight {
-			buf.Set(screenX, screenY, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, tcell.AttrNone)
+			buf.Set(screenX, screenY, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, terminal.AttrNone)
 		}
 	}
 }
@@ -80,13 +80,13 @@ func (p *PingGridRenderer) drawPingGrid(ctx render.RenderContext, buf *render.Re
 
 		if colRight < ctx.GameWidth {
 			for y := 0; y < ctx.GameHeight; y++ {
-				buf.Set(ctx.GameX+colRight, ctx.GameY+y, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, tcell.AttrNone)
+				buf.Set(ctx.GameX+colRight, ctx.GameY+y, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, terminal.AttrNone)
 			}
 		}
 
 		if colLeft >= 0 {
 			for y := 0; y < ctx.GameHeight; y++ {
-				buf.Set(ctx.GameX+colLeft, ctx.GameY+y, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, tcell.AttrNone)
+				buf.Set(ctx.GameX+colLeft, ctx.GameY+y, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, terminal.AttrNone)
 			}
 		}
 	}
@@ -103,13 +103,13 @@ func (p *PingGridRenderer) drawPingGrid(ctx render.RenderContext, buf *render.Re
 
 		if rowDown < ctx.GameHeight {
 			for x := 0; x < ctx.GameWidth; x++ {
-				buf.Set(ctx.GameX+x, ctx.GameY+rowDown, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, tcell.AttrNone)
+				buf.Set(ctx.GameX+x, ctx.GameY+rowDown, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, terminal.AttrNone)
 			}
 		}
 
 		if rowUp >= 0 {
 			for x := 0; x < ctx.GameWidth; x++ {
-				buf.Set(ctx.GameX+x, ctx.GameY+rowUp, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, tcell.AttrNone)
+				buf.Set(ctx.GameX+x, ctx.GameY+rowUp, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, terminal.AttrNone)
 			}
 		}
 	}

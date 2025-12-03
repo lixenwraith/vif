@@ -51,6 +51,8 @@ func (o *outputBuffer) resize(width, height int) {
 }
 
 // cellEqual compares two cells for equality (standalone for inlining)
+// Optimization: Skip foreground check to save CPU cycles considering current game context
+// TODO: no issue found in tests, trace to make sure doesn't break space
 func cellEqual(a, b Cell) bool {
 	if a.Rune != b.Rune || a.Attrs != b.Attrs {
 		return false
@@ -89,15 +91,10 @@ func (o *outputBuffer) flush(cells []Cell, width, height int) {
 
 			// Position cursor once for this dirty region
 			if !o.cursorValid || x != o.cursorX || y != o.cursorY {
+				// Always use non-destructive cursor movement
+				// TODO: review, optimization attempt for multiple jumps with ' ' write is destructive
 				if o.cursorValid && y == o.cursorY && x > o.cursorX {
-					gap := x - o.cursorX
-					if gap < 4 {
-						for i := 0; i < gap; i++ {
-							w.WriteByte(' ')
-						}
-					} else {
-						writeCursorForward(w, gap)
-					}
+					writeCursorForward(w, x-o.cursorX)
 				} else {
 					writeCursorPos(w, x, y)
 				}

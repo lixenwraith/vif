@@ -1,10 +1,10 @@
 package renderers
 
 import (
-	"github.com/gdamore/tcell/v2"
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // CharactersRenderer draws all character entities
@@ -82,17 +82,17 @@ func resolveCharacterColor(char components.CharacterComponent) render.RGB {
 }
 
 // resolveTextStyle maps semantic style to tcell attributes
-func resolveTextStyle(style components.TextStyle) tcell.AttrMask {
+func resolveTextStyle(style components.TextStyle) terminal.Attr {
 	switch style {
 	case components.StyleBold:
-		return tcell.AttrBold
+		return terminal.AttrBold
 	case components.StyleDim:
-		return tcell.AttrDim
+		return terminal.AttrDim
 	case components.StyleUnderline:
-		return tcell.AttrUnderline
+		return terminal.AttrUnderline
 	case components.StyleBlink:
-		return tcell.AttrBlink
+		return terminal.AttrBlink
 	default:
-		return tcell.AttrNone
+		return terminal.AttrNone
 	}
 }
