@@ -81,7 +81,7 @@ func resolveCharacterColor(char components.CharacterComponent) render.RGB {
 	return render.GetFgForSequence(char.SeqType, char.SeqLevel)
 }
 
-// resolveTextStyle maps semantic style to tcell attributes
+// resolveTextStyle maps semantic style to terminal attributes
 func resolveTextStyle(style components.TextStyle) terminal.Attr {
 	switch style {
 	case components.StyleBold:

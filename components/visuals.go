@@ -18,7 +18,7 @@ const (
 )
 
 // TextStyle represents semantic text styling
-// Renderers resolve these to tcell.AttrMask
+// Renderers resolve these to terminal.Attr
 type TextStyle uint8
 
 const (

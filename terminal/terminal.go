@@ -320,6 +320,11 @@ func (t *termImpl) Sync() {
 	t.height = h
 
 	t.output.resize(w, h)
+
+	// Physically clear terminal before full redraw
+	// Diff-based rendering assumes physical terminal matches front buffer state
+	// Breaks on resize expand and needs a reset
+	t.output.clear(RGBBlack)
 	t.output.forceFullRedraw()
 }
 

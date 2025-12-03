@@ -90,7 +90,7 @@ type ConfigResource struct {
 }
 
 // InputResource holds the current input state and mode
-// This decouples systems from the raw tcell events and InputHandler internal logic
+// This decouples systems from raw terminal events and InputHandler internal logic
 type InputResource struct {
 	GameMode    int // Maps to GameMode constants (Normal, Insert, etc)
 	CommandText string

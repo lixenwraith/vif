@@ -1,18 +1,22 @@
 package core
 
-import (
-	"github.com/gdamore/tcell/v2"
-)
-
 // Point represents a 2D coordinate
 type Point struct {
 	X, Y int
 }
 
+// Style represents cell styling for spatial buffer
+// Minimal type for entity tracking; actual rendering uses render.RenderBuffer
+// TODO: do we even need this?
+type Style struct{}
+
+// StyleDefault is the zero-value placeholder
+var StyleDefault = Style{}
+
 // Cell represents a single cell in the buffer
 type Cell struct {
 	Rune   rune
-	Style  tcell.Style
+	Style  Style
 	Entity uint64 // Optional entity at this position (0 if none)
 }
 
@@ -33,7 +37,7 @@ func NewBuffer(width, height int) *Buffer {
 		for x := 0; x < width; x++ {
 			lines[y][x] = Cell{
 				Rune:   ' ',
-				Style:  tcell.StyleDefault,
+				Style:  StyleDefault,
 				Entity: 0,
 			}
 		}
@@ -71,7 +75,7 @@ func (b *Buffer) Resize(newWidth, newHeight int) {
 				// Initialize new cell
 				newLines[y][x] = Cell{
 					Rune:   ' ',
-					Style:  tcell.StyleDefault,
+					Style:  StyleDefault,
 					Entity: 0,
 				}
 			}
@@ -122,7 +126,7 @@ func (b *Buffer) SetCell(x, y int, cell Cell) bool {
 }
 
 // SetContent sets the content at the given position
-func (b *Buffer) SetContent(x, y int, r rune, style tcell.Style, entity uint64) bool {
+func (b *Buffer) SetContent(x, y int, r rune, style Style, entity uint64) bool {
 	return b.SetCell(x, y, Cell{
 		Rune:   r,
 		Style:  style,
@@ -131,7 +135,7 @@ func (b *Buffer) SetContent(x, y int, r rune, style tcell.Style, entity uint64) 
 }
 
 // Clear clears the entire buffer
-func (b *Buffer) Clear(style tcell.Style) {
+func (b *Buffer) Clear(style Style) {
 	for y := 0; y < b.height; y++ {
 		for x := 0; x < b.width; x++ {
 			b.lines[y][x] = Cell{
