@@ -100,9 +100,8 @@ func (ps *PositionStore) Move(e Entity, newPos components.PositionComponent) err
 	return nil
 }
 
-// GetAllAt returns a COPY of entities at the given coordinates
-// SAFE but allocates memory
-// Use for UI/Input logic
+// GetAllAt returns a COPY of entities at the given position (concurrent safe but uses memory)
+// Returns nil if position is out of bounds or empty
 func (ps *PositionStore) GetAllAt(x, y int) []Entity {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
@@ -200,13 +199,6 @@ func (ps *PositionStore) SetWorld(w *World) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 	ps.world = w
-}
-
-// GetAllEntitiesAt returns all entities at the given position
-// Returns nil if position is out of bounds or empty
-// The returned slice is a copy and safe for concurrent use
-func (ps *PositionStore) GetAllEntitiesAt(x, y int) []Entity {
-	return ps.GetAllAt(x, y)
 }
 
 // GetTopEntityFiltered returns the highest z-index entity at position that passes filter

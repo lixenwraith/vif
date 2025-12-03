@@ -48,7 +48,7 @@ func (c *CharactersRenderer) Render(ctx render.RenderContext, world *engine.Worl
 
 		// Apply pause dimming
 		if c.gameCtx.IsPaused.Load() {
-			fg = fg.Scale(0.7)
+			fg = render.Scale(fg, 0.7)
 		}
 
 		// Characters have NO background - use SetFgOnly to preserve underlying bg

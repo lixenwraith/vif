@@ -8,7 +8,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
-	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
@@ -36,9 +35,6 @@ type GameContext struct {
 
 	// Terminal interface
 	Terminal terminal.Terminal
-
-	// Terminal screen buffer
-	Buffer *core.Buffer
 
 	// Pausable Clock time provider
 	PausableClock *PausableClock
@@ -172,9 +168,6 @@ func NewGameContext(term terminal.Terminal) *GameContext {
 
 	// Initialize pause state
 	ctx.IsPaused.Store(false)
-
-	// Create buffer
-	ctx.Buffer = core.NewBuffer(ctx.GameWidth, ctx.GameHeight)
 
 	return ctx
 }
@@ -338,14 +331,8 @@ func (ctx *GameContext) HandleResize() {
 
 		// TODO: Optional disable (world.crop)
 		// Cleanup entities outside new bounds to prevent ghosting/resource usage
-		// This uses GameWidth/Height because that is the valid coordinate space for entities.
-		// CRITICAL: This also resizes the spatial grid. Must be done BEFORE buffering logic.
+		// Uses GameWidth/Height as valid coordinate space for entities, resizes Spatial Grid
 		ctx.cleanupOutOfBoundsEntities(ctx.GameWidth, ctx.GameHeight)
-
-		// Resize buffer
-		if ctx.Buffer != nil {
-			ctx.Buffer.Resize(ctx.GameWidth, ctx.GameHeight)
-		}
 
 		// Clamp cursor position
 		if pos, ok := ctx.World.Positions.Get(ctx.CursorEntity); ok {

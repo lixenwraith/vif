@@ -124,7 +124,7 @@ func main() {
 	orchestrator.Register(heatMeterRenderer, render.PriorityUI)
 
 	// TODO: check LineNumWidth arg
-	lineNumbersRenderer := renderers.NewLineNumbersRenderer(ctx.LineNumWidth, ctx)
+	lineNumbersRenderer := renderers.NewLineNumbersRenderer(ctx)
 	orchestrator.Register(lineNumbersRenderer, render.PriorityUI)
 
 	columnIndicatorsRenderer := renderers.NewColumnIndicatorsRenderer(ctx)

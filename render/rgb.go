@@ -2,12 +2,13 @@ package render
 
 import (
 	"math"
+
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
-// RGB stores explicit 8-bit color channels
-type RGB struct {
-	R, G, B uint8
-}
+// RGB is an alias to terminal.RGB to serve as the Single Source of Truth
+// while allowing the render package to extend functionality via functions.
+type RGB = terminal.RGB
 
 // Predefined default color
 var (
@@ -20,8 +21,7 @@ var (
 	softLightDF [256]float64
 )
 
-// Go automatically calls init() before main starts
-// No need for sync.Once checks in the pixel loop
+// init pre-calculates the Perez SoftLight lookup tables to avoid expensive square root and division operations in the render loop
 func init() {
 	for i := 0; i < 256; i++ {
 		df := float64(i) / 255.0
@@ -72,7 +72,7 @@ func softLightChannel(d, s uint8, intensity float64) uint8 {
 }
 
 // SoftLight applies Perez soft light blend - gentler than linear alpha
-func (c RGB) SoftLight(src RGB, intensity float64) RGB {
+func SoftLight(c, src RGB, intensity float64) RGB {
 	return RGB{
 		R: softLightChannel(c.R, src.R, intensity),
 		G: softLightChannel(c.G, src.G, intensity),
@@ -82,7 +82,7 @@ func (c RGB) SoftLight(src RGB, intensity float64) RGB {
 
 // Blend optimizes alpha blending
 // If alpha is 1.0 or 0.0, we return early to save math
-func (c RGB) Blend(src RGB, alpha float64) RGB {
+func Blend(c, src RGB, alpha float64) RGB {
 	if alpha >= 1.0 {
 		return src
 	}
@@ -101,7 +101,7 @@ func (c RGB) Blend(src RGB, alpha float64) RGB {
 }
 
 // Max returns per-channel maximum
-func (c RGB) Max(src RGB) RGB {
+func Max(c, src RGB) RGB {
 	return RGB{
 		R: max(c.R, src.R),
 		G: max(c.G, src.G),
@@ -119,7 +119,7 @@ func add(a, b uint8) uint8 {
 }
 
 // Add performs additive blend with clamping (light accumulation)
-func (c RGB) Add(src RGB) RGB {
+func Add(c, src RGB) RGB {
 	return RGB{
 		R: add(c.R, src.R),
 		G: add(c.G, src.G),
@@ -135,7 +135,7 @@ func fastDiv255(x int) int {
 }
 
 // Screen blend: 1 - (1-Dst)*(1-Src) - lightens, good for glow
-func (c RGB) Screen(src RGB) RGB {
+func Screen(c, src RGB) RGB {
 	return RGB{
 		R: uint8(255 - fastDiv255((255-int(c.R))*(255-int(src.R)))),
 		G: uint8(255 - fastDiv255((255-int(c.G))*(255-int(src.G)))),
@@ -161,7 +161,7 @@ func overlayChannel(d, s uint8) uint8 {
 }
 
 // Overlay combines multiply (darks) and screen (lights)
-func (c RGB) Overlay(src RGB) RGB {
+func Overlay(c, src RGB) RGB {
 	return RGB{
 		R: overlayChannel(c.R, src.R),
 		G: overlayChannel(c.G, src.G),
@@ -170,7 +170,7 @@ func (c RGB) Overlay(src RGB) RGB {
 }
 
 // Scale multiplies all channels by factor (0.0-1.0)
-func (c RGB) Scale(factor float64) RGB {
+func Scale(c RGB, factor float64) RGB {
 	// Clamp to not wrap on factor > 1.0
 	return RGB{
 		R: clamp(float64(c.R) * factor),

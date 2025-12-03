@@ -36,7 +36,7 @@ func (e *EffectsRenderer) buildCleanerGradient() {
 		if opacity < 0 {
 			opacity = 0
 		}
-		e.cleanerGradient[i] = render.RgbCleanerBase.Scale(opacity)
+		e.cleanerGradient[i] = render.Scale(render.RgbCleanerBase, opacity)
 	}
 }
 
@@ -52,7 +52,7 @@ func (e *EffectsRenderer) buildMaterializeGradient() {
 		if opacity < 0 {
 			opacity = 0
 		}
-		e.materializeGradient[i] = render.RgbMaterialize.Scale(opacity)
+		e.materializeGradient[i] = render.Scale(render.RgbMaterialize, opacity)
 	}
 }
 

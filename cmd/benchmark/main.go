@@ -163,7 +163,7 @@ func main() {
 
 				// Convert terminal.RGB -> render.RGB -> terminal.RGB
 				bgRender := render.RGB{R: bg.R, G: bg.G, B: bg.B}
-				res := bgRender.Add(render.RGB{R: val, G: val, B: val})
+				res := render.Add(bgRender, render.RGB{R: val, G: val, B: val})
 				cells[idx].Bg = terminal.RGB{R: res.R, G: res.G, B: res.B}
 			}
 		}
@@ -224,12 +224,12 @@ func main() {
 						// Turbulence
 						noise := math.Sin(normDist*20.0-currTime*4.0) * 0.1
 
-						val := e.Color.Scale(corona + noise)
+						val := render.Scale(e.Color, corona+noise)
 						// Add white core
 						if core > 0 {
-							val = val.Add(render.RGB{R: 255, G: 255, B: 255}.Scale(core))
+							val = render.Add(val, render.Scale(render.RGB{R: 255, G: 255, B: 255}, core))
 						}
-						finalColor = bg.Add(val)
+						finalColor = render.Add(bg, val)
 
 					case 1: // "The Bubble" - Overlay Body + SoftLight Rim
 						// Rim lighting (strong at edges)
@@ -238,14 +238,14 @@ func main() {
 						body := math.Sqrt(1.0 - normDist) // Sphere-like volume
 
 						// Combine
-						bubbleCol := e.Color.Scale(body*0.6 + rim*0.8)
+						bubbleCol := render.Scale(e.Color, body*0.6+rim*0.8)
 
 						// Overlay preserves background details (stars) behind the bubble
-						finalColor = bg.Overlay(bubbleCol)
+						finalColor = render.Overlay(bg, bubbleCol)
 
 						// Add distinct rim highlight
 						if normDist > 0.85 {
-							finalColor = finalColor.Add(render.RGB{R: 200, G: 255, B: 255}.Scale((normDist - 0.85) * 6.0))
+							finalColor = render.Add(finalColor, render.Scale(render.RGB{R: 200, G: 255, B: 255}, (normDist-0.85)*6.0))
 						}
 
 					case 2: // "The Pulse" - Screen Interference
@@ -253,10 +253,10 @@ func main() {
 						ripple := math.Sin(normDist*30.0 - currTime*8.0)
 						alpha := (1.0 - normDist) * (0.5 + 0.5*ripple)
 
-						pulseCol := e.Color.Scale(alpha)
+						pulseCol := render.Scale(e.Color, alpha)
 
 						// Screen blend makes it look like a hologram/light projection
-						finalColor = bg.Screen(pulseCol)
+						finalColor = render.Screen(bg, pulseCol)
 					}
 
 					cells[idx].Bg = terminal.RGB{R: finalColor.R, G: finalColor.G, B: finalColor.B}

@@ -49,7 +49,7 @@ func (c *CursorRenderer) Render(ctx render.RenderContext, world *engine.World, b
 	// 2. Get entities at cursor position using z-index selection
 
 	// Get all entities at cursor position
-	entities := world.Positions.GetAllEntitiesAt(ctx.CursorX, ctx.CursorY)
+	entities := world.Positions.GetAllAt(ctx.CursorX, ctx.CursorY)
 
 	// Check for Drain (highest priority overlay, masks everything)
 	isDrain := false

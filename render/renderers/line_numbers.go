@@ -9,26 +9,27 @@ import (
 
 // LineNumbersRenderer draws relative line numbers
 type LineNumbersRenderer struct {
-	lineNumWidth int
-	gameCtx      *engine.GameContext
+	gameCtx *engine.GameContext
 }
 
 // NewLineNumbersRenderer creates a line numbers renderer
-func NewLineNumbersRenderer(lineNumWidth int, gameCtx *engine.GameContext) *LineNumbersRenderer {
+func NewLineNumbersRenderer(gameCtx *engine.GameContext) *LineNumbersRenderer {
 	return &LineNumbersRenderer{
-		lineNumWidth: lineNumWidth,
-		gameCtx:      gameCtx,
+		gameCtx: gameCtx,
 	}
 }
 
 // Render implements SystemRenderer
 func (l *LineNumbersRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+	// Snapshot from context in case of change mid-loop
+	width := l.gameCtx.LineNumWidth
+
 	for y := 0; y < ctx.GameHeight; y++ {
 		relativeNum := y - ctx.CursorY
 		if relativeNum < 0 {
 			relativeNum = -relativeNum
 		}
-		lineNum := fmt.Sprintf("%*d", l.lineNumWidth, relativeNum)
+		lineNum := fmt.Sprintf("%*d", width, relativeNum)
 
 		var fg, bg render.RGB
 		if relativeNum == 0 {
@@ -49,9 +50,4 @@ func (l *LineNumbersRenderer) Render(ctx render.RenderContext, world *engine.Wor
 			buf.SetWithBg(i, screenY, ch, fg, bg)
 		}
 	}
-}
-
-// UpdateLineNumWidth updates the line number column width
-func (l *LineNumbersRenderer) UpdateLineNumWidth(width int) {
-	l.lineNumWidth = width
 }

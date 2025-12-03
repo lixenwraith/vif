@@ -4,10 +4,10 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
-// RenderBuffer is a compositor backed by RGB cells with dirty tracking
-// Single source of truth - all methods write to the same backing store
+// RenderBuffer is a compositor backed by terminal.Cell array with dirty tracking
+// Uses []terminal.Cell directly to allow zero-copy export, worth the coupling
 type RenderBuffer struct {
-	cells   []CompositorCell
+	cells   []terminal.Cell // Optimization: Persistent buffer for output reuse
 	touched []bool
 	width   int
 	height  int
@@ -16,10 +16,10 @@ type RenderBuffer struct {
 // NewRenderBuffer creates a buffer with the specified dimensions
 func NewRenderBuffer(width, height int) *RenderBuffer {
 	size := width * height
-	cells := make([]CompositorCell, size)
+	cells := make([]terminal.Cell, size)
 	touched := make([]bool, size)
 	for i := range cells {
-		cells[i] = CompositorCell{
+		cells[i] = terminal.Cell{
 			Rune:  0,
 			Fg:    DefaultBgRGB,
 			Bg:    RGBBlack,
@@ -27,14 +27,19 @@ func NewRenderBuffer(width, height int) *RenderBuffer {
 		}
 		touched[i] = false
 	}
-	return &RenderBuffer{cells: cells, touched: touched, width: width, height: height}
+	return &RenderBuffer{
+		cells:   cells,
+		touched: touched,
+		width:   width,
+		height:  height,
+	}
 }
 
 // Resize adjusts buffer dimensions, reallocates only if capacity insufficient
 func (b *RenderBuffer) Resize(width, height int) {
 	size := width * height
 	if cap(b.cells) < size {
-		b.cells = make([]CompositorCell, size)
+		b.cells = make([]terminal.Cell, size)
 		b.touched = make([]bool, size)
 	} else {
 		b.cells = b.cells[:size]
@@ -51,7 +56,7 @@ func (b *RenderBuffer) Clear() {
 		return
 	}
 	// Initialize first cell
-	b.cells[0] = CompositorCell{
+	b.cells[0] = terminal.Cell{
 		Rune:  0,
 		Fg:    DefaultBgRGB,
 		Bg:    RGBBlack,
@@ -89,22 +94,22 @@ func (b *RenderBuffer) Set(x, y int, mainRune rune, fg, bg RGB, mode BlendMode, 
 		dst.Bg = bg
 		b.touched[idx] = true
 	case BlendAlpha:
-		dst.Bg = dst.Bg.Blend(bg, alpha)
+		dst.Bg = Blend(dst.Bg, bg, alpha)
 		b.touched[idx] = true
 	case BlendAdd:
-		dst.Bg = dst.Bg.Add(bg)
+		dst.Bg = Add(dst.Bg, bg)
 		b.touched[idx] = true
 	case BlendMax:
-		dst.Bg = dst.Bg.Max(bg)
+		dst.Bg = Max(dst.Bg, bg)
 		b.touched[idx] = true
 	case BlendSoftLight:
-		dst.Bg = dst.Bg.SoftLight(bg, alpha)
+		dst.Bg = SoftLight(dst.Bg, bg, alpha)
 		b.touched[idx] = true
 	case BlendScreen:
-		dst.Bg = dst.Bg.Screen(bg)
+		dst.Bg = Screen(dst.Bg, bg)
 		b.touched[idx] = true
 	case BlendOverlay:
-		dst.Bg = dst.Bg.Overlay(bg)
+		dst.Bg = Overlay(dst.Bg, bg)
 		b.touched[idx] = true
 	case BlendFgOnly:
 		// Explicitly preserve destination background, do not mark touched
@@ -118,9 +123,9 @@ func (b *RenderBuffer) Set(x, y int, mainRune rune, fg, bg RGB, mode BlendMode, 
 	} else if mode != BlendFgOnly {
 		switch mode {
 		case BlendAdd:
-			dst.Fg = dst.Fg.Add(fg)
+			dst.Fg = Add(dst.Bg, fg)
 		case BlendMax:
-			dst.Fg = dst.Fg.Max(fg)
+			dst.Fg = Max(dst.Bg, fg)
 		}
 	}
 }
@@ -147,23 +152,8 @@ func (b *RenderBuffer) finalize() {
 	}
 }
 
-// ToTerminalCells converts compositor cells to terminal cells for output
-func (b *RenderBuffer) ToTerminalCells() []terminal.Cell {
-	b.finalize()
-	out := make([]terminal.Cell, len(b.cells))
-	for i, c := range b.cells {
-		out[i] = terminal.Cell{
-			Rune:  c.Rune,
-			Fg:    terminal.RGB{R: c.Fg.R, G: c.Fg.G, B: c.Fg.B},
-			Bg:    terminal.RGB{R: c.Bg.R, G: c.Bg.G, B: c.Bg.B},
-			Attrs: c.Attrs,
-		}
-	}
-	return out
-}
-
 // FlushToTerminal writes render buffer to terminal
 func (b *RenderBuffer) FlushToTerminal(term terminal.Terminal) {
-	cells := b.ToTerminalCells()
-	term.Flush(cells, b.width, b.height)
+	b.finalize()
+	term.Flush(b.cells, b.width, b.height)
 }

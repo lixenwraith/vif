@@ -4,19 +4,15 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
-// CompositorCell is the authoritative cell state
-// Stores RGB colors directly, attributes preserved as terminal.Attr
-type CompositorCell struct {
-	Rune  rune
-	Fg    RGB
-	Bg    RGB
-	Attrs terminal.Attr
-}
+// Cell is an alias to terminal.Cell to avoid copying.
+// Attributes are preserved directly.
+type Cell = terminal.Cell
+type Attr = terminal.Attr
 
 // DefaultBgRGB is the default background color (Tokyo Night)
 var DefaultBgRGB = RGB{26, 27, 38}
 
-var emptyCell = CompositorCell{
+var emptyCell = Cell{
 	Rune:  ' ',
 	Fg:    DefaultBgRGB,
 	Bg:    DefaultBgRGB,
@@ -24,6 +20,6 @@ var emptyCell = CompositorCell{
 }
 
 // EmptyCell returns a copy of the empty cell sentinel
-func EmptyCell() CompositorCell {
+func EmptyCell() Cell {
 	return emptyCell
 }
