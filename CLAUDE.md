@@ -21,19 +21,14 @@ vi-fighter is a terminal-based typing game in Go using a compile-time Generics-b
 - **Renderers**: Individual `SystemRenderer` implementations in `render/renderers/`.
 - **Priority**: `RenderPriority` constants determine render order (lower first).
 
-## CURRENT TASK: Game Mechanics Update
+## DEVELOPMENT NOTES
 
-### Objective
-
-### Reference Document
-
-### Key Mechanics Summary
-
-### Implementation Approach
-
-### Files to Modify
-
-### Critical Patterns
+When implementing new features or modifying existing systems, always:
+- Follow strict ECS principles (entities = IDs, components = data, systems = logic)
+- Use the Resource System for global shared data access
+- Maintain thread safety with atomics for real-time state, mutexes for clock-tick state
+- Respect the render pipeline architecture and priority ordering
+- Test with `go build .` after each significant change
 
 ## VERIFICATION
 - **DO NOT TRY TO TEST OR BUILD ANY PART OF THE CODE IF THE SCOPE IS DOCUMENTATION UPDATE**
@@ -42,26 +37,28 @@ vi-fighter is a terminal-based typing game in Go using a compile-time Generics-b
 
 ## ENVIRONMENT
 
-This project relies on `oto` and `beep` for audio, which requires CGO bindings to ALSA on Linux.
+vi-fighter uses **pure Go** with no CGO dependencies.
 
-**Setup steps:**
+**Prerequisites:**
+- Go 1.19 or later
+- Terminal with color support
+- (Optional) System audio backend for sound effects:
+  - Linux: PulseAudio (`pacat`), PipeWire (`pw-cat`), or ALSA (`aplay`)
+  - FreeBSD: PulseAudio or OSS (`/dev/dsp`)
+  - Fallback: SoX (`play`) or FFmpeg (`ffplay`)
+  - Game runs silently if no audio backend is available
 
-1. **Install ALSA Development Library**:
+**Build:**
 ```bash
-   apt-get install -y libasound2-dev
+go build -o vi-fighter ./cmd/vi-fighter
 ```
 
-2. **Fix Go Module Proxy Issues** (if DNS/network failures):
+**Run:**
 ```bash
-   export GOPROXY="https://goproxy.io,direct"
+./vi-fighter
 ```
 
-3. **Download Dependencies**:
-```bash
-   GOPROXY="https://goproxy.io,direct" go mod tidy
-```
-
-4. **Build**:
-```bash
-   GOPROXY="https://goproxy.io,direct" go build .
-```
+**Audio Notes:**
+- Audio system auto-detects available backends at runtime
+- No compilation flags or external libraries required
+- Silent mode fallback ensures game works without audio

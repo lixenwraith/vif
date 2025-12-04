@@ -959,12 +959,56 @@ for _, entity := range entitiesAtCursor {
 - **Component**: `{Sources uint8, RadiusX, RadiusY float64, OverrideColor ColorClass, MaxOpacity float64, LastDrainTime time.Time}`
 
 ### Audio System
-- **AudioEngine**: Dual-queue (realTimeQueue size 5, stateQueue size 10)
-- **Sound Types**: Error (buzz), Bell (nugget), Whoosh (cleaner), Coin (gold)
+
+The audio system uses **pure Go PCM generation** piped to system audio tools, eliminating CGO dependencies.
+
+**Architecture:**
+
+- **Backend Detection** (priority order):
+  1. `pacat` - PulseAudio/PipeWire
+  2. `pw-cat` - PipeWire native
+  3. `aplay` - ALSA (Linux)
+  4. `play` - SoX (cross-platform)
+  5. `ffplay` - FFmpeg (fallback)
+  6. `/dev/dsp` - OSS (FreeBSD only)
+
+- **PCM Synthesis**:
+  - Pure Go waveform generation (sine, square, saw, noise)
+  - ADSR envelope shaping
+  - Float-based mixing with soft limiter
+  - 50ms buffer aligned with game tick
+  - Lazy sound caching (Error sound preloaded)
+
+- **Sound Effects**:
+  - `SoundError` - 80ms saw wave buzz (typing errors)
+  - `SoundBell` - 600ms dual-sine bell (nugget collection)
+  - `SoundWhoosh` - 300ms noise sweep (cleaner activation)
+  - `SoundCoin` - 360ms two-note square chime (gold sequence)
+
+- **AudioEngine**:
+  - Dual-queue (realTimeQueue size 5, stateQueue size 10)
+  - Process management for backend subprocess
+  - Graceful silent mode fallback if no backend available
+  - Controls: Ctrl+S toggle mute (starts muted)
+  - Thread Safety: Atomic flags, mutex for playback
+
 - **Integration**: EnergySystem, GoldSystem, NuggetSystem, CleanerSystem
 - **Pause**: Stops sound, drains queues
-- **Controls**: Ctrl+S toggle mute (starts muted)
-- **Thread Safety**: Atomic flags, mutex for playback
+
+**Platform Support:**
+- Linux (PulseAudio, PipeWire, ALSA)
+- FreeBSD (PulseAudio or OSS)
+- macOS not supported (no testable backend)
+
+**Implementation Files:**
+- `constants/audio.go` - Timing and hardware constants
+- `audio/types.go` - SoundType, BackendConfig, errors
+- `audio/config.go` - AudioConfig defaults
+- `audio/detector.go` - Backend detection
+- `audio/generators.go` - Waveform synthesis
+- `audio/cache.go` - Sound buffer cache
+- `audio/mixer.go` - Float mixing, output conversion
+- `audio/engine.go` - Public API, process management
 
 ## Extension Points
 
