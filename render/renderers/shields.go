@@ -9,19 +9,44 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
+// shieldCellRenderer is the callback type for per-cell shield rendering
+type shieldCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, dist float64, color render.RGB, maxOpacity float64)
+
 // ShieldRenderer renders active shields with dynamic color from GameState
 type ShieldRenderer struct {
 	gameCtx *engine.GameContext
+
+	// Cached cell renderers for each mode
+	renderCellTrueColor shieldCellRenderer
+	renderCell256       shieldCellRenderer
 }
 
 // NewShieldRenderer creates a new shield renderer
 func NewShieldRenderer(gameCtx *engine.GameContext) *ShieldRenderer {
-	return &ShieldRenderer{gameCtx: gameCtx}
+	s := &ShieldRenderer{gameCtx: gameCtx}
+
+	// Pre-bind cell renderers to avoid allocation in render loop
+	s.renderCellTrueColor = s.cellTrueColor
+	s.renderCell256 = s.cell256
+
+	return s
 }
 
 // Render draws all active shields with quadratic falloff gradient
 func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	shields := world.Shields.All()
+	if len(shields) == 0 {
+		return
+	}
+
+	// Select cell renderer once per frame
+	colorMode := s.gameCtx.Terminal.ColorMode()
+	var renderCell shieldCellRenderer
+	if colorMode == terminal.ColorMode256 {
+		renderCell = s.renderCell256
+	} else {
+		renderCell = s.renderCellTrueColor
+	}
 
 	for _, entity := range shields {
 		shield, okS := world.Shields.Get(entity)
@@ -59,47 +84,75 @@ func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, b
 			endY = ctx.GameHeight - 1
 		}
 
+		// Precompute inverse radii squared for ellipse calculation
+		invRxSq := 1.0 / (shield.RadiusX * shield.RadiusX)
+		invRySq := 1.0 / (shield.RadiusY * shield.RadiusY)
+
 		for y := startY; y <= endY; y++ {
 			for x := startX; x <= endX; x++ {
-				// Skip cursor position - cursor is absolute top
+				// Skip cursor position
 				if x == ctx.CursorX && y == ctx.CursorY {
 					continue
 				}
 
-				screenX := ctx.GameX + x
-				screenY := ctx.GameY + y
-
 				dx := float64(x - pos.X)
 				dy := float64(y - pos.Y)
 
-				// Elliptical distance: (dx/rx)² + (dy/ry)²
-				normalizedDistSq := (dx*dx)/(shield.RadiusX*shield.RadiusX) + (dy*dy)/(shield.RadiusY*shield.RadiusY)
-
+				// Elliptical normalized distance squared
+				normalizedDistSq := dx*dx*invRxSq + dy*dy*invRySq
 				if normalizedDistSq > 1.0 {
-					continue // Outside shield
+					continue
 				}
 
 				dist := math.Sqrt(normalizedDistSq)
+				screenX := ctx.GameX + x
+				screenY := ctx.GameY + y
 
-				// Quadratic soft falloff: (1-d)² * MaxOpacity
-				falloff := (1.0 - dist) * (1.0 - dist)
-				alpha := falloff * shield.MaxOpacity
-
-				// SoftLight blend for gentler falloff
-				buf.Set(screenX, screenY, 0, render.RGBBlack, shieldRGB, render.BlendSoftLight, alpha, terminal.AttrNone)
+				renderCell(buf, screenX, screenY, dist, shieldRGB, shield.MaxOpacity)
 			}
 		}
 	}
 }
 
+// cellTrueColor renders a single shield cell with smooth gradient (TrueColor mode)
+func (s *ShieldRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screenY int, dist float64, color render.RGB, maxOpacity float64) {
+	// Quadratic soft falloff: (1-d)² * MaxOpacity
+	falloff := (1.0 - dist) * (1.0 - dist)
+	alpha := falloff * maxOpacity
+
+	// BlendScreen: Adds light, visible on black, brightens over content
+	buf.Set(screenX, screenY, 0, render.RGBBlack, color, render.BlendScreen, alpha, terminal.AttrNone)
+}
+
+// cell256 renders a single shield cell with discrete zones (256-color mode)
+func (s *ShieldRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int, dist float64, color render.RGB, maxOpacity float64) {
+	// Palette-safe grayscale colors
+	// Index 238 = RGB(68,68,68) - dark gray
+	// Index 250 = RGB(188,188,188) - light gray
+	// Index 253 = RGB(218,218,218) - near-white for edge
+
+	switch {
+	case dist > 0.9:
+		// Edge zone: Attempt tinted glow via low-alpha screen blend
+		// If shield color is too dark, this still produces visible edge
+		buf.Set(screenX, screenY, 0, render.RGBBlack, color, render.BlendScreen, 0.4, terminal.AttrNone)
+
+	case dist > 0.6:
+		// Outer zone: Light gray, solid replace
+		buf.Set(screenX, screenY, 0, render.RGBBlack, render.RGB{R: 188, G: 188, B: 188}, render.BlendReplace, 1.0, terminal.AttrNone)
+
+	default:
+		// Inner zone: Dark gray, solid replace
+		buf.Set(screenX, screenY, 0, render.RGBBlack, render.RGB{R: 68, G: 68, B: 68}, render.BlendReplace, 1.0, terminal.AttrNone)
+	}
+}
+
 // resolveShieldColor determines the shield color from override or GameState
 func (s *ShieldRenderer) resolveShieldColor(shield components.ShieldComponent) render.RGB {
-	// Check override first
 	if shield.OverrideColor != components.ColorNone {
 		return s.colorClassToRGB(shield.OverrideColor)
 	}
 
-	// Derive from GameState
 	seqType := s.gameCtx.State.GetLastTypedSeqType()
 	seqLevel := s.gameCtx.State.GetLastTypedSeqLevel()
 
@@ -108,7 +161,6 @@ func (s *ShieldRenderer) resolveShieldColor(shield components.ShieldComponent) r
 
 // getColorFromSequence maps sequence type/level to RGB
 func (s *ShieldRenderer) getColorFromSequence(seqType, seqLevel int32) render.RGB {
-	// 0=None, 1=Blue, 2=Green
 	switch seqType {
 	case 1: // Blue
 		switch seqLevel {
@@ -133,7 +185,7 @@ func (s *ShieldRenderer) getColorFromSequence(seqType, seqLevel int32) render.RG
 	return render.RGB{R: 128, G: 128, B: 128}
 }
 
-// colorClassToRGB maps ColorClass overrides to RGB (for future super modes)
+// colorClassToRGB maps ColorClass overrides to RGB
 func (s *ShieldRenderer) colorClassToRGB(color components.ColorClass) render.RGB {
 	switch color {
 	case components.ColorShield:
