@@ -55,7 +55,7 @@ The game strictly follows ECS architecture principles with a hybrid real-time/cl
 
 ### Prerequisites
 
-- Go 1.19 or later
+- Go 1.24 or later
 - Terminal with color support
 - `assets/` directory containing `.txt` files with source code (included in repository)
 

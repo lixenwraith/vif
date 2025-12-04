@@ -1,14 +1,14 @@
 # vi-fighter Development Guide for Claude Code
 
 ## PROJECT CONTEXT
-vi-fighter is a terminal-based typing game in Go using a compile-time Generics-based ECS (Go 1.25+).
+vi-fighter is a terminal-based typing game in Go using a compile-time Generics-based ECS (Go 1.24+).
 
 ## ARCHITECTURE OVERVIEW
 
 ### Core Systems
 - **ECS**: Generics-based `World` with `Store[T]` and `PositionStore` (spatial hash).
 - **Game Loop**: Fixed 50ms tick (`ClockScheduler`) decoupled from rendering.
-- **Render Pipeline**: `RenderOrchestrator` coordinates `SystemRenderer` implementations.
+- **Render Pipeline**: `RenderOrchestrator` coordinates `SystemRenderer` implementations. Frame update 16ms.
 - **Input**: `InputHandler` processes `tcell` events, managing state transitions between Modes.
 
 ### Resources
@@ -40,8 +40,8 @@ When implementing new features or modifying existing systems, always:
 vi-fighter uses **pure Go** with no CGO dependencies.
 
 **Prerequisites:**
-- Go 1.19 or later
-- Terminal with color support
+- Go 1.24 or later
+- Terminal with color support (truecolor with 256-color mix/fallback)
 - (Optional) System audio backend for sound effects:
   - Linux: PulseAudio (`pacat`), PipeWire (`pw-cat`), or ALSA (`aplay`)
   - FreeBSD: PulseAudio or OSS (`/dev/dsp`)
@@ -62,3 +62,21 @@ go build -o vi-fighter ./cmd/vi-fighter
 - Audio system auto-detects available backends at runtime
 - No compilation flags or external libraries required
 - Silent mode fallback ensures game works without audio
+
+
+## CURRENT TASK
+
+**Prompt can override Environment and Verification section instructions**
+**Refer to prompt if this section is empty**
+
+### Objective
+
+### Reference Document
+
+### Key Mechanics Summary
+
+### Implementation Approach
+
+### Files to Modify
+
+### Critical Patterns
