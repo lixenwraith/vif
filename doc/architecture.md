@@ -960,55 +960,32 @@ for _, entity := range entitiesAtCursor {
 
 ### Audio System
 
-The audio system uses **pure Go PCM generation** piped to system audio tools, eliminating CGO dependencies.
+Vi-fighter uses a **pure Go audio system** with zero CGO dependencies. PCM waveforms are synthesized in memory and piped to system audio tools.
 
-**Architecture:**
-
-- **Backend Detection** (priority order):
-  1. `pacat` - PulseAudio/PipeWire
-  2. `pw-cat` - PipeWire native
-  3. `aplay` - ALSA (Linux)
-  4. `play` - SoX (cross-platform)
-  5. `ffplay` - FFmpeg (fallback)
-  6. `/dev/dsp` - OSS (FreeBSD only)
-
-- **PCM Synthesis**:
-  - Pure Go waveform generation (sine, square, saw, noise)
-  - ADSR envelope shaping
-  - Float-based mixing with soft limiter
-  - 50ms buffer aligned with game tick
-  - Lazy sound caching (Error sound preloaded)
+**Integration Points:**
 
 - **Sound Effects**:
-  - `SoundError` - 80ms saw wave buzz (typing errors)
-  - `SoundBell` - 600ms dual-sine bell (nugget collection)
-  - `SoundWhoosh` - 300ms noise sweep (cleaner activation)
-  - `SoundCoin` - 360ms two-note square chime (gold sequence)
+  - `SoundError` - Typing errors (EnergySystem)
+  - `SoundBell` - Nugget collection (NuggetSystem)
+  - `SoundWhoosh` - Cleaner activation (CleanerSystem)
+  - `SoundCoin` - Gold sequence completion (GoldSystem)
 
-- **AudioEngine**:
-  - Dual-queue (realTimeQueue size 5, stateQueue size 10)
-  - Process management for backend subprocess
-  - Graceful silent mode fallback if no backend available
-  - Controls: Ctrl+S toggle mute (starts muted)
-  - Thread Safety: Atomic flags, mutex for playback
+- **Game Systems**: EnergySystem, GoldSystem, NuggetSystem, CleanerSystem call `ctx.AudioEngine.Play(soundType)` to trigger sounds
 
-- **Integration**: EnergySystem, GoldSystem, NuggetSystem, CleanerSystem
-- **Pause**: Stops sound, drains queues
+- **User Controls**: Ctrl+S toggles mute (starts muted by default)
+
+- **Pause Behavior**: Entering COMMAND mode stops audio and drains queues
+
+- **Fallback**: Gracefully enters silent mode if no audio backend available (game continues normally)
 
 **Platform Support:**
 - Linux (PulseAudio, PipeWire, ALSA)
 - FreeBSD (PulseAudio or OSS)
 - macOS not supported (no testable backend)
 
-**Implementation Files:**
-- `constants/audio.go` - Timing and hardware constants
-- `audio/types.go` - SoundType, BackendConfig, errors
-- `audio/config.go` - AudioConfig defaults
-- `audio/detector.go` - Backend detection
-- `audio/generators.go` - Waveform synthesis
-- `audio/cache.go` - Sound buffer cache
-- `audio/mixer.go` - Float mixing, output conversion
-- `audio/engine.go` - Public API, process management
+**Audio Package Location:** `audio/` directory
+
+**For complete audio package implementation details**, see [audio.md](./audio.md).
 
 ## Extension Points
 
