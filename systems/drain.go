@@ -375,7 +375,6 @@ func (s *DrainSystem) triggerDespawnFlash(world *engine.World, x, y int) {
 func (s *DrainSystem) startMaterializeAt(world *engine.World, targetX, targetY int) {
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 
-	// Clamp to bounds
 	if targetX < 0 {
 		targetX = 0
 	}
@@ -411,8 +410,11 @@ func (s *DrainSystem) startMaterializeAt(world *engine.World, targetX, targetY i
 		velX := (tX - def.startX) / duration
 		velY := (tY - def.startY) / duration
 
+		startGridX := int(def.startX)
+		startGridY := int(def.startY)
+
 		var trailRing [constants.MaterializeTrailLength]core.Point
-		trailRing[0] = core.Point{X: int(def.startX), Y: int(def.startY)}
+		trailRing[0] = core.Point{X: startGridX, Y: startGridY}
 
 		comp := components.MaterializeComponent{
 			PreciseX:  def.startX,
@@ -421,8 +423,6 @@ func (s *DrainSystem) startMaterializeAt(world *engine.World, targetX, targetY i
 			VelocityY: velY,
 			TargetX:   targetX,
 			TargetY:   targetY,
-			GridX:     int(def.startX),
-			GridY:     int(def.startY),
 			TrailRing: trailRing,
 			TrailHead: 0,
 			TrailLen:  1,
@@ -432,11 +432,12 @@ func (s *DrainSystem) startMaterializeAt(world *engine.World, targetX, targetY i
 		}
 
 		entity := world.CreateEntity()
+		world.Positions.Add(entity, components.PositionComponent{X: startGridX, Y: startGridY})
 		world.Materializers.Add(entity, comp)
 	}
 }
 
-// updateMaterializers updates materialize spawner entities and triggers drain spawn when groups converge
+// updateMaterializers updates materialize spawner entities and triggers drain spawn
 func (s *DrainSystem) updateMaterializers(world *engine.World, dt time.Duration) {
 	dtSeconds := dt.Seconds()
 	if dtSeconds > 0.1 {
@@ -445,7 +446,6 @@ func (s *DrainSystem) updateMaterializers(world *engine.World, dt time.Duration)
 
 	entities := world.Materializers.All()
 
-	// Group materializers by target position
 	type targetState struct {
 		entities   []engine.Entity
 		allArrived bool
@@ -455,6 +455,11 @@ func (s *DrainSystem) updateMaterializers(world *engine.World, dt time.Duration)
 	for _, entity := range entities {
 		mat, ok := world.Materializers.Get(entity)
 		if !ok {
+			continue
+		}
+
+		oldPos, hasPos := world.Positions.Get(entity)
+		if !hasPos {
 			continue
 		}
 
@@ -500,15 +505,14 @@ func (s *DrainSystem) updateMaterializers(world *engine.World, dt time.Duration)
 		newGridX := int(mat.PreciseX)
 		newGridY := int(mat.PreciseY)
 
-		if newGridX != mat.GridX || newGridY != mat.GridY {
-			mat.GridX = newGridX
-			mat.GridY = newGridY
-
+		if newGridX != oldPos.X || newGridY != oldPos.Y {
 			mat.TrailHead = (mat.TrailHead + 1) % constants.MaterializeTrailLength
-			mat.TrailRing[mat.TrailHead] = core.Point{X: mat.GridX, Y: mat.GridY}
+			mat.TrailRing[mat.TrailHead] = core.Point{X: newGridX, Y: newGridY}
 			if mat.TrailLen < constants.MaterializeTrailLength {
 				mat.TrailLen++
 			}
+
+			world.Positions.Add(entity, components.PositionComponent{X: newGridX, Y: newGridY})
 		}
 
 		world.Materializers.Add(entity, mat)
@@ -755,45 +759,29 @@ func (s *DrainSystem) handleEntityCollisions(world *engine.World) {
 }
 
 // handleDecayCollisions detects and processes drain-decay collisions
-// Decay entities don't have PositionComponent, must iterate and check manually
-// TODO: fix this, related to another TODO item
+// Post-migration: Decay entities are in PositionStore, enabling direct spatial query
 func (s *DrainSystem) handleDecayCollisions(world *engine.World) {
-	decayEntities := world.Decays.All()
-	if len(decayEntities) == 0 {
-		return
-	}
-
 	drainEntities := world.Drains.All()
 	if len(drainEntities) == 0 {
 		return
 	}
 
-	// Build drain position lookup for O(1) collision check
-	drainPositions := make(map[uint64]bool, len(drainEntities))
 	for _, drainEntity := range drainEntities {
 		pos, ok := world.Positions.Get(drainEntity)
 		if !ok {
 			continue
 		}
-		key := uint64(pos.X)<<32 | uint64(pos.Y)
-		drainPositions[key] = true
-	}
 
-	// Check each decay entity against drain positions
-	for _, decayEntity := range decayEntities {
-		decay, ok := world.Decays.Get(decayEntity)
-		if !ok {
-			continue
-		}
-
-		// Decay position is Column (x) and int(YPosition) (y)
-		decayX := decay.Column
-		decayY := int(decay.YPosition)
-
-		key := uint64(decayX)<<32 | uint64(decayY)
-		if drainPositions[key] {
-			// Drain collides with decay - destroy decay entity
-			world.DestroyEntity(decayEntity)
+		// Query all entities at drain position
+		entitiesAtPos := world.Positions.GetAllAt(pos.X, pos.Y)
+		for _, e := range entitiesAtPos {
+			if e == 0 || e == drainEntity {
+				continue
+			}
+			// Destroy decay entities that collide with drain
+			if world.Decays.Has(e) {
+				world.DestroyEntity(e)
+			}
 		}
 	}
 }

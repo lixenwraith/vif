@@ -86,16 +86,10 @@ func (c *CursorRenderer) Render(ctx render.RenderContext, world *engine.World, b
 	}
 
 	// Priority 3: Decay (Lowest Priority)
-	// Only checked if no standard character or drain is present
-	// We scan manually because Decay entities are not fully integrated into PositionStore
-	// Because of sub-pixel precision requirement of position
-	// TODO: find a way around it for uniformity
 	hasDecay := false
 	if !isDrain && !hasChar {
-		decayEntities := world.Decays.All()
-		for _, e := range decayEntities {
-			decay, ok := world.Decays.Get(e)
-			if ok && decay.Column == ctx.CursorX && int(decay.YPosition) == ctx.CursorY {
+		for _, e := range entities {
+			if decay, ok := world.Decays.Get(e); ok {
 				charAtCursor = decay.Char
 				hasDecay = true
 				break

@@ -81,20 +81,24 @@ func (e *EffectsRenderer) drawDecay(ctx render.RenderContext, world *engine.Worl
 			continue
 		}
 
-		// Calculate screen position
-		y := int(decay.YPosition)
-		if y < 0 || y >= ctx.GameHeight {
+		// Use PreciseX/Y for screen position, truncate to int for grid alignment
+		screenCol := int(decay.PreciseX)
+		screenRow := int(decay.PreciseY)
+
+		if screenRow < 0 || screenRow >= ctx.GameHeight {
+			continue
+		}
+		if screenCol < 0 || screenCol >= ctx.GameWidth {
 			continue
 		}
 
-		screenX := ctx.GameX + decay.Column
-		screenY := ctx.GameY + y
+		screenX := ctx.GameX + screenCol
+		screenY := ctx.GameY + screenRow
 
 		if screenX < ctx.GameX || screenX >= ctx.Width || screenY < ctx.GameY || screenY >= ctx.GameY+ctx.GameHeight {
 			continue
 		}
 
-		// Decay floats over backgrounds - use SetFgOnly
 		buf.SetFgOnly(screenX, screenY, decay.Char, render.RgbDecay, terminal.AttrNone)
 	}
 }

@@ -16,10 +16,9 @@ const (
 )
 
 // MaterializeComponent represents a spawner entity that converges toward a target position
-// Used for drain materialization animation (4 spawners converge from screen edges)
-// Multiple sets of materializers can be active simultaneously (grouped by DrainSlot)
+// Grid position managed by PositionComponent (external)
 type MaterializeComponent struct {
-	// Physics state (sub-pixel precision)
+	// Sub-pixel position (physics/render precision)
 	PreciseX float64
 	PreciseY float64
 
@@ -35,10 +34,6 @@ type MaterializeComponent struct {
 	TrailRing [constants.MaterializeTrailLength]core.Point
 	TrailHead int // Most recent point index
 	TrailLen  int // Valid point count
-
-	// Current grid position (for detecting cell changes)
-	GridX int
-	GridY int
 
 	// Direction this spawner came from
 	Direction MaterializeDirection

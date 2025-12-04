@@ -63,12 +63,11 @@ func (cs *CleanerSystem) HandleEvent(world *engine.World, event engine.GameEvent
 
 // Update handles spawning, movement, collision, and cleanup synchronously
 func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
-	// Fetch resources
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	now := timeRes.GameTime
 
-	// 1. Clean old entries from spawned map (keep last CleanerDeduplicationWindow frames)
+	// Clean old entries from spawned map
 	currentFrame := cs.ctx.State.GetFrameNumber()
 	for frame := range cs.spawned {
 		if currentFrame-frame > constants.CleanerDeduplicationWindow {
@@ -76,27 +75,31 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 		}
 	}
 
-	// 2. Process Active Cleaners
 	entities := world.Cleaners.All()
 
-	// If no cleaners exist but we spawned this session, emit finished event
 	if len(entities) == 0 && cs.hasSpawnedSession {
 		cs.ctx.PushEvent(engine.EventCleanerFinished, nil, now)
 		cs.hasSpawnedSession = false
 		return
 	}
 
-	// If no cleaners, we can skip processing
 	if len(entities) == 0 {
 		return
 	}
 
 	dtSec := dt.Seconds()
 	gameWidth := config.GameWidth
+	gameHeight := config.GameHeight
 
 	for _, entity := range entities {
 		c, ok := world.Cleaners.Get(entity)
 		if !ok {
+			continue
+		}
+
+		// Read current grid position
+		oldPos, hasPos := world.Positions.Get(entity)
+		if !hasPos {
 			continue
 		}
 
@@ -107,15 +110,11 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 		c.PreciseY += c.VelocityY * dtSec
 
 		// --- Collision Detection (Swept Segment) ---
-		// Check all integer grid points covered during this frame's movement to prevent tunneling at high speeds
-		// Vertical cleaners sweep Y positions, horizontal cleaners sweep X positions
 		if c.VelocityY != 0 && c.VelocityX == 0 {
-			// Vertical cleaner - sweep Y positions at fixed X
+			// Vertical cleaner
 			startY := int(math.Min(prevPreciseY, c.PreciseY))
 			endY := int(math.Max(prevPreciseY, c.PreciseY))
 
-			// Clamp check range to screen bounds
-			gameHeight := config.GameHeight
 			checkStart := startY
 			if checkStart < 0 {
 				checkStart = 0
@@ -127,15 +126,14 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 
 			if checkStart <= checkEnd {
 				for y := checkStart; y <= checkEnd; y++ {
-					cs.checkAndDestroyAtPosition(world, c.GridX, y)
+					cs.checkAndDestroyAtPositionExcluding(world, oldPos.X, y, entity)
 				}
 			}
 		} else if c.VelocityX != 0 {
-			// Horizontal cleaner - sweep X positions at fixed Y
+			// Horizontal cleaner
 			startX := int(math.Min(prevPreciseX, c.PreciseX))
 			endX := int(math.Max(prevPreciseX, c.PreciseX))
 
-			// Clamp check range to screen bounds
 			checkStart := startX
 			if checkStart < 0 {
 				checkStart = 0
@@ -147,32 +145,26 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 
 			if checkStart <= checkEnd {
 				for x := checkStart; x <= checkEnd; x++ {
-					cs.checkAndDestroyAtPosition(world, x, c.GridY)
+					cs.checkAndDestroyAtPositionExcluding(world, x, oldPos.Y, entity)
 				}
 			}
 		}
 
-		// --- Trail Update ---
+		// --- Trail & Grid Sync ---
 		newGridX := int(c.PreciseX)
 		newGridY := int(c.PreciseY)
 
-		// Update trail only if we moved to a new integer grid cell
-		if newGridX != c.GridX || newGridY != c.GridY {
-			c.GridX = newGridX
-			c.GridY = newGridY
-
+		if newGridX != oldPos.X || newGridY != oldPos.Y {
 			c.TrailHead = (c.TrailHead + 1) % constants.CleanerTrailLength
-			c.TrailRing[c.TrailHead] = core.Point{X: c.GridX, Y: c.GridY}
+			c.TrailRing[c.TrailHead] = core.Point{X: newGridX, Y: newGridY}
 			if c.TrailLen < constants.CleanerTrailLength {
 				c.TrailLen++
 			}
+
+			world.Positions.Add(entity, components.PositionComponent{X: newGridX, Y: newGridY})
 		}
 
-		// Write back mutated component
-		world.Cleaners.Add(entity, c)
-
 		// --- Lifecycle Management ---
-		// Destroy entity when it passes its target (clearing the screen + trail)
 		shouldDestroy := false
 		if c.VelocityX > 0 && c.PreciseX >= c.TargetX {
 			shouldDestroy = true
@@ -187,12 +179,11 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 		if shouldDestroy {
 			world.DestroyEntity(entity)
 		} else {
-			// Save updated component state
 			world.Cleaners.Add(entity, c)
 		}
 	}
 
-	// Check again after processing to see if all cleaners finished this frame
+	// Check if all cleaners finished
 	entities = world.Cleaners.All()
 	if len(entities) == 0 && cs.hasSpawnedSession {
 		cs.ctx.PushEvent(engine.EventCleanerFinished, nil, now)
@@ -204,16 +195,13 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 func (cs *CleanerSystem) spawnCleaners(world *engine.World) {
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 
-	// No-op if there are no red entities
 	redRows := cs.scanRedCharacterRows(world)
 	if len(redRows) == 0 {
 		return
 	}
 
-	// Fetch TimeResource for audio timestamp
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 
-	// Play sound ONLY if spawning actual cleaners
 	if cs.ctx.AudioEngine != nil {
 		cs.ctx.AudioEngine.SendRealTime(audio.AudioCommand{
 			Type:       audio.SoundWhoosh,
@@ -225,61 +213,75 @@ func (cs *CleanerSystem) spawnCleaners(world *engine.World) {
 
 	gameWidth := float64(config.GameWidth)
 	duration := constants.CleanerAnimationDuration.Seconds()
-	// Calculate base speed to traverse width in duration
 	baseSpeed := gameWidth / duration
-
 	trailLen := float64(constants.CleanerTrailLength)
 
 	for _, row := range redRows {
 		var startX, targetX, velX float64
 
 		if row%2 != 0 {
-			// Odd Rows: Left -> Right
-			// Start off-screen left, End off-screen right
 			startX = -trailLen
 			targetX = gameWidth + trailLen
 			velX = baseSpeed
 		} else {
-			// Even Rows: Right -> Left
-			// Start off-screen right, End off-screen left
 			startX = gameWidth + trailLen
 			targetX = -trailLen
 			velX = -baseSpeed
 		}
 
-		// Initial trail point
 		startGridX := int(startX)
+		startGridY := row
 
 		var trailRing [constants.CleanerTrailLength]core.Point
-		trailRing[0] = core.Point{X: startGridX, Y: row}
+		trailRing[0] = core.Point{X: startGridX, Y: startGridY}
 
 		comp := components.CleanerComponent{
 			PreciseX:  startX,
 			PreciseY:  float64(row),
 			VelocityX: velX,
-			VelocityY: 0, // Horizontal only
+			VelocityY: 0,
 			TargetX:   targetX,
 			TargetY:   float64(row),
-			GridX:     startGridX,
-			GridY:     row,
 			TrailRing: trailRing,
 			TrailHead: 0,
 			TrailLen:  1,
 			Char:      constants.CleanerChar,
 		}
 
-		// Create cleaner entity and add to store
 		entity := world.CreateEntity()
+		world.Positions.Add(entity, components.PositionComponent{X: startGridX, Y: startGridY})
 		world.Cleaners.Add(entity, comp)
 	}
 }
 
-// spawnDirectionalCleaners generates 4 cleaner entities from origin position (up/down/left/right)
+// checkAndDestroyAtPositionExcluding handles collision logic with self-exclusion
+func (cs *CleanerSystem) checkAndDestroyAtPositionExcluding(world *engine.World, x, y int, selfEntity engine.Entity) {
+	targetEntities := world.Positions.GetAllAt(x, y)
+
+	var toDestroy []engine.Entity
+
+	for _, e := range targetEntities {
+		if e == 0 || e == selfEntity {
+			continue // Self-exclusion
+		}
+		if seqComp, ok := world.Sequences.Get(e); ok {
+			if seqComp.Type == components.SequenceRed {
+				toDestroy = append(toDestroy, e)
+			}
+		}
+	}
+
+	for _, e := range toDestroy {
+		cs.spawnRemovalFlash(world, e)
+		world.DestroyEntity(e)
+	}
+}
+
+// spawnDirectionalCleaners generates 4 cleaner entities from origin position
 func (cs *CleanerSystem) spawnDirectionalCleaners(world *engine.World, originX, originY int) {
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 
-	// Play whoosh sound once for all 4 cleaners
 	if cs.ctx.AudioEngine != nil {
 		cs.ctx.AudioEngine.SendRealTime(audio.AudioCommand{
 			Type:       audio.SoundWhoosh,
@@ -293,70 +295,29 @@ func (cs *CleanerSystem) spawnDirectionalCleaners(world *engine.World, originX, 
 	gameHeight := float64(config.GameHeight)
 	trailLen := float64(constants.CleanerTrailLength)
 
-	// Calculate speeds based on animation duration
 	horizontalSpeed := gameWidth / constants.CleanerAnimationDuration.Seconds()
 	verticalSpeed := gameHeight / constants.CleanerAnimationDuration.Seconds()
 
-	// Origin as floats
 	ox := float64(originX)
 	oy := float64(originY)
 
-	// Spawn 4 cleaners: right, left, down, up
 	directions := []struct {
 		velocityX, velocityY float64
 		startX, startY       float64
 		targetX, targetY     float64
-		gridX, gridY         int
 	}{
-		// Right: horizontal cleaner moving right
-		{
-			velocityX: horizontalSpeed,
-			velocityY: 0,
-			startX:    ox,
-			startY:    oy,
-			targetX:   gameWidth + trailLen,
-			targetY:   oy,
-			gridX:     originX,
-			gridY:     originY,
-		},
-		// Left: horizontal cleaner moving left
-		{
-			velocityX: -horizontalSpeed,
-			velocityY: 0,
-			startX:    ox,
-			startY:    oy,
-			targetX:   -trailLen,
-			targetY:   oy,
-			gridX:     originX,
-			gridY:     originY,
-		},
-		// Down: vertical cleaner moving down
-		{
-			velocityX: 0,
-			velocityY: verticalSpeed,
-			startX:    ox,
-			startY:    oy,
-			targetX:   ox,
-			targetY:   gameHeight + trailLen,
-			gridX:     originX,
-			gridY:     originY,
-		},
-		// Up: vertical cleaner moving up
-		{
-			velocityX: 0,
-			velocityY: -verticalSpeed,
-			startX:    ox,
-			startY:    oy,
-			targetX:   ox,
-			targetY:   -trailLen,
-			gridX:     originX,
-			gridY:     originY,
-		},
+		{horizontalSpeed, 0, ox, oy, gameWidth + trailLen, oy},
+		{-horizontalSpeed, 0, ox, oy, -trailLen, oy},
+		{0, verticalSpeed, ox, oy, ox, gameHeight + trailLen},
+		{0, -verticalSpeed, ox, oy, ox, -trailLen},
 	}
 
 	for _, dir := range directions {
+		startGridX := int(dir.startX)
+		startGridY := int(dir.startY)
+
 		var trailRing [constants.CleanerTrailLength]core.Point
-		trailRing[0] = core.Point{X: dir.gridX, Y: dir.gridY}
+		trailRing[0] = core.Point{X: startGridX, Y: startGridY}
 
 		comp := components.CleanerComponent{
 			PreciseX:  dir.startX,
@@ -365,8 +326,6 @@ func (cs *CleanerSystem) spawnDirectionalCleaners(world *engine.World, originX, 
 			VelocityY: dir.velocityY,
 			TargetX:   dir.targetX,
 			TargetY:   dir.targetY,
-			GridX:     dir.gridX,
-			GridY:     dir.gridY,
 			TrailRing: trailRing,
 			TrailHead: 0,
 			TrailLen:  1,
@@ -374,6 +333,7 @@ func (cs *CleanerSystem) spawnDirectionalCleaners(world *engine.World, originX, 
 		}
 
 		entity := world.CreateEntity()
+		world.Positions.Add(entity, components.PositionComponent{X: startGridX, Y: startGridY})
 		world.Cleaners.Add(entity, comp)
 	}
 }

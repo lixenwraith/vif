@@ -88,61 +88,51 @@ func (s *DecaySystem) updateAnimation(world *engine.World, dt time.Duration) {
 
 // spawnDecayEntities creates one decay entity per column using generic stores
 func (s *DecaySystem) spawnDecayEntities(world *engine.World) {
-	// Fetch resources
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 	gameWidth := config.GameWidth
 
-	// Create one falling entity per column to ensure complete coverage
 	for column := 0; column < gameWidth; column++ {
-		// Random speed for each entity
 		speed := constants.DecayMinSpeed + rand.Float64()*(constants.DecayMaxSpeed-constants.DecayMinSpeed)
-
-		// Random character for each entity
 		char := constants.AlphanumericRunes[rand.Intn(len(constants.AlphanumericRunes))]
 
-		// Create falling entity using world
 		entity := world.CreateEntity()
+
+		// Add PositionComponent for grid registration
+		world.Positions.Add(entity, components.PositionComponent{
+			X: column,
+			Y: 0,
+		})
+
 		world.Decays.Add(entity, components.DecayComponent{
-			Column:        column,
-			YPosition:     0.0,
+			PreciseX:      float64(column),
+			PreciseY:      0.0,
 			Speed:         speed,
 			Char:          char,
 			LastChangeRow: -1,
-
-			// Initialize coordinate latch to force first-frame processing
-			LastIntX: -1,
-			LastIntY: -1,
-
-			// Initialize physics history to spawn position
-			PrevPreciseX: float64(column),
-			PrevPreciseY: 0.0,
+			LastIntX:      -1,
+			LastIntY:      -1,
+			PrevPreciseX:  float64(column),
+			PrevPreciseY:  0.0,
 		})
 	}
 }
 
 // updateDecayEntities updates entity positions and applies decay using generic stores
 func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64) {
-	// Fetch resources
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 	gameHeight := config.GameHeight
 	gameWidth := config.GameWidth
 
-	// Clamp dt to prevent tunneling on huge lag spikes (e.g. Resume from pause)
 	if dtSeconds > 0.1 {
 		dtSeconds = 0.1
 	}
 
-	// Query all decay entities
 	decayEntities := world.Decays.All()
 
-	// Clear deduplication maps for this frame
-	// processedGridCells: prevents same cell being processed by multiple decay entities
-	// decayedThisFrame: prevents same target being decayed twice (by any decay entity)
 	for k := range s.processedGridCells {
 		delete(s.processedGridCells, k)
 	}
 
-	// Stack-allocated buffer for spatial queries (zero allocation)
 	var collisionBuf [engine.MaxEntitiesPerCell]engine.Entity
 
 	for _, entity := range decayEntities {
@@ -151,27 +141,32 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 			continue
 		}
 
+		// Read current grid position
+		pos, hasPos := world.Positions.Get(entity)
+		if !hasPos {
+			continue
+		}
+
 		// 1. Update Physics
-		startY := fall.YPosition
-		fall.YPosition += fall.Speed * dtSeconds
+		startY := fall.PreciseY
+		fall.PreciseY += fall.Speed * dtSeconds
 		fall.PrevPreciseY = startY
 
 		// Boundary Check
-		if fall.YPosition >= float64(gameHeight) {
+		if fall.PreciseY >= float64(gameHeight) {
 			world.DestroyEntity(entity)
 			continue
 		}
 
 		// 2. Swept Traversal (From StartY to EndY)
 		y1 := int(startY)
-		y2 := int(fall.YPosition)
+		y2 := int(fall.PreciseY)
 
 		startRow, endRow := y1, y2
 		if y1 > y2 {
 			startRow, endRow = y2, y1
 		}
 
-		// Clamp to screen
 		if startRow < 0 {
 			startRow = 0
 		}
@@ -179,9 +174,9 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 			endRow = gameHeight - 1
 		}
 
-		for row := startRow; row <= endRow; row++ {
-			col := fall.Column
+		col := int(fall.PreciseX)
 
+		for row := startRow; row <= endRow; row++ {
 			// A. Coordinate latch check
 			if col == fall.LastIntX && row == fall.LastIntY {
 				continue
@@ -192,7 +187,6 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 			}
 
 			// B. Frame deduplication (spatial)
-			// If another decay entity already processed this cell this frame, skip
 			flatIdx := (row * gameWidth) + col
 			if s.processedGridCells[flatIdx] {
 				continue
@@ -201,14 +195,12 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 			// C. Interaction - use zero-alloc buffer
 			n := world.Positions.GetAllAtInto(col, row, collisionBuf[:])
 
-			// Process all targets at this cell
 			for i := 0; i < n; i++ {
 				targetEntity := collisionBuf[i]
-				if targetEntity == 0 {
-					continue
+				if targetEntity == 0 || targetEntity == entity {
+					continue // Self-exclusion
 				}
 
-				// Check if this target was already decayed this frame (by any decay entity)
 				s.mu.RLock()
 				alreadyHit := s.decayedThisFrame[targetEntity]
 				s.mu.RUnlock()
@@ -217,7 +209,6 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 					continue
 				}
 
-				// Apply decay effect to target
 				if world.Nuggets.Has(targetEntity) {
 					if char, ok := world.Characters.Get(targetEntity); ok {
 						timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
@@ -229,30 +220,35 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 					s.applyDecayToCharacter(world, targetEntity)
 				}
 
-				// Mark target as processed for this frame
 				s.mu.Lock()
 				s.decayedThisFrame[targetEntity] = true
 				s.mu.Unlock()
 			}
 
-			// D. Mark cell as processed AFTER handling all targets
-			// This ensures: if 2 decay entities hit same cell, first one processes all targets,
-			// second one skips entirely (correct behavior - decay applies once per cell per frame)
 			s.processedGridCells[flatIdx] = true
+		}
 
-			// E. Update latch & visuals
-			fall.LastIntX = col
-			fall.LastIntY = row
+		// D. Update latch after collision processing
+		fall.LastIntX = col
+		fall.LastIntY = int(fall.PreciseY)
 
-			if row != fall.LastChangeRow {
-				fall.LastChangeRow = row
-				if row > 0 && rand.Float64() < constants.DecayChangeChance {
-					fall.Char = constants.AlphanumericRunes[rand.Intn(len(constants.AlphanumericRunes))]
-				}
+		// E. Visual character change
+		currentRow := int(fall.PreciseY)
+		if currentRow != fall.LastChangeRow {
+			fall.LastChangeRow = currentRow
+			if currentRow > 0 && rand.Float64() < constants.DecayChangeChance {
+				fall.Char = constants.AlphanumericRunes[rand.Intn(len(constants.AlphanumericRunes))]
 			}
 		}
 
-		fall.PrevPreciseX = float64(fall.Column)
+		fall.PrevPreciseX = fall.PreciseX
+
+		// F. Sync grid position if changed
+		newGridY := int(fall.PreciseY)
+		if newGridY != pos.Y {
+			world.Positions.Add(entity, components.PositionComponent{X: pos.X, Y: newGridY})
+		}
+
 		world.Decays.Add(entity, fall)
 	}
 }

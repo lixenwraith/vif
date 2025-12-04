@@ -2,9 +2,10 @@ package components
 
 // DecayComponent represents a decay character entity
 type DecayComponent struct {
-	// Position (float for smooth movement, future magnetic support)
-	Column    int     // Current column (legacy, keep for compatibility)
-	YPosition float64 // Current Y position
+	// Sub-pixel position (physics/render precision)
+	// Grid position managed by PositionComponent (external)
+	PreciseX float64
+	PreciseY float64
 
 	// Velocity
 	Speed float64 // Falling speed in rows per second

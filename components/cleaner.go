@@ -6,6 +6,7 @@ import (
 )
 
 // CleanerComponent tracks cleaner entity movement and trail
+// Grid position managed by PositionComponent (external)
 type CleanerComponent struct {
 	// Sub-pixel position for smooth animation
 	PreciseX float64
@@ -23,10 +24,6 @@ type CleanerComponent struct {
 	TrailRing [constants.CleanerTrailLength]core.Point
 	TrailHead int // Most recent point index
 	TrailLen  int // Valid point count
-
-	// Current grid cell
-	GridX int
-	GridY int
 
 	// Character used to render the cleaner block
 	Char rune
