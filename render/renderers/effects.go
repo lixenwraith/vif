@@ -81,10 +81,11 @@ func (e *EffectsRenderer) drawDecay(ctx render.RenderContext, world *engine.Worl
 			continue
 		}
 
-		// Use PreciseX/Y for screen position, truncate to int for grid alignment
+		// Convert PreciseX/Y (float overlay) to screen coordinates for rendering
 		screenCol := int(decay.PreciseX)
 		screenRow := int(decay.PreciseY)
 
+		// Bounds check: game area coordinates
 		if screenRow < 0 || screenRow >= ctx.GameHeight {
 			continue
 		}
@@ -92,9 +93,11 @@ func (e *EffectsRenderer) drawDecay(ctx render.RenderContext, world *engine.Worl
 			continue
 		}
 
+		// Translate game coordinates to screen coordinates (apply game area offset)
 		screenX := ctx.GameX + screenCol
 		screenY := ctx.GameY + screenRow
 
+		// Bounds check: screen coordinates
 		if screenX < ctx.GameX || screenX >= ctx.Width || screenY < ctx.GameY || screenY >= ctx.GameY+ctx.GameHeight {
 			continue
 		}

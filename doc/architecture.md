@@ -366,6 +366,76 @@ entity := world.Positions.GetTopEntityFiltered(x, y, world, func(e engine.Entity
 })
 ```
 
+### High-Precision Entity Architecture: Sync & Overlay Pattern
+
+High-precision entities (Decay, Cleaner, Materialize) use a **dual-state model** for unified spatial queries while maintaining sub-pixel physics:
+
+**Pattern Overview:**
+- **Primary (Logic)**: `PositionStore` holds authoritative integer grid location for collision/queries
+- **Overlay (Physics/Render)**: Domain components retain float precision (`PreciseX/Y`)
+- Systems update float state, then sync integer grid position via `Positions.Add()`
+
+**Migration Changes:**
+
+1. **Component Structure:**
+   - `DecayComponent`: Now has `PreciseX`, `PreciseY` (full 2D float) instead of `Column`, `YPosition`
+   - `CleanerComponent`: Grid position removed; now sourced from `PositionComponent`
+   - `MaterializeComponent`: Grid position removed; now sourced from `PositionComponent`
+
+2. **PositionStore Integration:**
+   - All gameplay entities now register in `PositionStore` for unified spatial queries
+   - Enables single iteration cleanup in `cleanupOutOfBoundsEntities()`
+   - Simplifies collision detection (no custom bypass logic needed)
+
+3. **Spawn Protocol:**
+   ```go
+   entity := world.CreateEntity()
+   world.Positions.Add(entity, components.PositionComponent{X: gridX, Y: gridY})  // Grid registration
+   world.Decays.Add(entity, components.DecayComponent{
+       PreciseX: float64(gridX),  // Float overlay
+       PreciseY: float64(gridY),
+       // ...
+   })
+   ```
+
+4. **Grid Sync Protocol:**
+   Systems update float position, then sync grid if integer position changed:
+   ```go
+   // Update physics (float)
+   decay.PreciseX += velocity * dt
+   decay.PreciseY += velocity * dt
+
+   // Sync grid position if cell changed
+   newGridX := int(decay.PreciseX)
+   newGridY := int(decay.PreciseY)
+   if newGridX != oldPos.X || newGridY != oldPos.Y {
+       world.Positions.Add(entity, components.PositionComponent{X: newGridX, Y: newGridY})
+   }
+   ```
+
+5. **Self-Exclusion Requirement:**
+   Spatial queries return the querying entity. Collision loops must filter:
+   ```go
+   entitiesAtPos := world.Positions.GetAllAt(x, y)
+   for _, candidate := range entitiesAtPos {
+       if candidate == selfEntity {
+           continue  // Self-exclusion
+       }
+       // Process collision...
+   }
+   ```
+
+**Affected Systems:**
+- **DecaySystem** (`systems/decay.go`): Swept traversal with self-exclusion, grid sync on cell change
+- **CleanerSystem** (`systems/cleaner.go`): Vector physics with trail tracking, grid sync on movement
+- **DrainSystem** (`systems/drain.go`): Materializers use pattern for spawn animation
+
+**Benefits:**
+- Unified cleanup via single `PositionStore` iteration
+- Spatial queries include all entities (no special cases)
+- Sub-pixel physics without sacrificing collision accuracy
+- Consistent entity lifecycle (all entities visible to global queries)
+
 ### Z-Index System
 
 **Z-Index System** (`engine/z-index.go`) provides priority-based entity selection.
@@ -402,9 +472,9 @@ Component (marker interface)
 ├── CharacterComponent {Rune rune, Color ColorClass, Style TextStyle, SeqType, SeqLevel}
 ├── SequenceComponent {ID, Index int, Type SequenceType, Level SequenceLevel}
 ├── GoldSequenceComponent {Active bool, SequenceID int, StartTimeNano int64, CharSequence []rune, CurrentIndex int}
-├── DecayComponent {Column int, YPosition float64, Speed float64, Char rune, LastChangeRow, LastIntX, LastIntY int, PrevPreciseX, PrevPreciseY float64}
-├── CleanerComponent {PreciseX/Y float64, VelocityX/Y float64, TargetX/Y float64, TrailRing [Length]Point, TrailHead, TrailLen, GridX, GridY int, Char rune}
-├── MaterializeComponent {PreciseX/Y float64, VelocityX/Y float64, TargetX, TargetY int, TrailRing [Length]Point, TrailHead, TrailLen, GridX, GridY int, Direction MaterializeDirection, Char rune, Arrived bool}
+├── DecayComponent {PreciseX, PreciseY float64, Speed float64, Char rune, LastChangeRow, LastIntX, LastIntY int, PrevPreciseX, PrevPreciseY float64}
+├── CleanerComponent {PreciseX/Y float64, VelocityX/Y float64, TargetX/Y float64, TrailRing [Length]Point, TrailHead, TrailLen int, Char rune}
+├── MaterializeComponent {PreciseX/Y float64, VelocityX/Y float64, TargetX, TargetY int, TrailRing [Length]Point, TrailHead, TrailLen int, Direction MaterializeDirection, Char rune, Arrived bool}
 ├── FlashComponent {X, Y int, Char rune, StartTime time.Time, Duration time.Duration}
 ├── NuggetComponent {ID int, SpawnTime time.Time}
 ├── DrainComponent {LastMoveTime, LastDrainTime time.Time, IsOnCursor bool, SpawnOrder int64}

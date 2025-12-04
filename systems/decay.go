@@ -91,18 +91,20 @@ func (s *DecaySystem) spawnDecayEntities(world *engine.World) {
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 	gameWidth := config.GameWidth
 
+	// Spawn one decay entity per column for full-width coverage
 	for column := 0; column < gameWidth; column++ {
 		speed := constants.DecayMinSpeed + rand.Float64()*(constants.DecayMaxSpeed-constants.DecayMinSpeed)
 		char := constants.AlphanumericRunes[rand.Intn(len(constants.AlphanumericRunes))]
 
 		entity := world.CreateEntity()
 
-		// Add PositionComponent for grid registration
+		// Spawn Protocol: Register in PositionStore for spatial queries
 		world.Positions.Add(entity, components.PositionComponent{
 			X: column,
 			Y: 0,
 		})
 
+		// Initialize DecayComponent with PreciseX/Y float overlay and coordinate history
 		world.Decays.Add(entity, components.DecayComponent{
 			PreciseX:      float64(column),
 			PreciseY:      0.0,
@@ -129,6 +131,7 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 
 	decayEntities := world.Decays.All()
 
+	// Clear frame deduplication maps
 	for k := range s.processedGridCells {
 		delete(s.processedGridCells, k)
 	}
@@ -141,24 +144,24 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 			continue
 		}
 
-		// Read current grid position
+		// Read grid position from PositionStore
 		pos, hasPos := world.Positions.Get(entity)
 		if !hasPos {
 			continue
 		}
 
-		// 1. Update Physics
+		// --- Physics Integration: Update float position (overlay state) ---
 		startY := fall.PreciseY
 		fall.PreciseY += fall.Speed * dtSeconds
 		fall.PrevPreciseY = startY
 
-		// Boundary Check
+		// Destroy if entity falls below game area
 		if fall.PreciseY >= float64(gameHeight) {
 			world.DestroyEntity(entity)
 			continue
 		}
 
-		// 2. Swept Traversal (From StartY to EndY)
+		// --- Swept Traversal: Check all rows between previous and current position for collisions ---
 		y1 := int(startY)
 		y2 := int(fall.PreciseY)
 
@@ -176,8 +179,9 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 
 		col := int(fall.PreciseX)
 
+		// Check each traversed row for entity collisions
 		for row := startRow; row <= endRow; row++ {
-			// A. Coordinate latch check
+			// Coordinate latch: skip if already processed this exact coordinate
 			if col == fall.LastIntX && row == fall.LastIntY {
 				continue
 			}
@@ -186,21 +190,23 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 				continue
 			}
 
-			// B. Frame deduplication (spatial)
+			// Frame deduplication: skip if this cell was already processed this frame
 			flatIdx := (row * gameWidth) + col
 			if s.processedGridCells[flatIdx] {
 				continue
 			}
 
-			// C. Interaction - use zero-alloc buffer
+			// Query entities at position using zero-alloc buffer
 			n := world.Positions.GetAllAtInto(col, row, collisionBuf[:])
 
+			// Process collisions with self-exclusion
 			for i := 0; i < n; i++ {
 				targetEntity := collisionBuf[i]
 				if targetEntity == 0 || targetEntity == entity {
-					continue // Self-exclusion
+					continue // Self-exclusion: decay entity is in PositionStore, must skip self
 				}
 
+				// Entity deduplication: skip if already hit this frame
 				s.mu.RLock()
 				alreadyHit := s.decayedThisFrame[targetEntity]
 				s.mu.RUnlock()
@@ -228,11 +234,11 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 			s.processedGridCells[flatIdx] = true
 		}
 
-		// D. Update latch after collision processing
+		// --- Coordinate Latch Update: Track last processed position to prevent re-processing ---
 		fall.LastIntX = col
 		fall.LastIntY = int(fall.PreciseY)
 
-		// E. Visual character change
+		// Visual character randomization (matrix effect)
 		currentRow := int(fall.PreciseY)
 		if currentRow != fall.LastChangeRow {
 			fall.LastChangeRow = currentRow
@@ -243,7 +249,7 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 
 		fall.PrevPreciseX = fall.PreciseX
 
-		// F. Sync grid position if changed
+		// --- Grid Sync Protocol: Update PositionStore if integer position changed ---
 		newGridY := int(fall.PreciseY)
 		if newGridY != pos.Y {
 			world.Positions.Add(entity, components.PositionComponent{X: pos.X, Y: newGridY})

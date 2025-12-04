@@ -77,6 +77,7 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 
 	entities := world.Cleaners.All()
 
+	// Push EventCleanerFinished when all cleaners have completed their animation
 	if len(entities) == 0 && cs.hasSpawnedSession {
 		cs.ctx.PushEvent(engine.EventCleanerFinished, nil, now)
 		cs.hasSpawnedSession = false
@@ -97,21 +98,21 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 			continue
 		}
 
-		// Read current grid position
+		// Read grid position from PositionStore (authoritative for spatial queries)
 		oldPos, hasPos := world.Positions.Get(entity)
 		if !hasPos {
 			continue
 		}
 
-		// --- Physics Update ---
+		// --- Physics Update: Integrate velocity into float position (overlay state) ---
 		prevPreciseX := c.PreciseX
 		prevPreciseY := c.PreciseY
 		c.PreciseX += c.VelocityX * dtSec
 		c.PreciseY += c.VelocityY * dtSec
 
-		// --- Collision Detection (Swept Segment) ---
+		// --- Swept Collision Detection: Check all cells between previous and current position ---
 		if c.VelocityY != 0 && c.VelocityX == 0 {
-			// Vertical cleaner
+			// Vertical cleaner: sweep Y axis
 			startY := int(math.Min(prevPreciseY, c.PreciseY))
 			endY := int(math.Max(prevPreciseY, c.PreciseY))
 
@@ -124,13 +125,14 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 				checkEnd = gameHeight - 1
 			}
 
+			// Check all traversed rows for collisions (with self-exclusion)
 			if checkStart <= checkEnd {
 				for y := checkStart; y <= checkEnd; y++ {
 					cs.checkAndDestroyAtPositionExcluding(world, oldPos.X, y, entity)
 				}
 			}
 		} else if c.VelocityX != 0 {
-			// Horizontal cleaner
+			// Horizontal cleaner: sweep X axis
 			startX := int(math.Min(prevPreciseX, c.PreciseX))
 			endX := int(math.Max(prevPreciseX, c.PreciseX))
 
@@ -143,6 +145,7 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 				checkEnd = gameWidth - 1
 			}
 
+			// Check all traversed columns for collisions (with self-exclusion)
 			if checkStart <= checkEnd {
 				for x := checkStart; x <= checkEnd; x++ {
 					cs.checkAndDestroyAtPositionExcluding(world, x, oldPos.Y, entity)
@@ -150,21 +153,23 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 			}
 		}
 
-		// --- Trail & Grid Sync ---
+		// --- Trail Update & Grid Sync: Update trail ring buffer and sync PositionStore if cell changed ---
 		newGridX := int(c.PreciseX)
 		newGridY := int(c.PreciseY)
 
 		if newGridX != oldPos.X || newGridY != oldPos.Y {
+			// Update trail: add new grid position to ring buffer
 			c.TrailHead = (c.TrailHead + 1) % constants.CleanerTrailLength
 			c.TrailRing[c.TrailHead] = core.Point{X: newGridX, Y: newGridY}
 			if c.TrailLen < constants.CleanerTrailLength {
 				c.TrailLen++
 			}
 
+			// Sync grid position to PositionStore
 			world.Positions.Add(entity, components.PositionComponent{X: newGridX, Y: newGridY})
 		}
 
-		// --- Lifecycle Management ---
+		// --- Lifecycle Check: Destroy cleaner when it reaches target position ---
 		shouldDestroy := false
 		if c.VelocityX > 0 && c.PreciseX >= c.TargetX {
 			shouldDestroy = true
@@ -216,6 +221,7 @@ func (cs *CleanerSystem) spawnCleaners(world *engine.World) {
 	baseSpeed := gameWidth / duration
 	trailLen := float64(constants.CleanerTrailLength)
 
+	// Spawn one cleaner per row with Red entities, alternating L→R and R→L direction
 	for _, row := range redRows {
 		var startX, targetX, velX float64
 
@@ -232,6 +238,7 @@ func (cs *CleanerSystem) spawnCleaners(world *engine.World) {
 		startGridX := int(startX)
 		startGridY := row
 
+		// Initialize trail ring buffer with starting position
 		var trailRing [constants.CleanerTrailLength]core.Point
 		trailRing[0] = core.Point{X: startGridX, Y: startGridY}
 
@@ -248,6 +255,7 @@ func (cs *CleanerSystem) spawnCleaners(world *engine.World) {
 			Char:      constants.CleanerChar,
 		}
 
+		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → CleanerComponent (float overlay)
 		entity := world.CreateEntity()
 		world.Positions.Add(entity, components.PositionComponent{X: startGridX, Y: startGridY})
 		world.Cleaners.Add(entity, comp)
@@ -256,14 +264,17 @@ func (cs *CleanerSystem) spawnCleaners(world *engine.World) {
 
 // checkAndDestroyAtPositionExcluding handles collision logic with self-exclusion
 func (cs *CleanerSystem) checkAndDestroyAtPositionExcluding(world *engine.World, x, y int, selfEntity engine.Entity) {
+	// Query all entities at position (includes cleaner itself due to PositionStore registration)
 	targetEntities := world.Positions.GetAllAt(x, y)
 
 	var toDestroy []engine.Entity
 
+	// Iterate candidates with self-exclusion pattern
 	for _, e := range targetEntities {
 		if e == 0 || e == selfEntity {
-			continue // Self-exclusion
+			continue // Self-exclusion: skip cleaner entity to prevent self-destruction
 		}
+		// Only destroy Red sequence entities
 		if seqComp, ok := world.Sequences.Get(e); ok {
 			if seqComp.Type == components.SequenceRed {
 				toDestroy = append(toDestroy, e)
@@ -271,6 +282,7 @@ func (cs *CleanerSystem) checkAndDestroyAtPositionExcluding(world *engine.World,
 		}
 	}
 
+	// Spawn flash effects and destroy marked entities
 	for _, e := range toDestroy {
 		cs.spawnRemovalFlash(world, e)
 		world.DestroyEntity(e)
@@ -301,6 +313,7 @@ func (cs *CleanerSystem) spawnDirectionalCleaners(world *engine.World, originX, 
 	ox := float64(originX)
 	oy := float64(originY)
 
+	// Define 4 directional cleaners: right, left, down, up
 	directions := []struct {
 		velocityX, velocityY float64
 		startX, startY       float64
@@ -312,10 +325,12 @@ func (cs *CleanerSystem) spawnDirectionalCleaners(world *engine.World, originX, 
 		{0, -verticalSpeed, ox, oy, ox, -trailLen},
 	}
 
+	// Spawn 4 cleaners from origin, each traveling in a cardinal direction
 	for _, dir := range directions {
 		startGridX := int(dir.startX)
 		startGridY := int(dir.startY)
 
+		// Initialize trail ring buffer with starting position
 		var trailRing [constants.CleanerTrailLength]core.Point
 		trailRing[0] = core.Point{X: startGridX, Y: startGridY}
 
@@ -332,6 +347,7 @@ func (cs *CleanerSystem) spawnDirectionalCleaners(world *engine.World, originX, 
 			Char:      constants.CleanerChar,
 		}
 
+		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → CleanerComponent (float overlay)
 		entity := world.CreateEntity()
 		world.Positions.Add(entity, components.PositionComponent{X: startGridX, Y: startGridY})
 		world.Cleaners.Add(entity, comp)
