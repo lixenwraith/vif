@@ -12,6 +12,7 @@ const (
 	KeyEscape
 	KeyEnter
 	KeyTab
+	KeyBacktab // Shift+Tab
 	KeyBackspace
 	KeyDelete
 	KeySpace
@@ -103,6 +104,7 @@ var csiSequences = []escapeSequence{
 	{"B", KeyDown, ModNone},
 	{"C", KeyRight, ModNone},
 	{"D", KeyLeft, ModNone},
+	{"Z", KeyBacktab, ModShift}, // Shift+Tab
 
 	// Arrow keys with modifiers (xterm style: ESC [ 1 ; mod X)
 	{"1;2A", KeyUp, ModShift},

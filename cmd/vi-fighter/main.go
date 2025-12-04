@@ -17,6 +17,9 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
+// Add before main()
+var colorModeFlag = flag.String("color", "auto", "Color mode: auto, truecolor, 256")
+
 func main() {
 	// Panic Recovery: Ensure terminal is reset even if the game crashes
 	defer func() {
@@ -34,8 +37,19 @@ func main() {
 	// Parse command-line flags (keeping flag parsing infrastructure)
 	flag.Parse()
 
+	// Resolve color mode from flag
+	var colorMode terminal.ColorMode
+	switch *colorModeFlag {
+	case "256":
+		colorMode = terminal.ColorMode256
+	case "truecolor", "true", "24bit":
+		colorMode = terminal.ColorModeTrueColor
+	default:
+		colorMode = terminal.DetectColorMode()
+	}
+
 	// Initialize terminal
-	term := terminal.New()
+	term := terminal.New(colorMode)
 	if err := term.Init(); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to initialize terminal: %v\n", err)
 		os.Exit(1)

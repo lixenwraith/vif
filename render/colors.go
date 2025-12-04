@@ -30,7 +30,7 @@ var (
 	RgbBackground      = RGB{26, 27, 38}    // Tokyo Night background
 
 	RgbPingHighlight = RGB{5, 5, 5}       // Almost Black for INSERT mode ping
-	RgbPingNormal    = RGB{60, 60, 10}    // Dark Olack for NORMAL/SEARCH ping
+	RgbPingNormal    = RGB{153, 102, 0}   // Dark orange for NORMAL/SEARCH ping
 	RgbPingOrange    = RGB{60, 40, 0}     // Very dark orange for ping on whitespace
 	RgbPingGreen     = RGB{0, 40, 0}      // Very dark green for ping on green char
 	RgbPingRed       = RGB{50, 15, 15}    // Very dark red for ping on red char

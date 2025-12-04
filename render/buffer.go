@@ -105,15 +105,15 @@ func (b *RenderBuffer) Set(x, y int, mainRune rune, fg, bg RGB, mode BlendMode, 
 		case opAlpha:
 			dst.Bg = Blend(dst.Bg, bg, alpha)
 		case opAdd:
-			dst.Bg = Add(dst.Bg, bg)
+			dst.Bg = Add(dst.Bg, bg, alpha)
 		case opMax:
-			dst.Bg = Max(dst.Bg, bg)
+			dst.Bg = Max(dst.Bg, bg, alpha)
 		case opSoftLight:
 			dst.Bg = SoftLight(dst.Bg, bg, alpha)
 		case opScreen:
-			dst.Bg = Screen(dst.Bg, bg)
+			dst.Bg = Screen(dst.Bg, bg, alpha)
 		case opOverlay:
-			dst.Bg = Overlay(dst.Bg, bg)
+			dst.Bg = Overlay(dst.Bg, bg, alpha)
 		}
 		// Always mark touched if we touched background
 		b.touched[idx] = true
@@ -127,15 +127,15 @@ func (b *RenderBuffer) Set(x, y int, mainRune rune, fg, bg RGB, mode BlendMode, 
 		case opAlpha:
 			dst.Fg = Blend(dst.Fg, fg, alpha)
 		case opAdd:
-			dst.Fg = Add(dst.Fg, fg)
+			dst.Fg = Add(dst.Fg, fg, alpha)
 		case opMax:
-			dst.Fg = Max(dst.Fg, fg)
+			dst.Fg = Max(dst.Fg, fg, alpha)
 		case opSoftLight:
 			dst.Fg = SoftLight(dst.Fg, fg, alpha)
 		case opScreen:
-			dst.Fg = Screen(dst.Fg, fg)
+			dst.Fg = Screen(dst.Fg, fg, alpha)
 		case opOverlay:
-			dst.Fg = Overlay(dst.Fg, fg)
+			dst.Fg = Overlay(dst.Fg, fg, alpha)
 		}
 	}
 }

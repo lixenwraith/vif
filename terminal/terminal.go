@@ -102,13 +102,21 @@ type termImpl struct {
 }
 
 // New creates a new Terminal instance
-func New() Terminal {
+func New(colorMode ...ColorMode) Terminal {
+	var c ColorMode
+	if len(colorMode) == 0 {
+		c = DetectColorMode()
+	} else {
+		c = colorMode[0]
+	}
+
 	return &termImpl{
 		in:          os.Stdin,
 		out:         os.Stdout,
 		inFd:        int(os.Stdin.Fd()),
 		outFd:       int(os.Stdout.Fd()),
 		syntheticCh: make(chan Event, 16),
+		colorMode:   c,
 	}
 }
 
@@ -131,9 +139,6 @@ func (t *termImpl) Init() error {
 	if t.initialized {
 		return nil
 	}
-
-	// Detect color mode
-	t.colorMode = DetectColorMode()
 
 	// Get initial size
 	t.width, t.height = getTerminalSize(t.outFd)

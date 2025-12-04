@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // StatusBarRenderer draws the status bar at the bottom
@@ -228,6 +229,19 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 		text: fmt.Sprintf(" FPS: %d ", s.currentFps),
 		fg:   render.RgbBlack,
 		bg:   render.RgbFpsBg,
+	})
+
+	// Priority 8: Color Mode Indicator
+	var colorModeStr string
+	if s.gameCtx.Terminal.ColorMode() == terminal.ColorModeTrueColor {
+		colorModeStr = " TC "
+	} else {
+		colorModeStr = " 256 "
+	}
+	rightItems = append(rightItems, statusItem{
+		text: colorModeStr,
+		fg:   render.RgbBlack,
+		bg:   render.RGB{R: 200, G: 200, B: 200}, // Light gray
 	})
 
 	// Calculate which items fit, dropping from end (lowest priority)

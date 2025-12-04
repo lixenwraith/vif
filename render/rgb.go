@@ -100,13 +100,23 @@ func Blend(c, src RGB, alpha float64) RGB {
 	}
 }
 
-// Max returns per-channel maximum
-func Max(c, src RGB) RGB {
-	return RGB{
+// Max returns per-channel maximum with alpha blending
+func Max(c, src RGB, alpha float64) RGB {
+	if alpha <= 0.0 {
+		return c
+	}
+
+	maxed := RGB{
 		R: max(c.R, src.R),
 		G: max(c.G, src.G),
 		B: max(c.B, src.B),
 	}
+
+	if alpha >= 1.0 {
+		return maxed
+	}
+
+	return Blend(c, maxed, alpha)
 }
 
 // add is addition with clamping
@@ -118,13 +128,23 @@ func add(a, b uint8) uint8 {
 	return uint8(sum)
 }
 
-// Add performs additive blend with clamping (light accumulation)
-func Add(c, src RGB) RGB {
-	return RGB{
+// Add performs additive blend with clamping and alpha blending
+func Add(c, src RGB, alpha float64) RGB {
+	if alpha <= 0.0 {
+		return c
+	}
+
+	added := RGB{
 		R: add(c.R, src.R),
 		G: add(c.G, src.G),
 		B: add(c.B, src.B),
 	}
+
+	if alpha >= 1.0 {
+		return added
+	}
+
+	return Blend(c, added, alpha)
 }
 
 // fastDiv255 approximates x / 255 using integer math
@@ -134,13 +154,23 @@ func fastDiv255(x int) int {
 	return (x + (x >> 8) + 1) >> 8
 }
 
-// Screen blend: 1 - (1-Dst)*(1-Src) - lightens, good for glow
-func Screen(c, src RGB) RGB {
-	return RGB{
+// Screen blend: 1 - (1-Dst)*(1-Src) with alpha blending
+func Screen(c, src RGB, alpha float64) RGB {
+	if alpha <= 0.0 {
+		return c
+	}
+
+	screened := RGB{
 		R: uint8(255 - fastDiv255((255-int(c.R))*(255-int(src.R)))),
 		G: uint8(255 - fastDiv255((255-int(c.G))*(255-int(src.G)))),
 		B: uint8(255 - fastDiv255((255-int(c.B))*(255-int(src.B)))),
 	}
+
+	if alpha >= 1.0 {
+		return screened
+	}
+
+	return Blend(c, screened, alpha)
 }
 
 // overlayChannel combines Multiply and Screen blend modes
@@ -160,13 +190,23 @@ func overlayChannel(d, s uint8) uint8 {
 	return uint8(255 - fastDiv255(val))
 }
 
-// Overlay combines multiply (darks) and screen (lights)
-func Overlay(c, src RGB) RGB {
-	return RGB{
+// Overlay combines multiply (darks) and screen (lights) with alpha blending
+func Overlay(c, src RGB, alpha float64) RGB {
+	if alpha <= 0.0 {
+		return c
+	}
+
+	overlaid := RGB{
 		R: overlayChannel(c.R, src.R),
 		G: overlayChannel(c.G, src.G),
 		B: overlayChannel(c.B, src.B),
 	}
+
+	if alpha >= 1.0 {
+		return overlaid
+	}
+
+	return Blend(c, overlaid, alpha)
 }
 
 // Scale multiplies all channels by factor (0.0-1.0)

@@ -116,35 +116,27 @@ func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, b
 
 // cellTrueColor renders a single shield cell with smooth gradient (TrueColor mode)
 func (s *ShieldRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screenY int, dist float64, color render.RGB, maxOpacity float64) {
-	// Quadratic soft falloff: (1-d)² * MaxOpacity
 	falloff := (1.0 - dist) * (1.0 - dist)
 	alpha := falloff * maxOpacity
 
-	// BlendScreen: Adds light, visible on black, brightens over content
+	// Changed from BlendSoftLight to BlendScreen:
+	// SoftLight disappears on black backgrounds (mathematically 0)
+	// Screen/Add is required for "glowing" objects to be visible in space
 	buf.Set(screenX, screenY, 0, render.RGBBlack, color, render.BlendScreen, alpha, terminal.AttrNone)
 }
 
 // cell256 renders a single shield cell with discrete zones (256-color mode)
 func (s *ShieldRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int, dist float64, color render.RGB, maxOpacity float64) {
-	// Palette-safe grayscale colors
-	// Index 238 = RGB(68,68,68) - dark gray
-	// Index 250 = RGB(188,188,188) - light gray
-	// Index 253 = RGB(218,218,218) - near-white for edge
-
-	switch {
-	case dist > 0.9:
-		// Edge zone: Attempt tinted glow via low-alpha screen blend
-		// If shield color is too dark, this still produces visible edge
-		buf.Set(screenX, screenY, 0, render.RGBBlack, color, render.BlendScreen, 0.4, terminal.AttrNone)
-
-	case dist > 0.6:
-		// Outer zone: Light gray, solid replace
-		buf.Set(screenX, screenY, 0, render.RGBBlack, render.RGB{R: 188, G: 188, B: 188}, render.BlendReplace, 1.0, terminal.AttrNone)
-
-	default:
-		// Inner zone: Dark gray, solid replace
-		buf.Set(screenX, screenY, 0, render.RGBBlack, render.RGB{R: 68, G: 68, B: 68}, render.BlendReplace, 1.0, terminal.AttrNone)
+	// In 256-color mode, center is transparent to ensure text legibility
+	// dist ranges from 0.0 (center) to 1.0 (edge)
+	if dist < 0.6 {
+		return // Transparent center: Don't touch the buffer
 	}
+
+	// Draw rim using Screen blend
+	// Tint background color (e.g. Black -> Shield Color) if empty, or lightens existing background if occupied, ensuring text remains visible
+	// High alpha (0.6) to ensure the color registers clearly in the 256-color palette lookup
+	buf.Set(screenX, screenY, 0, render.RGBBlack, color, render.BlendScreen, 0.6, terminal.AttrNone)
 }
 
 // resolveShieldColor determines the shield color from override or GameState
