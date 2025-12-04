@@ -346,7 +346,7 @@ func (ctx *GameContext) HandleResize() {
 // cleanupOutOfBoundsEntities removes entities that are outside the valid game area
 // and resizes the spatial grid to match new dimensions
 func (ctx *GameContext) cleanupOutOfBoundsEntities(width, height int) {
-	// Unified cleanup: single PositionStore iteration handles all entity types (including Decay, Cleaner, Materialize)
+	// Unified cleanup: single PositionStore iteration handles all entity types
 	allEntities := ctx.World.Positions.All()
 	for _, e := range allEntities {
 		// Skip cursor entity (special case)

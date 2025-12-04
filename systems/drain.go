@@ -252,17 +252,8 @@ func (s *DrainSystem) randomSpawnOffset(world *engine.World, baseX, baseY int, c
 			continue
 		}
 
-		// Check if cell is occupied by existing drain
-		entities := world.Positions.GetAllAt(x, y)
-		hasExistingDrain := false
-		for _, e := range entities {
-			if _, ok := world.Drains.Get(e); ok {
-				hasExistingDrain = true
-				break
-			}
-		}
-
-		if !hasExistingDrain {
+		// Check if cell is occupied by existing drain (authoritative, grid-independent)
+		if !s.hasDrainAt(world, x, y) {
 			return x, y, true
 		}
 	}
@@ -271,8 +262,58 @@ func (s *DrainSystem) randomSpawnOffset(world *engine.World, baseX, baseY int, c
 }
 
 // countActiveMaterializations returns number of drain spawns currently materializing
+// Rounds up to account for partial groups from premature destruction
 func (s *DrainSystem) countActiveMaterializations(world *engine.World) int {
-	return world.Materializers.Count() / 4
+	count := world.Materializers.Count()
+	if count == 0 {
+		return 0
+	}
+	return (count + 3) / 4
+}
+
+// buildQueuedPositionSet creates position exclusion map from all spawn sources
+func (s *DrainSystem) buildQueuedPositionSet(world *engine.World) map[uint64]bool {
+	queuedPositions := make(map[uint64]bool, len(s.pendingSpawns)+world.Drains.Count()+world.Materializers.Count()/4)
+
+	// Pending spawns
+	for _, ps := range s.pendingSpawns {
+		key := uint64(ps.targetX)<<32 | uint64(ps.targetY)
+		queuedPositions[key] = true
+	}
+
+	// Active materializer targets
+	matEntities := world.Materializers.All()
+	for _, e := range matEntities {
+		if mat, ok := world.Materializers.Get(e); ok {
+			key := uint64(mat.TargetX)<<32 | uint64(mat.TargetY)
+			queuedPositions[key] = true
+		}
+	}
+
+	// Existing drain positions (authoritative iteration, not spatial query)
+	drainEntities := world.Drains.All()
+	for _, e := range drainEntities {
+		if pos, ok := world.Positions.Get(e); ok {
+			key := uint64(pos.X)<<32 | uint64(pos.Y)
+			queuedPositions[key] = true
+		}
+	}
+
+	return queuedPositions
+}
+
+// hasDrainAt checks if any drain exists at position using authoritative Drains store
+// O(n) where n = drain count (max 10), immune to spatial grid saturation
+func (s *DrainSystem) hasDrainAt(world *engine.World, x, y int) bool {
+	drainEntities := world.Drains.All()
+	for _, e := range drainEntities {
+		if pos, ok := world.Positions.Get(e); ok {
+			if pos.X == x && pos.Y == y {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // queueDrainSpawns queues multiple drain spawns with stagger timing
@@ -285,34 +326,7 @@ func (s *DrainSystem) queueDrainSpawns(world *engine.World, count int) int {
 		return 0
 	}
 
-	// Build position set from ALL spawn sources:
-	// 1. Pending spawns in queue
-	// 2. Active materializers (in-flight)
-	// 3. Existing drains
-	queuedPositions := make(map[uint64]bool, len(s.pendingSpawns)+count+world.Materializers.Count()/4)
-
-	for _, ps := range s.pendingSpawns {
-		key := uint64(ps.targetX)<<32 | uint64(ps.targetY)
-		queuedPositions[key] = true
-	}
-
-	// Track active materializer target positions
-	matEntities := world.Materializers.All()
-	for _, e := range matEntities {
-		if mat, ok := world.Materializers.Get(e); ok {
-			key := uint64(mat.TargetX)<<32 | uint64(mat.TargetY)
-			queuedPositions[key] = true
-		}
-	}
-
-	// Track existing drain positions
-	drainEntities := world.Drains.All()
-	for _, e := range drainEntities {
-		if pos, ok := world.Positions.Get(e); ok {
-			key := uint64(pos.X)<<32 | uint64(pos.Y)
-			queuedPositions[key] = true
-		}
-	}
+	queuedPositions := s.buildQueuedPositionSet(world)
 
 	queued := 0
 	for i := 0; i < count; i++ {
@@ -438,6 +452,10 @@ func (s *DrainSystem) startMaterializeAt(world *engine.World, targetX, targetY i
 		entity := world.CreateEntity()
 		world.Positions.Add(entity, components.PositionComponent{X: startGridX, Y: startGridY})
 		world.Materializers.Add(entity, comp)
+		// Protect from resize culling (off-screen start positions)
+		world.Protections.Add(entity, components.ProtectionComponent{
+			Mask: components.ProtectFromCull,
+		})
 	}
 }
 
@@ -563,14 +581,11 @@ func (s *DrainSystem) materializeDrainAt(world *engine.World, spawnX, spawnY int
 		spawnY = config.GameHeight - 1
 	}
 
-	// TODO: this check is likely unnecessary
-	// Check for existing drain at spawn position - abort if occupied
-	entitiesAtSpawn := world.Positions.GetAllAt(spawnX, spawnY)
-	for _, e := range entitiesAtSpawn {
-		if _, isDrain := world.Drains.Get(e); isDrain {
-			// Drain already at target - abort spawn to prevent flash flood
-			return
-		}
+	// Check for existing drain using authoritative store (immune to grid saturation)
+	if s.hasDrainAt(world, spawnX, spawnY) {
+		// Collision with moved drain - re-queue at alternate position
+		s.requeueSpawnWithOffset(world, spawnX, spawnY)
+		return
 	}
 
 	entity := world.CreateEntity()
@@ -596,19 +611,37 @@ func (s *DrainSystem) materializeDrainAt(world *engine.World, spawnX, spawnY int
 	}
 
 	// Handle collisions at spawn position
-	// entitiesAtSpawn := world.Positions.GetAllAt(spawnX, spawnY)
-	var toProcess []engine.Entity
+	// GetAllAt returns a copy, so iterating while destroying is safe
+	entitiesAtSpawn := world.Positions.GetAllAt(spawnX, spawnY)
 	for _, e := range entitiesAtSpawn {
 		if e != s.ctx.CursorEntity {
-			toProcess = append(toProcess, e)
+			s.handleCollisionAtPosition(world, e)
 		}
-	}
-	for _, e := range toProcess {
-		s.handleCollisionAtPosition(world, e)
 	}
 
 	world.Positions.Add(entity, pos)
 	world.Drains.Add(entity, drain)
+}
+
+// requeueSpawnWithOffset attempts to find alternate position and re-queue spawn
+// Called when target position blocked by drain that moved into it
+func (s *DrainSystem) requeueSpawnWithOffset(world *engine.World, blockedX, blockedY int) {
+	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+
+	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
+	if !ok {
+		return
+	}
+
+	queuedPositions := s.buildQueuedPositionSet(world)
+	// Block original position to force different selection
+	queuedPositions[uint64(blockedX)<<32|uint64(blockedY)] = true
+
+	newX, newY, valid := s.randomSpawnOffset(world, cursorPos.X, cursorPos.Y, config, queuedPositions)
+	if valid {
+		s.queueDrainSpawn(newX, newY, 0) // Immediate re-spawn
+	}
+	// If no valid position, spawn dropped (map saturated with drains)
 }
 
 // isShieldActive checks if shield is functionally active
@@ -716,10 +749,9 @@ func (s *DrainSystem) handleDrainInteractions(world *engine.World) {
 	}
 
 	// Phase 3: Handle non-drain entity collisions
+	// Note: This now implicitly handles Decay collisions as well, since Decay entities
+	// are standard entities in the PositionStore.
 	s.handleEntityCollisions(world)
-
-	// Phase 4: Handle decay entity collisions
-	s.handleDecayCollisions(world)
 }
 
 // handleDrainDrainCollisions detects and removes all drains sharing a cell
@@ -765,35 +797,6 @@ func (s *DrainSystem) handleEntityCollisions(world *engine.World) {
 					continue
 				}
 				s.handleCollisionAtPosition(world, target)
-			}
-		}
-	}
-}
-
-// handleDecayCollisions detects and processes drain-decay collisions
-// Post-migration: Decay entities are in PositionStore, enabling direct spatial query
-func (s *DrainSystem) handleDecayCollisions(world *engine.World) {
-	drainEntities := world.Drains.All()
-	if len(drainEntities) == 0 {
-		return
-	}
-
-	// Check each drain position for decay entity collisions
-	for _, drainEntity := range drainEntities {
-		pos, ok := world.Positions.Get(drainEntity)
-		if !ok {
-			continue
-		}
-
-		// Simplified post-migration approach: Query PositionStore for all entities at drain position
-		entitiesAtPos := world.Positions.GetAllAt(pos.X, pos.Y)
-		for _, e := range entitiesAtPos {
-			if e == 0 || e == drainEntity {
-				continue
-			}
-			// Destroy decay entities on contact (no custom traversal needed)
-			if world.Decays.Has(e) {
-				world.DestroyEntity(e)
 			}
 		}
 	}
@@ -903,12 +906,7 @@ func (s *DrainSystem) handleCollisionAtPosition(world *engine.World, entity engi
 		return
 	}
 
-	// Skip other drains - handleDrainDrainCollisions destroys all colliding drains
-	if _, ok := world.Drains.Get(entity); ok {
-		return
-	}
-
-	// Check if this is a gold sequence entity - destroy entire sequence
+	// Check it's a gold sequence entity - destroy entire sequence
 	if seq, ok := world.Sequences.Get(entity); ok {
 		if seq.Type == components.SequenceGold {
 			s.handleGoldSequenceCollision(world, entity, seq.ID)
@@ -916,7 +914,13 @@ func (s *DrainSystem) handleCollisionAtPosition(world *engine.World, entity engi
 		}
 	}
 
-	// Destroy the entity
+	// Check if it's a nugget, destroy and clean up the ID
+	if world.Nuggets.Has(entity) {
+		s.handleNuggetCollision(world, entity)
+		return
+	}
+
+	// Destroy the entity (Handles standard chars, Decay entities, etc.)
 	world.DestroyEntity(entity)
 }
 

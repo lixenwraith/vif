@@ -1,9 +1,9 @@
 package engine
 
-// MaxEntitiesPerCell is set to 15 to ensure the Cell struct fits exactly into 128 bytes
-// (2 cache lines) when Entity is uint64 (8 bytes)
-// 15 * 8 (Entities) + 1 (Count) + 7 (Padding) = 128 bytes
-const MaxEntitiesPerCell = 15
+// MaxEntitiesPerCell set to 31 to ensure the Cell struct fits exactly into 256 bytes
+// (4 cache lines) when Entity is uint64 (8 bytes)
+// 31 * 8 (Entities) + 1 (Count) + 7 (Padding) = 256 bytes
+const MaxEntitiesPerCell = 31
 
 // Cell represents a single grid cell containing a fixed number of entities
 // It is a value type designed for contiguous memory layout

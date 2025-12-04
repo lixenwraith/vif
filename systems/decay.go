@@ -150,7 +150,7 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 			continue
 		}
 
-		// --- Physics Integration: Update float position (overlay state) ---
+		// Physics Integration: Update float position (overlay state)
 		startY := fall.PreciseY
 		fall.PreciseY += fall.Speed * dtSeconds
 		fall.PrevPreciseY = startY
@@ -161,7 +161,7 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 			continue
 		}
 
-		// --- Swept Traversal: Check all rows between previous and current position for collisions ---
+		// Swept Traversal: Check all rows between previous and current position for collisions
 		y1 := int(startY)
 		y2 := int(fall.PreciseY)
 
@@ -234,7 +234,7 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 			s.processedGridCells[flatIdx] = true
 		}
 
-		// --- Coordinate Latch Update: Track last processed position to prevent re-processing ---
+		// Coordinate Latch Update: Track last processed position to prevent re-processing
 		fall.LastIntX = col
 		fall.LastIntY = int(fall.PreciseY)
 
@@ -249,7 +249,7 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 
 		fall.PrevPreciseX = fall.PreciseX
 
-		// --- Grid Sync Protocol: Update PositionStore if integer position changed ---
+		// Grid Sync Protocol: Update PositionStore if integer position changed
 		newGridY := int(fall.PreciseY)
 		if newGridY != pos.Y {
 			world.Positions.Add(entity, components.PositionComponent{X: pos.X, Y: newGridY})

@@ -104,13 +104,13 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 			continue
 		}
 
-		// --- Physics Update: Integrate velocity into float position (overlay state) ---
+		// Physics Update: Integrate velocity into float position (overlay state)
 		prevPreciseX := c.PreciseX
 		prevPreciseY := c.PreciseY
 		c.PreciseX += c.VelocityX * dtSec
 		c.PreciseY += c.VelocityY * dtSec
 
-		// --- Swept Collision Detection: Check all cells between previous and current position ---
+		// Swept Collision Detection: Check all cells between previous and current position
 		if c.VelocityY != 0 && c.VelocityX == 0 {
 			// Vertical cleaner: sweep Y axis
 			startY := int(math.Min(prevPreciseY, c.PreciseY))
@@ -153,7 +153,7 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 			}
 		}
 
-		// --- Trail Update & Grid Sync: Update trail ring buffer and sync PositionStore if cell changed ---
+		// Trail Update & Grid Sync: Update trail ring buffer and sync PositionStore if cell changed
 		newGridX := int(c.PreciseX)
 		newGridY := int(c.PreciseY)
 
@@ -169,7 +169,7 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 			world.Positions.Add(entity, components.PositionComponent{X: newGridX, Y: newGridY})
 		}
 
-		// --- Lifecycle Check: Destroy cleaner when it reaches target position ---
+		// Lifecycle Check: Destroy cleaner when it reaches target position
 		shouldDestroy := false
 		if c.VelocityX > 0 && c.PreciseX >= c.TargetX {
 			shouldDestroy = true
