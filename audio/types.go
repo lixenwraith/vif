@@ -1,10 +1,11 @@
 package audio
 
 import (
+	"errors"
 	"time"
 )
 
-// SoundType represents different sound effects in the game
+// SoundType represents different sound effects
 type SoundType int
 
 const (
@@ -12,21 +13,40 @@ const (
 	SoundBell                    // Nugget collection
 	SoundWhoosh                  // Cleaner activation
 	SoundCoin                    // Gold sequence complete
+	soundTypeCount
 )
 
 // AudioCommand represents a sound playback request
+// Priority/Generation/Timestamp kept for API compatibility
 type AudioCommand struct {
 	Type       SoundType
-	Priority   int       // Higher priority overrides current sound
-	Generation uint64    // Generation counter for stale command detection
-	Timestamp  time.Time // When command was created
+	Priority   int
+	Generation uint64
+	Timestamp  time.Time
 }
 
-// AudioConfig holds audio system configuration
-type AudioConfig struct {
-	Enabled       bool                  // Global audio enable/disable
-	MasterVolume  float64               // 0.0 to 1.0
-	EffectVolumes map[SoundType]float64 // Per-effect volume multipliers
-	MinSoundGap   time.Duration         // Minimum gap between sounds
-	SampleRate    int                   // Audio sample rate
+// BackendType identifies the audio backend
+type BackendType int
+
+const (
+	BackendPulse BackendType = iota
+	BackendPipeWire
+	BackendALSA
+	BackendSoX
+	BackendFFplay
+	BackendOSS
+)
+
+// BackendConfig describes a CLI audio backend
+type BackendConfig struct {
+	Type BackendType
+	Name string
+	Path string
+	Args []string
 }
+
+// Sentinel errors
+var (
+	ErrNoAudioBackend = errors.New("no compatible audio backend found")
+	ErrPipeClosed     = errors.New("audio pipe closed")
+)

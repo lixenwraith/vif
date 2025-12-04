@@ -2,26 +2,38 @@ package constants
 
 import "time"
 
+// Audio Hardware Settings
+const (
+	AudioSampleRate    = 44100
+	AudioChannels      = 2
+	AudioBitDepth      = 16
+	AudioBytesPerFrame = AudioChannels * (AudioBitDepth / 8) // 4 bytes
+)
+
 // Audio Engine Timing
 const (
-	// AudioMonitorInterval is the interval for checking audio playback status
-	AudioMonitorInterval = 10 * time.Millisecond
+	// AudioBufferDuration determines latency and mixer tick rate
+	// 50ms aligns with game tick
+	AudioBufferDuration = 50 * time.Millisecond
 
-	// AudioDrainTimeout is the timeout for draining audio queues
+	// AudioBufferSamples is frames per mixer tick at 44.1kHz
+	AudioBufferSamples = (AudioSampleRate * 50) / 1000 // 2205
+
+	// AudioDrainTimeout for queue cleanup on stop
 	AudioDrainTimeout = 100 * time.Millisecond
 
-	// MinSoundGap is the minimum gap between consecutive sounds (one clock tick)
+	// MinSoundGap between consecutive sounds
 	MinSoundGap = 50 * time.Millisecond
 )
 
-// Error Sound Timing
+// Error Sound
 const (
 	ErrorSoundDuration = 80 * time.Millisecond
 	ErrorSoundAttack   = 5 * time.Millisecond
 	ErrorSoundRelease  = 20 * time.Millisecond
 )
 
-// Bell Sound Timing
+// Bell Sound
 const (
 	BellSoundDuration           = 600 * time.Millisecond
 	BellSoundAttack             = 5 * time.Millisecond
@@ -29,14 +41,14 @@ const (
 	BellSoundOvertoneRelease    = 200 * time.Millisecond
 )
 
-// Whoosh Sound Timing
+// Whoosh Sound
 const (
 	WhooshSoundDuration = 300 * time.Millisecond
 	WhooshSoundAttack   = 150 * time.Millisecond
 	WhooshSoundRelease  = 150 * time.Millisecond
 )
 
-// Coin Sound Timing
+// Coin Sound
 const (
 	CoinSoundNote1Duration = 80 * time.Millisecond
 	CoinSoundNote2Duration = 280 * time.Millisecond

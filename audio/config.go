@@ -4,7 +4,15 @@ import (
 	"github.com/lixenwraith/vi-fighter/constants"
 )
 
-// DefaultAudioConfig returns default audio configuration
+// AudioConfig holds audio system configuration
+type AudioConfig struct {
+	Enabled       bool
+	MasterVolume  float64
+	EffectVolumes map[SoundType]float64
+	SampleRate    int
+}
+
+// DefaultAudioConfig returns default configuration
 func DefaultAudioConfig() *AudioConfig {
 	return &AudioConfig{
 		Enabled:      true,
@@ -15,7 +23,6 @@ func DefaultAudioConfig() *AudioConfig {
 			SoundWhoosh: 0.6,
 			SoundCoin:   0.5,
 		},
-		MinSoundGap: constants.MinSoundGap, // One clock tick gap
-		SampleRate:  44100,
+		SampleRate: constants.AudioSampleRate,
 	}
 }
