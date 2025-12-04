@@ -3,7 +3,6 @@ package renderers
 import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // HeatMeterRenderer draws the heat meter bar at the top of the screen
@@ -36,19 +35,22 @@ func (h *HeatMeterRenderer) Render(ctx render.RenderContext, world *engine.World
 		// Determine if this segment is filled
 		isFilled := segment < displayHeat
 
-		var color render.RGB
-		if isFilled {
-			// Calculate progress for color gradient (0.0 to 1.0)
-			progress := float64(segment+1) / 10.0
-			color = render.GetHeatMeterColor(progress)
-		} else {
-			// Empty segment: black foreground
-			color = render.RgbBlack
-		}
-
 		// Draw all characters in this segment
 		for x := segmentStart; x < segmentEnd && x < ctx.Width; x++ {
-			buf.Set(x, 0, '█', color, render.DefaultBgRGB, render.BlendReplace, 1.0, terminal.AttrNone)
+			if isFilled {
+				// Calculate progress for color gradient (0.0 to 1.0)
+				progress := float64(segment+1) / 10.0
+				color := render.GetHeatMeterColor(progress)
+
+				// Optimization: Use SetBgOnly for filled segments
+				// Since buffer is cleared to empty space, setting BG creates a solid block
+				// This is faster than writing Rune+Fg+Bg
+				buf.SetBgOnly(x, 0, color)
+			} else {
+				// Empty segment: ensure it is black/empty
+				// Use SetBgOnly with Black to ensure "empty" look over default BG
+				buf.SetBgOnly(x, 0, render.RgbBlack)
+			}
 		}
 	}
 }

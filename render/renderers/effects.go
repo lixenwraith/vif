@@ -148,7 +148,7 @@ func (e *EffectsRenderer) drawCleaners(ctx render.RenderContext, world *engine.W
 	}
 }
 
-// drawRemovalFlashes draws the brief flash effects when red characters are removed
+// drawRemovalFlashes draws the brief flash effects when characters are removed
 func (e *EffectsRenderer) drawRemovalFlashes(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	entities := world.Flashes.All()
 
@@ -174,7 +174,7 @@ func (e *EffectsRenderer) drawRemovalFlashes(ctx render.RenderContext, world *en
 		}
 
 		// Flash contribution for additive blending
-		// TODO: remove hard-coded colors
+		// TODO: remove hardcoded colors
 		flashColor := render.RGB{
 			R: uint8(255 * opacity),
 			G: uint8(255 * opacity),
@@ -184,8 +184,9 @@ func (e *EffectsRenderer) drawRemovalFlashes(ctx render.RenderContext, world *en
 		screenX := ctx.GameX + flash.X
 		screenY := ctx.GameY + flash.Y
 
-		// Use BlendAdd to brighten underlying pixels (write-only)
-		buf.Set(screenX, screenY, flash.Char, flashColor, flashColor, render.BlendAdd, 1.0, terminal.AttrNone)
+		// Use BlendAddFg to brighten the character ONLY (no background wash)
+		// BlendAddFg = OpAdd | FlagFg. Maintains background transparency/color.
+		buf.Set(screenX, screenY, flash.Char, flashColor, render.RGBBlack, render.BlendAddFg, 1.0, terminal.AttrNone)
 	}
 }
 

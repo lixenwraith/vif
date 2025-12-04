@@ -88,57 +88,101 @@ func (b *RenderBuffer) Set(x, y int, mainRune rune, fg, bg RGB, mode BlendMode, 
 	idx := y*b.width + x
 	dst := &b.cells[idx]
 
-	// Background blending - mark touched for all modes except FgOnly
-	switch mode {
-	case BlendReplace:
-		dst.Bg = bg
-		b.touched[idx] = true
-	case BlendAlpha:
-		dst.Bg = Blend(dst.Bg, bg, alpha)
-		b.touched[idx] = true
-	case BlendAdd:
-		dst.Bg = Add(dst.Bg, bg)
-		b.touched[idx] = true
-	case BlendMax:
-		dst.Bg = Max(dst.Bg, bg)
-		b.touched[idx] = true
-	case BlendSoftLight:
-		dst.Bg = SoftLight(dst.Bg, bg, alpha)
-		b.touched[idx] = true
-	case BlendScreen:
-		dst.Bg = Screen(dst.Bg, bg)
-		b.touched[idx] = true
-	case BlendOverlay:
-		dst.Bg = Overlay(dst.Bg, bg)
-		b.touched[idx] = true
-	case BlendFgOnly:
-		// Explicitly preserve destination background, do not mark touched
-	}
+	op := uint8(mode) & 0x0F
+	flags := uint8(mode) & 0xF0
 
-	// Foreground handling
+	// 1. Update Rune/Attrs if provided
 	if mainRune != 0 {
 		dst.Rune = mainRune
-		dst.Fg = fg
 		dst.Attrs = attrs
-	} else if mode != BlendFgOnly {
-		switch mode {
-		case BlendAdd:
-			dst.Fg = Add(dst.Bg, fg)
-		case BlendMax:
-			dst.Fg = Max(dst.Bg, fg)
+	}
+
+	// 2. Background Processing
+	if flags&flagBg != 0 {
+		switch op {
+		case opReplace:
+			dst.Bg = bg
+		case opAlpha:
+			dst.Bg = Blend(dst.Bg, bg, alpha)
+		case opAdd:
+			dst.Bg = Add(dst.Bg, bg)
+		case opMax:
+			dst.Bg = Max(dst.Bg, bg)
+		case opSoftLight:
+			dst.Bg = SoftLight(dst.Bg, bg, alpha)
+		case opScreen:
+			dst.Bg = Screen(dst.Bg, bg)
+		case opOverlay:
+			dst.Bg = Overlay(dst.Bg, bg)
+		}
+		// Always mark touched if we touched background
+		b.touched[idx] = true
+	}
+
+	// 3. Foreground Processing
+	if flags&flagFg != 0 {
+		switch op {
+		case opReplace:
+			dst.Fg = fg
+		case opAlpha:
+			dst.Fg = Blend(dst.Fg, fg, alpha)
+		case opAdd:
+			dst.Fg = Add(dst.Fg, fg)
+		case opMax:
+			dst.Fg = Max(dst.Fg, fg)
+		case opSoftLight:
+			dst.Fg = SoftLight(dst.Fg, fg, alpha)
+		case opScreen:
+			dst.Fg = Screen(dst.Fg, fg)
+		case opOverlay:
+			dst.Fg = Overlay(dst.Fg, fg)
 		}
 	}
 }
 
 // SetFgOnly writes rune, foreground, and attrs while preserving existing background
-// Use for text that floats over backgrounds (grid, shields)
+// Unwrapped for performance: Bypass BlendMode decoding and branching for high-frequency text rendering
+// Does NOT mark cell as touched, allowing underlying background to persist or default in finalize()
 func (b *RenderBuffer) SetFgOnly(x, y int, r rune, fg RGB, attrs terminal.Attr) {
-	b.Set(x, y, r, fg, RGBBlack, BlendFgOnly, 0, attrs)
+	if !b.inBounds(x, y) {
+		return
+	}
+	idx := y*b.width + x
+	dst := &b.cells[idx]
+
+	dst.Rune = r
+	dst.Fg = fg
+	dst.Attrs = attrs
 }
 
-// SetWithBg writes a rune with explicit fg and bg colors (opaque replace)
+// SetBgOnly updates the background color while preserving existing rune/foreground.
+// Unwrapped for performance: Optimized for area effects (explosions, UI fills) avoiding full cell writes
+// Marks cell as touched to prevent default background override
+func (b *RenderBuffer) SetBgOnly(x, y int, bg RGB) {
+	if !b.inBounds(x, y) {
+		return
+	}
+	idx := y*b.width + x
+
+	b.cells[idx].Bg = bg
+	b.touched[idx] = true
+}
+
+// SetWithBg writes a cell with explicit fg and bg colors (opaque replace)
+// Unwrapped for performance: This is the "Hot Path" for most rendering (grids, UI, blocks)
+// Direct struct assignment avoids overhead of generic Set() function calls
 func (b *RenderBuffer) SetWithBg(x, y int, r rune, fg, bg RGB) {
-	b.Set(x, y, r, fg, bg, BlendReplace, 1.0, terminal.AttrNone)
+	if !b.inBounds(x, y) {
+		return
+	}
+	idx := y*b.width + x
+	dst := &b.cells[idx]
+
+	dst.Rune = r
+	dst.Fg = fg
+	dst.Bg = bg
+	dst.Attrs = terminal.AttrNone
+	b.touched[idx] = true
 }
 
 // ===== OUTPUT =====
