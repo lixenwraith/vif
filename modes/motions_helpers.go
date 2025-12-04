@@ -279,21 +279,28 @@ func findPrevWORDStart(ctx *engine.GameContext, cursorX, cursorY int) int {
 
 // --- Line Helpers ---
 
+// findLineEnd returns the X coordinate of the last interactable entity on the line
+// Optimized for high entity counts using spatial grid traversal (O(Width) instead of O(N))
 func findLineEnd(ctx *engine.GameContext, cursorY int) int {
-	entities := ctx.World.Query().With(ctx.World.Positions).Execute()
+	// Stack-allocated buffer for zero-alloc queries
+	var buf [engine.MaxEntitiesPerCell]engine.Entity
 
-	maxX := 0
-	for _, entity := range entities {
-		pos, _ := ctx.World.Positions.Get(entity)
-		if pos.Y == cursorY && pos.X > maxX {
-			maxX = pos.X
+	// Scan from right to left
+	for x := ctx.GameWidth - 1; x >= 0; x-- {
+		// Zero-alloc query
+		count := ctx.World.Positions.GetAllAtInto(x, cursorY, buf[:])
+
+		// Check entities at this cell
+		for i := 0; i < count; i++ {
+			if buf[i] != 0 && engine.IsInteractable(ctx.World, buf[i]) {
+				// Found right-most interactable entity
+				return x
+			}
 		}
 	}
 
-	if maxX == 0 {
-		return ctx.GameWidth - 1
-	}
-	return maxX
+	// Line is empty (or no interactable entities) - Return right edge (not standard VIM behavior)
+	return ctx.GameWidth - 1
 }
 
 func findFirstNonWhitespace(ctx *engine.GameContext, cursorY int) int {
@@ -308,38 +315,48 @@ func findFirstNonWhitespace(ctx *engine.GameContext, cursorY int) int {
 
 // --- Paragraph Helpers ---
 
+// findPrevEmptyLine finds the previous line with no interactable entities
+// Optimized for high entity counts using spatial grid traversal
 func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
-	entities := ctx.World.Query().With(ctx.World.Positions).Execute()
+	var buf [engine.MaxEntitiesPerCell]engine.Entity
 
 	for y := cursorY - 1; y >= 0; y-- {
-		hasChar := false
-		for _, entity := range entities {
-			pos, _ := ctx.World.Positions.Get(entity)
-			if pos.Y == y {
-				hasChar = true
-				break
+		rowEmpty := true
+		// Scan row; stop early if any interactable entity is found
+		for x := 0; x < ctx.GameWidth && rowEmpty; x++ {
+			count := ctx.World.Positions.GetAllAtInto(x, y, buf[:])
+			for i := 0; i < count; i++ {
+				if buf[i] != 0 && engine.IsInteractable(ctx.World, buf[i]) {
+					rowEmpty = false
+					break
+				}
 			}
 		}
-		if !hasChar {
+		if rowEmpty {
 			return y
 		}
 	}
 	return 0
 }
 
+// findNextEmptyLine finds the next line with no interactable entities
+// Optimized for high entity counts using spatial grid traversal
 func findNextEmptyLine(ctx *engine.GameContext, cursorY int) int {
-	entities := ctx.World.Query().With(ctx.World.Positions).Execute()
+	var buf [engine.MaxEntitiesPerCell]engine.Entity
 
 	for y := cursorY + 1; y < ctx.GameHeight; y++ {
-		hasChar := false
-		for _, entity := range entities {
-			pos, _ := ctx.World.Positions.Get(entity)
-			if pos.Y == y {
-				hasChar = true
-				break
+		rowEmpty := true
+		// Scan row; stop early if any interactable entity is found
+		for x := 0; x < ctx.GameWidth && rowEmpty; x++ {
+			count := ctx.World.Positions.GetAllAtInto(x, y, buf[:])
+			for i := 0; i < count; i++ {
+				if buf[i] != 0 && engine.IsInteractable(ctx.World, buf[i]) {
+					rowEmpty = false
+					break
+				}
 			}
 		}
-		if !hasChar {
+		if rowEmpty {
 			return y
 		}
 	}
