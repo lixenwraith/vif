@@ -30,6 +30,7 @@ func (s *SplashSystem) EventTypes() []engine.EventType {
 		engine.EventGoldSpawned,
 		engine.EventGoldComplete,
 		engine.EventGoldTimeout,
+		engine.EventGoldDestroyed,
 	}
 }
 
@@ -75,6 +76,13 @@ func (s *SplashSystem) Update(world *engine.World, dt time.Duration) {
 			}
 
 		case components.SplashModePersistent:
+			// Orphan detection: gold timer without active gold sequence
+			goldSnapshot := s.ctx.State.ReadGoldState(timeRes.GameTime)
+			if !goldSnapshot.Active || splash.SequenceID != goldSnapshot.SequenceID {
+				toDestroy = append(toDestroy, entity)
+				continue
+			}
+
 			// Update Timer logic
 			// Calculate remaining time
 			elapsedSeconds := float64(nowNano-splash.StartNano) / float64(time.Second)

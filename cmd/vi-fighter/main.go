@@ -183,6 +183,7 @@ func main() {
 	clockScheduler.SetSystems(goldSystem, decaySystem)
 	clockScheduler.RegisterEventHandler(cleanerSystem)
 	clockScheduler.RegisterEventHandler(energySystem)
+	clockScheduler.RegisterEventHandler(splashSystem)
 	clockScheduler.Start()
 	defer clockScheduler.Stop()
 

@@ -937,6 +937,11 @@ func (s *DrainSystem) handleGoldSequenceCollision(world *engine.World, entity en
 		return // Not the active gold sequence
 	}
 
+	// Emit event BEFORE destroying entities (SplashSystem needs sequenceID)
+	s.ctx.PushEvent(engine.EventGoldDestroyed, &engine.GoldCompletionPayload{
+		SequenceID: sequenceID,
+	}, now)
+
 	// Find and destroy all gold sequence entities with this ID
 	goldSequenceEntities := world.Sequences.All()
 	for _, goldSequenceEntity := range goldSequenceEntities {
