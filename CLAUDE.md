@@ -82,7 +82,7 @@ These directives are meta-instructions placed in prompts to control Claude Code 
 | `[verify]` | Run build/test commands after changes |
 | `[[code]]` | Action directive: generate code for preceding requirements |
 
-
+---
 
 ## CURRENT TASK
 
