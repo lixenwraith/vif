@@ -361,7 +361,7 @@ The game features four types of character sequences, each with distinct behavior
 
 ### Green Sequences
 - **Appearance**: Green text at three brightness levels (Bright/Normal/Dark)
-- **Spawning**: Generated from Go source code in `assets/data.txt`
+- **Spawning**: Generated from Go source code in `data/` directory
 - **Scoring**: Positive points (Heat × Level Multiplier × 1)
 - **Level Multipliers**:
   - Bright: ×3
@@ -372,7 +372,7 @@ The game features four types of character sequences, each with distinct behavior
 
 ### Blue Sequences
 - **Appearance**: Blue text at three brightness levels (Bright/Normal/Dark)
-- **Spawning**: Generated from Go source code in `assets/data.txt`
+- **Spawning**: Generated from Go source code in `data/` directory
 - **Scoring**: Positive points (Heat × Level Multiplier × 1)
 - **Level Multipliers**: Same as Green (Bright ×3, Normal ×2, Dark ×1)
 - **Decay Path**: Bright → Normal → Dark → **Green (Bright)**
@@ -576,7 +576,7 @@ An automated pressure mechanic that gradually degrades all sequences on screen, 
 ### Spawn System
 
 **Content Source:**
-New sequences are generated from Go source code in `assets/data.txt`.
+New sequences are generated from Go source code in `data/` directory.
 
 **6-Color Limit System:**
 Only 6 color/level combinations can exist simultaneously:

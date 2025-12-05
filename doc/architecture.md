@@ -908,13 +908,13 @@ Systems execute in priority order (lower = earlier):
 
 ### Content Management System
 - **ContentManager** (`content/manager.go`): Manages content files
-- Auto-discovery: Scans `assets/` for `.txt` files
+- Auto-discovery: Scans `data/` for `.txt` files
 - Validation: Pre-validates at startup
 - Block Selection: Random blocks (3-15 lines)
 - Location: Auto-locates project root via `go.mod`
 
 ### Spawn System
-- **Content Source**: `.txt` files in `assets/`
+- **Content Source**: `.txt` files in `data/`
 - **Block Generation**: 3-15 consecutive lines, trimmed
 - **6-Color Limit**: Tracks Blue×3 + Green×3 combinations
   - Census-based: per-frame entity iteration
@@ -1135,7 +1135,7 @@ Max 15 entities per cell:
 
 ## Content Files
 
-### assets/ directory
+### data/ directory
 - **Purpose**: `.txt` files with game content
 - **Format**: Plain text (code blocks, prose)
 - **Location**: Project root, auto-located via `go.mod`

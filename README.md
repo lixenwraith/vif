@@ -57,7 +57,7 @@ The game strictly follows ECS architecture principles with a hybrid real-time/cl
 
 - Go 1.24 or later
 - Terminal with color support
-- `assets/` directory containing `.txt` files with source code (included in repository)
+- `data/` directory containing `.txt` files with source code (included in repository)
 
 ### Build
 
@@ -67,7 +67,7 @@ go build -o vi-fighter ./cmd/vi-fighter
 
 ### Run
 
-The game automatically locates the `assets/` directory at the project root:
+The game automatically locates the `data/` directory at the project root:
 
 ```bash
 # From repository root
@@ -80,7 +80,7 @@ Or directly:
 go run ./cmd/vi-fighter
 ```
 
-**Note**: The ContentManager automatically finds the project root by searching for `go.mod`, then uses the `assets/` directory from there. If `assets/` is missing or contains no valid `.txt` files, the game gracefully falls back to default content.
+**Note**: The ContentManager automatically finds the project root by searching for `go.mod`, then uses the `data/` directory from there. If `data/` is missing or contains no valid `.txt` files, the game gracefully falls back to default content.
 
 ### Running Tests
 
@@ -98,7 +98,7 @@ go test -v ./...
 go test ./systems
 ```
 
-**Note**: Tests automatically locate the project root and `assets/` directory regardless of the current working directory. This ensures tests pass consistently in CI environments and when run from subdirectories.
+**Note**: Tests automatically locate the project root and `data/` directory regardless of the current working directory. This ensures tests pass consistently in CI environments and when run from subdirectories.
 
 ## Controls
 

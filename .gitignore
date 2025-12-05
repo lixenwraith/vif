@@ -1,6 +1,5 @@
 .idea
 bin
-data
 dev
 logs
 cmake-build-*/

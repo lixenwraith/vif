@@ -1,4 +1,4 @@
-# Vi-Fighter Asset Content Files
+# Vi-Fighter Data Content Files
 
 This directory contains content files used for both testing and actual gameplay in Vi-Fighter. These files provide diverse text content that players navigate through using Vi-like commands.
 

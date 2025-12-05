@@ -96,19 +96,19 @@ type ContentManager struct {
 	breaker        circuitBreaker
 	validatedCache []validatedContent
 	cacheMu        sync.RWMutex
-	assetsDir      string
+	dataDir        string
 }
 
 // NewContentManager creates a new content manager
-// It automatically finds the project root and uses assets/ directory from there
+// It automatically finds the project root and uses data/ directory from there
 func NewContentManager() *ContentManager {
 	projectRoot := findProjectRoot()
-	assetsPath := filepath.Join(projectRoot, "assets")
+	dataPath := filepath.Join(projectRoot, "data")
 
 	return &ContentManager{
 		contentFiles:   []string{},
 		validatedCache: []validatedContent{},
-		assetsDir:      assetsPath,
+		dataDir:        dataPath,
 	}
 }
 
@@ -232,7 +232,7 @@ func (cm *ContentManager) validateFileEncoding(filePath string) error {
 	return nil
 }
 
-// DiscoverContentFiles scans the assets directory for all .txt files
+// DiscoverContentFiles scans the data directory for all .txt files
 // and stores their paths. It handles missing directories gracefully
 // and skips hidden files (those starting with .)
 func (cm *ContentManager) DiscoverContentFiles() error {
@@ -243,15 +243,15 @@ func (cm *ContentManager) DiscoverContentFiles() error {
 		}
 	}()
 
-	// Check if assets directory exists
-	if _, err := os.Stat(cm.assetsDir); os.IsNotExist(err) {
+	// Check if data directory exists
+	if _, err := os.Stat(cm.dataDir); os.IsNotExist(err) {
 		return nil // Not an error, just no files to discover
 	}
 
 	// Read directory entries
-	entries, err := os.ReadDir(cm.assetsDir)
+	entries, err := os.ReadDir(cm.dataDir)
 	if err != nil {
-		return fmt.Errorf("failed to read assets directory: %w", err)
+		return fmt.Errorf("failed to read data directory: %w", err)
 	}
 
 	// Clear existing content files
@@ -273,7 +273,7 @@ func (cm *ContentManager) DiscoverContentFiles() error {
 
 		// Check if file has .txt extension
 		if strings.HasSuffix(fileName, ".txt") {
-			filePath := filepath.Join(cm.assetsDir, fileName)
+			filePath := filepath.Join(cm.dataDir, fileName)
 			cm.contentFiles = append(cm.contentFiles, filePath)
 		}
 	}
