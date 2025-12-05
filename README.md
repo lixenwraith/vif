@@ -49,7 +49,7 @@ The game strictly follows ECS architecture principles with a hybrid real-time/cl
 - **Systems**: All game logic (Boost, Energy, Spawn, Nugget, Gold, Cleaner, Drain, Decay)
 - **World**: Single source of truth for game state
 - **Concurrency**: Lock-free atomics for real-time state, mutexes for clock-tick state
-- **Rendering**: Direct terminal rendering with custom terminal package and RenderOrchestrator
+- **Rendering**: Direct terminal rendering with custom terminal package, RenderOrchestrator, and stencil-based post-processing
 
 ## Building and Running
 
@@ -112,7 +112,7 @@ go test ./systems
 - **Directional Cleaners**: Press `Enter` in NORMAL mode (requires heat ≥ 10, costs 10 heat) to spawn 4-directional cleaners from cursor
 - **Quit**: `Ctrl+C` or `Ctrl+Q`
 
-**Note**: When in COMMAND or OVERLAY mode, the game is paused - all characters are dimmed (70% brightness) to indicate the paused state while preserving visibility.
+**Note**: When in COMMAND or OVERLAY mode, the game is paused - all non-UI content is dimmed (50% brightness) via post-processing to indicate the paused state while preserving UI visibility.
 
 ## Game Strategy (Quick Tips)
 

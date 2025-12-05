@@ -521,12 +521,13 @@ The render package uses `terminal.Cell` directly in `RenderBuffer`, enabling zer
 
 **Core Types:**
 - `RenderOrchestrator` (`render/orchestrator.go`): Coordinates render pipeline with priority ordering
-- `RenderBuffer` (`render/buffer.go`): Dense grid compositor with blend modes
+- `RenderBuffer` (`render/buffer.go`): Dense grid compositor with blend modes and stencil masking
 - `SystemRenderer` (`render/interface.go`): Interface for renderers
 - `RenderPriority` (`render/priority.go`): Render order constants (lower first)
 - `RenderContext` (`render/context.go`): Frame data passed by value
-- `RGB` (`render/rgb.go`): Explicit 8-bit color with blend operations
+- `RGB` (`render/rgb.go`): Explicit 8-bit color with blend operations (Blend, Add, Scale, Grayscale, Lerp)
 - `Cell`: Type alias to `terminal.Cell` (zero-copy coupling)
+- `RenderMask` (`render/mask.go`): Bitmask constants for selective post-processing (MaskGrid, MaskEntity, MaskShield, MaskEffect, MaskUI)
 
 **Color Management** (`render/colors.go`):
 - 60+ named RGB color variables
@@ -544,9 +545,10 @@ The render package uses `terminal.Cell` directly in `RenderBuffer`, enabling zer
 
 **Render Flow:**
 1. `RenderOrchestrator.RenderFrame()` locks World and clears buffer
-2. Renderers execute in priority order (skip if `VisibilityToggle.IsVisible()` returns false)
-3. Each renderer writes to buffer: `Set()`, `SetFgOnly()`, `SetWithBg()`
-4. `RenderBuffer.FlushToTerminal()` passes `[]terminal.Cell` to terminal (zero-copy)
+2. Content renderers execute in priority order (skip if `VisibilityToggle.IsVisible()` returns false)
+3. Each renderer sets write mask via `SetWriteMask()` and writes to buffer: `Set()`, `SetFgOnly()`, `SetWithBg()`
+4. Post-processing renderers execute (DimRenderer, GrayoutRenderer) applying effects via `MutateDim()` and `MutateGrayscale()`
+5. `RenderBuffer.FlushToTerminal()` passes `[]terminal.Cell` to terminal (zero-copy)
 
 **Priority Layers:**
 - **PriorityBackground (0)**: Base layer
@@ -554,23 +556,33 @@ The render package uses `terminal.Cell` directly in `RenderBuffer`, enabling zer
 - **PriorityEntities (200)**: Characters
 - **PriorityEffects (300)**: Shields, decay, cleaners, flashes
 - **PriorityDrain (350)**: Drain entity
+- **PriorityPostProcessing (390-395)**: Post-processors (GrayoutRenderer, DimRenderer)
 - **PriorityUI (400)**: Heat meter, line numbers, status bar, cursor
 - **PriorityOverlay (500)**: Modal windows
 - **PriorityDebug (1000)**: Debug overlays
 
 **Individual Renderers** (`render/renderers/`):
-- `HeatMeterRenderer`, `LineNumbersRenderer`, `ColumnIndicatorsRenderer`
-- `StatusBarRenderer`: Mode, commands, metrics, FPS
-- `PingGridRenderer`: Row/column highlights
-- `ShieldRenderer`: Protective field with gradient (derived from GameState.LastTypedSeqType/Level)
-- `CharactersRenderer`: All character entities
-- `EffectsRenderer`: Decay, cleaners, flashes, materializers with pre-built gradients
-- `DrainRenderer`, `CursorRenderer`, `OverlayRenderer`
+- `PingGridRenderer`: Row/column highlights (writes MaskGrid)
+- `CharactersRenderer`: All character entities (writes MaskEntity)
+- `ShieldRenderer`: Protective field with gradient (writes MaskShield, derived from GameState.LastTypedSeqType/Level)
+- `EffectsRenderer`: Decay, cleaners, flashes, materializers (writes MaskEffect)
+- `DrainRenderer`: Drain entities (writes MaskEffect)
+- `HeatMeterRenderer`, `LineNumbersRenderer`, `ColumnIndicatorsRenderer`: UI elements (write MaskUI)
+- `StatusBarRenderer`: Mode, commands, metrics, FPS (writes MaskUI)
+- `CursorRenderer`: Cursor rendering (writes MaskUI)
+- `OverlayRenderer`: Modal windows (writes MaskUI)
+- **Post-Processors**:
+  - `GrayoutRenderer`: Desaturation effect for entities when cleaners trigger with no targets (priority 390)
+  - `DimRenderer`: Brightness reduction for non-UI content during pause (priority 395)
 
 **RenderBuffer Methods:**
-- `Set(x, y, rune, fg, bg, mode, alpha, attrs)`: Full compositing (marks touched)
-- `SetFgOnly(x, y, rune, fg, attrs)`: Text overlay (does NOT mark touched)
-- `SetWithBg(x, y, rune, fg, bg)`: Opaque replacement (marks touched)
+- `SetWriteMask(mask uint8)`: Set mask for subsequent draw operations
+- `Set(x, y, rune, fg, bg, mode, alpha, attrs)`: Full compositing (marks touched, writes currentMask)
+- `SetFgOnly(x, y, rune, fg, attrs)`: Text overlay (does NOT mark touched, writes currentMask)
+- `SetBgOnly(x, y, bg)`: Background update (marks touched, writes currentMask)
+- `SetWithBg(x, y, rune, fg, bg)`: Opaque replacement (marks touched, writes currentMask)
+- `MutateDim(factor, targetMask)`: Reduce brightness for cells matching mask
+- `MutateGrayscale(intensity, targetMask)`: Desaturate cells matching mask
 - `Clear()`: Exponential copy algorithm
 - `FlushToTerminal(term)`: Zero-copy pass to terminal
 
@@ -601,8 +613,33 @@ The render package uses `terminal.Cell` directly in `RenderBuffer`, enabling zer
 When paused (COMMAND mode):
 - Game time stops (all timers freeze)
 - UI time continues (cursor blinks)
-- Characters dimmed to 70% brightness
+- Non-UI content dimmed to 50% brightness via `DimRenderer` post-processor (applies to MaskAll ^ MaskUI)
 - Frame updates continue
+
+### Stencil-Based Post-Processing
+
+The render pipeline uses a **stencil mask system** for selective visual effects:
+
+**Architecture:**
+```
+Content Renderers → SetWriteMask() → RenderBuffer (cells[] + masks[])
+                                           ↓
+                              Post-Processors (GrayoutRenderer, DimRenderer)
+                                           ↓
+                              FlushToTerminal
+```
+
+**Mask Categories** (`render/mask.go`):
+- `MaskGrid` (0x01): Background grid, ping overlay
+- `MaskEntity` (0x02): Characters, nuggets, spawned content
+- `MaskShield` (0x04): Cursor shield effect
+- `MaskEffect` (0x08): Decay, cleaners, flashes, materializers, drains
+- `MaskUI` (0x10): Heat meter, status bar, line numbers, cursor, overlay
+- `MaskAll` (0xFF): All content
+
+**Post-Processing Effects:**
+- **DimRenderer** (priority 395): Applies brightness reduction during pause to all non-UI content (`MaskAll ^ MaskUI`)
+- **GrayoutRenderer** (priority 390): Applies desaturation effect to entities when cleaners trigger with no targets (phantom cleaners)
 
 ## System Coordination and Event Flow
 
