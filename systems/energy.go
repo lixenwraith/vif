@@ -7,8 +7,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
-	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // createAudioCommand creates an audio command for sound playback
@@ -204,6 +202,7 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 		s.lastCorrect = now
 
 		// Calculate points: increment * level_multiplier * (red?-1:1)
+		// TODO: refactor
 		levelMultipliers := map[components.SequenceLevel]int{
 			components.LevelDark:   1,
 			components.LevelNormal: 2,
@@ -252,8 +251,14 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 		// Safely destroy the character entity
 		world.DestroyEntity(entity)
 
-		// Trigger splash for successful typing
-		engine.TriggerSplashChar(s.ctx, typedRune, s.getSplashColorForSequence(seq))
+		// Trigger splash for successful typing via Event
+		splashColor := s.getSplashColorForSequence(seq)
+		s.ctx.PushEvent(engine.EventSplashRequest, &engine.SplashRequestPayload{
+			Text:    string(typedRune),
+			Color:   splashColor,
+			OriginX: cursorX,
+			OriginY: cursorY,
+		}, now)
 
 		// Move cursor right in ECS
 		cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
@@ -317,7 +322,6 @@ func (s *EnergySystem) handleNuggetCollection(world *engine.World, entity engine
 		s.ctx.State.SetHeat(0) // Reset heat on incorrect nugget typing
 		s.ctx.State.SetBoostEnabled(false)
 		s.ctx.State.SetBoostColor(0)
-		// Set energy blink to error state (black background with bright red text)
 		s.ctx.State.SetEnergyBlinkActive(true)
 		s.ctx.State.SetEnergyBlinkType(0)  // 0 = error
 		s.ctx.State.SetEnergyBlinkLevel(0) // 0 = dark
@@ -353,8 +357,13 @@ func (s *EnergySystem) handleNuggetCollection(world *engine.World, entity engine
 	// Destroy the nugget entity
 	world.DestroyEntity(entity)
 
-	// Trigger splash for nugget collection
-	engine.TriggerSplashChar(s.ctx, typedRune, terminal.RGB(render.RgbNuggetOrange))
+	// Trigger splash for nugget collection via Event
+	s.ctx.PushEvent(engine.EventSplashRequest, &engine.SplashRequestPayload{
+		Text:    string(typedRune),
+		Color:   components.SplashColorNugget,
+		OriginX: config.GameWidth / 2, // Nugget splash doesn't need strict repulsion, but we pass valid coords
+		OriginY: config.GameHeight / 2,
+	}, now)
 
 	// Clear the active nugget reference to trigger respawn
 	// Use CAS to ensure we only clear if this is still the active nugget
@@ -386,7 +395,6 @@ func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity engi
 		cursor, _ := world.Cursors.Get(s.ctx.CursorEntity)
 		cursor.ErrorFlashEnd = now.Add(constants.ErrorBlinkTimeout).UnixNano()
 		world.Cursors.Add(s.ctx.CursorEntity, cursor)
-		// Set energy blink to error state (black background with bright red text)
 		s.ctx.State.SetEnergyBlinkActive(true)
 		s.ctx.State.SetEnergyBlinkType(0)  // 0 = error
 		s.ctx.State.SetEnergyBlinkLevel(0) // 0 = dark
@@ -400,8 +408,8 @@ func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity engi
 	}
 
 	// Correct character - remove entity and move cursor
-	// Trigger energy blink with Gold type and level
 	s.ctx.State.SetEnergyBlinkActive(true)
+	// TODO: why check other sequences here?
 	// Map sequence types to uint32: 0=error, 1=blue, 2=green, 3=red, 4=gold
 	var typeCode uint32
 	switch seq.Type {
@@ -433,9 +441,6 @@ func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity engi
 	// Safely destroy the character entity
 	world.DestroyEntity(entity)
 
-	// Trigger splash for gold character
-	engine.TriggerSplashChar(s.ctx, typedRune, terminal.RGB(render.RgbSequenceGold))
-
 	// Move cursor right
 	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
 	if ok {
@@ -444,6 +449,14 @@ func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity engi
 		}
 		world.Positions.Add(s.ctx.CursorEntity, cursorPos)
 	}
+
+	// Trigger splash for gold character via Event
+	s.ctx.PushEvent(engine.EventSplashRequest, &engine.SplashRequestPayload{
+		Text:    string(typedRune),
+		Color:   components.SplashColorGold,
+		OriginX: cursorPos.X,
+		OriginY: cursorPos.Y,
+	}, now)
 
 	// Check if this was the last character of the gold sequence
 	isLastChar := seq.Index == constants.GoldSequenceLength-1
@@ -496,17 +509,17 @@ func (s *EnergySystem) HandleEvent(world *engine.World, event engine.GameEvent) 
 }
 
 // getSplashColorForSequence returns splash color based on sequence type
-func (s *EnergySystem) getSplashColorForSequence(seq components.SequenceComponent) terminal.RGB {
+func (s *EnergySystem) getSplashColorForSequence(seq components.SequenceComponent) components.SplashColor {
 	switch seq.Type {
 	case components.SequenceGreen:
-		return terminal.RGB(render.RgbSequenceGreenNormal)
+		return components.SplashColorGreen
 	case components.SequenceBlue:
-		return terminal.RGB(render.RgbSequenceBlueNormal)
+		return components.SplashColorBlue
 	case components.SequenceRed:
-		return terminal.RGB(render.RgbSequenceRedNormal)
+		return components.SplashColorRed
 	case components.SequenceGold:
-		return terminal.RGB(render.RgbSequenceGold)
+		return components.SplashColorGold
 	default:
-		return terminal.RGB(render.RgbSplashInsert)
+		return components.SplashColorInsert
 	}
 }

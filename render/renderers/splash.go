@@ -2,6 +2,7 @@ package renderers
 
 import (
 	"github.com/lixenwraith/vi-fighter/assets"
+	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
@@ -49,8 +50,11 @@ func (s *SplashRenderer) Render(ctx render.RenderContext, world *engine.World, b
 			opacity = 1
 		}
 
+		// Resolve concrete RGB from semantic enum
+		baseColor := s.resolveSplashColor(splash.Color)
+
 		// Scale color by opacity
-		scaledColor := render.Scale(render.RGB(splash.Color), opacity)
+		scaledColor := render.Scale(baseColor, opacity)
 
 		// Render each character in the splash
 		for i := 0; i < splash.Length; i++ {
@@ -89,5 +93,28 @@ func (s *SplashRenderer) renderChar(ctx render.RenderContext, buf *render.Render
 
 			buf.SetBgOnly(screenX, screenY, color)
 		}
+	}
+}
+
+// TODO: refactor, this logic is defined twice to avoid a cyclic dependency
+// resolveSplashColor maps the SplashColor enum to actual render.RGB
+func (s *SplashRenderer) resolveSplashColor(c components.SplashColor) render.RGB {
+	switch c {
+	case components.SplashColorNormal:
+		return render.RgbSplashNormal
+	case components.SplashColorInsert:
+		return render.RgbSplashInsert
+	case components.SplashColorGreen:
+		return render.RgbSequenceGreenNormal
+	case components.SplashColorBlue:
+		return render.RgbSequenceBlueNormal
+	case components.SplashColorRed:
+		return render.RgbSequenceRedNormal
+	case components.SplashColorGold:
+		return render.RgbSequenceGold
+	case components.SplashColorNugget:
+		return render.RgbNuggetOrange
+	default:
+		return render.RgbSplashNormal
 	}
 }

@@ -11,18 +11,12 @@ import (
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
-	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
-// GoldSystem manages the gold sequence mechanic and its timer visualization
+// GoldSystem manages the gold sequence mechanic and emits events for visualization
 type GoldSystem struct {
 	mu  sync.RWMutex
 	ctx *engine.GameContext
-
-	// Timer state
-	timerEntity engine.Entity
-	lastSeconds int
 }
 
 // NewGoldSystem creates a new gold sequence system
@@ -38,7 +32,7 @@ func (s *GoldSystem) Priority() int {
 }
 
 // Update runs the gold sequence system logic
-// Manages Gold Timer lifecycle and updates
+// Gold Timer visualization is now handled by SplashSystem via events
 func (s *GoldSystem) Update(world *engine.World, dt time.Duration) {
 	// Fetch resources
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
@@ -52,81 +46,6 @@ func (s *GoldSystem) Update(world *engine.World, dt time.Duration) {
 	if phaseSnapshot.Phase == engine.PhaseNormal && !goldSnapshot.Active {
 		s.spawnGold(world)
 	}
-
-	// Manage Gold Timer Visualization
-	if goldSnapshot.Active {
-		remaining := goldSnapshot.Remaining.Seconds()
-		currentSeconds := int(math.Ceil(remaining))
-
-		// Create timer if missing
-		if s.timerEntity == 0 || !world.Splashes.Has(s.timerEntity) {
-			s.spawnTimer(world, now, currentSeconds)
-			s.lastSeconds = currentSeconds
-		} else if currentSeconds != s.lastSeconds {
-			// Update existing timer on second change (pulse effect)
-			s.updateTimer(world, now, currentSeconds)
-			s.lastSeconds = currentSeconds
-		}
-	} else {
-		// Cleanup timer if active but gold is not
-		if s.timerEntity != 0 {
-			world.DestroyEntity(s.timerEntity)
-			s.timerEntity = 0
-		}
-	}
-}
-
-// spawnTimer creates the persistent splash entity for the countdown
-func (s *GoldSystem) spawnTimer(world *engine.World, now time.Time, seconds int) {
-	s.timerEntity = world.CreateEntity()
-
-	// Calculate position: Prefer opposite to cursor to avoid obscuring view
-	// We reuse the engine's layout logic but manually since we need to persist the ID
-	cursorPos, _ := world.Positions.Get(s.ctx.CursorEntity)
-	anchorX, anchorY := engine.CalculateSplashAnchor(s.ctx, cursorPos.X, cursorPos.Y, 1)
-
-	// Clamp seconds to single digit 0-9 for display
-	displayDigit := seconds
-	if displayDigit > 9 {
-		displayDigit = 9
-	}
-	if displayDigit < 0 {
-		displayDigit = 0
-	}
-
-	splash := components.SplashComponent{
-		Length:    1,
-		Color:     terminal.RGB(render.RgbSequenceGold),
-		AnchorX:   anchorX,
-		AnchorY:   anchorY,
-		Mode:      components.SplashModePersistent,
-		StartNano: now.UnixNano(),
-		Duration:  1 * time.Second.Nanoseconds(), // Pulse duration
-	}
-	splash.Content[0] = rune('0' + displayDigit)
-
-	world.Splashes.Add(s.timerEntity, splash)
-}
-
-// updateTimer updates the countdown digit and resets animation timestamp
-func (s *GoldSystem) updateTimer(world *engine.World, now time.Time, seconds int) {
-	splash, ok := world.Splashes.Get(s.timerEntity)
-	if !ok {
-		return
-	}
-
-	displayDigit := seconds
-	if displayDigit > 9 {
-		displayDigit = 9
-	}
-	if displayDigit < 0 {
-		displayDigit = 0
-	}
-
-	splash.Content[0] = rune('0' + displayDigit)
-	splash.StartNano = now.UnixNano() // Reset fade animation (pulse)
-
-	world.Splashes.Add(s.timerEntity, splash)
 }
 
 // spawnGold creates a new gold sequence at a random position on the screen using generic stores
@@ -236,6 +155,16 @@ func (s *GoldSystem) spawnGold(world *engine.World) bool {
 		}
 		return false
 	}
+
+	// Emit Spawn Event for Visualization (Timer)
+	s.ctx.PushEvent(engine.EventGoldSpawned, &engine.GoldSpawnedPayload{
+		SequenceID: sequenceID,
+		OriginX:    x,
+		OriginY:    y,
+		Length:     constants.GoldSequenceLength,
+		Duration:   constants.GoldDuration,
+	}, now)
+
 	return true
 }
 
@@ -289,8 +218,54 @@ func (s *GoldSystem) TimeoutGoldSequence(world *engine.World) {
 
 	// Read gold state snapshot to get current sequence ID
 	goldSnapshot := s.ctx.State.ReadGoldState(now)
+
+	// Emit Timeout Event first (so SplashSystem can remove timer)
+	s.ctx.PushEvent(engine.EventGoldTimeout, &engine.GoldCompletionPayload{
+		SequenceID: goldSnapshot.SequenceID,
+	}, now)
+
 	// Remove gold sequence entities (also starts decay timer)
 	s.removeGold(world, goldSnapshot.SequenceID)
+}
+
+// CompleteGold is called when the gold sequence is successfully completed
+// Gold removal triggers decay timer restart in removeGoldSequence()
+// Uses GameState snapshot
+func (s *GoldSystem) CompleteGold(world *engine.World) bool {
+	// Fetch resources
+	timeRes := engine.MustGetResource[*engine.TimeResource](s.ctx.World.Resources)
+	now := timeRes.GameTime
+
+	// Read gold state snapshot for consistent check
+	goldSnapshot := s.ctx.State.ReadGoldState(now)
+
+	if !goldSnapshot.Active {
+		return false
+	}
+
+	// Emit Completion Event (SplashSystem removes timer, others can react)
+	s.ctx.PushEvent(engine.EventGoldComplete, &engine.GoldCompletionPayload{
+		SequenceID: goldSnapshot.SequenceID,
+	}, now)
+
+	// Remove gold sequence entities
+	// This will also trigger decay timer restart
+	s.removeGold(world, goldSnapshot.SequenceID)
+
+	// Play coin sound for gold completion
+	if s.ctx.AudioEngine != nil {
+		// Fetch time resource for audio timestamp
+		cmd := audio.AudioCommand{
+			Type:       audio.SoundCoin,
+			Priority:   1,
+			Generation: uint64(s.ctx.State.GetFrameNumber()),
+			Timestamp:  now,
+		}
+		s.ctx.AudioEngine.SendRealTime(cmd)
+	}
+
+	// Fill heat to max (handled by Energy System)
+	return true
 }
 
 // IsActive returns whether a gold sequence is currently active
@@ -346,42 +321,6 @@ func (s *GoldSystem) GetExpectedCharacter(sequenceID int, index int) (rune, bool
 	}
 
 	return 0, false
-}
-
-// CompleteGold is called when the gold sequence is successfully completed
-// Gold removal triggers decay timer restart in removeGoldSequence()
-// Uses GameState snapshot
-func (s *GoldSystem) CompleteGold(world *engine.World) bool {
-	// Fetch resources
-	timeRes := engine.MustGetResource[*engine.TimeResource](s.ctx.World.Resources)
-	now := timeRes.GameTime
-
-	// Read gold state snapshot for consistent check
-	goldSnapshot := s.ctx.State.ReadGoldState(now)
-
-	if !goldSnapshot.Active {
-		return false
-	}
-
-	// Remove gold sequence entities
-	// This will also trigger decay timer restart
-	s.removeGold(world, goldSnapshot.SequenceID)
-
-	// Play coin sound for gold completion
-	if s.ctx.AudioEngine != nil {
-		// Fetch time resource for audio timestamp
-		timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-		cmd := audio.AudioCommand{
-			Type:       audio.SoundCoin,
-			Priority:   1,
-			Generation: uint64(s.ctx.State.GetFrameNumber()),
-			Timestamp:  timeRes.GameTime,
-		}
-		s.ctx.AudioEngine.SendRealTime(cmd)
-	}
-
-	// Fill heat to max (handled by Energy System)
-	return true
 }
 
 // findValidPosition finds a valid random position for the gold sequence using generic stores

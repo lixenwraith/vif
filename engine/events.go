@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 )
 
@@ -71,40 +72,55 @@ const (
 	//   - Does NOT trigger phase transitions (cleaners are non-blocking)
 	EventCleanerFinished
 
-	// EventGoldSpawned signals that a gold sequence has been created.
+	// EventGoldSpawned signals that a gold sequence has been created
 	//
 	// Triggered When:
-	//   - GoldSequenceSystem spawns a new 10-character gold sequence
-	//   - Occurs when PhaseDecayAnimation completes (transitions to PhaseNormal)
+	//   - GoldSequenceSystem spawns a new gold sequence (PhaseNormal)
 	//
 	// Consumed By:
-	//   - Currently used for testing and debugging
-	//   - Future: Could trigger audio/visual effects or UI updates
+	//   - SplashSystem: Spawns the anchored Gold Timer entity
+	//   - AudioSystem (future): Play spawn sound
 	//
-	// Payload: nil (gold sequence details available via ctx.State.ReadGoldState())
-	//
-	// State Coordination:
-	//   - GoldSequenceSystem maintains GoldActive flag in GameState
-	//   - EventGoldSpawned is informational, does not replace state checking
+	// Payload: *GoldSpawnedPayload
+	//   - Contains SequenceID, position, dimensions, and duration for timer anchoring
 	EventGoldSpawned
 
-	// EventGoldComplete signals that a gold sequence has been successfully typed.
+	// EventGoldComplete signals that a gold sequence has been successfully typed
 	//
 	// Triggered When:
 	//   - Player types the final character of an active gold sequence
-	//   - EnergySystem handles final character and validates completion
 	//
 	// Consumed By:
-	//   - Currently used for testing and debugging
-	//   - Future: Could trigger achievement tracking or statistics
+	//   - SplashSystem: Destroys the anchored Gold Timer immediately
+	//   - EnergySystem (internal handling): Fills heat, points
 	//
-	// Payload: nil (gold completion handled via GameState)
-	//
-	// Side Effects (via GameState, not event):
-	//   - Heat meter filled to maximum
-	//   - EventCleanerRequest pushed if heat was already at max
-	//   - GoldActive flag cleared in GameState
+	// Payload: *GoldCompletionPayload
+	//   - Contains SequenceID to identify which timer to destroy
 	EventGoldComplete
+
+	// EventGoldTimeout signals that a gold sequence expired before completion
+	//
+	// Triggered When:
+	//   - GoldSystem detects timeout in update loop
+	//
+	// Consumed By:
+	//   - SplashSystem: Destroys the anchored Gold Timer
+	//
+	// Payload: *GoldCompletionPayload
+	//   - Contains SequenceID to identify which timer to destroy
+	EventGoldTimeout
+
+	// EventGoldDestroyed signals that a gold sequence was destroyed by an external factor (e.g. Drain)
+	//
+	// Triggered When:
+	//   - DrainSystem (or other mechanics) destroys a Gold entity
+	//
+	// Consumed By:
+	//   - SplashSystem: Destroys the anchored Gold Timer
+	//
+	// Payload: *GoldCompletionPayload
+	//   - Contains SequenceID to identify which timer to destroy
+	EventGoldDestroyed
 
 	// EventCharacterTyped signals that a character was typed in insert mode.
 	//
@@ -136,6 +152,22 @@ const (
 	//
 	// Payload: *EnergyTransactionPayload containing amount
 	EventEnergyTransaction
+
+	// EventSplashRequest signals a request for transient visual feedback (text flash)
+	//
+	// Triggered When:
+	//   - Character typed (Input/Energy systems)
+	//   - Command executed
+	//   - Nugget collected
+	//
+	// Consumed By:
+	//   - SplashSystem: Creates a transient splash entity
+	//     - Enforces uniqueness (replaces existing transient splash)
+	//     - Calculates smart layout to avoid Cursor and Gold Sequence
+	//
+	// Payload: *SplashRequestPayload
+	//   - Content, color, and origin (cursor) position
+	EventSplashRequest
 )
 
 // String returns the name of the event type for debugging
@@ -151,10 +183,16 @@ func (e EventType) String() string {
 		return "GoldSpawned"
 	case EventGoldComplete:
 		return "GoldComplete"
+	case EventGoldTimeout:
+		return "GoldTimeout"
+	case EventGoldDestroyed:
+		return "GoldDestroyed"
 	case EventCharacterTyped:
 		return "CharacterTyped"
 	case EventEnergyTransaction:
 		return "EnergyTransaction"
+	case EventSplashRequest:
+		return "SplashRequest"
 	default:
 		return "Unknown"
 	}
@@ -180,14 +218,10 @@ type DirectionalCleanerPayload struct {
 //  3. ClockScheduler triggers EventRouter.DispatchAll()
 //  4. EventRouter invokes HandleEvent() on registered handlers synchronously
 
-// GameEvent represents a single game event with associated metadata.
-//
-// Events are immutable once created and flow from producers to consumers via EventQueue.
-// The Frame field enables deduplication (prevent processing same event multiple times).
-// The Timestamp field enables debugging and performance analysis.
+// GameEvent represents a single game event with associated metadata
 type GameEvent struct {
 	Type      EventType // Type of event (determines semantic meaning)
-	Payload   any       // Optional event-specific data (currently unused, reserved for future)
+	Payload   any       // Optional event-specific data
 	Frame     int64     // Frame number when event was created (for deduplication)
 	Timestamp time.Time // Creation timestamp (for debugging and metrics)
 }
@@ -248,6 +282,30 @@ var CharacterTypedPayloadPool = sync.Pool{
 type EnergyTransactionPayload struct {
 	Amount int    // Energy delta (can be negative)
 	Source string // Debug identifier (e.g., "NuggetJump", "Penalty")
+}
+
+// GoldSpawnedPayload contains details about a newly spawned gold sequence.
+// Used by SplashSystem to anchor the countdown timer relative to the sequence.
+type GoldSpawnedPayload struct {
+	SequenceID int           // Unique ID of the sequence
+	OriginX    int           // X position of the sequence start
+	OriginY    int           // Y position of the sequence
+	Length     int           // Length of the sequence in characters
+	Duration   time.Duration // Total duration for the timer
+}
+
+// GoldCompletionPayload contains details about a completed or timed-out gold sequence.
+// Used by SplashSystem to identify and remove the associated timer.
+type GoldCompletionPayload struct {
+	SequenceID int // Unique ID of the sequence that finished
+}
+
+// SplashRequestPayload contains data for creating a transient visual flash.
+type SplashRequestPayload struct {
+	Text    string                 // The text to display
+	Color   components.SplashColor // Semantic color enum
+	OriginX int                    // X position of the cause (usually cursor)
+	OriginY int                    // Y position of the cause (usually cursor)
 }
 
 // NewEventQueue creates a new event queue with empty state.

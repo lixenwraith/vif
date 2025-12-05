@@ -4,7 +4,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
-	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
@@ -123,8 +122,20 @@ func (h *InputHandler) handleNormalMode(ev terminal.Event) bool {
 	if result.Action != nil {
 		if result.CommandString != "" {
 			h.ctx.LastCommand = result.CommandString
-			// Trigger splash for command execution
-			engine.TriggerSplashString(h.ctx, result.CommandString, terminal.RGB(render.RgbSplashNormal))
+
+			// Push splash event for command execution
+			// We need cursor position for the splash origin
+			originX, originY := 0, 0
+			if pos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity); ok {
+				originX, originY = pos.X, pos.Y
+			}
+
+			h.ctx.PushEvent(engine.EventSplashRequest, &engine.SplashRequestPayload{
+				Text:    result.CommandString,
+				Color:   components.SplashColorNormal,
+				OriginX: originX,
+				OriginY: originY,
+			}, h.ctx.PausableClock.Now())
 		}
 		h.ctx.World.RunSafe(func() {
 			result.Action(h.ctx)
