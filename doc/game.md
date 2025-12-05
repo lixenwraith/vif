@@ -353,6 +353,24 @@ Hostile drain entities that scale with heat:
 - **Error**: Flashes black background with bright red text for 200ms
 - Provides instant visual feedback for typing accuracy
 
+**Splash Feedback** (Success Indicator):
+- **Display**: Large block characters (16×12 pixels each) appear in opposite screen quadrant from cursor
+- **Trigger Conditions**:
+  - Successfully typing a character in INSERT mode
+  - Collecting a nugget
+  - Executing a command in NORMAL mode (e.g., `dd`, `dw`)
+- **Animation**: 1-second fade-out from full opacity to transparent
+- **Color Coding**:
+  - Green sequences: Green (normal brightness)
+  - Blue sequences: Blue (normal brightness)
+  - Red sequences: Red (normal brightness)
+  - Gold sequences: Bright yellow
+  - Nuggets: Orange
+  - Normal mode commands: Dark orange
+- **Positioning**: Automatically places splash in opposite quadrant from cursor to avoid obstruction
+- **Max Length**: Up to 8 characters for command strings
+- **Purpose**: Provides satisfying visual confirmation of successful actions without blocking gameplay
+
 ---
 
 ## Sequence Types

@@ -87,6 +87,7 @@ type World struct {
     Cursors        *Store[CursorComponent]
     Protections    *Store[ProtectionComponent]
     Shields        *Store[ShieldComponent]
+    Splashes       *Store[SplashComponent]
 
     allStores []AnyStore
 }
@@ -480,7 +481,8 @@ Component (marker interface)
 ├── DrainComponent {LastMoveTime, LastDrainTime time.Time, IsOnCursor bool, SpawnOrder int64}
 ├── CursorComponent {ErrorFlashEnd int64, HeatDisplay int}
 ├── ProtectionComponent {Mask ProtectionFlags, ExpiresAt int64}
-└── ShieldComponent {Sources uint8, RadiusX, RadiusY float64, OverrideColor ColorClass, MaxOpacity float64, LastDrainTime time.Time}
+├── ShieldComponent {Sources uint8, RadiusX, RadiusY float64, OverrideColor ColorClass, MaxOpacity float64, LastDrainTime time.Time}
+└── SplashComponent {Content [8]rune, Length int, Color terminal.RGB, AnchorX, AnchorY int, StartNano int64}
 ```
 
 **Sequence Types:**
@@ -553,6 +555,7 @@ The render package uses `terminal.Cell` directly in `RenderBuffer`, enabling zer
 **Priority Layers:**
 - **PriorityBackground (0)**: Base layer
 - **PriorityGrid (100)**: Ping highlights
+- **PrioritySplash (150)**: Large block-character visual feedback
 - **PriorityEntities (200)**: Characters
 - **PriorityEffects (300)**: Shields, decay, cleaners, flashes
 - **PriorityDrain (350)**: Drain entity
@@ -563,6 +566,7 @@ The render package uses `terminal.Cell` directly in `RenderBuffer`, enabling zer
 
 **Individual Renderers** (`render/renderers/`):
 - `PingGridRenderer`: Row/column highlights (writes MaskGrid)
+- `SplashRenderer`: Large block-character success feedback (writes MaskEffect, opacity fade over 1 second)
 - `CharactersRenderer`: All character entities (writes MaskEntity)
 - `ShieldRenderer`: Protective field with gradient (writes MaskShield, derived from GameState.LastTypedSeqType/Level)
 - `EffectsRenderer`: Decay, cleaners, flashes, materializers (writes MaskEffect)
@@ -905,6 +909,7 @@ Systems execute in priority order (lower = earlier):
 7. **DrainSystem (25)**: Drain movement/logic
 8. **DecaySystem (30)**: Sequence degradation
 9. **FlashSystem (35)**: Flash effect lifecycle
+10. **SplashSystem (800)**: Splash timeout (after game logic, before rendering)
 
 ### Content Management System
 - **ContentManager** (`content/manager.go`): Manages content files
@@ -1051,6 +1056,25 @@ for _, entity := range entitiesAtCursor {
 - **Spawn**: `SpawnDestructionFlash(world, x, y, char, now)`
 - **Usage**: CleanerSystem, DrainSystem, DecaySystem
 - **Lifecycle**: Automatic cleanup after duration
+
+### Splash System
+- **Purpose**: Large block-character visual feedback for successful user actions
+- **Architecture**: Singleton entity with `SplashComponent`, no position component
+- **Entity Pattern**: Same as CursorEntity - created once in NewGameContext, never destroyed
+- **State Management**: Component with `Length` field (0 = inactive)
+- **Trigger Functions**:
+  - `TriggerSplashChar(ctx, char, color)` - Single character (Insert mode typing)
+  - `TriggerSplashString(ctx, text, color)` - Command strings (Normal mode)
+- **Positioning**: Quadrant-based placement opposite cursor position with left/top boundary clamping
+- **Rendering**: Background-only effect using `SetBgOnly()` with `MaskEffect` write mask
+- **Animation**: 1-second fade-out (opacity: 1.0 → 0.0 linear)
+- **Font Rendering**: Uses bitmap font from `assets/splash_font.go` (16×12 per character, MSB-first)
+- **Color Coding**:
+  - Insert mode: Sequence-based (Green/Blue/Red Normal colors, Gold for gold sequences, Nugget orange)
+  - Normal mode: Dark orange (RgbSplashNormal)
+- **Dimensions**: 16×12 pixels per character, 1-pixel spacing, max 8 characters
+- **Integration Points**: EnergySystem (character/nugget typing), Normal mode command execution
+- **Thread Safety**: Pure ECS (state in component), timeout checked in SplashSystem Update()
 
 ### Shield System
 - **Purpose**: Energy-powered protective field
