@@ -64,62 +64,68 @@ go build -o vi-fighter ./cmd/vi-fighter
 - No compilation flags or external libraries required
 - Silent mode fallback ensures game works without audio
 
+## Documentation
+
+- After completion of each task, update `doc/architecture.md`, deprecating and deleting the old information.
+- **DO NOT** include any migration or implementation steps.
+- If implementation consists of multiple steps, update the documents at the last step.
+
+## Directive Reference for Claude Code
+
+These directives are meta-instructions placed in prompts to control Claude Code behavior:
+
+| Directive | Meaning |
+|-----------|---------|
+| `[full]` | Output complete file content, not snippets |
+| `[block]` | Output only modified functions/structs with context placeholders |
+| `[diff]` | Output minimal change with surrounding context lines |
+| `[verify]` | Run build/test commands after changes |
+| `[[code]]` | Action directive: generate code for preceding requirements |
+
+
 
 ## CURRENT TASK
 
-**Prompt can override Environment and Verification section instructions**
-**Refer to prompt for complete implementation code**
+**Phase: Splash Font Asset Generation**
 
 ### Objective
-Implement stencil-based post-processing pipeline for selective visual effects (dim, grayscale) on render buffer.
+Generate procedural bitmap font data for the Splash visual feedback system.
 
-### Architecture
-```
-Renderers → SetWriteMask() → RenderBuffer (cells[] + masks[])
-                                    ↓
-                            Post-Processors (MutateDim/MutateGrayscale)
-                                    ↓
-                            FlushToTerminal
-```
+### Prerequisite
+- assets directory is currently being used to hold content files.
+- rename the folder to `data`
+- modify `assets` reference in `content/manager.go` and anywhere else to point to `data` before starting.
+- `assets` will be a new package.
+- Update `README.md` in the new `data` dir, repo readme, doc/architecture.md, and game.md at the end of the task.
 
-### Implementation Approach
+### Requirements
+- File: `assets/splash_font.go`
+- Format: `var SplashFont = [95][12]uint16{...}`
+- Coverage: ASCII 32-126 (space through tilde)
+- Dimensions: 16 columns × 12 rows per character
+- Bit order: MSB-first (bit 15 = column 0/leftmost)
+- Style: Sans-serif block glyphs, readable at terminal scale
 
-**Phase 1: Core Infrastructure**
-- Create `render/mask.go` with bitmask constants
-- Extend `RenderBuffer` with `masks []uint8`, `currentMask uint8`
-- Add `Grayscale()` and `Lerp()` to `render/rgb.go`
-- Add `MutateDim()` and `MutateGrayscale()` mutation methods
+### Character Priority
+1. **Critical**: A-Z, a-z, 0-9 (typing feedback)
+2. **Important**: Common punctuation (.,;:'"!?-_)
+3. **Standard**: Remaining printable ASCII
 
-**Phase 2: State & Logic**
-- Add `GrayoutActive`, `GrayoutStartTime` atomics to `GameState`
-- Modify `CleanerSystem.spawnCleaners()` for phantom trigger
+### Technical Constraints
+- Each row is `uint16` where set bit = filled pixel
+- Index calculation: `SplashFont[rune - 32]`
+- No external font files; pure Go literal data
+- Visually distinct glyphs; avoid ambiguity (0/O, 1/l/I)
 
-**Phase 3: Integration**
-- Inject `SetWriteMask()` calls into ALL existing renderers
-- Remove hardcoded pause dim from `CharactersRenderer`
-- Create `DimRenderer` and `GrayoutRenderer` post-processors
-- Register post-processors in `main.go` at priorities 390/395
+### Design Guidelines
+- Block style: thick strokes (2-3 pixels wide)
+- Consistent baseline and cap height
+- Adequate inter-character whitespace in glyph design
+- Alphanumerics should be recognizable at 50% opacity
 
-### Critical Patterns
-
-1. **Fg/Bg Granularity**: `touched=true` → mutate both; `touched=false, mask!=0` → mutate Fg only (preserve `RgbBackground`)
-2. **Mask Assignment**: Every draw method (`Set`, `SetFgOnly`, `SetBgOnly`, `SetWithBg`) writes `currentMask` to `masks[idx]`
-3. **Mutation Loop**: Iterate `b.cells`, check `masks[i]&targetMask != 0`, NOT `touched[i]`
-
-### Files Summary
-
-| File | Action |
-|------|--------|
-| `render/mask.go` | CREATE |
-| `render/renderers/post_process.go` | CREATE |
-| `render/rgb.go` | ADD `Grayscale`, `Lerp` |
-| `render/buffer.go` | REPLACE |
-| `engine/game_state.go` | ADD grayout fields/methods |
-| `systems/cleaner.go` | MODIFY `spawnCleaners` |
-| `render/renderers/*.go` | ADD `SetWriteMask` to all |
-| `cmd/vi-fighter/main.go` | ADD post-processor registrations |
+### Output
+Single file `assets/splash_font.go` with complete bitmap data for all 95 characters.
 
 ### Verification
-1. `go build .` must pass
-2. Manual test: `:` enters pause → game content dims, UI unchanged
-3. Manual test: Cleaner phase with no red targets → entities flash grayscale
+- `go build .` must pass
+- Spot-check: 'A' bitmap should show recognizable letter shape
