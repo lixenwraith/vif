@@ -38,6 +38,10 @@ var (
 	RgbCursorNormal  = RGB{255, 165, 0}   // Orange for normal mode
 	RgbCursorInsert  = RGB{255, 255, 255} // Bright white for insert mode
 
+	// Splash colors
+	RgbSplashInsert = RGB{200, 200, 200} // Light gray for insert mode
+	RgbSplashNormal = RGB{153, 102, 0}   // Dark orange (ping base) for normal mode
+
 	// Nugget colors
 	RgbNuggetOrange = RGB{255, 165, 0}   // Same as insert cursor
 	RgbNuggetDark   = RGB{101, 67, 33}   // Dark brown for contrast

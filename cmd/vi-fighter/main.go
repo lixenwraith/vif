@@ -100,6 +100,9 @@ func main() {
 	flashSystem := systems.NewFlashSystem(ctx)
 	ctx.World.AddSystem(flashSystem)
 
+	splashSystem := systems.NewSplashSystem(ctx)
+	ctx.World.AddSystem(splashSystem)
+
 	// Wire up system references
 	energySystem.SetGoldSystem(goldSystem)
 	energySystem.SetSpawnSystem(spawnSystem)
@@ -117,6 +120,9 @@ func main() {
 	// Grid (100)
 	pingGridRenderer := renderers.NewPingGridRenderer(ctx)
 	orchestrator.Register(pingGridRenderer, render.PriorityGrid)
+
+	splashRenderer := renderers.NewSplashRenderer(ctx)
+	orchestrator.Register(splashRenderer, render.PrioritySplash)
 
 	// Entities (200)
 	charactersRenderer := renderers.NewCharactersRenderer(ctx)

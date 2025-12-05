@@ -7,6 +7,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // createAudioCommand creates an audio command for sound playback
@@ -250,6 +252,9 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 		// Safely destroy the character entity
 		world.DestroyEntity(entity)
 
+		// Trigger splash for successful typing
+		engine.TriggerSplashChar(s.ctx, typedRune, s.getSplashColorForSequence(seq))
+
 		// Move cursor right in ECS
 		cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
 		if ok {
@@ -348,6 +353,9 @@ func (s *EnergySystem) handleNuggetCollection(world *engine.World, entity engine
 	// Destroy the nugget entity
 	world.DestroyEntity(entity)
 
+	// Trigger splash for nugget collection
+	engine.TriggerSplashChar(s.ctx, typedRune, terminal.RGB(render.RgbNuggetOrange))
+
 	// Clear the active nugget reference to trigger respawn
 	// Use CAS to ensure we only clear if this is still the active nugget
 	s.ctx.State.ClearActiveNuggetID(uint64(entity))
@@ -425,6 +433,9 @@ func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity engi
 	// Safely destroy the character entity
 	world.DestroyEntity(entity)
 
+	// Trigger splash for gold character
+	engine.TriggerSplashChar(s.ctx, typedRune, terminal.RGB(render.RgbSequenceGold))
+
 	// Move cursor right
 	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
 	if ok {
@@ -481,5 +492,21 @@ func (s *EnergySystem) HandleEvent(world *engine.World, event engine.GameEvent) 
 		if payload, ok := event.Payload.(*engine.EnergyTransactionPayload); ok {
 			s.ctx.State.AddEnergy(payload.Amount)
 		}
+	}
+}
+
+// getSplashColorForSequence returns splash color based on sequence type
+func (s *EnergySystem) getSplashColorForSequence(seq components.SequenceComponent) terminal.RGB {
+	switch seq.Type {
+	case components.SequenceGreen:
+		return terminal.RGB(render.RgbSequenceGreenNormal)
+	case components.SequenceBlue:
+		return terminal.RGB(render.RgbSequenceBlueNormal)
+	case components.SequenceRed:
+		return terminal.RGB(render.RgbSequenceRedNormal)
+	case components.SequenceGold:
+		return terminal.RGB(render.RgbSequenceGold)
+	default:
+		return terminal.RGB(render.RgbSplashInsert)
 	}
 }

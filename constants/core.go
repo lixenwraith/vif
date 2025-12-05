@@ -34,4 +34,5 @@ const (
 	PriorityDrain   = 25
 	PriorityDecay   = 30
 	PriorityFlash   = 35
+	PrioritySplash  = 800 // After game logic, before rendering
 )

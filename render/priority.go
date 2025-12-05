@@ -6,6 +6,7 @@ type RenderPriority int
 const (
 	PriorityBackground RenderPriority = 0
 	PriorityGrid       RenderPriority = 100
+	PrioritySplash     RenderPriority = 150
 	PriorityEntities   RenderPriority = 200
 	PriorityEffects    RenderPriority = 300
 	PriorityDrain      RenderPriority = 350

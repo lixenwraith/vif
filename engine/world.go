@@ -29,6 +29,7 @@ type World struct {
 	Cursors       *Store[components.CursorComponent]
 	Protections   *Store[components.ProtectionComponent]
 	Shields       *Store[components.ShieldComponent]
+	Splashes      *Store[components.SplashComponent]
 
 	allStores []AnyStore // All stores for uniform lifecycle operations
 
@@ -55,6 +56,7 @@ func NewWorld() *World {
 		Cursors:       NewStore[components.CursorComponent](),
 		Protections:   NewStore[components.ProtectionComponent](),
 		Shields:       NewStore[components.ShieldComponent](),
+		Splashes:      NewStore[components.SplashComponent](),
 	}
 
 	// Register all stores for lifecycle operations
@@ -72,6 +74,7 @@ func NewWorld() *World {
 		w.Cursors,
 		w.Protections,
 		w.Shields,
+		w.Splashes,
 	}
 
 	// Set world reference for z-index lookups
