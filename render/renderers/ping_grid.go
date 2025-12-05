@@ -20,6 +20,7 @@ func NewPingGridRenderer(gameCtx *engine.GameContext) *PingGridRenderer {
 
 // Render draws the ping highlights and grid
 func (p *PingGridRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+	buf.SetWriteMask(render.MaskGrid)
 	// Get ping color based on mode
 	pingColor := p.getPingColor()
 

@@ -218,3 +218,27 @@ func Scale(c RGB, factor float64) RGB {
 		B: clamp(float64(c.B) * factor),
 	}
 }
+
+// Grayscale converts RGB to grayscale using Rec. 601 luma coefficients
+// Formula: Y = R*0.299 + G*0.587 + B*0.114
+// Integer math: (R*299 + G*587 + B*114) / 1000
+func Grayscale(c RGB) RGB {
+	gray := uint8((int(c.R)*299 + int(c.G)*587 + int(c.B)*114) / 1000)
+	return RGB{R: gray, G: gray, B: gray}
+}
+
+// Lerp linearly interpolates between two colors
+// t=0 returns a, t=1 returns b
+func Lerp(a, b RGB, t float64) RGB {
+	if t <= 0 {
+		return a
+	}
+	if t >= 1 {
+		return b
+	}
+	return RGB{
+		R: uint8(float64(a.R) + t*float64(int(b.R)-int(a.R))),
+		G: uint8(float64(a.G) + t*float64(int(b.G)-int(a.G))),
+		B: uint8(float64(a.B) + t*float64(int(b.B)-int(a.B))),
+	}
+}

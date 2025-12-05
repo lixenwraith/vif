@@ -21,6 +21,7 @@ func NewLineNumbersRenderer(gameCtx *engine.GameContext) *LineNumbersRenderer {
 
 // Render implements SystemRenderer
 func (l *LineNumbersRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+	buf.SetWriteMask(render.MaskUI)
 	// Snapshot from context in case of change mid-loop
 	width := l.gameCtx.LineNumWidth
 

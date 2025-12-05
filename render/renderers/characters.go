@@ -21,18 +21,19 @@ func NewCharactersRenderer(gameCtx *engine.GameContext) *CharactersRenderer {
 
 // Render draws all character entities
 func (c *CharactersRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+	buf.SetWriteMask(render.MaskEntity)
+
 	// Query entities with both position and character
 	entities := world.Query().
 		With(world.Positions).
 		With(world.Characters).
 		Execute()
 
-	// Iteration over character entities
 	for _, entity := range entities {
 		pos, okP := world.Positions.Get(entity)
 		char, okC := world.Characters.Get(entity)
 		if !okP || !okC {
-			continue // Entity destroyed mid-iteration
+			continue
 		}
 
 		screenX := ctx.GameX + pos.X
@@ -42,17 +43,11 @@ func (c *CharactersRenderer) Render(ctx render.RenderContext, world *engine.Worl
 			continue
 		}
 
-		// Resolve semantic color to RGB
 		fg := resolveCharacterColor(char)
 		attrs := resolveTextStyle(char.Style)
 
-		// Apply pause dimming
-		if c.gameCtx.IsPaused.Load() {
-			fg = render.Scale(fg, 0.7)
-		}
+		// REMOVED: Pause dimming logic - now handled by DimRenderer post-processor
 
-		// Characters have NO background - use SetFgOnly to preserve underlying bg
-		// Grid (layer 100) already drew backgrounds; we float on top
 		buf.SetFgOnly(screenX, screenY, char.Rune, fg, attrs)
 	}
 }

@@ -27,6 +27,7 @@ func (o *OverlayRenderer) IsVisible() bool {
 
 // Render draws the overlay window
 func (o *OverlayRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+	buf.SetWriteMask(render.MaskUI)
 	// Calculate overlay dimensions (80% of screen)
 	overlayWidth := int(float64(ctx.Width) * constants.OverlayWidthPercent)
 	overlayHeight := int(float64(ctx.Height) * constants.OverlayHeightPercent)

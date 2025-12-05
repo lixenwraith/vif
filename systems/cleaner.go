@@ -199,13 +199,16 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 // spawnCleaners generates cleaner entities using generic stores
 func (cs *CleanerSystem) spawnCleaners(world *engine.World) {
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 
 	redRows := cs.scanRedCharacterRows(world)
+
+	// Phantom trigger: no targets to clean
 	if len(redRows) == 0 {
+		cs.ctx.State.TriggerGrayout(timeRes.GameTime)
+		cs.ctx.PushEvent(engine.EventCleanerFinished, nil, timeRes.GameTime)
 		return
 	}
-
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 
 	if cs.ctx.AudioEngine != nil {
 		cs.ctx.AudioEngine.SendRealTime(audio.AudioCommand{

@@ -58,6 +58,7 @@ func (e *EffectsRenderer) buildMaterializeGradient() {
 
 // Render draws all visual effects
 func (e *EffectsRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+	buf.SetWriteMask(render.MaskEffect)
 	// Draw decay (only if there are decay entities)
 	e.drawDecay(ctx, world, buf)
 

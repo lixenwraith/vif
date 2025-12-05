@@ -17,6 +17,7 @@ func NewHeatMeterRenderer(state *engine.GameState) *HeatMeterRenderer {
 
 // Render implements SystemRenderer
 func (h *HeatMeterRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+	buf.SetWriteMask(render.MaskUI)
 	heat := h.state.GetHeat()
 
 	// Calculate display segments: 0-9=0, 10-19=1, ..., 90-99=9, 100=10

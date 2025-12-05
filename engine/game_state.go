@@ -41,6 +41,10 @@ type GameState struct {
 	// TODO: Is this still required in multi-drain state? Seems redundant.
 	DrainActive atomic.Bool // Whether drain entity exists
 
+	// Grayout visual effect state
+	GrayoutActive    atomic.Bool
+	GrayoutStartTime atomic.Int64 // UnixNano
+
 	// Sequence ID generation (atomic for thread-safety)
 	NextSeqID atomic.Int64
 
@@ -121,6 +125,8 @@ func (gs *GameState) initState(now time.Time) {
 	gs.PingActive.Store(false)
 	gs.PingGridTimer.Store(0)
 	gs.DrainActive.Store(false)
+	gs.GrayoutActive.Store(false)
+	gs.GrayoutStartTime.Store(0)
 	gs.NextSeqID.Store(1)
 	gs.FrameNumber.Store(0)
 	gs.ActiveNuggetID.Store(0)
@@ -931,4 +937,33 @@ func (gs *GameState) ResetRuntimeStats() {
 	defer gs.mu.Unlock()
 	gs.apmHistory = [60]uint64{}
 	gs.apmHistoryIndex = 0
+}
+
+// ===== GRAYOUT EFFECT ACCESSORS (atomic) =====
+
+// TriggerGrayout activates the grayscale visual effect
+func (gs *GameState) TriggerGrayout(now time.Time) {
+	gs.GrayoutStartTime.Store(now.UnixNano())
+	gs.GrayoutActive.Store(true)
+}
+
+// GetGrayoutIntensity returns current effect intensity (0.0 to 1.0)
+// Returns 0.0 if effect inactive or duration exceeded
+func (gs *GameState) GetGrayoutIntensity(now time.Time, duration time.Duration) float64 {
+	if !gs.GrayoutActive.Load() {
+		return 0.0
+	}
+
+	startNano := gs.GrayoutStartTime.Load()
+	if startNano == 0 {
+		return 0.0
+	}
+
+	elapsed := now.Sub(time.Unix(0, startNano))
+	if elapsed >= duration {
+		gs.GrayoutActive.Store(false)
+		return 0.0
+	}
+
+	return 1.0 - (float64(elapsed) / float64(duration))
 }

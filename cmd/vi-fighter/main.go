@@ -133,6 +133,13 @@ func main() {
 	drainRenderer := renderers.NewDrainRenderer()
 	orchestrator.Register(drainRenderer, render.PriorityDrain)
 
+	// Post-Processing (390-395)
+	grayoutRenderer := renderers.NewGrayoutRenderer(ctx, 1*time.Second, render.MaskEntity)
+	orchestrator.Register(grayoutRenderer, render.PriorityUI-10)
+
+	dimRenderer := renderers.NewDimRenderer(ctx, 0.5, render.MaskAll^render.MaskUI)
+	orchestrator.Register(dimRenderer, render.PriorityUI-5)
+
 	// UI (400)
 	heatMeterRenderer := renderers.NewHeatMeterRenderer(ctx.State)
 	orchestrator.Register(heatMeterRenderer, render.PriorityUI)

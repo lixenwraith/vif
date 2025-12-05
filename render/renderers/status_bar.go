@@ -31,6 +31,7 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 
 // Render implements SystemRenderer
 func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+	buf.SetWriteMask(render.MaskUI)
 	// FPS Calculation
 	s.frameCount++
 	now := time.Now()

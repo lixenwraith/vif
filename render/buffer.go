@@ -1,3 +1,4 @@
+// FILE: render/buffer.go
 package render
 
 import (
@@ -5,12 +6,13 @@ import (
 )
 
 // RenderBuffer is a compositor backed by terminal.Cell array with dirty tracking
-// Uses []terminal.Cell directly to allow zero-copy export, worth the coupling
 type RenderBuffer struct {
-	cells   []terminal.Cell // Optimization: Persistent buffer for output reuse
-	touched []bool
-	width   int
-	height  int
+	cells       []terminal.Cell
+	touched     []bool
+	masks       []uint8
+	currentMask uint8
+	width       int
+	height      int
 }
 
 // NewRenderBuffer creates a buffer with the specified dimensions
@@ -18,6 +20,7 @@ func NewRenderBuffer(width, height int) *RenderBuffer {
 	size := width * height
 	cells := make([]terminal.Cell, size)
 	touched := make([]bool, size)
+	masks := make([]uint8, size)
 	for i := range cells {
 		cells[i] = terminal.Cell{
 			Rune:  0,
@@ -25,13 +28,14 @@ func NewRenderBuffer(width, height int) *RenderBuffer {
 			Bg:    RGBBlack,
 			Attrs: terminal.AttrNone,
 		}
-		touched[i] = false
 	}
 	return &RenderBuffer{
-		cells:   cells,
-		touched: touched,
-		width:   width,
-		height:  height,
+		cells:       cells,
+		touched:     touched,
+		masks:       masks,
+		currentMask: MaskNone,
+		width:       width,
+		height:      height,
 	}
 }
 
@@ -41,9 +45,11 @@ func (b *RenderBuffer) Resize(width, height int) {
 	if cap(b.cells) < size {
 		b.cells = make([]terminal.Cell, size)
 		b.touched = make([]bool, size)
+		b.masks = make([]uint8, size)
 	} else {
 		b.cells = b.cells[:size]
 		b.touched = b.touched[:size]
+		b.masks = b.masks[:size]
 	}
 	b.width = width
 	b.height = height
@@ -55,7 +61,6 @@ func (b *RenderBuffer) Clear() {
 	if len(b.cells) == 0 {
 		return
 	}
-	// Initialize first cell
 	b.cells[0] = terminal.Cell{
 		Rune:  0,
 		Fg:    DefaultBgRGB,
@@ -63,17 +68,27 @@ func (b *RenderBuffer) Clear() {
 		Attrs: terminal.AttrNone,
 	}
 	b.touched[0] = false
-	// Exponential copy for cells
+	b.masks[0] = MaskNone
+
 	for filled := 1; filled < len(b.cells); filled *= 2 {
 		copy(b.cells[filled:], b.cells[:filled])
 	}
-	// Exponential copy for touched
 	for filled := 1; filled < len(b.touched); filled *= 2 {
 		copy(b.touched[filled:], b.touched[:filled])
 	}
+	for filled := 1; filled < len(b.masks); filled *= 2 {
+		copy(b.masks[filled:], b.masks[:filled])
+	}
+
+	b.currentMask = MaskNone
 }
 
-// inBounds returns true if in screen bounds
+// SetWriteMask sets the mask for subsequent draw operations
+func (b *RenderBuffer) SetWriteMask(mask uint8) {
+	b.currentMask = mask
+}
+
+// inBounds returns true if coordinates are within buffer
 func (b *RenderBuffer) inBounds(x, y int) bool {
 	return x >= 0 && x < b.width && y >= 0 && y < b.height
 }
@@ -91,13 +106,13 @@ func (b *RenderBuffer) Set(x, y int, mainRune rune, fg, bg RGB, mode BlendMode, 
 	op := uint8(mode) & 0x0F
 	flags := uint8(mode) & 0xF0
 
-	// 1. Update Rune/Attrs if provided
+	b.masks[idx] = b.currentMask
+
 	if mainRune != 0 {
 		dst.Rune = mainRune
 		dst.Attrs = attrs
 	}
 
-	// 2. Background Processing
 	if flags&flagBg != 0 {
 		switch op {
 		case opReplace:
@@ -115,11 +130,9 @@ func (b *RenderBuffer) Set(x, y int, mainRune rune, fg, bg RGB, mode BlendMode, 
 		case opOverlay:
 			dst.Bg = Overlay(dst.Bg, bg, alpha)
 		}
-		// Always mark touched if we touched background
 		b.touched[idx] = true
 	}
 
-	// 3. Foreground Processing
 	if flags&flagFg != 0 {
 		switch op {
 		case opReplace:
@@ -141,8 +154,6 @@ func (b *RenderBuffer) Set(x, y int, mainRune rune, fg, bg RGB, mode BlendMode, 
 }
 
 // SetFgOnly writes rune, foreground, and attrs while preserving existing background
-// Unwrapped for performance: Bypass BlendMode decoding and branching for high-frequency text rendering
-// Does NOT mark cell as touched, allowing underlying background to persist or default in finalize()
 func (b *RenderBuffer) SetFgOnly(x, y int, r rune, fg RGB, attrs terminal.Attr) {
 	if !b.inBounds(x, y) {
 		return
@@ -153,11 +164,10 @@ func (b *RenderBuffer) SetFgOnly(x, y int, r rune, fg RGB, attrs terminal.Attr) 
 	dst.Rune = r
 	dst.Fg = fg
 	dst.Attrs = attrs
+	b.masks[idx] = b.currentMask
 }
 
-// SetBgOnly updates the background color while preserving existing rune/foreground.
-// Unwrapped for performance: Optimized for area effects (explosions, UI fills) avoiding full cell writes
-// Marks cell as touched to prevent default background override
+// SetBgOnly updates background color while preserving existing rune/foreground
 func (b *RenderBuffer) SetBgOnly(x, y int, bg RGB) {
 	if !b.inBounds(x, y) {
 		return
@@ -166,11 +176,10 @@ func (b *RenderBuffer) SetBgOnly(x, y int, bg RGB) {
 
 	b.cells[idx].Bg = bg
 	b.touched[idx] = true
+	b.masks[idx] = b.currentMask
 }
 
 // SetWithBg writes a cell with explicit fg and bg colors (opaque replace)
-// Unwrapped for performance: This is the "Hot Path" for most rendering (grids, UI, blocks)
-// Direct struct assignment avoids overhead of generic Set() function calls
 func (b *RenderBuffer) SetWithBg(x, y int, r rune, fg, bg RGB) {
 	if !b.inBounds(x, y) {
 		return
@@ -183,6 +192,60 @@ func (b *RenderBuffer) SetWithBg(x, y int, r rune, fg, bg RGB) {
 	dst.Bg = bg
 	dst.Attrs = terminal.AttrNone
 	b.touched[idx] = true
+	b.masks[idx] = b.currentMask
+}
+
+// ===== POST-PROCESSING =====
+
+// MutateDim multiplies colors by factor for cells matching targetMask
+// Respects Fg/Bg granularity: touched cells get both mutated, untouched get Fg only
+func (b *RenderBuffer) MutateDim(factor float64, targetMask uint8) {
+	if factor >= 1.0 {
+		return
+	}
+	for i := range b.cells {
+		if b.masks[i]&targetMask == 0 {
+			continue
+		}
+		cell := &b.cells[i]
+		cell.Fg = Scale(cell.Fg, factor)
+		if b.touched[i] {
+			cell.Bg = Scale(cell.Bg, factor)
+		}
+	}
+}
+
+// MutateGrayscale desaturates cells matching targetMask
+// intensity: 0.0 = no change, 1.0 = full grayscale
+// Respects Fg/Bg granularity: touched cells get both mutated, untouched get Fg only
+func (b *RenderBuffer) MutateGrayscale(intensity float64, targetMask uint8) {
+	if intensity <= 0.0 {
+		return
+	}
+	fullGray := intensity >= 1.0
+
+	for i := range b.cells {
+		if b.masks[i]&targetMask == 0 {
+			continue
+		}
+		cell := &b.cells[i]
+
+		fgGray := Grayscale(cell.Fg)
+		if fullGray {
+			cell.Fg = fgGray
+		} else {
+			cell.Fg = Lerp(cell.Fg, fgGray, intensity)
+		}
+
+		if b.touched[i] {
+			bgGray := Grayscale(cell.Bg)
+			if fullGray {
+				cell.Bg = bgGray
+			} else {
+				cell.Bg = Lerp(cell.Bg, bgGray, intensity)
+			}
+		}
+	}
 }
 
 // ===== OUTPUT =====

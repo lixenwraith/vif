@@ -19,6 +19,7 @@ func NewColumnIndicatorsRenderer(gameCtx *engine.GameContext) *ColumnIndicatorsR
 
 // Render implements SystemRenderer
 func (c *ColumnIndicatorsRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+	buf.SetWriteMask(render.MaskUI)
 	indicatorY := ctx.GameY + ctx.GameHeight
 
 	for x := 0; x < ctx.GameWidth; x++ {
