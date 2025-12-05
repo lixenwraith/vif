@@ -2,319 +2,334 @@ package main
 
 import (
 	"fmt"
-	"time"
+	"os"
+	"strconv"
+	"strings"
 
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
-// Config holds the interactive state
-type Config struct {
-	RimThreshold float64
-	Alpha        float64
-	BlendMode    render.BlendMode
-	ModeName     string
-	BgColor      render.RGB
-}
+// Mode represents the current app mode
+type Mode int
 
-var (
-	// All game colors from render/colors.go
-	namedColors = []struct {
-		name string
-		c    render.RGB
-	}{
-		{"ShieldBase", render.RgbShieldBase},
-		{"SeqGreenN", render.RgbSequenceGreenNormal},
-		{"SeqRedN", render.RgbSequenceRedNormal},
-		{"SeqBlueN", render.RgbSequenceBlueNormal},
-		{"SeqGold", render.RgbSequenceGold},
-		{"Decay", render.RgbDecay},
-		{"Drain", render.RgbDrain},
-		{"Nugget", render.RgbNuggetOrange},
-		{"Cursor", render.RgbCursorNormal},
-		{"Cleaner", render.RgbCleanerBase},
-		{"Materialize", render.RgbMaterialize},
-		{"Ping", render.RgbPingNormal},
-	}
-
-	// Blend modes to cycle through
-	blendModes = []struct {
-		name string
-		mode render.BlendMode
-	}{
-		{"Screen", render.BlendScreen},
-		{"Add", render.BlendAdd},
-		{"Alpha", render.BlendAlpha},
-		{"SoftLight", render.BlendSoftLight},
-		{"Overlay", render.BlendOverlay},
-		{"Max", render.BlendMax},
-	}
+const (
+	ModePalette Mode = iota
+	ModeBlend
+	ModeEffect
+	ModeDiag
 )
 
+// EffectSubMode for effect mode
+type EffectSubMode int
+
+const (
+	EffectShield EffectSubMode = iota
+	EffectTrail
+	EffectFlash
+	EffectHeat
+)
+
+// ShieldColorState for shield color simulation
+type ShieldColorState int
+
+const (
+	ShieldGray ShieldColorState = iota
+	ShieldBlue
+	ShieldGreen
+)
+
+// App state
+type AppState struct {
+	mode      Mode
+	effectSub EffectSubMode
+	running   bool
+	width     int
+	height    int
+	colorMode terminal.ColorMode
+
+	// Palette mode
+	paletteIdx    int
+	paletteScroll int
+
+	// Blend mode
+	blendSrcIdx   int
+	blendDstIdx   int
+	blendOp       int
+	blendAlpha    float64
+	blendBgIdx    int // 0=black, 1=white, 2=game-bg, 3=custom
+	blendCustomBg render.RGB
+
+	// Effect mode - Shield
+	shieldRadiusX float64
+	shieldRadiusY float64
+	shieldOpacity float64
+	shieldState   ShieldColorState
+	shieldBgIdx   int
+
+	// Effect mode - Trail
+	trailLength   int
+	trailColorIdx int
+	trailType     int // 0=cleaner, 1=materialize
+
+	// Effect mode - Flash
+	flashFrame    int
+	flashDuration int
+	flashColorIdx int
+
+	// Effect mode - Heat
+	heatValue int // 0-100
+
+	// Diag mode
+	diagInputHex string
+	diagInputRGB render.RGB
+
+	// Hex input state
+	hexInputActive bool
+	hexInputBuffer string
+	hexInputTarget int // 0=blend custom bg, 1=diag input
+}
+
+const (
+	MinWidth  = 100
+	MinHeight = 30
+)
+
+var (
+	term  terminal.Terminal
+	state AppState
+	buf   *render.RenderBuffer
+)
+
+// Blend operation names and formulas
+var blendOps = []struct {
+	name    string
+	formula string
+	mode    render.BlendMode
+}{
+	{"Replace", "Result = Src", render.BlendReplace},
+	{"Alpha", "Result = Dst*(1-α) + Src*α", render.BlendAlpha},
+	{"Add", "Result = min(Dst + Src, 255)", render.BlendAdd},
+	{"Max", "Result = max(Dst, Src)", render.BlendMax},
+	{"SoftLight", "Perez: df < 0.5 ? df-(1-2sf)*df*(1-df) : df+(2sf-1)*(G(df)-df)", render.BlendSoftLight},
+	{"Screen", "Result = 255 - (255-Dst)*(255-Src)/255", render.BlendScreen},
+	{"Overlay", "Dst<128 ? 2*Dst*Src/255 : 255-2*(255-Dst)*(255-Src)/255", render.BlendOverlay},
+}
+
+// Background presets
+var bgPresets = []struct {
+	name  string
+	color render.RGB
+}{
+	{"Black", render.RGB{0, 0, 0}},
+	{"White", render.RGB{255, 255, 255}},
+	{"GameBg", render.RGB{26, 27, 38}},
+	{"Custom", render.RGB{128, 128, 128}},
+}
+
 func main() {
-	// Force TrueColor for the tester itself so we can simulate 256 accurately on the screen
-	term := terminal.New(terminal.ColorModeTrueColor)
+	// Detect color mode from env, allow override
+	colorMode := terminal.DetectColorMode()
+	for _, arg := range os.Args[1:] {
+		if arg == "--256" {
+			colorMode = terminal.ColorMode256
+		} else if arg == "--tc" || arg == "--truecolor" {
+			colorMode = terminal.ColorModeTrueColor
+		}
+	}
+
+	term = terminal.New(colorMode)
 	if err := term.Init(); err != nil {
-		panic(err)
+		fmt.Fprintf(os.Stderr, "terminal init failed: %v\n", err)
+		os.Exit(1)
 	}
 	defer term.Fini()
 
-	// Initial State
-	state := Config{
-		RimThreshold: 0.85, // Default from current shield code
-		Alpha:        0.80, // Default from current shield code
-		BlendMode:    render.BlendScreen,
-		ModeName:     "Screen",
-		BgColor:      render.RgbBackground,
-	}
-
 	w, h := term.Size()
-	cells := make([]terminal.Cell, w*h)
-	eventCh := make(chan terminal.Event, 10)
+	state = AppState{
+		mode:          ModePalette,
+		running:       true,
+		width:         w,
+		height:        h,
+		colorMode:     colorMode,
+		blendAlpha:    1.0,
+		shieldRadiusX: 10.0,
+		shieldRadiusY: 5.0,
+		shieldOpacity: 0.6,
+		trailLength:   8,
+		flashDuration: 10,
+		heatValue:     50,
+		// Default analyze color to RgbPingNormal
+		diagInputRGB: render.RgbPingNormal,
+		diagInputHex: "996600",
+	}
+	buf = render.NewRenderBuffer(w, h)
 
-	// Input loop
-	go func() {
-		for {
-			eventCh <- term.PollEvent()
+	mainLoop()
+}
+
+func mainLoop() {
+	renderFrame()
+
+	for state.running {
+		ev := term.PollEvent()
+		switch ev.Type {
+		case terminal.EventKey:
+			handleInput(ev)
+		case terminal.EventResize:
+			state.width = ev.Width
+			state.height = ev.Height
+			buf.Resize(ev.Width, ev.Height)
+			term.Sync()
+		case terminal.EventError:
+			state.running = false
 		}
-	}()
-
-	modeIdx := 0
-
-	// Main Loop
-	for {
-		// --- Logic ---
-		select {
-		case ev := <-eventCh:
-			if ev.Type == terminal.EventKey {
-				switch ev.Key {
-				case terminal.KeyCtrlC, terminal.KeyEscape, terminal.KeyCtrlQ:
-					return
-				case terminal.KeyRight: // Increase Threshold
-					state.RimThreshold += 0.05
-					if state.RimThreshold > 1.0 {
-						state.RimThreshold = 1.0
-					}
-				case terminal.KeyLeft: // Decrease Threshold
-					state.RimThreshold -= 0.05
-					if state.RimThreshold < 0.0 {
-						state.RimThreshold = 0.0
-					}
-				case terminal.KeyUp: // Increase Alpha
-					state.Alpha += 0.05
-					if state.Alpha > 1.0 {
-						state.Alpha = 1.0
-					}
-				case terminal.KeyDown: // Decrease Alpha
-					state.Alpha -= 0.05
-					if state.Alpha < 0.0 {
-						state.Alpha = 0.0
-					}
-				case terminal.KeyTab: // Cycle Blend Mode Forward
-					modeIdx = (modeIdx + 1) % len(blendModes)
-					state.BlendMode = blendModes[modeIdx].mode
-					state.ModeName = blendModes[modeIdx].name
-				case terminal.KeyBacktab: // Cycle Blend Mode Backward (Shift+Tab)
-					modeIdx = (modeIdx - 1 + len(blendModes)) % len(blendModes)
-					state.BlendMode = blendModes[modeIdx].mode
-					state.ModeName = blendModes[modeIdx].name
-				}
-			} else if ev.Type == terminal.EventResize {
-				w, h = ev.Width, ev.Height
-				cells = make([]terminal.Cell, w*h)
-				term.Sync()
-			}
-		default:
-		}
-
-		// --- Rendering ---
-
-		// Clear
-		clearCells(cells, render.RGBBlack)
-
-		// 1. Header Info
-		printStr(cells, w, 0, 0, "VI-FIGHTER BLEND TESTER", render.RGB{255, 255, 255})
-		printStr(cells, w, 0, 1, fmt.Sprintf("Mode [Tab/S-Tab]: %-10s  Alpha [Up/Dn]: %.2f  RimStart [Lt/Rt]: %.2f", state.ModeName, state.Alpha, state.RimThreshold), render.RgbNuggetOrange)
-
-		// 2. Shield Gradient Simulation
-		printStr(cells, w, 0, 4, "--- Shield Gradient (Simulated 256 behavior vs TC) ---", render.RgbLineNumbers)
-		drawShieldStrip(cells, w, 5, state)
-
-		// 3. Palette Matrix
-		printStr(cells, w, 0, 10, "--- Global Palette Blend Test ---", render.RgbLineNumbers)
-		drawPaletteGrid(cells, w, 11, state)
-
-		term.Flush(cells, w, h)
-		time.Sleep(16 * time.Millisecond)
+		renderFrame()
 	}
 }
 
-func drawShieldStrip(cells []terminal.Cell, w, y int, state Config) {
-	// Draw 3 rows
-	// Row 1: TrueColor Reference (Gradient)
-	// Row 2: 256-Color Result (Quantized Threshold logic)
-	// Row 3: Markers/Text
-
-	barWidth := w - 4
-	shieldColor := render.RgbShieldBase
-	bgColor := render.RgbBackground // Tokyo Night BG
-
-	// Draw background text first to prove transparency
-	bgText := "Shields Up! Shields Up! Shields Up! Shields Up! Shields Up!"
-	for i := 0; i < barWidth; i++ {
-		char := rune(bgText[i%len(bgText)])
-		// Base Layer
-		setCell(cells, w, i+2, y, char, render.RGB{80, 80, 100}, bgColor)
-		setCell(cells, w, i+2, y+1, char, render.RGB{80, 80, 100}, bgColor)
-	}
-
-	for x := 0; x < barWidth; x++ {
-		dist := float64(x) / float64(barWidth)
-
-		// --- Row 1: TrueColor Smooth (Center=Transparent -> Edge=Full) ---
-		// Imitate cellTrueColor logic: alpha scales with dist
-		// falloff := dist * dist // Simple approximation for visualizer (0 at center, 1 at edge)
-		tcAlpha := dist * state.Alpha
-		tcRGB := applyBlend(state.BlendMode, bgColor, shieldColor, tcAlpha)
-		setCell(cells, w, x+2, y, '█', tcRGB, tcRGB)
-
-		// --- Row 2: 256-Color Logic (Threshold) ---
-		var final256RGB render.RGB
-
-		if dist < state.RimThreshold {
-			// Center: Transparent (keep existing background from text layer above)
-			// effectively we do nothing, but for the visualizer we need to calculate
-			// what "nothing" looks like (it looks like bgColor)
-			final256RGB = bgColor
-		} else {
-			// Rim: Blend
-			blended := applyBlend(state.BlendMode, bgColor, shieldColor, state.Alpha)
-			idx256 := terminal.RGBTo256(blended)
-			final256RGB = term256ToRGB(idx256)
-		}
-
-		// Only draw if not transparent (simulate opacity)
-		if dist >= state.RimThreshold {
-			setCell(cells, w, x+2, y+1, '█', final256RGB, final256RGB)
-		}
-
-		// --- Row 3: Markers ---
-		char := ' '
-		fg := render.RgbLineNumbers
-		if x == 0 {
-			char = 'C' // Center
-		} else if x == barWidth-1 {
-			char = 'E' // Edge
-		} else if isApprox(dist, state.RimThreshold, 0.01) {
-			char = '^'
-			fg = render.RgbCursorError
-		}
-		setCell(cells, w, x+2, y+2, char, fg, render.RGBBlack)
-	}
-
-	printStr(cells, w, barWidth+3, y, "TC", render.RGB{255, 255, 255})
-	printStr(cells, w, barWidth+3, y+1, "256", render.RGB{255, 255, 255})
-}
-
-func drawPaletteGrid(cells []terminal.Cell, w, startY int, state Config) {
-	// Grid:
-	// Color Name | Raw | Blended (TC) | Blended (256) + RGB Code
-
-	headers := []string{"Name", "Raw", "Blended (TC)", "Blended (256) -> RGB"}
-	colX := []int{2, 15, 25, 45}
-
-	for i, h := range headers {
-		printStr(cells, w, colX[i], startY, h, render.RgbLineNumbers)
-	}
-
-	y := startY + 2
-	for _, nc := range namedColors {
-		// 1. Name
-		printStr(cells, w, colX[0], y, nc.name, render.RGB{200, 200, 200})
-
-		// 2. Raw Color
-		setCell(cells, w, colX[1], y, '█', nc.c, render.RGBBlack)
-		setCell(cells, w, colX[1]+1, y, '█', nc.c, render.RGBBlack)
-		setCell(cells, w, colX[1]+2, y, '█', nc.c, render.RGBBlack)
-
-		// 3. Blended (TrueColor)
-		blendedTC := applyBlend(state.BlendMode, state.BgColor, nc.c, state.Alpha)
-		setCell(cells, w, colX[2], y, '█', blendedTC, render.RGBBlack)
-		setCell(cells, w, colX[2]+1, y, '█', blendedTC, render.RGBBlack)
-		setCell(cells, w, colX[2]+2, y, '█', blendedTC, render.RGBBlack)
-		setCell(cells, w, colX[2]+3, y, '█', blendedTC, render.RGBBlack)
-
-		// 4. Blended (256 Simulation)
-		idx256 := terminal.RGBTo256(blendedTC)
-		quantized := term256ToRGB(idx256)
-		setCell(cells, w, colX[3], y, '█', quantized, render.RGBBlack)
-		setCell(cells, w, colX[3]+1, y, '█', quantized, render.RGBBlack)
-		setCell(cells, w, colX[3]+2, y, '█', quantized, render.RGBBlack)
-		setCell(cells, w, colX[3]+3, y, '█', quantized, render.RGBBlack)
-
-		// Show RGB Hex
-		hexStr := fmt.Sprintf("#%02X%02X%02X", quantized.R, quantized.G, quantized.B)
-		printStr(cells, w, colX[3]+6, y, hexStr, render.RgbLineNumbers)
-
-		y++
-	}
-}
-
-// Helpers
-
-func applyBlend(mode render.BlendMode, dest, src render.RGB, alpha float64) render.RGB {
-	switch mode {
-	case render.BlendScreen:
-		return render.Screen(dest, src, alpha)
-	case render.BlendAdd:
-		return render.Add(dest, src, alpha)
-	case render.BlendAlpha:
-		return render.Blend(dest, src, alpha)
-	case render.BlendSoftLight:
-		return render.SoftLight(dest, src, alpha)
-	case render.BlendOverlay:
-		return render.Overlay(dest, src, alpha)
-	case render.BlendMax:
-		return render.Max(dest, src, alpha)
-	default:
-		return src
-	}
-}
-
-func term256ToRGB(index uint8) render.RGB {
-	if index < 16 {
-		return render.RGB{128, 128, 128} // Approximation
-	}
-	if index >= 232 {
-		g := uint8((int(index)-232)*10 + 8)
-		return render.RGB{g, g, g}
-	}
-	i := int(index) - 16
-	r := (i / 36) * 51
-	g := ((i / 6) % 6) * 51
-	b := (i % 6) * 51
-	return render.RGB{uint8(r), uint8(g), uint8(b)}
-}
-
-func clearCells(cells []terminal.Cell, bg render.RGB) {
-	for i := range cells {
-		cells[i] = terminal.Cell{Rune: ' ', Bg: bg, Fg: bg}
-	}
-}
-
-func setCell(cells []terminal.Cell, w, x, y int, r rune, fg, bg render.RGB) {
-	if x < 0 || x >= w || y*w+x >= len(cells) {
+func handleInput(ev terminal.Event) {
+	// Hex input mode
+	if state.hexInputActive {
+		handleHexInput(ev)
 		return
 	}
-	cells[y*w+x] = terminal.Cell{Rune: r, Fg: fg, Bg: bg}
-}
 
-func printStr(cells []terminal.Cell, w, x, y int, s string, fg render.RGB) {
-	for i, r := range s {
-		setCell(cells, w, x+i, y, r, fg, render.RGBBlack)
+	// Global keys
+	switch ev.Key {
+	case terminal.KeyEscape, terminal.KeyCtrlC:
+		state.running = false
+		return
+	case terminal.KeyF1:
+		state.mode = ModePalette
+		return
+	case terminal.KeyF2:
+		state.mode = ModeBlend
+		return
+	case terminal.KeyF3:
+		state.mode = ModeEffect
+		return
+	case terminal.KeyF4:
+		state.mode = ModeDiag
+		return
+	case terminal.KeyTab:
+		state.mode = (state.mode + 1) % 4
+		return
+	case terminal.KeyBacktab: // Shift+Tab
+		state.mode = (state.mode + 3) % 4 // +3 same as -1 mod 4
+		return
+	}
+
+	if ev.Key == terminal.KeyRune && (ev.Rune == 'q' || ev.Rune == 'Q') {
+		state.running = false
+		return
+	}
+
+	// Mode-specific keys
+	switch state.mode {
+	case ModePalette:
+		handlePaletteInput(ev)
+	case ModeBlend:
+		handleBlendInput(ev)
+	case ModeEffect:
+		handleEffectInput(ev)
+	case ModeDiag:
+		handleDiagInput(ev)
 	}
 }
 
-func isApprox(a, b, epsilon float64) bool {
-	return (a-b) < epsilon && (b-a) < epsilon
+func handleHexInput(ev terminal.Event) {
+	switch ev.Key {
+	case terminal.KeyEscape:
+		state.hexInputActive = false
+		state.hexInputBuffer = ""
+	case terminal.KeyEnter:
+		if len(state.hexInputBuffer) == 6 {
+			rgb := parseHex(state.hexInputBuffer)
+			if state.hexInputTarget == 0 {
+				state.blendCustomBg = rgb
+			} else {
+				state.diagInputRGB = rgb
+				state.diagInputHex = state.hexInputBuffer
+			}
+		}
+		state.hexInputActive = false
+		state.hexInputBuffer = ""
+	case terminal.KeyBackspace:
+		if len(state.hexInputBuffer) > 0 {
+			state.hexInputBuffer = state.hexInputBuffer[:len(state.hexInputBuffer)-1]
+		}
+	case terminal.KeyRune:
+		if len(state.hexInputBuffer) < 6 {
+			r := ev.Rune
+			if (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F') {
+				state.hexInputBuffer += strings.ToUpper(string(r))
+			}
+		}
+	}
+}
+
+func parseHex(s string) render.RGB {
+	if len(s) != 6 {
+		return render.RGB{}
+	}
+	r, _ := strconv.ParseUint(s[0:2], 16, 8)
+	g, _ := strconv.ParseUint(s[2:4], 16, 8)
+	b, _ := strconv.ParseUint(s[4:6], 16, 8)
+	return render.RGB{R: uint8(r), G: uint8(g), B: uint8(b)}
+}
+
+func renderFrame() {
+	buf.Clear()
+
+	// Draw header
+	drawHeader()
+
+	// Draw mode content
+	switch state.mode {
+	case ModePalette:
+		drawPaletteMode()
+	case ModeBlend:
+		drawBlendMode()
+	case ModeEffect:
+		drawEffectMode()
+	case ModeDiag:
+		drawDiagMode()
+	}
+
+	// Draw footer with size info
+	drawFooter()
+
+	buf.FlushToTerminal(term)
+}
+
+func drawHeader() {
+	modes := []string{"F1:Palette", "F2:Blend", "F3:Effect", "F4:Analyze"}
+	x := 1
+	for i, m := range modes {
+		fg := render.RGB{180, 180, 180}
+		bg := render.RGB{40, 40, 40}
+		if Mode(i) == state.mode {
+			fg = render.RGB{0, 0, 0}
+			bg = render.RGB{0, 255, 255}
+		}
+		drawText(x, 0, " "+m+" ", fg, bg)
+		x += len(m) + 3
+	}
+
+	// Color mode indicator
+	modeStr := "TC"
+	if state.colorMode == terminal.ColorMode256 {
+		modeStr = "256"
+	}
+	drawText(state.width-6, 0, "["+modeStr+"]", render.RGB{255, 255, 0}, render.RGB{40, 40, 40})
+}
+
+func drawFooter() {
+	// Size info
+	sizeStr := fmt.Sprintf("Size: %dx%d  Min: %dx%d", state.width, state.height, MinWidth, MinHeight)
+	drawText(state.width-len(sizeStr)-1, state.height-1, sizeStr, render.RGB{100, 100, 100}, render.RGB{0, 0, 0})
+
+	// Global keys
+	drawText(1, state.height-1, "Q:Quit Tab/Shift-Tab:Mode", render.RGB{100, 100, 100}, render.RGB{0, 0, 0})
 }

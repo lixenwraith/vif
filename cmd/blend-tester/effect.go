@@ -1,0 +1,432 @@
+package main
+
+import (
+	"fmt"
+	"math"
+
+	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/vi-fighter/terminal"
+)
+
+func handleEffectInput(ev terminal.Event) {
+	switch ev.Key {
+	case terminal.KeyRune:
+		switch ev.Rune {
+		case '1':
+			state.effectSub = EffectShield
+		case '2':
+			state.effectSub = EffectTrail
+		case '3':
+			state.effectSub = EffectFlash
+		case '4':
+			state.effectSub = EffectHeat
+		}
+	}
+
+	// Sub-mode specific
+	switch state.effectSub {
+	case EffectShield:
+		handleShieldInput(ev)
+	case EffectTrail:
+		handleTrailInput(ev)
+	case EffectFlash:
+		handleFlashInput(ev)
+	case EffectHeat:
+		handleHeatInput(ev)
+	}
+}
+
+func handleShieldInput(ev terminal.Event) {
+	switch ev.Key {
+	case terminal.KeyUp:
+		state.shieldRadiusY += 0.5
+	case terminal.KeyDown:
+		if state.shieldRadiusY > 1 {
+			state.shieldRadiusY -= 0.5
+		}
+	case terminal.KeyLeft:
+		if state.shieldRadiusX > 1 {
+			state.shieldRadiusX -= 0.5
+		}
+	case terminal.KeyRight:
+		state.shieldRadiusX += 0.5
+	case terminal.KeyRune:
+		switch ev.Rune {
+		case 'o', 'O':
+			state.shieldOpacity += 0.05
+			if state.shieldOpacity > 1 {
+				state.shieldOpacity = 1
+			}
+		case 'p', 'P':
+			state.shieldOpacity -= 0.05
+			if state.shieldOpacity < 0 {
+				state.shieldOpacity = 0
+			}
+		case 'c', 'C':
+			state.shieldState = (state.shieldState + 1) % 3
+		case 'b', 'B':
+			state.shieldBgIdx = (state.shieldBgIdx + 1) % len(bgPresets)
+		}
+	}
+}
+
+func handleTrailInput(ev terminal.Event) {
+	switch ev.Key {
+	case terminal.KeyUp:
+		if state.trailLength < 20 {
+			state.trailLength++
+		}
+	case terminal.KeyDown:
+		if state.trailLength > 1 {
+			state.trailLength--
+		}
+	case terminal.KeyRune:
+		switch ev.Rune {
+		case 'c', 'C':
+			state.trailColorIdx = (state.trailColorIdx + 1) % len(gamePalette)
+		case 't', 'T':
+			state.trailType = (state.trailType + 1) % 2
+		}
+	}
+}
+
+func handleFlashInput(ev terminal.Event) {
+	switch ev.Key {
+	case terminal.KeyUp:
+		if state.flashFrame < state.flashDuration-1 {
+			state.flashFrame++
+		}
+	case terminal.KeyDown:
+		if state.flashFrame > 0 {
+			state.flashFrame--
+		}
+	case terminal.KeyLeft:
+		if state.flashDuration > 1 {
+			state.flashDuration--
+			if state.flashFrame >= state.flashDuration {
+				state.flashFrame = state.flashDuration - 1
+			}
+		}
+	case terminal.KeyRight:
+		if state.flashDuration < 30 {
+			state.flashDuration++
+		}
+	case terminal.KeyRune:
+		switch ev.Rune {
+		case 'c', 'C':
+			state.flashColorIdx = (state.flashColorIdx + 1) % len(gamePalette)
+		}
+	}
+}
+
+func handleHeatInput(ev terminal.Event) {
+	switch ev.Key {
+	case terminal.KeyUp, terminal.KeyRight:
+		if state.heatValue < 100 {
+			state.heatValue += 5
+		}
+	case terminal.KeyDown, terminal.KeyLeft:
+		if state.heatValue > 0 {
+			state.heatValue -= 5
+		}
+	}
+}
+
+func drawEffectMode() {
+	startY := 2
+	fg := render.RGB{180, 180, 180}
+	bg := render.RGB{20, 20, 30}
+
+	// Sub-mode tabs
+	subModes := []string{"1:Shield", "2:Trail", "3:Flash", "4:Heat"}
+	x := 1
+	for i, m := range subModes {
+		tabFg := render.RGB{150, 150, 150}
+		tabBg := render.RGB{40, 40, 40}
+		if EffectSubMode(i) == state.effectSub {
+			tabFg = render.RGB{0, 0, 0}
+			tabBg = render.RGB{0, 200, 200}
+		}
+		drawText(x, startY, " "+m+" ", tabFg, tabBg)
+		x += len(m) + 3
+	}
+	startY += 2
+
+	switch state.effectSub {
+	case EffectShield:
+		drawShieldEffect(startY, fg, bg)
+	case EffectTrail:
+		drawTrailEffect(startY, fg, bg)
+	case EffectFlash:
+		drawFlashEffect(startY, fg, bg)
+	case EffectHeat:
+		drawHeatEffect(startY, fg, bg)
+	}
+}
+
+func drawShieldEffect(startY int, fg, bg render.RGB) {
+	// Keys
+	drawText(1, startY, "←→:RadX ↑↓:RadY O/P:Opacity C:ColorState B:Bg", render.RGB{100, 100, 100}, bg)
+	startY += 2
+
+	// Parameters
+	stateNames := []string{"Gray (No Char)", "Blue (Dark/Normal/Bright)", "Green (Dark/Normal/Bright)"}
+	drawText(1, startY, fmt.Sprintf("RadiusX: %.1f  RadiusY: %.1f  Opacity: %.2f", state.shieldRadiusX, state.shieldRadiusY, state.shieldOpacity), fg, bg)
+	startY++
+	drawText(1, startY, fmt.Sprintf("State: %s", stateNames[state.shieldState]), fg, bg)
+	startY++
+	bgName := bgPresets[state.shieldBgIdx].name
+	bgColor := bgPresets[state.shieldBgIdx].color
+	drawText(1, startY, fmt.Sprintf("Background: %s", bgName), fg, bg)
+	startY += 2
+
+	// Determine shield color
+	var shieldColor render.RGB
+	switch state.shieldState {
+	case ShieldGray:
+		shieldColor = render.RGB{128, 128, 128}
+	case ShieldBlue:
+		shieldColor = render.RgbSequenceBlueNormal
+	case ShieldGreen:
+		shieldColor = render.RgbSequenceGreenNormal
+	}
+
+	// Preview area - side by side TC and 256
+	previewW := int(state.shieldRadiusX)*2 + 3
+	previewH := int(state.shieldRadiusY)*2 + 3
+	if previewW > 40 {
+		previewW = 40
+	}
+	if previewH > 15 {
+		previewH = 15
+	}
+
+	centerX := previewW / 2
+	centerY := previewH / 2
+
+	// TC Preview
+	tcStartX := 2
+	drawText(tcStartX, startY, "TrueColor:", fg, bg)
+	startY++
+	drawShieldPreview(tcStartX, startY, previewW, previewH, centerX, centerY, shieldColor, bgColor, true)
+
+	// 256 Preview
+	x256StartX := tcStartX + previewW + 5
+	drawText(x256StartX, startY-1, "256-Color:", fg, bg)
+	drawShieldPreview(x256StartX, startY, previewW, previewH, centerX, centerY, shieldColor, bgColor, false)
+
+	// Formula
+	startY += previewH + 2
+	drawBox(0, startY, 70, 5, " Shield Blend (Screen) ", render.RGB{80, 80, 80}, bg)
+	drawText(2, startY+1, "falloff = (1 - dist)²", render.RGB{200, 200, 100}, bg)
+	drawText(2, startY+2, "alpha = falloff × maxOpacity", render.RGB{200, 200, 100}, bg)
+	drawText(2, startY+3, "Screen: 255 - (255-Dst)*(255-Src)/255", render.RGB{200, 200, 100}, bg)
+}
+
+func drawShieldPreview(startX, startY, w, h, cx, cy int, shieldColor, bgColor render.RGB, trueColor bool) {
+	invRxSq := 1.0 / (state.shieldRadiusX * state.shieldRadiusX)
+	invRySq := 1.0 / (state.shieldRadiusY * state.shieldRadiusY)
+
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			screenX := startX + x
+			screenY := startY + y
+
+			dx := float64(x - cx)
+			dy := float64(y - cy)
+
+			normalizedDistSq := dx*dx*invRxSq + dy*dy*invRySq
+
+			if normalizedDistSq > 1.0 {
+				// Outside shield
+				buf.SetWithBg(screenX, screenY, '·', render.RGB{60, 60, 60}, bgColor)
+				continue
+			}
+
+			dist := math.Sqrt(normalizedDistSq)
+
+			// Center marker
+			if x == cx && y == cy {
+				buf.SetWithBg(screenX, screenY, '+', render.RGB{255, 255, 255}, bgColor)
+				continue
+			}
+
+			if trueColor {
+				// TrueColor: smooth gradient
+				falloff := (1.0 - dist) * (1.0 - dist)
+				alpha := falloff * state.shieldOpacity
+				blended := render.Screen(bgColor, shieldColor, alpha)
+				buf.SetWithBg(screenX, screenY, ' ', blended, blended)
+			} else {
+				// 256: rim-only mode (matching cell256 in shields.go)
+				if dist < 0.6 {
+					buf.SetWithBg(screenX, screenY, ' ', bgColor, bgColor)
+				} else {
+					blended := render.Screen(bgColor, shieldColor, 0.6)
+					idx := terminal.RGBTo256(blended)
+					rgb256 := Get256PaletteRGB(idx)
+					buf.SetWithBg(screenX, screenY, ' ', rgb256, rgb256)
+				}
+			}
+		}
+	}
+}
+
+func drawTrailEffect(startY int, fg, bg render.RGB) {
+	drawText(1, startY, "↑↓:Length C:Color T:Type(Cleaner/Materialize)", render.RGB{100, 100, 100}, bg)
+	startY += 2
+
+	typeName := "Cleaner"
+	baseColor := render.RgbCleanerBase
+	if state.trailType == 1 {
+		typeName = "Materialize"
+		baseColor = render.RgbMaterialize
+	}
+	if state.trailColorIdx > 0 && state.trailColorIdx < len(gamePalette) {
+		baseColor = gamePalette[state.trailColorIdx].Color
+	}
+
+	drawText(1, startY, fmt.Sprintf("Type: %s  Length: %d  BaseColor:", typeName, state.trailLength), fg, bg)
+	drawSwatch(45, startY, 4, baseColor)
+	startY += 2
+
+	// Draw gradient strip
+	drawText(1, startY, "Gradient (head→tail):", fg, bg)
+	startY++
+
+	// TC strip
+	drawText(1, startY, "TC:", fg, bg)
+	for i := 0; i < state.trailLength; i++ {
+		opacity := 1.0 - (float64(i) / float64(state.trailLength))
+		if opacity < 0 {
+			opacity = 0
+		}
+		scaled := render.Scale(baseColor, opacity)
+		buf.SetWithBg(5+i*2, startY, '█', scaled, bg)
+		buf.SetWithBg(6+i*2, startY, '█', scaled, bg)
+	}
+	startY++
+
+	// 256 strip
+	drawText(1, startY, "256:", fg, bg)
+	for i := 0; i < state.trailLength; i++ {
+		opacity := 1.0 - (float64(i) / float64(state.trailLength))
+		if opacity < 0 {
+			opacity = 0
+		}
+		scaled := render.Scale(baseColor, opacity)
+		idx := terminal.RGBTo256(scaled)
+		rgb256 := Get256PaletteRGB(idx)
+		buf.SetWithBg(5+i*2, startY, '█', rgb256, bg)
+		buf.SetWithBg(6+i*2, startY, '█', rgb256, bg)
+	}
+	startY += 2
+
+	// Formula
+	drawBox(0, startY, 50, 3, " Trail Formula ", render.RGB{80, 80, 80}, bg)
+	drawText(2, startY+1, "opacity = 1.0 - (idx / length)", render.RGB{200, 200, 100}, bg)
+}
+
+func drawFlashEffect(startY int, fg, bg render.RGB) {
+	drawText(1, startY, "↑↓:Frame ←→:Duration C:Color", render.RGB{100, 100, 100}, bg)
+	startY += 2
+
+	baseColor := render.RgbRemovalFlash
+	if state.flashColorIdx > 0 && state.flashColorIdx < len(gamePalette) {
+		baseColor = gamePalette[state.flashColorIdx].Color
+	}
+
+	drawText(1, startY, fmt.Sprintf("Frame: %d/%d  BaseColor:", state.flashFrame+1, state.flashDuration), fg, bg)
+	drawSwatch(30, startY, 4, baseColor)
+	startY += 2
+
+	// Calculate opacity for current frame
+	opacity := 1.0 - (float64(state.flashFrame) / float64(state.flashDuration))
+	if opacity < 0 {
+		opacity = 0
+	}
+
+	// Flash uses Add blend on foreground
+	flashColor := render.RGB{
+		R: uint8(float64(baseColor.R) * opacity),
+		G: uint8(float64(baseColor.G) * opacity),
+		B: uint8(float64(baseColor.B) * opacity),
+	}
+
+	drawText(1, startY, fmt.Sprintf("Opacity: %.2f", opacity), fg, bg)
+	startY++
+	drawText(1, startY, "Flash contribution:", fg, bg)
+	drawSwatch(22, startY, 6, flashColor)
+	drawText(29, startY, fmt.Sprintf("(%3d,%3d,%3d)", flashColor.R, flashColor.G, flashColor.B), render.RGB{150, 150, 150}, bg)
+	startY += 2
+
+	// Show Add blend result on sample char
+	drawText(1, startY, "Add blend on char 'A' (green):", fg, bg)
+	startY++
+	charFg := render.RgbSequenceGreenNormal
+	addedTC := render.Add(charFg, flashColor, 1.0)
+	idx := terminal.RGBTo256(addedTC)
+	added256 := Get256PaletteRGB(idx)
+
+	drawText(1, startY, "TC:", fg, bg)
+	buf.SetWithBg(5, startY, 'A', addedTC, bg)
+	drawText(7, startY, fmt.Sprintf("(%3d,%3d,%3d)", addedTC.R, addedTC.G, addedTC.B), render.RGB{150, 150, 150}, bg)
+
+	drawText(30, startY, "256:", fg, bg)
+	buf.SetWithBg(35, startY, 'A', added256, bg)
+	drawText(37, startY, fmt.Sprintf("idx=%3d", idx), render.RGB{150, 150, 150}, bg)
+	startY += 2
+
+	// Formula
+	drawBox(0, startY, 55, 4, " Flash Formula (BlendAddFg) ", render.RGB{80, 80, 80}, bg)
+	drawText(2, startY+1, "opacity = 1.0 - (elapsed / duration)", render.RGB{200, 200, 100}, bg)
+	drawText(2, startY+2, "result = min(charFg + flashColor*opacity, 255)", render.RGB{200, 200, 100}, bg)
+}
+
+func drawHeatEffect(startY int, fg, bg render.RGB) {
+	drawText(1, startY, "←→ ↑↓:Value", render.RGB{100, 100, 100}, bg)
+	startY += 2
+
+	drawText(1, startY, fmt.Sprintf("Heat Value: %d%%", state.heatValue), fg, bg)
+	startY += 2
+
+	// Full gradient display
+	drawText(1, startY, "Heat Meter Gradient (0→100%):", fg, bg)
+	startY++
+
+	gradientW := 60
+	// TC gradient
+	drawText(1, startY, "TC:", fg, bg)
+	for i := 0; i < gradientW; i++ {
+		progress := float64(i+1) / float64(gradientW)
+		color := render.GetHeatMeterColor(progress)
+		buf.SetWithBg(5+i, startY, ' ', color, color)
+	}
+	startY++
+
+	// 256 gradient
+	drawText(1, startY, "256:", fg, bg)
+	for i := 0; i < gradientW; i++ {
+		progress := float64(i+1) / float64(gradientW)
+		color := render.GetHeatMeterColor(progress)
+		idx := terminal.RGBTo256(color)
+		rgb256 := Get256PaletteRGB(idx)
+		buf.SetWithBg(5+i, startY, ' ', rgb256, rgb256)
+	}
+	startY += 2
+
+	// Current value indicator
+	progress := float64(state.heatValue) / 100.0
+	currentColor := render.GetHeatMeterColor(progress)
+	drawText(1, startY, fmt.Sprintf("Current (%d%%):", state.heatValue), fg, bg)
+	drawSwatch(18, startY, 6, currentColor)
+
+	info := AnalyzeColor(currentColor)
+	drawText(25, startY, fmt.Sprintf("TC: (%3d,%3d,%3d)", currentColor.R, currentColor.G, currentColor.B), render.RGB{150, 150, 150}, bg)
+	startY++
+	drawText(25, startY, fmt.Sprintf("256: idx=%3d → (%3d,%3d,%3d)", info.Redmean256, info.Redmean256Bg.R, info.Redmean256Bg.G, info.Redmean256Bg.B), render.RGB{150, 150, 150}, bg)
+	startY += 2
+
+	// Segment markers
+	drawText(1, startY, "Segments: 0  10  20  30  40  50  60  70  80  90 100", render.RGB{120, 120, 120}, bg)
+}

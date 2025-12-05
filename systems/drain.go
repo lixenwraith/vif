@@ -452,9 +452,9 @@ func (s *DrainSystem) startMaterializeAt(world *engine.World, targetX, targetY i
 		entity := world.CreateEntity()
 		world.Positions.Add(entity, components.PositionComponent{X: startGridX, Y: startGridY})
 		world.Materializers.Add(entity, comp)
-		// Protect from resize culling (off-screen start positions)
+		// Protect from resize culling (off-screen start positions) and drains
 		world.Protections.Add(entity, components.ProtectionComponent{
-			Mask: components.ProtectFromCull,
+			Mask: components.ProtectFromDrain | components.ProtectFromCull,
 		})
 	}
 }
