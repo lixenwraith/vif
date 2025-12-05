@@ -68,40 +68,58 @@ go build -o vi-fighter ./cmd/vi-fighter
 ## CURRENT TASK
 
 **Prompt can override Environment and Verification section instructions**
-**Refer to prompt if this section is empty**
+**Refer to prompt for complete implementation code**
 
 ### Objective
-Implement dual-mode color rendering for shield component with Redmean-based 256-color mapping.
+Implement stencil-based post-processing pipeline for selective visual effects (dim, grayscale) on render buffer.
+
+### Architecture
+```
+Renderers → SetWriteMask() → RenderBuffer (cells[] + masks[])
+                                    ↓
+                            Post-Processors (MutateDim/MutateGrayscale)
+                                    ↓
+                            FlushToTerminal
+```
 
 ### Implementation Approach
 
-**Phase 1: Color Infrastructure**
-- Replace `RGBTo256` in `terminal/color.go` with 262KB pre-computed Redmean LUT
-- Remove existing cube-based implementation entirely
-- LUT populated at `init()`, runtime is O(1) table lookup
+**Phase 1: Core Infrastructure**
+- Create `render/mask.go` with bitmask constants
+- Extend `RenderBuffer` with `masks []uint8`, `currentMask uint8`
+- Add `Grayscale()` and `Lerp()` to `render/rgb.go`
+- Add `MutateDim()` and `MutateGrayscale()` mutation methods
 
-**Phase 2: Shield Dual-Mode**
-- Refactor `ShieldRenderer` to use callback injection pattern
-- TrueColor: `BlendScreen` with quadratic falloff gradient
-- 256-Color: 3-zone grayscale (inner dark, outer light, edge tinted)
+**Phase 2: State & Logic**
+- Add `GrayoutActive`, `GrayoutStartTime` atomics to `GameState`
+- Modify `CleanerSystem.spawnCleaners()` for phantom trigger
 
-### Files to Modify
-
-| File | Action |
-|------|--------|
-| `terminal/color.go` | Replace `RGBTo256` implementation, add `lut256`, `computeRedmean256`, `redmeanDistance` |
-| `render/renderers/shields.go` | Full rewrite with callback injection pattern |
+**Phase 3: Integration**
+- Inject `SetWriteMask()` calls into ALL existing renderers
+- Remove hardcoded pause dim from `CharactersRenderer`
+- Create `DimRenderer` and `GrayoutRenderer` post-processors
+- Register post-processors in `main.go` at priorities 390/395
 
 ### Critical Patterns
 
-1. **LUT Index Calculation**: `int(c.R>>2)<<12 | int(c.G>>2)<<6 | int(c.B>>2)`
-2. **Callback Type**: `type shieldCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, dist float64, color render.RGB, maxOpacity float64)`
-3. **Mode Selection**: Once per frame via `s.gameCtx.Terminal.ColorMode()`
-4. **256 Zones**: `dist > 0.9` edge (tinted), `dist > 0.6` outer (light gray 188,188,188), else inner (dark gray 68,68,68)
+1. **Fg/Bg Granularity**: `touched=true` → mutate both; `touched=false, mask!=0` → mutate Fg only (preserve `RgbBackground`)
+2. **Mask Assignment**: Every draw method (`Set`, `SetFgOnly`, `SetBgOnly`, `SetWithBg`) writes `currentMask` to `masks[idx]`
+3. **Mutation Loop**: Iterate `b.cells`, check `masks[i]&targetMask != 0`, NOT `touched[i]`
 
-### Reference
-Full implementation code provided in conversation. Apply as complete file replacements.
+### Files Summary
+
+| File | Action |
+|------|--------|
+| `render/mask.go` | CREATE |
+| `render/renderers/post_process.go` | CREATE |
+| `render/rgb.go` | ADD `Grayscale`, `Lerp` |
+| `render/buffer.go` | REPLACE |
+| `engine/game_state.go` | ADD grayout fields/methods |
+| `systems/cleaner.go` | MODIFY `spawnCleaners` |
+| `render/renderers/*.go` | ADD `SetWriteMask` to all |
+| `cmd/vi-fighter/main.go` | ADD post-processor registrations |
 
 ### Verification
 1. `go build .` must pass
-2. User will manually test visuals in both color modes
+2. Manual test: `:` enters pause → game content dims, UI unchanged
+3. Manual test: Cleaner phase with no red targets → entities flash grayscale
