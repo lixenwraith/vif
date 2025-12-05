@@ -11,12 +11,18 @@ import (
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
-// GoldSystem manages the gold sequence mechanic
+// GoldSystem manages the gold sequence mechanic and its timer visualization
 type GoldSystem struct {
 	mu  sync.RWMutex
 	ctx *engine.GameContext
+
+	// Timer state
+	timerEntity engine.Entity
+	lastSeconds int
 }
 
 // NewGoldSystem creates a new gold sequence system
@@ -32,7 +38,7 @@ func (s *GoldSystem) Priority() int {
 }
 
 // Update runs the gold sequence system logic
-// Gold timeout is now handled by ClockScheduler
+// Manages Gold Timer lifecycle and updates
 func (s *GoldSystem) Update(world *engine.World, dt time.Duration) {
 	// Fetch resources
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
@@ -46,6 +52,81 @@ func (s *GoldSystem) Update(world *engine.World, dt time.Duration) {
 	if phaseSnapshot.Phase == engine.PhaseNormal && !goldSnapshot.Active {
 		s.spawnGold(world)
 	}
+
+	// Manage Gold Timer Visualization
+	if goldSnapshot.Active {
+		remaining := goldSnapshot.Remaining.Seconds()
+		currentSeconds := int(math.Ceil(remaining))
+
+		// Create timer if missing
+		if s.timerEntity == 0 || !world.Splashes.Has(s.timerEntity) {
+			s.spawnTimer(world, now, currentSeconds)
+			s.lastSeconds = currentSeconds
+		} else if currentSeconds != s.lastSeconds {
+			// Update existing timer on second change (pulse effect)
+			s.updateTimer(world, now, currentSeconds)
+			s.lastSeconds = currentSeconds
+		}
+	} else {
+		// Cleanup timer if active but gold is not
+		if s.timerEntity != 0 {
+			world.DestroyEntity(s.timerEntity)
+			s.timerEntity = 0
+		}
+	}
+}
+
+// spawnTimer creates the persistent splash entity for the countdown
+func (s *GoldSystem) spawnTimer(world *engine.World, now time.Time, seconds int) {
+	s.timerEntity = world.CreateEntity()
+
+	// Calculate position: Prefer opposite to cursor to avoid obscuring view
+	// We reuse the engine's layout logic but manually since we need to persist the ID
+	cursorPos, _ := world.Positions.Get(s.ctx.CursorEntity)
+	anchorX, anchorY := engine.CalculateSplashAnchor(s.ctx, cursorPos.X, cursorPos.Y, 1)
+
+	// Clamp seconds to single digit 0-9 for display
+	displayDigit := seconds
+	if displayDigit > 9 {
+		displayDigit = 9
+	}
+	if displayDigit < 0 {
+		displayDigit = 0
+	}
+
+	splash := components.SplashComponent{
+		Length:    1,
+		Color:     terminal.RGB(render.RgbSequenceGold),
+		AnchorX:   anchorX,
+		AnchorY:   anchorY,
+		Mode:      components.SplashModePersistent,
+		StartNano: now.UnixNano(),
+		Duration:  1 * time.Second.Nanoseconds(), // Pulse duration
+	}
+	splash.Content[0] = rune('0' + displayDigit)
+
+	world.Splashes.Add(s.timerEntity, splash)
+}
+
+// updateTimer updates the countdown digit and resets animation timestamp
+func (s *GoldSystem) updateTimer(world *engine.World, now time.Time, seconds int) {
+	splash, ok := world.Splashes.Get(s.timerEntity)
+	if !ok {
+		return
+	}
+
+	displayDigit := seconds
+	if displayDigit > 9 {
+		displayDigit = 9
+	}
+	if displayDigit < 0 {
+		displayDigit = 0
+	}
+
+	splash.Content[0] = rune('0' + displayDigit)
+	splash.StartNano = now.UnixNano() // Reset fade animation (pulse)
+
+	world.Splashes.Add(s.timerEntity, splash)
 }
 
 // spawnGold creates a new gold sequence at a random position on the screen using generic stores

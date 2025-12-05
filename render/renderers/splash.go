@@ -1,4 +1,3 @@
-// FILE: render/renderers/splash.go
 package renderers
 
 import (
@@ -9,6 +8,7 @@ import (
 )
 
 // SplashRenderer draws large block characters as background effect
+// Supports multiple concurrent splash entities
 type SplashRenderer struct {
 	ctx *engine.GameContext
 }
@@ -18,33 +18,45 @@ func NewSplashRenderer(ctx *engine.GameContext) *SplashRenderer {
 	return &SplashRenderer{ctx: ctx}
 }
 
-// Render draws the splash effect to background channel
+// Render draws all splash effects to background channel
 func (s *SplashRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
-	splash, ok := world.Splashes.Get(s.ctx.SplashEntity)
-	if !ok || splash.Length == 0 {
-		return
-	}
-
 	buf.SetWriteMask(render.MaskEffect)
 
-	// Calculate opacity based on elapsed time
-	elapsed := ctx.GameTime.UnixNano() - splash.StartNano
-	duration := constants.SplashDuration.Nanoseconds()
-	opacity := 1.0 - float64(elapsed)/float64(duration)
-	if opacity < 0 {
-		opacity = 0
-	}
-	if opacity > 1 {
-		opacity = 1
-	}
+	entities := world.Splashes.All()
+	for _, entity := range entities {
+		splash, ok := world.Splashes.Get(entity)
+		if !ok || splash.Length == 0 {
+			continue
+		}
 
-	// Scale color by opacity
-	scaledColor := render.Scale(render.RGB(splash.Color), opacity)
+		// Calculate opacity based on elapsed time relative to StartNano and Duration
+		elapsed := ctx.GameTime.UnixNano() - splash.StartNano
 
-	// Render each character
-	for i := 0; i < splash.Length; i++ {
-		charX := splash.AnchorX + i*(constants.SplashCharWidth+constants.SplashCharSpacing)
-		s.renderChar(ctx, buf, splash.Content[i], charX, splash.AnchorY, scaledColor)
+		// Safe divide check
+		if splash.Duration <= 0 {
+			continue
+		}
+
+		ratio := float64(elapsed) / float64(splash.Duration)
+
+		// Animation curve: Linear fade out (1.0 -> 0.0)
+		opacity := 1.0 - ratio
+
+		if opacity < 0 {
+			opacity = 0
+		}
+		if opacity > 1 {
+			opacity = 1
+		}
+
+		// Scale color by opacity
+		scaledColor := render.Scale(render.RGB(splash.Color), opacity)
+
+		// Render each character in the splash
+		for i := 0; i < splash.Length; i++ {
+			charX := splash.AnchorX + i*(constants.SplashCharWidth+constants.SplashCharSpacing)
+			s.renderChar(ctx, buf, splash.Content[i], charX, splash.AnchorY, scaledColor)
+		}
 	}
 }
 

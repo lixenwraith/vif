@@ -1,4 +1,3 @@
-// FILE: render/mask.go
 package render
 
 // Render masks categorize buffer cells for selective post-processing

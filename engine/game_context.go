@@ -50,9 +50,6 @@ type GameContext struct {
 	// Cursor entity (singleton)
 	CursorEntity Entity
 
-	// Splash entity (singleton)
-	SplashEntity Entity
-
 	// Mode state
 	Mode           GameMode
 	SearchText     string
@@ -112,8 +109,6 @@ func NewGameContext(term terminal.Terminal) *GameContext {
 		Height:        height,
 		Mode:          ModeNormal,
 		eventQueue:    NewEventQueue(),
-		// CursorVisible:   true,
-		// CursorBlinkTime: pausableClock.RealTime(), // UI uses real time
 	}
 
 	// Calculate game area first
@@ -164,10 +159,6 @@ func NewGameContext(term terminal.Terminal) *GameContext {
 		Mask:      components.ProtectAll,
 		ExpiresAt: 0, // Permanent
 	})
-
-	// Create splash entity (singleton, no position component)
-	ctx.SplashEntity = ctx.World.CreateEntity()
-	ctx.World.Splashes.Add(ctx.SplashEntity, components.SplashComponent{})
 
 	// Initialize ping atomic values (still local to input handling)
 	ctx.pingActive.Store(false)

@@ -1,14 +1,15 @@
-// FILE: systems/splash.go
 package systems
 
 import (
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
-// SplashSystem handles splash timeout
+// SplashSystem manages the lifecycle of splash entities
+// Primarily responsible for cleaning up expired transient splashes
 type SplashSystem struct {
 	ctx *engine.GameContext
 }
@@ -23,18 +24,32 @@ func (s *SplashSystem) Priority() int {
 	return constants.PrioritySplash
 }
 
-// Update checks splash timeout and deactivates if expired
+// Update checks for expired transient splashes and destroys them
 func (s *SplashSystem) Update(world *engine.World, dt time.Duration) {
-	splash, ok := world.Splashes.Get(s.ctx.SplashEntity)
-	if !ok || splash.Length == 0 {
-		return
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+	nowNano := timeRes.GameTime.UnixNano()
+
+	// Collect entities to destroy (avoid modifying during iteration)
+	var toDestroy []engine.Entity
+
+	entities := world.Splashes.All()
+	for _, entity := range entities {
+		splash, ok := world.Splashes.Get(entity)
+		if !ok {
+			continue
+		}
+
+		// Only manage lifecycle for Transient splashes
+		if splash.Mode == components.SplashModeTransient {
+			elapsed := nowNano - splash.StartNano
+			if elapsed >= splash.Duration {
+				toDestroy = append(toDestroy, entity)
+			}
+		}
 	}
 
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-	elapsed := timeRes.GameTime.UnixNano() - splash.StartNano
-
-	if elapsed >= constants.SplashDuration.Nanoseconds() {
-		splash.Length = 0
-		world.Splashes.Add(s.ctx.SplashEntity, splash)
+	// Cleanup expired entities
+	for _, entity := range toDestroy {
+		world.DestroyEntity(entity)
 	}
 }

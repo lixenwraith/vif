@@ -73,6 +73,15 @@ const (
 	ShieldMaxOpacity = 0.5
 )
 
+// --- Splash Entity ---
+const (
+	SplashCharWidth   = 16
+	SplashCharHeight  = 12
+	SplashCharSpacing = 1
+	SplashMaxLength   = 8
+	SplashDuration    = 1 * time.Second
+)
+
 // --- Global Visual Effects ---
 const (
 	// DestructionFlashDuration is how long the destruction flash effect lasts in milliseconds

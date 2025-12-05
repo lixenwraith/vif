@@ -1,4 +1,3 @@
-// FILE: render/buffer.go
 package render
 
 import (

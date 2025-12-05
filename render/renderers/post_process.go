@@ -1,4 +1,3 @@
-// FILE: render/renderers/post_process.go
 package renderers
 
 import (
