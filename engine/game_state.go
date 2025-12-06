@@ -38,7 +38,7 @@ type GameState struct {
 	LastTypedSeqLevel atomic.Int32 // 0=Dark, 1=Normal, 2=Bright
 
 	// Drain entity tracking (real-time state for renderer snapshot)
-	// TODO: Is this still required in multi-drain state? Seems redundant.
+	// TODO: Is this still required in multi-drain state? Seems redundant
 	DrainActive atomic.Bool // Whether drain entity exists
 
 	// Grayout visual effect state

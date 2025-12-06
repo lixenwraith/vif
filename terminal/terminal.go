@@ -40,7 +40,7 @@ type Terminal interface {
 	// Init enters raw mode, alternate screen buffer, hides cursor
 	Init() error
 
-	// Fini restores terminal state. Safe to call multiple times.
+	// Fini restores terminal state. Safe to call multiple times
 	Fini()
 
 	// Size returns current terminal dimensions

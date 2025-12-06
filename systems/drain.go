@@ -749,8 +749,6 @@ func (s *DrainSystem) handleDrainInteractions(world *engine.World) {
 	}
 
 	// Phase 3: Handle non-drain entity collisions
-	// Note: This now implicitly handles Decay collisions as well, since Decay entities
-	// are standard entities in the PositionStore.
 	s.handleEntityCollisions(world)
 }
 

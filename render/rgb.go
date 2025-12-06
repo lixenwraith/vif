@@ -6,8 +6,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
-// RGB is an alias to terminal.RGB to serve as the Single Source of Truth
-// while allowing the render package to extend functionality via functions.
+// RGB is an alias to terminal.RGB for colors, allowing render package to extend functionality
 type RGB = terminal.RGB
 
 // Predefined default color

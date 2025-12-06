@@ -1,11 +1,10 @@
 package assets
 
-// SplashFont provides bitmap font data for ASCII characters 32-126 (95 printable characters).
-// Each character is represented as a 12-row bitmap with 16 columns.
-// Row format: uint16 where bit 15 (0x8000) = leftmost column (column 0), bit 0 (0x0001) = rightmost column (column 15).
-// Set bit = filled pixel, clear bit = empty pixel.
+// SplashFont provides bitmap font data for ASCII characters 32-126 (95 printable characters)
+// Each character is represented as a 12-row bitmap with 16 columns
+// Row format: uint16 where bit 15 (0x8000) = leftmost column (column 0), bit 0 (0x0001) = rightmost column (column 15)
+// Set bit = filled pixel, clear bit = empty pixel
 // Index mapping: SplashFont[rune - 32] (e.g., 'A' = index 33, space = index 0)
-//
 // Character dimensions: 16 columns × 12 rows
 // Style: Sans-serif block glyphs with 2-3 pixel stroke width
 // Baseline: Rows 10-11 reserved for descenders

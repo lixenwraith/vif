@@ -42,8 +42,7 @@ func (p *PingGridRenderer) getPingColor() render.RGB {
 }
 
 // drawPingHighlights - write-only, no buf.Get
-// Grid is layer 100, renders first. Just emit all highlights unconditionally.
-// Higher layers (shields at 300) will blend over as needed.
+// Grid is low layer, renders first, emit all highlights unconditionally, higher layers will blend as needed
 func (p *PingGridRenderer) drawPingHighlights(ctx render.RenderContext, buf *render.RenderBuffer, pingColor render.RGB) {
 	// Highlight the row
 	for x := 0; x < ctx.GameWidth; x++ {

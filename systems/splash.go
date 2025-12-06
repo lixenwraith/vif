@@ -159,7 +159,7 @@ func (s *SplashSystem) handleGoldSpawn(world *engine.World, payload *engine.Gold
 
 	// Anchor Y: Above sequence
 	// Timer Height = constants.SplashCharHeight (12 rows)
-	// Sequence Y is in Rows.
+	// Sequence Y is in Rows
 	// Place padding rows above sequence top (Sequence is 1 row high)
 	anchorY := payload.OriginY - constants.SplashCharHeight - constants.SplashTimerPadding
 
@@ -262,12 +262,12 @@ func (s *SplashSystem) calculateSmartLayout(world *engine.World, cursorX, cursor
 
 		// Get position of start of sequence (we need to query positions of member entities?)
 		// Since GoldSequenceComponent doesn't store position, we rely on the fact that
-		// GoldSystem creates entities.
+		// GoldSystem creates entities
 		// Optimization: Check the "Restricted Zone" via stored components?
-		// We don't have a direct "Box" component.
-		// However, we can scan `world.Positions` for entities with `SequenceID`.
-		// This is O(N) where N is total entities. Fast enough for 200 entities.
-		// Better: We iterate `world.Sequences` which is smaller.
+		// We don't have a direct "Box" component
+		// However, we can scan `world.Positions` for entities with `SequenceID`
+		// This is O(N) where N is total entities. Fast enough for 200 entities
+		// Better: We iterate `world.Sequences` which is smaller
 
 		seqEntities := world.Sequences.All()
 		for _, se := range seqEntities {

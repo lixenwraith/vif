@@ -181,7 +181,7 @@ func (e *EffectsRenderer) drawRemovalFlashes(ctx render.RenderContext, world *en
 		screenY := ctx.GameY + flash.Y
 
 		// Use BlendAddFg to brighten the character ONLY (no background wash)
-		// BlendAddFg = OpAdd | FlagFg. Maintains background transparency/color.
+		// BlendAddFg = OpAdd | FlagFg -  Maintains background transparency/color
 		buf.Set(screenX, screenY, flash.Char, flashColor, render.RGBBlack, render.BlendAddFg, 1.0, terminal.AttrNone)
 	}
 }

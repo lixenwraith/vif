@@ -7,7 +7,7 @@ import (
 // Entity is a unique identifier for an entity
 type Entity uint64
 
-// Component are handled in Store
+// Components are handled in Store
 
 // System is an interface that all systems must implement
 type System interface {
