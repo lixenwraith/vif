@@ -39,6 +39,9 @@ type GameContext struct {
 	// Pausable Clock time provider
 	PausableClock *PausableClock
 
+	// Crash handling
+	crashHandler func(any)
+
 	// Screen dimensions
 	Width, Height int
 
@@ -96,6 +99,7 @@ type GameContext struct {
 
 // NewGameContext creates a new game context with initialized ECS world
 func NewGameContext(term terminal.Terminal) *GameContext {
+	// Get terminal size
 	width, height := term.Size()
 
 	// Create pausable clock
@@ -109,6 +113,11 @@ func NewGameContext(term terminal.Terminal) *GameContext {
 		Height:        height,
 		Mode:          ModeNormal,
 		eventQueue:    NewEventQueue(),
+	}
+
+	// Default crash handler (just panic again if not set)
+	ctx.crashHandler = func(r any) {
+		panic(r)
 	}
 
 	// Calculate game area first
@@ -168,6 +177,26 @@ func NewGameContext(term terminal.Terminal) *GameContext {
 	ctx.IsPaused.Store(false)
 
 	return ctx
+}
+
+// ===== Crash Handling and Panic Management =====
+
+// SetCrashHandler sets the function called when a background goroutine panics
+func (ctx *GameContext) SetCrashHandler(handler func(any)) {
+	ctx.crashHandler = handler
+}
+
+// Go runs a function in a new goroutine with panic recovery
+// Use this instead of 'go func()' for game systems to ensure terminal cleanup
+func (ctx *GameContext) Go(fn func()) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				ctx.crashHandler(r)
+			}
+		}()
+		fn()
+	}()
 }
 
 // ===== INPUT-SPECIFIC METHODS =====

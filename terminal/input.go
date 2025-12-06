@@ -101,13 +101,13 @@ func (r *inputReader) events() <-chan Event {
 func (r *inputReader) readLoop() {
 	defer close(r.doneCh)
 
-	// TODO: attempt bubbling it up instead of adding terminal dependency
 	// Panic recovery for raw input reader
 	defer func() {
 		if r := recover(); r != nil {
 			EmergencyReset(os.Stdout)
-			fmt.Fprintf(os.Stderr, "\n\x1b[31mINPUT READER CRASHED: %v\x1b[0m\n", r)
-			fmt.Fprintf(os.Stderr, "Stack Trace:\n%s\n", debug.Stack())
+			// Use \r\n for clean output
+			fmt.Fprintf(os.Stderr, "\r\n\x1b[31mINPUT READER CRASHED: %v\x1b[0m\r\n", r)
+			fmt.Fprintf(os.Stderr, "Stack Trace:\r\n%s\r\n", debug.Stack())
 			os.Exit(1)
 		}
 	}()

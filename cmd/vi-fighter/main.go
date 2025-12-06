@@ -60,6 +60,16 @@ func main() {
 	// Create game context with ECS world
 	ctx := engine.NewGameContext(term)
 
+	// Dependency Injection: Set safe crash handler for engine goroutines
+	// This keeps engine package independent of terminal package
+	ctx.SetCrashHandler(func(r any) {
+		terminal.EmergencyReset(os.Stdout)
+		// Use \r\n for raw mode compatibility to avoid zig-zag output
+		fmt.Fprintf(os.Stderr, "\r\n\x1b[31mGAME CRASHED: %v\x1b[0m\r\n", r)
+		fmt.Fprintf(os.Stderr, "Stack Trace:\r\n%s\r\n", debug.Stack())
+		os.Exit(1)
+	})
+
 	// Initialize audio engine
 	if audioEngine, err := audio.NewAudioEngine(); err == nil {
 		if err := audioEngine.Start(); err == nil {
@@ -191,13 +201,14 @@ func main() {
 	defer frameTicker.Stop()
 
 	eventChan := make(chan terminal.Event, 256)
+	// Input polling uses raw goroutine as it interacts directly with terminal
 	go func() {
 		// Panic recovery for input polling goroutine to ensure terminal cleanup
 		defer func() {
 			if r := recover(); r != nil {
 				terminal.EmergencyReset(os.Stdout)
-				fmt.Fprintf(os.Stderr, "\n\x1b[31mEVENT POLLER CRASHED: %v\x1b[0m\n", r)
-				fmt.Fprintf(os.Stderr, "Stack Trace:\n%s\n", debug.Stack())
+				fmt.Fprintf(os.Stderr, "\r\n\x1b[31mEVENT POLLER CRASHED: %v\x1b[0m\r\n", r)
+				fmt.Fprintf(os.Stderr, "Stack Trace:\r\n%s\r\n", debug.Stack())
 				os.Exit(1)
 			}
 		}()
