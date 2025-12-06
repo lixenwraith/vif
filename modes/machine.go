@@ -242,9 +242,7 @@ func (m *InputMachine) processOperatorWait(key rune, bindings *BindingTable) Pro
 					Type: RangeLine, Style: StyleInclusive,
 					Valid: true,
 				}
-				if OpDelete(ctx, result) {
-					ctx.State.SetHeat(0)
-				}
+				OpDelete(ctx, result)
 			},
 		}
 	}
@@ -286,9 +284,7 @@ func (m *InputMachine) processOperatorWait(key rune, bindings *BindingTable) Pro
 				return
 			}
 			result := motion(ctx, pos.X, pos.Y, count)
-			if OpDelete(ctx, result) {
-				ctx.State.SetHeat(0)
-			}
+			OpDelete(ctx, result)
 			// State tracking for find motions
 			if result.Valid && (charCmd == 'f' || charCmd == 'F' || charCmd == 't' || charCmd == 'T') {
 				ctx.LastFindType = charCmd
@@ -315,9 +311,7 @@ func (m *InputMachine) processOperatorCharWait(key rune, bindings *BindingTable)
 				return
 			}
 			result := charMotion(ctx, pos.X, pos.Y, count, key)
-			if OpDelete(ctx, result) {
-				ctx.State.SetHeat(0)
-			}
+			OpDelete(ctx, result)
 			// State tracking
 			if result.Valid {
 				ctx.LastFindChar = key
@@ -378,9 +372,7 @@ func (m *InputMachine) processOperatorPrefixG(key rune, bindings *BindingTable) 
 				return
 			}
 			result := motion(ctx, pos.X, pos.Y, count)
-			if OpDelete(ctx, result) {
-				ctx.State.SetHeat(0)
-			}
+			OpDelete(ctx, result)
 		},
 	}
 }

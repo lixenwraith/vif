@@ -80,7 +80,29 @@ const (
 	// Trigger: DrainSystem when drain inside shield zone
 	// Consumer: ShieldSystem | Payload: *ShieldDrainPayload
 	EventShieldDrain
+
+	// EventDeleteRequest signals a deletion operation (x, d, etc.)
+	// Trigger: InputHandler via modes package
+	// Consumer: EnergySystem | Payload: *DeleteRequestPayload
+	EventDeleteRequest
 )
+
+// DeleteRangeType defines the scope of deletion
+type DeleteRangeType int
+
+const (
+	DeleteRangeChar DeleteRangeType = iota
+	DeleteRangeLine
+)
+
+// DeleteRequestPayload contains coordinates for deletion
+type DeleteRequestPayload struct {
+	RangeType DeleteRangeType
+	StartX    int
+	EndX      int
+	StartY    int
+	EndY      int
+}
 
 // ShieldDrainPayload contains energy drain amount from external sources
 type ShieldDrainPayload struct {

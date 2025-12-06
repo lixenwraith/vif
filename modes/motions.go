@@ -1,6 +1,10 @@
 package modes
 
-import "github.com/lixenwraith/vi-fighter/engine"
+import (
+	"github.com/lixenwraith/vi-fighter/engine"
+)
+
+// import "github.com/lixenwraith/vi-fighter/engine"
 
 // MotionLeft implements 'h' motion
 func MotionLeft(ctx *engine.GameContext, x, y, count int) MotionResult {

@@ -18,111 +18,55 @@ func OpMove(ctx *engine.GameContext, result MotionResult, cmd rune) {
 	})
 }
 
-// OpDelete destroys entities in range, returns true if green/blue deleted
-func OpDelete(ctx *engine.GameContext, result MotionResult) bool {
+// OpDelete emits a deletion request event based on the motion result
+func OpDelete(ctx *engine.GameContext, result MotionResult) {
 	if !result.Valid {
-		return false
+		return
 	}
+
+	payload := &engine.DeleteRequestPayload{}
 
 	if result.Type == RangeLine {
-		return deleteLineRange(ctx, result.StartY, result.EndY)
-	}
+		payload.RangeType = engine.DeleteRangeLine
+		payload.StartY = result.StartY
+		payload.EndY = result.EndY
+	} else {
+		payload.RangeType = engine.DeleteRangeChar
 
-	// Normalize direction
-	startX, endX := result.StartX, result.EndX
-	if startX > endX {
-		startX, endX = endX, startX
-	}
+		// Normalize range: Start should be visually before End
+		sx, sy := result.StartX, result.StartY
+		ex, ey := result.EndX, result.EndY
 
-	// Adjust for exclusive motions (endpoint not included)
-	if result.Style == StyleExclusive && endX > startX {
-		endX--
-	}
-
-	return deleteRange(ctx, startX, endX, result.StartY)
-}
-
-// deleteLineRange deletes all entities on lines from startY to endY inclusive
-func deleteLineRange(ctx *engine.GameContext, startY, endY int) bool {
-	if startY > endY {
-		startY, endY = endY, startY
-	}
-	deleted := false
-	for y := startY; y <= endY; y++ {
-		if deleteAllOnLine(ctx, y) {
-			deleted = true
+		if sy > ey || (sy == ey && sx > ex) {
+			// Swap to ensure Start is first
+			sx, sy, ex, ey = ex, ey, sx, sy
 		}
-	}
-	return deleted
-}
 
-// deleteAllOnLine deletes all interactable entities on a line
-func deleteAllOnLine(ctx *engine.GameContext, y int) bool {
-	entities := ctx.World.Query().With(ctx.World.Positions).Execute()
-
-	deletedGreenOrBlue := false
-	entitiesToDelete := make([]engine.Entity, 0)
-
-	for _, entity := range entities {
-		pos, _ := ctx.World.Positions.Get(entity)
-		if pos.Y != y {
-			continue
-		}
-		if !engine.IsInteractable(ctx.World, entity) {
-			continue
-		}
-		if prot, ok := ctx.World.Protections.Get(entity); ok {
-			if prot.Mask.Has(components.ProtectFromDelete) || prot.Mask == components.ProtectAll {
-				continue
-			}
-		}
-		if seq, ok := ctx.World.Sequences.Get(entity); ok {
-			if seq.Type == components.SequenceGreen || seq.Type == components.SequenceBlue {
-				deletedGreenOrBlue = true
-			}
-		}
-		entitiesToDelete = append(entitiesToDelete, entity)
-	}
-
-	for _, entity := range entitiesToDelete {
-		ctx.World.DestroyEntity(entity)
-	}
-
-	return deletedGreenOrBlue
-}
-
-// deleteRange deletes all interactable entities in a range on a line
-func deleteRange(ctx *engine.GameContext, startX, endX, y int) bool {
-	deletedGreenOrBlue := false
-	entitiesToDelete := make([]engine.Entity, 0)
-
-	if startX > endX {
-		startX, endX = endX, startX
-	}
-
-	for x := startX; x <= endX; x++ {
-		entities := ctx.World.Positions.GetAllAt(x, y)
-		for _, entity := range entities {
-			if !engine.IsInteractable(ctx.World, entity) {
-				continue
-			}
-			if prot, ok := ctx.World.Protections.Get(entity); ok {
-				if prot.Mask.Has(components.ProtectFromDelete) || prot.Mask == components.ProtectAll {
-					continue
+		// Adjust for exclusive motions (exclude the last character)
+		// e.g. "dw" lands on start of next word, but we don't delete that character
+		if result.Style == StyleExclusive {
+			if ex > 0 {
+				ex--
+			} else {
+				// Wrap back to previous line if at start of line
+				if ey > 0 {
+					ey--
+					ex = ctx.GameWidth - 1
+				} else {
+					// At 0,0 - effective range is empty if sx=0,sy=0
+					// Check if range became invalid (End before Start)
+					if sy > ey || (sy == ey && sx > ex) {
+						return // Nothing to delete
+					}
 				}
 			}
-			if seq, ok := ctx.World.Sequences.Get(entity); ok {
-				if seq.Type == components.SequenceGreen || seq.Type == components.SequenceBlue {
-					deletedGreenOrBlue = true
-				}
-			}
-			entitiesToDelete = append(entitiesToDelete, entity)
 		}
+
+		payload.StartX = sx
+		payload.StartY = sy
+		payload.EndX = ex
+		payload.EndY = ey
 	}
 
-	for _, entity := range entitiesToDelete {
-		ctx.World.DestroyEntity(entity)
-	}
-
-	return deletedGreenOrBlue
+	ctx.PushEvent(engine.EventDeleteRequest, payload, ctx.PausableClock.Now())
 }

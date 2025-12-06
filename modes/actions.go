@@ -25,16 +25,12 @@ func executeSpecial(ctx *engine.GameContext, target rune, count int) {
 			Type: RangeChar, Style: StyleInclusive,
 			Valid: true,
 		}
-		if OpDelete(ctx, result) {
-			ctx.State.SetHeat(0)
-		}
+		OpDelete(ctx, result)
 
 	case 'D':
 		// D is effectively "d$"
 		result := MotionLineEnd(ctx, pos.X, pos.Y, 1)
-		if OpDelete(ctx, result) {
-			ctx.State.SetHeat(0)
-		}
+		OpDelete(ctx, result)
 
 	case 'n':
 		RepeatSearch(ctx, true)

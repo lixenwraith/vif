@@ -493,6 +493,7 @@ func (s *EnergySystem) EventTypes() []engine.EventType {
 	return []engine.EventType{
 		engine.EventCharacterTyped,
 		engine.EventEnergyTransaction,
+		engine.EventDeleteRequest,
 	}
 }
 
@@ -508,10 +509,107 @@ func (s *EnergySystem) HandleEvent(world *engine.World, event engine.GameEvent) 
 			engine.CharacterTypedPayloadPool.Put(payload)
 		}
 
+	case engine.EventDeleteRequest:
+		if payload, ok := event.Payload.(*engine.DeleteRequestPayload); ok {
+			s.handleDeleteRequest(world, payload, event.Timestamp)
+		}
+
 	case engine.EventEnergyTransaction:
 		if payload, ok := event.Payload.(*engine.EnergyTransactionPayload); ok {
 			s.ctx.State.AddEnergy(payload.Amount)
 		}
+	}
+}
+
+// handleDeleteRequest processes deletion of entities in a range
+func (s *EnergySystem) handleDeleteRequest(world *engine.World, payload *engine.DeleteRequestPayload, now time.Time) {
+	// Fetch resources
+	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+
+	resetHeat := false
+	entitiesToDelete := make([]engine.Entity, 0)
+
+	// Helper to check and mark entity for deletion
+	checkEntity := func(entity engine.Entity) {
+		if !engine.IsInteractable(world, entity) {
+			return
+		}
+
+		// Check protection
+		if prot, ok := world.Protections.Get(entity); ok {
+			if prot.Mask.Has(components.ProtectFromDelete) || prot.Mask == components.ProtectAll {
+				return
+			}
+		}
+
+		// Check sequence type for penalty
+		// Red has no penalty, Gold cannot be deleted (via protection), Blue/Green resets heat
+		if seq, ok := world.Sequences.Get(entity); ok {
+			if seq.Type == components.SequenceGreen || seq.Type == components.SequenceBlue {
+				resetHeat = true
+			}
+		}
+
+		entitiesToDelete = append(entitiesToDelete, entity)
+	}
+
+	if payload.RangeType == engine.DeleteRangeLine {
+		// Line deletion (inclusive rows)
+		startY, endY := payload.StartY, payload.EndY
+		// Ensure normalized order
+		if startY > endY {
+			startY, endY = endY, startY
+		}
+
+		// Query all entities to find those in the row range
+		entities := world.Query().With(world.Positions).Execute()
+		for _, entity := range entities {
+			pos, _ := world.Positions.Get(entity)
+			if pos.Y >= startY && pos.Y <= endY {
+				checkEntity(entity)
+			}
+		}
+
+	} else {
+		// Char deletion (can span multiple lines)
+		p1x, p1y := payload.StartX, payload.StartY
+		p2x, p2y := payload.EndX, payload.EndY
+
+		// Normalize: P1 should be textually before P2
+		if p1y > p2y || (p1y == p2y && p1x > p2x) {
+			p1x, p1y, p2x, p2y = p2x, p2y, p1x, p1y
+		}
+
+		// Iterate through all rows involved
+		for y := p1y; y <= p2y; y++ {
+			// Determine X bounds for this row
+			minX := 0
+			maxX := config.GameWidth - 1
+
+			if y == p1y {
+				minX = p1x
+			}
+			if y == p2y {
+				maxX = p2x
+			}
+
+			// Optimization: Get entities by cell for the range on this row
+			for x := minX; x <= maxX; x++ {
+				cellEntities := world.Positions.GetAllAt(x, y)
+				for _, entity := range cellEntities {
+					checkEntity(entity)
+				}
+			}
+		}
+	}
+
+	// Execute deletion and side effects
+	for _, entity := range entitiesToDelete {
+		world.DestroyEntity(entity)
+	}
+
+	if resetHeat {
+		s.ctx.State.SetHeat(0)
 	}
 }
 
