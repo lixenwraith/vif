@@ -197,6 +197,7 @@ func main() {
 	clockScheduler.RegisterEventHandler(energySystem)
 	clockScheduler.RegisterEventHandler(splashSystem)
 	clockScheduler.RegisterEventHandler(shieldSystem)
+	clockScheduler.RegisterEventHandler(nuggetSystem)
 	clockScheduler.Start()
 	defer clockScheduler.Stop()
 

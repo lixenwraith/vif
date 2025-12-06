@@ -195,7 +195,19 @@ func MotionFirstNonWS(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 // MotionLineEnd implements '$' motion
 func MotionLineEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
-	endX := findLineEnd(ctx, y)
+	lastEntityX := findLineEnd(ctx, y)
+	var endX int
+
+	// Jump to screen edge if:
+	// 1. Line is empty (lastEntityX == -1)
+	// 2. We are already at the last entity (x == lastEntityX)
+	if lastEntityX == -1 || x == lastEntityX {
+		endX = ctx.GameWidth - 1
+	} else {
+		// Otherwise jump to the last entity
+		endX = lastEntityX
+	}
+
 	return MotionResult{
 		StartX: x, StartY: y,
 		EndX: endX, EndY: y,

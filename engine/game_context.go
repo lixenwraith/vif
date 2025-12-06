@@ -91,10 +91,6 @@ type GameContext struct {
 		ToggleMute() bool
 		IsMuted() bool
 	}
-
-	// Heat tracking (for consecutive move penalty - input specific)
-	LastMoveKey      rune
-	ConsecutiveCount int
 }
 
 // NewGameContext creates a new game context with initialized ECS world

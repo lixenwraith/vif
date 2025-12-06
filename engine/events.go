@@ -27,6 +27,11 @@ const (
 	// Trigger: All cleaner entities destroyed | Payload: nil
 	EventCleanerFinished
 
+	// EventNuggetJumpRequest signals player intent to jump to active nugget
+	// Trigger: InputHandler (Tab key)
+	// Consumer: NuggetSystem | Payload: nil
+	EventNuggetJumpRequest
+
 	// EventGoldSpawned signals gold sequence creation
 	// Trigger: GoldSystem spawns sequence in PhaseNormal
 	// Consumer: SplashSystem (timer) | Payload: *GoldSpawnedPayload

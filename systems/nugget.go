@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -34,6 +35,20 @@ func (s *NuggetSystem) Priority() int {
 	return constants.PriorityNugget
 }
 
+// EventTypes returns the event types NuggetSystem handles
+func (s *NuggetSystem) EventTypes() []engine.EventType {
+	return []engine.EventType{
+		engine.EventNuggetJumpRequest,
+	}
+}
+
+// HandleEvent processes jump requests
+func (s *NuggetSystem) HandleEvent(world *engine.World, event engine.GameEvent) {
+	if event.Type == engine.EventNuggetJumpRequest {
+		s.handleJumpRequest(world, event.Timestamp)
+	}
+}
+
 // Update runs the nugget system logic using generic stores
 func (s *NuggetSystem) Update(world *engine.World, dt time.Duration) {
 	// Fetch resources
@@ -55,6 +70,52 @@ func (s *NuggetSystem) Update(world *engine.World, dt time.Duration) {
 
 	if !world.Nuggets.Has(engine.Entity(activeNuggetEntity)) {
 		s.ctx.State.ClearActiveNuggetID(activeNuggetEntity)
+	}
+}
+
+// handleJumpRequest attempts to jump cursor to the active nugget
+func (s *NuggetSystem) handleJumpRequest(world *engine.World, now time.Time) {
+	// 1. Check Energy
+	energy := s.ctx.State.GetEnergy()
+	if energy < 10 {
+		return
+	}
+
+	// 2. Check Active Nugget
+	nuggetID := engine.Entity(s.ctx.State.GetActiveNuggetID())
+	if nuggetID == 0 {
+		return
+	}
+
+	// 3. Get Nugget Position
+	nuggetPos, ok := world.Positions.Get(nuggetID)
+	if !ok {
+		// State mismatch: ID set but entity gone/invalid
+		s.ctx.State.ClearActiveNuggetID(uint64(nuggetID))
+		return
+	}
+
+	// 4. Move Cursor
+	world.Positions.Add(s.ctx.CursorEntity, components.PositionComponent{
+		X: nuggetPos.X,
+		Y: nuggetPos.Y,
+	})
+
+	// 5. Pay Energy Cost
+	s.ctx.PushEvent(engine.EventEnergyTransaction, &engine.EnergyTransactionPayload{
+		Amount: -10,
+		Source: "NuggetJump",
+	}, now)
+
+	// 6. Play Sound
+	if s.ctx.AudioEngine != nil {
+		cmd := audio.AudioCommand{
+			Type:       audio.SoundBell,
+			Priority:   1,
+			Generation: uint64(s.ctx.State.GetFrameNumber()),
+			Timestamp:  now,
+		}
+		s.ctx.AudioEngine.SendState(cmd)
 	}
 }
 

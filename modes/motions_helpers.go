@@ -281,6 +281,7 @@ func findPrevWORDStart(ctx *engine.GameContext, cursorX, cursorY int) int {
 // --- Line Helpers ---
 
 // findLineEnd returns the X coordinate of the last interactable entity on the line
+// Returns -1 if no interactable entities are found on the line
 // Optimized for high entity counts using spatial grid traversal (O(Width) instead of O(N))
 func findLineEnd(ctx *engine.GameContext, cursorY int) int {
 	// Stack-allocated buffer for zero-alloc queries
@@ -300,8 +301,8 @@ func findLineEnd(ctx *engine.GameContext, cursorY int) int {
 		}
 	}
 
-	// Line is empty (or no interactable entities) - Return right edge (not standard VIM behavior)
-	return ctx.GameWidth - 1
+	// Line is empty (or no interactable entities)
+	return -1
 }
 
 func findFirstNonWhitespace(ctx *engine.GameContext, cursorY int) int {

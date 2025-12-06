@@ -16,17 +16,6 @@ func OpMove(ctx *engine.GameContext, result MotionResult, cmd rune) {
 		X: result.EndX,
 		Y: result.EndY,
 	})
-
-	// Consecutive motion penalty
-	if cmd == ctx.LastMoveKey && (cmd == 'h' || cmd == 'j' || cmd == 'k' || cmd == 'l') {
-		ctx.ConsecutiveCount++
-		if ctx.ConsecutiveCount > 3 {
-			ctx.State.SetHeat(0)
-		}
-	} else {
-		ctx.LastMoveKey = cmd
-		ctx.ConsecutiveCount = 1
-	}
 }
 
 // OpDelete destroys entities in range, returns true if green/blue deleted

@@ -1,7 +1,6 @@
 package modes
 
 import (
-	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/terminal"
@@ -155,73 +154,33 @@ func (h *InputHandler) handleNormalModeSpecialKeys(ev terminal.Event) {
 	case terminal.KeyUp:
 		result := MotionUp(h.ctx, pos.X, pos.Y, 1)
 		OpMove(h.ctx, result, 'k')
-		h.ctx.State.SetHeat(0)
 
 	case terminal.KeyDown:
 		result := MotionDown(h.ctx, pos.X, pos.Y, 1)
 		OpMove(h.ctx, result, 'j')
-		h.ctx.State.SetHeat(0)
 
 	case terminal.KeyLeft:
 		result := MotionLeft(h.ctx, pos.X, pos.Y, 1)
 		OpMove(h.ctx, result, 'h')
-		h.ctx.State.SetHeat(0)
 
 	case terminal.KeyRight:
 		result := MotionRight(h.ctx, pos.X, pos.Y, 1)
 		OpMove(h.ctx, result, 'l')
-		h.ctx.State.SetHeat(0)
 
 	case terminal.KeyHome:
 		result := MotionLineStart(h.ctx, pos.X, pos.Y, 1)
 		OpMove(h.ctx, result, '0')
-		h.ctx.State.SetHeat(0)
 
 	case terminal.KeyEnd:
 		result := MotionLineEnd(h.ctx, pos.X, pos.Y, 1)
 		OpMove(h.ctx, result, '$')
-		h.ctx.State.SetHeat(0)
 
 	case terminal.KeyBackspace:
 		result := MotionLeft(h.ctx, pos.X, pos.Y, 1)
 		OpMove(h.ctx, result, 'h')
 
 	case terminal.KeyTab:
-		energy := h.ctx.State.GetEnergy()
-		if energy < 10 {
-			return
-		}
-
-		nuggetID := engine.Entity(h.ctx.State.GetActiveNuggetID())
-		if nuggetID == 0 {
-			return
-		}
-
-		nuggetPos, ok := h.ctx.World.Positions.Get(nuggetID)
-		if !ok {
-			return
-		}
-
-		h.ctx.World.Positions.Add(h.ctx.CursorEntity, components.PositionComponent{
-			X: nuggetPos.X,
-			Y: nuggetPos.Y,
-		})
-
-		payload := &engine.EnergyTransactionPayload{
-			Amount: -10,
-			Source: "NuggetJump",
-		}
-		h.ctx.PushEvent(engine.EventEnergyTransaction, payload, h.ctx.PausableClock.Now())
-
-		if h.ctx.AudioEngine != nil {
-			cmd := audio.AudioCommand{
-				Type:       audio.SoundBell,
-				Priority:   1,
-				Generation: uint64(h.ctx.State.GetFrameNumber()),
-				Timestamp:  h.ctx.PausableClock.Now(),
-			}
-			h.ctx.AudioEngine.SendState(cmd)
-		}
+		h.ctx.PushEvent(engine.EventNuggetJumpRequest, nil, h.ctx.PausableClock.Now())
 
 	case terminal.KeyEnter:
 		currentHeat := h.ctx.State.GetHeat()
@@ -253,7 +212,6 @@ func (h *InputHandler) handleInsertMode(ev terminal.Event) bool {
 		h.ctx.World.RunSafe(func() {
 			result := MotionUp(h.ctx, pos.X, pos.Y, 1)
 			OpMove(h.ctx, result, 'k')
-			h.ctx.State.SetHeat(0)
 		})
 		return true
 
@@ -261,7 +219,6 @@ func (h *InputHandler) handleInsertMode(ev terminal.Event) bool {
 		h.ctx.World.RunSafe(func() {
 			result := MotionDown(h.ctx, pos.X, pos.Y, 1)
 			OpMove(h.ctx, result, 'j')
-			h.ctx.State.SetHeat(0)
 		})
 		return true
 
@@ -269,7 +226,6 @@ func (h *InputHandler) handleInsertMode(ev terminal.Event) bool {
 		h.ctx.World.RunSafe(func() {
 			result := MotionLeft(h.ctx, pos.X, pos.Y, 1)
 			OpMove(h.ctx, result, 'h')
-			h.ctx.State.SetHeat(0)
 		})
 		return true
 
@@ -277,7 +233,6 @@ func (h *InputHandler) handleInsertMode(ev terminal.Event) bool {
 		h.ctx.World.RunSafe(func() {
 			result := MotionRight(h.ctx, pos.X, pos.Y, 1)
 			OpMove(h.ctx, result, 'l')
-			h.ctx.State.SetHeat(0)
 		})
 		return true
 
@@ -285,7 +240,6 @@ func (h *InputHandler) handleInsertMode(ev terminal.Event) bool {
 		h.ctx.World.RunSafe(func() {
 			result := MotionLineStart(h.ctx, pos.X, pos.Y, 1)
 			OpMove(h.ctx, result, '0')
-			h.ctx.State.SetHeat(0)
 		})
 		return true
 
@@ -293,7 +247,6 @@ func (h *InputHandler) handleInsertMode(ev terminal.Event) bool {
 		h.ctx.World.RunSafe(func() {
 			result := MotionLineEnd(h.ctx, pos.X, pos.Y, 1)
 			OpMove(h.ctx, result, '$')
-			h.ctx.State.SetHeat(0)
 		})
 		return true
 
@@ -308,43 +261,7 @@ func (h *InputHandler) handleInsertMode(ev terminal.Event) bool {
 		return true
 
 	case terminal.KeyTab:
-		h.ctx.World.RunSafe(func() {
-			energy := h.ctx.State.GetEnergy()
-			if energy < 10 {
-				return
-			}
-
-			nuggetID := engine.Entity(h.ctx.State.GetActiveNuggetID())
-			if nuggetID == 0 {
-				return
-			}
-
-			nuggetPos, ok := h.ctx.World.Positions.Get(nuggetID)
-			if !ok {
-				return
-			}
-
-			h.ctx.World.Positions.Add(h.ctx.CursorEntity, components.PositionComponent{
-				X: nuggetPos.X,
-				Y: nuggetPos.Y,
-			})
-
-			payload := &engine.EnergyTransactionPayload{
-				Amount: -10,
-				Source: "NuggetJump",
-			}
-			h.ctx.PushEvent(engine.EventEnergyTransaction, payload, h.ctx.PausableClock.Now())
-
-			if h.ctx.AudioEngine != nil {
-				cmd := audio.AudioCommand{
-					Type:       audio.SoundBell,
-					Priority:   1,
-					Generation: uint64(h.ctx.State.GetFrameNumber()),
-					Timestamp:  h.ctx.PausableClock.Now(),
-				}
-				h.ctx.AudioEngine.SendState(cmd)
-			}
-		})
+		h.ctx.PushEvent(engine.EventNuggetJumpRequest, nil, h.ctx.PausableClock.Now())
 		return true
 
 	case terminal.KeyEnter:
