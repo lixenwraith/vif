@@ -136,7 +136,7 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 		delete(s.processedGridCells, k)
 	}
 
-	var collisionBuf [engine.MaxEntitiesPerCell]engine.Entity
+	var collisionBuf [constants.MaxEntitiesPerCell]engine.Entity
 
 	for _, entity := range decayEntities {
 		fall, ok := world.Decays.Get(entity)

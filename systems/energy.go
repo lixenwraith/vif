@@ -202,7 +202,6 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 		s.lastCorrect = now
 
 		// Calculate points: increment * level_multiplier * (red?-1:1)
-		// TODO: refactor
 		levelMultipliers := map[components.SequenceLevel]int{
 			components.LevelDark:   1,
 			components.LevelNormal: 2,
@@ -409,7 +408,6 @@ func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity engi
 
 	// Correct character - remove entity and move cursor
 	s.ctx.State.SetEnergyBlinkActive(true)
-	// TODO: why check other sequences here?
 	// Map sequence types to uint32: 0=error, 1=blue, 2=green, 3=red, 4=gold
 	var typeCode uint32
 	switch seq.Type {

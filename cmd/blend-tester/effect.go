@@ -39,33 +39,51 @@ func handleEffectInput(ev terminal.Event) {
 func handleShieldInput(ev terminal.Event) {
 	switch ev.Key {
 	case terminal.KeyUp:
-		state.shieldRadiusY += 0.5
+		if state.shieldRadiusY < 10.0 {
+			state.shieldRadiusY += 0.5
+		}
 	case terminal.KeyDown:
-		if state.shieldRadiusY > 1 {
+		if state.shieldRadiusY > 1.0 {
 			state.shieldRadiusY -= 0.5
 		}
 	case terminal.KeyLeft:
-		if state.shieldRadiusX > 1 {
+		if state.shieldRadiusX > 1.0 {
 			state.shieldRadiusX -= 0.5
 		}
 	case terminal.KeyRight:
-		state.shieldRadiusX += 0.5
+		if state.shieldRadiusX < 15.0 {
+			state.shieldRadiusX += 0.5
+		}
 	case terminal.KeyRune:
 		switch ev.Rune {
 		case 'o', 'O':
-			state.shieldOpacity += 0.05
-			if state.shieldOpacity > 1 {
-				state.shieldOpacity = 1
+			state.shieldOpacity -= 0.05
+			if state.shieldOpacity < 0.1 {
+				state.shieldOpacity = 0.1
 			}
 		case 'p', 'P':
-			state.shieldOpacity -= 0.05
-			if state.shieldOpacity < 0 {
-				state.shieldOpacity = 0
+			state.shieldOpacity += 0.05
+			if state.shieldOpacity > 1.0 {
+				state.shieldOpacity = 1.0
 			}
 		case 'c', 'C':
-			state.shieldState = (state.shieldState + 1) % 3
+			// Cycle: Gray → Blue → Green → Custom → Gray
+			if state.shieldColorMode == 1 {
+				state.shieldColorMode = 0
+				state.shieldState = ShieldGray
+			} else {
+				state.shieldState++
+				if state.shieldState > ShieldGreen {
+					state.shieldColorMode = 1 // Switch to custom
+				}
+			}
 		case 'b', 'B':
 			state.shieldBgIdx = (state.shieldBgIdx + 1) % len(bgPresets)
+		case 'h', 'H':
+			// Hex input for custom shield color
+			state.hexInputActive = true
+			state.hexInputBuffer = ""
+			state.hexInputTarget = 2 // New target: shield custom color
 		}
 	}
 }
@@ -129,6 +147,11 @@ func handleHeatInput(ev terminal.Event) {
 		if state.heatValue > 0 {
 			state.heatValue -= 5
 		}
+	case terminal.KeyRune:
+		switch ev.Rune {
+		case 'b', 'B':
+			state.heatBgIdx = (state.heatBgIdx + 1) % len(bgPresets)
+		}
 	}
 }
 
@@ -165,16 +188,28 @@ func drawEffectMode() {
 }
 
 func drawShieldEffect(startY int, fg, bg render.RGB) {
-	// Keys
-	drawText(1, startY, "←→:RadX ↑↓:RadY O/P:Opacity C:ColorState B:Bg", render.RGB{100, 100, 100}, bg)
+	// Keys line - updated
+	drawText(1, startY, "←→:RadX ↑↓:RadY O/P:Opacity C:Color B:Bg H:HexColor", render.RGB{100, 100, 100}, bg)
 	startY += 2
 
-	// Parameters
-	stateNames := []string{"Gray (No Char)", "Blue (Dark/Normal/Bright)", "Green (Dark/Normal/Bright)"}
+	// Parameters - updated to show color mode
+	var colorLabel string
+	if state.shieldColorMode == 1 {
+		colorLabel = fmt.Sprintf("Custom #%02X%02X%02X", state.shieldCustomColor.R, state.shieldCustomColor.G, state.shieldCustomColor.B)
+	} else {
+		stateNames := []string{"Gray (No Char)", "Blue (Dark/Normal/Bright)", "Green (Dark/Normal/Bright)"}
+		colorLabel = stateNames[state.shieldState]
+	}
 	drawText(1, startY, fmt.Sprintf("RadiusX: %.1f  RadiusY: %.1f  Opacity: %.2f", state.shieldRadiusX, state.shieldRadiusY, state.shieldOpacity), fg, bg)
 	startY++
-	drawText(1, startY, fmt.Sprintf("State: %s", stateNames[state.shieldState]), fg, bg)
+	drawText(1, startY, fmt.Sprintf("Color: %s", colorLabel), fg, bg)
+
+	// Color swatch for custom mode
+	if state.shieldColorMode == 1 {
+		drawSwatch(8+len(colorLabel), startY, 4, state.shieldCustomColor)
+	}
 	startY++
+
 	bgName := bgPresets[state.shieldBgIdx].name
 	bgColor := bgPresets[state.shieldBgIdx].color
 	drawText(1, startY, fmt.Sprintf("Background: %s", bgName), fg, bg)
@@ -182,16 +217,20 @@ func drawShieldEffect(startY int, fg, bg render.RGB) {
 
 	// Determine shield color
 	var shieldColor render.RGB
-	switch state.shieldState {
-	case ShieldGray:
-		shieldColor = render.RGB{128, 128, 128}
-	case ShieldBlue:
-		shieldColor = render.RgbSequenceBlueNormal
-	case ShieldGreen:
-		shieldColor = render.RgbSequenceGreenNormal
+	if state.shieldColorMode == 1 {
+		shieldColor = state.shieldCustomColor
+	} else {
+		switch state.shieldState {
+		case ShieldGray:
+			shieldColor = render.RGB{128, 128, 128}
+		case ShieldBlue:
+			shieldColor = render.RgbSequenceBlueNormal
+		case ShieldGreen:
+			shieldColor = render.RgbSequenceGreenNormal
+		}
 	}
 
-	// Preview area - side by side TC and 256
+	// ... existing preview rendering code ...
 	previewW := int(state.shieldRadiusX)*2 + 3
 	previewH := int(state.shieldRadiusY)*2 + 3
 	if previewW > 40 {
@@ -204,23 +243,27 @@ func drawShieldEffect(startY int, fg, bg render.RGB) {
 	centerX := previewW / 2
 	centerY := previewH / 2
 
-	// TC Preview
 	tcStartX := 2
 	drawText(tcStartX, startY, "TrueColor:", fg, bg)
 	startY++
 	drawShieldPreview(tcStartX, startY, previewW, previewH, centerX, centerY, shieldColor, bgColor, true)
 
-	// 256 Preview
 	x256StartX := tcStartX + previewW + 5
 	drawText(x256StartX, startY-1, "256-Color:", fg, bg)
 	drawShieldPreview(x256StartX, startY, previewW, previewH, centerX, centerY, shieldColor, bgColor, false)
 
-	// Formula
 	startY += previewH + 2
 	drawBox(0, startY, 70, 5, " Shield Blend (Screen) ", render.RGB{80, 80, 80}, bg)
 	drawText(2, startY+1, "falloff = (1 - dist)²", render.RGB{200, 200, 100}, bg)
 	drawText(2, startY+2, "alpha = falloff × maxOpacity", render.RGB{200, 200, 100}, bg)
 	drawText(2, startY+3, "Screen: 255 - (255-Dst)*(255-Src)/255", render.RGB{200, 200, 100}, bg)
+
+	// Hex input overlay for shield
+	if state.hexInputActive && state.hexInputTarget == 2 {
+		drawBox(20, 10, 30, 5, " Shield Color ", render.RGB{255, 255, 0}, render.RGB{40, 40, 60})
+		drawText(22, 12, "#"+state.hexInputBuffer+"_", render.RGB{255, 255, 255}, render.RGB{40, 40, 60})
+		drawText(22, 13, "Enter:Apply Esc:Cancel", render.RGB{100, 100, 100}, render.RGB{40, 40, 60})
+	}
 }
 
 func drawShieldPreview(startX, startY, w, h, cx, cy int, shieldColor, bgColor render.RGB, trueColor bool) {
@@ -384,10 +427,14 @@ func drawFlashEffect(startY int, fg, bg render.RGB) {
 }
 
 func drawHeatEffect(startY int, fg, bg render.RGB) {
-	drawText(1, startY, "←→ ↑↓:Value", render.RGB{100, 100, 100}, bg)
+	// Updated keys line
+	drawText(1, startY, "←→ ↑↓:Value B:Background", render.RGB{100, 100, 100}, bg)
 	startY += 2
 
-	drawText(1, startY, fmt.Sprintf("Heat Value: %d%%", state.heatValue), fg, bg)
+	// Show background selection
+	bgName := bgPresets[state.heatBgIdx].name
+	bgColor := bgPresets[state.heatBgIdx].color
+	drawText(1, startY, fmt.Sprintf("Heat Value: %d%%  Background: %s", state.heatValue, bgName), fg, bg)
 	startY += 2
 
 	// Full gradient display
@@ -396,19 +443,19 @@ func drawHeatEffect(startY int, fg, bg render.RGB) {
 
 	gradientW := 60
 	// TC gradient
-	drawText(1, startY, "TC:", fg, bg)
+	drawText(1, startY, "TC:", fg, bgColor)
 	for i := 0; i < gradientW; i++ {
 		progress := float64(i+1) / float64(gradientW)
-		color := render.GetHeatMeterColor(progress)
+		color := getHeatColor(progress)
 		buf.SetWithBg(5+i, startY, ' ', color, color)
 	}
 	startY++
 
 	// 256 gradient
-	drawText(1, startY, "256:", fg, bg)
+	drawText(1, startY, "256:", fg, bgColor)
 	for i := 0; i < gradientW; i++ {
 		progress := float64(i+1) / float64(gradientW)
-		color := render.GetHeatMeterColor(progress)
+		color := getHeatColor(progress)
 		idx := terminal.RGBTo256(color)
 		rgb256 := Get256PaletteRGB(idx)
 		buf.SetWithBg(5+i, startY, ' ', rgb256, rgb256)
@@ -417,16 +464,28 @@ func drawHeatEffect(startY int, fg, bg render.RGB) {
 
 	// Current value indicator
 	progress := float64(state.heatValue) / 100.0
-	currentColor := render.GetHeatMeterColor(progress)
-	drawText(1, startY, fmt.Sprintf("Current (%d%%):", state.heatValue), fg, bg)
+	currentColor := getHeatColor(progress)
+	drawText(1, startY, fmt.Sprintf("Current (%d%%):", state.heatValue), fg, bgColor)
 	drawSwatch(18, startY, 6, currentColor)
 
 	info := AnalyzeColor(currentColor)
-	drawText(25, startY, fmt.Sprintf("TC: (%3d,%3d,%3d)", currentColor.R, currentColor.G, currentColor.B), render.RGB{150, 150, 150}, bg)
+	drawText(25, startY, fmt.Sprintf("TC: (%3d,%3d,%3d)", currentColor.R, currentColor.G, currentColor.B), render.RGB{150, 150, 150}, bgColor)
 	startY++
-	drawText(25, startY, fmt.Sprintf("256: idx=%3d → (%3d,%3d,%3d)", info.Redmean256, info.Redmean256Bg.R, info.Redmean256Bg.G, info.Redmean256Bg.B), render.RGB{150, 150, 150}, bg)
+	drawText(25, startY, fmt.Sprintf("256: idx=%3d → (%3d,%3d,%3d)", info.Redmean256, info.Redmean256Bg.R, info.Redmean256Bg.G, info.Redmean256Bg.B), render.RGB{150, 150, 150}, bgColor)
 	startY += 2
 
 	// Segment markers
-	drawText(1, startY, "Segments: 0  10  20  30  40  50  60  70  80  90 100", render.RGB{120, 120, 120}, bg)
+	drawText(1, startY, "Segments: 0  10  20  30  40  50  60  70  80  90 100", render.RGB{120, 120, 120}, bgColor)
+}
+
+// getHeatColor retrieves gradient color from LUT, mapping progress to index
+func getHeatColor(progress float64) render.RGB {
+	if progress < 0 {
+		progress = 0
+	}
+	if progress > 1 {
+		progress = 1
+	}
+	idx := int(progress * 255)
+	return render.HeatGradientLUT[idx]
 }

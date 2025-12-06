@@ -1,16 +1,15 @@
 package engine
 
-// MaxEntitiesPerCell set to 31 to ensure the Cell struct fits exactly into 256 bytes
-// (4 cache lines) when Entity is uint64 (8 bytes)
-// 31 * 8 (Entities) + 1 (Count) + 7 (Padding) = 256 bytes
-const MaxEntitiesPerCell = 31
+import (
+	"github.com/lixenwraith/vi-fighter/constants"
+)
 
 // Cell represents a single grid cell containing a fixed number of entities
 // It is a value type designed for contiguous memory layout
 type Cell struct {
 	Count    uint8
 	_        [7]byte // Explicit padding to ensure 8-byte alignment for Entities
-	Entities [MaxEntitiesPerCell]Entity
+	Entities [constants.MaxEntitiesPerCell]Entity
 }
 
 // SpatialGrid is a dense 2D grid for fast spatial queries without allocation
@@ -39,7 +38,7 @@ func (g *SpatialGrid) Add(e Entity, x, y int) bool {
 	idx := y*g.Width + x
 	cell := &g.Cells[idx] // Get pointer to avoid copy
 
-	if cell.Count < MaxEntitiesPerCell {
+	if cell.Count < constants.MaxEntitiesPerCell {
 		cell.Entities[cell.Count] = e
 		cell.Count++
 		return true

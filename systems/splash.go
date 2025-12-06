@@ -179,7 +179,7 @@ func (s *SplashSystem) handleGoldSpawn(world *engine.World, payload *engine.Gold
 		Duration:   payload.Duration.Nanoseconds(),
 		SequenceID: payload.SequenceID,
 	}
-	// TODO: double counts 9
+	// TODO: make it flexible for > 10 and not bound to gold - future expansion
 	splash.Content[0] = '9' // Start at 9
 
 	// 4. Spawn

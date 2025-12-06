@@ -810,7 +810,7 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 	now := timeRes.GameTime
 
 	// Optimization buffer reusable for this scope
-	var collisionBuf [engine.MaxEntitiesPerCell]engine.Entity
+	var collisionBuf [constants.MaxEntitiesPerCell]engine.Entity
 
 	// Get and iterate on all drains
 	drainEntities := world.Drains.All()

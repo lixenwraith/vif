@@ -23,6 +23,11 @@ const (
 	EventBufferMask = 255
 )
 
+// MaxEntitiesPerCell set to 31 to ensure the Cell struct fits exactly into 256 bytes
+// (4 cache lines) when Entity is uint64 (8 bytes)
+// 31 * 8 (Entities) + 1 (Count) + 7 (Padding) = 256 bytes
+const MaxEntitiesPerCell = 31
+
 // System Execution Priorities (lower runs first)
 const (
 	PriorityBoost   = 5

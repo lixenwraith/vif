@@ -61,11 +61,13 @@ type AppState struct {
 	blendCustomBg render.RGB
 
 	// Effect mode - Shield
-	shieldRadiusX float64
-	shieldRadiusY float64
-	shieldOpacity float64
-	shieldState   ShieldColorState
-	shieldBgIdx   int
+	shieldRadiusX     float64
+	shieldRadiusY     float64
+	shieldOpacity     float64
+	shieldState       ShieldColorState
+	shieldBgIdx       int
+	shieldCustomColor render.RGB // Custom shield color
+	shieldColorMode   int        // 0=preset, 1=custom
 
 	// Effect mode - Trail
 	trailLength   int
@@ -79,6 +81,7 @@ type AppState struct {
 
 	// Effect mode - Heat
 	heatValue int // 0-100
+	heatBgIdx int // Background preset index
 
 	// Diag mode
 	diagInputHex string
@@ -246,11 +249,15 @@ func handleHexInput(ev terminal.Event) {
 	case terminal.KeyEnter:
 		if len(state.hexInputBuffer) == 6 {
 			rgb := parseHex(state.hexInputBuffer)
-			if state.hexInputTarget == 0 {
+			switch state.hexInputTarget {
+			case 0:
 				state.blendCustomBg = rgb
-			} else {
+			case 1:
 				state.diagInputRGB = rgb
 				state.diagInputHex = state.hexInputBuffer
+			case 2:
+				state.shieldCustomColor = rgb
+				state.shieldColorMode = 1
 			}
 		}
 		state.hexInputActive = false

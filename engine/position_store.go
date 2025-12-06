@@ -9,7 +9,7 @@ import (
 )
 
 // PositionStore maintains a spatial index using a fixed-capacity dense grid
-// It supports multiple entities per cell (up to 15)
+// It supports multiple entities per cell (up to MaxEntitiesPerCell)
 type PositionStore struct {
 	mu         sync.RWMutex
 	components map[Entity]components.PositionComponent
@@ -29,7 +29,7 @@ func NewPositionStore() *PositionStore {
 }
 
 // Add inserts or updates an entity's position
-// This handles the "cursor ghosting" bug by allowing multiple entities at the same location
+// Multiple entities at the same location are allowed, overflow silently ignored
 func (ps *PositionStore) Add(e Entity, pos components.PositionComponent) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
@@ -46,10 +46,6 @@ func (ps *PositionStore) Add(e Entity, pos components.PositionComponent) {
 	ps.components[e] = pos
 
 	// Add to new grid location
-	// NOTE: Grid overflow is silently ignored
-	// In real gameplay, 15 entities per cell is sufficient
-	// If this becomes an issue, expand MaxEntitiesPerCell or implement cell chaining
-	// Current design prioritizes cache locality over edge case handling
 	_ = ps.grid.Add(e, pos.X, pos.Y)
 }
 
