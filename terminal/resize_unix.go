@@ -3,8 +3,10 @@
 package terminal
 
 import (
+	"fmt"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -57,6 +59,17 @@ func (r *resizeHandler) events() <-chan ResizeEvent {
 // watchLoop monitors for resize signals
 func (r *resizeHandler) watchLoop() {
 	defer close(r.doneCh)
+
+	// TODO: attempt bubbling it up instead of adding terminal dependency
+	// Panic recovery for resize signal handler
+	defer func() {
+		if r := recover(); r != nil {
+			EmergencyReset(os.Stdout)
+			fmt.Fprintf(os.Stderr, "\n\x1b[31mRESIZE HANDLER CRASHED: %v\x1b[0m\n", r)
+			fmt.Fprintf(os.Stderr, "Stack Trace:\n%s\n", debug.Stack())
+			os.Exit(1)
+		}
+	}()
 
 	for {
 		select {

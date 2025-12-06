@@ -1,6 +1,9 @@
 package terminal
 
 import (
+	"fmt"
+	"os"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -97,6 +100,17 @@ func (r *inputReader) events() <-chan Event {
 // readLoop is the main input reading goroutine
 func (r *inputReader) readLoop() {
 	defer close(r.doneCh)
+
+	// TODO: attempt bubbling it up instead of adding terminal dependency
+	// Panic recovery for raw input reader
+	defer func() {
+		if r := recover(); r != nil {
+			EmergencyReset(os.Stdout)
+			fmt.Fprintf(os.Stderr, "\n\x1b[31mINPUT READER CRASHED: %v\x1b[0m\n", r)
+			fmt.Fprintf(os.Stderr, "Stack Trace:\n%s\n", debug.Stack())
+			os.Exit(1)
+		}
+	}()
 
 	buf := make([]byte, 256)
 

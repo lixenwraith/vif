@@ -54,9 +54,6 @@ func (r *EventRouter) DispatchAll(world *World) {
 	events := r.queue.Consume()
 	for _, ev := range events {
 		handlers := r.handlers[ev.Type]
-		if ev.Type == EventGoldDestroyed {
-			panic(nil)
-		}
 		for _, h := range handlers {
 			h.HandleEvent(world, ev)
 		}

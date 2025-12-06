@@ -1,11 +1,15 @@
 package engine
 
 import (
+	"fmt"
+	"os"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // GamePhase represents the current phase of the game's mechanic cycle
@@ -158,6 +162,18 @@ func (cs *ClockScheduler) Stop() {
 // Implements adaptive sleeping that respects pause state to avoid busy-waiting
 func (cs *ClockScheduler) schedulerLoop() {
 	defer cs.wg.Done()
+
+	// TODO: attempt bubbling it up instead of adding terminal dependency
+	// Panic recovery for game logic goroutine
+	defer func() {
+		if r := recover(); r != nil {
+			// Restore terminal to sane state using the terminal package directly
+			terminal.EmergencyReset(os.Stdout)
+			fmt.Fprintf(os.Stderr, "\n\x1b[31mGAME LOOP CRASHED: %v\x1b[0m\n", r)
+			fmt.Fprintf(os.Stderr, "Stack Trace:\n%s\n", debug.Stack())
+			os.Exit(1)
+		}
+	}()
 
 	// Initialize next tick deadline
 	cs.mu.Lock()

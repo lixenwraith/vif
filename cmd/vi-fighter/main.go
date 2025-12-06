@@ -150,7 +150,6 @@ func main() {
 	heatMeterRenderer := renderers.NewHeatMeterRenderer(ctx.State)
 	orchestrator.Register(heatMeterRenderer, render.PriorityUI)
 
-	// TODO: check LineNumWidth arg
 	lineNumbersRenderer := renderers.NewLineNumbersRenderer(ctx)
 	orchestrator.Register(lineNumbersRenderer, render.PriorityUI)
 
@@ -193,6 +192,16 @@ func main() {
 
 	eventChan := make(chan terminal.Event, 256)
 	go func() {
+		// Panic recovery for input polling goroutine to ensure terminal cleanup
+		defer func() {
+			if r := recover(); r != nil {
+				terminal.EmergencyReset(os.Stdout)
+				fmt.Fprintf(os.Stderr, "\n\x1b[31mEVENT POLLER CRASHED: %v\x1b[0m\n", r)
+				fmt.Fprintf(os.Stderr, "Stack Trace:\n%s\n", debug.Stack())
+				os.Exit(1)
+			}
+		}()
+
 		for {
 			eventChan <- term.PollEvent()
 		}

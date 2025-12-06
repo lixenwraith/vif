@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"os"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -13,6 +15,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/content"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // ColorLevelKey represents a unique color+level combination
@@ -170,6 +173,17 @@ func (s *SpawnSystem) checkAndTriggerRefresh() {
 
 // preFetchNextContent loads next content batch in background
 func (s *SpawnSystem) preFetchNextContent() {
+	// TODO: attempt bubbling it up instead of adding terminal dependency
+	// Panic recovery for content loader goroutine
+	defer func() {
+		if r := recover(); r != nil {
+			terminal.EmergencyReset(os.Stdout)
+			fmt.Fprintf(os.Stderr, "\n\x1b[31mCONTENT LOADER CRASHED: %v\x1b[0m\n", r)
+			fmt.Fprintf(os.Stderr, "Stack Trace:\n%s\n", debug.Stack())
+			os.Exit(1)
+		}
+	}()
+
 	// Get new content from ContentManager
 	lines, _, err := s.contentManager.SelectRandomBlockWithValidation()
 	if err != nil || len(lines) == 0 {
