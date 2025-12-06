@@ -133,68 +133,121 @@ func (s *MySystem) Update(world *engine.World, dt time.Duration) {
 **GameContext Role:**
 - OS/Window management, Event routing, State orchestration
 - `GameState` access via `ctx.State`
-- `EventQueue` access via `ctx.PushEvent()`
+- `EventQueue` integration via `ctx.PushEvent()` (wraps `events.EventQueue` for producer access)
 - `AudioEngine` access via `ctx.AudioEngine.PlaySound()`
 - `CursorEntity` reference for systems to query/update cursor position via ECS
 - Mode state tracking (NORMAL, INSERT, SEARCH, COMMAND, OVERLAY)
 
 ### Event-Driven Communication
 
-**EventRouter** pattern for decoupled system communication:
+The event system provides high-performance, type-safe inter-system communication through a dedicated `events` package (`github.com/lixenwraith/vi-fighter/events`). This architecture strictly separates message definitions from execution logic, eliminating circular dependencies between game systems.
 
-**Architecture Flow:**
+**Package Structure:**
+
+| File | Description |
+|------|-------------|
+| `types.go` | `EventType` enums and `GameEvent` envelope struct |
+| `payloads.go` | Structured data carriers (e.g., `CharacterTypedPayload`, `DeleteRequestPayload`) |
+| `queue.go` | Lock-free ring buffer (256 capacity, atomic CAS operations) |
+| `router.go` | Generic dispatch logic (`Router[T]`) connecting events to handlers |
+
+**Architecture Flow (MPSC Pattern):**
 ```
-Producer → EventQueue → ClockScheduler → EventRouter → EventHandler → Systems
-(InputHandler)  (lock-free)   (tick loop)    (dispatch)   (consume)
+Producer → EventQueue → ClockScheduler → EventRouter → Handler[T] → Systems
+(modes pkg)  (lock-free)   (tick loop)    (dispatch)    (consume)   (engine pkg)
 ```
 
 **Core Principles:**
-- Systems never call each other's methods directly
-- Lock-free queue with atomic CAS operations
-- Centralized dispatch before World.Update()
-- Frame deduplication to prevent duplicate processing
+- **Package Separation**: `events` package contains only message definitions, no game logic
+- **Generic Routing**: `Router[T any]` and `Handler[T any]` prevent import cycles between `events` and `engine`
+- **Type Safety**: Compile-time type checking via generics (Go 1.24+)
+- **Lock-Free Queue**: Atomic CAS operations, safe for concurrent writes from Input goroutine and Game Loop
+- **Zero Allocation**: Steady-state operation with no GC pressure (uses `sync.Pool` for high-frequency payloads)
+- **Centralized Dispatch**: Events dispatched before `World.Update()` in clock tick
 
 **Event Types:**
 
 | Event | Producer | Consumer | Payload |
 |-------|----------|----------|---------|
-| `EventCharacterTyped` | InputHandler | EnergySystem | `*CharacterTypedPayload{Char, X, Y}` |
-| `EventEnergyTransaction` | InputHandler | EnergySystem | `*EnergyTransactionPayload{Amount, Source}` |
-| `EventNuggetJumpRequest` | InputHandler | NuggetSystem | `nil` |
-| `EventDeleteRequest` | InputHandler | EnergySystem | `*DeleteRequestPayload{StartX, StartY, EndX, EndY, RangeType}` |
+| `EventCharacterTyped` | InputHandler (modes) | EnergySystem | `*CharacterTypedPayload{Char, X, Y}` |
+| `EventEnergyTransaction` | InputHandler (modes) | EnergySystem | `*EnergyTransactionPayload{Amount, Source}` |
+| `EventNuggetJumpRequest` | InputHandler (modes) | NuggetSystem | `nil` |
+| `EventDeleteRequest` | InputHandler (modes) | EnergySystem | `*DeleteRequestPayload{StartX, StartY, EndX, EndY, RangeType}` |
 | `EventShieldActivate` | EnergySystem | ShieldSystem | `nil` |
 | `EventShieldDeactivate` | EnergySystem | ShieldSystem | `nil` |
 | `EventShieldDrain` | DrainSystem | ShieldSystem | `*ShieldDrainPayload{Amount}` |
 | `EventCleanerRequest` | EnergySystem | CleanerSystem | `nil` |
-| `EventDirectionalCleanerRequest` | InputHandler, EnergySystem | CleanerSystem | `*DirectionalCleanerPayload{OriginX, OriginY}` |
+| `EventDirectionalCleanerRequest` | InputHandler (modes), EnergySystem | CleanerSystem | `*DirectionalCleanerPayload{OriginX, OriginY}` |
 | `EventCleanerFinished` | CleanerSystem | (observers) | `nil` |
-| `EventSplashRequest` | EnergySystem, InputHandler | SplashSystem | `*SplashRequestPayload{Text, Color, OriginX, OriginY}` |
+| `EventSplashRequest` | EnergySystem, InputHandler (modes) | SplashSystem | `*SplashRequestPayload{Text, Color, OriginX, OriginY}` |
 | `EventGoldSpawned` | GoldSystem | SplashSystem | `*GoldSpawnedPayload{SequenceID, OriginX, OriginY, Length, Duration}` |
 | `EventGoldComplete` | GoldSystem | SplashSystem | `*GoldCompletionPayload{SequenceID}` |
 | `EventGoldTimeout` | GoldSystem | SplashSystem | `*GoldCompletionPayload{SequenceID}` |
 | `EventGoldDestroyed` | DrainSystem | SplashSystem | `*GoldCompletionPayload{SequenceID}` |
 
-**Producer Pattern:**
+**Producer Pattern (modes package):**
 ```go
-payload := &engine.CharacterTypedPayload{Char: r, X: x, Y: y}
-h.ctx.PushEvent(engine.EventCharacterTyped, payload, h.ctx.PausableClock.Now())
+import "github.com/lixenwraith/vi-fighter/events"
+
+payload := &events.CharacterTypedPayload{Char: r, X: x, Y: y}
+h.ctx.PushEvent(events.EventCharacterTyped, payload, h.ctx.PausableClock.Now())
 ```
 
-**Consumer Pattern:**
+**Consumer Pattern (systems in engine package):**
 ```go
-func (s *EnergySystem) EventTypes() []engine.EventType {
-    return []engine.EventType{engine.EventCharacterTyped, engine.EventEnergyTransaction}
+import (
+    "github.com/lixenwraith/vi-fighter/engine"
+    "github.com/lixenwraith/vi-fighter/events"
+)
+
+// Generic Handler interface implemented by systems
+func (s *EnergySystem) EventTypes() []events.EventType {
+    return []events.EventType{events.EventCharacterTyped, events.EventEnergyTransaction}
 }
 
-func (s *EnergySystem) HandleEvent(world *engine.World, event engine.GameEvent) {
+func (s *EnergySystem) HandleEvent(world *engine.World, event events.GameEvent) {
     switch event.Type {
-    case engine.EventCharacterTyped:
-        if payload, ok := event.Payload.(*engine.CharacterTypedPayload); ok {
+    case events.EventCharacterTyped:
+        if payload, ok := event.Payload.(*events.CharacterTypedPayload); ok {
             s.handleCharacterTyping(world, payload.X, payload.Y, payload.Char)
         }
     }
 }
 ```
+
+**Generic Routing Architecture:**
+
+The `Router[T]` uses generics to avoid circular dependencies:
+
+```go
+// events package (no dependency on engine)
+type Handler[T any] interface {
+    HandleEvent(ctx T, event GameEvent)
+    EventTypes() []EventType
+}
+
+type Router[T any] struct {
+    handlers map[EventType][]Handler[T]
+}
+
+// engine package instantiates with concrete type
+router := events.NewRouter[*engine.World]()
+router.Register(energySystem)  // energySystem implements Handler[*engine.World]
+router.DispatchAll(world, eventQueue)
+```
+
+**Data Flow:**
+
+1. **Production**: `modes` package detects keystroke → constructs payload → calls `ctx.PushEvent()` → event written to lock-free `EventQueue`
+2. **Synchronization**: `ClockScheduler` wakes (50ms tick) → acquires `World` lock for thread safety
+3. **Consumption & Dispatch**: `Router` drains queue in FIFO order → looks up registered `Handler[*engine.World]` → calls `HandleEvent(world, event)`
+
+**Key Benefits:**
+
+1. **Decoupling**: Input handling (`modes`) depends only on lightweight event definitions, not heavy engine logic
+2. **Testability**: Routing logic and queues testable in isolation with mock contexts
+3. **Concurrency Safety**: Generic design keeps Event System "dumb" about data, while `engine` enforces thread safety via World lock during dispatch
+4. **No Circular Dependencies**: `events` package is standalone, `modes` and `engine` both depend on it but not on each other
 
 ### State Ownership Model
 
@@ -743,9 +796,11 @@ COMMAND ─[:debug/:help]→ OVERLAY (modal) ─[ESC/ENTER]→ NORMAL
 
 ### Input Handling Architecture
 
-The input system (`modes/` package) is fully decoupled from game logic through **event-driven architecture**.
+The input system (`modes/` package) is fully decoupled from game logic through **event-driven architecture** via the dedicated `events` package. The `modes` package depends only on `events` for message definitions, with zero dependencies on `engine` or `systems` packages.
 
 **Package Location:** `modes/` (InputHandler, InputMachine, BindingTable, Motion functions, Operators, Commands, Search)
+**Event Package:** `events/` (EventType, GameEvent, Payloads, EventQueue, Router[T])
+**Dependency Graph:** `modes` → `events` ← `engine` (no circular dependencies)
 
 #### Core Components
 
@@ -883,11 +938,13 @@ InputHandler.HandleEvent()
     ├─→ handleCommandMode() ───→ ExecuteCommand()
     └─→ handleOverlayMode() ───→ Scroll/Close overlay
          ↓
-EventQueue (lock-free)
+EventQueue (lock-free, events pkg)
          ↓
 ClockScheduler.DispatchEventsImmediately()
          ↓
-EventRouter
+EventRouter[*engine.World] (events pkg)
+         ↓
+Handler[*engine.World] implementations (systems pkg)
          ↓
 Systems (EnergySystem, NuggetSystem, CleanerSystem, etc.)
 ```
@@ -928,10 +985,12 @@ Systems (EnergySystem, NuggetSystem, CleanerSystem, etc.)
 
 #### Decoupling Patterns
 
-**1. Event-Driven Communication**
-- InputHandler emits events instead of calling system methods
-- Systems subscribe to event types via EventRouter
-- Eliminates direct dependencies between input and game logic
+**1. Event-Driven Communication via Dedicated Package**
+- **Package Separation**: `modes` package depends only on `events` package for message definitions
+- **No Engine Dependency**: InputHandler emits events without knowing about `engine` or `systems` packages
+- **Generic Routing**: Systems subscribe to event types via `Router[*engine.World]` (generic over context type)
+- **Zero Coupling**: `events` package contains only data structures, no game logic
+- **Import Graph**: `modes` → `events` ← `engine` (no circular dependencies)
 
 **2. Action Closures**
 - InputMachine returns action closures in `ProcessResult`
@@ -941,7 +1000,7 @@ Systems (EnergySystem, NuggetSystem, CleanerSystem, etc.)
 **3. Motion as Pure Functions**
 - Motion functions are stateless calculations
 - Return `MotionResult` describing target, not mutating state
-- Operators interpret results and emit events
+- Operators interpret results and emit events to `events.EventQueue`
 
 **4. Binding Table Configuration**
 - Key mappings externalized from state machine logic

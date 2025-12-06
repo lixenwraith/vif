@@ -51,6 +51,7 @@ The game strictly follows ECS architecture principles with a hybrid real-time/cl
 - **Components**: Pure data structures (Position, Character, Sequence, Gold, Nugget, Cleaner, Drain, etc.)
 - **Systems**: All game logic (Boost, Energy, Spawn, Nugget, Gold, Cleaner, Drain, Decay)
 - **World**: Single source of truth for game state
+- **Event System**: Dedicated `events` package with generic routing (`Router[T]`) for decoupled inter-system communication (MPSC pattern, lock-free queue)
 - **Concurrency**: Lock-free atomics for real-time state, mutexes for clock-tick state
 - **Rendering**: Direct terminal rendering with custom terminal package, RenderOrchestrator, and stencil-based post-processing
 
