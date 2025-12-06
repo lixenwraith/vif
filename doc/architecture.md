@@ -166,6 +166,10 @@ Producer → EventQueue → ClockScheduler → EventRouter → EventHandler → 
 | `EventDirectionalCleanerRequest` | InputHandler, EnergySystem | CleanerSystem | `*DirectionalCleanerPayload{OriginX, OriginY}` |
 | `EventCleanerFinished` | CleanerSystem | (observers) | `nil` |
 | `EventGoldComplete` | EnergySystem | (observers) | `nil` |
+| `EventSplashRequest` | EnergySystem, InputHandler | SplashSystem | `*SplashRequestPayload{Text, Color, OriginX, OriginY}` |
+| `EventGoldSpawned` | GoldSystem | SplashSystem | `*GoldSpawnedPayload{SequenceID, OriginX, OriginY, Length, Duration}` |
+| `EventGoldTimeout` | GoldSystem | SplashSystem | `*GoldCompletionPayload{SequenceID}` |
+| `EventGoldDestroyed` | GoldSystem | SplashSystem | `*GoldCompletionPayload{SequenceID}` |
 
 **Producer Pattern:**
 ```go
@@ -482,7 +486,7 @@ Component (marker interface)
 ├── CursorComponent {ErrorFlashEnd int64, HeatDisplay int}
 ├── ProtectionComponent {Mask ProtectionFlags, ExpiresAt int64}
 ├── ShieldComponent {Sources uint8, RadiusX, RadiusY float64, OverrideColor ColorClass, MaxOpacity float64, LastDrainTime time.Time}
-└── SplashComponent {Content [8]rune, Length int, Color terminal.RGB, AnchorX, AnchorY int, StartNano int64}
+└── SplashComponent {Content [8]rune, Length int, Color SplashColor, AnchorX, AnchorY int, Mode SplashMode, StartNano int64, Duration int64, SequenceID int}
 ```
 
 **Sequence Types:**
@@ -566,7 +570,7 @@ The render package uses `terminal.Cell` directly in `RenderBuffer`, enabling zer
 
 **Individual Renderers** (`render/renderers/`):
 - `PingGridRenderer`: Row/column highlights (writes MaskGrid)
-- `SplashRenderer`: Large block-character success feedback (writes MaskEffect, opacity fade over 1 second)
+- `SplashRenderer`: Large block-character feedback and gold timer (writes MaskEffect, linear opacity fade, bitmap font rendering)
 - `CharactersRenderer`: All character entities (writes MaskEntity)
 - `ShieldRenderer`: Protective field with gradient (writes MaskShield, derived from GameState.LastTypedSeqType/Level)
 - `EffectsRenderer`: Decay, cleaners, flashes, materializers (writes MaskEffect)
@@ -909,7 +913,7 @@ Systems execute in priority order (lower = earlier):
 7. **DrainSystem (25)**: Drain movement/logic
 8. **DecaySystem (30)**: Sequence degradation
 9. **FlashSystem (35)**: Flash effect lifecycle
-10. **SplashSystem (800)**: Splash timeout (after game logic, before rendering)
+10. **SplashSystem (800)**: Splash lifecycle and gold timer updates (after game logic, before rendering)
 
 ### Content Management System
 - **ContentManager** (`content/manager.go`): Manages content files
@@ -1058,23 +1062,68 @@ for _, entity := range entitiesAtCursor {
 - **Lifecycle**: Automatic cleanup after duration
 
 ### Splash System
-- **Purpose**: Large block-character visual feedback for successful user actions
-- **Architecture**: Singleton entity with `SplashComponent`, no position component
-- **Entity Pattern**: Same as CursorEntity - created once in NewGameContext, never destroyed
-- **State Management**: Component with `Length` field (0 = inactive)
-- **Trigger Functions**:
-  - `TriggerSplashChar(ctx, char, color)` - Single character (Insert mode typing)
-  - `TriggerSplashString(ctx, text, color)` - Command strings (Normal mode)
-- **Positioning**: Quadrant-based placement opposite cursor position with left/top boundary clamping
-- **Rendering**: Background-only effect using `SetBgOnly()` with `MaskEffect` write mask
-- **Animation**: 1-second fade-out (opacity: 1.0 → 0.0 linear)
-- **Font Rendering**: Uses bitmap font from `assets/splash_font.go` (16×12 per character, MSB-first)
-- **Color Coding**:
-  - Insert mode: Sequence-based (Green/Blue/Red Normal colors, Gold for gold sequences, Nugget orange)
-  - Normal mode: Dark orange (RgbSplashNormal)
-- **Dimensions**: 16×12 pixels per character, 1-pixel spacing, max 8 characters
-- **Integration Points**: EnergySystem (character/nugget typing), Normal mode command execution
-- **Thread Safety**: Pure ECS (state in component), timeout checked in SplashSystem Update()
+
+The Splash System provides large block-character visual feedback for player actions and displays the gold countdown timer.
+
+**Architecture:**
+- **Pure ECS**: Multiple concurrent splash entities, no singletons
+- **Event-Driven**: Subscribes to `EventSplashRequest`, `EventGoldSpawned`, `EventGoldComplete`, `EventGoldTimeout`, `EventGoldDestroyed`
+- **Component-Based**: `SplashComponent` stores content, color, position, lifecycle mode, and timing data
+- **No Position Component**: Splash entities don't use PositionStore (positioned via AnchorX/AnchorY fields)
+
+**Lifecycle Modes:**
+- **`SplashModeTransient`**: Auto-expire after duration (typing feedback, commands, nuggets)
+  - Enforces uniqueness: Only one transient splash active at a time
+  - Duration: 1 second fade-out
+- **`SplashModePersistent`**: Persistent until explicitly destroyed (gold countdown timer)
+  - Anchored to gold sequence position
+  - Updates every frame to display remaining time (9 → 0)
+  - Orphan detection: Auto-cleanup if gold sequence destroyed
+
+**Event Triggers:**
+- `EventSplashRequest`: Character typed (EnergySystem), nugget collected (EnergySystem), commands executed (InputHandler)
+- `EventGoldSpawned`: Gold sequence created (GoldSystem) → creates persistent timer splash
+- `EventGoldComplete/Timeout/Destroyed`: Gold finished → destroys timer splash
+
+**Smart Layout (Transient Splashes):**
+- Quadrant-based placement avoiding cursor and gold sequences
+- Scoring system: Opposite quadrant preferred (-1000 for cursor quadrant, -50 per gold char)
+- Boundary clamping to keep splash within game area
+- Origin provided by event payload (usually cursor position)
+
+**Gold Timer Anchoring (Persistent Splashes):**
+- Horizontally centered over gold sequence
+- Positioned 2 rows above sequence (fallback: below if top clipped)
+- Tracks gold SequenceID for lifecycle management
+
+**Rendering** (`SplashRenderer`):
+- Bitmap font from `assets/splash_font.go` (16×12 per character, MSB-first)
+- Background-only effect via `SetBgOnly()` with `MaskEffect` write mask
+- Linear fade-out animation (opacity: 1.0 → 0.0)
+- Color resolution: `SplashColor` enum → `render.RGB`
+- Max 8 characters, 1-pixel spacing between characters
+
+**Color Coding** (`SplashColor` enum):
+- `SplashColorGreen/Blue/Red`: Sequence colors (normal brightness)
+- `SplashColorGold`: Bright yellow (gold sequences and timer)
+- `SplashColorNugget`: Orange (nugget collection)
+- `SplashColorNormal`: Dark orange (commands in Normal mode)
+- `SplashColorInsert`: Specific color for Insert mode feedback
+
+**Update Loop** (`SplashSystem.Update()`):
+- Transient: Check expiry, destroy if duration elapsed
+- Persistent: Update countdown digit (9→8→...→0), orphan detection
+- Frame-accurate timing using `TimeResource.GameTime`
+
+**Integration Points:**
+- EnergySystem: Character/nugget typing → `EventSplashRequest`
+- InputHandler: Command execution → `EventSplashRequest`
+- GoldSystem: Sequence spawn → `EventGoldSpawned`, completion → `EventGoldComplete/Timeout`
+
+**Thread Safety:**
+- Pure ECS (state in component)
+- Event-driven (lock-free queue)
+- No shared state between systems
 
 ### Shield System
 - **Purpose**: Energy-powered protective field

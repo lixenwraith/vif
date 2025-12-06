@@ -354,7 +354,7 @@ Hostile drain entities that scale with heat:
 - Provides instant visual feedback for typing accuracy
 
 **Splash Feedback** (Success Indicator):
-- **Display**: Large block characters (16×12 pixels each) appear in opposite screen quadrant from cursor
+- **Display**: Large block characters (16×12 pixels each) appear in screen quadrant avoiding cursor and gold
 - **Trigger Conditions**:
   - Successfully typing a character in INSERT mode
   - Collecting a nugget
@@ -367,9 +367,21 @@ Hostile drain entities that scale with heat:
   - Gold sequences: Bright yellow
   - Nuggets: Orange
   - Normal mode commands: Dark orange
-- **Positioning**: Automatically places splash in opposite quadrant from cursor to avoid obstruction
+- **Smart Positioning**: Quadrant-based placement avoiding cursor and active gold sequences
+  - Opposite quadrant from cursor preferred
+  - Avoids quadrants containing gold sequences
+  - Automatically clamped to game area boundaries
 - **Max Length**: Up to 8 characters for command strings
 - **Purpose**: Provides satisfying visual confirmation of successful actions without blocking gameplay
+- **Uniqueness**: Only one typing feedback splash active at a time (replaced on new action)
+
+**Gold Countdown Timer**:
+- **Display**: Large single-digit countdown (9 → 0) in bright yellow
+- **Position**: Anchored to gold sequence (centered horizontally, 2 rows above/below)
+- **Lifecycle**: Appears when gold spawns, disappears when gold completed/timeout/destroyed
+- **Update**: Real-time countdown synchronized with gold timeout duration
+- **Purpose**: Clear visual indicator of remaining time to complete gold sequence
+- **Behavior**: Persistent until gold sequence finishes (not replaced by typing feedback)
 
 ---
 
@@ -410,6 +422,7 @@ The game features four types of character sequences, each with distinct behavior
 - **Spawning**: Appears randomly after any decay animation completes
 - **Content**: Random alphanumeric characters (a-z, A-Z, 0-9)
 - **Duration**: 10 seconds (game time) before timeout - timer freezes during COMMAND mode pause
+- **Countdown Timer**: Large yellow digit (9 → 0) appears above/below sequence showing remaining time
 - **Reward**: Completing all 10 characters fills heat meter to maximum
 - **Bonus Mechanic**: If heat is already at maximum when gold completed, triggers **Cleaners**
 - **Scoring**: Typing gold characters does NOT affect heat or energy during typing
