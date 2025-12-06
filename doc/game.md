@@ -316,8 +316,8 @@ Hostile drain entities that scale with heat:
 - **Visual**: Light cyan ╬ character
 - **Movement**: Toward cursor, 1 cell/second
 - **Shield Interaction**:
-  - **Shield Active**: Drains inside shield drain 100 energy/tick, persist
-  - **Shield Inactive**: Cursor collision costs 10 heat, drain despawns
+  - **Shield Active** (Energy > 0): Drains inside shield drain 100 energy/tick, persist
+  - **Shield Inactive** (Energy <= 0): Cursor collision costs 10 heat, drain despawns
   - **Drain-Drain**: Multiple drains same cell mutually destroy
 - **Despawn Triggers**:
   - Energy <= 0 AND Shield inactive
@@ -325,8 +325,9 @@ Hostile drain entities that scale with heat:
   - Cursor collision without shield
   - Drain-drain collision
 - **Strategic Notes**:
+  - Shield automatically activates when Energy > 0
   - Shield protection has energy cost (passive 1/sec + zone 100/tick/drain)
-  - Shield deactivates when Energy <= 0
+  - Shield automatically deactivates when Energy drops to 0
   - Can lead drains to destroy Red sequences
   - Heat management controls drain count
 
@@ -515,13 +516,12 @@ Heat caps at 100. The visual heat bar displays 10 segments, with each segment re
 ### Boost System
 
 **What is Boost?**
-A 2× heat multiplier plus shield activation at maximum heat.
+A 2× heat multiplier activated at maximum heat.
 
 **Activation:**
 1. Heat reaches maximum (100)
 2. Boost activates with 0.5s timer
 3. Tied to color of last character that maxed heat
-4. **Shield activates** (Sources bitmask set)
 
 **Color Matching:**
 - Same color (Blue or Green): +0.5s extension (timer extended)
@@ -530,18 +530,8 @@ A 2× heat multiplier plus shield activation at maximum heat.
 
 **Effects:**
 - +2 heat per character (instead of +1)
-- Shield activation provides drain defense
 - Faster heat rebuilding after mistakes
 - **Does NOT multiply energy** - only heat gain
-
-**Shield During Boost:**
-- **Activation**: Sources != 0 AND Energy > 0
-- **Color**: Derived from last typed Blue/Green character's sequence type and level (fallback: neutral gray)
-- **Visual**: Quadratic soft gradient for smooth appearance
-- **Passive Cost**: 1 energy/second while active
-- **Defense Cost**: 100 energy/tick per drain in shield
-- **Protection**: Drains inside shield don't reduce heat
-- **Deactivation**: Energy <= 0 or boost ends
 
 **Deactivation:**
 - Timer expires (no extension within 0.5s)
@@ -551,13 +541,39 @@ A 2× heat multiplier plus shield activation at maximum heat.
 
 **Visual Indicators:**
 - Pink "Boost: X.Xs" in status bar
-- Shield ellipse visible when Energy > 0
 
 **Strategy:**
 - Type same color to extend boost timer; different colors update BoostColor without penalty
-- Monitor energy - shield costs can drain fast
-- Shield most valuable with multiple drains active
-- Shield color reflects your last Blue/Green character typed
+
+### Shield System
+
+**What is Shield?**
+An energy-powered protective field that defends against drain attacks.
+
+**Activation:**
+- **Automatic**: Activates when Energy > 0
+- **Deactivation**: Automatically deactivates when Energy drops to 0
+
+**Energy Costs:**
+- **Passive Drain**: 1 energy/second while active
+- **Defense Cost**: 100 energy/tick per drain inside shield zone
+
+**Protection:**
+- Drains inside shield zone drain energy (not heat)
+- Without shield: Drain collision costs 10 heat, drain despawns
+- With shield: Drain collision costs energy only, drain persists
+
+**Visual:**
+- **Elliptical field** around cursor with gradient fade
+- **Color**: Reflects last typed Blue/Green character (sequence type and brightness level)
+- **Visibility**: Only visible when shield is active (Energy > 0)
+
+**Strategy:**
+- Monitor energy levels - shield costs can drain fast with multiple drains
+- Shield most valuable when multiple drains are clustered near cursor
+- Energy management is critical - let shield deactivate if energy too low
+- Position cursor to maximize drains inside shield ellipse for optimal protection
+- Shield color changes dynamically based on your typing
 
 ### Decay System
 
@@ -692,7 +708,7 @@ When all characters of one color/level are cleared, that slot opens for new spaw
 4. **Let decay happen** - Don't panic about the timer
 5. **Chase gold** aggressively - easiest way to build heat
 6. **Don't use delete** (`x`, `dd`, etc.) - it resets heat
-7. **Understand Drains**: When heat >= 10, drains spawn (count = floor(heat/10), max 10). Watch for cyan blocks converging (1-second warning). Shield activates during boost for protection, but costs energy (1/sec passive + 100/tick per drain in shield).
+7. **Understand Drains**: When heat >= 10, drains spawn (count = floor(heat/10), max 10). Watch for cyan blocks converging (1-second warning). Shield activates automatically when Energy > 0 for protection, but costs energy (1/sec passive + 100/tick per drain in shield).
 
 **Motion Practice:**
 - Use `0` and `$` to jump to line edges
@@ -719,9 +735,9 @@ When all characters of one color/level are cleared, that slot opens for new spaw
    - `/<pattern>` to find specific text
 5. **Drain & Shield management**:
    - Drains spawn at heat >= 10 (count = floor(heat/10))
-   - Shield activates during boost (Sources != 0 AND Energy > 0)
-   - **Without shield**: Cursor collision costs 10 heat, drain despawns
-   - **With shield**: Drains in shield cost 100 energy/tick, persist
+   - Shield activates automatically when Energy > 0
+   - **Without shield** (Energy <= 0): Cursor collision costs 10 heat, drain despawns
+   - **With shield** (Energy > 0): Drains in shield cost 100 energy/tick, persist
    - Shield passive cost: 1 energy/second
    - Lower heat to despawn excess drains (newest first)
    - Shield most valuable with multiple drains clustered
@@ -785,16 +801,17 @@ When all characters of one color/level are cleared, that slot opens for new spaw
    - **Heat-based spawn control**: floor(heat/10) = drain count - manage heat to control pressure
    - **Telegraph timing**: 1-second materialize animation, 4 ticks stagger between spawns
    - **Shield energy economics**:
+     - Automatic activation when Energy > 0
      - Passive: 1 energy/sec while active
      - Defense: 100 energy/tick per drain in shield ellipse
      - Break-even: Shield worth it when drains would cost >101 energy/sec without it
    - **Shield zone positioning**: Position cursor to maximize drains inside shield ellipse
-   - **Energy-zero despawn**: Drains despawn when Energy <= 0 AND Shield inactive
+   - **Energy-zero despawn**: Drains despawn when Energy drops to 0 (shield deactivates)
    - **Collision tactics**:
-     - Without shield: -10 heat per drain collision, drain despawns
-     - With shield: Energy cost only, no heat loss, drain persists
+     - Without shield (Energy <= 0): -10 heat per drain collision, drain despawns
+     - With shield (Energy > 0): Energy cost only, no heat loss, drain persists
      - Drain-drain: Multiple drains same cell mutually destroy
-   - **Strategic shield use**: Activate boost near drain clusters for maximum protection value
+   - **Strategic energy management**: Build energy reserves before high-drain situations
    - **Heat manipulation**: Lower heat to despawn excess drains (LIFO - newest first)
    - **Exploit drain paths**: Let drains destroy Red sequences (saves typing penalty)
 

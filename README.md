@@ -18,11 +18,11 @@ vi-fighter features a dynamic typing system with multiple sequence types and gam
 - **Sequence Types**: Green, Blue, Red (penalties), and Gold (bonus)
 - **Nuggets**: Collectible orange alphanumeric characters that provide heat bonuses
 - **Heat System**: Typing momentum that multiplies energy and affects decay speed
-- **Boost System**: 2× heat multiplier + shield activation at maximum heat
-- **Shield System**: Energy-powered defense during boost (Sources bitmask, passive 1/sec + zone 100/tick/drain costs)
+- **Boost System**: 2× heat multiplier activated at maximum heat
+- **Shield System**: Energy-powered protective field (activates when Energy > 0, passive 1/sec + zone 100/tick/drain costs)
 - **Decay System**: Automated pressure that degrades sequences over time
 - **Cleaners**: Clears Red sequences - horizontal sweeps (gold at max heat) or 4-directional bursts (nugget at max heat, Enter key)
-- **Multi-Drain System**: Heat-based hostile entities (floor(heat/10), max 10), staggered spawns with materialize animations, shield interaction (energy cost vs heat loss), drain-drain collisions, despawn when Energy <= 0 AND Shield inactive
+- **Multi-Drain System**: Heat-based hostile entities (floor(heat/10), max 10), staggered spawns with materialize animations, shield interaction (energy cost vs heat loss), drain-drain collisions, despawn when Energy drops to 0
 - **Splash Feedback System**: Event-driven visual feedback with two modes:
   - **Transient Splashes**: Large block-character feedback for typing, commands, and nugget collection (1-second fade, smart quadrant placement avoiding cursor and gold)
   - **Gold Countdown Timer**: Persistent single-digit timer (9 → 0) anchored above/below gold sequences
@@ -125,8 +125,9 @@ go test ./systems
 4. **Type Bright When Hot**: Bright sequences at high heat give maximum points (Heat × 3)
 5. **Manage Decay**: Higher heat = faster decay - balance aggressive play with sustainability
 6. **Boost Color Matching**: When boost activates, type same color to extend timer; different colors update BoostColor without penalty
-7. **Motion Efficiency**: Use `w`/`b`/`e` instead of repeated `h`/`j`/`k`/`l` to avoid heat reset
-8. **Use Cleaners**: Gold at max heat → horizontal row cleaners; Nugget at max heat or Enter key → 4-directional cleaners from cursor
+7. **Manage Shield Energy**: Shield activates automatically when Energy > 0 - monitor energy costs (1/sec passive + 100/tick per drain)
+8. **Motion Efficiency**: Use `w`/`b`/`e` instead of repeated `h`/`j`/`k`/`l` to avoid heat reset
+9. **Use Cleaners**: Gold at max heat → horizontal row cleaners; Nugget at max heat or Enter key → 4-directional cleaners from cursor
 
 ## License
 

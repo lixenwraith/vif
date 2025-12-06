@@ -162,6 +162,9 @@ Producer → EventQueue → ClockScheduler → EventRouter → EventHandler → 
 |-------|----------|----------|---------|
 | `EventCharacterTyped` | InputHandler | EnergySystem | `*CharacterTypedPayload{Char, X, Y}` |
 | `EventEnergyTransaction` | InputHandler | EnergySystem | `*EnergyTransactionPayload{Amount, Source}` |
+| `EventShieldActivate` | EnergySystem | ShieldSystem | `nil` |
+| `EventShieldDeactivate` | EnergySystem | ShieldSystem | `nil` |
+| `EventShieldDrain` | DrainSystem | ShieldSystem | `*ShieldDrainPayload{Amount}` |
 | `EventCleanerRequest` | EnergySystem | CleanerSystem | `nil` |
 | `EventDirectionalCleanerRequest` | InputHandler, EnergySystem | CleanerSystem | `*DirectionalCleanerPayload{OriginX, OriginY}` |
 | `EventCleanerFinished` | CleanerSystem | (observers) | `nil` |
@@ -201,6 +204,7 @@ func (s *EnergySystem) HandleEvent(world *engine.World, event engine.GameEvent) 
 - **Heat**, **Energy** (`atomic.Int64`): Current values
 - **Cursor Position**: Managed in ECS, cached in GameContext
 - **Boost State** (`atomic.Bool`, `atomic.Int64`): Enabled, EndTime, Color
+- **Shield State** (`atomic.Bool`): ShieldActive
 - **Shield Color Tracking** (`atomic.Int32`): LastTypedSeqType, LastTypedSeqLevel
 - **Drain State** (`atomic.Bool`, `atomic.Uint64`, `atomic.Int32`): Active, EntityID, X, Y
 - **Sequence ID** (`atomic.Int64`): Thread-safe ID generation
@@ -473,7 +477,7 @@ Component (marker interface)
 ├── DrainComponent {LastMoveTime, LastDrainTime time.Time, IsOnCursor bool, SpawnOrder int64}
 ├── CursorComponent {ErrorFlashEnd int64, HeatDisplay int}
 ├── ProtectionComponent {Mask ProtectionFlags, ExpiresAt int64}
-├── ShieldComponent {Sources uint8, RadiusX, RadiusY float64, OverrideColor ColorClass, MaxOpacity float64, LastDrainTime time.Time}
+├── ShieldComponent {Energy int64, RadiusX, RadiusY float64, OverrideColor ColorClass, MaxOpacity float64}
 └── SplashComponent {Content [8]rune, Length int, Color SplashColor, AnchorX, AnchorY int, Mode SplashMode, StartNano int64, Duration int64, SequenceID int}
 ```
 
@@ -560,7 +564,7 @@ The render package uses `terminal.Cell` directly in `RenderBuffer`, enabling zer
 - `PingGridRenderer`: Row/column highlights (writes MaskGrid)
 - `SplashRenderer`: Large block-character feedback and gold timer (writes MaskEffect, linear opacity fade, bitmap font rendering)
 - `CharactersRenderer`: All character entities (writes MaskEntity)
-- `ShieldRenderer`: Protective field with gradient (writes MaskShield, derived from GameState.LastTypedSeqType/Level)
+- `ShieldRenderer`: Protective field with gradient (writes MaskShield, queries GameState.ShieldActive from RenderContext, color derived from LastTypedSeqType/Level)
 - `EffectsRenderer`: Decay, cleaners, flashes, materializers (writes MaskEffect)
 - `DrainRenderer`: Drain entities (writes MaskEffect)
 - `HeatMeterRenderer`, `LineNumbersRenderer`, `ColumnIndicatorsRenderer`: UI elements (write MaskUI)
@@ -1016,7 +1020,7 @@ for _, entity := range entitiesAtCursor {
 - **Duration**: 500ms initial
 - **Color Binding**: Tied to triggering color
 - **Extension**: +500ms per matching color
-- **Effects**: 2× heat multiplier, shield activation
+- **Effects**: 2× heat multiplier
 - **Visual**: Pink "Boost: X.Xs" in status bar
 
 ### Gold System
@@ -1153,17 +1157,57 @@ The Splash System provides large block-character visual feedback for player acti
 - No shared state between systems
 
 ### Shield System
-- **Purpose**: Energy-powered protective field
-- **Activation**: Sources != 0 AND Energy > 0
-- **Energy Costs**:
-  - Passive: 1/second
-  - Shield Zone: 100/tick per drain
-- **Defense**: Drains drain energy (not heat) while active
-- **Visual**:
-  - Elliptical field with linear gradient
-  - Color derived from GameState.LastTypedSeqType/Level
-  - Only renders when `IsShieldActive()` true
-- **Component**: `{Sources uint8, RadiusX, RadiusY float64, OverrideColor ColorClass, MaxOpacity float64, LastDrainTime time.Time}`
+
+Event-driven energy-powered protective field that activates when energy is available.
+
+**Activation Model:**
+- **Trigger**: Energy > 0 (pure energy-gated)
+- **State Ownership**: `GameState.ShieldActive` atomic bool
+- **Event-Driven Control**: All activation/deactivation via events
+
+**Event Flow:**
+```
+EnergySystem.Update()
+    └─► if energy > 0 && !shieldActive → PushEvent(EventShieldActivate)
+    └─► if energy <= 0 && shieldActive → PushEvent(EventShieldDeactivate)
+
+DrainSystem.handleDrainInteractions()
+    └─► if drain inside shield zone → PushEvent(EventShieldDrain, amount)
+
+ClockScheduler.processTick()
+    └─► eventRouter.DispatchAll() → ShieldSystem.HandleEvent()
+    └─► world.Update() → ShieldSystem.Update() (passive drain)
+```
+
+**ShieldSystem Responsibilities:**
+- **Event Handling**: Consumes `EventShieldActivate`, `EventShieldDeactivate`, `EventShieldDrain`
+- **Activation**: Sets `ShieldActive` atomic flag, updates component state
+- **Deactivation**: Clears `ShieldActive` atomic flag, cleans up component state
+- **Passive Drain**: Drains 1 energy/second while active (in `Update()`)
+- **External Drain**: Processes `EventShieldDrain` events from DrainSystem
+
+**Energy Costs:**
+- **Passive**: 1 energy/second (handled by ShieldSystem.Update)
+- **Shield Zone**: 100 energy/tick per drain (via EventShieldDrain from DrainSystem)
+
+**Defense Mechanism:**
+- DrainSystem queries `GameState.GetShieldActive()` to check protection
+- Drains inside shield zone push `EventShieldDrain` instead of draining heat
+- Shield deactivates when energy depleted (EventShieldDeactivate)
+
+**Visual Rendering:**
+- **ShieldRenderer** queries `ctx.ShieldActive` from RenderContext
+- **Elliptical field** with linear gradient
+- **Color**: Derived from `GameState.LastTypedSeqType/Level` (set by EnergySystem)
+- **Visibility**: Only renders when `ShieldActive` is true
+
+**Component**: `{Energy int64, RadiusX, RadiusY float64, OverrideColor ColorClass, MaxOpacity float64}`
+
+**Key Design Decisions:**
+- **Decoupled from BoostSystem**: Boost no longer manages shield state
+- **Centralized State**: Single source of truth (`GameState.ShieldActive`)
+- **Event-Driven**: All state transitions via events (no direct system coupling)
+- **Pure Energy-Gated**: Activation depends only on energy availability
 
 ### Audio System
 
