@@ -135,10 +135,8 @@ func (s *MySystem) Update(world *engine.World, dt time.Duration) {
 - `GameState` access via `ctx.State`
 - `EventQueue` access via `ctx.PushEvent()`
 - `AudioEngine` access via `ctx.AudioEngine.PlaySound()`
-- Input handling methods (mode transitions, motion commands)
-- `CursorX`, `CursorY` fields cache ECS position for motion handlers
-  - MUST sync FROM ECS before use: `pos, _ := ctx.World.Positions.Get(ctx.CursorEntity); ctx.CursorX = pos.X`
-  - MUST sync TO ECS after modification
+- `CursorEntity` reference for systems to query/update cursor position via ECS
+- Mode state tracking (NORMAL, INSERT, SEARCH, COMMAND, OVERLAY)
 
 ### Event-Driven Communication
 
@@ -162,6 +160,8 @@ Producer → EventQueue → ClockScheduler → EventRouter → EventHandler → 
 |-------|----------|----------|---------|
 | `EventCharacterTyped` | InputHandler | EnergySystem | `*CharacterTypedPayload{Char, X, Y}` |
 | `EventEnergyTransaction` | InputHandler | EnergySystem | `*EnergyTransactionPayload{Amount, Source}` |
+| `EventNuggetJumpRequest` | InputHandler | NuggetSystem | `nil` |
+| `EventDeleteRequest` | InputHandler | EnergySystem | `*DeleteRequestPayload{StartX, StartY, EndX, EndY, RangeType}` |
 | `EventShieldActivate` | EnergySystem | ShieldSystem | `nil` |
 | `EventShieldDeactivate` | EnergySystem | ShieldSystem | `nil` |
 | `EventShieldDrain` | DrainSystem | ShieldSystem | `*ShieldDrainPayload{Amount}` |
@@ -741,55 +741,217 @@ COMMAND ─[:debug/:help]→ OVERLAY (modal) ─[ESC/ENTER]→ NORMAL
 4. Overlay Mode: Close overlay, unpause → NORMAL
 5. Normal Mode: Activate ping grid (1 second)
 
-### Input Dispatch Architecture (NORMAL Mode)
+### Input Handling Architecture
 
-**State machine with binding table** replaces enum+switch pattern.
+The input system (`modes/` package) is fully decoupled from game logic through **event-driven architecture**.
 
-**Core Components:**
+**Package Location:** `modes/` (InputHandler, InputMachine, BindingTable, Motion functions, Operators, Commands, Search)
 
-1. **InputMachine** (`modes/machine.go`):
-   - 7-state machine managing input parsing
-   - Tracks count accumulation (count1/count2 for `2d3w`)
-   - Dispatches via binding table lookup
+#### Core Components
 
-2. **BindingTable** (`modes/bindings.go`):
-   - Maps keys to action types
-   - Tables: `normal[]`, `operatorMotions[]`, `prefixG[]`
+**1. InputHandler** (`modes/input.go`)
 
-   ```go
-   type Binding struct {
-       Action       ActionType
-       Target       rune
-       AcceptsCount bool
-       Executor     func(*engine.GameContext, int)
-   }
-   ```
+Central coordinator for all input processing:
+- Receives terminal events from main game loop
+- Dispatches to mode-specific handlers (Normal, Insert, Search, Command, Overlay)
+- Manages mode transitions and state
+- Emits events instead of directly modifying game state
+- Coordinates with InputMachine for Normal mode vi command parsing
 
-3. **ActionType Enum:**
-   - `ActionMotion`: Immediate (h,j,k,l,w,b)
-   - `ActionCharWait`: Wait for target (f,F,t,T)
-   - `ActionOperator`: Wait for motion (d)
-   - `ActionPrefix`: Wait for second key (g)
-   - `ActionModeSwitch`: Change mode (i,/,:)
-   - `ActionSpecial`: Immediate with special handling (x,D,n,N)
+**Key Methods:**
+```go
+func (h *InputHandler) HandleEvent(ev terminal.Event) bool  // Main entry point
+func (h *InputHandler) handleNormalMode()   // Vi command parsing
+func (h *InputHandler) handleInsertMode()   // Character typing
+func (h *InputHandler) handleSearchMode()   // Search text input
+func (h *InputHandler) handleCommandMode()  // Colon command input
+func (h *InputHandler) handleOverlayMode()  // Modal window interaction
+```
 
-**State Machine States:**
+**2. InputMachine** (`modes/machine.go`)
 
-| State | Description | Transitions |
-|-------|-------------|-------------|
-| `StateIdle` | Awaiting input | Digit→StateCount, Operator→StateOperatorWait, Motion→execute |
-| `StateCount` | Accumulating count | Continue accumulating or execute with count |
-| `StateOperatorWait` | Operator pending | Motion→execute operator+motion |
-| `StateOperatorCharWait` | Operator + char wait | Char→execute |
-| `StateCharWait` | Awaiting target char | Char→execute find/till |
-| `StatePrefixG` | Prefix 'g' pending | Second char→execute |
-| `StateOperatorPrefixG` | Operator + 'g' | Second char→execute |
+Sophisticated state machine for parsing vi-style commands in Normal mode:
 
-**Example Flow** (typing `2d3w` - delete 6 words):
-1. `'2'` → StateIdle → StateCount, count1=2
-2. `'d'` → StateCount → StateOperatorWait, operator='d'
-3. `'3'` → StateOperatorWait → stay, count2=3
-4. `'w'` → Execute `DeleteMotion(ctx, 'w', 6)` → StateIdle
+**7 States:**
+- `StateIdle` - Awaiting input
+- `StateCount` - Accumulating count (e.g., "2" in "2dw")
+- `StateCharWait` - Waiting for character target (f, F, t, T)
+- `StateOperatorWait` - Waiting for motion after operator (d)
+- `StateOperatorCharWait` - Operator + character motion (df, dt)
+- `StatePrefixG` - Handling 'g' prefix commands (gg, go)
+- `StateOperatorPrefixG` - Operator + 'g' prefix (dgg)
+
+**Capabilities:**
+- Count accumulation with multiplication (e.g., `2d3w` = delete 6 words)
+- Command buffer for display feedback
+- Returns `ProcessResult` with action closures and mode changes
+
+**State Machine Flow** (typing `2d3w` - delete 6 words):
+```
+'2' → StateIdle → StateCount (count1=2)
+'d' → StateCount → StateOperatorWait (operator='d')
+'3' → StateOperatorWait → StateOperatorWait (count2=3)
+'w' → Execute OpDelete with MotionWordForward × 6 → StateIdle
+```
+
+**3. BindingTable** (`modes/bindings.go`)
+
+Maps keys to actions using three lookup tables:
+- `normal` - Standard Normal mode bindings (h, j, k, l, w, b, i, /, :, etc.)
+- `operatorMotions` - Motions valid after operators (w, b, $, gg, etc.)
+- `prefixG` - Commands following 'g' prefix (gg, go)
+
+**Binding Structure:**
+```go
+type Binding struct {
+    Action     ActionType      // Motion, CharWait, Operator, ModeSwitch, etc.
+    Target     rune            // Canonical identifier
+    Motion     MotionFunc      // For standard motions
+    CharMotion CharMotionFunc  // For f/F/t/T
+}
+```
+
+**ActionTypes:**
+- `ActionMotion` - Immediate cursor movement (h, j, k, l, w, b, $, gg)
+- `ActionCharWait` - Requires target character (f, F, t, T)
+- `ActionOperator` - Requires motion (d)
+- `ActionPrefix` - Requires second key (g)
+- `ActionModeSwitch` - Changes mode (i, /, :)
+- `ActionSpecial` - Special handling (x, D, n, N, ;, ,)
+
+**4. Motion Functions** (`modes/motions.go`, `modes/motions_helpers.go`)
+
+Pure computation functions that calculate target positions:
+
+**Function Signatures:**
+```go
+type MotionFunc func(ctx *GameContext, startX, startY, count int) MotionResult
+type CharMotionFunc func(ctx *GameContext, startX, startY, count int, char rune) MotionResult
+
+type MotionResult struct {
+    StartX, StartY int
+    EndX, EndY     int
+    Type           RangeType   // Char or Line
+    Style          MotionStyle // Inclusive or Exclusive
+    Valid          bool
+}
+```
+
+**Examples:** `MotionLeft`, `MotionRight`, `MotionWordForward`, `MotionLineEnd`, `MotionFindForward`
+
+**Key Property:** Motions are stateless calculations that return target coordinates without mutating game state.
+
+**5. Operators** (`modes/operators.go`)
+
+Functions that apply motions to the game state by emitting events:
+
+- `OpMove(ctx, result, cmd)` - Updates cursor position in ECS
+- `OpDelete(ctx, result)` - **Emits `EventDeleteRequest` event** (decoupled from EnergySystem)
+
+**Key Property:** Operators translate motion results into events, eliminating direct dependencies on game systems.
+
+**6. Commands** (`modes/commands.go`)
+
+Colon command execution system:
+- `ExecuteCommand(ctx, command)` - Parses and dispatches commands
+- Supports: `:q`, `:new`, `:energy`, `:heat`, `:boost`, `:spawn`, `:debug`, `:help`
+- Directly manipulates GameState for debug commands
+- Can trigger overlay mode for help/debug
+
+**7. Search Functions** (`modes/search.go`)
+
+Search functionality implementation:
+- `PerformSearch(ctx, text, forward)` - Finds matches and moves cursor
+- `RepeatSearch(ctx, forward)` - Repeats last search (n, N)
+
+#### Input Event Flow
+
+```
+Terminal Event (tcell)
+    ↓
+InputHandler.HandleEvent()
+    ↓
+[Mode Router]
+    ├─→ handleNormalMode() ──→ InputMachine.Process()
+    │        ↓                        ↓
+    │   BindingTable            Motion calculation
+    │        ↓                        ↓
+    │   Action closure          OpMove / OpDelete
+    │                                 ↓
+    ├─→ handleInsertMode() ────→ PushEvent(EventCharacterTyped)
+    ├─→ handleSearchMode() ────→ PerformSearch()
+    ├─→ handleCommandMode() ───→ ExecuteCommand()
+    └─→ handleOverlayMode() ───→ Scroll/Close overlay
+         ↓
+EventQueue (lock-free)
+         ↓
+ClockScheduler.DispatchEventsImmediately()
+         ↓
+EventRouter
+         ↓
+Systems (EnergySystem, NuggetSystem, CleanerSystem, etc.)
+```
+
+#### Mode-Specific Behavior
+
+**Normal Mode:**
+- Full vi command parsing via InputMachine
+- Arrow keys and special keys wrapped in `World.RunSafe()`
+- Rune keys processed through binding table
+- Actions executed as closures within `World.RunSafe()`
+- Tab emits `EventNuggetJumpRequest` (10 Energy cost)
+- Enter emits `EventDirectionalCleanerRequest` (heat ≥ 10, costs 10)
+- ESC activates ping grid (1 second)
+
+**Insert Mode:**
+- Movement keys (arrows, home, end) work normally
+- Typing emits `EventCharacterTyped` events
+- Space and backspace handled directly
+- Tab emits `EventNuggetJumpRequest`
+
+**Search Mode:**
+- Builds search text buffer
+- Enter triggers `PerformSearch()` which directly manipulates ECS
+- ESC clears buffer and returns to NORMAL
+
+**Command Mode:**
+- Builds command text buffer
+- Sets pause state via `ctx.SetPaused(true)`
+- Enter executes command via `ExecuteCommand()`
+- Commands can mutate GameState directly (debug mode)
+- ESC clears buffer, unpauses, returns to NORMAL
+
+**Overlay Mode:**
+- Modal display for help/debug info
+- Supports scrolling (k/j, up/down)
+- ESC/Enter closes and unpauses
+
+#### Decoupling Patterns
+
+**1. Event-Driven Communication**
+- InputHandler emits events instead of calling system methods
+- Systems subscribe to event types via EventRouter
+- Eliminates direct dependencies between input and game logic
+
+**2. Action Closures**
+- InputMachine returns action closures in `ProcessResult`
+- Closures capture context and are executed later
+- Allows pure computation in state machine
+
+**3. Motion as Pure Functions**
+- Motion functions are stateless calculations
+- Return `MotionResult` describing target, not mutating state
+- Operators interpret results and emit events
+
+**4. Binding Table Configuration**
+- Key mappings externalized from state machine logic
+- Easy to extend with new bindings
+- Supports multiple binding contexts (normal, operator, prefix)
+
+**5. Mode Isolation**
+- Each mode has dedicated handler function
+- Mode transitions managed centrally in InputHandler
+- Modes don't know about each other
 
 ### Commands
 
@@ -816,16 +978,12 @@ COMMAND ─[:debug/:help]→ OVERLAY (modal) ─[ESC/ENTER]→ NORMAL
   ctx.CursorEntity = cursorEntity
   ```
 
-### Motion Commands (NORMAL Mode)
+### Special Keys (NORMAL Mode)
 
-**Single character**: h, j, k, l, w, b, e, etc.
-**Prefix commands**: `gg`, `go`, `dd`, `dw`, `d$`, `f<char>`, `F<char>`
-**Count prefix**: `5j`, `10l`, `3w`, `2fa`, `3Fb`
-**Consecutive move penalty**: h/j/k/l >3 times resets heat
-**Arrow keys**: Function like h/j/k/l but always reset heat
-**Tab**: Jumps to active Nugget (Cost: 10 Energy)
-**ESC**: Ping grid for 1 second
-**Enter**: 4-directional cleaners from cursor (heat ≥ 10, costs 10)
+**Tab**: Jumps to active Nugget via `EventNuggetJumpRequest` (Cost: 10 Energy)
+**ESC**: Activates ping grid for 1 second
+**Enter**: 4-directional cleaners via `EventDirectionalCleanerRequest` (heat ≥ 10, costs 10)
+**Arrow keys**: Function like h/j/k/l (wrapped in `World.RunSafe()`)
 
 ### Supported Vi Motions
 
