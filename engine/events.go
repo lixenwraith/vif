@@ -60,33 +60,26 @@ const (
 	// Trigger: Character typed, command executed, nugget collected
 	// Consumer: SplashSystem | Payload: *SplashRequestPayload
 	EventSplashRequest
+
+	// EventShieldActivate signals shield should become active
+	// Trigger: EnergySystem when energy > 0 and shield inactive
+	// Consumer: ShieldSystem | Payload: nil
+	EventShieldActivate
+
+	// EventShieldDeactivate signals shield should become inactive
+	// Trigger: EnergySystem when energy <= 0 and shield active
+	// Consumer: ShieldSystem | Payload: nil
+	EventShieldDeactivate
+
+	// EventShieldDrain signals energy drain from external source
+	// Trigger: DrainSystem when drain inside shield zone
+	// Consumer: ShieldSystem | Payload: *ShieldDrainPayload
+	EventShieldDrain
 )
 
-func (e EventType) String() string {
-	switch e {
-	case EventCleanerRequest:
-		return "CleanerRequest"
-	case EventDirectionalCleanerRequest:
-		return "DirectionalCleanerRequest"
-	case EventCleanerFinished:
-		return "CleanerFinished"
-	case EventGoldSpawned:
-		return "GoldSpawned"
-	case EventGoldComplete:
-		return "GoldComplete"
-	case EventGoldTimeout:
-		return "GoldTimeout"
-	case EventGoldDestroyed:
-		return "GoldDestroyed"
-	case EventCharacterTyped:
-		return "CharacterTyped"
-	case EventEnergyTransaction:
-		return "EnergyTransaction"
-	case EventSplashRequest:
-		return "SplashRequest"
-	default:
-		return "Unknown"
-	}
+// ShieldDrainPayload contains energy drain amount from external sources
+type ShieldDrainPayload struct {
+	Amount int
 }
 
 // DirectionalCleanerPayload contains origin for 4-way cleaner spawn

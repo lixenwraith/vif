@@ -58,8 +58,7 @@ func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, b
 			continue
 		}
 
-		// Shield only renders if Sources != 0 AND Energy > 0
-		if shield.Sources == 0 || ctx.Energy <= 0 {
+		if !ctx.ShieldActive {
 			continue
 		}
 

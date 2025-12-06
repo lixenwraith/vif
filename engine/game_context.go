@@ -169,6 +169,17 @@ func NewGameContext(term terminal.Terminal) *GameContext {
 		ExpiresAt: 0, // Permanent
 	})
 
+	// Add ShieldComponent to cursor (initially invisible via GameState.ShieldActive)
+	// This ensures the renderer and systems have the geometric data needed when the shield activates
+	ctx.World.Shields.Add(ctx.CursorEntity, components.ShieldComponent{
+		Sources:       0, // Field deprecated/unused in event-driven system
+		RadiusX:       constants.ShieldRadiusX,
+		RadiusY:       constants.ShieldRadiusY,
+		OverrideColor: components.ColorNone,
+		MaxOpacity:    constants.ShieldMaxOpacity,
+		LastDrainTime: pausableClock.Now(),
+	})
+
 	// Initialize ping atomic values (still local to input handling)
 	ctx.pingActive.Store(false)
 	ctx.pingGridTimer.Store(0)

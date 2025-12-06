@@ -230,7 +230,7 @@ func drawShieldEffect(startY int, fg, bg render.RGB) {
 		}
 	}
 
-	// ... existing preview rendering code ...
+	// Preview area - side by side TC and 256
 	previewW := int(state.shieldRadiusX)*2 + 3
 	previewH := int(state.shieldRadiusY)*2 + 3
 	if previewW > 40 {
@@ -243,15 +243,18 @@ func drawShieldEffect(startY int, fg, bg render.RGB) {
 	centerX := previewW / 2
 	centerY := previewH / 2
 
+	// TC Preview
 	tcStartX := 2
 	drawText(tcStartX, startY, "TrueColor:", fg, bg)
 	startY++
 	drawShieldPreview(tcStartX, startY, previewW, previewH, centerX, centerY, shieldColor, bgColor, true)
 
+	// 256 Preview
 	x256StartX := tcStartX + previewW + 5
 	drawText(x256StartX, startY-1, "256-Color:", fg, bg)
 	drawShieldPreview(x256StartX, startY, previewW, previewH, centerX, centerY, shieldColor, bgColor, false)
 
+	// Formula
 	startY += previewH + 2
 	drawBox(0, startY, 70, 5, " Shield Blend (Screen) ", render.RGB{80, 80, 80}, bg)
 	drawText(2, startY+1, "falloff = (1 - dist)²", render.RGB{200, 200, 100}, bg)

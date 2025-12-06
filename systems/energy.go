@@ -70,6 +70,15 @@ func (s *EnergySystem) Update(world *engine.World, dt time.Duration) {
 	if s.ctx.State.GetEnergyBlinkActive() && now.Sub(s.ctx.State.GetEnergyBlinkTime()) > constants.EnergyBlinkTimeout {
 		s.ctx.State.SetEnergyBlinkActive(false)
 	}
+
+	energy := s.ctx.State.GetEnergy()
+	shieldActive := s.ctx.State.GetShieldActive()
+	// Evaluate and set shield activation state
+	if energy > 0 && !shieldActive {
+		s.ctx.PushEvent(engine.EventShieldActivate, nil, now)
+	} else if energy <= 0 && shieldActive {
+		s.ctx.PushEvent(engine.EventShieldDeactivate, nil, now)
+	}
 }
 
 // handleCharacterTyping processes a character typed in insert mode

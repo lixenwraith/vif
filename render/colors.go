@@ -9,8 +9,6 @@ import (
 var HeatGradientLUT [256]RGB
 
 func init() {
-	// ... existing init logic if any ...
-
 	// Pre-calculate heat gradient
 	for i := 0; i < 256; i++ {
 		progress := float64(i) / 255.0

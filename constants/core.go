@@ -31,6 +31,7 @@ const MaxEntitiesPerCell = 31
 // System Execution Priorities (lower runs first)
 const (
 	PriorityBoost   = 5
+	PriorityShield  = 6
 	PriorityEnergy  = 10
 	PrioritySpawn   = 15
 	PriorityNugget  = 18

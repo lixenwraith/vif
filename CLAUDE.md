@@ -1,4 +1,3 @@
-// FILE: CLAUDE.md
 # vi-fighter Development Guide for Claude Code
 
 ## PROJECT CONTEXT
@@ -86,17 +85,18 @@ These directives are meta-instructions placed in prompts to control Claude Code 
 
 ## CURRENT TASK
 
+**Refer to prompt if this section is empty**
 
 ### Objective
 
-### Reference
+### Reference Document
 
 ### Implementation Sequence
 
 ### Key Patterns
 
+### Files to Modify
+
 ### Import Requirements
 
-
 ### Verification
-

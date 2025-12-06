@@ -92,6 +92,9 @@ func main() {
 	boostSystem := systems.NewBoostSystem(ctx)
 	ctx.World.AddSystem(boostSystem)
 
+	shieldSystem := systems.NewShieldSystem(ctx)
+	ctx.World.AddSystem(shieldSystem)
+
 	nuggetSystem := systems.NewNuggetSystem(ctx)
 	ctx.World.AddSystem(nuggetSystem)
 
@@ -193,6 +196,7 @@ func main() {
 	clockScheduler.RegisterEventHandler(cleanerSystem)
 	clockScheduler.RegisterEventHandler(energySystem)
 	clockScheduler.RegisterEventHandler(splashSystem)
+	clockScheduler.RegisterEventHandler(shieldSystem)
 	clockScheduler.Start()
 	defer clockScheduler.Stop()
 

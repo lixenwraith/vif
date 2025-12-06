@@ -16,6 +16,9 @@ type GameState struct {
 	Energy atomic.Int64 // Current energy
 	Heat   atomic.Int64 // Current heat value
 
+	// Shield activation state (atomic for real-time access)
+	ShieldActive atomic.Bool
+
 	// Boost state (real-time feedback)
 	BoostEnabled atomic.Bool
 	BoostEndTime atomic.Int64 // UnixNano
@@ -111,6 +114,7 @@ func (gs *GameState) initState(now time.Time) {
 	// Reset atomics
 	gs.Energy.Store(0)
 	gs.Heat.Store(0)
+	gs.ShieldActive.Store(false)
 	gs.BoostEnabled.Store(false)
 	gs.BoostEndTime.Store(0)
 	gs.BoostColor.Store(0)
@@ -287,6 +291,18 @@ func (gs *GameState) GetLastTypedSeqLevel() int32 {
 // SetLastTypedSeqLevel sets the last typed sequence level
 func (gs *GameState) SetLastTypedSeqLevel(seqLevel int32) {
 	gs.LastTypedSeqLevel.Store(seqLevel)
+}
+
+// ===== SHIELD STATE ACCESSORS (atomic) =====
+
+// GetShieldActive returns whether shield is currently active
+func (gs *GameState) GetShieldActive() bool {
+	return gs.ShieldActive.Load()
+}
+
+// SetShieldActive sets the shield active state
+func (gs *GameState) SetShieldActive(active bool) {
+	gs.ShieldActive.Store(active)
 }
 
 // ===== BOOST ACCESSORS (atomic) =====

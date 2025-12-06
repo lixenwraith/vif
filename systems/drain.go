@@ -51,12 +51,7 @@ func (s *DrainSystem) Priority() int {
 
 // Update runs the drain system logic
 func (s *DrainSystem) Update(world *engine.World, dt time.Duration) {
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-	now := timeRes.GameTime
 	currentTick := s.ctx.State.GetGameTicks()
-
-	// Passive shield energy drain (1/sec while active)
-	s.handlePassiveShieldDrain(world, now)
 
 	// Process pending spawn queue first
 	s.processPendingSpawns(world)
@@ -645,12 +640,8 @@ func (s *DrainSystem) requeueSpawnWithOffset(world *engine.World, blockedX, bloc
 }
 
 // isShieldActive checks if shield is functionally active
-func (s *DrainSystem) isShieldActive(world *engine.World) bool {
-	shield, ok := world.Shields.Get(s.ctx.CursorEntity)
-	if !ok {
-		return false
-	}
-	return shield.Sources != 0 && s.ctx.State.GetEnergy() > 0
+func (s *DrainSystem) isShieldActive() bool {
+	return s.ctx.State.GetShieldActive()
 }
 
 // handlePassiveShieldDrain applies 1 energy/second cost while shield is active
@@ -703,7 +694,7 @@ func (s *DrainSystem) handleDrainInteractions(world *engine.World) {
 		return
 	}
 
-	shieldActive := s.isShieldActive(world)
+	shieldActive := s.isShieldActive()
 
 	// Phase 1: Detect drain-drain collisions (same cell)
 	s.handleDrainDrainCollisions(world)
@@ -732,7 +723,9 @@ func (s *DrainSystem) handleDrainInteractions(world *engine.World) {
 		// Shield zone energy drain (applies to drains anywhere in shield ellipse)
 		if shieldActive && s.isInsideShieldEllipse(world, drainPos.X, drainPos.Y) {
 			if now.Sub(drain.LastDrainTime) >= constants.DrainEnergyDrainInterval {
-				s.ctx.State.AddEnergy(-constants.DrainShieldEnergyDrainAmount)
+				s.ctx.PushEvent(engine.EventShieldDrain, &engine.ShieldDrainPayload{
+					Amount: constants.DrainShieldEnergyDrainAmount,
+				}, now)
 				drain.LastDrainTime = now
 				world.Drains.Add(drainEntity, drain)
 			}
