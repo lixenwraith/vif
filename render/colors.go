@@ -4,6 +4,20 @@ import (
 	"github.com/lixenwraith/vi-fighter/components"
 )
 
+// HeatGradientLUT holds the pre-calculated rainbow gradient
+// 768 bytes, fits in L1 cache alongside other hot data
+var HeatGradientLUT [256]RGB
+
+func init() {
+	// ... existing init logic if any ...
+
+	// Pre-calculate heat gradient
+	for i := 0; i < 256; i++ {
+		progress := float64(i) / 255.0
+		HeatGradientLUT[i] = calculateHeatColor(progress)
+	}
+}
+
 // RGB color definitions for all game systems
 var (
 	// RGB color definitions for sequences - all dark/normal/bright levels have minimum floor to prevent perceptual blackout at low alpha
@@ -94,11 +108,12 @@ var (
 	RgbGridTimerFg        = RGB{255, 255, 255} // White for grid timer text
 )
 
-// GetHeatMeterColor returns the color for a given position in the heat meter gradient
-// progress is 0.0 to 1.0, representing position from start to end
-func GetHeatMeterColor(progress float64) RGB {
-	if progress <= 0.0 {
-		return RGB{0, 0, 0} // Black for unfilled
+// calculateHeatColor returns the color for a given position in the heat meter gradient
+// Progress is 0.0 to 1.0, representing position from start to end
+// Only used for LUT generation
+func calculateHeatColor(progress float64) RGB {
+	if progress < 0.0 {
+		progress = 0.0
 	}
 	if progress > 1.0 {
 		progress = 1.0

@@ -10,6 +10,7 @@ import (
 )
 
 // shieldCellRenderer is the callback type for per-cell shield rendering
+// Defines the interface for rendering strategy (256-color vs TrueColor) selected initialization
 type shieldCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, dist float64, color render.RGB, maxOpacity float64)
 
 // ShieldRenderer renders active shields with dynamic color from GameState

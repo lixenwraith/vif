@@ -3,55 +3,82 @@ package renderers
 import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // HeatMeterRenderer draws the heat meter bar at the top of the screen
 type HeatMeterRenderer struct {
-	state *engine.GameState
+	gameCtx    *engine.GameContext
+	renderCell heatCellRenderer
 }
 
+// heatCellRenderer function type definition specifying signature for renderer callback
+// Defines the interface for rendering strategy (256-color vs TrueColor) selected initialization
+type heatCellRenderer func(buf *render.RenderBuffer, x int, color render.RGB)
+
 // NewHeatMeterRenderer creates a heat meter renderer
-func NewHeatMeterRenderer(state *engine.GameState) *HeatMeterRenderer {
-	return &HeatMeterRenderer{state: state}
+func NewHeatMeterRenderer(ctx *engine.GameContext) *HeatMeterRenderer {
+	h := &HeatMeterRenderer{gameCtx: ctx}
+
+	// Select optimization strategy once
+	if ctx.Terminal.ColorMode() == terminal.ColorMode256 {
+		h.renderCell = h.cell256
+	} else {
+		h.renderCell = h.cellTrueColor
+	}
+	return h
 }
 
 // Render implements SystemRenderer
 func (h *HeatMeterRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskUI)
-	heat := h.state.GetHeat()
 
-	// Calculate display segments: 0-9=0, 10-19=1, ..., 90-99=9, 100=10
-	displayHeat := heat / 10
-	if displayHeat > 10 {
-		displayHeat = 10
-	}
+	// 1. Calculate Fill Limit
+	heat := h.gameCtx.State.GetHeat() // 0-100
+	// fillWidth = (Width * Heat) / 100
+	fillWidth := (ctx.Width * heat) / 100
 
-	// Draw 10-segment heat bar across full terminal width
-	segmentWidth := float64(ctx.Width) / 10.0
-	for segment := 0; segment < 10; segment++ {
-		// Calculate start and end positions for this segment
-		segmentStart := int(float64(segment) * segmentWidth)
-		segmentEnd := int(float64(segment+1) * segmentWidth)
+	// 2. Pre-calculate separator interval
+	// Use float to minimize drift over width
+	sepInterval := float64(ctx.Width) / 10.0
+	nextSep := sepInterval
 
-		// Determine if this segment is filled
-		isFilled := segment < displayHeat
+	// 3. Render Loop
+	for x := 0; x < ctx.Width; x++ {
+		// Optimization: Early exit for empty part?
+		// No, we must clear the rest of the bar to Black/Empty
 
-		// Draw all characters in this segment
-		for x := segmentStart; x < segmentEnd && x < ctx.Width; x++ {
-			if isFilled {
-				// Calculate progress for color gradient (0.0 to 1.0)
-				progress := float64(segment+1) / 10.0
-				color := render.GetHeatMeterColor(progress)
-
-				// Optimization: Use SetBgOnly for filled segments
-				// Since buffer is cleared to empty space, setting BG creates a solid block
-				// This is faster than writing Rune+Fg+Bg
-				buf.SetBgOnly(x, 0, color)
-			} else {
-				// Empty segment: ensure it is black/empty
-				// Use SetBgOnly with Black to ensure "empty" look over default BG
-				buf.SetBgOnly(x, 0, render.RgbBlack)
-			}
+		if x >= fillWidth {
+			// Draw Empty
+			buf.SetBgOnly(x, 0, render.RgbBlack)
+			continue
 		}
+
+		// Calculate Gradient Color
+		// Map x (0..Width) to LUT (0..255)
+		lutIdx := (x * 255) / (ctx.Width - 1)
+		color := render.HeatGradientLUT[lutIdx]
+
+		// Apply Separator (Subtle Dimming)
+		// Check if x crosses a separator threshold, skipping first pixel for deep red start
+		if x > 0 && float64(x) >= nextSep {
+			// Dim the color by 50%
+			color = render.Scale(color, 0.5)
+			nextSep += sepInterval
+		}
+
+		// Draw Filled
+		h.renderCell(buf, x, color)
 	}
+}
+
+// cellTrueColor: Direct RGB write
+func (h *HeatMeterRenderer) cellTrueColor(buf *render.RenderBuffer, x int, color render.RGB) {
+	buf.SetBgOnly(x, 0, color)
+}
+
+// cell256: Direct write, relies on buffer's internal quantization if needed
+// or if SetBgOnly expects RGB, this is fine as Output buffer handles mapping
+func (h *HeatMeterRenderer) cell256(buf *render.RenderBuffer, x int, color render.RGB) {
+	buf.SetBgOnly(x, 0, color)
 }

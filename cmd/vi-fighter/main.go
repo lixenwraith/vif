@@ -157,7 +157,7 @@ func main() {
 	orchestrator.Register(dimRenderer, render.PriorityUI-5)
 
 	// UI (400)
-	heatMeterRenderer := renderers.NewHeatMeterRenderer(ctx.State)
+	heatMeterRenderer := renderers.NewHeatMeterRenderer(ctx)
 	orchestrator.Register(heatMeterRenderer, render.PriorityUI)
 
 	lineNumbersRenderer := renderers.NewLineNumbersRenderer(ctx)
