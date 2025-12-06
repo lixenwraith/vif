@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/events"
 )
 
 // CleanerSystem manages the cleaner animation and logic using vector physics
@@ -32,28 +33,28 @@ func (cs *CleanerSystem) Priority() int {
 }
 
 // EventTypes returns the event types CleanerSystem handles
-func (cs *CleanerSystem) EventTypes() []engine.EventType {
-	return []engine.EventType{
-		engine.EventCleanerRequest,
-		engine.EventDirectionalCleanerRequest,
+func (cs *CleanerSystem) EventTypes() []events.EventType {
+	return []events.EventType{
+		events.EventCleanerRequest,
+		events.EventDirectionalCleanerRequest,
 	}
 }
 
 // HandleEvent processes cleaner-related events from the router
-func (cs *CleanerSystem) HandleEvent(world *engine.World, event engine.GameEvent) {
+func (cs *CleanerSystem) HandleEvent(world *engine.World, event events.GameEvent) {
 	// Check if we already spawned for this frame (deduplication)
 	if cs.spawned[event.Frame] {
 		return
 	}
 
 	switch event.Type {
-	case engine.EventCleanerRequest:
+	case events.EventCleanerRequest:
 		cs.spawnCleaners(world)
 		cs.spawned[event.Frame] = true
 		cs.hasSpawnedSession = true
 
-	case engine.EventDirectionalCleanerRequest:
-		if payload, ok := event.Payload.(*engine.DirectionalCleanerPayload); ok {
+	case events.EventDirectionalCleanerRequest:
+		if payload, ok := event.Payload.(*events.DirectionalCleanerPayload); ok {
 			cs.spawnDirectionalCleaners(world, payload.OriginX, payload.OriginY)
 			cs.spawned[event.Frame] = true
 			cs.hasSpawnedSession = true
@@ -79,7 +80,7 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 
 	// Push EventCleanerFinished when all cleaners have completed their animation
 	if len(entities) == 0 && cs.hasSpawnedSession {
-		cs.ctx.PushEvent(engine.EventCleanerFinished, nil, now)
+		cs.ctx.PushEvent(events.EventCleanerFinished, nil, now)
 		cs.hasSpawnedSession = false
 		return
 	}
@@ -188,11 +189,12 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 		}
 	}
 
-	// Check if all cleaners finished
 	entities = world.Cleaners.All()
+	// Push EventCleanerFinished when all cleaners have completed their animation
 	if len(entities) == 0 && cs.hasSpawnedSession {
-		cs.ctx.PushEvent(engine.EventCleanerFinished, nil, now)
+		cs.ctx.PushEvent(events.EventCleanerFinished, nil, now)
 		cs.hasSpawnedSession = false
+		return
 	}
 }
 
@@ -203,10 +205,11 @@ func (cs *CleanerSystem) spawnCleaners(world *engine.World) {
 
 	redRows := cs.scanRedCharacterRows(world)
 
+	// TODO: to be deprecated, old workaround
 	// Phantom trigger: no targets to clean
 	if len(redRows) == 0 {
 		cs.ctx.State.TriggerGrayout(timeRes.GameTime)
-		cs.ctx.PushEvent(engine.EventCleanerFinished, nil, timeRes.GameTime)
+		cs.ctx.PushEvent(events.EventCleanerFinished, nil, timeRes.GameTime)
 		return
 	}
 

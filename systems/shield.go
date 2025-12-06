@@ -5,6 +5,7 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/events"
 )
 
 // ShieldSystem owns shield activation state and processes drain events
@@ -23,25 +24,25 @@ func (s *ShieldSystem) Priority() int {
 }
 
 // EventTypes returns the event types ShieldSystem handles
-func (s *ShieldSystem) EventTypes() []engine.EventType {
-	return []engine.EventType{
-		engine.EventShieldActivate,
-		engine.EventShieldDeactivate,
-		engine.EventShieldDrain,
+func (s *ShieldSystem) EventTypes() []events.EventType {
+	return []events.EventType{
+		events.EventShieldActivate,
+		events.EventShieldDeactivate,
+		events.EventShieldDrain,
 	}
 }
 
 // HandleEvent processes shield-related events from the router
-func (s *ShieldSystem) HandleEvent(world *engine.World, event engine.GameEvent) {
+func (s *ShieldSystem) HandleEvent(world *engine.World, event events.GameEvent) {
 	switch event.Type {
-	case engine.EventShieldActivate:
+	case events.EventShieldActivate:
 		s.ctx.State.SetShieldActive(true)
 
-	case engine.EventShieldDeactivate:
+	case events.EventShieldDeactivate:
 		s.ctx.State.SetShieldActive(false)
 
-	case engine.EventShieldDrain:
-		if payload, ok := event.Payload.(*engine.ShieldDrainPayload); ok {
+	case events.EventShieldDrain:
+		if payload, ok := event.Payload.(*events.ShieldDrainPayload); ok {
 			s.ctx.State.AddEnergy(-payload.Amount)
 		}
 	}

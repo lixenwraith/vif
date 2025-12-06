@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/events"
 )
 
 // GoldSystem manages the gold sequence mechanic and emits events for visualization
@@ -157,7 +158,7 @@ func (s *GoldSystem) spawnGold(world *engine.World) bool {
 	}
 
 	// Emit Spawn Event for Visualization (Timer)
-	s.ctx.PushEvent(engine.EventGoldSpawned, &engine.GoldSpawnedPayload{
+	s.ctx.PushEvent(events.EventGoldSpawned, &events.GoldSpawnedPayload{
 		SequenceID: sequenceID,
 		OriginX:    x,
 		OriginY:    y,
@@ -220,7 +221,7 @@ func (s *GoldSystem) TimeoutGoldSequence(world *engine.World) {
 	goldSnapshot := s.ctx.State.ReadGoldState(now)
 
 	// Emit Timeout Event first (so SplashSystem can remove timer)
-	s.ctx.PushEvent(engine.EventGoldTimeout, &engine.GoldCompletionPayload{
+	s.ctx.PushEvent(events.EventGoldTimeout, &events.GoldCompletionPayload{
 		SequenceID: goldSnapshot.SequenceID,
 	}, now)
 
@@ -244,7 +245,7 @@ func (s *GoldSystem) CompleteGold(world *engine.World) bool {
 	}
 
 	// Emit Completion Event (SplashSystem removes timer, others can react)
-	s.ctx.PushEvent(engine.EventGoldComplete, &engine.GoldCompletionPayload{
+	s.ctx.PushEvent(events.EventGoldComplete, &events.GoldCompletionPayload{
 		SequenceID: goldSnapshot.SequenceID,
 	}, now)
 

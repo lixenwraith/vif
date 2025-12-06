@@ -3,6 +3,7 @@ package modes
 import (
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/events"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
@@ -129,7 +130,7 @@ func (h *InputHandler) handleNormalMode(ev terminal.Event) bool {
 				originX, originY = pos.X, pos.Y
 			}
 
-			h.ctx.PushEvent(engine.EventSplashRequest, &engine.SplashRequestPayload{
+			h.ctx.PushEvent(events.EventSplashRequest, &events.SplashRequestPayload{
 				Text:    result.CommandString,
 				Color:   components.SplashColorNormal,
 				OriginX: originX,
@@ -180,7 +181,7 @@ func (h *InputHandler) handleNormalModeSpecialKeys(ev terminal.Event) {
 		OpMove(h.ctx, result, 'h')
 
 	case terminal.KeyTab:
-		h.ctx.PushEvent(engine.EventNuggetJumpRequest, nil, h.ctx.PausableClock.Now())
+		h.ctx.PushEvent(events.EventNuggetJumpRequest, nil, h.ctx.PausableClock.Now())
 
 	case terminal.KeyEnter:
 		currentHeat := h.ctx.State.GetHeat()
@@ -189,11 +190,11 @@ func (h *InputHandler) handleNormalModeSpecialKeys(ev terminal.Event) {
 
 			cursorPos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
 			if ok {
-				payload := &engine.DirectionalCleanerPayload{
+				payload := &events.DirectionalCleanerPayload{
 					OriginX: cursorPos.X,
 					OriginY: cursorPos.Y,
 				}
-				h.ctx.PushEvent(engine.EventDirectionalCleanerRequest, payload, h.ctx.PausableClock.Now())
+				h.ctx.PushEvent(events.EventDirectionalCleanerRequest, payload, h.ctx.PausableClock.Now())
 			}
 		}
 	}
@@ -261,7 +262,7 @@ func (h *InputHandler) handleInsertMode(ev terminal.Event) bool {
 		return true
 
 	case terminal.KeyTab:
-		h.ctx.PushEvent(engine.EventNuggetJumpRequest, nil, h.ctx.PausableClock.Now())
+		h.ctx.PushEvent(events.EventNuggetJumpRequest, nil, h.ctx.PausableClock.Now())
 		return true
 
 	case terminal.KeyEnter:
@@ -272,11 +273,11 @@ func (h *InputHandler) handleInsertMode(ev terminal.Event) bool {
 
 				cursorPos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
 				if ok {
-					payload := &engine.DirectionalCleanerPayload{
+					payload := &events.DirectionalCleanerPayload{
 						OriginX: cursorPos.X,
 						OriginY: cursorPos.Y,
 					}
-					h.ctx.PushEvent(engine.EventDirectionalCleanerRequest, payload, h.ctx.PausableClock.Now())
+					h.ctx.PushEvent(events.EventDirectionalCleanerRequest, payload, h.ctx.PausableClock.Now())
 				}
 			}
 		})
@@ -294,11 +295,11 @@ func (h *InputHandler) handleInsertMode(ev terminal.Event) bool {
 			return true
 		}
 		// Push typing event (processed by EnergySystem via EventRouter)
-		payload := engine.CharacterTypedPayloadPool.Get().(*engine.CharacterTypedPayload)
+		payload := events.CharacterTypedPayloadPool.Get().(*events.CharacterTypedPayload)
 		payload.Char = ev.Rune
 		payload.X = pos.X
 		payload.Y = pos.Y
-		h.ctx.PushEvent(engine.EventCharacterTyped, payload, h.ctx.PausableClock.Now())
+		h.ctx.PushEvent(events.EventCharacterTyped, payload, h.ctx.PausableClock.Now())
 	}
 	return true
 }

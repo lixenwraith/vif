@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/events"
 )
 
 // createAudioCommand creates an audio command for sound playback
@@ -75,9 +76,9 @@ func (s *EnergySystem) Update(world *engine.World, dt time.Duration) {
 	shieldActive := s.ctx.State.GetShieldActive()
 	// Evaluate and set shield activation state
 	if energy > 0 && !shieldActive {
-		s.ctx.PushEvent(engine.EventShieldActivate, nil, now)
+		s.ctx.PushEvent(events.EventShieldActivate, nil, now)
 	} else if energy <= 0 && shieldActive {
-		s.ctx.PushEvent(engine.EventShieldDeactivate, nil, now)
+		s.ctx.PushEvent(events.EventShieldDeactivate, nil, now)
 	}
 }
 
@@ -261,7 +262,7 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 
 		// Trigger splash for successful typing via Event
 		splashColor := s.getSplashColorForSequence(seq)
-		s.ctx.PushEvent(engine.EventSplashRequest, &engine.SplashRequestPayload{
+		s.ctx.PushEvent(events.EventSplashRequest, &events.SplashRequestPayload{
 			Text:    string(typedRune),
 			Color:   splashColor,
 			OriginX: cursorX,
@@ -354,11 +355,11 @@ func (s *EnergySystem) handleNuggetCollection(world *engine.World, entity engine
 	if newHeat >= constants.MaxHeat {
 		cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
 		if ok {
-			payload := &engine.DirectionalCleanerPayload{
+			payload := &events.DirectionalCleanerPayload{
 				OriginX: cursorPos.X,
 				OriginY: cursorPos.Y,
 			}
-			s.ctx.PushEvent(engine.EventDirectionalCleanerRequest, payload, now)
+			s.ctx.PushEvent(events.EventDirectionalCleanerRequest, payload, now)
 		}
 	}
 
@@ -366,7 +367,7 @@ func (s *EnergySystem) handleNuggetCollection(world *engine.World, entity engine
 	world.DestroyEntity(entity)
 
 	// Trigger splash for nugget collection via Event
-	s.ctx.PushEvent(engine.EventSplashRequest, &engine.SplashRequestPayload{
+	s.ctx.PushEvent(events.EventSplashRequest, &events.SplashRequestPayload{
 		Text:    string(typedRune),
 		Color:   components.SplashColorNugget,
 		OriginX: config.GameWidth / 2, // Nugget splash doesn't need strict repulsion, but we pass valid coords
@@ -458,7 +459,7 @@ func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity engi
 	}
 
 	// Trigger splash for gold character via Event
-	s.ctx.PushEvent(engine.EventSplashRequest, &engine.SplashRequestPayload{
+	s.ctx.PushEvent(events.EventSplashRequest, &events.SplashRequestPayload{
 		Text:    string(typedRune),
 		Color:   components.SplashColorGold,
 		OriginX: cursorPos.X,
@@ -475,7 +476,7 @@ func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity engi
 		// Request cleaners if heat is already at max
 		// Push event to trigger cleaners on next update
 		if currentHeat >= constants.MaxHeat {
-			s.ctx.PushEvent(engine.EventCleanerRequest, nil, timeRes.GameTime)
+			s.ctx.PushEvent(events.EventCleanerRequest, nil, timeRes.GameTime)
 		}
 
 		// Fill heat to max (if not already higher)
@@ -489,40 +490,40 @@ func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity engi
 }
 
 // EventTypes returns the event types EnergySystem handles
-func (s *EnergySystem) EventTypes() []engine.EventType {
-	return []engine.EventType{
-		engine.EventCharacterTyped,
-		engine.EventEnergyTransaction,
-		engine.EventDeleteRequest,
+func (s *EnergySystem) EventTypes() []events.EventType {
+	return []events.EventType{
+		events.EventCharacterTyped,
+		events.EventEnergyTransaction,
+		events.EventDeleteRequest,
 	}
 }
 
 // HandleEvent processes input-related events from the router
-func (s *EnergySystem) HandleEvent(world *engine.World, event engine.GameEvent) {
+func (s *EnergySystem) HandleEvent(world *engine.World, event events.GameEvent) {
 	switch event.Type {
-	case engine.EventCharacterTyped:
-		if payload, ok := event.Payload.(*engine.CharacterTypedPayload); ok {
+	case events.EventCharacterTyped:
+		if payload, ok := event.Payload.(*events.CharacterTypedPayload); ok {
 			// Process the event
 			s.handleCharacterTyping(world, payload.X, payload.Y, payload.Char)
 
 			// Return payload to pool to reduce allocations
-			engine.CharacterTypedPayloadPool.Put(payload)
+			events.CharacterTypedPayloadPool.Put(payload)
 		}
 
-	case engine.EventDeleteRequest:
-		if payload, ok := event.Payload.(*engine.DeleteRequestPayload); ok {
+	case events.EventDeleteRequest:
+		if payload, ok := event.Payload.(*events.DeleteRequestPayload); ok {
 			s.handleDeleteRequest(world, payload, event.Timestamp)
 		}
 
-	case engine.EventEnergyTransaction:
-		if payload, ok := event.Payload.(*engine.EnergyTransactionPayload); ok {
+	case events.EventEnergyTransaction:
+		if payload, ok := event.Payload.(*events.EnergyTransactionPayload); ok {
 			s.ctx.State.AddEnergy(payload.Amount)
 		}
 	}
 }
 
 // handleDeleteRequest processes deletion of entities in a range
-func (s *EnergySystem) handleDeleteRequest(world *engine.World, payload *engine.DeleteRequestPayload, now time.Time) {
+func (s *EnergySystem) handleDeleteRequest(world *engine.World, payload *events.DeleteRequestPayload, now time.Time) {
 	// Fetch resources
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 
@@ -553,7 +554,7 @@ func (s *EnergySystem) handleDeleteRequest(world *engine.World, payload *engine.
 		entitiesToDelete = append(entitiesToDelete, entity)
 	}
 
-	if payload.RangeType == engine.DeleteRangeLine {
+	if payload.RangeType == events.DeleteRangeLine {
 		// Line deletion (inclusive rows)
 		startY, endY := payload.StartY, payload.EndY
 		// Ensure normalized order

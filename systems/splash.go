@@ -6,6 +6,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/events"
 )
 
 // SplashSystem manages the lifecycle of splash entities
@@ -24,31 +25,31 @@ func (s *SplashSystem) Priority() int {
 }
 
 // EventTypes defines the events this system subscribes to
-func (s *SplashSystem) EventTypes() []engine.EventType {
-	return []engine.EventType{
-		engine.EventSplashRequest,
-		engine.EventGoldSpawned,
-		engine.EventGoldComplete,
-		engine.EventGoldTimeout,
-		engine.EventGoldDestroyed,
+func (s *SplashSystem) EventTypes() []events.EventType {
+	return []events.EventType{
+		events.EventSplashRequest,
+		events.EventGoldSpawned,
+		events.EventGoldComplete,
+		events.EventGoldTimeout,
+		events.EventGoldDestroyed,
 	}
 }
 
 // HandleEvent processes events to create or destroy splash entities
-func (s *SplashSystem) HandleEvent(world *engine.World, event engine.GameEvent) {
+func (s *SplashSystem) HandleEvent(world *engine.World, event events.GameEvent) {
 	switch event.Type {
-	case engine.EventSplashRequest:
-		if payload, ok := event.Payload.(*engine.SplashRequestPayload); ok {
+	case events.EventSplashRequest:
+		if payload, ok := event.Payload.(*events.SplashRequestPayload); ok {
 			s.handleSplashRequest(world, payload, event.Timestamp)
 		}
 
-	case engine.EventGoldSpawned:
-		if payload, ok := event.Payload.(*engine.GoldSpawnedPayload); ok {
+	case events.EventGoldSpawned:
+		if payload, ok := event.Payload.(*events.GoldSpawnedPayload); ok {
 			s.handleGoldSpawn(world, payload, event.Timestamp)
 		}
 
-	case engine.EventGoldComplete, engine.EventGoldTimeout, engine.EventGoldDestroyed:
-		if payload, ok := event.Payload.(*engine.GoldCompletionPayload); ok {
+	case events.EventGoldComplete, events.EventGoldTimeout, events.EventGoldDestroyed:
+		if payload, ok := event.Payload.(*events.GoldCompletionPayload); ok {
 			s.handleGoldFinish(world, payload.SequenceID)
 		}
 	}
@@ -109,7 +110,7 @@ func (s *SplashSystem) Update(world *engine.World, dt time.Duration) {
 }
 
 // handleSplashRequest creates a transient splash with smart layout
-func (s *SplashSystem) handleSplashRequest(world *engine.World, payload *engine.SplashRequestPayload, now time.Time) {
+func (s *SplashSystem) handleSplashRequest(world *engine.World, payload *events.SplashRequestPayload, now time.Time) {
 	// 1. Enforce Uniqueness: Destroy existing transient splashes
 	s.cleanupSplashesByMode(world, components.SplashModeTransient)
 
@@ -141,7 +142,7 @@ func (s *SplashSystem) handleSplashRequest(world *engine.World, payload *engine.
 }
 
 // handleGoldSpawn creates the persistent gold timer anchored to the sequence
-func (s *SplashSystem) handleGoldSpawn(world *engine.World, payload *engine.GoldSpawnedPayload, now time.Time) {
+func (s *SplashSystem) handleGoldSpawn(world *engine.World, payload *events.GoldSpawnedPayload, now time.Time) {
 	// 1. Enforce Uniqueness: Destroy existing timer
 	s.cleanupSplashesByMode(world, components.SplashModePersistent)
 

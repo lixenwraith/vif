@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/events"
 )
 
 // pendingDrainSpawn represents a queued drain spawn awaiting materialization
@@ -723,7 +724,7 @@ func (s *DrainSystem) handleDrainInteractions(world *engine.World) {
 		// Shield zone energy drain (applies to drains anywhere in shield ellipse)
 		if shieldActive && s.isInsideShieldEllipse(world, drainPos.X, drainPos.Y) {
 			if now.Sub(drain.LastDrainTime) >= constants.DrainEnergyDrainInterval {
-				s.ctx.PushEvent(engine.EventShieldDrain, &engine.ShieldDrainPayload{
+				s.ctx.PushEvent(events.EventShieldDrain, &events.ShieldDrainPayload{
 					Amount: constants.DrainShieldEnergyDrainAmount,
 				}, now)
 				drain.LastDrainTime = now
@@ -929,7 +930,7 @@ func (s *DrainSystem) handleGoldSequenceCollision(world *engine.World, entity en
 	}
 
 	// Emit event BEFORE destroying entities (SplashSystem needs sequenceID)
-	s.ctx.PushEvent(engine.EventGoldDestroyed, &engine.GoldCompletionPayload{
+	s.ctx.PushEvent(events.EventGoldDestroyed, &events.GoldCompletionPayload{
 		SequenceID: sequenceID,
 	}, now)
 

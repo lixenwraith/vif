@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/events"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
@@ -31,7 +32,7 @@ type GameContext struct {
 	World *World
 
 	// Event queue for inter-system communication
-	eventQueue *EventQueue
+	eventQueue *events.EventQueue
 
 	// Terminal interface
 	Terminal terminal.Terminal
@@ -108,7 +109,7 @@ func NewGameContext(term terminal.Terminal) *GameContext {
 		Width:         width,
 		Height:        height,
 		Mode:          ModeNormal,
-		eventQueue:    NewEventQueue(),
+		eventQueue:    events.NewEventQueue(),
 	}
 
 	// Default crash handler (just panic again if not set)
@@ -444,8 +445,8 @@ func (ctx *GameContext) IncrementFrameNumber() int64 {
 // ===== EVENT QUEUE METHODS =====
 
 // PushEvent adds an event to the event queue with current frame number and provided timestamp
-func (ctx *GameContext) PushEvent(eventType EventType, payload any, now time.Time) {
-	event := GameEvent{
+func (ctx *GameContext) PushEvent(eventType events.EventType, payload any, now time.Time) {
+	event := events.GameEvent{
 		Type:      eventType,
 		Payload:   payload,
 		Frame:     ctx.State.GetFrameNumber(),

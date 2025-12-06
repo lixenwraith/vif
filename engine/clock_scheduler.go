@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/events"
 )
 
 // GamePhase represents the current phase of the game's mechanic cycle
@@ -74,7 +75,7 @@ type ClockScheduler struct {
 	mu        sync.RWMutex
 
 	// Event routing
-	eventRouter *EventRouter
+	eventRouter *events.Router[*World]
 
 	// System references needed for triggering transitions
 	// These will be set via SetSystems() after scheduler creation
@@ -101,7 +102,7 @@ func NewClockScheduler(ctx *GameContext, tickInterval time.Duration, frameReady 
 		timeProvider:     ctx.PausableClock,
 		tickInterval:     tickInterval,
 		lastGameTickTime: ctx.PausableClock.Now(),
-		eventRouter:      NewEventRouter(ctx.eventQueue),
+		eventRouter:      events.NewRouter[*World](ctx.eventQueue),
 		frameReady:       frameReady,
 		updateDone:       updateDone,
 		tickCount:        atomic.Uint64{},
@@ -113,7 +114,7 @@ func NewClockScheduler(ctx *GameContext, tickInterval time.Duration, frameReady 
 
 // RegisterEventHandler adds an event handler to the router
 // Must be called before Start()
-func (cs *ClockScheduler) RegisterEventHandler(handler EventHandler) {
+func (cs *ClockScheduler) RegisterEventHandler(handler events.Handler[*World]) {
 	cs.eventRouter.Register(handler)
 }
 

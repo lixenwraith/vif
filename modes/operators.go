@@ -3,6 +3,7 @@ package modes
 import (
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/events"
 )
 
 // OpMove updates cursor position based on motion result
@@ -24,14 +25,14 @@ func OpDelete(ctx *engine.GameContext, result MotionResult) {
 		return
 	}
 
-	payload := &engine.DeleteRequestPayload{}
+	payload := &events.DeleteRequestPayload{}
 
 	if result.Type == RangeLine {
-		payload.RangeType = engine.DeleteRangeLine
+		payload.RangeType = events.DeleteRangeLine
 		payload.StartY = result.StartY
 		payload.EndY = result.EndY
 	} else {
-		payload.RangeType = engine.DeleteRangeChar
+		payload.RangeType = events.DeleteRangeChar
 
 		// Normalize range: Start should be visually before End
 		sx, sy := result.StartX, result.StartY
@@ -68,5 +69,5 @@ func OpDelete(ctx *engine.GameContext, result MotionResult) {
 		payload.EndY = ey
 	}
 
-	ctx.PushEvent(engine.EventDeleteRequest, payload, ctx.PausableClock.Now())
+	ctx.PushEvent(events.EventDeleteRequest, payload, ctx.PausableClock.Now())
 }

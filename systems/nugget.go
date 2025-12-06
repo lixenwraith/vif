@@ -13,6 +13,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/events"
 )
 
 // NuggetSystem manages nugget spawn and respawn logic
@@ -36,15 +37,15 @@ func (s *NuggetSystem) Priority() int {
 }
 
 // EventTypes returns the event types NuggetSystem handles
-func (s *NuggetSystem) EventTypes() []engine.EventType {
-	return []engine.EventType{
-		engine.EventNuggetJumpRequest,
+func (s *NuggetSystem) EventTypes() []events.EventType {
+	return []events.EventType{
+		events.EventNuggetJumpRequest,
 	}
 }
 
 // HandleEvent processes jump requests
-func (s *NuggetSystem) HandleEvent(world *engine.World, event engine.GameEvent) {
-	if event.Type == engine.EventNuggetJumpRequest {
+func (s *NuggetSystem) HandleEvent(world *engine.World, event events.GameEvent) {
+	if event.Type == events.EventNuggetJumpRequest {
 		s.handleJumpRequest(world, event.Timestamp)
 	}
 }
@@ -102,7 +103,7 @@ func (s *NuggetSystem) handleJumpRequest(world *engine.World, now time.Time) {
 	})
 
 	// 5. Pay Energy Cost
-	s.ctx.PushEvent(engine.EventEnergyTransaction, &engine.EnergyTransactionPayload{
+	s.ctx.PushEvent(events.EventEnergyTransaction, &events.EnergyTransactionPayload{
 		Amount: -10,
 		Source: "NuggetJump",
 	}, now)
