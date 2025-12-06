@@ -194,9 +194,9 @@ func (s *DrainSystem) getActiveDrainsBySpawnOrder(world *engine.World) []engine.
 
 // randomSpawnOffset returns a valid position with boundary-stretched offset
 // When cursor is near edge, extends spawn range on opposite side to maintain area
-// Retries up to 10 times to find unoccupied cell not in pending queue
+// Retries up to maxRetries times to find unoccupied cell not in pending queue
 func (s *DrainSystem) randomSpawnOffset(world *engine.World, baseX, baseY int, config *engine.ConfigResource, queuedPositions map[uint64]bool) (int, int, bool) {
-	const maxRetries = 10
+	maxRetries := constants.DrainSpawnMaxRetries
 	radius := constants.DrainSpawnOffsetMax
 	width := config.GameWidth
 	height := config.GameHeight

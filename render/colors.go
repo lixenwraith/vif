@@ -88,6 +88,10 @@ var (
 	RgbOverlayBg     = RGB{20, 20, 30}    // Dark background
 	RgbOverlayText   = RGB{255, 255, 255} // White text for high contrast
 	RgbOverlayTitle  = RGB{255, 255, 0}   // Yellow for title
+
+	// Status bar auxiliary colors
+	RgbColorModeIndicator = RGB{200, 200, 200} // Light gray for TC/256 indicator
+	RgbGridTimerFg        = RGB{255, 255, 255} // White for grid timer text
 )
 
 // GetHeatMeterColor returns the color for a given position in the heat meter gradient

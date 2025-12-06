@@ -98,3 +98,26 @@ const (
 	ShieldSourceNone  uint8 = 0
 	ShieldSourceBoost uint8 = 1 << 0
 )
+
+// Spawn Rate Management
+const (
+	// SpawnDensityLowThreshold is the entity density below which spawn rate increases
+	SpawnDensityLowThreshold = 0.3 // Below: 2x spawn rate
+
+	// SpawnDensityHighThreshold is the entity density above which spawn rate decreases
+	SpawnDensityHighThreshold = 0.7 // Above: 0.5x spawn rate
+
+	// Spawn rate multipliers
+	SpawnRateFast   = 2.0 // Used when density < low threshold
+	SpawnRateNormal = 1.0 // Used when density is between thresholds
+	SpawnRateSlow   = 0.5 // Used when density > high threshold
+)
+
+// Position Finding
+const (
+	// DrainSpawnMaxRetries is the maximum number of retries for finding valid drain spawn position
+	DrainSpawnMaxRetries = 10
+
+	// GoldSpawnMaxAttempts is the maximum number of attempts to find valid gold sequence position
+	GoldSpawnMaxAttempts = 100
+)

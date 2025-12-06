@@ -335,8 +335,7 @@ func (s *GoldSystem) findValidPosition(world *engine.World, seqLength int) (int,
 		panic(fmt.Errorf("cursor destroyed"))
 	}
 
-	maxAttempts := 100
-	for attempt := 0; attempt < maxAttempts; attempt++ {
+	for attempt := 0; attempt < constants.GoldSpawnMaxAttempts; attempt++ {
 		x := rand.Intn(config.GameWidth)
 		y := rand.Intn(config.GameHeight)
 

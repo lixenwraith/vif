@@ -80,6 +80,9 @@ const (
 	SplashCharSpacing = 1
 	SplashMaxLength   = 8
 	SplashDuration    = 1 * time.Second
+
+	// SplashTimerPadding is the vertical padding between gold timer and sequence
+	SplashTimerPadding = 2
 )
 
 // --- Global Visual Effects ---

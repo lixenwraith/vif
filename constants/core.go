@@ -36,3 +36,12 @@ const (
 	PriorityFlash   = 35
 	PrioritySplash  = 800 // After game logic, before rendering
 )
+
+// Spatial Grid Defaults
+const (
+	// DefaultGridWidth is the default width for the spatial grid
+	DefaultGridWidth = 200
+
+	// DefaultGridHeight is the default height for the spatial grid
+	DefaultGridHeight = 60
+)

@@ -432,12 +432,12 @@ func (gs *GameState) UpdateSpawnRate(entityCount, maxEntities int) {
 	// <30% filled: 2x faster (0.5s interval)
 	// 30-70% filled: normal (2.0s interval)
 	// >70% filled: 2x slower (4.0s interval)
-	if density < 0.3 {
-		gs.SpawnRateMultiplier = 2.0 // Spawn faster
-	} else if density > 0.7 {
-		gs.SpawnRateMultiplier = 0.5 // Spawn slower
+	if density < constants.SpawnDensityLowThreshold {
+		gs.SpawnRateMultiplier = constants.SpawnRateFast // Spawn faster
+	} else if density > constants.SpawnDensityHighThreshold {
+		gs.SpawnRateMultiplier = constants.SpawnRateSlow // Spawn slower
 	} else {
-		gs.SpawnRateMultiplier = 1.0 // Normal rate
+		gs.SpawnRateMultiplier = constants.SpawnRateNormal // Normal rate
 	}
 }
 

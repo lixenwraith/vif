@@ -160,13 +160,12 @@ func (s *SplashSystem) handleGoldSpawn(world *engine.World, payload *engine.Gold
 	// Anchor Y: Above sequence
 	// Timer Height = constants.SplashCharHeight (12 rows)
 	// Sequence Y is in Rows.
-	// Place 2 rows above sequence top (Sequence is 1 row high)
-	padding := 2
-	anchorY := payload.OriginY - constants.SplashCharHeight - padding
+	// Place padding rows above sequence top (Sequence is 1 row high)
+	anchorY := payload.OriginY - constants.SplashCharHeight - constants.SplashTimerPadding
 
 	// Fallback: If offscreen top, place below
 	if anchorY < 0 {
-		anchorY = payload.OriginY + 1 + padding
+		anchorY = payload.OriginY + 1 + constants.SplashTimerPadding
 	}
 
 	// 3. Create Component
@@ -239,9 +238,9 @@ func (s *SplashSystem) calculateSmartLayout(world *engine.World, cursorX, cursor
 	}
 
 	// Score Quadrants (Higher is better)
-	scores := []int{100, 100, 100, 100}
+	scores := []int{constants.SplashQuadrantBaseScore, constants.SplashQuadrantBaseScore, constants.SplashQuadrantBaseScore, constants.SplashQuadrantBaseScore}
 
-	// 1. Cursor Penalty (-1000)
+	// 1. Cursor Penalty
 	// Determine cursor quadrant
 	cursorQ := 0
 	if cursorX >= width/2 {
@@ -250,7 +249,7 @@ func (s *SplashSystem) calculateSmartLayout(world *engine.World, cursorX, cursor
 	if cursorY >= height/2 {
 		cursorQ |= 2
 	}
-	scores[cursorQ] -= 1000
+	scores[cursorQ] -= constants.SplashCursorPenalty
 
 	// 2. Gold Sequence Penalty (-500)
 	// Iterate active gold sequences
@@ -290,8 +289,8 @@ func (s *SplashSystem) calculateSmartLayout(world *engine.World, cursorX, cursor
 				goldQ |= 2
 			}
 			// Apply soft penalty (cumulative, but clamped or just flag)
-			// Deduct 50 per char, effectively vetoing the quadrant
-			scores[goldQ] -= 50
+			// Deduct per char, effectively vetoing the quadrant
+			scores[goldQ] -= constants.SplashGoldSequencePenalty
 		}
 	}
 

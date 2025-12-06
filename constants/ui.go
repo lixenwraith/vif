@@ -43,3 +43,15 @@ const (
 	// OverlayPaddingY is the vertical padding inside the overlay
 	OverlayPaddingY = 1
 )
+
+// Splash Layout
+const (
+	// SplashQuadrantBaseScore is the base score for each quadrant in smart layout
+	SplashQuadrantBaseScore = 100
+
+	// SplashCursorPenalty is the penalty applied to the quadrant containing the cursor
+	SplashCursorPenalty = 1000
+
+	// SplashGoldSequencePenalty is the penalty applied per gold character in a quadrant
+	SplashGoldSequencePenalty = 50
+)

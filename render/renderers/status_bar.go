@@ -210,7 +210,7 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 		}
 		rightItems = append(rightItems, statusItem{
 			text: fmt.Sprintf(" Grid: %.1fs ", gridRemaining),
-			fg:   render.RGB{255, 255, 255},
+			fg:   render.RgbGridTimerFg,
 			bg:   render.RgbBackground,
 		})
 	}
@@ -242,7 +242,7 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 	rightItems = append(rightItems, statusItem{
 		text: colorModeStr,
 		fg:   render.RgbBlack,
-		bg:   render.RGB{R: 200, G: 200, B: 200}, // Light gray
+		bg:   render.RgbColorModeIndicator,
 	})
 
 	// Calculate which items fit, dropping from end (lowest priority)

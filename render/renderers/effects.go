@@ -175,12 +175,7 @@ func (e *EffectsRenderer) drawRemovalFlashes(ctx render.RenderContext, world *en
 		}
 
 		// Flash contribution for additive blending
-		// TODO: remove hardcoded colors
-		flashColor := render.RGB{
-			R: uint8(255 * opacity),
-			G: uint8(255 * opacity),
-			B: uint8(200 * opacity),
-		}
+		flashColor := render.Scale(render.RgbRemovalFlash, opacity)
 
 		screenX := ctx.GameX + flash.X
 		screenY := ctx.GameY + flash.Y

@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/lixenwraith/vi-fighter/components"
+	"github.com/lixenwraith/vi-fighter/constants"
 )
 
 // PositionStore maintains a spatial index using a fixed-capacity dense grid
@@ -23,7 +24,7 @@ func NewPositionStore() *PositionStore {
 	return &PositionStore{
 		components: make(map[Entity]components.PositionComponent),
 		entities:   make([]Entity, 0, 64),
-		grid:       NewSpatialGrid(200, 60), // Default safe size
+		grid:       NewSpatialGrid(constants.DefaultGridWidth, constants.DefaultGridHeight), // Default safe size
 	}
 }
 
