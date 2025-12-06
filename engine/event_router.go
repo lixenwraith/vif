@@ -49,12 +49,14 @@ func (r *EventRouter) Register(handler EventHandler) {
 // DispatchAll consumes all pending events and routes to handlers
 // Events are processed in FIFO order
 // All handlers for an event type are called before moving to the next event
-//
 // Must be called once per tick, BEFORE World.Update()
 func (r *EventRouter) DispatchAll(world *World) {
 	events := r.queue.Consume()
 	for _, ev := range events {
 		handlers := r.handlers[ev.Type]
+		if ev.Type == EventGoldDestroyed {
+			panic(nil)
+		}
 		for _, h := range handlers {
 			h.HandleEvent(world, ev)
 		}

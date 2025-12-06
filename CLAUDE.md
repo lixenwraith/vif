@@ -86,51 +86,17 @@ These directives are meta-instructions placed in prompts to control Claude Code 
 
 ## CURRENT TASK
 
-**Phase: Splash Visual Feedback System Implementation**
 
 ### Objective
-Implement the Splash system providing large block-character visual feedback for successful user actions.
 
 ### Reference
-All code changes are specified in `SPLASH_code_changes.md` at repo root.
 
 ### Implementation Sequence
 
-| Phase | Files | Action |
-|-------|-------|--------|
-| 1 | `constants/splash.go` | CREATE - timing and dimension constants |
-| 2 | `components/splash.go` | CREATE - SplashComponent struct |
-| 3 | `engine/world.go` | MODIFY - add Splashes store |
-| 4 | `engine/game_context.go` | MODIFY - add SplashEntity field and init |
-| 5 | `engine/splash.go` | CREATE - trigger helper functions |
-| 6 | `systems/splash.go` | CREATE - timeout system |
-| 7 | `constants/priority.go` | MODIFY - add PrioritySplash constant |
-| 8 | `render/priority.go` | MODIFY - add render PrioritySplash |
-| 9 | `render/colors.go` | MODIFY - add splash color constants |
-| 10 | `render/renderers/splash.go` | CREATE - SplashRenderer |
-| 11 | `systems/energy.go` | MODIFY - Insert mode trigger hooks |
-| 12 | `modes/input.go` | MODIFY - Normal mode trigger hook |
-| 13 | `cmd/vi-fighter/main.go` | MODIFY - system and renderer registration |
-
 ### Key Patterns
-
-**Singleton Entity:** Splash uses same pattern as CursorEntity - created once in NewGameContext, never destroyed, state managed via component.
-
-**Trigger Functions:**
-- `TriggerSplashChar()` for single character (Insert mode typing)
-- `TriggerSplashString()` for command strings (Normal mode)
-
-**Positioning:** Quadrant-based placement opposite cursor position with left/top boundary clamping.
-
-**Rendering:** Background-only effect using `SetBgOnly()` with `MaskEffect` write mask.
 
 ### Import Requirements
 
-Files requiring new imports (handle automatically or verify):
-- `systems/energy.go`: add `render`, `terminal` packages
-- `modes/input.go`: add `render` package
 
 ### Verification
-1. `go build .` must pass after all changes
-2. Manual test: Type characters in Insert mode → large character appears in opposite quadrant
-3. Manual test: Execute Normal mode command (e.g., `dd`) → command string appears as splash
+
