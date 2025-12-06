@@ -165,11 +165,11 @@ Producer → EventQueue → ClockScheduler → EventRouter → EventHandler → 
 | `EventCleanerRequest` | EnergySystem | CleanerSystem | `nil` |
 | `EventDirectionalCleanerRequest` | InputHandler, EnergySystem | CleanerSystem | `*DirectionalCleanerPayload{OriginX, OriginY}` |
 | `EventCleanerFinished` | CleanerSystem | (observers) | `nil` |
-| `EventGoldComplete` | EnergySystem | (observers) | `nil` |
 | `EventSplashRequest` | EnergySystem, InputHandler | SplashSystem | `*SplashRequestPayload{Text, Color, OriginX, OriginY}` |
 | `EventGoldSpawned` | GoldSystem | SplashSystem | `*GoldSpawnedPayload{SequenceID, OriginX, OriginY, Length, Duration}` |
+| `EventGoldComplete` | GoldSystem | SplashSystem | `*GoldCompletionPayload{SequenceID}` |
 | `EventGoldTimeout` | GoldSystem | SplashSystem | `*GoldCompletionPayload{SequenceID}` |
-| `EventGoldDestroyed` | GoldSystem | SplashSystem | `*GoldCompletionPayload{SequenceID}` |
+| `EventGoldDestroyed` | DrainSystem | SplashSystem | `*GoldCompletionPayload{SequenceID}` |
 
 **Producer Pattern:**
 ```go
@@ -380,55 +380,43 @@ High-precision entities (Decay, Cleaner, Materialize) use a **dual-state model**
 - **Overlay (Physics/Render)**: Domain components retain float precision (`PreciseX/Y`)
 - Systems update float state, then sync integer grid position via `Positions.Add()`
 
-**Migration Changes:**
+**Spawn Protocol:**
+```go
+entity := world.CreateEntity()
+world.Positions.Add(entity, components.PositionComponent{X: gridX, Y: gridY})  // Grid registration
+world.Decays.Add(entity, components.DecayComponent{
+    PreciseX: float64(gridX),  // Float overlay
+    PreciseY: float64(gridY),
+    // ...
+})
+```
 
-1. **Component Structure:**
-   - `DecayComponent`: Now has `PreciseX`, `PreciseY` (full 2D float) instead of `Column`, `YPosition`
-   - `CleanerComponent`: Grid position removed; now sourced from `PositionComponent`
-   - `MaterializeComponent`: Grid position removed; now sourced from `PositionComponent`
+**Grid Sync Protocol:**
+Systems update float position, then sync grid if integer position changed:
+```go
+// Update physics (float)
+decay.PreciseX += velocity * dt
+decay.PreciseY += velocity * dt
 
-2. **PositionStore Integration:**
-   - All gameplay entities now register in `PositionStore` for unified spatial queries
-   - Enables single iteration cleanup in `cleanupOutOfBoundsEntities()`
-   - Simplifies collision detection (no custom bypass logic needed)
+// Sync grid position if cell changed
+newGridX := int(decay.PreciseX)
+newGridY := int(decay.PreciseY)
+if newGridX != oldPos.X || newGridY != oldPos.Y {
+    world.Positions.Add(entity, components.PositionComponent{X: newGridX, Y: newGridY})
+}
+```
 
-3. **Spawn Protocol:**
-   ```go
-   entity := world.CreateEntity()
-   world.Positions.Add(entity, components.PositionComponent{X: gridX, Y: gridY})  // Grid registration
-   world.Decays.Add(entity, components.DecayComponent{
-       PreciseX: float64(gridX),  // Float overlay
-       PreciseY: float64(gridY),
-       // ...
-   })
-   ```
-
-4. **Grid Sync Protocol:**
-   Systems update float position, then sync grid if integer position changed:
-   ```go
-   // Update physics (float)
-   decay.PreciseX += velocity * dt
-   decay.PreciseY += velocity * dt
-
-   // Sync grid position if cell changed
-   newGridX := int(decay.PreciseX)
-   newGridY := int(decay.PreciseY)
-   if newGridX != oldPos.X || newGridY != oldPos.Y {
-       world.Positions.Add(entity, components.PositionComponent{X: newGridX, Y: newGridY})
-   }
-   ```
-
-5. **Self-Exclusion Requirement:**
-   Spatial queries return the querying entity. Collision loops must filter:
-   ```go
-   entitiesAtPos := world.Positions.GetAllAt(x, y)
-   for _, candidate := range entitiesAtPos {
-       if candidate == selfEntity {
-           continue  // Self-exclusion
-       }
-       // Process collision...
-   }
-   ```
+**Self-Exclusion Requirement:**
+Spatial queries return the querying entity. Collision loops must filter:
+```go
+entitiesAtPos := world.Positions.GetAllAt(x, y)
+for _, candidate := range entitiesAtPos {
+    if candidate == selfEntity {
+        continue  // Self-exclusion
+    }
+    // Process collision...
+}
+```
 
 **Affected Systems:**
 - **DecaySystem** (`systems/decay.go`): Swept traversal with self-exclusion, grid sync on cell change
@@ -859,6 +847,41 @@ COMMAND ─[:debug/:help]→ OVERLAY (modal) ─[ESC/ENTER]→ NORMAL
 - **GameState**: `sync.RWMutex` for phase/timing
 - **World**: Thread-safe per store (internal locking)
 
+### Crash Handling and Panic Recovery
+
+The game uses a **centralized crash handling system** to ensure terminal cleanup on panic:
+
+**Architecture:**
+- `GameContext.crashHandler`: Function called when background goroutines panic
+- `GameContext.Go(fn)`: Wrapper for safe goroutine execution with panic recovery
+- Dependency injection from `main` package to avoid terminal package coupling
+
+**Implementation Pattern:**
+```go
+// Main package sets crash handler (has terminal dependency)
+ctx.SetCrashHandler(func(r any) {
+    terminal.EmergencyReset(os.Stdout)
+    fmt.Fprintf(os.Stderr, "\r\n\x1b[31mGAME CRASHED: %v\x1b[0m\r\n", r)
+    fmt.Fprintf(os.Stderr, "Stack Trace:\r\n%s\r\n", debug.Stack())
+    os.Exit(1)
+})
+
+// Engine package uses wrapper (terminal-independent)
+ctx.Go(func() {
+    // Game logic that might panic
+})
+```
+
+**Direct Panic Handling:**
+- **Main goroutine** (`main.go`): `defer recover()` restores terminal on crash
+- **Input poller goroutine** (`main.go`): `defer recover()` for event polling
+- **Render goroutine**: Runs in main loop, protected by main's defer
+
+**Usage:**
+- ClockScheduler uses `ctx.Go()` for safe tick loop execution
+- Any system spawning goroutines should use `ctx.Go()` wrapper
+- Terminal-dependent code uses direct `defer recover()` blocks
+
 ## Race Condition Prevention
 
 ### Design Principles
@@ -1075,15 +1098,18 @@ The Splash System provides large block-character visual feedback for player acti
 - **`SplashModeTransient`**: Auto-expire after duration (typing feedback, commands, nuggets)
   - Enforces uniqueness: Only one transient splash active at a time
   - Duration: 1 second fade-out
-- **`SplashModePersistent`**: Persistent until explicitly destroyed (gold countdown timer)
-  - Anchored to gold sequence position
+- **`SplashModePersistent`**: Event-driven lifecycle (gold countdown timer)
+  - Created by `EventGoldSpawned` with gold `SequenceID`
+  - Destroyed by `EventGoldComplete`, `EventGoldTimeout`, or `EventGoldDestroyed`
   - Updates every frame to display remaining time (9 → 0)
-  - Orphan detection: Auto-cleanup if gold sequence destroyed
+  - Anchored to gold sequence position
 
 **Event Triggers:**
-- `EventSplashRequest`: Character typed (EnergySystem), nugget collected (EnergySystem), commands executed (InputHandler)
+- `EventSplashRequest`: Character typed (EnergySystem), nugget collected (EnergySystem), commands executed (InputHandler) → creates transient splash
 - `EventGoldSpawned`: Gold sequence created (GoldSystem) → creates persistent timer splash
-- `EventGoldComplete/Timeout/Destroyed`: Gold finished → destroys timer splash
+- `EventGoldComplete`: Gold typed correctly (GoldSystem) → destroys timer splash
+- `EventGoldTimeout`: Gold sequence timed out (GoldSystem) → destroys timer splash
+- `EventGoldDestroyed`: Gold destroyed by external event (DrainSystem) → destroys timer splash
 
 **Smart Layout (Transient Splashes):**
 - Quadrant-based placement avoiding cursor and gold sequences
@@ -1112,8 +1138,9 @@ The Splash System provides large block-character visual feedback for player acti
 
 **Update Loop** (`SplashSystem.Update()`):
 - Transient: Check expiry, destroy if duration elapsed
-- Persistent: Update countdown digit (9→8→...→0), orphan detection
+- Persistent: Update countdown digit (9→8→...→0)
 - Frame-accurate timing using `TimeResource.GameTime`
+- No orphan detection needed (event-driven lifecycle ensures cleanup)
 
 **Integration Points:**
 - EnergySystem: Character/nugget typing → `EventSplashRequest`
