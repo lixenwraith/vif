@@ -10,7 +10,7 @@ type Cell = terminal.Cell
 type Attr = terminal.Attr
 
 // DefaultBgRGB is the default background color (Tokyo Night)
-var DefaultBgRGB = RGB{26, 27, 38}
+var DefaultBgRGB = RgbBackground
 
 var emptyCell = Cell{
 	Rune:  ' ',

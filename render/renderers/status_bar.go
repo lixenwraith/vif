@@ -105,7 +105,7 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 			if leftEndX >= ctx.Width {
 				return
 			}
-			buf.SetWithBg(leftEndX, statusY, ch, render.RGB{255, 255, 0}, render.RgbBackground)
+			buf.SetWithBg(leftEndX, statusY, ch, render.RgbLastCommandText, render.RgbBackground)
 			leftEndX++
 		}
 		leftEndX++
@@ -120,7 +120,7 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 			if leftEndX >= ctx.Width {
 				return
 			}
-			buf.SetWithBg(leftEndX, statusY, ch, render.RGB{255, 255, 255}, render.RgbBackground)
+			buf.SetWithBg(leftEndX, statusY, ch, render.RgbSearchInputText, render.RgbBackground)
 			leftEndX++
 		}
 	} else if s.gameCtx.IsCommandMode() {
@@ -129,7 +129,7 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 			if leftEndX >= ctx.Width {
 				return
 			}
-			buf.SetWithBg(leftEndX, statusY, ch, render.RGB{255, 255, 255}, render.RgbBackground)
+			buf.SetWithBg(leftEndX, statusY, ch, render.RgbCommandInputText, render.RgbBackground)
 			leftEndX++
 		}
 	} else if s.gameCtx.StatusMessage != "" {
@@ -137,7 +137,7 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 			if leftEndX >= ctx.Width {
 				return
 			}
-			buf.SetWithBg(leftEndX, statusY, ch, render.RGB{200, 200, 200}, render.RgbBackground)
+			buf.SetWithBg(leftEndX, statusY, ch, render.RgbStatusMessageText, render.RgbBackground)
 			leftEndX++
 		}
 	}

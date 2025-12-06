@@ -106,6 +106,10 @@ var (
 	// Status bar auxiliary colors
 	RgbColorModeIndicator = RGB{200, 200, 200} // Light gray for TC/256 indicator
 	RgbGridTimerFg        = RGB{255, 255, 255} // White for grid timer text
+	RgbLastCommandText    = RGB{255, 255, 0}   // Yellow for last command indicator
+	RgbSearchInputText    = RGB{255, 255, 255} // White for search input
+	RgbCommandInputText   = RGB{255, 255, 255} // White for command input
+	RgbStatusMessageText  = RGB{200, 200, 200} // Light gray for status messages
 )
 
 // calculateHeatColor returns the color for a given position in the heat meter gradient
