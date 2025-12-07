@@ -253,7 +253,6 @@ func main() {
 			clockScheduler.DispatchEventsImmediately()
 
 			// Update orchestrator dimensions if screen resized
-			// TODO: it should work during pause
 			if ev.Type == terminal.EventResize {
 				ctx.Width = ev.Width
 				ctx.Height = ev.Height

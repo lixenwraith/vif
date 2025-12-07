@@ -16,21 +16,21 @@ type World struct {
 	Resources *ResourceStore
 
 	// Component Stores (Public for direct system access)
-	Positions     *PositionStore
-	Characters    *Store[components.CharacterComponent]
-	Sequences     *Store[components.SequenceComponent]
-	GoldSequences *Store[components.GoldSequenceComponent]
-	Decays        *Store[components.DecayComponent]
-	Cleaners      *Store[components.CleanerComponent]
-	Flashes       *Store[components.FlashComponent]
-	Nuggets       *Store[components.NuggetComponent]
-	Drains        *Store[components.DrainComponent]
-	Materializers *Store[components.MaterializeComponent]
-	Cursors       *Store[components.CursorComponent]
-	Protections   *Store[components.ProtectionComponent]
-	Shields       *Store[components.ShieldComponent]
-	Splashes      *Store[components.SplashComponent]
-	OutOfBounds   *Store[components.OutOfBoundsComponent]
+	Positions       *PositionStore
+	Characters      *Store[components.CharacterComponent]
+	Sequences       *Store[components.SequenceComponent]
+	GoldSequences   *Store[components.GoldSequenceComponent]
+	Decays          *Store[components.DecayComponent]
+	Cleaners        *Store[components.CleanerComponent]
+	Flashes         *Store[components.FlashComponent]
+	Nuggets         *Store[components.NuggetComponent]
+	Drains          *Store[components.DrainComponent]
+	Materializers   *Store[components.MaterializeComponent]
+	Cursors         *Store[components.CursorComponent]
+	Protections     *Store[components.ProtectionComponent]
+	Shields         *Store[components.ShieldComponent]
+	Splashes        *Store[components.SplashComponent]
+	MarkedForDeaths *Store[components.MarkedForDeathComponent]
 
 	allStores []AnyStore // All stores for uniform lifecycle operations
 
@@ -41,24 +41,24 @@ type World struct {
 // NewWorld creates a new ECS world with all component stores initialized
 func NewWorld() *World {
 	w := &World{
-		nextEntityID:  1,
-		Resources:     NewResourceStore(),
-		systems:       make([]System, 0),
-		Positions:     NewPositionStore(),
-		Characters:    NewStore[components.CharacterComponent](),
-		Sequences:     NewStore[components.SequenceComponent](),
-		GoldSequences: NewStore[components.GoldSequenceComponent](),
-		Decays:        NewStore[components.DecayComponent](),
-		Cleaners:      NewStore[components.CleanerComponent](),
-		Flashes:       NewStore[components.FlashComponent](),
-		Nuggets:       NewStore[components.NuggetComponent](),
-		Drains:        NewStore[components.DrainComponent](),
-		Materializers: NewStore[components.MaterializeComponent](),
-		Cursors:       NewStore[components.CursorComponent](),
-		Protections:   NewStore[components.ProtectionComponent](),
-		Shields:       NewStore[components.ShieldComponent](),
-		Splashes:      NewStore[components.SplashComponent](),
-		OutOfBounds:   NewStore[components.OutOfBoundsComponent](),
+		nextEntityID:    1,
+		Resources:       NewResourceStore(),
+		systems:         make([]System, 0),
+		Positions:       NewPositionStore(),
+		Characters:      NewStore[components.CharacterComponent](),
+		Sequences:       NewStore[components.SequenceComponent](),
+		GoldSequences:   NewStore[components.GoldSequenceComponent](),
+		Decays:          NewStore[components.DecayComponent](),
+		Cleaners:        NewStore[components.CleanerComponent](),
+		Flashes:         NewStore[components.FlashComponent](),
+		Nuggets:         NewStore[components.NuggetComponent](),
+		Drains:          NewStore[components.DrainComponent](),
+		Materializers:   NewStore[components.MaterializeComponent](),
+		Cursors:         NewStore[components.CursorComponent](),
+		Protections:     NewStore[components.ProtectionComponent](),
+		Shields:         NewStore[components.ShieldComponent](),
+		Splashes:        NewStore[components.SplashComponent](),
+		MarkedForDeaths: NewStore[components.MarkedForDeathComponent](),
 	}
 
 	// Register all stores for lifecycle operations
@@ -77,7 +77,7 @@ func NewWorld() *World {
 		w.Protections,
 		w.Shields,
 		w.Splashes,
-		w.OutOfBounds,
+		w.MarkedForDeaths,
 	}
 
 	// Set world reference for z-index lookups

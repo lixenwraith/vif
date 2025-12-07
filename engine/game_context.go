@@ -401,7 +401,7 @@ func (ctx *GameContext) cleanupOutOfBoundsEntities(width, height int) {
 		// systems (like GoldSystem) to detect the loss and update GameState
 		pos, _ := ctx.World.Positions.Get(e)
 		if pos.X >= width || pos.Y >= height || pos.X < 0 || pos.Y < 0 {
-			ctx.World.OutOfBounds.Add(e, components.OutOfBoundsComponent{})
+			ctx.World.MarkedForDeaths.Add(e, components.MarkedForDeathComponent{})
 		}
 	}
 

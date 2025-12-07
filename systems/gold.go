@@ -64,14 +64,14 @@ func (s *GoldSystem) Update(world *engine.World, dt time.Duration) {
 		s.spawnGold(world)
 	}
 
-	// Consistency Check: If gold is active, check if any sequence members are flagged OutOfBounds
+	// Consistency Check: If gold is active, check if any sequence members are flagged MarkedForDeath
 	// Happens on resize and must fail the sequence BEFORE CullSystem destroys the entities
 	if goldSnapshot.Active {
 		// Check for OOB gold entities
 		// Use Sequences store instead of GoldSequences (which are not attached to entities)
 		oobEntities := world.Query().
 			With(world.Sequences).
-			With(world.OutOfBounds).
+			With(world.MarkedForDeaths).
 			Execute()
 
 		for _, e := range oobEntities {

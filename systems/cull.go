@@ -24,8 +24,8 @@ func (s *CullSystem) Priority() int {
 
 // Update iterates through tagged entities and destroys them
 func (s *CullSystem) Update(world *engine.World, dt time.Duration) {
-	// Query all entities tagged as OutOfBounds
-	entities := world.OutOfBounds.All()
+	// Query all entities tagged MarkedForDeath
+	entities := world.MarkedForDeaths.All()
 
 	for _, entity := range entities {
 		// Check protection flags
@@ -33,7 +33,7 @@ func (s *CullSystem) Update(world *engine.World, dt time.Duration) {
 			// If entity is protected from culling or is immortal, remove the OOB tag but don't destroy
 			// This prevents the system from checking it repeatedly or destroying cursor
 			if prot.Mask.Has(components.ProtectFromCull) || prot.Mask == components.ProtectAll {
-				world.OutOfBounds.Remove(entity)
+				world.MarkedForDeaths.Remove(entity)
 				continue
 			}
 		}
