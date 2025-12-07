@@ -60,6 +60,16 @@ func main() {
 	// Create game context with ECS world
 	ctx := engine.NewGameContext(term)
 
+	// Initialize Render Configuration
+	renderConfig := &engine.RenderConfig{
+		ColorMode:       uint8(colorMode), // 0=256, 1=TrueColor (matches constants in terminal package usually, but safe cast here)
+		GrayoutDuration: 1 * time.Second,
+		GrayoutMask:     render.MaskEntity,
+		DimFactor:       0.5,
+		DimMask:         render.MaskAll ^ render.MaskUI,
+	}
+	engine.AddResource(ctx.World.Resources, renderConfig)
+
 	// Dependency Injection: Set safe crash handler for engine goroutines
 	// This keeps engine package independent of terminal package
 	ctx.SetCrashHandler(func(r any) {
@@ -128,54 +138,39 @@ func main() {
 
 	// Create and register renderers in priority order
 
-	// Grid (100)
-	pingGridRenderer := renderers.NewPingGridRenderer(ctx)
-	orchestrator.Register(pingGridRenderer, render.PriorityGrid)
+	// Standardized initialization loop
+	type rendererDef struct {
+		factory  func(*engine.GameContext) render.SystemRenderer
+		priority render.RenderPriority
+	}
 
-	splashRenderer := renderers.NewSplashRenderer(ctx)
-	orchestrator.Register(splashRenderer, render.PrioritySplash)
+	rendererList := []rendererDef{
+		// Grid (100)
+		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewPingGridRenderer(c) }, render.PriorityGrid},
+		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewSplashRenderer(c) }, render.PrioritySplash},
+		// Entities (200)
+		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewCharactersRenderer(c) }, render.PriorityEntities},
+		// Effects (300)
+		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewShieldRenderer(c) }, render.PriorityEffects},
+		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewEffectsRenderer(c) }, render.PriorityEffects},
+		// Drain (350)
+		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewDrainRenderer(c) }, render.PriorityDrain},
+		// Post-Processing (390-395)
+		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewGrayoutRenderer(c) }, render.PriorityUI - 10},
+		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewDimRenderer(c) }, render.PriorityUI - 5},
+		// UI (400)
+		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewHeatMeterRenderer(c) }, render.PriorityUI},
+		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewLineNumbersRenderer(c) }, render.PriorityUI},
+		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewColumnIndicatorsRenderer(c) }, render.PriorityUI},
+		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewStatusBarRenderer(c) }, render.PriorityUI},
+		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewCursorRenderer(c) }, render.PriorityUI},
+		// Overlay (500)
+		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewOverlayRenderer(c) }, render.PriorityOverlay},
+	}
 
-	// Entities (200)
-	charactersRenderer := renderers.NewCharactersRenderer(ctx)
-	orchestrator.Register(charactersRenderer, render.PriorityEntities)
-
-	// Effects (300)
-	shieldRenderer := renderers.NewShieldRenderer(ctx)
-	orchestrator.Register(shieldRenderer, render.PriorityEffects)
-
-	effectsRenderer := renderers.NewEffectsRenderer(ctx)
-	orchestrator.Register(effectsRenderer, render.PriorityEffects)
-
-	// Drain (350)
-	drainRenderer := renderers.NewDrainRenderer()
-	orchestrator.Register(drainRenderer, render.PriorityDrain)
-
-	// Post-Processing (390-395)
-	grayoutRenderer := renderers.NewGrayoutRenderer(ctx, 1*time.Second, render.MaskEntity)
-	orchestrator.Register(grayoutRenderer, render.PriorityUI-10)
-
-	dimRenderer := renderers.NewDimRenderer(ctx, 0.5, render.MaskAll^render.MaskUI)
-	orchestrator.Register(dimRenderer, render.PriorityUI-5)
-
-	// UI (400)
-	heatMeterRenderer := renderers.NewHeatMeterRenderer(ctx)
-	orchestrator.Register(heatMeterRenderer, render.PriorityUI)
-
-	lineNumbersRenderer := renderers.NewLineNumbersRenderer(ctx)
-	orchestrator.Register(lineNumbersRenderer, render.PriorityUI)
-
-	columnIndicatorsRenderer := renderers.NewColumnIndicatorsRenderer(ctx)
-	orchestrator.Register(columnIndicatorsRenderer, render.PriorityUI)
-
-	statusBarRenderer := renderers.NewStatusBarRenderer(ctx)
-	orchestrator.Register(statusBarRenderer, render.PriorityUI)
-
-	cursorRenderer := renderers.NewCursorRenderer(ctx)
-	orchestrator.Register(cursorRenderer, render.PriorityUI)
-
-	// Overlay (500)
-	overlayRenderer := renderers.NewOverlayRenderer(ctx)
-	orchestrator.Register(overlayRenderer, render.PriorityOverlay)
+	for _, def := range rendererList {
+		orchestrator.Register(def.factory(ctx), def.priority)
+	}
 
 	// Create input handler
 	inputHandler := modes.NewInputHandler(ctx)

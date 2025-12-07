@@ -10,11 +10,15 @@ import (
 )
 
 // DrainRenderer draws the drain entity with transparent background
-type DrainRenderer struct{}
+type DrainRenderer struct {
+	gameCtx *engine.GameContext
+}
 
 // NewDrainRenderer creates a new drain renderer
-func NewDrainRenderer() *DrainRenderer {
-	return &DrainRenderer{}
+func NewDrainRenderer(ctx *engine.GameContext) *DrainRenderer {
+	return &DrainRenderer{
+		gameCtx: ctx,
+	}
 }
 
 // Render draws all drain entities

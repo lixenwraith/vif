@@ -15,20 +15,22 @@ type shieldCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, dis
 
 // ShieldRenderer renders active shields with dynamic color from GameState
 type ShieldRenderer struct {
-	gameCtx *engine.GameContext
-
-	// Cached cell renderers for each mode
-	renderCellTrueColor shieldCellRenderer
-	renderCell256       shieldCellRenderer
+	gameCtx    *engine.GameContext
+	renderCell shieldCellRenderer
 }
 
 // NewShieldRenderer creates a new shield renderer
 func NewShieldRenderer(gameCtx *engine.GameContext) *ShieldRenderer {
 	s := &ShieldRenderer{gameCtx: gameCtx}
 
-	// Pre-bind cell renderers to avoid allocation in render loop
-	s.renderCellTrueColor = s.cellTrueColor
-	s.renderCell256 = s.cell256
+	// Access RenderConfig for display mode and select strategy once
+	cfg := engine.MustGetResource[*engine.RenderConfig](gameCtx.World.Resources)
+
+	if cfg.ColorMode == uint8(terminal.ColorMode256) {
+		s.renderCell = s.cell256
+	} else {
+		s.renderCell = s.cellTrueColor
+	}
 
 	return s
 }
@@ -39,15 +41,6 @@ func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, b
 	shields := world.Shields.All()
 	if len(shields) == 0 {
 		return
-	}
-
-	// Select cell renderer once per frame
-	colorMode := s.gameCtx.Terminal.ColorMode()
-	var renderCell shieldCellRenderer
-	if colorMode == terminal.ColorMode256 {
-		renderCell = s.renderCell256
-	} else {
-		renderCell = s.renderCellTrueColor
 	}
 
 	for _, entity := range shields {
@@ -109,7 +102,8 @@ func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, b
 				screenX := ctx.GameX + x
 				screenY := ctx.GameY + y
 
-				renderCell(buf, screenX, screenY, dist, shieldRGB, shield.MaxOpacity)
+				// Use pre-selected strategy
+				s.renderCell(buf, screenX, screenY, dist, shieldRGB, shield.MaxOpacity)
 			}
 		}
 	}

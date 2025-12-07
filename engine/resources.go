@@ -105,3 +105,18 @@ const (
 	ResourceModeSearch  = 2
 	ResourceModeCommand = 3
 )
+
+// RenderConfig holds configuration for the rendering pipeline
+// This decouples renderers from specific terminal implementations and allows dynamic adjustment
+type RenderConfig struct {
+	// Color Configuration
+	ColorMode uint8 // 0=256, 1=TrueColor
+
+	// Post-Processing: Grayout (Desaturation)
+	GrayoutDuration time.Duration
+	GrayoutMask     uint8
+
+	// Post-Processing: Dim (Brightness Reduction)
+	DimFactor float64
+	DimMask   uint8
+}
