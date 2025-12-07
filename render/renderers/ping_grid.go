@@ -21,24 +21,29 @@ func NewPingGridRenderer(gameCtx *engine.GameContext) *PingGridRenderer {
 // Render draws the ping highlights and grid
 func (p *PingGridRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskGrid)
-	// Get ping color based on mode
-	pingColor := p.getPingColor()
 
-	// Draw row and column highlights
-	p.drawPingHighlights(ctx, buf, pingColor)
+	// Draw row and column highlights with line color
+	lineColor := p.getPingLineColor()
+	p.drawPingHighlights(ctx, buf, lineColor)
 
-	// Draw grid lines if ping is active
+	// Draw grid lines if ping is active (NORMAL mode only, uses grid color)
 	if p.gameCtx.GetPingActive() {
-		p.drawPingGrid(ctx, buf, pingColor)
+		gridColor := p.getPingGridColor()
+		p.drawPingGrid(ctx, buf, gridColor)
 	}
 }
 
-// getPingColor determines the ping highlight color based on game mode
-func (p *PingGridRenderer) getPingColor() render.RGB {
+// getPingLineColor returns color for cursor row/column highlights
+func (p *PingGridRenderer) getPingLineColor() render.RGB {
 	if p.gameCtx.IsInsertMode() {
-		return render.RgbPingHighlight
+		return render.RgbPingHighlight // Almost black (5,5,5)
 	}
-	return render.RgbPingNormal
+	return render.RgbPingLineNormal // Dark gray (40,40,40)
+}
+
+// getPingGridColor returns color for 5-interval grid lines
+func (p *PingGridRenderer) getPingGridColor() render.RGB {
+	return render.RgbPingGridNormal // Slightly lighter gray (55,55,55)
 }
 
 // drawPingHighlights - write-only, no buf.Get

@@ -41,9 +41,11 @@ var (
 	RgbColumnIndicator = RGB{180, 180, 180} // Brighter gray
 	RgbBackground      = RGB{26, 27, 38}    // Tokyo Night background
 
-	RgbPingHighlight = RGB{5, 5, 5}       // Almost Black for INSERT mode ping
-	RgbPingNormal    = RGB{153, 102, 0}   // Dark orange for NORMAL/SEARCH ping
-	RgbPingOrange    = RGB{60, 40, 0}     // Very dark orange for ping on whitespace
+	RgbPingHighlight   = RGB{5, 5, 5}     // Almost Black for INSERT mode ping
+	RgbPingNormal      = RGB{153, 102, 0} // Legacy: Dark orange (used by blend-tester)
+	RgbPingLineNormal  = RGB{40, 40, 40}  // Dark gray for NORMAL mode ping lines
+	RgbPingGridNormal  = RGB{55, 55, 55}  // Slightly lighter gray for NORMAL mode ping grid
+	RgbPingOrange      = RGB{60, 40, 0}   // Very dark orange for ping on whitespace
 	RgbPingGreen     = RGB{0, 40, 0}      // Very dark green for ping on green char
 	RgbPingRed       = RGB{50, 15, 15}    // Very dark red for ping on red char
 	RgbPingBlue      = RGB{15, 25, 50}    // Very dark blue for ping on blue char
