@@ -378,8 +378,8 @@ func (ctx *GameContext) HandleResize() {
 	}
 }
 
-// cleanupOutOfBoundsEntities removes entities that are outside the valid game area
-// and resizes the spatial grid to match new dimensions
+// cleanupOutOfBoundsEntities tags entities that are outside the valid game area
+// Actual destruction is handled by CullSystem in the next tick
 func (ctx *GameContext) cleanupOutOfBoundsEntities(width, height int) {
 	// Unified cleanup: single PositionStore iteration handles all entity types
 	allEntities := ctx.World.Positions.All()
@@ -389,17 +389,19 @@ func (ctx *GameContext) cleanupOutOfBoundsEntities(width, height int) {
 			continue
 		}
 
-		// Check protection flags before culling
+		// Check protection flags before marking
 		if prot, ok := ctx.World.Protections.Get(e); ok {
 			if prot.Mask.Has(components.ProtectFromCull) || prot.Mask == components.ProtectAll {
 				continue
 			}
 		}
 
-		// Destroy entities outside valid coordinate space [0, width) × [0, height)
+		// Mark entities outside valid coordinate space [0, width) × [0, height)
+		// We use OutOfBoundsComponent instead of immediate destruction to allow
+		// systems (like GoldSystem) to detect the loss and update GameState
 		pos, _ := ctx.World.Positions.Get(e)
 		if pos.X >= width || pos.Y >= height || pos.X < 0 || pos.Y < 0 {
-			ctx.World.DestroyEntity(e)
+			ctx.World.OutOfBounds.Add(e, components.OutOfBoundsComponent{})
 		}
 	}
 

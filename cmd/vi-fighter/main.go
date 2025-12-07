@@ -116,6 +116,9 @@ func main() {
 	splashSystem := systems.NewSplashSystem(ctx)
 	ctx.World.AddSystem(splashSystem)
 
+	cullSystem := systems.NewCullSystem()
+	ctx.World.AddSystem(cullSystem)
+
 	// Create render orchestrator
 	orchestrator := render.NewRenderOrchestrator(
 		term,

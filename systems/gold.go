@@ -63,6 +63,38 @@ func (s *GoldSystem) Update(world *engine.World, dt time.Duration) {
 	if phaseSnapshot.Phase == engine.PhaseNormal && !goldSnapshot.Active {
 		s.spawnGold(world)
 	}
+
+	// Consistency Check: If gold is active, check if any sequence members are flagged OutOfBounds
+	// Happens on resize and must fail the sequence BEFORE CullSystem destroys the entities
+	if goldSnapshot.Active {
+		// Check for OOB gold entities
+		// Use Sequences store instead of GoldSequences (which are not attached to entities)
+		oobEntities := world.Query().
+			With(world.Sequences).
+			With(world.OutOfBounds).
+			Execute()
+
+		for _, e := range oobEntities {
+			// Verify this entity belongs to the active sequence
+			if seq, ok := world.Sequences.Get(e); ok && seq.Type == components.SequenceGold && seq.ID == goldSnapshot.SequenceID {
+				// Found an active gold char marked for deletion (resize/cull)
+				// Trigger failure logic
+				s.failSequence(world, seq.ID, now)
+				break // One failure is enough to kill the sequence
+			}
+		}
+	}
+}
+
+// failSequence handles the destruction of a gold sequence due to external causes (OOB/Drain)
+func (s *GoldSystem) failSequence(world *engine.World, sequenceID int, now time.Time) {
+	// Emit event to notify UI/SplashSystem
+	s.ctx.PushEvent(events.EventGoldDestroyed, &events.GoldCompletionPayload{
+		SequenceID: sequenceID,
+	}, now)
+
+	// Call removeGold to destroy ALL entities in the sequence, not just the one that triggered the failure, handling partial resize culling
+	s.removeGold(world, sequenceID)
 }
 
 // spawnGold creates a new gold sequence at a random position on the screen using generic stores

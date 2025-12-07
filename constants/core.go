@@ -41,6 +41,7 @@ const (
 	PriorityDecay   = 30
 	PriorityFlash   = 35
 	PrioritySplash  = 800 // After game logic, before rendering
+	PriorityCleanup = 900 // Last: Removes marked entities
 )
 
 // Spatial Grid Defaults
