@@ -1159,6 +1159,28 @@ Systems execute in priority order (lower = earlier):
 9. **FlashSystem (35)**: Flash effect lifecycle
 10. **SplashSystem (800)**: Splash lifecycle and gold timer updates (after game logic, before rendering)
 
+### System Communication Patterns
+
+**Event-Driven Systems** (fully decoupled via events):
+- **SplashSystem**: Subscribes to 5 events, no direct system calls
+- **ShieldSystem**: Subscribes to 3 events, no direct system calls
+- **FlashSystem**: Pure functional helper, no coupling
+- **CleanerSystem**: Subscribes to 2 events, emits 1 event
+- **EnergySystem**: Subscribes to 3 events, emits 4 events
+- **GoldSystem**: Subscribes to 1 event, emits 2 events
+- **NuggetSystem**: Subscribes to 1 event, emits 1 event
+
+**Clock-Tick Systems** (update-based):
+- **BoostSystem**: Pure state management, no events
+- **SpawnSystem**: Content spawning only, no event communication
+- **DrainSystem**: Hostile entity management, emits 1 event
+- **DecaySystem**: Sequence degradation, direct scheduler integration
+
+**GameContext Coupling** (by design):
+- **AudioEngine** access for sound effects (EnergySystem, GoldSystem, NuggetSystem, CleanerSystem)
+- **CursorEntity** access for spatial reference (EnergySystem, GoldSystem, NuggetSystem, DrainSystem, SpawnSystem)
+- **GameState** access for centralized state management (all systems)
+
 ### Content Management System
 - **ContentManager** (`content/manager.go`): Manages content files
 - Auto-discovery: Scans `data/` for `.txt` files
@@ -1167,56 +1189,87 @@ Systems execute in priority order (lower = earlier):
 - Location: Auto-locates project root via `go.mod`
 
 ### Spawn System
-- **Content Source**: `.txt` files in `data/`
-- **Block Generation**: 3-15 consecutive lines, trimmed
-- **6-Color Limit**: Tracks Blue×3 + Green×3 combinations
-  - Census-based: per-frame entity iteration
-  - SpawnSystem runs `runCensus(world)` returning `ColorCensus`
-  - Only spawns when <6 combinations present
-  - Red/Gold excluded from limit
-- **Placement**: Random locations, 3 attempts per line
-  - Collision detection
-  - Cursor exclusion zone (5H, 3V)
-  - Failed attempts discarded
-- **Rate**: 2s base, adaptive (1-4s)
-- **Generates**: Only Blue and Green
+
+Clock-tick system managing content spawning and difficulty scaling.
+
+**Communication:** Pure update-based, no event handlers or emission
+
+**Content Source:**
+- Loads from `.txt` files in `data/` directory via ContentManager
+- Block generation: 3-15 consecutive lines, trimmed
+- Background pre-fetch using `ctx.Go()` for performance
+
+**Spawn Rate:**
+- Base: 2 seconds
+- Adaptive: 1-4 seconds based on screen density
+- Controlled via GameState spawn timing
+
+**6-Color Limit:**
+- Tracks Blue×3 + Green×3 combinations (18 possible states)
+- Census-based: per-frame entity iteration via `runCensus(world)`
+- Only spawns when <6 combinations present
+- Red/Gold excluded from limit
+
+**Placement Strategy:**
+- Random positions with 3 attempts per line
+- Collision detection via PositionStore
+- Cursor exclusion zone (5 horizontal, 3 vertical)
+- Failed attempts discarded
+
+**Generates:** Only Blue and Green sequences (Red comes from decay)
 
 ### Decay System
 
-Applies degradation through falling entity animation.
+Clock-tick system managing sequence degradation through falling entity animation.
+
+**Communication:** Direct scheduler integration, no event handlers or emission
+
+**Phase Integration:**
+- Triggered by ClockScheduler when decay timer expires (60-10 seconds based on heat)
+- Manages PhaseDecayAnimation state via GameState
+- Returns to PhaseNormal when animation completes
 
 **Decay Mechanics:**
 - **Brightness**: Bright → Normal → Dark
 - **Color Chain**:
   - Blue (Dark) → Green (Bright)
-  - Green (Dark) → Red (Bright) ← ONLY source of Red
+  - Green (Dark) → Red (Bright) ← **ONLY source of Red sequences**
   - Red (Dark) → Destroyed
-- **Timing**: 10-60s based on heat
-- **Formula**: `60s - (50s * heatPercentage)`
+- **Timing**: 60-10 seconds based on heat percentage
+- **Formula**: `60s - (50s * (CurrentHeat / MaxHeat))`
 
 **Falling Animation:**
-- One entity per column (`DecayComponent` in `World.Decays`)
-- Speed: Random 5.0-15.0 rows/sec
-- Physics: `YPosition += Speed × dt.Seconds()`
-- Matrix effect: Random character changes
-- Cleanup: Auto-destroy when done
+- One decay entity per column (`DecayComponent` in `World.Decays`)
+- Speed: Random 5.0-15.0 rows/second
+- Physics: `PreciseY += Speed × dt.Seconds()`
+- Matrix effect: Random character changes during fall
+- Auto-destroy when entity exits bottom of screen
 
 **Collision Detection:**
 - **Swept traversal**: Checks all rows between prev/current position (anti-tunneling)
-- **Coordinate latching**: `LastIntX`, `LastIntY` prevent re-processing (anti-green artifacts)
+- **Coordinate latching**: `LastIntX`, `LastIntY` prevent re-processing same cell
 - **Frame deduplication**: `processedGridCells` map prevents double-hits
-- **Entity deduplication**: `decayedThisFrame` map prevents repeat decay
+- **Entity deduplication**: `decayedThisFrame` map prevents repeat decay of same entity
 
 **Thread Safety:**
-- `sync.RWMutex` protects system state
-- Falling entities queried from `World.Decays` (no internal tracking)
-- Deduplication maps are system-internal state
+- `sync.RWMutex` protects animation state
+- Falling entities stored in `World.Decays` (pure ECS)
+- Deduplication maps are system-local state
 
 ### Energy System
-- Character typing in insert mode
-- Heat updates (with boost multiplier)
-- Error handling (resets heat)
-- Census impact: destruction affects next spawn
+
+Event-driven system for character interaction and energy/heat management.
+
+**Event Handling:**
+- Consumes: `EventCharacterTyped`, `EventEnergyTransaction`, `EventDeleteRequest`
+- Emits: `EventSplashRequest`, `EventShieldActivate`, `EventShieldDeactivate`, `EventDirectionalCleanerRequest`, `EventCleanerRequest`, `EventGoldComplete`
+
+**Responsibilities:**
+- Character typing validation and sequence destruction
+- Heat accumulation (with boost multiplier)
+- Energy management and shield state control
+- Error handling (resets heat, plays error sound)
+- Cleaner triggering (gold/nugget completion at max heat)
 
 **Hit Detection:**
 ```go
@@ -1233,77 +1286,151 @@ for _, entity := range entitiesAtCursor {
 ```
 
 ### Boost System
-- **Activation**: Heat reaches 100
-- **Duration**: 500ms initial
-- **Color Binding**: Tied to triggering color
-- **Extension**: +500ms per matching color
-- **Effects**: 2× heat multiplier
-- **Visual**: Pink "Boost: X.Xs" in status bar
+
+Clock-tick system managing boost timer and heat multiplier state.
+
+**Communication:** Pure state management, no event handlers or emission
+
+**Activation:**
+- Automatically activates when heat reaches 100
+- Managed via GameState atomic fields (`BoostEnabled`, `BoostEndTime`, `BoostColor`)
+
+**Timing:**
+- **Initial Duration**: 500ms
+- **Extension**: +500ms per matching color/level sequence typed
+- **Color Binding**: Tied to triggering sequence color/level
+- **Timer Check**: Runs every Update() tick, deactivates on expiration
+
+**Effects:**
+- 2× heat multiplier while active
+- Visual feedback: Pink "Boost: X.Xs" in status bar
 
 ### Gold System
-- **Trigger**: Spawns after decay animation
+
+Event-driven system managing gold sequence lifecycle and phase transitions.
+
+**Event Handling:**
+- Consumes: `EventGoldComplete`
+- Emits: `EventGoldSpawned`, `EventGoldTimeout`
+
+**Lifecycle:**
+- **Spawn**: After decay animation completes
 - **Position**: Random location avoiding cursor
 - **Length**: 10 alphanumeric characters
-- **Duration**: 10 seconds (pausable)
-- **Reward**: Fills heat to max
-- **Cleaner Trigger**: If heat already max when completed
+- **Duration**: 10 seconds (pausable, tracked via GameState)
+- **Completion**: Via `EventGoldComplete` from EnergySystem
+- **Timeout**: Self-triggered via `EventGoldTimeout` after 10 seconds
+
+**Reward:**
+- Fills heat to max
+- Triggers cleaners if heat already at max (via EnergySystem)
 
 ### Nugget System
-- **Behavior**: Spawns every 5 seconds if no active nugget
-- **Collection**:
-  - Typing: Type character on nugget
-  - Jump (Tab): Instant jump to nugget (10 Energy cost)
-- **Reward**: +10% max heat
-- **Bonus**: 4 cleaners if heat at max when collected
+
+Event-driven system managing nugget spawning and collection mechanics.
+
+**Event Handling:**
+- Consumes: `EventNuggetJumpRequest` (from Tab key)
+- Emits: `EventEnergyTransaction` (jump energy cost)
+
+**Behavior:**
+- Spawns every 5 seconds if no active nugget exists
+- Orange alphanumeric character displayed on screen
+
+**Collection Methods:**
+- **Typing**: Type the nugget character at its position
+- **Jump (Tab)**: Instant cursor teleport (costs 10 Energy via `EventEnergyTransaction`)
+
+**Rewards:**
+- +10% max heat capacity
+- Triggers 4-directional cleaners if heat at max (via EnergySystem)
 
 ### Drain System
-- **Purpose**: Hostile entities scaling with heat
-- **Spawn**: Heat ≥ 10, count = `floor(Heat/10)`, max 10
+
+Clock-tick system managing hostile entities with shield interaction.
+
+**Communication:** Update-based, emits `EventShieldDrain` for shield interactions
+
+**Purpose:**
+- Hostile entities that scale with heat level
+- Pressure mechanic forcing energy/shield management
+
+**Spawn Mechanics:**
+- **Trigger**: Heat ≥ 10
+- **Count**: `floor(Heat/10)`, maximum 10 drains
 - **Position**: Random offset (±10) from cursor
-- **Staggered**: 4 ticks between spawns
+- **Staggered**: 4 ticks between spawns (prevents spawn storms)
 - **LIFO**: SpawnOrder tracks despawn priority
-- **Despawn**: Energy ≤ 0 AND Shield inactive, OR excess drains, OR collisions
-- **Materialize**: 1s cyan block animation from edges
-- **Movement**: Toward cursor every 1s
-- **Collisions**:
-  - Drain-Drain: Mutual destruction
-  - Cursor (No Shield): -10 Heat, drain despawns
-  - Cursor (Shield): Energy drain, no heat loss, drain persists
-  - Shield Zone: 100 energy/tick drain
+- **Materialize**: 1-second cyan block animation from screen edges
+
+**Movement:**
+- Moves toward cursor every 1 second
+- Uses PositionStore for spatial queries
+- Path-finding: Direct line toward cursor position
+
+**Despawn Conditions:**
+- Energy ≤ 0 AND Shield inactive
+- Excess drain count (LIFO order)
+- Drain-Drain collisions (mutual destruction)
+- Cursor collision without shield (-10 Heat, drain despawns)
+
+**Shield Interaction:**
+- **Zone Check**: Drains inside shield radius emit `EventShieldDrain`
+- **Energy Drain**: 100 energy/tick per drain (via ShieldSystem event handler)
+- **No Heat Loss**: Drains persist but don't damage heat when shield active
+- **Shield Query**: Checks `GameState.GetShieldActive()` for protection state
 
 ### Cleaner System
 
+Event-driven system managing Red sequence cleanup animations.
+
+**Event Handling:**
+- Consumes: `EventCleanerRequest`, `EventDirectionalCleanerRequest`
+- Emits: `EventCleanerFinished` (decorative, no consumers)
+
 **Horizontal Row Cleaners:**
-- Trigger: `EventCleanerRequest` when gold at max heat
-- Behavior: Sweeps rows with Red characters
-- Phantom: No spawn if no Red (still pushes EventCleanerFinished)
-- Direction: Alternating L→R / R→L
-- Selectivity: Only destroys Red
+- **Trigger**: `EventCleanerRequest` when gold completed at max heat
+- **Behavior**: Sweeps rows containing Red characters
+- **Phantom Mode**: No spawn if no Red exists (still emits `EventCleanerFinished`)
+- **Direction**: Alternating L→R / R→L per row
+- **Selectivity**: Only destroys Red sequences
 
 **Directional Cleaners (4-Way):**
-- Trigger: `EventDirectionalCleanerRequest`
-  - Nugget at max heat: EnergySystem
-  - Enter key (heat ≥ 10): Input handler, costs 10 heat
-- Behavior: 4 cleaners from origin (right, left, down, up)
-- Position Lock: Row/column locked at spawn
-- Selectivity: Only destroys Red
+- **Triggers**:
+  - Nugget collected at max heat (via EnergySystem)
+  - Enter key in NORMAL mode (requires heat ≥ 10, costs 10 heat)
+- **Behavior**: 4 cleaners from cursor origin (right, left, down, up)
+- **Position Lock**: Row/column locked at spawn (horizontal/vertical movement only)
+- **Selectivity**: Only destroys Red sequences
 
 **Common Architecture:**
 - Pure ECS (state in `CleanerComponent`)
 - Vector physics: `position += velocity × dt`
-- Trail: Ring buffer (10 positions, FIFO)
-- Lifecycle: Spawn off-screen → target opposite side → destroy
-- Collision: Swept segment (anti-tunneling)
+- Trail rendering: Ring buffer (10 positions, FIFO)
+- Lifecycle: Spawn off-screen → traverse to opposite edge → auto-destroy
+- Collision: Swept segment detection (anti-tunneling)
 - Visual: Pre-calculated gradients, opacity falloff
-- Thread Safety: Event-driven, lock-free queue, ECS sync
+- Thread Safety: Event-driven activation, lock-free queue, synchronous ECS updates
 
 ### Flash System
-- **Purpose**: Visual flash for entity destruction
-- **Architecture**: Pure ECS (`FlashComponent`)
-- **Duration**: 300ms default
-- **Spawn**: `SpawnDestructionFlash(world, x, y, char, now)`
-- **Usage**: CleanerSystem, DrainSystem, DecaySystem
-- **Lifecycle**: Automatic cleanup after duration
+
+Pure functional system providing visual feedback for entity destruction.
+
+**Communication:** No event handlers, provides functional helper for other systems
+
+**Architecture:**
+- Pure ECS (`FlashComponent`)
+- No coupling to other systems
+- Functional helper: `SpawnDestructionFlash(world, x, y, char, now)`
+
+**Usage:**
+- Called by: CleanerSystem, DrainSystem, DecaySystem
+- Creates flash entity at destruction site
+- Default duration: 300ms
+
+**Lifecycle:**
+- Auto-cleanup after duration expires
+- Update() checks `GameTime` against `StartTime + Duration`
 
 ### Splash System
 
