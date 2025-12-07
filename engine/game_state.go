@@ -37,8 +37,9 @@ type GameState struct {
 	PingGridTimer atomic.Uint64 // float64 bits
 
 	// Last typed character sequence info for shield color
-	LastTypedSeqType  atomic.Int32 // 0=None, 1=Blue, 2=Green, 3=Red, 4=Gold
-	LastTypedSeqLevel atomic.Int32 // 0=Dark, 1=Normal, 2=Bright (deprecated for shield, kept for other uses)
+	// DEPRECATED: Shield now uses EnergyBlinkType directly
+	LastTypedSeqType  atomic.Int32 // Deprecated - use EnergyBlinkType
+	LastTypedSeqLevel atomic.Int32 // Deprecated - unused
 
 	// Drain entity tracking (real-time state for renderer snapshot)
 	// TODO: Is this still required in multi-drain state? Seems redundant
@@ -273,22 +274,26 @@ func (gs *GameState) IncrementFrameNumber() int64 {
 
 // ===== LAST TYPED SEQUENCE ACCESSORS (atomic) =====
 
-// GetLastTypedSeqType returns the last typed sequence type (0=None, 1=Blue, 2=Green)
+// GetLastTypedSeqType returns the last typed sequence type
+// Deprecated: Shield color now uses GetEnergyBlinkType
 func (gs *GameState) GetLastTypedSeqType() int32 {
 	return gs.LastTypedSeqType.Load()
 }
 
 // SetLastTypedSeqType sets the last typed sequence type
+// Deprecated: Shield color now uses EnergyBlinkType
 func (gs *GameState) SetLastTypedSeqType(seqType int32) {
 	gs.LastTypedSeqType.Store(seqType)
 }
 
-// GetLastTypedSeqLevel returns the last typed sequence level (0=Dark, 1=Normal, 2=Bright)
+// GetLastTypedSeqLevel returns the last typed sequence level
+// Deprecated: No longer used
 func (gs *GameState) GetLastTypedSeqLevel() int32 {
 	return gs.LastTypedSeqLevel.Load()
 }
 
 // SetLastTypedSeqLevel sets the last typed sequence level
+// Deprecated: No longer used
 func (gs *GameState) SetLastTypedSeqLevel(seqLevel int32) {
 	gs.LastTypedSeqLevel.Store(seqLevel)
 }

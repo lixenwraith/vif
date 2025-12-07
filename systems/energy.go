@@ -148,22 +148,6 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 
 	// Check if typed character matches
 	if char.Rune == typedRune {
-		// Track last typed sequence for shield color (Blue, Green, Red, Gold)
-		var seqTypeCode int32
-		switch seq.Type {
-		case components.SequenceBlue:
-			seqTypeCode = 1
-		case components.SequenceGreen:
-			seqTypeCode = 2
-		case components.SequenceRed:
-			seqTypeCode = 3
-		case components.SequenceGold:
-			seqTypeCode = 4
-		}
-		if seqTypeCode != 0 {
-			s.ctx.State.SetLastTypedSeqType(seqTypeCode)
-		}
-
 		// RED characters reset heat instead of incrementing it
 		if seq.Type == components.SequenceRed {
 			s.ctx.State.SetHeat(0)

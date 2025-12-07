@@ -134,21 +134,20 @@ func (s *ShieldRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int,
 	buf.Set(screenX, screenY, 0, render.RGBBlack, color, render.BlendScreen, 0.6, terminal.AttrNone)
 }
 
-// resolveShieldColor determines the shield color from override or GameState
+// resolveShieldColor determines the shield color from override or EnergyBlinkType
 func (s *ShieldRenderer) resolveShieldColor(shield components.ShieldComponent) render.RGB {
 	if shield.OverrideColor != components.ColorNone {
 		return s.colorClassToRGB(shield.OverrideColor)
 	}
 
-	seqType := s.gameCtx.State.GetLastTypedSeqType()
-	seqLevel := s.gameCtx.State.GetLastTypedSeqLevel()
-
-	return s.getColorFromSequence(seqType, seqLevel)
+	blinkType := s.gameCtx.State.GetEnergyBlinkType()
+	return s.getColorFromBlinkType(blinkType)
 }
 
-// getColorFromSequence maps sequence type to shield RGB (level ignored)
-func (s *ShieldRenderer) getColorFromSequence(seqType, seqLevel int32) render.RGB {
-	switch seqType {
+// getColorFromBlinkType maps blink type to shield RGB
+// 0=error/gray, 1=blue, 2=green, 3=red, 4=gold
+func (s *ShieldRenderer) getColorFromBlinkType(blinkType uint32) render.RGB {
+	switch blinkType {
 	case 1: // Blue
 		return render.RgbShieldBlue
 	case 2: // Green
@@ -158,7 +157,7 @@ func (s *ShieldRenderer) getColorFromSequence(seqType, seqLevel int32) render.RG
 	case 4: // Gold
 		return render.RgbShieldGold
 	}
-	// Default: neutral gray when no character typed yet
+	// 0 (error) or unknown: neutral gray
 	return render.RGB{R: 128, G: 128, B: 128}
 }
 
