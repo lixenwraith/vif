@@ -37,8 +37,8 @@ type GameState struct {
 	PingGridTimer atomic.Uint64 // float64 bits
 
 	// Last typed character sequence info for shield color
-	LastTypedSeqType  atomic.Int32 // 0=None, 1=Blue, 2=Green
-	LastTypedSeqLevel atomic.Int32 // 0=Dark, 1=Normal, 2=Bright
+	LastTypedSeqType  atomic.Int32 // 0=None, 1=Blue, 2=Green, 3=Red, 4=Gold
+	LastTypedSeqLevel atomic.Int32 // 0=Dark, 1=Normal, 2=Bright (deprecated for shield, kept for other uses)
 
 	// Drain entity tracking (real-time state for renderer snapshot)
 	// TODO: Is this still required in multi-drain state? Seems redundant

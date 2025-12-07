@@ -146,27 +146,17 @@ func (s *ShieldRenderer) resolveShieldColor(shield components.ShieldComponent) r
 	return s.getColorFromSequence(seqType, seqLevel)
 }
 
-// getColorFromSequence maps sequence type/level to RGB
+// getColorFromSequence maps sequence type to shield RGB (level ignored)
 func (s *ShieldRenderer) getColorFromSequence(seqType, seqLevel int32) render.RGB {
 	switch seqType {
 	case 1: // Blue
-		switch seqLevel {
-		case 0:
-			return render.RgbSequenceBlueDark
-		case 1:
-			return render.RgbSequenceBlueNormal
-		case 2:
-			return render.RgbSequenceBlueBright
-		}
+		return render.RgbShieldBlue
 	case 2: // Green
-		switch seqLevel {
-		case 0:
-			return render.RgbSequenceGreenDark
-		case 1:
-			return render.RgbSequenceGreenNormal
-		case 2:
-			return render.RgbSequenceGreenBright
-		}
+		return render.RgbShieldGreen
+	case 3: // Red
+		return render.RgbShieldRed
+	case 4: // Gold
+		return render.RgbShieldGold
 	}
 	// Default: neutral gray when no character typed yet
 	return render.RGB{R: 128, G: 128, B: 128}

@@ -84,6 +84,12 @@ var (
 	// Shield Colors
 	RgbShieldBase = RGB{180, 0, 150} // Deep Magenta
 
+	// Shield colors per sequence type (alias Normal-level for now)
+	RgbShieldBlue  = RGB{80, 130, 255} // Alias RgbSequenceBlueNormal
+	RgbShieldGreen = RGB{20, 200, 20}  // Alias RgbSequenceGreenNormal
+	RgbShieldRed   = RGB{255, 60, 60}  // Alias RgbSequenceRedNormal
+	RgbShieldGold  = RGB{255, 255, 0}  // Alias RgbSequenceGold
+
 	// General colors
 	RgbBlack = RGB{0, 0, 0} // Black for various uses
 

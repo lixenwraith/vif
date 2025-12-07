@@ -148,16 +148,20 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 
 	// Check if typed character matches
 	if char.Rune == typedRune {
-		// Track last typed sequence for shield color (Blue and Green only)
-		if seq.Type == components.SequenceBlue || seq.Type == components.SequenceGreen {
-			var seqTypeCode int32
-			if seq.Type == components.SequenceBlue {
-				seqTypeCode = 1
-			} else {
-				seqTypeCode = 2
-			}
+		// Track last typed sequence for shield color (Blue, Green, Red, Gold)
+		var seqTypeCode int32
+		switch seq.Type {
+		case components.SequenceBlue:
+			seqTypeCode = 1
+		case components.SequenceGreen:
+			seqTypeCode = 2
+		case components.SequenceRed:
+			seqTypeCode = 3
+		case components.SequenceGold:
+			seqTypeCode = 4
+		}
+		if seqTypeCode != 0 {
 			s.ctx.State.SetLastTypedSeqType(seqTypeCode)
-			s.ctx.State.SetLastTypedSeqLevel(int32(seq.Level))
 		}
 
 		// RED characters reset heat instead of incrementing it
@@ -200,14 +204,8 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 		}
 		s.lastCorrect = now
 
-		// Calculate points: increment * level_multiplier * (red?-1:1)
-		levelMultipliers := map[components.SequenceLevel]int{
-			components.LevelDark:   1,
-			components.LevelNormal: 2,
-			components.LevelBright: 3,
-		}
-		levelMult := levelMultipliers[seq.Level]
-		points := s.ctx.State.GetHeat() * levelMult
+		// Calculate points: heat value only (no level multiplier)
+		points := s.ctx.State.GetHeat()
 
 		// Red characters give negative points
 		if seq.Type == components.SequenceRed {
