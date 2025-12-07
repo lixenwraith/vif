@@ -116,11 +116,6 @@ func main() {
 	splashSystem := systems.NewSplashSystem(ctx)
 	ctx.World.AddSystem(splashSystem)
 
-	// Wire up system references
-	energySystem.SetGoldSystem(goldSystem)
-	energySystem.SetSpawnSystem(spawnSystem)
-	decaySystem.SetSpawnSystem(spawnSystem)
-
 	// Create render orchestrator
 	orchestrator := render.NewRenderOrchestrator(
 		term,
@@ -195,6 +190,7 @@ func main() {
 	clockScheduler.SetSystems(goldSystem, decaySystem)
 	clockScheduler.RegisterEventHandler(cleanerSystem)
 	clockScheduler.RegisterEventHandler(energySystem)
+	clockScheduler.RegisterEventHandler(goldSystem)
 	clockScheduler.RegisterEventHandler(splashSystem)
 	clockScheduler.RegisterEventHandler(shieldSystem)
 	clockScheduler.RegisterEventHandler(nuggetSystem)
@@ -219,7 +215,12 @@ func main() {
 		}()
 
 		for {
-			eventChan <- term.PollEvent()
+			ev := term.PollEvent()
+			// Clean exit on terminal closure or error
+			if ev.Type == terminal.EventClosed || ev.Type == terminal.EventError {
+				return
+			}
+			eventChan <- ev
 		}
 	}()
 

@@ -117,6 +117,8 @@ func (r *inputReader) readLoop() {
 	for {
 		select {
 		case <-r.stopCh:
+			// Emit EventClosed to unblock consumers like PollEvent
+			r.sendEvent(Event{Type: EventClosed})
 			return
 		default:
 		}
@@ -127,6 +129,7 @@ func (r *inputReader) readLoop() {
 		if err != nil {
 			select {
 			case <-r.stopCh:
+				r.sendEvent(Event{Type: EventClosed})
 				return
 			case r.eventCh <- Event{Type: EventError, Err: err}:
 			}
@@ -148,6 +151,7 @@ func (r *inputReader) readLoop() {
 			}
 			select {
 			case <-r.stopCh:
+				r.sendEvent(Event{Type: EventClosed})
 				return
 			case r.eventCh <- Event{Type: EventError, Err: err}:
 			}
@@ -155,6 +159,8 @@ func (r *inputReader) readLoop() {
 		}
 
 		if n == 0 {
+			// EOF implies closure
+			r.sendEvent(Event{Type: EventClosed})
 			continue
 		}
 

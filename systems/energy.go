@@ -22,11 +22,9 @@ func createAudioCommand(soundType audio.SoundType, timestamp time.Time, frameNum
 
 // EnergySystem handles character typing and energy calculation
 type EnergySystem struct {
-	ctx                *engine.GameContext
-	lastCorrect        time.Time
-	errorCursorSet     bool
-	goldSequenceSystem *GoldSystem
-	spawnSystem        *SpawnSystem
+	ctx            *engine.GameContext
+	lastCorrect    time.Time
+	errorCursorSet bool
 }
 
 // NewEnergySystem creates a new energy system
@@ -40,16 +38,6 @@ func NewEnergySystem(ctx *engine.GameContext) *EnergySystem {
 // Priority returns the system's priority
 func (s *EnergySystem) Priority() int {
 	return constants.PriorityEnergy
-}
-
-// SetGoldSystem sets the gold sequence system reference
-func (s *EnergySystem) SetGoldSystem(goldSystem *GoldSystem) {
-	s.goldSequenceSystem = goldSystem
-}
-
-// SetSpawnSystem sets the spawn system reference for color counter updates
-func (s *EnergySystem) SetSpawnSystem(spawnSystem *SpawnSystem) {
-	s.spawnSystem = spawnSystem
 }
 
 // Update runs the energy system
@@ -151,7 +139,8 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 	}
 
 	// Check if this is a gold sequence character
-	if seq.Type == components.SequenceGold && s.goldSequenceSystem != nil && s.goldSequenceSystem.IsActive() {
+	goldState := s.ctx.State.ReadGoldState(now)
+	if seq.Type == components.SequenceGold && goldState.Active {
 		// Handle gold sequence typing
 		s.handleGoldSequenceTyping(world, entity, char, seq, typedRune)
 		return
@@ -418,32 +407,8 @@ func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity engi
 
 	// Correct character - remove entity and move cursor
 	s.ctx.State.SetEnergyBlinkActive(true)
-	// Map sequence types to uint32: 0=error, 1=blue, 2=green, 3=red, 4=gold
-	var typeCode uint32
-	switch seq.Type {
-	case components.SequenceBlue:
-		typeCode = 1
-	case components.SequenceGreen:
-		typeCode = 2
-	case components.SequenceRed:
-		typeCode = 3
-	case components.SequenceGold:
-		typeCode = 4
-	default:
-		typeCode = 0 // Error state
-	}
-	// Map levels to uint32: 0=dark, 1=normal, 2=bright
-	var levelCode uint32
-	switch seq.Level {
-	case components.LevelDark:
-		levelCode = 0
-	case components.LevelNormal:
-		levelCode = 1
-	case components.LevelBright:
-		levelCode = 2
-	}
-	s.ctx.State.SetEnergyBlinkType(typeCode)
-	s.ctx.State.SetEnergyBlinkLevel(levelCode)
+	s.ctx.State.SetEnergyBlinkType(4)  // 4 = gold
+	s.ctx.State.SetEnergyBlinkLevel(2) // 2 = bright
 	s.ctx.State.SetEnergyBlinkTime(now)
 
 	// Safely destroy the character entity
@@ -474,7 +439,6 @@ func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity engi
 		currentHeat := s.ctx.State.GetHeat()
 
 		// Request cleaners if heat is already at max
-		// Push event to trigger cleaners on next update
 		if currentHeat >= constants.MaxHeat {
 			s.ctx.PushEvent(events.EventCleanerRequest, nil, timeRes.GameTime)
 		}
@@ -484,8 +448,10 @@ func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity engi
 			s.ctx.State.SetHeat(constants.MaxHeat)
 		}
 
-		// Mark gold sequence as complete
-		s.goldSequenceSystem.CompleteGold(world)
+		// Emit Completion Event (GoldSystem handles cleanup, SplashSystem removes timer)
+		s.ctx.PushEvent(events.EventGoldComplete, &events.GoldCompletionPayload{
+			SequenceID: seq.ID,
+		}, now)
 	}
 }
 

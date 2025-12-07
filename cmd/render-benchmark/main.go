@@ -163,7 +163,7 @@ func main() {
 
 				// Convert terminal.RGB -> render.RGB -> terminal.RGB
 				bgRender := render.RGB{R: bg.R, G: bg.G, B: bg.B}
-				// UPDATE: Explicit alpha 1.0 for additive blend
+				// Explicit alpha 1.0 for additive blend
 				res := render.Add(bgRender, render.RGB{R: val, G: val, B: val}, 1.0)
 				cells[idx].Bg = terminal.RGB{R: res.R, G: res.G, B: res.B}
 			}
@@ -228,10 +228,10 @@ func main() {
 						val := render.Scale(e.Color, corona+noise)
 						// Add white core
 						if core > 0 {
-							// UPDATE: Explicit alpha 1.0
+							// Explicit alpha 1.0
 							val = render.Add(val, render.Scale(render.RGB{R: 255, G: 255, B: 255}, core), 1.0)
 						}
-						// UPDATE: Explicit alpha 1.0
+						// Explicit alpha 1.0
 						finalColor = render.Add(bg, val, 1.0)
 
 					case 1: // "The Bubble" - Overlay Body + SoftLight Rim
@@ -244,12 +244,12 @@ func main() {
 						bubbleCol := render.Scale(e.Color, body*0.6+rim*0.8)
 
 						// Overlay preserves background details (stars) behind the bubble
-						// UPDATE: Explicit alpha 1.0
+						// Explicit alpha 1.0
 						finalColor = render.Overlay(bg, bubbleCol, 1.0)
 
 						// Add distinct rim highlight
 						if normDist > 0.85 {
-							// UPDATE: Explicit alpha 1.0
+							// Explicit alpha 1.0
 							finalColor = render.Add(finalColor, render.Scale(render.RGB{R: 200, G: 255, B: 255}, (normDist-0.85)*6.0), 1.0)
 						}
 
@@ -261,7 +261,7 @@ func main() {
 						pulseCol := render.Scale(e.Color, alpha)
 
 						// Screen blend makes it look like a hologram/light projection
-						// UPDATE: Explicit alpha 1.0
+						// Explicit alpha 1.0
 						finalColor = render.Screen(bg, pulseCol, 1.0)
 					}
 

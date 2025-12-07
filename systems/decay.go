@@ -16,7 +16,6 @@ type DecaySystem struct {
 	currentRow         int
 	lastUpdate         time.Time
 	ctx                *engine.GameContext
-	spawnSystem        *SpawnSystem
 	decayedThisFrame   map[engine.Entity]bool
 	processedGridCells map[int]bool // Key is flat index: (y * gameWidth) + x
 }
@@ -31,11 +30,6 @@ func NewDecaySystem(ctx *engine.GameContext) *DecaySystem {
 		processedGridCells: make(map[int]bool),
 	}
 	return s
-}
-
-// SetSpawnSystem sets the spawn system reference for color counter updates
-func (s *DecaySystem) SetSpawnSystem(spawnSystem *SpawnSystem) {
-	s.spawnSystem = spawnSystem
 }
 
 // Priority returns the system's priority

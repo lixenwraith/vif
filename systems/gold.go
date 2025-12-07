@@ -32,6 +32,22 @@ func (s *GoldSystem) Priority() int {
 	return constants.PriorityGold
 }
 
+// EventTypes returns the event types GoldSystem handles
+func (s *GoldSystem) EventTypes() []events.EventType {
+	return []events.EventType{
+		events.EventGoldComplete,
+	}
+}
+
+// HandleEvent processes gold events
+func (s *GoldSystem) HandleEvent(world *engine.World, event events.GameEvent) {
+	if event.Type == events.EventGoldComplete {
+		if payload, ok := event.Payload.(*events.GoldCompletionPayload); ok {
+			s.handleCompletion(world, payload.SequenceID, event.Timestamp)
+		}
+	}
+}
+
 // Update runs the gold sequence system logic
 // Gold Timer visualization is now handled by SplashSystem via events
 func (s *GoldSystem) Update(world *engine.World, dt time.Duration) {
@@ -210,6 +226,31 @@ func (s *GoldSystem) removeGold(world *engine.World, sequenceID int) {
 	}
 }
 
+// handleCompletion cleans up gold sequence and plays sound
+func (s *GoldSystem) handleCompletion(world *engine.World, sequenceID int, now time.Time) {
+	// Read gold state snapshot for consistent check
+	goldSnapshot := s.ctx.State.ReadGoldState(now)
+
+	if !goldSnapshot.Active {
+		return
+	}
+
+	// Remove gold sequence entities
+	// This will also trigger decay timer restart logic in removeGold
+	s.removeGold(world, sequenceID)
+
+	// Play coin sound for gold completion
+	if s.ctx.AudioEngine != nil {
+		cmd := audio.AudioCommand{
+			Type:       audio.SoundCoin,
+			Priority:   1,
+			Generation: uint64(s.ctx.State.GetFrameNumber()),
+			Timestamp:  now,
+		}
+		s.ctx.AudioEngine.SendRealTime(cmd)
+	}
+}
+
 // TimeoutGoldSequence is called by ClockScheduler when gold sequence times out
 // Required by GoldSystemInterface
 func (s *GoldSystem) TimeoutGoldSequence(world *engine.World) {
@@ -227,101 +268,6 @@ func (s *GoldSystem) TimeoutGoldSequence(world *engine.World) {
 
 	// Remove gold sequence entities (also starts decay timer)
 	s.removeGold(world, goldSnapshot.SequenceID)
-}
-
-// CompleteGold is called when the gold sequence is successfully completed
-// Gold removal triggers decay timer restart in removeGoldSequence()
-// Uses GameState snapshot
-func (s *GoldSystem) CompleteGold(world *engine.World) bool {
-	// Fetch resources
-	timeRes := engine.MustGetResource[*engine.TimeResource](s.ctx.World.Resources)
-	now := timeRes.GameTime
-
-	// Read gold state snapshot for consistent check
-	goldSnapshot := s.ctx.State.ReadGoldState(now)
-
-	if !goldSnapshot.Active {
-		return false
-	}
-
-	// Emit Completion Event (SplashSystem removes timer, others can react)
-	s.ctx.PushEvent(events.EventGoldComplete, &events.GoldCompletionPayload{
-		SequenceID: goldSnapshot.SequenceID,
-	}, now)
-
-	// Remove gold sequence entities
-	// This will also trigger decay timer restart
-	s.removeGold(world, goldSnapshot.SequenceID)
-
-	// Play coin sound for gold completion
-	if s.ctx.AudioEngine != nil {
-		// Fetch time resource for audio timestamp
-		cmd := audio.AudioCommand{
-			Type:       audio.SoundCoin,
-			Priority:   1,
-			Generation: uint64(s.ctx.State.GetFrameNumber()),
-			Timestamp:  now,
-		}
-		s.ctx.AudioEngine.SendRealTime(cmd)
-	}
-
-	// Fill heat to max (handled by Energy System)
-	return true
-}
-
-// IsActive returns whether a gold sequence is currently active
-// Reads from GameState snapshot
-func (s *GoldSystem) IsActive() bool {
-	timeRes := engine.MustGetResource[*engine.TimeResource](s.ctx.World.Resources)
-	goldSnapshot := s.ctx.State.ReadGoldState(timeRes.GameTime)
-	return goldSnapshot.Active
-}
-
-// GetSequenceID returns the current gold sequence ID
-// Reads from GameState snapshot
-func (s *GoldSystem) GetSequenceID() int {
-	timeRes := engine.MustGetResource[*engine.TimeResource](s.ctx.World.Resources)
-	goldSnapshot := s.ctx.State.ReadGoldState(timeRes.GameTime)
-	return goldSnapshot.SequenceID
-}
-
-// GetExpectedCharacter returns the expected character at the given index for the active gold sequence using generic stores
-// Returns 0 and false if no active gold sequence or index is invalid
-// Uses GameState snapshot for active check
-func (s *GoldSystem) GetExpectedCharacter(sequenceID int, index int) (rune, bool) {
-	// Fetch resources
-	timeRes := engine.MustGetResource[*engine.TimeResource](s.ctx.World.Resources)
-	now := timeRes.GameTime
-
-	// Read gold state snapshot for consistent check
-	goldSnapshot := s.ctx.State.ReadGoldState(now)
-
-	if !goldSnapshot.Active || sequenceID != goldSnapshot.SequenceID {
-		return 0, false
-	}
-
-	// Query entities with sequence and character components
-	entities := s.ctx.World.Query().
-		With(s.ctx.World.Sequences).
-		With(s.ctx.World.Characters).
-		Execute()
-
-	for _, entity := range entities {
-		seq, ok := s.ctx.World.Sequences.Get(entity)
-		if !ok {
-			continue
-		}
-
-		if seq.Type == components.SequenceGold && seq.ID == sequenceID && seq.Index == index {
-			char, ok := s.ctx.World.Characters.Get(entity)
-			if !ok {
-				return 0, false
-			}
-			return char.Rune, true
-		}
-	}
-
-	return 0, false
 }
 
 // findValidPosition finds a valid random position for the gold sequence using generic stores
