@@ -51,7 +51,7 @@ func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, b
 			continue
 		}
 
-		if !ctx.ShieldActive {
+		if !shield.Active {
 			continue
 		}
 

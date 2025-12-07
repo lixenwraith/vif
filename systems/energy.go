@@ -61,12 +61,15 @@ func (s *EnergySystem) Update(world *engine.World, dt time.Duration) {
 	}
 
 	energy := s.ctx.State.GetEnergy()
-	shieldActive := s.ctx.State.GetShieldActive()
-	// Evaluate and set shield activation state
-	if energy > 0 && !shieldActive {
-		s.ctx.PushEvent(events.EventShieldActivate, nil, now)
-	} else if energy <= 0 && shieldActive {
-		s.ctx.PushEvent(events.EventShieldDeactivate, nil, now)
+
+	if shield, ok := world.Shields.Get(s.ctx.CursorEntity); ok {
+		shieldActive := shield.Active
+		// Evaluate and set shield activation state
+		if energy > 0 && !shieldActive {
+			s.ctx.PushEvent(events.EventShieldActivate, nil, now)
+		} else if energy <= 0 && shieldActive {
+			s.ctx.PushEvent(events.EventShieldDeactivate, nil, now)
+		}
 	}
 }
 

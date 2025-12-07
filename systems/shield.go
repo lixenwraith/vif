@@ -36,10 +36,18 @@ func (s *ShieldSystem) EventTypes() []events.EventType {
 func (s *ShieldSystem) HandleEvent(world *engine.World, event events.GameEvent) {
 	switch event.Type {
 	case events.EventShieldActivate:
-		s.ctx.State.SetShieldActive(true)
+		shield, ok := world.Shields.Get(s.ctx.CursorEntity)
+		if ok {
+			shield.Active = true
+			world.Shields.Add(s.ctx.CursorEntity, shield)
+		}
 
 	case events.EventShieldDeactivate:
-		s.ctx.State.SetShieldActive(false)
+		shield, ok := world.Shields.Get(s.ctx.CursorEntity)
+		if ok {
+			shield.Active = false
+			world.Shields.Add(s.ctx.CursorEntity, shield)
+		}
 
 	case events.EventShieldDrain:
 		if payload, ok := event.Payload.(*events.ShieldDrainPayload); ok {
@@ -50,17 +58,13 @@ func (s *ShieldSystem) HandleEvent(world *engine.World, event events.GameEvent) 
 
 // Update handles passive shield drain
 func (s *ShieldSystem) Update(world *engine.World, dt time.Duration) {
-	if !s.ctx.State.GetShieldActive() {
+	shield, ok := world.Shields.Get(s.ctx.CursorEntity)
+	if !ok || !shield.Active {
 		return
 	}
 
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	now := timeRes.GameTime
-
-	shield, ok := world.Shields.Get(s.ctx.CursorEntity)
-	if !ok {
-		return
-	}
 
 	// Check passive drain interval
 	if now.Sub(shield.LastDrainTime) >= constants.ShieldPassiveDrainInterval {

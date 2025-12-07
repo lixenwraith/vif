@@ -640,11 +640,6 @@ func (s *DrainSystem) requeueSpawnWithOffset(world *engine.World, blockedX, bloc
 	// If no valid position, spawn dropped (map saturated with drains)
 }
 
-// isShieldActive checks if shield is functionally active
-func (s *DrainSystem) isShieldActive() bool {
-	return s.ctx.State.GetShieldActive()
-}
-
 // handlePassiveShieldDrain applies 1 energy/second cost while shield is active
 func (s *DrainSystem) handlePassiveShieldDrain(world *engine.World, now time.Time) {
 	shield, ok := world.Shields.Get(s.ctx.CursorEntity)
@@ -690,8 +685,6 @@ func (s *DrainSystem) handleDrainInteractions(world *engine.World) {
 		return
 	}
 
-	shieldActive := s.isShieldActive()
-
 	// Phase 1: Detect drain-drain collisions (same cell)
 	s.handleDrainDrainCollisions(world)
 
@@ -715,6 +708,10 @@ func (s *DrainSystem) handleDrainInteractions(world *engine.World) {
 			drain.IsOnCursor = isOnCursor
 			world.Drains.Add(drainEntity, drain)
 		}
+
+		// Check shield state from component
+		shield, shieldOk := world.Shields.Get(s.ctx.CursorEntity)
+		shieldActive := shieldOk && shield.Active
 
 		// Shield zone energy drain (applies to drains anywhere in shield ellipse)
 		if shieldActive && s.isInsideShieldEllipse(world, drainPos.X, drainPos.Y) {

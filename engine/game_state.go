@@ -16,8 +16,8 @@ type GameState struct {
 	Energy atomic.Int64 // Current energy
 	Heat   atomic.Int64 // Current heat value
 
-	// Shield activation state (atomic for real-time access)
-	ShieldActive atomic.Bool
+	// // Shield activation state (atomic for real-time access)
+	// ShieldActive atomic.Bool
 
 	// Boost state (real-time feedback)
 	BoostEnabled atomic.Bool
@@ -35,10 +35,6 @@ type GameState struct {
 	// Ping grid (immediate visual aid)
 	PingActive    atomic.Bool
 	PingGridTimer atomic.Uint64 // float64 bits
-
-	// Drain entity tracking (real-time state for renderer snapshot)
-	// TODO: Is this still required in multi-drain state? Seems redundant
-	DrainActive atomic.Bool // Whether drain entity exists
 
 	// Grayout visual effect state
 	GrayoutActive    atomic.Bool
@@ -110,7 +106,6 @@ func (gs *GameState) initState(now time.Time) {
 	// Reset atomics
 	gs.Energy.Store(0)
 	gs.Heat.Store(0)
-	gs.ShieldActive.Store(false)
 	gs.BoostEnabled.Store(false)
 	gs.BoostEndTime.Store(0)
 	gs.BoostColor.Store(0)
@@ -122,7 +117,6 @@ func (gs *GameState) initState(now time.Time) {
 	gs.EnergyBlinkTime.Store(0)
 	gs.PingActive.Store(false)
 	gs.PingGridTimer.Store(0)
-	gs.DrainActive.Store(false)
 	gs.GrayoutActive.Store(false)
 	gs.GrayoutStartTime.Store(0)
 	gs.NextSeqID.Store(1)
@@ -233,14 +227,6 @@ func (gs *GameState) AddEnergy(delta int) {
 	gs.Energy.Add(int64(delta))
 }
 
-// ReadHeatAndEnergy returns consistent snapshot of both heat and energy
-func (gs *GameState) ReadHeatAndEnergy() (heat int64, energy int64) {
-	// Read both atomic values sequentially for consistent view
-	heat = gs.Heat.Load()
-	energy = gs.Energy.Load()
-	return heat, energy
-}
-
 // ===== SEQUENCE ID ACCESSORS (atomic) =====
 
 // GetNextSeqID returns the next sequence ID
@@ -265,17 +251,17 @@ func (gs *GameState) IncrementFrameNumber() int64 {
 	return gs.FrameNumber.Add(1)
 }
 
-// ===== SHIELD STATE ACCESSORS (atomic) =====
-
-// GetShieldActive returns whether shield is currently active
-func (gs *GameState) GetShieldActive() bool {
-	return gs.ShieldActive.Load()
-}
-
-// SetShieldActive sets the shield active state
-func (gs *GameState) SetShieldActive(active bool) {
-	gs.ShieldActive.Store(active)
-}
+// // ===== SHIELD STATE ACCESSORS (atomic) =====
+//
+// // GetShieldActive returns whether shield is currently active
+// func (gs *GameState) GetShieldActive() bool {
+// 	return gs.ShieldActive.Load()
+// }
+//
+// // SetShieldActive sets the shield active state
+// func (gs *GameState) SetShieldActive(active bool) {
+// 	gs.ShieldActive.Store(active)
+// }
 
 // ===== BOOST ACCESSORS (atomic) =====
 

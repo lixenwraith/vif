@@ -54,19 +54,18 @@ func (p *PingGridRenderer) drawPingHighlights(ctx render.RenderContext, buf *ren
 	var shieldCenterX, shieldCenterY float64
 	var invRxSq, invRySq float64
 
-	if p.gameCtx.State.GetShieldActive() {
-		if shield, ok := p.gameCtx.World.Shields.Get(p.gameCtx.CursorEntity); ok {
-			shieldExclusion = true
-			pos, _ := p.gameCtx.World.Positions.Get(p.gameCtx.CursorEntity)
-			shieldCenterX = float64(pos.X)
-			shieldCenterY = float64(pos.Y)
-			// Precompute inverse radii squared
-			if shield.RadiusX > 0 && shield.RadiusY > 0 {
-				invRxSq = 1.0 / (shield.RadiusX * shield.RadiusX)
-				invRySq = 1.0 / (shield.RadiusY * shield.RadiusY)
-			} else {
-				shieldExclusion = false
-			}
+	// Query shield component directly
+	if shield, ok := p.gameCtx.World.Shields.Get(p.gameCtx.CursorEntity); ok && shield.Active {
+		shieldExclusion = true
+		pos, _ := p.gameCtx.World.Positions.Get(p.gameCtx.CursorEntity)
+		shieldCenterX = float64(pos.X)
+		shieldCenterY = float64(pos.Y)
+		// Precompute inverse radii squared
+		if shield.RadiusX > 0 && shield.RadiusY > 0 {
+			invRxSq = 1.0 / (shield.RadiusX * shield.RadiusX)
+			invRySq = 1.0 / (shield.RadiusY * shield.RadiusY)
+		} else {
+			shieldExclusion = false
 		}
 	}
 
