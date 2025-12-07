@@ -111,12 +111,14 @@ func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, b
 
 // cellTrueColor renders a single shield cell with smooth gradient (TrueColor mode)
 func (s *ShieldRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screenY int, dist float64, color render.RGB, maxOpacity float64) {
-	falloff := (1.0 - dist) * (1.0 - dist)
-	alpha := falloff * maxOpacity
+	// Simple quadratic gradient: Dark center -> Bright edge
+	// dist ranges from 0.0 (center) to 1.0 (edge)
+	// Squared curve (dist^2) keeps the center transparent/dark for text visibility,
+	// while ramping up smoothly to maximum intensity at the very edge
+	// This eliminates the "blocky" fade-out and ensures the rim is the brightest part
+	alpha := (dist * dist) * maxOpacity
 
-	// Changed from BlendSoftLight to BlendScreen:
-	// SoftLight disappears on black backgrounds (mathematically 0)
-	// Screen/Add is required for "glowing" objects to be visible in space
+	// Use BlendScreen for glowing effect on dark backgrounds
 	buf.Set(screenX, screenY, 0, render.RGBBlack, color, render.BlendScreen, alpha, terminal.AttrNone)
 }
 

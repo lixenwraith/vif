@@ -652,11 +652,6 @@ func (s *DrainSystem) handlePassiveShieldDrain(world *engine.World, now time.Tim
 		return
 	}
 
-	// Shield must have sources and energy > 0 for passive drain
-	if shield.Sources == 0 || s.ctx.State.GetEnergy() <= 0 {
-		return
-	}
-
 	// Check passive drain interval
 	if now.Sub(shield.LastDrainTime) >= constants.ShieldPassiveDrainInterval {
 		s.ctx.State.AddEnergy(-constants.ShieldPassiveDrainAmount)

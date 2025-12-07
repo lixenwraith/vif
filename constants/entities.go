@@ -70,7 +70,7 @@ const (
 const (
 	ShieldRadiusX    = 10.5
 	ShieldRadiusY    = 5.5
-	ShieldMaxOpacity = 0.5
+	ShieldMaxOpacity = 0.3
 )
 
 // --- Splash Entity ---

@@ -169,7 +169,6 @@ func NewGameContext(term terminal.Terminal) *GameContext {
 	// Add ShieldComponent to cursor (initially invisible via GameState.ShieldActive)
 	// This ensures the renderer and systems have the geometric data needed when the shield activates
 	ctx.World.Shields.Add(ctx.CursorEntity, components.ShieldComponent{
-		Sources:       0, // Field deprecated/unused in event-driven system
 		RadiusX:       constants.ShieldRadiusX,
 		RadiusY:       constants.ShieldRadiusY,
 		OverrideColor: components.ColorNone,

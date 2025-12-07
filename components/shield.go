@@ -8,7 +8,6 @@ import (
 // It is a geometric field effect that modifies visual rendering and physics interactions
 // Shield is active when Sources != 0 AND Energy > 0
 type ShieldComponent struct {
-	Sources       uint8      // Bitmask of active sources (ShieldSourceBoost, etc)
 	RadiusX       float64    // Horizontal radius in grid cells
 	RadiusY       float64    // Vertical radius in grid cells
 	OverrideColor ColorClass // ColorNone = derive from GameState, else use this color

@@ -49,8 +49,46 @@ func (p *PingGridRenderer) getPingGridColor() render.RGB {
 // drawPingHighlights - write-only, no buf.Get
 // Grid is low layer, renders first, emit all highlights unconditionally, higher layers will blend as needed
 func (p *PingGridRenderer) drawPingHighlights(ctx render.RenderContext, buf *render.RenderBuffer, pingColor render.RGB) {
+	// Check if shield is active on cursor to create exclusion zone
+	shieldExclusion := false
+	var shieldCenterX, shieldCenterY float64
+	var invRxSq, invRySq float64
+
+	if p.gameCtx.State.GetShieldActive() {
+		if shield, ok := p.gameCtx.World.Shields.Get(p.gameCtx.CursorEntity); ok {
+			shieldExclusion = true
+			pos, _ := p.gameCtx.World.Positions.Get(p.gameCtx.CursorEntity)
+			shieldCenterX = float64(pos.X)
+			shieldCenterY = float64(pos.Y)
+			// Precompute inverse radii squared
+			if shield.RadiusX > 0 && shield.RadiusY > 0 {
+				invRxSq = 1.0 / (shield.RadiusX * shield.RadiusX)
+				invRySq = 1.0 / (shield.RadiusY * shield.RadiusY)
+			} else {
+				shieldExclusion = false
+			}
+		}
+	}
+
+	// TODO: is this optimized?
+	// Helper to check exclusion
+	isExcluded := func(x, y int) bool {
+		if !shieldExclusion {
+			return false
+		}
+		dx := float64(x) - shieldCenterX
+		dy := float64(y) - shieldCenterY
+		// Ellipse equation: x^2/a^2 + y^2/b^2 <= 1
+		return (dx*dx*invRxSq + dy*dy*invRySq) <= 1.0
+	}
+
 	// Highlight the row
 	for x := 0; x < ctx.GameWidth; x++ {
+		// Exclusion check: Don't draw line inside shield
+		if isExcluded(x, ctx.CursorY) {
+			continue
+		}
+
 		screenX := ctx.GameX + x
 		screenY := ctx.GameY + ctx.CursorY
 		if screenX >= ctx.GameX && screenX < ctx.Width &&
@@ -61,6 +99,11 @@ func (p *PingGridRenderer) drawPingHighlights(ctx render.RenderContext, buf *ren
 
 	// Highlight the column
 	for y := 0; y < ctx.GameHeight; y++ {
+		// Exclusion check
+		if isExcluded(ctx.CursorX, y) {
+			continue
+		}
+
 		screenX := ctx.GameX + ctx.CursorX
 		screenY := ctx.GameY + y
 		if screenX >= ctx.GameX && screenX < ctx.Width &&
