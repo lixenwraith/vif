@@ -85,10 +85,10 @@ type World struct {
     Nuggets        *Store[NuggetComponent]
     Drains         *Store[DrainComponent]
     Cursors        *Store[CursorComponent]
-    Protections    *Store[ProtectionComponent]
-    Shields        *Store[ShieldComponent]
-    Splashes       *Store[SplashComponent]
-    OutOfBounds    *Store[OutOfBoundsComponent]
+    Protections     *Store[ProtectionComponent]
+    Shields         *Store[ShieldComponent]
+    Splashes        *Store[SplashComponent]
+    MarkedForDeaths *Store[MarkedForDeathComponent]
 
     allStores []AnyStore
 }
@@ -115,6 +115,13 @@ The Resource System provides generic, thread-safe access to global shared data w
    - `GameMode` (int): Current mode (Normal, Insert, Search, Command)
    - `CommandText`, `SearchText` (string): Buffer text
    - `IsPaused` (bool): Pause state
+
+4. **`RenderConfig`** - Rendering pipeline configuration:
+   - `ColorMode` (uint8): Color mode (0=256, 1=TrueColor)
+   - `GrayoutDuration` (time.Duration): Grayout effect duration
+   - `GrayoutMask` (uint8): Target mask for grayout post-processing
+   - `DimFactor` (float64): Brightness reduction factor
+   - `DimMask` (uint8): Target mask for dim post-processing
 
 **Access Pattern:**
 ```go
@@ -533,7 +540,7 @@ Component (marker interface)
 ├── ProtectionComponent {Mask ProtectionFlags, ExpiresAt int64}
 ├── ShieldComponent {Energy int64, RadiusX, RadiusY float64, OverrideColor ColorClass, MaxOpacity float64}
 ├── SplashComponent {Content [8]rune, Length int, Color SplashColor, AnchorX, AnchorY int, Mode SplashMode, StartNano int64, Duration int64, SequenceID int}
-└── OutOfBoundsComponent {}
+└── MarkedForDeathComponent {}
 ```
 
 **Protection Flags:**
@@ -753,9 +760,9 @@ Parallel (Event-Driven):
    - Fill heat to maximum
    - Mark gold complete
 
-**OOB Handling (Terminal Resize):**
-- Gold entities outside valid bounds tagged with OutOfBoundsComponent
-- GoldSystem detects OOB gold before CullSystem destroys them
+**Gold Destruction (Terminal Resize):**
+- Gold entities outside valid bounds tagged with MarkedForDeathComponent
+- GoldSystem detects tagged gold before CullSystem destroys them
 - Triggers `failSequence()` to clean up entire gold sequence
 - Emits `EventGoldDestroyed` for UI cleanup
 
@@ -1174,7 +1181,7 @@ Systems execute in priority order (lower = earlier):
 8. **DecaySystem (30)**: Sequence degradation
 9. **FlashSystem (35)**: Flash effect lifecycle
 10. **SplashSystem (800)**: Splash lifecycle and gold timer updates (after game logic, before rendering)
-11. **CullSystem (900)**: Removes OutOfBounds-tagged entities (runs last)
+11. **CullSystem (900)**: Removes MarkedForDeath-tagged entities (runs last)
 
 ### System Communication Patterns
 
@@ -1572,26 +1579,28 @@ ClockScheduler.processTick()
 
 ### Cull System
 
-Tag-and-cull architecture for safe entity removal during resize operations.
+Tag-and-cull architecture for safe entity removal.
 
 **Architecture:**
 - **Priority**: 900 (runs last after all game logic)
-- **Tag Phase**: Entities outside valid bounds tagged with `OutOfBoundsComponent`
+- **Tag Phase**: Entities marked for destruction tagged with `MarkedForDeathComponent`
 - **Cull Phase**: CullSystem destroys all tagged entities
 - **Protection**: Respects `ProtectFromCull` and `ProtectAll` flags
 
 **Tag Sources:**
-- **Terminal Resize**: `GameContext.ResizeGameArea()` tags entities with `X >= width || Y >= height || X < 0 || Y < 0`
+- **Terminal Resize**: `GameContext.ResizeGameArea()` tags entities outside valid bounds (`X >= width || Y >= height || X < 0 || Y < 0`)
+- **Extensible**: Other systems can tag entities for deferred destruction
 
 **System Reactions Before Culling:**
-- **GoldSystem**: Detects OOB gold entities, triggers `failSequence()`, emits `EventGoldDestroyed`
-- Other systems can query `OutOfBounds` store to react before destruction
+- **GoldSystem**: Detects tagged gold entities, triggers `failSequence()`, emits `EventGoldDestroyed`
+- Other systems can query `MarkedForDeaths` store to react before destruction
 
 **Benefits:**
 - Decouples detection (tagging) from destruction (culling)
 - Allows game logic to react to impending entity loss
-- Handles partial/full gold OOB scenarios from terminal resize
+- Handles terminal resize scenarios (partial/full gold out-of-bounds)
 - Protected entities (cursor) skip destruction
+- General-purpose tagging mechanism for deferred entity cleanup
 
 ### Audio System
 
