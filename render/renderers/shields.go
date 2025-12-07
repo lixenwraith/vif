@@ -158,7 +158,7 @@ func (s *ShieldRenderer) getColorFromBlinkType(blinkType uint32) render.RGB {
 		return render.RgbShieldGold
 	}
 	// 0 (error) or unknown: neutral gray
-	return render.RGB{R: 128, G: 128, B: 128}
+	return render.RgbShieldNone
 }
 
 // colorClassToRGB maps ColorClass overrides to RGB

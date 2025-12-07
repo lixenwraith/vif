@@ -41,16 +41,16 @@ var (
 	RgbColumnIndicator = RGB{180, 180, 180} // Brighter gray
 	RgbBackground      = RGB{26, 27, 38}    // Tokyo Night background
 
-	RgbPingHighlight   = RGB{5, 5, 5}     // Almost Black for INSERT mode ping
-	RgbPingNormal      = RGB{153, 102, 0} // Legacy: Dark orange (used by blend-tester)
-	RgbPingLineNormal  = RGB{40, 40, 40}  // Dark gray for NORMAL mode ping lines
-	RgbPingGridNormal  = RGB{55, 55, 55}  // Slightly lighter gray for NORMAL mode ping grid
-	RgbPingOrange      = RGB{60, 40, 0}   // Very dark orange for ping on whitespace
-	RgbPingGreen     = RGB{0, 40, 0}      // Very dark green for ping on green char
-	RgbPingRed       = RGB{50, 15, 15}    // Very dark red for ping on red char
-	RgbPingBlue      = RGB{15, 25, 50}    // Very dark blue for ping on blue char
-	RgbCursorNormal  = RGB{255, 165, 0}   // Orange for normal mode
-	RgbCursorInsert  = RGB{255, 255, 255} // Bright white for insert mode
+	RgbPingHighlight  = RGB{5, 5, 5}       // Almost Black for INSERT mode ping
+	RgbPingNormal     = RGB{153, 102, 0}   // Legacy: Dark orange (used by blend-tester)
+	RgbPingLineNormal = RGB{40, 40, 40}    // Dark gray for NORMAL mode ping lines
+	RgbPingGridNormal = RGB{55, 55, 55}    // Slightly lighter gray for NORMAL mode ping grid
+	RgbPingOrange     = RGB{60, 40, 0}     // Very dark orange for ping on whitespace
+	RgbPingGreen      = RGB{0, 40, 0}      // Very dark green for ping on green char
+	RgbPingRed        = RGB{50, 15, 15}    // Very dark red for ping on red char
+	RgbPingBlue       = RGB{15, 25, 50}    // Very dark blue for ping on blue char
+	RgbCursorNormal   = RGB{255, 165, 0}   // Orange for normal mode
+	RgbCursorInsert   = RGB{255, 255, 255} // Bright white for insert mode
 
 	// Splash colors
 	RgbSplashInsert = RGB{200, 200, 200} // Light gray for insert mode
@@ -85,10 +85,11 @@ var (
 	RgbShieldBase = RGB{180, 0, 150} // Deep Magenta
 
 	// Shield colors per sequence type (alias Normal-level for now)
-	RgbShieldBlue  = RGB{80, 130, 255} // Alias RgbSequenceBlueNormal
-	RgbShieldGreen = RGB{20, 200, 20}  // Alias RgbSequenceGreenNormal
-	RgbShieldRed   = RGB{255, 60, 60}  // Alias RgbSequenceRedNormal
-	RgbShieldGold  = RGB{255, 255, 0}  // Alias RgbSequenceGold
+	RgbShieldNone  = RGB{R: 128, G: 128, B: 128} // Gray for unset/error
+	RgbShieldBlue  = RGB{80, 130, 255}           // Alias RgbSequenceBlueNormal
+	RgbShieldGreen = RGB{20, 200, 20}            // Alias RgbSequenceGreenNormal
+	RgbShieldRed   = RGB{255, 60, 60}            // Alias RgbSequenceRedNormal
+	RgbShieldGold  = RGB{255, 255, 0}            // Alias RgbSequenceGold
 
 	// General colors
 	RgbBlack = RGB{0, 0, 0} // Black for various uses
