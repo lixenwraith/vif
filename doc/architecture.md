@@ -88,6 +88,7 @@ type World struct {
     Protections    *Store[ProtectionComponent]
     Shields        *Store[ShieldComponent]
     Splashes       *Store[SplashComponent]
+    OutOfBounds    *Store[OutOfBoundsComponent]
 
     allStores []AnyStore
 }
@@ -531,8 +532,16 @@ Component (marker interface)
 ├── CursorComponent {ErrorFlashEnd int64, HeatDisplay int}
 ├── ProtectionComponent {Mask ProtectionFlags, ExpiresAt int64}
 ├── ShieldComponent {Energy int64, RadiusX, RadiusY float64, OverrideColor ColorClass, MaxOpacity float64}
-└── SplashComponent {Content [8]rune, Length int, Color SplashColor, AnchorX, AnchorY int, Mode SplashMode, StartNano int64, Duration int64, SequenceID int}
+├── SplashComponent {Content [8]rune, Length int, Color SplashColor, AnchorX, AnchorY int, Mode SplashMode, StartNano int64, Duration int64, SequenceID int}
+└── OutOfBoundsComponent {}
 ```
+
+**Protection Flags:**
+- `ProtectFromDecay`: Immune to decay characters
+- `ProtectFromDrain`: Immune to energy drain mechanic
+- `ProtectFromCull`: Immune to out-of-bounds cleanup (cursor)
+- `ProtectFromDelete`: Immune to delete operators (gold)
+- `ProtectAll (0xFF)`: Completely indestructible (cursor)
 
 **Sequence Types:**
 - **Green**: Positive scoring, spawned by SpawnSystem
@@ -744,10 +753,17 @@ Parallel (Event-Driven):
    - Fill heat to maximum
    - Mark gold complete
 
+**OOB Handling (Terminal Resize):**
+- Gold entities outside valid bounds tagged with OutOfBoundsComponent
+- GoldSystem detects OOB gold before CullSystem destroys them
+- Triggers `failSequence()` to clean up entire gold sequence
+- Emits `EventGoldDestroyed` for UI cleanup
+
 **Key Behavior:**
 - Gold typing NEVER resets heat
 - Cleaners trigger BEFORE heat fill
 - Gold timeout uses pausable clock
+- Terminal resize fails active gold sequences gracefully
 
 ### Concurrency Guarantees
 
@@ -1158,6 +1174,7 @@ Systems execute in priority order (lower = earlier):
 8. **DecaySystem (30)**: Sequence degradation
 9. **FlashSystem (35)**: Flash effect lifecycle
 10. **SplashSystem (800)**: Splash lifecycle and gold timer updates (after game logic, before rendering)
+11. **CullSystem (900)**: Removes OutOfBounds-tagged entities (runs last)
 
 ### System Communication Patterns
 
@@ -1552,6 +1569,29 @@ ClockScheduler.processTick()
 - **Centralized State**: Single source of truth (`GameState.ShieldActive`)
 - **Event-Driven**: All state transitions via events (no direct system coupling)
 - **Pure Energy-Gated**: Activation depends only on energy availability
+
+### Cull System
+
+Tag-and-cull architecture for safe entity removal during resize operations.
+
+**Architecture:**
+- **Priority**: 900 (runs last after all game logic)
+- **Tag Phase**: Entities outside valid bounds tagged with `OutOfBoundsComponent`
+- **Cull Phase**: CullSystem destroys all tagged entities
+- **Protection**: Respects `ProtectFromCull` and `ProtectAll` flags
+
+**Tag Sources:**
+- **Terminal Resize**: `GameContext.ResizeGameArea()` tags entities with `X >= width || Y >= height || X < 0 || Y < 0`
+
+**System Reactions Before Culling:**
+- **GoldSystem**: Detects OOB gold entities, triggers `failSequence()`, emits `EventGoldDestroyed`
+- Other systems can query `OutOfBounds` store to react before destruction
+
+**Benefits:**
+- Decouples detection (tagging) from destruction (culling)
+- Allows game logic to react to impending entity loss
+- Handles partial/full gold OOB scenarios from terminal resize
+- Protected entities (cursor) skip destruction
 
 ### Audio System
 
