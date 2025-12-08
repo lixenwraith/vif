@@ -76,9 +76,9 @@ func (s *NuggetSystem) Update(world *engine.World, dt time.Duration) {
 
 // handleJumpRequest attempts to jump cursor to the active nugget
 func (s *NuggetSystem) handleJumpRequest(world *engine.World, now time.Time) {
-	// 1. Check Energy
-	energy := s.ctx.State.GetEnergy()
-	if energy < 10 {
+	// 1. Check Energy from component
+	energyComp, ok := world.Energies.Get(s.ctx.CursorEntity)
+	if !ok || energyComp.Current.Load() < 10 {
 		return
 	}
 

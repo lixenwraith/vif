@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/events"
 )
 
 // ExecuteCommand executes a command and returns false if the game should exit
@@ -106,7 +107,10 @@ func handleEnergyCommand(ctx *engine.GameContext, args []string) bool {
 		return true
 	}
 
-	ctx.State.SetEnergy(value)
+	ctx.PushEvent(events.EventEnergySet, &events.EnergySetPayload{
+		Value: value,
+	}, ctx.PausableClock.Now())
+
 	ctx.LastCommand = fmt.Sprintf(":energy %d", value)
 	return true
 }
@@ -200,10 +204,14 @@ func clearAllEntities(world *engine.World) {
 // handleDebugCommand shows debug information overlay
 func handleDebugCommand(ctx *engine.GameContext) bool {
 	// Gather debug stats
+
+	energyComp, _ := ctx.World.Energies.Get(ctx.CursorEntity)
+	energyVal := energyComp.Current.Load()
+
 	debugContent := []string{
 		"=== DEBUG INFORMATION ===",
 		"",
-		fmt.Sprintf("Energy:        %d", ctx.State.GetEnergy()),
+		fmt.Sprintf("Energy:        %d", energyVal),
 		fmt.Sprintf("Heat:          %d / %d", ctx.State.GetHeat(), constants.MaxHeat),
 		fmt.Sprintf("FPS:           %d", ctx.State.GetGameTicks()), // Approximate
 		fmt.Sprintf("Game Ticks:    %d", ctx.State.GetGameTicks()),

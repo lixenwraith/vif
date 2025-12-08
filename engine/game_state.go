@@ -12,12 +12,8 @@ import (
 type GameState struct {
 	// ===== REAL-TIME STATE (lock-free atomics) =====
 
-	// Scoring and Heat (typing feedback)
-	Energy atomic.Int64 // Current energy
-	Heat   atomic.Int64 // Current heat value
-
-	// // Shield activation state (atomic for real-time access)
-	// ShieldActive atomic.Bool
+	// Heat (combo/bonus-like system)
+	Heat atomic.Int64 // Current heat value
 
 	// Boost state (real-time feedback)
 	BoostEnabled atomic.Bool
@@ -25,12 +21,8 @@ type GameState struct {
 	BoostColor   atomic.Int32 // 0=None, 1=Blue, 2=Green
 
 	// Visual feedback (error flash, energy blink)
-	CursorError       atomic.Bool
-	CursorErrorTime   atomic.Int64 // UnixNano
-	EnergyBlinkActive atomic.Bool
-	EnergyBlinkType   atomic.Uint32 // 0=error, 1=blue, 2=green, 3=red, 4=gold
-	EnergyBlinkLevel  atomic.Uint32 // 0=dark, 1=normal, 2=bright
-	EnergyBlinkTime   atomic.Int64  // UnixNano
+	CursorError     atomic.Bool
+	CursorErrorTime atomic.Int64 // UnixNano
 
 	// Ping grid (immediate visual aid)
 	PingActive    atomic.Bool
@@ -104,17 +96,12 @@ type GameState struct {
 // Called by both NewGameState and Reset to avoid duplication
 func (gs *GameState) initState(now time.Time) {
 	// Reset atomics
-	gs.Energy.Store(0)
 	gs.Heat.Store(0)
 	gs.BoostEnabled.Store(false)
 	gs.BoostEndTime.Store(0)
 	gs.BoostColor.Store(0)
 	gs.CursorError.Store(false)
 	gs.CursorErrorTime.Store(0)
-	gs.EnergyBlinkActive.Store(false)
-	gs.EnergyBlinkType.Store(0)
-	gs.EnergyBlinkLevel.Store(0)
-	gs.EnergyBlinkTime.Store(0)
 	gs.PingActive.Store(false)
 	gs.PingGridTimer.Store(0)
 	gs.GrayoutActive.Store(false)
@@ -210,23 +197,6 @@ func (gs *GameState) AddHeat(delta int) {
 	}
 }
 
-// ===== SCORE ACCESSORS (atomic) =====
-
-// GetEnergy returns the current energy value
-func (gs *GameState) GetEnergy() int {
-	return int(gs.Energy.Load())
-}
-
-// SetEnergy sets the energy value
-func (gs *GameState) SetEnergy(energy int) {
-	gs.Energy.Store(int64(energy))
-}
-
-// AddEnergy adds a delta to the current energy value
-func (gs *GameState) AddEnergy(delta int) {
-	gs.Energy.Add(int64(delta))
-}
-
 // ===== SEQUENCE ID ACCESSORS (atomic) =====
 
 // GetNextSeqID returns the next sequence ID
@@ -250,18 +220,6 @@ func (gs *GameState) GetFrameNumber() int64 {
 func (gs *GameState) IncrementFrameNumber() int64 {
 	return gs.FrameNumber.Add(1)
 }
-
-// // ===== SHIELD STATE ACCESSORS (atomic) =====
-//
-// // GetShieldActive returns whether shield is currently active
-// func (gs *GameState) GetShieldActive() bool {
-// 	return gs.ShieldActive.Load()
-// }
-//
-// // SetShieldActive sets the shield active state
-// func (gs *GameState) SetShieldActive(active bool) {
-// 	gs.ShieldActive.Store(active)
-// }
 
 // ===== BOOST ACCESSORS (atomic) =====
 
@@ -461,50 +419,6 @@ func (gs *GameState) GetCursorErrorTime() time.Time {
 // SetCursorErrorTime sets when the cursor error started
 func (gs *GameState) SetCursorErrorTime(t time.Time) {
 	gs.CursorErrorTime.Store(t.UnixNano())
-}
-
-// GetEnergyBlinkActive returns whether energy blink is active
-func (gs *GameState) GetEnergyBlinkActive() bool {
-	return gs.EnergyBlinkActive.Load()
-}
-
-// SetEnergyBlinkActive sets the energy blink active state
-func (gs *GameState) SetEnergyBlinkActive(active bool) {
-	gs.EnergyBlinkActive.Store(active)
-}
-
-// GetEnergyBlinkType returns the energy blink type
-func (gs *GameState) GetEnergyBlinkType() uint32 {
-	return gs.EnergyBlinkType.Load()
-}
-
-// SetEnergyBlinkType sets the energy blink type
-func (gs *GameState) SetEnergyBlinkType(seqType uint32) {
-	gs.EnergyBlinkType.Store(seqType)
-}
-
-// GetEnergyBlinkLevel returns the energy blink level
-func (gs *GameState) GetEnergyBlinkLevel() uint32 {
-	return gs.EnergyBlinkLevel.Load()
-}
-
-// SetEnergyBlinkLevel sets the energy blink level
-func (gs *GameState) SetEnergyBlinkLevel(level uint32) {
-	gs.EnergyBlinkLevel.Store(level)
-}
-
-// GetEnergyBlinkTime returns when the energy blink started
-func (gs *GameState) GetEnergyBlinkTime() time.Time {
-	nano := gs.EnergyBlinkTime.Load()
-	if nano == 0 {
-		return time.Time{}
-	}
-	return time.Unix(0, nano)
-}
-
-// SetEnergyBlinkTime sets when the energy blink started
-func (gs *GameState) SetEnergyBlinkTime(t time.Time) {
-	gs.EnergyBlinkTime.Store(t.UnixNano())
 }
 
 // ===== PHASE STATE ACCESSORS (mutex protected) =====

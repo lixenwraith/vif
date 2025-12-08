@@ -46,8 +46,6 @@ func (c *CharactersRenderer) Render(ctx render.RenderContext, world *engine.Worl
 		fg := resolveCharacterColor(char)
 		attrs := resolveTextStyle(char.Style)
 
-		// REMOVED: Pause dimming logic - now handled by DimRenderer post-processor
-
 		buf.SetFgOnly(screenX, screenY, char.Rune, fg, attrs)
 	}
 }

@@ -47,24 +47,28 @@ func (s *EnergySystem) Update(world *engine.World, dt time.Duration) {
 	now := timeRes.GameTime
 
 	// Clear error flash (red cursor) after timeout using Game Time
-	// This ensures the red flash "freezes" if the game is paused
 	cursor, ok := world.Cursors.Get(s.ctx.CursorEntity)
 	if ok && cursor.ErrorFlashEnd > 0 && now.UnixNano() >= cursor.ErrorFlashEnd {
 		cursor.ErrorFlashEnd = 0
 		world.Cursors.Add(s.ctx.CursorEntity, cursor)
 	}
 
-	// Clear energy blink (background color flash) after timeout using Game Time
-	// This ensures the success flash "freezes" if the game is paused
-	if s.ctx.State.GetEnergyBlinkActive() && now.Sub(s.ctx.State.GetEnergyBlinkTime()) > constants.EnergyBlinkTimeout {
-		s.ctx.State.SetEnergyBlinkActive(false)
+	// Clear energy blink after timeout
+	energyComp, ok := world.Energies.Get(s.ctx.CursorEntity)
+	if ok && energyComp.BlinkActive.Load() {
+		blinkTime := time.Unix(0, energyComp.BlinkTime.Load())
+		if now.Sub(blinkTime) > constants.EnergyBlinkTimeout {
+			energyComp.BlinkActive.Store(false)
+			// TODO: something probably wrong here
+			world.Energies.Add(s.ctx.CursorEntity, energyComp)
+		}
 	}
 
-	energy := s.ctx.State.GetEnergy()
-
-	if shield, ok := world.Shields.Get(s.ctx.CursorEntity); ok {
+	// Evaluate shield activation state
+	energy := energyComp.Current.Load()
+	shield, shieldOk := world.Shields.Get(s.ctx.CursorEntity)
+	if shieldOk {
 		shieldActive := shield.Active
-		// Evaluate and set shield activation state
 		if energy > 0 && !shieldActive {
 			s.ctx.PushEvent(events.EventShieldActivate, nil, now)
 		} else if energy <= 0 && shieldActive {
@@ -95,10 +99,6 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 		s.ctx.State.SetBoostEnabled(false)
 		s.ctx.State.SetBoostColor(0) // 0 = None
 		// Set energy blink to error state (black background with bright red text)
-		s.ctx.State.SetEnergyBlinkActive(true)
-		s.ctx.State.SetEnergyBlinkType(0)  // 0 = error
-		s.ctx.State.SetEnergyBlinkLevel(0) // 0 = dark
-		s.ctx.State.SetEnergyBlinkTime(now)
 		// Trigger error sound
 		if s.ctx.AudioEngine != nil {
 			cmd := createAudioCommand(audio.SoundError, now, frameNumber)
@@ -128,11 +128,6 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 		s.ctx.State.SetHeat(0)
 		s.ctx.State.SetBoostEnabled(false)
 		s.ctx.State.SetBoostColor(0)
-		// Set energy blink to error state (black background with bright red text)
-		s.ctx.State.SetEnergyBlinkActive(true)
-		s.ctx.State.SetEnergyBlinkType(0)  // 0 = error
-		s.ctx.State.SetEnergyBlinkLevel(0) // 0 = dark
-		s.ctx.State.SetEnergyBlinkTime(now)
 		// Trigger error sound
 		if s.ctx.AudioEngine != nil {
 			cmd := createAudioCommand(audio.SoundError, now, frameNumber)
@@ -199,11 +194,13 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 			points = -points
 		}
 
-		s.ctx.State.AddEnergy(points)
-
 		// Trigger energy blink with character type and level
-		s.ctx.State.SetEnergyBlinkActive(true)
-		// Map sequence types to uint32: 0=error, 1=blue, 2=green, 3=red, 4=gold
+		s.ctx.PushEvent(events.EventEnergyAdd, &events.EnergyAddPayload{
+			Delta:  points,
+			Source: "CharacterTyped",
+		}, now)
+
+		// Trigger blink via event
 		var typeCode uint32
 		switch seq.Type {
 		case components.SequenceBlue:
@@ -215,9 +212,8 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 		case components.SequenceGold:
 			typeCode = 4
 		default:
-			typeCode = 0 // Error state
+			typeCode = 0
 		}
-		// Map levels to uint32: 0=dark, 1=normal, 2=bright
 		var levelCode uint32
 		switch seq.Level {
 		case components.LevelDark:
@@ -227,9 +223,7 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 		case components.LevelBright:
 			levelCode = 2
 		}
-		s.ctx.State.SetEnergyBlinkType(typeCode)
-		s.ctx.State.SetEnergyBlinkLevel(levelCode)
-		s.ctx.State.SetEnergyBlinkTime(now)
+		s.triggerEnergyBlink(typeCode, levelCode, now)
 
 		// Safely destroy the character entity
 		world.DestroyEntity(entity)
@@ -261,10 +255,7 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 		s.ctx.State.SetBoostEnabled(false)
 		s.ctx.State.SetBoostColor(0) // 0 = None
 		// Set energy blink to error state (black background with bright red text)
-		s.ctx.State.SetEnergyBlinkActive(true)
-		s.ctx.State.SetEnergyBlinkType(0)  // 0 = error
-		s.ctx.State.SetEnergyBlinkLevel(0) // 0 = dark
-		s.ctx.State.SetEnergyBlinkTime(now)
+		s.triggerEnergyBlink(0, 0, now) // Error blink
 		// Trigger error sound
 		if s.ctx.AudioEngine != nil {
 			cmd := createAudioCommand(audio.SoundError, now, frameNumber)
@@ -305,10 +296,7 @@ func (s *EnergySystem) handleNuggetCollection(world *engine.World, entity engine
 		s.ctx.State.SetHeat(0) // Reset heat on incorrect nugget typing
 		s.ctx.State.SetBoostEnabled(false)
 		s.ctx.State.SetBoostColor(0)
-		s.ctx.State.SetEnergyBlinkActive(true)
-		s.ctx.State.SetEnergyBlinkType(0)  // 0 = error
-		s.ctx.State.SetEnergyBlinkLevel(0) // 0 = dark
-		s.ctx.State.SetEnergyBlinkTime(now)
+		s.triggerEnergyBlink(0, 0, now)
 		// Trigger error sound
 		if s.ctx.AudioEngine != nil {
 			cmd := createAudioCommand(audio.SoundError, now, frameNumber)
@@ -378,10 +366,7 @@ func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity engi
 		cursor, _ := world.Cursors.Get(s.ctx.CursorEntity)
 		cursor.ErrorFlashEnd = now.Add(constants.ErrorBlinkTimeout).UnixNano()
 		world.Cursors.Add(s.ctx.CursorEntity, cursor)
-		s.ctx.State.SetEnergyBlinkActive(true)
-		s.ctx.State.SetEnergyBlinkType(0)  // 0 = error
-		s.ctx.State.SetEnergyBlinkLevel(0) // 0 = dark
-		s.ctx.State.SetEnergyBlinkTime(now)
+		s.triggerEnergyBlink(0, 0, now)
 		// Trigger error sound
 		if s.ctx.AudioEngine != nil {
 			cmd := createAudioCommand(audio.SoundError, now, frameNumber)
@@ -390,11 +375,7 @@ func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity engi
 		return
 	}
 
-	// Correct character - remove entity and move cursor
-	s.ctx.State.SetEnergyBlinkActive(true)
-	s.ctx.State.SetEnergyBlinkType(4)  // 4 = gold
-	s.ctx.State.SetEnergyBlinkLevel(2) // 2 = bright
-	s.ctx.State.SetEnergyBlinkTime(now)
+	s.triggerEnergyBlink(4, 2, now)
 
 	// Safely destroy the character entity
 	world.DestroyEntity(entity)
@@ -444,7 +425,11 @@ func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity engi
 func (s *EnergySystem) EventTypes() []events.EventType {
 	return []events.EventType{
 		events.EventCharacterTyped,
-		events.EventEnergyTransaction,
+		events.EventEnergyTransaction, // Legacy, keep for compatibility
+		events.EventEnergyAdd,
+		events.EventEnergySet,
+		events.EventEnergyBlinkStart,
+		events.EventEnergyBlinkStop,
 		events.EventDeleteRequest,
 	}
 }
@@ -454,10 +439,7 @@ func (s *EnergySystem) HandleEvent(world *engine.World, event events.GameEvent) 
 	switch event.Type {
 	case events.EventCharacterTyped:
 		if payload, ok := event.Payload.(*events.CharacterTypedPayload); ok {
-			// Process the event
 			s.handleCharacterTyping(world, payload.X, payload.Y, payload.Char)
-
-			// Return payload to pool to reduce allocations
 			events.CharacterTypedPayloadPool.Put(payload)
 		}
 
@@ -467,10 +449,80 @@ func (s *EnergySystem) HandleEvent(world *engine.World, event events.GameEvent) 
 		}
 
 	case events.EventEnergyTransaction:
+		// Legacy event - apply to cursor entity
 		if payload, ok := event.Payload.(*events.EnergyTransactionPayload); ok {
-			s.ctx.State.AddEnergy(payload.Amount)
+			s.addEnergy(world, int64(payload.Amount))
 		}
+
+	case events.EventEnergyAdd:
+		if payload, ok := event.Payload.(*events.EnergyAddPayload); ok {
+			s.addEnergy(world, int64(payload.Delta))
+		}
+
+	case events.EventEnergySet:
+		if payload, ok := event.Payload.(*events.EnergySetPayload); ok {
+			s.setEnergy(world, int64(payload.Value))
+		}
+
+	case events.EventEnergyBlinkStart:
+		if payload, ok := event.Payload.(*events.EnergyBlinkPayload); ok {
+			s.startBlink(world, payload.Type, payload.Level, event.Timestamp)
+		}
+
+	case events.EventEnergyBlinkStop:
+		s.stopBlink(world)
 	}
+}
+
+// addEnergy modifies energy on target entity
+func (s *EnergySystem) addEnergy(world *engine.World, delta int64) {
+	energyComp, ok := world.Energies.Get(s.ctx.CursorEntity)
+	if !ok {
+		return
+	}
+	energyComp.Current.Add(delta)
+	world.Energies.Add(s.ctx.CursorEntity, energyComp)
+}
+
+// setEnergy sets energy value
+func (s *EnergySystem) setEnergy(world *engine.World, value int64) {
+	energyComp, ok := world.Energies.Get(s.ctx.CursorEntity)
+	if !ok {
+		return
+	}
+	energyComp.Current.Store(value)
+	world.Energies.Add(s.ctx.CursorEntity, energyComp)
+}
+
+// startBlink activates blink state
+func (s *EnergySystem) startBlink(world *engine.World, blinkType, blinkLevel uint32, now time.Time) {
+	energyComp, ok := world.Energies.Get(s.ctx.CursorEntity)
+	if !ok {
+		return
+	}
+	energyComp.BlinkActive.Store(true)
+	energyComp.BlinkType.Store(blinkType)
+	energyComp.BlinkLevel.Store(blinkLevel)
+	energyComp.BlinkTime.Store(now.UnixNano())
+	world.Energies.Add(s.ctx.CursorEntity, energyComp)
+}
+
+// stopBlink clears blink state
+func (s *EnergySystem) stopBlink(world *engine.World) {
+	energyComp, ok := world.Energies.Get(s.ctx.CursorEntity)
+	if !ok {
+		return
+	}
+	energyComp.BlinkActive.Store(false)
+	world.Energies.Add(s.ctx.CursorEntity, energyComp)
+}
+
+// triggerEnergyBlink pushes blink event
+func (s *EnergySystem) triggerEnergyBlink(blinkType, blinkLevel uint32, now time.Time) {
+	s.ctx.PushEvent(events.EventEnergyBlinkStart, &events.EnergyBlinkPayload{
+		Type:  blinkType,
+		Level: blinkLevel,
+	}, now)
 }
 
 // handleDeleteRequest processes deletion of entities in a range

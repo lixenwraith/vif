@@ -142,7 +142,12 @@ func (s *ShieldRenderer) resolveShieldColor(shield components.ShieldComponent) r
 		return s.colorClassToRGB(shield.OverrideColor)
 	}
 
-	blinkType := s.gameCtx.State.GetEnergyBlinkType()
+	// Query energy component for blink type
+	energyComp, ok := s.gameCtx.World.Energies.Get(s.gameCtx.CursorEntity)
+	if !ok {
+		return render.RgbShieldNone
+	}
+	blinkType := energyComp.BlinkType.Load()
 	return s.getColorFromBlinkType(blinkType)
 }
 

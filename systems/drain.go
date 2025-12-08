@@ -647,9 +647,11 @@ func (s *DrainSystem) handlePassiveShieldDrain(world *engine.World, now time.Tim
 		return
 	}
 
-	// Check passive drain interval
 	if now.Sub(shield.LastDrainTime) >= constants.ShieldPassiveDrainInterval {
-		s.ctx.State.AddEnergy(-constants.ShieldPassiveDrainAmount)
+		s.ctx.PushEvent(events.EventEnergyAdd, &events.EnergyAddPayload{
+			Delta:  -constants.ShieldPassiveDrainAmount,
+			Source: "DrainPassiveShield",
+		}, now)
 		shield.LastDrainTime = now
 		world.Shields.Add(s.ctx.CursorEntity, shield)
 	}

@@ -61,6 +61,26 @@ const (
 	// Consumer: SplashSystem | Payload: *SplashRequestPayload
 	EventSplashRequest
 
+	// EventEnergyAdd signals energy delta on target entity
+	// Trigger: Character typed, shield drain, nugget jump
+	// Consumer: EnergySystem | Payload: *EnergyAddPayload
+	EventEnergyAdd
+
+	// EventEnergySet signals setting energy to specific value
+	// Trigger: Game reset, cheats
+	// Consumer: EnergySystem | Payload: *EnergySetPayload
+	EventEnergySet
+
+	// EventEnergyBlinkStart signals visual blink trigger
+	// Trigger: Character typed (success/error)
+	// Consumer: EnergySystem | Payload: *EnergyBlinkPayload
+	EventEnergyBlinkStart
+
+	// EventEnergyBlinkStop signals blink clear
+	// Trigger: EnergySystem timeout
+	// Consumer: EnergySystem | Payload: nil
+	EventEnergyBlinkStop
+
 	// EventShieldActivate signals shield should become active
 	// Trigger: EnergySystem when energy > 0 and shield inactive
 	// Consumer: ShieldSystem | Payload: nil

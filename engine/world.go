@@ -28,6 +28,7 @@ type World struct {
 	Materializers   *Store[components.MaterializeComponent]
 	Cursors         *Store[components.CursorComponent]
 	Protections     *Store[components.ProtectionComponent]
+	Energies        *Store[components.EnergyComponent]
 	Shields         *Store[components.ShieldComponent]
 	Splashes        *Store[components.SplashComponent]
 	MarkedForDeaths *Store[components.MarkedForDeathComponent]
@@ -56,6 +57,7 @@ func NewWorld() *World {
 		Materializers:   NewStore[components.MaterializeComponent](),
 		Cursors:         NewStore[components.CursorComponent](),
 		Protections:     NewStore[components.ProtectionComponent](),
+		Energies:        NewStore[components.EnergyComponent](),
 		Shields:         NewStore[components.ShieldComponent](),
 		Splashes:        NewStore[components.SplashComponent](),
 		MarkedForDeaths: NewStore[components.MarkedForDeathComponent](),

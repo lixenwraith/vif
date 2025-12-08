@@ -164,10 +164,13 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 	})
 
 	// Priority 2: Energy
-	energyText := fmt.Sprintf(" Energy: %d ", s.gameCtx.State.GetEnergy())
+	energyComp, _ := s.gameCtx.World.Energies.Get(s.gameCtx.CursorEntity)
+	energyVal := energyComp.Current.Load()
+	energyText := fmt.Sprintf(" Energy: %d ", energyVal)
 	energyFg, energyBg := render.RgbBlack, render.RgbEnergyBg
-	if s.gameCtx.State.GetEnergyBlinkActive() && clockNow.Sub(s.gameCtx.State.GetEnergyBlinkTime()).Milliseconds() < 200 {
-		typeCode := s.gameCtx.State.GetEnergyBlinkType()
+	blinkTime := time.Unix(0, energyComp.BlinkTime.Load())
+	if energyComp.BlinkActive.Load() && clockNow.Sub(blinkTime).Milliseconds() < 200 {
+		typeCode := energyComp.BlinkType.Load()
 		if typeCode == 0 {
 			energyFg, energyBg = render.RgbCursorError, render.RgbBlack
 		} else {

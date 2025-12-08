@@ -166,6 +166,9 @@ func NewGameContext(term terminal.Terminal) *GameContext {
 		ExpiresAt: 0, // Permanent
 	})
 
+	// Add EnergyComponent to cursor (tracks energy and blink state)
+	ctx.World.Energies.Add(ctx.CursorEntity, components.EnergyComponent{})
+
 	// Add ShieldComponent to cursor (initially invisible via GameState.ShieldActive)
 	// This ensures the renderer and systems have the geometric data needed when the shield activates
 	ctx.World.Shields.Add(ctx.CursorEntity, components.ShieldComponent{

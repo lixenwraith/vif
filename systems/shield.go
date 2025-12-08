@@ -51,7 +51,11 @@ func (s *ShieldSystem) HandleEvent(world *engine.World, event events.GameEvent) 
 
 	case events.EventShieldDrain:
 		if payload, ok := event.Payload.(*events.ShieldDrainPayload); ok {
-			s.ctx.State.AddEnergy(-payload.Amount)
+			// Use energy event instead of direct state access
+			s.ctx.PushEvent(events.EventEnergyAdd, &events.EnergyAddPayload{
+				Delta:  -payload.Amount,
+				Source: "ShieldDrain",
+			}, event.Timestamp)
 		}
 	}
 }
@@ -68,7 +72,11 @@ func (s *ShieldSystem) Update(world *engine.World, dt time.Duration) {
 
 	// Check passive drain interval
 	if now.Sub(shield.LastDrainTime) >= constants.ShieldPassiveDrainInterval {
-		s.ctx.State.AddEnergy(-constants.ShieldPassiveDrainAmount)
+		// Use energy event
+		s.ctx.PushEvent(events.EventEnergyAdd, &events.EnergyAddPayload{
+			Delta:  -constants.ShieldPassiveDrainAmount,
+			Source: "ShieldPassiveDrain",
+		}, now)
 		shield.LastDrainTime = now
 		world.Shields.Add(s.ctx.CursorEntity, shield)
 	}

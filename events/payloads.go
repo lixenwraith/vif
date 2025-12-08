@@ -47,6 +47,23 @@ var CharacterTypedPayloadPool = sync.Pool{
 	New: func() any { return &CharacterTypedPayload{} },
 }
 
+// EnergyAddPayload contains energy delta
+type EnergyAddPayload struct {
+	Delta  int
+	Source string
+}
+
+// EnergySetPayload contains energy value
+type EnergySetPayload struct {
+	Value int
+}
+
+// EnergyBlinkPayload triggers visual blink state
+type EnergyBlinkPayload struct {
+	Type  uint32 // 0=error, 1=blue, 2=green, 3=red, 4=gold
+	Level uint32 // 0=dark, 1=normal, 2=bright
+}
+
 // EnergyTransactionPayload contains energy delta (positive = gain, negative = cost)
 type EnergyTransactionPayload struct {
 	Amount int
