@@ -77,39 +77,6 @@ func writeInt(w *bufio.Writer, n int) {
 	w.Write(buf[i+1:])
 }
 
-// writeIntBytes writes integer to byte slice, returns bytes written
-func writeIntBytes(buf []byte, n int) int {
-	if n < 0 {
-		n = 0
-	}
-	if n < 10 {
-		buf[0] = byte(n) + '0'
-		return 1
-	}
-	if n < 100 {
-		buf[0] = byte(n/10) + '0'
-		buf[1] = byte(n%10) + '0'
-		return 2
-	}
-	if n < 1000 {
-		buf[0] = byte(n/100) + '0'
-		buf[1] = byte(n/10%10) + '0'
-		buf[2] = byte(n%10) + '0'
-		return 3
-	}
-	i := 0
-	tmp := n
-	for tmp > 0 {
-		tmp /= 10
-		i++
-	}
-	for j := i - 1; j >= 0; j-- {
-		buf[j] = byte(n%10) + '0'
-		n /= 10
-	}
-	return i
-}
-
 // writeCursorPos writes cursor positioning sequence (0-indexed input)
 func writeCursorPos(w *bufio.Writer, x, y int) {
 	w.Write(csiCursorPos)

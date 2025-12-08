@@ -89,50 +89,6 @@ func (eq *EventQueue) Consume() []GameEvent {
 	}
 }
 
-// Peek returns pending events without consuming (read-only snapshot)
-// Safe from any thread. May be stale immediately after return
-func (eq *EventQueue) Peek() []GameEvent {
-	currentHead := eq.head.Load()
-	currentTail := eq.tail.Load()
-
-	if currentTail == currentHead {
-		return nil
-	}
-
-	maxAvailable := currentTail - currentHead
-	if maxAvailable > constants.EventQueueSize {
-		maxAvailable = constants.EventQueueSize
-		currentHead = currentTail - constants.EventQueueSize
-	}
-
-	result := make([]GameEvent, 0, maxAvailable)
-	for i := uint64(0); i < maxAvailable; i++ {
-		idx := (currentHead + i) & constants.EventBufferMask
-
-		if !eq.published[idx].Load() {
-			break
-		}
-		result = append(result, eq.events[idx])
-	}
-
-	if len(result) == 0 {
-		return nil
-	}
-	return result
-}
-
-// Len returns current pending event count (snapshot, 0-EventQueueSize)
-func (eq *EventQueue) Len() int {
-	currentHead := eq.head.Load()
-	currentTail := eq.tail.Load()
-	available := currentTail - currentHead
-
-	if available > constants.EventQueueSize {
-		return constants.EventQueueSize
-	}
-	return int(available)
-}
-
 // Reset clears queue. NOT thread-safe; call within world lock or initialization
 func (eq *EventQueue) Reset() {
 	eq.head.Store(0)

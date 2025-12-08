@@ -35,29 +35,6 @@ func GetZIndex(world *World, e Entity) int {
 	return ZIndexSpawnChar
 }
 
-// SelectTopEntity returns the entity with the highest Z-index from a slice
-// Returns 0 if the slice is empty
-func SelectTopEntity(entities []Entity, world *World) Entity {
-	if len(entities) == 0 {
-		return 0
-	}
-	if len(entities) == 1 {
-		return entities[0]
-	}
-
-	var top Entity
-	maxZ := -1
-
-	for _, e := range entities {
-		z := GetZIndex(world, e)
-		if z > maxZ {
-			maxZ = z
-			top = e
-		}
-	}
-	return top
-}
-
 // SelectTopEntityFiltered returns the entity with highest z-index that passes the filter
 // Returns 0 if no entities pass the filter or slice is empty
 // Filter receives entity and returns true if entity should be considered

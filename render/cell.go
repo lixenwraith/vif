@@ -11,15 +11,3 @@ type Attr = terminal.Attr
 
 // DefaultBgRGB is the default background color (Tokyo Night)
 var DefaultBgRGB = RgbBackground
-
-var emptyCell = Cell{
-	Rune:  ' ',
-	Fg:    DefaultBgRGB,
-	Bg:    DefaultBgRGB,
-	Attrs: terminal.AttrNone,
-}
-
-// EmptyCell returns a copy of the empty cell sentinel
-func EmptyCell() Cell {
-	return emptyCell
-}
