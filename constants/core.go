@@ -32,6 +32,7 @@ const MaxEntitiesPerCell = 31
 const (
 	PriorityBoost   = 5
 	PriorityShield  = 6
+	PriorityHeat    = 8
 	PriorityEnergy  = 10
 	PrioritySpawn   = 15
 	PriorityNugget  = 18

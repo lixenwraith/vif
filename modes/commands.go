@@ -70,20 +70,32 @@ func handleNewCommand(ctx *engine.GameContext) bool {
 	// Reset entire game state using unified initState() method (same as app start)
 	ctx.State.Reset(ctx.PausableClock.Now())
 
+	// TODO: Below is duplicated in NewGameContext, refactor needed
+
 	// Recreate cursor entity
 	ctx.CursorEntity = ctx.World.CreateEntity()
-
 	ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
 		X: ctx.GameWidth / 2,
 		Y: ctx.GameHeight / 2,
 	})
-
 	ctx.World.Cursors.Add(ctx.CursorEntity, components.CursorComponent{})
 
 	ctx.World.Protections.Add(ctx.CursorEntity, components.ProtectionComponent{
 		Mask:      components.ProtectAll,
 		ExpiresAt: 0,
 	})
+
+	// Make cursor indestructible
+	ctx.World.Protections.Add(ctx.CursorEntity, components.ProtectionComponent{
+		Mask:      components.ProtectAll,
+		ExpiresAt: 0, // Permanent
+	})
+
+	// Add HeatComponent to cursor
+	ctx.World.Heats.Add(ctx.CursorEntity, components.HeatComponent{})
+
+	// Add EnergyComponent to cursor (tracks energy and blink state)
+	ctx.World.Energies.Add(ctx.CursorEntity, components.EnergyComponent{})
 
 	ctx.LastCommand = ":new"
 	return true
@@ -141,8 +153,8 @@ func handleHeatCommand(ctx *engine.GameContext, args []string) bool {
 	// 4. Update Feedback first (visible immediately)
 	ctx.LastCommand = fmt.Sprintf(":heat %d", value)
 
-	// 5. Update State last (atomic, takes effect on next tick)
-	ctx.State.SetHeat(value)
+	// 5. Push event for HeatSystem to process
+	ctx.PushEvent(events.EventHeatSet, &events.HeatSetPayload{Value: value}, ctx.PausableClock.Now())
 
 	return true
 }
@@ -153,12 +165,9 @@ func handleBoostCommand(ctx *engine.GameContext) bool {
 	endTime := now.Add(constants.BoostBaseDuration)
 
 	// Maximize heat to ensure consistent gameplay state (Boost implies Max Heat)
-	ctx.State.SetHeat(constants.MaxHeat)
+	ctx.PushEvent(events.EventHeatSet, &events.HeatSetPayload{Value: constants.MaxHeat}, now)
 
 	// CRITICAL: Set end time BEFORE enabling boost to prevent race condition
-	// BoostSystem.UpdateBoostTimerAtomic() checks Enabled first, then reads EndTime
-	// If we set Enabled=true before EndTime, the system may read stale EndTime
-	// and immediately disable boost
 	ctx.State.SetBoostEndTime(endTime)
 	ctx.State.SetBoostColor(1) // Default to blue boost
 	ctx.State.SetBoostEnabled(true)
@@ -205,14 +214,21 @@ func clearAllEntities(world *engine.World) {
 func handleDebugCommand(ctx *engine.GameContext) bool {
 	// Gather debug stats
 
+	// Query energy from component
 	energyComp, _ := ctx.World.Energies.Get(ctx.CursorEntity)
 	energyVal := energyComp.Current.Load()
+
+	// Query heat from component
+	heatVal := 0
+	if hc, ok := ctx.World.Heats.Get(ctx.CursorEntity); ok {
+		heatVal = int(hc.Current.Load())
+	}
 
 	debugContent := []string{
 		"=== DEBUG INFORMATION ===",
 		"",
 		fmt.Sprintf("Energy:        %d", energyVal),
-		fmt.Sprintf("Heat:          %d / %d", ctx.State.GetHeat(), constants.MaxHeat),
+		fmt.Sprintf("Heat:          %d / %d", heatVal, constants.MaxHeat),
 		fmt.Sprintf("FPS:           %d", ctx.State.GetGameTicks()), // Approximate
 		fmt.Sprintf("Game Ticks:    %d", ctx.State.GetGameTicks()),
 		fmt.Sprintf("APM:           %d", ctx.State.GetAPM()),

@@ -105,6 +105,9 @@ func main() {
 	shieldSystem := systems.NewShieldSystem(ctx)
 	ctx.World.AddSystem(shieldSystem)
 
+	heatSystem := systems.NewHeatSystem(ctx)
+	ctx.World.AddSystem(heatSystem)
+
 	nuggetSystem := systems.NewNuggetSystem(ctx)
 	ctx.World.AddSystem(nuggetSystem)
 
@@ -186,12 +189,13 @@ func main() {
 	frameReady <- struct{}{}
 
 	clockScheduler.SetSystems(goldSystem, decaySystem)
-	clockScheduler.RegisterEventHandler(cleanerSystem)
+	clockScheduler.RegisterEventHandler(shieldSystem)
+	clockScheduler.RegisterEventHandler(heatSystem)
 	clockScheduler.RegisterEventHandler(energySystem)
 	clockScheduler.RegisterEventHandler(goldSystem)
 	clockScheduler.RegisterEventHandler(splashSystem)
-	clockScheduler.RegisterEventHandler(shieldSystem)
 	clockScheduler.RegisterEventHandler(nuggetSystem)
+	clockScheduler.RegisterEventHandler(cleanerSystem)
 	clockScheduler.Start()
 	defer clockScheduler.Stop()
 

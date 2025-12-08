@@ -12,9 +12,6 @@ import (
 type GameState struct {
 	// ===== REAL-TIME STATE (lock-free atomics) =====
 
-	// Heat (combo/bonus-like system)
-	Heat atomic.Int64 // Current heat value
-
 	// Boost state (real-time feedback)
 	BoostEnabled atomic.Bool
 	BoostEndTime atomic.Int64 // UnixNano
@@ -96,7 +93,6 @@ type GameState struct {
 // Called by both NewGameState and Reset to avoid duplication
 func (gs *GameState) initState(now time.Time) {
 	// Reset atomics
-	gs.Heat.Store(0)
 	gs.BoostEnabled.Store(false)
 	gs.BoostEndTime.Store(0)
 	gs.BoostColor.Store(0)
@@ -160,41 +156,6 @@ func (gs *GameState) Reset(now time.Time) {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
 	gs.initState(now)
-}
-
-// ===== HEAT ACCESSORS (atomic) =====
-
-// GetHeat returns the current heat value
-func (gs *GameState) GetHeat() int {
-	return int(gs.Heat.Load())
-}
-
-// SetHeat sets the heat value
-func (gs *GameState) SetHeat(heat int) {
-	if heat < 0 {
-		heat = 0
-	}
-	if heat > constants.MaxHeat {
-		heat = constants.MaxHeat
-	}
-	gs.Heat.Store(int64(heat))
-}
-
-// AddHeat adds a delta to the current heat value
-func (gs *GameState) AddHeat(delta int) {
-	for {
-		current := gs.Heat.Load()
-		newVal := current + int64(delta)
-		if newVal < 0 {
-			newVal = 0
-		}
-		if newVal > int64(constants.MaxHeat) {
-			newVal = int64(constants.MaxHeat)
-		}
-		if gs.Heat.CompareAndSwap(current, newVal) {
-			return
-		}
-	}
 }
 
 // ===== SEQUENCE ID ACCESSORS (atomic) =====
@@ -615,9 +576,9 @@ func (gs *GameState) GetDecayTimerActive() bool {
 }
 
 // StartDecayTimer starts the decay timer with the given interval
-// Calculates interval based on current heat atomically
+// Heat value must be passed from caller (queried from HeatComponent)
 // Only allowed from PhaseGoldComplete (checked by phase transition validation)
-func (gs *GameState) StartDecayTimer(baseSeconds, rangeSeconds float64, now time.Time) bool {
+func (gs *GameState) StartDecayTimer(baseSeconds, rangeSeconds float64, now time.Time, heatValue int) bool {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
 
@@ -627,8 +588,7 @@ func (gs *GameState) StartDecayTimer(baseSeconds, rangeSeconds float64, now time
 	}
 
 	// Calculate decay timer based on heat percentage
-	heat := int(gs.Heat.Load())
-	heatPercentage := float64(heat) / float64(constants.MaxHeat)
+	heatPercentage := float64(heatValue) / float64(constants.MaxHeat)
 	if heatPercentage > 1.0 {
 		heatPercentage = 1.0
 	}
@@ -646,6 +606,7 @@ func (gs *GameState) StartDecayTimer(baseSeconds, rangeSeconds float64, now time
 	gs.DecayNextTime = now.Add(interval)
 	gs.CurrentPhase = PhaseDecayWait
 	gs.PhaseStartTime = now
+
 	return true
 }
 

@@ -66,7 +66,7 @@ func (s *DrainSystem) Update(world *engine.World, dt time.Duration) {
 	currentCount := world.Drains.Count()
 	pendingCount := len(s.pendingSpawns) + s.countActiveMaterializations(world)
 
-	targetCount := s.calcTargetDrainCount()
+	targetCount := s.calcTargetDrainCount(world)
 	effectiveCount := currentCount + pendingCount
 
 	if effectiveCount < targetCount {
@@ -102,6 +102,14 @@ func (s *DrainSystem) Update(world *engine.World, dt time.Duration) {
 		s.updateDrainMovement(world)
 		s.handleDrainInteractions(world)
 	}
+}
+
+// getHeat reads heat value from HeatComponent
+func (s *DrainSystem) getHeat(world *engine.World) int {
+	if hc, ok := world.Heats.Get(s.ctx.CursorEntity); ok {
+		return int(hc.Current.Load())
+	}
+	return 0
 }
 
 // hasPendingSpawns returns true if spawn queue is non-empty
@@ -143,8 +151,8 @@ func (s *DrainSystem) queueDrainSpawn(targetX, targetY int, staggerIndex int) {
 
 // calcTargetDrainCount returns the desired number of drains based on current heat
 // Formula: floor(heat / 10), capped at DrainMaxCount
-func (s *DrainSystem) calcTargetDrainCount() int {
-	heat := s.ctx.State.GetHeat()
+func (s *DrainSystem) calcTargetDrainCount(world *engine.World) int {
+	heat := s.getHeat(world)
 	count := heat / 10 // Integer division = floor
 	if count > constants.DrainMaxCount {
 		count = constants.DrainMaxCount
@@ -731,8 +739,10 @@ func (s *DrainSystem) handleDrainInteractions(world *engine.World) {
 		// Cursor collision (shield not active or drain outside shield)
 		if isOnCursor {
 			// No shield protection: reduce heat and despawn
-			s.ctx.State.AddHeat(-constants.DrainHeatReductionAmount)
-			s.despawnDrainWithFlash(world, drainEntity)
+			s.ctx.PushEvent(events.EventHeatAdd, &events.HeatAddPayload{
+				Delta:  -constants.DrainHeatReductionAmount,
+				Source: "DrainHit",
+			}, now)
 		}
 	}
 

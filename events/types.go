@@ -51,6 +51,7 @@ const (
 	// Latency: max 50ms (next tick)
 	EventCharacterTyped
 
+	// TODO: Legacy, to be deprecated
 	// EventEnergyTransaction signals energy delta
 	// Trigger: Nugget jump (-10), power-ups, penalties
 	// Consumer: EnergySystem | Payload: *EnergyTransactionPayload
@@ -80,6 +81,16 @@ const (
 	// Trigger: EnergySystem timeout
 	// Consumer: EnergySystem | Payload: nil
 	EventEnergyBlinkStop
+
+	// EventHeatAdd signals heat delta modification
+	// Trigger: Character typed, drain hit, nugget collected
+	// Consumer: HeatSystem | Payload: *HeatAddPayload
+	EventHeatAdd
+
+	// EventHeatSet signals absolute heat value
+	// Trigger: Gold complete, debug command, boost command, error reset
+	// Consumer: HeatSystem | Payload: *HeatSetPayload
+	EventHeatSet
 
 	// EventShieldActivate signals shield should become active
 	// Trigger: EnergySystem when energy > 0 and shield inactive

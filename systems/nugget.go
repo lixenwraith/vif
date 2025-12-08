@@ -103,6 +103,7 @@ func (s *NuggetSystem) handleJumpRequest(world *engine.World, now time.Time) {
 	})
 
 	// 5. Pay Energy Cost
+	// TODO: Migrate EventEnergyTransaction to new events and deprecate this event (only used in nugget)
 	s.ctx.PushEvent(events.EventEnergyTransaction, &events.EnergyTransactionPayload{
 		Amount: -10,
 		Source: "NuggetJump",

@@ -328,11 +328,17 @@ func (cs *ClockScheduler) processTick() {
 
 	case PhaseGoldComplete:
 		// Gold sequence completed or timed out - start decay timer
+		// Query heat from HeatComponent
+		heatValue := 0
+		if hc, ok := world.Heats.Get(cs.ctx.CursorEntity); ok {
+			heatValue = int(hc.Current.Load())
+		}
 		// This will transition to PhaseDecayWait
 		cs.ctx.State.StartDecayTimer(
 			constants.DecayIntervalBaseSeconds,
 			constants.DecayIntervalRangeSeconds,
 			gameNow,
+			heatValue,
 		)
 
 	case PhaseDecayWait:

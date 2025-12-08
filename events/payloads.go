@@ -64,10 +64,22 @@ type EnergyBlinkPayload struct {
 	Level uint32 // 0=dark, 1=normal, 2=bright
 }
 
+// TODO: Legacy, to be deprecated
 // EnergyTransactionPayload contains energy delta (positive = gain, negative = cost)
 type EnergyTransactionPayload struct {
 	Amount int
 	Source string // Debug identifier
+}
+
+// HeatAddPayload contains heat delta
+type HeatAddPayload struct {
+	Delta  int
+	Source string // Debug identifier
+}
+
+// HeatSetPayload contains absolute heat value
+type HeatSetPayload struct {
+	Value int
 }
 
 // GoldSpawnedPayload anchors countdown timer to sequence position

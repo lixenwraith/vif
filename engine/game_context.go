@@ -166,6 +166,9 @@ func NewGameContext(term terminal.Terminal) *GameContext {
 		ExpiresAt: 0, // Permanent
 	})
 
+	// Add HeatComponent to cursor
+	ctx.World.Heats.Add(ctx.CursorEntity, components.HeatComponent{})
+
 	// Add EnergyComponent to cursor (tracks energy and blink state)
 	ctx.World.Energies.Add(ctx.CursorEntity, components.EnergyComponent{})
 

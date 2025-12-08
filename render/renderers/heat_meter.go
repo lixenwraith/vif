@@ -35,8 +35,11 @@ func NewHeatMeterRenderer(ctx *engine.GameContext) *HeatMeterRenderer {
 func (h *HeatMeterRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskUI)
 
-	// 1. Calculate Fill Limit
-	heat := h.gameCtx.State.GetHeat() // 0-100
+	// 1. Calculate Fill Limit from HeatComponent
+	heat := 0
+	if hc, ok := world.Heats.Get(h.gameCtx.CursorEntity); ok {
+		heat = int(hc.Current.Load())
+	}
 	// fillWidth = (Width * Heat) / 100
 	fillWidth := (ctx.Width * heat) / 100
 
@@ -47,9 +50,7 @@ func (h *HeatMeterRenderer) Render(ctx render.RenderContext, world *engine.World
 
 	// 3. Render Loop
 	for x := 0; x < ctx.Width; x++ {
-		// Optimization: Early exit for empty part?
-		// No, we must clear the rest of the bar to Black/Empty
-
+		// No early exit optimization, must clear the rest of the bar to Black/Empty
 		if x >= fillWidth {
 			// Draw Empty
 			buf.SetBgOnly(x, 0, render.RgbBlack)
