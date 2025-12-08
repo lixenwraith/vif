@@ -85,9 +85,12 @@ type World struct {
     Nuggets        *Store[NuggetComponent]
     Drains         *Store[DrainComponent]
     Cursors        *Store[CursorComponent]
-    Protections     *Store[ProtectionComponent]
-    Shields         *Store[ShieldComponent]
-    Splashes        *Store[SplashComponent]
+    Protections    *Store[ProtectionComponent]
+    Pings          *Store[PingComponent]
+    Energies       *Store[EnergyComponent]
+    Shields        *Store[ShieldComponent]
+    Heats          *Store[HeatComponent]
+    Splashes       *Store[SplashComponent]
     MarkedForDeaths *Store[MarkedForDeathComponent]
 
     allStores []AnyStore
@@ -140,10 +143,14 @@ func (s *MySystem) Update(world *engine.World, dt time.Duration) {
 
 **GameContext Role:**
 - OS/Window management, Event routing, State orchestration
-- `GameState` access via `ctx.State`
+- `GameState` access via `ctx.State` (phase, spawn, boost timing)
 - `EventQueue` integration via `ctx.PushEvent()` (wraps `events.EventQueue` for producer access)
-- `AudioEngine` access via `ctx.AudioEngine.PlaySound()`
-- `CursorEntity` reference for systems to query/update cursor position via ECS
+- `AudioEngine` access via `ctx.AudioEngine` interface
+- `CursorEntity` reference for systems to query/update cursor components via ECS:
+  - Position, Cursor, Protection (indestructible)
+  - Ping (crosshair and grid state)
+  - Heat, Energy (gameplay meters)
+  - Shield (geometry and activation state)
 - Mode state tracking (NORMAL, INSERT, SEARCH, COMMAND, OVERLAY)
 
 ### Event-Driven Communication
@@ -178,20 +185,27 @@ Producer → EventQueue → ClockScheduler → EventRouter → Handler[T] → Sy
 | Event | Producer | Consumer | Payload |
 |-------|----------|----------|---------|
 | `EventCharacterTyped` | InputHandler (modes) | EnergySystem | `*CharacterTypedPayload{Char, X, Y}` |
-| `EventEnergyTransaction` | InputHandler (modes) | EnergySystem | `*EnergyTransactionPayload{Amount, Source}` |
-| `EventNuggetJumpRequest` | InputHandler (modes) | NuggetSystem | `nil` |
 | `EventDeleteRequest` | InputHandler (modes) | EnergySystem | `*DeleteRequestPayload{StartX, StartY, EndX, EndY, RangeType}` |
+| `EventEnergyAdd` | EnergySystem, ShieldSystem | EnergySystem | `*EnergyAddPayload{Delta, Source}` |
+| `EventEnergySet` | InputHandler (modes, :energy cmd) | EnergySystem | `*EnergySetPayload{Value}` |
+| `EventEnergyBlinkStart` | EnergySystem | EnergySystem | `*EnergyBlinkPayload{Type, Level}` |
+| `EventEnergyBlinkStop` | EnergySystem | EnergySystem | `nil` |
+| `EventHeatAdd` | EnergySystem, DrainSystem | HeatSystem | `*HeatAddPayload{Delta, Source}` |
+| `EventHeatSet` | InputHandler (modes, :heat cmd), EnergySystem | HeatSystem | `*HeatSetPayload{Value}` |
+| `EventManualCleanerTrigger` | InputHandler (modes, Enter key) | HeatSystem | `nil` |
+| `EventPingGridRequest` | InputHandler (modes, ESC key) | PingSystem | `*PingGridRequestPayload{Duration}` |
+| `EventNuggetJumpRequest` | InputHandler (modes, Tab key) | NuggetSystem | `nil` |
 | `EventShieldActivate` | EnergySystem | ShieldSystem | `nil` |
 | `EventShieldDeactivate` | EnergySystem | ShieldSystem | `nil` |
 | `EventShieldDrain` | DrainSystem | ShieldSystem | `*ShieldDrainPayload{Amount}` |
 | `EventCleanerRequest` | EnergySystem | CleanerSystem | `nil` |
-| `EventDirectionalCleanerRequest` | InputHandler (modes), EnergySystem | CleanerSystem | `*DirectionalCleanerPayload{OriginX, OriginY}` |
+| `EventDirectionalCleanerRequest` | HeatSystem, EnergySystem | CleanerSystem | `*DirectionalCleanerPayload{OriginX, OriginY}` |
 | `EventCleanerFinished` | CleanerSystem | (observers) | `nil` |
 | `EventSplashRequest` | EnergySystem, InputHandler (modes) | SplashSystem | `*SplashRequestPayload{Text, Color, OriginX, OriginY}` |
 | `EventGoldSpawned` | GoldSystem | SplashSystem | `*GoldSpawnedPayload{SequenceID, OriginX, OriginY, Length, Duration}` |
 | `EventGoldComplete` | GoldSystem | SplashSystem | `*GoldCompletionPayload{SequenceID}` |
 | `EventGoldTimeout` | GoldSystem | SplashSystem | `*GoldCompletionPayload{SequenceID}` |
-| `EventGoldDestroyed` | DrainSystem | SplashSystem | `*GoldCompletionPayload{SequenceID}` |
+| `EventGoldDestroyed` | GoldSystem | SplashSystem | `*GoldCompletionPayload{SequenceID}` |
 
 **Producer Pattern (modes package):**
 ```go
@@ -210,7 +224,14 @@ import (
 
 // Generic Handler interface implemented by systems
 func (s *EnergySystem) EventTypes() []events.EventType {
-    return []events.EventType{events.EventCharacterTyped, events.EventEnergyTransaction}
+    return []events.EventType{
+        events.EventCharacterTyped,
+        events.EventEnergyAdd,
+        events.EventEnergySet,
+        events.EventEnergyBlinkStart,
+        events.EventEnergyBlinkStop,
+        events.EventDeleteRequest,
+    }
 }
 
 func (s *EnergySystem) HandleEvent(world *engine.World, event events.GameEvent) {
@@ -218,6 +239,10 @@ func (s *EnergySystem) HandleEvent(world *engine.World, event events.GameEvent) 
     case events.EventCharacterTyped:
         if payload, ok := event.Payload.(*events.CharacterTypedPayload); ok {
             s.handleCharacterTyping(world, payload.X, payload.Y, payload.Char)
+        }
+    case events.EventEnergyAdd:
+        if payload, ok := event.Payload.(*events.EnergyAddPayload); ok {
+            s.addEnergy(world, int64(payload.Delta))
         }
     }
 }
@@ -262,14 +287,15 @@ router.DispatchAll(world, eventQueue)
 **GameState** (`engine/game_state.go`) centralizes game state with clear ownership boundaries:
 
 #### Real-Time State (Lock-Free Atomics)
-- **Heat**, **Energy** (`atomic.Int64`): Current values
-- **Cursor Position**: Managed in ECS, cached in GameContext
-- **Boost State** (`atomic.Bool`, `atomic.Int64`): Enabled, EndTime, Color
-- **Shield State** (`atomic.Bool`): ShieldActive
-- **Shield Color Tracking** (`atomic.Int32`): LastTypedSeqType, LastTypedSeqLevel
-- **Drain State** (`atomic.Bool`, `atomic.Uint64`, `atomic.Int32`): Active, EntityID, X, Y
+- **Boost State** (`atomic.Bool`, `atomic.Int64`, `atomic.Int32`): Enabled, EndTime, Color
+- **Cursor Error Flash** (`atomic.Bool`, `atomic.Int64`): CursorError, CursorErrorTime
+- **Grayout Effect** (`atomic.Bool`, `atomic.Int64`): GrayoutActive, GrayoutStartTime
 - **Sequence ID** (`atomic.Int64`): Thread-safe ID generation
+- **Active Nugget** (`atomic.Uint64`): ActiveNuggetID
+- **Frame Counter** (`atomic.Int64`): FrameNumber
 - **Runtime Metrics** (`atomic.Uint64`): GameTicks, CurrentAPM, PendingActions
+
+**Note**: Heat and Energy migrated from GameState to ECS components (`HeatComponent`, `EnergyComponent`) attached to cursor entity. Shield activation state moved to `ShieldComponent.Active` field.
 
 #### Clock-Tick State (Mutex Protected)
 - **Spawn Timing** (`sync.RWMutex`): LastTime, NextTime, RateMultiplier
@@ -286,10 +312,18 @@ The game uses `GameState.initState()` for both app start and :new command:
 
 ```go
 func (gs *GameState) initState(now time.Time) {
-    gs.Energy.Store(0)
-    gs.Heat.Store(0)
+    // Reset atomics
     gs.BoostEnabled.Store(false)
-    // ... all atomic and mutex-protected state
+    gs.BoostEndTime.Store(0)
+    gs.BoostColor.Store(0)
+    gs.CursorError.Store(false)
+    gs.CursorErrorTime.Store(0)
+    gs.GrayoutActive.Store(false)
+    gs.GrayoutStartTime.Store(0)
+    gs.NextSeqID.Store(1)
+    gs.FrameNumber.Store(0)
+    gs.ActiveNuggetID.Store(0)
+    // ... metrics, spawn, gold, decay, phase state
 }
 
 func NewGameState(maxEntities int, now time.Time) *GameState {
@@ -303,6 +337,20 @@ func (gs *GameState) Reset(now time.Time) {
     defer gs.mu.Unlock()
     gs.initState(now)
 }
+```
+
+**Cursor Entity Component Initialization** (`GameContext.CreateCursorEntity()`):
+```go
+// Position, Cursor, Protection components
+ctx.World.Positions.Add(cursorEntity, PositionComponent{X: centerX, Y: centerY})
+ctx.World.Cursors.Add(cursorEntity, CursorComponent{})
+ctx.World.Protections.Add(cursorEntity, ProtectionComponent{Mask: ProtectAll})
+
+// Ping, Heat, Energy, Shield components
+ctx.World.Pings.Add(cursorEntity, PingComponent{ShowCrosshair: true, ContextAware: true})
+ctx.World.Heats.Add(cursorEntity, HeatComponent{})  // Current starts at 0
+ctx.World.Energies.Add(cursorEntity, EnergyComponent{})  // Current starts at 0
+ctx.World.Shields.Add(cursorEntity, ShieldComponent{RadiusX: ..., RadiusY: ..., LastDrainTime: now})
 ```
 
 #### Snapshot Pattern
@@ -536,9 +584,12 @@ Component (marker interface)
 ├── FlashComponent {X, Y int, Char rune, StartTime time.Time, Duration time.Duration}
 ├── NuggetComponent {ID int, SpawnTime time.Time}
 ├── DrainComponent {LastMoveTime, LastDrainTime time.Time, IsOnCursor bool, SpawnOrder int64}
-├── CursorComponent {ErrorFlashEnd int64, HeatDisplay int}
+├── CursorComponent {ErrorFlashEnd int64}
 ├── ProtectionComponent {Mask ProtectionFlags, ExpiresAt int64}
-├── ShieldComponent {Energy int64, RadiusX, RadiusY float64, OverrideColor ColorClass, MaxOpacity float64}
+├── PingComponent {ShowCrosshair bool, CrosshairColor ColorClass, GridActive bool, GridTimer float64, GridColor ColorClass, ContextAware bool}
+├── EnergyComponent {Current atomic.Int64, BlinkActive atomic.Bool, BlinkType atomic.Uint32, BlinkLevel atomic.Uint32, BlinkTime atomic.Int64}
+├── HeatComponent {Current atomic.Int64}
+├── ShieldComponent {Active bool, RadiusX, RadiusY float64, OverrideColor ColorClass, MaxOpacity float64, LastDrainTime time.Time}
 ├── SplashComponent {Content [8]rune, Length int, Color SplashColor, AnchorX, AnchorY int, Mode SplashMode, StartNano int64, Duration int64, SequenceID int}
 └── MarkedForDeathComponent {}
 ```
@@ -630,15 +681,24 @@ The render package uses `terminal.Cell` directly in `RenderBuffer`, enabling zer
 - **PriorityDebug (1000)**: Debug overlays
 
 **Individual Renderers** (`render/renderers/`):
-- `PingGridRenderer`: Row/column highlights (writes MaskGrid)
+- `PingRenderer`: Row/column highlights (writes MaskGrid)
+  - Reads `PingComponent` from cursor entity for grid state and crosshair
+  - Checks `ShieldComponent` to exclude ping overlay from shield area
 - `SplashRenderer`: Large block-character feedback and gold timer (writes MaskEffect, linear opacity fade, bitmap font rendering)
 - `CharactersRenderer`: All character entities (writes MaskEntity)
-- `ShieldRenderer`: Protective field with gradient (writes MaskShield, queries GameState.ShieldActive from RenderContext, color derived from LastTypedSeqType/Level)
+- `ShieldRenderer`: Protective field with gradient (writes MaskShield)
+  - Reads `ShieldComponent.Active` from cursor entity for visibility
+  - Reads `EnergyComponent.BlinkType` from cursor entity for color
+  - Reads `ShieldComponent` for RadiusX, RadiusY, MaxOpacity
 - `EffectsRenderer`: Decay, cleaners, flashes, materializers (writes MaskEffect)
 - `DrainRenderer`: Drain entities (writes MaskEffect)
-- `HeatMeterRenderer`, `LineNumbersRenderer`, `ColumnIndicatorsRenderer`: UI elements (write MaskUI)
+- `HeatMeterRenderer`: Heat bar UI (writes MaskUI)
+  - Reads `HeatComponent.Current` from cursor entity
+- `LineNumbersRenderer`, `ColumnIndicatorsRenderer`: UI elements (write MaskUI)
 - `StatusBarRenderer`: Mode, commands, metrics, FPS (writes MaskUI)
+  - Reads `EnergyComponent.Current` from cursor entity for energy display
 - `CursorRenderer`: Cursor rendering (writes MaskUI)
+  - Reads `CursorComponent.ErrorFlashEnd` for error flash state
 - `OverlayRenderer`: Modal windows (writes MaskUI)
 - **Post-Processors**:
   - `GrayoutRenderer`: Desaturation effect for entities when cleaners trigger with no targets (priority 390)
@@ -1041,30 +1101,29 @@ Systems (EnergySystem, NuggetSystem, CleanerSystem, etc.)
 - Clears ECS World and resets game state
 - Phase: Transitions to PhaseNormal
 - Event Queue: Drains all pending events
-- **Critical**: Restore Cursor Entity after `World.Clear()`:
+- **Critical**: Restore Cursor Entity after `World.Clear()` via `ctx.CreateCursorEntity()`:
   ```go
   world.Clear()
   ctx.ResetEventQueue()
   ctx.State.Reset(ctx.PausableClock.Now())
-
-  cursorEntity := world.CreateEntity()
-  world.Positions.Add(cursorEntity, components.PositionComponent{
-      X: ctx.GameWidth / 2,
-      Y: ctx.GameHeight / 2,
-  })
-  world.Cursors.Add(cursorEntity, components.CursorComponent{})
-  world.Protections.Add(cursorEntity, components.ProtectionComponent{
-      Mask: components.ProtectAll,
-      ExpiresAt: 0,
-  })
-  ctx.CursorEntity = cursorEntity
+  ctx.CreateCursorEntity()  // Creates cursor with all components
   ```
+
+**`:heat <value>` - Set Heat (Debug):**
+- Parses integer value (clamped to 0-MaxHeat)
+- Emits `EventHeatSet` with value
+- Consumer: HeatSystem updates `HeatComponent.Current` on cursor entity
+
+**`:energy <value>` - Set Energy (Debug):**
+- Parses integer value
+- Emits `EventEnergySet` with value
+- Consumer: EnergySystem updates `EnergyComponent.Current` on cursor entity
 
 ### Special Keys (NORMAL Mode)
 
 **Tab**: Jumps to active Nugget via `EventNuggetJumpRequest` (Cost: 10 Energy)
-**ESC**: Activates ping grid for 1 second
-**Enter**: 4-directional cleaners via `EventDirectionalCleanerRequest` (heat ≥ 10, costs 10)
+**ESC**: Activates ping grid via `EventPingGridRequest` (duration: 1 second)
+**Enter**: Manual cleaner trigger via `EventManualCleanerTrigger` → HeatSystem checks heat ≥ 10, deducts 10 heat, emits `EventDirectionalCleanerRequest`
 **Arrow keys**: Function like h/j/k/l (wrapped in `World.RunSafe()`)
 
 ### Supported Vi Motions
@@ -1172,16 +1231,19 @@ ctx.Go(func() {
 
 Systems execute in priority order (lower = earlier):
 1. **BoostSystem (5)**: Boost timer expiration
-2. **EnergySystem (10)**: Process input, update energy
-3. **SpawnSystem (15)**: Generate Blue/Green sequences
-4. **NuggetSystem (18)**: Nugget spawning/collection
-5. **GoldSystem (20)**: Gold lifecycle
-6. **CleanerSystem (22)**: Cleaner physics/collision
-7. **DrainSystem (25)**: Drain movement/logic
-8. **DecaySystem (30)**: Sequence degradation
-9. **FlashSystem (35)**: Flash effect lifecycle
-10. **SplashSystem (800)**: Splash lifecycle and gold timer updates (after game logic, before rendering)
-11. **CullSystem (900)**: Removes MarkedForDeath-tagged entities (runs last)
+2. **EnergySystem (10)**: Process input, update energy, shield activation
+3. **HeatSystem (12)**: Heat event processing, manual cleaner trigger
+4. **SpawnSystem (15)**: Generate Blue/Green sequences
+5. **NuggetSystem (18)**: Nugget spawning/collection
+6. **GoldSystem (20)**: Gold lifecycle
+7. **ShieldSystem (21)**: Shield activation/deactivation, passive drain
+8. **CleanerSystem (22)**: Cleaner physics/collision
+9. **DrainSystem (25)**: Drain movement/logic
+10. **DecaySystem (30)**: Sequence degradation
+11. **FlashSystem (35)**: Flash effect lifecycle
+12. **PingSystem (300)**: Ping grid timer and crosshair state
+13. **SplashSystem (800)**: Splash lifecycle and gold timer updates (after game logic, before rendering)
+14. **CullSystem (900)**: Removes MarkedForDeath-tagged entities (runs last)
 
 ### System Communication Patterns
 
@@ -1282,17 +1344,19 @@ Clock-tick system managing sequence degradation through falling entity animation
 
 ### Energy System
 
-Event-driven system for character interaction and energy/heat management.
+Event-driven system for character interaction and energy management (priority 10).
 
 **Event Handling:**
-- Consumes: `EventCharacterTyped`, `EventEnergyTransaction`, `EventDeleteRequest`
-- Emits: `EventSplashRequest`, `EventShieldActivate`, `EventShieldDeactivate`, `EventDirectionalCleanerRequest`, `EventCleanerRequest`, `EventGoldComplete`
+- Consumes: `EventCharacterTyped`, `EventEnergyAdd`, `EventEnergySet`, `EventEnergyBlinkStart`, `EventEnergyBlinkStop`, `EventDeleteRequest`
+- Emits: `EventSplashRequest`, `EventShieldActivate`, `EventShieldDeactivate`, `EventHeatAdd`, `EventHeatSet`, `EventDirectionalCleanerRequest`, `EventCleanerRequest`, `EventGoldComplete`
 
 **Responsibilities:**
 - Character typing validation and sequence destruction
-- Heat accumulation (with boost multiplier)
-- Energy management and shield state control
-- Error handling (resets heat, plays error sound)
+- Energy component management (`EnergyComponent` on cursor entity)
+- Energy blink visual state (success/error feedback)
+- Heat manipulation via `EventHeatAdd` and `EventHeatSet`
+- Shield activation/deactivation events based on energy state
+- Error handling (emits `EventHeatSet` to reset heat, plays error sound)
 - Cleaner triggering (gold/nugget completion at max heat)
 
 **Hit Detection:**
@@ -1308,6 +1372,60 @@ for _, entity := range entitiesAtCursor {
     // Process typing...
 }
 ```
+
+**Update() Cycle:**
+- Clear error flash after timeout (cursor red flash)
+- Clear energy blink after timeout (visual feedback)
+- Evaluate shield activation: emit `EventShieldActivate` if energy > 0 and shield inactive, or `EventShieldDeactivate` if energy <= 0 and shield active
+
+### Heat System
+
+Event-driven system managing heat meter state (priority 12).
+
+**Event Handling:**
+- Consumes: `EventHeatAdd`, `EventHeatSet`, `EventManualCleanerTrigger`
+- Emits: `EventDirectionalCleanerRequest` (from manual trigger)
+
+**Responsibilities:**
+- Heat component management (`HeatComponent.Current` on cursor entity)
+- Heat addition with clamping (0 to `MaxHeat`)
+- Heat setting with clamping
+- Manual cleaner ability (Enter key): checks heat >= 10, deducts 10 heat, emits `EventDirectionalCleanerRequest`
+
+**Implementation:**
+```go
+func (s *HeatSystem) addHeat(world *engine.World, delta int) {
+    heatComp, _ := world.Heats.Get(s.ctx.CursorEntity)
+    current := heatComp.Current.Load()
+    newVal := clamp(current + int64(delta), 0, MaxHeat)
+    heatComp.Current.Store(newVal)
+    world.Heats.Add(s.ctx.CursorEntity, heatComp)  // Write back to store
+}
+```
+
+**Note:** No tick-based logic; all mutations via events.
+
+### Ping System
+
+Event-driven system managing ping grid and crosshair state (priority 300).
+
+**Event Handling:**
+- Consumes: `EventPingGridRequest`
+- Emits: None
+
+**Responsibilities:**
+- Ping grid timer countdown (decrement `GridTimer` each frame)
+- Grid deactivation when timer expires
+- Context-aware crosshair color synchronization with game mode
+- Processes `PingComponent` on cursor entity
+
+**Update() Cycle:**
+- Decrement `GridTimer` if `GridActive`
+- Deactivate grid when timer reaches 0
+- Sync `CrosshairColor` with current game mode (via `InputResource`)
+
+**Event Handling:**
+- `EventPingGridRequest`: Activates grid for specified duration (typically 1 second from ESC key)
 
 ### Boost System
 
@@ -1526,18 +1644,18 @@ The Splash System provides large block-character visual feedback for player acti
 
 ### Shield System
 
-Event-driven energy-powered protective field that activates when energy is available.
+Event-driven energy-powered protective field that activates when energy is available (priority 21).
 
 **Activation Model:**
 - **Trigger**: Energy > 0 (pure energy-gated)
-- **State Ownership**: `GameState.ShieldActive` atomic bool
+- **State Ownership**: `ShieldComponent.Active` field on cursor entity
 - **Event-Driven Control**: All activation/deactivation via events
 
 **Event Flow:**
 ```
 EnergySystem.Update()
-    └─► if energy > 0 && !shieldActive → PushEvent(EventShieldActivate)
-    └─► if energy <= 0 && shieldActive → PushEvent(EventShieldDeactivate)
+    └─► if energy > 0 && !shield.Active → PushEvent(EventShieldActivate)
+    └─► if energy <= 0 && shield.Active → PushEvent(EventShieldDeactivate)
 
 DrainSystem.handleDrainInteractions()
     └─► if drain inside shield zone → PushEvent(EventShieldDrain, amount)
@@ -1547,34 +1665,34 @@ ClockScheduler.processTick()
     └─► world.Update() → ShieldSystem.Update() (passive drain)
 ```
 
-**ShieldSystem Responsibilities:**
+**ShieldSystem Responsibilities (priority 21):**
 - **Event Handling**: Consumes `EventShieldActivate`, `EventShieldDeactivate`, `EventShieldDrain`
-- **Activation**: Sets `ShieldActive` atomic flag, updates component state
-- **Deactivation**: Clears `ShieldActive` atomic flag, cleans up component state
-- **Passive Drain**: Drains 1 energy/second while active (in `Update()`)
-- **External Drain**: Processes `EventShieldDrain` events from DrainSystem
+- **Activation**: Sets `ShieldComponent.Active = true` on cursor entity
+- **Deactivation**: Sets `ShieldComponent.Active = false` on cursor entity
+- **Passive Drain**: Emits `EventEnergyAdd` (delta: -1) every 1 second while active (in `Update()`)
+- **External Drain**: Processes `EventShieldDrain` events from DrainSystem, emits `EventEnergyAdd` with negative delta
 
 **Energy Costs:**
-- **Passive**: 1 energy/second (handled by ShieldSystem.Update)
-- **Shield Zone**: 100 energy/tick per drain (via EventShieldDrain from DrainSystem)
+- **Passive**: 1 energy/second (via `EventEnergyAdd` from ShieldSystem.Update)
+- **Shield Zone**: 100 energy/tick per drain (via `EventShieldDrain` → `EventEnergyAdd` from ShieldSystem)
 
 **Defense Mechanism:**
-- DrainSystem queries `GameState.GetShieldActive()` to check protection
-- Drains inside shield zone push `EventShieldDrain` instead of draining heat
-- Shield deactivates when energy depleted (EventShieldDeactivate)
+- DrainSystem queries `ShieldComponent.Active` to check protection
+- Drains inside shield zone emit `EventShieldDrain` instead of draining heat
+- Shield deactivates when energy depleted (via `EventShieldDeactivate` from EnergySystem)
 
 **Visual Rendering:**
-- **ShieldRenderer** queries `ctx.ShieldActive` from RenderContext
+- **ShieldRenderer** queries `ShieldComponent.Active` from cursor entity
 - **Elliptical field** with linear gradient
-- **Color**: Derived from `GameState.LastTypedSeqType/Level` (set by EnergySystem)
-- **Visibility**: Only renders when `ShieldActive` is true
+- **Color**: Derived from `EnergyComponent.BlinkType` on cursor entity
+- **Visibility**: Only renders when `ShieldComponent.Active` is true
 
-**Component**: `{Energy int64, RadiusX, RadiusY float64, OverrideColor ColorClass, MaxOpacity float64}`
+**Component**: `{Active bool, RadiusX, RadiusY float64, OverrideColor ColorClass, MaxOpacity float64, LastDrainTime time.Time}`
 
 **Key Design Decisions:**
-- **Decoupled from BoostSystem**: Boost no longer manages shield state
-- **Centralized State**: Single source of truth (`GameState.ShieldActive`)
-- **Event-Driven**: All state transitions via events (no direct system coupling)
+- **Pure ECS**: All shield state in `ShieldComponent`, no GameState involvement
+- **Event-Driven Energy**: All energy modifications via `EventEnergyAdd`
+- **No Direct System Coupling**: ShieldSystem and EnergySystem communicate only via events
 - **Pure Energy-Gated**: Activation depends only on energy availability
 
 ### Cull System
