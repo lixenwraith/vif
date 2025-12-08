@@ -92,6 +92,11 @@ const (
 	// Consumer: HeatSystem | Payload: *HeatSetPayload
 	EventHeatSet
 
+	// EventManualCleanerTrigger signals player request to use cleaner ability (consumes heat)
+	// Trigger: Enter key in Insert/Normal mode
+	// Consumer: HeatSystem | Payload: nil
+	EventManualCleanerTrigger
+
 	// EventShieldActivate signals shield should become active
 	// Trigger: EnergySystem when energy > 0 and shield inactive
 	// Consumer: ShieldSystem | Payload: nil

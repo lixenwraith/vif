@@ -30,6 +30,7 @@ func (s *HeatSystem) EventTypes() []events.EventType {
 	return []events.EventType{
 		events.EventHeatAdd,
 		events.EventHeatSet,
+		events.EventManualCleanerTrigger,
 	}
 }
 
@@ -43,6 +44,8 @@ func (s *HeatSystem) HandleEvent(world *engine.World, event events.GameEvent) {
 		if payload, ok := event.Payload.(*events.HeatSetPayload); ok {
 			s.setHeat(world, payload.Value)
 		}
+	case events.EventManualCleanerTrigger:
+		s.handleManualCleanerTrigger(world, event.Timestamp)
 	}
 }
 
@@ -90,4 +93,28 @@ func (s *HeatSystem) setHeat(world *engine.World, value int) {
 
 	// CRITICAL: Write the modified component copy back to the store
 	world.Heats.Add(s.ctx.CursorEntity, heatComp)
+}
+
+// handleManualCleanerTrigger checks heat cost and triggers cleaner if affordable
+func (s *HeatSystem) handleManualCleanerTrigger(world *engine.World, now time.Time) {
+	heatComp, ok := world.Heats.Get(s.ctx.CursorEntity)
+	if !ok {
+		return
+	}
+
+	// Check cost (10 heat)
+	if heatComp.Current.Load() < 10 {
+		return
+	}
+
+	// Deduct heat
+	s.addHeat(world, -10)
+
+	// Trigger directional cleaner at cursor position
+	if pos, ok := world.Positions.Get(s.ctx.CursorEntity); ok {
+		s.ctx.PushEvent(events.EventDirectionalCleanerRequest, &events.DirectionalCleanerPayload{
+			OriginX: pos.X,
+			OriginY: pos.Y,
+		}, now)
+	}
 }

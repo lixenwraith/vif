@@ -183,28 +183,8 @@ func (h *InputHandler) handleNormalModeSpecialKeys(ev terminal.Event) {
 	case terminal.KeyTab:
 		h.ctx.PushEvent(events.EventNuggetJumpRequest, nil, h.ctx.PausableClock.Now())
 
-		// TODO: Move logic out of input, new event
 	case terminal.KeyEnter:
-		now := h.ctx.PausableClock.Now()
-		currentHeat := 0
-		if hc, ok := h.ctx.World.Heats.Get(h.ctx.CursorEntity); ok {
-			currentHeat = int(hc.Current.Load())
-		}
-		if currentHeat >= 10 {
-			h.ctx.PushEvent(events.EventHeatAdd, &events.HeatAddPayload{
-				Delta:  -10,
-				Source: "DirectionalCleaner",
-			}, now)
-
-			cursorPos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
-			if ok {
-				payload := &events.DirectionalCleanerPayload{
-					OriginX: cursorPos.X,
-					OriginY: cursorPos.Y,
-				}
-				h.ctx.PushEvent(events.EventDirectionalCleanerRequest, payload, now)
-			}
-		}
+		h.ctx.PushEvent(events.EventManualCleanerTrigger, nil, h.ctx.PausableClock.Now())
 	}
 
 	h.ctx.LastCommand = ""
@@ -273,30 +253,8 @@ func (h *InputHandler) handleInsertMode(ev terminal.Event) bool {
 		h.ctx.PushEvent(events.EventNuggetJumpRequest, nil, h.ctx.PausableClock.Now())
 		return true
 
-		// TODO: move logic out of input, new event
 	case terminal.KeyEnter:
-		h.ctx.World.RunSafe(func() {
-			now := h.ctx.PausableClock.Now()
-			currentHeat := 0
-			if hc, ok := h.ctx.World.Heats.Get(h.ctx.CursorEntity); ok {
-				currentHeat = int(hc.Current.Load())
-			}
-			if currentHeat >= 10 {
-				h.ctx.PushEvent(events.EventHeatAdd, &events.HeatAddPayload{
-					Delta:  -10,
-					Source: "DirectionalCleaner",
-				}, now)
-
-				cursorPos, ok := h.ctx.World.Positions.Get(h.ctx.CursorEntity)
-				if ok {
-					payload := &events.DirectionalCleanerPayload{
-						OriginX: cursorPos.X,
-						OriginY: cursorPos.Y,
-					}
-					h.ctx.PushEvent(events.EventDirectionalCleanerRequest, payload, now)
-				}
-			}
-		})
+		h.ctx.PushEvent(events.EventManualCleanerTrigger, nil, h.ctx.PausableClock.Now())
 		return true
 
 	case terminal.KeyRune:
