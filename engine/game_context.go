@@ -149,9 +149,26 @@ func NewGameContext(term terminal.Terminal) *GameContext {
 	}
 	AddResource(ctx.World.Resources, inputRes)
 
+	// 4. Game State
 	// Create centralized game state with pausable time provider
 	ctx.State = NewGameState(constants.MaxEntities, pausableClock.Now())
 
+	// 5. Cursor Entity
+	ctx.CreateCursorEntity()
+
+	// Initialize ping atomic values (still local to input handling)
+	ctx.pingActive.Store(false)
+	ctx.pingGridTimer.Store(0)
+
+	// Initialize pause state
+	ctx.IsPaused.Store(false)
+
+	return ctx
+}
+
+// CreateCursorEntity handles standard cursor entity creation and component attachment
+// Centralizes logic shared between NewGameContext and :new command
+func (ctx *GameContext) CreateCursorEntity() {
 	// Create cursor entity at the center of the screen
 	ctx.CursorEntity = ctx.World.CreateEntity()
 	ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
@@ -179,17 +196,8 @@ func NewGameContext(term terminal.Terminal) *GameContext {
 		RadiusY:       constants.ShieldRadiusY,
 		OverrideColor: components.ColorNone,
 		MaxOpacity:    constants.ShieldMaxOpacity,
-		LastDrainTime: pausableClock.Now(),
+		LastDrainTime: ctx.PausableClock.Now(),
 	})
-
-	// Initialize ping atomic values (still local to input handling)
-	ctx.pingActive.Store(false)
-	ctx.pingGridTimer.Store(0)
-
-	// Initialize pause state
-	ctx.IsPaused.Store(false)
-
-	return ctx
 }
 
 // ===== Crash Handling and Panic Management =====

@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/events"
@@ -70,32 +69,8 @@ func handleNewCommand(ctx *engine.GameContext) bool {
 	// Reset entire game state using unified initState() method (same as app start)
 	ctx.State.Reset(ctx.PausableClock.Now())
 
-	// TODO: Below is duplicated in NewGameContext, refactor needed
-
 	// Recreate cursor entity
-	ctx.CursorEntity = ctx.World.CreateEntity()
-	ctx.World.Positions.Add(ctx.CursorEntity, components.PositionComponent{
-		X: ctx.GameWidth / 2,
-		Y: ctx.GameHeight / 2,
-	})
-	ctx.World.Cursors.Add(ctx.CursorEntity, components.CursorComponent{})
-
-	ctx.World.Protections.Add(ctx.CursorEntity, components.ProtectionComponent{
-		Mask:      components.ProtectAll,
-		ExpiresAt: 0,
-	})
-
-	// Make cursor indestructible
-	ctx.World.Protections.Add(ctx.CursorEntity, components.ProtectionComponent{
-		Mask:      components.ProtectAll,
-		ExpiresAt: 0, // Permanent
-	})
-
-	// Add HeatComponent to cursor
-	ctx.World.Heats.Add(ctx.CursorEntity, components.HeatComponent{})
-
-	// Add EnergyComponent to cursor (tracks energy and blink state)
-	ctx.World.Energies.Add(ctx.CursorEntity, components.EnergyComponent{})
+	ctx.CreateCursorEntity()
 
 	ctx.LastCommand = ":new"
 	return true

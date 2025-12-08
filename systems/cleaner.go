@@ -205,8 +205,8 @@ func (cs *CleanerSystem) spawnCleaners(world *engine.World) {
 
 	redRows := cs.scanRedCharacterRows(world)
 
-	// TODO: to be deprecated, old workaround
-	// Phantom trigger: no targets to clean
+	// TODO: new boost trigger
+	// Grayout: no targets to clean
 	if len(redRows) == 0 {
 		cs.ctx.State.TriggerGrayout(timeRes.GameTime)
 		cs.ctx.PushEvent(events.EventCleanerFinished, nil, timeRes.GameTime)

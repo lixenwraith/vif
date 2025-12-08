@@ -2,7 +2,7 @@ package constants
 
 import "time"
 
-// Heat & Score System
+// Heat System
 const (
 	// MaxHeat is the maximum value for the heat meter (100%)
 	MaxHeat = 100
@@ -40,8 +40,14 @@ const (
 
 // Nugget Spawning Mechanics
 const (
+	// NuggetSpawnIntervalSeconds is the minimum interval between nugget spawns
 	NuggetSpawnIntervalSeconds = 5
-	NuggetMaxAttempts          = 100
+
+	// NuggetMaxAttempts is the maximum number of random placement attempts (occupied cell results in retry)
+	NuggetMaxAttempts = 100
+
+	// NuggetJumpCost is the energy cost to jump to a nugget
+	NuggetJumpCost = 10
 )
 
 // Character Spawn Logic

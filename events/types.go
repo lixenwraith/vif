@@ -51,12 +51,6 @@ const (
 	// Latency: max 50ms (next tick)
 	EventCharacterTyped
 
-	// TODO: Legacy, to be deprecated
-	// EventEnergyTransaction signals energy delta
-	// Trigger: Nugget jump (-10), power-ups, penalties
-	// Consumer: EnergySystem | Payload: *EnergyTransactionPayload
-	EventEnergyTransaction
-
 	// EventSplashRequest signals transient visual feedback
 	// Trigger: Character typed, command executed, nugget collected
 	// Consumer: SplashSystem | Payload: *SplashRequestPayload

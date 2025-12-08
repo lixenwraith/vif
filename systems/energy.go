@@ -44,7 +44,6 @@ func (s *EnergySystem) Priority() int {
 func (s *EnergySystem) EventTypes() []events.EventType {
 	return []events.EventType{
 		events.EventCharacterTyped,
-		events.EventEnergyTransaction, // Legacy, keep for compatibility
 		events.EventEnergyAdd,
 		events.EventEnergySet,
 		events.EventEnergyBlinkStart,
@@ -65,12 +64,6 @@ func (s *EnergySystem) HandleEvent(world *engine.World, event events.GameEvent) 
 	case events.EventDeleteRequest:
 		if payload, ok := event.Payload.(*events.DeleteRequestPayload); ok {
 			s.handleDeleteRequest(world, payload, event.Timestamp)
-		}
-
-	case events.EventEnergyTransaction:
-		// Legacy event - apply to cursor entity
-		if payload, ok := event.Payload.(*events.EnergyTransactionPayload); ok {
-			s.addEnergy(world, int64(payload.Amount))
 		}
 
 	case events.EventEnergyAdd:
