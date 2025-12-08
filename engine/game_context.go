@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"math"
 	"sync/atomic"
 	"time"
 
@@ -74,10 +73,6 @@ type GameContext struct {
 	LastFindChar    rune // Character that was searched for
 	LastFindForward bool // true for f/t (forward), false for F/T (backward)
 	LastFindType    rune // Type of last find: 'f', 'F', 't', or 'T'
-
-	// Atomic ping coordinates feature (local to input handling)
-	pingActive    atomic.Bool
-	pingGridTimer atomic.Uint64 // float64 bits for seconds
 
 	// Pause state management (simplified - actual pause handled by PausableClock)
 	IsPaused atomic.Bool
@@ -156,10 +151,6 @@ func NewGameContext(term terminal.Terminal) *GameContext {
 	// 5. Cursor Entity
 	ctx.CreateCursorEntity()
 
-	// Initialize ping atomic values (still local to input handling)
-	ctx.pingActive.Store(false)
-	ctx.pingGridTimer.Store(0)
-
 	// Initialize pause state
 	ctx.IsPaused.Store(false)
 
@@ -181,6 +172,16 @@ func (ctx *GameContext) CreateCursorEntity() {
 	ctx.World.Protections.Add(ctx.CursorEntity, components.ProtectionComponent{
 		Mask:      components.ProtectAll,
 		ExpiresAt: 0, // Permanent
+	})
+
+	// Add PingComponent to cursor (handles crosshair and grid state)
+	ctx.World.Pings.Add(ctx.CursorEntity, components.PingComponent{
+		ShowCrosshair:  true,
+		CrosshairColor: components.ColorNormal,
+		GridActive:     false,
+		GridTimer:      0,
+		GridColor:      components.ColorNormal,
+		ContextAware:   true,
 	})
 
 	// Add HeatComponent to cursor
@@ -222,58 +223,6 @@ func (ctx *GameContext) Go(fn func()) {
 
 // ===== INPUT-SPECIFIC METHODS =====
 
-// GetPingActive returns the current ping active state
-func (ctx *GameContext) GetPingActive() bool {
-	return ctx.pingActive.Load()
-}
-
-// SetPingActive sets the ping active state
-func (ctx *GameContext) SetPingActive(active bool) {
-	ctx.pingActive.Store(active)
-}
-
-// GetPingGridTimer returns the current ping grid timer value in seconds
-func (ctx *GameContext) GetPingGridTimer() float64 {
-	bits := ctx.pingGridTimer.Load()
-	return math.Float64frombits(bits)
-}
-
-// SetPingGridTimer sets the ping grid timer to the specified seconds
-func (ctx *GameContext) SetPingGridTimer(seconds float64) {
-	bits := math.Float64bits(seconds)
-	ctx.pingGridTimer.Store(bits)
-}
-
-// UpdatePingGridTimerAtomic atomically decrements the ping timer and returns true if it expired
-// This method handles the check-then-set atomically to avoid race conditions
-func (ctx *GameContext) UpdatePingGridTimerAtomic(delta float64) bool {
-	for {
-		oldBits := ctx.pingGridTimer.Load()
-		oldValue := math.Float64frombits(oldBits)
-
-		if oldValue <= 0 {
-			// Timer already expired or not active
-			return false
-		}
-
-		newValue := oldValue - delta
-		var newBits uint64
-
-		if newValue <= 0 {
-			// Timer will expire, set to 0
-			newBits = 0 // 0.0 float is 0 uint64
-		} else {
-			// Timer still active
-			newBits = math.Float64bits(newValue)
-		}
-
-		if ctx.pingGridTimer.CompareAndSwap(oldBits, newBits) {
-			// Successfully updated, return true if timer expired
-			return newValue <= 0
-		}
-	}
-}
-
 // SetPaused sets the pause state using the pausable clock
 func (ctx *GameContext) SetPaused(paused bool) {
 	wasPaused := ctx.IsPaused.Load()
@@ -287,16 +236,6 @@ func (ctx *GameContext) SetPaused(paused bool) {
 		// Ending pause
 		ctx.PausableClock.Resume()
 	}
-}
-
-// GetPauseDuration returns the current pause duration
-func (ctx *GameContext) GetPauseDuration() time.Duration {
-	return ctx.PausableClock.GetCurrentPauseDuration()
-}
-
-// GetTotalPauseDuration returns the cumulative pause time
-func (ctx *GameContext) GetTotalPauseDuration() time.Duration {
-	return ctx.PausableClock.GetTotalPauseDuration()
 }
 
 // GetRealTime returns wall clock time for UI elements
@@ -435,11 +374,6 @@ func (ctx *GameContext) IsSearchMode() bool {
 // IsCommandMode returns true if in command mode
 func (ctx *GameContext) IsCommandMode() bool {
 	return ctx.Mode == ModeCommand
-}
-
-// IsNormalMode returns true if in normal mode
-func (ctx *GameContext) IsNormalMode() bool {
-	return ctx.Mode == ModeNormal
 }
 
 // IsOverlayMode returns true if in overlay mode

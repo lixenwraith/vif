@@ -73,8 +73,11 @@ const (
 	// DrainMaxCount is the maximum number of drain entities (at 100% heat)
 	DrainMaxCount = 10
 
-	// DrainBreakpointSize is heat units per drain slot (100 heat / 10 drains)
-	DrainBreakpointSize = 10
+	// DrainShieldEnergyDrainAmount is energy cost per tick per drain inside shield
+	DrainShieldEnergyDrainAmount = 100
+
+	// DrainHeatReductionAmount is heat penalty when drain hits cursor without shield
+	DrainHeatReductionAmount = 10
 
 	// DrainSpawnOffsetMax is the maximum random offset from cursor position (±N)
 	DrainSpawnOffsetMax = 10
@@ -86,23 +89,11 @@ const (
 
 // Shield Defense Costs
 const (
-	// DrainShieldEnergyDrainAmount is energy cost per tick per drain inside shield
-	DrainShieldEnergyDrainAmount = 100
-
-	// DrainHeatReductionAmount is heat penalty when drain hits cursor without shield
-	DrainHeatReductionAmount = 10
-
 	// ShieldPassiveDrainAmount is energy cost per second while shield is active
 	ShieldPassiveDrainAmount = 1
 
 	// ShieldPassiveDrainInterval is the interval for passive shield drain
 	ShieldPassiveDrainInterval = 1 * time.Second
-)
-
-// Shield Source Flags (bitmask)
-const (
-	ShieldSourceNone  uint8 = 0
-	ShieldSourceBoost uint8 = 1 << 0
 )
 
 // Spawn Rate Management

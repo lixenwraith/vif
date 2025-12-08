@@ -2,6 +2,7 @@ package modes
 
 import (
 	"github.com/lixenwraith/vi-fighter/components"
+	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/events"
 	"github.com/lixenwraith/vi-fighter/terminal"
@@ -73,8 +74,10 @@ func (h *InputHandler) handleKeyEvent(ev terminal.Event) bool {
 			h.ctx.Mode = engine.ModeNormal
 			h.ctx.SetPaused(false)
 		} else {
-			h.ctx.SetPingActive(true)
-			h.ctx.SetPingGridTimer(1.0)
+			// Trigger ping grid via event system
+			h.ctx.PushEvent(events.EventPingGridRequest, &events.PingGridRequestPayload{
+				Duration: constants.PingGridDuration,
+			}, h.ctx.PausableClock.Now())
 		}
 		return true
 	}

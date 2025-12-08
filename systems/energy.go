@@ -612,6 +612,7 @@ func (s *EnergySystem) getHeat(world *engine.World) int {
 	return 0
 }
 
+// TODO: revisit this mapping
 // getSplashColorForSequence returns splash color based on sequence type
 func (s *EnergySystem) getSplashColorForSequence(seq components.SequenceComponent) components.SplashColor {
 	switch seq.Type {

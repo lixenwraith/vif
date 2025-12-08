@@ -93,20 +93,23 @@ func main() {
 	}
 
 	// Create and add systems to the ECS world
+	pingSystem := systems.NewPingSystem(ctx)
+	ctx.World.AddSystem(pingSystem)
+
 	energySystem := systems.NewEnergySystem(ctx)
 	ctx.World.AddSystem(energySystem)
-
-	spawnSystem := systems.NewSpawnSystem(ctx)
-	ctx.World.AddSystem(spawnSystem)
-
-	boostSystem := systems.NewBoostSystem(ctx)
-	ctx.World.AddSystem(boostSystem)
 
 	shieldSystem := systems.NewShieldSystem(ctx)
 	ctx.World.AddSystem(shieldSystem)
 
 	heatSystem := systems.NewHeatSystem(ctx)
 	ctx.World.AddSystem(heatSystem)
+
+	spawnSystem := systems.NewSpawnSystem(ctx)
+	ctx.World.AddSystem(spawnSystem)
+
+	boostSystem := systems.NewBoostSystem(ctx)
+	ctx.World.AddSystem(boostSystem)
 
 	nuggetSystem := systems.NewNuggetSystem(ctx)
 	ctx.World.AddSystem(nuggetSystem)
@@ -149,7 +152,7 @@ func main() {
 
 	rendererList := []rendererDef{
 		// Grid (100)
-		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewPingGridRenderer(c) }, render.PriorityGrid},
+		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewPingRenderer(c) }, render.PriorityGrid},
 		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewSplashRenderer(c) }, render.PrioritySplash},
 		// Entities (200)
 		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewCharactersRenderer(c) }, render.PriorityEntities},
@@ -189,6 +192,7 @@ func main() {
 	frameReady <- struct{}{}
 
 	clockScheduler.SetSystems(goldSystem, decaySystem)
+	clockScheduler.RegisterEventHandler(pingSystem)
 	clockScheduler.RegisterEventHandler(shieldSystem)
 	clockScheduler.RegisterEventHandler(heatSystem)
 	clockScheduler.RegisterEventHandler(energySystem)

@@ -1,163 +1,241 @@
 package renderers
 
 import (
+	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
-// PingGridRenderer draws cursor row/column highlights and optional grid lines
-type PingGridRenderer struct {
+// PingRenderer draws cursor row/column highlights and optional grid lines
+type PingRenderer struct {
 	gameCtx *engine.GameContext
+
+	// Bitmask for shield exclusion (1 bit per cell)
+	// Reused across frames to avoid allocation
+	exclusionMask []uint64
+	maskWidth     int
+	maskHeight    int
 }
 
-// NewPingGridRenderer creates a new ping grid renderer
-func NewPingGridRenderer(gameCtx *engine.GameContext) *PingGridRenderer {
-	return &PingGridRenderer{
+// NewPingRenderer creates a new ping renderer
+func NewPingRenderer(gameCtx *engine.GameContext) *PingRenderer {
+	return &PingRenderer{
 		gameCtx: gameCtx,
 	}
 }
 
 // Render draws the ping highlights and grid
-func (p *PingGridRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (p *PingRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+	// Get PingComponent from cursor (Single player assumption: ID 1/CursorEntity)
+	ping, ok := world.Pings.Get(p.gameCtx.CursorEntity)
+	if !ok {
+		return
+	}
+
+	// Early exit if nothing to draw
+	if !ping.ShowCrosshair && !ping.GridActive {
+		return
+	}
+
 	buf.SetWriteMask(render.MaskGrid)
 
-	// Draw row and column highlights with line color
-	lineColor := p.getPingLineColor()
-	p.drawPingHighlights(ctx, buf, lineColor)
+	// 1. Compute Shield Exclusion Mask
+	p.computeExclusionMask(world, ctx.GameWidth, ctx.GameHeight)
 
-	// Draw grid lines if ping is active (NORMAL mode only, uses grid color)
-	if p.gameCtx.GetPingActive() {
-		gridColor := p.getPingGridColor()
-		p.drawPingGrid(ctx, buf, gridColor)
+	// 2. Draw Crosshair (Row/Column Highlights)
+	if ping.ShowCrosshair {
+		lineColor := p.getPingLineColor(ping)
+		p.drawCrosshair(ctx, buf, lineColor)
+	}
+
+	// 3. Draw Grid Lines
+	if ping.GridActive {
+		gridColor := p.getPingGridColor(ping)
+		p.drawGrid(ctx, buf, gridColor)
 	}
 }
 
-// getPingLineColor returns color for cursor row/column highlights
-func (p *PingGridRenderer) getPingLineColor() render.RGB {
+// computeExclusionMask builds a 1-bit mask of all active shields
+// O(Shields * ShieldArea), usually very small
+func (p *PingRenderer) computeExclusionMask(world *engine.World, w, h int) {
+	// Resize mask if dimensions changed
+	// Need (w*h + 63) / 64 uint64s
+	needed := (w*h + 63) / 64
+	if len(p.exclusionMask) < needed || p.maskWidth != w || p.maskHeight != h {
+		p.exclusionMask = make([]uint64, needed)
+		p.maskWidth = w
+		p.maskHeight = h
+	} else {
+		// Zero out existing mask
+		for i := range p.exclusionMask {
+			p.exclusionMask[i] = 0
+		}
+	}
+
+	// Rasterize all active shields into the mask
+	shields := world.Shields.All()
+	for _, entity := range shields {
+		shield, okS := world.Shields.Get(entity)
+		pos, okP := world.Positions.Get(entity)
+		if !okS || !okP || !shield.Active {
+			continue
+		}
+
+		// Simple bounding box for ellipse
+		rx := int(shield.RadiusX)
+		ry := int(shield.RadiusY)
+		startX := pos.X - rx
+		endX := pos.X + rx
+		startY := pos.Y - ry
+		endY := pos.Y + ry
+
+		// Clamp
+		if startX < 0 {
+			startX = 0
+		}
+		if endX >= w {
+			endX = w - 1
+		}
+		if startY < 0 {
+			startY = 0
+		}
+		if endY >= h {
+			endY = h - 1
+		}
+
+		// Ellipse calculation constants
+		invRxSq := 1.0 / (shield.RadiusX * shield.RadiusX)
+		invRySq := 1.0 / (shield.RadiusY * shield.RadiusY)
+
+		for y := startY; y <= endY; y++ {
+			dy := float64(y - pos.Y)
+			rowOffset := y * w
+
+			for x := startX; x <= endX; x++ {
+				dx := float64(x - pos.X)
+				// Check ellipse containment
+				if (dx*dx*invRxSq + dy*dy*invRySq) <= 1.0 {
+					// Set bit
+					idx := rowOffset + x
+					p.exclusionMask[idx/64] |= (1 << (idx % 64))
+				}
+			}
+		}
+	}
+}
+
+// isExcluded checks if a cell is inside a shield
+func (p *PingRenderer) isExcluded(x, y int) bool {
+	if x < 0 || x >= p.maskWidth || y < 0 || y >= p.maskHeight {
+		return false
+	}
+	idx := y*p.maskWidth + x
+	return (p.exclusionMask[idx/64] & (1 << (idx % 64))) != 0
+}
+
+func (p *PingRenderer) getPingLineColor(ping components.PingComponent) render.RGB {
+	if ping.CrosshairColor != components.ColorNone {
+		// Use component override
+		if ping.CrosshairColor == components.ColorNormal && p.gameCtx.IsInsertMode() {
+			return render.RgbPingHighlight
+		}
+		// TODO: Map other ColorClasses if needed
+	}
+	// Default
 	if p.gameCtx.IsInsertMode() {
-		return render.RgbPingHighlight // Almost black (5,5,5)
+		return render.RgbPingHighlight
 	}
-	return render.RgbPingLineNormal // Dark gray (40,40,40)
+	return render.RgbPingLineNormal
 }
 
-// getPingGridColor returns color for 5-interval grid lines
-func (p *PingGridRenderer) getPingGridColor() render.RGB {
-	return render.RgbPingGridNormal // Slightly lighter gray (55,55,55)
+func (p *PingRenderer) getPingGridColor(ping components.PingComponent) render.RGB {
+	if ping.GridColor != components.ColorNone {
+		// Placeholder for mapping
+	}
+	return render.RgbPingGridNormal
 }
 
-// drawPingHighlights - write-only, no buf.Get
-// Grid is low layer, renders first, emit all highlights unconditionally, higher layers will blend as needed
-func (p *PingGridRenderer) drawPingHighlights(ctx render.RenderContext, buf *render.RenderBuffer, pingColor render.RGB) {
-	// Check if shield is active on cursor to create exclusion zone
-	shieldExclusion := false
-	var shieldCenterX, shieldCenterY float64
-	var invRxSq, invRySq float64
-
-	// Query shield component directly
-	if shield, ok := p.gameCtx.World.Shields.Get(p.gameCtx.CursorEntity); ok && shield.Active {
-		shieldExclusion = true
-		pos, _ := p.gameCtx.World.Positions.Get(p.gameCtx.CursorEntity)
-		shieldCenterX = float64(pos.X)
-		shieldCenterY = float64(pos.Y)
-		// Precompute inverse radii squared
-		if shield.RadiusX > 0 && shield.RadiusY > 0 {
-			invRxSq = 1.0 / (shield.RadiusX * shield.RadiusX)
-			invRySq = 1.0 / (shield.RadiusY * shield.RadiusY)
-		} else {
-			shieldExclusion = false
+// drawCrosshair draws the crosshair lines respecting shield exclusion
+func (p *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.RenderBuffer, color render.RGB) {
+	// Row
+	screenY := ctx.GameY + ctx.CursorY
+	if screenY >= ctx.GameY && screenY < ctx.GameY+ctx.GameHeight {
+		for x := 0; x < ctx.GameWidth; x++ {
+			if !p.isExcluded(x, ctx.CursorY) {
+				buf.Set(ctx.GameX+x, screenY, ' ', render.DefaultBgRGB, color, render.BlendReplace, 1.0, terminal.AttrNone)
+			}
 		}
 	}
 
-	// TODO: is this optimized?
-	// Helper to check exclusion
-	isExcluded := func(x, y int) bool {
-		if !shieldExclusion {
-			return false
-		}
-		dx := float64(x) - shieldCenterX
-		dy := float64(y) - shieldCenterY
-		// Ellipse equation: x^2/a^2 + y^2/b^2 <= 1
-		return (dx*dx*invRxSq + dy*dy*invRySq) <= 1.0
-	}
-
-	// Highlight the row
-	for x := 0; x < ctx.GameWidth; x++ {
-		// Exclusion check: Don't draw line inside shield
-		if isExcluded(x, ctx.CursorY) {
-			continue
-		}
-
-		screenX := ctx.GameX + x
-		screenY := ctx.GameY + ctx.CursorY
-		if screenX >= ctx.GameX && screenX < ctx.Width &&
-			screenY >= ctx.GameY && screenY < ctx.GameY+ctx.GameHeight {
-			buf.Set(screenX, screenY, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, terminal.AttrNone)
-		}
-	}
-
-	// Highlight the column
-	for y := 0; y < ctx.GameHeight; y++ {
-		// Exclusion check
-		if isExcluded(ctx.CursorX, y) {
-			continue
-		}
-
-		screenX := ctx.GameX + ctx.CursorX
-		screenY := ctx.GameY + y
-		if screenX >= ctx.GameX && screenX < ctx.Width &&
-			screenY >= ctx.GameY && screenY < ctx.GameY+ctx.GameHeight {
-			buf.Set(screenX, screenY, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, terminal.AttrNone)
+	// Column
+	screenX := ctx.GameX + ctx.CursorX
+	if screenX >= ctx.GameX && screenX < ctx.GameX+ctx.GameWidth {
+		for y := 0; y < ctx.GameHeight; y++ {
+			if !p.isExcluded(ctx.CursorX, y) {
+				buf.Set(screenX, ctx.GameY+y, ' ', render.DefaultBgRGB, color, render.BlendReplace, 1.0, terminal.AttrNone)
+			}
 		}
 	}
 }
 
-// drawPingGrid draws coordinate grid lines at 5-column intervals
-// Only draws on cells with default background
-func (p *PingGridRenderer) drawPingGrid(ctx render.RenderContext, buf *render.RenderBuffer, pingColor render.RGB) {
-	// Vertical lines at ±5, ±10, ±15, etc from cursor
+// drawGrid draws the 5-cell grid respecting shield exclusion
+func (p *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuffer, color render.RGB) {
+	// Vertical lines at ±5, ±10, etc.
 	for n := 1; ; n++ {
 		offset := 5 * n
 		colRight := ctx.CursorX + offset
 		colLeft := ctx.CursorX - offset
-
-		if colRight >= ctx.GameWidth && colLeft < 0 {
-			break
-		}
+		inBounds := false
 
 		if colRight < ctx.GameWidth {
+			inBounds = true
 			for y := 0; y < ctx.GameHeight; y++ {
-				buf.Set(ctx.GameX+colRight, ctx.GameY+y, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, terminal.AttrNone)
+				if !p.isExcluded(colRight, y) {
+					buf.Set(ctx.GameX+colRight, ctx.GameY+y, ' ', render.DefaultBgRGB, color, render.BlendReplace, 1.0, terminal.AttrNone)
+				}
+			}
+		}
+		if colLeft >= 0 {
+			inBounds = true
+			for y := 0; y < ctx.GameHeight; y++ {
+				if !p.isExcluded(colLeft, y) {
+					buf.Set(ctx.GameX+colLeft, ctx.GameY+y, ' ', render.DefaultBgRGB, color, render.BlendReplace, 1.0, terminal.AttrNone)
+				}
 			}
 		}
 
-		if colLeft >= 0 {
-			for y := 0; y < ctx.GameHeight; y++ {
-				buf.Set(ctx.GameX+colLeft, ctx.GameY+y, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, terminal.AttrNone)
-			}
+		if !inBounds {
+			break
 		}
 	}
 
-	// Horizontal lines at ±5, ±10, ±15, etc from cursor
+	// Horizontal lines
 	for n := 1; ; n++ {
 		offset := 5 * n
 		rowDown := ctx.CursorY + offset
 		rowUp := ctx.CursorY - offset
-
-		if rowDown >= ctx.GameHeight && rowUp < 0 {
-			break
-		}
+		inBounds := false
 
 		if rowDown < ctx.GameHeight {
+			inBounds = true
 			for x := 0; x < ctx.GameWidth; x++ {
-				buf.Set(ctx.GameX+x, ctx.GameY+rowDown, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, terminal.AttrNone)
+				if !p.isExcluded(x, rowDown) {
+					buf.Set(ctx.GameX+x, ctx.GameY+rowDown, ' ', render.DefaultBgRGB, color, render.BlendReplace, 1.0, terminal.AttrNone)
+				}
+			}
+		}
+		if rowUp >= 0 {
+			inBounds = true
+			for x := 0; x < ctx.GameWidth; x++ {
+				if !p.isExcluded(x, rowUp) {
+					buf.Set(ctx.GameX+x, ctx.GameY+rowUp, ' ', render.DefaultBgRGB, color, render.BlendReplace, 1.0, terminal.AttrNone)
+				}
 			}
 		}
 
-		if rowUp >= 0 {
-			for x := 0; x < ctx.GameWidth; x++ {
-				buf.Set(ctx.GameX+x, ctx.GameY+rowUp, ' ', render.DefaultBgRGB, pingColor, render.BlendReplace, 1.0, terminal.AttrNone)
-			}
+		if !inBounds {
+			break
 		}
 	}
 }

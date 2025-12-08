@@ -21,10 +21,6 @@ type GameState struct {
 	CursorError     atomic.Bool
 	CursorErrorTime atomic.Int64 // UnixNano
 
-	// Ping grid (immediate visual aid)
-	PingActive    atomic.Bool
-	PingGridTimer atomic.Uint64 // float64 bits
-
 	// Grayout visual effect state
 	GrayoutActive    atomic.Bool
 	GrayoutStartTime atomic.Int64 // UnixNano
@@ -98,8 +94,6 @@ func (gs *GameState) initState(now time.Time) {
 	gs.BoostColor.Store(0)
 	gs.CursorError.Store(false)
 	gs.CursorErrorTime.Store(0)
-	gs.PingActive.Store(false)
-	gs.PingGridTimer.Store(0)
 	gs.GrayoutActive.Store(false)
 	gs.GrayoutStartTime.Store(0)
 	gs.NextSeqID.Store(1)
@@ -206,11 +200,6 @@ func (gs *GameState) GetBoostEndTime() time.Time {
 // SetBoostEndTime sets when the boost will end
 func (gs *GameState) SetBoostEndTime(t time.Time) {
 	gs.BoostEndTime.Store(t.UnixNano())
-}
-
-// GetBoostColor returns the current boost color
-func (gs *GameState) GetBoostColor() int32 {
-	return gs.BoostColor.Load()
 }
 
 // SetBoostColor sets the boost color
@@ -356,40 +345,7 @@ func (gs *GameState) SetSpawnEnabled(enabled bool) {
 	gs.SpawnEnabled = enabled
 }
 
-// ===== VISUAL FEEDBACK ACCESSORS (atomic) =====
-
-// GetCursorError returns whether a cursor error is active
-func (gs *GameState) GetCursorError() bool {
-	return gs.CursorError.Load()
-}
-
-// SetCursorError sets the cursor error state
-func (gs *GameState) SetCursorError(err bool) {
-	gs.CursorError.Store(err)
-}
-
-// GetCursorErrorTime returns when the cursor error started
-func (gs *GameState) GetCursorErrorTime() time.Time {
-	nano := gs.CursorErrorTime.Load()
-	if nano == 0 {
-		return time.Time{}
-	}
-	return time.Unix(0, nano)
-}
-
-// SetCursorErrorTime sets when the cursor error started
-func (gs *GameState) SetCursorErrorTime(t time.Time) {
-	gs.CursorErrorTime.Store(t.UnixNano())
-}
-
 // ===== PHASE STATE ACCESSORS (mutex protected) =====
-
-// GetPhase returns the current game phase
-func (gs *GameState) GetPhase() GamePhase {
-	gs.mu.RLock()
-	defer gs.mu.RUnlock()
-	return gs.CurrentPhase
-}
 
 // CanTransition checks if a phase transition is valid
 func (gs *GameState) CanTransition(from, to GamePhase) bool {
@@ -408,35 +364,6 @@ func (gs *GameState) CanTransition(from, to GamePhase) bool {
 		}
 	}
 	return false
-}
-
-// TransitionPhase attempts to transition to a new phase with validation
-// Returns true if transition succeeded, false if transition is invalid
-func (gs *GameState) TransitionPhase(to GamePhase, now time.Time) bool {
-	gs.mu.Lock()
-	defer gs.mu.Unlock()
-
-	if !gs.CanTransition(gs.CurrentPhase, to) {
-		return false
-	}
-
-	gs.CurrentPhase = to
-	gs.PhaseStartTime = now
-	return true
-}
-
-// GetPhaseStartTime returns when the current phase started
-func (gs *GameState) GetPhaseStartTime() time.Time {
-	gs.mu.RLock()
-	defer gs.mu.RUnlock()
-	return gs.PhaseStartTime
-}
-
-// GetPhaseDuration returns how long the current phase has been active
-func (gs *GameState) GetPhaseDuration(now time.Time) time.Duration {
-	gs.mu.RLock()
-	defer gs.mu.RUnlock()
-	return now.Sub(gs.PhaseStartTime)
 }
 
 // PhaseSnapshot provides a consistent view of phase state
@@ -507,13 +434,6 @@ func (gs *GameState) DeactivateGoldSequence(now time.Time) bool {
 	return true
 }
 
-// GetGoldTimeoutTime returns when the gold sequence will timeout
-func (gs *GameState) GetGoldTimeoutTime() time.Time {
-	gs.mu.RLock()
-	defer gs.mu.RUnlock()
-	return gs.GoldTimeoutTime
-}
-
 // GoldSnapshot provides a consistent view of gold state
 type GoldSnapshot struct {
 	Active      bool
@@ -568,13 +488,6 @@ func (gs *GameState) ClearActiveNuggetID(expected uint64) bool {
 
 // ===== DECAY TIMER STATE ACCESSORS (mutex protected) =====
 
-// GetDecayTimerActive returns whether the decay timer is active
-func (gs *GameState) GetDecayTimerActive() bool {
-	gs.mu.RLock()
-	defer gs.mu.RUnlock()
-	return gs.DecayTimerActive
-}
-
 // StartDecayTimer starts the decay timer with the given interval
 // Heat value must be passed from caller (queried from HeatComponent)
 // Only allowed from PhaseGoldComplete (checked by phase transition validation)
@@ -610,35 +523,7 @@ func (gs *GameState) StartDecayTimer(baseSeconds, rangeSeconds float64, now time
 	return true
 }
 
-// GetDecayNextTime returns when the next decay will trigger
-func (gs *GameState) GetDecayNextTime() time.Time {
-	gs.mu.RLock()
-	defer gs.mu.RUnlock()
-	return gs.DecayNextTime
-}
-
-// GetTimeUntilDecay returns seconds until next decay trigger
-func (gs *GameState) GetTimeUntilDecay(now time.Time) float64 {
-	gs.mu.RLock()
-	defer gs.mu.RUnlock()
-	if !gs.DecayTimerActive || gs.DecayAnimating {
-		return 0.0
-	}
-	remaining := gs.DecayNextTime.Sub(now).Seconds()
-	if remaining < 0 {
-		remaining = 0
-	}
-	return remaining
-}
-
 // ===== DECAY ANIMATION STATE ACCESSORS (mutex protected) =====
-
-// GetDecayAnimating returns whether decay animation is running
-func (gs *GameState) GetDecayAnimating() bool {
-	gs.mu.RLock()
-	defer gs.mu.RUnlock()
-	return gs.DecayAnimating
-}
 
 // StartDecayAnimation starts the decay animation
 // Only allowed from PhaseDecayWait (checked by phase transition validation)
@@ -721,15 +606,6 @@ type BoostSnapshot struct {
 	EndTime   time.Time
 	Color     int32 // 0=None, 1=Blue, 2=Green
 	Remaining time.Duration
-}
-
-// ===== GAME LIFECYCLE ACCESSORS (mutex protected) =====
-
-// GetGameStartTime returns when the current game/round started
-func (gs *GameState) GetGameStartTime() time.Time {
-	gs.mu.RLock()
-	defer gs.mu.RUnlock()
-	return gs.GameStartTime
 }
 
 // ===== RUNTIME METRICS ACCESSORS =====

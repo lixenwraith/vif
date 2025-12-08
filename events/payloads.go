@@ -96,3 +96,8 @@ type SplashRequestPayload struct {
 	OriginX int // Origin position (usually cursor)
 	OriginY int
 }
+
+// PingGridRequestPayload carries configuration for the ping grid activation
+type PingGridRequestPayload struct {
+	Duration float64 // Duration in seconds
+}

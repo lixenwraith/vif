@@ -55,3 +55,8 @@ const (
 	// SplashGoldSequencePenalty is the penalty applied per gold character in a quadrant
 	SplashGoldSequencePenalty = 50
 )
+
+// Ping
+const (
+	PingGridDuration = 0.5
+)

@@ -110,6 +110,11 @@ const (
 	// Trigger: InputHandler via modes package
 	// Consumer: EnergySystem | Payload: *DeleteRequestPayload
 	EventDeleteRequest
+
+	// EventPingGridRequest signals a request to show the ping grid
+	// Trigger: InputHandler (relative line numbers toggle, etc.)
+	// Consumer: PingSystem | Payload: *PingGridRequestPayload
+	EventPingGridRequest
 )
 
 // GameEvent represents a single game event with metadata

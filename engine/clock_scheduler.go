@@ -291,11 +291,6 @@ func (cs *ClockScheduler) processTick() {
 		cs.ctx.World.UpdateLocked(cs.tickInterval)
 	})
 
-	// Update ping grid timer
-	if cs.ctx.UpdatePingGridTimerAtomic(cs.tickInterval.Seconds()) {
-		cs.ctx.SetPingActive(false)
-	}
-
 	// Get systems references with mutex protection
 	cs.mu.RLock()
 	goldSys := cs.goldSystem
