@@ -2,6 +2,7 @@ package modes
 
 import (
 	"github.com/lixenwraith/vi-fighter/components"
+	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/events"
@@ -150,7 +151,7 @@ func (r *Router) handleEscape() bool {
 	case core.ModeNormal:
 		// Trigger ping grid
 		r.ctx.PushEvent(events.EventPingGridRequest, &events.PingGridRequestPayload{
-			Duration: 1.0, // constants.PingGridDuration
+			Duration: constants.PingGridDuration,
 		}, r.ctx.PausableClock.Now())
 		return true // Stay in Normal mode
 	}

@@ -17,10 +17,6 @@ type GameState struct {
 	BoostEndTime atomic.Int64 // UnixNano
 	BoostColor   atomic.Int32 // 0=None, 1=Blue, 2=Green
 
-	// Visual feedback (error flash, energy blink)
-	CursorError     atomic.Bool
-	CursorErrorTime atomic.Int64 // UnixNano
-
 	// Grayout visual effect state
 	GrayoutActive    atomic.Bool
 	GrayoutStartTime atomic.Int64 // UnixNano
@@ -89,8 +85,6 @@ func (gs *GameState) initState(now time.Time) {
 	gs.BoostEnabled.Store(false)
 	gs.BoostEndTime.Store(0)
 	gs.BoostColor.Store(0)
-	gs.CursorError.Store(false)
-	gs.CursorErrorTime.Store(0)
 	gs.GrayoutActive.Store(false)
 	gs.GrayoutStartTime.Store(0)
 	gs.NextSeqID.Store(1)

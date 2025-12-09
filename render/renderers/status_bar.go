@@ -209,7 +209,7 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 
 	// Priority 4: Grid (conditional)
 	if ping, ok := s.gameCtx.World.Pings.Get(s.gameCtx.CursorEntity); ok && ping.GridActive {
-		gridRemaining := ping.GridTimer
+		gridRemaining := ping.GridRemaining.Seconds()
 		if gridRemaining < 0 {
 			gridRemaining = 0
 		}

@@ -97,7 +97,7 @@ type SplashRequestPayload struct {
 
 // PingGridRequestPayload carries configuration for the ping grid activation
 type PingGridRequestPayload struct {
-	Duration float64 // Duration in seconds
+	Duration time.Duration
 }
 
 // SpawnChangePayload carries configuration for spawn state

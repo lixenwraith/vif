@@ -122,10 +122,8 @@ func (c *CursorRenderer) Render(ctx render.RenderContext, world *engine.World, b
 	// Reads component directly to ensure flash works during pause
 	cursorComp, ok := world.Cursors.Get(c.gameCtx.CursorEntity)
 	if ok && cursorComp.ErrorFlashRemaining > 0 {
-		if c.gameCtx.PausableClock.Now().UnixNano() < cursorComp.ErrorFlashRemaining.Nanoseconds() {
-			cursorBgColor = render.RgbCursorError
-			charFgColor = render.RgbBlack
-		}
+		cursorBgColor = render.RgbCursorError
+		charFgColor = render.RgbBlack
 	}
 
 	// 5. Render

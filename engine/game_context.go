@@ -191,7 +191,7 @@ func (ctx *GameContext) CreateCursorEntity() {
 		ShowCrosshair:  true,
 		CrosshairColor: components.ColorNormal,
 		GridActive:     false,
-		GridTimer:      0,
+		GridRemaining:  0,
 		GridColor:      components.ColorNormal,
 		ContextAware:   true,
 	})

@@ -46,8 +46,6 @@ func (s *PingSystem) HandleEvent(world *engine.World, event events.GameEvent) {
 
 // Update handles time-based logic for ping components
 func (s *PingSystem) Update(world *engine.World, dt time.Duration) {
-	dtSec := dt.Seconds()
-
 	// Update all entities with a PingComponent
 	entities := world.Pings.All()
 
@@ -61,9 +59,9 @@ func (s *PingSystem) Update(world *engine.World, dt time.Duration) {
 
 		// Update Grid Timer
 		if ping.GridActive {
-			ping.GridTimer -= dtSec
-			if ping.GridTimer <= 0 {
-				ping.GridTimer = 0
+			ping.GridRemaining -= dt
+			if ping.GridRemaining <= 0 {
+				ping.GridRemaining = 0
 				ping.GridActive = false
 			}
 			changed = true
@@ -90,7 +88,7 @@ func (s *PingSystem) Update(world *engine.World, dt time.Duration) {
 }
 
 // handleGridRequest activates the grid on the cursor entity
-func (s *PingSystem) handleGridRequest(world *engine.World, duration float64) {
+func (s *PingSystem) handleGridRequest(world *engine.World, duration time.Duration) {
 	// In single player, apply to the main cursor
 	entity := s.ctx.CursorEntity
 
@@ -100,6 +98,6 @@ func (s *PingSystem) handleGridRequest(world *engine.World, duration float64) {
 	}
 
 	ping.GridActive = true
-	ping.GridTimer = duration
+	ping.GridRemaining = duration
 	world.Pings.Add(entity, ping)
 }

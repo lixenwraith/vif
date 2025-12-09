@@ -1,6 +1,8 @@
 package renderers
 
 import (
+	"strconv"
+
 	"github.com/lixenwraith/vi-fighter/assets"
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
@@ -30,36 +32,27 @@ func (s *SplashRenderer) Render(ctx render.RenderContext, world *engine.World, b
 			continue
 		}
 
-		// Calculate opacity based on elapsed time relative to StartNano and Duration
-		elapsed := splash.Remaining.Seconds()
+		// Solid color - no fade effects
+		displayColor := s.resolveSplashColor(splash.Color)
 
-		// Safe divide check
-		if splash.Duration <= 0 {
-			continue
-		}
+		if splash.Mode == components.SplashModePersistent {
+			// Countdown timer: render digits from remaining time
+			remainingSec := int(splash.Remaining.Seconds())
+			if remainingSec < 0 {
+				remainingSec = 0
+			}
 
-		ratio := elapsed / splash.Duration.Seconds()
-
-		// Animation curve: Linear fade out (1.0 -> 0.0)
-		opacity := 1.0 - ratio
-
-		if opacity < 0 {
-			opacity = 0
-		}
-		if opacity > 1 {
-			opacity = 1
-		}
-
-		// Resolve concrete RGB from semantic enum
-		baseColor := s.resolveSplashColor(splash.Color)
-
-		// Scale color by opacity
-		scaledColor := render.Scale(baseColor, opacity)
-
-		// Render each character in the splash
-		for i := 0; i < splash.Length; i++ {
-			charX := splash.AnchorX + i*(constants.SplashCharWidth+constants.SplashCharSpacing)
-			s.renderChar(ctx, buf, splash.Content[i], charX, splash.AnchorY, scaledColor)
+			digits := strconv.Itoa(remainingSec)
+			for i, r := range digits {
+				charX := splash.AnchorX + i*(constants.SplashCharWidth+constants.SplashCharSpacing)
+				s.renderChar(ctx, buf, r, charX, splash.AnchorY, displayColor)
+			}
+		} else {
+			// Transient: render content directly
+			for i := 0; i < splash.Length; i++ {
+				charX := splash.AnchorX + i*(constants.SplashCharWidth+constants.SplashCharSpacing)
+				s.renderChar(ctx, buf, splash.Content[i], charX, splash.AnchorY, displayColor)
+			}
 		}
 	}
 }
