@@ -52,26 +52,9 @@ func handleQuitCommand(ctx *engine.GameContext) bool {
 	return false // Signal game exit
 }
 
-// handleNewCommand resets the game state
+// handleNewCommand resets the game state via event
 func handleNewCommand(ctx *engine.GameContext) bool {
-	// Despawn drain entities before clearing world
-	drains := ctx.World.Drains.All()
-	for _, e := range drains {
-		ctx.World.DestroyEntity(e)
-	}
-
-	// Clear all entities from the world
-	clearAllEntities(ctx.World)
-
-	// Clear any pending events from previous session
-	ctx.ResetEventQueue()
-
-	// Reset entire game state using unified initState() method (same as app start)
-	ctx.State.Reset(ctx.PausableClock.Now())
-
-	// Recreate cursor entity
-	ctx.CreateCursorEntity()
-
+	ctx.PushEvent(events.EventGameReset, nil, ctx.PausableClock.Now())
 	ctx.SetLastCommand(":new")
 	return true
 }
@@ -134,24 +117,14 @@ func handleHeatCommand(ctx *engine.GameContext, args []string) bool {
 	return true
 }
 
-// handleBoostCommand enables boost for 10 seconds
+// handleBoostCommand triggers boost request event
 func handleBoostCommand(ctx *engine.GameContext) bool {
-	now := ctx.PausableClock.Now()
-	endTime := now.Add(constants.BoostBaseDuration)
-
-	// Maximize heat to ensure consistent gameplay state (Boost implies Max Heat)
-	ctx.PushEvent(events.EventHeatSet, &events.HeatSetPayload{Value: constants.MaxHeat}, now)
-
-	// CRITICAL: Set end time BEFORE enabling boost to prevent race condition
-	ctx.State.SetBoostEndTime(endTime)
-	ctx.State.SetBoostColor(1) // Default to blue boost
-	ctx.State.SetBoostEnabled(true)
-
+	ctx.PushEvent(events.EventBoostRequest, nil, ctx.PausableClock.Now())
 	ctx.SetLastCommand(":boost")
 	return true
 }
 
-// handleSpawnCommand enables or disables entity spawning
+// handleSpawnCommand enables or disables entity spawning via event
 func handleSpawnCommand(ctx *engine.GameContext, args []string) bool {
 	if len(args) != 1 {
 		setCommandError(ctx, "Invalid arguments for spawn")
@@ -161,10 +134,10 @@ func handleSpawnCommand(ctx *engine.GameContext, args []string) bool {
 	arg := strings.ToLower(args[0])
 	switch arg {
 	case "on":
-		ctx.State.SetSpawnEnabled(true)
+		ctx.PushEvent(events.EventSpawnChange, &events.SpawnChangePayload{Enabled: true}, ctx.PausableClock.Now())
 		ctx.SetLastCommand(":spawn on")
 	case "off":
-		ctx.State.SetSpawnEnabled(false)
+		ctx.PushEvent(events.EventSpawnChange, &events.SpawnChangePayload{Enabled: false}, ctx.PausableClock.Now())
 		ctx.SetLastCommand(":spawn off")
 	default:
 		setCommandError(ctx, "Invalid arguments for spawn")
@@ -179,123 +152,18 @@ func setCommandError(ctx *engine.GameContext, message string) {
 	ctx.SetStatusMessage(message)
 }
 
-// clearAllEntities removes all entities from the world
-func clearAllEntities(world *engine.World) {
-	// Use the world's Clear method to remove all entities
-	world.Clear()
-}
-
-// handleDebugCommand shows debug information overlay
+// handleDebugCommand triggers debug overlay event
 func handleDebugCommand(ctx *engine.GameContext) bool {
-	// Gather debug stats
-
-	// Query energy from component
-	energyComp, _ := ctx.World.Energies.Get(ctx.CursorEntity)
-	energyVal := energyComp.Current.Load()
-
-	// Query heat from component
-	heatVal := 0
-	if hc, ok := ctx.World.Heats.Get(ctx.CursorEntity); ok {
-		heatVal = int(hc.Current.Load())
-	}
-
-	debugContent := []string{
-		"=== DEBUG INFORMATION ===",
-		"",
-		fmt.Sprintf("Energy:        %d", energyVal),
-		fmt.Sprintf("Heat:          %d / %d", heatVal, constants.MaxHeat),
-		fmt.Sprintf("FPS:           %d", ctx.State.GetGameTicks()), // Approximate
-		fmt.Sprintf("Game Ticks:    %d", ctx.State.GetGameTicks()),
-		fmt.Sprintf("APM:           %d", ctx.State.GetAPM()),
-		fmt.Sprintf("Frame Number:  %d", ctx.GetFrameNumber()),
-		"",
-		fmt.Sprintf("Screen Size:   %dx%d", ctx.Width, ctx.Height),
-		fmt.Sprintf("Game Area:     %dx%d", ctx.GameWidth, ctx.GameHeight),
-		fmt.Sprintf("Game Offset:   (%d, %d)", ctx.GameX, ctx.GameY),
-		"",
-		fmt.Sprintf("Spawn Enabled: %v", ctx.State.GetSpawnEnabled()),
-		fmt.Sprintf("Boost Active:  %v", ctx.State.GetBoostEnabled()),
-		fmt.Sprintf("Paused:        %v", ctx.IsPaused.Load()),
-		"",
-		"Entity Counts:",
-		fmt.Sprintf("  Characters:  %d", len(ctx.World.Characters.All())),
-		fmt.Sprintf("  Nuggets:     %d", len(ctx.World.Nuggets.All())),
-		fmt.Sprintf("  Drains:      %d", len(ctx.World.Drains.All())),
-		fmt.Sprintf("  Cleaners:    %d", len(ctx.World.Cleaners.All())),
-		fmt.Sprintf("  Decays:      %d", len(ctx.World.Decays.All())),
-		"",
-		"Press ESC or ENTER to close",
-	}
-
-	// Set overlay state
-	ctx.SetOverlayState(true, " DEBUG ", debugContent, 0)
-
-	// Switch to overlay mode
+	// Synchronous mode switch to prevent InputHandler from reverting mode
 	ctx.SetMode(engine.ModeOverlay)
-
+	ctx.PushEvent(events.EventDebugRequest, nil, ctx.PausableClock.Now())
 	return true
 }
 
-// handleHelpCommand shows help information overlay
+// handleHelpCommand triggers help overlay event
 func handleHelpCommand(ctx *engine.GameContext) bool {
-	// Build help content
-	helpContent := []string{
-		"=== VI-FIGHTER HELP ===",
-		"",
-		"MODES:",
-		"  i         - Enter INSERT mode",
-		"  ESC       - Return to NORMAL mode / Show grid",
-		"  /         - Enter SEARCH mode",
-		"  :         - Enter COMMAND mode",
-		"",
-		"MOVEMENT (Normal Mode):",
-		"  h/j/k/l   - Move left/down/up/right",
-		"  w/b       - Move forward/backward by word",
-		"  0/$       - Move to start/end of line",
-		"  gg        - Go to top",
-		"  G         - Go to bottom",
-		"  f{char}   - Find character forward",
-		"  F{char}   - Find character backward",
-		"  t{char}   - Till character forward",
-		"  T{char}   - Till character backward",
-		"  ;         - Repeat last find/till",
-		"  ,         - Repeat last find/till (reverse)",
-		"",
-		"DELETE (Normal Mode):",
-		"  d{motion} - Delete with motion (dw, d$, etc.)",
-		"  dd        - Delete current line",
-		"  D         - Delete to end of line",
-		"",
-		"GAME MECHANICS:",
-		"  TAB       - Jump to nugget (costs 10 energy)",
-		"  ENTER     - Fire directional cleaners (costs 10 heat)",
-		"",
-		"SEARCH:",
-		"  /text     - Search for text",
-		"  n         - Next match",
-		"  N         - Previous match",
-		"",
-		"COMMANDS:",
-		"  :q        - Quit game",
-		"  :n        - New game",
-		"  :energy N - Set energy to N",
-		"  :heat N   - Set heat to N",
-		"  :boost    - Enable boost for 10s",
-		"  :spawn on/off - Enable/disable spawning",
-		"  :d/:debug - Show debug info",
-		"  :h/:help  - Show this help",
-		"",
-		"AUDIO:",
-		"  Ctrl+S    - Toggle mute",
-		"",
-		"Press ESC or ENTER to close",
-	}
-
-	// Set overlay state
-	ctx.SetOverlayState(true, " HELP ", helpContent, 0)
-
-	// Switch to overlay mode
+	// Synchronous mode switch to prevent InputHandler from reverting mode
 	ctx.SetMode(engine.ModeOverlay)
-
+	ctx.PushEvent(events.EventHelpRequest, nil, ctx.PausableClock.Now())
 	return true
 }

@@ -41,6 +41,7 @@ const (
 	PriorityDrain   = 25
 	PriorityDecay   = 30
 	PriorityFlash   = 35
+	PriorityUI      = 50
 	PrioritySplash  = 800 // After game logic, before rendering
 	PriorityCleanup = 900 // Last: Removes marked entities
 )

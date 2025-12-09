@@ -88,15 +88,3 @@ func (eq *EventQueue) Consume() []GameEvent {
 		}
 	}
 }
-
-// Reset clears queue. NOT thread-safe; call within world lock or initialization
-func (eq *EventQueue) Reset() {
-	eq.head.Store(0)
-	eq.tail.Store(0)
-
-	var zeroEvent GameEvent
-	for i := range eq.events {
-		eq.published[i].Store(false)
-		eq.events[i] = zeroEvent
-	}
-}

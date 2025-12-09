@@ -86,24 +86,8 @@ type GameContext struct {
 		overlayScroll  int
 	}
 
-	// // Mode state
-	// Mode           GameMode
-	// SearchText     string
-
 	// LastSearchText is kept public as it is internal to InputHandler state (no race with renderers)
 	LastSearchText string
-
-	// CommandText    string
-	//
-	// // Overlay state
-	// OverlayActive  bool
-	// OverlayTitle   string
-	// OverlayContent []string
-	// OverlayScroll  int
-
-	// // Motion command state (input parsing - not game mechanics)
-	// StatusMessage string
-	// LastCommand   string // Last executed command for display
 
 	// Find/Till motion state (for ; and , repeat commands)
 	LastFindChar    rune // Character that was searched for
@@ -515,8 +499,7 @@ func (ctx *GameContext) GetOverlayContentLen() int {
 	return len(ctx.ui.overlayContent)
 }
 
-// === Misc accessors ===
-// TODO: check whether frame numbers are needed
+// === Frame Number Accessories ===
 // GetFrameNumber returns the current frame number
 func (ctx *GameContext) GetFrameNumber() int64 {
 	return ctx.State.GetFrameNumber()
@@ -538,10 +521,4 @@ func (ctx *GameContext) PushEvent(eventType events.EventType, payload any, now t
 		Timestamp: now,
 	}
 	ctx.eventQueue.Push(event)
-}
-
-// ResetEventQueue clears all pending events from the queue
-// Must be called inside a RunSafe block or during initialization
-func (ctx *GameContext) ResetEventQueue() {
-	ctx.eventQueue.Reset()
 }

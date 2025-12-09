@@ -135,6 +135,9 @@ func main() {
 	cullSystem := systems.NewCullSystem()
 	ctx.World.AddSystem(cullSystem)
 
+	// Mostly event-driven, added to ECS for consistency, not adding to World.systems list since it doesn't have any Update(dt) logic
+	commandSystem := systems.NewCommandSystem(ctx)
+
 	// Create render orchestrator
 	orchestrator := render.NewRenderOrchestrator(
 		term,
@@ -196,10 +199,13 @@ func main() {
 	clockScheduler.RegisterEventHandler(shieldSystem)
 	clockScheduler.RegisterEventHandler(heatSystem)
 	clockScheduler.RegisterEventHandler(energySystem)
+	clockScheduler.RegisterEventHandler(boostSystem)
+	clockScheduler.RegisterEventHandler(spawnSystem)
+	clockScheduler.RegisterEventHandler(nuggetSystem)
 	clockScheduler.RegisterEventHandler(goldSystem)
 	clockScheduler.RegisterEventHandler(splashSystem)
-	clockScheduler.RegisterEventHandler(nuggetSystem)
 	clockScheduler.RegisterEventHandler(cleanerSystem)
+	clockScheduler.RegisterEventHandler(commandSystem)
 	clockScheduler.Start()
 	defer clockScheduler.Stop()
 
@@ -236,8 +242,14 @@ func main() {
 	for {
 		select {
 		case ev := <-eventChan:
-			// Update Input Resource from Context
-			// This is a temporary bridge until InputHandler writes directly to Resources
+			// Input handling always works (even during pause)
+			// InputHandler will handle pause internally when entering or exiting COMMAND mode
+			if !inputHandler.HandleEvent(ev) {
+				return // Exit game
+			}
+
+			// Update Input Resource from Context AFTER handling input
+			// This ensures renderers see the mode change in the same frame it happened
 			uiSnapshot := ctx.GetUISnapshot()
 			inputRes := &engine.InputResource{
 				GameMode:    int(ctx.GetMode()),
@@ -246,12 +258,6 @@ func main() {
 				IsPaused:    ctx.IsPaused.Load(),
 			}
 			engine.AddResource(ctx.World.Resources, inputRes)
-
-			// Input handling always works (even during pause)
-			// InputHandler will handle pause internally when entering or exiting COMMAND mode
-			if !inputHandler.HandleEvent(ev) {
-				return // Exit game
-			}
 
 			// Dispatch input events immediately, bypassing 50ms tick wait
 			clockScheduler.DispatchEventsImmediately()

@@ -115,6 +115,31 @@ const (
 	// Trigger: InputHandler (relative line numbers toggle, etc.)
 	// Consumer: PingSystem | Payload: *PingGridRequestPayload
 	EventPingGridRequest
+
+	// EventGameReset signals a request to reset the game state
+	// Trigger: Command :new
+	// Consumer: CommandSystem | Payload: nil
+	EventGameReset
+
+	// EventBoostRequest signals a request to activate boost
+	// Trigger: Command :boost
+	// Consumer: BoostSystem | Payload: nil
+	EventBoostRequest
+
+	// EventSpawnChange signals a request to enable/disable spawning
+	// Trigger: Command :spawn
+	// Consumer: SpawnSystem | Payload: *SpawnChangePayload
+	EventSpawnChange
+
+	// EventDebugRequest signals a request to show debug overlay
+	// Trigger: Command :debug
+	// Consumer: CommandSystem | Payload: nil
+	EventDebugRequest
+
+	// EventHelpRequest signals a request to show help overlay
+	// Trigger: Command :help
+	// Consumer: CommandSystem | Payload: nil
+	EventHelpRequest
 )
 
 // GameEvent represents a single game event with metadata

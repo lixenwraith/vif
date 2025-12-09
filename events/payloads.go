@@ -101,3 +101,8 @@ type SplashRequestPayload struct {
 type PingGridRequestPayload struct {
 	Duration float64 // Duration in seconds
 }
+
+// SpawnChangePayload carries configuration for spawn state
+type SpawnChangePayload struct {
+	Enabled bool
+}

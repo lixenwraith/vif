@@ -13,6 +13,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/content"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/events"
 )
 
 // ColorLevelKey represents a unique color+level combination
@@ -299,6 +300,22 @@ func (s *SpawnSystem) hasBracesInBlock(lines []string) bool {
 // Priority returns the system's priority
 func (s *SpawnSystem) Priority() int {
 	return constants.PrioritySpawn
+}
+
+// EventTypes returns the event types SpawnSystem handles
+func (s *SpawnSystem) EventTypes() []events.EventType {
+	return []events.EventType{
+		events.EventSpawnChange,
+	}
+}
+
+// HandleEvent processes spawn configuration events
+func (s *SpawnSystem) HandleEvent(world *engine.World, event events.GameEvent) {
+	if event.Type == events.EventSpawnChange {
+		if payload, ok := event.Payload.(*events.SpawnChangePayload); ok {
+			s.ctx.State.SetSpawnEnabled(payload.Enabled)
+		}
+	}
 }
 
 // runCensus iterates all sequence entities and counts colors
