@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -21,6 +22,18 @@ const (
 	ModeCommand
 	ModeOverlay
 )
+
+// UISnapshot provides a consistent view of UI state for rendering
+type UISnapshot struct {
+	CommandText    string
+	SearchText     string
+	StatusMessage  string
+	LastCommand    string
+	OverlayActive  bool
+	OverlayTitle   string
+	OverlayContent []string
+	OverlayScroll  int
+}
 
 // GameContext holds all game state including the ECS world
 type GameContext struct {
@@ -46,28 +59,51 @@ type GameContext struct {
 	Width, Height int
 
 	// Game area (excluding UI elements)
+	// TODO: review, usage and resize race
 	GameX, GameY          int
 	GameWidth, GameHeight int
-	LineNumWidth          int
+	// TODO: review
+	LineNumWidth int
 
 	// Cursor entity (singleton)
 	CursorEntity Entity
 
-	// Mode state
-	Mode           GameMode
-	SearchText     string
+	// --- Thread-Safe State ---
+
+	// Mode state (Atomic)
+	mode atomic.Int32
+
+	// UI State (Mutex Protected)
+	ui struct {
+		mu             sync.RWMutex
+		commandText    string
+		searchText     string
+		statusMessage  string
+		lastCommand    string
+		overlayActive  bool
+		overlayTitle   string
+		overlayContent []string
+		overlayScroll  int
+	}
+
+	// // Mode state
+	// Mode           GameMode
+	// SearchText     string
+
+	// LastSearchText is kept public as it is internal to InputHandler state (no race with renderers)
 	LastSearchText string
-	CommandText    string
 
-	// Overlay state
-	OverlayActive  bool
-	OverlayTitle   string
-	OverlayContent []string
-	OverlayScroll  int
+	// CommandText    string
+	//
+	// // Overlay state
+	// OverlayActive  bool
+	// OverlayTitle   string
+	// OverlayContent []string
+	// OverlayScroll  int
 
-	// Motion command state (input parsing - not game mechanics)
-	StatusMessage string
-	LastCommand   string // Last executed command for display
+	// // Motion command state (input parsing - not game mechanics)
+	// StatusMessage string
+	// LastCommand   string // Last executed command for display
 
 	// Find/Till motion state (for ; and , repeat commands)
 	LastFindChar    rune // Character that was searched for
@@ -103,7 +139,6 @@ func NewGameContext(term terminal.Terminal) *GameContext {
 		PausableClock: pausableClock,
 		Width:         width,
 		Height:        height,
-		Mode:          ModeNormal,
 		eventQueue:    events.NewEventQueue(),
 	}
 
@@ -111,6 +146,9 @@ func NewGameContext(term terminal.Terminal) *GameContext {
 	ctx.crashHandler = func(r any) {
 		panic(r)
 	}
+
+	// Initialize atomic mode
+	ctx.SetMode(ModeNormal)
 
 	// Calculate game area first
 	ctx.updateGameArea()
@@ -361,26 +399,124 @@ func (ctx *GameContext) cleanupOutOfBoundsEntities(width, height int) {
 	ctx.World.Positions.ResizeGrid(width, height)
 }
 
+// ===== MODE ACCESSORS =====
+
+// GetMode returns the current game mode
+func (ctx *GameContext) GetMode() GameMode {
+	return GameMode(ctx.mode.Load())
+}
+
+// SetMode sets the current game mode
+func (ctx *GameContext) SetMode(m GameMode) {
+	ctx.mode.Store(int32(m))
+}
+
 // IsInsertMode returns true if in insert mode
 func (ctx *GameContext) IsInsertMode() bool {
-	return ctx.Mode == ModeInsert
+	return ctx.GetMode() == ModeInsert
 }
 
 // IsSearchMode returns true if in search mode
 func (ctx *GameContext) IsSearchMode() bool {
-	return ctx.Mode == ModeSearch
+	return ctx.GetMode() == ModeSearch
 }
 
 // IsCommandMode returns true if in command mode
 func (ctx *GameContext) IsCommandMode() bool {
-	return ctx.Mode == ModeCommand
+	return ctx.GetMode() == ModeCommand
 }
 
 // IsOverlayMode returns true if in overlay mode
 func (ctx *GameContext) IsOverlayMode() bool {
-	return ctx.Mode == ModeOverlay
+	return ctx.GetMode() == ModeOverlay
 }
 
+// ===== UI STATE ACCESSORS =====
+
+// GetUISnapshot returns a thread-safe copy of all UI state for rendering
+func (ctx *GameContext) GetUISnapshot() UISnapshot {
+	ctx.ui.mu.RLock()
+	defer ctx.ui.mu.RUnlock()
+
+	// Content slice copy is shallow (backing array shared), but writer typically replaces
+	// the whole slice, making this safe for concurrent read/replace usage.
+	return UISnapshot{
+		CommandText:    ctx.ui.commandText,
+		SearchText:     ctx.ui.searchText,
+		StatusMessage:  ctx.ui.statusMessage,
+		LastCommand:    ctx.ui.lastCommand,
+		OverlayActive:  ctx.ui.overlayActive,
+		OverlayTitle:   ctx.ui.overlayTitle,
+		OverlayContent: ctx.ui.overlayContent,
+		OverlayScroll:  ctx.ui.overlayScroll,
+	}
+}
+
+func (ctx *GameContext) SetCommandText(text string) {
+	ctx.ui.mu.Lock()
+	defer ctx.ui.mu.Unlock()
+	ctx.ui.commandText = text
+}
+
+func (ctx *GameContext) AppendCommandText(text string) {
+	ctx.ui.mu.Lock()
+	defer ctx.ui.mu.Unlock()
+	ctx.ui.commandText += text
+}
+
+func (ctx *GameContext) SetSearchText(text string) {
+	ctx.ui.mu.Lock()
+	defer ctx.ui.mu.Unlock()
+	ctx.ui.searchText = text
+}
+
+func (ctx *GameContext) AppendSearchText(text string) {
+	ctx.ui.mu.Lock()
+	defer ctx.ui.mu.Unlock()
+	ctx.ui.searchText += text
+}
+
+func (ctx *GameContext) SetStatusMessage(msg string) {
+	ctx.ui.mu.Lock()
+	defer ctx.ui.mu.Unlock()
+	ctx.ui.statusMessage = msg
+}
+
+func (ctx *GameContext) SetLastCommand(cmd string) {
+	ctx.ui.mu.Lock()
+	defer ctx.ui.mu.Unlock()
+	ctx.ui.lastCommand = cmd
+}
+
+func (ctx *GameContext) SetOverlayState(active bool, title string, content []string, scroll int) {
+	ctx.ui.mu.Lock()
+	defer ctx.ui.mu.Unlock()
+	ctx.ui.overlayActive = active
+	ctx.ui.overlayTitle = title
+	ctx.ui.overlayContent = content
+	ctx.ui.overlayScroll = scroll
+}
+
+func (ctx *GameContext) SetOverlayScroll(scroll int) {
+	ctx.ui.mu.Lock()
+	defer ctx.ui.mu.Unlock()
+	ctx.ui.overlayScroll = scroll
+}
+
+func (ctx *GameContext) GetOverlayScroll() int {
+	ctx.ui.mu.RLock()
+	defer ctx.ui.mu.RUnlock()
+	return ctx.ui.overlayScroll
+}
+
+func (ctx *GameContext) GetOverlayContentLen() int {
+	ctx.ui.mu.RLock()
+	defer ctx.ui.mu.RUnlock()
+	return len(ctx.ui.overlayContent)
+}
+
+// === Misc accessors ===
+// TODO: check whether frame numbers are needed
 // GetFrameNumber returns the current frame number
 func (ctx *GameContext) GetFrameNumber() int64 {
 	return ctx.State.GetFrameNumber()

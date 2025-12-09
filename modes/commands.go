@@ -72,7 +72,7 @@ func handleNewCommand(ctx *engine.GameContext) bool {
 	// Recreate cursor entity
 	ctx.CreateCursorEntity()
 
-	ctx.LastCommand = ":new"
+	ctx.SetLastCommand(":new")
 	return true
 }
 
@@ -98,7 +98,7 @@ func handleEnergyCommand(ctx *engine.GameContext, args []string) bool {
 		Value: value,
 	}, ctx.PausableClock.Now())
 
-	ctx.LastCommand = fmt.Sprintf(":energy %d", value)
+	ctx.SetLastCommand(fmt.Sprintf(":energy %d", value))
 	return true
 }
 
@@ -126,7 +126,7 @@ func handleHeatCommand(ctx *engine.GameContext, args []string) bool {
 	}
 
 	// 4. Update Feedback first (visible immediately)
-	ctx.LastCommand = fmt.Sprintf(":heat %d", value)
+	ctx.SetLastCommand(fmt.Sprintf(":heat %d", value))
 
 	// 5. Push event for HeatSystem to process
 	ctx.PushEvent(events.EventHeatSet, &events.HeatSetPayload{Value: value}, ctx.PausableClock.Now())
@@ -147,7 +147,7 @@ func handleBoostCommand(ctx *engine.GameContext) bool {
 	ctx.State.SetBoostColor(1) // Default to blue boost
 	ctx.State.SetBoostEnabled(true)
 
-	ctx.LastCommand = ":boost"
+	ctx.SetLastCommand(":boost")
 	return true
 }
 
@@ -162,10 +162,10 @@ func handleSpawnCommand(ctx *engine.GameContext, args []string) bool {
 	switch arg {
 	case "on":
 		ctx.State.SetSpawnEnabled(true)
-		ctx.LastCommand = ":spawn on"
+		ctx.SetLastCommand(":spawn on")
 	case "off":
 		ctx.State.SetSpawnEnabled(false)
-		ctx.LastCommand = ":spawn off"
+		ctx.SetLastCommand(":spawn off")
 	default:
 		setCommandError(ctx, "Invalid arguments for spawn")
 	}
@@ -176,7 +176,7 @@ func handleSpawnCommand(ctx *engine.GameContext, args []string) bool {
 // setCommandError sets an error message in the status message
 // This string will be cleared by InputHandler on the next keystroke
 func setCommandError(ctx *engine.GameContext, message string) {
-	ctx.StatusMessage = message
+	ctx.SetStatusMessage(message)
 }
 
 // clearAllEntities removes all entities from the world
@@ -228,13 +228,10 @@ func handleDebugCommand(ctx *engine.GameContext) bool {
 	}
 
 	// Set overlay state
-	ctx.OverlayActive = true
-	ctx.OverlayTitle = " DEBUG "
-	ctx.OverlayContent = debugContent
-	ctx.OverlayScroll = 0
+	ctx.SetOverlayState(true, " DEBUG ", debugContent, 0)
 
 	// Switch to overlay mode
-	ctx.Mode = engine.ModeOverlay
+	ctx.SetMode(engine.ModeOverlay)
 
 	return true
 }
@@ -295,13 +292,10 @@ func handleHelpCommand(ctx *engine.GameContext) bool {
 	}
 
 	// Set overlay state
-	ctx.OverlayActive = true
-	ctx.OverlayTitle = " HELP "
-	ctx.OverlayContent = helpContent
-	ctx.OverlayScroll = 0
+	ctx.SetOverlayState(true, " HELP ", helpContent, 0)
 
 	// Switch to overlay mode
-	ctx.Mode = engine.ModeOverlay
+	ctx.SetMode(engine.ModeOverlay)
 
 	return true
 }

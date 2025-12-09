@@ -22,12 +22,15 @@ func NewOverlayRenderer(gameCtx *engine.GameContext) *OverlayRenderer {
 
 // IsVisible returns true when the overlay should be rendered
 func (o *OverlayRenderer) IsVisible() bool {
-	return o.gameCtx.IsOverlayMode() && o.gameCtx.OverlayActive
+	uiSnapshot := o.gameCtx.GetUISnapshot()
+	return o.gameCtx.IsOverlayMode() && uiSnapshot.OverlayActive
 }
 
 // Render draws the overlay window
 func (o *OverlayRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskUI)
+	// Get UI Snapshot
+	uiSnapshot := o.gameCtx.GetUISnapshot()
 	// Calculate overlay dimensions (80% of screen)
 	overlayWidth := int(float64(ctx.Width) * constants.OverlayWidthPercent)
 	overlayHeight := int(float64(ctx.Height) * constants.OverlayHeightPercent)
@@ -60,10 +63,10 @@ func (o *OverlayRenderer) Render(ctx render.RenderContext, world *engine.World, 
 	buf.SetWithBg(startX+overlayWidth-1, startY, '╗', render.RgbOverlayBorder, render.RgbOverlayBg)
 
 	// Draw title centered on top border
-	if o.gameCtx.OverlayTitle != "" {
-		titleX := startX + (overlayWidth-len(o.gameCtx.OverlayTitle))/2
+	if uiSnapshot.OverlayTitle != "" {
+		titleX := startX + (overlayWidth-len(uiSnapshot.OverlayTitle))/2
 		if titleX > startX {
-			for i, ch := range o.gameCtx.OverlayTitle {
+			for i, ch := range uiSnapshot.OverlayTitle {
 				if titleX+i < startX+overlayWidth-1 {
 					buf.SetWithBg(titleX+i, startY, ch, render.RgbOverlayTitle, render.RgbOverlayBg)
 				}
@@ -100,16 +103,16 @@ func (o *OverlayRenderer) Render(ctx render.RenderContext, world *engine.World, 
 	maxContentLines := contentHeight - 2*constants.OverlayPaddingY
 
 	// Calculate visible range based on scroll
-	startLine := o.gameCtx.OverlayScroll
+	startLine := uiSnapshot.OverlayScroll
 	endLine := startLine + maxContentLines
-	if endLine > len(o.gameCtx.OverlayContent) {
-		endLine = len(o.gameCtx.OverlayContent)
+	if endLine > len(uiSnapshot.OverlayContent) {
+		endLine = len(uiSnapshot.OverlayContent)
 	}
 
 	// Draw visible content lines
 	lineY := contentStartY
 	for i := startLine; i < endLine && lineY < startY+overlayHeight-1-constants.OverlayPaddingY; i++ {
-		line := o.gameCtx.OverlayContent[i]
+		line := uiSnapshot.OverlayContent[i]
 		maxLineWidth := contentWidth - 2*constants.OverlayPaddingX
 
 		// Truncate line if too long
@@ -128,8 +131,8 @@ func (o *OverlayRenderer) Render(ctx render.RenderContext, world *engine.World, 
 	}
 
 	// Draw scroll indicator if content is scrollable
-	if len(o.gameCtx.OverlayContent) > maxContentLines {
-		scrollInfo := fmt.Sprintf("[%d/%d]", o.gameCtx.OverlayScroll+1, len(o.gameCtx.OverlayContent)-maxContentLines+1)
+	if len(uiSnapshot.OverlayContent) > maxContentLines {
+		scrollInfo := fmt.Sprintf("[%d/%d]", uiSnapshot.OverlayScroll+1, len(uiSnapshot.OverlayContent)-maxContentLines+1)
 		scrollX := startX + overlayWidth - len(scrollInfo) - 2
 		scrollY := startY + overlayHeight - 1
 		for i, ch := range scrollInfo {

@@ -29,8 +29,9 @@ func NewInputHandler(ctx *engine.GameContext) *InputHandler {
 func (h *InputHandler) HandleEvent(ev terminal.Event) bool {
 	switch ev.Type {
 	case terminal.EventKey:
-		if h.ctx.StatusMessage != "" {
-			h.ctx.StatusMessage = ""
+		// Clear status message on any keystroke
+		if h.ctx.GetUISnapshot().StatusMessage != "" {
+			h.ctx.SetStatusMessage("")
 		}
 		return h.handleKeyEvent(ev)
 	case terminal.EventResize:
@@ -58,20 +59,17 @@ func (h *InputHandler) handleKeyEvent(ev terminal.Event) bool {
 		h.machine.Reset()
 
 		if h.ctx.IsSearchMode() {
-			h.ctx.Mode = engine.ModeNormal
-			h.ctx.SearchText = ""
+			h.ctx.SetMode(engine.ModeNormal)
+			h.ctx.SetSearchText("")
 		} else if h.ctx.IsCommandMode() {
-			h.ctx.Mode = engine.ModeNormal
-			h.ctx.CommandText = ""
+			h.ctx.SetMode(engine.ModeNormal)
+			h.ctx.SetCommandText("")
 			h.ctx.SetPaused(false)
 		} else if h.ctx.IsInsertMode() {
-			h.ctx.Mode = engine.ModeNormal
+			h.ctx.SetMode(engine.ModeNormal)
 		} else if h.ctx.IsOverlayMode() {
-			h.ctx.OverlayActive = false
-			h.ctx.OverlayTitle = ""
-			h.ctx.OverlayContent = nil
-			h.ctx.OverlayScroll = 0
-			h.ctx.Mode = engine.ModeNormal
+			h.ctx.SetOverlayState(false, "", nil, 0)
+			h.ctx.SetMode(engine.ModeNormal)
 			h.ctx.SetPaused(false)
 		} else {
 			// Trigger ping grid via event system
@@ -114,17 +112,17 @@ func (h *InputHandler) handleNormalMode(ev terminal.Event) bool {
 	result := h.machine.Process(ev.Rune, h.bindings)
 
 	if result.ModeChange != 0 {
-		h.ctx.Mode = result.ModeChange
+		h.ctx.SetMode(result.ModeChange)
 		if result.ModeChange == engine.ModeSearch {
-			h.ctx.SearchText = ""
+			h.ctx.SetSearchText("")
 		} else if result.ModeChange == engine.ModeCommand {
-			h.ctx.CommandText = ""
+			h.ctx.SetCommandText("")
 		}
 	}
 
 	if result.Action != nil {
 		if result.CommandString != "" {
-			h.ctx.LastCommand = result.CommandString
+			h.ctx.SetLastCommand(result.CommandString)
 
 			// Push splash event for command execution
 			// We need cursor position for the splash origin
@@ -190,7 +188,7 @@ func (h *InputHandler) handleNormalModeSpecialKeys(ev terminal.Event) {
 		h.ctx.PushEvent(events.EventManualCleanerTrigger, nil, h.ctx.PausableClock.Now())
 	}
 
-	h.ctx.LastCommand = ""
+	h.ctx.SetLastCommand("")
 }
 
 func (h *InputHandler) handleInsertMode(ev terminal.Event) bool {
@@ -282,85 +280,89 @@ func (h *InputHandler) handleInsertMode(ev terminal.Event) bool {
 }
 
 func (h *InputHandler) handleSearchMode(ev terminal.Event) bool {
+	uiSnapshot := h.ctx.GetUISnapshot()
+	currentSearch := uiSnapshot.SearchText
+
 	if ev.Key == terminal.KeyEnter {
-		if h.ctx.SearchText != "" {
+		if currentSearch != "" {
 			// Wrap in RunSafe as PerformSearch writes to ECS
 			h.ctx.World.RunSafe(func() {
-				if PerformSearch(h.ctx, h.ctx.SearchText, true) {
-					h.ctx.LastSearchText = h.ctx.SearchText
+				if PerformSearch(h.ctx, currentSearch, true) {
+					h.ctx.LastSearchText = currentSearch
 				}
 			})
 		}
-		h.ctx.Mode = engine.ModeNormal
-		h.ctx.SearchText = ""
+		h.ctx.SetMode(engine.ModeNormal)
+		h.ctx.SetSearchText("")
 		return true
 	}
 	if ev.Key == terminal.KeyBackspace {
-		if len(h.ctx.SearchText) > 0 {
-			h.ctx.SearchText = h.ctx.SearchText[:len(h.ctx.SearchText)-1]
+		if len(currentSearch) > 0 {
+			h.ctx.SetSearchText(currentSearch[:len(currentSearch)-1])
 		}
 		return true
 	}
 	if ev.Key == terminal.KeyRune {
-		h.ctx.SearchText += string(ev.Rune)
+		h.ctx.AppendSearchText(string(ev.Rune))
 	}
 	return true
 }
 
 func (h *InputHandler) handleCommandMode(ev terminal.Event) bool {
+	uiSnapshot := h.ctx.GetUISnapshot()
+	currentCommand := uiSnapshot.CommandText
+
 	if ev.Key == terminal.KeyEnter {
-		command := h.ctx.CommandText
 		var shouldContinue bool
 
 		// Wrap in RunSafe as commands like :new mutate world
 		h.ctx.World.RunSafe(func() {
-			shouldContinue = ExecuteCommand(h.ctx, command)
+			shouldContinue = ExecuteCommand(h.ctx, currentCommand)
 		})
 
-		h.ctx.CommandText = ""
+		h.ctx.SetCommandText("")
 
-		if h.ctx.Mode == engine.ModeOverlay {
+		if h.ctx.IsOverlayMode() {
 			// Command switched to Overlay mode
 		} else {
-			h.ctx.Mode = engine.ModeNormal
+			h.ctx.SetMode(engine.ModeNormal)
 			h.ctx.SetPaused(false)
 		}
 
 		return shouldContinue
 	}
 	if ev.Key == terminal.KeyBackspace {
-		if len(h.ctx.CommandText) > 0 {
-			h.ctx.CommandText = h.ctx.CommandText[:len(h.ctx.CommandText)-1]
+		if len(currentCommand) > 0 {
+			h.ctx.SetCommandText(currentCommand[:len(currentCommand)-1])
 		}
 		return true
 	}
 	if ev.Key == terminal.KeyRune {
-		h.ctx.CommandText += string(ev.Rune)
+		h.ctx.AppendCommandText(string(ev.Rune))
 	}
 	return true
 }
 
 func (h *InputHandler) handleOverlayMode(ev terminal.Event) bool {
 	if ev.Key == terminal.KeyEscape || ev.Key == terminal.KeyEnter {
-		h.ctx.OverlayActive = false
-		h.ctx.OverlayTitle = ""
-		h.ctx.OverlayContent = nil
-		h.ctx.OverlayScroll = 0
-		h.ctx.Mode = engine.ModeNormal
+		h.ctx.SetOverlayState(false, "", nil, 0)
+		h.ctx.SetMode(engine.ModeNormal)
 		h.ctx.SetPaused(false)
 		return true
 	}
 
+	currentScroll := h.ctx.GetOverlayScroll()
 	if ev.Key == terminal.KeyUp || (ev.Key == terminal.KeyRune && ev.Rune == 'k') {
-		if h.ctx.OverlayScroll > 0 {
-			h.ctx.OverlayScroll--
+		if currentScroll > 0 {
+			h.ctx.SetOverlayScroll(currentScroll - 1)
 		}
 		return true
 	}
 
+	contentLen := h.ctx.GetOverlayContentLen()
 	if ev.Key == terminal.KeyDown || (ev.Key == terminal.KeyRune && ev.Rune == 'j') {
-		if h.ctx.OverlayScroll < len(h.ctx.OverlayContent)-1 {
-			h.ctx.OverlayScroll++
+		if currentScroll < contentLen-1 {
+			h.ctx.SetOverlayScroll(currentScroll + 1)
 		}
 		return true
 	}

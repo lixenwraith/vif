@@ -32,6 +32,8 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 // Render implements SystemRenderer
 func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskUI)
+	// Get consistent snapshot of UI state
+	uiSnapshot := s.gameCtx.GetUISnapshot()
 	// FPS Calculation
 	s.frameCount++
 	now := time.Now()
@@ -99,9 +101,9 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 
 	// Draw last command indicator (if present)
 	leftEndX := x
-	if s.gameCtx.LastCommand != "" && !s.gameCtx.IsSearchMode() && !s.gameCtx.IsCommandMode() {
+	if uiSnapshot.LastCommand != "" && !s.gameCtx.IsSearchMode() && !s.gameCtx.IsCommandMode() {
 		leftEndX++
-		for _, ch := range s.gameCtx.LastCommand {
+		for _, ch := range uiSnapshot.LastCommand {
 			if leftEndX >= ctx.Width {
 				return
 			}
@@ -115,7 +117,7 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 
 	// Draw search text, command text, or status message
 	if s.gameCtx.IsSearchMode() {
-		searchText := "/" + s.gameCtx.SearchText
+		searchText := "/" + uiSnapshot.SearchText
 		for _, ch := range searchText {
 			if leftEndX >= ctx.Width {
 				return
@@ -124,7 +126,7 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 			leftEndX++
 		}
 	} else if s.gameCtx.IsCommandMode() {
-		cmdText := ":" + s.gameCtx.CommandText
+		cmdText := ":" + uiSnapshot.CommandText
 		for _, ch := range cmdText {
 			if leftEndX >= ctx.Width {
 				return
@@ -132,8 +134,8 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 			buf.SetWithBg(leftEndX, statusY, ch, render.RgbCommandInputText, render.RgbBackground)
 			leftEndX++
 		}
-	} else if s.gameCtx.StatusMessage != "" {
-		for _, ch := range s.gameCtx.StatusMessage {
+	} else if uiSnapshot.StatusMessage != "" {
+		for _, ch := range uiSnapshot.StatusMessage {
 			if leftEndX >= ctx.Width {
 				return
 			}

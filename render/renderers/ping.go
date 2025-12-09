@@ -158,6 +158,7 @@ func (p *PingRenderer) getPingGridColor(ping components.PingComponent) render.RG
 
 // drawCrosshair draws the crosshair lines respecting shield exclusion
 func (p *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.RenderBuffer, color render.RGB) {
+
 	// Row
 	screenY := ctx.GameY + ctx.CursorY
 	if screenY >= ctx.GameY && screenY < ctx.GameY+ctx.GameHeight {

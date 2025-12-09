@@ -238,10 +238,11 @@ func main() {
 		case ev := <-eventChan:
 			// Update Input Resource from Context
 			// This is a temporary bridge until InputHandler writes directly to Resources
+			uiSnapshot := ctx.GetUISnapshot()
 			inputRes := &engine.InputResource{
-				GameMode:    int(ctx.Mode),
-				CommandText: ctx.CommandText,
-				SearchText:  ctx.SearchText,
+				GameMode:    int(ctx.GetMode()),
+				CommandText: uiSnapshot.CommandText,
+				SearchText:  uiSnapshot.SearchText,
 				IsPaused:    ctx.IsPaused.Load(),
 			}
 			engine.AddResource(ctx.World.Resources, inputRes)
