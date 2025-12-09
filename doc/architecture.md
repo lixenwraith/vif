@@ -148,7 +148,7 @@ func (s *MySystem) Update(world *engine.World, dt time.Duration) {
 - `AudioEngine` access via `ctx.AudioEngine` interface
 - `CursorEntity` reference for systems to query/update cursor components via ECS:
   - Position, Cursor, Protection (indestructible)
-  - Ping (crosshair and grid state)
+  - Ping (crosshair and grid state - component-based, not singleton)
   - Heat, Energy (gameplay meters)
   - Shield (geometry and activation state)
 - Mode state tracking (NORMAL, INSERT, SEARCH, COMMAND, OVERLAY)
@@ -184,24 +184,24 @@ Producer → EventQueue → ClockScheduler → EventRouter → Handler[T] → Sy
 
 | Event | Producer | Consumer | Payload |
 |-------|----------|----------|---------|
-| `EventCharacterTyped` | InputHandler (modes) | EnergySystem | `*CharacterTypedPayload{Char, X, Y}` |
-| `EventDeleteRequest` | InputHandler (modes) | EnergySystem | `*DeleteRequestPayload{StartX, StartY, EndX, EndY, RangeType}` |
+| `EventCharacterTyped` | modes.Router (Insert mode) | EnergySystem | `*CharacterTypedPayload{Char, X, Y}` |
+| `EventDeleteRequest` | modes.Router (Operators) | EnergySystem | `*DeleteRequestPayload{StartX, StartY, EndX, EndY, RangeType}` |
 | `EventEnergyAdd` | EnergySystem, ShieldSystem | EnergySystem | `*EnergyAddPayload{Delta, Source}` |
-| `EventEnergySet` | InputHandler (modes, :energy cmd) | EnergySystem | `*EnergySetPayload{Value}` |
+| `EventEnergySet` | modes.Router (:energy cmd) | EnergySystem | `*EnergySetPayload{Value}` |
 | `EventEnergyBlinkStart` | EnergySystem | EnergySystem | `*EnergyBlinkPayload{Type, Level}` |
 | `EventEnergyBlinkStop` | EnergySystem | EnergySystem | `nil` |
 | `EventHeatAdd` | EnergySystem, DrainSystem | HeatSystem | `*HeatAddPayload{Delta, Source}` |
-| `EventHeatSet` | InputHandler (modes, :heat cmd), EnergySystem | HeatSystem | `*HeatSetPayload{Value}` |
-| `EventManualCleanerTrigger` | InputHandler (modes, Enter key) | HeatSystem | `nil` |
-| `EventPingGridRequest` | InputHandler (modes, ESC key) | PingSystem | `*PingGridRequestPayload{Duration}` |
-| `EventNuggetJumpRequest` | InputHandler (modes, Tab key) | NuggetSystem | `nil` |
+| `EventHeatSet` | modes.Router (:heat cmd), EnergySystem | HeatSystem | `*HeatSetPayload{Value}` |
+| `EventManualCleanerTrigger` | modes.Router (Enter key) | HeatSystem | `nil` |
+| `EventPingGridRequest` | modes.Router (ESC key) | PingSystem | `*PingGridRequestPayload{Duration}` |
+| `EventNuggetJumpRequest` | modes.Router (Tab key) | NuggetSystem | `nil` |
 | `EventShieldActivate` | EnergySystem | ShieldSystem | `nil` |
 | `EventShieldDeactivate` | EnergySystem | ShieldSystem | `nil` |
 | `EventShieldDrain` | DrainSystem | ShieldSystem | `*ShieldDrainPayload{Amount}` |
 | `EventCleanerRequest` | EnergySystem | CleanerSystem | `nil` |
-| `EventDirectionalCleanerRequest` | HeatSystem, EnergySystem | CleanerSystem | `*DirectionalCleanerPayload{OriginX, OriginY}` |
+| `EventDirectionalCleanerRequest` | HeatSystem, EnergySystem, modes.Router | CleanerSystem | `*DirectionalCleanerPayload{OriginX, OriginY}` |
 | `EventCleanerFinished` | CleanerSystem | (observers) | `nil` |
-| `EventSplashRequest` | EnergySystem, InputHandler (modes) | SplashSystem | `*SplashRequestPayload{Text, Color, OriginX, OriginY}` |
+| `EventSplashRequest` | EnergySystem, modes.Router | SplashSystem | `*SplashRequestPayload{Text, Color, OriginX, OriginY}` |
 | `EventGoldSpawned` | GoldSystem | SplashSystem | `*GoldSpawnedPayload{SequenceID, OriginX, OriginY, Length, Duration}` |
 | `EventGoldComplete` | GoldSystem | SplashSystem | `*GoldCompletionPayload{SequenceID}` |
 | `EventGoldTimeout` | GoldSystem | SplashSystem | `*GoldCompletionPayload{SequenceID}` |
@@ -581,18 +581,41 @@ Component (marker interface)
 ├── DecayComponent {PreciseX, PreciseY float64, Speed float64, Char rune, LastChangeRow, LastIntX, LastIntY int, PrevPreciseX, PrevPreciseY float64}
 ├── CleanerComponent {PreciseX/Y float64, VelocityX/Y float64, TargetX/Y float64, TrailRing [Length]Point, TrailHead, TrailLen int, Char rune}
 ├── MaterializeComponent {PreciseX/Y float64, VelocityX/Y float64, TargetX, TargetY int, TrailRing [Length]Point, TrailHead, TrailLen int, Direction MaterializeDirection, Char rune, Arrived bool}
-├── FlashComponent {X, Y int, Char rune, StartTime time.Time, Duration time.Duration}
+├── FlashComponent {X, Y int, Char rune, Remaining time.Duration, Duration time.Duration}
 ├── NuggetComponent {ID int, SpawnTime time.Time}
 ├── DrainComponent {LastMoveTime, LastDrainTime time.Time, IsOnCursor bool, SpawnOrder int64}
-├── CursorComponent {ErrorFlashEnd int64}
+├── CursorComponent {ErrorFlashRemaining time.Duration}
 ├── ProtectionComponent {Mask ProtectionFlags, ExpiresAt int64}
 ├── PingComponent {ShowCrosshair bool, CrosshairColor ColorClass, GridActive bool, GridTimer float64, GridColor ColorClass, ContextAware bool}
 ├── EnergyComponent {Current atomic.Int64, BlinkActive atomic.Bool, BlinkType atomic.Uint32, BlinkLevel atomic.Uint32, BlinkTime atomic.Int64}
 ├── HeatComponent {Current atomic.Int64}
 ├── ShieldComponent {Active bool, RadiusX, RadiusY float64, OverrideColor ColorClass, MaxOpacity float64, LastDrainTime time.Time}
-├── SplashComponent {Content [8]rune, Length int, Color SplashColor, AnchorX, AnchorY int, Mode SplashMode, StartNano int64, Duration int64, SequenceID int}
+├── SplashComponent {Content [8]rune, Length int, Color SplashColor, AnchorX, AnchorY int, Mode SplashMode, Remaining time.Duration, Duration time.Duration, SequenceID int}
 └── MarkedForDeathComponent {}
 ```
+
+**Timing Architecture Changes:**
+
+The game has migrated from **timestamp-based** to **duration-based** tracking for most timed components:
+
+- **Duration-Based** (new pattern):
+  - `FlashComponent`: Uses `Remaining time.Duration` (counts down each frame via `dt`)
+  - `CursorComponent`: Uses `ErrorFlashRemaining time.Duration`
+  - `SplashComponent`: Uses `Remaining time.Duration` for transient splashes
+  - `PingComponent`: Uses `GridTimer float64` (seconds remaining)
+
+- **Timestamp-Based** (legacy, specific use cases):
+  - `NuggetComponent`: `SpawnTime time.Time` (spawn timing tracking)
+  - `DrainComponent`: `LastMoveTime`, `LastDrainTime time.Time` (interval-based actions)
+  - `ShieldComponent`: `LastDrainTime time.Time` (passive drain timing)
+  - `GoldSequenceComponent`: `StartTimeNano int64` (atomic operations for concurrent access)
+
+**Benefits of Duration-Based Timing:**
+- Eliminates entire class of timing bugs related to elapsed time calculations
+- Direct countdown tracking: `remaining -= dt`
+- More intuitive for lifecycle management
+- No timestamp comparison edge cases
+- Centralized time management via `TimeResource.DeltaTime`
 
 **Protection Flags:**
 - `ProtectFromDecay`: Immune to decay characters
@@ -879,36 +902,25 @@ COMMAND ─[:debug/:help]→ OVERLAY (modal) ─[ESC/ENTER]→ NORMAL
 
 ### Input Handling Architecture
 
-The input system (`modes/` package) is fully decoupled from game logic through **event-driven architecture** via the dedicated `events` package. The `modes` package depends only on `events` for message definitions, with zero dependencies on `engine` or `systems` packages.
+The input system has been **split into two distinct packages** for maximum decoupling:
 
-**Package Location:** `modes/` (InputHandler, InputMachine, BindingTable, Motion functions, Operators, Commands, Search)
-**Event Package:** `events/` (EventType, GameEvent, Payloads, EventQueue, Router[T])
-**Dependency Graph:** `modes` → `events` ← `engine` (no circular dependencies)
+**Package Structure:**
+- **`input/` package** - Mode-aware intent generator from terminal input (dumb parser, no game knowledge)
+- **`modes/` package** - Game context-aware validator and router (translates intents to events/operations)
+- **`events/` package** - Event definitions and routing infrastructure
+
+**Dependency Graph:** `input` (terminal only) ← `modes` (game context) → `events` ← `engine`
+
+**Architecture Philosophy:**
+- `input` package is a **pure parser** that converts terminal events into semantic `Intent` structs
+- `modes` package is a **context-aware router** that validates intents and routes operations to systems via events
+- Zero coupling between `input` and `engine` - the input parser has no knowledge of game state
 
 #### Core Components
 
-**1. InputHandler** (`modes/input.go`)
+**1. Input Machine** (`input/machine.go`)
 
-Central coordinator for all input processing:
-- Receives terminal events from main game loop
-- Dispatches to mode-specific handlers (Normal, Insert, Search, Command, Overlay)
-- Manages mode transitions and state
-- Emits events instead of directly modifying game state
-- Coordinates with InputMachine for Normal mode vi command parsing
-
-**Key Methods:**
-```go
-func (h *InputHandler) HandleEvent(ev terminal.Event) bool  // Main entry point
-func (h *InputHandler) handleNormalMode()   // Vi command parsing
-func (h *InputHandler) handleInsertMode()   // Character typing
-func (h *InputHandler) handleSearchMode()   // Search text input
-func (h *InputHandler) handleCommandMode()  // Colon command input
-func (h *InputHandler) handleOverlayMode()  // Modal window interaction
-```
-
-**2. InputMachine** (`modes/machine.go`)
-
-Sophisticated state machine for parsing vi-style commands in Normal mode:
+Sophisticated state machine for parsing terminal events into semantic intents:
 
 **7 States:**
 - `StateIdle` - Awaiting input
@@ -922,42 +934,89 @@ Sophisticated state machine for parsing vi-style commands in Normal mode:
 **Capabilities:**
 - Count accumulation with multiplication (e.g., `2d3w` = delete 6 words)
 - Command buffer for display feedback
-- Returns `ProcessResult` with action closures and mode changes
+- Returns `Intent` with parsed semantic actions
 
 **State Machine Flow** (typing `2d3w` - delete 6 words):
 ```
 '2' → StateIdle → StateCount (count1=2)
 'd' → StateCount → StateOperatorWait (operator='d')
 '3' → StateOperatorWait → StateOperatorWait (count2=3)
-'w' → Execute OpDelete with MotionWordForward × 6 → StateIdle
+'w' → Returns Intent{Type: IntentOperatorMotion, Operator: OperatorDelete, Motion: MotionWordForward, Count: 6}
 ```
 
-**3. BindingTable** (`modes/bindings.go`)
+**2. Intent Types** (`input/intent.go`)
 
-Maps keys to actions using three lookup tables:
-- `normal` - Standard Normal mode bindings (h, j, k, l, w, b, i, /, :, etc.)
-- `operatorMotions` - Motions valid after operators (w, b, $, gg, etc.)
-- `prefixG` - Commands following 'g' prefix (gg, go)
+Pure data structures representing parsed user actions:
 
-**Binding Structure:**
 ```go
-type Binding struct {
-    Action     ActionType      // Motion, CharWait, Operator, ModeSwitch, etc.
-    Target     rune            // Canonical identifier
-    Motion     MotionFunc      // For standard motions
-    CharMotion CharMotionFunc  // For f/F/t/T
+type Intent struct {
+    Type       IntentType   // IntentMotion, IntentOperatorMotion, IntentTextChar, etc.
+    Motion     MotionOp     // MotionLeft, MotionWordForward, etc.
+    Operator   OperatorOp   // OperatorDelete, etc.
+    Special    SpecialOp    // SpecialDeleteChar, SpecialSearchNext, etc.
+    ModeTarget ModeTarget   // ModeTargetInsert, ModeTargetSearch, etc.
+    ScrollDir  ScrollDir    // ScrollUp, ScrollDown
+    Count      int          // Effective count (minimum 1)
+    Char       rune         // Target char for f/t motions or typed char
+    Command    string       // Captured sequence for visual feedback
 }
 ```
 
-**ActionTypes:**
-- `ActionMotion` - Immediate cursor movement (h, j, k, l, w, b, $, gg)
-- `ActionCharWait` - Requires target character (f, F, t, T)
-- `ActionOperator` - Requires motion (d)
-- `ActionPrefix` - Requires second key (g)
-- `ActionModeSwitch` - Changes mode (i, /, :)
-- `ActionSpecial` - Special handling (x, D, n, N, ;, ,)
+**Intent Categories:**
+- **System**: `IntentQuit`, `IntentEscape`, `IntentToggleMute`, `IntentResize`
+- **Navigation**: `IntentMotion`, `IntentCharMotion`
+- **Operators**: `IntentOperatorMotion`, `IntentOperatorLine`, `IntentOperatorCharMotion`
+- **Special**: `IntentSpecial`, `IntentNuggetJump`, `IntentFireCleaner`
+- **Mode Switching**: `IntentModeSwitch`
+- **Text Entry**: `IntentTextChar`, `IntentTextBackspace`, `IntentTextConfirm`, `IntentTextNav`
+- **Overlay**: `IntentOverlayScroll`, `IntentOverlayClose`
 
-**4. Motion Functions** (`modes/motions.go`, `modes/motions_helpers.go`)
+**3. KeyTable** (`input/keytable.go`)
+
+Maps terminal keys to semantic actions using multiple lookup tables:
+- `SpecialKeys` - Non-rune keys (Arrow keys, Backspace, Enter, ESC, Ctrl+Q, etc.)
+- `NormalRunes` - Standard Normal mode bindings (h, j, k, l, w, b, i, /, :, etc.)
+- `OperatorMotions` - Motions valid after operators (w, b, $, gg, etc.)
+- `PrefixG` - Commands following 'g' prefix (gg, go)
+- `TextNavKeys` - Navigation in Insert/Search/Command modes
+- `OverlayKeys` - Overlay mode special keys
+- `OverlayRunes` - Overlay mode rune keys
+
+**Key Entry Behaviors:**
+- `BehaviorMotion` - Immediate cursor movement
+- `BehaviorCharWait` - Requires target character (f, F, t, T)
+- `BehaviorOperator` - Requires motion (d)
+- `BehaviorPrefix` - Requires second key (g)
+- `BehaviorModeSwitch` - Changes mode (i, /, :)
+- `BehaviorSpecial` - Special handling (x, D, n, N, ;, ,)
+- `BehaviorSystem` - System actions (ESC, Ctrl+Q, Ctrl+S)
+- `BehaviorAction` - Direct actions (Tab, Enter in Normal mode)
+
+**4. Modes Router** (`modes/router.go`)
+
+Context-aware interpreter that validates intents and executes game logic:
+
+**Responsibilities:**
+- Receives `Intent` from input machine
+- Validates intents against current game state
+- Routes operations to appropriate systems via events
+- Manages game mode transitions
+- Owns authoritative game mode state
+
+**Handler Methods:**
+```go
+func (r *Router) Handle(intent *input.Intent) bool           // Main dispatcher
+func (r *Router) handleMotion(intent *input.Intent) bool     // Cursor movement
+func (r *Router) handleOperatorMotion(intent) bool           // Delete operations
+func (r *Router) handleTextChar(intent) bool                 // Character typing
+func (r *Router) handleModeSwitch(intent) bool               // Mode transitions
+```
+
+**Look-Up Tables:**
+- `motionLUT map[input.MotionOp]MotionFunc` - Maps motion opcodes to motion functions
+- `charLUT map[input.MotionOp]CharMotionFunc` - Maps character motion opcodes to functions
+
+**5. Motion Functions** (`modes/motions.go`, `modes/motions_helpers.go`)
 
 Pure computation functions that calculate target positions:
 
@@ -979,16 +1038,16 @@ type MotionResult struct {
 
 **Key Property:** Motions are stateless calculations that return target coordinates without mutating game state.
 
-**5. Operators** (`modes/operators.go`)
+**6. Operators** (`modes/operators.go`)
 
 Functions that apply motions to the game state by emitting events:
 
-- `OpMove(ctx, result, cmd)` - Updates cursor position in ECS
+- `OpMove(ctx, result)` - Updates cursor position in ECS
 - `OpDelete(ctx, result)` - **Emits `EventDeleteRequest` event** (decoupled from EnergySystem)
 
 **Key Property:** Operators translate motion results into events, eliminating direct dependencies on game systems.
 
-**6. Commands** (`modes/commands.go`)
+**7. Commands** (`modes/commands.go`)
 
 Colon command execution system:
 - `ExecuteCommand(ctx, command)` - Parses and dispatches commands
@@ -996,103 +1055,137 @@ Colon command execution system:
 - Directly manipulates GameState for debug commands
 - Can trigger overlay mode for help/debug
 
-**7. Search Functions** (`modes/search.go`)
+**8. Search Functions** (`modes/search.go`)
 
 Search functionality implementation:
 - `PerformSearch(ctx, text, forward)` - Finds matches and moves cursor
 - `RepeatSearch(ctx, forward)` - Repeats last search (n, N)
 
+**9. Action Execution** (`modes/actions.go`)
+
+Helper functions that execute validated operations on the game state.
+
 #### Input Event Flow
 
 ```
-Terminal Event (tcell)
+Terminal Event (terminal pkg)
     ↓
-InputHandler.HandleEvent()
+input.Machine.Process()  ────────────┐  (input pkg - dumb parser)
+    ↓                                │  - Parses terminal.Event
+KeyTable lookup                      │  - No game knowledge
+    ↓                                │  - Returns Intent struct
+State machine processing             │
+    ↓                                ↓
+Intent {Type, Motion, Operator, ...}
     ↓
-[Mode Router]
-    ├─→ handleNormalMode() ──→ InputMachine.Process()
-    │        ↓                        ↓
-    │   BindingTable            Motion calculation
-    │        ↓                        ↓
-    │   Action closure          OpMove / OpDelete
-    │                                 ↓
-    ├─→ handleInsertMode() ────→ PushEvent(EventCharacterTyped)
-    ├─→ handleSearchMode() ────→ PerformSearch()
-    ├─→ handleCommandMode() ───→ ExecuteCommand()
-    └─→ handleOverlayMode() ───→ Scroll/Close overlay
+modes.Router.Handle(intent)  ────────┐  (modes pkg - context-aware router)
+    ↓                                │  - Has GameContext access
+Intent validation                    │  - Validates against game state
+    ↓                                │  - Routes to operations/events
+[Intent Type Router]                 │
+    ├─→ IntentMotion          ──→ motionLUT[Motion] → OpMove(ctx, result)
+    ├─→ IntentOperatorMotion  ──→ motionLUT[Motion] → OpDelete(ctx, result) → EventDeleteRequest
+    ├─→ IntentTextChar        ──→ EventCharacterTyped (Insert), update UI state (Search/Command)
+    ├─→ IntentModeSwitch      ──→ ctx.SetMode() + machine.SetMode()
+    ├─→ IntentNuggetJump      ──→ EventNuggetJumpRequest
+    ├─→ IntentFireCleaner     ──→ EventDirectionalCleanerRequest
+    ├─→ IntentSpecial         ──→ Special command execution (n, N, ;, ,, x, D)
+    └─→ IntentTextConfirm     ──→ ExecuteCommand() or PerformSearch()
          ↓
 EventQueue (lock-free, events pkg)
          ↓
-ClockScheduler.DispatchEventsImmediately()
+ClockScheduler.processTick() → EventRouter.DispatchAll()
          ↓
 EventRouter[*engine.World] (events pkg)
          ↓
 Handler[*engine.World] implementations (systems pkg)
          ↓
-Systems (EnergySystem, NuggetSystem, CleanerSystem, etc.)
+Systems (EnergySystem, HeatSystem, NuggetSystem, CleanerSystem, PingSystem, etc.)
 ```
+
+**Key Architectural Layers:**
+1. **Terminal → Intent** (`input` package): Pure parsing with zero game knowledge
+2. **Intent → Operations/Events** (`modes` package): Context-aware routing and validation
+3. **Events → Systems** (`events` + `engine` packages): Generic event dispatch to game logic
 
 #### Mode-Specific Behavior
 
 **Normal Mode:**
-- Full vi command parsing via InputMachine
-- Arrow keys and special keys wrapped in `World.RunSafe()`
-- Rune keys processed through binding table
-- Actions executed as closures within `World.RunSafe()`
-- Tab emits `EventNuggetJumpRequest` (10 Energy cost)
-- Enter emits `EventDirectionalCleanerRequest` (heat ≥ 10, costs 10)
-- ESC activates ping grid (1 second)
+- Full vi command parsing via `input.Machine`
+- Returns Intents like `IntentMotion`, `IntentOperatorMotion`, `IntentSpecial`
+- Arrow keys and special keys mapped in `KeyTable.SpecialKeys`
+- Rune keys mapped in `KeyTable.NormalRunes`
+- `modes.Router` executes motions/operators within `World.RunSafe()`
+- Tab returns `IntentNuggetJump` → Router emits `EventNuggetJumpRequest` (10 Energy cost)
+- Enter returns `IntentFireCleaner` → Router emits `EventDirectionalCleanerRequest` (heat ≥ 10, costs 10)
+- ESC returns `IntentEscape` → Router emits `EventPingGridRequest` (1 second)
 
 **Insert Mode:**
-- Movement keys (arrows, home, end) work normally
-- Typing emits `EventCharacterTyped` events
-- Space and backspace handled directly
-- Tab emits `EventNuggetJumpRequest`
+- Movement keys (arrows, home, end) return `IntentTextNav` → Router calls `OpMove()`
+- Typing returns `IntentTextChar` → Router emits `EventCharacterTyped`
+- Space returns `IntentTextNav` with `MotionRight`
+- Backspace returns `IntentTextBackspace` → Router calls `OpMove()` left
+- Tab returns `IntentNuggetJump` → Router emits `EventNuggetJumpRequest`
 
 **Search Mode:**
-- Builds search text buffer
-- Enter triggers `PerformSearch()` which directly manipulates ECS
-- ESC clears buffer and returns to NORMAL
+- Character keys return `IntentTextChar` → Router appends to search text buffer
+- Enter returns `IntentTextConfirm` → Router calls `PerformSearch()` which directly manipulates ECS
+- ESC returns `IntentEscape` → Router clears buffer and transitions to NORMAL
 
 **Command Mode:**
-- Builds command text buffer
-- Sets pause state via `ctx.SetPaused(true)`
-- Enter executes command via `ExecuteCommand()`
+- Character keys return `IntentTextChar` → Router appends to command text buffer
+- Router calls `ctx.SetPaused(true)` on mode entry
+- Enter returns `IntentTextConfirm` → Router calls `ExecuteCommand()`
 - Commands can mutate GameState directly (debug mode)
-- ESC clears buffer, unpauses, returns to NORMAL
+- ESC returns `IntentEscape` → Router clears buffer, unpauses, returns to NORMAL
 
 **Overlay Mode:**
 - Modal display for help/debug info
-- Supports scrolling (k/j, up/down)
-- ESC/Enter closes and unpauses
+- k/j and arrows return `IntentOverlayScroll` → Router updates scroll position
+- ESC/Enter return `IntentEscape` or `IntentOverlayClose` → Router closes overlay and unpauses
 
 #### Decoupling Patterns
 
-**1. Event-Driven Communication via Dedicated Package**
-- **Package Separation**: `modes` package depends only on `events` package for message definitions
-- **No Engine Dependency**: InputHandler emits events without knowing about `engine` or `systems` packages
+**1. Two-Package Architecture for Zero Coupling**
+- **`input` Package**: Pure parser with **zero game dependencies**
+  - Depends only on `terminal` package
+  - Converts `terminal.Event` → `Intent` (pure data struct)
+  - No knowledge of `engine`, `GameContext`, or `World`
+  - Testable in complete isolation
+- **`modes` Package**: Context-aware router with game knowledge
+  - Depends on `input`, `events`, `engine`, `components`
+  - Validates `Intent` against game state
+  - Routes operations to systems via events
+  - Owns authoritative game mode state
+- **Import Graph**: `input` (terminal only) ← `modes` → `events` ← `engine` (no circular dependencies)
+
+**2. Event-Driven Communication via Dedicated Package**
+- **Package Separation**: `modes` package emits events via dedicated `events` package
+- **No Direct System Coupling**: `modes.Router` emits events without knowing about specific system implementations
 - **Generic Routing**: Systems subscribe to event types via `Router[*engine.World]` (generic over context type)
 - **Zero Coupling**: `events` package contains only data structures, no game logic
-- **Import Graph**: `modes` → `events` ← `engine` (no circular dependencies)
 
-**2. Action Closures**
-- InputMachine returns action closures in `ProcessResult`
-- Closures capture context and are executed later
-- Allows pure computation in state machine
+**3. Intent as Pure Data**
+- `input.Machine` returns pure `Intent` structs (no function pointers)
+- Intents are declarative descriptions of user actions
+- `modes.Router` interprets intents in game context
+- Clear separation: parsing vs execution
 
-**3. Motion as Pure Functions**
-- Motion functions are stateless calculations
+**4. Motion as Pure Functions**
+- Motion functions are stateless calculations (in `modes` package)
 - Return `MotionResult` describing target, not mutating state
 - Operators interpret results and emit events to `events.EventQueue`
+- Motion functions have game context access (for spatial queries)
 
-**4. Binding Table Configuration**
-- Key mappings externalized from state machine logic
-- Easy to extend with new bindings
-- Supports multiple binding contexts (normal, operator, prefix)
+**5. Look-Up Table Pattern**
+- `input.KeyTable`: Maps terminal keys → semantic actions (no game logic)
+- `modes.Router`: Maps motion/char opcodes → motion functions (with game context)
+- Separation enables independent evolution of parsing and execution
 
-**5. Mode Isolation**
-- Each mode has dedicated handler function
-- Mode transitions managed centrally in InputHandler
+**6. Mode Isolation**
+- Each mode has dedicated processing in `input.Machine`
+- Mode transitions managed by `modes.Router` (authoritative)
+- Input machine syncs its mode state from router
 - Modes don't know about each other
 
 ### Commands
@@ -1409,23 +1502,33 @@ func (s *HeatSystem) addHeat(world *engine.World, delta int) {
 
 Event-driven system managing ping grid and crosshair state (priority 300).
 
+**Architecture:**
+- **Component-Based** (not singleton): `PingComponent` is attached to cursor entity
+- Processes `PingComponent` on `ctx.CursorEntity` via ECS
+- Migrated from singleton GameState pattern to proper ECS component
+
 **Event Handling:**
 - Consumes: `EventPingGridRequest`
 - Emits: None
 
 **Responsibilities:**
-- Ping grid timer countdown (decrement `GridTimer` each frame)
+- Ping grid timer countdown (decrement `GridTimer` each frame via `dt`)
 - Grid deactivation when timer expires
 - Context-aware crosshair color synchronization with game mode
-- Processes `PingComponent` on cursor entity
+- Duration-based timing (uses `GridTimer float64` seconds remaining)
 
 **Update() Cycle:**
-- Decrement `GridTimer` if `GridActive`
+- Decrement `GridTimer` if `GridActive`: `ping.GridTimer -= dt.Seconds()`
 - Deactivate grid when timer reaches 0
 - Sync `CrosshairColor` with current game mode (via `InputResource`)
 
 **Event Handling:**
 - `EventPingGridRequest`: Activates grid for specified duration (typically 1 second from ESC key)
+
+**Rendering Integration:**
+- `PingRenderer` queries `PingComponent` from cursor entity
+- Renders crosshair (row/column highlights) based on component state
+- Checks `ShieldComponent` to exclude ping overlay from shield area
 
 ### Boost System
 
