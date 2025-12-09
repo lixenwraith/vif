@@ -8,6 +8,6 @@ type FlashComponent struct {
 	X         int           // X position of the flash
 	Y         int           // Y position of the flash
 	Char      rune          // Character that was removed
-	StartTime time.Time     // When the flash started
+	Remaining time.Duration // Time remaining
 	Duration  time.Duration // Flash duration
 }

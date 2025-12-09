@@ -104,8 +104,7 @@ func (s *NuggetSystem) handleJumpRequest(world *engine.World, now time.Time) {
 
 	// 5. Pay Energy Cost
 	s.ctx.PushEvent(events.EventEnergyAdd, &events.EnergyAddPayload{
-		Delta:  -constants.NuggetJumpCost,
-		Source: "NuggetJump",
+		Delta: -constants.NuggetJumpCost,
 	}, now)
 
 	// 6. Play Sound

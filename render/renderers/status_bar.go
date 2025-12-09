@@ -170,8 +170,8 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 	energyVal := energyComp.Current.Load()
 	energyText := fmt.Sprintf(" Energy: %d ", energyVal)
 	energyFg, energyBg := render.RgbBlack, render.RgbEnergyBg
-	blinkTime := time.Unix(0, energyComp.BlinkTime.Load())
-	if energyComp.BlinkActive.Load() && clockNow.Sub(blinkTime).Milliseconds() < 200 {
+	blinkRemaining := energyComp.BlinkRemaining.Load()
+	if energyComp.BlinkActive.Load() && blinkRemaining > 0 {
 		typeCode := energyComp.BlinkType.Load()
 		if typeCode == 0 {
 			energyFg, energyBg = render.RgbCursorError, render.RgbBlack

@@ -8,7 +8,7 @@ import (
 
 // OpMove updates cursor position based on motion result
 // Handles consecutive move penalty (heat reset)
-func OpMove(ctx *engine.GameContext, result MotionResult, cmd rune) {
+func OpMove(ctx *engine.GameContext, result MotionResult) {
 	if !result.Valid {
 		return
 	}

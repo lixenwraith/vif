@@ -40,12 +40,12 @@ func (s *SplashSystem) HandleEvent(world *engine.World, event events.GameEvent) 
 	switch event.Type {
 	case events.EventSplashRequest:
 		if payload, ok := event.Payload.(*events.SplashRequestPayload); ok {
-			s.handleSplashRequest(world, payload, event.Timestamp)
+			s.handleSplashRequest(world, payload)
 		}
 
 	case events.EventGoldSpawned:
 		if payload, ok := event.Payload.(*events.GoldSpawnedPayload); ok {
-			s.handleGoldSpawn(world, payload, event.Timestamp)
+			s.handleGoldSpawn(world, payload)
 		}
 
 	case events.EventGoldComplete, events.EventGoldTimeout, events.EventGoldDestroyed:
@@ -57,9 +57,6 @@ func (s *SplashSystem) HandleEvent(world *engine.World, event events.GameEvent) 
 
 // Update manages lifecycle of splashes (expiry, timer updates)
 func (s *SplashSystem) Update(world *engine.World, dt time.Duration) {
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-	nowNano := timeRes.GameTime.UnixNano()
-
 	var toDestroy []engine.Entity
 
 	entities := world.Splashes.All()
@@ -69,39 +66,40 @@ func (s *SplashSystem) Update(world *engine.World, dt time.Duration) {
 			continue
 		}
 
-		switch splash.Mode {
-		case components.SplashModeTransient:
-			// Check expiry
-			if nowNano-splash.StartNano >= splash.Duration {
-				toDestroy = append(toDestroy, entity)
+		// Delta-based time tracking (Robust against clock jumps/resets)
+		splash.Remaining -= dt
+
+		// Lifecycle check
+		if splash.Mode == components.SplashModeTransient && splash.Remaining <= 0 {
+			toDestroy = append(toDestroy, entity)
+			continue
+		}
+
+		// Persistent Splash Logic (Gold Timer)
+		if splash.Mode == components.SplashModePersistent {
+			// Calculate display digit based on remaining time
+			// Clamp to ensure we don't display garbage if it goes slightly negative before cleanup event
+			// TODO: migrate to timer system
+			remainingSec := splash.Remaining.Seconds()
+			if remainingSec < 0 {
+				remainingSec = 0
 			}
 
-		case components.SplashModePersistent:
-			// Update Timer logic
-			// Calculate remaining time
-			elapsedSeconds := float64(nowNano-splash.StartNano) / float64(time.Second)
-			totalSeconds := float64(splash.Duration) / float64(time.Second)
-			remaining := totalSeconds - elapsedSeconds
-
-			// Clamp and Convert
-			// Logic: 9.9s -> '9', 0.9s -> '0'
-			digit := int(remaining)
+			// TODO: this should support >9 seconds
+			digit := int(remainingSec)
 			if digit > 9 {
 				digit = 9
-			}
-			if digit < 0 {
-				digit = 0
 			}
 
 			// Update content if changed
 			newChar := rune('0' + digit)
 			if splash.Content[0] != newChar {
 				splash.Content[0] = newChar
-				// Reset animation start for pulse effect on change?
-				// Optional: subtle pulse effect could be handled here or in renderer
-				world.Splashes.Add(entity, splash)
 			}
 		}
+
+		// Write back component (state changed)
+		world.Splashes.Add(entity, splash)
 	}
 
 	for _, e := range toDestroy {
@@ -110,7 +108,7 @@ func (s *SplashSystem) Update(world *engine.World, dt time.Duration) {
 }
 
 // handleSplashRequest creates a transient splash with smart layout
-func (s *SplashSystem) handleSplashRequest(world *engine.World, payload *events.SplashRequestPayload, now time.Time) {
+func (s *SplashSystem) handleSplashRequest(world *engine.World, payload *events.SplashRequestPayload) {
 	// 1. Enforce Uniqueness: Destroy existing transient splashes
 	s.cleanupSplashesByMode(world, components.SplashModeTransient)
 
@@ -124,15 +122,15 @@ func (s *SplashSystem) handleSplashRequest(world *engine.World, payload *events.
 	// 3. Smart Layout
 	anchorX, anchorY := s.calculateSmartLayout(world, payload.OriginX, payload.OriginY, length)
 
-	// 4. Create Component
+	// 4. Create Component with Delta Timer
 	splash := components.SplashComponent{
 		Length:    length,
 		Color:     payload.Color,
 		AnchorX:   anchorX,
 		AnchorY:   anchorY,
 		Mode:      components.SplashModeTransient,
-		StartNano: now.UnixNano(),
-		Duration:  constants.SplashDuration.Nanoseconds(),
+		Remaining: constants.SplashDuration,
+		Duration:  constants.SplashDuration,
 	}
 	copy(splash.Content[:], runes[:length])
 
@@ -142,7 +140,7 @@ func (s *SplashSystem) handleSplashRequest(world *engine.World, payload *events.
 }
 
 // handleGoldSpawn creates the persistent gold timer anchored to the sequence
-func (s *SplashSystem) handleGoldSpawn(world *engine.World, payload *events.GoldSpawnedPayload, now time.Time) {
+func (s *SplashSystem) handleGoldSpawn(world *engine.World, payload *events.GoldSpawnedPayload) {
 	// 1. Enforce Uniqueness: Destroy existing timer
 	s.cleanupSplashesByMode(world, components.SplashModePersistent)
 
@@ -169,15 +167,15 @@ func (s *SplashSystem) handleGoldSpawn(world *engine.World, payload *events.Gold
 		anchorY = payload.OriginY + 1 + constants.SplashTimerPadding
 	}
 
-	// 3. Create Component
+	// 3. Create Component with Delta Timer
 	splash := components.SplashComponent{
 		Length:     1,
 		Color:      components.SplashColorGold,
 		AnchorX:    anchorX,
 		AnchorY:    anchorY,
 		Mode:       components.SplashModePersistent,
-		StartNano:  now.UnixNano(),
-		Duration:   payload.Duration.Nanoseconds(),
+		Remaining:  payload.Duration,
+		Duration:   payload.Duration,
 		SequenceID: payload.SequenceID,
 	}
 	// TODO: make it flexible for > 10 and not bound to gold - future expansion

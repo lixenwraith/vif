@@ -211,8 +211,7 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 
 				if world.Nuggets.Has(targetEntity) {
 					if char, ok := world.Characters.Get(targetEntity); ok {
-						timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-						SpawnDestructionFlash(world, col, row, char.Rune, timeRes.GameTime)
+						SpawnDestructionFlash(world, col, row, char.Rune)
 					}
 					world.DestroyEntity(targetEntity)
 					s.ctx.State.ClearActiveNuggetID(uint64(targetEntity))
@@ -322,8 +321,7 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.E
 			// Red at LevelDark - spawn flash then remove entity
 			if pos, ok := world.Positions.Get(entity); ok {
 				if char, ok := world.Characters.Get(entity); ok {
-					timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-					SpawnDestructionFlash(world, pos.X, pos.Y, char.Rune, timeRes.GameTime)
+					SpawnDestructionFlash(world, pos.X, pos.Y, char.Rune)
 				}
 			}
 			world.DestroyEntity(entity)

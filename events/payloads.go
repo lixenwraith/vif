@@ -49,8 +49,7 @@ var CharacterTypedPayloadPool = sync.Pool{
 
 // EnergyAddPayload contains energy delta
 type EnergyAddPayload struct {
-	Delta  int
-	Source string
+	Delta int
 }
 
 // EnergySetPayload contains energy value
@@ -66,8 +65,7 @@ type EnergyBlinkPayload struct {
 
 // HeatAddPayload contains heat delta
 type HeatAddPayload struct {
-	Delta  int
-	Source string // Debug identifier
+	Delta int
 }
 
 // HeatSetPayload contains absolute heat value

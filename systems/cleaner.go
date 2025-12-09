@@ -441,12 +441,9 @@ func (cs *CleanerSystem) checkAndDestroyAtPosition(world *engine.World, x, y int
 
 // spawnRemovalFlash creates a transient visual effect using generic stores
 func (cs *CleanerSystem) spawnRemovalFlash(world *engine.World, targetEntity engine.Entity) {
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-	now := timeRes.GameTime
-
 	if charComp, ok := world.Characters.Get(targetEntity); ok {
 		if posComp, ok := world.Positions.Get(targetEntity); ok {
-			SpawnDestructionFlash(world, posComp.X, posComp.Y, charComp.Rune, now)
+			SpawnDestructionFlash(world, posComp.X, posComp.Y, charComp.Rune)
 		}
 	}
 }

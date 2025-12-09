@@ -1,9 +1,13 @@
 package components
 
+import (
+	"time"
+)
+
 // CursorComponent marks an entity as the player cursor (singleton)
 // Contains cursor-specific state that was previously in GameContext
 type CursorComponent struct {
-	// ErrorFlashEnd is game time (UnixNano) when error flash expires
+	// ErrorFlashRemaining is the duration remaining for the error flash
 	// Zero value means no flash active
-	ErrorFlashEnd int64
+	ErrorFlashRemaining time.Duration
 }

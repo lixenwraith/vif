@@ -378,15 +378,15 @@ func (s *DrainSystem) despawnAllDrains(world *engine.World) {
 func (s *DrainSystem) despawnDrainWithFlash(world *engine.World, entity engine.Entity) {
 	// Get position for flash effect before destruction
 	if pos, ok := world.Positions.Get(entity); ok {
-		s.triggerDespawnFlash(world, pos.X, pos.Y)
+		// TODO: systems should not spawn flashes directly
+		SpawnDestructionFlash(world, pos.X, pos.Y, constants.DrainChar)
 	}
 	world.DestroyEntity(entity)
 }
 
 // triggerDespawnFlash triggers a destruction flash effect at the given position
 func (s *DrainSystem) triggerDespawnFlash(world *engine.World, x, y int) {
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-	SpawnDestructionFlash(world, x, y, constants.DrainChar, timeRes.GameTime)
+	SpawnDestructionFlash(world, x, y, constants.DrainChar)
 }
 
 // startMaterializeAt initiates the materialize animation for a specific position
@@ -657,8 +657,7 @@ func (s *DrainSystem) handlePassiveShieldDrain(world *engine.World, now time.Tim
 
 	if now.Sub(shield.LastDrainTime) >= constants.ShieldPassiveDrainInterval {
 		s.ctx.PushEvent(events.EventEnergyAdd, &events.EnergyAddPayload{
-			Delta:  -constants.ShieldPassiveDrainAmount,
-			Source: "DrainPassiveShield",
+			Delta: -constants.ShieldPassiveDrainAmount,
 		}, now)
 		shield.LastDrainTime = now
 		world.Shields.Add(s.ctx.CursorEntity, shield)
@@ -740,8 +739,7 @@ func (s *DrainSystem) handleDrainInteractions(world *engine.World) {
 		if isOnCursor {
 			// No shield protection: reduce heat and despawn
 			s.ctx.PushEvent(events.EventHeatAdd, &events.HeatAddPayload{
-				Delta:  -constants.DrainHeatReductionAmount,
-				Source: "DrainHit",
+				Delta: -constants.DrainHeatReductionAmount,
 			}, now)
 		}
 	}
@@ -951,7 +949,7 @@ func (s *DrainSystem) handleGoldSequenceCollision(world *engine.World, entity en
 			// Flash for gold character destruction
 			if pos, ok := world.Positions.Get(goldSequenceEntity); ok {
 				if char, ok := world.Characters.Get(goldSequenceEntity); ok {
-					SpawnDestructionFlash(world, pos.X, pos.Y, char.Rune, now)
+					SpawnDestructionFlash(world, pos.X, pos.Y, char.Rune)
 				}
 			}
 			world.DestroyEntity(goldSequenceEntity)

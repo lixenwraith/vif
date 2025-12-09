@@ -94,20 +94,24 @@ func (s *EnergySystem) Update(world *engine.World, dt time.Duration) {
 
 	// Clear error flash (red cursor) after timeout using Game Time
 	cursor, ok := world.Cursors.Get(s.ctx.CursorEntity)
-	if ok && cursor.ErrorFlashEnd > 0 && now.UnixNano() >= cursor.ErrorFlashEnd {
-		cursor.ErrorFlashEnd = 0
+	if ok && cursor.ErrorFlashRemaining > 0 {
+		cursor.ErrorFlashRemaining -= dt
+		if cursor.ErrorFlashRemaining <= 0 {
+			cursor.ErrorFlashRemaining = 0
+		}
 		world.Cursors.Add(s.ctx.CursorEntity, cursor)
 	}
 
 	// Clear energy blink after timeout
 	energyComp, ok := world.Energies.Get(s.ctx.CursorEntity)
 	if ok && energyComp.BlinkActive.Load() {
-		blinkTime := time.Unix(0, energyComp.BlinkTime.Load())
-		if now.Sub(blinkTime) > constants.EnergyBlinkTimeout {
+		remaining := energyComp.BlinkRemaining.Load() - dt.Nanoseconds()
+		if remaining <= 0 {
+			remaining = 0
 			energyComp.BlinkActive.Store(false)
-			// TODO: something probably wrong here
-			world.Energies.Add(s.ctx.CursorEntity, energyComp)
 		}
+		energyComp.BlinkRemaining.Store(remaining)
+		world.Energies.Add(s.ctx.CursorEntity, energyComp)
 	}
 
 	// Evaluate shield activation state
@@ -184,8 +188,7 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 				heatGain = 2
 			}
 			s.ctx.PushEvent(events.EventHeatAdd, &events.HeatAddPayload{
-				Delta:  heatGain,
-				Source: "CharacterTyped",
+				Delta: heatGain,
 			}, now)
 
 			// Handle boost activation and maintenance
@@ -223,8 +226,7 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 
 		// Trigger energy blink with character type and level
 		s.ctx.PushEvent(events.EventEnergyAdd, &events.EnergyAddPayload{
-			Delta:  points,
-			Source: "CharacterTyped",
+			Delta: points,
 		}, now)
 
 		// Trigger blink via event
@@ -299,8 +301,9 @@ func (s *EnergySystem) handleTypingError(world *engine.World, now time.Time) {
 	frameNumber := uint64(s.ctx.State.GetFrameNumber())
 
 	// Flash cursor error
+	// Flash cursor error
 	cursor, _ := world.Cursors.Get(s.ctx.CursorEntity)
-	cursor.ErrorFlashEnd = now.Add(constants.ErrorBlinkTimeout).UnixNano()
+	cursor.ErrorFlashRemaining = constants.ErrorBlinkTimeout
 	world.Cursors.Add(s.ctx.CursorEntity, cursor)
 
 	// Reset heat via event
@@ -332,7 +335,7 @@ func (s *EnergySystem) handleNuggetCollection(world *engine.World, entity engine
 	if char.Rune != typedRune {
 		// Incorrect character - flash error cursor and reset heat
 		cursor, _ := world.Cursors.Get(s.ctx.CursorEntity)
-		cursor.ErrorFlashEnd = now.Add(constants.ErrorBlinkTimeout).UnixNano()
+		cursor.ErrorFlashRemaining = constants.ErrorBlinkTimeout
 		world.Cursors.Add(s.ctx.CursorEntity, cursor)
 		s.ctx.PushEvent(events.EventHeatSet, &events.HeatSetPayload{Value: 0}, now)
 		s.ctx.State.SetBoostEnabled(false)
@@ -404,7 +407,7 @@ func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity engi
 	if char.Rune != typedRune {
 		// Incorrect character - flash error cursor but DON'T reset heat for gold sequence
 		cursor, _ := world.Cursors.Get(s.ctx.CursorEntity)
-		cursor.ErrorFlashEnd = now.Add(constants.ErrorBlinkTimeout).UnixNano()
+		cursor.ErrorFlashRemaining = constants.ErrorBlinkTimeout
 		world.Cursors.Add(s.ctx.CursorEntity, cursor)
 		s.triggerEnergyBlink(0, 0, now)
 		// Trigger error sound
@@ -490,7 +493,7 @@ func (s *EnergySystem) startBlink(world *engine.World, blinkType, blinkLevel uin
 	energyComp.BlinkActive.Store(true)
 	energyComp.BlinkType.Store(blinkType)
 	energyComp.BlinkLevel.Store(blinkLevel)
-	energyComp.BlinkTime.Store(now.UnixNano())
+	energyComp.BlinkRemaining.Store(constants.EnergyBlinkTimeout.Nanoseconds())
 	world.Energies.Add(s.ctx.CursorEntity, energyComp)
 }
 
@@ -501,6 +504,7 @@ func (s *EnergySystem) stopBlink(world *engine.World) {
 		return
 	}
 	energyComp.BlinkActive.Store(false)
+	energyComp.BlinkRemaining.Store(0)
 	world.Energies.Add(s.ctx.CursorEntity, energyComp)
 }
 

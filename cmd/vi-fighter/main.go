@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/input"
 	"github.com/lixenwraith/vi-fighter/modes"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/render/renderers"
@@ -182,7 +183,8 @@ func main() {
 	}
 
 	// Create input handler
-	inputHandler := modes.NewInputHandler(ctx)
+	inputMachine := input.NewMachine()
+	router := modes.NewRouter(ctx, inputMachine)
 
 	// Create frame synchronization channel
 	frameReady := make(chan struct{}, 1)
@@ -243,23 +245,28 @@ func main() {
 		select {
 		case ev := <-eventChan:
 			// Input handling always works (even during pause)
-			// InputHandler will handle pause internally when entering or exiting COMMAND mode
-			if !inputHandler.HandleEvent(ev) {
-				return // Exit game
+			// Dumb pipe: Event → Machine → Intent → Router
+			intent := inputMachine.Process(ev)
+
+			if intent != nil {
+				if !router.Handle(intent) {
+					return // Exit game
+				}
 			}
 
 			// Update Input Resource from Context AFTER handling input
 			// This ensures renderers see the mode change in the same frame it happened
 			uiSnapshot := ctx.GetUISnapshot()
 			inputRes := &engine.InputResource{
-				GameMode:    int(ctx.GetMode()),
-				CommandText: uiSnapshot.CommandText,
-				SearchText:  uiSnapshot.SearchText,
-				IsPaused:    ctx.IsPaused.Load(),
+				GameMode:       int(ctx.GetMode()),
+				CommandText:    uiSnapshot.CommandText,
+				SearchText:     uiSnapshot.SearchText,
+				PendingCommand: inputMachine.GetPendingCommand(),
+				IsPaused:       ctx.IsPaused.Load(),
 			}
 			engine.AddResource(ctx.World.Resources, inputRes)
 
-			// Dispatch input events immediately, bypassing 50ms tick wait
+			// Dispatch input events immediately, bypassing game tick wait
 			clockScheduler.DispatchEventsImmediately()
 
 			// Update orchestrator dimensions if screen resized

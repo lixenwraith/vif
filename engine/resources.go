@@ -92,10 +92,11 @@ type ConfigResource struct {
 // InputResource holds the current input state and mode
 // This decouples systems from raw terminal events and InputHandler internal logic
 type InputResource struct {
-	GameMode    int // Maps to GameMode constants (Normal, Insert, etc)
-	CommandText string
-	SearchText  string
-	IsPaused    bool
+	GameMode       int // Maps to GameMode constants (Normal, Insert, etc)
+	CommandText    string
+	SearchText     string
+	PendingCommand string // Partial command buffer (e.g., "d2" while waiting for motion)
+	IsPaused       bool
 }
 
 // Constants for mapping integer GameMode in InputResource (Avoiding circular import with engine/game.go)

@@ -8,19 +8,9 @@ import (
 	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/events"
 	"github.com/lixenwraith/vi-fighter/terminal"
-)
-
-// GameMode represents the current input mode
-type GameMode int
-
-const (
-	ModeNormal GameMode = iota
-	ModeInsert
-	ModeSearch
-	ModeCommand
-	ModeOverlay
 )
 
 // UISnapshot provides a consistent view of UI state for rendering
@@ -132,7 +122,7 @@ func NewGameContext(term terminal.Terminal) *GameContext {
 	}
 
 	// Initialize atomic mode
-	ctx.SetMode(ModeNormal)
+	ctx.SetMode(core.ModeNormal)
 
 	// Calculate game area first
 	ctx.updateGameArea()
@@ -386,33 +376,33 @@ func (ctx *GameContext) cleanupOutOfBoundsEntities(width, height int) {
 // ===== MODE ACCESSORS =====
 
 // GetMode returns the current game mode
-func (ctx *GameContext) GetMode() GameMode {
-	return GameMode(ctx.mode.Load())
+func (ctx *GameContext) GetMode() core.GameMode {
+	return core.GameMode(ctx.mode.Load())
 }
 
 // SetMode sets the current game mode
-func (ctx *GameContext) SetMode(m GameMode) {
+func (ctx *GameContext) SetMode(m core.GameMode) {
 	ctx.mode.Store(int32(m))
 }
 
 // IsInsertMode returns true if in insert mode
 func (ctx *GameContext) IsInsertMode() bool {
-	return ctx.GetMode() == ModeInsert
+	return ctx.GetMode() == core.ModeInsert
 }
 
 // IsSearchMode returns true if in search mode
 func (ctx *GameContext) IsSearchMode() bool {
-	return ctx.GetMode() == ModeSearch
+	return ctx.GetMode() == core.ModeSearch
 }
 
 // IsCommandMode returns true if in command mode
 func (ctx *GameContext) IsCommandMode() bool {
-	return ctx.GetMode() == ModeCommand
+	return ctx.GetMode() == core.ModeCommand
 }
 
 // IsOverlayMode returns true if in overlay mode
 func (ctx *GameContext) IsOverlayMode() bool {
-	return ctx.GetMode() == ModeOverlay
+	return ctx.GetMode() == core.ModeOverlay
 }
 
 // ===== UI STATE ACCESSORS =====

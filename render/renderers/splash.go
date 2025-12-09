@@ -31,14 +31,14 @@ func (s *SplashRenderer) Render(ctx render.RenderContext, world *engine.World, b
 		}
 
 		// Calculate opacity based on elapsed time relative to StartNano and Duration
-		elapsed := ctx.GameTime.UnixNano() - splash.StartNano
+		elapsed := splash.Remaining.Seconds()
 
 		// Safe divide check
 		if splash.Duration <= 0 {
 			continue
 		}
 
-		ratio := float64(elapsed) / float64(splash.Duration)
+		ratio := elapsed / splash.Duration.Seconds()
 
 		// Animation curve: Linear fade out (1.0 -> 0.0)
 		opacity := 1.0 - ratio

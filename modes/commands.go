@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/events"
 )
@@ -155,7 +156,7 @@ func setCommandError(ctx *engine.GameContext, message string) {
 // handleDebugCommand triggers debug overlay event
 func handleDebugCommand(ctx *engine.GameContext) bool {
 	// Synchronous mode switch to prevent InputHandler from reverting mode
-	ctx.SetMode(engine.ModeOverlay)
+	ctx.SetMode(core.ModeOverlay)
 	ctx.PushEvent(events.EventDebugRequest, nil, ctx.PausableClock.Now())
 	return true
 }
@@ -163,7 +164,7 @@ func handleDebugCommand(ctx *engine.GameContext) bool {
 // handleHelpCommand triggers help overlay event
 func handleHelpCommand(ctx *engine.GameContext) bool {
 	// Synchronous mode switch to prevent InputHandler from reverting mode
-	ctx.SetMode(engine.ModeOverlay)
+	ctx.SetMode(core.ModeOverlay)
 	ctx.PushEvent(events.EventHelpRequest, nil, ctx.PausableClock.Now())
 	return true
 }

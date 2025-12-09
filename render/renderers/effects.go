@@ -163,13 +163,13 @@ func (e *EffectsRenderer) drawRemovalFlashes(ctx render.RenderContext, world *en
 			continue
 		}
 
-		elapsed := ctx.GameTime.Sub(flash.StartTime)
-		if elapsed >= flash.Duration {
+		remaining := flash.Remaining
+		if remaining <= 0 {
 			continue
 		}
 
 		// Calculate opacity based on elapsed time (fade from bright to transparent)
-		opacity := 1.0 - (float64(elapsed) / float64(flash.Duration))
+		opacity := 1.0 - (float64(remaining) / float64(flash.Duration))
 		if opacity < 0.0 {
 			opacity = 0.0
 		}

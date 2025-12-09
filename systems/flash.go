@@ -22,9 +22,6 @@ func (s *FlashSystem) Priority() int {
 }
 
 func (s *FlashSystem) Update(world *engine.World, dt time.Duration) {
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-	now := timeRes.GameTime
-
 	entities := world.Flashes.All()
 	for _, entity := range entities {
 		flash, ok := world.Flashes.Get(entity)
@@ -32,20 +29,23 @@ func (s *FlashSystem) Update(world *engine.World, dt time.Duration) {
 			continue
 		}
 
-		if now.Sub(flash.StartTime) >= flash.Duration {
+		flash.Remaining -= dt
+		if flash.Remaining <= 0 {
 			world.DestroyEntity(entity)
+		} else {
+			world.Flashes.Add(entity, flash)
 		}
 	}
 }
 
 // SpawnDestructionFlash creates a flash effect at the given position
 // Call from any system when destroying an entity with visual feedback
-func SpawnDestructionFlash(world *engine.World, x, y int, char rune, now time.Time) {
+func SpawnDestructionFlash(world *engine.World, x, y int, char rune) {
 	flash := components.FlashComponent{
 		X:         x,
 		Y:         y,
 		Char:      char,
-		StartTime: now,
+		Remaining: constants.DestructionFlashDuration,
 		Duration:  constants.DestructionFlashDuration,
 	}
 

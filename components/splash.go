@@ -1,5 +1,9 @@
 package components
 
+import (
+	"time"
+)
+
 // SplashColor defines the semantic color for splash effects
 // This decouples components from the render package to avoid cyclic dependencies
 type SplashColor uint8
@@ -38,8 +42,8 @@ type SplashComponent struct {
 	AnchorY int         // Game-relative Y
 
 	// Lifecycle & Animation
-	Mode       SplashMode // Transient vs Persistent
-	StartNano  int64      // GameTime at start (for animation/expiry)
-	Duration   int64      // Duration in nanoseconds
-	SequenceID int        // ID for linking to game mechanics (e.g. Gold Sequence)
+	Mode       SplashMode    // Transient vs Persistent
+	Remaining  time.Duration // Time remaining until expiration (Delta-based)
+	Duration   time.Duration // Total initial duration (for progress/animations)
+	SequenceID int           // ID for linking to game mechanics (e.g. Gold Sequence)
 }
