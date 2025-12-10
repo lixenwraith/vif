@@ -1,13 +1,13 @@
 # focus-catalog
 
-Interactive TUI for selecting Go codebase subsets as LLM context. Indexes packages by focus tags, resolves local import dependencies, supports keyword filtering via ripgrep.
+Interactive TUI for selecting Go codebase subsets as LLM context. Indexes packages by focus tags, resolves local import dependencies, supports keyword filtering.
 
 ## Installation
 ```bash
-go build -o focus-catalog ./cmd/focus-catalog
+go build -o focus-catalog .
 ```
 
-**Optional:** `ripgrep` (`rg`) for keyword search.
+**Optional:** `ripgrep` (`rg`) for content search mode.
 
 ## Usage
 ```bash
@@ -16,9 +16,6 @@ go build -o focus-catalog ./cmd/focus-catalog
 
 # Custom output file
 ./focus-catalog -o context.txt
-
-# Use file option of combine.sh to generate concatenated code context
-./combine.sh -r -f catalog.txt -o combined.go.txt
 ```
 
 ## Focus Tags
@@ -38,31 +35,85 @@ package systems
 
 ## Key Bindings
 
+### Navigation
 | Key | Action |
 |-----|--------|
-| `j`/`k`, `↑`/`↓` | Navigate |
-| `Space` | Toggle package selection |
-| `/` | Keyword search (requires `rg`) |
-| `Enter` | Output file list, exit |
-| `Escape` | Clear filter / cancel input |
-| `g` | Cycle group filter |
+| `Tab` | Switch focus between left/right pane |
+| `j`/`k`, `↑`/`↓` | Navigate up/down |
+| `h`/`l`, `←`/`→` | Collapse/expand directory (left pane) |
+| `PgUp`/`PgDn` | Page navigation |
+
+### Selection
+| Key | Action |
+|-----|--------|
+| `Space` | Toggle selection (file, directory, or tag) |
+| `a` | Select all visible files |
+| `c` | Clear all selections and filters |
+
+### Search & Filtering
+| Key | Action |
+|-----|--------|
+| `/` | Start keyword search |
+| `s` | Toggle search mode (metadata/content) |
+| `m` | Toggle filter mode (OR/AND) |
+| `i` | Toggle case sensitivity |
+| `Escape` | Clear active filters |
+
+### Dependencies & Output
+| Key | Action |
+|-----|--------|
 | `d` | Toggle dependency expansion |
 | `+`/`-` | Adjust expansion depth (1-5) |
-| `a` | Select all visible |
-| `c` | Clear selection |
-| `i` | Toggle case sensitivity |
 | `p` | Preview output files |
-| `q` | Quit without output |
+| `Enter` | Write output file (stays in app) |
+| `q` | Quit |
+
+## Search Modes
+
+Toggle with `s` key.
+
+### Metadata Search (default)
+Searches file path, package name, group names, and tag names. Fast, no external dependencies.
+
+**Example:** Searching `ecs` matches:
+- Files in path containing "ecs" (e.g., `systems/ecs.go`)
+- Files in package named "ecs"
+- Files with `#core{ecs}` or similar tag
+
+### Content Search (requires `rg`)
+Searches actual file contents using ripgrep. Useful for finding files that reference specific identifiers, functions, or strings.
+
+**Example:** Searching `cache` matches files containing the word "cache" anywhere in source code.
+
+## Filter Modes
+
+Toggle with `m` key.
+
+### OR Mode (default)
+File matches if it has **any** of the selected tags.
+
+### AND Mode
+File matches if it has **at least one selected tag from each group** that has selections.
+
+**Example:** With `#core{ecs}` and `#game{collision}` selected:
+- OR: Files with `ecs` tag OR `collision` tag
+- AND: Files with BOTH `ecs` AND `collision` tags
 
 ## Features
 
-**Dependency Expansion:** Selecting a package auto-includes its local imports (transitive, configurable depth).
+### Split-Pane Interface
+- **Left pane:** Directory tree with files, shows selection counts `[n/m]`
+- **Right pane:** Tag groups and tags with file counts
 
-**Group Filtering:** Press `g` to cycle through tag groups, showing only packages with matching tags.
+### Visual Indicators
+- `[x]` Directly selected
+- `[+]` Included via dependency expansion
+- `[ ]` Not selected
+- Dimmed files don't match current filters
+- Orange files have `#all` tag (always included)
 
-**Keyword Search:** `/pattern<Enter>` filters to packages containing files matching the pattern.
-
-**Output:** Writes `./path/to/file.go` lines to stdout, compatible with `combine.sh -f`.
+### Dependency Expansion
+Selecting files auto-includes their package's local imports (transitive, configurable depth 1-5).
 
 ## Output Format
 ```
@@ -71,4 +122,4 @@ package systems
 ./events/types.go
 ```
 
-Files with `#all` tag always included. Sorted alphabetically.
+Files with `#all` tag always included. Sorted alphabetically. Compatible with `combine.sh -f`.

@@ -1,4 +1,4 @@
-// @focus: #render { shield-render }
+// @focus: #render { shield-render, effects }
 package renderers
 
 import (

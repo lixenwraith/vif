@@ -56,6 +56,97 @@ func (app *AppState) FileMatchesTagFilter(fi *FileInfo) bool {
 	return app.fileMatchesAND(fi)
 }
 
+// SearchContent shells to rg for content search
+func SearchContent(root, pattern string, caseSensitive bool) ([]string, error) {
+	args := []string{"--files-with-matches", "-g", "*.go"}
+	if !caseSensitive {
+		args = append(args, "-i")
+	}
+	args = append(args, "--", pattern, root)
+
+	cmd := exec.Command("rg", args...)
+	out, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+			return nil, nil // No matches
+		}
+		return nil, err
+	}
+
+	raw := strings.TrimSpace(string(out))
+	if raw == "" {
+		return nil, nil
+	}
+
+	lines := strings.Split(raw, "\n")
+	result := make([]string, 0, len(lines))
+	for _, l := range lines {
+		l = strings.TrimPrefix(l, "./")
+		l = filepath.ToSlash(l)
+		result = append(result, l)
+	}
+
+	return result, nil
+}
+
+// SearchMeta searches files by metadata (path, package, tags, groups)
+func SearchMeta(index *Index, pattern string, caseSensitive bool) []string {
+	if !caseSensitive {
+		pattern = strings.ToLower(pattern)
+	}
+
+	var matches []string
+	for path, fi := range index.Files {
+		if fileMatchesPattern(path, fi, pattern, caseSensitive) {
+			matches = append(matches, path)
+		}
+	}
+	return matches
+}
+
+// fileMatchesPattern checks if file metadata contains pattern
+func fileMatchesPattern(path string, fi *FileInfo, pattern string, caseSensitive bool) bool {
+	// Check path
+	checkPath := path
+	if !caseSensitive {
+		checkPath = strings.ToLower(path)
+	}
+	if strings.Contains(checkPath, pattern) {
+		return true
+	}
+
+	// Check package name
+	checkPkg := fi.Package
+	if !caseSensitive {
+		checkPkg = strings.ToLower(fi.Package)
+	}
+	if strings.Contains(checkPkg, pattern) {
+		return true
+	}
+
+	// Check groups and tags
+	for group, tags := range fi.Tags {
+		checkGroup := group
+		if !caseSensitive {
+			checkGroup = strings.ToLower(group)
+		}
+		if strings.Contains(checkGroup, pattern) {
+			return true
+		}
+		for _, tag := range tags {
+			checkTag := tag
+			if !caseSensitive {
+				checkTag = strings.ToLower(tag)
+			}
+			if strings.Contains(checkTag, pattern) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 // fileMatchesOR returns true if file has ANY selected tag
 func (app *AppState) fileMatchesOR(fi *FileInfo) bool {
 	for group, selectedTags := range app.Filter.SelectedTags {

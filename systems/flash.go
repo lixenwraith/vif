@@ -1,4 +1,4 @@
-// @focus: #core { ecs } #game { flash }
+// @focus: #core { ecs } #game { flash } #render { effects }
 package systems
 
 import (

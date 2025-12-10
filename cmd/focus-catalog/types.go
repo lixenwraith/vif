@@ -96,6 +96,14 @@ type TreeNode struct {
 	Depth       int          // Nesting level for indentation
 }
 
+// SearchMode type
+type SearchMode int
+
+const (
+	SearchModeMeta    SearchMode = iota // Search file path, package, tags
+	SearchModeContent                   // Search file contents via ripgrep
+)
+
 // FilterState holds cross-group tag filtering state
 type FilterState struct {
 	SelectedTags  map[string]map[string]bool // group → tag → selected
@@ -103,6 +111,7 @@ type FilterState struct {
 	Keyword       string
 	KeywordMatch  map[string]bool
 	CaseSensitive bool
+	SearchMode    SearchMode // metadata vs content search
 }
 
 // NewFilterState creates an initialized FilterState

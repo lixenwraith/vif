@@ -1,4 +1,4 @@
-// @focus: #render { ping }
+// @focus: #render { ping } #game { ping }
 package renderers
 
 import (

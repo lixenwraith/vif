@@ -25,12 +25,8 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 		case 'q':
 			return true, false
 		case '/':
-			if app.RgAvailable {
-				app.InputMode = true
-				app.InputBuffer = ""
-			} else {
-				app.Message = "ripgrep (rg) not found"
-			}
+			app.InputMode = true
+			app.InputBuffer = ""
 			return false, false
 		case 'd':
 			app.ExpandDeps = !app.ExpandDeps
@@ -59,6 +55,27 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 			} else {
 				app.Filter.Mode = FilterOR
 				app.Message = "filter mode: OR"
+			}
+			return false, false
+		case 's':
+			if app.Filter.SearchMode == SearchModeMeta {
+				if app.RgAvailable {
+					app.Filter.SearchMode = SearchModeContent
+					app.Message = "search mode: CONTENT (rg)"
+				} else {
+					app.Message = "content search unavailable (rg not found)"
+				}
+			} else {
+				app.Filter.SearchMode = SearchModeMeta
+				app.Message = "search mode: METADATA"
+			}
+			return false, false
+		case 'i':
+			app.Filter.CaseSensitive = !app.Filter.CaseSensitive
+			if app.Filter.CaseSensitive {
+				app.Message = "case sensitive ON"
+			} else {
+				app.Message = "case sensitive OFF"
 			}
 			return false, false
 		case 'c':
@@ -214,17 +231,32 @@ func (app *AppState) handleInputEvent(ev terminal.Event) (quit, output bool) {
 		app.InputMode = false
 		if app.InputBuffer != "" {
 			app.Filter.Keyword = app.InputBuffer
-			matches, err := SearchKeyword(".", app.Filter.Keyword, app.Filter.CaseSensitive)
-			if err != nil {
-				app.Message = "search error: " + err.Error()
-				app.Filter.Keyword = ""
-			} else {
-				app.Filter.KeywordMatch = make(map[string]bool)
-				for _, m := range matches {
-					app.Filter.KeywordMatch[m] = true
+			app.Filter.KeywordMatch = make(map[string]bool)
+
+			var matches []string
+			var err error
+
+			if app.Filter.SearchMode == SearchModeContent {
+				matches, err = SearchContent(".", app.Filter.Keyword, app.Filter.CaseSensitive)
+				if err != nil {
+					app.Message = "search error: " + err.Error()
+					app.Filter.Keyword = ""
+					app.InputBuffer = ""
+					return false, false
 				}
-				app.Message = fmt.Sprintf("found %d files", len(matches))
+			} else {
+				matches = SearchMeta(app.Index, app.Filter.Keyword, app.Filter.CaseSensitive)
 			}
+
+			for _, m := range matches {
+				app.Filter.KeywordMatch[m] = true
+			}
+
+			modeStr := "meta"
+			if app.Filter.SearchMode == SearchModeContent {
+				modeStr = "content"
+			}
+			app.Message = fmt.Sprintf("found %d files (%s)", len(matches), modeStr)
 		}
 		app.InputBuffer = ""
 		return false, false

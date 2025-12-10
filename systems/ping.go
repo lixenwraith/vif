@@ -1,4 +1,4 @@
-// @focus: #core { ecs } #render { ping } #events { dispatch }
+// @focus: #core { ecs } #game { ping, cursor } #render { effects, ping } #events { dispatch }
 package systems
 
 import (

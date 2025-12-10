@@ -304,14 +304,22 @@ func (app *AppState) renderStatus(cells []terminal.Cell, w, y int) {
 
 	if app.Filter.Keyword != "" {
 		matchCount := len(app.Filter.KeywordMatch)
-		filterParts = append(filterParts, fmt.Sprintf("Keyword: %q (%d)", app.Filter.Keyword, matchCount))
+		searchStr := "meta"
+		if app.Filter.SearchMode == SearchModeContent {
+			searchStr = "content"
+		}
+		filterParts = append(filterParts, fmt.Sprintf("Keyword: %q (%d, %s)", app.Filter.Keyword, matchCount, searchStr))
 	}
 
 	if len(filterParts) > 0 {
 		filterStr := strings.Join(filterParts, "  |  ")
 		drawText(cells, w, 1, y, filterStr, colorTagFg, colorDefaultBg, terminal.AttrNone)
 	} else if app.InputMode {
-		inputStr := "Search: " + app.InputBuffer + "_"
+		searchStr := "[meta]"
+		if app.Filter.SearchMode == SearchModeContent {
+			searchStr = "[content]"
+		}
+		inputStr := fmt.Sprintf("Search %s: %s_", searchStr, app.InputBuffer)
 		drawText(cells, w, 1, y, inputStr, colorHeaderFg, colorInputBg, terminal.AttrNone)
 	}
 
@@ -325,7 +333,7 @@ func (app *AppState) renderStatus(cells []terminal.Cell, w, y int) {
 }
 
 func (app *AppState) renderHelp(cells []terminal.Cell, w, y int) {
-	help := "Tab:pane  j/k:nav  h/l:collapse  Space:sel  /:search  d:deps  m:mode  Enter:out  q:quit"
+	help := "Tab:pane  j/k:nav  Space:sel  /:search  s:search-mode  m:filter-mode  d:deps  Enter:out  q:quit"
 	if len(help) > w-2 {
 		help = help[:w-5] + "..."
 	}

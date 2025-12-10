@@ -1,4 +1,4 @@
-// @focus: #core { ecs, spatial } #game { spawn } #events { dispatch } #content { loader }
+// @focus: #core { ecs, spatial } #game { spawn, colors } #events { dispatch } #content { loader }
 package systems
 
 import (
