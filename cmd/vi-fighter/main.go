@@ -211,7 +211,6 @@ func main() {
 	clockScheduler.RegisterEventHandler(cleanerSystem)
 	clockScheduler.RegisterEventHandler(splashSystem)
 	clockScheduler.RegisterEventHandler(timeKeeperSystem)
-	// clockScheduler.RegisterEventHandler(cullSystem)
 	clockScheduler.RegisterEventHandler(commandSystem)
 	clockScheduler.Start()
 	defer clockScheduler.Stop()

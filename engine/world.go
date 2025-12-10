@@ -76,7 +76,7 @@ func NewWorld() *World {
 		w.Positions,
 		w.Characters,
 		w.Sequences,
-		w.GoldSequences,
+		w.GoldSequences, // TODO: updates handled in game state, to be changed, so keeping it though dead code
 		w.Decays,
 		w.Cleaners,
 		w.Flashes,
