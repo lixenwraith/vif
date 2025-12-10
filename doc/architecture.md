@@ -4,7 +4,7 @@
 
 ### Entity-Component-System (ECS)
 **Strict Rules:**
-- Entities are ONLY identifiers (uint64)
+- Entities are ONLY identifiers (`core.Entity` = uint64, defined in `core/entity.go`)
 - Components contain ONLY data, NO logic
 - Systems contain ALL logic, operate on component sets
 - World is the single source of truth for all game state
@@ -91,6 +91,7 @@ type World struct {
     Shields        *Store[ShieldComponent]
     Heats          *Store[HeatComponent]
     Splashes       *Store[SplashComponent]
+    Timers         *Store[TimerComponent]
     MarkedForDeaths *Store[MarkedForDeathComponent]
 
     allStores []AnyStore
@@ -115,7 +116,8 @@ The Resource System provides generic, thread-safe access to global shared data w
    - `GameX`, `GameY`: Game area offset
 
 3. **`InputResource`** - Current input state:
-   - `GameMode` (int): Current mode (Normal, Insert, Search, Command)
+   - `GameMode` (core.GameMode): Current mode (defined in `core/modes.go`)
+   - Mode constants: ModeNormal, ModeInsert, ModeSearch, ModeCommand, ModeOverlay
    - `CommandText`, `SearchText` (string): Buffer text
    - `IsPaused` (bool): Pause state
 
@@ -206,6 +208,7 @@ Producer → EventQueue → ClockScheduler → EventRouter → Handler[T] → Sy
 | `EventGoldComplete` | GoldSystem | SplashSystem | `*GoldCompletionPayload{SequenceID}` |
 | `EventGoldTimeout` | GoldSystem | SplashSystem | `*GoldCompletionPayload{SequenceID}` |
 | `EventGoldDestroyed` | GoldSystem | SplashSystem | `*GoldCompletionPayload{SequenceID}` |
+| `EventTimerStart` | SplashSystem | TimeKeeperSystem | `*TimerStartPayload{Entity core.Entity, Duration time.Duration}` |
 
 **Producer Pattern (modes package):**
 ```go
@@ -295,7 +298,7 @@ router.DispatchAll(world, eventQueue)
 - **Frame Counter** (`atomic.Int64`): FrameNumber
 - **Runtime Metrics** (`atomic.Uint64`): GameTicks, CurrentAPM, PendingActions
 
-**Note**: Heat and Energy migrated from GameState to ECS components (`HeatComponent`, `EnergyComponent`) attached to cursor entity. Shield activation state moved to `ShieldComponent.Active` field.
+**Note**: Heat and Energy are stored in ECS components (`HeatComponent`, `EnergyComponent`) attached to cursor entity. Shield activation state is stored in `ShieldComponent.Active` field.
 
 #### Clock-Tick State (Mutex Protected)
 - **Spawn Timing** (`sync.RWMutex`): LastTime, NextTime, RateMultiplier
@@ -591,31 +594,37 @@ Component (marker interface)
 ├── HeatComponent {Current atomic.Int64}
 ├── ShieldComponent {Active bool, RadiusX, RadiusY float64, OverrideColor ColorClass, MaxOpacity float64, LastDrainTime time.Time}
 ├── SplashComponent {Content [8]rune, Length int, Color SplashColor, AnchorX, AnchorY int, Mode SplashMode, Remaining time.Duration, Duration time.Duration, SequenceID int}
+├── TimerComponent {Remaining time.Duration}
 └── MarkedForDeathComponent {}
 ```
 
-**Timing Architecture Changes:**
+**Timing Architecture:**
 
-The game has migrated from **timestamp-based** to **duration-based** tracking for most timed components:
+The game uses **duration-based** tracking for most timed components, with centralized lifecycle management:
 
-- **Duration-Based** (new pattern):
+- **Centralized Lifecycle Management** (via TimeKeeperSystem):
+  - `TimerComponent`: Generic lifecycle timer for entity destruction
+  - Entities register via `EventTimerStart` event with duration
+  - TimeKeeperSystem decrements `Remaining` each frame and tags for destruction when expired
+  - Currently used by: SplashSystem (transient splashes)
+
+- **Component-Managed Duration Timers**:
   - `FlashComponent`: Uses `Remaining time.Duration` (counts down each frame via `dt`)
   - `CursorComponent`: Uses `ErrorFlashRemaining time.Duration`
-  - `SplashComponent`: Uses `Remaining time.Duration` for transient splashes
+  - `SplashComponent`: Uses `Remaining time.Duration` for animation/display (lifecycle managed by TimeKeeper)
   - `PingComponent`: Uses `GridTimer float64` (seconds remaining)
 
-- **Timestamp-Based** (legacy, specific use cases):
+- **Timestamp-Based** (interval-based actions):
   - `NuggetComponent`: `SpawnTime time.Time` (spawn timing tracking)
   - `DrainComponent`: `LastMoveTime`, `LastDrainTime time.Time` (interval-based actions)
   - `ShieldComponent`: `LastDrainTime time.Time` (passive drain timing)
   - `GoldSequenceComponent`: `StartTimeNano int64` (atomic operations for concurrent access)
 
-**Benefits of Duration-Based Timing:**
+**Benefits:**
 - Eliminates entire class of timing bugs related to elapsed time calculations
+- Centralized entity lifecycle management via TimeKeeperSystem
 - Direct countdown tracking: `remaining -= dt`
-- More intuitive for lifecycle management
 - No timestamp comparison edge cases
-- Centralized time management via `TimeResource.DeltaTime`
 
 **Protection Flags:**
 - `ProtectFromDecay`: Immune to decay characters
@@ -1324,24 +1333,27 @@ ctx.Go(func() {
 
 Systems execute in priority order (lower = earlier):
 1. **BoostSystem (5)**: Boost timer expiration
-2. **EnergySystem (10)**: Process input, update energy, shield activation
-3. **HeatSystem (12)**: Heat event processing, manual cleaner trigger
-4. **SpawnSystem (15)**: Generate Blue/Green sequences
-5. **NuggetSystem (18)**: Nugget spawning/collection
-6. **GoldSystem (20)**: Gold lifecycle
-7. **ShieldSystem (21)**: Shield activation/deactivation, passive drain
+2. **ShieldSystem (6)**: Shield activation/deactivation, passive drain
+3. **HeatSystem (8)**: Heat event processing, manual cleaner trigger
+4. **EnergySystem (10)**: Process input, update energy, shield activation
+5. **SpawnSystem (15)**: Generate Blue/Green sequences
+6. **NuggetSystem (18)**: Nugget spawning/collection
+7. **GoldSystem (20)**: Gold lifecycle
 8. **CleanerSystem (22)**: Cleaner physics/collision
 9. **DrainSystem (25)**: Drain movement/logic
 10. **DecaySystem (30)**: Sequence degradation
 11. **FlashSystem (35)**: Flash effect lifecycle
-12. **PingSystem (300)**: Ping grid timer and crosshair state
-13. **SplashSystem (800)**: Splash lifecycle and gold timer updates (after game logic, before rendering)
-14. **CullSystem (900)**: Removes MarkedForDeath-tagged entities (runs last)
+12. **UISystem (50)**: UI state management
+13. **PingSystem (300)**: Ping grid timer and crosshair state
+14. **SplashSystem (800)**: Splash lifecycle and gold timer updates (after game logic, before rendering)
+15. **TimeKeeperSystem (890)**: Centralized lifecycle timer management (tags expired entities)
+16. **CullSystem (900)**: Removes MarkedForDeath-tagged entities (runs last)
 
 ### System Communication Patterns
 
 **Event-Driven Systems** (fully decoupled via events):
-- **SplashSystem**: Subscribes to 5 events, no direct system calls
+- **SplashSystem**: Subscribes to 5 events, emits 1 event (EventTimerStart)
+- **TimeKeeperSystem**: Subscribes to 1 event (EventTimerStart), no emissions (tags entities)
 - **ShieldSystem**: Subscribes to 3 events, no direct system calls
 - **FlashSystem**: Pure functional helper, no coupling
 - **CleanerSystem**: Subscribes to 2 events, emits 1 event
@@ -1505,7 +1517,6 @@ Event-driven system managing ping grid and crosshair state (priority 300).
 **Architecture:**
 - **Component-Based** (not singleton): `PingComponent` is attached to cursor entity
 - Processes `PingComponent` on `ctx.CursorEntity` via ECS
-- Migrated from singleton GameState pattern to proper ECS component
 
 **Event Handling:**
 - Consumes: `EventPingGridRequest`
@@ -1691,11 +1702,14 @@ The Splash System provides large block-character visual feedback for player acti
 - **`SplashModeTransient`**: Auto-expire after duration (typing feedback, commands, nuggets)
   - Enforces uniqueness: Only one transient splash active at a time
   - Duration: 1 second fade-out
+  - **Lifecycle Management**: Delegated to TimeKeeperSystem via `EventTimerStart`
+  - Emits timer registration event on creation with entity ID and duration
 - **`SplashModePersistent`**: Event-driven lifecycle (gold countdown timer)
   - Created by `EventGoldSpawned` with gold `SequenceID`
   - Destroyed by `EventGoldComplete`, `EventGoldTimeout`, or `EventGoldDestroyed`
   - Updates every frame to display remaining time (9 → 0)
   - Anchored to gold sequence position
+  - **Lifecycle Management**: Direct event-driven destruction (no timer needed)
 
 **Event Triggers:**
 - `EventSplashRequest`: Character typed (EnergySystem), nugget collected (EnergySystem), commands executed (InputHandler) → creates transient splash
@@ -1730,10 +1744,10 @@ The Splash System provides large block-character visual feedback for player acti
 - `SplashColorInsert`: Specific color for Insert mode feedback
 
 **Update Loop** (`SplashSystem.Update()`):
-- Transient: Check expiry, destroy if duration elapsed
+- Transient: Decrements `Remaining` for fade animation (destruction handled by TimeKeeperSystem)
 - Persistent: Update countdown digit (9→8→...→0)
-- Frame-accurate timing using `TimeResource.GameTime`
-- No orphan detection needed (event-driven lifecycle ensures cleanup)
+- Frame-accurate timing using `TimeResource.DeltaTime`
+- Lifecycle management split: TimeKeeperSystem handles transient destruction, events handle persistent destruction
 
 **Integration Points:**
 - EnergySystem: Character/nugget typing → `EventSplashRequest`
@@ -1744,6 +1758,42 @@ The Splash System provides large block-character visual feedback for player acti
 - Pure ECS (state in component)
 - Event-driven (lock-free queue)
 - No shared state between systems
+
+### TimeKeeper System
+
+Centralized lifecycle timer system that manages entity destruction based on duration-based timers (priority 890).
+
+**Architecture:**
+- **Pure ECS**: State in `TimerComponent` with `Remaining time.Duration`
+- **Event-Driven Registration**: Entities register via `EventTimerStart` event
+- **Tag-and-Cull Pattern**: Expired entities tagged with `MarkedForDeathComponent` for CullSystem
+
+**Event Handling:**
+- Consumes: `EventTimerStart` with payload `{Entity core.Entity, Duration time.Duration}`
+- Emits: None (tags entities for CullSystem to destroy)
+
+**Responsibilities:**
+- Add `TimerComponent` to entities on `EventTimerStart` event
+- Decrement `Remaining` each frame by `dt` (from `TimeResource.DeltaTime`)
+- Tag entities for destruction when timer expires (`Remaining <= 0`)
+- Remove `TimerComponent` from expired entities
+
+**Update Cycle:**
+- Iterate all entities in `World.Timers` store
+- Decrement `timer.Remaining -= dt`
+- If expired: Remove timer, add `MarkedForDeathComponent`
+- CullSystem destroys tagged entities in next cycle (priority 900)
+
+**Current Usages:**
+- **SplashSystem**: Transient splash entities (1 second duration)
+- Designed for extensibility: Any system can register timers for auto-destruction
+
+**Benefits:**
+- Centralizes entity lifecycle management
+- Eliminates per-system destruction logic
+- Duration-based timing prevents timing bugs
+- Decouples lifecycle from system-specific Update() logic
+- Single source of truth for timed entity destruction
 
 ### Shield System
 
