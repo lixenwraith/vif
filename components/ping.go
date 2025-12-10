@@ -1,3 +1,4 @@
+// @focus: #core { ecs, types } #render { ping }
 package components
 
 import (

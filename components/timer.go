@@ -1,3 +1,4 @@
+// @focus: #core { ecs, types } #game { timer }
 package components
 
 import "time"

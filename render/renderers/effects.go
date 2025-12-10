@@ -1,3 +1,4 @@
+// @focus: #render { effects }
 package renderers
 
 import (

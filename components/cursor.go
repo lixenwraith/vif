@@ -1,3 +1,4 @@
+// @focus: #core { ecs, types } #game { cursor }
 package components
 
 import (

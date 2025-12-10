@@ -1,3 +1,4 @@
+// @focus: #core { ecs, spatial } #game { decay, phase, collision } #render { effects }
 package systems
 
 import (

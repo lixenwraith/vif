@@ -1,3 +1,4 @@
+// @focus: #events { payloads } #game { energy, shield, gold, cleaner, splash }
 package events
 
 import (

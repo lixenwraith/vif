@@ -1,3 +1,4 @@
+// @focus: #core { ecs } #game { boost } #events { dispatch }
 package systems
 
 import (

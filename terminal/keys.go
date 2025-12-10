@@ -1,3 +1,4 @@
+// @focus: #terminal { keys }
 package terminal
 
 // Key represents a parsed input key

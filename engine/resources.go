@@ -1,3 +1,4 @@
+// @focus: #core { resources, types }
 package engine
 
 import (

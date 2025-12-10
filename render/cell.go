@@ -1,3 +1,4 @@
+// @focus: #render { buffer, cell }
 package render
 
 import (

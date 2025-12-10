@@ -1,3 +1,4 @@
+// @focus: #render { orchestrator }
 package render
 
 import (

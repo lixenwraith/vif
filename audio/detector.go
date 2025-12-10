@@ -1,3 +1,4 @@
+// @focus: #audio { detect }
 package audio
 
 import (

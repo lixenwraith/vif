@@ -1,3 +1,4 @@
+// @focus: #all #events { types } #core { types }
 package events
 
 import (

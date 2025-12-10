@@ -1,3 +1,4 @@
+// @focus: #constants { audio }
 package constants
 
 import "time"

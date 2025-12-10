@@ -1,3 +1,4 @@
+// @focus: #input { operator, motion } #events { dispatch }
 package modes
 
 import (

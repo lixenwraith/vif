@@ -1,3 +1,4 @@
+// @focus: #render { cursor-render }
 package renderers
 
 import (

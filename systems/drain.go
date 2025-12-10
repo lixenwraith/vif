@@ -1,3 +1,4 @@
+// @focus: #core { ecs, spatial } #game { drain, collision, spawn, shield, gold, nugget } #events { dispatch }
 package systems
 
 import (

@@ -1,3 +1,4 @@
+// @focus: #render { post-process }
 package renderers
 
 import (

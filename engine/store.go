@@ -1,3 +1,4 @@
+// @focus: #core { store, ecs }
 package engine
 
 import (

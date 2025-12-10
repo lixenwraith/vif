@@ -1,3 +1,4 @@
+// @focus: #content { manager, loader }
 package content
 
 import (

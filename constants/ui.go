@@ -1,3 +1,4 @@
+// @focus: #constants { ui }
 package constants
 
 import "time"

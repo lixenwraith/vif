@@ -1,3 +1,4 @@
+// @focus: #core { ecs, types }
 package engine
 
 import (

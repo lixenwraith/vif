@@ -1,3 +1,4 @@
+// @focus: #core { query, ecs }
 package engine
 
 import (

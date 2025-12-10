@@ -1,3 +1,4 @@
+// @focus: #all #core { world, ecs, entity, store, lifecycle }
 package engine
 
 import (

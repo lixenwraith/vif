@@ -1,3 +1,4 @@
+// @focus: #terminal { color, color-mode }
 package terminal
 
 import (

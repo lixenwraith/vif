@@ -1,3 +1,4 @@
+// @focus: #terminal { raw-input, keys }
 package terminal
 
 import (

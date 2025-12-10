@@ -1,3 +1,4 @@
+// @focus: #render { ui }
 package renderers
 
 import (

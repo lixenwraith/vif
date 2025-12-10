@@ -1,3 +1,4 @@
+// @focus: #render { splash-render }
 package renderers
 
 import (

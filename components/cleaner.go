@@ -1,3 +1,4 @@
+// @focus: #core { ecs, types } #game { cleaner } #render { effects }
 package components
 
 import (

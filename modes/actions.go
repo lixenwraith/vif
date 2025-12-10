@@ -1,3 +1,4 @@
+// @focus: #input { char-motion } #game { cursor }
 package modes
 
 import (

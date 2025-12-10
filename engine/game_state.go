@@ -1,3 +1,4 @@
+// @focus: #core { state, types } #game { phase, spawn, gold, decay, boost }
 package engine
 
 import (

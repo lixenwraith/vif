@@ -1,3 +1,4 @@
+// @focus: #core { ecs, types } #game { nugget }
 package components
 
 import "time"

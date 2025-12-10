@@ -1,3 +1,4 @@
+// @focus: #core { ecs, lifecycle }
 package systems
 
 import (

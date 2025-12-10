@@ -1,3 +1,4 @@
+// @focus: #render { orchestrator }
 package render
 
 // RenderPriority determines render order. Lower values render first

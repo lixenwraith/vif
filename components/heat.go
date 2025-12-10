@@ -1,3 +1,4 @@
+// @focus: #core { ecs, types } #game { heat }
 package components
 
 import "sync/atomic"

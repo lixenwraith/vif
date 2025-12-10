@@ -1,3 +1,4 @@
+// @focus: #core { spatial, types }
 package engine
 
 import (

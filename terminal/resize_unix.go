@@ -1,5 +1,6 @@
 //go:build unix
 
+// @focus: #terminal { resize }
 package terminal
 
 import (

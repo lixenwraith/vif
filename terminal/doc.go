@@ -1,3 +1,4 @@
+// @focus: #terminal { ansi, output, raw-input }
 // Package terminal provides direct ANSI terminal control with zero-alloc rendering.
 //
 // Features:

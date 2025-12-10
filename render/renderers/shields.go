@@ -1,3 +1,4 @@
+// @focus: #render { shield-render }
 package renderers
 
 import (

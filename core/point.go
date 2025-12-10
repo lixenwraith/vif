@@ -1,3 +1,4 @@
+// @focus: #all #core { types, spatial }
 package core
 
 // Point represents a 2D coordinate

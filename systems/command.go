@@ -1,3 +1,4 @@
+// @focus: #core { ecs } #events { dispatch }
 package systems
 
 import (

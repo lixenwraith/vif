@@ -1,3 +1,4 @@
+// @focus: #audio { types }
 package audio
 
 import (

@@ -1,3 +1,4 @@
+// @focus: #core { clock, ecs, lifecycle } #events { dispatch } #game { phase }
 package engine
 
 import (

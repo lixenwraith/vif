@@ -1,3 +1,4 @@
+// @focus: #constants { entities }
 package constants
 
 import "time"

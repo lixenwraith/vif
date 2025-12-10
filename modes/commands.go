@@ -1,3 +1,4 @@
+// @focus: #input { commands } #game { spawn, phase }
 package modes
 
 import (

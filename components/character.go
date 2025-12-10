@@ -1,3 +1,4 @@
+// @focus: #core { ecs, types } #game { spawn, gold } #render { characters }
 package components
 
 // SequenceType represents the type of character sequence

@@ -1,3 +1,4 @@
+// @focus: #core { ecs, types } #game { energy }
 package components
 
 import (

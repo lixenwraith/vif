@@ -1,3 +1,4 @@
+// @focus: #core { ecs, types } #game { flash }
 package components
 
 import "time"

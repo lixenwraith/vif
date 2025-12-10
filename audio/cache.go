@@ -1,3 +1,4 @@
+// @focus: #audio { cache }
 package audio
 
 import "sync"

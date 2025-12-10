@@ -1,3 +1,4 @@
+// @focus: #terminal { ansi, output, cell }
 package terminal
 
 import (

@@ -1,3 +1,4 @@
+// @focus: #render { context }
 package render
 
 import (

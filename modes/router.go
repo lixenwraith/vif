@@ -1,3 +1,4 @@
+// @focus: #input { router, intent, motion, operator, commands } #events { dispatch }
 package modes
 
 import (

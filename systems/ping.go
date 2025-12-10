@@ -1,3 +1,4 @@
+// @focus: #core { ecs } #render { ping } #events { dispatch }
 package systems
 
 import (

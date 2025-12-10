@@ -1,3 +1,4 @@
+// @focus: #constants { gameplay }
 package constants
 
 // AlphanumericRunes contains all alphanumeric characters as runes

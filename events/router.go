@@ -1,3 +1,4 @@
+// @focus: #events { router, dispatch }
 package events
 
 // Handler processes specific event types within a context T

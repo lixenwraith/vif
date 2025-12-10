@@ -1,3 +1,4 @@
+// @focus: #render { buffer, blend, mask, colors }
 package render
 
 import (
