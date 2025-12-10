@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"sort"
 
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
@@ -38,23 +37,24 @@ func main() {
 	_, rgErr := exec.LookPath("rg")
 
 	app := &AppState{
-		Term:           term,
-		Index:          index,
-		Selected:       make(map[string]bool),
-		ExpandDeps:     true,
-		DepthLimit:     2,
-		KeywordMatches: make(map[string]bool),
-		RgAvailable:    rgErr == nil,
-		Width:          w,
-		Height:         h,
+		Term:        term,
+		Index:       index,
+		FocusPane:   PaneLeft,
+		Selected:    make(map[string]bool),
+		ExpandDeps:  true,
+		DepthLimit:  2,
+		Filter:      NewFilterState(),
+		RgAvailable: rgErr == nil,
+		Width:       w,
+		Height:      h,
 	}
 
-	app.AllPackages = make([]string, 0, len(index.Packages))
-	for name := range index.Packages {
-		app.AllPackages = append(app.AllPackages, name)
-	}
-	sort.Strings(app.AllPackages)
-	app.UpdatePackageList()
+	// Build tree from index
+	app.TreeRoot = BuildTree(index)
+	app.RefreshTreeFlat()
+
+	// Build tag list
+	app.RefreshTagFlat()
 
 	app.Render()
 
@@ -73,22 +73,8 @@ func main() {
 				return
 			}
 
-			quit, output := app.HandleEvent(ev)
+			quit, _ := app.HandleEvent(ev)
 			if quit {
-				return
-			}
-			if output {
-				files := app.ComputeOutputFiles()
-				err := WriteOutputFile(outputPath, files)
-				if err != nil {
-					app.Message = fmt.Sprintf("write error: %v", err)
-					app.Render()
-					continue
-				}
-				app.Message = fmt.Sprintf("wrote %d files to %s", len(files), outputPath)
-				app.Render()
-				// Brief pause to show message before exit
-				term.PollEvent()
 				return
 			}
 		}

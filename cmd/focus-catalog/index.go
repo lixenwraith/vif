@@ -18,9 +18,11 @@ func BuildIndex(root string) (*Index, error) {
 		ModulePath: modPath,
 		Packages:   make(map[string]*PackageInfo),
 		Files:      make(map[string]*FileInfo),
+		AllTags:    make(map[string][]string),
 	}
 
 	groupSet := make(map[string]bool)
+	tagsByGroup := make(map[string]map[string]bool)
 
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -84,9 +86,11 @@ func BuildIndex(root string) (*Index, error) {
 			pkg.HasAll = true
 		}
 
-		// Merge tags
+		// Merge tags into package and index
 		for group, tags := range fi.Tags {
 			groupSet[group] = true
+
+			// Package tags
 			existing := pkg.AllTags[group]
 			tagSet := make(map[string]bool)
 			for _, t := range existing {
@@ -99,6 +103,14 @@ func BuildIndex(root string) (*Index, error) {
 				}
 			}
 			pkg.AllTags[group] = existing
+
+			// Index-level tags
+			if tagsByGroup[group] == nil {
+				tagsByGroup[group] = make(map[string]bool)
+			}
+			for _, t := range tags {
+				tagsByGroup[group][t] = true
+			}
 		}
 
 		// Merge imports
@@ -128,7 +140,166 @@ func BuildIndex(root string) (*Index, error) {
 	}
 	sort.Strings(index.Groups)
 
+	// Build sorted tags per group
+	for group, tagSet := range tagsByGroup {
+		tags := make([]string, 0, len(tagSet))
+		for t := range tagSet {
+			tags = append(tags, t)
+		}
+		sort.Strings(tags)
+		index.AllTags[group] = tags
+	}
+
 	return index, nil
+}
+
+// BuildTree constructs a tree from the index
+func BuildTree(index *Index) *TreeNode {
+	root := &TreeNode{
+		Name:     ".",
+		Path:     ".",
+		IsDir:    true,
+		Expanded: true,
+		Children: make([]*TreeNode, 0),
+	}
+
+	// Map dir path → node for building hierarchy
+	dirNodes := make(map[string]*TreeNode)
+	dirNodes["."] = root
+
+	// Collect all directories from packages
+	dirs := make([]string, 0, len(index.Packages))
+	for _, pkg := range index.Packages {
+		dirs = append(dirs, pkg.Dir)
+	}
+	sort.Strings(dirs)
+
+	// Create directory nodes
+	for _, dir := range dirs {
+		if dir == "." {
+			continue
+		}
+		ensureDirNode(root, dir, dirNodes, index)
+	}
+
+	// Add files to their package directories
+	for _, pkg := range index.Packages {
+		dirNode := dirNodes[pkg.Dir]
+		if dirNode == nil {
+			dirNode = root
+		}
+
+		// Sort files by name
+		files := make([]*FileInfo, len(pkg.Files))
+		copy(files, pkg.Files)
+		sort.Slice(files, func(i, j int) bool {
+			return filepath.Base(files[i].Path) < filepath.Base(files[j].Path)
+		})
+
+		for _, fi := range files {
+			fileNode := &TreeNode{
+				Name:     filepath.Base(fi.Path),
+				Path:     fi.Path,
+				IsDir:    false,
+				FileInfo: fi,
+				Parent:   dirNode,
+				Depth:    dirNode.Depth + 1,
+			}
+			dirNode.Children = append(dirNode.Children, fileNode)
+		}
+	}
+
+	// Sort children: directories first, then files, alphabetically within each
+	sortChildren(root)
+
+	return root
+}
+
+// ensureDirNode creates directory node and all parent nodes as needed
+func ensureDirNode(root *TreeNode, dir string, dirNodes map[string]*TreeNode, index *Index) *TreeNode {
+	if node, ok := dirNodes[dir]; ok {
+		return node
+	}
+
+	parts := strings.Split(dir, "/")
+	current := root
+	currentPath := ""
+
+	for i, part := range parts {
+		if currentPath == "" {
+			currentPath = part
+		} else {
+			currentPath = currentPath + "/" + part
+		}
+
+		if node, ok := dirNodes[currentPath]; ok {
+			current = node
+			continue
+		}
+
+		// Find package info if this is a package directory
+		var pkgInfo *PackageInfo
+		for _, pkg := range index.Packages {
+			if pkg.Dir == currentPath {
+				pkgInfo = pkg
+				break
+			}
+		}
+
+		node := &TreeNode{
+			Name:        part,
+			Path:        currentPath,
+			IsDir:       true,
+			Expanded:    i == 0, // Expand top-level by default
+			Children:    make([]*TreeNode, 0),
+			Parent:      current,
+			PackageInfo: pkgInfo,
+			Depth:       current.Depth + 1,
+		}
+		current.Children = append(current.Children, node)
+		dirNodes[currentPath] = node
+		current = node
+	}
+
+	return current
+}
+
+// sortChildren recursively sorts tree nodes
+func sortChildren(node *TreeNode) {
+	if len(node.Children) == 0 {
+		return
+	}
+
+	sort.Slice(node.Children, func(i, j int) bool {
+		// Directories first
+		if node.Children[i].IsDir != node.Children[j].IsDir {
+			return node.Children[i].IsDir
+		}
+		return node.Children[i].Name < node.Children[j].Name
+	})
+
+	for _, child := range node.Children {
+		sortChildren(child)
+	}
+}
+
+// FlattenTree creates a flat list of visible nodes for rendering
+func FlattenTree(root *TreeNode) []*TreeNode {
+	var result []*TreeNode
+	flattenNode(root, &result, true)
+	return result
+}
+
+func flattenNode(node *TreeNode, result *[]*TreeNode, skipRoot bool) {
+	if !skipRoot {
+		*result = append(*result, node)
+	}
+
+	if node.IsDir && node.Expanded {
+		for _, child := range node.Children {
+			flattenNode(child, result, false)
+		}
+	}
 }
 
 // parseFile extracts info from a single Go file
@@ -193,7 +364,6 @@ func parseFile(path, modPath string) (*FileInfo, error) {
 }
 
 // parseTagLine parses a @focus comment line
-// Returns tags map, isAll flag, and ok
 func parseTagLine(line string) (map[string][]string, bool, bool) {
 	line = strings.TrimPrefix(line, "//")
 	line = strings.TrimSpace(line)
@@ -208,16 +378,13 @@ func parseTagLine(line string) (map[string][]string, bool, bool) {
 	result := make(map[string][]string)
 	isAll := false
 
-	// Parse #group { tag, tag } patterns
 	for len(line) > 0 {
-		// Find next #
 		idx := strings.Index(line, "#")
 		if idx == -1 {
 			break
 		}
 		line = line[idx+1:]
 
-		// Find group name (until space or {)
 		endIdx := strings.IndexAny(line, " \t{")
 		var groupName string
 		if endIdx == -1 {
@@ -238,14 +405,13 @@ func parseTagLine(line string) (map[string][]string, bool, bool) {
 			continue
 		}
 
-		// Find tags in braces
 		line = strings.TrimSpace(line)
 		if !strings.HasPrefix(line, "{") {
 			result[groupName] = []string{}
 			continue
 		}
 
-		line = line[1:] // skip {
+		line = line[1:]
 		endBrace := strings.Index(line, "}")
 		if endBrace == -1 {
 			break
@@ -254,7 +420,6 @@ func parseTagLine(line string) (map[string][]string, bool, bool) {
 		tagsStr := line[:endBrace]
 		line = line[endBrace+1:]
 
-		// Parse comma-separated tags
 		tags := strings.Split(tagsStr, ",")
 		for _, t := range tags {
 			t = strings.TrimSpace(t)

@@ -21,18 +21,39 @@ var (
 	colorExpandedFg   = terminal.RGB{R: 180, G: 140, B: 220}
 	colorAllTagFg     = terminal.RGB{R: 255, G: 180, B: 100}
 	colorMatchCountFg = terminal.RGB{R: 180, G: 220, B: 180}
+	colorDirFg        = terminal.RGB{R: 130, G: 170, B: 220}
+	colorPaneBorder   = terminal.RGB{R: 60, G: 80, B: 100}
+	colorPaneActiveBg = terminal.RGB{R: 30, G: 35, B: 45}
 )
 
 // Layout
 const (
-	headerHeight = 2
-	statusHeight = 3
-	helpHeight   = 2
-	minWidth     = 60
-	minHeight    = 15
+	headerHeight = 1
+	statusHeight = 2
+	helpHeight   = 1
+	minWidth     = 80
+	minHeight    = 20
+	leftPaneMin  = 35
+	rightPaneMin = 30
 )
 
 const defaultModulePath = "github.com/USER/vi-fighter"
+
+// Pane identifies which pane has focus
+type Pane int
+
+const (
+	PaneLeft  Pane = iota // Packages/Files tree
+	PaneRight             // Groups/Tags
+)
+
+// FilterMode for cross-group tag selection
+type FilterMode int
+
+const (
+	FilterOR  FilterMode = iota // Match ANY selected tag
+	FilterAND                   // Match ALL selected groups (at least one tag per group)
+)
 
 // FileInfo holds parsed data for a single Go file
 type FileInfo struct {
@@ -59,6 +80,63 @@ type Index struct {
 	Packages   map[string]*PackageInfo // package name → info
 	Files      map[string]*FileInfo    // relative path → info
 	Groups     []string                // sorted list of all group names
+	AllTags    map[string][]string     // group → all tags in that group
+}
+
+// TreeNode represents a directory or file in the tree view
+type TreeNode struct {
+	Name        string       // Display name: "systems" or "drain.go"
+	Path        string       // Full relative path
+	IsDir       bool         // true for directories/packages
+	Expanded    bool         // Directory expansion state
+	Children    []*TreeNode  // Child nodes (dirs first, then files)
+	Parent      *TreeNode    // Parent node (nil for root)
+	FileInfo    *FileInfo    // Non-nil for files
+	PackageInfo *PackageInfo // Non-nil for package directories
+	Depth       int          // Nesting level for indentation
+}
+
+// FilterState holds cross-group tag filtering state
+type FilterState struct {
+	SelectedTags  map[string]map[string]bool // group → tag → selected
+	Mode          FilterMode
+	Keyword       string
+	KeywordMatch  map[string]bool
+	CaseSensitive bool
+}
+
+// NewFilterState creates an initialized FilterState
+func NewFilterState() *FilterState {
+	return &FilterState{
+		SelectedTags: make(map[string]map[string]bool),
+		Mode:         FilterOR,
+		KeywordMatch: make(map[string]bool),
+	}
+}
+
+// HasSelectedTags returns true if any tags are selected
+func (f *FilterState) HasSelectedTags() bool {
+	for _, tags := range f.SelectedTags {
+		for _, selected := range tags {
+			if selected {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// SelectedTagCount returns total number of selected tags
+func (f *FilterState) SelectedTagCount() int {
+	count := 0
+	for _, tags := range f.SelectedTags {
+		for _, selected := range tags {
+			if selected {
+				count++
+			}
+		}
+	}
+	return count
 }
 
 // AppState holds all application state
@@ -66,27 +144,33 @@ type AppState struct {
 	Term  terminal.Terminal
 	Index *Index
 
-	// Selection
-	Selected   map[string]bool // selected package names
+	// Pane focus
+	FocusPane Pane
+
+	// Tree view (left pane)
+	TreeRoot   *TreeNode   // Root of directory tree
+	TreeFlat   []*TreeNode // Flattened visible nodes for rendering
+	TreeCursor int         // Cursor position in flattened list
+	TreeScroll int         // Scroll offset for left pane
+
+	// Selection (file paths)
+	Selected   map[string]bool // file path → selected
 	ExpandDeps bool            // auto-expand dependencies
 	DepthLimit int             // expansion depth
 
-	// Filtering
-	ActiveGroup    string          // "" = all, else specific group
-	GroupIndex     int             // index into Groups slice for cycling
-	KeywordFilter  string          // current keyword (empty = none)
-	KeywordMatches map[string]bool // file paths matching keyword
-	CaseSensitive  bool            // keyword case sensitivity
-	RgAvailable    bool            // ripgrep installed
+	// Tag view (right pane)
+	TagFlat   []TagItem // Flattened groups and tags for rendering
+	TagCursor int       // Cursor position in right pane
+	TagScroll int       // Scroll offset for right pane
+
+	// Filter state
+	Filter      *FilterState
+	RgAvailable bool // ripgrep installed
 
 	// UI state
-	PackageList   []string // sorted package names (filtered for display)
-	AllPackages   []string // all package names (unfiltered)
-	CursorPos     int      // currently highlighted package index
-	ScrollOffset  int      // for scrolling long lists
 	InputMode     bool     // true when typing keyword
 	InputBuffer   string   // keyword input buffer
-	Message       string   // status message (clears on next action)
+	Message       string   // status message
 	PreviewMode   bool     // showing file preview
 	PreviewFiles  []string // files to preview
 	PreviewScroll int      // preview scroll offset
@@ -94,4 +178,13 @@ type AppState struct {
 	// Dimensions
 	Width  int
 	Height int
+}
+
+// TagItem represents a group header or tag in the right pane
+type TagItem struct {
+	IsGroup     bool   // true for group header, false for tag
+	Group       string // group name
+	Tag         string // tag name (empty for group headers)
+	Selected    bool   // selection state
+	HasSelected bool   // for groups: has any selected tags
 }

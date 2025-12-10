@@ -39,42 +39,110 @@ func SearchKeyword(root, pattern string, caseSensitive bool) ([]string, error) {
 	return result, nil
 }
 
-// UpdatePackageList filters packages based on current group/keyword
-func (app *AppState) UpdatePackageList() {
-	app.PackageList = make([]string, 0, len(app.AllPackages))
+// FileMatchesTagFilter checks if a file matches current tag filter
+func (app *AppState) FileMatchesTagFilter(fi *FileInfo) bool {
+	if fi == nil {
+		return false
+	}
 
-	for _, name := range app.AllPackages {
-		pkg := app.Index.Packages[name]
+	// No tags selected = match all
+	if !app.Filter.HasSelectedTags() {
+		return true
+	}
 
-		// Group filter
-		if app.ActiveGroup != "" {
-			if _, ok := pkg.AllTags[app.ActiveGroup]; !ok && !pkg.HasAll {
+	if app.Filter.Mode == FilterOR {
+		return app.fileMatchesOR(fi)
+	}
+	return app.fileMatchesAND(fi)
+}
+
+// fileMatchesOR returns true if file has ANY selected tag
+func (app *AppState) fileMatchesOR(fi *FileInfo) bool {
+	for group, selectedTags := range app.Filter.SelectedTags {
+		for tag, selected := range selectedTags {
+			if !selected {
 				continue
 			}
+			// Check if file has this tag
+			if fileTags, ok := fi.Tags[group]; ok {
+				for _, ft := range fileTags {
+					if ft == tag {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+// fileMatchesAND returns true if file has at least one selected tag from EACH group with selections
+func (app *AppState) fileMatchesAND(fi *FileInfo) bool {
+	for group, selectedTags := range app.Filter.SelectedTags {
+		// Check if this group has any selections
+		hasSelection := false
+		for _, selected := range selectedTags {
+			if selected {
+				hasSelection = true
+				break
+			}
+		}
+		if !hasSelection {
+			continue
 		}
 
-		// Keyword filter
-		if app.KeywordFilter != "" && len(app.KeywordMatches) > 0 {
-			hasMatch := false
-			for _, f := range pkg.Files {
-				if app.KeywordMatches[f.Path] {
-					hasMatch = true
+		// File must have at least one selected tag from this group
+		matched := false
+		if fileTags, ok := fi.Tags[group]; ok {
+			for _, ft := range fileTags {
+				if selectedTags[ft] {
+					matched = true
 					break
 				}
 			}
-			if !hasMatch {
-				continue
-			}
 		}
 
-		app.PackageList = append(app.PackageList, name)
+		if !matched {
+			return false
+		}
+	}
+	return true
+}
+
+// FileMatchesKeyword checks if file matches keyword filter
+func (app *AppState) FileMatchesKeyword(path string) bool {
+	if app.Filter.Keyword == "" {
+		return true
+	}
+	return app.Filter.KeywordMatch[path]
+}
+
+// FileMatchesAllFilters checks if file passes all active filters
+func (app *AppState) FileMatchesAllFilters(fi *FileInfo) bool {
+	if fi == nil {
+		return false
 	}
 
-	// Adjust cursor if out of bounds
-	if app.CursorPos >= len(app.PackageList) {
-		app.CursorPos = len(app.PackageList) - 1
+	// Keyword filter
+	if !app.FileMatchesKeyword(fi.Path) {
+		return false
 	}
-	if app.CursorPos < 0 {
-		app.CursorPos = 0
+
+	// Tag filter
+	if !app.FileMatchesTagFilter(fi) {
+		return false
 	}
+
+	return true
+}
+
+// CountFilteredFiles returns count of files matching current filters
+func (app *AppState) CountFilteredFiles() int {
+	count := 0
+	for _, fi := range app.Index.Files {
+		if app.FileMatchesAllFilters(fi) {
+			count++
+		}
+	}
+	return count
 }

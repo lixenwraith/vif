@@ -34,35 +34,45 @@ func ExpandDeps(selected map[string]bool, index *Index, maxDepth int) map[string
 
 // ComputeOutputFiles generates the final file list
 func (app *AppState) ComputeOutputFiles() []string {
-	pkgSet := maps.Clone(app.Selected)
-
-	if app.ExpandDeps {
-		pkgSet = ExpandDeps(pkgSet, app.Index, app.DepthLimit)
-	}
-
 	fileSet := make(map[string]bool)
 
-	// Add files from selected/expanded packages
-	for pkgName := range pkgSet {
-		if pkg, ok := app.Index.Packages[pkgName]; ok {
-			for _, f := range pkg.Files {
-				// If keyword filter active, intersect
-				if app.KeywordFilter != "" && len(app.KeywordMatches) > 0 {
-					if !app.KeywordMatches[f.Path] {
-						continue
+	// Collect directly selected files
+	for path := range app.Selected {
+		fi := app.Index.Files[path]
+		if fi != nil && app.FileMatchesAllFilters(fi) {
+			fileSet[path] = true
+		}
+	}
+
+	// Dependency expansion
+	if app.ExpandDeps && len(app.Selected) > 0 {
+		// Get packages from selected files
+		selectedPkgs := make(map[string]bool)
+		for path := range app.Selected {
+			if fi, ok := app.Index.Files[path]; ok {
+				selectedPkgs[fi.Package] = true
+			}
+		}
+
+		// Expand dependencies
+		expandedPkgs := ExpandDeps(selectedPkgs, app.Index, app.DepthLimit)
+
+		// Add files from expanded packages (respecting filters)
+		for pkgName := range expandedPkgs {
+			if pkg, ok := app.Index.Packages[pkgName]; ok {
+				for _, fi := range pkg.Files {
+					if app.FileMatchesAllFilters(fi) {
+						fileSet[fi.Path] = true
 					}
 				}
-				fileSet[f.Path] = true
 			}
 		}
 	}
 
-	// Always include #all files
-	for _, pkg := range app.Index.Packages {
-		for _, f := range pkg.Files {
-			if f.IsAll {
-				fileSet[f.Path] = true
-			}
+	// Always include #all files (if they match filters)
+	for _, fi := range app.Index.Files {
+		if fi.IsAll && app.FileMatchesAllFilters(fi) {
+			fileSet[fi.Path] = true
 		}
 	}
 
@@ -85,16 +95,4 @@ func WriteOutputFile(path string, files []string) error {
 		fmt.Fprintf(w, "./%s\n", file)
 	}
 	return w.Flush()
-}
-
-// ToggleSelection toggles selection of current package
-func (app *AppState) ToggleSelection() {
-	if len(app.PackageList) == 0 {
-		return
-	}
-	name := app.PackageList[app.CursorPos]
-	app.Selected[name] = !app.Selected[name]
-	if !app.Selected[name] {
-		delete(app.Selected, name)
-	}
 }
