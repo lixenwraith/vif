@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/components"
+	"github.com/lixenwraith/vi-fighter/core"
 )
 
 // DeleteRangeType defines the scope of deletion
@@ -103,4 +104,10 @@ type PingGridRequestPayload struct {
 // SpawnChangePayload carries configuration for spawn state
 type SpawnChangePayload struct {
 	Enabled bool
+}
+
+// TimerStartPayload configuration for a new lifecycle timer
+type TimerStartPayload struct {
+	Entity   core.Entity
+	Duration time.Duration
 }

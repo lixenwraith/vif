@@ -5,6 +5,7 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/events"
 )
@@ -57,7 +58,7 @@ func (s *SplashSystem) HandleEvent(world *engine.World, event events.GameEvent) 
 
 // Update manages lifecycle of splashes (expiry, timer updates)
 func (s *SplashSystem) Update(world *engine.World, dt time.Duration) {
-	var toDestroy []engine.Entity
+	var toDestroy []core.Entity
 
 	entities := world.Splashes.All()
 	for _, entity := range entities {
@@ -69,11 +70,12 @@ func (s *SplashSystem) Update(world *engine.World, dt time.Duration) {
 		// Delta-based time tracking (Robust against clock jumps/resets)
 		splash.Remaining -= dt
 
+		// TODO: DEPRECATE after test: Transient splash destruction is now handled by TimeKeeperSystem
 		// Lifecycle check
-		if splash.Mode == components.SplashModeTransient && splash.Remaining <= 0 {
-			toDestroy = append(toDestroy, entity)
-			continue
-		}
+		// if splash.Mode == components.SplashModeTransient && splash.Remaining <= 0 {
+		// 	toDestroy = append(toDestroy, entity)
+		// 	continue
+		// }
 
 		// Persistent Splash Logic (Gold Timer)
 		if splash.Mode == components.SplashModePersistent {
@@ -137,6 +139,12 @@ func (s *SplashSystem) handleSplashRequest(world *engine.World, payload *events.
 	// 5. Spawn
 	entity := world.CreateEntity()
 	world.Splashes.Add(entity, splash)
+
+	// 6. Register with TimeKeeper for destruction
+	s.ctx.PushEvent(events.EventTimerStart, &events.TimerStartPayload{
+		Entity:   entity,
+		Duration: constants.SplashDuration,
+	}, time.Now())
 }
 
 // handleGoldSpawn creates the persistent gold timer anchored to the sequence

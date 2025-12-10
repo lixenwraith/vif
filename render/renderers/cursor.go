@@ -2,6 +2,7 @@ package renderers
 
 import (
 	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -62,7 +63,7 @@ func (c *CursorRenderer) Render(ctx render.RenderContext, world *engine.World, b
 	}
 
 	// Get the highest priority character entity for display (excluding cursor and non-character entities)
-	displayEntity := engine.SelectTopEntityFiltered(entities, world, func(e engine.Entity) bool {
+	displayEntity := engine.SelectTopEntityFiltered(entities, world, func(e core.Entity) bool {
 		// Exclude cursor itself and non-character entities
 		if e == c.gameCtx.CursorEntity {
 			return false

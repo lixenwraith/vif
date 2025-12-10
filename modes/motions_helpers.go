@@ -2,6 +2,7 @@ package modes
 
 import (
 	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
@@ -285,7 +286,7 @@ func findPrevWORDStart(ctx *engine.GameContext, cursorX, cursorY int) int {
 // Optimized for high entity counts using spatial grid traversal (O(Width) instead of O(N))
 func findLineEnd(ctx *engine.GameContext, cursorY int) int {
 	// Stack-allocated buffer for zero-alloc queries
-	var buf [constants.MaxEntitiesPerCell]engine.Entity
+	var buf [constants.MaxEntitiesPerCell]core.Entity
 
 	// Scan from right to left
 	for x := ctx.GameWidth - 1; x >= 0; x-- {
@@ -320,7 +321,7 @@ func findFirstNonWhitespace(ctx *engine.GameContext, cursorY int) int {
 // findPrevEmptyLine finds the previous line with no interactable entities
 // Optimized for high entity counts using spatial grid traversal
 func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
-	var buf [constants.MaxEntitiesPerCell]engine.Entity
+	var buf [constants.MaxEntitiesPerCell]core.Entity
 
 	for y := cursorY - 1; y >= 0; y-- {
 		rowEmpty := true
@@ -344,7 +345,7 @@ func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
 // findNextEmptyLine finds the next line with no interactable entities
 // Optimized for high entity counts using spatial grid traversal
 func findNextEmptyLine(ctx *engine.GameContext, cursorY int) int {
-	var buf [constants.MaxEntitiesPerCell]engine.Entity
+	var buf [constants.MaxEntitiesPerCell]core.Entity
 
 	for y := cursorY + 1; y < ctx.GameHeight; y++ {
 		rowEmpty := true

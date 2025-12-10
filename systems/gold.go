@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/events"
 )
@@ -140,7 +141,7 @@ func (s *GoldSystem) spawnGold(world *engine.World) bool {
 
 	// Create entities and components
 	type entityData struct {
-		entity engine.Entity
+		entity core.Entity
 		pos    components.PositionComponent
 		char   components.CharacterComponent
 		seq    components.SequenceComponent

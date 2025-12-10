@@ -4,8 +4,7 @@ import (
 	"time"
 )
 
-// Entity is a unique identifier for an entity
-type Entity uint64
+// Entity is defined in core package to avoid cyclic dependency
 
 // Components are handled in Store
 

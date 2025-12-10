@@ -1,14 +1,18 @@
 package engine
 
+import (
+	"github.com/lixenwraith/vi-fighter/core"
+)
+
 // AnyStore provides type-erased operations for lifecycle management
 // This interface allows World to manage all stores uniformly
 // for operations like entity destruction without knowing the concrete type
 type AnyStore interface {
 	// Remove deletes a component from an entity
-	Remove(e Entity)
+	Remove(e core.Entity)
 
 	// Has checks if an entity has this component
-	Has(e Entity) bool
+	Has(e core.Entity) bool
 
 	// Count returns the number of entities with this component
 	Count() int
@@ -23,5 +27,5 @@ type QueryableStore interface {
 	AnyStore
 
 	// All returns all entities that have this component type
-	All() []Entity
+	All() []core.Entity
 }

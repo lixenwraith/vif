@@ -1,6 +1,10 @@
 package engine
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/lixenwraith/vi-fighter/core"
+)
 
 // Compile-time check to ensure Store implements QueryableStore
 var _ QueryableStore = (*Store[int])(nil)
@@ -9,20 +13,20 @@ var _ QueryableStore = (*Store[int])(nil)
 // Uses sparse set pattern for cache-friendly iteration
 type Store[T any] struct {
 	mu         sync.RWMutex
-	components map[Entity]T
-	entities   []Entity // Dense array of entities that have this component
+	components map[core.Entity]T
+	entities   []core.Entity // Dense array of entities that have this component
 }
 
 // NewStore creates a new component store for type T
 func NewStore[T any]() *Store[T] {
 	return &Store[T]{
-		components: make(map[Entity]T),
-		entities:   make([]Entity, 0, 64),
+		components: make(map[core.Entity]T),
+		entities:   make([]core.Entity, 0, 64),
 	}
 }
 
 // Add inserts or updates a component for an entity
-func (s *Store[T]) Add(e Entity, val T) {
+func (s *Store[T]) Add(e core.Entity, val T) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -33,7 +37,7 @@ func (s *Store[T]) Add(e Entity, val T) {
 }
 
 // Get retrieves a component for an entity
-func (s *Store[T]) Get(e Entity) (T, bool) {
+func (s *Store[T]) Get(e core.Entity) (T, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	val, ok := s.components[e]
@@ -41,7 +45,7 @@ func (s *Store[T]) Get(e Entity) (T, bool) {
 }
 
 // Remove deletes a component from an entity
-func (s *Store[T]) Remove(e Entity) {
+func (s *Store[T]) Remove(e core.Entity) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -59,7 +63,7 @@ func (s *Store[T]) Remove(e Entity) {
 }
 
 // Has checks if entity has this component
-func (s *Store[T]) Has(e Entity) bool {
+func (s *Store[T]) Has(e core.Entity) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	_, ok := s.components[e]
@@ -67,10 +71,10 @@ func (s *Store[T]) Has(e Entity) bool {
 }
 
 // All returns all entities with this component type
-func (s *Store[T]) All() []Entity {
+func (s *Store[T]) All() []core.Entity {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	result := make([]Entity, len(s.entities))
+	result := make([]core.Entity, len(s.entities))
 	copy(result, s.entities)
 	return result
 }
@@ -86,6 +90,6 @@ func (s *Store[T]) Count() int {
 func (s *Store[T]) Clear() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.components = make(map[Entity]T)
-	s.entities = make([]Entity, 0, 64)
+	s.components = make(map[core.Entity]T)
+	s.entities = make([]core.Entity, 0, 64)
 }

@@ -161,7 +161,7 @@ func (s *DrainSystem) calcTargetDrainCount(world *engine.World) int {
 }
 
 // getActiveDrainsBySpawnOrder returns drains sorted by SpawnOrder descending (newest first)
-func (s *DrainSystem) getActiveDrainsBySpawnOrder(world *engine.World) []engine.Entity {
+func (s *DrainSystem) getActiveDrainsBySpawnOrder(world *engine.World) []core.Entity {
 	entities := world.Drains.All()
 	if len(entities) <= 1 {
 		return entities
@@ -169,7 +169,7 @@ func (s *DrainSystem) getActiveDrainsBySpawnOrder(world *engine.World) []engine.
 
 	// Sort by SpawnOrder descending (LIFO - highest order first)
 	type drainWithOrder struct {
-		entity engine.Entity
+		entity core.Entity
 		order  int64
 	}
 
@@ -189,7 +189,7 @@ func (s *DrainSystem) getActiveDrainsBySpawnOrder(world *engine.World) []engine.
 		}
 	}
 
-	result := make([]engine.Entity, len(ordered))
+	result := make([]core.Entity, len(ordered))
 	for i, d := range ordered {
 		result[i] = d.entity
 	}
@@ -375,7 +375,7 @@ func (s *DrainSystem) despawnAllDrains(world *engine.World) {
 }
 
 // despawnDrainWithFlash removes a single drain entity and triggers destruction flash
-func (s *DrainSystem) despawnDrainWithFlash(world *engine.World, entity engine.Entity) {
+func (s *DrainSystem) despawnDrainWithFlash(world *engine.World, entity core.Entity) {
 	// Get position for flash effect before destruction
 	if pos, ok := world.Positions.Get(entity); ok {
 		// TODO: systems should not spawn flashes directly
@@ -473,7 +473,7 @@ func (s *DrainSystem) updateMaterializers(world *engine.World, dt time.Duration)
 	entities := world.Materializers.All()
 
 	type targetState struct {
-		entities   []engine.Entity
+		entities   []core.Entity
 		allArrived bool
 	}
 	// Group materializers by target position (4 entities per target)
@@ -495,7 +495,7 @@ func (s *DrainSystem) updateMaterializers(world *engine.World, dt time.Duration)
 		key := uint64(mat.TargetX)<<32 | uint64(mat.TargetY)
 		if targets[key] == nil {
 			targets[key] = &targetState{
-				entities:   make([]engine.Entity, 0, 4),
+				entities:   make([]core.Entity, 0, 4),
 				allArrived: true,
 			}
 		}
@@ -751,7 +751,7 @@ func (s *DrainSystem) handleDrainInteractions(world *engine.World) {
 // handleDrainDrainCollisions detects and removes all drains sharing a cell
 func (s *DrainSystem) handleDrainDrainCollisions(world *engine.World) {
 	// Build position -> drain entities map
-	drainPositions := make(map[uint64][]engine.Entity)
+	drainPositions := make(map[uint64][]core.Entity)
 
 	drainEntities := world.Drains.All()
 	for _, drainEntity := range drainEntities {
@@ -804,7 +804,7 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 	now := timeRes.GameTime
 
 	// Optimization buffer reusable for this scope
-	var collisionBuf [constants.MaxEntitiesPerCell]engine.Entity
+	var collisionBuf [constants.MaxEntitiesPerCell]core.Entity
 
 	// Get and iterate on all drains
 	drainEntities := world.Drains.All()
@@ -886,7 +886,7 @@ func (s *DrainSystem) updateDrainMovement(world *engine.World) {
 }
 
 // handleCollisionAtPosition processes collision with a specific entity at a given position
-func (s *DrainSystem) handleCollisionAtPosition(world *engine.World, entity engine.Entity) {
+func (s *DrainSystem) handleCollisionAtPosition(world *engine.World, entity core.Entity) {
 	// Check protection before any collision handling
 	if prot, ok := world.Protections.Get(entity); ok {
 		timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
@@ -919,7 +919,7 @@ func (s *DrainSystem) handleCollisionAtPosition(world *engine.World, entity engi
 }
 
 // handleGoldSequenceCollision removes all gold sequence entities and triggers phase transition using generic stores
-func (s *DrainSystem) handleGoldSequenceCollision(world *engine.World, entity engine.Entity, sequenceID int) {
+func (s *DrainSystem) handleGoldSequenceCollision(world *engine.World, entity core.Entity, sequenceID int) {
 	// Fetch resources
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	now := timeRes.GameTime
@@ -961,7 +961,7 @@ func (s *DrainSystem) handleGoldSequenceCollision(world *engine.World, entity en
 }
 
 // handleNuggetCollision destroys the nugget entity and clears active nugget state using generic stores
-func (s *DrainSystem) handleNuggetCollision(world *engine.World, entity engine.Entity) {
+func (s *DrainSystem) handleNuggetCollision(world *engine.World, entity core.Entity) {
 	// Clear active nugget
 	s.ctx.State.ClearActiveNuggetID(uint64(entity))
 

@@ -133,6 +133,9 @@ func main() {
 	splashSystem := systems.NewSplashSystem(ctx)
 	ctx.World.AddSystem(splashSystem)
 
+	timeKeeperSystem := systems.NewTimeKeeperSystem(ctx)
+	ctx.World.AddSystem(timeKeeperSystem)
+
 	cullSystem := systems.NewCullSystem()
 	ctx.World.AddSystem(cullSystem)
 
@@ -205,8 +208,10 @@ func main() {
 	clockScheduler.RegisterEventHandler(spawnSystem)
 	clockScheduler.RegisterEventHandler(nuggetSystem)
 	clockScheduler.RegisterEventHandler(goldSystem)
-	clockScheduler.RegisterEventHandler(splashSystem)
 	clockScheduler.RegisterEventHandler(cleanerSystem)
+	clockScheduler.RegisterEventHandler(splashSystem)
+	clockScheduler.RegisterEventHandler(timeKeeperSystem)
+	// clockScheduler.RegisterEventHandler(cullSystem)
 	clockScheduler.RegisterEventHandler(commandSystem)
 	clockScheduler.Start()
 	defer clockScheduler.Stop()

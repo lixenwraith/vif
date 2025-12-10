@@ -12,6 +12,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/content"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/events"
 )
@@ -609,7 +610,7 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 
 			// Phase 1: Create entities and prepare components
 			type entityData struct {
-				entity engine.Entity
+				entity core.Entity
 				pos    components.PositionComponent
 				char   components.CharacterComponent
 				seq    components.SequenceComponent

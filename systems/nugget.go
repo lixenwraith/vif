@@ -12,6 +12,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/events"
 )
@@ -69,7 +70,7 @@ func (s *NuggetSystem) Update(world *engine.World, dt time.Duration) {
 		return
 	}
 
-	if !world.Nuggets.Has(engine.Entity(activeNuggetEntity)) {
+	if !world.Nuggets.Has(core.Entity(activeNuggetEntity)) {
 		s.ctx.State.ClearActiveNuggetID(activeNuggetEntity)
 	}
 }
@@ -83,7 +84,7 @@ func (s *NuggetSystem) handleJumpRequest(world *engine.World, now time.Time) {
 	}
 
 	// 2. Check Active Nugget
-	nuggetID := engine.Entity(s.ctx.State.GetActiveNuggetID())
+	nuggetID := core.Entity(s.ctx.State.GetActiveNuggetID())
 	if nuggetID == 0 {
 		return
 	}
@@ -200,7 +201,7 @@ func (s *NuggetSystem) ClearActiveNugget() {
 
 // ClearActiveNuggetIfMatches clears the active nugget if it matches the entity
 // Returns true if cleared, false if already cleared or a different nugget was active
-func (s *NuggetSystem) ClearActiveNuggetIfMatches(entity engine.Entity) bool {
+func (s *NuggetSystem) ClearActiveNuggetIfMatches(entity core.Entity) bool {
 	return s.ctx.State.ClearActiveNuggetID(uint64(entity))
 }
 

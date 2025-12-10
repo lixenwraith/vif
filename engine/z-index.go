@@ -1,5 +1,9 @@
 package engine
 
+import (
+	"github.com/lixenwraith/vi-fighter/core"
+)
+
 // Z-Index constants determine priority for spatial queries and rendering
 // Higher values are "on top"
 const (
@@ -14,7 +18,7 @@ const (
 
 // GetZIndex returns the Z-index for an entity based on its components
 // It checks stores in the World to determine the entity type
-func GetZIndex(world *World, e Entity) int {
+func GetZIndex(world *World, e core.Entity) int {
 	// Check highest priority first for early exit
 	if world.Cursors.Has(e) {
 		return ZIndexCursor
@@ -38,12 +42,12 @@ func GetZIndex(world *World, e Entity) int {
 // SelectTopEntityFiltered returns the entity with highest z-index that passes the filter
 // Returns 0 if no entities pass the filter or slice is empty
 // Filter receives entity and returns true if entity should be considered
-func SelectTopEntityFiltered(entities []Entity, world *World, filter func(Entity) bool) Entity {
+func SelectTopEntityFiltered(entities []core.Entity, world *World, filter func(core.Entity) bool) core.Entity {
 	if len(entities) == 0 {
 		return 0
 	}
 
-	var top Entity
+	var top core.Entity
 	maxZ := -1
 
 	for _, e := range entities {
@@ -62,7 +66,7 @@ func SelectTopEntityFiltered(entities []Entity, world *World, filter func(Entity
 // IsInteractable returns true if the entity is an interactable game element
 // Interactable entities: Characters (with SequenceComponent), Nuggets
 // Non-interactable: Cursor, Drain, Decay, Shield, Flash
-func IsInteractable(world *World, e Entity) bool {
+func IsInteractable(world *World, e core.Entity) bool {
 	if world.Nuggets.Has(e) {
 		return true
 	}

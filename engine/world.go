@@ -5,12 +5,13 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/components"
+	"github.com/lixenwraith/vi-fighter/core"
 )
 
 // World contains all entities and their components using compile-time typed stores
 type World struct {
 	mu           sync.RWMutex
-	nextEntityID Entity
+	nextEntityID core.Entity
 
 	// Global Resources
 	Resources *ResourceStore
@@ -34,6 +35,7 @@ type World struct {
 	Heats           *Store[components.HeatComponent]
 	Splashes        *Store[components.SplashComponent]
 	MarkedForDeaths *Store[components.MarkedForDeathComponent]
+	Timers          *Store[components.TimerComponent]
 
 	allStores []AnyStore // All stores for uniform lifecycle operations
 
@@ -64,9 +66,11 @@ func NewWorld() *World {
 		Shields:         NewStore[components.ShieldComponent](),
 		Heats:           NewStore[components.HeatComponent](),
 		Splashes:        NewStore[components.SplashComponent](),
+		Timers:          NewStore[components.TimerComponent](),
 		MarkedForDeaths: NewStore[components.MarkedForDeathComponent](),
 	}
 
+	// TODO: need to make this a factory
 	// Register all stores for lifecycle operations
 	w.allStores = []AnyStore{
 		w.Positions,
@@ -86,6 +90,7 @@ func NewWorld() *World {
 		w.Shields,
 		w.Heats,
 		w.Splashes,
+		w.Timers,
 		w.MarkedForDeaths,
 	}
 
@@ -96,7 +101,7 @@ func NewWorld() *World {
 }
 
 // CreateEntity reserves a new entity ID
-func (w *World) CreateEntity() Entity {
+func (w *World) CreateEntity() core.Entity {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -106,7 +111,7 @@ func (w *World) CreateEntity() Entity {
 }
 
 // DestroyEntity removes all components associated with an entity
-func (w *World) DestroyEntity(e Entity) {
+func (w *World) DestroyEntity(e core.Entity) {
 	// Check protection before destruction
 	if prot, ok := w.Protections.Get(e); ok {
 		if prot.Mask == components.ProtectAll {

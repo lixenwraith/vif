@@ -7,6 +7,7 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
 
@@ -16,7 +17,7 @@ type DecaySystem struct {
 	currentRow         int
 	lastUpdate         time.Time
 	ctx                *engine.GameContext
-	decayedThisFrame   map[engine.Entity]bool
+	decayedThisFrame   map[core.Entity]bool
 	processedGridCells map[int]bool // Key is flat index: (y * gameWidth) + x
 }
 
@@ -26,7 +27,7 @@ func NewDecaySystem(ctx *engine.GameContext) *DecaySystem {
 		currentRow:         0,
 		lastUpdate:         time.Time{},
 		ctx:                ctx,
-		decayedThisFrame:   make(map[engine.Entity]bool),
+		decayedThisFrame:   make(map[core.Entity]bool),
 		processedGridCells: make(map[int]bool),
 	}
 	return s
@@ -130,7 +131,7 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 		delete(s.processedGridCells, k)
 	}
 
-	var collisionBuf [constants.MaxEntitiesPerCell]engine.Entity
+	var collisionBuf [constants.MaxEntitiesPerCell]core.Entity
 
 	for _, entity := range decayEntities {
 		fall, ok := world.Decays.Get(entity)
@@ -273,7 +274,7 @@ func (s *DecaySystem) applyDecayToRow(world *engine.World, row int) {
 }
 
 // applyDecayToCharacter applies decay logic to a single character entity using generic stores
-func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity engine.Entity) {
+func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity core.Entity) {
 	seq, ok := world.Sequences.Get(entity)
 	if !ok {
 		return // Not a sequence entity

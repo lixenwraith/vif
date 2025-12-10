@@ -140,6 +140,11 @@ const (
 	// Trigger: Command :help
 	// Consumer: CommandSystem | Payload: nil
 	EventHelpRequest
+
+	// EventTimerStart signals creation of a lifecycle timer for an entity
+	// Trigger: Systems creating transient entities (Splash, Flash)
+	// Consumer: TimeKeeperSystem | Payload: *TimerStartPayload
+	EventTimerStart
 )
 
 // GameEvent represents a single game event with metadata

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/core"
 )
 
 // Cell represents a single grid cell containing a fixed number of entities
@@ -9,7 +10,7 @@ import (
 type Cell struct {
 	Count    uint8
 	_        [7]byte // Explicit padding to ensure 8-byte alignment for Entities
-	Entities [constants.MaxEntitiesPerCell]Entity
+	Entities [constants.MaxEntitiesPerCell]core.Entity
 }
 
 // SpatialGrid is a dense 2D grid for fast spatial queries without allocation
@@ -30,7 +31,7 @@ func NewSpatialGrid(width, height int) *SpatialGrid {
 
 // Add inserts an entity into the grid at (x, y)
 // O(1), Returns false if bounds invalid or cell full (soft clip)
-func (g *SpatialGrid) Add(e Entity, x, y int) bool {
+func (g *SpatialGrid) Add(e core.Entity, x, y int) bool {
 	if x < 0 || x >= g.Width || y < 0 || y >= g.Height {
 		return false
 	}
@@ -48,7 +49,7 @@ func (g *SpatialGrid) Add(e Entity, x, y int) bool {
 
 // Remove deletes an entity from the grid at (x, y)
 // O(k) where k <= 15. Uses swap-remove to maintain dense packing
-func (g *SpatialGrid) Remove(e Entity, x, y int) {
+func (g *SpatialGrid) Remove(e core.Entity, x, y int) {
 	if x < 0 || x >= g.Width || y < 0 || y >= g.Height {
 		return
 	}
@@ -76,7 +77,7 @@ func (g *SpatialGrid) Remove(e Entity, x, y int) {
 // GetAllAt returns a slice view of entities at (x, y)
 // INTERNAL USE ONLY - callers must copy or hold external lock
 // O(1), returns nil if empty or out of bounds
-func (g *SpatialGrid) GetAllAt(x, y int) []Entity {
+func (g *SpatialGrid) GetAllAt(x, y int) []core.Entity {
 	if x < 0 || x >= g.Width || y < 0 || y >= g.Height {
 		return nil
 	}

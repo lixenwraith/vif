@@ -56,7 +56,7 @@ type GameContext struct {
 	LineNumWidth int
 
 	// Cursor entity (singleton)
-	CursorEntity Entity
+	CursorEntity core.Entity
 
 	// --- Thread-Safe State ---
 

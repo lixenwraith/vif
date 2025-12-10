@@ -6,14 +6,15 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/core"
 )
 
 // PositionStore maintains a spatial index using a fixed-capacity dense grid
 // It supports multiple entities per cell (up to MaxEntitiesPerCell)
 type PositionStore struct {
 	mu         sync.RWMutex
-	components map[Entity]components.PositionComponent
-	entities   []Entity // Dense array for cache-friendly iteration
+	components map[core.Entity]components.PositionComponent
+	entities   []core.Entity // Dense array for cache-friendly iteration
 	grid       *SpatialGrid
 	world      *World // Reference for z-index lookups
 }
@@ -22,15 +23,15 @@ type PositionStore struct {
 func NewPositionStore() *PositionStore {
 	// Default grid size, will be resized by GameContext if needed
 	return &PositionStore{
-		components: make(map[Entity]components.PositionComponent),
-		entities:   make([]Entity, 0, 64),
+		components: make(map[core.Entity]components.PositionComponent),
+		entities:   make([]core.Entity, 0, 64),
 		grid:       NewSpatialGrid(constants.DefaultGridWidth, constants.DefaultGridHeight), // Default safe size
 	}
 }
 
 // Add inserts or updates an entity's position
 // Multiple entities at the same location are allowed, overflow silently ignored
-func (ps *PositionStore) Add(e Entity, pos components.PositionComponent) {
+func (ps *PositionStore) Add(e core.Entity, pos components.PositionComponent) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 
@@ -50,7 +51,7 @@ func (ps *PositionStore) Add(e Entity, pos components.PositionComponent) {
 }
 
 // Remove deletes an entity from the store and grid
-func (ps *PositionStore) Remove(e Entity) {
+func (ps *PositionStore) Remove(e core.Entity) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 
@@ -75,7 +76,7 @@ func (ps *PositionStore) Remove(e Entity) {
 // Move updates position atomically
 // Note: This version ignores collisions at the Store level
 // Systems should use HasAny() or GetAllAt() for collision logic before moving if needed
-func (ps *PositionStore) Move(e Entity, newPos components.PositionComponent) error {
+func (ps *PositionStore) Move(e core.Entity, newPos components.PositionComponent) error {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 
@@ -99,7 +100,7 @@ func (ps *PositionStore) Move(e Entity, newPos components.PositionComponent) err
 
 // GetAllAt returns a COPY of entities at the given position (concurrent safe but uses memory)
 // Returns nil if position is out of bounds or empty
-func (ps *PositionStore) GetAllAt(x, y int) []Entity {
+func (ps *PositionStore) GetAllAt(x, y int) []core.Entity {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
 
@@ -109,7 +110,7 @@ func (ps *PositionStore) GetAllAt(x, y int) []Entity {
 	}
 
 	// Allocate new slice to detach from grid memory
-	result := make([]Entity, len(view))
+	result := make([]core.Entity, len(view))
 	copy(result, view)
 	return result
 }
@@ -117,7 +118,7 @@ func (ps *PositionStore) GetAllAt(x, y int) []Entity {
 // GetAllAtInto copies entities into a caller-provided buffer and returns number of entities copied
 // SAFE and ZERO-ALLOCATION if buf is on stack
 // Use for Render/Physics
-func (ps *PositionStore) GetAllAtInto(x, y int, buf []Entity) int {
+func (ps *PositionStore) GetAllAtInto(x, y int, buf []core.Entity) int {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
 
@@ -150,7 +151,7 @@ func (ps *PositionStore) ResizeGrid(width, height int) {
 }
 
 // Get retrieves a position component
-func (ps *PositionStore) Get(e Entity) (components.PositionComponent, bool) {
+func (ps *PositionStore) Get(e core.Entity) (components.PositionComponent, bool) {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
 	val, ok := ps.components[e]
@@ -158,7 +159,7 @@ func (ps *PositionStore) Get(e Entity) (components.PositionComponent, bool) {
 }
 
 // Has checks if an entity has a position component
-func (ps *PositionStore) Has(e Entity) bool {
+func (ps *PositionStore) Has(e core.Entity) bool {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
 	_, ok := ps.components[e]
@@ -166,10 +167,10 @@ func (ps *PositionStore) Has(e Entity) bool {
 }
 
 // All returns all entities with position components
-func (ps *PositionStore) All() []Entity {
+func (ps *PositionStore) All() []core.Entity {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
-	result := make([]Entity, len(ps.entities))
+	result := make([]core.Entity, len(ps.entities))
 	copy(result, ps.entities)
 	return result
 }
@@ -186,8 +187,8 @@ func (ps *PositionStore) Clear() {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 
-	ps.components = make(map[Entity]components.PositionComponent)
-	ps.entities = make([]Entity, 0, 64)
+	ps.components = make(map[core.Entity]components.PositionComponent)
+	ps.entities = make([]core.Entity, 0, 64)
 	ps.grid.Clear()
 }
 
@@ -200,7 +201,7 @@ func (ps *PositionStore) SetWorld(w *World) {
 
 // GetTopEntityFiltered returns the highest z-index entity at position that passes filter
 // Returns 0 if no matching entity found
-func (ps *PositionStore) GetTopEntityFiltered(x, y int, world *World, filter func(Entity) bool) Entity {
+func (ps *PositionStore) GetTopEntityFiltered(x, y int, world *World, filter func(core.Entity) bool) core.Entity {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
 
@@ -221,7 +222,7 @@ type PositionBatch struct {
 }
 
 type positionAddition struct {
-	entity Entity
+	entity core.Entity
 	pos    components.PositionComponent
 }
 
@@ -232,7 +233,7 @@ func (ps *PositionStore) BeginBatch() *PositionBatch {
 	}
 }
 
-func (pb *PositionBatch) Add(e Entity, pos components.PositionComponent) {
+func (pb *PositionBatch) Add(e core.Entity, pos components.PositionComponent) {
 	pb.additions = append(pb.additions, positionAddition{entity: e, pos: pos})
 }
 

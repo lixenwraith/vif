@@ -1,13 +1,17 @@
 package engine
 
-import "sort"
+import (
+	"sort"
+
+	"github.com/lixenwraith/vi-fighter/core"
+)
 
 // QueryBuilder queries entities by component intersection, optimizing by starting with the smallest store
 type QueryBuilder struct {
 	world    *World
 	stores   []QueryableStore
 	executed bool
-	results  []Entity
+	results  []core.Entity
 }
 
 // Query creates a new QueryBuilder for finding entities with specific component combinations
@@ -39,7 +43,7 @@ func (qb *QueryBuilder) With(store QueryableStore) *QueryBuilder {
 
 // Execute runs the query, returning entities in all specified stores
 // Optimizes by sorting stores by size. Results are cached on subsequent calls
-func (qb *QueryBuilder) Execute() []Entity {
+func (qb *QueryBuilder) Execute() []core.Entity {
 	if qb.executed {
 		return qb.results
 	}
@@ -47,7 +51,7 @@ func (qb *QueryBuilder) Execute() []Entity {
 
 	// Empty query returns no results
 	if len(qb.stores) == 0 {
-		qb.results = make([]Entity, 0)
+		qb.results = make([]core.Entity, 0)
 		return qb.results
 	}
 

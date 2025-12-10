@@ -272,11 +272,11 @@ func (cs *CleanerSystem) spawnCleaners(world *engine.World) {
 }
 
 // checkAndDestroyAtPositionExcluding handles collision logic with self-exclusion
-func (cs *CleanerSystem) checkAndDestroyAtPositionExcluding(world *engine.World, x, y int, selfEntity engine.Entity) {
+func (cs *CleanerSystem) checkAndDestroyAtPositionExcluding(world *engine.World, x, y int, selfEntity core.Entity) {
 	// Query all entities at position (includes cleaner itself due to PositionStore registration)
 	targetEntities := world.Positions.GetAllAt(x, y)
 
-	var toDestroy []engine.Entity
+	var toDestroy []core.Entity
 
 	// Iterate candidates with self-exclusion pattern
 	for _, e := range targetEntities {
@@ -418,7 +418,7 @@ func (cs *CleanerSystem) checkAndDestroyAtPosition(world *engine.World, x, y int
 	// returned by GetAllAt (which is a view of backing array) is unsafe if the backing array shifts
 	// However, PositionStore.Remove modifies the array in place
 	// Safer to collect candidates first
-	var toDestroy []engine.Entity
+	var toDestroy []core.Entity
 
 	for _, e := range targetEntities {
 		if e == 0 {
@@ -440,7 +440,7 @@ func (cs *CleanerSystem) checkAndDestroyAtPosition(world *engine.World, x, y int
 }
 
 // spawnRemovalFlash creates a transient visual effect using generic stores
-func (cs *CleanerSystem) spawnRemovalFlash(world *engine.World, targetEntity engine.Entity) {
+func (cs *CleanerSystem) spawnRemovalFlash(world *engine.World, targetEntity core.Entity) {
 	if charComp, ok := world.Characters.Get(targetEntity); ok {
 		if posComp, ok := world.Positions.Get(targetEntity); ok {
 			SpawnDestructionFlash(world, posComp.X, posComp.Y, charComp.Rune)

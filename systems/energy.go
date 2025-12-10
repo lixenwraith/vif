@@ -6,6 +6,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/events"
 )
@@ -135,7 +136,7 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 	now := timeRes.GameTime
 
 	// Find interactable entity at cursor position using z-index filtered lookup
-	entity := world.Positions.GetTopEntityFiltered(cursorX, cursorY, world, func(e engine.Entity) bool {
+	entity := world.Positions.GetTopEntityFiltered(cursorX, cursorY, world, func(e core.Entity) bool {
 		return engine.IsInteractable(world, e)
 	})
 
@@ -324,7 +325,7 @@ func (s *EnergySystem) handleTypingError(world *engine.World, now time.Time) {
 }
 
 // handleNuggetCollection processes nugget collection (requires typing matching character)
-func (s *EnergySystem) handleNuggetCollection(world *engine.World, entity engine.Entity, char components.CharacterComponent, typedRune rune) {
+func (s *EnergySystem) handleNuggetCollection(world *engine.World, entity core.Entity, char components.CharacterComponent, typedRune rune) {
 	// Fetch resources
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
@@ -396,7 +397,7 @@ func (s *EnergySystem) handleNuggetCollection(world *engine.World, entity engine
 }
 
 // handleGoldSequenceTyping processes typing of gold sequence characters
-func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity engine.Entity, char components.CharacterComponent, seq components.SequenceComponent, typedRune rune) {
+func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity core.Entity, char components.CharacterComponent, seq components.SequenceComponent, typedRune rune) {
 	// Fetch resources
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
@@ -522,10 +523,10 @@ func (s *EnergySystem) handleDeleteRequest(world *engine.World, payload *events.
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 
 	resetHeat := false
-	entitiesToDelete := make([]engine.Entity, 0)
+	entitiesToDelete := make([]core.Entity, 0)
 
 	// Helper to check and mark entity for deletion
-	checkEntity := func(entity engine.Entity) {
+	checkEntity := func(entity core.Entity) {
 		if !engine.IsInteractable(world, entity) {
 			return
 		}
