@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/lixenwraith/vi-fighter/terminal"
@@ -22,7 +23,9 @@ func (app *AppState) Render() {
 		cells[i] = terminal.Cell{Rune: ' ', Fg: colorDefaultFg, Bg: colorDefaultBg}
 	}
 
-	if app.PreviewMode {
+	if app.MindmapMode {
+		app.RenderMindmap(cells, w, h)
+	} else if app.PreviewMode {
 		app.renderPreview(cells, w, h)
 	} else {
 		app.renderSplitPane(cells, w, h)
@@ -243,16 +246,22 @@ func (app *AppState) renderRightPane(cells []terminal.Cell, totalWidth, startX, 
 		x := startX + 1
 
 		if item.IsGroup {
-			// Group header
+			// Expand indicator
+			expandChar := '▶'
+			if item.Expanded {
+				expandChar = '▼'
+			}
+			cells[y*totalWidth+x] = terminal.Cell{Rune: expandChar, Fg: colorGroupFg, Bg: rowBg}
+			x += 2
+
+			// Selection indicator
 			indicator := "○"
 			indicatorFg := colorUnselected
 			if item.HasSelected {
-				indicator := "●"
+				indicator = "◉"
 				indicatorFg = colorSelected
-				drawText(cells, totalWidth, x, y, indicator, indicatorFg, rowBg, terminal.AttrNone)
-			} else {
-				drawText(cells, totalWidth, x, y, indicator, indicatorFg, rowBg, terminal.AttrNone)
 			}
+			drawText(cells, totalWidth, x, y, indicator, indicatorFg, rowBg, terminal.AttrNone)
 			x += 2
 
 			groupStr := "#" + item.Group
@@ -265,7 +274,7 @@ func (app *AppState) renderRightPane(cells []terminal.Cell, totalWidth, startX, 
 			}
 		} else {
 			// Tag item (indented)
-			x += 2
+			x += 4
 
 			checkbox := "[ ]"
 			checkFg := colorUnselected
@@ -290,7 +299,21 @@ func (app *AppState) renderRightPane(cells []terminal.Cell, totalWidth, startX, 
 }
 
 func (app *AppState) renderStatus(cells []terminal.Cell, w, y int) {
-	// Line 1: Filter info
+	// Line 1: Filter info or edit mode
+	if app.EditMode {
+		// Edit mode UI
+		label := fmt.Sprintf("Edit [%s]: ", app.EditTarget)
+		maxInputLen := w - len(label) - 3
+		input := app.InputBuffer
+		if len(input) > maxInputLen && maxInputLen > 3 {
+			input = input[len(input)-maxInputLen+3:]
+		}
+		editStr := label + input + "_"
+		drawText(cells, w, 1, y, editStr, colorHeaderFg, colorInputBg, terminal.AttrNone)
+		drawText(cells, w, 1, y+1, "Enter:save  Esc:cancel", colorHelpFg, colorDefaultBg, terminal.AttrDim)
+		return
+	}
+
 	var filterParts []string
 
 	if app.Filter.HasSelectedTags() {
@@ -422,27 +445,38 @@ func (app *AppState) RefreshTagFlat() {
 			}
 		}
 
+		// Default to expanded if not set
+		expanded := true
+		if exp, ok := app.GroupExpanded[group]; ok {
+			expanded = exp
+		} else {
+			app.GroupExpanded[group] = true
+		}
+
 		// Group header
 		app.TagFlat = append(app.TagFlat, TagItem{
 			IsGroup:     true,
 			Group:       group,
 			HasSelected: hasSelected,
+			Expanded:    expanded,
 		})
 
-		// Tags in group
-		if tags, ok := app.Index.AllTags[group]; ok {
-			for _, tag := range tags {
-				selected := false
-				if groupTags, ok := app.Filter.SelectedTags[group]; ok {
-					selected = groupTags[tag]
-				}
+		// Tags in group (only if expanded)
+		if expanded {
+			if tags, ok := app.Index.AllTags[group]; ok {
+				for _, tag := range tags {
+					selected := false
+					if groupTags, ok := app.Filter.SelectedTags[group]; ok {
+						selected = groupTags[tag]
+					}
 
-				app.TagFlat = append(app.TagFlat, TagItem{
-					IsGroup:  false,
-					Group:    group,
-					Tag:      tag,
-					Selected: selected,
-				})
+					app.TagFlat = append(app.TagFlat, TagItem{
+						IsGroup:  false,
+						Group:    group,
+						Tag:      tag,
+						Selected: selected,
+					})
+				}
 			}
 		}
 	}
@@ -477,25 +511,30 @@ func (app *AppState) countDirSelection(node *TreeNode) (selected, total int) {
 func (app *AppState) computeDepExpandedFiles() map[string]bool {
 	result := make(map[string]bool)
 
-	// Get selected packages from selected files
-	selectedPkgs := make(map[string]bool)
+	// Get package directories from selected files
+	selectedDirs := make(map[string]bool)
 	for path := range app.Selected {
-		if fi, ok := app.Index.Files[path]; ok {
-			selectedPkgs[fi.Package] = true
+		dir := filepath.Dir(path)
+		dir = filepath.ToSlash(dir)
+		if dir == "." {
+			if fi, ok := app.Index.Files[path]; ok {
+				dir = fi.Package
+			}
 		}
+		selectedDirs[dir] = true
 	}
 
 	// Expand dependencies
-	expandedPkgs := ExpandDeps(selectedPkgs, app.Index, app.DepthLimit)
+	expandedDirs := ExpandDeps(selectedDirs, app.Index, app.DepthLimit)
 
-	// Remove originally selected packages
-	for pkg := range selectedPkgs {
-		delete(expandedPkgs, pkg)
+	// Remove originally selected directories
+	for dir := range selectedDirs {
+		delete(expandedDirs, dir)
 	}
 
 	// Collect files from expanded packages
-	for pkgName := range expandedPkgs {
-		if pkg, ok := app.Index.Packages[pkgName]; ok {
+	for dir := range expandedDirs {
+		if pkg, ok := app.Index.Packages[dir]; ok {
 			for _, f := range pkg.Files {
 				if !app.Selected[f.Path] {
 					result[f.Path] = true

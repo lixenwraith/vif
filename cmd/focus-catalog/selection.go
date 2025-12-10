@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 )
@@ -16,12 +17,15 @@ func ExpandDeps(selected map[string]bool, index *Index, maxDepth int) map[string
 
 	for depth := 0; depth < maxDepth && len(frontier) > 0; depth++ {
 		var next []string
-		for _, pkg := range frontier {
-			if info, ok := index.Packages[pkg]; ok {
-				for _, dep := range info.LocalDeps {
-					if !result[dep] {
-						result[dep] = true
-						next = append(next, dep)
+		for _, dir := range frontier {
+			if pkg, ok := index.Packages[dir]; ok {
+				for _, dep := range pkg.LocalDeps {
+					// Find package by name - need to search
+					for pkgDir, pkgInfo := range index.Packages {
+						if pkgInfo.Name == dep && !result[pkgDir] {
+							result[pkgDir] = true
+							next = append(next, pkgDir)
+						}
 					}
 				}
 			}
@@ -46,20 +50,25 @@ func (app *AppState) ComputeOutputFiles() []string {
 
 	// Dependency expansion
 	if app.ExpandDeps && len(app.Selected) > 0 {
-		// Get packages from selected files
-		selectedPkgs := make(map[string]bool)
+		// Get package directories from selected files
+		selectedDirs := make(map[string]bool)
 		for path := range app.Selected {
-			if fi, ok := app.Index.Files[path]; ok {
-				selectedPkgs[fi.Package] = true
+			dir := filepath.Dir(path)
+			dir = filepath.ToSlash(dir)
+			if dir == "." {
+				if fi, ok := app.Index.Files[path]; ok {
+					dir = fi.Package
+				}
 			}
+			selectedDirs[dir] = true
 		}
 
 		// Expand dependencies
-		expandedPkgs := ExpandDeps(selectedPkgs, app.Index, app.DepthLimit)
+		expandedDirs := ExpandDeps(selectedDirs, app.Index, app.DepthLimit)
 
 		// Add files from expanded packages (respecting filters)
-		for pkgName := range expandedPkgs {
-			if pkg, ok := app.Index.Packages[pkgName]; ok {
+		for dir := range expandedDirs {
+			if pkg, ok := app.Index.Packages[dir]; ok {
 				for _, fi := range pkg.Files {
 					if app.FileMatchesAllFilters(fi) {
 						fileSet[fi.Path] = true

@@ -10,8 +10,18 @@ import (
 func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 	app.Message = ""
 
+	if app.MindmapMode {
+		app.HandleMindmapEvent(ev)
+		return false, false
+	}
+
 	if app.PreviewMode {
 		return app.handlePreviewEvent(ev)
+	}
+
+	if app.EditMode {
+		app.HandleEditEvent(ev)
+		return false, false
 	}
 
 	if app.InputMode {
@@ -27,6 +37,15 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 		case '/':
 			app.InputMode = true
 			app.InputBuffer = ""
+			return false, false
+		case 'v':
+			app.EnterMindmap()
+			return false, false
+		case 'r':
+			app.ReindexAll()
+			return false, false
+		case 'e':
+			app.EnterEditMode()
 			return false, false
 		case 'd':
 			app.ExpandDeps = !app.ExpandDeps
@@ -144,6 +163,14 @@ func (app *AppState) handleLeftPaneEvent(ev terminal.Event) (quit, output bool) 
 			app.toggleTreeSelection()
 		case 'a':
 			app.selectAllVisible()
+		case '0':
+			app.jumpTreeToStart()
+		case '$':
+			app.jumpTreeToEnd()
+		case 'H':
+			app.collapseAllDirs()
+		case 'L':
+			app.expandAllDirs()
 		}
 
 	case terminal.KeyUp:
@@ -160,6 +187,10 @@ func (app *AppState) handleLeftPaneEvent(ev terminal.Event) (quit, output bool) 
 		app.pageTreeCursor(-1)
 	case terminal.KeyPageDown:
 		app.pageTreeCursor(1)
+	case terminal.KeyHome:
+		app.jumpTreeToStart()
+	case terminal.KeyEnd:
+		app.jumpTreeToEnd()
 	}
 
 	return false, false
@@ -173,23 +204,186 @@ func (app *AppState) handleRightPaneEvent(ev terminal.Event) (quit, output bool)
 			app.moveTagCursor(1)
 		case 'k':
 			app.moveTagCursor(-1)
+		case 'h':
+			app.collapseCurrentGroup()
+		case 'l':
+			app.expandCurrentGroup()
 		case ' ':
 			app.toggleTagSelection()
+		case '0':
+			app.jumpTagToStart()
+		case '$':
+			app.jumpTagToEnd()
+		case 'H':
+			app.collapseAllGroups()
+		case 'L':
+			app.expandAllGroups()
 		}
 
 	case terminal.KeyUp:
 		app.moveTagCursor(-1)
 	case terminal.KeyDown:
 		app.moveTagCursor(1)
+	case terminal.KeyLeft:
+		app.collapseCurrentGroup()
+	case terminal.KeyRight:
+		app.expandCurrentGroup()
 	case terminal.KeySpace:
 		app.toggleTagSelection()
 	case terminal.KeyPageUp:
 		app.pageTagCursor(-1)
 	case terminal.KeyPageDown:
 		app.pageTagCursor(1)
+	case terminal.KeyHome:
+		app.jumpTagToStart()
+	case terminal.KeyEnd:
+		app.jumpTagToEnd()
 	}
 
 	return false, false
+}
+
+// jumpTreeToStart moves cursor to first item in tree
+func (app *AppState) jumpTreeToStart() {
+	if len(app.TreeFlat) == 0 {
+		return
+	}
+	app.TreeCursor = 0
+	app.TreeScroll = 0
+}
+
+// jumpTreeToEnd moves cursor to last item in tree
+func (app *AppState) jumpTreeToEnd() {
+	if len(app.TreeFlat) == 0 {
+		return
+	}
+	app.TreeCursor = len(app.TreeFlat) - 1
+	app.moveTreeCursor(0)
+}
+
+// collapseAllDirs collapses all directories in tree
+func (app *AppState) collapseAllDirs() {
+	collapseAllRecursive(app.TreeRoot)
+	app.RefreshTreeFlat()
+	if app.TreeCursor >= len(app.TreeFlat) {
+		app.TreeCursor = len(app.TreeFlat) - 1
+	}
+	if app.TreeCursor < 0 {
+		app.TreeCursor = 0
+	}
+	app.moveTreeCursor(0)
+	app.Message = "collapsed all directories"
+}
+
+// expandAllDirs expands all directories in tree
+func (app *AppState) expandAllDirs() {
+	expandAllRecursive(app.TreeRoot)
+	app.RefreshTreeFlat()
+	app.moveTreeCursor(0)
+	app.Message = "expanded all directories"
+}
+
+func collapseAllRecursive(node *TreeNode) {
+	if node.IsDir && node.Path != "." {
+		node.Expanded = false
+	}
+	for _, child := range node.Children {
+		collapseAllRecursive(child)
+	}
+}
+
+func expandAllRecursive(node *TreeNode) {
+	if node.IsDir {
+		node.Expanded = true
+	}
+	for _, child := range node.Children {
+		expandAllRecursive(child)
+	}
+}
+
+// jumpTagToStart moves cursor to first item in tag list
+func (app *AppState) jumpTagToStart() {
+	if len(app.TagFlat) == 0 {
+		return
+	}
+	app.TagCursor = 0
+	app.TagScroll = 0
+}
+
+// jumpTagToEnd moves cursor to last item in tag list
+func (app *AppState) jumpTagToEnd() {
+	if len(app.TagFlat) == 0 {
+		return
+	}
+	app.TagCursor = len(app.TagFlat) - 1
+	app.moveTagCursor(0)
+}
+
+// collapseAllGroups collapses all tag groups
+func (app *AppState) collapseAllGroups() {
+	for _, group := range app.Index.Groups {
+		app.GroupExpanded[group] = false
+	}
+	app.RefreshTagFlat()
+	if app.TagCursor >= len(app.TagFlat) {
+		app.TagCursor = len(app.TagFlat) - 1
+	}
+	if app.TagCursor < 0 {
+		app.TagCursor = 0
+	}
+	app.moveTagCursor(0)
+	app.Message = "collapsed all groups"
+}
+
+// expandAllGroups expands all tag groups
+func (app *AppState) expandAllGroups() {
+	for _, group := range app.Index.Groups {
+		app.GroupExpanded[group] = true
+	}
+	app.RefreshTagFlat()
+	app.moveTagCursor(0)
+	app.Message = "expanded all groups"
+}
+
+// collapseCurrentGroup collapses the group at cursor or containing group
+func (app *AppState) collapseCurrentGroup() {
+	if len(app.TagFlat) == 0 {
+		return
+	}
+	item := app.TagFlat[app.TagCursor]
+	group := item.Group
+
+	if app.GroupExpanded[group] {
+		app.GroupExpanded[group] = false
+		app.RefreshTagFlat()
+		// Move cursor to group header if we were on a tag
+		if !item.IsGroup {
+			for i, ti := range app.TagFlat {
+				if ti.IsGroup && ti.Group == group {
+					app.TagCursor = i
+					break
+				}
+			}
+		}
+		app.moveTagCursor(0)
+	}
+}
+
+// expandCurrentGroup expands the group at cursor
+func (app *AppState) expandCurrentGroup() {
+	if len(app.TagFlat) == 0 {
+		return
+	}
+	item := app.TagFlat[app.TagCursor]
+	if !item.IsGroup {
+		return
+	}
+
+	if !app.GroupExpanded[item.Group] {
+		app.GroupExpanded[item.Group] = true
+		app.RefreshTagFlat()
+		app.moveTagCursor(0)
+	}
 }
 
 // pageTreeCursor moves cursor by page in left pane

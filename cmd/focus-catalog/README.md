@@ -38,10 +38,45 @@ package systems
 ### Navigation
 | Key | Action |
 |-----|--------|
-| `Tab` | Switch focus between left/right pane |
-| `j`/`k`, `↑`/`↓` | Navigate up/down |
-| `h`/`l`, `←`/`→` | Collapse/expand directory (left pane) |
-| `PgUp`/`PgDn` | Page navigation |
+| `j` / `↓` | Move cursor down |
+| `k` / `↑` | Move cursor up |
+| `PgUp` / `PgDn` | Page up/down |
+| `Home` / `0` | Jump to first item |
+| `End` / `$` | Jump to last item |
+| `Tab` | Switch pane focus |
+
+### Tree Operations (Left Pane)
+
+| Key | Action |
+|-----|--------|
+| `h` / `←` | Collapse directory |
+| `l` / `→` | Expand directory |
+| `H` | Collapse all directories |
+| `L` | Expand all directories |
+
+### Tag Groups (Right Pane)
+
+| Key | Action |
+|-----|--------|
+| `h` / `←` | Collapse current group |
+| `l` / `→` | Expand current group |
+| `H` | Collapse all groups |
+| `L` | Expand all groups |
+
+### Views
+
+| Key | Action |
+|-----|--------|
+| `v` | Open mindmap view |
+| `p` | Preview selected files |
+| `Esc` | Exit view / clear filters |
+
+### Editing
+
+| Key | Action |
+|-----|--------|
+| `e` | Edit tags for current file (left pane only) |
+| `r` | Re-index entire tree |
 
 ### Selection
 | Key | Action |
@@ -123,3 +158,42 @@ Selecting files auto-includes their package's local imports (transitive, configu
 ```
 
 Files with `#all` tag always included. Sorted alphabetically. Compatible with `combine.sh -f`.
+
+## Mindmap View
+
+Press `v` to open a contextual mindmap visualization:
+
+**From Left Pane (on directory/file):**
+- Shows hierarchical view of package structure
+- Displays all files with their tags
+- Nested packages shown with proper indentation
+
+**From Right Pane (on tag/group):**
+- Shows all files containing that tag or group
+- Files listed with full paths and all their tags
+
+**Mindmap Controls:**
+- `j/k` or arrows: Navigate
+- `Space`: Toggle selection
+- `a`: Select all visible
+- `c`: Clear visible selections
+- `0/$` or `Home/End`: Jump to start/end
+- `Esc` or `q`: Return to main view
+
+Selections made in mindmap sync bidirectionally with the main view.
+
+## Tag Editor
+
+Press `e` on any file in the left pane to edit its `@focus` tags inline:
+
+- Pre-fills with current tag content (empty if no existing tags)
+- Type to edit, `Backspace` to delete
+- `Enter` to save changes
+- `Esc` to cancel
+
+The editor:
+- Modifies only the first `// @focus:` line before `package` statement
+- Inserts new focus line at file start if none exists
+- Preserves build tags (`//go:build`, `// +build`)
+- Uses atomic writes (temp file + rename) for safety
+- Automatically re-indexes after saving

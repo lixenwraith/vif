@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"go/parser"
 	"go/token"
 	"os"
@@ -65,20 +66,23 @@ func BuildIndex(root string) (*Index, error) {
 
 		index.Files[relPath] = fi
 
-		// Add to package
-		pkg, ok := index.Packages[fi.Package]
+		// Key packages by directory, not package name
+		// This handles multiple "main" packages correctly
+		dir := filepath.Dir(relPath)
+		if dir == "." {
+			dir = fi.Package
+		}
+		dir = filepath.ToSlash(dir)
+
+		pkg, ok := index.Packages[dir]
 		if !ok {
-			dir := filepath.Dir(relPath)
-			if dir == "." {
-				dir = fi.Package
-			}
 			pkg = &PackageInfo{
 				Name:    fi.Package,
 				Dir:     dir,
 				Files:   make([]*FileInfo, 0),
 				AllTags: make(map[string][]string),
 			}
-			index.Packages[fi.Package] = pkg
+			index.Packages[dir] = pkg
 		}
 
 		pkg.Files = append(pkg.Files, fi)
@@ -153,6 +157,21 @@ func BuildIndex(root string) (*Index, error) {
 	return index, nil
 }
 
+// ReindexAll rebuilds the entire index from disk
+func (app *AppState) ReindexAll() {
+	index, err := BuildIndex(".")
+	if err != nil {
+		app.Message = fmt.Sprintf("reindex error: %v", err)
+		return
+	}
+
+	app.Index = index
+	app.TreeRoot = BuildTree(index)
+	app.RefreshTreeFlat()
+	app.RefreshTagFlat()
+	app.Message = fmt.Sprintf("reindexed: %d files", len(index.Files))
+}
+
 // BuildTree constructs a tree from the index
 func BuildTree(index *Index) *TreeNode {
 	root := &TreeNode{
@@ -169,8 +188,8 @@ func BuildTree(index *Index) *TreeNode {
 
 	// Collect all directories from packages
 	dirs := make([]string, 0, len(index.Packages))
-	for _, pkg := range index.Packages {
-		dirs = append(dirs, pkg.Dir)
+	for dir := range index.Packages {
+		dirs = append(dirs, dir)
 	}
 	sort.Strings(dirs)
 
@@ -182,9 +201,9 @@ func BuildTree(index *Index) *TreeNode {
 		ensureDirNode(root, dir, dirNodes, index)
 	}
 
-	// Add files to their package directories
-	for _, pkg := range index.Packages {
-		dirNode := dirNodes[pkg.Dir]
+	// Add files to their directories
+	for dir, pkg := range index.Packages {
+		dirNode := dirNodes[dir]
 		if dirNode == nil {
 			dirNode = root
 		}
@@ -239,11 +258,8 @@ func ensureDirNode(root *TreeNode, dir string, dirNodes map[string]*TreeNode, in
 
 		// Find package info if this is a package directory
 		var pkgInfo *PackageInfo
-		for _, pkg := range index.Packages {
-			if pkg.Dir == currentPath {
-				pkgInfo = pkg
-				break
-			}
+		if pkg, ok := index.Packages[currentPath]; ok {
+			pkgInfo = pkg
 		}
 
 		node := &TreeNode{

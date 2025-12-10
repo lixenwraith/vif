@@ -4,6 +4,56 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
+// AppState holds all application state
+type AppState struct {
+	Term  terminal.Terminal
+	Index *Index
+
+	// Pane focus
+	FocusPane Pane
+
+	// Tree view (left pane)
+	TreeRoot   *TreeNode   // Root of directory tree
+	TreeFlat   []*TreeNode // Flattened visible nodes for rendering
+	TreeCursor int         // Cursor position in flattened list
+	TreeScroll int         // Scroll offset for left pane
+
+	// Selection (file paths)
+	Selected   map[string]bool // file path → selected
+	ExpandDeps bool            // auto-expand dependencies
+	DepthLimit int             // expansion depth
+
+	// Tag view (right pane)
+	TagFlat       []TagItem       // Flattened groups and tags for rendering
+	TagCursor     int             // Cursor position in right pane
+	TagScroll     int             // Scroll offset for right pane
+	GroupExpanded map[string]bool // group name → expanded state
+
+	// Filter state
+	Filter      *FilterState
+	RgAvailable bool // ripgrep installed
+
+	// UI state
+	InputMode     bool     // true when typing keyword
+	InputBuffer   string   // keyword input buffer
+	Message       string   // status message
+	PreviewMode   bool     // showing file preview
+	PreviewFiles  []string // files to preview
+	PreviewScroll int      // preview scroll offset
+
+	// Mindmap state
+	MindmapMode  bool
+	MindmapState *MindmapState
+
+	// Editor state
+	EditMode   bool   // true when editing tags
+	EditTarget string // file path being edited
+
+	// Dimensions
+	Width  int
+	Height int
+}
+
 // Colors
 var (
 	colorHeaderBg     = terminal.RGB{R: 40, G: 60, B: 90}
@@ -148,47 +198,6 @@ func (f *FilterState) SelectedTagCount() int {
 	return count
 }
 
-// AppState holds all application state
-type AppState struct {
-	Term  terminal.Terminal
-	Index *Index
-
-	// Pane focus
-	FocusPane Pane
-
-	// Tree view (left pane)
-	TreeRoot   *TreeNode   // Root of directory tree
-	TreeFlat   []*TreeNode // Flattened visible nodes for rendering
-	TreeCursor int         // Cursor position in flattened list
-	TreeScroll int         // Scroll offset for left pane
-
-	// Selection (file paths)
-	Selected   map[string]bool // file path → selected
-	ExpandDeps bool            // auto-expand dependencies
-	DepthLimit int             // expansion depth
-
-	// Tag view (right pane)
-	TagFlat   []TagItem // Flattened groups and tags for rendering
-	TagCursor int       // Cursor position in right pane
-	TagScroll int       // Scroll offset for right pane
-
-	// Filter state
-	Filter      *FilterState
-	RgAvailable bool // ripgrep installed
-
-	// UI state
-	InputMode     bool     // true when typing keyword
-	InputBuffer   string   // keyword input buffer
-	Message       string   // status message
-	PreviewMode   bool     // showing file preview
-	PreviewFiles  []string // files to preview
-	PreviewScroll int      // preview scroll offset
-
-	// Dimensions
-	Width  int
-	Height int
-}
-
 // TagItem represents a group header or tag in the right pane
 type TagItem struct {
 	IsGroup     bool   // true for group header, false for tag
@@ -196,4 +205,5 @@ type TagItem struct {
 	Tag         string // tag name (empty for group headers)
 	Selected    bool   // selection state
 	HasSelected bool   // for groups: has any selected tags
+	Expanded    bool   // for groups: expansion state
 }
