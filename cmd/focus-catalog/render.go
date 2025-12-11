@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/lixenwraith/vi-fighter/terminal"
@@ -206,17 +207,31 @@ func (app *AppState) renderLeftPane(cells []terminal.Cell, totalWidth, startX, p
 				nameFg = colorUnselected
 			}
 
-			maxNameLen := paneWidth - indent - 8
 			nameStr := node.Name
-			if len(nameStr) > maxNameLen && maxNameLen > 3 {
-				nameStr = nameStr[:maxNameLen-1] + "…"
-			}
-
 			attr := terminal.AttrNone
 			if dimmed {
 				attr = terminal.AttrDim
 			}
 			drawText(cells, totalWidth, x, y, nameStr, nameFg, rowBg, attr)
+			x += len(nameStr)
+
+			// Group hints - flow after filename with gap
+			if node.FileInfo != nil {
+				groupHint := getFileGroupSummary(node.FileInfo)
+				if groupHint != "" {
+					remaining := (startX + paneWidth) - x - 2
+					if remaining > 4 {
+						if len(groupHint) > remaining {
+							groupHint = groupHint[:remaining-1] + "…"
+						}
+						hintFg := colorGroupHintFg
+						if dimmed {
+							hintFg = colorUnselected
+						}
+						drawText(cells, totalWidth, x+2, y, groupHint, hintFg, rowBg, terminal.AttrDim)
+					}
+				}
+			}
 		}
 	}
 }
@@ -226,6 +241,8 @@ func (app *AppState) renderRightPane(cells []terminal.Cell, totalWidth, startX, 
 	if app.FocusPane == PaneRight {
 		bg = colorPaneActiveBg
 	}
+
+	hasFilter := app.Filter.HasActiveFilter()
 
 	for i := 0; i < height && app.TagScroll+i < len(app.TagFlat); i++ {
 		y := startY + i
@@ -246,53 +263,128 @@ func (app *AppState) renderRightPane(cells []terminal.Cell, totalWidth, startX, 
 		x := startX + 1
 
 		if item.IsGroup {
+			// Check filter and selection state
+			isFiltered := app.isGroupFiltered(item.Group)
+			dimmed := hasFilter && !isFiltered
+			selState := app.computeGroupSelectionState(item.Group)
+
 			// Expand indicator
 			expandChar := '▶'
 			if item.Expanded {
 				expandChar = '▼'
 			}
-			cells[y*totalWidth+x] = terminal.Cell{Rune: expandChar, Fg: colorGroupFg, Bg: rowBg}
+			expandFg := colorGroupFg
+			if dimmed {
+				expandFg = colorUnselected
+			}
+			cells[y*totalWidth+x] = terminal.Cell{Rune: expandChar, Fg: expandFg, Bg: rowBg}
 			x += 2
 
 			// Selection indicator
-			indicator := "○"
-			indicatorFg := colorUnselected
-			if item.HasSelected {
-				indicator = "◉"
-				indicatorFg = colorSelected
+			checkbox := "[ ]"
+			checkFg := colorUnselected
+			switch selState {
+			case TagSelectFull:
+				checkbox = "[x]"
+				checkFg = colorSelected
+			case TagSelectPartial:
+				checkbox = "[o]"
+				checkFg = colorPartialSelectFg
 			}
-			drawText(cells, totalWidth, x, y, indicator, indicatorFg, rowBg, terminal.AttrNone)
-			x += 2
+			if dimmed {
+				checkFg = colorUnselected
+			}
+			drawText(cells, totalWidth, x, y, checkbox, checkFg, rowBg, terminal.AttrNone)
+			x += 4
 
+			// Group name and count
+			groupFg := colorGroupFg
+			if dimmed {
+				groupFg = colorUnselected
+			}
 			groupStr := "#" + item.Group
-			drawText(cells, totalWidth, x, y, groupStr, colorGroupFg, rowBg, terminal.AttrBold)
+			drawText(cells, totalWidth, x, y, groupStr, groupFg, rowBg, terminal.AttrBold)
+			x += len(groupStr)
 
-			// Show tag count
-			if tags, ok := app.Index.AllTags[item.Group]; ok {
-				countStr := fmt.Sprintf(" (%d)", len(tags))
-				drawText(cells, totalWidth, x+len(groupStr), y, countStr, colorStatusFg, rowBg, terminal.AttrNone)
+			fileCount := app.countFilesInGroup(item.Group)
+			countStr := fmt.Sprintf(" (%d)", fileCount)
+			countFg := colorStatusFg
+			if dimmed {
+				countFg = colorUnselected
+			}
+			drawText(cells, totalWidth, x, y, countStr, countFg, rowBg, terminal.AttrNone)
+			x += len(countStr)
+
+			// Directory hints
+			dirs := app.getGroupDirectories(item.Group)
+			if len(dirs) > 0 {
+				remaining := (startX + paneWidth) - x - 2
+				if remaining > 4 {
+					dirHint := formatDirHints(dirs, remaining)
+					if dirHint != "" {
+						hintFg := colorDirHintFg
+						if dimmed {
+							hintFg = colorUnselected
+						}
+						drawText(cells, totalWidth, x+2, y, dirHint, hintFg, rowBg, terminal.AttrDim)
+					}
+				}
 			}
 		} else {
 			// Tag item (indented)
+			isFiltered := app.isTagFiltered(item.Group, item.Tag)
+			dimmed := hasFilter && !isFiltered
+			selState := app.computeTagSelectionState(item.Group, item.Tag)
+
 			x += 4
 
 			checkbox := "[ ]"
 			checkFg := colorUnselected
-			if item.Selected {
+			switch selState {
+			case TagSelectFull:
 				checkbox = "[x]"
 				checkFg = colorSelected
+			case TagSelectPartial:
+				checkbox = "[o]"
+				checkFg = colorPartialSelectFg
+			}
+			if dimmed {
+				checkFg = colorUnselected
 			}
 
 			drawText(cells, totalWidth, x, y, checkbox, checkFg, rowBg, terminal.AttrNone)
 			x += 4
 
-			drawText(cells, totalWidth, x, y, item.Tag, colorTagFg, rowBg, terminal.AttrNone)
+			tagFg := colorTagFg
+			if dimmed {
+				tagFg = colorUnselected
+			}
+			drawText(cells, totalWidth, x, y, item.Tag, tagFg, rowBg, terminal.AttrNone)
+			x += len(item.Tag)
 
-			// Show file count for this tag
 			fileCount := app.countFilesWithTag(item.Group, item.Tag)
-			if fileCount > 0 {
-				countStr := fmt.Sprintf(" (%d)", fileCount)
-				drawText(cells, totalWidth, x+len(item.Tag), y, countStr, colorStatusFg, rowBg, terminal.AttrNone)
+			countStr := fmt.Sprintf(" (%d)", fileCount)
+			countFg := colorStatusFg
+			if dimmed {
+				countFg = colorUnselected
+			}
+			drawText(cells, totalWidth, x, y, countStr, countFg, rowBg, terminal.AttrNone)
+			x += len(countStr)
+
+			// Directory hints
+			dirs := app.getTagDirectories(item.Group, item.Tag)
+			if len(dirs) > 0 {
+				remaining := (startX + paneWidth) - x - 2
+				if remaining > 4 {
+					dirHint := formatDirHints(dirs, remaining)
+					if dirHint != "" {
+						hintFg := colorDirHintFg
+						if dimmed {
+							hintFg = colorUnselected
+						}
+						drawText(cells, totalWidth, x+2, y, dirHint, hintFg, rowBg, terminal.AttrDim)
+					}
+				}
 			}
 		}
 	}
@@ -301,7 +393,6 @@ func (app *AppState) renderRightPane(cells []terminal.Cell, totalWidth, startX, 
 func (app *AppState) renderStatus(cells []terminal.Cell, w, y int) {
 	// Line 1: Filter info or edit mode
 	if app.EditMode {
-		// Edit mode UI
 		label := fmt.Sprintf("Edit [%s]: ", app.EditTarget)
 		maxInputLen := w - len(label) - 3
 		input := app.InputBuffer
@@ -314,36 +405,20 @@ func (app *AppState) renderStatus(cells []terminal.Cell, w, y int) {
 		return
 	}
 
-	var filterParts []string
-
-	if app.Filter.HasSelectedTags() {
-		tagCount := app.Filter.SelectedTagCount()
+	if app.InputMode {
+		paneHint := "left:content"
+		if app.FocusPane == PaneRight {
+			paneHint = "right:exact"
+		}
+		inputStr := fmt.Sprintf("Search [%s]: %s_", paneHint, app.InputBuffer)
+		drawText(cells, w, 1, y, inputStr, colorHeaderFg, colorInputBg, terminal.AttrNone)
+	} else if app.Filter.HasActiveFilter() {
 		modeStr := "OR"
 		if app.Filter.Mode == FilterAND {
 			modeStr = "AND"
 		}
-		filterParts = append(filterParts, fmt.Sprintf("Tags: %d (%s)", tagCount, modeStr))
-	}
-
-	if app.Filter.Keyword != "" {
-		matchCount := len(app.Filter.KeywordMatch)
-		searchStr := "meta"
-		if app.Filter.SearchMode == SearchModeContent {
-			searchStr = "content"
-		}
-		filterParts = append(filterParts, fmt.Sprintf("Keyword: %q (%d, %s)", app.Filter.Keyword, matchCount, searchStr))
-	}
-
-	if len(filterParts) > 0 {
-		filterStr := strings.Join(filterParts, "  |  ")
+		filterStr := fmt.Sprintf("Filter: %d files [%s]", len(app.Filter.FilteredPaths), modeStr)
 		drawText(cells, w, 1, y, filterStr, colorTagFg, colorDefaultBg, terminal.AttrNone)
-	} else if app.InputMode {
-		searchStr := "[meta]"
-		if app.Filter.SearchMode == SearchModeContent {
-			searchStr = "[content]"
-		}
-		inputStr := fmt.Sprintf("Search %s: %s_", searchStr, app.InputBuffer)
-		drawText(cells, w, 1, y, inputStr, colorHeaderFg, colorInputBg, terminal.AttrNone)
 	}
 
 	// Line 2: Message or selection info
@@ -356,7 +431,7 @@ func (app *AppState) renderStatus(cells []terminal.Cell, w, y int) {
 }
 
 func (app *AppState) renderHelp(cells []terminal.Cell, w, y int) {
-	help := "Tab:pane  j/k:nav  Space:sel  /:search  s:search-mode  m:filter-mode  d:deps  Enter:out  q:quit"
+	help := "Tab:pane  j/k:nav  Space:sel  f:filter  /:search  m:mode  d:deps  Enter:out  Esc:clear  q:quit"
 	if len(help) > w-2 {
 		help = help[:w-5] + "..."
 	}
@@ -387,6 +462,44 @@ func (app *AppState) renderPreview(cells []terminal.Cell, w, h int) {
 		scrollStr := fmt.Sprintf("[%d%%]", pct)
 		drawText(cells, w, w-len(scrollStr)-1, h-1, scrollStr, colorStatusFg, colorDefaultBg, terminal.AttrNone)
 	}
+}
+
+// countDirSelection returns (selected, total) file counts under a directory node
+func (app *AppState) countDirSelection(node *TreeNode) (int, int) {
+	if !node.IsDir {
+		return 0, 0
+	}
+
+	selected := 0
+	total := 0
+
+	var count func(n *TreeNode)
+	count = func(n *TreeNode) {
+		if n.IsDir {
+			for _, child := range n.Children {
+				count(child)
+			}
+		} else {
+			total++
+			if app.Selected[n.Path] {
+				selected++
+			}
+		}
+	}
+
+	count(node)
+	return selected, total
+}
+
+// countFilesInGroup counts files that have any tag in the specified group
+func (app *AppState) countFilesInGroup(group string) int {
+	count := 0
+	for _, fi := range app.Index.Files {
+		if _, ok := fi.Tags[group]; ok {
+			count++
+		}
+	}
+	return count
 }
 
 // drawText draws text at position
@@ -434,18 +547,6 @@ func (app *AppState) RefreshTagFlat() {
 	app.TagFlat = nil
 
 	for _, group := range app.Index.Groups {
-		// Check if group has any selected tags
-		hasSelected := false
-		if groupTags, ok := app.Filter.SelectedTags[group]; ok {
-			for _, sel := range groupTags {
-				if sel {
-					hasSelected = true
-					break
-				}
-			}
-		}
-
-		// Default to expanded if not set
 		expanded := true
 		if exp, ok := app.GroupExpanded[group]; ok {
 			expanded = exp
@@ -453,58 +554,31 @@ func (app *AppState) RefreshTagFlat() {
 			app.GroupExpanded[group] = true
 		}
 
-		// Group header
 		app.TagFlat = append(app.TagFlat, TagItem{
-			IsGroup:     true,
-			Group:       group,
-			HasSelected: hasSelected,
-			Expanded:    expanded,
+			IsGroup:  true,
+			Group:    group,
+			Expanded: expanded,
 		})
 
-		// Tags in group (only if expanded)
 		if expanded {
 			if tags, ok := app.Index.AllTags[group]; ok {
 				for _, tag := range tags {
-					selected := false
-					if groupTags, ok := app.Filter.SelectedTags[group]; ok {
-						selected = groupTags[tag]
-					}
-
 					app.TagFlat = append(app.TagFlat, TagItem{
-						IsGroup:  false,
-						Group:    group,
-						Tag:      tag,
-						Selected: selected,
+						IsGroup: false,
+						Group:   group,
+						Tag:     tag,
 					})
 				}
 			}
 		}
 	}
 
-	// Bounds check cursor
 	if app.TagCursor >= len(app.TagFlat) {
 		app.TagCursor = len(app.TagFlat) - 1
 	}
 	if app.TagCursor < 0 {
 		app.TagCursor = 0
 	}
-}
-
-// countDirSelection counts selected and total files in a directory
-func (app *AppState) countDirSelection(node *TreeNode) (selected, total int) {
-	if !node.IsDir {
-		if app.Selected[node.Path] {
-			return 1, 1
-		}
-		return 0, 1
-	}
-
-	for _, child := range node.Children {
-		s, t := app.countDirSelection(child)
-		selected += s
-		total += t
-	}
-	return
 }
 
 // computeDepExpandedFiles returns files included via dependency expansion
@@ -548,17 +622,16 @@ func (app *AppState) computeDepExpandedFiles() map[string]bool {
 
 // hasActiveFilters returns true if any filter is active
 func (app *AppState) hasActiveFilters() bool {
-	return app.Filter.HasSelectedTags() || app.Filter.Keyword != ""
+	return app.Filter.HasActiveFilter()
 }
 
-// nodeMatchesFilter checks if a tree node matches current filters
+// nodeMatchesFilter checks if a tree node matches current filter
 func (app *AppState) nodeMatchesFilter(node *TreeNode) bool {
-	if !app.hasActiveFilters() {
+	if !app.Filter.HasActiveFilter() {
 		return true
 	}
 
 	if node.IsDir {
-		// Directory matches if any child matches
 		for _, child := range node.Children {
 			if app.nodeMatchesFilter(child) {
 				return true
@@ -567,11 +640,7 @@ func (app *AppState) nodeMatchesFilter(node *TreeNode) bool {
 		return false
 	}
 
-	// File node
-	if node.FileInfo == nil {
-		return false
-	}
-	return app.FileMatchesAllFilters(node.FileInfo)
+	return app.Filter.FilteredPaths[node.Path]
 }
 
 // countFilesWithTag counts files that have a specific tag
@@ -588,4 +657,118 @@ func (app *AppState) countFilesWithTag(group, tag string) int {
 		}
 	}
 	return count
+}
+
+// getFileGroupSummary returns formatted group counts like "core(3) game(2)"
+func getFileGroupSummary(fi *FileInfo) string {
+	if fi == nil || len(fi.Tags) == 0 {
+		return ""
+	}
+
+	// Collect groups sorted alphabetically
+	groups := make([]string, 0, len(fi.Tags))
+	for g := range fi.Tags {
+		groups = append(groups, g)
+	}
+	sort.Strings(groups)
+
+	var parts []string
+	for _, g := range groups {
+		count := len(fi.Tags[g])
+		parts = append(parts, fmt.Sprintf("%s(%d)", g, count))
+	}
+
+	return strings.Join(parts, " ")
+}
+
+// getTagDirectories returns base directory names for files with given tag
+func (app *AppState) getTagDirectories(group, tag string) []string {
+	dirSet := make(map[string]bool)
+
+	for path, fi := range app.Index.Files {
+		if tags, ok := fi.Tags[group]; ok {
+			for _, t := range tags {
+				if t == tag {
+					dir := filepath.Dir(path)
+					if dir == "." {
+						dir = fi.Package
+					}
+					dirSet[filepath.Base(dir)] = true
+					break
+				}
+			}
+		}
+	}
+
+	dirs := make([]string, 0, len(dirSet))
+	for d := range dirSet {
+		dirs = append(dirs, d)
+	}
+	sort.Strings(dirs)
+	return dirs
+}
+
+// getGroupDirectories returns base directory names for files in group
+func (app *AppState) getGroupDirectories(group string) []string {
+	dirSet := make(map[string]bool)
+
+	for path, fi := range app.Index.Files {
+		if _, ok := fi.Tags[group]; ok {
+			dir := filepath.Dir(path)
+			if dir == "." {
+				dir = fi.Package
+			}
+			dirSet[filepath.Base(dir)] = true
+		}
+	}
+
+	dirs := make([]string, 0, len(dirSet))
+	for d := range dirSet {
+		dirs = append(dirs, d)
+	}
+	sort.Strings(dirs)
+	return dirs
+}
+
+// formatDirHints truncates directory list to fit maxLen
+func formatDirHints(dirs []string, maxLen int) string {
+	if len(dirs) == 0 || maxLen < 4 {
+		return ""
+	}
+
+	var result strings.Builder
+	shown := 0
+	maxDirs := 3
+
+	for i, d := range dirs {
+		if i >= maxDirs {
+			break
+		}
+
+		addition := d
+		if result.Len() > 0 {
+			addition = " " + d
+		}
+
+		// Check if adding this would exceed limit (leave room for potential "...")
+		projected := result.Len() + len(addition)
+		remaining := len(dirs) - i - 1
+		if remaining > 0 && projected+4 > maxLen {
+			break
+		}
+		if remaining == 0 && projected > maxLen {
+			break
+		}
+
+		result.WriteString(addition)
+		shown++
+	}
+
+	if shown < len(dirs) {
+		if result.Len()+4 <= maxLen {
+			result.WriteString(" ...")
+		}
+	}
+
+	return result.String()
 }

@@ -477,16 +477,11 @@ func (app *AppState) RenderMindmap(cells []terminal.Cell, w, h int) {
 		if item.IsDir {
 			// Directory line
 			drawText(cells, w, x, y, item.Name, colorDirFg, rowBg, terminal.AttrBold)
-			x += len(item.Name) + 1
+			x += len(item.Name) + 2
 
-			// Tags for directory
+			// Tags for directory (colored)
 			if item.TagStr != "" && x < w-2 {
-				maxTagLen := w - x - 2
-				tagStr := item.TagStr
-				if len(tagStr) > maxTagLen && maxTagLen > 3 {
-					tagStr = tagStr[:maxTagLen-3] + "..."
-				}
-				drawText(cells, w, x, y, tagStr, colorStatusFg, rowBg, terminal.AttrDim)
+				drawColoredTags(cells, w, x, y, item.TagStr, rowBg)
 			}
 		} else {
 			// File line - show checkbox
@@ -519,16 +514,11 @@ func (app *AppState) RenderMindmap(cells []terminal.Cell, w, h int) {
 				name = "..." + name[len(name)-maxNameLen+3:]
 			}
 			drawText(cells, w, x, y, name, nameFg, rowBg, terminal.AttrNone)
-			x += len(name) + 1
+			x += len(name) + 2
 
-			// Tags
+			// Tags (colored)
 			if item.TagStr != "" && x < w-2 {
-				maxTagLen := w - x - 2
-				tagStr := item.TagStr
-				if len(tagStr) > maxTagLen && maxTagLen > 3 {
-					tagStr = tagStr[:maxTagLen-3] + "..."
-				}
-				drawText(cells, w, x, y, tagStr, colorTagFg, rowBg, terminal.AttrNone)
+				drawColoredTags(cells, w, x, y, item.TagStr, rowBg)
 			}
 		}
 	}
@@ -547,4 +537,72 @@ func (app *AppState) RenderMindmap(cells []terminal.Cell, w, h int) {
 		scrollStr := fmt.Sprintf("[%d%%]", pct)
 		drawText(cells, w, w-len(scrollStr)-1, helpY, scrollStr, colorStatusFg, colorDefaultBg, terminal.AttrNone)
 	}
+}
+
+// drawColoredTags draws tags with distinct colors for groups and tag names
+// Returns the x position after drawing
+func drawColoredTags(cells []terminal.Cell, w, x, y int, tagStr string, bg terminal.RGB) int {
+	if tagStr == "" || x >= w-1 {
+		return x
+	}
+
+	maxX := w - 1
+	i := 0
+	runes := []rune(tagStr)
+	n := len(runes)
+
+	for i < n && x < maxX {
+		if runes[i] == '#' {
+			// Start of group: #groupname
+			cells[y*w+x] = terminal.Cell{Rune: '#', Fg: colorGroupNameFg, Bg: bg}
+			x++
+			i++
+
+			// Group name until '{' or space or end
+			for i < n && x < maxX && runes[i] != '{' && runes[i] != ' ' {
+				cells[y*w+x] = terminal.Cell{Rune: runes[i], Fg: colorGroupNameFg, Bg: bg}
+				x++
+				i++
+			}
+
+			// Opening brace
+			if i < n && runes[i] == '{' && x < maxX {
+				cells[y*w+x] = terminal.Cell{Rune: '{', Fg: colorGroupNameFg, Bg: bg}
+				x++
+				i++
+
+				// Tags inside braces (cyan)
+				for i < n && x < maxX && runes[i] != '}' {
+					fg := colorTagNameFg
+					if runes[i] == ',' {
+						fg = colorGroupNameFg
+					}
+					cells[y*w+x] = terminal.Cell{Rune: runes[i], Fg: fg, Bg: bg}
+					x++
+					i++
+				}
+
+				// Closing brace
+				if i < n && runes[i] == '}' && x < maxX {
+					cells[y*w+x] = terminal.Cell{Rune: '}', Fg: colorGroupNameFg, Bg: bg}
+					x++
+					i++
+				}
+			}
+		} else if runes[i] == ' ' {
+			// Space between tag groups
+			if x < maxX {
+				cells[y*w+x] = terminal.Cell{Rune: ' ', Fg: colorDefaultFg, Bg: bg}
+				x++
+			}
+			i++
+		} else {
+			// Unexpected character, just draw it
+			cells[y*w+x] = terminal.Cell{Rune: runes[i], Fg: colorDefaultFg, Bg: bg}
+			x++
+			i++
+		}
+	}
+
+	return x
 }

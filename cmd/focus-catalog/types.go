@@ -56,24 +56,29 @@ type AppState struct {
 
 // Colors
 var (
-	colorHeaderBg     = terminal.RGB{R: 40, G: 60, B: 90}
-	colorHeaderFg     = terminal.RGB{R: 255, G: 255, B: 255}
-	colorSelected     = terminal.RGB{R: 80, G: 200, B: 80}
-	colorUnselected   = terminal.RGB{R: 100, G: 100, B: 100}
-	colorCursorBg     = terminal.RGB{R: 50, G: 50, B: 70}
-	colorTagFg        = terminal.RGB{R: 100, G: 200, B: 220}
-	colorGroupFg      = terminal.RGB{R: 220, G: 180, B: 80}
-	colorStatusFg     = terminal.RGB{R: 140, G: 140, B: 140}
-	colorHelpFg       = terminal.RGB{R: 100, G: 180, B: 200}
-	colorInputBg      = terminal.RGB{R: 30, G: 30, B: 50}
-	colorDefaultBg    = terminal.RGB{R: 20, G: 20, B: 30}
-	colorDefaultFg    = terminal.RGB{R: 200, G: 200, B: 200}
-	colorExpandedFg   = terminal.RGB{R: 180, G: 140, B: 220}
-	colorAllTagFg     = terminal.RGB{R: 255, G: 180, B: 100}
-	colorMatchCountFg = terminal.RGB{R: 180, G: 220, B: 180}
-	colorDirFg        = terminal.RGB{R: 130, G: 170, B: 220}
-	colorPaneBorder   = terminal.RGB{R: 60, G: 80, B: 100}
-	colorPaneActiveBg = terminal.RGB{R: 30, G: 35, B: 45}
+	colorHeaderBg        = terminal.RGB{R: 40, G: 60, B: 90}
+	colorHeaderFg        = terminal.RGB{R: 255, G: 255, B: 255}
+	colorSelected        = terminal.RGB{R: 80, G: 200, B: 80}
+	colorUnselected      = terminal.RGB{R: 100, G: 100, B: 100}
+	colorCursorBg        = terminal.RGB{R: 50, G: 50, B: 70}
+	colorTagFg           = terminal.RGB{R: 100, G: 200, B: 220}
+	colorGroupFg         = terminal.RGB{R: 220, G: 180, B: 80}
+	colorStatusFg        = terminal.RGB{R: 140, G: 140, B: 140}
+	colorHelpFg          = terminal.RGB{R: 100, G: 180, B: 200}
+	colorInputBg         = terminal.RGB{R: 30, G: 30, B: 50}
+	colorDefaultBg       = terminal.RGB{R: 20, G: 20, B: 30}
+	colorDefaultFg       = terminal.RGB{R: 200, G: 200, B: 200}
+	colorExpandedFg      = terminal.RGB{R: 180, G: 140, B: 220}
+	colorAllTagFg        = terminal.RGB{R: 255, G: 180, B: 100}
+	colorMatchCountFg    = terminal.RGB{R: 180, G: 220, B: 180}
+	colorDirFg           = terminal.RGB{R: 130, G: 170, B: 220}
+	colorPaneBorder      = terminal.RGB{R: 60, G: 80, B: 100}
+	colorPaneActiveBg    = terminal.RGB{R: 30, G: 35, B: 45}
+	colorGroupHintFg     = terminal.RGB{R: 140, G: 140, B: 100}
+	colorDirHintFg       = terminal.RGB{R: 110, G: 110, B: 110}
+	colorGroupNameFg     = terminal.RGB{R: 220, G: 180, B: 80}
+	colorTagNameFg       = terminal.RGB{R: 100, G: 200, B: 220}
+	colorPartialSelectFg = terminal.RGB{R: 80, G: 160, B: 220}
 )
 
 // Layout
@@ -146,64 +151,40 @@ type TreeNode struct {
 	Depth       int          // Nesting level for indentation
 }
 
-// SearchMode type
-type SearchMode int
-
-const (
-	SearchModeMeta    SearchMode = iota // Search file path, package, tags
-	SearchModeContent                   // Search file contents via ripgrep
-)
-
-// FilterState holds cross-group tag filtering state
+// FilterState holds filter state (visual highlighting only)
 type FilterState struct {
-	SelectedTags  map[string]map[string]bool // group → tag → selected
+	FilteredPaths map[string]bool            // Files matching current filter
+	FilteredTags  map[string]map[string]bool // group -> tag -> highlighted (computed from FilteredPaths)
 	Mode          FilterMode
-	Keyword       string
-	KeywordMatch  map[string]bool
-	CaseSensitive bool
-	SearchMode    SearchMode // metadata vs content search
 }
 
 // NewFilterState creates an initialized FilterState
 func NewFilterState() *FilterState {
 	return &FilterState{
-		SelectedTags: make(map[string]map[string]bool),
-		Mode:         FilterOR,
-		KeywordMatch: make(map[string]bool),
+		FilteredPaths: make(map[string]bool),
+		FilteredTags:  make(map[string]map[string]bool),
+		Mode:          FilterOR,
 	}
 }
 
-// HasSelectedTags returns true if any tags are selected
-func (f *FilterState) HasSelectedTags() bool {
-	for _, tags := range f.SelectedTags {
-		for _, selected := range tags {
-			if selected {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// SelectedTagCount returns total number of selected tags
-func (f *FilterState) SelectedTagCount() int {
-	count := 0
-	for _, tags := range f.SelectedTags {
-		for _, selected := range tags {
-			if selected {
-				count++
-			}
-		}
-	}
-	return count
+// HasActiveFilter returns true if any filter is active
+func (f *FilterState) HasActiveFilter() bool {
+	return len(f.FilteredPaths) > 0
 }
 
 // TagItem represents a group header or tag in the right pane
 type TagItem struct {
-	IsGroup     bool   // true for group header, false for tag
-	Group       string // group name
-	Tag         string // tag name (empty for group headers)
-	Selected    bool   // selection state
-	HasSelected bool   // for groups: has any selected tags
-	Expanded    bool   // for groups: expansion state
+	IsGroup  bool   // true for group header, false for tag
+	Group    string // group name
+	Tag      string // tag name (empty for group headers)
+	Expanded bool   // for groups: expansion state
 }
+
+// TagSelectionState represents selection state for a tag/group
+type TagSelectionState int
+
+const (
+	TagSelectNone TagSelectionState = iota
+	TagSelectPartial
+	TagSelectFull
+)

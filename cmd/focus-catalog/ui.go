@@ -7,6 +7,7 @@ import (
 )
 
 // HandleEvent processes a key event
+// HandleEvent processes a key event
 func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 	app.Message = ""
 
@@ -76,32 +77,11 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 				app.Message = "filter mode: OR"
 			}
 			return false, false
-		case 's':
-			if app.Filter.SearchMode == SearchModeMeta {
-				if app.RgAvailable {
-					app.Filter.SearchMode = SearchModeContent
-					app.Message = "search mode: CONTENT (rg)"
-				} else {
-					app.Message = "content search unavailable (rg not found)"
-				}
-			} else {
-				app.Filter.SearchMode = SearchModeMeta
-				app.Message = "search mode: METADATA"
-			}
-			return false, false
-		case 'i':
-			app.Filter.CaseSensitive = !app.Filter.CaseSensitive
-			if app.Filter.CaseSensitive {
-				app.Message = "case sensitive ON"
-			} else {
-				app.Message = "case sensitive OFF"
-			}
-			return false, false
 		case 'c':
 			app.Selected = make(map[string]bool)
-			app.Filter = NewFilterState()
+			app.ClearFilter()
 			app.RefreshTagFlat()
-			app.Message = "cleared all selections"
+			app.Message = "cleared all"
 			return false, false
 		case 'p':
 			app.EnterPreview()
@@ -117,7 +97,6 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 		return false, false
 
 	case terminal.KeyEnter:
-		// Write output but stay in app
 		files := app.ComputeOutputFiles()
 		if len(files) == 0 {
 			app.Message = "no files to output"
@@ -127,20 +106,19 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 		if err != nil {
 			app.Message = fmt.Sprintf("write error: %v", err)
 		} else {
-			app.Message = fmt.Sprintf("wrote %d files to %s (press q to quit)", len(files), outputPath)
+			app.Message = fmt.Sprintf("wrote %d files to %s", len(files), outputPath)
 		}
 		return false, false
 
 	case terminal.KeyEscape:
-		if app.Filter.Keyword != "" || app.Filter.HasSelectedTags() {
-			app.Filter = NewFilterState()
+		if app.Filter.HasActiveFilter() {
+			app.ClearFilter()
 			app.RefreshTagFlat()
-			app.Message = "filters cleared"
+			app.Message = "filter cleared"
 		}
 		return false, false
 	}
 
-	// Pane-specific handling
 	if app.FocusPane == PaneLeft {
 		return app.handleLeftPaneEvent(ev)
 	}
@@ -161,6 +139,8 @@ func (app *AppState) handleLeftPaneEvent(ev terminal.Event) (quit, output bool) 
 			app.expandNode()
 		case ' ':
 			app.toggleTreeSelection()
+		case 'f':
+			app.applyLeftPaneFilter()
 		case 'a':
 			app.selectAllVisible()
 		case '0':
@@ -210,6 +190,10 @@ func (app *AppState) handleRightPaneEvent(ev terminal.Event) (quit, output bool)
 			app.expandCurrentGroup()
 		case ' ':
 			app.toggleTagSelection()
+		case 'f':
+			app.applyRightPaneFilter()
+		case 'a':
+			app.selectAllVisibleTags()
 		case '0':
 			app.jumpTagToStart()
 		case '$':
@@ -423,35 +407,7 @@ func (app *AppState) handleInputEvent(ev terminal.Event) (quit, output bool) {
 
 	case terminal.KeyEnter:
 		app.InputMode = false
-		if app.InputBuffer != "" {
-			app.Filter.Keyword = app.InputBuffer
-			app.Filter.KeywordMatch = make(map[string]bool)
-
-			var matches []string
-			var err error
-
-			if app.Filter.SearchMode == SearchModeContent {
-				matches, err = SearchContent(".", app.Filter.Keyword, app.Filter.CaseSensitive)
-				if err != nil {
-					app.Message = "search error: " + err.Error()
-					app.Filter.Keyword = ""
-					app.InputBuffer = ""
-					return false, false
-				}
-			} else {
-				matches = SearchMeta(app.Index, app.Filter.Keyword, app.Filter.CaseSensitive)
-			}
-
-			for _, m := range matches {
-				app.Filter.KeywordMatch[m] = true
-			}
-
-			modeStr := "meta"
-			if app.Filter.SearchMode == SearchModeContent {
-				modeStr = "content"
-			}
-			app.Message = fmt.Sprintf("found %d files (%s)", len(matches), modeStr)
-		}
+		app.executeSearch(app.InputBuffer)
 		app.InputBuffer = ""
 		return false, false
 
@@ -664,7 +620,30 @@ func (app *AppState) selectAllVisible() {
 	app.Message = "selected all visible files"
 }
 
-// toggleTagSelection toggles tag selection in right pane
+// selectAllVisibleTags selects all files matching visible/filtered tags
+func (app *AppState) selectAllVisibleTags() {
+	count := 0
+
+	if app.Filter.HasActiveFilter() {
+		for path := range app.Filter.FilteredPaths {
+			if !app.Selected[path] {
+				app.Selected[path] = true
+				count++
+			}
+		}
+	} else {
+		for path, fi := range app.Index.Files {
+			if len(fi.Tags) > 0 && !app.Selected[path] {
+				app.Selected[path] = true
+				count++
+			}
+		}
+	}
+
+	app.Message = fmt.Sprintf("selected %d files", count)
+}
+
+// toggleTagSelection toggles file selection for tag/group in right pane
 func (app *AppState) toggleTagSelection() {
 	if len(app.TagFlat) == 0 {
 		return
@@ -673,35 +652,24 @@ func (app *AppState) toggleTagSelection() {
 	item := app.TagFlat[app.TagCursor]
 
 	if item.IsGroup {
-		// Toggle all tags in group
-		if app.Filter.SelectedTags[item.Group] == nil {
-			app.Filter.SelectedTags[item.Group] = make(map[string]bool)
-		}
-
-		// Check if all selected
-		allSelected := true
-		if tags, ok := app.Index.AllTags[item.Group]; ok {
-			for _, tag := range tags {
-				if !app.Filter.SelectedTags[item.Group][tag] {
-					allSelected = false
-					break
-				}
-			}
-
-			// Toggle
-			for _, tag := range tags {
-				app.Filter.SelectedTags[item.Group][tag] = !allSelected
-			}
+		// Toggle all files in group
+		if app.allFilesWithGroupSelected(item.Group) {
+			count := app.deselectFilesWithGroup(item.Group)
+			app.Message = fmt.Sprintf("deselected %d files from #%s", count, item.Group)
+		} else {
+			count := app.selectFilesWithGroup(item.Group)
+			app.Message = fmt.Sprintf("selected %d files with #%s", count, item.Group)
 		}
 	} else {
-		// Toggle single tag
-		if app.Filter.SelectedTags[item.Group] == nil {
-			app.Filter.SelectedTags[item.Group] = make(map[string]bool)
+		// Toggle all files with this tag
+		if app.allFilesWithTagSelected(item.Group, item.Tag) {
+			count := app.deselectFilesWithTag(item.Group, item.Tag)
+			app.Message = fmt.Sprintf("deselected %d files from #%s{%s}", count, item.Group, item.Tag)
+		} else {
+			count := app.selectFilesWithTag(item.Group, item.Tag)
+			app.Message = fmt.Sprintf("selected %d files with #%s{%s}", count, item.Group, item.Tag)
 		}
-		app.Filter.SelectedTags[item.Group][item.Tag] = !app.Filter.SelectedTags[item.Group][item.Tag]
 	}
-
-	app.RefreshTagFlat()
 }
 
 // EnterPreview enters preview mode

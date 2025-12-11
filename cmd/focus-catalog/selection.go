@@ -40,17 +40,15 @@ func ExpandDeps(selected map[string]bool, index *Index, maxDepth int) map[string
 func (app *AppState) ComputeOutputFiles() []string {
 	fileSet := make(map[string]bool)
 
-	// Collect directly selected files
+	// Directly selected files
 	for path := range app.Selected {
-		fi := app.Index.Files[path]
-		if fi != nil && app.FileMatchesAllFilters(fi) {
+		if app.Index.Files[path] != nil {
 			fileSet[path] = true
 		}
 	}
 
 	// Dependency expansion
 	if app.ExpandDeps && len(app.Selected) > 0 {
-		// Get package directories from selected files
 		selectedDirs := make(map[string]bool)
 		for path := range app.Selected {
 			dir := filepath.Dir(path)
@@ -63,31 +61,26 @@ func (app *AppState) ComputeOutputFiles() []string {
 			selectedDirs[dir] = true
 		}
 
-		// Expand dependencies
 		expandedDirs := ExpandDeps(selectedDirs, app.Index, app.DepthLimit)
 
-		// Add files from expanded packages (respecting filters)
 		for dir := range expandedDirs {
 			if pkg, ok := app.Index.Packages[dir]; ok {
 				for _, fi := range pkg.Files {
-					if app.FileMatchesAllFilters(fi) {
-						fileSet[fi.Path] = true
-					}
+					fileSet[fi.Path] = true
 				}
 			}
 		}
 	}
 
-	// Always include #all files (if they match filters)
+	// Always include #all files
 	for _, fi := range app.Index.Files {
-		if fi.IsAll && app.FileMatchesAllFilters(fi) {
+		if fi.IsAll {
 			fileSet[fi.Path] = true
 		}
 	}
 
 	result := slices.Collect(maps.Keys(fileSet))
 	sort.Strings(result)
-
 	return result
 }
 
@@ -104,4 +97,99 @@ func WriteOutputFile(path string, files []string) error {
 		fmt.Fprintf(w, "./%s\n", file)
 	}
 	return w.Flush()
+}
+
+// selectFilesWithTag selects all files with given tag, returns count added
+func (app *AppState) selectFilesWithTag(group, tag string) int {
+	count := 0
+	for path, fi := range app.Index.Files {
+		if tags, ok := fi.Tags[group]; ok {
+			for _, t := range tags {
+				if t == tag {
+					if !app.Selected[path] {
+						app.Selected[path] = true
+						count++
+					}
+					break
+				}
+			}
+		}
+	}
+	return count
+}
+
+// deselectFilesWithTag deselects all files with given tag, returns count removed
+func (app *AppState) deselectFilesWithTag(group, tag string) int {
+	count := 0
+	for path, fi := range app.Index.Files {
+		if tags, ok := fi.Tags[group]; ok {
+			for _, t := range tags {
+				if t == tag {
+					if app.Selected[path] {
+						delete(app.Selected, path)
+						count++
+					}
+					break
+				}
+			}
+		}
+	}
+	return count
+}
+
+// selectFilesWithGroup selects all files with any tag in group, returns count added
+func (app *AppState) selectFilesWithGroup(group string) int {
+	count := 0
+	for path, fi := range app.Index.Files {
+		if _, ok := fi.Tags[group]; ok {
+			if !app.Selected[path] {
+				app.Selected[path] = true
+				count++
+			}
+		}
+	}
+	return count
+}
+
+// deselectFilesWithGroup deselects all files with any tag in group, returns count removed
+func (app *AppState) deselectFilesWithGroup(group string) int {
+	count := 0
+	for path, fi := range app.Index.Files {
+		if _, ok := fi.Tags[group]; ok {
+			if app.Selected[path] {
+				delete(app.Selected, path)
+				count++
+			}
+		}
+	}
+	return count
+}
+
+// allFilesWithTagSelected returns true if all files with tag are selected
+func (app *AppState) allFilesWithTagSelected(group, tag string) bool {
+	for path, fi := range app.Index.Files {
+		if tags, ok := fi.Tags[group]; ok {
+			for _, t := range tags {
+				if t == tag {
+					if !app.Selected[path] {
+						return false
+					}
+					break
+				}
+			}
+		}
+	}
+	return true
+}
+
+// allFilesWithGroupSelected returns true if all files in group are selected
+func (app *AppState) allFilesWithGroupSelected(group string) bool {
+	for path, fi := range app.Index.Files {
+		if _, ok := fi.Tags[group]; ok {
+			if !app.Selected[path] {
+				return false
+			}
+		}
+	}
+	return true
 }
