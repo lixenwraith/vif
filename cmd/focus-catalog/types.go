@@ -34,12 +34,13 @@ type AppState struct {
 	RgAvailable bool // ripgrep installed
 
 	// UI state
-	InputMode     bool     // true when typing keyword
-	InputBuffer   string   // keyword input buffer
-	Message       string   // status message
-	PreviewMode   bool     // showing file preview
-	PreviewFiles  []string // files to preview
-	PreviewScroll int      // preview scroll offset
+	InputMode     bool       // true when typing keyword
+	InputBuffer   string     // keyword input buffer
+	SearchType    SearchType // active search mode
+	Message       string     // status message
+	PreviewMode   bool       // showing file preview
+	PreviewFiles  []string   // files to preview
+	PreviewScroll int        // preview scroll offset
 
 	// Mindmap state
 	MindmapMode  bool
@@ -155,6 +156,15 @@ type TreeNode struct {
 	PackageInfo *PackageInfo // Non-nil for package directories
 	Depth       int          // Nesting level for indentation
 }
+
+// SearchType indicates active search mode
+type SearchType uint8
+
+const (
+	SearchTypeContent SearchType = iota
+	SearchTypeTags
+	SearchTypeGroups
+)
 
 // FilterState holds filter state (visual highlighting only)
 type FilterState struct {

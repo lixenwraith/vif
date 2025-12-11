@@ -274,6 +274,12 @@ func (app *AppState) buildTagItems(group, tag string) []MindmapItem {
 
 // HandleMindmapEvent processes input in mindmap view
 func (app *AppState) HandleMindmapEvent(ev terminal.Event) {
+	// Handle input mode first
+	if app.InputMode {
+		app.handleMindmapInputEvent(ev)
+		return
+	}
+
 	state := app.MindmapState
 	if state == nil {
 		app.MindmapMode = false
@@ -282,6 +288,11 @@ func (app *AppState) HandleMindmapEvent(ev terminal.Event) {
 
 	switch ev.Key {
 	case terminal.KeyEscape:
+		if app.Filter.HasActiveFilter() {
+			app.ClearFilter()
+			app.Message = "filter cleared"
+			return
+		}
 		app.MindmapMode = false
 		return
 
@@ -304,6 +315,20 @@ func (app *AppState) HandleMindmapEvent(ev terminal.Event) {
 			app.jumpMindmapToStart()
 		case '$':
 			app.jumpMindmapToEnd()
+		case 'f':
+			app.applyMindmapFilter()
+		case '/':
+			app.InputMode = true
+			app.InputBuffer = ""
+			app.SearchType = SearchTypeContent
+		case 't':
+			app.InputMode = true
+			app.InputBuffer = ""
+			app.SearchType = SearchTypeTags
+		case 'g':
+			app.InputMode = true
+			app.InputBuffer = ""
+			app.SearchType = SearchTypeGroups
 		}
 
 	case terminal.KeyEnter:
@@ -324,6 +349,60 @@ func (app *AppState) HandleMindmapEvent(ev terminal.Event) {
 		app.jumpMindmapToStart()
 	case terminal.KeyEnd:
 		app.jumpMindmapToEnd()
+	}
+}
+
+// handleMindmapInputEvent processes input mode events in mindmap
+func (app *AppState) handleMindmapInputEvent(ev terminal.Event) {
+	switch ev.Key {
+	case terminal.KeyEscape:
+		app.InputMode = false
+		app.InputBuffer = ""
+
+	case terminal.KeyEnter:
+		app.InputMode = false
+		app.executeSearch(app.InputBuffer)
+		app.InputBuffer = ""
+
+	case terminal.KeyBackspace:
+		if len(app.InputBuffer) > 0 {
+			app.InputBuffer = app.InputBuffer[:len(app.InputBuffer)-1]
+		}
+
+	case terminal.KeyRune:
+		app.InputBuffer += string(ev.Rune)
+	}
+}
+
+// applyMindmapFilter applies filter based on current mindmap item
+func (app *AppState) applyMindmapFilter() {
+	state := app.MindmapState
+	if state == nil || len(state.Items) == 0 {
+		return
+	}
+
+	item := state.Items[state.Cursor]
+	var paths []string
+
+	if item.IsDir {
+		// Collect all file paths under this directory item
+		for i := state.Cursor + 1; i < len(state.Items); i++ {
+			next := state.Items[i]
+			if next.Depth <= item.Depth {
+				break
+			}
+			if !next.IsDir && next.Path != "" {
+				paths = append(paths, next.Path)
+			}
+		}
+		app.Message = fmt.Sprintf("filter: %s (%d files)", item.Name, len(paths))
+	} else if item.Path != "" {
+		paths = []string{item.Path}
+		app.Message = fmt.Sprintf("filter: %s", item.Name)
+	}
+
+	if len(paths) > 0 {
+		app.ApplyFilter(paths)
 	}
 }
 
@@ -454,6 +533,9 @@ func (app *AppState) RenderMindmap(cells []terminal.Cell, w, h int) {
 		depExpanded = app.computeDepExpandedFiles()
 	}
 
+	// Check if filter is active
+	hasFilter := app.Filter.HasActiveFilter()
+
 	// Content area
 	contentTop := 1
 	contentHeight := h - 2 // Header + help
@@ -462,6 +544,13 @@ func (app *AppState) RenderMindmap(cells []terminal.Cell, w, h int) {
 		y := contentTop + i
 		idx := state.Scroll + i
 		item := state.Items[idx]
+
+		// Check filter match
+		matchesFilter := true
+		if hasFilter && !item.IsDir && item.Path != "" {
+			matchesFilter = app.Filter.FilteredPaths[item.Path]
+		}
+		dimmed := hasFilter && !matchesFilter
 
 		isCursor := idx == state.Cursor
 		rowBg := colorDefaultBg
@@ -501,6 +590,9 @@ func (app *AppState) RenderMindmap(cells []terminal.Cell, w, h int) {
 				checkbox = "[+]"
 				checkFg = colorExpandedFg
 			}
+			if dimmed {
+				checkFg = colorUnselected
+			}
 
 			drawText(cells, w, x, y, checkbox, checkFg, rowBg, terminal.AttrNone)
 			x += 4
@@ -517,7 +609,11 @@ func (app *AppState) RenderMindmap(cells []terminal.Cell, w, h int) {
 			if len(name) > maxNameLen {
 				name = "..." + name[len(name)-maxNameLen+3:]
 			}
-			drawText(cells, w, x, y, name, nameFg, rowBg, terminal.AttrNone)
+			attr := terminal.AttrNone
+			if dimmed {
+				attr = terminal.AttrDim
+			}
+			drawText(cells, w, x, y, name, nameFg, rowBg, attr)
 			x += len(name) + 2
 
 			// Tags (colored)
@@ -527,9 +623,22 @@ func (app *AppState) RenderMindmap(cells []terminal.Cell, w, h int) {
 		}
 	}
 
+	// Input mode overlay
+	if app.InputMode {
+		typeHint := "content"
+		switch app.SearchType {
+		case SearchTypeTags:
+			typeHint = "tags"
+		case SearchTypeGroups:
+			typeHint = "groups"
+		}
+		inputStr := fmt.Sprintf("Search [%s]: %s_", typeHint, app.InputBuffer)
+		drawText(cells, w, 1, h-2, inputStr, colorHeaderFg, colorInputBg, terminal.AttrNone)
+	}
+
 	// Help bar
 	helpY := h - 1
-	help := "j/k:nav  Space:toggle  a:all  c:clear  0/$:jump  Esc/q:back"
+	help := "j/k:nav 0/$:jump Space:toggle  a:all c:clear f:filter  /:search  t:tag  g:group Esc/q:back"
 	drawText(cells, w, 1, helpY, help, colorHelpFg, colorDefaultBg, terminal.AttrDim)
 
 	// Scroll indicator

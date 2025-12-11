@@ -43,6 +43,17 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 		case '/':
 			app.InputMode = true
 			app.InputBuffer = ""
+			app.SearchType = SearchTypeContent
+			return false, false
+		case 't':
+			app.InputMode = true
+			app.InputBuffer = ""
+			app.SearchType = SearchTypeTags
+			return false, false
+		case 'g':
+			app.InputMode = true
+			app.InputBuffer = ""
+			app.SearchType = SearchTypeGroups
 			return false, false
 		case 'r':
 			app.ReindexAll()

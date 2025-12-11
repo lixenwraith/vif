@@ -89,7 +89,9 @@ package systems
 | Key | Action |
 |-----|--------|
 | `f` | Apply filter at cursor position |
-| `/` | Start keyword search |
+| `/` | Search content (ripgrep) |
+| `t` | Search tags (prefix match) |
+| `g` | Search groups (prefix match) |
 | `m` | Toggle filter mode (OR/AND) |
 | `Esc` | Clear active filters |
 
@@ -116,18 +118,27 @@ Filtering highlights matching items without changing selection. Use filtering to
 - On tag: highlights all files with that tag and the tag itself
 - On group: highlights all files with any tag in that group
 
-### Filter with `/` Search
+### Search Filters
 
-Search behavior depends on active pane:
+Three search modes available from any pane:
 
-**Left Pane (content search):**
-- Uses ripgrep to search filenames, directory names, and file contents
-- Falls back to filename-only search if ripgrep unavailable
+| Key | Mode | Behavior |
+|-----|------|----------|
+| `/` | Content | Ripgrep search on filenames, paths, file contents |
+| `t` | Tags | Prefix match on tag names (case-insensitive) |
+| `g` | Groups | Prefix match on group names (case-insensitive) |
+
+**Content search (`/`):**
+- Uses ripgrep when available, falls back to filename-only search
 - Example: `/cache` finds files containing "cache" in name or content
 
-**Right Pane (exact match):**
-- Searches for exact group or tag name matches
-- Example: `/ecs` finds files tagged with group or tag named "ecs"
+**Tag search (`t`):**
+- Matches tags starting with query, unions multiple matches
+- Example: `t` then `ecs` finds files with tags `ecs`, `ecsystem`, etc.
+
+**Group search (`g`):**
+- Matches groups starting with query, unions multiple matches
+- Example: `g` then `co` finds files in groups `core`, `collision`, etc.
 
 ### Filter Chaining
 
@@ -256,10 +267,17 @@ Press `v` to open a contextual mindmap visualization:
 | `a` | Select all visible |
 | `c` | Clear visible selections |
 | `0`/`$` or `Home`/`End` | Jump to start/end |
+| `f` | Filter at cursor |
+| `/` | Search content |
+| `t` | Search tags |
+| `g` | Search groups |
 | `Enter` | Open dive view for selected file |
-| `Esc` or `q` | Return to main view |
+| `Esc` | Clear filter, or exit if no filter |
+| `q` | Return to main view
 
 Selections made in mindmap sync bidirectionally with the main view.
+
+Filter state also persists between mindmap and main view. Filters applied in mindmap remain active when returning to the two-pane view.
 
 ## Dive View
 

@@ -408,11 +408,14 @@ func (app *AppState) renderStatus(cells []terminal.Cell, w, y int) {
 	}
 
 	if app.InputMode {
-		paneHint := "left:content"
-		if app.FocusPane == PaneRight {
-			paneHint = "right:exact"
+		typeHint := "content"
+		switch app.SearchType {
+		case SearchTypeTags:
+			typeHint = "tags"
+		case SearchTypeGroups:
+			typeHint = "groups"
 		}
-		inputStr := fmt.Sprintf("Search [%s]: %s_", paneHint, app.InputBuffer)
+		inputStr := fmt.Sprintf("Search [%s]: %s_", typeHint, app.InputBuffer)
 		drawText(cells, w, 1, y, inputStr, colorHeaderFg, colorInputBg, terminal.AttrNone)
 	} else if app.Filter.HasActiveFilter() {
 		modeStr := "OR"
@@ -433,7 +436,7 @@ func (app *AppState) renderStatus(cells []terminal.Cell, w, y int) {
 }
 
 func (app *AppState) renderHelp(cells []terminal.Cell, w, y int) {
-	help := "Tab:pane  j/k:nav  Space:sel  f:filter  /:search  m:mode  d:deps  Enter:view  ^S:output  Esc:clear  q:quit"
+	help := "Tab:pane  j/k:nav 0/$:jump Space:sel  f:filter  /:search  t:tag  g:group  m:mode  d:deps  Enter:view  ^S:output  Esc:clear  q:quit"
 	if len(help) > w-2 {
 		help = help[:w-5] + "..."
 	}

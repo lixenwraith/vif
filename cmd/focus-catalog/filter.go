@@ -127,30 +127,28 @@ func (app *AppState) applyRightPaneFilter() {
 }
 
 // executeSearch performs pane-aware search
+// executeSearch performs search based on active SearchType
 func (app *AppState) executeSearch(query string) {
 	if query == "" {
 		return
 	}
 
 	var paths []string
+	var label string
 
-	if app.FocusPane == PaneLeft {
-		if app.RgAvailable {
-			matches, err := searchWithRipgrep(".", query)
-			if err != nil {
-				app.Message = fmt.Sprintf("search error: %v", err)
-				return
-			}
-			paths = matches
-		} else {
-			paths = searchPaths(app.Index, query)
-		}
-		app.Message = fmt.Sprintf("search: %q (%d files)", query, len(paths))
-	} else {
-		paths = searchTagsExact(app.Index, query)
-		app.Message = fmt.Sprintf("search tags: %q (%d files)", query, len(paths))
+	switch app.SearchType {
+	case SearchTypeContent:
+		paths = searchContentRg(app.Index, query, app.RgAvailable)
+		label = "content"
+	case SearchTypeTags:
+		paths = searchTagsPrefix(app.Index, query)
+		label = "tags"
+	case SearchTypeGroups:
+		paths = searchGroupsPrefix(app.Index, query)
+		label = "groups"
 	}
 
+	app.Message = fmt.Sprintf("search %s: %q (%d files)", label, query, len(paths))
 	app.ApplyFilter(paths)
 	app.RefreshTagFlat()
 }
@@ -194,27 +192,51 @@ func searchPaths(index *Index, pattern string) []string {
 	return matches
 }
 
-// searchTagsExact finds files with exact group or tag name match
-func searchTagsExact(index *Index, query string) []string {
+// searchContentRg searches file content/names using ripgrep or fallback
+func searchContentRg(index *Index, query string, rgAvailable bool) []string {
+	if rgAvailable {
+		matches, err := searchWithRipgrep(".", query)
+		if err != nil {
+			return nil
+		}
+		return matches
+	}
+	return searchPaths(index, query)
+}
+
+// searchTagsPrefix finds files with tags matching prefix (case-insensitive)
+func searchTagsPrefix(index *Index, query string) []string {
+	query = strings.ToLower(query)
 	var matches []string
 	seen := make(map[string]bool)
 
 	for path, fi := range index.Files {
-		for group, tags := range fi.Tags {
-			if group == query {
-				if !seen[path] {
-					matches = append(matches, path)
-					seen[path] = true
-				}
-				continue
-			}
+		for _, tags := range fi.Tags {
 			for _, tag := range tags {
-				if tag == query {
+				if strings.HasPrefix(strings.ToLower(tag), query) {
 					if !seen[path] {
 						matches = append(matches, path)
 						seen[path] = true
 					}
-					break
+				}
+			}
+		}
+	}
+	return matches
+}
+
+// searchGroupsPrefix finds files with groups matching prefix (case-insensitive)
+func searchGroupsPrefix(index *Index, query string) []string {
+	query = strings.ToLower(query)
+	var matches []string
+	seen := make(map[string]bool)
+
+	for path, fi := range index.Files {
+		for group := range fi.Tags {
+			if strings.HasPrefix(strings.ToLower(group), query) {
+				if !seen[path] {
+					matches = append(matches, path)
+					seen[path] = true
 				}
 			}
 		}
