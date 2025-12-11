@@ -306,6 +306,10 @@ func (app *AppState) HandleMindmapEvent(ev terminal.Event) {
 			app.jumpMindmapToEnd()
 		}
 
+	case terminal.KeyEnter:
+		app.EnterDive()
+		return
+
 	case terminal.KeyUp:
 		app.moveMindmapCursor(-1)
 	case terminal.KeyDown:

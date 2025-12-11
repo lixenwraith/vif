@@ -11,6 +11,11 @@ import (
 func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 	app.Message = ""
 
+	if app.DiveMode {
+		app.HandleDiveEvent(ev)
+		return false, false
+	}
+
 	if app.MindmapMode {
 		app.HandleMindmapEvent(ev)
 		return false, false
@@ -38,9 +43,6 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 		case '/':
 			app.InputMode = true
 			app.InputBuffer = ""
-			return false, false
-		case 'v':
-			app.EnterMindmap()
 			return false, false
 		case 'r':
 			app.ReindexAll()
@@ -97,6 +99,12 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 		return false, false
 
 	case terminal.KeyEnter:
+		if app.FocusPane == PaneLeft || app.FocusPane == PaneRight {
+			app.EnterMindmap()
+			return false, false
+		}
+
+	case terminal.KeyCtrlS:
 		files := app.ComputeOutputFiles()
 		if len(files) == 0 {
 			app.Message = "no files to output"

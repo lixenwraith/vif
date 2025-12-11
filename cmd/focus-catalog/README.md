@@ -67,7 +67,7 @@ package systems
 
 | Key | Action |
 |-----|--------|
-| `v` | Open mindmap view |
+| `Enter` | Open mindmap view |
 | `p` | Preview selected files |
 | `Esc` | Clear active filters |
 
@@ -99,7 +99,7 @@ package systems
 | `d` | Toggle dependency expansion |
 | `+`/`-` | Adjust expansion depth (1-5) |
 | `p` | Preview output files |
-| `Enter` | Write output file (stays in app) |
+| `Ctrl+S` | Write output file |
 | `q` | Quit |
 
 ## Filtering
@@ -256,9 +256,40 @@ Press `v` to open a contextual mindmap visualization:
 | `a` | Select all visible |
 | `c` | Clear visible selections |
 | `0`/`$` or `Home`/`End` | Jump to start/end |
+| `Enter` | Open dive view for selected file |
 | `Esc` or `q` | Return to main view |
 
 Selections made in mindmap sync bidirectionally with the main view.
+
+## Dive View
+
+Press `Enter` on any file in mindmap view to open a detailed relationship visualization:
+
+**Layout (top to bottom):**
+- **DEPENDS ON**: Packages this file imports (local only)
+- **DEPENDED BY**: Packages that import this file's package
+- **Focus Box**: The selected file with package info and tags
+- **Tag Sections**: Files sharing the same tags, grouped by tag
+
+**Visual Elements:**
+| Element | Meaning |
+|---------|---------|
+| `╔═══╗` | Double-line box: outer frame and focus file |
+| `┌───┐` | Single-line box: dependency and tag sections |
+| `★` | Focus file indicator |
+| `▼` | Connection arrows showing relationships |
+| `(+N)` | Truncated items count |
+
+**Dive Controls:**
+| Key | Action |
+|-----|--------|
+| `Esc` or `q` | Return to mindmap view |
+
+**Responsive Behavior:**
+- Tag boxes: 2-5 depending on terminal width
+- File lists: expand with available height
+- Package columns: multi-column layout when space permits
+
 
 ## Tag Editor
 

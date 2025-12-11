@@ -154,6 +154,9 @@ func BuildIndex(root string) (*Index, error) {
 		index.AllTags[group] = tags
 	}
 
+	// Compute reverse dependencies
+	index.ReverseDeps = computeReverseDeps(index)
+
 	return index, nil
 }
 
@@ -232,6 +235,31 @@ func BuildTree(index *Index) *TreeNode {
 	sortChildren(root)
 
 	return root
+}
+
+// computeReverseDeps builds reverse dependency map
+// Maps package dir → list of package dirs that import it
+func computeReverseDeps(index *Index) map[string][]string {
+	reverse := make(map[string][]string)
+
+	for dir, pkg := range index.Packages {
+		for _, dep := range pkg.LocalDeps {
+			// Find package dir by name
+			for depDir, depPkg := range index.Packages {
+				if depPkg.Name == dep {
+					reverse[depDir] = append(reverse[depDir], dir)
+					break
+				}
+			}
+		}
+	}
+
+	// Sort each list for consistent display
+	for dir := range reverse {
+		sort.Strings(reverse[dir])
+	}
+
+	return reverse
 }
 
 // ensureDirNode creates directory node and all parent nodes as needed

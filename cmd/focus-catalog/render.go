@@ -24,7 +24,9 @@ func (app *AppState) Render() {
 		cells[i] = terminal.Cell{Rune: ' ', Fg: colorDefaultFg, Bg: colorDefaultBg}
 	}
 
-	if app.MindmapMode {
+	if app.DiveMode {
+		app.RenderDive(cells, w, h)
+	} else if app.MindmapMode {
 		app.RenderMindmap(cells, w, h)
 	} else if app.PreviewMode {
 		app.renderPreview(cells, w, h)
@@ -431,7 +433,7 @@ func (app *AppState) renderStatus(cells []terminal.Cell, w, y int) {
 }
 
 func (app *AppState) renderHelp(cells []terminal.Cell, w, y int) {
-	help := "Tab:pane  j/k:nav  Space:sel  f:filter  /:search  m:mode  d:deps  Enter:out  Esc:clear  q:quit"
+	help := "Tab:pane  j/k:nav  Space:sel  f:filter  /:search  m:mode  d:deps  Enter:view  ^S:output  Esc:clear  q:quit"
 	if len(help) > w-2 {
 		help = help[:w-5] + "..."
 	}

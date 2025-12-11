@@ -45,6 +45,10 @@ type AppState struct {
 	MindmapMode  bool
 	MindmapState *MindmapState
 
+	// Dive state
+	DiveMode  bool
+	DiveState *DiveState
+
 	// Editor state
 	EditMode   bool   // true when editing tags
 	EditTarget string // file path being edited
@@ -131,11 +135,12 @@ type PackageInfo struct {
 
 // Index holds the complete codebase index
 type Index struct {
-	ModulePath string
-	Packages   map[string]*PackageInfo // package name → info
-	Files      map[string]*FileInfo    // relative path → info
-	Groups     []string                // sorted list of all group names
-	AllTags    map[string][]string     // group → all tags in that group
+	ModulePath  string
+	Packages    map[string]*PackageInfo // package dir → info
+	Files       map[string]*FileInfo    // relative path → info
+	Groups      []string                // sorted list of all group names
+	AllTags     map[string][]string     // group → all tags in that group
+	ReverseDeps map[string][]string     // package dir → dirs that import it
 }
 
 // TreeNode represents a directory or file in the tree view
