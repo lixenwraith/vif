@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// ApplyFilter applies a new filter using current mode (OR=union, AND=intersection)
+// ApplyFilter applies a new filter using current mode
 func (app *AppState) ApplyFilter(newPaths []string) {
 	newSet := make(map[string]bool, len(newPaths))
 	for _, p := range newPaths {
@@ -15,23 +15,53 @@ func (app *AppState) ApplyFilter(newPaths []string) {
 	}
 
 	if len(app.Filter.FilteredPaths) == 0 {
-		app.Filter.FilteredPaths = newSet
-	} else if app.Filter.Mode == FilterOR {
-		for p := range newSet {
-			app.Filter.FilteredPaths[p] = true
+		// First filter always sets the base, except NOT which needs a base
+		if app.Filter.Mode == FilterNOT {
+			return // Nothing to subtract from
 		}
+		app.Filter.FilteredPaths = newSet
 	} else {
-		// AND - intersection
-		result := make(map[string]bool)
-		for p := range app.Filter.FilteredPaths {
-			if newSet[p] {
-				result[p] = true
+		switch app.Filter.Mode {
+		case FilterOR:
+			for p := range newSet {
+				app.Filter.FilteredPaths[p] = true
+			}
+		case FilterAND:
+			result := make(map[string]bool)
+			for p := range app.Filter.FilteredPaths {
+				if newSet[p] {
+					result[p] = true
+				}
+			}
+			app.Filter.FilteredPaths = result
+		case FilterNOT:
+			for p := range newSet {
+				delete(app.Filter.FilteredPaths, p)
+			}
+		case FilterXOR:
+			for p := range newSet {
+				if app.Filter.FilteredPaths[p] {
+					delete(app.Filter.FilteredPaths, p)
+				} else {
+					app.Filter.FilteredPaths[p] = true
+				}
 			}
 		}
-		app.Filter.FilteredPaths = result
 	}
 
 	app.computeFilteredTags()
+}
+
+// RemoveFromFilter removes paths from the current filter
+func (app *AppState) RemoveFromFilter(paths []string) {
+	for _, p := range paths {
+		delete(app.Filter.FilteredPaths, p)
+	}
+	if len(app.Filter.FilteredPaths) == 0 {
+		app.ClearFilter()
+	} else {
+		app.computeFilteredTags()
+	}
 }
 
 // ClearFilter clears all filter state
@@ -60,7 +90,19 @@ func (app *AppState) computeFilteredTags() {
 	}
 }
 
-// applyLeftPaneFilter applies filter based on left pane cursor position
+// selectFilteredFiles transfers all filtered files to selection
+func (app *AppState) selectFilteredFiles() int {
+	count := 0
+	for path := range app.Filter.FilteredPaths {
+		if !app.Selected[path] {
+			app.Selected[path] = true
+			count++
+		}
+	}
+	return count
+}
+
+// applyLeftPaneFilter toggles filter based on left pane cursor position
 func (app *AppState) applyLeftPaneFilter() {
 	if len(app.TreeFlat) == 0 {
 		return
@@ -71,28 +113,35 @@ func (app *AppState) applyLeftPaneFilter() {
 
 	if node.IsDir {
 		collectFilePaths(node, &paths)
-		app.Message = fmt.Sprintf("filter: %s/ (%d files)", node.Path, len(paths))
 	} else {
 		paths = []string{node.Path}
-		app.Message = fmt.Sprintf("filter: %s", node.Path)
 	}
 
-	app.ApplyFilter(paths)
+	if len(paths) == 0 {
+		return
+	}
+
+	// Check if already filtered - toggle behavior
+	if app.isPathSetFiltered(paths) {
+		app.RemoveFromFilter(paths)
+		if node.IsDir {
+			app.Message = fmt.Sprintf("unfilter: %s/", node.Path)
+		} else {
+			app.Message = fmt.Sprintf("unfilter: %s", node.Path)
+		}
+	} else {
+		app.ApplyFilter(paths)
+		if node.IsDir {
+			app.Message = fmt.Sprintf("filter: %s/ (%d files)", node.Path, len(paths))
+		} else {
+			app.Message = fmt.Sprintf("filter: %s", node.Path)
+		}
+	}
+
 	app.RefreshTagFlat()
 }
 
-// collectFilePaths recursively collects file paths under a node
-func collectFilePaths(node *TreeNode, paths *[]string) {
-	if !node.IsDir {
-		*paths = append(*paths, node.Path)
-		return
-	}
-	for _, child := range node.Children {
-		collectFilePaths(child, paths)
-	}
-}
-
-// applyRightPaneFilter applies filter based on right pane cursor position
+// applyRightPaneFilter toggles filter based on right pane cursor position
 func (app *AppState) applyRightPaneFilter() {
 	if len(app.TagFlat) == 0 {
 		return
@@ -107,7 +156,6 @@ func (app *AppState) applyRightPaneFilter() {
 				paths = append(paths, path)
 			}
 		}
-		app.Message = fmt.Sprintf("filter: #%s (%d files)", item.Group, len(paths))
 	} else {
 		for path, fi := range app.Index.Files {
 			if tags, ok := fi.Tags[item.Group]; ok {
@@ -119,11 +167,54 @@ func (app *AppState) applyRightPaneFilter() {
 				}
 			}
 		}
-		app.Message = fmt.Sprintf("filter: #%s{%s} (%d files)", item.Group, item.Tag, len(paths))
 	}
 
-	app.ApplyFilter(paths)
+	if len(paths) == 0 {
+		return
+	}
+
+	// Check if already filtered - toggle behavior
+	if app.isPathSetFiltered(paths) {
+		app.RemoveFromFilter(paths)
+		if item.IsGroup {
+			app.Message = fmt.Sprintf("unfilter: #%s", item.Group)
+		} else {
+			app.Message = fmt.Sprintf("unfilter: #%s{%s}", item.Group, item.Tag)
+		}
+	} else {
+		app.ApplyFilter(paths)
+		if item.IsGroup {
+			app.Message = fmt.Sprintf("filter: #%s (%d files)", item.Group, len(paths))
+		} else {
+			app.Message = fmt.Sprintf("filter: #%s{%s} (%d files)", item.Group, item.Tag, len(paths))
+		}
+	}
+
 	app.RefreshTagFlat()
+}
+
+// isPathSetFiltered returns true if all paths in set are currently filtered
+func (app *AppState) isPathSetFiltered(paths []string) bool {
+	if !app.Filter.HasActiveFilter() || len(paths) == 0 {
+		return false
+	}
+	for _, p := range paths {
+		if !app.Filter.FilteredPaths[p] {
+			return false
+		}
+	}
+	return true
+}
+
+// collectFilePaths recursively collects file paths under a node
+func collectFilePaths(node *TreeNode, paths *[]string) {
+	if !node.IsDir {
+		*paths = append(*paths, node.Path)
+		return
+	}
+	for _, child := range node.Children {
+		collectFilePaths(child, paths)
+	}
 }
 
 // executeSearch performs pane-aware search

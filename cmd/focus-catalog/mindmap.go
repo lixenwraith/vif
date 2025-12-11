@@ -288,17 +288,17 @@ func (app *AppState) HandleMindmapEvent(ev terminal.Event) {
 
 	switch ev.Key {
 	case terminal.KeyEscape:
+		// Esc only clears filter/input, does not exit view
 		if app.Filter.HasActiveFilter() {
 			app.ClearFilter()
 			app.Message = "filter cleared"
-			return
 		}
-		app.MindmapMode = false
 		return
 
 	case terminal.KeyRune:
 		switch ev.Rune {
 		case 'q':
+			// Exit to 2-pane view
 			app.MindmapMode = false
 			return
 		case 'j':
@@ -317,6 +317,13 @@ func (app *AppState) HandleMindmapEvent(ev terminal.Event) {
 			app.jumpMindmapToEnd()
 		case 'f':
 			app.applyMindmapFilter()
+		case 'F':
+			if app.Filter.HasActiveFilter() {
+				count := app.selectFilteredFiles()
+				app.Message = fmt.Sprintf("selected %d filtered files", count)
+			} else {
+				app.Message = "no filter active"
+			}
 		case '/':
 			app.InputMode = true
 			app.InputBuffer = ""
@@ -374,7 +381,7 @@ func (app *AppState) handleMindmapInputEvent(ev terminal.Event) {
 	}
 }
 
-// applyMindmapFilter applies filter based on current mindmap item
+// applyMindmapFilter toggles filter based on current mindmap item
 func (app *AppState) applyMindmapFilter() {
 	state := app.MindmapState
 	if state == nil || len(state.Items) == 0 {
@@ -395,14 +402,25 @@ func (app *AppState) applyMindmapFilter() {
 				paths = append(paths, next.Path)
 			}
 		}
-		app.Message = fmt.Sprintf("filter: %s (%d files)", item.Name, len(paths))
 	} else if item.Path != "" {
 		paths = []string{item.Path}
-		app.Message = fmt.Sprintf("filter: %s", item.Name)
 	}
 
-	if len(paths) > 0 {
+	if len(paths) == 0 {
+		return
+	}
+
+	// Check if already filtered - toggle behavior
+	if app.isPathSetFiltered(paths) {
+		app.RemoveFromFilter(paths)
+		app.Message = fmt.Sprintf("unfilter: %s", item.Name)
+	} else {
 		app.ApplyFilter(paths)
+		if item.IsDir {
+			app.Message = fmt.Sprintf("filter: %s (%d files)", item.Name, len(paths))
+		} else {
+			app.Message = fmt.Sprintf("filter: %s", item.Name)
+		}
 	}
 }
 
@@ -638,7 +656,7 @@ func (app *AppState) RenderMindmap(cells []terminal.Cell, w, h int) {
 
 	// Help bar
 	helpY := h - 1
-	help := "j/k:nav 0/$:jump Space:toggle  a:all c:clear f:filter  /:search  t:tag  g:group Esc/q:back"
+	help := "j/k:nav 0/$:jump Space:toggle  a:all c:clear f:filter F:sel-filter /:search  t:tag  g:group Esc/q:back"
 	drawText(cells, w, 1, helpY, help, colorHelpFg, colorDefaultBg, terminal.AttrDim)
 
 	// Scroll indicator

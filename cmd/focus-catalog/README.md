@@ -27,88 +27,94 @@ Declare in Go files before `package` statement:
 package systems
 ```
 
-| Syntax | Meaning |
-|--------|---------|
-| `#group { tag1, tag2 }` | Assign tags to group |
-| `#all` | Include file in every output |
-| Multiple `// @focus:` lines | Accumulated |
+| Syntax                      | Meaning                      |
+|-----------------------------|------------------------------|
+| `#group { tag1, tag2 }`     | Assign tags to group         |
+| `#all`                      | Include file in every output |
+| Multiple `// @focus:` lines | Accumulated                  |
 
 ## Key Bindings
 
 ### Navigation
-| Key | Action |
-|-----|--------|
-| `j` / `↓` | Move cursor down |
-| `k` / `↑` | Move cursor up |
-| `PgUp` / `PgDn` | Page up/down |
-| `Home` / `0` | Jump to first item |
-| `End` / `$` | Jump to last item |
-| `Tab` | Switch pane focus |
+| Key             | Action             |
+|-----------------|--------------------|
+| `j` / `↓`       | Move cursor down   |
+| `k` / `↑`       | Move cursor up     |
+| `PgUp` / `PgDn` | Page up/down       |
+| `Home` / `0`    | Jump to first item |
+| `End` / `$`     | Jump to last item  |
+| `Tab`           | Switch pane focus  |
 
 ### Tree Operations (Left Pane)
 
-| Key | Action |
-|-----|--------|
-| `h` / `←` | Collapse directory |
-| `l` / `→` | Expand directory |
-| `H` | Collapse all directories |
-| `L` | Expand all directories |
+| Key       | Action                   |
+|-----------|--------------------------|
+| `h` / `←` | Collapse directory       |
+| `l` / `→` | Expand directory         |
+| `H`       | Collapse all directories |
+| `L`       | Expand all directories   |
 
 ### Tag Groups (Right Pane)
 
-| Key | Action |
-|-----|--------|
+| Key       | Action                 |
+|-----------|------------------------|
 | `h` / `←` | Collapse current group |
-| `l` / `→` | Expand current group |
-| `H` | Collapse all groups |
-| `L` | Expand all groups |
+| `l` / `→` | Expand current group   |
+| `H`       | Collapse all groups    |
+| `L`       | Expand all groups      |
 
 ### Views
 
-| Key | Action |
-|-----|--------|
-| `Enter` | Open mindmap view |
-| `p` | Preview selected files |
-| `Esc` | Clear active filters |
+| Key     | Action                 |
+|---------|------------------------|
+| `Enter` | Open mindmap view      |
+| `p`     | Preview selected files |
+| `Esc`   | Clear active filters   |
 
 ### Editing
 
-| Key | Action |
-|-----|--------|
+| Key | Action                                      |
+|-----|---------------------------------------------|
 | `e` | Edit tags for current file (left pane only) |
-| `r` | Re-index entire tree |
+| `r` | Re-index entire tree                        |
 
 ### Selection
-| Key | Action |
-|-----|--------|
+| Key     | Action                                            |
+|---------|---------------------------------------------------|
 | `Space` | Toggle selection (file, directory, tag, or group) |
-| `a` | Select all visible items (works in both panes) |
-| `c` | Clear all selections and filters |
+| `a`     | Select all visible items (works in both panes)    |
+| `c`     | Clear all selections and filters                  |
 
 ### Filtering
-| Key | Action |
-|-----|--------|
-| `f` | Apply filter at cursor position |
-| `/` | Search content (ripgrep) |
-| `t` | Search tags (prefix match) |
-| `g` | Search groups (prefix match) |
-| `m` | Toggle filter mode (OR/AND) |
-| `Esc` | Clear active filters |
+| Key   | Action                                                            |
+|-------|-------------------------------------------------------------------|
+| `f`   | Toggle filter at cursor (add if not filtered, remove if filtered) |
+| `F`   | Transfer filtered files to selection                              |
+| `/`   | Search content (ripgrep)                                          |
+| `t`   | Search tags (prefix match)                                        |
+| `g`   | Search groups (prefix match)                                      |
+| `m`   | Cycle filter mode (OR → AND → NOT → XOR)                          |
+| `Esc` | Clear active filters                                              |
 
 ### Dependencies & Output
-| Key | Action |
-|-----|--------|
-| `d` | Toggle dependency expansion |
-| `+`/`-` | Adjust expansion depth (1-5) |
-| `p` | Preview output files |
-| `Ctrl+S` | Write output file |
-| `q` | Quit |
+| Key      | Action                       |
+|----------|------------------------------|
+| `d`      | Toggle dependency expansion  |
+| `+`/`-`  | Adjust expansion depth (1-5) |
+| `p`      | Preview output files         |
+| `Ctrl+S` | Write output file            |
+| `Ctrl+Q` | Quit application             |
 
 ## Filtering
 
 Filtering highlights matching items without changing selection. Use filtering to preview which files match before selecting.
 
-### Filter with `f` Key
+### Apply and Toggle Filter with `f`
+
+Press `f` on any item to toggle its filter state:
+- If item is NOT highlighted → adds to filter
+- If item IS highlighted → removes from filter
+- If removal empties filter → filter cleared automatically
 
 **Left Pane:**
 - On file: highlights that single file and its associated tags in right pane
@@ -122,11 +128,11 @@ Filtering highlights matching items without changing selection. Use filtering to
 
 Three search modes available from any pane:
 
-| Key | Mode | Behavior |
-|-----|------|----------|
+| Key | Mode    | Behavior                                          |
+|-----|---------|---------------------------------------------------|
 | `/` | Content | Ripgrep search on filenames, paths, file contents |
-| `t` | Tags | Prefix match on tag names (case-insensitive) |
-| `g` | Groups | Prefix match on group names (case-insensitive) |
+| `t` | Tags    | Prefix match on tag names (case-insensitive)      |
+| `g` | Groups  | Prefix match on group names (case-insensitive)    |
 
 **Content search (`/`):**
 - Uses ripgrep when available, falls back to filename-only search
@@ -167,7 +173,29 @@ Press `Esc` at any time to clear all filters.
 
 - Filtered items: normal brightness
 - Non-filtered items: dimmed
-- Status bar shows: `Filter: N files [OR/AND]`
+- Status bar shows: `Filter: N files [OR/AND/NOT/XOR]`
+
+### Transfer Filter to Selection with `F`
+
+Press `F` (Shift+f) to select all currently filtered files. The filter remains active after transfer, allowing continued refinement.
+
+## Filter Modes
+
+Cycle with `m` key: OR → AND → NOT → XOR → OR
+
+### OR Mode (default)
+Each filter adds to the highlight set (union). Use for exploring related files across different criteria.
+
+### AND Mode
+Each filter narrows the highlight set (intersection). Use for finding files matching multiple criteria.
+
+### NOT Mode
+Each filter removes from the highlight set (subtraction). Use for excluding specific files from an existing filter.
+
+**Example:** Filter `#engine` group, switch to NOT mode, search for "test" → removes test files from engine filter.
+
+### XOR Mode
+Each filter toggles membership (symmetric difference). Items present in both sets are removed; items in only one set remain.
 
 ## Selection
 
@@ -186,18 +214,20 @@ Selection determines which files are included in the output. Selection and filte
 ### Selection Indicators
 
 **Left Pane (files):**
-| Symbol | Meaning |
-|--------|---------|
-| `[x]` | Directly selected |
-| `[+]` | Included via dependency expansion (purple) |
-| `[ ]` | Not selected |
+
+| Symbol | Meaning                                    |
+|--------|--------------------------------------------|
+| `[x]`  | Directly selected                          |
+| `[+]`  | Included via dependency expansion (purple) |
+| `[ ]`  | Not selected                               |
 
 **Right Pane (tags/groups):**
-| Symbol | Meaning |
-|--------|---------|
-| `[x]` | All files with this tag/group selected (green) |
-| `[o]` | Some files with this tag/group selected (blue) |
-| `[ ]` | No files with this tag/group selected |
+
+| Symbol | Meaning                                        |
+|--------|------------------------------------------------|
+| `[x]`  | All files with this tag/group selected (green) |
+| `[o]`  | Some files with this tag/group selected (blue) |
+| `[ ]`  | No files with this tag/group selected          |
 
 ### Bulk Selection
 
@@ -248,7 +278,7 @@ Files with `#all` tag always included. Sorted alphabetically. Compatible with `c
 
 ## Mindmap View
 
-Press `v` to open a contextual mindmap visualization:
+Press `Enter` to open a contextual mindmap visualization:
 
 **From Left Pane (on directory/file):**
 - Shows hierarchical view of package structure
@@ -260,20 +290,22 @@ Press `v` to open a contextual mindmap visualization:
 - Files listed with full paths and all their tags
 
 **Mindmap Controls:**
-| Key | Action |
-|-----|--------|
-| `j`/`k` or arrows | Navigate |
-| `Space` | Toggle selection |
-| `a` | Select all visible |
-| `c` | Clear visible selections |
-| `0`/`$` or `Home`/`End` | Jump to start/end |
-| `f` | Filter at cursor |
-| `/` | Search content |
-| `t` | Search tags |
-| `g` | Search groups |
-| `Enter` | Open dive view for selected file |
-| `Esc` | Clear filter, or exit if no filter |
-| `q` | Return to main view
+
+| Key                     | Action                               |
+|-------------------------|--------------------------------------|
+| `j`/`k` or arrows       | Navigate                             |
+| `Space`                 | Toggle selection                     |
+| `a`                     | Select all visible                   |
+| `c`                     | Clear visible selections             |
+| `0`/`$` or `Home`/`End` | Jump to start/end                    |
+| `f`                     | Filter at cursor                     |
+| `F`                     | Transfer filtered files to selection |
+| `/`                     | Search content                       |
+| `t`                     | Search tags                          |
+| `g`                     | Search groups                        |
+| `Enter`                 | Open dive view for selected file     |
+| `Esc`                   | Clear filter, or exit if no filter   |
+| `q`                     | Return to main view                  |
 
 Selections made in mindmap sync bidirectionally with the main view.
 
@@ -290,17 +322,19 @@ Press `Enter` on any file in mindmap view to open a detailed relationship visual
 - **Tag Sections**: Files sharing the same tags, grouped by tag
 
 **Visual Elements:**
-| Element | Meaning |
-|---------|---------|
-| `╔═══╗` | Double-line box: outer frame and focus file |
+
+| Element | Meaning                                      |
+|---------|----------------------------------------------|
+| `╔═══╗` | Double-line box: outer frame and focus file  |
 | `┌───┐` | Single-line box: dependency and tag sections |
-| `★` | Focus file indicator |
-| `▼` | Connection arrows showing relationships |
-| `(+N)` | Truncated items count |
+| `★`     | Focus file indicator                         |
+| `▼`     | Connection arrows showing relationships      |
+| `(+N)`  | Truncated items count                        |
 
 **Dive Controls:**
-| Key | Action |
-|-----|--------|
+
+| Key          | Action                 |
+|--------------|------------------------|
 | `Esc` or `q` | Return to mindmap view |
 
 **Responsive Behavior:**

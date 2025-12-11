@@ -419,8 +419,13 @@ func (app *AppState) renderStatus(cells []terminal.Cell, w, y int) {
 		drawText(cells, w, 1, y, inputStr, colorHeaderFg, colorInputBg, terminal.AttrNone)
 	} else if app.Filter.HasActiveFilter() {
 		modeStr := "OR"
-		if app.Filter.Mode == FilterAND {
+		switch app.Filter.Mode {
+		case FilterAND:
 			modeStr = "AND"
+		case FilterNOT:
+			modeStr = "NOT"
+		case FilterXOR:
+			modeStr = "XOR"
 		}
 		filterStr := fmt.Sprintf("Filter: %d files [%s]", len(app.Filter.FilteredPaths), modeStr)
 		drawText(cells, w, 1, y, filterStr, colorTagFg, colorDefaultBg, terminal.AttrNone)
@@ -436,7 +441,7 @@ func (app *AppState) renderStatus(cells []terminal.Cell, w, y int) {
 }
 
 func (app *AppState) renderHelp(cells []terminal.Cell, w, y int) {
-	help := "Tab:pane  j/k:nav 0/$:jump Space:sel  f:filter  /:search  t:tag  g:group  m:mode  d:deps  Enter:view  ^S:output  Esc:clear  q:quit"
+	help := "Tab:pane  j/k:nav 0/$:jump Space:sel  f:filter F:sel-filter /:search  t:tag  g:group  m:mode  d:deps  Enter:view  ^S:output  Esc:clear  q:quit"
 	if len(help) > w-2 {
 		help = help[:w-5] + "..."
 	}

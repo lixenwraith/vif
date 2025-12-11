@@ -111,8 +111,10 @@ const (
 type FilterMode int
 
 const (
-	FilterOR  FilterMode = iota // Match ANY selected tag
-	FilterAND                   // Match ALL selected groups (at least one tag per group)
+	FilterOR  FilterMode = iota // Match ANY selected tag (union)
+	FilterAND                   // Match ALL selected groups (intersection)
+	FilterNOT                   // Remove from existing (subtraction)
+	FilterXOR                   // Toggle membership (symmetric difference)
 )
 
 // FileInfo holds parsed data for a single Go file

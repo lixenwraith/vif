@@ -7,7 +7,6 @@ import (
 )
 
 // HandleEvent processes a key event
-// HandleEvent processes a key event
 func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 	app.Message = ""
 
@@ -36,10 +35,11 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 
 	// Global keys
 	switch ev.Key {
+	case terminal.KeyCtrlQ:
+		return true, false
+
 	case terminal.KeyRune:
 		switch ev.Rune {
-		case 'q':
-			return true, false
 		case '/':
 			app.InputMode = true
 			app.InputBuffer = ""
@@ -82,10 +82,18 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 			}
 			return false, false
 		case 'm':
-			if app.Filter.Mode == FilterOR {
+			// Cycle through filter modes
+			switch app.Filter.Mode {
+			case FilterOR:
 				app.Filter.Mode = FilterAND
 				app.Message = "filter mode: AND"
-			} else {
+			case FilterAND:
+				app.Filter.Mode = FilterNOT
+				app.Message = "filter mode: NOT"
+			case FilterNOT:
+				app.Filter.Mode = FilterXOR
+				app.Message = "filter mode: XOR"
+			case FilterXOR:
 				app.Filter.Mode = FilterOR
 				app.Message = "filter mode: OR"
 			}
@@ -98,6 +106,14 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 			return false, false
 		case 'p':
 			app.EnterPreview()
+			return false, false
+		case 'F':
+			if app.Filter.HasActiveFilter() {
+				count := app.selectFilteredFiles()
+				app.Message = fmt.Sprintf("selected %d filtered files", count)
+			} else {
+				app.Message = "no filter active"
+			}
 			return false, false
 		}
 
