@@ -1,4 +1,4 @@
-// @focus: #core { ecs, types } #game { cursor }
+// @focus: #flow { state } #gameplay { resource }
 package components
 
 import (

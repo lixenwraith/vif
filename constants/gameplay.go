@@ -1,4 +1,4 @@
-// @focus: #constants { gameplay }
+// @focus: #conf { gameplay } #gameplay { resource, reward }
 package constants
 
 import "time"

@@ -1,4 +1,4 @@
-// @focus: #core { ecs, types } #game { protection }
+// @focus: #lifecycle { protect }
 package components
 
 // ProtectionFlags defines immunity to specific game mechanics

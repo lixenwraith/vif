@@ -1,4 +1,4 @@
-// @focus: #render { blend }
+// @focus: #render { color }
 package render
 
 // BlendMode defines compositing operations using a bitmask (Flags | Op)

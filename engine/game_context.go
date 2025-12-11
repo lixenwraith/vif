@@ -1,4 +1,4 @@
-// @focus: #core { state, resources, lifecycle } #game { cursor } #events { dispatch }
+// @focus: #flow { context, state } #arch { resource } #event { dispatch } #gameplay { resource, defense } #input { types }
 package engine
 
 import (

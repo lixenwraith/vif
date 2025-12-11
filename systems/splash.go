@@ -1,4 +1,4 @@
-// @focus: #core { ecs } #game { splash, gold } #events { dispatch }
+// @focus: #vfx { splash } #event { dispatch } #gameplay { reward }
 package systems
 
 import (

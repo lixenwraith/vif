@@ -1,4 +1,4 @@
-// @focus: #core { ecs, spatial } #game { cleaner, collision } #render { effects } #events { dispatch }
+// @focus: #gameplay { ability, collision } #vfx { flash } #event { dispatch }
 package systems
 
 import (

@@ -1,4 +1,4 @@
-// @focus: #render { splash-render } #assets
+// @focus: #vfx { splash } #render { ui }
 package assets
 
 // SplashFont provides bitmap font data for ASCII characters 32-126 (95 printable characters)

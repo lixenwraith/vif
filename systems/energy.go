@@ -1,4 +1,4 @@
-// @focus: #core { ecs } #game { energy, shield, cursor, gold, nugget, heat, boost } #events { dispatch }
+// @focus: #gameplay { resource, reward, collision } #event { dispatch }
 package systems
 
 import (

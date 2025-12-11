@@ -1,3 +1,4 @@
+// @focus: #sys { term, io }
 //go:build unix
 
 // @focus: #terminal { resize }

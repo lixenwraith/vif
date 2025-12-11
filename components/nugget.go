@@ -1,4 +1,4 @@
-// @focus: #core { ecs, types } #game { nugget }
+// @focus: #gameplay { reward }
 package components
 
 import "time"

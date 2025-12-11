@@ -1,4 +1,4 @@
-// @focus: #core { ecs, types } #game { decay }
+// @focus: #gameplay { obstacle }
 package components
 
 // DecayComponent represents a decay character entity

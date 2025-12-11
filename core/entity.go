@@ -1,4 +1,4 @@
-// @focus: #all #core { entity, types }
+// @focus: #arch { ecs, types }
 package core
 
 // Entity is a unique identifier for an entity

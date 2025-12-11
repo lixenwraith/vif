@@ -1,4 +1,4 @@
-// @focus: #core { store, ecs }
+// @focus: #arch { ecs, types }
 package engine
 
 import (

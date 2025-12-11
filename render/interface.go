@@ -1,4 +1,4 @@
-// @focus: #render { orchestrator }
+// @focus: #render { pipeline, types }
 package render
 
 import "github.com/lixenwraith/vi-fighter/engine"

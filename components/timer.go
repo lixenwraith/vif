@@ -1,4 +1,4 @@
-// @focus: #core { ecs, types } #game { timer }
+// @focus: #lifecycle { timer }
 package components
 
 import "time"

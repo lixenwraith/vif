@@ -1,4 +1,4 @@
-// @focus: #constants { entities }
+// @focus: #conf { entity } #gameplay { obstacle, ability } #vfx { flash, materialize }
 package constants
 
 import "time"

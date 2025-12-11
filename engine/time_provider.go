@@ -1,4 +1,4 @@
-// @focus: #core { clock }
+// @focus: #flow { clock }
 package engine
 
 import "time"

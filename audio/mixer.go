@@ -1,4 +1,4 @@
-// @focus: #audio { mixer }
+// @focus: #sys { audio }
 package audio
 
 import (

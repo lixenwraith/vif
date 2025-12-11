@@ -1,4 +1,4 @@
-// @focus: #core { ecs, types } #game { drain }
+// @focus: #gameplay { obstacle }
 package components
 
 import "time"

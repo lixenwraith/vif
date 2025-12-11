@@ -1,4 +1,4 @@
-// @focus: #core { ecs } #game { heat, cleaner } #events { dispatch }
+// @focus: #gameplay { resource, ability } #event { dispatch }
 package systems
 
 import (

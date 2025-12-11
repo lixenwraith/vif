@@ -1,4 +1,4 @@
-// @focus: #render { orchestrator }
+// @focus: #render { pipeline }
 package render
 
 import (

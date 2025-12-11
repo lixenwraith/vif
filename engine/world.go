@@ -1,4 +1,4 @@
-// @focus: #all #core { world, ecs, entity, store, lifecycle }
+// @focus: #arch { ecs, types } #lifecycle { cull }
 package engine
 
 import (

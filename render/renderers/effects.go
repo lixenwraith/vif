@@ -1,4 +1,4 @@
-// @focus: #render { effects }
+// @focus: #render { scene } #vfx { flash, materialize } #gameplay { obstacle }
 package renderers
 
 import (

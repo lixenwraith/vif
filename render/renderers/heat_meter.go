@@ -1,4 +1,4 @@
-// @focus: #render { ui } #game { heat }
+// @focus: #render { ui } #gameplay { resource }
 package renderers
 
 import (

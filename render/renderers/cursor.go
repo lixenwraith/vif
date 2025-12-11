@@ -1,4 +1,4 @@
-// @focus: #render { cursor-render }
+// @focus: #render { ui } #gameplay { resource }
 package renderers
 
 import (

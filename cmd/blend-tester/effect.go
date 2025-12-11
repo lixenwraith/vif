@@ -1,3 +1,4 @@
+// @focus: #render { color, post }
 package main
 
 import (

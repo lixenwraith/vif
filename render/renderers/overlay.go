@@ -1,4 +1,4 @@
-// @focus: #render { ui }
+// @focus: #render { ui } #meta { overlay }
 package renderers
 
 import (

@@ -1,4 +1,4 @@
-// @focus: #render { characters } #game { spawn, gold }
+// @focus: #render { scene } #spawn { data }
 package renderers
 
 import (

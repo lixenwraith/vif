@@ -1,4 +1,4 @@
-// @focus: #input { intent, machine, keys }
+// @focus: #input { types }
 package input
 
 // IntentType discriminates semantic actions

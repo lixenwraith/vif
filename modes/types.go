@@ -1,4 +1,4 @@
-// @focus: #input { motion }
+// @focus: #control { types }
 package modes
 
 import "github.com/lixenwraith/vi-fighter/engine"

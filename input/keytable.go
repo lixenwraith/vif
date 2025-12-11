@@ -1,4 +1,4 @@
-// @focus: #input { keys, machine, motion, operator }
+// @focus: #input { keys }
 package input
 
 import "github.com/lixenwraith/vi-fighter/terminal"

@@ -1,4 +1,4 @@
-// @focus: #render { effects }
+// @focus: #render { scene } #gameplay { obstacle }
 package renderers
 
 import (

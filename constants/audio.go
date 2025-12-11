@@ -1,4 +1,4 @@
-// @focus: #constants { audio }
+// @focus: #conf { audio } #sys { audio }
 package constants
 
 import "time"

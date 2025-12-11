@@ -1,4 +1,4 @@
-// @focus: #core { ecs, lifecycle } #game { timer } #events { dispatch }
+// @focus: #lifecycle { timer } #event { dispatch }
 package systems
 
 import (

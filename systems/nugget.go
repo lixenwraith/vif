@@ -1,4 +1,4 @@
-// @focus: #core { ecs, spatial } #game { nugget } #events { dispatch }
+// @focus: #gameplay { reward } #spawn { placement } #event { dispatch }
 package systems
 
 import (

@@ -1,4 +1,4 @@
-// @focus: #core { ecs, lifecycle }
+// @focus: #lifecycle { cull }
 package systems
 
 import (

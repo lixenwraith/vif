@@ -1,4 +1,4 @@
-// @focus: #core { clock, ecs, lifecycle } #events { dispatch } #game { phase }
+// @focus: #flow { loop, clock } #event { dispatch }
 package engine
 
 import (

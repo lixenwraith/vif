@@ -1,4 +1,4 @@
-// @focus: #events { payloads } #game { energy, shield, gold, cleaner, splash }
+// @focus: #event { types } #gameplay { resource, defense, obstacle, reward, ability } #vfx { splash } #lifecycle { timer } #meta { reset }
 package events
 
 import (

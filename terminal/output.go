@@ -1,4 +1,4 @@
-// @focus: #terminal { ansi, output, cell }
+// @focus: #sys { io, term }
 package terminal
 
 import (

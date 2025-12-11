@@ -1,4 +1,4 @@
-// @focus: #render { splash-render }
+// @focus: #render { ui } #vfx { splash }
 package renderers
 
 import (

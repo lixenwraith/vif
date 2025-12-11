@@ -1,4 +1,4 @@
-// @focus: #core { spatial }
+// @focus: #arch { spatial }
 package engine
 
 import (

@@ -1,4 +1,4 @@
-// @focus: #core { ecs } #events { dispatch }
+// @focus: #meta { debug, help, reset } #event { dispatch }
 package systems
 
 import (

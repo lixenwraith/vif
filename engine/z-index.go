@@ -1,4 +1,4 @@
-// @focus: #core { spatial, types }
+// @focus: #arch { spatial } #render { types }
 package engine
 
 import (

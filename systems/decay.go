@@ -1,4 +1,4 @@
-// @focus: #core { ecs, spatial, lifecycle } #game { decay, phase, collision } #render { effects }
+// @focus: #gameplay { obstacle, collision } #flow { phase } #vfx { flash }
 package systems
 
 import (

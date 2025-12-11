@@ -1,4 +1,4 @@
-// @focus: #core { ecs, types } #game { splash, gold }
+// @focus: #vfx { splash }
 package components
 
 import (

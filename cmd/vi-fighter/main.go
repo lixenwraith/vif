@@ -1,4 +1,4 @@
-// @focus: #core { ecs, state } #game { spawn, cursor } #input { machine, router } #render { orchestrator }
+// @focus: #flow { loop, init } #arch { ecs } #event { dispatch } #render { pipeline }
 package main
 
 import (

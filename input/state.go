@@ -1,4 +1,4 @@
-// @focus: #input { machine, modes }
+// @focus: #input { machine, types }
 package input
 
 // InputMode mirrors game modes for parser context

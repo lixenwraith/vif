@@ -1,4 +1,4 @@
-// @focus: #all #core { types, state } #input { modes }
+// @focus: #flow { state } #control { types } #input { types }
 package core
 
 type GameMode uint8

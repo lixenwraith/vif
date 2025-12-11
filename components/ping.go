@@ -1,4 +1,4 @@
-// @focus: #core { ecs, types } #render { ping }
+// @focus: #vfx { ping }
 package components
 
 import (

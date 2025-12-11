@@ -1,4 +1,4 @@
-// @focus: #render { ping } #game { ping }
+// @focus: #render { scene } #vfx { ping }
 package renderers
 
 import (

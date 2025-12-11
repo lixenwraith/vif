@@ -1,4 +1,4 @@
-// @focus: #content { manager, loader }
+// @focus: #spawn { loader }
 package content
 
 import (

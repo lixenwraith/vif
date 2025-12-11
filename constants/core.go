@@ -1,4 +1,4 @@
-// @focus: #constants { entities }
+// @focus: #conf { system } #arch { ecs } #event { queue }
 package constants
 
 import "time"

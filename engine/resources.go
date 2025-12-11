@@ -1,4 +1,4 @@
-// @focus: #core { resources, types }
+// @focus: #arch { resource, types } #flow { clock } #render { types }
 package engine
 
 import (

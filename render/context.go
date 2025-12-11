@@ -1,4 +1,4 @@
-// @focus: #render { context }
+// @focus: #render { pipeline, types }
 package render
 
 import (

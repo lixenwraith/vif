@@ -1,3 +1,4 @@
+// @focus: #render { color }
 package main
 
 import (

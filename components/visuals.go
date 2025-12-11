@@ -1,4 +1,4 @@
-// @focus: #core { ecs, types } #render { colors }
+// @focus: #render { types }
 package components
 
 // ColorClass represents semantic color categories for rendering

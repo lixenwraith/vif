@@ -1,4 +1,4 @@
-// @focus: #audio { detect }
+// @focus: #sys { audio }
 package audio
 
 import (

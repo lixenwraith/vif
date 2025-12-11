@@ -1,4 +1,4 @@
-// @focus: #core { ecs, spatial } #game { drain, collision, spawn, shield, gold, nugget } #events { dispatch }
+// @focus: #gameplay { obstacle, collision, resource, reward } #vfx { flash } #event { dispatch }
 package systems
 
 import (

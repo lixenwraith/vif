@@ -1,4 +1,4 @@
-// @focus: #render { ui }
+// @focus: #render { ui } #flow { state } #input { types }
 package renderers
 
 import (

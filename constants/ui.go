@@ -1,4 +1,4 @@
-// @focus: #constants { ui }
+// @focus: #conf { visual } #render { ui }
 package constants
 
 import "time"

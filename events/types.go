@@ -1,4 +1,4 @@
-// @focus: #all #events { types } #core { types }
+// @focus: #event { types } #gameplay { resource, defense, obstacle, reward, ability } #vfx { splash, ping } #lifecycle { timer } #meta { debug, help, reset }
 package events
 
 import (

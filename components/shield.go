@@ -1,4 +1,4 @@
-// @focus: #core { ecs, types } #game { shield }
+// @focus: #gameplay { defense }
 package components
 
 import (

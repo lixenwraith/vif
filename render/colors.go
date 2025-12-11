@@ -1,4 +1,4 @@
-// @focus: #render { colors }
+// @focus: #render { color }
 package render
 
 import (

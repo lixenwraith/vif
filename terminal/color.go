@@ -1,4 +1,4 @@
-// @focus: #terminal { color, color-mode }
+// @focus: #sys { ansi } #render { color }
 package terminal
 
 import (

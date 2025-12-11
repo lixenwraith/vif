@@ -1,4 +1,4 @@
-// @focus: #events { queue }
+// @focus: #event { queue }
 package events
 
 import (

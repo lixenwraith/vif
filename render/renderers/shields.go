@@ -1,4 +1,4 @@
-// @focus: #render { shield-render, effects }
+// @focus: #render { scene } #gameplay { defense }
 package renderers
 
 import (

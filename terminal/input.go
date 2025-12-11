@@ -1,4 +1,4 @@
-// @focus: #terminal { raw-input, keys }
+// @focus: #sys { io } #input { keys }
 package terminal
 
 import (

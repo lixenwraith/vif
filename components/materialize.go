@@ -1,4 +1,4 @@
-// @focus: #core { ecs, types } #game { spawn } #render { effects }
+// @focus: #vfx { materialize }
 package components
 
 import (

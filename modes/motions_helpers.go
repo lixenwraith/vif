@@ -1,4 +1,4 @@
-// @focus: #input { motion }
+// @focus: #control { motion }
 package modes
 
 import (

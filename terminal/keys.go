@@ -1,4 +1,4 @@
-// @focus: #terminal { keys }
+// @focus: #sys { io } #input { keys }
 package terminal
 
 // Key represents a parsed input key
