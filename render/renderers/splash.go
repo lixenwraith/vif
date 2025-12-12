@@ -1,4 +1,5 @@
-// @focus: #render { ui } #vfx { splash }
+// @lixen: #focus{render[ui,splash],vfx[splash,text]}
+// @lixen: #interact{state[splash,gold,time]}
 package renderers
 
 import (

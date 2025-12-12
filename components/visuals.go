@@ -1,4 +1,5 @@
-// @focus: #render { types }
+// @lixen: #focus{render[types,style,color]}
+// @lixen: #interact{state[visuals]}
 package components
 
 // ColorClass represents semantic color categories for rendering

@@ -1,4 +1,5 @@
-// @focus: #render { post }
+// @lixen: #focus{render[post,dim,grayout]}
+// @lixen: #interact{state[context,config],trigger[buffer]}
 package renderers
 
 import (

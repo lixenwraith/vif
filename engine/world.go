@@ -1,4 +1,5 @@
-// @focus: #arch { ecs, types } #lifecycle { cull }
+// @lixen: #focus{arch[ecs,world,store,entity],lifecycle[cull]}
+// @lixen: #interact{init[entity,store],state[entity,store],end[entity]}
 package engine
 
 import (

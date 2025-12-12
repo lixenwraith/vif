@@ -1,4 +1,5 @@
-// @focus: #gameplay { resource, ability } #event { dispatch }
+// @lixen: #focus{gameplay[resource,heat,cleaner],event[dispatch]}
+// @lixen: #interact{state[cursor,heat],trigger[cleaner]}
 package systems
 
 import (

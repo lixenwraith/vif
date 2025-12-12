@@ -1,4 +1,5 @@
-// @focus: #control { operator, action }
+// @lixen: #focus{control[operator,delete,vim]}
+// @lixen: #interact{state[cursor],trigger[energy]}
 package modes
 
 import (

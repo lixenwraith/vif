@@ -1,4 +1,5 @@
-// @focus: #render { scene } #spawn { data }
+// @lixen: #focus{render[scene,character],spawn[character],gameplay[sequence]}
+// @lixen: #interact{state[position,character,sequence]}
 package renderers
 
 import (

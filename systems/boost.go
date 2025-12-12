@@ -1,4 +1,5 @@
-// @focus: #gameplay { defense } #flow { state }
+// @lixen: #focus{gameplay[defense,boost],flow[state,timer]}
+// @lixen: #interact{state[context,boost],morph[shield]}
 package systems
 
 import (

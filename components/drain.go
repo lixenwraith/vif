@@ -1,4 +1,5 @@
-// @focus: #gameplay { obstacle }
+// @lixen: #focus{gameplay[obstacle,drain]}
+// @lixen: #interact{state[drain]}
 package components
 
 import "time"

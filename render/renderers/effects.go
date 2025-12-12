@@ -1,4 +1,5 @@
-// @focus: #render { scene } #vfx { flash, materialize } #gameplay { obstacle }
+// @lixen: #focus{render[scene,effect],vfx[flash,materialize,decay,cleaner]}
+// @lixen: #interact{state[decay,cleaner,flash,materialize,position]}
 package renderers
 
 import (

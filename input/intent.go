@@ -1,4 +1,5 @@
-// @focus: #input { types }
+// @lixen: #focus{input[types,intent,motion,operator]}
+// @lixen: #interact{init[intent]}
 package input
 
 // IntentType discriminates semantic actions

@@ -1,4 +1,5 @@
-// @focus: #vfx { materialize }
+// @lixen: #focus{vfx[materialize,spawn]}
+// @lixen: #interact{state[materialize]}
 package components
 
 import (

@@ -1,4 +1,5 @@
-// @focus: #flow { loop, init } #arch { ecs } #event { dispatch } #render { pipeline }
+// @lixen: #focus{sys[audio,term],flow[loop,init,wiring],arch[ecs],event[dispatch],render[pipeline]}
+// @lixen: #interact{init[context,world,system,renderer,orchestrator,input,event,terminal]}
 package main
 
 import (

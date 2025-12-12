@@ -1,4 +1,5 @@
-// @focus: #render { ui } #meta { overlay }
+// @lixen: #focus{render[ui,overlay],meta[overlay,debug,help]}
+// @lixen: #interact{state[overlay,context]}
 package renderers
 
 import (

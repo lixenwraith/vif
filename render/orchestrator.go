@@ -1,4 +1,5 @@
-// @focus: #render { pipeline }
+// @lixen: #focus{render[pipeline,orchestrator]}
+// @lixen: #interact{init[buffer],state[renderer],trigger[renderer,buffer]}
 package render
 
 import (

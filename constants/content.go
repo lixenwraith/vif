@@ -1,4 +1,5 @@
-// @focus: #conf { gameplay } #spawn { logic }
+// @lixen: #focus{conf[spawn,content],spawn[config]}
+// @lixen: #interact{state[config]}
 package constants
 
 // AlphanumericRunes contains all alphanumeric characters as runes

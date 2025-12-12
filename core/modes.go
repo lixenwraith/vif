@@ -1,4 +1,5 @@
-// @focus: #flow { state } #control { types } #input { types }
+// @lixen: #focus{flow[state,mode],control[types,mode],input[types,mode]}
+// @lixen: #interact{state[mode]}
 package core
 
 type GameMode uint8

@@ -1,4 +1,5 @@
-// @focus: #sys { audio } #conf { audio }
+// @lixen: #focus{sys[audio,config],conf[audio]}
+// @lixen: #interact{state[config]}
 package audio
 
 import (

@@ -1,4 +1,5 @@
-// @focus: #conf { audio } #sys { audio }
+// @lixen: #focus{conf[audio],sys[audio]}
+// @lixen: #interact{state[config]}
 package constants
 
 import "time"

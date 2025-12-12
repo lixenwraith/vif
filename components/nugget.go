@@ -1,4 +1,5 @@
-// @focus: #gameplay { reward }
+// @lixen: #focus{gameplay[reward,nugget]}
+// @lixen: #interact{state[nugget]}
 package components
 
 import "time"

@@ -1,4 +1,5 @@
-// @focus: #control { router } #event { dispatch }
+// @lixen: #focus{control[router,intent,dispatch],event[dispatch]}
+// @lixen: #interact{state[cursor,mode,context],morph[mode],trigger[cursor,energy,cleaner,nugget,shield,ping,heat]}
 package modes
 
 import (

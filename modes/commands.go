@@ -1,4 +1,5 @@
-// @focus: #control { command } #meta { debug, help, reset }
+// @lixen: #focus{control[command,parser],meta[debug,help,reset,cheat]}
+// @lixen: #interact{trigger[command]}
 package modes
 
 import (

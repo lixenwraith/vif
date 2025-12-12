@@ -1,4 +1,5 @@
-// @focus: #sys { term }
+// @lixen: #focus{sys[term,interface]}
+// @lixen: #interact{init[terminal],state[terminal]}
 package terminal
 
 import (

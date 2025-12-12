@@ -1,4 +1,5 @@
-// @focus: #sys { audio }
+// @lixen: #focus{sys[audio],audio[engine]}
+// @lixen: #interact{init[mixer,generator],state[command],trigger[output]}
 package audio
 
 import (

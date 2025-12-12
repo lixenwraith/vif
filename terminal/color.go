@@ -1,4 +1,5 @@
-// @focus: #sys { ansi } #render { color }
+// @lixen: #focus{sys[term,ansi,color],render[color]}
+// @lixen: #interact{state[color],trigger[ansi]}
 package terminal
 
 import (

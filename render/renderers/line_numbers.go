@@ -1,4 +1,5 @@
-// @focus: #render { ui }
+// @lixen: #focus{render[ui,line]}
+// @lixen: #interact{state[cursor,config]}
 package renderers
 
 import (

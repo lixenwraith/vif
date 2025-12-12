@@ -1,4 +1,5 @@
-// @focus: #render { scene } #gameplay { defense }
+// @lixen: #focus{render[scene,shield],gameplay[defense,shield]}
+// @lixen: #interact{state[shield,cursor,energy]}
 package renderers
 
 import (

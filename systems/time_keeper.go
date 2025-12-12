@@ -1,4 +1,5 @@
-// @focus: #lifecycle { timer } #event { dispatch }
+// @lixen: #focus{lifecycle[timer,keeper],event[dispatch]}
+// @lixen: #interact{state[timer,time],end[entity],trigger[timer]}
 package systems
 
 import (

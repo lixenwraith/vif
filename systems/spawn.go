@@ -1,4 +1,5 @@
-// @focus: #spawn { logic, placement } #flow { phase } #gameplay { obstacle }
+// @lixen: #focus{spawn[logic,placement,content],flow[phase],gameplay[sequence,decay]}
+// @lixen: #interact{init[character,sequence,materialize],state[phase,position,cursor,heat]}
 package systems
 
 import (

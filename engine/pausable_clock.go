@@ -1,4 +1,5 @@
-// @focus: #flow { clock }
+// @lixen: #focus{flow[clock,pause]}
+// @lixen: #interact{state[time],morph[pause]}
 package engine
 
 import (

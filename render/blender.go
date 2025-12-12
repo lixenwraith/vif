@@ -1,4 +1,5 @@
-// @focus: #render { color }
+// @lixen: #focus{render[color,blend,math]}
+// @lixen: #interact{trigger[color]}
 package render
 
 // BlendMode defines compositing operations using a bitmask (Flags | Op)

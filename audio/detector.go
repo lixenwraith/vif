@@ -1,4 +1,5 @@
-// @focus: #sys { audio }
+// @lixen: #focus{sys[audio],audio[detector]}
+// @lixen: #interact{state[audio]}
 package audio
 
 import (

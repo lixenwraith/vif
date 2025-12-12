@@ -1,4 +1,5 @@
-// @focus: #input { machine, types }
+// @lixen: #focus{input[machine,types,state]}
+// @lixen: #interact{state[mode]}
 package input
 
 // InputMode mirrors game modes for parser context

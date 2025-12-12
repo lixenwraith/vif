@@ -1,4 +1,5 @@
-// @focus: #lifecycle { cull }
+// @lixen: #focus{lifecycle[cull,destroy]}
+// @lixen: #interact{state[death,protection],end[entity]}
 package systems
 
 import (

@@ -1,4 +1,5 @@
-// @focus: #input { machine }
+// @lixen: #focus{input[machine,state,parser]}
+// @lixen: #interact{init[intent],state[key],morph[mode]}
 package input
 
 import "github.com/lixenwraith/vi-fighter/terminal"

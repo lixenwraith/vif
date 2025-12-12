@@ -1,4 +1,5 @@
-// @focus: #conf { visual } #render { ui }
+// @lixen: #focus{conf[visual,ui,overlay,splash],render[ui]}
+// @lixen: #interact{state[config]}
 package constants
 
 import "time"

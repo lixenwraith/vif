@@ -1,4 +1,5 @@
-// @focus: #vfx { ping }
+// @lixen: #focus{vfx[ping,grid]}
+// @lixen: #interact{state[ping]}
 package components
 
 import (

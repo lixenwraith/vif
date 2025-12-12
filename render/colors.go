@@ -1,4 +1,5 @@
-// @focus: #render { color }
+// @lixen: #focus{render[color,palette,sequence]}
+// @lixen: #interact{state[sequence]}
 package render
 
 import (

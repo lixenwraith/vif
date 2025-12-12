@@ -1,4 +1,5 @@
-// @focus: #conf { entity } #gameplay { obstacle, ability } #vfx { flash, materialize }
+// @lixen: #focus{conf[entity,cleaner,drain,decay,shield,flash,materialize],gameplay[cleaner,drain,decay],vfx[flash,materialize]}
+// @lixen: #interact{state[config]}
 package constants
 
 import "time"

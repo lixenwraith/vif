@@ -1,4 +1,5 @@
-// @focus: #sys { term, io }
+// @lixen: #focus{sys[term,io,resize]}
+// @lixen: #interact{state[resize],trigger[event]}
 //go:build unix
 
 // @focus: #terminal { resize }

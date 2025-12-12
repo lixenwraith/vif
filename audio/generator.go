@@ -1,4 +1,5 @@
-// @focus: #sys { audio }
+// @lixen: #focus{sys[audio],audio[generator]}
+// @lixen: #interact{init[sample],state[config]}
 package audio
 
 import (

@@ -1,4 +1,5 @@
-// @focus: #gameplay { obstacle, collision, resource, reward } #vfx { flash } #event { dispatch }
+// @lixen: #focus{gameplay[obstacle,drain,collision,energy,gold,nugget,shield],vfx[flash],event[dispatch]}
+// @lixen: #interact{init[flash],state[cursor,shield,heat,gold,nugget,position,sequence],end[gold,nugget,character],trigger[energy,heat]}
 package systems
 
 import (

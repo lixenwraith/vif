@@ -1,4 +1,5 @@
-// @focus: #gameplay { obstacle }
+// @lixen: #focus{gameplay[obstacle,decay]}
+// @lixen: #interact{state[decay]}
 package components
 
 // DecayComponent represents a decay character entity

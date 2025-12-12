@@ -1,4 +1,5 @@
-// @focus: #event { types } #gameplay { resource, defense, obstacle, reward, ability } #vfx { splash } #lifecycle { timer } #meta { reset }
+// @lixen: #focus{event[types,payload],gameplay[energy,heat,shield,gold,cleaner,drain],vfx[splash],lifecycle[timer],meta[reset]}
+// @lixen: #interact{init[payload]}
 package events
 
 import (

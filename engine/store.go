@@ -1,4 +1,5 @@
-// @focus: #arch { ecs, types }
+// @lixen: #focus{arch[ecs,store,types]}
+// @lixen: #interact{init[component],state[component],end[component]}
 package engine
 
 import (

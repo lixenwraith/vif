@@ -1,4 +1,5 @@
-// @focus: #gameplay { defense }
+// @lixen: #focus{gameplay[defense,shield]}
+// @lixen: #interact{state[shield]}
 package components
 
 import (

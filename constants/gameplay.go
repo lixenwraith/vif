@@ -1,4 +1,5 @@
-// @focus: #conf { gameplay } #gameplay { resource, reward }
+// @lixen: #focus{conf[gameplay,heat,energy,gold,nugget,boost],gameplay[heat,energy,gold,nugget,boost]}
+// @lixen: #interact{state[config]}
 package constants
 
 import "time"

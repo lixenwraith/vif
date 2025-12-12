@@ -1,4 +1,5 @@
-// @focus: #control { motion }
+// @lixen: #focus{control[motion,vim,cursor]}
+// @lixen: #interact{state[cursor,position,character],trigger[cursor]}
 package modes
 
 import (

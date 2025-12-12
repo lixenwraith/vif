@@ -1,4 +1,5 @@
-// @focus: #vfx { ping } #event { dispatch }
+// @lixen: #focus{vfx[ping,grid],event[dispatch]}
+// @lixen: #interact{init[ping],state[cursor,time],end[ping]}
 package systems
 
 import (

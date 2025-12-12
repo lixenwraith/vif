@@ -1,4 +1,5 @@
-// @focus: #vfx { splash } #event { dispatch } #gameplay { reward }
+// @lixen: #focus{vfx[splash,text,gold],event[dispatch]}
+// @lixen: #interact{init[splash],state[time,gold,position,cursor],end[splash]}
 package systems
 
 import (

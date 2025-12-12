@@ -1,4 +1,5 @@
-// @focus: #meta { debug, help, reset } #event { dispatch }
+// @lixen: #focus{meta[debug,help,reset,cheat],event[dispatch]}
+// @lixen: #interact{init[overlay],state[context],morph[context,spawn,energy,heat,boost]}
 package systems
 
 import (

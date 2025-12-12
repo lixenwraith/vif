@@ -1,4 +1,5 @@
-// @focus: #control { search }
+// @lixen: #focus{control[search,pattern]}
+// @lixen: #interact{state[cursor,character,position],trigger[cursor]}
 package modes
 
 import (
