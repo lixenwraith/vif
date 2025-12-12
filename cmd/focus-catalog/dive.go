@@ -33,39 +33,6 @@ type DiveTagGroup struct {
 	Files []string
 }
 
-// Box drawing characters - single line
-const (
-	boxTL = '┌'
-	boxTR = '┐'
-	boxBL = '└'
-	boxBR = '┘'
-	boxH  = '─'
-	boxV  = '│'
-	boxTT = '┬'
-	boxBT = '┴'
-)
-
-// Box drawing characters - double line
-const (
-	dboxTL = '╔'
-	dboxTR = '╗'
-	dboxBL = '╚'
-	dboxBR = '╝'
-	dboxH  = '═'
-	dboxV  = '║'
-	dboxLT = '╠'
-	dboxRT = '╣'
-)
-
-// Connector characters
-const (
-	arrowDown = '▼'
-	arrowUp   = '▲'
-	connV     = '│'
-	connSplit = '┼'
-	starChar  = '★'
-)
-
 // EnterDive transitions to dive view for the file at current mindmap cursor
 func (app *AppState) EnterDive() {
 	if app.MindmapState == nil || len(app.MindmapState.Items) == 0 {
@@ -254,9 +221,9 @@ func (app *AppState) RenderDive(cells []terminal.Cell, w, h int) {
 
 	// Header line
 	title := fmt.Sprintf(" DIVE: %s ", truncateWithEllipsis(state.SourcePath, w-30))
-	drawTextAt(cells, w, 2, 0, title, colorHeaderFg, colorDefaultBg, terminal.AttrBold)
+	drawText(cells, w, 2, 0, title, colorHeaderFg, colorDefaultBg, terminal.AttrBold)
 	hint := "[Esc:back]"
-	drawTextAt(cells, w, w-len(hint)-2, 0, hint, colorHelpFg, colorDefaultBg, terminal.AttrNone)
+	drawText(cells, w, w-len(hint)-2, 0, hint, colorHelpFg, colorDefaultBg, terminal.AttrNone)
 
 	// Draw separator after header
 	cells[1*w] = terminal.Cell{Rune: dboxLT, Fg: colorPaneBorder, Bg: colorDefaultBg}
@@ -367,7 +334,7 @@ func renderDepsSection(cells []terminal.Cell, w, y, maxH int, dependsOn, depende
 	// Headers
 	if hasDepOn {
 		hdr := fmt.Sprintf(" DEPENDS ON (%d) ", len(dependsOn))
-		drawTextAt(cells, w, 4, y, hdr, colorGroupFg, colorDefaultBg, terminal.AttrBold)
+		drawText(cells, w, 4, y, hdr, colorGroupFg, colorDefaultBg, terminal.AttrBold)
 	}
 	if hasDepBy {
 		hdrX := 2 + depOnW + 1
@@ -381,7 +348,7 @@ func renderDepsSection(cells []terminal.Cell, w, y, maxH int, dependsOn, depende
 			hdrX++
 		}
 		hdr := fmt.Sprintf(" DEPENDED BY (%d) ", len(dependedBy))
-		drawTextAt(cells, w, hdrX+1, y, hdr, colorExpandedFg, colorDefaultBg, terminal.AttrBold)
+		drawText(cells, w, hdrX+1, y, hdr, colorExpandedFg, colorDefaultBg, terminal.AttrBold)
 	}
 
 	// Content
@@ -446,7 +413,7 @@ func renderPackageList(cells []terminal.Cell, totalW, x, y, availW, availH int, 
 
 		// Package directory
 		dirStr := truncateWithEllipsis(pkg.Dir+"/", colW)
-		drawTextAt(cells, totalW, colX, y+rowOffset+localRow, dirStr, fg, colorDefaultBg, terminal.AttrBold)
+		drawText(cells, totalW, colX, y+rowOffset+localRow, dirStr, fg, colorDefaultBg, terminal.AttrBold)
 		localRow++
 		pkgShown++
 
@@ -467,7 +434,7 @@ func renderPackageList(cells []terminal.Cell, totalW, x, y, availW, availH int, 
 		filesShown := 0
 		for i := 0; i < filesToShow && i < totalFiles; i++ {
 			fileStr := " " + truncateWithEllipsis(pkg.Files[i], colW-2)
-			drawTextAt(cells, totalW, colX, y+rowOffset+localRow, fileStr, colorDefaultFg, colorDefaultBg, terminal.AttrNone)
+			drawText(cells, totalW, colX, y+rowOffset+localRow, fileStr, colorDefaultFg, colorDefaultBg, terminal.AttrNone)
 			localRow++
 			filesShown++
 		}
@@ -476,7 +443,7 @@ func renderPackageList(cells []terminal.Cell, totalW, x, y, availW, availH int, 
 		if hasMore {
 			remaining := totalFiles - filesShown
 			moreStr := fmt.Sprintf(" (+%d)", remaining)
-			drawTextAt(cells, totalW, colX, y+rowOffset+localRow, moreStr, colorStatusFg, colorDefaultBg, terminal.AttrDim)
+			drawText(cells, totalW, colX, y+rowOffset+localRow, moreStr, colorStatusFg, colorDefaultBg, terminal.AttrDim)
 			localRow++
 		}
 
@@ -505,7 +472,7 @@ func renderPackageList(cells []terminal.Cell, totalW, x, y, availW, availH int, 
 		if col > 0 {
 			finalRow += maxRowInGroup
 		}
-		drawTextAt(cells, totalW, x, y+min(finalRow, availH-1), moreStr, colorStatusFg, colorDefaultBg, terminal.AttrDim)
+		drawText(cells, totalW, x, y+min(finalRow, availH-1), moreStr, colorStatusFg, colorDefaultBg, terminal.AttrDim)
 	}
 }
 
@@ -521,11 +488,11 @@ func renderFocusBox(cells []terminal.Cell, w, y int, state *DiveState) int {
 	// Title
 	title := fmt.Sprintf(" %s ", state.SourcePath)
 	titleX := boxX + (boxWidth-len(title))/2
-	drawTextAt(cells, w, titleX, y, title, colorAllTagFg, colorDefaultBg, terminal.AttrBold)
+	drawText(cells, w, titleX, y, title, colorAllTagFg, colorDefaultBg, terminal.AttrBold)
 
 	// Package info
 	pkgStr := fmt.Sprintf("Package: %s", state.FileInfo.Package)
-	drawTextAt(cells, w, boxX+2, y+1, pkgStr, colorDirFg, colorDefaultBg, terminal.AttrNone)
+	drawText(cells, w, boxX+2, y+1, pkgStr, colorDirFg, colorDefaultBg, terminal.AttrNone)
 
 	// Tags
 	tagStr := formatFileTagsCompact(state.FileInfo)
@@ -533,11 +500,11 @@ func renderFocusBox(cells []terminal.Cell, w, y int, state *DiveState) int {
 	if len(tagStr) > maxTagLen {
 		tagStr = truncateWithEllipsis(tagStr, maxTagLen)
 	}
-	drawTextAt(cells, w, boxX+len(pkgStr)+4, y+1, tagStr, colorTagFg, colorDefaultBg, terminal.AttrNone)
+	drawText(cells, w, boxX+len(pkgStr)+4, y+1, tagStr, colorTagFg, colorDefaultBg, terminal.AttrNone)
 
 	// Imports summary
 	impStr := fmt.Sprintf("Imports: %d local", len(state.FileInfo.Imports))
-	drawTextAt(cells, w, boxX+2, y+2, impStr, colorStatusFg, colorDefaultBg, terminal.AttrNone)
+	drawText(cells, w, boxX+2, y+2, impStr, colorStatusFg, colorDefaultBg, terminal.AttrNone)
 
 	// Importers count
 	fileDir := filepath.Dir(state.SourcePath)
@@ -546,7 +513,7 @@ func renderFocusBox(cells []terminal.Cell, w, y int, state *DiveState) int {
 	}
 	impByCount := len(state.DependedBy)
 	impByStr := fmt.Sprintf("Imported by: %d packages", impByCount)
-	drawTextAt(cells, w, boxX+len(impStr)+4, y+2, impByStr, colorStatusFg, colorDefaultBg, terminal.AttrNone)
+	drawText(cells, w, boxX+len(impStr)+4, y+2, impByStr, colorStatusFg, colorDefaultBg, terminal.AttrNone)
 
 	return y + boxHeight
 }
@@ -624,7 +591,7 @@ func renderTagSection(cells []terminal.Cell, w, y, maxH int, tagLinks []DiveTagG
 		if len(hdr) > boxWidth-2 {
 			hdr = fmt.Sprintf(" #%s{%s} ", tg.Group, truncateWithEllipsis(tg.Tag, 8))
 		}
-		drawTextAt(cells, w, boxX+1, y, hdr, colorGroupFg, colorDefaultBg, terminal.AttrBold)
+		drawText(cells, w, boxX+1, y, hdr, colorGroupFg, colorDefaultBg, terminal.AttrBold)
 
 		// Files
 		contentY := y + 1
@@ -645,7 +612,7 @@ func renderTagSection(cells []terminal.Cell, w, y, maxH int, tagLinks []DiveTagG
 		filesShown := 0
 		for j := 0; j < filesToShow && j < totalFiles; j++ {
 			fileStr := truncateWithEllipsis(tg.Files[j], boxWidth-3)
-			drawTextAt(cells, w, boxX+1, contentY+filesShown, fileStr, colorDefaultFg, colorDefaultBg, terminal.AttrNone)
+			drawText(cells, w, boxX+1, contentY+filesShown, fileStr, colorDefaultFg, colorDefaultBg, terminal.AttrNone)
 			filesShown++
 		}
 
@@ -653,11 +620,11 @@ func renderTagSection(cells []terminal.Cell, w, y, maxH int, tagLinks []DiveTagG
 		if hasMore {
 			remaining := totalFiles - filesShown
 			moreStr := fmt.Sprintf("(+%d more)", remaining)
-			drawTextAt(cells, w, boxX+1, contentY+filesShown, moreStr, colorStatusFg, colorDefaultBg, terminal.AttrDim)
+			drawText(cells, w, boxX+1, contentY+filesShown, moreStr, colorStatusFg, colorDefaultBg, terminal.AttrDim)
 		}
 
 		if totalFiles == 0 {
-			drawTextAt(cells, w, boxX+1, contentY, "(no other files)", colorStatusFg, colorDefaultBg, terminal.AttrDim)
+			drawText(cells, w, boxX+1, contentY, "(no other files)", colorStatusFg, colorDefaultBg, terminal.AttrDim)
 		}
 	}
 
@@ -665,7 +632,7 @@ func renderTagSection(cells []terminal.Cell, w, y, maxH int, tagLinks []DiveTagG
 	if len(tagLinks) > numBoxes {
 		remaining := len(tagLinks) - numBoxes
 		moreStr := fmt.Sprintf("(+%d more tags)", remaining)
-		drawTextAt(cells, w, w-len(moreStr)-3, y+boxHeight-1, moreStr, colorStatusFg, colorDefaultBg, terminal.AttrDim)
+		drawText(cells, w, w-len(moreStr)-3, y+boxHeight-1, moreStr, colorStatusFg, colorDefaultBg, terminal.AttrDim)
 	}
 }
 
@@ -681,92 +648,6 @@ func calcMaxTagBoxes(w int) int {
 		return 3
 	}
 	return 2
-}
-
-// drawSingleBox draws a single-line bordered rectangle
-func drawSingleBox(cells []terminal.Cell, totalW, x, y, w, h int) {
-	if w < 2 || h < 2 {
-		return
-	}
-
-	// Corners
-	setCell(cells, totalW, x, y, boxTL, colorPaneBorder)
-	setCell(cells, totalW, x+w-1, y, boxTR, colorPaneBorder)
-	setCell(cells, totalW, x, y+h-1, boxBL, colorPaneBorder)
-	setCell(cells, totalW, x+w-1, y+h-1, boxBR, colorPaneBorder)
-
-	// Horizontal edges
-	for i := 1; i < w-1; i++ {
-		setCell(cells, totalW, x+i, y, boxH, colorPaneBorder)
-		setCell(cells, totalW, x+i, y+h-1, boxH, colorPaneBorder)
-	}
-
-	// Vertical edges
-	for i := 1; i < h-1; i++ {
-		setCell(cells, totalW, x, y+i, boxV, colorPaneBorder)
-		setCell(cells, totalW, x+w-1, y+i, boxV, colorPaneBorder)
-	}
-}
-
-// drawDoubleBox draws a double-line bordered rectangle
-func drawDoubleBox(cells []terminal.Cell, totalW, x, y, w, h int) {
-	if w < 2 || h < 2 {
-		return
-	}
-
-	setCell(cells, totalW, x, y, dboxTL, colorPaneBorder)
-	setCell(cells, totalW, x+w-1, y, dboxTR, colorPaneBorder)
-	setCell(cells, totalW, x, y+h-1, dboxBL, colorPaneBorder)
-	setCell(cells, totalW, x+w-1, y+h-1, dboxBR, colorPaneBorder)
-
-	for i := 1; i < w-1; i++ {
-		setCell(cells, totalW, x+i, y, dboxH, colorPaneBorder)
-		setCell(cells, totalW, x+i, y+h-1, dboxH, colorPaneBorder)
-	}
-
-	for i := 1; i < h-1; i++ {
-		setCell(cells, totalW, x, y+i, dboxV, colorPaneBorder)
-		setCell(cells, totalW, x+w-1, y+i, dboxV, colorPaneBorder)
-	}
-}
-
-// drawDoubleFrame draws outer double-line frame (alias for drawDoubleBox)
-func drawDoubleFrame(cells []terminal.Cell, totalW, x, y, w, h int) {
-	drawDoubleBox(cells, totalW, x, y, w, h)
-}
-
-// setCell safely sets a single cell with bounds checking
-func setCell(cells []terminal.Cell, totalW, x, y int, r rune, fg terminal.RGB) {
-	if x >= 0 && x < totalW && y >= 0 {
-		idx := y*totalW + x
-		if idx < len(cells) {
-			cells[idx] = terminal.Cell{Rune: r, Fg: fg, Bg: colorDefaultBg}
-		}
-	}
-}
-
-// drawTextAt renders text at position with attributes
-func drawTextAt(cells []terminal.Cell, totalW, x, y int, text string, fg, bg terminal.RGB, attr terminal.Attr) {
-	for i, r := range text {
-		if x+i >= totalW || x+i < 0 {
-			break
-		}
-		idx := y*totalW + x + i
-		if idx >= 0 && idx < len(cells) {
-			cells[idx] = terminal.Cell{Rune: r, Fg: fg, Bg: bg, Attrs: attr}
-		}
-	}
-}
-
-// truncateWithEllipsis shortens string with ellipsis if exceeds maxLen
-func truncateWithEllipsis(s string, maxLen int) string {
-	if maxLen <= 3 {
-		return s[:min(len(s), maxLen)]
-	}
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen-1] + "…"
 }
 
 // formatFileTagsCompact formats file tags as compact #group{tags} string

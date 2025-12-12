@@ -304,26 +304,6 @@ func (app *AppState) expandAllDirs() {
 	app.Message = "expanded all directories"
 }
 
-// collapseAllRecursive recursively collapses directory nodes
-func collapseAllRecursive(node *TreeNode) {
-	if node.IsDir && node.Path != "." {
-		node.Expanded = false
-	}
-	for _, child := range node.Children {
-		collapseAllRecursive(child)
-	}
-}
-
-// expandAllRecursive recursively expands directory nodes
-func expandAllRecursive(node *TreeNode) {
-	if node.IsDir {
-		node.Expanded = true
-	}
-	for _, child := range node.Children {
-		expandAllRecursive(child)
-	}
-}
-
 // jumpTagToStart moves tag cursor to first item
 func (app *AppState) jumpTagToStart() {
 	if len(app.TagFlat) == 0 {
@@ -636,18 +616,6 @@ func (app *AppState) toggleTreeSelection() {
 		} else {
 			app.Selected[node.Path] = true
 		}
-	}
-}
-
-// collectFiles recursively collects file paths under tree node
-func collectFiles(node *TreeNode, files *[]string) {
-	if !node.IsDir {
-		*files = append(*files, node.Path)
-		return
-	}
-
-	for _, child := range node.Children {
-		collectFiles(child, files)
 	}
 }
 

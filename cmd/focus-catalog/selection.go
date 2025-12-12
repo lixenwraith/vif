@@ -1,10 +1,7 @@
 package main
 
 import (
-	"bufio"
-	"fmt"
 	"maps"
-	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -82,21 +79,6 @@ func (app *AppState) ComputeOutputFiles() []string {
 	result := slices.Collect(maps.Keys(fileSet))
 	sort.Strings(result)
 	return result
-}
-
-// WriteOutputFile writes file paths to catalog output file
-func WriteOutputFile(path string, files []string) error {
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	w := bufio.NewWriter(f)
-	for _, file := range files {
-		fmt.Fprintf(w, "./%s\n", file)
-	}
-	return w.Flush()
 }
 
 // selectFilesWithTag adds all files with tag to selection

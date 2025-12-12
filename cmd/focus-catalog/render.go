@@ -87,7 +87,7 @@ func (app *AppState) renderSplitPane(cells []terminal.Cell, w, h int) {
 
 	// Vertical border
 	for y := contentTop; y < contentTop+contentHeight; y++ {
-		cells[y*w+leftWidth] = terminal.Cell{Rune: '│', Fg: colorPaneBorder, Bg: colorDefaultBg}
+		cells[y*w+leftWidth] = terminal.Cell{Rune: boxV, Fg: colorPaneBorder, Bg: colorDefaultBg}
 	}
 
 	// Pane headers
@@ -518,33 +518,6 @@ func (app *AppState) countFilesInGroup(group string) int {
 	return count
 }
 
-// drawText renders text string at position with styling
-func drawText(cells []terminal.Cell, width, x, y int, text string, fg, bg terminal.RGB, attr terminal.Attr) {
-	for i, r := range text {
-		if x+i >= width || x+i < 0 {
-			break
-		}
-		cells[y*width+x+i] = terminal.Cell{
-			Rune:  r,
-			Fg:    fg,
-			Bg:    bg,
-			Attrs: attr,
-		}
-	}
-}
-
-// drawRect fills rectangle area with background color
-func drawRect(cells []terminal.Cell, startX, startY, rectW, rectH, totalWidth int, bg terminal.RGB) {
-	for row := startY; row < startY+rectH; row++ {
-		for col := startX; col < startX+rectW && col < totalWidth; col++ {
-			idx := row*totalWidth + col
-			if idx >= 0 && idx < len(cells) {
-				cells[idx] = terminal.Cell{Rune: ' ', Fg: colorDefaultFg, Bg: bg}
-			}
-		}
-	}
-}
-
 // RefreshTreeFlat rebuilds flattened tree list from root
 func (app *AppState) RefreshTreeFlat() {
 	app.TreeFlat = FlattenTree(app.TreeRoot)
@@ -744,47 +717,4 @@ func (app *AppState) getGroupDirectories(group string) []string {
 	}
 	sort.Strings(dirs)
 	return dirs
-}
-
-// formatDirHints truncates directory list to fit available width
-func formatDirHints(dirs []string, maxLen int) string {
-	if len(dirs) == 0 || maxLen < 4 {
-		return ""
-	}
-
-	var result strings.Builder
-	shown := 0
-	maxDirs := 3
-
-	for i, d := range dirs {
-		if i >= maxDirs {
-			break
-		}
-
-		addition := d
-		if result.Len() > 0 {
-			addition = " " + d
-		}
-
-		// Check if adding this would exceed limit (leave room for potential "...")
-		projected := result.Len() + len(addition)
-		remaining := len(dirs) - i - 1
-		if remaining > 0 && projected+4 > maxLen {
-			break
-		}
-		if remaining == 0 && projected > maxLen {
-			break
-		}
-
-		result.WriteString(addition)
-		shown++
-	}
-
-	if shown < len(dirs) {
-		if result.Len()+4 <= maxLen {
-			result.WriteString(" ...")
-		}
-	}
-
-	return result.String()
 }

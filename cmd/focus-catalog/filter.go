@@ -112,7 +112,7 @@ func (app *AppState) applyLeftPaneFilter() {
 	var paths []string
 
 	if node.IsDir {
-		collectFilePaths(node, &paths)
+		collectFiles(node, &paths)
 	} else {
 		paths = []string{node.Path}
 	}
@@ -204,17 +204,6 @@ func (app *AppState) isPathSetFiltered(paths []string) bool {
 		}
 	}
 	return true
-}
-
-// collectFilePaths recursively collects file paths under a tree node
-func collectFilePaths(node *TreeNode, paths *[]string) {
-	if !node.IsDir {
-		*paths = append(*paths, node.Path)
-		return
-	}
-	for _, child := range node.Children {
-		collectFilePaths(child, paths)
-	}
 }
 
 // executeSearch performs search using active SearchType and applies filter
