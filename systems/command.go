@@ -164,6 +164,7 @@ func (s *CommandSystem) handleHelpRequest() {
 		"  :energy N - Set energy to N",
 		"  :heat N   - Set heat to N",
 		"  :boost    - Enable boost for 10s",
+		"  :god      - Max heat + high energy",
 		"  :spawn on/off - Enable/disable spawning",
 		"  :d/:debug - Show debug info",
 		"  :h/:help  - Show this help",

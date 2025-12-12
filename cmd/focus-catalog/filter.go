@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// ApplyFilter applies a new filter using current mode
+// ApplyFilter applies paths to current filter using active mode
 func (app *AppState) ApplyFilter(newPaths []string) {
 	newSet := make(map[string]bool, len(newPaths))
 	for _, p := range newPaths {
@@ -52,7 +52,7 @@ func (app *AppState) ApplyFilter(newPaths []string) {
 	app.computeFilteredTags()
 }
 
-// RemoveFromFilter removes paths from the current filter
+// RemoveFromFilter removes specified paths from active filter
 func (app *AppState) RemoveFromFilter(paths []string) {
 	for _, p := range paths {
 		delete(app.Filter.FilteredPaths, p)
@@ -64,13 +64,13 @@ func (app *AppState) RemoveFromFilter(paths []string) {
 	}
 }
 
-// ClearFilter clears all filter state
+// ClearFilter resets all filter state to empty
 func (app *AppState) ClearFilter() {
 	app.Filter.FilteredPaths = make(map[string]bool)
 	app.Filter.FilteredTags = make(map[string]map[string]bool)
 }
 
-// computeFilteredTags derives highlighted tags from FilteredPaths
+// computeFilteredTags derives tag highlights from filtered file paths
 func (app *AppState) computeFilteredTags() {
 	app.Filter.FilteredTags = make(map[string]map[string]bool)
 
@@ -90,7 +90,7 @@ func (app *AppState) computeFilteredTags() {
 	}
 }
 
-// selectFilteredFiles transfers all filtered files to selection
+// selectFilteredFiles transfers all filtered paths to selection set
 func (app *AppState) selectFilteredFiles() int {
 	count := 0
 	for path := range app.Filter.FilteredPaths {
@@ -102,7 +102,7 @@ func (app *AppState) selectFilteredFiles() int {
 	return count
 }
 
-// applyLeftPaneFilter toggles filter based on left pane cursor position
+// applyLeftPaneFilter toggles filter for item at tree cursor
 func (app *AppState) applyLeftPaneFilter() {
 	if len(app.TreeFlat) == 0 {
 		return
@@ -141,7 +141,7 @@ func (app *AppState) applyLeftPaneFilter() {
 	app.RefreshTagFlat()
 }
 
-// applyRightPaneFilter toggles filter based on right pane cursor position
+// applyRightPaneFilter toggles filter for item at tag cursor
 func (app *AppState) applyRightPaneFilter() {
 	if len(app.TagFlat) == 0 {
 		return
@@ -193,7 +193,7 @@ func (app *AppState) applyRightPaneFilter() {
 	app.RefreshTagFlat()
 }
 
-// isPathSetFiltered returns true if all paths in set are currently filtered
+// isPathSetFiltered checks if all paths in set are currently filtered
 func (app *AppState) isPathSetFiltered(paths []string) bool {
 	if !app.Filter.HasActiveFilter() || len(paths) == 0 {
 		return false
@@ -206,7 +206,7 @@ func (app *AppState) isPathSetFiltered(paths []string) bool {
 	return true
 }
 
-// collectFilePaths recursively collects file paths under a node
+// collectFilePaths recursively collects file paths under a tree node
 func collectFilePaths(node *TreeNode, paths *[]string) {
 	if !node.IsDir {
 		*paths = append(*paths, node.Path)
@@ -217,8 +217,7 @@ func collectFilePaths(node *TreeNode, paths *[]string) {
 	}
 }
 
-// executeSearch performs pane-aware search
-// executeSearch performs search based on active SearchType
+// executeSearch performs search using active SearchType and applies filter
 func (app *AppState) executeSearch(query string) {
 	if query == "" {
 		return
@@ -244,7 +243,7 @@ func (app *AppState) executeSearch(query string) {
 	app.RefreshTagFlat()
 }
 
-// searchWithRipgrep searches using ripgrep (filename, directory, content)
+// searchWithRipgrep executes ripgrep for content search
 func searchWithRipgrep(root, pattern string) ([]string, error) {
 	args := []string{"--files-with-matches", "-g", "*.go", "-i", "--", pattern, root}
 	cmd := exec.Command("rg", args...)
@@ -271,7 +270,7 @@ func searchWithRipgrep(root, pattern string) ([]string, error) {
 	return result, nil
 }
 
-// searchPaths searches file paths (fallback when rg unavailable)
+// searchPaths searches file paths by substring (ripgrep fallback)
 func searchPaths(index *Index, pattern string) []string {
 	pattern = strings.ToLower(pattern)
 	var matches []string
@@ -283,7 +282,7 @@ func searchPaths(index *Index, pattern string) []string {
 	return matches
 }
 
-// searchContentRg searches file content/names using ripgrep or fallback
+// searchContentRg dispatches content search to ripgrep or fallback
 func searchContentRg(index *Index, query string, rgAvailable bool) []string {
 	if rgAvailable {
 		matches, err := searchWithRipgrep(".", query)
@@ -295,7 +294,7 @@ func searchContentRg(index *Index, query string, rgAvailable bool) []string {
 	return searchPaths(index, query)
 }
 
-// searchTagsPrefix finds files with tags matching prefix (case-insensitive)
+// searchTagsPrefix finds files with tags matching query prefix
 func searchTagsPrefix(index *Index, query string) []string {
 	query = strings.ToLower(query)
 	var matches []string
@@ -316,7 +315,7 @@ func searchTagsPrefix(index *Index, query string) []string {
 	return matches
 }
 
-// searchGroupsPrefix finds files with groups matching prefix (case-insensitive)
+// computeTagSelectionState returns selection coverage for a specific tag
 func searchGroupsPrefix(index *Index, query string) []string {
 	query = strings.ToLower(query)
 	var matches []string
@@ -335,7 +334,7 @@ func searchGroupsPrefix(index *Index, query string) []string {
 	return matches
 }
 
-// computeTagSelectionState returns selection state for a specific tag
+// computeGroupSelectionState returns selection coverage for a group
 func (app *AppState) computeTagSelectionState(group, tag string) TagSelectionState {
 	total := 0
 	selected := 0
@@ -363,7 +362,7 @@ func (app *AppState) computeTagSelectionState(group, tag string) TagSelectionSta
 	return TagSelectPartial
 }
 
-// computeGroupSelectionState returns selection state for a group
+// isGroupFiltered returns true if any tag in group matches filter
 func (app *AppState) computeGroupSelectionState(group string) TagSelectionState {
 	total := 0
 	selected := 0
@@ -386,7 +385,7 @@ func (app *AppState) computeGroupSelectionState(group string) TagSelectionState 
 	return TagSelectPartial
 }
 
-// isGroupFiltered returns true if any tag in group is filtered
+// isTagFiltered returns true if specific tag matches filter
 func (app *AppState) isGroupFiltered(group string) bool {
 	return len(app.Filter.FilteredTags[group]) > 0
 }

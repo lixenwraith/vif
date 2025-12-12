@@ -37,6 +37,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) bool {
 		return handleHeatCommand(ctx, args)
 	case "boost":
 		return handleBoostCommand(ctx)
+	case "god":
+		return handleGodCommand(ctx)
 	case "spawn":
 		return handleSpawnCommand(ctx, args)
 	case "d", "debug":
@@ -123,6 +125,15 @@ func handleHeatCommand(ctx *engine.GameContext, args []string) bool {
 func handleBoostCommand(ctx *engine.GameContext) bool {
 	ctx.PushEvent(events.EventBoostRequest, nil, ctx.PausableClock.Now())
 	ctx.SetLastCommand(":boost")
+	return true
+}
+
+// handleGodCommand sets heat to max and energy to high value
+func handleGodCommand(ctx *engine.GameContext) bool {
+	now := ctx.PausableClock.Now()
+	ctx.PushEvent(events.EventHeatSet, &events.HeatSetPayload{Value: constants.MaxHeat}, now)
+	ctx.PushEvent(events.EventEnergySet, &events.EnergySetPayload{Value: constants.GodEnergyAmount}, now)
+	ctx.SetLastCommand(":god")
 	return true
 }
 

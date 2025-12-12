@@ -53,6 +53,5 @@ func (bs *BoostSystem) activateBoost(now time.Time) {
 
 	// CRITICAL: Set end time BEFORE enabling boost to prevent race condition
 	bs.ctx.State.SetBoostEndTime(endTime)
-	bs.ctx.State.SetBoostColor(1) // Default to blue boost
 	bs.ctx.State.SetBoostEnabled(true)
 }

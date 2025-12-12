@@ -10,7 +10,7 @@ import (
 	"sort"
 )
 
-// ExpandDeps expands selected packages with their dependencies
+// ExpandDeps expands package set with transitive local dependencies
 func ExpandDeps(selected map[string]bool, index *Index, maxDepth int) map[string]bool {
 	result := maps.Clone(selected)
 	frontier := slices.Collect(maps.Keys(selected))
@@ -36,7 +36,7 @@ func ExpandDeps(selected map[string]bool, index *Index, maxDepth int) map[string
 	return result
 }
 
-// ComputeOutputFiles generates the final file list
+// ComputeOutputFiles generates final deduplicated file list for export
 func (app *AppState) ComputeOutputFiles() []string {
 	fileSet := make(map[string]bool)
 
@@ -84,7 +84,7 @@ func (app *AppState) ComputeOutputFiles() []string {
 	return result
 }
 
-// WriteOutputFile writes the catalog to file
+// WriteOutputFile writes file paths to catalog output file
 func WriteOutputFile(path string, files []string) error {
 	f, err := os.Create(path)
 	if err != nil {
@@ -99,7 +99,7 @@ func WriteOutputFile(path string, files []string) error {
 	return w.Flush()
 }
 
-// selectFilesWithTag selects all files with given tag, returns count added
+// selectFilesWithTag adds all files with tag to selection
 func (app *AppState) selectFilesWithTag(group, tag string) int {
 	count := 0
 	for path, fi := range app.Index.Files {
@@ -118,7 +118,7 @@ func (app *AppState) selectFilesWithTag(group, tag string) int {
 	return count
 }
 
-// deselectFilesWithTag deselects all files with given tag, returns count removed
+// deselectFilesWithTag removes all files with tag from selection
 func (app *AppState) deselectFilesWithTag(group, tag string) int {
 	count := 0
 	for path, fi := range app.Index.Files {
@@ -137,7 +137,7 @@ func (app *AppState) deselectFilesWithTag(group, tag string) int {
 	return count
 }
 
-// selectFilesWithGroup selects all files with any tag in group, returns count added
+// selectFilesWithGroup adds all files in group to selection
 func (app *AppState) selectFilesWithGroup(group string) int {
 	count := 0
 	for path, fi := range app.Index.Files {
@@ -151,7 +151,7 @@ func (app *AppState) selectFilesWithGroup(group string) int {
 	return count
 }
 
-// deselectFilesWithGroup deselects all files with any tag in group, returns count removed
+// deselectFilesWithGroup removes all files in group from selection
 func (app *AppState) deselectFilesWithGroup(group string) int {
 	count := 0
 	for path, fi := range app.Index.Files {
@@ -165,7 +165,7 @@ func (app *AppState) deselectFilesWithGroup(group string) int {
 	return count
 }
 
-// allFilesWithTagSelected returns true if all files with tag are selected
+// allFilesWithTagSelected checks if all files with tag are selected
 func (app *AppState) allFilesWithTagSelected(group, tag string) bool {
 	for path, fi := range app.Index.Files {
 		if tags, ok := fi.Tags[group]; ok {
@@ -182,7 +182,7 @@ func (app *AppState) allFilesWithTagSelected(group, tag string) bool {
 	return true
 }
 
-// allFilesWithGroupSelected returns true if all files in group are selected
+// allFilesWithGroupSelected checks if all files in group are selected
 func (app *AppState) allFilesWithGroupSelected(group string) bool {
 	for path, fi := range app.Index.Files {
 		if _, ok := fi.Tags[group]; ok {

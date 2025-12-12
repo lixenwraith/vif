@@ -4,7 +4,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
-// AppState holds all application state
+// AppState holds complete application runtime state
 type AppState struct {
 	Term  terminal.Terminal
 	Index *Index
@@ -99,7 +99,7 @@ const (
 
 const defaultModulePath = "github.com/USER/vi-fighter"
 
-// Pane identifies which pane has focus
+// Pane identifies which pane has keyboard focus
 type Pane int
 
 const (
@@ -107,7 +107,7 @@ const (
 	PaneRight             // Groups/Tags
 )
 
-// FilterMode for cross-group tag selection
+// FilterMode determines how successive filters combine
 type FilterMode int
 
 const (
@@ -117,7 +117,7 @@ const (
 	FilterXOR                   // Toggle membership (symmetric difference)
 )
 
-// FileInfo holds parsed data for a single Go file
+// FileInfo holds parsed metadata for a single Go source file
 type FileInfo struct {
 	Path    string              // relative path: "systems/drain.go"
 	Package string              // package name: "systems"
@@ -126,7 +126,7 @@ type FileInfo struct {
 	IsAll   bool                // has #all group
 }
 
-// PackageInfo aggregates files in a package
+// PackageInfo aggregates file data for a package directory
 type PackageInfo struct {
 	Name      string // "systems"
 	Dir       string // "systems" or "cmd/focus-catalog"
@@ -136,7 +136,7 @@ type PackageInfo struct {
 	HasAll    bool                // any file has #all
 }
 
-// Index holds the complete codebase index
+// Index holds the complete indexed codebase representation
 type Index struct {
 	ModulePath  string
 	Packages    map[string]*PackageInfo // package dir → info
@@ -146,7 +146,7 @@ type Index struct {
 	ReverseDeps map[string][]string     // package dir → dirs that import it
 }
 
-// TreeNode represents a directory or file in the tree view
+// TreeNode represents a directory or file in hierarchical tree
 type TreeNode struct {
 	Name        string       // Display name: "systems" or "drain.go"
 	Path        string       // Full relative path
@@ -159,7 +159,7 @@ type TreeNode struct {
 	Depth       int          // Nesting level for indentation
 }
 
-// SearchType indicates active search mode
+// SearchType indicates active search mode for input
 type SearchType uint8
 
 const (
@@ -168,14 +168,14 @@ const (
 	SearchTypeGroups
 )
 
-// FilterState holds filter state (visual highlighting only)
+// FilterState holds visual filter highlight state
 type FilterState struct {
 	FilteredPaths map[string]bool            // Files matching current filter
 	FilteredTags  map[string]map[string]bool // group -> tag -> highlighted (computed from FilteredPaths)
 	Mode          FilterMode
 }
 
-// NewFilterState creates an initialized FilterState
+// NewFilterState creates initialized empty FilterState
 func NewFilterState() *FilterState {
 	return &FilterState{
 		FilteredPaths: make(map[string]bool),
@@ -184,12 +184,12 @@ func NewFilterState() *FilterState {
 	}
 }
 
-// HasActiveFilter returns true if any filter is active
+// HasActiveFilter returns true if any paths are filtered
 func (f *FilterState) HasActiveFilter() bool {
 	return len(f.FilteredPaths) > 0
 }
 
-// TagItem represents a group header or tag in the right pane
+// TagItem represents a group header or tag in right pane list
 type TagItem struct {
 	IsGroup  bool   // true for group header, false for tag
 	Group    string // group name

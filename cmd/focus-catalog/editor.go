@@ -10,7 +10,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
-// EnterEditMode starts tag editing for the current file
+// EnterEditMode initiates inline tag editing for the file at cursor
 func (app *AppState) EnterEditMode() {
 	if app.FocusPane != PaneLeft {
 		app.Message = "edit only from file tree"
@@ -42,7 +42,7 @@ func (app *AppState) EnterEditMode() {
 	app.InputBuffer = content
 }
 
-// HandleEditEvent processes input in edit mode
+// HandleEditEvent processes keyboard input during tag editing
 func (app *AppState) HandleEditEvent(ev terminal.Event) {
 	switch ev.Key {
 	case terminal.KeyEscape:
@@ -68,7 +68,7 @@ func (app *AppState) HandleEditEvent(ev terminal.Event) {
 	}
 }
 
-// commitTagEdit writes the edited tags to file and reindexes
+// commitTagEdit writes modified tags to file and triggers reindex
 func (app *AppState) commitTagEdit() {
 	path := app.EditTarget
 	newTags := strings.TrimSpace(app.InputBuffer)
@@ -92,8 +92,7 @@ func (app *AppState) commitTagEdit() {
 	app.Message = fmt.Sprintf("updated tags: %s", path)
 }
 
-// readFocusLine extracts the focus tag content from a file
-// Returns empty string if no focus line exists
+// readFocusLine extracts @focus tag content from file header
 func readFocusLine(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -121,8 +120,7 @@ func readFocusLine(path string) (string, error) {
 	return "", scanner.Err()
 }
 
-// writeFocusLine writes the focus tag line to a file atomically
-// If focus line exists, replaces it; otherwise inserts at first line
+// writeFocusLine atomically writes @focus line to file, preserving structure
 func writeFocusLine(path, tags string) error {
 	// Read entire file
 	content, err := os.ReadFile(path)

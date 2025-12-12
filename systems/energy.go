@@ -180,7 +180,6 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 		if seq.Type == components.SequenceRed {
 			s.ctx.PushEvent(events.EventHeatSet, &events.HeatSetPayload{Value: 0}, now)
 			s.ctx.State.SetBoostEnabled(false)
-			s.ctx.State.SetBoostColor(0)
 		} else {
 			// Blue/Green: Apply heat gain with boost multiplier
 			boostState := s.ctx.State.ReadBoostState(timeRes.GameTime)
@@ -196,23 +195,12 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 			// Handle boost activation and maintenance
 			currentHeat := s.getHeat(world)
 
-			// Convert sequence type to color code: 1=Blue, 2=Green
-			var charColorCode int32
-			if seq.Type == components.SequenceBlue {
-				charColorCode = 1
-			} else if seq.Type == components.SequenceGreen {
-				charColorCode = 2
-			}
-
 			if currentHeat >= constants.MaxHeat {
 				if !boostState.Enabled {
 					s.ctx.State.SetBoostEnabled(true)
-					s.ctx.State.SetBoostColor(charColorCode)
 					s.ctx.State.SetBoostEndTime(now.Add(constants.BoostExtensionDuration))
-				} else if boostState.Color == charColorCode {
-					s.extendBoost(now, constants.BoostExtensionDuration)
 				} else {
-					s.ctx.State.SetBoostColor(charColorCode)
+					s.extendBoost(now, constants.BoostExtensionDuration)
 				}
 			}
 		}
@@ -313,7 +301,6 @@ func (s *EnergySystem) handleTypingError(world *engine.World, now time.Time) {
 
 	// Reset boost state
 	s.ctx.State.SetBoostEnabled(false)
-	s.ctx.State.SetBoostColor(0)
 
 	// Trigger error blink
 	s.triggerEnergyBlink(0, 0, now)
@@ -341,7 +328,6 @@ func (s *EnergySystem) handleNuggetCollection(world *engine.World, entity core.E
 		world.Cursors.Add(s.ctx.CursorEntity, cursor)
 		s.ctx.PushEvent(events.EventHeatSet, &events.HeatSetPayload{Value: 0}, now)
 		s.ctx.State.SetBoostEnabled(false)
-		s.ctx.State.SetBoostColor(0)
 		s.triggerEnergyBlink(0, 0, now)
 		// Trigger error sound
 		if s.ctx.AudioEngine != nil {

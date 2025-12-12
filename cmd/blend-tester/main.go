@@ -1,4 +1,3 @@
-// @focus: #render { pipeline }
 package main
 
 import (

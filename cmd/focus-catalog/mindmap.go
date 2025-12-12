@@ -8,7 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
-// MindmapSource indicates what triggered the mindmap
+// MindmapSource indicates origin context of mindmap view
 type MindmapSource int
 
 const (
@@ -16,7 +16,7 @@ const (
 	MindmapSourceTag                          // From right pane - tag/group
 )
 
-// MindmapState holds mindmap view state
+// MindmapState holds mindmap view navigation and display state
 type MindmapState struct {
 	Source      MindmapSource
 	Title       string
@@ -28,7 +28,7 @@ type MindmapState struct {
 	SourceTag   string // For tag mode: tag name (empty if group)
 }
 
-// MindmapItem represents a single item in mindmap view
+// MindmapItem represents a single row in mindmap file list
 type MindmapItem struct {
 	Depth  int
 	IsDir  bool
@@ -37,7 +37,7 @@ type MindmapItem struct {
 	TagStr string // Formatted tags
 }
 
-// EnterMindmap switches to mindmap view based on current pane context
+// EnterMindmap opens mindmap view based on current pane focus
 func (app *AppState) EnterMindmap() {
 	if app.FocusPane == PaneLeft {
 		app.enterMindmapPackage()
@@ -46,6 +46,7 @@ func (app *AppState) EnterMindmap() {
 	}
 }
 
+// enterMindmapPackage opens mindmap for directory at tree cursor
 func (app *AppState) enterMindmapPackage() {
 	if len(app.TreeFlat) == 0 {
 		app.Message = "no items to view"
@@ -78,6 +79,7 @@ func (app *AppState) enterMindmapPackage() {
 	app.MindmapMode = true
 }
 
+// buildPackageItems constructs mindmap items from tree node hierarchy
 func (app *AppState) buildPackageItems(node *TreeNode, depth int) []MindmapItem {
 	var items []MindmapItem
 
@@ -127,6 +129,7 @@ func (app *AppState) buildPackageItems(node *TreeNode, depth int) []MindmapItem 
 	return items
 }
 
+// formatDirTags aggregates tags from immediate children of directory
 func (app *AppState) formatDirTags(node *TreeNode) string {
 	// Aggregate all tags from files in this directory (non-recursive)
 	tagGroups := make(map[string]map[string]bool)
@@ -148,6 +151,7 @@ func (app *AppState) formatDirTags(node *TreeNode) string {
 	return formatTagGroups(tagGroups)
 }
 
+// formatFileTags formats single file's tags as display string
 func formatFileTags(fi *FileInfo) string {
 	tagGroups := make(map[string]map[string]bool)
 	for group, tags := range fi.Tags {
@@ -159,6 +163,7 @@ func formatFileTags(fi *FileInfo) string {
 	return formatTagGroups(tagGroups)
 }
 
+// formatTagGroups formats tag map as #group{tags} string
 func formatTagGroups(tagGroups map[string]map[string]bool) string {
 	if len(tagGroups) == 0 {
 		return ""
@@ -184,6 +189,7 @@ func formatTagGroups(tagGroups map[string]map[string]bool) string {
 	return strings.Join(parts, " ")
 }
 
+// enterMindmapTag opens mindmap for tag/group at tag cursor
 func (app *AppState) enterMindmapTag() {
 	if len(app.TagFlat) == 0 {
 		app.Message = "no tags to view"
@@ -215,6 +221,7 @@ func (app *AppState) enterMindmapTag() {
 	app.MindmapMode = true
 }
 
+// buildGroupItems creates mindmap items for all files in a group
 func (app *AppState) buildGroupItems(group string) []MindmapItem {
 	var items []MindmapItem
 
@@ -241,6 +248,7 @@ func (app *AppState) buildGroupItems(group string) []MindmapItem {
 	return items
 }
 
+// buildTagItems creates mindmap items for files with specific tag
 func (app *AppState) buildTagItems(group, tag string) []MindmapItem {
 	var items []MindmapItem
 
@@ -272,7 +280,7 @@ func (app *AppState) buildTagItems(group, tag string) []MindmapItem {
 	return items
 }
 
-// HandleMindmapEvent processes input in mindmap view
+// HandleMindmapEvent processes keyboard input in mindmap view
 func (app *AppState) HandleMindmapEvent(ev terminal.Event) {
 	// Handle input mode first
 	if app.InputMode {
@@ -359,7 +367,7 @@ func (app *AppState) HandleMindmapEvent(ev terminal.Event) {
 	}
 }
 
-// handleMindmapInputEvent processes input mode events in mindmap
+// handleMindmapInputEvent processes search input in mindmap view
 func (app *AppState) handleMindmapInputEvent(ev terminal.Event) {
 	switch ev.Key {
 	case terminal.KeyEscape:
@@ -381,7 +389,7 @@ func (app *AppState) handleMindmapInputEvent(ev terminal.Event) {
 	}
 }
 
-// applyMindmapFilter toggles filter based on current mindmap item
+// applyMindmapFilter toggles filter for item at mindmap cursor
 func (app *AppState) applyMindmapFilter() {
 	state := app.MindmapState
 	if state == nil || len(state.Items) == 0 {
@@ -424,6 +432,7 @@ func (app *AppState) applyMindmapFilter() {
 	}
 }
 
+// moveMindmapCursor moves cursor with bounds and scroll adjustment
 func (app *AppState) moveMindmapCursor(delta int) {
 	state := app.MindmapState
 	if state == nil || len(state.Items) == 0 {
@@ -452,6 +461,7 @@ func (app *AppState) moveMindmapCursor(delta int) {
 	}
 }
 
+// pageMindmapCursor moves cursor by half-page increment
 func (app *AppState) pageMindmapCursor(direction int) {
 	visibleRows := app.Height - 4
 	if visibleRows < 1 {
@@ -464,6 +474,7 @@ func (app *AppState) pageMindmapCursor(direction int) {
 	app.moveMindmapCursor(delta)
 }
 
+// jumpMindmapToStart moves cursor to first mindmap item
 func (app *AppState) jumpMindmapToStart() {
 	if app.MindmapState == nil {
 		return
@@ -472,6 +483,7 @@ func (app *AppState) jumpMindmapToStart() {
 	app.MindmapState.Scroll = 0
 }
 
+// jumpMindmapToEnd moves cursor to last mindmap item
 func (app *AppState) jumpMindmapToEnd() {
 	state := app.MindmapState
 	if state == nil || len(state.Items) == 0 {
@@ -481,6 +493,7 @@ func (app *AppState) jumpMindmapToEnd() {
 	app.moveMindmapCursor(0)
 }
 
+// toggleMindmapSelection toggles selection of file at cursor
 func (app *AppState) toggleMindmapSelection() {
 	state := app.MindmapState
 	if state == nil || len(state.Items) == 0 {
@@ -499,6 +512,7 @@ func (app *AppState) toggleMindmapSelection() {
 	}
 }
 
+// selectAllMindmap selects all files visible in mindmap
 func (app *AppState) selectAllMindmap() {
 	state := app.MindmapState
 	if state == nil {
@@ -513,6 +527,7 @@ func (app *AppState) selectAllMindmap() {
 	app.Message = "selected all visible"
 }
 
+// clearMindmapSelection deselects all files visible in mindmap
 func (app *AppState) clearMindmapSelection() {
 	state := app.MindmapState
 	if state == nil {
@@ -527,7 +542,7 @@ func (app *AppState) clearMindmapSelection() {
 	app.Message = "cleared visible selections"
 }
 
-// RenderMindmap draws the mindmap view
+// RenderMindmap draws mindmap view with file list and status
 func (app *AppState) RenderMindmap(cells []terminal.Cell, w, h int) {
 	state := app.MindmapState
 	if state == nil {
@@ -542,7 +557,7 @@ func (app *AppState) RenderMindmap(cells []terminal.Cell, w, h int) {
 	}
 	drawText(cells, w, 1, 0, title, colorHeaderFg, colorHeaderBg, terminal.AttrBold)
 
-	rightInfo := "[Space:sel] [Esc:back]"
+	rightInfo := "[Space:sel] [q:back]"
 	drawText(cells, w, w-len(rightInfo)-1, 0, rightInfo, colorHeaderFg, colorHeaderBg, terminal.AttrNone)
 
 	// Get expanded files for dependency highlighting
@@ -656,7 +671,7 @@ func (app *AppState) RenderMindmap(cells []terminal.Cell, w, h int) {
 
 	// Help bar
 	helpY := h - 1
-	help := "j/k:nav 0/$:jump Space:toggle  a:all c:clear f:filter F:sel-filter /:search  t:tag  g:group Esc/q:back"
+	help := "j/k:nav 0/$:jump Space:toggle a:all c:clear f:filter F:sel-filter /:search t:tag g:group q:back"
 	drawText(cells, w, 1, helpY, help, colorHelpFg, colorDefaultBg, terminal.AttrDim)
 
 	// Scroll indicator
@@ -670,8 +685,7 @@ func (app *AppState) RenderMindmap(cells []terminal.Cell, w, h int) {
 	}
 }
 
-// drawColoredTags draws tags with distinct colors for groups and tag names
-// Returns the x position after drawing
+// drawColoredTags renders tag string with syntax highlighting
 func drawColoredTags(cells []terminal.Cell, w, x, y int, tagStr string, bg terminal.RGB) int {
 	if tagStr == "" || x >= w-1 {
 		return x

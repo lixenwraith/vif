@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-// BuildIndex scans the codebase and builds the index
+// BuildIndex scans directory tree and builds complete codebase index
 func BuildIndex(root string) (*Index, error) {
 	modPath := getModulePath()
 
@@ -160,7 +160,7 @@ func BuildIndex(root string) (*Index, error) {
 	return index, nil
 }
 
-// ReindexAll rebuilds the entire index from disk
+// ReindexAll rebuilds index from disk and refreshes all views
 func (app *AppState) ReindexAll() {
 	index, err := BuildIndex(".")
 	if err != nil {
@@ -175,7 +175,7 @@ func (app *AppState) ReindexAll() {
 	app.Message = fmt.Sprintf("reindexed: %d files", len(index.Files))
 }
 
-// BuildTree constructs a tree from the index
+// BuildTree constructs hierarchical tree from flat index
 func BuildTree(index *Index) *TreeNode {
 	root := &TreeNode{
 		Name:     ".",
@@ -237,8 +237,7 @@ func BuildTree(index *Index) *TreeNode {
 	return root
 }
 
-// computeReverseDeps builds reverse dependency map
-// Maps package dir → list of package dirs that import it
+// computeReverseDeps builds map of packages to their importers.
 func computeReverseDeps(index *Index) map[string][]string {
 	reverse := make(map[string][]string)
 
@@ -262,7 +261,7 @@ func computeReverseDeps(index *Index) map[string][]string {
 	return reverse
 }
 
-// ensureDirNode creates directory node and all parent nodes as needed
+// ensureDirNode creates directory node and ancestors as needed
 func ensureDirNode(root *TreeNode, dir string, dirNodes map[string]*TreeNode, index *Index) *TreeNode {
 	if node, ok := dirNodes[dir]; ok {
 		return node
@@ -308,7 +307,7 @@ func ensureDirNode(root *TreeNode, dir string, dirNodes map[string]*TreeNode, in
 	return current
 }
 
-// sortChildren recursively sorts tree nodes
+// sortChildren recursively sorts tree nodes (dirs first, then alphabetical)
 func sortChildren(node *TreeNode) {
 	if len(node.Children) == 0 {
 		return
@@ -327,13 +326,14 @@ func sortChildren(node *TreeNode) {
 	}
 }
 
-// FlattenTree creates a flat list of visible nodes for rendering
+// FlattenTree creates ordered list of visible nodes for rendering
 func FlattenTree(root *TreeNode) []*TreeNode {
 	var result []*TreeNode
 	flattenNode(root, &result, true)
 	return result
 }
 
+// flattenNode recursively appends visible nodes to result slice
 func flattenNode(node *TreeNode, result *[]*TreeNode, skipRoot bool) {
 	if !skipRoot {
 		*result = append(*result, node)
@@ -346,7 +346,7 @@ func flattenNode(node *TreeNode, result *[]*TreeNode, skipRoot bool) {
 	}
 }
 
-// parseFile extracts info from a single Go file
+// parseFile extracts metadata from a single Go source file
 func parseFile(path, modPath string) (*FileInfo, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -407,7 +407,7 @@ func parseFile(path, modPath string) (*FileInfo, error) {
 	return fi, nil
 }
 
-// parseTagLine parses a @focus comment line
+// parseTagLine parses @focus comment into group-tag mapping
 func parseTagLine(line string) (map[string][]string, bool, bool) {
 	line = strings.TrimPrefix(line, "//")
 	line = strings.TrimSpace(line)
@@ -476,7 +476,7 @@ func parseTagLine(line string) (map[string][]string, bool, bool) {
 	return result, isAll, true
 }
 
-// getModulePath reads module path from go.mod
+// getModulePath reads module path from go.mod file
 func getModulePath() string {
 	f, err := os.Open("go.mod")
 	if err != nil {

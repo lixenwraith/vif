@@ -9,7 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
-// Render draws the entire UI
+// Render draws the complete UI to terminal based on current mode
 func (app *AppState) Render() {
 	w, h := app.Width, app.Height
 	if w < minWidth {
@@ -37,6 +37,7 @@ func (app *AppState) Render() {
 	app.Term.Flush(cells, w, h)
 }
 
+// renderSplitPane draws the two-pane main view layout
 func (app *AppState) renderSplitPane(cells []terminal.Cell, w, h int) {
 	// Calculate pane widths
 	leftWidth := w / 2
@@ -111,6 +112,7 @@ func (app *AppState) renderSplitPane(cells []terminal.Cell, w, h int) {
 	app.renderHelp(cells, w, helpY)
 }
 
+// renderLeftPane draws the tree pane with files and directories
 func (app *AppState) renderLeftPane(cells []terminal.Cell, totalWidth, startX, paneWidth, startY, height int) {
 	bg := colorDefaultBg
 	if app.FocusPane == PaneLeft {
@@ -238,6 +240,7 @@ func (app *AppState) renderLeftPane(cells []terminal.Cell, totalWidth, startX, p
 	}
 }
 
+// renderRightPane draws the tag pane with groups and tags
 func (app *AppState) renderRightPane(cells []terminal.Cell, totalWidth, startX, paneWidth, startY, height int) {
 	bg := colorDefaultBg
 	if app.FocusPane == PaneRight {
@@ -392,6 +395,7 @@ func (app *AppState) renderRightPane(cells []terminal.Cell, totalWidth, startX, 
 	}
 }
 
+// renderStatus draws filter/input status and message lines
 func (app *AppState) renderStatus(cells []terminal.Cell, w, y int) {
 	// Line 1: Filter info or edit mode
 	if app.EditMode {
@@ -440,6 +444,7 @@ func (app *AppState) renderStatus(cells []terminal.Cell, w, y int) {
 	drawText(cells, w, 1, y+1, statusStr, colorStatusFg, colorDefaultBg, terminal.AttrNone)
 }
 
+// renderHelp draws the keybinding help bar
 func (app *AppState) renderHelp(cells []terminal.Cell, w, y int) {
 	help := "Tab:pane  j/k:nav 0/$:jump Space:sel  f:filter F:sel-filter /:search  t:tag  g:group  m:mode  d:deps  Enter:view  ^S:output  Esc:clear  q:quit"
 	if len(help) > w-2 {
@@ -448,6 +453,7 @@ func (app *AppState) renderHelp(cells []terminal.Cell, w, y int) {
 	drawText(cells, w, 1, y, help, colorHelpFg, colorDefaultBg, terminal.AttrDim)
 }
 
+// renderPreview draws the output file preview overlay
 func (app *AppState) renderPreview(cells []terminal.Cell, w, h int) {
 	// Header
 	drawRect(cells, 0, 0, w, 1, w, colorHeaderBg)
@@ -474,7 +480,7 @@ func (app *AppState) renderPreview(cells []terminal.Cell, w, h int) {
 	}
 }
 
-// countDirSelection returns (selected, total) file counts under a directory node
+// countDirSelection counts selected and total files under directory
 func (app *AppState) countDirSelection(node *TreeNode) (int, int) {
 	if !node.IsDir {
 		return 0, 0
@@ -501,7 +507,7 @@ func (app *AppState) countDirSelection(node *TreeNode) (int, int) {
 	return selected, total
 }
 
-// countFilesInGroup counts files that have any tag in the specified group
+// countFilesInGroup counts files having any tag in specified group
 func (app *AppState) countFilesInGroup(group string) int {
 	count := 0
 	for _, fi := range app.Index.Files {
@@ -512,7 +518,7 @@ func (app *AppState) countFilesInGroup(group string) int {
 	return count
 }
 
-// drawText draws text at position
+// drawText renders text string at position with styling
 func drawText(cells []terminal.Cell, width, x, y int, text string, fg, bg terminal.RGB, attr terminal.Attr) {
 	for i, r := range text {
 		if x+i >= width || x+i < 0 {
@@ -527,7 +533,7 @@ func drawText(cells []terminal.Cell, width, x, y int, text string, fg, bg termin
 	}
 }
 
-// drawRect fills a rectangle with background color
+// drawRect fills rectangle area with background color
 func drawRect(cells []terminal.Cell, startX, startY, rectW, rectH, totalWidth int, bg terminal.RGB) {
 	for row := startY; row < startY+rectH; row++ {
 		for col := startX; col < startX+rectW && col < totalWidth; col++ {
@@ -539,7 +545,7 @@ func drawRect(cells []terminal.Cell, startX, startY, rectW, rectH, totalWidth in
 	}
 }
 
-// RefreshTreeFlat rebuilds flattened tree list
+// RefreshTreeFlat rebuilds flattened tree list from root
 func (app *AppState) RefreshTreeFlat() {
 	app.TreeFlat = FlattenTree(app.TreeRoot)
 
@@ -552,7 +558,7 @@ func (app *AppState) RefreshTreeFlat() {
 	}
 }
 
-// RefreshTagFlat rebuilds flattened tag list
+// RefreshTagFlat rebuilds flattened tag list from index
 func (app *AppState) RefreshTagFlat() {
 	app.TagFlat = nil
 
@@ -630,12 +636,12 @@ func (app *AppState) computeDepExpandedFiles() map[string]bool {
 	return result
 }
 
-// hasActiveFilters returns true if any filter is active
+// hasActiveFilters returns true if filter state is non-empty
 func (app *AppState) hasActiveFilters() bool {
 	return app.Filter.HasActiveFilter()
 }
 
-// nodeMatchesFilter checks if a tree node matches current filter
+// nodeMatchesFilter checks if tree node or descendants match filter
 func (app *AppState) nodeMatchesFilter(node *TreeNode) bool {
 	if !app.Filter.HasActiveFilter() {
 		return true
@@ -653,7 +659,7 @@ func (app *AppState) nodeMatchesFilter(node *TreeNode) bool {
 	return app.Filter.FilteredPaths[node.Path]
 }
 
-// countFilesWithTag counts files that have a specific tag
+// countFilesWithTag counts files having specific tag
 func (app *AppState) countFilesWithTag(group, tag string) int {
 	count := 0
 	for _, fi := range app.Index.Files {
@@ -669,7 +675,7 @@ func (app *AppState) countFilesWithTag(group, tag string) int {
 	return count
 }
 
-// getFileGroupSummary returns formatted group counts like "core(3) game(2)"
+// getFileGroupSummary formats file's groups as "group(count)" string
 func getFileGroupSummary(fi *FileInfo) string {
 	if fi == nil || len(fi.Tags) == 0 {
 		return ""
@@ -691,7 +697,7 @@ func getFileGroupSummary(fi *FileInfo) string {
 	return strings.Join(parts, " ")
 }
 
-// getTagDirectories returns base directory names for files with given tag
+// getTagDirectories returns base directory names for files with tag
 func (app *AppState) getTagDirectories(group, tag string) []string {
 	dirSet := make(map[string]bool)
 
@@ -740,7 +746,7 @@ func (app *AppState) getGroupDirectories(group string) []string {
 	return dirs
 }
 
-// formatDirHints truncates directory list to fit maxLen
+// formatDirHints truncates directory list to fit available width
 func formatDirHints(dirs []string, maxLen int) string {
 	if len(dirs) == 0 || maxLen < 4 {
 		return ""

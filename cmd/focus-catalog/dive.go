@@ -9,7 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
-// DiveState holds computed dive view data
+// DiveState holds computed relationship data for dive view visualization
 type DiveState struct {
 	SourcePath string
 	FileInfo   *FileInfo
@@ -19,13 +19,13 @@ type DiveState struct {
 	TagLinks   []DiveTagGroup
 }
 
-// DivePackage represents a package with its files
+// DivePackage represents a package directory with its constituent files
 type DivePackage struct {
 	Dir   string
 	Files []string
 }
 
-// DiveTagGroup represents files sharing a tag
+// DiveTagGroup represents files sharing a specific tag within a group
 type DiveTagGroup struct {
 	Group string
 	Tag   string
@@ -66,7 +66,7 @@ const (
 	starChar  = '★'
 )
 
-// EnterDive enters dive view for the current mindmap item
+// EnterDive transitions to dive view for the file at current mindmap cursor
 func (app *AppState) EnterDive() {
 	if app.MindmapState == nil || len(app.MindmapState.Items) == 0 {
 		return
@@ -88,13 +88,13 @@ func (app *AppState) EnterDive() {
 	app.DiveMode = true
 }
 
-// ExitDive exits dive view
+// ExitDive returns from dive view to mindmap view
 func (app *AppState) ExitDive() {
 	app.DiveMode = false
 	app.DiveState = nil
 }
 
-// HandleDiveEvent processes input in dive view
+// HandleDiveEvent processes keyboard input while in dive view
 func (app *AppState) HandleDiveEvent(ev terminal.Event) {
 	switch ev.Key {
 	case terminal.KeyEscape:
@@ -106,7 +106,7 @@ func (app *AppState) HandleDiveEvent(ev terminal.Event) {
 	}
 }
 
-// computeDiveData gathers all relationship data for a file
+// computeDiveData gathers dependency and tag relationship data for a file
 func computeDiveData(app *AppState, path string) *DiveState {
 	fi := app.Index.Files[path]
 	if fi == nil {
@@ -137,6 +137,7 @@ func computeDiveData(app *AppState, path string) *DiveState {
 	return state
 }
 
+// computeDependsOn resolves packages imported by the given file
 func computeDependsOn(app *AppState, fi *FileInfo) []DivePackage {
 	var deps []DivePackage
 	seen := make(map[string]bool)
@@ -163,6 +164,7 @@ func computeDependsOn(app *AppState, fi *FileInfo) []DivePackage {
 	return deps
 }
 
+// computeDependedBy finds packages that import the file's package
 func computeDependedBy(app *AppState, fileDir string) []DivePackage {
 	var deps []DivePackage
 
@@ -186,6 +188,7 @@ func computeDependedBy(app *AppState, fileDir string) []DivePackage {
 	return deps
 }
 
+// computeTagLinks finds files sharing tags with the source file
 func computeTagLinks(app *AppState, fi *FileInfo, selfPath string) []DiveTagGroup {
 	var links []DiveTagGroup
 
@@ -234,7 +237,7 @@ func computeTagLinks(app *AppState, fi *FileInfo, selfPath string) []DiveTagGrou
 	return links
 }
 
-// RenderDive draws the dive view
+// RenderDive draws the dive view layout with dependency and tag boxes
 func (app *AppState) RenderDive(cells []terminal.Cell, w, h int) {
 	state := app.DiveState
 	if state == nil {
@@ -312,6 +315,7 @@ func (app *AppState) RenderDive(cells []terminal.Cell, w, h int) {
 	}
 }
 
+// allocateSections distributes vertical space between dependency and tag areas
 func allocateSections(totalH, focusH, depCount, tagCount int) (depsH, tagsH int) {
 	available := totalH - focusH - 4 // connectors
 
@@ -337,6 +341,7 @@ func allocateSections(totalH, focusH, depCount, tagCount int) (depsH, tagsH int)
 	return depsH, tagsH
 }
 
+// renderDepsSection draws the depends-on and depended-by columns
 func renderDepsSection(cells []terminal.Cell, w, y, maxH int, dependsOn, dependedBy []DivePackage) int {
 	innerW := w - 4
 	startY := y
@@ -397,6 +402,7 @@ func renderDepsSection(cells []terminal.Cell, w, y, maxH int, dependsOn, depende
 	return startY + boxHeight
 }
 
+// calcDepsBoxHeight computes required height for dependency box content
 func calcDepsBoxHeight(dependsOn, dependedBy []DivePackage, maxH int) int {
 	// Calculate needed height based on content
 	maxFiles := 0
@@ -413,6 +419,7 @@ func calcDepsBoxHeight(dependsOn, dependedBy []DivePackage, maxH int) int {
 	return min(maxH, maxFiles+2) // +2 for borders
 }
 
+// renderPackageList draws a multi-column list of packages with their files
 func renderPackageList(cells []terminal.Cell, totalW, x, y, availW, availH int, packages []DivePackage, fg terminal.RGB) {
 	if len(packages) == 0 || availW < 10 || availH < 1 {
 		return
@@ -502,6 +509,7 @@ func renderPackageList(cells []terminal.Cell, totalW, x, y, availW, availH int, 
 	}
 }
 
+// renderFocusBox draws the central box showing the focused file details
 func renderFocusBox(cells []terminal.Cell, w, y int, state *DiveState) int {
 	boxWidth := w - 8
 	boxX := 4
@@ -543,6 +551,7 @@ func renderFocusBox(cells []terminal.Cell, w, y int, state *DiveState) int {
 	return y + boxHeight
 }
 
+// renderTagConnector draws branching connector lines to tag boxes
 func renderTagConnector(cells []terminal.Cell, w, y, boxCount int) int {
 	midX := w / 2
 
@@ -588,6 +597,7 @@ func renderTagConnector(cells []terminal.Cell, w, y, boxCount int) int {
 	return y
 }
 
+// renderTagSection draws tag group boxes with shared file lists
 func renderTagSection(cells []terminal.Cell, w, y, maxH int, tagLinks []DiveTagGroup) {
 	if len(tagLinks) == 0 {
 		return
@@ -659,6 +669,7 @@ func renderTagSection(cells []terminal.Cell, w, y, maxH int, tagLinks []DiveTagG
 	}
 }
 
+// renderTagSection draws tag group boxes with shared file lists
 func calcMaxTagBoxes(w int) int {
 	if w >= 180 {
 		return 5
@@ -672,6 +683,7 @@ func calcMaxTagBoxes(w int) int {
 	return 2
 }
 
+// drawSingleBox draws a single-line bordered rectangle
 func drawSingleBox(cells []terminal.Cell, totalW, x, y, w, h int) {
 	if w < 2 || h < 2 {
 		return
@@ -696,6 +708,7 @@ func drawSingleBox(cells []terminal.Cell, totalW, x, y, w, h int) {
 	}
 }
 
+// drawDoubleBox draws a double-line bordered rectangle
 func drawDoubleBox(cells []terminal.Cell, totalW, x, y, w, h int) {
 	if w < 2 || h < 2 {
 		return
@@ -717,10 +730,12 @@ func drawDoubleBox(cells []terminal.Cell, totalW, x, y, w, h int) {
 	}
 }
 
+// drawDoubleFrame draws outer double-line frame (alias for drawDoubleBox)
 func drawDoubleFrame(cells []terminal.Cell, totalW, x, y, w, h int) {
 	drawDoubleBox(cells, totalW, x, y, w, h)
 }
 
+// setCell safely sets a single cell with bounds checking
 func setCell(cells []terminal.Cell, totalW, x, y int, r rune, fg terminal.RGB) {
 	if x >= 0 && x < totalW && y >= 0 {
 		idx := y*totalW + x
@@ -730,6 +745,7 @@ func setCell(cells []terminal.Cell, totalW, x, y int, r rune, fg terminal.RGB) {
 	}
 }
 
+// drawTextAt renders text at position with attributes
 func drawTextAt(cells []terminal.Cell, totalW, x, y int, text string, fg, bg terminal.RGB, attr terminal.Attr) {
 	for i, r := range text {
 		if x+i >= totalW || x+i < 0 {
@@ -742,6 +758,7 @@ func drawTextAt(cells []terminal.Cell, totalW, x, y int, text string, fg, bg ter
 	}
 }
 
+// truncateWithEllipsis shortens string with ellipsis if exceeds maxLen
 func truncateWithEllipsis(s string, maxLen int) string {
 	if maxLen <= 3 {
 		return s[:min(len(s), maxLen)]
@@ -752,6 +769,7 @@ func truncateWithEllipsis(s string, maxLen int) string {
 	return s[:maxLen-1] + "…"
 }
 
+// formatFileTagsCompact formats file tags as compact #group{tags} string
 func formatFileTagsCompact(fi *FileInfo) string {
 	if fi == nil || len(fi.Tags) == 0 {
 		return ""
@@ -775,6 +793,7 @@ func formatFileTagsCompact(fi *FileInfo) string {
 	return strings.Join(parts, " ")
 }
 
+// joinTruncated joins strings with separator, truncating with ellipsis
 func joinTruncated(items []string, sep string, maxLen int) string {
 	if len(items) == 0 {
 		return ""

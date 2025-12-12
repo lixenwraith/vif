@@ -6,7 +6,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
-// HandleEvent processes a key event
+// HandleEvent routes keyboard events to appropriate handler
 func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 	app.Message = ""
 
@@ -160,6 +160,7 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 	return app.handleRightPaneEvent(ev)
 }
 
+// handleLeftPaneEvent processes input when tree pane focused
 func (app *AppState) handleLeftPaneEvent(ev terminal.Event) (quit, output bool) {
 	switch ev.Key {
 	case terminal.KeyRune:
@@ -211,6 +212,7 @@ func (app *AppState) handleLeftPaneEvent(ev terminal.Event) (quit, output bool) 
 	return false, false
 }
 
+// handleRightPaneEvent processes input when tag pane focused
 func (app *AppState) handleRightPaneEvent(ev terminal.Event) (quit, output bool) {
 	switch ev.Key {
 	case terminal.KeyRune:
@@ -262,7 +264,7 @@ func (app *AppState) handleRightPaneEvent(ev terminal.Event) (quit, output bool)
 	return false, false
 }
 
-// jumpTreeToStart moves cursor to first item in tree
+// jumpTreeToStart moves tree cursor to first item
 func (app *AppState) jumpTreeToStart() {
 	if len(app.TreeFlat) == 0 {
 		return
@@ -271,7 +273,7 @@ func (app *AppState) jumpTreeToStart() {
 	app.TreeScroll = 0
 }
 
-// jumpTreeToEnd moves cursor to last item in tree
+// jumpTreeToEnd moves tree cursor to last item
 func (app *AppState) jumpTreeToEnd() {
 	if len(app.TreeFlat) == 0 {
 		return
@@ -280,7 +282,7 @@ func (app *AppState) jumpTreeToEnd() {
 	app.moveTreeCursor(0)
 }
 
-// collapseAllDirs collapses all directories in tree
+// collapseAllDirs collapses all expanded directories
 func (app *AppState) collapseAllDirs() {
 	collapseAllRecursive(app.TreeRoot)
 	app.RefreshTreeFlat()
@@ -302,6 +304,7 @@ func (app *AppState) expandAllDirs() {
 	app.Message = "expanded all directories"
 }
 
+// collapseAllRecursive recursively collapses directory nodes
 func collapseAllRecursive(node *TreeNode) {
 	if node.IsDir && node.Path != "." {
 		node.Expanded = false
@@ -311,6 +314,7 @@ func collapseAllRecursive(node *TreeNode) {
 	}
 }
 
+// expandAllRecursive recursively expands directory nodes
 func expandAllRecursive(node *TreeNode) {
 	if node.IsDir {
 		node.Expanded = true
@@ -320,7 +324,7 @@ func expandAllRecursive(node *TreeNode) {
 	}
 }
 
-// jumpTagToStart moves cursor to first item in tag list
+// jumpTagToStart moves tag cursor to first item
 func (app *AppState) jumpTagToStart() {
 	if len(app.TagFlat) == 0 {
 		return
@@ -329,7 +333,7 @@ func (app *AppState) jumpTagToStart() {
 	app.TagScroll = 0
 }
 
-// jumpTagToEnd moves cursor to last item in tag list
+// jumpTagToEnd moves tag cursor to last item
 func (app *AppState) jumpTagToEnd() {
 	if len(app.TagFlat) == 0 {
 		return
@@ -338,7 +342,7 @@ func (app *AppState) jumpTagToEnd() {
 	app.moveTagCursor(0)
 }
 
-// collapseAllGroups collapses all tag groups
+// collapseAllGroups collapses all expanded tag groups
 func (app *AppState) collapseAllGroups() {
 	for _, group := range app.Index.Groups {
 		app.GroupExpanded[group] = false
@@ -364,7 +368,7 @@ func (app *AppState) expandAllGroups() {
 	app.Message = "expanded all groups"
 }
 
-// collapseCurrentGroup collapses the group at cursor or containing group
+// collapseCurrentGroup collapses group at or containing cursor
 func (app *AppState) collapseCurrentGroup() {
 	if len(app.TagFlat) == 0 {
 		return
@@ -388,7 +392,7 @@ func (app *AppState) collapseCurrentGroup() {
 	}
 }
 
-// expandCurrentGroup expands the group at cursor
+// expandCurrentGroup expands group at cursor if collapsed
 func (app *AppState) expandCurrentGroup() {
 	if len(app.TagFlat) == 0 {
 		return
@@ -405,7 +409,7 @@ func (app *AppState) expandCurrentGroup() {
 	}
 }
 
-// pageTreeCursor moves cursor by page in left pane
+// pageTreeCursor moves tree cursor by half-page
 func (app *AppState) pageTreeCursor(direction int) {
 	visibleRows := app.Height - headerHeight - statusHeight - helpHeight - 2
 	if visibleRows < 1 {
@@ -419,7 +423,7 @@ func (app *AppState) pageTreeCursor(direction int) {
 	app.moveTreeCursor(delta)
 }
 
-// pageTagCursor moves cursor by page in right pane
+// pageTagCursor moves tag cursor by half-page
 func (app *AppState) pageTagCursor(direction int) {
 	visibleRows := app.Height - headerHeight - statusHeight - helpHeight - 2
 	if visibleRows < 1 {
@@ -433,6 +437,7 @@ func (app *AppState) pageTagCursor(direction int) {
 	app.moveTagCursor(delta)
 }
 
+// handleInputEvent processes search input mode keystrokes
 func (app *AppState) handleInputEvent(ev terminal.Event) (quit, output bool) {
 	switch ev.Key {
 	case terminal.KeyEscape:
@@ -460,6 +465,7 @@ func (app *AppState) handleInputEvent(ev terminal.Event) (quit, output bool) {
 	return false, false
 }
 
+// handlePreviewEvent processes preview mode keystrokes
 func (app *AppState) handlePreviewEvent(ev terminal.Event) (quit, output bool) {
 	maxScroll := len(app.PreviewFiles) - (app.Height - headerHeight - 2)
 	if maxScroll < 0 {
@@ -498,7 +504,7 @@ func (app *AppState) handlePreviewEvent(ev terminal.Event) (quit, output bool) {
 	return false, false
 }
 
-// moveTreeCursor moves cursor in left pane with scrolling
+// moveTreeCursor moves tree cursor with scroll adjustment
 func (app *AppState) moveTreeCursor(delta int) {
 	if len(app.TreeFlat) == 0 {
 		return
@@ -526,7 +532,7 @@ func (app *AppState) moveTreeCursor(delta int) {
 	}
 }
 
-// moveTagCursor moves cursor in right pane with scrolling
+// moveTagCursor moves tag cursor with scroll adjustment
 func (app *AppState) moveTagCursor(delta int) {
 	if len(app.TagFlat) == 0 {
 		return
@@ -554,7 +560,7 @@ func (app *AppState) moveTagCursor(delta int) {
 	}
 }
 
-// collapseNode collapses current directory or moves to parent
+// collapseNode collapses current directory or navigates to parent
 func (app *AppState) collapseNode() {
 	if len(app.TreeFlat) == 0 {
 		return
@@ -580,7 +586,7 @@ func (app *AppState) collapseNode() {
 	}
 }
 
-// expandNode expands current directory
+// expandNode expands directory at cursor
 func (app *AppState) expandNode() {
 	if len(app.TreeFlat) == 0 {
 		return
@@ -594,7 +600,7 @@ func (app *AppState) expandNode() {
 	}
 }
 
-// toggleTreeSelection toggles selection of current item
+// toggleTreeSelection toggles selection of file or directory contents
 func (app *AppState) toggleTreeSelection() {
 	if len(app.TreeFlat) == 0 {
 		return
@@ -633,7 +639,7 @@ func (app *AppState) toggleTreeSelection() {
 	}
 }
 
-// collectFiles recursively collects all file paths under a node
+// collectFiles recursively collects file paths under tree node
 func collectFiles(node *TreeNode, files *[]string) {
 	if !node.IsDir {
 		*files = append(*files, node.Path)
@@ -645,7 +651,7 @@ func collectFiles(node *TreeNode, files *[]string) {
 	}
 }
 
-// selectAllVisible selects all visible files in tree
+// selectAllVisible selects all files in flattened tree
 func (app *AppState) selectAllVisible() {
 	for _, node := range app.TreeFlat {
 		if !node.IsDir {
@@ -655,7 +661,7 @@ func (app *AppState) selectAllVisible() {
 	app.Message = "selected all visible files"
 }
 
-// selectAllVisibleTags selects all files matching visible/filtered tags
+// selectAllVisibleTags selects files matching filter or all tagged
 func (app *AppState) selectAllVisibleTags() {
 	count := 0
 
@@ -678,7 +684,7 @@ func (app *AppState) selectAllVisibleTags() {
 	app.Message = fmt.Sprintf("selected %d files", count)
 }
 
-// toggleTagSelection toggles file selection for tag/group in right pane
+// toggleTagSelection toggles selection for tag or group at cursor
 func (app *AppState) toggleTagSelection() {
 	if len(app.TagFlat) == 0 {
 		return
@@ -707,7 +713,7 @@ func (app *AppState) toggleTagSelection() {
 	}
 }
 
-// EnterPreview enters preview mode
+// EnterPreview initializes preview mode with computed output files
 func (app *AppState) EnterPreview() {
 	app.PreviewFiles = app.ComputeOutputFiles()
 	app.PreviewMode = true

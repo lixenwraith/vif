@@ -1,4 +1,3 @@
-// @focus: #render { ui }
 package main
 
 import (

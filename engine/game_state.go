@@ -16,7 +16,6 @@ type GameState struct {
 	// Boost state (real-time feedback)
 	BoostEnabled atomic.Bool
 	BoostEndTime atomic.Int64 // UnixNano
-	BoostColor   atomic.Int32 // 0=None, 1=Blue, 2=Green
 
 	// Grayout visual effect state
 	GrayoutActive    atomic.Bool
@@ -85,7 +84,6 @@ func (gs *GameState) initState(now time.Time) {
 	// Reset atomics
 	gs.BoostEnabled.Store(false)
 	gs.BoostEndTime.Store(0)
-	gs.BoostColor.Store(0)
 	gs.GrayoutActive.Store(false)
 	gs.GrayoutStartTime.Store(0)
 	gs.NextSeqID.Store(1)
@@ -193,11 +191,6 @@ func (gs *GameState) SetBoostEndTime(t time.Time) {
 	gs.BoostEndTime.Store(t.UnixNano())
 }
 
-// SetBoostColor sets the boost color
-func (gs *GameState) SetBoostColor(color int32) {
-	gs.BoostColor.Store(color)
-}
-
 // UpdateBoostTimerAtomic atomically checks if boost should expire and disables it
 func (gs *GameState) UpdateBoostTimerAtomic(now time.Time) bool {
 	if !gs.BoostEnabled.Load() {
@@ -212,7 +205,6 @@ func (gs *GameState) UpdateBoostTimerAtomic(now time.Time) bool {
 
 	if now.After(endTime) {
 		if gs.BoostEnabled.CompareAndSwap(true, false) {
-			gs.BoostColor.Store(0) // Reset to None
 			return true
 		}
 	}
@@ -225,7 +217,6 @@ func (gs *GameState) ReadBoostState(now time.Time) BoostSnapshot {
 	// All boost fields are atomic, so we can read them without mutex
 	enabled := gs.BoostEnabled.Load()
 	endTimeNano := gs.BoostEndTime.Load()
-	color := gs.BoostColor.Load()
 
 	var endTime time.Time
 	var remaining time.Duration
@@ -243,7 +234,6 @@ func (gs *GameState) ReadBoostState(now time.Time) BoostSnapshot {
 	return BoostSnapshot{
 		Enabled:   enabled,
 		EndTime:   endTime,
-		Color:     color,
 		Remaining: remaining,
 	}
 }
@@ -595,7 +585,6 @@ func (gs *GameState) ReadDecayState(now time.Time) DecaySnapshot {
 type BoostSnapshot struct {
 	Enabled   bool
 	EndTime   time.Time
-	Color     int32 // 0=None, 1=Blue, 2=Green
 	Remaining time.Duration
 }
 

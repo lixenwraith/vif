@@ -11,10 +11,12 @@ import (
 
 var outputPath string
 
+// init registers command-line flags
 func init() {
 	flag.StringVar(&outputPath, "o", "catalog.txt", "output file path")
 }
 
+// main initializes terminal, builds index, and runs event loop
 func main() {
 	flag.Parse()
 

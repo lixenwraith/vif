@@ -30,6 +30,11 @@ const (
 	BoostExtensionDuration = 500 * time.Millisecond
 )
 
+// God Mode
+const (
+	GodEnergyAmount = 100_000_000
+)
+
 // Gold Sequence Mechanics
 const (
 	// GoldDuration is how long the gold sequence remains on screen
