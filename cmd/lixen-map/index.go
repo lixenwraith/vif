@@ -214,7 +214,8 @@ func (app *AppState) ReindexAll() {
 	app.Index = index
 	app.TreeRoot = BuildTree(index)
 	app.RefreshTreeFlat()
-	app.RefreshTagFlat()
+	app.RefreshFocusFlat()
+	app.RefreshInteractFlat()
 	app.Message = fmt.Sprintf("reindexed: %d files", len(index.Files))
 }
 

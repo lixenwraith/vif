@@ -37,22 +37,17 @@ func (app *AppState) Render() {
 	app.Term.Flush(cells, w, h)
 }
 
-// renderSplitPane draws the two-pane main view layout
+// renderSplitPane draws the three-pane main view layout
 func (app *AppState) renderSplitPane(cells []terminal.Cell, w, h int) {
-	// Calculate pane widths
-	leftWidth := w / 2
-	if leftWidth < leftPaneMin {
-		leftWidth = leftPaneMin
-	}
-	rightWidth := w - leftWidth - 1 // -1 for border
-	if rightWidth < rightPaneMin {
-		rightWidth = rightPaneMin
-		leftWidth = w - rightWidth - 1
-	}
+	// Calculate pane widths - equal thirds
+	paneWidth := (w - 2) / 3 // -2 for two borders
+	leftWidth := paneWidth
+	centerWidth := paneWidth
+	rightWidth := w - leftWidth - centerWidth - 2
 
 	// Header
 	drawRect(cells, 0, 0, w, headerHeight, w, colorHeaderBg)
-	title := "FOCUS-CATALOG"
+	title := "LIXEN-MAP"
 	drawText(cells, w, 1, 0, title, colorHeaderFg, colorHeaderBg, terminal.AttrBold)
 
 	// Right side header info
@@ -71,37 +66,48 @@ func (app *AppState) renderSplitPane(cells []terminal.Cell, w, h int) {
 		contentHeight = 1
 	}
 
-	// Left pane background
+	// Pane backgrounds
 	leftBg := colorDefaultBg
 	if app.FocusPane == PaneLeft {
 		leftBg = colorPaneActiveBg
 	}
 	drawRect(cells, 0, contentTop, leftWidth, contentHeight, w, leftBg)
 
-	// Right pane background
+	centerBg := colorDefaultBg
+	if app.FocusPane == PaneCenter {
+		centerBg = colorPaneActiveBg
+	}
+	centerStart := leftWidth + 1
+	drawRect(cells, centerStart, contentTop, centerWidth, contentHeight, w, centerBg)
+
 	rightBg := colorDefaultBg
 	if app.FocusPane == PaneRight {
 		rightBg = colorPaneActiveBg
 	}
-	drawRect(cells, leftWidth+1, contentTop, rightWidth, contentHeight, w, rightBg)
+	rightStart := leftWidth + centerWidth + 2
+	drawRect(cells, rightStart, contentTop, rightWidth, contentHeight, w, rightBg)
 
-	// Vertical border
+	// Vertical borders
 	for y := contentTop; y < contentTop+contentHeight; y++ {
 		cells[y*w+leftWidth] = terminal.Cell{Rune: boxV, Fg: colorPaneBorder, Bg: colorDefaultBg}
+		cells[y*w+leftWidth+centerWidth+1] = terminal.Cell{Rune: boxV, Fg: colorPaneBorder, Bg: colorDefaultBg}
 	}
 
 	// Pane headers
 	leftHeader := "PACKAGES / FILES"
-	rightHeader := "GROUPS & TAGS"
+	centerHeader := "FOCUS GROUPS"
+	rightHeader := "INTERACT GROUPS"
 	drawText(cells, w, 1, contentTop, leftHeader, colorStatusFg, leftBg, terminal.AttrBold)
-	drawText(cells, w, leftWidth+2, contentTop, rightHeader, colorStatusFg, rightBg, terminal.AttrBold)
+	drawText(cells, w, centerStart+1, contentTop, centerHeader, colorStatusFg, centerBg, terminal.AttrBold)
+	drawText(cells, w, rightStart+1, contentTop, rightHeader, colorStatusFg, rightBg, terminal.AttrBold)
 
 	// Render pane contents
 	paneContentTop := contentTop + 1
 	paneContentHeight := contentHeight - 1
 
-	app.renderLeftPane(cells, w, 0, leftWidth, paneContentTop, paneContentHeight)
-	app.renderRightPane(cells, w, leftWidth+1, rightWidth, paneContentTop, paneContentHeight)
+	app.renderTreePane(cells, w, 0, leftWidth, paneContentTop, paneContentHeight)
+	app.renderFocusPane(cells, w, centerStart, centerWidth, paneContentTop, paneContentHeight)
+	app.renderInteractPane(cells, w, rightStart, rightWidth, paneContentTop, paneContentHeight)
 
 	// Status area
 	statusY := h - statusHeight - helpHeight
@@ -112,8 +118,8 @@ func (app *AppState) renderSplitPane(cells []terminal.Cell, w, h int) {
 	app.renderHelp(cells, w, helpY)
 }
 
-// renderLeftPane draws the tree pane with files and directories
-func (app *AppState) renderLeftPane(cells []terminal.Cell, totalWidth, startX, paneWidth, startY, height int) {
+// renderTreePane draws the tree pane with files and directories
+func (app *AppState) renderTreePane(cells []terminal.Cell, totalWidth, startX, paneWidth, startY, height int) {
 	bg := colorDefaultBg
 	if app.FocusPane == PaneLeft {
 		bg = colorPaneActiveBg
@@ -240,10 +246,10 @@ func (app *AppState) renderLeftPane(cells []terminal.Cell, totalWidth, startX, p
 	}
 }
 
-// renderRightPane draws the tag pane with groups and tags
-func (app *AppState) renderRightPane(cells []terminal.Cell, totalWidth, startX, paneWidth, startY, height int) {
+// renderFocusPane draws the focus tag pane (center)
+func (app *AppState) renderFocusPane(cells []terminal.Cell, totalWidth, startX, paneWidth, startY, height int) {
 	bg := colorDefaultBg
-	if app.FocusPane == PaneRight {
+	if app.FocusPane == PaneCenter {
 		bg = colorPaneActiveBg
 	}
 
@@ -254,7 +260,7 @@ func (app *AppState) renderRightPane(cells []terminal.Cell, totalWidth, startX, 
 		idx := app.TagScroll + i
 		item := app.TagFlat[idx]
 
-		isCursor := idx == app.TagCursor && app.FocusPane == PaneRight
+		isCursor := idx == app.TagCursor && app.FocusPane == PaneCenter
 		rowBg := bg
 		if isCursor {
 			rowBg = colorCursorBg
@@ -268,12 +274,10 @@ func (app *AppState) renderRightPane(cells []terminal.Cell, totalWidth, startX, 
 		x := startX + 1
 
 		if item.IsGroup {
-			// Check filter and selection state
 			isFiltered := app.isGroupFiltered(item.Group)
 			dimmed := hasFilter && !isFiltered
 			selState := app.computeGroupSelectionState(item.Group)
 
-			// Expand indicator
 			expandChar := '▶'
 			if item.Expanded {
 				expandChar = '▼'
@@ -285,7 +289,6 @@ func (app *AppState) renderRightPane(cells []terminal.Cell, totalWidth, startX, 
 			cells[y*totalWidth+x] = terminal.Cell{Rune: expandChar, Fg: expandFg, Bg: rowBg}
 			x += 2
 
-			// Selection indicator
 			checkbox := "[ ]"
 			checkFg := colorUnselected
 			switch selState {
@@ -302,7 +305,6 @@ func (app *AppState) renderRightPane(cells []terminal.Cell, totalWidth, startX, 
 			drawText(cells, totalWidth, x, y, checkbox, checkFg, rowBg, terminal.AttrNone)
 			x += 4
 
-			// Group name and count
 			groupFg := colorGroupFg
 			if dimmed {
 				groupFg = colorUnselected
@@ -318,25 +320,8 @@ func (app *AppState) renderRightPane(cells []terminal.Cell, totalWidth, startX, 
 				countFg = colorUnselected
 			}
 			drawText(cells, totalWidth, x, y, countStr, countFg, rowBg, terminal.AttrNone)
-			x += len(countStr)
 
-			// Directory hints
-			dirs := app.getGroupDirectories(item.Group)
-			if len(dirs) > 0 {
-				remaining := (startX + paneWidth) - x - 2
-				if remaining > 4 {
-					dirHint := formatDirHints(dirs, remaining)
-					if dirHint != "" {
-						hintFg := colorDirHintFg
-						if dimmed {
-							hintFg = colorUnselected
-						}
-						drawText(cells, totalWidth, x+2, y, dirHint, hintFg, rowBg, terminal.AttrDim)
-					}
-				}
-			}
 		} else {
-			// Tag item (indented)
 			isFiltered := app.isTagFiltered(item.Group, item.Tag)
 			dimmed := hasFilter && !isFiltered
 			selState := app.computeTagSelectionState(item.Group, item.Tag)
@@ -374,23 +359,123 @@ func (app *AppState) renderRightPane(cells []terminal.Cell, totalWidth, startX, 
 				countFg = colorUnselected
 			}
 			drawText(cells, totalWidth, x, y, countStr, countFg, rowBg, terminal.AttrNone)
-			x += len(countStr)
+		}
+	}
+}
 
-			// Directory hints
-			dirs := app.getTagDirectories(item.Group, item.Tag)
-			if len(dirs) > 0 {
-				remaining := (startX + paneWidth) - x - 2
-				if remaining > 4 {
-					dirHint := formatDirHints(dirs, remaining)
-					if dirHint != "" {
-						hintFg := colorDirHintFg
-						if dimmed {
-							hintFg = colorUnselected
-						}
-						drawText(cells, totalWidth, x+2, y, dirHint, hintFg, rowBg, terminal.AttrDim)
-					}
-				}
+// renderInteractPane draws the interact tag pane (right)
+func (app *AppState) renderInteractPane(cells []terminal.Cell, totalWidth, startX, paneWidth, startY, height int) {
+	bg := colorDefaultBg
+	if app.FocusPane == PaneRight {
+		bg = colorPaneActiveBg
+	}
+
+	hasFilter := app.Filter.HasActiveFilter()
+
+	for i := 0; i < height && app.InteractScroll+i < len(app.InteractFlat); i++ {
+		y := startY + i
+		idx := app.InteractScroll + i
+		item := app.InteractFlat[idx]
+
+		isCursor := idx == app.InteractCursor && app.FocusPane == PaneRight
+		rowBg := bg
+		if isCursor {
+			rowBg = colorCursorBg
+		}
+
+		// Clear line
+		for x := startX; x < startX+paneWidth; x++ {
+			cells[y*totalWidth+x] = terminal.Cell{Rune: ' ', Fg: colorDefaultFg, Bg: rowBg}
+		}
+
+		x := startX + 1
+
+		if item.IsGroup {
+			isFiltered := app.isInteractGroupFiltered(item.Group)
+			dimmed := hasFilter && !isFiltered
+			selState := app.computeInteractGroupSelectionState(item.Group)
+
+			expandChar := '▶'
+			if item.Expanded {
+				expandChar = '▼'
 			}
+			expandFg := colorGroupFg
+			if dimmed {
+				expandFg = colorUnselected
+			}
+			cells[y*totalWidth+x] = terminal.Cell{Rune: expandChar, Fg: expandFg, Bg: rowBg}
+			x += 2
+
+			checkbox := "[ ]"
+			checkFg := colorUnselected
+			switch selState {
+			case TagSelectFull:
+				checkbox = "[x]"
+				checkFg = colorSelected
+			case TagSelectPartial:
+				checkbox = "[o]"
+				checkFg = colorPartialSelectFg
+			}
+			if dimmed {
+				checkFg = colorUnselected
+			}
+			drawText(cells, totalWidth, x, y, checkbox, checkFg, rowBg, terminal.AttrNone)
+			x += 4
+
+			groupFg := colorGroupFg
+			if dimmed {
+				groupFg = colorUnselected
+			}
+			groupStr := "#" + item.Group
+			drawText(cells, totalWidth, x, y, groupStr, groupFg, rowBg, terminal.AttrBold)
+			x += len(groupStr)
+
+			fileCount := app.countFilesInInteractGroup(item.Group)
+			countStr := fmt.Sprintf(" (%d)", fileCount)
+			countFg := colorStatusFg
+			if dimmed {
+				countFg = colorUnselected
+			}
+			drawText(cells, totalWidth, x, y, countStr, countFg, rowBg, terminal.AttrNone)
+
+		} else {
+			isFiltered := app.isInteractTagFiltered(item.Group, item.Tag)
+			dimmed := hasFilter && !isFiltered
+			selState := app.computeInteractTagSelectionState(item.Group, item.Tag)
+
+			x += 4
+
+			checkbox := "[ ]"
+			checkFg := colorUnselected
+			switch selState {
+			case TagSelectFull:
+				checkbox = "[x]"
+				checkFg = colorSelected
+			case TagSelectPartial:
+				checkbox = "[o]"
+				checkFg = colorPartialSelectFg
+			}
+			if dimmed {
+				checkFg = colorUnselected
+			}
+
+			drawText(cells, totalWidth, x, y, checkbox, checkFg, rowBg, terminal.AttrNone)
+			x += 4
+
+			tagFg := colorTagFg
+			if dimmed {
+				tagFg = colorUnselected
+			}
+			drawText(cells, totalWidth, x, y, item.Tag, tagFg, rowBg, terminal.AttrNone)
+			x += len(item.Tag)
+
+			fileCount := app.countFilesWithInteractTag(item.Group, item.Tag)
+			countStr := fmt.Sprintf(" (%d)", fileCount)
+			countFg := colorStatusFg
+			if dimmed {
+				countFg = colorUnselected
+			}
+			drawText(cells, totalWidth, x, y, countStr, countFg, rowBg, terminal.AttrNone)
 		}
 	}
 }
@@ -531,8 +616,8 @@ func (app *AppState) RefreshTreeFlat() {
 	}
 }
 
-// RefreshTagFlat rebuilds flattened tag list from index
-func (app *AppState) RefreshTagFlat() {
+// RefreshFocusFlat rebuilds flattened tag list from index
+func (app *AppState) RefreshFocusFlat() {
 	app.TagFlat = nil
 
 	for _, group := range app.Index.FocusGroups {
@@ -567,6 +652,45 @@ func (app *AppState) RefreshTagFlat() {
 	}
 	if app.TagCursor < 0 {
 		app.TagCursor = 0
+	}
+}
+
+// RefreshInteractFlat rebuilds flattened interact tag list from index
+func (app *AppState) RefreshInteractFlat() {
+	app.InteractFlat = nil
+
+	for _, group := range app.Index.InteractGroups {
+		expanded := true
+		if exp, ok := app.InteractGroupExpanded[group]; ok {
+			expanded = exp
+		} else {
+			app.InteractGroupExpanded[group] = true
+		}
+
+		app.InteractFlat = append(app.InteractFlat, TagItem{
+			IsGroup:  true,
+			Group:    group,
+			Expanded: expanded,
+		})
+
+		if expanded {
+			if tags, ok := app.Index.InteractTags[group]; ok {
+				for _, tag := range tags {
+					app.InteractFlat = append(app.InteractFlat, TagItem{
+						IsGroup: false,
+						Group:   group,
+						Tag:     tag,
+					})
+				}
+			}
+		}
+	}
+
+	if app.InteractCursor >= len(app.InteractFlat) {
+		app.InteractCursor = len(app.InteractFlat) - 1
+	}
+	if app.InteractCursor < 0 {
+		app.InteractCursor = 0
 	}
 }
 
@@ -637,6 +761,33 @@ func (app *AppState) countFilesWithTag(group, tag string) int {
 	count := 0
 	for _, fi := range app.Index.Files {
 		if tags, ok := fi.Focus[group]; ok {
+			for _, t := range tags {
+				if t == tag {
+					count++
+					break
+				}
+			}
+		}
+	}
+	return count
+}
+
+// countFilesInInteractGroup counts files having any tag in specified interact group
+func (app *AppState) countFilesInInteractGroup(group string) int {
+	count := 0
+	for _, fi := range app.Index.Files {
+		if _, ok := fi.Interact[group]; ok {
+			count++
+		}
+	}
+	return count
+}
+
+// countFilesWithInteractTag counts files having specific interact tag
+func (app *AppState) countFilesWithInteractTag(group, tag string) int {
+	count := 0
+	for _, fi := range app.Index.Files {
+		if tags, ok := fi.Interact[group]; ok {
 			for _, t := range tags {
 				if t == tag {
 					count++

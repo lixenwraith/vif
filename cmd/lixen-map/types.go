@@ -23,11 +23,17 @@ type AppState struct {
 	ExpandDeps bool            // auto-expand dependencies
 	DepthLimit int             // expansion depth
 
-	// Tag view (right pane)
+	// Focus view (center pane)
 	TagFlat       []TagItem       // Flattened groups and tags for rendering
 	TagCursor     int             // Cursor position in right pane
 	TagScroll     int             // Scroll offset for right pane
 	GroupExpanded map[string]bool // group name → expanded state
+
+	// Interact view (right pane)
+	InteractFlat          []TagItem
+	InteractCursor        int
+	InteractScroll        int
+	InteractGroupExpanded map[string]bool
 
 	// Filter state
 	Filter      *FilterState
@@ -103,8 +109,9 @@ const defaultModulePath = "github.com/USER/vi-fighter"
 type Pane int
 
 const (
-	PaneLeft  Pane = iota // Packages/Files tree
-	PaneRight             // Groups/Tags
+	PaneLeft   Pane = iota // Packages/Files tree
+	PaneCenter             // Focus Groups/Tags
+	PaneRight              // Interact Groups/Tags
 )
 
 // FilterMode determines how successive filters combine

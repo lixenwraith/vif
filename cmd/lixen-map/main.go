@@ -49,22 +49,24 @@ func main() {
 	_, rgErr := exec.LookPath("rg")
 
 	app := &AppState{
-		Term:          term,
-		Index:         index,
-		FocusPane:     PaneLeft,
-		Selected:      make(map[string]bool),
-		ExpandDeps:    true,
-		DepthLimit:    2,
-		Filter:        NewFilterState(),
-		RgAvailable:   rgErr == nil,
-		GroupExpanded: make(map[string]bool),
-		Width:         w,
-		Height:        h,
+		Term:                  term,
+		Index:                 index,
+		FocusPane:             PaneLeft,
+		Selected:              make(map[string]bool),
+		ExpandDeps:            true,
+		DepthLimit:            2,
+		Filter:                NewFilterState(),
+		RgAvailable:           rgErr == nil,
+		GroupExpanded:         make(map[string]bool),
+		InteractGroupExpanded: make(map[string]bool),
+		Width:                 w,
+		Height:                h,
 	}
 
 	app.TreeRoot = BuildTree(index)
 	app.RefreshTreeFlat()
-	app.RefreshTagFlat()
+	app.RefreshFocusFlat()
+	app.RefreshInteractFlat()
 	app.Render()
 
 	for {

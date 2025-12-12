@@ -175,3 +175,98 @@ func (app *AppState) allFilesWithGroupSelected(group string) bool {
 	}
 	return true
 }
+
+// selectFilesWithInteractTag adds all files with interact tag to selection
+func (app *AppState) selectFilesWithInteractTag(group, tag string) int {
+	count := 0
+	for path, fi := range app.Index.Files {
+		if tags, ok := fi.Interact[group]; ok {
+			for _, t := range tags {
+				if t == tag {
+					if !app.Selected[path] {
+						app.Selected[path] = true
+						count++
+					}
+					break
+				}
+			}
+		}
+	}
+	return count
+}
+
+// deselectFilesWithInteractTag removes all files with interact tag from selection
+func (app *AppState) deselectFilesWithInteractTag(group, tag string) int {
+	count := 0
+	for path, fi := range app.Index.Files {
+		if tags, ok := fi.Interact[group]; ok {
+			for _, t := range tags {
+				if t == tag {
+					if app.Selected[path] {
+						delete(app.Selected, path)
+						count++
+					}
+					break
+				}
+			}
+		}
+	}
+	return count
+}
+
+// selectFilesWithInteractGroup adds all files in interact group to selection
+func (app *AppState) selectFilesWithInteractGroup(group string) int {
+	count := 0
+	for path, fi := range app.Index.Files {
+		if _, ok := fi.Interact[group]; ok {
+			if !app.Selected[path] {
+				app.Selected[path] = true
+				count++
+			}
+		}
+	}
+	return count
+}
+
+// deselectFilesWithInteractGroup removes all files in interact group from selection
+func (app *AppState) deselectFilesWithInteractGroup(group string) int {
+	count := 0
+	for path, fi := range app.Index.Files {
+		if _, ok := fi.Interact[group]; ok {
+			if app.Selected[path] {
+				delete(app.Selected, path)
+				count++
+			}
+		}
+	}
+	return count
+}
+
+// allFilesWithInteractTagSelected checks if all files with interact tag selected
+func (app *AppState) allFilesWithInteractTagSelected(group, tag string) bool {
+	for path, fi := range app.Index.Files {
+		if tags, ok := fi.Interact[group]; ok {
+			for _, t := range tags {
+				if t == tag {
+					if !app.Selected[path] {
+						return false
+					}
+					break
+				}
+			}
+		}
+	}
+	return true
+}
+
+// allFilesWithInteractGroupSelected checks if all files in interact group selected
+func (app *AppState) allFilesWithInteractGroupSelected(group string) bool {
+	for path, fi := range app.Index.Files {
+		if _, ok := fi.Interact[group]; ok {
+			if !app.Selected[path] {
+				return false
+			}
+		}
+	}
+	return true
+}

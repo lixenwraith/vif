@@ -115,8 +115,8 @@ func (app *AppState) selectFilteredFiles() int {
 	return count
 }
 
-// applyLeftPaneFilter toggles filter for item at tree cursor
-func (app *AppState) applyLeftPaneFilter() {
+// applyTreePaneFilter toggles filter for item at tree cursor
+func (app *AppState) applyTreePaneFilter() {
 	if len(app.TreeFlat) == 0 {
 		return
 	}
@@ -151,11 +151,12 @@ func (app *AppState) applyLeftPaneFilter() {
 		}
 	}
 
-	app.RefreshTagFlat()
+	app.RefreshFocusFlat()
+	app.RefreshInteractFlat()
 }
 
-// applyRightPaneFilter toggles filter for item at tag cursor
-func (app *AppState) applyRightPaneFilter() {
+// applyFocusPaneFilter toggles filter for item at tag cursor
+func (app *AppState) applyFocusPaneFilter() {
 	if len(app.TagFlat) == 0 {
 		return
 	}
@@ -203,7 +204,8 @@ func (app *AppState) applyRightPaneFilter() {
 		}
 	}
 
-	app.RefreshTagFlat()
+	app.RefreshFocusFlat()
+	app.RefreshInteractFlat()
 }
 
 // isPathSetFiltered checks if all paths in set are currently filtered
@@ -242,7 +244,8 @@ func (app *AppState) executeSearch(query string) {
 
 	app.Message = fmt.Sprintf("search %s: %q (%d files)", label, query, len(paths))
 	app.ApplyFilter(paths)
-	app.RefreshTagFlat()
+	app.RefreshFocusFlat()
+	app.RefreshInteractFlat()
 }
 
 // searchWithRipgrep executes ripgrep for content search
@@ -398,4 +401,120 @@ func (app *AppState) isTagFiltered(group, tag string) bool {
 		return tags[tag]
 	}
 	return false
+}
+
+// isInteractGroupFiltered returns true if any tag in interact group matches filter
+func (app *AppState) isInteractGroupFiltered(group string) bool {
+	return len(app.Filter.FilteredInteractTags[group]) > 0
+}
+
+// isInteractTagFiltered returns true if specific interact tag is filtered
+func (app *AppState) isInteractTagFiltered(group, tag string) bool {
+	if tags, ok := app.Filter.FilteredInteractTags[group]; ok {
+		return tags[tag]
+	}
+	return false
+}
+
+// computeInteractTagSelectionState returns selection coverage for interact tag
+func (app *AppState) computeInteractTagSelectionState(group, tag string) TagSelectionState {
+	total := 0
+	selected := 0
+
+	for path, fi := range app.Index.Files {
+		if tags, ok := fi.Interact[group]; ok {
+			for _, t := range tags {
+				if t == tag {
+					total++
+					if app.Selected[path] {
+						selected++
+					}
+					break
+				}
+			}
+		}
+	}
+
+	if total == 0 || selected == 0 {
+		return TagSelectNone
+	}
+	if selected == total {
+		return TagSelectFull
+	}
+	return TagSelectPartial
+}
+
+// computeInteractGroupSelectionState returns selection coverage for interact group
+func (app *AppState) computeInteractGroupSelectionState(group string) TagSelectionState {
+	total := 0
+	selected := 0
+
+	for path, fi := range app.Index.Files {
+		if _, ok := fi.Interact[group]; ok {
+			total++
+			if app.Selected[path] {
+				selected++
+			}
+		}
+	}
+
+	if total == 0 || selected == 0 {
+		return TagSelectNone
+	}
+	if selected == total {
+		return TagSelectFull
+	}
+	return TagSelectPartial
+}
+
+// applyInteractPaneFilter toggles filter for item at interact cursor
+func (app *AppState) applyInteractPaneFilter() {
+	if len(app.InteractFlat) == 0 {
+		return
+	}
+
+	item := app.InteractFlat[app.InteractCursor]
+	var paths []string
+
+	if item.IsGroup {
+		for path, fi := range app.Index.Files {
+			if _, ok := fi.Interact[item.Group]; ok {
+				paths = append(paths, path)
+			}
+		}
+	} else {
+		for path, fi := range app.Index.Files {
+			if tags, ok := fi.Interact[item.Group]; ok {
+				for _, t := range tags {
+					if t == item.Tag {
+						paths = append(paths, path)
+						break
+					}
+				}
+			}
+		}
+	}
+
+	if len(paths) == 0 {
+		return
+	}
+
+	if app.isPathSetFiltered(paths) {
+		app.RemoveFromFilter(paths)
+		if item.IsGroup {
+			app.Message = fmt.Sprintf("unfilter: #%s", item.Group)
+		} else {
+			app.Message = fmt.Sprintf("unfilter: #%s{%s}", item.Group, item.Tag)
+		}
+	} else {
+		app.ApplyFilter(paths)
+		if item.IsGroup {
+			app.Message = fmt.Sprintf("filter: #%s (%d files)", item.Group, len(paths))
+		} else {
+			app.Message = fmt.Sprintf("filter: #%s{%s} (%d files)", item.Group, item.Tag, len(paths))
+		}
+	}
+
+	app.RefreshFocusFlat()
+	app.RefreshInteractFlat()
 }

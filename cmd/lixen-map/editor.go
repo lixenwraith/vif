@@ -92,7 +92,7 @@ func (app *AppState) commitTagEdit() {
 	app.Message = fmt.Sprintf("updated tags: %s", path)
 }
 
-// readFocusLine extracts @focus tag content from file header
+// readFocusLine extracts @lixen tag content from file header
 func readFocusLine(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -105,14 +105,13 @@ func readFocusLine(path string) (string, error) {
 		line := scanner.Text()
 		trimmed := strings.TrimSpace(line)
 
-		// Stop at package declaration
 		if strings.HasPrefix(trimmed, "package ") {
 			break
 		}
 
-		// Check for focus line
-		if strings.HasPrefix(trimmed, "// @focus:") {
-			content := strings.TrimPrefix(trimmed, "// @focus:")
+		// Check for lixen line (new format)
+		if strings.HasPrefix(trimmed, "// @lixen:") {
+			content := strings.TrimPrefix(trimmed, "// @lixen:")
 			return strings.TrimSpace(content), nil
 		}
 	}
