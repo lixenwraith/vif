@@ -92,7 +92,7 @@ func (app *AppState) commitTagEdit() {
 	app.Message = fmt.Sprintf("updated: %s", path)
 }
 
-// readLixenLine extracts @lixen: content from file header
+// readLixenLine extracts and merges all @lixen: content from file header
 func readLixenLine(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -100,6 +100,7 @@ func readLixenLine(path string) (string, error) {
 	}
 	defer f.Close()
 
+	var contents []string
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		trimmed := strings.TrimSpace(scanner.Text())
@@ -110,11 +111,54 @@ func readLixenLine(path string) (string, error) {
 
 		if strings.HasPrefix(trimmed, "// @lixen:") {
 			content := strings.TrimPrefix(trimmed, "// @lixen:")
-			return strings.TrimSpace(content), nil
+			content = strings.TrimSpace(content)
+			if content != "" {
+				contents = append(contents, content)
+			}
 		}
 	}
 
-	return "", scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return "", err
+	}
+
+	if len(contents) == 0 {
+		return "", nil
+	}
+
+	// Merge multiple lines by parsing and re-canonicalizing
+	mergedFocus := make(map[string][]string)
+	mergedInteract := make(map[string][]string)
+
+	for _, c := range contents {
+		focus, interact, err := parseLixenContent(c)
+		if err != nil {
+			continue // Skip malformed lines
+		}
+		for g, tags := range focus {
+			mergedFocus[g] = appendUnique(mergedFocus[g], tags...)
+		}
+		for g, tags := range interact {
+			mergedInteract[g] = appendUnique(mergedInteract[g], tags...)
+		}
+	}
+
+	return canonicalizeLixenContent(mergedFocus, mergedInteract), nil
+}
+
+// appendUnique appends values not already present
+func appendUnique(slice []string, values ...string) []string {
+	seen := make(map[string]bool, len(slice))
+	for _, s := range slice {
+		seen[s] = true
+	}
+	for _, v := range values {
+		if !seen[v] {
+			slice = append(slice, v)
+			seen[v] = true
+		}
+	}
+	return slice
 }
 
 // parseLixenContent parses lixen content into focus/interact maps
@@ -174,7 +218,7 @@ func formatBlock(name string, groups map[string][]string) string {
 	return fmt.Sprintf("#%s{%s}", name, strings.Join(groupParts, ","))
 }
 
-// writeLixenLine atomically writes lixen line to file
+// writeLixenLine atomically writes lixen line to file, removing all existing @lixen: lines
 func writeLixenLine(path, content string) error {
 	focus, interact, err := parseLixenContent(content)
 	if err != nil {
@@ -190,13 +234,14 @@ func writeLixenLine(path, content string) error {
 
 	lines := strings.Split(string(fileContent), "\n")
 
-	lixenIdx := -1
+	// Find all @lixen: lines and package line
+	var lixenIndices []int
 	packageIdx := -1
 
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "// @lixen:") && lixenIdx == -1 {
-			lixenIdx = i
+		if strings.HasPrefix(trimmed, "// @lixen:") {
+			lixenIndices = append(lixenIndices, i)
 		}
 		if strings.HasPrefix(trimmed, "package ") {
 			packageIdx = i
@@ -206,17 +251,28 @@ func writeLixenLine(path, content string) error {
 
 	var newLines []string
 
-	if lixenIdx >= 0 {
-		// Replace or remove existing line
-		newLines = make([]string, len(lines))
-		copy(newLines, lines)
-		if canonical == "" {
-			newLines = append(newLines[:lixenIdx], newLines[lixenIdx+1:]...)
-		} else {
-			newLines[lixenIdx] = "// @lixen: " + canonical
+	if len(lixenIndices) > 0 {
+		// Remove all existing @lixen: lines, insert single canonical at first position
+		newLines = make([]string, 0, len(lines)-len(lixenIndices)+1)
+		removed := make(map[int]bool)
+		for _, idx := range lixenIndices {
+			removed[idx] = true
+		}
+
+		insertDone := false
+		for i, line := range lines {
+			if removed[i] {
+				// Insert canonical line at position of first removed line
+				if !insertDone && canonical != "" {
+					newLines = append(newLines, "// @lixen: "+canonical)
+					insertDone = true
+				}
+				continue
+			}
+			newLines = append(newLines, line)
 		}
 	} else if canonical != "" {
-		// Insert before package, after build tags
+		// No existing line - insert before package, after build tags
 		insertIdx := 0
 		if packageIdx > 0 {
 			for i := 0; i < packageIdx; i++ {
@@ -234,7 +290,7 @@ func writeLixenLine(path, content string) error {
 		newLines = append(newLines, "// @lixen: "+canonical)
 		newLines = append(newLines, lines[insertIdx:]...)
 	} else {
-		return nil // No content and no existing line
+		return nil // No content and no existing lines
 	}
 
 	result := strings.Join(newLines, "\n")

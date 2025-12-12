@@ -179,6 +179,18 @@ func (app *AppState) handleCommandSequence(ev terminal.Event) (quit, output bool
 		return false, false
 	}
 
+	// 'ff' and 'if' - toggle filter on cursor item
+	if ev.Rune == 'f' {
+		switch pending {
+		case 'f':
+			app.applyCurrentPaneFilter()
+			return false, false
+		case 'i':
+			app.applyCurrentPaneFilter()
+			return false, false
+		}
+	}
+
 	// Determine category from first key
 	switch pending {
 	case 'f':
@@ -216,6 +228,18 @@ func (app *AppState) handleCommandSequence(ev terminal.Event) (quit, output bool
 	app.Message = fmt.Sprintf("filter %s %s:", categoryName, typeName)
 
 	return false, false
+}
+
+// applyCurrentPaneFilter applies filter toggle based on active pane
+func (app *AppState) applyCurrentPaneFilter() {
+	switch app.FocusPane {
+	case PaneLeft:
+		app.applyTreePaneFilter()
+	case PaneCenter:
+		app.applyFocusPaneFilter()
+	case PaneRight:
+		app.applyInteractPaneFilter()
+	}
 }
 
 // handleTreePaneEvent processes input when tree pane focused

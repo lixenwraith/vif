@@ -118,103 +118,32 @@ func (app *AppState) RenderDive(cells []terminal.Cell, w, h int) {
 		y = renderDepsSection(cells, w, y, depsH, state.DependsOn, state.DependedBy)
 	}
 
-	// Connector to focus box
-	if y < contentBottom-focusBoxH-tagsH {
-		midX := w / 2
-		cells[y*w+midX] = terminal.Cell{Rune: connV, Fg: colorStatusFg, Bg: colorDefaultBg}
-		y++
-		cells[y*w+midX] = terminal.Cell{Rune: arrowDown, Fg: colorStatusFg, Bg: colorDefaultBg}
-		y++
-	}
-
 	// Render focus box (file info)
 	y = renderFocusBox(cells, w, y, state)
 
 	// Render tag links sections
 	if tagsH > 0 && totalLinks > 0 {
-		midX := w / 2
-		// Initial connector from Focus Box
-		if y < contentBottom {
-			cells[y*w+midX] = terminal.Cell{Rune: connV, Fg: colorStatusFg, Bg: colorDefaultBg}
-			y++
-		}
-
-		// --- DYNAMIC HEIGHT CALCULATION START ---
-		// We calculate exactly how much space is left and subtract the overhead of arrows/lines
-		// to prevent drawing off-screen.
-
 		remainingSpace := contentBottom - y
-
-		// 1. Calculate overhead (lines consumed by arrows/branches)
-		focusOverhead := 0
-		if len(state.FocusLinks) > 0 {
-			if min(len(state.FocusLinks), calcMaxTagBoxes(w)) > 1 {
-				focusOverhead = 2 // Branching connector takes 2 lines
-			} else {
-				focusOverhead = 1 // Simple arrow takes 1 line
-			}
-		}
-
-		interactOverhead := 0
-		if len(state.InteractLinks) > 0 {
-			if len(state.FocusLinks) > 0 {
-				interactOverhead += 1 // Vertical separator line
-			}
-			if min(len(state.InteractLinks), calcMaxTagBoxes(w)) > 1 {
-				interactOverhead += 2
-			} else {
-				interactOverhead += 1
-			}
-		}
-
-		// 2. Determine actual box height available
-		availableBoxSpace := remainingSpace - focusOverhead - interactOverhead
-		if availableBoxSpace < 0 {
-			availableBoxSpace = 0
-		}
 
 		focusLinksH := 0
 		interactLinksH := 0
 
 		if len(state.FocusLinks) > 0 && len(state.InteractLinks) > 0 {
-			focusLinksH = availableBoxSpace / 2
-			interactLinksH = availableBoxSpace - focusLinksH
+			focusLinksH = remainingSpace / 2
+			interactLinksH = remainingSpace - focusLinksH
 		} else if len(state.FocusLinks) > 0 {
-			focusLinksH = availableBoxSpace
+			focusLinksH = remainingSpace
 		} else {
-			interactLinksH = availableBoxSpace
+			interactLinksH = remainingSpace
 		}
-		// --- DYNAMIC HEIGHT CALCULATION END ---
 
 		// Render Focus links
 		if focusLinksH > 0 && len(state.FocusLinks) > 0 {
-			boxCount := min(len(state.FocusLinks), calcMaxTagBoxes(w))
-			if boxCount > 1 {
-				y = renderTagConnector(cells, w, y, boxCount)
-			} else {
-				cells[y*w+midX] = terminal.Cell{Rune: arrowDown, Fg: colorStatusFg, Bg: colorDefaultBg}
-				y++
-			}
 			y = renderTagLinkSection(cells, w, y, focusLinksH, "FOCUS", state.FocusLinks, colorGroupFg)
 		}
 
 		// Render Interact links
 		if interactLinksH > 0 && len(state.InteractLinks) > 0 {
-			// Vertical connector from previous section
-			if len(state.FocusLinks) > 0 {
-				if y < contentBottom {
-					cells[y*w+midX] = terminal.Cell{Rune: connV, Fg: colorStatusFg, Bg: colorDefaultBg}
-					y++
-				}
-			}
-
-			boxCount := min(len(state.InteractLinks), calcMaxTagBoxes(w))
-			if boxCount > 1 {
-				y = renderTagConnector(cells, w, y, boxCount)
-			} else {
-				cells[y*w+midX] = terminal.Cell{Rune: arrowDown, Fg: colorStatusFg, Bg: colorDefaultBg}
-				y++
-			}
 			y = renderTagLinkSection(cells, w, y, interactLinksH, "INTERACT", state.InteractLinks, colorExpandedFg)
 		}
 	}
@@ -687,57 +616,4 @@ func renderFocusBox(cells []terminal.Cell, w, y int, state *DiveState) int {
 	drawText(cells, w, boxX+len(impStr)+4, y+2, impByStr, colorStatusFg, colorDefaultBg, terminal.AttrNone)
 
 	return y + boxHeight
-}
-
-// renderTagConnector draws branching connector lines to tag boxes
-func renderTagConnector(cells []terminal.Cell, w, y, boxCount int) int {
-	midX := w / 2
-	innerW := w - 4
-
-	// Calculate box positions matching renderTagLinkSection logic
-	boxWidth := (innerW - boxCount + 1) / boxCount
-	positions := make([]int, boxCount)
-
-	for i := 0; i < boxCount; i++ {
-		// Box center calculation must match renderTagLinkSection's boxX
-		boxX := 2 + i*(boxWidth+1)
-		positions[i] = boxX + boxWidth/2
-	}
-
-	// Draw horizontal line with splits
-	leftmost := positions[0]
-	rightmost := positions[boxCount-1]
-
-	for x := leftmost; x <= rightmost; x++ {
-		cells[y*w+x] = terminal.Cell{Rune: boxH, Fg: colorStatusFg, Bg: colorDefaultBg}
-	}
-
-	// Ensure center connection from above if not covered by a box position
-	if midX >= leftmost && midX <= rightmost {
-		cells[y*w+midX] = terminal.Cell{Rune: boxBT, Fg: colorStatusFg, Bg: colorDefaultBg}
-	}
-
-	// Draw branch points
-	for i, p := range positions {
-		var r rune
-		if p == midX {
-			r = connSplit // Center cross '┼'
-		} else if i == 0 {
-			r = boxTL // Left end '┌'
-		} else if i == boxCount-1 {
-			r = boxTR // Right end '┐'
-		} else {
-			r = boxTT // Middle branch '┬'
-		}
-		cells[y*w+p] = terminal.Cell{Rune: r, Fg: colorStatusFg, Bg: colorDefaultBg}
-	}
-	y++
-
-	// Draw down arrows
-	for _, p := range positions {
-		cells[y*w+p] = terminal.Cell{Rune: arrowDown, Fg: colorStatusFg, Bg: colorDefaultBg}
-	}
-	y++
-
-	return y
 }
