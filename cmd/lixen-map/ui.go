@@ -33,6 +33,11 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 		return app.handleInputEvent(ev)
 	}
 
+	// Two-key command sequence handling
+	if app.CommandPending != 0 {
+		return app.handleCommandSequence(ev)
+	}
+
 	// Global keys
 	switch ev.Key {
 	case terminal.KeyCtrlQ:
@@ -40,20 +45,15 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 
 	case terminal.KeyRune:
 		switch ev.Rune {
+		case 'f', 'i':
+			// Start two-key filter sequence
+			app.CommandPending = ev.Rune
+			app.Message = fmt.Sprintf("-%c-", ev.Rune)
+			return false, false
 		case '/':
 			app.InputMode = true
 			app.InputBuffer = ""
 			app.SearchType = SearchTypeContent
-			return false, false
-		case 't':
-			app.InputMode = true
-			app.InputBuffer = ""
-			app.SearchType = SearchTypeTags
-			return false, false
-		case 'g':
-			app.InputMode = true
-			app.InputBuffer = ""
-			app.SearchType = SearchTypeGroups
 			return false, false
 		case 'r':
 			app.ReindexAll()
@@ -82,7 +82,6 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 			}
 			return false, false
 		case 'm':
-			// Cycle through filter modes
 			switch app.Filter.Mode {
 			case FilterOR:
 				app.Filter.Mode = FilterAND
@@ -100,10 +99,7 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 			return false, false
 		case 'c':
 			app.Selected = make(map[string]bool)
-			app.ClearFilter()
-			app.RefreshFocusFlat()
-			app.RefreshInteractFlat()
-			app.Message = "cleared all"
+			app.Message = "cleared selections"
 			return false, false
 		case 'p':
 			app.EnterPreview()
@@ -130,10 +126,8 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 		return false, false
 
 	case terminal.KeyEnter:
-		if app.FocusPane == PaneLeft || app.FocusPane == PaneRight {
-			app.EnterMindmap()
-			return false, false
-		}
+		app.EnterMindmap()
+		return false, false
 
 	case terminal.KeyCtrlS:
 		files := app.ComputeOutputFiles()
@@ -170,6 +164,60 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 	return false, false
 }
 
+// handleCommandSequence processes second key of two-key filter command
+func (app *AppState) handleCommandSequence(ev terminal.Event) (quit, output bool) {
+	pending := app.CommandPending
+	app.CommandPending = 0
+
+	if ev.Key == terminal.KeyEscape {
+		app.Message = ""
+		return false, false
+	}
+
+	if ev.Key != terminal.KeyRune {
+		app.Message = "invalid sequence"
+		return false, false
+	}
+
+	// Determine category from first key
+	switch pending {
+	case 'f':
+		app.SearchCategory = SearchCategoryFocus
+	case 'i':
+		app.SearchCategory = SearchCategoryInteract
+	default:
+		app.Message = "invalid sequence"
+		return false, false
+	}
+
+	// Determine type from second key
+	switch ev.Rune {
+	case 'g':
+		app.SearchType = SearchTypeGroups
+	case 't':
+		app.SearchType = SearchTypeTags
+	default:
+		app.Message = "invalid sequence"
+		return false, false
+	}
+
+	// Enter input mode for filter query
+	app.InputMode = true
+	app.InputBuffer = ""
+
+	categoryName := "focus"
+	if app.SearchCategory == SearchCategoryInteract {
+		categoryName = "interact"
+	}
+	typeName := "tags"
+	if app.SearchType == SearchTypeGroups {
+		typeName = "groups"
+	}
+	app.Message = fmt.Sprintf("filter %s %s:", categoryName, typeName)
+
+	return false, false
+}
+
 // handleTreePaneEvent processes input when tree pane focused
 func (app *AppState) handleTreePaneEvent(ev terminal.Event) (quit, output bool) {
 	switch ev.Key {
@@ -185,8 +233,6 @@ func (app *AppState) handleTreePaneEvent(ev terminal.Event) (quit, output bool) 
 			app.expandNode()
 		case ' ':
 			app.toggleTreeSelection()
-		case 'f':
-			app.applyTreePaneFilter()
 		case 'a':
 			app.selectAllVisible()
 		case '0':
@@ -237,8 +283,6 @@ func (app *AppState) handleFocusPaneEvent(ev terminal.Event) (quit, output bool)
 			app.expandCurrentGroup()
 		case ' ':
 			app.toggleTagSelection()
-		case 'f':
-			app.applyFocusPaneFilter()
 		case 'a':
 			app.selectAllVisibleTags()
 		case '0':
@@ -289,8 +333,6 @@ func (app *AppState) handleInteractPaneEvent(ev terminal.Event) (quit, output bo
 			app.expandCurrentInteractGroup()
 		case ' ':
 			app.toggleInteractSelection()
-		case 'f':
-			app.applyInteractPaneFilter()
 		case 'a':
 			app.selectAllVisibleInteractTags()
 		case '0':

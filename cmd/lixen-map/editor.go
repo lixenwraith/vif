@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/lixenwraith/vi-fighter/terminal"
@@ -30,8 +31,7 @@ func (app *AppState) EnterEditMode() {
 	app.EditTarget = node.Path
 	app.EditMode = true
 
-	// Load current focus line content
-	content, err := readFocusLine(node.Path)
+	content, err := readLixenLine(node.Path)
 	if err != nil {
 		app.Message = fmt.Sprintf("read error: %v", err)
 		app.EditMode = false
@@ -39,7 +39,14 @@ func (app *AppState) EnterEditMode() {
 		return
 	}
 
-	app.InputBuffer = content
+	// Canonicalize for consistent editing
+	focus, interact, err := parseLixenContent(content)
+	if err != nil {
+		app.InputBuffer = content // Fallback to raw on parse error
+		return
+	}
+
+	app.InputBuffer = canonicalizeLixenContent(focus, interact)
 }
 
 // HandleEditEvent processes keyboard input during tag editing
@@ -50,31 +57,26 @@ func (app *AppState) HandleEditEvent(ev terminal.Event) {
 		app.EditTarget = ""
 		app.InputBuffer = ""
 		app.Message = "edit cancelled"
-		return
 
 	case terminal.KeyEnter:
 		app.commitTagEdit()
-		return
 
 	case terminal.KeyBackspace:
 		if len(app.InputBuffer) > 0 {
 			app.InputBuffer = app.InputBuffer[:len(app.InputBuffer)-1]
 		}
-		return
 
 	case terminal.KeyRune:
 		app.InputBuffer += string(ev.Rune)
-		return
 	}
 }
 
 // commitTagEdit writes modified tags to file and triggers reindex
 func (app *AppState) commitTagEdit() {
 	path := app.EditTarget
-	newTags := strings.TrimSpace(app.InputBuffer)
+	content := strings.TrimSpace(app.InputBuffer)
 
-	err := writeFocusLine(path, newTags)
-	if err != nil {
+	if err := writeLixenLine(path, content); err != nil {
 		app.Message = fmt.Sprintf("write error: %v", err)
 		app.EditMode = false
 		app.EditTarget = ""
@@ -82,18 +84,16 @@ func (app *AppState) commitTagEdit() {
 		return
 	}
 
-	// Exit edit mode
 	app.EditMode = false
 	app.EditTarget = ""
 	app.InputBuffer = ""
 
-	// Reindex entire tree
 	app.ReindexAll()
-	app.Message = fmt.Sprintf("updated tags: %s", path)
+	app.Message = fmt.Sprintf("updated: %s", path)
 }
 
-// readFocusLine extracts @lixen tag content from file header
-func readFocusLine(path string) (string, error) {
+// readLixenLine extracts @lixen: content from file header
+func readLixenLine(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return "", err
@@ -102,14 +102,12 @@ func readFocusLine(path string) (string, error) {
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
-		line := scanner.Text()
-		trimmed := strings.TrimSpace(line)
+		trimmed := strings.TrimSpace(scanner.Text())
 
 		if strings.HasPrefix(trimmed, "package ") {
 			break
 		}
 
-		// Check for lixen line (new format)
 		if strings.HasPrefix(trimmed, "// @lixen:") {
 			content := strings.TrimPrefix(trimmed, "// @lixen:")
 			return strings.TrimSpace(content), nil
@@ -119,28 +117,87 @@ func readFocusLine(path string) (string, error) {
 	return "", scanner.Err()
 }
 
-// writeFocusLine atomically writes @focus line to file, preserving structure
-func writeFocusLine(path, tags string) error {
-	// Read entire file
-	content, err := os.ReadFile(path)
+// parseLixenContent parses lixen content into focus/interact maps
+func parseLixenContent(content string) (focus, interact map[string][]string, err error) {
+	if content == "" {
+		return make(map[string][]string), make(map[string][]string), nil
+	}
+
+	fi := &FileInfo{
+		Focus:    make(map[string][]string),
+		Interact: make(map[string][]string),
+	}
+
+	content = stripWhitespace(content)
+	if err := parseBlocks(content, fi); err != nil {
+		return nil, nil, err
+	}
+
+	return fi.Focus, fi.Interact, nil
+}
+
+// canonicalizeLixenContent creates canonical lixen content from maps
+// Output: #focus{group1[tag1,tag2],group2[tag3]},#interact{init[cursor],state[gold]}
+func canonicalizeLixenContent(focus, interact map[string][]string) string {
+	var parts []string
+
+	if block := formatBlock("focus", focus); block != "" {
+		parts = append(parts, block)
+	}
+	if block := formatBlock("interact", interact); block != "" {
+		parts = append(parts, block)
+	}
+
+	return strings.Join(parts, ",")
+}
+
+// formatBlock formats a single block: #name{group1[tag1,tag2],group2[tag3]}
+func formatBlock(name string, groups map[string][]string) string {
+	if len(groups) == 0 {
+		return ""
+	}
+
+	groupNames := make([]string, 0, len(groups))
+	for g := range groups {
+		groupNames = append(groupNames, g)
+	}
+	sort.Strings(groupNames)
+
+	var groupParts []string
+	for _, g := range groupNames {
+		tags := make([]string, len(groups[g]))
+		copy(tags, groups[g])
+		sort.Strings(tags)
+		groupParts = append(groupParts, fmt.Sprintf("%s[%s]", g, strings.Join(tags, ",")))
+	}
+
+	return fmt.Sprintf("#%s{%s}", name, strings.Join(groupParts, ","))
+}
+
+// writeLixenLine atomically writes lixen line to file
+func writeLixenLine(path, content string) error {
+	focus, interact, err := parseLixenContent(content)
+	if err != nil {
+		return fmt.Errorf("parse: %w", err)
+	}
+
+	canonical := canonicalizeLixenContent(focus, interact)
+
+	fileContent, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
 
-	lines := strings.Split(string(content), "\n")
-	focusLine := fmt.Sprintf("// @focus: %s", tags)
+	lines := strings.Split(string(fileContent), "\n")
 
-	// Find existing focus line or package line
-	focusIdx := -1
+	lixenIdx := -1
 	packageIdx := -1
 
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
-
-		if strings.HasPrefix(trimmed, "// @focus:") && focusIdx == -1 {
-			focusIdx = i
+		if strings.HasPrefix(trimmed, "// @lixen:") && lixenIdx == -1 {
+			lixenIdx = i
 		}
-
 		if strings.HasPrefix(trimmed, "package ") {
 			packageIdx = i
 			break
@@ -149,16 +206,19 @@ func writeFocusLine(path, tags string) error {
 
 	var newLines []string
 
-	if focusIdx >= 0 {
-		// Replace existing focus line
+	if lixenIdx >= 0 {
+		// Replace or remove existing line
 		newLines = make([]string, len(lines))
 		copy(newLines, lines)
-		newLines[focusIdx] = focusLine
-	} else {
-		// Insert at beginning (before package, after any build tags/comments)
+		if canonical == "" {
+			newLines = append(newLines[:lixenIdx], newLines[lixenIdx+1:]...)
+		} else {
+			newLines[lixenIdx] = "// @lixen: " + canonical
+		}
+	} else if canonical != "" {
+		// Insert before package, after build tags
 		insertIdx := 0
 		if packageIdx > 0 {
-			// Find good insertion point - after initial comments/build tags
 			for i := 0; i < packageIdx; i++ {
 				trimmed := strings.TrimSpace(lines[i])
 				if trimmed == "" || strings.HasPrefix(trimmed, "//go:build") || strings.HasPrefix(trimmed, "// +build") {
@@ -171,46 +231,41 @@ func writeFocusLine(path, tags string) error {
 
 		newLines = make([]string, 0, len(lines)+1)
 		newLines = append(newLines, lines[:insertIdx]...)
-		newLines = append(newLines, focusLine)
+		newLines = append(newLines, "// @lixen: "+canonical)
 		newLines = append(newLines, lines[insertIdx:]...)
+	} else {
+		return nil // No content and no existing line
 	}
 
-	// Ensure file ends with newline
 	result := strings.Join(newLines, "\n")
 	if !strings.HasSuffix(result, "\n") {
 		result += "\n"
 	}
 
-	// Atomic write: temp file + rename
+	// Atomic write
 	dir := filepath.Dir(path)
-	tmpFile, err := os.CreateTemp(dir, ".focus-edit-*.tmp")
+	tmpFile, err := os.CreateTemp(dir, ".lixen-edit-*.tmp")
 	if err != nil {
 		return err
 	}
 	tmpPath := tmpFile.Name()
 
-	_, err = tmpFile.WriteString(result)
-	if err != nil {
+	if _, err := tmpFile.WriteString(result); err != nil {
 		tmpFile.Close()
 		os.Remove(tmpPath)
 		return err
 	}
 
-	err = tmpFile.Close()
-	if err != nil {
+	if err := tmpFile.Close(); err != nil {
 		os.Remove(tmpPath)
 		return err
 	}
 
-	// Preserve original file permissions
-	info, err := os.Stat(path)
-	if err == nil {
+	if info, err := os.Stat(path); err == nil {
 		os.Chmod(tmpPath, info.Mode())
 	}
 
-	// Atomic rename
-	err = os.Rename(tmpPath, path)
-	if err != nil {
+	if err := os.Rename(tmpPath, path); err != nil {
 		os.Remove(tmpPath)
 		return err
 	}

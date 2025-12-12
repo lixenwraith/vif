@@ -37,12 +37,14 @@ type MindmapItem struct {
 	TagStr string // Formatted tags
 }
 
-// EnterMindmap opens mindmap view based on current pane focus
 func (app *AppState) EnterMindmap() {
-	if app.FocusPane == PaneLeft {
+	switch app.FocusPane {
+	case PaneLeft:
 		app.enterMindmapPackage()
-	} else {
-		app.enterMindmapTag()
+	case PaneCenter:
+		app.enterMindmapFocusTag()
+	case PaneRight:
+		app.enterMindmapInteractTag()
 	}
 }
 
@@ -79,6 +81,232 @@ func (app *AppState) enterMindmapPackage() {
 	app.MindmapMode = true
 }
 
+// formatDirTags aggregates tags from immediate children of directory
+func (app *AppState) formatDirTags(node *TreeNode) string {
+	focusGroups := make(map[string]map[string]bool)
+	interactGroups := make(map[string]map[string]bool)
+
+	for _, child := range node.Children {
+		if child.IsDir || child.FileInfo == nil {
+			continue
+		}
+		// Aggregate focus
+		for group, tags := range child.FileInfo.Focus {
+			if focusGroups[group] == nil {
+				focusGroups[group] = make(map[string]bool)
+			}
+			for _, t := range tags {
+				focusGroups[group][t] = true
+			}
+		}
+		// Aggregate interact
+		for group, tags := range child.FileInfo.Interact {
+			if interactGroups[group] == nil {
+				interactGroups[group] = make(map[string]bool)
+			}
+			for _, t := range tags {
+				interactGroups[group][t] = true
+			}
+		}
+	}
+
+	var parts []string
+	if len(focusGroups) > 0 {
+		parts = append(parts, formatTagGroups("focus", focusGroups))
+	}
+	if len(interactGroups) > 0 {
+		parts = append(parts, formatTagGroups("interact", interactGroups))
+	}
+
+	return strings.Join(parts, " ")
+}
+
+// formatFileTags formats single file's tags as display string (both Focus and Interact)
+func formatFileTags(fi *FileInfo) string {
+	if fi == nil {
+		return ""
+	}
+
+	var parts []string
+
+	// Focus tags
+	if len(fi.Focus) > 0 {
+		parts = append(parts, formatTagMap("focus", fi.Focus))
+	}
+
+	// Interact tags
+	if len(fi.Interact) > 0 {
+		parts = append(parts, formatTagMap("interact", fi.Interact))
+	}
+
+	return strings.Join(parts, " ")
+}
+
+// formatTagMap formats a tag map as #block{group[tags],...} string
+func formatTagMap(block string, tagMap map[string][]string) string {
+	if len(tagMap) == 0 {
+		return ""
+	}
+
+	groups := make([]string, 0, len(tagMap))
+	for g := range tagMap {
+		groups = append(groups, g)
+	}
+	sort.Strings(groups)
+
+	var groupParts []string
+	for _, g := range groups {
+		tags := make([]string, len(tagMap[g]))
+		copy(tags, tagMap[g])
+		sort.Strings(tags)
+		groupParts = append(groupParts, fmt.Sprintf("%s[%s]", g, strings.Join(tags, ",")))
+	}
+
+	return fmt.Sprintf("#%s{%s}", block, strings.Join(groupParts, ","))
+}
+
+// formatTagGroups formats tag set map as #block{group[tags],...} string
+func formatTagGroups(block string, tagGroups map[string]map[string]bool) string {
+	if len(tagGroups) == 0 {
+		return ""
+	}
+
+	groups := make([]string, 0, len(tagGroups))
+	for g := range tagGroups {
+		groups = append(groups, g)
+	}
+	sort.Strings(groups)
+
+	var groupParts []string
+	for _, g := range groups {
+		tags := make([]string, 0, len(tagGroups[g]))
+		for t := range tagGroups[g] {
+			tags = append(tags, t)
+		}
+		sort.Strings(tags)
+		groupParts = append(groupParts, fmt.Sprintf("%s[%s]", g, strings.Join(tags, ",")))
+	}
+
+	return fmt.Sprintf("#%s{%s}", block, strings.Join(groupParts, ","))
+}
+
+func (app *AppState) enterMindmapFocusTag() {
+	if len(app.TagFlat) == 0 {
+		app.Message = "no focus tags to view"
+		return
+	}
+
+	item := app.TagFlat[app.TagCursor]
+
+	state := &MindmapState{
+		Source:      MindmapSourceTag,
+		SourceGroup: item.Group,
+		SourceTag:   item.Tag,
+	}
+
+	if item.IsGroup {
+		state.Title = "#focus:" + item.Group
+		state.Items = app.buildGroupItems(item.Group)
+	} else {
+		state.Title = fmt.Sprintf("#focus:%s{%s}", item.Group, item.Tag)
+		state.Items = app.buildTagItems(item.Group, item.Tag)
+	}
+
+	if len(state.Items) == 0 {
+		app.Message = "no files with this tag"
+		return
+	}
+
+	app.MindmapState = state
+	app.MindmapMode = true
+}
+
+func (app *AppState) enterMindmapInteractTag() {
+	if len(app.InteractFlat) == 0 {
+		app.Message = "no interact tags to view"
+		return
+	}
+
+	item := app.InteractFlat[app.InteractCursor]
+
+	state := &MindmapState{
+		Source:      MindmapSourceTag,
+		SourceGroup: item.Group,
+		SourceTag:   item.Tag,
+	}
+
+	if item.IsGroup {
+		state.Title = "#interact:" + item.Group
+		state.Items = app.buildInteractGroupItems(item.Group)
+	} else {
+		state.Title = fmt.Sprintf("#interact:%s{%s}", item.Group, item.Tag)
+		state.Items = app.buildInteractTagItems(item.Group, item.Tag)
+	}
+
+	if len(state.Items) == 0 {
+		app.Message = "no files with this tag"
+		return
+	}
+
+	app.MindmapState = state
+	app.MindmapMode = true
+}
+
+func (app *AppState) buildInteractGroupItems(group string) []MindmapItem {
+	var items []MindmapItem
+
+	var paths []string
+	for path, fi := range app.Index.Files {
+		if _, ok := fi.Interact[group]; ok {
+			paths = append(paths, path)
+		}
+	}
+	sort.Strings(paths)
+
+	for _, path := range paths {
+		fi := app.Index.Files[path]
+		items = append(items, MindmapItem{
+			Depth:  0,
+			IsDir:  false,
+			Path:   path,
+			Name:   path,
+			TagStr: formatFileTags(fi),
+		})
+	}
+
+	return items
+}
+
+func (app *AppState) buildInteractTagItems(group, tag string) []MindmapItem {
+	var items []MindmapItem
+
+	var paths []string
+	for path, fi := range app.Index.Files {
+		if tags, ok := fi.Interact[group]; ok {
+			for _, t := range tags {
+				if t == tag {
+					paths = append(paths, path)
+					break
+				}
+			}
+		}
+	}
+	sort.Strings(paths)
+
+	for _, path := range paths {
+		fi := app.Index.Files[path]
+		items = append(items, MindmapItem{
+			Depth:  0,
+			IsDir:  false,
+			Path:   path,
+			Name:   path,
+			TagStr: formatFileTags(fi),
+		})
+	}
+
+	return items
+}
+
 // buildPackageItems constructs mindmap items from tree node hierarchy
 func (app *AppState) buildPackageItems(node *TreeNode, depth int) []MindmapItem {
 	var items []MindmapItem
@@ -107,11 +335,9 @@ func (app *AppState) buildPackageItems(node *TreeNode, depth int) []MindmapItem 
 
 	for _, child := range children {
 		if child.IsDir {
-			// Recurse into subdirectories
 			subItems := app.buildPackageItems(child, depth+1)
 			items = append(items, subItems...)
 		} else {
-			// File item
 			tagStr := ""
 			if child.FileInfo != nil {
 				tagStr = formatFileTags(child.FileInfo)
@@ -129,103 +355,10 @@ func (app *AppState) buildPackageItems(node *TreeNode, depth int) []MindmapItem 
 	return items
 }
 
-// formatDirTags aggregates tags from immediate children of directory
-func (app *AppState) formatDirTags(node *TreeNode) string {
-	// Aggregate all tags from files in this directory (non-recursive)
-	tagGroups := make(map[string]map[string]bool)
-
-	for _, child := range node.Children {
-		if child.IsDir || child.FileInfo == nil {
-			continue
-		}
-		for group, tags := range child.FileInfo.Focus {
-			if tagGroups[group] == nil {
-				tagGroups[group] = make(map[string]bool)
-			}
-			for _, t := range tags {
-				tagGroups[group][t] = true
-			}
-		}
-	}
-
-	return formatTagGroups(tagGroups)
-}
-
-// formatFileTags formats single file's tags as display string
-func formatFileTags(fi *FileInfo) string {
-	tagGroups := make(map[string]map[string]bool)
-	for group, tags := range fi.Focus {
-		tagGroups[group] = make(map[string]bool)
-		for _, t := range tags {
-			tagGroups[group][t] = true
-		}
-	}
-	return formatTagGroups(tagGroups)
-}
-
-// formatTagGroups formats tag map as #group{tags} string
-func formatTagGroups(tagGroups map[string]map[string]bool) string {
-	if len(tagGroups) == 0 {
-		return ""
-	}
-
-	// Sort groups for consistent output
-	groups := make([]string, 0, len(tagGroups))
-	for g := range tagGroups {
-		groups = append(groups, g)
-	}
-	sort.Strings(groups)
-
-	var parts []string
-	for _, group := range groups {
-		tags := make([]string, 0, len(tagGroups[group]))
-		for t := range tagGroups[group] {
-			tags = append(tags, t)
-		}
-		sort.Strings(tags)
-		parts = append(parts, fmt.Sprintf("#%s{%s}", group, strings.Join(tags, ",")))
-	}
-
-	return strings.Join(parts, " ")
-}
-
-// enterMindmapTag opens mindmap for tag/group at tag cursor
-func (app *AppState) enterMindmapTag() {
-	if len(app.TagFlat) == 0 {
-		app.Message = "no tags to view"
-		return
-	}
-
-	item := app.TagFlat[app.TagCursor]
-
-	state := &MindmapState{
-		Source:      MindmapSourceTag,
-		SourceGroup: item.Group,
-		SourceTag:   item.Tag,
-	}
-
-	if item.IsGroup {
-		state.Title = "#" + item.Group
-		state.Items = app.buildGroupItems(item.Group)
-	} else {
-		state.Title = fmt.Sprintf("#%s{%s}", item.Group, item.Tag)
-		state.Items = app.buildTagItems(item.Group, item.Tag)
-	}
-
-	if len(state.Items) == 0 {
-		app.Message = "no files with this tag"
-		return
-	}
-
-	app.MindmapState = state
-	app.MindmapMode = true
-}
-
-// buildGroupItems creates mindmap items for all files in a group
+// buildGroupItems creates mindmap items for all files in a focus group
 func (app *AppState) buildGroupItems(group string) []MindmapItem {
 	var items []MindmapItem
 
-	// Find all files with any tag in this group
 	var paths []string
 	for path, fi := range app.Index.Files {
 		if _, ok := fi.Focus[group]; ok {
@@ -248,11 +381,10 @@ func (app *AppState) buildGroupItems(group string) []MindmapItem {
 	return items
 }
 
-// buildTagItems creates mindmap items for files with specific tag
+// buildTagItems creates mindmap items for files with specific focus tag
 func (app *AppState) buildTagItems(group, tag string) []MindmapItem {
 	var items []MindmapItem
 
-	// Find all files with this specific tag
 	var paths []string
 	for path, fi := range app.Index.Files {
 		if tags, ok := fi.Focus[group]; ok {

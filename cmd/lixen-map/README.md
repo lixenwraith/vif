@@ -1,389 +1,220 @@
-# focus-catalog
+# lixen-map
 
-Interactive TUI for selecting Go codebase subsets as LLM context. Indexes packages by focus tags, resolves local import dependencies, supports keyword filtering.
+Interactive TUI for selecting Go codebase subsets as LLM context. Indexes packages by lixen annotations (`#focus` and `#interact` tags), resolves local import dependencies, supports keyword filtering.
 
 ## Installation
+
 ```bash
-go build -o focus-catalog .
+go build -o lixen-map .
 ```
 
-**Optional:** `ripgrep` (`rg`) for content search in left pane.
+**Optional:** `ripgrep` (`rg`) for content search.
 
 ## Usage
+
 ```bash
 # Run in project root, writes to './catalog.txt'
-./focus-catalog
+./lixen-map
 
 # Custom output file
-./focus-catalog -o context.txt
+./lixen-map -o context.txt
 ```
 
-## Focus Tags
+## Lixen Annotations
 
 Declare in Go files before `package` statement:
+
 ```go
-// @focus: #core { ecs, lifecycle } #game { drain, collision }
-// @focus: #all
+// @lixen: #focus{arch[ecs,types],game[drain,collision]},#interact{init[cursor],state[gold]}
 package systems
 ```
 
-| Syntax                      | Meaning                      |
-|-----------------------------|------------------------------|
-| `#group { tag1, tag2 }`     | Assign tags to group         |
-| `#all`                      | Include file in every output |
-| Multiple `// @focus:` lines | Accumulated                  |
+| Syntax | Meaning |
+|--------|---------|
+| `#focus{group[tag1,tag2]}` | Classification tags (what the file IS) |
+| `#interact{group[tag1,tag2]}` | Relationship tags (what the file USES/AFFECTS) |
+| `#focus{all[*]}` | Include file in every output |
+| Multiple `// @lixen:` lines | Accumulated |
+
+Whitespace inside annotation content is ignored.
+
+## Interface Layout
+
+Three-pane split view:
+
+| Left Pane | Center Pane | Right Pane |
+|-----------|-------------|------------|
+| Packages/Files tree | Focus Groups/Tags | Interact Groups/Tags |
+
+Minimum terminal size: 120x24
 
 ## Key Bindings
 
 ### Navigation
-| Key             | Action             |
-|-----------------|--------------------|
-| `j` / `↓`       | Move cursor down   |
-| `k` / `↑`       | Move cursor up     |
-| `PgUp` / `PgDn` | Page up/down       |
-| `Home` / `0`    | Jump to first item |
-| `End` / `$`     | Jump to last item  |
-| `Tab`           | Switch pane focus  |
 
-### Tree Operations (Left Pane)
+| Key | Action |
+|-----|--------|
+| `j` / `↓` | Move cursor down |
+| `k` / `↑` | Move cursor up |
+| `h` / `←` | Collapse directory/group |
+| `l` / `→` | Expand directory/group |
+| `PgUp` / `PgDn` | Page up/down |
+| `0` / `Home` | Jump to first item |
+| `$` / `End` | Jump to last item |
+| `H` | Collapse all directories/groups |
+| `L` | Expand all directories/groups |
+| `Tab` | Cycle pane focus (Left → Center → Right) |
 
-| Key       | Action                   |
-|-----------|--------------------------|
-| `h` / `←` | Collapse directory       |
-| `l` / `→` | Expand directory         |
-| `H`       | Collapse all directories |
-| `L`       | Expand all directories   |
+### Selection
 
-### Tag Groups (Right Pane)
+| Key | Action |
+|-----|--------|
+| `Space` | Toggle selection (file, directory, tag, or group) |
+| `a` | Select all visible items in current pane |
+| `c` | Clear all selections |
+| `F` | Select all filtered files (transfer filter to selection) |
 
-| Key       | Action                 |
-|-----------|------------------------|
-| `h` / `←` | Collapse current group |
-| `l` / `→` | Expand current group   |
-| `H`       | Collapse all groups    |
-| `L`       | Expand all groups      |
+### Filtering
+
+Two-key sequences for targeted filtering:
+
+| Sequence | Action |
+|----------|--------|
+| `fg` | Filter by focus groups (enter query) |
+| `ft` | Filter by focus tags (enter query) |
+| `ig` | Filter by interact groups (enter query) |
+| `it` | Filter by interact tags (enter query) |
+| `/` | Filter by content (ripgrep search) |
+| `m` | Cycle filter mode (OR → AND → NOT → XOR) |
+| `Esc` | Clear active filter |
+
+Filtering highlights matching items without changing selection. Use filtering to preview matches before selecting.
+
+### Filter Modes
+
+| Mode | Behavior |
+|------|----------|
+| OR | Union - adds to existing filter |
+| AND | Intersection - narrows existing filter |
+| NOT | Subtraction - removes from existing filter |
+| XOR | Symmetric difference - toggles membership |
 
 ### Views
 
-| Key     | Action                 |
-|---------|------------------------|
-| `Enter` | Open mindmap view      |
-| `p`     | Preview selected files |
-| `Esc`   | Clear active filters   |
+| Key | Action |
+|-----|--------|
+| `Enter` | Open mindmap view (from any pane) |
+| `p` | Preview output files |
+
+### Dependencies & Output
+
+| Key | Action |
+|-----|--------|
+| `d` | Toggle dependency expansion |
+| `+`/`-` | Adjust expansion depth (1-5) |
+| `Ctrl+S` | Write output file |
+| `Ctrl+Q` | Quit |
 
 ### Editing
 
-| Key | Action                                      |
-|-----|---------------------------------------------|
-| `e` | Edit tags for current file (left pane only) |
-| `r` | Re-index entire tree                        |
+| Key | Action |
+|-----|--------|
+| `e` | Edit tags for file at cursor (left pane only) |
+| `r` | Re-index entire tree |
 
-### Selection
-| Key     | Action                                            |
-|---------|---------------------------------------------------|
-| `Space` | Toggle selection (file, directory, tag, or group) |
-| `a`     | Select all visible items (works in both panes)    |
-| `c`     | Clear all selections and filters                  |
-
-### Filtering
-| Key   | Action                                                            |
-|-------|-------------------------------------------------------------------|
-| `f`   | Toggle filter at cursor (add if not filtered, remove if filtered) |
-| `F`   | Transfer filtered files to selection                              |
-| `/`   | Search content (ripgrep)                                          |
-| `t`   | Search tags (prefix match)                                        |
-| `g`   | Search groups (prefix match)                                      |
-| `m`   | Cycle filter mode (OR → AND → NOT → XOR)                          |
-| `Esc` | Clear active filters                                              |
-
-### Dependencies & Output
-| Key      | Action                       |
-|----------|------------------------------|
-| `d`      | Toggle dependency expansion  |
-| `+`/`-`  | Adjust expansion depth (1-5) |
-| `p`      | Preview output files         |
-| `Ctrl+S` | Write output file            |
-| `Ctrl+Q` | Quit application             |
-
-## Filtering
-
-Filtering highlights matching items without changing selection. Use filtering to preview which files match before selecting.
-
-### Apply and Toggle Filter with `f`
-
-Press `f` on any item to toggle its filter state:
-- If item is NOT highlighted → adds to filter
-- If item IS highlighted → removes from filter
-- If removal empties filter → filter cleared automatically
-
-**Left Pane:**
-- On file: highlights that single file and its associated tags in right pane
-- On directory: highlights all files in directory and their associated tags
-
-**Right Pane:**
-- On tag: highlights all files with that tag and the tag itself
-- On group: highlights all files with any tag in that group
-
-### Search Filters
-
-Three search modes available from any pane:
-
-| Key | Mode    | Behavior                                          |
-|-----|---------|---------------------------------------------------|
-| `/` | Content | Ripgrep search on filenames, paths, file contents |
-| `t` | Tags    | Prefix match on tag names (case-insensitive)      |
-| `g` | Groups  | Prefix match on group names (case-insensitive)    |
-
-**Content search (`/`):**
-- Uses ripgrep when available, falls back to filename-only search
-- Example: `/cache` finds files containing "cache" in name or content
-
-**Tag search (`t`):**
-- Matches tags starting with query, unions multiple matches
-- Example: `t` then `ecs` finds files with tags `ecs`, `ecsystem`, etc.
-
-**Group search (`g`):**
-- Matches groups starting with query, unions multiple matches
-- Example: `g` then `co` finds files in groups `core`, `collision`, etc.
-
-### Filter Chaining
-
-Multiple filters can be applied sequentially. The filter mode determines how filters combine:
-
-**OR Mode (default):** New filter results are added to existing (union)
-```
-Filter A → Filter B (OR) → Result: A ∪ B
-```
-
-**AND Mode:** New filter results intersect with existing
-```
-Filter A → Filter B (AND) → Result: A ∩ B
-```
-
-Toggle mode with `m` key. Mode applies to the *next* filter operation.
-
-**Example workflow:**
-1. Press `f` on `#core` group → highlights all core files
-2. Press `m` to switch to AND mode
-3. Press `f` on `#game` group → highlights files with BOTH core AND game tags
-
-Press `Esc` at any time to clear all filters.
-
-### Filter Visual Indicators
-
-- Filtered items: normal brightness
-- Non-filtered items: dimmed
-- Status bar shows: `Filter: N files [OR/AND/NOT/XOR]`
-
-### Transfer Filter to Selection with `F`
-
-Press `F` (Shift+f) to select all currently filtered files. The filter remains active after transfer, allowing continued refinement.
-
-## Filter Modes
-
-Cycle with `m` key: OR → AND → NOT → XOR → OR
-
-### OR Mode (default)
-Each filter adds to the highlight set (union). Use for exploring related files across different criteria.
-
-### AND Mode
-Each filter narrows the highlight set (intersection). Use for finding files matching multiple criteria.
-
-### NOT Mode
-Each filter removes from the highlight set (subtraction). Use for excluding specific files from an existing filter.
-
-**Example:** Filter `#engine` group, switch to NOT mode, search for "test" → removes test files from engine filter.
-
-### XOR Mode
-Each filter toggles membership (symmetric difference). Items present in both sets are removed; items in only one set remain.
-
-## Selection
-
-Selection determines which files are included in the output. Selection and filtering are independent—you can select items regardless of filter state.
-
-### Selection with `Space`
-
-**Left Pane:**
-- On file: toggles that file
-- On directory: toggles all files recursively (select all if any unselected, deselect all if all selected)
-
-**Right Pane:**
-- On tag: toggles all files with that tag
-- On group: toggles all files with any tag in that group
-
-### Selection Indicators
+## Selection Indicators
 
 **Left Pane (files):**
 
-| Symbol | Meaning                                    |
-|--------|--------------------------------------------|
-| `[x]`  | Directly selected                          |
-| `[+]`  | Included via dependency expansion (purple) |
-| `[ ]`  | Not selected                               |
+| Symbol | Meaning |
+|--------|---------|
+| `[x]` | Directly selected |
+| `[+]` | Included via dependency expansion |
+| `[ ]` | Not selected |
 
-**Right Pane (tags/groups):**
+**Center/Right Panes (tags/groups):**
 
-| Symbol | Meaning                                        |
-|--------|------------------------------------------------|
-| `[x]`  | All files with this tag/group selected (green) |
-| `[o]`  | Some files with this tag/group selected (blue) |
-| `[ ]`  | No files with this tag/group selected          |
+| Symbol | Meaning |
+|--------|---------|
+| `[x]` | All files with this tag/group selected |
+| `[o]` | Some files with this tag/group selected |
+| `[ ]` | No files with this tag/group selected |
 
-### Bulk Selection
+## Mindmap View
 
-- `a` in left pane: select all visible files
-- `a` in right pane: select all files matching current filter (or all tagged files if no filter)
-- `c`: clear all selections and filters
+Press `Enter` to open contextual mindmap from any pane:
 
-## Filter Modes
+- **From Left Pane:** Hierarchical view of package/directory structure
+- **From Center Pane:** Files containing the focus tag/group
+- **From Right Pane:** Files containing the interact tag/group
 
-Toggle with `m` key.
+Files display both `#focus{...}` and `#interact{...}` annotations.
 
-### OR Mode (default)
-Each filter adds to the highlight set. Use for exploring related files across different criteria.
+**Mindmap Controls:**
 
-### AND Mode
-Each filter narrows the highlight set. Use for finding files matching multiple criteria.
+| Key | Action |
+|-----|--------|
+| `j`/`k` | Navigate |
+| `Space` | Toggle selection |
+| `a`/`c` | Select all / Clear visible |
+| `0`/`$` | Jump to start/end |
+| `f` | Filter at cursor |
+| `F` | Select filtered files |
+| `/`/`t`/`g` | Search content/tags/groups |
+| `Enter` | Open dive view |
+| `q` | Return to main view |
 
-## Features
+## Dive View
 
-### Split-Pane Interface
-- **Left pane:** Directory tree with files, shows selection counts `[n/m]`
-- **Right pane:** Tag groups and tags with file counts and selection state
+Press `Enter` on a file in mindmap to see relationships:
 
-### Visual Indicators
+- **DEPENDS ON:** Packages this file imports
+- **DEPENDED BY:** Packages importing this file's package
+- **Focus Box:** File details with tag counts
+- **FOCUS LINKS:** Files sharing focus tags
+- **INTERACT LINKS:** Files sharing interact tags
 
-**Left pane:** Files show group summary after filename (e.g., `drain.go  core(2) game(1)`)
+Press `Esc` or `q` to return.
 
-**Right pane:** Groups and tags show directory hints after count (e.g., `#core (12)  systems engine`)
+## Tag Editor
 
-**Special files:** Orange color indicates `#all` tag (always included in output)
+Press `e` on a file to edit its `@lixen:` annotations inline:
 
-### Dependency Expansion
-Selecting files auto-includes their package's local imports (transitive, configurable depth 1-5). Dependency-included files show `[+]` in purple.
-
-### Cross-Pane Synchronization
-- Filtering in left pane highlights corresponding tags in right pane
-- Filtering in right pane highlights corresponding files in left pane
-- Selection state is always synchronized between panes
+- Pre-fills current content
+- `Enter` to save, `Esc` to cancel
+- Atomic writes (temp file + rename)
+- Auto re-indexes after save
 
 ## Output Format
+
 ```
 ./systems/drain.go
 ./systems/spawn.go
 ./events/types.go
 ```
 
-Files with `#all` tag always included. Sorted alphabetically. Compatible with `combine.sh -f`.
-
-## Mindmap View
-
-Press `Enter` to open a contextual mindmap visualization:
-
-**From Left Pane (on directory/file):**
-- Shows hierarchical view of package structure
-- Displays all files with their tags
-- Nested packages shown with proper indentation
-
-**From Right Pane (on tag/group):**
-- Shows all files containing that tag or group
-- Files listed with full paths and all their tags
-
-**Mindmap Controls:**
-
-| Key                     | Action                               |
-|-------------------------|--------------------------------------|
-| `j`/`k` or arrows       | Navigate                             |
-| `Space`                 | Toggle selection                     |
-| `a`                     | Select all visible                   |
-| `c`                     | Clear visible selections             |
-| `0`/`$` or `Home`/`End` | Jump to start/end                    |
-| `f`                     | Filter at cursor                     |
-| `F`                     | Transfer filtered files to selection |
-| `/`                     | Search content                       |
-| `t`                     | Search tags                          |
-| `g`                     | Search groups                        |
-| `Enter`                 | Open dive view for selected file     |
-| `Esc`                   | Clear filter, or exit if no filter   |
-| `q`                     | Return to main view                  |
-
-Selections made in mindmap sync bidirectionally with the main view.
-
-Filter state also persists between mindmap and main view. Filters applied in mindmap remain active when returning to the two-pane view.
-
-## Dive View
-
-Press `Enter` on any file in mindmap view to open a detailed relationship visualization:
-
-**Layout (top to bottom):**
-- **DEPENDS ON**: Packages this file imports (local only)
-- **DEPENDED BY**: Packages that import this file's package
-- **Focus Box**: The selected file with package info and tags
-- **Tag Sections**: Files sharing the same tags, grouped by tag
-
-**Visual Elements:**
-
-| Element | Meaning                                      |
-|---------|----------------------------------------------|
-| `╔═══╗` | Double-line box: outer frame and focus file  |
-| `┌───┐` | Single-line box: dependency and tag sections |
-| `★`     | Focus file indicator                         |
-| `▼`     | Connection arrows showing relationships      |
-| `(+N)`  | Truncated items count                        |
-
-**Dive Controls:**
-
-| Key          | Action                 |
-|--------------|------------------------|
-| `Esc` or `q` | Return to mindmap view |
-
-**Responsive Behavior:**
-- Tag boxes: 2-5 depending on terminal width
-- File lists: expand with available height
-- Package columns: multi-column layout when space permits
-
-
-## Tag Editor
-
-Press `e` on any file in the left pane to edit its `@focus` tags inline:
-
-- Pre-fills with current tag content (empty if no existing tags)
-- Type to edit, `Backspace` to delete
-- `Enter` to save changes
-- `Esc` to cancel
-
-The editor:
-- Modifies only the first `// @focus:` line before `package` statement
-- Inserts new focus line at file start if none exists
-- Preserves build tags (`//go:build`, `// +build`)
-- Uses atomic writes (temp file + rename) for safety
-- Automatically re-indexes after saving
+Files with `#focus{all[*]}` always included. Sorted alphabetically.
 
 ## Workflow Examples
 
-### Find all files related to a component
-1. Navigate to component file in left pane (e.g., `components/drain.go`)
-2. Press `f` to filter
-3. Tab to right pane to see associated tags highlighted
-4. Press `a` to select all filtered files
-5. Press `Enter` to output
+### Find files by tag intersection
 
-### Find files matching multiple tags
-1. Press `f` on first tag in right pane
+1. Press `ft`, type tag prefix, Enter
 2. Press `m` to switch to AND mode
-3. Press `f` on second tag
-4. Result shows only files with both tags
-5. Press `Space` to select, or `a` to select all
+3. Press `ft`, type second tag, Enter
+4. Press `F` to select all filtered
+5. `Ctrl+S` to output
 
-### Explore a subsystem
-1. Press `f` on a package directory
-2. Tab to right pane to see which tags are used
-3. Navigate tags to understand the domain
-4. Select relevant tags with `Space`
-5. Press `Esc` to clear filter while keeping selection
-6. Continue selecting from other areas
+### Explore package relationships
 
-### Quick output of tagged files
-1. Tab to right pane
-2. Press `Space` on desired group to select all files in group
-3. Press `Enter` to output
+1. Navigate to package in left pane
+2. Press `Enter` for mindmap view
+3. Select file, press `Enter` for dive view
+4. Review dependencies and tag relationships
+
+### Filter by interact, select by focus
+
+1. Press `it`, type interaction tag, Enter
+2. Tab to center pane to see highlighted focus tags
+3. Use `Space` to select specific focus groups
+4. `Ctrl+S` to output

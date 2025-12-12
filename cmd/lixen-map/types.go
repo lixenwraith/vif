@@ -40,13 +40,15 @@ type AppState struct {
 	RgAvailable bool // ripgrep installed
 
 	// UI state
-	InputMode     bool       // true when typing keyword
-	InputBuffer   string     // keyword input buffer
-	SearchType    SearchType // active search mode
-	Message       string     // status message
-	PreviewMode   bool       // showing file preview
-	PreviewFiles  []string   // files to preview
-	PreviewScroll int        // preview scroll offset
+	InputMode      bool           // true when typing keyword
+	InputBuffer    string         // keyword input buffer
+	SearchType     SearchType     // tag vs group search
+	SearchCategory SearchCategory // focus vs interact
+	CommandPending rune           // first key of two-key sequence, 0 if none
+	Message        string         // status message
+	PreviewMode    bool           // showing file preview
+	PreviewFiles   []string       // files to preview
+	PreviewScroll  int            // preview scroll offset
 
 	// Mindmap state
 	MindmapMode  bool
@@ -185,6 +187,14 @@ const (
 	SearchTypeContent SearchType = iota
 	SearchTypeTags
 	SearchTypeGroups
+)
+
+// SearchCategory indicates which tag category to search
+type SearchCategory uint8
+
+const (
+	SearchCategoryFocus SearchCategory = iota
+	SearchCategoryInteract
 )
 
 // FilterState holds visual filter highlight state

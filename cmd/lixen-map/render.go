@@ -497,15 +497,22 @@ func (app *AppState) renderStatus(cells []terminal.Cell, w, y int) {
 	}
 
 	if app.InputMode {
+		categoryName := "focus"
+		if app.SearchCategory == SearchCategoryInteract {
+			categoryName = "interact"
+		}
 		typeHint := "content"
 		switch app.SearchType {
 		case SearchTypeTags:
-			typeHint = "tags"
+			typeHint = categoryName + " tags"
 		case SearchTypeGroups:
-			typeHint = "groups"
+			typeHint = categoryName + " groups"
 		}
-		inputStr := fmt.Sprintf("Search [%s]: %s_", typeHint, app.InputBuffer)
+		inputStr := fmt.Sprintf("Filter [%s]: %s_", typeHint, app.InputBuffer)
 		drawText(cells, w, 1, y, inputStr, colorHeaderFg, colorInputBg, terminal.AttrNone)
+	} else if app.CommandPending != 0 {
+		pendingStr := fmt.Sprintf("-%c-", app.CommandPending)
+		drawText(cells, w, 1, y, pendingStr, colorHeaderFg, colorInputBg, terminal.AttrNone)
 	} else if app.Filter.HasActiveFilter() {
 		modeStr := "OR"
 		switch app.Filter.Mode {
@@ -531,7 +538,7 @@ func (app *AppState) renderStatus(cells []terminal.Cell, w, y int) {
 
 // renderHelp draws the keybinding help bar
 func (app *AppState) renderHelp(cells []terminal.Cell, w, y int) {
-	help := "Tab:pane  j/k:nav 0/$:jump Space:sel  f:filter F:sel-filter /:search  t:tag  g:group  m:mode  d:deps  Enter:view  ^S:output  Esc:clear  q:quit"
+	help := "Tab:pane j/k:nav Space:sel fg/ft:focus-filter ig/it:interact-filter F:sel-filter m:mode d:deps Enter:view ^S:out Esc:clear"
 	if len(help) > w-2 {
 		help = help[:w-5] + "..."
 	}

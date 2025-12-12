@@ -235,14 +235,24 @@ func (app *AppState) executeSearch(query string) {
 		paths = searchContentRg(app.Index, query, app.RgAvailable)
 		label = "content"
 	case SearchTypeTags:
-		paths = searchTagsPrefix(app.Index, query)
-		label = "tags"
+		if app.SearchCategory == SearchCategoryInteract {
+			paths = searchInteractTagsPrefix(app.Index, query)
+			label = "interact tags"
+		} else {
+			paths = searchTagsPrefix(app.Index, query)
+			label = "focus tags"
+		}
 	case SearchTypeGroups:
-		paths = searchGroupsPrefix(app.Index, query)
-		label = "groups"
+		if app.SearchCategory == SearchCategoryInteract {
+			paths = searchInteractGroupsPrefix(app.Index, query)
+			label = "interact groups"
+		} else {
+			paths = searchGroupsPrefix(app.Index, query)
+			label = "focus groups"
+		}
 	}
 
-	app.Message = fmt.Sprintf("search %s: %q (%d files)", label, query, len(paths))
+	app.Message = fmt.Sprintf("filter %s: %q (%d files)", label, query, len(paths))
 	app.ApplyFilter(paths)
 	app.RefreshFocusFlat()
 	app.RefreshInteractFlat()
@@ -517,4 +527,44 @@ func (app *AppState) applyInteractPaneFilter() {
 
 	app.RefreshFocusFlat()
 	app.RefreshInteractFlat()
+}
+
+// searchInteractTagsPrefix finds files with interact tags matching query prefix
+func searchInteractTagsPrefix(index *Index, query string) []string {
+	query = strings.ToLower(query)
+	var matches []string
+	seen := make(map[string]bool)
+
+	for path, fi := range index.Files {
+		for _, tags := range fi.Interact {
+			for _, tag := range tags {
+				if strings.HasPrefix(strings.ToLower(tag), query) {
+					if !seen[path] {
+						matches = append(matches, path)
+						seen[path] = true
+					}
+				}
+			}
+		}
+	}
+	return matches
+}
+
+// searchInteractGroupsPrefix finds files with interact groups matching query prefix
+func searchInteractGroupsPrefix(index *Index, query string) []string {
+	query = strings.ToLower(query)
+	var matches []string
+	seen := make(map[string]bool)
+
+	for path, fi := range index.Files {
+		for group := range fi.Interact {
+			if strings.HasPrefix(strings.ToLower(group), query) {
+				if !seen[path] {
+					matches = append(matches, path)
+					seen[path] = true
+				}
+			}
+		}
+	}
+	return matches
 }

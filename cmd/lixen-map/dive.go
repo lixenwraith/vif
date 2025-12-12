@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
@@ -14,9 +13,10 @@ type DiveState struct {
 	SourcePath string
 	FileInfo   *FileInfo
 
-	DependsOn  []DivePackage
-	DependedBy []DivePackage
-	TagLinks   []DiveTagGroup
+	DependsOn     []DivePackage
+	DependedBy    []DivePackage
+	FocusLinks    []DiveTagGroup
+	InteractLinks []DiveTagGroup
 }
 
 // DivePackage represents a package directory with its constituent files
@@ -73,6 +73,153 @@ func (app *AppState) HandleDiveEvent(ev terminal.Event) {
 	}
 }
 
+// RenderDive draws the dive view layout with dependency and tag boxes
+func (app *AppState) RenderDive(cells []terminal.Cell, w, h int) {
+	state := app.DiveState
+	if state == nil {
+		return
+	}
+
+	// Clear with background
+	for i := range cells {
+		cells[i] = terminal.Cell{Rune: ' ', Fg: colorDefaultFg, Bg: colorDefaultBg}
+	}
+
+	// Draw outer double-line frame
+	drawDoubleFrame(cells, w, 0, 0, w, h)
+
+	// Header line
+	title := fmt.Sprintf(" DIVE: %s ", truncateWithEllipsis(state.SourcePath, w-30))
+	drawText(cells, w, 2, 0, title, colorHeaderFg, colorDefaultBg, terminal.AttrBold)
+	hint := "[Esc:back]"
+	drawText(cells, w, w-len(hint)-2, 0, hint, colorHelpFg, colorDefaultBg, terminal.AttrNone)
+
+	// Draw separator after header
+	cells[1*w] = terminal.Cell{Rune: dboxLT, Fg: colorPaneBorder, Bg: colorDefaultBg}
+	for x := 1; x < w-1; x++ {
+		cells[1*w+x] = terminal.Cell{Rune: dboxH, Fg: colorPaneBorder, Bg: colorDefaultBg}
+	}
+	cells[1*w+w-1] = terminal.Cell{Rune: dboxRT, Fg: colorPaneBorder, Bg: colorDefaultBg}
+
+	// Calculate layout
+	contentTop := 2
+	contentBottom := h - 1
+	contentH := contentBottom - contentTop
+
+	// Allocate sections
+	focusBoxH := 4
+	totalLinks := len(state.FocusLinks) + len(state.InteractLinks)
+	depsH, tagsH := allocateSections(contentH, focusBoxH, len(state.DependsOn)+len(state.DependedBy), totalLinks)
+
+	y := contentTop
+
+	// Render dependencies section
+	if depsH > 0 && (len(state.DependsOn) > 0 || len(state.DependedBy) > 0) {
+		y = renderDepsSection(cells, w, y, depsH, state.DependsOn, state.DependedBy)
+	}
+
+	// Connector to focus box
+	if y < contentBottom-focusBoxH-tagsH {
+		midX := w / 2
+		cells[y*w+midX] = terminal.Cell{Rune: connV, Fg: colorStatusFg, Bg: colorDefaultBg}
+		y++
+		cells[y*w+midX] = terminal.Cell{Rune: arrowDown, Fg: colorStatusFg, Bg: colorDefaultBg}
+		y++
+	}
+
+	// Render focus box (file info)
+	y = renderFocusBox(cells, w, y, state)
+
+	// Render tag links sections
+	if tagsH > 0 && totalLinks > 0 {
+		midX := w / 2
+		// Initial connector from Focus Box
+		if y < contentBottom {
+			cells[y*w+midX] = terminal.Cell{Rune: connV, Fg: colorStatusFg, Bg: colorDefaultBg}
+			y++
+		}
+
+		// --- DYNAMIC HEIGHT CALCULATION START ---
+		// We calculate exactly how much space is left and subtract the overhead of arrows/lines
+		// to prevent drawing off-screen.
+
+		remainingSpace := contentBottom - y
+
+		// 1. Calculate overhead (lines consumed by arrows/branches)
+		focusOverhead := 0
+		if len(state.FocusLinks) > 0 {
+			if min(len(state.FocusLinks), calcMaxTagBoxes(w)) > 1 {
+				focusOverhead = 2 // Branching connector takes 2 lines
+			} else {
+				focusOverhead = 1 // Simple arrow takes 1 line
+			}
+		}
+
+		interactOverhead := 0
+		if len(state.InteractLinks) > 0 {
+			if len(state.FocusLinks) > 0 {
+				interactOverhead += 1 // Vertical separator line
+			}
+			if min(len(state.InteractLinks), calcMaxTagBoxes(w)) > 1 {
+				interactOverhead += 2
+			} else {
+				interactOverhead += 1
+			}
+		}
+
+		// 2. Determine actual box height available
+		availableBoxSpace := remainingSpace - focusOverhead - interactOverhead
+		if availableBoxSpace < 0 {
+			availableBoxSpace = 0
+		}
+
+		focusLinksH := 0
+		interactLinksH := 0
+
+		if len(state.FocusLinks) > 0 && len(state.InteractLinks) > 0 {
+			focusLinksH = availableBoxSpace / 2
+			interactLinksH = availableBoxSpace - focusLinksH
+		} else if len(state.FocusLinks) > 0 {
+			focusLinksH = availableBoxSpace
+		} else {
+			interactLinksH = availableBoxSpace
+		}
+		// --- DYNAMIC HEIGHT CALCULATION END ---
+
+		// Render Focus links
+		if focusLinksH > 0 && len(state.FocusLinks) > 0 {
+			boxCount := min(len(state.FocusLinks), calcMaxTagBoxes(w))
+			if boxCount > 1 {
+				y = renderTagConnector(cells, w, y, boxCount)
+			} else {
+				cells[y*w+midX] = terminal.Cell{Rune: arrowDown, Fg: colorStatusFg, Bg: colorDefaultBg}
+				y++
+			}
+			y = renderTagLinkSection(cells, w, y, focusLinksH, "FOCUS", state.FocusLinks, colorGroupFg)
+		}
+
+		// Render Interact links
+		if interactLinksH > 0 && len(state.InteractLinks) > 0 {
+			// Vertical connector from previous section
+			if len(state.FocusLinks) > 0 {
+				if y < contentBottom {
+					cells[y*w+midX] = terminal.Cell{Rune: connV, Fg: colorStatusFg, Bg: colorDefaultBg}
+					y++
+				}
+			}
+
+			boxCount := min(len(state.InteractLinks), calcMaxTagBoxes(w))
+			if boxCount > 1 {
+				y = renderTagConnector(cells, w, y, boxCount)
+			} else {
+				cells[y*w+midX] = terminal.Cell{Rune: arrowDown, Fg: colorStatusFg, Bg: colorDefaultBg}
+				y++
+			}
+			y = renderTagLinkSection(cells, w, y, interactLinksH, "INTERACT", state.InteractLinks, colorExpandedFg)
+		}
+	}
+}
+
 // computeDiveData gathers dependency and tag relationship data for a file
 func computeDiveData(app *AppState, path string) *DiveState {
 	fi := app.Index.Files[path]
@@ -98,8 +245,9 @@ func computeDiveData(app *AppState, path string) *DiveState {
 	// Compute DependedBy - packages that import this file's package
 	state.DependedBy = computeDependedBy(app, fileDir)
 
-	// Compute TagLinks - files sharing tags
-	state.TagLinks = computeTagLinks(app, fi, path)
+	// Compute tag links for both Focus and Interact
+	state.FocusLinks = computeTagLinks(app, fi.Focus, path)
+	state.InteractLinks = computeTagLinks(app, fi.Interact, path)
 
 	return state
 }
@@ -156,18 +304,18 @@ func computeDependedBy(app *AppState, fileDir string) []DivePackage {
 }
 
 // computeTagLinks finds files sharing tags with the source file
-func computeTagLinks(app *AppState, fi *FileInfo, selfPath string) []DiveTagGroup {
+func computeTagLinks(app *AppState, sourceTagMap map[string][]string, selfPath string) []DiveTagGroup {
 	var links []DiveTagGroup
 
 	// Get sorted groups
-	groups := make([]string, 0, len(fi.Focus))
-	for g := range fi.Focus {
+	groups := make([]string, 0, len(sourceTagMap))
+	for g := range sourceTagMap {
 		groups = append(groups, g)
 	}
 	sort.Strings(groups)
 
 	for _, group := range groups {
-		tags := fi.Focus[group]
+		tags := sourceTagMap[group]
 		sortedTags := make([]string, len(tags))
 		copy(sortedTags, tags)
 		sort.Strings(sortedTags)
@@ -178,17 +326,27 @@ func computeTagLinks(app *AppState, fi *FileInfo, selfPath string) []DiveTagGrou
 				Tag:   tag,
 			}
 
-			// Find all files with this tag
+			// Find all files with this tag (in same tag category)
 			var files []string
 			for path, fileInfo := range app.Index.Files {
 				if path == selfPath {
 					continue
 				}
-				if fileTags, ok := fileInfo.Focus[group]; ok {
-					for _, t := range fileTags {
-						if t == tag {
-							files = append(files, path)
-							break
+				// Check if file has this group in same category
+				var targetMap map[string][]string
+				if _, inFocus := fileInfo.Focus[group]; inFocus {
+					targetMap = fileInfo.Focus
+				} else if _, inInteract := fileInfo.Interact[group]; inInteract {
+					targetMap = fileInfo.Interact
+				}
+
+				if targetMap != nil {
+					if fileTags, ok := targetMap[group]; ok {
+						for _, t := range fileTags {
+							if t == tag {
+								files = append(files, path)
+								break
+							}
 						}
 					}
 				}
@@ -202,84 +360,6 @@ func computeTagLinks(app *AppState, fi *FileInfo, selfPath string) []DiveTagGrou
 	}
 
 	return links
-}
-
-// RenderDive draws the dive view layout with dependency and tag boxes
-func (app *AppState) RenderDive(cells []terminal.Cell, w, h int) {
-	state := app.DiveState
-	if state == nil {
-		return
-	}
-
-	// Clear with background
-	for i := range cells {
-		cells[i] = terminal.Cell{Rune: ' ', Fg: colorDefaultFg, Bg: colorDefaultBg}
-	}
-
-	// Draw outer double-line frame
-	drawDoubleFrame(cells, w, 0, 0, w, h)
-
-	// Header line
-	title := fmt.Sprintf(" DIVE: %s ", truncateWithEllipsis(state.SourcePath, w-30))
-	drawText(cells, w, 2, 0, title, colorHeaderFg, colorDefaultBg, terminal.AttrBold)
-	hint := "[Esc:back]"
-	drawText(cells, w, w-len(hint)-2, 0, hint, colorHelpFg, colorDefaultBg, terminal.AttrNone)
-
-	// Draw separator after header
-	cells[1*w] = terminal.Cell{Rune: dboxLT, Fg: colorPaneBorder, Bg: colorDefaultBg}
-	for x := 1; x < w-1; x++ {
-		cells[1*w+x] = terminal.Cell{Rune: dboxH, Fg: colorPaneBorder, Bg: colorDefaultBg}
-	}
-	cells[1*w+w-1] = terminal.Cell{Rune: dboxRT, Fg: colorPaneBorder, Bg: colorDefaultBg}
-
-	// Calculate layout
-	contentTop := 2
-	contentBottom := h - 1
-	contentH := contentBottom - contentTop
-
-	// Allocate sections based on available height
-	focusBoxH := 4
-	depsH, tagsH := allocateSections(contentH, focusBoxH, len(state.DependsOn)+len(state.DependedBy), len(state.TagLinks))
-
-	y := contentTop
-
-	// Render dependencies section
-	if depsH > 0 && (len(state.DependsOn) > 0 || len(state.DependedBy) > 0) {
-		y = renderDepsSection(cells, w, y, depsH, state.DependsOn, state.DependedBy)
-	}
-
-	// Connector to focus box
-	if y < contentBottom-focusBoxH-tagsH {
-		midX := w / 2
-		cells[y*w+midX] = terminal.Cell{Rune: connV, Fg: colorStatusFg, Bg: colorDefaultBg}
-		y++
-		cells[y*w+midX] = terminal.Cell{Rune: arrowDown, Fg: colorStatusFg, Bg: colorDefaultBg}
-		y++
-	}
-
-	// Render focus box
-	y = renderFocusBox(cells, w, y, state)
-
-	// Connector to tags
-	if tagsH > 0 && len(state.TagLinks) > 0 {
-		midX := w / 2
-		cells[y*w+midX] = terminal.Cell{Rune: connV, Fg: colorStatusFg, Bg: colorDefaultBg}
-		y++
-
-		// Draw split connector
-		tagBoxCount := min(len(state.TagLinks), calcMaxTagBoxes(w))
-		if tagBoxCount > 1 {
-			y = renderTagConnector(cells, w, y, tagBoxCount)
-		} else {
-			cells[y*w+midX] = terminal.Cell{Rune: arrowDown, Fg: colorStatusFg, Bg: colorDefaultBg}
-			y++
-		}
-	}
-
-	// Render tag section
-	if tagsH > 0 && len(state.TagLinks) > 0 {
-		renderTagSection(cells, w, y, tagsH, state.TagLinks)
-	}
 }
 
 // allocateSections distributes vertical space between dependency and tag areas
@@ -476,6 +556,97 @@ func renderPackageList(cells []terminal.Cell, totalW, x, y, availW, availH int, 
 	}
 }
 
+// renderTagSection draws tag group boxes with shared file lists
+func calcMaxTagBoxes(w int) int {
+	if w >= 180 {
+		return 5
+	}
+	if w >= 140 {
+		return 4
+	}
+	if w >= 100 {
+		return 3
+	}
+	return 2
+}
+
+// renderTagLinkSection draws a labeled section of tag link boxes
+func renderTagLinkSection(cells []terminal.Cell, w, y, maxH int, label string, tagLinks []DiveTagGroup, labelColor terminal.RGB) int {
+	if len(tagLinks) == 0 || maxH < 3 {
+		return y
+	}
+
+	// Draw section label
+	labelStr := fmt.Sprintf(" %s LINKS ", label)
+	drawText(cells, w, 2, y, labelStr, labelColor, colorDefaultBg, terminal.AttrBold)
+	y++
+
+	// Calculate box layout
+	boxHeight := maxH - 1
+	if boxHeight < 3 {
+		boxHeight = 3
+	}
+
+	innerW := w - 4
+	numBoxes := min(len(tagLinks), calcMaxTagBoxes(w))
+	boxWidth := (innerW - numBoxes + 1) / numBoxes
+
+	for i := 0; i < numBoxes; i++ {
+		tg := tagLinks[i]
+		boxX := 2 + i*(boxWidth+1)
+
+		drawSingleBox(cells, w, boxX, y, boxWidth, boxHeight)
+
+		// Header
+		hdr := fmt.Sprintf(" #%s{%s} (%d) ", tg.Group, tg.Tag, tg.Count)
+		if len(hdr) > boxWidth-2 {
+			hdr = fmt.Sprintf(" %s (%d) ", truncateWithEllipsis(tg.Tag, 8), tg.Count)
+		}
+		drawText(cells, w, boxX+1, y, hdr, colorGroupFg, colorDefaultBg, terminal.AttrBold)
+
+		// Files
+		contentY := y + 1
+		contentH := boxHeight - 2
+		if contentH < 1 {
+			contentH = 1
+		}
+
+		totalFiles := len(tg.Files)
+		hasMore := totalFiles > contentH
+
+		filesToShow := contentH
+		if hasMore && contentH > 1 {
+			filesToShow = contentH - 1
+		}
+
+		filesShown := 0
+		for j := 0; j < filesToShow && j < totalFiles; j++ {
+			fileStr := truncateWithEllipsis(tg.Files[j], boxWidth-3)
+			drawText(cells, w, boxX+1, contentY+filesShown, fileStr, colorDefaultFg, colorDefaultBg, terminal.AttrNone)
+			filesShown++
+		}
+
+		if hasMore {
+			remaining := totalFiles - filesShown
+			moreStr := fmt.Sprintf("(+%d more)", remaining)
+			drawText(cells, w, boxX+1, contentY+filesShown, moreStr, colorStatusFg, colorDefaultBg, terminal.AttrDim)
+		}
+
+		if totalFiles == 0 {
+			drawText(cells, w, boxX+1, contentY, "(no other files)", colorStatusFg, colorDefaultBg, terminal.AttrDim)
+		}
+	}
+
+	// Show remaining tag groups count
+	if len(tagLinks) > numBoxes {
+		remaining := len(tagLinks) - numBoxes
+		moreStr := fmt.Sprintf("(+%d more)", remaining)
+		drawText(cells, w, w-len(moreStr)-3, y+boxHeight-1, moreStr, colorStatusFg, colorDefaultBg, terminal.AttrDim)
+	}
+
+	return y + boxHeight
+}
+
 // renderFocusBox draws the central box showing the focused file details
 func renderFocusBox(cells []terminal.Cell, w, y int, state *DiveState) int {
 	boxWidth := w - 8
@@ -494,12 +665,16 @@ func renderFocusBox(cells []terminal.Cell, w, y int, state *DiveState) int {
 	pkgStr := fmt.Sprintf("Package: %s", state.FileInfo.Package)
 	drawText(cells, w, boxX+2, y+1, pkgStr, colorDirFg, colorDefaultBg, terminal.AttrNone)
 
-	// Tags
-	tagStr := formatFileTagsCompact(state.FileInfo)
-	maxTagLen := boxWidth - len(pkgStr) - 6
-	if len(tagStr) > maxTagLen {
-		tagStr = truncateWithEllipsis(tagStr, maxTagLen)
+	// Tags summary (both focus and interact counts)
+	focusCount := 0
+	for _, tags := range state.FileInfo.Focus {
+		focusCount += len(tags)
 	}
+	interactCount := 0
+	for _, tags := range state.FileInfo.Interact {
+		interactCount += len(tags)
+	}
+	tagStr := fmt.Sprintf("Focus: %d tags  Interact: %d tags", focusCount, interactCount)
 	drawText(cells, w, boxX+len(pkgStr)+4, y+1, tagStr, colorTagFg, colorDefaultBg, terminal.AttrNone)
 
 	// Imports summary
@@ -507,10 +682,6 @@ func renderFocusBox(cells []terminal.Cell, w, y int, state *DiveState) int {
 	drawText(cells, w, boxX+2, y+2, impStr, colorStatusFg, colorDefaultBg, terminal.AttrNone)
 
 	// Importers count
-	fileDir := filepath.Dir(state.SourcePath)
-	if fileDir == "." {
-		fileDir = state.FileInfo.Package
-	}
 	impByCount := len(state.DependedBy)
 	impByStr := fmt.Sprintf("Imported by: %d packages", impByCount)
 	drawText(cells, w, boxX+len(impStr)+4, y+2, impByStr, colorStatusFg, colorDefaultBg, terminal.AttrNone)
@@ -521,22 +692,29 @@ func renderFocusBox(cells []terminal.Cell, w, y int, state *DiveState) int {
 // renderTagConnector draws branching connector lines to tag boxes
 func renderTagConnector(cells []terminal.Cell, w, y, boxCount int) int {
 	midX := w / 2
+	innerW := w - 4
 
-	// Calculate box positions
-	boxW := (w - 8) / boxCount
+	// Calculate box positions matching renderTagLinkSection logic
+	boxWidth := (innerW - boxCount + 1) / boxCount
 	positions := make([]int, boxCount)
-	startX := 4
+
 	for i := 0; i < boxCount; i++ {
-		positions[i] = startX + i*boxW + boxW/2
+		// Box center calculation must match renderTagLinkSection's boxX
+		boxX := 2 + i*(boxWidth+1)
+		positions[i] = boxX + boxWidth/2
 	}
 
 	// Draw horizontal line with splits
 	leftmost := positions[0]
 	rightmost := positions[boxCount-1]
 
-	// Draw the horizontal line first
 	for x := leftmost; x <= rightmost; x++ {
 		cells[y*w+x] = terminal.Cell{Rune: boxH, Fg: colorStatusFg, Bg: colorDefaultBg}
+	}
+
+	// Ensure center connection from above if not covered by a box position
+	if midX >= leftmost && midX <= rightmost {
+		cells[y*w+midX] = terminal.Cell{Rune: boxBT, Fg: colorStatusFg, Bg: colorDefaultBg}
 	}
 
 	// Draw branch points
@@ -562,131 +740,4 @@ func renderTagConnector(cells []terminal.Cell, w, y, boxCount int) int {
 	y++
 
 	return y
-}
-
-// renderTagSection draws tag group boxes with shared file lists
-func renderTagSection(cells []terminal.Cell, w, y, maxH int, tagLinks []DiveTagGroup) {
-	if len(tagLinks) == 0 {
-		return
-	}
-
-	// Reserve 1 line for outer frame
-	boxHeight := maxH - 1
-	if boxHeight < 3 {
-		boxHeight = 3
-	}
-
-	innerW := w - 4
-	numBoxes := min(len(tagLinks), calcMaxTagBoxes(w))
-	boxWidth := (innerW - numBoxes + 1) / numBoxes
-
-	for i := 0; i < numBoxes; i++ {
-		tg := tagLinks[i]
-		boxX := 2 + i*(boxWidth+1)
-
-		drawSingleBox(cells, w, boxX, y, boxWidth, boxHeight)
-
-		// Header
-		hdr := fmt.Sprintf(" #%s{%s} (%d) ", tg.Group, tg.Tag, tg.Count)
-		if len(hdr) > boxWidth-2 {
-			hdr = fmt.Sprintf(" #%s{%s} ", tg.Group, truncateWithEllipsis(tg.Tag, 8))
-		}
-		drawText(cells, w, boxX+1, y, hdr, colorGroupFg, colorDefaultBg, terminal.AttrBold)
-
-		// Files
-		contentY := y + 1
-		contentH := boxHeight - 2
-		if contentH < 1 {
-			contentH = 1
-		}
-
-		totalFiles := len(tg.Files)
-		hasMore := totalFiles > contentH
-
-		// Reserve last line for "(+N more)" if needed
-		filesToShow := contentH
-		if hasMore && contentH > 1 {
-			filesToShow = contentH - 1
-		}
-
-		filesShown := 0
-		for j := 0; j < filesToShow && j < totalFiles; j++ {
-			fileStr := truncateWithEllipsis(tg.Files[j], boxWidth-3)
-			drawText(cells, w, boxX+1, contentY+filesShown, fileStr, colorDefaultFg, colorDefaultBg, terminal.AttrNone)
-			filesShown++
-		}
-
-		// Show remaining count on its own line
-		if hasMore {
-			remaining := totalFiles - filesShown
-			moreStr := fmt.Sprintf("(+%d more)", remaining)
-			drawText(cells, w, boxX+1, contentY+filesShown, moreStr, colorStatusFg, colorDefaultBg, terminal.AttrDim)
-		}
-
-		if totalFiles == 0 {
-			drawText(cells, w, boxX+1, contentY, "(no other files)", colorStatusFg, colorDefaultBg, terminal.AttrDim)
-		}
-	}
-
-	// Show remaining tag groups count
-	if len(tagLinks) > numBoxes {
-		remaining := len(tagLinks) - numBoxes
-		moreStr := fmt.Sprintf("(+%d more tags)", remaining)
-		drawText(cells, w, w-len(moreStr)-3, y+boxHeight-1, moreStr, colorStatusFg, colorDefaultBg, terminal.AttrDim)
-	}
-}
-
-// renderTagSection draws tag group boxes with shared file lists
-func calcMaxTagBoxes(w int) int {
-	if w >= 180 {
-		return 5
-	}
-	if w >= 140 {
-		return 4
-	}
-	if w >= 100 {
-		return 3
-	}
-	return 2
-}
-
-// formatFileTagsCompact formats file tags as compact #group{tags} string
-func formatFileTagsCompact(fi *FileInfo) string {
-	if fi == nil || len(fi.Focus) == 0 {
-		return ""
-	}
-
-	groups := make([]string, 0, len(fi.Focus))
-	for g := range fi.Focus {
-		groups = append(groups, g)
-	}
-	sort.Strings(groups)
-
-	var parts []string
-	for _, g := range groups {
-		tags := fi.Focus[g]
-		sorted := make([]string, len(tags))
-		copy(sorted, tags)
-		sort.Strings(sorted)
-		parts = append(parts, fmt.Sprintf("#%s{%s}", g, joinTruncated(sorted, ",", 30)))
-	}
-
-	return strings.Join(parts, " ")
-}
-
-// joinTruncated joins strings with separator, truncating with ellipsis
-func joinTruncated(items []string, sep string, maxLen int) string {
-	if len(items) == 0 {
-		return ""
-	}
-
-	result := items[0]
-	for i := 1; i < len(items); i++ {
-		next := result + sep + items[i]
-		if len(next) > maxLen {
-			return result + ",..."
-		}
-		result = next
-	}
-	return result
 }
