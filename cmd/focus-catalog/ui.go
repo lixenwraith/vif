@@ -324,7 +324,7 @@ func (app *AppState) jumpTagToEnd() {
 
 // collapseAllGroups collapses all expanded tag groups
 func (app *AppState) collapseAllGroups() {
-	for _, group := range app.Index.Groups {
+	for _, group := range app.Index.FocusGroups {
 		app.GroupExpanded[group] = false
 	}
 	app.RefreshTagFlat()
@@ -340,7 +340,7 @@ func (app *AppState) collapseAllGroups() {
 
 // expandAllGroups expands all tag groups
 func (app *AppState) expandAllGroups() {
-	for _, group := range app.Index.Groups {
+	for _, group := range app.Index.FocusGroups {
 		app.GroupExpanded[group] = true
 	}
 	app.RefreshTagFlat()
@@ -642,7 +642,7 @@ func (app *AppState) selectAllVisibleTags() {
 		}
 	} else {
 		for path, fi := range app.Index.Files {
-			if len(fi.Tags) > 0 && !app.Selected[path] {
+			if len(fi.Focus) > 0 && !app.Selected[path] {
 				app.Selected[path] = true
 				count++
 			}

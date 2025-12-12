@@ -160,14 +160,14 @@ func computeTagLinks(app *AppState, fi *FileInfo, selfPath string) []DiveTagGrou
 	var links []DiveTagGroup
 
 	// Get sorted groups
-	groups := make([]string, 0, len(fi.Tags))
-	for g := range fi.Tags {
+	groups := make([]string, 0, len(fi.Focus))
+	for g := range fi.Focus {
 		groups = append(groups, g)
 	}
 	sort.Strings(groups)
 
 	for _, group := range groups {
-		tags := fi.Tags[group]
+		tags := fi.Focus[group]
 		sortedTags := make([]string, len(tags))
 		copy(sortedTags, tags)
 		sort.Strings(sortedTags)
@@ -184,7 +184,7 @@ func computeTagLinks(app *AppState, fi *FileInfo, selfPath string) []DiveTagGrou
 				if path == selfPath {
 					continue
 				}
-				if fileTags, ok := fileInfo.Tags[group]; ok {
+				if fileTags, ok := fileInfo.Focus[group]; ok {
 					for _, t := range fileTags {
 						if t == tag {
 							files = append(files, path)
@@ -652,19 +652,19 @@ func calcMaxTagBoxes(w int) int {
 
 // formatFileTagsCompact formats file tags as compact #group{tags} string
 func formatFileTagsCompact(fi *FileInfo) string {
-	if fi == nil || len(fi.Tags) == 0 {
+	if fi == nil || len(fi.Focus) == 0 {
 		return ""
 	}
 
-	groups := make([]string, 0, len(fi.Tags))
-	for g := range fi.Tags {
+	groups := make([]string, 0, len(fi.Focus))
+	for g := range fi.Focus {
 		groups = append(groups, g)
 	}
 	sort.Strings(groups)
 
 	var parts []string
 	for _, g := range groups {
-		tags := fi.Tags[g]
+		tags := fi.Focus[g]
 		sorted := make([]string, len(tags))
 		copy(sorted, tags)
 		sort.Strings(sorted)

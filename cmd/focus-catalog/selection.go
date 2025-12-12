@@ -85,7 +85,7 @@ func (app *AppState) ComputeOutputFiles() []string {
 func (app *AppState) selectFilesWithTag(group, tag string) int {
 	count := 0
 	for path, fi := range app.Index.Files {
-		if tags, ok := fi.Tags[group]; ok {
+		if tags, ok := fi.Focus[group]; ok {
 			for _, t := range tags {
 				if t == tag {
 					if !app.Selected[path] {
@@ -104,7 +104,7 @@ func (app *AppState) selectFilesWithTag(group, tag string) int {
 func (app *AppState) deselectFilesWithTag(group, tag string) int {
 	count := 0
 	for path, fi := range app.Index.Files {
-		if tags, ok := fi.Tags[group]; ok {
+		if tags, ok := fi.Focus[group]; ok {
 			for _, t := range tags {
 				if t == tag {
 					if app.Selected[path] {
@@ -123,7 +123,7 @@ func (app *AppState) deselectFilesWithTag(group, tag string) int {
 func (app *AppState) selectFilesWithGroup(group string) int {
 	count := 0
 	for path, fi := range app.Index.Files {
-		if _, ok := fi.Tags[group]; ok {
+		if _, ok := fi.Focus[group]; ok {
 			if !app.Selected[path] {
 				app.Selected[path] = true
 				count++
@@ -137,7 +137,7 @@ func (app *AppState) selectFilesWithGroup(group string) int {
 func (app *AppState) deselectFilesWithGroup(group string) int {
 	count := 0
 	for path, fi := range app.Index.Files {
-		if _, ok := fi.Tags[group]; ok {
+		if _, ok := fi.Focus[group]; ok {
 			if app.Selected[path] {
 				delete(app.Selected, path)
 				count++
@@ -150,7 +150,7 @@ func (app *AppState) deselectFilesWithGroup(group string) int {
 // allFilesWithTagSelected checks if all files with tag are selected
 func (app *AppState) allFilesWithTagSelected(group, tag string) bool {
 	for path, fi := range app.Index.Files {
-		if tags, ok := fi.Tags[group]; ok {
+		if tags, ok := fi.Focus[group]; ok {
 			for _, t := range tags {
 				if t == tag {
 					if !app.Selected[path] {
@@ -167,7 +167,7 @@ func (app *AppState) allFilesWithTagSelected(group, tag string) bool {
 // allFilesWithGroupSelected checks if all files in group are selected
 func (app *AppState) allFilesWithGroupSelected(group string) bool {
 	for path, fi := range app.Index.Files {
-		if _, ok := fi.Tags[group]; ok {
+		if _, ok := fi.Focus[group]; ok {
 			if !app.Selected[path] {
 				return false
 			}

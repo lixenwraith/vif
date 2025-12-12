@@ -511,7 +511,7 @@ func (app *AppState) countDirSelection(node *TreeNode) (int, int) {
 func (app *AppState) countFilesInGroup(group string) int {
 	count := 0
 	for _, fi := range app.Index.Files {
-		if _, ok := fi.Tags[group]; ok {
+		if _, ok := fi.Focus[group]; ok {
 			count++
 		}
 	}
@@ -535,7 +535,7 @@ func (app *AppState) RefreshTreeFlat() {
 func (app *AppState) RefreshTagFlat() {
 	app.TagFlat = nil
 
-	for _, group := range app.Index.Groups {
+	for _, group := range app.Index.FocusGroups {
 		expanded := true
 		if exp, ok := app.GroupExpanded[group]; ok {
 			expanded = exp
@@ -550,7 +550,7 @@ func (app *AppState) RefreshTagFlat() {
 		})
 
 		if expanded {
-			if tags, ok := app.Index.AllTags[group]; ok {
+			if tags, ok := app.Index.FocusTags[group]; ok {
 				for _, tag := range tags {
 					app.TagFlat = append(app.TagFlat, TagItem{
 						IsGroup: false,
@@ -636,7 +636,7 @@ func (app *AppState) nodeMatchesFilter(node *TreeNode) bool {
 func (app *AppState) countFilesWithTag(group, tag string) int {
 	count := 0
 	for _, fi := range app.Index.Files {
-		if tags, ok := fi.Tags[group]; ok {
+		if tags, ok := fi.Focus[group]; ok {
 			for _, t := range tags {
 				if t == tag {
 					count++
@@ -650,20 +650,20 @@ func (app *AppState) countFilesWithTag(group, tag string) int {
 
 // getFileGroupSummary formats file's groups as "group(count)" string
 func getFileGroupSummary(fi *FileInfo) string {
-	if fi == nil || len(fi.Tags) == 0 {
+	if fi == nil || len(fi.Focus) == 0 {
 		return ""
 	}
 
 	// Collect groups sorted alphabetically
-	groups := make([]string, 0, len(fi.Tags))
-	for g := range fi.Tags {
+	groups := make([]string, 0, len(fi.Focus))
+	for g := range fi.Focus {
 		groups = append(groups, g)
 	}
 	sort.Strings(groups)
 
 	var parts []string
 	for _, g := range groups {
-		count := len(fi.Tags[g])
+		count := len(fi.Focus[g])
 		parts = append(parts, fmt.Sprintf("%s(%d)", g, count))
 	}
 
@@ -675,7 +675,7 @@ func (app *AppState) getTagDirectories(group, tag string) []string {
 	dirSet := make(map[string]bool)
 
 	for path, fi := range app.Index.Files {
-		if tags, ok := fi.Tags[group]; ok {
+		if tags, ok := fi.Focus[group]; ok {
 			for _, t := range tags {
 				if t == tag {
 					dir := filepath.Dir(path)
@@ -702,7 +702,7 @@ func (app *AppState) getGroupDirectories(group string) []string {
 	dirSet := make(map[string]bool)
 
 	for path, fi := range app.Index.Files {
-		if _, ok := fi.Tags[group]; ok {
+		if _, ok := fi.Focus[group]; ok {
 			dir := filepath.Dir(path)
 			if dir == "." {
 				dir = fi.Package

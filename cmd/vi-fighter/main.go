@@ -20,7 +20,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
-// Add before main()
+// CLI flags
 var colorModeFlag = flag.String("color", "auto", "Color mode: auto, truecolor, 256")
 
 func main() {

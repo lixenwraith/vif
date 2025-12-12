@@ -138,7 +138,7 @@ func (app *AppState) formatDirTags(node *TreeNode) string {
 		if child.IsDir || child.FileInfo == nil {
 			continue
 		}
-		for group, tags := range child.FileInfo.Tags {
+		for group, tags := range child.FileInfo.Focus {
 			if tagGroups[group] == nil {
 				tagGroups[group] = make(map[string]bool)
 			}
@@ -154,7 +154,7 @@ func (app *AppState) formatDirTags(node *TreeNode) string {
 // formatFileTags formats single file's tags as display string
 func formatFileTags(fi *FileInfo) string {
 	tagGroups := make(map[string]map[string]bool)
-	for group, tags := range fi.Tags {
+	for group, tags := range fi.Focus {
 		tagGroups[group] = make(map[string]bool)
 		for _, t := range tags {
 			tagGroups[group][t] = true
@@ -228,7 +228,7 @@ func (app *AppState) buildGroupItems(group string) []MindmapItem {
 	// Find all files with any tag in this group
 	var paths []string
 	for path, fi := range app.Index.Files {
-		if _, ok := fi.Tags[group]; ok {
+		if _, ok := fi.Focus[group]; ok {
 			paths = append(paths, path)
 		}
 	}
@@ -255,7 +255,7 @@ func (app *AppState) buildTagItems(group, tag string) []MindmapItem {
 	// Find all files with this specific tag
 	var paths []string
 	for path, fi := range app.Index.Files {
-		if tags, ok := fi.Tags[group]; ok {
+		if tags, ok := fi.Focus[group]; ok {
 			for _, t := range tags {
 				if t == tag {
 					paths = append(paths, path)

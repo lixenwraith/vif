@@ -119,31 +119,43 @@ const (
 
 // FileInfo holds parsed metadata for a single Go source file
 type FileInfo struct {
-	Path    string              // relative path: "systems/drain.go"
-	Package string              // package name: "systems"
-	Tags    map[string][]string // group → tags: {"core": ["ecs"], "game": ["drain"]}
-	Imports []string            // local package names: ["events", "engine"]
-	IsAll   bool                // has #all group
+	Path     string              // relative path: "systems/drain.go"
+	Package  string              // package name: "systems"
+	Focus    map[string][]string // focus group -> tags: {"arch": ["ecs"], "gameplay": ["drain"]}
+	Interact map[string][]string // interact group -> tags: {"init": ["cursor"], "state": ["gold"]}
+	Imports  []string            // local package names: ["events", "engine"]
+	IsAll    bool                // has #focus{all[*]}
 }
 
 // PackageInfo aggregates file data for a package directory
 type PackageInfo struct {
-	Name      string // "systems"
-	Dir       string // "systems" or "cmd/focus-catalog"
-	Files     []*FileInfo
-	AllTags   map[string][]string // union of all file tags
-	LocalDeps []string            // union of all file imports (local only)
-	HasAll    bool                // any file has #all
+	Name        string
+	Dir         string
+	Files       []*FileInfo
+	AllFocus    map[string][]string // union of all file focus tags
+	AllInteract map[string][]string // union of all file interact tags
+	LocalDeps   []string
+	HasAll      bool
 }
 
 // Index holds the complete indexed codebase representation
 type Index struct {
 	ModulePath  string
-	Packages    map[string]*PackageInfo // package dir → info
-	Files       map[string]*FileInfo    // relative path → info
-	Groups      []string                // sorted list of all group names
-	AllTags     map[string][]string     // group → all tags in that group
-	ReverseDeps map[string][]string     // package dir → dirs that import it
+	Packages    map[string]*PackageInfo
+	Files       map[string]*FileInfo
+	ReverseDeps map[string][]string
+
+	// Focus index
+	FocusGroups  []string            // sorted group names
+	FocusTags    map[string][]string // group -> tags
+	FocusByGroup map[string][]string // group -> file paths
+	FocusByTag   map[string][]string // "group:tag" -> file paths
+
+	// Interact index
+	InteractGroups  []string            // sorted group names
+	InteractTags    map[string][]string // group -> tags
+	InteractByGroup map[string][]string // group -> file paths
+	InteractByTag   map[string][]string // "group:tag" -> file paths
 }
 
 // TreeNode represents a directory or file in hierarchical tree
@@ -170,17 +182,19 @@ const (
 
 // FilterState holds visual filter highlight state
 type FilterState struct {
-	FilteredPaths map[string]bool            // Files matching current filter
-	FilteredTags  map[string]map[string]bool // group -> tag -> highlighted (computed from FilteredPaths)
-	Mode          FilterMode
+	FilteredPaths        map[string]bool            // files matching current filter
+	FilteredFocusTags    map[string]map[string]bool // focus group -> tag -> highlighted
+	FilteredInteractTags map[string]map[string]bool // interact group -> tag -> highlighted
+	Mode                 FilterMode
 }
 
 // NewFilterState creates initialized empty FilterState
 func NewFilterState() *FilterState {
 	return &FilterState{
-		FilteredPaths: make(map[string]bool),
-		FilteredTags:  make(map[string]map[string]bool),
-		Mode:          FilterOR,
+		FilteredPaths:        make(map[string]bool),
+		FilteredFocusTags:    make(map[string]map[string]bool),
+		FilteredInteractTags: make(map[string]map[string]bool),
+		Mode:                 FilterOR,
 	}
 }
 

@@ -67,24 +67,37 @@ func (app *AppState) RemoveFromFilter(paths []string) {
 // ClearFilter resets all filter state to empty
 func (app *AppState) ClearFilter() {
 	app.Filter.FilteredPaths = make(map[string]bool)
-	app.Filter.FilteredTags = make(map[string]map[string]bool)
+	app.Filter.FilteredFocusTags = make(map[string]map[string]bool)
 }
 
 // computeFilteredTags derives tag highlights from filtered file paths
 func (app *AppState) computeFilteredTags() {
-	app.Filter.FilteredTags = make(map[string]map[string]bool)
+	app.Filter.FilteredFocusTags = make(map[string]map[string]bool)
+	app.Filter.FilteredInteractTags = make(map[string]map[string]bool)
 
 	for path := range app.Filter.FilteredPaths {
 		fi := app.Index.Files[path]
 		if fi == nil {
 			continue
 		}
-		for group, tags := range fi.Tags {
-			if app.Filter.FilteredTags[group] == nil {
-				app.Filter.FilteredTags[group] = make(map[string]bool)
+
+		// Focus tags
+		for group, tags := range fi.Focus {
+			if app.Filter.FilteredFocusTags[group] == nil {
+				app.Filter.FilteredFocusTags[group] = make(map[string]bool)
 			}
 			for _, tag := range tags {
-				app.Filter.FilteredTags[group][tag] = true
+				app.Filter.FilteredFocusTags[group][tag] = true
+			}
+		}
+
+		// Interact tags
+		for group, tags := range fi.Interact {
+			if app.Filter.FilteredInteractTags[group] == nil {
+				app.Filter.FilteredInteractTags[group] = make(map[string]bool)
+			}
+			for _, tag := range tags {
+				app.Filter.FilteredInteractTags[group][tag] = true
 			}
 		}
 	}
@@ -152,13 +165,13 @@ func (app *AppState) applyRightPaneFilter() {
 
 	if item.IsGroup {
 		for path, fi := range app.Index.Files {
-			if _, ok := fi.Tags[item.Group]; ok {
+			if _, ok := fi.Focus[item.Group]; ok {
 				paths = append(paths, path)
 			}
 		}
 	} else {
 		for path, fi := range app.Index.Files {
-			if tags, ok := fi.Tags[item.Group]; ok {
+			if tags, ok := fi.Focus[item.Group]; ok {
 				for _, t := range tags {
 					if t == item.Tag {
 						paths = append(paths, path)
@@ -290,7 +303,7 @@ func searchTagsPrefix(index *Index, query string) []string {
 	seen := make(map[string]bool)
 
 	for path, fi := range index.Files {
-		for _, tags := range fi.Tags {
+		for _, tags := range fi.Focus {
 			for _, tag := range tags {
 				if strings.HasPrefix(strings.ToLower(tag), query) {
 					if !seen[path] {
@@ -311,7 +324,7 @@ func searchGroupsPrefix(index *Index, query string) []string {
 	seen := make(map[string]bool)
 
 	for path, fi := range index.Files {
-		for group := range fi.Tags {
+		for group := range fi.Focus {
 			if strings.HasPrefix(strings.ToLower(group), query) {
 				if !seen[path] {
 					matches = append(matches, path)
@@ -329,7 +342,7 @@ func (app *AppState) computeTagSelectionState(group, tag string) TagSelectionSta
 	selected := 0
 
 	for path, fi := range app.Index.Files {
-		if tags, ok := fi.Tags[group]; ok {
+		if tags, ok := fi.Focus[group]; ok {
 			for _, t := range tags {
 				if t == tag {
 					total++
@@ -351,13 +364,13 @@ func (app *AppState) computeTagSelectionState(group, tag string) TagSelectionSta
 	return TagSelectPartial
 }
 
-// isGroupFiltered returns true if any tag in group matches filter
+// computeGroupSelectionState returns selection coverage for a group
 func (app *AppState) computeGroupSelectionState(group string) TagSelectionState {
 	total := 0
 	selected := 0
 
 	for path, fi := range app.Index.Files {
-		if _, ok := fi.Tags[group]; ok {
+		if _, ok := fi.Focus[group]; ok {
 			total++
 			if app.Selected[path] {
 				selected++
@@ -374,14 +387,14 @@ func (app *AppState) computeGroupSelectionState(group string) TagSelectionState 
 	return TagSelectPartial
 }
 
-// isTagFiltered returns true if specific tag matches filter
+// isGroupFiltered returns true if any tag in group matches filter
 func (app *AppState) isGroupFiltered(group string) bool {
-	return len(app.Filter.FilteredTags[group]) > 0
+	return len(app.Filter.FilteredFocusTags[group]) > 0
 }
 
 // isTagFiltered returns true if specific tag is filtered
 func (app *AppState) isTagFiltered(group, tag string) bool {
-	if tags, ok := app.Filter.FilteredTags[group]; ok {
+	if tags, ok := app.Filter.FilteredFocusTags[group]; ok {
 		return tags[tag]
 	}
 	return false
