@@ -1,8 +1,6 @@
 package main
 
 import (
-	"strings"
-
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
@@ -134,48 +132,6 @@ func truncateWithEllipsis(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen-1] + "…"
-}
-
-// formatDirHints truncates directory list to fit available width.
-func formatDirHints(dirs []string, maxLen int) string {
-	if len(dirs) == 0 || maxLen < 4 {
-		return ""
-	}
-
-	var result strings.Builder
-	shown := 0
-	maxDirs := 3
-
-	for i, d := range dirs {
-		if i >= maxDirs {
-			break
-		}
-
-		addition := d
-		if result.Len() > 0 {
-			addition = " " + d
-		}
-
-		projected := result.Len() + len(addition)
-		remaining := len(dirs) - i - 1
-		if remaining > 0 && projected+4 > maxLen {
-			break
-		}
-		if remaining == 0 && projected > maxLen {
-			break
-		}
-
-		result.WriteString(addition)
-		shown++
-	}
-
-	if shown < len(dirs) {
-		if result.Len()+4 <= maxLen {
-			result.WriteString(" ...")
-		}
-	}
-
-	return result.String()
 }
 
 // drawColoredTags renders tag string with syntax highlighting.

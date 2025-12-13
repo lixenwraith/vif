@@ -37,6 +37,7 @@ type MindmapItem struct {
 	TagStr string // Formatted tags
 }
 
+// EnterMindmap routes mindmap opening to the handler based on originating pane
 func (app *AppState) EnterMindmap() {
 	switch app.FocusPane {
 	case PaneLeft:
@@ -190,6 +191,7 @@ func formatTagGroups(block string, tagGroups map[string]map[string]bool) string 
 	return fmt.Sprintf("#%s{%s}", block, strings.Join(groupParts, ","))
 }
 
+// enterMindmapFocusTag opens mindmap for focus tag or group at cursor
 func (app *AppState) enterMindmapFocusTag() {
 	if len(app.TagFlat) == 0 {
 		app.Message = "no focus tags to view"
@@ -206,10 +208,10 @@ func (app *AppState) enterMindmapFocusTag() {
 
 	if item.IsGroup {
 		state.Title = "#focus:" + item.Group
-		state.Items = app.buildGroupItems(item.Group)
+		state.Items = app.buildGroupItems(CategoryFocus, item.Group)
 	} else {
 		state.Title = fmt.Sprintf("#focus:%s{%s}", item.Group, item.Tag)
-		state.Items = app.buildTagItems(item.Group, item.Tag)
+		state.Items = app.buildTagItems(CategoryFocus, item.Group, item.Tag)
 	}
 
 	if len(state.Items) == 0 {
@@ -221,6 +223,7 @@ func (app *AppState) enterMindmapFocusTag() {
 	app.MindmapMode = true
 }
 
+// enterMindmapInteractTag opens mindmap for interact tag or group at cursor
 func (app *AppState) enterMindmapInteractTag() {
 	if len(app.InteractFlat) == 0 {
 		app.Message = "no interact tags to view"
@@ -237,10 +240,10 @@ func (app *AppState) enterMindmapInteractTag() {
 
 	if item.IsGroup {
 		state.Title = "#interact:" + item.Group
-		state.Items = app.buildInteractGroupItems(item.Group)
+		state.Items = app.buildGroupItems(CategoryInteract, item.Group)
 	} else {
 		state.Title = fmt.Sprintf("#interact:%s{%s}", item.Group, item.Tag)
-		state.Items = app.buildInteractTagItems(item.Group, item.Tag)
+		state.Items = app.buildTagItems(CategoryInteract, item.Group, item.Tag)
 	}
 
 	if len(state.Items) == 0 {
@@ -252,12 +255,13 @@ func (app *AppState) enterMindmapInteractTag() {
 	app.MindmapMode = true
 }
 
-func (app *AppState) buildInteractGroupItems(group string) []MindmapItem {
+// buildGroupItems creates mindmap items for all files in a tag group
+func (app *AppState) buildGroupItems(cat Category, group string) []MindmapItem {
 	var items []MindmapItem
 
 	var paths []string
 	for path, fi := range app.Index.Files {
-		if _, ok := fi.Interact[group]; ok {
+		if _, ok := fi.TagMap(cat)[group]; ok {
 			paths = append(paths, path)
 		}
 	}
@@ -277,12 +281,13 @@ func (app *AppState) buildInteractGroupItems(group string) []MindmapItem {
 	return items
 }
 
-func (app *AppState) buildInteractTagItems(group, tag string) []MindmapItem {
+// buildTagItems creates mindmap items for files with specific tag
+func (app *AppState) buildTagItems(cat Category, group, tag string) []MindmapItem {
 	var items []MindmapItem
 
 	var paths []string
 	for path, fi := range app.Index.Files {
-		if tags, ok := fi.Interact[group]; ok {
+		if tags, ok := fi.TagMap(cat)[group]; ok {
 			for _, t := range tags {
 				if t == tag {
 					paths = append(paths, path)
@@ -350,63 +355,6 @@ func (app *AppState) buildPackageItems(node *TreeNode, depth int) []MindmapItem 
 				TagStr: tagStr,
 			})
 		}
-	}
-
-	return items
-}
-
-// buildGroupItems creates mindmap items for all files in a focus group
-func (app *AppState) buildGroupItems(group string) []MindmapItem {
-	var items []MindmapItem
-
-	var paths []string
-	for path, fi := range app.Index.Files {
-		if _, ok := fi.Focus[group]; ok {
-			paths = append(paths, path)
-		}
-	}
-	sort.Strings(paths)
-
-	for _, path := range paths {
-		fi := app.Index.Files[path]
-		items = append(items, MindmapItem{
-			Depth:  0,
-			IsDir:  false,
-			Path:   path,
-			Name:   path,
-			TagStr: formatFileTags(fi),
-		})
-	}
-
-	return items
-}
-
-// buildTagItems creates mindmap items for files with specific focus tag
-func (app *AppState) buildTagItems(group, tag string) []MindmapItem {
-	var items []MindmapItem
-
-	var paths []string
-	for path, fi := range app.Index.Files {
-		if tags, ok := fi.Focus[group]; ok {
-			for _, t := range tags {
-				if t == tag {
-					paths = append(paths, path)
-					break
-				}
-			}
-		}
-	}
-	sort.Strings(paths)
-
-	for _, path := range paths {
-		fi := app.Index.Files[path]
-		items = append(items, MindmapItem{
-			Depth:  0,
-			IsDir:  false,
-			Path:   path,
-			Name:   path,
-			TagStr: formatFileTags(fi),
-		})
 	}
 
 	return items

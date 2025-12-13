@@ -790,20 +790,20 @@ func (app *AppState) toggleTagSelection() {
 
 	if item.IsGroup {
 		// Toggle all files in group
-		if app.allFilesWithGroupSelected(item.Group) {
-			count := app.deselectFilesWithGroup(item.Group)
+		if app.allFilesWithGroupSelected(CategoryFocus, item.Group) {
+			count := app.deselectFilesWithGroup(CategoryFocus, item.Group)
 			app.Message = fmt.Sprintf("deselected %d files from #%s", count, item.Group)
 		} else {
-			count := app.selectFilesWithGroup(item.Group)
+			count := app.selectFilesWithGroup(CategoryFocus, item.Group)
 			app.Message = fmt.Sprintf("selected %d files with #%s", count, item.Group)
 		}
 	} else {
 		// Toggle all files with this tag
-		if app.allFilesWithTagSelected(item.Group, item.Tag) {
-			count := app.deselectFilesWithTag(item.Group, item.Tag)
+		if app.allFilesWithTagSelected(CategoryFocus, item.Group, item.Tag) {
+			count := app.deselectFilesWithTag(CategoryFocus, item.Group, item.Tag)
 			app.Message = fmt.Sprintf("deselected %d files from #%s{%s}", count, item.Group, item.Tag)
 		} else {
-			count := app.selectFilesWithTag(item.Group, item.Tag)
+			count := app.selectFilesWithTag(CategoryFocus, item.Group, item.Tag)
 			app.Message = fmt.Sprintf("selected %d files with #%s{%s}", count, item.Group, item.Tag)
 		}
 	}
@@ -949,19 +949,19 @@ func (app *AppState) toggleInteractSelection() {
 	item := app.InteractFlat[app.InteractCursor]
 
 	if item.IsGroup {
-		if app.allFilesWithInteractGroupSelected(item.Group) {
-			count := app.deselectFilesWithInteractGroup(item.Group)
+		if app.allFilesWithGroupSelected(CategoryInteract, item.Group) {
+			count := app.deselectFilesWithGroup(CategoryInteract, item.Group)
 			app.Message = fmt.Sprintf("deselected %d files from #%s", count, item.Group)
 		} else {
-			count := app.selectFilesWithInteractGroup(item.Group)
+			count := app.selectFilesWithGroup(CategoryInteract, item.Group)
 			app.Message = fmt.Sprintf("selected %d files with #%s", count, item.Group)
 		}
 	} else {
-		if app.allFilesWithInteractTagSelected(item.Group, item.Tag) {
-			count := app.deselectFilesWithInteractTag(item.Group, item.Tag)
+		if app.allFilesWithTagSelected(CategoryInteract, item.Group, item.Tag) {
+			count := app.deselectFilesWithTag(CategoryInteract, item.Group, item.Tag)
 			app.Message = fmt.Sprintf("deselected %d files from #%s{%s}", count, item.Group, item.Tag)
 		} else {
-			count := app.selectFilesWithInteractTag(item.Group, item.Tag)
+			count := app.selectFilesWithTag(CategoryInteract, item.Group, item.Tag)
 			app.Message = fmt.Sprintf("selected %d files with #%s{%s}", count, item.Group, item.Tag)
 		}
 	}

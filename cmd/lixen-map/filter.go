@@ -70,6 +70,97 @@ func (app *AppState) ClearFilter() {
 	app.Filter.FilteredFocusTags = make(map[string]map[string]bool)
 }
 
+// computeTagSelectionState returns selection coverage for a specific tag
+func (app *AppState) computeTagSelectionState(cat Category, group, tag string) TagSelectionState {
+	total := 0
+	selected := 0
+
+	for path, fi := range app.Index.Files {
+		if tags, ok := fi.TagMap(cat)[group]; ok {
+			for _, t := range tags {
+				if t == tag {
+					total++
+					if app.Selected[path] {
+						selected++
+					}
+					break
+				}
+			}
+		}
+	}
+
+	if total == 0 || selected == 0 {
+		return TagSelectNone
+	}
+	if selected == total {
+		return TagSelectFull
+	}
+	return TagSelectPartial
+}
+
+// computeGroupSelectionState returns selection coverage for a group
+func (app *AppState) computeGroupSelectionState(cat Category, group string) TagSelectionState {
+	total := 0
+	selected := 0
+
+	for path, fi := range app.Index.Files {
+		if _, ok := fi.TagMap(cat)[group]; ok {
+			total++
+			if app.Selected[path] {
+				selected++
+			}
+		}
+	}
+
+	if total == 0 || selected == 0 {
+		return TagSelectNone
+	}
+	if selected == total {
+		return TagSelectFull
+	}
+	return TagSelectPartial
+}
+
+// searchTagsPrefix finds files with tags matching query prefix
+func searchTagsPrefix(index *Index, cat Category, query string) []string {
+	query = strings.ToLower(query)
+	var matches []string
+	seen := make(map[string]bool)
+
+	for path, fi := range index.Files {
+		for _, tags := range fi.TagMap(cat) {
+			for _, tag := range tags {
+				if strings.HasPrefix(strings.ToLower(tag), query) {
+					if !seen[path] {
+						matches = append(matches, path)
+						seen[path] = true
+					}
+				}
+			}
+		}
+	}
+	return matches
+}
+
+// searchTagGroupsPrefix finds files with groups matching query prefix
+func searchTagGroupsPrefix(index *Index, cat Category, query string) []string {
+	query = strings.ToLower(query)
+	var matches []string
+	seen := make(map[string]bool)
+
+	for path, fi := range index.Files {
+		for group := range fi.TagMap(cat) {
+			if strings.HasPrefix(strings.ToLower(group), query) {
+				if !seen[path] {
+					matches = append(matches, path)
+					seen[path] = true
+				}
+			}
+		}
+	}
+	return matches
+}
+
 // computeFilteredTags derives tag highlights from filtered file paths
 func (app *AppState) computeFilteredTags() {
 	app.Filter.FilteredFocusTags = make(map[string]map[string]bool)
@@ -230,24 +321,28 @@ func (app *AppState) executeSearch(query string) {
 	var paths []string
 	var label string
 
+	// Convert SearchCategory to Category
+	cat := CategoryFocus
+	if app.SearchCategory == SearchCategoryInteract {
+		cat = CategoryInteract
+	}
+
 	switch app.SearchType {
 	case SearchTypeContent:
 		paths = searchContentRg(app.Index, query, app.RgAvailable)
 		label = "content"
 	case SearchTypeTags:
-		if app.SearchCategory == SearchCategoryInteract {
-			paths = searchInteractTagsPrefix(app.Index, query)
+		paths = searchTagsPrefix(app.Index, cat, query)
+		if cat == CategoryInteract {
 			label = "interact tags"
 		} else {
-			paths = searchTagsPrefix(app.Index, query)
 			label = "focus tags"
 		}
 	case SearchTypeGroups:
-		if app.SearchCategory == SearchCategoryInteract {
-			paths = searchInteractGroupsPrefix(app.Index, query)
+		paths = searchTagGroupsPrefix(app.Index, cat, query)
+		if cat == CategoryInteract {
 			label = "interact groups"
 		} else {
-			paths = searchGroupsPrefix(app.Index, query)
 			label = "focus groups"
 		}
 	}
@@ -309,172 +404,17 @@ func searchContentRg(index *Index, query string, rgAvailable bool) []string {
 	return searchPaths(index, query)
 }
 
-// searchTagsPrefix finds files with tags matching query prefix
-func searchTagsPrefix(index *Index, query string) []string {
-	query = strings.ToLower(query)
-	var matches []string
-	seen := make(map[string]bool)
-
-	for path, fi := range index.Files {
-		for _, tags := range fi.Focus {
-			for _, tag := range tags {
-				if strings.HasPrefix(strings.ToLower(tag), query) {
-					if !seen[path] {
-						matches = append(matches, path)
-						seen[path] = true
-					}
-				}
-			}
-		}
-	}
-	return matches
-}
-
-// computeTagSelectionState returns selection coverage for a specific tag
-func searchGroupsPrefix(index *Index, query string) []string {
-	query = strings.ToLower(query)
-	var matches []string
-	seen := make(map[string]bool)
-
-	for path, fi := range index.Files {
-		for group := range fi.Focus {
-			if strings.HasPrefix(strings.ToLower(group), query) {
-				if !seen[path] {
-					matches = append(matches, path)
-					seen[path] = true
-				}
-			}
-		}
-	}
-	return matches
-}
-
-// computeGroupSelectionState returns selection coverage for a group
-func (app *AppState) computeTagSelectionState(group, tag string) TagSelectionState {
-	total := 0
-	selected := 0
-
-	for path, fi := range app.Index.Files {
-		if tags, ok := fi.Focus[group]; ok {
-			for _, t := range tags {
-				if t == tag {
-					total++
-					if app.Selected[path] {
-						selected++
-					}
-					break
-				}
-			}
-		}
-	}
-
-	if total == 0 || selected == 0 {
-		return TagSelectNone
-	}
-	if selected == total {
-		return TagSelectFull
-	}
-	return TagSelectPartial
-}
-
-// computeGroupSelectionState returns selection coverage for a group
-func (app *AppState) computeGroupSelectionState(group string) TagSelectionState {
-	total := 0
-	selected := 0
-
-	for path, fi := range app.Index.Files {
-		if _, ok := fi.Focus[group]; ok {
-			total++
-			if app.Selected[path] {
-				selected++
-			}
-		}
-	}
-
-	if total == 0 || selected == 0 {
-		return TagSelectNone
-	}
-	if selected == total {
-		return TagSelectFull
-	}
-	return TagSelectPartial
-}
-
 // isGroupFiltered returns true if any tag in group matches filter
-func (app *AppState) isGroupFiltered(group string) bool {
-	return len(app.Filter.FilteredFocusTags[group]) > 0
+func (app *AppState) isGroupFiltered(cat Category, group string) bool {
+	return len(app.Filter.FilteredTags(cat)[group]) > 0
 }
 
 // isTagFiltered returns true if specific tag is filtered
-func (app *AppState) isTagFiltered(group, tag string) bool {
-	if tags, ok := app.Filter.FilteredFocusTags[group]; ok {
+func (app *AppState) isTagFiltered(cat Category, group, tag string) bool {
+	if tags, ok := app.Filter.FilteredTags(cat)[group]; ok {
 		return tags[tag]
 	}
 	return false
-}
-
-// isInteractGroupFiltered returns true if any tag in interact group matches filter
-func (app *AppState) isInteractGroupFiltered(group string) bool {
-	return len(app.Filter.FilteredInteractTags[group]) > 0
-}
-
-// isInteractTagFiltered returns true if specific interact tag is filtered
-func (app *AppState) isInteractTagFiltered(group, tag string) bool {
-	if tags, ok := app.Filter.FilteredInteractTags[group]; ok {
-		return tags[tag]
-	}
-	return false
-}
-
-// computeInteractTagSelectionState returns selection coverage for interact tag
-func (app *AppState) computeInteractTagSelectionState(group, tag string) TagSelectionState {
-	total := 0
-	selected := 0
-
-	for path, fi := range app.Index.Files {
-		if tags, ok := fi.Interact[group]; ok {
-			for _, t := range tags {
-				if t == tag {
-					total++
-					if app.Selected[path] {
-						selected++
-					}
-					break
-				}
-			}
-		}
-	}
-
-	if total == 0 || selected == 0 {
-		return TagSelectNone
-	}
-	if selected == total {
-		return TagSelectFull
-	}
-	return TagSelectPartial
-}
-
-// computeInteractGroupSelectionState returns selection coverage for interact group
-func (app *AppState) computeInteractGroupSelectionState(group string) TagSelectionState {
-	total := 0
-	selected := 0
-
-	for path, fi := range app.Index.Files {
-		if _, ok := fi.Interact[group]; ok {
-			total++
-			if app.Selected[path] {
-				selected++
-			}
-		}
-	}
-
-	if total == 0 || selected == 0 {
-		return TagSelectNone
-	}
-	if selected == total {
-		return TagSelectFull
-	}
-	return TagSelectPartial
 }
 
 // applyInteractPaneFilter toggles filter for item at interact cursor
@@ -527,44 +467,4 @@ func (app *AppState) applyInteractPaneFilter() {
 
 	app.RefreshFocusFlat()
 	app.RefreshInteractFlat()
-}
-
-// searchInteractTagsPrefix finds files with interact tags matching query prefix
-func searchInteractTagsPrefix(index *Index, query string) []string {
-	query = strings.ToLower(query)
-	var matches []string
-	seen := make(map[string]bool)
-
-	for path, fi := range index.Files {
-		for _, tags := range fi.Interact {
-			for _, tag := range tags {
-				if strings.HasPrefix(strings.ToLower(tag), query) {
-					if !seen[path] {
-						matches = append(matches, path)
-						seen[path] = true
-					}
-				}
-			}
-		}
-	}
-	return matches
-}
-
-// searchInteractGroupsPrefix finds files with interact groups matching query prefix
-func searchInteractGroupsPrefix(index *Index, query string) []string {
-	query = strings.ToLower(query)
-	var matches []string
-	seen := make(map[string]bool)
-
-	for path, fi := range index.Files {
-		for group := range fi.Interact {
-			if strings.HasPrefix(strings.ToLower(group), query) {
-				if !seen[path] {
-					matches = append(matches, path)
-					seen[path] = true
-				}
-			}
-		}
-	}
-	return matches
 }

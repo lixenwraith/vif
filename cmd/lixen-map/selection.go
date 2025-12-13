@@ -81,11 +81,11 @@ func (app *AppState) ComputeOutputFiles() []string {
 	return result
 }
 
-// selectFilesWithTag adds all files with tag to selection
-func (app *AppState) selectFilesWithTag(group, tag string) int {
+// selectFilesWithTag adds all files with specific tag to selection
+func (app *AppState) selectFilesWithTag(cat Category, group, tag string) int {
 	count := 0
 	for path, fi := range app.Index.Files {
-		if tags, ok := fi.Focus[group]; ok {
+		if tags, ok := fi.TagMap(cat)[group]; ok {
 			for _, t := range tags {
 				if t == tag {
 					if !app.Selected[path] {
@@ -100,11 +100,11 @@ func (app *AppState) selectFilesWithTag(group, tag string) int {
 	return count
 }
 
-// deselectFilesWithTag removes all files with tag from selection
-func (app *AppState) deselectFilesWithTag(group, tag string) int {
+// deselectFilesWithTag removes all files with specific tag from selection
+func (app *AppState) deselectFilesWithTag(cat Category, group, tag string) int {
 	count := 0
 	for path, fi := range app.Index.Files {
-		if tags, ok := fi.Focus[group]; ok {
+		if tags, ok := fi.TagMap(cat)[group]; ok {
 			for _, t := range tags {
 				if t == tag {
 					if app.Selected[path] {
@@ -120,10 +120,10 @@ func (app *AppState) deselectFilesWithTag(group, tag string) int {
 }
 
 // selectFilesWithGroup adds all files in group to selection
-func (app *AppState) selectFilesWithGroup(group string) int {
+func (app *AppState) selectFilesWithGroup(cat Category, group string) int {
 	count := 0
 	for path, fi := range app.Index.Files {
-		if _, ok := fi.Focus[group]; ok {
+		if _, ok := fi.TagMap(cat)[group]; ok {
 			if !app.Selected[path] {
 				app.Selected[path] = true
 				count++
@@ -134,10 +134,10 @@ func (app *AppState) selectFilesWithGroup(group string) int {
 }
 
 // deselectFilesWithGroup removes all files in group from selection
-func (app *AppState) deselectFilesWithGroup(group string) int {
+func (app *AppState) deselectFilesWithGroup(cat Category, group string) int {
 	count := 0
 	for path, fi := range app.Index.Files {
-		if _, ok := fi.Focus[group]; ok {
+		if _, ok := fi.TagMap(cat)[group]; ok {
 			if app.Selected[path] {
 				delete(app.Selected, path)
 				count++
@@ -147,10 +147,10 @@ func (app *AppState) deselectFilesWithGroup(group string) int {
 	return count
 }
 
-// allFilesWithTagSelected checks if all files with tag are selected
-func (app *AppState) allFilesWithTagSelected(group, tag string) bool {
+// allFilesWithTagSelected checks if all files with specific tag are selected
+func (app *AppState) allFilesWithTagSelected(cat Category, group, tag string) bool {
 	for path, fi := range app.Index.Files {
-		if tags, ok := fi.Focus[group]; ok {
+		if tags, ok := fi.TagMap(cat)[group]; ok {
 			for _, t := range tags {
 				if t == tag {
 					if !app.Selected[path] {
@@ -165,104 +165,9 @@ func (app *AppState) allFilesWithTagSelected(group, tag string) bool {
 }
 
 // allFilesWithGroupSelected checks if all files in group are selected
-func (app *AppState) allFilesWithGroupSelected(group string) bool {
+func (app *AppState) allFilesWithGroupSelected(cat Category, group string) bool {
 	for path, fi := range app.Index.Files {
-		if _, ok := fi.Focus[group]; ok {
-			if !app.Selected[path] {
-				return false
-			}
-		}
-	}
-	return true
-}
-
-// selectFilesWithInteractTag adds all files with interact tag to selection
-func (app *AppState) selectFilesWithInteractTag(group, tag string) int {
-	count := 0
-	for path, fi := range app.Index.Files {
-		if tags, ok := fi.Interact[group]; ok {
-			for _, t := range tags {
-				if t == tag {
-					if !app.Selected[path] {
-						app.Selected[path] = true
-						count++
-					}
-					break
-				}
-			}
-		}
-	}
-	return count
-}
-
-// deselectFilesWithInteractTag removes all files with interact tag from selection
-func (app *AppState) deselectFilesWithInteractTag(group, tag string) int {
-	count := 0
-	for path, fi := range app.Index.Files {
-		if tags, ok := fi.Interact[group]; ok {
-			for _, t := range tags {
-				if t == tag {
-					if app.Selected[path] {
-						delete(app.Selected, path)
-						count++
-					}
-					break
-				}
-			}
-		}
-	}
-	return count
-}
-
-// selectFilesWithInteractGroup adds all files in interact group to selection
-func (app *AppState) selectFilesWithInteractGroup(group string) int {
-	count := 0
-	for path, fi := range app.Index.Files {
-		if _, ok := fi.Interact[group]; ok {
-			if !app.Selected[path] {
-				app.Selected[path] = true
-				count++
-			}
-		}
-	}
-	return count
-}
-
-// deselectFilesWithInteractGroup removes all files in interact group from selection
-func (app *AppState) deselectFilesWithInteractGroup(group string) int {
-	count := 0
-	for path, fi := range app.Index.Files {
-		if _, ok := fi.Interact[group]; ok {
-			if app.Selected[path] {
-				delete(app.Selected, path)
-				count++
-			}
-		}
-	}
-	return count
-}
-
-// allFilesWithInteractTagSelected checks if all files with interact tag selected
-func (app *AppState) allFilesWithInteractTagSelected(group, tag string) bool {
-	for path, fi := range app.Index.Files {
-		if tags, ok := fi.Interact[group]; ok {
-			for _, t := range tags {
-				if t == tag {
-					if !app.Selected[path] {
-						return false
-					}
-					break
-				}
-			}
-		}
-	}
-	return true
-}
-
-// allFilesWithInteractGroupSelected checks if all files in interact group selected
-func (app *AppState) allFilesWithInteractGroupSelected(group string) bool {
-	for path, fi := range app.Index.Files {
-		if _, ok := fi.Interact[group]; ok {
+		if _, ok := fi.TagMap(cat)[group]; ok {
 			if !app.Selected[path] {
 				return false
 			}

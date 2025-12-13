@@ -274,9 +274,9 @@ func (app *AppState) renderFocusPane(cells []terminal.Cell, totalWidth, startX, 
 		x := startX + 1
 
 		if item.IsGroup {
-			isFiltered := app.isGroupFiltered(item.Group)
+			isFiltered := app.isGroupFiltered(CategoryFocus, item.Group)
 			dimmed := hasFilter && !isFiltered
-			selState := app.computeGroupSelectionState(item.Group)
+			selState := app.computeGroupSelectionState(CategoryFocus, item.Group)
 
 			expandChar := '▶'
 			if item.Expanded {
@@ -313,7 +313,7 @@ func (app *AppState) renderFocusPane(cells []terminal.Cell, totalWidth, startX, 
 			drawText(cells, totalWidth, x, y, groupStr, groupFg, rowBg, terminal.AttrBold)
 			x += len(groupStr)
 
-			fileCount := app.countFilesInGroup(item.Group)
+			fileCount := app.countFilesInGroup(CategoryFocus, item.Group)
 			countStr := fmt.Sprintf(" (%d)", fileCount)
 			countFg := colorStatusFg
 			if dimmed {
@@ -322,9 +322,9 @@ func (app *AppState) renderFocusPane(cells []terminal.Cell, totalWidth, startX, 
 			drawText(cells, totalWidth, x, y, countStr, countFg, rowBg, terminal.AttrNone)
 
 		} else {
-			isFiltered := app.isTagFiltered(item.Group, item.Tag)
+			isFiltered := app.isTagFiltered(CategoryFocus, item.Group, item.Tag)
 			dimmed := hasFilter && !isFiltered
-			selState := app.computeTagSelectionState(item.Group, item.Tag)
+			selState := app.computeTagSelectionState(CategoryFocus, item.Group, item.Tag)
 
 			x += 4
 
@@ -352,7 +352,7 @@ func (app *AppState) renderFocusPane(cells []terminal.Cell, totalWidth, startX, 
 			drawText(cells, totalWidth, x, y, item.Tag, tagFg, rowBg, terminal.AttrNone)
 			x += len(item.Tag)
 
-			fileCount := app.countFilesWithTag(item.Group, item.Tag)
+			fileCount := app.countFilesWithTag(CategoryFocus, item.Group, item.Tag)
 			countStr := fmt.Sprintf(" (%d)", fileCount)
 			countFg := colorStatusFg
 			if dimmed {
@@ -391,9 +391,9 @@ func (app *AppState) renderInteractPane(cells []terminal.Cell, totalWidth, start
 		x := startX + 1
 
 		if item.IsGroup {
-			isFiltered := app.isInteractGroupFiltered(item.Group)
+			isFiltered := app.isGroupFiltered(CategoryInteract, item.Group)
 			dimmed := hasFilter && !isFiltered
-			selState := app.computeInteractGroupSelectionState(item.Group)
+			selState := app.computeGroupSelectionState(CategoryInteract, item.Group)
 
 			expandChar := '▶'
 			if item.Expanded {
@@ -430,7 +430,7 @@ func (app *AppState) renderInteractPane(cells []terminal.Cell, totalWidth, start
 			drawText(cells, totalWidth, x, y, groupStr, groupFg, rowBg, terminal.AttrBold)
 			x += len(groupStr)
 
-			fileCount := app.countFilesInInteractGroup(item.Group)
+			fileCount := app.countFilesInGroup(CategoryInteract, item.Group)
 			countStr := fmt.Sprintf(" (%d)", fileCount)
 			countFg := colorStatusFg
 			if dimmed {
@@ -439,9 +439,9 @@ func (app *AppState) renderInteractPane(cells []terminal.Cell, totalWidth, start
 			drawText(cells, totalWidth, x, y, countStr, countFg, rowBg, terminal.AttrNone)
 
 		} else {
-			isFiltered := app.isInteractTagFiltered(item.Group, item.Tag)
+			isFiltered := app.isTagFiltered(CategoryInteract, item.Group, item.Tag)
 			dimmed := hasFilter && !isFiltered
-			selState := app.computeInteractTagSelectionState(item.Group, item.Tag)
+			selState := app.computeTagSelectionState(CategoryInteract, item.Group, item.Tag)
 
 			x += 4
 
@@ -469,7 +469,7 @@ func (app *AppState) renderInteractPane(cells []terminal.Cell, totalWidth, start
 			drawText(cells, totalWidth, x, y, item.Tag, tagFg, rowBg, terminal.AttrNone)
 			x += len(item.Tag)
 
-			fileCount := app.countFilesWithInteractTag(item.Group, item.Tag)
+			fileCount := app.countFilesWithTag(CategoryInteract, item.Group, item.Tag)
 			countStr := fmt.Sprintf(" (%d)", fileCount)
 			countFg := colorStatusFg
 			if dimmed {
@@ -600,11 +600,27 @@ func (app *AppState) countDirSelection(node *TreeNode) (int, int) {
 }
 
 // countFilesInGroup counts files having any tag in specified group
-func (app *AppState) countFilesInGroup(group string) int {
+func (app *AppState) countFilesInGroup(cat Category, group string) int {
 	count := 0
 	for _, fi := range app.Index.Files {
-		if _, ok := fi.Focus[group]; ok {
+		if _, ok := fi.TagMap(cat)[group]; ok {
 			count++
+		}
+	}
+	return count
+}
+
+// countFilesWithTag counts files having specific tag
+func (app *AppState) countFilesWithTag(cat Category, group, tag string) int {
+	count := 0
+	for _, fi := range app.Index.Files {
+		if tags, ok := fi.TagMap(cat)[group]; ok {
+			for _, t := range tags {
+				if t == tag {
+					count++
+					break
+				}
+			}
 		}
 	}
 	return count
@@ -761,49 +777,6 @@ func (app *AppState) nodeMatchesFilter(node *TreeNode) bool {
 	}
 
 	return app.Filter.FilteredPaths[node.Path]
-}
-
-// countFilesWithTag counts files having specific tag
-func (app *AppState) countFilesWithTag(group, tag string) int {
-	count := 0
-	for _, fi := range app.Index.Files {
-		if tags, ok := fi.Focus[group]; ok {
-			for _, t := range tags {
-				if t == tag {
-					count++
-					break
-				}
-			}
-		}
-	}
-	return count
-}
-
-// countFilesInInteractGroup counts files having any tag in specified interact group
-func (app *AppState) countFilesInInteractGroup(group string) int {
-	count := 0
-	for _, fi := range app.Index.Files {
-		if _, ok := fi.Interact[group]; ok {
-			count++
-		}
-	}
-	return count
-}
-
-// countFilesWithInteractTag counts files having specific interact tag
-func (app *AppState) countFilesWithInteractTag(group, tag string) int {
-	count := 0
-	for _, fi := range app.Index.Files {
-		if tags, ok := fi.Interact[group]; ok {
-			for _, t := range tags {
-				if t == tag {
-					count++
-					break
-				}
-			}
-		}
-	}
-	return count
 }
 
 // getFileGroupSummary formats file's groups as "group(count)" string

@@ -101,8 +101,6 @@ const (
 	helpHeight   = 1
 	minWidth     = 80
 	minHeight    = 20
-	leftPaneMin  = 35
-	rightPaneMin = 30
 )
 
 const defaultModulePath = "github.com/USER/vi-fighter"
@@ -126,6 +124,14 @@ const (
 	FilterXOR                   // Toggle membership (symmetric difference)
 )
 
+// Category discriminates between Focus and Interact tag collections
+type Category int
+
+const (
+	CategoryFocus Category = iota
+	CategoryInteract
+)
+
 // FileInfo holds parsed metadata for a single Go source file
 type FileInfo struct {
 	Path     string              // relative path: "systems/drain.go"
@@ -134,6 +140,14 @@ type FileInfo struct {
 	Interact map[string][]string // interact group -> tags: {"init": ["cursor"], "state": ["gold"]}
 	Imports  []string            // local package names: ["events", "engine"]
 	IsAll    bool                // has #focus{all[*]}
+}
+
+// TagMap returns the appropriate tag map for the category
+func (fi *FileInfo) TagMap(cat Category) map[string][]string {
+	if cat == CategoryInteract {
+		return fi.Interact
+	}
+	return fi.Focus
 }
 
 // PackageInfo aggregates file data for a package directory
@@ -165,6 +179,38 @@ type Index struct {
 	InteractTags    map[string][]string // group -> tags
 	InteractByGroup map[string][]string // group -> file paths
 	InteractByTag   map[string][]string // "group:tag" -> file paths
+}
+
+// TagGroups returns sorted group names for the category
+func (idx *Index) TagGroups(cat Category) []string {
+	if cat == CategoryInteract {
+		return idx.InteractGroups
+	}
+	return idx.FocusGroups
+}
+
+// TagsByGroup returns group -> tags map for the category
+func (idx *Index) TagsByGroup(cat Category) map[string][]string {
+	if cat == CategoryInteract {
+		return idx.InteractTags
+	}
+	return idx.FocusTags
+}
+
+// FilesByGroup returns group -> file paths map for the category
+func (idx *Index) FilesByGroup(cat Category) map[string][]string {
+	if cat == CategoryInteract {
+		return idx.InteractByGroup
+	}
+	return idx.FocusByGroup
+}
+
+// FilesByTag returns "group:tag" -> file paths map for the category
+func (idx *Index) FilesByTag(cat Category) map[string][]string {
+	if cat == CategoryInteract {
+		return idx.InteractByTag
+	}
+	return idx.FocusByTag
 }
 
 // TreeNode represents a directory or file in hierarchical tree
@@ -218,6 +264,14 @@ func NewFilterState() *FilterState {
 // HasActiveFilter returns true if any paths are filtered
 func (f *FilterState) HasActiveFilter() bool {
 	return len(f.FilteredPaths) > 0
+}
+
+// FilteredTags returns the appropriate filtered tags map for the category
+func (f *FilterState) FilteredTags(cat Category) map[string]map[string]bool {
+	if cat == CategoryInteract {
+		return f.FilteredInteractTags
+	}
+	return f.FilteredFocusTags
 }
 
 // TagItem represents a group header or tag in right pane list
