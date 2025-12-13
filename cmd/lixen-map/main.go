@@ -59,6 +59,7 @@ func main() {
 		RgAvailable:           rgErr == nil,
 		GroupExpanded:         make(map[string]bool),
 		InteractGroupExpanded: make(map[string]bool),
+		StartCollapsed:        true,
 		Width:                 w,
 		Height:                h,
 	}
@@ -67,6 +68,12 @@ func main() {
 	app.RefreshTreeFlat()
 	app.RefreshFocusFlat()
 	app.RefreshInteractFlat()
+
+	// Apply initial collapsed state
+	if app.StartCollapsed {
+		app.applyInitialCollapsedState()
+	}
+
 	app.Render()
 
 	for {

@@ -47,7 +47,11 @@ Three-pane split view:
 
 Minimum terminal size: 120x24
 
+All panes start collapsed. Use `l` or `→` to expand, `L` to expand all.
+
 ## Key Bindings
+
+Press `?` in any view to open the full key binding help overlay.
 
 ### Navigation
 
@@ -58,7 +62,7 @@ Minimum terminal size: 120x24
 | `H`/`L`               | Collapse/expand all |
 | `0`/`$`, `Home`/`End` | Jump start/end      |
 | `PgUp`/`PgDn`         | Page scroll         |
-| `Tab`                 | Cycle pane focus    ||
+| `Tab``Shift+Tab`      | Next/Previous pane  |
 
 ### Selection
 
@@ -104,12 +108,13 @@ Two-key sequences for targeted filtering:
 
 ### Dependencies & Output
 
-| Key      | Action                       |
-|----------|------------------------------|
-| `d`      | Toggle dependency expansion  |
-| `+`/`-`  | Adjust expansion depth (1-5) |
-| `Ctrl+S` | Write output file            |
-| `Ctrl+Q` | Quit                         |
+| Key      | Action                             |
+|----------|------------------------------------|
+| `d`      | Toggle dependency expansion        |
+| `+`/`-`  | Adjust expansion depth (1-5)       |
+| `Ctrl+S` | Write output file                  |
+| `Ctrl+Y` | Copy output to clipboard (wl-copy) |
+| `Ctrl+Q` | Quit                               |
 
 ### Editing
 
@@ -136,6 +141,13 @@ Two-key sequences for targeted filtering:
 | `[o]`  | Some files with this tag/group selected |
 | `[ ]`  | No files with this tag/group selected   |
 
+## Pane Counters
+
+Each pane header displays selection and filter counts:
+
+- `[Sel: 5/20]` — 5 of 20 files selected
+- `[Sel: 5/20 | Fil: 8]` — with active filter showing 8 matched files
+
 ## Mindmap View
 
 Press `Enter` to open contextual mindmap from any pane:
@@ -144,7 +156,10 @@ Press `Enter` to open contextual mindmap from any pane:
 - **From Center Pane:** Files containing the focus tag/group
 - **From Right Pane:** Files containing the interact tag/group
 
-Files display both `#focus{...}` and `#interact{...}` annotations.
+Each file displays on 3 lines:
+1. Checkbox, filename, package, dependency count
+2. Focus tags: `#group{tag1, tag2}`
+3. Interact tags: `#group{tag1, tag2}`
 
 **Mindmap Controls:**
 
@@ -184,3 +199,5 @@ Press `e` on a file to edit its `@lixen:` annotations inline:
 ## Output
 
 Files with `#focus{all[*]}` always included. Sorted alphabetically.
+
+Use `Ctrl+S` to write to file, `Ctrl+Y` to copy to clipboard (requires `wl-copy`).

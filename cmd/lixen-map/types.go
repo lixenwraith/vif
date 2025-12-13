@@ -62,6 +62,12 @@ type AppState struct {
 	EditMode   bool   // true when editing tags
 	EditTarget string // file path being edited
 
+	// Help overlay
+	HelpMode bool
+
+	// Preferences (future: persist to disk)
+	StartCollapsed bool // Start with all panes collapsed
+
 	// Dimensions
 	Width  int
 	Height int

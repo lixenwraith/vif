@@ -30,11 +30,53 @@ type MindmapState struct {
 
 // MindmapItem represents a single row in mindmap file list
 type MindmapItem struct {
-	Depth  int
-	IsDir  bool
-	Path   string // File path for selection lookup, empty for dirs
-	Name   string
-	TagStr string // Formatted tags
+	Depth    int
+	IsDir    bool
+	Path     string // File path for selection lookup, empty for dirs
+	Name     string
+	Package  string              // Package name for files
+	DepCount int                 // Number of local imports
+	Focus    map[string][]string // Focus tags
+	Interact map[string][]string // Interact tags
+}
+
+// itemScreenHeight returns the number of screen rows an item occupies
+func itemScreenHeight(item MindmapItem) int {
+	if item.IsDir {
+		return 1
+	}
+	return 3
+}
+
+// calcScreenOffset calculates screen row offset for item at given index
+func calcScreenOffset(items []MindmapItem, index int) int {
+	offset := 0
+	for i := 0; i < index && i < len(items); i++ {
+		offset += itemScreenHeight(items[i])
+	}
+	return offset
+}
+
+// findItemAtScreenRow finds item index containing the given screen row
+func findItemAtScreenRow(items []MindmapItem, screenRow int) int {
+	row := 0
+	for i, item := range items {
+		h := itemScreenHeight(item)
+		if screenRow < row+h {
+			return i
+		}
+		row += h
+	}
+	return len(items) - 1
+}
+
+// totalScreenRows calculates total screen rows needed for all items
+func totalScreenRows(items []MindmapItem) int {
+	total := 0
+	for _, item := range items {
+		total += itemScreenHeight(item)
+	}
+	return total
 }
 
 // EnterMindmap routes mindmap opening to the handler based on originating pane
@@ -80,115 +122,6 @@ func (app *AppState) enterMindmapPackage() {
 
 	app.MindmapState = state
 	app.MindmapMode = true
-}
-
-// formatDirTags aggregates tags from immediate children of directory
-func (app *AppState) formatDirTags(node *TreeNode) string {
-	focusGroups := make(map[string]map[string]bool)
-	interactGroups := make(map[string]map[string]bool)
-
-	for _, child := range node.Children {
-		if child.IsDir || child.FileInfo == nil {
-			continue
-		}
-		// Aggregate focus
-		for group, tags := range child.FileInfo.Focus {
-			if focusGroups[group] == nil {
-				focusGroups[group] = make(map[string]bool)
-			}
-			for _, t := range tags {
-				focusGroups[group][t] = true
-			}
-		}
-		// Aggregate interact
-		for group, tags := range child.FileInfo.Interact {
-			if interactGroups[group] == nil {
-				interactGroups[group] = make(map[string]bool)
-			}
-			for _, t := range tags {
-				interactGroups[group][t] = true
-			}
-		}
-	}
-
-	var parts []string
-	if len(focusGroups) > 0 {
-		parts = append(parts, formatTagGroups("focus", focusGroups))
-	}
-	if len(interactGroups) > 0 {
-		parts = append(parts, formatTagGroups("interact", interactGroups))
-	}
-
-	return strings.Join(parts, " ")
-}
-
-// formatFileTags formats single file's tags as display string (both Focus and Interact)
-func formatFileTags(fi *FileInfo) string {
-	if fi == nil {
-		return ""
-	}
-
-	var parts []string
-
-	// Focus tags
-	if len(fi.Focus) > 0 {
-		parts = append(parts, formatTagMap("focus", fi.Focus))
-	}
-
-	// Interact tags
-	if len(fi.Interact) > 0 {
-		parts = append(parts, formatTagMap("interact", fi.Interact))
-	}
-
-	return strings.Join(parts, " ")
-}
-
-// formatTagMap formats a tag map as #block{group[tags],...} string
-func formatTagMap(block string, tagMap map[string][]string) string {
-	if len(tagMap) == 0 {
-		return ""
-	}
-
-	groups := make([]string, 0, len(tagMap))
-	for g := range tagMap {
-		groups = append(groups, g)
-	}
-	sort.Strings(groups)
-
-	var groupParts []string
-	for _, g := range groups {
-		tags := make([]string, len(tagMap[g]))
-		copy(tags, tagMap[g])
-		sort.Strings(tags)
-		groupParts = append(groupParts, fmt.Sprintf("%s[%s]", g, strings.Join(tags, ",")))
-	}
-
-	return fmt.Sprintf("#%s{%s}", block, strings.Join(groupParts, ","))
-}
-
-// formatTagGroups formats tag set map as #block{group[tags],...} string
-func formatTagGroups(block string, tagGroups map[string]map[string]bool) string {
-	if len(tagGroups) == 0 {
-		return ""
-	}
-
-	groups := make([]string, 0, len(tagGroups))
-	for g := range tagGroups {
-		groups = append(groups, g)
-	}
-	sort.Strings(groups)
-
-	var groupParts []string
-	for _, g := range groups {
-		tags := make([]string, 0, len(tagGroups[g]))
-		for t := range tagGroups[g] {
-			tags = append(tags, t)
-		}
-		sort.Strings(tags)
-		groupParts = append(groupParts, fmt.Sprintf("%s[%s]", g, strings.Join(tags, ",")))
-	}
-
-	return fmt.Sprintf("#%s{%s}", block, strings.Join(groupParts, ","))
 }
 
 // enterMindmapFocusTag opens mindmap for focus tag or group at cursor
@@ -270,11 +203,14 @@ func (app *AppState) buildGroupItems(cat Category, group string) []MindmapItem {
 	for _, path := range paths {
 		fi := app.Index.Files[path]
 		items = append(items, MindmapItem{
-			Depth:  0,
-			IsDir:  false,
-			Path:   path,
-			Name:   path,
-			TagStr: formatFileTags(fi),
+			Depth:    0,
+			IsDir:    false,
+			Path:     path,
+			Name:     path,
+			Package:  fi.Package,
+			DepCount: len(fi.Imports),
+			Focus:    fi.Focus,
+			Interact: fi.Interact,
 		})
 	}
 
@@ -301,11 +237,14 @@ func (app *AppState) buildTagItems(cat Category, group, tag string) []MindmapIte
 	for _, path := range paths {
 		fi := app.Index.Files[path]
 		items = append(items, MindmapItem{
-			Depth:  0,
-			IsDir:  false,
-			Path:   path,
-			Name:   path,
-			TagStr: formatFileTags(fi),
+			Depth:    0,
+			IsDir:    false,
+			Path:     path,
+			Name:     path,
+			Package:  fi.Package,
+			DepCount: len(fi.Imports),
+			Focus:    fi.Focus,
+			Interact: fi.Interact,
 		})
 	}
 
@@ -318,13 +257,11 @@ func (app *AppState) buildPackageItems(node *TreeNode, depth int) []MindmapItem 
 
 	// Add directory header
 	if node.IsDir {
-		tagStr := app.formatDirTags(node)
 		items = append(items, MindmapItem{
-			Depth:  depth,
-			IsDir:  true,
-			Path:   "",
-			Name:   node.Name + "/",
-			TagStr: tagStr,
+			Depth: depth,
+			IsDir: true,
+			Path:  "",
+			Name:  node.Name + "/",
 		})
 	}
 
@@ -343,16 +280,24 @@ func (app *AppState) buildPackageItems(node *TreeNode, depth int) []MindmapItem 
 			subItems := app.buildPackageItems(child, depth+1)
 			items = append(items, subItems...)
 		} else {
-			tagStr := ""
+			var focus, interact map[string][]string
+			var pkg string
+			var depCount int
 			if child.FileInfo != nil {
-				tagStr = formatFileTags(child.FileInfo)
+				focus = child.FileInfo.Focus
+				interact = child.FileInfo.Interact
+				pkg = child.FileInfo.Package
+				depCount = len(child.FileInfo.Imports)
 			}
 			items = append(items, MindmapItem{
-				Depth:  depth + 1,
-				IsDir:  false,
-				Path:   child.Path,
-				Name:   child.Name,
-				TagStr: tagStr,
+				Depth:    depth + 1,
+				IsDir:    false,
+				Path:     child.Path,
+				Name:     child.Name,
+				Package:  pkg,
+				DepCount: depCount,
+				Focus:    focus,
+				Interact: interact,
 			})
 		}
 	}
@@ -385,8 +330,11 @@ func (app *AppState) HandleMindmapEvent(ev terminal.Event) {
 
 	case terminal.KeyRune:
 		switch ev.Rune {
+		case '?':
+			app.HelpMode = true
+			return
 		case 'q':
-			// Exit to 2-pane view
+			// Exit to pane view
 			app.MindmapMode = false
 			return
 		case 'j':
@@ -527,17 +475,23 @@ func (app *AppState) moveMindmapCursor(delta int) {
 		state.Cursor = len(state.Items) - 1
 	}
 
-	// Adjust scroll
+	// Adjust scroll based on screen rows
 	visibleRows := app.Height - 4 // Header + help
 	if visibleRows < 1 {
 		visibleRows = 1
 	}
 
-	if state.Cursor < state.Scroll {
-		state.Scroll = state.Cursor
+	cursorScreenStart := calcScreenOffset(state.Items, state.Cursor)
+	cursorScreenEnd := cursorScreenStart + itemScreenHeight(state.Items[state.Cursor])
+
+	if cursorScreenStart < state.Scroll {
+		state.Scroll = cursorScreenStart
 	}
-	if state.Cursor >= state.Scroll+visibleRows {
-		state.Scroll = state.Cursor - visibleRows + 1
+	if cursorScreenEnd > state.Scroll+visibleRows {
+		state.Scroll = cursorScreenEnd - visibleRows
+	}
+	if state.Scroll < 0 {
+		state.Scroll = 0
 	}
 }
 
@@ -547,7 +501,8 @@ func (app *AppState) pageMindmapCursor(direction int) {
 	if visibleRows < 1 {
 		visibleRows = 1
 	}
-	delta := (visibleRows / 2) * direction
+	// Move by roughly half-page worth of items
+	delta := (visibleRows / 4) * direction // Divide by 4 since files take 3 rows
 	if delta == 0 {
 		delta = direction
 	}
@@ -622,6 +577,29 @@ func (app *AppState) clearMindmapSelection() {
 	app.Message = "cleared visible selections"
 }
 
+// formatTagsExpanded formats tags with spacing: #group{tag1, tag2} #group2{tag3}
+func formatTagsExpanded(tagMap map[string][]string) string {
+	if len(tagMap) == 0 {
+		return ""
+	}
+
+	groups := make([]string, 0, len(tagMap))
+	for g := range tagMap {
+		groups = append(groups, g)
+	}
+	sort.Strings(groups)
+
+	var parts []string
+	for _, g := range groups {
+		tags := make([]string, len(tagMap[g]))
+		copy(tags, tagMap[g])
+		sort.Strings(tags)
+		parts = append(parts, fmt.Sprintf("#%s{%s}", g, strings.Join(tags, ", ")))
+	}
+
+	return strings.Join(parts, "  ")
+}
+
 // RenderMindmap draws mindmap view with file list and status
 func (app *AppState) RenderMindmap(cells []terminal.Cell, w, h int) {
 	state := app.MindmapState
@@ -653,10 +631,24 @@ func (app *AppState) RenderMindmap(cells []terminal.Cell, w, h int) {
 	contentTop := 1
 	contentHeight := h - 2 // Header + help
 
-	for i := 0; i < contentHeight && state.Scroll+i < len(state.Items); i++ {
-		y := contentTop + i
-		idx := state.Scroll + i
-		item := state.Items[idx]
+	// Render items based on screen row position
+	screenRow := 0
+	for idx, item := range state.Items {
+		itemH := itemScreenHeight(item)
+
+		// Skip items before scroll position
+		if screenRow+itemH <= state.Scroll {
+			screenRow += itemH
+			continue
+		}
+
+		// Stop if we're past visible area
+		if screenRow >= state.Scroll+contentHeight {
+			break
+		}
+
+		// Calculate visible portion of this item
+		itemStartY := contentTop + (screenRow - state.Scroll)
 
 		// Check filter match
 		matchesFilter := true
@@ -671,69 +663,148 @@ func (app *AppState) RenderMindmap(cells []terminal.Cell, w, h int) {
 			rowBg = colorCursorBg
 		}
 
-		// Clear line
-		for x := 0; x < w; x++ {
-			cells[y*w+x] = terminal.Cell{Rune: ' ', Fg: colorDefaultFg, Bg: rowBg}
-		}
-
 		// Indentation
 		indent := item.Depth * 2
-		x := 1 + indent
 
 		if item.IsDir {
-			// Directory line
-			drawText(cells, w, x, y, item.Name, colorDirFg, rowBg, terminal.AttrBold)
-			x += len(item.Name) + 2
+			// Directory: single line
+			y := itemStartY
+			if y >= contentTop && y < contentTop+contentHeight {
+				// Clear line
+				for x := 0; x < w; x++ {
+					cells[y*w+x] = terminal.Cell{Rune: ' ', Fg: colorDefaultFg, Bg: rowBg}
+				}
 
-			// Tags for directory (colored)
-			if item.TagStr != "" && x < w-2 {
-				drawColoredTags(cells, w, x, y, item.TagStr, rowBg)
+				x := 1 + indent
+				drawText(cells, w, x, y, item.Name, colorDirFg, rowBg, terminal.AttrBold)
 			}
 		} else {
-			// File line - show checkbox
+			// File: 3 lines
 			isSelected := app.Selected[item.Path]
 			isDepExpanded := depExpanded[item.Path]
 
-			checkbox := "[ ]"
-			checkFg := colorUnselected
-			if isSelected {
-				checkbox = "[x]"
-				checkFg = colorSelected
-			} else if isDepExpanded {
-				checkbox = "[+]"
-				checkFg = colorExpandedFg
-			}
-			if dimmed {
-				checkFg = colorUnselected
+			// Line 1: checkbox + filename + package + deps
+			y1 := itemStartY
+			if y1 >= contentTop && y1 < contentTop+contentHeight {
+				for x := 0; x < w; x++ {
+					cells[y1*w+x] = terminal.Cell{Rune: ' ', Fg: colorDefaultFg, Bg: rowBg}
+				}
+
+				x := 1 + indent
+
+				// Checkbox
+				checkbox := "[ ]"
+				checkFg := colorUnselected
+				if isSelected {
+					checkbox = "[x]"
+					checkFg = colorSelected
+				} else if isDepExpanded {
+					checkbox = "[+]"
+					checkFg = colorExpandedFg
+				}
+				if dimmed {
+					checkFg = colorUnselected
+				}
+				drawText(cells, w, x, y1, checkbox, checkFg, rowBg, terminal.AttrNone)
+				x += 4
+
+				// Filename
+				fi := app.Index.Files[item.Path]
+				nameFg := colorDefaultFg
+				if fi != nil && fi.IsAll {
+					nameFg = colorAllTagFg
+				}
+				if dimmed {
+					nameFg = colorUnselected
+				}
+
+				name := item.Name
+				maxNameLen := 35
+				if len(name) > maxNameLen {
+					name = "..." + name[len(name)-maxNameLen+3:]
+				}
+				attr := terminal.AttrNone
+				if dimmed {
+					attr = terminal.AttrDim
+				}
+				drawText(cells, w, x, y1, name, nameFg, rowBg, attr)
+				x += len(name) + 2
+
+				// Package and deps info
+				infoStr := fmt.Sprintf("pkg:%s  deps:%d", item.Package, item.DepCount)
+				infoFg := colorStatusFg
+				if dimmed {
+					infoFg = colorUnselected
+				}
+				drawText(cells, w, x, y1, infoStr, infoFg, rowBg, terminal.AttrDim)
 			}
 
-			drawText(cells, w, x, y, checkbox, checkFg, rowBg, terminal.AttrNone)
-			x += 4
+			// Line 2: Focus tags
+			y2 := itemStartY + 1
+			if y2 >= contentTop && y2 < contentTop+contentHeight {
+				for x := 0; x < w; x++ {
+					cells[y2*w+x] = terminal.Cell{Rune: ' ', Fg: colorDefaultFg, Bg: rowBg}
+				}
 
-			// File name
-			fi := app.Index.Files[item.Path]
-			nameFg := colorDefaultFg
-			if fi != nil && fi.IsAll {
-				nameFg = colorAllTagFg
+				x := 1 + indent + 4 // Align with filename
+				label := "Focus: "
+				labelFg := colorExpandedFg
+				if dimmed {
+					labelFg = colorUnselected
+				}
+				drawText(cells, w, x, y2, label, labelFg, rowBg, terminal.AttrNone)
+				x += len(label)
+
+				if len(item.Focus) > 0 {
+					focusStr := formatTagsExpanded(item.Focus)
+					maxLen := w - x - 2
+					if len(focusStr) > maxLen && maxLen > 3 {
+						focusStr = focusStr[:maxLen-1] + "…"
+					}
+					if dimmed {
+						drawText(cells, w, x, y2, focusStr, colorUnselected, rowBg, terminal.AttrDim)
+					} else {
+						drawColoredTags(cells, w, x, y2, focusStr, rowBg)
+					}
+				} else {
+					drawText(cells, w, x, y2, "(none)", colorUnselected, rowBg, terminal.AttrDim)
+				}
 			}
 
-			name := item.Name
-			maxNameLen := 40
-			if len(name) > maxNameLen {
-				name = "..." + name[len(name)-maxNameLen+3:]
-			}
-			attr := terminal.AttrNone
-			if dimmed {
-				attr = terminal.AttrDim
-			}
-			drawText(cells, w, x, y, name, nameFg, rowBg, attr)
-			x += len(name) + 2
+			// Line 3: Interact tags
+			y3 := itemStartY + 2
+			if y3 >= contentTop && y3 < contentTop+contentHeight {
+				for x := 0; x < w; x++ {
+					cells[y3*w+x] = terminal.Cell{Rune: ' ', Fg: colorDefaultFg, Bg: rowBg}
+				}
 
-			// Tags (colored)
-			if item.TagStr != "" && x < w-2 {
-				drawColoredTags(cells, w, x, y, item.TagStr, rowBg)
+				x := 1 + indent + 4 // Align with filename
+				label := "Interact: "
+				labelFg := colorExpandedFg
+				if dimmed {
+					labelFg = colorUnselected
+				}
+				drawText(cells, w, x, y3, label, labelFg, rowBg, terminal.AttrNone)
+				x += len(label)
+
+				if len(item.Interact) > 0 {
+					interactStr := formatTagsExpanded(item.Interact)
+					maxLen := w - x - 2
+					if len(interactStr) > maxLen && maxLen > 3 {
+						interactStr = interactStr[:maxLen-1] + "…"
+					}
+					if dimmed {
+						drawText(cells, w, x, y3, interactStr, colorUnselected, rowBg, terminal.AttrDim)
+					} else {
+						drawColoredTags(cells, w, x, y3, interactStr, rowBg)
+					}
+				} else {
+					drawText(cells, w, x, y3, "(none)", colorUnselected, rowBg, terminal.AttrDim)
+				}
 			}
 		}
+
+		screenRow += itemH
 	}
 
 	// Input mode overlay
@@ -751,14 +822,15 @@ func (app *AppState) RenderMindmap(cells []terminal.Cell, w, h int) {
 
 	// Help bar
 	helpY := h - 1
-	help := "j/k:nav 0/$:jump Space:toggle a:all c:clear f:filter F:sel-filter /:search t:tag g:group q:back"
+	help := "?:help j/k:nav Space:sel f:filter /:search t:tag g:group Enter:dive q:back ^Q:quit"
 	drawText(cells, w, 1, helpY, help, colorHelpFg, colorDefaultBg, terminal.AttrDim)
 
 	// Scroll indicator
-	if len(state.Items) > contentHeight {
+	totalRows := totalScreenRows(state.Items)
+	if totalRows > contentHeight {
 		pct := 0
-		if len(state.Items) > 0 {
-			pct = (state.Scroll * 100) / len(state.Items)
+		if totalRows > 0 {
+			pct = (state.Scroll * 100) / totalRows
 		}
 		scrollStr := fmt.Sprintf("[%d%%]", pct)
 		drawText(cells, w, w-len(scrollStr)-1, helpY, scrollStr, colorStatusFg, colorDefaultBg, terminal.AttrNone)

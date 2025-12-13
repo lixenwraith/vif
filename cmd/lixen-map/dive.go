@@ -67,7 +67,10 @@ func (app *AppState) HandleDiveEvent(ev terminal.Event) {
 	case terminal.KeyEscape:
 		app.ExitDive()
 	case terminal.KeyRune:
-		if ev.Rune == 'q' {
+		switch ev.Rune {
+		case '?':
+			app.HelpMode = true
+		case 'q':
 			app.ExitDive()
 		}
 	}
@@ -106,10 +109,11 @@ func (app *AppState) RenderDive(cells []terminal.Cell, w, h int) {
 	contentBottom := h - 1
 	contentH := contentBottom - contentTop
 
-	// Allocate sections
+	// Focus box height
 	focusBoxH := 4
-	totalLinks := len(state.FocusLinks) + len(state.InteractLinks)
-	depsH, tagsH := allocateSections(contentH, focusBoxH, len(state.DependsOn)+len(state.DependedBy), totalLinks)
+
+	// Allocate sections dynamically based on content
+	depsH, tagsH := allocateSections(contentH, focusBoxH, state.DependsOn, state.DependedBy, state.FocusLinks, state.InteractLinks)
 
 	y := contentTop
 
@@ -122,15 +126,26 @@ func (app *AppState) RenderDive(cells []terminal.Cell, w, h int) {
 	y = renderFocusBox(cells, w, y, state)
 
 	// Render tag links sections
-	if tagsH > 0 && totalLinks > 0 {
+	if tagsH > 0 && (len(state.FocusLinks) > 0 || len(state.InteractLinks) > 0) {
 		remainingSpace := contentBottom - y
 
 		focusLinksH := 0
 		interactLinksH := 0
 
 		if len(state.FocusLinks) > 0 && len(state.InteractLinks) > 0 {
-			focusLinksH = remainingSpace / 2
+			// Split based on content
+			focusContent := len(state.FocusLinks)
+			interactContent := len(state.InteractLinks)
+			total := focusContent + interactContent
+			focusLinksH = remainingSpace * focusContent / total
 			interactLinksH = remainingSpace - focusLinksH
+			// Ensure minimums
+			if focusLinksH < 4 {
+				focusLinksH = 4
+			}
+			if interactLinksH < 4 {
+				interactLinksH = 4
+			}
 		} else if len(state.FocusLinks) > 0 {
 			focusLinksH = remainingSpace
 		} else {
@@ -147,6 +162,11 @@ func (app *AppState) RenderDive(cells []terminal.Cell, w, h int) {
 			y = renderTagLinkSection(cells, w, y, interactLinksH, "INTERACT", state.InteractLinks, colorExpandedFg)
 		}
 	}
+
+	// Help bar
+	helpY := h - 1
+	help := "?:help Esc/q:back ^Q:quit"
+	drawText(cells, w, 2, helpY, help, colorHelpFg, colorDefaultBg, terminal.AttrDim)
 }
 
 // computeDiveData gathers dependency and tag relationship data for a file
@@ -292,29 +312,108 @@ func computeTagLinks(app *AppState, sourceTagMap map[string][]string, selfPath s
 }
 
 // allocateSections distributes vertical space between dependency and tag areas
-func allocateSections(totalH, focusH, depCount, tagCount int) (depsH, tagsH int) {
-	available := totalH - focusH - 4 // connectors
+func allocateSections(totalH, focusH int, dependsOn, dependedBy []DivePackage, focusLinks, interactLinks []DiveTagGroup) (depsH, tagsH int) {
+	available := totalH - focusH - 2 // -2 for connectors/margins
 
-	if depCount == 0 && tagCount == 0 {
+	if available < 4 {
 		return 0, 0
 	}
 
-	if depCount == 0 {
+	// Calculate actual content needs
+	depsContentH := calcDepsContentHeight(dependsOn, dependedBy)
+	tagsContentH := calcTagsContentHeight(focusLinks, interactLinks)
+
+	hasDeps := len(dependsOn) > 0 || len(dependedBy) > 0
+	hasTags := len(focusLinks) > 0 || len(interactLinks) > 0
+
+	if !hasDeps && !hasTags {
+		return 0, 0
+	}
+
+	if !hasDeps {
 		return 0, available
 	}
-	if tagCount == 0 {
+	if !hasTags {
 		return available, 0
 	}
 
-	// Split proportionally, minimum 4 lines each
-	depsH = max(4, available*40/100)
+	// Proportional allocation based on content
+	totalContent := depsContentH + tagsContentH
+	if totalContent == 0 {
+		totalContent = 1
+	}
+
+	depsH = (available * depsContentH) / totalContent
 	tagsH = available - depsH
-	if tagsH < 4 {
-		tagsH = 4
+
+	// Enforce minimums
+	minDeps := min(6, depsContentH+2)
+	minTags := min(6, tagsContentH+2)
+
+	if depsH < minDeps && available >= minDeps+minTags {
+		depsH = minDeps
+		tagsH = available - depsH
+	}
+	if tagsH < minTags && available >= minDeps+minTags {
+		tagsH = minTags
 		depsH = available - tagsH
 	}
 
+	// Cap at actual content needs + borders
+	maxDepsH := depsContentH + 3
+	if depsH > maxDepsH && tagsContentH > 0 {
+		depsH = maxDepsH
+		tagsH = available - depsH
+	}
+
 	return depsH, tagsH
+}
+
+// calcDepsContentHeight estimates lines needed for dependency content
+func calcDepsContentHeight(dependsOn, dependedBy []DivePackage) int {
+	maxLines := 0
+	for _, dp := range dependsOn {
+		lines := 1 + len(dp.Files) // dir + files
+		if lines > maxLines {
+			maxLines = lines
+		}
+	}
+	for _, dp := range dependedBy {
+		lines := 1 + len(dp.Files)
+		if lines > maxLines {
+			maxLines = lines
+		}
+	}
+	// Account for multiple packages in columns
+	totalPkgs := len(dependsOn) + len(dependedBy)
+	if totalPkgs > 2 {
+		maxLines += (totalPkgs / 3) * 2 // rough estimate for wrapping
+	}
+	return maxLines
+}
+
+// calcTagsContentHeight estimates lines needed for tag link content
+func calcTagsContentHeight(focusLinks, interactLinks []DiveTagGroup) int {
+	maxFiles := 0
+	for _, tg := range focusLinks {
+		if len(tg.Files) > maxFiles {
+			maxFiles = len(tg.Files)
+		}
+	}
+	for _, tg := range interactLinks {
+		if len(tg.Files) > maxFiles {
+			maxFiles = len(tg.Files)
+		}
+	}
+	// Two sections (focus + interact) with headers
+	sections := 0
+	if len(focusLinks) > 0 {
+		sections++
+	}
+	if len(interactLinks) > 0 {
+		sections++
+	}
+	return maxFiles + 3 + (sections * 2)
 }
 
 // renderDepsSection draws the depends-on and depended-by columns
@@ -322,13 +421,27 @@ func renderDepsSection(cells []terminal.Cell, w, y, maxH int, dependsOn, depende
 	innerW := w - 4
 	startY := y
 
-	// Calculate column widths
 	hasDepOn := len(dependsOn) > 0
 	hasDepBy := len(dependedBy) > 0
 
+	if !hasDepOn && !hasDepBy {
+		return y
+	}
+
+	// Dynamic column width based on content count
 	var depOnW, depByW int
 	if hasDepOn && hasDepBy {
-		depOnW = innerW * 65 / 100
+		// Split proportionally based on package count
+		totalPkgs := len(dependsOn) + len(dependedBy)
+		depOnRatio := len(dependsOn) * 100 / totalPkgs
+		// Clamp between 30% and 70%
+		if depOnRatio < 30 {
+			depOnRatio = 30
+		}
+		if depOnRatio > 70 {
+			depOnRatio = 70
+		}
+		depOnW = innerW * depOnRatio / 100
 		depByW = innerW - depOnW - 1 // -1 for separator
 	} else if hasDepOn {
 		depOnW = innerW
@@ -336,8 +449,9 @@ func renderDepsSection(cells []terminal.Cell, w, y, maxH int, dependsOn, depende
 		depByW = innerW
 	}
 
-	// Draw box
-	boxHeight := min(maxH, calcDepsBoxHeight(dependsOn, dependedBy, maxH))
+	// Calculate required height based on content
+	boxHeight := calcDepsBoxHeightDynamic(dependsOn, dependedBy, depOnW, depByW, maxH)
+
 	drawSingleBox(cells, w, 2, y, innerW, boxHeight)
 
 	// Headers
@@ -378,21 +492,56 @@ func renderDepsSection(cells []terminal.Cell, w, y, maxH int, dependsOn, depende
 	return startY + boxHeight
 }
 
-// calcDepsBoxHeight computes required height for dependency box content
-func calcDepsBoxHeight(dependsOn, dependedBy []DivePackage, maxH int) int {
-	// Calculate needed height based on content
-	maxFiles := 0
-	for _, dp := range dependsOn {
-		if len(dp.Files)+1 > maxFiles {
-			maxFiles = len(dp.Files) + 1
+// calcDepsBoxHeightDynamic computes height based on actual content layout
+func calcDepsBoxHeightDynamic(dependsOn, dependedBy []DivePackage, depOnW, depByW, maxH int) int {
+	// Simulate layout to find actual height needed
+	leftH := calcColumnHeight(dependsOn, depOnW)
+	rightH := calcColumnHeight(dependedBy, depByW)
+
+	neededH := max(leftH, rightH) + 2 // +2 for borders
+	if neededH < 4 {
+		neededH = 4
+	}
+	return min(maxH, neededH)
+}
+
+// calcColumnHeight calculates rows needed to render packages in given width
+func calcColumnHeight(packages []DivePackage, availW int) int {
+	if len(packages) == 0 || availW < 10 {
+		return 0
+	}
+
+	colW := min(availW, 22)
+	numCols := max(1, availW/(colW+1))
+
+	totalRows := 0
+	col := 0
+	rowHeight := 0
+
+	for _, pkg := range packages {
+		pkgHeight := 1 + min(len(pkg.Files), 6) // dir + up to 6 files
+		if len(pkg.Files) > 6 {
+			pkgHeight++ // +1 for "(+N more)"
+		}
+
+		if pkgHeight > rowHeight {
+			rowHeight = pkgHeight
+		}
+
+		col++
+		if col >= numCols {
+			totalRows += rowHeight + 1 // +1 gap
+			col = 0
+			rowHeight = 0
 		}
 	}
-	for _, dp := range dependedBy {
-		if len(dp.Files)+1 > maxFiles {
-			maxFiles = len(dp.Files) + 1
-		}
+
+	// Final partial row
+	if col > 0 {
+		totalRows += rowHeight
 	}
-	return min(maxH, maxFiles+2) // +2 for borders
+
+	return totalRows
 }
 
 // renderPackageList draws a multi-column list of packages with their files
@@ -402,15 +551,15 @@ func renderPackageList(cells []terminal.Cell, totalW, x, y, availW, availH int, 
 	}
 
 	// Calculate column layout
-	colW := min(availW, 20)
+	colW := min(availW, 22)
 	numCols := max(1, availW/(colW+1))
 	colW = (availW - numCols + 1) / numCols
 
 	col := 0
-	rowOffset := 0 // Track row within current "row of columns"
+	rowOffset := 0
+	maxRowInGroup := 0
 	pkgShown := 0
 	totalPkgs := len(packages)
-	maxRowInGroup := 0 // Track tallest column in current row of columns
 
 	for _, pkg := range packages {
 		if rowOffset >= availH {
@@ -426,15 +575,16 @@ func renderPackageList(cells []terminal.Cell, totalW, x, y, availW, availH int, 
 		localRow++
 		pkgShown++
 
-		// Files under package
-		maxFilesPerPkg := min(4, availH-rowOffset-localRow)
+		// Calculate how many files we can show
+		remainingRows := availH - rowOffset - localRow
+		maxFilesPerPkg := min(remainingRows, 8) // Show up to 8 files
 		if maxFilesPerPkg < 1 {
 			maxFilesPerPkg = 1
 		}
+
 		totalFiles := len(pkg.Files)
 		hasMore := totalFiles > maxFilesPerPkg
 
-		// Reserve last slot for "(+N)" if needed
 		filesToShow := maxFilesPerPkg
 		if hasMore && maxFilesPerPkg > 1 {
 			filesToShow = maxFilesPerPkg - 1
@@ -448,7 +598,6 @@ func renderPackageList(cells []terminal.Cell, totalW, x, y, availW, availH int, 
 			filesShown++
 		}
 
-		// Show remaining count on its own line
 		if hasMore {
 			remaining := totalFiles - filesShown
 			moreStr := fmt.Sprintf(" (+%d)", remaining)
@@ -456,16 +605,14 @@ func renderPackageList(cells []terminal.Cell, totalW, x, y, availW, availH int, 
 			localRow++
 		}
 
-		// Track max height in this row of columns
 		if localRow > maxRowInGroup {
 			maxRowInGroup = localRow
 		}
 
-		// Move to next column or wrap
 		col++
 		if col >= numCols {
 			col = 0
-			rowOffset += maxRowInGroup + 1 // Move past tallest column + gap
+			rowOffset += maxRowInGroup + 1
 			maxRowInGroup = 0
 		}
 
@@ -474,14 +621,15 @@ func renderPackageList(cells []terminal.Cell, totalW, x, y, availW, availH int, 
 		}
 	}
 
+	// Show remaining packages indicator only if we couldn't show all
 	if pkgShown < totalPkgs {
 		remaining := totalPkgs - pkgShown
 		moreStr := fmt.Sprintf("(+%d more)", remaining)
-		finalRow := rowOffset
+		finalRow := min(rowOffset, availH-1)
 		if col > 0 {
-			finalRow += maxRowInGroup
+			finalRow = min(rowOffset+maxRowInGroup, availH-1)
 		}
-		drawText(cells, totalW, x, y+min(finalRow, availH-1), moreStr, colorStatusFg, colorDefaultBg, terminal.AttrDim)
+		drawText(cells, totalW, x, y+finalRow, moreStr, colorStatusFg, colorDefaultBg, terminal.AttrDim)
 	}
 }
 

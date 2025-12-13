@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os/exec"
 
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
@@ -9,6 +10,17 @@ import (
 // HandleEvent routes keyboard events to appropriate handler
 func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 	app.Message = ""
+
+	// Global quit from any view
+	if ev.Key == terminal.KeyCtrlQ {
+		return true, false
+	}
+
+	// Help overlay takes priority
+	if app.HelpMode {
+		app.HandleHelpEvent(ev)
+		return false, false
+	}
 
 	if app.DiveMode {
 		app.HandleDiveEvent(ev)
@@ -40,11 +52,15 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 
 	// Global keys
 	switch ev.Key {
-	case terminal.KeyCtrlQ:
-		return true, false
+	case terminal.KeyCtrlY:
+		app.copyOutputToClipboard()
+		return false, false
 
 	case terminal.KeyRune:
 		switch ev.Rune {
+		case '?':
+			app.HelpMode = true
+			return false, false
 		case 'f', 'i':
 			// Start two-key filter sequence
 			app.CommandPending = ev.Rune
@@ -125,6 +141,17 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 		}
 		return false, false
 
+	case terminal.KeyBacktab:
+		switch app.FocusPane {
+		case PaneLeft:
+			app.FocusPane = PaneRight
+		case PaneCenter:
+			app.FocusPane = PaneLeft
+		case PaneRight:
+			app.FocusPane = PaneCenter
+		}
+		return false, false
+
 	case terminal.KeyEnter:
 		app.EnterMindmap()
 		return false, false
@@ -162,6 +189,31 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 		return app.handleInteractPaneEvent(ev)
 	}
 	return false, false
+}
+
+// applyInitialCollapsedState collapses all panes for fresh start
+func (app *AppState) applyInitialCollapsedState() {
+	// Collapse tree directories
+	collapseAllRecursive(app.TreeRoot)
+	app.RefreshTreeFlat()
+	app.TreeCursor = 0
+	app.TreeScroll = 0
+
+	// Collapse focus groups
+	for _, group := range app.Index.FocusGroups {
+		app.GroupExpanded[group] = false
+	}
+	app.RefreshFocusFlat()
+	app.TagCursor = 0
+	app.TagScroll = 0
+
+	// Collapse interact groups
+	for _, group := range app.Index.InteractGroups {
+		app.InteractGroupExpanded[group] = false
+	}
+	app.RefreshInteractFlat()
+	app.InteractCursor = 0
+	app.InteractScroll = 0
 }
 
 // handleCommandSequence processes second key of two-key filter command
@@ -988,4 +1040,34 @@ func (app *AppState) selectAllVisibleInteractTags() {
 	}
 
 	app.Message = fmt.Sprintf("selected %d files", count)
+}
+
+// copyOutputToClipboard pipes computed output files to wl-copy
+func (app *AppState) copyOutputToClipboard() {
+	files := app.ComputeOutputFiles()
+	if len(files) == 0 {
+		app.Message = "no files to copy"
+		return
+	}
+
+	cmd := exec.Command("wl-copy")
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return // Silent fail
+	}
+
+	if err := cmd.Start(); err != nil {
+		return // Silent fail
+	}
+
+	for _, f := range files {
+		fmt.Fprintf(stdin, "./%s\n", f)
+	}
+	stdin.Close()
+
+	if err := cmd.Wait(); err != nil {
+		return // Silent fail
+	}
+
+	app.Message = fmt.Sprintf("copied %d files to clipboard", len(files))
 }

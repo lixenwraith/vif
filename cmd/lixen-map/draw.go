@@ -37,22 +37,25 @@ const (
 	starChar  = '★'
 )
 
-// drawText renders text string at position with styling.
+// drawText renders text string at position with styling
 func drawText(cells []terminal.Cell, width, x, y int, text string, fg, bg terminal.RGB, attr terminal.Attr) {
-	for i, r := range text {
-		if x+i >= width || x+i < 0 {
+	// Not using for index for multi-byte characters
+	col := 0
+	for _, r := range text {
+		if x+col >= width || x+col < 0 {
 			break
 		}
-		cells[y*width+x+i] = terminal.Cell{
+		cells[y*width+x+col] = terminal.Cell{
 			Rune:  r,
 			Fg:    fg,
 			Bg:    bg,
 			Attrs: attr,
 		}
+		col++
 	}
 }
 
-// drawRect fills rectangle area with background color.
+// drawRect fills rectangle area with background color
 func drawRect(cells []terminal.Cell, startX, startY, rectW, rectH, totalWidth int, bg terminal.RGB) {
 	for row := startY; row < startY+rectH; row++ {
 		for col := startX; col < startX+rectW && col < totalWidth; col++ {
@@ -64,7 +67,7 @@ func drawRect(cells []terminal.Cell, startX, startY, rectW, rectH, totalWidth in
 	}
 }
 
-// setCell safely sets a single cell with bounds checking.
+// setCell safely sets a single cell with bounds checking
 func setCell(cells []terminal.Cell, totalW, x, y int, r rune, fg terminal.RGB) {
 	if x >= 0 && x < totalW && y >= 0 {
 		idx := y*totalW + x
@@ -74,7 +77,7 @@ func setCell(cells []terminal.Cell, totalW, x, y int, r rune, fg terminal.RGB) {
 	}
 }
 
-// drawSingleBox draws a single-line bordered rectangle.
+// drawSingleBox draws a single-line bordered rectangle
 func drawSingleBox(cells []terminal.Cell, totalW, x, y, w, h int) {
 	if w < 2 || h < 2 {
 		return
@@ -96,7 +99,7 @@ func drawSingleBox(cells []terminal.Cell, totalW, x, y, w, h int) {
 	}
 }
 
-// drawDoubleBox draws a double-line bordered rectangle.
+// drawDoubleBox draws a double-line bordered rectangle
 func drawDoubleBox(cells []terminal.Cell, totalW, x, y, w, h int) {
 	if w < 2 || h < 2 {
 		return
@@ -118,12 +121,12 @@ func drawDoubleBox(cells []terminal.Cell, totalW, x, y, w, h int) {
 	}
 }
 
-// drawDoubleFrame draws outer double-line frame.
+// drawDoubleFrame draws outer double-line frame
 func drawDoubleFrame(cells []terminal.Cell, totalW, x, y, w, h int) {
 	drawDoubleBox(cells, totalW, x, y, w, h)
 }
 
-// truncateWithEllipsis shortens string with ellipsis if exceeds maxLen.
+// truncateWithEllipsis shortens string with ellipsis if exceeds maxLen
 func truncateWithEllipsis(s string, maxLen int) string {
 	if maxLen <= 3 {
 		return s[:min(len(s), maxLen)]
@@ -134,7 +137,7 @@ func truncateWithEllipsis(s string, maxLen int) string {
 	return s[:maxLen-1] + "…"
 }
 
-// drawColoredTags renders tag string with syntax highlighting.
+// drawColoredTags renders tag string with syntax highlighting
 func drawColoredTags(cells []terminal.Cell, w, x, y int, tagStr string, bg terminal.RGB) int {
 	if tagStr == "" || x >= w-1 {
 		return x

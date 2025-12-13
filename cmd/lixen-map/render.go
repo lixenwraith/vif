@@ -24,7 +24,9 @@ func (app *AppState) Render() {
 		cells[i] = terminal.Cell{Rune: ' ', Fg: colorDefaultFg, Bg: colorDefaultBg}
 	}
 
-	if app.DiveMode {
+	if app.HelpMode {
+		app.RenderHelp(cells, w, h)
+	} else if app.DiveMode {
 		app.RenderDive(cells, w, h)
 	} else if app.MindmapMode {
 		app.RenderMindmap(cells, w, h)
@@ -93,13 +95,40 @@ func (app *AppState) renderSplitPane(cells []terminal.Cell, w, h int) {
 		cells[y*w+leftWidth+centerWidth+1] = terminal.Cell{Rune: boxV, Fg: colorPaneBorder, Bg: colorDefaultBg}
 	}
 
-	// Pane headers
+	hasFilter := app.Filter.HasActiveFilter()
+
+	// Pane headers with counters
+	leftSel, leftFil, leftTotal := app.computeTreePaneCounts()
+	centerSelG, centerTotalG, centerSelT, centerTotalT, centerFilG, centerFilT := app.computeFocusPaneCounts()
+	rightSelG, rightTotalG, rightSelT, rightTotalT, rightFilG, rightFilT := app.computeInteractPaneCounts()
+
 	leftHeader := "PACKAGES / FILES"
 	centerHeader := "FOCUS GROUPS"
 	rightHeader := "INTERACT GROUPS"
+
 	drawText(cells, w, 1, contentTop, leftHeader, colorStatusFg, leftBg, terminal.AttrBold)
 	drawText(cells, w, centerStart+1, contentTop, centerHeader, colorStatusFg, centerBg, terminal.AttrBold)
 	drawText(cells, w, rightStart+1, contentTop, rightHeader, colorStatusFg, rightBg, terminal.AttrBold)
+
+	// Counters on same line, right-aligned within pane
+	leftCounter := formatPaneCounter(leftSel, leftFil, leftTotal, hasFilter)
+	centerCounter := formatTagPaneCounter(centerSelG, centerTotalG, centerSelT, centerTotalT, centerFilG, centerFilT, hasFilter)
+	rightCounter := formatTagPaneCounter(rightSelG, rightTotalG, rightSelT, rightTotalT, rightFilG, rightFilT, hasFilter)
+
+	leftCounterX := leftWidth - len(leftCounter) - 1
+	if leftCounterX > len(leftHeader)+2 {
+		drawText(cells, w, leftCounterX, contentTop, leftCounter, colorMatchCountFg, leftBg, terminal.AttrNone)
+	}
+
+	centerCounterX := centerStart + centerWidth - len(centerCounter) - 1
+	if centerCounterX > centerStart+len(centerHeader)+2 {
+		drawText(cells, w, centerCounterX, contentTop, centerCounter, colorMatchCountFg, centerBg, terminal.AttrNone)
+	}
+
+	rightCounterX := rightStart + rightWidth - len(rightCounter) - 1
+	if rightCounterX > rightStart+len(rightHeader)+2 {
+		drawText(cells, w, rightCounterX, contentTop, rightCounter, colorMatchCountFg, rightBg, terminal.AttrNone)
+	}
 
 	// Render pane contents
 	paneContentTop := contentTop + 1
@@ -538,7 +567,7 @@ func (app *AppState) renderStatus(cells []terminal.Cell, w, y int) {
 
 // renderHelp draws the keybinding help bar
 func (app *AppState) renderHelp(cells []terminal.Cell, w, y int) {
-	help := "Tab:pane j/k:nav Space:sel fg/ft:focus-filter ig/it:interact-filter F:sel-filter m:mode d:deps Enter:view ^S:out Esc:clear"
+	help := "?:help Tab:pane j/k:nav Space:sel f/i+f/g/t:filter m:mode d:deps Enter:view ^S:out ^Q:quit"
 	if len(help) > w-2 {
 		help = help[:w-5] + "..."
 	}
@@ -848,4 +877,88 @@ func (app *AppState) getGroupDirectories(group string) []string {
 	}
 	sort.Strings(dirs)
 	return dirs
+}
+
+// computeTreePaneCounts returns selected, filtered, total counts for a pane
+func (app *AppState) computeTreePaneCounts() (sel, fil, total int) {
+	for path := range app.Index.Files {
+		total++
+		if app.Selected[path] {
+			sel++
+		}
+		if app.Filter.FilteredPaths[path] {
+			fil++
+		}
+	}
+	return
+}
+
+// computeFocusPaneCounts returns group/tag selection and filter counts
+func (app *AppState) computeFocusPaneCounts() (selGrps, totalGrps, selTags, totalTags, filGrps, filTags int) {
+	totalGrps = len(app.Index.FocusGroups)
+
+	for _, group := range app.Index.FocusGroups {
+		if app.computeGroupSelectionState(CategoryFocus, group) != TagSelectNone {
+			selGrps++
+		}
+		if app.isGroupFiltered(CategoryFocus, group) {
+			filGrps++
+		}
+
+		if tags, ok := app.Index.FocusTags[group]; ok {
+			for _, tag := range tags {
+				totalTags++
+				if app.computeTagSelectionState(CategoryFocus, group, tag) != TagSelectNone {
+					selTags++
+				}
+				if app.isTagFiltered(CategoryFocus, group, tag) {
+					filTags++
+				}
+			}
+		}
+	}
+	return
+}
+
+// computeInteractPaneCounts returns group/tag selection and filter counts
+func (app *AppState) computeInteractPaneCounts() (selGrps, totalGrps, selTags, totalTags, filGrps, filTags int) {
+	totalGrps = len(app.Index.InteractGroups)
+
+	for _, group := range app.Index.InteractGroups {
+		if app.computeGroupSelectionState(CategoryInteract, group) != TagSelectNone {
+			selGrps++
+		}
+		if app.isGroupFiltered(CategoryInteract, group) {
+			filGrps++
+		}
+
+		if tags, ok := app.Index.InteractTags[group]; ok {
+			for _, tag := range tags {
+				totalTags++
+				if app.computeTagSelectionState(CategoryInteract, group, tag) != TagSelectNone {
+					selTags++
+				}
+				if app.isTagFiltered(CategoryInteract, group, tag) {
+					filTags++
+				}
+			}
+		}
+	}
+	return
+}
+
+// formatTagPaneCounter formats counter for Focus/Interact panes showing group/tag counts
+func formatTagPaneCounter(selGrps, totalGrps, selTags, totalTags, filGrps, filTags int, hasFilter bool) string {
+	if hasFilter {
+		return fmt.Sprintf("[%d/%dg %d/%dt|%dg%dt]", selGrps, totalGrps, selTags, totalTags, filGrps, filTags)
+	}
+	return fmt.Sprintf("[%d/%dg %d/%dt]", selGrps, totalGrps, selTags, totalTags)
+}
+
+// formatPaneCounter formats counter string for pane header
+func formatPaneCounter(sel, fil, total int, hasFilter bool) string {
+	if hasFilter {
+		return fmt.Sprintf("[Sel: %d/%d | Fil: %d]", sel, total, fil)
+	}
+	return fmt.Sprintf("[Sel: %d/%d]", sel, total)
 }
