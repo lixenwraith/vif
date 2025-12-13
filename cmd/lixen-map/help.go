@@ -71,14 +71,23 @@ var helpMindmapKeys = []helpEntry{
 
 var helpDiveKeys = []helpEntry{
 	{"Navigation", ""},
-	{"Esc/q", "Back to mindmap"},
+	{"Tab/S-Tab", "Next/prev pane"},
+	{"j/k, ↑/↓", "Move cursor"},
+	{"h/l, ←/→", "Collapse/expand"},
+	{"H/L", "Collapse/expand all"},
+	{"0/$, Home/End", "Jump start/end"},
+	{"PgUp/PgDn", "Page scroll"},
+	{"Enter", "Dive into file"},
+	{"", ""},
+	{"Other", ""},
+	{"q/Esc", "Back to mindmap"},
 	{"Ctrl+Q", "Quit"},
 	{"", ""},
-	{"Sections", ""},
+	{"Panes", ""},
 	{"DEPENDS ON", "Packages imported"},
 	{"DEPENDED BY", "Packages importing"},
-	{"FOCUS LINKS", "Shared focus tags"},
-	{"INTERACT LINKS", "Shared interact tags"},
+	{"FOCUS LINKS", "Files sharing focus"},
+	{"INTERACT", "Files sharing interact"},
 }
 
 type helpEntry struct {

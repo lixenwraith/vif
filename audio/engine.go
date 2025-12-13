@@ -1,5 +1,5 @@
-// @lixen: #focus{sys[audio],audio[engine]}
-// @lixen: #interact{init[mixer,generator],state[command],trigger[output]}
+// @lixen: #focus{sys[audio,engine],audio[engine]}
+// @lixen: #interact{init[audio(cache,env,mixer,generator)],morph[audio(config,run)],state[audio(run)],trigger[audio(run,output)]}
 package audio
 
 import (
@@ -166,6 +166,7 @@ func (ae *AudioEngine) Stop() {
 	ae.wg.Wait()
 }
 
+// TODO: Change interface and deprecate
 // SendRealTime queues a sound (API compatibility)
 func (ae *AudioEngine) SendRealTime(cmd AudioCommand) bool {
 	return ae.Play(cmd.Type)

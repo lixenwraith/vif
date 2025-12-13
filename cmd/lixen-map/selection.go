@@ -175,3 +175,37 @@ func (app *AppState) allFilesWithGroupSelected(cat Category, group string) bool 
 	}
 	return true
 }
+
+// computeOutputStats calculates file counts and sizes for output
+// Returns: total files, dep-only files, total size, dep-only size
+func (app *AppState) computeOutputStats() (totalFiles, depFiles int, totalSize, depSize int64) {
+	outputFiles := app.ComputeOutputFiles()
+	totalFiles = len(outputFiles)
+
+	// Build set of directly selected + #all files
+	directSet := make(map[string]bool)
+	for path := range app.Selected {
+		directSet[path] = true
+	}
+	for path, fi := range app.Index.Files {
+		if fi.IsAll {
+			directSet[path] = true
+		}
+	}
+
+	for _, path := range outputFiles {
+		fi := app.Index.Files[path]
+		if fi == nil {
+			continue
+		}
+		totalSize += fi.Size
+
+		// Count as dep if in output but not directly selected/#all
+		if !directSet[path] {
+			depFiles++
+			depSize += fi.Size
+		}
+	}
+
+	return
+}

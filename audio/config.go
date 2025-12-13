@@ -1,5 +1,5 @@
-// @lixen: #focus{sys[audio,config],conf[audio]}
-// @lixen: #interact{state[config]}
+// @lixen: #focus{sys[audio,config],audio[config],conf[audio]}
+// @lixen: #interact{state[audio(config)]}
 package audio
 
 import (
@@ -17,7 +17,7 @@ type AudioConfig struct {
 // DefaultAudioConfig returns default configuration
 func DefaultAudioConfig() *AudioConfig {
 	return &AudioConfig{
-		Enabled:      true,
+		Enabled:      false,
 		MasterVolume: 0.5,
 		EffectVolumes: map[SoundType]float64{
 			SoundError:  0.8,

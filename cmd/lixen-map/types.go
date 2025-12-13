@@ -109,7 +109,7 @@ const (
 	minHeight    = 20
 )
 
-const defaultModulePath = "github.com/USER/vi-fighter"
+const defaultModulePath = "github.com/lixenwraith/vi-fighter"
 
 // Pane identifies which pane has keyboard focus
 type Pane int
@@ -146,7 +146,11 @@ type FileInfo struct {
 	Interact map[string][]string // interact group -> tags: {"init": ["cursor"], "state": ["gold"]}
 	Imports  []string            // local package names: ["events", "engine"]
 	IsAll    bool                // has #focus{all[*]}
+	Size     int64               // file size in bytes
 }
+
+// SizeWarningThreshold is output size (bytes) above which size displays in warning color
+const SizeWarningThreshold = 300 * 1024
 
 // TagMap returns the appropriate tag map for the category
 func (fi *FileInfo) TagMap(cat Category) map[string][]string {
@@ -295,4 +299,24 @@ const (
 	TagSelectNone TagSelectionState = iota
 	TagSelectPartial
 	TagSelectFull
+)
+
+// DivePane identifies active pane in dive view
+type DivePane int
+
+const (
+	DivePaneDependsOn DivePane = iota
+	DivePaneDependedBy
+	DivePaneFocusLinks
+	DivePaneInteractLinks
+)
+
+// DiveItemType distinguishes item kinds in dive list
+type DiveItemType int
+
+const (
+	DiveItemDir   DiveItemType = iota // Package directory
+	DiveItemGroup                     // Tag group header
+	DiveItemTag                       // Tag under group
+	DiveItemFile                      // Leaf file
 )

@@ -8,29 +8,27 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
-// DiveState holds computed relationship data for dive view visualization
+// DiveState holds computed relationship data for dive view
 type DiveState struct {
 	SourcePath string
 	FileInfo   *FileInfo
 
-	DependsOn     []DivePackage
-	DependedBy    []DivePackage
-	FocusLinks    []DiveTagGroup
-	InteractLinks []DiveTagGroup
+	Panes      [4][]DiveListItem
+	ActivePane DivePane
+	Cursors    [4]int
+	Scrolls    [4]int
+	Expanded   map[string]bool // GroupKey → expanded (default true)
 }
 
-// DivePackage represents a package directory with its constituent files
-type DivePackage struct {
-	Dir   string
-	Files []string
-}
-
-// DiveTagGroup represents files sharing a specific tag within a group
-type DiveTagGroup struct {
-	Group string
-	Tag   string
-	Count int
-	Files []string
+// DiveListItem represents a single row in any dive pane
+type DiveListItem struct {
+	Type     DiveItemType
+	Label    string // Display text
+	Path     string // Full file path for files, dir for dirs
+	Indent   int
+	Count    int    // Child count for expandable items
+	GroupKey string // Collapse state key (empty for files)
+	Expanded bool   // Current expansion state
 }
 
 // EnterDive transitions to dive view for the file at current mindmap cursor
@@ -63,113 +61,227 @@ func (app *AppState) ExitDive() {
 
 // HandleDiveEvent processes keyboard input while in dive view
 func (app *AppState) HandleDiveEvent(ev terminal.Event) {
+	state := app.DiveState
+	if state == nil {
+		app.ExitDive()
+		return
+	}
+
 	switch ev.Key {
 	case terminal.KeyEscape:
 		app.ExitDive()
+	case terminal.KeyTab:
+		state.ActivePane = (state.ActivePane + 1) % 4
+	case terminal.KeyBacktab:
+		state.ActivePane = (state.ActivePane + 3) % 4
+	case terminal.KeyEnter:
+		app.diveIntoSelected()
 	case terminal.KeyRune:
 		switch ev.Rune {
 		case '?':
 			app.HelpMode = true
 		case 'q':
 			app.ExitDive()
+		case 'j':
+			app.moveDiveCursor(1)
+		case 'k':
+			app.moveDiveCursor(-1)
+		case 'h':
+			app.collapseDiveItem()
+		case 'l':
+			app.expandDiveItem()
+		case 'H':
+			app.setAllDiveExpanded(false)
+		case 'L':
+			app.setAllDiveExpanded(true)
+		case '0':
+			app.jumpDiveCursor(0)
+		case '$':
+			app.jumpDiveCursor(-1)
 		}
+	case terminal.KeyUp:
+		app.moveDiveCursor(-1)
+	case terminal.KeyDown:
+		app.moveDiveCursor(1)
+	case terminal.KeyLeft:
+		app.collapseDiveItem()
+	case terminal.KeyRight:
+		app.expandDiveItem()
+	case terminal.KeyHome:
+		app.jumpDiveCursor(0)
+	case terminal.KeyEnd:
+		app.jumpDiveCursor(-1)
+	case terminal.KeyPageUp:
+		app.moveDiveCursor(-10)
+	case terminal.KeyPageDown:
+		app.moveDiveCursor(10)
 	}
 }
 
-// RenderDive draws the dive view layout with dependency and tag boxes
-func (app *AppState) RenderDive(cells []terminal.Cell, w, h int) {
+// Navigation helpers
+
+func (app *AppState) moveDiveCursor(delta int) {
 	state := app.DiveState
 	if state == nil {
 		return
 	}
 
-	// Clear with background
-	for i := range cells {
-		cells[i] = terminal.Cell{Rune: ' ', Fg: colorDefaultFg, Bg: colorDefaultBg}
+	pane := state.ActivePane
+	items := state.Panes[pane]
+	if len(items) == 0 {
+		return
 	}
 
-	// Draw outer double-line frame
-	drawDoubleFrame(cells, w, 0, 0, w, h)
-
-	// Header line
-	title := fmt.Sprintf(" DIVE: %s ", truncateWithEllipsis(state.SourcePath, w-30))
-	drawText(cells, w, 2, 0, title, colorHeaderFg, colorDefaultBg, terminal.AttrBold)
-	hint := "[Esc:back]"
-	drawText(cells, w, w-len(hint)-2, 0, hint, colorHelpFg, colorDefaultBg, terminal.AttrNone)
-
-	// Draw separator after header
-	cells[1*w] = terminal.Cell{Rune: dboxLT, Fg: colorPaneBorder, Bg: colorDefaultBg}
-	for x := 1; x < w-1; x++ {
-		cells[1*w+x] = terminal.Cell{Rune: dboxH, Fg: colorPaneBorder, Bg: colorDefaultBg}
+	cursor := state.Cursors[pane] + delta
+	if cursor < 0 {
+		cursor = 0
 	}
-	cells[1*w+w-1] = terminal.Cell{Rune: dboxRT, Fg: colorPaneBorder, Bg: colorDefaultBg}
-
-	// Calculate layout
-	contentTop := 2
-	contentBottom := h - 1
-	contentH := contentBottom - contentTop
-
-	// Focus box height
-	focusBoxH := 4
-
-	// Allocate sections dynamically based on content
-	depsH, tagsH := allocateSections(contentH, focusBoxH, state.DependsOn, state.DependedBy, state.FocusLinks, state.InteractLinks)
-
-	y := contentTop
-
-	// Render dependencies section
-	if depsH > 0 && (len(state.DependsOn) > 0 || len(state.DependedBy) > 0) {
-		y = renderDepsSection(cells, w, y, depsH, state.DependsOn, state.DependedBy)
+	if cursor >= len(items) {
+		cursor = len(items) - 1
 	}
+	state.Cursors[pane] = cursor
 
-	// Render focus box (file info)
-	y = renderFocusBox(cells, w, y, state)
-
-	// Render tag links sections
-	if tagsH > 0 && (len(state.FocusLinks) > 0 || len(state.InteractLinks) > 0) {
-		remainingSpace := contentBottom - y
-
-		focusLinksH := 0
-		interactLinksH := 0
-
-		if len(state.FocusLinks) > 0 && len(state.InteractLinks) > 0 {
-			// Split based on content
-			focusContent := len(state.FocusLinks)
-			interactContent := len(state.InteractLinks)
-			total := focusContent + interactContent
-			focusLinksH = remainingSpace * focusContent / total
-			interactLinksH = remainingSpace - focusLinksH
-			// Ensure minimums
-			if focusLinksH < 4 {
-				focusLinksH = 4
-			}
-			if interactLinksH < 4 {
-				interactLinksH = 4
-			}
-		} else if len(state.FocusLinks) > 0 {
-			focusLinksH = remainingSpace
-		} else {
-			interactLinksH = remainingSpace
-		}
-
-		// Render Focus links
-		if focusLinksH > 0 && len(state.FocusLinks) > 0 {
-			y = renderTagLinkSection(cells, w, y, focusLinksH, "FOCUS", state.FocusLinks, colorGroupFg)
-		}
-
-		// Render Interact links
-		if interactLinksH > 0 && len(state.InteractLinks) > 0 {
-			y = renderTagLinkSection(cells, w, y, interactLinksH, "INTERACT", state.InteractLinks, colorExpandedFg)
-		}
+	visibleH := app.diveContentHeight()
+	scroll := state.Scrolls[pane]
+	if cursor < scroll {
+		scroll = cursor
 	}
-
-	// Help bar
-	helpY := h - 1
-	help := "?:help Esc/q:back ^Q:quit"
-	drawText(cells, w, 2, helpY, help, colorHelpFg, colorDefaultBg, terminal.AttrDim)
+	if cursor >= scroll+visibleH {
+		scroll = cursor - visibleH + 1
+	}
+	state.Scrolls[pane] = scroll
 }
 
-// computeDiveData gathers dependency and tag relationship data for a file
+func (app *AppState) jumpDiveCursor(pos int) {
+	state := app.DiveState
+	if state == nil {
+		return
+	}
+
+	pane := state.ActivePane
+	items := state.Panes[pane]
+	if len(items) == 0 {
+		return
+	}
+
+	if pos < 0 {
+		state.Cursors[pane] = len(items) - 1
+	} else {
+		state.Cursors[pane] = 0
+		state.Scrolls[pane] = 0
+	}
+	app.moveDiveCursor(0) // Adjust scroll
+}
+
+func (app *AppState) diveContentHeight() int {
+	h := app.Height - 5 // Header + info + separator + title row + help
+	if h < 1 {
+		h = 1
+	}
+	return h
+}
+
+// Collapse/Expand
+
+func (app *AppState) collapseDiveItem() {
+	state := app.DiveState
+	if state == nil {
+		return
+	}
+
+	pane := state.ActivePane
+	items := state.Panes[pane]
+	cursor := state.Cursors[pane]
+	if cursor < 0 || cursor >= len(items) {
+		return
+	}
+
+	item := items[cursor]
+
+	// If on file, find parent expandable
+	if item.GroupKey == "" {
+		for i := cursor - 1; i >= 0; i-- {
+			if items[i].GroupKey != "" {
+				state.Cursors[pane] = i
+				cursor = i
+				item = items[i]
+				break
+			}
+		}
+	}
+
+	if item.GroupKey != "" && state.Expanded[item.GroupKey] {
+		state.Expanded[item.GroupKey] = false
+		app.rebuildDivePane(pane)
+	}
+}
+
+func (app *AppState) expandDiveItem() {
+	state := app.DiveState
+	if state == nil {
+		return
+	}
+
+	pane := state.ActivePane
+	items := state.Panes[pane]
+	cursor := state.Cursors[pane]
+	if cursor < 0 || cursor >= len(items) {
+		return
+	}
+
+	item := items[cursor]
+	if item.GroupKey != "" && !state.Expanded[item.GroupKey] {
+		state.Expanded[item.GroupKey] = true
+		app.rebuildDivePane(pane)
+	}
+}
+
+func (app *AppState) setAllDiveExpanded(expanded bool) {
+	state := app.DiveState
+	if state == nil {
+		return
+	}
+
+	for key := range state.Expanded {
+		state.Expanded[key] = expanded
+	}
+	for i := 0; i < 4; i++ {
+		app.rebuildDivePane(DivePane(i))
+	}
+}
+
+// Dive into selected file
+
+func (app *AppState) diveIntoSelected() {
+	state := app.DiveState
+	if state == nil {
+		return
+	}
+
+	pane := state.ActivePane
+	items := state.Panes[pane]
+	cursor := state.Cursors[pane]
+	if cursor < 0 || cursor >= len(items) {
+		return
+	}
+
+	item := items[cursor]
+	if item.Type != DiveItemFile || item.Path == "" {
+		return
+	}
+
+	if app.Index.Files[item.Path] == nil {
+		return
+	}
+
+	newState := computeDiveData(app, item.Path)
+	if newState != nil {
+		app.DiveState = newState
+	}
+}
+
+// Data computation
+
 func computeDiveData(app *AppState, path string) *DiveState {
 	fi := app.Index.Files[path]
 	if fi == nil {
@@ -179,589 +291,444 @@ func computeDiveData(app *AppState, path string) *DiveState {
 	state := &DiveState{
 		SourcePath: path,
 		FileInfo:   fi,
+		ActivePane: DivePaneDependsOn,
+		Expanded:   make(map[string]bool),
 	}
 
-	// Get package directory for this file
 	fileDir := filepath.Dir(path)
 	fileDir = filepath.ToSlash(fileDir)
 	if fileDir == "." {
 		fileDir = fi.Package
 	}
 
-	// Compute DependsOn - packages this file imports
-	state.DependsOn = computeDependsOn(app, fi)
-
-	// Compute DependedBy - packages that import this file's package
-	state.DependedBy = computeDependedBy(app, fileDir)
-
-	// Compute tag links for both Focus and Interact
-	state.FocusLinks = computeTagLinks(app, fi.Focus, path)
-	state.InteractLinks = computeTagLinks(app, fi.Interact, path)
+	state.Panes[DivePaneDependsOn] = buildDepsItems(app, fi.Imports, true, state.Expanded)
+	state.Panes[DivePaneDependedBy] = buildDepsItems(app, app.Index.ReverseDeps[fileDir], false, state.Expanded)
+	state.Panes[DivePaneFocusLinks] = buildLinksItems(app, fi.Focus, path, "focus", state.Expanded)
+	state.Panes[DivePaneInteractLinks] = buildLinksItems(app, fi.Interact, path, "interact", state.Expanded)
 
 	return state
 }
 
-// computeDependsOn resolves packages imported by the given file
-func computeDependsOn(app *AppState, fi *FileInfo) []DivePackage {
-	var deps []DivePackage
-	seen := make(map[string]bool)
+func buildDepsItems(app *AppState, source interface{}, forward bool, expanded map[string]bool) []DiveListItem {
+	var items []DiveListItem
+	var dirs []string
 
-	for _, impName := range fi.Imports {
-		// Find package by name
-		for dir, pkg := range app.Index.Packages {
-			if pkg.Name == impName && !seen[dir] {
-				seen[dir] = true
-				dp := DivePackage{Dir: dir}
-				for _, f := range pkg.Files {
-					dp.Files = append(dp.Files, filepath.Base(f.Path))
+	if forward {
+		imports := source.([]string)
+		dirSet := make(map[string]bool)
+		for _, impName := range imports {
+			for dir, pkg := range app.Index.Packages {
+				if pkg.Name == impName && !dirSet[dir] {
+					dirSet[dir] = true
+					dirs = append(dirs, dir)
+					break
 				}
-				sort.Strings(dp.Files)
-				deps = append(deps, dp)
-				break
 			}
 		}
+	} else {
+		dirs = source.([]string)
 	}
 
-	sort.Slice(deps, func(i, j int) bool {
-		return deps[i].Dir < deps[j].Dir
-	})
-	return deps
-}
+	sort.Strings(dirs)
 
-// computeDependedBy finds packages that import the file's package
-func computeDependedBy(app *AppState, fileDir string) []DivePackage {
-	var deps []DivePackage
-
-	importers := app.Index.ReverseDeps[fileDir]
-	for _, dir := range importers {
+	for _, dir := range dirs {
 		pkg := app.Index.Packages[dir]
 		if pkg == nil {
 			continue
 		}
-		dp := DivePackage{Dir: dir}
-		for _, f := range pkg.Files {
-			dp.Files = append(dp.Files, filepath.Base(f.Path))
+
+		key := "dep:" + dir
+		if _, exists := expanded[key]; !exists {
+			expanded[key] = true
 		}
-		sort.Strings(dp.Files)
-		deps = append(deps, dp)
+
+		files := make([]string, 0, len(pkg.Files))
+		for _, f := range pkg.Files {
+			files = append(files, filepath.Base(f.Path))
+		}
+		sort.Strings(files)
+
+		items = append(items, DiveListItem{
+			Type:     DiveItemDir,
+			Label:    dir + "/",
+			Path:     dir,
+			Count:    len(files),
+			GroupKey: key,
+			Expanded: expanded[key],
+		})
+
+		if expanded[key] {
+			for _, f := range files {
+				items = append(items, DiveListItem{
+					Type:   DiveItemFile,
+					Label:  f,
+					Path:   dir + "/" + f,
+					Indent: 1,
+				})
+			}
+		}
 	}
 
-	sort.Slice(deps, func(i, j int) bool {
-		return deps[i].Dir < deps[j].Dir
-	})
-	return deps
+	return items
 }
 
-// computeTagLinks finds files sharing tags with the source file
-func computeTagLinks(app *AppState, sourceTagMap map[string][]string, selfPath string) []DiveTagGroup {
-	var links []DiveTagGroup
+func buildLinksItems(app *AppState, tagMap map[string][]string, selfPath, prefix string, expanded map[string]bool) []DiveListItem {
+	var items []DiveListItem
 
-	// Get sorted groups
-	groups := make([]string, 0, len(sourceTagMap))
-	for g := range sourceTagMap {
+	groups := make([]string, 0, len(tagMap))
+	for g := range tagMap {
 		groups = append(groups, g)
 	}
 	sort.Strings(groups)
 
 	for _, group := range groups {
-		tags := sourceTagMap[group]
+		tags := tagMap[group]
 		sortedTags := make([]string, len(tags))
 		copy(sortedTags, tags)
 		sort.Strings(sortedTags)
 
+		groupFileCount := 0
 		for _, tag := range sortedTags {
-			tg := DiveTagGroup{
-				Group: group,
-				Tag:   tag,
+			groupFileCount += countLinkedFiles(app, group, tag, selfPath, prefix)
+		}
+
+		groupKey := prefix + ":" + group
+		if _, exists := expanded[groupKey]; !exists {
+			expanded[groupKey] = true
+		}
+
+		items = append(items, DiveListItem{
+			Type:     DiveItemGroup,
+			Label:    group,
+			Count:    groupFileCount,
+			GroupKey: groupKey,
+			Expanded: expanded[groupKey],
+		})
+
+		if !expanded[groupKey] {
+			continue
+		}
+
+		for _, tag := range sortedTags {
+			files := findLinkedFiles(app, group, tag, selfPath, prefix)
+			if len(files) == 0 {
+				continue
 			}
 
-			// Find all files with this tag (in same tag category)
-			var files []string
-			for path, fileInfo := range app.Index.Files {
-				if path == selfPath {
-					continue
-				}
-				// Check if file has this group in same category
-				var targetMap map[string][]string
-				if _, inFocus := fileInfo.Focus[group]; inFocus {
-					targetMap = fileInfo.Focus
-				} else if _, inInteract := fileInfo.Interact[group]; inInteract {
-					targetMap = fileInfo.Interact
-				}
+			tagKey := prefix + ":" + group + ":" + tag
+			if _, exists := expanded[tagKey]; !exists {
+				expanded[tagKey] = true
+			}
 
-				if targetMap != nil {
-					if fileTags, ok := targetMap[group]; ok {
-						for _, t := range fileTags {
-							if t == tag {
-								files = append(files, path)
-								break
-							}
-						}
-					}
+			items = append(items, DiveListItem{
+				Type:     DiveItemTag,
+				Label:    tag,
+				Indent:   1,
+				Count:    len(files),
+				GroupKey: tagKey,
+				Expanded: expanded[tagKey],
+			})
+
+			if expanded[tagKey] {
+				for _, f := range files {
+					items = append(items, DiveListItem{
+						Type:   DiveItemFile,
+						Label:  f,
+						Path:   f,
+						Indent: 2,
+					})
 				}
 			}
-			sort.Strings(files)
-
-			tg.Count = len(files)
-			tg.Files = files
-			links = append(links, tg)
 		}
 	}
 
-	return links
+	return items
 }
 
-// allocateSections distributes vertical space between dependency and tag areas
-func allocateSections(totalH, focusH int, dependsOn, dependedBy []DivePackage, focusLinks, interactLinks []DiveTagGroup) (depsH, tagsH int) {
-	available := totalH - focusH - 2 // -2 for connectors/margins
-
-	if available < 4 {
-		return 0, 0
-	}
-
-	// Calculate actual content needs
-	depsContentH := calcDepsContentHeight(dependsOn, dependedBy)
-	tagsContentH := calcTagsContentHeight(focusLinks, interactLinks)
-
-	hasDeps := len(dependsOn) > 0 || len(dependedBy) > 0
-	hasTags := len(focusLinks) > 0 || len(interactLinks) > 0
-
-	if !hasDeps && !hasTags {
-		return 0, 0
-	}
-
-	if !hasDeps {
-		return 0, available
-	}
-	if !hasTags {
-		return available, 0
-	}
-
-	// Proportional allocation based on content
-	totalContent := depsContentH + tagsContentH
-	if totalContent == 0 {
-		totalContent = 1
-	}
-
-	depsH = (available * depsContentH) / totalContent
-	tagsH = available - depsH
-
-	// Enforce minimums
-	minDeps := min(6, depsContentH+2)
-	minTags := min(6, tagsContentH+2)
-
-	if depsH < minDeps && available >= minDeps+minTags {
-		depsH = minDeps
-		tagsH = available - depsH
-	}
-	if tagsH < minTags && available >= minDeps+minTags {
-		tagsH = minTags
-		depsH = available - tagsH
-	}
-
-	// Cap at actual content needs + borders
-	maxDepsH := depsContentH + 3
-	if depsH > maxDepsH && tagsContentH > 0 {
-		depsH = maxDepsH
-		tagsH = available - depsH
-	}
-
-	return depsH, tagsH
-}
-
-// calcDepsContentHeight estimates lines needed for dependency content
-func calcDepsContentHeight(dependsOn, dependedBy []DivePackage) int {
-	maxLines := 0
-	for _, dp := range dependsOn {
-		lines := 1 + len(dp.Files) // dir + files
-		if lines > maxLines {
-			maxLines = lines
+func countLinkedFiles(app *AppState, group, tag, selfPath, prefix string) int {
+	count := 0
+	for path, fi := range app.Index.Files {
+		if path == selfPath {
+			continue
 		}
-	}
-	for _, dp := range dependedBy {
-		lines := 1 + len(dp.Files)
-		if lines > maxLines {
-			maxLines = lines
+		var tm map[string][]string
+		if prefix == "focus" {
+			tm = fi.Focus
+		} else {
+			tm = fi.Interact
 		}
-	}
-	// Account for multiple packages in columns
-	totalPkgs := len(dependsOn) + len(dependedBy)
-	if totalPkgs > 2 {
-		maxLines += (totalPkgs / 3) * 2 // rough estimate for wrapping
-	}
-	return maxLines
-}
-
-// calcTagsContentHeight estimates lines needed for tag link content
-func calcTagsContentHeight(focusLinks, interactLinks []DiveTagGroup) int {
-	maxFiles := 0
-	for _, tg := range focusLinks {
-		if len(tg.Files) > maxFiles {
-			maxFiles = len(tg.Files)
-		}
-	}
-	for _, tg := range interactLinks {
-		if len(tg.Files) > maxFiles {
-			maxFiles = len(tg.Files)
-		}
-	}
-	// Two sections (focus + interact) with headers
-	sections := 0
-	if len(focusLinks) > 0 {
-		sections++
-	}
-	if len(interactLinks) > 0 {
-		sections++
-	}
-	return maxFiles + 3 + (sections * 2)
-}
-
-// renderDepsSection draws the depends-on and depended-by columns
-func renderDepsSection(cells []terminal.Cell, w, y, maxH int, dependsOn, dependedBy []DivePackage) int {
-	innerW := w - 4
-	startY := y
-
-	hasDepOn := len(dependsOn) > 0
-	hasDepBy := len(dependedBy) > 0
-
-	if !hasDepOn && !hasDepBy {
-		return y
-	}
-
-	// Dynamic column width based on content count
-	var depOnW, depByW int
-	if hasDepOn && hasDepBy {
-		// Split proportionally based on package count
-		totalPkgs := len(dependsOn) + len(dependedBy)
-		depOnRatio := len(dependsOn) * 100 / totalPkgs
-		// Clamp between 30% and 70%
-		if depOnRatio < 30 {
-			depOnRatio = 30
-		}
-		if depOnRatio > 70 {
-			depOnRatio = 70
-		}
-		depOnW = innerW * depOnRatio / 100
-		depByW = innerW - depOnW - 1 // -1 for separator
-	} else if hasDepOn {
-		depOnW = innerW
-	} else {
-		depByW = innerW
-	}
-
-	// Calculate required height based on content
-	boxHeight := calcDepsBoxHeightDynamic(dependsOn, dependedBy, depOnW, depByW, maxH)
-
-	drawSingleBox(cells, w, 2, y, innerW, boxHeight)
-
-	// Headers
-	if hasDepOn {
-		hdr := fmt.Sprintf(" DEPENDS ON (%d) ", len(dependsOn))
-		drawText(cells, w, 4, y, hdr, colorGroupFg, colorDefaultBg, terminal.AttrBold)
-	}
-	if hasDepBy {
-		hdrX := 2 + depOnW + 1
-		if hasDepOn {
-			// Draw vertical separator
-			for sy := y; sy < y+boxHeight; sy++ {
-				cells[sy*w+hdrX] = terminal.Cell{Rune: boxV, Fg: colorPaneBorder, Bg: colorDefaultBg}
+		if tags, ok := tm[group]; ok {
+			for _, t := range tags {
+				if t == tag {
+					count++
+					break
+				}
 			}
-			cells[y*w+hdrX] = terminal.Cell{Rune: boxTT, Fg: colorPaneBorder, Bg: colorDefaultBg}
-			cells[(y+boxHeight-1)*w+hdrX] = terminal.Cell{Rune: boxBT, Fg: colorPaneBorder, Bg: colorDefaultBg}
-			hdrX++
 		}
-		hdr := fmt.Sprintf(" DEPENDED BY (%d) ", len(dependedBy))
-		drawText(cells, w, hdrX+1, y, hdr, colorExpandedFg, colorDefaultBg, terminal.AttrBold)
 	}
-
-	// Content
-	contentY := y + 1
-	contentH := boxHeight - 2
-
-	if hasDepOn {
-		renderPackageList(cells, w, 3, contentY, depOnW-2, contentH, dependsOn, colorDirFg)
-	}
-	if hasDepBy {
-		startX := 3 + depOnW
-		if hasDepOn {
-			startX++
-		}
-		renderPackageList(cells, w, startX, contentY, depByW-2, contentH, dependedBy, colorExpandedFg)
-	}
-
-	return startY + boxHeight
+	return count
 }
 
-// calcDepsBoxHeightDynamic computes height based on actual content layout
-func calcDepsBoxHeightDynamic(dependsOn, dependedBy []DivePackage, depOnW, depByW, maxH int) int {
-	// Simulate layout to find actual height needed
-	leftH := calcColumnHeight(dependsOn, depOnW)
-	rightH := calcColumnHeight(dependedBy, depByW)
-
-	neededH := max(leftH, rightH) + 2 // +2 for borders
-	if neededH < 4 {
-		neededH = 4
+func findLinkedFiles(app *AppState, group, tag, selfPath, prefix string) []string {
+	var files []string
+	for path, fi := range app.Index.Files {
+		if path == selfPath {
+			continue
+		}
+		var tm map[string][]string
+		if prefix == "focus" {
+			tm = fi.Focus
+		} else {
+			tm = fi.Interact
+		}
+		if tags, ok := tm[group]; ok {
+			for _, t := range tags {
+				if t == tag {
+					files = append(files, path)
+					break
+				}
+			}
+		}
 	}
-	return min(maxH, neededH)
+	sort.Strings(files)
+	return files
 }
 
-// calcColumnHeight calculates rows needed to render packages in given width
-func calcColumnHeight(packages []DivePackage, availW int) int {
-	if len(packages) == 0 || availW < 10 {
-		return 0
-	}
-
-	colW := min(availW, 22)
-	numCols := max(1, availW/(colW+1))
-
-	totalRows := 0
-	col := 0
-	rowHeight := 0
-
-	for _, pkg := range packages {
-		pkgHeight := 1 + min(len(pkg.Files), 6) // dir + up to 6 files
-		if len(pkg.Files) > 6 {
-			pkgHeight++ // +1 for "(+N more)"
-		}
-
-		if pkgHeight > rowHeight {
-			rowHeight = pkgHeight
-		}
-
-		col++
-		if col >= numCols {
-			totalRows += rowHeight + 1 // +1 gap
-			col = 0
-			rowHeight = 0
-		}
-	}
-
-	// Final partial row
-	if col > 0 {
-		totalRows += rowHeight
-	}
-
-	return totalRows
-}
-
-// renderPackageList draws a multi-column list of packages with their files
-func renderPackageList(cells []terminal.Cell, totalW, x, y, availW, availH int, packages []DivePackage, fg terminal.RGB) {
-	if len(packages) == 0 || availW < 10 || availH < 1 {
+func (app *AppState) rebuildDivePane(pane DivePane) {
+	state := app.DiveState
+	if state == nil {
 		return
 	}
 
-	// Calculate column layout
-	colW := min(availW, 22)
-	numCols := max(1, availW/(colW+1))
-	colW = (availW - numCols + 1) / numCols
-
-	col := 0
-	rowOffset := 0
-	maxRowInGroup := 0
-	pkgShown := 0
-	totalPkgs := len(packages)
-
-	for _, pkg := range packages {
-		if rowOffset >= availH {
-			break
-		}
-
-		colX := x + col*(colW+1)
-		localRow := 0
-
-		// Package directory
-		dirStr := truncateWithEllipsis(pkg.Dir+"/", colW)
-		drawText(cells, totalW, colX, y+rowOffset+localRow, dirStr, fg, colorDefaultBg, terminal.AttrBold)
-		localRow++
-		pkgShown++
-
-		// Calculate how many files we can show
-		remainingRows := availH - rowOffset - localRow
-		maxFilesPerPkg := min(remainingRows, 8) // Show up to 8 files
-		if maxFilesPerPkg < 1 {
-			maxFilesPerPkg = 1
-		}
-
-		totalFiles := len(pkg.Files)
-		hasMore := totalFiles > maxFilesPerPkg
-
-		filesToShow := maxFilesPerPkg
-		if hasMore && maxFilesPerPkg > 1 {
-			filesToShow = maxFilesPerPkg - 1
-		}
-
-		filesShown := 0
-		for i := 0; i < filesToShow && i < totalFiles; i++ {
-			fileStr := " " + truncateWithEllipsis(pkg.Files[i], colW-2)
-			drawText(cells, totalW, colX, y+rowOffset+localRow, fileStr, colorDefaultFg, colorDefaultBg, terminal.AttrNone)
-			localRow++
-			filesShown++
-		}
-
-		if hasMore {
-			remaining := totalFiles - filesShown
-			moreStr := fmt.Sprintf(" (+%d)", remaining)
-			drawText(cells, totalW, colX, y+rowOffset+localRow, moreStr, colorStatusFg, colorDefaultBg, terminal.AttrDim)
-			localRow++
-		}
-
-		if localRow > maxRowInGroup {
-			maxRowInGroup = localRow
-		}
-
-		col++
-		if col >= numCols {
-			col = 0
-			rowOffset += maxRowInGroup + 1
-			maxRowInGroup = 0
-		}
-
-		if col == 0 && rowOffset >= availH && pkgShown < totalPkgs {
-			break
-		}
+	fileDir := filepath.Dir(state.SourcePath)
+	fileDir = filepath.ToSlash(fileDir)
+	if fileDir == "." {
+		fileDir = state.FileInfo.Package
 	}
 
-	// Show remaining packages indicator only if we couldn't show all
-	if pkgShown < totalPkgs {
-		remaining := totalPkgs - pkgShown
-		moreStr := fmt.Sprintf("(+%d more)", remaining)
-		finalRow := min(rowOffset, availH-1)
-		if col > 0 {
-			finalRow = min(rowOffset+maxRowInGroup, availH-1)
-		}
-		drawText(cells, totalW, x, y+finalRow, moreStr, colorStatusFg, colorDefaultBg, terminal.AttrDim)
+	switch pane {
+	case DivePaneDependsOn:
+		state.Panes[pane] = buildDepsItems(app, state.FileInfo.Imports, true, state.Expanded)
+	case DivePaneDependedBy:
+		state.Panes[pane] = buildDepsItems(app, app.Index.ReverseDeps[fileDir], false, state.Expanded)
+	case DivePaneFocusLinks:
+		state.Panes[pane] = buildLinksItems(app, state.FileInfo.Focus, state.SourcePath, "focus", state.Expanded)
+	case DivePaneInteractLinks:
+		state.Panes[pane] = buildLinksItems(app, state.FileInfo.Interact, state.SourcePath, "interact", state.Expanded)
+	}
+
+	items := state.Panes[pane]
+	if state.Cursors[pane] >= len(items) {
+		state.Cursors[pane] = len(items) - 1
+	}
+	if state.Cursors[pane] < 0 {
+		state.Cursors[pane] = 0
 	}
 }
 
-// renderTagSection draws tag group boxes with shared file lists
-func calcMaxTagBoxes(w int) int {
-	if w >= 180 {
-		return 5
-	}
-	if w >= 140 {
-		return 4
-	}
-	if w >= 100 {
-		return 3
-	}
-	return 2
-}
+// Rendering
 
-// renderTagLinkSection draws a labeled section of tag link boxes
-func renderTagLinkSection(cells []terminal.Cell, w, y, maxH int, label string, tagLinks []DiveTagGroup, labelColor terminal.RGB) int {
-	if len(tagLinks) == 0 || maxH < 3 {
-		return y
+func (app *AppState) RenderDive(cells []terminal.Cell, w, h int) {
+	state := app.DiveState
+	if state == nil {
+		return
 	}
 
-	// Draw section label
-	labelStr := fmt.Sprintf(" %s LINKS ", label)
-	drawText(cells, w, 2, y, labelStr, labelColor, colorDefaultBg, terminal.AttrBold)
-	y++
-
-	// Calculate box layout
-	boxHeight := maxH - 1
-	if boxHeight < 3 {
-		boxHeight = 3
+	for i := range cells {
+		cells[i] = terminal.Cell{Rune: ' ', Fg: colorDefaultFg, Bg: colorDefaultBg}
 	}
 
-	innerW := w - 4
-	numBoxes := min(len(tagLinks), calcMaxTagBoxes(w))
-	boxWidth := (innerW - numBoxes + 1) / numBoxes
-
-	for i := 0; i < numBoxes; i++ {
-		tg := tagLinks[i]
-		boxX := 2 + i*(boxWidth+1)
-
-		drawSingleBox(cells, w, boxX, y, boxWidth, boxHeight)
-
-		// Header
-		hdr := fmt.Sprintf(" #%s{%s} (%d) ", tg.Group, tg.Tag, tg.Count)
-		if len(hdr) > boxWidth-2 {
-			hdr = fmt.Sprintf(" %s (%d) ", truncateWithEllipsis(tg.Tag, 8), tg.Count)
-		}
-		drawText(cells, w, boxX+1, y, hdr, colorGroupFg, colorDefaultBg, terminal.AttrBold)
-
-		// Files
-		contentY := y + 1
-		contentH := boxHeight - 2
-		if contentH < 1 {
-			contentH = 1
-		}
-
-		totalFiles := len(tg.Files)
-		hasMore := totalFiles > contentH
-
-		filesToShow := contentH
-		if hasMore && contentH > 1 {
-			filesToShow = contentH - 1
-		}
-
-		filesShown := 0
-		for j := 0; j < filesToShow && j < totalFiles; j++ {
-			fileStr := truncateWithEllipsis(tg.Files[j], boxWidth-3)
-			drawText(cells, w, boxX+1, contentY+filesShown, fileStr, colorDefaultFg, colorDefaultBg, terminal.AttrNone)
-			filesShown++
-		}
-
-		if hasMore {
-			remaining := totalFiles - filesShown
-			moreStr := fmt.Sprintf("(+%d more)", remaining)
-			drawText(cells, w, boxX+1, contentY+filesShown, moreStr, colorStatusFg, colorDefaultBg, terminal.AttrDim)
-		}
-
-		if totalFiles == 0 {
-			drawText(cells, w, boxX+1, contentY, "(no other files)", colorStatusFg, colorDefaultBg, terminal.AttrDim)
-		}
+	// Row 0: Header
+	cells[0] = terminal.Cell{Rune: dboxTL, Fg: colorPaneBorder, Bg: colorDefaultBg}
+	for x := 1; x < w-1; x++ {
+		cells[x] = terminal.Cell{Rune: dboxH, Fg: colorPaneBorder, Bg: colorDefaultBg}
 	}
+	cells[w-1] = terminal.Cell{Rune: dboxTR, Fg: colorPaneBorder, Bg: colorDefaultBg}
 
-	// Show remaining tag groups count
-	if len(tagLinks) > numBoxes {
-		remaining := len(tagLinks) - numBoxes
-		moreStr := fmt.Sprintf("(+%d more)", remaining)
-		drawText(cells, w, w-len(moreStr)-3, y+boxHeight-1, moreStr, colorStatusFg, colorDefaultBg, terminal.AttrDim)
+	title := fmt.Sprintf(" DIVE: %s ", state.SourcePath)
+	if len(title) > w-4 {
+		title = title[:w-7] + "... "
 	}
+	drawText(cells, w, 2, 0, title, colorHeaderFg, colorDefaultBg, terminal.AttrBold)
 
-	return y + boxHeight
-}
+	// Row 1: Info bar
+	cells[w] = terminal.Cell{Rune: dboxV, Fg: colorPaneBorder, Bg: colorDefaultBg}
+	cells[2*w-1] = terminal.Cell{Rune: dboxV, Fg: colorPaneBorder, Bg: colorDefaultBg}
 
-// renderFocusBox draws the central box showing the focused file details
-func renderFocusBox(cells []terminal.Cell, w, y int, state *DiveState) int {
-	boxWidth := w - 8
-	boxX := 4
-	boxHeight := 4
-
-	// Draw double-line box
-	drawDoubleBox(cells, w, boxX, y, boxWidth, boxHeight)
-
-	// Title
-	title := fmt.Sprintf(" %s ", state.SourcePath)
-	titleX := boxX + (boxWidth-len(title))/2
-	drawText(cells, w, titleX, y, title, colorAllTagFg, colorDefaultBg, terminal.AttrBold)
-
-	// Package info
-	pkgStr := fmt.Sprintf("Package: %s", state.FileInfo.Package)
-	drawText(cells, w, boxX+2, y+1, pkgStr, colorDirFg, colorDefaultBg, terminal.AttrNone)
-
-	// Tags summary (both focus and interact counts)
-	focusCount := 0
-	for _, tags := range state.FileInfo.Focus {
+	fi := state.FileInfo
+	focusCount, interactCount := 0, 0
+	for _, tags := range fi.Focus {
 		focusCount += len(tags)
 	}
-	interactCount := 0
-	for _, tags := range state.FileInfo.Interact {
+	for _, tags := range fi.Interact {
 		interactCount += len(tags)
 	}
-	tagStr := fmt.Sprintf("Focus: %d tags  Interact: %d tags", focusCount, interactCount)
-	drawText(cells, w, boxX+len(pkgStr)+4, y+1, tagStr, colorTagFg, colorDefaultBg, terminal.AttrNone)
+	info := fmt.Sprintf("pkg:%s │ Focus:%d │ Interact:%d │ Imports:%d",
+		fi.Package, focusCount, interactCount, len(fi.Imports))
+	if len(info) > w-4 {
+		info = info[:w-7] + "..."
+	}
+	drawText(cells, w, 2, 1, info, colorStatusFg, colorDefaultBg, terminal.AttrNone)
 
-	// Imports summary
-	impStr := fmt.Sprintf("Imports: %d local", len(state.FileInfo.Imports))
-	drawText(cells, w, boxX+2, y+2, impStr, colorStatusFg, colorDefaultBg, terminal.AttrNone)
+	// Row 2: Separator
+	cells[2*w] = terminal.Cell{Rune: dboxLT, Fg: colorPaneBorder, Bg: colorDefaultBg}
+	for x := 1; x < w-1; x++ {
+		cells[2*w+x] = terminal.Cell{Rune: dboxH, Fg: colorPaneBorder, Bg: colorDefaultBg}
+	}
+	cells[3*w-1] = terminal.Cell{Rune: dboxRT, Fg: colorPaneBorder, Bg: colorDefaultBg}
 
-	// Importers count
-	impByCount := len(state.DependedBy)
-	impByStr := fmt.Sprintf("Imported by: %d packages", impByCount)
-	drawText(cells, w, boxX+len(impStr)+4, y+2, impByStr, colorStatusFg, colorDefaultBg, terminal.AttrNone)
+	// Pane geometry: 4 equal-width panes
+	paneW := (w - 5) / 4 // left border + 3 separators + right border
+	paneX := [4]int{1, 1 + paneW + 1, 1 + 2*(paneW+1), 1 + 3*(paneW+1)}
 
-	return y + boxHeight
+	// Adjust last pane to fill remaining width
+	lastPaneW := w - paneX[3] - 1
+
+	// Separators at row 2
+	for i := 1; i < 4; i++ {
+		cells[2*w+paneX[i]-1] = terminal.Cell{Rune: boxTT, Fg: colorPaneBorder, Bg: colorDefaultBg}
+	}
+
+	contentTop := 3
+	contentH := h - 4 // Header + info + separator + help
+
+	// Vertical borders
+	for y := contentTop; y < contentTop+contentH; y++ {
+		cells[y*w] = terminal.Cell{Rune: dboxV, Fg: colorPaneBorder, Bg: colorDefaultBg}
+		cells[y*w+w-1] = terminal.Cell{Rune: dboxV, Fg: colorPaneBorder, Bg: colorDefaultBg}
+		for i := 1; i < 4; i++ {
+			cells[y*w+paneX[i]-1] = terminal.Cell{Rune: boxV, Fg: colorPaneBorder, Bg: colorDefaultBg}
+		}
+	}
+
+	// Pane titles and content
+	titles := [4]string{"DEPENDS ON", "DEPENDED BY", "FOCUS LINKS", "INTERACT"}
+	for i := 0; i < 4; i++ {
+		active := state.ActivePane == DivePane(i)
+		pw := paneW
+		if i == 3 {
+			pw = lastPaneW
+		}
+		renderDivePane(cells, w, paneX[i], contentTop, pw, contentH, titles[i],
+			state.Panes[i], state.Cursors[i], state.Scrolls[i], active)
+	}
+
+	// Bottom frame
+	helpY := h - 1
+	cells[helpY*w] = terminal.Cell{Rune: dboxBL, Fg: colorPaneBorder, Bg: colorDefaultBg}
+	for x := 1; x < w-1; x++ {
+		cells[helpY*w+x] = terminal.Cell{Rune: dboxH, Fg: colorPaneBorder, Bg: colorDefaultBg}
+	}
+	cells[helpY*w+w-1] = terminal.Cell{Rune: dboxBR, Fg: colorPaneBorder, Bg: colorDefaultBg}
+	for i := 1; i < 4; i++ {
+		cells[helpY*w+paneX[i]-1] = terminal.Cell{Rune: boxBT, Fg: colorPaneBorder, Bg: colorDefaultBg}
+	}
+
+	help := " ?:help Tab:pane h/l:fold j/k:nav Enter:dive q:back ^Q:quit "
+	drawText(cells, w, 2, helpY, help, colorHelpFg, colorDefaultBg, terminal.AttrNone)
+}
+
+func renderDivePane(cells []terminal.Cell, totalW, x, y, paneW, paneH int, title string, items []DiveListItem, cursor, scroll int, active bool) {
+	bg := colorDefaultBg
+	if active {
+		bg = colorPaneActiveBg
+	}
+
+	// Clear pane
+	for row := 0; row < paneH; row++ {
+		for col := 0; col < paneW; col++ {
+			idx := (y+row)*totalW + x + col
+			if idx < len(cells) {
+				cells[idx] = terminal.Cell{Rune: ' ', Fg: colorDefaultFg, Bg: bg}
+			}
+		}
+	}
+
+	// Title row
+	titleFg := colorStatusFg
+	if active {
+		titleFg = colorHeaderFg
+	}
+	drawText(cells, totalW, x, y, truncateWithEllipsis(title, paneW-1), titleFg, bg, terminal.AttrBold)
+
+	// Scroll indicator on title row
+	if len(items) > paneH-1 && paneH > 1 {
+		pct := 0
+		if len(items) > 0 {
+			pct = (scroll * 100) / len(items)
+		}
+		ind := fmt.Sprintf("%d%%", pct)
+		indX := x + paneW - len(ind) - 1
+		if indX > x+len(title)+1 {
+			drawText(cells, totalW, indX, y, ind, colorStatusFg, bg, terminal.AttrDim)
+		}
+	}
+
+	listY := y + 1
+	listH := paneH - 1
+
+	if len(items) == 0 {
+		drawText(cells, totalW, x, listY, "(none)", colorUnselected, bg, terminal.AttrDim)
+		return
+	}
+
+	for i := 0; i < listH && scroll+i < len(items); i++ {
+		idx := scroll + i
+		item := items[idx]
+		row := listY + i
+
+		isCursor := active && idx == cursor
+		rowBg := bg
+		if isCursor {
+			rowBg = colorCursorBg
+		}
+
+		// Clear row
+		for col := 0; col < paneW; col++ {
+			cellIdx := row*totalW + x + col
+			if cellIdx < len(cells) {
+				cells[cellIdx] = terminal.Cell{Rune: ' ', Fg: colorDefaultFg, Bg: rowBg}
+			}
+		}
+
+		indent := item.Indent * 2
+		col := x + indent
+
+		// Expand indicator
+		if item.GroupKey != "" {
+			ch := '▶'
+			if item.Expanded {
+				ch = '▼'
+			}
+			if col < x+paneW {
+				cells[row*totalW+col] = terminal.Cell{Rune: ch, Fg: colorDirFg, Bg: rowBg}
+			}
+			col += 2
+		}
+
+		// Label
+		var fg terminal.RGB
+		label := item.Label
+		switch item.Type {
+		case DiveItemDir:
+			fg = colorDirFg
+		case DiveItemGroup:
+			fg = colorGroupFg
+			if item.Count > 0 {
+				label = fmt.Sprintf("%s (%d)", item.Label, item.Count)
+			}
+		case DiveItemTag:
+			fg = colorTagFg
+			if item.Count > 0 {
+				label = fmt.Sprintf("%s (%d)", item.Label, item.Count)
+			}
+		case DiveItemFile:
+			fg = colorDefaultFg
+		}
+
+		maxLen := paneW - (col - x) - 1
+		if maxLen > 0 {
+			drawText(cells, totalW, col, row, truncateWithEllipsis(label, maxLen), fg, rowBg, terminal.AttrNone)
+		}
+	}
 }

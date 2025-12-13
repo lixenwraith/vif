@@ -52,14 +52,63 @@ func (app *AppState) renderSplitPane(cells []terminal.Cell, w, h int) {
 	title := "LIXEN-MAP"
 	drawText(cells, w, 1, 0, title, colorHeaderFg, colorHeaderBg, terminal.AttrBold)
 
-	// Right side header info
-	depsStr := fmt.Sprintf("Deps: %d", app.DepthLimit)
-	if !app.ExpandDeps {
-		depsStr = "Deps: OFF"
+	// Compute output stats once
+	totalFiles, depFiles, totalSize, depSize := app.computeOutputStats()
+
+	// Determine size color based on threshold
+	sizeFg := colorHeaderFg
+	if totalSize > SizeWarningThreshold {
+		sizeFg = terminal.RGB{R: 255, G: 80, B: 80}
 	}
-	outputFiles := app.ComputeOutputFiles()
-	rightInfo := fmt.Sprintf("%s  Output: %d files", depsStr, len(outputFiles))
-	drawText(cells, w, w-len(rightInfo)-2, 0, rightInfo, colorHeaderFg, colorHeaderBg, terminal.AttrNone)
+
+	// Right side header info - draw segments with different colors
+	// Format: "Deps: N | Output: N files | Size: X (+Y dep)"
+	x := w - 2
+
+	// Build from right to left
+	if app.ExpandDeps && depSize > 0 {
+		depSizeStr := fmt.Sprintf("(+%s dep)", formatSize(depSize))
+		x -= len(depSizeStr)
+		drawText(cells, w, x, 0, depSizeStr, colorStatusFg, colorHeaderBg, terminal.AttrNone)
+		x -= 1 // space
+	}
+
+	sizeVal := formatSize(totalSize)
+	x -= len(sizeVal)
+	drawText(cells, w, x, 0, sizeVal, sizeFg, colorHeaderBg, terminal.AttrNone)
+
+	sizeLabel := "Size: "
+	x -= len(sizeLabel)
+	drawText(cells, w, x, 0, sizeLabel, colorStatusFg, colorHeaderBg, terminal.AttrNone)
+
+	sep1 := " | "
+	x -= len(sep1)
+	drawText(cells, w, x, 0, sep1, colorPaneBorder, colorHeaderBg, terminal.AttrNone)
+
+	filesVal := fmt.Sprintf("%d files", totalFiles)
+	x -= len(filesVal)
+	drawText(cells, w, x, 0, filesVal, colorHeaderFg, colorHeaderBg, terminal.AttrNone)
+
+	filesLabel := "Output: "
+	x -= len(filesLabel)
+	drawText(cells, w, x, 0, filesLabel, colorStatusFg, colorHeaderBg, terminal.AttrNone)
+
+	sep2 := " | "
+	x -= len(sep2)
+	drawText(cells, w, x, 0, sep2, colorPaneBorder, colorHeaderBg, terminal.AttrNone)
+
+	var depsVal string
+	if app.ExpandDeps {
+		depsVal = fmt.Sprintf("%d", app.DepthLimit)
+	} else {
+		depsVal = "OFF"
+	}
+	x -= len(depsVal)
+	drawText(cells, w, x, 0, depsVal, colorHeaderFg, colorHeaderBg, terminal.AttrNone)
+
+	depsLabel := "Deps: "
+	x -= len(depsLabel)
+	drawText(cells, w, x, 0, depsLabel, colorStatusFg, colorHeaderBg, terminal.AttrNone)
 
 	// Content area
 	contentTop := headerHeight
@@ -111,13 +160,13 @@ func (app *AppState) renderSplitPane(cells []terminal.Cell, w, h int) {
 	drawText(cells, w, rightStart+1, contentTop, rightHeader, colorStatusFg, rightBg, terminal.AttrBold)
 
 	// Counters on same line, right-aligned within pane
-	leftCounter := formatPaneCounter(leftSel, leftFil, leftTotal, hasFilter)
+	leftCounter := formatTreePaneCounter(leftSel, leftFil, leftTotal, depFiles, app.ExpandDeps, hasFilter)
 	centerCounter := formatTagPaneCounter(centerSelG, centerTotalG, centerSelT, centerTotalT, centerFilG, centerFilT, hasFilter)
 	rightCounter := formatTagPaneCounter(rightSelG, rightTotalG, rightSelT, rightTotalT, rightFilG, rightFilT, hasFilter)
 
 	leftCounterX := leftWidth - len(leftCounter) - 1
 	if leftCounterX > len(leftHeader)+2 {
-		drawText(cells, w, leftCounterX, contentTop, leftCounter, colorMatchCountFg, leftBg, terminal.AttrNone)
+		drawTreePaneCounter(cells, w, leftCounterX, contentTop, leftCounter, leftSel, leftFil, leftTotal, depFiles, app.ExpandDeps, hasFilter, leftBg)
 	}
 
 	centerCounterX := centerStart + centerWidth - len(centerCounter) - 1
@@ -955,10 +1004,34 @@ func formatTagPaneCounter(selGrps, totalGrps, selTags, totalTags, filGrps, filTa
 	return fmt.Sprintf("[%d/%dg %d/%dt]", selGrps, totalGrps, selTags, totalTags)
 }
 
-// formatPaneCounter formats counter string for pane header
-func formatPaneCounter(sel, fil, total int, hasFilter bool) string {
+// formatTreePaneCounter formats counter string for tree pane header with deps
+func formatTreePaneCounter(sel, fil, total, deps int, depsEnabled, hasFilter bool) string {
 	if hasFilter {
-		return fmt.Sprintf("[Sel: %d/%d | Fil: %d]", sel, total, fil)
+		return fmt.Sprintf("[Sel: %d/%d | Fil: %d | Deps: %d]", sel, total, fil, deps)
 	}
-	return fmt.Sprintf("[Sel: %d/%d]", sel, total)
+	return fmt.Sprintf("[Sel: %d/%d | Deps: %d]", sel, total, deps)
+}
+
+// drawTreePaneCounter renders tree pane counter with conditional dim for deps
+func drawTreePaneCounter(cells []terminal.Cell, w, x, y int, counter string, sel, fil, total, deps int, depsEnabled, hasFilter bool, bg terminal.RGB) {
+	// Find position of "Deps:" in counter to apply conditional styling
+	depsIdx := len(counter) - len(fmt.Sprintf("Deps: %d]", deps))
+
+	// Draw everything before deps section
+	for i, r := range counter[:depsIdx] {
+		cells[y*w+x+i] = terminal.Cell{Rune: r, Fg: colorMatchCountFg, Bg: bg}
+	}
+
+	// Draw deps section with conditional dim
+	depsAttr := terminal.AttrNone
+	depsFg := colorMatchCountFg
+	if !depsEnabled {
+		depsAttr = terminal.AttrDim
+		depsFg = colorUnselected
+	}
+
+	depsSection := counter[depsIdx:]
+	for i, r := range depsSection {
+		cells[y*w+x+depsIdx+i] = terminal.Cell{Rune: r, Fg: depsFg, Bg: bg, Attrs: depsAttr}
+	}
 }

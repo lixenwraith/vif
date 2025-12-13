@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
@@ -39,13 +41,17 @@ const (
 
 // drawText renders text string at position with styling
 func drawText(cells []terminal.Cell, width, x, y int, text string, fg, bg terminal.RGB, attr terminal.Attr) {
-	// Not using for index for multi-byte characters
+	// Not using 'for' index due to multi-byte characters
 	col := 0
 	for _, r := range text {
 		if x+col >= width || x+col < 0 {
 			break
 		}
-		cells[y*width+x+col] = terminal.Cell{
+		idx := y*width + x + col
+		if idx < 0 || idx >= len(cells) {
+			break
+		}
+		cells[idx] = terminal.Cell{
 			Rune:  r,
 			Fg:    fg,
 			Bg:    bg,
@@ -195,4 +201,24 @@ func drawColoredTags(cells []terminal.Cell, w, x, y int, tagStr string, bg termi
 	}
 
 	return x
+}
+
+// formatSize formats byte count with adaptive units
+func formatSize(bytes int64) string {
+	const (
+		kb = 1024
+		mb = kb * 1024
+		gb = mb * 1024
+	)
+
+	switch {
+	case bytes < kb:
+		return fmt.Sprintf("%d B", bytes)
+	case bytes < mb:
+		return fmt.Sprintf("%.1f KB", float64(bytes)/kb)
+	case bytes < gb:
+		return fmt.Sprintf("%.1f MB", float64(bytes)/mb)
+	default:
+		return fmt.Sprintf("%.1f GB", float64(bytes)/gb)
+	}
 }

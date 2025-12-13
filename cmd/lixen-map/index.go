@@ -230,6 +230,7 @@ func parseFile(path, modPath string) (*FileInfo, error) {
 		Path:     path,
 		Focus:    make(map[string][]string),
 		Interact: make(map[string][]string),
+		Size:     int64(len(content)),
 	}
 
 	lines := strings.Split(string(content), "\n")
