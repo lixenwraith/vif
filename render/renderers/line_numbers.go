@@ -1,8 +1,6 @@
 package renderers
 
 import (
-	"fmt"
-
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -22,18 +20,25 @@ func NewLineNumbersRenderer(gameCtx *engine.GameContext) *LineNumbersRenderer {
 // Render implements SystemRenderer
 func (l *LineNumbersRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskUI)
-	// Snapshot from context in case of change mid-loop
-	width := l.gameCtx.LineNumWidth
 
 	for y := 0; y < ctx.GameHeight; y++ {
 		relativeNum := y - ctx.CursorY
-		if relativeNum < 0 {
-			relativeNum = -relativeNum
+		absRelative := relativeNum
+		if absRelative < 0 {
+			absRelative = -absRelative
 		}
-		lineNum := fmt.Sprintf("%*d", width, relativeNum)
 
+		screenY := ctx.GameY + y
+
+		// Column 0: left padding (always empty, never highlighted)
+		buf.SetWithBg(0, screenY, ' ', render.RgbBackground, render.RgbBackground)
+
+		// Column 1: line indicator
+		var ch rune
 		var fg, bg render.RGB
+
 		if relativeNum == 0 {
+			ch = '0'
 			if l.gameCtx.IsSearchMode() || l.gameCtx.IsCommandMode() {
 				fg = render.RgbCursorNormal
 				bg = render.RgbBackground
@@ -44,11 +49,16 @@ func (l *LineNumbersRenderer) Render(ctx render.RenderContext, world *engine.Wor
 		} else {
 			fg = render.RgbLineNumbers
 			bg = render.RgbBackground
+
+			if absRelative%10 == 0 {
+				ch = rune('0' + (absRelative/10)%10)
+			} else if absRelative%5 == 0 {
+				ch = '-'
+			} else {
+				ch = ' '
+			}
 		}
 
-		screenY := ctx.GameY + y
-		for i, ch := range lineNum {
-			buf.SetWithBg(i, screenY, ch, fg, bg)
-		}
+		buf.SetWithBg(1, screenY, ch, fg, bg)
 	}
 }

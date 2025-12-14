@@ -60,8 +60,6 @@ type GameContext struct {
 	// TODO: review, usage and resize race
 	GameX, GameY          int
 	GameWidth, GameHeight int
-	// TODO: review
-	LineNumWidth int
 
 	// Cursor entity (singleton)
 	CursorEntity core.Entity
@@ -282,33 +280,14 @@ func (ctx *GameContext) updateGameArea() {
 		gameHeight = 1
 	}
 
-	lineNumWidth := formatNumber(gameHeight)
-	if lineNumWidth < 1 {
-		lineNumWidth = 1
-	}
-
-	ctx.LineNumWidth = lineNumWidth
-	ctx.GameX = lineNumWidth + 1    // line number + 1 space
-	ctx.GameY = constants.TopMargin // Start at row 1 (row 0 is for heat meter)
+	ctx.GameX = constants.LeftMargin
+	ctx.GameY = constants.TopMargin
 	ctx.GameWidth = ctx.Width - ctx.GameX
 	ctx.GameHeight = gameHeight
 
 	if ctx.GameWidth < 1 {
 		ctx.GameWidth = 1
 	}
-}
-
-// formatNumber returns the number of digits needed to display n
-func formatNumber(n int) int {
-	if n == 0 {
-		return 1
-	}
-	digits := 0
-	for n > 0 {
-		digits++
-		n /= 10
-	}
-	return digits
 }
 
 // HandleResize handles terminal resize events
