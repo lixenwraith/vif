@@ -15,9 +15,10 @@ import (
 
 // pendingDrainSpawn represents a queued drain spawn awaiting materialization
 type pendingDrainSpawn struct {
-	targetX       int    // Spawn position X
-	targetY       int    // Spawn position Y
-	scheduledTick uint64 // Game tick when materialization should start
+	targetX            int    // Spawn position X
+	targetY            int    // Spawn position Y
+	scheduledTick      uint64 // Game tick when materialization should start
+	materializeStarted bool   // Prevent materializer accounting gap (1 tick in-flight event)
 }
 
 // DrainSystem manages the drain entity lifecycle
@@ -53,15 +54,16 @@ func (s *DrainSystem) Priority() int {
 // EventTypes returns the event types DrainSystem handles
 func (s *DrainSystem) EventTypes() []events.EventType {
 	return []events.EventType{
-		events.EventSpawnComplete,
+		events.EventMaterializeComplete,
 	}
 }
 
 // HandleEvent processes events
 func (s *DrainSystem) HandleEvent(world *engine.World, event events.GameEvent) {
-	if event.Type == events.EventSpawnComplete {
+	if event.Type == events.EventMaterializeComplete {
 		if payload, ok := event.Payload.(*events.SpawnCompletePayload); ok {
 			if payload.Type == components.SpawnTypeDrain {
+				s.removeCompletedSpawn(payload.X, payload.Y)
 				s.materializeDrainAt(world, payload.X, payload.Y)
 			}
 		}
@@ -77,7 +79,7 @@ func (s *DrainSystem) Update(world *engine.World, dt time.Duration) {
 
 	// Multi-drain lifecycle based on heat
 	currentCount := world.Drains.Count()
-	pendingCount := len(s.pendingSpawns) + s.countActiveMaterializations(world)
+	pendingCount := len(s.pendingSpawns)
 
 	targetCount := s.calcTargetDrainCount(world)
 	effectiveCount := currentCount + pendingCount
@@ -117,6 +119,17 @@ func (s *DrainSystem) Update(world *engine.World, dt time.Duration) {
 	}
 }
 
+// removeCompletedSpawn removes spawn entry after materialize completion
+func (s *DrainSystem) removeCompletedSpawn(x, y int) {
+	for i, spawn := range s.pendingSpawns {
+		if spawn.targetX == x && spawn.targetY == y && spawn.materializeStarted {
+			s.pendingSpawns[i] = s.pendingSpawns[len(s.pendingSpawns)-1]
+			s.pendingSpawns = s.pendingSpawns[:len(s.pendingSpawns)-1]
+			return
+		}
+	}
+}
+
 // getHeat reads heat value from HeatComponent
 func (s *DrainSystem) getHeat(world *engine.World) int {
 	if hc, ok := world.Heats.Get(s.ctx.CursorEntity); ok {
@@ -137,17 +150,14 @@ func (s *DrainSystem) processPendingSpawns(world *engine.World) {
 	}
 
 	currentTick := s.ctx.State.GetGameTicks()
-	var remaining []pendingDrainSpawn
-
-	for _, spawn := range s.pendingSpawns {
-		if currentTick >= spawn.scheduledTick {
+	// Set flag instead of removing from slice
+	for i := range s.pendingSpawns {
+		spawn := &s.pendingSpawns[i]
+		if !spawn.materializeStarted && currentTick >= spawn.scheduledTick {
 			s.startMaterializeAt(world, spawn.targetX, spawn.targetY)
-		} else {
-			remaining = append(remaining, spawn)
+			spawn.materializeStarted = true
 		}
 	}
-
-	s.pendingSpawns = remaining
 }
 
 // queueDrainSpawn adds a drain spawn to the pending queue with stagger timing
@@ -278,16 +288,6 @@ func (s *DrainSystem) randomSpawnOffset(world *engine.World, baseX, baseY int, c
 	return 0, 0, false
 }
 
-// countActiveMaterializations returns number of drain spawns currently materializing
-// Rounds up to account for partial groups from premature destruction
-func (s *DrainSystem) countActiveMaterializations(world *engine.World) int {
-	count := world.Materializers.Count()
-	if count == 0 {
-		return 0
-	}
-	return (count + 3) / 4
-}
-
 // buildQueuedPositionSet creates position exclusion map from all spawn sources
 func (s *DrainSystem) buildQueuedPositionSet(world *engine.World) map[uint64]bool {
 	queuedPositions := make(map[uint64]bool, len(s.pendingSpawns)+world.Drains.Count()+world.Materializers.Count()/4)
@@ -391,15 +391,14 @@ func (s *DrainSystem) despawnAllDrains(world *engine.World) {
 func (s *DrainSystem) despawnDrainWithFlash(world *engine.World, entity core.Entity) {
 	// Get position for flash effect before destruction
 	if pos, ok := world.Positions.Get(entity); ok {
-		// TODO: systems should not spawn flashes directly
-		SpawnDestructionFlash(world, pos.X, pos.Y, constants.DrainChar)
+		timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+		s.ctx.PushEvent(events.EventFlashRequest, &events.FlashRequestPayload{
+			X:    pos.X,
+			Y:    pos.Y,
+			Char: constants.DrainChar,
+		}, timeRes.GameTime)
 	}
 	world.DestroyEntity(entity)
-}
-
-// triggerDespawnFlash triggers a destruction flash effect at the given position
-func (s *DrainSystem) triggerDespawnFlash(world *engine.World, x, y int) {
-	SpawnDestructionFlash(world, x, y, constants.DrainChar)
 }
 
 // startMaterializeAt initiates the materialize animation for a specific position
@@ -797,7 +796,11 @@ func (s *DrainSystem) handleGoldSequenceCollision(world *engine.World, entity co
 			// Flash for gold character destruction
 			if pos, ok := world.Positions.Get(goldSequenceEntity); ok {
 				if char, ok := world.Characters.Get(goldSequenceEntity); ok {
-					SpawnDestructionFlash(world, pos.X, pos.Y, char.Rune)
+					s.ctx.PushEvent(events.EventFlashRequest, &events.FlashRequestPayload{
+						X:    pos.X,
+						Y:    pos.Y,
+						Char: char.Rune,
+					}, now)
 				}
 			}
 			world.DestroyEntity(goldSequenceEntity)

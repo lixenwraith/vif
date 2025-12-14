@@ -152,7 +152,7 @@ func (s *MaterializeSystem) Update(world *engine.World, dt time.Duration) {
 			targetX := int(key >> 32)
 			targetY := int(key & 0xFFFFFFFF)
 
-			s.ctx.PushEvent(events.EventSpawnComplete, &events.SpawnCompletePayload{
+			s.ctx.PushEvent(events.EventMaterializeComplete, &events.SpawnCompletePayload{
 				X:    targetX,
 				Y:    targetY,
 				Type: state.spawnType,

@@ -213,6 +213,7 @@ func main() {
 	clockScheduler.RegisterEventHandler(drainSystem)
 	clockScheduler.RegisterEventHandler(materializeSystem)
 	clockScheduler.RegisterEventHandler(splashSystem)
+	clockScheduler.RegisterEventHandler(flashSystem)
 	clockScheduler.RegisterEventHandler(timeKeeperSystem)
 	clockScheduler.RegisterEventHandler(commandSystem)
 	clockScheduler.Start()

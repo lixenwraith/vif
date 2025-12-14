@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/events"
 )
 
 // DecaySystem handles character decay animation and logic, stateless decay entity list
@@ -212,7 +213,12 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 
 				if world.Nuggets.Has(targetEntity) {
 					if char, ok := world.Characters.Get(targetEntity); ok {
-						SpawnDestructionFlash(world, col, row, char.Rune)
+						timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+						s.ctx.PushEvent(events.EventFlashRequest, &events.FlashRequestPayload{
+							X:    col,
+							Y:    row,
+							Char: char.Rune,
+						}, timeRes.GameTime)
 					}
 					world.DestroyEntity(targetEntity)
 					s.ctx.State.ClearActiveNuggetID(uint64(targetEntity))
@@ -322,7 +328,12 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity core.Ent
 			// Red at LevelDark - spawn flash then remove entity
 			if pos, ok := world.Positions.Get(entity); ok {
 				if char, ok := world.Characters.Get(entity); ok {
-					SpawnDestructionFlash(world, pos.X, pos.Y, char.Rune)
+					timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+					s.ctx.PushEvent(events.EventFlashRequest, &events.FlashRequestPayload{
+						X:    pos.X,
+						Y:    pos.Y,
+						Char: char.Rune,
+					}, timeRes.GameTime)
 				}
 			}
 			world.DestroyEntity(entity)

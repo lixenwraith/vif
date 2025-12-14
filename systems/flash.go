@@ -6,6 +6,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/events"
 )
 
 // FlashSystem manages the lifecycle of visual flash effects
@@ -19,6 +20,20 @@ func NewFlashSystem(ctx *engine.GameContext) *FlashSystem {
 
 func (s *FlashSystem) Priority() int {
 	return constants.PriorityFlash
+}
+
+func (s *FlashSystem) EventTypes() []events.EventType {
+	return []events.EventType{
+		events.EventFlashRequest,
+	}
+}
+
+func (s *FlashSystem) HandleEvent(world *engine.World, event events.GameEvent) {
+	if event.Type == events.EventFlashRequest {
+		if payload, ok := event.Payload.(*events.FlashRequestPayload); ok {
+			s.spawnDestructionFlash(world, payload.X, payload.Y, payload.Char)
+		}
+	}
 }
 
 func (s *FlashSystem) Update(world *engine.World, dt time.Duration) {
@@ -38,9 +53,8 @@ func (s *FlashSystem) Update(world *engine.World, dt time.Duration) {
 	}
 }
 
-// SpawnDestructionFlash creates a flash effect at the given position
-// Call from any system when destroying an entity with visual feedback
-func SpawnDestructionFlash(world *engine.World, x, y int, char rune) {
+// spawnDestructionFlash creates a flash effect at the given position
+func (s *FlashSystem) spawnDestructionFlash(world *engine.World, x, y int, char rune) {
 	flash := components.FlashComponent{
 		X:         x,
 		Y:         y,

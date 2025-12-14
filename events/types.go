@@ -161,10 +161,15 @@ const (
 	// Consumer: MaterializeSystem | Payload: *MaterializeRequestPayload
 	EventMaterializeRequest
 
-	// EventSpawnComplete signals materialization finished at location
+	// EventMaterializeComplete signals materialization finished at location
 	// Trigger: MaterializeSystem
 	// Consumer: DrainSystem (or others) | Payload: *SpawnCompletePayload
-	EventSpawnComplete
+	EventMaterializeComplete
+
+	// EventFlashRequest signals a request to spawn a destruction flash effect
+	// Trigger: Systems destroying entities with visual feedback (Drain, Cleaner, Decay)
+	// Consumer: FlashSystem | Payload: *FlashRequestPayload
+	EventFlashRequest
 )
 
 // GameEvent represents a single game event with metadata

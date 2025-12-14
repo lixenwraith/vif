@@ -135,3 +135,10 @@ type SpawnCompletePayload struct {
 	Y    int
 	Type components.SpawnType
 }
+
+// FlashRequestPayload contains parameters for destruction flash effect
+type FlashRequestPayload struct {
+	X    int
+	Y    int
+	Char rune
+}

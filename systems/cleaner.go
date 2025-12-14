@@ -443,7 +443,12 @@ func (cs *CleanerSystem) checkAndDestroyAtPosition(world *engine.World, x, y int
 func (cs *CleanerSystem) spawnRemovalFlash(world *engine.World, targetEntity core.Entity) {
 	if charComp, ok := world.Characters.Get(targetEntity); ok {
 		if posComp, ok := world.Positions.Get(targetEntity); ok {
-			SpawnDestructionFlash(world, posComp.X, posComp.Y, charComp.Rune)
+			timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+			cs.ctx.PushEvent(events.EventFlashRequest, &events.FlashRequestPayload{
+				X:    posComp.X,
+				Y:    posComp.Y,
+				Char: charComp.Rune,
+			}, timeRes.GameTime)
 		}
 	}
 }
