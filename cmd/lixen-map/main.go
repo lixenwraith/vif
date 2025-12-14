@@ -55,20 +55,22 @@ func main() {
 	}
 
 	app := &AppState{
-		Term:            term,
-		Index:           index,
-		FocusPane:       PaneTree,
-		Selected:        make(map[string]bool),
-		ExpandDeps:      true,
-		DepthLimit:      2,
-		Filter:          NewFilterState(),
-		RgAvailable:     rgErr == nil,
-		CurrentCategory: currentCat,
-		CategoryNames:   index.CategoryNames,
-		CategoryUI:      make(map[string]*CategoryUIState),
-		StartCollapsed:  true,
-		Width:           w,
-		Height:          h,
+		Term:             term,
+		Index:            index,
+		FocusPane:        PaneTree,
+		Selected:         make(map[string]bool),
+		ExpandDeps:       true,
+		DepthLimit:       2,
+		Filter:           NewFilterState(),
+		RgAvailable:      rgErr == nil,
+		CurrentCategory:  currentCat,
+		CategoryNames:    index.CategoryNames,
+		CategoryUI:       make(map[string]*CategoryUIState),
+		DepByState:       NewDetailPaneState(),
+		DepOnState:       NewDetailPaneState(),
+		DepAnalysisCache: make(map[string]*DependencyAnalysis),
+		Width:            w,
+		Height:           h,
 	}
 
 	// Initialize UI state for all categories
@@ -80,10 +82,8 @@ func main() {
 	app.RefreshTreeFlat()
 	app.RefreshLixenFlat()
 
-	// Apply initial collapsed state
-	if app.StartCollapsed {
-		app.applyInitialCollapsedState()
-	}
+	// Initial population of detail panes based on initial selection (root)
+	app.refreshDetailPanes()
 
 	app.Render()
 

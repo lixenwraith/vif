@@ -3,53 +3,12 @@ package main
 import (
 	"fmt"
 	"os/exec"
+	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
-
-// applyInitialCollapsedState collapses all panes for fresh start
-func (app *AppState) applyInitialCollapsedState() {
-	// Collapse tree directories
-	collapseAllRecursive(app.TreeRoot)
-	app.RefreshTreeFlat()
-	app.TreeCursor = 0
-	app.TreeScroll = 0
-
-	// Collapse all category UI states
-	for _, cat := range app.CategoryNames {
-		ui := app.CategoryUI[cat]
-		if ui == nil {
-			continue
-		}
-
-		catIdx := app.Index.Category(cat)
-		if catIdx == nil {
-			continue
-		}
-
-		// Collapse all groups
-		for _, group := range catIdx.Groups {
-			ui.GroupExpanded[group] = false
-		}
-
-		// Collapse all modules
-		for group, modules := range catIdx.Modules {
-			for _, mod := range modules {
-				ui.ModuleExpanded[group+"."+mod] = false
-			}
-		}
-	}
-
-	// Refresh current category flat list
-	app.RefreshLixenFlat()
-
-	// Reset cursor for current category
-	ui := app.getCurrentCategoryUI()
-	if ui != nil {
-		ui.Cursor = 0
-		ui.Scroll = 0
-	}
-}
 
 // HandleEvent routes keyboard events to appropriate handler
 func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
@@ -326,20 +285,12 @@ func (app *AppState) handleTreePaneEvent(ev terminal.Event) (quit, output bool) 
 
 // handleDepByPaneEvent processes input when depended-by pane focused
 func (app *AppState) handleDepByPaneEvent(ev terminal.Event) (quit, output bool) {
-	// Dep panes are read-only for now, only Enter navigates
-	if ev.Key == terminal.KeyEnter || (ev.Key == terminal.KeyRune && ev.Rune == 'l') {
-		app.navigateToDepByPackage()
-	}
-	return false, false
+	return app.handleDetailPaneEvent(ev, app.DepByState)
 }
 
 // handleDepOnPaneEvent processes input when depends-on pane focused
 func (app *AppState) handleDepOnPaneEvent(ev terminal.Event) (quit, output bool) {
-	// Dep panes are read-only for now, only Enter navigates
-	if ev.Key == terminal.KeyEnter || (ev.Key == terminal.KeyRune && ev.Rune == 'l') {
-		app.navigateToDepOnPackage()
-	}
-	return false, false
+	return app.handleDetailPaneEvent(ev, app.DepOnState)
 }
 
 // navigateToDepByPackage navigates to first file in depended-by package
@@ -357,6 +308,401 @@ func (app *AppState) navigateToDepByPackage() {
 	// Navigate to first package in list
 	targetPkg := depByPkgs[0]
 	app.navigateTreeToPackage(targetPkg)
+}
+
+// handleDetailPaneEvent generic handler for both detail panes
+func (app *AppState) handleDetailPaneEvent(ev terminal.Event, state *DetailPaneState) (quit, output bool) {
+	switch ev.Key {
+	case terminal.KeyRune:
+		switch ev.Rune {
+		case 'j':
+			app.moveDetailCursor(state, 1)
+		case 'k':
+			app.moveDetailCursor(state, -1)
+		case 'h':
+			app.collapseDetailItem(state)
+		case 'l':
+			app.expandOrNavDetailItem(state)
+		case 'H':
+			state.Expanded = make(map[string]bool)
+			app.refreshDetailPanes() // Recompute flat list
+			state.Cursor = 0
+			state.Scroll = 0
+		case 'L':
+			// Expand all visible headers
+			for _, item := range state.FlatItems {
+				if item.IsHeader {
+					state.Expanded[item.Key] = true
+				}
+			}
+			app.refreshDetailPanes()
+		case '0':
+			state.Cursor = 0
+			state.Scroll = 0
+		case '$':
+			if len(state.FlatItems) > 0 {
+				state.Cursor = len(state.FlatItems) - 1
+				app.moveDetailCursor(state, 0)
+			}
+		}
+
+	case terminal.KeyUp:
+		app.moveDetailCursor(state, -1)
+	case terminal.KeyDown:
+		app.moveDetailCursor(state, 1)
+	case terminal.KeyLeft:
+		app.collapseDetailItem(state)
+	case terminal.KeyRight:
+		app.expandOrNavDetailItem(state)
+	case terminal.KeyPageUp:
+		app.pageDetailCursor(state, -1)
+	case terminal.KeyPageDown:
+		app.pageDetailCursor(state, 1)
+	case terminal.KeyHome:
+		state.Cursor = 0
+		state.Scroll = 0
+	case terminal.KeyEnd:
+		if len(state.FlatItems) > 0 {
+			state.Cursor = len(state.FlatItems) - 1
+			app.moveDetailCursor(state, 0)
+		}
+	case terminal.KeyEnter:
+		app.expandOrNavDetailItem(state)
+	}
+	return false, false
+}
+
+func (app *AppState) moveDetailCursor(state *DetailPaneState, delta int) {
+	if len(state.FlatItems) == 0 {
+		return
+	}
+	state.Cursor += delta
+	if state.Cursor < 0 {
+		state.Cursor = 0
+	}
+	if state.Cursor >= len(state.FlatItems) {
+		state.Cursor = len(state.FlatItems) - 1
+	}
+
+	visibleRows := app.Height - headerHeight - statusHeight - helpHeight - 2
+	if visibleRows < 1 {
+		visibleRows = 1
+	}
+
+	if state.Cursor < state.Scroll {
+		state.Scroll = state.Cursor
+	}
+	if state.Cursor >= state.Scroll+visibleRows {
+		state.Scroll = state.Cursor - visibleRows + 1
+	}
+}
+
+func (app *AppState) pageDetailCursor(state *DetailPaneState, direction int) {
+	visibleRows := app.Height - headerHeight - statusHeight - helpHeight - 2
+	if visibleRows < 1 {
+		visibleRows = 1
+	}
+	delta := (visibleRows / 2) * direction
+	if delta == 0 {
+		delta = direction
+	}
+	app.moveDetailCursor(state, delta)
+}
+
+func (app *AppState) collapseDetailItem(state *DetailPaneState) {
+	if len(state.FlatItems) == 0 {
+		return
+	}
+	item := state.FlatItems[state.Cursor]
+	if item.IsHeader && item.Expanded {
+		state.Expanded[item.Key] = false
+		app.refreshDetailPanes()
+	} else if item.Level > 0 {
+		// Jump to parent
+		for i := state.Cursor - 1; i >= 0; i-- {
+			if state.FlatItems[i].IsHeader && state.FlatItems[i].Level < item.Level {
+				// Naive parent finding based on level/header, sufficient for 2-level
+				if strings.HasPrefix(item.Key, state.FlatItems[i].Key) { // Key check is safer
+					state.Cursor = i
+					app.moveDetailCursor(state, 0)
+					break
+				}
+			}
+		}
+	}
+}
+
+func (app *AppState) expandOrNavDetailItem(state *DetailPaneState) {
+	if len(state.FlatItems) == 0 {
+		return
+	}
+	item := state.FlatItems[state.Cursor]
+
+	if item.IsHeader {
+		if !item.Expanded {
+			state.Expanded[item.Key] = true
+			app.refreshDetailPanes()
+		}
+	} else if item.IsFile && item.Path != "" {
+		// Navigation (Pane 3)
+		app.navigateTreeToFile(item.Path)
+	}
+}
+
+// navigateTreeToFile expands tree and positions cursor on file
+func (app *AppState) navigateTreeToFile(path string) {
+	// Find file in tree
+	var findAndExpand func(node *TreeNode) bool
+	findAndExpand = func(node *TreeNode) bool {
+		if node.Path == path {
+			return true
+		}
+		for _, child := range node.Children {
+			if findAndExpand(child) {
+				if node.IsDir {
+					node.Expanded = true
+				}
+				return true
+			}
+		}
+		return false
+	}
+
+	if findAndExpand(app.TreeRoot) {
+		app.RefreshTreeFlat()
+		for i, n := range app.TreeFlat {
+			if n.Path == path {
+				app.TreeCursor = i
+				app.moveTreeCursor(0)
+				app.FocusPane = PaneTree
+				app.Message = fmt.Sprintf("navigated to %s", path)
+				app.triggerAnalysis() // Ensure analysis runs on nav
+				app.refreshDetailPanes()
+				return
+			}
+		}
+	}
+}
+
+// triggerAnalysis runs AST analysis if cursor is on a file
+func (app *AppState) triggerAnalysis() {
+	if len(app.TreeFlat) == 0 {
+		return
+	}
+	node := app.TreeFlat[app.TreeCursor]
+	if node.IsDir {
+		return
+	}
+
+	if _, ok := app.DepAnalysisCache[node.Path]; !ok {
+		// Not in cache, analyze
+		// Note: Synchronous for now, per plan. Can be made async if needed.
+		analysis, err := AnalyzeFileDependencies(node.Path, app.Index.ModulePath)
+		if err == nil {
+			app.DepAnalysisCache[node.Path] = analysis
+		}
+	}
+}
+
+// refreshDetailPanes rebuilds flat lists for both detail panes based on current tree selection
+func (app *AppState) refreshDetailPanes() {
+	app.rebuildDepByFlat()
+	app.rebuildDepOnFlat()
+}
+
+func (app *AppState) rebuildDepByFlat() {
+	app.DepByState.FlatItems = nil
+	pkgDir := app.getCurrentFilePackageDir()
+	if pkgDir == "" {
+		return
+	}
+
+	// Get raw reverse deps: importedPkg -> importingFiles
+	files := app.Index.ReverseDeps[pkgDir]
+	if len(files) == 0 {
+		return
+	}
+
+	// Prepare target definitions for intersection if a file is selected
+	var targetDefs map[string]bool
+	targetFile := app.getCurrentFileInfo()
+	// Only calculate usage if a specific file is selected (not just dir)
+	if targetFile != nil && len(targetFile.Definitions) > 0 {
+		targetDefs = make(map[string]bool, len(targetFile.Definitions))
+		for _, def := range targetFile.Definitions {
+			targetDefs[def] = true
+		}
+	}
+
+	// Resolve full import path for the currently selected package
+	fullImportPath := app.Index.ModulePath
+	if pkgDir != "." {
+		fullImportPath += "/" + pkgDir
+	}
+
+	// Structure to hold temp data for sorting
+	type depFile struct {
+		Path     string
+		HasUsage bool
+	}
+
+	// Group files by their package
+	filesByPkg := make(map[string][]*depFile)
+
+	for _, fPath := range files {
+		hasUsage := false
+
+		// If we have a target file with definitions, check for usage
+		if targetDefs != nil {
+			// Check cache or analyze
+			analysis, ok := app.DepAnalysisCache[fPath]
+			if !ok {
+				// On-demand analysis
+				a, err := AnalyzeFileDependencies(fPath, app.Index.ModulePath)
+				if err == nil {
+					analysis = a
+					app.DepAnalysisCache[fPath] = a
+				}
+			}
+
+			if analysis != nil {
+				if symbols, ok := analysis.UsedSymbols[fullImportPath]; ok {
+					for _, sym := range symbols {
+						if targetDefs[sym] {
+							hasUsage = true
+							break
+						}
+					}
+				}
+			}
+		}
+
+		dir := filepath.Dir(fPath)
+		dir = filepath.ToSlash(dir)
+		filesByPkg[dir] = append(filesByPkg[dir], &depFile{Path: fPath, HasUsage: hasUsage})
+	}
+
+	// Sort packages
+	pkgs := make([]string, 0, len(filesByPkg))
+	for p := range filesByPkg {
+		pkgs = append(pkgs, p)
+	}
+	sort.Strings(pkgs)
+
+	for _, p := range pkgs {
+		pkgFiles := filesByPkg[p]
+
+		// Sort files: Usage first, then alphabetical
+		sort.Slice(pkgFiles, func(i, j int) bool {
+			if pkgFiles[i].HasUsage && !pkgFiles[j].HasUsage {
+				return true
+			}
+			if !pkgFiles[i].HasUsage && pkgFiles[j].HasUsage {
+				return false
+			}
+			return pkgFiles[i].Path < pkgFiles[j].Path
+		})
+
+		// Default to expanded if new
+		if _, known := app.DepByState.Expanded[p]; !known {
+			app.DepByState.Expanded[p] = true
+		}
+		isExpanded := app.DepByState.Expanded[p]
+
+		// Format label for root package
+		label := p
+		if label == "." {
+			label = "(root)"
+		}
+
+		// Add Package Header
+		app.DepByState.FlatItems = append(app.DepByState.FlatItems, DetailItem{
+			Level:    0,
+			Label:    label,
+			Key:      p,
+			IsHeader: true,
+			Expanded: isExpanded,
+			IsLocal:  true,
+		})
+
+		if isExpanded {
+			for _, f := range pkgFiles {
+				app.DepByState.FlatItems = append(app.DepByState.FlatItems, DetailItem{
+					Level:    1,
+					Label:    filepath.Base(f.Path),
+					Key:      f.Path,
+					IsFile:   true,
+					Path:     f.Path,
+					IsLocal:  true,
+					HasUsage: f.HasUsage,
+				})
+			}
+		}
+	}
+}
+
+func (app *AppState) rebuildDepOnFlat() {
+	app.DepOnState.FlatItems = nil
+	fi := app.getCurrentFileInfo()
+	if fi == nil {
+		return
+	}
+
+	// Analysis result (symbols)
+	analysis := app.DepAnalysisCache[fi.Path]
+
+	importPaths := make([]string, 0)
+	if analysis != nil {
+		for p := range analysis.UsedSymbols {
+			importPaths = append(importPaths, p)
+		}
+	} else {
+		// Fallback: we don't have full paths in FileInfo easily mapping to short names
+		// without scanning Index packages. Waiting for analysis trigger.
+		return
+	}
+	sort.Strings(importPaths)
+
+	for _, path := range importPaths {
+		isLocal := strings.HasPrefix(path, app.Index.ModulePath)
+
+		// Default to expanded if new
+		if _, known := app.DepOnState.Expanded[path]; !known {
+			app.DepOnState.Expanded[path] = true
+		}
+		isExpanded := app.DepOnState.Expanded[path]
+
+		// Display name: strip module path for locals for brevity?
+		// User req: "green for internal package names"
+		dispName := path
+		if isLocal {
+			dispName = strings.TrimPrefix(path, app.Index.ModulePath+"/")
+		}
+
+		symbols := analysis.UsedSymbols[path]
+		hasSymbols := len(symbols) > 0 && isLocal // Only show symbols for local
+
+		app.DepOnState.FlatItems = append(app.DepOnState.FlatItems, DetailItem{
+			Level:    0,
+			Label:    dispName,
+			Key:      path,
+			IsHeader: hasSymbols, // Only expandable if we have symbols to show
+			Expanded: isExpanded,
+			IsLocal:  isLocal,
+		})
+
+		if isExpanded && hasSymbols {
+			for _, sym := range symbols {
+				app.DepOnState.FlatItems = append(app.DepOnState.FlatItems, DetailItem{
+					Level:    1,
+					Label:    sym,
+					Key:      path + "." + sym,
+					IsSymbol: true,
+					IsLocal:  true,
+				})
+			}
+		}
+	}
 }
 
 // navigateToDepOnPackage navigates to first file in depends-on package
@@ -735,6 +1081,9 @@ func (app *AppState) moveTreeCursor(delta int) {
 		return
 	}
 
+	// Check if cursor moved
+	prevCursor := app.TreeCursor
+
 	app.TreeCursor += delta
 	if app.TreeCursor < 0 {
 		app.TreeCursor = 0
@@ -754,6 +1103,11 @@ func (app *AppState) moveTreeCursor(delta int) {
 	}
 	if app.TreeCursor >= app.TreeScroll+visibleRows {
 		app.TreeScroll = app.TreeCursor - visibleRows + 1
+	}
+
+	if app.TreeCursor != prevCursor || delta == 0 { // delta 0 implies refresh
+		app.triggerAnalysis()
+		app.refreshDetailPanes()
 	}
 }
 

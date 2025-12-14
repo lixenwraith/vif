@@ -1,6 +1,6 @@
 # lixen-map
 
-Terminal TUI for selecting Go codebase subsets as LLM context. Indexes files by `@lixen:` annotations with arbitrary category names, resolves local import dependencies.
+Terminal TUI for selecting Go codebase subsets as LLM context. Indexes files by `@lixen:` annotations with arbitrary category names, resolves local import dependencies, and performs lightweight AST analysis to visualize coupling.
 
 ## Installation
 ```bash
@@ -28,13 +28,13 @@ package systems
 
 ### Syntax
 
-| Format | Example | Description |
-|--------|---------|-------------|
-| 2-level | `#category{group(tag1,tag2)}` | Group with direct tags |
-| 3-level | `#category{group[mod(tag1),mod2]}` | Group with modules containing tags |
-| Mixed | `#cat{grp1(t1),grp2[m(t2)]}` | Both formats in same category |
-| Multi-category | `#focus{...},#interact{...}` | Multiple categories per line |
-| Always include | `#focus{all(*)}` | File included in every output |
+| Format         | Example                            | Description                        |
+|----------------|------------------------------------|------------------------------------|
+| 2-level        | `#category{group(tag1,tag2)}`      | Group with direct tags             |
+| 3-level        | `#category{group[mod(tag1),mod2]}` | Group with modules containing tags |
+| Mixed          | `#cat{grp1(t1),grp2[m(t2)]}`       | Both formats in same category      |
+| Multi-category | `#focus{...},#interact{...}`       | Multiple categories per line       |
+| Always include | `#focus{all(*)}`                   | File included in every output      |
 
 Categories are arbitrary names discovered at index time. Common conventions:
 - `#focus` - Classification tags (what the file IS)
@@ -46,15 +46,18 @@ Multiple `// @lixen:` lines accumulate. Whitespace ignored.
 
 Four-pane split view:
 
-| Pane 1 (Left) | Pane 2 | Pane 3 | Pane 4 (Right) |
-|---------------|--------|--------|----------------|
-| LIXEN: category | PACKAGES / FILES | DEPENDED BY | DEPENDS ON |
-| Category tags | File tree | Reverse deps | Forward deps |
+| Pane 1 (Left)   | Pane 2           | Pane 3       | Pane 4 (Right) |
+|-----------------|------------------|--------------|----------------|
+| LIXEN: category | PACKAGES / FILES | DEPENDED BY  | DEPENDS ON     |
+| Category tags   | File tree        | Reverse deps | Forward deps   |
 
-- **LIXEN**: Shows groups/modules/tags for current category
-- **PACKAGES / FILES**: Directory tree with file selection
-- **DEPENDED BY**: Packages that import current file's package
-- **DEPENDS ON**: Local packages current file imports
+- **LIXEN**: Shows groups/modules/tags for current category.
+- **PACKAGES / FILES**: Directory tree with file selection.
+- **DEPENDED BY**: Files that import the currently selected file/package.
+    - **Smart Coupling**: Distinguishes between files that simply *import* the package vs files that *actively use* symbols defined in the selected file.
+    - **Sorting**: Files with active usage are sorted to the top.
+- **DEPENDS ON**: Local packages/symbols the currently selected file imports.
+    - **Symbol Drill-down**: Expandable to show specific functions/types used.
 
 Minimum terminal size: 120x24
 
@@ -66,91 +69,101 @@ Press `?` in any view to open the full key binding help overlay.
 
 ### Global Keys
 
-| Key | Action |
-|-----|--------|
-| `Tab` | Next pane |
-| `Shift+Tab` | Previous pane |
-| `[` / `]` | Previous / Next category |
-| `?` | Toggle help overlay |
-| `Ctrl+Q` | Quit |
+| Key         | Action                   |
+|-------------|--------------------------|
+| `Tab`       | Next pane                |
+| `Shift+Tab` | Previous pane            |
+| `[` / `]`   | Previous / Next category |
+| `?`         | Toggle help overlay      |
+| `Ctrl+Q`    | Quit                     |
 
 ### Navigation (Lixen & Tree Panes)
 
-| Key | Action |
-|-----|--------|
-| `j`/`k`, `↑`/`↓` | Move cursor |
-| `h`/`l`, `←`/`→` | Collapse/expand |
-| `H`/`L` | Collapse/expand all |
-| `0`/`$`, `Home`/`End` | Jump start/end |
-| `PgUp`/`PgDn` | Page scroll |
+| Key                   | Action              |
+|-----------------------|---------------------|
+| `j`/`k`, `↑`/`↓`      | Move cursor         |
+| `h`/`l`, `←`/`→`      | Collapse/expand     |
+| `H`/`L`               | Collapse/expand all |
+| `0`/`$`, `Home`/`End` | Jump start/end      |
+| `PgUp`/`PgDn`         | Page scroll         |
 
 ### Selection
 
-| Key | Action |
-|-----|--------|
-| `Space` | Toggle selection |
-| `a` | Select all visible |
-| `c` | Clear all selections |
-| `F` | Select all filtered files |
+| Key     | Action                    |
+|---------|---------------------------|
+| `Space` | Toggle selection          |
+| `a`     | Select all visible        |
+| `c`     | Clear all selections      |
+| `F`     | Select all filtered files |
 
 ### Filtering
 
-| Key | Action |
-|-----|--------|
-| `f` | Toggle filter on cursor item |
-| `/` | Content search (ripgrep) |
-| `m` | Cycle mode: OR → AND → NOT → XOR |
-| `Esc` | Clear filter |
+| Key   | Action                           |
+|-------|----------------------------------|
+| `f`   | Toggle filter on cursor item     |
+| `/`   | Content search (ripgrep)         |
+| `m`   | Cycle mode: OR → AND → NOT → XOR |
+| `Esc` | Clear filter                     |
 
 ### Filter Modes
 
-| Mode | Behavior |
-|------|----------|
-| OR | Union - adds to existing filter |
-| AND | Intersection - narrows existing filter |
-| NOT | Subtraction - removes from existing filter |
-| XOR | Symmetric difference - toggles membership |
+| Mode | Behavior                                   |
+|------|--------------------------------------------|
+| OR   | Union - adds to existing filter            |
+| AND  | Intersection - narrows existing filter     |
+| NOT  | Subtraction - removes from existing filter |
+| XOR  | Symmetric difference - toggles membership  |
 
 ### Dependency Panes
 
-| Key | Action |
-|-----|--------|
-| `Enter` or `l` | Navigate to package in tree |
+| Key            | Action                           |
+|----------------|----------------------------------|
+| `Enter` or `l` | Navigate to file/package in tree |
+| `L`            | Expand all headers               |
+| `H`            | Collapse all headers             |
 
 ### Dependencies & Output
 
-| Key | Action |
-|-----|--------|
-| `d` | Toggle dependency expansion |
-| `+`/`-` | Adjust expansion depth (1-5) |
-| `p` | Preview output files |
-| `Ctrl+S` | Write output file |
+| Key      | Action                             |
+|----------|------------------------------------|
+| `d`      | Toggle dependency expansion        |
+| `+`/`-`  | Adjust expansion depth (1-5)       |
+| `p`      | Preview output files               |
+| `Ctrl+S` | Write output file                  |
 | `Ctrl+Y` | Copy output to clipboard (wl-copy) |
 
 ### Editing
 
-| Key | Action |
-|-----|--------|
+| Key | Action                                        |
+|-----|-----------------------------------------------|
 | `e` | Edit tags for file at cursor (tree pane only) |
-| `r` | Re-index entire codebase |
+| `r` | Re-index entire codebase                      |
 
-## Selection Indicators
+## Visual Indicators
 
-**Tree Pane (files):**
+**Tree Pane (Files):**
 
-| Symbol | Meaning |
-|--------|---------|
-| `[x]` | Directly selected |
-| `[+]` | Included via dependency expansion |
-| `[ ]` | Not selected |
+| Symbol | Meaning                           |
+|--------|-----------------------------------|
+| `[x]`  | Directly selected                 |
+| `[+]`  | Included via dependency expansion |
+| `[ ]`  | Not selected                      |
 
-**Lixen Pane (tags/groups/modules):**
+**Lixen Pane (Tags):**
 
-| Symbol | Meaning |
-|--------|---------|
-| `[x]` | All files with this item selected |
-| `[o]` | Some files with this item selected |
-| `[ ]` | No files with this item selected |
+| Symbol | Meaning                            |
+|--------|------------------------------------|
+| `[x]`  | All files with this item selected  |
+| `[o]`  | Some files with this item selected |
+| `[ ]`  | No files with this item selected   |
+
+**Dependency Panes (Analysis):**
+
+| Symbol  | Pane        | Meaning                                                      |
+|---------|-------------|--------------------------------------------------------------|
+| `★`     | Depended By | **Active Usage**: File uses symbols defined in selected file |
+| `•`     | Depends On  | **Symbol**: Specific function/type/var used                  |
+| `▼`/`▶` | Headers     | Package or File group (expandable)                           |
 
 ## Category Switching
 

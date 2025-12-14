@@ -518,14 +518,13 @@ func (app *AppState) renderTreePane(cells []terminal.Cell, totalWidth, startX, p
 	}
 }
 
-// renderDepByPane draws packages that depend on current file's package
+// renderDepByPane draws packages/files that depend on current file's package
 func (app *AppState) renderDepByPane(cells []terminal.Cell, totalWidth, startX, paneWidth, startY, height int) {
 	bg := colorDefaultBg
 	if app.FocusPane == PaneDepBy {
 		bg = colorPaneActiveBg
 	}
 
-	// Get current file's package
 	pkgDir := app.getCurrentFilePackageDir()
 	if pkgDir == "" {
 		msg := "(select a file)"
@@ -533,41 +532,14 @@ func (app *AppState) renderDepByPane(cells []terminal.Cell, totalWidth, startX, 
 		return
 	}
 
-	// Get packages that import this package
-	depByPkgs := app.Index.ReverseDeps[pkgDir]
-	if len(depByPkgs) == 0 {
+	state := app.DepByState
+	if len(state.FlatItems) == 0 {
 		msg := "(no dependents)"
 		drawText(cells, totalWidth, startX+2, startY, msg, colorUnselected, bg, terminal.AttrDim)
 		return
 	}
 
-	for i := 0; i < height && i < len(depByPkgs); i++ {
-		y := startY + i
-		depPkg := depByPkgs[i]
-
-		rowBg := bg
-
-		// Clear line
-		for x := startX; x < startX+paneWidth; x++ {
-			cells[y*totalWidth+x] = terminal.Cell{Rune: ' ', Fg: colorDefaultFg, Bg: rowBg}
-		}
-
-		// Package name with truncation
-		displayName := truncatePathLeft(depPkg, paneWidth-2)
-		drawText(cells, totalWidth, startX+1, y, displayName, colorDirFg, rowBg, terminal.AttrNone)
-	}
-
-	// Show count if more than visible
-	if len(depByPkgs) > height {
-		countStr := fmt.Sprintf("... +%d more", len(depByPkgs)-height)
-		if height > 0 {
-			y := startY + height - 1
-			for x := startX; x < startX+paneWidth; x++ {
-				cells[y*totalWidth+x] = terminal.Cell{Rune: ' ', Fg: colorDefaultFg, Bg: bg}
-			}
-			drawText(cells, totalWidth, startX+1, y, countStr, colorStatusFg, bg, terminal.AttrDim)
-		}
-	}
+	app.renderDetailList(cells, totalWidth, startX, paneWidth, startY, height, bg, state)
 }
 
 // renderDepOnPane draws files/packages that current file depends on
@@ -577,7 +549,6 @@ func (app *AppState) renderDepOnPane(cells []terminal.Cell, totalWidth, startX, 
 		bg = colorPaneActiveBg
 	}
 
-	// Get current file
 	fi := app.getCurrentFileInfo()
 	if fi == nil {
 		msg := "(select a file)"
@@ -585,41 +556,120 @@ func (app *AppState) renderDepOnPane(cells []terminal.Cell, totalWidth, startX, 
 		return
 	}
 
-	if len(fi.Imports) == 0 {
-		msg := "(no local imports)"
+	state := app.DepOnState
+	if len(state.FlatItems) == 0 {
+		msg := "(no imports/analysis)"
 		drawText(cells, totalWidth, startX+2, startY, msg, colorUnselected, bg, terminal.AttrDim)
 		return
 	}
 
-	for i := 0; i < height && i < len(fi.Imports); i++ {
+	app.renderDetailList(cells, totalWidth, startX, paneWidth, startY, height, bg, state)
+}
+
+// renderDetailList generic renderer for detail panes
+func (app *AppState) renderDetailList(cells []terminal.Cell, totalWidth, startX, paneWidth, startY, height int, bg terminal.RGB, state *DetailPaneState) {
+	for i := 0; i < height && state.Scroll+i < len(state.FlatItems); i++ {
 		y := startY + i
-		imp := fi.Imports[i]
+		idx := state.Scroll + i
+		item := state.FlatItems[idx]
+
+		isCursor := idx == state.Cursor && (app.FocusPane == PaneDepBy || app.FocusPane == PaneDepOn)
+		// Check strictly which pane owns this state
+		if state == app.DepByState && app.FocusPane != PaneDepBy {
+			isCursor = false
+		}
+		if state == app.DepOnState && app.FocusPane != PaneDepOn {
+			isCursor = false
+		}
 
 		rowBg := bg
+		if isCursor {
+			rowBg = colorCursorBg
+		}
 
 		// Clear line
 		for x := startX; x < startX+paneWidth; x++ {
 			cells[y*totalWidth+x] = terminal.Cell{Rune: ' ', Fg: colorDefaultFg, Bg: rowBg}
 		}
 
-		// Import name
-		displayName := imp
-		if len(displayName) > paneWidth-2 {
-			displayName = displayName[:paneWidth-3] + "…"
+		x := startX + 1 + (item.Level * 2)
+
+		// Icon
+		if item.IsHeader {
+			expandChar := '▶'
+			if item.Expanded {
+				expandChar = '▼'
+			}
+			iconFg := colorDirFg
+			if !item.IsLocal {
+				iconFg = colorExternalPkgFg
+			}
+			if x < startX+paneWidth-1 {
+				cells[y*totalWidth+x] = terminal.Cell{Rune: expandChar, Fg: iconFg, Bg: rowBg}
+			}
+			x += 2
+		} else if item.IsSymbol {
+			if x < startX+paneWidth-1 {
+				cells[y*totalWidth+x] = terminal.Cell{Rune: '•', Fg: colorSymbolFg, Bg: rowBg}
+			}
+			x += 2
+		} else if item.IsFile {
+			// Visualization for Strong Coupling (Usage)
+			if item.HasUsage {
+				if x < startX+paneWidth-1 {
+					cells[y*totalWidth+x] = terminal.Cell{Rune: '★', Fg: colorModuleFg, Bg: rowBg}
+				}
+				x += 2
+			}
 		}
-		drawText(cells, totalWidth, startX+1, y, displayName, colorModuleFg, rowBg, terminal.AttrNone)
+
+		// Text
+		fg := colorDefaultFg
+		if item.IsHeader {
+			if item.IsLocal {
+				fg = colorModuleFg // Greenish for local packages
+			} else {
+				fg = colorExternalPkgFg // Cyan/Dim for external
+			}
+		} else if item.IsSymbol {
+			fg = colorSymbolFg
+		} else if item.IsFile {
+			if item.HasUsage {
+				fg = colorHeaderFg // Bright white for using files
+			} else {
+				fg = colorDefaultFg // Normal grey for just importing
+			}
+		}
+
+		// Truncate
+		label := item.Label
+		maxLen := (startX + paneWidth) - x - 1
+		if len(label) > maxLen && maxLen > 3 {
+			label = label[:maxLen-1] + "…"
+		}
+
+		attr := terminal.AttrNone
+		if item.IsHeader || item.HasUsage {
+			attr = terminal.AttrBold
+		}
+
+		drawText(cells, totalWidth, x, y, label, fg, rowBg, attr)
 	}
 
-	// Show count if more than visible
-	if len(fi.Imports) > height {
-		countStr := fmt.Sprintf("... +%d more", len(fi.Imports)-height)
-		if height > 0 {
-			y := startY + height - 1
-			for x := startX; x < startX+paneWidth; x++ {
-				cells[y*totalWidth+x] = terminal.Cell{Rune: ' ', Fg: colorDefaultFg, Bg: bg}
-			}
-			drawText(cells, totalWidth, startX+1, y, countStr, colorStatusFg, bg, terminal.AttrDim)
+	// Scroll indicator if needed
+	if len(state.FlatItems) > height {
+		var scrollStr string
+		// Human-readable scroll indicators
+		if state.Scroll == 0 {
+			scrollStr = "Top"
+		} else if state.Scroll+height >= len(state.FlatItems) {
+			scrollStr = "Bot"
+		} else {
+			pct := (state.Scroll * 100) / (len(state.FlatItems) - height)
+			scrollStr = fmt.Sprintf("%d%%", pct)
 		}
+
+		drawText(cells, totalWidth, startX+paneWidth-len(scrollStr)-1, startY+height-1, scrollStr, colorStatusFg, bg, terminal.AttrDim)
 	}
 }
 
@@ -636,9 +686,7 @@ func (app *AppState) getCurrentFilePackageDir() string {
 
 	if node.FileInfo != nil {
 		dir := filepath.Dir(node.Path)
-		if dir == "." {
-			return node.FileInfo.Package
-		}
+		// Return strictly the directory path to match index keys
 		return filepath.ToSlash(dir)
 	}
 

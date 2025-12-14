@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
@@ -24,11 +25,8 @@ func BuildIndex(root string) (*Index, error) {
 	}
 
 	// Temporary aggregation structures per category
-	// category → group → bool
 	categoryGroupSets := make(map[string]map[string]bool)
-	// category → group → module → bool
 	categoryModuleSets := make(map[string]map[string]map[string]bool)
-	// category → group → module → tag → bool
 	categoryTagSets := make(map[string]map[string]map[string]map[string]bool)
 
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
@@ -64,11 +62,10 @@ func BuildIndex(root string) (*Index, error) {
 
 		index.Files[relPath] = fi
 
+		// Strict directory-based keys. Root is "."
 		dir := filepath.Dir(relPath)
-		if dir == "." {
-			dir = fi.Package
-		}
 		dir = filepath.ToSlash(dir)
+		// filepath.Dir returns "." for root files, which is what we want
 
 		pkg, ok := index.Packages[dir]
 		if !ok {
@@ -87,7 +84,6 @@ func BuildIndex(root string) (*Index, error) {
 
 		// Index tags per category
 		for category, groups := range fi.Tags {
-			// Initialize category structures if needed
 			if categoryGroupSets[category] == nil {
 				categoryGroupSets[category] = make(map[string]bool)
 			}
@@ -130,7 +126,7 @@ func BuildIndex(root string) (*Index, error) {
 						categoryTagSets[category][group][module][tag] = true
 						var tagKey string
 						if module == DirectTagsModule {
-							tagKey = group + ".." + tag // double dot for 2-level
+							tagKey = group + ".." + tag
 						} else {
 							tagKey = group + "." + module + "." + tag
 						}
@@ -140,7 +136,7 @@ func BuildIndex(root string) (*Index, error) {
 			}
 		}
 
-		// Merge imports
+		// Merge imports for package-level forward deps (optional, but kept for consistency)
 		depSet := make(map[string]bool)
 		for _, d := range pkg.LocalDeps {
 			depSet[d] = true
@@ -163,7 +159,6 @@ func BuildIndex(root string) (*Index, error) {
 	for category, groupSet := range categoryGroupSets {
 		catIdx := index.Categories[category]
 
-		// Sorted groups (exclude "all")
 		for g := range groupSet {
 			if g != "all" {
 				catIdx.Groups = append(catIdx.Groups, g)
@@ -171,7 +166,6 @@ func BuildIndex(root string) (*Index, error) {
 		}
 		sort.Strings(catIdx.Groups)
 
-		// Sorted modules per group
 		for group, modSet := range categoryModuleSets[category] {
 			mods := make([]string, 0, len(modSet))
 			for m := range modSet {
@@ -181,7 +175,6 @@ func BuildIndex(root string) (*Index, error) {
 			catIdx.Modules[group] = mods
 		}
 
-		// Sorted tags per group/module
 		for group, modMap := range categoryTagSets[category] {
 			if catIdx.Tags[group] == nil {
 				catIdx.Tags[group] = make(map[string][]string)
@@ -197,7 +190,6 @@ func BuildIndex(root string) (*Index, error) {
 		}
 	}
 
-	// Build sorted category names
 	for cat := range index.Categories {
 		index.CategoryNames = append(index.CategoryNames, cat)
 	}
@@ -219,7 +211,6 @@ func (app *AppState) ReindexAll() {
 	app.Index = index
 	app.CategoryNames = index.CategoryNames
 
-	// Set current category to first available if not set or invalid
 	if app.CurrentCategory == "" || !index.HasCategory(app.CurrentCategory) {
 		if len(index.CategoryNames) > 0 {
 			app.CurrentCategory = index.CategoryNames[0]
@@ -228,7 +219,6 @@ func (app *AppState) ReindexAll() {
 		}
 	}
 
-	// Initialize category UI state if needed
 	if app.CategoryUI == nil {
 		app.CategoryUI = make(map[string]*CategoryUIState)
 	}
@@ -240,8 +230,7 @@ func (app *AppState) ReindexAll() {
 
 	app.TreeRoot = BuildTree(index)
 	app.RefreshTreeFlat()
-	// RefreshLixenFlat will be implemented in later step
-	// app.RefreshLixenFlat()
+	app.RefreshLixenFlat()
 	app.Message = fmt.Sprintf("reindexed: %d files, %d categories", len(index.Files), len(index.CategoryNames))
 }
 
@@ -282,17 +271,53 @@ func parseFile(path, modPath string) (*FileInfo, error) {
 	}
 
 	fset := token.NewFileSet()
-	astFile, err := parser.ParseFile(fset, path, content, parser.ImportsOnly)
+	// CHANGED: Parse full AST to extract definitions, not just imports
+	// Note: ParseFile is fast enough for individual files.
+	astFile, err := parser.ParseFile(fset, path, content, parser.ParseComments)
 	if err != nil {
 		return fi, nil
 	}
 
+	// Extract definitions
+	for _, decl := range astFile.Decls {
+		switch d := decl.(type) {
+		case *ast.GenDecl:
+			for _, spec := range d.Specs {
+				switch s := spec.(type) {
+				case *ast.TypeSpec:
+					if s.Name.IsExported() {
+						fi.Definitions = append(fi.Definitions, s.Name.Name)
+					}
+				case *ast.ValueSpec:
+					for _, name := range s.Names {
+						if name.IsExported() {
+							fi.Definitions = append(fi.Definitions, name.Name)
+						}
+					}
+				}
+			}
+		case *ast.FuncDecl:
+			if d.Name.IsExported() && d.Recv == nil { // Only package-level funcs, methods are tied to types
+				fi.Definitions = append(fi.Definitions, d.Name.Name)
+			}
+		}
+	}
+
+	// Extract imports
 	for _, imp := range astFile.Imports {
+		if imp.Path == nil {
+			continue
+		}
 		impPath := strings.Trim(imp.Path.Value, `"`)
-		if strings.HasPrefix(impPath, modPath+"/") {
+
+		// Robust module path stripping
+		if impPath == modPath {
+			// Import points to module root
+			fi.Imports = append(fi.Imports, ".")
+		} else if strings.HasPrefix(impPath, modPath+"/") {
+			// Import points to submodule: strip "module/path/" -> "path"
 			localPkg := strings.TrimPrefix(impPath, modPath+"/")
-			parts := strings.Split(localPkg, "/")
-			fi.Imports = append(fi.Imports, parts[len(parts)-1])
+			fi.Imports = append(fi.Imports, localPkg)
 		}
 	}
 
@@ -308,7 +333,6 @@ func parseLixenLine(line string, fi *FileInfo) error {
 		return nil
 	}
 
-	// Extract and normalize content (strip all whitespace)
 	content := strings.TrimPrefix(line, "@lixen:")
 	content = stripWhitespace(content)
 
@@ -316,7 +340,6 @@ func parseLixenLine(line string, fi *FileInfo) error {
 		return nil
 	}
 
-	// Parse blocks: #category1{...},#category2{...}
 	return parseBlocks(content, fi)
 }
 
@@ -367,13 +390,11 @@ func parseBlocks(content string, fi *FileInfo) error {
 			return err
 		}
 
-		// Initialize category in fi.Tags if needed
 		if fi.Tags[category] == nil {
 			fi.Tags[category] = make(map[string]map[string][]string)
 		}
 
 		for g, modules := range groups {
-			// Handle special "all(*)" marker
 			if g == "all" {
 				if mods, ok := modules[DirectTagsModule]; ok && len(mods) > 0 && mods[0] == "*" {
 					fi.IsAll = true
@@ -389,7 +410,6 @@ func parseBlocks(content string, fi *FileInfo) error {
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -423,7 +443,6 @@ func parseGroupEntries(content string) (map[string]map[string][]string, error) {
 			continue
 		}
 
-		// Find group name (up to '[' or '(')
 		groupEnd := -1
 		var format byte
 		for i := 0; i < len(content); i++ {
@@ -448,7 +467,6 @@ func parseGroupEntries(content string) (map[string]map[string][]string, error) {
 		}
 
 		if format == '(' {
-			// 2-level format: group(tag1,tag2)
 			closeIdx := strings.Index(content, ")")
 			if closeIdx == -1 {
 				return nil, fmt.Errorf("missing ')' in group entry")
@@ -461,9 +479,7 @@ func parseGroupEntries(content string) (map[string]map[string][]string, error) {
 				return nil, fmt.Errorf("empty tag list in group '%s'", groupName)
 			}
 			result[groupName][DirectTagsModule] = tags
-
 		} else {
-			// 3-level format: group[mod1(tag1),mod2]
 			closeIdx := strings.Index(content, "]")
 			if closeIdx == -1 {
 				return nil, fmt.Errorf("missing ']' in group entry")
@@ -480,7 +496,6 @@ func parseGroupEntries(content string) (map[string]map[string][]string, error) {
 			}
 		}
 	}
-
 	return result, nil
 }
 
@@ -494,7 +509,6 @@ func parseModuleEntries(content string) (map[string][]string, error) {
 			continue
 		}
 
-		// Find module name (up to '(' or ',' or end)
 		modEnd := len(content)
 		hasTags := false
 		for i := 0; i < len(content); i++ {
@@ -516,8 +530,7 @@ func parseModuleEntries(content string) (map[string][]string, error) {
 		content = content[modEnd:]
 
 		if hasTags {
-			// Module with tags: mod(tag1,tag2)
-			content = content[1:] // skip '('
+			content = content[1:]
 			closeIdx := strings.Index(content, ")")
 			if closeIdx == -1 {
 				return nil, fmt.Errorf("missing ')' for module '%s'", modName)
@@ -528,11 +541,9 @@ func parseModuleEntries(content string) (map[string][]string, error) {
 			tags := parseTagList(tagList)
 			result[modName] = tags
 		} else {
-			// Module without tags
 			result[modName] = nil
 		}
 	}
-
 	return result, nil
 }
 
@@ -567,6 +578,43 @@ func getModulePath() string {
 			return strings.TrimSpace(strings.TrimPrefix(line, "module"))
 		}
 	}
-
 	return defaultModulePath
+}
+
+// computeReverseDeps maps local import paths to lists of files that import them.
+// Keys are strictly directory paths (e.g. "pkg/sys", ".")
+func computeReverseDeps(index *Index) map[string][]string {
+	reverse := make(map[string][]string)
+
+	for path, fi := range index.Files {
+		// fi.Imports now contains exact relative paths or "."
+		for _, impPath := range fi.Imports {
+			// Verify the imported path actually exists in our index to ensure it is local
+			if _, exists := index.Packages[impPath]; exists {
+				reverse[impPath] = append(reverse[impPath], path)
+			}
+		}
+	}
+
+	for dir := range reverse {
+		sort.Strings(reverse[dir])
+		reverse[dir] = uniqueStrings(reverse[dir])
+	}
+
+	return reverse
+}
+
+func uniqueStrings(s []string) []string {
+	if len(s) == 0 {
+		return s
+	}
+	res := make([]string, 0, len(s))
+	prev := ""
+	for i, v := range s {
+		if i == 0 || v != prev {
+			res = append(res, v)
+			prev = v
+		}
+	}
+	return res
 }

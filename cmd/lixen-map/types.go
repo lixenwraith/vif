@@ -28,6 +28,13 @@ type AppState struct {
 	CategoryNames   []string                    // sorted category names from index
 	CategoryUI      map[string]*CategoryUIState // per-category UI state
 
+	// Detail Panes (Right side)
+	DepByState *DetailPaneState // State for "Depended By" pane
+	DepOnState *DetailPaneState // State for "Depends On" pane
+
+	// Dependency Analysis Cache (Forward deps)
+	DepAnalysisCache map[string]*DependencyAnalysis // file path → analysis
+
 	// Filter state
 	Filter      *FilterState
 	RgAvailable bool // ripgrep installed
@@ -48,12 +55,44 @@ type AppState struct {
 	// Help overlay
 	HelpMode bool
 
-	// Preferences
-	StartCollapsed bool // Start with all panes collapsed
-
 	// Dimensions
 	Width  int
 	Height int
+}
+
+// DetailPaneState tracks UI state for dependency tree views
+type DetailPaneState struct {
+	Cursor    int
+	Scroll    int
+	Expanded  map[string]bool // item key → expanded
+	FlatItems []DetailItem    // Flattened list for rendering
+}
+
+// NewDetailPaneState creates initialized DetailPaneState
+func NewDetailPaneState() *DetailPaneState {
+	return &DetailPaneState{
+		Expanded: make(map[string]bool),
+	}
+}
+
+// DetailItem represents a row in the dependency panes
+type DetailItem struct {
+	Level    int    // Indentation level (0 or 1)
+	Label    string // Display text
+	Key      string // Unique key for expansion/navigation
+	IsHeader bool   // True if expandable parent
+	Expanded bool   // Current expansion state
+	IsFile   bool   // True if it points to a file (Pane 3)
+	IsSymbol bool   // True if it is a symbol (Pane 4)
+	Path     string // Associated file path or import path
+	IsLocal  bool   // True if internal to module (for coloring)
+	HasUsage bool   // True if file actively uses symbols from target (Pane 3)
+}
+
+// DependencyAnalysis holds symbol usage for a file
+type DependencyAnalysis struct {
+	// ImportPath → List of used symbols
+	UsedSymbols map[string][]string
 }
 
 // CategoryUIState holds UI state for a single category pane
@@ -102,6 +141,8 @@ var (
 	colorTagNameFg       = terminal.RGB{R: 100, G: 200, B: 220}
 	colorPartialSelectFg = terminal.RGB{R: 80, G: 160, B: 220}
 	colorModuleFg        = terminal.RGB{R: 80, G: 200, B: 80}
+	colorExternalPkgFg   = terminal.RGB{R: 100, G: 140, B: 160} // Cyan/Dim for external/stdlib
+	colorSymbolFg        = terminal.RGB{R: 180, G: 220, B: 220} // Light cyan for symbols
 )
 
 // Layout
@@ -140,12 +181,11 @@ type FileInfo struct {
 	Path    string
 	Package string
 	// Tags: category → group → module → tags
-	// For 2-level format group(tag): module key is DirectTagsModule ("")
-	// For 3-level format group[mod(tag)]: module key is the module name
-	Tags    map[string]map[string]map[string][]string
-	Imports []string
-	IsAll   bool
-	Size    int64
+	Tags        map[string]map[string]map[string][]string
+	Imports     []string
+	Definitions []string // Exported symbols defined in this file
+	IsAll       bool
+	Size        int64
 }
 
 // SizeWarningThreshold is output size (bytes) above which size displays in warning color
@@ -269,15 +309,6 @@ type TreeNode struct {
 	PackageInfo *PackageInfo // Non-nil for package directories
 	Depth       int          // Nesting level for indentation
 }
-
-// SearchType indicates active search mode for input
-type SearchType uint8
-
-const (
-	SearchTypeContent SearchType = iota
-	SearchTypeTags
-	SearchTypeGroups
-)
 
 // TagSelectionState represents selection state for a tag/group
 type TagSelectionState int

@@ -61,28 +61,6 @@ func BuildTree(index *Index) *TreeNode {
 	return root
 }
 
-// computeReverseDeps builds map of packages to their importers.
-func computeReverseDeps(index *Index) map[string][]string {
-	reverse := make(map[string][]string)
-
-	for dir, pkg := range index.Packages {
-		for _, dep := range pkg.LocalDeps {
-			for depDir, depPkg := range index.Packages {
-				if depPkg.Name == dep {
-					reverse[depDir] = append(reverse[depDir], dir)
-					break
-				}
-			}
-		}
-	}
-
-	for dir := range reverse {
-		sort.Strings(reverse[dir])
-	}
-
-	return reverse
-}
-
 // ensureDirNode creates directory node and ancestors as needed.
 func ensureDirNode(root *TreeNode, dir string, dirNodes map[string]*TreeNode, index *Index) *TreeNode {
 	if node, ok := dirNodes[dir]; ok {
@@ -93,7 +71,7 @@ func ensureDirNode(root *TreeNode, dir string, dirNodes map[string]*TreeNode, in
 	current := root
 	currentPath := ""
 
-	for i, part := range parts {
+	for _, part := range parts {
 		if currentPath == "" {
 			currentPath = part
 		} else {
@@ -114,7 +92,7 @@ func ensureDirNode(root *TreeNode, dir string, dirNodes map[string]*TreeNode, in
 			Name:        part,
 			Path:        currentPath,
 			IsDir:       true,
-			Expanded:    i == 0,
+			Expanded:    true,
 			Children:    make([]*TreeNode, 0),
 			Parent:      current,
 			PackageInfo: pkgInfo,
