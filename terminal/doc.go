@@ -1,5 +1,3 @@
-// @lixen: #focus{sys[term,doc]}
-// @lixen: #interact{state[doc]}
 // Package terminal provides direct ANSI terminal control with zero-alloc rendering.
 //
 // Features:

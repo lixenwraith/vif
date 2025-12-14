@@ -1,5 +1,3 @@
-// @lixen: #focus{render[buffer,mask,composite]}
-// @lixen: #interact{init[cell],state[cell],trigger[cell]}
 package render
 
 import (

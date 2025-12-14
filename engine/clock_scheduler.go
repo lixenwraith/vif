@@ -1,5 +1,3 @@
-// @lixen: #focus{flow[loop,clock,scheduler],event[dispatch]}
-// @lixen: #interact{state[clock,event],trigger[system,event]}
 package engine
 
 import (

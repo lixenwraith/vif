@@ -1,5 +1,3 @@
-// @lixen: #focus{sys[audio],audio[mixer]}
-// @lixen: #interact{state[sample],trigger[output]}
 package audio
 
 import (

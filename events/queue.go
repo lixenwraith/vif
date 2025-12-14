@@ -1,5 +1,3 @@
-// @lixen: #focus{event[queue,mpsc]}
-// @lixen: #interact{init[event],state[event]}
 package events
 
 import (

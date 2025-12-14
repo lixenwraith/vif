@@ -17,28 +17,19 @@ func BuildIndex(root string) (*Index, error) {
 	modPath := getModulePath()
 
 	index := &Index{
-		ModulePath:       modPath,
-		Packages:         make(map[string]*PackageInfo),
-		Files:            make(map[string]*FileInfo),
-		FocusModules:     make(map[string][]string),
-		FocusTags:        make(map[string]map[string][]string),
-		FocusByGroup:     make(map[string][]string),
-		FocusByModule:    make(map[string][]string),
-		FocusByTag:       make(map[string][]string),
-		InteractModules:  make(map[string][]string),
-		InteractTags:     make(map[string]map[string][]string),
-		InteractByGroup:  make(map[string][]string),
-		InteractByModule: make(map[string][]string),
-		InteractByTag:    make(map[string][]string),
+		ModulePath: modPath,
+		Packages:   make(map[string]*PackageInfo),
+		Files:      make(map[string]*FileInfo),
+		Categories: make(map[string]*CategoryIndex),
 	}
 
-	focusGroupSet := make(map[string]bool)
-	focusModulesByGroup := make(map[string]map[string]bool)
-	focusTagsByGroupModule := make(map[string]map[string]map[string]bool)
-
-	interactGroupSet := make(map[string]bool)
-	interactModulesByGroup := make(map[string]map[string]bool)
-	interactTagsByGroupModule := make(map[string]map[string]map[string]bool)
+	// Temporary aggregation structures per category
+	// category → group → bool
+	categoryGroupSets := make(map[string]map[string]bool)
+	// category → group → module → bool
+	categoryModuleSets := make(map[string]map[string]map[string]bool)
+	// category → group → module → tag → bool
+	categoryTagSets := make(map[string]map[string]map[string]map[string]bool)
 
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -82,11 +73,9 @@ func BuildIndex(root string) (*Index, error) {
 		pkg, ok := index.Packages[dir]
 		if !ok {
 			pkg = &PackageInfo{
-				Name:        fi.Package,
-				Dir:         dir,
-				Files:       make([]*FileInfo, 0),
-				AllFocus:    make(map[string][]string),
-				AllInteract: make(map[string][]string),
+				Name:  fi.Package,
+				Dir:   dir,
+				Files: make([]*FileInfo, 0),
 			}
 			index.Packages[dir] = pkg
 		}
@@ -96,74 +85,57 @@ func BuildIndex(root string) (*Index, error) {
 			pkg.HasAll = true
 		}
 
-		// Index focus tags
-		for group, modules := range fi.Focus {
-			focusGroupSet[group] = true
-			if focusModulesByGroup[group] == nil {
-				focusModulesByGroup[group] = make(map[string]bool)
+		// Index tags per category
+		for category, groups := range fi.Tags {
+			// Initialize category structures if needed
+			if categoryGroupSets[category] == nil {
+				categoryGroupSets[category] = make(map[string]bool)
 			}
-			if focusTagsByGroupModule[group] == nil {
-				focusTagsByGroupModule[group] = make(map[string]map[string]bool)
+			if categoryModuleSets[category] == nil {
+				categoryModuleSets[category] = make(map[string]map[string]bool)
+			}
+			if categoryTagSets[category] == nil {
+				categoryTagSets[category] = make(map[string]map[string]map[string]bool)
+			}
+			if index.Categories[category] == nil {
+				index.Categories[category] = NewCategoryIndex()
 			}
 
-			index.FocusByGroup[group] = append(index.FocusByGroup[group], relPath)
+			catIdx := index.Categories[category]
 
-			for module, tags := range modules {
-				if module != DirectTagsModule {
-					focusModulesByGroup[group][module] = true
-					moduleKey := group + "." + module
-					index.FocusByModule[moduleKey] = append(index.FocusByModule[moduleKey], relPath)
+			for group, modules := range groups {
+				categoryGroupSets[category][group] = true
+
+				if categoryModuleSets[category][group] == nil {
+					categoryModuleSets[category][group] = make(map[string]bool)
+				}
+				if categoryTagSets[category][group] == nil {
+					categoryTagSets[category][group] = make(map[string]map[string]bool)
 				}
 
-				if focusTagsByGroupModule[group][module] == nil {
-					focusTagsByGroupModule[group][module] = make(map[string]bool)
-				}
+				catIdx.ByGroup[group] = append(catIdx.ByGroup[group], relPath)
 
-				for _, tag := range tags {
-					focusTagsByGroupModule[group][module][tag] = true
-					var tagKey string
-					if module == DirectTagsModule {
-						tagKey = group + ".." + tag // double dot for 2-level
-					} else {
-						tagKey = group + "." + module + "." + tag
+				for module, tags := range modules {
+					if module != DirectTagsModule {
+						categoryModuleSets[category][group][module] = true
+						moduleKey := group + "." + module
+						catIdx.ByModule[moduleKey] = append(catIdx.ByModule[moduleKey], relPath)
 					}
-					index.FocusByTag[tagKey] = append(index.FocusByTag[tagKey], relPath)
-				}
-			}
-		}
 
-		// Index interact tags
-		for group, modules := range fi.Interact {
-			interactGroupSet[group] = true
-			if interactModulesByGroup[group] == nil {
-				interactModulesByGroup[group] = make(map[string]bool)
-			}
-			if interactTagsByGroupModule[group] == nil {
-				interactTagsByGroupModule[group] = make(map[string]map[string]bool)
-			}
-
-			index.InteractByGroup[group] = append(index.InteractByGroup[group], relPath)
-
-			for module, tags := range modules {
-				if module != DirectTagsModule {
-					interactModulesByGroup[group][module] = true
-					moduleKey := group + "." + module
-					index.InteractByModule[moduleKey] = append(index.InteractByModule[moduleKey], relPath)
-				}
-
-				if interactTagsByGroupModule[group][module] == nil {
-					interactTagsByGroupModule[group][module] = make(map[string]bool)
-				}
-
-				for _, tag := range tags {
-					interactTagsByGroupModule[group][module][tag] = true
-					var tagKey string
-					if module == DirectTagsModule {
-						tagKey = group + ".." + tag
-					} else {
-						tagKey = group + "." + module + "." + tag
+					if categoryTagSets[category][group][module] == nil {
+						categoryTagSets[category][group][module] = make(map[string]bool)
 					}
-					index.InteractByTag[tagKey] = append(index.InteractByTag[tagKey], relPath)
+
+					for _, tag := range tags {
+						categoryTagSets[category][group][module][tag] = true
+						var tagKey string
+						if module == DirectTagsModule {
+							tagKey = group + ".." + tag // double dot for 2-level
+						} else {
+							tagKey = group + "." + module + "." + tag
+						}
+						catIdx.ByTag[tagKey] = append(catIdx.ByTag[tagKey], relPath)
+					}
 				}
 			}
 		}
@@ -187,69 +159,49 @@ func BuildIndex(root string) (*Index, error) {
 		return nil, err
 	}
 
-	// Build sorted focus groups
-	for g := range focusGroupSet {
-		if g != "all" {
-			index.FocusGroups = append(index.FocusGroups, g)
-		}
-	}
-	sort.Strings(index.FocusGroups)
+	// Build sorted structures for each category
+	for category, groupSet := range categoryGroupSets {
+		catIdx := index.Categories[category]
 
-	// Build sorted focus modules per group
-	for group, modSet := range focusModulesByGroup {
-		mods := make([]string, 0, len(modSet))
-		for m := range modSet {
-			mods = append(mods, m)
-		}
-		sort.Strings(mods)
-		index.FocusModules[group] = mods
-	}
-
-	// Build sorted focus tags per group/module
-	for group, modMap := range focusTagsByGroupModule {
-		if index.FocusTags[group] == nil {
-			index.FocusTags[group] = make(map[string][]string)
-		}
-		for module, tagSet := range modMap {
-			tags := make([]string, 0, len(tagSet))
-			for t := range tagSet {
-				tags = append(tags, t)
+		// Sorted groups (exclude "all")
+		for g := range groupSet {
+			if g != "all" {
+				catIdx.Groups = append(catIdx.Groups, g)
 			}
-			sort.Strings(tags)
-			index.FocusTags[group][module] = tags
 		}
-	}
+		sort.Strings(catIdx.Groups)
 
-	// Build sorted interact groups
-	for g := range interactGroupSet {
-		index.InteractGroups = append(index.InteractGroups, g)
-	}
-	sort.Strings(index.InteractGroups)
-
-	// Build sorted interact modules per group
-	for group, modSet := range interactModulesByGroup {
-		mods := make([]string, 0, len(modSet))
-		for m := range modSet {
-			mods = append(mods, m)
-		}
-		sort.Strings(mods)
-		index.InteractModules[group] = mods
-	}
-
-	// Build sorted interact tags per group/module
-	for group, modMap := range interactTagsByGroupModule {
-		if index.InteractTags[group] == nil {
-			index.InteractTags[group] = make(map[string][]string)
-		}
-		for module, tagSet := range modMap {
-			tags := make([]string, 0, len(tagSet))
-			for t := range tagSet {
-				tags = append(tags, t)
+		// Sorted modules per group
+		for group, modSet := range categoryModuleSets[category] {
+			mods := make([]string, 0, len(modSet))
+			for m := range modSet {
+				mods = append(mods, m)
 			}
-			sort.Strings(tags)
-			index.InteractTags[group][module] = tags
+			sort.Strings(mods)
+			catIdx.Modules[group] = mods
+		}
+
+		// Sorted tags per group/module
+		for group, modMap := range categoryTagSets[category] {
+			if catIdx.Tags[group] == nil {
+				catIdx.Tags[group] = make(map[string][]string)
+			}
+			for module, tagSet := range modMap {
+				tags := make([]string, 0, len(tagSet))
+				for t := range tagSet {
+					tags = append(tags, t)
+				}
+				sort.Strings(tags)
+				catIdx.Tags[group][module] = tags
+			}
 		}
 	}
+
+	// Build sorted category names
+	for cat := range index.Categories {
+		index.CategoryNames = append(index.CategoryNames, cat)
+	}
+	sort.Strings(index.CategoryNames)
 
 	index.ReverseDeps = computeReverseDeps(index)
 
@@ -265,11 +217,32 @@ func (app *AppState) ReindexAll() {
 	}
 
 	app.Index = index
+	app.CategoryNames = index.CategoryNames
+
+	// Set current category to first available if not set or invalid
+	if app.CurrentCategory == "" || !index.HasCategory(app.CurrentCategory) {
+		if len(index.CategoryNames) > 0 {
+			app.CurrentCategory = index.CategoryNames[0]
+		} else {
+			app.CurrentCategory = ""
+		}
+	}
+
+	// Initialize category UI state if needed
+	if app.CategoryUI == nil {
+		app.CategoryUI = make(map[string]*CategoryUIState)
+	}
+	for _, cat := range index.CategoryNames {
+		if app.CategoryUI[cat] == nil {
+			app.CategoryUI[cat] = NewCategoryUIState()
+		}
+	}
+
 	app.TreeRoot = BuildTree(index)
 	app.RefreshTreeFlat()
-	app.RefreshFocusFlat()
-	app.RefreshInteractFlat()
-	app.Message = fmt.Sprintf("reindexed: %d files", len(index.Files))
+	// RefreshLixenFlat will be implemented in later step
+	// app.RefreshLixenFlat()
+	app.Message = fmt.Sprintf("reindexed: %d files, %d categories", len(index.Files), len(index.CategoryNames))
 }
 
 // parseFile extracts metadata from a single Go source file
@@ -280,10 +253,9 @@ func parseFile(path, modPath string) (*FileInfo, error) {
 	}
 
 	fi := &FileInfo{
-		Path:     path,
-		Focus:    make(map[string]map[string][]string),
-		Interact: make(map[string]map[string][]string),
-		Size:     int64(len(content)),
+		Path: path,
+		Tags: make(map[string]map[string]map[string][]string),
+		Size: int64(len(content)),
 	}
 
 	lines := strings.Split(string(content), "\n")
@@ -344,7 +316,7 @@ func parseLixenLine(line string, fi *FileInfo) error {
 		return nil
 	}
 
-	// Parse blocks: #focus{...},#interact{...}
+	// Parse blocks: #category1{...},#category2{...}
 	return parseBlocks(content, fi)
 }
 
@@ -360,7 +332,8 @@ func stripWhitespace(s string) string {
 	return b.String()
 }
 
-// parseBlocks parses "#focus{...},#interact{...}" into FileInfo
+// parseBlocks parses "#category{...},#category2{...}" into FileInfo
+// Categories are dynamically discovered from the content
 func parseBlocks(content string, fi *FileInfo) error {
 	for len(content) > 0 {
 		if content[0] == ',' {
@@ -378,7 +351,7 @@ func parseBlocks(content string, fi *FileInfo) error {
 			return fmt.Errorf("missing '{' in block")
 		}
 
-		blockType := content[:braceIdx]
+		category := content[:braceIdx]
 		content = content[braceIdx+1:]
 
 		closeIdx := findMatchingBrace(content)
@@ -394,33 +367,26 @@ func parseBlocks(content string, fi *FileInfo) error {
 			return err
 		}
 
-		switch blockType {
-		case "focus":
-			for g, modules := range groups {
-				if g == "all" {
-					if mods, ok := modules[DirectTagsModule]; ok && len(mods) > 0 && mods[0] == "*" {
-						fi.IsAll = true
-						continue
-					}
-				}
-				if fi.Focus[g] == nil {
-					fi.Focus[g] = make(map[string][]string)
-				}
-				for mod, tags := range modules {
-					fi.Focus[g][mod] = append(fi.Focus[g][mod], tags...)
+		// Initialize category in fi.Tags if needed
+		if fi.Tags[category] == nil {
+			fi.Tags[category] = make(map[string]map[string][]string)
+		}
+
+		for g, modules := range groups {
+			// Handle special "all(*)" marker
+			if g == "all" {
+				if mods, ok := modules[DirectTagsModule]; ok && len(mods) > 0 && mods[0] == "*" {
+					fi.IsAll = true
+					continue
 				}
 			}
-		case "interact":
-			for g, modules := range groups {
-				if fi.Interact[g] == nil {
-					fi.Interact[g] = make(map[string][]string)
-				}
-				for mod, tags := range modules {
-					fi.Interact[g][mod] = append(fi.Interact[g][mod], tags...)
-				}
+
+			if fi.Tags[category][g] == nil {
+				fi.Tags[category][g] = make(map[string][]string)
 			}
-		default:
-			return fmt.Errorf("unknown block type: %s", blockType)
+			for mod, tags := range modules {
+				fi.Tags[category][g][mod] = append(fi.Tags[category][g][mod], tags...)
+			}
 		}
 	}
 

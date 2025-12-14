@@ -1,5 +1,3 @@
-// @lixen: #focus{gameplay[defense,shield,energy,drain],event[dispatch]}
-// @lixen: #interact{state[cursor,shield,energy],trigger[energy]}
 package systems
 
 import (

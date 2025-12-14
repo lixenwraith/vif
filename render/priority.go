@@ -1,5 +1,3 @@
-// @lixen: #focus{render[pipeline,priority]}
-// @lixen: #interact{state[priority]}
 package render
 
 // RenderPriority determines render order. Lower values render first

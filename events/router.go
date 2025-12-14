@@ -1,5 +1,3 @@
-// @lixen: #focus{event[dispatch,router,handler]}
-// @lixen: #interact{state[event,handler],trigger[handler]}
 package events
 
 // Handler processes specific event types within a context T

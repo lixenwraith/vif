@@ -1,5 +1,3 @@
-// @lixen: #focus{vfx[splash,text]}
-// @lixen: #interact{state[splash]}
 package components
 
 import (

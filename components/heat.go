@@ -1,5 +1,3 @@
-// @lixen: #focus{gameplay[resource,heat]}
-// @lixen: #interact{state[heat]}
 package components
 
 import "sync/atomic"

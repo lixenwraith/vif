@@ -1,5 +1,3 @@
-// @lixen: #focus{gameplay[resource,energy]}
-// @lixen: #interact{state[energy]}
 package components
 
 import (

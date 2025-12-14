@@ -1,5 +1,3 @@
-// @lixen: #focus{render[pipeline,context]}
-// @lixen: #interact{state[context,time,cursor]}
 package render
 
 import (

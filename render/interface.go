@@ -1,5 +1,3 @@
-// @lixen: #focus{render[pipeline,types,interface]}
-// @lixen: #interact{state[renderer]}
 package render
 
 import "github.com/lixenwraith/vi-fighter/engine"

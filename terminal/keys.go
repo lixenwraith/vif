@@ -1,5 +1,3 @@
-// @lixen: #focus{sys[term,io,keys],input[keys]}
-// @lixen: #interact{state[key]}
 package terminal
 
 // Key represents a parsed input key

@@ -1,5 +1,3 @@
-// @lixen: #focus{vfx[flash]}
-// @lixen: #interact{state[flash]}
 package components
 
 import "time"

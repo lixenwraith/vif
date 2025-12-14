@@ -1,5 +1,3 @@
-// @lixen: #focus{arch[spatial,ecs,position]}
-// @lixen: #interact{init[position],state[position],end[position]}
 package engine
 
 import (

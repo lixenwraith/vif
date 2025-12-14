@@ -1,5 +1,3 @@
-// @lixen: #focus{flow[context,state,cursor],arch[resource],event[dispatch],gameplay[energy,shield,heat],input[mode]}
-// @lixen: #interact{init[world,cursor,event],state[mode,pause,cursor,phase],morph[mode,pause],trigger[event]}
 package engine
 
 import (

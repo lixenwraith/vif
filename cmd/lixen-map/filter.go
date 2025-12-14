@@ -67,7 +67,7 @@ func (app *AppState) RemoveFromFilter(paths []string) {
 // ClearFilter resets all filter state to empty
 func (app *AppState) ClearFilter() {
 	app.Filter.FilteredPaths = make(map[string]bool)
-	app.Filter.FilteredFocusTags = make(map[string]map[string]map[string]bool)
+	app.Filter.FilteredCategoryTags = make(map[string]map[string]map[string]map[string]bool)
 }
 
 // selectFilteredFiles transfers all filtered paths to selection set
@@ -118,8 +118,7 @@ func (app *AppState) applyTreePaneFilter() {
 		}
 	}
 
-	app.RefreshFocusFlat()
-	app.RefreshInteractFlat()
+	app.RefreshLixenFlat()
 }
 
 // isPathSetFiltered checks if all paths in set are currently filtered
@@ -187,12 +186,12 @@ func searchContentRg(index *Index, query string, rgAvailable bool) []string {
 }
 
 // computeTagSelectionState returns selection coverage for a specific tag
-func (app *AppState) computeTagSelectionState(cat Category, group, module, tag string) TagSelectionState {
+func (app *AppState) computeTagSelectionState(cat, group, module, tag string) TagSelectionState {
 	total := 0
 	selected := 0
 
 	for path, fi := range app.Index.Files {
-		if mods, ok := fi.TagMap(cat)[group]; ok {
+		if mods, ok := fi.CategoryTags(cat)[group]; ok {
 			if tags, ok := mods[module]; ok {
 				for _, t := range tags {
 					if t == tag {
@@ -217,12 +216,12 @@ func (app *AppState) computeTagSelectionState(cat Category, group, module, tag s
 }
 
 // computeModuleSelectionState returns selection coverage for a module
-func (app *AppState) computeModuleSelectionState(cat Category, group, module string) TagSelectionState {
+func (app *AppState) computeModuleSelectionState(cat, group, module string) TagSelectionState {
 	total := 0
 	selected := 0
 
 	for path, fi := range app.Index.Files {
-		if mods, ok := fi.TagMap(cat)[group]; ok {
+		if mods, ok := fi.CategoryTags(cat)[group]; ok {
 			if _, ok := mods[module]; ok {
 				total++
 				if app.Selected[path] {
@@ -242,12 +241,12 @@ func (app *AppState) computeModuleSelectionState(cat Category, group, module str
 }
 
 // computeGroupSelectionState returns selection coverage for a group
-func (app *AppState) computeGroupSelectionState(cat Category, group string) TagSelectionState {
+func (app *AppState) computeGroupSelectionState(cat, group string) TagSelectionState {
 	total := 0
 	selected := 0
 
 	for path, fi := range app.Index.Files {
-		if _, ok := fi.TagMap(cat)[group]; ok {
+		if _, ok := fi.CategoryTags(cat)[group]; ok {
 			total++
 			if app.Selected[path] {
 				selected++
@@ -265,8 +264,11 @@ func (app *AppState) computeGroupSelectionState(cat Category, group string) TagS
 }
 
 // isGroupFiltered returns true if any module/tag in group matches filter
-func (app *AppState) isGroupFiltered(cat Category, group string) bool {
+func (app *AppState) isGroupFiltered(cat, group string) bool {
 	filteredTags := app.Filter.FilteredTags(cat)
+	if filteredTags == nil {
+		return false
+	}
 	if mods, ok := filteredTags[group]; ok {
 		for _, tags := range mods {
 			if len(tags) > 0 {
@@ -278,8 +280,11 @@ func (app *AppState) isGroupFiltered(cat Category, group string) bool {
 }
 
 // isModuleFiltered returns true if any tag in module matches filter
-func (app *AppState) isModuleFiltered(cat Category, group, module string) bool {
+func (app *AppState) isModuleFiltered(cat, group, module string) bool {
 	filteredTags := app.Filter.FilteredTags(cat)
+	if filteredTags == nil {
+		return false
+	}
 	if mods, ok := filteredTags[group]; ok {
 		if tags, ok := mods[module]; ok {
 			return len(tags) > 0
@@ -289,8 +294,11 @@ func (app *AppState) isModuleFiltered(cat Category, group, module string) bool {
 }
 
 // isTagFiltered returns true if specific tag is filtered
-func (app *AppState) isTagFiltered(cat Category, group, module, tag string) bool {
+func (app *AppState) isTagFiltered(cat, group, module, tag string) bool {
 	filteredTags := app.Filter.FilteredTags(cat)
+	if filteredTags == nil {
+		return false
+	}
 	if mods, ok := filteredTags[group]; ok {
 		if tags, ok := mods[module]; ok {
 			return tags[tag]
@@ -301,8 +309,7 @@ func (app *AppState) isTagFiltered(cat Category, group, module, tag string) bool
 
 // computeFilteredTags derives tag highlights from filtered file paths
 func (app *AppState) computeFilteredTags() {
-	app.Filter.FilteredFocusTags = make(map[string]map[string]map[string]bool)
-	app.Filter.FilteredInteractTags = make(map[string]map[string]map[string]bool)
+	app.Filter.FilteredCategoryTags = make(map[string]map[string]map[string]map[string]bool)
 
 	for path := range app.Filter.FilteredPaths {
 		fi := app.Index.Files[path]
@@ -310,57 +317,54 @@ func (app *AppState) computeFilteredTags() {
 			continue
 		}
 
-		// Focus tags
-		for group, mods := range fi.Focus {
-			if app.Filter.FilteredFocusTags[group] == nil {
-				app.Filter.FilteredFocusTags[group] = make(map[string]map[string]bool)
+		// Process all categories in file
+		for category, groups := range fi.Tags {
+			if app.Filter.FilteredCategoryTags[category] == nil {
+				app.Filter.FilteredCategoryTags[category] = make(map[string]map[string]map[string]bool)
 			}
-			for module, tags := range mods {
-				if app.Filter.FilteredFocusTags[group][module] == nil {
-					app.Filter.FilteredFocusTags[group][module] = make(map[string]bool)
-				}
-				for _, tag := range tags {
-					app.Filter.FilteredFocusTags[group][module][tag] = true
-				}
-			}
-		}
 
-		// Interact tags
-		for group, mods := range fi.Interact {
-			if app.Filter.FilteredInteractTags[group] == nil {
-				app.Filter.FilteredInteractTags[group] = make(map[string]map[string]bool)
-			}
-			for module, tags := range mods {
-				if app.Filter.FilteredInteractTags[group][module] == nil {
-					app.Filter.FilteredInteractTags[group][module] = make(map[string]bool)
+			for group, mods := range groups {
+				if app.Filter.FilteredCategoryTags[category][group] == nil {
+					app.Filter.FilteredCategoryTags[category][group] = make(map[string]map[string]bool)
 				}
-				for _, tag := range tags {
-					app.Filter.FilteredInteractTags[group][module][tag] = true
+				for module, tags := range mods {
+					if app.Filter.FilteredCategoryTags[category][group][module] == nil {
+						app.Filter.FilteredCategoryTags[category][group][module] = make(map[string]bool)
+					}
+					for _, tag := range tags {
+						app.Filter.FilteredCategoryTags[category][group][module][tag] = true
+					}
 				}
 			}
 		}
 	}
 }
 
-// applyFocusPaneFilter toggles filter for item at focus cursor
-func (app *AppState) applyFocusPaneFilter() {
-	if len(app.TagFlat) == 0 {
+// applyLixenPaneFilter toggles filter for item at lixen cursor
+func (app *AppState) applyLixenPaneFilter() {
+	cat := app.CurrentCategory
+	if cat == "" {
 		return
 	}
 
-	item := app.TagFlat[app.TagCursor]
+	ui := app.CategoryUI[cat]
+	if ui == nil || len(ui.Flat) == 0 {
+		return
+	}
+
+	item := ui.Flat[ui.Cursor]
 	var paths []string
 
 	switch item.Type {
 	case TagItemTypeGroup:
 		for path, fi := range app.Index.Files {
-			if _, ok := fi.Focus[item.Group]; ok {
+			if _, ok := fi.CategoryTags(cat)[item.Group]; ok {
 				paths = append(paths, path)
 			}
 		}
 	case TagItemTypeModule:
 		for path, fi := range app.Index.Files {
-			if mods, ok := fi.Focus[item.Group]; ok {
+			if mods, ok := fi.CategoryTags(cat)[item.Group]; ok {
 				if _, ok := mods[item.Module]; ok {
 					paths = append(paths, path)
 				}
@@ -368,7 +372,7 @@ func (app *AppState) applyFocusPaneFilter() {
 		}
 	case TagItemTypeTag:
 		for path, fi := range app.Index.Files {
-			if mods, ok := fi.Focus[item.Group]; ok {
+			if mods, ok := fi.CategoryTags(cat)[item.Group]; ok {
 				if tags, ok := mods[item.Module]; ok {
 					for _, t := range tags {
 						if t == item.Tag {
@@ -393,63 +397,7 @@ func (app *AppState) applyFocusPaneFilter() {
 		app.Message = fmt.Sprintf("filter: %s (%d files)", formatTagItemLabel(item), len(paths))
 	}
 
-	app.RefreshFocusFlat()
-	app.RefreshInteractFlat()
-}
-
-// applyInteractPaneFilter toggles filter for item at interact cursor
-func (app *AppState) applyInteractPaneFilter() {
-	if len(app.InteractFlat) == 0 {
-		return
-	}
-
-	item := app.InteractFlat[app.InteractCursor]
-	var paths []string
-
-	switch item.Type {
-	case TagItemTypeGroup:
-		for path, fi := range app.Index.Files {
-			if _, ok := fi.Interact[item.Group]; ok {
-				paths = append(paths, path)
-			}
-		}
-	case TagItemTypeModule:
-		for path, fi := range app.Index.Files {
-			if mods, ok := fi.Interact[item.Group]; ok {
-				if _, ok := mods[item.Module]; ok {
-					paths = append(paths, path)
-				}
-			}
-		}
-	case TagItemTypeTag:
-		for path, fi := range app.Index.Files {
-			if mods, ok := fi.Interact[item.Group]; ok {
-				if tags, ok := mods[item.Module]; ok {
-					for _, t := range tags {
-						if t == item.Tag {
-							paths = append(paths, path)
-							break
-						}
-					}
-				}
-			}
-		}
-	}
-
-	if len(paths) == 0 {
-		return
-	}
-
-	if app.isPathSetFiltered(paths) {
-		app.RemoveFromFilter(paths)
-		app.Message = fmt.Sprintf("unfilter: %s", formatTagItemLabel(item))
-	} else {
-		app.ApplyFilter(paths)
-		app.Message = fmt.Sprintf("filter: %s (%d files)", formatTagItemLabel(item), len(paths))
-	}
-
-	app.RefreshFocusFlat()
-	app.RefreshInteractFlat()
+	app.RefreshLixenFlat()
 }
 
 // formatTagItemLabel returns display label for a TagItem
@@ -477,6 +425,5 @@ func (app *AppState) executeSearch(query string) {
 	paths := searchContentRg(app.Index, query, app.RgAvailable)
 	app.Message = fmt.Sprintf("filter content: %q (%d files)", query, len(paths))
 	app.ApplyFilter(paths)
-	app.RefreshFocusFlat()
-	app.RefreshInteractFlat()
+	app.RefreshLixenFlat()
 }

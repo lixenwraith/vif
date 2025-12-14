@@ -1,5 +1,3 @@
-// @lixen: #focus{arch[query,ecs]}
-// @lixen: #interact{state[store,entity]}
 package engine
 
 import (

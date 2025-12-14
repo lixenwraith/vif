@@ -1,5 +1,3 @@
-// @lixen: #focus{gameplay[ability,cleaner],vfx[trail]}
-// @lixen: #interact{state[cleaner]}
 package components
 
 import (

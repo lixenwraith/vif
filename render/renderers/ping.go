@@ -1,5 +1,3 @@
-// @lixen: #focus{render[scene,ping],vfx[ping,grid]}
-// @lixen: #interact{state[ping,cursor]}
 package renderers
 
 import (

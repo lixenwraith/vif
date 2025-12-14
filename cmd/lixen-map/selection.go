@@ -116,10 +116,10 @@ func (app *AppState) computeOutputStats() (totalFiles, depFiles int, totalSize, 
 }
 
 // selectFilesWithTag adds all files with specific tag to selection
-func (app *AppState) selectFilesWithTag(cat Category, group, module, tag string) int {
+func (app *AppState) selectFilesWithTag(cat, group, module, tag string) int {
 	count := 0
 	for path, fi := range app.Index.Files {
-		if mods, ok := fi.TagMap(cat)[group]; ok {
+		if mods, ok := fi.CategoryTags(cat)[group]; ok {
 			if tags, ok := mods[module]; ok {
 				for _, t := range tags {
 					if t == tag {
@@ -137,10 +137,10 @@ func (app *AppState) selectFilesWithTag(cat Category, group, module, tag string)
 }
 
 // deselectFilesWithTag removes all files with specific tag from selection
-func (app *AppState) deselectFilesWithTag(cat Category, group, module, tag string) int {
+func (app *AppState) deselectFilesWithTag(cat, group, module, tag string) int {
 	count := 0
 	for path, fi := range app.Index.Files {
-		if mods, ok := fi.TagMap(cat)[group]; ok {
+		if mods, ok := fi.CategoryTags(cat)[group]; ok {
 			if tags, ok := mods[module]; ok {
 				for _, t := range tags {
 					if t == tag {
@@ -158,10 +158,10 @@ func (app *AppState) deselectFilesWithTag(cat Category, group, module, tag strin
 }
 
 // selectFilesWithModule adds all files in module to selection
-func (app *AppState) selectFilesWithModule(cat Category, group, module string) int {
+func (app *AppState) selectFilesWithModule(cat, group, module string) int {
 	count := 0
 	for path, fi := range app.Index.Files {
-		if mods, ok := fi.TagMap(cat)[group]; ok {
+		if mods, ok := fi.CategoryTags(cat)[group]; ok {
 			if _, ok := mods[module]; ok {
 				if !app.Selected[path] {
 					app.Selected[path] = true
@@ -174,10 +174,10 @@ func (app *AppState) selectFilesWithModule(cat Category, group, module string) i
 }
 
 // deselectFilesWithModule removes all files in module from selection
-func (app *AppState) deselectFilesWithModule(cat Category, group, module string) int {
+func (app *AppState) deselectFilesWithModule(cat, group, module string) int {
 	count := 0
 	for path, fi := range app.Index.Files {
-		if mods, ok := fi.TagMap(cat)[group]; ok {
+		if mods, ok := fi.CategoryTags(cat)[group]; ok {
 			if _, ok := mods[module]; ok {
 				if app.Selected[path] {
 					delete(app.Selected, path)
@@ -190,10 +190,10 @@ func (app *AppState) deselectFilesWithModule(cat Category, group, module string)
 }
 
 // selectFilesWithGroup adds all files in group to selection
-func (app *AppState) selectFilesWithGroup(cat Category, group string) int {
+func (app *AppState) selectFilesWithGroup(cat, group string) int {
 	count := 0
 	for path, fi := range app.Index.Files {
-		if _, ok := fi.TagMap(cat)[group]; ok {
+		if _, ok := fi.CategoryTags(cat)[group]; ok {
 			if !app.Selected[path] {
 				app.Selected[path] = true
 				count++
@@ -204,10 +204,10 @@ func (app *AppState) selectFilesWithGroup(cat Category, group string) int {
 }
 
 // deselectFilesWithGroup removes all files in group from selection
-func (app *AppState) deselectFilesWithGroup(cat Category, group string) int {
+func (app *AppState) deselectFilesWithGroup(cat, group string) int {
 	count := 0
 	for path, fi := range app.Index.Files {
-		if _, ok := fi.TagMap(cat)[group]; ok {
+		if _, ok := fi.CategoryTags(cat)[group]; ok {
 			if app.Selected[path] {
 				delete(app.Selected, path)
 				count++
@@ -218,9 +218,9 @@ func (app *AppState) deselectFilesWithGroup(cat Category, group string) int {
 }
 
 // allFilesWithTagSelected checks if all files with specific tag are selected
-func (app *AppState) allFilesWithTagSelected(cat Category, group, module, tag string) bool {
+func (app *AppState) allFilesWithTagSelected(cat, group, module, tag string) bool {
 	for path, fi := range app.Index.Files {
-		if mods, ok := fi.TagMap(cat)[group]; ok {
+		if mods, ok := fi.CategoryTags(cat)[group]; ok {
 			if tags, ok := mods[module]; ok {
 				for _, t := range tags {
 					if t == tag {
@@ -237,9 +237,9 @@ func (app *AppState) allFilesWithTagSelected(cat Category, group, module, tag st
 }
 
 // allFilesWithModuleSelected checks if all files in module are selected
-func (app *AppState) allFilesWithModuleSelected(cat Category, group, module string) bool {
+func (app *AppState) allFilesWithModuleSelected(cat, group, module string) bool {
 	for path, fi := range app.Index.Files {
-		if mods, ok := fi.TagMap(cat)[group]; ok {
+		if mods, ok := fi.CategoryTags(cat)[group]; ok {
 			if _, ok := mods[module]; ok {
 				if !app.Selected[path] {
 					return false
@@ -251,9 +251,9 @@ func (app *AppState) allFilesWithModuleSelected(cat Category, group, module stri
 }
 
 // allFilesWithGroupSelected checks if all files in group are selected
-func (app *AppState) allFilesWithGroupSelected(cat Category, group string) bool {
+func (app *AppState) allFilesWithGroupSelected(cat, group string) bool {
 	for path, fi := range app.Index.Files {
-		if _, ok := fi.TagMap(cat)[group]; ok {
+		if _, ok := fi.CategoryTags(cat)[group]; ok {
 			if !app.Selected[path] {
 				return false
 			}

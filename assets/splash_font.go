@@ -1,5 +1,3 @@
-// @lixen: #focus{vfx[splash,font],render[splash]}
-// @lixen: #interact{state[font]}
 package assets
 
 // SplashFont provides bitmap font data for ASCII characters 32-126 (95 printable characters)

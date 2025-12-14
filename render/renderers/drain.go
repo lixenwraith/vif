@@ -1,5 +1,3 @@
-// @lixen: #focus{render[scene,drain],gameplay[obstacle,drain]}
-// @lixen: #interact{state[drain,position]}
 package renderers
 
 import (

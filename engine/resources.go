@@ -1,5 +1,3 @@
-// @lixen: #focus{arch[resource,types],flow[clock,config],render[config]}
-// @lixen: #interact{init[resource],state[resource]}
 package engine
 
 import (

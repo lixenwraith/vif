@@ -1,5 +1,3 @@
-// @lixen: #focus{gameplay[ability,cleaner,collision],vfx[flash],event[dispatch]}
-// @lixen: #interact{init[flash],state[cursor,heat,position,sequence],end[character]}
 package systems
 
 import (

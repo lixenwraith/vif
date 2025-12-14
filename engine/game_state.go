@@ -1,5 +1,3 @@
-// @lixen: #focus{flow[state,phase],gameplay[energy,heat,gold,decay,boost,nugget],lifecycle[timer,decay]}
-// @lixen: #interact{state[phase,heat,energy,gold,decay,boost,nugget],morph[phase],trigger[heat,energy,gold,decay,boost,nugget]}
 package engine
 
 import (

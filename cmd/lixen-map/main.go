@@ -48,26 +48,37 @@ func main() {
 
 	_, rgErr := exec.LookPath("rg")
 
+	// Determine initial category
+	currentCat := ""
+	if len(index.CategoryNames) > 0 {
+		currentCat = index.CategoryNames[0]
+	}
+
 	app := &AppState{
-		Term:                  term,
-		Index:                 index,
-		FocusPane:             PaneLeft,
-		Selected:              make(map[string]bool),
-		ExpandDeps:            true,
-		DepthLimit:            2,
-		Filter:                NewFilterState(),
-		RgAvailable:           rgErr == nil,
-		GroupExpanded:         make(map[string]bool),
-		InteractGroupExpanded: make(map[string]bool),
-		StartCollapsed:        true,
-		Width:                 w,
-		Height:                h,
+		Term:            term,
+		Index:           index,
+		FocusPane:       PaneTree,
+		Selected:        make(map[string]bool),
+		ExpandDeps:      true,
+		DepthLimit:      2,
+		Filter:          NewFilterState(),
+		RgAvailable:     rgErr == nil,
+		CurrentCategory: currentCat,
+		CategoryNames:   index.CategoryNames,
+		CategoryUI:      make(map[string]*CategoryUIState),
+		StartCollapsed:  true,
+		Width:           w,
+		Height:          h,
+	}
+
+	// Initialize UI state for all categories
+	for _, cat := range index.CategoryNames {
+		app.CategoryUI[cat] = NewCategoryUIState()
 	}
 
 	app.TreeRoot = BuildTree(index)
 	app.RefreshTreeFlat()
-	app.RefreshFocusFlat()
-	app.RefreshInteractFlat()
+	app.RefreshLixenFlat()
 
 	// Apply initial collapsed state
 	if app.StartCollapsed {

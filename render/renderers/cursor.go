@@ -1,5 +1,3 @@
-// @lixen: #focus{render[ui,cursor],gameplay[cursor,energy]}
-// @lixen: #interact{state[cursor,position,energy,mode]}
 package renderers
 
 import (

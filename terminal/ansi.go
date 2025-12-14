@@ -1,5 +1,3 @@
-// @lixen: #focus{sys[term,ansi,escape]}
-// @lixen: #interact{trigger[ansi]}
 package terminal
 
 import (

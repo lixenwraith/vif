@@ -1,5 +1,3 @@
-// @lixen: #focus{sys[audio,env],audio[env]}
-// @lixen: #interact{state[audio(config)]}
 package audio
 
 import (

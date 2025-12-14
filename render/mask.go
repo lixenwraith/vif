@@ -1,5 +1,3 @@
-// @lixen: #focus{render[mask,layer]}
-// @lixen: #interact{state[mask]}
 package render
 
 // Render masks categorize buffer cells for selective post-processing

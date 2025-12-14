@@ -12,30 +12,21 @@ type AppState struct {
 	// Pane focus
 	FocusPane Pane
 
-	// Tree view (left pane)
+	// Tree view (second pane from left)
 	TreeRoot   *TreeNode   // Root of directory tree
 	TreeFlat   []*TreeNode // Flattened visible nodes for rendering
 	TreeCursor int         // Cursor position in flattened list
-	TreeScroll int         // Scroll offset for left pane
+	TreeScroll int         // Scroll offset
 
 	// Selection (file paths)
 	Selected   map[string]bool // file path → selected
 	ExpandDeps bool            // auto-expand dependencies
 	DepthLimit int             // expansion depth
 
-	// Focus view (center pane)
-	TagFlat        []TagItem       // Flattened groups and tags for rendering
-	TagCursor      int             // Cursor position in right pane
-	TagScroll      int             // Scroll offset for right pane
-	GroupExpanded  map[string]bool // group name → expanded state
-	ModuleExpanded map[string]bool // "group.module" → expanded state  // NEW
-
-	// Interact view (right pane)
-	InteractFlat           []TagItem
-	InteractCursor         int
-	InteractScroll         int
-	InteractGroupExpanded  map[string]bool
-	ModuleInteractExpanded map[string]bool
+	// Category view (left pane) - dynamic per category
+	CurrentCategory string                      // active category name
+	CategoryNames   []string                    // sorted category names from index
+	CategoryUI      map[string]*CategoryUIState // per-category UI state
 
 	// Filter state
 	Filter      *FilterState
@@ -57,12 +48,32 @@ type AppState struct {
 	// Help overlay
 	HelpMode bool
 
-	// Preferences (future: persist to disk)
+	// Preferences
 	StartCollapsed bool // Start with all panes collapsed
 
 	// Dimensions
 	Width  int
 	Height int
+}
+
+// CategoryUIState holds UI state for a single category pane
+type CategoryUIState struct {
+	Flat           []TagItem       // Flattened groups/modules/tags for rendering
+	Cursor         int             // Cursor position
+	Scroll         int             // Scroll offset
+	GroupExpanded  map[string]bool // group name → expanded state
+	ModuleExpanded map[string]bool // "group.module" → expanded state
+}
+
+// NewCategoryUIState creates initialized CategoryUIState
+func NewCategoryUIState() *CategoryUIState {
+	return &CategoryUIState{
+		Flat:           nil,
+		Cursor:         0,
+		Scroll:         0,
+		GroupExpanded:  make(map[string]bool),
+		ModuleExpanded: make(map[string]bool),
+	}
 }
 
 // Colors
@@ -108,9 +119,10 @@ const defaultModulePath = "github.com/lixenwraith/vi-fighter"
 type Pane int
 
 const (
-	PaneLeft   Pane = iota // Packages/Files tree
-	PaneCenter             // Focus Groups/Tags
-	PaneRight              // Interact Groups/Tags
+	PaneLixen Pane = iota // Category tags (left)
+	PaneTree              // Packages/Files tree (second from left)
+	PaneDepBy             // Depended by (third from left)
+	PaneDepOn             // Depends on (right)
 )
 
 // FilterMode determines how successive filters combine
@@ -123,48 +135,68 @@ const (
 	FilterXOR                   // Toggle membership (symmetric difference)
 )
 
-// Category discriminates between Focus and Interact tag collections
-type Category int
-
-const (
-	CategoryFocus Category = iota
-	CategoryInteract
-)
-
 // FileInfo holds parsed metadata for a single Go source file
 type FileInfo struct {
 	Path    string
 	Package string
-	// Focus: group → module → tags
+	// Tags: category → group → module → tags
 	// For 2-level format group(tag): module key is DirectTagsModule ("")
 	// For 3-level format group[mod(tag)]: module key is the module name
-	Focus    map[string]map[string][]string
-	Interact map[string]map[string][]string
-	Imports  []string
-	IsAll    bool
-	Size     int64
+	Tags    map[string]map[string]map[string][]string
+	Imports []string
+	IsAll   bool
+	Size    int64
 }
 
 // SizeWarningThreshold is output size (bytes) above which size displays in warning color
 const SizeWarningThreshold = 300 * 1024
 
-// TagMap returns the appropriate tag map for the category
-func (fi *FileInfo) TagMap(cat Category) map[string]map[string][]string {
-	if cat == CategoryInteract {
-		return fi.Interact
+// CategoryTags returns the tag map for specified category, nil if not present
+func (fi *FileInfo) CategoryTags(cat string) map[string]map[string][]string {
+	if fi.Tags == nil {
+		return nil
 	}
-	return fi.Focus
+	return fi.Tags[cat]
+}
+
+// HasCategory returns true if file has tags in specified category
+func (fi *FileInfo) HasCategory(cat string) bool {
+	if fi.Tags == nil {
+		return false
+	}
+	_, ok := fi.Tags[cat]
+	return ok
 }
 
 // PackageInfo aggregates file data for a package directory
 type PackageInfo struct {
-	Name        string
-	Dir         string
-	Files       []*FileInfo
-	AllFocus    map[string][]string // union of all file focus tags
-	AllInteract map[string][]string // union of all file interact tags
-	LocalDeps   []string
-	HasAll      bool
+	Name      string
+	Dir       string
+	Files     []*FileInfo
+	LocalDeps []string
+	HasAll    bool
+}
+
+// CategoryIndex holds indexed tag data for a single category
+type CategoryIndex struct {
+	Groups   []string                       // sorted group names
+	Modules  map[string][]string            // group → sorted module names (excludes DirectTagsModule)
+	Tags     map[string]map[string][]string // group → module → sorted tags
+	ByGroup  map[string][]string            // "group" → file paths
+	ByModule map[string][]string            // "group.module" → file paths
+	ByTag    map[string][]string            // "group.module.tag" or "group..tag" → file paths
+}
+
+// NewCategoryIndex creates initialized CategoryIndex
+func NewCategoryIndex() *CategoryIndex {
+	return &CategoryIndex{
+		Groups:   nil,
+		Modules:  make(map[string][]string),
+		Tags:     make(map[string]map[string][]string),
+		ByGroup:  make(map[string][]string),
+		ByModule: make(map[string][]string),
+		ByTag:    make(map[string][]string),
+	}
 }
 
 // Index holds the complete indexed codebase representation
@@ -172,78 +204,34 @@ type Index struct {
 	ModulePath  string
 	Packages    map[string]*PackageInfo
 	Files       map[string]*FileInfo
-	ReverseDeps map[string][]string
+	ReverseDeps map[string][]string // package dir → packages that import it
 
-	// Focus index
-	FocusGroups   []string                       // sorted group names
-	FocusModules  map[string][]string            // group → sorted module names (excludes DirectTagsModule)
-	FocusTags     map[string]map[string][]string // group → module → sorted tags
-	FocusByGroup  map[string][]string            // "group" → file paths
-	FocusByModule map[string][]string            // "group.module" → file paths
-	FocusByTag    map[string][]string            // "group.module.tag" → file paths
-
-	// Interact index
-	InteractGroups   []string
-	InteractModules  map[string][]string
-	InteractTags     map[string]map[string][]string
-	InteractByGroup  map[string][]string
-	InteractByModule map[string][]string
-	InteractByTag    map[string][]string
+	// Dynamic category indexes
+	Categories    map[string]*CategoryIndex // category name → index
+	CategoryNames []string                  // sorted category names
 }
 
-// TagGroups returns sorted group names for the category
-func (idx *Index) TagGroups(cat Category) []string {
-	if cat == CategoryInteract {
-		return idx.InteractGroups
+// Category returns CategoryIndex for name, nil if not present
+func (idx *Index) Category(name string) *CategoryIndex {
+	if idx.Categories == nil {
+		return nil
 	}
-	return idx.FocusGroups
+	return idx.Categories[name]
 }
 
-// TagModules returns group → modules map for the category
-func (idx *Index) TagModules(cat Category) map[string][]string {
-	if cat == CategoryInteract {
-		return idx.InteractModules
+// HasCategory returns true if category exists in index
+func (idx *Index) HasCategory(name string) bool {
+	if idx.Categories == nil {
+		return false
 	}
-	return idx.FocusModules
-}
-
-// TagsByGroupModule returns group → module → tags map for the category
-func (idx *Index) TagsByGroupModule(cat Category) map[string]map[string][]string {
-	if cat == CategoryInteract {
-		return idx.InteractTags
-	}
-	return idx.FocusTags
-}
-
-// FilesByGroup returns group → file paths map for the category
-func (idx *Index) FilesByGroup(cat Category) map[string][]string {
-	if cat == CategoryInteract {
-		return idx.InteractByGroup
-	}
-	return idx.FocusByGroup
-}
-
-// FilesByModule returns "group.module" → file paths map for the category
-func (idx *Index) FilesByModule(cat Category) map[string][]string {
-	if cat == CategoryInteract {
-		return idx.InteractByModule
-	}
-	return idx.FocusByModule
-}
-
-// FilesByTag returns "group.module.tag" → file paths map for the category
-func (idx *Index) FilesByTag(cat Category) map[string][]string {
-	if cat == CategoryInteract {
-		return idx.InteractByTag
-	}
-	return idx.FocusByTag
+	_, ok := idx.Categories[name]
+	return ok
 }
 
 // FilterState holds visual filter highlight state
 type FilterState struct {
-	FilteredPaths        map[string]bool                       // files matching current filter
-	FilteredFocusTags    map[string]map[string]map[string]bool // group → module → tag → highlighted
-	FilteredInteractTags map[string]map[string]map[string]bool
+	FilteredPaths        map[string]bool                                  // files matching current filter
+	FilteredCategoryTags map[string]map[string]map[string]map[string]bool // category → group → module → tag → highlighted
 	Mode                 FilterMode
 }
 
@@ -251,18 +239,17 @@ type FilterState struct {
 func NewFilterState() *FilterState {
 	return &FilterState{
 		FilteredPaths:        make(map[string]bool),
-		FilteredFocusTags:    make(map[string]map[string]map[string]bool),
-		FilteredInteractTags: make(map[string]map[string]map[string]bool),
+		FilteredCategoryTags: make(map[string]map[string]map[string]map[string]bool),
 		Mode:                 FilterOR,
 	}
 }
 
-// FilteredTags returns the appropriate filtered tags map for the category
-func (f *FilterState) FilteredTags(cat Category) map[string]map[string]map[string]bool {
-	if cat == CategoryInteract {
-		return f.FilteredInteractTags
+// FilteredTags returns the filtered tags map for specified category
+func (f *FilterState) FilteredTags(cat string) map[string]map[string]map[string]bool {
+	if f.FilteredCategoryTags == nil {
+		return nil
 	}
-	return f.FilteredFocusTags
+	return f.FilteredCategoryTags[cat]
 }
 
 // HasActiveFilter returns true if any paths are filtered
@@ -290,14 +277,6 @@ const (
 	SearchTypeContent SearchType = iota
 	SearchTypeTags
 	SearchTypeGroups
-)
-
-// SearchCategory indicates which tag category to search
-type SearchCategory uint8
-
-const (
-	SearchCategoryFocus SearchCategory = iota
-	SearchCategoryInteract
 )
 
 // TagSelectionState represents selection state for a tag/group

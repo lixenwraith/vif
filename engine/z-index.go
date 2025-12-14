@@ -1,5 +1,3 @@
-// @lixen: #focus{arch[spatial,zindex],render[layer]}
-// @lixen: #interact{state[zindex]}
 package engine
 
 import (

@@ -1,5 +1,3 @@
-// @lixen: #focus{gameplay[reward,nugget],spawn[placement],event[dispatch]}
-// @lixen: #interact{init[character],state[cursor,position,spawn,nugget],trigger[cursor]}
 package systems
 
 import (

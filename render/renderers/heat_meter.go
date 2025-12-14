@@ -1,5 +1,3 @@
-// @lixen: #focus{render[ui,heat],gameplay[resource,heat]}
-// @lixen: #interact{state[heat]}
 package renderers
 
 import (

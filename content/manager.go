@@ -1,5 +1,3 @@
-// @lixen: #focus{spawn[loader,content,file]}
-// @lixen: #interact{init[content],state[file,content]}
 package content
 
 import (

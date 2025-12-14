@@ -1,5 +1,3 @@
-// @lixen: #focus{spawn[data,character],render[scene,character],gameplay[sequence]}
-// @lixen: #interact{state[character]}
 package components
 
 // SequenceType represents the type of character sequence

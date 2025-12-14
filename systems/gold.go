@@ -1,5 +1,3 @@
-// @lixen: #focus{gameplay[reward,gold,sequence],flow[phase],spawn[placement],event[dispatch]}
-// @lixen: #interact{init[character,sequence,splash],state[phase,position,spawn],end[character,sequence],morph[phase],trigger[event]}
 package systems
 
 import (

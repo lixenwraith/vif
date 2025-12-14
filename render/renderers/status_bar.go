@@ -1,5 +1,3 @@
-// @lixen: #focus{render[ui,status],flow[state,mode],input[mode]}
-// @lixen: #interact{state[mode,context,input,command,search]}
 package renderers
 
 import (

@@ -1,5 +1,3 @@
-// @lixen: #focus{control[types,motion,range]}
-// @lixen: #interact{state[motion]}
 package modes
 
 import "github.com/lixenwraith/vi-fighter/engine"

@@ -1,5 +1,3 @@
-// @lixen: #focus{vfx[flash],lifecycle[timer]}
-// @lixen: #interact{state[flash,time],end[flash]}
 package systems
 
 import (

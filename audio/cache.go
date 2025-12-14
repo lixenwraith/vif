@@ -1,5 +1,3 @@
-// @lixen: #focus{sys[audio],audio[cache]}
-// @lixen: #interact{init[audio(cache)],state[audio(cache)]}
 package audio
 
 import "sync"

@@ -1,5 +1,3 @@
-// @lixen: #focus{flow[clock,time]}
-// @lixen: #interact{state[time]}
 package engine
 
 import "time"

@@ -13,7 +13,7 @@ import (
 
 // EnterEditMode initiates inline tag editing for the file at cursor
 func (app *AppState) EnterEditMode() {
-	if app.FocusPane != PaneLeft {
+	if app.FocusPane != PaneTree {
 		app.Message = "edit only from file tree"
 		return
 	}
@@ -40,14 +40,14 @@ func (app *AppState) EnterEditMode() {
 	}
 
 	// Canonicalize for consistent editing
-	focus, interact, err := parseLixenContent(content)
+	categories, err := parseLixenContent(content)
 	if err != nil {
 		app.InputBuffer = content // Fallback to raw on parse error
 		app.EditCursor = len(content)
 		return
 	}
 
-	app.InputBuffer = canonicalizeLixenContent(focus, interact)
+	app.InputBuffer = canonicalizeLixenContent(categories)
 	app.EditCursor = len(app.InputBuffer)
 }
 
@@ -200,33 +200,29 @@ func readLixenLine(path string) (string, error) {
 	}
 
 	// Merge multiple lines by parsing and re-canonicalizing
-	mergedFocus := make(map[string]map[string][]string)
-	mergedInteract := make(map[string]map[string][]string)
+	merged := make(map[string]map[string]map[string][]string)
 
 	for _, c := range contents {
-		focus, interact, err := parseLixenContent(c)
+		categories, err := parseLixenContent(c)
 		if err != nil {
 			continue // Skip malformed lines
 		}
-		for g, mods := range focus {
-			if mergedFocus[g] == nil {
-				mergedFocus[g] = make(map[string][]string)
+		for cat, groups := range categories {
+			if merged[cat] == nil {
+				merged[cat] = make(map[string]map[string][]string)
 			}
-			for m, tags := range mods {
-				mergedFocus[g][m] = appendUnique(mergedFocus[g][m], tags...)
-			}
-		}
-		for g, mods := range interact {
-			if mergedInteract[g] == nil {
-				mergedInteract[g] = make(map[string][]string)
-			}
-			for m, tags := range mods {
-				mergedInteract[g][m] = appendUnique(mergedInteract[g][m], tags...)
+			for g, mods := range groups {
+				if merged[cat][g] == nil {
+					merged[cat][g] = make(map[string][]string)
+				}
+				for m, tags := range mods {
+					merged[cat][g][m] = appendUnique(merged[cat][g][m], tags...)
+				}
 			}
 		}
 	}
 
-	return canonicalizeLixenContent(mergedFocus, mergedInteract), nil
+	return canonicalizeLixenContent(merged), nil
 }
 
 // appendUnique appends values not already present
@@ -244,45 +240,52 @@ func appendUnique(slice []string, values ...string) []string {
 	return slice
 }
 
-// parseLixenContent parses lixen content into focus/interact maps
-func parseLixenContent(content string) (focus, interact map[string]map[string][]string, err error) {
+// parseLixenContent parses lixen content into category map
+// Returns: category → group → module → tags
+func parseLixenContent(content string) (map[string]map[string]map[string][]string, error) {
 	if content == "" {
-		return make(map[string]map[string][]string), make(map[string]map[string][]string), nil
+		return make(map[string]map[string]map[string][]string), nil
 	}
 
 	fi := &FileInfo{
-		Focus:    make(map[string]map[string][]string),
-		Interact: make(map[string]map[string][]string),
+		Tags: make(map[string]map[string]map[string][]string),
 	}
 
 	content = stripWhitespace(content)
 	if err := parseBlocks(content, fi); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	return fi.Focus, fi.Interact, nil
+	return fi.Tags, nil
 }
 
-// canonicalizeLixenContent creates canonical lixen content from maps
-// Output format depends on structure:
-// - 2-level: #focus{group(tag1,tag2)}
-// - 3-level: #focus{group[mod1(tag1,tag2),mod2]}
-// - Mixed: #focus{group1(tag1),group2[mod(tag2)]}
-func canonicalizeLixenContent(focus, interact map[string]map[string][]string) string {
-	var parts []string
-
-	if block := formatBlock("focus", focus); block != "" {
-		parts = append(parts, block)
+// canonicalizeLixenContent creates canonical lixen content from category map
+// Output format: #category1{...},#category2{...}
+func canonicalizeLixenContent(categories map[string]map[string]map[string][]string) string {
+	if len(categories) == 0 {
+		return ""
 	}
-	if block := formatBlock("interact", interact); block != "" {
-		parts = append(parts, block)
+
+	// Sort category names
+	catNames := make([]string, 0, len(categories))
+	for cat := range categories {
+		catNames = append(catNames, cat)
+	}
+	sort.Strings(catNames)
+
+	var parts []string
+	for _, cat := range catNames {
+		groups := categories[cat]
+		if block := formatCategoryBlock(cat, groups); block != "" {
+			parts = append(parts, block)
+		}
 	}
 
 	return strings.Join(parts, ",")
 }
 
-// formatBlock formats a single block with proper syntax for 2-level vs 3-level
-func formatBlock(name string, groups map[string]map[string][]string) string {
+// formatCategoryBlock formats a single category block
+func formatCategoryBlock(category string, groups map[string]map[string][]string) string {
 	if len(groups) == 0 {
 		return ""
 	}
@@ -350,17 +353,17 @@ func formatBlock(name string, groups map[string]map[string][]string) string {
 		return ""
 	}
 
-	return fmt.Sprintf("#%s{%s}", name, strings.Join(groupParts, ","))
+	return fmt.Sprintf("#%s{%s}", category, strings.Join(groupParts, ","))
 }
 
 // writeLixenLine atomically writes lixen line to file, removing all existing @lixen: lines
 func writeLixenLine(path, content string) error {
-	focus, interact, err := parseLixenContent(content)
+	categories, err := parseLixenContent(content)
 	if err != nil {
 		return fmt.Errorf("parse: %w", err)
 	}
 
-	canonical := canonicalizeLixenContent(focus, interact)
+	canonical := canonicalizeLixenContent(categories)
 
 	fileContent, err := os.ReadFile(path)
 	if err != nil {

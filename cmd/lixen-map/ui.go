@@ -15,21 +15,40 @@ func (app *AppState) applyInitialCollapsedState() {
 	app.TreeCursor = 0
 	app.TreeScroll = 0
 
-	// Collapse focus groups
-	for _, group := range app.Index.FocusGroups {
-		app.GroupExpanded[group] = false
-	}
-	app.RefreshFocusFlat()
-	app.TagCursor = 0
-	app.TagScroll = 0
+	// Collapse all category UI states
+	for _, cat := range app.CategoryNames {
+		ui := app.CategoryUI[cat]
+		if ui == nil {
+			continue
+		}
 
-	// Collapse interact groups
-	for _, group := range app.Index.InteractGroups {
-		app.InteractGroupExpanded[group] = false
+		catIdx := app.Index.Category(cat)
+		if catIdx == nil {
+			continue
+		}
+
+		// Collapse all groups
+		for _, group := range catIdx.Groups {
+			ui.GroupExpanded[group] = false
+		}
+
+		// Collapse all modules
+		for group, modules := range catIdx.Modules {
+			for _, mod := range modules {
+				ui.ModuleExpanded[group+"."+mod] = false
+			}
+		}
 	}
-	app.RefreshInteractFlat()
-	app.InteractCursor = 0
-	app.InteractScroll = 0
+
+	// Refresh current category flat list
+	app.RefreshLixenFlat()
+
+	// Reset cursor for current category
+	ui := app.getCurrentCategoryUI()
+	if ui != nil {
+		ui.Cursor = 0
+		ui.Scroll = 0
+	}
 }
 
 // HandleEvent routes keyboard events to appropriate handler
@@ -70,6 +89,12 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 		switch ev.Rune {
 		case '?':
 			app.HelpMode = true
+			return false, false
+		case '[':
+			app.switchCategory(-1)
+			return false, false
+		case ']':
+			app.switchCategory(1)
 			return false, false
 		case 'f':
 			app.applyCurrentPaneFilter()
@@ -139,23 +164,27 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 
 	case terminal.KeyTab:
 		switch app.FocusPane {
-		case PaneLeft:
-			app.FocusPane = PaneCenter
-		case PaneCenter:
-			app.FocusPane = PaneRight
-		case PaneRight:
-			app.FocusPane = PaneLeft
+		case PaneLixen:
+			app.FocusPane = PaneTree
+		case PaneTree:
+			app.FocusPane = PaneDepBy
+		case PaneDepBy:
+			app.FocusPane = PaneDepOn
+		case PaneDepOn:
+			app.FocusPane = PaneLixen
 		}
 		return false, false
 
 	case terminal.KeyBacktab:
 		switch app.FocusPane {
-		case PaneLeft:
-			app.FocusPane = PaneRight
-		case PaneCenter:
-			app.FocusPane = PaneLeft
-		case PaneRight:
-			app.FocusPane = PaneCenter
+		case PaneLixen:
+			app.FocusPane = PaneDepOn
+		case PaneTree:
+			app.FocusPane = PaneLixen
+		case PaneDepBy:
+			app.FocusPane = PaneTree
+		case PaneDepOn:
+			app.FocusPane = PaneDepBy
 		}
 		return false, false
 
@@ -176,21 +205,72 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 	case terminal.KeyEscape:
 		if app.Filter.HasActiveFilter() {
 			app.ClearFilter()
-			app.RefreshFocusFlat()
-			app.RefreshInteractFlat()
+			app.RefreshLixenFlat()
 			app.Message = "filter cleared"
 		}
 		return false, false
 	}
 
 	switch app.FocusPane {
-	case PaneLeft:
+	case PaneLixen:
+		return app.handleLixenPaneEvent(ev)
+	case PaneTree:
 		return app.handleTreePaneEvent(ev)
-	case PaneCenter:
-		return app.handleFocusPaneEvent(ev)
-	case PaneRight:
-		return app.handleInteractPaneEvent(ev)
+	case PaneDepBy:
+		return app.handleDepByPaneEvent(ev)
+	case PaneDepOn:
+		return app.handleDepOnPaneEvent(ev)
 	}
+	return false, false
+}
+
+// handleLixenPaneEvent processes input when lixen pane focused
+func (app *AppState) handleLixenPaneEvent(ev terminal.Event) (quit, output bool) {
+	switch ev.Key {
+	case terminal.KeyRune:
+		switch ev.Rune {
+		case 'j':
+			app.moveLixenCursor(1)
+		case 'k':
+			app.moveLixenCursor(-1)
+		case 'h':
+			app.collapseLixenItem()
+		case 'l':
+			app.expandLixenItem()
+		case ' ':
+			app.toggleLixenSelection()
+		case 'a':
+			app.selectAllVisibleLixenTags()
+		case '0':
+			app.jumpLixenToStart()
+		case '$':
+			app.jumpLixenToEnd()
+		case 'H':
+			app.collapseAllLixenItems()
+		case 'L':
+			app.expandAllLixenItems()
+		}
+
+	case terminal.KeyUp:
+		app.moveLixenCursor(-1)
+	case terminal.KeyDown:
+		app.moveLixenCursor(1)
+	case terminal.KeyLeft:
+		app.collapseLixenItem()
+	case terminal.KeyRight:
+		app.expandLixenItem()
+	case terminal.KeySpace:
+		app.toggleLixenSelection()
+	case terminal.KeyPageUp:
+		app.pageLixenCursor(-1)
+	case terminal.KeyPageDown:
+		app.pageLixenCursor(1)
+	case terminal.KeyHome:
+		app.jumpLixenToStart()
+	case terminal.KeyEnd:
+		app.jumpLixenToEnd()
+	}
+
 	return false, false
 }
 
@@ -244,7 +324,326 @@ func (app *AppState) handleTreePaneEvent(ev terminal.Event) (quit, output bool) 
 	return false, false
 }
 
-// jumpTreeToStart moves tree cursor to first item
+// handleDepByPaneEvent processes input when depended-by pane focused
+func (app *AppState) handleDepByPaneEvent(ev terminal.Event) (quit, output bool) {
+	// Dep panes are read-only for now, only Enter navigates
+	if ev.Key == terminal.KeyEnter || (ev.Key == terminal.KeyRune && ev.Rune == 'l') {
+		app.navigateToDepByPackage()
+	}
+	return false, false
+}
+
+// handleDepOnPaneEvent processes input when depends-on pane focused
+func (app *AppState) handleDepOnPaneEvent(ev terminal.Event) (quit, output bool) {
+	// Dep panes are read-only for now, only Enter navigates
+	if ev.Key == terminal.KeyEnter || (ev.Key == terminal.KeyRune && ev.Rune == 'l') {
+		app.navigateToDepOnPackage()
+	}
+	return false, false
+}
+
+// navigateToDepByPackage navigates to first file in depended-by package
+func (app *AppState) navigateToDepByPackage() {
+	pkgDir := app.getCurrentFilePackageDir()
+	if pkgDir == "" {
+		return
+	}
+
+	depByPkgs := app.Index.ReverseDeps[pkgDir]
+	if len(depByPkgs) == 0 {
+		return
+	}
+
+	// Navigate to first package in list
+	targetPkg := depByPkgs[0]
+	app.navigateTreeToPackage(targetPkg)
+}
+
+// navigateToDepOnPackage navigates to first file in depends-on package
+func (app *AppState) navigateToDepOnPackage() {
+	fi := app.getCurrentFileInfo()
+	if fi == nil || len(fi.Imports) == 0 {
+		return
+	}
+
+	// Find package directory for first import
+	targetName := fi.Imports[0]
+	for pkgDir, pkg := range app.Index.Packages {
+		if pkg.Name == targetName {
+			app.navigateTreeToPackage(pkgDir)
+			return
+		}
+	}
+}
+
+// navigateTreeToPackage expands tree and positions cursor on package
+func (app *AppState) navigateTreeToPackage(pkgDir string) {
+	// Find package in tree and expand path to it
+	var findAndExpand func(node *TreeNode) bool
+	findAndExpand = func(node *TreeNode) bool {
+		if node.Path == pkgDir {
+			return true
+		}
+		for _, child := range node.Children {
+			if findAndExpand(child) {
+				if node.IsDir {
+					node.Expanded = true
+				}
+				return true
+			}
+		}
+		return false
+	}
+
+	if findAndExpand(app.TreeRoot) {
+		app.RefreshTreeFlat()
+
+		// Position cursor on the package
+		for i, n := range app.TreeFlat {
+			if n.Path == pkgDir {
+				app.TreeCursor = i
+				app.moveTreeCursor(0) // Adjust scroll
+				app.FocusPane = PaneTree
+				app.Message = fmt.Sprintf("navigated to %s", pkgDir)
+				return
+			}
+		}
+	}
+}
+
+// Lixen pane navigation
+
+func (app *AppState) moveLixenCursor(delta int) {
+	ui := app.getCurrentCategoryUI()
+	if ui == nil || len(ui.Flat) == 0 {
+		return
+	}
+
+	ui.Cursor += delta
+	if ui.Cursor < 0 {
+		ui.Cursor = 0
+	}
+	if ui.Cursor >= len(ui.Flat) {
+		ui.Cursor = len(ui.Flat) - 1
+	}
+
+	// Adjust scroll
+	visibleRows := app.Height - headerHeight - statusHeight - helpHeight - 2
+	if visibleRows < 1 {
+		visibleRows = 1
+	}
+
+	if ui.Cursor < ui.Scroll {
+		ui.Scroll = ui.Cursor
+	}
+	if ui.Cursor >= ui.Scroll+visibleRows {
+		ui.Scroll = ui.Cursor - visibleRows + 1
+	}
+}
+
+func (app *AppState) pageLixenCursor(direction int) {
+	visibleRows := app.Height - headerHeight - statusHeight - helpHeight - 2
+	if visibleRows < 1 {
+		visibleRows = 1
+	}
+	delta := (visibleRows / 2) * direction
+	if delta == 0 {
+		delta = direction
+	}
+	app.moveLixenCursor(delta)
+}
+
+func (app *AppState) jumpLixenToStart() {
+	ui := app.getCurrentCategoryUI()
+	if ui == nil {
+		return
+	}
+	ui.Cursor = 0
+	ui.Scroll = 0
+}
+
+func (app *AppState) jumpLixenToEnd() {
+	ui := app.getCurrentCategoryUI()
+	if ui == nil || len(ui.Flat) == 0 {
+		return
+	}
+	ui.Cursor = len(ui.Flat) - 1
+	app.moveLixenCursor(0)
+}
+
+func (app *AppState) collapseLixenItem() {
+	cat := app.CurrentCategory
+	ui := app.getCurrentCategoryUI()
+	if ui == nil || len(ui.Flat) == 0 {
+		return
+	}
+
+	item := ui.Flat[ui.Cursor]
+
+	switch item.Type {
+	case TagItemTypeGroup:
+		if ui.GroupExpanded[item.Group] {
+			ui.GroupExpanded[item.Group] = false
+			app.RefreshLixenFlat()
+		}
+	case TagItemTypeModule:
+		moduleKey := item.Group + "." + item.Module
+		if ui.ModuleExpanded[moduleKey] {
+			ui.ModuleExpanded[moduleKey] = false
+			app.RefreshLixenFlat()
+		} else {
+			// Navigate to parent group
+			for i := ui.Cursor - 1; i >= 0; i-- {
+				if ui.Flat[i].Type == TagItemTypeGroup && ui.Flat[i].Group == item.Group {
+					ui.Cursor = i
+					app.moveLixenCursor(0)
+					break
+				}
+			}
+		}
+	case TagItemTypeTag:
+		// Navigate to parent (module or group)
+		for i := ui.Cursor - 1; i >= 0; i-- {
+			if item.Module != DirectTagsModule {
+				if ui.Flat[i].Type == TagItemTypeModule && ui.Flat[i].Group == item.Group && ui.Flat[i].Module == item.Module {
+					ui.Cursor = i
+					app.moveLixenCursor(0)
+					return
+				}
+			}
+			if ui.Flat[i].Type == TagItemTypeGroup && ui.Flat[i].Group == item.Group {
+				ui.Cursor = i
+				app.moveLixenCursor(0)
+				return
+			}
+		}
+	}
+	_ = cat // Used for context
+}
+
+func (app *AppState) expandLixenItem() {
+	ui := app.getCurrentCategoryUI()
+	if ui == nil || len(ui.Flat) == 0 {
+		return
+	}
+
+	item := ui.Flat[ui.Cursor]
+
+	switch item.Type {
+	case TagItemTypeGroup:
+		if !ui.GroupExpanded[item.Group] {
+			ui.GroupExpanded[item.Group] = true
+			app.RefreshLixenFlat()
+		}
+	case TagItemTypeModule:
+		moduleKey := item.Group + "." + item.Module
+		if !ui.ModuleExpanded[moduleKey] {
+			ui.ModuleExpanded[moduleKey] = true
+			app.RefreshLixenFlat()
+		}
+	}
+}
+
+func (app *AppState) collapseAllLixenItems() {
+	cat := app.CurrentCategory
+	ui := app.getCurrentCategoryUI()
+	catIdx := app.Index.Category(cat)
+	if ui == nil || catIdx == nil {
+		return
+	}
+
+	for _, group := range catIdx.Groups {
+		ui.GroupExpanded[group] = false
+	}
+	for group, modules := range catIdx.Modules {
+		for _, mod := range modules {
+			ui.ModuleExpanded[group+"."+mod] = false
+		}
+	}
+
+	app.RefreshLixenFlat()
+	ui.Cursor = 0
+	ui.Scroll = 0
+	app.Message = "collapsed all groups"
+}
+
+func (app *AppState) expandAllLixenItems() {
+	cat := app.CurrentCategory
+	ui := app.getCurrentCategoryUI()
+	catIdx := app.Index.Category(cat)
+	if ui == nil || catIdx == nil {
+		return
+	}
+
+	for _, group := range catIdx.Groups {
+		ui.GroupExpanded[group] = true
+	}
+	for group, modules := range catIdx.Modules {
+		for _, mod := range modules {
+			ui.ModuleExpanded[group+"."+mod] = true
+		}
+	}
+
+	app.RefreshLixenFlat()
+	app.moveLixenCursor(0)
+	app.Message = "expanded all groups"
+}
+
+func (app *AppState) toggleLixenSelection() {
+	cat := app.CurrentCategory
+	ui := app.getCurrentCategoryUI()
+	if ui == nil || len(ui.Flat) == 0 {
+		return
+	}
+
+	item := ui.Flat[ui.Cursor]
+
+	switch item.Type {
+	case TagItemTypeGroup:
+		if app.allFilesWithGroupSelected(cat, item.Group) {
+			count := app.deselectFilesWithGroup(cat, item.Group)
+			app.Message = fmt.Sprintf("deselected %d files from #%s", count, item.Group)
+		} else {
+			count := app.selectFilesWithGroup(cat, item.Group)
+			app.Message = fmt.Sprintf("selected %d files with #%s", count, item.Group)
+		}
+	case TagItemTypeModule:
+		if app.allFilesWithModuleSelected(cat, item.Group, item.Module) {
+			count := app.deselectFilesWithModule(cat, item.Group, item.Module)
+			app.Message = fmt.Sprintf("deselected %d files from %s", count, item.Module)
+		} else {
+			count := app.selectFilesWithModule(cat, item.Group, item.Module)
+			app.Message = fmt.Sprintf("selected %d files with %s", count, item.Module)
+		}
+	case TagItemTypeTag:
+		if app.allFilesWithTagSelected(cat, item.Group, item.Module, item.Tag) {
+			count := app.deselectFilesWithTag(cat, item.Group, item.Module, item.Tag)
+			app.Message = fmt.Sprintf("deselected %d files from %s", count, item.Tag)
+		} else {
+			count := app.selectFilesWithTag(cat, item.Group, item.Module, item.Tag)
+			app.Message = fmt.Sprintf("selected %d files with %s", count, item.Tag)
+		}
+	}
+}
+
+func (app *AppState) selectAllVisibleLixenTags() {
+	cat := app.CurrentCategory
+	ui := app.getCurrentCategoryUI()
+	if ui == nil {
+		return
+	}
+
+	count := 0
+	for _, item := range ui.Flat {
+		if item.Type == TagItemTypeTag {
+			count += app.selectFilesWithTag(cat, item.Group, item.Module, item.Tag)
+		}
+	}
+	app.Message = fmt.Sprintf("selected %d files from visible tags", count)
+}
+
+// Tree pane navigation
+
 func (app *AppState) jumpTreeToStart() {
 	if len(app.TreeFlat) == 0 {
 		return
@@ -253,7 +652,6 @@ func (app *AppState) jumpTreeToStart() {
 	app.TreeScroll = 0
 }
 
-// jumpTreeToEnd moves tree cursor to last item
 func (app *AppState) jumpTreeToEnd() {
 	if len(app.TreeFlat) == 0 {
 		return
@@ -262,7 +660,6 @@ func (app *AppState) jumpTreeToEnd() {
 	app.moveTreeCursor(0)
 }
 
-// collapseAllDirs collapses all expanded directories
 func (app *AppState) collapseAllDirs() {
 	collapseAllRecursive(app.TreeRoot)
 	app.RefreshTreeFlat()
@@ -276,7 +673,6 @@ func (app *AppState) collapseAllDirs() {
 	app.Message = "collapsed all directories"
 }
 
-// expandAllDirs expands all directories in tree
 func (app *AppState) expandAllDirs() {
 	expandAllRecursive(app.TreeRoot)
 	app.RefreshTreeFlat()
@@ -284,31 +680,11 @@ func (app *AppState) expandAllDirs() {
 	app.Message = "expanded all directories"
 }
 
-// jumpTagToStart moves tag cursor to first item
-func (app *AppState) jumpTagToStart() {
-	if len(app.TagFlat) == 0 {
-		return
-	}
-	app.TagCursor = 0
-	app.TagScroll = 0
-}
-
-// jumpTagToEnd moves tag cursor to last item
-func (app *AppState) jumpTagToEnd() {
-	if len(app.TagFlat) == 0 {
-		return
-	}
-	app.TagCursor = len(app.TagFlat) - 1
-	app.moveTagCursor(0)
-}
-
-// pageTreeCursor moves tree cursor by half-page
 func (app *AppState) pageTreeCursor(direction int) {
 	visibleRows := app.Height - headerHeight - statusHeight - helpHeight - 2
 	if visibleRows < 1 {
 		visibleRows = 1
 	}
-	// Move by half page for smoother navigation
 	delta := (visibleRows / 2) * direction
 	if delta == 0 {
 		delta = direction
@@ -316,21 +692,6 @@ func (app *AppState) pageTreeCursor(direction int) {
 	app.moveTreeCursor(delta)
 }
 
-// pageTagCursor moves tag cursor by half-page
-func (app *AppState) pageTagCursor(direction int) {
-	visibleRows := app.Height - headerHeight - statusHeight - helpHeight - 2
-	if visibleRows < 1 {
-		visibleRows = 1
-	}
-	// Move by half page for smoother navigation
-	delta := (visibleRows / 2) * direction
-	if delta == 0 {
-		delta = direction
-	}
-	app.moveTagCursor(delta)
-}
-
-// handlePreviewEvent processes preview mode keystrokes
 func (app *AppState) handlePreviewEvent(ev terminal.Event) (quit, output bool) {
 	maxScroll := len(app.PreviewFiles) - (app.Height - headerHeight - 2)
 	if maxScroll < 0 {
@@ -369,7 +730,6 @@ func (app *AppState) handlePreviewEvent(ev terminal.Event) (quit, output bool) {
 	return false, false
 }
 
-// moveTreeCursor moves tree cursor with scroll adjustment
 func (app *AppState) moveTreeCursor(delta int) {
 	if len(app.TreeFlat) == 0 {
 		return
@@ -397,35 +757,6 @@ func (app *AppState) moveTreeCursor(delta int) {
 	}
 }
 
-// moveTagCursor moves tag cursor with scroll adjustment
-func (app *AppState) moveTagCursor(delta int) {
-	if len(app.TagFlat) == 0 {
-		return
-	}
-
-	app.TagCursor += delta
-	if app.TagCursor < 0 {
-		app.TagCursor = 0
-	}
-	if app.TagCursor >= len(app.TagFlat) {
-		app.TagCursor = len(app.TagFlat) - 1
-	}
-
-	// Adjust scroll
-	visibleRows := app.Height - headerHeight - statusHeight - helpHeight - 2
-	if visibleRows < 1 {
-		visibleRows = 1
-	}
-
-	if app.TagCursor < app.TagScroll {
-		app.TagScroll = app.TagCursor
-	}
-	if app.TagCursor >= app.TagScroll+visibleRows {
-		app.TagScroll = app.TagCursor - visibleRows + 1
-	}
-}
-
-// collapseNode collapses current directory or navigates to parent
 func (app *AppState) collapseNode() {
 	if len(app.TreeFlat) == 0 {
 		return
@@ -444,14 +775,13 @@ func (app *AppState) collapseNode() {
 		for i, n := range app.TreeFlat {
 			if n == node.Parent {
 				app.TreeCursor = i
-				app.moveTreeCursor(0) // Adjust scroll
+				app.moveTreeCursor(0)
 				break
 			}
 		}
 	}
 }
 
-// expandNode expands directory at cursor
 func (app *AppState) expandNode() {
 	if len(app.TreeFlat) == 0 {
 		return
@@ -465,7 +795,6 @@ func (app *AppState) expandNode() {
 	}
 }
 
-// toggleTreeSelection toggles selection of file or directory contents
 func (app *AppState) toggleTreeSelection() {
 	if len(app.TreeFlat) == 0 {
 		return
@@ -474,7 +803,6 @@ func (app *AppState) toggleTreeSelection() {
 	node := app.TreeFlat[app.TreeCursor]
 
 	if node.IsDir {
-		// Toggle all files in directory
 		allSelected := true
 		var files []string
 		collectFiles(node, &files)
@@ -486,7 +814,6 @@ func (app *AppState) toggleTreeSelection() {
 			}
 		}
 
-		// If all selected, deselect all; otherwise select all
 		for _, f := range files {
 			if allSelected {
 				delete(app.Selected, f)
@@ -495,7 +822,6 @@ func (app *AppState) toggleTreeSelection() {
 			}
 		}
 	} else {
-		// Toggle single file
 		if app.Selected[node.Path] {
 			delete(app.Selected, node.Path)
 		} else {
@@ -504,7 +830,6 @@ func (app *AppState) toggleTreeSelection() {
 	}
 }
 
-// selectAllVisible selects all files in flattened tree
 func (app *AppState) selectAllVisible() {
 	for _, node := range app.TreeFlat {
 		if !node.IsDir {
@@ -514,118 +839,12 @@ func (app *AppState) selectAllVisible() {
 	app.Message = "selected all visible files"
 }
 
-// selectAllVisibleTags selects files matching filter or all tagged
-func (app *AppState) selectAllVisibleTags() {
-	count := 0
-
-	if app.Filter.HasActiveFilter() {
-		for path := range app.Filter.FilteredPaths {
-			if !app.Selected[path] {
-				app.Selected[path] = true
-				count++
-			}
-		}
-	} else {
-		for path, fi := range app.Index.Files {
-			if len(fi.Focus) > 0 && !app.Selected[path] {
-				app.Selected[path] = true
-				count++
-			}
-		}
-	}
-
-	app.Message = fmt.Sprintf("selected %d files", count)
-}
-
-// EnterPreview initializes preview mode with computed output files
 func (app *AppState) EnterPreview() {
 	app.PreviewFiles = app.ComputeOutputFiles()
 	app.PreviewMode = true
 	app.PreviewScroll = 0
 }
 
-// moveInteractCursor moves interact cursor with scroll adjustment
-func (app *AppState) moveInteractCursor(delta int) {
-	if len(app.InteractFlat) == 0 {
-		return
-	}
-
-	app.InteractCursor += delta
-	if app.InteractCursor < 0 {
-		app.InteractCursor = 0
-	}
-	if app.InteractCursor >= len(app.InteractFlat) {
-		app.InteractCursor = len(app.InteractFlat) - 1
-	}
-
-	visibleRows := app.Height - headerHeight - statusHeight - helpHeight - 2
-	if visibleRows < 1 {
-		visibleRows = 1
-	}
-
-	if app.InteractCursor < app.InteractScroll {
-		app.InteractScroll = app.InteractCursor
-	}
-	if app.InteractCursor >= app.InteractScroll+visibleRows {
-		app.InteractScroll = app.InteractCursor - visibleRows + 1
-	}
-}
-
-// pageInteractCursor moves interact cursor by half-page
-func (app *AppState) pageInteractCursor(direction int) {
-	visibleRows := app.Height - headerHeight - statusHeight - helpHeight - 2
-	if visibleRows < 1 {
-		visibleRows = 1
-	}
-	delta := (visibleRows / 2) * direction
-	if delta == 0 {
-		delta = direction
-	}
-	app.moveInteractCursor(delta)
-}
-
-// jumpInteractToStart moves interact cursor to first item
-func (app *AppState) jumpInteractToStart() {
-	if len(app.InteractFlat) == 0 {
-		return
-	}
-	app.InteractCursor = 0
-	app.InteractScroll = 0
-}
-
-// jumpInteractToEnd moves interact cursor to last item
-func (app *AppState) jumpInteractToEnd() {
-	if len(app.InteractFlat) == 0 {
-		return
-	}
-	app.InteractCursor = len(app.InteractFlat) - 1
-	app.moveInteractCursor(0)
-}
-
-// selectAllVisibleInteractTags selects files matching interact filter or all
-func (app *AppState) selectAllVisibleInteractTags() {
-	count := 0
-
-	if app.Filter.HasActiveFilter() {
-		for path := range app.Filter.FilteredPaths {
-			if !app.Selected[path] {
-				app.Selected[path] = true
-				count++
-			}
-		}
-	} else {
-		for path, fi := range app.Index.Files {
-			if len(fi.Interact) > 0 && !app.Selected[path] {
-				app.Selected[path] = true
-				count++
-			}
-		}
-	}
-
-	app.Message = fmt.Sprintf("selected %d files", count)
-}
-
-// copyOutputToClipboard pipes computed output files to wl-copy
 func (app *AppState) copyOutputToClipboard() {
 	files := app.ComputeOutputFiles()
 	if len(files) == 0 {
@@ -636,11 +855,11 @@ func (app *AppState) copyOutputToClipboard() {
 	cmd := exec.Command("wl-copy")
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		return // Silent fail
+		return
 	}
 
 	if err := cmd.Start(); err != nil {
-		return // Silent fail
+		return
 	}
 
 	for _, f := range files {
@@ -649,417 +868,23 @@ func (app *AppState) copyOutputToClipboard() {
 	stdin.Close()
 
 	if err := cmd.Wait(); err != nil {
-		return // Silent fail
+		return
 	}
 
 	app.Message = fmt.Sprintf("copied %d files to clipboard", len(files))
 }
 
-// applyCurrentPaneFilter applies filter toggle based on active pane
 func (app *AppState) applyCurrentPaneFilter() {
 	switch app.FocusPane {
-	case PaneLeft:
+	case PaneLixen:
+		app.applyLixenPaneFilter()
+	case PaneTree:
 		app.applyTreePaneFilter()
-	case PaneCenter:
-		app.applyFocusPaneFilter()
-	case PaneRight:
-		app.applyInteractPaneFilter()
+	case PaneDepBy, PaneDepOn:
+		app.Message = "filter not available in dep panes"
 	}
 }
 
-// handleFocusPaneEvent processes input when focus pane is active
-func (app *AppState) handleFocusPaneEvent(ev terminal.Event) (quit, output bool) {
-	switch ev.Key {
-	case terminal.KeyRune:
-		switch ev.Rune {
-		case 'j':
-			app.moveTagCursor(1)
-		case 'k':
-			app.moveTagCursor(-1)
-		case 'h':
-			app.collapseCurrentFocusItem()
-		case 'l':
-			app.expandCurrentFocusItem()
-		case ' ':
-			app.toggleFocusSelection()
-		case 'a':
-			app.selectAllVisibleTags()
-		case '0':
-			app.jumpTagToStart()
-		case '$':
-			app.jumpTagToEnd()
-		case 'H':
-			app.collapseAllFocusItems()
-		case 'L':
-			app.expandAllFocusItems()
-		}
-
-	case terminal.KeyUp:
-		app.moveTagCursor(-1)
-	case terminal.KeyDown:
-		app.moveTagCursor(1)
-	case terminal.KeyLeft:
-		app.collapseCurrentFocusItem()
-	case terminal.KeyRight:
-		app.expandCurrentFocusItem()
-	case terminal.KeySpace:
-		app.toggleFocusSelection()
-	case terminal.KeyPageUp:
-		app.pageTagCursor(-1)
-	case terminal.KeyPageDown:
-		app.pageTagCursor(1)
-	case terminal.KeyHome:
-		app.jumpTagToStart()
-	case terminal.KeyEnd:
-		app.jumpTagToEnd()
-	}
-
-	return false, false
-}
-
-// handleInteractPaneEvent processes input when interact pane is active
-func (app *AppState) handleInteractPaneEvent(ev terminal.Event) (quit, output bool) {
-	switch ev.Key {
-	case terminal.KeyRune:
-		switch ev.Rune {
-		case 'j':
-			app.moveInteractCursor(1)
-		case 'k':
-			app.moveInteractCursor(-1)
-		case 'h':
-			app.collapseCurrentInteractItem()
-		case 'l':
-			app.expandCurrentInteractItem()
-		case ' ':
-			app.toggleInteractSelection()
-		case 'a':
-			app.selectAllVisibleInteractTags()
-		case '0':
-			app.jumpInteractToStart()
-		case '$':
-			app.jumpInteractToEnd()
-		case 'H':
-			app.collapseAllInteractItems()
-		case 'L':
-			app.expandAllInteractItems()
-		}
-
-	case terminal.KeyUp:
-		app.moveInteractCursor(-1)
-	case terminal.KeyDown:
-		app.moveInteractCursor(1)
-	case terminal.KeyLeft:
-		app.collapseCurrentInteractItem()
-	case terminal.KeyRight:
-		app.expandCurrentInteractItem()
-	case terminal.KeySpace:
-		app.toggleInteractSelection()
-	case terminal.KeyPageUp:
-		app.pageInteractCursor(-1)
-	case terminal.KeyPageDown:
-		app.pageInteractCursor(1)
-	case terminal.KeyHome:
-		app.jumpInteractToStart()
-	case terminal.KeyEnd:
-		app.jumpInteractToEnd()
-	}
-
-	return false, false
-}
-
-// collapseCurrentFocusItem collapses group/module at or containing cursor
-func (app *AppState) collapseCurrentFocusItem() {
-	if len(app.TagFlat) == 0 {
-		return
-	}
-	item := app.TagFlat[app.TagCursor]
-
-	switch item.Type {
-	case TagItemTypeGroup:
-		if item.Expanded {
-			app.GroupExpanded[item.Group] = false
-			app.RefreshFocusFlat()
-			app.moveTagCursor(0)
-		}
-	case TagItemTypeModule:
-		moduleKey := item.Group + "." + item.Module
-		if item.Expanded {
-			app.ModuleExpanded[moduleKey] = false
-			app.RefreshFocusFlat()
-			app.moveTagCursor(0)
-		} else {
-			// Navigate to parent group
-			for i := app.TagCursor - 1; i >= 0; i-- {
-				if app.TagFlat[i].Type == TagItemTypeGroup && app.TagFlat[i].Group == item.Group {
-					app.TagCursor = i
-					app.moveTagCursor(0)
-					break
-				}
-			}
-		}
-	case TagItemTypeTag:
-		// Navigate to parent module or group
-		for i := app.TagCursor - 1; i >= 0; i-- {
-			ti := app.TagFlat[i]
-			if item.Module == DirectTagsModule {
-				if ti.Type == TagItemTypeGroup && ti.Group == item.Group {
-					app.TagCursor = i
-					app.moveTagCursor(0)
-					break
-				}
-			} else {
-				if ti.Type == TagItemTypeModule && ti.Group == item.Group && ti.Module == item.Module {
-					app.TagCursor = i
-					app.moveTagCursor(0)
-					break
-				}
-			}
-		}
-	}
-}
-
-// expandCurrentFocusItem expands group/module at cursor
-func (app *AppState) expandCurrentFocusItem() {
-	if len(app.TagFlat) == 0 {
-		return
-	}
-	item := app.TagFlat[app.TagCursor]
-
-	switch item.Type {
-	case TagItemTypeGroup:
-		if !item.Expanded {
-			app.GroupExpanded[item.Group] = true
-			app.RefreshFocusFlat()
-			app.moveTagCursor(0)
-		}
-	case TagItemTypeModule:
-		moduleKey := item.Group + "." + item.Module
-		if !item.Expanded {
-			app.ModuleExpanded[moduleKey] = true
-			app.RefreshFocusFlat()
-			app.moveTagCursor(0)
-		}
-	}
-}
-
-// collapseAllFocusItems collapses all groups and modules
-func (app *AppState) collapseAllFocusItems() {
-	for _, group := range app.Index.FocusGroups {
-		app.GroupExpanded[group] = false
-	}
-	for key := range app.ModuleExpanded {
-		app.ModuleExpanded[key] = false
-	}
-	app.RefreshFocusFlat()
-	if app.TagCursor >= len(app.TagFlat) {
-		app.TagCursor = len(app.TagFlat) - 1
-	}
-	if app.TagCursor < 0 {
-		app.TagCursor = 0
-	}
-	app.moveTagCursor(0)
-	app.Message = "collapsed all"
-}
-
-// expandAllFocusItems expands all groups and modules
-func (app *AppState) expandAllFocusItems() {
-	for _, group := range app.Index.FocusGroups {
-		app.GroupExpanded[group] = true
-	}
-	for _, group := range app.Index.FocusGroups {
-		if mods, ok := app.Index.FocusModules[group]; ok {
-			for _, mod := range mods {
-				app.ModuleExpanded[group+"."+mod] = true
-			}
-		}
-	}
-	app.RefreshFocusFlat()
-	app.moveTagCursor(0)
-	app.Message = "expanded all"
-}
-
-// toggleFocusSelection toggles selection for item at cursor
-func (app *AppState) toggleFocusSelection() {
-	if len(app.TagFlat) == 0 {
-		return
-	}
-
-	item := app.TagFlat[app.TagCursor]
-
-	switch item.Type {
-	case TagItemTypeGroup:
-		if app.allFilesWithGroupSelected(CategoryFocus, item.Group) {
-			count := app.deselectFilesWithGroup(CategoryFocus, item.Group)
-			app.Message = fmt.Sprintf("deselected %d files from #%s", count, item.Group)
-		} else {
-			count := app.selectFilesWithGroup(CategoryFocus, item.Group)
-			app.Message = fmt.Sprintf("selected %d files with #%s", count, item.Group)
-		}
-	case TagItemTypeModule:
-		if app.allFilesWithModuleSelected(CategoryFocus, item.Group, item.Module) {
-			count := app.deselectFilesWithModule(CategoryFocus, item.Group, item.Module)
-			app.Message = fmt.Sprintf("deselected %d files from %s", count, item.Module)
-		} else {
-			count := app.selectFilesWithModule(CategoryFocus, item.Group, item.Module)
-			app.Message = fmt.Sprintf("selected %d files with %s", count, item.Module)
-		}
-	case TagItemTypeTag:
-		if app.allFilesWithTagSelected(CategoryFocus, item.Group, item.Module, item.Tag) {
-			count := app.deselectFilesWithTag(CategoryFocus, item.Group, item.Module, item.Tag)
-			app.Message = fmt.Sprintf("deselected %d files from %s", count, item.Tag)
-		} else {
-			count := app.selectFilesWithTag(CategoryFocus, item.Group, item.Module, item.Tag)
-			app.Message = fmt.Sprintf("selected %d files with %s", count, item.Tag)
-		}
-	}
-}
-
-// collapseCurrentInteractItem collapses group/module at or containing cursor
-func (app *AppState) collapseCurrentInteractItem() {
-	if len(app.InteractFlat) == 0 {
-		return
-	}
-	item := app.InteractFlat[app.InteractCursor]
-
-	switch item.Type {
-	case TagItemTypeGroup:
-		if item.Expanded {
-			app.InteractGroupExpanded[item.Group] = false
-			app.RefreshInteractFlat()
-			app.moveInteractCursor(0)
-		}
-	case TagItemTypeModule:
-		moduleKey := item.Group + "." + item.Module
-		if item.Expanded {
-			app.ModuleInteractExpanded[moduleKey] = false
-			app.RefreshInteractFlat()
-			app.moveInteractCursor(0)
-		} else {
-			for i := app.InteractCursor - 1; i >= 0; i-- {
-				if app.InteractFlat[i].Type == TagItemTypeGroup && app.InteractFlat[i].Group == item.Group {
-					app.InteractCursor = i
-					app.moveInteractCursor(0)
-					break
-				}
-			}
-		}
-	case TagItemTypeTag:
-		for i := app.InteractCursor - 1; i >= 0; i-- {
-			ti := app.InteractFlat[i]
-			if item.Module == DirectTagsModule {
-				if ti.Type == TagItemTypeGroup && ti.Group == item.Group {
-					app.InteractCursor = i
-					app.moveInteractCursor(0)
-					break
-				}
-			} else {
-				if ti.Type == TagItemTypeModule && ti.Group == item.Group && ti.Module == item.Module {
-					app.InteractCursor = i
-					app.moveInteractCursor(0)
-					break
-				}
-			}
-		}
-	}
-}
-
-// expandCurrentInteractItem expands group/module at cursor
-func (app *AppState) expandCurrentInteractItem() {
-	if len(app.InteractFlat) == 0 {
-		return
-	}
-	item := app.InteractFlat[app.InteractCursor]
-
-	switch item.Type {
-	case TagItemTypeGroup:
-		if !item.Expanded {
-			app.InteractGroupExpanded[item.Group] = true
-			app.RefreshInteractFlat()
-			app.moveInteractCursor(0)
-		}
-	case TagItemTypeModule:
-		moduleKey := item.Group + "." + item.Module
-		if !item.Expanded {
-			app.ModuleInteractExpanded[moduleKey] = true
-			app.RefreshInteractFlat()
-			app.moveInteractCursor(0)
-		}
-	}
-}
-
-// collapseAllInteractItems collapses all interact groups and modules
-func (app *AppState) collapseAllInteractItems() {
-	for _, group := range app.Index.InteractGroups {
-		app.InteractGroupExpanded[group] = false
-	}
-	for key := range app.ModuleInteractExpanded {
-		app.ModuleInteractExpanded[key] = false
-	}
-	app.RefreshInteractFlat()
-	if app.InteractCursor >= len(app.InteractFlat) {
-		app.InteractCursor = len(app.InteractFlat) - 1
-	}
-	if app.InteractCursor < 0 {
-		app.InteractCursor = 0
-	}
-	app.moveInteractCursor(0)
-	app.Message = "collapsed all interact"
-}
-
-// expandAllInteractItems expands all interact groups and modules
-func (app *AppState) expandAllInteractItems() {
-	for _, group := range app.Index.InteractGroups {
-		app.InteractGroupExpanded[group] = true
-	}
-	for _, group := range app.Index.InteractGroups {
-		if mods, ok := app.Index.InteractModules[group]; ok {
-			for _, mod := range mods {
-				app.ModuleInteractExpanded[group+"."+mod] = true
-			}
-		}
-	}
-	app.RefreshInteractFlat()
-	app.moveInteractCursor(0)
-	app.Message = "expanded all interact"
-}
-
-// toggleInteractSelection toggles selection for interact item at cursor
-func (app *AppState) toggleInteractSelection() {
-	if len(app.InteractFlat) == 0 {
-		return
-	}
-
-	item := app.InteractFlat[app.InteractCursor]
-
-	switch item.Type {
-	case TagItemTypeGroup:
-		if app.allFilesWithGroupSelected(CategoryInteract, item.Group) {
-			count := app.deselectFilesWithGroup(CategoryInteract, item.Group)
-			app.Message = fmt.Sprintf("deselected %d files from #%s", count, item.Group)
-		} else {
-			count := app.selectFilesWithGroup(CategoryInteract, item.Group)
-			app.Message = fmt.Sprintf("selected %d files with #%s", count, item.Group)
-		}
-	case TagItemTypeModule:
-		if app.allFilesWithModuleSelected(CategoryInteract, item.Group, item.Module) {
-			count := app.deselectFilesWithModule(CategoryInteract, item.Group, item.Module)
-			app.Message = fmt.Sprintf("deselected %d files from %s", count, item.Module)
-		} else {
-			count := app.selectFilesWithModule(CategoryInteract, item.Group, item.Module)
-			app.Message = fmt.Sprintf("selected %d files with %s", count, item.Module)
-		}
-	case TagItemTypeTag:
-		if app.allFilesWithTagSelected(CategoryInteract, item.Group, item.Module, item.Tag) {
-			count := app.deselectFilesWithTag(CategoryInteract, item.Group, item.Module, item.Tag)
-			app.Message = fmt.Sprintf("deselected %d files from %s", count, item.Tag)
-		} else {
-			count := app.selectFilesWithTag(CategoryInteract, item.Group, item.Module, item.Tag)
-			app.Message = fmt.Sprintf("selected %d files with %s", count, item.Tag)
-		}
-	}
-}
-
-// handleInputEvent processes search input mode keystrokes
 func (app *AppState) handleInputEvent(ev terminal.Event) (quit, output bool) {
 	switch ev.Key {
 	case terminal.KeyEscape:
@@ -1085,4 +910,194 @@ func (app *AppState) handleInputEvent(ev terminal.Event) (quit, output bool) {
 	}
 
 	return false, false
+}
+
+func (app *AppState) getCurrentCategoryUI() *CategoryUIState {
+	if app.CurrentCategory == "" {
+		return nil
+	}
+	ui := app.CategoryUI[app.CurrentCategory]
+	if ui == nil {
+		ui = NewCategoryUIState()
+		app.CategoryUI[app.CurrentCategory] = ui
+	}
+	return ui
+}
+
+func (app *AppState) switchCategory(delta int) {
+	if len(app.CategoryNames) <= 1 {
+		return
+	}
+
+	currentIdx := -1
+	for i, cat := range app.CategoryNames {
+		if cat == app.CurrentCategory {
+			currentIdx = i
+			break
+		}
+	}
+
+	if currentIdx == -1 {
+		currentIdx = 0
+	}
+
+	newIdx := (currentIdx + delta + len(app.CategoryNames)) % len(app.CategoryNames)
+	newCat := app.CategoryNames[newIdx]
+
+	if newCat == app.CurrentCategory {
+		return
+	}
+
+	var currentFile string
+	if len(app.TreeFlat) > 0 && app.TreeCursor < len(app.TreeFlat) {
+		node := app.TreeFlat[app.TreeCursor]
+		if !node.IsDir {
+			currentFile = node.Path
+		}
+	}
+
+	app.CurrentCategory = newCat
+
+	if app.CategoryUI[newCat] == nil {
+		app.CategoryUI[newCat] = NewCategoryUIState()
+	}
+
+	app.RefreshLixenFlat()
+
+	if currentFile != "" {
+		app.positionLixenCursorForFile(currentFile)
+	}
+
+	app.Message = fmt.Sprintf("category: %s", newCat)
+}
+
+func (app *AppState) positionLixenCursorForFile(path string) {
+	fi := app.Index.Files[path]
+	if fi == nil {
+		return
+	}
+
+	catTags := fi.CategoryTags(app.CurrentCategory)
+	if catTags == nil || len(catTags) == 0 {
+		ui := app.getCurrentCategoryUI()
+		if ui != nil {
+			ui.Cursor = 0
+			ui.Scroll = 0
+		}
+		return
+	}
+
+	ui := app.getCurrentCategoryUI()
+	if ui == nil {
+		return
+	}
+
+	for group := range catTags {
+		for i, item := range ui.Flat {
+			if item.Type == TagItemTypeGroup && item.Group == group {
+				ui.Cursor = i
+				visibleRows := app.Height - headerHeight - statusHeight - helpHeight - 2
+				if visibleRows < 1 {
+					visibleRows = 1
+				}
+				if ui.Cursor < ui.Scroll {
+					ui.Scroll = ui.Cursor
+				}
+				if ui.Cursor >= ui.Scroll+visibleRows {
+					ui.Scroll = ui.Cursor - visibleRows + 1
+				}
+				return
+			}
+		}
+	}
+}
+
+func (app *AppState) RefreshLixenFlat() {
+	cat := app.CurrentCategory
+	if cat == "" {
+		return
+	}
+
+	catIdx := app.Index.Category(cat)
+	if catIdx == nil {
+		return
+	}
+
+	ui := app.getCurrentCategoryUI()
+	if ui == nil {
+		return
+	}
+
+	ui.Flat = nil
+
+	for _, group := range catIdx.Groups {
+		groupExpanded := true
+		if exp, ok := ui.GroupExpanded[group]; ok {
+			groupExpanded = exp
+		} else {
+			ui.GroupExpanded[group] = true
+		}
+
+		ui.Flat = append(ui.Flat, TagItem{
+			Type:     TagItemTypeGroup,
+			Group:    group,
+			Expanded: groupExpanded,
+		})
+
+		if !groupExpanded {
+			continue
+		}
+
+		if tags, ok := catIdx.Tags[group][DirectTagsModule]; ok {
+			for _, tag := range tags {
+				ui.Flat = append(ui.Flat, TagItem{
+					Type:   TagItemTypeTag,
+					Group:  group,
+					Module: DirectTagsModule,
+					Tag:    tag,
+				})
+			}
+		}
+
+		if modules, ok := catIdx.Modules[group]; ok {
+			for _, module := range modules {
+				moduleKey := group + "." + module
+				moduleExpanded := true
+				if exp, ok := ui.ModuleExpanded[moduleKey]; ok {
+					moduleExpanded = exp
+				} else {
+					ui.ModuleExpanded[moduleKey] = true
+				}
+
+				ui.Flat = append(ui.Flat, TagItem{
+					Type:     TagItemTypeModule,
+					Group:    group,
+					Module:   module,
+					Expanded: moduleExpanded,
+				})
+
+				if !moduleExpanded {
+					continue
+				}
+
+				if tags, ok := catIdx.Tags[group][module]; ok {
+					for _, tag := range tags {
+						ui.Flat = append(ui.Flat, TagItem{
+							Type:   TagItemTypeTag,
+							Group:  group,
+							Module: module,
+							Tag:    tag,
+						})
+					}
+				}
+			}
+		}
+	}
+
+	if ui.Cursor >= len(ui.Flat) {
+		ui.Cursor = len(ui.Flat) - 1
+	}
+	if ui.Cursor < 0 {
+		ui.Cursor = 0
+	}
 }

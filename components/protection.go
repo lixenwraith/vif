@@ -1,5 +1,3 @@
-// @lixen: #focus{lifecycle[protect,immunity]}
-// @lixen: #interact{state[protection]}
 package components
 
 // ProtectionFlags defines immunity to specific game mechanics

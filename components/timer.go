@@ -1,5 +1,3 @@
-// @lixen: #focus{lifecycle[timer]}
-// @lixen: #interact{state[timer]}
 package components
 
 import "time"

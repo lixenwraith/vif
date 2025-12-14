@@ -1,5 +1,3 @@
-// @lixen: #focus{conf[system,core],arch[ecs],event[queue]}
-// @lixen: #interact{state[config]}
 package constants
 
 import "time"

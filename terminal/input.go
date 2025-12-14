@@ -1,5 +1,3 @@
-// @lixen: #focus{sys[term,io,input],input[capture]}
-// @lixen: #interact{state[input,key],trigger[event]}
 package terminal
 
 import (

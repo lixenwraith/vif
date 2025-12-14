@@ -1,5 +1,3 @@
-// @lixen: #focus{control[action,move,cursor]}
-// @lixen: #interact{state[cursor],trigger[cursor,position]}
 package modes
 
 import (
