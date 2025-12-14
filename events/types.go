@@ -121,11 +121,6 @@ const (
 	// Consumer: CommandSystem | Payload: nil
 	EventGameReset
 
-	// EventBoostRequest signals a request to activate boost
-	// Trigger: Command :boost
-	// Consumer: BoostSystem | Payload: nil
-	EventBoostRequest
-
 	// EventSpawnChange signals a request to enable/disable spawning
 	// Trigger: Command :spawn
 	// Consumer: SpawnSystem | Payload: *SpawnChangePayload
@@ -145,6 +140,31 @@ const (
 	// Trigger: Systems creating transient entities (Splash, Flash)
 	// Consumer: TimeKeeperSystem | Payload: *TimerStartPayload
 	EventTimerStart
+
+	// EventBoostActivate signals boost activation request
+	// Trigger: Max heat reached, :boost command
+	// Consumer: BoostSystem | Payload: *BoostActivatePayload
+	EventBoostActivate
+
+	// EventBoostDeactivate signals boost deactivation
+	// Trigger: Red character typed, error state
+	// Consumer: BoostSystem | Payload: nil
+	EventBoostDeactivate
+
+	// EventBoostExtend signals boost duration extension
+	// Trigger: Correct character typed while boost active
+	// Consumer: BoostSystem | Payload: *BoostExtendPayload
+	EventBoostExtend
+
+	// EventMaterializeRequest signals a request to start a materialization visual effect
+	// Trigger: DrainSystem (or others) determining a spawn location
+	// Consumer: MaterializeSystem | Payload: *MaterializeRequestPayload
+	EventMaterializeRequest
+
+	// EventSpawnComplete signals materialization finished at location
+	// Trigger: MaterializeSystem
+	// Consumer: DrainSystem (or others) | Payload: *SpawnCompletePayload
+	EventSpawnComplete
 )
 
 // GameEvent represents a single game event with metadata

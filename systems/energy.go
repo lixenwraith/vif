@@ -175,16 +175,18 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 
 	// Check if typed character matches
 	if char.Rune == typedRune {
-		// RED characters reset heat instead of incrementing it
+		// RED characters reset heat and disable boost
 		if seq.Type == components.SequenceRed {
 			s.ctx.PushEvent(events.EventHeatSet, &events.HeatSetPayload{Value: 0}, now)
-			s.ctx.State.SetBoostEnabled(false)
+			s.ctx.PushEvent(events.EventBoostDeactivate, nil, now)
 		} else {
 			// Blue/Green: Apply heat gain with boost multiplier
-			boostState := s.ctx.State.ReadBoostState(timeRes.GameTime)
-
 			heatGain := 1
-			if boostState.Enabled {
+
+			// TODO: this logic seems wrong now, check
+			// Check boost state from component
+			boost, ok := world.Boosts.Get(s.ctx.CursorEntity)
+			if ok && boost.Active {
 				heatGain = 2
 			}
 			s.ctx.PushEvent(events.EventHeatAdd, &events.HeatAddPayload{
@@ -195,11 +197,16 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 			currentHeat := s.getHeat(world)
 
 			if currentHeat >= constants.MaxHeat {
-				if !boostState.Enabled {
-					s.ctx.State.SetBoostEnabled(true)
-					s.ctx.State.SetBoostEndTime(now.Add(constants.BoostExtensionDuration))
-				} else {
-					s.extendBoost(now, constants.BoostExtensionDuration)
+				if ok && !boost.Active {
+					// Activate boost
+					s.ctx.PushEvent(events.EventBoostActivate, &events.BoostActivatePayload{
+						Duration: constants.BoostBaseDuration,
+					}, now)
+				} else if ok && boost.Active {
+					// Extend boost
+					s.ctx.PushEvent(events.EventBoostExtend, &events.BoostExtendPayload{
+						Duration: constants.BoostExtensionDuration,
+					}, now)
 				}
 			}
 		}
@@ -270,26 +277,10 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 	}
 }
 
-// extendBoost extends the boost timer by the given duration
-func (s *EnergySystem) extendBoost(now time.Time, duration time.Duration) {
-	// If boost is already active, add to existing end time; otherwise start fresh
-	currentEndTime := s.ctx.State.GetBoostEndTime()
-	wasActive := s.ctx.State.GetBoostEnabled() && currentEndTime.After(now)
-
-	if wasActive {
-		s.ctx.State.SetBoostEndTime(currentEndTime.Add(duration))
-	} else {
-		s.ctx.State.SetBoostEndTime(now.Add(duration))
-	}
-
-	s.ctx.State.SetBoostEnabled(true)
-}
-
 // handleTypingError resets heat and boost on typing error
 func (s *EnergySystem) handleTypingError(world *engine.World, now time.Time) {
 	frameNumber := uint64(s.ctx.State.GetFrameNumber())
 
-	// Flash cursor error
 	// Flash cursor error
 	cursor, _ := world.Cursors.Get(s.ctx.CursorEntity)
 	cursor.ErrorFlashRemaining = constants.ErrorBlinkTimeout
@@ -299,7 +290,7 @@ func (s *EnergySystem) handleTypingError(world *engine.World, now time.Time) {
 	s.ctx.PushEvent(events.EventHeatSet, &events.HeatSetPayload{Value: 0}, now)
 
 	// Reset boost state
-	s.ctx.State.SetBoostEnabled(false)
+	s.ctx.PushEvent(events.EventBoostDeactivate, nil, now)
 
 	// Trigger error blink
 	s.triggerEnergyBlink(0, 0, now)
@@ -321,12 +312,12 @@ func (s *EnergySystem) handleNuggetCollection(world *engine.World, entity core.E
 
 	// Check if typed character matches the nugget character
 	if char.Rune != typedRune {
-		// Incorrect character - flash error cursor and reset heat
+		// Incorrect character - flash error cursor, reset heat, deactivate boost
 		cursor, _ := world.Cursors.Get(s.ctx.CursorEntity)
 		cursor.ErrorFlashRemaining = constants.ErrorBlinkTimeout
 		world.Cursors.Add(s.ctx.CursorEntity, cursor)
 		s.ctx.PushEvent(events.EventHeatSet, &events.HeatSetPayload{Value: 0}, now)
-		s.ctx.State.SetBoostEnabled(false)
+		s.ctx.PushEvent(events.EventBoostDeactivate, nil, now)
 		s.triggerEnergyBlink(0, 0, now)
 		// Trigger error sound
 		if s.ctx.AudioEngine != nil {

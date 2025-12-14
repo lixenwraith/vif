@@ -77,15 +77,19 @@ func (s *CommandSystem) handleGameReset() {
 func (s *CommandSystem) handleDebugRequest() {
 	// Gather debug stats
 
-	// Query energy from component
+	// Query energy
 	energyComp, _ := s.ctx.World.Energies.Get(s.ctx.CursorEntity)
 	energyVal := energyComp.Current.Load()
 
-	// Query heat from component
+	// Query heat
 	heatVal := 0
 	if hc, ok := s.ctx.World.Heats.Get(s.ctx.CursorEntity); ok {
 		heatVal = int(hc.Current.Load())
 	}
+
+	// Query boost
+	boost, ok := s.ctx.World.Boosts.Get(s.ctx.CursorEntity)
+	boostActive := ok && boost.Active
 
 	debugContent := []string{
 		"=== DEBUG INFORMATION ===",
@@ -101,7 +105,7 @@ func (s *CommandSystem) handleDebugRequest() {
 		fmt.Sprintf("Game Offset:   (%d, %d)", s.ctx.GameX, s.ctx.GameY),
 		"",
 		fmt.Sprintf("Spawn Enabled: %v", s.ctx.State.GetSpawnEnabled()),
-		fmt.Sprintf("Boost Active:  %v", s.ctx.State.GetBoostEnabled()),
+		fmt.Sprintf("Boost Active:  %v", boostActive),
 		fmt.Sprintf("Paused:        %v", s.ctx.IsPaused.Load()),
 		"",
 		"Entity Counts:",

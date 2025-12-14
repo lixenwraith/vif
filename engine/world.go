@@ -33,6 +33,7 @@ type World struct {
 	Energies        *Store[components.EnergyComponent]
 	Shields         *Store[components.ShieldComponent]
 	Heats           *Store[components.HeatComponent]
+	Boosts          *Store[components.BoostComponent]
 	Splashes        *Store[components.SplashComponent]
 	MarkedForDeaths *Store[components.MarkedForDeathComponent]
 	Timers          *Store[components.TimerComponent]
@@ -65,6 +66,7 @@ func NewWorld() *World {
 		Energies:        NewStore[components.EnergyComponent](),
 		Shields:         NewStore[components.ShieldComponent](),
 		Heats:           NewStore[components.HeatComponent](),
+		Boosts:          NewStore[components.BoostComponent](),
 		Splashes:        NewStore[components.SplashComponent](),
 		Timers:          NewStore[components.TimerComponent](),
 		MarkedForDeaths: NewStore[components.MarkedForDeathComponent](),
@@ -89,6 +91,7 @@ func NewWorld() *World {
 		w.Energies,
 		w.Shields,
 		w.Heats,
+		w.Boosts,
 		w.Splashes,
 		w.Timers,
 		w.MarkedForDeaths,

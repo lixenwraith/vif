@@ -122,7 +122,16 @@ func handleHeatCommand(ctx *engine.GameContext, args []string) bool {
 
 // handleBoostCommand triggers boost request event
 func handleBoostCommand(ctx *engine.GameContext) bool {
-	ctx.PushEvent(events.EventBoostRequest, nil, ctx.PausableClock.Now())
+	now := ctx.PausableClock.Now()
+
+	ctx.PushEvent(events.EventHeatSet, &events.HeatSetPayload{
+		Value: constants.MaxHeat,
+	}, now)
+
+	ctx.PushEvent(events.EventBoostActivate, &events.BoostActivatePayload{
+		Duration: constants.BoostBaseDuration,
+	}, now)
+
 	ctx.SetLastCommand(":boost")
 	return true
 }

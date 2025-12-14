@@ -12,10 +12,6 @@ import (
 type GameState struct {
 	// ===== REAL-TIME STATE (lock-free atomics) =====
 
-	// Boost state (real-time feedback)
-	BoostEnabled atomic.Bool
-	BoostEndTime atomic.Int64 // UnixNano
-
 	// Grayout visual effect state
 	GrayoutActive    atomic.Bool
 	GrayoutStartTime atomic.Int64 // UnixNano
@@ -81,8 +77,6 @@ type GameState struct {
 // Called by both NewGameState and Reset to avoid duplication
 func (gs *GameState) initState(now time.Time) {
 	// Reset atomics
-	gs.BoostEnabled.Store(false)
-	gs.BoostEndTime.Store(0)
 	gs.GrayoutActive.Store(false)
 	gs.GrayoutStartTime.Store(0)
 	gs.NextSeqID.Store(1)
@@ -162,79 +156,6 @@ func (gs *GameState) GetFrameNumber() int64 {
 // IncrementFrameNumber increments and returns the frame number
 func (gs *GameState) IncrementFrameNumber() int64 {
 	return gs.FrameNumber.Add(1)
-}
-
-// ===== BOOST ACCESSORS (atomic) =====
-
-// GetBoostEnabled returns whether boost is currently enabled
-func (gs *GameState) GetBoostEnabled() bool {
-	return gs.BoostEnabled.Load()
-}
-
-// SetBoostEnabled sets the boost enabled state
-func (gs *GameState) SetBoostEnabled(enabled bool) {
-	gs.BoostEnabled.Store(enabled)
-}
-
-// GetBoostEndTime returns when the boost will end
-func (gs *GameState) GetBoostEndTime() time.Time {
-	nano := gs.BoostEndTime.Load()
-	if nano == 0 {
-		return time.Time{}
-	}
-	return time.Unix(0, nano)
-}
-
-// SetBoostEndTime sets when the boost will end
-func (gs *GameState) SetBoostEndTime(t time.Time) {
-	gs.BoostEndTime.Store(t.UnixNano())
-}
-
-// UpdateBoostTimerAtomic atomically checks if boost should expire and disables it
-func (gs *GameState) UpdateBoostTimerAtomic(now time.Time) bool {
-	if !gs.BoostEnabled.Load() {
-		return false
-	}
-
-	endTimeNano := gs.BoostEndTime.Load()
-	if endTimeNano == 0 {
-		return false
-	}
-	endTime := time.Unix(0, endTimeNano)
-
-	if now.After(endTime) {
-		if gs.BoostEnabled.CompareAndSwap(true, false) {
-			return true
-		}
-	}
-
-	return false
-}
-
-// ReadBoostState returns a consistent snapshot of the boost state
-func (gs *GameState) ReadBoostState(now time.Time) BoostSnapshot {
-	// All boost fields are atomic, so we can read them without mutex
-	enabled := gs.BoostEnabled.Load()
-	endTimeNano := gs.BoostEndTime.Load()
-
-	var endTime time.Time
-	var remaining time.Duration
-
-	if endTimeNano != 0 {
-		endTime = time.Unix(0, endTimeNano)
-		if enabled {
-			remaining = endTime.Sub(now)
-			if remaining < 0 {
-				remaining = 0
-			}
-		}
-	}
-
-	return BoostSnapshot{
-		Enabled:   enabled,
-		EndTime:   endTime,
-		Remaining: remaining,
-	}
 }
 
 // ===== SPAWN STATE ACCESSORS (mutex protected) =====
@@ -578,13 +499,6 @@ func (gs *GameState) ReadDecayState(now time.Time) DecaySnapshot {
 		StartTime:   gs.DecayStartTime,
 		TimeUntil:   timeUntil,
 	}
-}
-
-// BoostSnapshot provides consistent view of boost state
-type BoostSnapshot struct {
-	Enabled   bool
-	EndTime   time.Time
-	Remaining time.Duration
 }
 
 // ===== RUNTIME METRICS ACCESSORS =====

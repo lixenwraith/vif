@@ -106,11 +106,11 @@ func main() {
 	heatSystem := systems.NewHeatSystem(ctx)
 	ctx.World.AddSystem(heatSystem)
 
-	spawnSystem := systems.NewSpawnSystem(ctx)
-	ctx.World.AddSystem(spawnSystem)
-
 	boostSystem := systems.NewBoostSystem(ctx)
 	ctx.World.AddSystem(boostSystem)
+
+	spawnSystem := systems.NewSpawnSystem(ctx)
+	ctx.World.AddSystem(spawnSystem)
 
 	nuggetSystem := systems.NewNuggetSystem(ctx)
 	ctx.World.AddSystem(nuggetSystem)
@@ -120,6 +120,9 @@ func main() {
 
 	goldSystem := systems.NewGoldSystem(ctx)
 	ctx.World.AddSystem(goldSystem)
+
+	materializeSystem := systems.NewMaterializeSystem(ctx)
+	ctx.World.AddSystem(materializeSystem)
 
 	drainSystem := systems.NewDrainSystem(ctx)
 	ctx.World.AddSystem(drainSystem)
@@ -149,9 +152,7 @@ func main() {
 		ctx.Height,
 	)
 
-	// Create and register renderers in priority order
-
-	// Standardized initialization loop
+	// Create and register renderers in priority order via standardized initialization loop
 	type rendererDef struct {
 		factory  func(*engine.GameContext) render.SystemRenderer
 		priority render.RenderPriority
@@ -192,13 +193,13 @@ func main() {
 	// Create frame synchronization channel
 	frameReady := make(chan struct{}, 1)
 
-	// Create clock scheduler with frame synchronization
-	// Clock scheduler handles systems phase transitions and triggers
+	// Create clock scheduler with frame synchronization, handling systems phase transition and triggers
 	clockScheduler, gameUpdateDone := engine.NewClockScheduler(ctx, constants.GameUpdateInterval, frameReady)
 
 	// Signal initial frame ready
 	frameReady <- struct{}{}
 
+	// TODO: refactor this SetSystems call
 	clockScheduler.SetSystems(goldSystem, decaySystem)
 	clockScheduler.RegisterEventHandler(pingSystem)
 	clockScheduler.RegisterEventHandler(shieldSystem)
@@ -209,6 +210,8 @@ func main() {
 	clockScheduler.RegisterEventHandler(nuggetSystem)
 	clockScheduler.RegisterEventHandler(goldSystem)
 	clockScheduler.RegisterEventHandler(cleanerSystem)
+	clockScheduler.RegisterEventHandler(drainSystem)
+	clockScheduler.RegisterEventHandler(materializeSystem)
 	clockScheduler.RegisterEventHandler(splashSystem)
 	clockScheduler.RegisterEventHandler(timeKeeperSystem)
 	clockScheduler.RegisterEventHandler(commandSystem)

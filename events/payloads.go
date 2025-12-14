@@ -111,3 +111,27 @@ type TimerStartPayload struct {
 	Entity   core.Entity
 	Duration time.Duration
 }
+
+// BoostActivatePayload contains boost activation parameters
+type BoostActivatePayload struct {
+	Duration time.Duration
+}
+
+// BoostExtendPayload contains boost extension parameters
+type BoostExtendPayload struct {
+	Duration time.Duration
+}
+
+// MaterializeRequestPayload contains parameters to start a visual spawn sequence
+type MaterializeRequestPayload struct {
+	X    int
+	Y    int
+	Type components.SpawnType
+}
+
+// SpawnCompletePayload carries details about a completed materialization
+type SpawnCompletePayload struct {
+	X    int
+	Y    int
+	Type components.SpawnType
+}

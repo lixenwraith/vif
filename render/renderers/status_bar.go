@@ -155,7 +155,8 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 	}
 	var rightItems []statusItem
 
-	clockNow := s.gameCtx.PausableClock.Now()
+	// TODO: unused, just keeping it warm for now
+	// clockNow := s.gameCtx.PausableClock.Now()
 
 	// Priority 1: Decay (always important)
 	decaySnapshot := s.gameCtx.State.ReadDecayState(ctx.GameTime)
@@ -195,8 +196,10 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 	rightItems = append(rightItems, statusItem{text: energyText, fg: energyFg, bg: energyBg})
 
 	// Priority 3: Boost (conditional)
-	if s.gameCtx.State.GetBoostEnabled() {
-		remaining := s.gameCtx.State.GetBoostEndTime().Sub(clockNow).Seconds()
+	boost, boostOk := s.gameCtx.World.Boosts.Get(s.gameCtx.CursorEntity)
+
+	if boostOk && boost.Active {
+		remaining := boost.Remaining.Seconds()
 		if remaining < 0 {
 			remaining = 0
 		}

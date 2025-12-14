@@ -30,21 +30,22 @@ const MaxEntitiesPerCell = 31
 
 // System Execution Priorities (lower runs first)
 const (
-	PriorityBoost      = 5
-	PriorityShield     = 6
-	PriorityHeat       = 8
-	PriorityEnergy     = 10
-	PrioritySpawn      = 15
-	PriorityNugget     = 18
-	PriorityGold       = 20
-	PriorityCleaner    = 22
-	PriorityDrain      = 25
-	PriorityDecay      = 30
-	PriorityFlash      = 35
-	PriorityUI         = 50
-	PrioritySplash     = 800 // After game logic, before rendering
-	PriorityTimekeeper = 890 // After game logic, before final cleanup
-	PriorityCleanup    = 900 // Last: Removes marked entities
+	PriorityShield       = 6
+	PriorityHeat         = 8
+	PriorityEnergy       = 10
+	PriorityBoost        = 12
+	PrioritySpawn        = 15
+	PriorityNugget       = 18
+	PriorityGold         = 20
+	PriorityCleaner      = 22
+	PriorityDrain        = 25
+	PriorityMaterializer = 26 // PriorityDrain + 1
+	PriorityDecay        = 30
+	PriorityFlash        = 35
+	PriorityUI           = 50
+	PrioritySplash       = 800 // After game logic, before rendering
+	PriorityTimekeeper   = 890 // After game logic, before final cleanup
+	PriorityCleanup      = 900 // Last: Removes marked entities
 )
 
 // Spatial Grid Defaults

@@ -50,17 +50,30 @@ func (s *DrainSystem) Priority() int {
 	return constants.PriorityDrain
 }
 
+// EventTypes returns the event types DrainSystem handles
+func (s *DrainSystem) EventTypes() []events.EventType {
+	return []events.EventType{
+		events.EventSpawnComplete,
+	}
+}
+
+// HandleEvent processes events
+func (s *DrainSystem) HandleEvent(world *engine.World, event events.GameEvent) {
+	if event.Type == events.EventSpawnComplete {
+		if payload, ok := event.Payload.(*events.SpawnCompletePayload); ok {
+			if payload.Type == components.SpawnTypeDrain {
+				s.materializeDrainAt(world, payload.X, payload.Y)
+			}
+		}
+	}
+}
+
 // Update runs the drain system logic
 func (s *DrainSystem) Update(world *engine.World, dt time.Duration) {
 	currentTick := s.ctx.State.GetGameTicks()
 
 	// Process pending spawn queue first
 	s.processPendingSpawns(world)
-
-	// Update materialize animation if active
-	if world.Materializers.Count() > 0 {
-		s.updateMaterializers(world, dt)
-	}
 
 	// Multi-drain lifecycle based on heat
 	currentCount := world.Drains.Count()
@@ -391,178 +404,13 @@ func (s *DrainSystem) triggerDespawnFlash(world *engine.World, x, y int) {
 
 // startMaterializeAt initiates the materialize animation for a specific position
 func (s *DrainSystem) startMaterializeAt(world *engine.World, targetX, targetY int) {
-	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 
-	if targetX < 0 {
-		targetX = 0
-	}
-	if targetX >= config.GameWidth {
-		targetX = config.GameWidth - 1
-	}
-	if targetY < 0 {
-		targetY = 0
-	}
-	if targetY >= config.GameHeight {
-		targetY = config.GameHeight - 1
-	}
-
-	gameWidth := float64(config.GameWidth)
-	gameHeight := float64(config.GameHeight)
-	tX := float64(targetX)
-	tY := float64(targetY)
-	duration := constants.MaterializeAnimationDuration.Seconds()
-
-	type spawnerDef struct {
-		startX, startY float64
-		dir            components.MaterializeDirection
-	}
-
-	// Create 4 spawner entities converging from edges (top, bottom, left, right)
-	spawners := []spawnerDef{
-		{tX, -1, components.MaterializeFromTop},
-		{tX, gameHeight, components.MaterializeFromBottom},
-		{-1, tY, components.MaterializeFromLeft},
-		{gameWidth, tY, components.MaterializeFromRight},
-	}
-
-	// Spawn 4 materializer entities that animate toward target position
-	for _, def := range spawners {
-		velX := (tX - def.startX) / duration
-		velY := (tY - def.startY) / duration
-
-		startGridX := int(def.startX)
-		startGridY := int(def.startY)
-
-		// Initialize trail ring buffer with starting position
-		var trailRing [constants.MaterializeTrailLength]core.Point
-		trailRing[0] = core.Point{X: startGridX, Y: startGridY}
-
-		comp := components.MaterializeComponent{
-			PreciseX:  def.startX,
-			PreciseY:  def.startY,
-			VelocityX: velX,
-			VelocityY: velY,
-			TargetX:   targetX,
-			TargetY:   targetY,
-			TrailRing: trailRing,
-			TrailHead: 0,
-			TrailLen:  1,
-			Direction: def.dir,
-			Char:      constants.MaterializeChar,
-			Arrived:   false,
-		}
-
-		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → MaterializeComponent (float overlay)
-		entity := world.CreateEntity()
-		world.Positions.Add(entity, components.PositionComponent{X: startGridX, Y: startGridY})
-		world.Materializers.Add(entity, comp)
-		// Protect from resize culling (off-screen start positions) and drains
-		world.Protections.Add(entity, components.ProtectionComponent{
-			Mask: components.ProtectFromDrain | components.ProtectFromCull,
-		})
-	}
-}
-
-// updateMaterializers updates materialize spawner entities and triggers drain spawn
-func (s *DrainSystem) updateMaterializers(world *engine.World, dt time.Duration) {
-	dtSeconds := dt.Seconds()
-	if dtSeconds > 0.1 {
-		dtSeconds = 0.1
-	}
-
-	entities := world.Materializers.All()
-
-	type targetState struct {
-		entities   []core.Entity
-		allArrived bool
-	}
-	// Group materializers by target position (4 entities per target)
-	targets := make(map[uint64]*targetState)
-
-	for _, entity := range entities {
-		mat, ok := world.Materializers.Get(entity)
-		if !ok {
-			continue
-		}
-
-		// Read grid position from PositionStore
-		oldPos, hasPos := world.Positions.Get(entity)
-		if !hasPos {
-			continue
-		}
-
-		// Group by target position
-		key := uint64(mat.TargetX)<<32 | uint64(mat.TargetY)
-		if targets[key] == nil {
-			targets[key] = &targetState{
-				entities:   make([]core.Entity, 0, 4),
-				allArrived: true,
-			}
-		}
-
-		state := targets[key]
-		state.entities = append(state.entities, entity)
-
-		if mat.Arrived {
-			continue
-		}
-
-		// --- Physics Update: Integrate velocity into float position (overlay state) ---
-		mat.PreciseX += mat.VelocityX * dtSeconds
-		mat.PreciseY += mat.VelocityY * dtSeconds
-
-		// Check arrival based on direction
-		arrived := false
-		switch mat.Direction {
-		case components.MaterializeFromTop:
-			arrived = mat.PreciseY >= float64(mat.TargetY)
-		case components.MaterializeFromBottom:
-			arrived = mat.PreciseY <= float64(mat.TargetY)
-		case components.MaterializeFromLeft:
-			arrived = mat.PreciseX >= float64(mat.TargetX)
-		case components.MaterializeFromRight:
-			arrived = mat.PreciseX <= float64(mat.TargetX)
-		}
-
-		if arrived {
-			mat.PreciseX = float64(mat.TargetX)
-			mat.PreciseY = float64(mat.TargetY)
-			mat.Arrived = true
-		} else {
-			state.allArrived = false
-		}
-
-		// --- Trail Update & Grid Sync: Update trail ring buffer and sync PositionStore if cell changed ---
-		newGridX := int(mat.PreciseX)
-		newGridY := int(mat.PreciseY)
-
-		if newGridX != oldPos.X || newGridY != oldPos.Y {
-			mat.TrailHead = (mat.TrailHead + 1) % constants.MaterializeTrailLength
-			mat.TrailRing[mat.TrailHead] = core.Point{X: newGridX, Y: newGridY}
-			if mat.TrailLen < constants.MaterializeTrailLength {
-				mat.TrailLen++
-			}
-
-			// Sync grid position to PositionStore
-			world.Positions.Add(entity, components.PositionComponent{X: newGridX, Y: newGridY})
-		}
-
-		world.Materializers.Add(entity, mat)
-	}
-
-	// --- Target Completion Handling: Spawn drain when all 4 materializers reach target ---
-	for key, state := range targets {
-		if state.allArrived && len(state.entities) > 0 {
-			// Destroy all 4 materializers
-			for _, entity := range state.entities {
-				world.DestroyEntity(entity)
-			}
-			// Spawn drain at target position
-			targetX := int(key >> 32)
-			targetY := int(key & 0xFFFFFFFF)
-			s.materializeDrainAt(world, targetX, targetY)
-		}
-	}
+	s.ctx.PushEvent(events.EventMaterializeRequest, &events.MaterializeRequestPayload{
+		X:    targetX,
+		Y:    targetY,
+		Type: components.SpawnTypeDrain,
+	}, timeRes.GameTime)
 }
 
 // materializeDrainAt creates a drain entity at the specified position

@@ -15,8 +15,15 @@ const (
 	MaterializeFromRight
 )
 
+// SpawnType identifies what entity will be spawned upon materialization completion
+type SpawnType int
+
+const (
+	SpawnTypeDrain SpawnType = iota
+	// Future: SpawnTypeNugget, SpawnTypeBot, etc.
+)
+
 // MaterializeComponent represents a spawner entity that converges toward a target position
-// Grid position managed by PositionComponent (external)
 type MaterializeComponent struct {
 	// Sub-pixel position (physics/render precision)
 	PreciseX float64
@@ -43,4 +50,7 @@ type MaterializeComponent struct {
 
 	// Arrived flag - set when spawner reaches target
 	Arrived bool
+
+	// Type of entity being spawned
+	Type SpawnType
 }

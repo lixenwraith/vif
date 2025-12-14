@@ -211,6 +211,9 @@ func (ctx *GameContext) CreateCursorEntity() {
 		MaxOpacity:    constants.ShieldMaxOpacity,
 		LastDrainTime: ctx.PausableClock.Now(),
 	})
+
+	// Add BoostComponent to cursor
+	ctx.World.Boosts.Add(ctx.CursorEntity, components.BoostComponent{})
 }
 
 // ===== Crash Handling and Panic Management =====
