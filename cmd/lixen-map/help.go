@@ -1,14 +1,10 @@
-// FILE: help.go
 package main
 
 import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
-// HelpMode indicates help overlay is active
-// Added to AppState in types.go
-
-// Help content organized by view
+// Help content for pane view only (mindmap/dive removed)
 var helpPaneKeys = []helpEntry{
 	{"Navigation", ""},
 	{"j/k, ↑/↓", "Move cursor"},
@@ -25,9 +21,7 @@ var helpPaneKeys = []helpEntry{
 	{"F", "Select filtered"},
 	{"", ""},
 	{"Filter", ""},
-	{"ff/if", "Filter at cursor"},
-	{"fg/ft", "Focus group/tag"},
-	{"ig/it", "Interact group/tag"},
+	{"f", "Filter at cursor"},
 	{"/", "Content search"},
 	{"m", "Cycle filter mode"},
 	{"Esc", "Clear filter"},
@@ -38,56 +32,32 @@ var helpPaneKeys = []helpEntry{
 	{"e", "Edit tags"},
 	{"r", "Reindex"},
 	{"p", "Preview output"},
-	{"Enter", "Mindmap view"},
 	{"Ctrl+S", "Save output"},
 	{"Ctrl+Y", "Copy to clipboard"},
 	{"Ctrl+Q", "Quit"},
 }
 
-var helpMindmapKeys = []helpEntry{
-	{"Navigation", ""},
-	{"j/k, ↑/↓", "Move cursor"},
-	{"0/$, Home/End", "Jump start/end"},
-	{"PgUp/PgDn", "Page scroll"},
+var helpEditorKeys = []helpEntry{
+	{"Editor Keys", ""},
+	{"←/→", "Move cursor"},
+	{"Home/Ctrl+A", "Go to start"},
+	{"End/Ctrl+E", "Go to end"},
+	{"Backspace", "Delete before"},
+	{"Delete", "Delete at cursor"},
+	{"Ctrl+K", "Kill to end"},
+	{"Ctrl+U", "Kill to start"},
+	{"Ctrl+W", "Kill word"},
+	{"Enter", "Save changes"},
+	{"Escape", "Cancel edit"},
 	{"", ""},
-	{"Selection", ""},
-	{"Space", "Toggle selection"},
-	{"a", "Select all"},
-	{"c", "Clear selections"},
-	{"F", "Select filtered"},
+	{"Tag Syntax", ""},
+	{"2-level", "group(tag1,tag2)"},
+	{"3-level", "group[mod(tag)]"},
 	{"", ""},
-	{"Filter", ""},
-	{"f", "Filter at cursor"},
-	{"/", "Content search"},
-	{"t", "Tag search"},
-	{"g", "Group search"},
-	{"Esc", "Clear filter"},
-	{"", ""},
-	{"Views", ""},
-	{"Enter", "Dive view"},
-	{"q", "Back to panes"},
-	{"Ctrl+Q", "Quit"},
-}
-
-var helpDiveKeys = []helpEntry{
-	{"Navigation", ""},
-	{"Tab/S-Tab", "Next/prev pane"},
-	{"j/k, ↑/↓", "Move cursor"},
-	{"h/l, ←/→", "Collapse/expand"},
-	{"H/L", "Collapse/expand all"},
-	{"0/$, Home/End", "Jump start/end"},
-	{"PgUp/PgDn", "Page scroll"},
-	{"Enter", "Dive into file"},
-	{"", ""},
-	{"Other", ""},
-	{"q/Esc", "Back to mindmap"},
-	{"Ctrl+Q", "Quit"},
-	{"", ""},
-	{"Panes", ""},
-	{"DEPENDS ON", "Packages imported"},
-	{"DEPENDED BY", "Packages importing"},
-	{"FOCUS LINKS", "Files sharing focus"},
-	{"INTERACT", "Files sharing interact"},
+	{"Examples", ""},
+	{"#focus{}", "Classification"},
+	{"#interact{}", "Relationships"},
+	{"all(*)", "Always include"},
 }
 
 type helpEntry struct {
@@ -95,7 +65,7 @@ type helpEntry struct {
 	Desc string
 }
 
-// RenderHelp draws the full-screen help overlay
+// RenderHelp draws the help overlay
 func (app *AppState) RenderHelp(cells []terminal.Cell, w, h int) {
 	// Background
 	for i := range cells {
@@ -113,17 +83,15 @@ func (app *AppState) RenderHelp(cells []terminal.Cell, w, h int) {
 	hint := "[?/Esc: close]"
 	drawText(cells, w, w-len(hint)-2, 0, hint, colorHelpFg, colorDefaultBg, terminal.AttrNone)
 
-	// Calculate column layout
-	colWidth := (w - 8) / 3
+	// Calculate column layout - two columns
+	colWidth := (w - 6) / 2
 	col1X := 3
 	col2X := col1X + colWidth + 2
-	col3X := col2X + colWidth + 2
 
 	// Column headers
 	headerY := 2
 	drawText(cells, w, col1X, headerY, "PANE VIEW", colorGroupFg, colorDefaultBg, terminal.AttrBold)
-	drawText(cells, w, col2X, headerY, "MINDMAP VIEW", colorGroupFg, colorDefaultBg, terminal.AttrBold)
-	drawText(cells, w, col3X, headerY, "DIVE VIEW", colorGroupFg, colorDefaultBg, terminal.AttrBold)
+	drawText(cells, w, col2X, headerY, "TAG EDITOR", colorGroupFg, colorDefaultBg, terminal.AttrBold)
 
 	// Separator line
 	sepY := headerY + 1
@@ -137,13 +105,11 @@ func (app *AppState) RenderHelp(cells []terminal.Cell, w, h int) {
 
 	// Render columns
 	renderHelpColumn(cells, w, col1X, contentY, colWidth, maxRows, helpPaneKeys)
-	renderHelpColumn(cells, w, col2X, contentY, colWidth, maxRows, helpMindmapKeys)
-	renderHelpColumn(cells, w, col3X, contentY, colWidth, maxRows, helpDiveKeys)
+	renderHelpColumn(cells, w, col2X, contentY, colWidth, maxRows, helpEditorKeys)
 
-	// Vertical separators between columns
+	// Vertical separator between columns
 	for y := headerY; y < h-1; y++ {
 		cells[y*w+col2X-1] = terminal.Cell{Rune: '│', Fg: colorPaneBorder, Bg: colorDefaultBg}
-		cells[y*w+col3X-1] = terminal.Cell{Rune: '│', Fg: colorPaneBorder, Bg: colorDefaultBg}
 	}
 }
 

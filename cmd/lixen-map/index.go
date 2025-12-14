@@ -17,21 +17,28 @@ func BuildIndex(root string) (*Index, error) {
 	modPath := getModulePath()
 
 	index := &Index{
-		ModulePath:      modPath,
-		Packages:        make(map[string]*PackageInfo),
-		Files:           make(map[string]*FileInfo),
-		FocusTags:       make(map[string][]string),
-		FocusByGroup:    make(map[string][]string),
-		FocusByTag:      make(map[string][]string),
-		InteractTags:    make(map[string][]string),
-		InteractByGroup: make(map[string][]string),
-		InteractByTag:   make(map[string][]string),
+		ModulePath:       modPath,
+		Packages:         make(map[string]*PackageInfo),
+		Files:            make(map[string]*FileInfo),
+		FocusModules:     make(map[string][]string),
+		FocusTags:        make(map[string]map[string][]string),
+		FocusByGroup:     make(map[string][]string),
+		FocusByModule:    make(map[string][]string),
+		FocusByTag:       make(map[string][]string),
+		InteractModules:  make(map[string][]string),
+		InteractTags:     make(map[string]map[string][]string),
+		InteractByGroup:  make(map[string][]string),
+		InteractByModule: make(map[string][]string),
+		InteractByTag:    make(map[string][]string),
 	}
 
 	focusGroupSet := make(map[string]bool)
-	focusTagsByGroup := make(map[string]map[string]bool)
+	focusModulesByGroup := make(map[string]map[string]bool)
+	focusTagsByGroupModule := make(map[string]map[string]map[string]bool)
+
 	interactGroupSet := make(map[string]bool)
-	interactTagsByGroup := make(map[string]map[string]bool)
+	interactModulesByGroup := make(map[string]map[string]bool)
+	interactTagsByGroupModule := make(map[string]map[string]map[string]bool)
 
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -90,59 +97,75 @@ func BuildIndex(root string) (*Index, error) {
 		}
 
 		// Index focus tags
-		for group, tags := range fi.Focus {
+		for group, modules := range fi.Focus {
 			focusGroupSet[group] = true
-			if focusTagsByGroup[group] == nil {
-				focusTagsByGroup[group] = make(map[string]bool)
+			if focusModulesByGroup[group] == nil {
+				focusModulesByGroup[group] = make(map[string]bool)
+			}
+			if focusTagsByGroupModule[group] == nil {
+				focusTagsByGroupModule[group] = make(map[string]map[string]bool)
 			}
 
-			// Package-level aggregation
-			existing := pkg.AllFocus[group]
-			tagSet := make(map[string]bool)
-			for _, t := range existing {
-				tagSet[t] = true
-			}
-
-			for _, t := range tags {
-				focusTagsByGroup[group][t] = true
-				if !tagSet[t] {
-					existing = append(existing, t)
-					tagSet[t] = true
-				}
-				// Index by group:tag
-				key := group + ":" + t
-				index.FocusByTag[key] = append(index.FocusByTag[key], relPath)
-			}
-			pkg.AllFocus[group] = existing
-
-			// Index by group
 			index.FocusByGroup[group] = append(index.FocusByGroup[group], relPath)
+
+			for module, tags := range modules {
+				if module != DirectTagsModule {
+					focusModulesByGroup[group][module] = true
+					moduleKey := group + "." + module
+					index.FocusByModule[moduleKey] = append(index.FocusByModule[moduleKey], relPath)
+				}
+
+				if focusTagsByGroupModule[group][module] == nil {
+					focusTagsByGroupModule[group][module] = make(map[string]bool)
+				}
+
+				for _, tag := range tags {
+					focusTagsByGroupModule[group][module][tag] = true
+					var tagKey string
+					if module == DirectTagsModule {
+						tagKey = group + ".." + tag // double dot for 2-level
+					} else {
+						tagKey = group + "." + module + "." + tag
+					}
+					index.FocusByTag[tagKey] = append(index.FocusByTag[tagKey], relPath)
+				}
+			}
 		}
 
 		// Index interact tags
-		for group, tags := range fi.Interact {
+		for group, modules := range fi.Interact {
 			interactGroupSet[group] = true
-			if interactTagsByGroup[group] == nil {
-				interactTagsByGroup[group] = make(map[string]bool)
+			if interactModulesByGroup[group] == nil {
+				interactModulesByGroup[group] = make(map[string]bool)
+			}
+			if interactTagsByGroupModule[group] == nil {
+				interactTagsByGroupModule[group] = make(map[string]map[string]bool)
 			}
 
-			existing := pkg.AllInteract[group]
-			tagSet := make(map[string]bool)
-			for _, t := range existing {
-				tagSet[t] = true
-			}
-
-			for _, t := range tags {
-				interactTagsByGroup[group][t] = true
-				if !tagSet[t] {
-					existing = append(existing, t)
-					tagSet[t] = true
-				}
-				key := group + ":" + t
-				index.InteractByTag[key] = append(index.InteractByTag[key], relPath)
-			}
-			pkg.AllInteract[group] = existing
 			index.InteractByGroup[group] = append(index.InteractByGroup[group], relPath)
+
+			for module, tags := range modules {
+				if module != DirectTagsModule {
+					interactModulesByGroup[group][module] = true
+					moduleKey := group + "." + module
+					index.InteractByModule[moduleKey] = append(index.InteractByModule[moduleKey], relPath)
+				}
+
+				if interactTagsByGroupModule[group][module] == nil {
+					interactTagsByGroupModule[group][module] = make(map[string]bool)
+				}
+
+				for _, tag := range tags {
+					interactTagsByGroupModule[group][module][tag] = true
+					var tagKey string
+					if module == DirectTagsModule {
+						tagKey = group + ".." + tag
+					} else {
+						tagKey = group + "." + module + "." + tag
+					}
+					index.InteractByTag[tagKey] = append(index.InteractByTag[tagKey], relPath)
+				}
+			}
 		}
 
 		// Merge imports
@@ -172,14 +195,29 @@ func BuildIndex(root string) (*Index, error) {
 	}
 	sort.Strings(index.FocusGroups)
 
-	// Build sorted focus tags per group
-	for group, tagSet := range focusTagsByGroup {
-		tags := make([]string, 0, len(tagSet))
-		for t := range tagSet {
-			tags = append(tags, t)
+	// Build sorted focus modules per group
+	for group, modSet := range focusModulesByGroup {
+		mods := make([]string, 0, len(modSet))
+		for m := range modSet {
+			mods = append(mods, m)
 		}
-		sort.Strings(tags)
-		index.FocusTags[group] = tags
+		sort.Strings(mods)
+		index.FocusModules[group] = mods
+	}
+
+	// Build sorted focus tags per group/module
+	for group, modMap := range focusTagsByGroupModule {
+		if index.FocusTags[group] == nil {
+			index.FocusTags[group] = make(map[string][]string)
+		}
+		for module, tagSet := range modMap {
+			tags := make([]string, 0, len(tagSet))
+			for t := range tagSet {
+				tags = append(tags, t)
+			}
+			sort.Strings(tags)
+			index.FocusTags[group][module] = tags
+		}
 	}
 
 	// Build sorted interact groups
@@ -188,14 +226,29 @@ func BuildIndex(root string) (*Index, error) {
 	}
 	sort.Strings(index.InteractGroups)
 
-	// Build sorted interact tags per group
-	for group, tagSet := range interactTagsByGroup {
-		tags := make([]string, 0, len(tagSet))
-		for t := range tagSet {
-			tags = append(tags, t)
+	// Build sorted interact modules per group
+	for group, modSet := range interactModulesByGroup {
+		mods := make([]string, 0, len(modSet))
+		for m := range modSet {
+			mods = append(mods, m)
 		}
-		sort.Strings(tags)
-		index.InteractTags[group] = tags
+		sort.Strings(mods)
+		index.InteractModules[group] = mods
+	}
+
+	// Build sorted interact tags per group/module
+	for group, modMap := range interactTagsByGroupModule {
+		if index.InteractTags[group] == nil {
+			index.InteractTags[group] = make(map[string][]string)
+		}
+		for module, tagSet := range modMap {
+			tags := make([]string, 0, len(tagSet))
+			for t := range tagSet {
+				tags = append(tags, t)
+			}
+			sort.Strings(tags)
+			index.InteractTags[group][module] = tags
+		}
 	}
 
 	index.ReverseDeps = computeReverseDeps(index)
@@ -228,8 +281,8 @@ func parseFile(path, modPath string) (*FileInfo, error) {
 
 	fi := &FileInfo{
 		Path:     path,
-		Focus:    make(map[string][]string),
-		Interact: make(map[string][]string),
+		Focus:    make(map[string]map[string][]string),
+		Interact: make(map[string]map[string][]string),
 		Size:     int64(len(content)),
 	}
 
@@ -247,7 +300,6 @@ func parseFile(path, modPath string) (*FileInfo, error) {
 
 		if strings.HasPrefix(trimmed, "//") {
 			if err := parseLixenLine(trimmed, fi); err != nil {
-				// Skip malformed lines
 				continue
 			}
 		}
@@ -257,7 +309,6 @@ func parseFile(path, modPath string) (*FileInfo, error) {
 		return nil, nil
 	}
 
-	// Parse imports
 	fset := token.NewFileSet()
 	astFile, err := parser.ParseFile(fset, path, content, parser.ImportsOnly)
 	if err != nil {
@@ -311,7 +362,6 @@ func stripWhitespace(s string) string {
 
 // parseBlocks parses "#focus{...},#interact{...}" into FileInfo
 func parseBlocks(content string, fi *FileInfo) error {
-	// Split by #, filter empty
 	for len(content) > 0 {
 		if content[0] == ',' {
 			content = content[1:]
@@ -323,7 +373,6 @@ func parseBlocks(content string, fi *FileInfo) error {
 		}
 		content = content[1:]
 
-		// Find block type
 		braceIdx := strings.Index(content, "{")
 		if braceIdx == -1 {
 			return fmt.Errorf("missing '{' in block")
@@ -332,7 +381,6 @@ func parseBlocks(content string, fi *FileInfo) error {
 		blockType := content[:braceIdx]
 		content = content[braceIdx+1:]
 
-		// Find matching close brace
 		closeIdx := findMatchingBrace(content)
 		if closeIdx == -1 {
 			return fmt.Errorf("missing '}' in block")
@@ -341,7 +389,6 @@ func parseBlocks(content string, fi *FileInfo) error {
 		blockContent := content[:closeIdx]
 		content = content[closeIdx+1:]
 
-		// Parse group entries
 		groups, err := parseGroupEntries(blockContent)
 		if err != nil {
 			return err
@@ -349,16 +396,28 @@ func parseBlocks(content string, fi *FileInfo) error {
 
 		switch blockType {
 		case "focus":
-			for g, tags := range groups {
-				if g == "all" && len(tags) > 0 && tags[0] == "*" {
-					fi.IsAll = true
-					continue
+			for g, modules := range groups {
+				if g == "all" {
+					if mods, ok := modules[DirectTagsModule]; ok && len(mods) > 0 && mods[0] == "*" {
+						fi.IsAll = true
+						continue
+					}
 				}
-				fi.Focus[g] = append(fi.Focus[g], tags...)
+				if fi.Focus[g] == nil {
+					fi.Focus[g] = make(map[string][]string)
+				}
+				for mod, tags := range modules {
+					fi.Focus[g][mod] = append(fi.Focus[g][mod], tags...)
+				}
 			}
 		case "interact":
-			for g, tags := range groups {
-				fi.Interact[g] = append(fi.Interact[g], tags...)
+			for g, modules := range groups {
+				if fi.Interact[g] == nil {
+					fi.Interact[g] = make(map[string][]string)
+				}
+				for mod, tags := range modules {
+					fi.Interact[g][mod] = append(fi.Interact[g][mod], tags...)
+				}
 			}
 		default:
 			return fmt.Errorf("unknown block type: %s", blockType)
@@ -385,8 +444,82 @@ func findMatchingBrace(s string) int {
 	return -1
 }
 
-// parseGroupEntries parses "group1[tag1,tag2],group2[tag3]" into map
-func parseGroupEntries(content string) (map[string][]string, error) {
+// parseGroupEntries parses group entries supporting both formats:
+// - 2-level: "group(tag1,tag2)" → group with direct tags
+// - 3-level: "group[mod1(tag1),mod2]" → group with modules
+// Returns: group → module → tags (module="" for 2-level direct tags)
+func parseGroupEntries(content string) (map[string]map[string][]string, error) {
+	result := make(map[string]map[string][]string)
+
+	for len(content) > 0 {
+		if content[0] == ',' {
+			content = content[1:]
+			continue
+		}
+
+		// Find group name (up to '[' or '(')
+		groupEnd := -1
+		var format byte
+		for i := 0; i < len(content); i++ {
+			if content[i] == '[' || content[i] == '(' {
+				groupEnd = i
+				format = content[i]
+				break
+			}
+		}
+		if groupEnd == -1 {
+			return nil, fmt.Errorf("missing '[' or '(' in group entry")
+		}
+
+		groupName := content[:groupEnd]
+		if groupName == "" {
+			return nil, fmt.Errorf("empty group name")
+		}
+		content = content[groupEnd+1:]
+
+		if result[groupName] == nil {
+			result[groupName] = make(map[string][]string)
+		}
+
+		if format == '(' {
+			// 2-level format: group(tag1,tag2)
+			closeIdx := strings.Index(content, ")")
+			if closeIdx == -1 {
+				return nil, fmt.Errorf("missing ')' in group entry")
+			}
+			tagList := content[:closeIdx]
+			content = content[closeIdx+1:]
+
+			tags := parseTagList(tagList)
+			if len(tags) == 0 {
+				return nil, fmt.Errorf("empty tag list in group '%s'", groupName)
+			}
+			result[groupName][DirectTagsModule] = tags
+
+		} else {
+			// 3-level format: group[mod1(tag1),mod2]
+			closeIdx := strings.Index(content, "]")
+			if closeIdx == -1 {
+				return nil, fmt.Errorf("missing ']' in group entry")
+			}
+			moduleContent := content[:closeIdx]
+			content = content[closeIdx+1:]
+
+			modules, err := parseModuleEntries(moduleContent)
+			if err != nil {
+				return nil, fmt.Errorf("in group '%s': %w", groupName, err)
+			}
+			for mod, tags := range modules {
+				result[groupName][mod] = tags
+			}
+		}
+	}
+
+	return result, nil
+}
+
+// parseModuleEntries parses "mod1(tag1,tag2),mod2,mod3(tag3)" into module → tags
+func parseModuleEntries(content string) (map[string][]string, error) {
 	result := make(map[string][]string)
 
 	for len(content) > 0 {
@@ -395,35 +528,62 @@ func parseGroupEntries(content string) (map[string][]string, error) {
 			continue
 		}
 
-		// Find group name (up to '[')
-		bracketIdx := strings.Index(content, "[")
-		if bracketIdx == -1 {
-			return nil, fmt.Errorf("missing '[' in group entry")
-		}
-
-		groupName := content[:bracketIdx]
-		content = content[bracketIdx+1:]
-
-		// Find closing bracket
-		closeIdx := strings.Index(content, "]")
-		if closeIdx == -1 {
-			return nil, fmt.Errorf("missing ']' in group entry")
-		}
-
-		tagList := content[:closeIdx]
-		content = content[closeIdx+1:]
-
-		// Parse tags
-		tags := strings.Split(tagList, ",")
-		for _, t := range tags {
-			t = strings.TrimSpace(t)
-			if t != "" {
-				result[groupName] = append(result[groupName], t)
+		// Find module name (up to '(' or ',' or end)
+		modEnd := len(content)
+		hasTags := false
+		for i := 0; i < len(content); i++ {
+			if content[i] == '(' {
+				modEnd = i
+				hasTags = true
+				break
 			}
+			if content[i] == ',' {
+				modEnd = i
+				break
+			}
+		}
+
+		modName := content[:modEnd]
+		if modName == "" {
+			return nil, fmt.Errorf("empty module name")
+		}
+		content = content[modEnd:]
+
+		if hasTags {
+			// Module with tags: mod(tag1,tag2)
+			content = content[1:] // skip '('
+			closeIdx := strings.Index(content, ")")
+			if closeIdx == -1 {
+				return nil, fmt.Errorf("missing ')' for module '%s'", modName)
+			}
+			tagList := content[:closeIdx]
+			content = content[closeIdx+1:]
+
+			tags := parseTagList(tagList)
+			result[modName] = tags
+		} else {
+			// Module without tags
+			result[modName] = nil
 		}
 	}
 
 	return result, nil
+}
+
+// parseTagList splits comma-separated tags
+func parseTagList(content string) []string {
+	if content == "" {
+		return nil
+	}
+	parts := strings.Split(content, ",")
+	tags := make([]string, 0, len(parts))
+	for _, t := range parts {
+		t = strings.TrimSpace(t)
+		if t != "" {
+			tags = append(tags, t)
+		}
+	}
+	return tags
 }
 
 // getModulePath reads module path from go.mod file

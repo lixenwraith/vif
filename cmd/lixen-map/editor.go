@@ -43,32 +43,103 @@ func (app *AppState) EnterEditMode() {
 	focus, interact, err := parseLixenContent(content)
 	if err != nil {
 		app.InputBuffer = content // Fallback to raw on parse error
+		app.EditCursor = len(content)
 		return
 	}
 
 	app.InputBuffer = canonicalizeLixenContent(focus, interact)
+	app.EditCursor = len(app.InputBuffer)
 }
 
 // HandleEditEvent processes keyboard input during tag editing
 func (app *AppState) HandleEditEvent(ev terminal.Event) {
+	buf := []rune(app.InputBuffer)
+	cursor := app.EditCursor
+
+	// Clamp cursor
+	if cursor > len(buf) {
+		cursor = len(buf)
+	}
+	if cursor < 0 {
+		cursor = 0
+	}
+
 	switch ev.Key {
 	case terminal.KeyEscape:
 		app.EditMode = false
 		app.EditTarget = ""
 		app.InputBuffer = ""
+		app.EditCursor = 0
 		app.Message = "edit cancelled"
 
 	case terminal.KeyEnter:
 		app.commitTagEdit()
 
 	case terminal.KeyBackspace:
-		if len(app.InputBuffer) > 0 {
-			app.InputBuffer = app.InputBuffer[:len(app.InputBuffer)-1]
+		if cursor > 0 {
+			buf = append(buf[:cursor-1], buf[cursor:]...)
+			cursor--
+		}
+
+	case terminal.KeyDelete:
+		if cursor < len(buf) {
+			buf = append(buf[:cursor], buf[cursor+1:]...)
+		}
+
+	case terminal.KeyLeft:
+		if cursor > 0 {
+			cursor--
+		}
+
+	case terminal.KeyRight:
+		if cursor < len(buf) {
+			cursor++
+		}
+
+	case terminal.KeyHome, terminal.KeyCtrlA:
+		cursor = 0
+
+	case terminal.KeyEnd, terminal.KeyCtrlE:
+		cursor = len(buf)
+
+	case terminal.KeyCtrlK:
+		// Kill to end of line
+		buf = buf[:cursor]
+
+	case terminal.KeyCtrlU:
+		// Kill to start of line
+		buf = buf[cursor:]
+		cursor = 0
+
+	case terminal.KeyCtrlW:
+		// Kill previous word
+		if cursor > 0 {
+			// Skip trailing spaces
+			end := cursor
+			for end > 0 && buf[end-1] == ' ' {
+				end--
+			}
+			// Find word start
+			start := end
+			for start > 0 && buf[start-1] != ' ' {
+				start--
+			}
+			buf = append(buf[:start], buf[end:]...)
+			cursor = start
 		}
 
 	case terminal.KeyRune:
-		app.InputBuffer += string(ev.Rune)
+		// Insert at cursor
+		newBuf := make([]rune, len(buf)+1)
+		copy(newBuf[:cursor], buf[:cursor])
+		newBuf[cursor] = ev.Rune
+		copy(newBuf[cursor+1:], buf[cursor:])
+		buf = newBuf
+		cursor++
 	}
+
+	app.InputBuffer = string(buf)
+	app.EditCursor = cursor
 }
 
 // commitTagEdit writes modified tags to file and triggers reindex
@@ -81,12 +152,14 @@ func (app *AppState) commitTagEdit() {
 		app.EditMode = false
 		app.EditTarget = ""
 		app.InputBuffer = ""
+		app.EditCursor = 0
 		return
 	}
 
 	app.EditMode = false
 	app.EditTarget = ""
 	app.InputBuffer = ""
+	app.EditCursor = 0
 
 	app.ReindexAll()
 	app.Message = fmt.Sprintf("updated: %s", path)
@@ -127,19 +200,29 @@ func readLixenLine(path string) (string, error) {
 	}
 
 	// Merge multiple lines by parsing and re-canonicalizing
-	mergedFocus := make(map[string][]string)
-	mergedInteract := make(map[string][]string)
+	mergedFocus := make(map[string]map[string][]string)
+	mergedInteract := make(map[string]map[string][]string)
 
 	for _, c := range contents {
 		focus, interact, err := parseLixenContent(c)
 		if err != nil {
 			continue // Skip malformed lines
 		}
-		for g, tags := range focus {
-			mergedFocus[g] = appendUnique(mergedFocus[g], tags...)
+		for g, mods := range focus {
+			if mergedFocus[g] == nil {
+				mergedFocus[g] = make(map[string][]string)
+			}
+			for m, tags := range mods {
+				mergedFocus[g][m] = appendUnique(mergedFocus[g][m], tags...)
+			}
 		}
-		for g, tags := range interact {
-			mergedInteract[g] = appendUnique(mergedInteract[g], tags...)
+		for g, mods := range interact {
+			if mergedInteract[g] == nil {
+				mergedInteract[g] = make(map[string][]string)
+			}
+			for m, tags := range mods {
+				mergedInteract[g][m] = appendUnique(mergedInteract[g][m], tags...)
+			}
 		}
 	}
 
@@ -162,14 +245,14 @@ func appendUnique(slice []string, values ...string) []string {
 }
 
 // parseLixenContent parses lixen content into focus/interact maps
-func parseLixenContent(content string) (focus, interact map[string][]string, err error) {
+func parseLixenContent(content string) (focus, interact map[string]map[string][]string, err error) {
 	if content == "" {
-		return make(map[string][]string), make(map[string][]string), nil
+		return make(map[string]map[string][]string), make(map[string]map[string][]string), nil
 	}
 
 	fi := &FileInfo{
-		Focus:    make(map[string][]string),
-		Interact: make(map[string][]string),
+		Focus:    make(map[string]map[string][]string),
+		Interact: make(map[string]map[string][]string),
 	}
 
 	content = stripWhitespace(content)
@@ -181,8 +264,11 @@ func parseLixenContent(content string) (focus, interact map[string][]string, err
 }
 
 // canonicalizeLixenContent creates canonical lixen content from maps
-// Output: #focus{group1[tag1,tag2],group2[tag3]},#interact{init[cursor],state[gold]}
-func canonicalizeLixenContent(focus, interact map[string][]string) string {
+// Output format depends on structure:
+// - 2-level: #focus{group(tag1,tag2)}
+// - 3-level: #focus{group[mod1(tag1,tag2),mod2]}
+// - Mixed: #focus{group1(tag1),group2[mod(tag2)]}
+func canonicalizeLixenContent(focus, interact map[string]map[string][]string) string {
 	var parts []string
 
 	if block := formatBlock("focus", focus); block != "" {
@@ -195,8 +281,8 @@ func canonicalizeLixenContent(focus, interact map[string][]string) string {
 	return strings.Join(parts, ",")
 }
 
-// formatBlock formats a single block: #name{group1[tag1,tag2],group2[tag3]}
-func formatBlock(name string, groups map[string][]string) string {
+// formatBlock formats a single block with proper syntax for 2-level vs 3-level
+func formatBlock(name string, groups map[string]map[string][]string) string {
 	if len(groups) == 0 {
 		return ""
 	}
@@ -209,10 +295,59 @@ func formatBlock(name string, groups map[string][]string) string {
 
 	var groupParts []string
 	for _, g := range groupNames {
-		tags := make([]string, len(groups[g]))
-		copy(tags, groups[g])
-		sort.Strings(tags)
-		groupParts = append(groupParts, fmt.Sprintf("%s[%s]", g, strings.Join(tags, ",")))
+		mods := groups[g]
+
+		// Check if only DirectTagsModule exists (2-level format)
+		if len(mods) == 1 {
+			if tags, ok := mods[DirectTagsModule]; ok && len(tags) > 0 {
+				sortedTags := make([]string, len(tags))
+				copy(sortedTags, tags)
+				sort.Strings(sortedTags)
+				groupParts = append(groupParts, fmt.Sprintf("%s(%s)", g, strings.Join(sortedTags, ",")))
+				continue
+			}
+		}
+
+		// 3-level format: group[mod1(tag1),mod2]
+		modNames := make([]string, 0, len(mods))
+		for m := range mods {
+			if m != DirectTagsModule {
+				modNames = append(modNames, m)
+			}
+		}
+		sort.Strings(modNames)
+
+		// Include DirectTagsModule tags as direct if present alongside modules
+		var modParts []string
+		if tags, ok := mods[DirectTagsModule]; ok && len(tags) > 0 {
+			sortedTags := make([]string, len(tags))
+			copy(sortedTags, tags)
+			sort.Strings(sortedTags)
+			// Direct tags go first without module wrapper
+			for _, t := range sortedTags {
+				modParts = append(modParts, t)
+			}
+		}
+
+		for _, m := range modNames {
+			tags := mods[m]
+			if len(tags) == 0 {
+				modParts = append(modParts, m)
+			} else {
+				sortedTags := make([]string, len(tags))
+				copy(sortedTags, tags)
+				sort.Strings(sortedTags)
+				modParts = append(modParts, fmt.Sprintf("%s(%s)", m, strings.Join(sortedTags, ",")))
+			}
+		}
+
+		if len(modParts) > 0 {
+			groupParts = append(groupParts, fmt.Sprintf("%s[%s]", g, strings.Join(modParts, ",")))
+		}
+	}
+
+	if len(groupParts) == 0 {
+		return ""
 	}
 
 	return fmt.Sprintf("#%s{%s}", name, strings.Join(groupParts, ","))

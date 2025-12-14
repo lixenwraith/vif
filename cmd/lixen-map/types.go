@@ -24,43 +24,35 @@ type AppState struct {
 	DepthLimit int             // expansion depth
 
 	// Focus view (center pane)
-	TagFlat       []TagItem       // Flattened groups and tags for rendering
-	TagCursor     int             // Cursor position in right pane
-	TagScroll     int             // Scroll offset for right pane
-	GroupExpanded map[string]bool // group name → expanded state
+	TagFlat        []TagItem       // Flattened groups and tags for rendering
+	TagCursor      int             // Cursor position in right pane
+	TagScroll      int             // Scroll offset for right pane
+	GroupExpanded  map[string]bool // group name → expanded state
+	ModuleExpanded map[string]bool // "group.module" → expanded state  // NEW
 
 	// Interact view (right pane)
-	InteractFlat          []TagItem
-	InteractCursor        int
-	InteractScroll        int
-	InteractGroupExpanded map[string]bool
+	InteractFlat           []TagItem
+	InteractCursor         int
+	InteractScroll         int
+	InteractGroupExpanded  map[string]bool
+	ModuleInteractExpanded map[string]bool
 
 	// Filter state
 	Filter      *FilterState
 	RgAvailable bool // ripgrep installed
 
 	// UI state
-	InputMode      bool           // true when typing keyword
-	InputBuffer    string         // keyword input buffer
-	SearchType     SearchType     // tag vs group search
-	SearchCategory SearchCategory // focus vs interact
-	CommandPending rune           // first key of two-key sequence, 0 if none
-	Message        string         // status message
-	PreviewMode    bool           // showing file preview
-	PreviewFiles   []string       // files to preview
-	PreviewScroll  int            // preview scroll offset
-
-	// Mindmap state
-	MindmapMode  bool
-	MindmapState *MindmapState
-
-	// Dive state
-	DiveMode  bool
-	DiveState *DiveState
+	InputMode     bool     // true when typing keyword
+	InputBuffer   string   // keyword input buffer
+	Message       string   // status message
+	PreviewMode   bool     // showing file preview
+	PreviewFiles  []string // files to preview
+	PreviewScroll int      // preview scroll offset
 
 	// Editor state
 	EditMode   bool   // true when editing tags
 	EditTarget string // file path being edited
+	EditCursor int    // cursor position within InputBuffer
 
 	// Help overlay
 	HelpMode bool
@@ -98,6 +90,7 @@ var (
 	colorGroupNameFg     = terminal.RGB{R: 220, G: 180, B: 80}
 	colorTagNameFg       = terminal.RGB{R: 100, G: 200, B: 220}
 	colorPartialSelectFg = terminal.RGB{R: 80, G: 160, B: 220}
+	colorModuleFg        = terminal.RGB{R: 80, G: 200, B: 80}
 )
 
 // Layout
@@ -140,20 +133,23 @@ const (
 
 // FileInfo holds parsed metadata for a single Go source file
 type FileInfo struct {
-	Path     string              // relative path: "systems/drain.go"
-	Package  string              // package name: "systems"
-	Focus    map[string][]string // focus group -> tags: {"arch": ["ecs"], "gameplay": ["drain"]}
-	Interact map[string][]string // interact group -> tags: {"init": ["cursor"], "state": ["gold"]}
-	Imports  []string            // local package names: ["events", "engine"]
-	IsAll    bool                // has #focus{all[*]}
-	Size     int64               // file size in bytes
+	Path    string
+	Package string
+	// Focus: group → module → tags
+	// For 2-level format group(tag): module key is DirectTagsModule ("")
+	// For 3-level format group[mod(tag)]: module key is the module name
+	Focus    map[string]map[string][]string
+	Interact map[string]map[string][]string
+	Imports  []string
+	IsAll    bool
+	Size     int64
 }
 
 // SizeWarningThreshold is output size (bytes) above which size displays in warning color
 const SizeWarningThreshold = 300 * 1024
 
 // TagMap returns the appropriate tag map for the category
-func (fi *FileInfo) TagMap(cat Category) map[string][]string {
+func (fi *FileInfo) TagMap(cat Category) map[string]map[string][]string {
 	if cat == CategoryInteract {
 		return fi.Interact
 	}
@@ -179,16 +175,20 @@ type Index struct {
 	ReverseDeps map[string][]string
 
 	// Focus index
-	FocusGroups  []string            // sorted group names
-	FocusTags    map[string][]string // group -> tags
-	FocusByGroup map[string][]string // group -> file paths
-	FocusByTag   map[string][]string // "group:tag" -> file paths
+	FocusGroups   []string                       // sorted group names
+	FocusModules  map[string][]string            // group → sorted module names (excludes DirectTagsModule)
+	FocusTags     map[string]map[string][]string // group → module → sorted tags
+	FocusByGroup  map[string][]string            // "group" → file paths
+	FocusByModule map[string][]string            // "group.module" → file paths
+	FocusByTag    map[string][]string            // "group.module.tag" → file paths
 
 	// Interact index
-	InteractGroups  []string            // sorted group names
-	InteractTags    map[string][]string // group -> tags
-	InteractByGroup map[string][]string // group -> file paths
-	InteractByTag   map[string][]string // "group:tag" -> file paths
+	InteractGroups   []string
+	InteractModules  map[string][]string
+	InteractTags     map[string]map[string][]string
+	InteractByGroup  map[string][]string
+	InteractByModule map[string][]string
+	InteractByTag    map[string][]string
 }
 
 // TagGroups returns sorted group names for the category
@@ -199,15 +199,23 @@ func (idx *Index) TagGroups(cat Category) []string {
 	return idx.FocusGroups
 }
 
-// TagsByGroup returns group -> tags map for the category
-func (idx *Index) TagsByGroup(cat Category) map[string][]string {
+// TagModules returns group → modules map for the category
+func (idx *Index) TagModules(cat Category) map[string][]string {
+	if cat == CategoryInteract {
+		return idx.InteractModules
+	}
+	return idx.FocusModules
+}
+
+// TagsByGroupModule returns group → module → tags map for the category
+func (idx *Index) TagsByGroupModule(cat Category) map[string]map[string][]string {
 	if cat == CategoryInteract {
 		return idx.InteractTags
 	}
 	return idx.FocusTags
 }
 
-// FilesByGroup returns group -> file paths map for the category
+// FilesByGroup returns group → file paths map for the category
 func (idx *Index) FilesByGroup(cat Category) map[string][]string {
 	if cat == CategoryInteract {
 		return idx.InteractByGroup
@@ -215,12 +223,51 @@ func (idx *Index) FilesByGroup(cat Category) map[string][]string {
 	return idx.FocusByGroup
 }
 
-// FilesByTag returns "group:tag" -> file paths map for the category
+// FilesByModule returns "group.module" → file paths map for the category
+func (idx *Index) FilesByModule(cat Category) map[string][]string {
+	if cat == CategoryInteract {
+		return idx.InteractByModule
+	}
+	return idx.FocusByModule
+}
+
+// FilesByTag returns "group.module.tag" → file paths map for the category
 func (idx *Index) FilesByTag(cat Category) map[string][]string {
 	if cat == CategoryInteract {
 		return idx.InteractByTag
 	}
 	return idx.FocusByTag
+}
+
+// FilterState holds visual filter highlight state
+type FilterState struct {
+	FilteredPaths        map[string]bool                       // files matching current filter
+	FilteredFocusTags    map[string]map[string]map[string]bool // group → module → tag → highlighted
+	FilteredInteractTags map[string]map[string]map[string]bool
+	Mode                 FilterMode
+}
+
+// NewFilterState creates initialized empty FilterState
+func NewFilterState() *FilterState {
+	return &FilterState{
+		FilteredPaths:        make(map[string]bool),
+		FilteredFocusTags:    make(map[string]map[string]map[string]bool),
+		FilteredInteractTags: make(map[string]map[string]map[string]bool),
+		Mode:                 FilterOR,
+	}
+}
+
+// FilteredTags returns the appropriate filtered tags map for the category
+func (f *FilterState) FilteredTags(cat Category) map[string]map[string]map[string]bool {
+	if cat == CategoryInteract {
+		return f.FilteredInteractTags
+	}
+	return f.FilteredFocusTags
+}
+
+// HasActiveFilter returns true if any paths are filtered
+func (f *FilterState) HasActiveFilter() bool {
+	return len(f.FilteredPaths) > 0
 }
 
 // TreeNode represents a directory or file in hierarchical tree
@@ -253,45 +300,6 @@ const (
 	SearchCategoryInteract
 )
 
-// FilterState holds visual filter highlight state
-type FilterState struct {
-	FilteredPaths        map[string]bool            // files matching current filter
-	FilteredFocusTags    map[string]map[string]bool // focus group -> tag -> highlighted
-	FilteredInteractTags map[string]map[string]bool // interact group -> tag -> highlighted
-	Mode                 FilterMode
-}
-
-// NewFilterState creates initialized empty FilterState
-func NewFilterState() *FilterState {
-	return &FilterState{
-		FilteredPaths:        make(map[string]bool),
-		FilteredFocusTags:    make(map[string]map[string]bool),
-		FilteredInteractTags: make(map[string]map[string]bool),
-		Mode:                 FilterOR,
-	}
-}
-
-// HasActiveFilter returns true if any paths are filtered
-func (f *FilterState) HasActiveFilter() bool {
-	return len(f.FilteredPaths) > 0
-}
-
-// FilteredTags returns the appropriate filtered tags map for the category
-func (f *FilterState) FilteredTags(cat Category) map[string]map[string]bool {
-	if cat == CategoryInteract {
-		return f.FilteredInteractTags
-	}
-	return f.FilteredFocusTags
-}
-
-// TagItem represents a group header or tag in right pane list
-type TagItem struct {
-	IsGroup  bool   // true for group header, false for tag
-	Group    string // group name
-	Tag      string // tag name (empty for group headers)
-	Expanded bool   // for groups: expansion state
-}
-
 // TagSelectionState represents selection state for a tag/group
 type TagSelectionState int
 
@@ -301,22 +309,23 @@ const (
 	TagSelectFull
 )
 
-// DivePane identifies active pane in dive view
-type DivePane int
+// DirectTagsModule is sentinel for 2-level group(tag) format without modules
+const DirectTagsModule = ""
+
+// TagItemType distinguishes item kinds in tag pane list
+type TagItemType uint8
 
 const (
-	DivePaneDependsOn DivePane = iota
-	DivePaneDependedBy
-	DivePaneFocusLinks
-	DivePaneInteractLinks
+	TagItemTypeGroup TagItemType = iota
+	TagItemTypeModule
+	TagItemTypeTag
 )
 
-// DiveItemType distinguishes item kinds in dive list
-type DiveItemType int
-
-const (
-	DiveItemDir   DiveItemType = iota // Package directory
-	DiveItemGroup                     // Tag group header
-	DiveItemTag                       // Tag under group
-	DiveItemFile                      // Leaf file
-)
+// TagItem represents a group, module, or tag in pane list
+type TagItem struct {
+	Type     TagItemType
+	Group    string
+	Module   string // empty for groups, DirectTagsModule for 2-level tags
+	Tag      string // empty for groups and modules
+	Expanded bool   // groups and modules can expand
+}

@@ -7,6 +7,31 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
+// applyInitialCollapsedState collapses all panes for fresh start
+func (app *AppState) applyInitialCollapsedState() {
+	// Collapse tree directories
+	collapseAllRecursive(app.TreeRoot)
+	app.RefreshTreeFlat()
+	app.TreeCursor = 0
+	app.TreeScroll = 0
+
+	// Collapse focus groups
+	for _, group := range app.Index.FocusGroups {
+		app.GroupExpanded[group] = false
+	}
+	app.RefreshFocusFlat()
+	app.TagCursor = 0
+	app.TagScroll = 0
+
+	// Collapse interact groups
+	for _, group := range app.Index.InteractGroups {
+		app.InteractGroupExpanded[group] = false
+	}
+	app.RefreshInteractFlat()
+	app.InteractCursor = 0
+	app.InteractScroll = 0
+}
+
 // HandleEvent routes keyboard events to appropriate handler
 func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 	app.Message = ""
@@ -19,16 +44,6 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 	// Help overlay takes priority
 	if app.HelpMode {
 		app.HandleHelpEvent(ev)
-		return false, false
-	}
-
-	if app.DiveMode {
-		app.HandleDiveEvent(ev)
-		return false, false
-	}
-
-	if app.MindmapMode {
-		app.HandleMindmapEvent(ev)
 		return false, false
 	}
 
@@ -45,11 +60,6 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 		return app.handleInputEvent(ev)
 	}
 
-	// Two-key command sequence handling
-	if app.CommandPending != 0 {
-		return app.handleCommandSequence(ev)
-	}
-
 	// Global keys
 	switch ev.Key {
 	case terminal.KeyCtrlY:
@@ -61,15 +71,12 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 		case '?':
 			app.HelpMode = true
 			return false, false
-		case 'f', 'i':
-			// Start two-key filter sequence
-			app.CommandPending = ev.Rune
-			app.Message = fmt.Sprintf("-%c-", ev.Rune)
+		case 'f':
+			app.applyCurrentPaneFilter()
 			return false, false
 		case '/':
 			app.InputMode = true
 			app.InputBuffer = ""
-			app.SearchType = SearchTypeContent
 			return false, false
 		case 'r':
 			app.ReindexAll()
@@ -152,10 +159,6 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 		}
 		return false, false
 
-	case terminal.KeyEnter:
-		app.EnterMindmap()
-		return false, false
-
 	case terminal.KeyCtrlS:
 		files := app.ComputeOutputFiles()
 		if len(files) == 0 {
@@ -189,109 +192,6 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 		return app.handleInteractPaneEvent(ev)
 	}
 	return false, false
-}
-
-// applyInitialCollapsedState collapses all panes for fresh start
-func (app *AppState) applyInitialCollapsedState() {
-	// Collapse tree directories
-	collapseAllRecursive(app.TreeRoot)
-	app.RefreshTreeFlat()
-	app.TreeCursor = 0
-	app.TreeScroll = 0
-
-	// Collapse focus groups
-	for _, group := range app.Index.FocusGroups {
-		app.GroupExpanded[group] = false
-	}
-	app.RefreshFocusFlat()
-	app.TagCursor = 0
-	app.TagScroll = 0
-
-	// Collapse interact groups
-	for _, group := range app.Index.InteractGroups {
-		app.InteractGroupExpanded[group] = false
-	}
-	app.RefreshInteractFlat()
-	app.InteractCursor = 0
-	app.InteractScroll = 0
-}
-
-// handleCommandSequence processes second key of two-key filter command
-func (app *AppState) handleCommandSequence(ev terminal.Event) (quit, output bool) {
-	pending := app.CommandPending
-	app.CommandPending = 0
-
-	if ev.Key == terminal.KeyEscape {
-		app.Message = ""
-		return false, false
-	}
-
-	if ev.Key != terminal.KeyRune {
-		app.Message = "invalid sequence"
-		return false, false
-	}
-
-	// 'ff' and 'if' - toggle filter on cursor item
-	if ev.Rune == 'f' {
-		switch pending {
-		case 'f':
-			app.applyCurrentPaneFilter()
-			return false, false
-		case 'i':
-			app.applyCurrentPaneFilter()
-			return false, false
-		}
-	}
-
-	// Determine category from first key
-	switch pending {
-	case 'f':
-		app.SearchCategory = SearchCategoryFocus
-	case 'i':
-		app.SearchCategory = SearchCategoryInteract
-	default:
-		app.Message = "invalid sequence"
-		return false, false
-	}
-
-	// Determine type from second key
-	switch ev.Rune {
-	case 'g':
-		app.SearchType = SearchTypeGroups
-	case 't':
-		app.SearchType = SearchTypeTags
-	default:
-		app.Message = "invalid sequence"
-		return false, false
-	}
-
-	// Enter input mode for filter query
-	app.InputMode = true
-	app.InputBuffer = ""
-
-	categoryName := "focus"
-	if app.SearchCategory == SearchCategoryInteract {
-		categoryName = "interact"
-	}
-	typeName := "tags"
-	if app.SearchType == SearchTypeGroups {
-		typeName = "groups"
-	}
-	app.Message = fmt.Sprintf("filter %s %s:", categoryName, typeName)
-
-	return false, false
-}
-
-// applyCurrentPaneFilter applies filter toggle based on active pane
-func (app *AppState) applyCurrentPaneFilter() {
-	switch app.FocusPane {
-	case PaneLeft:
-		app.applyTreePaneFilter()
-	case PaneCenter:
-		app.applyFocusPaneFilter()
-	case PaneRight:
-		app.applyInteractPaneFilter()
-	}
 }
 
 // handleTreePaneEvent processes input when tree pane focused
@@ -339,106 +239,6 @@ func (app *AppState) handleTreePaneEvent(ev terminal.Event) (quit, output bool) 
 		app.jumpTreeToStart()
 	case terminal.KeyEnd:
 		app.jumpTreeToEnd()
-	}
-
-	return false, false
-}
-
-// handleFocusPaneEvent processes input when focus pane is active
-func (app *AppState) handleFocusPaneEvent(ev terminal.Event) (quit, output bool) {
-	switch ev.Key {
-	case terminal.KeyRune:
-		switch ev.Rune {
-		case 'j':
-			app.moveTagCursor(1)
-		case 'k':
-			app.moveTagCursor(-1)
-		case 'h':
-			app.collapseCurrentGroup()
-		case 'l':
-			app.expandCurrentGroup()
-		case ' ':
-			app.toggleTagSelection()
-		case 'a':
-			app.selectAllVisibleTags()
-		case '0':
-			app.jumpTagToStart()
-		case '$':
-			app.jumpTagToEnd()
-		case 'H':
-			app.collapseAllGroups()
-		case 'L':
-			app.expandAllGroups()
-		}
-
-	case terminal.KeyUp:
-		app.moveTagCursor(-1)
-	case terminal.KeyDown:
-		app.moveTagCursor(1)
-	case terminal.KeyLeft:
-		app.collapseCurrentGroup()
-	case terminal.KeyRight:
-		app.expandCurrentGroup()
-	case terminal.KeySpace:
-		app.toggleTagSelection()
-	case terminal.KeyPageUp:
-		app.pageTagCursor(-1)
-	case terminal.KeyPageDown:
-		app.pageTagCursor(1)
-	case terminal.KeyHome:
-		app.jumpTagToStart()
-	case terminal.KeyEnd:
-		app.jumpTagToEnd()
-	}
-
-	return false, false
-}
-
-// handleInteractPaneEvent processes input when interact pane is active
-func (app *AppState) handleInteractPaneEvent(ev terminal.Event) (quit, output bool) {
-	switch ev.Key {
-	case terminal.KeyRune:
-		switch ev.Rune {
-		case 'j':
-			app.moveInteractCursor(1)
-		case 'k':
-			app.moveInteractCursor(-1)
-		case 'h':
-			app.collapseCurrentInteractGroup()
-		case 'l':
-			app.expandCurrentInteractGroup()
-		case ' ':
-			app.toggleInteractSelection()
-		case 'a':
-			app.selectAllVisibleInteractTags()
-		case '0':
-			app.jumpInteractToStart()
-		case '$':
-			app.jumpInteractToEnd()
-		case 'H':
-			app.collapseAllInteractGroups()
-		case 'L':
-			app.expandAllInteractGroups()
-		}
-
-	case terminal.KeyUp:
-		app.moveInteractCursor(-1)
-	case terminal.KeyDown:
-		app.moveInteractCursor(1)
-	case terminal.KeyLeft:
-		app.collapseCurrentInteractGroup()
-	case terminal.KeyRight:
-		app.expandCurrentInteractGroup()
-	case terminal.KeySpace:
-		app.toggleInteractSelection()
-	case terminal.KeyPageUp:
-		app.pageInteractCursor(-1)
-	case terminal.KeyPageDown:
-		app.pageInteractCursor(1)
-	case terminal.KeyHome:
-		app.jumpInteractToStart()
-	case terminal.KeyEnd:
-		app.jumpInteractToEnd()
 	}
 
 	return false, false
@@ -502,73 +302,6 @@ func (app *AppState) jumpTagToEnd() {
 	app.moveTagCursor(0)
 }
 
-// collapseAllGroups collapses all expanded tag groups
-func (app *AppState) collapseAllGroups() {
-	for _, group := range app.Index.FocusGroups {
-		app.GroupExpanded[group] = false
-	}
-	app.RefreshFocusFlat()
-	if app.TagCursor >= len(app.TagFlat) {
-		app.TagCursor = len(app.TagFlat) - 1
-	}
-	if app.TagCursor < 0 {
-		app.TagCursor = 0
-	}
-	app.moveTagCursor(0)
-	app.Message = "collapsed all groups"
-}
-
-// expandAllGroups expands all tag groups
-func (app *AppState) expandAllGroups() {
-	for _, group := range app.Index.FocusGroups {
-		app.GroupExpanded[group] = true
-	}
-	app.RefreshFocusFlat()
-	app.moveTagCursor(0)
-	app.Message = "expanded all groups"
-}
-
-// collapseCurrentGroup collapses group at or containing cursor
-func (app *AppState) collapseCurrentGroup() {
-	if len(app.TagFlat) == 0 {
-		return
-	}
-	item := app.TagFlat[app.TagCursor]
-	group := item.Group
-
-	if app.GroupExpanded[group] {
-		app.GroupExpanded[group] = false
-		app.RefreshFocusFlat()
-		// Move cursor to group header if we were on a tag
-		if !item.IsGroup {
-			for i, ti := range app.TagFlat {
-				if ti.IsGroup && ti.Group == group {
-					app.TagCursor = i
-					break
-				}
-			}
-		}
-		app.moveTagCursor(0)
-	}
-}
-
-// expandCurrentGroup expands group at cursor if collapsed
-func (app *AppState) expandCurrentGroup() {
-	if len(app.TagFlat) == 0 {
-		return
-	}
-	item := app.TagFlat[app.TagCursor]
-	if !item.IsGroup {
-		return
-	}
-
-	if !app.GroupExpanded[item.Group] {
-		app.GroupExpanded[item.Group] = true
-		app.RefreshFocusFlat()
-		app.moveTagCursor(0)
-	}
-}
-
 // pageTreeCursor moves tree cursor by half-page
 func (app *AppState) pageTreeCursor(direction int) {
 	visibleRows := app.Height - headerHeight - statusHeight - helpHeight - 2
@@ -595,34 +328,6 @@ func (app *AppState) pageTagCursor(direction int) {
 		delta = direction
 	}
 	app.moveTagCursor(delta)
-}
-
-// handleInputEvent processes search input mode keystrokes
-func (app *AppState) handleInputEvent(ev terminal.Event) (quit, output bool) {
-	switch ev.Key {
-	case terminal.KeyEscape:
-		app.InputMode = false
-		app.InputBuffer = ""
-		return false, false
-
-	case terminal.KeyEnter:
-		app.InputMode = false
-		app.executeSearch(app.InputBuffer)
-		app.InputBuffer = ""
-		return false, false
-
-	case terminal.KeyBackspace:
-		if len(app.InputBuffer) > 0 {
-			app.InputBuffer = app.InputBuffer[:len(app.InputBuffer)-1]
-		}
-		return false, false
-
-	case terminal.KeyRune:
-		app.InputBuffer += string(ev.Rune)
-		return false, false
-	}
-
-	return false, false
 }
 
 // handlePreviewEvent processes preview mode keystrokes
@@ -832,35 +537,6 @@ func (app *AppState) selectAllVisibleTags() {
 	app.Message = fmt.Sprintf("selected %d files", count)
 }
 
-// toggleTagSelection toggles selection for tag or group at cursor
-func (app *AppState) toggleTagSelection() {
-	if len(app.TagFlat) == 0 {
-		return
-	}
-
-	item := app.TagFlat[app.TagCursor]
-
-	if item.IsGroup {
-		// Toggle all files in group
-		if app.allFilesWithGroupSelected(CategoryFocus, item.Group) {
-			count := app.deselectFilesWithGroup(CategoryFocus, item.Group)
-			app.Message = fmt.Sprintf("deselected %d files from #%s", count, item.Group)
-		} else {
-			count := app.selectFilesWithGroup(CategoryFocus, item.Group)
-			app.Message = fmt.Sprintf("selected %d files with #%s", count, item.Group)
-		}
-	} else {
-		// Toggle all files with this tag
-		if app.allFilesWithTagSelected(CategoryFocus, item.Group, item.Tag) {
-			count := app.deselectFilesWithTag(CategoryFocus, item.Group, item.Tag)
-			app.Message = fmt.Sprintf("deselected %d files from #%s{%s}", count, item.Group, item.Tag)
-		} else {
-			count := app.selectFilesWithTag(CategoryFocus, item.Group, item.Tag)
-			app.Message = fmt.Sprintf("selected %d files with #%s{%s}", count, item.Group, item.Tag)
-		}
-	}
-}
-
 // EnterPreview initializes preview mode with computed output files
 func (app *AppState) EnterPreview() {
 	app.PreviewFiles = app.ComputeOutputFiles()
@@ -926,99 +602,6 @@ func (app *AppState) jumpInteractToEnd() {
 	app.moveInteractCursor(0)
 }
 
-// collapseCurrentInteractGroup collapses interact group at cursor
-func (app *AppState) collapseCurrentInteractGroup() {
-	if len(app.InteractFlat) == 0 {
-		return
-	}
-	item := app.InteractFlat[app.InteractCursor]
-	group := item.Group
-
-	if app.InteractGroupExpanded[group] {
-		app.InteractGroupExpanded[group] = false
-		app.RefreshInteractFlat()
-		if !item.IsGroup {
-			for i, ti := range app.InteractFlat {
-				if ti.IsGroup && ti.Group == group {
-					app.InteractCursor = i
-					break
-				}
-			}
-		}
-		app.moveInteractCursor(0)
-	}
-}
-
-// expandCurrentInteractGroup expands interact group at cursor
-func (app *AppState) expandCurrentInteractGroup() {
-	if len(app.InteractFlat) == 0 {
-		return
-	}
-	item := app.InteractFlat[app.InteractCursor]
-	if !item.IsGroup {
-		return
-	}
-
-	if !app.InteractGroupExpanded[item.Group] {
-		app.InteractGroupExpanded[item.Group] = true
-		app.RefreshInteractFlat()
-		app.moveInteractCursor(0)
-	}
-}
-
-// collapseAllInteractGroups collapses all interact groups
-func (app *AppState) collapseAllInteractGroups() {
-	for _, group := range app.Index.InteractGroups {
-		app.InteractGroupExpanded[group] = false
-	}
-	app.RefreshInteractFlat()
-	if app.InteractCursor >= len(app.InteractFlat) {
-		app.InteractCursor = len(app.InteractFlat) - 1
-	}
-	if app.InteractCursor < 0 {
-		app.InteractCursor = 0
-	}
-	app.moveInteractCursor(0)
-	app.Message = "collapsed all interact groups"
-}
-
-// expandAllInteractGroups expands all interact groups
-func (app *AppState) expandAllInteractGroups() {
-	for _, group := range app.Index.InteractGroups {
-		app.InteractGroupExpanded[group] = true
-	}
-	app.RefreshInteractFlat()
-	app.moveInteractCursor(0)
-	app.Message = "expanded all interact groups"
-}
-
-// toggleInteractSelection toggles selection for interact tag/group at cursor
-func (app *AppState) toggleInteractSelection() {
-	if len(app.InteractFlat) == 0 {
-		return
-	}
-
-	item := app.InteractFlat[app.InteractCursor]
-
-	if item.IsGroup {
-		if app.allFilesWithGroupSelected(CategoryInteract, item.Group) {
-			count := app.deselectFilesWithGroup(CategoryInteract, item.Group)
-			app.Message = fmt.Sprintf("deselected %d files from #%s", count, item.Group)
-		} else {
-			count := app.selectFilesWithGroup(CategoryInteract, item.Group)
-			app.Message = fmt.Sprintf("selected %d files with #%s", count, item.Group)
-		}
-	} else {
-		if app.allFilesWithTagSelected(CategoryInteract, item.Group, item.Tag) {
-			count := app.deselectFilesWithTag(CategoryInteract, item.Group, item.Tag)
-			app.Message = fmt.Sprintf("deselected %d files from #%s{%s}", count, item.Group, item.Tag)
-		} else {
-			count := app.selectFilesWithTag(CategoryInteract, item.Group, item.Tag)
-			app.Message = fmt.Sprintf("selected %d files with #%s{%s}", count, item.Group, item.Tag)
-		}
-	}
-}
-
 // selectAllVisibleInteractTags selects files matching interact filter or all
 func (app *AppState) selectAllVisibleInteractTags() {
 	count := 0
@@ -1070,4 +653,436 @@ func (app *AppState) copyOutputToClipboard() {
 	}
 
 	app.Message = fmt.Sprintf("copied %d files to clipboard", len(files))
+}
+
+// applyCurrentPaneFilter applies filter toggle based on active pane
+func (app *AppState) applyCurrentPaneFilter() {
+	switch app.FocusPane {
+	case PaneLeft:
+		app.applyTreePaneFilter()
+	case PaneCenter:
+		app.applyFocusPaneFilter()
+	case PaneRight:
+		app.applyInteractPaneFilter()
+	}
+}
+
+// handleFocusPaneEvent processes input when focus pane is active
+func (app *AppState) handleFocusPaneEvent(ev terminal.Event) (quit, output bool) {
+	switch ev.Key {
+	case terminal.KeyRune:
+		switch ev.Rune {
+		case 'j':
+			app.moveTagCursor(1)
+		case 'k':
+			app.moveTagCursor(-1)
+		case 'h':
+			app.collapseCurrentFocusItem()
+		case 'l':
+			app.expandCurrentFocusItem()
+		case ' ':
+			app.toggleFocusSelection()
+		case 'a':
+			app.selectAllVisibleTags()
+		case '0':
+			app.jumpTagToStart()
+		case '$':
+			app.jumpTagToEnd()
+		case 'H':
+			app.collapseAllFocusItems()
+		case 'L':
+			app.expandAllFocusItems()
+		}
+
+	case terminal.KeyUp:
+		app.moveTagCursor(-1)
+	case terminal.KeyDown:
+		app.moveTagCursor(1)
+	case terminal.KeyLeft:
+		app.collapseCurrentFocusItem()
+	case terminal.KeyRight:
+		app.expandCurrentFocusItem()
+	case terminal.KeySpace:
+		app.toggleFocusSelection()
+	case terminal.KeyPageUp:
+		app.pageTagCursor(-1)
+	case terminal.KeyPageDown:
+		app.pageTagCursor(1)
+	case terminal.KeyHome:
+		app.jumpTagToStart()
+	case terminal.KeyEnd:
+		app.jumpTagToEnd()
+	}
+
+	return false, false
+}
+
+// handleInteractPaneEvent processes input when interact pane is active
+func (app *AppState) handleInteractPaneEvent(ev terminal.Event) (quit, output bool) {
+	switch ev.Key {
+	case terminal.KeyRune:
+		switch ev.Rune {
+		case 'j':
+			app.moveInteractCursor(1)
+		case 'k':
+			app.moveInteractCursor(-1)
+		case 'h':
+			app.collapseCurrentInteractItem()
+		case 'l':
+			app.expandCurrentInteractItem()
+		case ' ':
+			app.toggleInteractSelection()
+		case 'a':
+			app.selectAllVisibleInteractTags()
+		case '0':
+			app.jumpInteractToStart()
+		case '$':
+			app.jumpInteractToEnd()
+		case 'H':
+			app.collapseAllInteractItems()
+		case 'L':
+			app.expandAllInteractItems()
+		}
+
+	case terminal.KeyUp:
+		app.moveInteractCursor(-1)
+	case terminal.KeyDown:
+		app.moveInteractCursor(1)
+	case terminal.KeyLeft:
+		app.collapseCurrentInteractItem()
+	case terminal.KeyRight:
+		app.expandCurrentInteractItem()
+	case terminal.KeySpace:
+		app.toggleInteractSelection()
+	case terminal.KeyPageUp:
+		app.pageInteractCursor(-1)
+	case terminal.KeyPageDown:
+		app.pageInteractCursor(1)
+	case terminal.KeyHome:
+		app.jumpInteractToStart()
+	case terminal.KeyEnd:
+		app.jumpInteractToEnd()
+	}
+
+	return false, false
+}
+
+// collapseCurrentFocusItem collapses group/module at or containing cursor
+func (app *AppState) collapseCurrentFocusItem() {
+	if len(app.TagFlat) == 0 {
+		return
+	}
+	item := app.TagFlat[app.TagCursor]
+
+	switch item.Type {
+	case TagItemTypeGroup:
+		if item.Expanded {
+			app.GroupExpanded[item.Group] = false
+			app.RefreshFocusFlat()
+			app.moveTagCursor(0)
+		}
+	case TagItemTypeModule:
+		moduleKey := item.Group + "." + item.Module
+		if item.Expanded {
+			app.ModuleExpanded[moduleKey] = false
+			app.RefreshFocusFlat()
+			app.moveTagCursor(0)
+		} else {
+			// Navigate to parent group
+			for i := app.TagCursor - 1; i >= 0; i-- {
+				if app.TagFlat[i].Type == TagItemTypeGroup && app.TagFlat[i].Group == item.Group {
+					app.TagCursor = i
+					app.moveTagCursor(0)
+					break
+				}
+			}
+		}
+	case TagItemTypeTag:
+		// Navigate to parent module or group
+		for i := app.TagCursor - 1; i >= 0; i-- {
+			ti := app.TagFlat[i]
+			if item.Module == DirectTagsModule {
+				if ti.Type == TagItemTypeGroup && ti.Group == item.Group {
+					app.TagCursor = i
+					app.moveTagCursor(0)
+					break
+				}
+			} else {
+				if ti.Type == TagItemTypeModule && ti.Group == item.Group && ti.Module == item.Module {
+					app.TagCursor = i
+					app.moveTagCursor(0)
+					break
+				}
+			}
+		}
+	}
+}
+
+// expandCurrentFocusItem expands group/module at cursor
+func (app *AppState) expandCurrentFocusItem() {
+	if len(app.TagFlat) == 0 {
+		return
+	}
+	item := app.TagFlat[app.TagCursor]
+
+	switch item.Type {
+	case TagItemTypeGroup:
+		if !item.Expanded {
+			app.GroupExpanded[item.Group] = true
+			app.RefreshFocusFlat()
+			app.moveTagCursor(0)
+		}
+	case TagItemTypeModule:
+		moduleKey := item.Group + "." + item.Module
+		if !item.Expanded {
+			app.ModuleExpanded[moduleKey] = true
+			app.RefreshFocusFlat()
+			app.moveTagCursor(0)
+		}
+	}
+}
+
+// collapseAllFocusItems collapses all groups and modules
+func (app *AppState) collapseAllFocusItems() {
+	for _, group := range app.Index.FocusGroups {
+		app.GroupExpanded[group] = false
+	}
+	for key := range app.ModuleExpanded {
+		app.ModuleExpanded[key] = false
+	}
+	app.RefreshFocusFlat()
+	if app.TagCursor >= len(app.TagFlat) {
+		app.TagCursor = len(app.TagFlat) - 1
+	}
+	if app.TagCursor < 0 {
+		app.TagCursor = 0
+	}
+	app.moveTagCursor(0)
+	app.Message = "collapsed all"
+}
+
+// expandAllFocusItems expands all groups and modules
+func (app *AppState) expandAllFocusItems() {
+	for _, group := range app.Index.FocusGroups {
+		app.GroupExpanded[group] = true
+	}
+	for _, group := range app.Index.FocusGroups {
+		if mods, ok := app.Index.FocusModules[group]; ok {
+			for _, mod := range mods {
+				app.ModuleExpanded[group+"."+mod] = true
+			}
+		}
+	}
+	app.RefreshFocusFlat()
+	app.moveTagCursor(0)
+	app.Message = "expanded all"
+}
+
+// toggleFocusSelection toggles selection for item at cursor
+func (app *AppState) toggleFocusSelection() {
+	if len(app.TagFlat) == 0 {
+		return
+	}
+
+	item := app.TagFlat[app.TagCursor]
+
+	switch item.Type {
+	case TagItemTypeGroup:
+		if app.allFilesWithGroupSelected(CategoryFocus, item.Group) {
+			count := app.deselectFilesWithGroup(CategoryFocus, item.Group)
+			app.Message = fmt.Sprintf("deselected %d files from #%s", count, item.Group)
+		} else {
+			count := app.selectFilesWithGroup(CategoryFocus, item.Group)
+			app.Message = fmt.Sprintf("selected %d files with #%s", count, item.Group)
+		}
+	case TagItemTypeModule:
+		if app.allFilesWithModuleSelected(CategoryFocus, item.Group, item.Module) {
+			count := app.deselectFilesWithModule(CategoryFocus, item.Group, item.Module)
+			app.Message = fmt.Sprintf("deselected %d files from %s", count, item.Module)
+		} else {
+			count := app.selectFilesWithModule(CategoryFocus, item.Group, item.Module)
+			app.Message = fmt.Sprintf("selected %d files with %s", count, item.Module)
+		}
+	case TagItemTypeTag:
+		if app.allFilesWithTagSelected(CategoryFocus, item.Group, item.Module, item.Tag) {
+			count := app.deselectFilesWithTag(CategoryFocus, item.Group, item.Module, item.Tag)
+			app.Message = fmt.Sprintf("deselected %d files from %s", count, item.Tag)
+		} else {
+			count := app.selectFilesWithTag(CategoryFocus, item.Group, item.Module, item.Tag)
+			app.Message = fmt.Sprintf("selected %d files with %s", count, item.Tag)
+		}
+	}
+}
+
+// collapseCurrentInteractItem collapses group/module at or containing cursor
+func (app *AppState) collapseCurrentInteractItem() {
+	if len(app.InteractFlat) == 0 {
+		return
+	}
+	item := app.InteractFlat[app.InteractCursor]
+
+	switch item.Type {
+	case TagItemTypeGroup:
+		if item.Expanded {
+			app.InteractGroupExpanded[item.Group] = false
+			app.RefreshInteractFlat()
+			app.moveInteractCursor(0)
+		}
+	case TagItemTypeModule:
+		moduleKey := item.Group + "." + item.Module
+		if item.Expanded {
+			app.ModuleInteractExpanded[moduleKey] = false
+			app.RefreshInteractFlat()
+			app.moveInteractCursor(0)
+		} else {
+			for i := app.InteractCursor - 1; i >= 0; i-- {
+				if app.InteractFlat[i].Type == TagItemTypeGroup && app.InteractFlat[i].Group == item.Group {
+					app.InteractCursor = i
+					app.moveInteractCursor(0)
+					break
+				}
+			}
+		}
+	case TagItemTypeTag:
+		for i := app.InteractCursor - 1; i >= 0; i-- {
+			ti := app.InteractFlat[i]
+			if item.Module == DirectTagsModule {
+				if ti.Type == TagItemTypeGroup && ti.Group == item.Group {
+					app.InteractCursor = i
+					app.moveInteractCursor(0)
+					break
+				}
+			} else {
+				if ti.Type == TagItemTypeModule && ti.Group == item.Group && ti.Module == item.Module {
+					app.InteractCursor = i
+					app.moveInteractCursor(0)
+					break
+				}
+			}
+		}
+	}
+}
+
+// expandCurrentInteractItem expands group/module at cursor
+func (app *AppState) expandCurrentInteractItem() {
+	if len(app.InteractFlat) == 0 {
+		return
+	}
+	item := app.InteractFlat[app.InteractCursor]
+
+	switch item.Type {
+	case TagItemTypeGroup:
+		if !item.Expanded {
+			app.InteractGroupExpanded[item.Group] = true
+			app.RefreshInteractFlat()
+			app.moveInteractCursor(0)
+		}
+	case TagItemTypeModule:
+		moduleKey := item.Group + "." + item.Module
+		if !item.Expanded {
+			app.ModuleInteractExpanded[moduleKey] = true
+			app.RefreshInteractFlat()
+			app.moveInteractCursor(0)
+		}
+	}
+}
+
+// collapseAllInteractItems collapses all interact groups and modules
+func (app *AppState) collapseAllInteractItems() {
+	for _, group := range app.Index.InteractGroups {
+		app.InteractGroupExpanded[group] = false
+	}
+	for key := range app.ModuleInteractExpanded {
+		app.ModuleInteractExpanded[key] = false
+	}
+	app.RefreshInteractFlat()
+	if app.InteractCursor >= len(app.InteractFlat) {
+		app.InteractCursor = len(app.InteractFlat) - 1
+	}
+	if app.InteractCursor < 0 {
+		app.InteractCursor = 0
+	}
+	app.moveInteractCursor(0)
+	app.Message = "collapsed all interact"
+}
+
+// expandAllInteractItems expands all interact groups and modules
+func (app *AppState) expandAllInteractItems() {
+	for _, group := range app.Index.InteractGroups {
+		app.InteractGroupExpanded[group] = true
+	}
+	for _, group := range app.Index.InteractGroups {
+		if mods, ok := app.Index.InteractModules[group]; ok {
+			for _, mod := range mods {
+				app.ModuleInteractExpanded[group+"."+mod] = true
+			}
+		}
+	}
+	app.RefreshInteractFlat()
+	app.moveInteractCursor(0)
+	app.Message = "expanded all interact"
+}
+
+// toggleInteractSelection toggles selection for interact item at cursor
+func (app *AppState) toggleInteractSelection() {
+	if len(app.InteractFlat) == 0 {
+		return
+	}
+
+	item := app.InteractFlat[app.InteractCursor]
+
+	switch item.Type {
+	case TagItemTypeGroup:
+		if app.allFilesWithGroupSelected(CategoryInteract, item.Group) {
+			count := app.deselectFilesWithGroup(CategoryInteract, item.Group)
+			app.Message = fmt.Sprintf("deselected %d files from #%s", count, item.Group)
+		} else {
+			count := app.selectFilesWithGroup(CategoryInteract, item.Group)
+			app.Message = fmt.Sprintf("selected %d files with #%s", count, item.Group)
+		}
+	case TagItemTypeModule:
+		if app.allFilesWithModuleSelected(CategoryInteract, item.Group, item.Module) {
+			count := app.deselectFilesWithModule(CategoryInteract, item.Group, item.Module)
+			app.Message = fmt.Sprintf("deselected %d files from %s", count, item.Module)
+		} else {
+			count := app.selectFilesWithModule(CategoryInteract, item.Group, item.Module)
+			app.Message = fmt.Sprintf("selected %d files with %s", count, item.Module)
+		}
+	case TagItemTypeTag:
+		if app.allFilesWithTagSelected(CategoryInteract, item.Group, item.Module, item.Tag) {
+			count := app.deselectFilesWithTag(CategoryInteract, item.Group, item.Module, item.Tag)
+			app.Message = fmt.Sprintf("deselected %d files from %s", count, item.Tag)
+		} else {
+			count := app.selectFilesWithTag(CategoryInteract, item.Group, item.Module, item.Tag)
+			app.Message = fmt.Sprintf("selected %d files with %s", count, item.Tag)
+		}
+	}
+}
+
+// handleInputEvent processes search input mode keystrokes
+func (app *AppState) handleInputEvent(ev terminal.Event) (quit, output bool) {
+	switch ev.Key {
+	case terminal.KeyEscape:
+		app.InputMode = false
+		app.InputBuffer = ""
+		return false, false
+
+	case terminal.KeyEnter:
+		app.InputMode = false
+		app.executeSearch(app.InputBuffer)
+		app.InputBuffer = ""
+		return false, false
+
+	case terminal.KeyBackspace:
+		if len(app.InputBuffer) > 0 {
+			app.InputBuffer = app.InputBuffer[:len(app.InputBuffer)-1]
+		}
+		return false, false
+
+	case terminal.KeyRune:
+		app.InputBuffer += string(ev.Rune)
+		return false, false
+	}
+
+	return false, false
 }

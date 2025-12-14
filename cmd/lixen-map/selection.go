@@ -81,18 +81,54 @@ func (app *AppState) ComputeOutputFiles() []string {
 	return result
 }
 
+// computeOutputStats calculates file counts and sizes for output
+// Returns: total files, dep-only files, total size, dep-only size
+func (app *AppState) computeOutputStats() (totalFiles, depFiles int, totalSize, depSize int64) {
+	outputFiles := app.ComputeOutputFiles()
+	totalFiles = len(outputFiles)
+
+	// Build set of directly selected + #all files
+	directSet := make(map[string]bool)
+	for path := range app.Selected {
+		directSet[path] = true
+	}
+	for path, fi := range app.Index.Files {
+		if fi.IsAll {
+			directSet[path] = true
+		}
+	}
+
+	for _, path := range outputFiles {
+		fi := app.Index.Files[path]
+		if fi == nil {
+			continue
+		}
+		totalSize += fi.Size
+
+		// Count as dep if in output but not directly selected/#all
+		if !directSet[path] {
+			depFiles++
+			depSize += fi.Size
+		}
+	}
+
+	return
+}
+
 // selectFilesWithTag adds all files with specific tag to selection
-func (app *AppState) selectFilesWithTag(cat Category, group, tag string) int {
+func (app *AppState) selectFilesWithTag(cat Category, group, module, tag string) int {
 	count := 0
 	for path, fi := range app.Index.Files {
-		if tags, ok := fi.TagMap(cat)[group]; ok {
-			for _, t := range tags {
-				if t == tag {
-					if !app.Selected[path] {
-						app.Selected[path] = true
-						count++
+		if mods, ok := fi.TagMap(cat)[group]; ok {
+			if tags, ok := mods[module]; ok {
+				for _, t := range tags {
+					if t == tag {
+						if !app.Selected[path] {
+							app.Selected[path] = true
+							count++
+						}
+						break
 					}
-					break
 				}
 			}
 		}
@@ -101,17 +137,51 @@ func (app *AppState) selectFilesWithTag(cat Category, group, tag string) int {
 }
 
 // deselectFilesWithTag removes all files with specific tag from selection
-func (app *AppState) deselectFilesWithTag(cat Category, group, tag string) int {
+func (app *AppState) deselectFilesWithTag(cat Category, group, module, tag string) int {
 	count := 0
 	for path, fi := range app.Index.Files {
-		if tags, ok := fi.TagMap(cat)[group]; ok {
-			for _, t := range tags {
-				if t == tag {
-					if app.Selected[path] {
-						delete(app.Selected, path)
-						count++
+		if mods, ok := fi.TagMap(cat)[group]; ok {
+			if tags, ok := mods[module]; ok {
+				for _, t := range tags {
+					if t == tag {
+						if app.Selected[path] {
+							delete(app.Selected, path)
+							count++
+						}
+						break
 					}
-					break
+				}
+			}
+		}
+	}
+	return count
+}
+
+// selectFilesWithModule adds all files in module to selection
+func (app *AppState) selectFilesWithModule(cat Category, group, module string) int {
+	count := 0
+	for path, fi := range app.Index.Files {
+		if mods, ok := fi.TagMap(cat)[group]; ok {
+			if _, ok := mods[module]; ok {
+				if !app.Selected[path] {
+					app.Selected[path] = true
+					count++
+				}
+			}
+		}
+	}
+	return count
+}
+
+// deselectFilesWithModule removes all files in module from selection
+func (app *AppState) deselectFilesWithModule(cat Category, group, module string) int {
+	count := 0
+	for path, fi := range app.Index.Files {
+		if mods, ok := fi.TagMap(cat)[group]; ok {
+			if _, ok := mods[module]; ok {
+				if app.Selected[path] {
+					delete(app.Selected, path)
+					count++
 				}
 			}
 		}
@@ -148,15 +218,31 @@ func (app *AppState) deselectFilesWithGroup(cat Category, group string) int {
 }
 
 // allFilesWithTagSelected checks if all files with specific tag are selected
-func (app *AppState) allFilesWithTagSelected(cat Category, group, tag string) bool {
+func (app *AppState) allFilesWithTagSelected(cat Category, group, module, tag string) bool {
 	for path, fi := range app.Index.Files {
-		if tags, ok := fi.TagMap(cat)[group]; ok {
-			for _, t := range tags {
-				if t == tag {
-					if !app.Selected[path] {
-						return false
+		if mods, ok := fi.TagMap(cat)[group]; ok {
+			if tags, ok := mods[module]; ok {
+				for _, t := range tags {
+					if t == tag {
+						if !app.Selected[path] {
+							return false
+						}
+						break
 					}
-					break
+				}
+			}
+		}
+	}
+	return true
+}
+
+// allFilesWithModuleSelected checks if all files in module are selected
+func (app *AppState) allFilesWithModuleSelected(cat Category, group, module string) bool {
+	for path, fi := range app.Index.Files {
+		if mods, ok := fi.TagMap(cat)[group]; ok {
+			if _, ok := mods[module]; ok {
+				if !app.Selected[path] {
+					return false
 				}
 			}
 		}
@@ -174,38 +260,4 @@ func (app *AppState) allFilesWithGroupSelected(cat Category, group string) bool 
 		}
 	}
 	return true
-}
-
-// computeOutputStats calculates file counts and sizes for output
-// Returns: total files, dep-only files, total size, dep-only size
-func (app *AppState) computeOutputStats() (totalFiles, depFiles int, totalSize, depSize int64) {
-	outputFiles := app.ComputeOutputFiles()
-	totalFiles = len(outputFiles)
-
-	// Build set of directly selected + #all files
-	directSet := make(map[string]bool)
-	for path := range app.Selected {
-		directSet[path] = true
-	}
-	for path, fi := range app.Index.Files {
-		if fi.IsAll {
-			directSet[path] = true
-		}
-	}
-
-	for _, path := range outputFiles {
-		fi := app.Index.Files[path]
-		if fi == nil {
-			continue
-		}
-		totalSize += fi.Size
-
-		// Count as dep if in output but not directly selected/#all
-		if !directSet[path] {
-			depFiles++
-			depSize += fi.Size
-		}
-	}
-
-	return
 }
