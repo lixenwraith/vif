@@ -11,16 +11,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/events"
 )
 
-// createAudioCommand creates an audio command for sound playback
-func createAudioCommand(soundType audio.SoundType, timestamp time.Time, frameNumber uint64) audio.AudioCommand {
-	return audio.AudioCommand{
-		Type:       soundType,
-		Priority:   1,
-		Generation: frameNumber,
-		Timestamp:  timestamp,
-	}
-}
-
 // EnergySystem handles character typing and energy calculation
 type EnergySystem struct {
 	ctx            *engine.GameContext
@@ -279,8 +269,6 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 
 // handleTypingError resets heat and boost on typing error
 func (s *EnergySystem) handleTypingError(world *engine.World, now time.Time) {
-	frameNumber := uint64(s.ctx.State.GetFrameNumber())
-
 	// Flash cursor error
 	cursor, _ := world.Cursors.Get(s.ctx.CursorEntity)
 	cursor.ErrorFlashRemaining = constants.ErrorBlinkTimeout
@@ -297,8 +285,7 @@ func (s *EnergySystem) handleTypingError(world *engine.World, now time.Time) {
 
 	// Trigger error sound
 	if s.ctx.AudioEngine != nil {
-		cmd := createAudioCommand(audio.SoundError, now, frameNumber)
-		s.ctx.AudioEngine.SendRealTime(cmd)
+		s.ctx.AudioEngine.Play(audio.SoundError)
 	}
 }
 
@@ -308,7 +295,6 @@ func (s *EnergySystem) handleNuggetCollection(world *engine.World, entity core.E
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	now := timeRes.GameTime
-	frameNumber := uint64(s.ctx.State.GetFrameNumber())
 
 	// Check if typed character matches the nugget character
 	if char.Rune != typedRune {
@@ -321,8 +307,7 @@ func (s *EnergySystem) handleNuggetCollection(world *engine.World, entity core.E
 		s.triggerEnergyBlink(0, 0, now)
 		// Trigger error sound
 		if s.ctx.AudioEngine != nil {
-			cmd := createAudioCommand(audio.SoundError, now, frameNumber)
-			s.ctx.AudioEngine.SendRealTime(cmd)
+			s.ctx.AudioEngine.Play(audio.SoundError)
 		}
 		return
 	}
@@ -379,7 +364,6 @@ func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity core
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
 	now := timeRes.GameTime
-	frameNumber := uint64(s.ctx.State.GetFrameNumber())
 
 	// Check if typed character matches
 	if char.Rune != typedRune {
@@ -390,8 +374,7 @@ func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity core
 		s.triggerEnergyBlink(0, 0, now)
 		// Trigger error sound
 		if s.ctx.AudioEngine != nil {
-			cmd := createAudioCommand(audio.SoundError, now, frameNumber)
-			s.ctx.AudioEngine.SendRealTime(cmd)
+			s.ctx.AudioEngine.Play(audio.SoundError)
 		}
 		return
 	}

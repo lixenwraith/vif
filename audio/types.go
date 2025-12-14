@@ -2,7 +2,6 @@ package audio
 
 import (
 	"errors"
-	"time"
 )
 
 // SoundType represents different sound effects
@@ -15,15 +14,6 @@ const (
 	SoundCoin                    // Gold sequence complete
 	soundTypeCount
 )
-
-// AudioCommand represents a sound playback request
-// Priority/Generation/Timestamp kept for API compatibility
-type AudioCommand struct {
-	Type       SoundType
-	Priority   int
-	Generation uint64
-	Timestamp  time.Time
-}
 
 // BackendType identifies the audio backend
 type BackendType int

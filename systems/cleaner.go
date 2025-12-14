@@ -214,12 +214,7 @@ func (cs *CleanerSystem) spawnCleaners(world *engine.World) {
 	}
 
 	if cs.ctx.AudioEngine != nil {
-		cs.ctx.AudioEngine.SendRealTime(audio.AudioCommand{
-			Type:       audio.SoundWhoosh,
-			Priority:   1,
-			Generation: uint64(cs.ctx.State.GetFrameNumber()),
-			Timestamp:  timeRes.GameTime,
-		})
+		cs.ctx.AudioEngine.Play(audio.SoundWhoosh)
 	}
 
 	gameWidth := float64(config.GameWidth)
@@ -301,15 +296,9 @@ func (cs *CleanerSystem) checkAndDestroyAtPositionExcluding(world *engine.World,
 // spawnDirectionalCleaners generates 4 cleaner entities from origin position
 func (cs *CleanerSystem) spawnDirectionalCleaners(world *engine.World, originX, originY int) {
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 
 	if cs.ctx.AudioEngine != nil {
-		cs.ctx.AudioEngine.SendRealTime(audio.AudioCommand{
-			Type:       audio.SoundWhoosh,
-			Priority:   1,
-			Generation: uint64(cs.ctx.State.GetFrameNumber()),
-			Timestamp:  timeRes.GameTime,
-		})
+		cs.ctx.AudioEngine.Play(audio.SoundWhoosh)
 	}
 
 	gameWidth := float64(config.GameWidth)

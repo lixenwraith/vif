@@ -274,13 +274,7 @@ func (s *GoldSystem) handleCompletion(world *engine.World, sequenceID int, now t
 
 	// Play coin sound for gold completion
 	if s.ctx.AudioEngine != nil {
-		cmd := audio.AudioCommand{
-			Type:       audio.SoundCoin,
-			Priority:   1,
-			Generation: uint64(s.ctx.State.GetFrameNumber()),
-			Timestamp:  now,
-		}
-		s.ctx.AudioEngine.SendRealTime(cmd)
+		s.ctx.AudioEngine.Play(audio.SoundCoin)
 	}
 }
 

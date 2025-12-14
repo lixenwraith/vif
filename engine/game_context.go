@@ -25,6 +25,14 @@ type UISnapshot struct {
 	OverlayScroll  int
 }
 
+// AudioPlayer defines the minimal audio interface used by game systems
+type AudioPlayer interface {
+	Play(audio.SoundType) bool
+	ToggleMute() bool
+	IsMuted() bool
+	IsRunning() bool
+}
+
 // GameContext holds all game state including the ECS world
 type GameContext struct {
 	// Central game state (spawn/content/phase state management)
@@ -88,15 +96,7 @@ type GameContext struct {
 	IsPaused atomic.Bool
 
 	// Audio engine (nil if audio disabled or initialization failed)
-	AudioEngine interface {
-		SendRealTime(cmd audio.AudioCommand) bool
-		SendState(cmd audio.AudioCommand) bool
-		StopCurrentSound()
-		DrainQueues()
-		IsRunning() bool
-		ToggleMute() bool
-		IsMuted() bool
-	}
+	AudioEngine AudioPlayer
 }
 
 // NewGameContext creates a new game context with initialized ECS world
@@ -258,11 +258,10 @@ func (ctx *GameContext) GetRealTime() time.Time {
 	return ctx.PausableClock.RealTime()
 }
 
-// StopAudio stops the current audio and drains queues if audio engine is available
+// StopAudio mutes audio during pause (sounds complete naturally)
 func (ctx *GameContext) StopAudio() {
-	if ctx.AudioEngine != nil && ctx.AudioEngine.IsRunning() {
-		ctx.AudioEngine.StopCurrentSound()
-		ctx.AudioEngine.DrainQueues()
+	if ctx.AudioEngine != nil && ctx.AudioEngine.IsRunning() && !ctx.AudioEngine.IsMuted() {
+		ctx.AudioEngine.ToggleMute()
 	}
 }
 

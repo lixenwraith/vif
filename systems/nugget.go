@@ -110,13 +110,7 @@ func (s *NuggetSystem) handleJumpRequest(world *engine.World, now time.Time) {
 
 	// 6. Play Sound
 	if s.ctx.AudioEngine != nil {
-		cmd := audio.AudioCommand{
-			Type:       audio.SoundBell,
-			Priority:   1,
-			Generation: uint64(s.ctx.State.GetFrameNumber()),
-			Timestamp:  now,
-		}
-		s.ctx.AudioEngine.SendState(cmd)
+		s.ctx.AudioEngine.Play(audio.SoundBell)
 	}
 }
 

@@ -164,17 +164,6 @@ func (ae *AudioEngine) Stop() {
 	ae.wg.Wait()
 }
 
-// TODO: Change interface and deprecate
-// SendRealTime queues a sound (API compatibility)
-func (ae *AudioEngine) SendRealTime(cmd AudioCommand) bool {
-	return ae.Play(cmd.Type)
-}
-
-// SendState queues a sound (API compatibility)
-func (ae *AudioEngine) SendState(cmd AudioCommand) bool {
-	return ae.Play(cmd.Type)
-}
-
 // Play queues a sound for playback
 func (ae *AudioEngine) Play(st SoundType) bool {
 	if !ae.running.Load() || ae.muted.Load() || ae.silentMode.Load() {
@@ -247,14 +236,4 @@ func (ae *AudioEngine) GetStats() (played, dropped, overflow uint64) {
 		return p, d, 0
 	}
 	return 0, 0, 0
-}
-
-// DrainQueues clears pending sounds (API compatibility)
-func (ae *AudioEngine) DrainQueues() {
-	// Mixer handles queue internally; no-op for compatibility
-}
-
-// StopCurrentSound stops playback (API compatibility)
-func (ae *AudioEngine) StopCurrentSound() {
-	// Not directly supported in streaming model; sounds complete naturally
 }
