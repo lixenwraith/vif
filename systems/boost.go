@@ -10,11 +10,15 @@ import (
 )
 
 type BoostSystem struct {
-	ctx *engine.GameContext
+	world *engine.World
+	res   engine.CoreResources
 }
 
-func NewBoostSystem(ctx *engine.GameContext) *BoostSystem {
-	return &BoostSystem{ctx: ctx}
+func NewBoostSystem(world *engine.World) *BoostSystem {
+	return &BoostSystem{
+		world: world,
+		res:   engine.GetCoreResources(world),
+	}
 }
 
 func (bs *BoostSystem) Priority() int {
@@ -46,7 +50,9 @@ func (bs *BoostSystem) HandleEvent(world *engine.World, event events.GameEvent) 
 
 // Update handles boost duration decrement using Delta Time
 func (bs *BoostSystem) Update(world *engine.World, dt time.Duration) {
-	boost, ok := world.Boosts.Get(bs.ctx.CursorEntity)
+	cursorEntity := bs.res.Cursor.Entity
+
+	boost, ok := world.Boosts.Get(cursorEntity)
 	if !ok || !boost.Active {
 		return
 	}
@@ -57,13 +63,14 @@ func (bs *BoostSystem) Update(world *engine.World, dt time.Duration) {
 		boost.Active = false
 	}
 
-	world.Boosts.Add(bs.ctx.CursorEntity, boost)
+	world.Boosts.Add(cursorEntity, boost)
 }
 
 func (bs *BoostSystem) activate(world *engine.World, duration time.Duration) {
-	boost, ok := world.Boosts.Get(bs.ctx.CursorEntity)
+	cursorEntity := bs.res.Cursor.Entity
+
+	boost, ok := world.Boosts.Get(cursorEntity)
 	if !ok {
-		// Should always exist on cursor, but safe fallback
 		boost = components.BoostComponent{}
 	}
 
@@ -73,27 +80,25 @@ func (bs *BoostSystem) activate(world *engine.World, duration time.Duration) {
 	boost.Remaining = duration
 	boost.TotalDuration = duration // Reset total for UI progress bar if applicable
 
-	world.Boosts.Add(bs.ctx.CursorEntity, boost)
-
-	// Boost implies Max Heat
-	// We emit event to keep HeatSystem authoritative
-	// Timestamp is not available here in standard helper, would need to pass it or use context
-	// For simplicity in this decoupled system, we assume immediate effect
-	bs.ctx.PushEvent(events.EventHeatSet, &events.HeatSetPayload{Value: constants.MaxHeat}, bs.ctx.PausableClock.Now())
+	world.Boosts.Add(cursorEntity, boost)
 }
 
 func (bs *BoostSystem) deactivate(world *engine.World) {
-	boost, ok := world.Boosts.Get(bs.ctx.CursorEntity)
+	cursorEntity := bs.res.Cursor.Entity
+
+	boost, ok := world.Boosts.Get(cursorEntity)
 	if !ok {
 		return
 	}
 	boost.Active = false
 	boost.Remaining = 0
-	world.Boosts.Add(bs.ctx.CursorEntity, boost)
+	world.Boosts.Add(cursorEntity, boost)
 }
 
 func (bs *BoostSystem) extend(world *engine.World, duration time.Duration) {
-	boost, ok := world.Boosts.Get(bs.ctx.CursorEntity)
+	cursorEntity := bs.res.Cursor.Entity
+
+	boost, ok := world.Boosts.Get(cursorEntity)
 	if !ok || !boost.Active {
 		return
 	}
@@ -105,5 +110,5 @@ func (bs *BoostSystem) extend(world *engine.World, duration time.Duration) {
 		boost.TotalDuration = boost.Remaining
 	}
 
-	world.Boosts.Add(bs.ctx.CursorEntity, boost)
+	world.Boosts.Add(cursorEntity, boost)
 }

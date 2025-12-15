@@ -9,14 +9,19 @@ import (
 	"github.com/lixenwraith/vi-fighter/events"
 )
 
+// TODO: find a way around not keeping ctx, non-standard interface for factory
 // CommandSystem handles meta-game commands like Reset, Debug, and Help
 type CommandSystem struct {
 	ctx *engine.GameContext
+	res engine.CoreResources
 }
 
 // NewCommandSystem creates a new command system
 func NewCommandSystem(ctx *engine.GameContext) *CommandSystem {
-	return &CommandSystem{ctx: ctx}
+	return &CommandSystem{
+		ctx: ctx,
+		res: engine.GetCoreResources(ctx.World),
+	}
 }
 
 // Priority returns the system's priority

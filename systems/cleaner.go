@@ -14,15 +14,18 @@ import (
 
 // CleanerSystem manages the cleaner animation and logic using vector physics
 type CleanerSystem struct {
-	ctx               *engine.GameContext
+	world *engine.World
+	res   engine.CoreResources
+
 	spawned           map[int64]bool // Track which frames already spawned cleaners
 	hasSpawnedSession bool           // Track if we spawned cleaners this session
 }
 
 // NewCleanerSystem creates a new cleaner system
-func NewCleanerSystem(ctx *engine.GameContext) *CleanerSystem {
+func NewCleanerSystem(world *engine.World) *CleanerSystem {
 	return &CleanerSystem{
-		ctx:     ctx,
+		world:   world,
+		res:     engine.GetCoreResources(world),
 		spawned: make(map[int64]bool),
 	}
 }
@@ -64,12 +67,11 @@ func (cs *CleanerSystem) HandleEvent(world *engine.World, event events.GameEvent
 
 // Update handles spawning, movement, collision, and cleanup synchronously
 func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
-	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-	now := timeRes.GameTime
+	config := cs.res.Config
 
 	// Clean old entries from spawned map
-	currentFrame := cs.ctx.State.GetFrameNumber()
+	// TODO: change this
+	currentFrame := cs.res.State.State.GetFrameNumber()
 	for frame := range cs.spawned {
 		if currentFrame-frame > constants.CleanerDeduplicationWindow {
 			delete(cs.spawned, frame)
@@ -80,7 +82,7 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 
 	// Push EventCleanerFinished when all cleaners have completed their animation
 	if len(entities) == 0 && cs.hasSpawnedSession {
-		cs.ctx.PushEvent(events.EventCleanerFinished, nil, now)
+		world.PushEvent(events.EventCleanerFinished, nil)
 		cs.hasSpawnedSession = false
 		return
 	}
@@ -192,30 +194,28 @@ func (cs *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 	entities = world.Cleaners.All()
 	// Push EventCleanerFinished when all cleaners have completed their animation
 	if len(entities) == 0 && cs.hasSpawnedSession {
-		cs.ctx.PushEvent(events.EventCleanerFinished, nil, now)
+		world.PushEvent(events.EventCleanerFinished, nil)
 		cs.hasSpawnedSession = false
-		return
 	}
 }
 
 // spawnCleaners generates cleaner entities using generic stores
 func (cs *CleanerSystem) spawnCleaners(world *engine.World) {
-	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+	config := cs.res.Config
 
 	redRows := cs.scanRedCharacterRows(world)
 
 	// TODO: new boost trigger
 	// Grayout: no targets to clean
 	if len(redRows) == 0 {
-		cs.ctx.State.TriggerGrayout(timeRes.GameTime)
-		cs.ctx.PushEvent(events.EventCleanerFinished, nil, timeRes.GameTime)
+		cs.res.State.State.TriggerGrayout(cs.res.Time.GameTime)
+		world.PushEvent(events.EventCleanerFinished, nil)
 		return
 	}
 
-	if cs.ctx.AudioEngine != nil {
-		cs.ctx.AudioEngine.Play(audio.SoundWhoosh)
-	}
+	world.PushEvent(events.EventSoundRequest, &events.SoundRequestPayload{
+		SoundType: audio.SoundWhoosh,
+	})
 
 	gameWidth := float64(config.GameWidth)
 	duration := constants.CleanerAnimationDuration.Seconds()
@@ -295,11 +295,11 @@ func (cs *CleanerSystem) checkAndDestroyAtPositionExcluding(world *engine.World,
 
 // spawnDirectionalCleaners generates 4 cleaner entities from origin position
 func (cs *CleanerSystem) spawnDirectionalCleaners(world *engine.World, originX, originY int) {
-	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+	config := cs.res.Config
 
-	if cs.ctx.AudioEngine != nil {
-		cs.ctx.AudioEngine.Play(audio.SoundWhoosh)
-	}
+	world.PushEvent(events.EventSoundRequest, &events.SoundRequestPayload{
+		SoundType: audio.SoundWhoosh,
+	})
 
 	gameWidth := float64(config.GameWidth)
 	gameHeight := float64(config.GameHeight)
@@ -358,7 +358,7 @@ func (cs *CleanerSystem) spawnDirectionalCleaners(world *engine.World, originX, 
 
 // scanRedCharacterRows finds all rows containing Red sequences using query builder
 func (cs *CleanerSystem) scanRedCharacterRows(world *engine.World) []int {
-	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+	config := cs.res.Config
 	redRows := make(map[int]bool)
 	gameHeight := config.GameHeight
 
@@ -432,12 +432,11 @@ func (cs *CleanerSystem) checkAndDestroyAtPosition(world *engine.World, x, y int
 func (cs *CleanerSystem) spawnRemovalFlash(world *engine.World, targetEntity core.Entity) {
 	if charComp, ok := world.Characters.Get(targetEntity); ok {
 		if posComp, ok := world.Positions.Get(targetEntity); ok {
-			timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-			cs.ctx.PushEvent(events.EventFlashRequest, &events.FlashRequestPayload{
+			world.PushEvent(events.EventFlashRequest, &events.FlashRequestPayload{
 				X:    posComp.X,
 				Y:    posComp.Y,
 				Char: charComp.Rune,
-			}, timeRes.GameTime)
+			})
 		}
 	}
 }

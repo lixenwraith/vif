@@ -1,17 +1,18 @@
 package events
 
-import (
-	"time"
-)
-
 // EventType represents the type of game event
 type EventType int
 
 const (
+	// EventSoundRequest requests audio playback
+	// Trigger: Systems requiring audio feedback
+	// Consumer: AudioSystem | Payload: *SoundRequestPayload
+	EventSoundRequest EventType = iota
+
 	// EventCleanerRequest spawns cleaners on rows with Red characters
 	// Trigger: Gold sequence completed at max heat
 	// Consumer: CleanerSystem | Payload: nil
-	EventCleanerRequest EventType = iota
+	EventCleanerRequest
 
 	// EventDirectionalCleanerRequest spawns 4-way cleaners from origin
 	// Trigger: Nugget collected at max heat, Enter in Normal mode with heat >= 10
@@ -199,8 +200,7 @@ const (
 
 // GameEvent represents a single game event with metadata
 type GameEvent struct {
-	Type      EventType
-	Payload   any
-	Frame     int64 // For deduplication
-	Timestamp time.Time
+	Type    EventType
+	Payload any
+	Frame   int64 // For deduplication
 }

@@ -57,7 +57,7 @@ func handleQuitCommand(ctx *engine.GameContext) bool {
 
 // handleNewCommand resets the game state via event
 func handleNewCommand(ctx *engine.GameContext) bool {
-	ctx.PushEvent(events.EventGameReset, nil, ctx.PausableClock.Now())
+	ctx.PushEvent(events.EventGameReset, nil)
 	ctx.SetLastCommand(":new")
 	return true
 }
@@ -82,7 +82,7 @@ func handleEnergyCommand(ctx *engine.GameContext, args []string) bool {
 
 	ctx.PushEvent(events.EventEnergySet, &events.EnergySetPayload{
 		Value: value,
-	}, ctx.PausableClock.Now())
+	})
 
 	ctx.SetLastCommand(fmt.Sprintf(":energy %d", value))
 	return true
@@ -115,22 +115,20 @@ func handleHeatCommand(ctx *engine.GameContext, args []string) bool {
 	ctx.SetLastCommand(fmt.Sprintf(":heat %d", value))
 
 	// 5. Push event for HeatSystem to process
-	ctx.PushEvent(events.EventHeatSet, &events.HeatSetPayload{Value: value}, ctx.PausableClock.Now())
+	ctx.PushEvent(events.EventHeatSet, &events.HeatSetPayload{Value: value})
 
 	return true
 }
 
 // handleBoostCommand triggers boost request event
 func handleBoostCommand(ctx *engine.GameContext) bool {
-	now := ctx.PausableClock.Now()
-
 	ctx.PushEvent(events.EventHeatSet, &events.HeatSetPayload{
 		Value: constants.MaxHeat,
-	}, now)
+	})
 
 	ctx.PushEvent(events.EventBoostActivate, &events.BoostActivatePayload{
 		Duration: constants.BoostBaseDuration,
-	}, now)
+	})
 
 	ctx.SetLastCommand(":boost")
 	return true
@@ -138,9 +136,8 @@ func handleBoostCommand(ctx *engine.GameContext) bool {
 
 // handleGodCommand sets heat to max and energy to high value
 func handleGodCommand(ctx *engine.GameContext) bool {
-	now := ctx.PausableClock.Now()
-	ctx.PushEvent(events.EventHeatSet, &events.HeatSetPayload{Value: constants.MaxHeat}, now)
-	ctx.PushEvent(events.EventEnergySet, &events.EnergySetPayload{Value: constants.GodEnergyAmount}, now)
+	ctx.PushEvent(events.EventHeatSet, &events.HeatSetPayload{Value: constants.MaxHeat})
+	ctx.PushEvent(events.EventEnergySet, &events.EnergySetPayload{Value: constants.GodEnergyAmount})
 	ctx.SetLastCommand(":god")
 	return true
 }
@@ -155,10 +152,10 @@ func handleSpawnCommand(ctx *engine.GameContext, args []string) bool {
 	arg := strings.ToLower(args[0])
 	switch arg {
 	case "on":
-		ctx.PushEvent(events.EventSpawnChange, &events.SpawnChangePayload{Enabled: true}, ctx.PausableClock.Now())
+		ctx.PushEvent(events.EventSpawnChange, &events.SpawnChangePayload{Enabled: true})
 		ctx.SetLastCommand(":spawn on")
 	case "off":
-		ctx.PushEvent(events.EventSpawnChange, &events.SpawnChangePayload{Enabled: false}, ctx.PausableClock.Now())
+		ctx.PushEvent(events.EventSpawnChange, &events.SpawnChangePayload{Enabled: false})
 		ctx.SetLastCommand(":spawn off")
 	default:
 		setCommandError(ctx, "Invalid arguments for spawn")
@@ -177,7 +174,7 @@ func setCommandError(ctx *engine.GameContext, message string) {
 func handleDebugCommand(ctx *engine.GameContext) bool {
 	// Synchronous mode switch to prevent InputHandler from reverting mode
 	ctx.SetMode(core.ModeOverlay)
-	ctx.PushEvent(events.EventDebugRequest, nil, ctx.PausableClock.Now())
+	ctx.PushEvent(events.EventDebugRequest, nil)
 	return true
 }
 
@@ -185,6 +182,6 @@ func handleDebugCommand(ctx *engine.GameContext) bool {
 func handleHelpCommand(ctx *engine.GameContext) bool {
 	// Synchronous mode switch to prevent InputHandler from reverting mode
 	ctx.SetMode(core.ModeOverlay)
-	ctx.PushEvent(events.EventHelpRequest, nil, ctx.PausableClock.Now())
+	ctx.PushEvent(events.EventHelpRequest, nil)
 	return true
 }

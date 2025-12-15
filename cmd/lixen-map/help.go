@@ -16,6 +16,7 @@ var helpPaneKeys = []helpEntry{
 	{"", ""},
 	{"Selection", ""},
 	{"Space", "Toggle selection"},
+	{"s", "Select and advance"},
 	{"a", "Select all visible"},
 	{"c", "Clear selections"},
 	{"F", "Select filtered"},

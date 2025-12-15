@@ -6,6 +6,7 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/events"
 )
 
 // World contains all entities and their components using compile-time typed stores
@@ -195,4 +196,20 @@ func (w *World) Clear() {
 	for _, store := range w.allStores {
 		store.Clear()
 	}
+}
+
+// PushEvent emits a game event using world resources
+// Retrieves frame number from GameState; caller provides timestamp
+func (w *World) PushEvent(eventType events.EventType, payload any) {
+	eqRes, eqOk := GetResource[*EventQueueResource](w.Resources)
+	stateRes, stateOk := GetResource[*GameStateResource](w.Resources)
+	if !eqOk || !stateOk {
+		return
+	}
+	event := events.GameEvent{
+		Type:    eventType,
+		Payload: payload,
+		Frame:   stateRes.State.GetFrameNumber(),
+	}
+	eqRes.Queue.Push(event)
 }

@@ -61,6 +61,25 @@ func main() {
 	// Create game context with ECS world
 	ctx := engine.NewGameContext(term)
 
+	// Initialize singleton TimeResource (updated in-place by ClockScheduler)
+	timeRes := &engine.TimeResource{
+		GameTime:    ctx.PausableClock.Now(),
+		RealTime:    ctx.GetRealTime(),
+		DeltaTime:   constants.GameUpdateInterval,
+		FrameNumber: 0,
+	}
+	engine.AddResource(ctx.World.Resources, timeRes)
+
+	// Initialize singleton InputResource (updated in-place during input handling)
+	inputRes := &engine.InputResource{
+		GameMode:       int(ctx.GetMode()),
+		CommandText:    "",
+		SearchText:     "",
+		PendingCommand: "",
+		IsPaused:       ctx.IsPaused.Load(),
+	}
+	engine.AddResource(ctx.World.Resources, inputRes)
+
 	// Initialize Render Configuration
 	renderConfig := &engine.RenderConfig{
 		ColorMode:       uint8(colorMode), // 0=256, 1=TrueColor (matches constants in terminal package usually, but safe cast here)
@@ -94,22 +113,22 @@ func main() {
 	}
 
 	// Create and add systems to the ECS world
-	pingSystem := systems.NewPingSystem(ctx)
+	pingSystem := systems.NewPingSystem(ctx.World)
 	ctx.World.AddSystem(pingSystem)
 
-	energySystem := systems.NewEnergySystem(ctx)
+	energySystem := systems.NewEnergySystem(ctx.World)
 	ctx.World.AddSystem(energySystem)
 
-	shieldSystem := systems.NewShieldSystem(ctx)
+	shieldSystem := systems.NewShieldSystem(ctx.World)
 	ctx.World.AddSystem(shieldSystem)
 
-	heatSystem := systems.NewHeatSystem(ctx)
+	heatSystem := systems.NewHeatSystem(ctx.World)
 	ctx.World.AddSystem(heatSystem)
 
-	boostSystem := systems.NewBoostSystem(ctx)
+	boostSystem := systems.NewBoostSystem(ctx.World)
 	ctx.World.AddSystem(boostSystem)
 
-	spawnSystem := systems.NewSpawnSystem(ctx)
+	spawnSystem := systems.NewSpawnSystem(ctx.World)
 	ctx.World.AddSystem(spawnSystem)
 
 	nuggetSystem := systems.NewNuggetSystem(ctx.World)
@@ -121,29 +140,31 @@ func main() {
 	goldSystem := systems.NewGoldSystem(ctx.World)
 	ctx.World.AddSystem(goldSystem)
 
-	materializeSystem := systems.NewMaterializeSystem(ctx)
+	materializeSystem := systems.NewMaterializeSystem(ctx.World)
 	ctx.World.AddSystem(materializeSystem)
 
-	drainSystem := systems.NewDrainSystem(ctx)
+	drainSystem := systems.NewDrainSystem(ctx.World)
 	ctx.World.AddSystem(drainSystem)
 
-	cleanerSystem := systems.NewCleanerSystem(ctx)
+	cleanerSystem := systems.NewCleanerSystem(ctx.World)
 	ctx.World.AddSystem(cleanerSystem)
 
-	flashSystem := systems.NewFlashSystem(ctx)
+	flashSystem := systems.NewFlashSystem(ctx.World)
 	ctx.World.AddSystem(flashSystem)
 
-	splashSystem := systems.NewSplashSystem(ctx)
+	splashSystem := systems.NewSplashSystem(ctx.World)
 	ctx.World.AddSystem(splashSystem)
 
-	timeKeeperSystem := systems.NewTimeKeeperSystem(ctx)
+	timeKeeperSystem := systems.NewTimeKeeperSystem(ctx.World)
 	ctx.World.AddSystem(timeKeeperSystem)
 
 	cullSystem := systems.NewCullSystem()
 	ctx.World.AddSystem(cullSystem)
 
-	// Mostly event-driven, added to ECS for consistency, not adding to World.systems list since it doesn't have any Update(dt) logic
+	// Event-driven system, not added to World.systems list since no Update(dt) logic
+	// TODO: no factory for these
 	commandSystem := systems.NewCommandSystem(ctx)
+	audioSystem := systems.NewAudioSystem(ctx.AudioEngine)
 
 	// Create render orchestrator
 	orchestrator := render.NewRenderOrchestrator(
@@ -216,6 +237,7 @@ func main() {
 	clockScheduler.RegisterEventHandler(flashSystem)
 	clockScheduler.RegisterEventHandler(timeKeeperSystem)
 	clockScheduler.RegisterEventHandler(commandSystem)
+	clockScheduler.RegisterEventHandler(audioSystem)
 	clockScheduler.Start()
 	defer clockScheduler.Stop()
 
@@ -265,14 +287,17 @@ func main() {
 			// Update Input Resource from Context AFTER handling input
 			// This ensures renderers see the mode change in the same frame it happened
 			uiSnapshot := ctx.GetUISnapshot()
-			inputRes := &engine.InputResource{
-				GameMode:       int(ctx.GetMode()),
-				CommandText:    uiSnapshot.CommandText,
-				SearchText:     uiSnapshot.SearchText,
-				PendingCommand: inputMachine.GetPendingCommand(),
-				IsPaused:       ctx.IsPaused.Load(),
-			}
-			engine.AddResource(ctx.World.Resources, inputRes)
+
+			// Lock world to prevent race with Systems reading InputResource in Scheduler
+			ctx.World.RunSafe(func() {
+				inputRes.Update(
+					int(ctx.GetMode()),
+					uiSnapshot.CommandText,
+					uiSnapshot.SearchText,
+					inputMachine.GetPendingCommand(),
+					ctx.IsPaused.Load(),
+				)
+			})
 
 			// Dispatch input events immediately, bypassing game tick wait
 			clockScheduler.DispatchEventsImmediately()
@@ -289,20 +314,41 @@ func main() {
 			// Increment frame number at the start of the frame cycle
 			ctx.IncrementFrameNumber()
 
-			// Update time resource based on context pausable clock
-			timeRes := &engine.TimeResource{
-				GameTime:    ctx.PausableClock.Now(),
-				RealTime:    ctx.GetRealTime(),
-				DeltaTime:   constants.FrameUpdateInterval,
-				FrameNumber: ctx.GetFrameNumber(),
-			}
-			engine.AddResource(ctx.World.Resources, timeRes)
+			// Snapshots for rendering (captured safely under lock)
+			var (
+				snapTimeRes engine.TimeResource
+				snapCursorX int
+				snapCursorY int
+			)
 
-			// During pause: skip game updates but still render
+			// Lock world to safely access/mutate shared TimeResource
+			// Copy the values to stack variables for minimal lock duration and ensuring RenderContext is built with consistent state
+			ctx.World.RunSafe(func() {
+				// TimeResource updated by ClockScheduler; refresh frame number for render
+				timeRes.FrameNumber = ctx.GetFrameNumber()
+
+				// During pause: skip game updates but still render
+				if ctx.IsPaused.Load() {
+					// Update time for paused rendering
+					timeRes.RealTime = ctx.GetRealTime()
+				}
+
+				// Copy TimeResource state by value for thread-safe reading
+				snapTimeRes = *timeRes
+
+				// Capture cursor position
+				if pos, ok := ctx.World.Positions.Get(ctx.CursorEntity); ok {
+					snapCursorX = pos.X
+					snapCursorY = pos.Y
+				}
+			})
+
+			// Build RenderContext using the thread-safe snapshots
+			// NewRenderContextFromGame expects a pointer, so we pass the address of our snapshot copy
+			renderCtx := render.NewRenderContextFromGame(ctx, &snapTimeRes, snapCursorX, snapCursorY)
+
 			if ctx.IsPaused.Load() {
 				// Show pause overlay and maintains visual feedback
-				cursorPos, _ := ctx.World.Positions.Get(ctx.CursorEntity)
-				renderCtx := render.NewRenderContextFromGame(ctx, timeRes, cursorPos.X, cursorPos.Y)
 				orchestrator.RenderFrame(renderCtx, ctx.World)
 				continue
 			}
@@ -317,10 +363,7 @@ func main() {
 				updatePending = true
 			}
 
-			// Render frame (all updates guaranteed complete)
-
-			cursorPos, _ := ctx.World.Positions.Get(ctx.CursorEntity)
-			renderCtx := render.NewRenderContextFromGame(ctx, timeRes, cursorPos.X, cursorPos.Y)
+			// Render frame (all updates guaranteed complete), locks internally for component access
 			orchestrator.RenderFrame(renderCtx, ctx.World)
 
 			// Signal ready for next update (non-blocking)

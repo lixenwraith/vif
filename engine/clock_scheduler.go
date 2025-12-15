@@ -53,11 +53,17 @@ func (p GamePhase) String() string {
 type ClockScheduler struct {
 	ctx          *GameContext
 	timeProvider *PausableClock
+	// TimeResource singleton for in-place updates
+	timeRes *TimeResource
 
 	// Tick configuration
 	tickInterval     time.Duration
 	lastGameTickTime time.Time // Last tick in game time
 	nextTickDeadline time.Time // Next tick deadline for drift correction
+
+	// Tick counter for debugging and metrics
+	tickCount atomic.Uint64
+	mu        sync.RWMutex
 
 	// Control channels
 	stopChan chan struct{}
@@ -69,10 +75,6 @@ type ClockScheduler struct {
 	frameReady <-chan struct{} // Receive signal that frame is ready
 	updateDone chan<- struct{} // Send signal that update is complete
 
-	// Tick counter for debugging and metrics
-	tickCount atomic.Uint64
-	mu        sync.RWMutex
-
 	// Event routing
 	eventRouter *events.Router[*World]
 }
@@ -81,15 +83,19 @@ type ClockScheduler struct {
 func NewClockScheduler(ctx *GameContext, tickInterval time.Duration, frameReady <-chan struct{}) (*ClockScheduler, <-chan struct{}) {
 	updateDone := make(chan struct{}, 1)
 
+	// Look up the singleton TimeResource once at startup
+	timeRes := MustGetResource[*TimeResource](ctx.World.Resources)
+
 	cs := &ClockScheduler{
 		ctx:              ctx,
 		timeProvider:     ctx.PausableClock,
 		tickInterval:     tickInterval,
+		timeRes:          timeRes,
 		lastGameTickTime: ctx.PausableClock.Now(),
+		tickCount:        atomic.Uint64{},
 		eventRouter:      events.NewRouter[*World](ctx.eventQueue),
 		frameReady:       frameReady,
 		updateDone:       updateDone,
-		tickCount:        atomic.Uint64{},
 		stopChan:         make(chan struct{}),
 	}
 
@@ -115,29 +121,29 @@ func (cs *ClockScheduler) EventTypes() []events.EventType {
 
 // HandleEvent processes phase transition events
 func (cs *ClockScheduler) HandleEvent(world *World, event events.GameEvent) {
+	now := cs.timeRes.GameTime
 	switch event.Type {
 	case events.EventGoldSpawned:
-		cs.ctx.State.SetPhase(PhaseGoldActive, event.Timestamp)
+		cs.ctx.State.SetPhase(PhaseGoldActive, now)
 
 	case events.EventGoldComplete, events.EventGoldTimeout, events.EventGoldDestroyed:
-		cs.ctx.State.SetPhase(PhaseDecayWait, event.Timestamp)
-		cs.emitPhaseChange(PhaseDecayWait, event.Timestamp)
+		cs.ctx.State.SetPhase(PhaseDecayWait, now)
+		cs.emitPhaseChange(PhaseDecayWait)
 
 	case events.EventDecayStart:
-		cs.ctx.State.SetPhase(PhaseDecayAnimation, event.Timestamp)
+		cs.ctx.State.SetPhase(PhaseDecayAnimation, now)
 
 	case events.EventDecayComplete:
-		cs.ctx.State.SetPhase(PhaseNormal, event.Timestamp)
-		cs.emitPhaseChange(PhaseNormal, event.Timestamp)
+		cs.ctx.State.SetPhase(PhaseNormal, now)
+		cs.emitPhaseChange(PhaseNormal)
 	}
 }
 
-func (cs *ClockScheduler) emitPhaseChange(phase GamePhase, now time.Time) {
+func (cs *ClockScheduler) emitPhaseChange(phase GamePhase) {
 	event := events.GameEvent{
-		Type:      events.EventPhaseChange,
-		Payload:   &events.PhaseChangePayload{NewPhase: int(phase)},
-		Frame:     cs.ctx.State.GetFrameNumber(),
-		Timestamp: now,
+		Type:    events.EventPhaseChange,
+		Payload: &events.PhaseChangePayload{NewPhase: int(phase)},
+		Frame:   cs.ctx.State.GetFrameNumber(),
 	}
 	cs.ctx.eventQueue.Push(event)
 }
@@ -301,6 +307,14 @@ func (cs *ClockScheduler) processTick() {
 
 	// Dispatch + Update under single lock to serialize with DispatchEventsImmediately
 	cs.ctx.World.RunSafe(func() {
+		now := cs.timeProvider.Now()
+		cs.timeRes.Update(
+			now,
+			cs.timeProvider.RealTime(),
+			cs.tickInterval,
+			cs.ctx.State.GetFrameNumber(),
+		)
+
 		cs.eventRouter.DispatchAll(cs.ctx.World)
 		cs.ctx.World.UpdateLocked(cs.tickInterval)
 	})

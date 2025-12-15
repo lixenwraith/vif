@@ -496,12 +496,11 @@ func (ctx *GameContext) IncrementFrameNumber() int64 {
 // ===== EVENT QUEUE METHODS =====
 
 // PushEvent adds an event to the event queue with current frame number and provided timestamp
-func (ctx *GameContext) PushEvent(eventType events.EventType, payload any, now time.Time) {
+func (ctx *GameContext) PushEvent(eventType events.EventType, payload any) {
 	event := events.GameEvent{
-		Type:      eventType,
-		Payload:   payload,
-		Frame:     ctx.State.GetFrameNumber(),
-		Timestamp: now,
+		Type:    eventType,
+		Payload: payload,
+		Frame:   ctx.State.GetFrameNumber(),
 	}
 	ctx.eventQueue.Push(event)
 }

@@ -152,7 +152,7 @@ func (r *Router) handleEscape() bool {
 		// Trigger ping grid
 		r.ctx.PushEvent(events.EventPingGridRequest, &events.PingGridRequestPayload{
 			Duration: constants.PingGridDuration,
-		}, r.ctx.PausableClock.Now())
+		})
 		return true // Stay in Normal mode
 	}
 
@@ -371,7 +371,7 @@ func (r *Router) handleSpecial(intent *input.Intent) bool {
 }
 
 func (r *Router) handleNuggetJump() bool {
-	r.ctx.PushEvent(events.EventNuggetJumpRequest, nil, r.ctx.PausableClock.Now())
+	r.ctx.PushEvent(events.EventNuggetJumpRequest, nil)
 	return true
 }
 
@@ -385,7 +385,7 @@ func (r *Router) handleFireCleaner() bool {
 	r.ctx.PushEvent(events.EventDirectionalCleanerRequest, &events.DirectionalCleanerPayload{
 		OriginX: originX,
 		OriginY: originY,
-	}, r.ctx.PausableClock.Now())
+	})
 
 	return true
 }
@@ -449,7 +449,7 @@ func (r *Router) handleInsertChar(char rune) {
 	payload.Char = char
 	payload.X = posX
 	payload.Y = posY
-	r.ctx.PushEvent(events.EventCharacterTyped, payload, r.ctx.PausableClock.Now())
+	r.ctx.PushEvent(events.EventCharacterTyped, payload)
 }
 
 func (r *Router) handleSearchChar(char rune) {
@@ -598,7 +598,7 @@ func (r *Router) setLastCommandAndSplash(cmd string) {
 		Color:   components.SplashColorNormal,
 		OriginX: originX,
 		OriginY: originY,
-	}, r.ctx.PausableClock.Now())
+	})
 }
 
 // motionOpToRune converts MotionOp to the canonical rune for tracking

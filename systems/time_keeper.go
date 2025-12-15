@@ -12,12 +12,16 @@ import (
 // TimeKeeperSystem manages lifecycle timers for entities
 // It runs before cleanup to tag expired entities for destruction
 type TimeKeeperSystem struct {
-	ctx *engine.GameContext
+	world *engine.World
+	res   engine.CoreResources
 }
 
 // NewTimeKeeperSystem creates a new timekeeper system
-func NewTimeKeeperSystem(ctx *engine.GameContext) *TimeKeeperSystem {
-	return &TimeKeeperSystem{ctx: ctx}
+func NewTimeKeeperSystem(world *engine.World) *TimeKeeperSystem {
+	return &TimeKeeperSystem{
+		world: world,
+		res:   engine.GetCoreResources(world),
+	}
 }
 
 // Priority returns the system's priority (runs just before CullSystem)

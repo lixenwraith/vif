@@ -73,7 +73,8 @@ type CodeBlock struct {
 
 // SpawnSystem handles character sequence generation and spawning
 type SpawnSystem struct {
-	ctx *engine.GameContext
+	world *engine.World
+	res   engine.CoreResources
 
 	// Content management
 	contentManager *content.ContentManager
@@ -88,9 +89,10 @@ type SpawnSystem struct {
 }
 
 // NewSpawnSystem creates a new spawn system
-func NewSpawnSystem(ctx *engine.GameContext) *SpawnSystem {
+func NewSpawnSystem(world *engine.World) *SpawnSystem {
 	s := &SpawnSystem{
-		ctx: ctx,
+		world: world,
+		res:   engine.GetCoreResources(world),
 	}
 
 	// Initialize content management atomics (not game state)
@@ -106,12 +108,9 @@ func NewSpawnSystem(ctx *engine.GameContext) *SpawnSystem {
 		// TODO: add status bar error message
 	}
 
-	// Pre-validate all discovered content files and build cache
-	// This ensures content is validated once at startup for better performance
-	// and prevents corruption from malformed files
+	// Pre-validate all discovered content files once at startup and build cache
 	if err := s.contentManager.PreValidateAllContent(); err != nil {
-		// Log error but continue - will fall back to default content
-		// System will handle gracefully
+		// Continue gracefully
 	}
 
 	// Load initial content
@@ -167,7 +166,8 @@ func (s *SpawnSystem) checkAndTriggerRefresh() {
 	if consumptionRatio >= constants.ContentRefreshThreshold && !s.isRefreshing.Load() {
 		s.isRefreshing.Store(true)
 		// Use ctx.Go for safe execution with centralized crash handling
-		s.ctx.Go(s.preFetchNextContent)
+		// TODO: Can't use ctx.Go anymore, need crash handler in world maybe instead of distributed implementation
+		go s.preFetchNextContent()
 	}
 }
 
@@ -314,7 +314,8 @@ func (s *SpawnSystem) EventTypes() []events.EventType {
 func (s *SpawnSystem) HandleEvent(world *engine.World, event events.GameEvent) {
 	if event.Type == events.EventSpawnChange {
 		if payload, ok := event.Payload.(*events.SpawnChangePayload); ok {
-			s.ctx.State.SetSpawnEnabled(payload.Enabled)
+			// TODO: change this with fsm
+			s.res.State.State.SetSpawnEnabled(payload.Enabled)
 		}
 	}
 }
@@ -398,9 +399,8 @@ func (s *SpawnSystem) getAvailableColorsFromCensus(census ColorCensus) []ColorLe
 
 // Update runs the spawn system logic
 func (s *SpawnSystem) Update(world *engine.World, dt time.Duration) {
-	// Fetch resources
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-	now := timeRes.GameTime
+	now := s.res.Time.GameTime
+	state := s.res.State.State
 
 	// Calculate fill percentage and update GameState using generic stores
 
@@ -411,19 +411,19 @@ func (s *SpawnSystem) Update(world *engine.World, dt time.Duration) {
 	}
 
 	// Update spawn rate in GameState based on entity count
-	s.ctx.State.UpdateSpawnRate(entityCount, constants.MaxEntities)
+	state.UpdateSpawnRate(entityCount, constants.MaxEntities)
 
 	// Check if it's time to spawn
-	if !s.ctx.State.GetSpawnEnabled() {
+	if !state.GetSpawnEnabled() {
 		return
 	}
-	nextTime := s.ctx.State.GetSpawnNextTime()
+	nextTime := state.GetSpawnNextTime()
 	if now.Before(nextTime) {
 		return
 	}
 
 	// Get current spawn state for rate calculation
-	spawnState := s.ctx.State.ReadSpawnState()
+	spawnState := state.ReadSpawnState()
 
 	// Calculate next spawn time based on rate multiplier
 	baseDelay := time.Duration(constants.SpawnIntervalMs) * time.Millisecond
@@ -434,7 +434,7 @@ func (s *SpawnSystem) Update(world *engine.World, dt time.Duration) {
 
 	// Update spawn timing in GameState
 	timeAdjust := now.Add(adjustedDelay)
-	s.ctx.State.UpdateSpawnTiming(now, timeAdjust)
+	state.UpdateSpawnTiming(now, timeAdjust)
 }
 
 // spawnSequence generates and spawns a new character block from file
@@ -545,8 +545,9 @@ func (s *SpawnSystem) getNextBlock() CodeBlock {
 // placeLine attempts to place a single line on the screen using generic stores
 // Lines exceeding GameWidth are cropped to fit available space
 func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType components.SequenceType, seqLevel components.SequenceLevel) bool {
-	// Fetch resources
-	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+	config := s.res.Config
+	cursorEntity := s.res.Cursor.Entity
+	state := s.res.State.State
 
 	lineRunes := []rune(line)
 	lineLength := len(lineRunes)
@@ -591,13 +592,14 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 		}
 
 		// Check if too close to cursor
-		cursorPos, ok := s.ctx.World.Positions.Get(s.ctx.CursorEntity)
+		cursorPos, ok := world.Positions.Get(cursorEntity)
 		if !ok {
 			panic(fmt.Errorf("cursor destroyed"))
 		}
 		for i := 0; i < lineLength; i++ {
 			col := startCol + i
-			if math.Abs(float64(col-cursorPos.X)) <= constants.CursorExclusionX && math.Abs(float64(row-cursorPos.Y)) <= constants.CursorExclusionY {
+			if math.Abs(float64(col-cursorPos.X)) <= constants.CursorExclusionX &&
+				math.Abs(float64(row-cursorPos.Y)) <= constants.CursorExclusionY {
 				hasOverlap = true
 				break
 			}
@@ -606,7 +608,8 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 		if !hasOverlap {
 			// Valid position found, create entities
 			// Get sequence ID from GameState (atomic increment)
-			sequenceID := s.ctx.State.IncrementSeqID()
+			// TODO: this is not good
+			sequenceID := state.IncrementSeqID()
 
 			// Phase 1: Create entities and prepare components
 			type entityData struct {

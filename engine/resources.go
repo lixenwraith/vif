@@ -144,3 +144,46 @@ type GameStateResource struct {
 type CursorResource struct {
 	Entity core.Entity
 }
+
+// CoreResources provides cached pointers to singleton resources
+// Initialized once per system to eliminate runtime map lookups
+type CoreResources struct {
+	Time   *TimeResource
+	Config *ConfigResource
+	State  *GameStateResource
+	Cursor *CursorResource
+	Input  *InputResource
+	Events *EventQueueResource
+}
+
+// GetCoreResources populates CoreResources from the world's resource store
+// Call once during system construction; pointers remain valid for application lifetime
+func GetCoreResources(w *World) CoreResources {
+	return CoreResources{
+		Time:   MustGetResource[*TimeResource](w.Resources),
+		Config: MustGetResource[*ConfigResource](w.Resources),
+		State:  MustGetResource[*GameStateResource](w.Resources),
+		Cursor: MustGetResource[*CursorResource](w.Resources),
+		Input:  MustGetResource[*InputResource](w.Resources),
+		Events: MustGetResource[*EventQueueResource](w.Resources),
+	}
+}
+
+// Update modifies TimeResource fields in-place (zero allocation)
+// Must be called under world lock to prevent races with system reads
+func (tr *TimeResource) Update(gameTime, realTime time.Time, deltaTime time.Duration, frameNumber int64) {
+	tr.GameTime = gameTime
+	tr.RealTime = realTime
+	tr.DeltaTime = deltaTime
+	tr.FrameNumber = frameNumber
+}
+
+// Update modifies InputResource fields in-place (zero allocation)
+// Must be called under world lock to prevent races with system reads
+func (ir *InputResource) Update(gameMode int, commandText, searchText, pendingCommand string, isPaused bool) {
+	ir.GameMode = gameMode
+	ir.CommandText = commandText
+	ir.SearchText = searchText
+	ir.PendingCommand = pendingCommand
+	ir.IsPaused = isPaused
+}

@@ -10,12 +10,16 @@ import (
 
 // ShieldSystem owns shield activation state and processes drain events
 type ShieldSystem struct {
-	ctx *engine.GameContext
+	world *engine.World
+	res   engine.CoreResources
 }
 
 // NewShieldSystem creates a new shield system
-func NewShieldSystem(ctx *engine.GameContext) *ShieldSystem {
-	return &ShieldSystem{ctx: ctx}
+func NewShieldSystem(world *engine.World) *ShieldSystem {
+	return &ShieldSystem{
+		world: world,
+		res:   engine.GetCoreResources(world),
+	}
 }
 
 // Priority returns the system's priority
@@ -34,48 +38,48 @@ func (s *ShieldSystem) EventTypes() []events.EventType {
 
 // HandleEvent processes shield-related events from the router
 func (s *ShieldSystem) HandleEvent(world *engine.World, event events.GameEvent) {
+	cursorEntity := s.res.Cursor.Entity
+
 	switch event.Type {
 	case events.EventShieldActivate:
-		shield, ok := world.Shields.Get(s.ctx.CursorEntity)
+		shield, ok := world.Shields.Get(cursorEntity)
 		if ok {
 			shield.Active = true
-			world.Shields.Add(s.ctx.CursorEntity, shield)
+			world.Shields.Add(cursorEntity, shield)
 		}
 
 	case events.EventShieldDeactivate:
-		shield, ok := world.Shields.Get(s.ctx.CursorEntity)
+		shield, ok := world.Shields.Get(cursorEntity)
 		if ok {
 			shield.Active = false
-			world.Shields.Add(s.ctx.CursorEntity, shield)
+			world.Shields.Add(cursorEntity, shield)
 		}
 
 	case events.EventShieldDrain:
 		if payload, ok := event.Payload.(*events.ShieldDrainPayload); ok {
-			// Use energy event instead of direct state access
-			s.ctx.PushEvent(events.EventEnergyAdd, &events.EnergyAddPayload{
+			world.PushEvent(events.EventEnergyAdd, &events.EnergyAddPayload{
 				Delta: -payload.Amount,
-			}, event.Timestamp)
+			})
 		}
 	}
 }
 
 // Update handles passive shield drain
 func (s *ShieldSystem) Update(world *engine.World, dt time.Duration) {
-	shield, ok := world.Shields.Get(s.ctx.CursorEntity)
+	cursorEntity := s.res.Cursor.Entity
+
+	shield, ok := world.Shields.Get(cursorEntity)
 	if !ok || !shield.Active {
 		return
 	}
 
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-	now := timeRes.GameTime
+	now := s.res.Time.GameTime
 
-	// Check passive drain interval
 	if now.Sub(shield.LastDrainTime) >= constants.ShieldPassiveDrainInterval {
-		// Use energy event
-		s.ctx.PushEvent(events.EventEnergyAdd, &events.EnergyAddPayload{
+		world.PushEvent(events.EventEnergyAdd, &events.EnergyAddPayload{
 			Delta: -constants.ShieldPassiveDrainAmount,
-		}, now)
+		})
 		shield.LastDrainTime = now
-		world.Shields.Add(s.ctx.CursorEntity, shield)
+		world.Shields.Add(cursorEntity, shield)
 	}
 }

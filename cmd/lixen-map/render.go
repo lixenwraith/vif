@@ -574,7 +574,6 @@ func (app *AppState) renderDetailList(cells []terminal.Cell, totalWidth, startX,
 		item := state.FlatItems[idx]
 
 		isCursor := idx == state.Cursor && (app.FocusPane == PaneDepBy || app.FocusPane == PaneDepOn)
-		// Check strictly which pane owns this state
 		if state == app.DepByState && app.FocusPane != PaneDepBy {
 			isCursor = false
 		}
@@ -594,7 +593,7 @@ func (app *AppState) renderDetailList(cells []terminal.Cell, totalWidth, startX,
 
 		x := startX + 1 + (item.Level * 2)
 
-		// Icon
+		// Icon/expand indicator
 		if item.IsHeader {
 			expandChar := '▶'
 			if item.Expanded {
@@ -608,13 +607,34 @@ func (app *AppState) renderDetailList(cells []terminal.Cell, totalWidth, startX,
 				cells[y*totalWidth+x] = terminal.Cell{Rune: expandChar, Fg: iconFg, Bg: rowBg}
 			}
 			x += 2
+
+			// Selection checkbox for local headers
+			if item.IsLocal && item.PkgDir != "" {
+				checkbox, checkFg := app.getHeaderSelectionState(item.PkgDir)
+				if x+3 < startX+paneWidth {
+					drawText(cells, totalWidth, x, y, checkbox, checkFg, rowBg, terminal.AttrNone)
+				}
+				x += 4
+			}
 		} else if item.IsSymbol {
 			if x < startX+paneWidth-1 {
 				cells[y*totalWidth+x] = terminal.Cell{Rune: '•', Fg: colorSymbolFg, Bg: rowBg}
 			}
 			x += 2
 		} else if item.IsFile {
-			// Visualization for Strong Coupling (Usage)
+			// Selection checkbox for files
+			checkbox := "[ ]"
+			checkFg := colorUnselected
+			if app.Selected[item.Path] {
+				checkbox = "[x]"
+				checkFg = colorSelected
+			}
+			if x+3 < startX+paneWidth {
+				drawText(cells, totalWidth, x, y, checkbox, checkFg, rowBg, terminal.AttrNone)
+			}
+			x += 4
+
+			// Usage indicator after checkbox
 			if item.HasUsage {
 				if x < startX+paneWidth-1 {
 					cells[y*totalWidth+x] = terminal.Cell{Rune: '★', Fg: colorModuleFg, Bg: rowBg}
@@ -627,21 +647,20 @@ func (app *AppState) renderDetailList(cells []terminal.Cell, totalWidth, startX,
 		fg := colorDefaultFg
 		if item.IsHeader {
 			if item.IsLocal {
-				fg = colorModuleFg // Greenish for local packages
+				fg = colorModuleFg
 			} else {
-				fg = colorExternalPkgFg // Cyan/Dim for external
+				fg = colorExternalPkgFg
 			}
 		} else if item.IsSymbol {
 			fg = colorSymbolFg
 		} else if item.IsFile {
 			if item.HasUsage {
-				fg = colorHeaderFg // Bright white for using files
+				fg = colorHeaderFg
 			} else {
-				fg = colorDefaultFg // Normal grey for just importing
+				fg = colorDefaultFg
 			}
 		}
 
-		// Truncate
 		label := item.Label
 		maxLen := (startX + paneWidth) - x - 1
 		if len(label) > maxLen && maxLen > 3 {
@@ -656,10 +675,9 @@ func (app *AppState) renderDetailList(cells []terminal.Cell, totalWidth, startX,
 		drawText(cells, totalWidth, x, y, label, fg, rowBg, attr)
 	}
 
-	// Scroll indicator if needed
+	// Scroll indicator
 	if len(state.FlatItems) > height {
 		var scrollStr string
-		// Human-readable scroll indicators
 		if state.Scroll == 0 {
 			scrollStr = "Top"
 		} else if state.Scroll+height >= len(state.FlatItems) {
@@ -671,6 +689,29 @@ func (app *AppState) renderDetailList(cells []terminal.Cell, totalWidth, startX,
 
 		drawText(cells, totalWidth, startX+paneWidth-len(scrollStr)-1, startY+height-1, scrollStr, colorStatusFg, bg, terminal.AttrDim)
 	}
+}
+
+// getHeaderSelectionState returns checkbox string and color for package header
+func (app *AppState) getHeaderSelectionState(pkgDir string) (string, terminal.RGB) {
+	pkg := app.Index.Packages[pkgDir]
+	if pkg == nil || len(pkg.Files) == 0 {
+		return "[ ]", colorUnselected
+	}
+
+	selected := 0
+	for _, fi := range pkg.Files {
+		if app.Selected[fi.Path] {
+			selected++
+		}
+	}
+
+	if selected == 0 {
+		return "[ ]", colorUnselected
+	}
+	if selected == len(pkg.Files) {
+		return "[x]", colorSelected
+	}
+	return "[o]", colorPartialSelectFg
 }
 
 // getCurrentFilePackageDir returns the package directory of file at tree cursor

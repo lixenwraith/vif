@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/core"
 )
@@ -161,4 +162,9 @@ type NuggetCollectedPayload struct {
 // NuggetDestroyedPayload signals external nugget destruction
 type NuggetDestroyedPayload struct {
 	Entity core.Entity
+}
+
+// SoundRequestPayload contains the sound type to play
+type SoundRequestPayload struct {
+	SoundType audio.SoundType
 }

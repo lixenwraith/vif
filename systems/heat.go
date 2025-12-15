@@ -9,13 +9,16 @@ import (
 )
 
 // HeatSystem owns HeatComponent mutations
-// Processes EventHeatAdd and EventHeatSet with clamping to 0-MaxHeat
 type HeatSystem struct {
-	ctx *engine.GameContext
+	world *engine.World
+	res   engine.CoreResources
 }
 
-func NewHeatSystem(ctx *engine.GameContext) *HeatSystem {
-	return &HeatSystem{ctx: ctx}
+func NewHeatSystem(world *engine.World) *HeatSystem {
+	return &HeatSystem{
+		world: world,
+		res:   engine.GetCoreResources(world),
+	}
 }
 
 func (s *HeatSystem) Priority() int {
@@ -45,13 +48,15 @@ func (s *HeatSystem) HandleEvent(world *engine.World, event events.GameEvent) {
 			s.setHeat(world, payload.Value)
 		}
 	case events.EventManualCleanerTrigger:
-		s.handleManualCleanerTrigger(world, event.Timestamp)
+		s.handleManualCleanerTrigger(world)
 	}
 }
 
 // addHeat applies delta with clamping and writes back to store
 func (s *HeatSystem) addHeat(world *engine.World, delta int) {
-	heatComp, ok := world.Heats.Get(s.ctx.CursorEntity)
+	cursorEntity := s.res.Cursor.Entity
+
+	heatComp, ok := world.Heats.Get(cursorEntity)
 	if !ok {
 		return
 	}
@@ -71,12 +76,14 @@ func (s *HeatSystem) addHeat(world *engine.World, delta int) {
 	heatComp.Current.Store(newVal)
 
 	// CRITICAL: Write the modified component copy back to the store
-	world.Heats.Add(s.ctx.CursorEntity, heatComp)
+	world.Heats.Add(cursorEntity, heatComp)
 }
 
 // setHeat stores absolute value with clamping and writes back to store
 func (s *HeatSystem) setHeat(world *engine.World, value int) {
-	heatComp, ok := world.Heats.Get(s.ctx.CursorEntity)
+	cursorEntity := s.res.Cursor.Entity
+
+	heatComp, ok := world.Heats.Get(cursorEntity)
 	if !ok {
 		return
 	}
@@ -92,12 +99,14 @@ func (s *HeatSystem) setHeat(world *engine.World, value int) {
 	heatComp.Current.Store(int64(value))
 
 	// CRITICAL: Write the modified component copy back to the store
-	world.Heats.Add(s.ctx.CursorEntity, heatComp)
+	world.Heats.Add(cursorEntity, heatComp)
 }
 
 // handleManualCleanerTrigger checks heat cost and triggers cleaner if affordable
-func (s *HeatSystem) handleManualCleanerTrigger(world *engine.World, now time.Time) {
-	heatComp, ok := world.Heats.Get(s.ctx.CursorEntity)
+func (s *HeatSystem) handleManualCleanerTrigger(world *engine.World) {
+	cursorEntity := s.res.Cursor.Entity
+
+	heatComp, ok := world.Heats.Get(cursorEntity)
 	if !ok {
 		return
 	}
@@ -111,10 +120,10 @@ func (s *HeatSystem) handleManualCleanerTrigger(world *engine.World, now time.Ti
 	s.addHeat(world, -10)
 
 	// Trigger directional cleaner at cursor position
-	if pos, ok := world.Positions.Get(s.ctx.CursorEntity); ok {
-		s.ctx.PushEvent(events.EventDirectionalCleanerRequest, &events.DirectionalCleanerPayload{
+	if pos, ok := world.Positions.Get(cursorEntity); ok {
+		world.PushEvent(events.EventDirectionalCleanerRequest, &events.DirectionalCleanerPayload{
 			OriginX: pos.X,
 			OriginY: pos.Y,
-		}, now)
+		})
 	}
 }

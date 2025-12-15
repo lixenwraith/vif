@@ -82,11 +82,12 @@ type DetailItem struct {
 	Key      string // Unique key for expansion/navigation
 	IsHeader bool   // True if expandable parent
 	Expanded bool   // Current expansion state
-	IsFile   bool   // True if it points to a file (Pane 3)
-	IsSymbol bool   // True if it is a symbol (Pane 4)
-	Path     string // Associated file path or import path
+	IsFile   bool   // True if it points to a file
+	IsSymbol bool   // True if it is a symbol
+	Path     string // Associated file path (for files)
+	PkgDir   string // Package directory (for selection on headers/files)
 	IsLocal  bool   // True if internal to module (for coloring)
-	HasUsage bool   // True if file actively uses symbols from target (Pane 3)
+	HasUsage bool   // True if file actively uses symbols from target
 }
 
 // DependencyAnalysis holds symbol usage for a file

@@ -3,7 +3,6 @@ package systems
 import (
 	"math"
 	"math/rand"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -18,8 +17,10 @@ import (
 
 // NuggetSystem manages nugget spawn and respawn logic
 type NuggetSystem struct {
-	mu                 sync.RWMutex
-	world              *engine.World
+	mu    sync.RWMutex
+	world *engine.World
+	res   engine.CoreResources
+
 	nuggetID           atomic.Int32
 	lastSpawnAttempt   time.Time
 	activeNuggetEntity core.Entity
@@ -29,6 +30,7 @@ type NuggetSystem struct {
 func NewNuggetSystem(world *engine.World) *NuggetSystem {
 	return &NuggetSystem{
 		world: world,
+		res:   engine.GetCoreResources(world),
 	}
 }
 
@@ -51,7 +53,7 @@ func (s *NuggetSystem) EventTypes() []events.EventType {
 func (s *NuggetSystem) HandleEvent(world *engine.World, event events.GameEvent) {
 	switch event.Type {
 	case events.EventNuggetJumpRequest:
-		s.handleJumpRequest(world, event.Timestamp)
+		s.handleJumpRequest(world)
 
 	case events.EventNuggetCollected:
 		if payload, ok := event.Payload.(*events.NuggetCollectedPayload); ok {
@@ -79,22 +81,9 @@ func (s *NuggetSystem) HandleEvent(world *engine.World, event events.GameEvent) 
 	}
 }
 
-func (s *NuggetSystem) pushEvent(eventType events.EventType, payload any, now time.Time) {
-	stateRes := engine.MustGetResource[*engine.GameStateResource](s.world.Resources)
-	eqRes := engine.MustGetResource[*engine.EventQueueResource](s.world.Resources)
-	event := events.GameEvent{
-		Type:      eventType,
-		Payload:   payload,
-		Frame:     stateRes.State.GetFrameNumber(),
-		Timestamp: now,
-	}
-	eqRes.Queue.Push(event)
-}
-
 // Update runs the nugget system logic
 func (s *NuggetSystem) Update(world *engine.World, dt time.Duration) {
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-	now := timeRes.GameTime
+	now := s.res.Time.GameTime
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -114,11 +103,11 @@ func (s *NuggetSystem) Update(world *engine.World, dt time.Duration) {
 }
 
 // handleJumpRequest attempts to jump cursor to the active nugget
-func (s *NuggetSystem) handleJumpRequest(world *engine.World, now time.Time) {
-	cursorRes := engine.MustGetResource[*engine.CursorResource](world.Resources)
+func (s *NuggetSystem) handleJumpRequest(world *engine.World) {
+	cursorEntity := s.res.Cursor.Entity
 
 	// 1. Check Energy from component
-	energyComp, ok := world.Energies.Get(cursorRes.Entity)
+	energyComp, ok := world.Energies.Get(cursorEntity)
 	if !ok || energyComp.Current.Load() < constants.NuggetJumpCost {
 		return
 	}
@@ -145,15 +134,15 @@ func (s *NuggetSystem) handleJumpRequest(world *engine.World, now time.Time) {
 	}
 
 	// 4. Move Cursor
-	world.Positions.Add(cursorRes.Entity, components.PositionComponent{
+	world.Positions.Add(cursorEntity, components.PositionComponent{
 		X: nuggetPos.X,
 		Y: nuggetPos.Y,
 	})
 
 	// 5. Pay Energy Cost
-	s.pushEvent(events.EventEnergyAdd, &events.EnergyAddPayload{
+	world.PushEvent(events.EventEnergyAdd, &events.EnergyAddPayload{
 		Delta: -constants.NuggetJumpCost,
-	}, now)
+	})
 
 	// 6. Play Sound
 	if audioRes, ok := engine.GetResource[*engine.AudioResource](world.Resources); ok && audioRes.Player != nil {
@@ -210,10 +199,8 @@ func (s *NuggetSystem) spawnNugget(world *engine.World, now time.Time) {
 // findValidPosition finds a valid random position for a nugget
 // Caller must hold s.mu lock
 func (s *NuggetSystem) findValidPosition(world *engine.World) (int, int) {
-	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
-	cursorRes := engine.MustGetResource[*engine.CursorResource](world.Resources)
-
-	cursorPos, ok := world.Positions.Get(cursorRes.Entity)
+	config := s.res.Config
+	cursorPos, ok := world.Positions.Get(s.res.Cursor.Entity)
 	if !ok {
 		return -1, -1
 	}
@@ -234,22 +221,4 @@ func (s *NuggetSystem) findValidPosition(world *engine.World) (int, int) {
 	}
 
 	return -1, -1
-}
-
-// GetSystemState returns a debug string describing the current system state
-func (s *NuggetSystem) GetSystemState() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	if s.activeNuggetEntity == 0 {
-		now := time.Now()
-		timeSinceLastSpawn := now.Sub(s.lastSpawnAttempt)
-		timeUntilNext := (constants.NuggetSpawnIntervalSeconds * time.Second) - timeSinceLastSpawn
-		if timeUntilNext < 0 {
-			timeUntilNext = 0
-		}
-		return "Nugget[inactive, nextSpawn=" + timeUntilNext.Round(100*time.Millisecond).String() + "]"
-	}
-
-	return "Nugget[active, entityID=" + strconv.Itoa(int(s.activeNuggetEntity)) + "]"
 }

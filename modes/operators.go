@@ -69,5 +69,5 @@ func OpDelete(ctx *engine.GameContext, result MotionResult) {
 		payload.EndY = ey
 	}
 
-	ctx.PushEvent(events.EventDeleteRequest, payload, ctx.PausableClock.Now())
+	ctx.PushEvent(events.EventDeleteRequest, payload)
 }

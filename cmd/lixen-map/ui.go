@@ -198,6 +198,8 @@ func (app *AppState) handleLixenPaneEvent(ev terminal.Event) (quit, output bool)
 			app.expandLixenItem()
 		case ' ':
 			app.toggleLixenSelection()
+		case 's':
+			app.selectAndAdvanceLixen()
 		case 'a':
 			app.selectAllVisibleLixenTags()
 		case '0':
@@ -248,6 +250,8 @@ func (app *AppState) handleTreePaneEvent(ev terminal.Event) (quit, output bool) 
 			app.expandNode()
 		case ' ':
 			app.toggleTreeSelection()
+		case 's':
+			app.selectAndAdvanceTree()
 		case 'a':
 			app.selectAllVisible()
 		case '0':
@@ -281,6 +285,79 @@ func (app *AppState) handleTreePaneEvent(ev terminal.Event) (quit, output bool) 
 	}
 
 	return false, false
+}
+
+// selectAndAdvanceTree selects item and moves to next
+func (app *AppState) selectAndAdvanceTree() {
+	if len(app.TreeFlat) == 0 {
+		return
+	}
+
+	node := app.TreeFlat[app.TreeCursor]
+
+	if node.IsDir {
+		// Select all files in directory
+		var files []string
+		collectFiles(node, &files)
+		for _, f := range files {
+			app.Selected[f] = true
+		}
+
+		// Jump to next directory at same depth
+		for i := app.TreeCursor + 1; i < len(app.TreeFlat); i++ {
+			if app.TreeFlat[i].IsDir && app.TreeFlat[i].Depth == node.Depth {
+				app.TreeCursor = i
+				app.moveTreeCursor(0)
+				return
+			}
+		}
+		// No next dir at same level, just advance
+		app.moveTreeCursor(1)
+	} else {
+		app.Selected[node.Path] = true
+		app.moveTreeCursor(1)
+	}
+}
+
+// selectAndAdvanceLixen selects item and moves to next appropriate item
+func (app *AppState) selectAndAdvanceLixen() {
+	cat := app.CurrentCategory
+	ui := app.getCurrentCategoryUI()
+	if ui == nil || len(ui.Flat) == 0 {
+		return
+	}
+
+	item := ui.Flat[ui.Cursor]
+
+	switch item.Type {
+	case TagItemTypeGroup:
+		app.selectFilesWithGroup(cat, item.Group)
+		// Jump to next group
+		for i := ui.Cursor + 1; i < len(ui.Flat); i++ {
+			if ui.Flat[i].Type == TagItemTypeGroup {
+				ui.Cursor = i
+				app.moveLixenCursor(0)
+				return
+			}
+		}
+		app.moveLixenCursor(1)
+
+	case TagItemTypeModule:
+		app.selectFilesWithModule(cat, item.Group, item.Module)
+		// Jump to next module or group
+		for i := ui.Cursor + 1; i < len(ui.Flat); i++ {
+			if ui.Flat[i].Type == TagItemTypeModule || ui.Flat[i].Type == TagItemTypeGroup {
+				ui.Cursor = i
+				app.moveLixenCursor(0)
+				return
+			}
+		}
+		app.moveLixenCursor(1)
+
+	case TagItemTypeTag:
+		app.selectFilesWithTag(cat, item.Group, item.Module, item.Tag)
+		app.moveLixenCursor(1)
+	}
 }
 
 // handleDepByPaneEvent processes input when depended-by pane focused
@@ -323,13 +400,18 @@ func (app *AppState) handleDetailPaneEvent(ev terminal.Event, state *DetailPaneS
 			app.collapseDetailItem(state)
 		case 'l':
 			app.expandOrNavDetailItem(state)
+		case ' ':
+			app.toggleDetailSelection(state)
+		case 's':
+			app.selectAndAdvanceDetail(state)
+		case 'a':
+			app.selectAllDetailFiles(state)
 		case 'H':
 			state.Expanded = make(map[string]bool)
-			app.refreshDetailPanes() // Recompute flat list
+			app.refreshDetailPanes()
 			state.Cursor = 0
 			state.Scroll = 0
 		case 'L':
-			// Expand all visible headers
 			for _, item := range state.FlatItems {
 				if item.IsHeader {
 					state.Expanded[item.Key] = true
@@ -354,6 +436,8 @@ func (app *AppState) handleDetailPaneEvent(ev terminal.Event, state *DetailPaneS
 		app.collapseDetailItem(state)
 	case terminal.KeyRight:
 		app.expandOrNavDetailItem(state)
+	case terminal.KeySpace:
+		app.toggleDetailSelection(state)
 	case terminal.KeyPageUp:
 		app.pageDetailCursor(state, -1)
 	case terminal.KeyPageDown:
@@ -449,6 +533,126 @@ func (app *AppState) expandOrNavDetailItem(state *DetailPaneState) {
 	}
 }
 
+// toggleDetailSelection toggles selection for item at cursor in detail pane
+func (app *AppState) toggleDetailSelection(state *DetailPaneState) {
+	if len(state.FlatItems) == 0 {
+		return
+	}
+
+	item := state.FlatItems[state.Cursor]
+
+	if item.IsSymbol || !item.IsLocal {
+		return // Symbols and external packages not selectable
+	}
+
+	if item.IsFile && item.Path != "" {
+		if app.Selected[item.Path] {
+			delete(app.Selected, item.Path)
+			app.Message = fmt.Sprintf("deselected: %s", filepath.Base(item.Path))
+		} else {
+			app.Selected[item.Path] = true
+			app.Message = fmt.Sprintf("selected: %s", filepath.Base(item.Path))
+		}
+		return
+	}
+
+	if item.IsHeader && item.PkgDir != "" {
+		// Select/deselect all files in package
+		pkg := app.Index.Packages[item.PkgDir]
+		if pkg == nil {
+			return
+		}
+
+		allSelected := true
+		for _, fi := range pkg.Files {
+			if !app.Selected[fi.Path] {
+				allSelected = false
+				break
+			}
+		}
+
+		count := 0
+		for _, fi := range pkg.Files {
+			if allSelected {
+				if app.Selected[fi.Path] {
+					delete(app.Selected, fi.Path)
+					count++
+				}
+			} else {
+				if !app.Selected[fi.Path] {
+					app.Selected[fi.Path] = true
+					count++
+				}
+			}
+		}
+
+		if allSelected {
+			app.Message = fmt.Sprintf("deselected %d files from %s", count, item.Label)
+		} else {
+			app.Message = fmt.Sprintf("selected %d files from %s", count, item.Label)
+		}
+	}
+}
+
+// selectAndAdvanceDetail selects item and moves to next appropriate item
+func (app *AppState) selectAndAdvanceDetail(state *DetailPaneState) {
+	if len(state.FlatItems) == 0 {
+		return
+	}
+
+	item := state.FlatItems[state.Cursor]
+
+	if item.IsSymbol || !item.IsLocal {
+		app.moveDetailCursor(state, 1)
+		return
+	}
+
+	// Perform selection
+	if item.IsFile && item.Path != "" {
+		if !app.Selected[item.Path] {
+			app.Selected[item.Path] = true
+		}
+		app.moveDetailCursor(state, 1)
+		return
+	}
+
+	if item.IsHeader && item.PkgDir != "" {
+		// Select all files in package
+		pkg := app.Index.Packages[item.PkgDir]
+		if pkg != nil {
+			for _, fi := range pkg.Files {
+				app.Selected[fi.Path] = true
+			}
+		}
+
+		// Jump to next header at same level
+		for i := state.Cursor + 1; i < len(state.FlatItems); i++ {
+			if state.FlatItems[i].IsHeader && state.FlatItems[i].Level == item.Level {
+				state.Cursor = i
+				app.moveDetailCursor(state, 0)
+				return
+			}
+		}
+		// No next header, move to end
+		state.Cursor = len(state.FlatItems) - 1
+		app.moveDetailCursor(state, 0)
+	}
+}
+
+// selectAllDetailFiles selects all local files visible in detail pane
+func (app *AppState) selectAllDetailFiles(state *DetailPaneState) {
+	count := 0
+	for _, item := range state.FlatItems {
+		if item.IsFile && item.IsLocal && item.Path != "" {
+			if !app.Selected[item.Path] {
+				app.Selected[item.Path] = true
+				count++
+			}
+		}
+	}
+	app.Message = fmt.Sprintf("selected %d files", count)
+}
+
 // navigateTreeToFile expands tree and positions cursor on file
 func (app *AppState) navigateTreeToFile(path string) {
 	// Find file in tree
@@ -517,16 +721,13 @@ func (app *AppState) rebuildDepByFlat() {
 		return
 	}
 
-	// Get raw reverse deps: importedPkg -> importingFiles
 	files := app.Index.ReverseDeps[pkgDir]
 	if len(files) == 0 {
 		return
 	}
 
-	// Prepare target definitions for intersection if a file is selected
 	var targetDefs map[string]bool
 	targetFile := app.getCurrentFileInfo()
-	// Only calculate usage if a specific file is selected (not just dir)
 	if targetFile != nil && len(targetFile.Definitions) > 0 {
 		targetDefs = make(map[string]bool, len(targetFile.Definitions))
 		for _, def := range targetFile.Definitions {
@@ -534,30 +735,24 @@ func (app *AppState) rebuildDepByFlat() {
 		}
 	}
 
-	// Resolve full import path for the currently selected package
 	fullImportPath := app.Index.ModulePath
 	if pkgDir != "." {
 		fullImportPath += "/" + pkgDir
 	}
 
-	// Structure to hold temp data for sorting
 	type depFile struct {
 		Path     string
 		HasUsage bool
 	}
 
-	// Group files by their package
 	filesByPkg := make(map[string][]*depFile)
 
 	for _, fPath := range files {
 		hasUsage := false
 
-		// If we have a target file with definitions, check for usage
 		if targetDefs != nil {
-			// Check cache or analyze
 			analysis, ok := app.DepAnalysisCache[fPath]
 			if !ok {
-				// On-demand analysis
 				a, err := AnalyzeFileDependencies(fPath, app.Index.ModulePath)
 				if err == nil {
 					analysis = a
@@ -582,7 +777,6 @@ func (app *AppState) rebuildDepByFlat() {
 		filesByPkg[dir] = append(filesByPkg[dir], &depFile{Path: fPath, HasUsage: hasUsage})
 	}
 
-	// Sort packages
 	pkgs := make([]string, 0, len(filesByPkg))
 	for p := range filesByPkg {
 		pkgs = append(pkgs, p)
@@ -592,7 +786,6 @@ func (app *AppState) rebuildDepByFlat() {
 	for _, p := range pkgs {
 		pkgFiles := filesByPkg[p]
 
-		// Sort files: Usage first, then alphabetical
 		sort.Slice(pkgFiles, func(i, j int) bool {
 			if pkgFiles[i].HasUsage && !pkgFiles[j].HasUsage {
 				return true
@@ -603,19 +796,16 @@ func (app *AppState) rebuildDepByFlat() {
 			return pkgFiles[i].Path < pkgFiles[j].Path
 		})
 
-		// Default to expanded if new
 		if _, known := app.DepByState.Expanded[p]; !known {
 			app.DepByState.Expanded[p] = true
 		}
 		isExpanded := app.DepByState.Expanded[p]
 
-		// Format label for root package
 		label := p
 		if label == "." {
 			label = "(root)"
 		}
 
-		// Add Package Header
 		app.DepByState.FlatItems = append(app.DepByState.FlatItems, DetailItem{
 			Level:    0,
 			Label:    label,
@@ -623,6 +813,7 @@ func (app *AppState) rebuildDepByFlat() {
 			IsHeader: true,
 			Expanded: isExpanded,
 			IsLocal:  true,
+			PkgDir:   p, // Package directory for selection
 		})
 
 		if isExpanded {
@@ -633,6 +824,7 @@ func (app *AppState) rebuildDepByFlat() {
 					Key:      f.Path,
 					IsFile:   true,
 					Path:     f.Path,
+					PkgDir:   p, // Same package directory
 					IsLocal:  true,
 					HasUsage: f.HasUsage,
 				})
@@ -648,47 +840,54 @@ func (app *AppState) rebuildDepOnFlat() {
 		return
 	}
 
-	// Analysis result (symbols)
 	analysis := app.DepAnalysisCache[fi.Path]
-
-	importPaths := make([]string, 0)
-	if analysis != nil {
-		for p := range analysis.UsedSymbols {
-			importPaths = append(importPaths, p)
-		}
-	} else {
-		// Fallback: we don't have full paths in FileInfo easily mapping to short names
-		// without scanning Index packages. Waiting for analysis trigger.
+	if analysis == nil {
 		return
+	}
+
+	importPaths := make([]string, 0, len(analysis.UsedSymbols))
+	for p := range analysis.UsedSymbols {
+		importPaths = append(importPaths, p)
 	}
 	sort.Strings(importPaths)
 
 	for _, path := range importPaths {
 		isLocal := strings.HasPrefix(path, app.Index.ModulePath)
 
-		// Default to expanded if new
+		// Resolve local import path to package directory
+		var pkgDir string
+		if isLocal {
+			if path == app.Index.ModulePath {
+				pkgDir = "."
+			} else {
+				pkgDir = strings.TrimPrefix(path, app.Index.ModulePath+"/")
+			}
+		}
+
 		if _, known := app.DepOnState.Expanded[path]; !known {
 			app.DepOnState.Expanded[path] = true
 		}
 		isExpanded := app.DepOnState.Expanded[path]
 
-		// Display name: strip module path for locals for brevity?
-		// User req: "green for internal package names"
 		dispName := path
 		if isLocal {
 			dispName = strings.TrimPrefix(path, app.Index.ModulePath+"/")
+			if dispName == "" {
+				dispName = "(root)"
+			}
 		}
 
 		symbols := analysis.UsedSymbols[path]
-		hasSymbols := len(symbols) > 0 && isLocal // Only show symbols for local
+		hasSymbols := len(symbols) > 0 && isLocal
 
 		app.DepOnState.FlatItems = append(app.DepOnState.FlatItems, DetailItem{
 			Level:    0,
 			Label:    dispName,
 			Key:      path,
-			IsHeader: hasSymbols, // Only expandable if we have symbols to show
+			IsHeader: hasSymbols,
 			Expanded: isExpanded,
 			IsLocal:  isLocal,
+			PkgDir:   pkgDir, // Package directory for local imports
 		})
 
 		if isExpanded && hasSymbols {

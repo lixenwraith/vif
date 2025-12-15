@@ -16,6 +16,7 @@ import (
 type DecaySystem struct {
 	mu    sync.RWMutex
 	world *engine.World
+	res   engine.CoreResources
 
 	// Internal state (migrated from GameState)
 	timerActive bool
@@ -33,6 +34,7 @@ type DecaySystem struct {
 func NewDecaySystem(world *engine.World) *DecaySystem {
 	return &DecaySystem{
 		world:              world,
+		res:                engine.GetCoreResources(world),
 		decayedThisFrame:   make(map[core.Entity]bool),
 		processedGridCells: make(map[int]bool),
 	}
@@ -55,7 +57,7 @@ func (s *DecaySystem) HandleEvent(world *engine.World, event events.GameEvent) {
 	if event.Type == events.EventPhaseChange {
 		if payload, ok := event.Payload.(*events.PhaseChangePayload); ok {
 			if payload.NewPhase == int(engine.PhaseDecayWait) {
-				s.startDecayTimer(world, event.Timestamp)
+				s.startDecayTimer(world)
 			}
 		}
 	} else if event.Type == events.EventGameReset {
@@ -73,8 +75,7 @@ func (s *DecaySystem) HandleEvent(world *engine.World, event events.GameEvent) {
 
 // Update runs the decay system logic
 func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-	now := timeRes.GameTime
+	now := s.res.Time.GameTime
 
 	s.mu.Lock()
 	timerActive := s.timerActive
@@ -94,25 +95,10 @@ func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 	}
 }
 
-// pushEvent is resource event wrapper
-func (s *DecaySystem) pushEvent(eventType events.EventType, payload any, now time.Time) {
-	stateRes := engine.MustGetResource[*engine.GameStateResource](s.world.Resources)
-	eqRes := engine.MustGetResource[*engine.EventQueueResource](s.world.Resources)
-	event := events.GameEvent{
-		Type:      eventType,
-		Payload:   payload,
-		Frame:     stateRes.State.GetFrameNumber(),
-		Timestamp: now,
-	}
-	eqRes.Queue.Push(event)
-}
-
 // startDecayTimer calculates interval based on heat and starts timer
-func (s *DecaySystem) startDecayTimer(world *engine.World, now time.Time) {
-	cursorRes := engine.MustGetResource[*engine.CursorResource](world.Resources)
-
+func (s *DecaySystem) startDecayTimer(world *engine.World) {
 	heatValue := 0
-	if hc, ok := world.Heats.Get(cursorRes.Entity); ok {
+	if hc, ok := world.Heats.Get(s.res.Cursor.Entity); ok {
 		heatValue = int(hc.Current.Load())
 	}
 
@@ -129,6 +115,8 @@ func (s *DecaySystem) startDecayTimer(world *engine.World, now time.Time) {
 	interval := time.Duration(intervalSeconds * float64(time.Second))
 
 	s.mu.Lock()
+	// TODO: check if `now` should be in mutex
+	now := s.res.Time.GameTime
 	s.timerActive = true
 	s.nextTime = now.Add(interval)
 	s.mu.Unlock()
@@ -145,14 +133,11 @@ func (s *DecaySystem) triggerAnimation(world *engine.World, now time.Time) {
 	s.mu.Unlock()
 
 	s.spawnDecayEntities(world)
-	s.pushEvent(events.EventDecayStart, nil, now)
+	world.PushEvent(events.EventDecayStart, nil)
 }
 
 // updateAnimation progresses the decay animation
 func (s *DecaySystem) updateAnimation(world *engine.World, dt time.Duration) {
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-	now := timeRes.GameTime
-
 	// Use Delta Time (dt) for physics integration
 	s.updateDecayEntities(world, dt.Seconds())
 
@@ -167,14 +152,13 @@ func (s *DecaySystem) updateAnimation(world *engine.World, dt time.Duration) {
 
 		// Ensure cleanup of any artifacts
 		s.cleanupDecayEntities(world)
-		s.pushEvent(events.EventDecayComplete, nil, now)
+		world.PushEvent(events.EventDecayComplete, nil)
 	}
 }
 
 // spawnDecayEntities creates one decay entity per column
 func (s *DecaySystem) spawnDecayEntities(world *engine.World) {
-	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
-	gameWidth := config.GameWidth
+	gameWidth := s.res.Config.GameWidth
 
 	// Spawn one decay entity per column for full-width coverage
 	for column := 0; column < gameWidth; column++ {
@@ -201,9 +185,8 @@ func (s *DecaySystem) spawnDecayEntities(world *engine.World) {
 
 // updateDecayEntities updates entity positions and applies decay
 func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64) {
-	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
-	gameHeight := config.GameHeight
-	gameWidth := config.GameWidth
+	gameHeight := s.res.Config.GameHeight
+	gameWidth := s.res.Config.GameWidth
 
 	if dtSeconds > 0.1 {
 		dtSeconds = 0.1
@@ -294,16 +277,14 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 
 				if world.Nuggets.Has(targetEntity) {
 					if char, ok := world.Characters.Get(targetEntity); ok {
-						timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-						s.pushEvent(events.EventFlashRequest, &events.FlashRequestPayload{
+						world.PushEvent(events.EventFlashRequest, &events.FlashRequestPayload{
 							X: col, Y: row, Char: char.Rune,
-						}, timeRes.GameTime)
+						})
 					}
 					// Signal nugget destruction to NuggetSystem
-					timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-					s.pushEvent(events.EventNuggetDestroyed, &events.NuggetDestroyedPayload{
+					world.PushEvent(events.EventNuggetDestroyed, &events.NuggetDestroyedPayload{
 						Entity: targetEntity,
-					}, timeRes.GameTime)
+					})
 					world.DestroyEntity(targetEntity)
 				} else {
 					s.applyDecayToCharacter(world, targetEntity)
@@ -390,10 +371,9 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity core.Ent
 			// Red at LevelDark - spawn flash then remove entity
 			if pos, ok := world.Positions.Get(entity); ok {
 				if char, ok := world.Characters.Get(entity); ok {
-					timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-					s.pushEvent(events.EventFlashRequest, &events.FlashRequestPayload{
+					world.PushEvent(events.EventFlashRequest, &events.FlashRequestPayload{
 						X: pos.X, Y: pos.Y, Char: char.Rune,
-					}, timeRes.GameTime)
+					})
 				}
 			}
 			world.DestroyEntity(entity)
@@ -411,16 +391,4 @@ func (s *DecaySystem) cleanupDecayEntities(world *engine.World) {
 	s.mu.Lock()
 	clear(s.decayedThisFrame)
 	s.mu.Unlock()
-}
-
-// TriggerDecayAnimation is called by ClockScheduler to start decay animation
-func (s *DecaySystem) TriggerDecayAnimation(world *engine.World) {
-	s.mu.Lock()
-	s.currentRow = 0
-	// Reset the decay tracking map for the new animation sequence
-	clear(s.decayedThisFrame)
-	s.mu.Unlock()
-
-	// Spawn falling decay entities
-	s.spawnDecayEntities(world)
 }

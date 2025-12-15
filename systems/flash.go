@@ -11,11 +11,15 @@ import (
 
 // FlashSystem manages the lifecycle of visual flash effects
 type FlashSystem struct {
-	ctx *engine.GameContext
+	world *engine.World
+	res   engine.CoreResources
 }
 
-func NewFlashSystem(ctx *engine.GameContext) *FlashSystem {
-	return &FlashSystem{ctx: ctx}
+func NewFlashSystem(world *engine.World) *FlashSystem {
+	return &FlashSystem{
+		world: world,
+		res:   engine.GetCoreResources(world),
+	}
 }
 
 func (s *FlashSystem) Priority() int {

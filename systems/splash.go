@@ -12,12 +12,16 @@ import (
 
 // SplashSystem manages the lifecycle of splash entities
 type SplashSystem struct {
-	ctx *engine.GameContext
+	world *engine.World
+	res   engine.CoreResources
 }
 
 // NewSplashSystem creates a new splash system
-func NewSplashSystem(ctx *engine.GameContext) *SplashSystem {
-	return &SplashSystem{ctx: ctx}
+func NewSplashSystem(world *engine.World) *SplashSystem {
+	return &SplashSystem{
+		world: world,
+		res:   engine.GetCoreResources(world),
+	}
 }
 
 // Priority returns the system's priority (low, after game logic)
@@ -70,17 +74,9 @@ func (s *SplashSystem) Update(world *engine.World, dt time.Duration) {
 		// Delta-based time tracking (Robust against clock jumps/resets)
 		splash.Remaining -= dt
 
-		// TODO: DEPRECATE after test: Transient splash destruction is now handled by TimeKeeperSystem
-		// Lifecycle check
-		// if splash.Mode == components.SplashModeTransient && splash.Remaining <= 0 {
-		// 	toDestroy = append(toDestroy, entity)
-		// 	continue
-		// }
-
 		// Persistent Splash Logic (Gold Timer)
 		if splash.Mode == components.SplashModePersistent {
 			// Calculate display digit based on remaining time
-			// Clamp to ensure we don't display garbage if it goes slightly negative before cleanup event
 			// TODO: migrate to timer system
 			remainingSec := splash.Remaining.Seconds()
 			if remainingSec < 0 {
@@ -141,10 +137,10 @@ func (s *SplashSystem) handleSplashRequest(world *engine.World, payload *events.
 	world.Splashes.Add(entity, splash)
 
 	// 6. Register with TimeKeeper for destruction
-	s.ctx.PushEvent(events.EventTimerStart, &events.TimerStartPayload{
+	world.PushEvent(events.EventTimerStart, &events.TimerStartPayload{
 		Entity:   entity,
 		Duration: constants.SplashDuration,
-	}, time.Now())
+	})
 }
 
 // handleGoldSpawn creates the persistent gold timer anchored to the sequence
@@ -227,7 +223,7 @@ func (s *SplashSystem) cleanupSplashesByMode(world *engine.World, mode component
 // calculateSmartLayout determines the best position for a transient splash
 // Avoids Cursor and Gold Sequences
 func (s *SplashSystem) calculateSmartLayout(world *engine.World, cursorX, cursorY, charCount int) (int, int) {
-	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+	config := s.res.Config
 	width := config.GameWidth
 	height := config.GameHeight
 

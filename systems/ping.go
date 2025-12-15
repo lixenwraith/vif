@@ -4,28 +4,29 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/components"
+	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/events"
 )
 
 // PingSystem manages the state of ping highlights and grids
-// It handles timer countdowns and configuration updates based on game state
 type PingSystem struct {
-	ctx *engine.GameContext
+	world *engine.World
+	res   engine.CoreResources
 }
 
 // NewPingSystem creates a new ping system
-func NewPingSystem(ctx *engine.GameContext) *PingSystem {
+func NewPingSystem(world *engine.World) *PingSystem {
 	return &PingSystem{
-		ctx: ctx,
+		world: world,
+		res:   engine.GetCoreResources(world),
 	}
 }
 
 // Priority returns the system's priority
 // Should run before rendering to ensure visual state is up to date
 func (s *PingSystem) Priority() int {
-	// Run with Effects to ensure state is ready for render
-	return 300 // PriorityEffects
+	return constants.PriorityEffect
 }
 
 // EventTypes returns the event types PingSystem handles
@@ -90,7 +91,7 @@ func (s *PingSystem) Update(world *engine.World, dt time.Duration) {
 // handleGridRequest activates the grid on the cursor entity
 func (s *PingSystem) handleGridRequest(world *engine.World, duration time.Duration) {
 	// In single player, apply to the main cursor
-	entity := s.ctx.CursorEntity
+	entity := s.res.Cursor.Entity
 
 	ping, ok := world.Pings.Get(entity)
 	if !ok {

@@ -18,12 +18,14 @@ import (
 type GoldSystem struct {
 	mu    sync.RWMutex
 	world *engine.World
+	res   engine.CoreResources
 
-	// Internal state (migrated from GameState)
-	active      bool
-	sequenceID  int
-	startTime   time.Time
-	timeoutTime time.Time
+	// Internal state
+	active       bool
+	sequenceID   int
+	startTime    time.Time
+	timeoutTime  time.Time
+	spawnEnabled bool
 
 	// Sequence ID generator
 	nextSeqID int
@@ -32,8 +34,10 @@ type GoldSystem struct {
 // NewGoldSystem creates a new gold sequence system
 func NewGoldSystem(world *engine.World) *GoldSystem {
 	return &GoldSystem{
-		world:     world,
-		nextSeqID: 1,
+		world:        world,
+		res:          engine.GetCoreResources(world),
+		nextSeqID:    1,
+		spawnEnabled: true,
 	}
 }
 
@@ -47,6 +51,7 @@ func (s *GoldSystem) EventTypes() []events.EventType {
 	return []events.EventType{
 		events.EventGoldComplete,
 		events.EventGoldDestroyed,
+		events.EventPhaseChange,
 		events.EventGameReset,
 	}
 }
@@ -56,12 +61,19 @@ func (s *GoldSystem) HandleEvent(world *engine.World, event events.GameEvent) {
 	switch event.Type {
 	case events.EventGoldComplete:
 		if payload, ok := event.Payload.(*events.GoldCompletionPayload); ok {
-			s.handleCompletion(world, payload.SequenceID, event.Timestamp)
+			s.handleCompletion(world, payload.SequenceID)
 		}
 
 	case events.EventGoldDestroyed:
 		if payload, ok := event.Payload.(*events.GoldCompletionPayload); ok {
-			s.handleDestroyed(world, payload.SequenceID, event.Timestamp)
+			s.handleDestroyed(world, payload.SequenceID)
+		}
+
+	case events.EventPhaseChange:
+		if payload, ok := event.Payload.(*events.PhaseChangePayload); ok {
+			s.mu.Lock()
+			s.spawnEnabled = payload.NewPhase == int(engine.PhaseNormal)
+			s.mu.Unlock()
 		}
 
 	case events.EventGameReset:
@@ -76,48 +88,30 @@ func (s *GoldSystem) HandleEvent(world *engine.World, event events.GameEvent) {
 
 // Update runs the gold sequence system logic
 func (s *GoldSystem) Update(world *engine.World, dt time.Duration) {
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-	now := timeRes.GameTime
+	now := s.res.Time.GameTime
 
 	s.mu.Lock()
 	active := s.active
 	timeoutTime := s.timeoutTime
 	seqID := s.sequenceID
+	canSpawn := s.spawnEnabled
 	s.mu.Unlock()
 
 	// Timeout check
 	if active && now.After(timeoutTime) {
-		s.failSequence(world, seqID, now, true)
+		s.failSequence(world, seqID, true)
 		return
 	}
 
-	// Spawn check: only in PhaseNormal when inactive
-	stateRes := engine.MustGetResource[*engine.GameStateResource](world.Resources)
-	phase := stateRes.State.ReadPhaseState(now)
-
-	if phase.Phase == engine.PhaseNormal && !active {
+	// Spawn check
+	if canSpawn && !active {
 		s.spawnGold(world)
 	}
 }
 
-// TODO: can we do without this
-// pushEvent is resource event wrapper
-func (s *GoldSystem) pushEvent(eventType events.EventType, payload any, now time.Time) {
-	stateRes := engine.MustGetResource[*engine.GameStateResource](s.world.Resources)
-	eqRes := engine.MustGetResource[*engine.EventQueueResource](s.world.Resources)
-	event := events.GameEvent{
-		Type:      eventType,
-		Payload:   payload,
-		Frame:     stateRes.State.GetFrameNumber(),
-		Timestamp: now,
-	}
-	eqRes.Queue.Push(event)
-}
-
 // spawnGold creates a new gold sequence
 func (s *GoldSystem) spawnGold(world *engine.World) bool {
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-	now := timeRes.GameTime
+	now := s.res.Time.GameTime
 
 	s.mu.Lock()
 	if s.active {
@@ -204,19 +198,20 @@ func (s *GoldSystem) spawnGold(world *engine.World) bool {
 	// Activate internal state
 	s.mu.Lock()
 	s.active = true
+	s.spawnEnabled = false
 	s.sequenceID = sequenceID
 	s.startTime = now
 	s.timeoutTime = now.Add(constants.GoldDuration)
 	s.mu.Unlock()
 
 	// Emit spawn event
-	s.pushEvent(events.EventGoldSpawned, &events.GoldSpawnedPayload{
+	world.PushEvent(events.EventGoldSpawned, &events.GoldSpawnedPayload{
 		SequenceID: sequenceID,
 		OriginX:    x,
 		OriginY:    y,
 		Length:     constants.GoldSequenceLength,
 		Duration:   constants.GoldDuration,
-	}, now)
+	})
 
 	return true
 }
@@ -250,7 +245,7 @@ func (s *GoldSystem) removeGold(world *engine.World, sequenceID int) {
 }
 
 // failSequence handles gold failure (timeout or destruction)
-func (s *GoldSystem) failSequence(world *engine.World, sequenceID int, now time.Time, isTimeout bool) {
+func (s *GoldSystem) failSequence(world *engine.World, sequenceID int, isTimeout bool) {
 	s.mu.RLock()
 	if !s.active || sequenceID != s.sequenceID {
 		s.mu.RUnlock()
@@ -259,16 +254,16 @@ func (s *GoldSystem) failSequence(world *engine.World, sequenceID int, now time.
 	s.mu.RUnlock()
 
 	if isTimeout {
-		s.pushEvent(events.EventGoldTimeout, &events.GoldCompletionPayload{
+		world.PushEvent(events.EventGoldTimeout, &events.GoldCompletionPayload{
 			SequenceID: sequenceID,
-		}, now)
+		})
 	}
 
 	s.removeGold(world, sequenceID)
 }
 
 // handleCompletion processes successful gold sequence
-func (s *GoldSystem) handleCompletion(world *engine.World, sequenceID int, now time.Time) {
+func (s *GoldSystem) handleCompletion(world *engine.World, sequenceID int) {
 	s.mu.RLock()
 	if !s.active || sequenceID != s.sequenceID {
 		s.mu.RUnlock()
@@ -285,7 +280,7 @@ func (s *GoldSystem) handleCompletion(world *engine.World, sequenceID int, now t
 }
 
 // handleDestroyed processes external gold destruction
-func (s *GoldSystem) handleDestroyed(world *engine.World, sequenceID int, now time.Time) {
+func (s *GoldSystem) handleDestroyed(world *engine.World, sequenceID int) {
 	s.mu.RLock()
 	if !s.active || sequenceID != s.sequenceID {
 		s.mu.RUnlock()
@@ -299,11 +294,8 @@ func (s *GoldSystem) handleDestroyed(world *engine.World, sequenceID int, now ti
 // findValidPosition finds a valid random position for the gold sequence
 // Caller must NOT hold s.mu lock
 func (s *GoldSystem) findValidPosition(world *engine.World, seqLength int) (int, int) {
-	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
-	cursorRes := engine.MustGetResource[*engine.CursorResource](world.Resources)
-
-	// Read cursor position for exclusion
-	cursorPos, ok := world.Positions.Get(cursorRes.Entity)
+	config := s.res.Config
+	cursorPos, ok := world.Positions.Get(s.res.Cursor.Entity)
 	if !ok {
 		return -1, -1
 	}

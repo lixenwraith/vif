@@ -12,13 +12,15 @@ import (
 
 // MaterializeSystem manages materializer animations and triggering spawn completion
 type MaterializeSystem struct {
-	ctx *engine.GameContext
+	world *engine.World
+	res   engine.CoreResources
 }
 
 // NewMaterializeSystem creates a new materialize system
-func NewMaterializeSystem(ctx *engine.GameContext) *MaterializeSystem {
+func NewMaterializeSystem(world *engine.World) *MaterializeSystem {
 	return &MaterializeSystem{
-		ctx: ctx,
+		world: world,
+		res:   engine.GetCoreResources(world),
 	}
 }
 
@@ -138,9 +140,6 @@ func (s *MaterializeSystem) Update(world *engine.World, dt time.Duration) {
 	}
 
 	// --- Target Completion Handling ---
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-	now := timeRes.GameTime
-
 	for key, state := range targets {
 		if state.allArrived && len(state.entities) > 0 {
 			// Destroy all materializers in this group
@@ -152,11 +151,11 @@ func (s *MaterializeSystem) Update(world *engine.World, dt time.Duration) {
 			targetX := int(key >> 32)
 			targetY := int(key & 0xFFFFFFFF)
 
-			s.ctx.PushEvent(events.EventMaterializeComplete, &events.SpawnCompletePayload{
+			world.PushEvent(events.EventMaterializeComplete, &events.SpawnCompletePayload{
 				X:    targetX,
 				Y:    targetY,
 				Type: state.spawnType,
-			}, now)
+			})
 		}
 	}
 }
@@ -164,7 +163,7 @@ func (s *MaterializeSystem) Update(world *engine.World, dt time.Duration) {
 // spawnMaterializers creates the visual entities converging on the target
 // Logic moved from DrainSystem
 func (s *MaterializeSystem) spawnMaterializers(world *engine.World, targetX, targetY int, spawnType components.SpawnType) {
-	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+	config := s.res.Config
 
 	// Clamp target coordinates
 	if targetX < 0 {
