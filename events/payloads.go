@@ -142,3 +142,23 @@ type FlashRequestPayload struct {
 	Y    int
 	Char rune
 }
+
+// PhaseChangePayload carries the new game phase
+type PhaseChangePayload struct {
+	NewPhase int // Maps to engine.GamePhase
+}
+
+// DecayTimerStartPayload carries heat value for decay interval calculation
+type DecayTimerStartPayload struct {
+	HeatValue int
+}
+
+// NuggetCollectedPayload signals successful nugget collection
+type NuggetCollectedPayload struct {
+	Entity core.Entity
+}
+
+// NuggetDestroyedPayload signals external nugget destruction
+type NuggetDestroyedPayload struct {
+	Entity core.Entity
+}

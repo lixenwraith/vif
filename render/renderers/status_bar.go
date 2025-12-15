@@ -159,12 +159,13 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 	// clockNow := s.gameCtx.PausableClock.Now()
 
 	// Priority 1: Decay (always important)
-	decaySnapshot := s.gameCtx.State.ReadDecayState(ctx.GameTime)
-	rightItems = append(rightItems, statusItem{
-		text: fmt.Sprintf(" Decay: %.1fs ", decaySnapshot.TimeUntil),
-		fg:   render.RgbBlack,
-		bg:   render.RgbDecayTimerBg,
-	})
+	// TODO: Can't do this clean, defer till adding a Metrics resource
+	// decaySnapshot := s.gameCtx.State.ReadDecayState(ctx.GameTime)
+	// rightItems = append(rightItems, statusItem{
+	// 	text: fmt.Sprintf(" Decay: %.1fs ", decaySnapshot.TimeUntil),
+	// 	fg:   render.RgbBlack,
+	// 	bg:   render.RgbDecayTimerBg,
+	// })
 
 	// Priority 2: Energy
 	energyComp, _ := s.gameCtx.World.Energies.Get(s.gameCtx.CursorEntity)

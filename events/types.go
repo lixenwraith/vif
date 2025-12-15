@@ -18,14 +18,24 @@ const (
 	// Consumer: CleanerSystem | Payload: *DirectionalCleanerPayload
 	EventDirectionalCleanerRequest
 
-	// EventCleanerFinished marks cleaner animation completion
-	// Trigger: All cleaner entities destroyed | Payload: nil
-	EventCleanerFinished
+	// EventNuggetCollected signals nugget was collected by player
+	// Trigger: EnergySystem on successful nugget character match
+	// Consumer: NuggetSystem | Payload: *NuggetCollectedPayload
+	EventNuggetCollected
+
+	// EventNuggetDestroyed signals nugget was destroyed externally
+	// Trigger: DrainSystem collision, DecaySystem collision
+	// Consumer: NuggetSystem | Payload: *NuggetDestroyedPayload
+	EventNuggetDestroyed
 
 	// EventNuggetJumpRequest signals player intent to jump to active nugget
 	// Trigger: InputHandler (Tab key)
 	// Consumer: NuggetSystem | Payload: nil
 	EventNuggetJumpRequest
+
+	// EventCleanerFinished marks cleaner animation completion
+	// Trigger: All cleaner entities destroyed | Payload: nil
+	EventCleanerFinished
 
 	// EventGoldSpawned signals gold sequence creation
 	// Trigger: GoldSystem spawns sequence in PhaseNormal
@@ -170,6 +180,21 @@ const (
 	// Trigger: Systems destroying entities with visual feedback (Drain, Cleaner, Decay)
 	// Consumer: FlashSystem | Payload: *FlashRequestPayload
 	EventFlashRequest
+
+	// EventDecayStart signals decay timer expired and animation should begin
+	// Trigger: DecaySystem timer expiration
+	// Consumer: (internal to DecaySystem) | Payload: nil
+	EventDecayStart
+
+	// EventDecayComplete signals all decay entities destroyed
+	// Trigger: DecaySystem when entity count reaches zero
+	// Consumer: ClockScheduler | Payload: nil
+	EventDecayComplete
+
+	// EventPhaseChange broadcasts global phase transition
+	// Trigger: ClockScheduler reacting to system events
+	// Consumer: SpawnSystem, DecaySystem | Payload: *PhaseChangePayload
+	EventPhaseChange
 )
 
 // GameEvent represents a single game event with metadata

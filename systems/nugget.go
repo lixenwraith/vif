@@ -1,7 +1,6 @@
 package systems
 
 import (
-	"fmt"
 	"math"
 	"math/rand"
 	"strconv"
@@ -19,16 +18,17 @@ import (
 
 // NuggetSystem manages nugget spawn and respawn logic
 type NuggetSystem struct {
-	mu               sync.RWMutex
-	ctx              *engine.GameContext
-	nuggetID         atomic.Int32
-	lastSpawnAttempt time.Time
+	mu                 sync.RWMutex
+	world              *engine.World
+	nuggetID           atomic.Int32
+	lastSpawnAttempt   time.Time
+	activeNuggetEntity core.Entity
 }
 
 // NewNuggetSystem creates a new nugget system
-func NewNuggetSystem(ctx *engine.GameContext) *NuggetSystem {
+func NewNuggetSystem(world *engine.World) *NuggetSystem {
 	return &NuggetSystem{
-		ctx: ctx,
+		world: world,
 	}
 }
 
@@ -41,28 +41,65 @@ func (s *NuggetSystem) Priority() int {
 func (s *NuggetSystem) EventTypes() []events.EventType {
 	return []events.EventType{
 		events.EventNuggetJumpRequest,
+		events.EventNuggetCollected,
+		events.EventNuggetDestroyed,
+		events.EventGameReset,
 	}
 }
 
-// HandleEvent processes jump requests
+// HandleEvent processes nugget-related events
 func (s *NuggetSystem) HandleEvent(world *engine.World, event events.GameEvent) {
-	if event.Type == events.EventNuggetJumpRequest {
+	switch event.Type {
+	case events.EventNuggetJumpRequest:
 		s.handleJumpRequest(world, event.Timestamp)
+
+	case events.EventNuggetCollected:
+		if payload, ok := event.Payload.(*events.NuggetCollectedPayload); ok {
+			s.mu.Lock()
+			if s.activeNuggetEntity == payload.Entity {
+				s.activeNuggetEntity = 0
+			}
+			s.mu.Unlock()
+		}
+
+	case events.EventNuggetDestroyed:
+		if payload, ok := event.Payload.(*events.NuggetDestroyedPayload); ok {
+			s.mu.Lock()
+			if s.activeNuggetEntity == payload.Entity {
+				s.activeNuggetEntity = 0
+			}
+			s.mu.Unlock()
+		}
+
+	case events.EventGameReset:
+		s.mu.Lock()
+		s.activeNuggetEntity = 0
+		s.lastSpawnAttempt = time.Time{}
+		s.mu.Unlock()
 	}
 }
 
-// Update runs the nugget system logic using generic stores
+func (s *NuggetSystem) pushEvent(eventType events.EventType, payload any, now time.Time) {
+	stateRes := engine.MustGetResource[*engine.GameStateResource](s.world.Resources)
+	eqRes := engine.MustGetResource[*engine.EventQueueResource](s.world.Resources)
+	event := events.GameEvent{
+		Type:      eventType,
+		Payload:   payload,
+		Frame:     stateRes.State.GetFrameNumber(),
+		Timestamp: now,
+	}
+	eqRes.Queue.Push(event)
+}
+
+// Update runs the nugget system logic
 func (s *NuggetSystem) Update(world *engine.World, dt time.Duration) {
-	// Fetch resources
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	now := timeRes.GameTime
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	activeNuggetEntity := s.ctx.State.GetActiveNuggetID()
-
-	if activeNuggetEntity == 0 {
+	if s.activeNuggetEntity == 0 {
 		if now.Sub(s.lastSpawnAttempt) >= constants.NuggetSpawnIntervalSeconds*time.Second {
 			s.lastSpawnAttempt = now
 			s.spawnNugget(world, now)
@@ -70,47 +107,57 @@ func (s *NuggetSystem) Update(world *engine.World, dt time.Duration) {
 		return
 	}
 
-	if !world.Nuggets.Has(core.Entity(activeNuggetEntity)) {
-		s.ctx.State.ClearActiveNuggetID(activeNuggetEntity)
+	// Validate entity still exists
+	if !world.Nuggets.Has(s.activeNuggetEntity) {
+		s.activeNuggetEntity = 0
 	}
 }
 
 // handleJumpRequest attempts to jump cursor to the active nugget
 func (s *NuggetSystem) handleJumpRequest(world *engine.World, now time.Time) {
+	cursorRes := engine.MustGetResource[*engine.CursorResource](world.Resources)
+
 	// 1. Check Energy from component
-	energyComp, ok := world.Energies.Get(s.ctx.CursorEntity)
-	if !ok || energyComp.Current.Load() < 10 {
+	energyComp, ok := world.Energies.Get(cursorRes.Entity)
+	if !ok || energyComp.Current.Load() < constants.NuggetJumpCost {
 		return
 	}
 
 	// 2. Check Active Nugget
-	nuggetID := core.Entity(s.ctx.State.GetActiveNuggetID())
-	if nuggetID == 0 {
+	s.mu.RLock()
+	nuggetEntity := s.activeNuggetEntity
+	s.mu.RUnlock()
+
+	if nuggetEntity == 0 {
 		return
 	}
 
 	// 3. Get Nugget Position
-	nuggetPos, ok := world.Positions.Get(nuggetID)
+	nuggetPos, ok := world.Positions.Get(nuggetEntity)
 	if !ok {
-		// State mismatch: ID set but entity gone/invalid
-		s.ctx.State.ClearActiveNuggetID(uint64(nuggetID))
+		// Stale reference - clear it
+		s.mu.Lock()
+		if s.activeNuggetEntity == nuggetEntity {
+			s.activeNuggetEntity = 0
+		}
+		s.mu.Unlock()
 		return
 	}
 
 	// 4. Move Cursor
-	world.Positions.Add(s.ctx.CursorEntity, components.PositionComponent{
+	world.Positions.Add(cursorRes.Entity, components.PositionComponent{
 		X: nuggetPos.X,
 		Y: nuggetPos.Y,
 	})
 
 	// 5. Pay Energy Cost
-	s.ctx.PushEvent(events.EventEnergyAdd, &events.EnergyAddPayload{
+	s.pushEvent(events.EventEnergyAdd, &events.EnergyAddPayload{
 		Delta: -constants.NuggetJumpCost,
 	}, now)
 
 	// 6. Play Sound
-	if s.ctx.AudioEngine != nil {
-		s.ctx.AudioEngine.Play(audio.SoundBell)
+	if audioRes, ok := engine.GetResource[*engine.AudioResource](world.Resources); ok && audioRes.Player != nil {
+		audioRes.Player.Play(audio.SoundBell)
 	}
 }
 
@@ -157,16 +204,18 @@ func (s *NuggetSystem) spawnNugget(world *engine.World, now time.Time) {
 	world.Characters.Add(entity, char)
 	world.Nuggets.Add(entity, nugget)
 
-	s.ctx.State.SetActiveNuggetID(uint64(entity))
+	s.activeNuggetEntity = entity
 }
 
-// findValidPosition finds a valid random position for a nugget using generic stores
+// findValidPosition finds a valid random position for a nugget
 // Caller must hold s.mu lock
 func (s *NuggetSystem) findValidPosition(world *engine.World) (int, int) {
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
-	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
+	cursorRes := engine.MustGetResource[*engine.CursorResource](world.Resources)
+
+	cursorPos, ok := world.Positions.Get(cursorRes.Entity)
 	if !ok {
-		panic(fmt.Errorf("cursor destroyed"))
+		return -1, -1
 	}
 
 	for attempt := 0; attempt < constants.NuggetMaxAttempts; attempt++ {
@@ -187,26 +236,12 @@ func (s *NuggetSystem) findValidPosition(world *engine.World) (int, int) {
 	return -1, -1
 }
 
-// ClearActiveNugget clears the active nugget reference (called when collected)
-// This uses unconditional Store(0) for backward compatibility
-func (s *NuggetSystem) ClearActiveNugget() {
-	s.ctx.State.SetActiveNuggetID(0)
-}
-
-// ClearActiveNuggetIfMatches clears the active nugget if it matches the entity
-// Returns true if cleared, false if already cleared or a different nugget was active
-func (s *NuggetSystem) ClearActiveNuggetIfMatches(entity core.Entity) bool {
-	return s.ctx.State.ClearActiveNuggetID(uint64(entity))
-}
-
 // GetSystemState returns a debug string describing the current system state
 func (s *NuggetSystem) GetSystemState() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	activeNuggetEntity := s.ctx.State.GetActiveNuggetID()
-
-	if activeNuggetEntity == 0 {
+	if s.activeNuggetEntity == 0 {
 		now := time.Now()
 		timeSinceLastSpawn := now.Sub(s.lastSpawnAttempt)
 		timeUntilNext := (constants.NuggetSpawnIntervalSeconds * time.Second) - timeSinceLastSpawn
@@ -216,5 +251,5 @@ func (s *NuggetSystem) GetSystemState() string {
 		return "Nugget[inactive, nextSpawn=" + timeUntilNext.Round(100*time.Millisecond).String() + "]"
 	}
 
-	return "Nugget[active, entityID=" + strconv.Itoa(int(activeNuggetEntity)) + "]"
+	return "Nugget[active, entityID=" + strconv.Itoa(int(s.activeNuggetEntity)) + "]"
 }

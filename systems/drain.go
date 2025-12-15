@@ -750,7 +750,7 @@ func (s *DrainSystem) handleCollisionAtPosition(world *engine.World, entity core
 	// Check it's a gold sequence entity - destroy entire sequence
 	if seq, ok := world.Sequences.Get(entity); ok {
 		if seq.Type == components.SequenceGold {
-			s.handleGoldSequenceCollision(world, entity, seq.ID)
+			s.handleGoldSequenceCollision(world, seq.ID)
 			return
 		}
 	}
@@ -765,20 +765,12 @@ func (s *DrainSystem) handleCollisionAtPosition(world *engine.World, entity core
 	world.DestroyEntity(entity)
 }
 
-// handleGoldSequenceCollision removes all gold sequence entities and triggers phase transition using generic stores
-func (s *DrainSystem) handleGoldSequenceCollision(world *engine.World, entity core.Entity, sequenceID int) {
-	// Fetch resources
+// handleGoldSequenceCollision removes all gold sequence entities and emits destruction event
+func (s *DrainSystem) handleGoldSequenceCollision(world *engine.World, sequenceID int) {
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	now := timeRes.GameTime
 
-	// Get current gold state to verify this is the active gold sequence
-	goldSnapshot := s.ctx.State.ReadGoldState(now)
-	if !goldSnapshot.Active || goldSnapshot.SequenceID != sequenceID {
-		world.DestroyEntity(entity)
-		return // Not the active gold sequence
-	}
-
-	// Emit event BEFORE destroying entities (SplashSystem needs sequenceID)
+	// Emit event BEFORE destroying entities - GoldSystem validates if ID matches
 	s.ctx.PushEvent(events.EventGoldDestroyed, &events.GoldCompletionPayload{
 		SequenceID: sequenceID,
 	}, now)
@@ -788,33 +780,30 @@ func (s *DrainSystem) handleGoldSequenceCollision(world *engine.World, entity co
 	for _, goldSequenceEntity := range goldSequenceEntities {
 		seq, ok := world.Sequences.Get(goldSequenceEntity)
 		if !ok {
-			continue // Already destroyed or typed
+			continue
 		}
 
-		// Only destroy gold sequence entities with matching ID
 		if seq.Type == components.SequenceGold && seq.ID == sequenceID {
-			// Flash for gold character destruction
 			if pos, ok := world.Positions.Get(goldSequenceEntity); ok {
 				if char, ok := world.Characters.Get(goldSequenceEntity); ok {
 					s.ctx.PushEvent(events.EventFlashRequest, &events.FlashRequestPayload{
-						X:    pos.X,
-						Y:    pos.Y,
-						Char: char.Rune,
+						X: pos.X, Y: pos.Y, Char: char.Rune,
 					}, now)
 				}
 			}
 			world.DestroyEntity(goldSequenceEntity)
 		}
 	}
-
-	// Trigger phase transition to PhaseGoldComplete
-	s.ctx.State.DeactivateGoldSequence(now)
 }
 
-// handleNuggetCollision destroys the nugget entity and clears active nugget state using generic stores
+// handleNuggetCollision destroys the nugget entity and emits destruction event
 func (s *DrainSystem) handleNuggetCollision(world *engine.World, entity core.Entity) {
-	// Clear active nugget
-	s.ctx.State.ClearActiveNuggetID(uint64(entity))
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+
+	// Signal nugget destruction to NuggetSystem
+	s.ctx.PushEvent(events.EventNuggetDestroyed, &events.NuggetDestroyedPayload{
+		Entity: entity,
+	}, timeRes.GameTime)
 
 	// Destroy the nugget entity
 	world.DestroyEntity(entity)

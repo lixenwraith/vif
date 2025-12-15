@@ -28,7 +28,6 @@ type GameState struct {
 	PendingActions atomic.Uint64 // Actions in the current second bucket
 
 	// ===== CLOCK-TICK STATE (mutex protected) =====
-	// Updated during clock tick cycles, read by systems via snapshot methods
 
 	mu sync.RWMutex
 
@@ -51,26 +50,6 @@ type GameState struct {
 	// Controls which game mechanic is active (Normal, Gold, Decay Wait, Decay Animation)
 	CurrentPhase   GamePhase // Current game phase
 	PhaseStartTime time.Time // When current phase started
-
-	// Gold Sequence State
-	// Tracks active gold sequence timing and lifecycle
-	GoldActive      bool      // Whether gold sequence is active
-	GoldSequenceID  int       // Current gold sequence ID
-	GoldStartTime   time.Time // When gold spawned
-	GoldTimeoutTime time.Time // When gold will timeout
-
-	// Stores the Entity ID of the currently active nugget, or 0 if none
-	ActiveNuggetID atomic.Uint64
-
-	// Decay Timer State
-	// Manages countdown between gold completion and decay animation trigger
-	DecayTimerActive bool      // Whether decay timer has been started
-	DecayNextTime    time.Time // When decay will trigger
-
-	// Decay Animation State
-	// Tracks decay animation lifecycle
-	DecayAnimating bool      // Whether decay animation is running
-	DecayStartTime time.Time // When decay animation started
 }
 
 // initState initializes all game state fields to starting values
@@ -81,7 +60,6 @@ func (gs *GameState) initState(now time.Time) {
 	gs.GrayoutStartTime.Store(0)
 	gs.NextSeqID.Store(1)
 	gs.FrameNumber.Store(0)
-	gs.ActiveNuggetID.Store(0)
 
 	// Reset metrics
 	gs.GameTicks.Store(0)
@@ -99,18 +77,6 @@ func (gs *GameState) initState(now time.Time) {
 	gs.SpawnEnabled = true
 	gs.EntityCount = 0
 	gs.ScreenDensity = 0.0
-
-	// Gold state
-	gs.GoldActive = false
-	gs.GoldSequenceID = 0
-	gs.GoldStartTime = time.Time{}
-	gs.GoldTimeoutTime = time.Time{}
-
-	// Decay state
-	gs.DecayTimerActive = false
-	gs.DecayNextTime = time.Time{}
-	gs.DecayAnimating = false
-	gs.DecayStartTime = time.Time{}
 
 	// Phase state
 	gs.CurrentPhase = PhaseNormal
@@ -132,6 +98,34 @@ func (gs *GameState) Reset(now time.Time) {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
 	gs.initState(now)
+}
+
+// ===== PHASE STATE ACCESSORS (mutex protected) =====
+
+// PhaseSnapshot provides a consistent view of phase state
+type PhaseSnapshot struct {
+	Phase     GamePhase
+	StartTime time.Time
+	Duration  time.Duration
+}
+
+// SetPhase updates phase state (called by ClockScheduler)
+func (gs *GameState) SetPhase(phase GamePhase, now time.Time) {
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
+	gs.CurrentPhase = phase
+	gs.PhaseStartTime = now
+}
+
+// ReadPhaseState returns current phase snapshot
+func (gs *GameState) ReadPhaseState(now time.Time) PhaseSnapshot {
+	gs.mu.RLock()
+	defer gs.mu.RUnlock()
+	return PhaseSnapshot{
+		Phase:     gs.CurrentPhase,
+		StartTime: gs.PhaseStartTime,
+		Duration:  now.Sub(gs.PhaseStartTime),
+	}
 }
 
 // ===== SEQUENCE ID ACCESSORS (atomic) =====
@@ -244,261 +238,6 @@ func (gs *GameState) SetSpawnEnabled(enabled bool) {
 	defer gs.mu.Unlock()
 
 	gs.SpawnEnabled = enabled
-}
-
-// ===== PHASE STATE ACCESSORS (mutex protected) =====
-
-// CanTransition checks if a phase transition is valid
-func (gs *GameState) CanTransition(from, to GamePhase) bool {
-	validTransitions := map[GamePhase][]GamePhase{
-		PhaseNormal:         {PhaseGoldActive},
-		PhaseGoldActive:     {PhaseGoldComplete},
-		PhaseGoldComplete:   {PhaseDecayWait},
-		PhaseDecayWait:      {PhaseDecayAnimation},
-		PhaseDecayAnimation: {PhaseNormal},
-	}
-
-	allowed := validTransitions[from]
-	for _, phase := range allowed {
-		if phase == to {
-			return true
-		}
-	}
-	return false
-}
-
-// PhaseSnapshot provides a consistent view of phase state
-type PhaseSnapshot struct {
-	Phase     GamePhase
-	StartTime time.Time
-	Duration  time.Duration
-}
-
-// ReadPhaseState returns a consistent snapshot of the current phase state
-func (gs *GameState) ReadPhaseState(now time.Time) PhaseSnapshot {
-	gs.mu.RLock()
-	defer gs.mu.RUnlock()
-
-	return PhaseSnapshot{
-		Phase:     gs.CurrentPhase,
-		StartTime: gs.PhaseStartTime,
-		Duration:  now.Sub(gs.PhaseStartTime),
-	}
-}
-
-// ===== GOLD SEQUENCE STATE ACCESSORS (mutex protected) =====
-
-// IncrementGoldSequenceID increments and returns the next gold sequence ID
-func (gs *GameState) IncrementGoldSequenceID() int {
-	gs.mu.Lock()
-	defer gs.mu.Unlock()
-	gs.GoldSequenceID++
-	return gs.GoldSequenceID
-}
-
-// ActivateGoldSequence atomically activates a gold sequence with timeout
-// Only allowed from PhaseNormal (checked by phase transition validation)
-func (gs *GameState) ActivateGoldSequence(sequenceID int, duration time.Duration, now time.Time) bool {
-	gs.mu.Lock()
-	defer gs.mu.Unlock()
-
-	// Validate phase transition
-	if !gs.CanTransition(gs.CurrentPhase, PhaseGoldActive) {
-		return false
-	}
-
-	gs.GoldActive = true
-	gs.GoldSequenceID = sequenceID
-	gs.GoldStartTime = now
-	gs.GoldTimeoutTime = now.Add(duration)
-	gs.CurrentPhase = PhaseGoldActive
-	gs.PhaseStartTime = now
-	return true
-}
-
-// DeactivateGoldSequence atomically deactivates the gold sequence
-// Transitions to PhaseGoldComplete to allow decay or cleaner to start
-func (gs *GameState) DeactivateGoldSequence(now time.Time) bool {
-	gs.mu.Lock()
-	defer gs.mu.Unlock()
-
-	// Validate phase transition
-	if !gs.CanTransition(gs.CurrentPhase, PhaseGoldComplete) {
-		return false
-	}
-
-	gs.GoldActive = false
-	gs.GoldStartTime = time.Time{}
-	gs.GoldTimeoutTime = time.Time{}
-	gs.CurrentPhase = PhaseGoldComplete
-	gs.PhaseStartTime = now
-	return true
-}
-
-// GoldSnapshot provides a consistent view of gold state
-type GoldSnapshot struct {
-	Active      bool
-	SequenceID  int
-	StartTime   time.Time
-	TimeoutTime time.Time
-	Elapsed     time.Duration
-	Remaining   time.Duration
-}
-
-// ReadGoldState returns a consistent snapshot of the gold sequence state
-func (gs *GameState) ReadGoldState(now time.Time) GoldSnapshot {
-	gs.mu.RLock()
-	defer gs.mu.RUnlock()
-
-	var elapsed, remaining time.Duration
-	if gs.GoldActive {
-		elapsed = now.Sub(gs.GoldStartTime)
-		remaining = gs.GoldTimeoutTime.Sub(now)
-		if remaining < 0 {
-			remaining = 0
-		}
-	}
-
-	return GoldSnapshot{
-		Active:      gs.GoldActive,
-		SequenceID:  gs.GoldSequenceID,
-		StartTime:   gs.GoldStartTime,
-		TimeoutTime: gs.GoldTimeoutTime,
-		Elapsed:     elapsed,
-		Remaining:   remaining,
-	}
-}
-
-// ===== ACTIVE NUGGET ACCESSORS (atomic) =====
-
-// GetActiveNuggetID returns the entity ID of the active nugget (0 if none)
-func (gs *GameState) GetActiveNuggetID() uint64 {
-	return gs.ActiveNuggetID.Load()
-}
-
-// SetActiveNuggetID sets the active nugget entity ID
-func (gs *GameState) SetActiveNuggetID(id uint64) {
-	gs.ActiveNuggetID.Store(id)
-}
-
-// ClearActiveNuggetID atomically clears the active nugget if it matches expected
-// Returns true if cleared, false if already changed
-func (gs *GameState) ClearActiveNuggetID(expected uint64) bool {
-	return gs.ActiveNuggetID.CompareAndSwap(expected, 0)
-}
-
-// ===== DECAY TIMER STATE ACCESSORS (mutex protected) =====
-
-// StartDecayTimer starts the decay timer with the given interval
-// Heat value must be passed from caller (queried from HeatComponent)
-// Only allowed from PhaseGoldComplete (checked by phase transition validation)
-func (gs *GameState) StartDecayTimer(baseSeconds, rangeSeconds float64, now time.Time, heatValue int) bool {
-	gs.mu.Lock()
-	defer gs.mu.Unlock()
-
-	// Validate phase transition
-	if !gs.CanTransition(gs.CurrentPhase, PhaseDecayWait) {
-		return false
-	}
-
-	// Calculate decay timer based on heat percentage
-	heatPercentage := float64(heatValue) / float64(constants.MaxHeat)
-	if heatPercentage > 1.0 {
-		heatPercentage = 1.0
-	}
-	if heatPercentage < 0.0 {
-		heatPercentage = 0.0
-	}
-
-	// Formula: base - range * heat_percentage
-	// Empty heat bar (0): 60 - 50 * 0 = 60 seconds
-	// Full heat bar (max): 60 - 50 * 1 = 10 seconds
-	intervalSeconds := baseSeconds - rangeSeconds*heatPercentage
-	interval := time.Duration(intervalSeconds * float64(time.Second))
-
-	gs.DecayTimerActive = true
-	gs.DecayNextTime = now.Add(interval)
-	gs.CurrentPhase = PhaseDecayWait
-	gs.PhaseStartTime = now
-
-	return true
-}
-
-// ===== DECAY ANIMATION STATE ACCESSORS (mutex protected) =====
-
-// StartDecayAnimation starts the decay animation
-// Only allowed from PhaseDecayWait (checked by phase transition validation)
-func (gs *GameState) StartDecayAnimation(now time.Time) bool {
-	gs.mu.Lock()
-	defer gs.mu.Unlock()
-
-	// Validate phase transition
-	if !gs.CanTransition(gs.CurrentPhase, PhaseDecayAnimation) {
-		return false
-	}
-
-	gs.DecayAnimating = true
-	gs.DecayStartTime = now
-	gs.DecayTimerActive = false // Timer is no longer active once animation starts
-	gs.CurrentPhase = PhaseDecayAnimation
-	gs.PhaseStartTime = now
-	return true
-}
-
-// StopDecayAnimation stops the decay animation and returns to Normal phase
-// Only allowed from PhaseDecayAnimation (checked by phase transition validation)
-func (gs *GameState) StopDecayAnimation(now time.Time) bool {
-	gs.mu.Lock()
-	defer gs.mu.Unlock()
-
-	// Validate phase transition
-	if !gs.CanTransition(gs.CurrentPhase, PhaseNormal) {
-		return false
-	}
-
-	gs.DecayAnimating = false
-	gs.DecayStartTime = time.Time{}
-	gs.CurrentPhase = PhaseNormal
-	gs.PhaseStartTime = now
-	return true
-}
-
-// GetDecayStartTime returns when the decay animation started
-func (gs *GameState) GetDecayStartTime() time.Time {
-	gs.mu.RLock()
-	defer gs.mu.RUnlock()
-	return gs.DecayStartTime
-}
-
-// DecaySnapshot provides a consistent view of decay state
-type DecaySnapshot struct {
-	TimerActive bool
-	NextTime    time.Time
-	Animating   bool
-	StartTime   time.Time
-	TimeUntil   float64
-}
-
-// ReadDecayState returns a consistent snapshot of the decay state
-func (gs *GameState) ReadDecayState(now time.Time) DecaySnapshot {
-	gs.mu.RLock()
-	defer gs.mu.RUnlock()
-
-	timeUntil := 0.0
-	if gs.DecayTimerActive && !gs.DecayAnimating {
-		remaining := gs.DecayNextTime.Sub(now).Seconds()
-		if remaining > 0 {
-			timeUntil = remaining
-		}
-	}
-
-	return DecaySnapshot{
-		TimerActive: gs.DecayTimerActive,
-		NextTime:    gs.DecayNextTime,
-		Animating:   gs.DecayAnimating,
-		StartTime:   gs.DecayStartTime,
-		TimeUntil:   timeUntil,
-	}
 }
 
 // ===== RUNTIME METRICS ACCESSORS =====

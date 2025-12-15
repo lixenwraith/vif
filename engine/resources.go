@@ -4,6 +4,9 @@ import (
 	"reflect"
 	"sync"
 	"time"
+
+	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/events"
 )
 
 // ResourceStore is a thread-safe container for global game resources
@@ -120,4 +123,24 @@ type RenderConfig struct {
 	// Post-Processing: Dim (Brightness Reduction)
 	DimFactor float64
 	DimMask   uint8
+}
+
+// EventQueueResource wraps the event queue for system access
+type EventQueueResource struct {
+	Queue *events.EventQueue
+}
+
+// AudioResource wraps the audio player interface
+type AudioResource struct {
+	Player AudioPlayer
+}
+
+// GameStateResource wraps GameState for read access by systems
+type GameStateResource struct {
+	State *GameState
+}
+
+// CursorResource holds the cursor entity reference
+type CursorResource struct {
+	Entity core.Entity
 }

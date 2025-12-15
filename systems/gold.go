@@ -1,7 +1,6 @@
 package systems
 
 import (
-	"fmt"
 	"math"
 	"math/rand"
 	"sync"
@@ -15,16 +14,26 @@ import (
 	"github.com/lixenwraith/vi-fighter/events"
 )
 
-// GoldSystem manages the gold sequence mechanic and emits events for visualization
+// GoldSystem manages the gold sequence mechanic autonomously
 type GoldSystem struct {
-	mu  sync.RWMutex
-	ctx *engine.GameContext
+	mu    sync.RWMutex
+	world *engine.World
+
+	// Internal state (migrated from GameState)
+	active      bool
+	sequenceID  int
+	startTime   time.Time
+	timeoutTime time.Time
+
+	// Sequence ID generator
+	nextSeqID int
 }
 
 // NewGoldSystem creates a new gold sequence system
-func NewGoldSystem(ctx *engine.GameContext) *GoldSystem {
+func NewGoldSystem(world *engine.World) *GoldSystem {
 	return &GoldSystem{
-		ctx: ctx,
+		world:     world,
+		nextSeqID: 1,
 	}
 }
 
@@ -37,109 +46,106 @@ func (s *GoldSystem) Priority() int {
 func (s *GoldSystem) EventTypes() []events.EventType {
 	return []events.EventType{
 		events.EventGoldComplete,
+		events.EventGoldDestroyed,
+		events.EventGameReset,
 	}
 }
 
 // HandleEvent processes gold events
 func (s *GoldSystem) HandleEvent(world *engine.World, event events.GameEvent) {
-	if event.Type == events.EventGoldComplete {
+	switch event.Type {
+	case events.EventGoldComplete:
 		if payload, ok := event.Payload.(*events.GoldCompletionPayload); ok {
 			s.handleCompletion(world, payload.SequenceID, event.Timestamp)
 		}
+
+	case events.EventGoldDestroyed:
+		if payload, ok := event.Payload.(*events.GoldCompletionPayload); ok {
+			s.handleDestroyed(world, payload.SequenceID, event.Timestamp)
+		}
+
+	case events.EventGameReset:
+		s.mu.Lock()
+		s.active = false
+		s.sequenceID = 0
+		s.startTime = time.Time{}
+		s.timeoutTime = time.Time{}
+		s.mu.Unlock()
 	}
 }
 
 // Update runs the gold sequence system logic
-// Gold Timer visualization is now handled by SplashSystem via events
 func (s *GoldSystem) Update(world *engine.World, dt time.Duration) {
-	// Fetch resources
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	now := timeRes.GameTime
-
-	// Read state snapshots
-	goldSnapshot := s.ctx.State.ReadGoldState(now)
-	phaseSnapshot := s.ctx.State.ReadPhaseState(now)
-
-	// Gold spawning: Only in PhaseNormal when no gold is active
-	if phaseSnapshot.Phase == engine.PhaseNormal && !goldSnapshot.Active {
-		s.spawnGold(world)
-	}
-
-	// Consistency Check: If gold is active, check if any sequence members are flagged MarkedForDeath
-	// Happens on resize and must fail the sequence BEFORE CullSystem destroys the entities
-	if goldSnapshot.Active {
-		// Check for OOB gold entities
-		// Use Sequences store instead of GoldSequences (which are not attached to entities)
-		oobEntities := world.Query().
-			With(world.Sequences).
-			With(world.MarkedForDeaths).
-			Execute()
-
-		for _, e := range oobEntities {
-			// Verify this entity belongs to the active sequence
-			if seq, ok := world.Sequences.Get(e); ok && seq.Type == components.SequenceGold && seq.ID == goldSnapshot.SequenceID {
-				// Found an active gold char marked for deletion (resize/cull)
-				// Trigger failure logic
-				s.failSequence(world, seq.ID, now)
-				break // One failure is enough to kill the sequence
-			}
-		}
-	}
-}
-
-// failSequence handles the destruction of a gold sequence due to external causes (OOB/Drain)
-func (s *GoldSystem) failSequence(world *engine.World, sequenceID int, now time.Time) {
-	// Emit event to notify UI/SplashSystem
-	s.ctx.PushEvent(events.EventGoldDestroyed, &events.GoldCompletionPayload{
-		SequenceID: sequenceID,
-	}, now)
-
-	// Call removeGold to destroy ALL entities in the sequence, not just the one that triggered the failure, handling partial resize culling
-	s.removeGold(world, sequenceID)
-}
-
-// spawnGold creates a new gold sequence at a random position on the screen using generic stores
-// Returns true if spawn succeeded, false if spawn failed (e.g., no valid position)
-func (s *GoldSystem) spawnGold(world *engine.World) bool {
-	// Fetch resources
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-	now := timeRes.GameTime
-
-	// Read phase and gold state snapshots for consistent checks
-	phaseSnapshot := s.ctx.State.ReadPhaseState(now)
-	goldSnapshot := s.ctx.State.ReadGoldState(now)
-
-	// Phase consistency check: Gold can only spawn in PhaseNormal
-	if phaseSnapshot.Phase != engine.PhaseNormal {
-		return false
-	}
-
-	// Check active state from snapshot
-	if goldSnapshot.Active {
-		// Already have an active gold sequence
-		return false
-	}
 
 	s.mu.Lock()
+	active := s.active
+	timeoutTime := s.timeoutTime
+	seqID := s.sequenceID
+	s.mu.Unlock()
+
+	// Timeout check
+	if active && now.After(timeoutTime) {
+		s.failSequence(world, seqID, now, true)
+		return
+	}
+
+	// Spawn check: only in PhaseNormal when inactive
+	stateRes := engine.MustGetResource[*engine.GameStateResource](world.Resources)
+	phase := stateRes.State.ReadPhaseState(now)
+
+	if phase.Phase == engine.PhaseNormal && !active {
+		s.spawnGold(world)
+	}
+}
+
+// TODO: can we do without this
+// pushEvent is resource event wrapper
+func (s *GoldSystem) pushEvent(eventType events.EventType, payload any, now time.Time) {
+	stateRes := engine.MustGetResource[*engine.GameStateResource](s.world.Resources)
+	eqRes := engine.MustGetResource[*engine.EventQueueResource](s.world.Resources)
+	event := events.GameEvent{
+		Type:      eventType,
+		Payload:   payload,
+		Frame:     stateRes.State.GetFrameNumber(),
+		Timestamp: now,
+	}
+	eqRes.Queue.Push(event)
+}
+
+// spawnGold creates a new gold sequence
+func (s *GoldSystem) spawnGold(world *engine.World) bool {
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+	now := timeRes.GameTime
+
+	s.mu.Lock()
+	if s.active {
+		s.mu.Unlock()
+		return false
+	}
+	s.mu.Unlock() // Unlock before expensive operation
+
 	// Generate random 10-character sequence
 	sequence := make([]rune, constants.GoldSequenceLength)
 	for i := 0; i < constants.GoldSequenceLength; i++ {
 		sequence[i] = constants.AlphanumericRunes[rand.Intn(len(constants.AlphanumericRunes))]
 	}
 
-	// Find random valid position (similar to spawn system)
+	// Caller must NOT hold s.mu lock
 	x, y := s.findValidPosition(world, constants.GoldSequenceLength)
-	s.mu.Unlock()
 
 	if x < 0 || y < 0 {
-		// No valid position found - spawn failed
 		return false
 	}
 
-	// Get next sequence ID from GameState
-	sequenceID := s.ctx.State.IncrementGoldSequenceID()
+	// Increment sequence ID for new spawn
+	s.mu.Lock()
+	s.nextSeqID++
+	s.mu.Unlock()
+	sequenceID := s.nextSeqID
 
-	// Create entities and components
+	// Create entities
 	type entityData struct {
 		entity core.Entity
 		pos    components.PositionComponent
@@ -153,10 +159,7 @@ func (s *GoldSystem) spawnGold(world *engine.World) bool {
 		entity := world.CreateEntity()
 		entities = append(entities, entityData{
 			entity: entity,
-			pos: components.PositionComponent{
-				X: x + i,
-				Y: y,
-			},
+			pos:    components.PositionComponent{X: x + i, Y: y},
 			char: components.CharacterComponent{
 				Rune: sequence[i],
 				// Color defaults to ColorNone, renderer uses SeqType/SeqLevel
@@ -173,7 +176,7 @@ func (s *GoldSystem) spawnGold(world *engine.World) bool {
 		})
 	}
 
-	// Batch position validation and commit
+	// Batch position commit
 	batch := world.Positions.BeginBatch()
 	for _, ed := range entities {
 		batch.Add(ed.entity, ed.pos)
@@ -192,22 +195,22 @@ func (s *GoldSystem) spawnGold(world *engine.World) bool {
 		world.Characters.Add(ed.entity, ed.char)
 		world.Sequences.Add(ed.entity, ed.seq)
 		// Protect gold entities from delete operators
+		// TODO: protect from decay here as well instead of decay system check
 		world.Protections.Add(ed.entity, components.ProtectionComponent{
 			Mask: components.ProtectFromDelete,
 		})
 	}
 
-	// Activate gold sequence in GameState (sets phase to PhaseGoldActive)
-	if !s.ctx.State.ActivateGoldSequence(sequenceID, constants.GoldDuration, now) {
-		// Phase transition failed - clean up created entities
-		for _, ed := range entities {
-			world.DestroyEntity(ed.entity)
-		}
-		return false
-	}
+	// Activate internal state
+	s.mu.Lock()
+	s.active = true
+	s.sequenceID = sequenceID
+	s.startTime = now
+	s.timeoutTime = now.Add(constants.GoldDuration)
+	s.mu.Unlock()
 
-	// Emit Spawn Event for Visualization (Timer)
-	s.ctx.PushEvent(events.EventGoldSpawned, &events.GoldSpawnedPayload{
+	// Emit spawn event
+	s.pushEvent(events.EventGoldSpawned, &events.GoldSpawnedPayload{
 		SequenceID: sequenceID,
 		OriginX:    x,
 		OriginY:    y,
@@ -218,95 +221,91 @@ func (s *GoldSystem) spawnGold(world *engine.World) bool {
 	return true
 }
 
-// removeGold removes all gold sequence entities from the world using generic stores
+// removeGold removes all gold sequence entities
 func (s *GoldSystem) removeGold(world *engine.World, sequenceID int) {
-	// Fetch resources
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-	now := timeRes.GameTime
-
-	// Read gold state snapshot for consistent check
-	goldSnapshot := s.ctx.State.ReadGoldState(now)
-
-	// Check active state from snapshot
-	if !goldSnapshot.Active {
+	s.mu.RLock()
+	if !s.active || sequenceID != s.sequenceID {
+		s.mu.RUnlock()
 		return
 	}
+	s.mu.RUnlock()
 
-	// Only remove if the sequenceID matches
-	if sequenceID != goldSnapshot.SequenceID {
-		return
-	}
-
-	// Query entities with sequence components
 	entities := world.Sequences.All()
-
 	for _, entity := range entities {
 		seq, ok := world.Sequences.Get(entity)
 		if !ok {
 			continue
 		}
-
-		// Only remove gold sequence entities with our ID
+		// Only remove gold sequence entities with provided ID
 		if seq.Type == components.SequenceGold && seq.ID == sequenceID {
 			world.DestroyEntity(entity)
 		}
 	}
 
-	// Deactivate gold sequence in GameState (transitions to PhaseGoldComplete)
-	if !s.ctx.State.DeactivateGoldSequence(now) {
-		// Phase transition failed
-		return
-	}
+	s.mu.Lock()
+	s.active = false
+	s.startTime = time.Time{}
+	s.timeoutTime = time.Time{}
+	s.mu.Unlock()
 }
 
-// handleCompletion cleans up gold sequence and plays sound
-func (s *GoldSystem) handleCompletion(world *engine.World, sequenceID int, now time.Time) {
-	// Read gold state snapshot for consistent check
-	goldSnapshot := s.ctx.State.ReadGoldState(now)
-
-	if !goldSnapshot.Active {
+// failSequence handles gold failure (timeout or destruction)
+func (s *GoldSystem) failSequence(world *engine.World, sequenceID int, now time.Time, isTimeout bool) {
+	s.mu.RLock()
+	if !s.active || sequenceID != s.sequenceID {
+		s.mu.RUnlock()
 		return
 	}
+	s.mu.RUnlock()
 
-	// Remove gold sequence entities
-	// This will also trigger decay timer restart logic in removeGold
+	if isTimeout {
+		s.pushEvent(events.EventGoldTimeout, &events.GoldCompletionPayload{
+			SequenceID: sequenceID,
+		}, now)
+	}
+
+	s.removeGold(world, sequenceID)
+}
+
+// handleCompletion processes successful gold sequence
+func (s *GoldSystem) handleCompletion(world *engine.World, sequenceID int, now time.Time) {
+	s.mu.RLock()
+	if !s.active || sequenceID != s.sequenceID {
+		s.mu.RUnlock()
+		return
+	}
+	s.mu.RUnlock()
+
 	s.removeGold(world, sequenceID)
 
-	// Play coin sound for gold completion
-	if s.ctx.AudioEngine != nil {
-		s.ctx.AudioEngine.Play(audio.SoundCoin)
+	// Play sound
+	if audioRes, ok := engine.GetResource[*engine.AudioResource](world.Resources); ok && audioRes.Player != nil {
+		audioRes.Player.Play(audio.SoundCoin)
 	}
 }
 
-// TimeoutGoldSequence is called by ClockScheduler when gold sequence times out
-// Required by GoldSystemInterface
-func (s *GoldSystem) TimeoutGoldSequence(world *engine.World) {
-	// Fetch resources
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-	now := timeRes.GameTime
+// handleDestroyed processes external gold destruction
+func (s *GoldSystem) handleDestroyed(world *engine.World, sequenceID int, now time.Time) {
+	s.mu.RLock()
+	if !s.active || sequenceID != s.sequenceID {
+		s.mu.RUnlock()
+		return
+	}
+	s.mu.RUnlock()
 
-	// Read gold state snapshot to get current sequence ID
-	goldSnapshot := s.ctx.State.ReadGoldState(now)
-
-	// Emit Timeout Event first (so SplashSystem can remove timer)
-	s.ctx.PushEvent(events.EventGoldTimeout, &events.GoldCompletionPayload{
-		SequenceID: goldSnapshot.SequenceID,
-	}, now)
-
-	// Remove gold sequence entities (also starts decay timer)
-	s.removeGold(world, goldSnapshot.SequenceID)
+	s.removeGold(world, sequenceID)
 }
 
-// findValidPosition finds a valid random position for the gold sequence using generic stores
-// Caller holds s.mu lock
+// findValidPosition finds a valid random position for the gold sequence
+// Caller must NOT hold s.mu lock
 func (s *GoldSystem) findValidPosition(world *engine.World, seqLength int) (int, int) {
-	// Fetch resources
 	config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
+	cursorRes := engine.MustGetResource[*engine.CursorResource](world.Resources)
 
-	// Read cursor position
-	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)
+	// Read cursor position for exclusion
+	cursorPos, ok := world.Positions.Get(cursorRes.Entity)
 	if !ok {
-		panic(fmt.Errorf("cursor destroyed"))
+		return -1, -1
 	}
 
 	for attempt := 0; attempt < constants.GoldSpawnMaxAttempts; attempt++ {
@@ -314,7 +313,8 @@ func (s *GoldSystem) findValidPosition(world *engine.World, seqLength int) (int,
 		y := rand.Intn(config.GameHeight)
 
 		// Check if far enough from cursor
-		if math.Abs(float64(x-cursorPos.X)) <= constants.CursorExclusionX || math.Abs(float64(y-cursorPos.Y)) <= constants.CursorExclusionY {
+		if math.Abs(float64(x-cursorPos.X)) <= constants.CursorExclusionX ||
+			math.Abs(float64(y-cursorPos.Y)) <= constants.CursorExclusionY {
 			continue
 		}
 
@@ -337,5 +337,5 @@ func (s *GoldSystem) findValidPosition(world *engine.World, seqLength int) (int,
 		}
 	}
 
-	return -1, -1 // No valid position found
+	return -1, -1
 }

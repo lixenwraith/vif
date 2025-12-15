@@ -5,7 +5,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/events"
 )
 
@@ -76,21 +75,6 @@ type ClockScheduler struct {
 
 	// Event routing
 	eventRouter *events.Router[*World]
-
-	// System references needed for triggering transitions
-	// These will be set via SetSystems() after scheduler creation
-	goldSystem  GoldSystemInterface
-	decaySystem DecaySystemInterface
-}
-
-// GoldSystemInterface defines the interface for gold sequence system
-type GoldSystemInterface interface {
-	TimeoutGoldSequence(world *World)
-}
-
-// DecaySystemInterface defines the interface for decay system
-type DecaySystemInterface interface {
-	TriggerDecayAnimation(world *World)
 }
 
 // NewClockScheduler creates a new clock scheduler with specified tick interval
@@ -112,29 +96,50 @@ func NewClockScheduler(ctx *GameContext, tickInterval time.Duration, frameReady 
 	return cs, updateDone
 }
 
-// RegisterEventHandler adds an event handler to the router
-// Must be called before Start()
+// RegisterEventHandler adds an event handler to the router, must be called before Start()
 func (cs *ClockScheduler) RegisterEventHandler(handler events.Handler[*World]) {
 	cs.eventRouter.Register(handler)
 }
 
-// SetSystems sets the system references needed for phase transitions
-// Must be called before Start() to enable phase transition logic
-func (cs *ClockScheduler) SetSystems(goldSystem GoldSystemInterface, decaySystem DecaySystemInterface) {
-	cs.mu.Lock()
-	defer cs.mu.Unlock()
-	cs.goldSystem = goldSystem
-	cs.decaySystem = decaySystem
+// EventTypes returns event types ClockScheduler handles
+func (cs *ClockScheduler) EventTypes() []events.EventType {
+	return []events.EventType{
+		events.EventGoldSpawned,
+		events.EventGoldComplete,
+		events.EventGoldTimeout,
+		events.EventGoldDestroyed,
+		events.EventDecayStart,
+		events.EventDecayComplete,
+	}
 }
 
-// SetGoldSequenceSystem sets the gold sequence system for timeout handling
-func (cs *ClockScheduler) SetGoldSequenceSystem(system GoldSystemInterface) {
-	cs.goldSystem = system
+// HandleEvent processes phase transition events
+func (cs *ClockScheduler) HandleEvent(world *World, event events.GameEvent) {
+	switch event.Type {
+	case events.EventGoldSpawned:
+		cs.ctx.State.SetPhase(PhaseGoldActive, event.Timestamp)
+
+	case events.EventGoldComplete, events.EventGoldTimeout, events.EventGoldDestroyed:
+		cs.ctx.State.SetPhase(PhaseDecayWait, event.Timestamp)
+		cs.emitPhaseChange(PhaseDecayWait, event.Timestamp)
+
+	case events.EventDecayStart:
+		cs.ctx.State.SetPhase(PhaseDecayAnimation, event.Timestamp)
+
+	case events.EventDecayComplete:
+		cs.ctx.State.SetPhase(PhaseNormal, event.Timestamp)
+		cs.emitPhaseChange(PhaseNormal, event.Timestamp)
+	}
 }
 
-// SetDecaySystem sets the decay system for animation triggering
-func (cs *ClockScheduler) SetDecaySystem(system DecaySystemInterface) {
-	cs.decaySystem = system
+func (cs *ClockScheduler) emitPhaseChange(phase GamePhase, now time.Time) {
+	event := events.GameEvent{
+		Type:      events.EventPhaseChange,
+		Payload:   &events.PhaseChangePayload{NewPhase: int(phase)},
+		Frame:     cs.ctx.State.GetFrameNumber(),
+		Timestamp: now,
+	}
+	cs.ctx.eventQueue.Push(event)
 }
 
 // Start begins the scheduler loop
@@ -146,12 +151,12 @@ func (cs *ClockScheduler) Start() {
 	}
 }
 
-// Stop halts the scheduler loop and waits for goroutine to exit
+// Stop halts the scheduler loop
 func (cs *ClockScheduler) Stop() {
 	cs.stopOnce.Do(func() {
 		if cs.running.CompareAndSwap(true, false) {
 			close(cs.stopChan)
-			cs.wg.Wait() // Wait for goroutine to fully exit
+			cs.wg.Wait()
 		}
 	})
 }
@@ -160,6 +165,16 @@ func (cs *ClockScheduler) Stop() {
 // Implements adaptive sleeping that respects pause state to avoid busy-waiting
 func (cs *ClockScheduler) schedulerLoop() {
 	defer cs.wg.Done()
+
+	// TODO: test and clean up
+	// Explicitly handle panic in this goroutine to guarantee terminal reset
+	defer func() {
+		if r := recover(); r != nil {
+			if cs.ctx != nil {
+				cs.ctx.crashHandler(r)
+			}
+		}
+	}()
 
 	// Initialize next tick deadline
 	cs.mu.Lock()
@@ -176,7 +191,7 @@ func (cs *ClockScheduler) schedulerLoop() {
 		default:
 		}
 	}
-	defer timer.Stop() // Ensure the timer is cleaned up when the function exits
+	defer timer.Stop()
 
 	// Adaptive ticker that respects pause state
 	for {
@@ -277,8 +292,7 @@ func (cs *ClockScheduler) DispatchEventsImmediately() {
 	})
 }
 
-// processTick executes one clock cycle (called every 50ms when not paused)
-// Implements phase transition logic for Gold→GoldComplete→Decay→Normal cycle
+// processTick executes one clock cycle (called every game tick when not paused)
 func (cs *ClockScheduler) processTick() {
 	// Skip tick execution when paused (defensive check)
 	if cs.ctx.IsPaused.Load() {
@@ -291,82 +305,8 @@ func (cs *ClockScheduler) processTick() {
 		cs.ctx.World.UpdateLocked(cs.tickInterval)
 	})
 
-	// Get systems references with mutex protection
-	cs.mu.RLock()
-	goldSys := cs.goldSystem
-	decaySys := cs.decaySystem
-	cs.mu.RUnlock()
-
-	// Get world reference
-	world := cs.ctx.World
-
-	// Use the scheduler's tracked game time
-	gameNow := cs.lastGameTickTime
-
-	// Get current phase from GameState
-	phaseSnapshot := cs.ctx.State.ReadPhaseState(gameNow)
-
-	// Handle phase transitions based on current phase
-	switch phaseSnapshot.Phase {
-	case PhaseGoldActive:
-		// Check if gold sequence has timed out (pausable clock handles pause adjustment internally)
-		goldSnapshot := cs.ctx.State.ReadGoldState(gameNow)
-		if goldSnapshot.Active && gameNow.After(goldSnapshot.TimeoutTime) {
-			if goldSys != nil {
-				// Gold timeout - call gold system to remove gold entities
-				goldSys.TimeoutGoldSequence(world)
-			} else {
-				// No gold system - just deactivate gold sequence directly
-				cs.ctx.State.DeactivateGoldSequence(gameNow)
-			}
-		}
-
-	case PhaseGoldComplete:
-		// Gold sequence completed or timed out - start decay timer
-		// Query heat from HeatComponent
-		heatValue := 0
-		if hc, ok := world.Heats.Get(cs.ctx.CursorEntity); ok {
-			heatValue = int(hc.Current.Load())
-		}
-		// This will transition to PhaseDecayWait
-		cs.ctx.State.StartDecayTimer(
-			constants.DecayIntervalBaseSeconds,
-			constants.DecayIntervalRangeSeconds,
-			gameNow,
-			heatValue,
-		)
-
-	case PhaseDecayWait:
-		// Check if decay timer has expired (pausable clock handles pause adjustment internally)
-		decaySnapshot := cs.ctx.State.ReadDecayState(gameNow)
-		if decaySnapshot.TimerActive && gameNow.After(decaySnapshot.NextTime) {
-			// Timer expired - transition to DecayAnimation
-			if cs.ctx.State.StartDecayAnimation(gameNow) {
-				// Trigger decay system to spawn falling entities
-				if decaySys != nil {
-					decaySys.TriggerDecayAnimation(world)
-				}
-			}
-		}
-
-	case PhaseDecayAnimation:
-		// Animation is handled by DecaySystem
-		// When animation completes, DecaySystem will call StopDecayAnimation()
-		// which transitions back to PhaseNormal
-		// Nothing to do in clock tick for this phase
-
-	case PhaseNormal:
-		// Normal gameplay - no phase transitions
-		// Gold spawning is handled by GoldSequenceSystem's Update() method
-		// Nothing to do in clock tick for this phase
-	}
-
-	// Update Game Ticks
 	cs.ctx.State.IncrementGameTicks()
 
-	// Update APM every 20 ticks (approx 1 second)
-	// We use the tick count from the scheduler which resets only on restart or wraps,
-	// but calculating modulo on the localized tick count is safe for this interval
 	if cs.tickCount.Load()%20 == 0 {
 		cs.ctx.State.UpdateAPM()
 	}

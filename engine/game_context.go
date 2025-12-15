@@ -154,12 +154,18 @@ func NewGameContext(term terminal.Terminal) *GameContext {
 	}
 	AddResource(ctx.World.Resources, inputRes)
 
-	// 4. Game State
-	// Create centralized game state with pausable time provider
-	ctx.State = NewGameState(constants.MaxEntities, pausableClock.Now())
+	// 4. Event Queue Resource
+	AddResource(ctx.World.Resources, &EventQueueResource{Queue: ctx.eventQueue})
 
-	// 5. Cursor Entity
+	// 5. Game State
+	ctx.State = NewGameState(constants.MaxEntities, pausableClock.Now())
+	AddResource(ctx.World.Resources, &GameStateResource{State: ctx.State})
+
+	// 6. Cursor Entity (created below, resource registered after)
 	ctx.CreateCursorEntity()
+
+	// 7. Cursor Resource
+	AddResource(ctx.World.Resources, &CursorResource{Entity: ctx.CursorEntity})
 
 	// Initialize pause state
 	ctx.IsPaused.Store(false)
@@ -212,6 +218,12 @@ func (ctx *GameContext) CreateCursorEntity() {
 
 	// Add BoostComponent to cursor
 	ctx.World.Boosts.Add(ctx.CursorEntity, components.BoostComponent{})
+}
+
+// SetAudioEngine sets the audio engine and registers it as a resource
+func (ctx *GameContext) SetAudioEngine(engine AudioPlayer) {
+	ctx.AudioEngine = engine
+	AddResource(ctx.World.Resources, &AudioResource{Player: engine})
 }
 
 // ===== Crash Handling and Panic Management =====

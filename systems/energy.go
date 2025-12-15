@@ -156,9 +156,7 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 	}
 
 	// Check if this is a gold sequence character
-	goldState := s.ctx.State.ReadGoldState(now)
-	if seq.Type == components.SequenceGold && goldState.Active {
-		// Handle gold sequence typing
+	if seq.Type == components.SequenceGold {
 		s.handleGoldSequenceTyping(world, entity, char, seq, typedRune)
 		return
 	}
@@ -343,8 +341,10 @@ func (s *EnergySystem) handleNuggetCollection(world *engine.World, entity core.E
 		OriginY: config.GameHeight / 2,
 	}, now)
 
-	// Clear the active nugget reference to trigger respawn
-	s.ctx.State.ClearActiveNuggetID(uint64(entity))
+	// Signal nugget collection to NuggetSystem
+	s.ctx.PushEvent(events.EventNuggetCollected, &events.NuggetCollectedPayload{
+		Entity: entity,
+	}, now)
 
 	// Move cursor right in ECS
 	cursorPos, ok := world.Positions.Get(s.ctx.CursorEntity)

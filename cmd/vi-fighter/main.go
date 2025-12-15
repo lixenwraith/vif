@@ -84,7 +84,7 @@ func main() {
 	// Initialize audio engine
 	if audioEngine, err := audio.NewAudioEngine(); err == nil {
 		if err := audioEngine.Start(); err == nil {
-			ctx.AudioEngine = audioEngine
+			ctx.SetAudioEngine(audioEngine)
 			defer audioEngine.Stop()
 		} else {
 			fmt.Printf("Audio start failed: %v (continuing without audio)\n", err)
@@ -112,13 +112,13 @@ func main() {
 	spawnSystem := systems.NewSpawnSystem(ctx)
 	ctx.World.AddSystem(spawnSystem)
 
-	nuggetSystem := systems.NewNuggetSystem(ctx)
+	nuggetSystem := systems.NewNuggetSystem(ctx.World)
 	ctx.World.AddSystem(nuggetSystem)
 
-	decaySystem := systems.NewDecaySystem(ctx)
+	decaySystem := systems.NewDecaySystem(ctx.World)
 	ctx.World.AddSystem(decaySystem)
 
-	goldSystem := systems.NewGoldSystem(ctx)
+	goldSystem := systems.NewGoldSystem(ctx.World)
 	ctx.World.AddSystem(goldSystem)
 
 	materializeSystem := systems.NewMaterializeSystem(ctx)
@@ -199,8 +199,6 @@ func main() {
 	// Signal initial frame ready
 	frameReady <- struct{}{}
 
-	// TODO: refactor this SetSystems call
-	clockScheduler.SetSystems(goldSystem, decaySystem)
 	clockScheduler.RegisterEventHandler(pingSystem)
 	clockScheduler.RegisterEventHandler(shieldSystem)
 	clockScheduler.RegisterEventHandler(heatSystem)
@@ -212,6 +210,8 @@ func main() {
 	clockScheduler.RegisterEventHandler(cleanerSystem)
 	clockScheduler.RegisterEventHandler(drainSystem)
 	clockScheduler.RegisterEventHandler(materializeSystem)
+	clockScheduler.RegisterEventHandler(decaySystem)
+	clockScheduler.RegisterEventHandler(clockScheduler)
 	clockScheduler.RegisterEventHandler(splashSystem)
 	clockScheduler.RegisterEventHandler(flashSystem)
 	clockScheduler.RegisterEventHandler(timeKeeperSystem)
