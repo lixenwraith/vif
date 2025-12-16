@@ -31,7 +31,6 @@ type DecaySystem struct {
 	processedGridCells map[int]bool // Key is flat index: (y * gameWidth) + x
 
 	// Cached metric pointers
-	statPhase *atomic.Int64
 	statTimer *atomic.Int64
 }
 
@@ -43,7 +42,6 @@ func NewDecaySystem(world *engine.World) *DecaySystem {
 		res:                res,
 		decayedThisFrame:   make(map[core.Entity]bool),
 		processedGridCells: make(map[int]bool),
-		statPhase:          res.Status.Ints.Get("decay.phase"),
 		statTimer:          res.Status.Ints.Get("decay.timer"),
 	}
 }
@@ -79,7 +77,6 @@ func (s *DecaySystem) HandleEvent(world *engine.World, event events.GameEvent) {
 		clear(s.processedGridCells)
 		s.mu.Unlock()
 
-		s.statPhase.Store(int64(engine.PhaseNormal))
 		s.statTimer.Store(0)
 	}
 }
@@ -154,8 +151,6 @@ func (s *DecaySystem) triggerAnimation(world *engine.World, now time.Time) {
 	clear(s.decayedThisFrame)
 	s.mu.Unlock()
 
-	s.statPhase.Store(int64(engine.PhaseDecayAnimation))
-
 	s.spawnDecayEntities(world)
 	world.PushEvent(events.EventDecayStart, nil)
 }
@@ -174,7 +169,6 @@ func (s *DecaySystem) updateAnimation(world *engine.World, dt time.Duration) {
 		s.startTime = time.Time{}
 		s.mu.Unlock()
 
-		s.statPhase.Store(int64(engine.PhaseNormal))
 		s.statTimer.Store(0)
 
 		// Ensure cleanup of any artifacts

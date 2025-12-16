@@ -21,8 +21,8 @@ type StatusBarRenderer struct {
 	statFPS        *atomic.Int64
 	statAPM        *atomic.Int64
 	statTicks      *atomic.Int64
+	statPhase      *atomic.Int64
 	statDecayTimer *atomic.Int64
-	statDecayPhase *atomic.Int64
 }
 
 // NewStatusBarRenderer creates a status bar renderer
@@ -33,8 +33,8 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 		statFPS:        reg.Ints.Get("engine.fps"),
 		statAPM:        reg.Ints.Get("engine.apm"),
 		statTicks:      reg.Ints.Get("engine.ticks"),
+		statPhase:      reg.Ints.Get("engine.phase"),
 		statDecayTimer: reg.Ints.Get("decay.timer"),
-		statDecayPhase: reg.Ints.Get("decay.phase"),
 	}
 }
 
@@ -156,12 +156,9 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 	}
 	var rightItems []statusItem
 
-	// TODO: unused, just keeping it warm for now
-	// clockNow := s.gameCtx.PausableClock.Now()
-
 	// Priority 1: Decay timer (show during DecayWait phase)
-	decayPhase := s.statDecayPhase.Load()
-	if decayPhase == int64(engine.PhaseDecayWait) {
+	gamePhase := s.statPhase.Load()
+	if gamePhase == int64(engine.PhaseDecayWait) {
 		decayRemaining := time.Duration(s.statDecayTimer.Load())
 		rightItems = append(rightItems, statusItem{
 			text: fmt.Sprintf(" Decay: %.1fs ", decayRemaining.Seconds()),

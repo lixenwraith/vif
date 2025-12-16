@@ -81,7 +81,9 @@ type ClockScheduler struct {
 	eventRouter *events.Router[*World]
 
 	// Cached metric pointers
+	statusReg *status.Registry
 	statTicks *atomic.Int64
+	statPhase *atomic.Int64
 }
 
 // NewClockScheduler creates a new clock scheduler with specified tick interval
@@ -103,7 +105,9 @@ func NewClockScheduler(ctx *GameContext, tickInterval time.Duration, frameReady 
 		frameReady:       frameReady,
 		updateDone:       updateDone,
 		stopChan:         make(chan struct{}),
+		statusReg:        statusReg,
 		statTicks:        statusReg.Ints.Get("engine.ticks"), // TODO: review
+		statPhase:        statusReg.Ints.Get("engine.phase"),
 	}
 
 	return cs, updateDone
@@ -132,16 +136,20 @@ func (cs *ClockScheduler) HandleEvent(world *World, event events.GameEvent) {
 	switch event.Type {
 	case events.EventGoldSpawned:
 		cs.ctx.State.SetPhase(PhaseGoldActive, now)
+		cs.statPhase.Store(int64(PhaseGoldActive))
 
 	case events.EventGoldComplete, events.EventGoldTimeout, events.EventGoldDestroyed:
 		cs.ctx.State.SetPhase(PhaseDecayWait, now)
+		cs.statPhase.Store(int64(PhaseDecayWait))
 		cs.emitPhaseChange(PhaseDecayWait)
 
 	case events.EventDecayStart:
 		cs.ctx.State.SetPhase(PhaseDecayAnimation, now)
+		cs.statPhase.Store(int64(PhaseDecayAnimation))
 
 	case events.EventDecayComplete:
 		cs.ctx.State.SetPhase(PhaseNormal, now)
+		cs.statPhase.Store(int64(PhaseNormal))
 		cs.emitPhaseChange(PhaseNormal)
 	}
 }
@@ -316,10 +324,10 @@ func (cs *ClockScheduler) processTick() {
 		cs.ctx.World.UpdateLocked(cs.tickInterval)
 	})
 
-	cs.ctx.State.IncrementGameTicks()
+	ticks := cs.ctx.State.IncrementGameTicks()
+	cs.statTicks.Store(int64(ticks))
 
 	if cs.tickCount.Load()%20 == 0 {
-		statusReg, _ := GetResource[*status.Registry](cs.ctx.World.Resources)
-		cs.ctx.State.UpdateAPM(statusReg)
+		cs.ctx.State.UpdateAPM(cs.statusReg)
 	}
 }

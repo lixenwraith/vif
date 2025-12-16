@@ -155,8 +155,8 @@ type SpawnStateSnapshot struct {
 // ===== RUNTIME METRICS ACCESSORS =====
 
 // IncrementGameTicks increments the game tick counter
-func (gs *GameState) IncrementGameTicks() {
-	gs.GameTicks.Add(1)
+func (gs *GameState) IncrementGameTicks() (new uint64) {
+	return gs.GameTicks.Add(1)
 }
 
 // GetGameTicks returns the current game tick count
