@@ -12,20 +12,24 @@ import (
 type BoostSystem struct {
 	world *engine.World
 	res   engine.CoreResources
+
+	boostStore *engine.Store[components.BoostComponent]
 }
 
 func NewBoostSystem(world *engine.World) *BoostSystem {
 	return &BoostSystem{
 		world: world,
 		res:   engine.GetCoreResources(world),
+
+		boostStore: engine.GetStore[components.BoostComponent](world),
 	}
 }
 
-func (bs *BoostSystem) Priority() int {
+func (s *BoostSystem) Priority() int {
 	return constants.PriorityBoost
 }
 
-func (bs *BoostSystem) EventTypes() []events.EventType {
+func (s *BoostSystem) EventTypes() []events.EventType {
 	return []events.EventType{
 		events.EventBoostActivate,
 		events.EventBoostDeactivate,
@@ -33,26 +37,26 @@ func (bs *BoostSystem) EventTypes() []events.EventType {
 	}
 }
 
-func (bs *BoostSystem) HandleEvent(world *engine.World, event events.GameEvent) {
+func (s *BoostSystem) HandleEvent(world *engine.World, event events.GameEvent) {
 	switch event.Type {
 	case events.EventBoostActivate:
 		if payload, ok := event.Payload.(*events.BoostActivatePayload); ok {
-			bs.activate(world, payload.Duration)
+			s.activate(world, payload.Duration)
 		}
 	case events.EventBoostDeactivate:
-		bs.deactivate(world)
+		s.deactivate(world)
 	case events.EventBoostExtend:
 		if payload, ok := event.Payload.(*events.BoostExtendPayload); ok {
-			bs.extend(world, payload.Duration)
+			s.extend(world, payload.Duration)
 		}
 	}
 }
 
 // Update handles boost duration decrement using Delta Time
-func (bs *BoostSystem) Update(world *engine.World, dt time.Duration) {
-	cursorEntity := bs.res.Cursor.Entity
+func (s *BoostSystem) Update(world *engine.World, dt time.Duration) {
+	cursorEntity := s.res.Cursor.Entity
 
-	boost, ok := world.Boosts.Get(cursorEntity)
+	boost, ok := s.boostStore.Get(cursorEntity)
 	if !ok || !boost.Active {
 		return
 	}
@@ -63,13 +67,13 @@ func (bs *BoostSystem) Update(world *engine.World, dt time.Duration) {
 		boost.Active = false
 	}
 
-	world.Boosts.Add(cursorEntity, boost)
+	s.boostStore.Add(cursorEntity, boost)
 }
 
-func (bs *BoostSystem) activate(world *engine.World, duration time.Duration) {
-	cursorEntity := bs.res.Cursor.Entity
+func (s *BoostSystem) activate(world *engine.World, duration time.Duration) {
+	cursorEntity := s.res.Cursor.Entity
 
-	boost, ok := world.Boosts.Get(cursorEntity)
+	boost, ok := s.boostStore.Get(cursorEntity)
 	if !ok {
 		boost = components.BoostComponent{}
 	}
@@ -80,25 +84,25 @@ func (bs *BoostSystem) activate(world *engine.World, duration time.Duration) {
 	boost.Remaining = duration
 	boost.TotalDuration = duration // Reset total for UI progress bar if applicable
 
-	world.Boosts.Add(cursorEntity, boost)
+	s.boostStore.Add(cursorEntity, boost)
 }
 
-func (bs *BoostSystem) deactivate(world *engine.World) {
-	cursorEntity := bs.res.Cursor.Entity
+func (s *BoostSystem) deactivate(world *engine.World) {
+	cursorEntity := s.res.Cursor.Entity
 
-	boost, ok := world.Boosts.Get(cursorEntity)
+	boost, ok := s.boostStore.Get(cursorEntity)
 	if !ok {
 		return
 	}
 	boost.Active = false
 	boost.Remaining = 0
-	world.Boosts.Add(cursorEntity, boost)
+	s.boostStore.Add(cursorEntity, boost)
 }
 
-func (bs *BoostSystem) extend(world *engine.World, duration time.Duration) {
-	cursorEntity := bs.res.Cursor.Entity
+func (s *BoostSystem) extend(world *engine.World, duration time.Duration) {
+	cursorEntity := s.res.Cursor.Entity
 
-	boost, ok := world.Boosts.Get(cursorEntity)
+	boost, ok := s.boostStore.Get(cursorEntity)
 	if !ok || !boost.Active {
 		return
 	}
@@ -110,5 +114,5 @@ func (bs *BoostSystem) extend(world *engine.World, duration time.Duration) {
 		boost.TotalDuration = boost.Remaining
 	}
 
-	world.Boosts.Add(cursorEntity, boost)
+	s.boostStore.Add(cursorEntity, boost)
 }

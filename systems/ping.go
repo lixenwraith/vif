@@ -13,6 +13,8 @@ import (
 type PingSystem struct {
 	world *engine.World
 	res   engine.CoreResources
+
+	pingStore *engine.Store[components.PingComponent]
 }
 
 // NewPingSystem creates a new ping system
@@ -20,6 +22,8 @@ func NewPingSystem(world *engine.World) *PingSystem {
 	return &PingSystem{
 		world: world,
 		res:   engine.GetCoreResources(world),
+
+		pingStore: engine.GetStore[components.PingComponent](world),
 	}
 }
 
@@ -48,10 +52,10 @@ func (s *PingSystem) HandleEvent(world *engine.World, event events.GameEvent) {
 // Update handles time-based logic for ping components
 func (s *PingSystem) Update(world *engine.World, dt time.Duration) {
 	// Update all entities with a PingComponent
-	entities := world.Pings.All()
+	entities := s.pingStore.All()
 
 	for _, entity := range entities {
-		ping, ok := world.Pings.Get(entity)
+		ping, ok := s.pingStore.Get(entity)
 		if !ok {
 			continue
 		}
@@ -83,7 +87,7 @@ func (s *PingSystem) Update(world *engine.World, dt time.Duration) {
 
 		// Commit changes back to store
 		if changed {
-			world.Pings.Add(entity, ping)
+			s.pingStore.Add(entity, ping)
 		}
 	}
 }
@@ -93,12 +97,12 @@ func (s *PingSystem) handleGridRequest(world *engine.World, duration time.Durati
 	// In single player, apply to the main cursor
 	entity := s.res.Cursor.Entity
 
-	ping, ok := world.Pings.Get(entity)
+	ping, ok := s.pingStore.Get(entity)
 	if !ok {
 		return
 	}
 
 	ping.GridActive = true
 	ping.GridRemaining = duration
-	world.Pings.Add(entity, ping)
+	s.pingStore.Add(entity, ping)
 }

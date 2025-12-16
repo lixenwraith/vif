@@ -21,16 +21,24 @@ type NuggetSystem struct {
 	world *engine.World
 	res   engine.CoreResources
 
+	nuggetStore *engine.Store[components.NuggetComponent]
+	energyStore *engine.Store[components.EnergyComponent]
+	charStore   *engine.Store[components.CharacterComponent]
+
 	nuggetID           atomic.Int32
 	lastSpawnAttempt   time.Time
 	activeNuggetEntity core.Entity
 }
 
 // NewNuggetSystem creates a new nugget system
-func NewNuggetSystem(world *engine.World) *NuggetSystem {
+func NewNuggetSystem(world *engine.World) engine.System {
 	return &NuggetSystem{
 		world: world,
 		res:   engine.GetCoreResources(world),
+
+		nuggetStore: engine.GetStore[components.NuggetComponent](world),
+		energyStore: engine.GetStore[components.EnergyComponent](world),
+		charStore:   engine.GetStore[components.CharacterComponent](world),
 	}
 }
 
@@ -97,7 +105,7 @@ func (s *NuggetSystem) Update(world *engine.World, dt time.Duration) {
 	}
 
 	// Validate entity still exists
-	if !world.Nuggets.Has(s.activeNuggetEntity) {
+	if !s.nuggetStore.Has(s.activeNuggetEntity) {
 		s.activeNuggetEntity = 0
 	}
 }
@@ -107,7 +115,7 @@ func (s *NuggetSystem) handleJumpRequest(world *engine.World) {
 	cursorEntity := s.res.Cursor.Entity
 
 	// 1. Check Energy from component
-	energyComp, ok := world.Energies.Get(cursorEntity)
+	energyComp, ok := s.energyStore.Get(cursorEntity)
 	if !ok || energyComp.Current.Load() < constants.NuggetJumpCost {
 		return
 	}
@@ -190,8 +198,8 @@ func (s *NuggetSystem) spawnNugget(world *engine.World, now time.Time) {
 	}
 
 	// Add other components after position is committed
-	world.Characters.Add(entity, char)
-	world.Nuggets.Add(entity, nugget)
+	s.charStore.Add(entity, char)
+	s.nuggetStore.Add(entity, nugget)
 
 	s.activeNuggetEntity = entity
 }

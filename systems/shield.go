@@ -3,6 +3,7 @@ package systems
 import (
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/events"
@@ -12,6 +13,8 @@ import (
 type ShieldSystem struct {
 	world *engine.World
 	res   engine.CoreResources
+
+	shieldStore *engine.Store[components.ShieldComponent]
 }
 
 // NewShieldSystem creates a new shield system
@@ -19,6 +22,8 @@ func NewShieldSystem(world *engine.World) *ShieldSystem {
 	return &ShieldSystem{
 		world: world,
 		res:   engine.GetCoreResources(world),
+
+		shieldStore: engine.GetStore[components.ShieldComponent](world),
 	}
 }
 
@@ -42,17 +47,17 @@ func (s *ShieldSystem) HandleEvent(world *engine.World, event events.GameEvent) 
 
 	switch event.Type {
 	case events.EventShieldActivate:
-		shield, ok := world.Shields.Get(cursorEntity)
+		shield, ok := s.shieldStore.Get(cursorEntity)
 		if ok {
 			shield.Active = true
-			world.Shields.Add(cursorEntity, shield)
+			s.shieldStore.Add(cursorEntity, shield)
 		}
 
 	case events.EventShieldDeactivate:
-		shield, ok := world.Shields.Get(cursorEntity)
+		shield, ok := s.shieldStore.Get(cursorEntity)
 		if ok {
 			shield.Active = false
-			world.Shields.Add(cursorEntity, shield)
+			s.shieldStore.Add(cursorEntity, shield)
 		}
 
 	case events.EventShieldDrain:
@@ -68,7 +73,7 @@ func (s *ShieldSystem) HandleEvent(world *engine.World, event events.GameEvent) 
 func (s *ShieldSystem) Update(world *engine.World, dt time.Duration) {
 	cursorEntity := s.res.Cursor.Entity
 
-	shield, ok := world.Shields.Get(cursorEntity)
+	shield, ok := s.shieldStore.Get(cursorEntity)
 	if !ok || !shield.Active {
 		return
 	}
@@ -80,6 +85,6 @@ func (s *ShieldSystem) Update(world *engine.World, dt time.Duration) {
 			Delta: -constants.ShieldPassiveDrainAmount,
 		})
 		shield.LastDrainTime = now
-		world.Shields.Add(cursorEntity, shield)
+		s.shieldStore.Add(cursorEntity, shield)
 	}
 }

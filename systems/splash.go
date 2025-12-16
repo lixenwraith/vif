@@ -14,6 +14,10 @@ import (
 type SplashSystem struct {
 	world *engine.World
 	res   engine.CoreResources
+
+	splashStore *engine.Store[components.SplashComponent]
+	goldStore   *engine.Store[components.GoldSequenceComponent]
+	seqStore    *engine.Store[components.SequenceComponent]
 }
 
 // NewSplashSystem creates a new splash system
@@ -21,6 +25,10 @@ func NewSplashSystem(world *engine.World) *SplashSystem {
 	return &SplashSystem{
 		world: world,
 		res:   engine.GetCoreResources(world),
+
+		splashStore: engine.GetStore[components.SplashComponent](world),
+		goldStore:   engine.GetStore[components.GoldSequenceComponent](world),
+		seqStore:    engine.GetStore[components.SequenceComponent](world),
 	}
 }
 
@@ -64,9 +72,9 @@ func (s *SplashSystem) HandleEvent(world *engine.World, event events.GameEvent) 
 func (s *SplashSystem) Update(world *engine.World, dt time.Duration) {
 	var toDestroy []core.Entity
 
-	entities := world.Splashes.All()
+	entities := s.splashStore.All()
 	for _, entity := range entities {
-		splash, ok := world.Splashes.Get(entity)
+		splash, ok := s.splashStore.Get(entity)
 		if !ok {
 			continue
 		}
@@ -97,7 +105,7 @@ func (s *SplashSystem) Update(world *engine.World, dt time.Duration) {
 		}
 
 		// Write back component (state changed)
-		world.Splashes.Add(entity, splash)
+		s.splashStore.Add(entity, splash)
 	}
 
 	for _, e := range toDestroy {
@@ -134,7 +142,7 @@ func (s *SplashSystem) handleSplashRequest(world *engine.World, payload *events.
 
 	// 5. Spawn
 	entity := world.CreateEntity()
-	world.Splashes.Add(entity, splash)
+	s.splashStore.Add(entity, splash)
 
 	// 6. Register with TimeKeeper for destruction
 	world.PushEvent(events.EventTimerStart, &events.TimerStartPayload{
@@ -187,15 +195,15 @@ func (s *SplashSystem) handleGoldSpawn(world *engine.World, payload *events.Gold
 
 	// 4. Spawn
 	entity := world.CreateEntity()
-	world.Splashes.Add(entity, splash)
+	s.splashStore.Add(entity, splash)
 }
 
 // handleGoldFinish destroys the gold timer
 func (s *SplashSystem) handleGoldFinish(world *engine.World, sequenceID int) {
 	// Find and destroy specific timer
-	entities := world.Splashes.All()
+	entities := s.splashStore.All()
 	for _, entity := range entities {
-		splash, ok := world.Splashes.Get(entity)
+		splash, ok := s.splashStore.Get(entity)
 		if !ok {
 			continue
 		}
@@ -208,9 +216,9 @@ func (s *SplashSystem) handleGoldFinish(world *engine.World, sequenceID int) {
 
 // cleanupSplashesByMode removes all splashes of a specific mode
 func (s *SplashSystem) cleanupSplashesByMode(world *engine.World, mode components.SplashMode) {
-	entities := world.Splashes.All()
+	entities := s.splashStore.All()
 	for _, entity := range entities {
-		splash, ok := world.Splashes.Get(entity)
+		splash, ok := s.splashStore.Get(entity)
 		if !ok {
 			continue
 		}
@@ -256,9 +264,9 @@ func (s *SplashSystem) calculateSmartLayout(world *engine.World, cursorX, cursor
 
 	// 2. Gold Sequence Penalty (-500)
 	// Iterate active gold sequences
-	goldEntities := world.GoldSequences.All()
+	goldEntities := s.goldStore.All()
 	for _, e := range goldEntities {
-		gs, ok := world.GoldSequences.Get(e)
+		gs, ok := s.goldStore.Get(e)
 		if !ok || !gs.Active {
 			continue
 		}
@@ -270,11 +278,11 @@ func (s *SplashSystem) calculateSmartLayout(world *engine.World, cursorX, cursor
 		// We don't have a direct "Box" component
 		// However, we can scan `world.Positions` for entities with `SequenceID`
 		// This is O(N) where N is total entities. Fast enough for 200 entities
-		// Better: We iterate `world.Sequences` which is smaller
+		// Better: We iterate `s.seqStore` which is smaller
 
-		seqEntities := world.Sequences.All()
+		seqEntities := s.seqStore.All()
 		for _, se := range seqEntities {
-			seq, ok := world.Sequences.Get(se)
+			seq, ok := s.seqStore.Get(se)
 			if !ok || seq.ID != gs.SequenceID {
 				continue
 			}

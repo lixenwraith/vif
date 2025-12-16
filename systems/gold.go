@@ -21,6 +21,12 @@ type GoldSystem struct {
 	world *engine.World
 	res   engine.CoreResources
 
+	// Cached stores (resolved once at construction)
+	goldStore *engine.Store[components.GoldSequenceComponent]
+	seqStore  *engine.Store[components.SequenceComponent]
+	charStore *engine.Store[components.CharacterComponent]
+	protStore *engine.Store[components.ProtectionComponent]
+
 	// Internal state
 	active       bool
 	sequenceID   int
@@ -38,11 +44,17 @@ type GoldSystem struct {
 }
 
 // NewGoldSystem creates a new gold sequence system
-func NewGoldSystem(world *engine.World) *GoldSystem {
+func NewGoldSystem(world *engine.World) engine.System {
 	res := engine.GetCoreResources(world)
 	return &GoldSystem{
-		world:        world,
-		res:          res,
+		world: world,
+		res:   res,
+
+		goldStore: engine.GetStore[components.GoldSequenceComponent](world),
+		seqStore:  engine.GetStore[components.SequenceComponent](world),
+		charStore: engine.GetStore[components.CharacterComponent](world),
+		protStore: engine.GetStore[components.ProtectionComponent](world),
+
 		nextSeqID:    1,
 		spawnEnabled: true,
 		statActive:   res.Status.Bools.Get("gold.active"),
@@ -211,13 +223,12 @@ func (s *GoldSystem) spawnGold(world *engine.World) bool {
 		return false
 	}
 
-	// Add other components (positions already committed)
+	// Add components using cached stores
 	for _, ed := range entities {
-		world.Characters.Add(ed.entity, ed.char)
-		world.Sequences.Add(ed.entity, ed.seq)
-		// Protect gold entities from delete operators
-		// TODO: protect from decay here as well instead of decay system check
-		world.Protections.Add(ed.entity, components.ProtectionComponent{
+		s.charStore.Add(ed.entity, ed.char)
+		s.seqStore.Add(ed.entity, ed.seq)
+		// TODO: protect from decay here as well instead of decay system check, or put in component?
+		s.protStore.Add(ed.entity, components.ProtectionComponent{
 			Mask: components.ProtectFromDelete,
 		})
 	}
@@ -252,9 +263,9 @@ func (s *GoldSystem) removeGold(world *engine.World, sequenceID int) {
 	}
 	s.mu.RUnlock()
 
-	entities := world.Sequences.All()
+	entities := s.seqStore.All()
 	for _, entity := range entities {
-		seq, ok := world.Sequences.Get(entity)
+		seq, ok := s.seqStore.Get(entity)
 		if !ok {
 			continue
 		}

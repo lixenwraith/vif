@@ -13,8 +13,19 @@ import (
 
 // EnergySystem handles character typing and energy calculation
 type EnergySystem struct {
-	world          *engine.World
-	res            engine.CoreResources
+	world *engine.World
+	res   engine.CoreResources
+
+	energyStore *engine.Store[components.EnergyComponent]
+	cursorStore *engine.Store[components.CursorComponent]
+	protStore   *engine.Store[components.ProtectionComponent]
+	shieldStore *engine.Store[components.ShieldComponent]
+	heatStore   *engine.Store[components.HeatComponent]
+	boostStore  *engine.Store[components.BoostComponent]
+	seqStore    *engine.Store[components.SequenceComponent]
+	charStore   *engine.Store[components.CharacterComponent]
+	nuggetStore *engine.Store[components.NuggetComponent]
+
 	lastCorrect    time.Time
 	errorCursorSet bool
 }
@@ -22,8 +33,19 @@ type EnergySystem struct {
 // NewEnergySystem creates a new energy system
 func NewEnergySystem(world *engine.World) *EnergySystem {
 	return &EnergySystem{
-		world:       world,
-		res:         engine.GetCoreResources(world),
+		world: world,
+		res:   engine.GetCoreResources(world),
+
+		energyStore: engine.GetStore[components.EnergyComponent](world),
+		cursorStore: engine.GetStore[components.CursorComponent](world),
+		protStore:   engine.GetStore[components.ProtectionComponent](world),
+		shieldStore: engine.GetStore[components.ShieldComponent](world),
+		heatStore:   engine.GetStore[components.HeatComponent](world),
+		boostStore:  engine.GetStore[components.BoostComponent](world),
+		seqStore:    engine.GetStore[components.SequenceComponent](world),
+		charStore:   engine.GetStore[components.CharacterComponent](world),
+		nuggetStore: engine.GetStore[components.NuggetComponent](world),
+
 		lastCorrect: time.Time{},
 	}
 }
@@ -84,17 +106,17 @@ func (s *EnergySystem) Update(world *engine.World, dt time.Duration) {
 	cursorEntity := s.res.Cursor.Entity
 
 	// Clear error flash after timeout
-	cursor, ok := world.Cursors.Get(cursorEntity)
+	cursor, ok := s.cursorStore.Get(cursorEntity)
 	if ok && cursor.ErrorFlashRemaining > 0 {
 		cursor.ErrorFlashRemaining -= dt
 		if cursor.ErrorFlashRemaining <= 0 {
 			cursor.ErrorFlashRemaining = 0
 		}
-		world.Cursors.Add(cursorEntity, cursor)
+		s.cursorStore.Add(cursorEntity, cursor)
 	}
 
 	// Clear energy blink after timeout
-	energyComp, ok := world.Energies.Get(cursorEntity)
+	energyComp, ok := s.energyStore.Get(cursorEntity)
 	if ok && energyComp.BlinkActive.Load() {
 		remaining := energyComp.BlinkRemaining.Load() - dt.Nanoseconds()
 		if remaining <= 0 {
@@ -102,12 +124,12 @@ func (s *EnergySystem) Update(world *engine.World, dt time.Duration) {
 			energyComp.BlinkActive.Store(false)
 		}
 		energyComp.BlinkRemaining.Store(remaining)
-		world.Energies.Add(cursorEntity, energyComp)
+		s.energyStore.Add(cursorEntity, energyComp)
 	}
 
 	// Evaluate shield activation state
 	energy := energyComp.Current.Load()
-	shield, shieldOk := world.Shields.Get(cursorEntity)
+	shield, shieldOk := s.shieldStore.Get(cursorEntity)
 	if shieldOk {
 		shieldActive := shield.Active
 		if energy > 0 && !shieldActive {
@@ -135,20 +157,20 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 		return
 	}
 
-	char, ok := world.Characters.Get(entity)
+	char, ok := s.charStore.Get(entity)
 	if !ok {
 		return // Entity has no character component (shouldn't happen for interactable)
 	}
 
 	// Check if this is a nugget - handle before sequence logic
-	if world.Nuggets.Has(entity) {
+	if s.nuggetStore.Has(entity) {
 		// Handle nugget collection (requires matching character)
 		s.handleNuggetCollection(world, entity, char, typedRune)
 		return
 	}
 
 	// Get sequence component
-	seq, ok := world.Sequences.Get(entity)
+	seq, ok := s.seqStore.Get(entity)
 	if !ok {
 		s.handleTypingError(world)
 		return
@@ -172,7 +194,7 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 
 			// TODO: this logic seems wrong now, check
 			// Check boost state from component
-			boost, ok := world.Boosts.Get(cursorEntity)
+			boost, ok := s.boostStore.Get(cursorEntity)
 			if ok && boost.Active {
 				heatGain = 2
 			}
@@ -263,9 +285,9 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 func (s *EnergySystem) handleTypingError(world *engine.World) {
 	cursorEntity := s.res.Cursor.Entity
 
-	cursor, _ := world.Cursors.Get(cursorEntity)
+	cursor, _ := s.cursorStore.Get(cursorEntity)
 	cursor.ErrorFlashRemaining = constants.ErrorBlinkTimeout
-	world.Cursors.Add(cursorEntity, cursor)
+	s.cursorStore.Add(cursorEntity, cursor)
 
 	world.PushEvent(events.EventHeatSet, &events.HeatSetPayload{Value: 0})
 	world.PushEvent(events.EventBoostDeactivate, nil)
@@ -285,9 +307,9 @@ func (s *EnergySystem) handleNuggetCollection(world *engine.World, entity core.E
 	// Check if typed character matches the nugget character
 	if char.Rune != typedRune {
 		// Incorrect character - flash error cursor, reset heat, deactivate boost
-		cursor, _ := world.Cursors.Get(cursorEntity)
+		cursor, _ := s.cursorStore.Get(cursorEntity)
 		cursor.ErrorFlashRemaining = constants.ErrorBlinkTimeout
-		world.Cursors.Add(cursorEntity, cursor)
+		s.cursorStore.Add(cursorEntity, cursor)
 		world.PushEvent(events.EventHeatSet, &events.HeatSetPayload{Value: 0})
 		world.PushEvent(events.EventBoostDeactivate, nil)
 		s.triggerEnergyBlink(0, 0)
@@ -350,9 +372,9 @@ func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity core
 	// Check if typed character matches
 	if char.Rune != typedRune {
 		// Incorrect character - flash error cursor but DON'T reset heat for gold sequence
-		cursor, _ := world.Cursors.Get(cursorEntity)
+		cursor, _ := s.cursorStore.Get(cursorEntity)
 		cursor.ErrorFlashRemaining = constants.ErrorBlinkTimeout
-		world.Cursors.Add(cursorEntity, cursor)
+		s.cursorStore.Add(cursorEntity, cursor)
 		s.triggerEnergyBlink(0, 0)
 		world.PushEvent(events.EventSoundRequest, &events.SoundRequestPayload{
 			SoundType: audio.SoundError,
@@ -409,29 +431,29 @@ func (s *EnergySystem) handleGoldSequenceTyping(world *engine.World, entity core
 // addEnergy modifies energy on target entity
 func (s *EnergySystem) addEnergy(world *engine.World, delta int64) {
 	cursorEntity := s.res.Cursor.Entity
-	energyComp, ok := world.Energies.Get(cursorEntity)
+	energyComp, ok := s.energyStore.Get(cursorEntity)
 	if !ok {
 		return
 	}
 	energyComp.Current.Add(delta)
-	world.Energies.Add(cursorEntity, energyComp)
+	s.energyStore.Add(cursorEntity, energyComp)
 }
 
 // setEnergy sets energy value
 func (s *EnergySystem) setEnergy(world *engine.World, value int64) {
 	cursorEntity := s.res.Cursor.Entity
-	energyComp, ok := world.Energies.Get(cursorEntity)
+	energyComp, ok := s.energyStore.Get(cursorEntity)
 	if !ok {
 		return
 	}
 	energyComp.Current.Store(value)
-	world.Energies.Add(cursorEntity, energyComp)
+	s.energyStore.Add(cursorEntity, energyComp)
 }
 
 // startBlink activates blink state
 func (s *EnergySystem) startBlink(world *engine.World, blinkType, blinkLevel uint32) {
 	cursorEntity := s.res.Cursor.Entity
-	energyComp, ok := world.Energies.Get(cursorEntity)
+	energyComp, ok := s.energyStore.Get(cursorEntity)
 	if !ok {
 		return
 	}
@@ -439,19 +461,19 @@ func (s *EnergySystem) startBlink(world *engine.World, blinkType, blinkLevel uin
 	energyComp.BlinkType.Store(blinkType)
 	energyComp.BlinkLevel.Store(blinkLevel)
 	energyComp.BlinkRemaining.Store(constants.EnergyBlinkTimeout.Nanoseconds())
-	world.Energies.Add(cursorEntity, energyComp)
+	s.energyStore.Add(cursorEntity, energyComp)
 }
 
 // stopBlink clears blink state
 func (s *EnergySystem) stopBlink(world *engine.World) {
 	cursorEntity := s.res.Cursor.Entity
-	energyComp, ok := world.Energies.Get(cursorEntity)
+	energyComp, ok := s.energyStore.Get(cursorEntity)
 	if !ok {
 		return
 	}
 	energyComp.BlinkActive.Store(false)
 	energyComp.BlinkRemaining.Store(0)
-	world.Energies.Add(cursorEntity, energyComp)
+	s.energyStore.Add(cursorEntity, energyComp)
 }
 
 // triggerEnergyBlink pushes blink event
@@ -476,7 +498,7 @@ func (s *EnergySystem) handleDeleteRequest(world *engine.World, payload *events.
 		}
 
 		// Check protection
-		if prot, ok := world.Protections.Get(entity); ok {
+		if prot, ok := s.protStore.Get(entity); ok {
 			if prot.Mask.Has(components.ProtectFromDelete) || prot.Mask == components.ProtectAll {
 				return
 			}
@@ -484,7 +506,7 @@ func (s *EnergySystem) handleDeleteRequest(world *engine.World, payload *events.
 
 		// Check sequence type for penalty
 		// Red has no penalty, Gold cannot be deleted (via protection), Blue/Green resets heat
-		if seq, ok := world.Sequences.Get(entity); ok {
+		if seq, ok := s.seqStore.Get(entity); ok {
 			if seq.Type == components.SequenceGreen || seq.Type == components.SequenceBlue {
 				resetHeat = true
 			}
@@ -556,7 +578,7 @@ func (s *EnergySystem) handleDeleteRequest(world *engine.World, payload *events.
 // getHeat reads heat value from HeatComponent
 func (s *EnergySystem) getHeat(world *engine.World) int {
 	cursorEntity := s.res.Cursor.Entity
-	if hc, ok := world.Heats.Get(cursorEntity); ok {
+	if hc, ok := s.heatStore.Get(cursorEntity); ok {
 		return int(hc.Current.Load())
 	}
 	return 0

@@ -13,12 +13,16 @@ import (
 type FlashSystem struct {
 	world *engine.World
 	res   engine.CoreResources
+
+	flashStore *engine.Store[components.FlashComponent]
 }
 
 func NewFlashSystem(world *engine.World) *FlashSystem {
 	return &FlashSystem{
 		world: world,
 		res:   engine.GetCoreResources(world),
+
+		flashStore: engine.GetStore[components.FlashComponent](world),
 	}
 }
 
@@ -41,9 +45,9 @@ func (s *FlashSystem) HandleEvent(world *engine.World, event events.GameEvent) {
 }
 
 func (s *FlashSystem) Update(world *engine.World, dt time.Duration) {
-	entities := world.Flashes.All()
+	entities := s.flashStore.All()
 	for _, entity := range entities {
-		flash, ok := world.Flashes.Get(entity)
+		flash, ok := s.flashStore.Get(entity)
 		if !ok {
 			continue
 		}
@@ -52,7 +56,7 @@ func (s *FlashSystem) Update(world *engine.World, dt time.Duration) {
 		if flash.Remaining <= 0 {
 			world.DestroyEntity(entity)
 		} else {
-			world.Flashes.Add(entity, flash)
+			s.flashStore.Add(entity, flash)
 		}
 	}
 }
@@ -68,5 +72,5 @@ func (s *FlashSystem) spawnDestructionFlash(world *engine.World, x, y int, char 
 	}
 
 	entity := world.CreateEntity()
-	world.Flashes.Add(entity, flash)
+	s.flashStore.Add(entity, flash)
 }

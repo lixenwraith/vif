@@ -10,11 +10,17 @@ import (
 
 // CullSystem removes entities marked for destruction
 // It runs last in the tick to allow other systems to react to the tagged state
-type CullSystem struct{}
+type CullSystem struct {
+	deathStore *engine.Store[components.MarkedForDeathComponent]
+	protStore  *engine.Store[components.ProtectionComponent]
+}
 
 // NewCullSystem creates a new cull system
-func NewCullSystem(world *engine.World) *CullSystem {
-	return &CullSystem{}
+func NewCullSystem(world *engine.World) engine.System {
+	return &CullSystem{
+		deathStore: engine.GetStore[components.MarkedForDeathComponent](world),
+		protStore:  engine.GetStore[components.ProtectionComponent](world),
+	}
 }
 
 // Priority returns the system's priority (highest value = runs last)
@@ -25,15 +31,15 @@ func (s *CullSystem) Priority() int {
 // Update iterates through tagged entities and destroys them
 func (s *CullSystem) Update(world *engine.World, dt time.Duration) {
 	// Query all entities tagged MarkedForDeath
-	entities := world.MarkedForDeaths.All()
+	entities := s.deathStore.All()
 
 	for _, entity := range entities {
 		// Check protection flags
-		if prot, ok := world.Protections.Get(entity); ok {
+		if prot, ok := s.protStore.Get(entity); ok {
 			// If entity is protected from culling or is immortal, remove the OOB tag but don't destroy
 			// This prevents the system from checking it repeatedly or destroying cursor
 			if prot.Mask.Has(components.ProtectFromCull) || prot.Mask == components.ProtectAll {
-				world.MarkedForDeaths.Remove(entity)
+				s.deathStore.Remove(entity)
 				continue
 			}
 		}

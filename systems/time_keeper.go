@@ -14,6 +14,9 @@ import (
 type TimeKeeperSystem struct {
 	world *engine.World
 	res   engine.CoreResources
+
+	timerStore *engine.Store[components.TimerComponent]
+	deathStore *engine.Store[components.MarkedForDeathComponent]
 }
 
 // NewTimeKeeperSystem creates a new timekeeper system
@@ -21,6 +24,9 @@ func NewTimeKeeperSystem(world *engine.World) *TimeKeeperSystem {
 	return &TimeKeeperSystem{
 		world: world,
 		res:   engine.GetCoreResources(world),
+
+		timerStore: engine.GetStore[components.TimerComponent](world),
+		deathStore: engine.GetStore[components.MarkedForDeathComponent](world),
 	}
 }
 
@@ -40,7 +46,7 @@ func (s *TimeKeeperSystem) EventTypes() []events.EventType {
 func (s *TimeKeeperSystem) HandleEvent(world *engine.World, event events.GameEvent) {
 	if event.Type == events.EventTimerStart {
 		if payload, ok := event.Payload.(*events.TimerStartPayload); ok {
-			world.Timers.Add(payload.Entity, components.TimerComponent{
+			s.timerStore.Add(payload.Entity, components.TimerComponent{
 				Remaining: payload.Duration,
 			})
 		}
@@ -49,10 +55,10 @@ func (s *TimeKeeperSystem) HandleEvent(world *engine.World, event events.GameEve
 
 // Update decrements timers and handles expiration
 func (s *TimeKeeperSystem) Update(world *engine.World, dt time.Duration) {
-	entities := world.Timers.All()
+	entities := s.timerStore.All()
 
 	for _, entity := range entities {
-		timer, ok := world.Timers.Get(entity)
+		timer, ok := s.timerStore.Get(entity)
 		if !ok {
 			continue
 		}
@@ -61,10 +67,10 @@ func (s *TimeKeeperSystem) Update(world *engine.World, dt time.Duration) {
 
 		if timer.Remaining <= 0 {
 			// Timer expired - Default action is destruction
-			world.Timers.Remove(entity)
-			world.MarkedForDeaths.Add(entity, components.MarkedForDeathComponent{})
+			s.timerStore.Remove(entity)
+			s.deathStore.Add(entity, components.MarkedForDeathComponent{})
 		} else {
-			world.Timers.Add(entity, timer)
+			s.timerStore.Add(entity, timer)
 		}
 	}
 }

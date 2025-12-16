@@ -3,6 +3,7 @@ package systems
 import (
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/events"
@@ -12,12 +13,16 @@ import (
 type HeatSystem struct {
 	world *engine.World
 	res   engine.CoreResources
+
+	heatStore *engine.Store[components.HeatComponent]
 }
 
 func NewHeatSystem(world *engine.World) *HeatSystem {
 	return &HeatSystem{
 		world: world,
 		res:   engine.GetCoreResources(world),
+
+		heatStore: engine.GetStore[components.HeatComponent](world),
 	}
 }
 
@@ -56,7 +61,7 @@ func (s *HeatSystem) HandleEvent(world *engine.World, event events.GameEvent) {
 func (s *HeatSystem) addHeat(world *engine.World, delta int) {
 	cursorEntity := s.res.Cursor.Entity
 
-	heatComp, ok := world.Heats.Get(cursorEntity)
+	heatComp, ok := s.heatStore.Get(cursorEntity)
 	if !ok {
 		return
 	}
@@ -76,14 +81,14 @@ func (s *HeatSystem) addHeat(world *engine.World, delta int) {
 	heatComp.Current.Store(newVal)
 
 	// CRITICAL: Write the modified component copy back to the store
-	world.Heats.Add(cursorEntity, heatComp)
+	s.heatStore.Add(cursorEntity, heatComp)
 }
 
 // setHeat stores absolute value with clamping and writes back to store
 func (s *HeatSystem) setHeat(world *engine.World, value int) {
 	cursorEntity := s.res.Cursor.Entity
 
-	heatComp, ok := world.Heats.Get(cursorEntity)
+	heatComp, ok := s.heatStore.Get(cursorEntity)
 	if !ok {
 		return
 	}
@@ -99,14 +104,14 @@ func (s *HeatSystem) setHeat(world *engine.World, value int) {
 	heatComp.Current.Store(int64(value))
 
 	// CRITICAL: Write the modified component copy back to the store
-	world.Heats.Add(cursorEntity, heatComp)
+	s.heatStore.Add(cursorEntity, heatComp)
 }
 
 // handleManualCleanerTrigger checks heat cost and triggers cleaner if affordable
 func (s *HeatSystem) handleManualCleanerTrigger(world *engine.World) {
 	cursorEntity := s.res.Cursor.Entity
 
-	heatComp, ok := world.Heats.Get(cursorEntity)
+	heatComp, ok := s.heatStore.Get(cursorEntity)
 	if !ok {
 		return
 	}
