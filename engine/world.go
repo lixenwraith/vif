@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"fmt"
+	"reflect"
 	"sync"
 	"time"
 
@@ -17,91 +19,77 @@ type World struct {
 	// Global Resources
 	Resources *ResourceStore
 
-	// Component Stores (Public for direct system access)
-	Positions       *PositionStore
-	Characters      *Store[components.CharacterComponent]
-	Sequences       *Store[components.SequenceComponent]
-	GoldSequences   *Store[components.GoldSequenceComponent]
-	Decays          *Store[components.DecayComponent]
-	Cleaners        *Store[components.CleanerComponent]
-	Flashes         *Store[components.FlashComponent]
-	Nuggets         *Store[components.NuggetComponent]
-	Drains          *Store[components.DrainComponent]
-	Materializers   *Store[components.MaterializeComponent]
-	Cursors         *Store[components.CursorComponent]
-	Protections     *Store[components.ProtectionComponent]
-	Pings           *Store[components.PingComponent]
-	Energies        *Store[components.EnergyComponent]
-	Shields         *Store[components.ShieldComponent]
-	Heats           *Store[components.HeatComponent]
-	Boosts          *Store[components.BoostComponent]
-	Splashes        *Store[components.SplashComponent]
-	MarkedForDeaths *Store[components.MarkedForDeathComponent]
-	Timers          *Store[components.TimerComponent]
+	// Position Store (Special - spatial index, kept as named field)
+	Positions *PositionStore
 
-	allStores []AnyStore // All stores for uniform lifecycle operations
+	// Dynamic Component Stores (registered at startup)
+	componentStores map[reflect.Type]AnyStore
+	allStores       []AnyStore // For lifecycle operations (Clear, DestroyEntity)
 
 	systems     []System
-	updateMutex sync.Mutex // Prevents concurrent updates
+	updateMutex sync.Mutex
 }
 
-// NewWorld creates a new ECS world with all component stores initialized
+// NewWorld creates a new ECS world with dynamic component store support
 func NewWorld() *World {
 	w := &World{
 		nextEntityID:    1,
 		Resources:       NewResourceStore(),
 		systems:         make([]System, 0),
 		Positions:       NewPositionStore(),
-		Characters:      NewStore[components.CharacterComponent](),
-		Sequences:       NewStore[components.SequenceComponent](),
-		GoldSequences:   NewStore[components.GoldSequenceComponent](),
-		Decays:          NewStore[components.DecayComponent](),
-		Cleaners:        NewStore[components.CleanerComponent](),
-		Flashes:         NewStore[components.FlashComponent](),
-		Nuggets:         NewStore[components.NuggetComponent](),
-		Drains:          NewStore[components.DrainComponent](),
-		Materializers:   NewStore[components.MaterializeComponent](),
-		Cursors:         NewStore[components.CursorComponent](),
-		Protections:     NewStore[components.ProtectionComponent](),
-		Pings:           NewStore[components.PingComponent](),
-		Energies:        NewStore[components.EnergyComponent](),
-		Shields:         NewStore[components.ShieldComponent](),
-		Heats:           NewStore[components.HeatComponent](),
-		Boosts:          NewStore[components.BoostComponent](),
-		Splashes:        NewStore[components.SplashComponent](),
-		Timers:          NewStore[components.TimerComponent](),
-		MarkedForDeaths: NewStore[components.MarkedForDeathComponent](),
+		componentStores: make(map[reflect.Type]AnyStore),
+		allStores:       make([]AnyStore, 0, 32),
 	}
 
-	// TODO: need to make this a factory
-	// Register all stores for lifecycle operations
-	w.allStores = []AnyStore{
-		w.Positions,
-		w.Characters,
-		w.Sequences,
-		w.GoldSequences, // TODO: updates handled in game state, to be changed, so keeping it though dead code
-		w.Decays,
-		w.Cleaners,
-		w.Flashes,
-		w.Nuggets,
-		w.Drains,
-		w.Materializers,
-		w.Cursors,
-		w.Protections,
-		w.Pings,
-		w.Energies,
-		w.Shields,
-		w.Heats,
-		w.Boosts,
-		w.Splashes,
-		w.Timers,
-		w.MarkedForDeaths,
-	}
+	// Register Positions in allStores for lifecycle management
+	w.allStores = append(w.allStores, w.Positions)
 
 	// Set world reference for z-index lookups
 	w.Positions.SetWorld(w)
 
 	return w
+}
+
+// RegisterComponent creates and registers a typed component store
+// Must be called during initialization before systems access stores
+func RegisterComponent[T any](w *World) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	t := reflect.TypeOf((*T)(nil)).Elem()
+	if _, exists := w.componentStores[t]; exists {
+		return // Already registered, idempotent
+	}
+
+	store := NewStore[T]()
+	w.componentStores[t] = store
+	w.allStores = append(w.allStores, store)
+}
+
+// GetStore retrieves a typed component store
+// Panics if store not registered - indicates bootstrap error
+// Call only during system initialization, cache the result
+func GetStore[T any](w *World) *Store[T] {
+	t := reflect.TypeOf((*T)(nil)).Elem()
+
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
+	if store, ok := w.componentStores[t]; ok {
+		return store.(*Store[T])
+	}
+	panic(fmt.Sprintf("component store not registered: %v", t))
+}
+
+// HasStore checks if a component store is registered
+func HasStore[T any](w *World) bool {
+	t := reflect.TypeOf((*T)(nil)).Elem()
+
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
+	_, ok := w.componentStores[t]
+	return ok
 }
 
 // CreateEntity reserves a new entity ID
@@ -117,15 +105,16 @@ func (w *World) CreateEntity() core.Entity {
 // DestroyEntity removes all components associated with an entity
 func (w *World) DestroyEntity(e core.Entity) {
 	// Check protection before destruction
-	if prot, ok := w.Protections.Get(e); ok {
-		if prot.Mask == components.ProtectAll {
-			// Entity is immortal - reject destruction silently
-			// This prevents accidental cursor destruction
-			return
+	if HasStore[components.ProtectionComponent](w) {
+		protStore := GetStore[components.ProtectionComponent](w)
+		if prot, ok := protStore.Get(e); ok {
+			if prot.Mask == components.ProtectAll {
+				return // Entity is immortal
+			}
 		}
 	}
 
-	// Remove from all stores (PositionStore.Remove handles spatial index cleanup internally)
+	// Remove from all stores
 	for _, store := range w.allStores {
 		store.Remove(e)
 	}
@@ -138,7 +127,7 @@ func (w *World) AddSystem(system System) {
 
 	w.systems = append(w.systems, system)
 
-	// Sort systems by priority (bubble sort is fine for small number of systems)
+	// Sort by priority (bubble sort, small N)
 	for i := 0; i < len(w.systems)-1; i++ {
 		for j := 0; j < len(w.systems)-i-1; j++ {
 			if w.systems[j].Priority() > w.systems[j+1].Priority() {
@@ -148,16 +137,24 @@ func (w *World) AddSystem(system System) {
 	}
 }
 
+// Systems returns a copy of all registered systems
+// Used by ClockScheduler for event handler auto-registration
+func (w *World) Systems() []System {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	result := make([]System, len(w.systems))
+	copy(result, w.systems)
+	return result
+}
+
 // RunSafe executes a function while holding the world's update lock
-// Use for any operation that mutates world state outside of standard Update cycles
 func (w *World) RunSafe(fn func()) {
 	w.updateMutex.Lock()
 	defer w.updateMutex.Unlock()
 	fn()
 }
 
-// Lock acquires a lock on the world's update mutex (sync.Mutex)
-// Must be paired with Unlock()
+// Lock acquires a lock on the world's update mutex
 func (w *World) Lock() {
 	w.updateMutex.Lock()
 }
@@ -167,7 +164,7 @@ func (w *World) Unlock() {
 	w.updateMutex.Unlock()
 }
 
-// Update runs all systems sequentially. Only one update cycle can run at a time
+// Update runs all systems sequentially
 func (w *World) Update(dt time.Duration) {
 	w.RunSafe(func() {
 		w.UpdateLocked(dt)
@@ -175,7 +172,6 @@ func (w *World) Update(dt time.Duration) {
 }
 
 // UpdateLocked runs all systems assuming the caller already holds updateMutex
-// Internal use only: call Update() for standard usage, or wrap in RunSafe()
 func (w *World) UpdateLocked(dt time.Duration) {
 	w.mu.RLock()
 	systems := make([]System, len(w.systems))
@@ -199,7 +195,6 @@ func (w *World) Clear() {
 }
 
 // PushEvent emits a game event using world resources
-// Retrieves frame number from GameState; caller provides timestamp
 func (w *World) PushEvent(eventType events.EventType, payload any) {
 	eqRes, eqOk := GetResource[*EventQueueResource](w.Resources)
 	stateRes, stateOk := GetResource[*GameStateResource](w.Resources)

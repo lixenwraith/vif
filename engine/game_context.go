@@ -95,8 +95,9 @@ type GameContext struct {
 	AudioEngine AudioPlayer
 }
 
-// NewGameContext creates a new game context with initialized ECS world
-func NewGameContext(term terminal.Terminal) *GameContext {
+// NewGameContext creates a GameContext using an existing ECS World
+// Components must be registered before context creation
+func NewGameContext(term terminal.Terminal, world *World) *GameContext {
 	// Get terminal size
 	width, height := term.Size()
 
@@ -115,7 +116,7 @@ func NewGameContext(term terminal.Terminal) *GameContext {
 	// Initialize atomic mode
 	ctx.SetMode(core.ModeNormal)
 
-	// Calculate game area first
+	// Calculate game area
 	ctx.updateGameArea()
 
 	// -- Initialize Core Resources --
@@ -179,16 +180,17 @@ func (ctx *GameContext) CreateCursorEntity() {
 		X: ctx.GameWidth / 2,
 		Y: ctx.GameHeight / 2,
 	})
-	ctx.World.Cursors.Add(ctx.CursorEntity, components.CursorComponent{})
+
+	GetStore[components.CursorComponent](ctx.World).Add(ctx.CursorEntity, components.CursorComponent{})
 
 	// Make cursor indestructible
-	ctx.World.Protections.Add(ctx.CursorEntity, components.ProtectionComponent{
+	GetStore[components.ProtectionComponent](ctx.World).Add(ctx.CursorEntity, components.ProtectionComponent{
 		Mask:      components.ProtectAll,
-		ExpiresAt: 0, // Permanent
+		ExpiresAt: 0, // No expiry
 	})
 
 	// Add PingComponent to cursor (handles crosshair and grid state)
-	ctx.World.Pings.Add(ctx.CursorEntity, components.PingComponent{
+	GetStore[components.PingComponent](ctx.World).Add(ctx.CursorEntity, components.PingComponent{
 		ShowCrosshair:  true,
 		CrosshairColor: components.ColorNormal,
 		GridActive:     false,
@@ -198,14 +200,13 @@ func (ctx *GameContext) CreateCursorEntity() {
 	})
 
 	// Add HeatComponent to cursor
-	ctx.World.Heats.Add(ctx.CursorEntity, components.HeatComponent{})
+	GetStore[components.HeatComponent](ctx.World).Add(ctx.CursorEntity, components.HeatComponent{})
 
-	// Add EnergyComponent to cursor (tracks energy and blink state)
-	ctx.World.Energies.Add(ctx.CursorEntity, components.EnergyComponent{})
+	// Add EnergyComponent to cursor
+	GetStore[components.EnergyComponent](ctx.World).Add(ctx.CursorEntity, components.EnergyComponent{})
 
 	// Add ShieldComponent to cursor (initially invisible via GameState.ShieldActive)
-	// This ensures the renderer and systems have the geometric data needed when the shield activates
-	ctx.World.Shields.Add(ctx.CursorEntity, components.ShieldComponent{
+	GetStore[components.ShieldComponent](ctx.World).Add(ctx.CursorEntity, components.ShieldComponent{
 		RadiusX:       constants.ShieldRadiusX,
 		RadiusY:       constants.ShieldRadiusY,
 		OverrideColor: components.ColorNone,
@@ -214,7 +215,7 @@ func (ctx *GameContext) CreateCursorEntity() {
 	})
 
 	// Add BoostComponent to cursor
-	ctx.World.Boosts.Add(ctx.CursorEntity, components.BoostComponent{})
+	GetStore[components.BoostComponent](ctx.World).Add(ctx.CursorEntity, components.BoostComponent{})
 }
 
 // SetAudioEngine sets the audio engine and registers it as a resource
@@ -324,7 +325,8 @@ func (ctx *GameContext) cleanupOutOfBoundsEntities(width, height int) {
 		}
 
 		// Check protection flags before marking
-		if prot, ok := ctx.World.Protections.Get(e); ok {
+		protStore := GetStore[components.ProtectionComponent](ctx.World)
+		if prot, ok := protStore.Get(e); ok {
 			if prot.Mask.Has(components.ProtectFromCull) || prot.Mask == components.ProtectAll {
 				continue
 			}

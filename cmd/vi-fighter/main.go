@@ -10,11 +10,13 @@ import (
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/engine/registry"
 	"github.com/lixenwraith/vi-fighter/engine/status"
+	"github.com/lixenwraith/vi-fighter/events"
 	"github.com/lixenwraith/vi-fighter/input"
+	"github.com/lixenwraith/vi-fighter/manifest"
 	"github.com/lixenwraith/vi-fighter/modes"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/vi-fighter/render/renderers"
 	"github.com/lixenwraith/vi-fighter/systems"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
@@ -53,9 +55,18 @@ func main() {
 	// Normal exit terminal cleanup
 	defer term.Fini()
 
-	// Create game context with ECS world
-	ctx := engine.NewGameContext(term)
+	// === PHASE 1: Registry Setup ===
+	manifest.RegisterSystems()
+	manifest.RegisterRenderers()
 
+	// === PHASE 2: World & Component Registration ===
+	world := engine.NewWorld()
+	manifest.RegisterComponents(world)
+
+	// === PHASE 3: GameContext Creation ===
+	ctx := engine.NewGameContext(term, world)
+
+	// === PHASE 4: Core Resources ===
 	// Initialize singleton TimeResource (updated in-place by ClockScheduler)
 	timeRes := &engine.TimeResource{
 		GameTime:    ctx.PausableClock.Now(),
@@ -85,73 +96,31 @@ func main() {
 	}
 	engine.AddResource(ctx.World.Resources, renderConfig)
 
+	// Z-Index Resolver (after components registered)
+	zIndexResolver := engine.NewZIndexResolver(world)
+	engine.AddResource(ctx.World.Resources, zIndexResolver)
+
+	// === PHASE 5: Audio Engine ===
 	// Initialize audio engine
 	if audioEngine, err := audio.NewAudioEngine(); err == nil {
 		if err := audioEngine.Start(); err == nil {
 			ctx.SetAudioEngine(audioEngine)
 			defer audioEngine.Stop()
-		} else {
-			fmt.Printf("Audio start failed: %v (continuing without audio)\n", err)
 		}
-	} else {
-		fmt.Printf("Audio initialization failed: %v (continuing without audio)\n", err)
+	} // Silent fail if audio could not be initialized
+
+	// === PHASE 6: Systems Instantiation ===
+	// Add active systems to ECS world
+	for _, name := range manifest.ActiveSystems() {
+		factory, ok := registry.GetSystem(name)
+		if !ok {
+			panic(fmt.Sprintf("system not registered: %s", name))
+		}
+		sys := factory(world).(engine.System)
+		world.AddSystem(sys)
 	}
 
-	// Create and add systems to the ECS world
-	pingSystem := systems.NewPingSystem(ctx.World)
-	ctx.World.AddSystem(pingSystem)
-
-	energySystem := systems.NewEnergySystem(ctx.World)
-	ctx.World.AddSystem(energySystem)
-
-	shieldSystem := systems.NewShieldSystem(ctx.World)
-	ctx.World.AddSystem(shieldSystem)
-
-	heatSystem := systems.NewHeatSystem(ctx.World)
-	ctx.World.AddSystem(heatSystem)
-
-	boostSystem := systems.NewBoostSystem(ctx.World)
-	ctx.World.AddSystem(boostSystem)
-
-	spawnSystem := systems.NewSpawnSystem(ctx.World)
-	ctx.World.AddSystem(spawnSystem)
-
-	nuggetSystem := systems.NewNuggetSystem(ctx.World)
-	ctx.World.AddSystem(nuggetSystem)
-
-	decaySystem := systems.NewDecaySystem(ctx.World)
-	ctx.World.AddSystem(decaySystem)
-
-	goldSystem := systems.NewGoldSystem(ctx.World)
-	ctx.World.AddSystem(goldSystem)
-
-	materializeSystem := systems.NewMaterializeSystem(ctx.World)
-	ctx.World.AddSystem(materializeSystem)
-
-	drainSystem := systems.NewDrainSystem(ctx.World)
-	ctx.World.AddSystem(drainSystem)
-
-	cleanerSystem := systems.NewCleanerSystem(ctx.World)
-	ctx.World.AddSystem(cleanerSystem)
-
-	flashSystem := systems.NewFlashSystem(ctx.World)
-	ctx.World.AddSystem(flashSystem)
-
-	splashSystem := systems.NewSplashSystem(ctx.World)
-	ctx.World.AddSystem(splashSystem)
-
-	timeKeeperSystem := systems.NewTimeKeeperSystem(ctx.World)
-	ctx.World.AddSystem(timeKeeperSystem)
-
-	cullSystem := systems.NewCullSystem(ctx.World)
-	ctx.World.AddSystem(cullSystem)
-
-	// Event-driven system, not added to World.systems list since no Update(dt) logic
-	audioSystem := systems.NewAudioSystem(ctx.World)
-	// No factor for command system
-	// TODO: change `command` to `meta` system
-	commandSystem := systems.NewCommandSystem(ctx)
-
+	// === PHASE 7: Render Orchestrator & Renderers ===
 	// Create render orchestrator
 	orchestrator := render.NewRenderOrchestrator(
 		term,
@@ -159,40 +128,24 @@ func main() {
 		ctx.Height,
 	)
 
-	// Create and register renderers in priority order via standardized initialization loop
-	type rendererDef struct {
-		factory  func(*engine.GameContext) render.SystemRenderer
-		priority render.RenderPriority
+	// Add active renderers to render orchestrator
+	for _, name := range manifest.ActiveRenderers() {
+		entry, ok := registry.GetRenderer(name)
+		if !ok {
+			panic(fmt.Sprintf("renderer not registered: %s", name))
+		}
+		renderer := entry.Factory(ctx).(render.SystemRenderer)
+		orchestrator.Register(renderer, entry.Priority)
 	}
 
-	rendererList := []rendererDef{
-		// Grid (100)
-		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewPingRenderer(c) }, render.PriorityGrid},
-		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewSplashRenderer(c) }, render.PrioritySplash},
-		// Entities (200)
-		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewCharactersRenderer(c) }, render.PriorityEntities},
-		// Effects (300)
-		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewShieldRenderer(c) }, render.PriorityEffects},
-		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewEffectsRenderer(c) }, render.PriorityEffects},
-		// Drain (350)
-		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewDrainRenderer(c) }, render.PriorityDrain},
-		// Post-Processing (390-395)
-		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewGrayoutRenderer(c) }, render.PriorityUI - 10},
-		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewDimRenderer(c) }, render.PriorityUI - 5},
-		// UI (400)
-		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewHeatMeterRenderer(c) }, render.PriorityUI},
-		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewLineNumbersRenderer(c) }, render.PriorityUI},
-		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewColumnIndicatorsRenderer(c) }, render.PriorityUI},
-		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewStatusBarRenderer(c) }, render.PriorityUI},
-		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewCursorRenderer(c) }, render.PriorityUI},
-		// Overlay (500)
-		{func(c *engine.GameContext) render.SystemRenderer { return renderers.NewOverlayRenderer(c) }, render.PriorityOverlay},
-	}
+	// // Event-driven system, not added to World.systems list since no Update(dt) logic
+	// audioSystem := systems.NewAudioSystem(ctx.World)
+	// // No factor for command system
+	//
+	// commandSystem := systems.NewCommandSystem(ctx)
+	//
 
-	for _, def := range rendererList {
-		orchestrator.Register(def.factory(ctx), def.priority)
-	}
-
+	// === PHASE 8: Input & Clock Scheduler ===
 	// Create input handler
 	inputMachine := input.NewMachine()
 	router := modes.NewRouter(ctx, inputMachine)
@@ -206,27 +159,27 @@ func main() {
 	// Signal initial frame ready
 	frameReady <- struct{}{}
 
-	clockScheduler.RegisterEventHandler(pingSystem)
-	clockScheduler.RegisterEventHandler(shieldSystem)
-	clockScheduler.RegisterEventHandler(heatSystem)
-	clockScheduler.RegisterEventHandler(energySystem)
-	clockScheduler.RegisterEventHandler(boostSystem)
-	clockScheduler.RegisterEventHandler(spawnSystem)
-	clockScheduler.RegisterEventHandler(nuggetSystem)
-	clockScheduler.RegisterEventHandler(goldSystem)
-	clockScheduler.RegisterEventHandler(cleanerSystem)
-	clockScheduler.RegisterEventHandler(drainSystem)
-	clockScheduler.RegisterEventHandler(materializeSystem)
-	clockScheduler.RegisterEventHandler(decaySystem)
+	// Auto-register event handlers from World systems
+	for _, sys := range world.Systems() {
+		if handler, ok := sys.(events.Handler[*engine.World]); ok {
+			clockScheduler.RegisterEventHandler(handler)
+		}
+	}
 	clockScheduler.RegisterEventHandler(clockScheduler)
-	clockScheduler.RegisterEventHandler(splashSystem)
-	clockScheduler.RegisterEventHandler(flashSystem)
-	clockScheduler.RegisterEventHandler(timeKeeperSystem)
+
+	// TODO: service resource? stub networking? resource factory?
+	// Command/Audio systems (special handling - not in registry yet)
+	// TODO: change `command` to `meta` system
+	commandSystem := systems.NewCommandSystem(ctx)
 	clockScheduler.RegisterEventHandler(commandSystem)
+
+	audioSystem := systems.NewAudioSystem(world)
 	clockScheduler.RegisterEventHandler(audioSystem)
+
 	clockScheduler.Start()
 	defer clockScheduler.Stop()
 
+	// === PHASE 9: Main Loop ===
 	// Cache FPS metric pointer for render loop
 	statusReg := engine.MustGetResource[*status.Registry](ctx.World.Resources)
 	statFPS := statusReg.Ints.Get("engine.fps")
@@ -235,7 +188,7 @@ func main() {
 	var frameCount int64
 	var lastFPSUpdate time.Time = time.Now()
 
-	// Main game loop
+	// Set frame rate
 	frameTicker := time.NewTicker(constants.FrameUpdateInterval)
 	defer frameTicker.Stop()
 
@@ -259,7 +212,7 @@ func main() {
 		select {
 		case ev := <-eventChan:
 			// Input handling always works (even during pause)
-			// Dumb pipe: Event → Machine → Intent → Router
+			// Dumb pipe: Key Event → Machine → Intent → Router
 			intent := inputMachine.Process(ev)
 
 			if intent != nil {

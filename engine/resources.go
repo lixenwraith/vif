@@ -156,12 +156,13 @@ type CoreResources struct {
 	Input  *InputResource
 	Events *EventQueueResource
 	Status *status.Registry
+	ZIndex *ZIndexResolver
 }
 
 // GetCoreResources populates CoreResources from the world's resource store
 // Call once during system construction; pointers remain valid for application lifetime
 func GetCoreResources(w *World) CoreResources {
-	return CoreResources{
+	res := CoreResources{
 		Time:   MustGetResource[*TimeResource](w.Resources),
 		Config: MustGetResource[*ConfigResource](w.Resources),
 		State:  MustGetResource[*GameStateResource](w.Resources),
@@ -170,6 +171,13 @@ func GetCoreResources(w *World) CoreResources {
 		Events: MustGetResource[*EventQueueResource](w.Resources),
 		Status: MustGetResource[*status.Registry](w.Resources),
 	}
+
+	// ZIndex is optional during early bootstrap (before resolver created)
+	if zRes, ok := GetResource[*ZIndexResolver](w.Resources); ok {
+		res.ZIndex = zRes
+	}
+
+	return res
 }
 
 // Update modifies TimeResource fields in-place (zero allocation)
