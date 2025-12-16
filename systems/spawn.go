@@ -76,6 +76,12 @@ type SpawnSystem struct {
 	world *engine.World
 	res   engine.CoreResources
 
+	// Spawn timing and rate (internal state, replaces GameState coupling)
+	enabled        bool
+	lastSpawnTime  time.Time // When last spawn occurred
+	nextSpawnTime  time.Time // When next spawn should occur
+	rateMultiplier float64   // 0.5x, 1.0x, 2.0x based on screen fill
+
 	// Content management
 	contentManager *content.ContentManager
 	contentMutex   sync.RWMutex
@@ -90,9 +96,18 @@ type SpawnSystem struct {
 
 // NewSpawnSystem creates a new spawn system
 func NewSpawnSystem(world *engine.World) *SpawnSystem {
+	res := engine.GetCoreResources(world)
+	now := res.Time.GameTime
+
 	s := &SpawnSystem{
 		world: world,
-		res:   engine.GetCoreResources(world),
+		res:   res,
+
+		// Initialize spawn state
+		enabled:        true, // Default enabled, future FSM will control
+		lastSpawnTime:  now,
+		nextSpawnTime:  now,
+		rateMultiplier: 1.0,
 	}
 
 	// Initialize content management atomics (not game state)
@@ -117,6 +132,100 @@ func NewSpawnSystem(world *engine.World) *SpawnSystem {
 	s.loadContentFromManager()
 
 	return s
+}
+
+// Priority returns the system's priority
+func (s *SpawnSystem) Priority() int {
+	return constants.PrioritySpawn
+}
+
+// EventTypes returns the event types SpawnSystem handles
+func (s *SpawnSystem) EventTypes() []events.EventType {
+	return []events.EventType{
+		events.EventSpawnChange,
+		events.EventPhaseChange,
+		events.EventGameReset,
+	}
+}
+
+// HandleEvent processes spawn configuration events
+func (s *SpawnSystem) HandleEvent(world *engine.World, event events.GameEvent) {
+	switch event.Type {
+	case events.EventSpawnChange:
+		// TODO: Future FSM integration will toggle s.enabled here
+		// if payload, ok := event.Payload.(*events.SpawnChangePayload); ok {
+		//     s.enabled = payload.Enabled
+		// }
+
+	case events.EventPhaseChange:
+		// TODO: Future FSM integration
+		// if payload, ok := event.Payload.(*events.PhaseChangePayload); ok {
+		//     s.enabled = payload.NewPhase == int(engine.PhaseNormal)
+		// }
+
+	case events.EventGameReset:
+		now := s.res.Time.GameTime
+		s.lastSpawnTime = now
+		s.nextSpawnTime = now
+		s.rateMultiplier = 1.0
+	}
+}
+
+// Update runs the spawn system logic
+func (s *SpawnSystem) Update(world *engine.World, dt time.Duration) {
+	now := s.res.Time.GameTime
+	config := s.res.Config
+
+	// Check spawn enabled
+	if !s.enabled {
+		return
+	}
+
+	// Calculate current density and update rate multiplier
+	entityCount := world.Positions.Count()
+	screenCapacity := config.GameWidth * config.GameHeight
+	density := s.calculateDensity(entityCount, screenCapacity)
+	s.updateRateMultiplier(density)
+
+	// Check if spawn is due
+	if now.Before(s.nextSpawnTime) {
+		return
+	}
+
+	// Generate and spawn a new sequence
+	s.spawnSequence(world)
+
+	// Schedule next spawn
+	s.scheduleNextSpawn(now)
+}
+
+// calculateDensity returns entity density as fraction of screen capacity
+func (s *SpawnSystem) calculateDensity(entityCount, screenCapacity int) float64 {
+	if screenCapacity <= 0 {
+		return 0
+	}
+	return float64(entityCount) / float64(screenCapacity)
+}
+
+// updateRateMultiplier adjusts spawn rate based on screen density
+// <30% filled: 2x faster, 30-70%: normal, >70%: 0.5x slower
+func (s *SpawnSystem) updateRateMultiplier(density float64) {
+	if density < constants.SpawnDensityLowThreshold {
+		s.rateMultiplier = constants.SpawnRateFast
+	} else if density > constants.SpawnDensityHighThreshold {
+		s.rateMultiplier = constants.SpawnRateSlow
+	} else {
+		s.rateMultiplier = constants.SpawnRateNormal
+	}
+}
+
+// scheduleNextSpawn calculates and sets the next spawn time
+func (s *SpawnSystem) scheduleNextSpawn(now time.Time) {
+	baseDelay := time.Duration(constants.SpawnIntervalMs) * time.Millisecond
+	adjustedDelay := time.Duration(float64(baseDelay) / s.rateMultiplier)
+
+	s.lastSpawnTime = now
+	s.nextSpawnTime = now.Add(adjustedDelay)
 }
 
 // loadContentFromManager loads content using ContentManager
@@ -165,9 +274,8 @@ func (s *SpawnSystem) checkAndTriggerRefresh() {
 	// If we've consumed 80% and not already refreshing, start pre-fetch
 	if consumptionRatio >= constants.ContentRefreshThreshold && !s.isRefreshing.Load() {
 		s.isRefreshing.Store(true)
-		// Use ctx.Go for safe execution with centralized crash handling
-		// TODO: Can't use ctx.Go anymore, need crash handler in world maybe instead of distributed implementation
-		go s.preFetchNextContent()
+		// Use core.Go for safe execution with centralized crash handling
+		core.Go(s.preFetchNextContent)
 	}
 }
 
@@ -298,28 +406,6 @@ func (s *SpawnSystem) hasBracesInBlock(lines []string) bool {
 	return false
 }
 
-// Priority returns the system's priority
-func (s *SpawnSystem) Priority() int {
-	return constants.PrioritySpawn
-}
-
-// EventTypes returns the event types SpawnSystem handles
-func (s *SpawnSystem) EventTypes() []events.EventType {
-	return []events.EventType{
-		events.EventSpawnChange,
-	}
-}
-
-// HandleEvent processes spawn configuration events
-func (s *SpawnSystem) HandleEvent(world *engine.World, event events.GameEvent) {
-	if event.Type == events.EventSpawnChange {
-		if payload, ok := event.Payload.(*events.SpawnChangePayload); ok {
-			// TODO: change this with fsm
-			s.res.State.State.SetSpawnEnabled(payload.Enabled)
-		}
-	}
-}
-
 // runCensus iterates all sequence entities and counts colors
 // Called once per spawn check, O(n) where n ≈ 200 max entities
 func (s *SpawnSystem) runCensus(world *engine.World) ColorCensus {
@@ -395,46 +481,6 @@ func (s *SpawnSystem) getAvailableColorsFromCensus(census ColorCensus) []ColorLe
 	}
 
 	return available
-}
-
-// Update runs the spawn system logic
-func (s *SpawnSystem) Update(world *engine.World, dt time.Duration) {
-	now := s.res.Time.GameTime
-	state := s.res.State.State
-
-	// Calculate fill percentage and update GameState using generic stores
-
-	entityCount := world.Positions.Count()
-
-	if entityCount > constants.MaxEntities {
-		return // Already at max capacity
-	}
-
-	// Update spawn rate in GameState based on entity count
-	state.UpdateSpawnRate(entityCount, constants.MaxEntities)
-
-	// Check if it's time to spawn
-	if !state.GetSpawnEnabled() {
-		return
-	}
-	nextTime := state.GetSpawnNextTime()
-	if now.Before(nextTime) {
-		return
-	}
-
-	// Get current spawn state for rate calculation
-	spawnState := state.ReadSpawnState()
-
-	// Calculate next spawn time based on rate multiplier
-	baseDelay := time.Duration(constants.SpawnIntervalMs) * time.Millisecond
-	adjustedDelay := time.Duration(float64(baseDelay) / spawnState.RateMultiplier)
-
-	// Generate and spawn a new sequence
-	s.spawnSequence(world)
-
-	// Update spawn timing in GameState
-	timeAdjust := now.Add(adjustedDelay)
-	state.UpdateSpawnTiming(now, timeAdjust)
 }
 
 // spawnSequence generates and spawns a new character block from file
@@ -547,7 +593,6 @@ func (s *SpawnSystem) getNextBlock() CodeBlock {
 func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType components.SequenceType, seqLevel components.SequenceLevel) bool {
 	config := s.res.Config
 	cursorEntity := s.res.Cursor.Entity
-	state := s.res.State.State
 
 	lineRunes := []rune(line)
 	lineLength := len(lineRunes)
@@ -607,9 +652,9 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 
 		if !hasOverlap {
 			// Valid position found, create entities
-			// Get sequence ID from GameState (atomic increment)
-			// TODO: this is not good
-			sequenceID := state.IncrementSeqID()
+			// Get sequence ID from GameState
+			// TODO: future migration to SystemStatus resource
+			sequenceID := s.res.State.State.IncrementSeqID()
 
 			// Phase 1: Create entities and prepare components
 			type entityData struct {

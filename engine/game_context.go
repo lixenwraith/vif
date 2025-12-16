@@ -50,9 +50,6 @@ type GameContext struct {
 	// Pausable Clock time provider
 	PausableClock *PausableClock
 
-	// Crash handling
-	crashHandler func(any)
-
 	// Screen dimensions
 	Width, Height int
 
@@ -114,11 +111,6 @@ func NewGameContext(term terminal.Terminal) *GameContext {
 		eventQueue:    events.NewEventQueue(),
 	}
 
-	// Default crash handler (just panic again if not set)
-	ctx.crashHandler = func(r any) {
-		panic(r)
-	}
-
 	// Initialize atomic mode
 	ctx.SetMode(core.ModeNormal)
 
@@ -158,10 +150,10 @@ func NewGameContext(term terminal.Terminal) *GameContext {
 	AddResource(ctx.World.Resources, &EventQueueResource{Queue: ctx.eventQueue})
 
 	// 5. Game State
-	ctx.State = NewGameState(constants.MaxEntities, pausableClock.Now())
+	ctx.State = NewGameState(pausableClock.Now())
 	AddResource(ctx.World.Resources, &GameStateResource{State: ctx.State})
 
-	// 6. Cursor Entity (created below, resource registered after)
+	// 6. Cursor Entity
 	ctx.CreateCursorEntity()
 
 	// 7. Cursor Resource
@@ -224,26 +216,6 @@ func (ctx *GameContext) CreateCursorEntity() {
 func (ctx *GameContext) SetAudioEngine(engine AudioPlayer) {
 	ctx.AudioEngine = engine
 	AddResource(ctx.World.Resources, &AudioResource{Player: engine})
-}
-
-// ===== Crash Handling and Panic Management =====
-
-// SetCrashHandler sets the function called when a background goroutine panics
-func (ctx *GameContext) SetCrashHandler(handler func(any)) {
-	ctx.crashHandler = handler
-}
-
-// Go runs a function in a new goroutine with panic recovery
-// Use this instead of 'go func()' for game systems to ensure terminal cleanup
-func (ctx *GameContext) Go(fn func()) {
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				ctx.crashHandler(r)
-			}
-		}()
-		fn()
-	}()
 }
 
 // ===== INPUT-SPECIFIC METHODS =====

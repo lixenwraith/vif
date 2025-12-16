@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/events"
 )
 
@@ -152,8 +153,8 @@ func (cs *ClockScheduler) emitPhaseChange(phase GamePhase) {
 func (cs *ClockScheduler) Start() {
 	if cs.running.CompareAndSwap(false, true) {
 		cs.wg.Add(1)
-		// Use ctx.Go for safe execution with centralized crash handling
-		cs.ctx.Go(cs.schedulerLoop)
+		// Use core.Go for safe execution with centralized crash handling
+		core.Go(cs.schedulerLoop)
 	}
 }
 
@@ -171,16 +172,6 @@ func (cs *ClockScheduler) Stop() {
 // Implements adaptive sleeping that respects pause state to avoid busy-waiting
 func (cs *ClockScheduler) schedulerLoop() {
 	defer cs.wg.Done()
-
-	// TODO: test and clean up
-	// Explicitly handle panic in this goroutine to guarantee terminal reset
-	defer func() {
-		if r := recover(); r != nil {
-			if cs.ctx != nil {
-				cs.ctx.crashHandler(r)
-			}
-		}
-	}()
 
 	// Initialize next tick deadline
 	cs.mu.Lock()

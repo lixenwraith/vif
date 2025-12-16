@@ -13,7 +13,7 @@ import (
 type CullSystem struct{}
 
 // NewCullSystem creates a new cull system
-func NewCullSystem() *CullSystem {
+func NewCullSystem(world *engine.World) *CullSystem {
 	return &CullSystem{}
 }
 

@@ -9,7 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/events"
 )
 
-// TODO: find a way around not keeping ctx, non-standard interface for factory
+// TODO: rename to meta system
 // CommandSystem handles meta-game commands like Reset, Debug, and Help
 type CommandSystem struct {
 	ctx *engine.GameContext
@@ -109,7 +109,6 @@ func (s *CommandSystem) handleDebugRequest() {
 		fmt.Sprintf("Game Area:     %dx%d", s.ctx.GameWidth, s.ctx.GameHeight),
 		fmt.Sprintf("Game Offset:   (%d, %d)", s.ctx.GameX, s.ctx.GameY),
 		"",
-		fmt.Sprintf("Spawn Enabled: %v", s.ctx.State.GetSpawnEnabled()),
 		fmt.Sprintf("Boost Active:  %v", boostActive),
 		fmt.Sprintf("Paused:        %v", s.ctx.IsPaused.Load()),
 		"",

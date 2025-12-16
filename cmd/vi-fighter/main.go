@@ -4,11 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"runtime/debug"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/input"
 	"github.com/lixenwraith/vi-fighter/modes"
@@ -25,13 +25,7 @@ func main() {
 	// Panic Recovery: Ensure terminal is reset even if the game crashes
 	defer func() {
 		if r := recover(); r != nil {
-			// Restore terminal to sane state immediately
-			terminal.EmergencyReset(os.Stdout)
-
-			// Print error and stack trace to stderr so it's visible after reset
-			fmt.Fprintf(os.Stderr, "\n\x1b[31mVI-FIGHTER CRASHED: %v\x1b[0m\n", r)
-			fmt.Fprintf(os.Stderr, "Stack Trace:\n%s\n", debug.Stack())
-			os.Exit(1)
+			core.HandleCrash(r)
 		}
 	}()
 
@@ -89,16 +83,6 @@ func main() {
 		DimMask:         render.MaskAll ^ render.MaskUI,
 	}
 	engine.AddResource(ctx.World.Resources, renderConfig)
-
-	// Dependency Injection: Set safe crash handler for engine goroutines
-	// This keeps engine package independent of terminal package
-	ctx.SetCrashHandler(func(r any) {
-		terminal.EmergencyReset(os.Stdout)
-		// Use \r\n for raw mode compatibility to avoid zig-zag output
-		fmt.Fprintf(os.Stderr, "\r\n\x1b[31mGAME CRASHED: %v\x1b[0m\r\n", r)
-		fmt.Fprintf(os.Stderr, "Stack Trace:\r\n%s\r\n", debug.Stack())
-		os.Exit(1)
-	})
 
 	// Initialize audio engine
 	if audioEngine, err := audio.NewAudioEngine(); err == nil {
@@ -158,13 +142,14 @@ func main() {
 	timeKeeperSystem := systems.NewTimeKeeperSystem(ctx.World)
 	ctx.World.AddSystem(timeKeeperSystem)
 
-	cullSystem := systems.NewCullSystem()
+	cullSystem := systems.NewCullSystem(ctx.World)
 	ctx.World.AddSystem(cullSystem)
 
 	// Event-driven system, not added to World.systems list since no Update(dt) logic
-	// TODO: no factory for these
+	audioSystem := systems.NewAudioSystem(ctx.World)
+	// No factor for command system
+	// TODO: change `command` to `meta` system
 	commandSystem := systems.NewCommandSystem(ctx)
-	audioSystem := systems.NewAudioSystem(ctx.AudioEngine)
 
 	// Create render orchestrator
 	orchestrator := render.NewRenderOrchestrator(
@@ -247,17 +232,7 @@ func main() {
 
 	eventChan := make(chan terminal.Event, 256)
 	// Input polling uses raw goroutine as it interacts directly with terminal
-	go func() {
-		// Panic recovery for input polling goroutine to ensure terminal cleanup
-		defer func() {
-			if r := recover(); r != nil {
-				terminal.EmergencyReset(os.Stdout)
-				fmt.Fprintf(os.Stderr, "\r\n\x1b[31mEVENT POLLER CRASHED: %v\x1b[0m\r\n", r)
-				fmt.Fprintf(os.Stderr, "Stack Trace:\r\n%s\r\n", debug.Stack())
-				os.Exit(1)
-			}
-		}()
-
+	core.Go(func() {
 		for {
 			ev := term.PollEvent()
 			// Clean exit on terminal closure or error
@@ -266,7 +241,7 @@ func main() {
 			}
 			eventChan <- ev
 		}
-	}()
+	})
 
 	// Track last update state for rendering
 	var updatePending bool

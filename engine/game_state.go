@@ -4,8 +4,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/lixenwraith/vi-fighter/constants"
 )
 
 // GameState centralizes game state with clear ownership boundaries
@@ -34,12 +32,6 @@ type GameState struct {
 	// APM History (mutex protected)
 	apmHistory      [60]uint64
 	apmHistoryIndex int
-
-	// Spawn/Content State
-	SpawnLastTime       time.Time // When last spawn occurred
-	SpawnNextTime       time.Time // When next spawn should occur
-	SpawnRateMultiplier float64   // 0.5x, 1.0x, 2.0x based on screen fill
-	SpawnEnabled        bool      // Whether spawning is active
 
 	// Screen fill tracking (for adaptive spawn rate)
 	EntityCount   int     // Current number of entities on screen
@@ -71,12 +63,7 @@ func (gs *GameState) initState(now time.Time) {
 	gs.apmHistoryIndex = 0
 
 	// Spawn state
-	gs.SpawnLastTime = now
-	gs.SpawnNextTime = now
-	gs.SpawnRateMultiplier = 1.0
-	gs.SpawnEnabled = true
 	gs.EntityCount = 0
-	gs.ScreenDensity = 0.0
 
 	// Phase state
 	gs.CurrentPhase = PhaseNormal
@@ -84,10 +71,8 @@ func (gs *GameState) initState(now time.Time) {
 }
 
 // NewGameState creates a new centralized game state
-func NewGameState(maxEntities int, now time.Time) *GameState {
-	gs := &GameState{
-		MaxEntities: maxEntities,
-	}
+func NewGameState(now time.Time) *GameState {
+	gs := &GameState{}
 	gs.initState(now)
 	return gs
 }
@@ -163,81 +148,6 @@ type SpawnStateSnapshot struct {
 	EntityCount    int
 	MaxEntities    int
 	ScreenDensity  float64
-}
-
-// ReadSpawnState returns a consistent snapshot of spawn state
-func (gs *GameState) ReadSpawnState() SpawnStateSnapshot {
-	gs.mu.RLock()
-	defer gs.mu.RUnlock()
-
-	return SpawnStateSnapshot{
-		LastTime:       gs.SpawnLastTime,
-		NextTime:       gs.SpawnNextTime,
-		RateMultiplier: gs.SpawnRateMultiplier,
-		Enabled:        gs.SpawnEnabled,
-		EntityCount:    gs.EntityCount,
-		MaxEntities:    gs.MaxEntities,
-		ScreenDensity:  gs.ScreenDensity,
-	}
-}
-
-// UpdateSpawnTiming updates spawn timing state (called after successful spawn)
-func (gs *GameState) UpdateSpawnTiming(lastTime, nextTime time.Time) {
-	gs.mu.Lock()
-	defer gs.mu.Unlock()
-
-	gs.SpawnLastTime = lastTime
-	gs.SpawnNextTime = nextTime
-}
-
-// UpdateSpawnRate updates the spawn rate multiplier based on screen density
-func (gs *GameState) UpdateSpawnRate(entityCount, maxEntities int) {
-	gs.mu.Lock()
-	defer gs.mu.Unlock()
-
-	gs.EntityCount = entityCount
-	gs.MaxEntities = maxEntities
-
-	// Calculate screen density (0.0 to 1.0)
-	density := 0.0
-	if maxEntities > 0 {
-		density = float64(entityCount) / float64(maxEntities)
-	}
-	gs.ScreenDensity = density
-
-	// Update spawn rate multiplier based on density
-	// <30% filled: 2x faster (0.5s interval)
-	// 30-70% filled: normal (2.0s interval)
-	// >70% filled: 2x slower (4.0s interval)
-	if density < constants.SpawnDensityLowThreshold {
-		gs.SpawnRateMultiplier = constants.SpawnRateFast // Spawn faster
-	} else if density > constants.SpawnDensityHighThreshold {
-		gs.SpawnRateMultiplier = constants.SpawnRateSlow // Spawn slower
-	} else {
-		gs.SpawnRateMultiplier = constants.SpawnRateNormal // Normal rate
-	}
-}
-
-// GetSpawnNextTime checks if it's time to spawn new content
-func (gs *GameState) GetSpawnNextTime() time.Time {
-	gs.mu.RLock()
-	defer gs.mu.RUnlock()
-	return gs.SpawnNextTime
-}
-
-// GetSpawnEnabled returns if content spawn is enabled
-func (gs *GameState) GetSpawnEnabled() bool {
-	gs.mu.RLock()
-	defer gs.mu.RUnlock()
-	return gs.SpawnEnabled
-}
-
-// SetSpawnEnabled enables or disables spawning
-func (gs *GameState) SetSpawnEnabled(enabled bool) {
-	gs.mu.Lock()
-	defer gs.mu.Unlock()
-
-	gs.SpawnEnabled = enabled
 }
 
 // ===== RUNTIME METRICS ACCESSORS =====
