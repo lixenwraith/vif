@@ -4,6 +4,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/lixenwraith/vi-fighter/engine/status"
 )
 
 // GameState centralizes game state with clear ownership boundaries
@@ -172,10 +174,9 @@ func (gs *GameState) GetAPM() uint64 {
 	return gs.CurrentAPM.Load()
 }
 
-// UpdateAPM rolls the action history window and recalculates APM
-// Should be called approximately every second by the scheduler
-func (gs *GameState) UpdateAPM() {
-	// atomically swap pending actions to 0 to start new bucket
+// UpdateAPM rolls action history window and recalculates APM, called ~1/sec by scheduler, publishes results to status registry
+func (gs *GameState) UpdateAPM(registry *status.Registry) {
+	// Atomically swap pending actions to 0 to start new bucket
 	actions := gs.PendingActions.Swap(0)
 
 	gs.mu.Lock()
@@ -192,6 +193,11 @@ func (gs *GameState) UpdateAPM() {
 	}
 
 	gs.CurrentAPM.Store(total)
+
+	// Publish to registry
+	if registry != nil {
+		registry.Ints.Get("engine.apm").Store(int64(total))
+	}
 }
 
 // ResetRuntimeStats resets Ticks and APM statistics (for new game)

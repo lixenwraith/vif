@@ -3,6 +3,7 @@ package systems
 import (
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/components"
@@ -28,15 +29,22 @@ type DecaySystem struct {
 	currentRow         int
 	decayedThisFrame   map[core.Entity]bool
 	processedGridCells map[int]bool // Key is flat index: (y * gameWidth) + x
+
+	// Cached metric pointers
+	statPhase *atomic.Int64
+	statTimer *atomic.Int64
 }
 
 // NewDecaySystem creates a new decay system
 func NewDecaySystem(world *engine.World) *DecaySystem {
+	res := engine.GetCoreResources(world)
 	return &DecaySystem{
 		world:              world,
-		res:                engine.GetCoreResources(world),
+		res:                res,
 		decayedThisFrame:   make(map[core.Entity]bool),
 		processedGridCells: make(map[int]bool),
+		statPhase:          res.Status.Ints.Get("decay.phase"),
+		statTimer:          res.Status.Ints.Get("decay.timer"),
 	}
 }
 
@@ -70,6 +78,9 @@ func (s *DecaySystem) HandleEvent(world *engine.World, event events.GameEvent) {
 		clear(s.decayedThisFrame)
 		clear(s.processedGridCells)
 		s.mu.Unlock()
+
+		s.statPhase.Store(int64(engine.PhaseNormal))
+		s.statTimer.Store(0)
 	}
 }
 
@@ -82,6 +93,17 @@ func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 	nextTime := s.nextTime
 	animating := s.animating
 	s.mu.Unlock()
+
+	// Publish timer remaining (direct atomic write)
+	if timerActive {
+		remaining := nextTime.Sub(now)
+		if remaining < 0 {
+			remaining = 0
+		}
+		s.statTimer.Store(int64(remaining))
+	} else if animating {
+		s.statTimer.Store(0)
+	}
 
 	// Timer expiration check
 	if timerActive && now.After(nextTime) {
@@ -132,6 +154,8 @@ func (s *DecaySystem) triggerAnimation(world *engine.World, now time.Time) {
 	clear(s.decayedThisFrame)
 	s.mu.Unlock()
 
+	s.statPhase.Store(int64(engine.PhaseDecayAnimation))
+
 	s.spawnDecayEntities(world)
 	world.PushEvent(events.EventDecayStart, nil)
 }
@@ -149,6 +173,9 @@ func (s *DecaySystem) updateAnimation(world *engine.World, dt time.Duration) {
 		s.animating = false
 		s.startTime = time.Time{}
 		s.mu.Unlock()
+
+		s.statPhase.Store(int64(engine.PhaseNormal))
+		s.statTimer.Store(0)
 
 		// Ensure cleanup of any artifacts
 		s.cleanupDecayEntities(world)

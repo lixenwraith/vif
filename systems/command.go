@@ -2,10 +2,13 @@ package systems
 
 import (
 	"fmt"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/engine/status"
 	"github.com/lixenwraith/vi-fighter/events"
 )
 
@@ -80,8 +83,6 @@ func (s *CommandSystem) handleGameReset() {
 
 // handleDebugRequest shows debug information overlay
 func (s *CommandSystem) handleDebugRequest() {
-	// Gather debug stats
-
 	// Query energy
 	energyComp, _ := s.ctx.World.Energies.Get(s.ctx.CursorEntity)
 	energyVal := energyComp.Current.Load()
@@ -113,14 +114,37 @@ func (s *CommandSystem) handleDebugRequest() {
 		fmt.Sprintf("Paused:        %v", s.ctx.IsPaused.Load()),
 		"",
 		"Entity Counts:",
-		fmt.Sprintf("  Characters:  %d", len(s.ctx.World.Characters.All())),
-		fmt.Sprintf("  Nuggets:     %d", len(s.ctx.World.Nuggets.All())),
-		fmt.Sprintf("  Drains:      %d", len(s.ctx.World.Drains.All())),
-		fmt.Sprintf("  Cleaners:    %d", len(s.ctx.World.Cleaners.All())),
-		fmt.Sprintf("  Decays:      %d", len(s.ctx.World.Decays.All())),
+		fmt.Sprintf("  Characters:  %d", s.ctx.World.Characters.Count()),
+		fmt.Sprintf("  Nuggets:     %d", s.ctx.World.Nuggets.Count()),
+		fmt.Sprintf("  Drains:      %d", s.ctx.World.Drains.Count()),
+		fmt.Sprintf("  Cleaners:    %d", s.ctx.World.Cleaners.Count()),
+		fmt.Sprintf("  Decays:      %d", s.ctx.World.Decays.Count()),
 		"",
 		"Press ESC or ENTER to close",
 	}
+
+	// Iterate registry - no reflection, type-safe
+	reg := s.res.Status
+
+	reg.Bools.Range(func(key string, ptr *atomic.Bool) {
+		debugContent = append(debugContent, fmt.Sprintf("  %s: %v", key, ptr.Load()))
+	})
+
+	reg.Ints.Range(func(key string, ptr *atomic.Int64) {
+		val := ptr.Load()
+		// Format durations nicely
+		if strings.HasSuffix(key, ".timer") {
+			debugContent = append(debugContent, fmt.Sprintf("  %s: %s", key, time.Duration(val).String()))
+		} else {
+			debugContent = append(debugContent, fmt.Sprintf("  %s: %d", key, val))
+		}
+	})
+
+	reg.Floats.Range(func(key string, ptr *status.AtomicFloat) {
+		debugContent = append(debugContent, fmt.Sprintf("  %s: %.3f", key, ptr.Get()))
+	})
+
+	debugContent = append(debugContent, "", "Press ESC or ENTER to close")
 
 	// Set overlay state only (Mode set by input handler)
 	s.ctx.SetOverlayState(true, " DEBUG ", debugContent, 0)

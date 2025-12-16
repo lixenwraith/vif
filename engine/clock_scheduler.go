@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/engine/status"
 	"github.com/lixenwraith/vi-fighter/events"
 )
 
@@ -78,6 +79,9 @@ type ClockScheduler struct {
 
 	// Event routing
 	eventRouter *events.Router[*World]
+
+	// Cached metric pointers
+	statTicks *atomic.Int64
 }
 
 // NewClockScheduler creates a new clock scheduler with specified tick interval
@@ -86,6 +90,7 @@ func NewClockScheduler(ctx *GameContext, tickInterval time.Duration, frameReady 
 
 	// Look up the singleton TimeResource once at startup
 	timeRes := MustGetResource[*TimeResource](ctx.World.Resources)
+	statusReg := MustGetResource[*status.Registry](ctx.World.Resources)
 
 	cs := &ClockScheduler{
 		ctx:              ctx,
@@ -98,6 +103,7 @@ func NewClockScheduler(ctx *GameContext, tickInterval time.Duration, frameReady 
 		frameReady:       frameReady,
 		updateDone:       updateDone,
 		stopChan:         make(chan struct{}),
+		statTicks:        statusReg.Ints.Get("engine.ticks"), // TODO: review
 	}
 
 	return cs, updateDone
@@ -313,6 +319,7 @@ func (cs *ClockScheduler) processTick() {
 	cs.ctx.State.IncrementGameTicks()
 
 	if cs.tickCount.Load()%20 == 0 {
-		cs.ctx.State.UpdateAPM()
+		statusReg, _ := GetResource[*status.Registry](cs.ctx.World.Resources)
+		cs.ctx.State.UpdateAPM(statusReg)
 	}
 }

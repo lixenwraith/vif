@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/engine/status"
 	"github.com/lixenwraith/vi-fighter/events"
 )
 
@@ -154,6 +155,7 @@ type CoreResources struct {
 	Cursor *CursorResource
 	Input  *InputResource
 	Events *EventQueueResource
+	Status *status.Registry
 }
 
 // GetCoreResources populates CoreResources from the world's resource store
@@ -166,6 +168,7 @@ func GetCoreResources(w *World) CoreResources {
 		Cursor: MustGetResource[*CursorResource](w.Resources),
 		Input:  MustGetResource[*InputResource](w.Resources),
 		Events: MustGetResource[*EventQueueResource](w.Resources),
+		Status: MustGetResource[*status.Registry](w.Resources),
 	}
 }
 

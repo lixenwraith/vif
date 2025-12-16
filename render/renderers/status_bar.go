@@ -2,11 +2,13 @@ package renderers
 
 import (
 	"fmt"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/engine/status"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
@@ -15,17 +17,24 @@ import (
 type StatusBarRenderer struct {
 	gameCtx *engine.GameContext
 
-	// FPS Tracking
-	frameCount    int
-	lastFpsUpdate time.Time
-	currentFps    int
+	// Cached metric pointers (zero-lock reads)
+	statFPS        *atomic.Int64
+	statAPM        *atomic.Int64
+	statTicks      *atomic.Int64
+	statDecayTimer *atomic.Int64
+	statDecayPhase *atomic.Int64
 }
 
 // NewStatusBarRenderer creates a status bar renderer
 func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
+	reg := engine.MustGetResource[*status.Registry](gameCtx.World.Resources)
 	return &StatusBarRenderer{
-		gameCtx:       gameCtx,
-		lastFpsUpdate: time.Now(),
+		gameCtx:        gameCtx,
+		statFPS:        reg.Ints.Get("engine.fps"),
+		statAPM:        reg.Ints.Get("engine.apm"),
+		statTicks:      reg.Ints.Get("engine.ticks"),
+		statDecayTimer: reg.Ints.Get("decay.timer"),
+		statDecayPhase: reg.Ints.Get("decay.phase"),
 	}
 }
 
@@ -34,14 +43,6 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 	buf.SetWriteMask(render.MaskUI)
 	// Get consistent snapshot of UI state
 	uiSnapshot := s.gameCtx.GetUISnapshot()
-	// FPS Calculation
-	s.frameCount++
-	now := time.Now()
-	if now.Sub(s.lastFpsUpdate) >= time.Second {
-		s.currentFps = s.frameCount
-		s.frameCount = 0
-		s.lastFpsUpdate = now
-	}
 
 	statusY := ctx.GameY + ctx.GameHeight + 1
 
@@ -75,7 +76,7 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 		}
 	}
 
-	// Draw mode indicator
+	// Mode indicator
 	var modeText string
 	var modeBgColor render.RGB
 	if s.gameCtx.IsSearchMode() {
@@ -99,7 +100,7 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 		x++
 	}
 
-	// Draw last command indicator (if present)
+	// Last command indicator
 	leftEndX := x
 	if uiSnapshot.LastCommand != "" && !s.gameCtx.IsSearchMode() && !s.gameCtx.IsCommandMode() {
 		leftEndX++
@@ -115,7 +116,7 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 		leftEndX++
 	}
 
-	// Draw search text, command text, or status message
+	// Search, command, or status text
 	if s.gameCtx.IsSearchMode() {
 		searchText := "/" + uiSnapshot.SearchText
 		for _, ch := range searchText {
@@ -158,14 +159,16 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 	// TODO: unused, just keeping it warm for now
 	// clockNow := s.gameCtx.PausableClock.Now()
 
-	// Priority 1: Decay (always important)
-	// TODO: Can't do this clean, defer till adding a Metrics resource
-	// decaySnapshot := s.gameCtx.State.ReadDecayState(ctx.GameTime)
-	// rightItems = append(rightItems, statusItem{
-	// 	text: fmt.Sprintf(" Decay: %.1fs ", decaySnapshot.TimeUntil),
-	// 	fg:   render.RgbBlack,
-	// 	bg:   render.RgbDecayTimerBg,
-	// })
+	// Priority 1: Decay timer (show during DecayWait phase)
+	decayPhase := s.statDecayPhase.Load()
+	if decayPhase == int64(engine.PhaseDecayWait) {
+		decayRemaining := time.Duration(s.statDecayTimer.Load())
+		rightItems = append(rightItems, statusItem{
+			text: fmt.Sprintf(" Decay: %.1fs ", decayRemaining.Seconds()),
+			fg:   render.RgbBlack,
+			bg:   render.RgbDecayTimerBg,
+		})
+	}
 
 	// Priority 2: Energy
 	energyComp, _ := s.gameCtx.World.Energies.Get(s.gameCtx.CursorEntity)
@@ -224,19 +227,19 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 		})
 	}
 
-	// Priority 5-7: Metrics (lowest priority, dropped first)
+	// Priority 5-7: Metrics from registry (direct atomic reads)
 	rightItems = append(rightItems, statusItem{
-		text: fmt.Sprintf(" APM: %d ", s.gameCtx.State.GetAPM()),
+		text: fmt.Sprintf(" APM: %d ", s.statAPM.Load()),
 		fg:   render.RgbBlack,
 		bg:   render.RgbApmBg,
 	})
 	rightItems = append(rightItems, statusItem{
-		text: fmt.Sprintf(" GT: %d ", s.gameCtx.State.GetGameTicks()),
+		text: fmt.Sprintf(" GT: %d ", s.statTicks.Load()),
 		fg:   render.RgbBlack,
 		bg:   render.RgbGtBg,
 	})
 	rightItems = append(rightItems, statusItem{
-		text: fmt.Sprintf(" FPS: %d ", s.currentFps),
+		text: fmt.Sprintf(" FPS: %d ", s.statFPS.Load()),
 		fg:   render.RgbBlack,
 		bg:   render.RgbFpsBg,
 	})

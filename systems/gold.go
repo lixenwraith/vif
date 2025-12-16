@@ -4,6 +4,7 @@ import (
 	"math"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/audio"
@@ -29,15 +30,24 @@ type GoldSystem struct {
 
 	// Sequence ID generator
 	nextSeqID int
+
+	// Cached metric pointers
+	statActive *atomic.Bool
+	statSeqID  *atomic.Int64
+	statTimer  *atomic.Int64
 }
 
 // NewGoldSystem creates a new gold sequence system
 func NewGoldSystem(world *engine.World) *GoldSystem {
+	res := engine.GetCoreResources(world)
 	return &GoldSystem{
 		world:        world,
-		res:          engine.GetCoreResources(world),
+		res:          res,
 		nextSeqID:    1,
 		spawnEnabled: true,
+		statActive:   res.Status.Bools.Get("gold.active"),
+		statSeqID:    res.Status.Ints.Get("gold.seq_id"),
+		statTimer:    res.Status.Ints.Get("gold.timer"),
 	}
 }
 
@@ -83,6 +93,10 @@ func (s *GoldSystem) HandleEvent(world *engine.World, event events.GameEvent) {
 		s.startTime = time.Time{}
 		s.timeoutTime = time.Time{}
 		s.mu.Unlock()
+
+		s.statActive.Store(false)
+		s.statSeqID.Store(0)
+		s.statTimer.Store(0)
 	}
 }
 
@@ -96,6 +110,19 @@ func (s *GoldSystem) Update(world *engine.World, dt time.Duration) {
 	seqID := s.sequenceID
 	canSpawn := s.spawnEnabled
 	s.mu.Unlock()
+
+	// Publish metrics (direct atomic writes)
+	s.statActive.Store(active)
+	if active {
+		remaining := timeoutTime.Sub(now)
+		if remaining < 0 {
+			remaining = 0
+		}
+		s.statTimer.Store(int64(remaining))
+		s.statSeqID.Store(int64(seqID))
+	} else {
+		s.statTimer.Store(0)
+	}
 
 	// Timeout check
 	if active && now.After(timeoutTime) {
@@ -242,6 +269,9 @@ func (s *GoldSystem) removeGold(world *engine.World, sequenceID int) {
 	s.startTime = time.Time{}
 	s.timeoutTime = time.Time{}
 	s.mu.Unlock()
+
+	s.statActive.Store(false)
+	s.statTimer.Store(0)
 }
 
 // failSequence handles gold failure (timeout or destruction)

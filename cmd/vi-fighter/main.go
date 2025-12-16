@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/engine/status"
 	"github.com/lixenwraith/vi-fighter/input"
 	"github.com/lixenwraith/vi-fighter/modes"
 	"github.com/lixenwraith/vi-fighter/render"
@@ -226,6 +227,14 @@ func main() {
 	clockScheduler.Start()
 	defer clockScheduler.Stop()
 
+	// Cache FPS metric pointer for render loop
+	statusReg := engine.MustGetResource[*status.Registry](ctx.World.Resources)
+	statFPS := statusReg.Ints.Get("engine.fps")
+
+	// FPS tracking
+	var frameCount int64
+	var lastFPSUpdate time.Time = time.Now()
+
 	// Main game loop
 	frameTicker := time.NewTicker(constants.FrameUpdateInterval)
 	defer frameTicker.Stop()
@@ -288,6 +297,15 @@ func main() {
 		case <-frameTicker.C:
 			// Increment frame number at the start of the frame cycle
 			ctx.IncrementFrameNumber()
+
+			// FPS calculation (once per second)
+			frameCount++
+			now := time.Now()
+			if now.Sub(lastFPSUpdate) >= time.Second {
+				statFPS.Store(frameCount)
+				frameCount = 0
+				lastFPSUpdate = now
+			}
 
 			// Snapshots for rendering (captured safely under lock)
 			var (

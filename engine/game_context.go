@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/engine/status"
 	"github.com/lixenwraith/vi-fighter/events"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
@@ -118,6 +119,10 @@ func NewGameContext(term terminal.Terminal) *GameContext {
 	ctx.updateGameArea()
 
 	// -- Initialize Core Resources --
+
+	// 0. Status Registry (before other resources that may use it)
+	statusRegistry := status.NewRegistry()
+	AddResource(ctx.World.Resources, statusRegistry)
 
 	// 1. Config Resource
 	configRes := &ConfigResource{

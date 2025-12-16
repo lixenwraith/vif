@@ -14,6 +14,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/content"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/engine/status"
 	"github.com/lixenwraith/vi-fighter/events"
 )
 
@@ -92,6 +93,11 @@ type SpawnSystem struct {
 	blocksConsumed atomic.Int32 // Counter for consumed blocks
 	nextContent    []CodeBlock  // Pre-fetched content for seamless transition
 	isRefreshing   atomic.Bool
+
+	// Cached metric pointers (zero-lock writes in Update)
+	statEnabled  *atomic.Bool
+	statDensity  *status.AtomicFloat
+	statRateMult *status.AtomicFloat
 }
 
 // NewSpawnSystem creates a new spawn system
@@ -108,6 +114,11 @@ func NewSpawnSystem(world *engine.World) *SpawnSystem {
 		lastSpawnTime:  now,
 		nextSpawnTime:  now,
 		rateMultiplier: 1.0,
+
+		// Cache metric pointers
+		statEnabled:  res.Status.Bools.Get("spawn.enabled"),
+		statDensity:  res.Status.Floats.Get("spawn.density"),
+		statRateMult: res.Status.Floats.Get("spawn.rate_mult"),
 	}
 
 	// Initialize content management atomics (not game state)
@@ -127,6 +138,9 @@ func NewSpawnSystem(world *engine.World) *SpawnSystem {
 	if err := s.contentManager.PreValidateAllContent(); err != nil {
 		// Continue gracefully
 	}
+
+	// Initialize metrics
+	s.statEnabled.Store(true)
 
 	// Load initial content
 	s.loadContentFromManager()
@@ -152,10 +166,10 @@ func (s *SpawnSystem) EventTypes() []events.EventType {
 func (s *SpawnSystem) HandleEvent(world *engine.World, event events.GameEvent) {
 	switch event.Type {
 	case events.EventSpawnChange:
-		// TODO: Future FSM integration will toggle s.enabled here
-		// if payload, ok := event.Payload.(*events.SpawnChangePayload); ok {
-		//     s.enabled = payload.Enabled
-		// }
+		if payload, ok := event.Payload.(*events.SpawnChangePayload); ok {
+			s.enabled = payload.Enabled
+			s.statEnabled.Store(payload.Enabled)
+		}
 
 	case events.EventPhaseChange:
 		// TODO: Future FSM integration
@@ -168,6 +182,8 @@ func (s *SpawnSystem) HandleEvent(world *engine.World, event events.GameEvent) {
 		s.lastSpawnTime = now
 		s.nextSpawnTime = now
 		s.rateMultiplier = 1.0
+		s.statRateMult.Set(1.0)
+		s.statDensity.Set(0.0)
 	}
 }
 
@@ -186,6 +202,10 @@ func (s *SpawnSystem) Update(world *engine.World, dt time.Duration) {
 	screenCapacity := config.GameWidth * config.GameHeight
 	density := s.calculateDensity(entityCount, screenCapacity)
 	s.updateRateMultiplier(density)
+
+	// Update metrics
+	s.statDensity.Set(density)
+	s.statRateMult.Set(s.rateMultiplier)
 
 	// Check if spawn is due
 	if now.Before(s.nextSpawnTime) {
