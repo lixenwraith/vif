@@ -191,9 +191,9 @@ Play(SoundType)
 
 All active sounds summed in float64 space:
 ```go
-for j := 0; j < samples && s.pos < len(s.buffer); j++ {
-    buf[j] += s.buffer[s.pos] * s.volume
-    s.pos++
+for j := 0; j < samples && r.pos < len(r.buffer); j++ {
+    buf[j] += r.buffer[r.pos] * r.volume
+    r.pos++
 }
 ```
 

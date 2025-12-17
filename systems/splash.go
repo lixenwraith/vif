@@ -21,7 +21,7 @@ type SplashSystem struct {
 }
 
 // NewSplashSystem creates a new splash system
-func NewSplashSystem(world *engine.World) *SplashSystem {
+func NewSplashSystem(world *engine.World) engine.System {
 	return &SplashSystem{
 		world: world,
 		res:   engine.GetCoreResources(world),

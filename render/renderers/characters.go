@@ -9,30 +9,33 @@ import (
 
 // CharactersRenderer draws all character entities
 type CharactersRenderer struct {
-	gameCtx *engine.GameContext
+	gameCtx   *engine.GameContext
+	charStore *engine.Store[components.CharacterComponent]
 }
 
 // NewCharactersRenderer creates a new characters renderer
 func NewCharactersRenderer(gameCtx *engine.GameContext) *CharactersRenderer {
 	return &CharactersRenderer{
-		gameCtx: gameCtx,
+		gameCtx:   gameCtx,
+		charStore: engine.GetStore[components.CharacterComponent](gameCtx.World),
 	}
 }
 
 // Render draws all character entities
-func (c *CharactersRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (r *CharactersRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskEntity)
 
 	// Query entities with both position and character
-	entities := world.Query().
-		With(world.Positions).
-		With(world.Characters).
-		Execute()
+	entities := r.charStore.All()
 
 	for _, entity := range entities {
-		pos, okP := world.Positions.Get(entity)
-		char, okC := world.Characters.Get(entity)
-		if !okP || !okC {
+		char, ok := r.charStore.Get(entity)
+		if !ok {
+			continue
+		}
+
+		pos, ok := world.Positions.Get(entity)
+		if !ok {
 			continue
 		}
 

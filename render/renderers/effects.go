@@ -1,6 +1,7 @@
 package renderers
 
 import (
+	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
@@ -9,7 +10,13 @@ import (
 
 // EffectsRenderer draws decay, cleaners, removal flashes, and materializers
 type EffectsRenderer struct {
-	gameCtx             *engine.GameContext
+	gameCtx *engine.GameContext
+
+	decayStore   *engine.Store[components.DecayComponent]
+	flashStore   *engine.Store[components.FlashComponent]
+	cleanerStore *engine.Store[components.CleanerComponent]
+	matStore     *engine.Store[components.MaterializeComponent]
+
 	cleanerGradient     []render.RGB
 	materializeGradient []render.RGB
 }
@@ -17,7 +24,11 @@ type EffectsRenderer struct {
 // NewEffectsRenderer creates a new effects renderer with gradient generation
 func NewEffectsRenderer(gameCtx *engine.GameContext) *EffectsRenderer {
 	e := &EffectsRenderer{
-		gameCtx: gameCtx,
+		gameCtx:      gameCtx,
+		decayStore:   engine.GetStore[components.DecayComponent](gameCtx.World),
+		flashStore:   engine.GetStore[components.FlashComponent](gameCtx.World),
+		cleanerStore: engine.GetStore[components.CleanerComponent](gameCtx.World),
+		matStore:     engine.GetStore[components.MaterializeComponent](gameCtx.World),
 	}
 	e.buildCleanerGradient()
 	e.buildMaterializeGradient()
@@ -25,10 +36,10 @@ func NewEffectsRenderer(gameCtx *engine.GameContext) *EffectsRenderer {
 }
 
 // buildCleanerGradient builds the gradient for cleaner trail rendering
-func (e *EffectsRenderer) buildCleanerGradient() {
+func (r *EffectsRenderer) buildCleanerGradient() {
 	length := constants.CleanerTrailLength
 
-	e.cleanerGradient = make([]render.RGB, length)
+	r.cleanerGradient = make([]render.RGB, length)
 
 	for i := 0; i < length; i++ {
 		// Opacity fade from 1.0 to 0.0
@@ -36,15 +47,15 @@ func (e *EffectsRenderer) buildCleanerGradient() {
 		if opacity < 0 {
 			opacity = 0
 		}
-		e.cleanerGradient[i] = render.Scale(render.RgbCleanerBase, opacity)
+		r.cleanerGradient[i] = render.Scale(render.RgbCleanerBase, opacity)
 	}
 }
 
 // buildMaterializeGradient builds the gradient for materialize trail rendering
-func (e *EffectsRenderer) buildMaterializeGradient() {
+func (r *EffectsRenderer) buildMaterializeGradient() {
 	length := constants.MaterializeTrailLength
 
-	e.materializeGradient = make([]render.RGB, length)
+	r.materializeGradient = make([]render.RGB, length)
 
 	for i := 0; i < length; i++ {
 		// Opacity fade from 1.0 to 0.0
@@ -52,32 +63,32 @@ func (e *EffectsRenderer) buildMaterializeGradient() {
 		if opacity < 0 {
 			opacity = 0
 		}
-		e.materializeGradient[i] = render.Scale(render.RgbMaterialize, opacity)
+		r.materializeGradient[i] = render.Scale(render.RgbMaterialize, opacity)
 	}
 }
 
 // Render draws all visual effects
-func (e *EffectsRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (r *EffectsRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskEffect)
 	// Draw decay (only if there are decay entities)
-	e.drawDecay(ctx, world, buf)
+	r.drawDecay(ctx, world, buf)
 
 	// Draw cleaners
-	e.drawCleaners(ctx, world, buf)
+	r.drawCleaners(ctx, world, buf)
 
 	// Draw removal flashes
-	e.drawRemovalFlashes(ctx, world, buf)
+	r.drawRemovalFlashes(ctx, world, buf)
 
 	// Draw materializers
-	e.drawMaterializers(ctx, world, buf)
+	r.drawMaterializers(ctx, world, buf)
 }
 
 // drawDecay draws the decay characters
-func (e *EffectsRenderer) drawDecay(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
-	decayEntities := world.Decays.All()
+func (r *EffectsRenderer) drawDecay(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+	decayEntities := r.decayStore.All()
 
 	for _, decayEntity := range decayEntities {
-		decay, exists := world.Decays.Get(decayEntity)
+		decay, exists := r.decayStore.Get(decayEntity)
 		if !exists {
 			continue
 		}
@@ -109,14 +120,14 @@ func (e *EffectsRenderer) drawDecay(ctx render.RenderContext, world *engine.Worl
 
 // drawCleaners draws the cleaner animation using the trail of grid points
 // Cleaners are opaque and render ON TOP of everything (occlude shield)
-func (e *EffectsRenderer) drawCleaners(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
-	cleanerEntities := world.Cleaners.All()
+func (r *EffectsRenderer) drawCleaners(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+	cleanerEntities := r.cleanerStore.All()
 
-	gradientLen := len(e.cleanerGradient)
+	gradientLen := len(r.cleanerGradient)
 	maxGradientIdx := gradientLen - 1
 
 	for _, cleanerEntity := range cleanerEntities {
-		cleaner, ok := world.Cleaners.Get(cleanerEntity)
+		cleaner, ok := r.cleanerStore.Get(cleanerEntity)
 		if !ok {
 			continue
 		}
@@ -143,18 +154,18 @@ func (e *EffectsRenderer) drawCleaners(ctx render.RenderContext, world *engine.W
 			}
 
 			// Cleaners are OPAQUE (solid background)
-			color := e.cleanerGradient[gradientIndex]
+			color := r.cleanerGradient[gradientIndex]
 			buf.SetWithBg(screenX, screenY, cleaner.Char, color, render.RgbBackground)
 		}
 	}
 }
 
 // drawRemovalFlashes draws the brief flash effects when characters are removed
-func (e *EffectsRenderer) drawRemovalFlashes(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
-	entities := world.Flashes.All()
+func (r *EffectsRenderer) drawRemovalFlashes(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+	entities := r.flashStore.All()
 
 	for _, entity := range entities {
-		flash, ok := world.Flashes.Get(entity)
+		flash, ok := r.flashStore.Get(entity)
 		if !ok {
 			continue
 		}
@@ -187,17 +198,17 @@ func (e *EffectsRenderer) drawRemovalFlashes(ctx render.RenderContext, world *en
 }
 
 // drawMaterializers draws the materialize animation using the trail of grid points
-func (e *EffectsRenderer) drawMaterializers(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
-	entities := world.Materializers.All()
+func (r *EffectsRenderer) drawMaterializers(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+	entities := r.matStore.All()
 	if len(entities) == 0 {
 		return
 	}
 
-	gradientLen := len(e.materializeGradient)
+	gradientLen := len(r.materializeGradient)
 	maxGradientIdx := gradientLen - 1
 
 	for _, entity := range entities {
-		mat, ok := world.Materializers.Get(entity)
+		mat, ok := r.matStore.Get(entity)
 		if !ok {
 			continue
 		}
@@ -223,7 +234,7 @@ func (e *EffectsRenderer) drawMaterializers(ctx render.RenderContext, world *eng
 				gradientIndex = maxGradientIdx
 			}
 
-			color := e.materializeGradient[gradientIndex]
+			color := r.materializeGradient[gradientIndex]
 
 			// BlendMax with SrcBg=Black preserves destination bg: Max(Dst, 0) = Dst
 			buf.Set(screenX, screenY, mat.Char, color, render.RGBBlack, render.BlendMax, 1.0, terminal.AttrNone)

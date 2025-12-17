@@ -18,7 +18,7 @@ type PingSystem struct {
 }
 
 // NewPingSystem creates a new ping system
-func NewPingSystem(world *engine.World) *PingSystem {
+func NewPingSystem(world *engine.World) engine.System {
 	return &PingSystem{
 		world: world,
 		res:   engine.GetCoreResources(world),

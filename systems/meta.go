@@ -6,34 +6,53 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/engine/status"
 	"github.com/lixenwraith/vi-fighter/events"
 )
 
-// TODO: rename to meta system
-// CommandSystem handles meta-game commands like Reset, Debug, and Help
-type CommandSystem struct {
+// MetaSystem handles meta-game commands like Reset, Debug, and Help
+type MetaSystem struct {
 	ctx *engine.GameContext
 	res engine.CoreResources
+
+	// Cached stores for debug display and reset
+	drainStore   *engine.Store[components.DrainComponent]
+	energyStore  *engine.Store[components.EnergyComponent]
+	heatStore    *engine.Store[components.HeatComponent]
+	shieldStore  *engine.Store[components.ShieldComponent]
+	charStore    *engine.Store[components.CharacterComponent]
+	nuggetStore  *engine.Store[components.NuggetComponent]
+	cleanerStore *engine.Store[components.CleanerComponent]
+	decayStore   *engine.Store[components.DecayComponent]
 }
 
-// NewCommandSystem creates a new command system
-func NewCommandSystem(ctx *engine.GameContext) *CommandSystem {
-	return &CommandSystem{
-		ctx: ctx,
-		res: engine.GetCoreResources(ctx.World),
+// NewMetaSystem creates a new meta system
+func NewMetaSystem(ctx *engine.GameContext) engine.System {
+	world := ctx.World
+	return &MetaSystem{
+		ctx:          ctx,
+		res:          engine.GetCoreResources(world),
+		drainStore:   engine.GetStore[components.DrainComponent](world),
+		energyStore:  engine.GetStore[components.EnergyComponent](world),
+		heatStore:    engine.GetStore[components.HeatComponent](world),
+		shieldStore:  engine.GetStore[components.ShieldComponent](world),
+		charStore:    engine.GetStore[components.CharacterComponent](world),
+		nuggetStore:  engine.GetStore[components.NuggetComponent](world),
+		cleanerStore: engine.GetStore[components.CleanerComponent](world),
+		decayStore:   engine.GetStore[components.DecayComponent](world),
 	}
 }
 
 // Priority returns the system's priority
-func (s *CommandSystem) Priority() int {
-	return constants.PriorityUI // Run with UI/Input logic
+func (s *MetaSystem) Priority() int {
+	return constants.PriorityUI
 }
 
-// EventTypes returns the event types CommandSystem handles
-func (s *CommandSystem) EventTypes() []events.EventType {
+// EventTypes returns the event types MetaSystem handles
+func (s *MetaSystem) EventTypes() []events.EventType {
 	return []events.EventType{
 		events.EventGameReset,
 		events.EventDebugRequest,
@@ -42,7 +61,7 @@ func (s *CommandSystem) EventTypes() []events.EventType {
 }
 
 // HandleEvent processes command events
-func (s *CommandSystem) HandleEvent(world *engine.World, event events.GameEvent) {
+func (s *MetaSystem) HandleEvent(world *engine.World, event events.GameEvent) {
 	switch event.Type {
 	case events.EventGameReset:
 		s.handleGameReset()
@@ -54,25 +73,23 @@ func (s *CommandSystem) HandleEvent(world *engine.World, event events.GameEvent)
 }
 
 // Update implements System interface
-func (s *CommandSystem) Update(world *engine.World, dt time.Duration) {
+func (s *MetaSystem) Update(world *engine.World, dt time.Duration) {
 	// No tick-based logic
 }
 
 // handleGameReset resets the game state
-func (s *CommandSystem) handleGameReset() {
+func (s *MetaSystem) handleGameReset() {
 	// Stop any playing audio
 	s.ctx.StopAudio()
 
 	// Despawn drain entities before clearing world
-	drains := s.ctx.World.Drains.All()
+	drains := s.drainStore.All()
 	for _, e := range drains {
 		s.ctx.World.DestroyEntity(e)
 	}
 
 	// Clear all entities from the world
 	s.ctx.World.Clear()
-
-	// No need to reset event queue due to potential race with input, the queued events will fail to no-op for invalid targets after world reset
 
 	// Reset entire game state
 	s.ctx.State.Reset(s.ctx.PausableClock.Now())
@@ -82,26 +99,30 @@ func (s *CommandSystem) handleGameReset() {
 }
 
 // handleDebugRequest shows debug information overlay
-func (s *CommandSystem) handleDebugRequest() {
+func (s *MetaSystem) handleDebugRequest() {
 	// Query energy
-	energyComp, _ := s.ctx.World.Energies.Get(s.ctx.CursorEntity)
+	energyComp, _ := s.energyStore.Get(s.ctx.CursorEntity)
 	energyVal := energyComp.Current.Load()
 
 	// Query heat
 	heatVal := 0
-	if hc, ok := s.ctx.World.Heats.Get(s.ctx.CursorEntity); ok {
+	if hc, ok := s.heatStore.Get(s.ctx.CursorEntity); ok {
 		heatVal = int(hc.Current.Load())
 	}
 
-	// Query boost
-	boost, ok := s.ctx.World.Boosts.Get(s.ctx.CursorEntity)
-	boostActive := ok && boost.Active
+	// Query shield
+	shieldActive := false
+	if sc, ok := s.shieldStore.Get(s.ctx.CursorEntity); ok {
+		shieldActive = sc.Active
+	}
 
+	// Build debug content
 	debugContent := []string{
 		"=== DEBUG INFORMATION ===",
 		"",
 		fmt.Sprintf("Energy:        %d", energyVal),
 		fmt.Sprintf("Heat:          %d / %d", heatVal, constants.MaxHeat),
+		fmt.Sprintf("Shield Active: %v", shieldActive),
 		fmt.Sprintf("Game Ticks:    %d", s.ctx.State.GetGameTicks()),
 		fmt.Sprintf("APM:           %d", s.ctx.State.GetAPM()),
 		fmt.Sprintf("Frame Number:  %d", s.ctx.GetFrameNumber()),
@@ -110,22 +131,22 @@ func (s *CommandSystem) handleDebugRequest() {
 		fmt.Sprintf("Game Area:     %dx%d", s.ctx.GameWidth, s.ctx.GameHeight),
 		fmt.Sprintf("Game Offset:   (%d, %d)", s.ctx.GameX, s.ctx.GameY),
 		"",
-		fmt.Sprintf("Boost Active:  %v", boostActive),
+		fmt.Sprintf("Spawn Enabled: %v", s.res.Status.Bools.Get("spawn.enabled").Load()),
+		fmt.Sprintf("Boost Active:  %v", s.res.Status.Bools.Get("boost.active").Load()),
 		fmt.Sprintf("Paused:        %v", s.ctx.IsPaused.Load()),
 		"",
 		"Entity Counts:",
-		fmt.Sprintf("  Characters:  %d", s.ctx.World.Characters.Count()),
-		fmt.Sprintf("  Nuggets:     %d", s.ctx.World.Nuggets.Count()),
-		fmt.Sprintf("  Drains:      %d", s.ctx.World.Drains.Count()),
-		fmt.Sprintf("  Cleaners:    %d", s.ctx.World.Cleaners.Count()),
-		fmt.Sprintf("  Decays:      %d", s.ctx.World.Decays.Count()),
+		fmt.Sprintf("  Characters:  %d", s.charStore.Count()),
+		fmt.Sprintf("  Nuggets:     %d", s.nuggetStore.Count()),
+		fmt.Sprintf("  Drains:      %d", s.drainStore.Count()),
+		fmt.Sprintf("  Cleaners:    %d", s.cleanerStore.Count()),
+		fmt.Sprintf("  Decays:      %d", s.decayStore.Count()),
 		"",
-		"Press ESC or ENTER to close",
+		"Status Registry:",
 	}
 
-	// Iterate registry - no reflection, type-safe
+	// Add status registry values
 	reg := s.res.Status
-
 	reg.Bools.Range(func(key string, ptr *atomic.Bool) {
 		debugContent = append(debugContent, fmt.Sprintf("  %s: %v", key, ptr.Load()))
 	})
@@ -146,13 +167,12 @@ func (s *CommandSystem) handleDebugRequest() {
 
 	debugContent = append(debugContent, "", "Press ESC or ENTER to close")
 
-	// Set overlay state only (Mode set by input handler)
+	// Set overlay state
 	s.ctx.SetOverlayState(true, " DEBUG ", debugContent, 0)
 }
 
 // handleHelpRequest shows help information overlay
-func (s *CommandSystem) handleHelpRequest() {
-	// Build help content
+func (s *MetaSystem) handleHelpRequest() {
 	helpContent := []string{
 		"=== VI-FIGHTER HELP ===",
 		"",
@@ -195,7 +215,6 @@ func (s *CommandSystem) handleHelpRequest() {
 		"  :energy N - Set energy to N",
 		"  :heat N   - Set heat to N",
 		"  :boost    - Enable boost for 10s",
-		"  :god      - Max heat + high energy",
 		"  :spawn on/off - Enable/disable spawning",
 		"  :d/:debug - Show debug info",
 		"  :h/:help  - Show this help",
@@ -206,6 +225,5 @@ func (s *CommandSystem) handleHelpRequest() {
 		"Press ESC or ENTER to close",
 	}
 
-	// Set overlay state only (Mode set by input handler)
 	s.ctx.SetOverlayState(true, " HELP ", helpContent, 0)
 }

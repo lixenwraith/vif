@@ -15,13 +15,20 @@ type shieldCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, dis
 
 // ShieldRenderer renders active shields with dynamic color from GameState
 type ShieldRenderer struct {
-	gameCtx    *engine.GameContext
+	gameCtx     *engine.GameContext
+	shieldStore *engine.Store[components.ShieldComponent]
+	energyStore *engine.Store[components.EnergyComponent]
+
 	renderCell shieldCellRenderer
 }
 
 // NewShieldRenderer creates a new shield renderer
 func NewShieldRenderer(gameCtx *engine.GameContext) *ShieldRenderer {
-	s := &ShieldRenderer{gameCtx: gameCtx}
+	s := &ShieldRenderer{
+		gameCtx:     gameCtx,
+		shieldStore: engine.GetStore[components.ShieldComponent](gameCtx.World),
+		energyStore: engine.GetStore[components.EnergyComponent](gameCtx.World),
+	}
 
 	// Access RenderConfig for display mode and select strategy once
 	cfg := engine.MustGetResource[*engine.RenderConfig](gameCtx.World.Resources)
@@ -36,15 +43,15 @@ func NewShieldRenderer(gameCtx *engine.GameContext) *ShieldRenderer {
 }
 
 // Render draws all active shields with quadratic falloff gradient
-func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (r *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskShield)
-	shields := world.Shields.All()
+	shields := r.shieldStore.All()
 	if len(shields) == 0 {
 		return
 	}
 
 	for _, entity := range shields {
-		shield, okS := world.Shields.Get(entity)
+		shield, okS := r.shieldStore.Get(entity)
 		pos, okP := world.Positions.Get(entity)
 
 		if !okS || !okP {
@@ -56,7 +63,7 @@ func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, b
 		}
 
 		// Resolve shield color
-		shieldRGB := s.resolveShieldColor(shield)
+		shieldRGB := r.resolveShieldColor(shield)
 
 		// Bounding box
 		startX := int(float64(pos.X) - shield.RadiusX)
@@ -103,14 +110,14 @@ func (s *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, b
 				screenY := ctx.GameY + y
 
 				// Use pre-selected strategy
-				s.renderCell(buf, screenX, screenY, dist, shieldRGB, shield.MaxOpacity)
+				r.renderCell(buf, screenX, screenY, dist, shieldRGB, shield.MaxOpacity)
 			}
 		}
 	}
 }
 
 // cellTrueColor renders a single shield cell with smooth gradient (TrueColor mode)
-func (s *ShieldRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screenY int, dist float64, color render.RGB, maxOpacity float64) {
+func (r *ShieldRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screenY int, dist float64, color render.RGB, maxOpacity float64) {
 	// Simple quadratic gradient: Dark center -> Bright edge
 	// dist ranges from 0.0 (center) to 1.0 (edge)
 	// Squared curve (dist^2) keeps the center transparent/dark for text visibility,
@@ -123,7 +130,7 @@ func (s *ShieldRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screen
 }
 
 // cell256 renders a single shield cell with discrete zones (256-color mode)
-func (s *ShieldRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int, dist float64, color render.RGB, maxOpacity float64) {
+func (r *ShieldRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int, dist float64, color render.RGB, maxOpacity float64) {
 	// In 256-color mode, center is transparent to ensure text legibility
 	// dist ranges from 0.0 (center) to 1.0 (edge)
 	if dist < 0.6 {
@@ -137,23 +144,23 @@ func (s *ShieldRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int,
 }
 
 // resolveShieldColor determines the shield color from override or EnergyBlinkType
-func (s *ShieldRenderer) resolveShieldColor(shield components.ShieldComponent) render.RGB {
+func (r *ShieldRenderer) resolveShieldColor(shield components.ShieldComponent) render.RGB {
 	if shield.OverrideColor != components.ColorNone {
-		return s.colorClassToRGB(shield.OverrideColor)
+		return r.colorClassToRGB(shield.OverrideColor)
 	}
 
 	// Query energy component for blink type
-	energyComp, ok := s.gameCtx.World.Energies.Get(s.gameCtx.CursorEntity)
+	energyComp, ok := r.energyStore.Get(r.gameCtx.CursorEntity)
 	if !ok {
 		return render.RgbShieldNone
 	}
 	blinkType := energyComp.BlinkType.Load()
-	return s.getColorFromBlinkType(blinkType)
+	return r.getColorFromBlinkType(blinkType)
 }
 
 // getColorFromBlinkType maps blink type to shield RGB
 // 0=error/gray, 1=blue, 2=green, 3=red, 4=gold
-func (s *ShieldRenderer) getColorFromBlinkType(blinkType uint32) render.RGB {
+func (r *ShieldRenderer) getColorFromBlinkType(blinkType uint32) render.RGB {
 	switch blinkType {
 	case 1: // Blue
 		return render.RgbShieldBlue
@@ -169,7 +176,7 @@ func (s *ShieldRenderer) getColorFromBlinkType(blinkType uint32) render.RGB {
 }
 
 // colorClassToRGB maps ColorClass overrides to RGB
-func (s *ShieldRenderer) colorClassToRGB(color components.ColorClass) render.RGB {
+func (r *ShieldRenderer) colorClassToRGB(color components.ColorClass) render.RGB {
 	switch color {
 	case components.ColorShield:
 		return render.RgbShieldBase

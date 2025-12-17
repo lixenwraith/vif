@@ -18,7 +18,7 @@ type ShieldSystem struct {
 }
 
 // NewShieldSystem creates a new shield system
-func NewShieldSystem(world *engine.World) *ShieldSystem {
+func NewShieldSystem(world *engine.World) engine.System {
 	return &ShieldSystem{
 		world: world,
 		res:   engine.GetCoreResources(world),

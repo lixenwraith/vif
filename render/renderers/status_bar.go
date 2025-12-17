@@ -6,6 +6,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/engine/status"
@@ -15,7 +16,10 @@ import (
 
 // StatusBarRenderer draws the status bar at the bottom
 type StatusBarRenderer struct {
-	gameCtx *engine.GameContext
+	gameCtx     *engine.GameContext
+	pingStore   *engine.Store[components.PingComponent]
+	energyStore *engine.Store[components.EnergyComponent]
+	boostStore  *engine.Store[components.BoostComponent]
 
 	// Cached metric pointers (zero-lock reads)
 	statFPS        *atomic.Int64
@@ -30,6 +34,9 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 	reg := engine.MustGetResource[*status.Registry](gameCtx.World.Resources)
 	return &StatusBarRenderer{
 		gameCtx:        gameCtx,
+		pingStore:      engine.GetStore[components.PingComponent](gameCtx.World),
+		energyStore:    engine.GetStore[components.EnergyComponent](gameCtx.World),
+		boostStore:     engine.GetStore[components.BoostComponent](gameCtx.World),
 		statFPS:        reg.Ints.Get("engine.fps"),
 		statAPM:        reg.Ints.Get("engine.apm"),
 		statTicks:      reg.Ints.Get("engine.ticks"),
@@ -39,10 +46,10 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 }
 
 // Render implements SystemRenderer
-func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (r *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskUI)
 	// Get consistent snapshot of UI state
-	uiSnapshot := s.gameCtx.GetUISnapshot()
+	uiSnapshot := r.gameCtx.GetUISnapshot()
 
 	statusY := ctx.GameY + ctx.GameHeight + 1
 
@@ -60,9 +67,9 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 	x := 0
 
 	// Audio mute indicator - always visible
-	if s.gameCtx.AudioEngine != nil {
+	if r.gameCtx.AudioEngine != nil {
 		var audioBgColor render.RGB
-		if s.gameCtx.AudioEngine.IsMuted() {
+		if r.gameCtx.AudioEngine.IsMuted() {
 			audioBgColor = render.RgbAudioMuted
 		} else {
 			audioBgColor = render.RgbAudioUnmuted
@@ -79,13 +86,13 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 	// Mode indicator
 	var modeText string
 	var modeBgColor render.RGB
-	if s.gameCtx.IsSearchMode() {
+	if r.gameCtx.IsSearchMode() {
 		modeText = constants.ModeTextSearch
 		modeBgColor = render.RgbModeSearchBg
-	} else if s.gameCtx.IsCommandMode() {
+	} else if r.gameCtx.IsCommandMode() {
 		modeText = constants.ModeTextCommand
 		modeBgColor = render.RgbModeCommandBg
-	} else if s.gameCtx.IsInsertMode() {
+	} else if r.gameCtx.IsInsertMode() {
 		modeText = constants.ModeTextInsert
 		modeBgColor = render.RgbModeInsertBg
 	} else {
@@ -102,7 +109,7 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 
 	// Last command indicator
 	leftEndX := x
-	if uiSnapshot.LastCommand != "" && !s.gameCtx.IsSearchMode() && !s.gameCtx.IsCommandMode() {
+	if uiSnapshot.LastCommand != "" && !r.gameCtx.IsSearchMode() && !r.gameCtx.IsCommandMode() {
 		leftEndX++
 		for _, ch := range uiSnapshot.LastCommand {
 			if leftEndX >= ctx.Width {
@@ -117,7 +124,7 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 	}
 
 	// Search, command, or status text
-	if s.gameCtx.IsSearchMode() {
+	if r.gameCtx.IsSearchMode() {
 		searchText := "/" + uiSnapshot.SearchText
 		for _, ch := range searchText {
 			if leftEndX >= ctx.Width {
@@ -126,7 +133,7 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 			buf.SetWithBg(leftEndX, statusY, ch, render.RgbSearchInputText, render.RgbBackground)
 			leftEndX++
 		}
-	} else if s.gameCtx.IsCommandMode() {
+	} else if r.gameCtx.IsCommandMode() {
 		cmdText := ":" + uiSnapshot.CommandText
 		for _, ch := range cmdText {
 			if leftEndX >= ctx.Width {
@@ -157,9 +164,9 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 	var rightItems []statusItem
 
 	// Priority 1: Decay timer (show during DecayWait phase)
-	gamePhase := s.statPhase.Load()
+	gamePhase := r.statPhase.Load()
 	if gamePhase == int64(engine.PhaseDecayWait) {
-		decayRemaining := time.Duration(s.statDecayTimer.Load())
+		decayRemaining := time.Duration(r.statDecayTimer.Load())
 		rightItems = append(rightItems, statusItem{
 			text: fmt.Sprintf(" Decay: %.1fs ", decayRemaining.Seconds()),
 			fg:   render.RgbBlack,
@@ -168,7 +175,7 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 	}
 
 	// Priority 2: Energy
-	energyComp, _ := s.gameCtx.World.Energies.Get(s.gameCtx.CursorEntity)
+	energyComp, _ := r.energyStore.Get(r.gameCtx.CursorEntity)
 	energyVal := energyComp.Current.Load()
 	energyText := fmt.Sprintf(" Energy: %d ", energyVal)
 	energyFg, energyBg := render.RgbBlack, render.RgbEnergyBg
@@ -197,7 +204,7 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 	rightItems = append(rightItems, statusItem{text: energyText, fg: energyFg, bg: energyBg})
 
 	// Priority 3: Boost (conditional)
-	boost, boostOk := s.gameCtx.World.Boosts.Get(s.gameCtx.CursorEntity)
+	boost, boostOk := r.boostStore.Get(r.gameCtx.CursorEntity)
 
 	if boostOk && boost.Active {
 		remaining := boost.Remaining.Seconds()
@@ -212,7 +219,7 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 	}
 
 	// Priority 4: Grid (conditional)
-	if ping, ok := s.gameCtx.World.Pings.Get(s.gameCtx.CursorEntity); ok && ping.GridActive {
+	if ping, ok := r.pingStore.Get(r.gameCtx.CursorEntity); ok && ping.GridActive {
 		gridRemaining := ping.GridRemaining.Seconds()
 		if gridRemaining < 0 {
 			gridRemaining = 0
@@ -226,24 +233,24 @@ func (s *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 
 	// Priority 5-7: Metrics from registry (direct atomic reads)
 	rightItems = append(rightItems, statusItem{
-		text: fmt.Sprintf(" APM: %d ", s.statAPM.Load()),
+		text: fmt.Sprintf(" APM: %d ", r.statAPM.Load()),
 		fg:   render.RgbBlack,
 		bg:   render.RgbApmBg,
 	})
 	rightItems = append(rightItems, statusItem{
-		text: fmt.Sprintf(" GT: %d ", s.statTicks.Load()),
+		text: fmt.Sprintf(" GT: %d ", r.statTicks.Load()),
 		fg:   render.RgbBlack,
 		bg:   render.RgbGtBg,
 	})
 	rightItems = append(rightItems, statusItem{
-		text: fmt.Sprintf(" FPS: %d ", s.statFPS.Load()),
+		text: fmt.Sprintf(" FPS: %d ", r.statFPS.Load()),
 		fg:   render.RgbBlack,
 		bg:   render.RgbFpsBg,
 	})
 
 	// Priority 8: Color Mode Indicator
 	var colorModeStr string
-	if s.gameCtx.Terminal.ColorMode() == terminal.ColorModeTrueColor {
+	if r.gameCtx.Terminal.ColorMode() == terminal.ColorModeTrueColor {
 		colorModeStr = " TC "
 	} else {
 		colorModeStr = " 256 "

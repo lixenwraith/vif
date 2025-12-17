@@ -105,7 +105,7 @@ func NewGameContext(term terminal.Terminal, world *World) *GameContext {
 	pausableClock := NewPausableClock()
 
 	ctx := &GameContext{
-		World:         NewWorld(),
+		World:         world,
 		Terminal:      term,
 		PausableClock: pausableClock,
 		Width:         width,

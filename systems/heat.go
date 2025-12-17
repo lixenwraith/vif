@@ -17,7 +17,7 @@ type HeatSystem struct {
 	heatStore *engine.Store[components.HeatComponent]
 }
 
-func NewHeatSystem(world *engine.World) *HeatSystem {
+func NewHeatSystem(world *engine.World) engine.System {
 	return &HeatSystem{
 		world: world,
 		res:   engine.GetCoreResources(world),

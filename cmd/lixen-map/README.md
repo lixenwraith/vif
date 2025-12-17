@@ -128,7 +128,7 @@ Press `?` in any view to open the full key binding help overlay.
 |----------|------------------------------------|
 | `d`      | Toggle dependency expansion        |
 | `+`/`-`  | Adjust expansion depth (1-5)       |
-| `p`      | Preview output files               |
+| `r`      | Preview output files               |
 | `Ctrl+S` | Write output file                  |
 | `Ctrl+Y` | Copy output to clipboard (wl-copy) |
 

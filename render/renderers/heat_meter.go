@@ -1,6 +1,7 @@
 package renderers
 
 import (
+	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
@@ -8,7 +9,9 @@ import (
 
 // HeatMeterRenderer draws the heat meter bar at the top of the screen
 type HeatMeterRenderer struct {
-	gameCtx    *engine.GameContext
+	gameCtx   *engine.GameContext
+	heatStore *engine.Store[components.HeatComponent]
+
 	renderCell heatCellRenderer
 }
 
@@ -18,7 +21,10 @@ type heatCellRenderer func(buf *render.RenderBuffer, x int, color render.RGB)
 
 // NewHeatMeterRenderer creates a heat meter renderer
 func NewHeatMeterRenderer(ctx *engine.GameContext) *HeatMeterRenderer {
-	h := &HeatMeterRenderer{gameCtx: ctx}
+	h := &HeatMeterRenderer{
+		gameCtx:   ctx,
+		heatStore: engine.GetStore[components.HeatComponent](ctx.World),
+	}
 
 	// Access RenderConfig for display mode
 	cfg := engine.MustGetResource[*engine.RenderConfig](ctx.World.Resources)
@@ -32,12 +38,12 @@ func NewHeatMeterRenderer(ctx *engine.GameContext) *HeatMeterRenderer {
 }
 
 // Render implements SystemRenderer
-func (h *HeatMeterRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (r *HeatMeterRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskUI)
 
 	// 1. Calculate Fill Limit from HeatComponent
 	heat := 0
-	if hc, ok := world.Heats.Get(h.gameCtx.CursorEntity); ok {
+	if hc, ok := r.heatStore.Get(r.gameCtx.CursorEntity); ok {
 		heat = int(hc.Current.Load())
 	}
 	// fillWidth = (Width * Heat) / 100
@@ -71,17 +77,17 @@ func (h *HeatMeterRenderer) Render(ctx render.RenderContext, world *engine.World
 		}
 
 		// Draw Filled
-		h.renderCell(buf, x, color)
+		r.renderCell(buf, x, color)
 	}
 }
 
 // cellTrueColor: Direct RGB write
-func (h *HeatMeterRenderer) cellTrueColor(buf *render.RenderBuffer, x int, color render.RGB) {
+func (r *HeatMeterRenderer) cellTrueColor(buf *render.RenderBuffer, x int, color render.RGB) {
 	buf.SetBgOnly(x, 0, color)
 }
 
 // cell256: Direct write, relies on buffer's internal quantization if needed
 // or if SetBgOnly expects RGB, this is fine as Output buffer handles mapping
-func (h *HeatMeterRenderer) cell256(buf *render.RenderBuffer, x int, color render.RGB) {
+func (r *HeatMeterRenderer) cell256(buf *render.RenderBuffer, x int, color render.RGB) {
 	buf.SetBgOnly(x, 0, color)
 }

@@ -13,27 +13,31 @@ import (
 // SplashRenderer draws large block characters as background effect
 // Supports multiple concurrent splash entities
 type SplashRenderer struct {
-	ctx *engine.GameContext
+	gameCtx     *engine.GameContext
+	splashStore *engine.Store[components.SplashComponent]
 }
 
 // NewSplashRenderer creates a new splash renderer
-func NewSplashRenderer(ctx *engine.GameContext) *SplashRenderer {
-	return &SplashRenderer{ctx: ctx}
+func NewSplashRenderer(gameCtx *engine.GameContext) *SplashRenderer {
+	return &SplashRenderer{
+		gameCtx:     gameCtx,
+		splashStore: engine.GetStore[components.SplashComponent](gameCtx.World),
+	}
 }
 
 // Render draws all splash effects to background channel
-func (s *SplashRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (r *SplashRenderer) Render(gameCtx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskEffect)
 
-	entities := world.Splashes.All()
+	entities := r.splashStore.All()
 	for _, entity := range entities {
-		splash, ok := world.Splashes.Get(entity)
+		splash, ok := r.splashStore.Get(entity)
 		if !ok || splash.Length == 0 {
 			continue
 		}
 
 		// Solid color - no fade effects
-		displayColor := s.resolveSplashColor(splash.Color)
+		displayColor := r.resolveSplashColor(splash.Color)
 
 		if splash.Mode == components.SplashModePersistent {
 			// Countdown timer: render digits from remaining time
@@ -43,22 +47,22 @@ func (s *SplashRenderer) Render(ctx render.RenderContext, world *engine.World, b
 			}
 
 			digits := strconv.Itoa(remainingSec)
-			for i, r := range digits {
+			for i, d := range digits {
 				charX := splash.AnchorX + i*(constants.SplashCharWidth+constants.SplashCharSpacing)
-				s.renderChar(ctx, buf, r, charX, splash.AnchorY, displayColor)
+				r.renderChar(gameCtx, buf, d, charX, splash.AnchorY, displayColor)
 			}
 		} else {
 			// Transient: render content directly
 			for i := 0; i < splash.Length; i++ {
 				charX := splash.AnchorX + i*(constants.SplashCharWidth+constants.SplashCharSpacing)
-				s.renderChar(ctx, buf, splash.Content[i], charX, splash.AnchorY, displayColor)
+				r.renderChar(gameCtx, buf, splash.Content[i], charX, splash.AnchorY, displayColor)
 			}
 		}
 	}
 }
 
 // renderChar renders a single splash character bitmap
-func (s *SplashRenderer) renderChar(ctx render.RenderContext, buf *render.RenderBuffer, char rune, gameX, gameY int, color render.RGB) {
+func (r *SplashRenderer) renderChar(gameCtx render.RenderContext, buf *render.RenderBuffer, char rune, gameX, gameY int, color render.RGB) {
 	// Bounds check character
 	if char < 32 || char > 126 {
 		return
@@ -67,8 +71,8 @@ func (s *SplashRenderer) renderChar(ctx render.RenderContext, buf *render.Render
 	bitmap := assets.SplashFont[char-32]
 
 	for row := 0; row < constants.SplashCharHeight; row++ {
-		screenY := ctx.GameY + gameY + row
-		if screenY < ctx.GameY || screenY >= ctx.GameY+ctx.GameHeight {
+		screenY := gameCtx.GameY + gameY + row
+		if screenY < gameCtx.GameY || screenY >= gameCtx.GameY+gameCtx.GameHeight {
 			continue
 		}
 
@@ -79,8 +83,8 @@ func (s *SplashRenderer) renderChar(ctx render.RenderContext, buf *render.Render
 				continue
 			}
 
-			screenX := ctx.GameX + gameX + col
-			if screenX < ctx.GameX || screenX >= ctx.GameX+ctx.GameWidth {
+			screenX := gameCtx.GameX + gameX + col
+			if screenX < gameCtx.GameX || screenX >= gameCtx.GameX+gameCtx.GameWidth {
 				continue
 			}
 
@@ -91,7 +95,7 @@ func (s *SplashRenderer) renderChar(ctx render.RenderContext, buf *render.Render
 
 // TODO: refactor, this logic is defined twice to avoid a cyclic dependency
 // resolveSplashColor maps the SplashColor enum to actual render.RGB
-func (s *SplashRenderer) resolveSplashColor(c components.SplashColor) render.RGB {
+func (r *SplashRenderer) resolveSplashColor(c components.SplashColor) render.RGB {
 	switch c {
 	case components.SplashColorNormal:
 		return render.RgbSplashNormal

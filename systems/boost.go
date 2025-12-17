@@ -16,7 +16,7 @@ type BoostSystem struct {
 	boostStore *engine.Store[components.BoostComponent]
 }
 
-func NewBoostSystem(world *engine.World) *BoostSystem {
+func NewBoostSystem(world *engine.World) engine.System {
 	return &BoostSystem{
 		world: world,
 		res:   engine.GetCoreResources(world),

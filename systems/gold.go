@@ -227,9 +227,9 @@ func (s *GoldSystem) spawnGold(world *engine.World) bool {
 	for _, ed := range entities {
 		s.charStore.Add(ed.entity, ed.char)
 		s.seqStore.Add(ed.entity, ed.seq)
-		// TODO: protect from decay here as well instead of decay system check, or put in component?
+		// Gold entities are protected from deletion AND decay
 		s.protStore.Add(ed.entity, components.ProtectionComponent{
-			Mask: components.ProtectFromDelete,
+			Mask: components.ProtectFromDelete | components.ProtectFromDecay,
 		})
 	}
 

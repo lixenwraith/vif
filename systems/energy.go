@@ -31,7 +31,7 @@ type EnergySystem struct {
 }
 
 // NewEnergySystem creates a new energy system
-func NewEnergySystem(world *engine.World) *EnergySystem {
+func NewEnergySystem(world *engine.World) engine.System {
 	return &EnergySystem{
 		world: world,
 		res:   engine.GetCoreResources(world),
@@ -147,8 +147,8 @@ func (s *EnergySystem) handleCharacterTyping(world *engine.World, cursorX, curso
 	now := s.res.Time.GameTime
 
 	// Find interactable entity at cursor position using z-index filtered lookup
-	entity := world.Positions.GetTopEntityFiltered(cursorX, cursorY, world, func(e core.Entity) bool {
-		return engine.IsInteractable(world, e)
+	entity := world.Positions.GetTopEntityFiltered(cursorX, cursorY, func(e core.Entity) bool {
+		return s.res.ZIndex.IsInteractable(e)
 	})
 
 	if entity == 0 {
@@ -491,9 +491,13 @@ func (s *EnergySystem) handleDeleteRequest(world *engine.World, payload *events.
 	resetHeat := false
 	entitiesToDelete := make([]core.Entity, 0)
 
+	// Use cached ZIndexResolver
+	resolver := s.res.ZIndex
+
 	// Helper to check and mark entity for deletion
 	checkEntity := func(entity core.Entity) {
-		if !engine.IsInteractable(world, entity) {
+		// Use resolver method instead of package function
+		if resolver == nil || !resolver.IsInteractable(entity) {
 			return
 		}
 

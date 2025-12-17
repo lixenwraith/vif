@@ -3,6 +3,7 @@ package systems
 import (
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/events"
 )
@@ -10,22 +11,26 @@ import (
 // AudioSystem consumes sound request events and plays audio
 // Decouples game systems from direct AudioEngine access
 type AudioSystem struct {
+	world  *engine.World
 	player engine.AudioPlayer
 }
 
 // NewAudioSystem creates an audio system with the given player
 // player may be nil if audio is disabled
-func NewAudioSystem(world *engine.World) *AudioSystem {
+func NewAudioSystem(world *engine.World) engine.System {
 	var player engine.AudioPlayer
 	if res, ok := engine.GetResource[*engine.AudioResource](world.Resources); ok {
 		player = res.Player
 	}
-	return &AudioSystem{player: player}
+	return &AudioSystem{
+		world:  world,
+		player: player,
+	}
 }
 
-// Priority returns the system's priority (runs with UI systems)
+// Priority returns the system's priority
 func (s *AudioSystem) Priority() int {
-	return 50 // Same as PriorityUI
+	return constants.PriorityUI
 }
 
 // EventTypes returns the event types AudioSystem handles

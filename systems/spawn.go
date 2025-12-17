@@ -77,6 +77,9 @@ type SpawnSystem struct {
 	world *engine.World
 	res   engine.CoreResources
 
+	seqStore  *engine.Store[components.SequenceComponent]
+	charStore *engine.Store[components.CharacterComponent]
+
 	// Spawn timing and rate (internal state, replaces GameState coupling)
 	enabled        bool
 	lastSpawnTime  time.Time // When last spawn occurred
@@ -108,6 +111,9 @@ func NewSpawnSystem(world *engine.World) *SpawnSystem {
 	s := &SpawnSystem{
 		world: world,
 		res:   res,
+
+		seqStore:  engine.GetStore[components.SequenceComponent](world),
+		charStore: engine.GetStore[components.CharacterComponent](world),
 
 		// Initialize spawn state
 		enabled:        true, // Default enabled, future FSM will control
@@ -431,9 +437,9 @@ func (s *SpawnSystem) hasBracesInBlock(lines []string) bool {
 func (s *SpawnSystem) runCensus(world *engine.World) ColorCensus {
 	var census ColorCensus
 
-	entities := world.Sequences.All()
+	entities := s.seqStore.All()
 	for _, entity := range entities {
-		seq, ok := world.Sequences.Get(entity)
+		seq, ok := s.seqStore.Get(entity)
 		if !ok {
 			continue
 		}
@@ -731,8 +737,8 @@ func (s *SpawnSystem) placeLine(world *engine.World, line string, seqType compon
 
 			// Phase 3: Add other components (positions already committed)
 			for _, ed := range entities {
-				world.Characters.Add(ed.entity, ed.char)
-				world.Sequences.Add(ed.entity, ed.seq)
+				s.charStore.Add(ed.entity, ed.char)
+				s.seqStore.Add(ed.entity, ed.seq)
 			}
 
 			return true

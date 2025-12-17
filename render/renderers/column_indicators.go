@@ -18,7 +18,7 @@ func NewColumnIndicatorsRenderer(gameCtx *engine.GameContext) *ColumnIndicatorsR
 }
 
 // Render implements SystemRenderer
-func (c *ColumnIndicatorsRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (r *ColumnIndicatorsRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskUI)
 	indicatorY := ctx.GameY + ctx.GameHeight
 
@@ -31,7 +31,7 @@ func (c *ColumnIndicatorsRenderer) Render(ctx render.RenderContext, world *engin
 
 		if relativeCol == 0 {
 			ch = '0'
-			if c.gameCtx.IsSearchMode() || c.gameCtx.IsCommandMode() {
+			if r.gameCtx.IsSearchMode() || r.gameCtx.IsCommandMode() {
 				fg = render.RgbCursorNormal
 				bg = render.RgbBackground
 			} else {

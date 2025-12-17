@@ -1,6 +1,7 @@
 package renderers
 
 import (
+	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -9,23 +10,35 @@ import (
 
 // CursorRenderer draws the cursor with complex entity overlap handling
 type CursorRenderer struct {
-	gameCtx *engine.GameContext
+	gameCtx     *engine.GameContext
+	cursorStore *engine.Store[components.CursorComponent]
+	charStore   *engine.Store[components.CharacterComponent]
+	nuggetStore *engine.Store[components.NuggetComponent]
+	drainStore  *engine.Store[components.DrainComponent]
+	decayStore  *engine.Store[components.DecayComponent]
+	resolver    *engine.ZIndexResolver
 }
 
 // NewCursorRenderer creates a new cursor renderer
 func NewCursorRenderer(gameCtx *engine.GameContext) *CursorRenderer {
 	return &CursorRenderer{
-		gameCtx: gameCtx,
+		gameCtx:     gameCtx,
+		cursorStore: engine.GetStore[components.CursorComponent](gameCtx.World),
+		charStore:   engine.GetStore[components.CharacterComponent](gameCtx.World),
+		nuggetStore: engine.GetStore[components.NuggetComponent](gameCtx.World),
+		drainStore:  engine.GetStore[components.DrainComponent](gameCtx.World),
+		decayStore:  engine.GetStore[components.DecayComponent](gameCtx.World),
+		resolver:    engine.MustGetResource[*engine.ZIndexResolver](gameCtx.World.Resources),
 	}
 }
 
 // IsVisible returns true when the cursor should be rendered
-func (c *CursorRenderer) IsVisible() bool {
-	return !c.gameCtx.IsSearchMode() && !c.gameCtx.IsCommandMode()
+func (r *CursorRenderer) IsVisible() bool {
+	return !r.gameCtx.IsSearchMode() && !r.gameCtx.IsCommandMode()
 }
 
 // Render draws the cursor
-func (c *CursorRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (r *CursorRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskUI)
 	screenX := ctx.GameX + ctx.CursorX
 	screenY := ctx.GameY + ctx.CursorY
@@ -40,7 +53,7 @@ func (c *CursorRenderer) Render(ctx render.RenderContext, world *engine.World, b
 	var cursorBgColor render.RGB
 
 	// Default background based on mode
-	if c.gameCtx.IsInsertMode() {
+	if r.gameCtx.IsInsertMode() {
 		cursorBgColor = render.RgbCursorInsert
 	} else {
 		cursorBgColor = render.RgbCursorNormal
@@ -56,20 +69,20 @@ func (c *CursorRenderer) Render(ctx render.RenderContext, world *engine.World, b
 	// Check for Drain (highest priority overlay, masks everything)
 	isDrain := false
 	for _, e := range entities {
-		if world.Drains.Has(e) {
+		if r.drainStore.Has(e) {
 			isDrain = true
 			break
 		}
 	}
 
 	// Get the highest priority character entity for display (excluding cursor and non-character entities)
-	displayEntity := engine.SelectTopEntityFiltered(entities, world, func(e core.Entity) bool {
+	displayEntity := r.resolver.SelectTopEntityFiltered(entities, func(e core.Entity) bool {
 		// Exclude cursor itself and non-character entities
-		if e == c.gameCtx.CursorEntity {
+		if e == r.gameCtx.CursorEntity {
 			return false
 		}
 		// Only consider entities with characters
-		return world.Characters.Has(e)
+		return r.charStore.Has(e)
 	})
 
 	hasChar := displayEntity != 0
@@ -77,11 +90,11 @@ func (c *CursorRenderer) Render(ctx render.RenderContext, world *engine.World, b
 	var charFg render.RGB
 
 	if hasChar {
-		if charComp, ok := world.Characters.Get(displayEntity); ok {
+		if charComp, ok := r.charStore.Get(displayEntity); ok {
 			charAtCursor = charComp.Rune
 			// Resolve color from semantic fields
 			charFg = resolveCharacterColor(charComp)
-			if world.Nuggets.Has(displayEntity) {
+			if r.nuggetStore.Has(displayEntity) {
 				isNugget = true
 			}
 		}
@@ -91,7 +104,7 @@ func (c *CursorRenderer) Render(ctx render.RenderContext, world *engine.World, b
 	hasDecay := false
 	if !isDrain && !hasChar {
 		for _, e := range entities {
-			if decay, ok := world.Decays.Get(e); ok {
+			if decay, ok := r.decayStore.Get(e); ok {
 				charAtCursor = decay.Char
 				hasDecay = true
 				break
@@ -121,7 +134,7 @@ func (c *CursorRenderer) Render(ctx render.RenderContext, world *engine.World, b
 
 	// 4. Error Flash Overlay (Absolute Highest Priority for Background)
 	// Reads component directly to ensure flash works during pause
-	cursorComp, ok := world.Cursors.Get(c.gameCtx.CursorEntity)
+	cursorComp, ok := r.cursorStore.Get(r.gameCtx.CursorEntity)
 	if ok && cursorComp.ErrorFlashRemaining > 0 {
 		cursorBgColor = render.RgbCursorError
 		charFgColor = render.RgbBlack

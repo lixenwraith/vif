@@ -38,7 +38,7 @@ Vi-fighter uses **compile-time generics-based ECS** (Go 1.18+) that eliminates r
    // Basic Pattern (no collision checking)
    entity := world.CreateEntity()
    world.Positions.Add(entity, components.PositionComponent{X: x, Y: y})
-   world.Characters.Add(entity, components.CharacterComponent{Rune: r, Style: s})
+   world.Characters.Add(entity, components.CharacterComponent{Rune: r, Style: r})
    ```
 
    **Batch Pattern** (for collision-sensitive spawning):
@@ -130,7 +130,7 @@ The Resource System provides generic, thread-safe access to global shared data w
 
 **Access Pattern:**
 ```go
-func (s *MySystem) Update(world *engine.World, dt time.Duration) {
+func (r *MySystem) Update(world *engine.World, dt time.Duration) {
     config := engine.MustGetResource[*engine.ConfigResource](world.Resources)
     timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 
@@ -138,8 +138,8 @@ func (s *MySystem) Update(world *engine.World, dt time.Duration) {
     now := timeRes.GameTime
 
     // Access game state through GameContext
-    s.ctx.State.AddHeat(1)
-    snapshot := s.ctx.State.ReadSpawnState()
+    r.ctx.State.AddHeat(1)
+    snapshot := r.ctx.State.ReadSpawnState()
 }
 ```
 
@@ -226,7 +226,7 @@ import (
 )
 
 // Generic Handler interface implemented by systems
-func (s *EnergySystem) EventTypes() []events.EventType {
+func (r *EnergySystem) EventTypes() []events.EventType {
     return []events.EventType{
         events.EventCharacterTyped,
         events.EventEnergyAdd,
@@ -237,15 +237,15 @@ func (s *EnergySystem) EventTypes() []events.EventType {
     }
 }
 
-func (s *EnergySystem) HandleEvent(world *engine.World, event events.GameEvent) {
+func (r *EnergySystem) HandleEvent(world *engine.World, event events.GameEvent) {
     switch event.Type {
     case events.EventCharacterTyped:
         if payload, ok := event.Payload.(*events.CharacterTypedPayload); ok {
-            s.handleCharacterTyping(world, payload.X, payload.Y, payload.Char)
+            r.handleCharacterTyping(world, payload.X, payload.Y, payload.Char)
         }
     case events.EventEnergyAdd:
         if payload, ok := event.Payload.(*events.EnergyAddPayload); ok {
-            s.addEnergy(world, int64(payload.Delta))
+            r.addEnergy(world, int64(payload.Delta))
         }
     }
 }
@@ -1267,7 +1267,7 @@ The game uses a **centralized crash handling system** to ensure terminal cleanup
 ctx.SetCrashHandler(func(r any) {
     terminal.EmergencyReset(os.Stdout)
     fmt.Fprintf(os.Stderr, "\r\n\x1b[31mGAME CRASHED: %v\x1b[0m\r\n", r)
-    fmt.Fprintf(os.Stderr, "Stack Trace:\r\n%s\r\n", debug.Stack())
+    fmt.Fprintf(os.Stderr, "Stack Trace:\r\n%r\r\n", debug.Stack())
     os.Exit(1)
 })
 
@@ -1280,7 +1280,7 @@ ctx.Go(func() {
 **Direct Panic Handling:**
 - **Main goroutine** (`main.go`): `defer recover()` restores terminal on crash
 - **Input poller goroutine** (`main.go`): `defer recover()` for event polling
-- **Render goroutine**: Runs in main loop, protected by main's defer
+- **Render goroutine**: Runs in main loop, protected by main'r defer
 
 **Usage:**
 - ClockScheduler uses `ctx.Go()` for safe tick loop execution
@@ -1316,7 +1316,7 @@ ctx.Go(func() {
 ### Hot Path Optimizations
 1. Generics-based queries (zero-allocation)
 2. `GetAllAtInto()` with stack buffers
-3. SpatialGrid's cache-friendly layout (128-byte cells)
+3. SpatialGrid'r cache-friendly layout (128-byte cells)
 4. Batch similar operations
 5. Reuse allocated slices
 6. Synchronous CleanerSystem updates
@@ -1471,7 +1471,7 @@ count := world.Positions.GetAllAtInto(cursorX, cursorY, entityBuf[:])
 entitiesAtCursor := entityBuf[:count]
 
 for _, entity := range entitiesAtCursor {
-    if entity == s.ctx.CursorEntity {
+    if entity == r.ctx.CursorEntity {
         continue
     }
     // Process typing...
@@ -1499,12 +1499,12 @@ Event-driven system managing heat meter state (priority 12).
 
 **Implementation:**
 ```go
-func (s *HeatSystem) addHeat(world *engine.World, delta int) {
-    heatComp, _ := world.Heats.Get(s.ctx.CursorEntity)
+func (r *HeatSystem) addHeat(world *engine.World, delta int) {
+    heatComp, _ := world.Heats.Get(r.ctx.CursorEntity)
     current := heatComp.Current.Load()
     newVal := clamp(current + int64(delta), 0, MaxHeat)
     heatComp.Current.Store(newVal)
-    world.Heats.Add(s.ctx.CursorEntity, heatComp)  // Write back to store
+    world.Heats.Add(r.ctx.CursorEntity, heatComp)  // Write back to store
 }
 ```
 

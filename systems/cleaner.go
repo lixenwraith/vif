@@ -27,7 +27,7 @@ type CleanerSystem struct {
 }
 
 // NewCleanerSystem creates a new cleaner system
-func NewCleanerSystem(world *engine.World) *CleanerSystem {
+func NewCleanerSystem(world *engine.World) engine.System {
 	return &CleanerSystem{
 		world: world,
 		res:   engine.GetCoreResources(world),

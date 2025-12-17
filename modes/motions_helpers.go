@@ -1,6 +1,7 @@
 package modes
 
 import (
+	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -18,12 +19,13 @@ const (
 // getCharAt returns the character at the given position, or 0 if empty
 func getCharAt(ctx *engine.GameContext, x, y int) rune {
 	entities := ctx.World.Positions.GetAllAt(x, y)
+	charStore := engine.GetStore[components.CharacterComponent](ctx.World)
 
 	for _, entity := range entities {
 		if entity == ctx.CursorEntity || entity == 0 {
 			continue
 		}
-		char, ok := ctx.World.Characters.Get(entity)
+		char, ok := charStore.Get(entity)
 		if ok {
 			if char.Rune == ' ' {
 				return 0
@@ -72,6 +74,7 @@ func validatePosition(ctx *engine.GameContext, x, y int) (validX, validY int) {
 func findCharInDirection(ctx *engine.GameContext, startX, startY int, target rune, count int, forward bool) (int, bool) {
 	occurrences := 0
 	lastMatch := -1
+	charStore := engine.GetStore[components.CharacterComponent](ctx.World)
 
 	if forward {
 		for x := startX + 1; x < ctx.GameWidth; x++ {
@@ -80,7 +83,7 @@ func findCharInDirection(ctx *engine.GameContext, startX, startY int, target run
 				if entity == 0 {
 					continue
 				}
-				char, ok := ctx.World.Characters.Get(entity)
+				char, ok := charStore.Get(entity)
 				if ok && char.Rune == target {
 					occurrences++
 					lastMatch = x
@@ -97,7 +100,7 @@ func findCharInDirection(ctx *engine.GameContext, startX, startY int, target run
 				if entity == 0 {
 					continue
 				}
-				char, ok := ctx.World.Characters.Get(entity)
+				char, ok := charStore.Get(entity)
 				if ok && char.Rune == target {
 					occurrences++
 					lastMatch = x
@@ -288,6 +291,8 @@ func findLineEnd(ctx *engine.GameContext, cursorY int) int {
 	// Stack-allocated buffer for zero-alloc queries
 	var buf [constants.MaxEntitiesPerCell]core.Entity
 
+	resolver := engine.MustGetResource[*engine.ZIndexResolver](ctx.World.Resources)
+
 	// Scan from right to left
 	for x := ctx.GameWidth - 1; x >= 0; x-- {
 		// Zero-alloc query
@@ -295,7 +300,7 @@ func findLineEnd(ctx *engine.GameContext, cursorY int) int {
 
 		// Check entities at this cell
 		for i := 0; i < count; i++ {
-			if buf[i] != 0 && engine.IsInteractable(ctx.World, buf[i]) {
+			if buf[i] != 0 && resolver.IsInteractable(buf[i]) {
 				// Found right-most interactable entity
 				return x
 			}
@@ -323,13 +328,15 @@ func findFirstNonWhitespace(ctx *engine.GameContext, cursorY int) int {
 func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
 	var buf [constants.MaxEntitiesPerCell]core.Entity
 
+	resolver := engine.MustGetResource[*engine.ZIndexResolver](ctx.World.Resources)
+
 	for y := cursorY - 1; y >= 0; y-- {
 		rowEmpty := true
 		// Scan row; stop early if any interactable entity is found
 		for x := 0; x < ctx.GameWidth && rowEmpty; x++ {
 			count := ctx.World.Positions.GetAllAtInto(x, y, buf[:])
 			for i := 0; i < count; i++ {
-				if buf[i] != 0 && engine.IsInteractable(ctx.World, buf[i]) {
+				if buf[i] != 0 && resolver.IsInteractable(buf[i]) {
 					rowEmpty = false
 					break
 				}
@@ -347,13 +354,15 @@ func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
 func findNextEmptyLine(ctx *engine.GameContext, cursorY int) int {
 	var buf [constants.MaxEntitiesPerCell]core.Entity
 
+	resolver := engine.MustGetResource[*engine.ZIndexResolver](ctx.World.Resources)
+
 	for y := cursorY + 1; y < ctx.GameHeight; y++ {
 		rowEmpty := true
 		// Scan row; stop early if any interactable entity is found
 		for x := 0; x < ctx.GameWidth && rowEmpty; x++ {
 			count := ctx.World.Positions.GetAllAtInto(x, y, buf[:])
 			for i := 0; i < count; i++ {
-				if buf[i] != 0 && engine.IsInteractable(ctx.World, buf[i]) {
+				if buf[i] != 0 && resolver.IsInteractable(buf[i]) {
 					rowEmpty = false
 					break
 				}

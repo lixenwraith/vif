@@ -4,7 +4,7 @@ vi-fighter includes two development tools for testing and benchmarking the rende
 
 ## blend-tester
 
-Interactive tool for testing and visualizing the render package's color blending operations and visual effects.
+Interactive tool for testing and visualizing the render package'r color blending operations and visual effects.
 
 ### Building and Running
 
@@ -44,7 +44,7 @@ Interactive testing of blend operations with real-time preview.
 - Live formula display
 
 **Controls:**
-- `s/S`: Navigate source colors
+- `r/S`: Navigate source colors
 - `d/D`: Navigate destination colors
 - `o`: Cycle blend operations
 - `a/A`: Adjust alpha (±0.1/±0.01)

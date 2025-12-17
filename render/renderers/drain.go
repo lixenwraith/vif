@@ -3,6 +3,7 @@ package renderers
 import (
 	"fmt"
 
+	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
@@ -11,21 +12,23 @@ import (
 
 // DrainRenderer draws the drain entity with transparent background
 type DrainRenderer struct {
-	gameCtx *engine.GameContext
+	gameCtx    *engine.GameContext
+	drainStore *engine.Store[components.DrainComponent]
 }
 
 // NewDrainRenderer creates a new drain renderer
-func NewDrainRenderer(ctx *engine.GameContext) *DrainRenderer {
+func NewDrainRenderer(gameCtx *engine.GameContext) *DrainRenderer {
 	return &DrainRenderer{
-		gameCtx: ctx,
+		gameCtx:    gameCtx,
+		drainStore: engine.GetStore[components.DrainComponent](gameCtx.World),
 	}
 }
 
 // Render draws all drain entities
-func (d *DrainRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (r *DrainRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskEffect)
 	// Get all drains
-	drainEntities := world.Drains.All()
+	drainEntities := r.drainStore.All()
 	if len(drainEntities) == 0 {
 		return
 	}

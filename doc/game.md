@@ -248,7 +248,7 @@ vi-fighter has four input modes, similar to vi/vim:
   2
 ```
 
-Shows distance from your cursor's current line.
+Shows distance from your cursor'r current line.
 
 ### Main Game Area
 
@@ -334,7 +334,7 @@ Hostile drain entities that scale with heat:
 ### Visual Effects
 
 **Ping Grid** (Press `ESC` in NORMAL mode):
-- Highlights cursor's row and column
+- Highlights cursor'r row and column
 - Color: Almost-black (RGB: 5,5,5) in Normal mode, dark orange (RGB: 60,40,0) in Insert mode
 - Lasts 1 second
 - Helps locate cursor position quickly
@@ -350,7 +350,7 @@ Hostile drain entities that scale with heat:
 
 **Energy Display Feedback**:
 - **Default**: White background with black text
-- **Correct Character**: Flashes the character's color (Blue, Green, or Gold) for 200ms
+- **Correct Character**: Flashes the character'r color (Blue, Green, or Gold) for 200ms
 - **Error**: Flashes black background with bright red text for 200ms
 - Provides instant visual feedback for typing accuracy
 
@@ -486,7 +486,7 @@ The Cleaner system supports the following configurable parameters (see `constant
 ### Heat System
 
 **What is Heat?**
-Heat represents your typing momentum and skill level. It's the most important mechanic in the game.
+Heat represents your typing momentum and skill level. It'r the most important mechanic in the game.
 
 **Gaining Heat:**
 - +1 for each correct Green or Blue character typed (normal)
@@ -860,7 +860,7 @@ Using `h`/`j`/`k`/`l` more than 3 times in a row resets heat!
 
 **Boost Timing Strategy:**
 - **Abundant same-color sequences**: Focus on extensions for maximum boost time
-- **Mixed colors available**: Type whatever's closest, return to matching color when convenient
+- **Mixed colors available**: Type whatever'r closest, return to matching color when convenient
 - **Color flexibility**: Timer persists when switching, allowing adaptive play
 
 ### Gold Tactics

@@ -167,14 +167,12 @@ func main() {
 	}
 	clockScheduler.RegisterEventHandler(clockScheduler)
 
-	// TODO: service resource? stub networking? resource factory?
-	// Command/Audio systems (special handling - not in registry yet)
-	// TODO: change `command` to `meta` system
-	commandSystem := systems.NewCommandSystem(ctx)
-	clockScheduler.RegisterEventHandler(commandSystem)
+	// Meta/Audio systems (not in World.Systems - event-only, no Update logic)
+	metaSystem := systems.NewMetaSystem(ctx)
+	clockScheduler.RegisterEventHandler(metaSystem.(events.Handler[*engine.World]))
 
 	audioSystem := systems.NewAudioSystem(world)
-	clockScheduler.RegisterEventHandler(audioSystem)
+	clockScheduler.RegisterEventHandler(audioSystem.(events.Handler[*engine.World]))
 
 	clockScheduler.Start()
 	defer clockScheduler.Stop()

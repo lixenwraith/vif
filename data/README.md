@@ -102,7 +102,7 @@ These files are used by:
 To add support for a new programming language:
 
 1. Create `code_<language>.txt` in this directory
-2. Include representative samples from the language's standard library
+2. Include representative samples from the language'r standard library
 3. Ensure proper comment syntax is included
 4. Add variety in code structure and complexity
 5. Meet the 200+ line minimum requirement

@@ -15,11 +15,18 @@ import (
 
 // DecaySystem handles character decay animation and logic
 type DecaySystem struct {
-	mu    sync.RWMutex
 	world *engine.World
 	res   engine.CoreResources
 
-	// Internal state (migrated from GameState)
+	decayStore  *engine.Store[components.DecayComponent]
+	protStore   *engine.Store[components.ProtectionComponent]
+	heatStore   *engine.Store[components.HeatComponent]
+	nuggetStore *engine.Store[components.NuggetComponent]
+	charStore   *engine.Store[components.CharacterComponent]
+	seqStore    *engine.Store[components.SequenceComponent]
+
+	// Internal state
+	mu          sync.RWMutex
 	timerActive bool
 	nextTime    time.Time
 	animating   bool
@@ -35,12 +42,20 @@ type DecaySystem struct {
 }
 
 // NewDecaySystem creates a new decay system
-func NewDecaySystem(world *engine.World) *DecaySystem {
+func NewDecaySystem(world *engine.World) engine.System {
 	res := engine.GetCoreResources(world)
 	return &DecaySystem{
-		world:              world,
-		res:                res,
-		decayedThisFrame:   make(map[core.Entity]bool),
+		world: world,
+		res:   res,
+
+		decayStore:       engine.GetStore[components.DecayComponent](world),
+		protStore:        engine.GetStore[components.ProtectionComponent](world),
+		heatStore:        engine.GetStore[components.HeatComponent](world),
+		nuggetStore:      engine.GetStore[components.NuggetComponent](world),
+		charStore:        engine.GetStore[components.CharacterComponent](world),
+		seqStore:         engine.GetStore[components.SequenceComponent](world),
+		decayedThisFrame: make(map[core.Entity]bool),
+
 		processedGridCells: make(map[int]bool),
 		statTimer:          res.Status.Ints.Get("decay.timer"),
 	}
@@ -117,7 +132,7 @@ func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 // startDecayTimer calculates interval based on heat and starts timer
 func (s *DecaySystem) startDecayTimer(world *engine.World) {
 	heatValue := 0
-	if hc, ok := world.Heats.Get(s.res.Cursor.Entity); ok {
+	if hc, ok := s.heatStore.Get(s.res.Cursor.Entity); ok {
 		heatValue = int(hc.Current.Load())
 	}
 
@@ -161,7 +176,7 @@ func (s *DecaySystem) updateAnimation(world *engine.World, dt time.Duration) {
 	s.updateDecayEntities(world, dt.Seconds())
 
 	// Check entity count from the Store to prevents "Zombie Phase" by ensuring phase ends exactly when entities are gone
-	count := world.Decays.Count()
+	count := s.decayStore.Count()
 	if count == 0 {
 		s.mu.Lock()
 		s.currentRow = 0
@@ -190,7 +205,7 @@ func (s *DecaySystem) spawnDecayEntities(world *engine.World) {
 
 		world.Positions.Add(entity, components.PositionComponent{X: column, Y: 0})
 		// Initialize DecayComponent with PreciseX/Y float overlay and coordinate history
-		world.Decays.Add(entity, components.DecayComponent{
+		s.decayStore.Add(entity, components.DecayComponent{
 			PreciseX:      float64(column),
 			PreciseY:      0.0,
 			Speed:         speed,
@@ -213,7 +228,7 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 		dtSeconds = 0.1
 	}
 
-	decayEntities := world.Decays.All()
+	decayEntities := s.decayStore.All()
 
 	// Clear frame deduplication maps
 	for k := range s.processedGridCells {
@@ -223,7 +238,7 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 	var collisionBuf [constants.MaxEntitiesPerCell]core.Entity
 
 	for _, entity := range decayEntities {
-		fall, ok := world.Decays.Get(entity)
+		fall, ok := s.decayStore.Get(entity)
 		if !ok {
 			continue
 		}
@@ -296,8 +311,8 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 					continue
 				}
 
-				if world.Nuggets.Has(targetEntity) {
-					if char, ok := world.Characters.Get(targetEntity); ok {
+				if s.nuggetStore.Has(targetEntity) {
+					if char, ok := s.charStore.Get(targetEntity); ok {
 						world.PushEvent(events.EventFlashRequest, &events.FlashRequestPayload{
 							X: col, Y: row, Char: char.Rune,
 						})
@@ -340,58 +355,60 @@ func (s *DecaySystem) updateDecayEntities(world *engine.World, dtSeconds float64
 			world.Positions.Add(entity, components.PositionComponent{X: pos.X, Y: newGridY})
 		}
 
-		world.Decays.Add(entity, fall)
+		s.decayStore.Add(entity, fall)
 	}
 }
 
 // applyDecayToCharacter applies decay logic to a single character entity
 func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity core.Entity) {
-	seq, ok := world.Sequences.Get(entity)
+	seq, ok := s.seqStore.Get(entity)
 	if !ok {
 		return
 	}
 
-	// TODO: change to protection from hard-code inter-system logic
-	// Don't decay gold sequences
-	if seq.Type == components.SequenceGold {
-		return
+	// Check protection
+	if prot, ok := s.protStore.Get(entity); ok {
+		now := s.res.Time.GameTime
+		if !prot.IsExpired(now.UnixNano()) && prot.Mask.Has(components.ProtectFromDecay) {
+			return
+		}
 	}
 
 	// Apply decay logic
 	if seq.Level > components.LevelDark {
 		// Reduce level by 1 when not dark
 		seq.Level--
-		world.Sequences.Add(entity, seq)
+		s.seqStore.Add(entity, seq)
 
 		// Update character semantic info (renderer resolves color)
-		if char, ok := world.Characters.Get(entity); ok {
+		if char, ok := s.charStore.Get(entity); ok {
 			char.SeqLevel = seq.Level
-			world.Characters.Add(entity, char)
+			s.charStore.Add(entity, char)
 		}
 	} else {
 		// Dark level decay color chain: Blue → Green → Red → destroy
 		if seq.Type == components.SequenceBlue {
 			seq.Type = components.SequenceGreen
 			seq.Level = components.LevelBright
-			world.Sequences.Add(entity, seq)
-			if char, ok := world.Characters.Get(entity); ok {
+			s.seqStore.Add(entity, seq)
+			if char, ok := s.charStore.Get(entity); ok {
 				char.SeqType = seq.Type
 				char.SeqLevel = seq.Level
-				world.Characters.Add(entity, char)
+				s.charStore.Add(entity, char)
 			}
 		} else if seq.Type == components.SequenceGreen {
 			seq.Type = components.SequenceRed
 			seq.Level = components.LevelBright
-			world.Sequences.Add(entity, seq)
-			if char, ok := world.Characters.Get(entity); ok {
+			s.seqStore.Add(entity, seq)
+			if char, ok := s.charStore.Get(entity); ok {
 				char.SeqType = seq.Type
 				char.SeqLevel = seq.Level
-				world.Characters.Add(entity, char)
+				s.charStore.Add(entity, char)
 			}
 		} else {
 			// Red at LevelDark - spawn flash then remove entity
 			if pos, ok := world.Positions.Get(entity); ok {
-				if char, ok := world.Characters.Get(entity); ok {
+				if char, ok := s.charStore.Get(entity); ok {
 					world.PushEvent(events.EventFlashRequest, &events.FlashRequestPayload{
 						X: pos.X, Y: pos.Y, Char: char.Rune,
 					})
@@ -404,7 +421,7 @@ func (s *DecaySystem) applyDecayToCharacter(world *engine.World, entity core.Ent
 
 // cleanupDecayEntities removes all decay entities
 func (s *DecaySystem) cleanupDecayEntities(world *engine.World) {
-	entities := world.Decays.All()
+	entities := s.decayStore.All()
 	for _, entity := range entities {
 		world.DestroyEntity(entity)
 	}

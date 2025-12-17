@@ -17,7 +17,7 @@ type FlashSystem struct {
 	flashStore *engine.Store[components.FlashComponent]
 }
 
-func NewFlashSystem(world *engine.World) *FlashSystem {
+func NewFlashSystem(world *engine.World) engine.System {
 	return &FlashSystem{
 		world: world,
 		res:   engine.GetCoreResources(world),

@@ -22,7 +22,7 @@ type ZIndexResolver struct {
 // NewZIndexResolver creates a resolver with cached store references
 // Call after all components are registered
 func NewZIndexResolver(w *World) *ZIndexResolver {
-	return &ZIndexResolver{
+	z := &ZIndexResolver{
 		cursors: GetStore[components.CursorComponent](w),
 		shields: GetStore[components.ShieldComponent](w),
 		drains:  GetStore[components.DrainComponent](w),
@@ -31,6 +31,11 @@ func NewZIndexResolver(w *World) *ZIndexResolver {
 		chars:   GetStore[components.CharacterComponent](w),
 		seqs:    GetStore[components.SequenceComponent](w),
 	}
+
+	// Wire to PositionStore for hot-path access
+	w.Positions.SetZIndexResolver(z)
+
+	return z
 }
 
 // GetZIndex returns the Z-index for an entity based on its components
@@ -81,22 +86,4 @@ func (z *ZIndexResolver) SelectTopEntityFiltered(entities []core.Entity, filter 
 		}
 	}
 	return top
-}
-
-// TODO: check for refactor after full migration
-// IsInteractable is a convenience function using the world's ZIndexResolver
-// Returns false if resolver not available (early bootstrap)
-func IsInteractable(w *World, e core.Entity) bool {
-	if resolver, ok := GetResource[*ZIndexResolver](w.Resources); ok {
-		return resolver.IsInteractable(e)
-	}
-	return false
-}
-
-// SelectTopEntityFiltered is a convenience function using the world's ZIndexResolver
-func SelectTopEntityFiltered(entities []core.Entity, w *World, filter func(core.Entity) bool) core.Entity {
-	if resolver, ok := GetResource[*ZIndexResolver](w.Resources); ok {
-		return resolver.SelectTopEntityFiltered(entities, filter)
-	}
-	return 0
 }

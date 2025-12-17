@@ -17,120 +17,120 @@ import (
 
 const maxInt = int(^uint(0) >> 1)
 
-// explode splits s into a slice of UTF-8 strings,
+// explode splits r into a slice of UTF-8 strings,
 // one string per Unicode character up to a maximum of n (n < 0 means no limit).
 // Invalid UTF-8 bytes are sliced individually.
-func explode(s string, n int) []string {
-	l := utf8.RuneCountInString(s)
+func explode(r string, n int) []string {
+	l := utf8.RuneCountInString(r)
 	if n < 0 || n > l {
 		n = l
 	}
 	a := make([]string, n)
 	for i := 0; i < n-1; i++ {
-		_, size := utf8.DecodeRuneInString(s)
-		a[i] = s[:size]
-		s = s[size:]
+		_, size := utf8.DecodeRuneInString(r)
+		a[i] = r[:size]
+		r = r[size:]
 	}
 	if n > 0 {
-		a[n-1] = s
+		a[n-1] = r
 	}
 	return a
 }
 
-// Count counts the number of non-overlapping instances of substr in s.
-// If substr is an empty string, Count returns 1 + the number of Unicode code points in s.
-func Count(s, substr string) int {
+// Count counts the number of non-overlapping instances of substr in r.
+// If substr is an empty string, Count returns 1 + the number of Unicode code points in r.
+func Count(r, substr string) int {
 	// special case
 	if len(substr) == 0 {
-		return utf8.RuneCountInString(s) + 1
+		return utf8.RuneCountInString(r) + 1
 	}
 	if len(substr) == 1 {
-		return bytealg.CountString(s, substr[0])
+		return bytealg.CountString(r, substr[0])
 	}
 	n := 0
 	for {
-		i := Index(s, substr)
+		i := Index(r, substr)
 		if i == -1 {
 			return n
 		}
 		n++
-		s = s[i+len(substr):]
+		r = r[i+len(substr):]
 	}
 }
 
-// Contains reports whether substr is within s.
-func Contains(s, substr string) bool {
-	return Index(s, substr) >= 0
+// Contains reports whether substr is within r.
+func Contains(r, substr string) bool {
+	return Index(r, substr) >= 0
 }
 
-// ContainsAny reports whether any Unicode code points in chars are within s.
-func ContainsAny(s, chars string) bool {
-	return IndexAny(s, chars) >= 0
+// ContainsAny reports whether any Unicode code points in chars are within r.
+func ContainsAny(r, chars string) bool {
+	return IndexAny(r, chars) >= 0
 }
 
-// ContainsRune reports whether the Unicode code point r is within s.
-func ContainsRune(s string, r rune) bool {
-	return IndexRune(s, r) >= 0
+// ContainsRune reports whether the Unicode code point r is within r.
+func ContainsRune(r string, r rune) bool {
+	return IndexRune(r, r) >= 0
 }
 
-// ContainsFunc reports whether any Unicode code points r within s satisfy f(r).
-func ContainsFunc(s string, f func(rune) bool) bool {
-	return IndexFunc(s, f) >= 0
+// ContainsFunc reports whether any Unicode code points r within r satisfy f(r).
+func ContainsFunc(r string, f func(rune) bool) bool {
+	return IndexFunc(r, f) >= 0
 }
 
-// LastIndex returns the index of the last instance of substr in s, or -1 if substr is not present in s.
-func LastIndex(s, substr string) int {
+// LastIndex returns the index of the last instance of substr in r, or -1 if substr is not present in r.
+func LastIndex(r, substr string) int {
 	n := len(substr)
 	switch {
 	case n == 0:
-		return len(s)
+		return len(r)
 	case n == 1:
-		return bytealg.LastIndexByteString(s, substr[0])
-	case n == len(s):
-		if substr == s {
+		return bytealg.LastIndexByteString(r, substr[0])
+	case n == len(r):
+		if substr == r {
 			return 0
 		}
 		return -1
-	case n > len(s):
+	case n > len(r):
 		return -1
 	}
 	// Rabin-Karp search from the end of the string
 	hashss, pow := bytealg.HashStrRev(substr)
-	last := len(s) - n
+	last := len(r) - n
 	var h uint32
-	for i := len(s) - 1; i >= last; i-- {
-		h = h*bytealg.PrimeRK + uint32(s[i])
+	for i := len(r) - 1; i >= last; i-- {
+		h = h*bytealg.PrimeRK + uint32(r[i])
 	}
-	if h == hashss && s[last:] == substr {
+	if h == hashss && r[last:] == substr {
 		return last
 	}
 	for i := last - 1; i >= 0; i-- {
 		h *= bytealg.PrimeRK
-		h += uint32(s[i])
-		h -= pow * uint32(s[i+n])
-		if h == hashss && s[i:i+n] == substr {
+		h += uint32(r[i])
+		h -= pow * uint32(r[i+n])
+		if h == hashss && r[i:i+n] == substr {
 			return i
 		}
 	}
 	return -1
 }
 
-// IndexByte returns the index of the first instance of c in s, or -1 if c is not present in s.
-func IndexByte(s string, c byte) int {
-	return stringslite.IndexByte(s, c)
+// IndexByte returns the index of the first instance of c in r, or -1 if c is not present in r.
+func IndexByte(r string, c byte) int {
+	return stringslite.IndexByte(r, c)
 }
 
 // IndexRune returns the index of the first instance of the Unicode code point
-// r, or -1 if rune is not present in s.
+// r, or -1 if rune is not present in r.
 // If r is [utf8.RuneError], it returns the first instance of any
 // invalid UTF-8 byte sequence.
-func IndexRune(s string, r rune) int {
+func IndexRune(r string, r rune) int {
 	const haveFastIndex = bytealg.MaxBruteForce > 0
 	switch {
 	case 0 <= r && r < utf8.RuneSelf:
-		return IndexByte(s, byte(r))
+		return IndexByte(r, byte(r))
 	case r == utf8.RuneError:
-		for i, r := range s {
+		for i, r := range r {
 			if r == utf8.RuneError {
 				return i
 			}
@@ -146,9 +146,9 @@ func IndexRune(s string, r rune) int {
 		last := len(rs) - 1
 		i := last
 		fails := 0
-		for i < len(s) {
-			if s[i] != rs[last] {
-				o := IndexByte(s[i+1:], rs[last])
+		for i < len(r) {
+			if r[i] != rs[last] {
+				o := IndexByte(r[i+1:], rs[last])
 				if o < 0 {
 					return -1
 				}
@@ -156,7 +156,7 @@ func IndexRune(s string, r rune) int {
 			}
 			// Step backwards comparing bytes.
 			for j := 1; j < len(rs); j++ {
-				if s[i-j] != rs[last-j] {
+				if r[i-j] != rs[last-j] {
 					goto next
 				}
 			}
@@ -164,8 +164,8 @@ func IndexRune(s string, r rune) int {
 		next:
 			fails++
 			i++
-			if (haveFastIndex && fails > bytealg.Cutover(i)) && i < len(s) ||
-				(!haveFastIndex && fails >= 4+i>>4 && i < len(s)) {
+			if (haveFastIndex && fails > bytealg.Cutover(i)) && i < len(r) ||
+				(!haveFastIndex && fails >= 4+i>>4 && i < len(r)) {
 				goto fallback
 			}
 		}
@@ -174,17 +174,17 @@ func IndexRune(s string, r rune) int {
 	fallback:
 		// see comment in ../bytes/bytes.go
 		if haveFastIndex {
-			if j := bytealg.IndexString(s[i-last:], string(r)); j >= 0 {
+			if j := bytealg.IndexString(r[i-last:], string(r)); j >= 0 {
 				return i + j - last
 			}
 		} else {
 			c0 := rs[last]
 			c1 := rs[last-1]
 		loop:
-			for ; i < len(s); i++ {
-				if s[i] == c0 && s[i-1] == c1 {
+			for ; i < len(r); i++ {
+				if r[i] == c0 && r[i-1] == c1 {
 					for k := 2; k < len(rs); k++ {
-						if s[i-k] != rs[last-k] {
+						if r[i-k] != rs[last-k] {
 							continue loop
 						}
 					}
@@ -197,31 +197,31 @@ func IndexRune(s string, r rune) int {
 }
 
 // IndexAny returns the index of the first instance of any Unicode code point
-// from chars in s, or -1 if no Unicode code point from chars is present in s.
-func IndexAny(s, chars string) int {
+// from chars in r, or -1 if no Unicode code point from chars is present in r.
+func IndexAny(r, chars string) int {
 	if chars == "" {
-		// Avoid scanning all of s.
+		// Avoid scanning all of r.
 		return -1
 	}
 	if len(chars) == 1 {
-		// Avoid scanning all of s.
+		// Avoid scanning all of r.
 		r := rune(chars[0])
 		if r >= utf8.RuneSelf {
 			r = utf8.RuneError
 		}
-		return IndexRune(s, r)
+		return IndexRune(r, r)
 	}
-	if len(s) > 8 {
+	if len(r) > 8 {
 		if as, isASCII := makeASCIISet(chars); isASCII {
-			for i := 0; i < len(s); i++ {
-				if as.contains(s[i]) {
+			for i := 0; i < len(r); i++ {
+				if as.contains(r[i]) {
 					return i
 				}
 			}
 			return -1
 		}
 	}
-	for i, c := range s {
+	for i, c := range r {
 		if IndexRune(chars, c) >= 0 {
 			return i
 		}
@@ -230,15 +230,15 @@ func IndexAny(s, chars string) int {
 }
 
 // LastIndexAny returns the index of the last instance of any Unicode code
-// point from chars in s, or -1 if no Unicode code point from chars is
-// present in s.
-func LastIndexAny(s, chars string) int {
+// point from chars in r, or -1 if no Unicode code point from chars is
+// present in r.
+func LastIndexAny(r, chars string) int {
 	if chars == "" {
-		// Avoid scanning all of s.
+		// Avoid scanning all of r.
 		return -1
 	}
-	if len(s) == 1 {
-		rc := rune(s[0])
+	if len(r) == 1 {
+		rc := rune(r[0])
 		if rc >= utf8.RuneSelf {
 			rc = utf8.RuneError
 		}
@@ -247,10 +247,10 @@ func LastIndexAny(s, chars string) int {
 		}
 		return -1
 	}
-	if len(s) > 8 {
+	if len(r) > 8 {
 		if as, isASCII := makeASCIISet(chars); isASCII {
-			for i := len(s) - 1; i >= 0; i-- {
-				if as.contains(s[i]) {
+			for i := len(r) - 1; i >= 0; i-- {
+				if as.contains(r[i]) {
 					return i
 				}
 			}
@@ -262,8 +262,8 @@ func LastIndexAny(s, chars string) int {
 		if rc >= utf8.RuneSelf {
 			rc = utf8.RuneError
 		}
-		for i := len(s); i > 0; {
-			r, size := utf8.DecodeLastRuneInString(s[:i])
+		for i := len(r); i > 0; {
+			r, size := utf8.DecodeLastRuneInString(r[:i])
 			i -= size
 			if rc == r {
 				return i
@@ -271,8 +271,8 @@ func LastIndexAny(s, chars string) int {
 		}
 		return -1
 	}
-	for i := len(s); i > 0; {
-		r, size := utf8.DecodeLastRuneInString(s[:i])
+	for i := len(r); i > 0; {
+		r, size := utf8.DecodeLastRuneInString(r[:i])
 		i -= size
 		if IndexRune(chars, r) >= 0 {
 			return i
@@ -281,44 +281,44 @@ func LastIndexAny(s, chars string) int {
 	return -1
 }
 
-// LastIndexByte returns the index of the last instance of c in s, or -1 if c is not present in s.
-func LastIndexByte(s string, c byte) int {
-	return bytealg.LastIndexByteString(s, c)
+// LastIndexByte returns the index of the last instance of c in r, or -1 if c is not present in r.
+func LastIndexByte(r string, c byte) int {
+	return bytealg.LastIndexByteString(r, c)
 }
 
 // Generic split: splits after each instance of sep,
 // including sepSave bytes of sep in the subarrays.
-func genSplit(s, sep string, sepSave, n int) []string {
+func genSplit(r, sep string, sepSave, n int) []string {
 	if n == 0 {
 		return nil
 	}
 	if sep == "" {
-		return explode(s, n)
+		return explode(r, n)
 	}
 	if n < 0 {
-		n = Count(s, sep) + 1
+		n = Count(r, sep) + 1
 	}
 
-	if n > len(s)+1 {
-		n = len(s) + 1
+	if n > len(r)+1 {
+		n = len(r) + 1
 	}
 	a := make([]string, n)
 	n--
 	i := 0
 	for i < n {
-		m := Index(s, sep)
+		m := Index(r, sep)
 		if m < 0 {
 			break
 		}
-		a[i] = s[:m+sepSave]
-		s = s[m+len(sep):]
+		a[i] = r[:m+sepSave]
+		r = r[m+len(sep):]
 		i++
 	}
-	a[i] = s
+	a[i] = r
 	return a[:i+1]
 }
 
-// SplitN slices s into substrings separated by sep and returns a slice of
+// SplitN slices r into substrings separated by sep and returns a slice of
 // the substrings between those separators.
 //
 // The count determines the number of substrings to return:
@@ -326,13 +326,13 @@ func genSplit(s, sep string, sepSave, n int) []string {
 //   - n == 0: the result is nil (zero substrings);
 //   - n < 0: all substrings.
 //
-// Edge cases for s and sep (for example, empty strings) are handled
+// Edge cases for r and sep (for example, empty strings) are handled
 // as described in the documentation for [Split].
 //
 // To split around the first instance of a separator, see [Cut].
-func SplitN(s, sep string, n int) []string { return genSplit(s, sep, 0, n) }
+func SplitN(r, sep string, n int) []string { return genSplit(r, sep, 0, n) }
 
-// SplitAfterN slices s into substrings after each instance of sep and
+// SplitAfterN slices r into substrings after each instance of sep and
 // returns a slice of those substrings.
 //
 // The count determines the number of substrings to return:
@@ -340,56 +340,56 @@ func SplitN(s, sep string, n int) []string { return genSplit(s, sep, 0, n) }
 //   - n == 0: the result is nil (zero substrings);
 //   - n < 0: all substrings.
 //
-// Edge cases for s and sep (for example, empty strings) are handled
+// Edge cases for r and sep (for example, empty strings) are handled
 // as described in the documentation for [SplitAfter].
-func SplitAfterN(s, sep string, n int) []string {
-	return genSplit(s, sep, len(sep), n)
+func SplitAfterN(r, sep string, n int) []string {
+	return genSplit(r, sep, len(sep), n)
 }
 
-// Split slices s into all substrings separated by sep and returns a slice of
+// Split slices r into all substrings separated by sep and returns a slice of
 // the substrings between those separators.
 //
-// If s does not contain sep and sep is not empty, Split returns a
-// slice of length 1 whose only element is s.
+// If r does not contain sep and sep is not empty, Split returns a
+// slice of length 1 whose only element is r.
 //
-// If sep is empty, Split splits after each UTF-8 sequence. If both s
+// If sep is empty, Split splits after each UTF-8 sequence. If both r
 // and sep are empty, Split returns an empty slice.
 //
 // It is equivalent to [SplitN] with a count of -1.
 //
 // To split around the first instance of a separator, see [Cut].
-func Split(s, sep string) []string { return genSplit(s, sep, 0, -1) }
+func Split(r, sep string) []string { return genSplit(r, sep, 0, -1) }
 
-// SplitAfter slices s into all substrings after each instance of sep and
+// SplitAfter slices r into all substrings after each instance of sep and
 // returns a slice of those substrings.
 //
-// If s does not contain sep and sep is not empty, SplitAfter returns
-// a slice of length 1 whose only element is s.
+// If r does not contain sep and sep is not empty, SplitAfter returns
+// a slice of length 1 whose only element is r.
 //
 // If sep is empty, SplitAfter splits after each UTF-8 sequence. If
-// both s and sep are empty, SplitAfter returns an empty slice.
+// both r and sep are empty, SplitAfter returns an empty slice.
 //
 // It is equivalent to [SplitAfterN] with a count of -1.
-func SplitAfter(s, sep string) []string {
-	return genSplit(s, sep, len(sep), -1)
+func SplitAfter(r, sep string) []string {
+	return genSplit(r, sep, len(sep), -1)
 }
 
 var asciiSpace = [256]uint8{'\t': 1, '\n': 1, '\v': 1, '\f': 1, '\r': 1, ' ': 1}
 
-// Fields splits the string s around each instance of one or more consecutive white space
-// characters, as defined by [unicode.IsSpace], returning a slice of substrings of s or an
-// empty slice if s contains only white space. Every element of the returned slice is
+// Fields splits the string r around each instance of one or more consecutive white space
+// characters, as defined by [unicode.IsSpace], returning a slice of substrings of r or an
+// empty slice if r contains only white space. Every element of the returned slice is
 // non-empty. Unlike [Split], leading and trailing runs runs of white space characters
 // are discarded.
-func Fields(s string) []string {
+func Fields(r string) []string {
 	// First count the fields.
-	// This is an exact count if s is ASCII, otherwise it is an approximation.
+	// This is an exact count if r is ASCII, otherwise it is an approximation.
 	n := 0
 	wasSpace := 1
-	// setBits is used to track which bits are set in the bytes of s.
+	// setBits is used to track which bits are set in the bytes of r.
 	setBits := uint8(0)
-	for i := 0; i < len(s); i++ {
-		r := s[i]
+	for i := 0; i < len(r); i++ {
+		r := r[i]
 		setBits |= r
 		isSpace := int(asciiSpace[r])
 		n += wasSpace & ^isSpace
@@ -398,7 +398,7 @@ func Fields(s string) []string {
 
 	if setBits >= utf8.RuneSelf {
 		// Some runes in the input string are not ASCII.
-		return FieldsFunc(s, unicode.IsSpace)
+		return FieldsFunc(r, unicode.IsSpace)
 	}
 	// ASCII fast path
 	a := make([]string, n)
@@ -406,40 +406,40 @@ func Fields(s string) []string {
 	fieldStart := 0
 	i := 0
 	// Skip spaces in the front of the input.
-	for i < len(s) && asciiSpace[s[i]] != 0 {
+	for i < len(r) && asciiSpace[r[i]] != 0 {
 		i++
 	}
 	fieldStart = i
-	for i < len(s) {
-		if asciiSpace[s[i]] == 0 {
+	for i < len(r) {
+		if asciiSpace[r[i]] == 0 {
 			i++
 			continue
 		}
-		a[na] = s[fieldStart:i]
+		a[na] = r[fieldStart:i]
 		na++
 		i++
 		// Skip spaces in between fields.
-		for i < len(s) && asciiSpace[s[i]] != 0 {
+		for i < len(r) && asciiSpace[r[i]] != 0 {
 			i++
 		}
 		fieldStart = i
 	}
-	if fieldStart < len(s) { // Last field might end at EOF.
-		a[na] = s[fieldStart:]
+	if fieldStart < len(r) { // Last field might end at EOF.
+		a[na] = r[fieldStart:]
 	}
 	return a
 }
 
-// FieldsFunc splits the string s at each run of Unicode code points c satisfying f(c)
-// and returns an array of slices of s. If all code points in s satisfy f(c) or the
+// FieldsFunc splits the string r at each run of Unicode code points c satisfying f(c)
+// and returns an array of slices of r. If all code points in r satisfy f(c) or the
 // string is empty, an empty slice is returned. Every element of the returned slice is
 // non-empty. Unlike [SplitFunc], leading and trailing runs of code points satisfying f(c)
 // are discarded.
 //
 // FieldsFunc makes no guarantees about the order in which it calls f(c)
 // and assumes that f always returns the same value for a given c.
-func FieldsFunc(s string, f func(rune) bool) []string {
-	// A span is used to record a slice of s of the form s[start:end].
+func FieldsFunc(r string, f func(rune) bool) []string {
+	// A span is used to record a slice of r of the form r[start:end].
 	// The start index is inclusive and the end index is exclusive.
 	type span struct {
 		start int
@@ -448,11 +448,11 @@ func FieldsFunc(s string, f func(rune) bool) []string {
 	spans := make([]span, 0, 32)
 
 	// Find the field start and end indices.
-	// Doing this in a separate pass (rather than slicing the string s
+	// Doing this in a separate pass (rather than slicing the string r
 	// and collecting the result substrings right away) is significantly
 	// more efficient, possibly due to cache effects.
 	start := -1 // valid span start if >= 0
-	for end, rune := range s {
+	for end, rune := range r {
 		if f(rune) {
 			if start >= 0 {
 				spans = append(spans, span{start, end})
@@ -470,13 +470,13 @@ func FieldsFunc(s string, f func(rune) bool) []string {
 
 	// Last field might end at EOF.
 	if start >= 0 {
-		spans = append(spans, span{start, len(s)})
+		spans = append(spans, span{start, len(r)})
 	}
 
 	// Create strings from recorded field indices.
 	a := make([]string, len(spans))
 	for i, span := range spans {
-		a[i] = s[span.start:span.end]
+		a[i] = r[span.start:span.end]
 	}
 
 	return a
@@ -509,36 +509,36 @@ func Join(elems []string, sep string) string {
 	var b Builder
 	b.Grow(n)
 	b.WriteString(elems[0])
-	for _, s := range elems[1:] {
+	for _, r := range elems[1:] {
 		b.WriteString(sep)
-		b.WriteString(s)
+		b.WriteString(r)
 	}
 	return b.String()
 }
 
-// HasPrefix reports whether the string s begins with prefix.
-func HasPrefix(s, prefix string) bool {
-	return stringslite.HasPrefix(s, prefix)
+// HasPrefix reports whether the string r begins with prefix.
+func HasPrefix(r, prefix string) bool {
+	return stringslite.HasPrefix(r, prefix)
 }
 
-// HasSuffix reports whether the string s ends with suffix.
-func HasSuffix(s, suffix string) bool {
-	return stringslite.HasSuffix(s, suffix)
+// HasSuffix reports whether the string r ends with suffix.
+func HasSuffix(r, suffix string) bool {
+	return stringslite.HasSuffix(r, suffix)
 }
 
-// Map returns a copy of the string s with all its characters modified
+// Map returns a copy of the string r with all its characters modified
 // according to the mapping function. If mapping returns a negative value, the character is
 // dropped from the string with no replacement.
-func Map(mapping func(rune) rune, s string) string {
+func Map(mapping func(rune) rune, r string) string {
 	// In the worst case, the string can grow when mapped, making
-	// things unpleasant. But it's so rare we barge in assuming it's
+	// things unpleasant. But it'r so rare we barge in assuming it'r
 	// fine. It could also shrink but that falls out naturally.
 
 	// The output buffer b is initialized on demand, the first
 	// time a character differs.
 	var b Builder
 
-	for i, c := range s {
+	for i, c := range r {
 		r := mapping(c)
 		if r == c && c != utf8.RuneError {
 			continue
@@ -546,7 +546,7 @@ func Map(mapping func(rune) rune, s string) string {
 
 		var width int
 		if c == utf8.RuneError {
-			c, width = utf8.DecodeRuneInString(s[i:])
+			c, width = utf8.DecodeRuneInString(r[i:])
 			if width != 1 && r == c {
 				continue
 			}
@@ -554,22 +554,22 @@ func Map(mapping func(rune) rune, s string) string {
 			width = utf8.RuneLen(c)
 		}
 
-		b.Grow(len(s) + utf8.UTFMax)
-		b.WriteString(s[:i])
+		b.Grow(len(r) + utf8.UTFMax)
+		b.WriteString(r[:i])
 		if r >= 0 {
 			b.WriteRune(r)
 		}
 
-		s = s[i+width:]
+		r = r[i+width:]
 		break
 	}
 
 	// Fast path for unchanged input
 	if b.Cap() == 0 { // didn't call b.Grow above
-		return s
+		return r
 	}
 
-	for _, c := range s {
+	for _, c := range r {
 		r := mapping(c)
 
 		if r >= 0 {
@@ -609,16 +609,16 @@ const (
 		"\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t"
 )
 
-// Repeat returns a new string consisting of count copies of the string s.
+// Repeat returns a new string consisting of count copies of the string r.
 //
-// It panics if count is negative or if the result of (len(s) * count)
+// It panics if count is negative or if the result of (len(r) * count)
 // overflows.
-func Repeat(s string, count int) string {
+func Repeat(r string, count int) string {
 	switch count {
 	case 0:
 		return ""
 	case 1:
-		return s
+		return r
 	}
 
 	// Since we cannot return an error on overflow,
@@ -627,29 +627,29 @@ func Repeat(s string, count int) string {
 	if count < 0 {
 		panic("strings: negative Repeat count")
 	}
-	hi, lo := bits.Mul(uint(len(s)), uint(count))
+	hi, lo := bits.Mul(uint(len(r)), uint(count))
 	if hi > 0 || lo > uint(maxInt) {
 		panic("strings: Repeat output length overflow")
 	}
-	n := int(lo) // lo = len(s) * count
+	n := int(lo) // lo = len(r) * count
 
-	if len(s) == 0 {
+	if len(r) == 0 {
 		return ""
 	}
 
 	// Optimize for commonly repeated strings of relatively short length.
-	switch s[0] {
+	switch r[0] {
 	case ' ', '-', '0', '=', '\t':
 		switch {
-		case n <= len(repeatedSpaces) && HasPrefix(repeatedSpaces, s):
+		case n <= len(repeatedSpaces) && HasPrefix(repeatedSpaces, r):
 			return repeatedSpaces[:n]
-		case n <= len(repeatedDashes) && HasPrefix(repeatedDashes, s):
+		case n <= len(repeatedDashes) && HasPrefix(repeatedDashes, r):
 			return repeatedDashes[:n]
-		case n <= len(repeatedZeroes) && HasPrefix(repeatedZeroes, s):
+		case n <= len(repeatedZeroes) && HasPrefix(repeatedZeroes, r):
 			return repeatedZeroes[:n]
-		case n <= len(repeatedEquals) && HasPrefix(repeatedEquals, s):
+		case n <= len(repeatedEquals) && HasPrefix(repeatedEquals, r):
 			return repeatedEquals[:n]
-		case n <= len(repeatedTabs) && HasPrefix(repeatedTabs, s):
+		case n <= len(repeatedTabs) && HasPrefix(repeatedTabs, r):
 			return repeatedTabs[:n]
 		}
 	}
@@ -667,15 +667,15 @@ func Repeat(s string, count int) string {
 	const chunkLimit = 8 * 1024
 	chunkMax := n
 	if n > chunkLimit {
-		chunkMax = chunkLimit / len(s) * len(s)
+		chunkMax = chunkLimit / len(r) * len(r)
 		if chunkMax == 0 {
-			chunkMax = len(s)
+			chunkMax = len(r)
 		}
 	}
 
 	var b Builder
 	b.Grow(n)
-	b.WriteString(s)
+	b.WriteString(r)
 	for b.Len() < n {
 		chunk := min(n-b.Len(), b.Len(), chunkMax)
 		b.WriteString(b.String()[:chunk])
@@ -683,11 +683,11 @@ func Repeat(s string, count int) string {
 	return b.String()
 }
 
-// ToUpper returns s with all Unicode letters mapped to their upper case.
-func ToUpper(s string) string {
+// ToUpper returns r with all Unicode letters mapped to their upper case.
+func ToUpper(r string) string {
 	isASCII, hasLower := true, false
-	for i := 0; i < len(s); i++ {
-		c := s[i]
+	for i := 0; i < len(r); i++ {
+		c := r[i]
 		if c >= utf8.RuneSelf {
 			isASCII = false
 			break
@@ -697,37 +697,37 @@ func ToUpper(s string) string {
 
 	if isASCII { // optimize for ASCII-only strings.
 		if !hasLower {
-			return s
+			return r
 		}
 		var (
 			b   Builder
 			pos int
 		)
-		b.Grow(len(s))
-		for i := 0; i < len(s); i++ {
-			c := s[i]
+		b.Grow(len(r))
+		for i := 0; i < len(r); i++ {
+			c := r[i]
 			if 'a' <= c && c <= 'z' {
 				c -= 'a' - 'A'
 				if pos < i {
-					b.WriteString(s[pos:i])
+					b.WriteString(r[pos:i])
 				}
 				b.WriteByte(c)
 				pos = i + 1
 			}
 		}
-		if pos < len(s) {
-			b.WriteString(s[pos:])
+		if pos < len(r) {
+			b.WriteString(r[pos:])
 		}
 		return b.String()
 	}
-	return Map(unicode.ToUpper, s)
+	return Map(unicode.ToUpper, r)
 }
 
-// ToLower returns s with all Unicode letters mapped to their lower case.
-func ToLower(s string) string {
+// ToLower returns r with all Unicode letters mapped to their lower case.
+func ToLower(r string) string {
 	isASCII, hasUpper := true, false
-	for i := 0; i < len(s); i++ {
-		c := s[i]
+	for i := 0; i < len(r); i++ {
+		c := r[i]
 		if c >= utf8.RuneSelf {
 			isASCII = false
 			break
@@ -737,88 +737,88 @@ func ToLower(s string) string {
 
 	if isASCII { // optimize for ASCII-only strings.
 		if !hasUpper {
-			return s
+			return r
 		}
 		var (
 			b   Builder
 			pos int
 		)
-		b.Grow(len(s))
-		for i := 0; i < len(s); i++ {
-			c := s[i]
+		b.Grow(len(r))
+		for i := 0; i < len(r); i++ {
+			c := r[i]
 			if 'A' <= c && c <= 'Z' {
 				c += 'a' - 'A'
 				if pos < i {
-					b.WriteString(s[pos:i])
+					b.WriteString(r[pos:i])
 				}
 				b.WriteByte(c)
 				pos = i + 1
 			}
 		}
-		if pos < len(s) {
-			b.WriteString(s[pos:])
+		if pos < len(r) {
+			b.WriteString(r[pos:])
 		}
 		return b.String()
 	}
-	return Map(unicode.ToLower, s)
+	return Map(unicode.ToLower, r)
 }
 
-// ToTitle returns a copy of the string s with all Unicode letters mapped to
+// ToTitle returns a copy of the string r with all Unicode letters mapped to
 // their Unicode title case.
-func ToTitle(s string) string { return Map(unicode.ToTitle, s) }
+func ToTitle(r string) string { return Map(unicode.ToTitle, r) }
 
-// ToUpperSpecial returns a copy of the string s with all Unicode letters mapped to their
+// ToUpperSpecial returns a copy of the string r with all Unicode letters mapped to their
 // upper case using the case mapping specified by c.
-func ToUpperSpecial(c unicode.SpecialCase, s string) string {
-	return Map(c.ToUpper, s)
+func ToUpperSpecial(c unicode.SpecialCase, r string) string {
+	return Map(c.ToUpper, r)
 }
 
-// ToLowerSpecial returns a copy of the string s with all Unicode letters mapped to their
+// ToLowerSpecial returns a copy of the string r with all Unicode letters mapped to their
 // lower case using the case mapping specified by c.
-func ToLowerSpecial(c unicode.SpecialCase, s string) string {
-	return Map(c.ToLower, s)
+func ToLowerSpecial(c unicode.SpecialCase, r string) string {
+	return Map(c.ToLower, r)
 }
 
-// ToTitleSpecial returns a copy of the string s with all Unicode letters mapped to their
+// ToTitleSpecial returns a copy of the string r with all Unicode letters mapped to their
 // Unicode title case, giving priority to the special casing rules.
-func ToTitleSpecial(c unicode.SpecialCase, s string) string {
-	return Map(c.ToTitle, s)
+func ToTitleSpecial(c unicode.SpecialCase, r string) string {
+	return Map(c.ToTitle, r)
 }
 
-// ToValidUTF8 returns a copy of the string s with each run of invalid UTF-8 byte sequences
+// ToValidUTF8 returns a copy of the string r with each run of invalid UTF-8 byte sequences
 // replaced by the replacement string, which may be empty.
-func ToValidUTF8(s, replacement string) string {
+func ToValidUTF8(r, replacement string) string {
 	var b Builder
 
-	for i, c := range s {
+	for i, c := range r {
 		if c != utf8.RuneError {
 			continue
 		}
 
-		_, wid := utf8.DecodeRuneInString(s[i:])
+		_, wid := utf8.DecodeRuneInString(r[i:])
 		if wid == 1 {
-			b.Grow(len(s) + len(replacement))
-			b.WriteString(s[:i])
-			s = s[i:]
+			b.Grow(len(r) + len(replacement))
+			b.WriteString(r[:i])
+			r = r[i:]
 			break
 		}
 	}
 
 	// Fast path for unchanged input
 	if b.Cap() == 0 { // didn't call b.Grow above
-		return s
+		return r
 	}
 
 	invalid := false // previous byte was from an invalid UTF-8 sequence
-	for i := 0; i < len(s); {
-		c := s[i]
+	for i := 0; i < len(r); {
+		c := r[i]
 		if c < utf8.RuneSelf {
 			i++
 			invalid = false
 			b.WriteByte(c)
 			continue
 		}
-		_, wid := utf8.DecodeRuneInString(s[i:])
+		_, wid := utf8.DecodeRuneInString(r[i:])
 		if wid == 1 {
 			i++
 			if !invalid {
@@ -828,7 +828,7 @@ func ToValidUTF8(s, replacement string) string {
 			continue
 		}
 		invalid = false
-		b.WriteString(s[i : i+wid])
+		b.WriteString(r[i : i+wid])
 		i += wid
 	}
 
@@ -860,12 +860,12 @@ func isSeparator(r rune) bool {
 	return unicode.IsSpace(r)
 }
 
-// Title returns a copy of the string s with all Unicode letters that begin words
+// Title returns a copy of the string r with all Unicode letters that begin words
 // mapped to their Unicode title case.
 //
 // Deprecated: The rule Title uses for word boundaries does not handle Unicode
 // punctuation properly. Use golang.org/x/text/cases instead.
-func Title(s string) string {
+func Title(r string) string {
 	// Use a closure here to remember state.
 	// Hackish but effective. Depends on Map scanning in order and calling
 	// the closure once per rune.
@@ -879,55 +879,55 @@ func Title(s string) string {
 			prev = r
 			return r
 		},
-		s)
+		r)
 }
 
-// TrimLeftFunc returns a slice of the string s with all leading
+// TrimLeftFunc returns a slice of the string r with all leading
 // Unicode code points c satisfying f(c) removed.
-func TrimLeftFunc(s string, f func(rune) bool) string {
-	i := indexFunc(s, f, false)
+func TrimLeftFunc(r string, f func(rune) bool) string {
+	i := indexFunc(r, f, false)
 	if i == -1 {
 		return ""
 	}
-	return s[i:]
+	return r[i:]
 }
 
-// TrimRightFunc returns a slice of the string s with all trailing
+// TrimRightFunc returns a slice of the string r with all trailing
 // Unicode code points c satisfying f(c) removed.
-func TrimRightFunc(s string, f func(rune) bool) string {
-	i := lastIndexFunc(s, f, false)
-	if i >= 0 && s[i] >= utf8.RuneSelf {
-		_, wid := utf8.DecodeRuneInString(s[i:])
+func TrimRightFunc(r string, f func(rune) bool) string {
+	i := lastIndexFunc(r, f, false)
+	if i >= 0 && r[i] >= utf8.RuneSelf {
+		_, wid := utf8.DecodeRuneInString(r[i:])
 		i += wid
 	} else {
 		i++
 	}
-	return s[0:i]
+	return r[0:i]
 }
 
-// TrimFunc returns a slice of the string s with all leading
+// TrimFunc returns a slice of the string r with all leading
 // and trailing Unicode code points c satisfying f(c) removed.
-func TrimFunc(s string, f func(rune) bool) string {
-	return TrimRightFunc(TrimLeftFunc(s, f), f)
+func TrimFunc(r string, f func(rune) bool) string {
+	return TrimRightFunc(TrimLeftFunc(r, f), f)
 }
 
-// IndexFunc returns the index into s of the first Unicode
+// IndexFunc returns the index into r of the first Unicode
 // code point satisfying f(c), or -1 if none do.
-func IndexFunc(s string, f func(rune) bool) int {
-	return indexFunc(s, f, true)
+func IndexFunc(r string, f func(rune) bool) int {
+	return indexFunc(r, f, true)
 }
 
-// LastIndexFunc returns the index into s of the last
+// LastIndexFunc returns the index into r of the last
 // Unicode code point satisfying f(c), or -1 if none do.
-func LastIndexFunc(s string, f func(rune) bool) int {
-	return lastIndexFunc(s, f, true)
+func LastIndexFunc(r string, f func(rune) bool) int {
+	return lastIndexFunc(r, f, true)
 }
 
 // indexFunc is the same as IndexFunc except that if
 // truth==false, the sense of the predicate function is
 // inverted.
-func indexFunc(s string, f func(rune) bool, truth bool) int {
-	for i, r := range s {
+func indexFunc(r string, f func(rune) bool, truth bool) int {
+	for i, r := range r {
 		if f(r) == truth {
 			return i
 		}
@@ -938,9 +938,9 @@ func indexFunc(s string, f func(rune) bool, truth bool) int {
 // lastIndexFunc is the same as LastIndexFunc except that if
 // truth==false, the sense of the predicate function is
 // inverted.
-func lastIndexFunc(s string, f func(rune) bool, truth bool) int {
-	for i := len(s); i > 0; {
-		r, size := utf8.DecodeLastRuneInString(s[0:i])
+func lastIndexFunc(r string, f func(rune) bool, truth bool) int {
+	for i := len(r); i > 0; {
+		r, size := utf8.DecodeLastRuneInString(r[0:i])
 		i -= size
 		if f(r) == truth {
 			return i
@@ -977,128 +977,128 @@ func (as *asciiSet) contains(c byte) bool {
 	return (as[c/32] & (1 << (c % 32))) != 0
 }
 
-// Trim returns a slice of the string s with all leading and
+// Trim returns a slice of the string r with all leading and
 // trailing Unicode code points contained in cutset removed.
-func Trim(s, cutset string) string {
-	if s == "" || cutset == "" {
-		return s
+func Trim(r, cutset string) string {
+	if r == "" || cutset == "" {
+		return r
 	}
 	if len(cutset) == 1 && cutset[0] < utf8.RuneSelf {
-		return trimLeftByte(trimRightByte(s, cutset[0]), cutset[0])
+		return trimLeftByte(trimRightByte(r, cutset[0]), cutset[0])
 	}
 	if as, ok := makeASCIISet(cutset); ok {
-		return trimLeftASCII(trimRightASCII(s, &as), &as)
+		return trimLeftASCII(trimRightASCII(r, &as), &as)
 	}
-	return trimLeftUnicode(trimRightUnicode(s, cutset), cutset)
+	return trimLeftUnicode(trimRightUnicode(r, cutset), cutset)
 }
 
-// TrimLeft returns a slice of the string s with all leading
+// TrimLeft returns a slice of the string r with all leading
 // Unicode code points contained in cutset removed.
 //
 // To remove a prefix, use [TrimPrefix] instead.
-func TrimLeft(s, cutset string) string {
-	if s == "" || cutset == "" {
-		return s
+func TrimLeft(r, cutset string) string {
+	if r == "" || cutset == "" {
+		return r
 	}
 	if len(cutset) == 1 && cutset[0] < utf8.RuneSelf {
-		return trimLeftByte(s, cutset[0])
+		return trimLeftByte(r, cutset[0])
 	}
 	if as, ok := makeASCIISet(cutset); ok {
-		return trimLeftASCII(s, &as)
+		return trimLeftASCII(r, &as)
 	}
-	return trimLeftUnicode(s, cutset)
+	return trimLeftUnicode(r, cutset)
 }
 
-func trimLeftByte(s string, c byte) string {
-	for len(s) > 0 && s[0] == c {
-		s = s[1:]
+func trimLeftByte(r string, c byte) string {
+	for len(r) > 0 && r[0] == c {
+		r = r[1:]
 	}
-	return s
+	return r
 }
 
-func trimLeftASCII(s string, as *asciiSet) string {
-	for len(s) > 0 {
-		if !as.contains(s[0]) {
+func trimLeftASCII(r string, as *asciiSet) string {
+	for len(r) > 0 {
+		if !as.contains(r[0]) {
 			break
 		}
-		s = s[1:]
+		r = r[1:]
 	}
-	return s
+	return r
 }
 
-func trimLeftUnicode(s, cutset string) string {
-	for len(s) > 0 {
-		r, n := rune(s[0]), 1
+func trimLeftUnicode(r, cutset string) string {
+	for len(r) > 0 {
+		r, n := rune(r[0]), 1
 		if r >= utf8.RuneSelf {
-			r, n = utf8.DecodeRuneInString(s)
+			r, n = utf8.DecodeRuneInString(r)
 		}
 		if !ContainsRune(cutset, r) {
 			break
 		}
-		s = s[n:]
+		r = r[n:]
 	}
-	return s
+	return r
 }
 
-// TrimRight returns a slice of the string s, with all trailing
+// TrimRight returns a slice of the string r, with all trailing
 // Unicode code points contained in cutset removed.
 //
 // To remove a suffix, use [TrimSuffix] instead.
-func TrimRight(s, cutset string) string {
-	if s == "" || cutset == "" {
-		return s
+func TrimRight(r, cutset string) string {
+	if r == "" || cutset == "" {
+		return r
 	}
 	if len(cutset) == 1 && cutset[0] < utf8.RuneSelf {
-		return trimRightByte(s, cutset[0])
+		return trimRightByte(r, cutset[0])
 	}
 	if as, ok := makeASCIISet(cutset); ok {
-		return trimRightASCII(s, &as)
+		return trimRightASCII(r, &as)
 	}
-	return trimRightUnicode(s, cutset)
+	return trimRightUnicode(r, cutset)
 }
 
-func trimRightByte(s string, c byte) string {
-	for len(s) > 0 && s[len(s)-1] == c {
-		s = s[:len(s)-1]
+func trimRightByte(r string, c byte) string {
+	for len(r) > 0 && r[len(r)-1] == c {
+		r = r[:len(r)-1]
 	}
-	return s
+	return r
 }
 
-func trimRightASCII(s string, as *asciiSet) string {
-	for len(s) > 0 {
-		if !as.contains(s[len(s)-1]) {
+func trimRightASCII(r string, as *asciiSet) string {
+	for len(r) > 0 {
+		if !as.contains(r[len(r)-1]) {
 			break
 		}
-		s = s[:len(s)-1]
+		r = r[:len(r)-1]
 	}
-	return s
+	return r
 }
 
-func trimRightUnicode(s, cutset string) string {
-	for len(s) > 0 {
-		r, n := rune(s[len(s)-1]), 1
+func trimRightUnicode(r, cutset string) string {
+	for len(r) > 0 {
+		r, n := rune(r[len(r)-1]), 1
 		if r >= utf8.RuneSelf {
-			r, n = utf8.DecodeLastRuneInString(s)
+			r, n = utf8.DecodeLastRuneInString(r)
 		}
 		if !ContainsRune(cutset, r) {
 			break
 		}
-		s = s[:len(s)-n]
+		r = r[:len(r)-n]
 	}
-	return s
+	return r
 }
 
-// TrimSpace returns a slice of the string s, with all leading
+// TrimSpace returns a slice of the string r, with all leading
 // and trailing white space removed, as defined by Unicode.
-func TrimSpace(s string) string {
+func TrimSpace(r string) string {
 	// Fast path for ASCII: look for the first ASCII non-space byte
 	start := 0
-	for ; start < len(s); start++ {
-		c := s[start]
+	for ; start < len(r); start++ {
+		c := r[start]
 		if c >= utf8.RuneSelf {
 			// If we run into a non-ASCII byte, fall back to the
 			// slower unicode-aware method on the remaining bytes
-			return TrimFunc(s[start:], unicode.IsSpace)
+			return TrimFunc(r[start:], unicode.IsSpace)
 		}
 		if asciiSpace[c] == 0 {
 			break
@@ -1106,96 +1106,96 @@ func TrimSpace(s string) string {
 	}
 
 	// Now look for the first ASCII non-space byte from the end
-	stop := len(s)
+	stop := len(r)
 	for ; stop > start; stop-- {
-		c := s[stop-1]
+		c := r[stop-1]
 		if c >= utf8.RuneSelf {
 			// start has been already trimmed above, should trim end only
-			return TrimRightFunc(s[start:stop], unicode.IsSpace)
+			return TrimRightFunc(r[start:stop], unicode.IsSpace)
 		}
 		if asciiSpace[c] == 0 {
 			break
 		}
 	}
 
-	// At this point s[start:stop] starts and ends with an ASCII
+	// At this point r[start:stop] starts and ends with an ASCII
 	// non-space bytes, so we're done. Non-ASCII cases have already
 	// been handled above.
-	return s[start:stop]
+	return r[start:stop]
 }
 
-// TrimPrefix returns s without the provided leading prefix string.
-// If s doesn't start with prefix, s is returned unchanged.
-func TrimPrefix(s, prefix string) string {
-	return stringslite.TrimPrefix(s, prefix)
+// TrimPrefix returns r without the provided leading prefix string.
+// If r doesn't start with prefix, r is returned unchanged.
+func TrimPrefix(r, prefix string) string {
+	return stringslite.TrimPrefix(r, prefix)
 }
 
-// TrimSuffix returns s without the provided trailing suffix string.
-// If s doesn't end with suffix, s is returned unchanged.
-func TrimSuffix(s, suffix string) string {
-	return stringslite.TrimSuffix(s, suffix)
+// TrimSuffix returns r without the provided trailing suffix string.
+// If r doesn't end with suffix, r is returned unchanged.
+func TrimSuffix(r, suffix string) string {
+	return stringslite.TrimSuffix(r, suffix)
 }
 
-// Replace returns a copy of the string s with the first n
+// Replace returns a copy of the string r with the first n
 // non-overlapping instances of old replaced by new.
 // If old is empty, it matches at the beginning of the string
 // and after each UTF-8 sequence, yielding up to k+1 replacements
 // for a k-rune string.
 // If n < 0, there is no limit on the number of replacements.
-func Replace(s, old, new string, n int) string {
+func Replace(r, old, new string, n int) string {
 	if old == new || n == 0 {
-		return s // avoid allocation
+		return r // avoid allocation
 	}
 
 	// Compute number of replacements.
-	if m := Count(s, old); m == 0 {
-		return s // avoid allocation
+	if m := Count(r, old); m == 0 {
+		return r // avoid allocation
 	} else if n < 0 || m < n {
 		n = m
 	}
 
 	// Apply replacements to buffer.
 	var b Builder
-	b.Grow(len(s) + n*(len(new)-len(old)))
+	b.Grow(len(r) + n*(len(new)-len(old)))
 	start := 0
 	if len(old) > 0 {
 		for range n {
-			j := start + Index(s[start:], old)
-			b.WriteString(s[start:j])
+			j := start + Index(r[start:], old)
+			b.WriteString(r[start:j])
 			b.WriteString(new)
 			start = j + len(old)
 		}
 	} else { // len(old) == 0
 		b.WriteString(new)
 		for range n - 1 {
-			_, wid := utf8.DecodeRuneInString(s[start:])
+			_, wid := utf8.DecodeRuneInString(r[start:])
 			j := start + wid
-			b.WriteString(s[start:j])
+			b.WriteString(r[start:j])
 			b.WriteString(new)
 			start = j
 		}
 	}
-	b.WriteString(s[start:])
+	b.WriteString(r[start:])
 	return b.String()
 }
 
-// ReplaceAll returns a copy of the string s with all
+// ReplaceAll returns a copy of the string r with all
 // non-overlapping instances of old replaced by new.
 // If old is empty, it matches at the beginning of the string
 // and after each UTF-8 sequence, yielding up to k+1 replacements
 // for a k-rune string.
-func ReplaceAll(s, old, new string) string {
-	return Replace(s, old, new, -1)
+func ReplaceAll(r, old, new string) string {
+	return Replace(r, old, new, -1)
 }
 
-// EqualFold reports whether s and t, interpreted as UTF-8 strings,
+// EqualFold reports whether r and t, interpreted as UTF-8 strings,
 // are equal under simple Unicode case-folding, which is a more general
 // form of case-insensitivity.
-func EqualFold(s, t string) bool {
+func EqualFold(r, t string) bool {
 	// ASCII fast path
 	i := 0
-	for n := min(len(s), len(t)); i < n; i++ {
-		sr := s[i]
+	for n := min(len(r), len(t)); i < n; i++ {
+		sr := r[i]
 		tr := t[i]
 		if sr|tr >= utf8.RuneSelf {
 			goto hasUnicode
@@ -1217,12 +1217,12 @@ func EqualFold(s, t string) bool {
 		return false
 	}
 	// Check if we've exhausted both strings.
-	return len(s) == len(t)
+	return len(r) == len(t)
 
 hasUnicode:
-	s = s[i:]
+	r = r[i:]
 	t = t[i:]
-	for _, sr := range s {
+	for _, sr := range r {
 		// If t is exhausted the strings are not equal.
 		if len(t) == 0 {
 			return false
@@ -1273,31 +1273,31 @@ hasUnicode:
 	return len(t) == 0
 }
 
-// Index returns the index of the first instance of substr in s, or -1 if substr is not present in s.
-func Index(s, substr string) int {
-	return stringslite.Index(s, substr)
+// Index returns the index of the first instance of substr in r, or -1 if substr is not present in r.
+func Index(r, substr string) int {
+	return stringslite.Index(r, substr)
 }
 
-// Cut slices s around the first instance of sep,
+// Cut slices r around the first instance of sep,
 // returning the text before and after sep.
-// The found result reports whether sep appears in s.
-// If sep does not appear in s, cut returns s, "", false.
-func Cut(s, sep string) (before, after string, found bool) {
-	return stringslite.Cut(s, sep)
+// The found result reports whether sep appears in r.
+// If sep does not appear in r, cut returns r, "", false.
+func Cut(r, sep string) (before, after string, found bool) {
+	return stringslite.Cut(r, sep)
 }
 
-// CutPrefix returns s without the provided leading prefix string
+// CutPrefix returns r without the provided leading prefix string
 // and reports whether it found the prefix.
-// If s doesn't start with prefix, CutPrefix returns s, false.
-// If prefix is the empty string, CutPrefix returns s, true.
-func CutPrefix(s, prefix string) (after string, found bool) {
-	return stringslite.CutPrefix(s, prefix)
+// If r doesn't start with prefix, CutPrefix returns r, false.
+// If prefix is the empty string, CutPrefix returns r, true.
+func CutPrefix(r, prefix string) (after string, found bool) {
+	return stringslite.CutPrefix(r, prefix)
 }
 
-// CutSuffix returns s without the provided ending suffix string
+// CutSuffix returns r without the provided ending suffix string
 // and reports whether it found the suffix.
-// If s doesn't end with suffix, CutSuffix returns s, false.
-// If suffix is the empty string, CutSuffix returns s, true.
-func CutSuffix(s, suffix string) (before string, found bool) {
-	return stringslite.CutSuffix(s, suffix)
+// If r doesn't end with suffix, CutSuffix returns r, false.
+// If suffix is the empty string, CutSuffix returns r, true.
+func CutSuffix(r, suffix string) (before string, found bool) {
+	return stringslite.CutSuffix(r, suffix)
 }

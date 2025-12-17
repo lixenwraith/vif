@@ -14,13 +14,19 @@ import (
 type MaterializeSystem struct {
 	world *engine.World
 	res   engine.CoreResources
+
+	matStore  *engine.Store[components.MaterializeComponent]
+	protStore *engine.Store[components.ProtectionComponent]
 }
 
 // NewMaterializeSystem creates a new materialize system
-func NewMaterializeSystem(world *engine.World) *MaterializeSystem {
+func NewMaterializeSystem(world *engine.World) engine.System {
 	return &MaterializeSystem{
 		world: world,
 		res:   engine.GetCoreResources(world),
+
+		matStore:  engine.GetStore[components.MaterializeComponent](world),
+		protStore: engine.GetStore[components.ProtectionComponent](world),
 	}
 }
 
@@ -54,7 +60,7 @@ func (s *MaterializeSystem) Update(world *engine.World, dt time.Duration) {
 		dtSeconds = 0.1
 	}
 
-	entities := world.Materializers.All()
+	entities := s.matStore.All()
 	if len(entities) == 0 {
 		return
 	}
@@ -68,7 +74,7 @@ func (s *MaterializeSystem) Update(world *engine.World, dt time.Duration) {
 	targets := make(map[uint64]*targetState)
 
 	for _, entity := range entities {
-		mat, ok := world.Materializers.Get(entity)
+		mat, ok := s.matStore.Get(entity)
 		if !ok {
 			continue
 		}
@@ -136,7 +142,7 @@ func (s *MaterializeSystem) Update(world *engine.World, dt time.Duration) {
 			world.Positions.Add(entity, components.PositionComponent{X: newGridX, Y: newGridY})
 		}
 
-		world.Materializers.Add(entity, mat)
+		s.matStore.Add(entity, mat)
 	}
 
 	// --- Target Completion Handling ---
@@ -227,9 +233,9 @@ func (s *MaterializeSystem) spawnMaterializers(world *engine.World, targetX, tar
 		// Create Entity
 		entity := world.CreateEntity()
 		world.Positions.Add(entity, components.PositionComponent{X: startGridX, Y: startGridY})
-		world.Materializers.Add(entity, comp)
+		s.matStore.Add(entity, comp)
 		// Protect from cull/drain during animation
-		world.Protections.Add(entity, components.ProtectionComponent{
+		s.protStore.Add(entity, components.ProtectionComponent{
 			Mask: components.ProtectFromDrain | components.ProtectFromCull,
 		})
 	}

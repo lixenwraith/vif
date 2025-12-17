@@ -17,6 +17,7 @@ type PositionStore struct {
 	entities   []core.Entity // Dense array for cache-friendly iteration
 	grid       *SpatialGrid
 	world      *World // Reference for z-index lookups
+	resolver   *ZIndexResolver
 }
 
 // NewPositionStore creates a new position store with spatial indexing
@@ -199,9 +200,17 @@ func (ps *PositionStore) SetWorld(w *World) {
 	ps.world = w
 }
 
+// SetZIndexResolver sets the cached resolver reference
+// Called once by ZIndexResolver when created during bootstrap
+func (ps *PositionStore) SetZIndexResolver(z *ZIndexResolver) {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	ps.resolver = z
+}
+
 // GetTopEntityFiltered returns the highest z-index entity at position that passes filter
 // Returns 0 if no matching entity found
-func (ps *PositionStore) GetTopEntityFiltered(x, y int, world *World, filter func(core.Entity) bool) core.Entity {
+func (ps *PositionStore) GetTopEntityFiltered(x, y int, filter func(core.Entity) bool) core.Entity {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
 
@@ -210,7 +219,11 @@ func (ps *PositionStore) GetTopEntityFiltered(x, y int, world *World, filter fun
 		return 0
 	}
 
-	return SelectTopEntityFiltered(view, world, filter)
+	if ps.resolver == nil {
+		return 0
+	}
+
+	return ps.resolver.SelectTopEntityFiltered(view, filter)
 }
 
 // --- Batch Implementation ---

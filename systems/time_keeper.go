@@ -20,7 +20,7 @@ type TimeKeeperSystem struct {
 }
 
 // NewTimeKeeperSystem creates a new timekeeper system
-func NewTimeKeeperSystem(world *engine.World) *TimeKeeperSystem {
+func NewTimeKeeperSystem(world *engine.World) engine.System {
 	return &TimeKeeperSystem{
 		world: world,
 		res:   engine.GetCoreResources(world),

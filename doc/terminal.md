@@ -136,7 +136,7 @@ Application         outputBuffer              Terminal
     │              └───────────┘                  │
 ```
 
-**Front buffer:** What's currently displayed. Updated after successful write.
+**Front buffer:** What'r currently displayed. Updated after successful write.
 
 **Back buffer:** Incoming cells from application. Compared against front.
 
@@ -323,8 +323,8 @@ var csiMap = buildSequenceMap(csiSequences)  // Built at init
 
 // Zero-alloc lookup via compiler optimization
 func lookupCSI(seq []byte) (Key, Modifier, bool) {
-    if s, ok := csiMap[string(seq)]; ok {  // No allocation
-        return s.key, s.mod, true
+    if r, ok := csiMap[string(seq)]; ok {  // No allocation
+        return r.key, r.mod, true
     }
     return KeyNone, ModNone, false
 }
@@ -350,7 +350,7 @@ func lookupCSI(seq []byte) (Key, Modifier, bool) {
 4. Default                             → 256-Color
 ```
 
-**Rationale:** `COLORTERM` is the modern standard. tcell's TERM-first approach causes quantization in terminals that set `TERM=screen-256color` inside tmux but support true color.
+**Rationale:** `COLORTERM` is the modern standard. tcell'r TERM-first approach causes quantization in terminals that set `TERM=screen-256color` inside tmux but support true color.
 
 ### RGB → 256 Compute-Based Conversion
 ```go

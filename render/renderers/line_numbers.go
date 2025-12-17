@@ -18,7 +18,7 @@ func NewLineNumbersRenderer(gameCtx *engine.GameContext) *LineNumbersRenderer {
 }
 
 // Render implements SystemRenderer
-func (l *LineNumbersRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (r *LineNumbersRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskUI)
 
 	for y := 0; y < ctx.GameHeight; y++ {
@@ -39,7 +39,7 @@ func (l *LineNumbersRenderer) Render(ctx render.RenderContext, world *engine.Wor
 
 		if relativeNum == 0 {
 			ch = '0'
-			if l.gameCtx.IsSearchMode() || l.gameCtx.IsCommandMode() {
+			if r.gameCtx.IsSearchMode() || r.gameCtx.IsCommandMode() {
 				fg = render.RgbCursorNormal
 				bg = render.RgbBackground
 			} else {
@@ -52,7 +52,7 @@ func (l *LineNumbersRenderer) Render(ctx render.RenderContext, world *engine.Wor
 
 			if absRelative%10 == 0 {
 				ch = rune('0' + (absRelative/10)%10)
-			} else if absRelative%5 == 0 {
+			} else if absRelative%2 == 0 {
 				ch = '-'
 			} else {
 				ch = ' '

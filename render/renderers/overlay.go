@@ -21,16 +21,16 @@ func NewOverlayRenderer(gameCtx *engine.GameContext) *OverlayRenderer {
 }
 
 // IsVisible returns true when the overlay should be rendered
-func (o *OverlayRenderer) IsVisible() bool {
-	uiSnapshot := o.gameCtx.GetUISnapshot()
-	return o.gameCtx.IsOverlayMode() && uiSnapshot.OverlayActive
+func (r *OverlayRenderer) IsVisible() bool {
+	uiSnapshot := r.gameCtx.GetUISnapshot()
+	return r.gameCtx.IsOverlayMode() && uiSnapshot.OverlayActive
 }
 
 // Render draws the overlay window
-func (o *OverlayRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (r *OverlayRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskUI)
 	// Get UI Snapshot
-	uiSnapshot := o.gameCtx.GetUISnapshot()
+	uiSnapshot := r.gameCtx.GetUISnapshot()
 	// Calculate overlay dimensions (80% of screen)
 	overlayWidth := int(float64(ctx.Width) * constants.OverlayWidthPercent)
 	overlayHeight := int(float64(ctx.Height) * constants.OverlayHeightPercent)
