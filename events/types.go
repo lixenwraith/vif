@@ -9,16 +9,6 @@ const (
 	// Consumer: AudioSystem | Payload: *SoundRequestPayload
 	EventSoundRequest EventType = iota
 
-	// EventCleanerRequest spawns cleaners on rows with Red characters
-	// Trigger: Gold sequence completed at max heat
-	// Consumer: CleanerSystem | Payload: nil
-	EventCleanerRequest
-
-	// EventDirectionalCleanerRequest spawns 4-way cleaners from origin
-	// Trigger: Nugget collected at max heat, Enter in Normal mode with heat >= 10
-	// Consumer: CleanerSystem | Payload: *DirectionalCleanerPayload
-	EventDirectionalCleanerRequest
-
 	// EventNuggetCollected signals nugget was collected by player
 	// Trigger: EnergySystem on successful nugget character match
 	// Consumer: NuggetSystem | Payload: *NuggetCollectedPayload
@@ -34,9 +24,20 @@ const (
 	// Consumer: NuggetSystem | Payload: nil
 	EventNuggetJumpRequest
 
-	// EventCleanerFinished marks cleaner animation completion
-	// Trigger: All cleaner entities destroyed | Payload: nil
-	EventCleanerFinished
+	// EventGoldEnable signals whether gold sequence spawning is allowed
+	// Trigger: FSM entering/exiting Normal state
+	// Consumer: GoldSystem | Payload: *GoldEnablePayload
+	EventGoldEnable
+
+	// EventGoldSpawnRequest signals a specific request to try spawning a gold sequence
+	// Trigger: FSM State Action
+	// Consumer: GoldSystem | Payload: nil
+	EventGoldSpawnRequest
+
+	// EventGoldSpawnFailed signals that a requested spawn could not be completed (e.g. no space)
+	// Trigger: GoldSystem
+	// Consumer: FSM (to return to Normal/Wait) | Payload: nil
+	EventGoldSpawnFailed
 
 	// EventGoldSpawned signals gold sequence creation
 	// Trigger: GoldSystem spawns sequence in PhaseNormal
@@ -55,6 +56,25 @@ const (
 	// EventGoldDestroyed signals external gold destruction (e.g., Drain)
 	// Payload: *GoldCompletionPayload
 	EventGoldDestroyed
+
+	// EventDirectionalCleanerRequest spawns 4-way cleaners from origin
+	// Trigger: Nugget collected at max heat, Enter in Normal mode with heat >= 10
+	// Consumer: CleanerSystem | Payload: *DirectionalCleanerPayload
+	EventDirectionalCleanerRequest
+
+	// EventManualCleanerTrigger signals player request to use cleaner ability (consumes heat)
+	// Trigger: Enter key in Insert/Normal mode
+	// Consumer: HeatSystem | Payload: nil
+	EventManualCleanerTrigger
+
+	// EventCleanerRequest spawns cleaners on rows with Red characters
+	// Trigger: Gold sequence completed at max heat
+	// Consumer: CleanerSystem | Payload: nil
+	EventCleanerRequest
+
+	// EventCleanerFinished marks cleaner animation completion
+	// Trigger: All cleaner entities destroyed | Payload: nil
+	EventCleanerFinished
 
 	// EventCharacterTyped signals Insert mode keypress
 	// Trigger: InputHandler on printable key
@@ -96,11 +116,6 @@ const (
 	// Trigger: Gold complete, debug command, boost command, error reset
 	// Consumer: HeatSystem | Payload: *HeatSetPayload
 	EventHeatSet
-
-	// EventManualCleanerTrigger signals player request to use cleaner ability (consumes heat)
-	// Trigger: Enter key in Insert/Normal mode
-	// Consumer: HeatSystem | Payload: nil
-	EventManualCleanerTrigger
 
 	// EventShieldActivate signals shield should become active
 	// Trigger: EnergySystem when energy > 0 and shield inactive
@@ -181,6 +196,11 @@ const (
 	// Trigger: Systems destroying entities with visual feedback (Drain, Cleaner, Decay)
 	// Consumer: FlashSystem | Payload: *FlashRequestPayload
 	EventFlashRequest
+
+	// EventDecayTimerStart signals the start of the pre-decay wait period
+	// Trigger: FSM entering DecayWait state
+	// Consumer: DecaySystem | Payload: nil (System calculates duration based on Heat)
+	EventDecayTimerStart
 
 	// EventDecayStart signals decay timer expired and animation should begin
 	// Trigger: DecaySystem timer expiration

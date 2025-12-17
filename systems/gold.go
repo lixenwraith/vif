@@ -71,9 +71,10 @@ func (s *GoldSystem) Priority() int {
 // EventTypes returns the event types GoldSystem handles
 func (s *GoldSystem) EventTypes() []events.EventType {
 	return []events.EventType{
+		events.EventGoldEnable,
+		events.EventGoldSpawnRequest,
 		events.EventGoldComplete,
 		events.EventGoldDestroyed,
-		events.EventPhaseChange,
 		events.EventGameReset,
 	}
 }
@@ -81,6 +82,23 @@ func (s *GoldSystem) EventTypes() []events.EventType {
 // HandleEvent processes gold events
 func (s *GoldSystem) HandleEvent(world *engine.World, event events.GameEvent) {
 	switch event.Type {
+	case events.EventGoldSpawnRequest:
+		s.mu.RLock()
+		enabled := s.spawnEnabled
+		active := s.active
+		s.mu.RUnlock()
+
+		if !enabled || active {
+			world.PushEvent(events.EventGoldSpawnFailed, nil)
+			return
+		}
+
+		if s.spawnGold(world) {
+			// EventGoldSpawned emitted inside spawnGold
+		} else {
+			world.PushEvent(events.EventGoldSpawnFailed, nil)
+		}
+
 	case events.EventGoldComplete:
 		if payload, ok := event.Payload.(*events.GoldCompletionPayload); ok {
 			s.handleCompletion(world, payload.SequenceID)
@@ -91,10 +109,11 @@ func (s *GoldSystem) HandleEvent(world *engine.World, event events.GameEvent) {
 			s.handleDestroyed(world, payload.SequenceID)
 		}
 
-	case events.EventPhaseChange:
-		if payload, ok := event.Payload.(*events.PhaseChangePayload); ok {
+		// TODO: implement enabled event for all systems
+	case events.EventGoldEnable:
+		if payload, ok := event.Payload.(*events.GoldEnablePayload); ok {
 			s.mu.Lock()
-			s.spawnEnabled = payload.NewPhase == int(engine.PhaseNormal)
+			s.spawnEnabled = payload.Enabled
 			s.mu.Unlock()
 		}
 
@@ -120,7 +139,6 @@ func (s *GoldSystem) Update(world *engine.World, dt time.Duration) {
 	active := s.active
 	timeoutTime := s.timeoutTime
 	seqID := s.sequenceID
-	canSpawn := s.spawnEnabled
 	s.mu.Unlock()
 
 	// Publish metrics (direct atomic writes)
@@ -139,25 +157,12 @@ func (s *GoldSystem) Update(world *engine.World, dt time.Duration) {
 	// Timeout check
 	if active && now.After(timeoutTime) {
 		s.failSequence(world, seqID, true)
-		return
-	}
-
-	// Spawn check
-	if canSpawn && !active {
-		s.spawnGold(world)
 	}
 }
 
 // spawnGold creates a new gold sequence
 func (s *GoldSystem) spawnGold(world *engine.World) bool {
 	now := s.res.Time.GameTime
-
-	s.mu.Lock()
-	if s.active {
-		s.mu.Unlock()
-		return false
-	}
-	s.mu.Unlock() // Unlock before expensive operation
 
 	// Generate random 10-character sequence
 	sequence := make([]rune, constants.GoldSequenceLength)
@@ -236,7 +241,6 @@ func (s *GoldSystem) spawnGold(world *engine.World) bool {
 	// Activate internal state
 	s.mu.Lock()
 	s.active = true
-	s.spawnEnabled = false
 	s.sequenceID = sequenceID
 	s.startTime = now
 	s.timeoutTime = now.Add(constants.GoldDuration)
@@ -270,7 +274,7 @@ func (s *GoldSystem) removeGold(world *engine.World, sequenceID int) {
 			continue
 		}
 		// Only remove gold sequence entities with provided ID
-		if seq.Type == components.SequenceGold && seq.ID == sequenceID {
+		if seq.Type == components.SequenceGold && (sequenceID == 0 || seq.ID == sequenceID) {
 			world.DestroyEntity(entity)
 		}
 	}

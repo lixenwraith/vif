@@ -153,12 +153,20 @@ func main() {
 	// Create frame synchronization channel
 	frameReady := make(chan struct{}, 1)
 
-	// Create clock scheduler with frame synchronization, handling systems phase transition and triggers
+	// Create clock scheduler with frame synchronization
 	clockScheduler, gameUpdateDone := engine.NewClockScheduler(ctx, constants.GameUpdateInterval, frameReady)
 
-	// Signal initial frame ready
-	frameReady <- struct{}{}
+	// === Phase 9: FSM Setup ===
+	// Initialize Event Registry first (for payload reflection)
+	events.InitRegistry()
 
+	// Load FSM Config
+	// For now we use the default JSON embedded in manifest
+	if err := clockScheduler.LoadFSM(manifest.DefaultGameplayFSMConfig, manifest.RegisterFSMComponents); err != nil {
+		panic(fmt.Sprintf("failed to load FSM: %v", err))
+	}
+
+	// === Phase 10: Event Handlers ===
 	// Auto-register event handlers from World systems
 	for _, sys := range world.Systems() {
 		if handler, ok := sys.(events.Handler[*engine.World]); ok {
@@ -174,10 +182,13 @@ func main() {
 	audioSystem := systems.NewAudioSystem(world)
 	clockScheduler.RegisterEventHandler(audioSystem.(events.Handler[*engine.World]))
 
+	// === PHASE 10: Main Loop ===
+	// Signal initial frame ready
+	frameReady <- struct{}{}
+
 	clockScheduler.Start()
 	defer clockScheduler.Stop()
 
-	// === PHASE 9: Main Loop ===
 	// Cache FPS metric pointer for render loop
 	statusReg := engine.MustGetResource[*status.Registry](ctx.World.Resources)
 	statFPS := statusReg.Ints.Get("engine.fps")

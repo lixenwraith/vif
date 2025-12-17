@@ -163,7 +163,6 @@ func (s *SpawnSystem) Priority() int {
 func (s *SpawnSystem) EventTypes() []events.EventType {
 	return []events.EventType{
 		events.EventSpawnChange,
-		events.EventPhaseChange,
 		events.EventGameReset,
 	}
 }
@@ -176,12 +175,6 @@ func (s *SpawnSystem) HandleEvent(world *engine.World, event events.GameEvent) {
 			s.enabled = payload.Enabled
 			s.statEnabled.Store(payload.Enabled)
 		}
-
-	case events.EventPhaseChange:
-		// TODO: Future FSM integration
-		// if payload, ok := event.Payload.(*events.PhaseChangePayload); ok {
-		//     s.enabled = payload.NewPhase == int(engine.PhaseNormal)
-		// }
 
 	case events.EventGameReset:
 		now := s.res.Time.GameTime

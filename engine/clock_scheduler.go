@@ -1,11 +1,13 @@
 package engine
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/engine/fsm"
 	"github.com/lixenwraith/vi-fighter/engine/status"
 	"github.com/lixenwraith/vi-fighter/events"
 )
@@ -80,6 +82,9 @@ type ClockScheduler struct {
 	// Event routing
 	eventRouter *events.Router[*World]
 
+	// Finite State Machine
+	fsm *fsm.Machine[*World]
+
 	// Cached metric pointers
 	statusReg *status.Registry
 	statTicks *atomic.Int64
@@ -106,8 +111,9 @@ func NewClockScheduler(ctx *GameContext, tickInterval time.Duration, frameReady 
 		updateDone:       updateDone,
 		stopChan:         make(chan struct{}),
 		statusReg:        statusReg,
-		statTicks:        statusReg.Ints.Get("engine.ticks"), // TODO: review
+		statTicks:        statusReg.Ints.Get("engine.ticks"),
 		statPhase:        statusReg.Ints.Get("engine.phase"),
+		fsm:              fsm.NewMachine[*World](),
 	}
 
 	return cs, updateDone
@@ -118,49 +124,45 @@ func (cs *ClockScheduler) RegisterEventHandler(handler events.Handler[*World]) {
 	cs.eventRouter.Register(handler)
 }
 
-// EventTypes returns event types ClockScheduler handles
+// LoadFSM initializes the HFSM with the provided JSON config and registry bridge
+// MUST be called before Start()
+func (cs *ClockScheduler) LoadFSM(configJSON string, registerComponents func(*fsm.Machine[*World])) error {
+	// Register Actions/Guards
+	registerComponents(cs.fsm)
+
+	// Load Graph
+	if err := cs.fsm.LoadJSON([]byte(configJSON)); err != nil {
+		return fmt.Errorf("failed to load FSM JSON: %w", err)
+	}
+
+	// Initialize State (enters initial state)
+	if err := cs.fsm.Init(cs.ctx.World, cs.fsm.InitialStateID); err != nil {
+		return fmt.Errorf("failed to init FSM: %w", err)
+	}
+
+	return nil
+}
+
+// EventTypes returns event types ClockScheduler handles (Legacy support for PhaseChange)
 func (cs *ClockScheduler) EventTypes() []events.EventType {
 	return []events.EventType{
-		events.EventGoldSpawned,
-		events.EventGoldComplete,
-		events.EventGoldTimeout,
-		events.EventGoldDestroyed,
-		events.EventDecayStart,
-		events.EventDecayComplete,
+		events.EventPhaseChange,
 	}
 }
 
-// HandleEvent processes phase transition events
+// HandleEvent processes events.
+// IMPORTANT: ClockScheduler acts as the Bridge between EventRouter and FSM.
+// It receives ALL events via the router (if registered) or manually dispatches them.
+// To avoid infinite loops, the ClockScheduler itself only listens to PhaseChange to update metrics.
+// The FSM processing happens in DispatchAll wrapper.
 func (cs *ClockScheduler) HandleEvent(world *World, event events.GameEvent) {
-	now := cs.timeRes.GameTime
-	switch event.Type {
-	case events.EventGoldSpawned:
-		cs.ctx.State.SetPhase(PhaseGoldActive, now)
-		cs.statPhase.Store(int64(PhaseGoldActive))
-
-	case events.EventGoldComplete, events.EventGoldTimeout, events.EventGoldDestroyed:
-		cs.ctx.State.SetPhase(PhaseDecayWait, now)
-		cs.statPhase.Store(int64(PhaseDecayWait))
-		cs.emitPhaseChange(PhaseDecayWait)
-
-	case events.EventDecayStart:
-		cs.ctx.State.SetPhase(PhaseDecayAnimation, now)
-		cs.statPhase.Store(int64(PhaseDecayAnimation))
-
-	case events.EventDecayComplete:
-		cs.ctx.State.SetPhase(PhaseNormal, now)
-		cs.statPhase.Store(int64(PhaseNormal))
-		cs.emitPhaseChange(PhaseNormal)
+	// Update metrics on phase change
+	if event.Type == events.EventPhaseChange {
+		if payload, ok := event.Payload.(*events.PhaseChangePayload); ok {
+			cs.ctx.State.SetPhase(GamePhase(payload.NewPhase), cs.timeRes.GameTime)
+			cs.statPhase.Store(int64(payload.NewPhase))
+		}
 	}
-}
-
-func (cs *ClockScheduler) emitPhaseChange(phase GamePhase) {
-	event := events.GameEvent{
-		Type:    events.EventPhaseChange,
-		Payload: &events.PhaseChangePayload{NewPhase: int(phase)},
-		Frame:   cs.ctx.State.GetFrameNumber(),
-	}
-	cs.ctx.eventQueue.Push(event)
 }
 
 // Start begins the scheduler loop
@@ -183,18 +185,14 @@ func (cs *ClockScheduler) Stop() {
 }
 
 // schedulerLoop runs the main scheduling loop with pause awareness
-// Implements adaptive sleeping that respects pause state to avoid busy-waiting
 func (cs *ClockScheduler) schedulerLoop() {
 	defer cs.wg.Done()
 
-	// Initialize next tick deadline
 	cs.mu.Lock()
 	cs.nextTickDeadline = cs.timeProvider.Now().Add(cs.tickInterval)
 	cs.lastGameTickTime = cs.timeProvider.Now()
 	cs.mu.Unlock()
 
-	// Initialize the timer outside the loop to prevent creating garbage on every tick
-	// Starts with 0 and immediately stopped so it is ready for Reset() inside the loop
 	timer := time.NewTimer(0)
 	if !timer.Stop() {
 		select {
@@ -204,7 +202,6 @@ func (cs *ClockScheduler) schedulerLoop() {
 	}
 	defer timer.Stop()
 
-	// Adaptive ticker that respects pause state
 	for {
 		select {
 		case <-cs.stopChan:
@@ -212,11 +209,9 @@ func (cs *ClockScheduler) schedulerLoop() {
 		default:
 		}
 
-		// Calculate next tick time
 		var sleepDuration time.Duration
 
 		if cs.ctx.IsPaused.Load() {
-			// During pause, sleep longer to avoid busy-wait
 			sleepDuration = cs.tickInterval * 2
 		} else {
 			gameNow := cs.timeProvider.Now()
@@ -225,92 +220,91 @@ func (cs *ClockScheduler) schedulerLoop() {
 			deadline := cs.nextTickDeadline
 			cs.mu.RUnlock()
 
-			// Check if we've reached or passed the deadline
 			if !gameNow.Before(deadline) {
-				// Wait for frame ready signal (with timeout to prevent deadlock)
 				select {
 				case <-cs.frameReady:
-					// Frame is ready, proceed with tick
 				case <-time.After(cs.tickInterval * 2):
-					// Timeout - proceed anyway to prevent game freeze
-					// This handles case where renderer is blocked
 				case <-cs.stopChan:
 					return
 				}
 
-				// Tick is due, process immediately
 				cs.processTick()
 
-				// Update timing with drift protection
 				cs.mu.Lock()
 				cs.lastGameTickTime = gameNow
-
-				// Advance deadline by exactly one interval (prevents drift)
 				cs.nextTickDeadline = cs.nextTickDeadline.Add(cs.tickInterval)
 
-				// If we're severely behind (>2 intervals), catch up to avoid spiral
 				maxBehind := cs.tickInterval * 2
 				if gameNow.Sub(cs.nextTickDeadline) > maxBehind {
-					// Reset to next interval from current time
 					cs.nextTickDeadline = gameNow.Add(cs.tickInterval)
 				}
-
 				deadline = cs.nextTickDeadline
-
 				cs.mu.Unlock()
 
-				// Increment tick counter for debugging/tests
 				cs.tickCount.Add(1)
 
-				// Signal update complete (non-blocking)
 				select {
 				case cs.updateDone <- struct{}{}:
 				default:
-					// Channel full, renderer will catch up
 				}
 
-				// Sleep until next deadline
 				sleepDuration = deadline.Sub(cs.timeProvider.Now())
 				if sleepDuration < 0 {
-					sleepDuration = 0 // Process next tick immediately if behind
+					sleepDuration = 0
 				}
 			} else {
-				// Sleep until next tick
 				sleepDuration = deadline.Sub(gameNow)
 			}
 		}
 
-		// Sleep with interruptible timer
 		if sleepDuration > 0 {
-			// GC Optimization: Reset() existing timer instead of allocating a new one with NewTimer()
 			timer.Reset(sleepDuration)
 			select {
 			case <-timer.C:
-				// Continue loop
 			case <-cs.stopChan:
-				// No need to Stop() the timer, handled by defer time.Stop()
 				return
 			}
 		}
 	}
 }
 
+// dispatchAndProcessEvents processes pending events through Router AND FSM
+// This replaces eventRouter.DispatchAll in the tick loop
+func (cs *ClockScheduler) dispatchAndProcessEvents() {
+	eventsList := cs.ctx.eventQueue.Consume()
+	for _, ev := range eventsList {
+		// 1. Give FSM first dibs (consumes event if transition occurs?)
+		// Our FSM.HandleEvent returns bool (handled/transitioned).
+		// However, in our architecture, systems usually need to react to the event too
+		// (e.g. GoldSpawned needs to go to FSM to change state, AND SplashSystem to show timer).
+		// So we do NOT stop propagation even if FSM handles it.
+		cs.fsm.HandleEvent(cs.ctx.World, ev.Type)
+
+		// 2. Route to Systems
+		// Manually route using the router's handler map since we consumed the queue
+		// This duplicates Router logic slightly but allows FSM injection in the middle
+		// Alternatively, we could register FSM as a handler in Router, but FSM needs to run logic, not just handle.
+		if handlers, ok := cs.eventRouter.GetHandlers(ev.Type); ok {
+			for _, h := range handlers {
+				h.HandleEvent(cs.ctx.World, ev)
+			}
+		}
+	}
+}
+
 // DispatchEventsImmediately processes all pending events synchronously
-// Call from main loop after input handling to eliminate input latency
 func (cs *ClockScheduler) DispatchEventsImmediately() {
 	cs.ctx.World.RunSafe(func() {
-		cs.eventRouter.DispatchAll(cs.ctx.World)
+		cs.dispatchAndProcessEvents()
 	})
 }
 
-// processTick executes one clock cycle (called every game tick when not paused)
+// processTick executes one clock cycle
 func (cs *ClockScheduler) processTick() {
-	// Skip tick execution when paused (defensive check)
 	if cs.ctx.IsPaused.Load() {
 		return
 	}
 
-	// Dispatch + Update under single lock to serialize with DispatchEventsImmediately
 	cs.ctx.World.RunSafe(func() {
 		now := cs.timeProvider.Now()
 		cs.timeRes.Update(
@@ -320,7 +314,13 @@ func (cs *ClockScheduler) processTick() {
 			cs.ctx.State.GetFrameNumber(),
 		)
 
-		cs.eventRouter.DispatchAll(cs.ctx.World)
+		// Process Events (Input -> FSM -> Systems)
+		cs.dispatchAndProcessEvents()
+
+		// Update FSM Logic (Tick transitions)
+		cs.fsm.Update(cs.ctx.World, cs.tickInterval)
+
+		// Run Systems
 		cs.ctx.World.UpdateLocked(cs.tickInterval)
 	})
 

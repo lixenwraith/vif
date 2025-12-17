@@ -69,19 +69,18 @@ func (s *DecaySystem) Priority() int {
 // EventTypes returns the event types DecaySystem handles
 func (s *DecaySystem) EventTypes() []events.EventType {
 	return []events.EventType{
-		events.EventPhaseChange,
+		events.EventDecayTimerStart,
+		events.EventGameReset,
 	}
 }
 
 // HandleEvent processes decay-related events
 func (s *DecaySystem) HandleEvent(world *engine.World, event events.GameEvent) {
-	if event.Type == events.EventPhaseChange {
-		if payload, ok := event.Payload.(*events.PhaseChangePayload); ok {
-			if payload.NewPhase == int(engine.PhaseDecayWait) {
-				s.startDecayTimer(world)
-			}
-		}
-	} else if event.Type == events.EventGameReset {
+	switch event.Type {
+	case events.EventDecayTimerStart:
+		s.startDecayTimer(world)
+
+	case events.EventGameReset:
 		s.mu.Lock()
 		s.timerActive = false
 		s.animating = false

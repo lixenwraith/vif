@@ -75,6 +75,11 @@ type HeatSetPayload struct {
 	Value int
 }
 
+// GoldEnablePayload controls gold spawning eligibility
+type GoldEnablePayload struct {
+	Enabled bool
+}
+
 // GoldSpawnedPayload anchors countdown timer to sequence position
 type GoldSpawnedPayload struct {
 	SequenceID int

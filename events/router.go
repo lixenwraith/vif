@@ -60,3 +60,10 @@ func (r *Router[T]) HasHandlers(t EventType) bool {
 func (r *Router[T]) HandlerCount(t EventType) int {
 	return len(r.handlers[t])
 }
+
+// GetHandlers returns the slice of handlers for a specific event type
+// Exposed to allow ClockScheduler to manually iterate handlers after FSM processing
+func (r *Router[T]) GetHandlers(t EventType) ([]Handler[T], bool) {
+	handlers, ok := r.handlers[t]
+	return handlers, ok
+}
