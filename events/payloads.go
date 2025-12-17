@@ -149,11 +149,6 @@ type FlashRequestPayload struct {
 	Char rune
 }
 
-// PhaseChangePayload carries the new game phase
-type PhaseChangePayload struct {
-	NewPhase int // Maps to engine.GamePhase
-}
-
 // NuggetCollectedPayload signals successful nugget collection
 type NuggetCollectedPayload struct {
 	Entity core.Entity

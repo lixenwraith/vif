@@ -12,45 +12,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/events"
 )
 
-// GamePhase represents the current phase of the game's mechanic cycle
-// ClockScheduler manages game phase transitions on a 50ms clock tick
-type GamePhase int
-
-const (
-	// PhaseNormal - Regular gameplay, spawning content, no special mechanics active
-	PhaseNormal GamePhase = iota
-
-	// PhaseGoldActive - Gold sequence is active and can be typed with timeout tracking
-	PhaseGoldActive
-
-	// PhaseGoldComplete - Gold sequence was completed, ready to transition to decay or cleaner
-	PhaseGoldComplete
-
-	// PhaseDecayWait - Waiting for decay timer to expire after gold completion/timeout (heat-based interval)
-	PhaseDecayWait
-
-	// PhaseDecayAnimation - Decay animation is running with falling entities
-	PhaseDecayAnimation
-)
-
-// String returns the name of the game phase for debugging
-func (p GamePhase) String() string {
-	switch p {
-	case PhaseNormal:
-		return "Normal"
-	case PhaseGoldActive:
-		return "GoldActive"
-	case PhaseGoldComplete:
-		return "GoldComplete"
-	case PhaseDecayWait:
-		return "DecayWait"
-	case PhaseDecayAnimation:
-		return "DecayAnimation"
-	default:
-		return "Unknown"
-	}
-}
-
 // ClockScheduler manages game logic on a fixed 50ms tick
 // Provides infrastructure for phase transitions and state ownership
 // Handles pause-aware scheduling without busy-wait
@@ -88,7 +49,6 @@ type ClockScheduler struct {
 	// Cached metric pointers
 	statusReg *status.Registry
 	statTicks *atomic.Int64
-	statPhase *atomic.Int64
 }
 
 // NewClockScheduler creates a new clock scheduler with specified tick interval
@@ -112,7 +72,6 @@ func NewClockScheduler(ctx *GameContext, tickInterval time.Duration, frameReady 
 		stopChan:         make(chan struct{}),
 		statusReg:        statusReg,
 		statTicks:        statusReg.Ints.Get("engine.ticks"),
-		statPhase:        statusReg.Ints.Get("engine.phase"),
 		fsm:              fsm.NewMachine[*World](),
 	}
 
@@ -251,14 +210,6 @@ func (cs *ClockScheduler) dispatchAndProcessEvents() {
 	eventsList := cs.ctx.eventQueue.Consume()
 	for _, ev := range eventsList {
 		cs.fsm.HandleEvent(cs.ctx.World, ev.Type)
-
-		// Handle PhaseChange internally (no self-registration needed)
-		if ev.Type == events.EventPhaseChange {
-			if payload, ok := ev.Payload.(*events.PhaseChangePayload); ok {
-				cs.ctx.State.SetPhase(GamePhase(payload.NewPhase), cs.timeRes.GameTime)
-				cs.statPhase.Store(int64(payload.NewPhase))
-			}
-		}
 
 		if handlers, ok := cs.eventRouter.GetHandlers(ev.Type); ok {
 			for _, h := range handlers {

@@ -163,16 +163,14 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 	}
 	var rightItems []statusItem
 
-	// Priority 1: Decay timer (show during DecayWait phase)
-	gamePhase := r.statPhase.Load()
-	if gamePhase == int64(engine.PhaseDecayWait) {
-		decayRemaining := time.Duration(r.statDecayTimer.Load())
-		rightItems = append(rightItems, statusItem{
-			text: fmt.Sprintf(" Decay: %.1fs ", decayRemaining.Seconds()),
-			fg:   render.RgbBlack,
-			bg:   render.RgbDecayTimerBg,
-		})
-	}
+	// Priority 1: Decay timer
+	// TODO: Broken
+	decayRemaining := time.Duration(r.statDecayTimer.Load())
+	rightItems = append(rightItems, statusItem{
+		text: fmt.Sprintf(" Decay: %.1fs ", decayRemaining.Seconds()),
+		fg:   render.RgbBlack,
+		bg:   render.RgbDecayTimerBg,
+	})
 
 	// Priority 2: Energy
 	energyComp, _ := r.energyStore.Get(r.gameCtx.CursorEntity)

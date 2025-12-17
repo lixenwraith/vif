@@ -39,11 +39,6 @@ type GameState struct {
 	EntityCount   int     // Current number of entities on screen
 	MaxEntities   int     // Maximum allowed entities
 	ScreenDensity float64 // Percentage of screen filled (0.0-1.0)
-
-	// Phase State (Infrastructure)
-	// Controls which game mechanic is active (Normal, Gold, Decay Wait, Decay Animation)
-	CurrentPhase   GamePhase // Current game phase
-	PhaseStartTime time.Time // When current phase started
 }
 
 // initState initializes all game state fields to starting values
@@ -66,10 +61,6 @@ func (gs *GameState) initState(now time.Time) {
 
 	// Spawn state
 	gs.EntityCount = 0
-
-	// Phase state
-	gs.CurrentPhase = PhaseNormal
-	gs.PhaseStartTime = now
 }
 
 // NewGameState creates a new centralized game state
@@ -85,34 +76,6 @@ func (gs *GameState) Reset(now time.Time) {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
 	gs.initState(now)
-}
-
-// ===== PHASE STATE ACCESSORS (mutex protected) =====
-
-// PhaseSnapshot provides a consistent view of phase state
-type PhaseSnapshot struct {
-	Phase     GamePhase
-	StartTime time.Time
-	Duration  time.Duration
-}
-
-// SetPhase updates phase state (called by ClockScheduler)
-func (gs *GameState) SetPhase(phase GamePhase, now time.Time) {
-	gs.mu.Lock()
-	defer gs.mu.Unlock()
-	gs.CurrentPhase = phase
-	gs.PhaseStartTime = now
-}
-
-// ReadPhaseState returns current phase snapshot
-func (gs *GameState) ReadPhaseState(now time.Time) PhaseSnapshot {
-	gs.mu.RLock()
-	defer gs.mu.RUnlock()
-	return PhaseSnapshot{
-		Phase:     gs.CurrentPhase,
-		StartTime: gs.PhaseStartTime,
-		Duration:  now.Sub(gs.PhaseStartTime),
-	}
 }
 
 // ===== SEQUENCE ID ACCESSORS (atomic) =====

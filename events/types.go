@@ -211,11 +211,6 @@ const (
 	// Trigger: DecaySystem when entity count reaches zero
 	// Consumer: ClockScheduler | Payload: nil
 	EventDecayComplete
-
-	// EventPhaseChange broadcasts global phase transition
-	// Trigger: ClockScheduler reacting to system events
-	// Consumer: SpawnSystem, DecaySystem | Payload: *PhaseChangePayload
-	EventPhaseChange
 )
 
 // GameEvent represents a single game event with metadata

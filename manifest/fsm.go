@@ -92,9 +92,6 @@ const DefaultGameplayFSMConfig = `
     },
     "GoldActive": {
       "parent": "Gameplay",
-      "on_enter": [
-        { "action": "EmitEvent", "event": "EventPhaseChange", "payload": { "NewPhase": 1 } }
-      ],
       "transitions": [
         { "trigger": "EventGoldComplete", "target": "DecayWait" },
         { "trigger": "EventGoldTimeout", "target": "DecayWait" },
@@ -103,9 +100,6 @@ const DefaultGameplayFSMConfig = `
     },
     "DecayWait": {
       "parent": "Gameplay",
-      "on_enter": [
-        { "action": "EmitEvent", "event": "EventPhaseChange", "payload": { "NewPhase": 3 } }
-      ],
       "transitions": [
         { "trigger": "Tick", "target": "DecayAnimation", "guard": "StateTimeExceeds", "guard_args": { "ms": 10000 } }
       ]
@@ -113,7 +107,6 @@ const DefaultGameplayFSMConfig = `
     "DecayAnimation": {
       "parent": "Gameplay",
       "on_enter": [
-        { "action": "EmitEvent", "event": "EventPhaseChange", "payload": { "NewPhase": 4 } },
         { "action": "EmitEvent", "event": "EventDecayStart" }
       ],
       "transitions": [
