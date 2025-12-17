@@ -143,28 +143,6 @@ func (cs *ClockScheduler) LoadFSM(configJSON string, registerComponents func(*fs
 	return nil
 }
 
-// EventTypes returns event types ClockScheduler handles (Legacy support for PhaseChange)
-func (cs *ClockScheduler) EventTypes() []events.EventType {
-	return []events.EventType{
-		events.EventPhaseChange,
-	}
-}
-
-// HandleEvent processes events.
-// IMPORTANT: ClockScheduler acts as the Bridge between EventRouter and FSM.
-// It receives ALL events via the router (if registered) or manually dispatches them.
-// To avoid infinite loops, the ClockScheduler itself only listens to PhaseChange to update metrics.
-// The FSM processing happens in DispatchAll wrapper.
-func (cs *ClockScheduler) HandleEvent(event events.GameEvent) {
-	// Update metrics on phase change
-	if event.Type == events.EventPhaseChange {
-		if payload, ok := event.Payload.(*events.PhaseChangePayload); ok {
-			cs.ctx.State.SetPhase(GamePhase(payload.NewPhase), cs.timeRes.GameTime)
-			cs.statPhase.Store(int64(payload.NewPhase))
-		}
-	}
-}
-
 // Start begins the scheduler loop
 func (cs *ClockScheduler) Start() {
 	if cs.running.CompareAndSwap(false, true) {
@@ -269,21 +247,19 @@ func (cs *ClockScheduler) schedulerLoop() {
 }
 
 // dispatchAndProcessEvents processes pending events through Router AND FSM
-// This replaces eventRouter.DispatchAll in the tick loop
 func (cs *ClockScheduler) dispatchAndProcessEvents() {
 	eventsList := cs.ctx.eventQueue.Consume()
 	for _, ev := range eventsList {
-		// 1. Give FSM first dibs (consumes event if transition occurs?)
-		// Our FSM.HandleEvent returns bool (handled/transitioned).
-		// However, in our architecture, systems usually need to react to the event too
-		// (e.g. GoldSpawned needs to go to FSM to change state, AND SplashSystem to show timer).
-		// So we do NOT stop propagation even if FSM handles it.
 		cs.fsm.HandleEvent(cs.ctx.World, ev.Type)
 
-		// 2. Route to Systems
-		// Manually route using the router's handler map since we consumed the queue
-		// This duplicates Router logic slightly but allows FSM injection in the middle
-		// Alternatively, we could register FSM as a handler in Router, but FSM needs to run logic, not just handle.
+		// Handle PhaseChange internally (no self-registration needed)
+		if ev.Type == events.EventPhaseChange {
+			if payload, ok := ev.Payload.(*events.PhaseChangePayload); ok {
+				cs.ctx.State.SetPhase(GamePhase(payload.NewPhase), cs.timeRes.GameTime)
+				cs.statPhase.Store(int64(payload.NewPhase))
+			}
+		}
+
 		if handlers, ok := cs.eventRouter.GetHandlers(ev.Type); ok {
 			for _, h := range handlers {
 				h.HandleEvent(ev)
