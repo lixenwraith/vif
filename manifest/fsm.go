@@ -104,17 +104,17 @@ const DefaultGameplayFSMConfig = `
     "DecayWait": {
       "parent": "Gameplay",
       "on_enter": [
-        { "action": "EmitEvent", "event": "EventPhaseChange", "payload": { "NewPhase": 3 } },
-        { "action": "EmitEvent", "event": "EventDecayTimerStart" }
+        { "action": "EmitEvent", "event": "EventPhaseChange", "payload": { "NewPhase": 3 } }
       ],
       "transitions": [
-        { "trigger": "EventDecayStart", "target": "DecayAnimation" }
+        { "trigger": "Tick", "target": "DecayAnimation", "guard": "StateTimeExceeds", "guard_args": { "ms": 10000 } }
       ]
     },
     "DecayAnimation": {
       "parent": "Gameplay",
       "on_enter": [
-        { "action": "EmitEvent", "event": "EventPhaseChange", "payload": { "NewPhase": 4 } }
+        { "action": "EmitEvent", "event": "EventPhaseChange", "payload": { "NewPhase": 4 } },
+        { "action": "EmitEvent", "event": "EventDecayStart" }
       ],
       "transitions": [
         { "trigger": "EventDecayComplete", "target": "TrySpawnGold" }

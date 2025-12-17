@@ -103,8 +103,8 @@ func InitRegistry() {
 	RegisterType("EventMaterializeRequest", EventMaterializeRequest, &MaterializeRequestPayload{})
 	RegisterType("EventMaterializeComplete", EventMaterializeComplete, &SpawnCompletePayload{})
 	RegisterType("EventFlashRequest", EventFlashRequest, &FlashRequestPayload{})
-	RegisterType("EventDecayTimerStart", EventDecayTimerStart, nil)
 	RegisterType("EventDecayStart", EventDecayStart, nil)
+	RegisterType("EventDecayCancel", EventDecayCancel, nil)
 	RegisterType("EventDecayComplete", EventDecayComplete, nil)
 	RegisterType("EventPhaseChange", EventPhaseChange, &PhaseChangePayload{})
 }

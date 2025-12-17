@@ -197,15 +197,15 @@ const (
 	// Consumer: FlashSystem | Payload: *FlashRequestPayload
 	EventFlashRequest
 
-	// EventDecayTimerStart signals the start of the pre-decay wait period
-	// Trigger: FSM entering DecayWait state
-	// Consumer: DecaySystem | Payload: nil (System calculates duration based on Heat)
-	EventDecayTimerStart
-
 	// EventDecayStart signals decay timer expired and animation should begin
-	// Trigger: DecaySystem timer expiration
-	// Consumer: (internal to DecaySystem) | Payload: nil
+	// Trigger: FSM entering DecayAnimation state
+	// Consumer: DecaySystem | Payload: nil
 	EventDecayStart
+
+	// EventDecayCancel signals that the decay phase should be aborted immediately
+	// Trigger: Game reset, Phase change interruption
+	// Consumer: DecaySystem | Payload: nil
+	EventDecayCancel
 
 	// EventDecayComplete signals all decay entities destroyed
 	// Trigger: DecaySystem when entity count reaches zero
