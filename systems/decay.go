@@ -3,7 +3,6 @@ package systems
 import (
 	"math/rand"
 	"sync"
-	"time"
 
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
@@ -19,7 +18,7 @@ type DecaySystem struct {
 
 	decayStore  *engine.Store[components.DecayComponent]
 	protStore   *engine.Store[components.ProtectionComponent]
-	deathStore  *engine.Store[components.MarkedForDeathComponent]
+	deathStore  *engine.Store[components.DeathComponent]
 	nuggetStore *engine.Store[components.NuggetComponent]
 	charStore   *engine.Store[components.CharacterComponent]
 	seqStore    *engine.Store[components.SequenceComponent]
@@ -42,7 +41,7 @@ func NewDecaySystem(world *engine.World) engine.System {
 
 		decayStore:       engine.GetStore[components.DecayComponent](world),
 		protStore:        engine.GetStore[components.ProtectionComponent](world),
-		deathStore:       engine.GetStore[components.MarkedForDeathComponent](world),
+		deathStore:       engine.GetStore[components.DeathComponent](world),
 		nuggetStore:      engine.GetStore[components.NuggetComponent](world),
 		charStore:        engine.GetStore[components.CharacterComponent](world),
 		seqStore:         engine.GetStore[components.SequenceComponent](world),
@@ -67,7 +66,7 @@ func (s *DecaySystem) EventTypes() []events.EventType {
 }
 
 // HandleEvent processes decay-related events
-func (s *DecaySystem) HandleEvent(world *engine.World, event events.GameEvent) {
+func (s *DecaySystem) HandleEvent(event events.GameEvent) {
 	switch event.Type {
 	case events.EventDecayStart:
 		s.spawnDecayEntities()
@@ -85,7 +84,7 @@ func (s *DecaySystem) HandleEvent(world *engine.World, event events.GameEvent) {
 }
 
 // Update runs the decay system logic
-func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
+func (s *DecaySystem) Update() {
 	s.mu.RLock()
 	animating := s.animating
 	s.mu.RUnlock()
@@ -94,8 +93,7 @@ func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 		return
 	}
 
-	// Use Delta Time (dt) for physics integration
-	s.updateDecayEntities(dt.Seconds())
+	s.updateDecayEntities()
 
 	// When there are no decay entities, emit EventDecayComplete once
 	count := s.decayStore.Count()
@@ -108,7 +106,7 @@ func (s *DecaySystem) Update(world *engine.World, dt time.Duration) {
 		if shouldEmit {
 			// Reuse despawn to reset state/flags; entity loop is no-op here since count is 0
 			s.despawnDecayEntities()
-			world.PushEvent(events.EventDecayComplete, nil)
+			s.world.PushEvent(events.EventDecayComplete, nil)
 		}
 	}
 }
@@ -146,7 +144,8 @@ func (s *DecaySystem) spawnDecayEntities() {
 }
 
 // updateDecayEntities updates entity positions and applies decay
-func (s *DecaySystem) updateDecayEntities(dtSeconds float64) {
+func (s *DecaySystem) updateDecayEntities() {
+	dtSeconds := s.res.Time.DeltaTime.Seconds()
 	gameHeight := s.res.Config.GameHeight
 	gameWidth := s.res.Config.GameWidth
 
@@ -357,6 +356,6 @@ func (s *DecaySystem) despawnDecayEntities() {
 	// We use MarkedForDeath to allow CullSystem to clean them up properly in the same frame
 	entities := s.decayStore.All()
 	for _, entity := range entities {
-		s.deathStore.Add(entity, components.MarkedForDeathComponent{})
+		s.deathStore.Add(entity, components.DeathComponent{})
 	}
 }

@@ -1,8 +1,6 @@
 package systems
 
 import (
-	"time"
-
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/core"
@@ -33,7 +31,7 @@ func NewMaterializeSystem(world *engine.World) engine.System {
 // Priority returns the system's priority
 // Must run before DrainSystem which listens to completion
 func (s *MaterializeSystem) Priority() int {
-	return constants.PriorityMaterializer
+	return constants.PriorityMaterialize
 }
 
 // EventTypes returns event types handled
@@ -44,17 +42,17 @@ func (s *MaterializeSystem) EventTypes() []events.EventType {
 }
 
 // HandleEvent processes requests to spawn visual effects
-func (s *MaterializeSystem) HandleEvent(world *engine.World, event events.GameEvent) {
+func (s *MaterializeSystem) HandleEvent(event events.GameEvent) {
 	if event.Type == events.EventMaterializeRequest {
 		if payload, ok := event.Payload.(*events.MaterializeRequestPayload); ok {
-			s.spawnMaterializers(world, payload.X, payload.Y, payload.Type)
+			s.spawnMaterializers(payload.X, payload.Y, payload.Type)
 		}
 	}
 }
 
 // Update updates materialize spawner entities and triggers spawn completion events
-func (s *MaterializeSystem) Update(world *engine.World, dt time.Duration) {
-	dtSeconds := dt.Seconds()
+func (s *MaterializeSystem) Update() {
+	dtSeconds := s.res.Time.DeltaTime.Seconds()
 	// Cap delta time to prevent tunneling on lag spikes
 	if dtSeconds > 0.1 {
 		dtSeconds = 0.1
@@ -80,7 +78,7 @@ func (s *MaterializeSystem) Update(world *engine.World, dt time.Duration) {
 		}
 
 		// Read grid position from PositionStore
-		oldPos, hasPos := world.Positions.Get(entity)
+		oldPos, hasPos := s.world.Positions.Get(entity)
 		if !hasPos {
 			continue
 		}
@@ -139,7 +137,7 @@ func (s *MaterializeSystem) Update(world *engine.World, dt time.Duration) {
 			}
 
 			// Sync grid position to PositionStore
-			world.Positions.Add(entity, components.PositionComponent{X: newGridX, Y: newGridY})
+			s.world.Positions.Add(entity, components.PositionComponent{X: newGridX, Y: newGridY})
 		}
 
 		s.matStore.Add(entity, mat)
@@ -150,14 +148,14 @@ func (s *MaterializeSystem) Update(world *engine.World, dt time.Duration) {
 		if state.allArrived && len(state.entities) > 0 {
 			// Destroy all materializers in this group
 			for _, entity := range state.entities {
-				world.DestroyEntity(entity)
+				s.world.DestroyEntity(entity)
 			}
 
 			// Emit completion event
 			targetX := int(key >> 32)
 			targetY := int(key & 0xFFFFFFFF)
 
-			world.PushEvent(events.EventMaterializeComplete, &events.SpawnCompletePayload{
+			s.world.PushEvent(events.EventMaterializeComplete, &events.SpawnCompletePayload{
 				X:    targetX,
 				Y:    targetY,
 				Type: state.spawnType,
@@ -168,7 +166,7 @@ func (s *MaterializeSystem) Update(world *engine.World, dt time.Duration) {
 
 // spawnMaterializers creates the visual entities converging on the target
 // Logic moved from DrainSystem
-func (s *MaterializeSystem) spawnMaterializers(world *engine.World, targetX, targetY int, spawnType components.SpawnType) {
+func (s *MaterializeSystem) spawnMaterializers(targetX, targetY int, spawnType components.SpawnType) {
 	config := s.res.Config
 
 	// Clamp target coordinates
@@ -231,8 +229,8 @@ func (s *MaterializeSystem) spawnMaterializers(world *engine.World, targetX, tar
 		}
 
 		// Create Entity
-		entity := world.CreateEntity()
-		world.Positions.Add(entity, components.PositionComponent{X: startGridX, Y: startGridY})
+		entity := s.world.CreateEntity()
+		s.world.Positions.Add(entity, components.PositionComponent{X: startGridX, Y: startGridY})
 		s.matStore.Add(entity, comp)
 		// Protect from cull/drain during animation
 		s.protStore.Add(entity, components.ProtectionComponent{

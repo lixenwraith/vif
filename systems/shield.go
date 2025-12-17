@@ -1,8 +1,6 @@
 package systems
 
 import (
-	"time"
-
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -42,7 +40,7 @@ func (s *ShieldSystem) EventTypes() []events.EventType {
 }
 
 // HandleEvent processes shield-related events from the router
-func (s *ShieldSystem) HandleEvent(world *engine.World, event events.GameEvent) {
+func (s *ShieldSystem) HandleEvent(event events.GameEvent) {
 	cursorEntity := s.res.Cursor.Entity
 
 	switch event.Type {
@@ -62,7 +60,7 @@ func (s *ShieldSystem) HandleEvent(world *engine.World, event events.GameEvent) 
 
 	case events.EventShieldDrain:
 		if payload, ok := event.Payload.(*events.ShieldDrainPayload); ok {
-			world.PushEvent(events.EventEnergyAdd, &events.EnergyAddPayload{
+			s.world.PushEvent(events.EventEnergyAdd, &events.EnergyAddPayload{
 				Delta: -payload.Amount,
 			})
 		}
@@ -70,7 +68,7 @@ func (s *ShieldSystem) HandleEvent(world *engine.World, event events.GameEvent) 
 }
 
 // Update handles passive shield drain
-func (s *ShieldSystem) Update(world *engine.World, dt time.Duration) {
+func (s *ShieldSystem) Update() {
 	cursorEntity := s.res.Cursor.Entity
 
 	shield, ok := s.shieldStore.Get(cursorEntity)
@@ -81,7 +79,7 @@ func (s *ShieldSystem) Update(world *engine.World, dt time.Duration) {
 	now := s.res.Time.GameTime
 
 	if now.Sub(shield.LastDrainTime) >= constants.ShieldPassiveDrainInterval {
-		world.PushEvent(events.EventEnergyAdd, &events.EnergyAddPayload{
+		s.world.PushEvent(events.EventEnergyAdd, &events.EnergyAddPayload{
 			Delta: -constants.ShieldPassiveDrainAmount,
 		})
 		shield.LastDrainTime = now

@@ -58,10 +58,10 @@ func (s *NuggetSystem) EventTypes() []events.EventType {
 }
 
 // HandleEvent processes nugget-related events
-func (s *NuggetSystem) HandleEvent(world *engine.World, event events.GameEvent) {
+func (s *NuggetSystem) HandleEvent(event events.GameEvent) {
 	switch event.Type {
 	case events.EventNuggetJumpRequest:
-		s.handleJumpRequest(world)
+		s.handleJumpRequest()
 
 	case events.EventNuggetCollected:
 		if payload, ok := event.Payload.(*events.NuggetCollectedPayload); ok {
@@ -90,7 +90,7 @@ func (s *NuggetSystem) HandleEvent(world *engine.World, event events.GameEvent) 
 }
 
 // Update runs the nugget system logic
-func (s *NuggetSystem) Update(world *engine.World, dt time.Duration) {
+func (s *NuggetSystem) Update() {
 	now := s.res.Time.GameTime
 
 	s.mu.Lock()
@@ -99,7 +99,7 @@ func (s *NuggetSystem) Update(world *engine.World, dt time.Duration) {
 	if s.activeNuggetEntity == 0 {
 		if now.Sub(s.lastSpawnAttempt) >= constants.NuggetSpawnIntervalSeconds*time.Second {
 			s.lastSpawnAttempt = now
-			s.spawnNugget(world, now)
+			s.spawnNugget()
 		}
 		return
 	}
@@ -111,7 +111,7 @@ func (s *NuggetSystem) Update(world *engine.World, dt time.Duration) {
 }
 
 // handleJumpRequest attempts to jump cursor to the active nugget
-func (s *NuggetSystem) handleJumpRequest(world *engine.World) {
+func (s *NuggetSystem) handleJumpRequest() {
 	cursorEntity := s.res.Cursor.Entity
 
 	// 1. Check Energy from component
@@ -130,7 +130,7 @@ func (s *NuggetSystem) handleJumpRequest(world *engine.World) {
 	}
 
 	// 3. Get Nugget Position
-	nuggetPos, ok := world.Positions.Get(nuggetEntity)
+	nuggetPos, ok := s.world.Positions.Get(nuggetEntity)
 	if !ok {
 		// Stale reference - clear it
 		s.mu.Lock()
@@ -142,32 +142,33 @@ func (s *NuggetSystem) handleJumpRequest(world *engine.World) {
 	}
 
 	// 4. Move Cursor
-	world.Positions.Add(cursorEntity, components.PositionComponent{
+	s.world.Positions.Add(cursorEntity, components.PositionComponent{
 		X: nuggetPos.X,
 		Y: nuggetPos.Y,
 	})
 
 	// 5. Pay Energy Cost
-	world.PushEvent(events.EventEnergyAdd, &events.EnergyAddPayload{
+	s.world.PushEvent(events.EventEnergyAdd, &events.EnergyAddPayload{
 		Delta: -constants.NuggetJumpCost,
 	})
 
 	// 6. Play Sound
-	if audioRes, ok := engine.GetResource[*engine.AudioResource](world.Resources); ok && audioRes.Player != nil {
+	if audioRes, ok := engine.GetResource[*engine.AudioResource](s.world.Resources); ok && audioRes.Player != nil {
 		audioRes.Player.Play(audio.SoundBell)
 	}
 }
 
 // spawnNugget creates a new nugget at a random valid position using generic stores
 // Caller must hold s.mu lock
-func (s *NuggetSystem) spawnNugget(world *engine.World, now time.Time) {
-	x, y := s.findValidPosition(world)
+func (s *NuggetSystem) spawnNugget() {
+	now := s.res.Time.GameTime
+	x, y := s.findValidPosition()
 	if x < 0 || y < 0 {
 		return
 	}
 
 	nuggetID := s.nuggetID.Add(1)
-	entity := world.CreateEntity()
+	entity := s.world.CreateEntity()
 
 	pos := components.PositionComponent{
 		X: x,
@@ -189,11 +190,11 @@ func (s *NuggetSystem) spawnNugget(world *engine.World, now time.Time) {
 	}
 
 	// Use batch for atomic position validation
-	batch := world.Positions.BeginBatch()
+	batch := s.world.Positions.BeginBatch()
 	batch.Add(entity, pos)
 	if err := batch.Commit(); err != nil {
 		// Position was taken while we were creating the nugget
-		world.DestroyEntity(entity)
+		s.world.DestroyEntity(entity)
 		return
 	}
 
@@ -206,9 +207,9 @@ func (s *NuggetSystem) spawnNugget(world *engine.World, now time.Time) {
 
 // findValidPosition finds a valid random position for a nugget
 // Caller must hold s.mu lock
-func (s *NuggetSystem) findValidPosition(world *engine.World) (int, int) {
+func (s *NuggetSystem) findValidPosition() (int, int) {
 	config := s.res.Config
-	cursorPos, ok := world.Positions.Get(s.res.Cursor.Entity)
+	cursorPos, ok := s.world.Positions.Get(s.res.Cursor.Entity)
 	if !ok {
 		return -1, -1
 	}
@@ -221,7 +222,7 @@ func (s *NuggetSystem) findValidPosition(world *engine.World) (int, int) {
 			continue
 		}
 
-		if world.Positions.HasAny(x, y) {
+		if s.world.Positions.HasAny(x, y) {
 			continue
 		}
 

@@ -1,8 +1,6 @@
 package systems
 
 import (
-	"time"
-
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/core"
@@ -49,27 +47,28 @@ func (s *SplashSystem) EventTypes() []events.EventType {
 }
 
 // HandleEvent processes events to create or destroy splash entities
-func (s *SplashSystem) HandleEvent(world *engine.World, event events.GameEvent) {
+func (s *SplashSystem) HandleEvent(event events.GameEvent) {
 	switch event.Type {
 	case events.EventSplashRequest:
 		if payload, ok := event.Payload.(*events.SplashRequestPayload); ok {
-			s.handleSplashRequest(world, payload)
+			s.handleSplashRequest(payload)
 		}
 
 	case events.EventGoldSpawned:
 		if payload, ok := event.Payload.(*events.GoldSpawnedPayload); ok {
-			s.handleGoldSpawn(world, payload)
+			s.handleGoldSpawn(payload)
 		}
 
 	case events.EventGoldComplete, events.EventGoldTimeout, events.EventGoldDestroyed:
 		if payload, ok := event.Payload.(*events.GoldCompletionPayload); ok {
-			s.handleGoldFinish(world, payload.SequenceID)
+			s.handleGoldFinish(payload.SequenceID)
 		}
 	}
 }
 
 // Update manages lifecycle of splashes (expiry, timer updates)
-func (s *SplashSystem) Update(world *engine.World, dt time.Duration) {
+func (s *SplashSystem) Update() {
+	dt := s.res.Time.DeltaTime
 	var toDestroy []core.Entity
 
 	entities := s.splashStore.All()
@@ -109,14 +108,14 @@ func (s *SplashSystem) Update(world *engine.World, dt time.Duration) {
 	}
 
 	for _, e := range toDestroy {
-		world.DestroyEntity(e)
+		s.world.DestroyEntity(e)
 	}
 }
 
 // handleSplashRequest creates a transient splash with smart layout
-func (s *SplashSystem) handleSplashRequest(world *engine.World, payload *events.SplashRequestPayload) {
+func (s *SplashSystem) handleSplashRequest(payload *events.SplashRequestPayload) {
 	// 1. Enforce Uniqueness: Destroy existing transient splashes
-	s.cleanupSplashesByMode(world, components.SplashModeTransient)
+	s.cleanupSplashesByMode(components.SplashModeTransient)
 
 	// 2. Prepare Content
 	runes := []rune(payload.Text)
@@ -126,7 +125,7 @@ func (s *SplashSystem) handleSplashRequest(world *engine.World, payload *events.
 	}
 
 	// 3. Smart Layout
-	anchorX, anchorY := s.calculateSmartLayout(world, payload.OriginX, payload.OriginY, length)
+	anchorX, anchorY := s.calculateSmartLayout(payload.OriginX, payload.OriginY, length)
 
 	// 4. Create Component with Delta Timer
 	splash := components.SplashComponent{
@@ -141,20 +140,20 @@ func (s *SplashSystem) handleSplashRequest(world *engine.World, payload *events.
 	copy(splash.Content[:], runes[:length])
 
 	// 5. Spawn
-	entity := world.CreateEntity()
+	entity := s.world.CreateEntity()
 	s.splashStore.Add(entity, splash)
 
 	// 6. Register with TimeKeeper for destruction
-	world.PushEvent(events.EventTimerStart, &events.TimerStartPayload{
+	s.world.PushEvent(events.EventTimerStart, &events.TimerStartPayload{
 		Entity:   entity,
 		Duration: constants.SplashDuration,
 	})
 }
 
 // handleGoldSpawn creates the persistent gold timer anchored to the sequence
-func (s *SplashSystem) handleGoldSpawn(world *engine.World, payload *events.GoldSpawnedPayload) {
+func (s *SplashSystem) handleGoldSpawn(payload *events.GoldSpawnedPayload) {
 	// 1. Enforce Uniqueness: Destroy existing timer
-	s.cleanupSplashesByMode(world, components.SplashModePersistent)
+	s.cleanupSplashesByMode(components.SplashModePersistent)
 
 	// 2. Calculate Anchored Position
 	// Center horizontally over the sequence
@@ -194,12 +193,12 @@ func (s *SplashSystem) handleGoldSpawn(world *engine.World, payload *events.Gold
 	splash.Content[0] = '9' // Start at 9
 
 	// 4. Spawn
-	entity := world.CreateEntity()
+	entity := s.world.CreateEntity()
 	s.splashStore.Add(entity, splash)
 }
 
 // handleGoldFinish destroys the gold timer
-func (s *SplashSystem) handleGoldFinish(world *engine.World, sequenceID int) {
+func (s *SplashSystem) handleGoldFinish(sequenceID int) {
 	// Find and destroy specific timer
 	entities := s.splashStore.All()
 	for _, entity := range entities {
@@ -208,14 +207,14 @@ func (s *SplashSystem) handleGoldFinish(world *engine.World, sequenceID int) {
 			continue
 		}
 		if splash.Mode == components.SplashModePersistent && splash.SequenceID == sequenceID {
-			world.DestroyEntity(entity)
+			s.world.DestroyEntity(entity)
 			return // Found it
 		}
 	}
 }
 
 // cleanupSplashesByMode removes all splashes of a specific mode
-func (s *SplashSystem) cleanupSplashesByMode(world *engine.World, mode components.SplashMode) {
+func (s *SplashSystem) cleanupSplashesByMode(mode components.SplashMode) {
 	entities := s.splashStore.All()
 	for _, entity := range entities {
 		splash, ok := s.splashStore.Get(entity)
@@ -223,14 +222,14 @@ func (s *SplashSystem) cleanupSplashesByMode(world *engine.World, mode component
 			continue
 		}
 		if splash.Mode == mode {
-			world.DestroyEntity(entity)
+			s.world.DestroyEntity(entity)
 		}
 	}
 }
 
 // calculateSmartLayout determines the best position for a transient splash
 // Avoids Cursor and Gold Sequences
-func (s *SplashSystem) calculateSmartLayout(world *engine.World, cursorX, cursorY, charCount int) (int, int) {
+func (s *SplashSystem) calculateSmartLayout(cursorX, cursorY, charCount int) (int, int) {
 	config := s.res.Config
 	width := config.GameWidth
 	height := config.GameHeight
@@ -286,7 +285,7 @@ func (s *SplashSystem) calculateSmartLayout(world *engine.World, cursorX, cursor
 			if !ok || seq.ID != gs.SequenceID {
 				continue
 			}
-			pos, ok := world.Positions.Get(se)
+			pos, ok := s.world.Positions.Get(se)
 			if !ok {
 				continue
 			}

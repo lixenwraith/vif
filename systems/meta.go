@@ -61,7 +61,7 @@ func (s *MetaSystem) EventTypes() []events.EventType {
 }
 
 // HandleEvent processes command events
-func (s *MetaSystem) HandleEvent(world *engine.World, event events.GameEvent) {
+func (s *MetaSystem) HandleEvent(event events.GameEvent) {
 	switch event.Type {
 	case events.EventGameReset:
 		s.handleGameReset()
@@ -73,7 +73,7 @@ func (s *MetaSystem) HandleEvent(world *engine.World, event events.GameEvent) {
 }
 
 // Update implements System interface
-func (s *MetaSystem) Update(world *engine.World, dt time.Duration) {
+func (s *MetaSystem) Update() {
 	// No tick-based logic
 }
 

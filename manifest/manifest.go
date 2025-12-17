@@ -24,7 +24,7 @@ func RegisterComponents(w *engine.World) {
 	engine.RegisterComponent[components.ShieldComponent](w)
 	engine.RegisterComponent[components.BoostComponent](w)
 	engine.RegisterComponent[components.SplashComponent](w)
-	engine.RegisterComponent[components.MarkedForDeathComponent](w)
+	engine.RegisterComponent[components.DeathComponent](w)
 	engine.RegisterComponent[components.TimerComponent](w)
 	engine.RegisterComponent[components.EnergyComponent](w)
 	engine.RegisterComponent[components.HeatComponent](w)

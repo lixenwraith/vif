@@ -41,18 +41,18 @@ func (s *PingSystem) EventTypes() []events.EventType {
 }
 
 // HandleEvent processes ping-related events
-func (s *PingSystem) HandleEvent(world *engine.World, event events.GameEvent) {
+func (s *PingSystem) HandleEvent(event events.GameEvent) {
 	if event.Type == events.EventPingGridRequest {
 		if payload, ok := event.Payload.(*events.PingGridRequestPayload); ok {
-			s.handleGridRequest(world, payload.Duration)
+			s.handleGridRequest(payload.Duration)
 		}
 	}
 }
 
 // Update handles time-based logic for ping components
-func (s *PingSystem) Update(world *engine.World, dt time.Duration) {
-	// Update all entities with a PingComponent
+func (s *PingSystem) Update() {
 	entities := s.pingStore.All()
+	dt := s.res.Time.DeltaTime
 
 	for _, entity := range entities {
 		ping, ok := s.pingStore.Get(entity)
@@ -74,7 +74,7 @@ func (s *PingSystem) Update(world *engine.World, dt time.Duration) {
 
 		// Sync styling with GameMode (Context Awareness)
 		targetColor := components.ColorNormal
-		if inputRes, ok := engine.GetResource[*engine.InputResource](world.Resources); ok {
+		if inputRes, ok := engine.GetResource[*engine.InputResource](s.world.Resources); ok {
 			if inputRes.GameMode == engine.ResourceModeInsert {
 				targetColor = components.ColorNormal // or specific Insert color if defined
 			}
@@ -93,7 +93,7 @@ func (s *PingSystem) Update(world *engine.World, dt time.Duration) {
 }
 
 // handleGridRequest activates the grid on the cursor entity
-func (s *PingSystem) handleGridRequest(world *engine.World, duration time.Duration) {
+func (s *PingSystem) handleGridRequest(duration time.Duration) {
 	// In single player, apply to the main cursor
 	entity := s.res.Cursor.Entity
 

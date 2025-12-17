@@ -1,8 +1,6 @@
 package systems
 
 import (
-	"time"
-
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -30,7 +28,7 @@ func (s *HeatSystem) Priority() int {
 	return constants.PriorityHeat
 }
 
-func (s *HeatSystem) Update(world *engine.World, dt time.Duration) {
+func (s *HeatSystem) Update() {
 	// No tick-based logic; all mutations via events
 }
 
@@ -42,23 +40,23 @@ func (s *HeatSystem) EventTypes() []events.EventType {
 	}
 }
 
-func (s *HeatSystem) HandleEvent(world *engine.World, event events.GameEvent) {
+func (s *HeatSystem) HandleEvent(event events.GameEvent) {
 	switch event.Type {
 	case events.EventHeatAdd:
 		if payload, ok := event.Payload.(*events.HeatAddPayload); ok {
-			s.addHeat(world, payload.Delta)
+			s.addHeat(payload.Delta)
 		}
 	case events.EventHeatSet:
 		if payload, ok := event.Payload.(*events.HeatSetPayload); ok {
-			s.setHeat(world, payload.Value)
+			s.setHeat(payload.Value)
 		}
 	case events.EventManualCleanerTrigger:
-		s.handleManualCleanerTrigger(world)
+		s.handleManualCleanerTrigger()
 	}
 }
 
 // addHeat applies delta with clamping and writes back to store
-func (s *HeatSystem) addHeat(world *engine.World, delta int) {
+func (s *HeatSystem) addHeat(delta int) {
 	cursorEntity := s.res.Cursor.Entity
 
 	heatComp, ok := s.heatStore.Get(cursorEntity)
@@ -85,7 +83,7 @@ func (s *HeatSystem) addHeat(world *engine.World, delta int) {
 }
 
 // setHeat stores absolute value with clamping and writes back to store
-func (s *HeatSystem) setHeat(world *engine.World, value int) {
+func (s *HeatSystem) setHeat(value int) {
 	cursorEntity := s.res.Cursor.Entity
 
 	heatComp, ok := s.heatStore.Get(cursorEntity)
@@ -108,7 +106,7 @@ func (s *HeatSystem) setHeat(world *engine.World, value int) {
 }
 
 // handleManualCleanerTrigger checks heat cost and triggers cleaner if affordable
-func (s *HeatSystem) handleManualCleanerTrigger(world *engine.World) {
+func (s *HeatSystem) handleManualCleanerTrigger() {
 	cursorEntity := s.res.Cursor.Entity
 
 	heatComp, ok := s.heatStore.Get(cursorEntity)
@@ -122,11 +120,11 @@ func (s *HeatSystem) handleManualCleanerTrigger(world *engine.World) {
 	}
 
 	// Deduct heat
-	s.addHeat(world, -10)
+	s.addHeat(-10)
 
 	// Trigger directional cleaner at cursor position
-	if pos, ok := world.Positions.Get(cursorEntity); ok {
-		world.PushEvent(events.EventDirectionalCleanerRequest, &events.DirectionalCleanerPayload{
+	if pos, ok := s.world.Positions.Get(cursorEntity); ok {
+		s.world.PushEvent(events.EventDirectionalCleanerRequest, &events.DirectionalCleanerPayload{
 			OriginX: pos.X,
 			OriginY: pos.Y,
 		})

@@ -1,8 +1,6 @@
 package systems
 
 import (
-	"time"
-
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/events"
@@ -41,7 +39,7 @@ func (s *AudioSystem) EventTypes() []events.EventType {
 }
 
 // HandleEvent processes sound request events
-func (s *AudioSystem) HandleEvent(world *engine.World, event events.GameEvent) {
+func (s *AudioSystem) HandleEvent(event events.GameEvent) {
 	if s.player == nil {
 		return
 	}
@@ -53,4 +51,4 @@ func (s *AudioSystem) HandleEvent(world *engine.World, event events.GameEvent) {
 }
 
 // Update implements System interface (no tick-based logic)
-func (s *AudioSystem) Update(world *engine.World, dt time.Duration) {}
+func (s *AudioSystem) Update() {}

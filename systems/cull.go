@@ -1,8 +1,6 @@
 package systems
 
 import (
-	"time"
-
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -11,14 +9,20 @@ import (
 // CullSystem removes entities marked for destruction
 // It runs last in the tick to allow other systems to react to the tagged state
 type CullSystem struct {
-	deathStore *engine.Store[components.MarkedForDeathComponent]
+	world *engine.World
+	res   engine.CoreResources
+
+	deathStore *engine.Store[components.DeathComponent]
 	protStore  *engine.Store[components.ProtectionComponent]
 }
 
 // NewCullSystem creates a new cull system
 func NewCullSystem(world *engine.World) engine.System {
 	return &CullSystem{
-		deathStore: engine.GetStore[components.MarkedForDeathComponent](world),
+		world: world,
+		res:   engine.GetCoreResources(world),
+
+		deathStore: engine.GetStore[components.DeathComponent](world),
 		protStore:  engine.GetStore[components.ProtectionComponent](world),
 	}
 }
@@ -29,7 +33,7 @@ func (s *CullSystem) Priority() int {
 }
 
 // Update iterates through tagged entities and destroys them
-func (s *CullSystem) Update(world *engine.World, dt time.Duration) {
+func (s *CullSystem) Update() {
 	// Query all entities tagged MarkedForDeath
 	entities := s.deathStore.All()
 
@@ -45,6 +49,6 @@ func (s *CullSystem) Update(world *engine.World, dt time.Duration) {
 		}
 
 		// Safe to destroy
-		world.DestroyEntity(entity)
+		s.world.DestroyEntity(entity)
 	}
 }

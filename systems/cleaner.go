@@ -2,7 +2,6 @@ package systems
 
 import (
 	"math"
-	"time"
 
 	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/components"
@@ -55,7 +54,7 @@ func (s *CleanerSystem) EventTypes() []events.EventType {
 }
 
 // HandleEvent processes cleaner-related events from the router
-func (s *CleanerSystem) HandleEvent(world *engine.World, event events.GameEvent) {
+func (s *CleanerSystem) HandleEvent(event events.GameEvent) {
 	// Check if we already spawned for this frame (deduplication)
 	if s.spawned[event.Frame] {
 		return
@@ -63,13 +62,13 @@ func (s *CleanerSystem) HandleEvent(world *engine.World, event events.GameEvent)
 
 	switch event.Type {
 	case events.EventCleanerRequest:
-		s.spawnCleaners(world)
+		s.spawnCleaners()
 		s.spawned[event.Frame] = true
 		s.hasSpawnedSession = true
 
 	case events.EventDirectionalCleanerRequest:
 		if payload, ok := event.Payload.(*events.DirectionalCleanerPayload); ok {
-			s.spawnDirectionalCleaners(world, payload.OriginX, payload.OriginY)
+			s.spawnDirectionalCleaners(payload.OriginX, payload.OriginY)
 			s.spawned[event.Frame] = true
 			s.hasSpawnedSession = true
 		}
@@ -77,7 +76,7 @@ func (s *CleanerSystem) HandleEvent(world *engine.World, event events.GameEvent)
 }
 
 // Update handles spawning, movement, collision, and cleanup synchronously
-func (s *CleanerSystem) Update(world *engine.World, dt time.Duration) {
+func (s *CleanerSystem) Update() {
 	config := s.res.Config
 
 	// Clean old entries from spawned map
@@ -93,7 +92,7 @@ func (s *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 
 	// Push EventCleanerFinished when all cleaners have completed their animation
 	if len(entities) == 0 && s.hasSpawnedSession {
-		world.PushEvent(events.EventCleanerFinished, nil)
+		s.world.PushEvent(events.EventCleanerFinished, nil)
 		s.hasSpawnedSession = false
 		return
 	}
@@ -102,7 +101,7 @@ func (s *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 		return
 	}
 
-	dtSec := dt.Seconds()
+	dtSeconds := s.res.Time.DeltaTime.Seconds()
 	gameWidth := config.GameWidth
 	gameHeight := config.GameHeight
 
@@ -113,7 +112,7 @@ func (s *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 		}
 
 		// Read grid position from PositionStore (authoritative for spatial queries)
-		oldPos, hasPos := world.Positions.Get(entity)
+		oldPos, hasPos := s.world.Positions.Get(entity)
 		if !hasPos {
 			continue
 		}
@@ -121,8 +120,8 @@ func (s *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 		// Physics Update: Integrate velocity into float position (overlay state)
 		prevPreciseX := c.PreciseX
 		prevPreciseY := c.PreciseY
-		c.PreciseX += c.VelocityX * dtSec
-		c.PreciseY += c.VelocityY * dtSec
+		c.PreciseX += c.VelocityX * dtSeconds
+		c.PreciseY += c.VelocityY * dtSeconds
 
 		// Swept Collision Detection: Check all cells between previous and current position
 		if c.VelocityY != 0 && c.VelocityX == 0 {
@@ -142,7 +141,7 @@ func (s *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 			// Check all traversed rows for collisions (with self-exclusion)
 			if checkStart <= checkEnd {
 				for y := checkStart; y <= checkEnd; y++ {
-					s.checkAndDestroyAtPositionExcluding(world, oldPos.X, y, entity)
+					s.checkAndDestroyAtPositionExcluding(oldPos.X, y, entity)
 				}
 			}
 		} else if c.VelocityX != 0 {
@@ -162,7 +161,7 @@ func (s *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 			// Check all traversed columns for collisions (with self-exclusion)
 			if checkStart <= checkEnd {
 				for x := checkStart; x <= checkEnd; x++ {
-					s.checkAndDestroyAtPositionExcluding(world, x, oldPos.Y, entity)
+					s.checkAndDestroyAtPositionExcluding(x, oldPos.Y, entity)
 				}
 			}
 		}
@@ -180,7 +179,7 @@ func (s *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 			}
 
 			// Sync grid position to PositionStore
-			world.Positions.Add(entity, components.PositionComponent{X: newGridX, Y: newGridY})
+			s.world.Positions.Add(entity, components.PositionComponent{X: newGridX, Y: newGridY})
 		}
 
 		// Lifecycle Check: Destroy cleaner when it reaches target position
@@ -196,7 +195,7 @@ func (s *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 		}
 
 		if shouldDestroy {
-			world.DestroyEntity(entity)
+			s.world.DestroyEntity(entity)
 		} else {
 			s.cleanerStore.Add(entity, c)
 		}
@@ -205,26 +204,26 @@ func (s *CleanerSystem) Update(world *engine.World, dt time.Duration) {
 	entities = s.cleanerStore.All()
 	// Push EventCleanerFinished when all cleaners have completed their animation
 	if len(entities) == 0 && s.hasSpawnedSession {
-		world.PushEvent(events.EventCleanerFinished, nil)
+		s.world.PushEvent(events.EventCleanerFinished, nil)
 		s.hasSpawnedSession = false
 	}
 }
 
 // spawnCleaners generates cleaner entities using generic stores
-func (s *CleanerSystem) spawnCleaners(world *engine.World) {
+func (s *CleanerSystem) spawnCleaners() {
 	config := s.res.Config
 
-	redRows := s.scanRedCharacterRows(world)
+	redRows := s.scanRedCharacterRows()
 
 	// TODO: new boost trigger
 	// Grayout: no targets to clean
 	if len(redRows) == 0 {
 		s.res.State.State.TriggerGrayout(s.res.Time.GameTime)
-		world.PushEvent(events.EventCleanerFinished, nil)
+		s.world.PushEvent(events.EventCleanerFinished, nil)
 		return
 	}
 
-	world.PushEvent(events.EventSoundRequest, &events.SoundRequestPayload{
+	s.world.PushEvent(events.EventSoundRequest, &events.SoundRequestPayload{
 		SoundType: audio.SoundWhoosh,
 	})
 
@@ -268,8 +267,8 @@ func (s *CleanerSystem) spawnCleaners(world *engine.World) {
 		}
 
 		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → CleanerComponent (float overlay)
-		entity := world.CreateEntity()
-		world.Positions.Add(entity, components.PositionComponent{X: startGridX, Y: startGridY})
+		entity := s.world.CreateEntity()
+		s.world.Positions.Add(entity, components.PositionComponent{X: startGridX, Y: startGridY})
 		s.cleanerStore.Add(entity, comp)
 		s.protStore.Add(entity, components.ProtectionComponent{
 			Mask: components.ProtectFromDrain | components.ProtectFromCull,
@@ -278,9 +277,9 @@ func (s *CleanerSystem) spawnCleaners(world *engine.World) {
 }
 
 // checkAndDestroyAtPositionExcluding handles collision logic with self-exclusion
-func (s *CleanerSystem) checkAndDestroyAtPositionExcluding(world *engine.World, x, y int, selfEntity core.Entity) {
+func (s *CleanerSystem) checkAndDestroyAtPositionExcluding(x, y int, selfEntity core.Entity) {
 	// Query all entities at position (includes cleaner itself due to PositionStore registration)
-	targetEntities := world.Positions.GetAllAt(x, y)
+	targetEntities := s.world.Positions.GetAllAt(x, y)
 
 	var toDestroy []core.Entity
 
@@ -299,16 +298,16 @@ func (s *CleanerSystem) checkAndDestroyAtPositionExcluding(world *engine.World, 
 
 	// Spawn flash effects and destroy marked entities
 	for _, e := range toDestroy {
-		s.spawnRemovalFlash(world, e)
-		world.DestroyEntity(e)
+		s.spawnRemovalFlash(e)
+		s.world.DestroyEntity(e)
 	}
 }
 
 // spawnDirectionalCleaners generates 4 cleaner entities from origin position
-func (s *CleanerSystem) spawnDirectionalCleaners(world *engine.World, originX, originY int) {
+func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 	config := s.res.Config
 
-	world.PushEvent(events.EventSoundRequest, &events.SoundRequestPayload{
+	s.world.PushEvent(events.EventSoundRequest, &events.SoundRequestPayload{
 		SoundType: audio.SoundWhoosh,
 	})
 
@@ -357,8 +356,8 @@ func (s *CleanerSystem) spawnDirectionalCleaners(world *engine.World, originX, o
 		}
 
 		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → CleanerComponent (float overlay)
-		entity := world.CreateEntity()
-		world.Positions.Add(entity, components.PositionComponent{X: startGridX, Y: startGridY})
+		entity := s.world.CreateEntity()
+		s.world.Positions.Add(entity, components.PositionComponent{X: startGridX, Y: startGridY})
 		s.cleanerStore.Add(entity, comp)
 		// TODO: centralize protection via entity factory
 		s.protStore.Add(entity, components.ProtectionComponent{
@@ -368,15 +367,15 @@ func (s *CleanerSystem) spawnDirectionalCleaners(world *engine.World, originX, o
 }
 
 // scanRedCharacterRows finds all rows containing Red sequences using query builder
-func (s *CleanerSystem) scanRedCharacterRows(world *engine.World) []int {
+func (s *CleanerSystem) scanRedCharacterRows() []int {
 	config := s.res.Config
 	redRows := make(map[int]bool)
 	gameHeight := config.GameHeight
 
 	// Query entities with both Sequences and Positions
-	entities := world.Query().
+	entities := s.world.Query().
 		With(s.seqStore).
-		With(world.Positions).
+		With(s.world.Positions).
 		Execute()
 
 	for _, entity := range entities {
@@ -390,7 +389,7 @@ func (s *CleanerSystem) scanRedCharacterRows(world *engine.World) []int {
 		}
 
 		// Retrieve Position
-		pos, hasPos := world.Positions.Get(entity)
+		pos, hasPos := s.world.Positions.Get(entity)
 		if !hasPos {
 			continue
 		}
@@ -409,9 +408,9 @@ func (s *CleanerSystem) scanRedCharacterRows(world *engine.World) []int {
 }
 
 // checkAndDestroyAtPosition handles collision logic using spatial index
-func (s *CleanerSystem) checkAndDestroyAtPosition(world *engine.World, x, y int) {
+func (s *CleanerSystem) checkAndDestroyAtPosition(x, y int) {
 	// Get all entities at this position
-	targetEntities := world.Positions.GetAllAt(x, y)
+	targetEntities := s.world.Positions.GetAllAt(x, y)
 
 	// Create a copy or iterate carefully since we might destroy entities
 	// Destroying modifies the grid, so standard range loop on the slice
@@ -434,16 +433,16 @@ func (s *CleanerSystem) checkAndDestroyAtPosition(world *engine.World, x, y int)
 
 	// Spawn flash effect and destroy all marked to destroy
 	for _, e := range toDestroy {
-		s.spawnRemovalFlash(world, e)
-		world.DestroyEntity(e)
+		s.spawnRemovalFlash(e)
+		s.world.DestroyEntity(e)
 	}
 }
 
 // spawnRemovalFlash creates a transient visual effect using generic stores
-func (s *CleanerSystem) spawnRemovalFlash(world *engine.World, targetEntity core.Entity) {
+func (s *CleanerSystem) spawnRemovalFlash(targetEntity core.Entity) {
 	if charComp, ok := s.charStore.Get(targetEntity); ok {
-		if posComp, ok := world.Positions.Get(targetEntity); ok {
-			world.PushEvent(events.EventFlashRequest, &events.FlashRequestPayload{
+		if posComp, ok := s.world.Positions.Get(targetEntity); ok {
+			s.world.PushEvent(events.EventFlashRequest, &events.FlashRequestPayload{
 				X:    posComp.X,
 				Y:    posComp.Y,
 				Char: charComp.Rune,

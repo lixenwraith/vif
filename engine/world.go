@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
-	"time"
 
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/core"
@@ -165,21 +164,21 @@ func (w *World) Unlock() {
 }
 
 // Update runs all systems sequentially
-func (w *World) Update(dt time.Duration) {
+func (w *World) Update() {
 	w.RunSafe(func() {
-		w.UpdateLocked(dt)
+		w.UpdateLocked()
 	})
 }
 
 // UpdateLocked runs all systems assuming the caller already holds updateMutex
-func (w *World) UpdateLocked(dt time.Duration) {
+func (w *World) UpdateLocked() {
 	w.mu.RLock()
 	systems := make([]System, len(w.systems))
 	copy(systems, w.systems)
 	w.mu.RUnlock()
 
 	for _, system := range systems {
-		system.Update(w, dt)
+		system.Update()
 	}
 }
 

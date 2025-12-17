@@ -37,23 +37,24 @@ func (s *BoostSystem) EventTypes() []events.EventType {
 	}
 }
 
-func (s *BoostSystem) HandleEvent(world *engine.World, event events.GameEvent) {
+func (s *BoostSystem) HandleEvent(event events.GameEvent) {
 	switch event.Type {
 	case events.EventBoostActivate:
 		if payload, ok := event.Payload.(*events.BoostActivatePayload); ok {
-			s.activate(world, payload.Duration)
+			s.activate(payload.Duration)
 		}
 	case events.EventBoostDeactivate:
-		s.deactivate(world)
+		s.deactivate()
 	case events.EventBoostExtend:
 		if payload, ok := event.Payload.(*events.BoostExtendPayload); ok {
-			s.extend(world, payload.Duration)
+			s.extend(payload.Duration)
 		}
 	}
 }
 
 // Update handles boost duration decrement using Delta Time
-func (s *BoostSystem) Update(world *engine.World, dt time.Duration) {
+func (s *BoostSystem) Update() {
+	dt := s.res.Time.DeltaTime
 	cursorEntity := s.res.Cursor.Entity
 
 	boost, ok := s.boostStore.Get(cursorEntity)
@@ -70,7 +71,7 @@ func (s *BoostSystem) Update(world *engine.World, dt time.Duration) {
 	s.boostStore.Add(cursorEntity, boost)
 }
 
-func (s *BoostSystem) activate(world *engine.World, duration time.Duration) {
+func (s *BoostSystem) activate(duration time.Duration) {
 	cursorEntity := s.res.Cursor.Entity
 
 	boost, ok := s.boostStore.Get(cursorEntity)
@@ -87,7 +88,7 @@ func (s *BoostSystem) activate(world *engine.World, duration time.Duration) {
 	s.boostStore.Add(cursorEntity, boost)
 }
 
-func (s *BoostSystem) deactivate(world *engine.World) {
+func (s *BoostSystem) deactivate() {
 	cursorEntity := s.res.Cursor.Entity
 
 	boost, ok := s.boostStore.Get(cursorEntity)
@@ -99,7 +100,7 @@ func (s *BoostSystem) deactivate(world *engine.World) {
 	s.boostStore.Add(cursorEntity, boost)
 }
 
-func (s *BoostSystem) extend(world *engine.World, duration time.Duration) {
+func (s *BoostSystem) extend(duration time.Duration) {
 	cursorEntity := s.res.Cursor.Entity
 
 	boost, ok := s.boostStore.Get(cursorEntity)

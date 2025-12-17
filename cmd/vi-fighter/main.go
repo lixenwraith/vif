@@ -169,18 +169,17 @@ func main() {
 	// === Phase 10: Event Handlers ===
 	// Auto-register event handlers from World systems
 	for _, sys := range world.Systems() {
-		if handler, ok := sys.(events.Handler[*engine.World]); ok {
+		if handler, ok := sys.(events.Handler); ok {
 			clockScheduler.RegisterEventHandler(handler)
 		}
 	}
-	clockScheduler.RegisterEventHandler(clockScheduler)
 
 	// Meta/Audio systems (not in World.Systems - event-only, no Update logic)
 	metaSystem := systems.NewMetaSystem(ctx)
-	clockScheduler.RegisterEventHandler(metaSystem.(events.Handler[*engine.World]))
+	clockScheduler.RegisterEventHandler(metaSystem.(events.Handler))
 
 	audioSystem := systems.NewAudioSystem(world)
-	clockScheduler.RegisterEventHandler(audioSystem.(events.Handler[*engine.World]))
+	clockScheduler.RegisterEventHandler(audioSystem.(events.Handler))
 
 	// === PHASE 10: Main Loop ===
 	// Signal initial frame ready

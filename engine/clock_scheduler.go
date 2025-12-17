@@ -80,7 +80,7 @@ type ClockScheduler struct {
 	updateDone chan<- struct{} // Send signal that update is complete
 
 	// Event routing
-	eventRouter *events.Router[*World]
+	eventRouter *events.Router
 
 	// Finite State Machine
 	fsm *fsm.Machine[*World]
@@ -106,7 +106,7 @@ func NewClockScheduler(ctx *GameContext, tickInterval time.Duration, frameReady 
 		timeRes:          timeRes,
 		lastGameTickTime: ctx.PausableClock.Now(),
 		tickCount:        atomic.Uint64{},
-		eventRouter:      events.NewRouter[*World](ctx.eventQueue),
+		eventRouter:      events.NewRouter(ctx.eventQueue),
 		frameReady:       frameReady,
 		updateDone:       updateDone,
 		stopChan:         make(chan struct{}),
@@ -120,7 +120,7 @@ func NewClockScheduler(ctx *GameContext, tickInterval time.Duration, frameReady 
 }
 
 // RegisterEventHandler adds an event handler to the router, must be called before Start()
-func (cs *ClockScheduler) RegisterEventHandler(handler events.Handler[*World]) {
+func (cs *ClockScheduler) RegisterEventHandler(handler events.Handler) {
 	cs.eventRouter.Register(handler)
 }
 
@@ -155,7 +155,7 @@ func (cs *ClockScheduler) EventTypes() []events.EventType {
 // It receives ALL events via the router (if registered) or manually dispatches them.
 // To avoid infinite loops, the ClockScheduler itself only listens to PhaseChange to update metrics.
 // The FSM processing happens in DispatchAll wrapper.
-func (cs *ClockScheduler) HandleEvent(world *World, event events.GameEvent) {
+func (cs *ClockScheduler) HandleEvent(event events.GameEvent) {
 	// Update metrics on phase change
 	if event.Type == events.EventPhaseChange {
 		if payload, ok := event.Payload.(*events.PhaseChangePayload); ok {
@@ -286,7 +286,7 @@ func (cs *ClockScheduler) dispatchAndProcessEvents() {
 		// Alternatively, we could register FSM as a handler in Router, but FSM needs to run logic, not just handle.
 		if handlers, ok := cs.eventRouter.GetHandlers(ev.Type); ok {
 			for _, h := range handlers {
-				h.HandleEvent(cs.ctx.World, ev)
+				h.HandleEvent(ev)
 			}
 		}
 	}
@@ -321,7 +321,7 @@ func (cs *ClockScheduler) processTick() {
 		cs.fsm.Update(cs.ctx.World, cs.tickInterval)
 
 		// Run Systems
-		cs.ctx.World.UpdateLocked(cs.tickInterval)
+		cs.ctx.World.UpdateLocked()
 	})
 
 	ticks := cs.ctx.State.IncrementGameTicks()

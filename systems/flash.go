@@ -1,8 +1,6 @@
 package systems
 
 import (
-	"time"
-
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -36,15 +34,16 @@ func (s *FlashSystem) EventTypes() []events.EventType {
 	}
 }
 
-func (s *FlashSystem) HandleEvent(world *engine.World, event events.GameEvent) {
+func (s *FlashSystem) HandleEvent(event events.GameEvent) {
 	if event.Type == events.EventFlashRequest {
 		if payload, ok := event.Payload.(*events.FlashRequestPayload); ok {
-			s.spawnDestructionFlash(world, payload.X, payload.Y, payload.Char)
+			s.spawnDestructionFlash(payload.X, payload.Y, payload.Char)
 		}
 	}
 }
 
-func (s *FlashSystem) Update(world *engine.World, dt time.Duration) {
+func (s *FlashSystem) Update() {
+	dt := s.res.Time.DeltaTime
 	entities := s.flashStore.All()
 	for _, entity := range entities {
 		flash, ok := s.flashStore.Get(entity)
@@ -54,7 +53,7 @@ func (s *FlashSystem) Update(world *engine.World, dt time.Duration) {
 
 		flash.Remaining -= dt
 		if flash.Remaining <= 0 {
-			world.DestroyEntity(entity)
+			s.world.DestroyEntity(entity)
 		} else {
 			s.flashStore.Add(entity, flash)
 		}
@@ -62,7 +61,7 @@ func (s *FlashSystem) Update(world *engine.World, dt time.Duration) {
 }
 
 // spawnDestructionFlash creates a flash effect at the given position
-func (s *FlashSystem) spawnDestructionFlash(world *engine.World, x, y int, char rune) {
+func (s *FlashSystem) spawnDestructionFlash(x, y int, char rune) {
 	flash := components.FlashComponent{
 		X:         x,
 		Y:         y,
@@ -71,6 +70,6 @@ func (s *FlashSystem) spawnDestructionFlash(world *engine.World, x, y int, char 
 		Duration:  constants.DestructionFlashDuration,
 	}
 
-	entity := world.CreateEntity()
+	entity := s.world.CreateEntity()
 	s.flashStore.Add(entity, flash)
 }

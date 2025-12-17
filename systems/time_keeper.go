@@ -1,8 +1,6 @@
 package systems
 
 import (
-	"time"
-
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -16,7 +14,7 @@ type TimeKeeperSystem struct {
 	res   engine.CoreResources
 
 	timerStore *engine.Store[components.TimerComponent]
-	deathStore *engine.Store[components.MarkedForDeathComponent]
+	deathStore *engine.Store[components.DeathComponent]
 }
 
 // NewTimeKeeperSystem creates a new timekeeper system
@@ -26,7 +24,7 @@ func NewTimeKeeperSystem(world *engine.World) engine.System {
 		res:   engine.GetCoreResources(world),
 
 		timerStore: engine.GetStore[components.TimerComponent](world),
-		deathStore: engine.GetStore[components.MarkedForDeathComponent](world),
+		deathStore: engine.GetStore[components.DeathComponent](world),
 	}
 }
 
@@ -43,7 +41,7 @@ func (s *TimeKeeperSystem) EventTypes() []events.EventType {
 }
 
 // HandleEvent processes timer registration events
-func (s *TimeKeeperSystem) HandleEvent(world *engine.World, event events.GameEvent) {
+func (s *TimeKeeperSystem) HandleEvent(event events.GameEvent) {
 	if event.Type == events.EventTimerStart {
 		if payload, ok := event.Payload.(*events.TimerStartPayload); ok {
 			s.timerStore.Add(payload.Entity, components.TimerComponent{
@@ -54,8 +52,9 @@ func (s *TimeKeeperSystem) HandleEvent(world *engine.World, event events.GameEve
 }
 
 // Update decrements timers and handles expiration
-func (s *TimeKeeperSystem) Update(world *engine.World, dt time.Duration) {
+func (s *TimeKeeperSystem) Update() {
 	entities := s.timerStore.All()
+	dt := s.res.Time.DeltaTime
 
 	for _, entity := range entities {
 		timer, ok := s.timerStore.Get(entity)
@@ -68,7 +67,7 @@ func (s *TimeKeeperSystem) Update(world *engine.World, dt time.Duration) {
 		if timer.Remaining <= 0 {
 			// Timer expired - Default action is destruction
 			s.timerStore.Remove(entity)
-			s.deathStore.Add(entity, components.MarkedForDeathComponent{})
+			s.deathStore.Add(entity, components.DeathComponent{})
 		} else {
 			s.timerStore.Add(entity, timer)
 		}
