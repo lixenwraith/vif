@@ -414,7 +414,8 @@ func (s *DrainSystem) despawnAllDrains() {
 
 // despawnDrainWithFlash removes a single drain entity and triggers destruction flash
 func (s *DrainSystem) despawnDrainWithFlash(entity core.Entity) {
-	// Get position for flash effect before destruction
+	// TODO: change flash to accommodate? or better: anti-decay mechanic or energy explosion (accumulated energy of stuff eaten)
+	// Flash emitted inline - drain entities lack CharacterComponent
 	if pos, ok := s.world.Positions.Get(entity); ok {
 		s.world.PushEvent(events.EventFlashRequest, &events.FlashRequestPayload{
 			X:    pos.X,
@@ -422,7 +423,10 @@ func (s *DrainSystem) despawnDrainWithFlash(entity core.Entity) {
 			Char: constants.DrainChar,
 		})
 	}
-	s.world.DestroyEntity(entity)
+	s.world.PushEvent(events.EventRequestDeath, &events.DeathRequestPayload{
+		Entities:    []core.Entity{entity},
+		EffectEvent: 0, // Flash already emitted
+	})
 }
 
 // materializeDrainAt creates a drain entity at the specified position

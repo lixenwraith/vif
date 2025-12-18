@@ -45,6 +45,7 @@ const (
 	PriorityUI          = 50
 	PriorityEffect      = 300
 	PrioritySplash      = 800 // After game logic, before rendering
+	PriorityDeath       = 850 // After game logic, before TimeKeeper
 	PriorityTimekeeper  = 890 // After game logic, before final cleanup
 	PriorityCleanup     = 900 // Last: Removes marked entities
 )

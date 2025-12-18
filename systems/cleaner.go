@@ -296,10 +296,12 @@ func (s *CleanerSystem) checkAndDestroyAtPositionExcluding(x, y int, selfEntity 
 		}
 	}
 
-	// Spawn flash effects and destroy marked entities
-	for _, e := range toDestroy {
-		s.spawnRemovalFlash(e)
-		s.world.DestroyEntity(e)
+	// Batch death with flash effect
+	if len(toDestroy) > 0 {
+		s.world.PushEvent(events.EventRequestDeath, &events.DeathRequestPayload{
+			Entities:    toDestroy,
+			EffectEvent: events.EventFlashRequest,
+		})
 	}
 }
 
@@ -405,48 +407,4 @@ func (s *CleanerSystem) scanRedCharacterRows() []int {
 		rows = append(rows, row)
 	}
 	return rows
-}
-
-// checkAndDestroyAtPosition handles collision logic using spatial index
-func (s *CleanerSystem) checkAndDestroyAtPosition(x, y int) {
-	// Get all entities at this position
-	targetEntities := s.world.Positions.GetAllAt(x, y)
-
-	// Create a copy or iterate carefully since we might destroy entities
-	// Destroying modifies the grid, so standard range loop on the slice
-	// returned by GetAllAt (which is a view of backing array) is unsafe if the backing array shifts
-	// However, PositionStore.Remove modifies the array in place
-	// Safer to collect candidates first
-	var toDestroy []core.Entity
-
-	for _, e := range targetEntities {
-		if e == 0 {
-			continue
-		}
-		// Verify it's a Red character
-		if seqComp, ok := s.seqStore.Get(e); ok {
-			if seqComp.Type == components.SequenceRed {
-				toDestroy = append(toDestroy, e)
-			}
-		}
-	}
-
-	// Spawn flash effect and destroy all marked to destroy
-	for _, e := range toDestroy {
-		s.spawnRemovalFlash(e)
-		s.world.DestroyEntity(e)
-	}
-}
-
-// spawnRemovalFlash creates a transient visual effect using generic stores
-func (s *CleanerSystem) spawnRemovalFlash(targetEntity core.Entity) {
-	if charComp, ok := s.charStore.Get(targetEntity); ok {
-		if posComp, ok := s.world.Positions.Get(targetEntity); ok {
-			s.world.PushEvent(events.EventFlashRequest, &events.FlashRequestPayload{
-				X:    posComp.X,
-				Y:    posComp.Y,
-				Char: charComp.Rune,
-			})
-		}
-	}
 }

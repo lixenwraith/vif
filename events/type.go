@@ -211,6 +211,11 @@ const (
 	// Trigger: DecaySystem when entity count reaches zero
 	// Consumer: ClockScheduler | Payload: nil
 	EventDecayComplete
+
+	// EventRequestDeath signals intent to destroy game entities
+	// Trigger: Game systems (Energy, Drain, Decay, Cleaner, etc.)
+	// Consumer: DeathSystem | Payload: *DeathRequestPayload
+	EventRequestDeath
 )
 
 // GameEvent represents a single game event with metadata

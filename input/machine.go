@@ -31,7 +31,7 @@ func NewMachine() *Machine {
 }
 
 // SetMode updates the parser's mode context
-// Called by modes.Router when game mode changes
+// Called by mode.Router when game mode changes
 func (m *Machine) SetMode(mode InputMode) {
 	m.mode = mode
 	if mode == ModeNormal {

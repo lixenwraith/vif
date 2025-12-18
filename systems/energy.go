@@ -256,8 +256,11 @@ func (s *EnergySystem) handleCharacterTyping(cursorX, cursorY int, typedRune run
 		}
 		s.triggerEnergyBlink(typeCode, levelCode)
 
-		// Safely destroy the character entity
-		s.world.DestroyEntity(entity)
+		// Request death (silent)
+		s.world.PushEvent(events.EventRequestDeath, &events.DeathRequestPayload{
+			Entities:    []core.Entity{entity},
+			EffectEvent: 0,
+		})
 
 		// Trigger splash for successful typing via Event
 		splashColor := s.getSplashColorForSequence(seq)
@@ -339,8 +342,11 @@ func (s *EnergySystem) handleNuggetCollection(entity core.Entity, char component
 		}
 	}
 
-	// Destroy the nugget entity
-	s.world.DestroyEntity(entity)
+	// Request death (silent)
+	s.world.PushEvent(events.EventRequestDeath, &events.DeathRequestPayload{
+		Entities:    []core.Entity{entity},
+		EffectEvent: 0,
+	})
 
 	// Trigger splash for nugget collection via Event
 	s.world.PushEvent(events.EventSplashRequest, &events.SplashRequestPayload{
@@ -385,8 +391,11 @@ func (s *EnergySystem) handleGoldSequenceTyping(entity core.Entity, char compone
 
 	s.triggerEnergyBlink(4, 2)
 
-	// Safely destroy the character entity
-	s.world.DestroyEntity(entity)
+	// Request death (silent - gold typing has splash feedback)
+	s.world.PushEvent(events.EventRequestDeath, &events.DeathRequestPayload{
+		Entities:    []core.Entity{entity},
+		EffectEvent: 0,
+	})
 
 	// Move cursor right
 	cursorPos, ok := s.world.Positions.Get(cursorEntity)
@@ -570,11 +579,15 @@ func (s *EnergySystem) handleDeleteRequest(payload *events.DeleteRequestPayload)
 		}
 	}
 
-	// Execute deletion and side effects
-	for _, entity := range entitiesToDelete {
-		s.world.DestroyEntity(entity)
+	// Execute deletion via DeathSystem (silent - delete operator has no flash)
+	if len(entitiesToDelete) > 0 {
+		s.world.PushEvent(events.EventRequestDeath, &events.DeathRequestPayload{
+			Entities:    entitiesToDelete,
+			EffectEvent: 0,
+		})
 	}
 
+	// TODO: should only reset if non-red deletec
 	if resetHeat {
 		s.world.PushEvent(events.EventHeatSet, &events.HeatSetPayload{Value: 0})
 	}

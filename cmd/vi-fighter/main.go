@@ -15,7 +15,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/events"
 	"github.com/lixenwraith/vi-fighter/input"
 	"github.com/lixenwraith/vi-fighter/manifest"
-	"github.com/lixenwraith/vi-fighter/modes"
+	"github.com/lixenwraith/vi-fighter/mode"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/systems"
 	"github.com/lixenwraith/vi-fighter/terminal"
@@ -148,7 +148,7 @@ func main() {
 	// === PHASE 8: Input & Clock Scheduler ===
 	// Create input handler
 	inputMachine := input.NewMachine()
-	router := modes.NewRouter(ctx, inputMachine)
+	router := mode.NewRouter(ctx, inputMachine)
 
 	// Create frame synchronization channel
 	frameReady := make(chan struct{}, 1)

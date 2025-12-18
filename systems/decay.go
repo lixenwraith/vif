@@ -237,16 +237,14 @@ func (s *DecaySystem) updateDecayEntities() {
 				}
 
 				if s.nuggetStore.Has(targetEntity) {
-					if char, ok := s.charStore.Get(targetEntity); ok {
-						s.world.PushEvent(events.EventFlashRequest, &events.FlashRequestPayload{
-							X: col, Y: row, Char: char.Rune,
-						})
-					}
 					// Signal nugget destruction to NuggetSystem
 					s.world.PushEvent(events.EventNuggetDestroyed, &events.NuggetDestroyedPayload{
 						Entity: targetEntity,
 					})
-					s.world.DestroyEntity(targetEntity)
+					s.world.PushEvent(events.EventRequestDeath, &events.DeathRequestPayload{
+						Entities:    []core.Entity{targetEntity},
+						EffectEvent: events.EventFlashRequest,
+					})
 				} else {
 					s.applyDecayToCharacter(targetEntity)
 				}
@@ -331,15 +329,11 @@ func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
 				s.charStore.Add(entity, char)
 			}
 		} else {
-			// Red at LevelDark - spawn flash then remove entity
-			if pos, ok := s.world.Positions.Get(entity); ok {
-				if char, ok := s.charStore.Get(entity); ok {
-					s.world.PushEvent(events.EventFlashRequest, &events.FlashRequestPayload{
-						X: pos.X, Y: pos.Y, Char: char.Rune,
-					})
-				}
-			}
-			s.world.DestroyEntity(entity)
+			// Red at LevelDark - death with flash
+			s.world.PushEvent(events.EventRequestDeath, &events.DeathRequestPayload{
+				Entities:    []core.Entity{entity},
+				EffectEvent: events.EventFlashRequest,
+			})
 		}
 	}
 }

@@ -1,4 +1,4 @@
-package modes
+package mode
 
 import (
 	"github.com/lixenwraith/vi-fighter/components"

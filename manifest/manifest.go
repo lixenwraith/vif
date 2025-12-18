@@ -77,6 +77,9 @@ func RegisterSystems() {
 	registry.RegisterSystem("splash", func(w any) any {
 		return systems.NewSplashSystem(w.(*engine.World))
 	})
+	registry.RegisterSystem("death", func(w any) any {
+		return systems.NewDeathSystem(w.(*engine.World))
+	})
 	registry.RegisterSystem("timekeeper", func(w any) any {
 		return systems.NewTimeKeeperSystem(w.(*engine.World))
 	})
@@ -162,6 +165,7 @@ func ActiveSystems() []string {
 		"cleaner",
 		"flash",
 		"splash",
+		"death",
 		"timekeeper",
 		"cull",
 	}

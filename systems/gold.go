@@ -268,6 +268,7 @@ func (s *GoldSystem) removeGold(sequenceID int) {
 	s.mu.RUnlock()
 
 	entities := s.seqStore.All()
+	var toDestroy []core.Entity
 	for _, entity := range entities {
 		seq, ok := s.seqStore.Get(entity)
 		if !ok {
@@ -275,8 +276,15 @@ func (s *GoldSystem) removeGold(sequenceID int) {
 		}
 		// Only remove gold sequence entities with provided ID
 		if seq.Type == components.SequenceGold && (sequenceID == 0 || seq.ID == sequenceID) {
-			s.world.DestroyEntity(entity)
+			toDestroy = append(toDestroy, entity)
 		}
+	}
+
+	if len(toDestroy) > 0 {
+		s.world.PushEvent(events.EventRequestDeath, &events.DeathRequestPayload{
+			Entities:    toDestroy,
+			EffectEvent: 0,
+		})
 	}
 
 	s.mu.Lock()

@@ -163,3 +163,10 @@ type NuggetDestroyedPayload struct {
 type SoundRequestPayload struct {
 	SoundType audio.SoundType
 }
+
+// DeathRequestPayload contains batch death request
+// EffectEvent: 0 = silent death, EventFlashRequest = flash, future: explosion, chain death
+type DeathRequestPayload struct {
+	Entities    []core.Entity
+	EffectEvent EventType
+}
