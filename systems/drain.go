@@ -65,6 +65,9 @@ func NewDrainSystem(world *engine.World) engine.System {
 	}
 }
 
+// Init
+func (s *DrainSystem) Init() {}
+
 // Priority returns the system's priority
 func (s *DrainSystem) Priority() int {
 	return constants.PriorityDrain

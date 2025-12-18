@@ -96,6 +96,40 @@ func (m *Machine[T]) Update(ctx T, dt time.Duration) {
 	}
 }
 
+// Reset returns FSM to initial state, executing full entry sequence
+// Preserves graph structure, zeros time tracking
+// MUST be called under World lock to prevent event dispatch races
+func (m *Machine[T]) Reset(ctx T) error {
+	if m.InitialStateID == StateNone {
+		return fmt.Errorf("FSM not initialized")
+	}
+
+	// Zero time tracking (prevents stale timer inheritance)
+	m.timeInState = 0
+
+	// TODO: seems fragile, should be able to immediately unplug considering system reset happens prior in pause
+	// Exit current state hierarchy (OnExit actions)
+	// Then enter initial state hierarchy (OnEnter actions)
+	// OnEnter will emit EventGoldSpawnRequest via EmitEvent action
+	if m.activeStateID != StateNone && m.activeStateID != m.InitialStateID {
+		// Perform clean exit from current state before re-init
+		currentPath := make([]StateID, len(m.activePath))
+		copy(currentPath, m.activePath)
+
+		// Walk up from leaf to root, executing OnExit
+		for i := len(currentPath) - 1; i >= 0; i-- {
+			if node, ok := m.nodes[currentPath[i]]; ok {
+				for _, action := range node.OnExit {
+					action.Func(ctx, action.Args)
+				}
+			}
+		}
+	}
+
+	// Re-initialize to initial state (runs OnEnter chain)
+	return m.Init(ctx, m.InitialStateID)
+}
+
 // HandleEvent routes an external event through the state hierarchy
 // Returns true if the event triggered a transition or was consumed
 func (m *Machine[T]) HandleEvent(ctx T, eventType events.EventType) bool {

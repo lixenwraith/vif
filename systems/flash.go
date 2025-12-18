@@ -24,6 +24,9 @@ func NewFlashSystem(world *engine.World) engine.System {
 	}
 }
 
+// Init
+func (s *FlashSystem) Init() {}
+
 func (s *FlashSystem) Priority() int {
 	return constants.PriorityFlash
 }

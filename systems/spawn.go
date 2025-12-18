@@ -104,7 +104,7 @@ type SpawnSystem struct {
 }
 
 // NewSpawnSystem creates a new spawn system
-func NewSpawnSystem(world *engine.World) *SpawnSystem {
+func NewSpawnSystem(world *engine.World) engine.System {
 	res := engine.GetCoreResources(world)
 	now := res.Time.GameTime
 
@@ -153,6 +153,9 @@ func NewSpawnSystem(world *engine.World) *SpawnSystem {
 
 	return s
 }
+
+// Init
+func (s *SpawnSystem) Init() {}
 
 // Priority returns the system's priority
 func (s *SpawnSystem) Priority() int {

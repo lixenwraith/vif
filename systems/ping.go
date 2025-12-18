@@ -27,6 +27,9 @@ func NewPingSystem(world *engine.World) engine.System {
 	}
 }
 
+// Init
+func (s *PingSystem) Init() {}
+
 // Priority returns the system's priority
 // Should run before rendering to ensure visual state is up to date
 func (s *PingSystem) Priority() int {

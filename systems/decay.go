@@ -51,6 +51,9 @@ func NewDecaySystem(world *engine.World) engine.System {
 	}
 }
 
+// Init
+func (s *DecaySystem) Init() {}
+
 // Priority returns the system's priority
 func (s *DecaySystem) Priority() int {
 	return constants.PriorityDecay

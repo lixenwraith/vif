@@ -12,14 +12,17 @@ import (
 	"github.com/lixenwraith/vi-fighter/events"
 )
 
-// ClockScheduler manages game logic on a fixed 50ms tick
+// ClockScheduler manages game logic on a fixed tick
 // Provides infrastructure for phase transitions and state ownership
 // Handles pause-aware scheduling without busy-wait
 type ClockScheduler struct {
-	ctx          *GameContext
-	timeProvider *PausableClock
-	// TimeResource singleton for in-place updates
-	timeRes *TimeResource
+	world    *World
+	timeRes  *TimeResource
+	stateRes *GameStateResource
+	eqRes    *EventQueueResource
+
+	pausableClock *PausableClock
+	isPaused      *atomic.Bool
 
 	// Tick configuration
 	tickInterval     time.Duration
@@ -31,10 +34,11 @@ type ClockScheduler struct {
 	mu        sync.RWMutex
 
 	// Control channels
-	stopChan chan struct{}
-	stopOnce sync.Once
-	wg       sync.WaitGroup // Ensures goroutine exits before Stop() returns
-	running  atomic.Bool
+	stopChan  chan struct{}
+	stopOnce  sync.Once
+	wg        sync.WaitGroup
+	running   atomic.Bool
+	resetChan <-chan struct{}
 
 	// Frame synchronization channels
 	frameReady <-chan struct{} // Receive signal that frame is ready
@@ -52,30 +56,43 @@ type ClockScheduler struct {
 }
 
 // NewClockScheduler creates a new clock scheduler with specified tick interval
-func NewClockScheduler(ctx *GameContext, tickInterval time.Duration, frameReady <-chan struct{}) (*ClockScheduler, <-chan struct{}) {
+// Receives frameReady sync (receive) channel and returns game updateDone (send) and resetRequest (send) channels
+func NewClockScheduler(
+	world *World,
+	pausableClock *PausableClock,
+	isPaused *atomic.Bool,
+	tickInterval time.Duration,
+	frameReady <-chan struct{},
+) (*ClockScheduler, <-chan struct{}, chan<- struct{}) {
 	updateDone := make(chan struct{}, 1)
+	resetChan := make(chan struct{}, 1)
 
-	// Look up the singleton TimeResource once at startup
-	timeRes := MustGetResource[*TimeResource](ctx.World.Resources)
-	statusReg := MustGetResource[*status.Registry](ctx.World.Resources)
+	timeRes := MustGetResource[*TimeResource](world.Resources)
+	stateRes := MustGetResource[*GameStateResource](world.Resources)
+	statusReg := MustGetResource[*status.Registry](world.Resources)
+	eqRes := MustGetResource[*EventQueueResource](world.Resources)
 
 	cs := &ClockScheduler{
-		ctx:              ctx,
-		timeProvider:     ctx.PausableClock,
+		world:            world,
+		pausableClock:    pausableClock,
+		isPaused:         isPaused,
 		tickInterval:     tickInterval,
 		timeRes:          timeRes,
-		lastGameTickTime: ctx.PausableClock.Now(),
+		stateRes:         stateRes,
+		eqRes:            eqRes,
+		lastGameTickTime: pausableClock.Now(),
 		tickCount:        atomic.Uint64{},
-		eventRouter:      events.NewRouter(ctx.eventQueue),
+		eventRouter:      events.NewRouter(MustGetResource[*EventQueueResource](world.Resources).Queue),
 		frameReady:       frameReady,
 		updateDone:       updateDone,
+		resetChan:        resetChan,
 		stopChan:         make(chan struct{}),
 		statusReg:        statusReg,
 		statTicks:        statusReg.Ints.Get("engine.ticks"),
 		fsm:              fsm.NewMachine[*World](),
 	}
 
-	return cs, updateDone
+	return cs, updateDone, resetChan
 }
 
 // RegisterEventHandler adds an event handler to the router, must be called before Start()
@@ -95,7 +112,7 @@ func (cs *ClockScheduler) LoadFSM(configJSON string, registerComponents func(*fs
 	}
 
 	// Initialize State (enters initial state)
-	if err := cs.fsm.Init(cs.ctx.World, cs.fsm.InitialStateID); err != nil {
+	if err := cs.fsm.Init(cs.world, cs.fsm.InitialStateID); err != nil {
 		return fmt.Errorf("failed to init FSM: %w", err)
 	}
 
@@ -126,8 +143,8 @@ func (cs *ClockScheduler) schedulerLoop() {
 	defer cs.wg.Done()
 
 	cs.mu.Lock()
-	cs.nextTickDeadline = cs.timeProvider.Now().Add(cs.tickInterval)
-	cs.lastGameTickTime = cs.timeProvider.Now()
+	cs.nextTickDeadline = cs.pausableClock.Now().Add(cs.tickInterval)
+	cs.lastGameTickTime = cs.pausableClock.Now()
 	cs.mu.Unlock()
 
 	timer := time.NewTimer(0)
@@ -143,15 +160,22 @@ func (cs *ClockScheduler) schedulerLoop() {
 		select {
 		case <-cs.stopChan:
 			return
+
+		case <-cs.resetChan:
+			// Execute reset regardless of current pause state to prevent channel clogging
+			cs.executeReset()
+			continue
+
 		default:
 		}
 
 		var sleepDuration time.Duration
 
-		if cs.ctx.IsPaused.Load() {
+		if cs.isPaused.Load() {
+			// Increase sleep interval while paused to save CPU
 			sleepDuration = cs.tickInterval * 2
 		} else {
-			gameNow := cs.timeProvider.Now()
+			gameNow := cs.pausableClock.Now()
 
 			cs.mu.RLock()
 			deadline := cs.nextTickDeadline
@@ -185,7 +209,7 @@ func (cs *ClockScheduler) schedulerLoop() {
 				default:
 				}
 
-				sleepDuration = deadline.Sub(cs.timeProvider.Now())
+				sleepDuration = deadline.Sub(cs.pausableClock.Now())
 				if sleepDuration < 0 {
 					sleepDuration = 0
 				}
@@ -198,6 +222,16 @@ func (cs *ClockScheduler) schedulerLoop() {
 			timer.Reset(sleepDuration)
 			select {
 			case <-timer.C:
+			case <-cs.resetChan:
+				if !timer.Stop() {
+					select {
+					case <-timer.C:
+					default:
+					}
+				}
+				if cs.isPaused.Load() {
+					cs.executeReset()
+				}
 			case <-cs.stopChan:
 				return
 			}
@@ -205,11 +239,43 @@ func (cs *ClockScheduler) schedulerLoop() {
 	}
 }
 
+// executeReset performs FSM reset while scheduler mutex is held
+func (cs *ClockScheduler) executeReset() {
+	// NOTE: Do not use RunSafe if called from a blocking system
+	// 1. Drain and discard stale events from the previous game session
+	_ = cs.eqRes.Queue.Consume()
+
+	// 2. Synchronize with world lock
+	// Acquire lock explicitly, wait till MetaSystem finishes its synchronous cleanup and releases the lock
+	cs.world.Lock()
+	defer cs.world.Unlock()
+
+	// 3. Reset Scheduler internal timing
+	cs.mu.Lock()
+	cs.tickCount.Store(0)
+	cs.lastGameTickTime = cs.pausableClock.Now()
+	cs.nextTickDeadline = cs.lastGameTickTime.Add(cs.tickInterval)
+	cs.mu.Unlock()
+
+	// 4. Reset FSM state - This will trigger OnEnter actions
+	if err := cs.fsm.Reset(cs.world); err != nil {
+		panic(fmt.Errorf("FSM reset failed: %v", err))
+	}
+
+	// 5. Process the events emitted by FSM Reset while holding World lock to ensure initial entities are spawned in world BEFORE unpause
+	cs.dispatchAndProcessEvents()
+
+	// 6. Transition to Running state
+	// Scheduler is the unpause authority during reset, preventing systems from ticking against an uninitialized FSM
+	cs.isPaused.Store(false)
+	cs.pausableClock.Resume()
+}
+
 // dispatchAndProcessEvents processes pending events through Router AND FSM
 func (cs *ClockScheduler) dispatchAndProcessEvents() {
-	eventsList := cs.ctx.eventQueue.Consume()
+	eventsList := cs.eqRes.Queue.Consume()
 	for _, ev := range eventsList {
-		cs.fsm.HandleEvent(cs.ctx.World, ev.Type)
+		cs.fsm.HandleEvent(cs.world, ev.Type)
 
 		if handlers, ok := cs.eventRouter.GetHandlers(ev.Type); ok {
 			for _, h := range handlers {
@@ -221,40 +287,40 @@ func (cs *ClockScheduler) dispatchAndProcessEvents() {
 
 // DispatchEventsImmediately processes all pending events synchronously
 func (cs *ClockScheduler) DispatchEventsImmediately() {
-	cs.ctx.World.RunSafe(func() {
+	cs.world.RunSafe(func() {
 		cs.dispatchAndProcessEvents()
 	})
 }
 
 // processTick executes one clock cycle
 func (cs *ClockScheduler) processTick() {
-	if cs.ctx.IsPaused.Load() {
+	if cs.isPaused.Load() {
 		return
 	}
 
-	cs.ctx.World.RunSafe(func() {
-		now := cs.timeProvider.Now()
+	cs.world.RunSafe(func() {
+		now := cs.pausableClock.Now()
 		cs.timeRes.Update(
 			now,
-			cs.timeProvider.RealTime(),
+			cs.pausableClock.RealTime(),
 			cs.tickInterval,
-			cs.ctx.State.GetFrameNumber(),
+			MustGetResource[*GameStateResource](cs.world.Resources).State.GetFrameNumber(),
 		)
 
 		// Process Events (Input -> FSM -> Systems)
 		cs.dispatchAndProcessEvents()
 
 		// Update FSM Logic (Tick transitions)
-		cs.fsm.Update(cs.ctx.World, cs.tickInterval)
+		cs.fsm.Update(cs.world, cs.tickInterval)
 
 		// Run Systems
-		cs.ctx.World.UpdateLocked()
+		cs.world.UpdateLocked()
 	})
 
-	ticks := cs.ctx.State.IncrementGameTicks()
+	ticks := cs.stateRes.State.IncrementGameTicks()
 	cs.statTicks.Store(int64(ticks))
 
 	if cs.tickCount.Load()%20 == 0 {
-		cs.ctx.State.UpdateAPM(cs.statusReg)
+		cs.stateRes.State.UpdateAPM(cs.statusReg)
 	}
 }

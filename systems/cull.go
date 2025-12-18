@@ -27,6 +27,9 @@ func NewCullSystem(world *engine.World) engine.System {
 	}
 }
 
+// Init
+func (s *CullSystem) Init() {}
+
 // Priority returns the system's priority (highest value = runs last)
 func (s *CullSystem) Priority() int {
 	return constants.PriorityCleanup

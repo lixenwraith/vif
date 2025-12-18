@@ -509,10 +509,10 @@ func (r *Router) handleTextConfirm() bool {
 
 	case core.ModeCommand:
 		command := snapshot.CommandText
-		var shouldContinue bool
 
+		var result CommandResult
 		r.ctx.World.RunSafe(func() {
-			shouldContinue = ExecuteCommand(r.ctx, command)
+			result = ExecuteCommand(r.ctx, command)
 		})
 
 		r.ctx.SetCommandText("")
@@ -521,12 +521,14 @@ func (r *Router) handleTextConfirm() bool {
 		if r.ctx.GetMode() != core.ModeOverlay {
 			r.ctx.SetMode(core.ModeNormal)
 			r.machine.SetMode(input.ModeNormal)
-			r.ctx.SetPaused(false)
+			if !result.KeepPaused {
+				r.ctx.SetPaused(false)
+			}
 		} else {
 			r.machine.SetMode(input.ModeOverlay)
 		}
 
-		return shouldContinue
+		return result.Continue
 	}
 
 	return true

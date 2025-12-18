@@ -26,6 +26,9 @@ func NewAudioSystem(world *engine.World) engine.System {
 	}
 }
 
+// Init
+func (s *AudioSystem) Init() {}
+
 // Priority returns the system's priority
 func (s *AudioSystem) Priority() int {
 	return constants.PriorityUI

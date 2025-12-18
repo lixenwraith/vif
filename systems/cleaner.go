@@ -40,6 +40,9 @@ func NewCleanerSystem(world *engine.World) engine.System {
 	}
 }
 
+// Init
+func (s *CleanerSystem) Init() {}
+
 // Priority returns the system's priority
 func (s *CleanerSystem) Priority() int {
 	return constants.PriorityCleaner

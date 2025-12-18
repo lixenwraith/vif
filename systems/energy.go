@@ -50,6 +50,9 @@ func NewEnergySystem(world *engine.World) engine.System {
 	}
 }
 
+// Init
+func (s *EnergySystem) Init() {}
+
 // Priority returns the system's priority
 func (s *EnergySystem) Priority() int {
 	return constants.PriorityEnergy

@@ -46,6 +46,9 @@ func NewMetaSystem(ctx *engine.GameContext) engine.System {
 	}
 }
 
+// Init
+func (s *MetaSystem) Init() {}
+
 // Priority returns the system's priority
 func (s *MetaSystem) Priority() int {
 	return constants.PriorityUI
@@ -77,25 +80,34 @@ func (s *MetaSystem) Update() {
 	// No tick-based logic
 }
 
-// handleGameReset resets the game state
+// handleGameReset performs full game reset with deterministic ordering
+// Execution sequence (race-free):
+//  1. Entity cleanup (drains, world entities)
+//  2. State reset (counters, timers)
+//  3. Cursor recreation
+//  4. FSM reset (emits spawn request, dispatched immediately)
+//
+// Other systems handle EventGameReset after this completes
 func (s *MetaSystem) handleGameReset() {
-	// Stop any playing audio
+	// Phase 1: Stop audio
 	s.ctx.StopAudio()
 
-	// Despawn drain entities before clearing world
-	drains := s.drainStore.All()
-	for _, e := range drains {
-		s.ctx.World.DestroyEntity(e)
-	}
-
-	// Clear all entities from the world
+	// Phase 2: Synchronous World Cleanup
+	// Already inside world.RunSafe from main -> DispatchEventsImmediately
 	s.ctx.World.Clear()
 
-	// Reset entire game state
+	// Phase 3: State reset (counters, NextSeqID → 1)
 	s.ctx.State.Reset(s.ctx.PausableClock.Now())
 
-	// Recreate cursor entity
+	// Phase 4: Cursor recreation (required before spawn events)
 	s.ctx.CreateCursorEntity()
+
+	// Phase 5: Signal FSM reset - Non-blocking
+	// On return from this function main releases the world lock and scheduler acquires it for reset
+	select {
+	case s.ctx.ResetChan <- struct{}{}:
+	default:
+	}
 }
 
 // handleDebugRequest shows debug information overlay

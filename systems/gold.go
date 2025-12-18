@@ -63,6 +63,9 @@ func NewGoldSystem(world *engine.World) engine.System {
 	}
 }
 
+// Init
+func (s *GoldSystem) Init() {}
+
 // Priority returns the system's priority
 func (s *GoldSystem) Priority() int {
 	return constants.PriorityGold

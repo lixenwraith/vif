@@ -30,6 +30,9 @@ func NewSplashSystem(world *engine.World) engine.System {
 	}
 }
 
+// Init
+func (s *SplashSystem) Init() {}
+
 // Priority returns the system's priority (low, after game logic)
 func (s *SplashSystem) Priority() int {
 	return constants.PrioritySplash

@@ -42,6 +42,9 @@ func NewNuggetSystem(world *engine.World) engine.System {
 	}
 }
 
+// Init
+func (s *NuggetSystem) Init() {}
+
 // Priority returns the system's priority
 func (s *NuggetSystem) Priority() int {
 	return constants.PriorityNugget

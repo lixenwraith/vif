@@ -11,12 +11,18 @@ import (
 	"github.com/lixenwraith/vi-fighter/events"
 )
 
-// ExecuteCommand executes a command and returns false if the game should exit
-func ExecuteCommand(ctx *engine.GameContext, command string) bool {
-	// Trim whitespace
+// CommandResult represents the outcome of command execution
+type CommandResult struct {
+	Continue   bool // false = exit game
+	KeepPaused bool // true = caller should not unpause
+}
+
+// ExecuteCommand parses and executes a command string
+// Returns CommandResult indicating whether game should continue and pause state
+func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 	command = strings.TrimSpace(command)
 	if command == "" {
-		return true
+		return CommandResult{Continue: true, KeepPaused: false}
 	}
 
 	// Parse command into parts (space-separated)
@@ -46,38 +52,44 @@ func ExecuteCommand(ctx *engine.GameContext, command string) bool {
 		return handleHelpCommand(ctx)
 	default:
 		setCommandError(ctx, fmt.Sprintf("Unknown command: %s", cmd))
-		return true
+		return CommandResult{Continue: true, KeepPaused: false}
 	}
 }
 
+// setCommandError sets an error message in the status message
+// This string will be cleared by InputHandler on the next keystroke
+func setCommandError(ctx *engine.GameContext, message string) {
+	ctx.SetStatusMessage(message)
+}
+
 // handleQuitCommand exits the game
-func handleQuitCommand(ctx *engine.GameContext) bool {
-	return false // Signal game exit
+func handleQuitCommand(ctx *engine.GameContext) CommandResult {
+	return CommandResult{Continue: false, KeepPaused: true}
 }
 
 // handleNewCommand resets the game state via event
-func handleNewCommand(ctx *engine.GameContext) bool {
+func handleNewCommand(ctx *engine.GameContext) CommandResult {
 	ctx.PushEvent(events.EventGameReset, nil)
 	ctx.SetLastCommand(":new")
-	return true
+	return CommandResult{Continue: true, KeepPaused: true}
 }
 
 // handleEnergyCommand sets the energy to a specified value
-func handleEnergyCommand(ctx *engine.GameContext, args []string) bool {
+func handleEnergyCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if len(args) != 1 {
 		setCommandError(ctx, "Invalid arguments for energy")
-		return true
+		return CommandResult{Continue: true, KeepPaused: false}
 	}
 
 	value, err := strconv.Atoi(args[0])
 	if err != nil {
 		setCommandError(ctx, "Invalid arguments for energy")
-		return true
+		return CommandResult{Continue: true, KeepPaused: false}
 	}
 
 	if value < 0 {
 		setCommandError(ctx, "Value out of range for energy")
-		return true
+		return CommandResult{Continue: true, KeepPaused: false}
 	}
 
 	ctx.PushEvent(events.EventEnergySet, &events.EnergySetPayload{
@@ -85,25 +97,22 @@ func handleEnergyCommand(ctx *engine.GameContext, args []string) bool {
 	})
 
 	ctx.SetLastCommand(fmt.Sprintf(":energy %d", value))
-	return true
+	return CommandResult{Continue: true, KeepPaused: false}
 }
 
 // handleHeatCommand sets the heat to a specified value
-func handleHeatCommand(ctx *engine.GameContext, args []string) bool {
-	// 1. Argument Validation
+func handleHeatCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if len(args) != 1 {
 		setCommandError(ctx, "Usage: :heat <0-100>")
-		return true
+		return CommandResult{Continue: true, KeepPaused: false}
 	}
 
-	// 2. Parse Value
 	value, err := strconv.Atoi(args[0])
 	if err != nil {
 		setCommandError(ctx, "Invalid number format")
-		return true
+		return CommandResult{Continue: true, KeepPaused: false}
 	}
 
-	// 3. Logic Validation (0-MaxHeat)
 	if value < 0 {
 		value = 0
 	}
@@ -111,17 +120,14 @@ func handleHeatCommand(ctx *engine.GameContext, args []string) bool {
 		value = constants.MaxHeat
 	}
 
-	// 4. Update Feedback first (visible immediately)
+	ctx.PushEvent(events.EventHeatSet, &events.HeatSetPayload{Value: value})
 	ctx.SetLastCommand(fmt.Sprintf(":heat %d", value))
 
-	// 5. Push event for HeatSystem to process
-	ctx.PushEvent(events.EventHeatSet, &events.HeatSetPayload{Value: value})
-
-	return true
+	return CommandResult{Continue: true, KeepPaused: false}
 }
 
 // handleBoostCommand triggers boost request event
-func handleBoostCommand(ctx *engine.GameContext) bool {
+func handleBoostCommand(ctx *engine.GameContext) CommandResult {
 	ctx.PushEvent(events.EventHeatSet, &events.HeatSetPayload{
 		Value: constants.MaxHeat,
 	})
@@ -131,22 +137,22 @@ func handleBoostCommand(ctx *engine.GameContext) bool {
 	})
 
 	ctx.SetLastCommand(":boost")
-	return true
+	return CommandResult{Continue: true, KeepPaused: false}
 }
 
 // handleGodCommand sets heat to max and energy to high value
-func handleGodCommand(ctx *engine.GameContext) bool {
+func handleGodCommand(ctx *engine.GameContext) CommandResult {
 	ctx.PushEvent(events.EventHeatSet, &events.HeatSetPayload{Value: constants.MaxHeat})
 	ctx.PushEvent(events.EventEnergySet, &events.EnergySetPayload{Value: constants.GodEnergyAmount})
 	ctx.SetLastCommand(":god")
-	return true
+	return CommandResult{Continue: true, KeepPaused: false}
 }
 
 // handleSpawnCommand enables or disables entity spawning via event
-func handleSpawnCommand(ctx *engine.GameContext, args []string) bool {
+func handleSpawnCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if len(args) != 1 {
 		setCommandError(ctx, "Invalid arguments for spawn")
-		return true
+		return CommandResult{Continue: true, KeepPaused: false}
 	}
 
 	arg := strings.ToLower(args[0])
@@ -161,27 +167,19 @@ func handleSpawnCommand(ctx *engine.GameContext, args []string) bool {
 		setCommandError(ctx, "Invalid arguments for spawn")
 	}
 
-	return true
-}
-
-// setCommandError sets an error message in the status message
-// This string will be cleared by InputHandler on the next keystroke
-func setCommandError(ctx *engine.GameContext, message string) {
-	ctx.SetStatusMessage(message)
+	return CommandResult{Continue: true, KeepPaused: false}
 }
 
 // handleDebugCommand triggers debug overlay event
-func handleDebugCommand(ctx *engine.GameContext) bool {
-	// Synchronous mode switch to prevent InputHandler from reverting mode
+func handleDebugCommand(ctx *engine.GameContext) CommandResult {
 	ctx.SetMode(core.ModeOverlay)
 	ctx.PushEvent(events.EventDebugRequest, nil)
-	return true
+	return CommandResult{Continue: true, KeepPaused: true}
 }
 
 // handleHelpCommand triggers help overlay event
-func handleHelpCommand(ctx *engine.GameContext) bool {
-	// Synchronous mode switch to prevent InputHandler from reverting mode
+func handleHelpCommand(ctx *engine.GameContext) CommandResult {
 	ctx.SetMode(core.ModeOverlay)
 	ctx.PushEvent(events.EventHelpRequest, nil)
-	return true
+	return CommandResult{Continue: true, KeepPaused: true}
 }

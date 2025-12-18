@@ -30,6 +30,9 @@ func NewDeathSystem(world *engine.World) engine.System {
 	}
 }
 
+// Init
+func (s *DeathSystem) Init() {}
+
 func (s *DeathSystem) Priority() int {
 	return constants.PriorityDeath
 }

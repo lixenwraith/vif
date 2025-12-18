@@ -25,6 +25,9 @@ func NewBoostSystem(world *engine.World) engine.System {
 	}
 }
 
+// Init
+func (s *BoostSystem) Init() {}
+
 func (s *BoostSystem) Priority() int {
 	return constants.PriorityBoost
 }

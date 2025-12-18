@@ -154,7 +154,16 @@ func main() {
 	frameReady := make(chan struct{}, 1)
 
 	// Create clock scheduler with frame synchronization
-	clockScheduler, gameUpdateDone := engine.NewClockScheduler(ctx, constants.GameUpdateInterval, frameReady)
+	clockScheduler, gameUpdateDone, resetChan := engine.NewClockScheduler(
+		world,
+		ctx.PausableClock,
+		&ctx.IsPaused,
+		constants.GameUpdateInterval,
+		frameReady,
+	)
+
+	// Wire reset channels to GameContext for MetaSystem access
+	ctx.ResetChan = resetChan
 
 	// === Phase 9: FSM Setup ===
 	// Initialize Event Registry first (for payload reflection)

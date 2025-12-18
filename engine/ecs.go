@@ -6,6 +6,7 @@ package engine
 
 // System is an interface that all systems must implement
 type System interface {
+	Init()
 	Update()
 	Priority() int // Lower values run first
 }

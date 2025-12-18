@@ -28,6 +28,9 @@ func NewTimeKeeperSystem(world *engine.World) engine.System {
 	}
 }
 
+// Init
+func (s *TimeKeeperSystem) Init() {}
+
 // Priority returns the system's priority (runs just before CullSystem)
 func (s *TimeKeeperSystem) Priority() int {
 	return constants.PriorityTimekeeper

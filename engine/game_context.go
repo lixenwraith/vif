@@ -51,6 +51,9 @@ type GameContext struct {
 	// Pausable Clock time provider
 	PausableClock *PausableClock
 
+	// FSM Reset channel, wired by main to ClockScheduler
+	ResetChan chan<- struct{}
+
 	// Screen dimensions
 	Width, Height int
 

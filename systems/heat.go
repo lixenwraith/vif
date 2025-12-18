@@ -24,6 +24,9 @@ func NewHeatSystem(world *engine.World) engine.System {
 	}
 }
 
+// Init
+func (s *HeatSystem) Init() {}
+
 func (s *HeatSystem) Priority() int {
 	return constants.PriorityHeat
 }

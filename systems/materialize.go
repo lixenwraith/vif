@@ -28,6 +28,9 @@ func NewMaterializeSystem(world *engine.World) engine.System {
 	}
 }
 
+// Init
+func (s *MaterializeSystem) Init() {}
+
 // Priority returns the system's priority
 // Must run before DrainSystem which listens to completion
 func (s *MaterializeSystem) Priority() int {
