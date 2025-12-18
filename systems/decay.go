@@ -13,6 +13,7 @@ import (
 
 // DecaySystem handles character decay animation and logic
 type DecaySystem struct {
+	mu    sync.RWMutex
 	world *engine.World
 	res   engine.CoreResources
 
@@ -23,8 +24,7 @@ type DecaySystem struct {
 	charStore   *engine.Store[components.CharacterComponent]
 	seqStore    *engine.Store[components.SequenceComponent]
 
-	// Internal state
-	mu        sync.RWMutex
+	// State
 	animating bool
 
 	// Per-frame tracking
@@ -35,24 +35,37 @@ type DecaySystem struct {
 // NewDecaySystem creates a new decay system
 func NewDecaySystem(world *engine.World) engine.System {
 	res := engine.GetCoreResources(world)
-	return &DecaySystem{
+	s := &DecaySystem{
 		world: world,
 		res:   res,
 
-		decayStore:       engine.GetStore[components.DecayComponent](world),
-		protStore:        engine.GetStore[components.ProtectionComponent](world),
-		deathStore:       engine.GetStore[components.DeathComponent](world),
-		nuggetStore:      engine.GetStore[components.NuggetComponent](world),
-		charStore:        engine.GetStore[components.CharacterComponent](world),
-		seqStore:         engine.GetStore[components.SequenceComponent](world),
-		decayedThisFrame: make(map[core.Entity]bool),
+		decayStore:  engine.GetStore[components.DecayComponent](world),
+		protStore:   engine.GetStore[components.ProtectionComponent](world),
+		deathStore:  engine.GetStore[components.DeathComponent](world),
+		nuggetStore: engine.GetStore[components.NuggetComponent](world),
+		charStore:   engine.GetStore[components.CharacterComponent](world),
+		seqStore:    engine.GetStore[components.SequenceComponent](world),
 
+		decayedThisFrame:   make(map[core.Entity]bool),
 		processedGridCells: make(map[int]bool),
 	}
+	s.initLocked()
+	return s
 }
 
-// Init
-func (s *DecaySystem) Init() {}
+// Init resets session state for new game
+func (s *DecaySystem) Init() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.initLocked()
+}
+
+// initLocked performs session state reset, caller must hold s.mu
+func (s *DecaySystem) initLocked() {
+	s.animating = false
+	clear(s.decayedThisFrame)
+	clear(s.processedGridCells)
+}
 
 // Priority returns the system's priority
 func (s *DecaySystem) Priority() int {
@@ -78,11 +91,7 @@ func (s *DecaySystem) HandleEvent(event events.GameEvent) {
 		s.despawnDecayEntities()
 
 	case events.EventGameReset:
-		s.mu.Lock()
-		s.animating = false
-		clear(s.decayedThisFrame)
-		clear(s.processedGridCells)
-		s.mu.Unlock()
+		s.Init()
 	}
 }
 

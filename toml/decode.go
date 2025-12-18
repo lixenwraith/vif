@@ -33,6 +33,15 @@ func decodeValue(data any, val reflect.Value) error {
 	}
 
 	switch val.Kind() {
+	case reflect.Ptr:
+		// Allocate new value of the pointed-to type, decode into it, set pointer
+		elemType := val.Type().Elem()
+		newVal := reflect.New(elemType)
+		if err := decodeValue(data, newVal.Elem()); err != nil {
+			return err
+		}
+		val.Set(newVal)
+
 	case reflect.Struct:
 		dataMap, ok := data.(map[string]any)
 		if !ok {

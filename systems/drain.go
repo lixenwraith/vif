@@ -3,6 +3,7 @@ package systems
 import (
 	"cmp"
 	"math/rand"
+	"sync"
 
 	"github.com/lixenwraith/vi-fighter/components"
 	"github.com/lixenwraith/vi-fighter/constants"
@@ -24,6 +25,7 @@ type pendingDrainSpawn struct {
 // Drains spawn based on Heat only
 // Priority: 25 (after CleanerSystem:22, before DecaySystem:30)
 type DrainSystem struct {
+	mu    sync.Mutex
 	world *engine.World
 	res   engine.CoreResources
 
@@ -48,7 +50,7 @@ type DrainSystem struct {
 
 // NewDrainSystem creates a new drain system
 func NewDrainSystem(world *engine.World) engine.System {
-	return &DrainSystem{
+	s := &DrainSystem{
 		world: world,
 		res:   engine.GetCoreResources(world),
 
@@ -63,10 +65,22 @@ func NewDrainSystem(world *engine.World) engine.System {
 
 		pendingSpawns: make([]pendingDrainSpawn, 0, constants.DrainMaxCount),
 	}
+	s.initLocked()
+	return s
 }
 
-// Init
-func (s *DrainSystem) Init() {}
+// Init resets session state for new game
+func (s *DrainSystem) Init() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.initLocked()
+}
+
+// initLocked performs session state reset, caller must hold s.mu
+func (s *DrainSystem) initLocked() {
+	s.pendingSpawns = s.pendingSpawns[:0]
+	s.spawnCooldownUntil = 0
+}
 
 // Priority returns the system's priority
 func (s *DrainSystem) Priority() int {
@@ -77,18 +91,23 @@ func (s *DrainSystem) Priority() int {
 func (s *DrainSystem) EventTypes() []events.EventType {
 	return []events.EventType{
 		events.EventMaterializeComplete,
+		events.EventGameReset,
 	}
 }
 
 // HandleEvent processes events
 func (s *DrainSystem) HandleEvent(event events.GameEvent) {
-	if event.Type == events.EventMaterializeComplete {
+	switch event.Type {
+	case events.EventMaterializeComplete:
 		if payload, ok := event.Payload.(*events.SpawnCompletePayload); ok {
 			if payload.Type == components.SpawnTypeDrain {
 				s.removeCompletedSpawn(payload.X, payload.Y)
 				s.materializeDrainAt(payload.X, payload.Y)
 			}
 		}
+
+	case events.EventGameReset:
+		s.Init()
 	}
 }
 

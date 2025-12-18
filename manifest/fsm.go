@@ -65,54 +65,34 @@ func RegisterFSMComponents(m *fsm.Machine[*engine.World]) {
 	})
 }
 
-// DefaultGameplayFSMConfig returns the default JSON configuration matching the legacy ClockScheduler logic
+// DefaultGameplayFSMConfig returns the default TOML configuration matching the legacy ClockScheduler logic
 // This effectively ports the hardcoded Phase switch into data
 const DefaultGameplayFSMConfig = `
-{
-  "initial": "TrySpawnGold",
-  "states": {
-    "Gameplay": {
-      "parent": "Root"
-    },
-    "TrySpawnGold": {
-      "parent": "Gameplay",
-      "on_enter": [
-        { "action": "EmitEvent", "event": "EventGoldSpawnRequest" }
-      ],
-      "transitions": [
-        { "trigger": "EventGoldSpawned", "target": "GoldActive" },
-        { "trigger": "EventGoldSpawnFailed", "target": "GoldRetryWait" }
-      ]
-    },
-    "GoldRetryWait": {
-      "parent": "Gameplay",
-      "transitions": [
-        { "trigger": "Tick", "target": "TrySpawnGold", "guard": "StateTimeExceeds", "guard_args": { "ms": 1 } }
-      ]
-    },
-    "GoldActive": {
-      "parent": "Gameplay",
-      "transitions": [
-        { "trigger": "EventGoldComplete", "target": "DecayWait" },
-        { "trigger": "EventGoldTimeout", "target": "DecayWait" },
-        { "trigger": "EventGoldDestroyed", "target": "DecayWait" }
-      ]
-    },
-    "DecayWait": {
-      "parent": "Gameplay",
-      "transitions": [
-        { "trigger": "Tick", "target": "DecayAnimation", "guard": "StateTimeExceeds", "guard_args": { "ms": 10000 } }
-      ]
-    },
-    "DecayAnimation": {
-      "parent": "Gameplay",
-      "on_enter": [
-        { "action": "EmitEvent", "event": "EventDecayStart" }
-      ],
-      "transitions": [
-        { "trigger": "EventDecayComplete", "target": "TrySpawnGold" }
-      ]
-    }
-  }
-}
+initial = "TrySpawnGold"
+
+[states.Gameplay]
+parent = "Root"
+
+[states.TrySpawnGold]
+parent = "Gameplay"
+on_enter = [
+	{ action = "EmitEvent", event = "EventGoldSpawnRequest" }
+]
+transitions = [
+	{ trigger = "EventGoldSpawned", target = "GoldActive" },
+	{ trigger = "EventGoldSpawnFailed", target = "GoldRetryWait" }
+]
+
+[states.GoldRetryWait]
+parent = "Gameplay"
+transitions = [
+	{ trigger = "Tick", target = "TrySpawnGold", guard = "StateTimeExceeds", guard_args = { ms = 2000 } }
+]
+
+[states.GoldActive]
+parent = "Gameplay"
+transitions = [
+	{ trigger = "EventGoldCollected", target = "TrySpawnGold" },
+	{ trigger = "EventGoldExpired", target = "TrySpawnGold" }
+]
 `

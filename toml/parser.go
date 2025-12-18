@@ -252,9 +252,12 @@ func (p *Parser) parseValue() (any, error) {
 		p.nextToken()
 		return val, nil
 	case TokenInteger:
-		val, _ := strconv.ParseInt(p.curToken.Literal, 10, 64)
+		val, err := p.parseInteger(p.curToken.Literal)
+		if err != nil {
+			return nil, fmt.Errorf("invalid integer %q at line %d: %w", p.curToken.Literal, p.curToken.Line, err)
+		}
 		p.nextToken()
-		return int(val), nil // Cast to int for convenience
+		return val, nil
 	case TokenFloat:
 		val, _ := strconv.ParseFloat(p.curToken.Literal, 64)
 		p.nextToken()
@@ -269,6 +272,43 @@ func (p *Parser) parseValue() (any, error) {
 		return p.parseInlineTable()
 	}
 	return nil, fmt.Errorf("unexpected value token %s at line %d", p.curToken.String(), p.curToken.Line)
+}
+
+func (p *Parser) parseInteger(lit string) (int, error) {
+	// Handle optional leading sign
+	negative := false
+	numLit := lit
+	if len(numLit) > 0 && (numLit[0] == '+' || numLit[0] == '-') {
+		negative = numLit[0] == '-'
+		numLit = numLit[1:]
+	}
+
+	var val int64
+	var err error
+
+	if len(numLit) > 2 && numLit[0] == '0' {
+		switch numLit[1] {
+		case 'x', 'X':
+			val, err = strconv.ParseInt(numLit[2:], 16, 64)
+		case 'o', 'O':
+			val, err = strconv.ParseInt(numLit[2:], 8, 64)
+		case 'b', 'B':
+			val, err = strconv.ParseInt(numLit[2:], 2, 64)
+		default:
+			val, err = strconv.ParseInt(lit, 10, 64)
+			return int(val), err
+		}
+		if err != nil {
+			return 0, err
+		}
+		if negative {
+			val = -val
+		}
+		return int(val), nil
+	}
+
+	val, err = strconv.ParseInt(lit, 10, 64)
+	return int(val), err
 }
 
 func (p *Parser) parseArray() ([]any, error) {

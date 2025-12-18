@@ -95,20 +95,19 @@ func NewClockScheduler(
 	return cs, updateDone, resetChan
 }
 
-// RegisterEventHandler adds an event handler to the router, must be called before Start()
+// RegisterEventHandler adds an event handler to router, must be called before Start()
 func (cs *ClockScheduler) RegisterEventHandler(handler events.Handler) {
 	cs.eventRouter.Register(handler)
 }
 
-// LoadFSM initializes the HFSM with the provided JSON config and registry bridge
-// MUST be called before Start()
-func (cs *ClockScheduler) LoadFSM(configJSON string, registerComponents func(*fsm.Machine[*World])) error {
+// LoadFSM initializes HFSM with provided config and registry bridge, must be called before Start()
+func (cs *ClockScheduler) LoadFSM(config string, registerComponents func(*fsm.Machine[*World])) error {
 	// Register Actions/Guards
 	registerComponents(cs.fsm)
 
 	// Load Graph
-	if err := cs.fsm.LoadJSON([]byte(configJSON)); err != nil {
-		return fmt.Errorf("failed to load FSM JSON: %w", err)
+	if err := cs.fsm.LoadConfig([]byte(config)); err != nil {
+		return fmt.Errorf("failed to load FSM config: %w", err)
 	}
 
 	// Initialize State (enters initial state)

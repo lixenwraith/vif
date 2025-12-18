@@ -192,10 +192,17 @@ func (l *Lexer) unescape(s string) string {
 
 func (l *Lexer) readBareOrNumber() Token {
 	start := l.pos
+	firstCh := l.peek()
+	// Numbers start with digit or sign; bare keys start with alpha/_
+	isNumber := isDigit(firstCh) || firstCh == '+' || firstCh == '-'
+
 	for l.pos < len(l.input) {
 		ch := l.peek()
 		// Bare keys: A-Za-z0-9_-
-		if isAlpha(ch) || isDigit(ch) || ch == '_' || ch == '-' || ch == '+' || ch == '.' {
+		if isAlpha(ch) || isDigit(ch) || ch == '_' || ch == '-' || ch == '+' {
+			l.advance()
+		} else if ch == '.' && isNumber {
+			// Allow '.' only in numeric context (floats)
 			l.advance()
 		} else {
 			break
@@ -206,6 +213,18 @@ func (l *Lexer) readBareOrNumber() Token {
 	// Classify
 	if lit == "true" || lit == "false" {
 		return l.newToken(TokenBool, lit)
+	}
+
+	// Check for prefixed integers: 0x, 0o, 0b (with optional leading sign)
+	checkLit := lit
+	if len(checkLit) > 0 && (checkLit[0] == '+' || checkLit[0] == '-') {
+		checkLit = checkLit[1:]
+	}
+	if len(checkLit) > 2 && checkLit[0] == '0' {
+		switch checkLit[1] {
+		case 'x', 'X', 'o', 'O', 'b', 'B':
+			return l.newToken(TokenInteger, lit)
+		}
 	}
 
 	// Try Number

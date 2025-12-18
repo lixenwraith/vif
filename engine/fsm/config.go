@@ -1,34 +1,31 @@
 package fsm
 
-import "encoding/json"
-
-// RootConfig represents the top-level JSON structure
+// RootConfig represents the top-level config structure
 type RootConfig struct {
-	InitialState string                  `json:"initial"`
-	States       map[string]*StateConfig `json:"states"`
+	InitialState string                  `toml:"initial"`
+	States       map[string]*StateConfig `toml:"states"`
 }
 
-// StateConfig represents a single state definition in JSON
+// StateConfig represents a single state definition
 type StateConfig struct {
-	Parent      string             `json:"parent,omitempty"`
-	OnEnter     []ActionConfig     `json:"on_enter,omitempty"`
-	OnUpdate    []ActionConfig     `json:"on_update,omitempty"`
-	OnExit      []ActionConfig     `json:"on_exit,omitempty"`
-	Transitions []TransitionConfig `json:"transitions,omitempty"`
+	Parent      string             `toml:"parent,omitempty"`
+	OnEnter     []ActionConfig     `toml:"on_enter,omitempty"`
+	OnUpdate    []ActionConfig     `toml:"on_update,omitempty"`
+	OnExit      []ActionConfig     `toml:"on_exit,omitempty"`
+	Transitions []TransitionConfig `toml:"transitions,omitempty"`
 }
 
 // TransitionConfig represents a transition definition
 type TransitionConfig struct {
-	Trigger   string         `json:"trigger"`              // Event Name or "Tick"
-	Target    string         `json:"target"`               // Target State Name
-	Guard     string         `json:"guard,omitempty"`      // Guard function name
-	GuardArgs map[string]any `json:"guard_args,omitempty"` // parameters for factory guards
+	Trigger   string         `toml:"trigger"`              // Event Name or "Tick"
+	Target    string         `toml:"target"`               // Target State Name
+	Guard     string         `toml:"guard,omitempty"`      // Guard function name
+	GuardArgs map[string]any `toml:"guard_args,omitempty"` // Parameters for factory guards
 }
 
 // ActionConfig represents an action definition
-// Payload is kept as RawMessage to be unmarshaled later using reflection
 type ActionConfig struct {
-	Action  string          `json:"action"`            // Action function name (e.g. "EmitEvent")
-	Event   string          `json:"event,omitempty"`   // For EmitEvent: Event Name
-	Payload json.RawMessage `json:"payload,omitempty"` // For EmitEvent: Event Payload object
+	Action  string `toml:"action"`            // Action function name (e.g. "EmitEvent")
+	Event   string `toml:"event,omitempty"`   // For EmitEvent: Event Name
+	Payload any    `toml:"payload,omitempty"` // For EmitEvent: Event Payload (map[string]any from parser)
 }

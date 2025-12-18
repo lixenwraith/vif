@@ -46,7 +46,7 @@ type GoldSystem struct {
 // NewGoldSystem creates a new gold sequence system
 func NewGoldSystem(world *engine.World) engine.System {
 	res := engine.GetCoreResources(world)
-	return &GoldSystem{
+	s := &GoldSystem{
 		world: world,
 		res:   res,
 
@@ -55,16 +55,30 @@ func NewGoldSystem(world *engine.World) engine.System {
 		charStore: engine.GetStore[components.CharacterComponent](world),
 		protStore: engine.GetStore[components.ProtectionComponent](world),
 
-		nextSeqID:    1,
-		spawnEnabled: true,
-		statActive:   res.Status.Bools.Get("gold.active"),
-		statSeqID:    res.Status.Ints.Get("gold.seq_id"),
-		statTimer:    res.Status.Ints.Get("gold.timer"),
+		nextSeqID:  1,
+		statActive: res.Status.Bools.Get("gold.active"),
+		statSeqID:  res.Status.Ints.Get("gold.seq_id"),
+		statTimer:  res.Status.Ints.Get("gold.timer"),
 	}
+	s.initLocked()
+	return s
 }
 
-// Init
-func (s *GoldSystem) Init() {}
+// Init resets session state for new game
+func (s *GoldSystem) Init() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.initLocked()
+}
+
+// initLocked performs session state reset, caller must hold s.mu
+func (s *GoldSystem) initLocked() {
+	s.active = false
+	s.sequenceID = 0
+	s.startTime = time.Time{}
+	s.timeoutTime = time.Time{}
+	s.spawnEnabled = true
+}
 
 // Priority returns the system's priority
 func (s *GoldSystem) Priority() int {
@@ -121,12 +135,7 @@ func (s *GoldSystem) HandleEvent(event events.GameEvent) {
 		}
 
 	case events.EventGameReset:
-		s.mu.Lock()
-		s.active = false
-		s.sequenceID = 0
-		s.startTime = time.Time{}
-		s.timeoutTime = time.Time{}
-		s.mu.Unlock()
+		s.Init()
 
 		s.statActive.Store(false)
 		s.statSeqID.Store(0)

@@ -2,6 +2,7 @@ package systems
 
 import (
 	"math"
+	"sync"
 
 	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/components"
@@ -13,6 +14,7 @@ import (
 
 // CleanerSystem manages the cleaner animation and logic using vector physics
 type CleanerSystem struct {
+	mu    sync.Mutex
 	world *engine.World
 	res   engine.CoreResources
 
@@ -27,7 +29,7 @@ type CleanerSystem struct {
 
 // NewCleanerSystem creates a new cleaner system
 func NewCleanerSystem(world *engine.World) engine.System {
-	return &CleanerSystem{
+	s := &CleanerSystem{
 		world: world,
 		res:   engine.GetCoreResources(world),
 
@@ -38,10 +40,22 @@ func NewCleanerSystem(world *engine.World) engine.System {
 
 		spawned: make(map[int64]bool),
 	}
+	s.initLocked()
+	return s
 }
 
-// Init
-func (s *CleanerSystem) Init() {}
+// Init resets session state for new game
+func (s *CleanerSystem) Init() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.initLocked()
+}
+
+// initLocked performs session state reset, caller must hold s.mu
+func (s *CleanerSystem) initLocked() {
+	clear(s.spawned)
+	s.hasSpawnedSession = false
+}
 
 // Priority returns the system's priority
 func (s *CleanerSystem) Priority() int {
@@ -53,6 +67,7 @@ func (s *CleanerSystem) EventTypes() []events.EventType {
 	return []events.EventType{
 		events.EventCleanerRequest,
 		events.EventDirectionalCleanerRequest,
+		events.EventGameReset,
 	}
 }
 
@@ -75,6 +90,10 @@ func (s *CleanerSystem) HandleEvent(event events.GameEvent) {
 			s.spawned[event.Frame] = true
 			s.hasSpawnedSession = true
 		}
+
+	case events.EventGameReset:
+		s.Init()
+		return
 	}
 }
 

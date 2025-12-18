@@ -256,3 +256,231 @@ func TestDecode_TypeMismatch(t *testing.T) {
 		t.Error("Expected error decoding string to int")
 	}
 }
+
+// FILE: decode_fsm_test.go
+
+func TestLexer_DottedKeyVsFloat(t *testing.T) {
+	// Verify lexer correctly distinguishes dotted keys from floats
+	tests := []struct {
+		input    string
+		expected []TokenType
+	}{
+		{"a.b", []TokenType{TokenIdent, TokenDot, TokenIdent, TokenEOF}},
+		{"1.5", []TokenType{TokenFloat, TokenEOF}},
+		{"-3.14", []TokenType{TokenFloat, TokenEOF}},
+		{"+2.0", []TokenType{TokenFloat, TokenEOF}},
+		{"a.b.c", []TokenType{TokenIdent, TokenDot, TokenIdent, TokenDot, TokenIdent, TokenEOF}},
+		{"1e10", []TokenType{TokenFloat, TokenEOF}},
+		{"1.5e-3", []TokenType{TokenFloat, TokenEOF}},
+		{"key_name", []TokenType{TokenIdent, TokenEOF}},
+		{"key-name", []TokenType{TokenIdent, TokenEOF}},
+	}
+
+	for _, tc := range tests {
+		l := NewLexer([]byte(tc.input))
+		var got []TokenType
+		for {
+			tok := l.NextToken()
+			got = append(got, tok.Type)
+			if tok.Type == TokenEOF || tok.Type == TokenError {
+				break
+			}
+		}
+		if len(got) != len(tc.expected) {
+			t.Errorf("input %q: token count mismatch, got %d, want %d", tc.input, len(got), len(tc.expected))
+			continue
+		}
+		for i, tt := range tc.expected {
+			if got[i] != tt {
+				t.Errorf("input %q: token[%d] = %v, want %v", tc.input, i, got[i], tt)
+			}
+		}
+	}
+}
+
+func TestUnmarshal_FloatInNestedTable(t *testing.T) {
+	input := []byte(`
+[physics.gravity]
+x = 0.0
+y = -9.81
+z = 0.0
+`)
+	type Vec3 struct {
+		X float64 `toml:"x"`
+		Y float64 `toml:"y"`
+		Z float64 `toml:"z"`
+	}
+	type Config struct {
+		Physics struct {
+			Gravity Vec3 `toml:"gravity"`
+		} `toml:"physics"`
+	}
+
+	var cfg Config
+	if err := Unmarshal(input, &cfg); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+	if cfg.Physics.Gravity.Y != -9.81 {
+		t.Errorf("Gravity.Y = %f, want -9.81", cfg.Physics.Gravity.Y)
+	}
+}
+
+func TestUnmarshal_DeepDottedKeys(t *testing.T) {
+	input := []byte(`
+[a.b.c.d]
+value = 42
+`)
+	type Config struct {
+		A struct {
+			B struct {
+				C struct {
+					D struct {
+						Value int `toml:"value"`
+					} `toml:"d"`
+				} `toml:"c"`
+			} `toml:"b"`
+		} `toml:"a"`
+	}
+
+	var cfg Config
+	if err := Unmarshal(input, &cfg); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+	if cfg.A.B.C.D.Value != 42 {
+		t.Errorf("Value = %d, want 42", cfg.A.B.C.D.Value)
+	}
+}
+
+func TestUnmarshal_MixedDottedAndInline(t *testing.T) {
+	input := []byte(`
+[server.http]
+port = 8080
+tls = { enabled = true, cert = "server.crt" }
+`)
+	type TLS struct {
+		Enabled bool   `toml:"enabled"`
+		Cert    string `toml:"cert"`
+	}
+	type Config struct {
+		Server struct {
+			HTTP struct {
+				Port int `toml:"port"`
+				TLS  TLS `toml:"tls"`
+			} `toml:"http"`
+		} `toml:"server"`
+	}
+
+	var cfg Config
+	if err := Unmarshal(input, &cfg); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+	if cfg.Server.HTTP.Port != 8080 {
+		t.Errorf("Port = %d, want 8080", cfg.Server.HTTP.Port)
+	}
+	if !cfg.Server.HTTP.TLS.Enabled {
+		t.Error("TLS.Enabled should be true")
+	}
+}
+
+func TestUnmarshal_ScientificNotation(t *testing.T) {
+	input := []byte(`
+planck = 6.626e-34
+avogadro = 6.022e+23
+speed_of_light = 3e8
+`)
+	type Config struct {
+		Planck       float64 `toml:"planck"`
+		Avogadro     float64 `toml:"avogadro"`
+		SpeedOfLight float64 `toml:"speed_of_light"`
+	}
+
+	var cfg Config
+	if err := Unmarshal(input, &cfg); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+	if cfg.SpeedOfLight != 3e8 {
+		t.Errorf("SpeedOfLight = %e, want 3e8", cfg.SpeedOfLight)
+	}
+}
+
+func TestUnmarshal_HyphenatedKeys(t *testing.T) {
+	input := []byte(`
+[my-section]
+my-key = "value"
+another_key = 123
+`)
+	type Config struct {
+		MySection struct {
+			MyKey      string `toml:"my-key"`
+			AnotherKey int    `toml:"another_key"`
+		} `toml:"my-section"`
+	}
+
+	var cfg Config
+	if err := Unmarshal(input, &cfg); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+	if cfg.MySection.MyKey != "value" {
+		t.Errorf("MyKey = %q, want \"value\"", cfg.MySection.MyKey)
+	}
+}
+
+func TestUnmarshal_ArrayOfTablesWithPointers(t *testing.T) {
+	input := []byte(`
+[[items]]
+name = "first"
+value = 1.5
+
+[[items]]
+name = "second"
+value = 2.5
+`)
+	type Item struct {
+		Name  string  `toml:"name"`
+		Value float64 `toml:"value"`
+	}
+	type Config struct {
+		Items []*Item `toml:"items"`
+	}
+
+	var cfg Config
+	if err := Unmarshal(input, &cfg); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+	if len(cfg.Items) != 2 {
+		t.Fatalf("len(Items) = %d, want 2", len(cfg.Items))
+	}
+	if cfg.Items[0] == nil || cfg.Items[0].Value != 1.5 {
+		t.Errorf("Items[0] mismatch: %+v", cfg.Items[0])
+	}
+}
+
+func TestUnmarshal_NestedMapPointers(t *testing.T) {
+	input := []byte(`
+[entities.player]
+health = 100
+speed = 5.5
+
+[entities.enemy]
+health = 50
+speed = 3.0
+`)
+	type Entity struct {
+		Health int     `toml:"health"`
+		Speed  float64 `toml:"speed"`
+	}
+	type Config struct {
+		Entities map[string]*Entity `toml:"entities"`
+	}
+
+	var cfg Config
+	if err := Unmarshal(input, &cfg); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+	if cfg.Entities["player"] == nil || cfg.Entities["player"].Speed != 5.5 {
+		t.Errorf("player mismatch: %+v", cfg.Entities["player"])
+	}
+	if cfg.Entities["enemy"] == nil || cfg.Entities["enemy"].Health != 50 {
+		t.Errorf("enemy mismatch: %+v", cfg.Entities["enemy"])
+	}
+}

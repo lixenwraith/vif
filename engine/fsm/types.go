@@ -75,3 +75,10 @@ type ActionFunc[T any] func(ctx T, args any)
 // GuardFactoryFunc creates a parameterized guard from JSON args
 // Used for configurable guards like StateTimeExceeds with duration parameter
 type GuardFactoryFunc[T any] func(m *Machine[T], args map[string]any) GuardFunc[T]
+
+// EmitEventArgs holds pre-compiled event data for the EmitEvent action
+// Type identifies the event; Payload is the decoded struct (or nil)
+type EmitEventArgs struct {
+	Type    events.EventType
+	Payload any
+}

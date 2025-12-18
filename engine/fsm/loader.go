@@ -1,20 +1,20 @@
 package fsm
 
 import (
-	"encoding/json"
 	"fmt"
 	"sort"
 
 	"github.com/lixenwraith/vi-fighter/events"
+	"github.com/lixenwraith/vi-fighter/toml"
 )
 
-// LoadJSON parses a JSON byte slice and populates the Machine
+// LoadConfig parses a TOML byte slice and populates the Machine
 // Validates all references (states, guards, actions, events)
 // Clears existing graph data before loading
-func (m *Machine[T]) LoadJSON(data []byte) error {
-	// 1. Decode JSON into intermediate config
+func (m *Machine[T]) LoadConfig(data []byte) error {
+	// 1. Decode TOML into intermediate config
 	var config RootConfig
-	if err := json.Unmarshal(data, &config); err != nil {
+	if err := toml.Unmarshal(data, &config); err != nil {
 		return fmt.Errorf("failed to unmarshal FSM config: %w", err)
 	}
 
@@ -138,25 +138,17 @@ func (m *Machine[T]) compileActions(configs []ActionConfig) ([]Action[T], error)
 
 			// Create Payload Struct
 			payload := events.NewPayloadStruct(et)
-			if payload != nil && len(cfg.Payload) > 0 {
-				// Unmarshal JSON into struct
-				if err := json.Unmarshal(cfg.Payload, payload); err != nil {
-					return nil, fmt.Errorf("failed to unmarshal payload for event '%s': %w", cfg.Event, err)
+			if payload != nil && cfg.Payload != nil {
+				// Decode map[string]any into struct
+				if err := toml.Decode(cfg.Payload, payload); err != nil {
+					return nil, fmt.Errorf("failed to decode payload for event '%s': %w", cfg.Event, err)
 				}
 			}
 
-			// For EmitEvent, Args is a tuple-like struct or we rely on the specific Action implementation
-			// We'll wrap it in a generic EmitArgs struct if needed, or pass the payload directly if the action expects it
-			// However, `ActionFunc` signature is `func(ctx, args)`.
-			// We need to pass both EventType and Payload.
-			// Let's use a standard wrapper struct for EmitEvent.
 			args = &EmitEventArgs{
 				Type:    et,
 				Payload: payload,
 			}
-		} else {
-			// Generic args handling (if needed later)
-			// For now, only EmitEvent is fully supported with reflection
 		}
 
 		actions = append(actions, Action[T]{
@@ -169,43 +161,37 @@ func (m *Machine[T]) compileActions(configs []ActionConfig) ([]Action[T], error)
 
 func (m *Machine[T]) compileTransitions(node *Node[T], configs []TransitionConfig, nameToID map[string]StateID) error {
 	for _, cfg := range configs {
-		// Resolve Trigger
-		et, ok := events.GetEventType(cfg.Trigger)
-		if !ok {
-			return fmt.Errorf("unknown trigger event '%s'", cfg.Trigger)
-		}
-
-		// Resolve Target
 		targetID, ok := nameToID[cfg.Target]
 		if !ok {
-			return fmt.Errorf("unknown target state '%s'", cfg.Target)
+			return fmt.Errorf("transition references unknown target '%s'", cfg.Target)
 		}
 
-		// Resolve Guard (factory first, then static)
+		var eventType events.EventType = 0 // 0 = Tick
+		if cfg.Trigger != "Tick" {
+			et, ok := events.GetEventType(cfg.Trigger)
+			if !ok {
+				return fmt.Errorf("unknown event type '%s'", cfg.Trigger)
+			}
+			eventType = et
+		}
+
 		var guard GuardFunc[T]
 		if cfg.Guard != "" {
+			// Check factory first
 			if factory, ok := m.guardFactoryReg[cfg.Guard]; ok {
-				// Parameterized guard via factory
 				guard = factory(m, cfg.GuardArgs)
-			} else if staticGuard, ok := m.guardReg[cfg.Guard]; ok {
-				// Static guard
-				guard = staticGuard
+			} else if g, ok := m.guardReg[cfg.Guard]; ok {
+				guard = g
 			} else {
-				return fmt.Errorf("unknown guard function '%s'", cfg.Guard)
+				return fmt.Errorf("unknown guard '%s'", cfg.Guard)
 			}
 		}
 
 		node.Transitions = append(node.Transitions, Transition[T]{
 			TargetID: targetID,
-			Event:    et,
+			Event:    eventType,
 			Guard:    guard,
 		})
 	}
 	return nil
-}
-
-// EmitEventArgs wraps arguments for the EmitEvent action
-type EmitEventArgs struct {
-	Type    events.EventType
-	Payload any
 }

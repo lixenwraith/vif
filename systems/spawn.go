@@ -74,6 +74,7 @@ type CodeBlock struct {
 
 // SpawnSystem handles character sequence generation and spawning
 type SpawnSystem struct {
+	mu    sync.RWMutex
 	world *engine.World
 	res   engine.CoreResources
 
@@ -106,7 +107,6 @@ type SpawnSystem struct {
 // NewSpawnSystem creates a new spawn system
 func NewSpawnSystem(world *engine.World) engine.System {
 	res := engine.GetCoreResources(world)
-	now := res.Time.GameTime
 
 	s := &SpawnSystem{
 		world: world,
@@ -115,23 +115,11 @@ func NewSpawnSystem(world *engine.World) engine.System {
 		seqStore:  engine.GetStore[components.SequenceComponent](world),
 		charStore: engine.GetStore[components.CharacterComponent](world),
 
-		// Initialize spawn state
-		enabled:        true, // Default enabled, future FSM will control
-		lastSpawnTime:  now,
-		nextSpawnTime:  now,
-		rateMultiplier: 1.0,
-
 		// Cache metric pointers
 		statEnabled:  res.Status.Bools.Get("spawn.enabled"),
 		statDensity:  res.Status.Floats.Get("spawn.density"),
 		statRateMult: res.Status.Floats.Get("spawn.rate_mult"),
 	}
-
-	// Initialize content management atomics (not game state)
-	s.isRefreshing.Store(false)
-	s.nextBlockIndex.Store(0)
-	s.totalBlocks.Store(0)
-	s.blocksConsumed.Store(0)
 
 	// Initialize ContentManager
 	s.contentManager = content.NewContentManager()
@@ -151,11 +139,27 @@ func NewSpawnSystem(world *engine.World) engine.System {
 	// Load initial content
 	s.loadContentFromManager()
 
+	s.initLocked()
 	return s
 }
 
-// Init
-func (s *SpawnSystem) Init() {}
+// Init resets session state for new game
+func (s *SpawnSystem) Init() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.initLocked()
+}
+
+// initLocked performs session state reset, caller must hold s.mu
+func (s *SpawnSystem) initLocked() {
+	s.enabled = true
+	s.lastSpawnTime = time.Time{}
+	s.nextSpawnTime = time.Time{}
+	s.rateMultiplier = 1.0
+	s.nextBlockIndex.Store(0)
+	s.blocksConsumed.Store(0)
+	s.isRefreshing.Store(false)
+}
 
 // Priority returns the system's priority
 func (s *SpawnSystem) Priority() int {
@@ -180,10 +184,7 @@ func (s *SpawnSystem) HandleEvent(event events.GameEvent) {
 		}
 
 	case events.EventGameReset:
-		now := s.res.Time.GameTime
-		s.lastSpawnTime = now
-		s.nextSpawnTime = now
-		s.rateMultiplier = 1.0
+		s.Init()
 		s.statRateMult.Set(1.0)
 		s.statDensity.Set(0.0)
 	}
