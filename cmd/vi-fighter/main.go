@@ -138,13 +138,6 @@ func main() {
 		orchestrator.Register(renderer, entry.Priority)
 	}
 
-	// // Event-driven system, not added to World.systems list since no Update(dt) logic
-	// audioSystem := systems.NewAudioSystem(ctx.World)
-	// // No factor for command system
-	//
-	// commandSystem := systems.NewCommandSystem(ctx)
-	//
-
 	// === PHASE 8: Input & Clock Scheduler ===
 	// Create input handler
 	inputMachine := input.NewMachine()

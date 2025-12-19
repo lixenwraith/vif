@@ -49,14 +49,14 @@ func TestLexer_InvalidNumbers(t *testing.T) {
 func TestDecode_DeepPointers(t *testing.T) {
 	data := map[string]any{"val": 42}
 	type T struct {
-		Val ****int `toml:"val"`
+		Val ******int `toml:"val"`
 	}
 	var tgt T
 	if err := Decode(data, &tgt); err != nil {
 		t.Fatalf("Deep pointer decode failed: %v", err)
 	}
-	if ****tgt.Val != 42 {
-		t.Errorf("Expected 42, got %d", ****tgt.Val)
+	if ******tgt.Val != 42 {
+		t.Errorf("Expected 42, got %d", ******tgt.Val)
 	}
 }
 
