@@ -1,8 +1,8 @@
 package mode
 
 import (
-	"github.com/lixenwraith/vi-fighter/components"
-	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/component"
+	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 )
@@ -19,7 +19,7 @@ const (
 // getCharAt returns the character at the given position, or 0 if empty
 func getCharAt(ctx *engine.GameContext, x, y int) rune {
 	entities := ctx.World.Positions.GetAllAt(x, y)
-	charStore := engine.GetStore[components.CharacterComponent](ctx.World)
+	charStore := engine.GetStore[component.CharacterComponent](ctx.World)
 
 	for _, entity := range entities {
 		if entity == ctx.CursorEntity || entity == 0 {
@@ -74,7 +74,7 @@ func validatePosition(ctx *engine.GameContext, x, y int) (validX, validY int) {
 func findCharInDirection(ctx *engine.GameContext, startX, startY int, target rune, count int, forward bool) (int, bool) {
 	occurrences := 0
 	lastMatch := -1
-	charStore := engine.GetStore[components.CharacterComponent](ctx.World)
+	charStore := engine.GetStore[component.CharacterComponent](ctx.World)
 
 	if forward {
 		for x := startX + 1; x < ctx.GameWidth; x++ {
@@ -289,7 +289,7 @@ func findPrevWORDStart(ctx *engine.GameContext, cursorX, cursorY int) int {
 // Optimized for high entity counts using spatial grid traversal (O(Width) instead of O(N))
 func findLineEnd(ctx *engine.GameContext, cursorY int) int {
 	// Stack-allocated buffer for zero-alloc queries
-	var buf [constants.MaxEntitiesPerCell]core.Entity
+	var buf [constant.MaxEntitiesPerCell]core.Entity
 
 	resolver := engine.MustGetResource[*engine.ZIndexResolver](ctx.World.Resources)
 
@@ -326,7 +326,7 @@ func findFirstNonWhitespace(ctx *engine.GameContext, cursorY int) int {
 // findPrevEmptyLine finds the previous line with no interactable entities
 // Optimized for high entity counts using spatial grid traversal
 func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
-	var buf [constants.MaxEntitiesPerCell]core.Entity
+	var buf [constant.MaxEntitiesPerCell]core.Entity
 
 	resolver := engine.MustGetResource[*engine.ZIndexResolver](ctx.World.Resources)
 
@@ -352,7 +352,7 @@ func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
 // findNextEmptyLine finds the next line with no interactable entities
 // Optimized for high entity counts using spatial grid traversal
 func findNextEmptyLine(ctx *engine.GameContext, cursorY int) int {
-	var buf [constants.MaxEntitiesPerCell]core.Entity
+	var buf [constant.MaxEntitiesPerCell]core.Entity
 
 	resolver := engine.MustGetResource[*engine.ZIndexResolver](ctx.World.Resources)
 

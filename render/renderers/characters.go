@@ -1,7 +1,7 @@
 package renderers
 
 import (
-	"github.com/lixenwraith/vi-fighter/components"
+	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
@@ -10,14 +10,14 @@ import (
 // CharactersRenderer draws all character entities
 type CharactersRenderer struct {
 	gameCtx   *engine.GameContext
-	charStore *engine.Store[components.CharacterComponent]
+	charStore *engine.Store[component.CharacterComponent]
 }
 
 // NewCharactersRenderer creates a new characters renderer
 func NewCharactersRenderer(gameCtx *engine.GameContext) *CharactersRenderer {
 	return &CharactersRenderer{
 		gameCtx:   gameCtx,
-		charStore: engine.GetStore[components.CharacterComponent](gameCtx.World),
+		charStore: engine.GetStore[component.CharacterComponent](gameCtx.World),
 	}
 }
 
@@ -54,22 +54,22 @@ func (r *CharactersRenderer) Render(ctx render.RenderContext, world *engine.Worl
 }
 
 // resolveCharacterColor maps semantic color info to concrete RGB
-func resolveCharacterColor(char components.CharacterComponent) render.RGB {
+func resolveCharacterColor(char component.CharacterComponent) render.RGB {
 	// Handle explicit semantic colors first
 	switch char.Color {
-	case components.ColorNugget:
+	case component.ColorNugget:
 		return render.RgbNuggetOrange
-	case components.ColorDecay:
+	case component.ColorDecay:
 		return render.RgbDecay
-	case components.ColorDrain:
+	case component.ColorDrain:
 		return render.RgbDrain
-	case components.ColorCleaner:
+	case component.ColorCleaner:
 		return render.RgbCleanerBase
-	case components.ColorMaterialize:
+	case component.ColorMaterialize:
 		return render.RgbMaterialize
-	case components.ColorFlash:
+	case component.ColorFlash:
 		return render.RgbRemovalFlash
-	case components.ColorNone, components.ColorNormal:
+	case component.ColorNone, component.ColorNormal:
 		// Fall through to sequence-based resolution
 	}
 
@@ -78,15 +78,15 @@ func resolveCharacterColor(char components.CharacterComponent) render.RGB {
 }
 
 // resolveTextStyle maps semantic style to terminal attributes
-func resolveTextStyle(style components.TextStyle) terminal.Attr {
+func resolveTextStyle(style component.TextStyle) terminal.Attr {
 	switch style {
-	case components.StyleBold:
+	case component.StyleBold:
 		return terminal.AttrBold
-	case components.StyleDim:
+	case component.StyleDim:
 		return terminal.AttrDim
-	case components.StyleUnderline:
+	case component.StyleUnderline:
 		return terminal.AttrUnderline
-	case components.StyleBlink:
+	case component.StyleBlink:
 		return terminal.AttrBlink
 	default:
 		return terminal.AttrNone

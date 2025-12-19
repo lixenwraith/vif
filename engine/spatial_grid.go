@@ -1,7 +1,7 @@
 package engine
 
 import (
-	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 )
 
@@ -10,7 +10,7 @@ import (
 type Cell struct {
 	Count    uint8
 	_        [7]byte // Explicit padding to ensure 8-byte alignment for Entities
-	Entities [constants.MaxEntitiesPerCell]core.Entity
+	Entities [constant.MaxEntitiesPerCell]core.Entity
 }
 
 // SpatialGrid is a dense 2D grid for fast spatial queries without allocation
@@ -39,7 +39,7 @@ func (g *SpatialGrid) Add(e core.Entity, x, y int) bool {
 	idx := y*g.Width + x
 	cell := &g.Cells[idx] // Get pointer to avoid copy
 
-	if cell.Count < constants.MaxEntitiesPerCell {
+	if cell.Count < constant.MaxEntitiesPerCell {
 		cell.Entities[cell.Count] = e
 		cell.Count++
 		return true

@@ -5,10 +5,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
-	"github.com/lixenwraith/vi-fighter/events"
+	"github.com/lixenwraith/vi-fighter/event"
 )
 
 // CommandResult represents the outcome of command execution
@@ -69,7 +69,7 @@ func handleQuitCommand(ctx *engine.GameContext) CommandResult {
 
 // handleNewCommand resets the game state via event
 func handleNewCommand(ctx *engine.GameContext) CommandResult {
-	ctx.PushEvent(events.EventGameReset, nil)
+	ctx.PushEvent(event.EventGameReset, nil)
 	ctx.SetLastCommand(":new")
 	return CommandResult{Continue: true, KeepPaused: true}
 }
@@ -92,7 +92,7 @@ func handleEnergyCommand(ctx *engine.GameContext, args []string) CommandResult {
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
 
-	ctx.PushEvent(events.EventEnergySet, &events.EnergySetPayload{
+	ctx.PushEvent(event.EventEnergySet, &event.EnergySetPayload{
 		Value: value,
 	})
 
@@ -116,11 +116,11 @@ func handleHeatCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if value < 0 {
 		value = 0
 	}
-	if value > constants.MaxHeat {
-		value = constants.MaxHeat
+	if value > constant.MaxHeat {
+		value = constant.MaxHeat
 	}
 
-	ctx.PushEvent(events.EventHeatSet, &events.HeatSetPayload{Value: value})
+	ctx.PushEvent(event.EventHeatSet, &event.HeatSetPayload{Value: value})
 	ctx.SetLastCommand(fmt.Sprintf(":heat %d", value))
 
 	return CommandResult{Continue: true, KeepPaused: false}
@@ -128,12 +128,12 @@ func handleHeatCommand(ctx *engine.GameContext, args []string) CommandResult {
 
 // handleBoostCommand triggers boost request event
 func handleBoostCommand(ctx *engine.GameContext) CommandResult {
-	ctx.PushEvent(events.EventHeatSet, &events.HeatSetPayload{
-		Value: constants.MaxHeat,
+	ctx.PushEvent(event.EventHeatSet, &event.HeatSetPayload{
+		Value: constant.MaxHeat,
 	})
 
-	ctx.PushEvent(events.EventBoostActivate, &events.BoostActivatePayload{
-		Duration: constants.BoostBaseDuration,
+	ctx.PushEvent(event.EventBoostActivate, &event.BoostActivatePayload{
+		Duration: constant.BoostBaseDuration,
 	})
 
 	ctx.SetLastCommand(":boost")
@@ -142,8 +142,8 @@ func handleBoostCommand(ctx *engine.GameContext) CommandResult {
 
 // handleGodCommand sets heat to max and energy to high value
 func handleGodCommand(ctx *engine.GameContext) CommandResult {
-	ctx.PushEvent(events.EventHeatSet, &events.HeatSetPayload{Value: constants.MaxHeat})
-	ctx.PushEvent(events.EventEnergySet, &events.EnergySetPayload{Value: constants.GodEnergyAmount})
+	ctx.PushEvent(event.EventHeatSet, &event.HeatSetPayload{Value: constant.MaxHeat})
+	ctx.PushEvent(event.EventEnergySet, &event.EnergySetPayload{Value: constant.GodEnergyAmount})
 	ctx.SetLastCommand(":god")
 	return CommandResult{Continue: true, KeepPaused: false}
 }
@@ -158,10 +158,10 @@ func handleSpawnCommand(ctx *engine.GameContext, args []string) CommandResult {
 	arg := strings.ToLower(args[0])
 	switch arg {
 	case "on":
-		ctx.PushEvent(events.EventSpawnChange, &events.SpawnChangePayload{Enabled: true})
+		ctx.PushEvent(event.EventSpawnChange, &event.SpawnChangePayload{Enabled: true})
 		ctx.SetLastCommand(":spawn on")
 	case "off":
-		ctx.PushEvent(events.EventSpawnChange, &events.SpawnChangePayload{Enabled: false})
+		ctx.PushEvent(event.EventSpawnChange, &event.SpawnChangePayload{Enabled: false})
 		ctx.SetLastCommand(":spawn off")
 	default:
 		setCommandError(ctx, "Invalid arguments for spawn")
@@ -173,13 +173,13 @@ func handleSpawnCommand(ctx *engine.GameContext, args []string) CommandResult {
 // handleDebugCommand triggers debug overlay event
 func handleDebugCommand(ctx *engine.GameContext) CommandResult {
 	ctx.SetMode(core.ModeOverlay)
-	ctx.PushEvent(events.EventDebugRequest, nil)
+	ctx.PushEvent(event.EventDebugRequest, nil)
 	return CommandResult{Continue: true, KeepPaused: true}
 }
 
 // handleHelpCommand triggers help overlay event
 func handleHelpCommand(ctx *engine.GameContext) CommandResult {
 	ctx.SetMode(core.ModeOverlay)
-	ctx.PushEvent(events.EventHelpRequest, nil)
+	ctx.PushEvent(event.EventHelpRequest, nil)
 	return CommandResult{Continue: true, KeepPaused: true}
 }

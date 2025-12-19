@@ -1,7 +1,7 @@
 package render
 
 import (
-	"github.com/lixenwraith/vi-fighter/components"
+	"github.com/lixenwraith/vi-fighter/component"
 )
 
 // HeatGradientLUT holds the pre-calculated rainbow gradient
@@ -178,36 +178,36 @@ func calculateHeatColor(progress float64) RGB {
 }
 
 // GetFgForSequence returns the foreground color for a given sequence type and level
-func GetFgForSequence(seqType components.SequenceType, level components.SequenceLevel) RGB {
+func GetFgForSequence(seqType component.SequenceType, level component.SequenceLevel) RGB {
 	switch seqType {
-	case components.SequenceGreen:
+	case component.SequenceGreen:
 		switch level {
-		case components.LevelDark:
+		case component.LevelDark:
 			return RgbSequenceGreenDark
-		case components.LevelNormal:
+		case component.LevelNormal:
 			return RgbSequenceGreenNormal
-		case components.LevelBright:
+		case component.LevelBright:
 			return RgbSequenceGreenBright
 		}
-	case components.SequenceRed:
+	case component.SequenceRed:
 		switch level {
-		case components.LevelDark:
+		case component.LevelDark:
 			return RgbSequenceRedDark
-		case components.LevelNormal:
+		case component.LevelNormal:
 			return RgbSequenceRedNormal
-		case components.LevelBright:
+		case component.LevelBright:
 			return RgbSequenceRedBright
 		}
-	case components.SequenceBlue:
+	case component.SequenceBlue:
 		switch level {
-		case components.LevelDark:
+		case component.LevelDark:
 			return RgbSequenceBlueDark
-		case components.LevelNormal:
+		case component.LevelNormal:
 			return RgbSequenceBlueNormal
-		case components.LevelBright:
+		case component.LevelBright:
 			return RgbSequenceBlueBright
 		}
-	case components.SequenceGold:
+	case component.SequenceGold:
 		// Gold sequence always uses bright yellow, regardless of level
 		return RgbSequenceGold
 	}

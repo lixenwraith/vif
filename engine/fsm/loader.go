@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/lixenwraith/vi-fighter/events"
+	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/toml"
 )
 
@@ -131,13 +131,13 @@ func (m *Machine[T]) compileActions(configs []ActionConfig) ([]Action[T], error)
 			}
 
 			// Resolve Event Type
-			et, ok := events.GetEventType(cfg.Event)
+			et, ok := event.GetEventType(cfg.Event)
 			if !ok {
 				return nil, fmt.Errorf("unknown event type '%s'", cfg.Event)
 			}
 
 			// Create Payload Struct
-			payload := events.NewPayloadStruct(et)
+			payload := event.NewPayloadStruct(et)
 			if payload != nil && cfg.Payload != nil {
 				// Decode map[string]any into struct
 				if err := toml.Decode(cfg.Payload, payload); err != nil {
@@ -166,9 +166,9 @@ func (m *Machine[T]) compileTransitions(node *Node[T], configs []TransitionConfi
 			return fmt.Errorf("transition references unknown target '%s'", cfg.Target)
 		}
 
-		var eventType events.EventType = 0 // 0 = Tick
+		var eventType event.EventType = 0 // 0 = Tick
 		if cfg.Trigger != "Tick" {
-			et, ok := events.GetEventType(cfg.Trigger)
+			et, ok := event.GetEventType(cfg.Trigger)
 			if !ok {
 				return fmt.Errorf("unknown event type '%s'", cfg.Trigger)
 			}

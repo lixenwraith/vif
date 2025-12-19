@@ -1,7 +1,7 @@
 package renderers
 
 import (
-	"github.com/lixenwraith/vi-fighter/components"
+	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
@@ -10,8 +10,8 @@ import (
 // PingRenderer draws cursor row/column highlights and optional grid lines
 type PingRenderer struct {
 	gameCtx     *engine.GameContext
-	pingStore   *engine.Store[components.PingComponent]
-	shieldStore *engine.Store[components.ShieldComponent]
+	pingStore   *engine.Store[component.PingComponent]
+	shieldStore *engine.Store[component.ShieldComponent]
 
 	// Bitmask for shield exclusion (1 bit per cell)
 	// Reused across frames to avoid allocation
@@ -24,8 +24,8 @@ type PingRenderer struct {
 func NewPingRenderer(gameCtx *engine.GameContext) *PingRenderer {
 	return &PingRenderer{
 		gameCtx:     gameCtx,
-		pingStore:   engine.GetStore[components.PingComponent](gameCtx.World),
-		shieldStore: engine.GetStore[components.ShieldComponent](gameCtx.World),
+		pingStore:   engine.GetStore[component.PingComponent](gameCtx.World),
+		shieldStore: engine.GetStore[component.ShieldComponent](gameCtx.World),
 	}
 }
 
@@ -138,10 +138,10 @@ func (r *PingRenderer) isExcluded(x, y int) bool {
 	return (r.exclusionMask[idx/64] & (1 << (idx % 64))) != 0
 }
 
-func (r *PingRenderer) getPingLineColor(ping components.PingComponent) render.RGB {
-	if ping.CrosshairColor != components.ColorNone {
+func (r *PingRenderer) getPingLineColor(ping component.PingComponent) render.RGB {
+	if ping.CrosshairColor != component.ColorNone {
 		// Use component override
-		if ping.CrosshairColor == components.ColorNormal && r.gameCtx.IsInsertMode() {
+		if ping.CrosshairColor == component.ColorNormal && r.gameCtx.IsInsertMode() {
 			return render.RgbPingHighlight
 		}
 		// TODO: Map other ColorClasses if needed
@@ -153,8 +153,8 @@ func (r *PingRenderer) getPingLineColor(ping components.PingComponent) render.RG
 	return render.RgbPingLineNormal
 }
 
-func (r *PingRenderer) getPingGridColor(ping components.PingComponent) render.RGB {
-	if ping.GridColor != components.ColorNone {
+func (r *PingRenderer) getPingGridColor(ping component.PingComponent) render.RGB {
+	if ping.GridColor != component.ColorNone {
 		// Placeholder for mapping
 	}
 	return render.RgbPingGridNormal

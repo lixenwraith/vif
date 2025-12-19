@@ -3,7 +3,7 @@ package renderers
 import (
 	"fmt"
 
-	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -32,8 +32,8 @@ func (r *OverlayRenderer) Render(ctx render.RenderContext, world *engine.World, 
 	// Get UI Snapshot
 	uiSnapshot := r.gameCtx.GetUISnapshot()
 	// Calculate overlay dimensions (80% of screen)
-	overlayWidth := int(float64(ctx.Width) * constants.OverlayWidthPercent)
-	overlayHeight := int(float64(ctx.Height) * constants.OverlayHeightPercent)
+	overlayWidth := int(float64(ctx.Width) * constant.OverlayWidthPercent)
+	overlayHeight := int(float64(ctx.Height) * constant.OverlayHeightPercent)
 
 	// Ensure minimum dimensions
 	if overlayWidth < 20 {
@@ -98,9 +98,9 @@ func (r *OverlayRenderer) Render(ctx render.RenderContext, world *engine.World, 
 	buf.SetWithBg(startX+overlayWidth-1, startY+overlayHeight-1, '╝', render.RgbOverlayBorder, render.RgbOverlayBg)
 
 	// Draw content lines
-	contentStartY := startY + 1 + constants.OverlayPaddingY
-	contentStartX := startX + constants.OverlayPaddingX
-	maxContentLines := contentHeight - 2*constants.OverlayPaddingY
+	contentStartY := startY + 1 + constant.OverlayPaddingY
+	contentStartX := startX + constant.OverlayPaddingX
+	maxContentLines := contentHeight - 2*constant.OverlayPaddingY
 
 	// Calculate visible range based on scroll
 	startLine := uiSnapshot.OverlayScroll
@@ -111,9 +111,9 @@ func (r *OverlayRenderer) Render(ctx render.RenderContext, world *engine.World, 
 
 	// Draw visible content lines
 	lineY := contentStartY
-	for i := startLine; i < endLine && lineY < startY+overlayHeight-1-constants.OverlayPaddingY; i++ {
+	for i := startLine; i < endLine && lineY < startY+overlayHeight-1-constant.OverlayPaddingY; i++ {
 		line := uiSnapshot.OverlayContent[i]
-		maxLineWidth := contentWidth - 2*constants.OverlayPaddingX
+		maxLineWidth := contentWidth - 2*constant.OverlayPaddingX
 
 		// Truncate line if too long
 		displayLine := line
@@ -123,7 +123,7 @@ func (r *OverlayRenderer) Render(ctx render.RenderContext, world *engine.World, 
 
 		// Draw the line
 		for j, ch := range displayLine {
-			if contentStartX+j < startX+overlayWidth-1-constants.OverlayPaddingX {
+			if contentStartX+j < startX+overlayWidth-1-constant.OverlayPaddingX {
 				buf.SetWithBg(contentStartX+j, lineY, ch, render.RgbOverlayText, render.RgbOverlayBg)
 			}
 		}

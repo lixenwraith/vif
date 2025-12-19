@@ -5,12 +5,12 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/lixenwraith/vi-fighter/components"
+	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
-	"github.com/lixenwraith/vi-fighter/events"
+	"github.com/lixenwraith/vi-fighter/event"
 )
 
-// World contains all entities and their components using compile-time typed stores
+// World contains all entities and their components using typed stores
 type World struct {
 	mu           sync.RWMutex
 	nextEntityID core.Entity
@@ -104,10 +104,10 @@ func (w *World) CreateEntity() core.Entity {
 // DestroyEntity removes all components associated with an entity
 func (w *World) DestroyEntity(e core.Entity) {
 	// Check protection before destruction
-	if HasStore[components.ProtectionComponent](w) {
-		protStore := GetStore[components.ProtectionComponent](w)
+	if HasStore[component.ProtectionComponent](w) {
+		protStore := GetStore[component.ProtectionComponent](w)
 		if prot, ok := protStore.Get(e); ok {
-			if prot.Mask == components.ProtectAll {
+			if prot.Mask == component.ProtectAll {
 				return // Entity is immortal
 			}
 		}
@@ -194,13 +194,13 @@ func (w *World) Clear() {
 }
 
 // PushEvent emits a game event using world resources
-func (w *World) PushEvent(eventType events.EventType, payload any) {
+func (w *World) PushEvent(eventType event.EventType, payload any) {
 	eqRes, eqOk := GetResource[*EventQueueResource](w.Resources)
 	stateRes, stateOk := GetResource[*GameStateResource](w.Resources)
 	if !eqOk || !stateOk {
 		return
 	}
-	event := events.GameEvent{
+	event := event.GameEvent{
 		Type:    eventType,
 		Payload: payload,
 		Frame:   stateRes.State.GetFrameNumber(),

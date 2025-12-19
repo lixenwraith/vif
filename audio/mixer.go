@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/constant"
 )
 
 // activeSound tracks a playing sound instance
@@ -97,12 +97,12 @@ func (m *Mixer) Errors() <-chan error {
 
 // loop is the main mixing goroutine
 func (m *Mixer) loop() {
-	ticker := time.NewTicker(constants.AudioBufferDuration)
+	ticker := time.NewTicker(constant.AudioBufferDuration)
 	defer ticker.Stop()
 
-	samplesPerTick := constants.AudioBufferSamples
+	samplesPerTick := constant.AudioBufferSamples
 	mixBuf := make([]float64, samplesPerTick)
-	outBytes := make([]byte, samplesPerTick*constants.AudioBytesPerFrame)
+	outBytes := make([]byte, samplesPerTick*constant.AudioBytesPerFrame)
 
 	for {
 		select {

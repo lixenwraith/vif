@@ -3,8 +3,8 @@ package renderers
 import (
 	"fmt"
 
-	"github.com/lixenwraith/vi-fighter/components"
-	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/component"
+	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
@@ -13,14 +13,14 @@ import (
 // DrainRenderer draws the drain entity with transparent background
 type DrainRenderer struct {
 	gameCtx    *engine.GameContext
-	drainStore *engine.Store[components.DrainComponent]
+	drainStore *engine.Store[component.DrainComponent]
 }
 
 // NewDrainRenderer creates a new drain renderer
 func NewDrainRenderer(gameCtx *engine.GameContext) *DrainRenderer {
 	return &DrainRenderer{
 		gameCtx:    gameCtx,
-		drainStore: engine.GetStore[components.DrainComponent](gameCtx.World),
+		drainStore: engine.GetStore[component.DrainComponent](gameCtx.World),
 	}
 }
 
@@ -51,6 +51,6 @@ func (r *DrainRenderer) Render(ctx render.RenderContext, world *engine.World, bu
 		}
 
 		// Drain floats over backgrounds - use SetFgOnly
-		buf.SetFgOnly(screenX, screenY, constants.DrainChar, render.RgbDrain, terminal.AttrNone)
+		buf.SetFgOnly(screenX, screenY, constant.DrainChar, render.RgbDrain, terminal.AttrNone)
 	}
 }

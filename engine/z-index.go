@@ -1,35 +1,35 @@
 package engine
 
 import (
-	"github.com/lixenwraith/vi-fighter/components"
-	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/component"
+	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 )
 
 // ZIndexResolver provides fast z-index lookups using cached store pointers
 // Initialize once during bootstrap, access via CoreResources.ZIndex
 type ZIndexResolver struct {
-	cursors *Store[components.CursorComponent]
-	shields *Store[components.ShieldComponent]
-	drains  *Store[components.DrainComponent]
-	decays  *Store[components.DecayComponent]
-	nuggets *Store[components.NuggetComponent]
+	cursors *Store[component.CursorComponent]
+	shields *Store[component.ShieldComponent]
+	drains  *Store[component.DrainComponent]
+	decays  *Store[component.DecayComponent]
+	nuggets *Store[component.NuggetComponent]
 	// Cached for IsInteractable
-	chars *Store[components.CharacterComponent]
-	seqs  *Store[components.SequenceComponent]
+	chars *Store[component.CharacterComponent]
+	seqs  *Store[component.SequenceComponent]
 }
 
 // NewZIndexResolver creates a resolver with cached store references
 // Call after all components are registered
 func NewZIndexResolver(w *World) *ZIndexResolver {
 	z := &ZIndexResolver{
-		cursors: GetStore[components.CursorComponent](w),
-		shields: GetStore[components.ShieldComponent](w),
-		drains:  GetStore[components.DrainComponent](w),
-		decays:  GetStore[components.DecayComponent](w),
-		nuggets: GetStore[components.NuggetComponent](w),
-		chars:   GetStore[components.CharacterComponent](w),
-		seqs:    GetStore[components.SequenceComponent](w),
+		cursors: GetStore[component.CursorComponent](w),
+		shields: GetStore[component.ShieldComponent](w),
+		drains:  GetStore[component.DrainComponent](w),
+		decays:  GetStore[component.DecayComponent](w),
+		nuggets: GetStore[component.NuggetComponent](w),
+		chars:   GetStore[component.CharacterComponent](w),
+		seqs:    GetStore[component.SequenceComponent](w),
 	}
 
 	// Wire to PositionStore for hot-path access
@@ -41,21 +41,21 @@ func NewZIndexResolver(w *World) *ZIndexResolver {
 // GetZIndex returns the Z-index for an entity based on its components
 func (z *ZIndexResolver) GetZIndex(e core.Entity) int {
 	if z.cursors.Has(e) {
-		return constants.ZIndexCursor
+		return constant.ZIndexCursor
 	}
 	if z.shields.Has(e) {
-		return constants.ZIndexShield
+		return constant.ZIndexShield
 	}
 	if z.drains.Has(e) {
-		return constants.ZIndexDrain
+		return constant.ZIndexDrain
 	}
 	if z.decays.Has(e) {
-		return constants.ZIndexDecay
+		return constant.ZIndexDecay
 	}
 	if z.nuggets.Has(e) {
-		return constants.ZIndexNugget
+		return constant.ZIndexNugget
 	}
-	return constants.ZIndexSpawnChar
+	return constant.ZIndexSpawnChar
 }
 
 // IsInteractable returns true if the entity is an interactable game element

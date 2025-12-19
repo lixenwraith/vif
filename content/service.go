@@ -5,7 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 )
 
@@ -91,7 +91,7 @@ func (s *Service) NotifyConsumed(count int) {
 	}
 
 	ratio := float64(newConsumed) / float64(total)
-	if ratio >= constants.ContentRefreshThreshold && !s.refreshing.Load() {
+	if ratio >= constant.ContentRefreshThreshold && !s.refreshing.Load() {
 		s.triggerRefresh()
 	}
 }
@@ -170,12 +170,12 @@ func (s *Service) groupIntoBlocks(lines []string) []CodeBlock {
 		braceDepth -= strings.Count(line, "}")
 
 		shouldStartNewBlock := len(currentBlock) == 0 ||
-			(len(currentBlock) >= constants.MaxBlockLines) ||
-			(braceDepth == 0 && len(currentBlock) >= constants.MinBlockLines &&
-				(indent < currentIndent-constants.MinIndentChange || indent > currentIndent+constants.MinIndentChange))
+			(len(currentBlock) >= constant.MaxBlockLines) ||
+			(braceDepth == 0 && len(currentBlock) >= constant.MinBlockLines &&
+				(indent < currentIndent-constant.MinIndentChange || indent > currentIndent+constant.MinIndentChange))
 
 		if shouldStartNewBlock && len(currentBlock) > 0 {
-			if len(currentBlock) >= constants.MinBlockLines {
+			if len(currentBlock) >= constant.MinBlockLines {
 				blocks = append(blocks, CodeBlock{
 					Lines:       currentBlock,
 					IndentLevel: currentIndent,
@@ -192,7 +192,7 @@ func (s *Service) groupIntoBlocks(lines []string) []CodeBlock {
 		}
 	}
 
-	if len(currentBlock) >= constants.MinBlockLines {
+	if len(currentBlock) >= constant.MinBlockLines {
 		blocks = append(blocks, CodeBlock{
 			Lines:       currentBlock,
 			IndentLevel: currentIndent,

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/events"
+	"github.com/lixenwraith/vi-fighter/event"
 )
 
 // NewMachine creates a new FSM instance
@@ -132,7 +132,7 @@ func (m *Machine[T]) Reset(ctx T) error {
 
 // HandleEvent routes an external event through the state hierarchy
 // Returns true if the event triggered a transition or was consumed
-func (m *Machine[T]) HandleEvent(ctx T, eventType events.EventType) bool {
+func (m *Machine[T]) HandleEvent(ctx T, eventType event.EventType) bool {
 	if m.activeStateID == StateNone {
 		return false
 	}

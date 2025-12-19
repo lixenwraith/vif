@@ -5,9 +5,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/content"
 	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/engine/services"
 	"github.com/lixenwraith/vi-fighter/engine/status"
-	"github.com/lixenwraith/vi-fighter/events"
+	"github.com/lixenwraith/vi-fighter/event"
 )
 
 // ResourceStore is a thread-safe container for global game resources
@@ -128,7 +130,7 @@ type RenderConfig struct {
 
 // EventQueueResource wraps the event queue for system access
 type EventQueueResource struct {
-	Queue *events.EventQueue
+	Queue *event.EventQueue
 }
 
 // AudioResource wraps the audio player interface
@@ -146,35 +148,72 @@ type CursorResource struct {
 	Entity core.Entity
 }
 
+// ContentProvider defines the interface for content access
+// Matches content.Service public API
+type ContentProvider interface {
+	CurrentContent() *content.PreparedContent
+	NotifyConsumed(count int)
+}
+
 // CoreResources provides cached pointers to singleton resources
 // Initialized once per system to eliminate runtime map lookups
 type CoreResources struct {
-	Time   *TimeResource
-	Config *ConfigResource
-	State  *GameStateResource
-	Cursor *CursorResource
-	Input  *InputResource
-	Events *EventQueueResource
-	Status *status.Registry
-	ZIndex *ZIndexResolver
+	Time    *TimeResource
+	Config  *ConfigResource
+	State   *GameStateResource
+	Cursor  *CursorResource
+	Input   *InputResource
+	Events  *EventQueueResource
+	Status  *status.Registry
+	ZIndex  *ZIndexResolver
+	Content ContentProvider
 }
 
 // GetCoreResources populates CoreResources from the world's resource store
 // Call once during system construction; pointers remain valid for application lifetime
 func GetCoreResources(w *World) CoreResources {
-	res := CoreResources{
-		Time:   MustGetResource[*TimeResource](w.Resources),
-		Config: MustGetResource[*ConfigResource](w.Resources),
-		State:  MustGetResource[*GameStateResource](w.Resources),
-		Cursor: MustGetResource[*CursorResource](w.Resources),
-		Input:  MustGetResource[*InputResource](w.Resources),
-		Events: MustGetResource[*EventQueueResource](w.Resources),
-		Status: MustGetResource[*status.Registry](w.Resources),
+	res := CoreResources{}
+
+	// ECS Resources
+	if t, ok := GetResource[*TimeResource](w.Resources); ok {
+		res.Time = t
+	}
+	if c, ok := GetResource[*ConfigResource](w.Resources); ok {
+		res.Config = c
+	}
+	if i, ok := GetResource[*InputResource](w.Resources); ok {
+		res.Input = i
+	}
+	if c, ok := GetResource[*CursorResource](w.Resources); ok {
+		res.Cursor = c
+	}
+	if s, ok := GetResource[*GameStateResource](w.Resources); ok {
+		res.State = s
+	}
+	if e, ok := GetResource[*EventQueueResource](w.Resources); ok {
+		res.Events = e
+	}
+	if t, ok := GetResource[*status.Registry](w.Resources); ok {
+		res.Status = t
 	}
 
-	// ZIndex is optional during early bootstrap (before resolver created)
+	// Z-Index resolver (may not exist during early bootstrap)
 	if zRes, ok := GetResource[*ZIndexResolver](w.Resources); ok {
 		res.ZIndex = zRes
+	}
+
+	// Service Hub resources
+	if hub, ok := GetResource[*services.Hub](w.Resources); ok {
+		if statusSvc, ok := hub.Get("status"); ok {
+			if ss, ok := statusSvc.(*status.StatusService); ok {
+				res.Status = ss.Registry()
+			}
+		}
+		if contentSvc, ok := hub.Get("content"); ok {
+			if cs, ok := contentSvc.(*content.Service); ok {
+				res.Content = cs
+			}
+		}
 	}
 
 	return res

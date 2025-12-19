@@ -4,7 +4,7 @@ import (
 	"math"
 	"math/rand"
 
-	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/constant"
 )
 
 // Waveform types
@@ -22,7 +22,7 @@ type floatBuffer []float64
 func oscillator(waveType int, freq float64, samples int) floatBuffer {
 	buf := make(floatBuffer, samples)
 	phase := 0.0
-	phaseInc := freq / float64(constants.AudioSampleRate)
+	phaseInc := freq / float64(constant.AudioSampleRate)
 
 	for i := 0; i < samples; i++ {
 		switch waveType {
@@ -51,8 +51,8 @@ func oscillator(waveType int, freq float64, samples int) floatBuffer {
 // applyEnvelope applies attack/release envelope in place
 func applyEnvelope(buf floatBuffer, attackSec, releaseSec float64) {
 	total := len(buf)
-	attackSamples := int(attackSec * float64(constants.AudioSampleRate))
-	releaseSamples := int(releaseSec * float64(constants.AudioSampleRate))
+	attackSamples := int(attackSec * float64(constant.AudioSampleRate))
+	releaseSamples := int(releaseSec * float64(constant.AudioSampleRate))
 
 	releaseStart := total - releaseSamples
 	if releaseStart < attackSamples {
@@ -93,50 +93,50 @@ func concatFloatBuffers(a, b floatBuffer) floatBuffer {
 
 // durationToSamples converts duration to sample count
 func durationToSamples(d float64) int {
-	return int(d * float64(constants.AudioSampleRate))
+	return int(d * float64(constant.AudioSampleRate))
 }
 
 // --- Sound Generators (unity gain) ---
 
 func generateErrorSound() floatBuffer {
-	samples := durationToSamples(constants.ErrorSoundDuration.Seconds())
+	samples := durationToSamples(constant.ErrorSoundDuration.Seconds())
 	buf := oscillator(waveSaw, 100.0, samples)
-	applyEnvelope(buf, constants.ErrorSoundAttack.Seconds(), constants.ErrorSoundRelease.Seconds())
+	applyEnvelope(buf, constant.ErrorSoundAttack.Seconds(), constant.ErrorSoundRelease.Seconds())
 	return buf
 }
 
 func generateBellSound() floatBuffer {
-	samples := durationToSamples(constants.BellSoundDuration.Seconds())
+	samples := durationToSamples(constant.BellSoundDuration.Seconds())
 
 	// Fundamental A5 (880Hz)
 	fund := oscillator(waveSine, 880.0, samples)
-	applyEnvelope(fund, constants.BellSoundAttack.Seconds(), constants.BellSoundFundamentalRelease.Seconds())
+	applyEnvelope(fund, constant.BellSoundAttack.Seconds(), constant.BellSoundFundamentalRelease.Seconds())
 
 	// Overtone A6 (1760Hz)
 	over := oscillator(waveSine, 1760.0, samples)
-	applyEnvelope(over, constants.BellSoundAttack.Seconds(), constants.BellSoundOvertoneRelease.Seconds())
+	applyEnvelope(over, constant.BellSoundAttack.Seconds(), constant.BellSoundOvertoneRelease.Seconds())
 
 	// Mix 70% fundamental + 30% overtone
 	return mixFloatBuffers(fund, over, 0.3/0.7)
 }
 
 func generateWhooshSound() floatBuffer {
-	samples := durationToSamples(constants.WhooshSoundDuration.Seconds())
+	samples := durationToSamples(constant.WhooshSoundDuration.Seconds())
 	buf := oscillator(waveNoise, 0, samples)
-	applyEnvelope(buf, constants.WhooshSoundAttack.Seconds(), constants.WhooshSoundRelease.Seconds())
+	applyEnvelope(buf, constant.WhooshSoundAttack.Seconds(), constant.WhooshSoundRelease.Seconds())
 	return buf
 }
 
 func generateCoinSound() floatBuffer {
 	// Note 1: B5 (987.77 Hz)
-	n1Samples := durationToSamples(constants.CoinSoundNote1Duration.Seconds())
+	n1Samples := durationToSamples(constant.CoinSoundNote1Duration.Seconds())
 	n1 := oscillator(waveSquare, 987.77, n1Samples)
-	applyEnvelope(n1, constants.CoinSoundAttack.Seconds(), constants.CoinSoundNote1Release.Seconds())
+	applyEnvelope(n1, constant.CoinSoundAttack.Seconds(), constant.CoinSoundNote1Release.Seconds())
 
 	// Note 2: E6 (1318.51 Hz)
-	n2Samples := durationToSamples(constants.CoinSoundNote2Duration.Seconds())
+	n2Samples := durationToSamples(constant.CoinSoundNote2Duration.Seconds())
 	n2 := oscillator(waveSquare, 1318.51, n2Samples)
-	applyEnvelope(n2, constants.CoinSoundAttack.Seconds(), constants.CoinSoundNote2Release.Seconds())
+	applyEnvelope(n2, constant.CoinSoundAttack.Seconds(), constant.CoinSoundNote2Release.Seconds())
 
 	return concatFloatBuffers(n1, n2)
 }

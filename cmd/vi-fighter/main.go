@@ -7,17 +7,18 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/audio"
-	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/engine/registry"
+	"github.com/lixenwraith/vi-fighter/engine/services"
 	"github.com/lixenwraith/vi-fighter/engine/status"
-	"github.com/lixenwraith/vi-fighter/events"
+	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/input"
 	"github.com/lixenwraith/vi-fighter/manifest"
 	"github.com/lixenwraith/vi-fighter/mode"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/vi-fighter/systems"
+	"github.com/lixenwraith/vi-fighter/system"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
@@ -25,13 +26,7 @@ import (
 var colorModeFlag = flag.String("color", "auto", "Color mode: auto, truecolor, 256")
 
 func main() {
-	// Panic Recovery: Ensure terminal is reset even if the game crashes
-	defer func() {
-		if r := recover(); r != nil {
-			core.HandleCrash(r)
-		}
-	}()
-
+	// === PHASE 0: Can we Run? ===
 	// Parse command-line flags (keeping flag parsing infrastructure)
 	flag.Parse()
 
@@ -52,26 +47,65 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Failed to initialize terminal: %v\n", err)
 		os.Exit(1)
 	}
-	// Normal exit terminal cleanup
-	defer term.Fini()
 
-	// === PHASE 1: Registry Setup ===
+	// === PHASE 1: Service Hub Setup ===
+	hub := services.NewHub()
+
+	// Panic recovery and cleanup
+	defer func() {
+		if r := recover(); r != nil {
+			// Crash
+			core.HandleCrash(r)
+		}
+		// Normal exit
+		hub.StopAll()
+		term.Fini() // Terminal cleanup always runs last
+	}()
+
+	// === PHASE 2: Registry Setup ===
 	manifest.RegisterSystems()
 	manifest.RegisterRenderers()
+	manifest.RegisterServices()
 
-	// === PHASE 2: World & Component Registration ===
+	// === PHASE 3: World Creation & Component Registry ===
 	world := engine.NewWorld()
 	manifest.RegisterComponents(world)
 
-	// === PHASE 3: GameContext Creation ===
+	// === PHASE 4: GameContext Creation ===
 	ctx := engine.NewGameContext(term, world)
 
+	// === PHASE 5: Service Registration ===
+	// Register bootstrap service (terminal)
+	hub.Register(terminal.NewService(term))
+
+	// Register services via factories
+	for _, name := range manifest.ActiveServices() {
+		factory, ok := registry.GetService(name)
+		if !ok {
+			panic(fmt.Sprintf("service not registered: %s", name))
+		}
+		svc := factory().(services.Service)
+		hub.Register(svc)
+	}
+
+	// Initialize and start services
+	if err := hub.InitAll(world); err != nil {
+		panic(fmt.Sprintf("service init failed: %v", err))
+	}
+	if err := hub.StartAll(); err != nil {
+		panic(fmt.Sprintf("service start failed: %v", err))
+	}
+
+	// Store hub in resources for system access
+	engine.AddResource(world.Resources, hub)
+
 	// === PHASE 4: Core Resources ===
+	// TODO: This comment or interaction is confusing
 	// Initialize singleton TimeResource (updated in-place by ClockScheduler)
 	timeRes := &engine.TimeResource{
 		GameTime:    ctx.PausableClock.Now(),
 		RealTime:    ctx.GetRealTime(),
-		DeltaTime:   constants.GameUpdateInterval,
+		DeltaTime:   constant.GameUpdateInterval,
 		FrameNumber: 0,
 	}
 	engine.AddResource(ctx.World.Resources, timeRes)
@@ -88,7 +122,9 @@ func main() {
 
 	// Initialize Render Configuration
 	renderConfig := &engine.RenderConfig{
-		ColorMode:       uint8(colorMode), // 0=256, 1=TrueColor (matches constants in terminal package usually, but safe cast here)
+		// TODO: move colorMode to core and alias terminal type
+		ColorMode: uint8(colorMode), // 0=256, 1=TrueColor (matches constants in terminal package usually, but safe cast here)
+		// TODO: post-render effects should not initialize here
 		GrayoutDuration: 1 * time.Second,
 		GrayoutMask:     render.MaskEntity,
 		DimFactor:       0.5,
@@ -100,16 +136,17 @@ func main() {
 	zIndexResolver := engine.NewZIndexResolver(world)
 	engine.AddResource(ctx.World.Resources, zIndexResolver)
 
-	// === PHASE 5: Audio Engine ===
-	// Initialize audio engine
-	if audioEngine, err := audio.NewAudioEngine(); err == nil {
-		if err := audioEngine.Start(); err == nil {
-			ctx.SetAudioEngine(audioEngine)
-			defer audioEngine.Stop()
+	// === PHASE 6: Audio Engine ===
+	// Initialize audio from services
+	if audioSvc, ok := hub.Get("audio"); ok {
+		if as, ok := audioSvc.(*audio.AudioService); ok {
+			if player := as.Player(); player != nil {
+				ctx.SetAudioEngine(player.(engine.AudioPlayer))
+			}
 		}
 	} // Silent fail if audio could not be initialized
 
-	// === PHASE 6: Systems Instantiation ===
+	// === PHASE 7: Systems Instantiation ===
 	// Add active systems to ECS world
 	for _, name := range manifest.ActiveSystems() {
 		factory, ok := registry.GetSystem(name)
@@ -120,7 +157,7 @@ func main() {
 		world.AddSystem(sys)
 	}
 
-	// === PHASE 7: Render Orchestrator & Renderers ===
+	// === PHASE 8: Render Orchestrator & Renderers ===
 	// Create render orchestrator
 	orchestrator := render.NewRenderOrchestrator(
 		term,
@@ -138,7 +175,7 @@ func main() {
 		orchestrator.Register(renderer, entry.Priority)
 	}
 
-	// === PHASE 8: Input & Clock Scheduler ===
+	// === PHASE 9: Input & Clock Scheduler ===
 	// Create input handler
 	inputMachine := input.NewMachine()
 	router := mode.NewRouter(ctx, inputMachine)
@@ -151,16 +188,16 @@ func main() {
 		world,
 		ctx.PausableClock,
 		&ctx.IsPaused,
-		constants.GameUpdateInterval,
+		constant.GameUpdateInterval,
 		frameReady,
 	)
 
 	// Wire reset channels to GameContext for MetaSystem access
 	ctx.ResetChan = resetChan
 
-	// === Phase 9: FSM Setup ===
+	// === Phase 10: FSM Setup ===
 	// Initialize Event Registry first (for payload reflection)
-	events.InitRegistry()
+	event.InitRegistry()
 
 	// Load FSM Config
 	// For now we use the default JSON embedded in manifest
@@ -168,22 +205,22 @@ func main() {
 		panic(fmt.Sprintf("failed to load FSM: %v", err))
 	}
 
-	// === Phase 10: Event Handlers ===
+	// === Phase 11: Event Handlers ===
 	// Auto-register event handlers from World systems
 	for _, sys := range world.Systems() {
-		if handler, ok := sys.(events.Handler); ok {
+		if handler, ok := sys.(event.Handler); ok {
 			clockScheduler.RegisterEventHandler(handler)
 		}
 	}
 
 	// Meta/Audio systems (not in World.Systems - event-only, no Update logic)
-	metaSystem := systems.NewMetaSystem(ctx)
-	clockScheduler.RegisterEventHandler(metaSystem.(events.Handler))
+	metaSystem := system.NewMetaSystem(ctx)
+	clockScheduler.RegisterEventHandler(metaSystem.(event.Handler))
 
-	audioSystem := systems.NewAudioSystem(world)
-	clockScheduler.RegisterEventHandler(audioSystem.(events.Handler))
+	audioSystem := system.NewAudioSystem(world)
+	clockScheduler.RegisterEventHandler(audioSystem.(event.Handler))
 
-	// === PHASE 10: Main Loop ===
+	// === PHASE 12: Main Loop ===
 	// Signal initial frame ready
 	frameReady <- struct{}{}
 
@@ -199,7 +236,7 @@ func main() {
 	var lastFPSUpdate time.Time = time.Now()
 
 	// Set frame rate
-	frameTicker := time.NewTicker(constants.FrameUpdateInterval)
+	frameTicker := time.NewTicker(constant.FrameUpdateInterval)
 	defer frameTicker.Stop()
 
 	eventChan := make(chan terminal.Event, 256)

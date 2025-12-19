@@ -3,7 +3,7 @@ package manifest
 import (
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/engine/fsm"
 )
@@ -27,7 +27,7 @@ func RegisterFSMComponents(m *fsm.Machine[*engine.World]) {
 
 	// StateTimeExceeds: Configurable duration guard
 	m.RegisterGuardFactory("StateTimeExceeds", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
-		duration := constants.GameUpdateInterval // Default: 1 tick
+		duration := constant.GameUpdateInterval // Default: 1 tick
 		if args != nil {
 			if v, ok := args["ms"]; ok {
 				switch val := v.(type) {

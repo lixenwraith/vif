@@ -1,8 +1,8 @@
 package renderers
 
 import (
-	"github.com/lixenwraith/vi-fighter/components"
-	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/component"
+	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
@@ -12,10 +12,10 @@ import (
 type EffectsRenderer struct {
 	gameCtx *engine.GameContext
 
-	decayStore   *engine.Store[components.DecayComponent]
-	flashStore   *engine.Store[components.FlashComponent]
-	cleanerStore *engine.Store[components.CleanerComponent]
-	matStore     *engine.Store[components.MaterializeComponent]
+	decayStore   *engine.Store[component.DecayComponent]
+	flashStore   *engine.Store[component.FlashComponent]
+	cleanerStore *engine.Store[component.CleanerComponent]
+	matStore     *engine.Store[component.MaterializeComponent]
 
 	cleanerGradient     []render.RGB
 	materializeGradient []render.RGB
@@ -25,10 +25,10 @@ type EffectsRenderer struct {
 func NewEffectsRenderer(gameCtx *engine.GameContext) *EffectsRenderer {
 	e := &EffectsRenderer{
 		gameCtx:      gameCtx,
-		decayStore:   engine.GetStore[components.DecayComponent](gameCtx.World),
-		flashStore:   engine.GetStore[components.FlashComponent](gameCtx.World),
-		cleanerStore: engine.GetStore[components.CleanerComponent](gameCtx.World),
-		matStore:     engine.GetStore[components.MaterializeComponent](gameCtx.World),
+		decayStore:   engine.GetStore[component.DecayComponent](gameCtx.World),
+		flashStore:   engine.GetStore[component.FlashComponent](gameCtx.World),
+		cleanerStore: engine.GetStore[component.CleanerComponent](gameCtx.World),
+		matStore:     engine.GetStore[component.MaterializeComponent](gameCtx.World),
 	}
 	e.buildCleanerGradient()
 	e.buildMaterializeGradient()
@@ -37,7 +37,7 @@ func NewEffectsRenderer(gameCtx *engine.GameContext) *EffectsRenderer {
 
 // buildCleanerGradient builds the gradient for cleaner trail rendering
 func (r *EffectsRenderer) buildCleanerGradient() {
-	length := constants.CleanerTrailLength
+	length := constant.CleanerTrailLength
 
 	r.cleanerGradient = make([]render.RGB, length)
 
@@ -53,7 +53,7 @@ func (r *EffectsRenderer) buildCleanerGradient() {
 
 // buildMaterializeGradient builds the gradient for materialize trail rendering
 func (r *EffectsRenderer) buildMaterializeGradient() {
-	length := constants.MaterializeTrailLength
+	length := constant.MaterializeTrailLength
 
 	r.materializeGradient = make([]render.RGB, length)
 
@@ -132,7 +132,7 @@ func (r *EffectsRenderer) drawCleaners(ctx render.RenderContext, world *engine.W
 			continue
 		}
 
-		cl := constants.CleanerTrailLength
+		cl := constant.CleanerTrailLength
 
 		// Iterate through the trail
 		// Index 0 is the head (brightest), last index is the tail (faintest)
@@ -213,7 +213,7 @@ func (r *EffectsRenderer) drawMaterializers(ctx render.RenderContext, world *eng
 			continue
 		}
 
-		ml := constants.MaterializeTrailLength
+		ml := constant.MaterializeTrailLength
 
 		// Iterate through the trail
 		// Index 0 is the head (brightest), last index is the tail (faintest)

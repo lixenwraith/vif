@@ -1,90 +1,90 @@
 package manifest
 
 import (
-	"github.com/lixenwraith/vi-fighter/components"
+	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/engine/registry"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/render/renderers"
-	"github.com/lixenwraith/vi-fighter/systems"
+	"github.com/lixenwraith/vi-fighter/system"
 )
 
 // RegisterComponents registers all component types with the World
 // Must be called before systems are created
 func RegisterComponents(w *engine.World) {
-	engine.RegisterComponent[components.CharacterComponent](w)
-	engine.RegisterComponent[components.SequenceComponent](w)
-	engine.RegisterComponent[components.GoldSequenceComponent](w)
-	engine.RegisterComponent[components.FlashComponent](w)
-	engine.RegisterComponent[components.NuggetComponent](w)
-	engine.RegisterComponent[components.DrainComponent](w)
-	engine.RegisterComponent[components.CursorComponent](w)
-	engine.RegisterComponent[components.ProtectionComponent](w)
-	engine.RegisterComponent[components.PingComponent](w)
-	engine.RegisterComponent[components.ShieldComponent](w)
-	engine.RegisterComponent[components.BoostComponent](w)
-	engine.RegisterComponent[components.SplashComponent](w)
-	engine.RegisterComponent[components.DeathComponent](w)
-	engine.RegisterComponent[components.TimerComponent](w)
-	engine.RegisterComponent[components.EnergyComponent](w)
-	engine.RegisterComponent[components.HeatComponent](w)
-	engine.RegisterComponent[components.DecayComponent](w)
-	engine.RegisterComponent[components.CleanerComponent](w)
-	engine.RegisterComponent[components.MaterializeComponent](w)
+	engine.RegisterComponent[component.CharacterComponent](w)
+	engine.RegisterComponent[component.SequenceComponent](w)
+	engine.RegisterComponent[component.GoldSequenceComponent](w)
+	engine.RegisterComponent[component.FlashComponent](w)
+	engine.RegisterComponent[component.NuggetComponent](w)
+	engine.RegisterComponent[component.DrainComponent](w)
+	engine.RegisterComponent[component.CursorComponent](w)
+	engine.RegisterComponent[component.ProtectionComponent](w)
+	engine.RegisterComponent[component.PingComponent](w)
+	engine.RegisterComponent[component.ShieldComponent](w)
+	engine.RegisterComponent[component.BoostComponent](w)
+	engine.RegisterComponent[component.SplashComponent](w)
+	engine.RegisterComponent[component.DeathComponent](w)
+	engine.RegisterComponent[component.TimerComponent](w)
+	engine.RegisterComponent[component.EnergyComponent](w)
+	engine.RegisterComponent[component.HeatComponent](w)
+	engine.RegisterComponent[component.DecayComponent](w)
+	engine.RegisterComponent[component.CleanerComponent](w)
+	engine.RegisterComponent[component.MaterializeComponent](w)
 }
 
 // RegisterSystems registers all system factories with the registry
 func RegisterSystems() {
 	registry.RegisterSystem("ping", func(w any) any {
-		return systems.NewPingSystem(w.(*engine.World))
+		return system.NewPingSystem(w.(*engine.World))
 	})
 	registry.RegisterSystem("energy", func(w any) any {
-		return systems.NewEnergySystem(w.(*engine.World))
+		return system.NewEnergySystem(w.(*engine.World))
 	})
 	registry.RegisterSystem("shield", func(w any) any {
-		return systems.NewShieldSystem(w.(*engine.World))
+		return system.NewShieldSystem(w.(*engine.World))
 	})
 	registry.RegisterSystem("heat", func(w any) any {
-		return systems.NewHeatSystem(w.(*engine.World))
+		return system.NewHeatSystem(w.(*engine.World))
 	})
 	registry.RegisterSystem("boost", func(w any) any {
-		return systems.NewBoostSystem(w.(*engine.World))
+		return system.NewBoostSystem(w.(*engine.World))
 	})
 	registry.RegisterSystem("spawn", func(w any) any {
-		return systems.NewSpawnSystem(w.(*engine.World))
+		return system.NewSpawnSystem(w.(*engine.World))
 	})
 	registry.RegisterSystem("nugget", func(w any) any {
-		return systems.NewNuggetSystem(w.(*engine.World))
+		return system.NewNuggetSystem(w.(*engine.World))
 	})
 	registry.RegisterSystem("decay", func(w any) any {
-		return systems.NewDecaySystem(w.(*engine.World))
+		return system.NewDecaySystem(w.(*engine.World))
 	})
 	registry.RegisterSystem("gold", func(w any) any {
-		return systems.NewGoldSystem(w.(*engine.World))
+		return system.NewGoldSystem(w.(*engine.World))
 	})
 	registry.RegisterSystem("materialize", func(w any) any {
-		return systems.NewMaterializeSystem(w.(*engine.World))
+		return system.NewMaterializeSystem(w.(*engine.World))
 	})
 	registry.RegisterSystem("drain", func(w any) any {
-		return systems.NewDrainSystem(w.(*engine.World))
+		return system.NewDrainSystem(w.(*engine.World))
 	})
 	registry.RegisterSystem("cleaner", func(w any) any {
-		return systems.NewCleanerSystem(w.(*engine.World))
+		return system.NewCleanerSystem(w.(*engine.World))
 	})
 	registry.RegisterSystem("flash", func(w any) any {
-		return systems.NewFlashSystem(w.(*engine.World))
+		return system.NewFlashSystem(w.(*engine.World))
 	})
 	registry.RegisterSystem("splash", func(w any) any {
-		return systems.NewSplashSystem(w.(*engine.World))
+		return system.NewSplashSystem(w.(*engine.World))
 	})
 	registry.RegisterSystem("death", func(w any) any {
-		return systems.NewDeathSystem(w.(*engine.World))
+		return system.NewDeathSystem(w.(*engine.World))
 	})
 	registry.RegisterSystem("timekeeper", func(w any) any {
-		return systems.NewTimeKeeperSystem(w.(*engine.World))
+		return system.NewTimeKeeperSystem(w.(*engine.World))
 	})
 	registry.RegisterSystem("cull", func(w any) any {
-		return systems.NewCullSystem(w.(*engine.World))
+		return system.NewCullSystem(w.(*engine.World))
 	})
 }
 

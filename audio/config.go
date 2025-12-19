@@ -1,7 +1,7 @@
 package audio
 
 import (
-	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/constant"
 )
 
 // AudioConfig holds audio system configuration
@@ -23,6 +23,6 @@ func DefaultAudioConfig() *AudioConfig {
 			SoundWhoosh: 0.6,
 			SoundCoin:   0.5,
 		},
-		SampleRate: constants.AudioSampleRate,
+		SampleRate: constant.AudioSampleRate,
 	}
 }

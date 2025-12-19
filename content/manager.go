@@ -11,7 +11,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/constant"
 )
 
 var (
@@ -58,7 +58,7 @@ func (cb *circuitBreaker) recordFailure(err error) {
 	cb.failureCount++
 	cb.lastFailureError = err
 
-	if cb.failureCount >= constants.CircuitBreakerThreshold {
+	if cb.failureCount >= constant.CircuitBreakerThreshold {
 		cb.isOpen = true
 	}
 }
@@ -343,7 +343,7 @@ func (cm *ContentManager) loadAndProcessFile(filePath string) ([]string, error) 
 		lineCount++
 
 		// Check for maximum block size to prevent memory issues
-		if lineCount > constants.MaxBlockSize {
+		if lineCount > constant.MaxBlockSize {
 			break
 		}
 
@@ -359,8 +359,8 @@ func (cm *ContentManager) loadAndProcessFile(filePath string) ([]string, error) 
 		}
 
 		// Truncate if too long
-		if len(trimmed) > constants.MaxLineLength {
-			trimmed = trimmed[:constants.MaxLineLength]
+		if len(trimmed) > constant.MaxLineLength {
+			trimmed = trimmed[:constant.MaxLineLength]
 		}
 
 		allLines = append(allLines, trimmed)
@@ -450,8 +450,8 @@ func (cm *ContentManager) ProcessContentBlock(lines []string) []string {
 		}
 
 		// Truncate lines that are too long
-		if len(trimmed) > constants.MaxLineLength {
-			trimmed = trimmed[:constants.MaxLineLength]
+		if len(trimmed) > constant.MaxLineLength {
+			trimmed = trimmed[:constant.MaxLineLength]
 		}
 
 		processed = append(processed, trimmed)
@@ -464,14 +464,14 @@ func (cm *ContentManager) ProcessContentBlock(lines []string) []string {
 // Returns true if content is valid, false otherwise
 func (cm *ContentManager) ValidateProcessedContent(lines []string) bool {
 	// Check if we have enough lines
-	if len(lines) < constants.MinProcessedLines {
+	if len(lines) < constant.MinProcessedLines {
 		return false
 	}
 
 	// All lines should already be within MaxLineLength due to processing
 	// But we can verify for safety
 	for _, line := range lines {
-		if len(line) > constants.MaxLineLength {
+		if len(line) > constant.MaxLineLength {
 			return false
 		}
 	}
@@ -491,8 +491,8 @@ func (cm *ContentManager) GetContentBlock(filePath string, startLine, size int) 
 	}()
 
 	// Enforce maximum size limit
-	if size > constants.MaxBlockSize {
-		size = constants.MaxBlockSize
+	if size > constant.MaxBlockSize {
+		size = constant.MaxBlockSize
 	}
 
 	// Open the file
@@ -511,7 +511,7 @@ func (cm *ContentManager) GetContentBlock(filePath string, startLine, size int) 
 		lineCount++
 
 		// Prevent excessive memory usage
-		if lineCount > constants.MaxBlockSize {
+		if lineCount > constant.MaxBlockSize {
 			break
 		}
 
@@ -592,7 +592,7 @@ func (cm *ContentManager) selectFromValidatedCache() ([]string, string, error) {
 	}
 
 	// Determine block size (use minimum of ContentBlockSize and available lines)
-	blockSize := constants.ContentBlockSize
+	blockSize := constant.ContentBlockSize
 	if len(cached.lines) < blockSize {
 		blockSize = len(cached.lines)
 	}
@@ -647,7 +647,7 @@ func (cm *ContentManager) SelectRandomBlock() ([]string, string, error) {
 		lineCount++
 
 		// Prevent excessive scanning
-		if lineCount > constants.MaxBlockSize {
+		if lineCount > constant.MaxBlockSize {
 			break
 		}
 
@@ -672,7 +672,7 @@ func (cm *ContentManager) SelectRandomBlock() ([]string, string, error) {
 	randomStartLine := rand.Intn(validLineCount)
 
 	// Get the content block
-	block, err := cm.GetContentBlock(selectedFile, randomStartLine, constants.ContentBlockSize)
+	block, err := cm.GetContentBlock(selectedFile, randomStartLine, constant.ContentBlockSize)
 	if err != nil {
 		return nil, "", err
 	}
@@ -709,7 +709,7 @@ func (cm *ContentManager) SelectRandomBlockWithValidation() ([]string, string, e
 	}
 
 	// Try to get valid content with retries
-	for attempt := 0; attempt < constants.MaxRetries; attempt++ {
+	for attempt := 0; attempt < constant.MaxRetries; attempt++ {
 		// Try to select a random block
 		block, filePath, err := cm.SelectRandomBlock()
 		if err != nil {
@@ -732,7 +732,7 @@ func (cm *ContentManager) SelectRandomBlockWithValidation() ([]string, string, e
 	}
 
 	// All retries failed, fall back to default content
-	err := fmt.Errorf("all %d attempts failed to load valid content", constants.MaxRetries)
+	err := fmt.Errorf("all %d attempts failed to load valid content", constant.MaxRetries)
 	cm.breaker.recordFailure(err)
 	return cm.GetDefaultContent(), "default", nil
 }

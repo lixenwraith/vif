@@ -1,11 +1,11 @@
 package mode
 
 import (
-	"github.com/lixenwraith/vi-fighter/components"
-	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/component"
+	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
-	"github.com/lixenwraith/vi-fighter/events"
+	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/input"
 )
 
@@ -150,8 +150,8 @@ func (r *Router) handleEscape() bool {
 		// Nothing to clear
 	case core.ModeNormal:
 		// Trigger ping grid
-		r.ctx.PushEvent(events.EventPingGridRequest, &events.PingGridRequestPayload{
-			Duration: constants.PingGridDuration,
+		r.ctx.PushEvent(event.EventPingGridRequest, &event.PingGridRequestPayload{
+			Duration: constant.PingGridDuration,
 		})
 		return true // Stay in Normal mode
 	}
@@ -371,7 +371,7 @@ func (r *Router) handleSpecial(intent *input.Intent) bool {
 }
 
 func (r *Router) handleNuggetJump() bool {
-	r.ctx.PushEvent(events.EventNuggetJumpRequest, nil)
+	r.ctx.PushEvent(event.EventNuggetJumpRequest, nil)
 	return true
 }
 
@@ -382,7 +382,7 @@ func (r *Router) handleFireCleaner() bool {
 		originX, originY = pos.X, pos.Y
 	}
 
-	r.ctx.PushEvent(events.EventDirectionalCleanerRequest, &events.DirectionalCleanerPayload{
+	r.ctx.PushEvent(event.EventDirectionalCleanerRequest, &event.DirectionalCleanerPayload{
 		OriginX: originX,
 		OriginY: originY,
 	})
@@ -445,11 +445,11 @@ func (r *Router) handleInsertChar(char rune) {
 		posX, posY = pos.X, pos.Y
 	}
 
-	payload := events.CharacterTypedPayloadPool.Get().(*events.CharacterTypedPayload)
+	payload := event.CharacterTypedPayloadPool.Get().(*event.CharacterTypedPayload)
 	payload.Char = char
 	payload.X = posX
 	payload.Y = posY
-	r.ctx.PushEvent(events.EventCharacterTyped, payload)
+	r.ctx.PushEvent(event.EventCharacterTyped, payload)
 }
 
 func (r *Router) handleSearchChar(char rune) {
@@ -595,9 +595,9 @@ func (r *Router) setLastCommandAndSplash(cmd string) {
 		originX, originY = pos.X, pos.Y
 	}
 
-	r.ctx.PushEvent(events.EventSplashRequest, &events.SplashRequestPayload{
+	r.ctx.PushEvent(event.EventSplashRequest, &event.SplashRequestPayload{
 		Text:    cmd,
-		Color:   components.SplashColorNormal,
+		Color:   component.SplashColorNormal,
 		OriginX: originX,
 		OriginY: originY,
 	})

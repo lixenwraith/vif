@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/assets"
+	"github.com/lixenwraith/vi-fighter/asset"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
@@ -119,10 +119,10 @@ func NewEditor(term terminal.Terminal) *Editor {
 }
 
 func (e *Editor) loadAssets() {
-	for i := 0; i < len(assets.SplashFont); i++ {
+	for i := 0; i < len(asset.SplashFont); i++ {
 		r := rune(MinChar + i)
-		e.glyphs[r] = assets.SplashFont[i]
-		e.original[r] = assets.SplashFont[i]
+		e.glyphs[r] = asset.SplashFont[i]
+		e.original[r] = asset.SplashFont[i]
 	}
 }
 

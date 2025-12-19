@@ -9,7 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine/fsm"
 	"github.com/lixenwraith/vi-fighter/engine/status"
-	"github.com/lixenwraith/vi-fighter/events"
+	"github.com/lixenwraith/vi-fighter/event"
 )
 
 // ClockScheduler manages game logic on a fixed tick
@@ -45,7 +45,7 @@ type ClockScheduler struct {
 	updateDone chan<- struct{} // Send signal that update is complete
 
 	// Event routing
-	eventRouter *events.Router
+	eventRouter *event.Router
 
 	// Finite State Machine
 	fsm *fsm.Machine[*World]
@@ -82,7 +82,7 @@ func NewClockScheduler(
 		eqRes:            eqRes,
 		lastGameTickTime: pausableClock.Now(),
 		tickCount:        atomic.Uint64{},
-		eventRouter:      events.NewRouter(MustGetResource[*EventQueueResource](world.Resources).Queue),
+		eventRouter:      event.NewRouter(MustGetResource[*EventQueueResource](world.Resources).Queue),
 		frameReady:       frameReady,
 		updateDone:       updateDone,
 		resetChan:        resetChan,
@@ -96,7 +96,7 @@ func NewClockScheduler(
 }
 
 // RegisterEventHandler adds an event handler to router, must be called before Start()
-func (cs *ClockScheduler) RegisterEventHandler(handler events.Handler) {
+func (cs *ClockScheduler) RegisterEventHandler(handler event.Handler) {
 	cs.eventRouter.Register(handler)
 }
 

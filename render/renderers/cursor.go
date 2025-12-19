@@ -1,8 +1,8 @@
 package renderers
 
 import (
-	"github.com/lixenwraith/vi-fighter/components"
-	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/component"
+	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
@@ -11,11 +11,11 @@ import (
 // CursorRenderer draws the cursor with complex entity overlap handling
 type CursorRenderer struct {
 	gameCtx     *engine.GameContext
-	cursorStore *engine.Store[components.CursorComponent]
-	charStore   *engine.Store[components.CharacterComponent]
-	nuggetStore *engine.Store[components.NuggetComponent]
-	drainStore  *engine.Store[components.DrainComponent]
-	decayStore  *engine.Store[components.DecayComponent]
+	cursorStore *engine.Store[component.CursorComponent]
+	charStore   *engine.Store[component.CharacterComponent]
+	nuggetStore *engine.Store[component.NuggetComponent]
+	drainStore  *engine.Store[component.DrainComponent]
+	decayStore  *engine.Store[component.DecayComponent]
 	resolver    *engine.ZIndexResolver
 }
 
@@ -23,11 +23,11 @@ type CursorRenderer struct {
 func NewCursorRenderer(gameCtx *engine.GameContext) *CursorRenderer {
 	return &CursorRenderer{
 		gameCtx:     gameCtx,
-		cursorStore: engine.GetStore[components.CursorComponent](gameCtx.World),
-		charStore:   engine.GetStore[components.CharacterComponent](gameCtx.World),
-		nuggetStore: engine.GetStore[components.NuggetComponent](gameCtx.World),
-		drainStore:  engine.GetStore[components.DrainComponent](gameCtx.World),
-		decayStore:  engine.GetStore[components.DecayComponent](gameCtx.World),
+		cursorStore: engine.GetStore[component.CursorComponent](gameCtx.World),
+		charStore:   engine.GetStore[component.CharacterComponent](gameCtx.World),
+		nuggetStore: engine.GetStore[component.NuggetComponent](gameCtx.World),
+		drainStore:  engine.GetStore[component.DrainComponent](gameCtx.World),
+		decayStore:  engine.GetStore[component.DecayComponent](gameCtx.World),
 		resolver:    engine.MustGetResource[*engine.ZIndexResolver](gameCtx.World.Resources),
 	}
 }
@@ -115,7 +115,7 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, world *engine.World, b
 	// 3. Resolve Final Visuals based on priority
 	if isDrain {
 		// Drain overrides everything
-		charAtCursor = constants.DrainChar
+		charAtCursor = constant.DrainChar
 		cursorBgColor = render.RgbDrain
 		charFgColor = render.RgbBlack
 	} else if hasChar {

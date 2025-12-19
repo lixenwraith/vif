@@ -1,7 +1,7 @@
 package renderers
 
 import (
-	"github.com/lixenwraith/vi-fighter/components"
+	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
@@ -10,7 +10,7 @@ import (
 // HeatMeterRenderer draws the heat meter bar at the top of the screen
 type HeatMeterRenderer struct {
 	gameCtx   *engine.GameContext
-	heatStore *engine.Store[components.HeatComponent]
+	heatStore *engine.Store[component.HeatComponent]
 
 	renderCell heatCellRenderer
 }
@@ -23,7 +23,7 @@ type heatCellRenderer func(buf *render.RenderBuffer, x int, color render.RGB)
 func NewHeatMeterRenderer(ctx *engine.GameContext) *HeatMeterRenderer {
 	h := &HeatMeterRenderer{
 		gameCtx:   ctx,
-		heatStore: engine.GetStore[components.HeatComponent](ctx.World),
+		heatStore: engine.GetStore[component.HeatComponent](ctx.World),
 	}
 
 	// Access RenderConfig for display mode

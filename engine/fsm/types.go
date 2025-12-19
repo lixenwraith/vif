@@ -3,7 +3,7 @@ package fsm
 import (
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/events"
+	"github.com/lixenwraith/vi-fighter/event"
 )
 
 // StateID is a unique identifier for a node
@@ -56,8 +56,8 @@ type Node[T any] struct {
 // Transition defines a link between states
 type Transition[T any] struct {
 	TargetID StateID
-	Event    events.EventType // 0 = Tick (auto-transition)
-	Guard    GuardFunc[T]     // nil = Always true
+	Event    event.EventType // 0 = Tick (auto-transition)
+	Guard    GuardFunc[T]    // nil = Always true
 }
 
 // Action represents a side-effect
@@ -79,6 +79,6 @@ type GuardFactoryFunc[T any] func(m *Machine[T], args map[string]any) GuardFunc[
 // EmitEventArgs holds pre-compiled event data for the EmitEvent action
 // Type identifies the event; Payload is the decoded struct (or nil)
 type EmitEventArgs struct {
-	Type    events.EventType
+	Type    event.EventType
 	Payload any
 }

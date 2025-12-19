@@ -3,9 +3,9 @@ package renderers
 import (
 	"strconv"
 
-	"github.com/lixenwraith/vi-fighter/assets"
-	"github.com/lixenwraith/vi-fighter/components"
-	"github.com/lixenwraith/vi-fighter/constants"
+	"github.com/lixenwraith/vi-fighter/asset"
+	"github.com/lixenwraith/vi-fighter/component"
+	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -14,14 +14,14 @@ import (
 // Supports multiple concurrent splash entities
 type SplashRenderer struct {
 	gameCtx     *engine.GameContext
-	splashStore *engine.Store[components.SplashComponent]
+	splashStore *engine.Store[component.SplashComponent]
 }
 
 // NewSplashRenderer creates a new splash renderer
 func NewSplashRenderer(gameCtx *engine.GameContext) *SplashRenderer {
 	return &SplashRenderer{
 		gameCtx:     gameCtx,
-		splashStore: engine.GetStore[components.SplashComponent](gameCtx.World),
+		splashStore: engine.GetStore[component.SplashComponent](gameCtx.World),
 	}
 }
 
@@ -39,7 +39,7 @@ func (r *SplashRenderer) Render(gameCtx render.RenderContext, world *engine.Worl
 		// Solid color - no fade effects
 		displayColor := r.resolveSplashColor(splash.Color)
 
-		if splash.Mode == components.SplashModePersistent {
+		if splash.Mode == component.SplashModePersistent {
 			// Countdown timer: render digits from remaining time
 			remainingSec := int(splash.Remaining.Seconds())
 			if remainingSec < 0 {
@@ -48,13 +48,13 @@ func (r *SplashRenderer) Render(gameCtx render.RenderContext, world *engine.Worl
 
 			digits := strconv.Itoa(remainingSec)
 			for i, d := range digits {
-				charX := splash.AnchorX + i*(constants.SplashCharWidth+constants.SplashCharSpacing)
+				charX := splash.AnchorX + i*(constant.SplashCharWidth+constant.SplashCharSpacing)
 				r.renderChar(gameCtx, buf, d, charX, splash.AnchorY, displayColor)
 			}
 		} else {
 			// Transient: render content directly
 			for i := 0; i < splash.Length; i++ {
-				charX := splash.AnchorX + i*(constants.SplashCharWidth+constants.SplashCharSpacing)
+				charX := splash.AnchorX + i*(constant.SplashCharWidth+constant.SplashCharSpacing)
 				r.renderChar(gameCtx, buf, splash.Content[i], charX, splash.AnchorY, displayColor)
 			}
 		}
@@ -68,16 +68,16 @@ func (r *SplashRenderer) renderChar(gameCtx render.RenderContext, buf *render.Re
 		return
 	}
 
-	bitmap := assets.SplashFont[char-32]
+	bitmap := asset.SplashFont[char-32]
 
-	for row := 0; row < constants.SplashCharHeight; row++ {
+	for row := 0; row < constant.SplashCharHeight; row++ {
 		screenY := gameCtx.GameY + gameY + row
 		if screenY < gameCtx.GameY || screenY >= gameCtx.GameY+gameCtx.GameHeight {
 			continue
 		}
 
 		rowBits := bitmap[row]
-		for col := 0; col < constants.SplashCharWidth; col++ {
+		for col := 0; col < constant.SplashCharWidth; col++ {
 			// MSB-first: bit 15 = column 0
 			if rowBits&(1<<(15-col)) == 0 {
 				continue
@@ -95,21 +95,21 @@ func (r *SplashRenderer) renderChar(gameCtx render.RenderContext, buf *render.Re
 
 // TODO: refactor, this logic is defined twice to avoid a cyclic dependency
 // resolveSplashColor maps the SplashColor enum to actual render.RGB
-func (r *SplashRenderer) resolveSplashColor(c components.SplashColor) render.RGB {
+func (r *SplashRenderer) resolveSplashColor(c component.SplashColor) render.RGB {
 	switch c {
-	case components.SplashColorNormal:
+	case component.SplashColorNormal:
 		return render.RgbSplashNormal
-	case components.SplashColorInsert:
+	case component.SplashColorInsert:
 		return render.RgbSplashInsert
-	case components.SplashColorGreen:
+	case component.SplashColorGreen:
 		return render.RgbSequenceGreenNormal
-	case components.SplashColorBlue:
+	case component.SplashColorBlue:
 		return render.RgbSequenceBlueNormal
-	case components.SplashColorRed:
+	case component.SplashColorRed:
 		return render.RgbSequenceRedNormal
-	case components.SplashColorGold:
+	case component.SplashColorGold:
 		return render.RgbSequenceGold
-	case components.SplashColorNugget:
+	case component.SplashColorNugget:
 		return render.RgbNuggetOrange
 	default:
 		return render.RgbSplashNormal

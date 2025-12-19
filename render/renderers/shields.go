@@ -3,7 +3,7 @@ package renderers
 import (
 	"math"
 
-	"github.com/lixenwraith/vi-fighter/components"
+	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
@@ -16,8 +16,8 @@ type shieldCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, dis
 // ShieldRenderer renders active shields with dynamic color from GameState
 type ShieldRenderer struct {
 	gameCtx     *engine.GameContext
-	shieldStore *engine.Store[components.ShieldComponent]
-	energyStore *engine.Store[components.EnergyComponent]
+	shieldStore *engine.Store[component.ShieldComponent]
+	energyStore *engine.Store[component.EnergyComponent]
 
 	renderCell shieldCellRenderer
 }
@@ -26,8 +26,8 @@ type ShieldRenderer struct {
 func NewShieldRenderer(gameCtx *engine.GameContext) *ShieldRenderer {
 	s := &ShieldRenderer{
 		gameCtx:     gameCtx,
-		shieldStore: engine.GetStore[components.ShieldComponent](gameCtx.World),
-		energyStore: engine.GetStore[components.EnergyComponent](gameCtx.World),
+		shieldStore: engine.GetStore[component.ShieldComponent](gameCtx.World),
+		energyStore: engine.GetStore[component.EnergyComponent](gameCtx.World),
 	}
 
 	// Access RenderConfig for display mode and select strategy once
@@ -144,8 +144,8 @@ func (r *ShieldRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int,
 }
 
 // resolveShieldColor determines the shield color from override or EnergyBlinkType
-func (r *ShieldRenderer) resolveShieldColor(shield components.ShieldComponent) render.RGB {
-	if shield.OverrideColor != components.ColorNone {
+func (r *ShieldRenderer) resolveShieldColor(shield component.ShieldComponent) render.RGB {
+	if shield.OverrideColor != component.ColorNone {
 		return r.colorClassToRGB(shield.OverrideColor)
 	}
 
@@ -176,11 +176,11 @@ func (r *ShieldRenderer) getColorFromBlinkType(blinkType uint32) render.RGB {
 }
 
 // colorClassToRGB maps ColorClass overrides to RGB
-func (r *ShieldRenderer) colorClassToRGB(color components.ColorClass) render.RGB {
+func (r *ShieldRenderer) colorClassToRGB(color component.ColorClass) render.RGB {
 	switch color {
-	case components.ColorShield:
+	case component.ColorShield:
 		return render.RgbShieldBase
-	case components.ColorNugget:
+	case component.ColorNugget:
 		return render.RgbNuggetOrange
 	default:
 		return render.RgbShieldBase
