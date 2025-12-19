@@ -1,6 +1,8 @@
 package input
 
-import "github.com/lixenwraith/vi-fighter/terminal"
+import (
+	"github.com/lixenwraith/vi-fighter/terminal"
+)
 
 // Machine is the input state machine
 // Parses terminal.Event into semantic Intent

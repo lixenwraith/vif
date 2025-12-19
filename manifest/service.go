@@ -4,14 +4,14 @@ import (
 	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/content"
 	"github.com/lixenwraith/vi-fighter/engine/registry"
-	"github.com/lixenwraith/vi-fighter/engine/status"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // RegisterServices registers all service factories
 // Terminal is excluded - it's a bootstrap service registered directly
 func RegisterServices() {
-	registry.RegisterService("status", func() any {
-		return status.NewService()
+	registry.RegisterService("terminal", func() any {
+		return terminal.NewService()
 	})
 
 	registry.RegisterService("audio", func() any {
@@ -27,7 +27,7 @@ func RegisterServices() {
 // Terminal is excluded - handled separately as bootstrap
 func ActiveServices() []string {
 	return []string{
-		"status",
+		"terminal",
 		"audio",
 		"content",
 	}

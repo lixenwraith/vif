@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/audio"
@@ -11,132 +10,86 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/engine/registry"
-	"github.com/lixenwraith/vi-fighter/engine/services"
 	"github.com/lixenwraith/vi-fighter/engine/status"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/input"
 	"github.com/lixenwraith/vi-fighter/manifest"
 	"github.com/lixenwraith/vi-fighter/mode"
 	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/vi-fighter/service"
 	"github.com/lixenwraith/vi-fighter/system"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // CLI flags
-var colorModeFlag = flag.String("color", "auto", "Color mode: auto, truecolor, 256")
+var (
+	flagColor256    = flag.Bool("cx", false, "Force 256-color mode")
+	flagColorTrue   = flag.Bool("ct", false, "Force truecolor mode")
+	flagAudioMute   = flag.Bool("am", false, "Start with audio muted")
+	flagAudioUnmute = flag.Bool("au", false, "Start with audio unmuted")
+	flagContentPath = flag.String("f", "", "Content file path or glob pattern")
+)
 
 func main() {
-	// === PHASE 0: Can we Run? ===
-	// Parse command-line flags (keeping flag parsing infrastructure)
+	// 0. Config
+	// Parse CLI flags
 	flag.Parse()
 
-	// Resolve color mode from flag
-	var colorMode terminal.ColorMode
-	switch *colorModeFlag {
-	case "256":
-		colorMode = terminal.ColorMode256
-	case "truecolor", "true", "24bit":
-		colorMode = terminal.ColorModeTrueColor
-	default:
-		colorMode = terminal.DetectColorMode()
-	}
+	// Resolve service args from flags
+	serviceArgs := buildServiceArgs()
 
-	// Initialize terminal
-	term := terminal.New(colorMode)
-	if err := term.Init(); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to initialize terminal: %v\n", err)
-		os.Exit(1)
-	}
+	// 1. Service Hub
+	hub := service.NewHub()
 
-	// === PHASE 1: Service Hub Setup ===
-	hub := services.NewHub()
-
-	// Panic recovery and cleanup
 	defer func() {
 		if r := recover(); r != nil {
-			// Crash
-			core.HandleCrash(r)
+			core.HandleCrash(r) // Crash
 		}
 		// Normal exit
 		hub.StopAll()
-		term.Fini() // Terminal cleanup always runs last
 	}()
 
-	// === PHASE 2: Registry Setup ===
+	// 2. Registry Setup
+	manifest.RegisterServices()
 	manifest.RegisterSystems()
 	manifest.RegisterRenderers()
-	manifest.RegisterServices()
 
-	// === PHASE 3: World Creation & Component Registry ===
-	world := engine.NewWorld()
-	manifest.RegisterComponents(world)
-
-	// === PHASE 4: GameContext Creation ===
-	ctx := engine.NewGameContext(term, world)
-
-	// === PHASE 5: Service Registration ===
-	// Register bootstrap service (terminal)
-	hub.Register(terminal.NewService(term))
-
-	// Register services via factories
+	// 3. Service Registration
 	for _, name := range manifest.ActiveServices() {
 		factory, ok := registry.GetService(name)
 		if !ok {
 			panic(fmt.Sprintf("service not registered: %s", name))
 		}
-		svc := factory().(services.Service)
-		hub.Register(svc)
+		svc := factory().(service.Service)
+		args := serviceArgs[name]
+		if err := hub.RegisterWithArgs(svc, args...); err != nil {
+			panic(fmt.Sprintf("service registration failed: %s: %v", name, err))
+		}
 	}
 
-	// Initialize and start services
-	if err := hub.InitAll(world); err != nil {
+	// 4. World Creation & Component Registry
+	world := engine.NewWorld()
+	manifest.RegisterComponents(world)
+
+	// TODO: check moving it up since no world dependency
+	// 5.: Service Initialization
+	if err := hub.InitAll(); err != nil {
 		panic(fmt.Sprintf("service init failed: %v", err))
 	}
-	if err := hub.StartAll(); err != nil {
-		panic(fmt.Sprintf("service start failed: %v", err))
-	}
 
-	// Store hub in resources for system access
+	// TODO: find some use or remove, services are not world resources
+	// Store hub for system access
 	engine.AddResource(world.Resources, hub)
 
-	// === PHASE 4: Core Resources ===
-	// TODO: This comment or interaction is confusing
-	// Initialize singleton TimeResource (updated in-place by ClockScheduler)
-	timeRes := &engine.TimeResource{
-		GameTime:    ctx.PausableClock.Now(),
-		RealTime:    ctx.GetRealTime(),
-		DeltaTime:   constant.GameUpdateInterval,
-		FrameNumber: 0,
-	}
-	engine.AddResource(ctx.World.Resources, timeRes)
+	// Extract terminal for orchestrator and context
+	termSvc := service.MustGet[*terminal.TerminalService](hub, "terminal")
+	term := termSvc.Terminal()
+	width, height := term.Size()
 
-	// Initialize singleton InputResource (updated in-place during input handling)
-	inputRes := &engine.InputResource{
-		GameMode:       int(ctx.GetMode()),
-		CommandText:    "",
-		SearchText:     "",
-		PendingCommand: "",
-		IsPaused:       ctx.IsPaused.Load(),
-	}
-	engine.AddResource(ctx.World.Resources, inputRes)
+	// 6. GameContext Creation
+	ctx := engine.NewGameContext(world, width, height)
 
-	// Initialize Render Configuration
-	renderConfig := &engine.RenderConfig{
-		// TODO: move colorMode to core and alias terminal type
-		ColorMode: uint8(colorMode), // 0=256, 1=TrueColor (matches constants in terminal package usually, but safe cast here)
-		// TODO: post-render effects should not initialize here
-		GrayoutDuration: 1 * time.Second,
-		GrayoutMask:     render.MaskEntity,
-		DimFactor:       0.5,
-		DimMask:         render.MaskAll ^ render.MaskUI,
-	}
-	engine.AddResource(ctx.World.Resources, renderConfig)
-
-	// Z-Index Resolver (after components registered)
-	zIndexResolver := engine.NewZIndexResolver(world)
-	engine.AddResource(ctx.World.Resources, zIndexResolver)
-
-	// === PHASE 6: Audio Engine ===
+	// 7. Audio Engine
 	// Initialize audio from services
 	if audioSvc, ok := hub.Get("audio"); ok {
 		if as, ok := audioSvc.(*audio.AudioService); ok {
@@ -146,7 +99,7 @@ func main() {
 		}
 	} // Silent fail if audio could not be initialized
 
-	// === PHASE 7: Systems Instantiation ===
+	// 8. Systems Instantiation
 	// Add active systems to ECS world
 	for _, name := range manifest.ActiveSystems() {
 		factory, ok := registry.GetSystem(name)
@@ -157,15 +110,21 @@ func main() {
 		world.AddSystem(sys)
 	}
 
-	// === PHASE 8: Render Orchestrator & Renderers ===
-	// Create render orchestrator
-	orchestrator := render.NewRenderOrchestrator(
-		term,
-		ctx.Width,
-		ctx.Height,
-	)
+	// 9. Render Orchestrator
+	// Resolve color mode for RenderConfig
+	colorMode := term.ColorMode()
+	renderConfig := &engine.RenderConfig{
+		ColorMode: colorMode,
+		// TODO: post-render effects should not initialize here
+		GrayoutDuration: 1 * time.Second,
+		GrayoutMask:     render.MaskEntity,
+		DimFactor:       0.5,
+		DimMask:         render.MaskAll ^ render.MaskUI,
+	}
+	engine.AddResource(ctx.World.Resources, renderConfig)
 
-	// Add active renderers to render orchestrator
+	orchestrator := render.NewRenderOrchestrator(term, ctx.Width, ctx.Height)
+
 	for _, name := range manifest.ActiveRenderers() {
 		entry, ok := registry.GetRenderer(name)
 		if !ok {
@@ -175,7 +134,7 @@ func main() {
 		orchestrator.Register(renderer, entry.Priority)
 	}
 
-	// === PHASE 9: Input & Clock Scheduler ===
+	// 10. Input & Clock Scheduler
 	// Create input handler
 	inputMachine := input.NewMachine()
 	router := mode.NewRouter(ctx, inputMachine)
@@ -195,17 +154,17 @@ func main() {
 	// Wire reset channels to GameContext for MetaSystem access
 	ctx.ResetChan = resetChan
 
-	// === Phase 10: FSM Setup ===
-	// Initialize Event Registry first (for payload reflection)
+	// 11. Engine (FSM) Setup
+	// Initialize Event Registry for payload reflection
 	event.InitRegistry()
 
 	// Load FSM Config
-	// For now we use the default JSON embedded in manifest
+	// NOTE: using embedded TOML manifest for now
 	if err := clockScheduler.LoadFSM(manifest.DefaultGameplayFSMConfig, manifest.RegisterFSMComponents); err != nil {
 		panic(fmt.Sprintf("failed to load FSM: %v", err))
 	}
 
-	// === Phase 11: Event Handlers ===
+	// 12. Event Handlers
 	// Auto-register event handlers from World systems
 	for _, sys := range world.Systems() {
 		if handler, ok := sys.(event.Handler); ok {
@@ -220,41 +179,41 @@ func main() {
 	audioSystem := system.NewAudioSystem(world)
 	clockScheduler.RegisterEventHandler(audioSystem.(event.Handler))
 
-	// === PHASE 12: Main Loop ===
+	// 13. Start Services
+	if err := hub.StartAll(); err != nil {
+		panic(fmt.Sprintf("service start failed: %v", err))
+	}
+
+	// 14. Game Start
+	// Get world resources
+	// NOTE: World resources are initialized in GameContext
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
+	statusReg := engine.MustGetResource[*status.Registry](world.Resources)
+
 	// Signal initial frame ready
 	frameReady <- struct{}{}
 
+	// Start game ticks
 	clockScheduler.Start()
 	defer clockScheduler.Stop()
 
 	// Cache FPS metric pointer for render loop
-	statusReg := engine.MustGetResource[*status.Registry](ctx.World.Resources)
 	statFPS := statusReg.Ints.Get("engine.fps")
 
 	// FPS tracking
 	var frameCount int64
-	var lastFPSUpdate time.Time = time.Now()
+	// TODO: changed from time.Now(), check
+	lastFPSUpdate := timeRes.RealTime
 
 	// Set frame rate
 	frameTicker := time.NewTicker(constant.FrameUpdateInterval)
 	defer frameTicker.Stop()
 
-	eventChan := make(chan terminal.Event, 256)
-	// Input polling uses raw goroutine as it interacts directly with terminal
-	core.Go(func() {
-		for {
-			ev := term.PollEvent()
-			// Clean exit on terminal closure or error
-			if ev.Type == terminal.EventClosed || ev.Type == terminal.EventError {
-				return
-			}
-			eventChan <- ev
-		}
-	})
-
+	eventChan := termSvc.Events()
 	// Track last update state for rendering
 	var updatePending bool
 
+	// 15. Main Loop
 	for {
 		select {
 		case ev := <-eventChan:
@@ -267,21 +226,6 @@ func main() {
 					return // Exit game
 				}
 			}
-
-			// Update Input Resource from Context AFTER handling input
-			// This ensures renderers see the mode change in the same frame it happened
-			uiSnapshot := ctx.GetUISnapshot()
-
-			// Lock world to prevent race with Systems reading InputResource in Scheduler
-			ctx.World.RunSafe(func() {
-				inputRes.Update(
-					int(ctx.GetMode()),
-					uiSnapshot.CommandText,
-					uiSnapshot.SearchText,
-					inputMachine.GetPendingCommand(),
-					ctx.IsPaused.Load(),
-				)
-			})
 
 			// Dispatch input events immediately, bypassing game tick wait
 			clockScheduler.DispatchEventsImmediately()
@@ -323,7 +267,7 @@ func main() {
 				// During pause: skip game updates but still render
 				if ctx.IsPaused.Load() {
 					// Update time for paused rendering
-					timeRes.RealTime = ctx.GetRealTime()
+					timeRes.RealTime = ctx.PausableClock.RealTime()
 				}
 
 				// Copy TimeResource state by value for thread-safe reading
@@ -369,4 +313,34 @@ func main() {
 			}
 		}
 	}
+}
+
+// buildServiceArgs maps service names to their initialization args from flags
+func buildServiceArgs() map[string][]any {
+	args := make(map[string][]any)
+
+	// Terminal: color mode
+	if *flagColor256 {
+		args["terminal"] = []any{terminal.ColorMode256}
+	} else if *flagColorTrue {
+		args["terminal"] = []any{terminal.ColorModeTrueColor}
+	}
+	// No flag = auto-detect (empty args)
+
+	// Audio: mute state (default muted)
+	if *flagAudioUnmute {
+		args["audio"] = []any{false} // unmuted
+	} else if *flagAudioMute {
+		args["audio"] = []any{true} // muted (explicit)
+	} else {
+		args["audio"] = []any{true} // muted (default)
+	}
+
+	// Content: file pattern
+	if *flagContentPath != "" {
+		args["content"] = []any{*flagContentPath}
+	}
+	// No flag = default discovery (empty args)
+
+	return args
 }

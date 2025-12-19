@@ -1,4 +1,4 @@
-package services
+package service
 
 import (
 	"fmt"
@@ -11,14 +11,16 @@ import (
 type Hub struct {
 	mu       sync.RWMutex
 	services map[string]Service
-	sorted   []string // Topological order, computed on InitAll
-	started  []string // Services that completed Start(), for rollback
+	sorted   []string         // Topological order, computed on InitAll
+	started  []string         // Services that completed Start(), for rollback
+	initArgs map[string][]any // Per-service init args
 }
 
 // NewHub creates an empty service hub
 func NewHub() *Hub {
 	return &Hub{
 		services: make(map[string]Service),
+		initArgs: make(map[string][]any),
 	}
 }
 
@@ -35,6 +37,17 @@ func (h *Hub) Register(svc Service) error {
 
 	h.services[name] = svc
 	h.sorted = nil // Invalidate cached order
+	return nil
+}
+
+// RegisterWithArgs adds a service with init-time configuration
+func (h *Hub) RegisterWithArgs(svc Service, args ...any) error {
+	if err := h.Register(svc); err != nil {
+		return err
+	}
+	h.mu.Lock()
+	h.initArgs[svc.Name()] = args
+	h.mu.Unlock()
 	return nil
 }
 
@@ -66,7 +79,7 @@ func MustGet[T any](h *Hub, name string) T {
 
 // InitAll resolves dependencies and calls Init on all services
 // On failure, calls Stop on already-initialized services in reverse order
-func (h *Hub) InitAll(world any) error {
+func (h *Hub) InitAll() error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -83,7 +96,8 @@ func (h *Hub) InitAll(world any) error {
 	var initialized []string
 	for _, name := range h.sorted {
 		svc := h.services[name]
-		if err := svc.Init(world); err != nil {
+		args := h.initArgs[name]
+		if err := svc.Init(args...); err != nil {
 			// Rollback: stop already-initialized in reverse order
 			for i := len(initialized) - 1; i >= 0; i-- {
 				h.services[initialized[i]].Stop()

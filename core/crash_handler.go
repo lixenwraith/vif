@@ -15,13 +15,20 @@ func HandleCrash(r any) {
 	}
 
 	// Restore terminal to sane state immediately
-	// using os.Stdout directly as terminal package acts independently
 	terminal.EmergencyReset(os.Stdout)
 
-	// Print error and stack trace to stderr so it's visible after reset
-	// Use \r\n for raw mode compatibility to avoid zig-zag output if reset failed partially
+	// TODO: Though cleaner now, still zig-zags in stack trace print, add more '\r\n' and sync/flushes to test
+	// Force flush stdout/stderr before printing to stderr
+	os.Stdout.Sync()
+	os.Stderr.Sync()
+
+	// Print error and stack trace to stderr
 	fmt.Fprintf(os.Stderr, "\r\n\x1b[31mCRASH DETECTED: %v\x1b[0m\r\n", r)
 	fmt.Fprintf(os.Stderr, "Stack Trace:\r\n%s\r\n", debug.Stack())
+
+	// Sync stderr before exit
+	os.Stderr.Sync()
+
 	os.Exit(1)
 }
 

@@ -3,7 +3,6 @@ package engine
 import (
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/component"
@@ -11,7 +10,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine/status"
 	"github.com/lixenwraith/vi-fighter/event"
-	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // UISnapshot provides a consistent view of UI state for rendering
@@ -45,8 +43,8 @@ type GameContext struct {
 	// Event queue for inter-system communication
 	eventQueue *event.EventQueue
 
-	// Terminal interface
-	Terminal terminal.Terminal
+	// // Terminal interface
+	// Terminal terminal.Terminal
 
 	// Pausable Clock time provider
 	PausableClock *PausableClock
@@ -100,16 +98,13 @@ type GameContext struct {
 
 // NewGameContext creates a GameContext using an existing ECS World
 // Components must be registered before context creation
-func NewGameContext(term terminal.Terminal, world *World) *GameContext {
-	// Get terminal size
-	width, height := term.Size()
-
+// width/height are initial terminal dimensions
+func NewGameContext(world *World, width, height int) *GameContext {
 	// Create pausable clock
 	pausableClock := NewPausableClock()
 
 	ctx := &GameContext{
 		World:         world,
-		Terminal:      term,
 		PausableClock: pausableClock,
 		Width:         width,
 		Height:        height,
@@ -122,7 +117,7 @@ func NewGameContext(term terminal.Terminal, world *World) *GameContext {
 	// Calculate game area
 	ctx.updateGameArea()
 
-	// -- Initialize Core Resources --
+	// -- Initialize Resources --
 
 	// 0. Status Registry (before other resources that may use it)
 	statusRegistry := status.NewRegistry()
@@ -143,30 +138,27 @@ func NewGameContext(term terminal.Terminal, world *World) *GameContext {
 	timeRes := &TimeResource{
 		GameTime:    pausableClock.Now(),
 		RealTime:    pausableClock.RealTime(),
-		DeltaTime:   0,
+		DeltaTime:   constant.GameUpdateInterval,
 		FrameNumber: 0,
 	}
 	AddResource(ctx.World.Resources, timeRes)
 
-	// 3. Input Resource (Initial state)
-	inputRes := &InputResource{
-		GameMode: ResourceModeNormal,
-		IsPaused: false,
-	}
-	AddResource(ctx.World.Resources, inputRes)
-
-	// 4. Event Queue Resource
+	// 3. Event Queue Resource
 	AddResource(ctx.World.Resources, &EventQueueResource{Queue: ctx.eventQueue})
 
-	// 5. Game State
+	// 4. Game State
 	ctx.State = NewGameState(pausableClock.Now())
 	AddResource(ctx.World.Resources, &GameStateResource{State: ctx.State})
 
-	// 6. Cursor Entity
+	// 5. Cursor Entity
 	ctx.CreateCursorEntity()
 
-	// 7. Cursor Resource
+	// 6. Cursor Resource
 	AddResource(ctx.World.Resources, &CursorResource{Entity: ctx.CursorEntity})
+
+	// ZIndex resolver for entity interaction ordering
+	zIndexResolver := NewZIndexResolver(ctx.World)
+	AddResource(ctx.World.Resources, zIndexResolver)
 
 	// Initialize pause state
 	ctx.IsPaused.Store(false)
@@ -244,11 +236,6 @@ func (ctx *GameContext) SetPaused(paused bool) {
 	}
 }
 
-// GetRealTime returns wall clock time for UI elements
-func (ctx *GameContext) GetRealTime() time.Time {
-	return ctx.PausableClock.RealTime()
-}
-
 // StopAudio mutes audio during pause (sounds complete naturally)
 func (ctx *GameContext) StopAudio() {
 	if ctx.AudioEngine != nil && ctx.AudioEngine.IsRunning() && !ctx.AudioEngine.IsMuted() {
@@ -285,34 +272,30 @@ func (ctx *GameContext) updateGameArea() {
 
 // HandleResize handles terminal resize events
 func (ctx *GameContext) HandleResize() {
-	newWidth, newHeight := ctx.Terminal.Size()
-	if newWidth != ctx.Width || newHeight != ctx.Height {
-		ctx.Width = newWidth
-		ctx.Height = newHeight
-		ctx.updateGameArea()
+	// New Height and Width already set in context by main
+	ctx.updateGameArea()
 
-		// Update ConfigResource
-		configRes := &ConfigResource{
-			ScreenWidth:  ctx.Width,
-			ScreenHeight: ctx.Height,
-			GameWidth:    ctx.GameWidth,
-			GameHeight:   ctx.GameHeight,
-			GameX:        ctx.GameX,
-			GameY:        ctx.GameY,
-		}
-		AddResource(ctx.World.Resources, configRes)
+	// Update ConfigResource
+	configRes := &ConfigResource{
+		ScreenWidth:  ctx.Width,
+		ScreenHeight: ctx.Height,
+		GameWidth:    ctx.GameWidth,
+		GameHeight:   ctx.GameHeight,
+		GameX:        ctx.GameX,
+		GameY:        ctx.GameY,
+	}
+	AddResource(ctx.World.Resources, configRes)
 
-		// TODO: Optional disable (world.crop)
-		// Cleanup entities outside new bounds to prevent ghosting/resource usage
-		// Uses GameWidth/Height as valid coordinate space for entities, resizes Spatial Grid
-		ctx.cleanupOutOfBoundsEntities(ctx.GameWidth, ctx.GameHeight)
+	// TODO: Optional disable (world.crop)
+	// Cleanup entities outside new bounds to prevent ghosting/resource usage
+	// Uses GameWidth/Height as valid coordinate space for entities, resizes Spatial Grid
+	ctx.cleanupOutOfBoundsEntities(ctx.GameWidth, ctx.GameHeight)
 
-		// Clamp cursor position
-		if pos, ok := ctx.World.Positions.Get(ctx.CursorEntity); ok {
-			pos.X = max(0, min(pos.X, ctx.GameWidth-1))
-			pos.Y = max(0, min(pos.Y, ctx.GameHeight-1))
-			ctx.World.Positions.Add(ctx.CursorEntity, pos)
-		}
+	// Clamp cursor position
+	if pos, ok := ctx.World.Positions.Get(ctx.CursorEntity); ok {
+		pos.X = max(0, min(pos.X, ctx.GameWidth-1))
+		pos.Y = max(0, min(pos.Y, ctx.GameHeight-1))
+		ctx.World.Positions.Add(ctx.CursorEntity, pos)
 	}
 }
 

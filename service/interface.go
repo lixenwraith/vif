@@ -1,11 +1,11 @@
-package services
+package service
 
 // Service defines the lifecycle interface for infrastructure subsystems
-// Services manage long-lived resources: audio backends, content pipelines, telemetry
+// Services manage long-lived resources: audio backends, content pipelines, terminals
 //
 // Lifecycle:
 //  1. Construction (via factory)
-//  2. Init(world) - resolve dependencies from World.Resources
+//  2. Init(args...) - implicit configuration (e.g. from parsed flags/env)
 //  3. Start() - launch background goroutines
 //  4. [runtime operation]
 //  5. Stop() - halt goroutines, release resources
@@ -17,9 +17,9 @@ type Service interface {
 	// Return nil or empty slice if no dependencies
 	Dependencies() []string
 
-	// Init receives the World for dependency resolution via Resources
-	// Called after all dependencies have initialized
-	Init(world any) error
+	// Init configures the service from optional args
+	// Args are service-specific (color mode, mute state, file patterns)
+	Init(args ...any) error
 
 	// Start begins service operation (launches goroutines if any)
 	// Called after all services have initialized

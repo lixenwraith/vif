@@ -7,9 +7,10 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/content"
 	"github.com/lixenwraith/vi-fighter/core"
-	"github.com/lixenwraith/vi-fighter/engine/services"
 	"github.com/lixenwraith/vi-fighter/engine/status"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/service"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // ResourceStore is a thread-safe container for global game resources
@@ -95,29 +96,11 @@ type ConfigResource struct {
 	GameY        int
 }
 
-// InputResource holds the current input state and mode
-// This decouples systems from raw terminal events and InputHandler internal logic
-type InputResource struct {
-	GameMode       int // Maps to GameMode constants (Normal, Insert, etc)
-	CommandText    string
-	SearchText     string
-	PendingCommand string // Partial command buffer (e.g., "d2" while waiting for motion)
-	IsPaused       bool
-}
-
-// Constants for mapping integer GameMode in InputResource (Avoiding circular import with engine/game.go)
-const (
-	ResourceModeNormal  = 0
-	ResourceModeInsert  = 1
-	ResourceModeSearch  = 2
-	ResourceModeCommand = 3
-)
-
 // RenderConfig holds configuration for the rendering pipeline
 // This decouples renderers from specific terminal implementations and allows dynamic adjustment
 type RenderConfig struct {
 	// Color Configuration
-	ColorMode uint8 // 0=256, 1=TrueColor
+	ColorMode terminal.ColorMode // 0=256, 1=TrueColor
 
 	// Post-Processing: Grayout (Desaturation)
 	GrayoutDuration time.Duration
@@ -162,7 +145,6 @@ type CoreResources struct {
 	Config  *ConfigResource
 	State   *GameStateResource
 	Cursor  *CursorResource
-	Input   *InputResource
 	Events  *EventQueueResource
 	Status  *status.Registry
 	ZIndex  *ZIndexResolver
@@ -172,43 +154,18 @@ type CoreResources struct {
 // GetCoreResources populates CoreResources from the world's resource store
 // Call once during system construction; pointers remain valid for application lifetime
 func GetCoreResources(w *World) CoreResources {
-	res := CoreResources{}
-
-	// ECS Resources
-	if t, ok := GetResource[*TimeResource](w.Resources); ok {
-		res.Time = t
-	}
-	if c, ok := GetResource[*ConfigResource](w.Resources); ok {
-		res.Config = c
-	}
-	if i, ok := GetResource[*InputResource](w.Resources); ok {
-		res.Input = i
-	}
-	if c, ok := GetResource[*CursorResource](w.Resources); ok {
-		res.Cursor = c
-	}
-	if s, ok := GetResource[*GameStateResource](w.Resources); ok {
-		res.State = s
-	}
-	if e, ok := GetResource[*EventQueueResource](w.Resources); ok {
-		res.Events = e
-	}
-	if t, ok := GetResource[*status.Registry](w.Resources); ok {
-		res.Status = t
-	}
-
-	// Z-Index resolver (may not exist during early bootstrap)
-	if zRes, ok := GetResource[*ZIndexResolver](w.Resources); ok {
-		res.ZIndex = zRes
+	res := CoreResources{
+		Time:   MustGetResource[*TimeResource](w.Resources),
+		Config: MustGetResource[*ConfigResource](w.Resources),
+		Cursor: MustGetResource[*CursorResource](w.Resources),
+		State:  MustGetResource[*GameStateResource](w.Resources),
+		Events: MustGetResource[*EventQueueResource](w.Resources),
+		Status: MustGetResource[*status.Registry](w.Resources),
+		ZIndex: MustGetResource[*ZIndexResolver](w.Resources),
 	}
 
 	// Service Hub resources
-	if hub, ok := GetResource[*services.Hub](w.Resources); ok {
-		if statusSvc, ok := hub.Get("status"); ok {
-			if ss, ok := statusSvc.(*status.StatusService); ok {
-				res.Status = ss.Registry()
-			}
-		}
+	if hub, ok := GetResource[*service.Hub](w.Resources); ok {
 		if contentSvc, ok := hub.Get("content"); ok {
 			if cs, ok := contentSvc.(*content.Service); ok {
 				res.Content = cs
@@ -226,14 +183,4 @@ func (tr *TimeResource) Update(gameTime, realTime time.Time, deltaTime time.Dura
 	tr.RealTime = realTime
 	tr.DeltaTime = deltaTime
 	tr.FrameNumber = frameNumber
-}
-
-// Update modifies InputResource fields in-place (zero allocation)
-// Must be called under world lock to prevent races with system reads
-func (ir *InputResource) Update(gameMode int, commandText, searchText, pendingCommand string, isPaused bool) {
-	ir.GameMode = gameMode
-	ir.CommandText = commandText
-	ir.SearchText = searchText
-	ir.PendingCommand = pendingCommand
-	ir.IsPaused = isPaused
 }

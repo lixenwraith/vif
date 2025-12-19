@@ -6,6 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"golang.org/x/sys/unix"
 	"golang.org/x/term"
 )
 
@@ -393,10 +394,38 @@ func (t *termImpl) writeRaw(data []byte) {
 
 // EmergencyReset attempts to restore terminal to sane state
 // Call this from panic recovery if Fini() cannot be called normally
+// EmergencyReset attempts to restore terminal to sane state
+// Call this from panic recovery if Fini() cannot be called normally
 func EmergencyReset(w io.Writer) {
+	// Write sequences to provided writer
 	w.Write(csiCursorShow)
 	w.Write(csiAltScreenExit)
 	w.Write(csiSGR0)
-	w.Write(csiAutoWrapOn) // Ensure auto-wrap restored even on crash
-	w.Write(csiRIS)        // Full reset as last resort
+	w.Write(csiAutoWrapOn)
+	w.Write(csiRIS)
+
+	// Flush if it's a file
+	if f, ok := w.(*os.File); ok {
+		f.Sync()
+	}
+
+	// Attempt raw mode reset via stty - escape sequences alone don't restore termios
+	// This is best-effort; ignore errors in crash context
+	resetTerminalMode()
+}
+
+// resetTerminalMode attempts to restore terminal to cooked mode
+// Best-effort for crash recovery; errors ignored
+func resetTerminalMode() {
+	// Try to restore via /dev/tty (works even if stdin redirected)
+	if tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err == nil {
+		defer tty.Close()
+		fd := int(tty.Fd())
+		// Get current termios, enable ECHO and ICANON
+		if termios, err := unix.IoctlGetTermios(fd, unix.TCGETS); err == nil {
+			termios.Lflag |= unix.ECHO | unix.ICANON | unix.ISIG | unix.IEXTEN
+			termios.Iflag |= unix.ICRNL
+			unix.IoctlSetTermios(fd, unix.TCSETS, termios)
+		}
+	}
 }

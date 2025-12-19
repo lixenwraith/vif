@@ -41,13 +41,20 @@ func (s *Service) Name() string {
 
 // Dependencies implements Service
 func (s *Service) Dependencies() []string {
-	return []string{"status"}
+	return nil
 }
 
 // Init implements Service
-// Discovers content files and builds initial cache
-func (s *Service) Init(world any) error {
+// args[0]: string - file glob path (optional, defaults to discovered files)
+func (s *Service) Init(args ...any) error {
 	s.manager = NewContentManager()
+
+	// Override data directory if path provided
+	if len(args) > 0 {
+		if path, ok := args[0].(string); ok && path != "" {
+			s.manager.dataDir = path
+		}
+	}
 
 	if err := s.manager.DiscoverContentFiles(); err != nil {
 		// Continue gracefully with empty content
@@ -57,7 +64,6 @@ func (s *Service) Init(world any) error {
 		// Continue gracefully
 	}
 
-	// Load initial content
 	s.loadContent()
 
 	return nil

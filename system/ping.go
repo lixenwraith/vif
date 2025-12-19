@@ -11,8 +11,9 @@ import (
 
 // PingSystem manages the state of ping highlights and grids
 type PingSystem struct {
-	world *engine.World
-	res   engine.CoreResources
+	world    *engine.World
+	res      engine.CoreResources
+	stateRes *engine.GameStateResource
 
 	pingStore *engine.Store[component.PingComponent]
 }
@@ -72,19 +73,6 @@ func (s *PingSystem) Update() {
 				ping.GridRemaining = 0
 				ping.GridActive = false
 			}
-			changed = true
-		}
-
-		// Sync styling with GameMode (Context Awareness)
-		targetColor := component.ColorNormal
-		if inputRes, ok := engine.GetResource[*engine.InputResource](s.world.Resources); ok {
-			if inputRes.GameMode == engine.ResourceModeInsert {
-				targetColor = component.ColorNormal // or specific Insert color if defined
-			}
-		}
-
-		if ping.CrosshairColor != targetColor {
-			ping.CrosshairColor = targetColor
 			changed = true
 		}
 

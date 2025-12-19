@@ -13,9 +13,6 @@ const (
 
 // ECS & Resource Limits
 const (
-	// MaxEntities is the hard limit for the Entity Component System
-	MaxEntities = 20000
-
 	// EventQueueSize is the fixed capacity of the event ring buffer
 	EventQueueSize = 256
 

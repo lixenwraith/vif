@@ -5,11 +5,15 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine/status"
 )
 
 // GameState centralizes game state with clear ownership boundaries
 type GameState struct {
+	// Mode state (Atomic)
+	mode atomic.Int32
+
 	// ===== REAL-TIME STATE (lock-free atomics) =====
 
 	// Grayout visual effect state
@@ -91,6 +95,38 @@ func (gs *GameState) GetFrameNumber() int64 {
 // IncrementFrameNumber increments and returns the frame number
 func (gs *GameState) IncrementFrameNumber() int64 {
 	return gs.FrameNumber.Add(1)
+}
+
+// ===== MODE ACCESSORS =====
+// TODO: decide where Mode lives; it fits in both context (meta/overlay) and here
+// GetMode returns the current game mode
+func (gs *GameState) GetMode() core.GameMode {
+	return core.GameMode(gs.mode.Load())
+}
+
+// SetMode sets the current game mode
+func (gs *GameState) SetMode(m core.GameMode) {
+	gs.mode.Store(int32(m))
+}
+
+// IsInsertMode returns true if in insert mode
+func (gs *GameState) IsInsertMode() bool {
+	return gs.GetMode() == core.ModeInsert
+}
+
+// IsSearchMode returns true if in search mode
+func (gs *GameState) IsSearchMode() bool {
+	return gs.GetMode() == core.ModeSearch
+}
+
+// IsCommandMode returns true if in command mode
+func (gs *GameState) IsCommandMode() bool {
+	return gs.GetMode() == core.ModeCommand
+}
+
+// IsOverlayMode returns true if in overlay mode
+func (gs *GameState) IsOverlayMode() bool {
+	return gs.GetMode() == core.ModeOverlay
 }
 
 // ===== RUNTIME METRICS ACCESSORS =====

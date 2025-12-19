@@ -21,6 +21,9 @@ type StatusBarRenderer struct {
 	energyStore *engine.Store[component.EnergyComponent]
 	boostStore  *engine.Store[component.BoostComponent]
 
+	// Color mode (persist throughout runtime)
+	colorMode terminal.ColorMode
+
 	// Cached metric pointers (zero-lock reads)
 	statFPS        *atomic.Int64
 	statAPM        *atomic.Int64
@@ -32,11 +35,13 @@ type StatusBarRenderer struct {
 // NewStatusBarRenderer creates a status bar renderer
 func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 	reg := engine.MustGetResource[*status.Registry](gameCtx.World.Resources)
+	render := engine.MustGetResource[*engine.RenderConfig](gameCtx.World.Resources)
 	return &StatusBarRenderer{
 		gameCtx:        gameCtx,
 		pingStore:      engine.GetStore[component.PingComponent](gameCtx.World),
 		energyStore:    engine.GetStore[component.EnergyComponent](gameCtx.World),
 		boostStore:     engine.GetStore[component.BoostComponent](gameCtx.World),
+		colorMode:      render.ColorMode,
 		statFPS:        reg.Ints.Get("engine.fps"),
 		statAPM:        reg.Ints.Get("engine.apm"),
 		statTicks:      reg.Ints.Get("engine.ticks"),
@@ -248,7 +253,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 
 	// Priority 8: Color Mode Indicator
 	var colorModeStr string
-	if r.gameCtx.Terminal.ColorMode() == terminal.ColorModeTrueColor {
+	if r.colorMode == terminal.ColorModeTrueColor {
 		colorModeStr = " TC "
 	} else {
 		colorModeStr = " 256 "

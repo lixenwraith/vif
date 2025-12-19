@@ -29,7 +29,7 @@ func NewHeatMeterRenderer(ctx *engine.GameContext) *HeatMeterRenderer {
 	// Access RenderConfig for display mode
 	cfg := engine.MustGetResource[*engine.RenderConfig](ctx.World.Resources)
 
-	if cfg.ColorMode == uint8(terminal.ColorMode256) {
+	if cfg.ColorMode == terminal.ColorMode256 {
 		h.renderCell = h.cell256
 	} else {
 		h.renderCell = h.cellTrueColor
