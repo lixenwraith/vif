@@ -103,9 +103,10 @@ func decodeValue(data any, val reflect.Value) error {
 		val.Set(reflect.ValueOf(data))
 
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		// Convert generic int or float to specific int
-		f, ok := toFloat(data)
-		if ok {
+		// Try direct int conversion first to preserve precision
+		if i, ok := data.(int); ok {
+			val.SetInt(int64(i))
+		} else if f, ok := data.(float64); ok {
 			val.SetInt(int64(f))
 		} else {
 			return fmt.Errorf("cannot convert %T to int", data)
@@ -143,6 +144,11 @@ func decodeStruct(data map[string]any, val reflect.Value) error {
 	for i := 0; i < val.NumField(); i++ {
 		field := val.Field(i)
 		fieldType := typ.Field(i)
+
+		// Safety check: skip unexported fields that cannot be set
+		if !field.CanSet() {
+			continue
+		}
 
 		// Determine key name
 		key := fieldType.Name

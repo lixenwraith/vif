@@ -140,6 +140,10 @@ func (p *Parser) setTableScope(keys []string, isArrayOfTables bool) error {
 					targetMap = make(map[string]any)
 					currentMap[key] = targetMap
 				}
+				// Standard Check: Ensure we aren't overwriting a non-map value
+				if _, ok := currentMap[key].(map[string]any); !ok {
+					return fmt.Errorf("key conflict: %s is already defined as a non-table value", key)
+				}
 				p.current = targetMap
 			}
 		} else {
@@ -228,16 +232,28 @@ func (p *Parser) assignValue(scope any, keys []string, val any) error {
 
 func (p *Parser) parseKeyParts() ([]string, error) {
 	var keys []string
-
 	for {
-		if p.curToken.Type != TokenIdent && p.curToken.Type != TokenString {
-			return nil, fmt.Errorf("expected key at line %d, got %s", p.curToken.Line, p.curToken.String())
+		// Rule: Tokens identified as Numbers are forbidden as keys
+		if p.curToken.Type == TokenInteger || p.curToken.Type == TokenFloat {
+			return nil, fmt.Errorf("numeric keys are forbidden: %q", p.curToken.Literal)
 		}
+
+		if p.curToken.Type == TokenString {
+			// Rule: Even quoted strings shouldn't be pure numbers per instruction
+			if _, err := strconv.Atoi(p.curToken.Literal); err == nil {
+				return nil, fmt.Errorf("numeric string keys are forbidden: %q", p.curToken.Literal)
+			}
+		}
+
+		if p.curToken.Type != TokenIdent && p.curToken.Type != TokenString {
+			return nil, fmt.Errorf("expected key, got %s", p.curToken.String())
+		}
+
 		keys = append(keys, p.curToken.Literal)
 		p.nextToken()
 
 		if p.curToken.Type == TokenDot {
-			p.nextToken() // consume dot, expect another key
+			p.nextToken()
 			continue
 		}
 		break
@@ -259,7 +275,10 @@ func (p *Parser) parseValue() (any, error) {
 		p.nextToken()
 		return val, nil
 	case TokenFloat:
-		val, _ := strconv.ParseFloat(p.curToken.Literal, 64)
+		val, err := strconv.ParseFloat(p.curToken.Literal, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid float %q at line %d: %w", p.curToken.Literal, p.curToken.Line, err)
+		}
 		p.nextToken()
 		return val, nil
 	case TokenBool:

@@ -86,13 +86,29 @@ transitions = [
 [states.GoldRetryWait]
 parent = "Gameplay"
 transitions = [
-	{ trigger = "Tick", target = "TrySpawnGold", guard = "StateTimeExceeds", guard_args = { ms = 2000 } }
+	{ trigger = "Tick", target = "TrySpawnGold", guard = "StateTimeExceeds", guard_args = { ms = 1 } }
 ]
 
 [states.GoldActive]
 parent = "Gameplay"
 transitions = [
-	{ trigger = "EventGoldCollected", target = "TrySpawnGold" },
-	{ trigger = "EventGoldExpired", target = "TrySpawnGold" }
+	{ trigger = "EventGoldComplete", target = "DecayWait" },
+	{ trigger = "EventGoldTimeout", target = "DecayWait" },
+	{ trigger = "EventGoldDestroyed", target = "DecayWait" }
+]
+
+[states.DecayWait]
+parent = "Gameplay"
+transitions = [
+	{ trigger = "Tick", target = "DecayAnimation", guard = "StateTimeExceeds", guard_args = { ms = 10000 } }
+]
+
+[states.DecayAnimation]
+parent = "Gameplay"
+on_enter = [
+	{ action = "EmitEvent", event = "EventDecayStart" }
+]
+transitions = [
+	{ trigger = "EventDecayComplete", target = "TrySpawnGold" }
 ]
 `

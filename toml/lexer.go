@@ -2,18 +2,15 @@ package toml
 
 import (
 	"fmt"
-	"strings"
 	"unicode/utf8"
 )
 
-// Lexer state machine
 type Lexer struct {
 	input []byte
-	pos   int // current position in input (points to current char)
-	start int // start position of this token
+	pos   int
 	line  int
 	col   int
-	width int // width of last rune read
+	width int
 }
 
 func NewLexer(input []byte) *Lexer {
@@ -24,7 +21,6 @@ func NewLexer(input []byte) *Lexer {
 	}
 }
 
-// NextToken returns the next token in the stream
 func (l *Lexer) NextToken() Token {
 	l.skipWhitespace()
 
@@ -34,18 +30,15 @@ func (l *Lexer) NextToken() Token {
 
 	ch := l.peek()
 
-	// Handle Newlines explicitly as they are statement terminators in TOML
 	if ch == '\n' {
 		l.advance()
 		return l.newToken(TokenNewline, "\n")
 	}
 
-	// Handle Comments
 	if ch == '#' {
 		return l.readComment()
 	}
 
-	// Operators
 	switch ch {
 	case '=':
 		l.advance()
@@ -72,31 +65,203 @@ func (l *Lexer) NextToken() Token {
 		return l.readString()
 	}
 
-	// Numbers (Start with digit, or +/-, check next char for sign)
-	if isDigit(ch) || ch == '+' || ch == '-' {
-		// Edge case: '-' or '+' followed by non-digit is invalid, or could be part of string if not handled
-		// But in TOML bare keys are A-Za-z0-9_-. So 123 is num, 123a is ident (unquoted key) needed?
-		// Actually, TOML spec: Bare keys must be non-empty, composed of A-Za-z0-9_-
-		// Values: 123 is int.
-		// We treat ambiguity by lookahead in parser? No, lexer should decide.
-		// If it starts with digit/+/- it attempts number. If fails (contains letters), it might be Ident?
-		// No, standard TOML: Bare keys can only contain digits if they are fully digits? No "123a" is valid bare key.
-		// Strategy: Read until boundary. Check if valid number. If not, check if valid ident.
-		return l.readBareOrNumber()
+	// Number: digit or sign+digit
+	if isDigit(ch) {
+		return l.readNumber()
+	}
+	if ch == '+' {
+		if isDigit(l.peekAt(1)) {
+			return l.readNumber()
+		}
+		// Lone + is invalid TOML
+		l.advance()
+		return l.newToken(TokenError, "unexpected character: +")
+	}
+	if ch == '-' {
+		if isDigit(l.peekAt(1)) {
+			return l.readNumber()
+		}
+		// Bare key can start with hyphen
+		return l.readIdent()
 	}
 
-	// Identifiers / Booleans
+	// Identifier: alpha or underscore
 	if isAlpha(ch) || ch == '_' {
-		return l.readBareOrNumber()
+		return l.readIdent()
 	}
 
-	// Unknown
 	l.advance()
 	return l.newToken(TokenError, fmt.Sprintf("unexpected character: %c", ch))
 }
 
+func (l *Lexer) readNumber() Token {
+	start := l.pos
+	startCol := l.col
+
+	// Optional sign
+	if l.peek() == '+' || l.peek() == '-' {
+		l.advance()
+	}
+
+	// Check radix prefix
+	if l.peek() == '0' {
+		next := l.peekAt(1)
+		switch next {
+		case 'x', 'X':
+			l.advance() // '0'
+			l.advance() // 'x'
+			return l.readHex(start, startCol)
+		case 'o', 'O':
+			l.advance()
+			l.advance()
+			return l.readOctal(start, startCol)
+		case 'b', 'B':
+			l.advance()
+			l.advance()
+			return l.readBinary(start, startCol)
+		}
+	}
+
+	// Integer part
+	for isDigit(l.peek()) {
+		l.advance()
+	}
+
+	isFloat := false
+
+	// Fractional part: '.' followed by digit
+	if l.peek() == '.' && isDigit(l.peekAt(1)) {
+		isFloat = true
+		l.advance() // consume '.'
+
+		for isDigit(l.peek()) {
+			l.advance()
+		}
+
+		// Multi-dot: another '.' followed by digit is fatal
+		if l.peek() == '.' && isDigit(l.peekAt(1)) {
+			return Token{Type: TokenError, Literal: "invalid number: multiple decimal points", Line: l.line, Col: startCol}
+		}
+	}
+
+	// Exponent: e/E followed by optional sign and digits
+	if l.peek() == 'e' || l.peek() == 'E' {
+		next := l.peekAt(1)
+		validExp := isDigit(next) || ((next == '+' || next == '-') && isDigit(l.peekAt(2)))
+		if validExp {
+			isFloat = true
+			l.advance() // 'e'
+			if l.peek() == '+' || l.peek() == '-' {
+				l.advance()
+			}
+			for isDigit(l.peek()) {
+				l.advance()
+			}
+		}
+	}
+
+	lit := string(l.input[start:l.pos])
+
+	// Validate float format: 1.e2 is invalid (no digit after dot before exponent)
+	if isFloat {
+		if err := validateFloat(lit); err != nil {
+			return Token{Type: TokenError, Literal: err.Error(), Line: l.line, Col: startCol}
+		}
+		return Token{Type: TokenFloat, Literal: lit, Line: l.line, Col: startCol}
+	}
+	return Token{Type: TokenInteger, Literal: lit, Line: l.line, Col: startCol}
+}
+
+func validateFloat(lit string) error {
+	// Find dot position (if any)
+	dotIdx := -1
+	expIdx := -1
+	for i := 0; i < len(lit); i++ {
+		if lit[i] == '.' {
+			dotIdx = i
+		}
+		if lit[i] == 'e' || lit[i] == 'E' {
+			expIdx = i
+			break
+		}
+	}
+
+	if dotIdx >= 0 {
+		// Check digit before dot (ignoring sign)
+		start := 0
+		if lit[0] == '+' || lit[0] == '-' {
+			start = 1
+		}
+		if dotIdx == start {
+			return fmt.Errorf("invalid float %q: no digit before decimal point", lit)
+		}
+
+		// Check digit after dot
+		afterDot := dotIdx + 1
+		endFrac := len(lit)
+		if expIdx > 0 {
+			endFrac = expIdx
+		}
+		if afterDot >= endFrac {
+			return fmt.Errorf("invalid float %q: no digit after decimal point", lit)
+		}
+	}
+	return nil
+}
+
+func (l *Lexer) readHex(start, startCol int) Token {
+	if !isHexDigit(l.peek()) {
+		return Token{Type: TokenError, Literal: "invalid hex: no digits after prefix", Line: l.line, Col: startCol}
+	}
+	for isHexDigit(l.peek()) {
+		l.advance()
+	}
+	return Token{Type: TokenInteger, Literal: string(l.input[start:l.pos]), Line: l.line, Col: startCol}
+}
+
+func (l *Lexer) readOctal(start, startCol int) Token {
+	if !isOctalDigit(l.peek()) {
+		return Token{Type: TokenError, Literal: "invalid octal: no digits after prefix", Line: l.line, Col: startCol}
+	}
+	for isOctalDigit(l.peek()) {
+		l.advance()
+	}
+	return Token{Type: TokenInteger, Literal: string(l.input[start:l.pos]), Line: l.line, Col: startCol}
+}
+
+func (l *Lexer) readBinary(start, startCol int) Token {
+	if !isBinaryDigit(l.peek()) {
+		return Token{Type: TokenError, Literal: "invalid binary: no digits after prefix", Line: l.line, Col: startCol}
+	}
+	for isBinaryDigit(l.peek()) {
+		l.advance()
+	}
+	return Token{Type: TokenInteger, Literal: string(l.input[start:l.pos]), Line: l.line, Col: startCol}
+}
+
+func (l *Lexer) readIdent() Token {
+	start := l.pos
+	for l.pos < len(l.input) {
+		ch := l.peek()
+		if isAlpha(ch) || isDigit(ch) || ch == '_' || ch == '-' {
+			l.advance()
+		} else {
+			break
+		}
+	}
+	lit := string(l.input[start:l.pos])
+	if lit == "true" || lit == "false" {
+		return l.newToken(TokenBool, lit)
+	}
+	return l.newToken(TokenIdent, lit)
+}
+
 func (l *Lexer) newToken(typ TokenType, literal string) Token {
-	return Token{Type: typ, Literal: literal, Line: l.line, Col: l.col - len(literal)}
+	col := l.col - len(literal)
+	if col < 0 {
+		col = 0
+	}
+	return Token{Type: typ, Literal: literal, Line: l.line, Col: col}
 }
 
 func (l *Lexer) advance() rune {
@@ -124,6 +289,19 @@ func (l *Lexer) peek() rune {
 	return r
 }
 
+func (l *Lexer) peekAt(n int) rune {
+	pos := l.pos
+	for i := 0; i < n && pos < len(l.input); i++ {
+		_, w := utf8.DecodeRune(l.input[pos:])
+		pos += w
+	}
+	if pos >= len(l.input) {
+		return 0
+	}
+	r, _ := utf8.DecodeRune(l.input[pos:])
+	return r
+}
+
 func (l *Lexer) skipWhitespace() {
 	for l.pos < len(l.input) {
 		ch := l.peek()
@@ -136,120 +314,61 @@ func (l *Lexer) skipWhitespace() {
 }
 
 func (l *Lexer) readComment() Token {
-	// Consume '#'
-	l.advance()
+	l.advance() // '#'
 	start := l.pos
-	for l.pos < len(l.input) {
-		if l.peek() == '\n' {
-			break
-		}
+	for l.pos < len(l.input) && l.peek() != '\n' {
 		l.advance()
 	}
-	// We treat comments as skippable in parser usually, but returning them helps if we want to preserve them.
-	// For this strict data parser, we usually ignore them, but let's return it and let parser skip.
 	return l.newToken(TokenComment, string(l.input[start:l.pos]))
 }
 
 func (l *Lexer) readString() Token {
-	// Consume opening quote
-	l.advance()
-	start := l.pos
+	l.advance() // opening quote
+	var result []byte
 	escaped := false
+
 	for l.pos < len(l.input) {
 		ch := l.peek()
 		if ch == '\n' {
-			return l.newToken(TokenError, "unterminated string (newlines not allowed in basic strings)")
+			return l.newToken(TokenError, "unterminated string: newline in basic string")
 		}
 		if ch == '"' && !escaped {
-			lit := string(l.input[start:l.pos])
-			l.advance() // consume closing quote
-			return l.newToken(TokenString, l.unescape(lit))
+			l.advance()
+			return l.newToken(TokenString, string(result))
 		}
 		if ch == '\\' && !escaped {
 			escaped = true
-		} else {
+			l.advance()
+			continue
+		}
+		if escaped {
+			switch ch {
+			case '"':
+				result = append(result, '"')
+			case '\\':
+				result = append(result, '\\')
+			case 'n':
+				result = append(result, '\n')
+			case 't':
+				result = append(result, '\t')
+			case 'r':
+				result = append(result, '\r')
+			default:
+				// Unknown escape: preserve backslash and full rune
+				result = append(result, '\\')
+				var buf [utf8.UTFMax]byte
+				n := utf8.EncodeRune(buf[:], ch)
+				result = append(result, buf[:n]...)
+			}
 			escaped = false
+		} else {
+			// Get actual width of current character, don't use stale l.width
+			_, w := utf8.DecodeRune(l.input[l.pos:])
+			result = append(result, l.input[l.pos:l.pos+w]...)
 		}
 		l.advance()
 	}
 	return l.newToken(TokenError, "unterminated string")
-}
-
-// Simple unescape for basic JSON-like escapes
-func (l *Lexer) unescape(s string) string {
-	if !strings.Contains(s, "\\") {
-		return s
-	}
-	// Simplified: use Go's unquote if possible or manual
-	// Since we are no-dep, manual replacement of common escapes
-	s = strings.ReplaceAll(s, `\"`, `"`)
-	s = strings.ReplaceAll(s, `\\`, `\`)
-	s = strings.ReplaceAll(s, `\n`, "\n")
-	s = strings.ReplaceAll(s, `\t`, "\t")
-	s = strings.ReplaceAll(s, `\r`, "\r")
-	return s
-}
-
-func (l *Lexer) readBareOrNumber() Token {
-	start := l.pos
-	firstCh := l.peek()
-	// Numbers start with digit or sign; bare keys start with alpha/_
-	isNumber := isDigit(firstCh) || firstCh == '+' || firstCh == '-'
-
-	for l.pos < len(l.input) {
-		ch := l.peek()
-		// Bare keys: A-Za-z0-9_-
-		if isAlpha(ch) || isDigit(ch) || ch == '_' || ch == '-' || ch == '+' {
-			l.advance()
-		} else if ch == '.' && isNumber {
-			// Allow '.' only in numeric context (floats)
-			l.advance()
-		} else {
-			break
-		}
-	}
-	lit := string(l.input[start:l.pos])
-
-	// Classify
-	if lit == "true" || lit == "false" {
-		return l.newToken(TokenBool, lit)
-	}
-
-	// Check for prefixed integers: 0x, 0o, 0b (with optional leading sign)
-	checkLit := lit
-	if len(checkLit) > 0 && (checkLit[0] == '+' || checkLit[0] == '-') {
-		checkLit = checkLit[1:]
-	}
-	if len(checkLit) > 2 && checkLit[0] == '0' {
-		switch checkLit[1] {
-		case 'x', 'X', 'o', 'O', 'b', 'B':
-			return l.newToken(TokenInteger, lit)
-		}
-	}
-
-	// Try Number
-	// Strict TOML number rules are complex, we use a heuristic here.
-	// If it contains only digits, +, -, . (and valid structure), it's a number.
-	// If it contains letters (except e in scientific notation), it is a bare key.
-	// For this implementation, let's look for letters.
-	hasLetter := false
-	for _, r := range lit {
-		if isAlpha(r) && r != 'e' && r != 'E' {
-			hasLetter = true
-			break
-		}
-	}
-
-	if !hasLetter {
-		// Likely a number
-		if strings.Contains(lit, ".") || strings.Contains(lit, "e") || strings.Contains(lit, "E") {
-			return l.newToken(TokenFloat, lit)
-		}
-		// Also standard ints shouldn't have multiple dots etc, but assuming valid input for now
-		return l.newToken(TokenInteger, lit)
-	}
-
-	return l.newToken(TokenIdent, lit)
 }
 
 func isDigit(r rune) bool {
@@ -258,4 +377,16 @@ func isDigit(r rune) bool {
 
 func isAlpha(r rune) bool {
 	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
+}
+
+func isHexDigit(r rune) bool {
+	return isDigit(r) || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')
+}
+
+func isOctalDigit(r rune) bool {
+	return r >= '0' && r <= '7'
+}
+
+func isBinaryDigit(r rune) bool {
+	return r == '0' || r == '1'
 }
