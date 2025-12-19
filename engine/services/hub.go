@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 )
 
@@ -141,11 +142,17 @@ func (h *Hub) topologicalSort() ([]string, error) {
 	inDegree := make(map[string]int)
 	dependents := make(map[string][]string) // dep -> services that depend on it
 
+	// 1. Get and sort all names for deterministic processing
+	names := make([]string, 0, len(h.services))
 	for name := range h.services {
-		inDegree[name] = 0
+		names = append(names, name)
 	}
+	sort.Strings(names)
 
-	for name, svc := range h.services {
+	// 2. Build graph using sorted names
+	for _, name := range names {
+		svc := h.services[name]
+		inDegree[name] = 0 // Initialize entry
 		for _, dep := range svc.Dependencies() {
 			if _, exists := h.services[dep]; !exists {
 				return nil, fmt.Errorf("service %s depends on unregistered service: %s", name, dep)
@@ -155,10 +162,10 @@ func (h *Hub) topologicalSort() ([]string, error) {
 		}
 	}
 
-	// Process nodes with zero in-degree
+	// 3. Seed queue from sorted names to ensure deterministic start
 	var queue []string
-	for name, degree := range inDegree {
-		if degree == 0 {
+	for _, name := range names {
+		if inDegree[name] == 0 {
 			queue = append(queue, name)
 		}
 	}
@@ -170,8 +177,12 @@ func (h *Hub) topologicalSort() ([]string, error) {
 		queue = queue[1:]
 		result = append(result, name)
 
+		// Sorting dependents here is optional but ensures determinism for siblings in the tree
+		deps := dependents[name]
+		sort.Strings(deps)
+
 		// Decrement in-degree of dependents
-		for _, dependent := range dependents[name] {
+		for _, dependent := range deps {
 			inDegree[dependent]--
 			if inDegree[dependent] == 0 {
 				queue = append(queue, dependent)

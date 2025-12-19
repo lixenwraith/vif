@@ -16,4 +16,5 @@ const (
 	MaxRetries              = 5    // Maximum number of retries when selecting content blocks
 	MaxBlockSize            = 1000 // Maximum number of lines in a content block to prevent memory issues
 	CircuitBreakerThreshold = 10   // Number of consecutive failures before circuit breaker trips
+	TabWidth                = 4
 )

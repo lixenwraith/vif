@@ -210,7 +210,7 @@ func (s *Service) getIndentLevel(line string) int {
 		if ch == ' ' {
 			indent++
 		} else if ch == '\t' {
-			indent += 4
+			indent += constant.TabWidth
 		} else {
 			break
 		}
