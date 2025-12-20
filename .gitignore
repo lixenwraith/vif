@@ -5,3 +5,4 @@ logs
 cmake-build-*/
 build.sh
 vi-fighter
+catalog.txt

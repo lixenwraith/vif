@@ -27,7 +27,7 @@ type pendingDrainSpawn struct {
 type DrainSystem struct {
 	mu    sync.Mutex
 	world *engine.World
-	res   engine.CoreResources
+	res   engine.Resources
 
 	drainStore  *engine.Store[component.DrainComponent]
 	matStore    *engine.Store[component.MaterializeComponent]
@@ -52,7 +52,7 @@ type DrainSystem struct {
 func NewDrainSystem(world *engine.World) engine.System {
 	s := &DrainSystem{
 		world: world,
-		res:   engine.GetCoreResources(world),
+		res:   engine.GetResources(world),
 
 		drainStore:  engine.GetStore[component.DrainComponent](world),
 		matStore:    engine.GetStore[component.MaterializeComponent](world),

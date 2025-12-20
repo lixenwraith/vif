@@ -15,7 +15,7 @@ import (
 type DecaySystem struct {
 	mu    sync.RWMutex
 	world *engine.World
-	res   engine.CoreResources
+	res   engine.Resources
 
 	decayStore  *engine.Store[component.DecayComponent]
 	protStore   *engine.Store[component.ProtectionComponent]
@@ -34,7 +34,7 @@ type DecaySystem struct {
 
 // NewDecaySystem creates a new decay system
 func NewDecaySystem(world *engine.World) engine.System {
-	res := engine.GetCoreResources(world)
+	res := engine.GetResources(world)
 	s := &DecaySystem{
 		world: world,
 		res:   res,

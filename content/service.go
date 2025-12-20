@@ -7,6 +7,8 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/service"
 )
 
 // Service manages content loading and provides block access to SpawnSystem
@@ -79,6 +81,12 @@ func (s *Service) Stop() error {
 	close(s.stopCh)
 	s.wg.Wait()
 	return nil
+}
+
+// Contribute implements service.ResourceContributor
+// Publishes ContentProviderResource for ECS system access
+func (s *Service) Contribute(publish service.ResourcePublisher) {
+	publish(&engine.ContentResource{Provider: s})
 }
 
 // CurrentContent returns the current prepared content batch

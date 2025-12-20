@@ -11,7 +11,7 @@ import (
 // It runs before cleanup to tag expired entities for destruction
 type TimeKeeperSystem struct {
 	world *engine.World
-	res   engine.CoreResources
+	res   engine.Resources
 
 	timerStore *engine.Store[component.TimerComponent]
 	deathStore *engine.Store[component.DeathComponent]
@@ -21,7 +21,7 @@ type TimeKeeperSystem struct {
 func NewTimeKeeperSystem(world *engine.World) engine.System {
 	return &TimeKeeperSystem{
 		world: world,
-		res:   engine.GetCoreResources(world),
+		res:   engine.GetResources(world),
 
 		timerStore: engine.GetStore[component.TimerComponent](world),
 		deathStore: engine.GetStore[component.DeathComponent](world),

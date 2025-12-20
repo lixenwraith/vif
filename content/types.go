@@ -1,15 +1,9 @@
 package content
 
-// CodeBlock represents a logical group of related lines for spawning
-type CodeBlock struct {
-	Lines       []string
-	IndentLevel int
-	HasBraces   bool
-}
+import (
+	"github.com/lixenwraith/vi-fighter/core"
+)
 
-// PreparedContent holds a batch of processed content blocks
-// Generation increments on each refresh to allow consumers to detect swaps
-type PreparedContent struct {
-	Blocks     []CodeBlock
-	Generation int64
-}
+// Type aliases for backward compatibility within content package
+type CodeBlock = core.CodeBlock
+type PreparedContent = core.PreparedContent

@@ -11,7 +11,7 @@ import (
 // MaterializeSystem manages materializer animations and triggering spawn completion
 type MaterializeSystem struct {
 	world *engine.World
-	res   engine.CoreResources
+	res   engine.Resources
 
 	matStore  *engine.Store[component.MaterializeComponent]
 	protStore *engine.Store[component.ProtectionComponent]
@@ -21,7 +21,7 @@ type MaterializeSystem struct {
 func NewMaterializeSystem(world *engine.World) engine.System {
 	return &MaterializeSystem{
 		world: world,
-		res:   engine.GetCoreResources(world),
+		res:   engine.GetResources(world),
 
 		matStore:  engine.GetStore[component.MaterializeComponent](world),
 		protStore: engine.GetStore[component.ProtectionComponent](world),

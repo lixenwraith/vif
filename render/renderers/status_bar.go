@@ -72,9 +72,9 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 	x := 0
 
 	// Audio mute indicator - always visible
-	if r.gameCtx.AudioEngine != nil {
+	if player := r.gameCtx.GetAudioPlayer(); player != nil {
 		var audioBgColor render.RGB
-		if r.gameCtx.AudioEngine.IsMuted() {
+		if player.IsMuted() {
 			audioBgColor = render.RgbAudioMuted
 		} else {
 			audioBgColor = render.RgbAudioUnmuted

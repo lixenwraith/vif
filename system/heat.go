@@ -10,7 +10,7 @@ import (
 // HeatSystem owns HeatComponent mutations
 type HeatSystem struct {
 	world *engine.World
-	res   engine.CoreResources
+	res   engine.Resources
 
 	heatStore *engine.Store[component.HeatComponent]
 }
@@ -18,7 +18,7 @@ type HeatSystem struct {
 func NewHeatSystem(world *engine.World) engine.System {
 	return &HeatSystem{
 		world: world,
-		res:   engine.GetCoreResources(world),
+		res:   engine.GetResources(world),
 
 		heatStore: engine.GetStore[component.HeatComponent](world),
 	}

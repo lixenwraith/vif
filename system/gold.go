@@ -7,7 +7,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
@@ -19,7 +18,7 @@ import (
 type GoldSystem struct {
 	mu    sync.RWMutex
 	world *engine.World
-	res   engine.CoreResources
+	res   engine.Resources
 
 	// Cached stores (resolved once at construction)
 	goldStore *engine.Store[component.GoldSequenceComponent]
@@ -45,7 +44,7 @@ type GoldSystem struct {
 
 // NewGoldSystem creates a new gold sequence system
 func NewGoldSystem(world *engine.World) engine.System {
-	res := engine.GetCoreResources(world)
+	res := engine.GetResources(world)
 	s := &GoldSystem{
 		world: world,
 		res:   res,
@@ -340,7 +339,7 @@ func (s *GoldSystem) handleCompletion(world *engine.World, sequenceID int) {
 
 	// Play sound
 	if audioRes, ok := engine.GetResource[*engine.AudioResource](world.Resources); ok && audioRes.Player != nil {
-		audioRes.Player.Play(audio.SoundCoin)
+		audioRes.Player.Play(core.SoundCoin)
 	}
 }
 

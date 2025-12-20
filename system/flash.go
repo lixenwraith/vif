@@ -10,7 +10,7 @@ import (
 // FlashSystem manages the lifecycle of visual flash effects
 type FlashSystem struct {
 	world *engine.World
-	res   engine.CoreResources
+	res   engine.Resources
 
 	flashStore *engine.Store[component.FlashComponent]
 }
@@ -18,7 +18,7 @@ type FlashSystem struct {
 func NewFlashSystem(world *engine.World) engine.System {
 	return &FlashSystem{
 		world: world,
-		res:   engine.GetCoreResources(world),
+		res:   engine.GetResources(world),
 
 		flashStore: engine.GetStore[component.FlashComponent](world),
 	}

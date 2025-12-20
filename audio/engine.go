@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"sync"
 	"sync/atomic"
+
+	"github.com/lixenwraith/vi-fighter/core"
 )
 
 // AudioEngine manages audio via pipe to system tools
@@ -165,7 +167,7 @@ func (ae *AudioEngine) Stop() {
 }
 
 // Play queues a sound for playback
-func (ae *AudioEngine) Play(st SoundType) bool {
+func (ae *AudioEngine) Play(st core.SoundType) bool {
 	if !ae.running.Load() || ae.muted.Load() || ae.silentMode.Load() {
 		return false
 	}

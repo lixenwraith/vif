@@ -4,7 +4,6 @@ import (
 	"math"
 	"sync"
 
-	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
@@ -16,7 +15,7 @@ import (
 type CleanerSystem struct {
 	mu    sync.Mutex
 	world *engine.World
-	res   engine.CoreResources
+	res   engine.Resources
 
 	cleanerStore *engine.Store[component.CleanerComponent]
 	protStore    *engine.Store[component.ProtectionComponent]
@@ -31,7 +30,7 @@ type CleanerSystem struct {
 func NewCleanerSystem(world *engine.World) engine.System {
 	s := &CleanerSystem{
 		world: world,
-		res:   engine.GetCoreResources(world),
+		res:   engine.GetResources(world),
 
 		cleanerStore: engine.GetStore[component.CleanerComponent](world),
 		protStore:    engine.GetStore[component.ProtectionComponent](world),
@@ -246,7 +245,7 @@ func (s *CleanerSystem) spawnCleaners() {
 	}
 
 	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
-		SoundType: audio.SoundWhoosh,
+		SoundType: core.SoundWhoosh,
 	})
 
 	gameWidth := float64(config.GameWidth)
@@ -332,7 +331,7 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 	config := s.res.Config
 
 	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
-		SoundType: audio.SoundWhoosh,
+		SoundType: core.SoundWhoosh,
 	})
 
 	gameWidth := float64(config.GameWidth)

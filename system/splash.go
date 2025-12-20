@@ -11,7 +11,7 @@ import (
 // SplashSystem manages the lifecycle of splash entities
 type SplashSystem struct {
 	world *engine.World
-	res   engine.CoreResources
+	res   engine.Resources
 
 	splashStore *engine.Store[component.SplashComponent]
 	goldStore   *engine.Store[component.GoldSequenceComponent]
@@ -22,7 +22,7 @@ type SplashSystem struct {
 func NewSplashSystem(world *engine.World) engine.System {
 	return &SplashSystem{
 		world: world,
-		res:   engine.GetCoreResources(world),
+		res:   engine.GetResources(world),
 
 		splashStore: engine.GetStore[component.SplashComponent](world),
 		goldStore:   engine.GetStore[component.GoldSequenceComponent](world),

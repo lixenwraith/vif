@@ -76,7 +76,7 @@ type CodeBlock struct {
 type SpawnSystem struct {
 	mu    sync.RWMutex
 	world *engine.World
-	res   engine.CoreResources
+	res   engine.Resources
 
 	seqStore  *engine.Store[component.SequenceComponent]
 	charStore *engine.Store[component.CharacterComponent]
@@ -100,7 +100,7 @@ type SpawnSystem struct {
 
 // NewSpawnSystem creates a new spawn system
 func NewSpawnSystem(world *engine.World) engine.System {
-	res := engine.GetCoreResources(world)
+	res := engine.GetResources(world)
 
 	s := &SpawnSystem{
 		world: world,
@@ -194,7 +194,7 @@ func (s *SpawnSystem) Update() {
 	}
 
 	// Snapshot content at frame start to prevent mid-frame race
-	s.frameContent = s.res.Content.CurrentContent()
+	s.frameContent = s.res.Content.Provider.CurrentContent()
 
 	// Detect content swap and reset index
 	if s.frameContent != nil && s.frameContent.Generation != s.localGeneration {
@@ -255,7 +255,7 @@ func (s *SpawnSystem) getNextBlock() content.CodeBlock {
 	s.localIndex++
 
 	// Notify service of consumption
-	s.res.Content.NotifyConsumed(1)
+	s.res.Content.Provider.NotifyConsumed(1)
 
 	return block
 }

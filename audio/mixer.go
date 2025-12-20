@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/constant"
+	"github.com/lixenwraith/vi-fighter/core"
 )
 
 // activeSound tracks a playing sound instance
@@ -41,7 +42,7 @@ type Mixer struct {
 }
 
 type playRequest struct {
-	sound  SoundType
+	sound  core.SoundType
 	volume float64
 }
 
@@ -71,7 +72,7 @@ func (m *Mixer) Stop() {
 }
 
 // Play queues a sound with computed volume
-func (m *Mixer) Play(st SoundType, masterVol float64, effectVols map[SoundType]float64) {
+func (m *Mixer) Play(st core.SoundType, masterVol float64, effectVols map[core.SoundType]float64) {
 	if m.stopped.Load() {
 		return
 	}

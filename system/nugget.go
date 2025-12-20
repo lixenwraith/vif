@@ -7,7 +7,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
@@ -19,7 +18,7 @@ import (
 type NuggetSystem struct {
 	mu    sync.RWMutex
 	world *engine.World
-	res   engine.CoreResources
+	res   engine.Resources
 
 	nuggetStore *engine.Store[component.NuggetComponent]
 	energyStore *engine.Store[component.EnergyComponent]
@@ -34,7 +33,7 @@ type NuggetSystem struct {
 func NewNuggetSystem(world *engine.World) engine.System {
 	return &NuggetSystem{
 		world: world,
-		res:   engine.GetCoreResources(world),
+		res:   engine.GetResources(world),
 
 		nuggetStore: engine.GetStore[component.NuggetComponent](world),
 		energyStore: engine.GetStore[component.EnergyComponent](world),
@@ -157,7 +156,7 @@ func (s *NuggetSystem) handleJumpRequest() {
 
 	// 6. Play Sound
 	if audioRes, ok := engine.GetResource[*engine.AudioResource](s.world.Resources); ok && audioRes.Player != nil {
-		audioRes.Player.Play(audio.SoundBell)
+		audioRes.Player.Play(core.SoundBell)
 	}
 }
 

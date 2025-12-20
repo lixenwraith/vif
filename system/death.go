@@ -12,7 +12,7 @@ import (
 // Game entities route through here; effect entities bypass via direct DeathComponent
 type DeathSystem struct {
 	world *engine.World
-	res   engine.CoreResources
+	res   engine.Resources
 
 	deathStore *engine.Store[component.DeathComponent]
 	protStore  *engine.Store[component.ProtectionComponent]
@@ -22,7 +22,7 @@ type DeathSystem struct {
 func NewDeathSystem(world *engine.World) engine.System {
 	return &DeathSystem{
 		world: world,
-		res:   engine.GetCoreResources(world),
+		res:   engine.GetResources(world),
 
 		deathStore: engine.GetStore[component.DeathComponent](world),
 		protStore:  engine.GetStore[component.ProtectionComponent](world),

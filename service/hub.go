@@ -16,6 +16,8 @@ type Hub struct {
 	initArgs map[string][]any // Per-service init args
 }
 
+// TODO: need some telemetry for services at some point
+
 // NewHub creates an empty service hub
 func NewHub() *Hub {
 	return &Hub{
@@ -221,4 +223,16 @@ func (h *Hub) Names() []string {
 		names = append(names, name)
 	}
 	return names
+}
+
+// PublishResources invokes Contribute on all eligible services
+func (h *Hub) PublishResources(publish ResourcePublisher) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	for _, name := range h.sorted {
+		if contrib, ok := h.services[name].(ResourceContributor); ok {
+			contrib.Contribute(publish)
+		}
+	}
 }

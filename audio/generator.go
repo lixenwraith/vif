@@ -5,6 +5,7 @@ import (
 	"math/rand"
 
 	"github.com/lixenwraith/vi-fighter/constant"
+	"github.com/lixenwraith/vi-fighter/core"
 )
 
 // Waveform types
@@ -142,15 +143,15 @@ func generateCoinSound() floatBuffer {
 }
 
 // generateSound dispatches to specific generator
-func generateSound(st SoundType) floatBuffer {
+func generateSound(st core.SoundType) floatBuffer {
 	switch st {
-	case SoundError:
+	case core.SoundError:
 		return generateErrorSound()
-	case SoundBell:
+	case core.SoundBell:
 		return generateBellSound()
-	case SoundWhoosh:
+	case core.SoundWhoosh:
 		return generateWhooshSound()
-	case SoundCoin:
+	case core.SoundCoin:
 		return generateCoinSound()
 	default:
 		return nil

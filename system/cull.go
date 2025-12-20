@@ -10,7 +10,7 @@ import (
 // It runs last in the tick to allow other systems to react to the tagged state
 type CullSystem struct {
 	world *engine.World
-	res   engine.CoreResources
+	res   engine.Resources
 
 	deathStore *engine.Store[component.DeathComponent]
 	protStore  *engine.Store[component.ProtectionComponent]
@@ -20,7 +20,7 @@ type CullSystem struct {
 func NewCullSystem(world *engine.World) engine.System {
 	return &CullSystem{
 		world: world,
-		res:   engine.GetCoreResources(world),
+		res:   engine.GetResources(world),
 
 		deathStore: engine.GetStore[component.DeathComponent](world),
 		protStore:  engine.GetStore[component.ProtectionComponent](world),

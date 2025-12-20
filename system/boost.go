@@ -11,7 +11,7 @@ import (
 
 type BoostSystem struct {
 	world *engine.World
-	res   engine.CoreResources
+	res   engine.Resources
 
 	boostStore *engine.Store[component.BoostComponent]
 }
@@ -19,7 +19,7 @@ type BoostSystem struct {
 func NewBoostSystem(world *engine.World) engine.System {
 	return &BoostSystem{
 		world: world,
-		res:   engine.GetCoreResources(world),
+		res:   engine.GetResources(world),
 
 		boostStore: engine.GetStore[component.BoostComponent](world),
 	}

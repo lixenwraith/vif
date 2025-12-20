@@ -3,7 +3,6 @@ package system
 import (
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
@@ -14,7 +13,7 @@ import (
 // EnergySystem handles character typing and energy calculation
 type EnergySystem struct {
 	world *engine.World
-	res   engine.CoreResources
+	res   engine.Resources
 
 	energyStore *engine.Store[component.EnergyComponent]
 	cursorStore *engine.Store[component.CursorComponent]
@@ -34,7 +33,7 @@ type EnergySystem struct {
 func NewEnergySystem(world *engine.World) engine.System {
 	return &EnergySystem{
 		world: world,
-		res:   engine.GetCoreResources(world),
+		res:   engine.GetResources(world),
 
 		energyStore: engine.GetStore[component.EnergyComponent](world),
 		cursorStore: engine.GetStore[component.CursorComponent](world),
@@ -302,7 +301,7 @@ func (s *EnergySystem) handleTypingError() {
 	s.triggerEnergyBlink(0, 0)
 
 	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
-		SoundType: audio.SoundError,
+		SoundType: core.SoundError,
 	})
 }
 
@@ -321,7 +320,7 @@ func (s *EnergySystem) handleNuggetCollection(entity core.Entity, char component
 		s.world.PushEvent(event.EventBoostDeactivate, nil)
 		s.triggerEnergyBlink(0, 0)
 		s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
-			SoundType: audio.SoundError,
+			SoundType: core.SoundError,
 		})
 		return
 	}
@@ -387,7 +386,7 @@ func (s *EnergySystem) handleGoldSequenceTyping(entity core.Entity, char compone
 		s.cursorStore.Add(cursorEntity, cursor)
 		s.triggerEnergyBlink(0, 0)
 		s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
-			SoundType: audio.SoundError,
+			SoundType: core.SoundError,
 		})
 		return
 	}

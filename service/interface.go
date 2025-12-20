@@ -29,3 +29,13 @@ type Service interface {
 	// Must be idempotent - safe to call multiple times
 	Stop() error
 }
+
+// ResourcePublisher is a callback for services to contribute ECS resources
+// Services call this with wrapped resources; receiver handles type routing
+type ResourcePublisher func(resource any)
+
+// ResourceContributor is implemented by services that expose APIs to the ECS layer
+// Optional interface - services not implementing it are skipped during contribution
+type ResourceContributor interface {
+	Contribute(publish ResourcePublisher)
+}

@@ -16,7 +16,7 @@ import (
 // MetaSystem handles meta-game commands like Reset, Debug, and Help
 type MetaSystem struct {
 	ctx *engine.GameContext
-	res engine.CoreResources
+	res engine.Resources
 
 	// Cached stores for debug display and reset
 	drainStore   *engine.Store[component.DrainComponent]
@@ -34,7 +34,7 @@ func NewMetaSystem(ctx *engine.GameContext) engine.System {
 	world := ctx.World
 	return &MetaSystem{
 		ctx:          ctx,
-		res:          engine.GetCoreResources(world),
+		res:          engine.GetResources(world),
 		drainStore:   engine.GetStore[component.DrainComponent](world),
 		energyStore:  engine.GetStore[component.EnergyComponent](world),
 		heatStore:    engine.GetStore[component.HeatComponent](world),

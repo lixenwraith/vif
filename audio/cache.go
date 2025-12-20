@@ -1,12 +1,16 @@
 package audio
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/lixenwraith/vi-fighter/core"
+)
 
 // soundCache stores pre-generated unity-gain float buffers
 type soundCache struct {
 	mu    sync.RWMutex
-	store [soundTypeCount]floatBuffer
-	ready [soundTypeCount]bool
+	store [core.SoundTypeCount]floatBuffer
+	ready [core.SoundTypeCount]bool
 }
 
 func newSoundCache() *soundCache {
@@ -14,8 +18,8 @@ func newSoundCache() *soundCache {
 }
 
 // get returns cached buffer or generates on demand
-func (c *soundCache) get(st SoundType) floatBuffer {
-	if st < 0 || int(st) >= int(soundTypeCount) {
+func (c *soundCache) get(st core.SoundType) floatBuffer {
+	if st < 0 || int(st) >= int(core.SoundTypeCount) {
 		return nil
 	}
 
@@ -44,5 +48,5 @@ func (c *soundCache) get(st SoundType) floatBuffer {
 
 // preload generates frequently used sounds at init
 func (c *soundCache) preload() {
-	c.get(SoundError) // Most frequent
+	c.get(core.SoundError) // Most frequent
 }

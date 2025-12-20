@@ -12,7 +12,7 @@ import (
 // PingSystem manages the state of ping highlights and grids
 type PingSystem struct {
 	world    *engine.World
-	res      engine.CoreResources
+	res      engine.Resources
 	stateRes *engine.GameStateResource
 
 	pingStore *engine.Store[component.PingComponent]
@@ -22,7 +22,7 @@ type PingSystem struct {
 func NewPingSystem(world *engine.World) engine.System {
 	return &PingSystem{
 		world: world,
-		res:   engine.GetCoreResources(world),
+		res:   engine.GetResources(world),
 
 		pingStore: engine.GetStore[component.PingComponent](world),
 	}

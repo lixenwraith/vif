@@ -2,13 +2,17 @@ package audio
 
 import (
 	"sync/atomic"
+
+	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/service"
 )
 
 // AudioService wraps AudioEngine as a Service
 // Handles graceful degradation when no audio backend is available
 type AudioService struct {
-	engine   *AudioEngine
-	disabled atomic.Bool
+	audioEngine *AudioEngine
+	disabled    atomic.Bool
 }
 
 // NewService creates a new audio service
@@ -40,25 +44,25 @@ func (s *AudioService) Init(args ...any) error {
 	}
 	// Default: config.Enabled = false (muted)
 
-	engine, err := NewAudioEngine(config)
+	audioEngine, err := NewAudioEngine(config)
 	if err != nil {
 		s.disabled.Store(true)
 		return nil
 	}
-	s.engine = engine
+	s.audioEngine = audioEngine
 	return nil
 }
 
 // Start implements Service
 // Launches mixer goroutine; sets disabled on failure (no error returned)
 func (s *AudioService) Start() error {
-	if s.disabled.Load() || s.engine == nil {
+	if s.disabled.Load() || s.audioEngine == nil {
 		return nil
 	}
 
-	if err := s.engine.Start(); err != nil {
+	if err := s.audioEngine.Start(); err != nil {
 		s.disabled.Store(true)
-		s.engine = nil
+		s.audioEngine = nil
 		return nil
 	}
 	return nil
@@ -66,10 +70,18 @@ func (s *AudioService) Start() error {
 
 // Stop implements Service
 func (s *AudioService) Stop() error {
-	if s.engine != nil && s.engine.IsRunning() {
-		s.engine.Stop()
+	if s.audioEngine != nil && s.audioEngine.IsRunning() {
+		s.audioEngine.Stop()
 	}
 	return nil
+}
+
+// Contribute implements service.ResourceContributor
+// Publishes AudioResource if initialization succeeded
+func (s *AudioService) Contribute(publish service.ResourcePublisher) {
+	if player := s.Player(); player != nil {
+		publish(&engine.AudioResource{Player: player})
+	}
 }
 
 // IsDisabled returns true if audio is unavailable
@@ -82,21 +94,21 @@ func (s *AudioService) Engine() *AudioEngine {
 	if s.disabled.Load() {
 		return nil
 	}
-	return s.engine
+	return s.audioEngine
 }
 
 // Player returns an AudioPlayer interface for game systems
 // Returns nil if audio is disabled
 func (s *AudioService) Player() AudioPlayer {
-	if s.disabled.Load() || s.engine == nil {
+	if s.disabled.Load() || s.audioEngine == nil {
 		return nil
 	}
-	return s.engine
+	return s.audioEngine
 }
 
 // AudioPlayer defines the minimal audio interface used by game systems
 type AudioPlayer interface {
-	Play(SoundType) bool
+	Play(core.SoundType) bool
 	ToggleMute() bool
 	IsMuted() bool
 	IsRunning() bool

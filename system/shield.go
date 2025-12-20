@@ -10,7 +10,7 @@ import (
 // ShieldSystem owns shield activation state and processes drain events
 type ShieldSystem struct {
 	world *engine.World
-	res   engine.CoreResources
+	res   engine.Resources
 
 	shieldStore *engine.Store[component.ShieldComponent]
 }
@@ -19,7 +19,7 @@ type ShieldSystem struct {
 func NewShieldSystem(world *engine.World) engine.System {
 	return &ShieldSystem{
 		world: world,
-		res:   engine.GetCoreResources(world),
+		res:   engine.GetResources(world),
 
 		shieldStore: engine.GetStore[component.ShieldComponent](world),
 	}

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -77,29 +76,31 @@ func main() {
 		panic(fmt.Sprintf("service init failed: %v", err))
 	}
 
-	// TODO: find some use or remove, services are not world resources
-	// Store hub for system access
-	engine.AddResource(world.Resources, hub)
+	// 6. Resource Bridge - Services contribute to ECS
+	hub.PublishResources(func(res any) {
+		engine.AddResource(world.Resources, res)
+	})
 
-	// Extract terminal for orchestrator and context
+	// 7. Terminal extraction (orchestrator needs interface directly)
 	termSvc := service.MustGet[*terminal.TerminalService](hub, "terminal")
 	term := termSvc.Terminal()
 	width, height := term.Size()
 
-	// 6. GameContext Creation
+	// 8. GameContext Creation
+	// NOTE: World resources are initialized in GameContext
 	ctx := engine.NewGameContext(world, width, height)
 
-	// 7. Audio Engine
-	// Initialize audio from services
-	if audioSvc, ok := hub.Get("audio"); ok {
-		if as, ok := audioSvc.(*audio.AudioService); ok {
-			if player := as.Player(); player != nil {
-				ctx.SetAudioEngine(player.(engine.AudioPlayer))
-			}
-		}
-	} // Silent fail if audio could not be initialized
+	// // 7. Audio Engine
+	// // Initialize audio from services
+	// if audioSvc, ok := hub.Get("audio"); ok {
+	// 	if as, ok := audioSvc.(*audio.AudioService); ok {
+	// 		if player := as.Player(); player != nil {
+	// 			ctx.SetAudioEngine(player.(engine.AudioPlayer))
+	// 		}
+	// 	}
+	// } // Silent fail if audio could not be initialized
 
-	// 8. Systems Instantiation
+	// 9. Systems Instantiation
 	// Add active systems to ECS world
 	for _, name := range manifest.ActiveSystems() {
 		factory, ok := registry.GetSystem(name)
@@ -110,7 +111,7 @@ func main() {
 		world.AddSystem(sys)
 	}
 
-	// 9. Render Orchestrator
+	// 10. Render Orchestrator
 	// Resolve color mode for RenderConfig
 	colorMode := term.ColorMode()
 	renderConfig := &engine.RenderConfig{
@@ -134,7 +135,7 @@ func main() {
 		orchestrator.Register(renderer, entry.Priority)
 	}
 
-	// 10. Input & Clock Scheduler
+	// 11. Input & Clock Scheduler
 	// Create input handler
 	inputMachine := input.NewMachine()
 	router := mode.NewRouter(ctx, inputMachine)
@@ -154,7 +155,7 @@ func main() {
 	// Wire reset channels to GameContext for MetaSystem access
 	ctx.ResetChan = resetChan
 
-	// 11. Engine (FSM) Setup
+	// 12. Engine (FSM) Setup
 	// Initialize Event Registry for payload reflection
 	event.InitRegistry()
 
@@ -164,7 +165,7 @@ func main() {
 		panic(fmt.Sprintf("failed to load FSM: %v", err))
 	}
 
-	// 12. Event Handlers
+	// 13. Event Handlers
 	// Auto-register event handlers from World systems
 	for _, sys := range world.Systems() {
 		if handler, ok := sys.(event.Handler); ok {
@@ -179,14 +180,13 @@ func main() {
 	audioSystem := system.NewAudioSystem(world)
 	clockScheduler.RegisterEventHandler(audioSystem.(event.Handler))
 
-	// 13. Start Services
+	// 14. Start Services
 	if err := hub.StartAll(); err != nil {
 		panic(fmt.Sprintf("service start failed: %v", err))
 	}
 
-	// 14. Game Start
+	// 15. Start Game
 	// Get world resources
-	// NOTE: World resources are initialized in GameContext
 	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
 	statusReg := engine.MustGetResource[*status.Registry](world.Resources)
 
@@ -213,7 +213,7 @@ func main() {
 	// Track last update state for rendering
 	var updatePending bool
 
-	// 15. Main Loop
+	// 16. Main Loop
 	for {
 		select {
 		case ev := <-eventChan:

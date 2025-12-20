@@ -4,7 +4,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
@@ -22,14 +21,6 @@ type UISnapshot struct {
 	OverlayTitle   string
 	OverlayContent []string
 	OverlayScroll  int
-}
-
-// AudioPlayer defines the minimal audio interface used by game systems
-type AudioPlayer interface {
-	Play(audio.SoundType) bool
-	ToggleMute() bool
-	IsMuted() bool
-	IsRunning() bool
 }
 
 // GameContext holds all game state including the ECS world
@@ -91,9 +82,6 @@ type GameContext struct {
 
 	// Pause state management (simplified - actual pause handled by PausableClock)
 	IsPaused atomic.Bool
-
-	// Audio engine (nil if audio disabled or initialization failed)
-	AudioEngine AudioPlayer
 }
 
 // NewGameContext creates a GameContext using an existing ECS World
@@ -213,12 +201,6 @@ func (ctx *GameContext) CreateCursorEntity() {
 	GetStore[component.BoostComponent](ctx.World).Add(ctx.CursorEntity, component.BoostComponent{})
 }
 
-// SetAudioEngine sets the audio engine and registers it as a resource
-func (ctx *GameContext) SetAudioEngine(engine AudioPlayer) {
-	ctx.AudioEngine = engine
-	AddResource(ctx.World.Resources, &AudioResource{Player: engine})
-}
-
 // ===== INPUT-SPECIFIC METHODS =====
 
 // SetPaused sets the pause state using the pausable clock
@@ -236,18 +218,29 @@ func (ctx *GameContext) SetPaused(paused bool) {
 	}
 }
 
+// GetAudioPlayer retrieves audio player from resources
+// Returns nil if audio unavailable
+func (ctx *GameContext) GetAudioPlayer() AudioPlayer {
+	if res, ok := GetResource[*AudioResource](ctx.World.Resources); ok {
+		return res.Player
+	}
+	return nil
+}
+
 // StopAudio mutes audio during pause (sounds complete naturally)
 func (ctx *GameContext) StopAudio() {
-	if ctx.AudioEngine != nil && ctx.AudioEngine.IsRunning() && !ctx.AudioEngine.IsMuted() {
-		ctx.AudioEngine.ToggleMute()
+	player := ctx.GetAudioPlayer()
+	if player != nil && player.IsRunning() && !player.IsMuted() {
+		player.ToggleMute()
 	}
 }
 
 // ToggleAudioMute toggles the mute state of the audio engine
 // Returns the new mute state (true if muted, false if unmuted)
 func (ctx *GameContext) ToggleAudioMute() bool {
-	if ctx.AudioEngine != nil {
-		return ctx.AudioEngine.ToggleMute()
+	player := ctx.GetAudioPlayer()
+	if player != nil {
+		return player.ToggleMute()
 	}
 	return false
 }
@@ -275,33 +268,36 @@ func (ctx *GameContext) HandleResize() {
 	// New Height and Width already set in context by main
 	ctx.updateGameArea()
 
-	// Update ConfigResource
-	configRes := &ConfigResource{
-		ScreenWidth:  ctx.Width,
-		ScreenHeight: ctx.Height,
-		GameWidth:    ctx.GameWidth,
-		GameHeight:   ctx.GameHeight,
-		GameX:        ctx.GameX,
-		GameY:        ctx.GameY,
-	}
-	AddResource(ctx.World.Resources, configRes)
+	ctx.World.RunSafe(func() {
+		// Update existing ConfigResource in-place
+		configRes := MustGetResource[*ConfigResource](ctx.World.Resources)
+		configRes.ScreenWidth = ctx.Width
+		configRes.ScreenHeight = ctx.Height
+		configRes.GameWidth = ctx.GameWidth
+		configRes.GameHeight = ctx.GameHeight
+		configRes.GameX = ctx.GameX
+		configRes.GameY = ctx.GameY
 
-	// TODO: Optional disable (world.crop)
-	// Cleanup entities outside new bounds to prevent ghosting/resource usage
-	// Uses GameWidth/Height as valid coordinate space for entities, resizes Spatial Grid
-	ctx.cleanupOutOfBoundsEntities(ctx.GameWidth, ctx.GameHeight)
+		// TODO: Optional disable (world.crop)
+		// Cleanup entities outside new bounds to prevent ghosting/resource usage
+		// Uses GameWidth/Height as valid coordinate space for entities, resizes Spatial Grid
+		ctx.cleanupOutOfBoundsEntities(ctx.GameWidth, ctx.GameHeight)
 
-	// Clamp cursor position
-	if pos, ok := ctx.World.Positions.Get(ctx.CursorEntity); ok {
-		pos.X = max(0, min(pos.X, ctx.GameWidth-1))
-		pos.Y = max(0, min(pos.Y, ctx.GameHeight-1))
-		ctx.World.Positions.Add(ctx.CursorEntity, pos)
-	}
+		// Clamp cursor position
+		if pos, ok := ctx.World.Positions.Get(ctx.CursorEntity); ok {
+			pos.X = max(0, min(pos.X, ctx.GameWidth-1))
+			pos.Y = max(0, min(pos.Y, ctx.GameHeight-1))
+			ctx.World.Positions.Add(ctx.CursorEntity, pos)
+		}
+	})
 }
 
 // cleanupOutOfBoundsEntities tags entities that are outside the valid game area
 // Actual destruction is handled by CullSystem in the next tick
 func (ctx *GameContext) cleanupOutOfBoundsEntities(width, height int) {
+	protStore := GetStore[component.ProtectionComponent](ctx.World)
+	deathStore := GetStore[component.DeathComponent](ctx.World)
+
 	// Unified cleanup: single PositionStore iteration handles all entity types
 	allEntities := ctx.World.Positions.All()
 	for _, e := range allEntities {
@@ -311,7 +307,6 @@ func (ctx *GameContext) cleanupOutOfBoundsEntities(width, height int) {
 		}
 
 		// Check protection flags before marking
-		protStore := GetStore[component.ProtectionComponent](ctx.World)
 		if prot, ok := protStore.Get(e); ok {
 			if prot.Mask.Has(component.ProtectFromCull) || prot.Mask == component.ProtectAll {
 				continue
@@ -321,7 +316,6 @@ func (ctx *GameContext) cleanupOutOfBoundsEntities(width, height int) {
 		// Mark entities outside valid coordinate space [0, width) × [0, height)
 		// We use OutOfBoundsComponent instead of immediate destruction to allow
 		// systems (like GoldSystem) to detect the loss and update GameState
-		deathStore := GetStore[component.DeathComponent](ctx.World)
 		pos, _ := ctx.World.Positions.Get(e)
 		if pos.X >= width || pos.Y >= height || pos.X < 0 || pos.Y < 0 {
 			deathStore.Add(e, component.DeathComponent{})

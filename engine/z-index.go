@@ -7,7 +7,7 @@ import (
 )
 
 // ZIndexResolver provides fast z-index lookups using cached store pointers
-// Initialize once during bootstrap, access via CoreResources.ZIndex
+// Initialize once during bootstrap, access via Resources.ZIndex
 type ZIndexResolver struct {
 	cursors *Store[component.CursorComponent]
 	shields *Store[component.ShieldComponent]

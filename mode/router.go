@@ -164,8 +164,8 @@ func (r *Router) handleEscape() bool {
 }
 
 func (r *Router) handleToggleMute() bool {
-	if r.ctx.AudioEngine != nil {
-		_ = r.ctx.ToggleAudioMute()
+	if player := r.ctx.GetAudioPlayer(); player != nil {
+		_ = player.ToggleMute()
 	}
 	return true
 }
