@@ -165,10 +165,37 @@ func (s *GoldSystem) Update() {
 		s.statTimer.Store(0)
 	}
 
+	// Detect external destruction (e.g., resize cull) before timeout check
+	if s.isGoldDestroyed(seqID) {
+		s.world.PushEvent(event.EventGoldDestroyed, &event.GoldCompletionPayload{
+			SequenceID: seqID,
+		})
+		s.mu.Lock()
+		s.active = false
+		s.startTime = time.Time{}
+		s.timeoutTime = time.Time{}
+		s.mu.Unlock()
+		s.statActive.Store(false)
+		s.statTimer.Store(0)
+		return
+	}
+
 	// Timeout check
 	if active && now.After(timeoutTime) {
 		s.failSequence(seqID, true)
 	}
+}
+
+// isGoldDestroyed returns true if no gold sequence entities with the given ID exist
+func (s *GoldSystem) isGoldDestroyed(sequenceID int) bool {
+	entities := s.seqStore.All()
+	for _, entity := range entities {
+		seq, ok := s.seqStore.Get(entity)
+		if ok && seq.Type == component.SequenceGold && seq.ID == sequenceID {
+			return false
+		}
+	}
+	return true
 }
 
 // spawnGold creates a new gold sequence
