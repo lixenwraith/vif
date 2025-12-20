@@ -64,7 +64,16 @@ func InitRegistry() {
 	registryInit = true
 
 	// Register all events from types.go
+	// Audio events
 	RegisterType("EventSoundRequest", EventSoundRequest, &SoundRequestPayload{})
+	// Network events
+	RegisterType("EventNetworkConnect", EventNetworkConnect, &NetworkConnectPayload{})
+	RegisterType("EventNetworkDisconnect", EventNetworkDisconnect, &NetworkDisconnectPayload{})
+	RegisterType("EventRemoteInput", EventRemoteInput, &RemoteInputPayload{})
+	RegisterType("EventStateSync", EventStateSync, &StateSyncPayload{})
+	RegisterType("EventNetworkEvent", EventNetworkEvent, &NetworkEventPayload{})
+	RegisterType("EventNetworkError", EventNetworkError, &NetworkErrorPayload{})
+	// Game events
 	RegisterType("EventNuggetCollected", EventNuggetCollected, &NuggetCollectedPayload{})
 	RegisterType("EventNuggetDestroyed", EventNuggetDestroyed, &NuggetDestroyedPayload{})
 	RegisterType("EventNuggetJumpRequest", EventNuggetJumpRequest, nil)

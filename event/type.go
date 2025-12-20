@@ -4,10 +4,46 @@ package event
 type EventType int
 
 const (
+	// === Audio Events ===
+
 	// EventSoundRequest requests audio playback
 	// Trigger: Systems requiring audio feedback
 	// Consumer: AudioSystem | Payload: *SoundRequestPayload
 	EventSoundRequest EventType = iota
+
+	// === Network Events ===
+
+	// EventNetworkConnect signals a new peer connection
+	// Trigger: NetworkService on accepted/established connection
+	// Consumer: Game systems | Payload: *NetworkConnectPayload
+	EventNetworkConnect
+
+	// EventNetworkDisconnect signals peer disconnection
+	// Trigger: NetworkService on connection close
+	// Consumer: Game systems | Payload: *NetworkDisconnectPayload
+	EventNetworkDisconnect
+
+	// EventRemoteInput signals input from a remote player
+	// Trigger: NetworkService on MsgInput received
+	// Consumer: InputSystem | Payload: *RemoteInputPayload
+	EventRemoteInput
+
+	// EventStateSync signals state snapshot received
+	// Trigger: NetworkService on MsgStateSync received
+	// Consumer: SyncSystem | Payload: *StateSyncPayload
+	EventStateSync
+
+	// EventNetworkEvent signals a game event from remote peer
+	// Trigger: NetworkService on MsgEvent received
+	// Consumer: Game systems | Payload: *NetworkEventPayload
+	EventNetworkEvent
+
+	// EventNetworkError signals a network error
+	// Trigger: NetworkService on error
+	// Consumer: UISystem | Payload: *NetworkErrorPayload
+	EventNetworkError
+
+	// === Game Events ===
 
 	// EventNuggetCollected signals nugget was collected by player
 	// Trigger: EnergySystem on successful nugget character match

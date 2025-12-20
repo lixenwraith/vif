@@ -169,3 +169,38 @@ type DeathRequestPayload struct {
 	Entities    []core.Entity
 	EffectEvent EventType
 }
+
+// NetworkConnectPayload signals peer connection
+type NetworkConnectPayload struct {
+	PeerID uint32
+}
+
+// NetworkDisconnectPayload signals peer disconnection
+type NetworkDisconnectPayload struct {
+	PeerID uint32
+}
+
+// RemoteInputPayload contains input data from remote player
+type RemoteInputPayload struct {
+	PeerID  uint32
+	Payload []byte // Encoded keystroke/intent
+}
+
+// StateSyncPayload contains state snapshot from peer
+type StateSyncPayload struct {
+	PeerID  uint32
+	Seq     uint32
+	Payload []byte // Encoded snapshot
+}
+
+// NetworkEventPayload contains a forwarded game event
+type NetworkEventPayload struct {
+	PeerID  uint32
+	Payload []byte // Encoded GameEvent
+}
+
+// NetworkErrorPayload contains error information
+type NetworkErrorPayload struct {
+	PeerID uint32 // 0 for general errors
+	Error  string
+}

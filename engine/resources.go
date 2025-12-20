@@ -85,6 +85,7 @@ type Resources struct {
 	// Bridged resources from Services
 	Content *ContentResource
 	Audio   *AudioResource
+	Network *NetworkResource
 }
 
 // GetResources populates Resources from the world's resource store
@@ -105,6 +106,10 @@ func GetResources(w *World) Resources {
 
 	if audioRes, ok := GetResource[*AudioResource](w.Resources); ok && audioRes.Player != nil {
 		res.Audio = audioRes
+	}
+
+	if netRes, ok := GetResource[*NetworkResource](w.Resources); ok {
+		res.Network = netRes
 	}
 
 	return res
@@ -179,6 +184,18 @@ type CursorResource struct {
 
 // === Bridged Resources from Service ===
 
+// ContentProvider defines the interface for content access
+// Matches content.Service public API
+type ContentProvider interface {
+	CurrentContent() *core.PreparedContent
+	NotifyConsumed(count int)
+}
+
+// ContentResource wraps a ContentProvider for the ResourceStore
+type ContentResource struct {
+	Provider ContentProvider
+}
+
 // AudioPlayer defines the minimal audio interface used by game systems
 type AudioPlayer interface {
 	Play(core.SoundType) bool
@@ -192,14 +209,15 @@ type AudioResource struct {
 	Player AudioPlayer
 }
 
-// ContentProvider defines the interface for content access
-// Matches content.Service public API
-type ContentProvider interface {
-	CurrentContent() *core.PreparedContent
-	NotifyConsumed(count int)
+// NetworkProvider defines the interface for network access
+type NetworkProvider interface {
+	Send(peerID uint32, msgType uint8, payload []byte) bool
+	Broadcast(msgType uint8, payload []byte)
+	PeerCount() int
+	IsRunning() bool
 }
 
-// ContentResource wraps a ContentProvider for the ResourceStore
-type ContentResource struct {
-	Provider ContentProvider
+// NetworkResource wraps network provider for ECS access
+type NetworkResource struct {
+	Transport NetworkProvider
 }

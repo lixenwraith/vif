@@ -4,6 +4,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/content"
 	"github.com/lixenwraith/vi-fighter/engine/registry"
+	"github.com/lixenwraith/vi-fighter/network"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
@@ -14,12 +15,16 @@ func RegisterServices() {
 		return terminal.NewService()
 	})
 
+	registry.RegisterService("content", func() any {
+		return content.NewService()
+	})
+
 	registry.RegisterService("audio", func() any {
 		return audio.NewService()
 	})
 
-	registry.RegisterService("content", func() any {
-		return content.NewService()
+	registry.RegisterService("network", func() any {
+		return network.NewService()
 	})
 }
 
@@ -28,7 +33,8 @@ func RegisterServices() {
 func ActiveServices() []string {
 	return []string{
 		"terminal",
-		"audio",
 		"content",
+		"audio",
+		"network",
 	}
 }
