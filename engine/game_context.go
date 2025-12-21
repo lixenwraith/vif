@@ -135,7 +135,7 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	AddResource(ctx.World.Resources, &EventQueueResource{Queue: ctx.eventQueue})
 
 	// 4. Game State
-	ctx.State = NewGameState(pausableClock.Now())
+	ctx.State = NewGameState()
 	AddResource(ctx.World.Resources, &GameStateResource{State: ctx.State})
 
 	// 5. Cursor Entity

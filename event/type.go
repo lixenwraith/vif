@@ -252,6 +252,12 @@ const (
 	// Trigger: Game systems (Energy, Drain, Decay, Cleaner, etc.)
 	// Consumer: DeathSystem | Payload: *DeathRequestPayload
 	EventRequestDeath
+
+	// EventMemberTyped signals a composite member was successfully typed
+	// Trigger: TypingSystem on valid member character match
+	// Consumer: CompositeSystem routes to behavior-specific handler
+	// Payload: *MemberTypedPayload
+	EventMemberTyped
 )
 
 // GameEvent represents a single game event with metadata

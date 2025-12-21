@@ -253,10 +253,10 @@ func (s *DecaySystem) updateDecayEntities() {
 					s.world.PushEvent(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{
 						Entity: targetEntity,
 					})
-					s.world.PushEvent(event.EventRequestDeath, &event.DeathRequestPayload{
-						Entities:    []core.Entity{targetEntity},
-						EffectEvent: event.EventFlashRequest,
-					})
+					// TODO: death to inform system of entity of their deaths instead of spread out event? Easier to manage logic
+					p := event.AcquireDeathRequest(event.EventFlashRequest)
+					p.Entities = append(p.Entities, targetEntity)
+					s.world.PushEvent(event.EventRequestDeath, p)
 				} else {
 					s.applyDecayToCharacter(targetEntity)
 				}
@@ -341,11 +341,9 @@ func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
 				s.charStore.Add(entity, char)
 			}
 		} else {
-			// Red at LevelDark - death with flash
-			s.world.PushEvent(event.EventRequestDeath, &event.DeathRequestPayload{
-				Entities:    []core.Entity{entity},
-				EffectEvent: event.EventFlashRequest,
-			})
+			p := event.AcquireDeathRequest(event.EventFlashRequest)
+			p.Entities = append(p.Entities, entity)
+			s.world.PushEvent(event.EventRequestDeath, p)
 		}
 	}
 }

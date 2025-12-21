@@ -20,10 +20,10 @@ type GameState struct {
 	GrayoutActive    atomic.Bool
 	GrayoutStartTime atomic.Int64 // UnixNano
 
-	// Sequence ID generation (atomic for thread-safety)
-	NextSeqID atomic.Int64
+	// Unified ID generation
+	NextID atomic.Uint64
 
-	// Frame counter (atomic for thread-safety, incremented each render)
+	// Frame counter (incremented each render)
 	FrameNumber atomic.Int64
 
 	// Runtime Metrics
@@ -31,7 +31,7 @@ type GameState struct {
 	CurrentAPM     atomic.Uint64
 	PendingActions atomic.Uint64 // Actions in the current second bucket
 
-	// ===== CLOCK-TICK STATE (mutex protected) =====
+	// === CLOCK-TICK STATE (mutex protected) ===
 
 	mu sync.RWMutex
 
@@ -47,11 +47,11 @@ type GameState struct {
 
 // initState initializes all game state fields to starting values
 // Called by both NewGameState and Reset to avoid duplication
-func (gs *GameState) initState(now time.Time) {
+func (gs *GameState) initState() {
 	// Reset atomics
 	gs.GrayoutActive.Store(false)
 	gs.GrayoutStartTime.Store(0)
-	gs.NextSeqID.Store(1)
+	gs.NextID.Store(1)
 	gs.FrameNumber.Store(0)
 
 	// Reset metrics
@@ -68,23 +68,23 @@ func (gs *GameState) initState(now time.Time) {
 }
 
 // NewGameState creates a new centralized game state
-func NewGameState(now time.Time) *GameState {
+func NewGameState() *GameState {
 	gs := &GameState{}
-	gs.initState(now)
+	gs.initState()
 	return gs
 }
 
 // Reset resets the game state for a new game
 // Ensures clean state for :new command without recreation
-func (gs *GameState) Reset(now time.Time) {
+func (gs *GameState) Reset() {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
-	gs.initState(now)
+	gs.initState()
 }
 
-// IncrementSeqID increments and returns the next sequence ID
-func (gs *GameState) IncrementSeqID() int {
-	return int(gs.NextSeqID.Add(1))
+// IncrementID increments and returns the next ID
+func (gs *GameState) IncrementID() int {
+	return int(gs.NextID.Add(1))
 }
 
 // GetFrameNumber returns the current frame number

@@ -31,6 +31,8 @@ const (
 	PriorityHeat        = 8
 	PriorityEnergy      = 10
 	PriorityBoost       = 12
+	PriorityTyping      = 13 // After boost, before composite
+	PriorityComposite   = 14 // After boost, before spawn (position sync)
 	PrioritySpawn       = 15
 	PriorityNugget      = 18
 	PriorityGold        = 20

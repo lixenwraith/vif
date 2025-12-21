@@ -116,4 +116,5 @@ func InitRegistry() {
 	RegisterType("EventDecayCancel", EventDecayCancel, nil)
 	RegisterType("EventDecayComplete", EventDecayComplete, nil)
 	RegisterType("EventRequestDeath", EventRequestDeath, &DeathRequestPayload{})
+	RegisterType("EventMemberTyped", EventMemberTyped, &MemberTypedPayload{})
 }

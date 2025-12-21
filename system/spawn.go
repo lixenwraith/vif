@@ -447,7 +447,7 @@ func (s *SpawnSystem) placeLine(line string, seqType component.SequenceType, seq
 			// Valid position found, create entities
 			// Get sequence ID from GameState
 			// TODO: future migration to SystemStatus resource
-			sequenceID := s.res.State.State.IncrementSeqID()
+			sequenceID := s.res.State.State.IncrementID()
 
 			// Phase 1: Create entities and prepare components
 			type entityData struct {

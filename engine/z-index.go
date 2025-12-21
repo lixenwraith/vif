@@ -15,21 +15,23 @@ type ZIndexResolver struct {
 	decays  *Store[component.DecayComponent]
 	nuggets *Store[component.NuggetComponent]
 	// Cached for IsInteractable
-	chars *Store[component.CharacterComponent]
-	seqs  *Store[component.SequenceComponent]
+	chars    *Store[component.CharacterComponent]
+	seqs     *Store[component.SequenceComponent]
+	typeable *Store[component.TypeableComponent]
 }
 
 // NewZIndexResolver creates a resolver with cached store references
 // Call after all components are registered
 func NewZIndexResolver(w *World) *ZIndexResolver {
 	z := &ZIndexResolver{
-		cursors: GetStore[component.CursorComponent](w),
-		shields: GetStore[component.ShieldComponent](w),
-		drains:  GetStore[component.DrainComponent](w),
-		decays:  GetStore[component.DecayComponent](w),
-		nuggets: GetStore[component.NuggetComponent](w),
-		chars:   GetStore[component.CharacterComponent](w),
-		seqs:    GetStore[component.SequenceComponent](w),
+		cursors:  GetStore[component.CursorComponent](w),
+		shields:  GetStore[component.ShieldComponent](w),
+		drains:   GetStore[component.DrainComponent](w),
+		decays:   GetStore[component.DecayComponent](w),
+		nuggets:  GetStore[component.NuggetComponent](w),
+		chars:    GetStore[component.CharacterComponent](w),
+		seqs:     GetStore[component.SequenceComponent](w),
+		typeable: GetStore[component.TypeableComponent](w),
 	}
 
 	// Wire to PositionStore for hot-path access
@@ -61,6 +63,9 @@ func (z *ZIndexResolver) GetZIndex(e core.Entity) int {
 // IsInteractable returns true if the entity is an interactable game element
 func (z *ZIndexResolver) IsInteractable(e core.Entity) bool {
 	if z.nuggets.Has(e) {
+		return true
+	}
+	if z.typeable.Has(e) {
 		return true
 	}
 	return z.chars.Has(e) && z.seqs.Has(e)

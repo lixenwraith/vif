@@ -204,3 +204,11 @@ type NetworkErrorPayload struct {
 	PeerID uint32 // 0 for general errors
 	Error  string
 }
+
+// MemberTypedPayload signals a composite member was typed
+type MemberTypedPayload struct {
+	AnchorID       core.Entity
+	MemberEntity   core.Entity
+	Char           rune
+	RemainingCount int // Count of remaining live members after this one
+}

@@ -160,8 +160,7 @@ func (s *NuggetSystem) handleJumpRequest() {
 	}
 }
 
-// spawnNugget creates a new nugget at a random valid position using generic stores
-// Caller must hold s.mu lock
+// spawnNugget creates a new nugget at a random valid position, caller must hold s.mu lock
 func (s *NuggetSystem) spawnNugget() {
 	now := s.res.Time.GameTime
 	x, y := s.findValidPosition()
@@ -178,12 +177,18 @@ func (s *NuggetSystem) spawnNugget() {
 	}
 
 	randomChar := constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
+	// Visual component (renderer uses this)
 	char := component.CharacterComponent{
-		Rune: randomChar,
-		// Use semantic color
+		Rune:  randomChar,
 		Color: component.ColorNugget,
 		Style: component.StyleNormal,
-		// SeqType/SeqLevel default to zero values (unused for nuggets)
+	}
+
+	// Interaction component (typing system uses this)
+	typeable := component.TypeableComponent{
+		Char:  randomChar,
+		Type:  component.TypeNugget,
+		Level: component.LevelNormal,
 	}
 
 	nugget := component.NuggetComponent{
@@ -202,6 +207,7 @@ func (s *NuggetSystem) spawnNugget() {
 
 	// Add other components after position is committed
 	s.charStore.Add(entity, char)
+	engine.GetStore[component.TypeableComponent](s.world).Add(entity, typeable)
 	s.nuggetStore.Add(entity, nugget)
 
 	s.activeNuggetEntity = entity

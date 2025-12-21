@@ -4,6 +4,7 @@ package component
 // Renderers resolve these to concrete RGB values
 type ColorClass uint8
 
+// Sematic colors
 const (
 	ColorNone ColorClass = iota
 	ColorNormal

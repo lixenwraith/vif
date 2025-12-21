@@ -272,16 +272,26 @@ func (cs *ClockScheduler) executeReset() {
 
 // dispatchAndProcessEvents processes pending events through Router AND FSM
 func (cs *ClockScheduler) dispatchAndProcessEvents() {
-	eventsList := cs.eqRes.Queue.Consume()
-	for _, ev := range eventsList {
-		cs.fsm.HandleEvent(cs.world, ev.Type)
+	const maxIterations = 16 // Prevent infinite loops from circular event chains
 
-		if handlers, ok := cs.eventRouter.GetHandlers(ev.Type); ok {
-			for _, h := range handlers {
-				h.HandleEvent(ev)
+	for i := 0; i < maxIterations; i++ {
+		eventsList := cs.eqRes.Queue.Consume()
+		if len(eventsList) == 0 {
+			return
+		}
+
+		for _, ev := range eventsList {
+			cs.fsm.HandleEvent(cs.world, ev.Type)
+
+			if handlers, ok := cs.eventRouter.GetHandlers(ev.Type); ok {
+				for _, h := range handlers {
+					h.HandleEvent(ev)
+				}
 			}
 		}
 	}
+	// If we hit maxIterations, remaining events process next tick
+	// This indicates potential circular event chain
 }
 
 // DispatchEventsImmediately processes all pending events synchronously

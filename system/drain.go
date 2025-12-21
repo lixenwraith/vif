@@ -37,6 +37,8 @@ type DrainSystem struct {
 	seqStore    *engine.Store[component.SequenceComponent]
 	charStore   *engine.Store[component.CharacterComponent]
 	nuggetStore *engine.Store[component.NuggetComponent]
+	memberStore *engine.Store[component.MemberComponent]
+	headerStore *engine.Store[component.CompositeHeaderComponent]
 
 	// Spawn queue for staggered materialization
 	pendingSpawns []pendingDrainSpawn
@@ -62,6 +64,8 @@ func NewDrainSystem(world *engine.World) engine.System {
 		seqStore:    engine.GetStore[component.SequenceComponent](world),
 		charStore:   engine.GetStore[component.CharacterComponent](world),
 		nuggetStore: engine.GetStore[component.NuggetComponent](world),
+		memberStore: engine.GetStore[component.MemberComponent](world),
+		headerStore: engine.GetStore[component.CompositeHeaderComponent](world),
 
 		pendingSpawns: make([]pendingDrainSpawn, 0, constant.DrainMaxCount),
 	}
@@ -773,7 +777,20 @@ func (s *DrainSystem) handleCollisionAtPosition(entity core.Entity) {
 		return
 	}
 
-	// Check it's a gold sequence entity - destroy entire sequence
+	// Check composite membership first (handles Gold after migration)
+	if member, ok := s.memberStore.Get(entity); ok {
+		header, headerOk := s.headerStore.Get(member.AnchorID)
+		if headerOk && header.BehaviorID == component.BehaviorGold {
+			s.handleGoldCompositeCollision(member.AnchorID, &header)
+			return
+		}
+		// Non-gold composite member: destroy single entity
+		s.world.DestroyEntity(entity)
+		return
+	}
+
+	// TODO: remove with the legacy sequences
+	// Legacy: Check SequenceComponent for old gold entities
 	if seq, ok := s.seqStore.Get(entity); ok {
 		if seq.Type == component.SequenceGold {
 			s.handleGoldSequenceCollision(seq.ID)
@@ -789,6 +806,34 @@ func (s *DrainSystem) handleCollisionAtPosition(entity core.Entity) {
 
 	// Destroy the entity (Handles standard chars, Decay entities, etc.)
 	s.world.DestroyEntity(entity)
+}
+
+// handleGoldCompositeCollision destroys entire gold composite via anchor
+func (s *DrainSystem) handleGoldCompositeCollision(anchorID core.Entity, header *component.CompositeHeaderComponent) {
+	s.world.PushEvent(event.EventGoldDestroyed, &event.GoldCompletionPayload{
+		SequenceID: int(header.GroupID),
+	})
+
+	// Destroy all living members with flash
+	for _, m := range header.Members {
+		if m.Entity == 0 {
+			continue
+		}
+		if pos, ok := s.world.Positions.Get(m.Entity); ok {
+			if char, ok := s.charStore.Get(m.Entity); ok {
+				s.world.PushEvent(event.EventFlashRequest, &event.FlashRequestPayload{
+					X: pos.X, Y: pos.Y, Char: char.Rune,
+				})
+			}
+		}
+		s.memberStore.Remove(m.Entity)
+		s.world.DestroyEntity(m.Entity)
+	}
+
+	// Destroy phantom head
+	s.protStore.Remove(anchorID)
+	s.headerStore.Remove(anchorID)
+	s.world.DestroyEntity(anchorID)
 }
 
 // handleGoldSequenceCollision removes all gold sequence entities and emits destruction event

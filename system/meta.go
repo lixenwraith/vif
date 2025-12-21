@@ -96,8 +96,8 @@ func (s *MetaSystem) handleGameReset() {
 	// Already inside world.RunSafe from main -> DispatchEventsImmediately
 	s.ctx.World.Clear()
 
-	// Phase 3: State reset (counters, NextSeqID → 1)
-	s.ctx.State.Reset(s.ctx.PausableClock.Now())
+	// Phase 3: State reset (counters, NextID → 1)
+	s.ctx.State.Reset()
 
 	// Phase 4: Cursor recreation (required before spawn events)
 	s.ctx.CreateCursorEntity()
