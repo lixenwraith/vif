@@ -62,36 +62,8 @@ func (s *CompositeSystem) HandleEvent(ev event.GameEvent) {
 	// 1. Mark tombstone immediately (Single Authority)
 	s.markMemberTombstone(payload.AnchorID, payload.MemberEntity)
 
-	// header, _ := s.headerStore.Get(payload.AnchorID)
-
-	// // Route to behavior-specific handler
-	// switch header.BehaviorID {
-	// case component.BehaviorGold:
-	// 	s.world.PushEvent(event.EventGoldMemberTyped, &event.GoldMemberTypedPayload{
-	// 		AnchorID:       payload.AnchorID,
-	// 		MemberEntity:   payload.MemberEntity,
-	// 		Char:           payload.Char,
-	// 		RemainingCount: payload.RemainingCount,
-	// 	})
-
-	// case component.BehaviorBubble:
-	// 	// Future: EventBubbleMemberTyped
-	// 	s.handleGenericMemberDeath(payload.AnchorID, payload.MemberEntity)
-	//
-	// case component.BehaviorBoss:
-	// 	// Future: EventBossMemberTyped
-	// 	s.handleGenericMemberDeath(payload.AnchorID, payload.MemberEntity)
-	//
-	// default:
-	// 	s.handleGenericMemberDeath(payload.AnchorID, payload.MemberEntity)
-	// }
-	// }
-
 	// 2. Request death for the member entity
-	s.world.PushEvent(event.EventRequestDeath, &event.DeathRequestPayload{
-		Entities:    []core.Entity{payload.MemberEntity},
-		EffectEvent: 0,
-	})
+	event.EmitDeathOne(s.res.Events.Queue, payload.MemberEntity, 0, s.res.Time.FrameNumber)
 }
 
 func (s *CompositeSystem) Update() {

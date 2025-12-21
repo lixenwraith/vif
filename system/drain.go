@@ -449,10 +449,8 @@ func (s *DrainSystem) despawnDrainWithFlash(entity core.Entity) {
 			Char: constant.DrainChar,
 		})
 	}
-	s.world.PushEvent(event.EventRequestDeath, &event.DeathRequestPayload{
-		Entities:    []core.Entity{entity},
-		EffectEvent: 0, // Flash already emitted
-	})
+	// TODO: integrate flash with drain; issue: non-typeable character, can't extract. or use explosion?
+	event.EmitDeathOne(s.res.Events.Queue, entity, 0, s.res.Time.FrameNumber)
 }
 
 // materializeDrainAt creates a drain entity at the specified position

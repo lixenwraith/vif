@@ -21,7 +21,6 @@ type EnergySystem struct {
 	shieldStore *engine.Store[component.ShieldComponent]
 	heatStore   *engine.Store[component.HeatComponent]
 	boostStore  *engine.Store[component.BoostComponent]
-	seqStore    *engine.Store[component.SequenceComponent]
 	charStore   *engine.Store[component.CharacterComponent]
 	nuggetStore *engine.Store[component.NuggetComponent]
 
@@ -41,7 +40,6 @@ func NewEnergySystem(world *engine.World) engine.System {
 		shieldStore: engine.GetStore[component.ShieldComponent](world),
 		heatStore:   engine.GetStore[component.HeatComponent](world),
 		boostStore:  engine.GetStore[component.BoostComponent](world),
-		seqStore:    engine.GetStore[component.SequenceComponent](world),
 		charStore:   engine.GetStore[component.CharacterComponent](world),
 		nuggetStore: engine.GetStore[component.NuggetComponent](world),
 
@@ -192,11 +190,11 @@ func (s *EnergySystem) triggerEnergyBlink(blinkType, blinkLevel uint32) {
 	})
 }
 
+// TODO: move this to typing system
 // handleDeleteRequest processes deletion of entities in a range
 func (s *EnergySystem) handleDeleteRequest(payload *event.DeleteRequestPayload) {
 	config := s.res.Config
 
-	resetHeat := false
 	entitiesToDelete := make([]core.Entity, 0)
 
 	// Use cached ZIndexResolver
@@ -204,7 +202,6 @@ func (s *EnergySystem) handleDeleteRequest(payload *event.DeleteRequestPayload) 
 
 	// Helper to check and mark entity for deletion
 	checkEntity := func(entity core.Entity) {
-		// Use resolver method instead of package function
 		if resolver == nil || !resolver.IsInteractable(entity) {
 			return
 		}
@@ -213,14 +210,6 @@ func (s *EnergySystem) handleDeleteRequest(payload *event.DeleteRequestPayload) 
 		if prot, ok := s.protStore.Get(entity); ok {
 			if prot.Mask.Has(component.ProtectFromDelete) || prot.Mask == component.ProtectAll {
 				return
-			}
-		}
-
-		// Check sequence type for penalty
-		// Red has no penalty, Gold cannot be deleted (via protection), Blue/Green resets heat
-		if seq, ok := s.seqStore.Get(entity); ok {
-			if seq.Type == component.SequenceGreen || seq.Type == component.SequenceBlue {
-				resetHeat = true
 			}
 		}
 
@@ -277,16 +266,8 @@ func (s *EnergySystem) handleDeleteRequest(payload *event.DeleteRequestPayload) 
 		}
 	}
 
-	// Execute deletion via DeathSystem (silent - delete operator has no flash)
+	// Batch deletion via DeathSystem (silent)
 	if len(entitiesToDelete) > 0 {
-		s.world.PushEvent(event.EventRequestDeath, &event.DeathRequestPayload{
-			Entities:    entitiesToDelete,
-			EffectEvent: 0,
-		})
-	}
-
-	// TODO: should only reset if non-red deletec
-	if resetHeat {
-		s.world.PushEvent(event.EventHeatSet, &event.HeatSetPayload{Value: 0})
+		event.EmitDeathBatch(s.res.Events.Queue, 0, entitiesToDelete, s.res.Time.FrameNumber)
 	}
 }

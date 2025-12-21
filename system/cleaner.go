@@ -17,10 +17,10 @@ type CleanerSystem struct {
 	world *engine.World
 	res   engine.Resources
 
-	cleanerStore *engine.Store[component.CleanerComponent]
-	protStore    *engine.Store[component.ProtectionComponent]
-	seqStore     *engine.Store[component.SequenceComponent]
-	charStore    *engine.Store[component.CharacterComponent]
+	cleanerStore  *engine.Store[component.CleanerComponent]
+	protStore     *engine.Store[component.ProtectionComponent]
+	typeableStore *engine.Store[component.TypeableComponent]
+	charStore     *engine.Store[component.CharacterComponent]
 
 	spawned           map[int64]bool // Track which frames already spawned cleaners
 	hasSpawnedSession bool           // Track if we spawned cleaners this session
@@ -32,10 +32,10 @@ func NewCleanerSystem(world *engine.World) engine.System {
 		world: world,
 		res:   engine.GetResources(world),
 
-		cleanerStore: engine.GetStore[component.CleanerComponent](world),
-		protStore:    engine.GetStore[component.ProtectionComponent](world),
-		charStore:    engine.GetStore[component.CharacterComponent](world),
-		seqStore:     engine.GetStore[component.SequenceComponent](world),
+		cleanerStore:  engine.GetStore[component.CleanerComponent](world),
+		protStore:     engine.GetStore[component.ProtectionComponent](world),
+		charStore:     engine.GetStore[component.CharacterComponent](world),
+		typeableStore: engine.GetStore[component.TypeableComponent](world),
 
 		spawned: make(map[int64]bool),
 	}
@@ -102,7 +102,7 @@ func (s *CleanerSystem) Update() {
 
 	// Clean old entries from spawned map
 	// TODO: change this
-	currentFrame := s.res.State.State.GetFrameNumber()
+	currentFrame := s.res.Time.FrameNumber
 	for frame := range s.spawned {
 		if currentFrame-frame > constant.CleanerDeduplicationWindow {
 			delete(s.spawned, frame)
@@ -309,21 +309,17 @@ func (s *CleanerSystem) checkAndDestroyAtPositionExcluding(x, y int, selfEntity 
 		if e == 0 || e == selfEntity {
 			continue // Self-exclusion: skip cleaner entity to prevent self-destruction
 		}
-		// Only destroy Red sequence entities
-		if seqComp, ok := s.seqStore.Get(e); ok {
-			if seqComp.Type == component.SequenceRed {
+		// Only destroy Red typeable entities
+		if typeable, ok := s.typeableStore.Get(e); ok {
+			if typeable.Type == component.TypeRed {
 				toDestroy = append(toDestroy, e)
 			}
 		}
 	}
 
+	// TODO: should this use acquire death request?
 	// Batch death with flash effect
-	if len(toDestroy) > 0 {
-		s.world.PushEvent(event.EventRequestDeath, &event.DeathRequestPayload{
-			Entities:    toDestroy,
-			EffectEvent: event.EventFlashRequest,
-		})
-	}
+	event.EmitDeathBatch(s.res.Events.Queue, event.EventFlashRequest, toDestroy, s.res.Time.FrameNumber)
 }
 
 // spawnDirectionalCleaners generates 4 cleaner entities from origin position
@@ -389,25 +385,25 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 	}
 }
 
-// scanRedCharacterRows finds all rows containing Red sequences using query builder
+// scanRedCharacterRows finds all rows containing Red typeables using query builder
 func (s *CleanerSystem) scanRedCharacterRows() []int {
 	config := s.res.Config
 	redRows := make(map[int]bool)
 	gameHeight := config.GameHeight
 
-	// Query entities with both Sequences and Positions
+	// Query entities with both Typeable and Positions
 	entities := s.world.Query().
-		With(s.seqStore).
+		With(s.typeableStore).
 		With(s.world.Positions).
 		Execute()
 
 	for _, entity := range entities {
-		seq, hasSeq := s.seqStore.Get(entity)
-		if !hasSeq {
+		typeable, ok := s.typeableStore.Get(entity)
+		if !ok {
 			continue
 		}
 
-		if seq.Type != component.SequenceRed {
+		if typeable.Type != component.TypeRed {
 			continue
 		}
 

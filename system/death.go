@@ -38,50 +38,54 @@ func (s *DeathSystem) Priority() int {
 }
 
 func (s *DeathSystem) EventTypes() []event.EventType {
-	return []event.EventType{event.EventRequestDeath}
+	return []event.EventType{event.EventDeathOne, event.EventDeathBatch}
 }
 
 func (s *DeathSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type != event.EventRequestDeath {
-		return
-	}
-	p, ok := ev.Payload.(*event.DeathRequestPayload)
-	if !ok {
-		return
-	}
+	switch ev.Type {
+	case event.EventDeathOne:
+		if packed, ok := ev.Payload.(uint64); ok {
+			// Bit-pack decode, skipping heap allocation, use event.EmitDeathOne
+			id := core.Entity(packed & 0xFFFFFFFFFFFF)
+			effect := event.EventType(packed >> 48)
+			s.markForDeath(id, effect)
+		}
 
-	s.processDeathRequest(p)
-	event.ReleaseDeathRequest(p)
+	case event.EventDeathBatch:
+		if p, ok := ev.Payload.(*event.DeathRequestPayload); ok {
+			for _, entity := range p.Entities {
+				s.markForDeath(entity, p.EffectEvent)
+			}
+			event.ReleaseDeathRequest(p)
+		}
+	}
 }
 
-func (s *DeathSystem) processDeathRequest(p *event.DeathRequestPayload) {
-	now := s.res.Time.GameTime.UnixNano()
-
-	for _, entity := range p.Entities {
-		if entity == 0 {
-			continue
-		}
-
-		// Protection check
-		if prot, ok := s.protStore.Get(entity); ok {
-			if !prot.IsExpired(now) && prot.Mask == component.ProtectAll {
-				continue
-			}
-		}
-
-		// Skip if already marked
-		if s.deathStore.Has(entity) {
-			continue
-		}
-
-		// Emit effect event if specified
-		if p.EffectEvent != 0 {
-			s.emitEffect(entity, p.EffectEvent)
-		}
-
-		// Tag for CullSystem
-		s.deathStore.Add(entity, component.DeathComponent{})
+// markForDeath performs protection checks and tags entity
+func (s *DeathSystem) markForDeath(entity core.Entity, effect event.EventType) {
+	if entity == 0 {
+		return
 	}
+
+	// Protection check
+	if prot, ok := s.protStore.Get(entity); ok {
+		if !prot.IsExpired(s.res.Time.GameTime.UnixNano()) && prot.Mask == component.ProtectAll {
+			return
+		}
+	}
+
+	// Skip if already marked
+	if s.deathStore.Has(entity) {
+		return
+	}
+
+	// Emit death vfx event if specified
+	if effect != 0 {
+		s.emitEffect(entity, effect)
+	}
+
+	// Tag for CullSystem
+	s.deathStore.Add(entity, component.DeathComponent{})
 }
 
 func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType) {

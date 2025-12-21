@@ -78,8 +78,9 @@ type SpawnSystem struct {
 	world *engine.World
 	res   engine.Resources
 
-	seqStore  *engine.Store[component.SequenceComponent]
-	charStore *engine.Store[component.CharacterComponent]
+	seqStore      *engine.Store[component.SequenceComponent]
+	charStore     *engine.Store[component.CharacterComponent]
+	typeableStore *engine.Store[component.TypeableComponent]
 
 	// Spawn timing and rate (internal state, replaces GameState coupling)
 	enabled        bool
@@ -106,8 +107,9 @@ func NewSpawnSystem(world *engine.World) engine.System {
 		world: world,
 		res:   res,
 
-		seqStore:  engine.GetStore[component.SequenceComponent](world),
-		charStore: engine.GetStore[component.CharacterComponent](world),
+		seqStore:      engine.GetStore[component.SequenceComponent](world),
+		charStore:     engine.GetStore[component.CharacterComponent](world),
+		typeableStore: engine.GetStore[component.TypeableComponent](world),
 
 		// Cache metric pointers
 		statEnabled:  res.Status.Bools.Get("spawn.enabled"),
@@ -347,6 +349,22 @@ func (s *SpawnSystem) getAvailableColorsFromCensus(census ColorCensus) []ColorLe
 	return available
 }
 
+// typeableTypeFromSeq converts SequenceType to TypeableType
+func typeableTypeFromSeq(st component.SequenceType) component.TypeableType {
+	switch st {
+	case component.SequenceBlue:
+		return component.TypeBlue
+	case component.SequenceGreen:
+		return component.TypeGreen
+	case component.SequenceRed:
+		return component.TypeRed
+	case component.SequenceGold:
+		return component.TypeGold
+	default:
+		return component.TypeGreen
+	}
+}
+
 // spawnSequence generates and spawns a new character block from file
 func (s *SpawnSystem) spawnSequence() {
 	// Census for color counters
@@ -505,7 +523,15 @@ func (s *SpawnSystem) placeLine(line string, seqType component.SequenceType, seq
 			// Phase 3: Add other components (positions already committed)
 			for _, ed := range entities {
 				s.charStore.Add(ed.entity, ed.char)
+				// TODO: seqStore to be deprecated
 				s.seqStore.Add(ed.entity, ed.seq)
+
+				// TypeableComponent for decay system migration
+				s.typeableStore.Add(ed.entity, component.TypeableComponent{
+					Char:  ed.char.Rune,
+					Type:  typeableTypeFromSeq(seqType),
+					Level: seqLevel,
+				})
 			}
 
 			return true

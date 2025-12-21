@@ -313,7 +313,7 @@ func (cs *ClockScheduler) processTick() {
 			now,
 			cs.pausableClock.RealTime(),
 			cs.tickInterval,
-			MustGetResource[*GameStateResource](cs.world.Resources).State.GetFrameNumber(),
+			MustGetResource[*TimeResource](cs.world.Resources).FrameNumber,
 		)
 
 		// Process Events (Input -> FSM -> Systems)

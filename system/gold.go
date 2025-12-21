@@ -461,9 +461,7 @@ func (s *GoldSystem) destroyComposite(anchorEntity core.Entity) {
 	}
 
 	if len(toDestroy) > 0 {
-		p := event.AcquireDeathRequest(0)
-		p.Entities = append(p.Entities, toDestroy...)
-		s.world.PushEvent(event.EventRequestDeath, p)
+		event.EmitDeathBatch(s.res.Events.Queue, 0, toDestroy, s.res.Time.FrameNumber)
 	}
 
 	// Remove protection and destroy phantom head

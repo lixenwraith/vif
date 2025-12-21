@@ -328,7 +328,7 @@ func (s *TypingSystem) handleTypeable(entity core.Entity, typeable component.Typ
 	// Universal rewards
 	s.applyUniversalRewards()
 
-	// Emit appropriate event based on type
+	// Type-specific handling
 	switch typeable.Type {
 	case component.TypeNugget:
 		s.world.PushEvent(event.EventNuggetCollected, &event.NuggetCollectedPayload{
@@ -347,12 +347,18 @@ func (s *TypingSystem) handleTypeable(entity core.Entity, typeable component.Typ
 			// Provide heat reward only when below maximum
 			s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: constant.NuggetHeatIncrease})
 		}
+
+		// TODO: this logic is weird, if this breaks energy is not added, maybe change the function name, confusing
+	case component.TypeBlue, component.TypeGreen, component.TypeRed:
+		// Color-based energy
+		s.applyColorEnergy(typeable.Type)
+
 	}
 
-	p := event.AcquireDeathRequest(0)
-	p.Entities = append(p.Entities, entity)
-	s.world.PushEvent(event.EventRequestDeath, p)
+	// Silent Death
+	event.EmitDeathOne(s.res.Events.Queue, entity, 0, s.res.Time.FrameNumber)
 
+	// Splash typing feedback
 	s.emitTypingFeedback(typeable.Type, typeable.Level, typedRune)
 	s.moveCursorRight()
 }
@@ -395,10 +401,8 @@ func (s *TypingSystem) handleLegacySequence(entity core.Entity, typedRune rune) 
 	// Color-based energy
 	s.applyColorEnergy(typeableType)
 
-	// Death request
-	p := event.AcquireDeathRequest(0)
-	p.Entities = append(p.Entities, entity)
-	s.world.PushEvent(event.EventRequestDeath, p)
+	// Silent death
+	event.EmitDeathOne(s.res.Events.Queue, entity, 0, s.res.Time.FrameNumber)
 
 	// Visual feedback
 	s.emitTypingFeedback(typeableType, seq.Level, typedRune)

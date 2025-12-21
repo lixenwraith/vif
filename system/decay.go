@@ -17,12 +17,12 @@ type DecaySystem struct {
 	world *engine.World
 	res   engine.Resources
 
-	decayStore  *engine.Store[component.DecayComponent]
-	protStore   *engine.Store[component.ProtectionComponent]
-	deathStore  *engine.Store[component.DeathComponent]
-	nuggetStore *engine.Store[component.NuggetComponent]
-	charStore   *engine.Store[component.CharacterComponent]
-	seqStore    *engine.Store[component.SequenceComponent]
+	decayStore    *engine.Store[component.DecayComponent]
+	protStore     *engine.Store[component.ProtectionComponent]
+	deathStore    *engine.Store[component.DeathComponent]
+	nuggetStore   *engine.Store[component.NuggetComponent]
+	charStore     *engine.Store[component.CharacterComponent]
+	typeableStore *engine.Store[component.TypeableComponent]
 
 	// State
 	animating bool
@@ -39,12 +39,12 @@ func NewDecaySystem(world *engine.World) engine.System {
 		world: world,
 		res:   res,
 
-		decayStore:  engine.GetStore[component.DecayComponent](world),
-		protStore:   engine.GetStore[component.ProtectionComponent](world),
-		deathStore:  engine.GetStore[component.DeathComponent](world),
-		nuggetStore: engine.GetStore[component.NuggetComponent](world),
-		charStore:   engine.GetStore[component.CharacterComponent](world),
-		seqStore:    engine.GetStore[component.SequenceComponent](world),
+		decayStore:    engine.GetStore[component.DecayComponent](world),
+		protStore:     engine.GetStore[component.ProtectionComponent](world),
+		deathStore:    engine.GetStore[component.DeathComponent](world),
+		nuggetStore:   engine.GetStore[component.NuggetComponent](world),
+		charStore:     engine.GetStore[component.CharacterComponent](world),
+		typeableStore: engine.GetStore[component.TypeableComponent](world),
 
 		decayedThisFrame:   make(map[core.Entity]bool),
 		processedGridCells: make(map[int]bool),
@@ -254,9 +254,7 @@ func (s *DecaySystem) updateDecayEntities() {
 						Entity: targetEntity,
 					})
 					// TODO: death to inform system of entity of their deaths instead of spread out event? Easier to manage logic
-					p := event.AcquireDeathRequest(event.EventFlashRequest)
-					p.Entities = append(p.Entities, targetEntity)
-					s.world.PushEvent(event.EventRequestDeath, p)
+					event.EmitDeathOne(s.res.Events.Queue, targetEntity, event.EventFlashRequest, s.res.Time.FrameNumber)
 				} else {
 					s.applyDecayToCharacter(targetEntity)
 				}
@@ -296,7 +294,7 @@ func (s *DecaySystem) updateDecayEntities() {
 
 // applyDecayToCharacter applies decay logic to a single character entity
 func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
-	seq, ok := s.seqStore.Get(entity)
+	typeable, ok := s.typeableStore.Get(entity)
 	if !ok {
 		return
 	}
@@ -309,41 +307,46 @@ func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
 		}
 	}
 
-	// Apply decay logic
-	if seq.Level > component.LevelDark {
-		// Reduce level by 1 when not dark
-		seq.Level--
-		s.seqStore.Add(entity, seq)
+	// Get character component for renderer sync
+	char, hasChar := s.charStore.Get(entity)
 
-		// Update character semantic info (renderer resolves color)
-		if char, ok := s.charStore.Get(entity); ok {
-			char.SeqLevel = seq.Level
+	// Apply decay logic
+	if typeable.Level > component.LevelDark {
+		// Reduce level by 1
+		typeable.Level--
+		s.typeableStore.Add(entity, typeable)
+
+		// Sync renderer
+		if hasChar {
+			char.SeqLevel = typeable.Level
 			s.charStore.Add(entity, char)
 		}
 	} else {
-		// Dark level decay color chain: Blue → Green → Red → destroy
-		if seq.Type == component.SequenceBlue {
-			seq.Type = component.SequenceGreen
-			seq.Level = component.LevelBright
-			s.seqStore.Add(entity, seq)
-			if char, ok := s.charStore.Get(entity); ok {
-				char.SeqType = seq.Type
-				char.SeqLevel = seq.Level
+		// Dark level: type chain Blue→Green→Red→destroy
+		switch typeable.Type {
+		case component.TypeBlue:
+			typeable.Type = component.TypeGreen
+			typeable.Level = component.LevelBright
+			s.typeableStore.Add(entity, typeable)
+			if hasChar {
+				char.SeqType = component.SequenceGreen
+				char.SeqLevel = component.LevelBright
 				s.charStore.Add(entity, char)
 			}
-		} else if seq.Type == component.SequenceGreen {
-			seq.Type = component.SequenceRed
-			seq.Level = component.LevelBright
-			s.seqStore.Add(entity, seq)
-			if char, ok := s.charStore.Get(entity); ok {
-				char.SeqType = seq.Type
-				char.SeqLevel = seq.Level
+
+		case component.TypeGreen:
+			typeable.Type = component.TypeRed
+			typeable.Level = component.LevelBright
+			s.typeableStore.Add(entity, typeable)
+			if hasChar {
+				char.SeqType = component.SequenceRed
+				char.SeqLevel = component.LevelBright
 				s.charStore.Add(entity, char)
 			}
-		} else {
-			p := event.AcquireDeathRequest(event.EventFlashRequest)
-			p.Entities = append(p.Entities, entity)
-			s.world.PushEvent(event.EventRequestDeath, p)
+
+		default:
+			// Red or other: destroy
+			s.world.PushEvent(event.EventDeathOne, entity)
 		}
 	}
 }

@@ -195,15 +195,13 @@ func (w *World) Clear() {
 
 // PushEvent emits a game event using world resources
 func (w *World) PushEvent(eventType event.EventType, payload any) {
-	eqRes, eqOk := GetResource[*EventQueueResource](w.Resources)
-	stateRes, stateOk := GetResource[*GameStateResource](w.Resources)
-	if !eqOk || !stateOk {
-		return
-	}
+	// TODO: cache these
+	eqRes := MustGetResource[*EventQueueResource](w.Resources)
+	timeRes := MustGetResource[*TimeResource](w.Resources)
 	event := event.GameEvent{
 		Type:    eventType,
 		Payload: payload,
-		Frame:   stateRes.State.GetFrameNumber(),
+		Frame:   timeRes.FrameNumber,
 	}
 	eqRes.Queue.Push(event)
 }
