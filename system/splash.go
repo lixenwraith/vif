@@ -14,8 +14,7 @@ type SplashSystem struct {
 	res   engine.Resources
 
 	splashStore *engine.Store[component.SplashComponent]
-	goldStore   *engine.Store[component.GoldSequenceComponent]
-	seqStore    *engine.Store[component.SequenceComponent]
+	headerStore *engine.Store[component.CompositeHeaderComponent]
 }
 
 // NewSplashSystem creates a new splash system
@@ -25,8 +24,7 @@ func NewSplashSystem(world *engine.World) engine.System {
 		res:   engine.GetResources(world),
 
 		splashStore: engine.GetStore[component.SplashComponent](world),
-		goldStore:   engine.GetStore[component.GoldSequenceComponent](world),
-		seqStore:    engine.GetStore[component.SequenceComponent](world),
+		headerStore: engine.GetStore[component.CompositeHeaderComponent](world),
 	}
 }
 
@@ -264,31 +262,21 @@ func (s *SplashSystem) calculateSmartLayout(cursorX, cursorY, charCount int) (in
 	}
 	scores[cursorQ] -= constant.SplashCursorPenalty
 
-	// 2. Gold Sequence Penalty (-500)
-	// Iterate active gold sequences
-	goldEntities := s.goldStore.All()
-	for _, e := range goldEntities {
-		gs, ok := s.goldStore.Get(e)
-		if !ok || !gs.Active {
+	// 2. Gold Sequence Penalty
+	// Iterate composites with BehaviorGold
+	anchors := s.headerStore.All()
+	for _, anchor := range anchors {
+		header, ok := s.headerStore.Get(anchor)
+		if !ok || header.BehaviorID != component.BehaviorGold {
 			continue
 		}
 
-		// Get position of start of sequence (we need to query positions of member entities?)
-		// Since GoldSequenceComponent doesn't store position, we rely on the fact that
-		// GoldSystem creates entities
-		// Optimization: Check the "Restricted Zone" via stored components?
-		// We don't have a direct "Box" component
-		// However, we can scan `world.Positions` for entities with `SequenceID`
-		// This is O(N) where N is total entities. Fast enough for 200 entities
-		// Better: We iterate `s.seqStore` which is smaller
-
-		seqEntities := s.seqStore.All()
-		for _, se := range seqEntities {
-			seq, ok := s.seqStore.Get(se)
-			if !ok || seq.ID != gs.SequenceID {
+		// Check each living member's position
+		for _, m := range header.Members {
+			if m.Entity == 0 {
 				continue
 			}
-			pos, ok := s.world.Positions.Get(se)
+			pos, ok := s.world.Positions.Get(m.Entity)
 			if !ok {
 				continue
 			}
@@ -301,8 +289,7 @@ func (s *SplashSystem) calculateSmartLayout(cursorX, cursorY, charCount int) (in
 			if pos.Y >= height/2 {
 				goldQ |= 2
 			}
-			// Apply soft penalty (cumulative, but clamped or just flag)
-			// Deduct per char, effectively vetoing the quadrant
+			// Apply soft penalty (cumulative, effectively vetoes the quadrant)
 			scores[goldQ] -= constant.SplashGoldSequencePenalty
 		}
 	}

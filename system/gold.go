@@ -21,8 +21,6 @@ type GoldSystem struct {
 	res   engine.Resources
 
 	// Cached stores (resolved once at construction)
-	// goldStore *engine.Store[component.GoldSequenceComponent]
-	// seqStore  *engine.Store[component.SequenceComponent]
 	headerStore   *engine.Store[component.CompositeHeaderComponent]
 	memberStore   *engine.Store[component.MemberComponent]
 	typeableStore *engine.Store[component.TypeableComponent]

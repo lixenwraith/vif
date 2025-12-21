@@ -104,21 +104,261 @@ func (s *TypingSystem) handleTyping(cursorX, cursorY int, typedRune rune) {
 		return
 	}
 
-	// // EnergySystem still handles SequenceComponent entities during migration
-	// s.world.PushEvent(event.EventCharacterTyped, &event.CharacterTypedPayload{
-	// 	Char: typedRune,
-	// 	X:    cursorX,
-	// 	Y:    cursorY,
-	// })
-
 	s.emitTypingError()
 }
 
-// handleLegacySequence processes legacy SequenceComponent entities
-// Migrated from EnergySystem.handleCharacterTyping
-func (s *TypingSystem) handleLegacySequence(entity core.Entity, typedRune rune) {
+// === UNIFIED REWARD HELPERS ===
+
+// applyUniversalRewards handles boost activation/extension and heat gain for any correct typing
+func (s *TypingSystem) applyUniversalRewards() {
 	cursorEntity := s.res.Cursor.Entity
 
+	// Check current boost state BEFORE pushing events
+	boost, ok := s.boostStore.Get(cursorEntity)
+	isBoostActive := ok && boost.Active
+
+	// Boost: activate or extend
+	if isBoostActive {
+		s.world.PushEvent(event.EventBoostExtend, &event.BoostExtendPayload{
+			Duration: constant.BoostExtensionDuration,
+		})
+	} else {
+		s.world.PushEvent(event.EventBoostActivate, &event.BoostActivatePayload{
+			Duration: constant.BoostBaseDuration,
+		})
+	}
+
+	// Heat: +2 with active boost, +1 without
+	// TODO: const
+	heatGain := 1
+	if isBoostActive {
+		heatGain = 2
+	}
+	s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: heatGain})
+}
+
+// applyColorEnergy handles energy based on color type (Blue/Green/Red only)
+func (s *TypingSystem) applyColorEnergy(colorType component.TypeableType) {
+	heat := s.getHeat()
+	switch colorType {
+	case component.TypeBlue, component.TypeGreen:
+		s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{Delta: heat})
+	case component.TypeRed:
+		s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{Delta: -heat})
+		// Gold, Nugget: no energy from typing
+	}
+}
+
+// emitTypingFeedback sends visual feedback (splash + blink)
+func (s *TypingSystem) emitTypingFeedback(typeableType component.TypeableType, level component.TypeableLevel, char rune) {
+	cursorPos, _ := s.world.Positions.Get(s.res.Cursor.Entity)
+
+	var splashColor component.SplashColor
+	var blinkType uint32
+
+	switch typeableType {
+	case component.TypeGreen:
+		splashColor = component.SplashColorGreen
+		blinkType = 2
+	case component.TypeBlue:
+		splashColor = component.SplashColorBlue
+		blinkType = 1
+	case component.TypeRed:
+		splashColor = component.SplashColorRed
+		blinkType = 3
+	case component.TypeGold:
+		splashColor = component.SplashColorGold
+		blinkType = 4
+	case component.TypeNugget:
+		splashColor = component.SplashColorNugget
+		blinkType = 0
+	default:
+		splashColor = component.SplashColorNormal
+		blinkType = 0
+	}
+
+	var blinkLevel uint32
+	switch level {
+	case component.LevelDark:
+		blinkLevel = 0
+	case component.LevelNormal:
+		blinkLevel = 1
+	case component.LevelBright:
+		blinkLevel = 2
+	}
+
+	s.world.PushEvent(event.EventEnergyBlinkStart, &event.EnergyBlinkPayload{
+		Type:  blinkType,
+		Level: blinkLevel,
+	})
+
+	s.world.PushEvent(event.EventSplashRequest, &event.SplashRequestPayload{
+		Text:    string(char),
+		Color:   splashColor,
+		OriginX: cursorPos.X,
+		OriginY: cursorPos.Y,
+	})
+}
+
+func (s *TypingSystem) emitTypingError() {
+	cursorEntity := s.res.Cursor.Entity
+
+	// Set cursor error flash
+	if cursor, ok := s.cursorStore.Get(cursorEntity); ok {
+		cursor.ErrorFlashRemaining = constant.ErrorBlinkTimeout
+		s.cursorStore.Add(cursorEntity, cursor)
+	}
+
+	// Reset heat and boost
+	s.world.PushEvent(event.EventHeatSet, &event.HeatSetPayload{Value: 0})
+	s.world.PushEvent(event.EventBoostDeactivate, nil)
+	s.world.PushEvent(event.EventEnergyBlinkStart, &event.EnergyBlinkPayload{Type: 0, Level: 0})
+	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
+		SoundType: core.SoundError,
+	})
+}
+
+func (s *TypingSystem) moveCursorRight() {
+	cursorEntity := s.res.Cursor.Entity
+	config := s.res.Config
+
+	if cursorPos, ok := s.world.Positions.Get(cursorEntity); ok && cursorPos.X < config.GameWidth-1 {
+		cursorPos.X++
+		s.world.Positions.Add(cursorEntity, cursorPos)
+	}
+}
+
+// getHeat reads current heat value from cursor's HeatComponent
+func (s *TypingSystem) getHeat() int {
+	cursorEntity := s.res.Cursor.Entity
+	if hc, ok := s.heatStore.Get(cursorEntity); ok {
+		return int(hc.Current.Load())
+	}
+	return 0
+}
+
+// === HANDLER PATHS ===
+
+// handleCompositeMember processes typing for composite member entities
+func (s *TypingSystem) handleCompositeMember(entity core.Entity, anchorID core.Entity, typedRune rune) {
+	// Get typeable or fall back to character component
+	var targetChar rune
+	var typeableType component.TypeableType
+	var typeableLevel component.TypeableLevel
+
+	if typeable, ok := s.typeableStore.Get(entity); ok {
+		targetChar = typeable.Char
+		typeableType = typeable.Type
+		typeableLevel = typeable.Level
+	} else if char, ok := s.charStore.Get(entity); ok {
+		// Fallback to CharacterComponent for migration period
+		targetChar = char.Rune
+		switch char.SeqType {
+		case component.SequenceGold:
+			typeableType = component.TypeGold
+		case component.SequenceBlue:
+			typeableType = component.TypeBlue
+		case component.SequenceGreen:
+			typeableType = component.TypeGreen
+		case component.SequenceRed:
+			typeableType = component.TypeRed
+		}
+		typeableLevel = char.SeqLevel
+	} else {
+		s.emitTypingError()
+		return
+	}
+
+	// Character match check
+	if targetChar != typedRune {
+		s.emitTypingError()
+		return
+	}
+
+	// Identify composite behavior for reward logic
+	header, ok := s.headerStore.Get(anchorID)
+	if !ok {
+		s.emitTypingError()
+		return
+	}
+
+	// Validate composite typing order
+	if !s.validateTypingOrder(entity, &header) {
+		s.emitTypingError()
+		return
+	}
+
+	// Universal rewards (boost + heat)
+	s.applyUniversalRewards()
+
+	// Color-based energy (only Blue/Green/Red for now)
+	if header.BehaviorID != component.BehaviorGold {
+		s.applyColorEnergy(typeableType)
+	}
+
+	// Visual feedback
+	s.emitTypingFeedback(typeableType, typeableLevel, typedRune)
+
+	// Signal composite system
+	remaining := 0
+	for _, m := range header.Members {
+		if m.Entity != 0 && m.Entity != entity {
+			remaining++
+		}
+	}
+	s.world.PushEvent(event.EventMemberTyped, &event.MemberTypedPayload{
+		AnchorID:       anchorID,
+		MemberEntity:   entity,
+		Char:           typedRune,
+		RemainingCount: remaining,
+	})
+
+	s.moveCursorRight()
+}
+
+// handleTypeable processes standalone TypeableComponent entities (nuggets)
+func (s *TypingSystem) handleTypeable(entity core.Entity, typeable component.TypeableComponent, typedRune rune) {
+	cursorEntity := s.res.Cursor.Entity
+
+	if typeable.Char != typedRune {
+		s.emitTypingError()
+		return
+	}
+
+	// Universal rewards
+	s.applyUniversalRewards()
+
+	// Emit appropriate event based on type
+	switch typeable.Type {
+	case component.TypeNugget:
+		s.world.PushEvent(event.EventNuggetCollected, &event.NuggetCollectedPayload{
+			Entity: entity,
+		})
+
+		// Nugget bonus: cleaners at max heat, else up to +10 heat
+		if s.getHeat() >= constant.MaxHeat {
+			cursorPos, _ := s.world.Positions.Get(cursorEntity)
+			// Trigger directional cleaners if heat is already at maximum
+			s.world.PushEvent(event.EventDirectionalCleanerRequest, &event.DirectionalCleanerPayload{
+				OriginX: cursorPos.X,
+				OriginY: cursorPos.Y,
+			})
+		} else {
+			// Provide heat reward only when below maximum
+			s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: constant.NuggetHeatIncrease})
+		}
+	}
+
+	p := event.AcquireDeathRequest(0)
+	p.Entities = append(p.Entities, entity)
+	s.world.PushEvent(event.EventRequestDeath, p)
+
+	s.emitTypingFeedback(typeable.Type, typeable.Level, typedRune)
+	s.moveCursorRight()
+}
+
+// handleLegacySequence processes legacy SequenceComponent entities (from SpawnSystem)
+func (s *TypingSystem) handleLegacySequence(entity core.Entity, typedRune rune) {
 	char, ok := s.charStore.Get(entity)
 	if !ok {
 		s.emitTypingError()
@@ -131,207 +371,41 @@ func (s *TypingSystem) handleLegacySequence(entity core.Entity, typedRune rune) 
 		return
 	}
 
-	// Character match check
 	if char.Rune != typedRune {
 		s.emitTypingError()
 		return
 	}
 
-	// Universal: ALL correct typing adds heat
-	heatGain := 1
+	// Universal rewards
+	s.applyUniversalRewards()
 
-	// Check boost state for double heat gain
-	boost, ok := s.boostStore.Get(cursorEntity)
-	if ok && boost.Active {
-		heatGain = 2 // TODO: const
-		s.world.PushEvent(event.EventBoostExtend, &event.BoostExtendPayload{
-			Duration: constant.BoostExtensionDuration,
-		})
-	} else {
-		s.world.PushEvent(event.EventBoostActivate, &event.BoostActivatePayload{
-			Duration: constant.BoostBaseDuration,
-		})
-	}
-	s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: heatGain})
-
-	// Energy: positive for Blue/Green, negative for Red
-	points := s.getHeat()
-	if seq.Type == component.SequenceRed {
-		points = -points
-	}
-	s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{Delta: points})
-
-	// Energy blink based on sequence type and level
-	var typeCode uint32
+	// Map SequenceType to TypeableType for unified energy handling
+	var typeableType component.TypeableType
 	switch seq.Type {
 	case component.SequenceBlue:
-		typeCode = 1
+		typeableType = component.TypeBlue
 	case component.SequenceGreen:
-		typeCode = 2
+		typeableType = component.TypeGreen
 	case component.SequenceRed:
-		typeCode = 3
-	default:
-		typeCode = 0
+		typeableType = component.TypeRed
+	case component.SequenceGold:
+		typeableType = component.TypeGold
 	}
-	var levelCode uint32
-	switch seq.Level {
-	case component.LevelDark:
-		levelCode = 0
-	case component.LevelNormal:
-		levelCode = 1
-	case component.LevelBright:
-		levelCode = 2
-	}
-	s.world.PushEvent(event.EventEnergyBlinkStart, &event.EnergyBlinkPayload{
-		Type:  typeCode,
-		Level: levelCode,
-	})
 
+	// Color-based energy
+	s.applyColorEnergy(typeableType)
+
+	// Death request
 	p := event.AcquireDeathRequest(0)
 	p.Entities = append(p.Entities, entity)
 	s.world.PushEvent(event.EventRequestDeath, p)
 
-	// Splash feedback
-	var splashColor component.SplashColor
-	switch seq.Type {
-	case component.SequenceGreen:
-		splashColor = component.SplashColorGreen
-	case component.SequenceBlue:
-		splashColor = component.SplashColorBlue
-	case component.SequenceRed:
-		splashColor = component.SplashColorRed
-	default:
-		splashColor = component.SplashColorNormal
-	}
-	cursorPos, ok := s.world.Positions.Get(cursorEntity)
-	if ok {
-		s.world.PushEvent(event.EventSplashRequest, &event.SplashRequestPayload{
-			Text:    string(typedRune),
-			Color:   splashColor,
-			OriginX: cursorPos.X,
-			OriginY: cursorPos.Y,
-		})
-	}
-
-	// Move cursor right
+	// Visual feedback
+	s.emitTypingFeedback(typeableType, seq.Level, typedRune)
 	s.moveCursorRight()
 }
 
-// getHeat reads current heat value from cursor's HeatComponent
-func (s *TypingSystem) getHeat() int {
-	cursorEntity := s.res.Cursor.Entity
-	if hc, ok := s.heatStore.Get(cursorEntity); ok {
-		return int(hc.Current.Load())
-	}
-	return 0
-}
-
-// handleCompositeMemberTyping processes typing for composite member entities
-// TODO: are we under lock and can we not pass cursor location? any inaccuracy risk? we have cursor cached and pass it around...
-func (s *TypingSystem) handleCompositeMember(entity core.Entity, anchorID core.Entity, typedRune rune) {
-	cursorEntity := s.res.Cursor.Entity
-
-	// Get typeable or fall back to character component
-	var targetChar rune
-	var typeableType component.TypeableType
-	var typeableLevel component.TypeableLevel
-
-	if typeable, ok := s.typeableStore.Get(entity); ok {
-		targetChar = typeable.Char
-		typeableType = typeable.Type
-		typeableLevel = typeable.Level
-	} else {
-		// Fallback to CharacterComponent for migration period
-		char, ok := s.charStore.Get(entity)
-		if !ok {
-			s.emitTypingError()
-			return
-		}
-		targetChar = char.Rune
-		// Derive type from CharacterComponent.SeqType
-		switch char.SeqType {
-		case component.SequenceGold:
-			typeableType = component.TypeGold
-		case component.SequenceBlue:
-			typeableType = component.TypeBlue
-		case component.SequenceGreen:
-			typeableType = component.TypeGreen
-		case component.SequenceRed:
-			typeableType = component.TypeRed
-		}
-		typeableLevel = char.SeqLevel
-	}
-
-	// Character match check
-	if targetChar != typedRune {
-		s.emitTypingError()
-		return
-	}
-
-	// 1. Identify behavior for reward logic
-	header, ok := s.headerStore.Get(anchorID)
-	if !ok {
-		s.emitTypingError()
-		return
-	}
-
-	// 2. Validate typing order
-	if !s.validateTypingOrder(entity, &header) {
-		s.emitTypingError()
-		return
-	}
-
-	// 3. Visual Feedback (Shield Pulse / Blink)
-	// Even Gold gives a pulse via BlinkType, but no heat/energy delta here
-	s.emitTypingSuccess(typeableType, typeableLevel, typedRune)
-
-	// 4. Rewards: Non-Gold members give immediate reward
-
-	// Universal: ALL correct typing adds heat
-	heatGain := 1
-
-	// Boost and heat logic
-	boost, ok := s.boostStore.Get(cursorEntity)
-	if ok && boost.Active {
-		heatGain = 2 // TODO: const
-		s.world.PushEvent(event.EventBoostExtend, &event.BoostExtendPayload{
-			Duration: constant.BoostExtensionDuration,
-		})
-	} else {
-		s.world.PushEvent(event.EventBoostActivate, &event.BoostActivatePayload{
-			Duration: constant.BoostBaseDuration,
-		})
-	}
-	s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: heatGain})
-
-	// Energy and heat logic for non-Gold composites
-	if header.BehaviorID != component.BehaviorGold {
-		points := s.getHeat()
-		if typeableType == component.TypeRed {
-			points = -points
-		}
-		s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{Delta: points})
-	}
-
-	// 5. Signal Composite Hit
-	remaining := 0
-	for _, m := range header.Members {
-		if m.Entity != 0 && m.Entity != entity {
-			remaining++
-		}
-	}
-
-	// Emit member typed event for CompositeSystem routing
-	s.world.PushEvent(event.EventMemberTyped, &event.MemberTypedPayload{
-		AnchorID:       anchorID,
-		MemberEntity:   entity,
-		Char:           typedRune,
-		RemainingCount: remaining,
-	})
-
-	// Move cursor right
-	s.moveCursorRight()
-}
+// === TYPING ORDER VALIDATION ===
 
 // validateTypingOrder checks if the entity is the next valid target based on BehaviorID heuristic
 func (s *TypingSystem) validateTypingOrder(entity core.Entity, header *component.CompositeHeaderComponent) bool {
@@ -444,176 +518,4 @@ func (s *TypingSystem) validateBossOrder(entity core.Entity, header *component.C
 	}
 
 	return leftmost == entity
-}
-
-// handleTypeableTyping processes standalone TypeableComponent entities (nuggets migrated)
-func (s *TypingSystem) handleTypeable(entity core.Entity, typeable component.TypeableComponent, typedRune rune) {
-	cursorEntity := s.res.Cursor.Entity
-
-	if typeable.Char != typedRune {
-		s.emitTypingError()
-		return
-	}
-
-	// Emit appropriate event based on type
-	switch typeable.Type {
-	case component.TypeNugget:
-		s.world.PushEvent(event.EventNuggetCollected, &event.NuggetCollectedPayload{
-			Entity: entity,
-		})
-
-		// Universal: ALL correct typing adds heat
-		heatGain := 1
-
-		// Check boost state for double heat gain
-		boost, ok := s.boostStore.Get(cursorEntity)
-		if ok && boost.Active {
-			heatGain = 2 // TODO: const
-			s.world.PushEvent(event.EventBoostExtend, &event.BoostExtendPayload{
-				Duration: constant.BoostExtensionDuration,
-			})
-		} else {
-			s.world.PushEvent(event.EventBoostActivate, &event.BoostActivatePayload{
-				Duration: constant.BoostBaseDuration,
-			})
-		}
-		s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: heatGain})
-
-		// Branching reward logic based on current heat
-		// TODO: this is Nugget; tighten after the legacy migration
-		currentHeat := s.getHeat()
-		if currentHeat >= constant.MaxHeat {
-			cursorPos, ok := s.world.Positions.Get(cursorEntity)
-			if ok {
-				// Trigger directional cleaners ONLY if heat is already at maximum
-				s.world.PushEvent(event.EventDirectionalCleanerRequest, &event.DirectionalCleanerPayload{
-					OriginX: cursorPos.X,
-					OriginY: cursorPos.Y,
-				})
-			}
-		} else {
-			// Provide heat reward only when below maximum
-			s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: constant.NuggetHeatIncrease})
-		}
-		p := event.AcquireDeathRequest(0)
-		p.Entities = append(p.Entities, entity)
-		s.world.PushEvent(event.EventRequestDeath, p)
-
-	default:
-		p := event.AcquireDeathRequest(0)
-		p.Entities = append(p.Entities, entity)
-		s.world.PushEvent(event.EventRequestDeath, p)
-	}
-
-	s.moveCursorRight()
-	s.emitTypingSuccess(typeable.Type, typeable.Level, typedRune)
-}
-
-// handleNuggetTyping processes legacy nugget typing
-func (s *TypingSystem) handleNuggetTyping(entity core.Entity, entityChar rune, typedRune rune, cursorX, cursorY int) {
-	if entityChar != typedRune {
-		s.emitTypingError()
-		return
-	}
-
-	s.world.PushEvent(event.EventNuggetCollected, &event.NuggetCollectedPayload{
-		Entity: entity,
-	})
-	// TODO: doing this seems inefficient, why not pool them at target, or let the pool manage append centrally
-	p := event.AcquireDeathRequest(0)
-	p.Entities = append(p.Entities, entity)
-	s.world.PushEvent(event.EventRequestDeath, p)
-
-	s.moveCursorRight()
-
-	// Nugget splash
-	s.world.PushEvent(event.EventSplashRequest, &event.SplashRequestPayload{
-		Text:    string(typedRune),
-		Color:   component.SplashColorNugget,
-		OriginX: cursorX,
-		OriginY: cursorY,
-	})
-}
-
-func (s *TypingSystem) emitTypingError() {
-	cursorEntity := s.res.Cursor.Entity
-
-	// Set cursor error flash
-	cursor, ok := s.cursorStore.Get(cursorEntity)
-	if ok {
-		cursor.ErrorFlashRemaining = constant.ErrorBlinkTimeout
-		s.cursorStore.Add(cursorEntity, cursor)
-	}
-
-	// Reset heat and boost
-	s.world.PushEvent(event.EventHeatSet, &event.HeatSetPayload{Value: 0})
-	s.world.PushEvent(event.EventBoostDeactivate, nil)
-	s.world.PushEvent(event.EventEnergyBlinkStart, &event.EnergyBlinkPayload{Type: 0, Level: 0})
-	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
-		SoundType: core.SoundError,
-	})
-}
-
-func (s *TypingSystem) emitTypingSuccess(seqType component.TypeableType, level component.TypeableLevel, char rune) {
-	cursorEntity := s.res.Cursor.Entity
-	// Map TypeableType to splash color
-	var splashColor component.SplashColor
-	var blinkType uint32
-
-	switch seqType {
-	case component.TypeGreen:
-		splashColor = component.SplashColorGreen
-		blinkType = 2
-	case component.TypeBlue:
-		splashColor = component.SplashColorBlue
-		blinkType = 1
-	case component.TypeRed:
-		splashColor = component.SplashColorRed
-		blinkType = 3
-	case component.TypeGold:
-		splashColor = component.SplashColorGold
-		blinkType = 4
-	case component.TypeNugget:
-		splashColor = component.SplashColorNugget
-		blinkType = 0
-	default:
-		splashColor = component.SplashColorNormal
-		blinkType = 0
-	}
-
-	var blinkLevel uint32
-	switch level {
-	case component.LevelDark:
-		blinkLevel = 0
-	case component.LevelNormal:
-		blinkLevel = 1
-	case component.LevelBright:
-		blinkLevel = 2
-	}
-
-	s.world.PushEvent(event.EventEnergyBlinkStart, &event.EnergyBlinkPayload{
-		Type:  blinkType,
-		Level: blinkLevel,
-	})
-
-	cursorPos, ok := s.world.Positions.Get(cursorEntity)
-	if ok {
-		s.world.PushEvent(event.EventSplashRequest, &event.SplashRequestPayload{
-			Text:    string(char),
-			Color:   splashColor,
-			OriginX: cursorPos.X,
-			OriginY: cursorPos.Y,
-		})
-	}
-}
-
-func (s *TypingSystem) moveCursorRight() {
-	cursorEntity := s.res.Cursor.Entity
-	config := s.res.Config
-
-	cursorPos, ok := s.world.Positions.Get(cursorEntity)
-	if ok && cursorPos.X < config.GameWidth-1 {
-		cursorPos.X++
-		s.world.Positions.Add(cursorEntity, cursorPos)
-	}
 }

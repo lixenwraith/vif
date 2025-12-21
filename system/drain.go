@@ -789,15 +789,6 @@ func (s *DrainSystem) handleCollisionAtPosition(entity core.Entity) {
 		return
 	}
 
-	// TODO: remove with the legacy sequences
-	// Legacy: Check SequenceComponent for old gold entities
-	if seq, ok := s.seqStore.Get(entity); ok {
-		if seq.Type == component.SequenceGold {
-			s.handleGoldSequenceCollision(seq.ID)
-			return
-		}
-	}
-
 	// Check if it's a nugget, destroy and clean up the ID
 	if s.nuggetStore.Has(entity) {
 		s.handleNuggetCollision(entity)
@@ -834,34 +825,6 @@ func (s *DrainSystem) handleGoldCompositeCollision(anchorID core.Entity, header 
 	s.protStore.Remove(anchorID)
 	s.headerStore.Remove(anchorID)
 	s.world.DestroyEntity(anchorID)
-}
-
-// handleGoldSequenceCollision removes all gold sequence entities and emits destruction event
-func (s *DrainSystem) handleGoldSequenceCollision(sequenceID int) {
-	// Emit event BEFORE destroying entities - GoldSystem validates if ID matches
-	s.world.PushEvent(event.EventGoldDestroyed, &event.GoldCompletionPayload{
-		SequenceID: sequenceID,
-	})
-
-	// Find and destroy all gold sequence entities with this ID
-	goldSequenceEntities := s.seqStore.All()
-	for _, goldSequenceEntity := range goldSequenceEntities {
-		seq, ok := s.seqStore.Get(goldSequenceEntity)
-		if !ok {
-			continue
-		}
-
-		if seq.Type == component.SequenceGold && seq.ID == sequenceID {
-			if pos, ok := s.world.Positions.Get(goldSequenceEntity); ok {
-				if char, ok := s.charStore.Get(goldSequenceEntity); ok {
-					s.world.PushEvent(event.EventFlashRequest, &event.FlashRequestPayload{
-						X: pos.X, Y: pos.Y, Char: char.Rune,
-					})
-				}
-			}
-			s.world.DestroyEntity(goldSequenceEntity)
-		}
-	}
 }
 
 // handleNuggetCollision destroys the nugget entity and emits destruction event
