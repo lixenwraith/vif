@@ -20,8 +20,8 @@ import (
 
 // ColorLevelKey represents a unique color+level combination
 type ColorLevelKey struct {
-	Type  component.SequenceType
-	Level component.SequenceLevel
+	Type  component.CharacterType
+	Level component.CharacterLevel
 }
 
 // ColorCensus holds entity counts for each color/level combination
@@ -78,7 +78,6 @@ type SpawnSystem struct {
 	world *engine.World
 	res   engine.Resources
 
-	seqStore      *engine.Store[component.SequenceComponent]
 	charStore     *engine.Store[component.CharacterComponent]
 	typeableStore *engine.Store[component.TypeableComponent]
 
@@ -107,7 +106,6 @@ func NewSpawnSystem(world *engine.World) engine.System {
 		world: world,
 		res:   res,
 
-		seqStore:      engine.GetStore[component.SequenceComponent](world),
 		charStore:     engine.GetStore[component.CharacterComponent](world),
 		typeableStore: engine.GetStore[component.TypeableComponent](world),
 
@@ -272,22 +270,22 @@ func (s *SpawnSystem) hasBracesInBlock(lines []string) bool {
 	return false
 }
 
-// runCensus iterates all sequence entities and counts colors
+// runCensus iterates all typeable entities and counts colors
 // Called once per spawn check, O(n) where n ≈ 200 max entities
 func (s *SpawnSystem) runCensus() ColorCensus {
 	var census ColorCensus
 
-	entities := s.seqStore.All()
+	entities := s.typeableStore.All()
 	for _, entity := range entities {
-		seq, ok := s.seqStore.Get(entity)
+		typeable, ok := s.typeableStore.Get(entity)
 		if !ok {
 			continue
 		}
 
-		// Only count Blue and Green (Red and Gold excluded from 6-color limit)
-		switch seq.Type {
-		case component.SequenceBlue:
-			switch seq.Level {
+		// Only count Blue and Green (Red, Gold, Nugget excluded from 6-color limit)
+		switch typeable.Type {
+		case component.TypeBlue:
+			switch typeable.Level {
 			case component.LevelBright:
 				census.BlueBright++
 			case component.LevelNormal:
@@ -295,8 +293,8 @@ func (s *SpawnSystem) runCensus() ColorCensus {
 			case component.LevelDark:
 				census.BlueDark++
 			}
-		case component.SequenceGreen:
-			switch seq.Level {
+		case component.TypeGreen:
+			switch typeable.Level {
 			case component.LevelBright:
 				census.GreenBright++
 			case component.LevelNormal:
@@ -304,7 +302,6 @@ func (s *SpawnSystem) runCensus() ColorCensus {
 			case component.LevelDark:
 				census.GreenDark++
 			}
-			// SequenceRed, SequenceGold: intentionally not counted
 		}
 	}
 
@@ -317,48 +314,48 @@ func (s *SpawnSystem) getAvailableColorsFromCensus(census ColorCensus) []ColorLe
 
 	if census.BlueBright == 0 {
 		available = append(available, ColorLevelKey{
-			Type: component.SequenceBlue, Level: component.LevelBright,
+			Type: component.CharacterBlue, Level: component.LevelBright,
 		})
 	}
 	if census.BlueNormal == 0 {
 		available = append(available, ColorLevelKey{
-			Type: component.SequenceBlue, Level: component.LevelNormal,
+			Type: component.CharacterBlue, Level: component.LevelNormal,
 		})
 	}
 	if census.BlueDark == 0 {
 		available = append(available, ColorLevelKey{
-			Type: component.SequenceBlue, Level: component.LevelDark,
+			Type: component.CharacterBlue, Level: component.LevelDark,
 		})
 	}
 	if census.GreenBright == 0 {
 		available = append(available, ColorLevelKey{
-			Type: component.SequenceGreen, Level: component.LevelBright,
+			Type: component.CharacterGreen, Level: component.LevelBright,
 		})
 	}
 	if census.GreenNormal == 0 {
 		available = append(available, ColorLevelKey{
-			Type: component.SequenceGreen, Level: component.LevelNormal,
+			Type: component.CharacterGreen, Level: component.LevelNormal,
 		})
 	}
 	if census.GreenDark == 0 {
 		available = append(available, ColorLevelKey{
-			Type: component.SequenceGreen, Level: component.LevelDark,
+			Type: component.CharacterGreen, Level: component.LevelDark,
 		})
 	}
 
 	return available
 }
 
-// typeableTypeFromSeq converts SequenceType to TypeableType
-func typeableTypeFromSeq(st component.SequenceType) component.TypeableType {
+// typeableTypeFromSeq converts CharacterType to TypeableType
+func typeableTypeFromSeq(st component.CharacterType) component.TypeableType {
 	switch st {
-	case component.SequenceBlue:
+	case component.CharacterBlue:
 		return component.TypeBlue
-	case component.SequenceGreen:
+	case component.CharacterGreen:
 		return component.TypeGreen
-	case component.SequenceRed:
+	case component.CharacterRed:
 		return component.TypeRed
-	case component.SequenceGold:
+	case component.CharacterGold:
 		return component.TypeGold
 	default:
 		return component.TypeGreen
@@ -401,7 +398,7 @@ func (s *SpawnSystem) spawnSequence() {
 
 // placeLine attempts to place a single line on the screen using generic stores
 // Lines exceeding GameWidth are cropped to fit available space
-func (s *SpawnSystem) placeLine(line string, seqType component.SequenceType, seqLevel component.SequenceLevel) bool {
+func (s *SpawnSystem) placeLine(line string, seqType component.CharacterType, seqLevel component.CharacterLevel) bool {
 	config := s.res.Config
 	cursorEntity := s.res.Cursor.Entity
 
@@ -463,16 +460,12 @@ func (s *SpawnSystem) placeLine(line string, seqType component.SequenceType, seq
 
 		if !hasOverlap {
 			// Valid position found, create entities
-			// Get sequence ID from GameState
-			// TODO: future migration to SystemStatus resource
-			sequenceID := s.res.State.State.IncrementID()
 
 			// Phase 1: Create entities and prepare components
 			type entityData struct {
 				entity core.Entity
 				pos    component.PositionComponent
 				char   component.CharacterComponent
-				seq    component.SequenceComponent
 			}
 
 			entities := make([]entityData, 0, lineLength)
@@ -497,12 +490,6 @@ func (s *SpawnSystem) placeLine(line string, seqType component.SequenceType, seq
 						SeqType:  seqType,
 						SeqLevel: seqLevel,
 					},
-					seq: component.SequenceComponent{
-						ID:    sequenceID,
-						Index: i,
-						Type:  seqType,
-						Level: seqLevel,
-					},
 				})
 			}
 
@@ -523,10 +510,6 @@ func (s *SpawnSystem) placeLine(line string, seqType component.SequenceType, seq
 			// Phase 3: Add other components (positions already committed)
 			for _, ed := range entities {
 				s.charStore.Add(ed.entity, ed.char)
-				// TODO: seqStore to be deprecated
-				s.seqStore.Add(ed.entity, ed.seq)
-
-				// TypeableComponent for decay system migration
 				s.typeableStore.Add(ed.entity, component.TypeableComponent{
 					Char:  ed.char.Rune,
 					Type:  typeableTypeFromSeq(seqType),

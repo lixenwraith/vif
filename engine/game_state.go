@@ -34,11 +34,6 @@ type GameState struct {
 	// APM History (mutex protected)
 	apmHistory      [60]uint64
 	apmHistoryIndex int
-
-	// Screen fill tracking (for adaptive spawn rate)
-	EntityCount   int     // Current number of entities on screen
-	MaxEntities   int     // Maximum allowed entities
-	ScreenDensity float64 // Percentage of screen filled (0.0-1.0)
 }
 
 // initState initializes all game state fields to starting values
@@ -58,9 +53,6 @@ func (gs *GameState) initState() {
 	// Mutex-protected fields (caller may or may not hold lock)
 	gs.apmHistory = [60]uint64{}
 	gs.apmHistoryIndex = 0
-
-	// Spawn state
-	gs.EntityCount = 0
 }
 
 // NewGameState creates a new centralized game state

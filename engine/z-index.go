@@ -14,9 +14,8 @@ type ZIndexResolver struct {
 	drains  *Store[component.DrainComponent]
 	decays  *Store[component.DecayComponent]
 	nuggets *Store[component.NuggetComponent]
-	// Cached for IsInteractable
+	// Cached for IsTypeable
 	chars    *Store[component.CharacterComponent]
-	seqs     *Store[component.SequenceComponent]
 	typeable *Store[component.TypeableComponent]
 }
 
@@ -30,7 +29,6 @@ func NewZIndexResolver(w *World) *ZIndexResolver {
 		decays:   GetStore[component.DecayComponent](w),
 		nuggets:  GetStore[component.NuggetComponent](w),
 		chars:    GetStore[component.CharacterComponent](w),
-		seqs:     GetStore[component.SequenceComponent](w),
 		typeable: GetStore[component.TypeableComponent](w),
 	}
 
@@ -60,15 +58,9 @@ func (z *ZIndexResolver) GetZIndex(e core.Entity) int {
 	return constant.ZIndexSpawnChar
 }
 
-// IsInteractable returns true if the entity is an interactable game element
-func (z *ZIndexResolver) IsInteractable(e core.Entity) bool {
-	if z.nuggets.Has(e) {
-		return true
-	}
-	if z.typeable.Has(e) {
-		return true
-	}
-	return z.chars.Has(e) && z.seqs.Has(e)
+// IsTypeable returns true if the entity is an interactable game element
+func (z *ZIndexResolver) IsTypeable(e core.Entity) bool {
+	return z.typeable.Has(e)
 }
 
 // SelectTopEntityFiltered returns the entity with highest z-index passing filter

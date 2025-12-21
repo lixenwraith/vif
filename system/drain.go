@@ -34,7 +34,6 @@ type DrainSystem struct {
 	protStore   *engine.Store[component.ProtectionComponent]
 	shieldStore *engine.Store[component.ShieldComponent]
 	heatStore   *engine.Store[component.HeatComponent]
-	seqStore    *engine.Store[component.SequenceComponent]
 	charStore   *engine.Store[component.CharacterComponent]
 	nuggetStore *engine.Store[component.NuggetComponent]
 	memberStore *engine.Store[component.MemberComponent]
@@ -61,7 +60,6 @@ func NewDrainSystem(world *engine.World) engine.System {
 		protStore:   engine.GetStore[component.ProtectionComponent](world),
 		shieldStore: engine.GetStore[component.ShieldComponent](world),
 		heatStore:   engine.GetStore[component.HeatComponent](world),
-		seqStore:    engine.GetStore[component.SequenceComponent](world),
 		charStore:   engine.GetStore[component.CharacterComponent](world),
 		nuggetStore: engine.GetStore[component.NuggetComponent](world),
 		memberStore: engine.GetStore[component.MemberComponent](world),

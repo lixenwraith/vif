@@ -202,7 +202,7 @@ func (s *EnergySystem) handleDeleteRequest(payload *event.DeleteRequestPayload) 
 
 	// Helper to check and mark entity for deletion
 	checkEntity := func(entity core.Entity) {
-		if resolver == nil || !resolver.IsInteractable(entity) {
+		if resolver == nil || !resolver.IsTypeable(entity) {
 			return
 		}
 

@@ -15,7 +15,7 @@ const (
 	ColorCleaner
 	ColorMaterialize
 	ColorFlash
-	// Sequence colors derived from SequenceType + SequenceLevel
+	// Sequence colors derived from CharacterType + CharacterLevel
 )
 
 // TextStyle represents semantic text styling

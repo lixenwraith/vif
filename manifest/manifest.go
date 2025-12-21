@@ -13,7 +13,6 @@ import (
 // Must be called before systems are created
 func RegisterComponents(w *engine.World) {
 	engine.RegisterComponent[component.CharacterComponent](w)
-	engine.RegisterComponent[component.SequenceComponent](w)
 	engine.RegisterComponent[component.FlashComponent](w)
 	engine.RegisterComponent[component.NuggetComponent](w)
 	engine.RegisterComponent[component.DrainComponent](w)

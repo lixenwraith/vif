@@ -329,7 +329,7 @@ func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
 			typeable.Level = component.LevelBright
 			s.typeableStore.Add(entity, typeable)
 			if hasChar {
-				char.SeqType = component.SequenceGreen
+				char.SeqType = component.CharacterGreen
 				char.SeqLevel = component.LevelBright
 				s.charStore.Add(entity, char)
 			}
@@ -339,7 +339,7 @@ func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
 			typeable.Level = component.LevelBright
 			s.typeableStore.Add(entity, typeable)
 			if hasChar {
-				char.SeqType = component.SequenceRed
+				char.SeqType = component.CharacterRed
 				char.SeqLevel = component.LevelBright
 				s.charStore.Add(entity, char)
 			}

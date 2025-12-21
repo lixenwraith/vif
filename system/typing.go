@@ -22,7 +22,6 @@ type TypingSystem struct {
 	cursorStore   *engine.Store[component.CursorComponent]
 	charStore     *engine.Store[component.CharacterComponent]
 	nuggetStore   *engine.Store[component.NuggetComponent]
-	seqStore      *engine.Store[component.SequenceComponent]
 	boostStore    *engine.Store[component.BoostComponent]
 	heatStore     *engine.Store[component.HeatComponent]
 }
@@ -39,7 +38,6 @@ func NewTypingSystem(world *engine.World) engine.System {
 		cursorStore:   engine.GetStore[component.CursorComponent](world),
 		charStore:     engine.GetStore[component.CharacterComponent](world),
 		nuggetStore:   engine.GetStore[component.NuggetComponent](world),
-		seqStore:      engine.GetStore[component.SequenceComponent](world),
 		boostStore:    engine.GetStore[component.BoostComponent](world),
 		heatStore:     engine.GetStore[component.HeatComponent](world),
 	}
@@ -77,7 +75,7 @@ func (s *TypingSystem) HandleEvent(ev event.GameEvent) {
 func (s *TypingSystem) handleTyping(cursorX, cursorY int, typedRune rune) {
 	// Find interactable entity at cursor position
 	entity := s.world.Positions.GetTopEntityFiltered(cursorX, cursorY, func(e core.Entity) bool {
-		return s.res.ZIndex.IsInteractable(e)
+		return s.res.ZIndex.IsTypeable(e)
 	})
 
 	if entity == 0 {
@@ -85,22 +83,15 @@ func (s *TypingSystem) handleTyping(cursorX, cursorY int, typedRune rune) {
 		return
 	}
 
-	// 1. Check if this is a composite member
+	// Check if this is a composite member
 	if member, ok := s.memberStore.Get(entity); ok {
 		s.handleCompositeMember(entity, member.AnchorID, typedRune)
 		return
 	}
 
-	// 2. Check for standalone TypeableComponent
+	// Check for standalone TypeableComponent
 	if typeable, ok := s.typeableStore.Get(entity); ok {
 		s.handleTypeable(entity, typeable, typedRune)
-		return
-	}
-
-	// 3. Legacy SequenceComponent path (SpawnSystem-created blocks)
-	// TODO: to be migrated/deprecated
-	if s.seqStore.Has(entity) {
-		s.handleLegacySequence(entity, typedRune)
 		return
 	}
 
@@ -254,13 +245,13 @@ func (s *TypingSystem) handleCompositeMember(entity core.Entity, anchorID core.E
 		// Fallback to CharacterComponent for migration period
 		targetChar = char.Rune
 		switch char.SeqType {
-		case component.SequenceGold:
+		case component.CharacterGold:
 			typeableType = component.TypeGold
-		case component.SequenceBlue:
+		case component.CharacterBlue:
 			typeableType = component.TypeBlue
-		case component.SequenceGreen:
+		case component.CharacterGreen:
 			typeableType = component.TypeGreen
-		case component.SequenceRed:
+		case component.CharacterRed:
 			typeableType = component.TypeRed
 		}
 		typeableLevel = char.SeqLevel
@@ -360,52 +351,6 @@ func (s *TypingSystem) handleTypeable(entity core.Entity, typeable component.Typ
 
 	// Splash typing feedback
 	s.emitTypingFeedback(typeable.Type, typeable.Level, typedRune)
-	s.moveCursorRight()
-}
-
-// handleLegacySequence processes legacy SequenceComponent entities (from SpawnSystem)
-func (s *TypingSystem) handleLegacySequence(entity core.Entity, typedRune rune) {
-	char, ok := s.charStore.Get(entity)
-	if !ok {
-		s.emitTypingError()
-		return
-	}
-
-	seq, ok := s.seqStore.Get(entity)
-	if !ok {
-		s.emitTypingError()
-		return
-	}
-
-	if char.Rune != typedRune {
-		s.emitTypingError()
-		return
-	}
-
-	// Universal rewards
-	s.applyUniversalRewards()
-
-	// Map SequenceType to TypeableType for unified energy handling
-	var typeableType component.TypeableType
-	switch seq.Type {
-	case component.SequenceBlue:
-		typeableType = component.TypeBlue
-	case component.SequenceGreen:
-		typeableType = component.TypeGreen
-	case component.SequenceRed:
-		typeableType = component.TypeRed
-	case component.SequenceGold:
-		typeableType = component.TypeGold
-	}
-
-	// Color-based energy
-	s.applyColorEnergy(typeableType)
-
-	// Silent death
-	event.EmitDeathOne(s.res.Events.Queue, entity, 0, s.res.Time.FrameNumber)
-
-	// Visual feedback
-	s.emitTypingFeedback(typeableType, seq.Level, typedRune)
 	s.moveCursorRight()
 }
 

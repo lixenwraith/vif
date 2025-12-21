@@ -11,8 +11,8 @@ const (
 	TypeNugget
 )
 
-// TypeableLevel mirrors SequenceLevel for typeable entities
-type TypeableLevel = SequenceLevel
+// TypeableLevel mirrors CharacterLevel for typeable entities
+type TypeableLevel = CharacterLevel
 
 // TypeableComponent marks an entity as a valid typing target
 // Decouples interaction capability from visual rendering (CharacterComponent)

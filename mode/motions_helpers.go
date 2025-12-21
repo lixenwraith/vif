@@ -300,7 +300,7 @@ func findLineEnd(ctx *engine.GameContext, cursorY int) int {
 
 		// Check entities at this cell
 		for i := 0; i < count; i++ {
-			if buf[i] != 0 && resolver.IsInteractable(buf[i]) {
+			if buf[i] != 0 && resolver.IsTypeable(buf[i]) {
 				// Found right-most interactable entity
 				return x
 			}
@@ -336,7 +336,7 @@ func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
 		for x := 0; x < ctx.GameWidth && rowEmpty; x++ {
 			count := ctx.World.Positions.GetAllAtInto(x, y, buf[:])
 			for i := 0; i < count; i++ {
-				if buf[i] != 0 && resolver.IsInteractable(buf[i]) {
+				if buf[i] != 0 && resolver.IsTypeable(buf[i]) {
 					rowEmpty = false
 					break
 				}
@@ -362,7 +362,7 @@ func findNextEmptyLine(ctx *engine.GameContext, cursorY int) int {
 		for x := 0; x < ctx.GameWidth && rowEmpty; x++ {
 			count := ctx.World.Positions.GetAllAtInto(x, y, buf[:])
 			for i := 0; i < count; i++ {
-				if buf[i] != 0 && resolver.IsInteractable(buf[i]) {
+				if buf[i] != 0 && resolver.IsTypeable(buf[i]) {
 					rowEmpty = false
 					break
 				}

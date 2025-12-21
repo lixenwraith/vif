@@ -1,22 +1,22 @@
 package component
 
-// SequenceType represents the type of character sequence
-type SequenceType int
+// CharacterType represents the type of character sequence
+type CharacterType int
 
 const (
-	SequenceGreen SequenceType = iota // Positive scoring
-	SequenceRed                       // Negative scoring
-	SequenceBlue                      // Positive scoring + trail effect
-	SequenceGold                      // Bonus sequence - fills heat to max when completed
+	CharacterGreen CharacterType = iota // Positive scoring
+	CharacterRed                        // Negative scoring
+	CharacterBlue                       // Positive scoring + trail effect
+	CharacterGold                       // Bonus sequence - fills heat to max when completed
 )
 
-// SequenceLevel represents the brightness level of a sequence
-type SequenceLevel int
+// CharacterLevel represents the brightness level of a sequence
+type CharacterLevel int
 
 const (
-	LevelDark   SequenceLevel = iota // x1 multiplier
-	LevelNormal                      // x2 multiplier
-	LevelBright                      // x3 multiplier
+	LevelDark   CharacterLevel = iota // x1 multiplier
+	LevelNormal                       // x2 multiplier
+	LevelBright                       // x3 multiplier
 )
 
 // CharacterComponent represents a character entity
@@ -26,14 +26,6 @@ type CharacterComponent struct {
 	Color ColorClass // Semantic color, resolved by renderer
 	Style TextStyle  // Semantic style, resolved by renderer
 	// Sequence info used to derive actual color
-	SeqType  SequenceType
-	SeqLevel SequenceLevel
-}
-
-// SequenceComponent represents membership in a character sequence
-type SequenceComponent struct {
-	ID    int           // Unique sequence ID
-	Index int           // Position in the sequence (0-based)
-	Type  SequenceType  // Type of sequence (Green, Red, Blue, Gold)
-	Level SequenceLevel // Sequence level (Dark, Normal, Bright)
+	SeqType  CharacterType
+	SeqLevel CharacterLevel
 }

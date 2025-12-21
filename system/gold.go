@@ -264,7 +264,7 @@ func (s *GoldSystem) spawnGold() bool {
 		s.charStore.Add(ed.entity, component.CharacterComponent{
 			Rune:     sequence[i],
 			Style:    component.StyleNormal,
-			SeqType:  component.SequenceGold,
+			SeqType:  component.CharacterGold,
 			SeqLevel: component.LevelBright,
 		})
 

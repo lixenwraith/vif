@@ -178,9 +178,9 @@ func calculateHeatColor(progress float64) RGB {
 }
 
 // GetFgForSequence returns the foreground color for a given sequence type and level
-func GetFgForSequence(seqType component.SequenceType, level component.SequenceLevel) RGB {
+func GetFgForSequence(seqType component.CharacterType, level component.CharacterLevel) RGB {
 	switch seqType {
-	case component.SequenceGreen:
+	case component.CharacterGreen:
 		switch level {
 		case component.LevelDark:
 			return RgbSequenceGreenDark
@@ -189,7 +189,7 @@ func GetFgForSequence(seqType component.SequenceType, level component.SequenceLe
 		case component.LevelBright:
 			return RgbSequenceGreenBright
 		}
-	case component.SequenceRed:
+	case component.CharacterRed:
 		switch level {
 		case component.LevelDark:
 			return RgbSequenceRedDark
@@ -198,7 +198,7 @@ func GetFgForSequence(seqType component.SequenceType, level component.SequenceLe
 		case component.LevelBright:
 			return RgbSequenceRedBright
 		}
-	case component.SequenceBlue:
+	case component.CharacterBlue:
 		switch level {
 		case component.LevelDark:
 			return RgbSequenceBlueDark
@@ -207,7 +207,7 @@ func GetFgForSequence(seqType component.SequenceType, level component.SequenceLe
 		case component.LevelBright:
 			return RgbSequenceBlueBright
 		}
-	case component.SequenceGold:
+	case component.CharacterGold:
 		// Gold sequence always uses bright yellow, regardless of level
 		return RgbSequenceGold
 	}
