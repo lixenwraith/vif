@@ -383,7 +383,7 @@ func (cs *ClockScheduler) processTick() {
 		now := cs.pausableClock.Now()
 
 		// 1. Sync Time: Authoritative FrameNumber from GameState (Render Clock)
-		currentFrame := cs.stateRes.State.GetFrameNumber()
+		currentFrame := cs.world.FrameNumber()
 		cs.timeRes.Update(
 			now,
 			cs.pausableClock.RealTime(),

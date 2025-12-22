@@ -17,10 +17,8 @@ type GameState struct {
 	GrayoutStartTime atomic.Int64 // UnixNano
 
 	// Unified ID generation
+	// TODO: This is mainly used by spawn, all others use world's `nextEntityID` migrate and deprecate
 	NextID atomic.Uint64
-
-	// Frame counter (incremented each render)
-	FrameNumber atomic.Int64
 
 	// Runtime Metrics
 	GameTicks      atomic.Uint64
@@ -43,7 +41,6 @@ func (gs *GameState) initState() {
 	gs.GrayoutActive.Store(false)
 	gs.GrayoutStartTime.Store(0)
 	gs.NextID.Store(1)
-	gs.FrameNumber.Store(0)
 
 	// Reset metrics
 	gs.GameTicks.Store(0)
@@ -73,16 +70,6 @@ func (gs *GameState) Reset() {
 // IncrementID increments and returns the next ID
 func (gs *GameState) IncrementID() int {
 	return int(gs.NextID.Add(1))
-}
-
-// GetFrameNumber returns the current frame number
-func (gs *GameState) GetFrameNumber() int64 {
-	return gs.FrameNumber.Load()
-}
-
-// IncrementFrameNumber increments and returns the frame number
-func (gs *GameState) IncrementFrameNumber() int64 {
-	return gs.FrameNumber.Add(1)
 }
 
 // ===== RUNTIME METRICS ACCESSORS =====

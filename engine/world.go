@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
@@ -17,6 +18,10 @@ type World struct {
 
 	// Global Resources
 	Resources *ResourceStore
+
+	// Direct pointers for high-frequency path optimization
+	eventQueue  *event.EventQueue
+	frameSource *atomic.Int64
 
 	// Position Store (Special - spatial index, kept as named field)
 	Positions *PositionStore
@@ -199,15 +204,33 @@ func (w *World) Clear() {
 	}
 }
 
-// PushEvent emits a game event using world resources
+// TODO: more clutches for clockscheduler
+// FrameNumber returns the current authoritative frame index from GameContext
+// Optimized for hot-path access by simulation and event loops
+func (w *World) FrameNumber() int64 {
+	if w.frameSource == nil {
+		return 0
+	}
+	return w.frameSource.Load()
+}
+
+// SetEventMetadata wires the direct pointers for PushEvent optimization
+// Called once during GameContext initialization
+func (w *World) SetEventMetadata(q *event.EventQueue, f *atomic.Int64) {
+	w.eventQueue = q
+	w.frameSource = f
+}
+
+// PushEvent emits a game event using direct cached pointers
+// This is the hot-path for all system communication
 func (w *World) PushEvent(eventType event.EventType, payload any) {
-	// TODO: cache these
-	eqRes := MustGetResource[*EventQueueResource](w.Resources)
-	timeRes := MustGetResource[*TimeResource](w.Resources)
-	event := event.GameEvent{
+	if w.eventQueue == nil || w.frameSource == nil {
+		return // Not yet initialized
+	}
+
+	w.eventQueue.Push(event.GameEvent{
 		Type:    eventType,
 		Payload: payload,
-		Frame:   timeRes.FrameNumber,
-	}
-	eqRes.Queue.Push(event)
+		Frame:   w.frameSource.Load(),
+	})
 }

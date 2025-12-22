@@ -56,8 +56,11 @@ type GameContext struct {
 
 	// --- Thread-Safe State ---
 
-	// Mode state (Atomic)
+	// Mode state (mode package is the authority)
 	mode atomic.Int32
+
+	// Authority: Total number of render cycles elapsed
+	FrameNumber atomic.Int64
 
 	// UI State (Mutex Protected)
 	ui struct {
@@ -99,6 +102,9 @@ func NewGameContext(world *World, width, height int) *GameContext {
 		eventQueue:    event.NewEventQueue(),
 	}
 
+	// Wire World to this Context's frame and event source
+	world.SetEventMetadata(ctx.eventQueue, &ctx.FrameNumber)
+
 	// Initialize atomic mode
 	ctx.SetMode(core.ModeNormal)
 
@@ -127,7 +133,7 @@ func NewGameContext(world *World, width, height int) *GameContext {
 		GameTime:    pausableClock.Now(),
 		RealTime:    pausableClock.RealTime(),
 		DeltaTime:   constant.GameUpdateInterval,
-		FrameNumber: 0,
+		FrameNumber: ctx.FrameNumber.Load(),
 	}
 	AddResource(ctx.World.Resources, timeRes)
 
@@ -443,24 +449,21 @@ func (ctx *GameContext) GetOverlayContentLen() int {
 }
 
 // === Frame Number Accessories ===
-// GetFrameNumber returns the current frame number
+
+// GetFrameNumber returns the live render frame index
 func (ctx *GameContext) GetFrameNumber() int64 {
-	return ctx.State.GetFrameNumber()
+	return ctx.FrameNumber.Load()
 }
 
-// IncrementFrameNumber increments and returns the frame number
+// IncrementFrameNumber advances the frame authority (called by Render Loop)
 func (ctx *GameContext) IncrementFrameNumber() int64 {
-	return ctx.State.IncrementFrameNumber()
+	return ctx.FrameNumber.Add(1)
 }
 
 // ===== EVENT QUEUE METHODS =====
 
-// PushEvent adds an event to the event queue with current frame number and provided timestamp
+// PushEvent adds an event to the event queue using the World's optimized dispatcher
+// This ensures consistent frame-stamping across simulation and input sources
 func (ctx *GameContext) PushEvent(eventType event.EventType, payload any) {
-	event := event.GameEvent{
-		Type:    eventType,
-		Payload: payload,
-		Frame:   ctx.State.GetFrameNumber(),
-	}
-	ctx.eventQueue.Push(event)
+	ctx.World.PushEvent(eventType, payload)
 }
