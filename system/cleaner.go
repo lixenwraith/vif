@@ -3,6 +3,7 @@ package system
 import (
 	"math"
 	"sync"
+	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
@@ -24,13 +25,17 @@ type CleanerSystem struct {
 
 	spawned           map[int64]bool // Track which frames already spawned cleaners
 	hasSpawnedSession bool           // Track if we spawned cleaners this session
+
+	statActive  *atomic.Int64
+	statSpawned *atomic.Int64
 }
 
 // NewCleanerSystem creates a new cleaner system
 func NewCleanerSystem(world *engine.World) engine.System {
+	res := engine.GetResources(world)
 	s := &CleanerSystem{
 		world: world,
-		res:   engine.GetResources(world),
+		res:   res,
 
 		cleanerStore:  engine.GetStore[component.CleanerComponent](world),
 		protStore:     engine.GetStore[component.ProtectionComponent](world),
@@ -38,6 +43,9 @@ func NewCleanerSystem(world *engine.World) engine.System {
 		typeableStore: engine.GetStore[component.TypeableComponent](world),
 
 		spawned: make(map[int64]bool),
+
+		statActive:  res.Status.Ints.Get("cleaner.active"),
+		statSpawned: res.Status.Ints.Get("cleaner.spawned"),
 	}
 	s.initLocked()
 	return s
@@ -101,7 +109,6 @@ func (s *CleanerSystem) Update() {
 	config := s.res.Config
 
 	// Clean old entries from spawned map
-	// TODO: change this
 	currentFrame := s.res.Time.FrameNumber
 	for frame := range s.spawned {
 		if currentFrame-frame > constant.CleanerDeduplicationWindow {
@@ -110,6 +117,7 @@ func (s *CleanerSystem) Update() {
 	}
 
 	entities := s.cleanerStore.All()
+	s.statActive.Store(int64(len(entities)))
 
 	// Push EventCleanerFinished when all cleaners have completed their animation
 	if len(entities) == 0 && s.hasSpawnedSession {
@@ -236,13 +244,15 @@ func (s *CleanerSystem) spawnCleaners() {
 
 	redRows := s.scanRedCharacterRows()
 
-	// TODO: new boost trigger
+	spawnCount := len(redRows)
+	// TODO: new phase trigger
 	// Grayout: no targets to clean
-	if len(redRows) == 0 {
+	if spawnCount == 0 {
 		s.res.State.State.TriggerGrayout(s.res.Time.GameTime)
 		s.world.PushEvent(event.EventCleanerFinished, nil)
 		return
 	}
+	s.statSpawned.Add(int64(spawnCount))
 
 	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
 		SoundType: core.SoundWhoosh,

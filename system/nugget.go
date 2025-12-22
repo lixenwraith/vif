@@ -27,18 +27,31 @@ type NuggetSystem struct {
 	nuggetID           atomic.Int32
 	lastSpawnAttempt   time.Time
 	activeNuggetEntity core.Entity
+
+	statActive    *atomic.Bool
+	statSpawned   *atomic.Int64
+	statCollected *atomic.Int64
+	statJumps     *atomic.Int64
 }
 
 // NewNuggetSystem creates a new nugget system
 func NewNuggetSystem(world *engine.World) engine.System {
-	return &NuggetSystem{
+	res := engine.GetResources(world)
+	s := &NuggetSystem{
 		world: world,
-		res:   engine.GetResources(world),
+		res:   res,
 
 		nuggetStore: engine.GetStore[component.NuggetComponent](world),
 		energyStore: engine.GetStore[component.EnergyComponent](world),
 		charStore:   engine.GetStore[component.CharacterComponent](world),
+
+		statActive:    res.Status.Bools.Get("nugget.active"),
+		statSpawned:   res.Status.Ints.Get("nugget.spawned"),
+		statCollected: res.Status.Ints.Get("nugget.collected"),
+		statJumps:     res.Status.Ints.Get("nugget.jumps"),
 	}
+
+	return s
 }
 
 // Init
@@ -73,6 +86,7 @@ func (s *NuggetSystem) HandleEvent(ev event.GameEvent) {
 			}
 			s.mu.Unlock()
 		}
+		s.statCollected.Add(1)
 
 	case event.EventNuggetDestroyed:
 		if payload, ok := ev.Payload.(*event.NuggetDestroyedPayload); ok {
@@ -110,6 +124,8 @@ func (s *NuggetSystem) Update() {
 	if !s.nuggetStore.Has(s.activeNuggetEntity) {
 		s.activeNuggetEntity = 0
 	}
+
+	s.statActive.Store(s.activeNuggetEntity != 0)
 }
 
 // handleJumpRequest attempts to jump cursor to the active nugget
@@ -158,6 +174,8 @@ func (s *NuggetSystem) handleJumpRequest() {
 	if audioRes, ok := engine.GetResource[*engine.AudioResource](s.world.Resources); ok && audioRes.Player != nil {
 		audioRes.Player.Play(core.SoundBell)
 	}
+
+	s.statJumps.Add(1)
 }
 
 // spawnNugget creates a new nugget at a random valid position, caller must hold s.mu lock
@@ -211,6 +229,8 @@ func (s *NuggetSystem) spawnNugget() {
 	s.nuggetStore.Add(entity, nugget)
 
 	s.activeNuggetEntity = entity
+
+	s.statSpawned.Add(1)
 }
 
 // findValidPosition finds a valid random position for a nugget

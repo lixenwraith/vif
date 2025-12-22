@@ -51,15 +51,17 @@ type ClockScheduler struct {
 	// Finite State Machine
 	fsm *fsm.Machine[*World]
 
+	// Event loop configuration
+	eventLoopInterval   time.Duration
+	eventLoopBackoffMax int
+
 	// Cached metric pointers
 	statusReg        *status.Registry
 	statTicks        *atomic.Int64
 	statEvBackoffs   *atomic.Int64
 	statEvDispatches *atomic.Int64
-
-	// Event loop configuration
-	eventLoopInterval   time.Duration
-	eventLoopBackoffMax int
+	statEntityCount  *atomic.Int64
+	statQueueLen     *atomic.Int64
 }
 
 // NewClockScheduler creates a new clock scheduler with specified tick interval
@@ -95,12 +97,14 @@ func NewClockScheduler(
 		resetChan:           resetChan,
 		stopChan:            make(chan struct{}),
 		statusReg:           statusReg,
-		statTicks:           statusReg.Ints.Get("engine.ticks"),
-		statEvBackoffs:      statusReg.Ints.Get("event.backoffs"),
-		statEvDispatches:    statusReg.Ints.Get("event.dispatches"),
 		fsm:                 fsm.NewMachine[*World](),
 		eventLoopInterval:   constant.EventLoopInterval,
 		eventLoopBackoffMax: constant.EventLoopBackoffMax,
+		statTicks:           statusReg.Ints.Get("engine.ticks"),
+		statEvBackoffs:      statusReg.Ints.Get("event.backoffs"),
+		statEvDispatches:    statusReg.Ints.Get("event.dispatches"),
+		statEntityCount:     statusReg.Ints.Get("entity.count"),
+		statQueueLen:        statusReg.Ints.Get("event.queue_len"),
 	}
 
 	return cs, updateDone, resetChan
@@ -411,4 +415,7 @@ func (cs *ClockScheduler) processTick() {
 	if cs.tickCount.Load()%20 == 0 {
 		cs.stateRes.State.UpdateAPM(cs.statusReg)
 	}
+
+	cs.statEntityCount.Store(int64(cs.world.Positions.Count()))
+	cs.statQueueLen.Store(int64(cs.eqRes.Queue.Len()))
 }

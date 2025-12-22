@@ -1,6 +1,8 @@
 package system
 
 import (
+	"sync/atomic"
+
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
@@ -17,17 +19,23 @@ type DeathSystem struct {
 	deathStore *engine.Store[component.DeathComponent]
 	protStore  *engine.Store[component.ProtectionComponent]
 	charStore  *engine.Store[component.CharacterComponent]
+
+	statKilled *atomic.Int64
 }
 
 func NewDeathSystem(world *engine.World) engine.System {
-	return &DeathSystem{
+	res := engine.GetResources(world)
+	s := &DeathSystem{
 		world: world,
-		res:   engine.GetResources(world),
+		res:   res,
 
 		deathStore: engine.GetStore[component.DeathComponent](world),
 		protStore:  engine.GetStore[component.ProtectionComponent](world),
 		charStore:  engine.GetStore[component.CharacterComponent](world),
+
+		statKilled: res.Status.Ints.Get("death.killed"),
 	}
+	return s
 }
 
 // Init
@@ -38,7 +46,10 @@ func (s *DeathSystem) Priority() int {
 }
 
 func (s *DeathSystem) EventTypes() []event.EventType {
-	return []event.EventType{event.EventDeathOne, event.EventDeathBatch}
+	return []event.EventType{
+		event.EventDeathOne,
+		event.EventDeathBatch,
+	}
 }
 
 func (s *DeathSystem) HandleEvent(ev event.GameEvent) {
@@ -97,6 +108,8 @@ func (s *DeathSystem) markForDeath(entity core.Entity, effect event.EventType) {
 	// 4. Immediate Destruction
 	// Removes entity from ALL stores, making it invisible to next Render snapshot
 	s.world.DestroyEntity(entity)
+
+	s.statKilled.Add(1)
 }
 
 // routeCleanup handles informing other systems before the entity is purged

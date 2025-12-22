@@ -1,6 +1,8 @@
 package system
 
 import (
+	"sync/atomic"
+
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -13,16 +15,22 @@ type ShieldSystem struct {
 	res   engine.Resources
 
 	shieldStore *engine.Store[component.ShieldComponent]
+
+	statActive *atomic.Bool
 }
 
 // NewShieldSystem creates a new shield system
 func NewShieldSystem(world *engine.World) engine.System {
-	return &ShieldSystem{
+	res := engine.GetResources(world)
+	s := &ShieldSystem{
 		world: world,
-		res:   engine.GetResources(world),
+		res:   res,
 
 		shieldStore: engine.GetStore[component.ShieldComponent](world),
+
+		statActive: res.Status.Bools.Get("shield.active"),
 	}
+	return s
 }
 
 // Init
@@ -53,6 +61,7 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 			shield.Active = true
 			s.shieldStore.Add(cursorEntity, shield)
 		}
+		s.statActive.Store(true)
 
 	case event.EventShieldDeactivate:
 		shield, ok := s.shieldStore.Get(cursorEntity)
@@ -60,6 +69,7 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 			shield.Active = false
 			s.shieldStore.Add(cursorEntity, shield)
 		}
+		s.statActive.Store(false)
 
 	case event.EventShieldDrain:
 		if payload, ok := ev.Payload.(*event.ShieldDrainPayload); ok {

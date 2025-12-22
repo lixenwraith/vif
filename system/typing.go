@@ -2,6 +2,7 @@ package system
 
 import (
 	"math"
+	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
@@ -24,13 +25,20 @@ type TypingSystem struct {
 	nuggetStore   *engine.Store[component.NuggetComponent]
 	boostStore    *engine.Store[component.BoostComponent]
 	heatStore     *engine.Store[component.HeatComponent]
+
+	statCorrect   *atomic.Int64
+	statErrors    *atomic.Int64
+	statMaxStreak *atomic.Int64
+
+	currentStreak int64
 }
 
 // NewTypingSystem creates a new typing system
 func NewTypingSystem(world *engine.World) engine.System {
-	return &TypingSystem{
+	res := engine.GetResources(world)
+	s := &TypingSystem{
 		world: world,
-		res:   engine.GetResources(world),
+		res:   res,
 
 		typeableStore: engine.GetStore[component.TypeableComponent](world),
 		memberStore:   engine.GetStore[component.MemberComponent](world),
@@ -40,7 +48,12 @@ func NewTypingSystem(world *engine.World) engine.System {
 		nuggetStore:   engine.GetStore[component.NuggetComponent](world),
 		boostStore:    engine.GetStore[component.BoostComponent](world),
 		heatStore:     engine.GetStore[component.HeatComponent](world),
+
+		statCorrect:   res.Status.Ints.Get("typing.correct"),
+		statErrors:    res.Status.Ints.Get("typing.errors"),
+		statMaxStreak: res.Status.Ints.Get("typing.max_streak"),
 	}
+	return s
 }
 
 func (s *TypingSystem) Init() {}
@@ -126,6 +139,13 @@ func (s *TypingSystem) applyUniversalRewards() {
 		heatGain = 2
 	}
 	s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: heatGain})
+
+	s.statCorrect.Add(1)
+	s.currentStreak++
+	maxStreak := s.statMaxStreak.Load()
+	if maxStreak < s.currentStreak {
+		s.statMaxStreak.Store(s.currentStreak)
+	}
 }
 
 // applyColorEnergy handles energy based on color type (Blue/Green/Red only)
@@ -207,6 +227,9 @@ func (s *TypingSystem) emitTypingError() {
 	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
 		SoundType: core.SoundError,
 	})
+
+	s.statErrors.Add(1)
+	s.currentStreak = 0
 }
 
 func (s *TypingSystem) moveCursorRight() {

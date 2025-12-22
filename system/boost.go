@@ -1,6 +1,7 @@
 package system
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
@@ -14,15 +15,25 @@ type BoostSystem struct {
 	res   engine.Resources
 
 	boostStore *engine.Store[component.BoostComponent]
+
+	// Cached metric pointers
+	statActive    *atomic.Bool
+	statRemaining *atomic.Int64
 }
 
 func NewBoostSystem(world *engine.World) engine.System {
-	return &BoostSystem{
+	res := engine.GetResources(world)
+	s := &BoostSystem{
 		world: world,
-		res:   engine.GetResources(world),
+		res:   res,
 
 		boostStore: engine.GetStore[component.BoostComponent](world),
+
+		statActive:    res.Status.Bools.Get("boost.active"),
+		statRemaining: res.Status.Ints.Get("boost.remaining"),
 	}
+
+	return s
 }
 
 // Init
@@ -72,6 +83,9 @@ func (s *BoostSystem) Update() {
 	}
 
 	s.boostStore.Add(cursorEntity, boost)
+
+	s.statActive.Store(boost.Active)
+	s.statRemaining.Store(int64(boost.Remaining))
 }
 
 func (s *BoostSystem) activate(duration time.Duration) {

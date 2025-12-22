@@ -3,6 +3,7 @@ package system
 import (
 	"math/rand"
 	"sync"
+	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
@@ -30,6 +31,9 @@ type DecaySystem struct {
 	// Per-frame tracking
 	decayedThisFrame   map[core.Entity]bool
 	processedGridCells map[int]bool // Key is flat index: (y * gameWidth) + x
+
+	statActive *atomic.Bool
+	statCount  *atomic.Int64
 }
 
 // NewDecaySystem creates a new decay system
@@ -48,6 +52,9 @@ func NewDecaySystem(world *engine.World) engine.System {
 
 		decayedThisFrame:   make(map[core.Entity]bool),
 		processedGridCells: make(map[int]bool),
+
+		statActive: res.Status.Bools.Get("decay.active"),
+		statCount:  res.Status.Ints.Get("decay.count"),
 	}
 	s.initLocked()
 	return s
@@ -121,6 +128,9 @@ func (s *DecaySystem) Update() {
 			s.world.PushEvent(event.EventDecayComplete, nil)
 		}
 	}
+
+	s.statActive.Store(s.animating)
+	s.statCount.Store(int64(s.decayStore.Count()))
 }
 
 // spawnDecayEntities creates one decay entity per column

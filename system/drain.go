@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
@@ -47,13 +48,18 @@ type DrainSystem struct {
 
 	// Spawn failure backoff (game ticks)
 	spawnCooldownUntil uint64
+
+	// Cached metric pointers
+	statCount   *atomic.Int64
+	statPending *atomic.Int64
 }
 
 // NewDrainSystem creates a new drain system
 func NewDrainSystem(world *engine.World) engine.System {
+	res := engine.GetResources(world)
 	s := &DrainSystem{
 		world: world,
-		res:   engine.GetResources(world),
+		res:   res,
 
 		drainStore:  engine.GetStore[component.DrainComponent](world),
 		matStore:    engine.GetStore[component.MaterializeComponent](world),
@@ -66,6 +72,9 @@ func NewDrainSystem(world *engine.World) engine.System {
 		headerStore: engine.GetStore[component.CompositeHeaderComponent](world),
 
 		pendingSpawns: make([]pendingDrainSpawn, 0, constant.DrainMaxCount),
+
+		statCount:   res.Status.Ints.Get("drain.count"),
+		statPending: res.Status.Ints.Get("drain.pending"),
 	}
 	s.initLocked()
 	return s
@@ -161,6 +170,9 @@ func (s *DrainSystem) Update() {
 		s.updateDrainMovement()
 		s.handleDrainInteractions()
 	}
+
+	s.statCount.Store(int64(s.drainStore.Count()))
+	s.statPending.Store(int64(len(s.pendingSpawns)))
 }
 
 // removeCompletedSpawn removes spawn entry after materialize completion
