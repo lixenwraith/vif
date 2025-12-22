@@ -158,6 +158,12 @@ func (w *World) Lock() {
 	w.updateMutex.Lock()
 }
 
+// TryLock attempts to acquire the update mutex without blocking
+// Returns true if lock acquired, false if already held
+func (w *World) TryLock() bool {
+	return w.updateMutex.TryLock()
+}
+
 // Unlock releases the update mutex
 func (w *World) Unlock() {
 	w.updateMutex.Unlock()

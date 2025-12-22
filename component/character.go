@@ -4,10 +4,11 @@ package component
 type CharacterType int
 
 const (
-	CharacterGreen CharacterType = iota // Positive scoring
-	CharacterRed                        // Negative scoring
-	CharacterBlue                       // Positive scoring + trail effect
-	CharacterGold                       // Bonus sequence - fills heat to max when completed
+	CharacterGreen  CharacterType = iota // Positive scoring
+	CharacterRed                         // Negative scoring
+	CharacterBlue                        // Positive scoring + trail effect
+	CharacterNugget                      // Positive scoring + trail effect
+	CharacterGold                        // Bonus sequence - fills heat to max when completed
 )
 
 // CharacterLevel represents the brightness level of a sequence

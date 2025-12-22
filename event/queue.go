@@ -88,3 +88,18 @@ func (eq *EventQueue) Consume() []GameEvent {
 		}
 	}
 }
+
+// Len returns approximate pending event count
+// Lock-free; used for pre-lock heuristics
+func (eq *EventQueue) Len() int {
+	head := eq.head.Load()
+	tail := eq.tail.Load()
+	if tail <= head {
+		return 0
+	}
+	diff := int(tail - head)
+	if diff > constant.EventQueueSize {
+		return constant.EventQueueSize
+	}
+	return diff
+}

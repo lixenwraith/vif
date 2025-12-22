@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine/fsm"
 	"github.com/lixenwraith/vi-fighter/engine/status"
@@ -51,8 +52,14 @@ type ClockScheduler struct {
 	fsm *fsm.Machine[*World]
 
 	// Cached metric pointers
-	statusReg *status.Registry
-	statTicks *atomic.Int64
+	statusReg        *status.Registry
+	statTicks        *atomic.Int64
+	statEvBackoffs   *atomic.Int64
+	statEvDispatches *atomic.Int64
+
+	// Event loop configuration
+	eventLoopInterval   time.Duration
+	eventLoopBackoffMax int
 }
 
 // NewClockScheduler creates a new clock scheduler with specified tick interval
@@ -73,23 +80,27 @@ func NewClockScheduler(
 	eqRes := MustGetResource[*EventQueueResource](world.Resources)
 
 	cs := &ClockScheduler{
-		world:            world,
-		pausableClock:    pausableClock,
-		isPaused:         isPaused,
-		tickInterval:     tickInterval,
-		timeRes:          timeRes,
-		stateRes:         stateRes,
-		eqRes:            eqRes,
-		lastGameTickTime: pausableClock.Now(),
-		tickCount:        atomic.Uint64{},
-		eventRouter:      event.NewRouter(MustGetResource[*EventQueueResource](world.Resources).Queue),
-		frameReady:       frameReady,
-		updateDone:       updateDone,
-		resetChan:        resetChan,
-		stopChan:         make(chan struct{}),
-		statusReg:        statusReg,
-		statTicks:        statusReg.Ints.Get("engine.ticks"),
-		fsm:              fsm.NewMachine[*World](),
+		world:               world,
+		pausableClock:       pausableClock,
+		isPaused:            isPaused,
+		tickInterval:        tickInterval,
+		timeRes:             timeRes,
+		stateRes:            stateRes,
+		eqRes:               eqRes,
+		lastGameTickTime:    pausableClock.Now(),
+		tickCount:           atomic.Uint64{},
+		eventRouter:         event.NewRouter(MustGetResource[*EventQueueResource](world.Resources).Queue),
+		frameReady:          frameReady,
+		updateDone:          updateDone,
+		resetChan:           resetChan,
+		stopChan:            make(chan struct{}),
+		statusReg:           statusReg,
+		statTicks:           statusReg.Ints.Get("engine.ticks"),
+		statEvBackoffs:      statusReg.Ints.Get("event.backoffs"),
+		statEvDispatches:    statusReg.Ints.Get("event.dispatches"),
+		fsm:                 fsm.NewMachine[*World](),
+		eventLoopInterval:   constant.EventLoopInterval,
+		eventLoopBackoffMax: constant.EventLoopBackoffMax,
 	}
 
 	return cs, updateDone, resetChan
@@ -121,9 +132,10 @@ func (cs *ClockScheduler) LoadFSM(config string, registerComponents func(*fsm.Ma
 // Start begins the scheduler loop
 func (cs *ClockScheduler) Start() {
 	if cs.running.CompareAndSwap(false, true) {
-		cs.wg.Add(1)
+		cs.wg.Add(2) // 2 Goroutines
 		// Use core.Go for safe execution with centralized crash handling
 		core.Go(cs.schedulerLoop)
+		core.Go(cs.eventLoop)
 	}
 }
 
@@ -238,6 +250,90 @@ func (cs *ClockScheduler) schedulerLoop() {
 	}
 }
 
+// eventLoop runs at 1ms frequency for reactive event settling
+func (cs *ClockScheduler) eventLoop() {
+	defer cs.wg.Done()
+
+	ticker := time.NewTicker(cs.eventLoopInterval)
+	defer ticker.Stop()
+
+	backoffCount := 0
+
+	for {
+		select {
+		case <-cs.stopChan:
+			return
+
+		case <-ticker.C:
+			if cs.isPaused.Load() {
+				continue
+			}
+
+			// Skip if queue empty (prevents busy-wait contention)
+			if cs.eqRes.Queue.Len() == 0 {
+				backoffCount = 0
+				continue
+			}
+
+			// Attempt non-blocking lock
+			if cs.world.TryLock() {
+				cs.dispatchOnePass()
+				cs.world.Unlock()
+				backoffCount = 0
+				continue
+			}
+
+			// Backoff tracking
+			backoffCount++
+			cs.statEvBackoffs.Add(1)
+
+			// Force progress after threshold
+			if backoffCount >= cs.eventLoopBackoffMax {
+				// Check shutdown before blocking lock to prevent Stop() hang
+				if !cs.running.Load() {
+					return
+				}
+				cs.world.Lock()
+				cs.dispatchOnePass()
+				cs.world.Unlock()
+				backoffCount = 0
+			}
+		}
+	}
+}
+
+// dispatchOnePass consumes and dispatches pending events exactly once
+// Returns number of events processed
+func (cs *ClockScheduler) dispatchOnePass() int {
+	eventsList := cs.eqRes.Queue.Consume()
+	if len(eventsList) == 0 {
+		return 0
+	}
+
+	for _, ev := range eventsList {
+		cs.fsm.HandleEvent(cs.world, ev.Type)
+
+		if handlers, ok := cs.eventRouter.GetHandlers(ev.Type); ok {
+			for _, h := range handlers {
+				h.HandleEvent(ev)
+			}
+		}
+	}
+
+	cs.statEvDispatches.Add(int64(len(eventsList)))
+	return len(eventsList)
+}
+
+// dispatchAndProcessEvents settles pending events with iteration cap
+// Used by reset path where immediate settling is required
+func (cs *ClockScheduler) dispatchAndProcessEvents() {
+	for i := 0; i < constant.EventLoopIterations; i++ {
+		if cs.dispatchOnePass() == 0 {
+			return
+		}
+	}
+}
+
 // executeReset performs FSM reset while scheduler mutex is held
 func (cs *ClockScheduler) executeReset() {
 	// NOTE: Do not use RunSafe if called from a blocking system
@@ -270,30 +366,6 @@ func (cs *ClockScheduler) executeReset() {
 	cs.pausableClock.Resume()
 }
 
-// dispatchAndProcessEvents processes pending events through Router AND FSM
-func (cs *ClockScheduler) dispatchAndProcessEvents() {
-	const maxIterations = 16 // Prevent infinite loops from circular event chains
-
-	for i := 0; i < maxIterations; i++ {
-		eventsList := cs.eqRes.Queue.Consume()
-		if len(eventsList) == 0 {
-			return
-		}
-
-		for _, ev := range eventsList {
-			cs.fsm.HandleEvent(cs.world, ev.Type)
-
-			if handlers, ok := cs.eventRouter.GetHandlers(ev.Type); ok {
-				for _, h := range handlers {
-					h.HandleEvent(ev)
-				}
-			}
-		}
-	}
-	// If we hit maxIterations, remaining events process next tick
-	// This indicates potential circular event chain
-}
-
 // DispatchEventsImmediately processes all pending events synchronously
 func (cs *ClockScheduler) DispatchEventsImmediately() {
 	cs.world.RunSafe(func() {
@@ -309,20 +381,27 @@ func (cs *ClockScheduler) processTick() {
 
 	cs.world.RunSafe(func() {
 		now := cs.pausableClock.Now()
+
+		// 1. Sync Time: Authoritative FrameNumber from GameState (Render Clock)
+		currentFrame := cs.stateRes.State.GetFrameNumber()
 		cs.timeRes.Update(
 			now,
 			cs.pausableClock.RealTime(),
 			cs.tickInterval,
-			MustGetResource[*TimeResource](cs.world.Resources).FrameNumber,
+			currentFrame,
 		)
 
-		// Process Events (Input -> FSM -> Systems)
+		// 2. Initial Settling: Resolve everything accumulated during game tick
+		// Ensures FSM and Systems start with a consistent, settled world.
 		cs.dispatchAndProcessEvents()
 
-		// Update FSM Logic (Tick transitions)
+		// 3. FSM Update: Advance state machine (may emit new events via Actions)
 		cs.fsm.Update(cs.world, cs.tickInterval)
 
-		// Run Systems
+		// 4. Post-FSM Settling: Resolve events emitted by FSM state transitions
+		cs.dispatchAndProcessEvents()
+
+		// 5. System Execution: Systems run on the final, settled state for this tick
 		cs.world.UpdateLocked()
 	})
 
