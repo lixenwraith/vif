@@ -53,10 +53,20 @@ func NewTypingSystem(world *engine.World) engine.System {
 		statErrors:    res.Status.Ints.Get("typing.errors"),
 		statMaxStreak: res.Status.Ints.Get("typing.max_streak"),
 	}
+	s.initLocked()
 	return s
 }
 
-func (s *TypingSystem) Init() {}
+func (s *TypingSystem) Init() {
+	s.initLocked()
+}
+
+func (s *TypingSystem) initLocked() {
+	s.currentStreak = 0
+	s.statCorrect.Store(0)
+	s.statErrors.Store(0)
+	s.statMaxStreak.Store(0)
+}
 
 func (s *TypingSystem) Priority() int {
 	return constant.PriorityTyping
@@ -67,21 +77,23 @@ func (s *TypingSystem) Update() {}
 func (s *TypingSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventCharacterTyped,
+		event.EventGameReset,
 	}
 }
 
 func (s *TypingSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type != event.EventCharacterTyped {
-		return
-	}
+	switch ev.Type {
+	case event.EventCharacterTyped:
+		payload, ok := ev.Payload.(*event.CharacterTypedPayload)
+		if !ok {
+			return
+		}
+		s.handleTyping(payload.X, payload.Y, payload.Char)
+		event.CharacterTypedPayloadPool.Put(payload)
 
-	payload, ok := ev.Payload.(*event.CharacterTypedPayload)
-	if !ok {
-		return
+	case event.EventGameReset:
+		s.Init()
 	}
-
-	s.handleTyping(payload.X, payload.Y, payload.Char)
-	event.CharacterTypedPayloadPool.Put(payload)
 }
 
 // handleTyping processes a typed character at cursor position

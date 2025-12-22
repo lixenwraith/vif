@@ -32,12 +32,20 @@ func NewBoostSystem(world *engine.World) engine.System {
 		statActive:    res.Status.Bools.Get("boost.active"),
 		statRemaining: res.Status.Ints.Get("boost.remaining"),
 	}
-
+	s.initLocked()
 	return s
 }
 
-// Init
-func (s *BoostSystem) Init() {}
+// Init resets session state for new game
+func (s *BoostSystem) Init() {
+	s.initLocked()
+}
+
+// initLocked performs session state reset
+func (s *BoostSystem) initLocked() {
+	s.statActive.Store(false)
+	s.statRemaining.Store(0)
+}
 
 func (s *BoostSystem) Priority() int {
 	return constant.PriorityBoost
@@ -48,6 +56,7 @@ func (s *BoostSystem) EventTypes() []event.EventType {
 		event.EventBoostActivate,
 		event.EventBoostDeactivate,
 		event.EventBoostExtend,
+		event.EventGameReset,
 	}
 }
 
@@ -63,6 +72,8 @@ func (s *BoostSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.BoostExtendPayload); ok {
 			s.extend(payload.Duration)
 		}
+	case event.EventGameReset:
+		s.Init()
 	}
 }
 

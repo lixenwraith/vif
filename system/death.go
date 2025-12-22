@@ -35,11 +35,19 @@ func NewDeathSystem(world *engine.World) engine.System {
 
 		statKilled: res.Status.Ints.Get("death.killed"),
 	}
+	s.initLocked()
 	return s
 }
 
-// Init
-func (s *DeathSystem) Init() {}
+// Init resets session state for new game
+func (s *DeathSystem) Init() {
+	s.initLocked()
+}
+
+// initLocked performs session state reset
+func (s *DeathSystem) initLocked() {
+	s.statKilled.Store(0)
+}
 
 func (s *DeathSystem) Priority() int {
 	return constant.PriorityDeath
@@ -49,6 +57,7 @@ func (s *DeathSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventDeathOne,
 		event.EventDeathBatch,
+		event.EventGameReset,
 	}
 }
 
@@ -77,6 +86,9 @@ func (s *DeathSystem) HandleEvent(ev event.GameEvent) {
 			}
 			event.ReleaseDeathRequest(p)
 		}
+
+	case event.EventGameReset:
+		s.Init()
 	}
 }
 

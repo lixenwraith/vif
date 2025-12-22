@@ -50,12 +50,27 @@ func NewNuggetSystem(world *engine.World) engine.System {
 		statCollected: res.Status.Ints.Get("nugget.collected"),
 		statJumps:     res.Status.Ints.Get("nugget.jumps"),
 	}
-
+	s.initLocked()
 	return s
 }
 
-// Init
-func (s *NuggetSystem) Init() {}
+// Init resets session state for new game
+func (s *NuggetSystem) Init() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.initLocked()
+}
+
+// initLocked performs session state reset, caller must hold s.mu
+func (s *NuggetSystem) initLocked() {
+	s.nuggetID.Store(0)
+	s.lastSpawnAttempt = time.Time{}
+	s.activeNuggetEntity = 0
+	s.statActive.Store(false)
+	s.statSpawned.Store(0)
+	s.statCollected.Store(0)
+	s.statJumps.Store(0)
+}
 
 // Priority returns the system's priority
 func (s *NuggetSystem) Priority() int {
@@ -98,10 +113,7 @@ func (s *NuggetSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventGameReset:
-		s.mu.Lock()
-		s.activeNuggetEntity = 0
-		s.lastSpawnAttempt = time.Time{}
-		s.mu.Unlock()
+		s.Init()
 	}
 }
 

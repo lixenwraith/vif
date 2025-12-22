@@ -90,7 +90,10 @@ func (s *DrainSystem) Init() {
 // initLocked performs session state reset, caller must hold s.mu
 func (s *DrainSystem) initLocked() {
 	s.pendingSpawns = s.pendingSpawns[:0]
+	s.nextSpawnOrder = 0
 	s.spawnCooldownUntil = 0
+	s.statCount.Store(0)
+	s.statPending.Store(0)
 }
 
 // Priority returns the system's priority

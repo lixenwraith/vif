@@ -135,6 +135,9 @@ func (s *SpawnSystem) initLocked() {
 	s.lastSpawnTime = time.Time{}
 	s.nextSpawnTime = time.Time{}
 	s.rateMultiplier = 1.0
+	s.localGeneration = 0
+	s.localIndex = 0
+	s.frameContent = nil
 }
 
 // Priority returns the system's priority

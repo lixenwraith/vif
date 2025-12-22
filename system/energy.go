@@ -30,7 +30,7 @@ type EnergySystem struct {
 
 // NewEnergySystem creates a new energy system
 func NewEnergySystem(world *engine.World) engine.System {
-	return &EnergySystem{
+	s := &EnergySystem{
 		world: world,
 		res:   engine.GetResources(world),
 
@@ -42,13 +42,21 @@ func NewEnergySystem(world *engine.World) engine.System {
 		boostStore:  engine.GetStore[component.BoostComponent](world),
 		charStore:   engine.GetStore[component.CharacterComponent](world),
 		nuggetStore: engine.GetStore[component.NuggetComponent](world),
-
-		lastCorrect: time.Time{},
 	}
+	s.initLocked()
+	return s
 }
 
-// Init
-func (s *EnergySystem) Init() {}
+// Init resets session state for new game
+func (s *EnergySystem) Init() {
+	s.initLocked()
+}
+
+// initLocked performs session state reset
+func (s *EnergySystem) initLocked() {
+	s.lastCorrect = time.Time{}
+	s.errorCursorSet = false
+}
 
 // Priority returns the system's priority
 func (s *EnergySystem) Priority() int {
@@ -63,6 +71,7 @@ func (s *EnergySystem) EventTypes() []event.EventType {
 		event.EventEnergyBlinkStart,
 		event.EventEnergyBlinkStop,
 		event.EventDeleteRequest,
+		event.EventGameReset,
 	}
 }
 
@@ -91,6 +100,9 @@ func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventEnergyBlinkStop:
 		s.stopBlink()
+
+	case event.EventGameReset:
+		s.Init()
 	}
 }
 

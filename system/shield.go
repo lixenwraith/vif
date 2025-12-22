@@ -30,11 +30,19 @@ func NewShieldSystem(world *engine.World) engine.System {
 
 		statActive: res.Status.Bools.Get("shield.active"),
 	}
+	s.initLocked()
 	return s
 }
 
-// Init
-func (s *ShieldSystem) Init() {}
+// Init resets session state for new game
+func (s *ShieldSystem) Init() {
+	s.initLocked()
+}
+
+// initLocked performs session state reset
+func (s *ShieldSystem) initLocked() {
+	s.statActive.Store(false)
+}
 
 // Priority returns the system's priority
 func (s *ShieldSystem) Priority() int {
@@ -47,6 +55,7 @@ func (s *ShieldSystem) EventTypes() []event.EventType {
 		event.EventShieldActivate,
 		event.EventShieldDeactivate,
 		event.EventShieldDrain,
+		event.EventGameReset,
 	}
 }
 
@@ -77,6 +86,9 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 				Delta: -payload.Amount,
 			})
 		}
+
+	case event.EventGameReset:
+		s.Init()
 	}
 }
 
