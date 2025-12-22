@@ -292,7 +292,7 @@ func (s *CleanerSystem) spawnCleaners() {
 		s.world.Positions.Add(entity, component.PositionComponent{X: startGridX, Y: startGridY})
 		s.cleanerStore.Add(entity, comp)
 		s.protStore.Add(entity, component.ProtectionComponent{
-			Mask: component.ProtectFromDrain | component.ProtectFromCull,
+			Mask: component.ProtectFromDrain | component.ProtectFromDeath,
 		})
 	}
 }
@@ -380,7 +380,7 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 		s.cleanerStore.Add(entity, comp)
 		// TODO: centralize protection via entity factory
 		s.protStore.Add(entity, component.ProtectionComponent{
-			Mask: component.ProtectFromDrain | component.ProtectFromCull,
+			Mask: component.ProtectFromDrain | component.ProtectFromDeath,
 		})
 	}
 }

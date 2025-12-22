@@ -91,9 +91,6 @@ func RegisterSystems() {
 	registry.RegisterSystem("timekeeper", func(w any) any {
 		return system.NewTimeKeeperSystem(w.(*engine.World))
 	})
-	registry.RegisterSystem("cull", func(w any) any {
-		return system.NewCullSystem(w.(*engine.World))
-	})
 }
 
 // RegisterRenderers registers all renderer factories with priorities
@@ -177,7 +174,6 @@ func ActiveSystems() []string {
 		"splash",
 		"death",
 		"timekeeper",
-		"cull",
 	}
 }
 

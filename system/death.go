@@ -44,11 +44,19 @@ func (s *DeathSystem) EventTypes() []event.EventType {
 func (s *DeathSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventDeathOne:
+		// HOT PATH: Priority check for bit-packed uint64
 		if packed, ok := ev.Payload.(uint64); ok {
 			// Bit-pack decode, skipping heap allocation, use event.EmitDeathOne
-			id := core.Entity(packed & 0xFFFFFFFFFFFF)
+			entity := core.Entity(packed & 0xFFFFFFFFFFFF)
 			effect := event.EventType(packed >> 48)
-			s.markForDeath(id, effect)
+			s.markForDeath(entity, effect)
+			return
+		}
+
+		// DEV/SAFETY PATH: Fallback for direct core.Entity calls
+		if entity, ok := ev.Payload.(core.Entity); ok {
+			s.markForDeath(entity, 0)
+			return
 		}
 
 	case event.EventDeathBatch:
@@ -61,31 +69,40 @@ func (s *DeathSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
-// markForDeath performs protection checks and tags entity
+// markForDeath performs protection checks, triggers effects, and DESTROYS the entity immediately
 func (s *DeathSystem) markForDeath(entity core.Entity, effect event.EventType) {
 	if entity == 0 {
 		return
 	}
 
-	// Protection check
+	// 1. Protection Check
 	if prot, ok := s.protStore.Get(entity); ok {
-		if !prot.IsExpired(s.res.Time.GameTime.UnixNano()) && prot.Mask == component.ProtectAll {
+		if !prot.IsExpired(s.res.Time.GameTime.UnixNano()) &&
+			(prot.Mask.Has(component.ProtectFromDeath) || prot.Mask == component.ProtectAll) {
+			// If immortal, remove tag to not process again in Update()
+			s.deathStore.Remove(entity)
 			return
 		}
 	}
 
-	// Skip if already marked
-	if s.deathStore.Has(entity) {
-		return
-	}
+	// 2. Routing/Cleanup Hooks
+	// Pre-destruction hook for informing other systems
+	s.routeCleanup(entity)
 
-	// Emit death vfx event if specified
+	// 3. Visual Effects
 	if effect != 0 {
 		s.emitEffect(entity, effect)
 	}
 
-	// Tag for CullSystem
-	s.deathStore.Add(entity, component.DeathComponent{})
+	// 4. Immediate Destruction
+	// Removes entity from ALL stores, making it invisible to next Render snapshot
+	s.world.DestroyEntity(entity)
+}
+
+// routeCleanup handles informing other systems before the entity is purged
+func (s *DeathSystem) routeCleanup(entity core.Entity) {
+	// TODO: Future Implementation
+	// Example: If entity has MemberComponent, emit EventMemberDied to CompositeSystem
 }
 
 func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType) {
@@ -112,4 +129,16 @@ func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType
 	}
 }
 
-func (s *DeathSystem) Update() {}
+// Update processes entities tagged with DeathComponent by systems not using the event path.
+// This preserves the "deferred" cleanup logic for OOB or timer-based destruction.
+func (s *DeathSystem) Update() {
+	entities := s.deathStore.All()
+	if len(entities) == 0 {
+		return
+	}
+
+	for _, entity := range entities {
+		// Route through markForDeath to ensure protection checks and visual effects are applied
+		s.markForDeath(entity, 0)
+	}
+}

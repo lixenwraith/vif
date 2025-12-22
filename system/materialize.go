@@ -237,7 +237,7 @@ func (s *MaterializeSystem) spawnMaterializers(targetX, targetY int, spawnType c
 		s.matStore.Add(entity, comp)
 		// Protect from cull/drain during animation
 		s.protStore.Add(entity, component.ProtectionComponent{
-			Mask: component.ProtectFromDrain | component.ProtectFromCull,
+			Mask: component.ProtectFromDrain | component.ProtectFromDeath,
 		})
 	}
 }

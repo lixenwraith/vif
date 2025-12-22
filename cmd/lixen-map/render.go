@@ -26,6 +26,8 @@ func (app *AppState) Render() {
 
 	if app.HelpMode {
 		app.RenderHelp(cells, w, h)
+	} else if app.BatchEditMode {
+		app.renderBatchEdit(cells, w, h)
 	} else if app.PreviewMode {
 		app.renderPreview(cells, w, h)
 	} else {

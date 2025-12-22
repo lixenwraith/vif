@@ -31,6 +31,7 @@ var helpPaneKeys = []helpEntry{
 	{"d", "Toggle deps"},
 	{"+/-", "Deps depth"},
 	{"e", "Edit tags"},
+	{"Ctrl+E", "Batch edit tags"},
 	{"r", "Reindex"},
 	{"p", "Preview output"},
 	{"Ctrl+S", "Save output"},

@@ -14,11 +14,11 @@ const (
 	// ProtectFromDrain makes entity immune to energy drain mechanic
 	ProtectFromDrain
 
-	// ProtectFromCull makes entity immune to out-of-bounds cleanup
-	ProtectFromCull
-
 	// ProtectFromDelete makes entity immune to delete operators
 	ProtectFromDelete
+
+	// ProtectFromDeath makes entity immune to death (e.g. out-of-bounds cleanup)
+	ProtectFromDeath
 
 	// ProtectAll makes entity completely indestructible
 	// Used for Cursor entity. World.DestroyEntity() will reject destruction

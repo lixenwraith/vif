@@ -135,10 +135,105 @@ Press `?` in any view to open the full key binding help overlay.
 
 ### Editing
 
-| Key | Action                                        |
-|-----|-----------------------------------------------|
-| `e` | Edit tags for file at cursor (tree pane only) |
-| `r` | Re-index entire codebase                      |
+| Key      | Action                                        |
+|----------|-----------------------------------------------|
+| `e`      | Edit tags for file at cursor (tree pane only) |
+| `Ctrl+E` | Batch edit tags for all selected files        |
+| `r`      | Re-index entire codebase                      |
+
+## Batch Tag Editor
+
+Press `Ctrl+E` with files selected to open the batch tag editor overlay. This allows editing tags across multiple files simultaneously.
+
+### Layout
+
+```
+╔══════════════════════════════════════════════════════════════════════════╗
+║ BATCH EDIT (12 files)                    Ctrl+S:save  Esc:cancel  i:new  ║
+╠════════════════════════╦═══════════════╦═════════════════════════════════╣
+║ TAG TREE               ║ INFO          ║ FILES                           ║
+║ ────────────────────── ║ ───────────── ║ ─────────────────────────────── ║
+║ ▼ #focus               ║ Selected:     ║ term.go        render.go        ║
+║   ▼ sys                ║ #focus        ║ input.go       buffer.go        ║
+║     [x]    term        ║               ║ drain.go       collision.go     ║
+║     [o]→[x] io         ║ Changes:      ║ state.go       audio.go         ║
+║     [ ]→[x] render     ║ +3 additions  ║                                 ║
+║   ▶ game               ║ 2 files       ║                                 ║
+║ ▶ #interact            ║               ║                                 ║
+╚════════════════════════╩═══════════════╩═════════════════════════════════╝
+```
+
+### Visual Indicators
+
+| Symbol         | Meaning                                   |
+|----------------|-------------------------------------------|
+| `[x]`          | All selected files have this item         |
+| `[o]`          | Some selected files have this item        |
+| `[ ]`          | No selected files have this item          |
+| `→[x]`         | Pending: will be added to all files       |
+| `→[ ]`         | Pending: will be removed from all files   |
+| `→[o]`         | Pending: partial change                   |
+| Red filename   | File had parse error, excluded from edits |
+| Green filename | File matches item at cursor               |
+
+### Key Bindings
+
+| Key                   | Action                         |
+|-----------------------|--------------------------------|
+| `j`/`k`, `↑`/`↓`      | Move cursor                    |
+| `h`/`l`, `←`/`→`      | Collapse/expand                |
+| `H`/`L`               | Collapse/expand all            |
+| `0`/`$`, `Home`/`End` | Jump start/end                 |
+| `PgUp`/`PgDn`         | Page scroll                    |
+| `Space`               | Toggle selection for all files |
+| `i`                   | Add new item at cursor level   |
+| `Ctrl+S`              | Save all changes               |
+| `Esc`                 | Cancel and discard changes     |
+
+### Toggle Behavior
+
+Pressing `Space` on an item cycles through states:
+
+| Current State     | Action | Result                 |
+|-------------------|--------|------------------------|
+| `[ ]` (none have) | Toggle | Add to all files       |
+| `[o]` (some have) | Toggle | Add to remaining files |
+| `[x]` (all have)  | Toggle | Remove from all files  |
+
+Toggling a category/group/module affects all tags within it.
+
+### Adding New Items
+
+Press `i` to add a new item at the same level as the cursor:
+
+- Cursor on category → add new category
+- Cursor on group → add new group in same category
+- Cursor on module → add new module in same group
+- Cursor on tag → add new tag in same module/group
+
+New tags are automatically marked as pending addition for all valid files.
+
+### Write Behavior
+
+`Ctrl+S` writes changes to all files atomically:
+
+1. Computes final tag state for each file
+2. Generates canonical `@lixen:` content (alphabetically sorted)
+3. Writes to each file, replacing existing `@lixen:` lines
+4. Reports success/failure count
+5. Triggers full reindex on success
+
+Files with parse errors are excluded from writes. If any write fails, a partial failure is reported.
+
+### Tag Syntax Reference
+
+The batch editor respects existing tag format conventions:
+
+| Format  | Syntax                           | Example                             |
+|---------|----------------------------------|-------------------------------------|
+| 2-level | `#category{group(tag1,tag2)}`    | `#focus{sys(term,io)}`              |
+| 3-level | `#category{group[module(tag1)]}` | `#focus{sys[term(vt100)]}`          |
+| Mixed   | Both formats in same category    | `#focus{sys(io),game[drain(tick)]}` |
 
 ## Visual Indicators
 

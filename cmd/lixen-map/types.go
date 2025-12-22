@@ -52,6 +52,10 @@ type AppState struct {
 	EditTarget string // file path being edited
 	EditCursor int    // cursor position within InputBuffer
 
+	// Batch edit overlay
+	BatchEditMode bool
+	BatchEdit     *BatchEditState
+
 	// Help overlay
 	HelpMode bool
 

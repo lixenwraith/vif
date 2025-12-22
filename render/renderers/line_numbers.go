@@ -53,7 +53,7 @@ func (r *LineNumbersRenderer) Render(ctx render.RenderContext, world *engine.Wor
 			if absRelative%10 == 0 {
 				ch = rune('0' + (absRelative/10)%10)
 			} else if absRelative%2 == 0 {
-				ch = '-'
+				ch = '─'
 			} else {
 				ch = ' '
 			}

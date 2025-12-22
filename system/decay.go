@@ -346,7 +346,7 @@ func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
 
 		default:
 			// Red or other: destroy
-			s.world.PushEvent(event.EventDeathOne, entity)
+			event.EmitDeathOne(s.res.Events.Queue, entity, event.EventFlashRequest, s.res.Time.FrameNumber)
 		}
 	}
 }

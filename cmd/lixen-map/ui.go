@@ -26,6 +26,11 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 		return false, false
 	}
 
+	if app.BatchEditMode {
+		app.HandleBatchEditEvent(ev)
+		return false, false
+	}
+
 	if app.PreviewMode {
 		return app.handlePreviewEvent(ev)
 	}
@@ -47,6 +52,14 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 
 	case terminal.KeyCtrlL:
 		app.loadSelectionFromFile()
+		return false, false
+
+	case terminal.KeyCtrlE:
+		if len(app.Selected) == 0 {
+			app.Message = "no files selected"
+			return false, false
+		}
+		app.EnterBatchEditMode()
 		return false, false
 
 	case terminal.KeyRune:
