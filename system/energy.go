@@ -138,9 +138,9 @@ func (s *EnergySystem) Update() {
 	shield, shieldOk := s.shieldStore.Get(cursorEntity)
 	if shieldOk {
 		shieldActive := shield.Active
-		if energy > 0 && !shieldActive {
+		if energy != 0 && !shieldActive {
 			s.world.PushEvent(event.EventShieldActivate, nil)
-		} else if energy <= 0 && shieldActive {
+		} else if energy == 0 && shieldActive {
 			s.world.PushEvent(event.EventShieldDeactivate, nil)
 		}
 	}

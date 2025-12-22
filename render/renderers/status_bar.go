@@ -330,14 +330,16 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 }
 
 // phaseColor returns rainbow-interpolated color for phase index
+// Uses offset range (40-220) to avoid dark extremes for text readability
 func phaseColor(index, total int64) render.RGB {
 	if total <= 1 {
 		return render.RgbModeNormalBg
 	}
-	// Map to 0-255 for gradient LUT
-	lutIdx := int((index * 255) / (total - 1))
-	if lutIdx > 255 {
-		lutIdx = 255
+	// Map to 40-220 range to skip dark red/purple extremes
+	// TODO: may be expensive
+	lutIdx := 40 + int((index*180)/(total-1))
+	if lutIdx > 220 {
+		lutIdx = 220
 	}
 	return render.HeatGradientLUT[lutIdx]
 }

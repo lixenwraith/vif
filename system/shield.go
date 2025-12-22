@@ -82,9 +82,7 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventShieldDrain:
 		if payload, ok := ev.Payload.(*event.ShieldDrainPayload); ok {
-			s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{
-				Delta: -payload.Amount,
-			})
+			s.applyConvergentDrain(payload.Amount)
 		}
 
 	case event.EventGameReset:
@@ -104,10 +102,45 @@ func (s *ShieldSystem) Update() {
 	now := s.res.Time.GameTime
 
 	if now.Sub(shield.LastDrainTime) >= constant.ShieldPassiveDrainInterval {
-		s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{
-			Delta: -constant.ShieldPassiveDrainAmount,
-		})
+		s.applyConvergentDrain(constant.ShieldPassiveDrainAmount)
 		shield.LastDrainTime = now
 		s.shieldStore.Add(cursorEntity, shield)
 	}
+}
+
+// applyConvergentDrain reduces energy magnitude toward zero by amount, clamping at zero
+func (s *ShieldSystem) applyConvergentDrain(amount int) {
+	cursorEntity := s.res.Cursor.Entity
+
+	energyStore := engine.GetStore[component.EnergyComponent](s.world)
+	energyComp, ok := energyStore.Get(cursorEntity)
+	if !ok {
+		return
+	}
+
+	current := energyComp.Current.Load()
+	if current == 0 {
+		return
+	}
+
+	var delta int64
+	if current > 0 {
+		// Positive energy: subtract, clamp at 0
+		if current > int64(amount) {
+			delta = -int64(amount)
+		} else {
+			delta = -current // Clamp to exactly 0
+		}
+	} else {
+		// Negative energy: add, clamp at 0
+		if -current > int64(amount) {
+			delta = int64(amount)
+		} else {
+			delta = -current // Clamp to exactly 0
+		}
+	}
+
+	s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{
+		Delta: int(delta),
+	})
 }

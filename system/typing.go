@@ -160,15 +160,17 @@ func (s *TypingSystem) applyUniversalRewards() {
 	}
 }
 
-// applyColorEnergy handles energy based on color type (Blue/Green/Red only)
+// applyColorEnergy handles energy based on color type
+// Green: +heat, Blue: +2*heat, Red: -heat (mirrors green)
 func (s *TypingSystem) applyColorEnergy(colorType component.TypeableType) {
 	heat := s.getHeat()
 	switch colorType {
-	case component.TypeBlue, component.TypeGreen:
+	case component.TypeGreen:
 		s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{Delta: heat})
+	case component.TypeBlue:
+		s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{Delta: 2 * heat})
 	case component.TypeRed:
 		s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{Delta: -heat})
-		// Gold, Nugget: no energy from typing
 	}
 }
 
