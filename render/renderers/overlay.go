@@ -2,6 +2,7 @@ package renderers
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -11,6 +12,12 @@ import (
 // OverlayRenderer draws the modal overlay window
 type OverlayRenderer struct {
 	gameCtx *engine.GameContext
+}
+
+type overlaySection struct {
+	header string
+	items  [][2]string
+	isHint bool
 }
 
 // NewOverlayRenderer creates a new overlay renderer
@@ -26,117 +33,268 @@ func (r *OverlayRenderer) IsVisible() bool {
 	return r.gameCtx.IsOverlayMode() && uiSnapshot.OverlayActive
 }
 
-// Render draws the overlay window
+// Render draws the overlay window with a colored two-column section layout
 func (r *OverlayRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskUI)
-	// Get UI Snapshot
 	uiSnapshot := r.gameCtx.GetUISnapshot()
+
 	// Calculate overlay dimensions (80% of screen)
 	overlayWidth := int(float64(ctx.Width) * constant.OverlayWidthPercent)
 	overlayHeight := int(float64(ctx.Height) * constant.OverlayHeightPercent)
 
-	// Ensure minimum dimensions
-	if overlayWidth < 20 {
-		overlayWidth = 20
+	if overlayWidth < 40 {
+		overlayWidth = 40
 	}
-	if overlayHeight < 10 {
-		overlayHeight = 10
-	}
-
-	// Ensure it fits on screen
-	if overlayWidth > ctx.Width-4 {
-		overlayWidth = ctx.Width - 4
-	}
-	if overlayHeight > ctx.Height-4 {
-		overlayHeight = ctx.Height - 4
+	if overlayHeight < 15 {
+		overlayHeight = 15
 	}
 
-	// Calculate centered position
 	startX := (ctx.Width - overlayWidth) / 2
 	startY := (ctx.Height - overlayHeight) / 2
 
-	// Draw top border with title
-	buf.SetWithBg(startX, startY, '╔', render.RgbOverlayBorder, render.RgbOverlayBg)
-	for x := 1; x < overlayWidth-1; x++ {
-		buf.SetWithBg(startX+x, startY, '═', render.RgbOverlayBorder, render.RgbOverlayBg)
-	}
-	buf.SetWithBg(startX+overlayWidth-1, startY, '╗', render.RgbOverlayBorder, render.RgbOverlayBg)
-
-	// Draw title centered on top border
-	if uiSnapshot.OverlayTitle != "" {
-		titleX := startX + (overlayWidth-len(uiSnapshot.OverlayTitle))/2
-		if titleX > startX {
-			for i, ch := range uiSnapshot.OverlayTitle {
-				if titleX+i < startX+overlayWidth-1 {
-					buf.SetWithBg(titleX+i, startY, ch, render.RgbOverlayTitle, render.RgbOverlayBg)
-				}
-			}
+	// 1. Draw Background and Borders
+	for y := 0; y < overlayHeight; y++ {
+		for x := 0; x < overlayWidth; x++ {
+			buf.SetWithBg(startX+x, startY+y, ' ', render.RgbOverlayText, render.RgbOverlayBg)
 		}
 	}
 
-	// Draw content area and side borders
-	contentHeight := overlayHeight - 2
-	contentWidth := overlayWidth - 2
+	r.drawBorder(buf, startX, startY, overlayWidth, overlayHeight, uiSnapshot.OverlayTitle)
 
-	for y := 1; y < overlayHeight-1; y++ {
-		screenY := startY + y
-		// Left border
-		buf.SetWithBg(startX, screenY, '║', render.RgbOverlayBorder, render.RgbOverlayBg)
-		// Content area
-		for x := 1; x < overlayWidth-1; x++ {
-			buf.SetWithBg(startX+x, screenY, ' ', render.RgbOverlayText, render.RgbOverlayBg)
-		}
-		// Right border
-		buf.SetWithBg(startX+overlayWidth-1, screenY, '║', render.RgbOverlayBorder, render.RgbOverlayBg)
-	}
-
-	// Draw bottom border
-	buf.SetWithBg(startX, startY+overlayHeight-1, '╚', render.RgbOverlayBorder, render.RgbOverlayBg)
-	for x := 1; x < overlayWidth-1; x++ {
-		buf.SetWithBg(startX+x, startY+overlayHeight-1, '═', render.RgbOverlayBorder, render.RgbOverlayBg)
-	}
-	buf.SetWithBg(startX+overlayWidth-1, startY+overlayHeight-1, '╝', render.RgbOverlayBorder, render.RgbOverlayBg)
-
-	// Draw content lines
+	// 2. Content Layout Calculation
+	contentStartX := startX + 1 + constant.OverlayPaddingX
 	contentStartY := startY + 1 + constant.OverlayPaddingY
-	contentStartX := startX + constant.OverlayPaddingX
-	maxContentLines := contentHeight - 2*constant.OverlayPaddingY
+	contentWidth := overlayWidth - 2 - (2 * constant.OverlayPaddingX)
+	contentHeight := overlayHeight - 2 - (2 * constant.OverlayPaddingY)
 
-	// Calculate visible range based on scroll
-	startLine := uiSnapshot.OverlayScroll
-	endLine := startLine + maxContentLines
-	if endLine > len(uiSnapshot.OverlayContent) {
-		endLine = len(uiSnapshot.OverlayContent)
+	sections := r.parseSections(uiSnapshot.OverlayContent)
+	leftSections, rightSections := r.distributeSections(sections)
+
+	maxLines := contentHeight - 1
+
+	// 3. Render Columns - center if single column
+	if len(rightSections) == 0 {
+		// Single column: center it
+		colWidth := (contentWidth * 2) / 3
+		if colWidth > 60 {
+			colWidth = 60
+		}
+		centerX := contentStartX + (contentWidth-colWidth)/2
+		r.renderColumn(buf, leftSections, centerX, contentStartY, colWidth, maxLines, uiSnapshot.OverlayScroll)
+	} else {
+		// Two columns
+		colWidth := (contentWidth - 3) / 2
+		leftColX := contentStartX
+		rightColX := contentStartX + colWidth + 3
+		r.renderColumn(buf, leftSections, leftColX, contentStartY, colWidth, maxLines, uiSnapshot.OverlayScroll)
+		r.renderColumn(buf, rightSections, rightColX, contentStartY, colWidth, maxLines, uiSnapshot.OverlayScroll)
 	}
 
-	// Draw visible content lines
-	lineY := contentStartY
-	for i := startLine; i < endLine && lineY < startY+overlayHeight-1-constant.OverlayPaddingY; i++ {
-		line := uiSnapshot.OverlayContent[i]
-		maxLineWidth := contentWidth - 2*constant.OverlayPaddingX
+	// 4. Render Hints (Bottom Center)
+	r.renderHints(buf, sections, startX, startY+overlayHeight-2, overlayWidth)
 
-		// Truncate line if too long
-		displayLine := line
-		if len(line) > maxLineWidth {
-			displayLine = line[:maxLineWidth]
-		}
-
-		// Draw the line
-		for j, ch := range displayLine {
-			if contentStartX+j < startX+overlayWidth-1-constant.OverlayPaddingX {
-				buf.SetWithBg(contentStartX+j, lineY, ch, render.RgbOverlayText, render.RgbOverlayBg)
-			}
-		}
-		lineY++
-	}
-
-	// Draw scroll indicator if content is scrollable
-	if len(uiSnapshot.OverlayContent) > maxContentLines {
-		scrollInfo := fmt.Sprintf("[%d/%d]", uiSnapshot.OverlayScroll+1, len(uiSnapshot.OverlayContent)-maxContentLines+1)
+	// 5. Scroll Indicator
+	totalLines := r.countTotalLines(sections)
+	if totalLines > maxLines {
+		scrollInfo := fmt.Sprintf("[%d/%d]", uiSnapshot.OverlayScroll+1, totalLines-maxLines+1)
 		scrollX := startX + overlayWidth - len(scrollInfo) - 2
 		scrollY := startY + overlayHeight - 1
 		for i, ch := range scrollInfo {
 			buf.SetWithBg(scrollX+i, scrollY, ch, render.RgbOverlayBorder, render.RgbOverlayBg)
 		}
 	}
+}
+
+func (r *OverlayRenderer) drawBorder(buf *render.RenderBuffer, x, y, w, h int, title string) {
+	// Corners
+	buf.SetWithBg(x, y, '╔', render.RgbOverlayBorder, render.RgbOverlayBg)
+	buf.SetWithBg(x+w-1, y, '╗', render.RgbOverlayBorder, render.RgbOverlayBg)
+	buf.SetWithBg(x, y+h-1, '╚', render.RgbOverlayBorder, render.RgbOverlayBg)
+	buf.SetWithBg(x+w-1, y+h-1, '╝', render.RgbOverlayBorder, render.RgbOverlayBg)
+
+	// Horizontal lines
+	for i := 1; i < w-1; i++ {
+		buf.SetWithBg(x+i, y, '═', render.RgbOverlayBorder, render.RgbOverlayBg)
+		buf.SetWithBg(x+i, y+h-1, '═', render.RgbOverlayBorder, render.RgbOverlayBg)
+	}
+
+	// Vertical lines
+	for i := 1; i < h-1; i++ {
+		buf.SetWithBg(x, y+i, '║', render.RgbOverlayBorder, render.RgbOverlayBg)
+		buf.SetWithBg(x+w-1, y+i, '║', render.RgbOverlayBorder, render.RgbOverlayBg)
+	}
+
+	// Title
+	if title != "" {
+		displayTitle := fmt.Sprintf(" %s ", strings.ToUpper(title))
+		titleX := x + (w-len(displayTitle))/2
+		for i, ch := range displayTitle {
+			buf.SetWithBg(titleX+i, y, ch, render.RgbOverlayTitle, render.RgbOverlayBg)
+		}
+	}
+}
+
+func (r *OverlayRenderer) parseSections(content []string) []overlaySection {
+	var sections []overlaySection
+	var current *overlaySection
+
+	for _, line := range content {
+		if len(line) == 0 {
+			continue
+		}
+		switch line[0] {
+		case '§':
+			if current != nil {
+				sections = append(sections, *current)
+			}
+			current = &overlaySection{header: line[1:]}
+		case '~':
+			if current != nil {
+				sections = append(sections, *current)
+			}
+			sections = append(sections, overlaySection{header: line[1:], isHint: true})
+			current = nil
+		default:
+			if current == nil {
+				current = &overlaySection{header: "INFO"}
+			}
+			if idx := strings.Index(line, "|"); idx > 0 {
+				current.items = append(current.items, [2]string{line[:idx], line[idx+1:]})
+			} else {
+				current.items = append(current.items, [2]string{line, ""})
+			}
+		}
+	}
+	if current != nil {
+		sections = append(sections, *current)
+	}
+	return sections
+}
+
+func (r *OverlayRenderer) distributeSections(sections []overlaySection) (left, right []overlaySection) {
+	lLines, rLines := 0, 0
+	for _, sec := range sections {
+		if sec.isHint {
+			continue
+		}
+		cost := 1 + len(sec.items) + 1
+		if lLines <= rLines {
+			left = append(left, sec)
+			lLines += cost
+		} else {
+			right = append(right, sec)
+			rLines += cost
+		}
+	}
+	return
+}
+
+func (r *OverlayRenderer) renderColumn(buf *render.RenderBuffer, sections []overlaySection, x, y, width, maxLines, scroll int) {
+	lineY := y
+	currentLine := 0
+	maxY := y + maxLines
+
+	for _, sec := range sections {
+		// Header
+		if currentLine >= scroll && lineY < maxY {
+			r.drawSectionHeader(buf, sec.header, x, lineY, width)
+			lineY++
+		}
+		currentLine++
+
+		// Items
+		for _, item := range sec.items {
+			if currentLine >= scroll && lineY < maxY {
+				r.drawKeyValue(buf, item[0], item[1], x, lineY, width)
+				lineY++
+			}
+			currentLine++
+		}
+
+		// Spacer
+		if currentLine >= scroll && lineY < maxY {
+			lineY++
+		}
+		currentLine++
+	}
+}
+
+func (r *OverlayRenderer) drawSectionHeader(buf *render.RenderBuffer, text string, x, y, width int) {
+	// Draw horizontal line with embedded text: ┌─ TITLE ──┐
+	header := fmt.Sprintf(" %s ", text)
+	buf.SetWithBg(x, y, '┌', render.RgbOverlaySeparator, render.RgbOverlayBg)
+	for i := 1; i < width-1; i++ {
+		buf.SetWithBg(x+i, y, '─', render.RgbOverlaySeparator, render.RgbOverlayBg)
+	}
+	buf.SetWithBg(x+width-1, y, '┐', render.RgbOverlaySeparator, render.RgbOverlayBg)
+
+	for i, ch := range header {
+		if i+2 < width-1 {
+			buf.SetWithBg(x+2+i, y, ch, render.RgbOverlayHeader, render.RgbOverlayBg)
+		}
+	}
+}
+
+func (r *OverlayRenderer) drawKeyValue(buf *render.RenderBuffer, key, val string, x, y, width int) {
+	keyWidth := (width / 2) - 1
+	if len(key) > keyWidth {
+		key = key[:keyWidth-1] + "…"
+	}
+
+	// Key (right aligned in first half)
+	for i, ch := range key {
+		buf.SetWithBg(x+keyWidth-len(key)+i, y, ch, render.RgbOverlayKey, render.RgbOverlayBg)
+	}
+
+	buf.SetWithBg(x+keyWidth, y, ':', render.RgbOverlaySeparator, render.RgbOverlayBg)
+
+	// Value (left aligned in second half)
+	valArea := width - keyWidth - 2
+	if len(val) > valArea {
+		val = val[:valArea-1] + "…"
+	}
+	for i, ch := range val {
+		buf.SetWithBg(x+keyWidth+2+i, y, ch, render.RgbOverlayValue, render.RgbOverlayBg)
+	}
+}
+
+func (r *OverlayRenderer) renderHints(buf *render.RenderBuffer, sections []overlaySection, x, y, w int) {
+	var hints []string
+	for _, sec := range sections {
+		if sec.isHint {
+			hints = append(hints, sec.header)
+		}
+	}
+	if len(hints) == 0 {
+		return
+	}
+
+	combined := strings.Join(hints, "  •  ")
+	if len(combined) > w-4 {
+		combined = combined[:w-7] + "..."
+	}
+
+	startX := x + (w-len(combined))/2
+	for i, ch := range combined {
+		buf.SetWithBg(startX+i, y, ch, render.RgbOverlayHint, render.RgbOverlayBg)
+	}
+}
+
+func (r *OverlayRenderer) countTotalLines(sections []overlaySection) int {
+	l, rLines := 0, 0
+	for _, sec := range sections {
+		if sec.isHint {
+			continue
+		}
+		cost := 1 + len(sec.items) + 1
+		if l <= rLines {
+			l += cost
+		} else {
+			rLines += cost
+		}
+	}
+	if l > rLines {
+		return l
+	}
+	return rLines
 }

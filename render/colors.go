@@ -105,10 +105,15 @@ var (
 	RgbEnergyBlinkWhite = RGB{255, 255, 255} // White blink
 
 	// Overlay colors
-	RgbOverlayBorder = RGB{0, 255, 255}   // Bright Cyan for border
-	RgbOverlayBg     = RGB{20, 20, 30}    // Dark background
-	RgbOverlayText   = RGB{255, 255, 255} // White text for high contrast
-	RgbOverlayTitle  = RGB{255, 255, 0}   // Yellow for title
+	RgbOverlayBorder    = RGB{0, 255, 255}            // Bright Cyan for border
+	RgbOverlayBg        = RGB{20, 20, 30}             // Dark background
+	RgbOverlayText      = RGB{255, 255, 255}          // White text for high contrast
+	RgbOverlayTitle     = RGB{255, 255, 0}            // Yellow for title
+	RgbOverlayHeader    = RGB{R: 255, G: 215, B: 0}   // Gold for headers
+	RgbOverlayKey       = RGB{R: 180, G: 180, B: 180} // Light gray for keys
+	RgbOverlayValue     = RGB{R: 100, G: 220, B: 100} // Green for values
+	RgbOverlayHint      = RGB{R: 120, G: 120, B: 120} // Dim for hints
+	RgbOverlaySeparator = RGB{R: 80, G: 80, B: 80}    // Dark for separators
 
 	// Status bar auxiliary colors
 	RgbColorModeIndicator = RGB{200, 200, 200} // Light gray for TC/256 indicator

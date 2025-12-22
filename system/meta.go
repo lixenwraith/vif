@@ -110,77 +110,104 @@ func (s *MetaSystem) handleGameReset() {
 	}
 }
 
-// handleDebugRequest shows debug information overlay
+// handleDebugRequest shows debug information overlay with auto-discovered stats
 func (s *MetaSystem) handleDebugRequest() {
-	// Query energy
+	var lines []string
+
+	// Section: Player State (cursor-specific, always relevant)
+	lines = append(lines, "§PLAYER STATE")
+
 	energyComp, _ := s.energyStore.Get(s.ctx.CursorEntity)
-	energyVal := energyComp.Current.Load()
+	lines = append(lines, fmt.Sprintf("Energy|%d", energyComp.Current.Load()))
 
-	// Query heat
-	heatVal := 0
+	heatVal := int64(0)
 	if hc, ok := s.heatStore.Get(s.ctx.CursorEntity); ok {
-		heatVal = int(hc.Current.Load())
+		heatVal = hc.Current.Load()
 	}
+	lines = append(lines, fmt.Sprintf("Heat|%d / %d", heatVal, constant.MaxHeat))
 
-	// Query shield
 	shieldActive := false
 	if sc, ok := s.shieldStore.Get(s.ctx.CursorEntity); ok {
 		shieldActive = sc.Active
 	}
+	lines = append(lines, fmt.Sprintf("Shield|%v", shieldActive))
 
-	// Build debug content
-	debugContent := []string{
-		"=== DEBUG INFORMATION ===",
-		"",
-		fmt.Sprintf("Energy:        %d", energyVal),
-		fmt.Sprintf("Heat:          %d / %d", heatVal, constant.MaxHeat),
-		fmt.Sprintf("Shield Active: %v", shieldActive),
-		fmt.Sprintf("Game Ticks:    %d", s.ctx.State.GetGameTicks()),
-		fmt.Sprintf("APM:           %d", s.ctx.State.GetAPM()),
-		fmt.Sprintf("Frame Number:  %d", s.ctx.GetFrameNumber()),
-		"",
-		fmt.Sprintf("Screen Size:   %dx%d", s.ctx.Width, s.ctx.Height),
-		fmt.Sprintf("Game Area:     %dx%d", s.ctx.GameWidth, s.ctx.GameHeight),
-		fmt.Sprintf("Game Offset:   (%d, %d)", s.ctx.GameX, s.ctx.GameY),
-		"",
-		fmt.Sprintf("Spawn Enabled: %v", s.res.Status.Bools.Get("spawn.enabled").Load()),
-		fmt.Sprintf("Boost Active:  %v", s.res.Status.Bools.Get("boost.active").Load()),
-		fmt.Sprintf("Paused:        %v", s.ctx.IsPaused.Load()),
-		"",
-		"Entity Counts:",
-		fmt.Sprintf("  Characters:  %d", s.charStore.Count()),
-		fmt.Sprintf("  Nuggets:     %d", s.nuggetStore.Count()),
-		fmt.Sprintf("  Drains:      %d", s.drainStore.Count()),
-		fmt.Sprintf("  Cleaners:    %d", s.cleanerStore.Count()),
-		fmt.Sprintf("  Decays:      %d", s.decayStore.Count()),
-		"",
-		"Status Registry:",
-	}
+	// Section: Engine
+	lines = append(lines, "§ENGINE")
+	lines = append(lines, fmt.Sprintf("Frame|%d", s.ctx.GetFrameNumber()))
+	lines = append(lines, fmt.Sprintf("Screen|%dx%d", s.ctx.Width, s.ctx.Height))
+	lines = append(lines, fmt.Sprintf("Game Area|%dx%d", s.ctx.GameWidth, s.ctx.GameHeight))
+	lines = append(lines, fmt.Sprintf("Paused|%v", s.ctx.IsPaused.Load()))
 
-	// Add status registry values
+	// Section: Auto-discovered Registry Stats
 	reg := s.res.Status
+
+	// Collect and group by prefix
+	groups := make(map[string][][2]string) // prefix -> []{"key", "value"}
+
 	reg.Bools.Range(func(key string, ptr *atomic.Bool) {
-		debugContent = append(debugContent, fmt.Sprintf("  %s: %v", key, ptr.Load()))
+		prefix, name := splitStatKey(key)
+		groups[prefix] = append(groups[prefix], [2]string{name, fmt.Sprintf("%v", ptr.Load())})
 	})
 
 	reg.Ints.Range(func(key string, ptr *atomic.Int64) {
 		val := ptr.Load()
+		prefix, name := splitStatKey(key)
+
 		// Format durations nicely
-		if strings.HasSuffix(key, ".timer") {
-			debugContent = append(debugContent, fmt.Sprintf("  %s: %s", key, time.Duration(val).String()))
+		var valStr string
+		if strings.HasSuffix(key, ".timer") || strings.HasSuffix(key, ".duration") {
+			valStr = time.Duration(val).String()
 		} else {
-			debugContent = append(debugContent, fmt.Sprintf("  %s: %d", key, val))
+			valStr = fmt.Sprintf("%d", val)
 		}
+		groups[prefix] = append(groups[prefix], [2]string{name, valStr})
 	})
 
 	reg.Floats.Range(func(key string, ptr *status.AtomicFloat) {
-		debugContent = append(debugContent, fmt.Sprintf("  %s: %.3f", key, ptr.Get()))
+		prefix, name := splitStatKey(key)
+		groups[prefix] = append(groups[prefix], [2]string{name, fmt.Sprintf("%.3f", ptr.Get())})
 	})
 
-	debugContent = append(debugContent, "", "Press ESC or ENTER to close")
+	// Output groups in deterministic order
+	groupOrder := []string{"engine", "event", "entity", "spawn", "boost", "gold", "decay"}
+	seen := make(map[string]bool)
 
-	// Set overlay state
-	s.ctx.SetOverlayState(true, " DEBUG ", debugContent, 0)
+	for _, prefix := range groupOrder {
+		if stats, ok := groups[prefix]; ok {
+			lines = append(lines, "§"+strings.ToUpper(prefix))
+			for _, kv := range stats {
+				lines = append(lines, fmt.Sprintf("%s|%s", kv[0], kv[1]))
+			}
+			seen[prefix] = true
+		}
+	}
+
+	// Any remaining groups not in predefined order
+	for prefix, stats := range groups {
+		if seen[prefix] {
+			continue
+		}
+		lines = append(lines, "§"+strings.ToUpper(prefix))
+		for _, kv := range stats {
+			lines = append(lines, fmt.Sprintf("%s|%s", kv[0], kv[1]))
+		}
+	}
+
+	lines = append(lines, "")
+	lines = append(lines, "~ESC or ENTER to close")
+
+	s.ctx.SetOverlayState(true, " DEBUG ", lines, 0)
+}
+
+// splitStatKey splits "prefix.name" into prefix and name
+// Returns ("misc", key) if no dot found
+func splitStatKey(key string) (prefix, name string) {
+	idx := strings.Index(key, ".")
+	if idx < 0 {
+		return "misc", key
+	}
+	return key[:idx], key[idx+1:]
 }
 
 // handleHelpRequest shows help information overlay
