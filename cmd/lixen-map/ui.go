@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -42,6 +43,10 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 	switch ev.Key {
 	case terminal.KeyCtrlY:
 		app.copyOutputToClipboard()
+		return false, false
+
+	case terminal.KeyCtrlL:
+		app.loadSelectionFromFile()
 		return false, false
 
 	case terminal.KeyRune:
@@ -181,6 +186,27 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 		return app.handleDepOnPaneEvent(ev)
 	}
 	return false, false
+}
+
+// loadSelectionFromFile loads selection from catalog file
+func (app *AppState) loadSelectionFromFile() {
+	paths, err := LoadSelectionFile(outputPath, app.Index)
+	if err != nil {
+		if os.IsNotExist(err) {
+			app.Message = fmt.Sprintf("file not found: %s", outputPath)
+		} else {
+			app.Message = fmt.Sprintf("load error: %v", err)
+		}
+		return
+	}
+
+	// Clear and apply
+	app.Selected = make(map[string]bool)
+	for _, p := range paths {
+		app.Selected[p] = true
+	}
+
+	app.Message = fmt.Sprintf("loaded %d files from %s", len(paths), outputPath)
 }
 
 // handleLixenPaneEvent processes input when lixen pane focused

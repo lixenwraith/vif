@@ -390,7 +390,6 @@ func (app *AppState) renderLixenPane(cells []terminal.Cell, totalWidth, startX, 
 	}
 }
 
-// renderTreePane draws the tree pane with files and directories
 func (app *AppState) renderTreePane(cells []terminal.Cell, totalWidth, startX, paneWidth, startY, height int) {
 	bg := colorDefaultBg
 	if app.FocusPane == PaneTree {
@@ -428,7 +427,10 @@ func (app *AppState) renderTreePane(cells []terminal.Cell, totalWidth, startX, p
 		x := startX + 1 + indent
 
 		if node.IsDir {
-			// Directory: show expand indicator and name
+			// Directory: show checkbox, expand indicator, and name
+			selCount, totalCount := app.countDirSelection(node)
+
+			// Expand indicator
 			expandChar := '▶'
 			if node.Expanded {
 				expandChar = '▼'
@@ -442,16 +444,35 @@ func (app *AppState) renderTreePane(cells []terminal.Cell, totalWidth, startX, p
 			}
 			x += 2
 
-			// Selection count for directories
-			selCount, totalCount := app.countDirSelection(node)
+			// Selection checkbox
+			checkbox := "[ ]"
+			checkFg := colorUnselected
+			if totalCount > 0 {
+				if selCount == totalCount {
+					checkbox = "[x]"
+					checkFg = colorSelected
+				} else if selCount > 0 {
+					checkbox = "[o]"
+					checkFg = colorPartialSelectFg
+				}
+			}
+			if dimmed {
+				checkFg = colorUnselected
+			}
+			if x+3 < startX+paneWidth {
+				drawText(cells, totalWidth, x, y, checkbox, checkFg, rowBg, terminal.AttrNone)
+			}
+			x += 4
+
+			// Directory name with count
 			nameStr := node.Name
 			if totalCount > 0 {
 				nameStr = fmt.Sprintf("%s [%d/%d]", node.Name, selCount, totalCount)
 			}
 
-			maxNameLen := paneWidth - indent - 5
+			maxNameLen := paneWidth - indent - 9 // checkbox(4) + expand(2) + margin
 			if len(nameStr) > maxNameLen && maxNameLen > 3 {
-				nameStr = nameStr[:maxNameLen-1] + "…"
+				nameStr = nameStr[:maxNameLen-1] + "â€¦"
 			}
 
 			drawText(cells, totalWidth, x, y, nameStr, dirFg, rowBg, terminal.AttrNone)
@@ -504,7 +525,7 @@ func (app *AppState) renderTreePane(cells []terminal.Cell, totalWidth, startX, p
 					remaining := (startX + paneWidth) - x - 2
 					if remaining > 4 {
 						if len(groupHint) > remaining {
-							groupHint = groupHint[:remaining-1] + "…"
+							groupHint = groupHint[:remaining-1] + "â€¦"
 						}
 						hintFg := colorGroupHintFg
 						if dimmed {

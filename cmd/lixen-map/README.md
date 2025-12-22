@@ -130,6 +130,7 @@ Press `?` in any view to open the full key binding help overlay.
 | `+`/`-`  | Adjust expansion depth (1-5)       |
 | `r`      | Preview output files               |
 | `Ctrl+S` | Write output file                  |
+| `Ctrl+L` | Load selection from file           |
 | `Ctrl+Y` | Copy output to clipboard (wl-copy) |
 
 ### Editing
@@ -197,6 +198,21 @@ Multiple categories separated by commas:
 Files with `all(*)` in any category always included. Output sorted alphabetically.
 
 Use `Ctrl+S` to write to file, `Ctrl+Y` to copy to clipboard (requires `wl-copy`).
+
+## Selection Loading
+
+Use `Ctrl+L` to load selections from the catalog ile (default `catalog.txt`, or path specified via -o`).
+
+**Supported patterns:**
+
+| Pattern             | Matches                            |
+|---------------------|------------------------------------|
+| `./path/to/file.go` | Exact file                         |
+| `cmd/*`             | All files recursively under `cmd/` |
+| `*_test.go`         | All test files project-wide        |
+| `pkg/*.go`          | Files matching glob in `pkg/`      |
+
+Lines starting with `#` are treated as comments. Loading clears existing selection before applying.
 
 ## Dependency Expansion
 

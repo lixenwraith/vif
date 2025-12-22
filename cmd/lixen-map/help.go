@@ -34,6 +34,7 @@ var helpPaneKeys = []helpEntry{
 	{"r", "Reindex"},
 	{"p", "Preview output"},
 	{"Ctrl+S", "Save output"},
+	{"Ctrl+L", "Load selection"},
 	{"Ctrl+Y", "Copy to clipboard"},
 	{"Ctrl+Q", "Quit"},
 }
