@@ -30,7 +30,7 @@ func NewPingRenderer(gameCtx *engine.GameContext) *PingRenderer {
 }
 
 // Render draws the ping highlights and grid
-func (r *PingRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (r *PingRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	// Get PingComponent from cursor (Single player assumption: ID 1/CursorEntity)
 	ping, ok := r.pingStore.Get(r.gameCtx.CursorEntity)
 	if !ok {
@@ -45,7 +45,7 @@ func (r *PingRenderer) Render(ctx render.RenderContext, world *engine.World, buf
 	buf.SetWriteMask(render.MaskGrid)
 
 	// 1. Compute Shield Exclusion Mask
-	r.computeExclusionMask(world, ctx.GameWidth, ctx.GameHeight)
+	r.computeExclusionMask(r.gameCtx.World, ctx.GameWidth, ctx.GameHeight)
 
 	// 2. Draw Crosshair (Row/Column Highlights)
 	if ping.ShowCrosshair {

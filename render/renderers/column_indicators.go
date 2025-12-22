@@ -18,7 +18,7 @@ func NewColumnIndicatorsRenderer(gameCtx *engine.GameContext) *ColumnIndicatorsR
 }
 
 // Render implements SystemRenderer
-func (r *ColumnIndicatorsRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (r *ColumnIndicatorsRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskUI)
 	indicatorY := ctx.GameY + ctx.GameHeight
 

@@ -26,7 +26,7 @@ func NewSplashRenderer(gameCtx *engine.GameContext) *SplashRenderer {
 }
 
 // Render draws all splash effects to background channel
-func (r *SplashRenderer) Render(gameCtx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (r *SplashRenderer) Render(gameCtx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskEffect)
 
 	entities := r.splashStore.All()

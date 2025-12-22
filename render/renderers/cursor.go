@@ -38,7 +38,7 @@ func (r *CursorRenderer) IsVisible() bool {
 }
 
 // Render draws the cursor
-func (r *CursorRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskUI)
 	screenX := ctx.GameX + ctx.CursorX
 	screenY := ctx.GameY + ctx.CursorY
@@ -64,7 +64,7 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, world *engine.World, b
 	// 2. Get entities at cursor position using z-index selection
 
 	// Get all entities at cursor position
-	entities := world.Positions.GetAllAt(ctx.CursorX, ctx.CursorY)
+	entities := r.gameCtx.World.Positions.GetAllAt(ctx.CursorX, ctx.CursorY)
 
 	// Check for Drain (highest priority overlay, masks everything)
 	isDrain := false

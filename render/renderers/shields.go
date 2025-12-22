@@ -43,7 +43,7 @@ func NewShieldRenderer(gameCtx *engine.GameContext) *ShieldRenderer {
 }
 
 // Render draws all active shields with quadratic falloff gradient
-func (r *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskShield)
 	shields := r.shieldStore.All()
 	if len(shields) == 0 {
@@ -52,7 +52,7 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, world *engine.World, b
 
 	for _, entity := range shields {
 		shield, okS := r.shieldStore.Get(entity)
-		pos, okP := world.Positions.Get(entity)
+		pos, okP := r.gameCtx.World.Positions.Get(entity)
 
 		if !okS || !okP {
 			continue

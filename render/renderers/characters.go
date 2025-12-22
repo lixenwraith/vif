@@ -22,7 +22,7 @@ func NewCharactersRenderer(gameCtx *engine.GameContext) *CharactersRenderer {
 }
 
 // Render draws all character entities
-func (r *CharactersRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (r *CharactersRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskEntity)
 
 	// Query entities with both position and character
@@ -34,7 +34,7 @@ func (r *CharactersRenderer) Render(ctx render.RenderContext, world *engine.Worl
 			continue
 		}
 
-		pos, ok := world.Positions.Get(entity)
+		pos, ok := r.gameCtx.World.Positions.Get(entity)
 		if !ok {
 			continue
 		}

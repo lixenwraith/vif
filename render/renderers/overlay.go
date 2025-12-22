@@ -34,7 +34,7 @@ func (r *OverlayRenderer) IsVisible() bool {
 }
 
 // Render draws the overlay window with a colored two-column section layout
-func (r *OverlayRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (r *OverlayRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskUI)
 	uiSnapshot := r.gameCtx.GetUISnapshot()
 

@@ -3,6 +3,7 @@ package fsm
 import (
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/toml"
@@ -93,7 +94,35 @@ func (m *Machine[T]) LoadConfig(data []byte) error {
 		return err
 	}
 
-	// 6. Validate Initial State
+	// 6. Build state metadata for telemetry
+	m.StateDurations = make(map[StateID]time.Duration)
+	m.StateIndices = make(map[StateID]int)
+	m.StateCount = len(stateNames) // Excludes Root
+
+	for idx, name := range stateNames {
+		id := nameToID[name]
+		m.StateIndices[id] = idx
+
+		// Extract duration from StateTimeExceeds guards
+		if cfg, ok := config.States[name]; ok {
+			for _, trans := range cfg.Transitions {
+				if trans.Guard == "StateTimeExceeds" && trans.GuardArgs != nil {
+					if ms, ok := trans.GuardArgs["ms"]; ok {
+						switch v := ms.(type) {
+						case float64:
+							m.StateDurations[id] = time.Duration(v) * time.Millisecond
+						case int64:
+							m.StateDurations[id] = time.Duration(v) * time.Millisecond
+						case int:
+							m.StateDurations[id] = time.Duration(v) * time.Millisecond
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 7. Validate Initial State
 	initialID, ok := nameToID[config.InitialState]
 	if !ok {
 		return fmt.Errorf("initial state '%s' not found", config.InitialState)

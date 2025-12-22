@@ -32,6 +32,11 @@ type Machine[T any] struct {
 	guardReg        map[string]GuardFunc[T]
 	guardFactoryReg map[string]GuardFactoryFunc[T]
 	actionReg       map[string]ActionFunc[T]
+
+	// State metadata (populated by loader)
+	StateDurations map[StateID]time.Duration // Max duration per state (0 = instant/event-driven)
+	StateIndices   map[StateID]int           // Deterministic index for color mapping
+	StateCount     int                       // Total non-Root states for normalization
 }
 
 // Node represents a state in the hierarchy

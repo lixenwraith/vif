@@ -18,7 +18,7 @@ func NewLineNumbersRenderer(gameCtx *engine.GameContext) *LineNumbersRenderer {
 }
 
 // Render implements SystemRenderer
-func (r *LineNumbersRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (r *LineNumbersRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskUI)
 
 	for y := 0; y < ctx.GameHeight; y++ {

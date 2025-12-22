@@ -69,7 +69,7 @@ func (o *RenderOrchestrator) RenderFrame(ctx RenderContext, world *engine.World)
 		if vt, ok := entry.renderer.(VisibilityToggle); ok && !vt.IsVisible() {
 			continue
 		}
-		entry.renderer.Render(ctx, world, o.buffer)
+		entry.renderer.Render(ctx, o.buffer)
 	}
 
 	o.buffer.FlushToTerminal(o.term)

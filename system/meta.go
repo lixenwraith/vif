@@ -169,6 +169,11 @@ func (s *MetaSystem) handleDebugRequest() {
 		groups[prefix] = append(groups[prefix], [2]string{name, fmt.Sprintf("%.3f", ptr.Get())})
 	})
 
+	reg.Strings.Range(func(key string, ptr *status.AtomicString) {
+		prefix, name := splitStatKey(key)
+		groups[prefix] = append(groups[prefix], [2]string{name, ptr.Load()})
+	})
+
 	// Output groups in deterministic order
 	groupOrder := []string{"engine", "event", "entity", "spawn", "boost", "gold", "decay"}
 	seen := make(map[string]bool)

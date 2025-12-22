@@ -18,11 +18,11 @@ func NewDimRenderer(ctx *engine.GameContext) *DimRenderer {
 }
 
 // Render applies dimming when game is paused
-func (r *DimRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (r *DimRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	if !ctx.IsPaused {
 		return
 	}
-	cfg := engine.MustGetResource[*engine.RenderConfig](world.Resources)
+	cfg := engine.MustGetResource[*engine.RenderConfig](r.gameCtx.World.Resources)
 	buf.MutateDim(cfg.DimFactor, cfg.DimMask)
 }
 
@@ -39,8 +39,8 @@ func NewGrayoutRenderer(ctx *engine.GameContext) *GrayoutRenderer {
 }
 
 // Render applies grayscale with intensity from game state
-func (r *GrayoutRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
-	cfg := engine.MustGetResource[*engine.RenderConfig](world.Resources)
+func (r *GrayoutRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
+	cfg := engine.MustGetResource[*engine.RenderConfig](r.gameCtx.World.Resources)
 	intensity := r.gameCtx.State.GetGrayoutIntensity(ctx.GameTime, cfg.GrayoutDuration)
 	if intensity <= 0 {
 		return

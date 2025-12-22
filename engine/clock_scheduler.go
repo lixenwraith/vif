@@ -62,6 +62,13 @@ type ClockScheduler struct {
 	statEvDispatches *atomic.Int64
 	statEntityCount  *atomic.Int64
 	statQueueLen     *atomic.Int64
+
+	// FSM telemetry
+	statFSMName    *status.AtomicString
+	statFSMElapsed *atomic.Int64
+	statFSMMaxDur  *atomic.Int64
+	statFSMIndex   *atomic.Int64
+	statFSMTotal   *atomic.Int64
 }
 
 // NewClockScheduler creates a new clock scheduler with specified tick interval
@@ -82,29 +89,44 @@ func NewClockScheduler(
 	eqRes := MustGetResource[*EventQueueResource](world.Resources)
 
 	cs := &ClockScheduler{
-		world:               world,
-		pausableClock:       pausableClock,
-		isPaused:            isPaused,
-		tickInterval:        tickInterval,
-		timeRes:             timeRes,
-		stateRes:            stateRes,
-		eqRes:               eqRes,
-		lastGameTickTime:    pausableClock.Now(),
-		tickCount:           atomic.Uint64{},
-		eventRouter:         event.NewRouter(MustGetResource[*EventQueueResource](world.Resources).Queue),
-		frameReady:          frameReady,
-		updateDone:          updateDone,
-		resetChan:           resetChan,
-		stopChan:            make(chan struct{}),
-		statusReg:           statusReg,
-		fsm:                 fsm.NewMachine[*World](),
+		world: world,
+
+		pausableClock: pausableClock,
+		isPaused:      isPaused,
+		tickInterval:  tickInterval,
+
+		timeRes:  timeRes,
+		stateRes: stateRes,
+		eqRes:    eqRes,
+
+		lastGameTickTime: pausableClock.Now(),
+		tickCount:        atomic.Uint64{},
+
+		eventRouter: event.NewRouter(MustGetResource[*EventQueueResource](world.Resources).Queue),
+
+		frameReady: frameReady,
+		updateDone: updateDone,
+		resetChan:  resetChan,
+		stopChan:   make(chan struct{}),
+
+		fsm: fsm.NewMachine[*World](),
+
 		eventLoopInterval:   constant.EventLoopInterval,
 		eventLoopBackoffMax: constant.EventLoopBackoffMax,
-		statTicks:           statusReg.Ints.Get("engine.ticks"),
-		statEvBackoffs:      statusReg.Ints.Get("event.backoffs"),
-		statEvDispatches:    statusReg.Ints.Get("event.dispatches"),
-		statEntityCount:     statusReg.Ints.Get("entity.count"),
-		statQueueLen:        statusReg.Ints.Get("event.queue_len"),
+
+		statusReg: statusReg,
+
+		statTicks:        statusReg.Ints.Get("engine.ticks"),
+		statEvBackoffs:   statusReg.Ints.Get("event.backoffs"),
+		statEvDispatches: statusReg.Ints.Get("event.dispatches"),
+		statEntityCount:  statusReg.Ints.Get("entity.count"),
+		statQueueLen:     statusReg.Ints.Get("event.queue_len"),
+
+		statFSMName:    statusReg.Strings.Get("fsm.state"),
+		statFSMElapsed: statusReg.Ints.Get("fsm.elapsed"),
+		statFSMMaxDur:  statusReg.Ints.Get("fsm.max_duration"),
+		statFSMIndex:   statusReg.Ints.Get("fsm.state_index"),
+		statFSMTotal:   statusReg.Ints.Get("fsm.state_count"),
 	}
 
 	return cs, updateDone, resetChan
@@ -402,10 +424,25 @@ func (cs *ClockScheduler) processTick() {
 		// 3. FSM Update: Advance state machine (may emit new events via Actions)
 		cs.fsm.Update(cs.world, cs.tickInterval)
 
-		// 4. Post-FSM Settling: Resolve events emitted by FSM state transitions
+		// 4. FSM Telemetry (after update, before post-settling)
+		cs.statFSMName.Store(cs.fsm.CurrentStateName())
+		cs.statFSMElapsed.Store(int64(cs.fsm.TimeInState()))
+		if maxDur, ok := cs.fsm.StateDurations[cs.fsm.CurrentStateID()]; ok {
+			cs.statFSMMaxDur.Store(int64(maxDur))
+		} else {
+			cs.statFSMMaxDur.Store(0)
+		}
+		if idx, ok := cs.fsm.StateIndices[cs.fsm.CurrentStateID()]; ok {
+			cs.statFSMIndex.Store(int64(idx))
+		} else {
+			cs.statFSMIndex.Store(0)
+		}
+		cs.statFSMTotal.Store(int64(cs.fsm.StateCount))
+
+		// 5. Post-FSM Settling: Resolve events emitted by FSM state transitions
 		cs.dispatchAndProcessEvents()
 
-		// 5. System Execution: Systems run on the final, settled state for this tick
+		// 6. System Execution: Systems run on the final, settled state for this tick
 		cs.world.UpdateLocked()
 	})
 

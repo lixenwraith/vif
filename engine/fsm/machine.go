@@ -9,14 +9,18 @@ import (
 
 // NewMachine creates a new FSM instance
 func NewMachine[T any]() *Machine[T] {
-	return &Machine[T]{
+	m := &Machine[T]{
 		nodes:           make(map[StateID]*Node[T]),
 		guardReg:        make(map[string]GuardFunc[T]),
 		guardFactoryReg: make(map[string]GuardFactoryFunc[T]),
 		actionReg:       make(map[string]ActionFunc[T]),
 		// Pre-allocate path slice to avoid resize during typical depth operations
-		activePath: make([]StateID, 0, 8),
+		activePath:     make([]StateID, 0, 8),
+		StateDurations: make(map[StateID]time.Duration),
+		StateIndices:   make(map[StateID]int),
+		StateCount:     0,
 	}
+	return m
 }
 
 // RegisterGuard adds a predicate function to the registry

@@ -68,23 +68,23 @@ func (r *EffectsRenderer) buildMaterializeGradient() {
 }
 
 // Render draws all visual effects
-func (r *EffectsRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (r *EffectsRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskEffect)
 	// Draw decay (only if there are decay entities)
-	r.drawDecay(ctx, world, buf)
+	r.drawDecay(ctx, buf)
 
 	// Draw cleaners
-	r.drawCleaners(ctx, world, buf)
+	r.drawCleaners(ctx, buf)
 
 	// Draw removal flashes
-	r.drawRemovalFlashes(ctx, world, buf)
+	r.drawRemovalFlashes(ctx, buf)
 
 	// Draw materializers
-	r.drawMaterializers(ctx, world, buf)
+	r.drawMaterializers(ctx, buf)
 }
 
 // drawDecay draws the decay characters
-func (r *EffectsRenderer) drawDecay(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (r *EffectsRenderer) drawDecay(ctx render.RenderContext, buf *render.RenderBuffer) {
 	decayEntities := r.decayStore.All()
 
 	for _, decayEntity := range decayEntities {
@@ -120,7 +120,7 @@ func (r *EffectsRenderer) drawDecay(ctx render.RenderContext, world *engine.Worl
 
 // drawCleaners draws the cleaner animation using the trail of grid points
 // Cleaners are opaque and render ON TOP of everything (occlude shield)
-func (r *EffectsRenderer) drawCleaners(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (r *EffectsRenderer) drawCleaners(ctx render.RenderContext, buf *render.RenderBuffer) {
 	cleanerEntities := r.cleanerStore.All()
 
 	gradientLen := len(r.cleanerGradient)
@@ -161,7 +161,7 @@ func (r *EffectsRenderer) drawCleaners(ctx render.RenderContext, world *engine.W
 }
 
 // drawRemovalFlashes draws the brief flash effects when characters are removed
-func (r *EffectsRenderer) drawRemovalFlashes(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (r *EffectsRenderer) drawRemovalFlashes(ctx render.RenderContext, buf *render.RenderBuffer) {
 	entities := r.flashStore.All()
 
 	for _, entity := range entities {
@@ -198,7 +198,7 @@ func (r *EffectsRenderer) drawRemovalFlashes(ctx render.RenderContext, world *en
 }
 
 // drawMaterializers draws the materialize animation using the trail of grid points
-func (r *EffectsRenderer) drawMaterializers(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (r *EffectsRenderer) drawMaterializers(ctx render.RenderContext, buf *render.RenderBuffer) {
 	entities := r.matStore.All()
 	if len(entities) == 0 {
 		return

@@ -30,28 +30,43 @@ type StatusBarRenderer struct {
 	statTicks      *atomic.Int64
 	statPhase      *atomic.Int64
 	statDecayTimer *atomic.Int64
+
+	// FSM telemetry
+	statFSMName    *status.AtomicString
+	statFSMElapsed *atomic.Int64
+	statFSMMaxDur  *atomic.Int64
+	statFSMIndex   *atomic.Int64
+	statFSMTotal   *atomic.Int64
 }
 
 // NewStatusBarRenderer creates a status bar renderer
 func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 	reg := engine.MustGetResource[*status.Registry](gameCtx.World.Resources)
-	render := engine.MustGetResource[*engine.RenderConfig](gameCtx.World.Resources)
+	cfg := engine.MustGetResource[*engine.RenderConfig](gameCtx.World.Resources)
 	return &StatusBarRenderer{
-		gameCtx:        gameCtx,
-		pingStore:      engine.GetStore[component.PingComponent](gameCtx.World),
-		energyStore:    engine.GetStore[component.EnergyComponent](gameCtx.World),
-		boostStore:     engine.GetStore[component.BoostComponent](gameCtx.World),
-		colorMode:      render.ColorMode,
+		gameCtx:     gameCtx,
+		pingStore:   engine.GetStore[component.PingComponent](gameCtx.World),
+		energyStore: engine.GetStore[component.EnergyComponent](gameCtx.World),
+		boostStore:  engine.GetStore[component.BoostComponent](gameCtx.World),
+
+		colorMode: cfg.ColorMode,
+
 		statFPS:        reg.Ints.Get("engine.fps"),
 		statAPM:        reg.Ints.Get("engine.apm"),
 		statTicks:      reg.Ints.Get("engine.ticks"),
 		statPhase:      reg.Ints.Get("engine.phase"),
 		statDecayTimer: reg.Ints.Get("decay.timer"),
+
+		statFSMName:    reg.Strings.Get("fsm.state"),
+		statFSMElapsed: reg.Ints.Get("fsm.elapsed"),
+		statFSMMaxDur:  reg.Ints.Get("fsm.max_duration"),
+		statFSMIndex:   reg.Ints.Get("fsm.state_index"),
+		statFSMTotal:   reg.Ints.Get("fsm.state_count"),
 	}
 }
 
 // Render implements SystemRenderer
-func (r *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskUI)
 	// Get consistent snapshot of UI state
 	uiSnapshot := r.gameCtx.GetUISnapshot()
@@ -168,14 +183,35 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 	}
 	var rightItems []statusItem
 
-	// Priority 1: Decay timer
-	// TODO: Broken
-	decayRemaining := time.Duration(r.statDecayTimer.Load())
-	rightItems = append(rightItems, statusItem{
-		text: fmt.Sprintf(" Decay: %.1fs ", decayRemaining.Seconds()),
-		fg:   render.RgbBlack,
-		bg:   render.RgbDecayTimerBg,
-	})
+	// Priority 1: FSM Phase (replaces Decay timer)
+	phaseName := r.statFSMName.Load()
+	if phaseName != "" {
+		elapsed := time.Duration(r.statFSMElapsed.Load())
+		maxDur := time.Duration(r.statFSMMaxDur.Load())
+		phaseIdx := r.statFSMIndex.Load()
+		phaseTotal := r.statFSMTotal.Load()
+
+		// Calculate timer text
+		var timerVal float64
+		if maxDur > 0 {
+			remaining := maxDur - elapsed
+			if remaining < 0 {
+				remaining = 0
+			}
+			timerVal = remaining.Seconds()
+		} else {
+			timerVal = elapsed.Seconds()
+		}
+
+		// Calculate phase color from rainbow gradient
+		phaseBg := phaseColor(phaseIdx, phaseTotal)
+
+		rightItems = append(rightItems, statusItem{
+			text: fmt.Sprintf(" %s: %.1fs ", phaseName, timerVal),
+			fg:   render.RgbBlack,
+			bg:   phaseBg,
+		})
+	}
 
 	// Priority 2: Energy
 	energyComp, _ := r.energyStore.Get(r.gameCtx.CursorEntity)
@@ -291,4 +327,17 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, world *engine.World
 			}
 		}
 	}
+}
+
+// phaseColor returns rainbow-interpolated color for phase index
+func phaseColor(index, total int64) render.RGB {
+	if total <= 1 {
+		return render.RgbModeNormalBg
+	}
+	// Map to 0-255 for gradient LUT
+	lutIdx := int((index * 255) / (total - 1))
+	if lutIdx > 255 {
+		lutIdx = 255
+	}
+	return render.HeatGradientLUT[lutIdx]
 }

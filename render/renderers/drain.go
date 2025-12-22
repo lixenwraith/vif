@@ -25,7 +25,7 @@ func NewDrainRenderer(gameCtx *engine.GameContext) *DrainRenderer {
 }
 
 // Render draws all drain entities
-func (r *DrainRenderer) Render(ctx render.RenderContext, world *engine.World, buf *render.RenderBuffer) {
+func (r *DrainRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskEffect)
 	// Get all drains
 	drainEntities := r.drainStore.All()
@@ -36,7 +36,7 @@ func (r *DrainRenderer) Render(ctx render.RenderContext, world *engine.World, bu
 	// Iterate on all drains
 	for _, drainEntity := range drainEntities {
 		// Get current position
-		drainPos, ok := world.Positions.Get(drainEntity)
+		drainPos, ok := r.gameCtx.World.Positions.Get(drainEntity)
 		if !ok {
 			panic(fmt.Errorf("drain destroyed"))
 		}
