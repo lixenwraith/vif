@@ -170,6 +170,12 @@ func (s *BlossomSystem) spawnBlossomWave() {
 // updateBlossomEntities updates entity positions and applies blossom effects
 func (s *BlossomSystem) updateBlossomEntities() {
 	dtFixed := vmath.FromFloat(s.res.Time.DeltaTime.Seconds())
+	// Cap delta time to prevent tunneling on lag spikes
+	dtCap := vmath.FromFloat(0.1)
+	if dtFixed > dtCap {
+		dtFixed = dtCap
+	}
+
 	gameWidth := s.res.Config.GameWidth
 	gameHeight := s.res.Config.GameHeight
 

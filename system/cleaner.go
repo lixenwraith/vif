@@ -1,7 +1,6 @@
 package system
 
 import (
-	"math"
 	"sync"
 	"sync/atomic"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // CleanerSystem manages the cleaner animation and logic using vector physics
@@ -131,7 +131,7 @@ func (s *CleanerSystem) Update() {
 		return
 	}
 
-	dtSeconds := s.res.Time.DeltaTime.Seconds()
+	dtFixed := vmath.FromFloat(s.res.Time.DeltaTime.Seconds())
 	gameWidth := config.GameWidth
 	gameHeight := config.GameHeight
 
@@ -150,55 +150,58 @@ func (s *CleanerSystem) Update() {
 		// Physics Update: Integrate velocity into float position (overlay state)
 		prevPreciseX := c.PreciseX
 		prevPreciseY := c.PreciseY
-		c.PreciseX += c.VelocityX * dtSeconds
-		c.PreciseY += c.VelocityY * dtSeconds
+		c.Integrate(dtFixed)
 
 		// Swept Collision Detection: Check all cells between previous and current position
-		if c.VelocityY != 0 && c.VelocityX == 0 {
+		if c.VelY != 0 && c.VelX == 0 {
 			// Vertical cleaner: sweep Y axis
-			startY := int(math.Min(prevPreciseY, c.PreciseY))
-			endY := int(math.Max(prevPreciseY, c.PreciseY))
-
-			checkStart := startY
-			if checkStart < 0 {
-				checkStart = 0
+			prevY := vmath.ToInt(prevPreciseY)
+			currY := vmath.ToInt(c.PreciseY)
+			startY, endY := prevY, currY
+			if startY > endY {
+				startY, endY = endY, startY
 			}
-			checkEnd := endY
-			if checkEnd >= gameHeight {
-				checkEnd = gameHeight - 1
+
+			if startY < 0 {
+				startY = 0
+			}
+			if endY >= gameHeight {
+				endY = gameHeight - 1
 			}
 
 			// Check all traversed rows for collisions (with self-exclusion)
-			if checkStart <= checkEnd {
-				for y := checkStart; y <= checkEnd; y++ {
+			if startY <= endY {
+				for y := startY; y <= endY; y++ {
 					s.checkAndDestroyAtPositionExcluding(oldPos.X, y, entity)
 				}
 			}
-		} else if c.VelocityX != 0 {
+		} else if c.VelX != 0 {
 			// Horizontal cleaner: sweep X axis
-			startX := int(math.Min(prevPreciseX, c.PreciseX))
-			endX := int(math.Max(prevPreciseX, c.PreciseX))
-
-			checkStart := startX
-			if checkStart < 0 {
-				checkStart = 0
+			prevX := vmath.ToInt(prevPreciseX)
+			currX := vmath.ToInt(c.PreciseX)
+			startX, endX := prevX, currX
+			if startX > endX {
+				startX, endX = endX, startX
 			}
-			checkEnd := endX
-			if checkEnd >= gameWidth {
-				checkEnd = gameWidth - 1
+
+			if startX < 0 {
+				startX = 0
+			}
+			if endX >= gameWidth {
+				endX = gameWidth - 1
 			}
 
 			// Check all traversed columns for collisions (with self-exclusion)
-			if checkStart <= checkEnd {
-				for x := checkStart; x <= checkEnd; x++ {
+			if startX <= endX {
+				for x := startX; x <= endX; x++ {
 					s.checkAndDestroyAtPositionExcluding(x, oldPos.Y, entity)
 				}
 			}
 		}
 
 		// Trail Update & Grid Sync: Update trail ring buffer and sync PositionStore if cell changed
-		newGridX := int(c.PreciseX)
-		newGridY := int(c.PreciseY)
+		newGridX := vmath.ToInt(c.PreciseX)
+		newGridY := vmath.ToInt(c.PreciseY)
 
 		if newGridX != oldPos.X || newGridY != oldPos.Y {
 			// Update trail: add new grid position to ring buffer
@@ -214,13 +217,13 @@ func (s *CleanerSystem) Update() {
 
 		// Lifecycle Check: Destroy cleaner when it reaches target position
 		shouldDestroy := false
-		if c.VelocityX > 0 && c.PreciseX >= c.TargetX {
+		if c.VelX > 0 && c.PreciseX >= c.TargetX {
 			shouldDestroy = true
-		} else if c.VelocityX < 0 && c.PreciseX <= c.TargetX {
+		} else if c.VelX < 0 && c.PreciseX <= c.TargetX {
 			shouldDestroy = true
-		} else if c.VelocityY > 0 && c.PreciseY >= c.TargetY {
+		} else if c.VelY > 0 && c.PreciseY >= c.TargetY {
 			shouldDestroy = true
-		} else if c.VelocityY < 0 && c.PreciseY <= c.TargetY {
+		} else if c.VelY < 0 && c.PreciseY <= c.TargetY {
 			shouldDestroy = true
 		}
 
@@ -259,26 +262,29 @@ func (s *CleanerSystem) spawnCleaners() {
 		SoundType: core.SoundWhoosh,
 	})
 
-	gameWidth := float64(config.GameWidth)
-	duration := constant.CleanerAnimationDuration.Seconds()
-	baseSpeed := gameWidth / duration
-	trailLen := float64(constant.CleanerTrailLength)
+	gameWidthFixed := vmath.FromInt(config.GameWidth)
+	trailLenFixed := vmath.FromInt(constant.CleanerTrailLength)
+	durationFixed := vmath.FromFloat(constant.CleanerAnimationDuration.Seconds())
+	baseSpeed := vmath.Div(gameWidthFixed, durationFixed)
 
 	// Spawn one cleaner per row with Red entities, alternating L→R and R→L direction
 	for _, row := range redRows {
-		var startX, targetX, velX float64
+		var startX, targetX, velX int32
+		rowFixed := vmath.FromInt(row)
 
 		if row%2 != 0 {
-			startX = -trailLen
-			targetX = gameWidth + trailLen
+			// Left to right
+			startX = -trailLenFixed
+			targetX = gameWidthFixed + trailLenFixed
 			velX = baseSpeed
 		} else {
-			startX = gameWidth + trailLen
-			targetX = -trailLen
+			// Right to left
+			startX = gameWidthFixed + trailLenFixed
+			targetX = -trailLenFixed
 			velX = -baseSpeed
 		}
 
-		startGridX := int(startX)
+		startGridX := vmath.ToInt(startX)
 		startGridY := row
 
 		// Initialize trail ring buffer with starting position
@@ -286,12 +292,14 @@ func (s *CleanerSystem) spawnCleaners() {
 		trailRing[0] = core.Point{X: startGridX, Y: startGridY}
 
 		comp := component.CleanerComponent{
-			PreciseX:  startX,
-			PreciseY:  float64(row),
-			VelocityX: velX,
-			VelocityY: 0,
+			KineticState: component.KineticState{
+				PreciseX: startX,
+				PreciseY: rowFixed,
+				VelX:     velX,
+				VelY:     0,
+			},
 			TargetX:   targetX,
-			TargetY:   float64(row),
+			TargetY:   rowFixed,
 			TrailRing: trailRing,
 			TrailHead: 0,
 			TrailLen:  1,
@@ -353,42 +361,46 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 		SoundType: core.SoundWhoosh,
 	})
 
-	gameWidth := float64(config.GameWidth)
-	gameHeight := float64(config.GameHeight)
-	trailLen := float64(constant.CleanerTrailLength)
+	gameWidthFixed := vmath.FromInt(config.GameWidth)
+	gameHeightFixed := vmath.FromInt(config.GameHeight)
+	trailLenFixed := vmath.FromInt(constant.CleanerTrailLength)
+	durationFixed := vmath.FromFloat(constant.CleanerAnimationDuration.Seconds())
 
-	horizontalSpeed := gameWidth / constant.CleanerAnimationDuration.Seconds()
-	verticalSpeed := gameHeight / constant.CleanerAnimationDuration.Seconds()
+	horizontalSpeed := vmath.Div(gameWidthFixed, durationFixed)
+	verticalSpeed := vmath.Div(gameHeightFixed, durationFixed)
 
-	ox := float64(originX)
-	oy := float64(originY)
+	oxFixed := vmath.FromInt(originX)
+	oyFixed := vmath.FromInt(originY)
 
-	// Define 4 directional cleaners: right, left, down, up
-	directions := []struct {
-		velocityX, velocityY float64
-		startX, startY       float64
-		targetX, targetY     float64
-	}{
-		{horizontalSpeed, 0, ox, oy, gameWidth + trailLen, oy},
-		{-horizontalSpeed, 0, ox, oy, -trailLen, oy},
-		{0, verticalSpeed, ox, oy, ox, gameHeight + trailLen},
-		{0, -verticalSpeed, ox, oy, ox, -trailLen},
+	type dirDef struct {
+		velX, velY       int32
+		startX, startY   int32
+		targetX, targetY int32
+	}
+
+	directions := []dirDef{
+		{horizontalSpeed, 0, oxFixed, oyFixed, gameWidthFixed + trailLenFixed, oyFixed},
+		{-horizontalSpeed, 0, oxFixed, oyFixed, -trailLenFixed, oyFixed},
+		{0, verticalSpeed, oxFixed, oyFixed, oxFixed, gameHeightFixed + trailLenFixed},
+		{0, -verticalSpeed, oxFixed, oyFixed, oxFixed, -trailLenFixed},
 	}
 
 	// Spawn 4 cleaners from origin, each traveling in a cardinal direction
 	for _, dir := range directions {
-		startGridX := int(dir.startX)
-		startGridY := int(dir.startY)
+		startGridX := vmath.ToInt(dir.startX)
+		startGridY := vmath.ToInt(dir.startY)
 
 		// Initialize trail ring buffer with starting position
 		var trailRing [constant.CleanerTrailLength]core.Point
 		trailRing[0] = core.Point{X: startGridX, Y: startGridY}
 
 		comp := component.CleanerComponent{
-			PreciseX:  dir.startX,
-			PreciseY:  dir.startY,
-			VelocityX: dir.velocityX,
-			VelocityY: dir.velocityY,
+			KineticState: component.KineticState{
+				PreciseX: dir.startX,
+				PreciseY: dir.startY,
+				VelX:     dir.velX,
+				VelY:     dir.velY,
+			},
 			TargetX:   dir.targetX,
 			TargetY:   dir.targetY,
 			TrailRing: trailRing,

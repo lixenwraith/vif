@@ -25,17 +25,11 @@ const (
 
 // MaterializeComponent represents a spawner entity that converges toward a target position
 type MaterializeComponent struct {
-	// Sub-pixel position (physics/render precision)
-	PreciseX float64
-	PreciseY float64
+	KineticState // Embeds PreciseX, PreciseY, VelX, VelY, AccelX, AccelY
 
-	// Movement vector (pixels per second)
-	VelocityX float64
-	VelocityY float64
-
-	// Target position (where spawners converge)
-	TargetX int
-	TargetY int
+	// Target position (where spawners converge) - Q16.16
+	TargetX int32
+	TargetY int32
 
 	// Ring buffer trail (zero-allocation updates)
 	TrailRing [constant.MaterializeTrailLength]core.Point

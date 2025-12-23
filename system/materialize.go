@@ -6,6 +6,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // MaterializeSystem manages materializer animations and triggering spawn completion
@@ -55,10 +56,11 @@ func (s *MaterializeSystem) HandleEvent(ev event.GameEvent) {
 
 // Update updates materialize spawner entities and triggers spawn completion events
 func (s *MaterializeSystem) Update() {
-	dtSeconds := s.res.Time.DeltaTime.Seconds()
+	dtFixed := vmath.FromFloat(s.res.Time.DeltaTime.Seconds())
 	// Cap delta time to prevent tunneling on lag spikes
-	if dtSeconds > 0.1 {
-		dtSeconds = 0.1
+	dtCap := vmath.FromFloat(0.1)
+	if dtFixed > dtCap {
+		dtFixed = dtCap
 	}
 
 	entities := s.matStore.All()
@@ -86,8 +88,10 @@ func (s *MaterializeSystem) Update() {
 			continue
 		}
 
-		// Group by target position
-		key := uint64(mat.TargetX)<<32 | uint64(mat.TargetY)
+		// Group by target position (grid coords)
+		tX := vmath.ToInt(mat.TargetX)
+		tY := vmath.ToInt(mat.TargetY)
+		key := uint64(tX)<<32 | uint64(tY)
 		if targets[key] == nil {
 			targets[key] = &targetState{
 				entities:   make([]core.Entity, 0, 4),
@@ -103,34 +107,36 @@ func (s *MaterializeSystem) Update() {
 			continue
 		}
 
-		// --- Physics Update ---
-		mat.PreciseX += mat.VelocityX * dtSeconds
-		mat.PreciseY += mat.VelocityY * dtSeconds
+		// Physics Update
+		mat.Integrate(dtFixed)
 
-		// Check arrival based on direction
+		// Check if spawner reached target based on direction
 		arrived := false
 		switch mat.Direction {
 		case component.MaterializeFromTop:
-			arrived = mat.PreciseY >= float64(mat.TargetY)
+			arrived = mat.PreciseY >= mat.TargetY
 		case component.MaterializeFromBottom:
-			arrived = mat.PreciseY <= float64(mat.TargetY)
+			arrived = mat.PreciseY <= mat.TargetY
 		case component.MaterializeFromLeft:
-			arrived = mat.PreciseX >= float64(mat.TargetX)
+			arrived = mat.PreciseX >= mat.TargetX
 		case component.MaterializeFromRight:
-			arrived = mat.PreciseX <= float64(mat.TargetX)
+			arrived = mat.PreciseX <= mat.TargetX
 		}
 
+		// If materializer arrived at target, clamp position to target and zeroes velocity
 		if arrived {
-			mat.PreciseX = float64(mat.TargetX)
-			mat.PreciseY = float64(mat.TargetY)
+			mat.PreciseX = mat.TargetX
+			mat.PreciseY = mat.TargetY
+			mat.VelX = 0
+			mat.VelY = 0
 			mat.Arrived = true
 		} else {
 			state.allArrived = false
 		}
 
-		// --- Trail Update & Grid Sync ---
-		newGridX := int(mat.PreciseX)
-		newGridY := int(mat.PreciseY)
+		// Trail Update & Grid Sync
+		newGridX := vmath.ToInt(mat.PreciseX)
+		newGridY := vmath.ToInt(mat.PreciseY)
 
 		if newGridX != oldPos.X || newGridY != oldPos.Y {
 			mat.TrailHead = (mat.TrailHead + 1) % constant.MaterializeTrailLength
@@ -146,7 +152,7 @@ func (s *MaterializeSystem) Update() {
 		s.matStore.Add(entity, mat)
 	}
 
-	// --- Target Completion Handling ---
+	// Target Completion Handling
 	for key, state := range targets {
 		if state.allArrived && len(state.entities) > 0 {
 			// Destroy all materializers in this group
@@ -186,42 +192,45 @@ func (s *MaterializeSystem) spawnMaterializers(targetX, targetY int, spawnType c
 		targetY = config.GameHeight - 1
 	}
 
-	gameWidth := float64(config.GameWidth)
-	gameHeight := float64(config.GameHeight)
-	tX := float64(targetX)
-	tY := float64(targetY)
-	duration := constant.MaterializeAnimationDuration.Seconds()
+	targetXFixed := vmath.FromInt(targetX)
+	targetYFixed := vmath.FromInt(targetY)
+	gameWidthFixed := vmath.FromInt(config.GameWidth)
+	gameHeightFixed := vmath.FromInt(config.GameHeight)
+	negOne := vmath.FromInt(-1)
+	durationFixed := vmath.FromFloat(constant.MaterializeAnimationDuration.Seconds())
 
 	type spawnerDef struct {
-		startX, startY float64
+		startX, startY int32
 		dir            component.MaterializeDirection
 	}
 
 	// Define 4 spawner entities converging from edges
 	spawners := []spawnerDef{
-		{tX, -1, component.MaterializeFromTop},
-		{tX, gameHeight, component.MaterializeFromBottom},
-		{-1, tY, component.MaterializeFromLeft},
-		{gameWidth, tY, component.MaterializeFromRight},
+		{targetXFixed, negOne, component.MaterializeFromTop},
+		{targetXFixed, gameHeightFixed, component.MaterializeFromBottom},
+		{negOne, targetYFixed, component.MaterializeFromLeft},
+		{gameWidthFixed, targetYFixed, component.MaterializeFromRight},
 	}
 
 	for _, def := range spawners {
-		velX := (tX - def.startX) / duration
-		velY := (tY - def.startY) / duration
+		velX := vmath.Div(targetXFixed-def.startX, durationFixed)
+		velY := vmath.Div(targetYFixed-def.startY, durationFixed)
 
-		startGridX := int(def.startX)
-		startGridY := int(def.startY)
+		startGridX := vmath.ToInt(def.startX)
+		startGridY := vmath.ToInt(def.startY)
 
 		var trailRing [constant.MaterializeTrailLength]core.Point
 		trailRing[0] = core.Point{X: startGridX, Y: startGridY}
 
 		comp := component.MaterializeComponent{
-			PreciseX:  def.startX,
-			PreciseY:  def.startY,
-			VelocityX: velX,
-			VelocityY: velY,
-			TargetX:   targetX,
-			TargetY:   targetY,
+			KineticState: component.KineticState{
+				PreciseX: def.startX,
+				PreciseY: def.startY,
+				VelX:     velX,
+				VelY:     velY,
+			},
+			TargetX:   targetXFixed,
+			TargetY:   targetYFixed,
 			TrailRing: trailRing,
 			TrailHead: 0,
 			TrailLen:  1,
@@ -235,7 +244,7 @@ func (s *MaterializeSystem) spawnMaterializers(targetX, targetY int, spawnType c
 		entity := s.world.CreateEntity()
 		s.world.Positions.Add(entity, component.PositionComponent{X: startGridX, Y: startGridY})
 		s.matStore.Add(entity, comp)
-		// Protect from cull/drain during animation
+		// Protect from death/drain during animation
 		s.protStore.Add(entity, component.ProtectionComponent{
 			Mask: component.ProtectFromDrain | component.ProtectFromDeath,
 		})

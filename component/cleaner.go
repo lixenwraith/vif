@@ -6,19 +6,13 @@ import (
 )
 
 // CleanerComponent tracks cleaner entity movement and trail
-// Grid position managed by PositionComponent (external)
+// Grid position managed by PositionComponent
 type CleanerComponent struct {
-	// Sub-pixel position for smooth animation
-	PreciseX float64
-	PreciseY float64
+	KineticState // Embeds PreciseX, PreciseY, VelX, VelY, AccelX, AccelY
 
-	// Movement vector (pixels/second)
-	VelocityX float64
-	VelocityY float64
-
-	// Destruction target (tail must clear screen)
-	TargetX float64
-	TargetY float64
+	// Destruction target (tail must clear screen) - Q16.16
+	TargetX int32
+	TargetY int32
 
 	// Ring buffer trail (zero-allocation updates)
 	TrailRing [constant.CleanerTrailLength]core.Point
