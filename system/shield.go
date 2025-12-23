@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // ShieldSystem owns shield activation state and processes drain events
@@ -42,6 +43,28 @@ func (s *ShieldSystem) Init() {
 // initLocked performs session state reset
 func (s *ShieldSystem) initLocked() {
 	s.statActive.Store(false)
+	s.cacheInverseRadii()
+}
+
+// cacheInverseRadii precomputes Q16.16 inverse squared radii for ellipse checks
+func (s *ShieldSystem) cacheInverseRadii() {
+	cursorEntity := s.res.Cursor.Entity
+	shield, ok := s.shieldStore.Get(cursorEntity)
+	if !ok {
+		panic(nil)
+	}
+	rx := vmath.FromFloat(constant.ShieldRadiusX)
+	ry := vmath.FromFloat(constant.ShieldRadiusY)
+
+	shield.RadiusX = rx
+	shield.RadiusY = ry
+
+	rxSq := vmath.Mul(rx, rx)
+	rySq := vmath.Mul(ry, ry)
+	shield.InvRxSq = vmath.Div(vmath.Scale, rxSq)
+	shield.InvRySq = vmath.Div(vmath.Scale, rySq)
+
+	s.shieldStore.Add(cursorEntity, shield)
 }
 
 // Priority returns the system's priority

@@ -1,7 +1,6 @@
 package system
 
 import (
-	"math"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -270,11 +269,16 @@ func (s *NuggetSystem) findValidPosition() (int, int) {
 		x := rand.Intn(config.GameWidth)
 		y := rand.Intn(config.GameHeight)
 
-		if math.Abs(float64(x-cursorPos.X)) <= constant.CursorExclusionX || math.Abs(float64(y-cursorPos.Y)) <= constant.CursorExclusionY {
-			continue
+		dx := x - cursorPos.X
+		if dx < 0 {
+			dx = -dx
+		}
+		dy := y - cursorPos.Y
+		if dy < 0 {
+			dy = -dy
 		}
 
-		if s.world.Positions.HasAny(x, y) {
+		if dx <= constant.CursorExclusionX || dy <= constant.CursorExclusionY {
 			continue
 		}
 

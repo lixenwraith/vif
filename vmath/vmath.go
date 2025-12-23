@@ -89,6 +89,23 @@ func DistanceApprox(dx, dy int32) int32 {
 	return dx + (dy >> 2) + (dy >> 3)
 }
 
+// Sqrt returns Q16.16 square root using Newton-Raphson
+func Sqrt(x int32) int32 {
+	if x <= 0 {
+		return 0
+	}
+	// Initial guess: x/2 or better estimate
+	guess := x >> 1
+	if guess == 0 {
+		guess = 1
+	}
+	// 4 iterations sufficient for Q16.16 precision
+	for i := 0; i < 4; i++ {
+		guess = (guess + Div(x, guess)) >> 1
+	}
+	return guess
+}
+
 // --- Randomness ---
 
 type FastRand struct {

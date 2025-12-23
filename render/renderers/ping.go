@@ -5,6 +5,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // PingRenderer draws cursor row/column highlights and optional grid lines
@@ -86,9 +87,9 @@ func (r *PingRenderer) computeExclusionMask(world *engine.World, w, h int) {
 			continue
 		}
 
-		// Simple bounding box for ellipse
-		rx := int(shield.RadiusX)
-		ry := int(shield.RadiusY)
+		// Bounding box from Q16.16 radii
+		rx := vmath.ToInt(shield.RadiusX)
+		ry := vmath.ToInt(shield.RadiusY)
 		startX := pos.X - rx
 		endX := pos.X + rx
 		startY := pos.Y - ry
@@ -108,19 +109,17 @@ func (r *PingRenderer) computeExclusionMask(world *engine.World, w, h int) {
 			endY = h - 1
 		}
 
-		// Ellipse calculation constants
-		invRxSq := 1.0 / (shield.RadiusX * shield.RadiusX)
-		invRySq := 1.0 / (shield.RadiusY * shield.RadiusY)
-
 		for y := startY; y <= endY; y++ {
-			dy := float64(y - pos.Y)
+			dy := vmath.FromInt(y - pos.Y)
+			dySq := vmath.Mul(dy, dy)
 			rowOffset := y * w
 
 			for x := startX; x <= endX; x++ {
-				dx := float64(x - pos.X)
-				// Check ellipse containment
-				if (dx*dx*invRxSq + dy*dy*invRySq) <= 1.0 {
-					// Set bit
+				dx := vmath.FromInt(x - pos.X)
+				dxSq := vmath.Mul(dx, dx)
+
+				// Ellipse containment: (dx²*invRxSq + dy²*invRySq) <= 1.0
+				if (vmath.Mul(dxSq, shield.InvRxSq) + vmath.Mul(dySq, shield.InvRySq)) <= vmath.Scale {
 					idx := rowOffset + x
 					r.exclusionMask[idx/64] |= (1 << (idx % 64))
 				}

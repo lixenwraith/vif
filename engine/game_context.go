@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine/status"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // UISnapshot provides a consistent view of UI state for rendering
@@ -196,8 +197,8 @@ func (ctx *GameContext) CreateCursorEntity() {
 
 	// Add ShieldComponent to cursor (initially invisible via GameState.ShieldActive)
 	GetStore[component.ShieldComponent](ctx.World).Add(ctx.CursorEntity, component.ShieldComponent{
-		RadiusX:       constant.ShieldRadiusX,
-		RadiusY:       constant.ShieldRadiusY,
+		RadiusX:       vmath.FromFloat(constant.ShieldRadiusX),
+		RadiusY:       vmath.FromFloat(constant.ShieldRadiusY),
 		OverrideColor: component.ColorNone,
 		MaxOpacity:    constant.ShieldMaxOpacity,
 		LastDrainTime: ctx.PausableClock.Now(),

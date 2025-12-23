@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // shieldCellRenderer is the callback type for per-cell shield rendering
@@ -65,11 +66,14 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		// Resolve shield color
 		shieldRGB := r.resolveShieldColor(shield)
 
-		// Bounding box
-		startX := int(float64(pos.X) - shield.RadiusX)
-		endX := int(float64(pos.X) + shield.RadiusX)
-		startY := int(float64(pos.Y) - shield.RadiusY)
-		endY := int(float64(pos.Y) + shield.RadiusY)
+		// Bounding box - integer radii from Q16.16
+		radiusXInt := vmath.ToInt(shield.RadiusX)
+		radiusYInt := vmath.ToInt(shield.RadiusY)
+
+		startX := pos.X - radiusXInt
+		endX := pos.X + radiusXInt
+		startY := pos.Y - radiusYInt
+		endY := pos.Y + radiusYInt
 
 		// Clamp to screen bounds
 		if startX < 0 {
@@ -85,10 +89,6 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			endY = ctx.GameHeight - 1
 		}
 
-		// Precompute inverse radii squared for ellipse calculation
-		invRxSq := 1.0 / (shield.RadiusX * shield.RadiusX)
-		invRySq := 1.0 / (shield.RadiusY * shield.RadiusY)
-
 		for y := startY; y <= endY; y++ {
 			for x := startX; x <= endX; x++ {
 				// Skip cursor position
@@ -96,20 +96,22 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 					continue
 				}
 
-				dx := float64(x - pos.X)
-				dy := float64(y - pos.Y)
+				dx := vmath.FromInt(x - pos.X)
+				dy := vmath.FromInt(y - pos.Y)
+				dxSq := vmath.Mul(dx, dx)
+				dySq := vmath.Mul(dy, dy)
 
-				// Elliptical normalized distance squared
-				normalizedDistSq := dx*dx*invRxSq + dy*dy*invRySq
-				if normalizedDistSq > 1.0 {
+				// Ellipse containment check in Q16.16
+				normalizedDistSq := vmath.Mul(dxSq, shield.InvRxSq) + vmath.Mul(dySq, shield.InvRySq)
+				if normalizedDistSq > vmath.Scale {
 					continue
 				}
 
-				dist := math.Sqrt(normalizedDistSq)
 				screenX := ctx.GameX + x
 				screenY := ctx.GameY + y
 
 				// Use pre-selected strategy
+				dist := math.Sqrt(vmath.ToFloat(normalizedDistSq))
 				r.renderCell(buf, screenX, screenY, dist, shieldRGB, shield.MaxOpacity)
 			}
 		}

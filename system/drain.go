@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // pendingDrainSpawn represents a queued drain spawn awaiting materialization
@@ -549,7 +550,7 @@ func (s *DrainSystem) requeueSpawnWithOffset(blockedX, blockedY int) {
 	// If no valid position, spawn dropped (map saturated with drains)
 }
 
-// isInsideShieldEllipse checks if position is within the shield ellipse
+// isInsideShieldEllipse checks if position is within the shield ellipse using Q16.16 fixed-point
 func (s *DrainSystem) isInsideShieldEllipse(x, y int) bool {
 	cursorEntity := s.res.Cursor.Entity
 
@@ -563,12 +564,13 @@ func (s *DrainSystem) isInsideShieldEllipse(x, y int) bool {
 		return false
 	}
 
-	dx := float64(x - cursorPos.X)
-	dy := float64(y - cursorPos.Y)
+	dx := vmath.FromInt(x - cursorPos.X)
+	dy := vmath.FromInt(y - cursorPos.Y)
+	dxSq := vmath.Mul(dx, dx)
+	dySq := vmath.Mul(dy, dy)
 
-	// Ellipse equation: (dx/rx)^2 + (dy/ry)^2 <= 1
-	normalizedDistSq := (dx*dx)/(shield.RadiusX*shield.RadiusX) + (dy*dy)/(shield.RadiusY*shield.RadiusY)
-	return normalizedDistSq <= 1.0
+	// Ellipse equation: (dx²/rx² + dy²/ry²) <= 1  →  (dx² * invRxSq + dy² * invRySq) <= Scale
+	return (vmath.Mul(dxSq, shield.InvRxSq) + vmath.Mul(dySq, shield.InvRySq)) <= vmath.Scale
 }
 
 // handleDrainInteractions processes all drain interactions per tick
