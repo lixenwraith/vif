@@ -262,10 +262,10 @@ func (s *GoldSystem) spawnGold() bool {
 	for i, ed := range entities {
 		// Visual component
 		s.charStore.Add(ed.entity, component.CharacterComponent{
-			Rune:     sequence[i],
-			Style:    component.StyleNormal,
-			SeqType:  component.CharacterGold,
-			SeqLevel: component.LevelBright,
+			Rune:  sequence[i],
+			Style: component.StyleNormal,
+			Type:  component.CharacterGold,
+			Level: component.LevelBright,
 		})
 
 		// Typing target

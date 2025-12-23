@@ -238,25 +238,20 @@ const (
 	// Consumer: BlossomSystem | Payload: *BlossomSpawnPayload
 	EventBlossomSpawnOne
 
-	// EventDecayStart signals decay timer expired and animation should begin
-	// Trigger: FSM entering DecayAnimation state
-	// Consumer: DecaySystem | Payload: nil
-	EventDecayStart
-
-	// EventDecayCancel signals that the decay phase should be aborted immediately
-	// Trigger: Game reset, Phase change interruption
-	// Consumer: DecaySystem | Payload: nil
-	EventDecayCancel
-
-	// EventDecayComplete signals all decay entities destroyed
-	// Trigger: DecaySystem when entity count reaches zero
-	// Consumer: ClockScheduler | Payload: nil
-	EventDecayComplete
+	// EventBlossomWave signals start of a full width rising blossom wave
+	// Trigger: FSM
+	// Consumer: BlossomSystem | Payload: nil
+	EventBlossomWave
 
 	// EventDecaySpawnOne signals intent to spawn a single decay entity
 	// Trigger: DeathSystem on death with decay effect (cleaner + negative energy)
 	// Consumer: DecaySystem | Payload: *DecaySpawnPayload
 	EventDecaySpawnOne
+
+	// EventDecayWave signals start of a full width falling decay wave
+	// Trigger: FSM
+	// Consumer: DecaySystem | Payload: nil
+	EventDecayWave
 
 	// EventDeathOne signals intent to destroy a single game entity (scalar/silent)
 	// Trigger: TypingSystem, NuggetSystem, etc.

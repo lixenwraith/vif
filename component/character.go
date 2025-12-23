@@ -27,6 +27,6 @@ type CharacterComponent struct {
 	Color ColorClass // Semantic color, resolved by renderer
 	Style TextStyle  // Semantic style, resolved by renderer
 	// Sequence info used to derive actual color
-	SeqType  CharacterType
-	SeqLevel CharacterLevel
+	Type  CharacterType
+	Level CharacterLevel
 }

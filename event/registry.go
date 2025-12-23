@@ -113,10 +113,9 @@ func InitRegistry() {
 	RegisterType("EventMaterializeComplete", EventMaterializeComplete, &SpawnCompletePayload{})
 	RegisterType("EventFlashRequest", EventFlashRequest, &FlashRequestPayload{})
 	RegisterType("EventBlossomSpawnOne", EventBlossomSpawnOne, &BlossomSpawnPayload{})
-	RegisterType("EventDecayStart", EventDecayStart, nil)
-	RegisterType("EventDecayCancel", EventDecayCancel, nil)
-	RegisterType("EventDecayComplete", EventDecayComplete, nil)
+	RegisterType("EventBlossomWave", EventBlossomWave, nil)
 	RegisterType("EventDecaySpawnOne", EventDecaySpawnOne, &DecaySpawnPayload{})
+	RegisterType("EventDecayWave", EventDecayWave, nil)
 	RegisterType("EventDeathOne", EventDeathOne, nil) // Scalar bit-packed payload (no struct), use api
 	RegisterType("EventDeathBatch", EventDeathBatch, &DeathRequestPayload{})
 	RegisterType("EventMemberTyped", EventMemberTyped, &MemberTypedPayload{})

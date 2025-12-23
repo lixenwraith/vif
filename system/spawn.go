@@ -488,10 +488,10 @@ func (s *SpawnSystem) placeLine(line string, seqType component.CharacterType, se
 					},
 					char: component.CharacterComponent{
 						Rune: lineRunes[i],
-						// Color defaults to ColorNone (0), signaling renderer to use SeqType/SeqLevel
-						Style:    component.StyleNormal,
-						SeqType:  seqType,
-						SeqLevel: seqLevel,
+						// Color defaults to ColorNone (0), signaling renderer to use Type/Level
+						Style: component.StyleNormal,
+						Type:  seqType,
+						Level: seqLevel,
 					},
 				})
 			}

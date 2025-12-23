@@ -2,17 +2,21 @@ package component
 
 // DecayComponent represents a decay character entity
 type DecayComponent struct {
-	// Sub-pixel position (physics/render precision)
-	// Grid position managed by PositionComponent (external)
-	PreciseX float64
-	PreciseY float64
+	// Fixed-point positions and movement (Q16.16)
+	// Sub-pixel position (physics/render precision), Grid position managed by PositionComponent
+	PreciseX int32
+	PreciseY int32
 
 	// Velocity
-	Speed float64 // Falling speed in rows per second
+	VelX int32
+	VelY int32
+
+	// Acceleration
+	AccelX int32
+	AccelY int32
 
 	// Visual
-	Char          rune // The character being displayed
-	LastChangeRow int  // Last row where character changed (Matrix effect)
+	Char rune // The character being displayed
 
 	// Coordinate Latching (prevents re-processing same cell)
 	LastIntX int // Last processed grid X coordinate

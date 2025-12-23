@@ -281,7 +281,7 @@ func (s *TypingSystem) handleCompositeMember(entity core.Entity, anchorID core.E
 	} else if char, ok := s.charStore.Get(entity); ok {
 		// Fallback to CharacterComponent for migration period
 		targetChar = char.Rune
-		switch char.SeqType {
+		switch char.Type {
 		case component.CharacterGold:
 			typeableType = component.TypeGold
 		case component.CharacterBlue:
@@ -291,7 +291,7 @@ func (s *TypingSystem) handleCompositeMember(entity core.Entity, anchorID core.E
 		case component.CharacterRed:
 			typeableType = component.TypeRed
 		}
-		typeableLevel = char.SeqLevel
+		typeableLevel = char.Level
 	} else {
 		s.emitTypingError()
 		return

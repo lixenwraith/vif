@@ -1,0 +1,193 @@
+package vmath
+
+import (
+	"math"
+	"unsafe"
+)
+
+// Q16.16 Fixed Point constants
+const (
+	Shift   = 16
+	Scale   = 1 << Shift
+	Mask    = Scale - 1
+	Half    = 1 << (Shift - 1)
+	LUTSize = 1024
+	LUTMask = LUTSize - 1
+)
+
+// SinLUT and CosLUT scaled by Q16.16
+var (
+	SinLUT [LUTSize]int32
+	CosLUT [LUTSize]int32
+)
+
+func init() {
+	for i := 0; i < LUTSize; i++ {
+		rad := 2.0 * math.Pi * float64(i) / float64(LUTSize)
+		SinLUT[i] = int32(math.Sin(rad) * Scale)
+		CosLUT[i] = int32(math.Cos(rad) * Scale)
+	}
+}
+
+// --- Arithmetic ---
+
+func FromInt(i int) int32       { return int32(i << Shift) }
+func ToInt(f int32) int         { return int(f >> Shift) }
+func FromFloat(f float64) int32 { return int32(f * Scale) }
+func ToFloat(f int32) float64   { return float64(f) / Scale }
+
+func Mul(a, b int32) int32 {
+	return int32((int64(a) * int64(b)) >> Shift)
+}
+
+func Div(a, b int32) int32 {
+	if b == 0 {
+		return 0
+	}
+	return int32((int64(a) << Shift) / int64(b))
+}
+
+// --- Trigonometry ---
+
+// Sin returns sine of an angle where angle 0..Scale maps to 0..2pi
+func Sin(angle int32) int32 {
+	return SinLUT[(angle>>(Shift-10))&LUTMask]
+}
+
+func Cos(angle int32) int32 {
+	return CosLUT[(angle>>(Shift-10))&LUTMask]
+}
+
+// --- Fast Approximations ---
+
+// InvSqrt implements the fast inverse square root (Quake III algorithm)
+func InvSqrt(n float32) float32 {
+	if n == 0 {
+		return 0
+	}
+	n2 := n * 0.5
+	y := n
+	i := *(*int32)(unsafe.Pointer(&y))
+	i = 0x5f3759df - (i >> 1)
+	y = *(*float32)(unsafe.Pointer(&i))
+	y = y * (1.5 - (n2 * y * y))
+	return y
+}
+
+// DistanceApprox uses Alpha max plus beta min algorithm (error ~4%)
+func DistanceApprox(dx, dy int32) int32 {
+	if dx < 0 {
+		dx = -dx
+	}
+	if dy < 0 {
+		dy = -dy
+	}
+	if dx < dy {
+		dx, dy = dy, dx
+	}
+	// dist = max + 0.375*min
+	return dx + (dy >> 2) + (dy >> 3)
+}
+
+// --- Randomness ---
+
+type FastRand struct {
+	state uint32
+}
+
+func NewFastRand(seed uint32) *FastRand {
+	if seed == 0 {
+		seed = 1
+	}
+	return &FastRand{state: seed}
+}
+
+func (r *FastRand) Next() uint32 {
+	x := r.state
+	x ^= x << 13
+	x ^= x >> 17
+	x ^= x << 5
+	r.state = x
+	return x
+}
+
+func (r *FastRand) Intn(n int) int {
+	if n <= 0 {
+		return 0
+	}
+	return int(r.Next() % uint32(n))
+}
+
+// --- 2D Traversal (Supercover DDA) ---
+
+// Traverse visits every grid cell intersected by a line from (x1, y1) to (x2, y2)
+// Coordinates are Q16.16 fixed point
+func Traverse(x1, y1, x2, y2 int32, callback func(x, y int) bool) {
+	ix, iy := ToInt(x1), ToInt(y1)
+	targetX, targetY := ToInt(x2), ToInt(y2)
+
+	if ix == targetX && iy == targetY {
+		callback(ix, iy)
+		return
+	}
+
+	dx := x2 - x1
+	dy := y2 - y1
+
+	stepX, stepY := 1, 1
+	if dx < 0 {
+		stepX = -1
+		dx = -dx
+	}
+	if dy < 0 {
+		stepY = -1
+		dy = -dy
+	}
+
+	// Calculate initial tMax and tDelta
+	var tMaxX, tMaxY, tDeltaX, tDeltaY int64
+	if dx == 0 {
+		tMaxX = math.MaxInt64
+	} else {
+		tDeltaX = int64(Scale) << 32 / int64(dx)
+		if stepX > 0 {
+			tMaxX = int64(Scale-(x1&Mask)) * tDeltaX >> Shift
+		} else {
+			tMaxX = int64(x1&Mask) * tDeltaX >> Shift
+		}
+	}
+
+	if dy == 0 {
+		tMaxY = math.MaxInt64
+	} else {
+		tDeltaY = int64(Scale) << 32 / int64(dy)
+		if stepY > 0 {
+			tMaxY = int64(Scale-(y1&Mask)) * tDeltaY >> Shift
+		} else {
+			tMaxY = int64(y1&Mask) * tDeltaY >> Shift
+		}
+	}
+
+	if !callback(ix, iy) {
+		return
+	}
+
+	for ix != targetX || iy != targetY {
+		if tMaxX < tMaxY {
+			ix += stepX
+			tMaxX += tDeltaX
+		} else if tMaxX > tMaxY {
+			iy += stepY
+			tMaxY += tDeltaY
+		} else {
+			// Perfect diagonal crossing - Supercover visits both adjacent cells
+			ix += stepX
+			iy += stepY
+			tMaxX += tDeltaX
+			tMaxY += tDeltaY
+		}
+		if !callback(ix, iy) {
+			break
+		}
+	}
+}

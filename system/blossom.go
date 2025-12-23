@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // BlossomSystem handles blossom entity movement and collision logic
@@ -86,6 +87,7 @@ func (s *BlossomSystem) Priority() int {
 // EventTypes returns the event types BlossomSystem handles
 func (s *BlossomSystem) EventTypes() []event.EventType {
 	return []event.EventType{
+		event.EventBlossomWave,
 		event.EventBlossomSpawnOne,
 		event.EventGameReset,
 	}
@@ -94,6 +96,8 @@ func (s *BlossomSystem) EventTypes() []event.EventType {
 // HandleEvent processes blossom-related events
 func (s *BlossomSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
+	case event.EventBlossomWave:
+		s.spawnBlossomWave()
 	case event.EventBlossomSpawnOne:
 		if payload, ok := ev.Payload.(*event.BlossomSpawnPayload); ok {
 			s.spawnSingleBlossom(payload.X, payload.Y, payload.Char)
@@ -118,48 +122,62 @@ func (s *BlossomSystem) Update() {
 
 // spawnSingleBlossom creates one blossom entity at specified position
 func (s *BlossomSystem) spawnSingleBlossom(x, y int, char rune) {
-	speed := constant.BlossomMinSpeed + rand.Float64()*(constant.BlossomMaxSpeed-constant.BlossomMinSpeed)
+	// Random speed between BlossomMinSpeed and BlossomMaxSpeed
+	// Note: Speed is converted to Q16.16. Blossom moves UP, so velocity is negative.
+	speedFloat := constant.BlossomMinSpeed + rand.Float64()*(constant.BlossomMaxSpeed-constant.BlossomMinSpeed)
+	velY := -vmath.FromFloat(speedFloat)
+	accelY := -vmath.FromFloat(constant.BlossomAcceleration)
 
 	entity := s.world.CreateEntity()
 
+	// 1. Grid Position
 	s.world.Positions.Add(entity, component.PositionComponent{X: x, Y: y})
+
+	// 2. Physics/Logic Component
 	s.blossomStore.Add(entity, component.BlossomComponent{
-		PreciseX:      float64(x),
-		PreciseY:      float64(y),
-		Speed:         speed,
-		Acceleration:  constant.BlossomAcceleration,
-		Char:          char,
-		LastChangeRow: -1,
-		LastIntX:      -1,
-		LastIntY:      -1,
-		PrevPreciseX:  float64(x),
-		PrevPreciseY:  float64(y),
+		PreciseX: vmath.FromInt(x),
+		PreciseY: vmath.FromInt(y),
+		VelX:     0,
+		VelY:     velY,
+		AccelX:   0,
+		AccelY:   accelY,
+		Char:     char,
+		// Latch current cell to prevent immediate char randomization
+		LastIntX: x,
+		LastIntY: y,
 	})
+
+	// 3. Render component
 	s.charStore.Add(entity, component.CharacterComponent{
 		Rune:  char,
 		Color: component.ColorBlossom,
 		Style: component.StyleNormal,
+		// Type and Level not needed for blossom
 	})
+}
+
+// spawnBlossomWave creates a screen-wide rising blossom wave
+func (s *BlossomSystem) spawnBlossomWave() {
+	gameWidth := s.res.Config.GameWidth
+
+	// Spawn one blossom entity per column for full-width coverage
+	for column := 0; column < gameWidth; column++ {
+		char := constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
+		s.spawnSingleBlossom(column, 0, char)
+	}
 }
 
 // updateBlossomEntities updates entity positions and applies blossom effects
 func (s *BlossomSystem) updateBlossomEntities() {
-	dtSeconds := s.res.Time.DeltaTime.Seconds()
+	dtFixed := vmath.FromFloat(s.res.Time.DeltaTime.Seconds())
 	gameWidth := s.res.Config.GameWidth
-
-	if dtSeconds > 0.1 {
-		dtSeconds = 0.1
-	}
+	gameHeight := s.res.Config.GameHeight
 
 	blossomEntities := s.blossomStore.All()
 
 	// Clear frame deduplication maps
-	for k := range s.processedGridCells {
-		delete(s.processedGridCells, k)
-	}
-	for k := range s.blossomedThisFrame {
-		delete(s.blossomedThisFrame, k)
-	}
+	clear(s.processedGridCells)
+	clear(s.blossomedThisFrame)
 
 	var collisionBuf [constant.MaxEntitiesPerCell]core.Entity
 
@@ -169,140 +187,110 @@ func (s *BlossomSystem) updateBlossomEntities() {
 			continue
 		}
 
-		pos, hasPos := s.world.Positions.Get(entity)
-		if !hasPos {
-			continue
-		}
+		oldX, oldY := b.PreciseX, b.PreciseY
 
-		// Physics Integration: acceleration then position (upward movement)
-		startY := b.PreciseY
-		b.Speed += b.Acceleration * dtSeconds
-		b.PreciseY -= b.Speed * dtSeconds
-		b.PrevPreciseY = startY
+		// Physics Integration: v = v + a*dt; p = p + v*dt
+		b.VelX += vmath.Mul(b.AccelX, dtFixed)
+		b.VelY += vmath.Mul(b.AccelY, dtFixed)
+		b.PreciseX += vmath.Mul(b.VelX, dtFixed)
+		b.PreciseY += vmath.Mul(b.VelY, dtFixed)
 
-		// Destroy if entity rises above game area
-		if b.PreciseY < 0 {
+		curX, curY := vmath.ToInt(b.PreciseX), vmath.ToInt(b.PreciseY)
+
+		// 2D Boundary Check: Destroy if entity leaves the game area in any direction
+		if curX < 0 || curX >= gameWidth || curY < 0 || curY >= gameHeight {
 			s.world.DestroyEntity(entity)
 			continue
 		}
 
-		// Swept Traversal: Check all rows between previous and current position
-		// Note: blossom moves upward, so currentY < startY
-		y1 := int(b.PreciseY)
-		y2 := int(startY)
-
-		startRow, endRow := y1, y2
-		if y1 > y2 {
-			startRow, endRow = y2, y1
-		}
-		if startRow < 0 {
-			startRow = 0
-		}
-
-		col := int(b.PreciseX)
 		destroyBlossom := false
-
-		// Check each traversed row for entity collisions
-		for row := startRow; row <= endRow && !destroyBlossom; row++ {
-			// Coordinate latch: skip if already processed this exact coordinate
-			if col == b.LastIntX && row == b.LastIntY {
-				continue
-			}
-			if col < 0 || col >= gameWidth {
-				continue
+		// Swept Traversal: Check every grid cell intersected by the movement vector
+		vmath.Traverse(oldX, oldY, b.PreciseX, b.PreciseY, func(x, y int) bool {
+			// Bounds safety for the DDA callback
+			if x < 0 || x >= gameWidth || y < 0 || y >= gameHeight {
+				return true
 			}
 
-			// Frame deduplication: skip if this cell was already processed this frame
-			flatIdx := (row * gameWidth) + col
+			// Coordinate latch: skip if already processed this exact coordinate for THIS entity
+			if x == b.LastIntX && y == b.LastIntY {
+				return true
+			}
+
+			// Global frame deduplication: skip if this cell was already processed by ANY blossom this tick
+			flatIdx := (y * gameWidth) + x
 			if s.processedGridCells[flatIdx] {
-				continue
+				return true
 			}
 
 			// Query entities at position using zero-alloc buffer
-			n := s.world.Positions.GetAllAtInto(col, row, collisionBuf[:])
+			n := s.world.Positions.GetAllAtInto(x, y, collisionBuf[:])
 
-			// Process collisions with self-exclusion
 			for i := 0; i < n && !destroyBlossom; i++ {
-				targetEntity := collisionBuf[i]
-				if targetEntity == 0 || targetEntity == entity {
-					continue // Self-exclusion
+				target := collisionBuf[i]
+				if target == 0 || target == entity {
+					continue
 				}
 
-				// Entity deduplication: skip if already hit this frame
+				// Entity deduplication: ensure one blossom effect per target per tick
 				s.mu.RLock()
-				alreadyHit := s.blossomedThisFrame[targetEntity]
+				alreadyHit := s.blossomedThisFrame[target]
 				s.mu.RUnlock()
-
 				if alreadyHit {
 					continue
 				}
 
-				// Decay collision: both destroyed
-				if s.decayStore.Has(targetEntity) {
-					s.world.DestroyEntity(targetEntity)
+				// Logic: Blossom vs Decay collision
+				if s.decayStore.Has(target) {
+					s.world.DestroyEntity(target)
 					destroyBlossom = true
 					continue
 				}
 
-				// Skip nuggets (passthrough)
-				if s.nuggetStore.Has(targetEntity) {
+				// Logic: Passthrough checks
+				if s.nuggetStore.Has(target) {
 					continue
 				}
-
-				// Skip gold composite members (passthrough)
-				if member, ok := s.memberStore.Get(targetEntity); ok {
-					if header, ok := s.headerStore.Get(member.AnchorID); ok {
-						if header.BehaviorID == component.BehaviorGold {
-							continue
-						}
+				if member, ok := s.memberStore.Get(target); ok {
+					if header, ok := s.headerStore.Get(member.AnchorID); ok && header.BehaviorID == component.BehaviorGold {
+						continue
 					}
 				}
 
-				// Apply blossom effect to typeable characters
-				killed := s.applyBlossomToCharacter(targetEntity)
-				if killed {
+				// Apply effect
+				if s.applyBlossomToCharacter(target) {
 					destroyBlossom = true
 				}
 
 				s.mu.Lock()
-				s.blossomedThisFrame[targetEntity] = true
+				s.blossomedThisFrame[target] = true
 				s.mu.Unlock()
 			}
 
 			s.processedGridCells[flatIdx] = true
-		}
+			return !destroyBlossom // Stop traversal if blossom destroyed
+		})
 
 		if destroyBlossom {
 			s.world.DestroyEntity(entity)
 			continue
 		}
 
-		// Coordinate Latch Update
-		b.LastIntX = col
-		b.LastIntY = int(b.PreciseY)
-
-		// Visual character randomization (matrix effect)
-		currentRow := int(b.PreciseY)
-		if currentRow != b.LastChangeRow {
-			b.LastChangeRow = currentRow
+		// 2D Matrix Visual Effect: Randomize character when entering ANY new cell
+		if b.LastIntX != curX || b.LastIntY != curY {
 			if rand.Float64() < constant.DecayChangeChance {
 				b.Char = constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
-				// Sync CharacterComponent
+				// Must update the component used by the renderer
 				if char, ok := s.charStore.Get(entity); ok {
 					char.Rune = b.Char
 					s.charStore.Add(entity, char)
 				}
 			}
+			b.LastIntX = curX
+			b.LastIntY = curY
 		}
 
-		b.PrevPreciseX = b.PreciseX
-
-		// Grid Sync Protocol: Update PositionStore if integer position changed
-		newGridY := int(b.PreciseY)
-		if newGridY != pos.Y {
-			s.world.Positions.Add(entity, component.PositionComponent{X: pos.X, Y: newGridY})
-		}
-
+		// Grid Sync: Update PositionStore for spatial queries
+		s.world.Positions.Add(entity, component.PositionComponent{X: curX, Y: curY})
 		s.blossomStore.Add(entity, b)
 	}
 }
@@ -338,7 +326,7 @@ func (s *BlossomSystem) applyBlossomToCharacter(entity core.Entity) bool {
 
 		// Sync renderer
 		if hasChar {
-			char.SeqLevel = typeable.Level
+			char.Level = typeable.Level
 			s.charStore.Add(entity, char)
 		}
 

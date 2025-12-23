@@ -3,20 +3,21 @@ package component
 // BlossomComponent represents a blossom character entity
 // Moves upward with acceleration, increases character levels on collision
 type BlossomComponent struct {
-	// Sub-pixel position (physics/render precision)
-	// Grid position managed by PositionComponent (external)
-	PreciseX float64
-	PreciseY float64
+	// Fixed-point positions and movement (Q16.16)
+	// Sub-pixel position (physics/render precision), Grid position managed by PositionComponent
+	PreciseX int32
+	PreciseY int32
 
 	// Velocity
-	// TODO: speed x, speed y
-	Speed float64 // Current speed in rows per second
-	// TODO: acceleration x, acceleration y
-	Acceleration float64 // Speed increase per second
+	VelX int32
+	VelY int32
+
+	// Acceleration
+	AccelX int32
+	AccelY int32
 
 	// Visual
-	Char          rune // The character being displayed
-	LastChangeRow int  // Last row where character changed (Matrix effect)
+	Char rune // The character being displayed
 
 	// Coordinate Latching (prevents re-processing same cell)
 	LastIntX int // Last processed grid X coordinate

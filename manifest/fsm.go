@@ -106,9 +106,9 @@ transitions = [
 [states.DecayAnimation]
 parent = "Gameplay"
 on_enter = [
-	{ action = "EmitEvent", event = "EventDecayStart" }
+	{ action = "EmitEvent", event = "EventDecayWave" }
 ]
 transitions = [
-	{ trigger = "EventDecayComplete", target = "TrySpawnGold" }
+	{ trigger = "Tick", target = "TrySpawnGold", guard = "StateTimeExceeds", guard_args = { ms = 5000 } }
 ]
 `

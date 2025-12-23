@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // DecaySystem handles character decay animation and logic
@@ -25,14 +26,10 @@ type DecaySystem struct {
 	charStore     *engine.Store[component.CharacterComponent]
 	typeableStore *engine.Store[component.TypeableComponent]
 
-	// State
-	animating bool
-
 	// Per-frame tracking
 	decayedThisFrame   map[core.Entity]bool
 	processedGridCells map[int]bool // Key is flat index: (y * gameWidth) + x
 
-	statActive  *atomic.Bool
 	statCount   *atomic.Int64
 	statApplied *atomic.Int64
 }
@@ -54,7 +51,6 @@ func NewDecaySystem(world *engine.World) engine.System {
 		decayedThisFrame:   make(map[core.Entity]bool),
 		processedGridCells: make(map[int]bool),
 
-		statActive:  res.Status.Bools.Get("decay.active"),
 		statCount:   res.Status.Ints.Get("decay.count"),
 		statApplied: res.Status.Ints.Get("decay.applied"),
 	}
@@ -71,10 +67,8 @@ func (s *DecaySystem) Init() {
 
 // initLocked performs session state reset, caller must hold s.mu
 func (s *DecaySystem) initLocked() {
-	s.animating = false
 	clear(s.decayedThisFrame)
 	clear(s.processedGridCells)
-	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.statApplied.Store(0)
 }
@@ -87,8 +81,7 @@ func (s *DecaySystem) Priority() int {
 // EventTypes returns the event types DecaySystem handles
 func (s *DecaySystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventDecayStart,
-		event.EventDecayCancel,
+		event.EventDecayWave,
 		event.EventDecaySpawnOne,
 		event.EventGameReset,
 	}
@@ -97,11 +90,8 @@ func (s *DecaySystem) EventTypes() []event.EventType {
 // HandleEvent processes decay-related events
 func (s *DecaySystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
-	case event.EventDecayStart:
-		s.spawnPhaseDecay()
-
-	case event.EventDecayCancel:
-		s.despawnDecayEntities()
+	case event.EventDecayWave:
+		s.spawnDecayWave()
 
 	case event.EventDecaySpawnOne:
 		if payload, ok := ev.Payload.(*event.DecaySpawnPayload); ok {
@@ -115,71 +105,53 @@ func (s *DecaySystem) HandleEvent(ev event.GameEvent) {
 
 // Update runs the decay system logic
 func (s *DecaySystem) Update() {
-	// Always process decay entities regardless of phase animation state
 	count := s.decayStore.Count()
 	if count == 0 {
-		// Check if phase animation completed (FSM needs EventDecayComplete)
-		s.mu.RLock()
-		animating := s.animating
-		s.mu.RUnlock()
-
-		if animating {
-			s.despawnDecayEntities()
-			s.world.PushEvent(event.EventDecayComplete, nil)
-		}
-
-		s.statActive.Store(false)
 		s.statCount.Store(0)
 		return
 	}
 
 	s.updateDecayEntities()
-
-	// Re-check count after update (entities may have been destroyed)
-	count = s.decayStore.Count()
-	if count == 0 {
-		s.mu.Lock()
-		animating := s.animating
-		s.mu.Unlock()
-
-		if animating {
-			s.despawnDecayEntities()
-			s.world.PushEvent(event.EventDecayComplete, nil)
-		}
-	}
-
-	s.statActive.Store(s.animating)
 	s.statCount.Store(int64(s.decayStore.Count()))
 }
 
 // spawnSingleDecay creates one decay entity at specified position
-// Used by cleaner-triggered decay (negative energy) and phase decay
 func (s *DecaySystem) spawnSingleDecay(x, y int, char rune) {
-	speed := constant.DecayMinSpeed + rand.Float64()*(constant.DecayMaxSpeed-constant.DecayMinSpeed)
+	speedFloat := constant.DecayMinSpeed + rand.Float64()*(constant.DecayMaxSpeed-constant.DecayMinSpeed)
+	velY := vmath.FromFloat(speedFloat)
+	accelY := vmath.FromFloat(constant.BlossomAcceleration) // Replicated acceleration from blossom
+	// TODO: its own constant
 
 	entity := s.world.CreateEntity()
 
+	// 1. Grid Position
 	s.world.Positions.Add(entity, component.PositionComponent{X: x, Y: y})
+
+	// 2. Physics/Logic Component
 	s.decayStore.Add(entity, component.DecayComponent{
-		PreciseX:      float64(x),
-		PreciseY:      float64(y),
-		Speed:         speed,
-		Char:          char,
-		LastChangeRow: -1,
-		LastIntX:      -1,
-		LastIntY:      -1,
-		PrevPreciseX:  float64(x),
-		PrevPreciseY:  float64(y),
+		PreciseX: vmath.FromInt(x),
+		PreciseY: vmath.FromInt(y),
+		VelX:     0,
+		VelY:     velY,
+		AccelX:   0,
+		AccelY:   accelY,
+		Char:     char,
+		// Latch current cell to prevent immediate char randomization
+		LastIntX: x,
+		LastIntY: y,
+	})
+
+	// 3. Render component
+	s.charStore.Add(entity, component.CharacterComponent{
+		Rune:  char,
+		Color: component.ColorDecay,
+		Style: component.StyleNormal,
+		// Type and Level not needed for decay
 	})
 }
 
-// spawnPhaseDecay creates decay entities for FSM-triggered phase transition
-func (s *DecaySystem) spawnPhaseDecay() {
-	s.mu.Lock()
-	s.animating = true
-	clear(s.decayedThisFrame)
-	s.mu.Unlock()
-
+// spawnDecayWave creates a screen-wide falling decay wave
+func (s *DecaySystem) spawnDecayWave() {
 	gameWidth := s.res.Config.GameWidth
 
 	// Spawn one decay entity per column for full-width coverage
@@ -191,142 +163,102 @@ func (s *DecaySystem) spawnPhaseDecay() {
 
 // updateDecayEntities updates entity positions and applies decay
 func (s *DecaySystem) updateDecayEntities() {
-	dtSeconds := s.res.Time.DeltaTime.Seconds()
-	gameHeight := s.res.Config.GameHeight
+	dtFixed := vmath.FromFloat(s.res.Time.DeltaTime.Seconds())
 	gameWidth := s.res.Config.GameWidth
-
-	if dtSeconds > 0.1 {
-		dtSeconds = 0.1
-	}
+	gameHeight := s.res.Config.GameHeight
 
 	decayEntities := s.decayStore.All()
 
 	// Clear frame deduplication maps
-	for k := range s.processedGridCells {
-		delete(s.processedGridCells, k)
-	}
-	// Clear one-decay-per-tick map
-	for k := range s.decayedThisFrame {
-		delete(s.decayedThisFrame, k)
-	}
+	clear(s.processedGridCells)
+	clear(s.decayedThisFrame)
 
 	var collisionBuf [constant.MaxEntitiesPerCell]core.Entity
 
 	for _, entity := range decayEntities {
-		fall, ok := s.decayStore.Get(entity)
+		d, ok := s.decayStore.Get(entity)
 		if !ok {
 			continue
 		}
 
-		pos, hasPos := s.world.Positions.Get(entity)
-		if !hasPos {
-			continue
-		}
+		oldX, oldY := d.PreciseX, d.PreciseY
 
-		// Physics Integration: Update float position (overlay state)
-		startY := fall.PreciseY
-		fall.PreciseY += fall.Speed * dtSeconds
-		fall.PrevPreciseY = startY
+		// Physics Integration (Fixed Point)
+		d.VelX += vmath.Mul(d.AccelX, dtFixed)
+		d.VelY += vmath.Mul(d.AccelY, dtFixed)
+		d.PreciseX += vmath.Mul(d.VelX, dtFixed)
+		d.PreciseY += vmath.Mul(d.VelY, dtFixed)
 
-		// Destroy if entity falls below game area
-		if fall.PreciseY >= float64(gameHeight) {
+		curX, curY := vmath.ToInt(d.PreciseX), vmath.ToInt(d.PreciseY)
+
+		// 2D Boundary Check
+		if curX < 0 || curX >= gameWidth || curY < 0 || curY >= gameHeight {
 			s.world.DestroyEntity(entity)
 			continue
 		}
 
-		// Swept Traversal: Check all rows between previous and current position for collisions
-		y1 := int(startY)
-		y2 := int(fall.PreciseY)
-
-		startRow, endRow := y1, y2
-		if y1 > y2 {
-			startRow, endRow = y2, y1
-		}
-		if startRow < 0 {
-			startRow = 0
-		}
-		if endRow >= gameHeight {
-			endRow = gameHeight - 1
-		}
-
-		col := int(fall.PreciseX)
-
-		// Check each traversed row for entity collisions
-		for row := startRow; row <= endRow; row++ {
-			// Coordinate latch: skip if already processed this exact coordinate
-			if col == fall.LastIntX && row == fall.LastIntY {
-				continue
-			}
-			if col < 0 || col >= gameWidth {
-				continue
+		// Swept Traversal via Supercover DDA
+		vmath.Traverse(oldX, oldY, d.PreciseX, d.PreciseY, func(x, y int) bool {
+			if x < 0 || x >= gameWidth || y < 0 || y >= gameHeight {
+				return true
 			}
 
-			// Frame deduplication: skip if this cell was already processed this frame
-			flatIdx := (row * gameWidth) + col
+			if x == d.LastIntX && y == d.LastIntY {
+				return true
+			}
+
+			flatIdx := (y * gameWidth) + x
 			if s.processedGridCells[flatIdx] {
-				continue
+				return true
 			}
 
-			// Query entities at position using zero-alloc buffer
-			n := s.world.Positions.GetAllAtInto(col, row, collisionBuf[:])
-
-			// Process collisions with self-exclusion
+			n := s.world.Positions.GetAllAtInto(x, y, collisionBuf[:])
 			for i := 0; i < n; i++ {
-				targetEntity := collisionBuf[i]
-				if targetEntity == 0 || targetEntity == entity {
-					continue // Self-exclusion
+				target := collisionBuf[i]
+				if target == 0 || target == entity {
+					continue
 				}
 
-				// Entity deduplication: skip if already hit this frame
 				s.mu.RLock()
-				alreadyHit := s.decayedThisFrame[targetEntity]
+				alreadyHit := s.decayedThisFrame[target]
 				s.mu.RUnlock()
-
 				if alreadyHit {
 					continue
 				}
 
-				if s.nuggetStore.Has(targetEntity) {
-					// Signal nugget destruction to NuggetSystem
-					s.world.PushEvent(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{
-						Entity: targetEntity,
-					})
-					// TODO: death to inform system of entity of their deaths instead of spread out event? Easier to manage logic
-					event.EmitDeathOne(s.res.Events.Queue, targetEntity, event.EventFlashRequest, s.res.Time.FrameNumber)
+				if s.nuggetStore.Has(target) {
+					s.world.PushEvent(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{Entity: target})
+					event.EmitDeathOne(s.res.Events.Queue, target, event.EventFlashRequest, s.res.Time.FrameNumber)
 				} else {
-					s.applyDecayToCharacter(targetEntity)
+					s.applyDecayToCharacter(target)
 				}
 
 				s.mu.Lock()
-				s.decayedThisFrame[targetEntity] = true
+				s.decayedThisFrame[target] = true
 				s.mu.Unlock()
 			}
 
 			s.processedGridCells[flatIdx] = true
-		}
+			return true
+		})
 
-		// Coordinate Latch Update: Track last processed position to prevent re-processing
-		fall.LastIntX = col
-		fall.LastIntY = int(fall.PreciseY)
-
-		// Visual character randomization (matrix effect)
-		currentRow := int(fall.PreciseY)
-		if currentRow != fall.LastChangeRow {
-			fall.LastChangeRow = currentRow
-			if currentRow > 0 && rand.Float64() < constant.DecayChangeChance {
-				fall.Char = constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
+		// 2D Matrix Visual Effect: Update character on ANY cell entry
+		if d.LastIntX != curX || d.LastIntY != curY {
+			if rand.Float64() < constant.DecayChangeChance {
+				d.Char = constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
+				// Must update the component used by the renderer
+				if charComp, ok := s.charStore.Get(entity); ok {
+					charComp.Rune = d.Char
+					s.charStore.Add(entity, charComp)
+				}
 			}
+			d.LastIntX = curX
+			d.LastIntY = curY
 		}
 
-		fall.PrevPreciseX = fall.PreciseX
-
-		// Grid Sync Protocol: Update PositionStore if integer position changed
-		newGridY := int(fall.PreciseY)
-		if newGridY != pos.Y {
-			s.world.Positions.Add(entity, component.PositionComponent{X: pos.X, Y: newGridY})
-		}
-
-		s.decayStore.Add(entity, fall)
+		// Grid Sync: Update PositionStore for spatial queries
+		s.world.Positions.Add(entity, component.PositionComponent{X: curX, Y: curY})
+		s.decayStore.Add(entity, d)
 	}
 }
 
@@ -356,7 +288,7 @@ func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
 
 		// Sync renderer
 		if hasChar {
-			char.SeqLevel = typeable.Level
+			char.Level = typeable.Level
 			s.charStore.Add(entity, char)
 		}
 	} else {
@@ -367,8 +299,8 @@ func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
 			typeable.Level = component.LevelBright
 			s.typeableStore.Add(entity, typeable)
 			if hasChar {
-				char.SeqType = component.CharacterGreen
-				char.SeqLevel = component.LevelBright
+				char.Type = component.CharacterGreen
+				char.Level = component.LevelBright
 				s.charStore.Add(entity, char)
 			}
 
@@ -377,8 +309,8 @@ func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
 			typeable.Level = component.LevelBright
 			s.typeableStore.Add(entity, typeable)
 			if hasChar {
-				char.SeqType = component.CharacterRed
-				char.SeqLevel = component.LevelBright
+				char.Type = component.CharacterRed
+				char.Level = component.LevelBright
 				s.charStore.Add(entity, char)
 			}
 
@@ -389,20 +321,4 @@ func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
 	}
 
 	s.statApplied.Add(1)
-}
-
-// despawnDecayEntities marks all decay entities for death
-func (s *DecaySystem) despawnDecayEntities() {
-	s.mu.Lock()
-	s.animating = false // Stop processing updates immediately
-	clear(s.decayedThisFrame)
-	clear(s.processedGridCells) // Reset frame state
-	s.mu.Unlock()
-
-	// Mark all existing decay entities for death
-	// We use MarkedForDeath to allow CullSystem to clean them up properly in the same frame
-	entities := s.decayStore.All()
-	for _, entity := range entities {
-		s.deathStore.Add(entity, component.DeathComponent{})
-	}
 }

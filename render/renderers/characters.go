@@ -75,8 +75,8 @@ func resolveCharacterColor(char component.CharacterComponent) render.RGB {
 		// Fall through to sequence-based resolution
 	}
 
-	// Default: derive from SeqType + SeqLevel
-	return render.GetFgForSequence(char.SeqType, char.SeqLevel)
+	// Default: derive from Type + Level
+	return render.GetFgForSequence(char.Type, char.Level)
 }
 
 // resolveTextStyle maps semantic style to terminal attributes
