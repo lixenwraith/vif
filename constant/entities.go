@@ -32,38 +32,16 @@ const (
 	DrainEnergyDrainAmount = 10
 )
 
-// --- Blossom Entity ---
+// --- Decay / Blossom Entities ---
 const (
-	// BlossomMinSpeed is the minimum initial speed for blossom entities
-	BlossomMinSpeed = 8.0
-
-	// BlossomMaxSpeed is the maximum initial speed for blossom entities
-	BlossomMaxSpeed = 15.0
-
-	// BlossomAcceleration is the speed increase per second
-	BlossomAcceleration = 2.0
-)
-
-// --- Decay System ---
-const (
-	// DecayRowAnimationDurationMs is the time per row during decay animation
-	DecayRowAnimationDurationMs = 100
-	DecayRowAnimationDuration   = DecayRowAnimationDurationMs * time.Millisecond
-
-	// DecayIntervalBaseSeconds is the base decay interval at zero heat
-	DecayIntervalBaseSeconds = 60
-	// DecayIntervalRangeSeconds is the range of decay interval affected by heat
-	DecayIntervalRangeSeconds = 50
-	// DecayIntervalMinSeconds is the minimum decay interval at max heat
-	DecayIntervalMinSeconds = DecayIntervalBaseSeconds - DecayIntervalRangeSeconds
-
-	// Decay Speed Limits (rows per second)
-	DecayMinSpeed = 8.0
-	DecayMaxSpeed = 15.0
-
-	// Matrix-style Effect Constants
-	DecayChangeChance          = 0.4
-	DecayMinRowsBetweenChanges = 1
+	// ParticleMinSpeed is minimum initial cell per second velocity of decay/blossom components
+	ParticleMinSpeed = 8.0
+	// ParticleMaxSpeed is maximum initial cell per second velocity of decay/blossom components
+	ParticleMaxSpeed = 15.0
+	// ParticleAcceleration is acceleration (velocity increase) per second
+	ParticleAcceleration = 2.0
+	// ParticleChangeChance is the chance of character change of particles when moving from one cell to next (Matrix-style char swap probability)
+	ParticleChangeChance = 0.4
 )
 
 // --- Materialization Effect ---

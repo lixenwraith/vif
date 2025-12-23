@@ -122,11 +122,11 @@ func (s *BlossomSystem) Update() {
 
 // spawnSingleBlossom creates one blossom entity at specified position
 func (s *BlossomSystem) spawnSingleBlossom(x, y int, char rune) {
-	// Random speed between BlossomMinSpeed and BlossomMaxSpeed
-	// Note: Speed is converted to Q16.16. Blossom moves UP, so velocity is negative.
-	speedFloat := constant.BlossomMinSpeed + rand.Float64()*(constant.BlossomMaxSpeed-constant.BlossomMinSpeed)
+	// Random speed between ParticleMinSpeed and ParticleMaxSpeed
+	// Note: Speed is converted to Q16.16. Blossom moves UP by default, so velocity is negative
+	speedFloat := constant.ParticleMinSpeed + rand.Float64()*(constant.ParticleMaxSpeed-constant.ParticleMinSpeed)
 	velY := -vmath.FromFloat(speedFloat)
-	accelY := -vmath.FromFloat(constant.BlossomAcceleration)
+	accelY := -vmath.FromFloat(constant.ParticleAcceleration)
 
 	entity := s.world.CreateEntity()
 
@@ -135,13 +135,13 @@ func (s *BlossomSystem) spawnSingleBlossom(x, y int, char rune) {
 
 	// 2. Physics/Logic Component
 	s.blossomStore.Add(entity, component.BlossomComponent{
-		PreciseX: vmath.FromInt(x),
-		PreciseY: vmath.FromInt(y),
-		VelX:     0,
-		VelY:     velY,
-		AccelX:   0,
-		AccelY:   accelY,
-		Char:     char,
+		KineticState: component.KineticState{
+			PreciseX: vmath.FromInt(x),
+			PreciseY: vmath.FromInt(y),
+			VelY:     velY,
+			AccelY:   accelY,
+		},
+		Char: char,
 		// Latch current cell to prevent immediate char randomization
 		LastIntX: x,
 		LastIntY: y,
@@ -188,14 +188,8 @@ func (s *BlossomSystem) updateBlossomEntities() {
 		}
 
 		oldX, oldY := b.PreciseX, b.PreciseY
-
-		// Physics Integration: v = v + a*dt; p = p + v*dt
-		b.VelX += vmath.Mul(b.AccelX, dtFixed)
-		b.VelY += vmath.Mul(b.AccelY, dtFixed)
-		b.PreciseX += vmath.Mul(b.VelX, dtFixed)
-		b.PreciseY += vmath.Mul(b.VelY, dtFixed)
-
-		curX, curY := vmath.ToInt(b.PreciseX), vmath.ToInt(b.PreciseY)
+		// Physics Integration (Fixed Point)
+		curX, curY := b.Integrate(dtFixed)
 
 		// 2D Boundary Check: Destroy if entity leaves the game area in any direction
 		if curX < 0 || curX >= gameWidth || curY < 0 || curY >= gameHeight {
@@ -277,7 +271,7 @@ func (s *BlossomSystem) updateBlossomEntities() {
 
 		// 2D Matrix Visual Effect: Randomize character when entering ANY new cell
 		if b.LastIntX != curX || b.LastIntY != curY {
-			if rand.Float64() < constant.DecayChangeChance {
+			if rand.Float64() < constant.ParticleChangeChance {
 				b.Char = constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
 				// Must update the component used by the renderer
 				if char, ok := s.charStore.Get(entity); ok {

@@ -117,10 +117,11 @@ func (s *DecaySystem) Update() {
 
 // spawnSingleDecay creates one decay entity at specified position
 func (s *DecaySystem) spawnSingleDecay(x, y int, char rune) {
-	speedFloat := constant.DecayMinSpeed + rand.Float64()*(constant.DecayMaxSpeed-constant.DecayMinSpeed)
+	// Random speed between ParticleMinSpeed and ParticleMaxSpeed
+	// Note: Speed is converted to Q16.16. Decay moves DOWN by default, so velocity is positive
+	speedFloat := constant.ParticleMinSpeed + rand.Float64()*(constant.ParticleMaxSpeed-constant.ParticleMinSpeed)
 	velY := vmath.FromFloat(speedFloat)
-	accelY := vmath.FromFloat(constant.BlossomAcceleration) // Replicated acceleration from blossom
-	// TODO: its own constant
+	accelY := vmath.FromFloat(constant.ParticleAcceleration)
 
 	entity := s.world.CreateEntity()
 
@@ -129,13 +130,13 @@ func (s *DecaySystem) spawnSingleDecay(x, y int, char rune) {
 
 	// 2. Physics/Logic Component
 	s.decayStore.Add(entity, component.DecayComponent{
-		PreciseX: vmath.FromInt(x),
-		PreciseY: vmath.FromInt(y),
-		VelX:     0,
-		VelY:     velY,
-		AccelX:   0,
-		AccelY:   accelY,
-		Char:     char,
+		KineticState: component.KineticState{
+			PreciseX: vmath.FromInt(x),
+			PreciseY: vmath.FromInt(y),
+			VelY:     velY,
+			AccelY:   accelY,
+		},
+		Char: char,
 		// Latch current cell to prevent immediate char randomization
 		LastIntX: x,
 		LastIntY: y,
@@ -182,14 +183,8 @@ func (s *DecaySystem) updateDecayEntities() {
 		}
 
 		oldX, oldY := d.PreciseX, d.PreciseY
-
 		// Physics Integration (Fixed Point)
-		d.VelX += vmath.Mul(d.AccelX, dtFixed)
-		d.VelY += vmath.Mul(d.AccelY, dtFixed)
-		d.PreciseX += vmath.Mul(d.VelX, dtFixed)
-		d.PreciseY += vmath.Mul(d.VelY, dtFixed)
-
-		curX, curY := vmath.ToInt(d.PreciseX), vmath.ToInt(d.PreciseY)
+		curX, curY := d.Integrate(dtFixed)
 
 		// 2D Boundary Check
 		if curX < 0 || curX >= gameWidth || curY < 0 || curY >= gameHeight {
@@ -244,7 +239,7 @@ func (s *DecaySystem) updateDecayEntities() {
 
 		// 2D Matrix Visual Effect: Update character on ANY cell entry
 		if d.LastIntX != curX || d.LastIntY != curY {
-			if rand.Float64() < constant.DecayChangeChance {
+			if rand.Float64() < constant.ParticleChangeChance {
 				d.Char = constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
 				// Must update the component used by the renderer
 				if charComp, ok := s.charStore.Get(entity); ok {
