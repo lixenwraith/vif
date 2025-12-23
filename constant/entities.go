@@ -46,7 +46,7 @@ const (
 	DecayIntervalMinSeconds = DecayIntervalBaseSeconds - DecayIntervalRangeSeconds
 
 	// Decay Speed Limits (rows per second)
-	DecayMinSpeed = 5.0
+	DecayMinSpeed = 8.0
 	DecayMaxSpeed = 15.0
 
 	// Matrix-style Effect Constants

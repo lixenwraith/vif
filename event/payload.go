@@ -212,3 +212,10 @@ type MemberTypedPayload struct {
 	Char           rune
 	RemainingCount int // Count of remaining live members after this one
 }
+
+// DecaySpawnPayload contains parameters to spawn a single decay entity
+type DecaySpawnPayload struct {
+	X    int
+	Y    int
+	Char rune
+}

@@ -126,7 +126,7 @@ func (s *DeathSystem) markForDeath(entity core.Entity, effect event.EventType) {
 
 // routeCleanup handles informing other systems before the entity is purged
 func (s *DeathSystem) routeCleanup(entity core.Entity) {
-	// TODO: Future Implementation
+	// TODO: Future Implementation, it's already done with emitEffect, maybe expand and remove this branch, need batch processing
 	// Example: If entity has MemberComponent, emit EventMemberDied to CompositeSystem
 }
 
@@ -136,14 +136,21 @@ func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType
 		return
 	}
 
-	// Build payload based on effect type
+	char, hasChar := s.charStore.Get(entity)
+	if !hasChar {
+		return
+	}
+
 	switch effectEvent {
 	case event.EventFlashRequest:
-		char, hasChar := s.charStore.Get(entity)
-		if !hasChar {
-			return
-		}
 		s.world.PushEvent(event.EventFlashRequest, &event.FlashRequestPayload{
+			X:    pos.X,
+			Y:    pos.Y,
+			Char: char.Rune,
+		})
+
+	case event.EventDecaySpawnOne:
+		s.world.PushEvent(event.EventDecaySpawnOne, &event.DecaySpawnPayload{
 			X:    pos.X,
 			Y:    pos.Y,
 			Char: char.Rune,

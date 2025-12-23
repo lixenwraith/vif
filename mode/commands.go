@@ -87,11 +87,6 @@ func handleEnergyCommand(ctx *engine.GameContext, args []string) CommandResult {
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
 
-	if value < 0 {
-		setCommandError(ctx, "Value out of range for energy")
-		return CommandResult{Continue: true, KeepPaused: false}
-	}
-
 	ctx.PushEvent(event.EventEnergySet, &event.EnergySetPayload{
 		Value: value,
 	})

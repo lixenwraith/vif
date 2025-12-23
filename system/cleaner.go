@@ -22,6 +22,7 @@ type CleanerSystem struct {
 	protStore     *engine.Store[component.ProtectionComponent]
 	typeableStore *engine.Store[component.TypeableComponent]
 	charStore     *engine.Store[component.CharacterComponent]
+	energyStore   *engine.Store[component.EnergyComponent]
 
 	spawned           map[int64]bool // Track which frames already spawned cleaners
 	hasSpawnedSession bool           // Track if we spawned cleaners this session
@@ -40,7 +41,7 @@ func NewCleanerSystem(world *engine.World) engine.System {
 		cleanerStore:  engine.GetStore[component.CleanerComponent](world),
 		protStore:     engine.GetStore[component.ProtectionComponent](world),
 		charStore:     engine.GetStore[component.CharacterComponent](world),
-		typeableStore: engine.GetStore[component.TypeableComponent](world),
+		typeableStore: engine.GetStore[component.TypeableComponent](world), energyStore: engine.GetStore[component.EnergyComponent](world),
 
 		spawned: make(map[int64]bool),
 
@@ -327,9 +328,21 @@ func (s *CleanerSystem) checkAndDestroyAtPositionExcluding(x, y int, selfEntity 
 		}
 	}
 
-	// TODO: should this use acquire death request?
-	// Batch death with flash effect
-	event.EmitDeathBatch(s.res.Events.Queue, event.EventFlashRequest, toDestroy, s.res.Time.FrameNumber)
+	if len(toDestroy) == 0 {
+		return
+	}
+
+	// Determine effect based on energy polarity
+	effectEvent := event.EventFlashRequest
+	cursorEntity := s.res.Cursor.Entity
+	if energyComp, ok := s.energyStore.Get(cursorEntity); ok {
+		if energyComp.Current.Load() < 0 {
+			effectEvent = event.EventDecaySpawnOne
+		}
+	}
+
+	// Batch death with effect
+	event.EmitDeathBatch(s.res.Events.Queue, effectEvent, toDestroy, s.res.Time.FrameNumber)
 }
 
 // spawnDirectionalCleaners generates 4 cleaner entities from origin position

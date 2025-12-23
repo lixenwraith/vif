@@ -84,6 +84,7 @@ func (s *DecaySystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventDecayStart,
 		event.EventDecayCancel,
+		event.EventDecaySpawnOne,
 		event.EventGameReset,
 	}
 }
@@ -92,10 +93,15 @@ func (s *DecaySystem) EventTypes() []event.EventType {
 func (s *DecaySystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventDecayStart:
-		s.spawnDecayEntities()
+		s.spawnPhaseDecay()
 
 	case event.EventDecayCancel:
 		s.despawnDecayEntities()
+
+	case event.EventDecaySpawnOne:
+		if payload, ok := ev.Payload.(*event.DecaySpawnPayload); ok {
+			s.spawnSingleDecay(payload.X, payload.Y, payload.Char)
+		}
 
 	case event.EventGameReset:
 		s.Init()
@@ -104,26 +110,34 @@ func (s *DecaySystem) HandleEvent(ev event.GameEvent) {
 
 // Update runs the decay system logic
 func (s *DecaySystem) Update() {
-	s.mu.RLock()
-	animating := s.animating
-	s.mu.RUnlock()
+	// Always process decay entities regardless of phase animation state
+	count := s.decayStore.Count()
+	if count == 0 {
+		// Check if phase animation completed (FSM needs EventDecayComplete)
+		s.mu.RLock()
+		animating := s.animating
+		s.mu.RUnlock()
 
-	if !animating {
+		if animating {
+			s.despawnDecayEntities()
+			s.world.PushEvent(event.EventDecayComplete, nil)
+		}
+
+		s.statActive.Store(false)
+		s.statCount.Store(0)
 		return
 	}
 
 	s.updateDecayEntities()
 
-	// When there are no decay entities, emit EventDecayComplete once
-	count := s.decayStore.Count()
+	// Re-check count after update (entities may have been destroyed)
+	count = s.decayStore.Count()
 	if count == 0 {
 		s.mu.Lock()
-		// Double check inside lock to ensure we only fire once
-		shouldEmit := s.animating
+		animating := s.animating
 		s.mu.Unlock()
 
-		if shouldEmit {
-			// Reuse despawn to reset state/flags; entity loop is no-op here since count is 0
+		if animating {
 			s.despawnDecayEntities()
 			s.world.PushEvent(event.EventDecayComplete, nil)
 		}
@@ -133,8 +147,29 @@ func (s *DecaySystem) Update() {
 	s.statCount.Store(int64(s.decayStore.Count()))
 }
 
-// spawnDecayEntities creates one decay entity per column
-func (s *DecaySystem) spawnDecayEntities() {
+// spawnSingleDecay creates one decay entity at specified position
+// Used by cleaner-triggered decay (negative energy) and phase decay
+func (s *DecaySystem) spawnSingleDecay(x, y int, char rune) {
+	speed := constant.DecayMinSpeed + rand.Float64()*(constant.DecayMaxSpeed-constant.DecayMinSpeed)
+
+	entity := s.world.CreateEntity()
+
+	s.world.Positions.Add(entity, component.PositionComponent{X: x, Y: y})
+	s.decayStore.Add(entity, component.DecayComponent{
+		PreciseX:      float64(x),
+		PreciseY:      float64(y),
+		Speed:         speed,
+		Char:          char,
+		LastChangeRow: -1,
+		LastIntX:      -1,
+		LastIntY:      -1,
+		PrevPreciseX:  float64(x),
+		PrevPreciseY:  float64(y),
+	})
+}
+
+// spawnPhaseDecay creates decay entities for FSM-triggered phase transition
+func (s *DecaySystem) spawnPhaseDecay() {
 	s.mu.Lock()
 	s.animating = true
 	clear(s.decayedThisFrame)
@@ -144,24 +179,8 @@ func (s *DecaySystem) spawnDecayEntities() {
 
 	// Spawn one decay entity per column for full-width coverage
 	for column := 0; column < gameWidth; column++ {
-		speed := constant.DecayMinSpeed + rand.Float64()*(constant.DecayMaxSpeed-constant.DecayMinSpeed)
 		char := constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
-
-		entity := s.world.CreateEntity()
-
-		s.world.Positions.Add(entity, component.PositionComponent{X: column, Y: 0})
-		// Initialize DecayComponent with PreciseX/Y float overlay and coordinate history
-		s.decayStore.Add(entity, component.DecayComponent{
-			PreciseX:      float64(column),
-			PreciseY:      0.0,
-			Speed:         speed,
-			Char:          char,
-			LastChangeRow: -1,
-			LastIntX:      -1,
-			LastIntY:      -1,
-			PrevPreciseX:  float64(column),
-			PrevPreciseY:  0.0,
-		})
+		s.spawnSingleDecay(column, 0, char)
 	}
 }
 
@@ -180,6 +199,10 @@ func (s *DecaySystem) updateDecayEntities() {
 	// Clear frame deduplication maps
 	for k := range s.processedGridCells {
 		delete(s.processedGridCells, k)
+	}
+	// Clear one-decay-per-tick map
+	for k := range s.decayedThisFrame {
+		delete(s.decayedThisFrame, k)
 	}
 
 	var collisionBuf [constant.MaxEntitiesPerCell]core.Entity

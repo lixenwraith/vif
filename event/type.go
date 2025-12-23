@@ -248,6 +248,11 @@ const (
 	// Consumer: ClockScheduler | Payload: nil
 	EventDecayComplete
 
+	// EventDecaySpawnOne signals intent to spawn a single decay entity
+	// Trigger: DeathSystem on death with decay effect (cleaner + negative energy)
+	// Consumer: DecaySystem | Payload: *DecaySpawnPayload
+	EventDecaySpawnOne
+
 	// EventDeathOne signals intent to destroy a single game entity (scalar/silent)
 	// Trigger: TypingSystem, NuggetSystem, etc.
 	// Consumer: DeathSystem | Payload: core.Entity
