@@ -219,3 +219,10 @@ type DecaySpawnPayload struct {
 	Y    int
 	Char rune
 }
+
+// BlossomSpawnPayload contains parameters to spawn a single blossom entity
+type BlossomSpawnPayload struct {
+	X    int
+	Y    int
+	Char rune
+}

@@ -10,6 +10,7 @@ const (
 	ColorNormal
 	ColorNugget
 	ColorShield
+	ColorBlossom
 	ColorDecay
 	ColorDrain
 	ColorCleaner

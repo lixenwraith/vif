@@ -333,7 +333,7 @@ func (s *CleanerSystem) checkAndDestroyAtPositionExcluding(x, y int, selfEntity 
 	}
 
 	// Determine effect based on energy polarity
-	effectEvent := event.EventFlashRequest
+	effectEvent := event.EventBlossomSpawnOne
 	cursorEntity := s.res.Cursor.Entity
 	if energyComp, ok := s.energyStore.Get(cursorEntity); ok {
 		if energyComp.Current.Load() < 0 {

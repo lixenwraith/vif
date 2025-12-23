@@ -33,6 +33,7 @@ func RegisterComponents(w *engine.World) {
 	engine.RegisterComponent[component.CompositeHeaderComponent](w)
 	engine.RegisterComponent[component.MemberComponent](w)
 	engine.RegisterComponent[component.TypeableComponent](w)
+	engine.RegisterComponent[component.BlossomComponent](w)
 }
 
 // RegisterSystems registers all system factories with the registry
@@ -66,6 +67,9 @@ func RegisterSystems() {
 	})
 	registry.RegisterSystem("decay", func(w any) any {
 		return system.NewDecaySystem(w.(*engine.World))
+	})
+	registry.RegisterSystem("blossom", func(w any) any {
+		return system.NewBlossomSystem(w.(*engine.World))
 	})
 	registry.RegisterSystem("gold", func(w any) any {
 		return system.NewGoldSystem(w.(*engine.World))
@@ -166,6 +170,7 @@ func ActiveSystems() []string {
 		"spawn",
 		"nugget",
 		"decay",
+		"blossom",
 		"gold",
 		"materialize",
 		"drain",

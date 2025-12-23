@@ -49,13 +49,13 @@ const (
 	PriorityDrain       = 25
 	PriorityMaterialize = 26 // PriorityDrain + 1
 	PriorityDecay       = 30
+	PriorityBlossom     = 31
 	PriorityFlash       = 35
 	PriorityUI          = 50
 	PriorityEffect      = 300
 	PrioritySplash      = 800 // After game logic, before rendering
 	PriorityDeath       = 850 // After game logic, before TimeKeeper
-	PriorityTimekeeper  = 890 // After game logic, before final cleanup
-	PriorityCleanup     = 900 // Last: Removes marked entities
+	PriorityTimekeeper  = 900 // After game logic, final
 )
 
 // Spatial Grid Defaults

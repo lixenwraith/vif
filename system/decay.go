@@ -32,8 +32,9 @@ type DecaySystem struct {
 	decayedThisFrame   map[core.Entity]bool
 	processedGridCells map[int]bool // Key is flat index: (y * gameWidth) + x
 
-	statActive *atomic.Bool
-	statCount  *atomic.Int64
+	statActive  *atomic.Bool
+	statCount   *atomic.Int64
+	statApplied *atomic.Int64
 }
 
 // NewDecaySystem creates a new decay system
@@ -53,8 +54,9 @@ func NewDecaySystem(world *engine.World) engine.System {
 		decayedThisFrame:   make(map[core.Entity]bool),
 		processedGridCells: make(map[int]bool),
 
-		statActive: res.Status.Bools.Get("decay.active"),
-		statCount:  res.Status.Ints.Get("decay.count"),
+		statActive:  res.Status.Bools.Get("decay.active"),
+		statCount:   res.Status.Ints.Get("decay.count"),
+		statApplied: res.Status.Ints.Get("decay.applied"),
 	}
 	s.initLocked()
 	return s
@@ -72,6 +74,9 @@ func (s *DecaySystem) initLocked() {
 	s.animating = false
 	clear(s.decayedThisFrame)
 	clear(s.processedGridCells)
+	s.statActive.Store(false)
+	s.statCount.Store(0)
+	s.statApplied.Store(0)
 }
 
 // Priority returns the system's priority
@@ -382,6 +387,8 @@ func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
 			event.EmitDeathOne(s.res.Events.Queue, entity, event.EventFlashRequest, s.res.Time.FrameNumber)
 		}
 	}
+
+	s.statApplied.Add(1)
 }
 
 // despawnDecayEntities marks all decay entities for death

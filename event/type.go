@@ -233,6 +233,11 @@ const (
 	// Consumer: FlashSystem | Payload: *FlashRequestPayload
 	EventFlashRequest
 
+	// EventBlossomSpawnOne signals intent to spawn a single blossom entity
+	// Trigger: DeathSystem on death with blossom effect (cleaner + positive energy)
+	// Consumer: BlossomSystem | Payload: *BlossomSpawnPayload
+	EventBlossomSpawnOne
+
 	// EventDecayStart signals decay timer expired and animation should begin
 	// Trigger: FSM entering DecayAnimation state
 	// Consumer: DecaySystem | Payload: nil

@@ -32,6 +32,18 @@ const (
 	DrainEnergyDrainAmount = 10
 )
 
+// --- Blossom Entity ---
+const (
+	// BlossomMinSpeed is the minimum initial speed for blossom entities
+	BlossomMinSpeed = 8.0
+
+	// BlossomMaxSpeed is the maximum initial speed for blossom entities
+	BlossomMaxSpeed = 15.0
+
+	// BlossomAcceleration is the speed increase per second
+	BlossomAcceleration = 2.0
+)
+
 // --- Decay System ---
 const (
 	// DecayRowAnimationDurationMs is the time per row during decay animation

@@ -146,7 +146,14 @@ func (s *NuggetSystem) handleJumpRequest() {
 
 	// 1. Check Energy from component
 	energyComp, ok := s.energyStore.Get(cursorEntity)
-	if !ok || energyComp.Current.Load() < constant.NuggetJumpCost {
+	if !ok {
+		return
+	}
+
+	energy := energyComp.Current.Load()
+	cost := int64(constant.NuggetJumpCost)
+	// Allow jump if magnitude is sufficient in either direction
+	if energy < cost && energy > -cost {
 		return
 	}
 
@@ -177,9 +184,14 @@ func (s *NuggetSystem) handleJumpRequest() {
 		Y: nuggetPos.Y,
 	})
 
-	// 5. Pay Energy Cost
+	// 5. Pay Energy Cost (move towards 0)
+	delta := -constant.NuggetJumpCost
+	if energy < 0 {
+		delta = constant.NuggetJumpCost
+	}
+
 	s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{
-		Delta: -constant.NuggetJumpCost,
+		Delta: delta,
 	})
 
 	// 6. Play Sound

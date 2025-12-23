@@ -31,10 +31,11 @@ var (
 	RgbSequenceBlueNormal = RGB{80, 130, 255}
 	RgbSequenceBlueBright = RGB{120, 170, 255}
 
-	RgbSequenceGold = RGB{255, 255, 0} // Bright Yellow for gold sequence
-	RgbDecay        = RGB{0, 139, 139} // Dark Cyan for decay animation
-	RgbDrain        = RGB{0, 200, 200} // Vibrant Cyan for drain entity
-	RgbMaterialize  = RGB{0, 220, 220} // Bright cyan for materialize head
+	RgbSequenceGold = RGB{255, 255, 0}   // Bright Yellow for gold sequence
+	RgbDecay        = RGB{0, 139, 139}   // Dark Cyan for decay animation
+	RgbBlossom      = RGB{255, 182, 193} // Light pink (cherry blossom)
+	RgbDrain        = RGB{0, 200, 200}   // Vibrant Cyan for drain entity
+	RgbMaterialize  = RGB{0, 220, 220}   // Bright cyan for materialize head
 
 	RgbLineNumbers     = RGB{180, 180, 180} // Brighter gray
 	RgbStatusBar       = RGB{255, 255, 255} // White
@@ -69,7 +70,6 @@ var (
 	RgbModeCommandBg = RGB{128, 0, 128}   // Dark purple
 	RgbEnergyBg      = RGB{255, 255, 255} // Bright white
 	RgbBoostBg       = RGB{255, 192, 203} // Pink for boost timer
-	RgbDecayTimerBg  = RGB{200, 50, 50}   // Red for decay timer
 	RgbStatusText    = RGB{0, 0, 0}       // Dark text for status
 
 	// Runtime Metrics Backgrounds

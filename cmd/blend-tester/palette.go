@@ -32,6 +32,7 @@ var gamePalette = []PaletteEntry{
 
 	// Effects
 	{"Decay", render.RgbDecay, "Effect"},
+	{"Blossom", render.RgbBlossom, "Effect"},
 	{"Drain", render.RgbDrain, "Effect"},
 	{"Materialize", render.RgbMaterialize, "Effect"},
 	{"RemovalFlash", render.RgbRemovalFlash, "Effect"},
@@ -76,7 +77,6 @@ var gamePalette = []PaletteEntry{
 
 	// Timer Backgrounds
 	{"BoostBg", render.RgbBoostBg, "Timer"},
-	{"DecayTimerBg", render.RgbDecayTimerBg, "Timer"},
 	{"FpsBg", render.RgbFpsBg, "Timer"},
 	{"GtBg", render.RgbGtBg, "Timer"},
 	{"ApmBg", render.RgbApmBg, "Timer"},

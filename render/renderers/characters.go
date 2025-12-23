@@ -61,6 +61,8 @@ func resolveCharacterColor(char component.CharacterComponent) render.RGB {
 		return render.RgbNuggetOrange
 	case component.ColorDecay:
 		return render.RgbDecay
+	case component.ColorBlossom:
+		return render.RgbBlossom
 	case component.ColorDrain:
 		return render.RgbDrain
 	case component.ColorCleaner:
