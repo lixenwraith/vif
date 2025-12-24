@@ -1,6 +1,9 @@
 package system
 
 import (
+	"math"
+	"strconv"
+
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
@@ -8,13 +11,41 @@ import (
 	"github.com/lixenwraith/vi-fighter/event"
 )
 
+// BBox represents an axis-aligned bounding box for collision detection
+type BBox struct {
+	X, Y, W, H int
+}
+
+// Pre-computed direction vectors for 8 angles (45° increments) in virtual space
+// Index 0 = top (0°), 1 = top-right (45°), etc. counter-clockwise
+// Values: (cos(angle), sin(angle)) where angle starts from -90° (top)
+var spiralDirections = [8][2]float64{
+	{0.0, -1.0},      // 0: Top (0°)
+	{0.707, -0.707},  // 1: Top-right (45°)
+	{1.0, 0.0},       // 2: Right (90°)
+	{0.707, 0.707},   // 3: Bottom-right (135°)
+	{0.0, 1.0},       // 4: Bottom (180°)
+	{-0.707, 0.707},  // 5: Bottom-left (225°)
+	{-1.0, 0.0},      // 6: Left (270°)
+	{-0.707, -0.707}, // 7: Top-left (315°)
+}
+
+// Magnifier angle orders (diagonals first to avoid ping lines, then cardinals)
+var magnifierAnglesCCW = [8]int{7, 5, 3, 1, 0, 6, 4, 2} // 315°→225°→135°→45°→0°→270°→180°→90°
+var magnifierAnglesCW = [8]int{1, 3, 5, 7, 0, 2, 4, 6}  // 45°→135°→225°→315°→0°→90°→180°→270°
+
+// Timer angle orders (cardinals first, then diagonals as fallback)
+var timerAnglesCCW = [8]int{0, 3, 1, 2, 5, 7, 6, 4} // Bottom→Left→Top→Right, then BL→TL→TR→BR
+var timerAnglesCW = [8]int{0, 2, 1, 3, 4, 6, 7, 5}  // Bottom→Right→Top→Left, then BR→TR→TL→BL
+
 // SplashSystem manages the lifecycle of splash entities
 type SplashSystem struct {
 	world *engine.World
 	res   engine.Resources
 
-	splashStore *engine.Store[component.SplashComponent]
-	headerStore *engine.Store[component.CompositeHeaderComponent]
+	splashStore   *engine.Store[component.SplashComponent]
+	headerStore   *engine.Store[component.CompositeHeaderComponent]
+	typeableStore *engine.Store[component.TypeableComponent]
 }
 
 // NewSplashSystem creates a new splash system
@@ -23,8 +54,9 @@ func NewSplashSystem(world *engine.World) engine.System {
 		world: world,
 		res:   engine.GetResources(world),
 
-		splashStore: engine.GetStore[component.SplashComponent](world),
-		headerStore: engine.GetStore[component.CompositeHeaderComponent](world),
+		splashStore:   engine.GetStore[component.SplashComponent](world),
+		headerStore:   engine.GetStore[component.CompositeHeaderComponent](world),
+		typeableStore: engine.GetStore[component.TypeableComponent](world),
 	}
 }
 
@@ -44,6 +76,7 @@ func (s *SplashSystem) EventTypes() []event.EventType {
 		event.EventGoldComplete,
 		event.EventGoldTimeout,
 		event.EventGoldDestroyed,
+		event.EventCursorMoved,
 	}
 }
 
@@ -64,13 +97,17 @@ func (s *SplashSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.GoldCompletionPayload); ok {
 			s.handleGoldFinish(payload.SequenceID)
 		}
+
+	case event.EventCursorMoved:
+		if payload, ok := ev.Payload.(*event.CursorMovedPayload); ok {
+			s.handleCursorMoved(payload)
+		}
 	}
 }
 
-// Update manages lifecycle of splashes (expiry, timer updates)
+// Update manages lifecycle of splashes (expiry, timer updates, magnifier validation)
 func (s *SplashSystem) Update() {
 	dt := s.res.Time.DeltaTime
-	var toDestroy []core.Entity
 
 	entities := s.splashStore.All()
 	for _, entity := range entities {
@@ -82,41 +119,62 @@ func (s *SplashSystem) Update() {
 		// Delta-based time tracking (Robust against clock jumps/resets)
 		splash.Remaining -= dt
 
-		// Persistent Splash Logic (Gold Timer)
-		if splash.Mode == component.SplashModePersistent {
-			// Calculate display digit based on remaining time
-			// TODO: migrate to timer system
-			remainingSec := splash.Remaining.Seconds()
-			if remainingSec < 0 {
-				remainingSec = 0
+		switch splash.Slot {
+		case component.SlotTimer:
+
+			// Use Slot for timer behavior
+			if splash.Slot == component.SlotTimer {
+				// Display digits ceiling math - "1" shows for 1.0→0.001s, dies at 0
+				remainingSec := int(math.Ceil(splash.Remaining.Seconds()))
+
+				if remainingSec <= 0 {
+					// Timer expired - mark for destruction
+					s.world.DestroyEntity(entity)
+					continue
+				}
+
+				// Multi-digit support
+				digits := strconv.Itoa(remainingSec)
+				newLength := len(digits)
+
+				// Update content if changed
+				contentChanged := newLength != splash.Length
+				if !contentChanged {
+					for i, d := range digits {
+						if splash.Content[i] != d {
+							contentChanged = true
+							break
+						}
+					}
+				}
+
+				if contentChanged {
+					splash.Length = newLength
+					for i, d := range digits {
+						if i < len(splash.Content) {
+							splash.Content[i] = d
+						}
+					}
+				}
 			}
 
-			// TODO: this should support >9 seconds
-			digit := int(remainingSec)
-			if digit > 9 {
-				digit = 9
+		case component.SlotMagnifier:
+			// Validate magnifier - re-query entity under cursor
+			if !s.validateMagnifier(entity, &splash) {
+				continue // Entity was destroyed
 			}
 
-			// Update content if changed
-			newChar := rune('0' + digit)
-			if splash.Content[0] != newChar {
-				splash.Content[0] = newChar
-			}
 		}
 
 		// Write back component (state changed)
 		s.splashStore.Add(entity, splash)
 	}
-
-	for _, e := range toDestroy {
-		s.world.DestroyEntity(e)
-	}
 }
 
 // handleSplashRequest creates a transient splash with smart layout
 func (s *SplashSystem) handleSplashRequest(payload *event.SplashRequestPayload) {
-	// 1. Enforce Uniqueness: Destroy existing transient splashes
-	s.cleanupSplashesByMode(component.SplashModeTransient)
+	// 1. Enforce Uniqueness: Destroy existing in slot
+	s.cleanupSplashesBySlot(component.SlotAction)
 
 	// 2. Prepare Content
 	runes := []rune(payload.Text)
@@ -134,7 +192,7 @@ func (s *SplashSystem) handleSplashRequest(payload *event.SplashRequestPayload) 
 		Color:     payload.Color,
 		AnchorX:   anchorX,
 		AnchorY:   anchorY,
-		Mode:      component.SplashModeTransient,
+		Slot:      component.SlotAction,
 		Remaining: constant.SplashDuration,
 		Duration:  constant.SplashDuration,
 	}
@@ -151,49 +209,76 @@ func (s *SplashSystem) handleSplashRequest(payload *event.SplashRequestPayload) 
 	})
 }
 
-// handleGoldSpawn creates the persistent gold timer anchored to the sequence
+// validateMagnifier checks if magnifier is still valid and updates content if entity changed
+// Returns false if magnifier was destroyed
+func (s *SplashSystem) validateMagnifier(splashEntity core.Entity, splash *component.SplashComponent) bool {
+	cursorPos, ok := s.world.Positions.Get(s.res.Cursor.Entity)
+	if !ok {
+		s.world.DestroyEntity(splashEntity)
+		return false
+	}
+
+	typeableEntity := s.world.Positions.GetTopEntityFiltered(cursorPos.X, cursorPos.Y, func(e core.Entity) bool {
+		return s.typeableStore.Has(e)
+	})
+
+	if typeableEntity == 0 {
+		s.world.DestroyEntity(splashEntity)
+		return false
+	}
+
+	typeable, ok := s.typeableStore.Get(typeableEntity)
+	if !ok {
+		s.world.DestroyEntity(splashEntity)
+		return false
+	}
+
+	// Update if character or type changed (handles entity swap, moving entities)
+	newColor := s.typeableToSplashColor(typeable.Type)
+	if splash.Content[0] != typeable.Char || splash.Color != newColor {
+		splash.Content[0] = typeable.Char
+		splash.Color = newColor
+	}
+
+	return true
+}
+
+// TODO: change to generic timer, make gold system send splash timer request with gold anchor
+// handleGoldSpawn creates the persistent gold timer anchored to the gold entity
 func (s *SplashSystem) handleGoldSpawn(payload *event.GoldSpawnedPayload) {
-	// 1. Enforce Uniqueness: Destroy existing timer
-	s.cleanupSplashesByMode(component.SplashModePersistent)
+	s.cleanupSplashesBySlot(component.SlotTimer)
 
-	// 2. Calculate Anchored Position
-	// Center horizontally over the sequence
-	// Position above, fallback to below if too close to top
+	initialSec := int(math.Ceil(payload.Duration.Seconds()))
+	digits := strconv.Itoa(initialSec)
+	digitCount := len(digits)
 
-	// Anchor X: Center of sequence
-	// Sequence Center (Cells) = OriginX + Length/2
-	// Timer Center (Cells) = AnchorX + TimerWidth/2
-	// AnchorX = OriginX + Length/2 - TimerWidth/2
-	timerCellWidth := 1 * (constant.SplashCharWidth + constant.SplashCharSpacing)
-	seqCenter := payload.OriginX + (payload.Length / 2)
-	anchorX := seqCenter - (timerCellWidth / 2)
+	timerCellWidth := digitCount * constant.SplashCharWidth
 
-	// Anchor Y: Above sequence
-	// Timer Height = constants.SplashCharHeight (12 rows)
-	// Sequence Y is in Rows
-	// Place padding rows above sequence top (Sequence is 1 row high)
-	anchorY := payload.OriginY - constant.SplashCharHeight - constant.SplashTimerPadding
+	// Calculate offset using cardinal spiral search
+	offsetX, offsetY := s.calculateTimerOffset(
+		payload.AnchorEntity,
+		payload.Length,
+		timerCellWidth,
+	)
 
-	// Fallback: If offscreen top, place below
-	if anchorY < 0 {
-		anchorY = payload.OriginY + 1 + constant.SplashTimerPadding
-	}
-
-	// 3. Create Component with Delta Timer
 	splash := component.SplashComponent{
-		Length:     1,
-		Color:      component.SplashColorGold,
-		AnchorX:    anchorX,
-		AnchorY:    anchorY,
-		Mode:       component.SplashModePersistent,
-		Remaining:  payload.Duration,
-		Duration:   payload.Duration,
-		SequenceID: payload.SequenceID,
+		Length:       digitCount,
+		Color:        component.SplashColorWhite,
+		AnchorEntity: payload.AnchorEntity,
+		OffsetX:      offsetX,
+		OffsetY:      offsetY,
+		Slot:         component.SlotTimer,
+		Remaining:    payload.Duration,
+		Duration:     payload.Duration,
+		SequenceID:   payload.SequenceID,
 	}
-	// TODO: make it flexible for > 10 and not bound to gold - future expansion
-	splash.Content[0] = '9' // Start at 9
 
-	// 4. Spawn
+	for i, d := range digits {
+		if i < len(splash.Content) {
+			splash.Content[i] = d
+		}
+	}
+
 	entity := s.world.CreateEntity()
 	s.splashStore.Add(entity, splash)
 }
@@ -207,22 +292,22 @@ func (s *SplashSystem) handleGoldFinish(sequenceID int) {
 		if !ok {
 			continue
 		}
-		if splash.Mode == component.SplashModePersistent && splash.SequenceID == sequenceID {
+		if splash.Slot == component.SlotTimer && splash.SequenceID == sequenceID {
 			s.world.DestroyEntity(entity)
 			return // Found it
 		}
 	}
 }
 
-// cleanupSplashesByMode removes all splashes of a specific mode
-func (s *SplashSystem) cleanupSplashesByMode(mode component.SplashMode) {
+// cleanupSplashesBySlot removes all splashes of a specific slot
+func (s *SplashSystem) cleanupSplashesBySlot(slot component.SplashSlot) {
 	entities := s.splashStore.All()
 	for _, entity := range entities {
 		splash, ok := s.splashStore.Get(entity)
 		if !ok {
 			continue
 		}
-		if splash.Mode == mode {
+		if splash.Slot == slot {
 			s.world.DestroyEntity(entity)
 		}
 	}
@@ -236,7 +321,7 @@ func (s *SplashSystem) calculateSmartLayout(cursorX, cursorY, charCount int) (in
 	height := config.GameHeight
 
 	// Splash Dimensions
-	splashW := charCount * (constant.SplashCharWidth + constant.SplashCharSpacing)
+	splashW := charCount * constant.SplashCharWidth
 	splashH := constant.SplashCharHeight
 
 	// Define Quadrant Centers
@@ -337,4 +422,280 @@ func (s *SplashSystem) calculateSmartLayout(cursorX, cursorY, charCount int) (in
 	}
 
 	return anchorX, anchorY
+}
+
+// handleCursorMoved updates the magnifier splash based on cursor position
+func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
+	cursorX, cursorY := payload.X, payload.Y
+
+	// Query typeable entity under cursor
+	entity := s.world.Positions.GetTopEntityFiltered(cursorX, cursorY, func(e core.Entity) bool {
+		return s.typeableStore.Has(e)
+	})
+
+	if entity == 0 {
+		// No typeable entity - clear magnifier
+		s.cleanupSplashesBySlot(component.SlotMagnifier)
+		return
+	}
+
+	// Get the character to display
+	typeable, ok := s.typeableStore.Get(entity)
+	if !ok {
+		s.cleanupSplashesBySlot(component.SlotMagnifier)
+		return
+	}
+
+	// Resolve color from typeable type
+	color := s.typeableToSplashColor(typeable.Type)
+
+	// Calculate proximity anchor (between cursor and center, min 15 chars away)
+	anchorX, anchorY := s.calculateProximityAnchor(cursorX, cursorY, 1)
+
+	// Check for existing magnifier to update in place
+	existing := s.findSplashBySlot(component.SlotMagnifier)
+	if existing != 0 {
+		splash, ok := s.splashStore.Get(existing)
+		if ok {
+			splash.Content[0] = typeable.Char
+			splash.Length = 1
+			splash.Color = color
+			splash.AnchorX = anchorX
+			splash.AnchorY = anchorY
+			s.splashStore.Add(existing, splash)
+			return
+		}
+	}
+
+	// Create new magnifier (persistent - no expiry while on char)
+	splash := component.SplashComponent{
+		Length:    1,
+		Color:     color,
+		AnchorX:   anchorX,
+		AnchorY:   anchorY,
+		Slot:      component.SlotMagnifier,
+		Remaining: 0, // Persistent - managed by cursor movement
+		Duration:  0,
+	}
+	splash.Content[0] = typeable.Char
+
+	newEntity := s.world.CreateEntity()
+	s.splashStore.Add(newEntity, splash)
+}
+
+// calculateProximityAnchor uses spiral search to find valid magnifier position
+// Works in virtual circular space, converts back to game elliptical space
+// Searches diagonals first to avoid overlapping with ping crosshair lines
+func (s *SplashSystem) calculateProximityAnchor(cursorX, cursorY, charCount int) (int, int) {
+	config := s.res.Config
+	centerX := config.GameWidth / 2
+	centerY := config.GameHeight / 2
+
+	splashW := charCount * constant.SplashCharWidth
+	splashH := constant.SplashCharHeight
+	minDist := float64(constant.SplashMinDistance)
+
+	timerBBoxes := s.getTimerBBoxes()
+
+	// Determine search direction and select angle order
+	searchCCW := s.getSearchDirection(cursorX, cursorY, centerX, centerY)
+	var angleOrder [8]int
+	if searchCCW {
+		angleOrder = magnifierAnglesCCW
+	} else {
+		angleOrder = magnifierAnglesCW
+	}
+
+	// Spiral search: 3 radius levels, 8 angles each (diagonals first)
+	for radiusLevel := 0; radiusLevel < 3; radiusLevel++ {
+		radius := minDist * float64(1+radiusLevel)
+
+		for _, angleIdx := range angleOrder {
+			dir := spiralDirections[angleIdx]
+
+			// Calculate position in virtual space (circular)
+			vX := float64(cursorX) + dir[0]*radius
+			vY := float64(cursorY)*2.0 + dir[1]*radius // Convert cursor Y to virtual
+
+			// Convert back to game space
+			anchorX := int(vX) - splashW/2
+			anchorY := int(vY/2.0) - splashH/2
+
+			// Bounds check
+			if anchorX < 0 || anchorX+splashW > config.GameWidth ||
+				anchorY < 0 || anchorY+splashH > config.GameHeight {
+				continue
+			}
+
+			// Collision check against timers
+			candidate := BBox{X: anchorX, Y: anchorY, W: splashW, H: splashH}
+			collides := false
+			for _, timer := range timerBBoxes {
+				if s.checkBBoxCollision(candidate, timer) {
+					collides = true
+					break
+				}
+			}
+
+			if !collides {
+				return anchorX, anchorY
+			}
+		}
+	}
+
+	// Final fallback: top-left diagonal position, clamped
+	anchorX := cursorX - splashW/2
+	anchorY := cursorY - splashH - int(minDist)
+
+	if anchorX < 0 {
+		anchorX = 0
+	}
+	if anchorX+splashW > config.GameWidth {
+		anchorX = config.GameWidth - splashW
+	}
+	if anchorY < 0 {
+		anchorY = 0
+	}
+	if anchorY+splashH > config.GameHeight {
+		anchorY = config.GameHeight - splashH
+	}
+
+	return anchorX, anchorY
+}
+
+// calculateTimerOffset finds valid offset for timer relative to anchor entity
+// Uses 8-direction search: cardinals first, then diagonals
+func (s *SplashSystem) calculateTimerOffset(anchorEntity core.Entity, seqLength, timerWidth int) (int, int) {
+	config := s.res.Config
+	centerX := config.GameWidth / 2
+	timerH := constant.SplashCharHeight
+	padding := constant.SplashTimerPadding
+
+	var anchorX, anchorY int
+	if anchorEntity != 0 {
+		if pos, ok := s.world.Positions.Get(anchorEntity); ok {
+			anchorX = pos.X
+			anchorY = pos.Y
+		}
+	}
+
+	seqCenter := seqLength / 2
+	timerHalfW := timerWidth / 2
+	timerHalfH := timerH / 2
+
+	// 8 position offsets: cardinals (0-3), then diagonals (4-7)
+	type posOffset struct{ x, y int }
+	positions := []posOffset{
+		{seqCenter - timerHalfW, 1 + padding},       // 0: Bottom
+		{seqCenter - timerHalfW, -timerH - padding}, // 1: Top
+		{seqLength + padding, -timerHalfH},          // 2: Right
+		{-timerWidth - padding, -timerHalfH},        // 3: Left
+		{seqLength + padding, 1 + padding},          // 4: Bottom-right
+		{-timerWidth - padding, 1 + padding},        // 5: Bottom-left
+		{seqLength + padding, -timerH - padding},    // 6: Top-right
+		{-timerWidth - padding, -timerH - padding},  // 7: Top-left
+	}
+
+	// Select angle order based on anchor quadrant
+	var order [8]int
+	if anchorX > centerX {
+		order = timerAnglesCCW
+	} else {
+		order = timerAnglesCW
+	}
+
+	for _, idx := range order {
+		offset := positions[idx]
+		absX := anchorX + offset.x
+		absY := anchorY + offset.y
+
+		if absX >= 0 && absX+timerWidth <= config.GameWidth &&
+			absY >= 0 && absY+timerH <= config.GameHeight {
+			return offset.x, offset.y
+		}
+	}
+
+	// Fallback: bottom position (may be OOB)
+	return seqCenter - timerHalfW, 1 + padding
+}
+
+// getSearchDirection determines spiral rotation direction
+// Returns true for counter-clockwise, false for clockwise
+// Search rotates from top (0°) towards the direction of screen center
+func (s *SplashSystem) getSearchDirection(cursorX, cursorY, centerX, centerY int) bool {
+	// Edge cases: exactly at center top/bottom
+	if cursorX == centerX {
+		return true // counter-clockwise
+	}
+
+	// Quadrant-based direction
+	// Top-right or bottom-right: counter-clockwise (search left toward center)
+	// Top-left or bottom-left: clockwise (search right toward center)
+	return cursorX > centerX
+}
+
+// getTimerBBoxes returns bounding boxes for all SlotTimer splashes
+func (s *SplashSystem) getTimerBBoxes() []BBox {
+	var boxes []BBox
+
+	entities := s.splashStore.All()
+	for _, entity := range entities {
+		splash, ok := s.splashStore.Get(entity)
+		if !ok || splash.Slot != component.SlotTimer {
+			continue
+		}
+
+		// Resolve actual position
+		x, y := splash.AnchorX, splash.AnchorY
+		if splash.AnchorEntity != 0 {
+			if pos, ok := s.world.Positions.Get(splash.AnchorEntity); ok {
+				x = pos.X + splash.OffsetX
+				y = pos.Y + splash.OffsetY
+			}
+		}
+
+		// Dynamic width for timer
+		w := splash.Length * constant.SplashCharWidth
+		h := constant.SplashCharHeight
+
+		boxes = append(boxes, BBox{X: x, Y: y, W: w, H: h})
+	}
+
+	return boxes
+}
+
+// checkBBoxCollision returns true if two bounding boxes overlap
+func (s *SplashSystem) checkBBoxCollision(a, b BBox) bool {
+	return a.X < b.X+b.W && a.X+a.W > b.X &&
+		a.Y < b.Y+b.H && a.Y+a.H > b.Y
+}
+
+// findSplashBySlot returns entity ID of first splash with given slot, or 0
+func (s *SplashSystem) findSplashBySlot(slot component.SplashSlot) core.Entity {
+	entities := s.splashStore.All()
+	for _, entity := range entities {
+		splash, ok := s.splashStore.Get(entity)
+		if ok && splash.Slot == slot {
+			return entity
+		}
+	}
+	return 0
+}
+
+// typeableToSplashColor maps TypeableType to SplashColor
+func (s *SplashSystem) typeableToSplashColor(t component.TypeableType) component.SplashColor {
+	switch t {
+	case component.TypeGreen:
+		return component.SplashColorGreen
+	case component.TypeBlue:
+		return component.SplashColorBlue
+	case component.TypeRed:
+		return component.SplashColorRed
+	case component.TypeGold:
+		return component.SplashColorGold
+	case component.TypeNugget:
+		return component.SplashColorNugget
+	default:
+		return component.SplashColorNormal
+	}
 }

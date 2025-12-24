@@ -65,14 +65,13 @@ const (
 
 // --- Splash Entity ---
 const (
-	SplashCharWidth   = 16
-	SplashCharHeight  = 12
-	SplashCharSpacing = 1
-	SplashMaxLength   = 8
-	SplashDuration    = 1 * time.Second
+	SplashCharWidth  = 16
+	SplashCharHeight = 12
+	SplashMaxLength  = 8
+	SplashDuration   = 1 * time.Second
 
 	// SplashTimerPadding is the vertical padding between gold timer and sequence
-	SplashTimerPadding = 2
+	SplashTimerPadding = 1
 )
 
 // --- Global Visual Effects ---

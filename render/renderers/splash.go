@@ -1,6 +1,7 @@
 package renderers
 
 import (
+	"math"
 	"strconv"
 
 	"github.com/lixenwraith/vi-fighter/asset"
@@ -11,7 +12,6 @@ import (
 )
 
 // SplashRenderer draws large block characters as background effect
-// Supports multiple concurrent splash entities
 type SplashRenderer struct {
 	gameCtx     *engine.GameContext
 	splashStore *engine.Store[component.SplashComponent]
@@ -36,39 +36,82 @@ func (r *SplashRenderer) Render(gameCtx render.RenderContext, buf *render.Render
 			continue
 		}
 
-		// Solid color - no fade effects
+		// Resolve anchor position
+		anchorX, anchorY := r.resolveAnchor(&splash)
+
 		displayColor := r.resolveSplashColor(splash.Color)
 
-		if splash.Mode == component.SplashModePersistent {
-			// Countdown timer: render digits from remaining time
-			remainingSec := int(splash.Remaining.Seconds())
+		// Use Slot for countdown detection
+		if splash.Slot == component.SlotTimer {
+			// Timer: render digits from remaining time (ceiling)
+			remainingSec := int(math.Ceil(splash.Remaining.Seconds()))
 			if remainingSec < 0 {
 				remainingSec = 0
+				// TODO: change to `remainingSec <= 0` and continue after checking there is no phantom timers
+				// continue // System should destroy, but renderer skips for safety
 			}
 
 			digits := strconv.Itoa(remainingSec)
 			for i, d := range digits {
-				charX := splash.AnchorX + i*(constant.SplashCharWidth+constant.SplashCharSpacing)
-				r.renderChar(gameCtx, buf, d, charX, splash.AnchorY, displayColor)
+				charX := anchorX + i*constant.SplashCharWidth
+				r.renderChar(gameCtx, buf, d, charX, anchorY, displayColor)
 			}
 		} else {
 			// Transient: render content directly
 			for i := 0; i < splash.Length; i++ {
-				charX := splash.AnchorX + i*(constant.SplashCharWidth+constant.SplashCharSpacing)
-				r.renderChar(gameCtx, buf, splash.Content[i], charX, splash.AnchorY, displayColor)
+				charX := anchorX + i*constant.SplashCharWidth
+				r.renderChar(gameCtx, buf, splash.Content[i], charX, anchorY, displayColor)
 			}
 		}
 	}
 }
 
-// renderChar renders a single splash character bitmap
-func (r *SplashRenderer) renderChar(gameCtx render.RenderContext, buf *render.RenderBuffer, char rune, gameX, gameY int, color render.RGB) {
-	// Bounds check character
-	if char < 32 || char > 126 {
-		return
+// resolveAnchor determines the screen position for a splash
+func (r *SplashRenderer) resolveAnchor(splash *component.SplashComponent) (int, int) {
+	baseX, baseY := splash.AnchorX, splash.AnchorY
+
+	if splash.AnchorEntity != 0 {
+		if pos, ok := r.gameCtx.World.Positions.Get(splash.AnchorEntity); ok {
+			baseX = pos.X + splash.OffsetX
+			baseY = pos.Y + splash.OffsetY
+		}
 	}
 
-	bitmap := asset.SplashFont[char-32]
+	// Dynamic centering for timer slot based on current digit count
+	if splash.Slot == component.SlotTimer {
+		// Recalculate centering based on actual length
+		// OffsetX was calculated for initial digit count, adjust for current
+		currentWidth := splash.Length * constant.SplashCharWidth
+		initialWidth := len(strconv.Itoa(int(math.Ceil(splash.Duration.Seconds())))) * constant.SplashCharWidth
+		adjustment := (initialWidth - currentWidth) / 2
+		baseX += adjustment
+	}
+
+	return baseX, baseY
+}
+
+// renderChar renders a single splash character bitmap
+func (r *SplashRenderer) renderChar(gameCtx render.RenderContext, buf *render.RenderBuffer, char rune, gameX, gameY int, color render.RGB) {
+	var bitmap [12]uint16
+	// Bounds check and fallback for missing glyphs
+	if char < 32 || char > 126 {
+		bitmap = asset.SplashFontFallback
+	} else {
+		bitmap = asset.SplashFont[char-32]
+	}
+
+	// // Check if bitmap is empty (all zeros = missing glyph)
+	// // TODO: defensive, delete after check
+	// isEmpty := true
+	// for _, row := range bitmap {
+	// 	if row != 0 {
+	// 		isEmpty = false
+	// 		break
+	// 	}
+	// }
+	// if isEmpty && char != ' ' {
+	// 	bitmap = asset.SplashFontFallback
+	// }
 
 	for row := 0; row < constant.SplashCharHeight; row++ {
 		screenY := gameCtx.GameY + gameY + row
@@ -111,6 +154,12 @@ func (r *SplashRenderer) resolveSplashColor(c component.SplashColor) render.RGB 
 		return render.RgbSequenceGold
 	case component.SplashColorNugget:
 		return render.RgbNuggetOrange
+	case component.SplashColorWhite:
+		return render.RgbTimerWhite
+	case component.SplashColorBlossom:
+		return render.RgbBlossom
+	case component.SplashColorDecay:
+		return render.RgbDecay
 	default:
 		return render.RgbSplashNormal
 	}

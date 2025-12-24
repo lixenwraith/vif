@@ -2,10 +2,20 @@ package component
 
 import (
 	"time"
+
+	"github.com/lixenwraith/vi-fighter/core"
 )
 
-// SplashColor defines the semantic color for splash effects
-// This decouples components from the render package to avoid cyclic dependencies
+// SplashSlot identifies the visual purpose of a splash for uniqueness enforcement
+type SplashSlot uint8
+
+const (
+	SlotTimer     SplashSlot = iota // Gold timer, entity-anchored
+	SlotAction                      // Normal mode feedback, far corner
+	SlotMagnifier                   // Typing preview, cursor-anchored
+)
+
+// SplashColor defines the semantic color for splash effects (decoupling from renderer for cyclic dependency)
 type SplashColor uint8
 
 const (
@@ -17,19 +27,9 @@ const (
 	SplashColorRed
 	SplashColorGold
 	SplashColorNugget
-)
-
-// SplashMode defines the behavior and lifecycle of a splash entity
-type SplashMode uint8
-
-const (
-	// SplashModeTransient entities automatically expire after Duration
-	// Used for input feedback, nuggets, commands
-	SplashModeTransient SplashMode = iota
-
-	// SplashModePersistent entities persist until explicitly destroyed via event
-	// Used for the Gold Timer
-	SplashModePersistent
+	SplashColorWhite
+	SplashColorBlossom
+	SplashColorDecay
 )
 
 // SplashComponent holds state for splash effects (typing feedback, timers)
@@ -38,11 +38,16 @@ type SplashComponent struct {
 	Content [8]rune     // Content buffer
 	Length  int         // Active character count
 	Color   SplashColor // Render color
-	AnchorX int         // Game-relative X
-	AnchorY int         // Game-relative Y
+
+	// Positioning: AnchorEntity != 0 uses entity-relative, else absolute AnchorX/Y
+	AnchorEntity core.Entity
+	AnchorX      int // Game-relative X
+	AnchorY      int // Game-relative Y
+	OffsetX      int // Offset from entity position (ignored if AnchorEntity == 0)
+	OffsetY      int
 
 	// Lifecycle & Animation
-	Mode       SplashMode    // Transient vs Persistent
+	Slot       SplashSlot    // Visual purpose and uniqueness enforcement
 	Remaining  time.Duration // Time remaining until expiration (Delta-based)
 	Duration   time.Duration // Total initial duration (for progress/animations)
 	SequenceID int           // ID for linking to game mechanics (e.g. Gold Sequence)

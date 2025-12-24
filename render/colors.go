@@ -56,6 +56,7 @@ var (
 	// Splash colors
 	RgbSplashInsert = RGB{200, 200, 200} // Light gray for insert mode
 	RgbSplashNormal = RGB{153, 102, 0}   // Dark orange (ping base) for normal mode
+	RgbTimerWhite   = RGB{155, 155, 155} // White for some actions
 
 	// Nugget colors
 	RgbNuggetOrange = RGB{255, 165, 0}   // Same as insert cursor

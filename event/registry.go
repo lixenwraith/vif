@@ -119,4 +119,5 @@ func InitRegistry() {
 	RegisterType("EventDeathOne", EventDeathOne, nil) // Scalar bit-packed payload (no struct), use api
 	RegisterType("EventDeathBatch", EventDeathBatch, &DeathRequestPayload{})
 	RegisterType("EventMemberTyped", EventMemberTyped, &MemberTypedPayload{})
+	RegisterType("EventCursorMoved", EventCursorMoved, &CursorMovedPayload{})
 }

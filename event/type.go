@@ -268,6 +268,11 @@ const (
 	// Consumer: CompositeSystem routes to behavior-specific handler
 	// Payload: *MemberTypedPayload
 	EventMemberTyped
+
+	// EventCursorMoved signals cursor position change
+	// Trigger: InputHandler on cursor movement (h/j/k/l, arrow keys, etc.)
+	// Consumer: SplashSystem (magnifier) | Payload: *CursorMovedPayload
+	EventCursorMoved
 )
 
 // GameEvent represents a single game event with metadata

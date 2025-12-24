@@ -7,13 +7,17 @@ import (
 )
 
 // OpMove updates cursor position based on motion result
-// Handles consecutive move penalty (heat reset)
 func OpMove(ctx *engine.GameContext, result MotionResult) {
 	if !result.Valid {
 		return
 	}
 
 	ctx.World.Positions.Add(ctx.CursorEntity, component.PositionComponent{
+		X: result.EndX,
+		Y: result.EndY,
+	})
+
+	ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{
 		X: result.EndX,
 		Y: result.EndY,
 	})

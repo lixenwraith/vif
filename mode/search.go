@@ -4,6 +4,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/event"
 )
 
 // PerformSearch searches for a text pattern and moves cursor to first match
@@ -104,6 +105,7 @@ func searchForward(ctx *engine.GameContext, grid map[core.Point]rune, pattern []
 					X: x,
 					Y: y,
 				})
+				ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: x, Y: y})
 				return true
 			}
 		}
@@ -117,6 +119,7 @@ func searchForward(ctx *engine.GameContext, grid map[core.Point]rune, pattern []
 				X: x,
 				Y: startY,
 			})
+			ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: x, Y: startY})
 			return true
 		}
 	}
@@ -140,6 +143,7 @@ func searchBackward(ctx *engine.GameContext, grid map[core.Point]rune, pattern [
 					X: x,
 					Y: y,
 				})
+				ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: x, Y: y})
 				return true
 			}
 		}
@@ -154,6 +158,7 @@ func searchBackward(ctx *engine.GameContext, grid map[core.Point]rune, pattern [
 					X: x,
 					Y: y,
 				})
+				ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: x, Y: y})
 				return true
 			}
 		}
@@ -167,6 +172,7 @@ func searchBackward(ctx *engine.GameContext, grid map[core.Point]rune, pattern [
 				X: x,
 				Y: startY,
 			})
+			ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: x, Y: startY})
 			return true
 		}
 	}

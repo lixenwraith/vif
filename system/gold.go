@@ -141,7 +141,6 @@ func (s *GoldSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventGameReset:
-		s.destroyCurrentGold() // TODO: review gold teardown on reset
 		s.Init()
 
 		s.statActive.Store(false)
@@ -312,11 +311,12 @@ func (s *GoldSystem) spawnGold() bool {
 
 	// Emit spawn event
 	s.world.PushEvent(event.EventGoldSpawned, &event.GoldSpawnedPayload{
-		SequenceID: int(groupID),
-		OriginX:    x,
-		OriginY:    y,
-		Length:     constant.GoldSequenceLength,
-		Duration:   constant.GoldDuration,
+		SequenceID:   int(groupID),
+		AnchorEntity: anchorEntity,
+		OriginX:      x,
+		OriginY:      y,
+		Length:       constant.GoldSequenceLength,
+		Duration:     constant.GoldDuration,
 	})
 
 	return true

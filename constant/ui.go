@@ -49,6 +49,15 @@ const (
 
 // Splash Layout
 const (
+	// SplashMinDistance is the minimum distance from cursor for magnifier placement
+	SplashMinDistance = 25
+
+	// SplashActionDuration is how long normal mode feedback displays
+	SplashActionDuration = 500 * time.Millisecond
+
+	// SplashFlashDuration is how long energy flash displays
+	SplashFlashDuration = 100 * time.Millisecond
+
 	// SplashQuadrantBaseScore is the base score for each quadrant in smart layout
 	SplashQuadrantBaseScore = 100
 

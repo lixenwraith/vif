@@ -81,11 +81,12 @@ type GoldEnablePayload struct {
 
 // GoldSpawnedPayload anchors countdown timer to sequence position
 type GoldSpawnedPayload struct {
-	SequenceID int
-	OriginX    int
-	OriginY    int
-	Length     int
-	Duration   time.Duration
+	SequenceID   int
+	AnchorEntity core.Entity // Phantom head for entity-anchored timer
+	OriginX      int
+	OriginY      int
+	Length       int
+	Duration     time.Duration
 }
 
 // GoldCompletionPayload identifies which timer to destroy
@@ -225,4 +226,10 @@ type BlossomSpawnPayload struct {
 	X    int
 	Y    int
 	Char rune
+}
+
+// CursorMovedPayload signals cursor position change for magnifier updates
+type CursorMovedPayload struct {
+	X int
+	Y int
 }

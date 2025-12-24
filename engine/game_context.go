@@ -292,9 +292,16 @@ func (ctx *GameContext) HandleResize() {
 
 		// Clamp cursor position
 		if pos, ok := ctx.World.Positions.Get(ctx.CursorEntity); ok {
-			pos.X = max(0, min(pos.X, ctx.GameWidth-1))
-			pos.Y = max(0, min(pos.Y, ctx.GameHeight-1))
-			ctx.World.Positions.Add(ctx.CursorEntity, pos)
+			newX := max(0, min(pos.X, ctx.GameWidth-1))
+			newY := max(0, min(pos.Y, ctx.GameHeight-1))
+
+			if newX != pos.X || newY != pos.Y {
+				pos.X = newX
+				pos.Y = newY
+				ctx.World.Positions.Add(ctx.CursorEntity, pos)
+				// Signal cursor movement if clamped due to resize
+				ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: newX, Y: newY})
+			}
 		}
 	})
 }
