@@ -149,7 +149,7 @@ func (s *MaterializeSystem) Update() {
 			s.world.Positions.Add(entity, component.PositionComponent{X: newGridX, Y: newGridY})
 		}
 
-		s.matStore.Add(entity, mat)
+		s.matStore.Set(entity, mat)
 	}
 
 	// Target Completion Handling
@@ -243,9 +243,9 @@ func (s *MaterializeSystem) spawnMaterializers(targetX, targetY int, spawnType c
 		// Create Entity
 		entity := s.world.CreateEntity()
 		s.world.Positions.Add(entity, component.PositionComponent{X: startGridX, Y: startGridY})
-		s.matStore.Add(entity, comp)
+		s.matStore.Set(entity, comp)
 		// Protect from death/drain during animation
-		s.protStore.Add(entity, component.ProtectionComponent{
+		s.protStore.Set(entity, component.ProtectionComponent{
 			Mask: component.ProtectFromDrain | component.ProtectFromDeath,
 		})
 	}

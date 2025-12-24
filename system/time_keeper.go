@@ -47,7 +47,7 @@ func (s *TimeKeeperSystem) EventTypes() []event.EventType {
 func (s *TimeKeeperSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventTimerStart {
 		if payload, ok := ev.Payload.(*event.TimerStartPayload); ok {
-			s.timerStore.Add(payload.Entity, component.TimerComponent{
+			s.timerStore.Set(payload.Entity, component.TimerComponent{
 				Remaining: payload.Duration,
 			})
 		}
@@ -70,9 +70,9 @@ func (s *TimeKeeperSystem) Update() {
 		if timer.Remaining <= 0 {
 			// Timer expired - Default action is destruction
 			s.timerStore.Remove(entity)
-			s.deathStore.Add(entity, component.DeathComponent{})
+			s.deathStore.Set(entity, component.DeathComponent{})
 		} else {
-			s.timerStore.Add(entity, timer)
+			s.timerStore.Set(entity, timer)
 		}
 	}
 }

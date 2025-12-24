@@ -754,7 +754,7 @@ func (state *BatchEditState) toggleTag(cat, grp, mod, tag string) {
 			}
 		}
 	} else {
-		// Add to all missing
+		// Set to all missing
 		for _, path := range validFiles {
 			has := ts.CurrentFiles[path] && !ts.PendingRemove[path]
 			has = has || ts.PendingAdd[path]
@@ -1343,7 +1343,7 @@ func (state *BatchEditState) toggleModule(cat, grp, mod string) {
 			}
 		}
 	} else {
-		// Add to all
+		// Set to all
 		for _, ts := range modData.Tags {
 			for _, path := range validFiles {
 				has := ts.CurrentFiles[path] && !ts.PendingRemove[path]

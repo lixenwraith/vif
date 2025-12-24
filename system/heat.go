@@ -82,7 +82,7 @@ func (s *HeatSystem) addHeat(delta int) {
 	heatComp.Current.Store(newVal)
 
 	// CRITICAL: Write the modified component copy back to the store
-	s.heatStore.Add(cursorEntity, heatComp)
+	s.heatStore.Set(cursorEntity, heatComp)
 }
 
 // setHeat stores absolute value with clamping and writes back to store
@@ -105,7 +105,7 @@ func (s *HeatSystem) setHeat(value int) {
 	heatComp.Current.Store(int64(value))
 
 	// CRITICAL: Write the modified component copy back to the store
-	s.heatStore.Add(cursorEntity, heatComp)
+	s.heatStore.Set(cursorEntity, heatComp)
 }
 
 // handleManualCleanerTrigger checks heat cost and triggers cleaner if affordable

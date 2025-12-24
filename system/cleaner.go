@@ -230,7 +230,7 @@ func (s *CleanerSystem) Update() {
 		if shouldDestroy {
 			s.world.DestroyEntity(entity)
 		} else {
-			s.cleanerStore.Add(entity, c)
+			s.cleanerStore.Set(entity, c)
 		}
 	}
 
@@ -309,8 +309,8 @@ func (s *CleanerSystem) spawnCleaners() {
 		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → CleanerComponent (float overlay)
 		entity := s.world.CreateEntity()
 		s.world.Positions.Add(entity, component.PositionComponent{X: startGridX, Y: startGridY})
-		s.cleanerStore.Add(entity, comp)
-		s.protStore.Add(entity, component.ProtectionComponent{
+		s.cleanerStore.Set(entity, comp)
+		s.protStore.Set(entity, component.ProtectionComponent{
 			Mask: component.ProtectFromDrain | component.ProtectFromDeath,
 		})
 	}
@@ -412,9 +412,9 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → CleanerComponent (float overlay)
 		entity := s.world.CreateEntity()
 		s.world.Positions.Add(entity, component.PositionComponent{X: startGridX, Y: startGridY})
-		s.cleanerStore.Add(entity, comp)
+		s.cleanerStore.Set(entity, comp)
 		// TODO: centralize protection via entity factory
-		s.protStore.Add(entity, component.ProtectionComponent{
+		s.protStore.Set(entity, component.ProtectionComponent{
 			Mask: component.ProtectFromDrain | component.ProtectFromDeath,
 		})
 	}
@@ -448,7 +448,7 @@ func (s *CleanerSystem) scanRedCharacterRows() []int {
 			continue
 		}
 
-		// Add row if in bounds
+		// Set row if in bounds
 		if pos.Y >= 0 && pos.Y < gameHeight {
 			redRows[pos.Y] = true
 		}

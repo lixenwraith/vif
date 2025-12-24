@@ -106,7 +106,7 @@ func (s *CompositeSystem) Update() {
 		}
 
 		// Write back header
-		s.headerStore.Add(anchor, header)
+		s.headerStore.Set(anchor, header)
 	}
 }
 
@@ -124,7 +124,7 @@ func (s *CompositeSystem) markMemberTombstone(anchorID, memberEntity core.Entity
 			break
 		}
 	}
-	s.headerStore.Add(anchorID, header)
+	s.headerStore.Set(anchorID, header)
 }
 
 // integrateMovement applies 16.16 fixed-point velocity to accumulator
@@ -229,14 +229,13 @@ func (s *CompositeSystem) CreatePhantomHead(x, y int, groupID uint64, behaviorID
 	s.world.Positions.Add(entity, component.PositionComponent{X: x, Y: y})
 
 	// Header component with empty member slice
-	s.headerStore.Add(entity, component.CompositeHeaderComponent{
-		GroupID:    groupID,
+	s.headerStore.Set(entity, component.CompositeHeaderComponent{
 		BehaviorID: behaviorID,
 		Members:    make([]component.MemberEntry, 0, 16),
 	})
 
 	// Phantom heads are protected from all destruction except explicit removal
-	s.protStore.Add(entity, component.ProtectionComponent{
+	s.protStore.Set(entity, component.ProtectionComponent{
 		Mask: component.ProtectAll,
 	})
 
@@ -250,17 +249,17 @@ func (s *CompositeSystem) AddMember(anchorID, memberEntity core.Entity, offsetX,
 		return
 	}
 
-	// Add member entry
+	// Set member entry
 	header.Members = append(header.Members, component.MemberEntry{
 		Entity:  memberEntity,
 		OffsetX: offsetX,
 		OffsetY: offsetY,
 		Layer:   layer,
 	})
-	s.headerStore.Add(anchorID, header)
+	s.headerStore.Set(anchorID, header)
 
-	// Add backlink to member
-	s.memberStore.Add(memberEntity, component.MemberComponent{
+	// Set backlink to member
+	s.memberStore.Set(memberEntity, component.MemberComponent{
 		AnchorID: anchorID,
 	})
 }
@@ -273,7 +272,7 @@ func (s *CompositeSystem) SetVelocity(anchorID core.Entity, velX, velY int32) {
 	}
 	header.VelX = velX
 	header.VelY = velY
-	s.headerStore.Add(anchorID, header)
+	s.headerStore.Set(anchorID, header)
 }
 
 // DestroyComposite removes the phantom head and all members

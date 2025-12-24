@@ -47,8 +47,7 @@ type SplashComponent struct {
 	OffsetY      int
 
 	// Lifecycle & Animation
-	Slot       SplashSlot    // Visual purpose and uniqueness enforcement
-	Remaining  time.Duration // Time remaining until expiration (Delta-based)
-	Duration   time.Duration // Total initial duration (for progress/animations)
-	SequenceID int           // ID for linking to game mechanics (e.g. Gold Sequence)
+	Slot      SplashSlot    // Visual purpose and uniqueness enforcement
+	Remaining time.Duration // Time remaining until expiration (Delta-based)
+	Duration  time.Duration // Total initial duration (for progress/animations)
 }

@@ -246,10 +246,10 @@ func (s *NuggetSystem) spawnNugget() {
 		return
 	}
 
-	// Add other components after position is committed
-	s.charStore.Add(entity, char)
-	engine.GetStore[component.TypeableComponent](s.world).Add(entity, typeable)
-	s.nuggetStore.Add(entity, nugget)
+	// Set other components after position is committed
+	s.charStore.Set(entity, char)
+	engine.GetStore[component.TypeableComponent](s.world).Set(entity, typeable)
+	s.nuggetStore.Set(entity, nugget)
 
 	s.activeNuggetEntity = entity
 

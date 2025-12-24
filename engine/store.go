@@ -25,8 +25,8 @@ func NewStore[T any]() *Store[T] {
 	}
 }
 
-// Add inserts or updates a component for an entity
-func (s *Store[T]) Add(e core.Entity, val T) {
+// Set inserts or updates a component for an entity
+func (s *Store[T]) Set(e core.Entity, val T) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

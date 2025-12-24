@@ -52,7 +52,7 @@ func RegisterFSMComponents(m *fsm.Machine[*engine.World]) {
 		return true
 	})
 
-	// TODO: Add more game-specific guards here to test
+	// TODO: Set more game-specific guards here to test
 
 	// StateTimeExceeds10s: Checks if the FSM has been in the current state for > 10 seconds
 	m.RegisterGuard("StateTimeExceeds10s", func(world *engine.World) bool {

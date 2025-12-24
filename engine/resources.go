@@ -26,7 +26,7 @@ func NewResourceStore() *ResourceStore {
 	}
 }
 
-// Add registers or updates a resource in the store
+// Set registers or updates a resource in the store
 // T must be the pointer type of the resource struct to ensure addressability if mutation is needed,
 // or the struct type if read-only behavior is desired (though pointers are recommended for consistency)
 func AddResource[T any](rs *ResourceStore, resource T) {

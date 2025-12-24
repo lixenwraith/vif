@@ -31,15 +31,14 @@ type GoldSystem struct {
 	// Internal state
 	active       bool
 	anchorEntity core.Entity // Phantom Head
-	groupID      uint64
 	startTime    time.Time
 	timeoutTime  time.Time
 	spawnEnabled bool
 
 	// Cached metric pointers
-	statActive *atomic.Bool
-	statSeqID  *atomic.Int64
-	statTimer  *atomic.Int64
+	statActive   *atomic.Bool
+	statAnchorID *atomic.Int64
+	statTimer    *atomic.Int64
 }
 
 // NewGoldSystem creates a new gold sequence system
@@ -56,9 +55,9 @@ func NewGoldSystem(world *engine.World) engine.System {
 		protStore:     engine.GetStore[component.ProtectionComponent](world),
 		heatStore:     engine.GetStore[component.HeatComponent](world),
 
-		statActive: res.Status.Bools.Get("gold.active"),
-		statSeqID:  res.Status.Ints.Get("gold.seq_id"),
-		statTimer:  res.Status.Ints.Get("gold.timer"),
+		statActive:   res.Status.Bools.Get("gold.active"),
+		statAnchorID: res.Status.Ints.Get("gold.anchor_id"),
+		statTimer:    res.Status.Ints.Get("gold.timer"),
 	}
 	s.initLocked()
 	return s
@@ -75,10 +74,12 @@ func (s *GoldSystem) Init() {
 func (s *GoldSystem) initLocked() {
 	s.active = false
 	s.anchorEntity = 0
-	s.groupID = 0
 	s.startTime = time.Time{}
 	s.timeoutTime = time.Time{}
 	s.spawnEnabled = true
+	s.statActive.Store(false)
+	s.statAnchorID.Store(0)
+	s.statTimer.Store(0)
 }
 
 // Priority returns the system's priority
@@ -142,10 +143,6 @@ func (s *GoldSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventGameReset:
 		s.Init()
-
-		s.statActive.Store(false)
-		s.statSeqID.Store(0)
-		s.statTimer.Store(0)
 	}
 }
 
@@ -156,12 +153,10 @@ func (s *GoldSystem) Update() {
 	s.mu.Lock()
 	active := s.active
 	timeoutTime := s.timeoutTime
-	// seqID := s.sequenceID
-	groupID := s.groupID
 	anchorEntity := s.anchorEntity
 	s.mu.Unlock()
 
-	// Publish metrics (direct atomic writes)
+	// Publish metrics
 	s.statActive.Store(active)
 	if active {
 		remaining := timeoutTime.Sub(now)
@@ -169,7 +164,7 @@ func (s *GoldSystem) Update() {
 			remaining = 0
 		}
 		s.statTimer.Store(int64(remaining))
-		s.statSeqID.Store(int64(groupID))
+		s.statAnchorID.Store(int64(s.anchorEntity))
 	} else {
 		s.statTimer.Store(0)
 	}
@@ -209,9 +204,6 @@ func (s *GoldSystem) spawnGold() bool {
 		return false
 	}
 
-	// Generate group ID
-	groupID := uint64(s.res.State.State.IncrementID())
-
 	// Phase 1: Create Phantom Head entity (NO position yet)
 	anchorEntity := s.world.CreateEntity()
 
@@ -225,7 +217,7 @@ func (s *GoldSystem) spawnGold() bool {
 	// Create member entities
 	members := make([]component.MemberEntry, 0, constant.GoldSequenceLength)
 
-	// Add position component to gold entities
+	// Set position component to gold entities
 	for i := 0; i < constant.GoldSequenceLength; i++ {
 		entity := s.world.CreateEntity()
 		entities = append(entities, entityData{
@@ -249,18 +241,18 @@ func (s *GoldSystem) spawnGold() bool {
 		return false
 	}
 
-	// Phase 4: Add Phantom Head to Positions AFTER batch success
-	// Direct Add bypasses HasAny validation, colocates with member 0
+	// Phase 4: Set Phantom Head to Positions AFTER batch success
+	// Direct Set bypasses HasAny validation, colocates with member 0
 	// TODO: check protectAll, it may conflicts with OOB bound, set specific protections
 	s.world.Positions.Add(anchorEntity, component.PositionComponent{X: x, Y: y})
-	s.protStore.Add(anchorEntity, component.ProtectionComponent{
+	s.protStore.Set(anchorEntity, component.ProtectionComponent{
 		Mask: component.ProtectAll,
 	})
 
-	// Phase 5: Add components to members
+	// Phase 5: Set components to members
 	for i, ed := range entities {
 		// Visual component
-		s.charStore.Add(ed.entity, component.CharacterComponent{
+		s.charStore.Set(ed.entity, component.CharacterComponent{
 			Rune:  sequence[i],
 			Style: component.StyleNormal,
 			Type:  component.CharacterGold,
@@ -268,23 +260,23 @@ func (s *GoldSystem) spawnGold() bool {
 		})
 
 		// Typing target
-		s.typeableStore.Add(ed.entity, component.TypeableComponent{
+		s.typeableStore.Set(ed.entity, component.TypeableComponent{
 			Char:  sequence[i],
 			Type:  component.TypeGold,
 			Level: component.LevelBright,
 		})
 
 		// Composite membership
-		s.memberStore.Add(ed.entity, component.MemberComponent{
+		s.memberStore.Set(ed.entity, component.MemberComponent{
 			AnchorID: anchorEntity,
 		})
 
 		// Protect gold entities from decay/delete
-		s.protStore.Add(ed.entity, component.ProtectionComponent{
+		s.protStore.Set(ed.entity, component.ProtectionComponent{
 			Mask: component.ProtectFromDelete | component.ProtectFromDecay,
 		})
 
-		// Add gold entity to composite member entities
+		// Set gold entity to composite member entities
 		members = append(members, component.MemberEntry{
 			Entity:  ed.entity,
 			OffsetX: ed.offset,
@@ -294,8 +286,7 @@ func (s *GoldSystem) spawnGold() bool {
 	}
 
 	// Phase 6: Create composite header
-	s.headerStore.Add(anchorEntity, component.CompositeHeaderComponent{
-		GroupID:    groupID,
+	s.headerStore.Set(anchorEntity, component.CompositeHeaderComponent{
 		BehaviorID: component.BehaviorGold,
 		Members:    members,
 	})
@@ -304,14 +295,12 @@ func (s *GoldSystem) spawnGold() bool {
 	s.mu.Lock()
 	s.active = true
 	s.anchorEntity = anchorEntity
-	s.groupID = groupID
 	s.startTime = now
 	s.timeoutTime = now.Add(constant.GoldDuration)
 	s.mu.Unlock()
 
 	// Emit spawn event
 	s.world.PushEvent(event.EventGoldSpawned, &event.GoldSpawnedPayload{
-		SequenceID:   int(groupID),
 		AnchorEntity: anchorEntity,
 		OriginX:      x,
 		OriginY:      y,
@@ -340,7 +329,6 @@ func (s *GoldSystem) handleMemberTyped(payload *event.MemberTypedPayload) {
 // handleGoldComplete processes successful gold sequence completion
 func (s *GoldSystem) handleGoldComplete() {
 	s.mu.RLock()
-	groupID := s.groupID
 	anchorEntity := s.anchorEntity
 	s.mu.RUnlock()
 
@@ -360,7 +348,7 @@ func (s *GoldSystem) handleGoldComplete() {
 
 	// Emit completion event
 	s.world.PushEvent(event.EventGoldComplete, &event.GoldCompletionPayload{
-		SequenceID: int(groupID),
+		AnchorEntity: anchorEntity,
 	})
 
 	// Play sound
@@ -380,17 +368,17 @@ func (s *GoldSystem) handleGoldComplete() {
 
 	s.statActive.Store(false)
 	s.statTimer.Store(0)
+	s.statAnchorID.Store(0)
 }
 
 // handleGoldTimeout processes gold sequence expiration
 func (s *GoldSystem) handleGoldTimeout() {
 	s.mu.RLock()
-	groupID := s.groupID
 	anchorEntity := s.anchorEntity
 	s.mu.RUnlock()
 
 	s.world.PushEvent(event.EventGoldTimeout, &event.GoldCompletionPayload{
-		SequenceID: int(groupID),
+		AnchorEntity: anchorEntity,
 	})
 
 	s.destroyComposite(anchorEntity)
@@ -404,17 +392,17 @@ func (s *GoldSystem) handleGoldTimeout() {
 
 	s.statActive.Store(false)
 	s.statTimer.Store(0)
+	s.statAnchorID.Store(0)
 }
 
 // handleGoldDestroyed processes external gold destruction
 func (s *GoldSystem) handleGoldDestroyed() {
 	s.mu.RLock()
-	groupID := s.groupID
 	anchorEntity := s.anchorEntity
 	s.mu.RUnlock()
 
 	s.world.PushEvent(event.EventGoldDestroyed, &event.GoldCompletionPayload{
-		SequenceID: int(groupID),
+		AnchorEntity: anchorEntity,
 	})
 
 	if anchorEntity != 0 {
@@ -430,6 +418,7 @@ func (s *GoldSystem) handleGoldDestroyed() {
 
 	s.statActive.Store(false)
 	s.statTimer.Store(0)
+	s.statAnchorID.Store(0)
 }
 
 // destroyCurrentGold destroys the current gold if active

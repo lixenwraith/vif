@@ -510,10 +510,10 @@ func (s *SpawnSystem) placeLine(line string, seqType component.CharacterType, se
 				continue
 			}
 
-			// Phase 3: Add other components (positions already committed)
+			// Phase 3: Set other components (positions already committed)
 			for _, ed := range entities {
-				s.charStore.Add(ed.entity, ed.char)
-				s.typeableStore.Add(ed.entity, component.TypeableComponent{
+				s.charStore.Set(ed.entity, ed.char)
+				s.typeableStore.Set(ed.entity, component.TypeableComponent{
 					Char:  ed.char.Rune,
 					Type:  typeableTypeFromSeq(seqType),
 					Level: seqLevel,

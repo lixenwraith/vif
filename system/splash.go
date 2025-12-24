@@ -95,7 +95,7 @@ func (s *SplashSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventGoldComplete, event.EventGoldTimeout, event.EventGoldDestroyed:
 		if payload, ok := ev.Payload.(*event.GoldCompletionPayload); ok {
-			s.handleGoldFinish(payload.SequenceID)
+			s.handleGoldFinish(payload.AnchorEntity)
 		}
 
 	case event.EventCursorMoved:
@@ -167,7 +167,7 @@ func (s *SplashSystem) Update() {
 		}
 
 		// Write back component (state changed)
-		s.splashStore.Add(entity, splash)
+		s.splashStore.Set(entity, splash)
 	}
 }
 
@@ -200,7 +200,7 @@ func (s *SplashSystem) handleSplashRequest(payload *event.SplashRequestPayload) 
 
 	// 5. Spawn
 	entity := s.world.CreateEntity()
-	s.splashStore.Add(entity, splash)
+	s.splashStore.Set(entity, splash)
 
 	// 6. Register with TimeKeeper for destruction
 	s.world.PushEvent(event.EventTimerStart, &event.TimerStartPayload{
@@ -270,7 +270,6 @@ func (s *SplashSystem) handleGoldSpawn(payload *event.GoldSpawnedPayload) {
 		Slot:         component.SlotTimer,
 		Remaining:    payload.Duration,
 		Duration:     payload.Duration,
-		SequenceID:   payload.SequenceID,
 	}
 
 	for i, d := range digits {
@@ -280,11 +279,11 @@ func (s *SplashSystem) handleGoldSpawn(payload *event.GoldSpawnedPayload) {
 	}
 
 	entity := s.world.CreateEntity()
-	s.splashStore.Add(entity, splash)
+	s.splashStore.Set(entity, splash)
 }
 
 // handleGoldFinish destroys the gold timer
-func (s *SplashSystem) handleGoldFinish(sequenceID int) {
+func (s *SplashSystem) handleGoldFinish(anchorEntity core.Entity) {
 	// Find and destroy specific timer
 	entities := s.splashStore.All()
 	for _, entity := range entities {
@@ -292,7 +291,7 @@ func (s *SplashSystem) handleGoldFinish(sequenceID int) {
 		if !ok {
 			continue
 		}
-		if splash.Slot == component.SlotTimer && splash.SequenceID == sequenceID {
+		if splash.Slot == component.SlotTimer && splash.AnchorEntity == anchorEntity {
 			s.world.DestroyEntity(entity)
 			return // Found it
 		}
@@ -462,7 +461,7 @@ func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 			splash.Color = color
 			splash.AnchorX = anchorX
 			splash.AnchorY = anchorY
-			s.splashStore.Add(existing, splash)
+			s.splashStore.Set(existing, splash)
 			return
 		}
 	}
@@ -480,7 +479,7 @@ func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 	splash.Content[0] = typeable.Char
 
 	newEntity := s.world.CreateEntity()
-	s.splashStore.Add(newEntity, splash)
+	s.splashStore.Set(newEntity, splash)
 }
 
 // calculateProximityAnchor uses spiral search to find valid magnifier position

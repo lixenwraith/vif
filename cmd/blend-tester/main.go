@@ -112,7 +112,7 @@ var blendOps = []struct {
 }{
 	{"Replace", "Result = Src", render.BlendReplace},
 	{"Alpha", "Result = Dst*(1-α) + Src*α", render.BlendAlpha},
-	{"Add", "Result = min(Dst + Src, 255)", render.BlendAdd},
+	{"Set", "Result = min(Dst + Src, 255)", render.BlendAdd},
 	{"Max", "Result = max(Dst, Src)", render.BlendMax},
 	{"SoftLight", "Perez: df < 0.5 ? df-(1-2sf)*df*(1-df) : df+(2sf-1)*(G(df)-df)", render.BlendSoftLight},
 	{"Screen", "Result = 255 - (255-Dst)*(255-Src)/255", render.BlendScreen},

@@ -31,7 +31,6 @@ type MemberEntry struct {
 // CompositeHeaderComponent resides on the Phantom Head (controller) entity
 // The Phantom Head is invisible, protected, and manages group lifecycle
 type CompositeHeaderComponent struct {
-	GroupID    uint64
 	BehaviorID BehaviorID
 
 	// Contiguous slice for cache-friendly iteration

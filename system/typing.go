@@ -231,7 +231,7 @@ func (s *TypingSystem) emitTypingError() {
 	// Set cursor error flash
 	if cursor, ok := s.cursorStore.Get(cursorEntity); ok {
 		cursor.ErrorFlashRemaining = constant.ErrorBlinkTimeout
-		s.cursorStore.Add(cursorEntity, cursor)
+		s.cursorStore.Set(cursorEntity, cursor)
 	}
 
 	// Reset heat and boost

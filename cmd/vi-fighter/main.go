@@ -101,7 +101,7 @@ func main() {
 	// } // Silent fail if audio could not be initialized
 
 	// 9. Systems Instantiation
-	// Add active systems to ECS world
+	// Set active systems to ECS world
 	for _, name := range manifest.ActiveSystems() {
 		factory, ok := registry.GetSystem(name)
 		if !ok {

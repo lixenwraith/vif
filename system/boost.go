@@ -93,7 +93,7 @@ func (s *BoostSystem) Update() {
 		boost.Active = false
 	}
 
-	s.boostStore.Add(cursorEntity, boost)
+	s.boostStore.Set(cursorEntity, boost)
 
 	s.statActive.Store(boost.Active)
 	s.statRemaining.Store(int64(boost.Remaining))
@@ -113,7 +113,7 @@ func (s *BoostSystem) activate(duration time.Duration) {
 	boost.Remaining = duration
 	boost.TotalDuration = duration // Reset total for UI progress bar if applicable
 
-	s.boostStore.Add(cursorEntity, boost)
+	s.boostStore.Set(cursorEntity, boost)
 }
 
 func (s *BoostSystem) deactivate() {
@@ -125,7 +125,7 @@ func (s *BoostSystem) deactivate() {
 	}
 	boost.Active = false
 	boost.Remaining = 0
-	s.boostStore.Add(cursorEntity, boost)
+	s.boostStore.Set(cursorEntity, boost)
 }
 
 func (s *BoostSystem) extend(duration time.Duration) {
@@ -143,5 +143,5 @@ func (s *BoostSystem) extend(duration time.Duration) {
 		boost.TotalDuration = boost.Remaining
 	}
 
-	s.boostStore.Add(cursorEntity, boost)
+	s.boostStore.Set(cursorEntity, boost)
 }

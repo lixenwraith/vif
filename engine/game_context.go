@@ -171,16 +171,16 @@ func (ctx *GameContext) CreateCursorEntity() {
 		Y: ctx.GameHeight / 2,
 	})
 
-	GetStore[component.CursorComponent](ctx.World).Add(ctx.CursorEntity, component.CursorComponent{})
+	GetStore[component.CursorComponent](ctx.World).Set(ctx.CursorEntity, component.CursorComponent{})
 
 	// Make cursor indestructible
-	GetStore[component.ProtectionComponent](ctx.World).Add(ctx.CursorEntity, component.ProtectionComponent{
+	GetStore[component.ProtectionComponent](ctx.World).Set(ctx.CursorEntity, component.ProtectionComponent{
 		Mask:      component.ProtectAll,
 		ExpiresAt: 0, // No expiry
 	})
 
-	// Add PingComponent to cursor (handles crosshair and grid state)
-	GetStore[component.PingComponent](ctx.World).Add(ctx.CursorEntity, component.PingComponent{
+	// Set PingComponent to cursor (handles crosshair and grid state)
+	GetStore[component.PingComponent](ctx.World).Set(ctx.CursorEntity, component.PingComponent{
 		ShowCrosshair:  true,
 		CrosshairColor: component.ColorNormal,
 		GridActive:     false,
@@ -189,14 +189,14 @@ func (ctx *GameContext) CreateCursorEntity() {
 		ContextAware:   true,
 	})
 
-	// Add HeatComponent to cursor
-	GetStore[component.HeatComponent](ctx.World).Add(ctx.CursorEntity, component.HeatComponent{})
+	// Set HeatComponent to cursor
+	GetStore[component.HeatComponent](ctx.World).Set(ctx.CursorEntity, component.HeatComponent{})
 
-	// Add EnergyComponent to cursor
-	GetStore[component.EnergyComponent](ctx.World).Add(ctx.CursorEntity, component.EnergyComponent{})
+	// Set EnergyComponent to cursor
+	GetStore[component.EnergyComponent](ctx.World).Set(ctx.CursorEntity, component.EnergyComponent{})
 
-	// Add ShieldComponent to cursor (initially invisible via GameState.ShieldActive)
-	GetStore[component.ShieldComponent](ctx.World).Add(ctx.CursorEntity, component.ShieldComponent{
+	// Set ShieldComponent to cursor (initially invisible via GameState.ShieldActive)
+	GetStore[component.ShieldComponent](ctx.World).Set(ctx.CursorEntity, component.ShieldComponent{
 		RadiusX:       vmath.FromFloat(constant.ShieldRadiusX),
 		RadiusY:       vmath.FromFloat(constant.ShieldRadiusY),
 		OverrideColor: component.ColorNone,
@@ -204,8 +204,8 @@ func (ctx *GameContext) CreateCursorEntity() {
 		LastDrainTime: ctx.PausableClock.Now(),
 	})
 
-	// Add BoostComponent to cursor
-	GetStore[component.BoostComponent](ctx.World).Add(ctx.CursorEntity, component.BoostComponent{})
+	// Set BoostComponent to cursor
+	GetStore[component.BoostComponent](ctx.World).Set(ctx.CursorEntity, component.BoostComponent{})
 }
 
 // ===== INPUT-SPECIFIC METHODS =====
@@ -322,7 +322,7 @@ func (ctx *GameContext) cleanupOutOfBoundsEntities(width, height int) {
 		// Death system informs respective systems of their entity destruction
 		pos, _ := ctx.World.Positions.Get(e)
 		if pos.X >= width || pos.Y >= height || pos.X < 0 || pos.Y < 0 {
-			deathStore.Add(e, component.DeathComponent{})
+			deathStore.Set(e, component.DeathComponent{})
 		}
 	}
 

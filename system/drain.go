@@ -526,7 +526,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	}
 
 	s.world.Positions.Add(entity, pos)
-	s.drainStore.Add(entity, drain)
+	s.drainStore.Set(entity, drain)
 }
 
 // requeueSpawnWithOffset attempts to find alternate position and re-queue spawn
@@ -604,7 +604,7 @@ func (s *DrainSystem) handleDrainInteractions() {
 		// Update cached state
 		if drain.IsOnCursor != isOnCursor {
 			drain.IsOnCursor = isOnCursor
-			s.drainStore.Add(drainEntity, drain)
+			s.drainStore.Set(drainEntity, drain)
 		}
 
 		// Check shield state from component
@@ -618,7 +618,7 @@ func (s *DrainSystem) handleDrainInteractions() {
 					Amount: constant.DrainShieldEnergyDrainAmount,
 				})
 				drain.LastDrainTime = now
-				s.drainStore.Add(drainEntity, drain)
+				s.drainStore.Set(drainEntity, drain)
 			}
 			// Drain persists when shield is active
 			continue
@@ -769,7 +769,7 @@ func (s *DrainSystem) updateDrainMovement() {
 
 		// Save updated drain component
 		drain.LastMoveTime = now
-		s.drainStore.Add(drainEntity, drain)
+		s.drainStore.Set(drainEntity, drain)
 	}
 }
 
@@ -813,9 +813,9 @@ func (s *DrainSystem) handleCollisionAtPosition(entity core.Entity) {
 }
 
 // handleGoldCompositeCollision destroys entire gold composite via anchor
-func (s *DrainSystem) handleGoldCompositeCollision(anchorID core.Entity, header *component.CompositeHeaderComponent) {
+func (s *DrainSystem) handleGoldCompositeCollision(anchorEntity core.Entity, header *component.CompositeHeaderComponent) {
 	s.world.PushEvent(event.EventGoldDestroyed, &event.GoldCompletionPayload{
-		SequenceID: int(header.GroupID),
+		AnchorEntity: anchorEntity,
 	})
 
 	// Destroy all living members with flash
@@ -835,9 +835,9 @@ func (s *DrainSystem) handleGoldCompositeCollision(anchorID core.Entity, header 
 	}
 
 	// Destroy phantom head
-	s.protStore.Remove(anchorID)
-	s.headerStore.Remove(anchorID)
-	s.world.DestroyEntity(anchorID)
+	s.protStore.Remove(anchorEntity)
+	s.headerStore.Remove(anchorEntity)
+	s.world.DestroyEntity(anchorEntity)
 }
 
 // handleNuggetCollision destroys the nugget entity and emits destruction event

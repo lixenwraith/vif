@@ -58,7 +58,7 @@ func (s *FlashSystem) Update() {
 		if flash.Remaining <= 0 {
 			s.world.DestroyEntity(entity)
 		} else {
-			s.flashStore.Add(entity, flash)
+			s.flashStore.Set(entity, flash)
 		}
 	}
 }
@@ -74,5 +74,5 @@ func (s *FlashSystem) spawnDestructionFlash(x, y int, char rune) {
 	}
 
 	entity := s.world.CreateEntity()
-	s.flashStore.Add(entity, flash)
+	s.flashStore.Set(entity, flash)
 }

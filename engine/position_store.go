@@ -47,7 +47,7 @@ func (ps *PositionStore) Add(e core.Entity, pos component.PositionComponent) {
 	// Update component
 	ps.components[e] = pos
 
-	// Add to new grid location
+	// Set to new grid location
 	_ = ps.grid.Add(e, pos.X, pos.Y)
 }
 
@@ -92,7 +92,7 @@ func (ps *PositionStore) Move(e core.Entity, newPos component.PositionComponent)
 	// Update component
 	ps.components[e] = newPos
 
-	// Add to new grid pos
+	// Set to new grid pos
 	// Note: explicit ignore for OOB and Cell full
 	_ = ps.grid.Add(e, newPos.X, newPos.Y)
 

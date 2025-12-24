@@ -81,7 +81,6 @@ type GoldEnablePayload struct {
 
 // GoldSpawnedPayload anchors countdown timer to sequence position
 type GoldSpawnedPayload struct {
-	SequenceID   int
 	AnchorEntity core.Entity // Phantom head for entity-anchored timer
 	OriginX      int
 	OriginY      int
@@ -91,7 +90,7 @@ type GoldSpawnedPayload struct {
 
 // GoldCompletionPayload identifies which timer to destroy
 type GoldCompletionPayload struct {
-	SequenceID int
+	AnchorEntity core.Entity
 }
 
 // SplashRequestPayload creates transient visual flash

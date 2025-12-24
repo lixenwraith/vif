@@ -34,7 +34,7 @@ const (
 	GodEnergyAmount = 100_000_000
 )
 
-// Gold Sequence Mechanics
+// Gold Mechanics
 const (
 	// GoldDuration is how long the gold sequence remains on screen
 	GoldDuration = 10 * time.Second

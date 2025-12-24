@@ -129,7 +129,7 @@ func (s *DecaySystem) spawnSingleDecay(x, y int, char rune) {
 	s.world.Positions.Add(entity, component.PositionComponent{X: x, Y: y})
 
 	// 2. Physics/Logic Component
-	s.decayStore.Add(entity, component.DecayComponent{
+	s.decayStore.Set(entity, component.DecayComponent{
 		KineticState: component.KineticState{
 			PreciseX: vmath.FromInt(x),
 			PreciseY: vmath.FromInt(y),
@@ -143,7 +143,7 @@ func (s *DecaySystem) spawnSingleDecay(x, y int, char rune) {
 	})
 
 	// 3. Render component
-	s.charStore.Add(entity, component.CharacterComponent{
+	s.charStore.Set(entity, component.CharacterComponent{
 		Rune:  char,
 		Color: component.ColorDecay,
 		Style: component.StyleNormal,
@@ -250,7 +250,7 @@ func (s *DecaySystem) updateDecayEntities() {
 				// Must update the component used by the renderer
 				if charComp, ok := s.charStore.Get(entity); ok {
 					charComp.Rune = d.Char
-					s.charStore.Add(entity, charComp)
+					s.charStore.Set(entity, charComp)
 				}
 			}
 			d.LastIntX = curX
@@ -259,7 +259,7 @@ func (s *DecaySystem) updateDecayEntities() {
 
 		// Grid Sync: Update PositionStore for spatial queries
 		s.world.Positions.Add(entity, component.PositionComponent{X: curX, Y: curY})
-		s.decayStore.Add(entity, d)
+		s.decayStore.Set(entity, d)
 	}
 }
 
@@ -285,12 +285,12 @@ func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
 	if typeable.Level > component.LevelDark {
 		// Reduce level by 1
 		typeable.Level--
-		s.typeableStore.Add(entity, typeable)
+		s.typeableStore.Set(entity, typeable)
 
 		// Sync renderer
 		if hasChar {
 			char.Level = typeable.Level
-			s.charStore.Add(entity, char)
+			s.charStore.Set(entity, char)
 		}
 	} else {
 		// Dark level: type chain Blue→Green→Red→destroy
@@ -298,21 +298,21 @@ func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
 		case component.TypeBlue:
 			typeable.Type = component.TypeGreen
 			typeable.Level = component.LevelBright
-			s.typeableStore.Add(entity, typeable)
+			s.typeableStore.Set(entity, typeable)
 			if hasChar {
 				char.Type = component.CharacterGreen
 				char.Level = component.LevelBright
-				s.charStore.Add(entity, char)
+				s.charStore.Set(entity, char)
 			}
 
 		case component.TypeGreen:
 			typeable.Type = component.TypeRed
 			typeable.Level = component.LevelBright
-			s.typeableStore.Add(entity, typeable)
+			s.typeableStore.Set(entity, typeable)
 			if hasChar {
 				char.Type = component.CharacterRed
 				char.Level = component.LevelBright
-				s.charStore.Add(entity, char)
+				s.charStore.Set(entity, char)
 			}
 
 		default:

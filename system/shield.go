@@ -64,7 +64,7 @@ func (s *ShieldSystem) cacheInverseRadii() {
 	shield.InvRxSq = vmath.Div(vmath.Scale, rxSq)
 	shield.InvRySq = vmath.Div(vmath.Scale, rySq)
 
-	s.shieldStore.Add(cursorEntity, shield)
+	s.shieldStore.Set(cursorEntity, shield)
 }
 
 // Priority returns the system's priority
@@ -91,7 +91,7 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 		shield, ok := s.shieldStore.Get(cursorEntity)
 		if ok {
 			shield.Active = true
-			s.shieldStore.Add(cursorEntity, shield)
+			s.shieldStore.Set(cursorEntity, shield)
 		}
 		s.statActive.Store(true)
 
@@ -99,7 +99,7 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 		shield, ok := s.shieldStore.Get(cursorEntity)
 		if ok {
 			shield.Active = false
-			s.shieldStore.Add(cursorEntity, shield)
+			s.shieldStore.Set(cursorEntity, shield)
 		}
 		s.statActive.Store(false)
 
@@ -127,7 +127,7 @@ func (s *ShieldSystem) Update() {
 	if now.Sub(shield.LastDrainTime) >= constant.ShieldPassiveDrainInterval {
 		s.applyConvergentDrain(constant.ShieldPassiveDrainAmount)
 		shield.LastDrainTime = now
-		s.shieldStore.Add(cursorEntity, shield)
+		s.shieldStore.Set(cursorEntity, shield)
 	}
 }
 

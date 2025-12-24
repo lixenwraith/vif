@@ -78,7 +78,7 @@ func (s *PingSystem) Update() {
 
 		// Commit changes back to store
 		if changed {
-			s.pingStore.Add(entity, ping)
+			s.pingStore.Set(entity, ping)
 		}
 	}
 }
@@ -95,5 +95,5 @@ func (s *PingSystem) handleGridRequest(duration time.Duration) {
 
 	ping.GridActive = true
 	ping.GridRemaining = duration
-	s.pingStore.Add(entity, ping)
+	s.pingStore.Set(entity, ping)
 }

@@ -16,10 +16,6 @@ type GameState struct {
 	GrayoutActive    atomic.Bool
 	GrayoutStartTime atomic.Int64 // UnixNano
 
-	// Unified ID generation
-	// TODO: This is mainly used by spawn, all others use world's `nextEntityID` migrate and deprecate
-	NextID atomic.Uint64
-
 	// Runtime Metrics
 	GameTicks      atomic.Uint64
 	CurrentAPM     atomic.Uint64
@@ -40,7 +36,6 @@ func (gs *GameState) initState() {
 	// Reset atomics
 	gs.GrayoutActive.Store(false)
 	gs.GrayoutStartTime.Store(0)
-	gs.NextID.Store(1)
 
 	// Reset metrics
 	gs.GameTicks.Store(0)
@@ -65,11 +60,6 @@ func (gs *GameState) Reset() {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
 	gs.initState()
-}
-
-// IncrementID increments and returns the next ID
-func (gs *GameState) IncrementID() int {
-	return int(gs.NextID.Add(1))
 }
 
 // ===== RUNTIME METRICS ACCESSORS =====

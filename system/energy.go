@@ -118,7 +118,7 @@ func (s *EnergySystem) Update() {
 		if cursor.ErrorFlashRemaining <= 0 {
 			cursor.ErrorFlashRemaining = 0
 		}
-		s.cursorStore.Add(cursorEntity, cursor)
+		s.cursorStore.Set(cursorEntity, cursor)
 	}
 
 	// Clear energy blink after timeout
@@ -130,7 +130,7 @@ func (s *EnergySystem) Update() {
 			energyComp.BlinkActive.Store(false)
 		}
 		energyComp.BlinkRemaining.Store(remaining)
-		s.energyStore.Add(cursorEntity, energyComp)
+		s.energyStore.Set(cursorEntity, energyComp)
 	}
 
 	// Evaluate shield activation state
@@ -154,7 +154,7 @@ func (s *EnergySystem) addEnergy(delta int64) {
 		return
 	}
 	energyComp.Current.Add(delta)
-	s.energyStore.Add(cursorEntity, energyComp)
+	s.energyStore.Set(cursorEntity, energyComp)
 }
 
 // setEnergy sets energy value
@@ -165,7 +165,7 @@ func (s *EnergySystem) setEnergy(value int64) {
 		return
 	}
 	energyComp.Current.Store(value)
-	s.energyStore.Add(cursorEntity, energyComp)
+	s.energyStore.Set(cursorEntity, energyComp)
 }
 
 // startBlink activates blink state
@@ -179,7 +179,7 @@ func (s *EnergySystem) startBlink(blinkType, blinkLevel uint32) {
 	energyComp.BlinkType.Store(blinkType)
 	energyComp.BlinkLevel.Store(blinkLevel)
 	energyComp.BlinkRemaining.Store(constant.EnergyBlinkTimeout.Nanoseconds())
-	s.energyStore.Add(cursorEntity, energyComp)
+	s.energyStore.Set(cursorEntity, energyComp)
 }
 
 // stopBlink clears blink state
@@ -191,7 +191,7 @@ func (s *EnergySystem) stopBlink() {
 	}
 	energyComp.BlinkActive.Store(false)
 	energyComp.BlinkRemaining.Store(0)
-	s.energyStore.Add(cursorEntity, energyComp)
+	s.energyStore.Set(cursorEntity, energyComp)
 }
 
 // triggerEnergyBlink pushes blink event

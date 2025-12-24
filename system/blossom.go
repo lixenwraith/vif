@@ -134,7 +134,7 @@ func (s *BlossomSystem) spawnSingleBlossom(x, y int, char rune) {
 	s.world.Positions.Add(entity, component.PositionComponent{X: x, Y: y})
 
 	// 2. Physics/Logic Component
-	s.blossomStore.Add(entity, component.BlossomComponent{
+	s.blossomStore.Set(entity, component.BlossomComponent{
 		KineticState: component.KineticState{
 			PreciseX: vmath.FromInt(x),
 			PreciseY: vmath.FromInt(y),
@@ -148,7 +148,7 @@ func (s *BlossomSystem) spawnSingleBlossom(x, y int, char rune) {
 	})
 
 	// 3. Render component
-	s.charStore.Add(entity, component.CharacterComponent{
+	s.charStore.Set(entity, component.CharacterComponent{
 		Rune:  char,
 		Color: component.ColorBlossom,
 		Style: component.StyleNormal,
@@ -282,7 +282,7 @@ func (s *BlossomSystem) updateBlossomEntities() {
 				// Must update the component used by the renderer
 				if char, ok := s.charStore.Get(entity); ok {
 					char.Rune = b.Char
-					s.charStore.Add(entity, char)
+					s.charStore.Set(entity, char)
 				}
 			}
 			b.LastIntX = curX
@@ -291,7 +291,7 @@ func (s *BlossomSystem) updateBlossomEntities() {
 
 		// Grid Sync: Update PositionStore for spatial queries
 		s.world.Positions.Add(entity, component.PositionComponent{X: curX, Y: curY})
-		s.blossomStore.Add(entity, b)
+		s.blossomStore.Set(entity, b)
 	}
 }
 
@@ -322,12 +322,12 @@ func (s *BlossomSystem) applyBlossomToCharacter(entity core.Entity) bool {
 	// Increase level (inverse of decay)
 	if typeable.Level < component.LevelBright {
 		typeable.Level++
-		s.typeableStore.Add(entity, typeable)
+		s.typeableStore.Set(entity, typeable)
 
 		// Sync renderer
 		if hasChar {
 			char.Level = typeable.Level
-			s.charStore.Add(entity, char)
+			s.charStore.Set(entity, char)
 		}
 
 		s.statApplied.Add(1)

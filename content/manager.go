@@ -310,7 +310,7 @@ func (cm *ContentManager) PreValidateAllContent() error {
 			continue
 		}
 
-		// Add to validated cache
+		// Set to validated cache
 		cm.validatedCache = append(cm.validatedCache, validatedContent{
 			lines:    lines,
 			filePath: filePath,
