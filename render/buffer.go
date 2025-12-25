@@ -194,6 +194,19 @@ func (b *RenderBuffer) SetWithBg(x, y int, r rune, fg, bg RGB) {
 	b.masks[idx] = b.currentMask
 }
 
+// SetBg256 sets background using 256-color palette index directly
+// Bypasses RGB conversion for consistent 256-color rendering
+func (b *RenderBuffer) SetBg256(x, y int, paletteIdx uint8) {
+	if !b.inBounds(x, y) {
+		return
+	}
+	idx := y*b.width + x
+	b.cells[idx].Bg = RGB{R: paletteIdx, G: 0, B: 0}
+	b.cells[idx].Attrs = terminal.AttrBg256
+	b.touched[idx] = true
+	b.masks[idx] = b.currentMask
+}
+
 // ===== POST-PROCESSING =====
 
 // MutateDim multiplies colors by factor for cells matching targetMask

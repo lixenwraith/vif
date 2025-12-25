@@ -182,6 +182,8 @@ func (s *DecaySystem) updateDecayEntities() {
 	clear(s.processedGridCells)
 	clear(s.decayedThisFrame)
 
+	// Local buffers
+	var deathCandidates []core.Entity
 	var collisionBuf [constant.MaxEntitiesPerCell]core.Entity
 
 	for _, entity := range decayEntities {
@@ -240,6 +242,8 @@ func (s *DecaySystem) updateDecayEntities() {
 				if s.nuggetStore.Has(target) {
 					s.world.PushEvent(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{Entity: target})
 					event.EmitDeathOne(s.res.Events.Queue, target, event.EventFlashRequest, s.res.Time.FrameNumber)
+				} else if s.shouldDieByDecay(target) {
+					deathCandidates = append(deathCandidates, target)
 				} else {
 					s.applyDecayToCharacter(target)
 				}
@@ -271,6 +275,20 @@ func (s *DecaySystem) updateDecayEntities() {
 		s.world.Positions.Set(entity, component.PositionComponent{X: curX, Y: curY})
 		s.decayStore.Set(entity, d)
 	}
+
+	// Emit single batch event instead of scalar events per hit
+	if len(deathCandidates) > 0 {
+		event.EmitDeathBatch(s.res.Events.Queue, event.EventFlashRequest, deathCandidates, s.res.Time.FrameNumber)
+	}
+}
+
+// shouldDieByDecay checks if a character has reached the end of the decay chain
+func (s *DecaySystem) shouldDieByDecay(entity core.Entity) bool {
+	typeable, ok := s.typeableStore.Get(entity)
+	if !ok {
+		return false
+	}
+	return typeable.Level == component.LevelDark && typeable.Type == component.TypeRed
 }
 
 // applyDecayToCharacter applies decay logic to a single character entity
@@ -326,7 +344,7 @@ func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
 			}
 
 		default:
-			// Red or other: destroy
+			// Fallback: Red or other: destroy
 			event.EmitDeathOne(s.res.Events.Queue, entity, event.EventFlashRequest, s.res.Time.FrameNumber)
 		}
 	}

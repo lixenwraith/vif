@@ -23,10 +23,10 @@ const (
 // ECS & Resource Limits
 const (
 	// EventQueueSize is the fixed capacity of the event ring buffer
-	EventQueueSize = 256
+	EventQueueSize = 2048
 
-	// EventBufferMask is the bitmask for fast modulo operations (256 - 1)
-	EventBufferMask = 255
+	// EventBufferMask is the bitmask for fast modulo operations (2048 - 1)
+	EventBufferMask = 2047
 )
 
 // MaxEntitiesPerCell set to 31 to ensure the Cell struct fits exactly into 256 bytes
@@ -61,8 +61,8 @@ const (
 // Spatial Grid Defaults
 const (
 	// DefaultGridWidth is the default width for the spatial grid
-	DefaultGridWidth = 200
+	DefaultGridWidth = 500
 
 	// DefaultGridHeight is the default height for the spatial grid
-	DefaultGridHeight = 60
+	DefaultGridHeight = 250
 )

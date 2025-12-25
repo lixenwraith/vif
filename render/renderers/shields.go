@@ -10,6 +10,26 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
+// shield256Colors maps sequence blink type to 256-palette index
+// Using xterm 6×6×6 cube for medium-brightness colors
+var shield256Colors = map[uint32]uint8{
+	0: 245, // None/error: light gray
+	1: 75,  // Blue (1,3,5)
+	2: 41,  // Green (0,4,1)
+	3: 167, // Red (4,1,1)
+	4: 178, // Gold (4,4,0)
+}
+
+// TODO: this is a clutch, to be refactored
+// shieldRGBColors maps sequence blink type to RGB
+var shieldRGBColors = [5]render.RGB{
+	render.RgbShieldNone,
+	render.RgbShieldBlue,
+	render.RgbShieldGreen,
+	render.RgbShieldRed,
+	render.RgbShieldGold,
+}
+
 // shieldCellRenderer is the callback type for per-cell shield rendering
 // Defines the interface for rendering strategy (256-color vs TrueColor) selected initialization
 type shieldCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, dist float64, color render.RGB, maxOpacity float64)
@@ -21,6 +41,9 @@ type ShieldRenderer struct {
 	energyStore *engine.Store[component.EnergyComponent]
 
 	renderCell shieldCellRenderer
+
+	// Per-frame cached palette index for 256-color mode
+	framePalette uint8
 }
 
 // NewShieldRenderer creates a new shield renderer
@@ -50,6 +73,16 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	if len(shields) == 0 {
 		return
 	}
+
+	// Cache palette index for 256-color callbacks
+	blinkType := uint32(0)
+	if energyComp, ok := r.energyStore.Get(r.gameCtx.CursorEntity); ok {
+		blinkType = energyComp.BlinkType.Load()
+	}
+	if blinkType > 4 {
+		blinkType = 0
+	}
+	r.framePalette = shield256Colors[blinkType]
 
 	for _, entity := range shields {
 		shield, okS := r.shieldStore.Get(entity)
@@ -135,14 +168,13 @@ func (r *ShieldRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screen
 func (r *ShieldRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int, dist float64, color render.RGB, maxOpacity float64) {
 	// In 256-color mode, center is transparent to ensure text legibility
 	// dist ranges from 0.0 (center) to 1.0 (edge)
-	if dist < 0.6 {
+	if dist < 0.8 {
 		return // Transparent center: Don't touch the buffer
 	}
 
 	// Draw rim using Screen blend
-	// Tint background color (e.g. Black -> Shield Color) if empty, or lightens existing background if occupied, ensuring text remains visible
-	// High alpha (0.6) to ensure the color registers clearly in the 256-color palette lookup
-	buf.Set(screenX, screenY, 0, render.RGBBlack, color, render.BlendScreen, 0.6, terminal.AttrNone)
+	buf.SetBg256(screenX, screenY, r.framePalette)
+	// buf.Set(screenX, screenY, 0, render.RGBBlack, color, render.BlendScreen, 0.6, terminal.AttrNone)
 }
 
 // resolveShieldColor determines the shield color from override or EnergyBlinkType
