@@ -97,7 +97,7 @@ func (s *DecaySystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventDecaySpawnOne:
 		if payload, ok := ev.Payload.(*event.DecaySpawnPayload); ok {
-			s.spawnSingleDecay(payload.X, payload.Y, payload.Char)
+			s.spawnSingleDecay(payload.X, payload.Y, payload.Char, payload.SkipStartCell)
 		}
 
 	case event.EventGameReset:
@@ -118,7 +118,7 @@ func (s *DecaySystem) Update() {
 }
 
 // spawnSingleDecay creates one decay entity at specified position
-func (s *DecaySystem) spawnSingleDecay(x, y int, char rune) {
+func (s *DecaySystem) spawnSingleDecay(x, y int, char rune, skipStartCell bool) {
 	// Random speed between ParticleMinSpeed and ParticleMaxSpeed
 	// Note: Speed is converted to Q16.16. Decay moves DOWN by default, so velocity is positive
 	speedFloat := constant.ParticleMinSpeed + rand.Float64()*(constant.ParticleMaxSpeed-constant.ParticleMinSpeed)
@@ -131,6 +131,10 @@ func (s *DecaySystem) spawnSingleDecay(x, y int, char rune) {
 	s.world.Positions.Set(entity, component.PositionComponent{X: x, Y: y})
 
 	// 2. Physics/Logic Component
+	lastX, lastY := -1, -1
+	if skipStartCell {
+		lastX, lastY = x, y
+	}
 	s.decayStore.Set(entity, component.DecayComponent{
 		KineticState: component.KineticState{
 			PreciseX: vmath.FromInt(x),
@@ -138,10 +142,9 @@ func (s *DecaySystem) spawnSingleDecay(x, y int, char rune) {
 			VelY:     velY,
 			AccelY:   accelY,
 		},
-		Char: char,
-		// Set OOB not to skip first fow
-		LastIntX: -1,
-		LastIntY: -1,
+		Char:     char,
+		LastIntX: lastX,
+		LastIntY: lastY,
 	})
 
 	// 3. Render component
@@ -160,7 +163,7 @@ func (s *DecaySystem) spawnDecayWave() {
 	// Spawn one decay entity per column for full-width coverage
 	for column := 0; column < gameWidth; column++ {
 		char := constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
-		s.spawnSingleDecay(column, 0, char)
+		s.spawnSingleDecay(column, 0, char, false)
 	}
 }
 

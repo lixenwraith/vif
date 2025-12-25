@@ -46,6 +46,12 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleGodCommand(ctx)
 	case "spawn":
 		return handleSpawnCommand(ctx, args)
+	case "blossom":
+		return handleBlossomCommand(ctx)
+	case "decay":
+		return handleDecayCommand(ctx)
+	case "cleaner":
+		return handleCleanerCommand(ctx)
 	case "d", "debug":
 		return handleDebugCommand(ctx)
 	case "h", "help", "?":
@@ -162,6 +168,27 @@ func handleSpawnCommand(ctx *engine.GameContext, args []string) CommandResult {
 		setCommandError(ctx, "Invalid arguments for spawn")
 	}
 
+	return CommandResult{Continue: true, KeepPaused: false}
+}
+
+// handleBlossomCommand triggers a blossom wave
+func handleBlossomCommand(ctx *engine.GameContext) CommandResult {
+	ctx.PushEvent(event.EventBlossomWave, nil)
+	ctx.SetLastCommand(":blossom")
+	return CommandResult{Continue: true, KeepPaused: false}
+}
+
+// handleDecayCommand triggers a decay wave
+func handleDecayCommand(ctx *engine.GameContext) CommandResult {
+	ctx.PushEvent(event.EventDecayWave, nil)
+	ctx.SetLastCommand(":decay")
+	return CommandResult{Continue: true, KeepPaused: false}
+}
+
+// handleCleanerCommand triggers cleaners on Red character rows
+func handleCleanerCommand(ctx *engine.GameContext) CommandResult {
+	ctx.PushEvent(event.EventCleanerRequest, nil)
+	ctx.SetLastCommand(":cleaner")
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 

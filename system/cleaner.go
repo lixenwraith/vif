@@ -172,7 +172,7 @@ func (s *CleanerSystem) Update() {
 			// Check all traversed rows for collisions (with self-exclusion)
 			if startY <= endY {
 				for y := startY; y <= endY; y++ {
-					s.checkAndDestroyAtPositionExcluding(oldPos.X, y, entity)
+					s.checkCollisions(oldPos.X, y, entity)
 				}
 			}
 		} else if c.VelX != 0 {
@@ -194,7 +194,7 @@ func (s *CleanerSystem) Update() {
 			// Check all traversed columns for collisions (with self-exclusion)
 			if startX <= endX {
 				for x := startX; x <= endX; x++ {
-					s.checkAndDestroyAtPositionExcluding(x, oldPos.Y, entity)
+					s.checkCollisions(x, oldPos.Y, entity)
 				}
 			}
 		}
@@ -246,7 +246,7 @@ func (s *CleanerSystem) Update() {
 func (s *CleanerSystem) spawnCleaners() {
 	config := s.res.Config
 
-	redRows := s.scanRedCharacterRows()
+	redRows := s.scanTargetRows()
 
 	spawnCount := len(redRows)
 	// TODO: new phase trigger
@@ -316,19 +316,37 @@ func (s *CleanerSystem) spawnCleaners() {
 	}
 }
 
-// checkAndDestroyAtPositionExcluding handles collision logic with self-exclusion
-func (s *CleanerSystem) checkAndDestroyAtPositionExcluding(x, y int, selfEntity core.Entity) {
+// checkCollisions handles collision logic with self-exclusion
+func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 	// Query all entities at position (includes cleaner itself due to PositionStore registration)
 	targetEntities := s.world.Positions.GetAllAt(x, y)
+	if len(targetEntities) == 0 {
+		return
+	}
 
+	// Determine mode based on energy polarity
+	cursorEntity := s.res.Cursor.Entity
+	negativeEnergy := false
+	if energyComp, ok := s.energyStore.Get(cursorEntity); ok {
+		negativeEnergy = energyComp.Current.Load() < 0
+	}
+
+	if negativeEnergy {
+		s.processNegativeEnergy(x, y, targetEntities, selfEntity)
+	} else {
+		s.processPositiveEnergy(targetEntities, selfEntity)
+	}
+}
+
+// processPositiveEnergy handles Red destruction with Blossom spawn
+func (s *CleanerSystem) processPositiveEnergy(targetEntities []core.Entity, selfEntity core.Entity) {
 	var toDestroy []core.Entity
 
 	// Iterate candidates with self-exclusion pattern
 	for _, e := range targetEntities {
 		if e == 0 || e == selfEntity {
-			continue // Self-exclusion: skip cleaner entity to prevent self-destruction
+			continue
 		}
-		// Only destroy Red typeable entities
 		if typeable, ok := s.typeableStore.Get(e); ok {
 			if typeable.Type == component.TypeRed {
 				toDestroy = append(toDestroy, e)
@@ -340,17 +358,46 @@ func (s *CleanerSystem) checkAndDestroyAtPositionExcluding(x, y int, selfEntity 
 		return
 	}
 
-	// Determine effect based on energy polarity
-	effectEvent := event.EventBlossomSpawnOne
-	cursorEntity := s.res.Cursor.Entity
-	if energyComp, ok := s.energyStore.Get(cursorEntity); ok {
-		if energyComp.Current.Load() < 0 {
-			effectEvent = event.EventDecaySpawnOne
-		}
-	}
+	event.EmitDeathBatch(s.res.Events.Queue, event.EventBlossomSpawnOne, toDestroy, s.res.Time.FrameNumber)
+}
 
-	// Batch death with effect
-	event.EmitDeathBatch(s.res.Events.Queue, effectEvent, toDestroy, s.res.Time.FrameNumber)
+// processNegativeEnergy handles Blue mutation to Green with Decay spawn
+func (s *CleanerSystem) processNegativeEnergy(x, y int, targetEntities []core.Entity, selfEntity core.Entity) {
+	// Iterate candidates with self-exclusion pattern
+	for _, e := range targetEntities {
+		if e == 0 || e == selfEntity {
+			continue
+		}
+
+		typeable, ok := s.typeableStore.Get(e)
+		if !ok || typeable.Type != component.TypeBlue {
+			continue
+		}
+
+		// Mutate Blue → Green, preserving level
+		s.mutateBlueToGreen(e, typeable)
+
+		// Spawn decay at same position (particle skips starting cell via LastIntX/Y)
+		s.world.PushEvent(event.EventDecaySpawnOne, &event.DecaySpawnPayload{
+			X:             x,
+			Y:             y,
+			Char:          typeable.Char,
+			SkipStartCell: true,
+		})
+	}
+}
+
+// mutateBlueToGreen transforms a Blue typeable to Green, preserving level
+func (s *CleanerSystem) mutateBlueToGreen(entity core.Entity, typeable component.TypeableComponent) {
+	// Update TypeableComponent
+	typeable.Type = component.TypeGreen
+	s.typeableStore.Set(entity, typeable)
+
+	// Sync CharacterComponent for rendering
+	if char, ok := s.charStore.Get(entity); ok {
+		char.Type = component.CharacterGreen
+		s.charStore.Set(entity, char)
+	}
 }
 
 // spawnDirectionalCleaners generates 4 cleaner entities from origin position
@@ -420,13 +467,23 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 	}
 }
 
-// scanRedCharacterRows finds all rows containing Red typeables using query builder
-func (s *CleanerSystem) scanRedCharacterRows() []int {
+// scanTargetRows finds rows containing target character type based on energy polarity
+// Returns rows with TypeRed (energy >= 0) or TypeBlue (energy < 0)
+func (s *CleanerSystem) scanTargetRows() []int {
 	config := s.res.Config
-	redRows := make(map[int]bool)
 	gameHeight := config.GameHeight
 
-	// Query entities with both Typeable and Positions
+	// Determine target type based on energy polarity
+	targetType := component.TypeRed
+	cursorEntity := s.res.Cursor.Entity
+	if energyComp, ok := s.energyStore.Get(cursorEntity); ok {
+		if energyComp.Current.Load() < 0 {
+			targetType = component.TypeBlue
+		}
+	}
+
+	targetRows := make(map[int]bool)
+
 	entities := s.world.Query().
 		With(s.typeableStore).
 		With(s.world.Positions).
@@ -434,29 +491,64 @@ func (s *CleanerSystem) scanRedCharacterRows() []int {
 
 	for _, entity := range entities {
 		typeable, ok := s.typeableStore.Get(entity)
-		if !ok {
+		if !ok || typeable.Type != targetType {
 			continue
 		}
 
-		if typeable.Type != component.TypeRed {
-			continue
-		}
-
-		// Retrieve Position
 		pos, hasPos := s.world.Positions.Get(entity)
 		if !hasPos {
 			continue
 		}
 
-		// Set row if in bounds
 		if pos.Y >= 0 && pos.Y < gameHeight {
-			redRows[pos.Y] = true
+			targetRows[pos.Y] = true
 		}
 	}
 
-	rows := make([]int, 0, len(redRows))
-	for row := range redRows {
+	rows := make([]int, 0, len(targetRows))
+	for row := range targetRows {
 		rows = append(rows, row)
 	}
 	return rows
 }
+
+// // scanRedCharacterRows finds all rows containing Red typeables using query builder
+// func (s *CleanerSystem) scanRedCharacterRows() []int {
+// 	config := s.res.Config
+// 	redRows := make(map[int]bool)
+// 	gameHeight := config.GameHeight
+//
+// 	// Query entities with both Typeable and Positions
+// 	entities := s.world.Query().
+// 		With(s.typeableStore).
+// 		With(s.world.Positions).
+// 		Execute()
+//
+// 	for _, entity := range entities {
+// 		typeable, ok := s.typeableStore.Get(entity)
+// 		if !ok {
+// 			continue
+// 		}
+//
+// 		if typeable.Type != component.TypeRed {
+// 			continue
+// 		}
+//
+// 		// Retrieve Position
+// 		pos, hasPos := s.world.Positions.Get(entity)
+// 		if !hasPos {
+// 			continue
+// 		}
+//
+// 		// Set row if in bounds
+// 		if pos.Y >= 0 && pos.Y < gameHeight {
+// 			redRows[pos.Y] = true
+// 		}
+// 	}
+//
+// 	rows := make([]int, 0, len(redRows))
+// 	for row := range redRows {
+// 		rows = append(rows, row)
+// 	}
+// 	return rows
+// }

@@ -50,6 +50,10 @@ func NewRouter(ctx *engine.GameContext, machine *input.Machine) *Router {
 		input.MotionParaForward:  MotionParaForward,
 		input.MotionMatchBracket: MotionMatchBracket,
 		input.MotionOrigin:       MotionOrigin,
+		input.MotionHalfPageUp:   MotionHalfPageUp,
+		input.MotionHalfPageDown: MotionHalfPageDown,
+		input.MotionColumnUp:     MotionColumnUp,
+		input.MotionColumnDown:   MotionColumnDown,
 	}
 
 	r.charLUT = map[input.MotionOp]CharMotionFunc{
@@ -121,6 +125,12 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return r.handleTextConfirm()
 	case input.IntentTextNav:
 		return r.handleTextNav(intent)
+	case input.IntentInsertDeleteCurrent:
+		return r.handleInsertDeleteCurrent()
+	case input.IntentInsertDeleteForward:
+		return r.handleInsertDeleteForward()
+	case input.IntentInsertDeleteBack:
+		return r.handleInsertDeleteBack()
 
 	// Overlay
 	case input.IntentOverlayScroll:
@@ -476,15 +486,8 @@ func (r *Router) handleTextBackspace() bool {
 			r.ctx.SetCommandText(snapshot.CommandText[:len(snapshot.CommandText)-1])
 		}
 	case core.ModeInsert:
-		// Backspace in Insert mode is cursor movement (left)
-		r.ctx.World.RunSafe(func() {
-			pos, ok := r.ctx.World.Positions.Get(r.ctx.CursorEntity)
-			if !ok {
-				return
-			}
-			result := MotionLeft(r.ctx, pos.X, pos.Y, 1)
-			OpMove(r.ctx, result)
-		})
+		// Backspace in Insert mode is move left and delete character
+		return r.handleInsertDeleteBack()
 	}
 
 	return true
@@ -553,6 +556,65 @@ func (r *Router) handleTextNav(intent *input.Intent) bool {
 	}
 	// Search/Command modes ignore arrow navigation (text is single-line, no cursor)
 
+	return true
+}
+
+func (r *Router) handleInsertDeleteCurrent() bool {
+	r.ctx.World.RunSafe(func() {
+		pos, ok := r.ctx.World.Positions.Get(r.ctx.CursorEntity)
+		if !ok {
+			return
+		}
+		result := MotionResult{
+			StartX: pos.X, StartY: pos.Y,
+			EndX: pos.X, EndY: pos.Y,
+			Type: RangeChar, Style: StyleInclusive,
+			Valid: true,
+		}
+		OpDelete(r.ctx, result)
+	})
+	return true
+}
+
+func (r *Router) handleInsertDeleteForward() bool {
+	r.ctx.World.RunSafe(func() {
+		pos, ok := r.ctx.World.Positions.Get(r.ctx.CursorEntity)
+		if !ok {
+			return
+		}
+		// Delete at current position
+		result := MotionResult{
+			StartX: pos.X, StartY: pos.Y,
+			EndX: pos.X, EndY: pos.Y,
+			Type: RangeChar, Style: StyleInclusive,
+			Valid: true,
+		}
+		OpDelete(r.ctx, result)
+		// Move right
+		moveResult := MotionRight(r.ctx, pos.X, pos.Y, 1)
+		OpMove(r.ctx, moveResult)
+	})
+	return true
+}
+
+func (r *Router) handleInsertDeleteBack() bool {
+	r.ctx.World.RunSafe(func() {
+		pos, ok := r.ctx.World.Positions.Get(r.ctx.CursorEntity)
+		if !ok || pos.X == 0 {
+			return
+		}
+		// Delete at pos-1
+		result := MotionResult{
+			StartX: pos.X - 1, StartY: pos.Y,
+			EndX: pos.X - 1, EndY: pos.Y,
+			Type: RangeChar, Style: StyleInclusive,
+			Valid: true,
+		}
+		OpDelete(r.ctx, result)
+		// Move to pos-1
+		moveResult := MotionLeft(r.ctx, pos.X, pos.Y, 1)
+		OpMove(r.ctx, moveResult)
+	})
 	return true
 }
 

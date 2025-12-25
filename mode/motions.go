@@ -415,3 +415,81 @@ func MotionTillBack(ctx *engine.GameContext, x, y, count int, char rune) MotionR
 		Valid: true,
 	}
 }
+
+// MotionHalfPageUp implements PgUp motion
+func MotionHalfPageUp(ctx *engine.GameContext, x, y, count int) MotionResult {
+	halfHeight := ctx.GameHeight / 2
+	endY := y - (halfHeight * count)
+	if endY < 0 {
+		endY = 0
+	}
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: x, EndY: endY,
+		Type: RangeLine, Style: StyleInclusive,
+		Valid: endY != y,
+	}
+}
+
+// MotionHalfPageDown implements PgDown motion
+func MotionHalfPageDown(ctx *engine.GameContext, x, y, count int) MotionResult {
+	halfHeight := ctx.GameHeight / 2
+	endY := y + (halfHeight * count)
+	if endY >= ctx.GameHeight {
+		endY = ctx.GameHeight - 1
+	}
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: x, EndY: endY,
+		Type: RangeLine, Style: StyleInclusive,
+		Valid: endY != y,
+	}
+}
+
+// MotionColumnUp implements [ and gk - jump to first non-space above in same column
+func MotionColumnUp(ctx *engine.GameContext, x, y, count int) MotionResult {
+	endY := y
+	for i := 0; i < count; i++ {
+		found := false
+		for newY := endY - 1; newY >= 0; newY-- {
+			if getCharacterTypeAt(ctx, x, newY) != CharTypeSpace {
+				endY = newY
+				found = true
+				break
+			}
+		}
+		if !found {
+			break
+		}
+	}
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: x, EndY: endY,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: endY != y,
+	}
+}
+
+// MotionColumnDown implements ] and gj - jump to first non-space below in same column
+func MotionColumnDown(ctx *engine.GameContext, x, y, count int) MotionResult {
+	endY := y
+	for i := 0; i < count; i++ {
+		found := false
+		for newY := endY + 1; newY < ctx.GameHeight; newY++ {
+			if getCharacterTypeAt(ctx, x, newY) != CharTypeSpace {
+				endY = newY
+				found = true
+				break
+			}
+		}
+		if !found {
+			break
+		}
+	}
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: x, EndY: endY,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: endY != y,
+	}
+}

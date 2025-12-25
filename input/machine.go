@@ -333,13 +333,9 @@ func (m *Machine) processInsert(ev terminal.Event) *Intent {
 		return nil
 	}
 
-	// Space navigates right in Insert mode (like Normal)
+	// Space deletes character and moves right
 	if ev.Rune == ' ' {
-		return &Intent{
-			Type:   IntentTextNav,
-			Motion: MotionRight,
-			Count:  1,
-		}
+		return &Intent{Type: IntentInsertDeleteForward}
 	}
 
 	// Printable character

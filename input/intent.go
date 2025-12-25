@@ -30,10 +30,13 @@ const (
 	IntentModeSwitch // i, /, :
 
 	// Text entry modes (Insert/Search/Command)
-	IntentTextChar      // Printable character
-	IntentTextBackspace // Backspace
-	IntentTextConfirm   // Enter (execute search/command)
-	IntentTextNav       // Arrow navigation in text modes
+	IntentTextChar            // Printable character
+	IntentTextBackspace       // Backspace
+	IntentTextConfirm         // Enter (execute search/command)
+	IntentTextNav             // Arrow navigation in text modes
+	IntentInsertDeleteCurrent // Delete key in Insert mode
+	IntentInsertDeleteForward // Space in Insert mode (delete + move)
+	IntentInsertDeleteBack    // Backspace in Insert mode (delete prev + move)
 
 	// Overlay mode
 	IntentOverlayScroll // j/k/arrows
@@ -71,6 +74,10 @@ const (
 	MotionFindBack              // F + char
 	MotionTillForward           // t + char
 	MotionTillBack              // T + char
+	MotionHalfPageUp            // PgUp
+	MotionHalfPageDown          // PgDown
+	MotionColumnUp              // [ or gk
+	MotionColumnDown            // ] or gj
 )
 
 // OperatorOp identifies operator type

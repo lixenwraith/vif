@@ -68,7 +68,7 @@ var (
 	RgbModeNormalBg  = RGB{135, 206, 250} // Light sky blue
 	RgbModeInsertBg  = RGB{144, 238, 144} // Light grass green
 	RgbModeSearchBg  = RGB{255, 165, 0}   // Orange
-	RgbModeCommandBg = RGB{128, 0, 128}   // Dark purple
+	RgbModeCommandBg = RGB{160, 100, 160} // Light purple
 	RgbEnergyBg      = RGB{255, 255, 255} // Bright white
 	RgbBoostBg       = RGB{255, 192, 203} // Pink for boost timer
 	RgbStatusText    = RGB{0, 0, 0}       // Dark text for status

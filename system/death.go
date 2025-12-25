@@ -151,16 +151,18 @@ func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType
 
 	case event.EventBlossomSpawnOne:
 		s.world.PushEvent(event.EventBlossomSpawnOne, &event.BlossomSpawnPayload{
-			X:    pos.X,
-			Y:    pos.Y,
-			Char: char.Rune,
+			X:             pos.X,
+			Y:             pos.Y,
+			Char:          char.Rune,
+			SkipStartCell: true,
 		})
 
 	case event.EventDecaySpawnOne:
 		s.world.PushEvent(event.EventDecaySpawnOne, &event.DecaySpawnPayload{
-			X:    pos.X,
-			Y:    pos.Y,
-			Char: char.Rune,
+			X:             pos.X,
+			Y:             pos.Y,
+			Char:          char.Rune,
+			SkipStartCell: true,
 		})
 
 		// Future: EventExplosionRequest, EventChainDeathRequest

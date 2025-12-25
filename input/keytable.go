@@ -65,6 +65,8 @@ func DefaultKeyTable() *KeyTable {
 			terminal.KeyTab:       {BehaviorAction, MotionNone, SpecialNone, ModeTargetNone, IntentNuggetJump},
 			terminal.KeyEnter:     {BehaviorAction, MotionNone, SpecialNone, ModeTargetNone, IntentFireCleaner},
 			terminal.KeyBackspace: {BehaviorMotion, MotionLeft, SpecialNone, ModeTargetNone, IntentNone},
+			terminal.KeyPageUp:    {BehaviorMotion, MotionHalfPageUp, SpecialNone, ModeTargetNone, IntentNone},
+			terminal.KeyPageDown:  {BehaviorMotion, MotionHalfPageDown, SpecialNone, ModeTargetNone, IntentNone},
 		},
 
 		NormalRunes: map[rune]KeyEntry{
@@ -87,6 +89,10 @@ func DefaultKeyTable() *KeyTable {
 			'0': {BehaviorMotion, MotionLineStart, SpecialNone, ModeTargetNone, IntentNone},
 			'^': {BehaviorMotion, MotionFirstNonWS, SpecialNone, ModeTargetNone, IntentNone},
 			'$': {BehaviorMotion, MotionLineEnd, SpecialNone, ModeTargetNone, IntentNone},
+
+			// Column motions
+			'[': {BehaviorMotion, MotionColumnUp, SpecialNone, ModeTargetNone, IntentNone},
+			']': {BehaviorMotion, MotionColumnDown, SpecialNone, ModeTargetNone, IntentNone},
 
 			// Screen motions
 			'H': {BehaviorMotion, MotionScreenTop, SpecialNone, ModeTargetNone, IntentNone},
@@ -156,6 +162,8 @@ func DefaultKeyTable() *KeyTable {
 		PrefixG: map[rune]KeyEntry{
 			'g': {BehaviorMotion, MotionFileStart, SpecialNone, ModeTargetNone, IntentNone},
 			'o': {BehaviorMotion, MotionOrigin, SpecialNone, ModeTargetNone, IntentNone},
+			'k': {BehaviorMotion, MotionColumnUp, SpecialNone, ModeTargetNone, IntentNone},
+			'j': {BehaviorMotion, MotionColumnDown, SpecialNone, ModeTargetNone, IntentNone},
 		},
 
 		OverlayRunes: map[rune]KeyEntry{
@@ -179,6 +187,9 @@ func DefaultKeyTable() *KeyTable {
 			terminal.KeyHome:      {BehaviorMotion, MotionLineStart, SpecialNone, ModeTargetNone, IntentNone},
 			terminal.KeyEnd:       {BehaviorMotion, MotionLineEnd, SpecialNone, ModeTargetNone, IntentNone},
 			terminal.KeyBackspace: {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentTextBackspace},
+			terminal.KeyDelete:    {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentInsertDeleteCurrent},
+			terminal.KeyPageUp:    {BehaviorMotion, MotionHalfPageUp, SpecialNone, ModeTargetNone, IntentNone},
+			terminal.KeyPageDown:  {BehaviorMotion, MotionHalfPageDown, SpecialNone, ModeTargetNone, IntentNone},
 			terminal.KeyEnter:     {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentTextConfirm},
 			terminal.KeyEscape:    {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentEscape},
 			terminal.KeyCtrlQ:     {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentQuit},

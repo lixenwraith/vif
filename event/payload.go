@@ -215,16 +215,18 @@ type MemberTypedPayload struct {
 
 // DecaySpawnPayload contains parameters to spawn a single decay entity
 type DecaySpawnPayload struct {
-	X    int
-	Y    int
-	Char rune
+	X             int
+	Y             int
+	Char          rune
+	SkipStartCell bool // True: particle skips interaction at spawn position
 }
 
 // BlossomSpawnPayload contains parameters to spawn a single blossom entity
 type BlossomSpawnPayload struct {
-	X    int
-	Y    int
-	Char rune
+	X             int
+	Y             int
+	Char          rune
+	SkipStartCell bool // True: particle skips interaction at spawn position
 }
 
 // CursorMovedPayload signals cursor position change for magnifier updates
