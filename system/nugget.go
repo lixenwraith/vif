@@ -178,7 +178,7 @@ func (s *NuggetSystem) handleJumpRequest() {
 	}
 
 	// 4. Move Cursor
-	s.world.Positions.Add(cursorEntity, component.PositionComponent{
+	s.world.Positions.Set(cursorEntity, component.PositionComponent{
 		X: nuggetPos.X,
 		Y: nuggetPos.Y,
 	})

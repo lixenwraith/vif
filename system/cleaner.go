@@ -212,7 +212,7 @@ func (s *CleanerSystem) Update() {
 			}
 
 			// Sync grid position to PositionStore
-			s.world.Positions.Add(entity, component.PositionComponent{X: newGridX, Y: newGridY})
+			s.world.Positions.Set(entity, component.PositionComponent{X: newGridX, Y: newGridY})
 		}
 
 		// Lifecycle Check: Destroy cleaner when it reaches target position
@@ -308,7 +308,7 @@ func (s *CleanerSystem) spawnCleaners() {
 
 		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → CleanerComponent (float overlay)
 		entity := s.world.CreateEntity()
-		s.world.Positions.Add(entity, component.PositionComponent{X: startGridX, Y: startGridY})
+		s.world.Positions.Set(entity, component.PositionComponent{X: startGridX, Y: startGridY})
 		s.cleanerStore.Set(entity, comp)
 		s.protStore.Set(entity, component.ProtectionComponent{
 			Mask: component.ProtectFromDrain | component.ProtectFromDeath,
@@ -411,7 +411,7 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 
 		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → CleanerComponent (float overlay)
 		entity := s.world.CreateEntity()
-		s.world.Positions.Add(entity, component.PositionComponent{X: startGridX, Y: startGridY})
+		s.world.Positions.Set(entity, component.PositionComponent{X: startGridX, Y: startGridY})
 		s.cleanerStore.Set(entity, comp)
 		// TODO: centralize protection via entity factory
 		s.protStore.Set(entity, component.ProtectionComponent{

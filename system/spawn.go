@@ -93,9 +93,11 @@ type SpawnSystem struct {
 	frameContent    *content.PreparedContent // Snapshot for current frame
 
 	// Cached metric pointers
-	statEnabled  *atomic.Bool
-	statDensity  *status.AtomicFloat
-	statRateMult *status.AtomicFloat
+	statEnabled        *atomic.Bool
+	statDensity        *status.AtomicFloat
+	statRateMult       *status.AtomicFloat
+	statOrphanTypeable *atomic.Int64
+	statOrphanChar     *atomic.Int64
 }
 
 // NewSpawnSystem creates a new spawn system
@@ -110,9 +112,11 @@ func NewSpawnSystem(world *engine.World) engine.System {
 		typeableStore: engine.GetStore[component.TypeableComponent](world),
 
 		// Cache metric pointers
-		statEnabled:  res.Status.Bools.Get("spawn.enabled"),
-		statDensity:  res.Status.Floats.Get("spawn.density"),
-		statRateMult: res.Status.Floats.Get("spawn.rate_mult"),
+		statEnabled:        res.Status.Bools.Get("spawn.enabled"),
+		statDensity:        res.Status.Floats.Get("spawn.density"),
+		statRateMult:       res.Status.Floats.Get("spawn.rate_mult"),
+		statOrphanTypeable: res.Status.Ints.Get("spawn.orphan_typeable"),
+		statOrphanChar:     res.Status.Ints.Get("spawn.orphan_char"),
 	}
 
 	// Initialize metrics
@@ -138,6 +142,11 @@ func (s *SpawnSystem) initLocked() {
 	s.localGeneration = 0
 	s.localIndex = 0
 	s.frameContent = nil
+	s.statEnabled.Store(s.enabled)
+	s.statDensity.Set(0)
+	s.statRateMult.Set(0)
+	s.statOrphanTypeable.Store(0)
+	s.statOrphanChar.Store(0)
 }
 
 // Priority returns the system's priority
@@ -277,9 +286,15 @@ func (s *SpawnSystem) hasBracesInBlock(lines []string) bool {
 // Called once per spawn check, O(n) where n ≈ 200 max entities
 func (s *SpawnSystem) runCensus() ColorCensus {
 	var census ColorCensus
+	var orphanTypeable, orphanChar int64
 
 	entities := s.typeableStore.All()
 	for _, entity := range entities {
+		if !s.world.Positions.Has(entity) {
+			orphanTypeable++
+			continue
+		}
+
 		typeable, ok := s.typeableStore.Get(entity)
 		if !ok {
 			continue
@@ -307,6 +322,16 @@ func (s *SpawnSystem) runCensus() ColorCensus {
 			}
 		}
 	}
+
+	charEntities := s.charStore.All()
+	for _, entity := range charEntities {
+		if !s.world.Positions.Has(entity) {
+			orphanChar++
+		}
+	}
+
+	s.statOrphanTypeable.Store(orphanTypeable)
+	s.statOrphanChar.Store(orphanChar)
 
 	return census
 }

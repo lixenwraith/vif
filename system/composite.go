@@ -87,7 +87,7 @@ func (s *CompositeSystem) Update() {
 		if deltaX != 0 || deltaY != 0 {
 			anchorPos.X += deltaX
 			anchorPos.Y += deltaY
-			s.world.Positions.Add(anchor, anchorPos)
+			s.world.Positions.Set(anchor, anchorPos)
 		}
 
 		// Phase 3: Propagate offsets to members + liveness validation
@@ -226,7 +226,7 @@ func (s *CompositeSystem) CreatePhantomHead(x, y int, groupID uint64, behaviorID
 	entity := s.world.CreateEntity()
 
 	// Position at anchor point
-	s.world.Positions.Add(entity, component.PositionComponent{X: x, Y: y})
+	s.world.Positions.Set(entity, component.PositionComponent{X: x, Y: y})
 
 	// Header component with empty member slice
 	s.headerStore.Set(entity, component.CompositeHeaderComponent{

@@ -25,6 +25,7 @@ type DecaySystem struct {
 	nuggetStore   *engine.Store[component.NuggetComponent]
 	charStore     *engine.Store[component.CharacterComponent]
 	typeableStore *engine.Store[component.TypeableComponent]
+	blossomStore  *engine.Store[component.BlossomComponent]
 
 	// Per-frame tracking
 	decayedThisFrame   map[core.Entity]bool
@@ -47,6 +48,7 @@ func NewDecaySystem(world *engine.World) engine.System {
 		nuggetStore:   engine.GetStore[component.NuggetComponent](world),
 		charStore:     engine.GetStore[component.CharacterComponent](world),
 		typeableStore: engine.GetStore[component.TypeableComponent](world),
+		blossomStore:  engine.GetStore[component.BlossomComponent](world),
 
 		decayedThisFrame:   make(map[core.Entity]bool),
 		processedGridCells: make(map[int]bool),
@@ -126,7 +128,7 @@ func (s *DecaySystem) spawnSingleDecay(x, y int, char rune) {
 	entity := s.world.CreateEntity()
 
 	// 1. Grid Position
-	s.world.Positions.Add(entity, component.PositionComponent{X: x, Y: y})
+	s.world.Positions.Set(entity, component.PositionComponent{X: x, Y: y})
 
 	// 2. Physics/Logic Component
 	s.decayStore.Set(entity, component.DecayComponent{
@@ -137,9 +139,9 @@ func (s *DecaySystem) spawnSingleDecay(x, y int, char rune) {
 			AccelY:   accelY,
 		},
 		Char: char,
-		// Latch current cell to prevent immediate char randomization
-		LastIntX: x,
-		LastIntY: y,
+		// Set OOB not to skip first fow
+		LastIntX: -1,
+		LastIntY: -1,
 	})
 
 	// 3. Render component
@@ -204,6 +206,7 @@ func (s *DecaySystem) updateDecayEntities() {
 				return true
 			}
 
+			// Skip cell from previous frame (already processed)
 			if x == d.LastIntX && y == d.LastIntY {
 				return true
 			}
@@ -225,6 +228,13 @@ func (s *DecaySystem) updateDecayEntities() {
 				s.mu.RUnlock()
 				if alreadyHit {
 					continue
+				}
+
+				// Mutual destruction: decay + blossom annihilate
+				if s.blossomStore.Has(target) {
+					s.world.DestroyEntity(target)
+					s.world.DestroyEntity(entity)
+					break
 				}
 
 				if s.nuggetStore.Has(target) {
@@ -258,7 +268,7 @@ func (s *DecaySystem) updateDecayEntities() {
 		}
 
 		// Grid Sync: Update PositionStore for spatial queries
-		s.world.Positions.Add(entity, component.PositionComponent{X: curX, Y: curY})
+		s.world.Positions.Set(entity, component.PositionComponent{X: curX, Y: curY})
 		s.decayStore.Set(entity, d)
 	}
 }

@@ -32,7 +32,6 @@ func RegisterComponents(w *engine.World) {
 	engine.RegisterComponent[component.TypeableComponent](w)
 	engine.RegisterComponent[component.CompositeHeaderComponent](w)
 	engine.RegisterComponent[component.MemberComponent](w)
-	engine.RegisterComponent[component.TypeableComponent](w)
 	engine.RegisterComponent[component.BlossomComponent](w)
 }
 

@@ -100,7 +100,7 @@ transitions = [
 [states.DecayWait]
 parent = "Gameplay"
 transitions = [
-	{ trigger = "Tick", target = "DecayAnimation", guard = "StateTimeExceeds", guard_args = { ms = 10000 } }
+	{ trigger = "Tick", target = "DecayAnimation", guard = "StateTimeExceeds", guard_args = { ms = 5000 } }
 ]
 
 [states.DecayAnimation]
@@ -109,6 +109,45 @@ on_enter = [
 	{ action = "EmitEvent", event = "EventDecayWave" }
 ]
 transitions = [
-	{ trigger = "Tick", target = "TrySpawnGold", guard = "StateTimeExceeds", guard_args = { ms = 5000 } }
+	{ trigger = "Tick", target = "TrySpawnGold2", guard = "StateTimeExceeds", guard_args = { ms = 3000 } }
+]
+
+[states.TrySpawnGold2]
+parent = "Gameplay"
+on_enter = [
+	{ action = "EmitEvent", event = "EventGoldSpawnRequest" }
+]
+transitions = [
+	{ trigger = "EventGoldSpawned", target = "GoldActive2" },
+	{ trigger = "EventGoldSpawnFailed", target = "GoldRetryWait2" }
+]
+
+[states.GoldRetryWait2]
+parent = "Gameplay"
+transitions = [
+	{ trigger = "Tick", target = "TrySpawnGold2", guard = "StateTimeExceeds", guard_args = { ms = 1 } }
+]
+
+[states.GoldActive2]
+parent = "Gameplay"
+transitions = [
+	{ trigger = "EventGoldComplete", target = "BlossomWait" },
+	{ trigger = "EventGoldTimeout", target = "BlossomWait" },
+	{ trigger = "EventGoldDestroyed", target = "BlossomWait" }
+]
+
+[states.BlossomWait]
+parent = "Gameplay"
+transitions = [
+	{ trigger = "Tick", target = "BlossomAnimation", guard = "StateTimeExceeds", guard_args = { ms = 5000 } }
+]
+
+[states.BlossomAnimation]
+parent = "Gameplay"
+on_enter = [
+	{ action = "EmitEvent", event = "EventBlossomWave" }
+]
+transitions = [
+	{ trigger = "Tick", target = "TrySpawnGold", guard = "StateTimeExceeds", guard_args = { ms = 3000 } }
 ]
 `

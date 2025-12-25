@@ -252,7 +252,7 @@ func (s *TypingSystem) moveCursorRight() {
 
 	if cursorPos, ok := s.world.Positions.Get(cursorEntity); ok && cursorPos.X < config.GameWidth-1 {
 		cursorPos.X++
-		s.world.Positions.Add(cursorEntity, cursorPos)
+		s.world.Positions.Set(cursorEntity, cursorPos)
 	}
 }
 

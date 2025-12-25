@@ -131,7 +131,7 @@ func (s *BlossomSystem) spawnSingleBlossom(x, y int, char rune) {
 	entity := s.world.CreateEntity()
 
 	// 1. Grid Position
-	s.world.Positions.Add(entity, component.PositionComponent{X: x, Y: y})
+	s.world.Positions.Set(entity, component.PositionComponent{X: x, Y: y})
 
 	// 2. Physics/Logic Component
 	s.blossomStore.Set(entity, component.BlossomComponent{
@@ -142,9 +142,9 @@ func (s *BlossomSystem) spawnSingleBlossom(x, y int, char rune) {
 			AccelY:   accelY,
 		},
 		Char: char,
-		// Latch current cell to prevent immediate char randomization
-		LastIntX: x,
-		LastIntY: y,
+		// Set OOB not to skip first fow
+		LastIntX: -1,
+		LastIntY: -1,
 	})
 
 	// 3. Render component
@@ -159,11 +159,12 @@ func (s *BlossomSystem) spawnSingleBlossom(x, y int, char rune) {
 // spawnBlossomWave creates a screen-wide rising blossom wave
 func (s *BlossomSystem) spawnBlossomWave() {
 	gameWidth := s.res.Config.GameWidth
+	gameHeight := s.res.Config.GameHeight
 
 	// Spawn one blossom entity per column for full-width coverage
 	for column := 0; column < gameWidth; column++ {
 		char := constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
-		s.spawnSingleBlossom(column, 0, char)
+		s.spawnSingleBlossom(column, gameHeight-1, char)
 	}
 }
 
@@ -211,7 +212,7 @@ func (s *BlossomSystem) updateBlossomEntities() {
 				return true
 			}
 
-			// Coordinate latch: skip if already processed this exact coordinate for THIS entity
+			// Skip cell from previous frame (already processed)
 			if x == b.LastIntX && y == b.LastIntY {
 				return true
 			}
@@ -290,7 +291,7 @@ func (s *BlossomSystem) updateBlossomEntities() {
 		}
 
 		// Grid Sync: Update PositionStore for spatial queries
-		s.world.Positions.Add(entity, component.PositionComponent{X: curX, Y: curY})
+		s.world.Positions.Set(entity, component.PositionComponent{X: curX, Y: curY})
 		s.blossomStore.Set(entity, b)
 	}
 }

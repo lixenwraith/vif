@@ -244,7 +244,7 @@ func (s *GoldSystem) spawnGold() bool {
 	// Phase 4: Set Phantom Head to Positions AFTER batch success
 	// Direct Set bypasses HasAny validation, colocates with member 0
 	// TODO: check protectAll, it may conflicts with OOB bound, set specific protections
-	s.world.Positions.Add(anchorEntity, component.PositionComponent{X: x, Y: y})
+	s.world.Positions.Set(anchorEntity, component.PositionComponent{X: x, Y: y})
 	s.protStore.Set(anchorEntity, component.ProtectionComponent{
 		Mask: component.ProtectAll,
 	})

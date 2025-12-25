@@ -166,7 +166,7 @@ func NewGameContext(world *World, width, height int) *GameContext {
 func (ctx *GameContext) CreateCursorEntity() {
 	// Create cursor entity at the center of the screen
 	ctx.CursorEntity = ctx.World.CreateEntity()
-	ctx.World.Positions.Add(ctx.CursorEntity, component.PositionComponent{
+	ctx.World.Positions.Set(ctx.CursorEntity, component.PositionComponent{
 		X: ctx.GameWidth / 2,
 		Y: ctx.GameHeight / 2,
 	})
@@ -298,7 +298,7 @@ func (ctx *GameContext) HandleResize() {
 			if newX != pos.X || newY != pos.Y {
 				pos.X = newX
 				pos.Y = newY
-				ctx.World.Positions.Add(ctx.CursorEntity, pos)
+				ctx.World.Positions.Set(ctx.CursorEntity, pos)
 				// Signal cursor movement if clamped due to resize
 				ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: newX, Y: newY})
 			}

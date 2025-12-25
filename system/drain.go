@@ -525,7 +525,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 		}
 	}
 
-	s.world.Positions.Add(entity, pos)
+	s.world.Positions.Set(entity, pos)
 	s.drainStore.Set(entity, drain)
 }
 
@@ -765,7 +765,7 @@ func (s *DrainSystem) updateDrainMovement() {
 		drain.IsOnCursor = drainPos.X == cursorPos.X && drainPos.Y == cursorPos.Y
 
 		// Update position
-		s.world.Positions.Add(drainEntity, drainPos)
+		s.world.Positions.Set(drainEntity, drainPos)
 
 		// Save updated drain component
 		drain.LastMoveTime = now

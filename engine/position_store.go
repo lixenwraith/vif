@@ -30,9 +30,9 @@ func NewPositionStore() *PositionStore {
 	}
 }
 
-// Add inserts or updates an entity's position
+// Set inserts or updates an entity's position
 // Multiple entities at the same location are allowed, overflow silently ignored
-func (ps *PositionStore) Add(e core.Entity, pos component.PositionComponent) {
+func (ps *PositionStore) Set(e core.Entity, pos component.PositionComponent) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 
