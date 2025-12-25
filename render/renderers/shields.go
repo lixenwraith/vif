@@ -32,7 +32,7 @@ var shieldRGBColors = [5]render.RGB{
 
 // shieldCellRenderer is the callback type for per-cell shield rendering
 // Defines the interface for rendering strategy (256-color vs TrueColor) selected initialization
-type shieldCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, dist float64, color render.RGB, maxOpacity float64)
+type shieldCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, dist float64)
 
 // ShieldRenderer renders active shields with dynamic color from GameState
 type ShieldRenderer struct {
@@ -42,8 +42,10 @@ type ShieldRenderer struct {
 
 	renderCell shieldCellRenderer
 
-	// Per-frame cached palette index for 256-color mode
-	framePalette uint8
+	// Per-frame state
+	frameColor      render.RGB
+	framePalette    uint8
+	frameMaxOpacity float64
 }
 
 // NewShieldRenderer creates a new shield renderer
@@ -74,7 +76,7 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		return
 	}
 
-	// Cache palette index for 256-color callbacks
+	// Resolve blink type (shield color)
 	blinkType := uint32(0)
 	if energyComp, ok := r.energyStore.Get(r.gameCtx.CursorEntity); ok {
 		blinkType = energyComp.BlinkType.Load()
@@ -82,6 +84,9 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	if blinkType > 4 {
 		blinkType = 0
 	}
+
+	// Set frame state for callbacks
+	r.frameColor = shieldRGBColors[blinkType]
 	r.framePalette = shield256Colors[blinkType]
 
 	for _, entity := range shields {
@@ -96,31 +101,17 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			continue
 		}
 
-		// Resolve shield color
-		shieldRGB := r.resolveShieldColor(shield)
+		r.frameMaxOpacity = shield.MaxOpacity
 
 		// Bounding box - integer radii from Q16.16
 		radiusXInt := vmath.ToInt(shield.RadiusX)
 		radiusYInt := vmath.ToInt(shield.RadiusY)
 
-		startX := pos.X - radiusXInt
-		endX := pos.X + radiusXInt
-		startY := pos.Y - radiusYInt
-		endY := pos.Y + radiusYInt
-
-		// Clamp to screen bounds
-		if startX < 0 {
-			startX = 0
-		}
-		if endX >= ctx.GameWidth {
-			endX = ctx.GameWidth - 1
-		}
-		if startY < 0 {
-			startY = 0
-		}
-		if endY >= ctx.GameHeight {
-			endY = ctx.GameHeight - 1
-		}
+		// Render area with OOB clamp
+		startX := max(0, pos.X-radiusXInt)
+		endX := min(ctx.GameWidth-1, pos.X+radiusXInt)
+		startY := max(0, pos.Y-radiusYInt)
+		endY := min(ctx.GameHeight-1, pos.Y+radiusYInt)
 
 		for y := startY; y <= endY; y++ {
 			for x := startX; x <= endX; x++ {
@@ -136,36 +127,34 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 				// Ellipse containment check in Q16.16
 				normalizedDistSq := vmath.Mul(dxSq, shield.InvRxSq) + vmath.Mul(dySq, shield.InvRySq)
+
 				if normalizedDistSq > vmath.Scale {
 					continue
 				}
 
-				screenX := ctx.GameX + x
-				screenY := ctx.GameY + y
-
 				// Use pre-selected strategy
 				dist := math.Sqrt(vmath.ToFloat(normalizedDistSq))
-				r.renderCell(buf, screenX, screenY, dist, shieldRGB, shield.MaxOpacity)
+				r.renderCell(buf, ctx.GameX+x, ctx.GameY+y, dist)
 			}
 		}
 	}
 }
 
 // cellTrueColor renders a single shield cell with smooth gradient (TrueColor mode)
-func (r *ShieldRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screenY int, dist float64, color render.RGB, maxOpacity float64) {
+func (r *ShieldRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screenY int, dist float64) {
 	// Simple quadratic gradient: Dark center -> Bright edge
 	// dist ranges from 0.0 (center) to 1.0 (edge)
 	// Squared curve (dist^2) keeps the center transparent/dark for text visibility,
 	// while ramping up smoothly to maximum intensity at the very edge
 	// This eliminates the "blocky" fade-out and ensures the rim is the brightest part
-	alpha := (dist * dist) * maxOpacity
+	alpha := (dist * dist) * r.frameMaxOpacity
 
 	// Use BlendScreen for glowing effect on dark backgrounds
-	buf.Set(screenX, screenY, 0, render.RGBBlack, color, render.BlendScreen, alpha, terminal.AttrNone)
+	buf.Set(screenX, screenY, 0, render.RGBBlack, r.frameColor, render.BlendScreen, alpha, terminal.AttrNone)
 }
 
 // cell256 renders a single shield cell with discrete zones (256-color mode)
-func (r *ShieldRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int, dist float64, color render.RGB, maxOpacity float64) {
+func (r *ShieldRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int, dist float64) {
 	// In 256-color mode, center is transparent to ensure text legibility
 	// dist ranges from 0.0 (center) to 1.0 (edge)
 	if dist < 0.8 {
@@ -175,48 +164,4 @@ func (r *ShieldRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int,
 	// Draw rim using Screen blend
 	buf.SetBg256(screenX, screenY, r.framePalette)
 	// buf.Set(screenX, screenY, 0, render.RGBBlack, color, render.BlendScreen, 0.6, terminal.AttrNone)
-}
-
-// resolveShieldColor determines the shield color from override or EnergyBlinkType
-func (r *ShieldRenderer) resolveShieldColor(shield component.ShieldComponent) render.RGB {
-	if shield.OverrideColor != component.ColorNone {
-		return r.colorClassToRGB(shield.OverrideColor)
-	}
-
-	// Query energy component for blink type
-	energyComp, ok := r.energyStore.Get(r.gameCtx.CursorEntity)
-	if !ok {
-		return render.RgbShieldNone
-	}
-	blinkType := energyComp.BlinkType.Load()
-	return r.getColorFromBlinkType(blinkType)
-}
-
-// getColorFromBlinkType maps blink type to shield RGB
-// 0=error/gray, 1=blue, 2=green, 3=red, 4=gold
-func (r *ShieldRenderer) getColorFromBlinkType(blinkType uint32) render.RGB {
-	switch blinkType {
-	case 1: // Blue
-		return render.RgbShieldBlue
-	case 2: // Green
-		return render.RgbShieldGreen
-	case 3: // Red
-		return render.RgbShieldRed
-	case 4: // Gold
-		return render.RgbShieldGold
-	}
-	// 0 (error) or unknown: neutral gray
-	return render.RgbShieldNone
-}
-
-// colorClassToRGB maps ColorClass overrides to RGB
-func (r *ShieldRenderer) colorClassToRGB(color component.ColorClass) render.RGB {
-	switch color {
-	case component.ColorShield:
-		return render.RgbShieldBase
-	case component.ColorNugget:
-		return render.RgbNuggetOrange
-	default:
-		return render.RgbShieldBase
-	}
 }
