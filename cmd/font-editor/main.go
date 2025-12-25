@@ -1,4 +1,3 @@
-// FILE: cmd/font-editor/main.go
 package main
 
 import (
@@ -17,7 +16,7 @@ import (
 // Editor constants
 const (
 	GridRows     = 12
-	GridCols     = 16
+	GridCols     = 12
 	MinChar      = 32
 	MaxChar      = 126
 	PreviewLimit = 40
@@ -110,7 +109,7 @@ func NewEditor(term terminal.Terminal) *Editor {
 		glyphs:      make(map[rune][GridRows]uint16),
 		original:    make(map[rune][GridRows]uint16),
 		current:     'A',
-		cursorX:     8,
+		cursorX:     6,
 		cursorY:     5,
 		previewText: "ABCDEFG 0123456789",
 	}
@@ -495,7 +494,8 @@ func (e *Editor) flipHorizontal() {
 		var newVal uint16
 		for c := 0; c < GridCols; c++ {
 			if (g[r] & (1 << (15 - c))) != 0 {
-				newVal |= 1 << c
+				// FIXED: Write to mirrored MSB-aligned position
+				newVal |= 1 << (15 - (GridCols - 1 - c))
 			}
 		}
 		g[r] = newVal
