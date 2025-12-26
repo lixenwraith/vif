@@ -8,17 +8,15 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
-// EffectsRenderer draws decay, cleaners, removal flashes, and materializers
+// EffectsRenderer draws decay, cleaners, removal flashes
 type EffectsRenderer struct {
 	gameCtx *engine.GameContext
 
 	decayStore   *engine.Store[component.DecayComponent]
 	flashStore   *engine.Store[component.FlashComponent]
 	cleanerStore *engine.Store[component.CleanerComponent]
-	matStore     *engine.Store[component.MaterializeComponent]
 
-	cleanerGradient     []render.RGB
-	materializeGradient []render.RGB
+	cleanerGradient []render.RGB
 }
 
 // NewEffectsRenderer creates a new effects renderer with gradient generation
@@ -28,10 +26,8 @@ func NewEffectsRenderer(gameCtx *engine.GameContext) *EffectsRenderer {
 		decayStore:   engine.GetStore[component.DecayComponent](gameCtx.World),
 		flashStore:   engine.GetStore[component.FlashComponent](gameCtx.World),
 		cleanerStore: engine.GetStore[component.CleanerComponent](gameCtx.World),
-		matStore:     engine.GetStore[component.MaterializeComponent](gameCtx.World),
 	}
 	e.buildCleanerGradient()
-	e.buildMaterializeGradient()
 	return e
 }
 
@@ -51,22 +47,6 @@ func (r *EffectsRenderer) buildCleanerGradient() {
 	}
 }
 
-// buildMaterializeGradient builds the gradient for materialize trail rendering
-func (r *EffectsRenderer) buildMaterializeGradient() {
-	length := constant.MaterializeTrailLength
-
-	r.materializeGradient = make([]render.RGB, length)
-
-	for i := 0; i < length; i++ {
-		// Opacity fade from 1.0 to 0.0
-		opacity := 1.0 - (float64(i) / float64(length))
-		if opacity < 0 {
-			opacity = 0
-		}
-		r.materializeGradient[i] = render.Scale(render.RgbMaterialize, opacity)
-	}
-}
-
 // Render draws all visual effects
 func (r *EffectsRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskEffect)
@@ -78,9 +58,6 @@ func (r *EffectsRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 
 	// Draw removal flashes
 	r.drawRemovalFlashes(ctx, buf)
-
-	// Draw materializers
-	r.drawMaterializers(ctx, buf)
 }
 
 // drawDecay draws the decay characters
@@ -194,50 +171,5 @@ func (r *EffectsRenderer) drawRemovalFlashes(ctx render.RenderContext, buf *rend
 		// Use BlendAddFg to brighten the character ONLY (no background wash)
 		// BlendAddFg = OpAdd | FlagFg -  Maintains background transparency/color
 		buf.Set(screenX, screenY, flash.Char, flashColor, render.RGBBlack, render.BlendAddFg, 1.0, terminal.AttrNone)
-	}
-}
-
-// drawMaterializers draws the materialize animation using the trail of grid points
-func (r *EffectsRenderer) drawMaterializers(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.matStore.All()
-	if len(entities) == 0 {
-		return
-	}
-
-	gradientLen := len(r.materializeGradient)
-	maxGradientIdx := gradientLen - 1
-
-	for _, entity := range entities {
-		mat, ok := r.matStore.Get(entity)
-		if !ok {
-			continue
-		}
-
-		ml := constant.MaterializeTrailLength
-
-		// Iterate through the trail
-		// Index 0 is the head (brightest), last index is the tail (faintest)
-		for i := 0; i < mat.TrailLen; i++ {
-			// Walk backwards from head in the ring buffer
-			idx := (mat.TrailHead - i + ml) % ml
-			point := mat.TrailRing[idx]
-
-			if point.X < 0 || point.X >= ctx.GameWidth || point.Y < 0 || point.Y >= ctx.GameHeight {
-				continue
-			}
-
-			screenX := ctx.GameX + point.X
-			screenY := ctx.GameY + point.Y
-
-			gradientIndex := i
-			if gradientIndex > maxGradientIdx {
-				gradientIndex = maxGradientIdx
-			}
-
-			color := r.materializeGradient[gradientIndex]
-
-			// BlendMax with SrcBg=Black preserves destination bg: Max(Dst, 0) = Dst
-			buf.Set(screenX, screenY, mat.Char, color, render.RGBBlack, render.BlendMax, 1.0, terminal.AttrNone)
-		}
 	}
 }

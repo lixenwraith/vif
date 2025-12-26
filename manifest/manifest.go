@@ -118,6 +118,10 @@ func RegisterRenderers() {
 		return renderers.NewEffectsRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityEffects)
 
+	registry.RegisterRenderer("materialize", func(ctx any) any {
+		return renderers.NewMaterializeRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityMaterialize)
+
 	registry.RegisterRenderer("drain", func(ctx any) any {
 		return renderers.NewDrainRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityDrain)
@@ -189,6 +193,7 @@ func ActiveRenderers() []string {
 		"characters",
 		"shield",
 		"effects",
+		"materialize",
 		"drain",
 		"grayout",
 		"dim",

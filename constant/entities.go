@@ -46,14 +46,18 @@ const (
 
 // --- Materialization Effect ---
 const (
-	// MaterializeChar is the character used for spawn animation blocks
-	MaterializeChar = '█'
-
 	// MaterializeAnimationDuration is the time for spawners to converge
 	MaterializeAnimationDuration = 1 * time.Second
 
-	// MaterializeTrailLength is the number of trail positions for fade effect
-	MaterializeTrailLength = 8
+	// CHANGED: Removed MaterializeTrailLength - no longer using trails
+
+	// Materialize phase thresholds (normalized 0.0-1.0)
+	MaterializeFillEnd = 0.4 // Fill phase ends, hold begins
+	MaterializeHoldEnd = 0.6 // Hold phase ends, recede begins
+	MaterializePulseHz = 8   // Sine wave cycles during fill phase
+
+	// Materialize visual parameters
+	MaterializeWidthFalloff = 0.5 // Side-line intensity for multi-width beams
 )
 
 // --- Shield Entity ---

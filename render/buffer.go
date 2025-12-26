@@ -1,6 +1,7 @@
 package render
 
 import (
+	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
@@ -163,7 +164,7 @@ func (b *RenderBuffer) SetFgOnly(x, y int, r rune, fg RGB, attrs terminal.Attr) 
 	dst.Rune = r
 	dst.Fg = fg
 	dst.Attrs = attrs
-	b.masks[idx] = b.currentMask
+	b.masks[idx] |= b.currentMask
 }
 
 // SetBgOnly updates background color while preserving existing rune/foreground
@@ -262,11 +263,17 @@ func (b *RenderBuffer) MutateGrayscale(intensity float64, targetMask uint8) {
 
 // ===== OUTPUT =====
 
-// finalize sets default background to untouched cells before Flush
+// finalize sets default background to untouched cells and applies occlusion dimming
 func (b *RenderBuffer) finalize() {
 	for i := range b.cells {
 		if !b.touched[i] {
 			b.cells[i].Bg = RgbBackground
+		} else if constant.OcclusionDimEnabled && b.cells[i].Rune != 0 {
+			// Dim background when foreground character present
+			if b.masks[i]&(MaskEffect|MaskEntity) != 0 {
+				// if b.masks[i]&(MaskEffect|MaskGrid) != 0 {
+				b.cells[i].Bg = Scale(b.cells[i].Bg, constant.OcclusionDimFactor)
+			}
 		}
 	}
 }

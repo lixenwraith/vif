@@ -1,19 +1,20 @@
 package component
 
-import (
-	"github.com/lixenwraith/vi-fighter/constant"
-	"github.com/lixenwraith/vi-fighter/core"
-)
+// MaterializeComponent represents a converging beam effect toward a spawn target
+// Single entity manages all 4 cardinal beams via progress-based rendering
+type MaterializeComponent struct {
+	// Target position (convergence point)
+	TargetX, TargetY int
 
-// MaterializeDirection indicates which screen edge the spawner originates from
-type MaterializeDirection int
+	// Animation progress in Q16.16: 0 = start, Scale = complete
+	Progress int32
 
-const (
-	MaterializeFromTop MaterializeDirection = iota
-	MaterializeFromBottom
-	MaterializeFromLeft
-	MaterializeFromRight
-)
+	// Beam width in cells (1 = single line, 3 = wide beam)
+	Width int
+
+	// Type of entity being spawned (for completion event)
+	Type SpawnType
+}
 
 // SpawnType identifies what entity will be spawned upon materialization completion
 type SpawnType int
@@ -22,29 +23,3 @@ const (
 	SpawnTypeDrain SpawnType = iota
 	// Future: SpawnTypeNugget, SpawnTypeBot, etc.
 )
-
-// MaterializeComponent represents a spawner entity that converges toward a target position
-type MaterializeComponent struct {
-	KineticState // Embeds PreciseX, PreciseY, VelX, VelY, AccelX, AccelY
-
-	// Target position (where spawners converge) - Q16.16
-	TargetX int32
-	TargetY int32
-
-	// Ring buffer trail (zero-allocation updates)
-	TrailRing [constant.MaterializeTrailLength]core.Point
-	TrailHead int // Most recent point index
-	TrailLen  int // Valid point count
-
-	// Direction this spawner came from
-	Direction MaterializeDirection
-
-	// Character used to render the spawner block
-	Char rune
-
-	// Arrived flag - set when spawner reaches target
-	Arrived bool
-
-	// Type of entity being spawned
-	Type SpawnType
-}

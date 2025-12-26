@@ -34,4 +34,7 @@ const (
 	// Targeted Modes
 	BlendFgOnly = BlendMode(opReplace | flagFg) // Replace Fg, Keep Bg
 	BlendAddFg  = BlendMode(opAdd | flagFg)     // Add Fg, Keep Bg (Fixes flash bug)
+
+	// Background-only modes
+	BlendMaxBg = BlendMode(opMax | flagBg) // Max blend background only, preserve fg
 )
