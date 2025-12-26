@@ -566,11 +566,10 @@ func (s *DrainSystem) isInsideShieldEllipse(x, y int) bool {
 
 	dx := vmath.FromInt(x - cursorPos.X)
 	dy := vmath.FromInt(y - cursorPos.Y)
-	dxSq := vmath.Mul(dx, dx)
-	dySq := vmath.Mul(dy, dy)
 
 	// Ellipse equation: (dx²/rx² + dy²/ry²) <= 1  →  (dx² * invRxSq + dy² * invRySq) <= Scale
-	return (vmath.Mul(dxSq, shield.InvRxSq) + vmath.Mul(dySq, shield.InvRySq)) <= vmath.Scale
+	// Precomputed InvRxSq/InvRySq from ShieldSystem.cacheInverseRadii
+	return vmath.EllipseContains(dx, dy, shield.InvRxSq, shield.InvRySq)
 }
 
 // handleDrainInteractions processes all drain interactions per tick

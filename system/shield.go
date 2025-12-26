@@ -59,10 +59,8 @@ func (s *ShieldSystem) cacheInverseRadii() {
 	shield.RadiusX = rx
 	shield.RadiusY = ry
 
-	rxSq := vmath.Mul(rx, rx)
-	rySq := vmath.Mul(ry, ry)
-	shield.InvRxSq = vmath.Div(vmath.Scale, rxSq)
-	shield.InvRySq = vmath.Div(vmath.Scale, rySq)
+	// Use pre-computed inverse squared radii
+	shield.InvRxSq, shield.InvRySq = vmath.EllipseInvRadiiSq(rx, ry)
 
 	s.shieldStore.Set(cursorEntity, shield)
 }
