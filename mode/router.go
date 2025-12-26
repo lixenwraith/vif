@@ -626,26 +626,8 @@ func (r *Router) handleInsertDeleteBack() bool {
 
 // ========== Overlay Handlers ==========
 
-func (r *Router) handleOverlayScroll(intent *input.Intent) bool {
-	snapshot := r.ctx.GetUISnapshot()
-	newScroll := snapshot.OverlayScroll + int(intent.ScrollDir)
-
-	if newScroll < 0 {
-		newScroll = 0
-	}
-	if newScroll >= len(snapshot.OverlayContent) {
-		newScroll = len(snapshot.OverlayContent) - 1
-	}
-	if newScroll < 0 {
-		newScroll = 0
-	}
-
-	r.ctx.SetOverlayScroll(newScroll)
-	return true
-}
-
 func (r *Router) handleOverlayClose() bool {
-	r.ctx.SetOverlayState(false, "", nil, 0)
+	r.ctx.SetOverlayContent(nil)
 	r.ctx.SetMode(core.ModeNormal)
 	r.machine.SetMode(input.ModeNormal)
 	r.ctx.SetPaused(false)
@@ -660,14 +642,37 @@ func (r *Router) handleOverlayActivate() bool {
 
 func (r *Router) handleOverlayPageScroll(direction int) bool {
 	snapshot := r.ctx.GetUISnapshot()
-	// Page scroll by half visible height (estimate 20 lines visible)
-	pageSize := 10
+
+	// Calculate visible height based on overlay dimensions
+	overlayH := int(float64(r.ctx.Height) * constant.OverlayHeightPercent)
+	// TODO: to constant if not delete, check in tiny pane
+	if overlayH < 10 {
+		overlayH = 10
+	}
+	// Subtract border (2) + padding (2) + hints row (1)
+	visibleH := overlayH - 2 - (2 * constant.OverlayPaddingY) - 1
+	pageSize := visibleH / 2
+	if pageSize < 1 {
+		pageSize = 1
+	}
+
 	newScroll := snapshot.OverlayScroll + (direction * pageSize)
+	if newScroll < 0 {
+		newScroll = 0
+	}
+
+	r.ctx.SetOverlayScroll(newScroll)
+	return true
+}
+
+func (r *Router) handleOverlayScroll(intent *input.Intent) bool {
+	snapshot := r.ctx.GetUISnapshot()
+	newScroll := snapshot.OverlayScroll + int(intent.ScrollDir)
 
 	if newScroll < 0 {
 		newScroll = 0
 	}
-	// Upper bound handled by renderer based on content
+	// Upper bound handled by renderer based on actual content height
 
 	r.ctx.SetOverlayScroll(newScroll)
 	return true

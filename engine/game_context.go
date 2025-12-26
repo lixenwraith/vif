@@ -12,16 +12,16 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
+// TODO: Refactor this with GameContext.ui
 // UISnapshot provides a consistent view of UI state for rendering
 type UISnapshot struct {
-	CommandText    string
-	SearchText     string
-	StatusMessage  string
-	LastCommand    string
-	OverlayActive  bool
-	OverlayTitle   string
-	OverlayContent []string
-	OverlayScroll  int
+	CommandText   string
+	SearchText    string
+	StatusMessage string
+	LastCommand   string
+	OverlayActive bool
+	OverlayTitle  string
+	OverlayScroll int
 }
 
 // GameContext holds all game state including the ECS world
@@ -57,24 +57,27 @@ type GameContext struct {
 
 	// --- Thread-Safe State ---
 
-	// Mode state (mode package is the authority)
-	mode atomic.Int32
-
 	// Authority: Total number of render cycles elapsed
 	FrameNumber atomic.Int64
 
-	// UI State (Mutex Protected)
+	// UI State uses ctx.ui.mu for locking and ctx.ui.fieldName for fields
 	ui struct {
-		mu             sync.RWMutex
-		commandText    string
-		searchText     string
-		statusMessage  string
-		lastCommand    string
-		overlayActive  bool
-		overlayTitle   string
-		overlayContent []string
-		overlayScroll  int
+		mu            sync.RWMutex
+		commandText   string
+		searchText    string
+		statusMessage string
+		lastCommand   string
+		overlayActive bool
+		overlayTitle  string
+		overlayScroll int
 	}
+
+	overlayContent *core.OverlayContent // Typed overlay content
+
+	// --- Input State ---
+
+	// Mode state (mode package is the authority)
+	mode atomic.Int32
 
 	// LastSearchText is kept public as it is internal to InputHandler state (no race with renderers)
 	LastSearchText string
@@ -372,14 +375,13 @@ func (ctx *GameContext) GetUISnapshot() UISnapshot {
 	// Content slice copy is shallow (backing array shared), but writer typically replaces
 	// the whole slice, making this safe for concurrent read/replace usage.
 	return UISnapshot{
-		CommandText:    ctx.ui.commandText,
-		SearchText:     ctx.ui.searchText,
-		StatusMessage:  ctx.ui.statusMessage,
-		LastCommand:    ctx.ui.lastCommand,
-		OverlayActive:  ctx.ui.overlayActive,
-		OverlayTitle:   ctx.ui.overlayTitle,
-		OverlayContent: ctx.ui.overlayContent,
-		OverlayScroll:  ctx.ui.overlayScroll,
+		CommandText:   ctx.ui.commandText,
+		SearchText:    ctx.ui.searchText,
+		StatusMessage: ctx.ui.statusMessage,
+		LastCommand:   ctx.ui.lastCommand,
+		OverlayActive: ctx.ui.overlayActive,
+		OverlayTitle:  ctx.ui.overlayTitle,
+		OverlayScroll: ctx.ui.overlayScroll,
 	}
 }
 
@@ -422,28 +424,38 @@ func (ctx *GameContext) SetLastCommand(cmd string) {
 func (ctx *GameContext) SetOverlayState(active bool, title string, content []string, scroll int) {
 	ctx.ui.mu.Lock()
 	defer ctx.ui.mu.Unlock()
+	ctx.overlayContent = nil
 	ctx.ui.overlayActive = active
 	ctx.ui.overlayTitle = title
-	ctx.ui.overlayContent = content
 	ctx.ui.overlayScroll = scroll
+}
+
+// SetOverlayContent sets typed overlay content (used for debug/stats)
+func (ctx *GameContext) SetOverlayContent(content *core.OverlayContent) {
+	ctx.ui.mu.Lock()
+	defer ctx.ui.mu.Unlock()
+	ctx.overlayContent = content
+	if content != nil {
+		ctx.ui.overlayTitle = content.Title
+		ctx.ui.overlayActive = true
+	} else {
+		ctx.ui.overlayActive = false
+		ctx.ui.overlayTitle = ""
+	}
+	ctx.ui.overlayScroll = 0
+}
+
+// GetOverlayContent returns typed overlay content if set
+func (ctx *GameContext) GetOverlayContent() *core.OverlayContent {
+	ctx.ui.mu.RLock()
+	defer ctx.ui.mu.RUnlock()
+	return ctx.overlayContent
 }
 
 func (ctx *GameContext) SetOverlayScroll(scroll int) {
 	ctx.ui.mu.Lock()
 	defer ctx.ui.mu.Unlock()
 	ctx.ui.overlayScroll = scroll
-}
-
-func (ctx *GameContext) GetOverlayScroll() int {
-	ctx.ui.mu.RLock()
-	defer ctx.ui.mu.RUnlock()
-	return ctx.ui.overlayScroll
-}
-
-func (ctx *GameContext) GetOverlayContentLen() int {
-	ctx.ui.mu.RLock()
-	defer ctx.ui.mu.RUnlock()
-	return len(ctx.ui.overlayContent)
 }
 
 // === Frame Number Accessories ===

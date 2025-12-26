@@ -8,6 +8,7 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/engine/status"
 	"github.com/lixenwraith/vi-fighter/event"
@@ -112,97 +113,98 @@ func (s *MetaSystem) handleGameReset() {
 
 // handleDebugRequest shows debug information overlay with auto-discovered stats
 func (s *MetaSystem) handleDebugRequest() {
-	var lines []string
+	content := &core.OverlayContent{
+		Title: "DEBUG",
+	}
 
-	// Section: Player State (cursor-specific, always relevant)
-	lines = append(lines, "§PLAYER STATE")
-
+	// Card: Player State
+	playerCard := core.OverlayCard{Title: "PLAYER"}
 	energyComp, _ := s.energyStore.Get(s.ctx.CursorEntity)
-	lines = append(lines, fmt.Sprintf("Energy|%d", energyComp.Current.Load()))
-
-	heatVal := int64(0)
+	playerCard.Entries = append(playerCard.Entries, core.CardEntry{
+		Key: "Energy", Value: fmt.Sprintf("%d", energyComp.Current.Load()),
+	})
 	if hc, ok := s.heatStore.Get(s.ctx.CursorEntity); ok {
-		heatVal = hc.Current.Load()
+		playerCard.Entries = append(playerCard.Entries, core.CardEntry{
+			Key: "Heat", Value: fmt.Sprintf("%d/%d", hc.Current.Load(), constant.MaxHeat),
+		})
 	}
-	lines = append(lines, fmt.Sprintf("Heat|%d / %d", heatVal, constant.MaxHeat))
-
-	shieldActive := false
 	if sc, ok := s.shieldStore.Get(s.ctx.CursorEntity); ok {
-		shieldActive = sc.Active
+		playerCard.Entries = append(playerCard.Entries, core.CardEntry{
+			Key: "Shield", Value: fmt.Sprintf("%v", sc.Active),
+		})
 	}
-	lines = append(lines, fmt.Sprintf("Shield|%v", shieldActive))
+	content.Items = append(content.Items, playerCard)
 
-	// Section: Engine
-	lines = append(lines, "§ENGINE")
-	lines = append(lines, fmt.Sprintf("Frame|%d", s.ctx.GetFrameNumber()))
-	lines = append(lines, fmt.Sprintf("Screen|%dx%d", s.ctx.Width, s.ctx.Height))
-	lines = append(lines, fmt.Sprintf("Game Area|%dx%d", s.ctx.GameWidth, s.ctx.GameHeight))
-	lines = append(lines, fmt.Sprintf("Paused|%v", s.ctx.IsPaused.Load()))
+	// Card: Engine (from context)
+	engineCard := core.OverlayCard{Title: "ENGINE"}
+	engineCard.Entries = append(engineCard.Entries,
+		core.CardEntry{Key: "Frame", Value: fmt.Sprintf("%d", s.ctx.GetFrameNumber())},
+		core.CardEntry{Key: "Screen", Value: fmt.Sprintf("%dx%d", s.ctx.Width, s.ctx.Height)},
+		core.CardEntry{Key: "Game", Value: fmt.Sprintf("%dx%d", s.ctx.GameWidth, s.ctx.GameHeight)},
+		core.CardEntry{Key: "Paused", Value: fmt.Sprintf("%v", s.ctx.IsPaused.Load())},
+	)
+	content.Items = append(content.Items, engineCard)
 
-	// Section: Auto-discovered Registry Stats
+	// Cards from status registry, grouped by prefix
 	reg := s.res.Status
-
-	// Collect and group by prefix
-	groups := make(map[string][][2]string) // prefix -> []{"key", "value"}
+	groups := make(map[string][]core.CardEntry)
 
 	reg.Bools.Range(func(key string, ptr *atomic.Bool) {
 		prefix, name := splitStatKey(key)
-		groups[prefix] = append(groups[prefix], [2]string{name, fmt.Sprintf("%v", ptr.Load())})
+		groups[prefix] = append(groups[prefix], core.CardEntry{
+			Key: name, Value: fmt.Sprintf("%v", ptr.Load()),
+		})
 	})
 
 	reg.Ints.Range(func(key string, ptr *atomic.Int64) {
 		val := ptr.Load()
 		prefix, name := splitStatKey(key)
-
-		// Format durations nicely
 		var valStr string
 		if strings.HasSuffix(key, ".timer") || strings.HasSuffix(key, ".duration") {
 			valStr = time.Duration(val).String()
 		} else {
 			valStr = fmt.Sprintf("%d", val)
 		}
-		groups[prefix] = append(groups[prefix], [2]string{name, valStr})
+		groups[prefix] = append(groups[prefix], core.CardEntry{Key: name, Value: valStr})
 	})
 
 	reg.Floats.Range(func(key string, ptr *status.AtomicFloat) {
 		prefix, name := splitStatKey(key)
-		groups[prefix] = append(groups[prefix], [2]string{name, fmt.Sprintf("%.3f", ptr.Get())})
+		groups[prefix] = append(groups[prefix], core.CardEntry{
+			Key: name, Value: fmt.Sprintf("%.3f", ptr.Get()),
+		})
 	})
 
 	reg.Strings.Range(func(key string, ptr *status.AtomicString) {
 		prefix, name := splitStatKey(key)
-		groups[prefix] = append(groups[prefix], [2]string{name, ptr.Load()})
+		groups[prefix] = append(groups[prefix], core.CardEntry{Key: name, Value: ptr.Load()})
 	})
 
-	// Output groups in deterministic order
+	// Add registry groups as cards in deterministic order
 	groupOrder := []string{"engine", "event", "entity", "spawn", "boost", "gold", "decay"}
 	seen := make(map[string]bool)
 
 	for _, prefix := range groupOrder {
-		if stats, ok := groups[prefix]; ok {
-			lines = append(lines, "§"+strings.ToUpper(prefix))
-			for _, kv := range stats {
-				lines = append(lines, fmt.Sprintf("%s|%s", kv[0], kv[1]))
-			}
+		if entries, ok := groups[prefix]; ok && len(entries) > 0 {
+			content.Items = append(content.Items, core.OverlayCard{
+				Title:   strings.ToUpper(prefix),
+				Entries: entries,
+			})
 			seen[prefix] = true
 		}
 	}
 
-	// Any remaining groups not in predefined order
-	for prefix, stats := range groups {
-		if seen[prefix] {
-			continue
-		}
-		lines = append(lines, "§"+strings.ToUpper(prefix))
-		for _, kv := range stats {
-			lines = append(lines, fmt.Sprintf("%s|%s", kv[0], kv[1]))
+	// Remaining groups not in predefined order
+	for prefix, entries := range groups {
+		if !seen[prefix] && len(entries) > 0 {
+			content.Items = append(content.Items, core.OverlayCard{
+				Title:   strings.ToUpper(prefix),
+				Entries: entries,
+			})
 		}
 	}
 
-	lines = append(lines, "")
-	lines = append(lines, "~ESC to close")
-
-	s.ctx.SetOverlayState(true, " DEBUG ", lines, 0)
+	s.ctx.SetOverlayContent(content)
 }
 
 // splitStatKey splits "prefix.name" into prefix and name
@@ -217,57 +219,79 @@ func splitStatKey(key string) (prefix, name string) {
 
 // handleHelpRequest shows help information overlay
 func (s *MetaSystem) handleHelpRequest() {
-	helpContent := []string{
-		"=== VI-FIGHTER HELP ===",
-		"",
-		"MODES:",
-		"  i         - Enter INSERT mode",
-		"  ESC       - Return to NORMAL mode / Show grid",
-		"  /         - Enter SEARCH mode",
-		"  :         - Enter COMMAND mode",
-		"",
-		"MOVEMENT (Normal Mode):",
-		"  h/j/k/l   - Move left/down/up/right",
-		"  w/b       - Move forward/backward by word",
-		"  0/$       - Move to start/end of line",
-		"  gg        - Go to top",
-		"  G         - Go to bottom",
-		"  f{char}   - Find character forward",
-		"  F{char}   - Find character backward",
-		"  t{char}   - Till character forward",
-		"  T{char}   - Till character backward",
-		"  ;         - Repeat last find/till",
-		"  ,         - Repeat last find/till (reverse)",
-		"",
-		"DELETE (Normal Mode):",
-		"  d{motion} - Delete with motion (dw, d$, etc.)",
-		"  dd        - Delete current line",
-		"  D         - Delete to end of line",
-		"",
-		"GAME MECHANICS:",
-		"  TAB       - Jump to nugget (costs 10 energy)",
-		"  ENTER     - Fire directional cleaners (costs 10 heat)",
-		"",
-		"SEARCH:",
-		"  /text     - Search for text",
-		"  n         - Next match",
-		"  N         - Previous match",
-		"",
-		"COMMANDS:",
-		"  :q        - Quit game",
-		"  :n        - New game",
-		"  :energy N - Set energy to N",
-		"  :heat N   - Set heat to N",
-		"  :boost    - Enable boost for 10s",
-		"  :spawn on/off - Enable/disable spawning",
-		"  :d/:debug - Show debug info",
-		"  :h/:help  - Show this help",
-		"",
-		"AUDIO:",
-		"  Ctrl+S    - Toggle mute",
-		"",
-		"Press ESC or ENTER to close",
+	content := &core.OverlayContent{
+		Title: "HELP",
 	}
 
-	s.ctx.SetOverlayState(true, " HELP ", helpContent, 0)
+	// Card: Modes
+	content.Items = append(content.Items, core.OverlayCard{
+		Title: "MODES",
+		Entries: []core.CardEntry{
+			{Key: "i", Value: "Enter INSERT mode"},
+			{Key: "ESC", Value: "Return to NORMAL / Show grid"},
+			{Key: "/", Value: "Enter SEARCH mode"},
+			{Key: ":", Value: "Enter COMMAND mode"},
+		},
+	})
+
+	// Card: Movement
+	content.Items = append(content.Items, core.OverlayCard{
+		Title: "MOVEMENT",
+		Entries: []core.CardEntry{
+			{Key: "h/j/k/l", Value: "Move left/down/up/right"},
+			{Key: "w/b", Value: "Word forward/backward"},
+			{Key: "0/$", Value: "Line start/end"},
+			{Key: "gg/G", Value: "Top/bottom of screen"},
+			{Key: "f/F{c}", Value: "Find char forward/backward"},
+			{Key: "t/T{c}", Value: "Till char forward/backward"},
+			{Key: ";/,", Value: "Repeat find / reverse"},
+		},
+	})
+
+	// Card: Delete
+	content.Items = append(content.Items, core.OverlayCard{
+		Title: "DELETE",
+		Entries: []core.CardEntry{
+			{Key: "d{motion}", Value: "Delete with motion"},
+			{Key: "dd", Value: "Delete current line"},
+			{Key: "D", Value: "Delete to end of line"},
+			{Key: "x", Value: "Delete char at cursor"},
+		},
+	})
+
+	// Card: Game
+	content.Items = append(content.Items, core.OverlayCard{
+		Title: "GAME",
+		Entries: []core.CardEntry{
+			{Key: "TAB", Value: "Jump to nugget (10 energy)"},
+			{Key: "ENTER", Value: "Fire directional cleaners"},
+			{Key: "Ctrl+S", Value: "Toggle audio mute"},
+		},
+	})
+
+	// Card: Search
+	content.Items = append(content.Items, core.OverlayCard{
+		Title: "SEARCH",
+		Entries: []core.CardEntry{
+			{Key: "/text", Value: "Search for text"},
+			{Key: "n/N", Value: "Next/previous match"},
+		},
+	})
+
+	// Card: Commands
+	content.Items = append(content.Items, core.OverlayCard{
+		Title: "COMMANDS",
+		Entries: []core.CardEntry{
+			{Key: ":q", Value: "Quit game"},
+			{Key: ":n", Value: "New game"},
+			{Key: ":energy N", Value: "Set energy"},
+			{Key: ":heat N", Value: "Set heat"},
+			{Key: ":boost", Value: "Enable boost"},
+			{Key: ":spawn on/off", Value: "Toggle spawning"},
+			{Key: ":d", Value: "Debug overlay"},
+			{Key: ":h", Value: "This help"},
+		},
+	})
+
+	s.ctx.SetOverlayContent(content)
 }

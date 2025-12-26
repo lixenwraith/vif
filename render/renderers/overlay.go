@@ -2,9 +2,9 @@ package renderers
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/lixenwraith/vi-fighter/constant"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
@@ -84,6 +84,12 @@ func (a *TUIAdapter) Height() int {
 	return a.height
 }
 
+// cardLayout holds calculated position and size for a card
+type cardLayout struct {
+	x, y, w, h int
+	card       core.OverlayCard
+}
+
 // OverlayRenderer draws the modal overlay window
 type OverlayRenderer struct {
 	gameCtx *engine.GameContext
@@ -112,12 +118,9 @@ func (r *OverlayRenderer) IsVisible() bool {
 
 // Render draws the overlay window using TUI primitives
 func (r *OverlayRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	uiSnapshot := r.gameCtx.GetUISnapshot()
-
-	// Calculate overlay dimensions (80% of screen)
+	// Calculate overlay dimensions
 	overlayW := int(float64(ctx.Width) * constant.OverlayWidthPercent)
 	overlayH := int(float64(ctx.Height) * constant.OverlayHeightPercent)
-
 	if overlayW < 40 {
 		overlayW = 40
 	}
@@ -128,225 +131,217 @@ func (r *OverlayRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 	startX := (ctx.Width - overlayW) / 2
 	startY := (ctx.Height - overlayH) / 2
 
-	// Ensure adapter is correctly sized
+	// Ensure adapter sized
 	if r.adapter == nil || r.adapter.Width() != overlayW || r.adapter.Height() != overlayH {
 		r.adapter = NewTUIAdapter(overlayW, overlayH)
 	}
 
-	// Get root region and draw frame
+	// Clear adapter for fresh frame
+	r.adapter.Clear(render.RgbOverlayBg)
+
 	root := r.adapter.Region()
 	root.BoxFilled(tui.LineDouble, render.RgbOverlayBorder, render.RgbOverlayBg)
 
-	// Draw title in top border
-	r.drawTitle(root, uiSnapshot.OverlayTitle, overlayW)
+	// Check for typed content first
+	content := r.gameCtx.GetOverlayContent()
+	if content != nil {
+		r.renderTypedContent(root, content, overlayW, overlayH)
+	}
 
-	// Content area inside border with padding
+	r.adapter.FlushTo(buf, startX, startY, render.MaskUI)
+}
+
+func (r *OverlayRenderer) renderTypedContent(root tui.Region, content *core.OverlayContent, w, h int) {
+	// Title
+	if content.Title != "" {
+		title := fmt.Sprintf(" %s ", content.Title)
+		titleX := (w - tui.RuneLen(title)) / 2
+		root.Text(titleX, 0, title, render.RgbOverlayTitle, render.RgbOverlayBg, terminal.AttrBold)
+	}
+
+	// Content area (inside border, with padding)
 	contentX := 1 + constant.OverlayPaddingX
 	contentY := 1 + constant.OverlayPaddingY
-	contentW := overlayW - 2 - (2 * constant.OverlayPaddingX)
-	contentH := overlayH - 2 - (2 * constant.OverlayPaddingY) - 1 // -1 for hints row
+	contentW := w - 2 - (2 * constant.OverlayPaddingX)
+	contentH := h - 2 - (2 * constant.OverlayPaddingY) - 1 // -1 for hints
 
-	content := root.Sub(contentX, contentY, contentW, contentH)
+	contentRegion := root.Sub(contentX, contentY, contentW, contentH)
 
-	// Parse content sections
-	sections := r.parseSections(uiSnapshot.OverlayContent)
+	// Get cards and calculate layout
+	cards := content.Cards()
+	if len(cards) == 0 {
+		return
+	}
 
-	// Calculate total lines for scroll bounds
-	totalLines := r.countTotalLines(sections)
-	scroll := uiSnapshot.OverlayScroll
-	if scroll > totalLines-contentH {
-		scroll = totalLines - contentH
+	layouts := r.calculateCardLayouts(cards, contentW, contentH)
+	scroll := r.gameCtx.GetUISnapshot().OverlayScroll
+
+	// Calculate total content height for scroll
+	totalH := 0
+	for _, l := range layouts {
+		if l.y+l.h > totalH {
+			totalH = l.y + l.h
+		}
+	}
+
+	// Clamp scroll
+	maxScroll := totalH - contentH
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if scroll > maxScroll {
+		scroll = maxScroll
 	}
 	if scroll < 0 {
 		scroll = 0
 	}
 
-	// Render sections with two-column layout
-	r.renderSections(content, sections, scroll, contentH)
-
-	// Render hints at bottom
-	hintsRegion := root.Sub(1, overlayH-2, overlayW-2, 1)
-	r.renderHints(hintsRegion, sections)
-
-	// Render scroll indicator in bottom-right of border
-	if totalLines > contentH {
-		r.renderScrollIndicator(root, overlayW, overlayH, scroll, contentH, totalLines)
-	}
-
-	// Flush adapter to main render buffer
-	r.adapter.FlushTo(buf, startX, startY, render.MaskUI)
-}
-
-func (r *OverlayRenderer) drawTitle(root tui.Region, title string, width int) {
-	if title == "" {
-		return
-	}
-	displayTitle := fmt.Sprintf(" %s ", strings.ToUpper(title))
-	titleX := (width - tui.RuneLen(displayTitle)) / 2
-	root.Text(titleX, 0, displayTitle, render.RgbOverlayTitle, render.RgbOverlayBg, terminal.AttrBold)
-}
-
-func (r *OverlayRenderer) parseSections(content []string) []overlaySection {
-	var sections []overlaySection
-	var current *overlaySection
-
-	for _, line := range content {
-		if len(line) == 0 {
+	// Render visible cards
+	for _, l := range layouts {
+		cardY := l.y - scroll
+		// Skip if entirely above viewport
+		if cardY+l.h < 0 {
 			continue
 		}
-		switch line[0] {
-		case '§':
-			if current != nil {
-				sections = append(sections, *current)
-			}
-			current = &overlaySection{header: line[1:]}
-		case '~':
-			if current != nil {
-				sections = append(sections, *current)
-			}
-			sections = append(sections, overlaySection{header: line[1:], isHint: true})
-			current = nil
-		default:
-			if current == nil {
-				current = &overlaySection{header: "INFO"}
-			}
-			if idx := strings.Index(line, "|"); idx > 0 {
-				current.items = append(current.items, [2]string{line[:idx], line[idx+1:]})
-			} else {
-				current.items = append(current.items, [2]string{line, ""})
-			}
+		// Skip if entirely below viewport
+		if cardY >= contentH {
+			continue
+		}
+
+		// Clip card region to viewport
+		visibleY := cardY
+		visibleH := l.h
+		entryOffset := 0
+
+		if cardY < 0 {
+			entryOffset = -cardY
+			visibleH += cardY
+			visibleY = 0
+		}
+		if visibleY+visibleH > contentH {
+			visibleH = contentH - visibleY
+		}
+
+		if visibleH > 0 {
+			cardRegion := contentRegion.Sub(l.x, visibleY, l.w, visibleH)
+			r.renderCard(cardRegion, l.card, entryOffset, visibleH)
 		}
 	}
-	if current != nil {
-		sections = append(sections, *current)
+
+	// Navigation hints
+	hintsY := h - 2
+	hints := "ESC close · j/k scroll · PgUp/PgDn page"
+	hintsX := (w - tui.RuneLen(hints)) / 2
+	root.Text(hintsX, hintsY, hints, render.RgbOverlayHint, render.RgbOverlayBg, terminal.AttrDim)
+
+	// Scroll indicator
+	if totalH > contentH {
+		indicator := fmt.Sprintf("[%d/%d]", scroll+1, maxScroll+1)
+		indX := w - tui.RuneLen(indicator) - 1
+		root.Text(indX, h-1, indicator, render.RgbOverlayBorder, render.RgbOverlayBg, terminal.AttrNone)
 	}
-	return sections
 }
 
-func (r *OverlayRenderer) renderSections(content tui.Region, sections []overlaySection, scroll, maxLines int) {
-	// Filter out hints
-	var dataSections []overlaySection
-	for _, sec := range sections {
-		if !sec.isHint {
-			dataSections = append(dataSections, sec)
+func (r *OverlayRenderer) calculateCardLayouts(cards []core.OverlayCard, availW, availH int) []cardLayout {
+	// Determine column count based on width
+	var cols int
+	switch {
+	case availW >= 140:
+		cols = 4
+	case availW >= 100:
+		cols = 3
+	case availW >= 60:
+		cols = 2
+	default:
+		cols = 1
+	}
+
+	gap := 2
+	colW := (availW - (cols-1)*gap) / cols
+
+	layouts := make([]cardLayout, 0, len(cards))
+	colHeights := make([]int, cols) // Track height used in each column
+
+	for _, card := range cards {
+		// Card height: 2 (border) + entries
+		cardH := 2 + len(card.Entries)
+		if cardH < 3 {
+			cardH = 3
+		}
+
+		// Find shortest column
+		minCol := 0
+		minH := colHeights[0]
+		for i := 1; i < cols; i++ {
+			if colHeights[i] < minH {
+				minH = colHeights[i]
+				minCol = i
+			}
+		}
+
+		x := minCol * (colW + gap)
+		y := colHeights[minCol]
+
+		layouts = append(layouts, cardLayout{
+			x: x, y: y, w: colW, h: cardH,
+			card: card,
+		})
+
+		colHeights[minCol] += cardH + 1 // +1 for gap between cards
+	}
+
+	return layouts
+}
+
+func (r *OverlayRenderer) renderCard(region tui.Region, card core.OverlayCard, entryOffset, visibleH int) {
+	// Draw card frame if top border visible
+	if entryOffset == 0 {
+		region.Box(tui.LineSingle, render.RgbOverlayBorder)
+
+		// Title in top border
+		if card.Title != "" && region.W > 4 {
+			title := " " + card.Title + " "
+			if tui.RuneLen(title) > region.W-4 {
+				title = tui.Truncate(title, region.W-4)
+			}
+			titleX := 2
+			region.Text(titleX, 0, title, render.RgbOverlayHeader, render.RgbOverlayBg, terminal.AttrBold)
 		}
 	}
 
-	if len(dataSections) == 0 {
+	// Content area inside card
+	innerX := 1
+	innerY := 1 - entryOffset
+	innerW := region.W - 2
+	innerH := region.H
+
+	if innerW < 1 {
 		return
 	}
-
-	// Distribute sections into two columns
-	leftSections, rightSections := r.distributeSections(dataSections)
-
-	// Calculate column widths
-	colGap := 3
-	colWidth := (content.W - colGap) / 2
-	if len(rightSections) == 0 {
-		// Single column centered
-		colWidth = content.W * 2 / 3
-		if colWidth > 60 {
-			colWidth = 60
-		}
-		leftX := (content.W - colWidth) / 2
-		leftCol := content.Sub(leftX, 0, colWidth, content.H)
-		r.renderColumn(leftCol, leftSections, scroll, maxLines)
-	} else {
-		// Two columns
-		leftCol := content.Sub(0, 0, colWidth, content.H)
-		rightCol := content.Sub(colWidth+colGap, 0, colWidth, content.H)
-		r.renderColumn(leftCol, leftSections, scroll, maxLines)
-		r.renderColumn(rightCol, rightSections, scroll, maxLines)
-	}
-}
-
-func (r *OverlayRenderer) distributeSections(sections []overlaySection) (left, right []overlaySection) {
-	leftLines, rightLines := 0, 0
-	for _, sec := range sections {
-		cost := 2 + len(sec.items) // header + spacer + items
-		if leftLines <= rightLines {
-			left = append(left, sec)
-			leftLines += cost
-		} else {
-			right = append(right, sec)
-			rightLines += cost
-		}
-	}
-	return
-}
-
-func (r *OverlayRenderer) renderColumn(col tui.Region, sections []overlaySection, scroll, maxLines int) {
-	y := 0
-	lineNum := 0
 
 	keyStyle := tui.Style{Fg: render.RgbOverlayKey, Bg: render.RgbOverlayBg}
 	valStyle := tui.Style{Fg: render.RgbOverlayValue, Bg: render.RgbOverlayBg}
 
-	for _, sec := range sections {
-		// Section header
-		if lineNum >= scroll && y < col.H {
-			col.Divider(y, sec.header, tui.LineSingle, render.RgbOverlayHeader)
-			y++
-		}
-		lineNum++
-
-		// Items
-		for _, item := range sec.items {
-			if lineNum >= scroll && y < col.H {
-				col.KeyValue(y, item[0], item[1], keyStyle, valStyle, ':')
-				y++
-			}
-			lineNum++
-		}
-
-		// Spacer between sections
-		if lineNum >= scroll && y < col.H {
-			y++
-		}
-		lineNum++
-	}
-}
-
-func (r *OverlayRenderer) renderHints(region tui.Region, sections []overlaySection) {
-	var hints []string
-	for _, sec := range sections {
-		if sec.isHint {
-			hints = append(hints, sec.header)
-		}
-	}
-	if len(hints) == 0 {
-		return
-	}
-
-	combined := strings.Join(hints, "  •  ")
-	if tui.RuneLen(combined) > region.W {
-		combined = tui.Truncate(combined, region.W)
-	}
-
-	region.TextCenter(0, combined, render.RgbOverlayHint, render.RgbOverlayBg, terminal.AttrDim)
-}
-
-func (r *OverlayRenderer) renderScrollIndicator(root tui.Region, w, h, scroll, visible, total int) {
-	indicator := fmt.Sprintf("[%d/%d]", scroll+1, total-visible+1)
-	x := w - tui.RuneLen(indicator) - 1
-	root.Text(x, h-1, indicator, render.RgbOverlayBorder, render.RgbOverlayBg, terminal.AttrNone)
-}
-
-func (r *OverlayRenderer) countTotalLines(sections []overlaySection) int {
-	leftLines, rightLines := 0, 0
-	for _, sec := range sections {
-		if sec.isHint {
+	for i, entry := range card.Entries {
+		y := innerY + i
+		if y < 0 {
 			continue
 		}
-		cost := 2 + len(sec.items)
-		if leftLines <= rightLines {
-			leftLines += cost
-		} else {
-			rightLines += cost
+		if y >= innerH-1 { // -1 for bottom border
+			break
 		}
+
+		inner := region.Sub(innerX, y, innerW, 1)
+		inner.KeyValue(0, entry.Key, entry.Value, keyStyle, valStyle, ':')
 	}
-	if leftLines > rightLines {
-		return leftLines
+
+	// Draw bottom border if visible
+	bottomY := 1 + len(card.Entries) - entryOffset
+	if bottomY >= 0 && bottomY < region.H {
+		for x := 1; x < region.W-1; x++ {
+			region.Cell(x, bottomY, '─', render.RgbOverlayBorder, render.RgbOverlayBg, terminal.AttrNone)
+		}
+		region.Cell(0, bottomY, '└', render.RgbOverlayBorder, render.RgbOverlayBg, terminal.AttrNone)
+		region.Cell(region.W-1, bottomY, '┘', render.RgbOverlayBorder, render.RgbOverlayBg, terminal.AttrNone)
 	}
-	return rightLines
 }
