@@ -7,11 +7,14 @@ import (
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/vi-fighter/terminal/tui"
 )
 
 // OverlayRenderer draws the modal overlay window
 type OverlayRenderer struct {
 	gameCtx *engine.GameContext
+	adapter *TUIAdapter
 }
 
 type overlaySection struct {
@@ -297,4 +300,77 @@ func (r *OverlayRenderer) countTotalLines(sections []overlaySection) int {
 		return l
 	}
 	return rLines
+}
+
+// TUIAdapter bridges terminal/tui to render.RenderBuffer
+type TUIAdapter struct {
+	cells  []terminal.Cell
+	width  int
+	height int
+}
+
+// NewTUIAdapter creates adapter with given dimensions
+func NewTUIAdapter(width, height int) *TUIAdapter {
+	size := width * height
+	cells := make([]terminal.Cell, size)
+	return &TUIAdapter{
+		cells:  cells,
+		width:  width,
+		height: height,
+	}
+}
+
+// Resize adjusts adapter dimensions, reallocating if needed
+func (a *TUIAdapter) Resize(width, height int) {
+	size := width * height
+	if cap(a.cells) < size {
+		a.cells = make([]terminal.Cell, size)
+	} else {
+		a.cells = a.cells[:size]
+	}
+	a.width = width
+	a.height = height
+}
+
+// Region returns a tui.Region covering the entire adapter buffer
+func (a *TUIAdapter) Region() tui.Region {
+	return tui.NewRegion(a.cells, a.width, 0, 0, a.width, a.height)
+}
+
+// SubRegion returns a tui.Region for a portion of the buffer
+func (a *TUIAdapter) SubRegion(x, y, w, h int) tui.Region {
+	return tui.NewRegion(a.cells, a.width, x, y, w, h)
+}
+
+// Clear fills buffer with specified background
+func (a *TUIAdapter) Clear(bg terminal.RGB) {
+	for i := range a.cells {
+		a.cells[i] = terminal.Cell{Rune: ' ', Bg: bg}
+	}
+}
+
+// FlushTo copies adapter buffer to RenderBuffer at offset with mask
+func (a *TUIAdapter) FlushTo(buf *render.RenderBuffer, offsetX, offsetY int, mask uint8) {
+	buf.SetWriteMask(mask)
+	for y := 0; y < a.height; y++ {
+		for x := 0; x < a.width; x++ {
+			idx := y*a.width + x
+			cell := a.cells[idx]
+			ch := cell.Rune
+			if ch == 0 {
+				ch = ' '
+			}
+			buf.SetWithBg(offsetX+x, offsetY+y, ch, cell.Fg, cell.Bg)
+		}
+	}
+}
+
+// Width returns adapter width
+func (a *TUIAdapter) Width() int {
+	return a.width
+}
+
+// Height returns adapter height
+func (a *TUIAdapter) Height() int {
+	return a.height
 }

@@ -38,6 +38,23 @@ const (
 	progressHalf  = '▌'
 )
 
+// Style bundles foreground, background, and attributes
+type Style struct {
+	Fg   terminal.RGB
+	Bg   terminal.RGB
+	Attr terminal.Attr
+}
+
+// DefaultStyle returns style with zero values (transparent bg)
+func DefaultStyle(fg terminal.RGB) Style {
+	return Style{Fg: fg}
+}
+
+// IsZero returns true if style has no colors or attributes set
+func (s Style) IsZero() bool {
+	return s.Fg == (terminal.RGB{}) && s.Bg == (terminal.RGB{}) && s.Attr == terminal.AttrNone
+}
+
 // Spinner frames
 var spinnerFrames = []rune{'⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'}
 
@@ -68,6 +85,103 @@ func (r Region) TextRight(y int, s string, fg, bg terminal.RGB, attr terminal.At
 func (r Region) TextCenter(y int, s string, fg, bg terminal.RGB, attr terminal.Attr) {
 	x := (r.W - RuneLen(s)) / 2
 	r.Text(x, y, s, fg, bg, attr)
+}
+
+// TextStyled renders text using Style struct
+func (r Region) TextStyled(x, y int, s string, style Style) {
+	if y < 0 || y >= r.H {
+		return
+	}
+	col := 0
+	for _, ch := range s {
+		if x+col >= r.W {
+			break
+		}
+		if x+col >= 0 {
+			r.Cell(x+col, y, ch, style.Fg, style.Bg, style.Attr)
+		}
+		col++
+	}
+}
+
+// KeyValue renders right-aligned key, separator, left-aligned value on row
+func (r Region) KeyValue(y int, key, value string, keyStyle, valStyle Style, sep rune) {
+	if y < 0 || y >= r.H || r.W < 3 {
+		return
+	}
+
+	keyW := r.W / 2
+	valW := r.W - keyW - 1
+
+	// Truncate if needed
+	keyRunes := []rune(key)
+	if len(keyRunes) > keyW {
+		keyRunes = keyRunes[:keyW-1]
+		keyRunes = append(keyRunes, '…')
+	}
+
+	valRunes := []rune(value)
+	if len(valRunes) > valW {
+		valRunes = valRunes[:valW-1]
+		valRunes = append(valRunes, '…')
+	}
+
+	// Right-align key
+	keyX := keyW - len(keyRunes)
+	for i, ch := range keyRunes {
+		r.Cell(keyX+i, y, ch, keyStyle.Fg, keyStyle.Bg, keyStyle.Attr)
+	}
+
+	// Separator
+	r.Cell(keyW, y, sep, keyStyle.Fg, keyStyle.Bg, terminal.AttrDim)
+
+	// Left-align value
+	for i, ch := range valRunes {
+		r.Cell(keyW+1+i, y, ch, valStyle.Fg, valStyle.Bg, valStyle.Attr)
+	}
+}
+
+// Divider draws horizontal line with optional centered label
+func (r Region) Divider(y int, label string, line LineType, fg terminal.RGB) {
+	if y < 0 || y >= r.H {
+		return
+	}
+	if line >= LineType(len(boxChars)) {
+		line = LineSingle
+	}
+
+	hChar := boxChars[line][boxH]
+
+	// Fill with horizontal line
+	for x := 0; x < r.W; x++ {
+		r.Cell(x, y, hChar, fg, terminal.RGB{}, terminal.AttrNone)
+	}
+
+	// Center label if provided
+	if label != "" && r.W > 4 {
+		text := " " + label + " "
+		textLen := RuneLen(text)
+		if textLen > r.W-2 {
+			text = Truncate(text, r.W-2)
+			textLen = RuneLen(text)
+		}
+		startX := (r.W - textLen) / 2
+		for i, ch := range text {
+			r.Cell(startX+i, y, ch, fg, terminal.RGB{}, terminal.AttrBold)
+		}
+	}
+}
+
+// BoxFilled draws border and fills interior with background
+func (r Region) BoxFilled(line LineType, fg, bg terminal.RGB) {
+	// Fill interior first
+	for y := 1; y < r.H-1; y++ {
+		for x := 1; x < r.W-1; x++ {
+			r.Cell(x, y, ' ', fg, bg, terminal.AttrNone)
+		}
+	}
+	// Draw border on top
+	r.Box(line, fg)
 }
 
 // Box draws border around region edge
@@ -258,6 +372,16 @@ func (r Region) Gauge(x, y, w int, value, max int, fg, bg terminal.RGB) {
 	r.Text(x+2+barW, y, label, fg, bg, terminal.AttrNone)
 }
 
+// CheckState represents checkbox visual state
+type CheckState uint8
+
+const (
+	CheckNone    CheckState = iota // [ ]
+	CheckPartial                   // [o]
+	CheckFull                      // [x]
+	CheckPlus                      // [+]
+)
+
 // Checkbox draws a checkbox indicator
 func (r Region) Checkbox(x, y int, state CheckState, fg terminal.RGB) {
 	if x < 0 || x+2 >= r.W || y < 0 || y >= r.H {
@@ -278,13 +402,3 @@ func (r Region) Checkbox(x, y int, state CheckState, fg terminal.RGB) {
 	r.Cell(x+1, y, ch, fg, terminal.RGB{}, terminal.AttrNone)
 	r.Cell(x+2, y, ']', fg, terminal.RGB{}, terminal.AttrNone)
 }
-
-// CheckState represents checkbox visual state
-type CheckState uint8
-
-const (
-	CheckNone    CheckState = iota // [ ]
-	CheckPartial                   // [o]
-	CheckFull                      // [x]
-	CheckPlus                      // [+]
-)
