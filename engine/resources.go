@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/core"
-	"github.com/lixenwraith/vi-fighter/engine/status"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/status"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 

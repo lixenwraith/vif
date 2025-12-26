@@ -160,7 +160,7 @@ func (r *Router) handleEscape() bool {
 		r.ctx.SetCommandText("")
 		r.ctx.SetPaused(false)
 	case core.ModeOverlay:
-		r.ctx.SetOverlayState(false, "", nil, 0)
+		r.ctx.SetOverlayState(false, "", 0)
 		r.ctx.SetPaused(false)
 	case core.ModeInsert:
 		// Nothing to clear

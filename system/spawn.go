@@ -14,8 +14,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/content"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
-	"github.com/lixenwraith/vi-fighter/engine/status"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/status"
 )
 
 // ColorLevelKey represents a unique color+level combination

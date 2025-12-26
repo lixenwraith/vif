@@ -9,8 +9,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
-	"github.com/lixenwraith/vi-fighter/engine/status"
 	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/vi-fighter/status"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 

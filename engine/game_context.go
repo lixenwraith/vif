@@ -7,8 +7,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
-	"github.com/lixenwraith/vi-fighter/engine/status"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/status"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -26,69 +26,58 @@ type UISnapshot struct {
 
 // GameContext holds all game state including the ECS world
 type GameContext struct {
-	// Central game state (spawn/content/phase state management)
-	State *GameState
+	// ===== Immutable After Init =====
+	// Set once during NewGameContext. Pointers/values never modified.
+	// Safe for concurrent read without synchronization.
 
-	// ECS World
-	World *World
+	World         *World            // ECS world; has internal locking for component access
+	State         *GameState        // Centralized game state; has internal atomics/mutex
+	eventQueue    *event.EventQueue // Lock-free MPSC queue
+	PausableClock *PausableClock    // Pausable time source; has internal sync
+	CursorEntity  core.Entity       // Singleton cursor entity ID; recreated only on :new
 
-	// Event queue for inter-system communication
-	eventQueue *event.EventQueue
+	// ===== Channels =====
+	// Inherently thread-safe for send operations.
 
-	// // Terminal interface
-	// Terminal terminal.Terminal
+	ResetChan chan<- struct{} // FSM reset signal; wired to ClockScheduler
 
-	// Pausable Clock time provider
-	PausableClock *PausableClock
+	// ===== Atomic (Self-Synchronized) =====
+	// Safe for concurrent access via atomic operations.
 
-	// FSM Reset channel, wired by main to ClockScheduler
-	ResetChan chan<- struct{}
+	FrameNumber atomic.Int64 // Render frame counter; incremented by main loop
+	mode        atomic.Int32 // Game mode (core.GameMode); set by Router
+	IsPaused    atomic.Bool  // Pause flag; actual timing handled by PausableClock
 
-	// Screen dimensions
-	Width, Height int
+	// ===== Main-Loop Exclusive =====
+	// Accessed only from main goroutine (input, resize, render).
+	// No synchronization required.
 
-	// Game area (excluding UI elements)
-	// TODO: review, usage and resize race
-	GameX, GameY          int
-	GameWidth, GameHeight int
+	Width, Height         int // Terminal dimensions
+	GameX, GameY          int // Game area offset from terminal origin
+	GameWidth, GameHeight int // Game area dimensions (excluding margins)
 
-	// Cursor entity (singleton)
-	CursorEntity core.Entity
+	// Input state (Router/InputHandler only; never accessed by scheduler/renderers)
+	LastSearchText  string // Preserved for n/N repeat
+	LastFindChar    rune   // Target character for f/F/t/T
+	LastFindForward bool   // true for f/t, false for F/T
+	LastFindType    rune   // Motion type: 'f', 'F', 't', or 'T'
 
-	// --- Thread-Safe State ---
+	// ===== Mutex-Protected (ui.mu) =====
+	// All access requires holding ui.mu (RLock for read, Lock for write).
 
-	// Authority: Total number of render cycles elapsed
-	FrameNumber atomic.Int64
-
-	// UI State uses ctx.ui.mu for locking and ctx.ui.fieldName for fields
 	ui struct {
-		mu            sync.RWMutex
+		mu sync.RWMutex
+
 		commandText   string
 		searchText    string
 		statusMessage string
 		lastCommand   string
-		overlayActive bool
-		overlayTitle  string
-		overlayScroll int
+
+		overlayActive  bool
+		overlayTitle   string
+		overlayScroll  int
+		overlayContent *core.OverlayContent // Typed overlay data
 	}
-
-	overlayContent *core.OverlayContent // Typed overlay content
-
-	// --- Input State ---
-
-	// Mode state (mode package is the authority)
-	mode atomic.Int32
-
-	// LastSearchText is kept public as it is internal to InputHandler state (no race with renderers)
-	LastSearchText string
-
-	// Find/Till motion state (for ; and , repeat commands)
-	LastFindChar    rune // Character that was searched for
-	LastFindForward bool // true for f/t (forward), false for F/T (backward)
-	LastFindType    rune // Type of last find: 'f', 'F', 't', or 'T'
-
-	// Pause state management (simplified - actual pause handled by PausableClock)
-	IsPaused atomic.Bool
 }
 
 // NewGameContext creates a GameContext using an existing ECS World
@@ -391,22 +380,10 @@ func (ctx *GameContext) SetCommandText(text string) {
 	ctx.ui.commandText = text
 }
 
-func (ctx *GameContext) AppendCommandText(text string) {
-	ctx.ui.mu.Lock()
-	defer ctx.ui.mu.Unlock()
-	ctx.ui.commandText += text
-}
-
 func (ctx *GameContext) SetSearchText(text string) {
 	ctx.ui.mu.Lock()
 	defer ctx.ui.mu.Unlock()
 	ctx.ui.searchText = text
-}
-
-func (ctx *GameContext) AppendSearchText(text string) {
-	ctx.ui.mu.Lock()
-	defer ctx.ui.mu.Unlock()
-	ctx.ui.searchText += text
 }
 
 func (ctx *GameContext) SetStatusMessage(msg string) {
@@ -421,10 +398,10 @@ func (ctx *GameContext) SetLastCommand(cmd string) {
 	ctx.ui.lastCommand = cmd
 }
 
-func (ctx *GameContext) SetOverlayState(active bool, title string, content []string, scroll int) {
+func (ctx *GameContext) SetOverlayState(active bool, title string, scroll int) {
 	ctx.ui.mu.Lock()
 	defer ctx.ui.mu.Unlock()
-	ctx.overlayContent = nil
+	ctx.ui.overlayContent = nil
 	ctx.ui.overlayActive = active
 	ctx.ui.overlayTitle = title
 	ctx.ui.overlayScroll = scroll
@@ -434,7 +411,7 @@ func (ctx *GameContext) SetOverlayState(active bool, title string, content []str
 func (ctx *GameContext) SetOverlayContent(content *core.OverlayContent) {
 	ctx.ui.mu.Lock()
 	defer ctx.ui.mu.Unlock()
-	ctx.overlayContent = content
+	ctx.ui.overlayContent = content
 	if content != nil {
 		ctx.ui.overlayTitle = content.Title
 		ctx.ui.overlayActive = true
@@ -449,7 +426,7 @@ func (ctx *GameContext) SetOverlayContent(content *core.OverlayContent) {
 func (ctx *GameContext) GetOverlayContent() *core.OverlayContent {
 	ctx.ui.mu.RLock()
 	defer ctx.ui.mu.RUnlock()
-	return ctx.overlayContent
+	return ctx.ui.overlayContent
 }
 
 func (ctx *GameContext) SetOverlayScroll(scroll int) {

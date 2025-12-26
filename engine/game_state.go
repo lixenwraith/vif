@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/engine/status"
+	"github.com/lixenwraith/vi-fighter/status"
 )
 
 // GameState centralizes game state with clear ownership boundaries

@@ -9,8 +9,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine/fsm"
-	"github.com/lixenwraith/vi-fighter/engine/status"
 	"github.com/lixenwraith/vi-fighter/event"
+	status2 "github.com/lixenwraith/vi-fighter/status"
 )
 
 // ClockScheduler manages game logic on a fixed tick
@@ -56,7 +56,7 @@ type ClockScheduler struct {
 	eventLoopBackoffMax int
 
 	// Cached metric pointers
-	statusReg        *status.Registry
+	statusReg        *status2.Registry
 	statTicks        *atomic.Int64
 	statEvBackoffs   *atomic.Int64
 	statEvDispatches *atomic.Int64
@@ -64,7 +64,7 @@ type ClockScheduler struct {
 	statQueueLen     *atomic.Int64
 
 	// FSM telemetry
-	statFSMName    *status.AtomicString
+	statFSMName    *status2.AtomicString
 	statFSMElapsed *atomic.Int64
 	statFSMMaxDur  *atomic.Int64
 	statFSMIndex   *atomic.Int64
@@ -85,7 +85,7 @@ func NewClockScheduler(
 
 	timeRes := MustGetResource[*TimeResource](world.Resources)
 	stateRes := MustGetResource[*GameStateResource](world.Resources)
-	statusReg := MustGetResource[*status.Registry](world.Resources)
+	statusReg := MustGetResource[*status2.Registry](world.Resources)
 	eqRes := MustGetResource[*EventQueueResource](world.Resources)
 
 	cs := &ClockScheduler{
