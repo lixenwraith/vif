@@ -96,24 +96,11 @@ type OverlayRenderer struct {
 	adapter *TUIAdapter
 }
 
-// overlaySection represents parsed content section
-type overlaySection struct {
-	header string
-	items  [][2]string
-	isHint bool
-}
-
 // NewOverlayRenderer creates a new overlay renderer
 func NewOverlayRenderer(gameCtx *engine.GameContext) *OverlayRenderer {
 	return &OverlayRenderer{
 		gameCtx: gameCtx,
 	}
-}
-
-// IsVisible returns true when the overlay should be rendered
-func (r *OverlayRenderer) IsVisible() bool {
-	uiSnapshot := r.gameCtx.GetUISnapshot()
-	return r.gameCtx.IsOverlayMode() && uiSnapshot.OverlayActive
 }
 
 // Render draws the overlay window using TUI primitives
@@ -151,6 +138,11 @@ func (r *OverlayRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 	r.adapter.FlushTo(buf, startX, startY, render.MaskUI)
 }
 
+// IsVisible implements render.VisibilityToggle
+func (r *OverlayRenderer) IsVisible() bool {
+	return r.gameCtx.IsOverlayActive()
+}
+
 func (r *OverlayRenderer) renderTypedContent(root tui.Region, content *core.OverlayContent, w, h int) {
 	// Title
 	if content.Title != "" {
@@ -174,7 +166,7 @@ func (r *OverlayRenderer) renderTypedContent(root tui.Region, content *core.Over
 	}
 
 	layouts := r.calculateCardLayouts(cards, contentW, contentH)
-	scroll := r.gameCtx.GetUISnapshot().OverlayScroll
+	scroll := r.gameCtx.GetOverlayScroll()
 
 	// Calculate total content height for scroll
 	totalH := 0

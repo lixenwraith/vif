@@ -90,8 +90,8 @@ func (s *MetaSystem) Update() {
 //
 // Other systems handle EventGameReset after this completes
 func (s *MetaSystem) handleGameReset() {
-	// Phase 1: Stop audio
-	s.ctx.StopAudio()
+	// Phase 1: Pause and stop audio
+	s.ctx.SetPaused(true)
 
 	// Phase 2: Synchronous World Cleanup
 	// Already inside world.RunSafe from main -> DispatchEventsImmediately

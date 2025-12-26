@@ -15,6 +15,12 @@ type Router struct {
 	ctx     *engine.GameContext
 	machine *input.Machine
 
+	// Input state (find/search repeat)
+	lastSearchText  string // Preserved for n/N repeat
+	lastFindChar    rune   // Target character for f/F/t/T
+	lastFindForward bool   // true for f/t, false for F/T
+	lastFindType    rune   // Motion type: 'f', 'F', 't', or 'T'
+
 	// Look-up tables: OpCode → Function
 	motionLUT map[input.MotionOp]MotionFunc
 	charLUT   map[input.MotionOp]CharMotionFunc
@@ -73,7 +79,7 @@ func (r *Router) Handle(intent *input.Intent) bool {
 	}
 
 	// Clear status message on any action
-	if r.ctx.GetUISnapshot().StatusMessage != "" {
+	if r.ctx.GetStatusMessage() != "" {
 		r.ctx.SetStatusMessage("")
 	}
 	r.ctx.State.RecordAction()
@@ -228,9 +234,9 @@ func (r *Router) handleCharMotion(intent *input.Intent) bool {
 
 		// Track for ; and , repeat
 		if result.Valid {
-			r.ctx.LastFindChar = intent.Char
-			r.ctx.LastFindType = motionOpToRune(intent.Motion)
-			r.ctx.LastFindForward = intent.Motion == input.MotionFindForward || intent.Motion == input.MotionTillForward
+			r.lastFindChar = intent.Char
+			r.lastFindType = motionOpToRune(intent.Motion)
+			r.lastFindForward = intent.Motion == input.MotionFindForward || intent.Motion == input.MotionTillForward
 		}
 	})
 
@@ -323,9 +329,9 @@ func (r *Router) handleOperatorCharMotion(intent *input.Intent) bool {
 
 		// Track for ; and , repeat
 		if result.Valid {
-			r.ctx.LastFindChar = intent.Char
-			r.ctx.LastFindType = motionOpToRune(intent.Motion)
-			r.ctx.LastFindForward = (intent.Motion == input.MotionFindForward || intent.Motion == input.MotionTillForward)
+			r.lastFindChar = intent.Char
+			r.lastFindType = motionOpToRune(intent.Motion)
+			r.lastFindForward = (intent.Motion == input.MotionFindForward || intent.Motion == input.MotionTillForward)
 		}
 	})
 
@@ -366,16 +372,16 @@ func (r *Router) handleSpecial(intent *input.Intent) bool {
 			OpDelete(r.ctx, result)
 
 		case input.SpecialSearchNext:
-			RepeatSearch(r.ctx, true)
+			RepeatSearch(r.ctx, r.lastSearchText, true)
 
 		case input.SpecialSearchPrev:
-			RepeatSearch(r.ctx, false)
+			RepeatSearch(r.ctx, r.lastSearchText, false)
 
 		case input.SpecialRepeatFind:
-			executeRepeatFind(r.ctx, false)
+			r.executeRepeatFind(false)
 
 		case input.SpecialRepeatFindRev:
-			executeRepeatFind(r.ctx, true)
+			r.executeRepeatFind(true)
 		}
 	})
 
@@ -469,27 +475,28 @@ func (r *Router) handleInsertChar(char rune) {
 }
 
 func (r *Router) handleSearchChar(char rune) {
-	snapshot := r.ctx.GetUISnapshot()
-	r.ctx.SetSearchText(snapshot.SearchText + string(char))
+	searchText := r.ctx.GetSearchText()
+	r.ctx.SetSearchText(searchText + string(char))
 }
 
 func (r *Router) handleCommandChar(char rune) {
-	snapshot := r.ctx.GetUISnapshot()
-	r.ctx.SetCommandText(snapshot.CommandText + string(char))
+	commandText := r.ctx.GetCommandText()
+	r.ctx.SetCommandText(commandText + string(char))
 }
 
 func (r *Router) handleTextBackspace() bool {
 	currentMode := r.ctx.GetMode()
-	snapshot := r.ctx.GetUISnapshot()
 
 	switch currentMode {
 	case core.ModeSearch:
-		if len(snapshot.SearchText) > 0 {
-			r.ctx.SetSearchText(snapshot.SearchText[:len(snapshot.SearchText)-1])
+		searchText := r.ctx.GetSearchText()
+		if len(searchText) > 0 {
+			r.ctx.SetSearchText(searchText[:len(searchText)-1])
 		}
 	case core.ModeCommand:
-		if len(snapshot.CommandText) > 0 {
-			r.ctx.SetCommandText(snapshot.CommandText[:len(snapshot.CommandText)-1])
+		commandText := r.ctx.GetCommandText()
+		if len(commandText) > 0 {
+			r.ctx.SetCommandText(commandText[:len(commandText)-1])
 		}
 	case core.ModeInsert:
 		// Backspace in Insert mode is move left and delete character
@@ -501,14 +508,14 @@ func (r *Router) handleTextBackspace() bool {
 
 func (r *Router) handleTextConfirm() bool {
 	currentMode := r.ctx.GetMode()
-	snapshot := r.ctx.GetUISnapshot()
 
 	switch currentMode {
 	case core.ModeSearch:
-		if snapshot.SearchText != "" {
+		searchText := r.ctx.GetSearchText()
+		if searchText != "" {
 			r.ctx.World.RunSafe(func() {
-				if PerformSearch(r.ctx, snapshot.SearchText, true) {
-					r.ctx.LastSearchText = snapshot.SearchText
+				if PerformSearch(r.ctx, searchText, true) {
+					r.lastSearchText = searchText
 				}
 			})
 		}
@@ -517,11 +524,11 @@ func (r *Router) handleTextConfirm() bool {
 		r.machine.SetMode(input.ModeNormal)
 
 	case core.ModeCommand:
-		command := snapshot.CommandText
+		commandText := r.ctx.GetCommandText()
 
 		var result CommandResult
 		r.ctx.World.RunSafe(func() {
-			result = ExecuteCommand(r.ctx, command)
+			result = ExecuteCommand(r.ctx, commandText)
 		})
 
 		r.ctx.SetCommandText("")
@@ -641,8 +648,6 @@ func (r *Router) handleOverlayActivate() bool {
 }
 
 func (r *Router) handleOverlayPageScroll(direction int) bool {
-	snapshot := r.ctx.GetUISnapshot()
-
 	// Calculate visible height based on overlay dimensions
 	overlayH := int(float64(r.ctx.Height) * constant.OverlayHeightPercent)
 	// TODO: to constant if not delete, check in tiny pane
@@ -656,7 +661,7 @@ func (r *Router) handleOverlayPageScroll(direction int) bool {
 		pageSize = 1
 	}
 
-	newScroll := snapshot.OverlayScroll + (direction * pageSize)
+	newScroll := r.ctx.GetOverlayScroll() + (direction * pageSize)
 	if newScroll < 0 {
 		newScroll = 0
 	}
@@ -666,8 +671,7 @@ func (r *Router) handleOverlayPageScroll(direction int) bool {
 }
 
 func (r *Router) handleOverlayScroll(intent *input.Intent) bool {
-	snapshot := r.ctx.GetUISnapshot()
-	newScroll := snapshot.OverlayScroll + int(intent.ScrollDir)
+	newScroll := r.ctx.GetOverlayScroll() + int(intent.ScrollDir)
 
 	if newScroll < 0 {
 		newScroll = 0

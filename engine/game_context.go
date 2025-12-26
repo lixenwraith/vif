@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"sync"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
@@ -11,18 +10,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/status"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
-
-// TODO: Refactor this with GameContext.ui
-// UISnapshot provides a consistent view of UI state for rendering
-type UISnapshot struct {
-	CommandText   string
-	SearchText    string
-	StatusMessage string
-	LastCommand   string
-	OverlayActive bool
-	OverlayTitle  string
-	OverlayScroll int
-}
 
 // GameContext holds all game state including the ECS world
 type GameContext struct {
@@ -47,6 +34,7 @@ type GameContext struct {
 	FrameNumber atomic.Int64 // Render frame counter; incremented by main loop
 	mode        atomic.Int32 // Game mode (core.GameMode); set by Router
 	IsPaused    atomic.Bool  // Pause flag; actual timing handled by PausableClock
+	IsMuted     atomic.Bool  // Mute flag; keeps mute state
 
 	// ===== Main-Loop Exclusive =====
 	// Accessed only from main goroutine (input, resize, render).
@@ -56,28 +44,20 @@ type GameContext struct {
 	GameX, GameY          int // Game area offset from terminal origin
 	GameWidth, GameHeight int // Game area dimensions (excluding margins)
 
-	// Input state (Router/InputHandler only; never accessed by scheduler/renderers)
-	LastSearchText  string // Preserved for n/N repeat
-	LastFindChar    rune   // Target character for f/F/t/T
-	LastFindForward bool   // true for f/t, false for F/T
-	LastFindType    rune   // Motion type: 'f', 'F', 't', or 'T'
-
 	// ===== Mutex-Protected (ui.mu) =====
 	// All access requires holding ui.mu (RLock for read, Lock for write).
 
-	ui struct {
-		mu sync.RWMutex
+	// Status bar state (atomic pointers for lock-free access)
+	commandText   atomic.Pointer[string]
+	searchText    atomic.Pointer[string]
+	statusMessage atomic.Pointer[string]
+	lastCommand   atomic.Pointer[string]
 
-		commandText   string
-		searchText    string
-		statusMessage string
-		lastCommand   string
-
-		overlayActive  bool
-		overlayTitle   string
-		overlayScroll  int
-		overlayContent *core.OverlayContent // Typed overlay data
-	}
+	// Overlay state (atomic for lock-free access)
+	overlayActive  atomic.Bool
+	overlayTitle   atomic.Pointer[string]
+	overlayScroll  atomic.Int32
+	overlayContent atomic.Pointer[core.OverlayContent]
 }
 
 // NewGameContext creates a GameContext using an existing ECS World
@@ -147,102 +127,24 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	zIndexResolver := NewZIndexResolver(ctx.World)
 	AddResource(ctx.World.Resources, zIndexResolver)
 
+	// Initialize atomic string pointers to empty strings
+	empty := ""
+	ctx.commandText.Store(&empty)
+	ctx.searchText.Store(&empty)
+	ctx.statusMessage.Store(&empty)
+	ctx.lastCommand.Store(&empty)
+	ctx.overlayTitle.Store(&empty)
+
+	// Initialize audio muted
+	ctx.IsMuted.Store(true)
+
 	// Initialize pause state
 	ctx.IsPaused.Store(false)
 
 	return ctx
 }
 
-// CreateCursorEntity handles standard cursor entity creation and component attachment
-// Centralizes logic shared between NewGameContext and :new command
-func (ctx *GameContext) CreateCursorEntity() {
-	// Create cursor entity at the center of the screen
-	ctx.CursorEntity = ctx.World.CreateEntity()
-	ctx.World.Positions.Set(ctx.CursorEntity, component.PositionComponent{
-		X: ctx.GameWidth / 2,
-		Y: ctx.GameHeight / 2,
-	})
-
-	GetStore[component.CursorComponent](ctx.World).Set(ctx.CursorEntity, component.CursorComponent{})
-
-	// Make cursor indestructible
-	GetStore[component.ProtectionComponent](ctx.World).Set(ctx.CursorEntity, component.ProtectionComponent{
-		Mask:      component.ProtectAll,
-		ExpiresAt: 0, // No expiry
-	})
-
-	// Set PingComponent to cursor (handles crosshair and grid state)
-	GetStore[component.PingComponent](ctx.World).Set(ctx.CursorEntity, component.PingComponent{
-		ShowCrosshair:  true,
-		CrosshairColor: component.ColorNormal,
-		GridActive:     false,
-		GridRemaining:  0,
-		GridColor:      component.ColorNormal,
-		ContextAware:   true,
-	})
-
-	// Set HeatComponent to cursor
-	GetStore[component.HeatComponent](ctx.World).Set(ctx.CursorEntity, component.HeatComponent{})
-
-	// Set EnergyComponent to cursor
-	GetStore[component.EnergyComponent](ctx.World).Set(ctx.CursorEntity, component.EnergyComponent{})
-
-	// Set ShieldComponent to cursor (initially invisible via GameState.ShieldActive)
-	GetStore[component.ShieldComponent](ctx.World).Set(ctx.CursorEntity, component.ShieldComponent{
-		RadiusX:       vmath.FromFloat(constant.ShieldRadiusX),
-		RadiusY:       vmath.FromFloat(constant.ShieldRadiusY),
-		OverrideColor: component.ColorNone,
-		MaxOpacity:    constant.ShieldMaxOpacity,
-		LastDrainTime: ctx.PausableClock.Now(),
-	})
-
-	// Set BoostComponent to cursor
-	GetStore[component.BoostComponent](ctx.World).Set(ctx.CursorEntity, component.BoostComponent{})
-}
-
-// ===== INPUT-SPECIFIC METHODS =====
-
-// SetPaused sets the pause state using the pausable clock
-func (ctx *GameContext) SetPaused(paused bool) {
-	wasPaused := ctx.IsPaused.Load()
-	ctx.IsPaused.Store(paused)
-
-	if paused && !wasPaused {
-		// Starting pause
-		ctx.PausableClock.Pause()
-		ctx.StopAudio()
-	} else if !paused && wasPaused {
-		// Ending pause
-		ctx.PausableClock.Resume()
-	}
-}
-
-// GetAudioPlayer retrieves audio player from resources
-// Returns nil if audio unavailable
-func (ctx *GameContext) GetAudioPlayer() AudioPlayer {
-	if res, ok := GetResource[*AudioResource](ctx.World.Resources); ok {
-		return res.Player
-	}
-	return nil
-}
-
-// StopAudio mutes audio during pause (sounds complete naturally)
-func (ctx *GameContext) StopAudio() {
-	player := ctx.GetAudioPlayer()
-	if player != nil && player.IsRunning() && !player.IsMuted() {
-		player.ToggleMute()
-	}
-}
-
-// ToggleAudioMute toggles the mute state of the audio engine
-// Returns the new mute state (true if muted, false if unmuted)
-func (ctx *GameContext) ToggleAudioMute() bool {
-	player := ctx.GetAudioPlayer()
-	if player != nil {
-		return player.ToggleMute()
-	}
-	return false
-}
+// ===== Screen =====
 
 // updateGameArea calculates the game area dimensions
 func (ctx *GameContext) updateGameArea() {
@@ -322,6 +224,25 @@ func (ctx *GameContext) cleanupOutOfBoundsEntities(width, height int) {
 	ctx.World.Positions.ResizeGrid(width, height)
 }
 
+// === Frame Number Accessories ===
+
+// GetFrameNumber returns the live render frame index
+func (ctx *GameContext) GetFrameNumber() int64 {
+	return ctx.FrameNumber.Load()
+}
+
+// IncrementFrameNumber advances the frame authority (called by Render Loop)
+func (ctx *GameContext) IncrementFrameNumber() int64 {
+	return ctx.FrameNumber.Add(1)
+}
+
+// ===== EVENT QUEUE METHODS =====
+
+// PushEvent adds an event to the event queue using the World's optimized dispatcher, ensuring consistent frame-stamping across game space and input sources
+func (ctx *GameContext) PushEvent(eventType event.EventType, payload any) {
+	ctx.World.PushEvent(eventType, payload)
+}
+
 // ===== MODE ACCESSORS =====
 
 // GetMode returns the current game mode
@@ -354,103 +275,193 @@ func (ctx *GameContext) IsOverlayMode() bool {
 	return ctx.GetMode() == core.ModeOverlay
 }
 
-// ===== UI STATE ACCESSORS =====
+// ===== STATUS BAR ACCESSORS =====
 
-// GetUISnapshot returns a thread-safe copy of all UI state for rendering
-func (ctx *GameContext) GetUISnapshot() UISnapshot {
-	ctx.ui.mu.RLock()
-	defer ctx.ui.mu.RUnlock()
-
-	// Content slice copy is shallow (backing array shared), but writer typically replaces
-	// the whole slice, making this safe for concurrent read/replace usage.
-	return UISnapshot{
-		CommandText:   ctx.ui.commandText,
-		SearchText:    ctx.ui.searchText,
-		StatusMessage: ctx.ui.statusMessage,
-		LastCommand:   ctx.ui.lastCommand,
-		OverlayActive: ctx.ui.overlayActive,
-		OverlayTitle:  ctx.ui.overlayTitle,
-		OverlayScroll: ctx.ui.overlayScroll,
+func (ctx *GameContext) GetCommandText() string {
+	if p := ctx.commandText.Load(); p != nil {
+		return *p
 	}
+	return ""
 }
 
 func (ctx *GameContext) SetCommandText(text string) {
-	ctx.ui.mu.Lock()
-	defer ctx.ui.mu.Unlock()
-	ctx.ui.commandText = text
+	ctx.commandText.Store(&text)
+}
+
+func (ctx *GameContext) GetSearchText() string {
+	if p := ctx.searchText.Load(); p != nil {
+		return *p
+	}
+	return ""
 }
 
 func (ctx *GameContext) SetSearchText(text string) {
-	ctx.ui.mu.Lock()
-	defer ctx.ui.mu.Unlock()
-	ctx.ui.searchText = text
+	ctx.searchText.Store(&text)
+}
+
+func (ctx *GameContext) GetStatusMessage() string {
+	if p := ctx.statusMessage.Load(); p != nil {
+		return *p
+	}
+	return ""
 }
 
 func (ctx *GameContext) SetStatusMessage(msg string) {
-	ctx.ui.mu.Lock()
-	defer ctx.ui.mu.Unlock()
-	ctx.ui.statusMessage = msg
+	ctx.statusMessage.Store(&msg)
+}
+
+func (ctx *GameContext) GetLastCommand() string {
+	if p := ctx.lastCommand.Load(); p != nil {
+		return *p
+	}
+	return ""
 }
 
 func (ctx *GameContext) SetLastCommand(cmd string) {
-	ctx.ui.mu.Lock()
-	defer ctx.ui.mu.Unlock()
-	ctx.ui.lastCommand = cmd
+	ctx.lastCommand.Store(&cmd)
 }
 
-func (ctx *GameContext) SetOverlayState(active bool, title string, scroll int) {
-	ctx.ui.mu.Lock()
-	defer ctx.ui.mu.Unlock()
-	ctx.ui.overlayContent = nil
-	ctx.ui.overlayActive = active
-	ctx.ui.overlayTitle = title
-	ctx.ui.overlayScroll = scroll
+// ===== OVERLAY ACCESSORS =====
+
+func (ctx *GameContext) IsOverlayActive() bool {
+	return ctx.overlayActive.Load()
 }
 
-// SetOverlayContent sets typed overlay content (used for debug/stats)
-func (ctx *GameContext) SetOverlayContent(content *core.OverlayContent) {
-	ctx.ui.mu.Lock()
-	defer ctx.ui.mu.Unlock()
-	ctx.ui.overlayContent = content
-	if content != nil {
-		ctx.ui.overlayTitle = content.Title
-		ctx.ui.overlayActive = true
-	} else {
-		ctx.ui.overlayActive = false
-		ctx.ui.overlayTitle = ""
+func (ctx *GameContext) GetOverlayTitle() string {
+	if p := ctx.overlayTitle.Load(); p != nil {
+		return *p
 	}
-	ctx.ui.overlayScroll = 0
+	return ""
 }
 
-// GetOverlayContent returns typed overlay content if set
-func (ctx *GameContext) GetOverlayContent() *core.OverlayContent {
-	ctx.ui.mu.RLock()
-	defer ctx.ui.mu.RUnlock()
-	return ctx.ui.overlayContent
+func (ctx *GameContext) GetOverlayScroll() int {
+	return int(ctx.overlayScroll.Load())
 }
 
 func (ctx *GameContext) SetOverlayScroll(scroll int) {
-	ctx.ui.mu.Lock()
-	defer ctx.ui.mu.Unlock()
-	ctx.ui.overlayScroll = scroll
+	ctx.overlayScroll.Store(int32(scroll))
 }
 
-// === Frame Number Accessories ===
-
-// GetFrameNumber returns the live render frame index
-func (ctx *GameContext) GetFrameNumber() int64 {
-	return ctx.FrameNumber.Load()
+func (ctx *GameContext) GetOverlayContent() *core.OverlayContent {
+	return ctx.overlayContent.Load()
 }
 
-// IncrementFrameNumber advances the frame authority (called by Render Loop)
-func (ctx *GameContext) IncrementFrameNumber() int64 {
-	return ctx.FrameNumber.Add(1)
+func (ctx *GameContext) SetOverlayState(active bool, title string, scroll int) {
+	ctx.overlayContent.Store(nil)
+	ctx.overlayActive.Store(active)
+	ctx.overlayTitle.Store(&title)
+	ctx.overlayScroll.Store(int32(scroll))
 }
 
-// ===== EVENT QUEUE METHODS =====
+func (ctx *GameContext) SetOverlayContent(content *core.OverlayContent) {
+	ctx.overlayContent.Store(content)
+	if content != nil {
+		ctx.overlayTitle.Store(&content.Title)
+		ctx.overlayActive.Store(true)
+	} else {
+		ctx.overlayActive.Store(false)
+		empty := ""
+		ctx.overlayTitle.Store(&empty)
+	}
+	ctx.overlayScroll.Store(0)
+}
 
-// PushEvent adds an event to the event queue using the World's optimized dispatcher
-// This ensures consistent frame-stamping across simulation and input sources
-func (ctx *GameContext) PushEvent(eventType event.EventType, payload any) {
-	ctx.World.PushEvent(eventType, payload)
+// ===== Cursor Entity =====
+
+// CreateCursorEntity handles standard cursor entity creation and component attachment
+func (ctx *GameContext) CreateCursorEntity() {
+	// Create cursor entity at the center of the screen
+	ctx.CursorEntity = ctx.World.CreateEntity()
+	ctx.World.Positions.Set(ctx.CursorEntity, component.PositionComponent{
+		X: ctx.GameWidth / 2,
+		Y: ctx.GameHeight / 2,
+	})
+
+	GetStore[component.CursorComponent](ctx.World).Set(ctx.CursorEntity, component.CursorComponent{})
+
+	// Make cursor indestructible
+	GetStore[component.ProtectionComponent](ctx.World).Set(ctx.CursorEntity, component.ProtectionComponent{
+		Mask:      component.ProtectAll,
+		ExpiresAt: 0, // No expiry
+	})
+
+	// Set PingComponent to cursor (handles crosshair and grid state)
+	GetStore[component.PingComponent](ctx.World).Set(ctx.CursorEntity, component.PingComponent{
+		ShowCrosshair:  true,
+		CrosshairColor: component.ColorNormal,
+		GridActive:     false,
+		GridRemaining:  0,
+		GridColor:      component.ColorNormal,
+		ContextAware:   true,
+	})
+
+	// Set HeatComponent to cursor
+	GetStore[component.HeatComponent](ctx.World).Set(ctx.CursorEntity, component.HeatComponent{})
+
+	// Set EnergyComponent to cursor
+	GetStore[component.EnergyComponent](ctx.World).Set(ctx.CursorEntity, component.EnergyComponent{})
+
+	// Set ShieldComponent to cursor (initially invisible via GameState.ShieldActive)
+	GetStore[component.ShieldComponent](ctx.World).Set(ctx.CursorEntity, component.ShieldComponent{
+		RadiusX:       vmath.FromFloat(constant.ShieldRadiusX),
+		RadiusY:       vmath.FromFloat(constant.ShieldRadiusY),
+		OverrideColor: component.ColorNone,
+		MaxOpacity:    constant.ShieldMaxOpacity,
+		LastDrainTime: ctx.PausableClock.Now(),
+	})
+
+	// Set BoostComponent to cursor
+	GetStore[component.BoostComponent](ctx.World).Set(ctx.CursorEntity, component.BoostComponent{})
+}
+
+// ===== Audio =====
+
+// GetAudioPlayer retrieves audio player from resources
+// Returns nil if audio unavailable
+func (ctx *GameContext) GetAudioPlayer() AudioPlayer {
+	if res, ok := GetResource[*AudioResource](ctx.World.Resources); ok {
+		return res.Player
+	}
+	return nil
+}
+
+// ToggleAudioMute toggles the mute state of the audio engine
+// Returns the new mute state (true if muted, false if unmuted)
+func (ctx *GameContext) ToggleAudioMute() bool {
+	player := ctx.GetAudioPlayer()
+	if player == nil {
+		return ctx.IsMuted.Load()
+	}
+	newMuted := player.ToggleMute()
+	ctx.IsMuted.Store(newMuted)
+	return newMuted
+}
+
+// ===== Pause =====
+
+// SetPaused sets the pause state using the pausable clock
+func (ctx *GameContext) SetPaused(paused bool) {
+	wasPaused := ctx.IsPaused.Load()
+	ctx.IsPaused.Store(paused)
+
+	player := ctx.GetAudioPlayer()
+
+	if paused && !wasPaused {
+		ctx.PausableClock.Pause()
+		// Capture pre-pause state, then mute for pause
+		if player != nil && player.IsRunning() {
+			ctx.IsMuted.Store(player.IsMuted())
+			if !player.IsMuted() {
+				player.ToggleMute()
+			}
+		}
+	} else if !paused && wasPaused {
+		ctx.PausableClock.Resume()
+		// Restore pre-pause state (respects user toggle during pause)
+		if player != nil && player.IsRunning() {
+			if !ctx.IsMuted.Load() && player.IsMuted() {
+				player.ToggleMute()
+			}
+		}
+	}
 }

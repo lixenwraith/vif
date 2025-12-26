@@ -49,11 +49,11 @@ func PerformSearch(ctx *engine.GameContext, searchText string, forward bool) boo
 }
 
 // RepeatSearch repeats the last search in the specified direction
-func RepeatSearch(ctx *engine.GameContext, forward bool) bool {
-	if ctx.LastSearchText == "" {
+func RepeatSearch(ctx *engine.GameContext, lastSearchText string, forward bool) bool {
+	if lastSearchText == "" {
 		return false
 	}
-	return PerformSearch(ctx, ctx.LastSearchText, forward)
+	return PerformSearch(ctx, lastSearchText, forward)
 }
 
 // buildCharacterGrid builds a 2D map of characters from the ECS

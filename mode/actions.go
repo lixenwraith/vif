@@ -1,29 +1,25 @@
 package mode
 
-import (
-	"github.com/lixenwraith/vi-fighter/engine"
-)
-
 // executeRepeatFind repeats the last find/till command
-func executeRepeatFind(ctx *engine.GameContext, reverse bool) {
-	if ctx.LastFindType == 0 {
+func (r *Router) executeRepeatFind(reverse bool) {
+	if r.lastFindType == 0 {
 		return
 	}
 
-	pos, ok := ctx.World.Positions.Get(ctx.CursorEntity)
+	pos, ok := r.ctx.World.Positions.Get(r.ctx.CursorEntity)
 	if !ok {
 		return
 	}
 
-	originalChar := ctx.LastFindChar
-	originalType := ctx.LastFindType
-	originalForward := ctx.LastFindForward
+	originalChar := r.lastFindChar
+	originalType := r.lastFindType
+	originalForward := r.lastFindForward
 
 	var charMotion CharMotionFunc
 
 	// Determine motion based on direction and reversal
 	if reverse {
-		switch ctx.LastFindType {
+		switch r.lastFindType {
 		case 'f':
 			charMotion = MotionFindBack
 		case 'F':
@@ -34,7 +30,7 @@ func executeRepeatFind(ctx *engine.GameContext, reverse bool) {
 			charMotion = MotionTillForward
 		}
 	} else {
-		switch ctx.LastFindType {
+		switch r.lastFindType {
 		case 'f':
 			charMotion = MotionFindForward
 		case 'F':
@@ -46,11 +42,11 @@ func executeRepeatFind(ctx *engine.GameContext, reverse bool) {
 		}
 	}
 
-	result := charMotion(ctx, pos.X, pos.Y, 1, ctx.LastFindChar)
-	OpMove(ctx, result)
+	result := charMotion(r.ctx, pos.X, pos.Y, 1, r.lastFindChar)
+	OpMove(r.ctx, result)
 
 	// Restore original state because OpMove/CharMotion logic might update it to the 'reversed' type
-	ctx.LastFindChar = originalChar
-	ctx.LastFindType = originalType
-	ctx.LastFindForward = originalForward
+	r.lastFindChar = originalChar
+	r.lastFindType = originalType
+	r.lastFindForward = originalForward
 }

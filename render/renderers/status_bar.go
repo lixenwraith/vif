@@ -68,9 +68,6 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 // Render implements SystemRenderer
 func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(render.MaskUI)
-	// Get consistent snapshot of UI state
-	uiSnapshot := r.gameCtx.GetUISnapshot()
-
 	statusY := ctx.GameY + ctx.GameHeight + 1
 
 	// Bounds check: skip if status row outside screen
@@ -128,10 +125,11 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 
 	// Last command indicator
+	lastCommand := r.gameCtx.GetLastCommand()
 	leftEndX := x
-	if uiSnapshot.LastCommand != "" && !r.gameCtx.IsSearchMode() && !r.gameCtx.IsCommandMode() {
+	if lastCommand != "" && !r.gameCtx.IsSearchMode() && !r.gameCtx.IsCommandMode() {
 		leftEndX++
-		for _, ch := range uiSnapshot.LastCommand {
+		for _, ch := range lastCommand {
 			if leftEndX >= ctx.Width {
 				return
 			}
@@ -144,8 +142,9 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 
 	// Search, command, or status text
+	searchText := r.gameCtx.GetSearchText()
 	if r.gameCtx.IsSearchMode() {
-		searchText := "/" + uiSnapshot.SearchText
+		searchText = "/" + searchText
 		for _, ch := range searchText {
 			if leftEndX >= ctx.Width {
 				return
@@ -154,21 +153,25 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			leftEndX++
 		}
 	} else if r.gameCtx.IsCommandMode() {
-		cmdText := ":" + uiSnapshot.CommandText
-		for _, ch := range cmdText {
+		commandText := r.gameCtx.GetCommandText()
+		commandText = ":" + commandText
+		for _, ch := range commandText {
 			if leftEndX >= ctx.Width {
 				return
 			}
 			buf.SetWithBg(leftEndX, statusY, ch, render.RgbCommandInputText, render.RgbBackground)
 			leftEndX++
 		}
-	} else if uiSnapshot.StatusMessage != "" {
-		for _, ch := range uiSnapshot.StatusMessage {
-			if leftEndX >= ctx.Width {
-				return
+	} else {
+		statusMessage := r.gameCtx.GetStatusMessage()
+		if statusMessage != "" {
+			for _, ch := range statusMessage {
+				if leftEndX >= ctx.Width {
+					return
+				}
+				buf.SetWithBg(leftEndX, statusY, ch, render.RgbStatusMessageText, render.RgbBackground)
+				leftEndX++
 			}
-			buf.SetWithBg(leftEndX, statusY, ch, render.RgbStatusMessageText, render.RgbBackground)
-			leftEndX++
 		}
 	}
 
