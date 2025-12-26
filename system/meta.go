@@ -200,7 +200,7 @@ func (s *MetaSystem) handleDebugRequest() {
 	}
 
 	lines = append(lines, "")
-	lines = append(lines, "~ESC or ENTER to close")
+	lines = append(lines, "~ESC to close")
 
 	s.ctx.SetOverlayState(true, " DEBUG ", lines, 0)
 }

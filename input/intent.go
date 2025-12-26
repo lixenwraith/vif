@@ -39,8 +39,11 @@ const (
 	IntentInsertDeleteBack    // Backspace in Insert mode (delete prev + move)
 
 	// Overlay mode
-	IntentOverlayScroll // j/k/arrows
-	IntentOverlayClose  // ESC/Enter
+	IntentOverlayScroll   // j/k/arrows
+	IntentOverlayActivate // Enter/Space (future: section toggle)
+	IntentOverlayClose    // ESC/q
+	IntentOverlayPageUp   // PgUp
+	IntentOverlayPageDown // PgDn
 )
 
 // MotionOp identifies motion algorithm

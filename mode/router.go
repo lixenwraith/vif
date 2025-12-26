@@ -135,6 +135,12 @@ func (r *Router) Handle(intent *input.Intent) bool {
 	// Overlay
 	case input.IntentOverlayScroll:
 		return r.handleOverlayScroll(intent)
+	case input.IntentOverlayActivate:
+		return r.handleOverlayActivate()
+	case input.IntentOverlayPageUp:
+		return r.handleOverlayPageScroll(-1)
+	case input.IntentOverlayPageDown:
+		return r.handleOverlayPageScroll(1)
 	case input.IntentOverlayClose:
 		return r.handleOverlayClose()
 	}
@@ -643,6 +649,27 @@ func (r *Router) handleOverlayClose() bool {
 	r.ctx.SetMode(core.ModeNormal)
 	r.machine.SetMode(input.ModeNormal)
 	r.ctx.SetPaused(false)
+	return true
+}
+
+// TODO: future implementation
+func (r *Router) handleOverlayActivate() bool {
+	// Stub: future section toggle/expand functionality
+	return true
+}
+
+func (r *Router) handleOverlayPageScroll(direction int) bool {
+	snapshot := r.ctx.GetUISnapshot()
+	// Page scroll by half visible height (estimate 20 lines visible)
+	pageSize := 10
+	newScroll := snapshot.OverlayScroll + (direction * pageSize)
+
+	if newScroll < 0 {
+		newScroll = 0
+	}
+	// Upper bound handled by renderer based on content
+
+	r.ctx.SetOverlayScroll(newScroll)
 	return true
 }
 

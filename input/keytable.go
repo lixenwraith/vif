@@ -169,13 +169,16 @@ func DefaultKeyTable() *KeyTable {
 		OverlayRunes: map[rune]KeyEntry{
 			'j': {BehaviorMotion, MotionDown, SpecialNone, ModeTargetNone, IntentNone},
 			'k': {BehaviorMotion, MotionUp, SpecialNone, ModeTargetNone, IntentNone},
+			'q': {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentOverlayClose},
 		},
 
 		OverlayKeys: map[terminal.Key]KeyEntry{
-			terminal.KeyUp:     {BehaviorMotion, MotionUp, SpecialNone, ModeTargetNone, IntentNone},
-			terminal.KeyDown:   {BehaviorMotion, MotionDown, SpecialNone, ModeTargetNone, IntentNone},
-			terminal.KeyEscape: {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentOverlayClose},
-			terminal.KeyEnter:  {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentOverlayClose},
+			terminal.KeyUp:       {BehaviorMotion, MotionUp, SpecialNone, ModeTargetNone, IntentNone},
+			terminal.KeyDown:     {BehaviorMotion, MotionDown, SpecialNone, ModeTargetNone, IntentNone},
+			terminal.KeyEscape:   {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentOverlayClose},
+			terminal.KeyEnter:    {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentOverlayActivate},
+			terminal.KeyPageUp:   {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentOverlayPageUp},
+			terminal.KeyPageDown: {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentOverlayPageDown},
 		},
 
 		// Navigation keys valid in Insert/Search/Command modes
