@@ -2,6 +2,7 @@ package renderers
 
 import (
 	"github.com/lixenwraith/vi-fighter/component"
+	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
@@ -55,7 +56,7 @@ func NewHeatMeterRenderer(ctx *engine.GameContext) *HeatMeterRenderer {
 
 // Render implements SystemRenderer
 func (r *HeatMeterRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	buf.SetWriteMask(render.MaskUI)
+	buf.SetWriteMask(constant.MaskUI)
 
 	// Calculate Fill Limit from HeatComponent
 	heat := 0

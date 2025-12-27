@@ -49,7 +49,7 @@ func (r *EffectsRenderer) buildCleanerGradient() {
 
 // Render draws all visual effects
 func (r *EffectsRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	buf.SetWriteMask(render.MaskEffect)
+	buf.SetWriteMask(constant.MaskEffect)
 	// Draw decay (only if there are decay entities)
 	r.drawDecay(ctx, buf)
 

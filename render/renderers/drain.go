@@ -26,7 +26,7 @@ func NewDrainRenderer(gameCtx *engine.GameContext) *DrainRenderer {
 
 // Render draws all drain entities
 func (r *DrainRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	buf.SetWriteMask(render.MaskEffect)
+	buf.SetWriteMask(constant.MaskEffect)
 	// Get all drains
 	drainEntities := r.drainStore.All()
 	if len(drainEntities) == 0 {

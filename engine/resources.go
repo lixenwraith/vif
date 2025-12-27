@@ -157,14 +157,6 @@ type ConfigResource struct {
 type RenderConfig struct {
 	// Color Configuration
 	ColorMode terminal.ColorMode // 0=256, 1=TrueColor
-
-	// Post-Processing: Grayout (Desaturation)
-	GrayoutDuration time.Duration
-	GrayoutMask     uint8
-
-	// Post-Processing: Dim (Brightness Reduction)
-	DimFactor float64
-	DimMask   uint8
 }
 
 // EventQueueResource wraps the event queue for system access

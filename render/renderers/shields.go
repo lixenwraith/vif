@@ -2,6 +2,7 @@ package renderers
 
 import (
 	"github.com/lixenwraith/vi-fighter/component"
+	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
@@ -69,7 +70,7 @@ func NewShieldRenderer(gameCtx *engine.GameContext) *ShieldRenderer {
 
 // Render draws all active shields with quadratic falloff gradient
 func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	buf.SetWriteMask(render.MaskShield)
+	buf.SetWriteMask(constant.MaskShield)
 	shields := r.shieldStore.All()
 	if len(shields) == 0 {
 		return

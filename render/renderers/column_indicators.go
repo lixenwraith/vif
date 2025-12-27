@@ -1,6 +1,7 @@
 package renderers
 
 import (
+	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -19,7 +20,7 @@ func NewColumnIndicatorsRenderer(gameCtx *engine.GameContext) *ColumnIndicatorsR
 
 // Render implements SystemRenderer
 func (r *ColumnIndicatorsRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	buf.SetWriteMask(render.MaskUI)
+	buf.SetWriteMask(constant.MaskUI)
 	indicatorY := ctx.GameY + ctx.GameHeight
 
 	for x := 0; x < ctx.GameWidth; x++ {

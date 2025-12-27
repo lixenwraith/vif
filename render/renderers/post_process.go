@@ -1,6 +1,7 @@
 package renderers
 
 import (
+	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -22,8 +23,7 @@ func (r *DimRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer)
 	if !ctx.IsPaused {
 		return
 	}
-	cfg := engine.MustGetResource[*engine.RenderConfig](r.gameCtx.World.Resources)
-	buf.MutateDim(cfg.DimFactor, cfg.DimMask)
+	buf.MutateDim(constant.DimFactor, constant.DimMask)
 }
 
 // GrayoutRenderer applies desaturation effect based on game state
@@ -40,10 +40,9 @@ func NewGrayoutRenderer(ctx *engine.GameContext) *GrayoutRenderer {
 
 // Render applies grayscale with intensity from game state
 func (r *GrayoutRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	cfg := engine.MustGetResource[*engine.RenderConfig](r.gameCtx.World.Resources)
-	intensity := r.gameCtx.State.GetGrayoutIntensity(ctx.GameTime, cfg.GrayoutDuration)
+	intensity := r.gameCtx.State.GetGrayoutIntensity(ctx.GameTime, constant.GrayoutDuration)
 	if intensity <= 0 {
 		return
 	}
-	buf.MutateGrayscale(intensity, cfg.GrayoutMask)
+	buf.MutateGrayscale(intensity, constant.GrayoutMask)
 }

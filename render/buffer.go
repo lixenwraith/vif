@@ -33,7 +33,7 @@ func NewRenderBuffer(width, height int) *RenderBuffer {
 		cells:       cells,
 		touched:     touched,
 		masks:       masks,
-		currentMask: MaskNone,
+		currentMask: constant.MaskNone,
 		width:       width,
 		height:      height,
 	}
@@ -68,7 +68,7 @@ func (b *RenderBuffer) Clear() {
 		Attrs: terminal.AttrNone,
 	}
 	b.touched[0] = false
-	b.masks[0] = MaskNone
+	b.masks[0] = constant.MaskNone
 
 	for filled := 1; filled < len(b.cells); filled *= 2 {
 		copy(b.cells[filled:], b.cells[:filled])
@@ -80,7 +80,7 @@ func (b *RenderBuffer) Clear() {
 		copy(b.masks[filled:], b.masks[:filled])
 	}
 
-	b.currentMask = MaskNone
+	b.currentMask = constant.MaskNone
 }
 
 // SetWriteMask sets the mask for subsequent draw operations
@@ -270,8 +270,7 @@ func (b *RenderBuffer) finalize() {
 			b.cells[i].Bg = RgbBackground
 		} else if constant.OcclusionDimEnabled && b.cells[i].Rune != 0 {
 			// Dim background when foreground character present
-			if b.masks[i]&(MaskEffect|MaskEntity) != 0 {
-				// if b.masks[i]&(MaskEffect|MaskGrid) != 0 {
+			if b.masks[i]&(constant.OcclusionDimMask) != 0 {
 				b.cells[i].Bg = Scale(b.cells[i].Bg, constant.OcclusionDimFactor)
 			}
 		}

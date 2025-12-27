@@ -1,6 +1,7 @@
 package renderers
 
 import (
+	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -19,7 +20,7 @@ func NewLineNumbersRenderer(gameCtx *engine.GameContext) *LineNumbersRenderer {
 
 // Render implements SystemRenderer
 func (r *LineNumbersRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	buf.SetWriteMask(render.MaskUI)
+	buf.SetWriteMask(constant.MaskUI)
 
 	for y := 0; y < ctx.GameHeight; y++ {
 		relativeNum := y - ctx.CursorY

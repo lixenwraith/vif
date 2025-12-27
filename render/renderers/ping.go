@@ -2,6 +2,7 @@ package renderers
 
 import (
 	"github.com/lixenwraith/vi-fighter/component"
+	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
@@ -43,7 +44,7 @@ func (r *PingRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 		return
 	}
 
-	buf.SetWriteMask(render.MaskGrid)
+	buf.SetWriteMask(constant.MaskGrid)
 
 	// 1. Compute Shield Exclusion Mask
 	r.computeExclusionMask(r.gameCtx.World, ctx.GameWidth, ctx.GameHeight)

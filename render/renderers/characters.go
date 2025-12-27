@@ -2,6 +2,7 @@ package renderers
 
 import (
 	"github.com/lixenwraith/vi-fighter/component"
+	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
@@ -23,7 +24,7 @@ func NewCharactersRenderer(gameCtx *engine.GameContext) *CharactersRenderer {
 
 // Render draws all character entities
 func (r *CharactersRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	buf.SetWriteMask(render.MaskEntity)
+	buf.SetWriteMask(constant.MaskEntity)
 
 	// Query entities with both position and character
 	entities := r.charStore.All()

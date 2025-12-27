@@ -39,7 +39,7 @@ func (r *CursorRenderer) IsVisible() bool {
 
 // Render draws the cursor
 func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	buf.SetWriteMask(render.MaskUI)
+	buf.SetWriteMask(constant.MaskUI)
 	screenX := ctx.GameX + ctx.CursorX
 	screenY := ctx.GameY + ctx.CursorY
 

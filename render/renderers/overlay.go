@@ -135,7 +135,7 @@ func (r *OverlayRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 		r.renderTypedContent(root, content, overlayW, overlayH)
 	}
 
-	r.adapter.FlushTo(buf, startX, startY, render.MaskUI)
+	r.adapter.FlushTo(buf, startX, startY, constant.MaskUI)
 }
 
 // IsVisible implements render.VisibilityToggle

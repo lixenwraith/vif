@@ -114,14 +114,7 @@ func main() {
 	// 10. Render Orchestrator
 	// Resolve color mode for RenderConfig
 	colorMode := term.ColorMode()
-	renderConfig := &engine.RenderConfig{
-		ColorMode: colorMode,
-		// TODO: post-render effects should not initialize here
-		GrayoutDuration: 1 * time.Second,
-		GrayoutMask:     render.MaskEntity,
-		DimFactor:       0.5,
-		DimMask:         render.MaskAll ^ render.MaskUI,
-	}
+	renderConfig := &engine.RenderConfig{ColorMode: colorMode}
 	engine.AddResource(ctx.World.Resources, renderConfig)
 
 	orchestrator := render.NewRenderOrchestrator(term, ctx.Width, ctx.Height)
