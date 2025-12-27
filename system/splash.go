@@ -82,6 +82,7 @@ func (s *SplashSystem) Priority() int {
 // EventTypes defines the events this system subscribes to
 func (s *SplashSystem) EventTypes() []event.EventType {
 	return []event.EventType{
+		event.EventGameReset,
 		event.EventSplashRequest,
 		event.EventGoldSpawned,
 		event.EventGoldComplete,
@@ -93,6 +94,15 @@ func (s *SplashSystem) EventTypes() []event.EventType {
 
 // HandleEvent processes events to create or destroy splash entities
 func (s *SplashSystem) HandleEvent(ev event.GameEvent) {
+	if ev.Type == event.EventGameReset {
+		s.Init()
+		return
+	}
+
+	if !s.enabled {
+		return
+	}
+
 	switch ev.Type {
 	case event.EventSplashRequest:
 		if payload, ok := ev.Payload.(*event.SplashRequestPayload); ok {
@@ -118,6 +128,10 @@ func (s *SplashSystem) HandleEvent(ev event.GameEvent) {
 
 // Update manages lifecycle of splashes (expiry, timer updates, magnifier validation)
 func (s *SplashSystem) Update() {
+	if !s.enabled {
+		return
+	}
+
 	dt := s.res.Time.DeltaTime
 
 	entities := s.splashStore.All()

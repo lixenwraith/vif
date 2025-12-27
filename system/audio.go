@@ -48,12 +48,22 @@ func (s *AudioSystem) Priority() int {
 // EventTypes returns the event types AudioSystem handles
 func (s *AudioSystem) EventTypes() []event.EventType {
 	return []event.EventType{
+		event.EventGameReset,
 		event.EventSoundRequest,
 	}
 }
 
 // HandleEvent processes sound request events
 func (s *AudioSystem) HandleEvent(ev event.GameEvent) {
+	if ev.Type == event.EventGameReset {
+		s.Init()
+		return
+	}
+
+	if !s.enabled {
+		return
+	}
+
 	if s.player == nil {
 		return
 	}
@@ -65,4 +75,8 @@ func (s *AudioSystem) HandleEvent(ev event.GameEvent) {
 }
 
 // Update implements System interface (no tick-based logic)
-func (s *AudioSystem) Update() {}
+func (s *AudioSystem) Update() {
+	if !s.enabled {
+		return
+	}
+}

@@ -54,11 +54,21 @@ func (s *CompositeSystem) Priority() int {
 
 func (s *CompositeSystem) EventTypes() []event.EventType {
 	return []event.EventType{
+		event.EventGameReset,
 		event.EventMemberTyped,
 	}
 }
 
 func (s *CompositeSystem) HandleEvent(ev event.GameEvent) {
+	if ev.Type == event.EventGameReset {
+		s.Init()
+		return
+	}
+
+	if !s.enabled {
+		return
+	}
+
 	if ev.Type != event.EventMemberTyped {
 		return
 	}
@@ -76,6 +86,10 @@ func (s *CompositeSystem) HandleEvent(ev event.GameEvent) {
 }
 
 func (s *CompositeSystem) Update() {
+	if !s.enabled {
+		return
+	}
+
 	anchors := s.headerStore.All()
 
 	for _, anchor := range anchors {

@@ -102,6 +102,15 @@ func (s *GoldSystem) EventTypes() []event.EventType {
 
 // HandleEvent processes gold events
 func (s *GoldSystem) HandleEvent(ev event.GameEvent) {
+	if ev.Type == event.EventGameReset {
+		s.Init()
+		return
+	}
+
+	if !s.enabled {
+		return
+	}
+
 	switch ev.Type {
 	// TODO: implement enabled event for all systems
 	case event.EventGoldEnable:
@@ -143,14 +152,15 @@ func (s *GoldSystem) HandleEvent(ev event.GameEvent) {
 				s.handleGoldComplete()
 			}
 		}
-
-	case event.EventGameReset:
-		s.Init()
 	}
 }
 
 // Update runs the gold sequence system logic
 func (s *GoldSystem) Update() {
+	if !s.enabled {
+		return
+	}
+
 	now := s.res.Time.GameTime
 
 	s.mu.Lock()

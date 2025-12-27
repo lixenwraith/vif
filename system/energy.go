@@ -80,6 +80,15 @@ func (s *EnergySystem) EventTypes() []event.EventType {
 
 // HandleEvent processes input-related events from the router
 func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
+	if ev.Type == event.EventGameReset {
+		s.Init()
+		return
+	}
+
+	if !s.enabled {
+		return
+	}
+
 	switch ev.Type {
 	case event.EventDeleteRequest:
 		if payload, ok := ev.Payload.(*event.DeleteRequestPayload); ok {
@@ -103,14 +112,15 @@ func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventEnergyBlinkStop:
 		s.stopBlink()
-
-	case event.EventGameReset:
-		s.Init()
 	}
 }
 
 // Update manages blink timeout and shield activation state
 func (s *EnergySystem) Update() {
+	if !s.enabled {
+		return
+	}
+
 	dt := s.res.Time.DeltaTime
 	cursorEntity := s.res.Cursor.Entity
 

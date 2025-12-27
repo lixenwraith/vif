@@ -43,11 +43,15 @@ func (s *HeatSystem) Priority() int {
 }
 
 func (s *HeatSystem) Update() {
+	if !s.enabled {
+		return
+	}
 	// No tick-based logic; all mutations via events
 }
 
 func (s *HeatSystem) EventTypes() []event.EventType {
 	return []event.EventType{
+		event.EventGameReset,
 		event.EventHeatAdd,
 		event.EventHeatSet,
 		event.EventManualCleanerTrigger,
@@ -55,6 +59,15 @@ func (s *HeatSystem) EventTypes() []event.EventType {
 }
 
 func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
+	if ev.Type == event.EventGameReset {
+		s.Init()
+		return
+	}
+
+	if !s.enabled {
+		return
+	}
+
 	switch ev.Type {
 	case event.EventHeatAdd:
 		if payload, ok := ev.Payload.(*event.HeatAddPayload); ok {

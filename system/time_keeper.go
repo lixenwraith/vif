@@ -50,12 +50,22 @@ func (s *TimeKeeperSystem) Priority() int {
 // EventTypes returns the event types TimeKeeperSystem handles
 func (s *TimeKeeperSystem) EventTypes() []event.EventType {
 	return []event.EventType{
+		event.EventGameReset,
 		event.EventTimerStart,
 	}
 }
 
 // HandleEvent processes timer registration events
 func (s *TimeKeeperSystem) HandleEvent(ev event.GameEvent) {
+	if ev.Type == event.EventGameReset {
+		s.Init()
+		return
+	}
+
+	if !s.enabled {
+		return
+	}
+
 	if ev.Type == event.EventTimerStart {
 		if payload, ok := ev.Payload.(*event.TimerStartPayload); ok {
 			s.timerStore.Set(payload.Entity, component.TimerComponent{
@@ -67,6 +77,10 @@ func (s *TimeKeeperSystem) HandleEvent(ev event.GameEvent) {
 
 // Update decrements timers and handles expiration
 func (s *TimeKeeperSystem) Update() {
+	if !s.enabled {
+		return
+	}
+
 	entities := s.timerStore.All()
 	dt := s.res.Time.DeltaTime
 

@@ -94,6 +94,15 @@ func (s *DecaySystem) EventTypes() []event.EventType {
 
 // HandleEvent processes decay-related events
 func (s *DecaySystem) HandleEvent(ev event.GameEvent) {
+	if ev.Type == event.EventGameReset {
+		s.Init()
+		return
+	}
+
+	if !s.enabled {
+		return
+	}
+
 	switch ev.Type {
 	case event.EventDecayWave:
 		s.spawnDecayWave()
@@ -102,14 +111,15 @@ func (s *DecaySystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.DecaySpawnPayload); ok {
 			s.spawnSingleDecay(payload.X, payload.Y, payload.Char, payload.SkipStartCell)
 		}
-
-	case event.EventGameReset:
-		s.Init()
 	}
 }
 
 // Update runs the decay system logic
 func (s *DecaySystem) Update() {
+	if !s.enabled {
+		return
+	}
+
 	count := s.decayStore.Count()
 	if count == 0 {
 		s.statCount.Store(0)

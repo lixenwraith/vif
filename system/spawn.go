@@ -165,17 +165,23 @@ func (s *SpawnSystem) EventTypes() []event.EventType {
 
 // HandleEvent processes spawn configuration events
 func (s *SpawnSystem) HandleEvent(ev event.GameEvent) {
+	if ev.Type == event.EventGameReset {
+		s.Init()
+		s.statRateMult.Set(1.0)
+		s.statDensity.Set(0.0)
+		return
+	}
+
+	if !s.enabled {
+		return
+	}
+
 	switch ev.Type {
 	case event.EventSpawnChange:
 		if payload, ok := ev.Payload.(*event.SpawnChangePayload); ok {
 			s.enabled = payload.Enabled
 			s.statEnabled.Store(payload.Enabled)
 		}
-
-	case event.EventGameReset:
-		s.Init()
-		s.statRateMult.Set(1.0)
-		s.statDensity.Set(0.0)
 	}
 }
 

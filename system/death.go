@@ -65,6 +65,15 @@ func (s *DeathSystem) EventTypes() []event.EventType {
 }
 
 func (s *DeathSystem) HandleEvent(ev event.GameEvent) {
+	if ev.Type == event.EventGameReset {
+		s.Init()
+		return
+	}
+
+	if !s.enabled {
+		return
+	}
+
 	switch ev.Type {
 	case event.EventDeathOne:
 		// HOT PATH: Priority check for bit-packed uint64
@@ -89,9 +98,6 @@ func (s *DeathSystem) HandleEvent(ev event.GameEvent) {
 			}
 			event.ReleaseDeathRequest(p)
 		}
-
-	case event.EventGameReset:
-		s.Init()
 	}
 }
 
@@ -176,6 +182,10 @@ func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType
 // Update processes entities tagged with DeathComponent by systems not using the event path.
 // This preserves the "deferred" cleanup logic for OOB or timer-based destruction.
 func (s *DeathSystem) Update() {
+	if !s.enabled {
+		return
+	}
+
 	entities := s.deathStore.All()
 	if len(entities) == 0 {
 		return

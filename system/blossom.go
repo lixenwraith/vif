@@ -98,6 +98,15 @@ func (s *BlossomSystem) EventTypes() []event.EventType {
 
 // HandleEvent processes blossom-related events
 func (s *BlossomSystem) HandleEvent(ev event.GameEvent) {
+	if ev.Type == event.EventGameReset {
+		s.Init()
+		return
+	}
+
+	if !s.enabled {
+		return
+	}
+
 	switch ev.Type {
 	case event.EventBlossomWave:
 		s.spawnBlossomWave()
@@ -105,14 +114,15 @@ func (s *BlossomSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.BlossomSpawnPayload); ok {
 			s.spawnSingleBlossom(payload.X, payload.Y, payload.Char, payload.SkipStartCell)
 		}
-
-	case event.EventGameReset:
-		s.Init()
 	}
 }
 
 // Update runs the blossom system logic
 func (s *BlossomSystem) Update() {
+	if !s.enabled {
+		return
+	}
+
 	count := s.blossomStore.Count()
 	if count == 0 {
 		s.statCount.Store(0)

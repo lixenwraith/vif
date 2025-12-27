@@ -93,6 +93,15 @@ func (s *NuggetSystem) EventTypes() []event.EventType {
 
 // HandleEvent processes nugget-related events
 func (s *NuggetSystem) HandleEvent(ev event.GameEvent) {
+	if ev.Type == event.EventGameReset {
+		s.Init()
+		return
+	}
+
+	if !s.enabled {
+		return
+	}
+
 	switch ev.Type {
 	case event.EventNuggetJumpRequest:
 		s.handleJumpRequest()
@@ -115,9 +124,6 @@ func (s *NuggetSystem) HandleEvent(ev event.GameEvent) {
 			}
 			s.mu.Unlock()
 		}
-
-	case event.EventGameReset:
-		s.Init()
 	}
 }
 

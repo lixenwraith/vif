@@ -51,12 +51,22 @@ func (s *PingSystem) Priority() int {
 // EventTypes returns the event types PingSystem handles
 func (s *PingSystem) EventTypes() []event.EventType {
 	return []event.EventType{
+		event.EventGameReset,
 		event.EventPingGridRequest,
 	}
 }
 
 // HandleEvent processes ping-related events
 func (s *PingSystem) HandleEvent(ev event.GameEvent) {
+	if ev.Type == event.EventGameReset {
+		s.Init()
+		return
+	}
+
+	if !s.enabled {
+		return
+	}
+
 	if ev.Type == event.EventPingGridRequest {
 		if payload, ok := ev.Payload.(*event.PingGridRequestPayload); ok {
 			s.handleGridRequest(payload.Duration)
@@ -66,6 +76,10 @@ func (s *PingSystem) HandleEvent(ev event.GameEvent) {
 
 // Update handles time-based logic for ping components
 func (s *PingSystem) Update() {
+	if !s.enabled {
+		return
+	}
+
 	entities := s.pingStore.All()
 	dt := s.res.Time.DeltaTime
 

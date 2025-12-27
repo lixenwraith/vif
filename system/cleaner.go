@@ -84,6 +84,15 @@ func (s *CleanerSystem) EventTypes() []event.EventType {
 
 // HandleEvent processes cleaner-related events from the router
 func (s *CleanerSystem) HandleEvent(ev event.GameEvent) {
+	if ev.Type == event.EventGameReset {
+		s.Init()
+		return
+	}
+
+	if !s.enabled {
+		return
+	}
+
 	// Check if we already spawned for this frame (deduplication)
 	if s.spawned[ev.Frame] {
 		return
@@ -101,15 +110,15 @@ func (s *CleanerSystem) HandleEvent(ev event.GameEvent) {
 			s.spawned[ev.Frame] = true
 			s.hasSpawnedSession = true
 		}
-
-	case event.EventGameReset:
-		s.Init()
-		return
 	}
 }
 
 // Update handles spawning, movement, collision, and cleanup synchronously
 func (s *CleanerSystem) Update() {
+	if !s.enabled {
+		return
+	}
+
 	config := s.res.Config
 
 	// Clean old entries from spawned map

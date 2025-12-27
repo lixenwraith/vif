@@ -51,12 +51,22 @@ func (s *MaterializeSystem) Priority() int {
 // EventTypes returns event types handled
 func (s *MaterializeSystem) EventTypes() []event.EventType {
 	return []event.EventType{
+		event.EventGameReset,
 		event.EventMaterializeRequest,
 	}
 }
 
 // HandleEvent processes requests to spawn visual effects
 func (s *MaterializeSystem) HandleEvent(ev event.GameEvent) {
+	if ev.Type == event.EventGameReset {
+		s.Init()
+		return
+	}
+
+	if !s.enabled {
+		return
+	}
+
 	if ev.Type == event.EventMaterializeRequest {
 		if payload, ok := ev.Payload.(*event.MaterializeRequestPayload); ok {
 			s.spawnMaterializeEffect(payload.X, payload.Y, payload.Type)
@@ -66,6 +76,10 @@ func (s *MaterializeSystem) HandleEvent(ev event.GameEvent) {
 
 // Update updates materialize spawner entities and triggers spawn completion events
 func (s *MaterializeSystem) Update() {
+	if !s.enabled {
+		return
+	}
+
 	dtFixed := vmath.FromFloat(s.res.Time.DeltaTime.Seconds())
 	// Cap delta time to prevent tunneling on lag spikes
 	dtCap := vmath.FromFloat(0.1)

@@ -64,6 +64,15 @@ func (s *BoostSystem) EventTypes() []event.EventType {
 }
 
 func (s *BoostSystem) HandleEvent(ev event.GameEvent) {
+	if ev.Type == event.EventGameReset {
+		s.Init()
+		return
+	}
+
+	if !s.enabled {
+		return
+	}
+
 	switch ev.Type {
 	case event.EventBoostActivate:
 		if payload, ok := ev.Payload.(*event.BoostActivatePayload); ok {
@@ -75,13 +84,15 @@ func (s *BoostSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.BoostExtendPayload); ok {
 			s.extend(payload.Duration)
 		}
-	case event.EventGameReset:
-		s.Init()
 	}
 }
 
 // Update handles boost duration decrement using Delta Time
 func (s *BoostSystem) Update() {
+	if !s.enabled {
+		return
+	}
+
 	dt := s.res.Time.DeltaTime
 	cursorEntity := s.res.Cursor.Entity
 

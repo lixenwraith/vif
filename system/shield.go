@@ -65,6 +65,15 @@ func (s *ShieldSystem) EventTypes() []event.EventType {
 
 // HandleEvent processes shield-related events from the router
 func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
+	if ev.Type == event.EventGameReset {
+		s.Init()
+		return
+	}
+
+	if !s.enabled {
+		return
+	}
+
 	cursorEntity := s.res.Cursor.Entity
 
 	switch ev.Type {
@@ -94,14 +103,15 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.ShieldDrainPayload); ok {
 			s.applyConvergentDrain(payload.Amount)
 		}
-
-	case event.EventGameReset:
-		s.Init()
 	}
 }
 
 // Update handles passive shield drain
 func (s *ShieldSystem) Update() {
+	if !s.enabled {
+		return
+	}
+
 	cursorEntity := s.res.Cursor.Entity
 
 	shield, ok := s.shieldStore.Get(cursorEntity)

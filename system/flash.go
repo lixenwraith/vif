@@ -44,11 +44,21 @@ func (s *FlashSystem) Priority() int {
 
 func (s *FlashSystem) EventTypes() []event.EventType {
 	return []event.EventType{
+		event.EventGameReset,
 		event.EventFlashRequest,
 	}
 }
 
 func (s *FlashSystem) HandleEvent(ev event.GameEvent) {
+	if ev.Type == event.EventGameReset {
+		s.Init()
+		return
+	}
+
+	if !s.enabled {
+		return
+	}
+
 	if ev.Type == event.EventFlashRequest {
 		if payload, ok := ev.Payload.(*event.FlashRequestPayload); ok {
 			s.spawnDestructionFlash(payload.X, payload.Y, payload.Char)
@@ -57,6 +67,10 @@ func (s *FlashSystem) HandleEvent(ev event.GameEvent) {
 }
 
 func (s *FlashSystem) Update() {
+	if !s.enabled {
+		return
+	}
+
 	dt := s.res.Time.DeltaTime
 	entities := s.flashStore.All()
 	for _, entity := range entities {

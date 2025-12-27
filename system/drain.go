@@ -115,6 +115,15 @@ func (s *DrainSystem) EventTypes() []event.EventType {
 
 // HandleEvent processes events
 func (s *DrainSystem) HandleEvent(ev event.GameEvent) {
+	if ev.Type == event.EventGameReset {
+		s.Init()
+		return
+	}
+
+	if !s.enabled {
+		return
+	}
+
 	switch ev.Type {
 	case event.EventMaterializeComplete:
 		if payload, ok := ev.Payload.(*event.SpawnCompletePayload); ok {
@@ -123,14 +132,15 @@ func (s *DrainSystem) HandleEvent(ev event.GameEvent) {
 				s.materializeDrainAt(payload.X, payload.Y)
 			}
 		}
-
-	case event.EventGameReset:
-		s.Init()
 	}
 }
 
 // Update runs the drain system logic
 func (s *DrainSystem) Update() {
+	if !s.enabled {
+		return
+	}
+
 	// TODO: revisit the tick source
 	currentTick := s.res.State.State.GetGameTicks()
 

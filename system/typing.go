@@ -75,7 +75,11 @@ func (s *TypingSystem) Priority() int {
 	return constant.PriorityTyping
 }
 
-func (s *TypingSystem) Update() {}
+func (s *TypingSystem) Update() {
+	if !s.enabled {
+		return
+	}
+}
 
 func (s *TypingSystem) EventTypes() []event.EventType {
 	return []event.EventType{
@@ -85,6 +89,15 @@ func (s *TypingSystem) EventTypes() []event.EventType {
 }
 
 func (s *TypingSystem) HandleEvent(ev event.GameEvent) {
+	if ev.Type == event.EventGameReset {
+		s.Init()
+		return
+	}
+
+	if !s.enabled {
+		return
+	}
+
 	switch ev.Type {
 	case event.EventCharacterTyped:
 		payload, ok := ev.Payload.(*event.CharacterTypedPayload)
@@ -93,9 +106,6 @@ func (s *TypingSystem) HandleEvent(ev event.GameEvent) {
 		}
 		s.handleTyping(payload.X, payload.Y, payload.Char)
 		event.CharacterTypedPayloadPool.Put(payload)
-
-	case event.EventGameReset:
-		s.Init()
 	}
 }
 
