@@ -93,11 +93,7 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		shield, okS := r.shieldStore.Get(entity)
 		pos, okP := r.gameCtx.World.Positions.Get(entity)
 
-		if !okS || !okP {
-			continue
-		}
-
-		if !shield.Active {
+		if !okS || !okP || !shield.Active {
 			continue
 		}
 

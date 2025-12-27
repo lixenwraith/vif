@@ -43,26 +43,6 @@ func (s *ShieldSystem) Init() {
 // initLocked performs session state reset
 func (s *ShieldSystem) initLocked() {
 	s.statActive.Store(false)
-	s.cacheInverseRadii()
-}
-
-// cacheInverseRadii precomputes Q16.16 inverse squared radii for ellipse checks
-func (s *ShieldSystem) cacheInverseRadii() {
-	cursorEntity := s.res.Cursor.Entity
-	shield, ok := s.shieldStore.Get(cursorEntity)
-	if !ok {
-		panic(nil)
-	}
-	rx := vmath.FromFloat(constant.ShieldRadiusX)
-	ry := vmath.FromFloat(constant.ShieldRadiusY)
-
-	shield.RadiusX = rx
-	shield.RadiusY = ry
-
-	// Use pre-computed inverse squared radii
-	shield.InvRxSq, shield.InvRySq = vmath.EllipseInvRadiiSq(rx, ry)
-
-	s.shieldStore.Set(cursorEntity, shield)
 }
 
 // Priority returns the system's priority
@@ -88,6 +68,12 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventShieldActivate:
 		shield, ok := s.shieldStore.Get(cursorEntity)
 		if ok {
+			// Calculation cache on activation since at init cursor may not be read when game is reset
+			rx := vmath.FromFloat(constant.ShieldRadiusX)
+			ry := vmath.FromFloat(constant.ShieldRadiusY)
+			shield.RadiusX = rx
+			shield.RadiusY = ry
+			shield.InvRxSq, shield.InvRySq = vmath.EllipseInvRadiiSq(rx, ry)
 			shield.Active = true
 			s.shieldStore.Set(cursorEntity, shield)
 		}
@@ -118,6 +104,11 @@ func (s *ShieldSystem) Update() {
 	shield, ok := s.shieldStore.Get(cursorEntity)
 	if !ok || !shield.Active {
 		return
+	}
+
+	// TODO: if panics, add Lazy computation on first tick
+	if shield.InvRxSq == 0 || shield.InvRySq == 0 {
+		panic(nil)
 	}
 
 	now := s.res.Time.GameTime
