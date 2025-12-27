@@ -28,8 +28,6 @@ type MetaSystem struct {
 	nuggetStore  *engine.Store[component.NuggetComponent]
 	cleanerStore *engine.Store[component.CleanerComponent]
 	decayStore   *engine.Store[component.DecayComponent]
-
-	enabled bool
 }
 
 // NewMetaSystem creates a new meta system
@@ -58,7 +56,7 @@ func (s *MetaSystem) Init() {
 
 // initLocked performs session state reset
 func (s *MetaSystem) initLocked() {
-	s.enabled = true
+	// No-op
 }
 
 // Priority returns the system's priority

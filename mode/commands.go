@@ -44,6 +44,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleBoostCommand(ctx)
 	case "god":
 		return handleGodCommand(ctx)
+	case "demon":
+		return handleDemonCommand(ctx)
 	case "spawn":
 		return handleSpawnCommand(ctx, args)
 	case "blossom":
@@ -146,6 +148,14 @@ func handleGodCommand(ctx *engine.GameContext) CommandResult {
 	ctx.PushEvent(event.EventHeatSet, &event.HeatSetPayload{Value: constant.MaxHeat})
 	ctx.PushEvent(event.EventEnergySet, &event.EnergySetPayload{Value: constant.GodEnergyAmount})
 	ctx.SetLastCommand(":god")
+	return CommandResult{Continue: true, KeepPaused: false}
+}
+
+// handleDemonCommand sets heat to max and energy to high value
+func handleDemonCommand(ctx *engine.GameContext) CommandResult {
+	ctx.PushEvent(event.EventHeatSet, &event.HeatSetPayload{Value: constant.MaxHeat})
+	ctx.PushEvent(event.EventEnergySet, &event.EnergySetPayload{Value: -constant.GodEnergyAmount})
+	ctx.SetLastCommand(":demon")
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 

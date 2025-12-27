@@ -28,7 +28,7 @@ const (
 
 // God Mode
 const (
-	GodEnergyAmount = 100_000_000
+	GodEnergyAmount = 100_000_000_000
 )
 
 // Gold Mechanics

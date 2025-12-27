@@ -369,31 +369,11 @@ func (s *TypingSystem) handleTypeable(entity core.Entity, typeable component.Typ
 	// Universal rewards
 	s.applyUniversalRewards()
 
-	// Type-specific handling
+	// Type-specific handling, placeholder for other type additions
 	switch typeable.Type {
-	// case component.TypeNugget:
-	// 	s.world.PushEvent(event.EventNuggetCollected, &event.NuggetCollectedPayload{
-	// 		Entity: entity,
-	// 	})
-	//
-	// 	// Nugget bonus: cleaners at max heat, else up to +10 heat
-	// 	if s.getHeat() >= constant.MaxHeat {
-	// 		cursorPos, _ := s.world.Positions.Get(cursorEntity)
-	// 		// Trigger directional cleaners if heat is already at maximum
-	// 		s.world.PushEvent(event.EventDirectionalCleanerRequest, &event.DirectionalCleanerPayload{
-	// 			OriginX: cursorPos.X,
-	// 			OriginY: cursorPos.Y,
-	// 		})
-	// 	} else {
-	// 		// Provide heat reward only when below maximum
-	// 		s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: constant.NuggetHeatIncrease})
-	// 	}
-
-	// TODO: this logic is weird, if this breaks energy is not added, maybe change the function name, confusing
 	case component.TypeBlue, component.TypeGreen, component.TypeRed:
 		// Color-based energy
 		s.applyColorEnergy(typeable.Type)
-
 	}
 
 	// Silent Death
