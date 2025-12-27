@@ -273,6 +273,41 @@ const (
 	// Trigger: InputHandler on cursor movement (h/j/k/l, arrow keys, etc.)
 	// Consumer: SplashSystem (magnifier) | Payload: *CursorMovedPayload
 	EventCursorMoved
+
+	// EventFuseDrains signals drains should fuse into quasar
+	// Trigger: CleanerSystem when no target rows at max heat
+	// Consumer: FuseSystem | Payload: nil
+	EventFuseDrains
+
+	// EventDrainPause signals DrainSystem to stop spawning
+	// Trigger: FuseSystem before destroying drains
+	// Consumer: DrainSystem | Payload: nil
+	EventDrainPause
+
+	// EventDrainResume signals DrainSystem to resume spawning
+	// Trigger: QuasarSystem on quasar termination
+	// Consumer: DrainSystem | Payload: nil
+	EventDrainResume
+
+	// EventQuasarSpawned signals quasar composite creation
+	// Trigger: FuseSystem after creating quasar
+	// Consumer: QuasarSystem | Payload: *QuasarSpawnedPayload
+	EventQuasarSpawned
+
+	// EventQuasarDestroyed signals quasar termination
+	// Trigger: QuasarSystem on lifecycle end
+	// Consumer: (future: audio/effects) | Payload: nil
+	EventQuasarDestroyed
+
+	// EventGrayoutStart signals persistent grayout activation
+	// Trigger: QuasarSystem on activation
+	// Consumer: GameState | Payload: nil
+	EventGrayoutStart
+
+	// EventGrayoutEnd signals persistent grayout deactivation
+	// Trigger: QuasarSystem on termination
+	// Consumer: GameState | Payload: nil
+	EventGrayoutEnd
 )
 
 // GameEvent represents a single game event with metadata

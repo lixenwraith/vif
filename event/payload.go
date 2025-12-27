@@ -234,3 +234,10 @@ type CursorMovedPayload struct {
 	X int
 	Y int
 }
+
+// QuasarSpawnedPayload contains quasar spawn data
+type QuasarSpawnedPayload struct {
+	AnchorEntity core.Entity
+	OriginX      int
+	OriginY      int
+}

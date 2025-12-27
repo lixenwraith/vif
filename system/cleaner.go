@@ -262,10 +262,9 @@ func (s *CleanerSystem) spawnCleaners() {
 	rows := s.scanTargetRows()
 
 	spawnCount := len(rows)
-	// TODO: new phase trigger
-	// Grayout: no targets to clean
+	// No rows to clean, trigger fuse drains
 	if spawnCount == 0 {
-		s.res.State.State.TriggerGrayout(s.res.Time.GameTime)
+		s.world.PushEvent(event.EventFuseDrains, nil)
 		s.world.PushEvent(event.EventCleanerFinished, nil)
 		return
 	}

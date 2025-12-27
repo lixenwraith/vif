@@ -120,4 +120,12 @@ func InitRegistry() {
 	RegisterType("EventDeathBatch", EventDeathBatch, &DeathRequestPayload{})
 	RegisterType("EventMemberTyped", EventMemberTyped, &MemberTypedPayload{})
 	RegisterType("EventCursorMoved", EventCursorMoved, &CursorMovedPayload{})
+	// Fuse/Quasar events
+	RegisterType("EventFuseDrains", EventFuseDrains, nil)
+	RegisterType("EventDrainPause", EventDrainPause, nil)
+	RegisterType("EventDrainResume", EventDrainResume, nil)
+	RegisterType("EventQuasarSpawned", EventQuasarSpawned, &QuasarSpawnedPayload{})
+	RegisterType("EventQuasarDestroyed", EventQuasarDestroyed, nil)
+	RegisterType("EventGrayoutStart", EventGrayoutStart, nil)
+	RegisterType("EventGrayoutEnd", EventGrayoutEnd, nil)
 }

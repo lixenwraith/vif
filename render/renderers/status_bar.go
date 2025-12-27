@@ -220,12 +220,21 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	energyComp, _ := r.energyStore.Get(r.gameCtx.CursorEntity)
 	energyVal := energyComp.Current.Load()
 	energyText := fmt.Sprintf(" Energy: %d ", energyVal)
-	energyFg, energyBg := render.RgbBlack, render.RgbEnergyBg
+
+	// Base colors based on energy polarity
+	var energyFg, energyBg render.RGB
+	if energyVal < 0 {
+		energyFg, energyBg = render.RgbEnergyBg, render.RgbBlack // white fg, black bg
+	} else {
+		energyFg, energyBg = render.RgbBlack, render.RgbEnergyBg // black fg, white bg
+	}
+
 	blinkRemaining := energyComp.BlinkRemaining.Load()
 	if energyComp.BlinkActive.Load() && blinkRemaining > 0 {
 		typeCode := energyComp.BlinkType.Load()
 		if typeCode == 0 {
-			energyFg, energyBg = render.RgbCursorError, render.RgbBlack
+			// Error: red text, keep polarity background
+			energyFg = render.RgbCursorError
 		} else {
 			var blinkColor render.RGB
 			switch typeCode {

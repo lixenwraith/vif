@@ -29,7 +29,23 @@ const (
 	DrainEnergyDrainInterval = 1000 * time.Millisecond
 
 	// DrainEnergyDrainAmount is the amount of energy drained per tick
-	DrainEnergyDrainAmount = 10
+	DrainEnergyDrainAmount = 100
+)
+
+// --- Quasar Entity ---
+const (
+	// QuasarWidth is the horizontal cell count
+	QuasarWidth = 5
+	// QuasarHeight is the vertical cell count
+	QuasarHeight = 3
+	// QuasarMoveInterval is duration between movement updates (2× drain speed)
+	QuasarMoveInterval = DrainMoveInterval / 2 // 500ms
+	// QuasarShieldDrain is energy drained per tick when any part overlaps shield
+	QuasarShieldDrain = 1000
+	// QuasarAnchorOffsetX is phantom head X offset from top-left (center column)
+	QuasarAnchorOffsetX = 2
+	// QuasarAnchorOffsetY is phantom head Y offset from top-left (center row)
+	QuasarAnchorOffsetY = 1
 )
 
 // --- Decay / Blossom Entities ---

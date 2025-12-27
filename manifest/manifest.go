@@ -15,7 +15,6 @@ func RegisterComponents(w *engine.World) {
 	engine.RegisterComponent[component.CharacterComponent](w)
 	engine.RegisterComponent[component.FlashComponent](w)
 	engine.RegisterComponent[component.NuggetComponent](w)
-	engine.RegisterComponent[component.DrainComponent](w)
 	engine.RegisterComponent[component.CursorComponent](w)
 	engine.RegisterComponent[component.ProtectionComponent](w)
 	engine.RegisterComponent[component.PingComponent](w)
@@ -28,7 +27,9 @@ func RegisterComponents(w *engine.World) {
 	engine.RegisterComponent[component.HeatComponent](w)
 	engine.RegisterComponent[component.DecayComponent](w)
 	engine.RegisterComponent[component.CleanerComponent](w)
+	engine.RegisterComponent[component.DrainComponent](w)
 	engine.RegisterComponent[component.MaterializeComponent](w)
+	engine.RegisterComponent[component.QuasarComponent](w)
 	engine.RegisterComponent[component.TypeableComponent](w)
 	engine.RegisterComponent[component.CompositeHeaderComponent](w)
 	engine.RegisterComponent[component.MemberComponent](w)
@@ -76,11 +77,17 @@ func RegisterSystems() {
 	registry.RegisterSystem("materialize", func(w any) any {
 		return system.NewMaterializeSystem(w.(*engine.World))
 	})
+	registry.RegisterSystem("cleaner", func(w any) any {
+		return system.NewCleanerSystem(w.(*engine.World))
+	})
+	registry.RegisterSystem("fuse", func(w any) any { // ADD
+		return system.NewFuseSystem(w.(*engine.World))
+	})
 	registry.RegisterSystem("drain", func(w any) any {
 		return system.NewDrainSystem(w.(*engine.World))
 	})
-	registry.RegisterSystem("cleaner", func(w any) any {
-		return system.NewCleanerSystem(w.(*engine.World))
+	registry.RegisterSystem("quasar", func(w any) any {
+		return system.NewQuasarSystem(w.(*engine.World))
 	})
 	registry.RegisterSystem("flash", func(w any) any {
 		return system.NewFlashSystem(w.(*engine.World))
@@ -124,6 +131,10 @@ func RegisterRenderers() {
 
 	registry.RegisterRenderer("drain", func(ctx any) any {
 		return renderers.NewDrainRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityDrain)
+
+	registry.RegisterRenderer("quasar", func(ctx any) any {
+		return renderers.NewQuasarRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityDrain)
 
 	registry.RegisterRenderer("grayout", func(ctx any) any {
@@ -176,8 +187,10 @@ func ActiveSystems() []string {
 		"blossom",
 		"gold",
 		"materialize",
-		"drain",
 		"cleaner",
+		"fuse",
+		"drain",
+		"quasar",
 		"flash",
 		"splash",
 		"death",
@@ -195,6 +208,7 @@ func ActiveRenderers() []string {
 		"effects",
 		"materialize",
 		"drain",
+		"quasar",
 		"grayout",
 		"dim",
 		"heatmeter",

@@ -15,6 +15,7 @@ type GameState struct {
 	// Grayout visual effect state
 	GrayoutActive    atomic.Bool
 	GrayoutStartTime atomic.Int64 // UnixNano
+	GrayoutPersist   atomic.Bool  // When true, ignores duration expiry
 
 	// Runtime Metrics
 	GameTicks      atomic.Uint64
@@ -36,6 +37,7 @@ func (gs *GameState) initState() {
 	// Reset atomics
 	gs.GrayoutActive.Store(false)
 	gs.GrayoutStartTime.Store(0)
+	gs.GrayoutPersist.Store(false)
 
 	// Reset metrics
 	gs.GameTicks.Store(0)
@@ -118,13 +120,30 @@ func (gs *GameState) TriggerGrayout(now time.Time) {
 	gs.GrayoutActive.Store(true)
 }
 
-// GetGrayoutIntensity returns current effect intensity (0.0 to 1.0)
-// Returns 0.0 if effect inactive or duration exceeded
+// StartGrayout activates persistent grayscale effect (used by QuasarSystem)
+func (gs *GameState) StartGrayout() {
+	gs.GrayoutPersist.Store(true)
+	gs.GrayoutActive.Store(true)
+}
+
+// EndGrayout deactivates persistent grayscale effect
+func (gs *GameState) EndGrayout() {
+	gs.GrayoutPersist.Store(false)
+	gs.GrayoutActive.Store(false)
+}
+
+// Modify GetGrayoutIntensity:
 func (gs *GameState) GetGrayoutIntensity(now time.Time, duration time.Duration) float64 {
 	if !gs.GrayoutActive.Load() {
 		return 0.0
 	}
 
+	// Persistent mode: full intensity until explicitly ended
+	if gs.GrayoutPersist.Load() {
+		return 1.0
+	}
+
+	// Duration-based mode (existing behavior)
 	startNano := gs.GrayoutStartTime.Load()
 	if startNano == 0 {
 		return 0.0

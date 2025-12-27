@@ -54,6 +54,8 @@ type DrainSystem struct {
 	statCount   *atomic.Int64
 	statPending *atomic.Int64
 
+	paused bool
+
 	enabled bool
 }
 
@@ -97,6 +99,7 @@ func (s *DrainSystem) initLocked() {
 	s.spawnCooldownUntil = 0
 	s.statCount.Store(0)
 	s.statPending.Store(0)
+	s.paused = false
 	s.enabled = true
 }
 
@@ -109,6 +112,8 @@ func (s *DrainSystem) Priority() int {
 func (s *DrainSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventMaterializeComplete,
+		event.EventDrainPause,
+		event.EventDrainResume,
 		event.EventGameReset,
 	}
 }
@@ -125,6 +130,15 @@ func (s *DrainSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	switch ev.Type {
+	case event.EventDrainPause:
+		s.paused = true
+		// Clear pending spawns to prevent stale materializations
+		s.pendingSpawns = s.pendingSpawns[:0]
+
+	case event.EventDrainResume:
+		s.paused = false
+		// Spawning resumes naturally in Update() based on heat
+
 	case event.EventMaterializeComplete:
 		if payload, ok := ev.Payload.(*event.SpawnCompletePayload); ok {
 			if payload.Type == component.SpawnTypeDrain {
@@ -141,7 +155,13 @@ func (s *DrainSystem) Update() {
 		return
 	}
 
-	// TODO: revisit the tick source
+	// Skip all spawn/despawn logic during quasar phase
+	if s.paused {
+		s.statCount.Store(0)
+		s.statPending.Store(0)
+		return
+	}
+
 	currentTick := s.res.State.State.GetGameTicks()
 
 	// Process pending spawn queue first

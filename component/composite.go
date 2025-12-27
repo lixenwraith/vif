@@ -11,6 +11,7 @@ const (
 	BehaviorBubble
 	BehaviorBoss
 	BehaviorShield
+	BehaviorQuasar
 )
 
 // CompositeLayer defines member interactability

@@ -46,8 +46,10 @@ const (
 	PriorityNugget      = 18
 	PriorityGold        = 20
 	PriorityCleaner     = 22
+	PriorityFuse        = 23 // After Cleaner, before Drain
 	PriorityDrain       = 25
 	PriorityMaterialize = 26 // PriorityDrain + 1
+	PriorityQuasar      = 27 // After Drain
 	PriorityDecay       = 30
 	PriorityBlossom     = 31
 	PriorityFlash       = 35
