@@ -81,8 +81,7 @@ type SpawnSystem struct {
 	charStore     *engine.Store[component.CharacterComponent]
 	typeableStore *engine.Store[component.TypeableComponent]
 
-	// Spawn timing and rate (internal state, replaces GameState coupling)
-	enabled        bool
+	// Spawn timing and rate
 	lastSpawnTime  time.Time // When last spawn occurred
 	nextSpawnTime  time.Time // When next spawn should occur
 	rateMultiplier float64   // 0.5x, 1.0x, 2.0x based on screen fill
@@ -98,6 +97,8 @@ type SpawnSystem struct {
 	statRateMult       *status.AtomicFloat
 	statOrphanTypeable *atomic.Int64
 	statOrphanChar     *atomic.Int64
+
+	enabled bool
 }
 
 // NewSpawnSystem creates a new spawn system
@@ -135,7 +136,6 @@ func (s *SpawnSystem) Init() {
 
 // initLocked performs session state reset, caller must hold s.mu
 func (s *SpawnSystem) initLocked() {
-	s.enabled = true
 	s.lastSpawnTime = time.Time{}
 	s.nextSpawnTime = time.Time{}
 	s.rateMultiplier = 1.0
@@ -147,6 +147,7 @@ func (s *SpawnSystem) initLocked() {
 	s.statRateMult.Set(0)
 	s.statOrphanTypeable.Store(0)
 	s.statOrphanChar.Store(0)
+	s.enabled = true
 }
 
 // Priority returns the system's priority

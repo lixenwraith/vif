@@ -6,9 +6,6 @@ import "time"
 const (
 	// MaxHeat is the maximum value for the heat meter (100%)
 	MaxHeat = 100
-
-	// NuggetHeatIncrease is the amount of heat increased by consuming a nugget
-	NuggetHeatIncrease = 10
 )
 
 // Energy System
@@ -43,10 +40,15 @@ const (
 	GoldSequenceLength = 10
 )
 
-// Nugget Spawning Mechanics
+// Nugget System
+//
+//goland:noinspection ALL
 const (
+	// NuggetHeatIncrease is the amount of heat increased by consuming a nugget
+	NuggetHeatIncrease = 10
+
 	// NuggetSpawnIntervalSeconds is the minimum interval between nugget spawns
-	NuggetSpawnIntervalSeconds = 5
+	NuggetSpawnIntervalSeconds = 0 * time.Second
 
 	// NuggetMaxAttempts is the maximum number of random placement attempts (occupied cell results in retry)
 	NuggetMaxAttempts = 100

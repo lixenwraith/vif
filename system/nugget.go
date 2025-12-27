@@ -21,6 +21,7 @@ type NuggetSystem struct {
 
 	nuggetStore *engine.Store[component.NuggetComponent]
 	energyStore *engine.Store[component.EnergyComponent]
+	heatStore   *engine.Store[component.HeatComponent]
 	charStore   *engine.Store[component.CharacterComponent]
 
 	nuggetID           atomic.Int32
@@ -31,6 +32,8 @@ type NuggetSystem struct {
 	statSpawned   *atomic.Int64
 	statCollected *atomic.Int64
 	statJumps     *atomic.Int64
+
+	enabled bool
 }
 
 // NewNuggetSystem creates a new nugget system
@@ -43,6 +46,7 @@ func NewNuggetSystem(world *engine.World) engine.System {
 		nuggetStore: engine.GetStore[component.NuggetComponent](world),
 		energyStore: engine.GetStore[component.EnergyComponent](world),
 		charStore:   engine.GetStore[component.CharacterComponent](world),
+		heatStore:   engine.GetStore[component.HeatComponent](world),
 
 		statActive:    res.Status.Bools.Get("nugget.active"),
 		statSpawned:   res.Status.Ints.Get("nugget.spawned"),
@@ -69,6 +73,7 @@ func (s *NuggetSystem) initLocked() {
 	s.statSpawned.Store(0)
 	s.statCollected.Store(0)
 	s.statJumps.Store(0)
+	s.enabled = true
 }
 
 // Priority returns the system's priority
@@ -118,13 +123,33 @@ func (s *NuggetSystem) HandleEvent(ev event.GameEvent) {
 
 // Update runs the nugget system logic
 func (s *NuggetSystem) Update() {
+	if !s.enabled {
+		return
+	}
+
 	now := s.res.Time.GameTime
+	cursorEntity := s.res.Cursor.Entity
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Validate active nugget still exists
+	if s.activeNuggetEntity != 0 && !s.nuggetStore.Has(s.activeNuggetEntity) {
+		s.activeNuggetEntity = 0
+	}
+
+	// Check cursor overlap for auto-collection
+	if s.activeNuggetEntity != 0 {
+		cursorPos, cursorOk := s.world.Positions.Get(cursorEntity)
+		nuggetPos, nuggetOk := s.world.Positions.Get(s.activeNuggetEntity)
+		if cursorOk && nuggetOk && cursorPos.X == nuggetPos.X && cursorPos.Y == nuggetPos.Y {
+			s.collectNugget()
+		}
+	}
+
+	// Spawn if no active nugget and cooldown elapsed
 	if s.activeNuggetEntity == 0 {
-		if now.Sub(s.lastSpawnAttempt) >= constant.NuggetSpawnIntervalSeconds*time.Second {
+		if now.Sub(s.lastSpawnAttempt) >= constant.NuggetSpawnIntervalSeconds {
 			s.lastSpawnAttempt = now
 			s.spawnNugget()
 		}
@@ -257,7 +282,6 @@ func (s *NuggetSystem) spawnNugget() {
 }
 
 // findValidPosition finds a valid random position for a nugget
-// Caller must hold s.mu lock
 func (s *NuggetSystem) findValidPosition() (int, int) {
 	config := s.res.Config
 	cursorPos, ok := s.world.Positions.Get(s.res.Cursor.Entity)
@@ -286,4 +310,37 @@ func (s *NuggetSystem) findValidPosition() (int, int) {
 	}
 
 	return -1, -1
+}
+
+// collectNugget handles auto-collection when cursor overlaps nugget
+func (s *NuggetSystem) collectNugget() {
+	if s.activeNuggetEntity == 0 {
+		return
+	}
+
+	nuggetPos, ok := s.world.Positions.Get(s.activeNuggetEntity)
+	if !ok {
+		return
+	}
+
+	cursorEntity := s.res.Cursor.Entity
+	var currentHeat int64
+	if hc, ok := s.heatStore.Get(cursorEntity); ok {
+		currentHeat = hc.Current.Load()
+	}
+
+	if currentHeat >= constant.MaxHeat {
+		s.world.PushEvent(event.EventDirectionalCleanerRequest, &event.DirectionalCleanerPayload{
+			OriginX: nuggetPos.X,
+			OriginY: nuggetPos.Y,
+		})
+	} else {
+		s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: constant.NuggetHeatIncrease})
+	}
+
+	// TODO: death
+	s.world.DestroyEntity(s.activeNuggetEntity)
+	s.activeNuggetEntity = 0
+
+	s.statCollected.Add(1)
 }

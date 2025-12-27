@@ -346,7 +346,7 @@ func (s *TypingSystem) handleCompositeMember(entity core.Entity, anchorID core.E
 
 // handleTypeable processes standalone TypeableComponent entities (nuggets)
 func (s *TypingSystem) handleTypeable(entity core.Entity, typeable component.TypeableComponent, typedRune rune) {
-	cursorEntity := s.res.Cursor.Entity
+	// cursorEntity := s.res.Cursor.Entity
 
 	if typeable.Char != typedRune {
 		s.emitTypingError()
@@ -358,25 +358,25 @@ func (s *TypingSystem) handleTypeable(entity core.Entity, typeable component.Typ
 
 	// Type-specific handling
 	switch typeable.Type {
-	case component.TypeNugget:
-		s.world.PushEvent(event.EventNuggetCollected, &event.NuggetCollectedPayload{
-			Entity: entity,
-		})
+	// case component.TypeNugget:
+	// 	s.world.PushEvent(event.EventNuggetCollected, &event.NuggetCollectedPayload{
+	// 		Entity: entity,
+	// 	})
+	//
+	// 	// Nugget bonus: cleaners at max heat, else up to +10 heat
+	// 	if s.getHeat() >= constant.MaxHeat {
+	// 		cursorPos, _ := s.world.Positions.Get(cursorEntity)
+	// 		// Trigger directional cleaners if heat is already at maximum
+	// 		s.world.PushEvent(event.EventDirectionalCleanerRequest, &event.DirectionalCleanerPayload{
+	// 			OriginX: cursorPos.X,
+	// 			OriginY: cursorPos.Y,
+	// 		})
+	// 	} else {
+	// 		// Provide heat reward only when below maximum
+	// 		s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: constant.NuggetHeatIncrease})
+	// 	}
 
-		// Nugget bonus: cleaners at max heat, else up to +10 heat
-		if s.getHeat() >= constant.MaxHeat {
-			cursorPos, _ := s.world.Positions.Get(cursorEntity)
-			// Trigger directional cleaners if heat is already at maximum
-			s.world.PushEvent(event.EventDirectionalCleanerRequest, &event.DirectionalCleanerPayload{
-				OriginX: cursorPos.X,
-				OriginY: cursorPos.Y,
-			})
-		} else {
-			// Provide heat reward only when below maximum
-			s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: constant.NuggetHeatIncrease})
-		}
-
-		// TODO: this logic is weird, if this breaks energy is not added, maybe change the function name, confusing
+	// TODO: this logic is weird, if this breaks energy is not added, maybe change the function name, confusing
 	case component.TypeBlue, component.TypeGreen, component.TypeRed:
 		// Color-based energy
 		s.applyColorEnergy(typeable.Type)
