@@ -31,6 +31,8 @@ type TypingSystem struct {
 	statMaxStreak *atomic.Int64
 
 	currentStreak int64
+
+	enabled bool
 }
 
 // NewTypingSystem creates a new typing system
@@ -66,6 +68,7 @@ func (s *TypingSystem) initLocked() {
 	s.statCorrect.Store(0)
 	s.statErrors.Store(0)
 	s.statMaxStreak.Store(0)
+	s.enabled = true
 }
 
 func (s *TypingSystem) Priority() int {

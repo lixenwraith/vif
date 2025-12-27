@@ -13,19 +13,30 @@ type FlashSystem struct {
 	res   engine.Resources
 
 	flashStore *engine.Store[component.FlashComponent]
+
+	enabled bool
 }
 
 func NewFlashSystem(world *engine.World) engine.System {
-	return &FlashSystem{
+	s := &FlashSystem{
 		world: world,
 		res:   engine.GetResources(world),
 
 		flashStore: engine.GetStore[component.FlashComponent](world),
 	}
+	s.initLocked()
+	return s
 }
 
-// Init
-func (s *FlashSystem) Init() {}
+// Init resets session state for new game
+func (s *FlashSystem) Init() {
+	s.initLocked()
+}
+
+// initLocked performs session state reset
+func (s *FlashSystem) initLocked() {
+	s.enabled = true
+}
 
 func (s *FlashSystem) Priority() int {
 	return constant.PriorityFlash

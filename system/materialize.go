@@ -15,21 +15,32 @@ type MaterializeSystem struct {
 
 	matStore  *engine.Store[component.MaterializeComponent]
 	protStore *engine.Store[component.ProtectionComponent]
+
+	enabled bool
 }
 
 // NewMaterializeSystem creates a new materialize system
 func NewMaterializeSystem(world *engine.World) engine.System {
-	return &MaterializeSystem{
+	s := &MaterializeSystem{
 		world: world,
 		res:   engine.GetResources(world),
 
 		matStore:  engine.GetStore[component.MaterializeComponent](world),
 		protStore: engine.GetStore[component.ProtectionComponent](world),
 	}
+	s.initLocked()
+	return s
 }
 
-// Init
-func (s *MaterializeSystem) Init() {}
+// Init resets session state for new game
+func (s *MaterializeSystem) Init() {
+	s.initLocked()
+}
+
+// initLocked performs session state reset
+func (s *MaterializeSystem) initLocked() {
+	s.enabled = true
+}
 
 // Priority returns the system's priority
 // Must run before DrainSystem which listens to completion

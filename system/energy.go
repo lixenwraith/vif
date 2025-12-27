@@ -26,6 +26,8 @@ type EnergySystem struct {
 
 	lastCorrect    time.Time
 	errorCursorSet bool
+
+	enabled bool
 }
 
 // NewEnergySystem creates a new energy system
@@ -56,6 +58,7 @@ func (s *EnergySystem) Init() {
 func (s *EnergySystem) initLocked() {
 	s.lastCorrect = time.Time{}
 	s.errorCursorSet = false
+	s.enabled = true
 }
 
 // Priority returns the system's priority

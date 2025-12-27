@@ -21,6 +21,8 @@ type CompositeSystem struct {
 	headerStore *engine.Store[component.CompositeHeaderComponent]
 	memberStore *engine.Store[component.MemberComponent]
 	protStore   *engine.Store[component.ProtectionComponent]
+
+	enabled bool
 }
 
 // NewCompositeSystem creates a new composite system
@@ -33,11 +35,18 @@ func NewCompositeSystem(world *engine.World) engine.System {
 		memberStore: engine.GetStore[component.MemberComponent](world),
 		protStore:   engine.GetStore[component.ProtectionComponent](world),
 	}
-
+	s.initLocked()
 	return s
 }
 
-func (s *CompositeSystem) Init() {}
+func (s *CompositeSystem) Init() {
+	s.initLocked()
+}
+
+// initLocked performs session state reset
+func (s *CompositeSystem) initLocked() {
+	s.enabled = true
+}
 
 func (s *CompositeSystem) Priority() int {
 	return constant.PriorityComposite

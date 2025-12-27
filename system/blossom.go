@@ -35,6 +35,8 @@ type BlossomSystem struct {
 
 	statCount   *atomic.Int64
 	statApplied *atomic.Int64
+
+	enabled bool
 }
 
 // NewBlossomSystem creates a new blossom system
@@ -77,6 +79,7 @@ func (s *BlossomSystem) initLocked() {
 	clear(s.processedGridCells)
 	s.statCount.Store(0)
 	s.statApplied.Store(0)
+	s.enabled = true
 }
 
 // Priority returns the system's priority

@@ -33,6 +33,8 @@ type DecaySystem struct {
 
 	statCount   *atomic.Int64
 	statApplied *atomic.Int64
+
+	enabled bool
 }
 
 // NewDecaySystem creates a new decay system
@@ -73,6 +75,7 @@ func (s *DecaySystem) initLocked() {
 	clear(s.processedGridCells)
 	s.statCount.Store(0)
 	s.statApplied.Store(0)
+	s.enabled = true
 }
 
 // Priority returns the system's priority

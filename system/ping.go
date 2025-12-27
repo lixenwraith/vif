@@ -16,20 +16,31 @@ type PingSystem struct {
 	stateRes *engine.GameStateResource
 
 	pingStore *engine.Store[component.PingComponent]
+
+	enabled bool
 }
 
 // NewPingSystem creates a new ping system
 func NewPingSystem(world *engine.World) engine.System {
-	return &PingSystem{
+	s := &PingSystem{
 		world: world,
 		res:   engine.GetResources(world),
 
 		pingStore: engine.GetStore[component.PingComponent](world),
 	}
+	s.initLocked()
+	return s
 }
 
-// Init
-func (s *PingSystem) Init() {}
+// Init resets session state for new game
+func (s *PingSystem) Init() {
+	s.initLocked()
+}
+
+// initLocked performs session state reset
+func (s *PingSystem) initLocked() {
+	s.enabled = true
+}
 
 // Priority returns the system's priority
 // Should run before rendering to ensure visual state is up to date

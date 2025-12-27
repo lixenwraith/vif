@@ -29,6 +29,8 @@ type CleanerSystem struct {
 
 	statActive  *atomic.Int64
 	statSpawned *atomic.Int64
+
+	enabled bool
 }
 
 // NewCleanerSystem creates a new cleaner system
@@ -63,6 +65,7 @@ func (s *CleanerSystem) Init() {
 func (s *CleanerSystem) initLocked() {
 	clear(s.spawned)
 	s.hasSpawnedSession = false
+	s.enabled = true
 }
 
 // Priority returns the system's priority

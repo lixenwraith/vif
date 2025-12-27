@@ -19,6 +19,8 @@ type BoostSystem struct {
 	// Cached metric pointers
 	statActive    *atomic.Bool
 	statRemaining *atomic.Int64
+
+	enabled bool
 }
 
 func NewBoostSystem(world *engine.World) engine.System {
@@ -45,6 +47,7 @@ func (s *BoostSystem) Init() {
 func (s *BoostSystem) initLocked() {
 	s.statActive.Store(false)
 	s.statRemaining.Store(0)
+	s.enabled = true
 }
 
 func (s *BoostSystem) Priority() int {

@@ -53,6 +53,8 @@ type DrainSystem struct {
 	// Cached metric pointers
 	statCount   *atomic.Int64
 	statPending *atomic.Int64
+
+	enabled bool
 }
 
 // NewDrainSystem creates a new drain system
@@ -95,6 +97,7 @@ func (s *DrainSystem) initLocked() {
 	s.spawnCooldownUntil = 0
 	s.statCount.Store(0)
 	s.statPending.Store(0)
+	s.enabled = true
 }
 
 // Priority returns the system's priority

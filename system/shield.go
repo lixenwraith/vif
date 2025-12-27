@@ -18,6 +18,8 @@ type ShieldSystem struct {
 	shieldStore *engine.Store[component.ShieldComponent]
 
 	statActive *atomic.Bool
+
+	enabled bool
 }
 
 // NewShieldSystem creates a new shield system
@@ -43,6 +45,7 @@ func (s *ShieldSystem) Init() {
 // initLocked performs session state reset
 func (s *ShieldSystem) initLocked() {
 	s.statActive.Store(false)
+	s.enabled = true
 }
 
 // Priority returns the system's priority

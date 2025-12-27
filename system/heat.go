@@ -13,19 +13,30 @@ type HeatSystem struct {
 	res   engine.Resources
 
 	heatStore *engine.Store[component.HeatComponent]
+
+	enabled bool
 }
 
 func NewHeatSystem(world *engine.World) engine.System {
-	return &HeatSystem{
+	s := &HeatSystem{
 		world: world,
 		res:   engine.GetResources(world),
 
 		heatStore: engine.GetStore[component.HeatComponent](world),
 	}
+	s.initLocked()
+	return s
 }
 
-// Init
-func (s *HeatSystem) Init() {}
+// Init resets session state for new game
+func (s *HeatSystem) Init() {
+	s.initLocked()
+}
+
+// initLocked performs session state reset
+func (s *HeatSystem) initLocked() {
+	s.enabled = true
+}
 
 func (s *HeatSystem) Priority() int {
 	return constant.PriorityHeat

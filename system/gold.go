@@ -39,6 +39,8 @@ type GoldSystem struct {
 	statActive   *atomic.Bool
 	statAnchorID *atomic.Int64
 	statTimer    *atomic.Int64
+
+	enabled bool
 }
 
 // NewGoldSystem creates a new gold sequence system
@@ -80,6 +82,7 @@ func (s *GoldSystem) initLocked() {
 	s.statActive.Store(false)
 	s.statAnchorID.Store(0)
 	s.statTimer.Store(0)
+	s.enabled = true
 }
 
 // Priority returns the system's priority

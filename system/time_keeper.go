@@ -15,21 +15,32 @@ type TimeKeeperSystem struct {
 
 	timerStore *engine.Store[component.TimerComponent]
 	deathStore *engine.Store[component.DeathComponent]
+
+	enabled bool
 }
 
 // NewTimeKeeperSystem creates a new timekeeper system
 func NewTimeKeeperSystem(world *engine.World) engine.System {
-	return &TimeKeeperSystem{
+	s := &TimeKeeperSystem{
 		world: world,
 		res:   engine.GetResources(world),
 
 		timerStore: engine.GetStore[component.TimerComponent](world),
 		deathStore: engine.GetStore[component.DeathComponent](world),
 	}
+	s.initLocked()
+	return s
 }
 
-// Init
-func (s *TimeKeeperSystem) Init() {}
+// Init resets session state for new game
+func (s *TimeKeeperSystem) Init() {
+	s.initLocked()
+}
+
+// initLocked performs session state reset
+func (s *TimeKeeperSystem) initLocked() {
+	s.enabled = true
+}
 
 // Priority returns the system's priority (runs just before CullSystem)
 func (s *TimeKeeperSystem) Priority() int {

@@ -46,11 +46,13 @@ type SplashSystem struct {
 	splashStore   *engine.Store[component.SplashComponent]
 	headerStore   *engine.Store[component.CompositeHeaderComponent]
 	typeableStore *engine.Store[component.TypeableComponent]
+
+	enabled bool
 }
 
 // NewSplashSystem creates a new splash system
 func NewSplashSystem(world *engine.World) engine.System {
-	return &SplashSystem{
+	s := &SplashSystem{
 		world: world,
 		res:   engine.GetResources(world),
 
@@ -58,10 +60,19 @@ func NewSplashSystem(world *engine.World) engine.System {
 		headerStore:   engine.GetStore[component.CompositeHeaderComponent](world),
 		typeableStore: engine.GetStore[component.TypeableComponent](world),
 	}
+	s.initLocked()
+	return s
 }
 
-// Init
-func (s *SplashSystem) Init() {}
+// Init resets session state for new game
+func (s *SplashSystem) Init() {
+	s.initLocked()
+}
+
+// initLocked performs session state reset
+func (s *SplashSystem) initLocked() {
+	s.enabled = true
+}
 
 // Priority returns the system's priority (low, after game logic)
 func (s *SplashSystem) Priority() int {

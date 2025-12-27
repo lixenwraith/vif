@@ -28,12 +28,14 @@ type MetaSystem struct {
 	nuggetStore  *engine.Store[component.NuggetComponent]
 	cleanerStore *engine.Store[component.CleanerComponent]
 	decayStore   *engine.Store[component.DecayComponent]
+
+	enabled bool
 }
 
 // NewMetaSystem creates a new meta system
 func NewMetaSystem(ctx *engine.GameContext) engine.System {
 	world := ctx.World
-	return &MetaSystem{
+	s := &MetaSystem{
 		ctx:          ctx,
 		res:          engine.GetResources(world),
 		drainStore:   engine.GetStore[component.DrainComponent](world),
@@ -45,10 +47,19 @@ func NewMetaSystem(ctx *engine.GameContext) engine.System {
 		cleanerStore: engine.GetStore[component.CleanerComponent](world),
 		decayStore:   engine.GetStore[component.DecayComponent](world),
 	}
+	s.initLocked()
+	return s
 }
 
-// Init
-func (s *MetaSystem) Init() {}
+// Init resets session state for new game
+func (s *MetaSystem) Init() {
+	s.initLocked()
+}
+
+// initLocked performs session state reset
+func (s *MetaSystem) initLocked() {
+	s.enabled = true
+}
 
 // Priority returns the system's priority
 func (s *MetaSystem) Priority() int {

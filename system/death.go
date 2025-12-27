@@ -21,6 +21,8 @@ type DeathSystem struct {
 	charStore  *engine.Store[component.CharacterComponent]
 
 	statKilled *atomic.Int64
+
+	enabled bool
 }
 
 func NewDeathSystem(world *engine.World) engine.System {
@@ -47,6 +49,7 @@ func (s *DeathSystem) Init() {
 // initLocked performs session state reset
 func (s *DeathSystem) initLocked() {
 	s.statKilled.Store(0)
+	s.enabled = true
 }
 
 func (s *DeathSystem) Priority() int {

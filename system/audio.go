@@ -11,6 +11,8 @@ import (
 type AudioSystem struct {
 	world  *engine.World
 	player engine.AudioPlayer
+
+	enabled bool
 }
 
 // NewAudioSystem creates an audio system with the given player
@@ -20,14 +22,23 @@ func NewAudioSystem(world *engine.World) engine.System {
 	if res, ok := engine.GetResource[*engine.AudioResource](world.Resources); ok {
 		player = res.Player
 	}
-	return &AudioSystem{
+	s := &AudioSystem{
 		world:  world,
 		player: player,
 	}
+	s.initLocked()
+	return s
 }
 
-// Init
-func (s *AudioSystem) Init() {}
+// Init resets session state for new game
+func (s *AudioSystem) Init() {
+	s.initLocked()
+}
+
+// initLocked performs session state reset
+func (s *AudioSystem) initLocked() {
+	s.enabled = true
+}
 
 // Priority returns the system's priority
 func (s *AudioSystem) Priority() int {
