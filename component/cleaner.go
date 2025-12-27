@@ -21,4 +21,7 @@ type CleanerComponent struct {
 
 	// Character used to render the cleaner block
 	Char rune
+
+	// Energy polarity indicator for rendering
+	NegativeEnergy bool // Set at spawn, determines gradient color
 }

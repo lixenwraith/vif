@@ -66,8 +66,10 @@ func resolveCharacterColor(char component.CharacterComponent) render.RGB {
 		return render.RgbBlossom
 	case component.ColorDrain:
 		return render.RgbDrain
-	case component.ColorCleaner:
-		return render.RgbCleanerBase
+	case component.ColorCleanerPositive:
+		return render.RgbCleanerBasePositive
+	case component.ColorCleanerNegative:
+		return render.RgbCleanerBaseNegative
 	case component.ColorMaterialize:
 		return render.RgbMaterialize
 	case component.ColorFlash:

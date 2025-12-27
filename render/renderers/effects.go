@@ -16,7 +16,8 @@ type EffectsRenderer struct {
 	flashStore   *engine.Store[component.FlashComponent]
 	cleanerStore *engine.Store[component.CleanerComponent]
 
-	cleanerGradient []render.RGB
+	cleanerGradientPositive []render.RGB
+	cleanerGradientNegative []render.RGB
 }
 
 // NewEffectsRenderer creates a new effects renderer with gradient generation
@@ -35,15 +36,16 @@ func NewEffectsRenderer(gameCtx *engine.GameContext) *EffectsRenderer {
 func (r *EffectsRenderer) buildCleanerGradient() {
 	length := constant.CleanerTrailLength
 
-	r.cleanerGradient = make([]render.RGB, length)
+	r.cleanerGradientPositive = make([]render.RGB, length)
+	r.cleanerGradientNegative = make([]render.RGB, length)
 
 	for i := 0; i < length; i++ {
-		// Opacity fade from 1.0 to 0.0
 		opacity := 1.0 - (float64(i) / float64(length))
 		if opacity < 0 {
 			opacity = 0
 		}
-		r.cleanerGradient[i] = render.Scale(render.RgbCleanerBase, opacity)
+		r.cleanerGradientPositive[i] = render.Scale(render.RgbCleanerBasePositive, opacity)
+		r.cleanerGradientNegative[i] = render.Scale(render.RgbCleanerBaseNegative, opacity)
 	}
 }
 
@@ -100,13 +102,19 @@ func (r *EffectsRenderer) drawDecay(ctx render.RenderContext, buf *render.Render
 func (r *EffectsRenderer) drawCleaners(ctx render.RenderContext, buf *render.RenderBuffer) {
 	cleanerEntities := r.cleanerStore.All()
 
-	gradientLen := len(r.cleanerGradient)
+	gradientLen := len(r.cleanerGradientPositive)
 	maxGradientIdx := gradientLen - 1
 
 	for _, cleanerEntity := range cleanerEntities {
 		cleaner, ok := r.cleanerStore.Get(cleanerEntity)
 		if !ok {
 			continue
+		}
+
+		// Select gradient based on energy polarity at spawn
+		gradient := r.cleanerGradientPositive
+		if cleaner.NegativeEnergy {
+			gradient = r.cleanerGradientNegative
 		}
 
 		cl := constant.CleanerTrailLength
@@ -131,7 +139,7 @@ func (r *EffectsRenderer) drawCleaners(ctx render.RenderContext, buf *render.Ren
 			}
 
 			// Cleaners are OPAQUE (solid background)
-			color := r.cleanerGradient[gradientIndex]
+			color := gradient[gradientIndex]
 			buf.SetWithBg(screenX, screenY, cleaner.Char, color, render.RgbBackground)
 		}
 	}

@@ -43,7 +43,8 @@ func NewCleanerSystem(world *engine.World) engine.System {
 		cleanerStore:  engine.GetStore[component.CleanerComponent](world),
 		protStore:     engine.GetStore[component.ProtectionComponent](world),
 		charStore:     engine.GetStore[component.CharacterComponent](world),
-		typeableStore: engine.GetStore[component.TypeableComponent](world), energyStore: engine.GetStore[component.EnergyComponent](world),
+		typeableStore: engine.GetStore[component.TypeableComponent](world),
+		energyStore:   engine.GetStore[component.EnergyComponent](world),
 
 		spawned: make(map[int64]bool),
 
@@ -258,9 +259,9 @@ func (s *CleanerSystem) Update() {
 func (s *CleanerSystem) spawnCleaners() {
 	config := s.res.Config
 
-	redRows := s.scanTargetRows()
+	rows := s.scanTargetRows()
 
-	spawnCount := len(redRows)
+	spawnCount := len(rows)
 	// TODO: new phase trigger
 	// Grayout: no targets to clean
 	if spawnCount == 0 {
@@ -274,13 +275,19 @@ func (s *CleanerSystem) spawnCleaners() {
 		SoundType: core.SoundWhoosh,
 	})
 
+	// Determine energy polarity once for entire batch
+	negativeEnergy := false
+	if energyComp, ok := s.energyStore.Get(s.res.Cursor.Entity); ok {
+		negativeEnergy = energyComp.Current.Load() < 0
+	}
+
 	gameWidthFixed := vmath.FromInt(config.GameWidth)
 	trailLenFixed := vmath.FromInt(constant.CleanerTrailLength)
 	durationFixed := vmath.FromFloat(constant.CleanerAnimationDuration.Seconds())
 	baseSpeed := vmath.Div(gameWidthFixed, durationFixed)
 
 	// Spawn one cleaner per row with Red entities, alternating L→R and R→L direction
-	for _, row := range redRows {
+	for _, row := range rows {
 		var startX, targetX, velX int32
 		rowFixed := vmath.FromInt(row)
 
@@ -310,12 +317,13 @@ func (s *CleanerSystem) spawnCleaners() {
 				VelX:     velX,
 				VelY:     0,
 			},
-			TargetX:   targetX,
-			TargetY:   rowFixed,
-			TrailRing: trailRing,
-			TrailHead: 0,
-			TrailLen:  1,
-			Char:      constant.CleanerChar,
+			TargetX:        targetX,
+			TargetY:        rowFixed,
+			TrailRing:      trailRing,
+			TrailHead:      0,
+			TrailLen:       1,
+			Char:           constant.CleanerChar,
+			NegativeEnergy: negativeEnergy,
 		}
 
 		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → CleanerComponent (float overlay)
@@ -420,6 +428,12 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 		SoundType: core.SoundWhoosh,
 	})
 
+	// Determine energy polarity once for entire batch
+	negativeEnergy := false
+	if energyComp, ok := s.energyStore.Get(s.res.Cursor.Entity); ok {
+		negativeEnergy = energyComp.Current.Load() < 0
+	}
+
 	gameWidthFixed := vmath.FromInt(config.GameWidth)
 	gameHeightFixed := vmath.FromInt(config.GameHeight)
 	trailLenFixed := vmath.FromInt(constant.CleanerTrailLength)
@@ -460,12 +474,13 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 				VelX:     dir.velX,
 				VelY:     dir.velY,
 			},
-			TargetX:   dir.targetX,
-			TargetY:   dir.targetY,
-			TrailRing: trailRing,
-			TrailHead: 0,
-			TrailLen:  1,
-			Char:      constant.CleanerChar,
+			TargetX:        dir.targetX,
+			TargetY:        dir.targetY,
+			TrailRing:      trailRing,
+			TrailHead:      0,
+			TrailLen:       1,
+			Char:           constant.CleanerChar,
+			NegativeEnergy: negativeEnergy,
 		}
 
 		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → CleanerComponent (float overlay)

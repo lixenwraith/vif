@@ -79,10 +79,13 @@ var (
 	RgbApmBg = RGB{50, 205, 50}   // Lime Green for APM
 
 	// Cleaner colors
-	RgbCleanerBase  = RGB{255, 255, 0}   // Bright yellow
+	RgbCleanerBasePositive = RGB{255, 255, 0}   // Bright yellow for positive energy cleaners
+	RgbCleanerBaseNegative = RGB{170, 100, 210} // Violet for negative energy cleaners
+
+	// Flash colors
 	RgbRemovalFlash = RGB{255, 255, 200} // Bright yellow-white flash
 
-	// Shield Colors
+	// Shield colors
 	RgbShieldBase = RGB{180, 0, 150} // Deep Magenta
 
 	// Shield colors per sequence type (alias Normal-level for now)

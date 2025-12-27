@@ -13,7 +13,8 @@ const (
 	ColorBlossom
 	ColorDecay
 	ColorDrain
-	ColorCleaner
+	ColorCleanerPositive
+	ColorCleanerNegative
 	ColorMaterialize
 	ColorFlash
 	// Sequence colors derived from CharacterType + CharacterLevel
