@@ -45,7 +45,7 @@ func (r *MaterializeRenderer) Render(ctx render.RenderContext, buf *render.Rende
 		return
 	}
 
-	buf.SetWriteMask(constant.MaskEffect)
+	buf.SetWriteMask(constant.MaskTransient)
 
 	for _, entity := range entities {
 		mat, ok := r.matStore.Get(entity)

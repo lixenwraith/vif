@@ -18,21 +18,10 @@ type RenderBuffer struct {
 // NewRenderBuffer creates a buffer with the specified dimensions
 func NewRenderBuffer(width, height int) *RenderBuffer {
 	size := width * height
-	cells := make([]terminal.Cell, size)
-	touched := make([]bool, size)
-	masks := make([]uint8, size)
-	for i := range cells {
-		cells[i] = terminal.Cell{
-			Rune:  0,
-			Fg:    DefaultBgRGB,
-			Bg:    RGBBlack,
-			Attrs: terminal.AttrNone,
-		}
-	}
 	return &RenderBuffer{
-		cells:       cells,
-		touched:     touched,
-		masks:       masks,
+		cells:       make([]terminal.Cell, size),
+		touched:     make([]bool, size),
+		masks:       make([]uint8, size),
 		currentMask: constant.MaskNone,
 		width:       width,
 		height:      height,
@@ -56,30 +45,15 @@ func (b *RenderBuffer) Resize(width, height int) {
 	b.Clear()
 }
 
-// Clear resets all cells to empty using exponential copy
+// Clear resets all cells to empty and zero-initializes metadata
 func (b *RenderBuffer) Clear() {
 	if len(b.cells) == 0 {
 		return
 	}
-	b.cells[0] = terminal.Cell{
-		Rune:  0,
-		Fg:    DefaultBgRGB,
-		Bg:    RGBBlack,
-		Attrs: terminal.AttrNone,
-	}
-	b.touched[0] = false
-	b.masks[0] = constant.MaskNone
 
-	for filled := 1; filled < len(b.cells); filled *= 2 {
-		copy(b.cells[filled:], b.cells[:filled])
-	}
-	for filled := 1; filled < len(b.touched); filled *= 2 {
-		copy(b.touched[filled:], b.touched[:filled])
-	}
-	for filled := 1; filled < len(b.masks); filled *= 2 {
-		copy(b.masks[filled:], b.masks[:filled])
-	}
-
+	clear(b.cells)
+	clear(b.touched)
+	clear(b.masks)
 	b.currentMask = constant.MaskNone
 }
 
@@ -106,7 +80,7 @@ func (b *RenderBuffer) Set(x, y int, mainRune rune, fg, bg RGB, mode BlendMode, 
 	op := uint8(mode) & 0x0F
 	flags := uint8(mode) & 0xF0
 
-	b.masks[idx] = b.currentMask
+	b.masks[idx] |= b.currentMask
 
 	if mainRune != 0 {
 		dst.Rune = mainRune
@@ -176,7 +150,7 @@ func (b *RenderBuffer) SetBgOnly(x, y int, bg RGB) {
 
 	b.cells[idx].Bg = bg
 	b.touched[idx] = true
-	b.masks[idx] = b.currentMask
+	b.masks[idx] |= b.currentMask
 }
 
 // SetWithBg writes a cell with explicit fg and bg colors (opaque replace)
@@ -192,7 +166,7 @@ func (b *RenderBuffer) SetWithBg(x, y int, r rune, fg, bg RGB) {
 	dst.Bg = bg
 	dst.Attrs = terminal.AttrNone
 	b.touched[idx] = true
-	b.masks[idx] = b.currentMask
+	b.masks[idx] |= b.currentMask
 }
 
 // SetBg256 sets background using 256-color palette index directly
@@ -205,7 +179,7 @@ func (b *RenderBuffer) SetBg256(x, y int, paletteIdx uint8) {
 	b.cells[idx].Bg = RGB{R: paletteIdx, G: 0, B: 0}
 	b.cells[idx].Attrs = terminal.AttrBg256
 	b.touched[idx] = true
-	b.masks[idx] = b.currentMask
+	b.masks[idx] |= b.currentMask
 }
 
 // ===== POST-PROCESSING =====

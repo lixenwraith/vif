@@ -90,20 +90,27 @@ func (s *MetaSystem) Update() {
 //
 // Other systems handle EventGameReset after this completes
 func (s *MetaSystem) handleGameReset() {
-	// Phase 1: Pause and stop audio
+	// 1. Pause and stop audio
 	s.ctx.SetPaused(true)
 
 	// Phase 2: Synchronous World Cleanup
 	// Already inside world.RunSafe from main -> DispatchEventsImmediately
 	s.ctx.World.Clear()
 
-	// Phase 3: State reset (counters, NextID → 1)
+	// 3. State reset (counters, NextID → 1)
 	s.ctx.State.Reset()
 
-	// Phase 4: Cursor recreation (required before spawn events)
+	// 4. Cursor recreation (required before spawn events)
 	s.ctx.CreateCursorEntity()
 
-	// Phase 5: Signal FSM reset - Non-blocking
+	// 5. Reset mode and status
+	s.ctx.SetMode(core.ModeNormal)
+	s.ctx.SetCommandText("")
+	s.ctx.SetSearchText("")
+	s.ctx.SetStatusMessage("")
+	s.ctx.SetOverlayContent(nil)
+
+	// 5. Signal FSM reset - Non-blocking
 	// On return from this function main releases the world lock and scheduler acquires it for reset
 	select {
 	case s.ctx.ResetChan <- struct{}{}:

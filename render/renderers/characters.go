@@ -24,7 +24,7 @@ func NewCharactersRenderer(gameCtx *engine.GameContext) *CharactersRenderer {
 
 // Render draws all character entities
 func (r *CharactersRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	buf.SetWriteMask(constant.MaskEntity)
+	buf.SetWriteMask(constant.MaskTypeable)
 
 	// Query entities with both position and character
 	entities := r.charStore.All()

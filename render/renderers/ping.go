@@ -44,7 +44,7 @@ func (r *PingRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 		return
 	}
 
-	buf.SetWriteMask(constant.MaskGrid)
+	buf.SetWriteMask(constant.MaskPing)
 
 	// 1. Compute Shield Exclusion Mask
 	r.computeExclusionMask(r.gameCtx.World, ctx.GameWidth, ctx.GameHeight)
