@@ -24,7 +24,6 @@ type GoldSystem struct {
 	headerStore   *engine.Store[component.CompositeHeaderComponent]
 	memberStore   *engine.Store[component.MemberComponent]
 	typeableStore *engine.Store[component.TypeableComponent]
-	charStore     *engine.Store[component.CharacterComponent]
 	protStore     *engine.Store[component.ProtectionComponent]
 	heatStore     *engine.Store[component.HeatComponent]
 
@@ -53,7 +52,6 @@ func NewGoldSystem(world *engine.World) engine.System {
 		headerStore:   engine.GetStore[component.CompositeHeaderComponent](world),
 		memberStore:   engine.GetStore[component.MemberComponent](world),
 		typeableStore: engine.GetStore[component.TypeableComponent](world),
-		charStore:     engine.GetStore[component.CharacterComponent](world),
 		protStore:     engine.GetStore[component.ProtectionComponent](world),
 		heatStore:     engine.GetStore[component.HeatComponent](world),
 
@@ -264,14 +262,6 @@ func (s *GoldSystem) spawnGold() bool {
 
 	// Phase 5: Set components to members
 	for i, ed := range entities {
-		// Visual component
-		s.charStore.Set(ed.entity, component.CharacterComponent{
-			Rune:  sequence[i],
-			Style: component.StyleNormal,
-			Type:  component.CharacterGold,
-			Level: component.LevelBright,
-		})
-
 		// Typing target
 		s.typeableStore.Set(ed.entity, component.TypeableComponent{
 			Char:  sequence[i],

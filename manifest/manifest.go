@@ -117,6 +117,14 @@ func RegisterRenderers() {
 		return renderers.NewCharactersRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityEntities)
 
+	registry.RegisterRenderer("nugget", func(ctx any) any {
+		return renderers.NewNuggetRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityEntities)
+
+	registry.RegisterRenderer("gold", func(ctx any) any {
+		return renderers.NewGoldRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityEntities)
+
 	registry.RegisterRenderer("shield", func(ctx any) any {
 		return renderers.NewShieldRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityEffects)
@@ -204,6 +212,8 @@ func ActiveRenderers() []string {
 		"ping",
 		"splash",
 		"characters",
+		"nugget",
+		"gold",
 		"shield",
 		"effects",
 		"materialize",

@@ -19,18 +19,18 @@ const (
 // getCharAt returns the character at the given position, or 0 if empty
 func getCharAt(ctx *engine.GameContext, x, y int) rune {
 	entities := ctx.World.Positions.GetAllAt(x, y)
-	charStore := engine.GetStore[component.CharacterComponent](ctx.World)
+	typeableStore := engine.GetStore[component.TypeableComponent](ctx.World)
 
 	for _, entity := range entities {
 		if entity == ctx.CursorEntity || entity == 0 {
 			continue
 		}
-		char, ok := charStore.Get(entity)
+		typeable, ok := typeableStore.Get(entity)
 		if ok {
-			if char.Rune == ' ' {
+			if typeable.Char == ' ' {
 				return 0
 			}
-			return char.Rune
+			return typeable.Char
 		}
 	}
 	return 0

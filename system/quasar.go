@@ -28,7 +28,6 @@ type QuasarSystem struct {
 	shieldStore *engine.Store[component.ShieldComponent]
 	heatStore   *engine.Store[component.HeatComponent]
 	protStore   *engine.Store[component.ProtectionComponent]
-	charStore   *engine.Store[component.CharacterComponent]
 	nuggetStore *engine.Store[component.NuggetComponent]
 
 	// Runtime state
@@ -54,7 +53,6 @@ func NewQuasarSystem(world *engine.World) engine.System {
 		shieldStore: engine.GetStore[component.ShieldComponent](world),
 		heatStore:   engine.GetStore[component.HeatComponent](world),
 		protStore:   engine.GetStore[component.ProtectionComponent](world),
-		charStore:   engine.GetStore[component.CharacterComponent](world),
 		nuggetStore: engine.GetStore[component.NuggetComponent](world),
 
 		statActive: res.Status.Bools.Get("quasar.active"),
@@ -169,7 +167,7 @@ func (s *QuasarSystem) Update() {
 
 	// Movement update (clock-based, 2x drain speed)
 	if now.Sub(quasar.LastMoveTime) >= constant.QuasarMoveInterval {
-		s.updateMovement(anchorEntity, &header, &quasar)
+		s.updateMovement(anchorEntity)
 		quasar.LastMoveTime = now
 		s.quasarStore.Set(anchorEntity, quasar)
 	}
@@ -179,7 +177,7 @@ func (s *QuasarSystem) Update() {
 }
 
 // updateMovement moves quasar toward cursor
-func (s *QuasarSystem) updateMovement(anchorEntity core.Entity, header *component.CompositeHeaderComponent, quasar *component.QuasarComponent) {
+func (s *QuasarSystem) updateMovement(anchorEntity core.Entity) {
 	config := s.res.Config
 	cursorEntity := s.res.Cursor.Entity
 
@@ -226,10 +224,16 @@ func (s *QuasarSystem) updateMovement(anchorEntity core.Entity, header *componen
 	}
 
 	// Process collisions at new member positions before moving
-	s.processCollisionsAtNewPositions(newAnchorX, newAnchorY, header)
+	s.processCollisionsAtNewPositions(anchorEntity, newAnchorX, newAnchorY)
 
 	// Update anchor position (CompositeSystem will propagate to members)
 	s.world.Positions.Set(anchorEntity, component.PositionComponent{X: newAnchorX, Y: newAnchorY})
+
+	header, ok := s.headerStore.Get(anchorEntity)
+	if !ok {
+		s.terminateQuasar()
+		return
+	}
 
 	// Sync member positions immediately (don't wait for CompositeSystem)
 	for i := range header.Members {
@@ -244,8 +248,14 @@ func (s *QuasarSystem) updateMovement(anchorEntity core.Entity, header *componen
 }
 
 // processCollisionsAtNewPositions destroys entities at quasar's destination
-func (s *QuasarSystem) processCollisionsAtNewPositions(anchorX, anchorY int, header *component.CompositeHeaderComponent) {
+func (s *QuasarSystem) processCollisionsAtNewPositions(anchorEntity core.Entity, anchorX, anchorY int) {
 	cursorEntity := s.res.Cursor.Entity
+
+	header, ok := s.headerStore.Get(anchorEntity)
+	if !ok {
+		s.terminateQuasar()
+		return
+	}
 
 	// Build set of member entity IDs for exclusion
 	memberSet := make(map[core.Entity]bool, len(header.Members)+1)

@@ -19,7 +19,6 @@ type FuseSystem struct {
 	quasarStore   *engine.Store[component.QuasarComponent]
 	headerStore   *engine.Store[component.CompositeHeaderComponent]
 	memberStore   *engine.Store[component.MemberComponent]
-	charStore     *engine.Store[component.CharacterComponent]
 	protStore     *engine.Store[component.ProtectionComponent]
 	typeableStore *engine.Store[component.TypeableComponent]
 
@@ -36,7 +35,6 @@ func NewFuseSystem(world *engine.World) engine.System {
 		quasarStore:   engine.GetStore[component.QuasarComponent](world),
 		headerStore:   engine.GetStore[component.CompositeHeaderComponent](world),
 		memberStore:   engine.GetStore[component.MemberComponent](world),
-		charStore:     engine.GetStore[component.CharacterComponent](world),
 		protStore:     engine.GetStore[component.ProtectionComponent](world),
 		typeableStore: engine.GetStore[component.TypeableComponent](world),
 	}
@@ -196,7 +194,7 @@ func (s *FuseSystem) createQuasarComposite(anchorX, anchorY int) core.Entity {
 	anchorEntity := s.world.CreateEntity()
 	s.world.Positions.Set(anchorEntity, component.PositionComponent{X: anchorX, Y: anchorY})
 
-	// Phantom head is indestructible
+	// Phantom head is indestructible through lifecycle
 	s.protStore.Set(anchorEntity, component.ProtectionComponent{
 		Mask: component.ProtectAll,
 	})
@@ -222,13 +220,6 @@ func (s *FuseSystem) createQuasarComposite(anchorX, anchorY int) core.Entity {
 			entity := s.world.CreateEntity()
 			s.world.Positions.Set(entity, component.PositionComponent{X: memberX, Y: memberY})
 
-			// Visual component using QuasarChars
-			s.charStore.Set(entity, component.CharacterComponent{
-				Rune:  component.QuasarChars[row][col],
-				Color: component.ColorDrain, // Same color as drains
-				Style: component.StyleNormal,
-			})
-
 			// Quasar members are not typeable - they're obstacles
 			// No TypeableComponent set
 
@@ -246,7 +237,7 @@ func (s *FuseSystem) createQuasarComposite(anchorX, anchorY int) core.Entity {
 				Entity:  entity,
 				OffsetX: offsetX,
 				OffsetY: offsetY,
-				Layer:   component.LayerCore,
+				Layer:   component.LayerEffect,
 			})
 		}
 	}

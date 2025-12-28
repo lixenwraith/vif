@@ -19,10 +19,10 @@ type NuggetSystem struct {
 	world *engine.World
 	res   engine.Resources
 
-	nuggetStore *engine.Store[component.NuggetComponent]
-	energyStore *engine.Store[component.EnergyComponent]
-	heatStore   *engine.Store[component.HeatComponent]
-	charStore   *engine.Store[component.CharacterComponent]
+	nuggetStore   *engine.Store[component.NuggetComponent]
+	energyStore   *engine.Store[component.EnergyComponent]
+	heatStore     *engine.Store[component.HeatComponent]
+	typeableStore *engine.Store[component.TypeableComponent]
 
 	nuggetID           atomic.Int32
 	lastSpawnAttempt   time.Time
@@ -43,10 +43,10 @@ func NewNuggetSystem(world *engine.World) engine.System {
 		world: world,
 		res:   res,
 
-		nuggetStore: engine.GetStore[component.NuggetComponent](world),
-		energyStore: engine.GetStore[component.EnergyComponent](world),
-		charStore:   engine.GetStore[component.CharacterComponent](world),
-		heatStore:   engine.GetStore[component.HeatComponent](world),
+		nuggetStore:   engine.GetStore[component.NuggetComponent](world),
+		energyStore:   engine.GetStore[component.EnergyComponent](world),
+		heatStore:     engine.GetStore[component.HeatComponent](world),
+		typeableStore: engine.GetStore[component.TypeableComponent](world),
 
 		statActive:    res.Status.Bools.Get("nugget.active"),
 		statSpawned:   res.Status.Ints.Get("nugget.spawned"),
@@ -249,14 +249,7 @@ func (s *NuggetSystem) spawnNugget() {
 	}
 
 	randomChar := constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
-	// Visual component (renderer uses this)
-	char := component.CharacterComponent{
-		Rune:  randomChar,
-		Color: component.ColorNugget,
-		Style: component.StyleNormal,
-	}
-
-	// Interaction component (typing system uses this)
+	// Interaction component
 	typeable := component.TypeableComponent{
 		Char:  randomChar,
 		Type:  component.TypeNugget,
@@ -277,9 +270,8 @@ func (s *NuggetSystem) spawnNugget() {
 		return
 	}
 
-	// Set other components after position is committed
-	s.charStore.Set(entity, char)
-	engine.GetStore[component.TypeableComponent](s.world).Set(entity, typeable)
+	// Set component after position is committed
+	s.typeableStore.Set(entity, typeable)
 	s.nuggetStore.Set(entity, nugget)
 
 	s.activeNuggetEntity = entity

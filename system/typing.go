@@ -295,8 +295,6 @@ func (s *TypingSystem) handleCompositeMember(entity core.Entity, anchorID core.E
 		// Fallback to CharacterComponent for migration period
 		targetChar = char.Rune
 		switch char.Type {
-		case component.CharacterGold:
-			typeableType = component.TypeGold
 		case component.CharacterBlue:
 			typeableType = component.TypeBlue
 		case component.CharacterGreen:

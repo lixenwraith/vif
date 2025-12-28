@@ -15,7 +15,6 @@ type QuasarRenderer struct {
 
 	quasarStore *engine.Store[component.QuasarComponent]
 	headerStore *engine.Store[component.CompositeHeaderComponent]
-	charStore   *engine.Store[component.CharacterComponent]
 }
 
 // NewQuasarRenderer creates a new quasar renderer
@@ -25,7 +24,6 @@ func NewQuasarRenderer(gameCtx *engine.GameContext) *QuasarRenderer {
 
 		quasarStore: engine.GetStore[component.QuasarComponent](gameCtx.World),
 		headerStore: engine.GetStore[component.CompositeHeaderComponent](gameCtx.World),
-		charStore:   engine.GetStore[component.CharacterComponent](gameCtx.World),
 	}
 }
 
@@ -56,10 +54,10 @@ func (r *QuasarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 				continue
 			}
 
-			char, hasChar := r.charStore.Get(member.Entity)
-			if !hasChar {
-				continue
-			}
+			// Resolve rune from QuasarChars using member offset
+			row := int(member.OffsetY) + constant.QuasarAnchorOffsetY
+			col := int(member.OffsetX) + constant.QuasarAnchorOffsetX
+			ch := component.QuasarChars[row][col]
 
 			screenX := ctx.GameX + pos.X
 			screenY := ctx.GameY + pos.Y
@@ -70,7 +68,7 @@ func (r *QuasarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 				continue
 			}
 
-			buf.SetFgOnly(screenX, screenY, char.Rune, render.RgbDrain, terminal.AttrNone)
+			buf.SetFgOnly(screenX, screenY, ch, render.RgbDrain, terminal.AttrNone)
 		}
 	}
 }

@@ -10,25 +10,27 @@ import (
 
 // CursorRenderer draws the cursor with complex entity overlap handling
 type CursorRenderer struct {
-	gameCtx     *engine.GameContext
-	cursorStore *engine.Store[component.CursorComponent]
-	charStore   *engine.Store[component.CharacterComponent]
-	nuggetStore *engine.Store[component.NuggetComponent]
-	drainStore  *engine.Store[component.DrainComponent]
-	decayStore  *engine.Store[component.DecayComponent]
-	resolver    *engine.ZIndexResolver
+	gameCtx       *engine.GameContext
+	cursorStore   *engine.Store[component.CursorComponent]
+	charStore     *engine.Store[component.CharacterComponent]
+	typeableStore *engine.Store[component.TypeableComponent]
+	nuggetStore   *engine.Store[component.NuggetComponent]
+	drainStore    *engine.Store[component.DrainComponent]
+	decayStore    *engine.Store[component.DecayComponent]
+	resolver      *engine.ZIndexResolver
 }
 
 // NewCursorRenderer creates a new cursor renderer
 func NewCursorRenderer(gameCtx *engine.GameContext) *CursorRenderer {
 	return &CursorRenderer{
-		gameCtx:     gameCtx,
-		cursorStore: engine.GetStore[component.CursorComponent](gameCtx.World),
-		charStore:   engine.GetStore[component.CharacterComponent](gameCtx.World),
-		nuggetStore: engine.GetStore[component.NuggetComponent](gameCtx.World),
-		drainStore:  engine.GetStore[component.DrainComponent](gameCtx.World),
-		decayStore:  engine.GetStore[component.DecayComponent](gameCtx.World),
-		resolver:    engine.MustGetResource[*engine.ZIndexResolver](gameCtx.World.Resources),
+		gameCtx:       gameCtx,
+		cursorStore:   engine.GetStore[component.CursorComponent](gameCtx.World),
+		charStore:     engine.GetStore[component.CharacterComponent](gameCtx.World),
+		typeableStore: engine.GetStore[component.TypeableComponent](gameCtx.World),
+		nuggetStore:   engine.GetStore[component.NuggetComponent](gameCtx.World),
+		drainStore:    engine.GetStore[component.DrainComponent](gameCtx.World),
+		decayStore:    engine.GetStore[component.DecayComponent](gameCtx.World),
+		resolver:      engine.MustGetResource[*engine.ZIndexResolver](gameCtx.World.Resources),
 	}
 }
 
@@ -82,7 +84,7 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			return false
 		}
 		// Only consider entities with characters
-		return r.charStore.Has(e)
+		return r.typeableStore.Has(e)
 	})
 
 	hasChar := displayEntity != 0
@@ -90,13 +92,18 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	var charFg render.RGB
 
 	if hasChar {
+		// TODO: to be deprecated and replaced with only typeable
+		// Try CharacterComponent first (spawned content, nuggets, etc.)
 		if charComp, ok := r.charStore.Get(displayEntity); ok {
 			charAtCursor = charComp.Rune
-			// Resolve color from semantic fields
 			charFg = resolveCharacterColor(charComp)
 			if r.nuggetStore.Has(displayEntity) {
 				isNugget = true
 			}
+		} else if typeable, ok := r.typeableStore.Get(displayEntity); ok {
+			// Fallback to TypeableComponent (gold)
+			charAtCursor = typeable.Char
+			charFg = render.RgbSequenceGold
 		}
 	}
 

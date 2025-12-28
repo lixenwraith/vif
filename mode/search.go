@@ -59,17 +59,17 @@ func RepeatSearch(ctx *engine.GameContext, lastSearchText string, forward bool) 
 // buildCharacterGrid builds a 2D map of characters from the ECS
 func buildCharacterGrid(ctx *engine.GameContext) map[core.Point]rune {
 	grid := make(map[core.Point]rune)
-	charStore := engine.GetStore[component.CharacterComponent](ctx.World)
+	typeableStore := engine.GetStore[component.TypeableComponent](ctx.World)
 
 	entities := ctx.World.Query().
 		With(ctx.World.Positions).
-		With(charStore).
+		With(typeableStore).
 		Execute()
 
 	for _, entity := range entities {
 		pos, _ := ctx.World.Positions.Get(entity)
-		char, _ := charStore.Get(entity)
-		grid[core.Point{X: pos.X, Y: pos.Y}] = char.Rune
+		typeable, _ := typeableStore.Get(entity)
+		grid[core.Point{X: pos.X, Y: pos.Y}] = typeable.Char
 	}
 
 	return grid

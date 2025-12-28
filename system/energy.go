@@ -21,7 +21,6 @@ type EnergySystem struct {
 	shieldStore *engine.Store[component.ShieldComponent]
 	heatStore   *engine.Store[component.HeatComponent]
 	boostStore  *engine.Store[component.BoostComponent]
-	charStore   *engine.Store[component.CharacterComponent]
 	nuggetStore *engine.Store[component.NuggetComponent]
 
 	lastCorrect    time.Time
@@ -42,7 +41,6 @@ func NewEnergySystem(world *engine.World) engine.System {
 		shieldStore: engine.GetStore[component.ShieldComponent](world),
 		heatStore:   engine.GetStore[component.HeatComponent](world),
 		boostStore:  engine.GetStore[component.BoostComponent](world),
-		charStore:   engine.GetStore[component.CharacterComponent](world),
 		nuggetStore: engine.GetStore[component.NuggetComponent](world),
 	}
 	s.initLocked()
