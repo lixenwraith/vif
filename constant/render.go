@@ -7,13 +7,13 @@ import (
 // Render masks categorize buffer cells for selective post-processing
 // Masks are bitfields allowing combination via OR and exclusion via XOR
 const (
-	MaskNone     uint8 = 0
-	MaskPing     uint8 = 1 << 0 // Background grid, ping overlay
-	MaskTypeable uint8 = 1 << 1 // Characters, nuggets, spawned content
-	MaskField    uint8 = 1 << 2 // Cursor shield effect
-	// TODO: break up to particle and transient
+	MaskNone      uint8 = 0
+	MaskPing      uint8 = 1 << 0 // Background grid, ping overlay
+	MaskTypeable  uint8 = 1 << 1 // Characters, nuggets, spawned content
+	MaskField     uint8 = 1 << 2 // Cursor shield effect
 	MaskTransient uint8 = 1 << 3 // Decay, cleaners, flashes, materializers, drains
-	MaskUI        uint8 = 1 << 4 // Heat meter, status bar, line numbers, cursor, overlay
+	MaskComposite uint8 = 1 << 4 // Composites exempt from grayout (Gold, Quasar)
+	MaskUI        uint8 = 1 << 5 // Heat meter, status bar, line numbers, cursor, overlay
 	MaskAll       uint8 = 0xFF
 )
 

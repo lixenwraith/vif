@@ -44,5 +44,5 @@ func (r *GrayoutRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 	if intensity <= 0 {
 		return
 	}
-	buf.MutateGrayscale(intensity, constant.GrayoutMask)
+	buf.MutateGrayscale(intensity, constant.GrayoutMask, constant.MaskPing|constant.MaskField|constant.MaskTransient|constant.MaskComposite|constant.MaskUI)
 }

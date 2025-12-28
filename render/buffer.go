@@ -205,7 +205,7 @@ func (b *RenderBuffer) MutateDim(factor float64, targetMask uint8) {
 // MutateGrayscale desaturates cells matching targetMask
 // intensity: 0.0 = no change, 1.0 = full grayscale
 // Respects Fg/Bg granularity: touched cells get both mutated, untouched get Fg only
-func (b *RenderBuffer) MutateGrayscale(intensity float64, targetMask uint8) {
+func (b *RenderBuffer) MutateGrayscale(intensity float64, targetMask, excludeMask uint8) {
 	if intensity <= 0.0 {
 		return
 	}
@@ -213,6 +213,9 @@ func (b *RenderBuffer) MutateGrayscale(intensity float64, targetMask uint8) {
 
 	for i := range b.cells {
 		if b.masks[i]&targetMask == 0 {
+			continue
+		}
+		if excludeMask != 0 && b.masks[i]&excludeMask != 0 {
 			continue
 		}
 		cell := &b.cells[i]

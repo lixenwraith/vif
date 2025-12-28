@@ -31,13 +31,13 @@ func NewQuasarRenderer(gameCtx *engine.GameContext) *QuasarRenderer {
 
 // Render draws the quasar composite entity
 func (r *QuasarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	buf.SetWriteMask(constant.MaskTransient)
-
 	// Find active quasar anchors
 	anchors := r.quasarStore.All()
 	if len(anchors) == 0 {
 		return
 	}
+
+	buf.SetWriteMask(constant.MaskComposite)
 
 	for _, anchor := range anchors {
 		header, ok := r.headerStore.Get(anchor)
