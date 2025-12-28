@@ -52,15 +52,13 @@ func (o *outputBuffer) resize(width, height int) {
 
 // cellEqual compares two cells for equality (standalone for inlining)
 // Optimization: Skip foreground check to save CPU cycles considering current game context
-// TODO: no issue found in tests, trace to make sure doesn't break space
 func cellEqual(a, b Cell) bool {
-	if a.Rune != b.Rune || a.Attrs != b.Attrs {
-		return false
-	}
-	if a.Rune == 0 {
-		return a.Bg == b.Bg
-	}
-	return a.Fg == b.Fg && a.Bg == b.Bg
+	// A cell is only equal if every visual component matches.
+	// We check the most likely changed fields first (Rune/Bg).
+	return a.Rune == b.Rune &&
+		a.Bg == b.Bg &&
+		a.Fg == b.Fg &&
+		a.Attrs == b.Attrs
 }
 
 // flush writes the back buffer to terminal, diffing against front buffer

@@ -45,11 +45,6 @@ func (r *SplashRenderer) Render(gameCtx render.RenderContext, buf *render.Render
 		if splash.Slot == component.SlotTimer {
 			// Timer: render digits from remaining time (ceiling)
 			remainingSec := int(math.Ceil(splash.Remaining.Seconds()))
-			if remainingSec < 0 {
-				remainingSec = 0
-				// TODO: change to `remainingSec <= 0` and continue after checking there is no phantom timers
-				// continue // System should destroy, but renderer skips for safety
-			}
 
 			digits := strconv.Itoa(remainingSec)
 			for i, d := range digits {
@@ -100,19 +95,6 @@ func (r *SplashRenderer) renderChar(gameCtx render.RenderContext, buf *render.Re
 		bitmap = asset.SplashFont[char-32]
 	}
 
-	// // Check if bitmap is empty (all zeros = missing glyph)
-	// // TODO: defensive, delete after check
-	// isEmpty := true
-	// for _, row := range bitmap {
-	// 	if row != 0 {
-	// 		isEmpty = false
-	// 		break
-	// 	}
-	// }
-	// if isEmpty && char != ' ' {
-	// 	bitmap = asset.SplashFontFallback
-	// }
-
 	for row := 0; row < constant.SplashCharHeight; row++ {
 		screenY := gameCtx.GameY + gameY + row
 		if screenY < gameCtx.GameY || screenY >= gameCtx.GameY+gameCtx.GameHeight {
@@ -136,7 +118,6 @@ func (r *SplashRenderer) renderChar(gameCtx render.RenderContext, buf *render.Re
 	}
 }
 
-// TODO: refactor, this logic is defined twice to avoid a cyclic dependency
 // resolveSplashColor maps the SplashColor enum to actual render.RGB
 func (r *SplashRenderer) resolveSplashColor(c component.SplashColor) render.RGB {
 	switch c {

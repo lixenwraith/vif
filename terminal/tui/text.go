@@ -1,18 +1,27 @@
 package tui
 
+import (
+	"unicode/utf8"
+)
+
 // Truncate truncates string with … suffix if exceeds maxLen
 func Truncate(s string, maxLen int) string {
 	if maxLen <= 0 {
 		return ""
 	}
-	runes := []rune(s)
-	if len(runes) <= maxLen {
+	if utf8.RuneCountInString(s) <= maxLen {
 		return s
 	}
-	if maxLen <= 1 {
-		return "…"
+
+	// Boundary-safe truncation for UTF-8
+	count := 0
+	for i := range s {
+		if count == maxLen-1 {
+			return s[:i] + "…"
+		}
+		count++
 	}
-	return string(runes[:maxLen-1]) + "…"
+	return s
 }
 
 // TruncateLeft truncates with … prefix, keeps end of string
@@ -97,11 +106,7 @@ func PadCenter(s string, width int) string {
 
 // RuneLen returns display width (rune count, not byte count)
 func RuneLen(s string) int {
-	n := 0
-	for range s {
-		n++
-	}
-	return n
+	return utf8.RuneCountInString(s)
 }
 
 // WrapText wraps text at word boundaries to fit width

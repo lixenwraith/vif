@@ -1,0 +1,483 @@
+// FILE: terminal/tui/tree.go
+package tui
+
+import "github.com/lixenwraith/vi-fighter/terminal"
+
+// TreeNode represents a node in a hierarchical tree
+type TreeNode struct {
+	Key        string // Unique identifier for expansion state
+	Label      string // Display text
+	Icon       rune   // Custom icon, 0 = auto (▶/▼ for expandable, • for leaf)
+	IconFg     terminal.RGB
+	Expandable bool       // Has children
+	Expanded   bool       // Currently expanded
+	Depth      int        // Nesting level (0 = root)
+	Check      CheckState // Optional checkbox, CheckNone to skip
+	CheckFg    terminal.RGB
+	Style      Style // Text styling
+	IsLast     bool  // Last sibling at this depth (for tree lines)
+	Data       any   // Application payload
+}
+
+// TreeLineMode specifies connector line rendering
+type TreeLineMode uint8
+
+const (
+	TreeLinesNone   TreeLineMode = iota // Indent only, no lines
+	TreeLinesSimple                     // │ continuation, └ for last
+)
+
+// TreeOpts configures tree rendering
+type TreeOpts struct {
+	CursorBg    terminal.RGB
+	DefaultBg   terminal.RGB
+	IndentWidth int // Cells per depth, default 2
+	IconWidth   int // Width for icon column, default 2
+	LineMode    TreeLineMode
+	LineFg      terminal.RGB
+}
+
+// DefaultTreeOpts returns sensible defaults
+func DefaultTreeOpts() TreeOpts {
+	return TreeOpts{
+		IndentWidth: 2,
+		IconWidth:   2,
+		LineMode:    TreeLinesNone,
+		LineFg:      terminal.RGB{R: 80, G: 80, B: 100},
+	}
+}
+
+// Tree renders hierarchical tree nodes within region
+// nodes must be pre-flattened (only visible/expanded nodes included)
+// Returns number of rows rendered
+func (r Region) Tree(nodes []TreeNode, cursor, scroll int, opts TreeOpts) int {
+	if r.H < 1 || len(nodes) == 0 {
+		return 0
+	}
+
+	indentW := opts.IndentWidth
+	if indentW < 1 {
+		indentW = 2
+	}
+	iconW := opts.IconWidth
+	if iconW < 1 {
+		iconW = 2
+	}
+
+	rendered := 0
+	for y := 0; y < r.H; y++ {
+		idx := scroll + y
+		if idx >= len(nodes) {
+			break
+		}
+
+		node := nodes[idx]
+		isCursor := idx == cursor
+
+		bg := opts.DefaultBg
+		if isCursor {
+			bg = opts.CursorBg
+		}
+
+		// Clear row
+		for x := 0; x < r.W; x++ {
+			r.Cell(x, y, ' ', terminal.RGB{}, bg, terminal.AttrNone)
+		}
+
+		x := 0
+
+		// Tree lines (if enabled)
+		if opts.LineMode == TreeLinesSimple && node.Depth > 0 {
+			x = r.renderTreeLines(y, x, node, nodes, idx, scroll, indentW, opts.LineFg, bg)
+		} else {
+			x = node.Depth * indentW
+		}
+
+		// Icon (expand indicator or leaf)
+		icon := node.Icon
+		iconFg := node.IconFg
+		if icon == 0 {
+			if node.Expandable {
+				if node.Expanded {
+					icon = IconExpanded
+				} else {
+					icon = IconCollapsed
+				}
+			} else {
+				icon = IconBullet
+			}
+		}
+		if iconFg == (terminal.RGB{}) {
+			iconFg = opts.LineFg
+		}
+		if x < r.W {
+			r.Cell(x, y, icon, iconFg, bg, terminal.AttrNone)
+		}
+		x += iconW
+
+		// Checkbox
+		if node.Check != CheckNone || node.CheckFg != (terminal.RGB{}) {
+			if x+3 <= r.W {
+				checkFg := node.CheckFg
+				if checkFg == (terminal.RGB{}) {
+					checkFg = node.Style.Fg
+				}
+				var ch rune
+				switch node.Check {
+				case CheckNone:
+					ch = ' '
+				case CheckPartial:
+					ch = 'o'
+				case CheckFull:
+					ch = 'x'
+				case CheckPlus:
+					ch = '+'
+				}
+				r.Cell(x, y, '[', checkFg, bg, terminal.AttrNone)
+				r.Cell(x+1, y, ch, checkFg, bg, terminal.AttrNone)
+				r.Cell(x+2, y, ']', checkFg, bg, terminal.AttrNone)
+			}
+			x += 4
+		}
+
+		// Label
+		style := node.Style
+		if style.Bg == (terminal.RGB{}) {
+			style.Bg = bg
+		}
+		label := node.Label
+		if x+RuneLen(label) > r.W {
+			label = Truncate(label, r.W-x)
+		}
+		r.TextStyled(x, y, label, style)
+
+		rendered++
+	}
+
+	return rendered
+}
+
+// renderTreeLines draws connector lines for tree structure
+// Returns x position after lines
+func (r Region) renderTreeLines(y, startX int, node TreeNode, nodes []TreeNode, idx, scroll, indentW int, fg terminal.RGB, bg terminal.RGB) int {
+	x := startX
+
+	for d := 0; d < node.Depth; d++ {
+		// Determine if ancestor at this depth has more siblings below
+		hasMore := r.ancestorHasMoreSiblings(nodes, idx, d)
+
+		if d == node.Depth-1 {
+			// Direct parent level - show branch
+			if node.IsLast {
+				r.Cell(x, y, '└', fg, bg, terminal.AttrNone)
+			} else {
+				r.Cell(x, y, '├', fg, bg, terminal.AttrNone)
+			}
+			// Horizontal connector
+			for i := 1; i < indentW; i++ {
+				if x+i < r.W {
+					r.Cell(x+i, y, '─', fg, bg, terminal.AttrNone)
+				}
+			}
+		} else {
+			// Ancestor level - show continuation or space
+			if hasMore {
+				r.Cell(x, y, '│', fg, bg, terminal.AttrNone)
+			}
+			// Fill rest with spaces (already cleared)
+		}
+		x += indentW
+	}
+
+	return x
+}
+
+// ancestorHasMoreSiblings checks if there are more nodes at given depth after idx
+func (r Region) ancestorHasMoreSiblings(nodes []TreeNode, idx, depth int) bool {
+	targetDepth := depth
+	for i := idx + 1; i < len(nodes); i++ {
+		if nodes[i].Depth <= targetDepth {
+			return nodes[i].Depth == targetDepth
+		}
+	}
+	return false
+}
+
+// TreeState manages navigation state for a tree
+type TreeState struct {
+	Cursor  int
+	Scroll  int
+	Visible int // Viewport height
+}
+
+// NewTreeState creates initialized tree state
+func NewTreeState(visible int) *TreeState {
+	return &TreeState{
+		Visible: visible,
+	}
+}
+
+// MoveCursor adjusts cursor position by delta
+func (t *TreeState) MoveCursor(delta, total int) {
+	t.Cursor += delta
+	if t.Cursor < 0 {
+		t.Cursor = 0
+	}
+	if t.Cursor >= total {
+		t.Cursor = total - 1
+	}
+	if t.Cursor < 0 {
+		t.Cursor = 0
+	}
+	t.AdjustScroll(total)
+}
+
+// AdjustScroll ensures cursor is visible
+func (t *TreeState) AdjustScroll(total int) {
+	if t.Visible <= 0 {
+		return
+	}
+	if t.Cursor < t.Scroll {
+		t.Scroll = t.Cursor
+	}
+	if t.Cursor >= t.Scroll+t.Visible {
+		t.Scroll = t.Cursor - t.Visible + 1
+	}
+	// Clamp scroll
+	maxScroll := total - t.Visible
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if t.Scroll > maxScroll {
+		t.Scroll = maxScroll
+	}
+	if t.Scroll < 0 {
+		t.Scroll = 0
+	}
+}
+
+// JumpStart moves cursor to first item
+func (t *TreeState) JumpStart() {
+	t.Cursor = 0
+	t.Scroll = 0
+}
+
+// JumpEnd moves cursor to last item
+func (t *TreeState) JumpEnd(total int) {
+	if total > 0 {
+		t.Cursor = total - 1
+	}
+	t.AdjustScroll(total)
+}
+
+// PageUp scrolls up by half viewport
+func (t *TreeState) PageUp(total int) {
+	delta := t.Visible / 2
+	if delta < 1 {
+		delta = 1
+	}
+	t.MoveCursor(-delta, total)
+}
+
+// PageDown scrolls down by half viewport
+func (t *TreeState) PageDown(total int) {
+	delta := t.Visible / 2
+	if delta < 1 {
+		delta = 1
+	}
+	t.MoveCursor(delta, total)
+}
+
+// SetVisible updates viewport height
+func (t *TreeState) SetVisible(visible int) {
+	t.Visible = visible
+}
+
+// TreeExpansion manages expand/collapse state
+type TreeExpansion struct {
+	State map[string]bool
+}
+
+// NewTreeExpansion creates initialized expansion state
+func NewTreeExpansion() *TreeExpansion {
+	return &TreeExpansion{
+		State: make(map[string]bool),
+	}
+}
+
+// IsExpanded returns expansion state for key
+func (e *TreeExpansion) IsExpanded(key string) bool {
+	return e.State[key]
+}
+
+// SetExpanded sets expansion state for key
+func (e *TreeExpansion) SetExpanded(key string, expanded bool) {
+	e.State[key] = expanded
+}
+
+// Toggle toggles expansion state for key
+func (e *TreeExpansion) Toggle(key string) bool {
+	e.State[key] = !e.State[key]
+	return e.State[key]
+}
+
+// Expand sets key to expanded
+func (e *TreeExpansion) Expand(key string) {
+	e.State[key] = true
+}
+
+// Collapse sets key to collapsed
+func (e *TreeExpansion) Collapse(key string) {
+	e.State[key] = false
+}
+
+// ExpandAll expands all provided keys
+func (e *TreeExpansion) ExpandAll(keys []string) {
+	for _, k := range keys {
+		e.State[k] = true
+	}
+}
+
+// CollapseAll collapses all keys
+func (e *TreeExpansion) CollapseAll() {
+	for k := range e.State {
+		e.State[k] = false
+	}
+}
+
+// Clear removes all expansion state
+func (e *TreeExpansion) Clear() {
+	e.State = make(map[string]bool)
+}
+
+// TreeBuilder helps construct flattened visible node list from hierarchical data
+type TreeBuilder struct {
+	nodes     []TreeNode
+	expansion *TreeExpansion
+}
+
+// NewTreeBuilder creates a builder with expansion state
+func NewTreeBuilder(expansion *TreeExpansion) *TreeBuilder {
+	return &TreeBuilder{
+		expansion: expansion,
+	}
+}
+
+// Reset clears accumulated nodes
+func (b *TreeBuilder) Reset() {
+	b.nodes = b.nodes[:0]
+}
+
+// Add adds a node if visible (parent expanded)
+// parentExpanded should be true for root-level nodes
+func (b *TreeBuilder) Add(node TreeNode, parentExpanded bool) {
+	if !parentExpanded {
+		return
+	}
+	node.Expanded = b.expansion.IsExpanded(node.Key)
+	b.nodes = append(b.nodes, node)
+}
+
+// Nodes returns accumulated visible nodes
+func (b *TreeBuilder) Nodes() []TreeNode {
+	return b.nodes
+}
+
+// MarkLastSiblings sets IsLast flag on nodes that are last at their depth
+// Call after all nodes added, before rendering
+func (b *TreeBuilder) MarkLastSiblings() {
+	n := len(b.nodes)
+	if n == 0 {
+		return
+	}
+
+	// Track last seen index at each depth
+	depthLast := make(map[int]int)
+
+	for i := 0; i < n; i++ {
+		depth := b.nodes[i].Depth
+		depthLast[depth] = i
+
+		// When we see a node, all deeper nodes before it are "last" at their levels
+		// Actually we need to mark when depth decreases or changes
+	}
+
+	// Simpler approach: scan backwards, mark last at each depth transition
+	for i := n - 1; i >= 0; i-- {
+		depth := b.nodes[i].Depth
+
+		// Check if next node (i+1) is at same or lesser depth
+		if i == n-1 {
+			b.nodes[i].IsLast = true
+		} else {
+			nextDepth := b.nodes[i+1].Depth
+			b.nodes[i].IsLast = nextDepth <= depth
+		}
+	}
+}
+
+// FindParentIndex returns index of parent node for node at idx, or -1 if root
+func FindParentIndex(nodes []TreeNode, idx int) int {
+	if idx <= 0 || idx >= len(nodes) {
+		return -1
+	}
+	targetDepth := nodes[idx].Depth - 1
+	if targetDepth < 0 {
+		return -1
+	}
+	for i := idx - 1; i >= 0; i-- {
+		if nodes[i].Depth == targetDepth {
+			return i
+		}
+	}
+	return -1
+}
+
+// FindFirstChildIndex returns index of first child for node at idx, or -1 if none
+func FindFirstChildIndex(nodes []TreeNode, idx int) int {
+	if idx < 0 || idx >= len(nodes)-1 {
+		return -1
+	}
+	if !nodes[idx].Expandable || !nodes[idx].Expanded {
+		return -1
+	}
+	childDepth := nodes[idx].Depth + 1
+	if idx+1 < len(nodes) && nodes[idx+1].Depth == childDepth {
+		return idx + 1
+	}
+	return -1
+}
+
+// FindNextSiblingIndex returns index of next sibling at same depth, or -1
+func FindNextSiblingIndex(nodes []TreeNode, idx int) int {
+	if idx < 0 || idx >= len(nodes) {
+		return -1
+	}
+	depth := nodes[idx].Depth
+	for i := idx + 1; i < len(nodes); i++ {
+		if nodes[i].Depth < depth {
+			return -1 // Went up, no more siblings
+		}
+		if nodes[i].Depth == depth {
+			return i
+		}
+	}
+	return -1
+}
+
+// FindPrevSiblingIndex returns index of previous sibling at same depth, or -1
+func FindPrevSiblingIndex(nodes []TreeNode, idx int) int {
+	if idx <= 0 || idx >= len(nodes) {
+		return -1
+	}
+	depth := nodes[idx].Depth
+	for i := idx - 1; i >= 0; i-- {
+		if nodes[i].Depth < depth {
+			return -1 // Went up, no more siblings
+		}
+		if nodes[i].Depth == depth {
+			return i
+		}
+	}
+	return -1
+}

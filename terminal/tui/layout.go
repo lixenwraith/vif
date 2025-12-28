@@ -32,7 +32,10 @@ func SplitH(r Region, ratios ...float64) []Region {
 		if i == len(ratios)-1 {
 			w = remaining // Last one gets remainder to avoid rounding gaps
 		} else {
-			w = int(float64(r.W) * ratio / sum)
+			w = int((float64(r.W) * ratio / sum) + 0.5) // Round to nearest cell
+			if w > remaining {
+				w = remaining
+			}
 		}
 		regions[i] = r.Sub(x, 0, w, r.H)
 		x += w

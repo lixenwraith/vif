@@ -487,8 +487,8 @@ func (s *DrainSystem) despawnAllDrains() {
 
 // despawnDrainWithFlash removes a single drain entity and triggers destruction flash
 func (s *DrainSystem) despawnDrainWithFlash(entity core.Entity) {
-	// TODO: change flash to accommodate? or better: anti-decay mechanic or energy explosion (accumulated energy of stuff eaten)
-	// Flash emitted inline - drain entities lack CharacterComponent
+	// TODO: change flash/desth to accommodate sigil components, or energy explosion (accumulated energy of stuff eaten)
+	// Flash emitted inline - drain entities lack GlyphComponent
 	if pos, ok := s.world.Positions.Get(entity); ok {
 		s.world.PushEvent(event.EventFlashRequest, &event.FlashRequestPayload{
 			X:    pos.X,

@@ -31,7 +31,6 @@ func RegisterComponents(w *engine.World) {
 	engine.RegisterComponent[component.DrainComponent](w)
 	engine.RegisterComponent[component.MaterializeComponent](w)
 	engine.RegisterComponent[component.QuasarComponent](w)
-	engine.RegisterComponent[component.GlyphComponent](w)
 	engine.RegisterComponent[component.CompositeHeaderComponent](w)
 	engine.RegisterComponent[component.MemberComponent](w)
 	engine.RegisterComponent[component.BlossomComponent](w)

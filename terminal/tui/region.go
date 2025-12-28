@@ -70,14 +70,17 @@ func (r Region) Cell(x, y int, ch rune, fg, bg terminal.RGB, attr terminal.Attr)
 	}
 	absX := r.X + x
 	absY := r.Y + y
-	if absX < 0 || absX >= r.TotalW {
+
+	// Bounds check against the physical buffer dimensions
+	if uint(absX) >= uint(r.TotalW) {
 		return
 	}
+
 	idx := absY*r.TotalW + absX
-	if idx < 0 || idx >= len(r.Cells) {
-		return
+	// Single bounds check for the backing slice
+	if uint(idx) < uint(len(r.Cells)) {
+		r.Cells[idx] = terminal.Cell{Rune: ch, Fg: fg, Bg: bg, Attrs: attr}
 	}
-	r.Cells[idx] = terminal.Cell{Rune: ch, Fg: fg, Bg: bg, Attrs: attr}
 }
 
 // Fill fills entire region with background color

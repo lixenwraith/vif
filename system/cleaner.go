@@ -394,7 +394,8 @@ func (s *CleanerSystem) processNegativeEnergy(x, y int, targetEntities []core.En
 		}
 
 		// Mutate Blue → Green, preserving level
-		s.mutateBlueToGreen(e, glyph)
+		glyph.Type = component.GlyphGreen
+		s.glyphStore.Set(e, glyph)
 
 		// Spawn decay at same position (particle skips starting cell via LastIntX/Y)
 		s.world.PushEvent(event.EventDecaySpawnOne, &event.DecaySpawnPayload{
@@ -403,19 +404,6 @@ func (s *CleanerSystem) processNegativeEnergy(x, y int, targetEntities []core.En
 			Char:          glyph.Rune,
 			SkipStartCell: true,
 		})
-	}
-}
-
-// mutateBlueToGreen transforms a Blue glyph to Green, preserving level
-func (s *CleanerSystem) mutateBlueToGreen(entity core.Entity, glyph component.GlyphComponent) {
-	// Update GlyphComponent
-	glyph.Type = component.GlyphGreen
-	s.glyphStore.Set(entity, glyph)
-
-	// Sync GlyphComponent for rendering
-	if glyph, ok := s.glyphStore.Get(entity); ok {
-		glyph.Type = component.GlyphGreen
-		s.glyphStore.Set(entity, glyph)
 	}
 }
 
