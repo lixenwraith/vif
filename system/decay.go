@@ -19,14 +19,13 @@ type DecaySystem struct {
 	world *engine.World
 	res   engine.Resources
 
-	decayStore    *engine.Store[component.DecayComponent]
-	protStore     *engine.Store[component.ProtectionComponent]
-	deathStore    *engine.Store[component.DeathComponent]
-	nuggetStore   *engine.Store[component.NuggetComponent]
-	sigilStore    *engine.Store[component.SigilComponent]
-	glyphStore    *engine.Store[component.GlyphComponent]
-	typeableStore *engine.Store[component.TypeableComponent]
-	blossomStore  *engine.Store[component.BlossomComponent]
+	decayStore   *engine.Store[component.DecayComponent]
+	protStore    *engine.Store[component.ProtectionComponent]
+	deathStore   *engine.Store[component.DeathComponent]
+	nuggetStore  *engine.Store[component.NuggetComponent]
+	sigilStore   *engine.Store[component.SigilComponent]
+	glyphStore   *engine.Store[component.GlyphComponent]
+	blossomStore *engine.Store[component.BlossomComponent]
 
 	// Per-frame tracking
 	decayedThisFrame   map[core.Entity]bool
@@ -45,14 +44,13 @@ func NewDecaySystem(world *engine.World) engine.System {
 		world: world,
 		res:   res,
 
-		decayStore:    engine.GetStore[component.DecayComponent](world),
-		protStore:     engine.GetStore[component.ProtectionComponent](world),
-		deathStore:    engine.GetStore[component.DeathComponent](world),
-		nuggetStore:   engine.GetStore[component.NuggetComponent](world),
-		sigilStore:    engine.GetStore[component.SigilComponent](world),
-		glyphStore:    engine.GetStore[component.GlyphComponent](world),
-		typeableStore: engine.GetStore[component.TypeableComponent](world),
-		blossomStore:  engine.GetStore[component.BlossomComponent](world),
+		decayStore:   engine.GetStore[component.DecayComponent](world),
+		protStore:    engine.GetStore[component.ProtectionComponent](world),
+		deathStore:   engine.GetStore[component.DeathComponent](world),
+		nuggetStore:  engine.GetStore[component.NuggetComponent](world),
+		sigilStore:   engine.GetStore[component.SigilComponent](world),
+		glyphStore:   engine.GetStore[component.GlyphComponent](world),
+		blossomStore: engine.GetStore[component.BlossomComponent](world),
 
 		decayedThisFrame:   make(map[core.Entity]bool),
 		processedGridCells: make(map[int]bool),
@@ -299,16 +297,16 @@ func (s *DecaySystem) updateDecayEntities() {
 
 // shouldDieByDecay checks if a character has reached the end of the decay chain
 func (s *DecaySystem) shouldDieByDecay(entity core.Entity) bool {
-	typeable, ok := s.typeableStore.Get(entity)
+	glyph, ok := s.glyphStore.Get(entity)
 	if !ok {
 		return false
 	}
-	return typeable.Level == component.LevelDark && typeable.Type == component.TypeRed
+	return glyph.Level == component.GlyphDark && glyph.Type == component.GlyphRed
 }
 
 // applyDecayToCharacter applies decay logic to a single character entity
 func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
-	typeable, ok := s.typeableStore.Get(entity)
+	glyph, ok := s.glyphStore.Get(entity)
 	if !ok {
 		return
 	}
@@ -321,41 +319,23 @@ func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
 		}
 	}
 
-	// Get glyph component for renderer sync
-	glyph, hasGlyph := s.glyphStore.Get(entity)
-
 	// Apply decay logic
-	if typeable.Level > component.LevelDark {
-		typeable.Level--
-		s.typeableStore.Set(entity, typeable)
-
-		// Sync renderer
-		if hasGlyph {
-			glyph.Level = component.GlyphLevel(typeable.Level)
-			s.glyphStore.Set(entity, glyph)
-		}
+	if glyph.Level > component.GlyphDark {
+		// Decrease level if not level dark
+		glyph.Level--
+		s.glyphStore.Set(entity, glyph)
 	} else {
 		// Dark level: type chain Blue→Green→Red→destroy
-		switch typeable.Type {
-		case component.TypeBlue:
-			typeable.Type = component.TypeGreen
-			typeable.Level = component.LevelBright
-			s.typeableStore.Set(entity, typeable)
-			if hasGlyph {
-				glyph.Type = component.GlyphGreen
-				glyph.Level = component.GlyphBright
-				s.glyphStore.Set(entity, glyph)
-			}
+		switch glyph.Type {
+		case component.GlyphBlue:
+			glyph.Type = component.GlyphGreen
+			glyph.Level = component.GlyphBright
+			s.glyphStore.Set(entity, glyph)
 
-		case component.TypeGreen:
-			typeable.Type = component.TypeRed
-			typeable.Level = component.LevelBright
-			s.typeableStore.Set(entity, typeable)
-			if hasGlyph {
-				glyph.Type = component.GlyphRed
-				glyph.Level = component.GlyphBright
-				s.glyphStore.Set(entity, glyph)
-			}
+		case component.GlyphGreen:
+			glyph.Type = component.GlyphRed
+			glyph.Level = component.GlyphBright
+			s.glyphStore.Set(entity, glyph)
 
 		default:
 			// Fallback: Red or other: destroy

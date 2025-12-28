@@ -88,7 +88,7 @@ func NewGameContext(world *World, width, height int) *GameContext {
 
 	// 0. Status Registry (before other resources that may use it)
 	statusRegistry := status.NewRegistry()
-	AddResource(ctx.World.Resources, statusRegistry)
+	SetResource(ctx.World.Resources, statusRegistry)
 
 	// 1. Config Resource
 	configRes := &ConfigResource{
@@ -99,7 +99,7 @@ func NewGameContext(world *World, width, height int) *GameContext {
 		GameX:        ctx.GameX,
 		GameY:        ctx.GameY,
 	}
-	AddResource(ctx.World.Resources, configRes)
+	SetResource(ctx.World.Resources, configRes)
 
 	// 2. Time Resource (Initial state)
 	timeRes := &TimeResource{
@@ -108,24 +108,24 @@ func NewGameContext(world *World, width, height int) *GameContext {
 		DeltaTime:   constant.GameUpdateInterval,
 		FrameNumber: ctx.FrameNumber.Load(),
 	}
-	AddResource(ctx.World.Resources, timeRes)
+	SetResource(ctx.World.Resources, timeRes)
 
 	// 3. Event Queue Resource
-	AddResource(ctx.World.Resources, &EventQueueResource{Queue: ctx.eventQueue})
+	SetResource(ctx.World.Resources, &EventQueueResource{Queue: ctx.eventQueue})
 
 	// 4. Game State
 	ctx.State = NewGameState()
-	AddResource(ctx.World.Resources, &GameStateResource{State: ctx.State})
+	SetResource(ctx.World.Resources, &GameStateResource{State: ctx.State})
 
 	// 5. Cursor Entity
 	ctx.CreateCursorEntity()
 
 	// 6. Cursor Resource
-	AddResource(ctx.World.Resources, &CursorResource{Entity: ctx.CursorEntity})
+	SetResource(ctx.World.Resources, &CursorResource{Entity: ctx.CursorEntity})
 
 	// ZIndex resolver for entity interaction ordering
 	zIndexResolver := NewZIndexResolver(ctx.World)
-	AddResource(ctx.World.Resources, zIndexResolver)
+	SetResource(ctx.World.Resources, zIndexResolver)
 
 	// Initialize atomic string pointers to empty strings
 	empty := ""

@@ -21,11 +21,11 @@ type GoldSystem struct {
 	res   engine.Resources
 
 	// Cached stores (resolved once at construction)
-	headerStore   *engine.Store[component.CompositeHeaderComponent]
-	memberStore   *engine.Store[component.MemberComponent]
-	typeableStore *engine.Store[component.TypeableComponent]
-	protStore     *engine.Store[component.ProtectionComponent]
-	heatStore     *engine.Store[component.HeatComponent]
+	headerStore *engine.Store[component.CompositeHeaderComponent]
+	memberStore *engine.Store[component.MemberComponent]
+	glyphStore  *engine.Store[component.GlyphComponent]
+	protStore   *engine.Store[component.ProtectionComponent]
+	heatStore   *engine.Store[component.HeatComponent]
 
 	// Internal state
 	active       bool
@@ -49,11 +49,11 @@ func NewGoldSystem(world *engine.World) engine.System {
 		world: world,
 		res:   res,
 
-		headerStore:   engine.GetStore[component.CompositeHeaderComponent](world),
-		memberStore:   engine.GetStore[component.MemberComponent](world),
-		typeableStore: engine.GetStore[component.TypeableComponent](world),
-		protStore:     engine.GetStore[component.ProtectionComponent](world),
-		heatStore:     engine.GetStore[component.HeatComponent](world),
+		headerStore: engine.GetStore[component.CompositeHeaderComponent](world),
+		memberStore: engine.GetStore[component.MemberComponent](world),
+		glyphStore:  engine.GetStore[component.GlyphComponent](world),
+		protStore:   engine.GetStore[component.ProtectionComponent](world),
+		heatStore:   engine.GetStore[component.HeatComponent](world),
 
 		statActive:   res.Status.Bools.Get("gold.active"),
 		statAnchorID: res.Status.Ints.Get("gold.anchor_id"),
@@ -263,10 +263,10 @@ func (s *GoldSystem) spawnGold() bool {
 	// Phase 5: Set components to members
 	for i, ed := range entities {
 		// Typing target
-		s.typeableStore.Set(ed.entity, component.TypeableComponent{
-			Char:  sequence[i],
-			Type:  component.TypeGold,
-			Level: component.LevelBright,
+		s.glyphStore.Set(ed.entity, component.GlyphComponent{
+			Rune:  sequence[i],
+			Type:  component.GlyphGold,
+			Level: component.GlyphBright,
 		})
 
 		// Composite membership

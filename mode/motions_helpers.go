@@ -19,18 +19,18 @@ const (
 // getCharAt returns the character at the given position, or 0 if empty
 func getCharAt(ctx *engine.GameContext, x, y int) rune {
 	entities := ctx.World.Positions.GetAllAt(x, y)
-	typeableStore := engine.GetStore[component.TypeableComponent](ctx.World)
+	glyphStore := engine.GetStore[component.GlyphComponent](ctx.World)
 
 	for _, entity := range entities {
 		if entity == ctx.CursorEntity || entity == 0 {
 			continue
 		}
-		typeable, ok := typeableStore.Get(entity)
+		glyph, ok := glyphStore.Get(entity)
 		if ok {
-			if typeable.Char == ' ' {
+			if glyph.Rune == ' ' {
 				return 0
 			}
-			return typeable.Char
+			return glyph.Rune
 		}
 	}
 	return 0
@@ -74,7 +74,7 @@ func validatePosition(ctx *engine.GameContext, x, y int) (validX, validY int) {
 func findCharInDirection(ctx *engine.GameContext, startX, startY int, target rune, count int, forward bool) (int, bool) {
 	occurrences := 0
 	lastMatch := -1
-	typeableStore := engine.GetStore[component.TypeableComponent](ctx.World)
+	glyphStore := engine.GetStore[component.GlyphComponent](ctx.World)
 
 	if forward {
 		for x := startX + 1; x < ctx.GameWidth; x++ {
@@ -83,8 +83,8 @@ func findCharInDirection(ctx *engine.GameContext, startX, startY int, target run
 				if entity == 0 {
 					continue
 				}
-				typeable, ok := typeableStore.Get(entity)
-				if ok && typeable.Char == target {
+				glyph, ok := glyphStore.Get(entity)
+				if ok && glyph.Rune == target {
 					occurrences++
 					lastMatch = x
 					if occurrences == count {
@@ -100,8 +100,8 @@ func findCharInDirection(ctx *engine.GameContext, startX, startY int, target run
 				if entity == 0 {
 					continue
 				}
-				typeable, ok := typeableStore.Get(entity)
-				if ok && typeable.Char == target {
+				glyph, ok := glyphStore.Get(entity)
+				if ok && glyph.Rune == target {
 					occurrences++
 					lastMatch = x
 					if occurrences == count {

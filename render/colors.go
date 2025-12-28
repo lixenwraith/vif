@@ -31,11 +31,12 @@ var (
 	RgbSequenceBlueNormal = RGB{80, 130, 255}
 	RgbSequenceBlueBright = RGB{120, 170, 255}
 
-	RgbSequenceGold = RGB{255, 255, 0}   // Bright Yellow for gold sequence
-	RgbDecay        = RGB{0, 139, 139}   // Dark Cyan for decay animation
-	RgbBlossom      = RGB{255, 182, 193} // Light pink (cherry blossom)
-	RgbDrain        = RGB{0, 200, 200}   // Vibrant Cyan for drain entity
-	RgbMaterialize  = RGB{0, 220, 220}   // Bright cyan for materialize head
+	RgbSequenceGold = RGB{255, 255, 0} // Bright Yellow for gold sequence
+
+	RgbDecay       = RGB{0, 139, 139}   // Dark Cyan for decay animation
+	RgbBlossom     = RGB{255, 182, 193} // Light pink (cherry blossom)
+	RgbDrain       = RGB{0, 200, 200}   // Vibrant Cyan for drain entity
+	RgbMaterialize = RGB{0, 220, 220}   // Bright cyan for materialize head
 
 	RgbLineNumbers     = RGB{180, 180, 180} // Brighter gray
 	RgbStatusBar       = RGB{255, 255, 255} // White
@@ -43,7 +44,6 @@ var (
 	RgbBackground      = RGB{26, 27, 38}    // Tokyo Night background
 
 	RgbPingHighlight  = RGB{5, 5, 5}       // Almost Black for INSERT mode ping
-	RgbPingNormal     = RGB{153, 102, 0}   // Legacy: Dark orange (used by blend-tester)
 	RgbPingLineNormal = RGB{40, 40, 40}    // Dark gray for NORMAL mode ping lines
 	RgbPingGridNormal = RGB{55, 55, 55}    // Slightly lighter gray for NORMAL mode ping grid
 	RgbPingOrange     = RGB{60, 40, 0}     // Very dark orange for ping on whitespace

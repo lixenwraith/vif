@@ -19,16 +19,15 @@ type BlossomSystem struct {
 	world *engine.World
 	res   engine.Resources
 
-	blossomStore  *engine.Store[component.BlossomComponent]
-	decayStore    *engine.Store[component.DecayComponent]
-	protStore     *engine.Store[component.ProtectionComponent]
-	deathStore    *engine.Store[component.DeathComponent]
-	nuggetStore   *engine.Store[component.NuggetComponent]
-	sigilStore    *engine.Store[component.SigilComponent]
-	glyphStore    *engine.Store[component.GlyphComponent]
-	typeableStore *engine.Store[component.TypeableComponent]
-	memberStore   *engine.Store[component.MemberComponent]
-	headerStore   *engine.Store[component.CompositeHeaderComponent]
+	blossomStore *engine.Store[component.BlossomComponent]
+	decayStore   *engine.Store[component.DecayComponent]
+	protStore    *engine.Store[component.ProtectionComponent]
+	deathStore   *engine.Store[component.DeathComponent]
+	nuggetStore  *engine.Store[component.NuggetComponent]
+	sigilStore   *engine.Store[component.SigilComponent]
+	glyphStore   *engine.Store[component.GlyphComponent]
+	memberStore  *engine.Store[component.MemberComponent]
+	headerStore  *engine.Store[component.CompositeHeaderComponent]
 
 	// Per-frame tracking
 	blossomedThisFrame map[core.Entity]bool
@@ -47,16 +46,15 @@ func NewBlossomSystem(world *engine.World) engine.System {
 		world: world,
 		res:   res,
 
-		blossomStore:  engine.GetStore[component.BlossomComponent](world),
-		decayStore:    engine.GetStore[component.DecayComponent](world),
-		protStore:     engine.GetStore[component.ProtectionComponent](world),
-		deathStore:    engine.GetStore[component.DeathComponent](world),
-		nuggetStore:   engine.GetStore[component.NuggetComponent](world),
-		sigilStore:    engine.GetStore[component.SigilComponent](world),
-		glyphStore:    engine.GetStore[component.GlyphComponent](world),
-		typeableStore: engine.GetStore[component.TypeableComponent](world),
-		memberStore:   engine.GetStore[component.MemberComponent](world),
-		headerStore:   engine.GetStore[component.CompositeHeaderComponent](world),
+		blossomStore: engine.GetStore[component.BlossomComponent](world),
+		decayStore:   engine.GetStore[component.DecayComponent](world),
+		protStore:    engine.GetStore[component.ProtectionComponent](world),
+		deathStore:   engine.GetStore[component.DeathComponent](world),
+		nuggetStore:  engine.GetStore[component.NuggetComponent](world),
+		sigilStore:   engine.GetStore[component.SigilComponent](world),
+		glyphStore:   engine.GetStore[component.GlyphComponent](world),
+		memberStore:  engine.GetStore[component.MemberComponent](world),
+		headerStore:  engine.GetStore[component.CompositeHeaderComponent](world),
 
 		blossomedThisFrame: make(map[core.Entity]bool),
 		processedGridCells: make(map[int]bool),
@@ -312,10 +310,10 @@ func (s *BlossomSystem) updateBlossomEntities() {
 	}
 }
 
-// applyBlossomToCharacter applies blossom effect to a typeable character
+// applyBlossomToCharacter applies blossom effect to a glyph character
 // Returns true if blossom should be destroyed (hit Red)
 func (s *BlossomSystem) applyBlossomToCharacter(entity core.Entity) bool {
-	typeable, ok := s.typeableStore.Get(entity)
+	glyph, ok := s.glyphStore.Get(entity)
 	if !ok {
 		return false
 	}
@@ -329,21 +327,14 @@ func (s *BlossomSystem) applyBlossomToCharacter(entity core.Entity) bool {
 	}
 
 	// Red characters destroy the blossom
-	if typeable.Type == component.TypeRed {
+	if glyph.Type == component.GlyphRed {
 		return true
 	}
 
 	// Increase level (inverse of decay)
-	if typeable.Level < component.LevelBright {
-		typeable.Level++
-		s.typeableStore.Set(entity, typeable)
-
-		// Sync glyph renderer
-		if glyph, ok := s.glyphStore.Get(entity); ok {
-			glyph.Level = component.GlyphLevel(typeable.Level)
-			s.glyphStore.Set(entity, glyph)
-		}
-
+	if glyph.Level < component.GlyphBright {
+		glyph.Level++
+		s.glyphStore.Set(entity, glyph)
 		s.statApplied.Add(1)
 	}
 	// At Bright: no effect, blossom continues

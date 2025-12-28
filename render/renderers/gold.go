@@ -12,16 +12,16 @@ import (
 type GoldRenderer struct {
 	gameCtx *engine.GameContext
 
-	headerStore   *engine.Store[component.CompositeHeaderComponent]
-	typeableStore *engine.Store[component.TypeableComponent]
+	headerStore *engine.Store[component.CompositeHeaderComponent]
+	glyphStore  *engine.Store[component.GlyphComponent]
 }
 
 // NewGoldRenderer creates a new gold renderer
 func NewGoldRenderer(gameCtx *engine.GameContext) *GoldRenderer {
 	return &GoldRenderer{
-		gameCtx:       gameCtx,
-		headerStore:   engine.GetStore[component.CompositeHeaderComponent](gameCtx.World),
-		typeableStore: engine.GetStore[component.TypeableComponent](gameCtx.World),
+		gameCtx:     gameCtx,
+		headerStore: engine.GetStore[component.CompositeHeaderComponent](gameCtx.World),
+		glyphStore:  engine.GetStore[component.GlyphComponent](gameCtx.World),
 	}
 }
 
@@ -50,8 +50,8 @@ func (r *GoldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 				continue
 			}
 
-			typeable, hasTypeable := r.typeableStore.Get(member.Entity)
-			if !hasTypeable {
+			glyph, hasGlyph := r.glyphStore.Get(member.Entity)
+			if !hasGlyph {
 				continue
 			}
 
@@ -63,7 +63,7 @@ func (r *GoldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 				continue
 			}
 
-			buf.SetFgOnly(screenX, screenY, typeable.Char, render.RgbSequenceGold, terminal.AttrNone)
+			buf.SetFgOnly(screenX, screenY, glyph.Rune, render.RgbSequenceGold, terminal.AttrNone)
 		}
 	}
 }

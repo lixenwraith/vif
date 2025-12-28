@@ -7,5 +7,6 @@ import "time"
 type NuggetComponent struct {
 	// TODO: try using just entity ID, duplicate logic
 	ID        int       // Unique identifier for tracking
+	Char      rune      // Character for visual display
 	SpawnTime time.Time // When this nugget was spawned
 }

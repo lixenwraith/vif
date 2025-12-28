@@ -70,8 +70,7 @@ type GlyphSystem struct {
 	world *engine.World
 	res   engine.Resources
 
-	glyphStore    *engine.Store[component.GlyphComponent]
-	typeableStore *engine.Store[component.TypeableComponent]
+	glyphStore *engine.Store[component.GlyphComponent]
 
 	// Spawn timing and rate
 	lastSpawnTime  time.Time // When last spawn occurred
@@ -101,8 +100,7 @@ func NewGlyphSystem(world *engine.World) engine.System {
 		world: world,
 		res:   res,
 
-		glyphStore:    engine.GetStore[component.GlyphComponent](world),
-		typeableStore: engine.GetStore[component.TypeableComponent](world),
+		glyphStore: engine.GetStore[component.GlyphComponent](world),
 
 		// Cache metric pointers
 		statEnabled:        res.Status.Bools.Get("glyph.enabled"),
@@ -318,7 +316,7 @@ func (s *GlyphSystem) runCensus() GlyphCensus {
 		}
 	}
 
-	typeableEntities := s.typeableStore.All()
+	typeableEntities := s.glyphStore.All()
 	for _, entity := range typeableEntities {
 		if !s.world.Positions.Has(entity) {
 			orphanTypeable++
@@ -367,23 +365,6 @@ func (s *GlyphSystem) getAvailableGlyphsFromCensus(census GlyphCensus) []GlyphKe
 	}
 
 	return available
-}
-
-// typeableTypeFromGlyph converts GlyphType to TypeableType
-func typeableTypeFromGlyph(gt component.GlyphType) component.TypeableType {
-	switch gt {
-	case component.GlyphBlue:
-		return component.TypeBlue
-	case component.GlyphRed:
-		return component.TypeRed
-	default:
-		return component.TypeGreen
-	}
-}
-
-// typeableLevelFromGlyph converts GlyphLevel to TypeableLevel
-func typeableLevelFromGlyph(gl component.GlyphLevel) component.TypeableLevel {
-	return component.TypeableLevel(gl)
 }
 
 // spawnGlyphs generates and spawns a new glyph block from file
@@ -531,12 +512,6 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 				Rune:  ed.char,
 				Type:  glyphType,
 				Level: glyphLevel,
-				Style: component.StyleNormal,
-			})
-			s.typeableStore.Set(ed.entity, component.TypeableComponent{
-				Char:  ed.char,
-				Type:  typeableTypeFromGlyph(glyphType),
-				Level: typeableLevelFromGlyph(glyphLevel),
 			})
 		}
 

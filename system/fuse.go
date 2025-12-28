@@ -15,12 +15,12 @@ type FuseSystem struct {
 	world *engine.World
 	res   engine.Resources
 
-	drainStore    *engine.Store[component.DrainComponent]
-	quasarStore   *engine.Store[component.QuasarComponent]
-	headerStore   *engine.Store[component.CompositeHeaderComponent]
-	memberStore   *engine.Store[component.MemberComponent]
-	protStore     *engine.Store[component.ProtectionComponent]
-	typeableStore *engine.Store[component.TypeableComponent]
+	drainStore  *engine.Store[component.DrainComponent]
+	quasarStore *engine.Store[component.QuasarComponent]
+	headerStore *engine.Store[component.CompositeHeaderComponent]
+	memberStore *engine.Store[component.MemberComponent]
+	protStore   *engine.Store[component.ProtectionComponent]
+	glyphStore  *engine.Store[component.GlyphComponent]
 
 	enabled bool
 }
@@ -31,12 +31,12 @@ func NewFuseSystem(world *engine.World) engine.System {
 		world: world,
 		res:   engine.GetResources(world),
 
-		drainStore:    engine.GetStore[component.DrainComponent](world),
-		quasarStore:   engine.GetStore[component.QuasarComponent](world),
-		headerStore:   engine.GetStore[component.CompositeHeaderComponent](world),
-		memberStore:   engine.GetStore[component.MemberComponent](world),
-		protStore:     engine.GetStore[component.ProtectionComponent](world),
-		typeableStore: engine.GetStore[component.TypeableComponent](world),
+		drainStore:  engine.GetStore[component.DrainComponent](world),
+		quasarStore: engine.GetStore[component.QuasarComponent](world),
+		headerStore: engine.GetStore[component.CompositeHeaderComponent](world),
+		memberStore: engine.GetStore[component.MemberComponent](world),
+		protStore:   engine.GetStore[component.ProtectionComponent](world),
+		glyphStore:  engine.GetStore[component.GlyphComponent](world),
 	}
 	s.initLocked()
 	return s
@@ -220,8 +220,7 @@ func (s *FuseSystem) createQuasarComposite(anchorX, anchorY int) core.Entity {
 			entity := s.world.CreateEntity()
 			s.world.Positions.Set(entity, component.PositionComponent{X: memberX, Y: memberY})
 
-			// Quasar members are not typeable - they're obstacles
-			// No TypeableComponent set
+			// Quasar members are not typeable - they're obstacles, no GlyphComponent set
 
 			// Members protected from decay/delete but not from death (composite manages lifecycle)
 			s.protStore.Set(entity, component.ProtectionComponent{

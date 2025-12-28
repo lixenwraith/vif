@@ -163,7 +163,7 @@ func main() {
 		flashDuration: 10,
 		heatValue:     50,
 		// Default analyze color to RgbPingNormal
-		diagInputRGB: render.RgbPingNormal,
+		diagInputRGB: render.RgbPingLineNormal,
 		diagInputHex: "996600",
 	}
 	buf = render.NewRenderBuffer(w, h)

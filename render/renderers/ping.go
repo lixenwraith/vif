@@ -51,7 +51,12 @@ func (r *PingRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 
 	// 2. Draw Crosshair (Row/Column Highlights)
 	if ping.ShowCrosshair {
-		lineColor := r.getPingLineColor(ping)
+		var lineColor render.RGB
+		if r.gameCtx.IsInsertMode() {
+			lineColor = render.RgbPingHighlight
+		} else {
+			lineColor = render.RgbPingLineNormal
+		}
 		r.drawCrosshair(ctx, buf, lineColor)
 	}
 
@@ -136,21 +141,6 @@ func (r *PingRenderer) isExcluded(x, y int) bool {
 	}
 	idx := y*r.maskWidth + x
 	return (r.exclusionMask[idx/64] & (1 << (idx % 64))) != 0
-}
-
-func (r *PingRenderer) getPingLineColor(ping component.PingComponent) render.RGB {
-	if ping.CrosshairColor != component.ColorNone {
-		// Use component override
-		if ping.CrosshairColor == component.ColorNormal && r.gameCtx.IsInsertMode() {
-			return render.RgbPingHighlight
-		}
-		// TODO: Map other ColorClasses if needed
-	}
-	// Default
-	if r.gameCtx.IsInsertMode() {
-		return render.RgbPingHighlight
-	}
-	return render.RgbPingLineNormal
 }
 
 func (r *PingRenderer) getPingGridColor(ping component.PingComponent) render.RGB {

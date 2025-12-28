@@ -19,10 +19,10 @@ type NuggetSystem struct {
 	world *engine.World
 	res   engine.Resources
 
-	nuggetStore   *engine.Store[component.NuggetComponent]
-	energyStore   *engine.Store[component.EnergyComponent]
-	heatStore     *engine.Store[component.HeatComponent]
-	typeableStore *engine.Store[component.TypeableComponent]
+	nuggetStore *engine.Store[component.NuggetComponent]
+	energyStore *engine.Store[component.EnergyComponent]
+	heatStore   *engine.Store[component.HeatComponent]
+	glyphStore  *engine.Store[component.GlyphComponent]
 
 	nuggetID           atomic.Int32
 	lastSpawnAttempt   time.Time
@@ -43,10 +43,10 @@ func NewNuggetSystem(world *engine.World) engine.System {
 		world: world,
 		res:   res,
 
-		nuggetStore:   engine.GetStore[component.NuggetComponent](world),
-		energyStore:   engine.GetStore[component.EnergyComponent](world),
-		heatStore:     engine.GetStore[component.HeatComponent](world),
-		typeableStore: engine.GetStore[component.TypeableComponent](world),
+		nuggetStore: engine.GetStore[component.NuggetComponent](world),
+		energyStore: engine.GetStore[component.EnergyComponent](world),
+		heatStore:   engine.GetStore[component.HeatComponent](world),
+		glyphStore:  engine.GetStore[component.GlyphComponent](world),
 
 		statActive:    res.Status.Bools.Get("nugget.active"),
 		statSpawned:   res.Status.Ints.Get("nugget.spawned"),
@@ -249,14 +249,8 @@ func (s *NuggetSystem) spawnNugget() {
 	}
 
 	randomChar := constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
-	// Interaction component
-	typeable := component.TypeableComponent{
-		Char:  randomChar,
-		Type:  component.TypeNugget,
-		Level: component.LevelNormal,
-	}
-
 	nugget := component.NuggetComponent{
+		Char:      randomChar,
 		ID:        int(nuggetID),
 		SpawnTime: now,
 	}
@@ -271,7 +265,6 @@ func (s *NuggetSystem) spawnNugget() {
 	}
 
 	// Set component after position is committed
-	s.typeableStore.Set(entity, typeable)
 	s.nuggetStore.Set(entity, nugget)
 
 	s.activeNuggetEntity = entity

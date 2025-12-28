@@ -31,15 +31,15 @@ type DrainSystem struct {
 	world *engine.World
 	res   engine.Resources
 
-	drainStore    *engine.Store[component.DrainComponent]
-	matStore      *engine.Store[component.MaterializeComponent]
-	protStore     *engine.Store[component.ProtectionComponent]
-	shieldStore   *engine.Store[component.ShieldComponent]
-	heatStore     *engine.Store[component.HeatComponent]
-	typeableStore *engine.Store[component.TypeableComponent]
-	nuggetStore   *engine.Store[component.NuggetComponent]
-	memberStore   *engine.Store[component.MemberComponent]
-	headerStore   *engine.Store[component.CompositeHeaderComponent]
+	drainStore  *engine.Store[component.DrainComponent]
+	matStore    *engine.Store[component.MaterializeComponent]
+	protStore   *engine.Store[component.ProtectionComponent]
+	shieldStore *engine.Store[component.ShieldComponent]
+	heatStore   *engine.Store[component.HeatComponent]
+	glyphStore  *engine.Store[component.GlyphComponent]
+	nuggetStore *engine.Store[component.NuggetComponent]
+	memberStore *engine.Store[component.MemberComponent]
+	headerStore *engine.Store[component.CompositeHeaderComponent]
 
 	// Spawn queue for staggered materialization
 	pendingSpawns []pendingDrainSpawn
@@ -66,15 +66,15 @@ func NewDrainSystem(world *engine.World) engine.System {
 		world: world,
 		res:   res,
 
-		drainStore:    engine.GetStore[component.DrainComponent](world),
-		matStore:      engine.GetStore[component.MaterializeComponent](world),
-		protStore:     engine.GetStore[component.ProtectionComponent](world),
-		shieldStore:   engine.GetStore[component.ShieldComponent](world),
-		heatStore:     engine.GetStore[component.HeatComponent](world),
-		typeableStore: engine.GetStore[component.TypeableComponent](world),
-		nuggetStore:   engine.GetStore[component.NuggetComponent](world),
-		memberStore:   engine.GetStore[component.MemberComponent](world),
-		headerStore:   engine.GetStore[component.CompositeHeaderComponent](world),
+		drainStore:  engine.GetStore[component.DrainComponent](world),
+		matStore:    engine.GetStore[component.MaterializeComponent](world),
+		protStore:   engine.GetStore[component.ProtectionComponent](world),
+		shieldStore: engine.GetStore[component.ShieldComponent](world),
+		heatStore:   engine.GetStore[component.HeatComponent](world),
+		glyphStore:  engine.GetStore[component.GlyphComponent](world),
+		nuggetStore: engine.GetStore[component.NuggetComponent](world),
+		memberStore: engine.GetStore[component.MemberComponent](world),
+		headerStore: engine.GetStore[component.CompositeHeaderComponent](world),
 
 		pendingSpawns: make([]pendingDrainSpawn, 0, constant.DrainMaxCount),
 
@@ -856,9 +856,9 @@ func (s *DrainSystem) handleGoldCompositeCollision(anchorEntity core.Entity, hea
 			continue
 		}
 		if pos, ok := s.world.Positions.Get(m.Entity); ok {
-			if typeable, ok := s.typeableStore.Get(m.Entity); ok {
+			if glyph, ok := s.glyphStore.Get(m.Entity); ok {
 				s.world.PushEvent(event.EventFlashRequest, &event.FlashRequestPayload{
-					X: pos.X, Y: pos.Y, Char: typeable.Char,
+					X: pos.X, Y: pos.Y, Char: glyph.Rune,
 				})
 			}
 		}

@@ -78,7 +78,7 @@ func main() {
 
 	// 6. Resource Bridge - Services contribute to ECS
 	hub.PublishResources(func(res any) {
-		engine.AddResource(world.Resources, res)
+		engine.SetResource(world.Resources, res)
 	})
 
 	// 7. Terminal extraction (orchestrator needs interface directly)
@@ -115,7 +115,7 @@ func main() {
 	// Resolve color mode for RenderConfig
 	colorMode := term.ColorMode()
 	renderConfig := &engine.RenderConfig{ColorMode: colorMode}
-	engine.AddResource(ctx.World.Resources, renderConfig)
+	engine.SetResource(ctx.World.Resources, renderConfig)
 
 	orchestrator := render.NewRenderOrchestrator(term, ctx.Width, ctx.Height)
 

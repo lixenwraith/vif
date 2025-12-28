@@ -12,16 +12,16 @@ import (
 type NuggetRenderer struct {
 	gameCtx *engine.GameContext
 
-	nuggetStore   *engine.Store[component.NuggetComponent]
-	typeableStore *engine.Store[component.TypeableComponent]
+	nuggetStore *engine.Store[component.NuggetComponent]
+	glyphStore  *engine.Store[component.GlyphComponent]
 }
 
 // NewNuggetRenderer creates a new nugget renderer
 func NewNuggetRenderer(gameCtx *engine.GameContext) *NuggetRenderer {
 	return &NuggetRenderer{
-		gameCtx:       gameCtx,
-		nuggetStore:   engine.GetStore[component.NuggetComponent](gameCtx.World),
-		typeableStore: engine.GetStore[component.TypeableComponent](gameCtx.World),
+		gameCtx:     gameCtx,
+		nuggetStore: engine.GetStore[component.NuggetComponent](gameCtx.World),
+		glyphStore:  engine.GetStore[component.GlyphComponent](gameCtx.World),
 	}
 }
 
@@ -32,7 +32,7 @@ func (r *NuggetRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		return
 	}
 
-	buf.SetWriteMask(constant.MaskTypeable)
+	buf.SetWriteMask(constant.MaskGlyph)
 
 	for _, entity := range entities {
 		pos, hasPos := r.gameCtx.World.Positions.Get(entity)
@@ -40,8 +40,8 @@ func (r *NuggetRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			continue
 		}
 
-		typeable, hasTypeable := r.typeableStore.Get(entity)
-		if !hasTypeable {
+		glyph, hasGlyph := r.glyphStore.Get(entity)
+		if !hasGlyph {
 			continue
 		}
 
@@ -53,6 +53,6 @@ func (r *NuggetRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			continue
 		}
 
-		buf.SetFgOnly(screenX, screenY, typeable.Char, render.RgbNuggetOrange, terminal.AttrNone)
+		buf.SetFgOnly(screenX, screenY, glyph.Rune, render.RgbNuggetOrange, terminal.AttrNone)
 	}
 }

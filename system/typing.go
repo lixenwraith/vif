@@ -17,13 +17,13 @@ type TypingSystem struct {
 	world *engine.World
 	res   engine.Resources
 
-	typeableStore *engine.Store[component.TypeableComponent]
-	memberStore   *engine.Store[component.MemberComponent]
-	headerStore   *engine.Store[component.CompositeHeaderComponent]
-	cursorStore   *engine.Store[component.CursorComponent]
-	nuggetStore   *engine.Store[component.NuggetComponent]
-	boostStore    *engine.Store[component.BoostComponent]
-	heatStore     *engine.Store[component.HeatComponent]
+	glyphStore  *engine.Store[component.GlyphComponent]
+	memberStore *engine.Store[component.MemberComponent]
+	headerStore *engine.Store[component.CompositeHeaderComponent]
+	cursorStore *engine.Store[component.CursorComponent]
+	nuggetStore *engine.Store[component.NuggetComponent]
+	boostStore  *engine.Store[component.BoostComponent]
+	heatStore   *engine.Store[component.HeatComponent]
 
 	statCorrect   *atomic.Int64
 	statErrors    *atomic.Int64
@@ -41,13 +41,13 @@ func NewTypingSystem(world *engine.World) engine.System {
 		world: world,
 		res:   res,
 
-		typeableStore: engine.GetStore[component.TypeableComponent](world),
-		memberStore:   engine.GetStore[component.MemberComponent](world),
-		headerStore:   engine.GetStore[component.CompositeHeaderComponent](world),
-		cursorStore:   engine.GetStore[component.CursorComponent](world),
-		nuggetStore:   engine.GetStore[component.NuggetComponent](world),
-		boostStore:    engine.GetStore[component.BoostComponent](world),
-		heatStore:     engine.GetStore[component.HeatComponent](world),
+		glyphStore:  engine.GetStore[component.GlyphComponent](world),
+		memberStore: engine.GetStore[component.MemberComponent](world),
+		headerStore: engine.GetStore[component.CompositeHeaderComponent](world),
+		cursorStore: engine.GetStore[component.CursorComponent](world),
+		nuggetStore: engine.GetStore[component.NuggetComponent](world),
+		boostStore:  engine.GetStore[component.BoostComponent](world),
+		heatStore:   engine.GetStore[component.HeatComponent](world),
 
 		statCorrect:   res.Status.Ints.Get("typing.correct"),
 		statErrors:    res.Status.Ints.Get("typing.errors"),
@@ -125,9 +125,9 @@ func (s *TypingSystem) handleTyping(cursorX, cursorY int, typedRune rune) {
 		return
 	}
 
-	// Check for standalone TypeableComponent
-	if typeable, ok := s.typeableStore.Get(entity); ok {
-		s.handleTypeable(entity, typeable, typedRune)
+	// Check for standalone GlyphComponent
+	if glyph, ok := s.glyphStore.Get(entity); ok {
+		s.handleGlyph(entity, glyph, typedRune)
 		return
 	}
 
@@ -173,41 +173,38 @@ func (s *TypingSystem) applyUniversalRewards() {
 
 // applyColorEnergy handles energy based on color type
 // Green: +heat, Blue: +2*heat, Red: -heat (mirrors green)
-func (s *TypingSystem) applyColorEnergy(colorType component.TypeableType) {
+func (s *TypingSystem) applyColorEnergy(colorType component.GlyphType) {
 	heat := s.getHeat()
 	switch colorType {
-	case component.TypeGreen:
+	case component.GlyphGreen:
 		s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{Delta: heat})
-	case component.TypeBlue:
+	case component.GlyphBlue:
 		s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{Delta: 2 * heat})
-	case component.TypeRed:
+	case component.GlyphRed:
 		s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{Delta: -heat})
 	}
 }
 
 // emitTypingFeedback sends visual feedback (splash + blink)
-func (s *TypingSystem) emitTypingFeedback(typeableType component.TypeableType, char rune) {
+func (s *TypingSystem) emitTypingFeedback(glyphType component.GlyphType, char rune) {
 	cursorPos, _ := s.world.Positions.Get(s.res.Cursor.Entity)
 
 	var splashColor component.SplashColor
 	var blinkType uint32
 
-	switch typeableType {
-	case component.TypeGreen:
+	switch glyphType {
+	case component.GlyphGreen:
 		splashColor = component.SplashColorGreen
 		blinkType = 2
-	case component.TypeBlue:
+	case component.GlyphBlue:
 		splashColor = component.SplashColorBlue
 		blinkType = 1
-	case component.TypeRed:
+	case component.GlyphRed:
 		splashColor = component.SplashColorRed
 		blinkType = 3
-	case component.TypeGold:
+	case component.GlyphGold:
 		splashColor = component.SplashColorGold
 		blinkType = 4
-	case component.TypeNugget:
-		splashColor = component.SplashColorNugget
-		blinkType = 0
 	default:
 		splashColor = component.SplashColorNormal
 		blinkType = 0
@@ -269,14 +266,14 @@ func (s *TypingSystem) getHeat() int {
 
 // handleCompositeMember processes typing for composite member entities
 func (s *TypingSystem) handleCompositeMember(entity core.Entity, anchorID core.Entity, typedRune rune) {
-	typeable, ok := s.typeableStore.Get(entity)
+	glyph, ok := s.glyphStore.Get(entity)
 	if !ok {
 		s.emitTypingError()
 		return
 	}
 
-	targetChar := typeable.Char
-	typeableType := typeable.Type
+	targetChar := glyph.Rune
+	glyphType := glyph.Type
 
 	// Character match check
 	if targetChar != typedRune {
@@ -302,11 +299,11 @@ func (s *TypingSystem) handleCompositeMember(entity core.Entity, anchorID core.E
 
 	// Color-based energy (only Blue/Green/Red for now)
 	if header.BehaviorID != component.BehaviorGold {
-		s.applyColorEnergy(typeableType)
+		s.applyColorEnergy(glyphType)
 	}
 
 	// Visual feedback
-	s.emitTypingFeedback(typeableType, typedRune)
+	s.emitTypingFeedback(glyphType, typedRune)
 
 	// Signal composite system
 	remaining := 0
@@ -325,11 +322,9 @@ func (s *TypingSystem) handleCompositeMember(entity core.Entity, anchorID core.E
 	s.moveCursorRight()
 }
 
-// handleTypeable processes standalone TypeableComponent entities (nuggets)
-func (s *TypingSystem) handleTypeable(entity core.Entity, typeable component.TypeableComponent, typedRune rune) {
-	// cursorEntity := s.res.Cursor.Entity
-
-	if typeable.Char != typedRune {
+// handleGlyph processes standalone GlyphComponent entities
+func (s *TypingSystem) handleGlyph(entity core.Entity, glyph component.GlyphComponent, typedRune rune) {
+	if glyph.Rune != typedRune {
 		s.emitTypingError()
 		return
 	}
@@ -338,17 +333,17 @@ func (s *TypingSystem) handleTypeable(entity core.Entity, typeable component.Typ
 	s.applyUniversalRewards()
 
 	// Type-specific handling, placeholder for other type additions
-	switch typeable.Type {
-	case component.TypeBlue, component.TypeGreen, component.TypeRed:
+	switch glyph.Type {
+	case component.GlyphBlue, component.GlyphGreen, component.GlyphRed:
 		// Color-based energy
-		s.applyColorEnergy(typeable.Type)
+		s.applyColorEnergy(glyph.Type)
 	}
 
 	// Silent Death
 	event.EmitDeathOne(s.res.Events.Queue, entity, 0, s.res.Time.FrameNumber)
 
 	// Splash typing feedback
-	s.emitTypingFeedback(typeable.Type, typedRune)
+	s.emitTypingFeedback(glyph.Type, typedRune)
 	s.moveCursorRight()
 }
 

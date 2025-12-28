@@ -16,10 +16,9 @@ type DeathSystem struct {
 	world *engine.World
 	res   engine.Resources
 
-	deathStore    *engine.Store[component.DeathComponent]
-	protStore     *engine.Store[component.ProtectionComponent]
-	glyphStore    *engine.Store[component.GlyphComponent]
-	typeableStore *engine.Store[component.TypeableComponent]
+	deathStore *engine.Store[component.DeathComponent]
+	protStore  *engine.Store[component.ProtectionComponent]
+	glyphStore *engine.Store[component.GlyphComponent]
 
 	statKilled *atomic.Int64
 
@@ -32,10 +31,9 @@ func NewDeathSystem(world *engine.World) engine.System {
 		world: world,
 		res:   res,
 
-		deathStore:    engine.GetStore[component.DeathComponent](world),
-		protStore:     engine.GetStore[component.ProtectionComponent](world),
-		glyphStore:    engine.GetStore[component.GlyphComponent](world),
-		typeableStore: engine.GetStore[component.TypeableComponent](world),
+		deathStore: engine.GetStore[component.DeathComponent](world),
+		protStore:  engine.GetStore[component.ProtectionComponent](world),
+		glyphStore: engine.GetStore[component.GlyphComponent](world),
 
 		statKilled: res.Status.Ints.Get("death.killed"),
 	}
@@ -147,12 +145,9 @@ func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType
 		return
 	}
 
-	// Try glyph first, then typeable for char
 	var char rune
 	if glyph, ok := s.glyphStore.Get(entity); ok {
 		char = glyph.Rune
-	} else if typeable, ok := s.typeableStore.Get(entity); ok {
-		char = typeable.Char
 	} else {
 		return
 	}

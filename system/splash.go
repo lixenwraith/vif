@@ -43,9 +43,9 @@ type SplashSystem struct {
 	world *engine.World
 	res   engine.Resources
 
-	splashStore   *engine.Store[component.SplashComponent]
-	headerStore   *engine.Store[component.CompositeHeaderComponent]
-	typeableStore *engine.Store[component.TypeableComponent]
+	splashStore *engine.Store[component.SplashComponent]
+	headerStore *engine.Store[component.CompositeHeaderComponent]
+	glyphStore  *engine.Store[component.GlyphComponent]
 
 	enabled bool
 }
@@ -56,9 +56,9 @@ func NewSplashSystem(world *engine.World) engine.System {
 		world: world,
 		res:   engine.GetResources(world),
 
-		splashStore:   engine.GetStore[component.SplashComponent](world),
-		headerStore:   engine.GetStore[component.CompositeHeaderComponent](world),
-		typeableStore: engine.GetStore[component.TypeableComponent](world),
+		splashStore: engine.GetStore[component.SplashComponent](world),
+		headerStore: engine.GetStore[component.CompositeHeaderComponent](world),
+		glyphStore:  engine.GetStore[component.GlyphComponent](world),
 	}
 	s.initLocked()
 	return s
@@ -243,25 +243,25 @@ func (s *SplashSystem) validateMagnifier(splashEntity core.Entity, splash *compo
 		return false
 	}
 
-	typeableEntity := s.world.Positions.GetTopEntityFiltered(cursorPos.X, cursorPos.Y, func(e core.Entity) bool {
-		return s.typeableStore.Has(e)
+	glyphEntity := s.world.Positions.GetTopEntityFiltered(cursorPos.X, cursorPos.Y, func(e core.Entity) bool {
+		return s.glyphStore.Has(e)
 	})
 
-	if typeableEntity == 0 {
+	if glyphEntity == 0 {
 		s.world.DestroyEntity(splashEntity)
 		return false
 	}
 
-	typeable, ok := s.typeableStore.Get(typeableEntity)
+	glyph, ok := s.glyphStore.Get(glyphEntity)
 	if !ok {
 		s.world.DestroyEntity(splashEntity)
 		return false
 	}
 
 	// Update if character or type changed (handles entity swap, moving entities)
-	newColor := s.typeableToSplashColor(typeable.Type)
-	if splash.Content[0] != typeable.Char || splash.Color != newColor {
-		splash.Content[0] = typeable.Char
+	newColor := s.glyphToSplashColor(glyph.Type)
+	if splash.Content[0] != glyph.Rune || splash.Color != newColor {
+		splash.Content[0] = glyph.Rune
 		splash.Color = newColor
 	}
 
@@ -452,26 +452,26 @@ func (s *SplashSystem) calculateSmartLayout(cursorX, cursorY, charCount int) (in
 func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 	cursorX, cursorY := payload.X, payload.Y
 
-	// Query typeable entity under cursor
+	// Query glyph entity under cursor
 	entity := s.world.Positions.GetTopEntityFiltered(cursorX, cursorY, func(e core.Entity) bool {
-		return s.typeableStore.Has(e)
+		return s.glyphStore.Has(e)
 	})
 
 	if entity == 0 {
-		// No typeable entity - clear magnifier
+		// No glyph entity - clear magnifier
 		s.cleanupSplashesBySlot(component.SlotMagnifier)
 		return
 	}
 
 	// Get the character to display
-	typeable, ok := s.typeableStore.Get(entity)
+	glyph, ok := s.glyphStore.Get(entity)
 	if !ok {
 		s.cleanupSplashesBySlot(component.SlotMagnifier)
 		return
 	}
 
-	// Resolve color from typeable type
-	color := s.typeableToSplashColor(typeable.Type)
+	// Resolve color from glyph type
+	color := s.glyphToSplashColor(glyph.Type)
 
 	// Calculate proximity anchor (between cursor and center, min 15 chars away)
 	anchorX, anchorY := s.calculateProximityAnchor(cursorX, cursorY, 1)
@@ -481,7 +481,7 @@ func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 	if existing != 0 {
 		splash, ok := s.splashStore.Get(existing)
 		if ok {
-			splash.Content[0] = typeable.Char
+			splash.Content[0] = glyph.Rune
 			splash.Length = 1
 			splash.Color = color
 			splash.AnchorX = anchorX
@@ -501,7 +501,7 @@ func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 		Remaining: 0, // Persistent - managed by cursor movement
 		Duration:  0,
 	}
-	splash.Content[0] = typeable.Char
+	splash.Content[0] = glyph.Rune
 
 	newEntity := s.world.CreateEntity()
 	s.splashStore.Set(newEntity, splash)
@@ -706,19 +706,17 @@ func (s *SplashSystem) findSplashBySlot(slot component.SplashSlot) core.Entity {
 	return 0
 }
 
-// typeableToSplashColor maps TypeableType to SplashColor
-func (s *SplashSystem) typeableToSplashColor(t component.TypeableType) component.SplashColor {
+// glyphToSplashColor maps GlyphType to SplashColor
+func (s *SplashSystem) glyphToSplashColor(t component.GlyphType) component.SplashColor {
 	switch t {
-	case component.TypeGreen:
+	case component.GlyphGreen:
 		return component.SplashColorGreen
-	case component.TypeBlue:
+	case component.GlyphBlue:
 		return component.SplashColorBlue
-	case component.TypeRed:
+	case component.GlyphRed:
 		return component.SplashColorRed
-	case component.TypeGold:
+	case component.GlyphGold:
 		return component.SplashColorGold
-	case component.TypeNugget:
-		return component.SplashColorNugget
 	default:
 		return component.SplashColorNormal
 	}

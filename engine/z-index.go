@@ -15,20 +15,19 @@ type ZIndexResolver struct {
 	drains  *Store[component.DrainComponent]
 	decays  *Store[component.DecayComponent]
 	nuggets *Store[component.NuggetComponent]
-	// Cached for IsTypeable
-	typeable *Store[component.TypeableComponent]
+	glyphs  *Store[component.GlyphComponent]
 }
 
 // NewZIndexResolver creates a resolver with cached store references
 // Call after all components are registered
 func NewZIndexResolver(w *World) *ZIndexResolver {
 	z := &ZIndexResolver{
-		cursors:  GetStore[component.CursorComponent](w),
-		shields:  GetStore[component.ShieldComponent](w),
-		drains:   GetStore[component.DrainComponent](w),
-		decays:   GetStore[component.DecayComponent](w),
-		nuggets:  GetStore[component.NuggetComponent](w),
-		typeable: GetStore[component.TypeableComponent](w),
+		cursors: GetStore[component.CursorComponent](w),
+		shields: GetStore[component.ShieldComponent](w),
+		drains:  GetStore[component.DrainComponent](w),
+		decays:  GetStore[component.DecayComponent](w),
+		nuggets: GetStore[component.NuggetComponent](w),
+		glyphs:  GetStore[component.GlyphComponent](w),
 	}
 
 	// Wire to PositionStore for hot-path access
@@ -57,9 +56,9 @@ func (z *ZIndexResolver) GetZIndex(e core.Entity) int {
 	return constant.ZIndexSpawnChar
 }
 
-// IsTypeable returns true if the entity is an interactable game element
+// IsTypeable returns true if the entity is a typeable (glyph) game element
 func (z *ZIndexResolver) IsTypeable(e core.Entity) bool {
-	return z.typeable.Has(e)
+	return z.glyphs.Has(e)
 }
 
 // SelectTopEntityFiltered returns the entity with highest z-index passing filter

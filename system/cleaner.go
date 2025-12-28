@@ -18,11 +18,10 @@ type CleanerSystem struct {
 	world *engine.World
 	res   engine.Resources
 
-	cleanerStore  *engine.Store[component.CleanerComponent]
-	protStore     *engine.Store[component.ProtectionComponent]
-	typeableStore *engine.Store[component.TypeableComponent]
-	glyphStore    *engine.Store[component.GlyphComponent]
-	energyStore   *engine.Store[component.EnergyComponent]
+	cleanerStore *engine.Store[component.CleanerComponent]
+	protStore    *engine.Store[component.ProtectionComponent]
+	glyphStore   *engine.Store[component.GlyphComponent]
+	energyStore  *engine.Store[component.EnergyComponent]
 
 	spawned           map[int64]bool // Track which frames already spawned cleaners
 	hasSpawnedSession bool           // Track if we spawned cleaners this session
@@ -40,11 +39,10 @@ func NewCleanerSystem(world *engine.World) engine.System {
 		world: world,
 		res:   res,
 
-		cleanerStore:  engine.GetStore[component.CleanerComponent](world),
-		protStore:     engine.GetStore[component.ProtectionComponent](world),
-		glyphStore:    engine.GetStore[component.GlyphComponent](world),
-		typeableStore: engine.GetStore[component.TypeableComponent](world),
-		energyStore:   engine.GetStore[component.EnergyComponent](world),
+		cleanerStore: engine.GetStore[component.CleanerComponent](world),
+		protStore:    engine.GetStore[component.ProtectionComponent](world),
+		glyphStore:   engine.GetStore[component.GlyphComponent](world),
+		energyStore:  engine.GetStore[component.EnergyComponent](world),
 
 		spawned: make(map[int64]bool),
 
@@ -368,8 +366,8 @@ func (s *CleanerSystem) processPositiveEnergy(targetEntities []core.Entity, self
 		if e == 0 || e == selfEntity {
 			continue
 		}
-		if typeable, ok := s.typeableStore.Get(e); ok {
-			if typeable.Type == component.TypeRed {
+		if glyph, ok := s.glyphStore.Get(e); ok {
+			if glyph.Type == component.GlyphRed {
 				toDestroy = append(toDestroy, e)
 			}
 		}
@@ -390,29 +388,29 @@ func (s *CleanerSystem) processNegativeEnergy(x, y int, targetEntities []core.En
 			continue
 		}
 
-		typeable, ok := s.typeableStore.Get(e)
-		if !ok || typeable.Type != component.TypeBlue {
+		glyph, ok := s.glyphStore.Get(e)
+		if !ok || glyph.Type != component.GlyphBlue {
 			continue
 		}
 
 		// Mutate Blue → Green, preserving level
-		s.mutateBlueToGreen(e, typeable)
+		s.mutateBlueToGreen(e, glyph)
 
 		// Spawn decay at same position (particle skips starting cell via LastIntX/Y)
 		s.world.PushEvent(event.EventDecaySpawnOne, &event.DecaySpawnPayload{
 			X:             x,
 			Y:             y,
-			Char:          typeable.Char,
+			Char:          glyph.Rune,
 			SkipStartCell: true,
 		})
 	}
 }
 
-// mutateBlueToGreen transforms a Blue typeable to Green, preserving level
-func (s *CleanerSystem) mutateBlueToGreen(entity core.Entity, typeable component.TypeableComponent) {
-	// Update TypeableComponent
-	typeable.Type = component.TypeGreen
-	s.typeableStore.Set(entity, typeable)
+// mutateBlueToGreen transforms a Blue glyph to Green, preserving level
+func (s *CleanerSystem) mutateBlueToGreen(entity core.Entity, glyph component.GlyphComponent) {
+	// Update GlyphComponent
+	glyph.Type = component.GlyphGreen
+	s.glyphStore.Set(entity, glyph)
 
 	// Sync GlyphComponent for rendering
 	if glyph, ok := s.glyphStore.Get(entity); ok {
@@ -502,24 +500,24 @@ func (s *CleanerSystem) scanTargetRows() []int {
 	gameHeight := config.GameHeight
 
 	// Determine target type based on energy polarity
-	targetType := component.TypeRed
+	targetType := component.GlyphRed
 	cursorEntity := s.res.Cursor.Entity
 	if energyComp, ok := s.energyStore.Get(cursorEntity); ok {
 		if energyComp.Current.Load() < 0 {
-			targetType = component.TypeBlue
+			targetType = component.GlyphBlue
 		}
 	}
 
 	targetRows := make(map[int]bool)
 
 	entities := s.world.Query().
-		With(s.typeableStore).
+		With(s.glyphStore).
 		With(s.world.Positions).
 		Execute()
 
 	for _, entity := range entities {
-		typeable, ok := s.typeableStore.Get(entity)
-		if !ok || typeable.Type != targetType {
+		glyph, ok := s.glyphStore.Get(entity)
+		if !ok || glyph.Type != targetType {
 			continue
 		}
 
@@ -539,44 +537,3 @@ func (s *CleanerSystem) scanTargetRows() []int {
 	}
 	return rows
 }
-
-// // scanRedCharacterRows finds all rows containing Red typeables using query builder
-// func (s *CleanerSystem) scanRedCharacterRows() []int {
-// 	config := s.res.Config
-// 	redRows := make(map[int]bool)
-// 	gameHeight := config.GameHeight
-//
-// 	// Query entities with both Typeable and Positions
-// 	entities := s.world.Query().
-// 		With(s.typeableStore).
-// 		With(s.world.Positions).
-// 		Execute()
-//
-// 	for _, entity := range entities {
-// 		typeable, ok := s.typeableStore.Get(entity)
-// 		if !ok {
-// 			continue
-// 		}
-//
-// 		if typeable.Type != component.TypeRed {
-// 			continue
-// 		}
-//
-// 		// Retrieve Position
-// 		pos, hasPos := s.world.Positions.Get(entity)
-// 		if !hasPos {
-// 			continue
-// 		}
-//
-// 		// Set row if in bounds
-// 		if pos.Y >= 0 && pos.Y < gameHeight {
-// 			redRows[pos.Y] = true
-// 		}
-// 	}
-//
-// 	rows := make([]int, 0, len(redRows))
-// 	for row := range redRows {
-// 		rows = append(rows, row)
-// 	}
-// 	return rows
-// }

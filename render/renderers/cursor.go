@@ -10,27 +10,25 @@ import (
 
 // CursorRenderer draws the cursor with complex entity overlap handling
 type CursorRenderer struct {
-	gameCtx       *engine.GameContext
-	cursorStore   *engine.Store[component.CursorComponent]
-	glyphStore    *engine.Store[component.GlyphComponent]
-	typeableStore *engine.Store[component.TypeableComponent]
-	nuggetStore   *engine.Store[component.NuggetComponent]
-	drainStore    *engine.Store[component.DrainComponent]
-	decayStore    *engine.Store[component.DecayComponent]
-	resolver      *engine.ZIndexResolver
+	gameCtx     *engine.GameContext
+	cursorStore *engine.Store[component.CursorComponent]
+	glyphStore  *engine.Store[component.GlyphComponent]
+	nuggetStore *engine.Store[component.NuggetComponent]
+	drainStore  *engine.Store[component.DrainComponent]
+	decayStore  *engine.Store[component.DecayComponent]
+	resolver    *engine.ZIndexResolver
 }
 
 // NewCursorRenderer creates a new cursor renderer
 func NewCursorRenderer(gameCtx *engine.GameContext) *CursorRenderer {
 	return &CursorRenderer{
-		gameCtx:       gameCtx,
-		cursorStore:   engine.GetStore[component.CursorComponent](gameCtx.World),
-		glyphStore:    engine.GetStore[component.GlyphComponent](gameCtx.World),
-		typeableStore: engine.GetStore[component.TypeableComponent](gameCtx.World),
-		nuggetStore:   engine.GetStore[component.NuggetComponent](gameCtx.World),
-		drainStore:    engine.GetStore[component.DrainComponent](gameCtx.World),
-		decayStore:    engine.GetStore[component.DecayComponent](gameCtx.World),
-		resolver:      engine.MustGetResource[*engine.ZIndexResolver](gameCtx.World.Resources),
+		gameCtx:     gameCtx,
+		cursorStore: engine.GetStore[component.CursorComponent](gameCtx.World),
+		glyphStore:  engine.GetStore[component.GlyphComponent](gameCtx.World),
+		nuggetStore: engine.GetStore[component.NuggetComponent](gameCtx.World),
+		drainStore:  engine.GetStore[component.DrainComponent](gameCtx.World),
+		decayStore:  engine.GetStore[component.DecayComponent](gameCtx.World),
+		resolver:    engine.MustGetResource[*engine.ZIndexResolver](gameCtx.World.Resources),
 	}
 }
 
@@ -84,7 +82,7 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			return false
 		}
 		// Only consider entities with characters
-		return r.typeableStore.Has(e)
+		return r.glyphStore.Has(e)
 	})
 
 	hasChar := displayEntity != 0
@@ -95,9 +93,8 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		if glyph, ok := r.glyphStore.Get(displayEntity); ok {
 			charAtCursor = glyph.Rune
 			charFg = resolveGlyphColor(glyph)
-		} else if typeable, ok := r.typeableStore.Get(displayEntity); ok {
-			charAtCursor = typeable.Char
-			charFg = render.RgbSequenceGold
+			charAtCursor = glyph.Rune
+			charFg = resolveGlyphColor(glyph)
 		}
 		if r.nuggetStore.Has(displayEntity) {
 			isNugget = true

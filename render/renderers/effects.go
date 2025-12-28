@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
+// TODO: move decay/blossom/drain to sigil renderer, cleaner to its own renderer
 // EffectsRenderer draws decay, cleaners, removal flashes
 type EffectsRenderer struct {
 	gameCtx *engine.GameContext

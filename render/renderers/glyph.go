@@ -24,16 +24,17 @@ func NewGlyphRenderer(gameCtx *engine.GameContext) *GlyphRenderer {
 
 // Render draws all glyph entities
 func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
+	buf.SetWriteMask(constant.MaskGlyph)
+
 	entities := r.glyphStore.All()
-	if len(entities) == 0 {
-		return
-	}
-
-	buf.SetWriteMask(constant.MaskTypeable)
-
 	for _, entity := range entities {
 		glyph, ok := r.glyphStore.Get(entity)
 		if !ok {
+			continue
+		}
+
+		// Gold is handled in its own composite renderer with a different mask
+		if glyph.Type == component.GlyphGold {
 			continue
 		}
 
@@ -51,9 +52,8 @@ func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		}
 
 		fg := resolveGlyphColor(glyph)
-		attrs := resolveGlyphStyle(glyph.Style)
 
-		buf.SetFgOnly(screenX, screenY, glyph.Rune, fg, attrs)
+		buf.SetFgOnly(screenX, screenY, glyph.Rune, fg, terminal.AttrNone)
 	}
 }
 
@@ -69,6 +69,15 @@ func resolveGlyphColor(g component.GlyphComponent) render.RGB {
 		case component.GlyphBright:
 			return render.RgbSequenceBlueBright
 		}
+	case component.GlyphGreen:
+		switch g.Level {
+		case component.GlyphDark:
+			return render.RgbSequenceGreenDark
+		case component.GlyphNormal:
+			return render.RgbSequenceGreenNormal
+		case component.GlyphBright:
+			return render.RgbSequenceGreenBright
+		}
 	case component.GlyphRed:
 		switch g.Level {
 		case component.GlyphDark:
@@ -78,31 +87,10 @@ func resolveGlyphColor(g component.GlyphComponent) render.RGB {
 		case component.GlyphBright:
 			return render.RgbSequenceRedBright
 		}
-	default: // GlyphGreen
-		switch g.Level {
-		case component.GlyphDark:
-			return render.RgbSequenceGreenDark
-		case component.GlyphNormal:
-			return render.RgbSequenceGreenNormal
-		case component.GlyphBright:
-			return render.RgbSequenceGreenBright
-		}
+	case component.GlyphGold:
+		return render.RgbSequenceGold
 	}
-	return render.RgbSequenceGreenNormal
-}
 
-// resolveGlyphStyle maps TextStyle to terminal attributes
-func resolveGlyphStyle(style component.TextStyle) terminal.Attr {
-	switch style {
-	case component.StyleBold:
-		return terminal.AttrBold
-	case component.StyleDim:
-		return terminal.AttrDim
-	case component.StyleUnderline:
-		return terminal.AttrUnderline
-	case component.StyleBlink:
-		return terminal.AttrBlink
-	default:
-		return terminal.AttrNone
-	}
+	// Debug
+	return render.RgbShieldBase
 }
