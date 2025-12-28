@@ -12,7 +12,8 @@ import (
 // RegisterComponents registers all component types with the World
 // Must be called before systems are created
 func RegisterComponents(w *engine.World) {
-	engine.RegisterComponent[component.CharacterComponent](w)
+	engine.RegisterComponent[component.GlyphComponent](w)
+	engine.RegisterComponent[component.SigilComponent](w)
 	engine.RegisterComponent[component.FlashComponent](w)
 	engine.RegisterComponent[component.NuggetComponent](w)
 	engine.RegisterComponent[component.CursorComponent](w)
@@ -59,8 +60,8 @@ func RegisterSystems() {
 	registry.RegisterSystem("composite", func(w any) any {
 		return system.NewCompositeSystem(w.(*engine.World))
 	})
-	registry.RegisterSystem("spawn", func(w any) any {
-		return system.NewSpawnSystem(w.(*engine.World))
+	registry.RegisterSystem("glyph", func(w any) any {
+		return system.NewGlyphSystem(w.(*engine.World))
 	})
 	registry.RegisterSystem("nugget", func(w any) any {
 		return system.NewNuggetSystem(w.(*engine.World))
@@ -113,8 +114,16 @@ func RegisterRenderers() {
 		return renderers.NewSplashRenderer(ctx.(*engine.GameContext))
 	}, render.PrioritySplash)
 
-	registry.RegisterRenderer("characters", func(ctx any) any {
-		return renderers.NewCharactersRenderer(ctx.(*engine.GameContext))
+	registry.RegisterRenderer("splash", func(ctx any) any {
+		return renderers.NewSplashRenderer(ctx.(*engine.GameContext))
+	}, render.PrioritySplash)
+
+	registry.RegisterRenderer("glyph", func(ctx any) any {
+		return renderers.NewGlyphRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityEntities)
+
+	registry.RegisterRenderer("sigil", func(ctx any) any {
+		return renderers.NewSigilRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityEntities)
 
 	registry.RegisterRenderer("nugget", func(ctx any) any {
@@ -189,7 +198,7 @@ func ActiveSystems() []string {
 		"boost",
 		"typing",
 		"composite",
-		"spawn",
+		"glyph",
 		"nugget",
 		"decay",
 		"blossom",
@@ -211,11 +220,12 @@ func ActiveRenderers() []string {
 	return []string{
 		"ping",
 		"splash",
-		"characters",
+		"glyph",
 		"nugget",
 		"gold",
 		"shield",
 		"effects",
+		"sigil",
 		"materialize",
 		"drain",
 		"quasar",

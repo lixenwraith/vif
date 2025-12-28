@@ -12,7 +12,7 @@ import (
 type CursorRenderer struct {
 	gameCtx       *engine.GameContext
 	cursorStore   *engine.Store[component.CursorComponent]
-	charStore     *engine.Store[component.CharacterComponent]
+	glyphStore    *engine.Store[component.GlyphComponent]
 	typeableStore *engine.Store[component.TypeableComponent]
 	nuggetStore   *engine.Store[component.NuggetComponent]
 	drainStore    *engine.Store[component.DrainComponent]
@@ -25,7 +25,7 @@ func NewCursorRenderer(gameCtx *engine.GameContext) *CursorRenderer {
 	return &CursorRenderer{
 		gameCtx:       gameCtx,
 		cursorStore:   engine.GetStore[component.CursorComponent](gameCtx.World),
-		charStore:     engine.GetStore[component.CharacterComponent](gameCtx.World),
+		glyphStore:    engine.GetStore[component.GlyphComponent](gameCtx.World),
 		typeableStore: engine.GetStore[component.TypeableComponent](gameCtx.World),
 		nuggetStore:   engine.GetStore[component.NuggetComponent](gameCtx.World),
 		drainStore:    engine.GetStore[component.DrainComponent](gameCtx.World),
@@ -92,18 +92,16 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	var charFg render.RGB
 
 	if hasChar {
-		// TODO: to be deprecated and replaced with only typeable
-		// Try CharacterComponent first (spawned content, nuggets, etc.)
-		if charComp, ok := r.charStore.Get(displayEntity); ok {
-			charAtCursor = charComp.Rune
-			charFg = resolveCharacterColor(charComp)
-			if r.nuggetStore.Has(displayEntity) {
-				isNugget = true
-			}
+		if glyph, ok := r.glyphStore.Get(displayEntity); ok {
+			charAtCursor = glyph.Rune
+			charFg = resolveGlyphColor(glyph)
 		} else if typeable, ok := r.typeableStore.Get(displayEntity); ok {
-			// Fallback to TypeableComponent (gold)
 			charAtCursor = typeable.Char
 			charFg = render.RgbSequenceGold
+		}
+		if r.nuggetStore.Has(displayEntity) {
+			isNugget = true
+			charFg = render.RgbNuggetOrange
 		}
 	}
 
@@ -139,8 +137,7 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		charFgColor = render.RgbBlack
 	}
 
-	// 4. Error Flash Overlay (Absolute Highest Priority for Background)
-	// Reads component directly to ensure flash works during pause
+	// 4. Error Flash Overlay
 	cursorComp, ok := r.cursorStore.Get(r.gameCtx.CursorEntity)
 	if ok && cursorComp.ErrorFlashRemaining > 0 {
 		cursorBgColor = render.RgbCursorError

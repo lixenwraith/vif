@@ -6,6 +6,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 )
 
+// TODO: missing blossom, quasar, ... review
 // ZIndexResolver provides fast z-index lookups using cached store pointers
 // Initialize once during bootstrap, access via Resources.ZIndex
 type ZIndexResolver struct {
@@ -15,7 +16,6 @@ type ZIndexResolver struct {
 	decays  *Store[component.DecayComponent]
 	nuggets *Store[component.NuggetComponent]
 	// Cached for IsTypeable
-	chars    *Store[component.CharacterComponent]
 	typeable *Store[component.TypeableComponent]
 }
 
@@ -28,7 +28,6 @@ func NewZIndexResolver(w *World) *ZIndexResolver {
 		drains:   GetStore[component.DrainComponent](w),
 		decays:   GetStore[component.DecayComponent](w),
 		nuggets:  GetStore[component.NuggetComponent](w),
-		chars:    GetStore[component.CharacterComponent](w),
 		typeable: GetStore[component.TypeableComponent](w),
 	}
 

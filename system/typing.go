@@ -21,7 +21,6 @@ type TypingSystem struct {
 	memberStore   *engine.Store[component.MemberComponent]
 	headerStore   *engine.Store[component.CompositeHeaderComponent]
 	cursorStore   *engine.Store[component.CursorComponent]
-	charStore     *engine.Store[component.CharacterComponent]
 	nuggetStore   *engine.Store[component.NuggetComponent]
 	boostStore    *engine.Store[component.BoostComponent]
 	heatStore     *engine.Store[component.HeatComponent]
@@ -46,7 +45,6 @@ func NewTypingSystem(world *engine.World) engine.System {
 		memberStore:   engine.GetStore[component.MemberComponent](world),
 		headerStore:   engine.GetStore[component.CompositeHeaderComponent](world),
 		cursorStore:   engine.GetStore[component.CursorComponent](world),
-		charStore:     engine.GetStore[component.CharacterComponent](world),
 		nuggetStore:   engine.GetStore[component.NuggetComponent](world),
 		boostStore:    engine.GetStore[component.BoostComponent](world),
 		heatStore:     engine.GetStore[component.HeatComponent](world),
@@ -188,7 +186,7 @@ func (s *TypingSystem) applyColorEnergy(colorType component.TypeableType) {
 }
 
 // emitTypingFeedback sends visual feedback (splash + blink)
-func (s *TypingSystem) emitTypingFeedback(typeableType component.TypeableType, level component.TypeableLevel, char rune) {
+func (s *TypingSystem) emitTypingFeedback(typeableType component.TypeableType, char rune) {
 	cursorPos, _ := s.world.Positions.Get(s.res.Cursor.Entity)
 
 	var splashColor component.SplashColor
@@ -215,19 +213,8 @@ func (s *TypingSystem) emitTypingFeedback(typeableType component.TypeableType, l
 		blinkType = 0
 	}
 
-	var blinkLevel uint32
-	switch level {
-	case component.LevelDark:
-		blinkLevel = 0
-	case component.LevelNormal:
-		blinkLevel = 1
-	case component.LevelBright:
-		blinkLevel = 2
-	}
-
 	s.world.PushEvent(event.EventEnergyBlinkStart, &event.EnergyBlinkPayload{
-		Type:  blinkType,
-		Level: blinkLevel,
+		Type: blinkType,
 	})
 
 	s.world.PushEvent(event.EventSplashRequest, &event.SplashRequestPayload{
@@ -282,31 +269,14 @@ func (s *TypingSystem) getHeat() int {
 
 // handleCompositeMember processes typing for composite member entities
 func (s *TypingSystem) handleCompositeMember(entity core.Entity, anchorID core.Entity, typedRune rune) {
-	// Get typeable or fall back to character component
-	var targetChar rune
-	var typeableType component.TypeableType
-	var typeableLevel component.TypeableLevel
-
-	if typeable, ok := s.typeableStore.Get(entity); ok {
-		targetChar = typeable.Char
-		typeableType = typeable.Type
-		typeableLevel = typeable.Level
-	} else if char, ok := s.charStore.Get(entity); ok {
-		// Fallback to CharacterComponent for migration period
-		targetChar = char.Rune
-		switch char.Type {
-		case component.CharacterBlue:
-			typeableType = component.TypeBlue
-		case component.CharacterGreen:
-			typeableType = component.TypeGreen
-		case component.CharacterRed:
-			typeableType = component.TypeRed
-		}
-		typeableLevel = char.Level
-	} else {
+	typeable, ok := s.typeableStore.Get(entity)
+	if !ok {
 		s.emitTypingError()
 		return
 	}
+
+	targetChar := typeable.Char
+	typeableType := typeable.Type
 
 	// Character match check
 	if targetChar != typedRune {
@@ -336,7 +306,7 @@ func (s *TypingSystem) handleCompositeMember(entity core.Entity, anchorID core.E
 	}
 
 	// Visual feedback
-	s.emitTypingFeedback(typeableType, typeableLevel, typedRune)
+	s.emitTypingFeedback(typeableType, typedRune)
 
 	// Signal composite system
 	remaining := 0
@@ -378,7 +348,7 @@ func (s *TypingSystem) handleTypeable(entity core.Entity, typeable component.Typ
 	event.EmitDeathOne(s.res.Events.Queue, entity, 0, s.res.Time.FrameNumber)
 
 	// Splash typing feedback
-	s.emitTypingFeedback(typeable.Type, typeable.Level, typedRune)
+	s.emitTypingFeedback(typeable.Type, typedRune)
 	s.moveCursorRight()
 }
 

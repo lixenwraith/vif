@@ -16,9 +16,10 @@ type DeathSystem struct {
 	world *engine.World
 	res   engine.Resources
 
-	deathStore *engine.Store[component.DeathComponent]
-	protStore  *engine.Store[component.ProtectionComponent]
-	charStore  *engine.Store[component.CharacterComponent]
+	deathStore    *engine.Store[component.DeathComponent]
+	protStore     *engine.Store[component.ProtectionComponent]
+	glyphStore    *engine.Store[component.GlyphComponent]
+	typeableStore *engine.Store[component.TypeableComponent]
 
 	statKilled *atomic.Int64
 
@@ -31,9 +32,10 @@ func NewDeathSystem(world *engine.World) engine.System {
 		world: world,
 		res:   res,
 
-		deathStore: engine.GetStore[component.DeathComponent](world),
-		protStore:  engine.GetStore[component.ProtectionComponent](world),
-		charStore:  engine.GetStore[component.CharacterComponent](world),
+		deathStore:    engine.GetStore[component.DeathComponent](world),
+		protStore:     engine.GetStore[component.ProtectionComponent](world),
+		glyphStore:    engine.GetStore[component.GlyphComponent](world),
+		typeableStore: engine.GetStore[component.TypeableComponent](world),
 
 		statKilled: res.Status.Ints.Get("death.killed"),
 	}
@@ -145,8 +147,13 @@ func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType
 		return
 	}
 
-	char, hasChar := s.charStore.Get(entity)
-	if !hasChar {
+	// Try glyph first, then typeable for char
+	var char rune
+	if glyph, ok := s.glyphStore.Get(entity); ok {
+		char = glyph.Rune
+	} else if typeable, ok := s.typeableStore.Get(entity); ok {
+		char = typeable.Char
+	} else {
 		return
 	}
 
@@ -155,14 +162,14 @@ func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType
 		s.world.PushEvent(event.EventFlashRequest, &event.FlashRequestPayload{
 			X:    pos.X,
 			Y:    pos.Y,
-			Char: char.Rune,
+			Char: char,
 		})
 
 	case event.EventBlossomSpawnOne:
 		s.world.PushEvent(event.EventBlossomSpawnOne, &event.BlossomSpawnPayload{
 			X:             pos.X,
 			Y:             pos.Y,
-			Char:          char.Rune,
+			Char:          char,
 			SkipStartCell: true,
 		})
 
@@ -170,7 +177,7 @@ func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType
 		s.world.PushEvent(event.EventDecaySpawnOne, &event.DecaySpawnPayload{
 			X:             pos.X,
 			Y:             pos.Y,
-			Char:          char.Rune,
+			Char:          char,
 			SkipStartCell: true,
 		})
 

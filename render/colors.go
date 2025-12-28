@@ -186,39 +186,36 @@ func calculateHeatColor(progress float64) RGB {
 	}
 }
 
-// GetFgForSequence returns the foreground color for a given sequence type and level
-func GetFgForSequence(seqType component.CharacterType, level component.CharacterLevel) RGB {
-	switch seqType {
-	case component.CharacterGreen:
+// GetFgForSequence returns the foreground color for a given glyph type and level
+func GetFgForSequence(glyphType component.GlyphType, level component.GlyphLevel) RGB {
+	switch glyphType {
+	case component.GlyphGreen:
 		switch level {
-		case component.LevelDark:
+		case component.GlyphDark:
 			return RgbSequenceGreenDark
-		case component.LevelNormal:
+		case component.GlyphNormal:
 			return RgbSequenceGreenNormal
-		case component.LevelBright:
+		case component.GlyphBright:
 			return RgbSequenceGreenBright
 		}
-	case component.CharacterRed:
+	case component.GlyphRed:
 		switch level {
-		case component.LevelDark:
+		case component.GlyphDark:
 			return RgbSequenceRedDark
-		case component.LevelNormal:
+		case component.GlyphNormal:
 			return RgbSequenceRedNormal
-		case component.LevelBright:
+		case component.GlyphBright:
 			return RgbSequenceRedBright
 		}
-	case component.CharacterBlue:
+	case component.GlyphBlue:
 		switch level {
-		case component.LevelDark:
+		case component.GlyphDark:
 			return RgbSequenceBlueDark
-		case component.LevelNormal:
+		case component.GlyphNormal:
 			return RgbSequenceBlueNormal
-		case component.LevelBright:
+		case component.GlyphBright:
 			return RgbSequenceBlueBright
 		}
-	case component.CharacterGold:
-		// Gold sequence always uses bright yellow, regardless of level
-		return RgbSequenceGold
 	}
 	return RgbBackground
 }

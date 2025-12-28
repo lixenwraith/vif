@@ -74,7 +74,7 @@ func validatePosition(ctx *engine.GameContext, x, y int) (validX, validY int) {
 func findCharInDirection(ctx *engine.GameContext, startX, startY int, target rune, count int, forward bool) (int, bool) {
 	occurrences := 0
 	lastMatch := -1
-	charStore := engine.GetStore[component.CharacterComponent](ctx.World)
+	typeableStore := engine.GetStore[component.TypeableComponent](ctx.World)
 
 	if forward {
 		for x := startX + 1; x < ctx.GameWidth; x++ {
@@ -83,8 +83,8 @@ func findCharInDirection(ctx *engine.GameContext, startX, startY int, target run
 				if entity == 0 {
 					continue
 				}
-				char, ok := charStore.Get(entity)
-				if ok && char.Rune == target {
+				typeable, ok := typeableStore.Get(entity)
+				if ok && typeable.Char == target {
 					occurrences++
 					lastMatch = x
 					if occurrences == count {
@@ -100,8 +100,8 @@ func findCharInDirection(ctx *engine.GameContext, startX, startY int, target run
 				if entity == 0 {
 					continue
 				}
-				char, ok := charStore.Get(entity)
-				if ok && char.Rune == target {
+				typeable, ok := typeableStore.Get(entity)
+				if ok && typeable.Char == target {
 					occurrences++
 					lastMatch = x
 					if occurrences == count {

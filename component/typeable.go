@@ -11,11 +11,16 @@ const (
 	TypeNugget
 )
 
-// TypeableLevel mirrors CharacterLevel for typeable entities
-type TypeableLevel = CharacterLevel
+// TypeableLevel represents brightness/intensity affecting multiplier
+type TypeableLevel uint8
+
+const (
+	LevelDark   TypeableLevel = iota // x1
+	LevelNormal                      // x2
+	LevelBright                      // x3
+)
 
 // TypeableComponent marks an entity as a valid typing target
-// Decouples interaction capability from visual rendering (CharacterComponent)
 type TypeableComponent struct {
 	Char  rune
 	Type  TypeableType

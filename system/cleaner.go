@@ -21,7 +21,7 @@ type CleanerSystem struct {
 	cleanerStore  *engine.Store[component.CleanerComponent]
 	protStore     *engine.Store[component.ProtectionComponent]
 	typeableStore *engine.Store[component.TypeableComponent]
-	charStore     *engine.Store[component.CharacterComponent]
+	glyphStore    *engine.Store[component.GlyphComponent]
 	energyStore   *engine.Store[component.EnergyComponent]
 
 	spawned           map[int64]bool // Track which frames already spawned cleaners
@@ -42,7 +42,7 @@ func NewCleanerSystem(world *engine.World) engine.System {
 
 		cleanerStore:  engine.GetStore[component.CleanerComponent](world),
 		protStore:     engine.GetStore[component.ProtectionComponent](world),
-		charStore:     engine.GetStore[component.CharacterComponent](world),
+		glyphStore:    engine.GetStore[component.GlyphComponent](world),
 		typeableStore: engine.GetStore[component.TypeableComponent](world),
 		energyStore:   engine.GetStore[component.EnergyComponent](world),
 
@@ -414,10 +414,10 @@ func (s *CleanerSystem) mutateBlueToGreen(entity core.Entity, typeable component
 	typeable.Type = component.TypeGreen
 	s.typeableStore.Set(entity, typeable)
 
-	// Sync CharacterComponent for rendering
-	if char, ok := s.charStore.Get(entity); ok {
-		char.Type = component.CharacterGreen
-		s.charStore.Set(entity, char)
+	// Sync GlyphComponent for rendering
+	if glyph, ok := s.glyphStore.Get(entity); ok {
+		glyph.Type = component.GlyphGreen
+		s.glyphStore.Set(entity, glyph)
 	}
 }
 

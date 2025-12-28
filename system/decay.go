@@ -23,7 +23,8 @@ type DecaySystem struct {
 	protStore     *engine.Store[component.ProtectionComponent]
 	deathStore    *engine.Store[component.DeathComponent]
 	nuggetStore   *engine.Store[component.NuggetComponent]
-	charStore     *engine.Store[component.CharacterComponent]
+	sigilStore    *engine.Store[component.SigilComponent]
+	glyphStore    *engine.Store[component.GlyphComponent]
 	typeableStore *engine.Store[component.TypeableComponent]
 	blossomStore  *engine.Store[component.BlossomComponent]
 
@@ -48,7 +49,8 @@ func NewDecaySystem(world *engine.World) engine.System {
 		protStore:     engine.GetStore[component.ProtectionComponent](world),
 		deathStore:    engine.GetStore[component.DeathComponent](world),
 		nuggetStore:   engine.GetStore[component.NuggetComponent](world),
-		charStore:     engine.GetStore[component.CharacterComponent](world),
+		sigilStore:    engine.GetStore[component.SigilComponent](world),
+		glyphStore:    engine.GetStore[component.GlyphComponent](world),
 		typeableStore: engine.GetStore[component.TypeableComponent](world),
 		blossomStore:  engine.GetStore[component.BlossomComponent](world),
 
@@ -160,12 +162,10 @@ func (s *DecaySystem) spawnSingleDecay(x, y int, char rune, skipStartCell bool) 
 		LastIntY: lastY,
 	})
 
-	// 3. Render component
-	s.charStore.Set(entity, component.CharacterComponent{
+	// 3. Visual component
+	s.sigilStore.Set(entity, component.SigilComponent{
 		Rune:  char,
-		Color: component.ColorDecay,
-		Style: component.StyleNormal,
-		// Type and Level not needed for decay
+		Color: component.SigilDecay,
 	})
 }
 
@@ -277,10 +277,9 @@ func (s *DecaySystem) updateDecayEntities() {
 		if d.LastIntX != curX || d.LastIntY != curY {
 			if rand.Float64() < constant.ParticleChangeChance {
 				d.Char = constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
-				// Must update the component used by the renderer
-				if charComp, ok := s.charStore.Get(entity); ok {
-					charComp.Rune = d.Char
-					s.charStore.Set(entity, charComp)
+				if sigil, ok := s.sigilStore.Get(entity); ok {
+					sigil.Rune = d.Char
+					s.sigilStore.Set(entity, sigil)
 				}
 			}
 			d.LastIntX = curX
@@ -322,19 +321,18 @@ func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
 		}
 	}
 
-	// Get character component for renderer sync
-	char, hasChar := s.charStore.Get(entity)
+	// Get glyph component for renderer sync
+	glyph, hasGlyph := s.glyphStore.Get(entity)
 
 	// Apply decay logic
 	if typeable.Level > component.LevelDark {
-		// Reduce level by 1
 		typeable.Level--
 		s.typeableStore.Set(entity, typeable)
 
 		// Sync renderer
-		if hasChar {
-			char.Level = typeable.Level
-			s.charStore.Set(entity, char)
+		if hasGlyph {
+			glyph.Level = component.GlyphLevel(typeable.Level)
+			s.glyphStore.Set(entity, glyph)
 		}
 	} else {
 		// Dark level: type chain Blue→Green→Red→destroy
@@ -343,20 +341,20 @@ func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
 			typeable.Type = component.TypeGreen
 			typeable.Level = component.LevelBright
 			s.typeableStore.Set(entity, typeable)
-			if hasChar {
-				char.Type = component.CharacterGreen
-				char.Level = component.LevelBright
-				s.charStore.Set(entity, char)
+			if hasGlyph {
+				glyph.Type = component.GlyphGreen
+				glyph.Level = component.GlyphBright
+				s.glyphStore.Set(entity, glyph)
 			}
 
 		case component.TypeGreen:
 			typeable.Type = component.TypeRed
 			typeable.Level = component.LevelBright
 			s.typeableStore.Set(entity, typeable)
-			if hasChar {
-				char.Type = component.CharacterRed
-				char.Level = component.LevelBright
-				s.charStore.Set(entity, char)
+			if hasGlyph {
+				glyph.Type = component.GlyphRed
+				glyph.Level = component.GlyphBright
+				s.glyphStore.Set(entity, glyph)
 			}
 
 		default:

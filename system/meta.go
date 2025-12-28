@@ -20,11 +20,11 @@ type MetaSystem struct {
 	res engine.Resources
 
 	// Cached stores for debug display and reset
-	drainStore   *engine.Store[component.DrainComponent]
-	energyStore  *engine.Store[component.EnergyComponent]
-	heatStore    *engine.Store[component.HeatComponent]
-	shieldStore  *engine.Store[component.ShieldComponent]
-	charStore    *engine.Store[component.CharacterComponent]
+	drainStore  *engine.Store[component.DrainComponent]
+	energyStore *engine.Store[component.EnergyComponent]
+	heatStore   *engine.Store[component.HeatComponent]
+	shieldStore *engine.Store[component.ShieldComponent]
+	// glyphStore   *engine.Store[component.GlyphComponent]
 	nuggetStore  *engine.Store[component.NuggetComponent]
 	cleanerStore *engine.Store[component.CleanerComponent]
 	decayStore   *engine.Store[component.DecayComponent]
@@ -34,13 +34,13 @@ type MetaSystem struct {
 func NewMetaSystem(ctx *engine.GameContext) engine.System {
 	world := ctx.World
 	s := &MetaSystem{
-		ctx:          ctx,
-		res:          engine.GetResources(world),
-		drainStore:   engine.GetStore[component.DrainComponent](world),
-		energyStore:  engine.GetStore[component.EnergyComponent](world),
-		heatStore:    engine.GetStore[component.HeatComponent](world),
-		shieldStore:  engine.GetStore[component.ShieldComponent](world),
-		charStore:    engine.GetStore[component.CharacterComponent](world),
+		ctx:         ctx,
+		res:         engine.GetResources(world),
+		drainStore:  engine.GetStore[component.DrainComponent](world),
+		energyStore: engine.GetStore[component.EnergyComponent](world),
+		heatStore:   engine.GetStore[component.HeatComponent](world),
+		shieldStore: engine.GetStore[component.ShieldComponent](world),
+		// glyphStore:   engine.GetStore[component.GlyphComponent](world),
 		nuggetStore:  engine.GetStore[component.NuggetComponent](world),
 		cleanerStore: engine.GetStore[component.CleanerComponent](world),
 		decayStore:   engine.GetStore[component.DecayComponent](world),

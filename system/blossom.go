@@ -24,7 +24,8 @@ type BlossomSystem struct {
 	protStore     *engine.Store[component.ProtectionComponent]
 	deathStore    *engine.Store[component.DeathComponent]
 	nuggetStore   *engine.Store[component.NuggetComponent]
-	charStore     *engine.Store[component.CharacterComponent]
+	sigilStore    *engine.Store[component.SigilComponent]
+	glyphStore    *engine.Store[component.GlyphComponent]
 	typeableStore *engine.Store[component.TypeableComponent]
 	memberStore   *engine.Store[component.MemberComponent]
 	headerStore   *engine.Store[component.CompositeHeaderComponent]
@@ -51,7 +52,8 @@ func NewBlossomSystem(world *engine.World) engine.System {
 		protStore:     engine.GetStore[component.ProtectionComponent](world),
 		deathStore:    engine.GetStore[component.DeathComponent](world),
 		nuggetStore:   engine.GetStore[component.NuggetComponent](world),
-		charStore:     engine.GetStore[component.CharacterComponent](world),
+		sigilStore:    engine.GetStore[component.SigilComponent](world),
+		glyphStore:    engine.GetStore[component.GlyphComponent](world),
 		typeableStore: engine.GetStore[component.TypeableComponent](world),
 		memberStore:   engine.GetStore[component.MemberComponent](world),
 		headerStore:   engine.GetStore[component.CompositeHeaderComponent](world),
@@ -164,11 +166,9 @@ func (s *BlossomSystem) spawnSingleBlossom(x, y int, char rune, skipStartCell bo
 	})
 
 	// 3. Render component
-	s.charStore.Set(entity, component.CharacterComponent{
+	s.sigilStore.Set(entity, component.SigilComponent{
 		Rune:  char,
-		Color: component.ColorBlossom,
-		Style: component.StyleNormal,
-		// Type and Level not needed for blossom
+		Color: component.SigilBlossom,
 	})
 }
 
@@ -297,9 +297,9 @@ func (s *BlossomSystem) updateBlossomEntities() {
 			if rand.Float64() < constant.ParticleChangeChance {
 				b.Char = constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
 				// Must update the component used by the renderer
-				if char, ok := s.charStore.Get(entity); ok {
-					char.Rune = b.Char
-					s.charStore.Set(entity, char)
+				if sigil, ok := s.sigilStore.Get(entity); ok {
+					sigil.Rune = b.Char
+					s.sigilStore.Set(entity, sigil)
 				}
 			}
 			b.LastIntX = curX
@@ -333,18 +333,15 @@ func (s *BlossomSystem) applyBlossomToCharacter(entity core.Entity) bool {
 		return true
 	}
 
-	// Get character component for renderer sync
-	char, hasChar := s.charStore.Get(entity)
-
 	// Increase level (inverse of decay)
 	if typeable.Level < component.LevelBright {
 		typeable.Level++
 		s.typeableStore.Set(entity, typeable)
 
-		// Sync renderer
-		if hasChar {
-			char.Level = typeable.Level
-			s.charStore.Set(entity, char)
+		// Sync glyph renderer
+		if glyph, ok := s.glyphStore.Get(entity); ok {
+			glyph.Level = component.GlyphLevel(typeable.Level)
+			s.glyphStore.Set(entity, glyph)
 		}
 
 		s.statApplied.Add(1)
