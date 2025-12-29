@@ -962,6 +962,20 @@ func (app *AppState) RefreshLixenFlat() {
 
 	ui.Flat = nil
 
+	// Handle direct category tags first (2-level)
+	if tags, ok := catIdx.Tags[DirectTagsGroup]; ok {
+		if directTags, ok := tags[DirectTagsModule]; ok && len(directTags) > 0 {
+			for _, tag := range directTags {
+				ui.Flat = append(ui.Flat, TagItem{
+					Type:   TagItemTypeTag,
+					Group:  DirectTagsGroup,
+					Module: DirectTagsModule,
+					Tag:    tag,
+				})
+			}
+		}
+	}
+
 	for _, group := range catIdx.Groups {
 		groupKey := "g:" + group
 		groupExpanded := ui.Expansion.IsExpanded(groupKey)

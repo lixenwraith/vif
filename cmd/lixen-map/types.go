@@ -278,8 +278,8 @@ const (
 	TagSelectFull
 )
 
-// DirectTagsModule is the key for tags directly under a group (2-level tags)
-const DirectTagsModule = ""
+const DirectTagsModule = "" // #cat{group(tag)}
+const DirectTagsGroup = ""  // #cat(tag)
 
 // TagItemType identifies the level of a tag item
 type TagItemType uint8

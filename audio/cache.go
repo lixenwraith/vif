@@ -1,3 +1,4 @@
+// @lixen: #cat(tag)
 package audio
 
 import (
@@ -50,3 +51,5 @@ func (c *soundCache) get(st core.SoundType) floatBuffer {
 func (c *soundCache) preload() {
 	c.get(core.SoundError) // Most frequent
 }
+
+

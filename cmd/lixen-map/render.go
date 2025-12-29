@@ -236,9 +236,11 @@ func (app *AppState) buildLixenNodes(cat string, ui *CategoryUIState) []tui.Tree
 			selState := app.computeTagSelectionState(cat, item.Group, item.Module, item.Tag)
 			count := app.countFilesWithTag(cat, item.Group, item.Module, item.Tag)
 
-			// Direct tags (under group) have depth 1, module tags have depth 2
+			// Depth: 0 for category-direct (2-level), 1 for group-direct (3-level), 2 for module tags (4-level)
 			depth := 2
-			if item.Module == DirectTagsModule {
+			if item.Group == DirectTagsGroup && item.Module == DirectTagsModule {
+				depth = 0
+			} else if item.Module == DirectTagsModule {
 				depth = 1
 			}
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -48,16 +49,17 @@ type EditorState struct {
 }
 
 type EditorTagNode struct {
-	Type      TagItemType
-	Category  string
-	Group     string
-	Module    string
-	Tag       string
-	Depth     int
-	FileCount int
-	Total     int
-	Coverage  CoverageState
-	Deleted   bool
+	Type           TagItemType
+	Category       string
+	Group          string
+	Module         string
+	Tag            string
+	Depth          int
+	FileCount      int
+	Total          int
+	Coverage       CoverageState
+	Deleted        bool
+	ImplicitDelete bool
 }
 
 type TagRef struct {
@@ -378,7 +380,7 @@ func (app *AppState) buildEditorTreeNodes() []tui.TreeNode {
 
 		fg := app.Theme.Fg
 		attr := terminal.AttrNone
-		if item.Deleted {
+		if item.Deleted || item.ImplicitDelete {
 			fg = app.Theme.Unselected
 			attr = terminal.AttrDim
 		} else if item.Tag == "" {
@@ -391,6 +393,16 @@ func (app *AppState) buildEditorTreeNodes() []tui.TreeNode {
 		if item.Deleted {
 			check = tui.CheckFull
 			checkFg = app.Theme.Error
+		} else if item.ImplicitDelete {
+			// Distinct indicator for cascade deletion
+			check = tui.CheckPartial
+			checkFg = app.Theme.Warning
+		}
+
+		// Add suffix for implicit deletion
+		suffixText := suffix
+		if item.ImplicitDelete {
+			suffixText = " (will be empty)"
 		}
 
 		nodes = append(nodes, tui.TreeNode{
@@ -402,7 +414,7 @@ func (app *AppState) buildEditorTreeNodes() []tui.TreeNode {
 			Check:       check,
 			CheckFg:     checkFg,
 			Style:       tui.Style{Fg: fg, Attr: attr},
-			Suffix:      suffix,
+			Suffix:      suffixText,
 			SuffixStyle: tui.Style{Fg: app.Theme.StatusFg},
 			Data:        i, // Index into TagTree
 		})
@@ -648,6 +660,70 @@ func (app *AppState) toggleEditorDeletion() {
 			n.Deleted = !alreadyDeleted
 		}
 	}
+
+	app.computeImplicitDeletions()
+}
+
+func (app *AppState) computeImplicitDeletions() {
+	e := app.Editor
+	if e == nil {
+		return
+	}
+
+	// Reset implicit flags
+	for i := range e.TagTree {
+		e.TagTree[i].ImplicitDelete = false
+	}
+
+	// Build child counts and deleted counts per parent
+	type nodeKey struct{ cat, group, module string }
+	childCount := make(map[nodeKey]int)
+	deletedCount := make(map[nodeKey]int)
+
+	for i := range e.TagTree {
+		n := &e.TagTree[i]
+		switch n.Type {
+		case TagItemTypeTag:
+			key := nodeKey{n.Category, n.Group, n.Module}
+			childCount[key]++
+			if n.Deleted {
+				deletedCount[key]++
+			}
+		case TagItemTypeModule:
+			key := nodeKey{n.Category, n.Group, ""}
+			childCount[key]++
+		case TagItemTypeGroup:
+			key := nodeKey{n.Category, "", ""}
+			childCount[key]++
+		}
+	}
+
+	// Mark modules implicit if all tags deleted
+	for i := range e.TagTree {
+		n := &e.TagTree[i]
+		if n.Type == TagItemTypeModule && !n.Deleted {
+			key := nodeKey{n.Category, n.Group, n.Module}
+			if childCount[key] > 0 && deletedCount[key] == childCount[key] {
+				n.ImplicitDelete = true
+				// Propagate to parent group
+				groupKey := nodeKey{n.Category, n.Group, ""}
+				deletedCount[groupKey]++
+			}
+		}
+	}
+
+	// Mark groups implicit if all modules/direct-tags deleted
+	for i := range e.TagTree {
+		n := &e.TagTree[i]
+		if n.Type == TagItemTypeGroup && !n.Deleted {
+			key := nodeKey{n.Category, n.Group, ""}
+			if childCount[key] > 0 && deletedCount[key] == childCount[key] {
+				n.ImplicitDelete = true
+				catKey := nodeKey{n.Category, "", ""}
+				deletedCount[catKey]++
+			}
+		}
+	}
 }
 
 // nodeMatchesHierarchy returns true if child is under parent in hierarchy
@@ -835,6 +911,8 @@ func (app *AppState) applyTagChangesToFile(path string, additions []TagRef, dele
 		return false
 	}
 
+	hasTrailingNewline := len(content) > 0 && content[len(content)-1] == '\n'
+
 	lines := strings.Split(string(content), "\n")
 	var lixenLineIdx = -1
 	var packageLineIdx = -1
@@ -920,15 +998,8 @@ func (app *AppState) applyTagChangesToFile(path string, additions []TagRef, dele
 	} else if lixenLineIdx >= 0 {
 		lines[lixenLineIdx] = lixenLine
 	} else if packageLineIdx >= 0 {
-		// Insert after package line
-		newLines := make([]string, 0, len(lines)+1)
-		for i, line := range lines {
-			newLines = append(newLines, line)
-			if i == packageLineIdx {
-				newLines = append(newLines, lixenLine)
-			}
-		}
-		lines = newLines
+		// Insert BEFORE package line
+		lines = slices.Insert(lines, packageLineIdx, lixenLine)
 	}
 
 	// Write back
@@ -941,7 +1012,8 @@ func (app *AppState) applyTagChangesToFile(path string, additions []TagRef, dele
 	w := bufio.NewWriter(f)
 	for i, line := range lines {
 		w.WriteString(line)
-		if i < len(lines)-1 {
+		// Always add newline between lines, final newline based on original
+		if i < len(lines)-1 || hasTrailingNewline {
 			w.WriteByte('\n')
 		}
 	}
@@ -1038,22 +1110,48 @@ func serializeTags(tags map[string]map[string]map[string][]string) string {
 			continue
 		}
 
+		// Check for 2-level (category-direct tags only)
+		if len(groups) == 1 {
+			if directMods, ok := groups[DirectTagsGroup]; ok && len(directMods) == 1 {
+				if directTags, ok := directMods[DirectTagsModule]; ok && len(directTags) > 0 {
+					sort.Strings(directTags)
+					parts = append(parts, fmt.Sprintf("#%s(%s)", cat, strings.Join(directTags, ",")))
+					continue
+				}
+			}
+		}
+
+		// Build group names, excluding DirectTagsGroup
 		groupNames := make([]string, 0, len(groups))
 		for g := range groups {
-			groupNames = append(groupNames, g)
+			if g != DirectTagsGroup {
+				groupNames = append(groupNames, g)
+			}
 		}
 		sort.Strings(groupNames)
 
 		var groupParts []string
+
+		// Handle mixed case: direct category tags alongside groups
+		if directMods, ok := groups[DirectTagsGroup]; ok {
+			if directTags, ok := directMods[DirectTagsModule]; ok && len(directTags) > 0 {
+				sort.Strings(directTags)
+				groupParts = append(groupParts, fmt.Sprintf("(%s)", strings.Join(directTags, ",")))
+			}
+		}
+
+		// Handle regular groups
 		for _, group := range groupNames {
 			mods := groups[group]
 			var groupContent []string
 
+			// 3-level: group(tags) — direct tags on group
 			if directTags, ok := mods[""]; ok && len(directTags) > 0 {
 				sort.Strings(directTags)
 				groupContent = append(groupContent, fmt.Sprintf("%s(%s)", group, strings.Join(directTags, ",")))
 			}
 
+			// 4-level: group[module(tags)]
 			modNames := make([]string, 0, len(mods))
 			for m := range mods {
 				if m != "" {
@@ -1070,10 +1168,6 @@ func serializeTags(tags map[string]map[string]map[string][]string) string {
 					sort.Strings(modTags)
 					groupContent = append(groupContent, fmt.Sprintf("%s[%s(%s)]", group, mod, strings.Join(modTags, ",")))
 				}
-			}
-
-			if len(groupContent) == 0 && len(mods) == 0 {
-				continue
 			}
 
 			groupParts = append(groupParts, groupContent...)

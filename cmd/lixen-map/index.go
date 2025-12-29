@@ -160,7 +160,7 @@ func BuildIndex(root string) (*Index, error) {
 		catIdx := index.Categories[category]
 
 		for g := range groupSet {
-			if g != "all" {
+			if g != "all" && g != DirectTagsGroup {
 				catIdx.Groups = append(catIdx.Groups, g)
 			}
 		}
@@ -377,13 +377,47 @@ func parseBlocks(content string, fi *FileInfo) error {
 		}
 		content = content[1:]
 
-		braceIdx := strings.Index(content, "{")
-		if braceIdx == -1 {
-			return fmt.Errorf("missing '{' in block")
+		// Find first delimiter to determine format
+		var delimIdx int
+		var delim byte
+		for i := 0; i < len(content); i++ {
+			if content[i] == '{' || content[i] == '(' {
+				delimIdx = i
+				delim = content[i]
+				break
+			}
+		}
+		if delimIdx == 0 {
+			return fmt.Errorf("missing '{' or '(' after category")
 		}
 
-		category := content[:braceIdx]
-		content = content[braceIdx+1:]
+		category := content[:delimIdx]
+		content = content[delimIdx+1:]
+
+		// Handle 2-level #cat(tags) format
+		if delim == '(' {
+			closeIdx := strings.Index(content, ")")
+			if closeIdx == -1 {
+				return fmt.Errorf("missing ')' in category direct tags")
+			}
+			tagList := content[:closeIdx]
+			content = content[closeIdx+1:]
+
+			tags := parseTagList(tagList)
+			if len(tags) == 0 {
+				return fmt.Errorf("empty tag list in category '%s'", category)
+			}
+
+			if fi.Tags[category] == nil {
+				fi.Tags[category] = make(map[string]map[string][]string)
+			}
+			if fi.Tags[category][DirectTagsGroup] == nil {
+				fi.Tags[category][DirectTagsGroup] = make(map[string][]string)
+			}
+			fi.Tags[category][DirectTagsGroup][DirectTagsModule] = append(
+				fi.Tags[category][DirectTagsGroup][DirectTagsModule], tags...)
+			continue
+		}
 
 		closeIdx := findMatchingBrace(content)
 		if closeIdx == -1 {
