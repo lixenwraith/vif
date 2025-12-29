@@ -14,7 +14,13 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 	// Quit is handled in global event loop of main: Ctrl+C, Ctrl+Q to quit
 	app.Message = ""
 
-	// Handle viewer events first if visible
+	// Handle editor events first if visible
+	if app.Editor != nil && app.Editor.Visible {
+		app.handleEditorEvent(ev)
+		return false, false
+	}
+
+	// Handle viewer events second if visible
 	if app.Viewer != nil && app.Viewer.Visible {
 		app.handleViewerEvent(ev)
 		return false, false
@@ -28,6 +34,9 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 	switch ev.Key {
 	case terminal.KeyRune:
 		switch ev.Rune {
+		case 'e':
+			app.OpenEditor()
+			return false, false
 		case '[':
 			app.switchCategory(-1)
 			return false, false
@@ -247,27 +256,27 @@ func (app *AppState) handleLixenPaneEvent(ev terminal.Event) {
 }
 
 func (app *AppState) collapseLixenItem(ui *CategoryUIState) {
-	if ui.TreeState.Cursor >= len(ui.Flat) {
+	data := ui.CurrentData()
+	if data == nil {
 		return
 	}
-	item := ui.Flat[ui.TreeState.Cursor]
 
-	switch item.Type {
+	switch data.Type {
 	case TagItemTypeGroup:
-		key := "g:" + item.Group
+		key := "g:" + data.Group
 		if ui.Expansion.IsExpanded(key) {
 			ui.Expansion.Collapse(key)
 			app.RefreshLixenFlat()
 		}
 	case TagItemTypeModule:
-		key := fmt.Sprintf("m:%s.%s", item.Group, item.Module)
+		key := fmt.Sprintf("m:%s.%s", data.Group, data.Module)
 		if ui.Expansion.IsExpanded(key) {
 			ui.Expansion.Collapse(key)
 			app.RefreshLixenFlat()
 		} else {
-			// Move to parent group
+			// Navigate to parent group
 			for i := ui.TreeState.Cursor - 1; i >= 0; i-- {
-				if ui.Flat[i].Type == TagItemTypeGroup && ui.Flat[i].Group == item.Group {
+				if i < len(ui.Flat) && ui.Flat[i].Type == TagItemTypeGroup && ui.Flat[i].Group == data.Group {
 					ui.TreeState.Cursor = i
 					ui.TreeState.AdjustScroll(len(ui.Flat))
 					break
@@ -275,15 +284,19 @@ func (app *AppState) collapseLixenItem(ui *CategoryUIState) {
 			}
 		}
 	case TagItemTypeTag:
-		// Move to parent module or group
+		// Navigate to parent module or group
 		for i := ui.TreeState.Cursor - 1; i >= 0; i-- {
-			if item.Module != DirectTagsModule && ui.Flat[i].Type == TagItemTypeModule &&
-				ui.Flat[i].Group == item.Group && ui.Flat[i].Module == item.Module {
+			if i >= len(ui.Flat) {
+				continue
+			}
+			item := ui.Flat[i]
+			if data.Module != DirectTagsModule && item.Type == TagItemTypeModule &&
+				item.Group == data.Group && item.Module == data.Module {
 				ui.TreeState.Cursor = i
 				ui.TreeState.AdjustScroll(len(ui.Flat))
 				return
 			}
-			if ui.Flat[i].Type == TagItemTypeGroup && ui.Flat[i].Group == item.Group {
+			if item.Type == TagItemTypeGroup && item.Group == data.Group {
 				ui.TreeState.Cursor = i
 				ui.TreeState.AdjustScroll(len(ui.Flat))
 				return
@@ -293,20 +306,20 @@ func (app *AppState) collapseLixenItem(ui *CategoryUIState) {
 }
 
 func (app *AppState) expandLixenItem(ui *CategoryUIState) {
-	if ui.TreeState.Cursor >= len(ui.Flat) {
+	data := ui.CurrentData()
+	if data == nil {
 		return
 	}
-	item := ui.Flat[ui.TreeState.Cursor]
 
-	switch item.Type {
+	switch data.Type {
 	case TagItemTypeGroup:
-		key := "g:" + item.Group
+		key := "g:" + data.Group
 		if !ui.Expansion.IsExpanded(key) {
 			ui.Expansion.Expand(key)
 			app.RefreshLixenFlat()
 		}
 	case TagItemTypeModule:
-		key := fmt.Sprintf("m:%s.%s", item.Group, item.Module)
+		key := fmt.Sprintf("m:%s.%s", data.Group, data.Module)
 		if !ui.Expansion.IsExpanded(key) {
 			ui.Expansion.Expand(key)
 			app.RefreshLixenFlat()
@@ -336,36 +349,35 @@ func (app *AppState) expandAllLixenItems(ui *CategoryUIState) {
 func (app *AppState) toggleLixenSelection() {
 	cat := app.CurrentCategory
 	ui := app.getCurrentCategoryUI()
-	if ui == nil || ui.TreeState.Cursor >= len(ui.Flat) {
+	data := ui.CurrentData()
+	if data == nil {
 		return
 	}
 
-	item := ui.Flat[ui.TreeState.Cursor]
-
-	switch item.Type {
+	switch data.Type {
 	case TagItemTypeGroup:
-		if app.allFilesWithGroupSelected(cat, item.Group) {
-			count := app.deselectFilesWithGroup(cat, item.Group)
-			app.Message = fmt.Sprintf("deselected %d files from #%s", count, item.Group)
+		if app.allFilesWithGroupSelected(cat, data.Group) {
+			count := app.deselectFilesWithGroup(cat, data.Group)
+			app.Message = fmt.Sprintf("deselected %d files from #%s", count, data.Group)
 		} else {
-			count := app.selectFilesWithGroup(cat, item.Group)
-			app.Message = fmt.Sprintf("selected %d files with #%s", count, item.Group)
+			count := app.selectFilesWithGroup(cat, data.Group)
+			app.Message = fmt.Sprintf("selected %d files with #%s", count, data.Group)
 		}
 	case TagItemTypeModule:
-		if app.allFilesWithModuleSelected(cat, item.Group, item.Module) {
-			count := app.deselectFilesWithModule(cat, item.Group, item.Module)
-			app.Message = fmt.Sprintf("deselected %d files from %s", count, item.Module)
+		if app.allFilesWithModuleSelected(cat, data.Group, data.Module) {
+			count := app.deselectFilesWithModule(cat, data.Group, data.Module)
+			app.Message = fmt.Sprintf("deselected %d files from %s", count, data.Module)
 		} else {
-			count := app.selectFilesWithModule(cat, item.Group, item.Module)
-			app.Message = fmt.Sprintf("selected %d files with %s", count, item.Module)
+			count := app.selectFilesWithModule(cat, data.Group, data.Module)
+			app.Message = fmt.Sprintf("selected %d files with %s", count, data.Module)
 		}
 	case TagItemTypeTag:
-		if app.allFilesWithTagSelected(cat, item.Group, item.Module, item.Tag) {
-			count := app.deselectFilesWithTag(cat, item.Group, item.Module, item.Tag)
-			app.Message = fmt.Sprintf("deselected %d files from %s", count, item.Tag)
+		if app.allFilesWithTagSelected(cat, data.Group, data.Module, data.Tag) {
+			count := app.deselectFilesWithTag(cat, data.Group, data.Module, data.Tag)
+			app.Message = fmt.Sprintf("deselected %d files from %s", count, data.Tag)
 		} else {
-			count := app.selectFilesWithTag(cat, item.Group, item.Module, item.Tag)
-			app.Message = fmt.Sprintf("selected %d files with %s", count, item.Tag)
+			count := app.selectFilesWithTag(cat, data.Group, data.Module, data.Tag)
+			app.Message = fmt.Sprintf("selected %d files with %s", count, data.Tag)
 		}
 	}
 }
@@ -377,12 +389,15 @@ func (app *AppState) selectAndAdvanceLixen() {
 		return
 	}
 
-	item := ui.Flat[ui.TreeState.Cursor]
+	data := ui.CurrentData()
+	if data == nil {
+		return
+	}
 
-	switch item.Type {
+	switch data.Type {
 	case TagItemTypeGroup:
-		app.selectFilesWithGroup(cat, item.Group)
-		// Move to next group
+		app.selectFilesWithGroup(cat, data.Group)
+		// Advance to next group
 		for i := ui.TreeState.Cursor + 1; i < len(ui.Flat); i++ {
 			if ui.Flat[i].Type == TagItemTypeGroup {
 				ui.TreeState.Cursor = i
@@ -393,8 +408,8 @@ func (app *AppState) selectAndAdvanceLixen() {
 		ui.TreeState.MoveCursor(1, len(ui.Flat))
 
 	case TagItemTypeModule:
-		app.selectFilesWithModule(cat, item.Group, item.Module)
-		// Move to next module or group
+		app.selectFilesWithModule(cat, data.Group, data.Module)
+		// Advance to next module or group
 		for i := ui.TreeState.Cursor + 1; i < len(ui.Flat); i++ {
 			if ui.Flat[i].Type == TagItemTypeModule || ui.Flat[i].Type == TagItemTypeGroup {
 				ui.TreeState.Cursor = i
@@ -405,7 +420,7 @@ func (app *AppState) selectAndAdvanceLixen() {
 		ui.TreeState.MoveCursor(1, len(ui.Flat))
 
 	case TagItemTypeTag:
-		app.selectFilesWithTag(cat, item.Group, item.Module, item.Tag)
+		app.selectFilesWithTag(cat, data.Group, data.Module, data.Tag)
 		ui.TreeState.MoveCursor(1, len(ui.Flat))
 	}
 }
@@ -950,23 +965,20 @@ func (app *AppState) RefreshLixenFlat() {
 	for _, group := range catIdx.Groups {
 		groupKey := "g:" + group
 		groupExpanded := ui.Expansion.IsExpanded(groupKey)
-		// Default to expanded if not set
 		if _, known := ui.Expansion.State[groupKey]; !known {
 			ui.Expansion.Expand(groupKey)
 			groupExpanded = true
 		}
 
 		ui.Flat = append(ui.Flat, TagItem{
-			Type:     TagItemTypeGroup,
-			Group:    group,
-			Expanded: groupExpanded,
+			Type:  TagItemTypeGroup,
+			Group: group,
 		})
 
 		if !groupExpanded {
 			continue
 		}
 
-		// Direct tags under group (2-level)
 		if tags, ok := catIdx.Tags[group][DirectTagsModule]; ok {
 			for _, tag := range tags {
 				ui.Flat = append(ui.Flat, TagItem{
@@ -978,29 +990,25 @@ func (app *AppState) RefreshLixenFlat() {
 			}
 		}
 
-		// Modules under group (3-level)
 		if modules, ok := catIdx.Modules[group]; ok {
 			for _, module := range modules {
 				moduleKey := fmt.Sprintf("m:%s.%s", group, module)
 				moduleExpanded := ui.Expansion.IsExpanded(moduleKey)
-				// Default to expanded if not set
 				if _, known := ui.Expansion.State[moduleKey]; !known {
 					ui.Expansion.Expand(moduleKey)
 					moduleExpanded = true
 				}
 
 				ui.Flat = append(ui.Flat, TagItem{
-					Type:     TagItemTypeModule,
-					Group:    group,
-					Module:   module,
-					Expanded: moduleExpanded,
+					Type:   TagItemTypeModule,
+					Group:  group,
+					Module: module,
 				})
 
 				if !moduleExpanded {
 					continue
 				}
 
-				// Tags under module
 				if tags, ok := catIdx.Tags[group][module]; ok {
 					for _, tag := range tags {
 						ui.Flat = append(ui.Flat, TagItem{
@@ -1015,7 +1023,6 @@ func (app *AppState) RefreshLixenFlat() {
 		}
 	}
 
-	// Clamp cursor
 	if ui.TreeState.Cursor >= len(ui.Flat) {
 		ui.TreeState.Cursor = len(ui.Flat) - 1
 	}

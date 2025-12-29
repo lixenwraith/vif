@@ -1,4 +1,3 @@
-// @lixen: #focus{audio[cache]}
 package audio
 
 import (

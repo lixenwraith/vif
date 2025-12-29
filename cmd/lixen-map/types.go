@@ -42,6 +42,7 @@ type AppState struct {
 	Height int
 
 	Viewer *FileViewerState // File viewer overlay state
+	Editor *EditorState     // Editor overlay state
 }
 
 // DetailPaneState manages UI state for dependency panes (DepBy, DepOn)
@@ -82,8 +83,27 @@ type DependencyAnalysis struct {
 // CategoryUIState manages UI state for a single lixen category
 type CategoryUIState struct {
 	Flat      []TagItem          // Flattened groups/modules/tags for rendering
+	Nodes     []tui.TreeNode     // Cached nodes with Data populated
 	TreeState *tui.TreeState     // Cursor and scroll management
 	Expansion *tui.TreeExpansion // Group/module expansion state
+}
+
+func (ui *CategoryUIState) CurrentNode() *tui.TreeNode {
+	if ui.TreeState.Cursor < 0 || ui.TreeState.Cursor >= len(ui.Nodes) {
+		return nil
+	}
+	return &ui.Nodes[ui.TreeState.Cursor]
+}
+
+func (ui *CategoryUIState) CurrentData() *LixenNodeData {
+	node := ui.CurrentNode()
+	if node == nil || node.Data == nil {
+		return nil
+	}
+	if data, ok := node.Data.(LixenNodeData); ok {
+		return &data
+	}
+	return nil
 }
 
 // NewCategoryUIState creates initialized category UI state
@@ -270,11 +290,19 @@ const (
 	TagItemTypeTag
 )
 
+// LixenNodeData for TreeNode.Data payload
+type LixenNodeData struct {
+	Type     TagItemType
+	Category string
+	Group    string
+	Module   string
+	Tag      string
+}
+
 // TagItem represents a single row in the lixen category pane
 type TagItem struct {
-	Type     TagItemType
-	Group    string
-	Module   string // empty for groups, DirectTagsModule for 2-level tags
-	Tag      string // empty for groups and modules
-	Expanded bool   // groups and modules can expand
+	Type   TagItemType
+	Group  string
+	Module string // empty for groups, DirectTagsModule for 2-level tags
+	Tag    string // empty for groups and modules
 }

@@ -352,30 +352,34 @@ func (app *AppState) applyLixenPaneFilter() {
 		return
 	}
 
-	item := ui.Flat[ui.TreeState.Cursor]
+	data := ui.CurrentData()
+	if data == nil {
+		return
+	}
+
 	var paths []string
 
-	switch item.Type {
+	switch data.Type {
 	case TagItemTypeGroup:
 		for path, fi := range app.Index.Files {
-			if _, ok := fi.CategoryTags(cat)[item.Group]; ok {
+			if _, ok := fi.CategoryTags(cat)[data.Group]; ok {
 				paths = append(paths, path)
 			}
 		}
 	case TagItemTypeModule:
 		for path, fi := range app.Index.Files {
-			if mods, ok := fi.CategoryTags(cat)[item.Group]; ok {
-				if _, ok := mods[item.Module]; ok {
+			if mods, ok := fi.CategoryTags(cat)[data.Group]; ok {
+				if _, ok := mods[data.Module]; ok {
 					paths = append(paths, path)
 				}
 			}
 		}
 	case TagItemTypeTag:
 		for path, fi := range app.Index.Files {
-			if mods, ok := fi.CategoryTags(cat)[item.Group]; ok {
-				if tags, ok := mods[item.Module]; ok {
+			if mods, ok := fi.CategoryTags(cat)[data.Group]; ok {
+				if tags, ok := mods[data.Module]; ok {
 					for _, t := range tags {
-						if t == item.Tag {
+						if t == data.Tag {
 							paths = append(paths, path)
 							break
 						}
@@ -391,27 +395,29 @@ func (app *AppState) applyLixenPaneFilter() {
 
 	if app.isPathSetFiltered(paths) {
 		app.RemoveFromFilter(paths)
-		app.Message = fmt.Sprintf("unfilter: %s", formatTagItemLabel(item))
+		app.Message = fmt.Sprintf("unfilter: %s", formatLixenNodeLabel(data))
 	} else {
 		app.ApplyFilter(paths)
-		app.Message = fmt.Sprintf("filter: %s (%d files)", formatTagItemLabel(item), len(paths))
+		app.Message = fmt.Sprintf("filter: %s (%d files)", formatLixenNodeLabel(data), len(paths))
 	}
 
 	app.RefreshLixenFlat()
 }
 
-// formatTagItemLabel returns display label for a TagItem
-func formatTagItemLabel(item TagItem) string {
-	switch item.Type {
+func formatLixenNodeLabel(data *LixenNodeData) string {
+	if data == nil {
+		return ""
+	}
+	switch data.Type {
 	case TagItemTypeGroup:
-		return "#" + item.Group
+		return "#" + data.Group
 	case TagItemTypeModule:
-		return fmt.Sprintf("#%s[%s]", item.Group, item.Module)
+		return fmt.Sprintf("#%s[%s]", data.Group, data.Module)
 	case TagItemTypeTag:
-		if item.Module == DirectTagsModule {
-			return fmt.Sprintf("#%s(%s)", item.Group, item.Tag)
+		if data.Module == DirectTagsModule {
+			return fmt.Sprintf("#%s(%s)", data.Group, data.Tag)
 		}
-		return fmt.Sprintf("#%s[%s(%s)]", item.Group, item.Module, item.Tag)
+		return fmt.Sprintf("#%s[%s(%s)]", data.Group, data.Module, data.Tag)
 	}
 	return ""
 }

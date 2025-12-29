@@ -18,8 +18,10 @@ func (app *AppState) Render() {
 
 	root := tui.NewRegion(cells, w, 0, 0, w, h)
 
-	// Render viewer overlay if visible, otherwise main view
-	if app.Viewer != nil && app.Viewer.Visible {
+	// Render overlays if visible, otherwise main view
+	if app.Editor != nil && app.Editor.Visible {
+		app.renderEditor(root)
+	} else if app.Viewer != nil && app.Viewer.Visible {
 		app.renderFileViewer(root)
 	} else {
 		app.renderMain(root)
@@ -156,9 +158,9 @@ func (app *AppState) renderLixenPane(r tui.Region) {
 	// Update visible height for scroll calculations
 	ui.TreeState.SetVisible(r.H)
 
-	// Build tree nodes from flat tag items
-	nodes := app.buildLixenNodes(cat, ui)
-	if len(nodes) == 0 {
+	// Build and cache tree nodes from flat tag items
+	ui.Nodes = app.buildLixenNodes(cat, ui)
+	if len(ui.Nodes) == 0 {
 		r.Text(1, 0, "(no tags)", app.Theme.Unselected, terminal.RGB{}, terminal.AttrNone)
 		return
 	}
@@ -169,7 +171,7 @@ func (app *AppState) renderLixenPane(r tui.Region) {
 		bg = app.Theme.FocusBg
 	}
 
-	r.Tree(nodes, ui.TreeState.Cursor, ui.TreeState.Scroll, tui.TreeOpts{
+	r.Tree(ui.Nodes, ui.TreeState.Cursor, ui.TreeState.Scroll, tui.TreeOpts{
 		CursorBg:    app.Theme.CursorBg,
 		DefaultBg:   bg,
 		IndentWidth: 2,
@@ -204,6 +206,7 @@ func (app *AppState) buildLixenNodes(cat string, ui *CategoryUIState) []tui.Tree
 				Style:       app.groupStyle(dimmed),
 				Suffix:      fmt.Sprintf(" (%d)", count),
 				SuffixStyle: tui.Style{Fg: app.suffixColor(dimmed)},
+				Data:        LixenNodeData{Type: TagItemTypeGroup, Category: cat, Group: item.Group},
 			}
 
 		case TagItemTypeModule:
@@ -224,6 +227,7 @@ func (app *AppState) buildLixenNodes(cat string, ui *CategoryUIState) []tui.Tree
 				Style:       app.moduleStyle(dimmed),
 				Suffix:      fmt.Sprintf(" (%d)", count),
 				SuffixStyle: tui.Style{Fg: app.suffixColor(dimmed)},
+				Data:        LixenNodeData{Type: TagItemTypeModule, Category: cat, Group: item.Group, Module: item.Module},
 			}
 
 		case TagItemTypeTag:
@@ -247,6 +251,7 @@ func (app *AppState) buildLixenNodes(cat string, ui *CategoryUIState) []tui.Tree
 				Style:       app.tagStyle(dimmed),
 				Suffix:      fmt.Sprintf(" (%d)", count),
 				SuffixStyle: tui.Style{Fg: app.suffixColor(dimmed)},
+				Data:        LixenNodeData{Type: TagItemTypeTag, Category: cat, Group: item.Group, Module: item.Module, Tag: item.Tag},
 			}
 		}
 
