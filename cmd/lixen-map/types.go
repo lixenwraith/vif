@@ -95,6 +95,8 @@ type AppState struct {
 
 	Width  int
 	Height int
+
+	Viewer *FileViewerState // File viewer overlay state
 }
 
 // DetailPaneState manages UI state for dependency panes (DepBy, DepOn)

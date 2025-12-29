@@ -17,7 +17,14 @@ func (app *AppState) Render() {
 	}
 
 	root := tui.NewRegion(cells, w, 0, 0, w, h)
-	app.renderMain(root)
+
+	// Render viewer overlay if visible, otherwise main view
+	if app.Viewer != nil && app.Viewer.Visible {
+		app.renderFileViewer(root)
+	} else {
+		app.renderMain(root)
+	}
+
 	app.Term.Flush(cells, w, h)
 }
 

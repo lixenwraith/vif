@@ -13,6 +13,15 @@ import (
 func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 	app.Message = ""
 
+	// Handle viewer events first if visible
+	if app.Viewer != nil && app.Viewer.Visible {
+		if ev.Key == terminal.KeyCtrlQ {
+			return true, false
+		}
+		app.handleViewerEvent(ev)
+		return false, false
+	}
+
 	if ev.Key == terminal.KeyCtrlQ {
 		return true, false
 	}
@@ -451,6 +460,13 @@ func (app *AppState) handleTreePaneEvent(ev terminal.Event) {
 		app.collapseTreeNode()
 	case terminal.KeyRight:
 		app.expandTreeNode()
+	case terminal.KeyEnter:
+		if app.TreeState.Cursor < len(app.TreeFlat) {
+			node := app.TreeFlat[app.TreeState.Cursor]
+			if !node.IsDir {
+				app.OpenFileViewer(node.Path)
+			}
+		}
 
 	case terminal.KeyRune:
 		switch ev.Rune {
