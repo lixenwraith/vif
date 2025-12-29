@@ -27,13 +27,14 @@ func RegisterComponents(w *engine.World) {
 	engine.RegisterComponent[component.EnergyComponent](w)
 	engine.RegisterComponent[component.HeatComponent](w)
 	engine.RegisterComponent[component.DecayComponent](w)
+	engine.RegisterComponent[component.BlossomComponent](w)
 	engine.RegisterComponent[component.CleanerComponent](w)
 	engine.RegisterComponent[component.DrainComponent](w)
 	engine.RegisterComponent[component.MaterializeComponent](w)
 	engine.RegisterComponent[component.QuasarComponent](w)
 	engine.RegisterComponent[component.CompositeHeaderComponent](w)
 	engine.RegisterComponent[component.MemberComponent](w)
-	engine.RegisterComponent[component.BlossomComponent](w)
+	engine.RegisterComponent[component.LightningComponent](w)
 }
 
 // RegisterSystems registers all system factories with the registry
@@ -80,7 +81,8 @@ func RegisterSystems() {
 	registry.RegisterSystem("cleaner", func(w any) any {
 		return system.NewCleanerSystem(w.(*engine.World))
 	})
-	registry.RegisterSystem("fuse", func(w any) any { // ADD
+
+	registry.RegisterSystem("fuse", func(w any) any {
 		return system.NewFuseSystem(w.(*engine.World))
 	})
 	registry.RegisterSystem("drain", func(w any) any {
@@ -139,6 +141,10 @@ func RegisterRenderers() {
 
 	registry.RegisterRenderer("effects", func(ctx any) any {
 		return renderers.NewEffectsRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityEffects)
+
+	registry.RegisterRenderer("lightning", func(ctx any) any {
+		return renderers.NewLightningRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityEffects)
 
 	registry.RegisterRenderer("materialize", func(ctx any) any {
@@ -220,11 +226,12 @@ func ActiveRenderers() []string {
 		"ping",
 		"splash",
 		"glyph",
+		"sigil",
 		"nugget",
 		"gold",
 		"shield",
 		"effects",
-		"sigil",
+		"lightning",
 		"materialize",
 		"drain",
 		"quasar",

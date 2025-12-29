@@ -323,7 +323,7 @@ func drawTrailEffect(startY int, fg, bg render.RGB) {
 	startY += 2
 
 	typeName := "Cleaner"
-	baseColor := render.RgbCleanerBase
+	baseColor := render.RgbCleanerBasePositive
 	if state.trailType == 1 {
 		typeName = "Materialize"
 		baseColor = render.RgbMaterialize

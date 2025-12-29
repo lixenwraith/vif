@@ -6,6 +6,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // FuseSystem orchestrates drain-to-quasar transformation
@@ -15,12 +16,15 @@ type FuseSystem struct {
 	world *engine.World
 	res   engine.Resources
 
-	drainStore  *engine.Store[component.DrainComponent]
-	quasarStore *engine.Store[component.QuasarComponent]
-	headerStore *engine.Store[component.CompositeHeaderComponent]
-	memberStore *engine.Store[component.MemberComponent]
-	protStore   *engine.Store[component.ProtectionComponent]
-	glyphStore  *engine.Store[component.GlyphComponent]
+	drainStore     *engine.Store[component.DrainComponent]
+	quasarStore    *engine.Store[component.QuasarComponent]
+	headerStore    *engine.Store[component.CompositeHeaderComponent]
+	memberStore    *engine.Store[component.MemberComponent]
+	protStore      *engine.Store[component.ProtectionComponent]
+	glyphStore     *engine.Store[component.GlyphComponent]
+	matStore       *engine.Store[component.MaterializeComponent]
+	lightningStore *engine.Store[component.LightningComponent]
+	timerStore     *engine.Store[component.TimerComponent]
 
 	enabled bool
 }
@@ -31,12 +35,15 @@ func NewFuseSystem(world *engine.World) engine.System {
 		world: world,
 		res:   engine.GetResources(world),
 
-		drainStore:  engine.GetStore[component.DrainComponent](world),
-		quasarStore: engine.GetStore[component.QuasarComponent](world),
-		headerStore: engine.GetStore[component.CompositeHeaderComponent](world),
-		memberStore: engine.GetStore[component.MemberComponent](world),
-		protStore:   engine.GetStore[component.ProtectionComponent](world),
-		glyphStore:  engine.GetStore[component.GlyphComponent](world),
+		drainStore:     engine.GetStore[component.DrainComponent](world),
+		quasarStore:    engine.GetStore[component.QuasarComponent](world),
+		headerStore:    engine.GetStore[component.CompositeHeaderComponent](world),
+		memberStore:    engine.GetStore[component.MemberComponent](world),
+		protStore:      engine.GetStore[component.ProtectionComponent](world),
+		glyphStore:     engine.GetStore[component.GlyphComponent](world),
+		matStore:       engine.GetStore[component.MaterializeComponent](world),
+		lightningStore: engine.GetStore[component.LightningComponent](world),
+		timerStore:     engine.GetStore[component.TimerComponent](world),
 	}
 	s.initLocked()
 	return s
@@ -85,19 +92,79 @@ func (s *FuseSystem) executeFuse() {
 	// 1. Signal DrainSystem to stop spawning
 	s.world.PushEvent(event.EventDrainPause, nil)
 
-	// 2. Destroy all existing drains (silent, no visual effect)
+	// 2. Collect active drains and their positions
+	drains := s.drainStore.All()
+	coords := make([]int, 0, len(drains)*2)
+	validDrains := make([]core.Entity, 0, len(drains))
+
+	for _, e := range drains {
+		if pos, ok := s.world.Positions.Get(e); ok {
+			coords = append(coords, pos.X, pos.Y)
+			validDrains = append(validDrains, e)
+		}
+	}
+
+	// 3. Calculate Centroid
+	cX, cY := vmath.CalculateCentroid(coords)
+
+	// Fallback to center screen if no drains (rare edge case)
+	if len(coords) == 0 {
+		config := s.res.Config
+		cX = config.GameWidth / 2
+		cY = config.GameHeight / 2
+	}
+
+	// 4. Determine Spawn Position (clamped)
+	spawnX, spawnY := s.clampSpawnPosition(cX, cY)
+
+	// 5. Spawn Lightning Effects
+	for i := range validDrains {
+		// Drains are at coords[i*2], coords[i*2+1]
+		originX := coords[i*2]
+		originY := coords[i*2+1]
+
+		// Spawn transient lightning entity
+		lightningEntity := s.world.CreateEntity()
+		s.lightningStore.Set(lightningEntity, component.LightningComponent{
+			OriginX:   originX,
+			OriginY:   originY,
+			TargetX:   spawnX,
+			TargetY:   spawnY,
+			Duration:  constant.DestructionFlashDuration,
+			Remaining: constant.DestructionFlashDuration,
+		})
+		// Auto-cleanup after duration
+		s.world.PushEvent(event.EventTimerStart, &event.TimerStartPayload{
+			Entity:   lightningEntity,
+			Duration: constant.DestructionFlashDuration,
+		})
+		// If timer system not used for this, can set TimerComponent directly:
+		s.timerStore.Set(lightningEntity, component.TimerComponent{
+			Remaining: constant.DestructionFlashDuration,
+		})
+
+		// Also destroy the drain entity (visual replacement)
+		// We destroy them in step 7, so lightning spawns from their last position
+	}
+
+	// 6. Cleanup Pending Materializers (Fixes artifact issue)
+	mats := s.matStore.All()
+	for _, e := range mats {
+		if m, ok := s.matStore.Get(e); ok && m.Type == component.SpawnTypeDrain {
+			s.world.DestroyEntity(e)
+		}
+	}
+
+	// 7. Destroy all existing drains (silent, no visual effect)
 	s.destroyAllDrains()
 
-	// 3. Calculate spawn position (center of game area)
-	spawnX, spawnY := s.calculateSpawnPosition()
-
-	// 4. Clear entities at spawn location
+	// 8. Clear entities at spawn location
 	s.clearSpawnArea(spawnX, spawnY)
 
-	// 5. Create Quasar composite
+	// 9. Create Quasar composite
 	anchorEntity := s.createQuasarComposite(spawnX, spawnY)
 
-	// 6. Notify QuasarSystem
+	// 10. Notify QuasarSystem
 	s.world.PushEvent(event.EventQuasarSpawned, &event.QuasarSpawnedPayload{
 		AnchorEntity: anchorEntity,
 		OriginX:      spawnX,
@@ -114,6 +181,40 @@ func (s *FuseSystem) destroyAllDrains() {
 
 	// Batch silent death (no effect event)
 	event.EmitDeathBatch(s.res.Events.Queue, 0, drains, s.res.Time.FrameNumber)
+}
+
+// clampSpawnPosition ensures the Quasar fits within bounds given a target center
+// Input x, y is the desired center (or centroid)
+// Returns the Phantom Head position (Quasar anchor)
+func (s *FuseSystem) clampSpawnPosition(targetX, targetY int) (int, int) {
+	config := s.res.Config
+
+	// Phantom head is at (2,1) offset relative to Quasar top-left (0,0)
+	// We want targetX, targetY to be roughly the center of the Quasar
+	// TopLeft = Center - CenterOffset
+	// Anchor = TopLeft + AnchorOffset
+	// Simplified: Anchor = Target
+
+	// However, we must ensure the entire 3x5 grid fits
+	// TopLeft = Anchor - AnchorOffset
+	topLeftX := targetX - constant.QuasarAnchorOffsetX
+	topLeftY := targetY - constant.QuasarAnchorOffsetY
+
+	if topLeftX < 0 {
+		topLeftX = 0
+	}
+	if topLeftY < 0 {
+		topLeftY = 0
+	}
+	if topLeftX+constant.QuasarWidth > config.GameWidth {
+		topLeftX = config.GameWidth - constant.QuasarWidth
+	}
+	if topLeftY+constant.QuasarHeight > config.GameHeight {
+		topLeftY = config.GameHeight - constant.QuasarHeight
+	}
+
+	// Return adjusted anchor position
+	return topLeftX + constant.QuasarAnchorOffsetX, topLeftY + constant.QuasarAnchorOffsetY
 }
 
 // calculateSpawnPosition returns center of game area

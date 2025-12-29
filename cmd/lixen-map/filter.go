@@ -88,7 +88,7 @@ func (app *AppState) applyTreePaneFilter() {
 		return
 	}
 
-	node := app.TreeFlat[app.TreeCursor]
+	node := app.TreeFlat[app.TreeState.Cursor]
 	var paths []string
 
 	if node.IsDir {
@@ -352,7 +352,7 @@ func (app *AppState) applyLixenPaneFilter() {
 		return
 	}
 
-	item := ui.Flat[ui.Cursor]
+	item := ui.Flat[ui.TreeState.Cursor]
 	var paths []string
 
 	switch item.Type {

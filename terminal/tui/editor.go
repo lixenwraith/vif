@@ -545,8 +545,8 @@ func DefaultEditorStyle() EditorStyle {
 }
 
 // Editor renders multi-line editor and returns content height used
-func (region Region) Editor(state *EditorState, opts EditorOpts) int {
-	if region.W < 3 || region.H < 1 {
+func (r Region) Editor(state *EditorState, opts EditorOpts) int {
+	if r.W < 3 || r.H < 1 {
 		return 0
 	}
 
@@ -558,18 +558,18 @@ func (region Region) Editor(state *EditorState, opts EditorOpts) int {
 	// Calculate content area accounting for border
 	contentX := 0
 	contentY := 0
-	contentW := region.W
-	contentH := region.H
+	contentW := r.W
+	contentH := r.H
 
 	if opts.Border != LineNone {
-		if region.H < 3 {
+		if r.H < 3 {
 			return 0
 		}
-		region.Box(opts.Border, style.BorderFg)
+		r.Box(opts.Border, style.BorderFg)
 		contentX = 1
 		contentY = 1
-		contentW = region.W - 2
-		contentH = region.H - 2
+		contentW = r.W - 2
+		contentH = r.H - 2
 	}
 
 	// Line number gutter
@@ -607,14 +607,14 @@ func (region Region) Editor(state *EditorState, opts EditorOpts) int {
 		// Line number gutter
 		if opts.LineNumbers {
 			for gx := 0; gx < gutterW-1; gx++ {
-				region.Cell(contentX+gx, contentY+y, ' ', style.LineNumFg, style.LineNumBg, terminal.AttrNone)
+				r.Cell(contentX+gx, contentY+y, ' ', style.LineNumFg, style.LineNumBg, terminal.AttrNone)
 			}
-			region.Cell(contentX+gutterW-1, contentY+y, '│', style.LineNumFg, style.LineNumBg, terminal.AttrDim)
+			r.Cell(contentX+gutterW-1, contentY+y, '│', style.LineNumFg, style.LineNumBg, terminal.AttrDim)
 
 			if lineIdx < len(state.Lines) {
 				numStr := formatLineNum(lineIdx+1, gutterW-1)
 				for i, ch := range numStr {
-					region.Cell(contentX+i, contentY+y, ch, style.LineNumFg, style.LineNumBg, terminal.AttrNone)
+					r.Cell(contentX+i, contentY+y, ch, style.LineNumFg, style.LineNumBg, terminal.AttrNone)
 				}
 			}
 		}
@@ -623,7 +623,7 @@ func (region Region) Editor(state *EditorState, opts EditorOpts) int {
 
 		// Fill text area with background
 		for x := 0; x < contentW; x++ {
-			region.Cell(textX+x, contentY+y, ' ', style.TextFg, bg, terminal.AttrNone)
+			r.Cell(textX+x, contentY+y, ' ', style.TextFg, bg, terminal.AttrNone)
 		}
 
 		if lineIdx >= len(state.Lines) {
@@ -634,7 +634,7 @@ func (region Region) Editor(state *EditorState, opts EditorOpts) int {
 
 		// Scroll indicator left
 		if state.ScrollX > 0 && len(line) > 0 {
-			region.Cell(textX, contentY+y, '◀', style.LineNumFg, bg, terminal.AttrDim)
+			r.Cell(textX, contentY+y, '◀', style.LineNumFg, bg, terminal.AttrDim)
 		}
 
 		// Render visible text
@@ -653,33 +653,33 @@ func (region Region) Editor(state *EditorState, opts EditorOpts) int {
 				cellBg = style.CursorBg
 			}
 
-			region.Cell(textX+x, contentY+y, ch, fg, cellBg, terminal.AttrNone)
+			r.Cell(textX+x, contentY+y, ch, fg, cellBg, terminal.AttrNone)
 		}
 
 		// Scroll indicator right
 		if state.ScrollX+contentW < len(line) {
-			region.Cell(textX+contentW-1, contentY+y, '▶', style.LineNumFg, bg, terminal.AttrDim)
+			r.Cell(textX+contentW-1, contentY+y, '▶', style.LineNumFg, bg, terminal.AttrDim)
 		}
 
 		// Cursor at end of line
 		if opts.Focused && lineIdx == state.CursorLine && state.CursorCol >= len(line) {
 			cursorX := state.CursorCol - state.ScrollX
 			if cursorX >= 0 && cursorX < contentW {
-				region.Cell(textX+cursorX, contentY+y, ' ', style.CursorFg, style.CursorBg, terminal.AttrNone)
+				r.Cell(textX+cursorX, contentY+y, ' ', style.CursorFg, style.CursorBg, terminal.AttrNone)
 			}
 		}
 	}
 
 	// Vertical scroll indicators
 	if state.ScrollY > 0 {
-		region.Cell(contentX+gutterW+contentW-1, contentY, '▲', style.LineNumFg, style.TextBg, terminal.AttrDim)
+		r.Cell(contentX+gutterW+contentW-1, contentY, '▲', style.LineNumFg, style.TextBg, terminal.AttrDim)
 	}
 	if state.ScrollY+contentH < len(state.Lines) {
-		region.Cell(contentX+gutterW+contentW-1, contentY+contentH-1, '▼', style.LineNumFg, style.TextBg, terminal.AttrDim)
+		r.Cell(contentX+gutterW+contentW-1, contentY+contentH-1, '▼', style.LineNumFg, style.TextBg, terminal.AttrDim)
 	}
 
 	if opts.Border != LineNone {
-		return region.H
+		return r.H
 	}
 	return contentH
 }

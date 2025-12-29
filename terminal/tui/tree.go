@@ -17,6 +17,11 @@ type TreeNode struct {
 	Style      Style // Text styling
 	IsLast     bool  // Last sibling at this depth (for tree lines)
 	Data       any   // Application payload
+
+	Suffix      string       // Secondary text after label (e.g., "(5 files)")
+	SuffixStyle Style        // Styling for suffix, zero = dimmed version of Style
+	Badge       rune         // Icon between checkbox and label (e.g., '★'), 0 = none
+	BadgeFg     terminal.RGB // Badge color
 }
 
 // TreeLineMode specifies connector line rendering
@@ -64,6 +69,11 @@ func (r Region) Tree(nodes []TreeNode, cursor, scroll int, opts TreeOpts) int {
 		iconW = 2
 	}
 
+	lineFg := opts.LineFg
+	if lineFg == (terminal.RGB{}) {
+		lineFg = DefaultTheme.Border
+	}
+
 	rendered := 0
 	for y := 0; y < r.H; y++ {
 		idx := scroll + y
@@ -79,21 +89,19 @@ func (r Region) Tree(nodes []TreeNode, cursor, scroll int, opts TreeOpts) int {
 			bg = opts.CursorBg
 		}
 
-		// Clear row
 		for x := 0; x < r.W; x++ {
 			r.Cell(x, y, ' ', terminal.RGB{}, bg, terminal.AttrNone)
 		}
 
 		x := 0
 
-		// Tree lines (if enabled)
 		if opts.LineMode == TreeLinesSimple && node.Depth > 0 {
-			x = r.renderTreeLines(y, x, node, nodes, idx, scroll, indentW, opts.LineFg, bg)
+			x = r.renderTreeLines(y, x, node, nodes, idx, scroll, indentW, lineFg, bg)
 		} else {
 			x = node.Depth * indentW
 		}
 
-		// Icon (expand indicator or leaf)
+		// Icon (expand indicator or bullet)
 		icon := node.Icon
 		iconFg := node.IconFg
 		if icon == 0 {
@@ -108,7 +116,7 @@ func (r Region) Tree(nodes []TreeNode, cursor, scroll int, opts TreeOpts) int {
 			}
 		}
 		if iconFg == (terminal.RGB{}) {
-			iconFg = opts.LineFg
+			iconFg = lineFg
 		}
 		if x < r.W {
 			r.Cell(x, y, icon, iconFg, bg, terminal.AttrNone)
@@ -140,16 +148,61 @@ func (r Region) Tree(nodes []TreeNode, cursor, scroll int, opts TreeOpts) int {
 			x += 4
 		}
 
+		// Badge (optional icon between checkbox and label)
+		if node.Badge != 0 {
+			if x < r.W {
+				badgeFg := node.BadgeFg
+				if badgeFg == (terminal.RGB{}) {
+					badgeFg = node.Style.Fg
+				}
+				r.Cell(x, y, node.Badge, badgeFg, bg, terminal.AttrNone)
+			}
+			x += 2
+		}
+
 		// Label
 		style := node.Style
 		if style.Bg == (terminal.RGB{}) {
 			style.Bg = bg
 		}
+
+		// Calculate available width for label + suffix
+		availW := r.W - x - 1
+		labelLen := RuneLen(node.Label)
+		suffixLen := RuneLen(node.Suffix)
+
 		label := node.Label
-		if x+RuneLen(label) > r.W {
-			label = Truncate(label, r.W-x)
+		suffix := node.Suffix
+
+		// Truncate if needed, prioritizing label over suffix
+		if labelLen+suffixLen > availW {
+			if labelLen > availW {
+				label = Truncate(label, availW)
+				suffix = ""
+			} else {
+				suffix = Truncate(suffix, availW-labelLen)
+			}
 		}
+
 		r.TextStyled(x, y, label, style)
+		x += RuneLen(label)
+
+		// Suffix
+		if suffix != "" {
+			suffixStyle := node.SuffixStyle
+			if suffixStyle.Fg == (terminal.RGB{}) {
+				// Default: dimmed version of label style
+				suffixStyle.Fg = terminal.RGB{
+					R: node.Style.Fg.R / 2,
+					G: node.Style.Fg.G / 2,
+					B: node.Style.Fg.B / 2,
+				}
+			}
+			if suffixStyle.Bg == (terminal.RGB{}) {
+				suffixStyle.Bg = bg
+			}
+			r.TextStyled(x, y, suffix, suffixStyle)
+		}
 
 		rendered++
 	}

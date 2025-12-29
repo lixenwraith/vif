@@ -2,84 +2,117 @@ package main
 
 import (
 	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/vi-fighter/terminal/tui"
 )
 
-// AppState holds complete application runtime state
+// Theme provides consistent styling across all UI components.
+// Centralizes color definitions for easy theming and maintenance.
+type Theme struct {
+	Bg         terminal.RGB // Default background
+	Fg         terminal.RGB // Default foreground text
+	FocusBg    terminal.RGB // Background for focused pane
+	CursorBg   terminal.RGB // Background for cursor row
+	Selected   terminal.RGB // Checkbox/indicator for fully selected
+	Unselected terminal.RGB // Checkbox/indicator for unselected or dimmed
+	Partial    terminal.RGB // Checkbox/indicator for partially selected
+	Expanded   terminal.RGB // Indicator for dependency-expanded files
+	Border     terminal.RGB // Pane borders and dividers
+	HeaderBg   terminal.RGB // Top header bar background
+	HeaderFg   terminal.RGB // Top header bar text
+	StatusFg   terminal.RGB // Status bar and secondary text
+	HintFg     terminal.RGB // Hint text and suffixes
+	DirFg      terminal.RGB // Directory names in tree
+	FileFg     terminal.RGB // File names in tree
+	GroupFg    terminal.RGB // Tag group names (#group)
+	ModuleFg   terminal.RGB // Module names in tags
+	TagFg      terminal.RGB // Individual tag names
+	ExternalFg terminal.RGB // External package references
+	SymbolFg   terminal.RGB // Symbol names in dependency analysis
+	AllTagFg   terminal.RGB // Files marked with #all tag
+	WarningFg  terminal.RGB // Warning indicators (e.g., size threshold)
+	InputBg    terminal.RGB // Input field background
+}
+
+// DefaultTheme provides the standard dark color scheme
+var DefaultTheme = Theme{
+	Bg:         terminal.RGB{R: 20, G: 20, B: 30},
+	Fg:         terminal.RGB{R: 200, G: 200, B: 200},
+	FocusBg:    terminal.RGB{R: 30, G: 35, B: 45},
+	CursorBg:   terminal.RGB{R: 50, G: 50, B: 70},
+	Selected:   terminal.RGB{R: 80, G: 200, B: 80},
+	Unselected: terminal.RGB{R: 100, G: 100, B: 100},
+	Partial:    terminal.RGB{R: 80, G: 160, B: 220},
+	Expanded:   terminal.RGB{R: 180, G: 140, B: 220},
+	Border:     terminal.RGB{R: 60, G: 80, B: 100},
+	HeaderBg:   terminal.RGB{R: 40, G: 60, B: 90},
+	HeaderFg:   terminal.RGB{R: 255, G: 255, B: 255},
+	StatusFg:   terminal.RGB{R: 140, G: 140, B: 140},
+	HintFg:     terminal.RGB{R: 100, G: 180, B: 200},
+	DirFg:      terminal.RGB{R: 130, G: 170, B: 220},
+	FileFg:     terminal.RGB{R: 200, G: 200, B: 200},
+	GroupFg:    terminal.RGB{R: 220, G: 180, B: 80},
+	ModuleFg:   terminal.RGB{R: 80, G: 200, B: 80},
+	TagFg:      terminal.RGB{R: 100, G: 200, B: 220},
+	ExternalFg: terminal.RGB{R: 100, G: 140, B: 160},
+	SymbolFg:   terminal.RGB{R: 180, G: 220, B: 220},
+	AllTagFg:   terminal.RGB{R: 255, G: 180, B: 100},
+	WarningFg:  terminal.RGB{R: 255, G: 80, B: 80},
+	InputBg:    terminal.RGB{R: 30, G: 30, B: 50},
+}
+
+// AppState holds all application state including UI, index, and selections
 type AppState struct {
 	Term  terminal.Terminal
 	Index *Index
+	Theme Theme
 
-	// Pane focus
 	FocusPane Pane
 
-	// Tree view (second pane from left)
 	TreeRoot   *TreeNode   // Root of directory tree
 	TreeFlat   []*TreeNode // Flattened visible nodes for rendering
-	TreeCursor int         // Cursor position in flattened list
-	TreeScroll int         // Scroll offset
+	TreeState  *tui.TreeState
+	TreeExpand *tui.TreeExpansion
 
-	// Selection (file paths)
 	Selected   map[string]bool // file path → selected
 	ExpandDeps bool            // auto-expand dependencies
 	DepthLimit int             // expansion depth
 
-	// Category view (left pane) - dynamic per category
 	CurrentCategory string                      // active category name
 	CategoryNames   []string                    // sorted category names from index
 	CategoryUI      map[string]*CategoryUIState // per-category UI state
 
-	// Detail Panes (Right side)
 	DepByState *DetailPaneState // State for "Depended By" pane
 	DepOnState *DetailPaneState // State for "Depends On" pane
 
-	// Dependency Analysis Cache (Forward deps)
 	DepAnalysisCache map[string]*DependencyAnalysis // file path → analysis
 
-	// Filter state
 	Filter      *FilterState
 	RgAvailable bool // ripgrep installed
 
-	// UI state
-	InputMode     bool     // true when typing keyword
-	InputBuffer   string   // keyword input buffer
-	Message       string   // status message
-	PreviewMode   bool     // showing file preview
-	PreviewFiles  []string // files to preview
-	PreviewScroll int      // preview scroll offset
+	InputMode  bool                // true when typing filter query
+	InputField *tui.TextFieldState // text input state for filter
+	Message    string              // status message
 
-	// Editor state
-	EditMode   bool   // true when editing tags
-	EditTarget string // file path being edited
-	EditCursor int    // cursor position within InputBuffer
-
-	// Batch edit overlay
-	BatchEditMode bool
-	BatchEdit     *BatchEditState
-
-	// Help overlay
-	HelpMode bool
-
-	// Dimensions
 	Width  int
 	Height int
 }
 
-// DetailPaneState tracks UI state for dependency tree views
+// DetailPaneState manages UI state for dependency panes (DepBy, DepOn)
 type DetailPaneState struct {
-	Cursor    int
-	Scroll    int
-	Expanded  map[string]bool // item key → expanded
-	FlatItems []DetailItem    // Flattened list for rendering
+	FlatItems []DetailItem       // Flattened list for rendering
+	TreeState *tui.TreeState     // Cursor and scroll management
+	Expansion *tui.TreeExpansion // Header expansion state
 }
 
-// NewDetailPaneState creates initialized DetailPaneState
+// NewDetailPaneState creates initialized detail pane state
 func NewDetailPaneState() *DetailPaneState {
 	return &DetailPaneState{
-		Expanded: make(map[string]bool),
+		TreeState: tui.NewTreeState(20),
+		Expansion: tui.NewTreeExpansion(),
 	}
 }
 
-// DetailItem represents a row in the dependency panes
+// DetailItem represents a single row in dependency panes
 type DetailItem struct {
 	Level    int    // Indentation level (0 or 1)
 	Label    string // Display text
@@ -94,74 +127,33 @@ type DetailItem struct {
 	HasUsage bool   // True if file actively uses symbols from target
 }
 
-// DependencyAnalysis holds symbol usage for a file
+// DependencyAnalysis holds parsed import/symbol usage for a file
 type DependencyAnalysis struct {
-	// ImportPath → List of used symbols
 	UsedSymbols map[string][]string
 }
 
-// CategoryUIState holds UI state for a single category pane
+// CategoryUIState manages UI state for a single lixen category
 type CategoryUIState struct {
-	Flat           []TagItem       // Flattened groups/modules/tags for rendering
-	Cursor         int             // Cursor position
-	Scroll         int             // Scroll offset
-	GroupExpanded  map[string]bool // group name → expanded state
-	ModuleExpanded map[string]bool // "group.module" → expanded state
+	Flat      []TagItem          // Flattened groups/modules/tags for rendering
+	TreeState *tui.TreeState     // Cursor and scroll management
+	Expansion *tui.TreeExpansion // Group/module expansion state
 }
 
-// NewCategoryUIState creates initialized CategoryUIState
+// NewCategoryUIState creates initialized category UI state
 func NewCategoryUIState() *CategoryUIState {
 	return &CategoryUIState{
-		Flat:           nil,
-		Cursor:         0,
-		Scroll:         0,
-		GroupExpanded:  make(map[string]bool),
-		ModuleExpanded: make(map[string]bool),
+		TreeState: tui.NewTreeState(20),
+		Expansion: tui.NewTreeExpansion(),
 	}
 }
 
-// Colors
-var (
-	colorHeaderBg        = terminal.RGB{R: 40, G: 60, B: 90}
-	colorHeaderFg        = terminal.RGB{R: 255, G: 255, B: 255}
-	colorSelected        = terminal.RGB{R: 80, G: 200, B: 80}
-	colorUnselected      = terminal.RGB{R: 100, G: 100, B: 100}
-	colorCursorBg        = terminal.RGB{R: 50, G: 50, B: 70}
-	colorTagFg           = terminal.RGB{R: 100, G: 200, B: 220}
-	colorGroupFg         = terminal.RGB{R: 220, G: 180, B: 80}
-	colorStatusFg        = terminal.RGB{R: 140, G: 140, B: 140}
-	colorHelpFg          = terminal.RGB{R: 100, G: 180, B: 200}
-	colorInputBg         = terminal.RGB{R: 30, G: 30, B: 50}
-	colorDefaultBg       = terminal.RGB{R: 20, G: 20, B: 30}
-	colorDefaultFg       = terminal.RGB{R: 200, G: 200, B: 200}
-	colorExpandedFg      = terminal.RGB{R: 180, G: 140, B: 220}
-	colorAllTagFg        = terminal.RGB{R: 255, G: 180, B: 100}
-	colorMatchCountFg    = terminal.RGB{R: 180, G: 220, B: 180}
-	colorDirFg           = terminal.RGB{R: 130, G: 170, B: 220}
-	colorPaneBorder      = terminal.RGB{R: 60, G: 80, B: 100}
-	colorPaneActiveBg    = terminal.RGB{R: 30, G: 35, B: 45}
-	colorGroupHintFg     = terminal.RGB{R: 140, G: 140, B: 100}
-	colorDirHintFg       = terminal.RGB{R: 110, G: 110, B: 110}
-	colorGroupNameFg     = terminal.RGB{R: 220, G: 180, B: 80}
-	colorTagNameFg       = terminal.RGB{R: 100, G: 200, B: 220}
-	colorPartialSelectFg = terminal.RGB{R: 80, G: 160, B: 220}
-	colorModuleFg        = terminal.RGB{R: 80, G: 200, B: 80}
-	colorExternalPkgFg   = terminal.RGB{R: 100, G: 140, B: 160} // Cyan/Dim for external/stdlib
-	colorSymbolFg        = terminal.RGB{R: 180, G: 220, B: 220} // Light cyan for symbols
-)
-
-// Layout
+// Layout constants
 const (
-	headerHeight = 1
-	statusHeight = 2
-	helpHeight   = 1
-	minWidth     = 80
-	minHeight    = 20
+	SizeWarningThreshold = 300 * 1024
+	defaultModulePath    = "github.com/lixenwraith/vi-fighter"
 )
 
-const defaultModulePath = "github.com/lixenwraith/vi-fighter"
-
-// Pane identifies which pane has keyboard focus
+// Pane identifies which pane has focus
 type Pane int
 
 const (
@@ -171,7 +163,7 @@ const (
 	PaneDepOn             // Depends on (right)
 )
 
-// FilterMode determines how successive filters combine
+// FilterMode determines how multiple filter operations combine
 type FilterMode int
 
 const (
@@ -183,20 +175,16 @@ const (
 
 // FileInfo holds parsed metadata for a single Go source file
 type FileInfo struct {
-	Path    string
-	Package string
-	// Tags: category → group → module → tags
-	Tags        map[string]map[string]map[string][]string
+	Path        string
+	Package     string
+	Tags        map[string]map[string]map[string][]string // category → group → module → tags
 	Imports     []string
 	Definitions []string // Exported symbols defined in this file
 	IsAll       bool
 	Size        int64
 }
 
-// SizeWarningThreshold is output size (bytes) above which size displays in warning color
-const SizeWarningThreshold = 300 * 1024
-
-// CategoryTags returns the tag map for specified category, nil if not present
+// CategoryTags returns the tag hierarchy for a specific category
 func (fi *FileInfo) CategoryTags(cat string) map[string]map[string][]string {
 	if fi.Tags == nil {
 		return nil
@@ -204,7 +192,7 @@ func (fi *FileInfo) CategoryTags(cat string) map[string]map[string][]string {
 	return fi.Tags[cat]
 }
 
-// HasCategory returns true if file has tags in specified category
+// HasCategory checks if file has any tags in the given category
 func (fi *FileInfo) HasCategory(cat string) bool {
 	if fi.Tags == nil {
 		return false
@@ -213,7 +201,7 @@ func (fi *FileInfo) HasCategory(cat string) bool {
 	return ok
 }
 
-// PackageInfo aggregates file data for a package directory
+// PackageInfo holds metadata for a Go package directory
 type PackageInfo struct {
 	Name      string
 	Dir       string
@@ -222,7 +210,7 @@ type PackageInfo struct {
 	HasAll    bool
 }
 
-// CategoryIndex holds indexed tag data for a single category
+// CategoryIndex provides fast lookups for a single lixen category
 type CategoryIndex struct {
 	Groups   []string                       // sorted group names
 	Modules  map[string][]string            // group → sorted module names (excludes DirectTagsModule)
@@ -232,7 +220,7 @@ type CategoryIndex struct {
 	ByTag    map[string][]string            // "group.module.tag" or "group..tag" → file paths
 }
 
-// NewCategoryIndex creates initialized CategoryIndex
+// NewCategoryIndex creates an empty category index
 func NewCategoryIndex() *CategoryIndex {
 	return &CategoryIndex{
 		Groups:   nil,
@@ -244,19 +232,18 @@ func NewCategoryIndex() *CategoryIndex {
 	}
 }
 
-// Index holds the complete indexed codebase representation
+// Index holds the complete parsed project state
 type Index struct {
 	ModulePath  string
 	Packages    map[string]*PackageInfo
 	Files       map[string]*FileInfo
 	ReverseDeps map[string][]string // package dir → packages that import it
 
-	// Dynamic category indexes
 	Categories    map[string]*CategoryIndex // category name → index
 	CategoryNames []string                  // sorted category names
 }
 
-// Category returns CategoryIndex for name, nil if not present
+// Category returns the index for a specific category name
 func (idx *Index) Category(name string) *CategoryIndex {
 	if idx.Categories == nil {
 		return nil
@@ -264,7 +251,7 @@ func (idx *Index) Category(name string) *CategoryIndex {
 	return idx.Categories[name]
 }
 
-// HasCategory returns true if category exists in index
+// HasCategory checks if the index contains a specific category
 func (idx *Index) HasCategory(name string) bool {
 	if idx.Categories == nil {
 		return false
@@ -273,14 +260,14 @@ func (idx *Index) HasCategory(name string) bool {
 	return ok
 }
 
-// FilterState holds visual filter highlight state
+// FilterState tracks active filter criteria and matching files
 type FilterState struct {
 	FilteredPaths        map[string]bool                                  // files matching current filter
 	FilteredCategoryTags map[string]map[string]map[string]map[string]bool // category → group → module → tag → highlighted
 	Mode                 FilterMode
 }
 
-// NewFilterState creates initialized empty FilterState
+// NewFilterState creates an empty filter state
 func NewFilterState() *FilterState {
 	return &FilterState{
 		FilteredPaths:        make(map[string]bool),
@@ -289,7 +276,7 @@ func NewFilterState() *FilterState {
 	}
 }
 
-// FilteredTags returns the filtered tags map for specified category
+// FilteredTags returns highlighted tags for a category
 func (f *FilterState) FilteredTags(cat string) map[string]map[string]map[string]bool {
 	if f.FilteredCategoryTags == nil {
 		return nil
@@ -297,12 +284,12 @@ func (f *FilterState) FilteredTags(cat string) map[string]map[string]map[string]
 	return f.FilteredCategoryTags[cat]
 }
 
-// HasActiveFilter returns true if any paths are filtered
+// HasActiveFilter returns true if any filter is applied
 func (f *FilterState) HasActiveFilter() bool {
 	return len(f.FilteredPaths) > 0
 }
 
-// TreeNode represents a directory or file in hierarchical tree
+// TreeNode represents a node in the file/directory tree
 type TreeNode struct {
 	Name        string       // Display name: "systems" or "drain.go"
 	Path        string       // Full relative path
@@ -315,7 +302,7 @@ type TreeNode struct {
 	Depth       int          // Nesting level for indentation
 }
 
-// TagSelectionState represents selection state for a tag/group
+// TagSelectionState indicates selection status of a tag/group/module
 type TagSelectionState int
 
 const (
@@ -324,10 +311,10 @@ const (
 	TagSelectFull
 )
 
-// DirectTagsModule is sentinel for 2-level group(tag) format without modules
+// DirectTagsModule is the key for tags directly under a group (2-level tags)
 const DirectTagsModule = ""
 
-// TagItemType distinguishes item kinds in tag pane list
+// TagItemType identifies the level of a tag item
 type TagItemType uint8
 
 const (
@@ -336,7 +323,7 @@ const (
 	TagItemTypeTag
 )
 
-// TagItem represents a group, module, or tag in pane list
+// TagItem represents a single row in the lixen category pane
 type TagItem struct {
 	Type     TagItemType
 	Group    string

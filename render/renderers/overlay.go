@@ -127,12 +127,24 @@ func (r *OverlayRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 	r.adapter.Clear(render.RgbOverlayBg)
 
 	root := r.adapter.Region()
-	root.BoxFilled(tui.LineDouble, render.RgbOverlayBorder, render.RgbOverlayBg)
-
-	// Check for typed content first
 	content := r.gameCtx.GetOverlayContent()
+
+	title := ""
 	if content != nil {
-		r.renderTypedContent(root, content, overlayW, overlayH)
+		title = content.Title
+	}
+
+	result := root.Overlay(tui.OverlayOpts{
+		Style:   tui.OverlayBorderTitle,
+		Title:   title,
+		Border:  tui.LineDouble,
+		Bg:      render.RgbOverlayBg,
+		Fg:      render.RgbOverlayBorder,
+		TitleFg: render.RgbOverlayTitle,
+	})
+
+	if content != nil {
+		r.renderTypedContent(root, result.Content, content)
 	}
 
 	r.adapter.FlushTo(buf, startX, startY, constant.MaskUI)
@@ -143,21 +155,15 @@ func (r *OverlayRenderer) IsVisible() bool {
 	return r.gameCtx.IsOverlayActive()
 }
 
-func (r *OverlayRenderer) renderTypedContent(root tui.Region, content *core.OverlayContent, w, h int) {
-	// Title
-	if content.Title != "" {
-		title := fmt.Sprintf(" %s ", content.Title)
-		titleX := (w - tui.RuneLen(title)) / 2
-		root.Text(titleX, 0, title, render.RgbOverlayTitle, render.RgbOverlayBg, terminal.AttrBold)
-	}
-
-	// Content area (inside border, with padding)
-	contentX := 1 + constant.OverlayPaddingX
-	contentY := 1 + constant.OverlayPaddingY
-	contentW := w - 2 - (2 * constant.OverlayPaddingX)
-	contentH := h - 2 - (2 * constant.OverlayPaddingY) - 1 // -1 for hints
-
-	contentRegion := root.Sub(contentX, contentY, contentW, contentH)
+func (r *OverlayRenderer) renderTypedContent(outer, inner tui.Region, content *core.OverlayContent) {
+	contentRegion := inner.Sub(
+		constant.OverlayPaddingX,
+		constant.OverlayPaddingY,
+		inner.W-2*constant.OverlayPaddingX,
+		inner.H-2*constant.OverlayPaddingY-1,
+	)
+	contentW := contentRegion.W
+	contentH := contentRegion.H
 
 	// Get cards and calculate layout
 	cards := content.Cards()
@@ -221,16 +227,15 @@ func (r *OverlayRenderer) renderTypedContent(root tui.Region, content *core.Over
 	}
 
 	// Navigation hints
-	hintsY := h - 2
 	hints := "ESC close · j/k scroll · PgUp/PgDn page"
-	hintsX := (w - tui.RuneLen(hints)) / 2
-	root.Text(hintsX, hintsY, hints, render.RgbOverlayHint, render.RgbOverlayBg, terminal.AttrDim)
+	hintsX := (outer.W - tui.RuneLen(hints)) / 2
+	outer.Text(hintsX, outer.H-2, hints, render.RgbOverlayHint, render.RgbOverlayBg, terminal.AttrDim)
 
 	// Scroll indicator
 	if totalH > contentH {
 		indicator := fmt.Sprintf("[%d/%d]", scroll+1, maxScroll+1)
-		indX := w - tui.RuneLen(indicator) - 1
-		root.Text(indX, h-1, indicator, render.RgbOverlayBorder, render.RgbOverlayBg, terminal.AttrNone)
+		indX := outer.W - tui.RuneLen(indicator) - 1
+		outer.Text(indX, outer.H-1, indicator, render.RgbOverlayBorder, render.RgbOverlayBg, terminal.AttrNone)
 	}
 }
 

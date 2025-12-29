@@ -79,3 +79,12 @@ func AnalyzeFileDependencies(path string, modPath string) (*DependencyAnalysis, 
 
 	return analysis, nil
 }
+
+func appendUnique(slice []string, item string) []string {
+	for _, s := range slice {
+		if s == item {
+			return slice
+		}
+	}
+	return append(slice, item)
+}

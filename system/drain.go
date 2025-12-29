@@ -132,7 +132,7 @@ func (s *DrainSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventDrainPause:
 		s.paused = true
-		// Clear pending spawns to prevent stale materializations
+		// Clear pending spawns to prevent stale materialize
 		s.pendingSpawns = s.pendingSpawns[:0]
 
 	case event.EventDrainResume:
@@ -140,6 +140,10 @@ func (s *DrainSystem) HandleEvent(ev event.GameEvent) {
 		// Spawning resumes naturally in Update() based on heat
 
 	case event.EventMaterializeComplete:
+		// Prevent race condition where drain materializes after fuse sequence started
+		if s.paused {
+			return
+		}
 		if payload, ok := ev.Payload.(*event.SpawnCompletePayload); ok {
 			if payload.Type == component.SpawnTypeDrain {
 				s.removeCompletedSpawn(payload.X, payload.Y)

@@ -36,12 +36,12 @@ var gamePalette = []PaletteEntry{
 	{"Drain", render.RgbDrain, "Effect"},
 	{"Materialize", render.RgbMaterialize, "Effect"},
 	{"RemovalFlash", render.RgbRemovalFlash, "Effect"},
-	{"CleanerBase", render.RgbCleanerBase, "Effect"},
+	{"CleanerBase", render.RgbCleanerBasePositive, "Effect"},
 	{"ShieldBase", render.RgbShieldBase, "Effect"},
 
 	// Cursor/Ping
 	{"PingHighlight", render.RgbPingHighlight, "Cursor"},
-	{"PingNormal", render.RgbPingNormal, "Cursor"},
+	{"PingNormal", render.RgbPingLineNormal, "Cursor"},
 	{"PingOrange", render.RgbPingOrange, "Cursor"},
 	{"PingGreen", render.RgbPingGreen, "Cursor"},
 	{"PingRed", render.RgbPingRed, "Cursor"},

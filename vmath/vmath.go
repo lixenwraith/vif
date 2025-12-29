@@ -157,8 +157,8 @@ func (r *FastRand) Intn(n int) int {
 
 // --- 2D Traversal (Supercover DDA) ---
 
-// Traverse visits every grid cell intersected by a line from (x1, y1) to (x2, y2)
-// Coordinates are Q16.16 fixed point
+// Traverse visits every grid cell intersected by a line from (x1, y1) to (x2, y2), coordinates are Q16.16 fixed point
+// Uses Supercover DDA to ensure no skipped cells, guaranteed to terminate by checking target bounds before stepping
 func Traverse(x1, y1, x2, y2 int32, callback func(x, y int) bool) {
 	ix, iy := ToInt(x1), ToInt(y1)
 	targetX, targetY := ToInt(x2), ToInt(y2)
@@ -209,22 +209,61 @@ func Traverse(x1, y1, x2, y2 int32, callback func(x, y int) bool) {
 		return
 	}
 
+	// Loop until both indices match targets
 	for ix != targetX || iy != targetY {
 		if tMaxX < tMaxY {
-			ix += stepX
-			tMaxX += tDeltaX
+			// Try stepping X
+			if ix != targetX {
+				ix += stepX
+				tMaxX += tDeltaX
+			} else {
+				// X is done, forced to step Y
+				iy += stepY
+				tMaxY += tDeltaY
+			}
 		} else if tMaxX > tMaxY {
-			iy += stepY
-			tMaxY += tDeltaY
+			// Try stepping Y
+			if iy != targetY {
+				iy += stepY
+				tMaxY += tDeltaY
+			} else {
+				// Y is done, forced to step X
+				ix += stepX
+				tMaxX += tDeltaX
+			}
 		} else {
-			// Perfect diagonal crossing - Supercover visits both adjacent cells
-			ix += stepX
-			iy += stepY
-			tMaxX += tDeltaX
-			tMaxY += tDeltaY
+			// Diagonal step (tMaxX == tMaxY)
+			if ix != targetX {
+				ix += stepX
+				tMaxX += tDeltaX
+			}
+			if iy != targetY {
+				iy += stepY
+				tMaxY += tDeltaY
+			}
 		}
+
 		if !callback(ix, iy) {
 			break
 		}
 	}
+}
+
+// CalculateCentroid computes the geometric center of a set of 2D points
+// Returns (0,0) if the input slice is empty
+// coords contains interleaved X,Y values (len must be even)
+func CalculateCentroid(coords []int) (int, int) {
+	if len(coords) == 0 || len(coords)%2 != 0 {
+		return 0, 0
+	}
+
+	sumX, sumY := 0, 0
+	count := len(coords) / 2
+
+	for i := 0; i < len(coords); i += 2 {
+		sumX += coords[i]
+		sumY += coords[i+1]
+	}
+
+	return sumX / count, sumY / count
 }
