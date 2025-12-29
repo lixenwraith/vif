@@ -18,6 +18,7 @@ const (
 	BarAlignRight      BarAlign = iota // Pack sections from right
 	BarAlignLeft                       // Pack sections from left
 	BarAlignDistribute                 // Evenly space sections
+	BarAlignCenter                     // Center all sections as a group
 )
 
 // BarOpts configures status bar rendering
@@ -98,6 +99,11 @@ func (r Region) StatusBar(y int, sections []BarSection, opts BarOpts) {
 	case BarAlignDistribute:
 		x = opts.Padding
 		// Handled specially below
+	case BarAlignCenter:
+		x = (r.W - totalW) / 2
+		if x < opts.Padding {
+			x = opts.Padding
+		}
 	}
 
 	// Render sections

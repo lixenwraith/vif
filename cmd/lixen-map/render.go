@@ -99,7 +99,7 @@ func (app *AppState) formatSizeValue(totalSize, depSize int64) string {
 // sizeColor returns warning color if size exceeds threshold
 func (app *AppState) sizeColor(size int64) terminal.RGB {
 	if size > SizeWarningThreshold {
-		return app.Theme.WarningFg
+		return app.Theme.Warning
 	}
 	return app.Theme.HeaderFg
 }

@@ -946,20 +946,20 @@ func (app *AppState) renderViewerLine(r tui.Region, y, startX int, text string, 
 		if runeIdx < len(spanKinds) {
 			switch spanKinds[runeIdx] {
 			case SpanComment:
-				fg = app.Theme.ViewerComment
+				fg = app.Theme.SyntaxComment
 				attr = terminal.AttrDim
 			case SpanString:
-				fg = app.Theme.ViewerString
+				fg = app.Theme.SyntaxString
 			case SpanKeyword:
-				fg = app.Theme.ViewerKeyword
+				fg = app.Theme.SyntaxKeyword
 				attr = terminal.AttrBold
 			case SpanDefinition:
 				fg = app.Theme.ViewerDefinition
 				attr = terminal.AttrBold
 			case SpanType:
-				fg = app.Theme.ViewerType
+				fg = app.Theme.SyntaxType
 			case SpanNumber:
-				fg = app.Theme.ViewerNumber
+				fg = app.Theme.SyntaxNumber
 			}
 		}
 
