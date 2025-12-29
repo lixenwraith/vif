@@ -1,8 +1,6 @@
 package renderers
 
 import (
-	"fmt"
-
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -94,6 +92,7 @@ type cardLayout struct {
 type OverlayRenderer struct {
 	gameCtx *engine.GameContext
 	adapter *TUIAdapter
+	masonry *tui.MasonryState
 }
 
 // NewOverlayRenderer creates a new overlay renderer
@@ -144,7 +143,7 @@ func (r *OverlayRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 	})
 
 	if content != nil {
-		r.renderTypedContent(root, result.Content, content)
+		r.renderContent(root, result.Content, content)
 	}
 
 	r.adapter.FlushTo(buf, startX, startY, constant.MaskUI)
@@ -155,76 +154,52 @@ func (r *OverlayRenderer) IsVisible() bool {
 	return r.gameCtx.IsOverlayActive()
 }
 
-func (r *OverlayRenderer) renderTypedContent(outer, inner tui.Region, content *core.OverlayContent) {
-	contentRegion := inner.Sub(
+func (r *OverlayRenderer) renderContent(outer, content tui.Region, data *core.OverlayContent) {
+	padded := content.Sub(
 		constant.OverlayPaddingX,
 		constant.OverlayPaddingY,
-		inner.W-2*constant.OverlayPaddingX,
-		inner.H-2*constant.OverlayPaddingY-1,
+		content.W-2*constant.OverlayPaddingX,
+		content.H-2*constant.OverlayPaddingY-1,
 	)
-	contentW := contentRegion.W
-	contentH := contentRegion.H
 
-	// Get cards and calculate layout
-	cards := content.Cards()
+	cards := data.Cards()
 	if len(cards) == 0 {
 		return
 	}
 
-	layouts := r.calculateCardLayouts(cards, contentW, contentH)
-	scroll := r.gameCtx.GetOverlayScroll()
-
-	// Calculate total content height for scroll
-	totalH := 0
-	for _, l := range layouts {
-		if l.y+l.h > totalH {
-			totalH = l.y + l.h
+	// Convert to masonry items
+	items := make([]tui.MasonryItem, len(cards))
+	for i, card := range cards {
+		items[i] = tui.MasonryItem{
+			Key:    card.Title,
+			Height: 2 + len(card.Entries), // border + entries
+			Data:   card,
 		}
 	}
 
-	// Clamp scroll
-	maxScroll := totalH - contentH
-	if maxScroll < 0 {
-		maxScroll = 0
-	}
-	if scroll > maxScroll {
-		scroll = maxScroll
-	}
-	if scroll < 0 {
-		scroll = 0
+	// Get or create masonry state (should be stored in renderer)
+	if r.masonry == nil {
+		r.masonry = tui.NewMasonryState()
 	}
 
-	// Render visible cards
-	for _, l := range layouts {
-		cardY := l.y - scroll
-		// Skip if entirely above viewport
-		if cardY+l.h < 0 {
-			continue
-		}
-		// Skip if entirely below viewport
-		if cardY >= contentH {
-			continue
-		}
+	// Calculate layout
+	r.masonry.CalculateLayout(items, padded.W, tui.MasonryOpts{
+		Gap: 2,
+		Breakpoints: map[int]int{
+			140: 4,
+			100: 3,
+			60:  2,
+		},
+	})
 
-		// Clip card region to viewport
-		visibleY := cardY
-		visibleH := l.h
-		entryOffset := 0
+	// Sync scroll from game context
+	r.masonry.Viewport.ScrollTo(r.gameCtx.GetOverlayScroll())
 
-		if cardY < 0 {
-			entryOffset = -cardY
-			visibleH += cardY
-			visibleY = 0
-		}
-		if visibleY+visibleH > contentH {
-			visibleH = contentH - visibleY
-		}
-
-		if visibleH > 0 {
-			cardRegion := contentRegion.Sub(l.x, visibleY, l.w, visibleH)
-			r.renderCard(cardRegion, l.card, entryOffset, visibleH)
-		}
-	}
+	// Render visible items
+	padded.Masonry(r.masonry, func(region tui.Region, layout tui.MasonryLayout, contentOffset int) {
+		card := layout.Item.Data.(core.OverlayCard)
+		r.renderCard(region, card, contentOffset, region.H)
+	})
 
 	// Navigation hints
 	hints := "ESC close · j/k scroll · PgUp/PgDn page"
@@ -232,8 +207,7 @@ func (r *OverlayRenderer) renderTypedContent(outer, inner tui.Region, content *c
 	outer.Text(hintsX, outer.H-2, hints, render.RgbOverlayHint, render.RgbOverlayBg, terminal.AttrDim)
 
 	// Scroll indicator
-	if totalH > contentH {
-		indicator := fmt.Sprintf("[%d/%d]", scroll+1, maxScroll+1)
+	if indicator := r.masonry.ScrollIndicator(); indicator != "" {
 		indX := outer.W - tui.RuneLen(indicator) - 1
 		outer.Text(indX, outer.H-1, indicator, render.RgbOverlayBorder, render.RgbOverlayBg, terminal.AttrNone)
 	}

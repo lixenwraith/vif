@@ -211,6 +211,14 @@ func (app *AppState) ReindexAll() {
 	app.Index = index
 	app.CategoryNames = index.CategoryNames
 
+	// Prune stale selections for files no longer in index
+	for path := range app.Selected {
+		if index.Files[path] == nil {
+			delete(app.Selected, path)
+		}
+	}
+
+	// Clear analysis cache as file contents may have changed
 	if app.CurrentCategory == "" || !index.HasCategory(app.CurrentCategory) {
 		if len(index.CategoryNames) > 0 {
 			app.CurrentCategory = index.CategoryNames[0]

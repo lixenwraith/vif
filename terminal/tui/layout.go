@@ -169,3 +169,127 @@ func BreakpointH(w int, breakpoints ...int) int {
 func BreakpointV(h int, breakpoints ...int) int {
 	return BreakpointH(h, breakpoints...)
 }
+
+// SplitHEqual splits region into n equal-width columns
+// gap specifies spacing between columns (e.g., 1 for divider lines)
+// Returns n regions positioned with gaps between them
+func SplitHEqual(r Region, n, gap int) []Region {
+	if n <= 0 {
+		return nil
+	}
+	if n == 1 {
+		return []Region{r}
+	}
+
+	totalGaps := gap * (n - 1)
+	availW := r.W - totalGaps
+	if availW < n {
+		availW = n
+	}
+
+	baseW := availW / n
+	extra := availW % n
+
+	regions := make([]Region, n)
+	x := 0
+	for i := 0; i < n; i++ {
+		w := baseW
+		if i < extra {
+			w++
+		}
+		regions[i] = r.Sub(x, 0, w, r.H)
+		x += w + gap
+	}
+	return regions
+}
+
+// SplitVEqual splits region into n equal-height rows
+// gap specifies spacing between rows
+func SplitVEqual(r Region, n, gap int) []Region {
+	if n <= 0 {
+		return nil
+	}
+	if n == 1 {
+		return []Region{r}
+	}
+
+	totalGaps := gap * (n - 1)
+	availH := r.H - totalGaps
+	if availH < n {
+		availH = n
+	}
+
+	baseH := availH / n
+	extra := availH % n
+
+	regions := make([]Region, n)
+	y := 0
+	for i := 0; i < n; i++ {
+		h := baseH
+		if i < extra {
+			h++
+		}
+		regions[i] = r.Sub(0, y, r.W, h)
+		y += h + gap
+	}
+	return regions
+}
+
+// DividerPositions returns X coordinates for vertical dividers between equal columns
+// Use with VLine to draw dividers in gaps created by SplitHEqual
+func DividerPositions(regionW, n, gap int) []int {
+	if n <= 1 || gap <= 0 {
+		return nil
+	}
+
+	totalGaps := gap * (n - 1)
+	availW := regionW - totalGaps
+	if availW < n {
+		availW = n
+	}
+
+	baseW := availW / n
+	extra := availW % n
+
+	positions := make([]int, n-1)
+	x := 0
+	for i := 0; i < n-1; i++ {
+		w := baseW
+		if i < extra {
+			w++
+		}
+		x += w
+		positions[i] = x
+		x += gap
+	}
+	return positions
+}
+
+// HDividerPositions returns Y coordinates for horizontal dividers between equal rows
+func HDividerPositions(regionH, n, gap int) []int {
+	if n <= 1 || gap <= 0 {
+		return nil
+	}
+
+	totalGaps := gap * (n - 1)
+	availH := regionH - totalGaps
+	if availH < n {
+		availH = n
+	}
+
+	baseH := availH / n
+	extra := availH % n
+
+	positions := make([]int, n-1)
+	y := 0
+	for i := 0; i < n-1; i++ {
+		h := baseH
+		if i < extra {
+			h++
+		}
+		y += h
+		positions[i] = y
+		y += gap
+	}
+	return positions
+}

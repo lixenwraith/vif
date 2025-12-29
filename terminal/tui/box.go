@@ -76,49 +76,6 @@ func (r Region) Box(line LineType, fg terminal.RGB) {
 	}
 }
 
-// PaneOpts configures pane rendering
-type PaneOpts struct {
-	Title    string
-	Border   LineType
-	BorderFg terminal.RGB
-	Bg       terminal.RGB
-	TitleFg  terminal.RGB
-}
-
-// Pane draws bordered pane with optional title, returns content region
-// Content region is inside border, below title row if present
-func (r Region) Pane(opts PaneOpts) Region {
-	if r.W < 3 || r.H < 3 {
-		return r.Sub(1, 1, 0, 0)
-	}
-
-	// Fill background
-	r.Fill(opts.Bg)
-
-	// Draw border
-	r.Box(opts.Border, opts.BorderFg)
-
-	// Title on top edge
-	headerH := 0
-	if opts.Title != "" {
-		headerH = 1
-		title := " " + opts.Title + " "
-		if RuneLen(title) > r.W-4 {
-			title = Truncate(title, r.W-4)
-		}
-		x := 2
-		for i, ch := range title {
-			if x+i >= r.W-1 {
-				break
-			}
-			r.Cell(x+i, 0, ch, opts.TitleFg, opts.Bg, terminal.AttrBold)
-		}
-	}
-
-	// Return content region (inside border, below title)
-	return r.Sub(1, 1+headerH, r.W-2, r.H-2-headerH)
-}
-
 // ModalOpts configures modal overlay rendering
 type ModalOpts struct {
 	Title    string

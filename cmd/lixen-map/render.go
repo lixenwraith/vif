@@ -99,47 +99,32 @@ func (app *AppState) sizeColor(size int64) terminal.RGB {
 
 // renderPanes draws the 4-pane layout with dividers
 func (app *AppState) renderPanes(r tui.Region) {
-	// Calculate pane widths: 4 equal panes with 3 dividers
-	paneW := (r.W - 3) / 4
-	p1W, p2W, p3W := paneW, paneW, paneW
-	p4W := r.W - p1W - p2W - p3W - 3 // Last pane gets remainder
+	panes := tui.SplitHEqual(r, 4, 1)
 
-	// Pane definitions with their rendering functions
-	panes := []struct {
-		x, w  int
+	for _, x := range tui.DividerPositions(r.W, 4, 1) {
+		r.VLine(x, tui.LineSingle, app.Theme.Border)
+	}
+
+	defs := []struct {
 		pane  Pane
 		title string
 		draw  func(tui.Region)
 	}{
-		{0, p1W, PaneLixen, app.lixenTitle(), app.renderLixenPane},
-		{p1W + 1, p2W, PaneTree, "PACKAGES / FILES", app.renderTreePane},
-		{p1W + p2W + 2, p3W, PaneDepBy, "DEPENDED BY", app.renderDepByPane},
-		{p1W + p2W + p3W + 3, p4W, PaneDepOn, "DEPENDS ON", app.renderDepOnPane},
+		{PaneLixen, app.lixenTitle(), app.renderLixenPane},
+		{PaneTree, "PACKAGES / FILES", app.renderTreePane},
+		{PaneDepBy, "DEPENDED BY", app.renderDepByPane},
+		{PaneDepOn, "DEPENDS ON", app.renderDepOnPane},
 	}
 
-	// Draw vertical dividers between panes
-	dividerPositions := []int{p1W, p1W + p2W + 1, p1W + p2W + p3W + 2}
-	for _, x := range dividerPositions {
-		r.VLine(x, tui.LineSingle, app.Theme.Border)
-	}
-
-	// Draw each pane
-	for _, p := range panes {
-		paneR := r.Sub(p.x, 0, p.w, r.H)
-
-		// Set background based on focus
-		bg := app.Theme.Bg
-		if app.FocusPane == p.pane {
-			bg = app.Theme.FocusBg
-		}
-		paneR.Fill(bg)
-
-		// Draw centered title
-		paneR.TextCenter(0, p.title, app.Theme.StatusFg, bg, terminal.AttrBold)
-
-		// Draw pane content below title
-		content := paneR.Sub(0, 1, paneR.W, paneR.H-1)
-		p.draw(content)
+	for i, d := range defs {
+		content := panes[i].TitledPaneFocused(
+			d.title,
+			app.Theme.StatusFg,
+			app.Theme.Bg,
+			app.Theme.FocusBg,
+			app.FocusPane == d.pane,
+		)
+		d.draw(content)
 	}
 }
 
