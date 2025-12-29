@@ -11,19 +11,13 @@ import (
 
 // HandleEvent processes a terminal event and returns quit/output flags
 func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
+	// Quit is handled in global event loop of main: Ctrl+C, Ctrl+Q to quit
 	app.Message = ""
 
 	// Handle viewer events first if visible
 	if app.Viewer != nil && app.Viewer.Visible {
-		if ev.Key == terminal.KeyCtrlQ {
-			return true, false
-		}
 		app.handleViewerEvent(ev)
 		return false, false
-	}
-
-	if ev.Key == terminal.KeyCtrlQ {
-		return true, false
 	}
 
 	if app.InputMode {

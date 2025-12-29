@@ -148,7 +148,8 @@ func (app *AppState) renderLixenPane(r tui.Region) {
 	cat := app.CurrentCategory
 	ui := app.getCurrentCategoryUI()
 	if ui == nil || cat == "" {
-		r.Text(1, 0, "(no categories)", app.Theme.Unselected, terminal.RGB{}, terminal.AttrDim)
+		r.Fill(app.Theme.Bg)
+		r.TextCenter(r.H/2, "(no categories)", app.Theme.StatusFg, app.Theme.Bg, terminal.AttrNone)
 		return
 	}
 
@@ -158,7 +159,7 @@ func (app *AppState) renderLixenPane(r tui.Region) {
 	// Build tree nodes from flat tag items
 	nodes := app.buildLixenNodes(cat, ui)
 	if len(nodes) == 0 {
-		r.Text(1, 0, "(no tags)", app.Theme.Unselected, terminal.RGB{}, terminal.AttrDim)
+		r.Text(1, 0, "(no tags)", app.Theme.Unselected, terminal.RGB{}, terminal.AttrNone)
 		return
 	}
 
@@ -258,7 +259,7 @@ func (app *AppState) buildLixenNodes(cat string, ui *CategoryUIState) []tui.Tree
 // renderTreePane draws the file/directory tree pane
 func (app *AppState) renderTreePane(r tui.Region) {
 	if len(app.TreeFlat) == 0 {
-		r.Text(1, 0, "(no files)", app.Theme.Unselected, terminal.RGB{}, terminal.AttrDim)
+		r.TextCenter(r.H/2, "(no files)", app.Theme.StatusFg, app.Theme.Bg, terminal.AttrNone)
 		return
 	}
 
@@ -376,13 +377,13 @@ func (app *AppState) buildTreeNodes() []tui.TreeNode {
 func (app *AppState) renderDepByPane(r tui.Region) {
 	pkgDir := app.getCurrentFilePackageDir()
 	if pkgDir == "" {
-		r.Text(1, 0, "(select a file)", app.Theme.Unselected, terminal.RGB{}, terminal.AttrDim)
+		r.TextCenter(r.H/2, "(select a file)", app.Theme.StatusFg, app.Theme.Bg, terminal.AttrNone)
 		return
 	}
 
 	state := app.DepByState
 	if len(state.FlatItems) == 0 {
-		r.Text(1, 0, "(no dependents)", app.Theme.Unselected, terminal.RGB{}, terminal.AttrDim)
+		r.TextCenter(r.H/2, "(no dependents)", app.Theme.StatusFg, app.Theme.Bg, terminal.AttrNone)
 		return
 	}
 
@@ -406,13 +407,13 @@ func (app *AppState) renderDepByPane(r tui.Region) {
 func (app *AppState) renderDepOnPane(r tui.Region) {
 	fi := app.getCurrentFileInfo()
 	if fi == nil {
-		r.Text(1, 0, "(select a file)", app.Theme.Unselected, terminal.RGB{}, terminal.AttrDim)
+		r.TextCenter(r.H/2, "(select a file)", app.Theme.StatusFg, app.Theme.Bg, terminal.AttrNone)
 		return
 	}
 
 	state := app.DepOnState
 	if len(state.FlatItems) == 0 {
-		r.Text(1, 0, "(no dependencies)", app.Theme.Unselected, terminal.RGB{}, terminal.AttrDim)
+		r.TextCenter(r.H/2, "(no dependencies)", app.Theme.StatusFg, app.Theme.Bg, terminal.AttrNone)
 		return
 	}
 
@@ -520,18 +521,18 @@ func (app *AppState) renderStatus(r tui.Region) {
 	r.Fill(app.Theme.Bg)
 
 	if app.InputMode {
-		// Render input field for filter query
-		r.TextField(app.InputField, tui.TextFieldOpts{
-			Prefix:  "Filter [content]: ",
-			Focused: true,
-			Style: tui.TextFieldStyle{
-				TextFg:   app.Theme.HeaderFg,
-				TextBg:   app.Theme.InputBg,
-				CursorFg: app.Theme.Bg,
+		if app.InputMode {
+			// Use Input which renders directly with cursor
+			r.Input(0, tui.InputOpts{
+				Label:    "Filter: ",
+				LabelFg:  app.Theme.StatusFg,
+				Text:     app.InputField.Value(),
+				Cursor:   app.InputField.Cursor,
 				CursorBg: app.Theme.HeaderFg,
-				PrefixFg: app.Theme.StatusFg,
-			},
-		})
+				TextFg:   app.Theme.HeaderFg,
+				Bg:       app.Theme.InputBg,
+			})
+		}
 	} else if app.Filter.HasActiveFilter() {
 		// Show active filter info
 		modeStr := "OR"
