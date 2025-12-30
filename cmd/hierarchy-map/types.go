@@ -5,6 +5,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal/tui"
 )
 
+const HierarchyLinePrefix = "lixen" // yields "@lixen:" in comments
+
 // AppState holds all application state including UI, index, and selections
 type AppState struct {
 	Term  terminal.Terminal
@@ -23,7 +25,7 @@ type AppState struct {
 	DepthLimit int             // expansion depth
 
 	CategoryNames []string         // sorted category names from index
-	LixenUI       *CategoryUIState // Hierarchy UI state
+	HierarchyUI   *CategoryUIState // Hierarchy UI state
 
 	DepByState *DetailPaneState // State for "Depended By" pane
 	DepOnState *DetailPaneState // State for "Depends On" pane
@@ -79,7 +81,7 @@ type DependencyAnalysis struct {
 	UsedSymbols map[string][]string
 }
 
-// CategoryUIState manages UI state for a single lixen category
+// CategoryUIState manages UI state for a single hierarchy category
 type CategoryUIState struct {
 	Flat      []TagItem          // Flattened groups/modules/tags for rendering
 	Nodes     []tui.TreeNode     // Cached nodes with Data populated
@@ -94,12 +96,12 @@ func (ui *CategoryUIState) CurrentNode() *tui.TreeNode {
 	return &ui.Nodes[ui.TreeState.Cursor]
 }
 
-func (ui *CategoryUIState) CurrentData() *LixenNodeData {
+func (ui *CategoryUIState) CurrentData() *HierarchyNodeData {
 	node := ui.CurrentNode()
 	if node == nil || node.Data == nil {
 		return nil
 	}
-	if data, ok := node.Data.(LixenNodeData); ok {
+	if data, ok := node.Data.(HierarchyNodeData); ok {
 		return &data
 	}
 	return nil
@@ -123,10 +125,10 @@ const (
 type Pane int
 
 const (
-	PaneLixen Pane = iota // Category tags (left)
-	PaneTree              // Packages/Files tree (second from left)
-	PaneDepBy             // Depended by (third from left)
-	PaneDepOn             // Depends on (right)
+	PaneHierarchy Pane = iota // Category tags (left)
+	PaneTree                  // Packages/Files tree (second from left)
+	PaneDepBy                 // Depended by (third from left)
+	PaneDepOn                 // Depends on (right)
 )
 
 // FilterMode determines how multiple filter operations combine
@@ -176,7 +178,7 @@ type PackageInfo struct {
 	HasAll    bool
 }
 
-// CategoryIndex provides fast lookups for a single lixen category
+// CategoryIndex provides fast lookups for a single hierarchy category
 type CategoryIndex struct {
 	Groups   []string                       // sorted group names
 	Modules  map[string][]string            // group → sorted module names (excludes DirectTagsModule)
@@ -290,8 +292,8 @@ const (
 	TagItemTypeTag
 )
 
-// LixenNodeData for TreeNode.Data payload
-type LixenNodeData struct {
+// HierarchyNodeData for TreeNode.Data payload
+type HierarchyNodeData struct {
 	Type     TagItemType
 	Category string
 	Group    string
@@ -299,7 +301,7 @@ type LixenNodeData struct {
 	Tag      string
 }
 
-// TagItem represents a single row in the lixen category pane
+// TagItem represents a single row in the hierarchy category pane
 type TagItem struct {
 	Type     TagItemType
 	Category string

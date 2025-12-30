@@ -118,7 +118,7 @@ func (app *AppState) applyTreePaneFilter() {
 		}
 	}
 
-	app.RefreshLixenFlat()
+	app.RefreshHierarchyFlat()
 }
 
 // isPathSetFiltered checks if all paths in set are currently filtered
@@ -340,8 +340,8 @@ func (app *AppState) computeFilteredTags() {
 	}
 }
 
-// applyLixenPaneFilter toggles filter for item at lixen cursor
-func (app *AppState) applyLixenPaneFilter() {
+// applyHierarchyPaneFilter toggles filter for item at hierarchy pane cursor
+func (app *AppState) applyHierarchyPaneFilter() {
 	ui := app.getCurrentCategoryUI()
 	if ui == nil || len(ui.Flat) == 0 {
 		return
@@ -397,16 +397,16 @@ func (app *AppState) applyLixenPaneFilter() {
 
 	if app.isPathSetFiltered(paths) {
 		app.RemoveFromFilter(paths)
-		app.Message = fmt.Sprintf("unfilter: %s", formatLixenNodeLabel(data))
+		app.Message = fmt.Sprintf("unfilter: %s", formatHierarchyNodeLabel(data))
 	} else {
 		app.ApplyFilter(paths)
-		app.Message = fmt.Sprintf("filter: %s (%d files)", formatLixenNodeLabel(data), len(paths))
+		app.Message = fmt.Sprintf("filter: %s (%d files)", formatHierarchyNodeLabel(data), len(paths))
 	}
 
-	app.RefreshLixenFlat()
+	app.RefreshHierarchyFlat()
 }
 
-func formatLixenNodeLabel(data *LixenNodeData) string {
+func formatHierarchyNodeLabel(data *HierarchyNodeData) string {
 	if data == nil {
 		return ""
 	}
@@ -438,5 +438,5 @@ func (app *AppState) executeSearch(query string) {
 	paths := searchContentRg(app.Index, query, app.RgAvailable)
 	app.Message = fmt.Sprintf("filter content: %q (%d files)", query, len(paths))
 	app.ApplyFilter(paths)
-	app.RefreshLixenFlat()
+	app.RefreshHierarchyFlat()
 }

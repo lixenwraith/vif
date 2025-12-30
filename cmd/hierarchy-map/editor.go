@@ -933,13 +933,14 @@ func (app *AppState) applyTagChangesToFile(path string, additions []TagRef, dele
 	hasTrailingNewline := len(content) > 0 && content[len(content)-1] == '\n'
 
 	lines := strings.Split(string(content), "\n")
-	var lixenLineIdx = -1
+	var hierarchyLineIdx = -1
 	var packageLineIdx = -1
 
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "// @lixen:") {
-			lixenLineIdx = i
+		prefix := "@" + HierarchyLinePrefix + ":"
+		if strings.HasPrefix(trimmed, "// "+prefix) {
+			hierarchyLineIdx = i
 		}
 		if packageLineIdx == -1 && strings.HasPrefix(trimmed, "package ") {
 			packageLineIdx = i
@@ -1007,18 +1008,18 @@ func (app *AppState) applyTagChangesToFile(path string, additions []TagRef, dele
 	}
 
 	// Serialize
-	lixenLine := serializeTags(tags)
+	hierarchyLine := serializeTags(tags)
 
-	// Update or insert lixen line
-	if lixenLine == "" {
-		if lixenLineIdx >= 0 {
-			lines = append(lines[:lixenLineIdx], lines[lixenLineIdx+1:]...)
+	// Update or insert hierarchy line
+	if hierarchyLine == "" {
+		if hierarchyLineIdx >= 0 {
+			lines = append(lines[:hierarchyLineIdx], lines[hierarchyLineIdx+1:]...)
 		}
-	} else if lixenLineIdx >= 0 {
-		lines[lixenLineIdx] = lixenLine
+	} else if hierarchyLineIdx >= 0 {
+		lines[hierarchyLineIdx] = hierarchyLine
 	} else if packageLineIdx >= 0 {
 		// Insert BEFORE package line
-		lines = slices.Insert(lines, packageLineIdx, lixenLine)
+		lines = slices.Insert(lines, packageLineIdx, hierarchyLine)
 	}
 
 	// Write back
@@ -1201,7 +1202,7 @@ func serializeTags(tags map[string]map[string]map[string][]string) string {
 		return ""
 	}
 
-	return "// @lixen: " + strings.Join(parts, ",")
+	return "// @" + HierarchyLinePrefix + ": " + strings.Join(parts, ",")
 }
 
 func (app *AppState) saveEditorChanges() {

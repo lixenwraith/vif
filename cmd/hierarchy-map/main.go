@@ -53,7 +53,7 @@ func main() {
 		Filter:           NewFilterState(),
 		RgAvailable:      rgErr == nil,
 		CategoryNames:    index.CategoryNames,
-		LixenUI:          NewCategoryUIState(),
+		HierarchyUI:          NewCategoryUIState(),
 		DepByState:       NewDetailPaneState(),
 		DepOnState:       NewDetailPaneState(),
 		DepAnalysisCache: make(map[string]*DependencyAnalysis),
@@ -66,7 +66,7 @@ func main() {
 
 	app.TreeRoot = BuildTree(index)
 	app.RefreshTreeFlat()
-	app.RefreshLixenFlat()
+	app.RefreshHierarchyFlat()
 
 	app.refreshDetailPanes()
 

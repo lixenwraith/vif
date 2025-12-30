@@ -119,7 +119,7 @@ func (app *AppState) renderPanes(r tui.Region) {
 		title string
 		draw  func(tui.Region)
 	}{
-		{PaneLixen, "HIERARCHY", app.renderLixenPane},
+		{PaneHierarchy, "HIERARCHY", app.renderHierarchyPane},
 		{PaneTree, "PACKAGES / FILES", app.renderTreePane},
 		{PaneDepBy, "DEPENDED BY", app.renderDepByPane},
 		{PaneDepOn, "DEPENDS ON", app.renderDepOnPane},
@@ -137,8 +137,8 @@ func (app *AppState) renderPanes(r tui.Region) {
 	}
 }
 
-// renderLixenPane draws the category/tag hierarchy pane
-func (app *AppState) renderLixenPane(r tui.Region) {
+// renderHierarchyPane draws the category/tag hierarchy pane
+func (app *AppState) renderHierarchyPane(r tui.Region) {
 	ui := app.getCurrentCategoryUI()
 	if ui == nil {
 		r.Fill(app.Theme.Bg)
@@ -150,7 +150,7 @@ func (app *AppState) renderLixenPane(r tui.Region) {
 	ui.TreeState.SetVisible(r.H)
 
 	// Build and cache tree nodes from flat tag items
-	ui.Nodes = app.buildLixenNodes(ui)
+	ui.Nodes = app.buildHierarchyNodes(ui)
 	if len(ui.Nodes) == 0 {
 		r.Text(1, 0, "(no tags)", app.Theme.Unselected, terminal.RGB{}, terminal.AttrNone)
 		return
@@ -158,7 +158,7 @@ func (app *AppState) renderLixenPane(r tui.Region) {
 
 	// Determine background based on focus
 	bg := app.Theme.Bg
-	if app.FocusPane == PaneLixen {
+	if app.FocusPane == PaneHierarchy {
 		bg = app.Theme.FocusBg
 	}
 
@@ -170,8 +170,8 @@ func (app *AppState) renderLixenPane(r tui.Region) {
 	})
 }
 
-// buildLixenNodes converts flat TagItems to tui.TreeNodes for rendering
-func (app *AppState) buildLixenNodes(ui *CategoryUIState) []tui.TreeNode {
+// buildHierarchyNodes converts flat TagItems to tui.TreeNodes for rendering
+func (app *AppState) buildHierarchyNodes(ui *CategoryUIState) []tui.TreeNode {
 	hasFilter := app.Filter.HasActiveFilter()
 	nodes := make([]tui.TreeNode, 0, len(ui.Flat))
 
@@ -198,7 +198,7 @@ func (app *AppState) buildLixenNodes(ui *CategoryUIState) []tui.TreeNode {
 				Style:       tui.Style{Fg: app.categoryColor(dimmed), Attr: terminal.AttrBold},
 				Suffix:      fmt.Sprintf(" (%d)", count),
 				SuffixStyle: tui.Style{Fg: app.suffixColor(dimmed)},
-				Data:        LixenNodeData{Type: TagItemTypeCategory, Category: cat},
+				Data:        HierarchyNodeData{Type: TagItemTypeCategory, Category: cat},
 			}
 
 		case TagItemTypeGroup:
@@ -219,7 +219,7 @@ func (app *AppState) buildLixenNodes(ui *CategoryUIState) []tui.TreeNode {
 				Style:       app.groupStyle(dimmed),
 				Suffix:      fmt.Sprintf(" (%d)", count),
 				SuffixStyle: tui.Style{Fg: app.suffixColor(dimmed)},
-				Data:        LixenNodeData{Type: TagItemTypeGroup, Category: cat, Group: item.Group},
+				Data:        HierarchyNodeData{Type: TagItemTypeGroup, Category: cat, Group: item.Group},
 			}
 
 		case TagItemTypeModule:
@@ -240,7 +240,7 @@ func (app *AppState) buildLixenNodes(ui *CategoryUIState) []tui.TreeNode {
 				Style:       app.moduleStyle(dimmed),
 				Suffix:      fmt.Sprintf(" (%d)", count),
 				SuffixStyle: tui.Style{Fg: app.suffixColor(dimmed)},
-				Data:        LixenNodeData{Type: TagItemTypeModule, Category: cat, Group: item.Group, Module: item.Module},
+				Data:        HierarchyNodeData{Type: TagItemTypeModule, Category: cat, Group: item.Group, Module: item.Module},
 			}
 
 		case TagItemTypeTag:
@@ -266,7 +266,7 @@ func (app *AppState) buildLixenNodes(ui *CategoryUIState) []tui.TreeNode {
 				Style:       app.tagStyle(dimmed),
 				Suffix:      fmt.Sprintf(" (%d)", count),
 				SuffixStyle: tui.Style{Fg: app.suffixColor(dimmed)},
-				Data:        LixenNodeData{Type: TagItemTypeTag, Category: cat, Group: item.Group, Module: item.Module, Tag: item.Tag},
+				Data:        HierarchyNodeData{Type: TagItemTypeTag, Category: cat, Group: item.Group, Module: item.Module, Tag: item.Tag},
 			}
 		}
 

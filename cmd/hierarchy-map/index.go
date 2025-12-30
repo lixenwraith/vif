@@ -218,14 +218,14 @@ func (app *AppState) ReindexAll() {
 		}
 	}
 
-	// Reset LixenUI if needed
-	if app.LixenUI == nil {
-		app.LixenUI = NewCategoryUIState()
+	// Reset HierarchyUI if needed
+	if app.HierarchyUI == nil {
+		app.HierarchyUI = NewCategoryUIState()
 	}
 
 	app.TreeRoot = BuildTree(index)
 	app.RefreshTreeFlat()
-	app.RefreshLixenFlat()
+	app.RefreshHierarchyFlat()
 	app.Message = fmt.Sprintf("reindexed: %d files, %d categories", len(index.Files), len(index.CategoryNames))
 }
 
@@ -255,7 +255,7 @@ func parseFile(path, modPath string) (*FileInfo, error) {
 		}
 
 		if strings.HasPrefix(trimmed, "//") {
-			if err := parseLixenLine(trimmed, fi); err != nil {
+			if err := parseHierarchyLine(trimmed, fi); err != nil {
 				continue
 			}
 		}
@@ -319,16 +319,17 @@ func parseFile(path, modPath string) (*FileInfo, error) {
 	return fi, nil
 }
 
-// parseLixenLine parses a single @lixen: comment line into FileInfo
-func parseLixenLine(line string, fi *FileInfo) error {
+// parseHierarchyLine parses a single @lixen: comment line into FileInfo
+func parseHierarchyLine(line string, fi *FileInfo) error {
 	line = strings.TrimPrefix(line, "//")
 	line = strings.TrimSpace(line)
 
-	if !strings.HasPrefix(line, "@lixen:") {
+	prefix := "@" + HierarchyLinePrefix + ":"
+	if !strings.HasPrefix(line, prefix) {
 		return nil
 	}
 
-	content := strings.TrimPrefix(line, "@lixen:")
+	content := strings.TrimPrefix(line, prefix)
 	content = stripWhitespace(content)
 
 	if content == "" {

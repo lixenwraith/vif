@@ -113,7 +113,7 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 	case terminal.KeyEscape:
 		if app.Filter.HasActiveFilter() {
 			app.ClearFilter()
-			app.RefreshLixenFlat()
+			app.RefreshHierarchyFlat()
 			app.Message = "filter cleared"
 		}
 		return false, false
@@ -121,8 +121,8 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 
 	// Pane-specific handling
 	switch app.FocusPane {
-	case PaneLixen:
-		app.handleLixenPaneEvent(ev)
+	case PaneHierarchy:
+		app.handleHierarchyPaneEvent(ev)
 	case PaneTree:
 		app.handleTreePaneEvent(ev)
 	case PaneDepBy:
@@ -189,9 +189,9 @@ func (app *AppState) handleInputEvent(ev terminal.Event) (quit, output bool) {
 	return false, false
 }
 
-// --- Lixen Pane Event Handling ---
+// --- Hierarchy Pane Event Handling ---
 
-func (app *AppState) handleLixenPaneEvent(ev terminal.Event) {
+func (app *AppState) handleHierarchyPaneEvent(ev terminal.Event) {
 	ui := app.getCurrentCategoryUI()
 	if ui == nil || len(ui.Flat) == 0 {
 		return
@@ -211,11 +211,11 @@ func (app *AppState) handleLixenPaneEvent(ev terminal.Event) {
 	case terminal.KeyEnd:
 		ui.TreeState.JumpEnd(len(ui.Flat))
 	case terminal.KeySpace:
-		app.toggleLixenSelection()
+		app.toggleHierarchySelection()
 	case terminal.KeyLeft:
-		app.collapseLixenItem(ui)
+		app.collapseHierarchyItem(ui)
 	case terminal.KeyRight:
-		app.expandLixenItem(ui)
+		app.expandHierarchyItem(ui)
 
 	case terminal.KeyRune:
 		switch ev.Rune {
@@ -224,32 +224,32 @@ func (app *AppState) handleLixenPaneEvent(ev terminal.Event) {
 		case 'k':
 			ui.TreeState.MoveCursor(-1, len(ui.Flat))
 		case 'h':
-			app.collapseLixenItem(ui)
+			app.collapseHierarchyItem(ui)
 		case 'l':
-			app.expandLixenItem(ui)
+			app.expandHierarchyItem(ui)
 		case ' ':
-			app.toggleLixenSelection()
+			app.toggleHierarchySelection()
 		case 's':
-			app.selectAndAdvanceLixen()
+			app.selectAndAdvanceHierarchy()
 		case 'a':
-			app.selectAllVisibleLixenTags()
+			app.selectAllVisibleHierarchyTags()
 		case '0':
 			ui.TreeState.JumpStart()
 		case '$':
 			ui.TreeState.JumpEnd(len(ui.Flat))
 		case 'H':
 			ui.Expansion.CollapseAll()
-			app.RefreshLixenFlat()
+			app.RefreshHierarchyFlat()
 			ui.TreeState.JumpStart()
 			app.Message = "collapsed all groups"
 		case 'L':
-			app.expandAllLixenItems(ui)
+			app.expandAllHierarchyItems(ui)
 			app.Message = "expanded all groups"
 		}
 	}
 }
 
-func (app *AppState) collapseLixenItem(ui *CategoryUIState) {
+func (app *AppState) collapseHierarchyItem(ui *CategoryUIState) {
 	data := ui.CurrentData()
 	if data == nil {
 		return
@@ -260,13 +260,13 @@ func (app *AppState) collapseLixenItem(ui *CategoryUIState) {
 		key := "c:" + data.Category
 		if ui.Expansion.IsExpanded(key) {
 			ui.Expansion.Collapse(key)
-			app.RefreshLixenFlat()
+			app.RefreshHierarchyFlat()
 		}
 	case TagItemTypeGroup:
 		key := "g:" + data.Category + "." + data.Group
 		if ui.Expansion.IsExpanded(key) {
 			ui.Expansion.Collapse(key)
-			app.RefreshLixenFlat()
+			app.RefreshHierarchyFlat()
 		} else {
 			// Navigate to parent category
 			for i := ui.TreeState.Cursor - 1; i >= 0; i-- {
@@ -281,7 +281,7 @@ func (app *AppState) collapseLixenItem(ui *CategoryUIState) {
 		key := fmt.Sprintf("m:%s.%s.%s", data.Category, data.Group, data.Module)
 		if ui.Expansion.IsExpanded(key) {
 			ui.Expansion.Collapse(key)
-			app.RefreshLixenFlat()
+			app.RefreshHierarchyFlat()
 		} else {
 			// Navigate to parent group
 			for i := ui.TreeState.Cursor - 1; i >= 0; i-- {
@@ -324,7 +324,7 @@ func (app *AppState) collapseLixenItem(ui *CategoryUIState) {
 	}
 }
 
-func (app *AppState) expandLixenItem(ui *CategoryUIState) {
+func (app *AppState) expandHierarchyItem(ui *CategoryUIState) {
 	data := ui.CurrentData()
 	if data == nil {
 		return
@@ -335,24 +335,24 @@ func (app *AppState) expandLixenItem(ui *CategoryUIState) {
 		key := "c:" + data.Category
 		if !ui.Expansion.IsExpanded(key) {
 			ui.Expansion.Expand(key)
-			app.RefreshLixenFlat()
+			app.RefreshHierarchyFlat()
 		}
 	case TagItemTypeGroup:
 		key := "g:" + data.Category + "." + data.Group
 		if !ui.Expansion.IsExpanded(key) {
 			ui.Expansion.Expand(key)
-			app.RefreshLixenFlat()
+			app.RefreshHierarchyFlat()
 		}
 	case TagItemTypeModule:
 		key := fmt.Sprintf("m:%s.%s.%s", data.Category, data.Group, data.Module)
 		if !ui.Expansion.IsExpanded(key) {
 			ui.Expansion.Expand(key)
-			app.RefreshLixenFlat()
+			app.RefreshHierarchyFlat()
 		}
 	}
 }
 
-func (app *AppState) expandAllLixenItems(ui *CategoryUIState) {
+func (app *AppState) expandAllHierarchyItems(ui *CategoryUIState) {
 	for _, cat := range app.CategoryNames {
 		ui.Expansion.Expand("c:" + cat)
 
@@ -371,10 +371,10 @@ func (app *AppState) expandAllLixenItems(ui *CategoryUIState) {
 		}
 	}
 
-	app.RefreshLixenFlat()
+	app.RefreshHierarchyFlat()
 }
 
-func (app *AppState) toggleLixenSelection() {
+func (app *AppState) toggleHierarchySelection() {
 	ui := app.getCurrentCategoryUI()
 	data := ui.CurrentData()
 	if data == nil {
@@ -438,7 +438,7 @@ func (app *AppState) toggleLixenSelection() {
 	}
 }
 
-func (app *AppState) selectAndAdvanceLixen() {
+func (app *AppState) selectAndAdvanceHierarchy() {
 	ui := app.getCurrentCategoryUI()
 	if ui == nil || len(ui.Flat) == 0 {
 		return
@@ -497,7 +497,7 @@ func (app *AppState) selectAndAdvanceLixen() {
 	}
 }
 
-func (app *AppState) selectAllVisibleLixenTags() {
+func (app *AppState) selectAllVisibleHierarchyTags() {
 	ui := app.getCurrentCategoryUI()
 	if ui == nil {
 		return
@@ -943,18 +943,18 @@ func (app *AppState) navigateTreeToFile(path string) {
 // --- Category Management ---
 
 func (app *AppState) getCurrentCategoryUI() *CategoryUIState {
-	if app.LixenUI == nil {
-		app.LixenUI = NewCategoryUIState()
+	if app.HierarchyUI == nil {
+		app.HierarchyUI = NewCategoryUIState()
 	}
-	return app.LixenUI
+	return app.HierarchyUI
 }
 
 // --- Filter ---
 
 func (app *AppState) applyCurrentPaneFilter() {
 	switch app.FocusPane {
-	case PaneLixen:
-		app.applyLixenPaneFilter()
+	case PaneHierarchy:
+		app.applyHierarchyPaneFilter()
 	case PaneTree:
 		app.applyTreePaneFilter()
 	case PaneDepBy, PaneDepOn:
@@ -976,7 +976,7 @@ func (app *AppState) RefreshTreeFlat() {
 	app.TreeState.AdjustScroll(len(app.TreeFlat))
 }
 
-func (app *AppState) RefreshLixenFlat() {
+func (app *AppState) RefreshHierarchyFlat() {
 	ui := app.getCurrentCategoryUI()
 	if ui == nil {
 		return
