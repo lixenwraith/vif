@@ -1,3 +1,4 @@
+// @lixen: #dev{feature[shield(render,system)],feature[spirit(render,system)]}
 package manifest
 
 import (
@@ -35,6 +36,7 @@ func RegisterComponents(w *engine.World) {
 	engine.RegisterComponent[component.CompositeHeaderComponent](w)
 	engine.RegisterComponent[component.MemberComponent](w)
 	engine.RegisterComponent[component.LightningComponent](w)
+	engine.RegisterComponent[component.SpiritComponent](w)
 }
 
 // RegisterSystems registers all system factories with the registry
@@ -84,6 +86,9 @@ func RegisterSystems() {
 
 	registry.RegisterSystem("fuse", func(w any) any {
 		return system.NewFuseSystem(w.(*engine.World))
+	})
+	registry.RegisterSystem("spirit", func(w any) any {
+		return system.NewSpiritSystem(w.(*engine.World))
 	})
 	registry.RegisterSystem("drain", func(w any) any {
 		return system.NewDrainSystem(w.(*engine.World))
@@ -145,6 +150,10 @@ func RegisterRenderers() {
 
 	registry.RegisterRenderer("lightning", func(ctx any) any {
 		return renderers.NewLightningRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityEffects)
+
+	registry.RegisterRenderer("spirit", func(ctx any) any {
+		return renderers.NewSpiritRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityEffects)
 
 	registry.RegisterRenderer("materialize", func(ctx any) any {
@@ -211,6 +220,7 @@ func ActiveSystems() []string {
 		"materialize",
 		"cleaner",
 		"fuse",
+		"spirit",
 		"drain",
 		"quasar",
 		"flash",
@@ -232,6 +242,7 @@ func ActiveRenderers() []string {
 		"shield",
 		"effects",
 		"lightning",
+		"spirit",
 		"materialize",
 		"drain",
 		"quasar",

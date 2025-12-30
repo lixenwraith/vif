@@ -1,3 +1,4 @@
+// @lixen: #dev{feature[spirit(render,system)]}
 package component
 
 // MarkedForDeath tags an entity to be destroyed by CullSystem safely after game logic

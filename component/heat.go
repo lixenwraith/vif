@@ -1,3 +1,4 @@
+// @lixen: #dev{feature[shield(render,system)]}
 package component
 
 import "sync/atomic"

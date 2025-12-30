@@ -1,3 +1,4 @@
+// @lixen: #dev{feature[shield(render,system)],feature[spirit(render,system)]}
 package constant
 
 import "time"
@@ -47,6 +48,7 @@ const (
 	PriorityGold        = 20
 	PriorityCleaner     = 22
 	PriorityFuse        = 23 // After Cleaner, before Drain
+	PrioritySpirit      = 24 // After Fuse, before Drain // TODO: really? or after drain?
 	PriorityDrain       = 25
 	PriorityMaterialize = 26 // PriorityDrain + 1
 	PriorityQuasar      = 27 // After Drain

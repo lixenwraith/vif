@@ -1,4 +1,5 @@
 // FILE: vmath/ellipse.go
+// @lixen: #dev{feature[shield(render,system)],feature[spirit(render,system)]}
 package vmath
 
 // Ellipse utilities for shield, drain, and orbital calculations

@@ -1,3 +1,4 @@
+// @lixen: #dev{feature[spirit(render,system)]}
 package component
 
 import "time"

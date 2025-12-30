@@ -1,3 +1,4 @@
+// @lixen: #dev{feature[shield(render,system)],feature[spirit(render,system)]}
 package engine
 
 // Entity is defined in core package to avoid cyclic dependency

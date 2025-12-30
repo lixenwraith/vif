@@ -1,3 +1,4 @@
+// @lixen: #dev{feature[shield(render,system)],feature[spirit(render,system)]}
 package vmath
 
 import (
@@ -266,4 +267,10 @@ func CalculateCentroid(coords []int) (int, int) {
 	}
 
 	return sumX / count, sumY / count
+}
+
+// Lerp performs linear interpolation between a and b
+// t is in [0, Scale] where 0 returns a, Scale returns b
+func Lerp(a, b, t int32) int32 {
+	return a + Mul(b-a, t)
 }

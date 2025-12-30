@@ -1,3 +1,4 @@
+// @lixen: #dev{feature[shield(render,system)],feature[spirit(render,system)]}
 package event
 
 import (
@@ -128,4 +129,6 @@ func InitRegistry() {
 	RegisterType("EventQuasarDestroyed", EventQuasarDestroyed, nil)
 	RegisterType("EventGrayoutStart", EventGrayoutStart, nil)
 	RegisterType("EventGrayoutEnd", EventGrayoutEnd, nil)
+	RegisterType("EventSpiritSpawn", EventSpiritSpawn, &SpiritSpawnPayload{})
+	RegisterType("EventSpiritDespawn", EventSpiritDespawn, nil)
 }

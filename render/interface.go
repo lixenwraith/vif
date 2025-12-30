@@ -1,3 +1,4 @@
+// @lixen: #dev{feature[shield(render,system)],feature[spirit(render,system)]}
 package render
 
 // SystemRenderer is implemented by systems with visual output

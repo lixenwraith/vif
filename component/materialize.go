@@ -1,3 +1,4 @@
+// @lixen: #dev{feature[shield(render,system)],feature[spirit(render,system)]}
 package component
 
 // MaterializeComponent represents a converging beam effect toward a spawn target

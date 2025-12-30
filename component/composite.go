@@ -1,3 +1,4 @@
+// @lixen: #dev{feature[spirit(render,system)]}
 package component
 
 import "github.com/lixenwraith/vi-fighter/core"

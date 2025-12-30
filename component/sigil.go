@@ -1,3 +1,4 @@
+// @lixen: #dev{feature[shield(render,system)],feature[spirit(render,system)]}
 package component
 
 // SigilComponent provides visual representation for non-typeable moving entities

@@ -1,3 +1,4 @@
+// @lixen: #dev{feature[shield(render,system)],feature[spirit(render,system)]}
 package constant
 
 import "time"
@@ -65,8 +66,6 @@ const (
 	// MaterializeAnimationDuration is the time for spawners to converge
 	MaterializeAnimationDuration = 1 * time.Second
 
-	// CHANGED: Removed MaterializeTrailLength - no longer using trails
-
 	// Materialize phase thresholds (normalized 0.0-1.0)
 	MaterializeFillEnd = 0.4 // Fill phase ends, hold begins
 	MaterializeHoldEnd = 0.6 // Hold phase ends, recede begins
@@ -74,6 +73,18 @@ const (
 
 	// Materialize visual parameters
 	MaterializeWidthFalloff = 0.5 // Side-line intensity for multi-width beams
+)
+
+// --- Spirit Entity ---
+const (
+	// SpiritAnimationDuration is the time for spirits to converge to target
+	SpiritAnimationDuration = 500 * time.Millisecond
+
+	// SpiritSafetyBuffer is additional time before safety despawn to allow final frame render
+	SpiritSafetyBuffer = 100 * time.Millisecond
+
+	// SpiritBlinkHz is the color oscillation frequency during travel
+	SpiritBlinkHz = 12
 )
 
 // --- Shield Entity ---

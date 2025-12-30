@@ -1,3 +1,4 @@
+// @lixen: #dev{feature[shield(render,system)],feature[spirit(render,system)]}
 package event
 
 import (
@@ -6,6 +7,7 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // DeleteRangeType defines the scope of deletion
@@ -240,4 +242,13 @@ type QuasarSpawnedPayload struct {
 	AnchorEntity core.Entity
 	OriginX      int
 	OriginY      int
+}
+
+// SpiritSpawnPayload contains parameters to spawn a spirit entity
+type SpiritSpawnPayload struct {
+	StartX, StartY   int // Starting position (grid coordinates)
+	TargetX, TargetY int // Target convergence position (grid coordinates)
+	Char             rune
+	BaseColor        terminal.RGB
+	BlinkColor       terminal.RGB
 }

@@ -1,3 +1,4 @@
+// @lixen: #dev{feature[shield(render,system)],feature[spirit(render,system)]}
 package event
 
 // EventType represents the type of game event
@@ -308,6 +309,16 @@ const (
 	// Trigger: QuasarSystem on termination
 	// Consumer: GameState | Payload: nil
 	EventGrayoutEnd
+
+	// EventSpiritSpawn signals intent to spawn a spirit entity
+	// Trigger: FuseSystem (or other systems needing convergence VFX)
+	// Consumer: SpiritSystem | Payload: *SpiritSpawnPayload
+	EventSpiritSpawn
+
+	// EventSpiritDespawn signals force-clear of all spirit entities
+	// Trigger: FuseSystem timer expiry (safety mechanism)
+	// Consumer: SpiritSystem | Payload: nil
+	EventSpiritDespawn
 )
 
 // GameEvent represents a single game event with metadata

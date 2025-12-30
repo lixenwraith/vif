@@ -1,3 +1,4 @@
+// @lixen: #dev{feature[shield(render,system)],feature[spirit(render,system)]}
 package system
 
 import (
@@ -6,6 +7,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/vi-fighter/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -16,15 +19,21 @@ type FuseSystem struct {
 	world *engine.World
 	res   engine.Resources
 
-	drainStore     *engine.Store[component.DrainComponent]
-	quasarStore    *engine.Store[component.QuasarComponent]
-	headerStore    *engine.Store[component.CompositeHeaderComponent]
-	memberStore    *engine.Store[component.MemberComponent]
-	protStore      *engine.Store[component.ProtectionComponent]
-	glyphStore     *engine.Store[component.GlyphComponent]
-	matStore       *engine.Store[component.MaterializeComponent]
-	lightningStore *engine.Store[component.LightningComponent]
-	timerStore     *engine.Store[component.TimerComponent]
+	drainStore  *engine.Store[component.DrainComponent]
+	quasarStore *engine.Store[component.QuasarComponent]
+	headerStore *engine.Store[component.CompositeHeaderComponent]
+	memberStore *engine.Store[component.MemberComponent]
+	protStore   *engine.Store[component.ProtectionComponent]
+	glyphStore  *engine.Store[component.GlyphComponent]
+	matStore    *engine.Store[component.MaterializeComponent]
+	spiritStore *engine.Store[component.SpiritComponent]
+	timerStore  *engine.Store[component.TimerComponent]
+
+	// Fusion state machine
+	fusing    bool
+	fuseTimer int64 // Remaining time in nanoseconds
+	targetX   int   // Quasar spawn position (centroid)
+	targetY   int
 
 	enabled bool
 }
@@ -35,15 +44,15 @@ func NewFuseSystem(world *engine.World) engine.System {
 		world: world,
 		res:   engine.GetResources(world),
 
-		drainStore:     engine.GetStore[component.DrainComponent](world),
-		quasarStore:    engine.GetStore[component.QuasarComponent](world),
-		headerStore:    engine.GetStore[component.CompositeHeaderComponent](world),
-		memberStore:    engine.GetStore[component.MemberComponent](world),
-		protStore:      engine.GetStore[component.ProtectionComponent](world),
-		glyphStore:     engine.GetStore[component.GlyphComponent](world),
-		matStore:       engine.GetStore[component.MaterializeComponent](world),
-		lightningStore: engine.GetStore[component.LightningComponent](world),
-		timerStore:     engine.GetStore[component.TimerComponent](world),
+		drainStore:  engine.GetStore[component.DrainComponent](world),
+		quasarStore: engine.GetStore[component.QuasarComponent](world),
+		headerStore: engine.GetStore[component.CompositeHeaderComponent](world),
+		memberStore: engine.GetStore[component.MemberComponent](world),
+		protStore:   engine.GetStore[component.ProtectionComponent](world),
+		glyphStore:  engine.GetStore[component.GlyphComponent](world),
+		matStore:    engine.GetStore[component.MaterializeComponent](world),
+		spiritStore: engine.GetStore[component.SpiritComponent](world),
+		timerStore:  engine.GetStore[component.TimerComponent](world),
 	}
 	s.initLocked()
 	return s
@@ -54,6 +63,10 @@ func (s *FuseSystem) Init() {
 }
 
 func (s *FuseSystem) initLocked() {
+	s.fusing = false
+	s.fuseTimer = 0
+	s.targetX = 0
+	s.targetY = 0
 	s.enabled = true
 }
 
@@ -70,6 +83,10 @@ func (s *FuseSystem) EventTypes() []event.EventType {
 
 func (s *FuseSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
+		// Abort any in-progress fusion
+		if s.fusing {
+			s.world.PushEvent(event.EventSpiritDespawn, nil)
+		}
 		s.Init()
 		return
 	}
@@ -79,12 +96,23 @@ func (s *FuseSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	if ev.Type == event.EventFuseDrains {
-		s.executeFuse()
+		if !s.fusing {
+			s.executeFuse()
+		}
 	}
 }
 
 func (s *FuseSystem) Update() {
-	// FuseSystem is purely event-driven, no tick logic
+	if !s.enabled || !s.fusing {
+		return
+	}
+
+	// Decrement timer
+	s.fuseTimer -= s.res.Time.DeltaTime.Nanoseconds()
+
+	if s.fuseTimer <= 0 {
+		s.completeFuse()
+	}
 }
 
 // executeFuse performs the drain-to-quasar transformation
@@ -107,7 +135,7 @@ func (s *FuseSystem) executeFuse() {
 	// 3. Calculate Centroid
 	cX, cY := vmath.CalculateCentroid(coords)
 
-	// Fallback to center screen if no drains (rare edge case)
+	// Fallback to center screen if no drains
 	if len(coords) == 0 {
 		config := s.res.Config
 		cX = config.GameWidth / 2
@@ -115,7 +143,7 @@ func (s *FuseSystem) executeFuse() {
 	}
 
 	// 4. Determine Spawn Position (clamped)
-	spawnX, spawnY := s.clampSpawnPosition(cX, cY)
+	s.targetX, s.targetY = s.clampSpawnPosition(cX, cY)
 
 	// 5. Spawn Lightning Effects
 	for i := range validDrains {
@@ -124,27 +152,16 @@ func (s *FuseSystem) executeFuse() {
 		originY := coords[i*2+1]
 
 		// Spawn transient lightning entity
-		lightningEntity := s.world.CreateEntity()
-		s.lightningStore.Set(lightningEntity, component.LightningComponent{
-			OriginX:   originX,
-			OriginY:   originY,
-			TargetX:   spawnX,
-			TargetY:   spawnY,
-			Duration:  constant.DestructionFlashDuration,
-			Remaining: constant.DestructionFlashDuration,
+		s.world.PushEvent(event.EventSpiritSpawn, &event.SpiritSpawnPayload{
+			StartX:  originX,
+			StartY:  originY,
+			TargetX: s.targetX,
+			TargetY: s.targetY,
+			Char:    constant.DrainChar,
+			// TODO: this is bad, only system needing colors, find a way not to import terminal or render
+			BaseColor:  terminal.RGB(render.RgbDrain),
+			BlinkColor: terminal.RGB{R: 255, G: 255, B: 0}, // Yellow blink
 		})
-		// Auto-cleanup after duration
-		s.world.PushEvent(event.EventTimerStart, &event.TimerStartPayload{
-			Entity:   lightningEntity,
-			Duration: constant.DestructionFlashDuration,
-		})
-		// If timer system not used for this, can set TimerComponent directly:
-		s.timerStore.Set(lightningEntity, component.TimerComponent{
-			Remaining: constant.DestructionFlashDuration,
-		})
-
-		// Also destroy the drain entity (visual replacement)
-		// We destroy them in step 7, so lightning spawns from their last position
 	}
 
 	// 6. Cleanup Pending Materializers (Fixes artifact issue)
@@ -158,18 +175,32 @@ func (s *FuseSystem) executeFuse() {
 	// 7. Destroy all existing drains (silent, no visual effect)
 	s.destroyAllDrains()
 
-	// 8. Clear entities at spawn location
-	s.clearSpawnArea(spawnX, spawnY)
+	// 8. Start timer
+	s.fusing = true
+	s.fuseTimer = (constant.SpiritAnimationDuration + constant.SpiritSafetyBuffer).Nanoseconds()
+}
 
-	// 9. Create Quasar composite
-	anchorEntity := s.createQuasarComposite(spawnX, spawnY)
+// completeFuse finalizes the transformation after timer expires
+func (s *FuseSystem) completeFuse() {
+	// 1. Safety cleanup - despawn any remaining spirits
+	s.world.PushEvent(event.EventSpiritDespawn, nil)
 
-	// 10. Notify QuasarSystem
+	// 2. Clear spawn area
+	s.clearSpawnArea(s.targetX, s.targetY)
+
+	// 3. Create Quasar composite
+	anchorEntity := s.createQuasarComposite(s.targetX, s.targetY)
+
+	// 4. Notify QuasarSystem
 	s.world.PushEvent(event.EventQuasarSpawned, &event.QuasarSpawnedPayload{
 		AnchorEntity: anchorEntity,
-		OriginX:      spawnX,
-		OriginY:      spawnY,
+		OriginX:      s.targetX,
+		OriginY:      s.targetY,
 	})
+
+	// 5. Reset state
+	s.fusing = false
+	s.fuseTimer = 0
 }
 
 // destroyAllDrains removes all drain entities without visual effects
