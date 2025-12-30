@@ -142,39 +142,39 @@ func RegisterRenderers() {
 
 	registry.RegisterRenderer("shield", func(ctx any) any {
 		return renderers.NewShieldRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityEffects)
+	}, render.PriorityField)
 
-	registry.RegisterRenderer("effects", func(ctx any) any {
-		return renderers.NewEffectsRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityEffects)
+	registry.RegisterRenderer("cleaner", func(ctx any) any {
+		return renderers.NewCleanerRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityCleaner)
+
+	registry.RegisterRenderer("flash", func(ctx any) any {
+		return renderers.NewCleanerRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityParticle)
 
 	registry.RegisterRenderer("lightning", func(ctx any) any {
 		return renderers.NewLightningRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityEffects)
+	}, render.PriorityField)
 
 	registry.RegisterRenderer("spirit", func(ctx any) any {
 		return renderers.NewSpiritRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityEffects)
+	}, render.PriorityParticle)
 
 	registry.RegisterRenderer("materialize", func(ctx any) any {
 		return renderers.NewMaterializeRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityMaterialize)
 
-	registry.RegisterRenderer("drain", func(ctx any) any {
-		return renderers.NewDrainRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityDrain)
-
 	registry.RegisterRenderer("quasar", func(ctx any) any {
 		return renderers.NewQuasarRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityDrain)
+	}, render.PriorityMulti)
 
 	registry.RegisterRenderer("grayout", func(ctx any) any {
 		return renderers.NewGrayoutRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityUI-10)
+	}, render.PriorityPostProcess)
 
 	registry.RegisterRenderer("dim", func(ctx any) any {
 		return renderers.NewDimRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityUI-5)
+	}, render.PriorityPostProcess)
 
 	registry.RegisterRenderer("heatmeter", func(ctx any) any {
 		return renderers.NewHeatMeterRenderer(ctx.(*engine.GameContext))
@@ -240,11 +240,11 @@ func ActiveRenderers() []string {
 		"nugget",
 		"gold",
 		"shield",
-		"effects",
+		"cleaner",
+		"flash",
 		"lightning",
 		"spirit",
 		"materialize",
-		"drain",
 		"quasar",
 		"grayout",
 		"dim",

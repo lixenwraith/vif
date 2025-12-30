@@ -12,6 +12,7 @@ import "time"
 type DrainComponent struct {
 	LastMoveTime  time.Time // Last time the drain moved (DrainMoveInterval)
 	LastDrainTime time.Time // Last time energy was drained (DrainEnergyDrainInterval)
-	IsOnCursor    bool      // Cached state for efficient drain checks
-	SpawnOrder    int64     // Monotonic counter for LIFO despawn ordering (higher = newer)
+	// TODO: legacy, before cursor store, check to remove
+	IsOnCursor bool  // Cached state for efficient drain checks
+	SpawnOrder int64 // Monotonic counter for LIFO despawn ordering (higher = newer)
 }

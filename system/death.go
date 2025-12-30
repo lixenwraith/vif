@@ -20,6 +20,7 @@ type DeathSystem struct {
 	deathStore *engine.Store[component.DeathComponent]
 	protStore  *engine.Store[component.ProtectionComponent]
 	glyphStore *engine.Store[component.GlyphComponent]
+	sigilStore *engine.Store[component.SigilComponent]
 
 	statKilled *atomic.Int64
 
@@ -35,6 +36,7 @@ func NewDeathSystem(world *engine.World) engine.System {
 		deathStore: engine.GetStore[component.DeathComponent](world),
 		protStore:  engine.GetStore[component.ProtectionComponent](world),
 		glyphStore: engine.GetStore[component.GlyphComponent](world),
+		sigilStore: engine.GetStore[component.SigilComponent](world),
 
 		statKilled: res.Status.Ints.Get("death.killed"),
 	}
@@ -146,9 +148,12 @@ func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType
 		return
 	}
 
+	// Extract char: glyph first, sigil fallback
 	var char rune
 	if glyph, ok := s.glyphStore.Get(entity); ok {
 		char = glyph.Rune
+	} else if sigil, ok := s.sigilStore.Get(entity); ok {
+		char = sigil.Rune
 	} else {
 		return
 	}

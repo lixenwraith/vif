@@ -33,6 +33,7 @@ type DrainSystem struct {
 	res   engine.Resources
 
 	drainStore  *engine.Store[component.DrainComponent]
+	sigilStore  *engine.Store[component.SigilComponent]
 	matStore    *engine.Store[component.MaterializeComponent]
 	protStore   *engine.Store[component.ProtectionComponent]
 	shieldStore *engine.Store[component.ShieldComponent]
@@ -68,6 +69,7 @@ func NewDrainSystem(world *engine.World) engine.System {
 		res:   res,
 
 		drainStore:  engine.GetStore[component.DrainComponent](world),
+		sigilStore:  engine.GetStore[component.SigilComponent](world),
 		matStore:    engine.GetStore[component.MaterializeComponent](world),
 		protStore:   engine.GetStore[component.ProtectionComponent](world),
 		shieldStore: engine.GetStore[component.ShieldComponent](world),
@@ -478,31 +480,8 @@ func (s *DrainSystem) despawnExcessDrains(count int) {
 	}
 
 	for i := 0; i < toRemove; i++ {
-		s.despawnDrainWithFlash(ordered[i])
+		event.EmitDeathOne(s.res.Events.Queue, ordered[i], event.EventFlashRequest, s.res.Time.FrameNumber)
 	}
-}
-
-// despawnAllDrains removes all drain entities with flash effect
-func (s *DrainSystem) despawnAllDrains() {
-	drains := s.drainStore.All()
-	for _, e := range drains {
-		s.despawnDrainWithFlash(e)
-	}
-}
-
-// despawnDrainWithFlash removes a single drain entity and triggers destruction flash
-func (s *DrainSystem) despawnDrainWithFlash(entity core.Entity) {
-	// TODO: change flash/desth to accommodate sigil components, or energy explosion (accumulated energy of stuff eaten)
-	// Flash emitted inline - drain entities lack GlyphComponent
-	if pos, ok := s.world.Positions.Get(entity); ok {
-		s.world.PushEvent(event.EventFlashRequest, &event.FlashRequestPayload{
-			X:    pos.X,
-			Y:    pos.Y,
-			Char: constant.DrainChar,
-		})
-	}
-	// TODO: integrate flash with drain; issue: non-typeable character, can't extract. or use explosion?
-	event.EmitDeathOne(s.res.Events.Queue, entity, 0, s.res.Time.FrameNumber)
 }
 
 // materializeDrainAt creates a drain entity at the specified position
@@ -525,7 +504,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 		spawnY = config.GameHeight - 1
 	}
 
-	// Check for existing drain using authoritative store (immune to grid saturation)
+	// Check for existing drain using authoritative store
 	if s.hasDrainAt(spawnX, spawnY) {
 		// Collision with moved drain - re-queue at alternate position
 		s.requeueSpawnWithOffset(spawnX, spawnY)
@@ -565,6 +544,11 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 
 	s.world.Positions.Set(entity, pos)
 	s.drainStore.Set(entity, drain)
+	// Visual component for sigil renderer and death system flash extraction
+	s.sigilStore.Set(entity, component.SigilComponent{
+		Rune:  constant.DrainChar,
+		Color: component.SigilDrain,
+	})
 }
 
 // requeueSpawnWithOffset attempts to find alternate position and re-queue spawn
@@ -693,7 +677,7 @@ func (s *DrainSystem) handleDrainDrainCollisions() {
 	for _, entities := range drainPositions {
 		if len(entities) > 1 {
 			for _, e := range entities {
-				s.despawnDrainWithFlash(e)
+				event.EmitDeathOne(s.res.Events.Queue, e, event.EventFlashRequest, s.res.Time.FrameNumber)
 			}
 		}
 	}

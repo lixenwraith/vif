@@ -10,25 +10,32 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
-// shield256Colors maps sequence blink type to 256-palette index
-// Using xterm 6×6×6 cube for medium-brightness colors
-var shield256Colors = map[uint32]uint8{
-	0: 245, // None/error: light gray
-	1: 75,  // Blue (1,3,5)
-	2: 41,  // Green (0,4,1)
-	3: 167, // Red (4,1,1)
-	4: 178, // Gold (4,4,0)
-}
+// STUB: Legacy blink-type color selection
+// // shield256Colors maps sequence blink type to 256-palette index
+// // Using xterm 6×6×6 cube for medium-brightness colors
+// var shield256Colors = map[uint32]uint8{
+// 	0: 245, // None/error: light gray
+// 	1: 75,  // Blue (1,3,5)
+// 	2: 41,  // Green (0,4,1)
+// 	3: 167, // Red (4,1,1)
+// 	4: 178, // Gold (4,4,0)
+// }
+//
+// // shieldRGBColors maps sequence blink type to RGB
+// var shieldRGBColors = [5]render.RGB{
+// 	render.RgbShieldNone,
+// 	render.RgbShieldBlue,
+// 	render.RgbShieldGreen,
+// 	render.RgbShieldRed,
+// 	render.RgbShieldGold,
+// }
 
-// TODO: this is a clutch, to be refactored
-// shieldRGBColors maps sequence blink type to RGB
-var shieldRGBColors = [5]render.RGB{
-	render.RgbShieldNone,
-	render.RgbShieldBlue,
-	render.RgbShieldGreen,
-	render.RgbShieldRed,
-	render.RgbShieldGold,
-}
+// TODO: refactor 2-palette color store
+// 256-color palette indices for energy-based shield colors
+const (
+	shield256Positive = 226 // Bright yellow (matches RgbCleanerBasePositive)
+	shield256Negative = 134 // Violet (matches RgbCleanerBaseNegative)
+)
 
 // shieldCellRenderer is the callback type for per-cell shield rendering
 // Defines the interface for rendering strategy (256-color vs TrueColor) selected at initialization
@@ -77,18 +84,29 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		return
 	}
 
-	// Resolve blink type (shield color)
-	blinkType := uint32(0)
+	// Energy-based shield color: positive/zero → yellow, negative → purple
+	r.frameColor = render.RgbCleanerBasePositive
+	r.framePalette = shield256Positive
 	if energyComp, ok := r.energyStore.Get(r.gameCtx.CursorEntity); ok {
-		blinkType = energyComp.BlinkType.Load()
-	}
-	if blinkType > 4 {
-		blinkType = 0
+		if energyComp.Current.Load() < 0 {
+			r.frameColor = render.RgbCleanerBaseNegative
+			r.framePalette = shield256Negative
+		}
 	}
 
-	// Set frame state for callbacks
-	r.frameColor = shieldRGBColors[blinkType]
-	r.framePalette = shield256Colors[blinkType]
+	// STUB: Legacy blink-type color selection (glyph-based, may restore for future use)
+	// // Resolve blink type (shield color)
+	// blinkType := uint32(0)
+	// if energyComp, ok := r.energyStore.Get(r.gameCtx.CursorEntity); ok {
+	// 	blinkType = energyComp.BlinkType.Load()
+	// }
+	// if blinkType > 4 {
+	// 	blinkType = 0
+	// }
+	//
+	// // Set frame state for callbacks
+	// r.frameColor = shieldRGBColors[blinkType]
+	// r.framePalette = shield256Colors[blinkType]
 
 	for _, entity := range shields {
 		shield, okS := r.shieldStore.Get(entity)
