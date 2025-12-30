@@ -1,14 +1,12 @@
 package renderers
 
 import (
-	"math"
-	"math/rand"
-
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // quadrantChars provides 2x2 sub-cell resolution for TrueColor mode
@@ -104,6 +102,8 @@ type LightningRenderer struct {
 
 	// Mode-specific renderer selected at construction
 	renderLightning lightningBoltRenderer
+
+	rng *vmath.FastRand // Cached RNG
 }
 
 // NewLightningRenderer creates a new lightning renderer with mode-appropriate rendering path
@@ -111,6 +111,7 @@ func NewLightningRenderer(ctx *engine.GameContext) *LightningRenderer {
 	r := &LightningRenderer{
 		gameCtx:        ctx,
 		lightningStore: engine.GetStore[component.LightningComponent](ctx.World),
+		rng:            vmath.NewFastRand(1),
 	}
 
 	// Select rendering strategy based on terminal color capability
@@ -134,92 +135,84 @@ func (r *LightningRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 	buf.SetWriteMask(constant.MaskTransient)
 
-	// Frame seed provides deterministic per-frame variation for electric sizzle effect
-	// Combined with entity ID for independent bolt vibration
-	frameSeed := ctx.FrameNumber
-
 	for _, e := range entities {
 		l, ok := r.lightningStore.Get(e)
-		if !ok || l.Duration <= 0 {
+		if !ok || l.Remaining <= 0 {
 			continue
 		}
-
-		// Calculate life progress: 1.0 = full life, 0.0 = expired
-		lifeRatio := float64(l.Remaining) / float64(l.Duration)
-		if lifeRatio <= 0 {
-			continue
-		}
-
-		// Cap max alpha to prevent "blown out" white blobs when multiple bolts overlap
-		// Range: 0.0 -> 0.8 -> 0.0 over lifetime
-		alpha := lifeRatio
-		if alpha > 0.8 {
-			alpha = 0.8
-		}
-
-		// Deterministic RNG seeded by EntityID + FrameNumber
-		// Ensures all bolts vibrate independently and update every frame (60hz sizzle)
-		seed := int64(e)*7919 + frameSeed
-		rng := rand.New(rand.NewSource(seed))
 
 		// Generate fractal path in sub-pixel coordinates (2x resolution)
 		// Shared between both rendering modes for consistent path shape
-		points := r.generateFractalPath(l.OriginX, l.OriginY, l.TargetX, l.TargetY, rng)
+		points := r.generateFractalPath(l.OriginX, l.OriginY, l.TargetX, l.TargetY, r.rng)
 
 		// Dispatch to mode-specific renderer
-		r.renderLightning(ctx, buf, points, l.ColorType, alpha)
+		r.renderLightning(ctx, buf, points, l.ColorType, constant.LightningAlpha)
 	}
 }
 
 // generateFractalPath creates a jagged lightning path using midpoint displacement
-// Returns points in 2x sub-pixel coordinates for maximum resolution
-// Both TrueColor and 256-color modes use this shared path generation
-func (r *LightningRenderer) generateFractalPath(x1, y1, x2, y2 int, rng *rand.Rand) []struct{ X, Y int } {
+// All calculations use Q16.16 fixed-point, returns points in 2x sub-pixel coordinates
+func (r *LightningRenderer) generateFractalPath(x1, y1, x2, y2 int, rng *vmath.FastRand) []struct{ X, Y int } {
 	// Convert cell coordinates to sub-pixel (2x resolution)
 	sx1, sy1 := x1*2, y1*2
 	sx2, sy2 := x2*2, y2*2
 
 	dx := sx2 - sx1
 	dy := sy2 - sy1
-	distSq := float64(dx*dx + dy*dy)
-	dist := math.Sqrt(distSq)
 
-	if dist < 1.0 {
-		dist = 1.0
+	// Convert to Q16.16
+	dxFixed := vmath.FromInt(dx)
+	dyFixed := vmath.FromInt(dy)
+
+	// Distance using fast approximation (~4% error acceptable for visuals)
+	distFixed := vmath.DistanceApprox(dxFixed, dyFixed)
+	if distFixed < vmath.Scale {
+		return []struct{ X, Y int }{{sx1, sy1}, {sx2, sy2}}
 	}
 
-	// Dynamic segment count: ~1 segment every 6 sub-pixels
-	// Higher density than cell-level for smoother "electric" appearance
-	segments := int(dist / 6.0)
+	// TODO: change this to be dynamic with a small range
+	// Segment count: ~1 per 6 sub-pixels
+	segments := vmath.ToInt(vmath.Div(distFixed, vmath.FromInt(6)))
 	if segments < 4 {
 		segments = 4
 	}
 
-	// Jitter calculation for perpendicular displacement
-	// "Shorter distances vibrate in a larger range" for visual separation
-	// Base jitter (4.0/dist) ensures short lines spread visually
-	// Proportional jitter (0.15) adds controlled chaos to long lines
-	jitterScale := 0.15 + (4.0 / dist)
+	// Normalized perpendicular unit vector: (-dy/dist, dx/dist)
+	perpXFixed := vmath.Div(-dyFixed, distFixed)
+	perpYFixed := vmath.Div(dxFixed, distFixed)
+
+	// Fixed absolute jitter magnitude: 8 sub-pixels (4 cells)
+	// Gives consistent visual "jaggedness" regardless of line length
+	maxJitterFixed := vmath.FromInt(8)
 
 	points := make([]struct{ X, Y int }, 0, segments+1)
 	points = append(points, struct{ X, Y int }{sx1, sy1})
 
+	sx1Fixed := vmath.FromInt(sx1)
+	sy1Fixed := vmath.FromInt(sy1)
+	segmentsFixed := vmath.FromInt(segments)
+
 	for i := 1; i < segments; i++ {
-		t := float64(i) / float64(segments)
+		// Interpolation: t = i / segments
+		tFixed := vmath.Div(vmath.FromInt(i), segmentsFixed)
 
-		// Linear interpolation base point
-		bx := float64(sx1) + float64(dx)*t
-		by := float64(sy1) + float64(dy)*t
+		// Base point: start + delta * t
+		bxFixed := sx1Fixed + vmath.Mul(dxFixed, tFixed)
+		byFixed := sy1Fixed + vmath.Mul(dyFixed, tFixed)
 
-		// Perpendicular jitter vector (-dy, dx) scaled by random factor
-		// Creates the characteristic jagged lightning appearance
-		jitter := jitterScale * (rng.Float64() - 0.5)
-		jx := -float64(dy) * jitter
-		jy := float64(dx) * jitter
+		// Random in [-1.0, 1.0): map uint32 to signed Q16.16
+		randRaw := rng.Next()
+		randFrac := int32(randRaw>>16) - int32(vmath.Scale>>1) // [-32768, 32767]
+		randFrac <<= 1                                         // [-65536, 65534] ≈ [-1.0, 1.0)
+
+		// Jitter displacement along normalized perpendicular
+		jitterFixed := vmath.Mul(randFrac, maxJitterFixed)
+		jxFixed := vmath.Mul(perpXFixed, jitterFixed)
+		jyFixed := vmath.Mul(perpYFixed, jitterFixed)
 
 		points = append(points, struct{ X, Y int }{
-			int(bx + jx),
-			int(by + jy),
+			vmath.ToInt(bxFixed + jxFixed),
+			vmath.ToInt(byFixed + jyFixed),
 		})
 	}
 
@@ -232,11 +225,7 @@ func (r *LightningRenderer) generateFractalPath(x1, y1, x2, y2 int, rng *rand.Ra
 func (r *LightningRenderer) renderLightningTrueColor(ctx render.RenderContext, buf *render.RenderBuffer,
 	points []struct{ X, Y int }, colorType component.LightningColorType, alpha float64) {
 
-	// Get color gradient endpoints for this lightning type
-	colorPair := lightningTrueColorLUT[colorType]
-	// Interpolate: core color at low life, hot color at high life
-	// Alpha already represents lifeRatio (capped at 0.8)
-	color := render.Lerp(colorPair[0], colorPair[1], alpha/0.8)
+	color := lightningTrueColorLUT[colorType][0]
 
 	// Accumulate quadrant hits per cell
 	// Key: packed (x,y), Value: quadrant bitmap

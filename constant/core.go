@@ -54,6 +54,7 @@ const (
 	PriorityQuasar      = 27 // After Drain
 	PriorityDecay       = 30
 	PriorityBlossom     = 31
+	PriorityLightning   = 32 // After Quasar
 	PriorityFlash       = 35
 	PriorityUI          = 50
 	PriorityEffect      = 300

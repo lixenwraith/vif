@@ -319,6 +319,21 @@ const (
 	// Trigger: FuseSystem timer expiry (safety mechanism)
 	// Consumer: SpiritSystem | Payload: nil
 	EventSpiritDespawn
+
+	// EventLightningSpawn signals intent to spawn a lightning visual effect
+	// Trigger: QuasarSystem (zap), FuseSystem (convergence)
+	// Consumer: LightningSystem | Payload: *LightningSpawnPayload
+	EventLightningSpawn
+
+	// EventLightningUpdate signals target position update for tracked lightning
+	// Trigger: QuasarSystem (cursor tracking while zapping)
+	// Consumer: LightningSystem | Payload: *LightningUpdatePayload
+	EventLightningUpdate
+
+	// EventLightningDespawn signals force-removal of specific lightning entity
+	// Trigger: QuasarSystem (zap ends)
+	// Consumer: LightningSystem | Payload: core.Entity
+	EventLightningDespawn
 )
 
 // GameEvent represents a single game event with metadata

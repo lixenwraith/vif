@@ -5,7 +5,7 @@ package constant
 // Higher values render on top / take precedence in queries
 const (
 	ZIndexBackground = 0
-	ZIndexSpawnChar  = 100
+	ZIndexGlyph      = 100
 	ZIndexNugget     = 200
 	ZIndexDecay      = 300
 	ZIndexDrain      = 400

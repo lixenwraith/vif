@@ -30,7 +30,7 @@ const (
 	BlendMax       = BlendMode(opMax | flagBg | flagFg)
 	BlendSoftLight = BlendMode(opSoftLight | flagBg | flagFg)
 	BlendScreen    = BlendMode(opScreen | flagBg | flagFg)
-	BlendScreenFg  = BlendMode(opScreen | flagBg)
+	BlendScreenFg  = BlendMode(opScreen | flagFg)
 	BlendOverlay   = BlendMode(opOverlay | flagBg | flagFg)
 
 	// Targeted Modes

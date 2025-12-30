@@ -90,6 +90,9 @@ func RegisterSystems() {
 	registry.RegisterSystem("spirit", func(w any) any {
 		return system.NewSpiritSystem(w.(*engine.World))
 	})
+	registry.RegisterSystem("lightning", func(w any) any {
+		return system.NewLightningSystem(w.(*engine.World))
+	})
 	registry.RegisterSystem("drain", func(w any) any {
 		return system.NewDrainSystem(w.(*engine.World))
 	})
@@ -221,6 +224,7 @@ func ActiveSystems() []string {
 		"cleaner",
 		"fuse",
 		"spirit",
+		"lightning",
 		"drain",
 		"quasar",
 		"flash",

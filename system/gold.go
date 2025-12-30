@@ -209,7 +209,7 @@ func (s *GoldSystem) spawnGold() bool {
 		sequence[i] = constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
 	}
 
-	// Find empty space to spawn gold
+	// Find empty space to spawnLightning gold
 	x, y := s.findValidPosition(constant.GoldSequenceLength)
 	if x < 0 || y < 0 {
 		return false
@@ -302,7 +302,7 @@ func (s *GoldSystem) spawnGold() bool {
 	s.timeoutTime = now.Add(constant.GoldDuration)
 	s.mu.Unlock()
 
-	// Emit spawn event
+	// Emit spawnLightning event
 	s.world.PushEvent(event.EventGoldSpawned, &event.GoldSpawnedPayload{
 		AnchorEntity: anchorEntity,
 		OriginX:      x,

@@ -40,13 +40,24 @@ const (
 	// QuasarHeight is the vertical cell count
 	QuasarHeight = 3
 	// QuasarMoveInterval is duration between movement updates (2× drain speed)
-	QuasarMoveInterval = DrainMoveInterval / 2 // 500ms
+	QuasarMoveInterval = 500 * time.Millisecond
 	// QuasarShieldDrain is energy drained per tick when any part overlaps shield
 	QuasarShieldDrain = 1000
 	// QuasarAnchorOffsetX is phantom head X offset from top-left (center column)
 	QuasarAnchorOffsetX = 2
 	// QuasarAnchorOffsetY is phantom head Y offset from top-left (center row)
 	QuasarAnchorOffsetY = 1
+
+	// QuasarSpeedIncreaseTicks
+	QuasarSpeedIncreaseTicks = 20
+
+	// QuasarSpeedIncreasePercent is the speed multiplier increase per move (10% = 0.10)
+	// Applied as: newSpeed = oldSpeed * (1.0 + QuasarSpeedIncreasePercent)
+	QuasarSpeedIncreasePercent = 0.10
+
+	// QuasarZapDuration is the visual duration for zap lightning effect
+	// Set long since it's continuously refreshed while zapping
+	QuasarZapDuration = 500 * time.Millisecond
 )
 
 // --- Decay / Blossom Entities ---
@@ -73,6 +84,11 @@ const (
 
 	// Materialize visual parameters
 	MaterializeWidthFalloff = 0.5 // Side-line intensity for multi-width beams
+)
+
+// --- Lightning Entity ---
+const (
+	LightningAlpha = 0.8
 )
 
 // --- Spirit Entity ---

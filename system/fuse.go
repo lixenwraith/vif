@@ -32,7 +32,7 @@ type FuseSystem struct {
 	// Fusion state machine
 	fusing    bool
 	fuseTimer int64 // Remaining time in nanoseconds
-	targetX   int   // Quasar spawn position (centroid)
+	targetX   int   // Quasar spawnLightning position (centroid)
 	targetY   int
 
 	enabled bool
@@ -182,10 +182,10 @@ func (s *FuseSystem) executeFuse() {
 
 // completeFuse finalizes the transformation after timer expires
 func (s *FuseSystem) completeFuse() {
-	// 1. Safety cleanup - despawn any remaining spirits
+	// 1. Safety cleanup - despawnLightning any remaining spirits
 	s.world.PushEvent(event.EventSpiritDespawn, nil)
 
-	// 2. Clear spawn area
+	// 2. Clear spawnLightning area
 	s.clearSpawnArea(s.targetX, s.targetY)
 
 	// 3. Create Quasar composite
@@ -316,8 +316,6 @@ func (s *FuseSystem) clearSpawnArea(anchorX, anchorY int) {
 
 // createQuasarComposite builds the 3x5 quasar entity structure
 func (s *FuseSystem) createQuasarComposite(anchorX, anchorY int) core.Entity {
-	now := s.res.Time.GameTime
-
 	// Calculate top-left from anchor position
 	topLeftX := anchorX - constant.QuasarAnchorOffsetX
 	topLeftY := anchorY - constant.QuasarAnchorOffsetY
@@ -333,8 +331,9 @@ func (s *FuseSystem) createQuasarComposite(anchorX, anchorY int) core.Entity {
 
 	// Set QuasarComponent for runtime state
 	s.quasarStore.Set(anchorEntity, component.QuasarComponent{
-		LastMoveTime: now,
-		IsOnCursor:   false,
+		TicksSinceLastMove:  0,
+		TicksSinceLastSpeed: 0,
+		IsOnCursor:          false,
 	})
 
 	// Build member entities

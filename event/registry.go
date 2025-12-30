@@ -131,4 +131,7 @@ func InitRegistry() {
 	RegisterType("EventGrayoutEnd", EventGrayoutEnd, nil)
 	RegisterType("EventSpiritSpawn", EventSpiritSpawn, &SpiritSpawnPayload{})
 	RegisterType("EventSpiritDespawn", EventSpiritDespawn, nil)
+	RegisterType("EventLightningSpawn", EventLightningSpawn, &LightningSpawnPayload{})
+	RegisterType("EventLightningUpdate", EventLightningUpdate, &LightningUpdatePayload{})
+	RegisterType("EventLightningDespawn", EventLightningDespawn, nil)
 }

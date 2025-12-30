@@ -35,6 +35,10 @@ type QuasarSystem struct {
 	active       bool
 	anchorEntity core.Entity
 
+	// Zap range ellipse (precomputed on config change)
+	zapInvRxSq int32
+	zapInvRySq int32
+
 	// Telemetry
 	statActive *atomic.Bool
 
@@ -71,6 +75,8 @@ func (s *QuasarSystem) Init() {
 func (s *QuasarSystem) initLocked() {
 	s.active = false
 	s.anchorEntity = 0
+	s.zapInvRxSq = 0
+	s.zapInvRySq = 0
 	s.statActive.Store(false)
 	s.enabled = true
 }
@@ -111,6 +117,18 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 		s.mu.Lock()
 		s.active = true
 		s.anchorEntity = payload.AnchorEntity
+
+		// Initialize speed multiplier
+		if quasar, ok := s.quasarStore.Get(s.anchorEntity); ok {
+			quasar.SpeedMultiplier = vmath.Scale // 1.0 in Q16.16
+			quasar.TicksSinceLastMove = 0
+			quasar.TicksSinceLastSpeed = 0
+			s.quasarStore.Set(s.anchorEntity, quasar)
+		}
+
+		// Compute zap range ellipse
+		s.updateZapEllipse()
+
 		s.statActive.Store(true)
 		s.mu.Unlock()
 
@@ -126,6 +144,14 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 			s.terminateQuasar()
 		}
 	}
+}
+
+// Compute zap range ellipse from game dimensions
+func (s *QuasarSystem) updateZapEllipse() {
+	config := s.res.Config
+	rx := vmath.FromInt(config.GameWidth / 2)
+	ry := vmath.FromInt(config.GameHeight / 2)
+	s.zapInvRxSq, s.zapInvRySq = vmath.EllipseInvRadiiSq(rx, ry)
 }
 
 func (s *QuasarSystem) Update() {
@@ -164,17 +190,141 @@ func (s *QuasarSystem) Update() {
 		return
 	}
 
-	now := s.res.Time.GameTime
+	// Check if cursor is within zap range
+	cursorInRange := s.isCursorInZapRange(anchorEntity)
 
-	// Movement update (clock-based, 2x drain speed)
-	if now.Sub(quasar.LastMoveTime) >= constant.QuasarMoveInterval {
-		s.updateMovement(anchorEntity)
-		quasar.LastMoveTime = now
+	if cursorInRange {
+		// Stop zapping if was zapping
+		if quasar.IsZapping {
+			s.stopZapping(&quasar, anchorEntity)
+		}
+
+		quasar.TicksSinceLastMove++
+		quasar.TicksSinceLastSpeed++
+
+		// Speed increase every 20 ticks (~1 second at 50ms tick)
+		if quasar.TicksSinceLastSpeed >= constant.QuasarSpeedIncreaseTicks {
+			quasar.SpeedMultiplier = vmath.Mul(quasar.SpeedMultiplier, vmath.FromFloat(1.1))
+			quasar.TicksSinceLastSpeed = 0
+		}
+
+		// TODO: revisit the movement timing
+		// Movement
+		baseTicks := int32(constant.QuasarMoveInterval / constant.GameUpdateInterval)
+		moveTicks := baseTicks * vmath.Scale / quasar.SpeedMultiplier
+		if moveTicks < 1 {
+			moveTicks = 1
+		}
+		if quasar.TicksSinceLastMove >= int(moveTicks) {
+			s.updateMovement(anchorEntity)
+			quasar.TicksSinceLastMove = 0
+		}
+
 		s.quasarStore.Set(anchorEntity, quasar)
+	} else {
+		// Cursor outside range: zap
+		if !quasar.IsZapping {
+			s.startZapping(&quasar, anchorEntity)
+		} else {
+			s.updateZapTarget(&quasar, anchorEntity)
+		}
+
+		// Apply zap damage (same as shield overlap)
+		s.applyZapDamage()
 	}
 
 	// Shield and cursor interaction
 	s.handleInteractions(anchorEntity, &header, &quasar)
+}
+
+// Check if cursor is within zap ellipse centered on quasar
+func (s *QuasarSystem) isCursorInZapRange(anchorEntity core.Entity) bool {
+	cursorEntity := s.res.Cursor.Entity
+
+	anchorPos, ok := s.world.Positions.Get(anchorEntity)
+	if !ok {
+		return true // Failsafe: don't zap if can't determine
+	}
+
+	cursorPos, ok := s.world.Positions.Get(cursorEntity)
+	if !ok {
+		return true
+	}
+
+	dx := vmath.FromInt(cursorPos.X - anchorPos.X)
+	dy := vmath.FromInt(cursorPos.Y - anchorPos.Y)
+
+	// Inside ellipse = in range (no zap)
+	return vmath.EllipseContains(dx, dy, s.zapInvRxSq, s.zapInvRySq)
+}
+
+// Start zapping - spawnLightning tracked lightning
+func (s *QuasarSystem) startZapping(quasar *component.QuasarComponent, anchorEntity core.Entity) {
+	cursorEntity := s.res.Cursor.Entity
+
+	anchorPos, ok := s.world.Positions.Get(anchorEntity)
+	if !ok {
+		return
+	}
+	cursorPos, ok := s.world.Positions.Get(cursorEntity)
+	if !ok {
+		return
+	}
+
+	s.world.PushEvent(event.EventLightningSpawn, &event.LightningSpawnPayload{
+		Owner:     anchorEntity,
+		OriginX:   anchorPos.X,
+		OriginY:   anchorPos.Y,
+		TargetX:   cursorPos.X,
+		TargetY:   cursorPos.Y,
+		ColorType: component.LightningCyan,
+		Duration:  constant.QuasarZapDuration,
+		Tracked:   true,
+	})
+
+	quasar.IsZapping = true
+	s.quasarStore.Set(anchorEntity, *quasar)
+}
+
+// stopZapping despawns lightning
+func (s *QuasarSystem) stopZapping(quasar *component.QuasarComponent, anchorEntity core.Entity) {
+	s.world.PushEvent(event.EventLightningDespawn, anchorEntity)
+
+	quasar.IsZapping = false
+	s.quasarStore.Set(anchorEntity, *quasar)
+}
+
+// Update lightning target to track cursor
+func (s *QuasarSystem) updateZapTarget(quasar *component.QuasarComponent, anchorEntity core.Entity) {
+	cursorEntity := s.res.Cursor.Entity
+	cursorPos, ok := s.world.Positions.Get(cursorEntity)
+	if !ok {
+		return
+	}
+
+	s.world.PushEvent(event.EventLightningUpdate, &event.LightningUpdatePayload{
+		Owner:   anchorEntity,
+		TargetX: cursorPos.X,
+		TargetY: cursorPos.Y,
+	})
+}
+
+// Apply zap damage - same rate as shield overlap
+func (s *QuasarSystem) applyZapDamage() {
+	cursorEntity := s.res.Cursor.Entity
+
+	shield, shieldOk := s.shieldStore.Get(cursorEntity)
+	shieldActive := shieldOk && shield.Active
+
+	if shieldActive {
+		// Drain energy through shield
+		s.world.PushEvent(event.EventShieldDrain, &event.ShieldDrainPayload{
+			Amount: constant.QuasarShieldDrain,
+		})
+	} else {
+		// Direct hit - reset heat (terminates phase)
+		s.world.PushEvent(event.EventHeatSet, &event.HeatSetPayload{Value: 0})
+	}
 }
 
 // updateMovement moves quasar toward cursor
@@ -422,6 +572,11 @@ func (s *QuasarSystem) terminateQuasar() {
 func (s *QuasarSystem) terminateQuasarLocked() {
 	if !s.active {
 		return
+	}
+
+	// Stop zapping via event (LightningSystem handles cleanup)
+	if s.anchorEntity != 0 {
+		s.world.PushEvent(event.EventLightningDespawn, s.anchorEntity)
 	}
 
 	// Destroy composite

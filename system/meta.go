@@ -95,7 +95,7 @@ func (s *MetaSystem) Update() {
 //  1. Entity cleanup (drains, world entities)
 //  2. State reset (counters, timers)
 //  3. Cursor recreation
-//  4. FSM reset (emits spawn request, dispatched immediately)
+//  4. FSM reset (emits spawnLightning request, dispatched immediately)
 //
 // Other systems handle EventGameReset after this completes
 func (s *MetaSystem) handleGameReset() {
@@ -109,7 +109,7 @@ func (s *MetaSystem) handleGameReset() {
 	// 3. State reset (counters, NextID → 1)
 	s.ctx.State.Reset()
 
-	// 4. Cursor recreation (required before spawn events)
+	// 4. Cursor recreation (required before spawnLightning events)
 	s.ctx.CreateCursorEntity()
 
 	// 5. Reset mode and status
@@ -197,7 +197,7 @@ func (s *MetaSystem) handleDebugRequest() {
 	})
 
 	// Add registry groups as cards in deterministic order
-	groupOrder := []string{"engine", "event", "entity", "spawn", "boost", "gold", "decay"}
+	groupOrder := []string{"engine", "event", "entity", "spawnLightning", "boost", "gold", "decay"}
 	seen := make(map[string]bool)
 
 	for _, prefix := range groupOrder {
@@ -303,7 +303,7 @@ func (s *MetaSystem) handleHelpRequest() {
 			{Key: ":energy N", Value: "Set energy"},
 			{Key: ":heat N", Value: "Set heat"},
 			{Key: ":boost", Value: "Enable boost"},
-			{Key: ":spawn on/off", Value: "Toggle spawning"},
+			{Key: ":spawnLightning on/off", Value: "Toggle spawning"},
 			{Key: ":d", Value: "Debug overlay"},
 			{Key: ":h", Value: "This help"},
 		},

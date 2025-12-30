@@ -15,7 +15,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
-// pendingDrainSpawn represents a queued drain spawn awaiting materialization
+// pendingDrainSpawn represents a queued drain spawnLightning awaiting materialization
 type pendingDrainSpawn struct {
 	targetX            int    // Spawn position X
 	targetY            int    // Spawn position Y
@@ -25,7 +25,7 @@ type pendingDrainSpawn struct {
 
 // DrainSystem manages the drain entity lifecycle
 // Drain count = floor(heat / 10), max 10
-// Drains spawn based on Heat only
+// Drains spawnLightning based on Heat only
 // Priority: 25 (after CleanerSystem:22, before DecaySystem:30)
 type DrainSystem struct {
 	mu    sync.Mutex
@@ -46,7 +46,7 @@ type DrainSystem struct {
 	// Spawn queue for staggered materialization
 	pendingSpawns []pendingDrainSpawn
 
-	// Monotonic counter for LIFO spawn ordering
+	// Monotonic counter for LIFO spawnLightning ordering
 	nextSpawnOrder int64
 
 	// Spawn failure backoff (game ticks)
@@ -162,7 +162,7 @@ func (s *DrainSystem) Update() {
 		return
 	}
 
-	// Skip all spawn/despawn logic during quasar phase
+	// Skip all spawnLightning/despawnLightning logic during quasar phase
 	if s.paused {
 		s.statCount.Store(0)
 		s.statPending.Store(0)
@@ -171,7 +171,7 @@ func (s *DrainSystem) Update() {
 
 	currentTick := s.res.State.State.GetGameTicks()
 
-	// Process pending spawn queue first
+	// Process pending spawnLightning queue first
 	s.processPendingSpawns()
 
 	// Multi-drain lifecycle based on heat
@@ -182,7 +182,7 @@ func (s *DrainSystem) Update() {
 	effectiveCount := currentCount + pendingCount
 
 	if effectiveCount < targetCount {
-		// Check spawn cooldown
+		// Check spawnLightning cooldown
 		if currentTick >= s.spawnCooldownUntil {
 			needed := targetCount - effectiveCount
 			queued := s.queueDrainSpawns(needed)
@@ -205,7 +205,7 @@ func (s *DrainSystem) Update() {
 	} else if currentCount > targetCount {
 		// Too many drains (heat dropped)
 		s.despawnExcessDrains(currentCount - targetCount)
-		// Clear cooldown on despawn (positions freed up)
+		// Clear cooldown on despawnLightning (positions freed up)
 		s.spawnCooldownUntil = 0
 	}
 
@@ -219,7 +219,7 @@ func (s *DrainSystem) Update() {
 	s.statPending.Store(int64(len(s.pendingSpawns)))
 }
 
-// removeCompletedSpawn removes spawn entry after materialize completion
+// removeCompletedSpawn removes spawnLightning entry after materialize completion
 func (s *DrainSystem) removeCompletedSpawn(x, y int) {
 	for i, spawn := range s.pendingSpawns {
 		if spawn.targetX == x && spawn.targetY == y && spawn.materializeStarted {
@@ -239,7 +239,7 @@ func (s *DrainSystem) getHeat() int {
 	return 0
 }
 
-// hasPendingSpawns returns true if spawn queue is non-empty
+// hasPendingSpawns returns true if spawnLightning queue is non-empty
 func (s *DrainSystem) hasPendingSpawns() bool {
 	return len(s.pendingSpawns) > 0
 }
@@ -264,7 +264,7 @@ func (s *DrainSystem) processPendingSpawns() {
 	}
 }
 
-// queueDrainSpawn adds a drain spawn to the pending queue with stagger timing
+// queueDrainSpawn adds a drain spawnLightning to the pending queue with stagger timing
 func (s *DrainSystem) queueDrainSpawn(targetX, targetY int, staggerIndex int) {
 	currentTick := s.res.State.State.GetGameTicks()
 	scheduledTick := currentTick + uint64(staggerIndex)*uint64(constant.DrainSpawnStaggerTicks)
@@ -324,7 +324,7 @@ func (s *DrainSystem) getActiveDrainsBySpawnOrder() []core.Entity {
 }
 
 // randomSpawnOffset returns a valid position with boundary-stretched offset
-// When cursor is near edge, extends spawn range on opposite side to maintain area
+// When cursor is near edge, extends spawnLightning range on opposite side to maintain area
 // Retries up to maxRetries times to find unoccupied cell not in pending queue
 func (s *DrainSystem) randomSpawnOffset(baseX, baseY int, queuedPositions map[uint64]bool) (int, int, bool) {
 	config := s.res.Config
@@ -333,7 +333,7 @@ func (s *DrainSystem) randomSpawnOffset(baseX, baseY int, queuedPositions map[ui
 	width := config.GameWidth
 	height := config.GameHeight
 
-	// Calculate spawn range with boundary stretching
+	// Calculate spawnLightning range with boundary stretching
 	// X axis: maintain 2*radius+1 cell range by extending opposite side
 	minX := baseX - radius
 	maxX := baseX + radius
@@ -378,7 +378,7 @@ func (s *DrainSystem) randomSpawnOffset(baseX, baseY int, queuedPositions map[ui
 		x := minX + rand.Intn(rangeX)
 		y := minY + rand.Intn(rangeY)
 
-		// Check if position already queued for spawn
+		// Check if position already queued for spawnLightning
 		key := uint64(x)<<32 | uint64(y)
 		if queuedPositions[key] {
 			continue
@@ -393,7 +393,7 @@ func (s *DrainSystem) randomSpawnOffset(baseX, baseY int, queuedPositions map[ui
 	return 0, 0, false
 }
 
-// buildQueuedPositionSet creates position exclusion map from all spawn sources
+// buildQueuedPositionSet creates position exclusion map from all spawnLightning sources
 func (s *DrainSystem) buildQueuedPositionSet() map[uint64]bool {
 	queuedPositions := make(map[uint64]bool, len(s.pendingSpawns)+s.drainStore.Count()+s.matStore.Count()/4)
 
@@ -523,7 +523,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 		return
 	}
 
-	// Increment and assign spawn order for LIFO tracking
+	// Increment and assign spawnLightning order for LIFO tracking
 	s.nextSpawnOrder++
 
 	drain := component.DrainComponent{
@@ -533,7 +533,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 		SpawnOrder:    s.nextSpawnOrder,
 	}
 
-	// Handle collisions at spawn position
+	// Handle collisions at spawnLightning position
 	// GetAllAt returns a copy, so iterating while destroying is safe
 	entitiesAtSpawn := s.world.Positions.GetAllAt(spawnX, spawnY)
 	for _, e := range entitiesAtSpawn {
@@ -551,7 +551,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	})
 }
 
-// requeueSpawnWithOffset attempts to find alternate position and re-queue spawn
+// requeueSpawnWithOffset attempts to find alternate position and re-queue spawnLightning
 // Called when target position blocked by drain that moved into it
 func (s *DrainSystem) requeueSpawnWithOffset(blockedX, blockedY int) {
 	cursorEntity := s.res.Cursor.Entity
@@ -567,9 +567,9 @@ func (s *DrainSystem) requeueSpawnWithOffset(blockedX, blockedY int) {
 
 	newX, newY, valid := s.randomSpawnOffset(cursorPos.X, cursorPos.Y, queuedPositions)
 	if valid {
-		s.queueDrainSpawn(newX, newY, 0) // Immediate re-spawn
+		s.queueDrainSpawn(newX, newY, 0) // Immediate re-spawnLightning
 	}
-	// If no valid position, spawn dropped (map saturated with drains)
+	// If no valid position, spawnLightning dropped (map saturated with drains)
 }
 
 // isInsideShieldEllipse checks if position is within the shield ellipse using Q16.16 fixed-point
@@ -647,7 +647,7 @@ func (s *DrainSystem) handleDrainInteractions() {
 
 		// Cursor collision (shield not active or drain outside shield)
 		if isOnCursor {
-			// No shield protection: reduce heat and despawn
+			// No shield protection: reduce heat and despawnLightning
 			s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{
 				Delta: -constant.DrainHeatReductionAmount,
 			})

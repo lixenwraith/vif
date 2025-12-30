@@ -54,7 +54,7 @@ func (z *ZIndexResolver) GetZIndex(e core.Entity) int {
 	if z.nuggets.Has(e) {
 		return constant.ZIndexNugget
 	}
-	return constant.ZIndexSpawnChar
+	return constant.ZIndexGlyph
 }
 
 // IsTypeable returns true if the entity is a typeable (glyph) game element

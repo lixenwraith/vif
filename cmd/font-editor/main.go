@@ -494,7 +494,7 @@ func (e *Editor) flipHorizontal() {
 		var newVal uint16
 		for c := 0; c < GridCols; c++ {
 			if (g[r] & (1 << (15 - c))) != 0 {
-				// FIXED: Write to mirrored MSB-aligned position
+				// Write to mirrored MSB-aligned position
 				newVal |= 1 << (15 - (GridCols - 1 - c))
 			}
 		}

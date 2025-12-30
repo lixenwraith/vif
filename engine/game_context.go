@@ -388,12 +388,10 @@ func (ctx *GameContext) CreateCursorEntity() {
 
 	// Set PingComponent to cursor (handles crosshair and grid state)
 	GetStore[component.PingComponent](ctx.World).Set(ctx.CursorEntity, component.PingComponent{
-		ShowCrosshair:  true,
-		CrosshairColor: component.ColorNormal,
-		GridActive:     false,
-		GridRemaining:  0,
-		GridColor:      component.ColorNormal,
-		ContextAware:   true,
+		ShowCrosshair: true,
+		GridActive:    false,
+		GridRemaining: 0,
+		ContextAware:  true,
 	})
 
 	// Set HeatComponent to cursor
@@ -406,7 +404,6 @@ func (ctx *GameContext) CreateCursorEntity() {
 	GetStore[component.ShieldComponent](ctx.World).Set(ctx.CursorEntity, component.ShieldComponent{
 		RadiusX:       vmath.FromFloat(constant.ShieldRadiusX),
 		RadiusY:       vmath.FromFloat(constant.ShieldRadiusY),
-		OverrideColor: component.ColorNone,
 		MaxOpacity:    constant.ShieldMaxOpacity,
 		LastDrainTime: ctx.PausableClock.Now(),
 	})

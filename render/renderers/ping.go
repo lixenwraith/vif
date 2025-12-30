@@ -63,8 +63,7 @@ func (r *PingRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 
 	// 3. Draw Grid Lines
 	if ping.GridActive {
-		gridColor := r.getPingGridColor(ping)
-		r.drawGrid(ctx, buf, gridColor)
+		r.drawGrid(ctx, buf, render.RgbPingGridNormal)
 	}
 }
 
@@ -142,13 +141,6 @@ func (r *PingRenderer) isExcluded(x, y int) bool {
 	}
 	idx := y*r.maskWidth + x
 	return (r.exclusionMask[idx/64] & (1 << (idx % 64))) != 0
-}
-
-func (r *PingRenderer) getPingGridColor(ping component.PingComponent) render.RGB {
-	if ping.GridColor != component.ColorNone {
-		// Placeholder for mapping
-	}
-	return render.RgbPingGridNormal
 }
 
 // drawCrosshair draws the crosshair lines respecting shield exclusion

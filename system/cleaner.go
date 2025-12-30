@@ -357,7 +357,7 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 	}
 }
 
-// processPositiveEnergy handles Red destruction with Blossom spawn
+// processPositiveEnergy handles Red destruction with Blossom spawnLightning
 func (s *CleanerSystem) processPositiveEnergy(targetEntities []core.Entity, selfEntity core.Entity) {
 	var toDestroy []core.Entity
 
@@ -380,7 +380,7 @@ func (s *CleanerSystem) processPositiveEnergy(targetEntities []core.Entity, self
 	event.EmitDeathBatch(s.res.Events.Queue, event.EventBlossomSpawnOne, toDestroy, s.res.Time.FrameNumber)
 }
 
-// processNegativeEnergy handles Blue mutation to Green with Decay spawn
+// processNegativeEnergy handles Blue mutation to Green with Decay spawnLightning
 func (s *CleanerSystem) processNegativeEnergy(x, y int, targetEntities []core.Entity, selfEntity core.Entity) {
 	// Iterate candidates with self-exclusion pattern
 	for _, e := range targetEntities {

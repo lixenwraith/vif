@@ -252,3 +252,20 @@ type SpiritSpawnPayload struct {
 	BaseColor        terminal.RGB
 	BlinkColor       terminal.RGB
 }
+
+// LightningSpawnPayload contains parameters to spawn a lightning entity
+type LightningSpawnPayload struct {
+	// TODO: this assumes one lightning per entity, change later to allow multiple
+	Owner            core.Entity // Owning entity for lifecycle (required for tracked)
+	OriginX, OriginY int
+	TargetX, TargetY int
+	ColorType        component.LightningColorType
+	Duration         time.Duration
+	Tracked          bool // If true, entity persists and target can be updated
+}
+
+// LightningUpdatePayload updates target position for tracked lightning
+type LightningUpdatePayload struct {
+	Owner            core.Entity
+	TargetX, TargetY int
+}

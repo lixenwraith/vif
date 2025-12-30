@@ -1330,7 +1330,7 @@ func (app *AppState) renderEditorInput(r tui.Region) {
 	}
 	r.Text(1, 1, "ADD TAG (Enter to submit)", titleFg, app.Theme.Bg, terminal.AttrBold)
 
-	// CHANGED: Single line input using Input helper
+	// Single line input using Input helper
 	r.Input(2, tui.InputOpts{
 		Label:    "Tag: ",
 		LabelFg:  app.Theme.StatusFg,

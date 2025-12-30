@@ -1,7 +1,11 @@
 // @lixen: #dev{feature[lightning(render)]}
 package component
 
-import "time"
+import (
+	"time"
+
+	"github.com/lixenwraith/vi-fighter/core"
+)
 
 // LightningColorType defines the visual color variant of a lightning bolt
 // Used to index into renderer color LUTs without cyclic dependency
@@ -29,4 +33,6 @@ type LightningComponent struct {
 	// Animation state
 	Remaining time.Duration
 	Duration  time.Duration
+
+	Owner core.Entity // Source entity for lifecycle management (0 = unowned)
 }

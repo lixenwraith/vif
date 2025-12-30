@@ -9,7 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
-// MaterializeSystem manages materializer animations and triggering spawn completion
+// MaterializeSystem manages materializer animations and triggering spawnLightning completion
 type MaterializeSystem struct {
 	world *engine.World
 	res   engine.Resources
@@ -57,7 +57,7 @@ func (s *MaterializeSystem) EventTypes() []event.EventType {
 	}
 }
 
-// HandleEvent processes requests to spawn visual effects
+// HandleEvent processes requests to spawnLightning visual effects
 func (s *MaterializeSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		s.Init()
@@ -75,7 +75,7 @@ func (s *MaterializeSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
-// Update updates materialize spawner entities and triggers spawn completion events
+// Update updates materialize spawner entities and triggers spawnLightning completion events
 func (s *MaterializeSystem) Update() {
 	if !s.enabled {
 		return
