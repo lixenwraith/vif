@@ -1,4 +1,4 @@
-// @lixen: #dev{feature[shield(render,system)],feature[spirit(render,system)]}
+// @lixen: #dev{feature[lightning(render)],feature[shield(render,system)],feature[spirit(render,system)]}
 package render
 
 // BlendMode defines compositing operations using a bitmask (Flags | Op)
@@ -30,6 +30,7 @@ const (
 	BlendMax       = BlendMode(opMax | flagBg | flagFg)
 	BlendSoftLight = BlendMode(opSoftLight | flagBg | flagFg)
 	BlendScreen    = BlendMode(opScreen | flagBg | flagFg)
+	BlendScreenFg  = BlendMode(opScreen | flagBg)
 	BlendOverlay   = BlendMode(opOverlay | flagBg | flagFg)
 
 	// Targeted Modes

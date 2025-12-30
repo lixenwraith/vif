@@ -1,4 +1,4 @@
-// @lixen: #dev{feature[shield(render,system)],feature[spirit(render,system)]}
+// @lixen: #dev{feature[lightning(render)],feature[shield(render,system)],feature[spirit(render,system)]}
 package render
 
 import (
