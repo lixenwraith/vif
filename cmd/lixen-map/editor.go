@@ -131,8 +131,9 @@ func (app *AppState) buildEditorTagTree() {
 	// Count occurrences at each level
 	type tagKey struct{ cat, group, mod, tag string }
 	tagCounts := make(map[tagKey]int)
-	modCounts := make(map[string]int)
-	groupCounts := make(map[string]int)
+	modCounts := make(map[string]int)   // cat.group.mod -> count
+	groupCounts := make(map[string]int) // cat.group -> count
+	catCounts := make(map[string]int)   // cat -> count
 	catSet := make(map[string]bool)
 
 	for _, path := range e.SelectedFiles {
@@ -143,13 +144,19 @@ func (app *AppState) buildEditorTagTree() {
 
 		for cat, groups := range fi.Tags {
 			catSet[cat] = true
+			catCounts[cat]++
+
 			for group, mods := range groups {
-				groupKey := cat + "." + group
-				groupCounts[groupKey]++
+				if group != DirectTagsGroup {
+					groupKey := cat + "." + group
+					groupCounts[groupKey]++
+				}
 
 				for mod, tags := range mods {
-					modKey := cat + "." + group + "." + mod
-					modCounts[modKey]++
+					if mod != DirectTagsModule {
+						modKey := cat + "." + group + "." + mod
+						modCounts[modKey]++
+					}
 
 					for _, tag := range tags {
 						tagCounts[tagKey{cat, group, mod, tag}]++
@@ -174,19 +181,38 @@ func (app *AppState) buildEditorTagTree() {
 		}
 		catExpanded := e.TagExpansion.IsExpanded(catKey)
 
+		// Add category node
 		e.TagTree = append(e.TagTree, EditorTagNode{
-			Type:      TagItemTypeGroup,
+			Type:      TagItemTypeCategory,
 			Category:  cat,
 			Depth:     0,
-			FileCount: 0,
+			FileCount: catCounts[cat],
 			Total:     total,
+			Coverage:  computeCoverage(catCounts[cat], total),
 		})
 
 		if !catExpanded {
 			continue
 		}
 
-		// Collect groups for this category
+		// Direct category tags (2-level)
+		for tk, count := range tagCounts {
+			if tk.cat == cat && tk.group == DirectTagsGroup && tk.mod == DirectTagsModule {
+				e.TagTree = append(e.TagTree, EditorTagNode{
+					Type:      TagItemTypeTag,
+					Category:  cat,
+					Group:     DirectTagsGroup,
+					Module:    DirectTagsModule,
+					Tag:       tk.tag,
+					Depth:     1,
+					FileCount: count,
+					Total:     total,
+					Coverage:  computeCoverage(count, total),
+				})
+			}
+		}
+
+		// Groups (excluding DirectTagsGroup)
 		groupSet := make(map[string]bool)
 		for key := range groupCounts {
 			if strings.HasPrefix(key, cat+".") {
@@ -222,7 +248,7 @@ func (app *AppState) buildEditorTagTree() {
 				continue
 			}
 
-			// Direct tags (module = "")
+			// Direct group tags (3-level)
 			for tk, count := range tagCounts {
 				if tk.cat == cat && tk.group == group && tk.mod == DirectTagsModule {
 					e.TagTree = append(e.TagTree, EditorTagNode{
@@ -279,7 +305,7 @@ func (app *AppState) buildEditorTagTree() {
 					continue
 				}
 
-				// Tags under module
+				// Module tags (4-level)
 				var modTags []string
 				for tk := range tagCounts {
 					if tk.cat == cat && tk.group == group && tk.mod == mod {
@@ -306,7 +332,7 @@ func (app *AppState) buildEditorTagTree() {
 		}
 	}
 
-	// Mark deleted nodes from existing Deletions
+	// Restore deletion state
 	for i := range e.TagTree {
 		node := &e.TagTree[i]
 		for _, del := range e.Deletions {
@@ -344,32 +370,27 @@ func (app *AppState) buildEditorTreeNodes() []tui.TreeNode {
 		var expandable bool
 		var key string
 
-		switch {
-		case item.Group == "" && item.Module == "" && item.Tag == "":
-			// Category
+		switch item.Type {
+		case TagItemTypeCategory:
 			label = "#" + item.Category
 			expandable = true
 			key = "c:" + item.Category
-		case item.Module == "" && item.Tag == "" && item.Group != "":
-			// Group
+		case TagItemTypeGroup:
 			label = item.Group
 			expandable = true
 			key = "g:" + item.Category + "." + item.Group
-		case item.Tag == "" && item.Module != "":
-			// Module
+		case TagItemTypeModule:
 			label = "[" + item.Module + "]"
 			expandable = true
 			key = "m:" + item.Category + "." + item.Group + "." + item.Module
-		default:
-			// Tag
+		case TagItemTypeTag:
 			label = item.Tag
 			expandable = false
 			key = fmt.Sprintf("t:%s.%s.%s.%s", item.Category, item.Group, item.Module, item.Tag)
 		}
 
-		// Coverage suffix for groups, modules, and tags
 		var suffix string
-		if item.Tag != "" || (item.Group != "" && item.Tag == "" && item.Module == "") {
+		if item.Type == TagItemTypeTag || item.Type == TagItemTypeGroup {
 			switch item.Coverage {
 			case CoverageFull:
 				suffix = " [ALL]"
@@ -383,7 +404,7 @@ func (app *AppState) buildEditorTreeNodes() []tui.TreeNode {
 		if item.Deleted || item.ImplicitDelete {
 			fg = app.Theme.Unselected
 			attr = terminal.AttrDim
-		} else if item.Tag == "" {
+		} else if item.Type != TagItemTypeTag {
 			fg = app.Theme.GroupFg
 			attr = terminal.AttrBold
 		}
@@ -394,12 +415,10 @@ func (app *AppState) buildEditorTreeNodes() []tui.TreeNode {
 			check = tui.CheckFull
 			checkFg = app.Theme.Error
 		} else if item.ImplicitDelete {
-			// Distinct indicator for cascade deletion
 			check = tui.CheckPartial
 			checkFg = app.Theme.Warning
 		}
 
-		// Add suffix for implicit deletion
 		suffixText := suffix
 		if item.ImplicitDelete {
 			suffixText = " (will be empty)"
@@ -416,7 +435,7 @@ func (app *AppState) buildEditorTreeNodes() []tui.TreeNode {
 			Style:       tui.Style{Fg: fg, Attr: attr},
 			Suffix:      suffixText,
 			SuffixStyle: tui.Style{Fg: app.Theme.StatusFg},
-			Data:        i, // Index into TagTree
+			Data:        i,
 		})
 	}
 

@@ -119,7 +119,7 @@ func (app *AppState) renderPanes(r tui.Region) {
 		title string
 		draw  func(tui.Region)
 	}{
-		{PaneLixen, app.lixenTitle(), app.renderLixenPane},
+		{PaneLixen, "HIERARCHY", app.renderLixenPane},
 		{PaneTree, "PACKAGES / FILES", app.renderTreePane},
 		{PaneDepBy, "DEPENDED BY", app.renderDepByPane},
 		{PaneDepOn, "DEPENDS ON", app.renderDepOnPane},
@@ -137,19 +137,10 @@ func (app *AppState) renderPanes(r tui.Region) {
 	}
 }
 
-// lixenTitle returns the title for the lixen pane including current category
-func (app *AppState) lixenTitle() string {
-	if app.CurrentCategory == "" {
-		return "LIXEN"
-	}
-	return fmt.Sprintf("LIXEN: %s", app.CurrentCategory)
-}
-
 // renderLixenPane draws the category/tag hierarchy pane
 func (app *AppState) renderLixenPane(r tui.Region) {
-	cat := app.CurrentCategory
 	ui := app.getCurrentCategoryUI()
-	if ui == nil || cat == "" {
+	if ui == nil {
 		r.Fill(app.Theme.Bg)
 		r.TextCenter(r.H/2, "(no categories)", app.Theme.StatusFg, app.Theme.Bg, terminal.AttrNone)
 		return
@@ -159,7 +150,7 @@ func (app *AppState) renderLixenPane(r tui.Region) {
 	ui.TreeState.SetVisible(r.H)
 
 	// Build and cache tree nodes from flat tag items
-	ui.Nodes = app.buildLixenNodes(cat, ui)
+	ui.Nodes = app.buildLixenNodes(ui)
 	if len(ui.Nodes) == 0 {
 		r.Text(1, 0, "(no tags)", app.Theme.Unselected, terminal.RGB{}, terminal.AttrNone)
 		return
@@ -180,27 +171,49 @@ func (app *AppState) renderLixenPane(r tui.Region) {
 }
 
 // buildLixenNodes converts flat TagItems to tui.TreeNodes for rendering
-func (app *AppState) buildLixenNodes(cat string, ui *CategoryUIState) []tui.TreeNode {
+func (app *AppState) buildLixenNodes(ui *CategoryUIState) []tui.TreeNode {
 	hasFilter := app.Filter.HasActiveFilter()
 	nodes := make([]tui.TreeNode, 0, len(ui.Flat))
 
 	for _, item := range ui.Flat {
 		var node tui.TreeNode
+		cat := item.Category
 
 		switch item.Type {
+		case TagItemTypeCategory:
+			isFiltered := app.isCategoryFiltered(cat)
+			dimmed := hasFilter && !isFiltered
+			selState := app.computeCategorySelectionState(cat)
+			count := app.countFilesInCategory(cat)
+			key := "c:" + cat
+
+			node = tui.TreeNode{
+				Key:         key,
+				Label:       "#" + cat,
+				Expandable:  true,
+				Expanded:    ui.Expansion.IsExpanded(key),
+				Depth:       0,
+				Check:       app.toCheckState(selState),
+				CheckFg:     app.checkColor(selState, dimmed),
+				Style:       tui.Style{Fg: app.categoryColor(dimmed), Attr: terminal.AttrBold},
+				Suffix:      fmt.Sprintf(" (%d)", count),
+				SuffixStyle: tui.Style{Fg: app.suffixColor(dimmed)},
+				Data:        LixenNodeData{Type: TagItemTypeCategory, Category: cat},
+			}
+
 		case TagItemTypeGroup:
 			isFiltered := app.isGroupFiltered(cat, item.Group)
 			dimmed := hasFilter && !isFiltered
 			selState := app.computeGroupSelectionState(cat, item.Group)
 			count := app.countFilesInGroup(cat, item.Group)
-			key := "g:" + item.Group
+			key := "g:" + cat + "." + item.Group
 
 			node = tui.TreeNode{
 				Key:         key,
-				Label:       "#" + item.Group,
+				Label:       item.Group,
 				Expandable:  true,
 				Expanded:    ui.Expansion.IsExpanded(key),
-				Depth:       0,
+				Depth:       1,
 				Check:       app.toCheckState(selState),
 				CheckFg:     app.checkColor(selState, dimmed),
 				Style:       app.groupStyle(dimmed),
@@ -214,14 +227,14 @@ func (app *AppState) buildLixenNodes(cat string, ui *CategoryUIState) []tui.Tree
 			dimmed := hasFilter && !isFiltered
 			selState := app.computeModuleSelectionState(cat, item.Group, item.Module)
 			count := app.countFilesInModule(cat, item.Group, item.Module)
-			key := fmt.Sprintf("m:%s.%s", item.Group, item.Module)
+			key := fmt.Sprintf("m:%s.%s.%s", cat, item.Group, item.Module)
 
 			node = tui.TreeNode{
 				Key:         key,
-				Label:       item.Module,
+				Label:       "[" + item.Module + "]",
 				Expandable:  true,
 				Expanded:    ui.Expansion.IsExpanded(key),
-				Depth:       1,
+				Depth:       2,
 				Check:       app.toCheckState(selState),
 				CheckFg:     app.checkColor(selState, dimmed),
 				Style:       app.moduleStyle(dimmed),
@@ -236,16 +249,16 @@ func (app *AppState) buildLixenNodes(cat string, ui *CategoryUIState) []tui.Tree
 			selState := app.computeTagSelectionState(cat, item.Group, item.Module, item.Tag)
 			count := app.countFilesWithTag(cat, item.Group, item.Module, item.Tag)
 
-			// Depth: 0 for category-direct (2-level), 1 for group-direct (3-level), 2 for module tags (4-level)
-			depth := 2
-			if item.Group == DirectTagsGroup && item.Module == DirectTagsModule {
-				depth = 0
-			} else if item.Module == DirectTagsModule {
+			// Depth: 1 for category-direct (2-level), 2 for group-direct (3-level), 3 for module tags (4-level)
+			depth := 3
+			if item.Group == DirectTagsGroup {
 				depth = 1
+			} else if item.Module == DirectTagsModule {
+				depth = 2
 			}
 
 			node = tui.TreeNode{
-				Key:         fmt.Sprintf("t:%s.%s.%s", item.Group, item.Module, item.Tag),
+				Key:         fmt.Sprintf("t:%s.%s.%s.%s", cat, item.Group, item.Module, item.Tag),
 				Label:       item.Tag,
 				Depth:       depth,
 				Check:       app.toCheckState(selState),
@@ -261,6 +274,50 @@ func (app *AppState) buildLixenNodes(cat string, ui *CategoryUIState) []tui.Tree
 	}
 
 	return nodes
+}
+
+func (app *AppState) categoryColor(dimmed bool) terminal.RGB {
+	if dimmed {
+		return app.Theme.Unselected
+	}
+	return app.Theme.HeaderFg
+}
+
+func (app *AppState) isCategoryFiltered(cat string) bool {
+	filteredTags := app.Filter.FilteredTags(cat)
+	return filteredTags != nil && len(filteredTags) > 0
+}
+
+func (app *AppState) computeCategorySelectionState(cat string) TagSelectionState {
+	total := 0
+	selected := 0
+
+	for path, fi := range app.Index.Files {
+		if fi.HasCategory(cat) {
+			total++
+			if app.Selected[path] {
+				selected++
+			}
+		}
+	}
+
+	if total == 0 || selected == 0 {
+		return TagSelectNone
+	}
+	if selected == total {
+		return TagSelectFull
+	}
+	return TagSelectPartial
+}
+
+func (app *AppState) countFilesInCategory(cat string) int {
+	count := 0
+	for _, fi := range app.Index.Files {
+		if fi.HasCategory(cat) {
+			count++
+		}
+	}
+	return count
 }
 
 // renderTreePane draws the file/directory tree pane
@@ -356,7 +413,7 @@ func (app *AppState) buildTreeNodes() []tui.TreeNode {
 			// Build suffix with group summary
 			var suffix string
 			if tn.FileInfo != nil {
-				suffix = getFileGroupSummary(tn.FileInfo, app.CurrentCategory)
+				suffix = getFileGroupSummary(tn.FileInfo)
 				if suffix != "" {
 					suffix = " " + suffix
 				}
@@ -702,15 +759,17 @@ func formatSize(bytes int64) string {
 }
 
 // getFileGroupSummary returns a short summary of tag groups for a file
-func getFileGroupSummary(fi *FileInfo, cat string) string {
-	if fi == nil || cat == "" {
+func getFileGroupSummary(fi *FileInfo) string {
+	if fi == nil || fi.Tags == nil || len(fi.Tags) == 0 {
 		return ""
 	}
-	catTags := fi.CategoryTags(cat)
-	if catTags == nil || len(catTags) == 0 {
-		return ""
+	// Show category count instead of group count for single category
+	if len(fi.Tags) == 1 {
+		for _, groups := range fi.Tags {
+			return fmt.Sprintf("(%d groups)", len(groups))
+		}
 	}
-	return fmt.Sprintf("(%d groups)", len(catTags))
+	return fmt.Sprintf("(%d cats)", len(fi.Tags))
 }
 
 // getCurrentFilePackageDir returns the package directory of the currently selected tree node

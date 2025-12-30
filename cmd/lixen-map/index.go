@@ -218,22 +218,9 @@ func (app *AppState) ReindexAll() {
 		}
 	}
 
-	// Clear analysis cache as file contents may have changed
-	if app.CurrentCategory == "" || !index.HasCategory(app.CurrentCategory) {
-		if len(index.CategoryNames) > 0 {
-			app.CurrentCategory = index.CategoryNames[0]
-		} else {
-			app.CurrentCategory = ""
-		}
-	}
-
-	if app.CategoryUI == nil {
-		app.CategoryUI = make(map[string]*CategoryUIState)
-	}
-	for _, cat := range index.CategoryNames {
-		if app.CategoryUI[cat] == nil {
-			app.CategoryUI[cat] = NewCategoryUIState()
-		}
+	// Reset LixenUI if needed
+	if app.LixenUI == nil {
+		app.LixenUI = NewCategoryUIState()
 	}
 
 	app.TreeRoot = BuildTree(index)

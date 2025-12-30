@@ -37,12 +37,6 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 		case 'e':
 			app.OpenEditor()
 			return false, false
-		case '[':
-			app.switchCategory(-1)
-			return false, false
-		case ']':
-			app.switchCategory(1)
-			return false, false
 		case 'f':
 			app.applyCurrentPaneFilter()
 			return false, false
@@ -262,21 +256,37 @@ func (app *AppState) collapseLixenItem(ui *CategoryUIState) {
 	}
 
 	switch data.Type {
-	case TagItemTypeGroup:
-		key := "g:" + data.Group
+	case TagItemTypeCategory:
+		key := "c:" + data.Category
 		if ui.Expansion.IsExpanded(key) {
 			ui.Expansion.Collapse(key)
 			app.RefreshLixenFlat()
 		}
+	case TagItemTypeGroup:
+		key := "g:" + data.Category + "." + data.Group
+		if ui.Expansion.IsExpanded(key) {
+			ui.Expansion.Collapse(key)
+			app.RefreshLixenFlat()
+		} else {
+			// Navigate to parent category
+			for i := ui.TreeState.Cursor - 1; i >= 0; i-- {
+				if i < len(ui.Flat) && ui.Flat[i].Type == TagItemTypeCategory && ui.Flat[i].Category == data.Category {
+					ui.TreeState.Cursor = i
+					ui.TreeState.AdjustScroll(len(ui.Flat))
+					break
+				}
+			}
+		}
 	case TagItemTypeModule:
-		key := fmt.Sprintf("m:%s.%s", data.Group, data.Module)
+		key := fmt.Sprintf("m:%s.%s.%s", data.Category, data.Group, data.Module)
 		if ui.Expansion.IsExpanded(key) {
 			ui.Expansion.Collapse(key)
 			app.RefreshLixenFlat()
 		} else {
 			// Navigate to parent group
 			for i := ui.TreeState.Cursor - 1; i >= 0; i-- {
-				if i < len(ui.Flat) && ui.Flat[i].Type == TagItemTypeGroup && ui.Flat[i].Group == data.Group {
+				if i < len(ui.Flat) && ui.Flat[i].Type == TagItemTypeGroup &&
+					ui.Flat[i].Category == data.Category && ui.Flat[i].Group == data.Group {
 					ui.TreeState.Cursor = i
 					ui.TreeState.AdjustScroll(len(ui.Flat))
 					break
@@ -284,19 +294,28 @@ func (app *AppState) collapseLixenItem(ui *CategoryUIState) {
 			}
 		}
 	case TagItemTypeTag:
-		// Navigate to parent module or group
+		// Navigate to parent (module, group, or category)
 		for i := ui.TreeState.Cursor - 1; i >= 0; i-- {
 			if i >= len(ui.Flat) {
 				continue
 			}
 			item := ui.Flat[i]
+			// 4-level: go to module
 			if data.Module != DirectTagsModule && item.Type == TagItemTypeModule &&
-				item.Group == data.Group && item.Module == data.Module {
+				item.Category == data.Category && item.Group == data.Group && item.Module == data.Module {
 				ui.TreeState.Cursor = i
 				ui.TreeState.AdjustScroll(len(ui.Flat))
 				return
 			}
-			if item.Type == TagItemTypeGroup && item.Group == data.Group {
+			// 3-level: go to group
+			if data.Group != DirectTagsGroup && item.Type == TagItemTypeGroup &&
+				item.Category == data.Category && item.Group == data.Group {
+				ui.TreeState.Cursor = i
+				ui.TreeState.AdjustScroll(len(ui.Flat))
+				return
+			}
+			// 2-level: go to category
+			if item.Type == TagItemTypeCategory && item.Category == data.Category {
 				ui.TreeState.Cursor = i
 				ui.TreeState.AdjustScroll(len(ui.Flat))
 				return
@@ -312,14 +331,20 @@ func (app *AppState) expandLixenItem(ui *CategoryUIState) {
 	}
 
 	switch data.Type {
+	case TagItemTypeCategory:
+		key := "c:" + data.Category
+		if !ui.Expansion.IsExpanded(key) {
+			ui.Expansion.Expand(key)
+			app.RefreshLixenFlat()
+		}
 	case TagItemTypeGroup:
-		key := "g:" + data.Group
+		key := "g:" + data.Category + "." + data.Group
 		if !ui.Expansion.IsExpanded(key) {
 			ui.Expansion.Expand(key)
 			app.RefreshLixenFlat()
 		}
 	case TagItemTypeModule:
-		key := fmt.Sprintf("m:%s.%s", data.Group, data.Module)
+		key := fmt.Sprintf("m:%s.%s.%s", data.Category, data.Group, data.Module)
 		if !ui.Expansion.IsExpanded(key) {
 			ui.Expansion.Expand(key)
 			app.RefreshLixenFlat()
@@ -328,18 +353,21 @@ func (app *AppState) expandLixenItem(ui *CategoryUIState) {
 }
 
 func (app *AppState) expandAllLixenItems(ui *CategoryUIState) {
-	cat := app.CurrentCategory
-	catIdx := app.Index.Category(cat)
-	if catIdx == nil {
-		return
-	}
+	for _, cat := range app.CategoryNames {
+		ui.Expansion.Expand("c:" + cat)
 
-	for _, group := range catIdx.Groups {
-		ui.Expansion.Expand("g:" + group)
-	}
-	for group, modules := range catIdx.Modules {
-		for _, mod := range modules {
-			ui.Expansion.Expand(fmt.Sprintf("m:%s.%s", group, mod))
+		catIdx := app.Index.Category(cat)
+		if catIdx == nil {
+			continue
+		}
+
+		for _, group := range catIdx.Groups {
+			ui.Expansion.Expand("g:" + cat + "." + group)
+		}
+		for group, modules := range catIdx.Modules {
+			for _, mod := range modules {
+				ui.Expansion.Expand(fmt.Sprintf("m:%s.%s.%s", cat, group, mod))
+			}
 		}
 	}
 
@@ -347,14 +375,42 @@ func (app *AppState) expandAllLixenItems(ui *CategoryUIState) {
 }
 
 func (app *AppState) toggleLixenSelection() {
-	cat := app.CurrentCategory
 	ui := app.getCurrentCategoryUI()
 	data := ui.CurrentData()
 	if data == nil {
 		return
 	}
 
+	cat := data.Category
+
 	switch data.Type {
+	case TagItemTypeCategory:
+		// Select/deselect all files in category
+		count := 0
+		allSelected := true
+		for path, fi := range app.Index.Files {
+			if fi.HasCategory(cat) {
+				if !app.Selected[path] {
+					allSelected = false
+				}
+			}
+		}
+		for path, fi := range app.Index.Files {
+			if fi.HasCategory(cat) {
+				if allSelected {
+					delete(app.Selected, path)
+					count++
+				} else if !app.Selected[path] {
+					app.Selected[path] = true
+					count++
+				}
+			}
+		}
+		if allSelected {
+			app.Message = fmt.Sprintf("deselected %d files from #%s", count, cat)
+		} else {
+			app.Message = fmt.Sprintf("selected %d files with #%s", count, cat)
+		}
 	case TagItemTypeGroup:
 		if app.allFilesWithGroupSelected(cat, data.Group) {
 			count := app.deselectFilesWithGroup(cat, data.Group)
@@ -383,7 +439,6 @@ func (app *AppState) toggleLixenSelection() {
 }
 
 func (app *AppState) selectAndAdvanceLixen() {
-	cat := app.CurrentCategory
 	ui := app.getCurrentCategoryUI()
 	if ui == nil || len(ui.Flat) == 0 {
 		return
@@ -394,12 +449,29 @@ func (app *AppState) selectAndAdvanceLixen() {
 		return
 	}
 
+	cat := data.Category
+
 	switch data.Type {
+	case TagItemTypeCategory:
+		for path, fi := range app.Index.Files {
+			if fi.HasCategory(cat) {
+				app.Selected[path] = true
+			}
+		}
+		// Advance to next category
+		for i := ui.TreeState.Cursor + 1; i < len(ui.Flat); i++ {
+			if ui.Flat[i].Type == TagItemTypeCategory {
+				ui.TreeState.Cursor = i
+				ui.TreeState.AdjustScroll(len(ui.Flat))
+				return
+			}
+		}
+		ui.TreeState.MoveCursor(1, len(ui.Flat))
+
 	case TagItemTypeGroup:
 		app.selectFilesWithGroup(cat, data.Group)
-		// Advance to next group
 		for i := ui.TreeState.Cursor + 1; i < len(ui.Flat); i++ {
-			if ui.Flat[i].Type == TagItemTypeGroup {
+			if ui.Flat[i].Type == TagItemTypeGroup || ui.Flat[i].Type == TagItemTypeCategory {
 				ui.TreeState.Cursor = i
 				ui.TreeState.AdjustScroll(len(ui.Flat))
 				return
@@ -409,9 +481,9 @@ func (app *AppState) selectAndAdvanceLixen() {
 
 	case TagItemTypeModule:
 		app.selectFilesWithModule(cat, data.Group, data.Module)
-		// Advance to next module or group
 		for i := ui.TreeState.Cursor + 1; i < len(ui.Flat); i++ {
-			if ui.Flat[i].Type == TagItemTypeModule || ui.Flat[i].Type == TagItemTypeGroup {
+			t := ui.Flat[i].Type
+			if t == TagItemTypeModule || t == TagItemTypeGroup || t == TagItemTypeCategory {
 				ui.TreeState.Cursor = i
 				ui.TreeState.AdjustScroll(len(ui.Flat))
 				return
@@ -426,7 +498,6 @@ func (app *AppState) selectAndAdvanceLixen() {
 }
 
 func (app *AppState) selectAllVisibleLixenTags() {
-	cat := app.CurrentCategory
 	ui := app.getCurrentCategoryUI()
 	if ui == nil {
 		return
@@ -435,7 +506,7 @@ func (app *AppState) selectAllVisibleLixenTags() {
 	count := 0
 	for _, item := range ui.Flat {
 		if item.Type == TagItemTypeTag {
-			count += app.selectFilesWithTag(cat, item.Group, item.Module, item.Tag)
+			count += app.selectFilesWithTag(item.Category, item.Group, item.Module, item.Tag)
 		}
 	}
 	app.Message = fmt.Sprintf("selected %d files from visible tags", count)
@@ -872,49 +943,10 @@ func (app *AppState) navigateTreeToFile(path string) {
 // --- Category Management ---
 
 func (app *AppState) getCurrentCategoryUI() *CategoryUIState {
-	if app.CurrentCategory == "" {
-		return nil
+	if app.LixenUI == nil {
+		app.LixenUI = NewCategoryUIState()
 	}
-	ui := app.CategoryUI[app.CurrentCategory]
-	if ui == nil {
-		ui = NewCategoryUIState()
-		app.CategoryUI[app.CurrentCategory] = ui
-	}
-	return ui
-}
-
-func (app *AppState) switchCategory(delta int) {
-	if len(app.CategoryNames) <= 1 {
-		return
-	}
-
-	currentIdx := -1
-	for i, cat := range app.CategoryNames {
-		if cat == app.CurrentCategory {
-			currentIdx = i
-			break
-		}
-	}
-
-	if currentIdx == -1 {
-		currentIdx = 0
-	}
-
-	newIdx := (currentIdx + delta + len(app.CategoryNames)) % len(app.CategoryNames)
-	newCat := app.CategoryNames[newIdx]
-
-	if newCat == app.CurrentCategory {
-		return
-	}
-
-	app.CurrentCategory = newCat
-
-	if app.CategoryUI[newCat] == nil {
-		app.CategoryUI[newCat] = NewCategoryUIState()
-	}
-
-	app.RefreshLixenFlat()
-	app.Message = fmt.Sprintf("category: %s", newCat)
+	return app.LixenUI
 }
 
 // --- Filter ---
@@ -945,16 +977,6 @@ func (app *AppState) RefreshTreeFlat() {
 }
 
 func (app *AppState) RefreshLixenFlat() {
-	cat := app.CurrentCategory
-	if cat == "" {
-		return
-	}
-
-	catIdx := app.Index.Category(cat)
-	if catIdx == nil {
-		return
-	}
-
 	ui := app.getCurrentCategoryUI()
 	if ui == nil {
 		return
@@ -962,75 +984,105 @@ func (app *AppState) RefreshLixenFlat() {
 
 	ui.Flat = nil
 
-	// Handle direct category tags first (2-level)
-	if tags, ok := catIdx.Tags[DirectTagsGroup]; ok {
-		if directTags, ok := tags[DirectTagsModule]; ok && len(directTags) > 0 {
-			for _, tag := range directTags {
-				ui.Flat = append(ui.Flat, TagItem{
-					Type:   TagItemTypeTag,
-					Group:  DirectTagsGroup,
-					Module: DirectTagsModule,
-					Tag:    tag,
-				})
-			}
-		}
-	}
-
-	for _, group := range catIdx.Groups {
-		groupKey := "g:" + group
-		groupExpanded := ui.Expansion.IsExpanded(groupKey)
-		if _, known := ui.Expansion.State[groupKey]; !known {
-			ui.Expansion.Expand(groupKey)
-			groupExpanded = true
-		}
-
-		ui.Flat = append(ui.Flat, TagItem{
-			Type:  TagItemTypeGroup,
-			Group: group,
-		})
-
-		if !groupExpanded {
+	for _, cat := range app.CategoryNames {
+		catIdx := app.Index.Category(cat)
+		if catIdx == nil {
 			continue
 		}
 
-		if tags, ok := catIdx.Tags[group][DirectTagsModule]; ok {
-			for _, tag := range tags {
-				ui.Flat = append(ui.Flat, TagItem{
-					Type:   TagItemTypeTag,
-					Group:  group,
-					Module: DirectTagsModule,
-					Tag:    tag,
-				})
+		catKey := "c:" + cat
+		if _, known := ui.Expansion.State[catKey]; !known {
+			ui.Expansion.Expand(catKey)
+		}
+		catExpanded := ui.Expansion.IsExpanded(catKey)
+
+		// Add category node
+		ui.Flat = append(ui.Flat, TagItem{
+			Type:     TagItemTypeCategory,
+			Category: cat,
+		})
+
+		if !catExpanded {
+			continue
+		}
+
+		// Direct category tags (2-level)
+		if tags, ok := catIdx.Tags[DirectTagsGroup]; ok {
+			if directTags, ok := tags[DirectTagsModule]; ok && len(directTags) > 0 {
+				for _, tag := range directTags {
+					ui.Flat = append(ui.Flat, TagItem{
+						Type:     TagItemTypeTag,
+						Category: cat,
+						Group:    DirectTagsGroup,
+						Module:   DirectTagsModule,
+						Tag:      tag,
+					})
+				}
 			}
 		}
 
-		if modules, ok := catIdx.Modules[group]; ok {
-			for _, module := range modules {
-				moduleKey := fmt.Sprintf("m:%s.%s", group, module)
-				moduleExpanded := ui.Expansion.IsExpanded(moduleKey)
-				if _, known := ui.Expansion.State[moduleKey]; !known {
-					ui.Expansion.Expand(moduleKey)
-					moduleExpanded = true
+		// Groups
+		for _, group := range catIdx.Groups {
+			groupKey := "g:" + cat + "." + group
+			if _, known := ui.Expansion.State[groupKey]; !known {
+				ui.Expansion.Expand(groupKey)
+			}
+			groupExpanded := ui.Expansion.IsExpanded(groupKey)
+
+			ui.Flat = append(ui.Flat, TagItem{
+				Type:     TagItemTypeGroup,
+				Category: cat,
+				Group:    group,
+			})
+
+			if !groupExpanded {
+				continue
+			}
+
+			// Direct group tags (3-level)
+			if tags, ok := catIdx.Tags[group][DirectTagsModule]; ok {
+				for _, tag := range tags {
+					ui.Flat = append(ui.Flat, TagItem{
+						Type:     TagItemTypeTag,
+						Category: cat,
+						Group:    group,
+						Module:   DirectTagsModule,
+						Tag:      tag,
+					})
 				}
+			}
 
-				ui.Flat = append(ui.Flat, TagItem{
-					Type:   TagItemTypeModule,
-					Group:  group,
-					Module: module,
-				})
+			// Modules
+			if modules, ok := catIdx.Modules[group]; ok {
+				for _, module := range modules {
+					moduleKey := fmt.Sprintf("m:%s.%s.%s", cat, group, module)
+					if _, known := ui.Expansion.State[moduleKey]; !known {
+						ui.Expansion.Expand(moduleKey)
+					}
+					moduleExpanded := ui.Expansion.IsExpanded(moduleKey)
 
-				if !moduleExpanded {
-					continue
-				}
+					ui.Flat = append(ui.Flat, TagItem{
+						Type:     TagItemTypeModule,
+						Category: cat,
+						Group:    group,
+						Module:   module,
+					})
 
-				if tags, ok := catIdx.Tags[group][module]; ok {
-					for _, tag := range tags {
-						ui.Flat = append(ui.Flat, TagItem{
-							Type:   TagItemTypeTag,
-							Group:  group,
-							Module: module,
-							Tag:    tag,
-						})
+					if !moduleExpanded {
+						continue
+					}
+
+					// Module tags (4-level)
+					if tags, ok := catIdx.Tags[group][module]; ok {
+						for _, tag := range tags {
+							ui.Flat = append(ui.Flat, TagItem{
+								Type:     TagItemTypeTag,
+								Category: cat,
+								Group:    group,
+								Module:   module,
+								Tag:      tag,
+							})
+						}
 					}
 				}
 			}

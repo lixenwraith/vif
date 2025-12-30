@@ -342,12 +342,7 @@ func (app *AppState) computeFilteredTags() {
 
 // applyLixenPaneFilter toggles filter for item at lixen cursor
 func (app *AppState) applyLixenPaneFilter() {
-	cat := app.CurrentCategory
-	if cat == "" {
-		return
-	}
-
-	ui := app.CategoryUI[cat]
+	ui := app.getCurrentCategoryUI()
 	if ui == nil || len(ui.Flat) == 0 {
 		return
 	}
@@ -357,9 +352,16 @@ func (app *AppState) applyLixenPaneFilter() {
 		return
 	}
 
+	cat := data.Category
 	var paths []string
 
 	switch data.Type {
+	case TagItemTypeCategory:
+		for path, fi := range app.Index.Files {
+			if fi.HasCategory(cat) {
+				paths = append(paths, path)
+			}
+		}
 	case TagItemTypeGroup:
 		for path, fi := range app.Index.Files {
 			if _, ok := fi.CategoryTags(cat)[data.Group]; ok {
@@ -409,11 +411,16 @@ func formatLixenNodeLabel(data *LixenNodeData) string {
 		return ""
 	}
 	switch data.Type {
+	case TagItemTypeCategory:
+		return "#" + data.Category
 	case TagItemTypeGroup:
 		return "#" + data.Group
 	case TagItemTypeModule:
 		return fmt.Sprintf("#%s[%s]", data.Group, data.Module)
 	case TagItemTypeTag:
+		if data.Group == DirectTagsGroup {
+			return fmt.Sprintf("#%s(%s)", data.Category, data.Tag)
+		}
 		if data.Module == DirectTagsModule {
 			return fmt.Sprintf("#%s(%s)", data.Group, data.Tag)
 		}

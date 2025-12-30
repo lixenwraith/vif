@@ -22,9 +22,8 @@ type AppState struct {
 	ExpandDeps bool            // auto-expand dependencies
 	DepthLimit int             // expansion depth
 
-	CurrentCategory string                      // active category name
-	CategoryNames   []string                    // sorted category names from index
-	CategoryUI      map[string]*CategoryUIState // per-category UI state
+	CategoryNames []string         // sorted category names from index
+	LixenUI       *CategoryUIState // Hierarchy UI state
 
 	DepByState *DetailPaneState // State for "Depended By" pane
 	DepOnState *DetailPaneState // State for "Depends On" pane
@@ -285,7 +284,8 @@ const DirectTagsGroup = ""  // #cat(tag)
 type TagItemType uint8
 
 const (
-	TagItemTypeGroup TagItemType = iota
+	TagItemTypeCategory TagItemType = iota
+	TagItemTypeGroup
 	TagItemTypeModule
 	TagItemTypeTag
 )
@@ -301,8 +301,9 @@ type LixenNodeData struct {
 
 // TagItem represents a single row in the lixen category pane
 type TagItem struct {
-	Type   TagItemType
-	Group  string
-	Module string // empty for groups, DirectTagsModule for 2-level tags
-	Tag    string // empty for groups and modules
+	Type     TagItemType
+	Category string
+	Group    string
+	Module   string // empty for groups, DirectTagsModule for 2-level tags
+	Tag      string // empty for groups and modules
 }

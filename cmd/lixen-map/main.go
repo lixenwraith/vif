@@ -42,11 +42,6 @@ func main() {
 
 	_, rgErr := exec.LookPath("rg")
 
-	currentCat := ""
-	if len(index.CategoryNames) > 0 {
-		currentCat = index.CategoryNames[0]
-	}
-
 	app := &AppState{
 		Term:             term,
 		Index:            index,
@@ -57,9 +52,8 @@ func main() {
 		DepthLimit:       2,
 		Filter:           NewFilterState(),
 		RgAvailable:      rgErr == nil,
-		CurrentCategory:  currentCat,
 		CategoryNames:    index.CategoryNames,
-		CategoryUI:       make(map[string]*CategoryUIState),
+		LixenUI:          NewCategoryUIState(),
 		DepByState:       NewDetailPaneState(),
 		DepOnState:       NewDetailPaneState(),
 		DepAnalysisCache: make(map[string]*DependencyAnalysis),
@@ -68,10 +62,6 @@ func main() {
 		InputField:       tui.NewTextFieldState(""),
 		Width:            w,
 		Height:           h,
-	}
-
-	for _, cat := range index.CategoryNames {
-		app.CategoryUI[cat] = NewCategoryUIState()
 	}
 
 	app.TreeRoot = BuildTree(index)
