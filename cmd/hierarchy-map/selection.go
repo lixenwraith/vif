@@ -2,35 +2,105 @@ package main
 
 import (
 	"maps"
-	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 )
 
-// ExpandDeps expands package set with transitive local dependencies
-func ExpandDeps(selected map[string]bool, index *Index, maxDepth int) map[string]bool {
-	result := maps.Clone(selected)
-	frontier := slices.Collect(maps.Keys(selected))
+// ExpandDepsFileLevel expands selected files with file-level granularity
+// Returns map of file paths that should be included as dependencies
+func ExpandDepsFileLevel(selectedFiles map[string]bool, index *Index, cache map[string]*DependencyAnalysis, maxDepth int) map[string]bool {
+	result := make(map[string]bool)
+	visited := make(map[string]bool)
 
-	for depth := 0; depth < maxDepth && len(frontier) > 0; depth++ {
-		var next []string
-		for _, dir := range frontier {
-			if pkg, ok := index.Packages[dir]; ok {
-				for _, dep := range pkg.LocalDeps {
-					// Find package by name - need to search
-					for pkgDir, pkgInfo := range index.Packages {
-						if pkgInfo.Name == dep && !result[pkgDir] {
-							result[pkgDir] = true
-							next = append(next, pkgDir)
+	// Queue: (filePath, currentDepth)
+	type item struct {
+		path  string
+		depth int
+	}
+	queue := make([]item, 0, len(selectedFiles))
+
+	for path := range selectedFiles {
+		queue = append(queue, item{path, 0})
+		visited[path] = true
+	}
+
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+
+		if current.depth >= maxDepth {
+			continue
+		}
+
+		fi := index.Files[current.path]
+		if fi == nil {
+			continue
+		}
+
+		// Get or compute analysis
+		analysis := cache[current.path]
+		if analysis == nil {
+			a, err := AnalyzeFileDependencies(current.path, index.ModulePath)
+			if err == nil {
+				analysis = a
+				cache[current.path] = a
+			}
+		}
+
+		if analysis != nil {
+			// Process symbol usage
+			for importPath, symbols := range analysis.UsedSymbols {
+				pkgDir := importPathToDir(importPath, index.ModulePath)
+				pkg := index.Packages[pkgDir]
+				if pkg == nil {
+					continue
+				}
+
+				for _, sym := range symbols {
+					if filePath, ok := pkg.SymbolFiles[sym]; ok {
+						if !visited[filePath] && !selectedFiles[filePath] {
+							result[filePath] = true
+							visited[filePath] = true
+							queue = append(queue, item{filePath, current.depth + 1})
 						}
 					}
 				}
 			}
 		}
-		frontier = next
+
+		// Handle blank imports: include file with init() if found
+		for _, blankPkg := range fi.BlankImports {
+			pkg := index.Packages[blankPkg]
+			if pkg == nil {
+				continue
+			}
+
+			for _, pkgFile := range pkg.Files {
+				if pkgFile.HasInit {
+					if !visited[pkgFile.Path] && !selectedFiles[pkgFile.Path] {
+						result[pkgFile.Path] = true
+						visited[pkgFile.Path] = true
+						queue = append(queue, item{pkgFile.Path, current.depth + 1})
+					}
+					break // Only first init file per package
+				}
+			}
+		}
 	}
 
 	return result
+}
+
+// importPathToDir converts full import path to package directory
+func importPathToDir(importPath, modPath string) string {
+	if importPath == modPath {
+		return "."
+	}
+	if strings.HasPrefix(importPath, modPath+"/") {
+		return strings.TrimPrefix(importPath, modPath+"/")
+	}
+	return ""
 }
 
 // ComputeOutputFiles generates final deduplicated file list for export
@@ -44,28 +114,11 @@ func (app *AppState) ComputeOutputFiles() []string {
 		}
 	}
 
-	// Dependency expansion
+	// File-level dependency expansion
 	if app.ExpandDeps && len(app.Selected) > 0 {
-		selectedDirs := make(map[string]bool)
-		for path := range app.Selected {
-			dir := filepath.Dir(path)
-			dir = filepath.ToSlash(dir)
-			if dir == "." {
-				if fi, ok := app.Index.Files[path]; ok {
-					dir = fi.Package
-				}
-			}
-			selectedDirs[dir] = true
-		}
-
-		expandedDirs := ExpandDeps(selectedDirs, app.Index, app.DepthLimit)
-
-		for dir := range expandedDirs {
-			if pkg, ok := app.Index.Packages[dir]; ok {
-				for _, fi := range pkg.Files {
-					fileSet[fi.Path] = true
-				}
-			}
+		depFiles := ExpandDepsFileLevel(app.Selected, app.Index, app.DepAnalysisCache, app.DepthLimit)
+		for path := range depFiles {
+			fileSet[path] = true
 		}
 	}
 

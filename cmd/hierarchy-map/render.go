@@ -152,7 +152,7 @@ func (app *AppState) renderHierarchyPane(r tui.Region) {
 	// Build and cache tree nodes from flat tag items
 	ui.Nodes = app.buildHierarchyNodes(ui)
 	if len(ui.Nodes) == 0 {
-		r.Text(1, 0, "(no tags)", app.Theme.Unselected, terminal.RGB{}, terminal.AttrNone)
+		r.TextCenter(r.H/2, "(no tags)", app.Theme.StatusFg, app.Theme.Bg, terminal.AttrNone)
 		return
 	}
 
@@ -876,37 +876,12 @@ func (app *AppState) countDirSelection(node *TreeNode) (int, int) {
 
 // computeDepExpandedFiles returns files included via dependency expansion
 func (app *AppState) computeDepExpandedFiles() map[string]bool {
-	result := make(map[string]bool)
-
-	selectedDirs := make(map[string]bool)
-	for path := range app.Selected {
-		dir := filepath.Dir(path)
-		dir = filepath.ToSlash(dir)
-		if dir == "." {
-			if fi, ok := app.Index.Files[path]; ok {
-				dir = fi.Package
-			}
-		}
-		selectedDirs[dir] = true
+	if !app.ExpandDeps || len(app.Selected) == 0 {
+		return nil
 	}
 
-	expandedDirs := ExpandDeps(selectedDirs, app.Index, app.DepthLimit)
-
-	for dir := range selectedDirs {
-		delete(expandedDirs, dir)
-	}
-
-	for dir := range expandedDirs {
-		if pkg, ok := app.Index.Packages[dir]; ok {
-			for _, f := range pkg.Files {
-				if !app.Selected[f.Path] {
-					result[f.Path] = true
-				}
-			}
-		}
-	}
-
-	return result
+	// Use file-level expansion
+	return ExpandDepsFileLevel(app.Selected, app.Index, app.DepAnalysisCache, app.DepthLimit)
 }
 
 // nodeMatchesFilter checks if a tree node matches the current filter

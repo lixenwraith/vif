@@ -143,13 +143,15 @@ const (
 
 // FileInfo holds parsed metadata for a single Go source file
 type FileInfo struct {
-	Path        string
-	Package     string
-	Tags        map[string]map[string]map[string][]string // category → group → module → tags
-	Imports     []string
-	Definitions []string // Exported symbols defined in this file
-	IsAll       bool
-	Size        int64
+	Path         string
+	Package      string
+	Tags         map[string]map[string]map[string][]string // category → group → module → tags
+	Imports      []string
+	BlankImports []string // blank imports (e.g., _ "pkg")
+	Definitions  []string // Exported symbols defined in this file
+	HasInit      bool     // true if file contains init() function
+	IsAll        bool
+	Size         int64
 }
 
 // CategoryTags returns the tag hierarchy for a specific category
@@ -171,11 +173,12 @@ func (fi *FileInfo) HasCategory(cat string) bool {
 
 // PackageInfo holds metadata for a Go package directory
 type PackageInfo struct {
-	Name      string
-	Dir       string
-	Files     []*FileInfo
-	LocalDeps []string
-	HasAll    bool
+	Name        string
+	Dir         string
+	Files       []*FileInfo
+	LocalDeps   []string
+	HasAll      bool
+	SymbolFiles map[string]string // symbol name → file path
 }
 
 // CategoryIndex provides fast lookups for a single hierarchy category

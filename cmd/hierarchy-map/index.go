@@ -70,9 +70,10 @@ func BuildIndex(root string) (*Index, error) {
 		pkg, ok := index.Packages[dir]
 		if !ok {
 			pkg = &PackageInfo{
-				Name:  fi.Package,
-				Dir:   dir,
-				Files: make([]*FileInfo, 0),
+				Name:        fi.Package,
+				Dir:         dir,
+				Files:       make([]*FileInfo, 0),
+				SymbolFiles: make(map[string]string),
 			}
 			index.Packages[dir] = pkg
 		}
@@ -153,6 +154,18 @@ func BuildIndex(root string) (*Index, error) {
 
 	if err != nil {
 		return nil, err
+	}
+
+	// Build SymbolFiles for each package
+	for _, pkg := range index.Packages {
+		for _, fi := range pkg.Files {
+			for _, sym := range fi.Definitions {
+				// First definition wins (handles redefinition edge case)
+				if _, exists := pkg.SymbolFiles[sym]; !exists {
+					pkg.SymbolFiles[sym] = fi.Path
+				}
+			}
+		}
 	}
 
 	// Build sorted structures for each category
@@ -266,8 +279,7 @@ func parseFile(path, modPath string) (*FileInfo, error) {
 	}
 
 	fset := token.NewFileSet()
-	// CHANGED: Parse full AST to extract definitions, not just imports
-	// Note: ParseFile is fast enough for individual files.
+	// Parse full AST to extract definitions, not just imports
 	astFile, err := parser.ParseFile(fset, path, content, parser.ParseComments)
 	if err != nil {
 		return fi, nil
@@ -292,7 +304,11 @@ func parseFile(path, modPath string) (*FileInfo, error) {
 				}
 			}
 		case *ast.FuncDecl:
-			if d.Name.IsExported() && d.Recv == nil { // Only package-level funcs, methods are tied to types
+			// Detect init() function
+			if d.Name.Name == "init" && d.Recv == nil {
+				fi.HasInit = true
+			}
+			if d.Name.IsExported() && d.Recv == nil {
 				fi.Definitions = append(fi.Definitions, d.Name.Name)
 			}
 		}
@@ -305,7 +321,20 @@ func parseFile(path, modPath string) (*FileInfo, error) {
 		}
 		impPath := strings.Trim(imp.Path.Value, `"`)
 
-		// Robust module path stripping
+		// Module path stripping
+
+		// Track blank imports separately
+		if imp.Name != nil && imp.Name.Name == "_" {
+			if impPath == modPath {
+				fi.BlankImports = append(fi.BlankImports, ".")
+			} else if strings.HasPrefix(impPath, modPath+"/") {
+				localPkg := strings.TrimPrefix(impPath, modPath+"/")
+				fi.BlankImports = append(fi.BlankImports, localPkg)
+			}
+			continue
+		}
+
+		// Regular imports
 		if impPath == modPath {
 			// Import points to module root
 			fi.Imports = append(fi.Imports, ".")
