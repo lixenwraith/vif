@@ -459,6 +459,11 @@ func (s *CleanerSystem) deflectQuasar(anchorEntity, hitMember core.Entity, clean
 		return
 	}
 
+	// Shield active during charge phase blocks deflection
+	if quasar.ShieldActive {
+		return
+	}
+
 	// Check deflection immunity
 	if s.res.Time.GameTime.Before(quasar.DeflectUntil) {
 		return
@@ -491,8 +496,14 @@ func (s *CleanerSystem) deflectQuasar(anchorEntity, hitMember core.Entity, clean
 		return
 	}
 
-	quasar.VelX += impulseX
-	quasar.VelY += impulseY
+	// // Add impulse to current velocity
+	// quasar.VelX += impulseX
+	// quasar.VelY += impulseY
+
+	// Reset velocity and apply impulse (clean knockback)
+	quasar.VelX = impulseX
+	quasar.VelY = impulseY
+
 	quasar.DeflectUntil = s.res.Time.GameTime.Add(constant.QuasarDeflectImmunity)
 
 	s.quasarStore.Set(anchorEntity, quasar)

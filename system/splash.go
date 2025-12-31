@@ -89,6 +89,8 @@ func (s *SplashSystem) EventTypes() []event.EventType {
 		event.EventGoldTimeout,
 		event.EventGoldDestroyed,
 		event.EventCursorMoved,
+		event.EventQuasarChargeStart,
+		event.EventQuasarChargeCancel,
 	}
 }
 
@@ -122,6 +124,16 @@ func (s *SplashSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventCursorMoved:
 		if payload, ok := ev.Payload.(*event.CursorMovedPayload); ok {
 			s.handleCursorMoved(payload)
+		}
+
+	case event.EventQuasarChargeStart:
+		if payload, ok := ev.Payload.(*event.QuasarChargeStartPayload); ok {
+			s.handleQuasarChargeStart(payload)
+		}
+
+	case event.EventQuasarChargeCancel:
+		if payload, ok := ev.Payload.(*event.QuasarChargeCancelPayload); ok {
+			s.cleanupSplashesBySlotAndAnchor(component.SlotTimer, payload.AnchorEntity)
 		}
 	}
 }
@@ -323,6 +335,74 @@ func (s *SplashSystem) handleGoldFinish(anchorEntity core.Entity) {
 	}
 }
 
+// handleQuasarChargeStart creates the quasar charge countdown timer
+func (s *SplashSystem) handleQuasarChargeStart(payload *event.QuasarChargeStartPayload) {
+	s.cleanupSplashesBySlotAndAnchor(component.SlotTimer, payload.AnchorEntity)
+
+	initialSec := int(math.Ceil(payload.Duration.Seconds()))
+	digits := strconv.Itoa(initialSec)
+	digitCount := len(digits)
+
+	timerCellWidth := digitCount * constant.SplashCharWidth
+	offsetX, offsetY := s.calculateTimerOffsetForQuasar(payload.AnchorEntity, timerCellWidth)
+
+	splash := component.SplashComponent{
+		Length:       digitCount,
+		Color:        component.SplashColorCyan,
+		AnchorEntity: payload.AnchorEntity,
+		OffsetX:      offsetX,
+		OffsetY:      offsetY,
+		Slot:         component.SlotTimer,
+		Remaining:    payload.Duration,
+		Duration:     payload.Duration,
+	}
+
+	for i, d := range digits {
+		if i < len(splash.Content) {
+			splash.Content[i] = d
+		}
+	}
+
+	entity := s.world.CreateEntity()
+	s.splashStore.Set(entity, splash)
+}
+
+// calculateTimerOffsetForQuasar positions timer above quasar center
+func (s *SplashSystem) calculateTimerOffsetForQuasar(anchorEntity core.Entity, timerWidth int) (int, int) {
+	config := s.res.Config
+	timerH := constant.SplashCharHeight
+	padding := constant.SplashTimerPadding
+
+	var anchorX, anchorY int
+	if anchorEntity != 0 {
+		if pos, ok := s.world.Positions.Get(anchorEntity); ok {
+			anchorX = pos.X
+			anchorY = pos.Y
+		}
+	}
+
+	// Center above quasar
+	offsetX := -timerWidth / 2
+	offsetY := -constant.QuasarAnchorOffsetY - timerH - padding
+
+	// Bounds adjustment
+	absX := anchorX + offsetX
+	absY := anchorY + offsetY
+
+	if absY < 0 {
+		// Place below instead
+		offsetY = constant.QuasarHeight - constant.QuasarAnchorOffsetY + padding
+	}
+	if absX < 0 {
+		offsetX = -anchorX
+	}
+	if absX+timerWidth > config.GameWidth {
+		offsetX = config.GameWidth - anchorX - timerWidth
+	}
+
+	return offsetX, offsetY
+}
+
 // cleanupSplashesBySlot removes all splashes of a specific slot
 func (s *SplashSystem) cleanupSplashesBySlot(slot component.SplashSlot) {
 	entities := s.splashStore.All()
@@ -332,6 +412,20 @@ func (s *SplashSystem) cleanupSplashesBySlot(slot component.SplashSlot) {
 			continue
 		}
 		if splash.Slot == slot {
+			s.world.DestroyEntity(entity)
+		}
+	}
+}
+
+// cleanupSplashesBySlot removes all splashes of a specific slot for a composite anchor
+func (s *SplashSystem) cleanupSplashesBySlotAndAnchor(slot component.SplashSlot, anchor core.Entity) {
+	entities := s.splashStore.All()
+	for _, entity := range entities {
+		splash, ok := s.splashStore.Get(entity)
+		if !ok {
+			continue
+		}
+		if splash.Slot == slot && splash.AnchorEntity == anchor {
 			s.world.DestroyEntity(entity)
 		}
 	}

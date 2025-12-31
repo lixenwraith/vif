@@ -1,4 +1,5 @@
 package event
+
 // @lixen: #dev{feature[drain(render,system)],feature[quasar(render,system)]}
 
 // EventType represents the type of game event
@@ -299,6 +300,16 @@ const (
 	// Trigger: QuasarSystem on lifecycle end
 	// Consumer: (future: audio/effects) | Payload: nil
 	EventQuasarDestroyed
+
+	// EventQuasarChargeStart signals quasar entering charge phase before zapping
+	// Trigger: QuasarSystem when cursor exits zap range
+	// Consumer: SplashSystem (countdown timer) | Payload: *QuasarChargeStartPayload
+	EventQuasarChargeStart
+
+	// EventQuasarChargeCancel signals charge phase cancelled (cursor re-entered range)
+	// Trigger: QuasarSystem when cursor re-enters zap range during charge
+	// Consumer: SplashSystem (destroy timer) | Payload: *QuasarChargeCancelPayload
+	EventQuasarChargeCancel
 
 	// EventGrayoutStart signals persistent grayout activation
 	// Trigger: QuasarSystem on activation

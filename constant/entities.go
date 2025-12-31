@@ -113,6 +113,9 @@ const (
 
 	// QuasarSpeedMultiplierMax caps progressive speed increase (10x = Scale * 10)
 	QuasarSpeedMultiplierMax = 10
+
+	// QuasarChargeDuration is the delay before zapping starts when cursor exits range
+	QuasarChargeDuration = 3 * time.Second
 )
 
 // --- Decay / Blossom Entities ---

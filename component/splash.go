@@ -26,6 +26,7 @@ const (
 	SplashColorBlue
 	SplashColorRed
 	SplashColorGold
+	SplashColorCyan
 	SplashColorNugget
 	SplashColorWhite
 	SplashColorBlossom

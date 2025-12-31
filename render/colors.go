@@ -1,4 +1,5 @@
 package render
+
 // @lixen: #dev{feature[drain(render,system)],feature[quasar(render,system)]}
 
 import (
@@ -58,6 +59,8 @@ var (
 	RgbSplashInsert = RGB{200, 200, 200} // Light gray for insert mode
 	RgbSplashNormal = RGB{153, 102, 0}   // Dark orange (ping base) for normal mode
 	RgbTimerWhite   = RGB{155, 155, 155} // White for some actions
+	// Splash colors
+	RgbSplashCyan = RGB{0, 200, 200} // Cyan for quasar charge timer
 
 	// Nugget colors
 	RgbNuggetOrange = RGB{255, 165, 0}   // Same as insert cursor
@@ -89,12 +92,8 @@ var (
 	// Shield colors
 	RgbShieldBase = RGB{180, 0, 150} // Deep Magenta
 
-	// Shield colors per sequence type (alias Normal-level for now)
-	RgbShieldNone  = RGB{R: 128, G: 128, B: 128} // Gray for unset/error
-	RgbShieldBlue  = RGB{80, 130, 255}           // Alias RgbSequenceBlueNormal
-	RgbShieldGreen = RGB{20, 200, 20}            // Alias RgbSequenceGreenNormal
-	RgbShieldRed   = RGB{255, 60, 60}            // Alias RgbSequenceRedNormal
-	RgbShieldGold  = RGB{255, 255, 0}            // Alias RgbSequenceGold
+	// Quasar colors
+	RgbQuasarEnraged = RGB{255, 60, 60} // Red tint during charge or zap phase
 
 	// General colors
 	RgbBlack = RGB{0, 0, 0} // Black for various uses

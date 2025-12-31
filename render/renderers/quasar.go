@@ -1,5 +1,6 @@
 // FILE: render/renderers/quasar.go
 package renderers
+
 // @lixen: #dev{feature[quasar(render,system)]}
 
 import (
@@ -39,9 +40,20 @@ func (r *QuasarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	buf.SetWriteMask(constant.MaskComposite)
 
 	for _, anchor := range anchors {
+		quasar, ok := r.quasarStore.Get(anchor)
+		if !ok {
+			continue
+		}
+
 		header, ok := r.headerStore.Get(anchor)
 		if !ok {
 			continue
+		}
+
+		// Select color based on state (red = enraged, charging or zapping)
+		color := render.RgbDrain
+		if quasar.IsCharging || quasar.IsZapping {
+			color = render.RgbQuasarEnraged
 		}
 
 		// Render each member
@@ -69,7 +81,7 @@ func (r *QuasarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 				continue
 			}
 
-			buf.SetFgOnly(screenX, screenY, ch, render.RgbDrain, terminal.AttrNone)
+			buf.SetFgOnly(screenX, screenY, ch, color, terminal.AttrNone)
 		}
 	}
 }

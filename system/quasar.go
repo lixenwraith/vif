@@ -209,30 +209,82 @@ func (s *QuasarSystem) Update() {
 	// Check if cursor is within zap range
 	cursorInRange := s.isCursorInZapRange(anchorEntity)
 
+	// State machine: InRange ←→ Charging → Zapping
 	if cursorInRange {
-		// Stop zapping if was zapping
+		// Cursor in range: cancel any active state, return to homing
 		if quasar.IsZapping {
 			s.stopZapping(&quasar, anchorEntity)
 		}
-
-		// Kinetic movement
-		s.updateKineticMovement(anchorEntity, &quasar)
-
-		s.quasarStore.Set(anchorEntity, quasar)
-	} else {
-		// Cursor outside range: zap
-		if !quasar.IsZapping {
-			s.startZapping(&quasar, anchorEntity)
-		} else {
-			s.updateZapTarget(&quasar, anchorEntity)
+		if quasar.IsCharging {
+			s.cancelCharging(&quasar, anchorEntity)
 		}
 
-		// Apply zap damage (same as shield overlap)
+		s.updateKineticMovement(anchorEntity, &quasar)
+		s.quasarStore.Set(anchorEntity, quasar)
+
+	} else if quasar.IsZapping {
+		// Already zapping: continue zap, update target
+		s.updateZapTarget(&quasar, anchorEntity)
 		s.applyZapDamage()
+
+	} else if quasar.IsCharging {
+		// Charging: decrement timer, check completion
+		quasar.ChargeRemaining -= s.res.Time.DeltaTime
+
+		if quasar.ChargeRemaining <= 0 {
+			s.completeCharging(&quasar, anchorEntity)
+		} else {
+			// Continue homing during charge
+			s.updateKineticMovement(anchorEntity, &quasar)
+			s.quasarStore.Set(anchorEntity, quasar)
+		}
+
+	} else {
+		// Cursor out of range, not charging, not zapping: start charging
+		s.startCharging(&quasar, anchorEntity)
 	}
 
-	// Shield and cursor interaction
+	// Shield and cursor interaction (all states)
 	s.handleInteractions(anchorEntity, &header, &quasar)
+}
+
+// startCharging initiates the charge phase before zapping
+func (s *QuasarSystem) startCharging(quasar *component.QuasarComponent, anchorEntity core.Entity) {
+	quasar.IsCharging = true
+	quasar.ChargeRemaining = constant.QuasarChargeDuration
+	quasar.ShieldActive = true
+
+	s.quasarStore.Set(anchorEntity, *quasar)
+
+	s.world.PushEvent(event.EventQuasarChargeStart, &event.QuasarChargeStartPayload{
+		AnchorEntity: anchorEntity,
+		Duration:     constant.QuasarChargeDuration,
+	})
+}
+
+// cancelCharging aborts the charge phase when cursor re-enters range
+func (s *QuasarSystem) cancelCharging(quasar *component.QuasarComponent, anchorEntity core.Entity) {
+	quasar.IsCharging = false
+	quasar.ChargeRemaining = 0
+	quasar.ShieldActive = false
+
+	s.quasarStore.Set(anchorEntity, *quasar)
+
+	s.world.PushEvent(event.EventQuasarChargeCancel, &event.QuasarChargeCancelPayload{
+		AnchorEntity: anchorEntity,
+	})
+}
+
+// completeCharging transitions from charging to zapping
+func (s *QuasarSystem) completeCharging(quasar *component.QuasarComponent, anchorEntity core.Entity) {
+	quasar.IsCharging = false
+	quasar.ChargeRemaining = 0
+	quasar.ShieldActive = false
+
+	s.quasarStore.Set(anchorEntity, *quasar)
+
+	// Transition to zapping
+	s.startZapping(quasar, anchorEntity)
 }
 
 // updateKineticMovement handles continuous kinetic quasar movement toward cursor

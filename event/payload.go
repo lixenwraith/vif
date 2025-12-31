@@ -1,4 +1,5 @@
 package event
+
 // @lixen: #dev{feature[drain(render,system)],feature[quasar(render,system)]}
 
 import (
@@ -268,4 +269,15 @@ type LightningSpawnPayload struct {
 type LightningUpdatePayload struct {
 	Owner            core.Entity
 	TargetX, TargetY int
+}
+
+// QuasarChargeStartPayload contains parameters for quasar charge countdown
+type QuasarChargeStartPayload struct {
+	AnchorEntity core.Entity
+	Duration     time.Duration
+}
+
+// QuasarChargeCancelPayload identifies which charge timer to destroy
+type QuasarChargeCancelPayload struct {
+	AnchorEntity core.Entity
 }

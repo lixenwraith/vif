@@ -25,4 +25,9 @@ type QuasarComponent struct {
 
 	IsOnCursor bool // True if any member overlaps cursor position
 	IsZapping  bool // True if zapping cursor outside range
+
+	// Charge phase state (delay before zapping)
+	IsCharging      bool
+	ChargeRemaining time.Duration
+	ShieldActive    bool // Cleaner immunity during charge
 }
