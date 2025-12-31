@@ -1,5 +1,6 @@
 package constant
-// @lixen: #dev{feat[drain(render,system)]}
+
+// @lixen: #dev{feature[drain(render,system)]}
 
 import "time"
 
@@ -23,6 +24,7 @@ const (
 	// DrainChar is the character used to render the drain entity (╬ - Unicode U+256C)
 	DrainChar = '╬'
 
+	// DEPRECATED: REMOVE AFTER MIGRATION
 	// DrainMoveInterval is the duration between drain movement updates
 	DrainMoveInterval = 1000 * time.Millisecond
 
@@ -31,6 +33,35 @@ const (
 
 	// DrainEnergyDrainAmount is the amount of energy drained per tick
 	DrainEnergyDrainAmount = 100
+
+	// DrainBaseSpeed is the normal homing velocity in cells/sec (Q16.16 via vmath.FromFloat)
+	// Equivalent to previous 1 cell per DrainMoveInterval
+	DrainBaseSpeedFloat = 1.0
+
+	// DrainHomingAccel is acceleration toward cursor in cells/sec² (Q16.16)
+	// Higher values = snappier homing, lower = more floaty
+	DrainHomingAccelFloat = 3.0
+
+	// DrainDrag is deceleration rate when speed exceeds DrainBaseSpeed (1/sec)
+	// Applied proportionally to excess speed for smooth convergence
+	DrainDragFloat = 2.0
+
+	// DrainDeflectImpulse is velocity magnitude added on cleaner collision (cells/sec)
+	// Determines how far drain travels before homing pulls it back
+	DrainDeflectImpulseFloat = 8.0
+
+	// DrainDeflectAngleVar is half-angle of random deflection cone (radians)
+	// ±0.35 rad ≈ ±20° spread for visual variety
+	DrainDeflectAngleVarFloat = 0.35
+
+	// DrainDeflectImmunity is the duration of immunity from homing/drag after cleaner collision
+	DrainDeflectImmunity = 350 * time.Millisecond
+
+	// DrainDeflectImpulseMinFloat is minimum deflection velocity (cells/sec)
+	DrainDeflectImpulseMinFloat = 12.0
+
+	// DrainDeflectImpulseMaxFloat is maximum deflection velocity (cells/sec)
+	DrainDeflectImpulseMaxFloat = 35.0
 )
 
 // --- Quasar Entity ---

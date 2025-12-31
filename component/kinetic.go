@@ -1,4 +1,5 @@
 package component
+// @lixen: #dev{feature[drain(render,system)]}
 
 import (
 	"github.com/lixenwraith/vi-fighter/vmath"

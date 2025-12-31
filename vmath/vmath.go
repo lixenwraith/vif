@@ -1,5 +1,5 @@
 package vmath
-// @lixen: #dev{feat[drain(render,system)]}
+// @lixen: #dev{feature[drain(render,system)]}
 
 import (
 	"math"

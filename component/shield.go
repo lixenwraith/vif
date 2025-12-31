@@ -1,5 +1,4 @@
 package component
-// @lixen: #dev{feat[drain(render,system)]}
 
 import (
 	"time"

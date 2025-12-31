@@ -1,5 +1,4 @@
 package system
-// @lixen: #dev{feat[drain(render,system)]}
 
 import (
 	"sync/atomic"

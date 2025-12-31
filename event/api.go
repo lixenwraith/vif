@@ -1,5 +1,5 @@
 package event
-// @lixen: #dev{feat[drain(render,system)]}
+// @lixen: #dev{feature[drain(render,system)]}
 
 import (
 	"github.com/lixenwraith/vi-fighter/core"

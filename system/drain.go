@@ -1,8 +1,8 @@
 package system
-// @lixen: #dev{feat[drain(render,system)]}
+
+// @lixen: #dev{feature[drain(render,system)]}
 
 import (
-	"cmp"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -526,11 +526,18 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	// Increment and assign spawnLightning order for LIFO tracking
 	s.nextSpawnOrder++
 
+	// Initialize KineticState with spawn position, zero velocity
 	drain := component.DrainComponent{
-		LastMoveTime:  now,
+		KineticState: component.KineticState{
+			PreciseX: vmath.FromInt(spawnX),
+			PreciseY: vmath.FromInt(spawnY),
+			// VelX, VelY, AccelX, AccelY zero-initialized
+		},
 		LastDrainTime: now,
 		IsOnCursor:    spawnX == cursorPos.X && spawnY == cursorPos.Y,
 		SpawnOrder:    s.nextSpawnOrder,
+		LastIntX:      spawnX,
+		LastIntY:      spawnY,
 	}
 
 	// Handle collisions at spawnLightning position
@@ -708,16 +715,32 @@ func (s *DrainSystem) handleEntityCollisions() {
 	}
 }
 
-// updateDrainMovement handles purely clock-based drain movement toward cursor
+// updateDrainMovement handles continuous kinetic drain movement toward cursor
 func (s *DrainSystem) updateDrainMovement() {
 	config := s.res.Config
 	cursorEntity := s.res.Cursor.Entity
 	now := s.res.Time.GameTime
 
-	// Optimization buffer reusable for this scope
+	cursorPos, ok := s.world.Positions.Get(cursorEntity)
+	if !ok {
+		return
+	}
+
+	dtFixed := vmath.FromFloat(s.res.Time.DeltaTime.Seconds())
+	// Cap delta time to prevent tunneling on lag spikes
+	dtCap := vmath.FromFloat(0.1)
+	if dtFixed > dtCap {
+		dtFixed = dtCap
+	}
+
+	gameWidth := config.GameWidth
+	gameHeight := config.GameHeight
+
+	cursorXFixed := vmath.FromInt(cursorPos.X)
+	cursorYFixed := vmath.FromInt(cursorPos.Y)
+
 	var collisionBuf [constant.MaxEntitiesPerCell]core.Entity
 
-	// Get and iterate on all drains
 	drainEntities := s.drainStore.All()
 	for _, drainEntity := range drainEntities {
 		drain, ok := s.drainStore.Get(drainEntity)
@@ -725,71 +748,102 @@ func (s *DrainSystem) updateDrainMovement() {
 			continue
 		}
 
-		// Purely clock-based movement: only move when interval has elapsed
-		timeSinceLastMove := now.Sub(drain.LastMoveTime)
-		if timeSinceLastMove < constant.DrainMoveInterval {
-			continue
+		// Check deflection immunity
+		inDeflection := now.Before(drain.DeflectUntil)
+
+		if !inDeflection {
+			// Normal physics: homing + drag
+
+			// Homing direction toward cursor
+			dx := cursorXFixed - drain.PreciseX
+			dy := cursorYFixed - drain.PreciseY
+			dirX, dirY := vmath.Normalize2D(dx, dy)
+
+			currentSpeed := vmath.Magnitude(drain.VelX, drain.VelY)
+
+			// Scaled homing: reduce influence at high speeds for curved comeback
+			homingAccel := constant.DrainHomingAccel
+			if currentSpeed > constant.DrainBaseSpeed && currentSpeed > 0 {
+				// Scale by (baseSpeed / currentSpeed) for gradual curve
+				homingAccel = vmath.Div(vmath.Mul(constant.DrainHomingAccel, constant.DrainBaseSpeed), currentSpeed)
+			}
+
+			drain.VelX += vmath.Mul(vmath.Mul(dirX, homingAccel), dtFixed)
+			drain.VelY += vmath.Mul(vmath.Mul(dirY, homingAccel), dtFixed)
+
+			// Apply drag if overspeed
+			if currentSpeed > constant.DrainBaseSpeed && currentSpeed > 0 {
+				excess := currentSpeed - constant.DrainBaseSpeed
+				dragScale := vmath.Div(excess, currentSpeed)
+				dragAmount := vmath.Mul(vmath.Mul(constant.DrainDrag, dtFixed), dragScale)
+
+				drain.VelX -= vmath.Mul(drain.VelX, dragAmount)
+				drain.VelY -= vmath.Mul(drain.VelY, dragAmount)
+			}
 		}
+		// During deflection immunity: pure ballistic (no homing, no drag)
 
-		cursorPos, ok := s.world.Positions.Get(cursorEntity)
-		if !ok {
-			continue
-		}
+		// Store previous position for traversal
+		oldPreciseX, oldPreciseY := drain.PreciseX, drain.PreciseY
 
-		drainPos, ok := s.world.Positions.Get(drainEntity)
-		if !ok {
-			continue
-		}
+		// Integrate position
+		newX, newY := drain.Integrate(dtFixed)
 
-		// Calculate movement direction using Manhattan distance (8-directional)
-		dx := cmp.Compare(cursorPos.X, drainPos.X)
-		dy := cmp.Compare(cursorPos.Y, drainPos.Y)
-
-		// Calculate new position
-		newX := drainPos.X + dx
-		newY := drainPos.Y + dy
-
-		// Boundary checks
+		// Boundary handling: reflect velocity on edge contact (pool table physics)
 		if newX < 0 {
 			newX = 0
-		}
-		if newX >= config.GameWidth {
-			newX = config.GameWidth - 1
+			drain.PreciseX = 0
+			drain.VelX, drain.VelY = vmath.ReflectAxisX(drain.VelX, drain.VelY)
+		} else if newX >= gameWidth {
+			newX = gameWidth - 1
+			drain.PreciseX = vmath.FromInt(gameWidth - 1)
+			drain.VelX, drain.VelY = vmath.ReflectAxisX(drain.VelX, drain.VelY)
 		}
 		if newY < 0 {
 			newY = 0
-		}
-		if newY >= config.GameHeight {
-			newY = config.GameHeight - 1
+			drain.PreciseY = 0
+			drain.VelX, drain.VelY = vmath.ReflectAxisY(drain.VelX, drain.VelY)
+		} else if newY >= gameHeight {
+			newY = gameHeight - 1
+			drain.PreciseY = vmath.FromInt(gameHeight - 1)
+			drain.VelX, drain.VelY = vmath.ReflectAxisY(drain.VelX, drain.VelY)
 		}
 
-		// Use Zero-Alloc check
-		count := s.world.Positions.GetAllAtInto(newX, newY, collisionBuf[:])
-		collidingEntities := collisionBuf[:count]
+		// Swept collision detection via Traverse
+		vmath.Traverse(oldPreciseX, oldPreciseY, drain.PreciseX, drain.PreciseY, func(x, y int) bool {
+			if x < 0 || x >= gameWidth || y < 0 || y >= gameHeight {
+				return true
+			}
+			// Skip previous cell (already processed)
+			if x == drain.LastIntX && y == drain.LastIntY {
+				return true
+			}
 
-		// Process collisions
-		for _, collidingEntity := range collidingEntities {
-			if collidingEntity != 0 && collidingEntity != drainEntity && collidingEntity != cursorEntity {
-				// Skip other drains - they will be handled by handleDrainDrainCollisions
-				if _, isDrain := s.drainStore.Get(collidingEntity); isDrain {
+			count := s.world.Positions.GetAllAtInto(x, y, collisionBuf[:])
+			for i := 0; i < count; i++ {
+				target := collisionBuf[i]
+				if target == 0 || target == drainEntity || target == cursorEntity {
 					continue
 				}
-				s.handleCollisionAtPosition(collidingEntity)
+				// Skip other drains - handled by handleDrainDrainCollisions
+				if s.drainStore.Has(target) {
+					continue
+				}
+				s.handleCollisionAtPosition(target)
 			}
+			return true
+		})
+
+		// Grid sync on cell change
+		if newX != drain.LastIntX || newY != drain.LastIntY {
+			drain.LastIntX = newX
+			drain.LastIntY = newY
+			s.world.Positions.Set(drainEntity, component.PositionComponent{X: newX, Y: newY})
 		}
 
-		// Movement succeeded - update components
-		drainPos.X = newX
-		drainPos.Y = newY
+		// Update cursor overlap state
+		drain.IsOnCursor = newX == cursorPos.X && newY == cursorPos.Y
 
-		// Recalculate IsOnCursor after position change
-		drain.IsOnCursor = drainPos.X == cursorPos.X && drainPos.Y == cursorPos.Y
-
-		// Update position
-		s.world.Positions.Set(drainEntity, drainPos)
-
-		// Save updated drain component
-		drain.LastMoveTime = now
 		s.drainStore.Set(drainEntity, drain)
 	}
 }

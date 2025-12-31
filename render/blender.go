@@ -1,5 +1,5 @@
 package render
-// @lixen: #dev{feat[drain(render,system)]}
+// @lixen: #dev{feature[drain(render,system)]}
 
 // BlendMode defines compositing operations using a bitmask (Flags | Op)
 type BlendMode uint8

@@ -1,5 +1,6 @@
 package component
-// @lixen: #dev{feat[drain(render,system)]}
+
+// @lixen: #dev{feature[drain(render,system)]}
 
 import "time"
 
@@ -10,9 +11,12 @@ import "time"
 // - Cursor collision without active shield (-10 Heat) and colliding drain despawns
 // - Drain-drain collision (all involved despawn)
 type DrainComponent struct {
-	LastMoveTime  time.Time // Last time the drain moved (DrainMoveInterval)
+	KineticState            // PreciseX/Y, VelX/Y, AccelX/Y (Q16.16)
 	LastDrainTime time.Time // Last time energy was drained (DrainEnergyDrainInterval)
 	// TODO: legacy, before cursor store, check to remove
-	IsOnCursor bool  // Cached state for efficient drain checks
-	SpawnOrder int64 // Monotonic counter for LIFO despawn ordering (higher = newer)
+	IsOnCursor   bool      // Cached state for efficient drain checks
+	SpawnOrder   int64     // Monotonic counter for LIFO despawn ordering (higher = newer)
+	LastIntX     int       // Cell-entry detection
+	LastIntY     int       // Cell-entry detection
+	DeflectUntil time.Time // Immunity from homing/drag until this time
 }

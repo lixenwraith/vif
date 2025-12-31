@@ -1,5 +1,6 @@
 package system
-// @lixen: #dev{feat[drain(render,system)]}
+
+// @lixen: #dev{feature[drain(render,system)]}
 
 import (
 	"sync"
@@ -23,9 +24,12 @@ type CleanerSystem struct {
 	protStore    *engine.Store[component.ProtectionComponent]
 	glyphStore   *engine.Store[component.GlyphComponent]
 	energyStore  *engine.Store[component.EnergyComponent]
+	drainStore   *engine.Store[component.DrainComponent]
 
 	spawned           map[int64]bool // Track which frames already spawned cleaners
 	hasSpawnedSession bool           // Track if we spawned cleaners this session
+
+	rng *vmath.FastRand
 
 	statActive  *atomic.Int64
 	statSpawned *atomic.Int64
@@ -44,6 +48,7 @@ func NewCleanerSystem(world *engine.World) engine.System {
 		protStore:    engine.GetStore[component.ProtectionComponent](world),
 		glyphStore:   engine.GetStore[component.GlyphComponent](world),
 		energyStore:  engine.GetStore[component.EnergyComponent](world),
+		drainStore:   engine.GetStore[component.DrainComponent](world),
 
 		spawned: make(map[int64]bool),
 
@@ -65,6 +70,7 @@ func (s *CleanerSystem) Init() {
 func (s *CleanerSystem) initLocked() {
 	clear(s.spawned)
 	s.hasSpawnedSession = false
+	s.rng = vmath.NewFastRand(uint32(s.res.Time.RealTime.UnixNano()))
 	s.enabled = true
 }
 
@@ -344,6 +350,22 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 		return
 	}
 
+	// Get cleaner velocity for drain deflection
+	cleaner, ok := s.cleanerStore.Get(selfEntity)
+	if !ok {
+		return
+	}
+
+	// Deflect drains (energy-independent, cleaner passes through)
+	for _, e := range targetEntities {
+		if e == 0 || e == selfEntity {
+			continue
+		}
+		if s.drainStore.Has(e) {
+			s.deflectDrain(e, cleaner.VelX, cleaner.VelY)
+		}
+	}
+
 	// Determine mode based on energy polarity
 	cursorEntity := s.res.Cursor.Entity
 	negativeEnergy := false
@@ -356,6 +378,39 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 	} else {
 		s.processPositiveEnergy(targetEntities, selfEntity)
 	}
+}
+
+// deflectDrain applies deflection impulse to a drain entity
+// Physics-based impulse - additive to drain velocity, direction from cleaner
+func (s *CleanerSystem) deflectDrain(drainEntity core.Entity, cleanerVelX, cleanerVelY int32) {
+	drain, ok := s.drainStore.Get(drainEntity)
+	if !ok {
+		return
+	}
+
+	// Calculate collision impulse from cleaner velocity
+	impulseX, impulseY := vmath.ApplyCollisionImpulse(
+		cleanerVelX, cleanerVelY,
+		vmath.MassRatioEqual,
+		constant.DrainDeflectAngleVar,
+		constant.DrainDeflectImpulseMin,
+		constant.DrainDeflectImpulseMax,
+		s.rng,
+	)
+
+	// Zero impulse fallback (cleaner stationary - shouldn't happen)
+	if impulseX == 0 && impulseY == 0 {
+		return
+	}
+
+	// Add impulse to current velocity (physics-based momentum transfer)
+	drain.VelX += impulseX
+	drain.VelY += impulseY
+
+	// Set immunity window
+	drain.DeflectUntil = s.res.Time.GameTime.Add(constant.DrainDeflectImmunity)
+
+	s.drainStore.Set(drainEntity, drain)
 }
 
 // processPositiveEnergy handles Red destruction with Blossom spawnLightning

@@ -1,5 +1,5 @@
 package event
-// @lixen: #dev{feat[drain(render,system)]}
+// @lixen: #dev{feature[drain(render,system)]}
 
 // EventType represents the type of game event
 type EventType int

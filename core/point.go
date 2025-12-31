@@ -1,5 +1,5 @@
 package core
-// @lixen: #dev{feat[drain(render,system)]}
+// @lixen: #dev{feature[drain(render,system)]}
 
 // Point represents a 2D coordinate
 type Point struct {
