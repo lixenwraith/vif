@@ -1,5 +1,5 @@
 package engine
-// @lixen: #dev{feature[drain(render,system)]}
+// @lixen: #dev{feature[drain(render,system)],feature[quasar(render,system)]}
 
 // Entity is defined in core package to avoid cyclic dependency
 

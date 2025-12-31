@@ -1,5 +1,5 @@
 package render
-// @lixen: #dev{feature[drain(render,system)]}
+// @lixen: #dev{feature[drain(render,system)],feature[quasar(render,system)]}
 
 // RenderPriority determines render order. Lower values render first
 type RenderPriority int

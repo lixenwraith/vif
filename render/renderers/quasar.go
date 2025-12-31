@@ -1,5 +1,6 @@
 // FILE: render/renderers/quasar.go
 package renderers
+// @lixen: #dev{feature[quasar(render,system)]}
 
 import (
 	"github.com/lixenwraith/vi-fighter/component"

@@ -1,5 +1,5 @@
 package engine
-// @lixen: #dev{feature[drain(render,system)]}
+// @lixen: #dev{feature[drain(render,system)],feature[quasar(render,system)]}
 
 import (
 	"github.com/lixenwraith/vi-fighter/constant"

@@ -1,5 +1,11 @@
 package component
 
+import (
+	"time"
+)
+
+// @lixen: #dev{feature[quasar(render,system)]}
+
 // QuasarChars defines the 3×5 visual representation
 var QuasarChars = [3][5]rune{
 	{'╔', '═', '╦', '═', '╗'},
@@ -10,13 +16,13 @@ var QuasarChars = [3][5]rune{
 // QuasarComponent holds quasar-specific runtime state
 // Composite structure managed via CompositeHeaderComponent
 type QuasarComponent struct {
-	TicksSinceLastMove  int
-	TicksSinceLastSpeed int
-	IsOnCursor          bool // True if any member overlaps cursor position
+	KineticState // PreciseX/Y, VelX/Y, AccelX/Y (Q16.16)
 
-	// Speed scaling (Q16.16, starts at vmath.Scale = 1.0)
-	SpeedMultiplier int32
+	DeflectUntil        time.Time // Immunity from homing/drag after cleaner hit
+	LastSpeedIncreaseAt time.Time // For periodic speed scaling
 
-	// Zap state
-	IsZapping bool
+	SpeedMultiplier int32 // Q16.16, current speed scale factor (starts at Scale)
+
+	IsOnCursor bool // True if any member overlaps cursor position
+	IsZapping  bool // True if zapping cursor outside range
 }

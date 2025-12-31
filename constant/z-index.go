@@ -1,5 +1,5 @@
 package constant
-// @lixen: #dev{feature[drain(render,system)]}
+// @lixen: #dev{feature[drain(render,system)],feature[quasar(render,system)]}
 
 // Z-Index constants determine render priority and spatial query ordering
 // Higher values render on top / take precedence in queries

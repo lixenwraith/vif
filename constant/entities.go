@@ -1,6 +1,6 @@
 package constant
 
-// @lixen: #dev{feature[drain(render,system)]}
+// @lixen: #dev{feature[drain(render,system)],feature[quasar(render,system)]}
 
 import "time"
 
@@ -89,6 +89,25 @@ const (
 	// QuasarZapDuration is the visual duration for zap lightning effect
 	// Set long since it's continuously refreshed while zapping
 	QuasarZapDuration = 500 * time.Millisecond
+
+	// QuasarDeflectImmunity is duration of immunity from homing after cleaner hit
+	QuasarDeflectImmunity = 250 * time.Millisecond
+
+	// QuasarDeflectImpulseMinFloat is minimum deflection velocity (cells/sec)
+	// Lower than drain due to mass ratio reduction
+	QuasarDeflectImpulseMinFloat = 15.0
+
+	// QuasarDeflectImpulseMaxFloat is maximum deflection velocity (cells/sec)
+	QuasarDeflectImpulseMaxFloat = 40.0
+
+	// QuasarHomingAccelFloat is acceleration toward cursor (cells/sec²)
+	QuasarHomingAccelFloat = 4.0
+
+	// QuasarBaseSpeedFloat is normal homing velocity (cells/sec)
+	QuasarBaseSpeedFloat = 2.0
+
+	// QuasarDragFloat is deceleration when overspeed (1/sec)
+	QuasarDragFloat = 1.5
 )
 
 // --- Decay / Blossom Entities ---

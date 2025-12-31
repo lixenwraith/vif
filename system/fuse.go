@@ -1,5 +1,7 @@
 package system
 
+// @lixen: #dev{feature[quasar(render,system)]}
+
 import (
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
@@ -330,9 +332,12 @@ func (s *FuseSystem) createQuasarComposite(anchorX, anchorY int) core.Entity {
 
 	// Set QuasarComponent for runtime state
 	s.quasarStore.Set(anchorEntity, component.QuasarComponent{
-		TicksSinceLastMove:  0,
-		TicksSinceLastSpeed: 0,
-		IsOnCursor:          false,
+		KineticState: component.KineticState{
+			PreciseX: vmath.FromInt(anchorX),
+			PreciseY: vmath.FromInt(anchorY),
+		},
+		SpeedMultiplier: vmath.Scale,
+		IsOnCursor:      false,
 	})
 
 	// Build member entities

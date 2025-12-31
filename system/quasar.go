@@ -1,9 +1,11 @@
 package system
 
+// @lixen: #dev{feature[quasar(render,system)]}
+
 import (
-	"cmp"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
@@ -117,11 +119,26 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 		s.active = true
 		s.anchorEntity = payload.AnchorEntity
 
-		// Initialize speed multiplier
+		// Initialize kinetic state
+		cursorEntity := s.res.Cursor.Entity
+		now := s.res.Time.GameTime
+
 		if quasar, ok := s.quasarStore.Get(s.anchorEntity); ok {
-			quasar.SpeedMultiplier = vmath.Scale // 1.0 in Q16.16
-			quasar.TicksSinceLastMove = 0
-			quasar.TicksSinceLastSpeed = 0
+			anchorPos, _ := s.world.Positions.Get(s.anchorEntity)
+			cursorPos, _ := s.world.Positions.Get(cursorEntity)
+
+			quasar.PreciseX = vmath.FromInt(anchorPos.X)
+			quasar.PreciseY = vmath.FromInt(anchorPos.Y)
+			quasar.SpeedMultiplier = vmath.Scale
+			quasar.LastSpeedIncreaseAt = now
+
+			// Initial velocity toward cursor
+			dx := vmath.FromInt(cursorPos.X - anchorPos.X)
+			dy := vmath.FromInt(cursorPos.Y - anchorPos.Y)
+			dirX, dirY := vmath.Normalize2D(dx, dy)
+			quasar.VelX = vmath.Mul(dirX, constant.QuasarBaseSpeed)
+			quasar.VelY = vmath.Mul(dirY, constant.QuasarBaseSpeed)
+
 			s.quasarStore.Set(s.anchorEntity, quasar)
 		}
 
@@ -198,26 +215,8 @@ func (s *QuasarSystem) Update() {
 			s.stopZapping(&quasar, anchorEntity)
 		}
 
-		quasar.TicksSinceLastMove++
-		quasar.TicksSinceLastSpeed++
-
-		// Speed increase every 20 ticks (~1 second at 50ms tick)
-		if quasar.TicksSinceLastSpeed >= constant.QuasarSpeedIncreaseTicks {
-			quasar.SpeedMultiplier = vmath.Mul(quasar.SpeedMultiplier, vmath.FromFloat(1.1))
-			quasar.TicksSinceLastSpeed = 0
-		}
-
-		// TODO: revisit the movement timing
-		// Movement
-		baseTicks := int32(constant.QuasarMoveInterval / constant.GameUpdateInterval)
-		moveTicks := baseTicks * vmath.Scale / quasar.SpeedMultiplier
-		if moveTicks < 1 {
-			moveTicks = 1
-		}
-		if quasar.TicksSinceLastMove >= int(moveTicks) {
-			s.updateMovement(anchorEntity)
-			quasar.TicksSinceLastMove = 0
-		}
+		// Kinetic movement
+		s.updateKineticMovement(anchorEntity, &quasar)
 
 		s.quasarStore.Set(anchorEntity, quasar)
 	} else {
@@ -234,6 +233,107 @@ func (s *QuasarSystem) Update() {
 
 	// Shield and cursor interaction
 	s.handleInteractions(anchorEntity, &header, &quasar)
+}
+
+// updateKineticMovement handles continuous kinetic quasar movement toward cursor
+func (s *QuasarSystem) updateKineticMovement(anchorEntity core.Entity, quasar *component.QuasarComponent) {
+	config := s.res.Config
+	cursorEntity := s.res.Cursor.Entity
+	now := s.res.Time.GameTime
+
+	cursorPos, ok := s.world.Positions.Get(cursorEntity)
+	if !ok {
+		return
+	}
+
+	anchorPos, ok := s.world.Positions.Get(anchorEntity)
+	if !ok {
+		return
+	}
+
+	dtFixed := vmath.FromFloat(s.res.Time.DeltaTime.Seconds())
+	// Cap delta to prevent tunneling
+	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
+		dtFixed = dtCap
+	}
+
+	// Periodic speed scaling
+	speedIncreaseInterval := time.Duration(constant.QuasarSpeedIncreaseTicks) * constant.GameUpdateInterval
+	if now.Sub(quasar.LastSpeedIncreaseAt) >= speedIncreaseInterval {
+		quasar.SpeedMultiplier = vmath.Mul(quasar.SpeedMultiplier, vmath.FromFloat(1.0+constant.QuasarSpeedIncreasePercent))
+		quasar.LastSpeedIncreaseAt = now
+	}
+
+	// Effective base speed scaled by multiplier
+	effectiveBaseSpeed := vmath.Mul(constant.QuasarBaseSpeed, quasar.SpeedMultiplier)
+
+	inDeflection := now.Before(quasar.DeflectUntil)
+
+	if !inDeflection {
+		// Homing toward cursor
+		cursorXFixed := vmath.FromInt(cursorPos.X)
+		cursorYFixed := vmath.FromInt(cursorPos.Y)
+		dx := cursorXFixed - quasar.PreciseX
+		dy := cursorYFixed - quasar.PreciseY
+		dirX, dirY := vmath.Normalize2D(dx, dy)
+
+		currentSpeed := vmath.Magnitude(quasar.VelX, quasar.VelY)
+
+		// Scale homing by inverse speed when overspeed for curved comeback
+		homingAccel := constant.QuasarHomingAccel
+		if currentSpeed > effectiveBaseSpeed && currentSpeed > 0 {
+			homingAccel = vmath.Div(vmath.Mul(constant.QuasarHomingAccel, effectiveBaseSpeed), currentSpeed)
+		}
+
+		quasar.VelX += vmath.Mul(vmath.Mul(dirX, homingAccel), dtFixed)
+		quasar.VelY += vmath.Mul(vmath.Mul(dirY, homingAccel), dtFixed)
+
+		// Drag if overspeed
+		if currentSpeed > effectiveBaseSpeed && currentSpeed > 0 {
+			excess := currentSpeed - effectiveBaseSpeed
+			dragScale := vmath.Div(excess, currentSpeed)
+			dragAmount := vmath.Mul(vmath.Mul(constant.QuasarDrag, dtFixed), dragScale)
+
+			quasar.VelX -= vmath.Mul(quasar.VelX, dragAmount)
+			quasar.VelY -= vmath.Mul(quasar.VelY, dragAmount)
+		}
+	}
+	// During deflection: pure ballistic
+
+	// Integrate position
+	newX, newY := quasar.Integrate(dtFixed)
+
+	// Boundary reflection with footprint constraints
+	minAnchorX := constant.QuasarAnchorOffsetX
+	maxAnchorX := config.GameWidth - (constant.QuasarWidth - constant.QuasarAnchorOffsetX)
+	minAnchorY := constant.QuasarAnchorOffsetY
+	maxAnchorY := config.GameHeight - (constant.QuasarHeight - constant.QuasarAnchorOffsetY)
+
+	if newX < minAnchorX {
+		newX = minAnchorX
+		quasar.PreciseX = vmath.FromInt(minAnchorX)
+		quasar.VelX, quasar.VelY = vmath.ReflectAxisX(quasar.VelX, quasar.VelY)
+	} else if newX >= maxAnchorX {
+		newX = maxAnchorX - 1
+		quasar.PreciseX = vmath.FromInt(maxAnchorX - 1)
+		quasar.VelX, quasar.VelY = vmath.ReflectAxisX(quasar.VelX, quasar.VelY)
+	}
+
+	if newY < minAnchorY {
+		newY = minAnchorY
+		quasar.PreciseY = vmath.FromInt(minAnchorY)
+		quasar.VelX, quasar.VelY = vmath.ReflectAxisY(quasar.VelX, quasar.VelY)
+	} else if newY >= maxAnchorY {
+		newY = maxAnchorY - 1
+		quasar.PreciseY = vmath.FromInt(maxAnchorY - 1)
+		quasar.VelX, quasar.VelY = vmath.ReflectAxisY(quasar.VelX, quasar.VelY)
+	}
+
+	// Update anchor position if cell changed
+	if newX != anchorPos.X || newY != anchorPos.Y {
+		s.processCollisionsAtNewPositions(anchorEntity, newX, newY)
+		s.world.Positions.Set(anchorEntity, component.PositionComponent{X: newX, Y: newY})
+	}
 }
 
 // Check if cursor is within zap ellipse centered on quasar
@@ -323,77 +423,6 @@ func (s *QuasarSystem) applyZapDamage() {
 	} else {
 		// Direct hit - reset heat (terminates phase)
 		s.world.PushEvent(event.EventHeatSet, &event.HeatSetPayload{Value: 0})
-	}
-}
-
-// updateMovement moves quasar toward cursor
-func (s *QuasarSystem) updateMovement(anchorEntity core.Entity) {
-	config := s.res.Config
-	cursorEntity := s.res.Cursor.Entity
-
-	anchorPos, ok := s.world.Positions.Get(anchorEntity)
-	if !ok {
-		return
-	}
-
-	cursorPos, ok := s.world.Positions.Get(cursorEntity)
-	if !ok {
-		return
-	}
-
-	// Calculate movement direction (Manhattan, 8-directional)
-	dx := cmp.Compare(cursorPos.X, anchorPos.X)
-	dy := cmp.Compare(cursorPos.Y, anchorPos.Y)
-
-	newAnchorX := anchorPos.X + dx
-	newAnchorY := anchorPos.Y + dy
-
-	// Calculate bounds for the entire quasar footprint
-	topLeftX := newAnchorX - constant.QuasarAnchorOffsetX
-	topLeftY := newAnchorY - constant.QuasarAnchorOffsetY
-	bottomRightX := topLeftX + constant.QuasarWidth - 1
-	bottomRightY := topLeftY + constant.QuasarHeight - 1
-
-	// Clamp to keep entire quasar within bounds
-	if topLeftX < 0 {
-		newAnchorX -= topLeftX
-	}
-	if topLeftY < 0 {
-		newAnchorY -= topLeftY
-	}
-	if bottomRightX >= config.GameWidth {
-		newAnchorX -= (bottomRightX - config.GameWidth + 1)
-	}
-	if bottomRightY >= config.GameHeight {
-		newAnchorY -= (bottomRightY - config.GameHeight + 1)
-	}
-
-	// Skip if no movement
-	if newAnchorX == anchorPos.X && newAnchorY == anchorPos.Y {
-		return
-	}
-
-	// Process collisions at new member positions before moving
-	s.processCollisionsAtNewPositions(anchorEntity, newAnchorX, newAnchorY)
-
-	// Update anchor position (CompositeSystem will propagate to members)
-	s.world.Positions.Set(anchorEntity, component.PositionComponent{X: newAnchorX, Y: newAnchorY})
-
-	header, ok := s.headerStore.Get(anchorEntity)
-	if !ok {
-		s.terminateQuasar()
-		return
-	}
-
-	// Sync member positions immediately (don't wait for CompositeSystem)
-	for i := range header.Members {
-		member := &header.Members[i]
-		if member.Entity == 0 {
-			continue
-		}
-		memberX := newAnchorX + int(member.OffsetX)
-		memberY := newAnchorY + int(member.OffsetY)
-		s.world.Positions.Set(member.Entity, component.PositionComponent{X: memberX, Y: memberY})
 	}
 }
 

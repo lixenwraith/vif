@@ -1,12 +1,13 @@
 package constant
 
-// @lixen: #dev{feature[drain(render,system)]}
+// @lixen: #dev{feature[drain(render,system)],feature[quasar(render,system)]}
 
 import "github.com/lixenwraith/vi-fighter/vmath"
 
 // Pre-computed Q16.16 physics constants
 // Initialized once, used by systems to avoid repeated FromFloat calls
 var (
+	// Drain physics (Q16.16)
 	DrainBaseSpeed         = vmath.FromFloat(DrainBaseSpeedFloat)
 	DrainHomingAccel       = vmath.FromFloat(DrainHomingAccelFloat)
 	DrainDrag              = vmath.FromFloat(DrainDragFloat)
@@ -14,4 +15,11 @@ var (
 	DrainDeflectAngleVar   = vmath.FromFloat(DrainDeflectAngleVarFloat)
 	DrainDeflectImpulseMin = vmath.FromFloat(DrainDeflectImpulseMinFloat)
 	DrainDeflectImpulseMax = vmath.FromFloat(DrainDeflectImpulseMaxFloat)
+
+	// Quasar physics (Q16.16)
+	QuasarDeflectImpulseMin = vmath.FromFloat(QuasarDeflectImpulseMinFloat)
+	QuasarDeflectImpulseMax = vmath.FromFloat(QuasarDeflectImpulseMaxFloat)
+	QuasarHomingAccel       = vmath.FromFloat(QuasarHomingAccelFloat)
+	QuasarBaseSpeed         = vmath.FromFloat(QuasarBaseSpeedFloat)
+	QuasarDrag              = vmath.FromFloat(QuasarDragFloat)
 )
