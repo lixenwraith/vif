@@ -2,7 +2,9 @@ package constant
 
 // @lixen: #dev{feature[drain(render,system)],feature[quasar(render,system)]}
 
-import "time"
+import (
+	"time"
+)
 
 // --- Cleaner Entity ---
 const (
@@ -108,6 +110,9 @@ const (
 
 	// QuasarDragFloat is deceleration when overspeed (1/sec)
 	QuasarDragFloat = 1.5
+
+	// QuasarSpeedMultiplierMax caps progressive speed increase (10x = Scale * 10)
+	QuasarSpeedMultiplierMax = 10
 )
 
 // --- Decay / Blossom Entities ---

@@ -22,4 +22,6 @@ var (
 	QuasarHomingAccel       = vmath.FromFloat(QuasarHomingAccelFloat)
 	QuasarBaseSpeed         = vmath.FromFloat(QuasarBaseSpeedFloat)
 	QuasarDrag              = vmath.FromFloat(QuasarDragFloat)
+	// QuasarSpeedMultiplierMaxFixed caps progressive speed increase (10x = Scale * 10)
+	QuasarSpeedMultiplierMaxFixed = vmath.Scale * QuasarSpeedMultiplierMax
 )

@@ -257,48 +257,84 @@ func (s *QuasarSystem) updateKineticMovement(anchorEntity core.Entity, quasar *c
 		dtFixed = dtCap
 	}
 
-	// Periodic speed scaling
+	// Periodic speed scaling with cap
 	speedIncreaseInterval := time.Duration(constant.QuasarSpeedIncreaseTicks) * constant.GameUpdateInterval
 	if now.Sub(quasar.LastSpeedIncreaseAt) >= speedIncreaseInterval {
-		quasar.SpeedMultiplier = vmath.Mul(quasar.SpeedMultiplier, vmath.FromFloat(1.0+constant.QuasarSpeedIncreasePercent))
+		newMultiplier := vmath.Mul(quasar.SpeedMultiplier, vmath.FromFloat(1.0+constant.QuasarSpeedIncreasePercent))
+		if newMultiplier > int32(constant.QuasarSpeedMultiplierMaxFixed) {
+			newMultiplier = int32(constant.QuasarSpeedMultiplierMaxFixed)
+		}
+		quasar.SpeedMultiplier = newMultiplier
 		quasar.LastSpeedIncreaseAt = now
 	}
 
-	// Effective base speed scaled by multiplier
-	effectiveBaseSpeed := vmath.Mul(constant.QuasarBaseSpeed, quasar.SpeedMultiplier)
-
 	inDeflection := now.Before(quasar.DeflectUntil)
 
-	if !inDeflection {
-		// Homing toward cursor
-		cursorXFixed := vmath.FromInt(cursorPos.X)
-		cursorYFixed := vmath.FromInt(cursorPos.Y)
-		dx := cursorXFixed - quasar.PreciseX
-		dy := cursorYFixed - quasar.PreciseY
-		dirX, dirY := vmath.Normalize2D(dx, dy)
+	cursorXFixed := vmath.FromInt(cursorPos.X)
+	cursorYFixed := vmath.FromInt(cursorPos.Y)
+	dx := cursorXFixed - quasar.PreciseX
+	dy := cursorYFixed - quasar.PreciseY
+	dist := vmath.Magnitude(dx, dy)
 
-		currentSpeed := vmath.Magnitude(quasar.VelX, quasar.VelY)
+	// Hard snap - dead zone clamp for zero wobble
+	deadZone := int32(vmath.Scale) / 2 // 0.5 cells
+	if dist < deadZone {
+		quasar.PreciseX = cursorXFixed
+		quasar.PreciseY = cursorYFixed
+		quasar.VelX = 0
+		quasar.VelY = 0
 
-		// Scale homing by inverse speed when overspeed for curved comeback
-		homingAccel := constant.QuasarHomingAccel
-		if currentSpeed > effectiveBaseSpeed && currentSpeed > 0 {
-			homingAccel = vmath.Div(vmath.Mul(constant.QuasarHomingAccel, effectiveBaseSpeed), currentSpeed)
+		// Sync grid position if snap crossed cell boundary
+		if anchorPos.X != cursorPos.X || anchorPos.Y != cursorPos.Y {
+			s.processCollisionsAtNewPositions(anchorEntity, cursorPos.X, cursorPos.Y)
+			s.world.Positions.Set(anchorEntity, component.PositionComponent{X: cursorPos.X, Y: cursorPos.Y})
 		}
 
-		quasar.VelX += vmath.Mul(vmath.Mul(dirX, homingAccel), dtFixed)
-		quasar.VelY += vmath.Mul(vmath.Mul(dirY, homingAccel), dtFixed)
-
-		// Drag if overspeed
-		if currentSpeed > effectiveBaseSpeed && currentSpeed > 0 {
-			excess := currentSpeed - effectiveBaseSpeed
-			dragScale := vmath.Div(excess, currentSpeed)
-			dragAmount := vmath.Mul(vmath.Mul(constant.QuasarDrag, dtFixed), dragScale)
-
-			quasar.VelX -= vmath.Mul(quasar.VelX, dragAmount)
-			quasar.VelY -= vmath.Mul(quasar.VelY, dragAmount)
-		}
+		// Skip all physics, already at target
+		return
 	}
-	// During deflection: pure ballistic
+
+	// Physics configuration
+	effectiveAccel := vmath.Mul(constant.QuasarHomingAccel, quasar.SpeedMultiplier)
+	effectiveDrag := constant.QuasarDrag
+
+	// ARRIVAL STEERING: Dampen motion when close to prevent overshoot
+	arrivalRadius := vmath.FromFloat(3.0)
+	if dist < arrivalRadius {
+		factor := vmath.Div(dist, arrivalRadius) // 0 at target, 1 at edge
+
+		// Ramp down acceleration
+		effectiveAccel = vmath.Mul(effectiveAccel, factor)
+
+		// Ramp up drag: 1x at edge → 4x at center
+		dampingBoost := vmath.FromFloat(4.0) - vmath.Mul(vmath.FromFloat(3.0), factor)
+		effectiveDrag = vmath.Mul(effectiveDrag, dampingBoost)
+	}
+
+	// Apply homing force (always, even during deflection per user spec)
+	dirX, dirY := vmath.Normalize2D(dx, dy)
+	quasar.VelX += vmath.Mul(vmath.Mul(dirX, effectiveAccel), dtFixed)
+	quasar.VelY += vmath.Mul(vmath.Mul(dirY, effectiveAccel), dtFixed)
+
+	// Drag only outside deflection (ballistic deflection)
+	if !inDeflection {
+		dragFactor := vmath.Mul(effectiveDrag, dtFixed)
+		if dragFactor > vmath.Scale {
+			dragFactor = vmath.Scale
+		}
+		quasar.VelX -= vmath.Mul(quasar.VelX, dragFactor)
+		quasar.VelY -= vmath.Mul(quasar.VelY, dragFactor)
+	}
+
+	// Soft settling - backup for edge cases
+	settleDistThreshold := int32(vmath.Scale) / 4  // 0.25 cells
+	settleSpeedThreshold := int32(vmath.Scale) / 2 // 0.5 cells/sec
+	speed := vmath.Magnitude(quasar.VelX, quasar.VelY)
+
+	if dist < settleDistThreshold && speed < settleSpeedThreshold {
+		quasar.VelX = 0
+		quasar.VelY = 0
+	}
 
 	// Integrate position
 	newX, newY := quasar.Integrate(dtFixed)

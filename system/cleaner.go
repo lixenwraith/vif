@@ -25,9 +25,14 @@ type CleanerSystem struct {
 	glyphStore   *engine.Store[component.GlyphComponent]
 	energyStore  *engine.Store[component.EnergyComponent]
 	drainStore   *engine.Store[component.DrainComponent]
+	quasarStore  *engine.Store[component.QuasarComponent]
+	headerStore  *engine.Store[component.CompositeHeaderComponent]
+	memberStore  *engine.Store[component.MemberComponent]
 
 	spawned           map[int64]bool // Track which frames already spawned cleaners
 	hasSpawnedSession bool           // Track if we spawned cleaners this session
+
+	deflectedAnchors map[core.Entity]core.Entity // anchor -> cleaner that deflected it for deduplication of large entity hits
 
 	rng *vmath.FastRand
 
@@ -49,6 +54,9 @@ func NewCleanerSystem(world *engine.World) engine.System {
 		glyphStore:   engine.GetStore[component.GlyphComponent](world),
 		energyStore:  engine.GetStore[component.EnergyComponent](world),
 		drainStore:   engine.GetStore[component.DrainComponent](world),
+		quasarStore:  engine.GetStore[component.QuasarComponent](world),
+		headerStore:  engine.GetStore[component.CompositeHeaderComponent](world),
+		memberStore:  engine.GetStore[component.MemberComponent](world),
 
 		spawned: make(map[int64]bool),
 
@@ -71,6 +79,7 @@ func (s *CleanerSystem) initLocked() {
 	clear(s.spawned)
 	s.hasSpawnedSession = false
 	s.rng = vmath.NewFastRand(uint32(s.res.Time.RealTime.UnixNano()))
+	s.deflectedAnchors = make(map[core.Entity]core.Entity, 4)
 	s.enabled = true
 }
 
@@ -145,6 +154,14 @@ func (s *CleanerSystem) Update() {
 		return
 	}
 
+	// Clean dead cleaners from deflection tracking
+	for anchor, cleaner := range s.deflectedAnchors {
+		if !s.cleanerStore.Has(cleaner) {
+			delete(s.deflectedAnchors, anchor)
+		}
+	}
+
+	// Early return if no cleaners
 	if len(entities) == 0 {
 		return
 	}
@@ -366,6 +383,28 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 		}
 	}
 
+	// Deflect quasar composites
+	for _, e := range targetEntities {
+		if e == 0 || e == selfEntity {
+			continue
+		}
+		member, ok := s.memberStore.Get(e)
+		if !ok {
+			continue
+		}
+		if lastCleaner, exists := s.deflectedAnchors[member.AnchorID]; exists && lastCleaner == selfEntity {
+			continue
+		}
+		header, ok := s.headerStore.Get(member.AnchorID)
+		if !ok {
+			continue
+		}
+		if header.BehaviorID == component.BehaviorQuasar {
+			s.deflectQuasar(member.AnchorID, e, cleaner.VelX, cleaner.VelY)
+			s.deflectedAnchors[member.AnchorID] = selfEntity
+		}
+	}
+
 	// Determine mode based on energy polarity
 	cursorEntity := s.res.Cursor.Entity
 	negativeEnergy := false
@@ -411,6 +450,52 @@ func (s *CleanerSystem) deflectDrain(drainEntity core.Entity, cleanerVelX, clean
 	drain.DeflectUntil = s.res.Time.GameTime.Add(constant.DrainDeflectImmunity)
 
 	s.drainStore.Set(drainEntity, drain)
+}
+
+// deflectQuasar applies offset-aware collision impulse to quasar composite
+func (s *CleanerSystem) deflectQuasar(anchorEntity, hitMember core.Entity, cleanerVelX, cleanerVelY int32) {
+	quasar, ok := s.quasarStore.Get(anchorEntity)
+	if !ok {
+		return
+	}
+
+	// Check deflection immunity
+	if s.res.Time.GameTime.Before(quasar.DeflectUntil) {
+		return
+	}
+
+	anchorPos, ok := s.world.Positions.Get(anchorEntity)
+	if !ok {
+		return
+	}
+	hitPos, ok := s.world.Positions.Get(hitMember)
+	if !ok {
+		return
+	}
+
+	offsetX := hitPos.X - anchorPos.X
+	offsetY := hitPos.Y - anchorPos.Y
+
+	impulseX, impulseY := vmath.ApplyOffsetCollisionImpulse(
+		cleanerVelX, cleanerVelY,
+		offsetX, offsetY,
+		vmath.OffsetInfluenceDefault,
+		vmath.MassRatioCleanerToQuasar,
+		constant.DrainDeflectAngleVar,
+		constant.QuasarDeflectImpulseMin,
+		constant.QuasarDeflectImpulseMax,
+		s.rng,
+	)
+
+	if impulseX == 0 && impulseY == 0 {
+		return
+	}
+
+	quasar.VelX += impulseX
+	quasar.VelY += impulseY
+	quasar.DeflectUntil = s.res.Time.GameTime.Add(constant.QuasarDeflectImmunity)
+
+	s.quasarStore.Set(anchorEntity, quasar)
 }
 
 // processPositiveEnergy handles Red destruction with Blossom spawnLightning
