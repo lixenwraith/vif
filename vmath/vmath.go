@@ -1,5 +1,5 @@
-// @lixen: #dev{feature[lightning(render)],feature[shield(render,system)],feature[spirit(render,system)]}
 package vmath
+// @lixen: #dev{feat[drain(render,system)]}
 
 import (
 	"math"

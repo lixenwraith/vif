@@ -1,4 +1,3 @@
-// @lixen: #dev{feature[lightning(render)]}
 package main
 
 import (

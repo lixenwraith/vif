@@ -1,4 +1,3 @@
-// @lixen: #dev{feature[spirit(render,system)]}
 package component
 
 // QuasarChars defines the 3×5 visual representation

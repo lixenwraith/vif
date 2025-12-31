@@ -19,7 +19,10 @@ func (app *AppState) Render() {
 	root := tui.NewRegion(cells, w, 0, 0, w, h)
 
 	// Render overlays if visible, otherwise main view
-	if app.Editor != nil && app.Editor.Visible {
+	if app.Help != nil && app.Help.Visible {
+		app.renderMain(root)
+		app.renderHelp(root)
+	} else if app.Editor != nil && app.Editor.Visible {
 		app.renderEditor(root)
 	} else if app.Viewer != nil && app.Viewer.Visible {
 		app.renderFileViewer(root)
@@ -231,7 +234,7 @@ func (app *AppState) buildHierarchyNodes(ui *CategoryUIState) []tui.TreeNode {
 
 			node = tui.TreeNode{
 				Key:         key,
-				Label:       "[" + item.Module + "]",
+				Label:       item.Module,
 				Expandable:  true,
 				Expanded:    ui.Expansion.IsExpanded(key),
 				Depth:       2,

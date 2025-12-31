@@ -44,6 +44,7 @@ type AppState struct {
 
 	Viewer *FileViewerState // File viewer overlay state
 	Editor *EditorState     // Editor overlay state
+	Help   *HelpState       // Help overlay state
 }
 
 // DetailPaneState manages UI state for dependency panes (DepBy, DepOn)

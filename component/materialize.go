@@ -1,5 +1,5 @@
-// @lixen: #dev{feature[shield(render,system)],feature[spirit(render,system)]}
 package component
+// @lixen: #dev{feat[drain(render,system)]}
 
 // MaterializeComponent represents a converging beam effect toward a spawn target
 // Single entity manages all 4 cardinal beams via progress-based rendering

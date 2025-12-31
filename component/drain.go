@@ -1,5 +1,5 @@
-// @lixen: #dev{feature[spirit(render,system)]}
 package component
+// @lixen: #dev{feat[drain(render,system)]}
 
 import "time"
 

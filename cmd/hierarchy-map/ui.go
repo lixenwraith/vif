@@ -14,13 +14,19 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 	// Quit is handled in global event loop of main: Ctrl+C, Ctrl+Q to quit
 	app.Message = ""
 
-	// Handle editor events first if visible
+	// Handle help overlay first (for all views)
+	if app.Help != nil && app.Help.Visible {
+		app.handleHelpEvent(ev)
+		return false, false
+	}
+
+	// Handle editor events second if visible
 	if app.Editor != nil && app.Editor.Visible {
 		app.handleEditorEvent(ev)
 		return false, false
 	}
 
-	// Handle viewer events second if visible
+	// Handle viewer events third if visible
 	if app.Viewer != nil && app.Viewer.Visible {
 		app.handleViewerEvent(ev)
 		return false, false
@@ -34,6 +40,9 @@ func (app *AppState) HandleEvent(ev terminal.Event) (quit, output bool) {
 	switch ev.Key {
 	case terminal.KeyRune:
 		switch ev.Rune {
+		case '?':
+			app.ToggleHelp()
+			return false, false
 		case 'e':
 			app.OpenEditor()
 			return false, false

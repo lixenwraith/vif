@@ -1,5 +1,4 @@
 // FILE: render/renderers/quasar.go
-// @lixen: #dev{feature[spirit(render,system)]}
 package renderers
 
 import (

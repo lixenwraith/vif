@@ -1,4 +1,3 @@
-// @lixen: #dev{feature[shield(render,system)],feature[spirit(render,system)]}
 package event
 
 import (

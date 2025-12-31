@@ -256,21 +256,30 @@ func parseFile(path, modPath string) (*FileInfo, error) {
 	}
 
 	lines := strings.Split(string(content), "\n")
+	packageFound := false
+
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 
-		if strings.HasPrefix(trimmed, "package ") {
+		if !packageFound && strings.HasPrefix(trimmed, "package ") {
 			parts := strings.Fields(trimmed)
 			if len(parts) >= 2 {
 				fi.Package = parts[1]
 			}
-			break
+			packageFound = true
+			continue
 		}
 
-		if strings.HasPrefix(trimmed, "//") {
+		// Parse hierarchy lines only after package
+		if packageFound && strings.HasPrefix(trimmed, "//") {
 			if err := parseHierarchyLine(trimmed, fi); err != nil {
 				continue
 			}
+		}
+
+		// Stop at first non-comment, non-blank line after package
+		if packageFound && trimmed != "" && !strings.HasPrefix(trimmed, "//") {
+			break
 		}
 	}
 

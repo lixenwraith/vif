@@ -1,5 +1,5 @@
-// @lixen: #dev{feature[shield(render,system)],feature[spirit(render,system)]}
 package renderers
+// @lixen: #dev{feat[drain(render,system)]}
 
 import (
 	"github.com/lixenwraith/vi-fighter/component"

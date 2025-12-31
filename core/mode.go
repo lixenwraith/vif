@@ -1,4 +1,3 @@
-// @lixen: #dev{feature[shield(render,system)]}
 package core
 
 type GameMode uint8

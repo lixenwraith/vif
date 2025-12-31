@@ -727,6 +727,9 @@ func (app *AppState) handleViewerEvent(ev terminal.Event) {
 
 	case terminal.KeyRune:
 		switch ev.Rune {
+		case '?':
+			app.ToggleHelp()
+			return
 		case 'q':
 			app.CloseFileViewer()
 			return

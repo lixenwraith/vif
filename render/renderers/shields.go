@@ -1,4 +1,3 @@
-// @lixen: #dev{feature[lightning(render)],feature[shield(render,system)],feature[spirit(render,system)]}
 package renderers
 
 import (

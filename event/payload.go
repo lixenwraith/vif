@@ -1,5 +1,5 @@
-// @lixen: #dev{feature[shield(render,system)],feature[spirit(render,system)]}
 package event
+// @lixen: #dev{feat[drain(render,system)]}
 
 import (
 	"sync"

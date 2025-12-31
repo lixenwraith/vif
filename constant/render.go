@@ -1,5 +1,5 @@
-// @lixen: #dev{base(render),feature[lightning(render)],feature[shield(render,system)],feature[spirit(render,system)]}
 package constant
+// @lixen: #dev{feat[drain(render,system)]}
 
 import (
 	"time"

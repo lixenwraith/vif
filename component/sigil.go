@@ -1,5 +1,5 @@
-// @lixen: #dev{feature[shield(render,system)],feature[spirit(render,system)]}
 package component
+// @lixen: #dev{feat[drain(render,system)]}
 
 // SigilComponent provides visual representation for non-typeable moving entities
 // Used by: DrainSystem, BlossomSystem, CleanerSystem, DecaySystem

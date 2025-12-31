@@ -1,5 +1,5 @@
-// @lixen: #dev{feature[shield(render,system)],feature[spirit(render,system)]}
 package component
+// @lixen: #dev{feat[drain(render,system)]}
 
 // ProtectionFlags defines immunity to specific game mechanics
 // Uses bitmask pattern for composable protection

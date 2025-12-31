@@ -217,7 +217,9 @@ func (app *AppState) buildEditorTagTree() {
 		for key := range groupCounts {
 			if strings.HasPrefix(key, cat+".") {
 				group := strings.TrimPrefix(key, cat+".")
-				groupSet[group] = true
+				if group != DirectTagsGroup {
+					groupSet[group] = true
+				}
 			}
 		}
 		groups := make([]string, 0, len(groupSet))
@@ -380,7 +382,7 @@ func (app *AppState) buildEditorTreeNodes() []tui.TreeNode {
 			expandable = true
 			key = "g:" + item.Category + "." + item.Group
 		case TagItemTypeModule:
-			label = "[" + item.Module + "]"
+			label = item.Module
 			expandable = true
 			key = "m:" + item.Category + "." + item.Group + "." + item.Module
 		case TagItemTypeTag:
@@ -469,6 +471,12 @@ func (app *AppState) handleEditorEvent(ev terminal.Event) bool {
 	case terminal.KeyBacktab:
 		e.FocusPane = (e.FocusPane + 2) % 3
 		return true
+
+	case terminal.KeyRune:
+		if ev.Rune == '?' {
+			app.ToggleHelp()
+			return true
+		}
 	}
 
 	switch e.FocusPane {
@@ -1018,8 +1026,8 @@ func (app *AppState) applyTagChangesToFile(path string, additions []TagRef, dele
 	} else if hierarchyLineIdx >= 0 {
 		lines[hierarchyLineIdx] = hierarchyLine
 	} else if packageLineIdx >= 0 {
-		// Insert BEFORE package line
-		lines = slices.Insert(lines, packageLineIdx, hierarchyLine)
+		// Insert AFTER package line
+		lines = slices.Insert(lines, packageLineIdx+1, hierarchyLine)
 	}
 
 	// Write back

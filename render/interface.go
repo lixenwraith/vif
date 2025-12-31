@@ -1,5 +1,5 @@
-// @lixen: #dev{base(render),feature[lightning(render)],feature[shield(render,system)],feature[spirit(render,system)]}
 package render
+// @lixen: #dev{feat[drain(render,system)]}
 
 // SystemRenderer is implemented by systems with visual output
 type SystemRenderer interface {

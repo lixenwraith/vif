@@ -1,4 +1,3 @@
-// @lixen: #dev{feature[lightning(render)]}
 package terminal
 
 // Key represents a parsed input key

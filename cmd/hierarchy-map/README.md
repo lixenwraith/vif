@@ -1,10 +1,10 @@
-# lixen-map
+# hierarchy-map
 
-Terminal TUI for selecting Go codebase subsets as LLM context. Indexes files by `@lixen:` annotations with arbitrary category names, resolves local import dependencies, and performs lightweight AST analysis to visualize coupling.
+Terminal TUI for selecting Go codebase subsets as LLM context. Indexes files by `@lixen:` annotations, resolves local import dependencies, and performs AST analysis to visualize symbol-level coupling.
 
 ## Installation
 ```bash
-go build -o lixen-map .
+go build -o hierarchy-map ./cmd/hierarchy-map
 ```
 
 **Optional:** `ripgrep` (`rg`) for content search.
@@ -12,305 +12,196 @@ go build -o lixen-map .
 ## Usage
 ```bash
 # Run in project root, writes to './catalog.txt'
-./lixen-map
+./hierarchy-map
 
 # Custom output file
-./lixen-map -o context.txt
+./hierarchy-map -o context.txt
 ```
 
-## Lixen Annotations
+Minimum terminal size: 120x24
 
-Declare in Go files before `package` statement:
+## Annotations
+
+Declare after `package` statement:
 ```go
-// @lixen: #focus{sys[term,io],game[drain,collision]},#interact{init[cursor],state[gold]}
 package systems
+// @lixen: #focus(term,io),#interact{sys[cursor(init),state(gold)]}
 ```
 
 ### Syntax
 
-| Format         | Example                            | Description                        |
-|----------------|------------------------------------|------------------------------------|
-| 2-level        | `#category{group(tag1,tag2)}`      | Group with direct tags             |
-| 3-level        | `#category{group[mod(tag1),mod2]}` | Group with modules containing tags |
-| Mixed          | `#cat{grp1(t1),grp2[m(t2)]}`       | Both formats in same category      |
-| Multi-category | `#focus{...},#interact{...}`       | Multiple categories per line       |
-| Always include | `#focus{all(*)}`                   | File included in every output      |
+| Level | Format | Example |
+|-------|--------|---------|
+| 2-level | `#category(tag1,tag2)` | `#focus(term,io)` |
+| 3-level | `#category{group(tag1,tag2)}` | `#focus{sys(term,io)}` |
+| 4-level | `#category{group[module(tag1,tag2)]}` | `#focus{sys[term(vt100,ansi)]}` |
+| Mixed | Combine formats | `#cat{grp(t1),grp2[mod(t2)]}` |
+| Multi-category | Comma-separated | `#focus{...},#interact{...}` |
+| Always include | `all(*)` in any category | `#focus{all(*)}` |
 
-Categories are arbitrary names discovered at index time. Common conventions:
-- `#focus` - Classification tags (what the file IS)
-- `#interact` - Relationship tags (what the file USES/AFFECTS)
-
-Multiple `// @lixen:` lines accumulate. Whitespace ignored.
+Categories are arbitrary names discovered at index time. Multiple `// @lixen:` lines accumulate. Whitespace ignored.
 
 ## Interface Layout
 
 Four-pane split view:
 
-| Pane 1 (Left)   | Pane 2           | Pane 3       | Pane 4 (Right) |
-|-----------------|------------------|--------------|----------------|
-| LIXEN: category | PACKAGES / FILES | DEPENDED BY  | DEPENDS ON     |
-| Category tags   | File tree        | Reverse deps | Forward deps   |
+| HIERARCHY | PACKAGES / FILES | DEPENDED BY | DEPENDS ON |
+|-----------|------------------|-------------|------------|
+| Tag tree by category | Directory/file tree | Reverse deps (who imports this) | Forward deps (what this imports) |
 
-- **LIXEN**: Shows groups/modules/tags for current category.
-- **PACKAGES / FILES**: Directory tree with file selection.
-- **DEPENDED BY**: Files that import the currently selected file/package.
-    - **Smart Coupling**: Distinguishes between files that simply *import* the package vs files that *actively use* symbols defined in the selected file.
-    - **Sorting**: Files with active usage are sorted to the top.
-- **DEPENDS ON**: Local packages/symbols the currently selected file imports.
-    - **Symbol Drill-down**: Expandable to show specific functions/types used.
+### Dependency Pane Features
 
-Minimum terminal size: 120x24
+**DEPENDED BY:**
+- Files importing the selected file's package
+- `★` badge indicates file actively uses symbols from selected file (not just package import)
+- Active-usage files sorted to top
 
-All panes start collapsed. Use `l` or `→` to expand, `L` to expand all.
+**DEPENDS ON:**
+- Local packages the selected file imports
+- Expandable to show specific symbols (functions/types/vars) used
 
 ## Key Bindings
 
-Press `?` in any view to open the full key binding help overlay.
+Press `?` in any view for full help overlay.
 
-### Global Keys
+### Global
 
-| Key         | Action                   |
-|-------------|--------------------------|
-| `Tab`       | Next pane                |
-| `Shift+Tab` | Previous pane            |
-| `[` / `]`   | Previous / Next category |
-| `?`         | Toggle help overlay      |
-| `Ctrl+Q`    | Quit                     |
+| Key | Action |
+|-----|--------|
+| `Tab` / `Shift+Tab` | Next / Previous pane |
+| `?` | Toggle help |
+| `Ctrl+C` / `Ctrl+Q` | Quit |
+| `Ctrl+S` | Write output file |
+| `Ctrl+L` | Load selection from file |
 
-### Navigation (Lixen & Tree Panes)
+### Navigation (All Panes)
 
-| Key                   | Action              |
-|-----------------------|---------------------|
-| `j`/`k`, `↑`/`↓`      | Move cursor         |
-| `h`/`l`, `←`/`→`      | Collapse/expand     |
-| `H`/`L`               | Collapse/expand all |
-| `0`/`$`, `Home`/`End` | Jump start/end      |
-| `PgUp`/`PgDn`         | Page scroll         |
+| Key | Action |
+|-----|--------|
+| `j`/`k`, `↑`/`↓` | Move cursor |
+| `h`/`l`, `←`/`→` | Collapse / Expand |
+| `H` / `L` | Collapse / Expand all |
+| `g` / `G`, `0` / `$` | Jump to start / end |
+| `PgUp` / `PgDn` | Page scroll |
 
 ### Selection
 
-| Key     | Action                    |
-|---------|---------------------------|
-| `Space` | Toggle selection          |
-| `a`     | Select all visible        |
-| `c`     | Clear all selections      |
-| `F`     | Select all filtered files |
+| Key | Action |
+|-----|--------|
+| `Space` | Toggle selection |
+| `s` | Select and advance to next sibling |
+| `a` | Select all visible |
+| `c` | Clear all selections |
+| `F` | Select all filtered files |
 
 ### Filtering
 
-| Key   | Action                           |
-|-------|----------------------------------|
-| `f`   | Toggle filter on cursor item     |
-| `/`   | Content search (ripgrep)         |
-| `m`   | Cycle mode: OR → AND → NOT → XOR |
-| `Esc` | Clear filter                     |
+| Key | Action |
+|-----|--------|
+| `f` | Toggle filter on cursor item |
+| `/` | Content search (uses ripgrep if available) |
+| `m` | Cycle mode: OR → AND → NOT → XOR |
+| `Esc` | Clear filter |
 
-### Filter Modes
+**Filter Modes:**
 
-| Mode | Behavior                                   |
-|------|--------------------------------------------|
-| OR   | Union - adds to existing filter            |
-| AND  | Intersection - narrows existing filter     |
-| NOT  | Subtraction - removes from existing filter |
-| XOR  | Symmetric difference - toggles membership  |
+| Mode | Behavior |
+|------|----------|
+| OR | Union - adds to existing filter |
+| AND | Intersection - narrows filter |
+| NOT | Subtraction - removes from filter |
+| XOR | Symmetric difference - toggles membership |
 
-### Dependency Panes
+### Dependencies
 
-| Key            | Action                           |
-|----------------|----------------------------------|
-| `Enter` or `l` | Navigate to file/package in tree |
-| `L`            | Expand all headers               |
-| `H`            | Collapse all headers             |
+| Key | Action |
+|-----|--------|
+| `d` | Toggle dependency expansion |
+| `+` / `-` | Adjust expansion depth (1-5) |
+| `r` | Reindex codebase |
 
-### Dependencies & Output
+### File Viewer
 
-| Key      | Action                             |
-|----------|------------------------------------|
-| `d`      | Toggle dependency expansion        |
-| `+`/`-`  | Adjust expansion depth (1-5)       |
-| `r`      | Preview output files               |
-| `Ctrl+S` | Write output file                  |
-| `Ctrl+L` | Load selection from file           |
-| `Ctrl+Y` | Copy output to clipboard (wl-copy) |
+Press `Enter` on a file to open viewer.
 
-### Editing
+| Key | Action |
+|-----|--------|
+| `q` / `Esc` | Close viewer |
+| `/` | Search |
+| `n` / `N` | Next / Previous match |
+| `o` | Toggle fold at cursor |
+| `h` / `l` | Collapse / Expand fold |
+| `M` / `R` | Collapse / Expand all folds |
 
-| Key      | Action                                        |
-|----------|-----------------------------------------------|
-| `e`      | Edit tags for file at cursor (tree pane only) |
-| `Ctrl+E` | Batch edit tags for all selected files        |
-| `r`      | Re-index entire codebase                      |
+### Tag Editor
 
-## Batch Tag Editor
+Press `e` with files selected to open editor.
 
-Press `Ctrl+E` with files selected to open the batch tag editor overlay. This allows editing tags across multiple files simultaneously.
+| Key | Action |
+|-----|--------|
+| `Tab` | Cycle panes: Tags → Input → Files |
+| `Space` / `d` | Mark tag for deletion |
+| `Enter` | Add tag from input field |
+| `Ctrl+S` | Save changes |
+| `Esc` | Cancel |
 
-### Layout
-
-```
-╔══════════════════════════════════════════════════════════════════════════╗
-║ BATCH EDIT (12 files)                    Ctrl+S:save  Esc:cancel  i:new  ║
-╠════════════════════════╦═══════════════╦═════════════════════════════════╣
-║ TAG TREE               ║ INFO          ║ FILES                           ║
-║ ────────────────────── ║ ───────────── ║ ─────────────────────────────── ║
-║ ▼ #focus               ║ Selected:     ║ term.go        render.go        ║
-║   ▼ sys                ║ #focus        ║ input.go       buffer.go        ║
-║     [x]    term        ║               ║ drain.go       collision.go     ║
-║     [o]→[x] io         ║ Changes:      ║ state.go       audio.go         ║
-║     [ ]→[x] render     ║ +3 additions  ║                                 ║
-║   ▶ game               ║ 2 files       ║                                 ║
-║ ▶ #interact            ║               ║                                 ║
-╚════════════════════════╩═══════════════╩═════════════════════════════════╝
-```
-
-### Visual Indicators
-
-| Symbol         | Meaning                                   |
-|----------------|-------------------------------------------|
-| `[x]`          | All selected files have this item         |
-| `[o]`          | Some selected files have this item        |
-| `[ ]`          | No selected files have this item          |
-| `→[x]`         | Pending: will be added to all files       |
-| `→[ ]`         | Pending: will be removed from all files   |
-| `→[o]`         | Pending: partial change                   |
-| Red filename   | File had parse error, excluded from edits |
-| Green filename | File matches item at cursor               |
-
-### Key Bindings
-
-| Key                   | Action                         |
-|-----------------------|--------------------------------|
-| `j`/`k`, `↑`/`↓`      | Move cursor                    |
-| `h`/`l`, `←`/`→`      | Collapse/expand                |
-| `H`/`L`               | Collapse/expand all            |
-| `0`/`$`, `Home`/`End` | Jump start/end                 |
-| `PgUp`/`PgDn`         | Page scroll                    |
-| `Space`               | Toggle selection for all files |
-| `i`                   | Add new item at cursor level   |
-| `Ctrl+S`              | Save all changes               |
-| `Esc`                 | Cancel and discard changes     |
-
-### Toggle Behavior
-
-Pressing `Space` on an item cycles through states:
-
-| Current State     | Action | Result                 |
-|-------------------|--------|------------------------|
-| `[ ]` (none have) | Toggle | Add to all files       |
-| `[o]` (some have) | Toggle | Add to remaining files |
-| `[x]` (all have)  | Toggle | Remove from all files  |
-
-Toggling a category/group/module affects all tags within it.
-
-### Adding New Items
-
-Press `i` to add a new item at the same level as the cursor:
-
-- Cursor on category → add new category
-- Cursor on group → add new group in same category
-- Cursor on module → add new module in same group
-- Cursor on tag → add new tag in same module/group
-
-New tags are automatically marked as pending addition for all valid files.
-
-### Write Behavior
-
-`Ctrl+S` writes changes to all files atomically:
-
-1. Computes final tag state for each file
-2. Generates canonical `@lixen:` content (alphabetically sorted)
-3. Writes to each file, replacing existing `@lixen:` lines
-4. Reports success/failure count
-5. Triggers full reindex on success
-
-Files with parse errors are excluded from writes. If any write fails, a partial failure is reported.
-
-### Tag Syntax Reference
-
-The batch editor respects existing tag format conventions:
-
-| Format  | Syntax                           | Example                             |
-|---------|----------------------------------|-------------------------------------|
-| 2-level | `#category{group(tag1,tag2)}`    | `#focus{sys(term,io)}`              |
-| 3-level | `#category{group[module(tag1)]}` | `#focus{sys[term(vt100)]}`          |
-| Mixed   | Both formats in same category    | `#focus{sys(io),game[drain(tick)]}` |
+**Editor Panes:**
+- **SELECTED FILES:** Read-only list of files being edited
+- **TAGS:** Existing tags with deletion toggles; shows coverage `[N/M]` per tag
+- **ADD TAG:** Raw input for new tags (e.g., `#focus{sys(new)}`)
 
 ## Visual Indicators
 
-**Tree Pane (Files):**
+### Tree Pane
 
-| Symbol | Meaning                           |
-|--------|-----------------------------------|
-| `[x]`  | Directly selected                 |
-| `[+]`  | Included via dependency expansion |
-| `[ ]`  | Not selected                      |
+| Symbol | Meaning |
+|--------|---------|
+| `[x]` | Directly selected |
+| `[+]` | Included via dependency expansion |
+| `[ ]` | Not selected |
 
-**Lixen Pane (Tags):**
+### Hierarchy Pane
 
-| Symbol | Meaning                            |
-|--------|------------------------------------|
-| `[x]`  | All files with this item selected  |
-| `[o]`  | Some files with this item selected |
-| `[ ]`  | No files with this item selected   |
+| Symbol | Meaning |
+|--------|---------|
+| `[x]` | All files with this tag selected |
+| `[o]` | Some files with this tag selected |
+| `[ ]` | No files with this tag selected |
 
-**Dependency Panes (Analysis):**
+### Dependency Panes
 
-| Symbol  | Pane        | Meaning                                                      |
-|---------|-------------|--------------------------------------------------------------|
-| `★`     | Depended By | **Active Usage**: File uses symbols defined in selected file |
-| `•`     | Depends On  | **Symbol**: Specific function/type/var used                  |
-| `▼`/`▶` | Headers     | Package or File group (expandable)                           |
-
-## Category Switching
-
-When multiple categories exist in the indexed codebase, use `[` and `]` to cycle between them. The LIXEN pane header shows the current category name.
-
-Category state (cursor position, expanded groups) is preserved per-category. When switching categories, if the current file at tree cursor has tags in the new category, the lixen pane positions to show those tags.
-
-## Tag Editor
-
-Press `e` on a file in the tree pane to edit its `@lixen:` annotations inline:
-
-- Pre-fills current content in canonical format
-- Full cursor navigation (←/→, Home/End, Ctrl+A/E)
-- Line editing (Backspace, Delete, Ctrl+K, Ctrl+U, Ctrl+W)
-- `Enter` to save, `Esc` to cancel
-- Atomic writes (temp file + rename)
-- Auto re-indexes after save
-
-### Tag Syntax in Editor
-```
-#category{group(tag1,tag2),group2[mod(tag)]}
-```
-
-Multiple categories separated by commas:
-```
-#focus{sys(term,io)},#interact{state(audio)}
-```
+| Symbol | Pane | Meaning |
+|--------|------|---------|
+| `★` | Depended By | File uses symbols defined in selected file |
+| `•` | Depends On | Specific symbol (function/type/var) |
 
 ## Output
 
-Files with `all(*)` in any category always included. Output sorted alphabetically.
+Output includes:
+1. All directly selected files
+2. Dependency-expanded files (if enabled)
+3. Files marked with `all(*)` in any category
 
-Use `Ctrl+S` to write to file, `Ctrl+Y` to copy to clipboard (requires `wl-copy`).
+Sorted alphabetically, prefixed with `./`.
 
-## Selection Loading
+### Loading Selections
 
-Use `Ctrl+L` to load selections from the catalog ile (default `catalog.txt`, or path specified via -o`).
+`Ctrl+L` loads from catalog file. Supported patterns:
 
-**Supported patterns:**
+| Pattern | Matches |
+|---------|---------|
+| `./path/to/file.go` | Exact file |
+| `cmd/*` or `cmd/**` | All files recursively under `cmd/` |
+| `*_test.go` | All test files |
+| `pkg/*.go` | Glob match in directory |
 
-| Pattern             | Matches                            |
-|---------------------|------------------------------------|
-| `./path/to/file.go` | Exact file                         |
-| `cmd/*`             | All files recursively under `cmd/` |
-| `*_test.go`         | All test files project-wide        |
-| `pkg/*.go`          | Files matching glob in `pkg/`      |
+Lines starting with `#` are comments.
 
-Lines starting with `#` are treated as comments. Loading clears existing selection before applying.
+## Header Stats
 
-## Dependency Expansion
+The header bar displays:
+- **Deps:** Dependency expansion status and depth limit
+- **Output:** Total file count for output
+- **Size:** Total size (with dependency size if expansion enabled)
 
-When enabled (`d` to toggle), selected files automatically include their transitive local dependencies up to the configured depth (`+`/`-` to adjust, range 1-5).
-
-Dependency-expanded files show `[+]` in the tree pane and are counted separately in the header stats.
+Size displays warning color when exceeding 300KB.

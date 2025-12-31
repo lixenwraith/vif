@@ -1,6 +1,6 @@
 // FILE: vmath/ellipse.go
-// @lixen: #dev{feature[lightning(render)],feature[shield(render,system)],feature[spirit(render,system)]}
 package vmath
+// @lixen: #dev{feat[drain(render,system)]}
 
 // Ellipse utilities for shield, drain, and orbital calculations
 // All operations use Q16.16 fixed-point with precomputed inverse squared radii
