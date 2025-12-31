@@ -151,39 +151,46 @@ func (r *LightningRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 }
 
 // generateFractalPath creates a jagged lightning path using midpoint displacement
-// All calculations use Q16.16 fixed-point, returns points in 2x sub-pixel coordinates
+// Uses sine envelope for oval shape and coherent spine for natural flow
 func (r *LightningRenderer) generateFractalPath(x1, y1, x2, y2 int, rng *vmath.FastRand) []struct{ X, Y int } {
-	// Convert cell coordinates to sub-pixel (2x resolution)
 	sx1, sy1 := x1*2, y1*2
 	sx2, sy2 := x2*2, y2*2
 
 	dx := sx2 - sx1
 	dy := sy2 - sy1
 
-	// Convert to Q16.16
 	dxFixed := vmath.FromInt(dx)
 	dyFixed := vmath.FromInt(dy)
 
-	// Distance using fast approximation (~4% error acceptable for visuals)
 	distFixed := vmath.DistanceApprox(dxFixed, dyFixed)
 	if distFixed < vmath.Scale {
 		return []struct{ X, Y int }{{sx1, sy1}, {sx2, sy2}}
 	}
 
-	// TODO: change this to be dynamic with a small range
-	// Segment count: ~1 per 6 sub-pixels
-	segments := vmath.ToInt(vmath.Div(distFixed, vmath.FromInt(6)))
+	// Segment count: ~1 per 10 sub-pixels
+	segments := vmath.ToInt(vmath.Div(distFixed, vmath.FromInt(10)))
 	if segments < 4 {
 		segments = 4
 	}
+	if segments > 32 {
+		segments = 32 // Cap for very long lines
+	}
 
-	// Normalized perpendicular unit vector: (-dy/dist, dx/dist)
+	// Normalized perpendicular: (-dy/dist, dx/dist)
 	perpXFixed := vmath.Div(-dyFixed, distFixed)
 	perpYFixed := vmath.Div(dxFixed, distFixed)
 
-	// Fixed absolute jitter magnitude: 8 sub-pixels (4 cells)
-	// Gives consistent visual "jaggedness" regardless of line length
-	maxJitterFixed := vmath.FromInt(8)
+	// === Two-octave jitter ===
+	// Octave 1: Coherent spine offset (single random value for whole path)
+	// Creates gentle arc, prevents "straight bundle" appearance
+	spineRand := rng.Next()
+	spineOffset := int32(spineRand>>16) - int32(vmath.Scale>>1)
+	spineOffset <<= 1                  // [-1.0, 1.0) in Q16.16
+	spineMagnitude := vmath.FromInt(4) // Max 4 sub-pixel spine curve
+	spineFixed := vmath.Mul(spineOffset, spineMagnitude)
+
+	// Octave 2: Per-segment detail jitter
+	detailMagnitude := vmath.FromInt(6) // Max 6 sub-pixel detail
 
 	points := make([]struct{ X, Y int }, 0, segments+1)
 	points = append(points, struct{ X, Y int }{sx1, sy1})
@@ -193,22 +200,39 @@ func (r *LightningRenderer) generateFractalPath(x1, y1, x2, y2 int, rng *vmath.F
 	segmentsFixed := vmath.FromInt(segments)
 
 	for i := 1; i < segments; i++ {
-		// Interpolation: t = i / segments
 		tFixed := vmath.Div(vmath.FromInt(i), segmentsFixed)
 
-		// Base point: start + delta * t
+		// Base point on line
 		bxFixed := sx1Fixed + vmath.Mul(dxFixed, tFixed)
 		byFixed := sy1Fixed + vmath.Mul(dyFixed, tFixed)
 
-		// Random in [-1.0, 1.0): map uint32 to signed Q16.16
-		randRaw := rng.Next()
-		randFrac := int32(randRaw>>16) - int32(vmath.Scale>>1) // [-32768, 32767]
-		randFrac <<= 1                                         // [-65536, 65534] ≈ [-1.0, 1.0)
+		// === Sine envelope: sin(t * π) ===
+		// Maps t ∈ [0,1] to envelope ∈ [0,1], max at t=0.5
+		// vmath.Sin expects angle where Scale = 2π, so t*Scale/2 = t*π
+		envelopeAngle := tFixed >> 1 // t * 0.5 in angle space (t*π when Sin expects 0..Scale = 0..2π)
+		envelope := vmath.Sin(envelopeAngle)
+		if envelope < 0 {
+			envelope = -envelope // Ensure positive (shouldn't happen in [0, 0.5] but safety)
+		}
 
-		// Jitter displacement along normalized perpendicular
-		jitterFixed := vmath.Mul(randFrac, maxJitterFixed)
-		jxFixed := vmath.Mul(perpXFixed, jitterFixed)
-		jyFixed := vmath.Mul(perpYFixed, jitterFixed)
+		// Spine contribution: coherent arc, modulated by envelope
+		// Parabolic envelope for spine: 4*t*(1-t), peaks at 0.5
+		oneMinusT := vmath.Scale - tFixed
+		spineEnvelope := vmath.Mul(vmath.Mul(tFixed, oneMinusT), vmath.FromInt(4))
+		spineJitter := vmath.Mul(spineFixed, spineEnvelope)
+
+		// Detail contribution: random per-segment, modulated by envelope
+		detailRand := rng.Next()
+		detailFrac := int32(detailRand>>16) - int32(vmath.Scale>>1)
+		detailFrac <<= 1
+		detailJitter := vmath.Mul(vmath.Mul(detailFrac, detailMagnitude), envelope)
+
+		// Combined jitter
+		totalJitter := spineJitter + detailJitter
+
+		// Apply perpendicular displacement
+		jxFixed := vmath.Mul(perpXFixed, totalJitter)
+		jyFixed := vmath.Mul(perpYFixed, totalJitter)
 
 		points = append(points, struct{ X, Y int }{
 			vmath.ToInt(bxFixed + jxFixed),
