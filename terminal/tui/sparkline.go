@@ -11,8 +11,7 @@ type SparklineOpts struct {
 	Style    Style
 }
 
-// Sparkline renders an inline graph of values
-// Values are mapped to 8-level block characters
+// Sparkline renders an inline graph of values, values are mapped to 8-level block characters
 func (r Region) Sparkline(x, y, width int, values []float64, opts SparklineOpts) {
 	if y < 0 || y >= r.H || width <= 0 || len(values) == 0 {
 		return

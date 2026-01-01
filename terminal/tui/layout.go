@@ -1,5 +1,7 @@
 package tui
 
+// --- Centering ---
+
 // Center returns a centered region of given size within outer
 func Center(outer Region, w, h int) Region {
 	x := (outer.W - w) / 2
@@ -7,8 +9,10 @@ func Center(outer Region, w, h int) Region {
 	return outer.Sub(x, y, w, h)
 }
 
-// SplitH splits region horizontally by ratios (0.0-1.0)
+// --- Ratio-based splitting ---
 // Ratios are normalized if they don't sum to 1.0
+
+// SplitH splits region horizontally by ratios (0.0-1.0)
 func SplitH(r Region, ratios ...float64) []Region {
 	if len(ratios) == 0 {
 		return nil
@@ -78,6 +82,8 @@ func SplitV(r Region, ratios ...float64) []Region {
 	return regions
 }
 
+// --- Fixed-size splitting ---
+
 // SplitHFixed splits with fixed left width, rest to right
 func SplitHFixed(r Region, leftW int) (left, right Region) {
 	if leftW > r.W {
@@ -104,71 +110,7 @@ func SplitVFixed(r Region, topH int) (top, bottom Region) {
 	return
 }
 
-// Columns calculates how many columns fit in width
-func Columns(availableW, itemW, gap int) int {
-	if itemW <= 0 {
-		return 0
-	}
-	if availableW < itemW {
-		return 0
-	}
-	// First item has no gap, subsequent items need gap + itemW
-	cols := 1 + (availableW-itemW)/(itemW+gap)
-	if cols < 0 {
-		cols = 0
-	}
-	return cols
-}
-
-// GridLayout returns a grid of equally sized regions
-func GridLayout(r Region, cols, rows, gapX, gapY int) []Region {
-	if cols <= 0 || rows <= 0 {
-		return nil
-	}
-
-	cellW := (r.W - gapX*(cols-1)) / cols
-	cellH := (r.H - gapY*(rows-1)) / rows
-
-	if cellW < 1 {
-		cellW = 1
-	}
-	if cellH < 1 {
-		cellH = 1
-	}
-
-	regions := make([]Region, cols*rows)
-	for row := 0; row < rows; row++ {
-		for col := 0; col < cols; col++ {
-			x := col * (cellW + gapX)
-			y := row * (cellH + gapY)
-			regions[row*cols+col] = r.Sub(x, y, cellW, cellH)
-		}
-	}
-
-	return regions
-}
-
-// FitOrScroll returns true if content exceeds available height
-func FitOrScroll(contentH, availableH int) bool {
-	return contentH > availableH
-}
-
-// BreakpointH returns index of first breakpoint <= w
-// Breakpoints should be in descending order
-// Returns len(breakpoints) if w is less than all breakpoints
-func BreakpointH(w int, breakpoints ...int) int {
-	for i, bp := range breakpoints {
-		if w >= bp {
-			return i
-		}
-	}
-	return len(breakpoints)
-}
-
-// BreakpointV returns index of first breakpoint <= h
-func BreakpointV(h int, breakpoints ...int) int {
-	return BreakpointH(h, breakpoints...)
-}
+// --- Equal splitting ---
 
 // SplitHEqual splits region into n equal-width columns
 // gap specifies spacing between columns (e.g., 1 for divider lines)
@@ -235,6 +177,54 @@ func SplitVEqual(r Region, n, gap int) []Region {
 	return regions
 }
 
+// --- Grid layout ---
+
+// Columns calculates how many columns fit in width
+func Columns(availableW, itemW, gap int) int {
+	if itemW <= 0 {
+		return 0
+	}
+	if availableW < itemW {
+		return 0
+	}
+	// First item has no gap, subsequent items need gap + itemW
+	cols := 1 + (availableW-itemW)/(itemW+gap)
+	if cols < 0 {
+		cols = 0
+	}
+	return cols
+}
+
+// GridLayout returns a grid of equally sized regions
+func GridLayout(r Region, cols, rows, gapX, gapY int) []Region {
+	if cols <= 0 || rows <= 0 {
+		return nil
+	}
+
+	cellW := (r.W - gapX*(cols-1)) / cols
+	cellH := (r.H - gapY*(rows-1)) / rows
+
+	if cellW < 1 {
+		cellW = 1
+	}
+	if cellH < 1 {
+		cellH = 1
+	}
+
+	regions := make([]Region, cols*rows)
+	for row := 0; row < rows; row++ {
+		for col := 0; col < cols; col++ {
+			x := col * (cellW + gapX)
+			y := row * (cellH + gapY)
+			regions[row*cols+col] = r.Sub(x, y, cellW, cellH)
+		}
+	}
+
+	return regions
+}
+
+// --- Divider positioning ---
+
 // DividerPositions returns X coordinates for vertical dividers between equal columns
 // Use with VLine to draw dividers in gaps created by SplitHEqual
 func DividerPositions(regionW, n, gap int) []int {
@@ -292,4 +282,28 @@ func HDividerPositions(regionH, n, gap int) []int {
 		y += gap
 	}
 	return positions
+}
+
+// --- Responsive utilities ---
+
+// FitOrScroll returns true if content exceeds available height
+func FitOrScroll(contentH, availableH int) bool {
+	return contentH > availableH
+}
+
+// Breakpoints should be in descending order
+
+// BreakpointH returns index of first breakpoint <= w, returns len(breakpoints) if w is less than all breakpoints
+func BreakpointH(w int, breakpoints ...int) int {
+	for i, bp := range breakpoints {
+		if w >= bp {
+			return i
+		}
+	}
+	return len(breakpoints)
+}
+
+// BreakpointV returns index of first breakpoint <= h
+func BreakpointV(h int, breakpoints ...int) int {
+	return BreakpointH(h, breakpoints...)
 }

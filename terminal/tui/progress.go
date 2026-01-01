@@ -4,6 +4,13 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
+// Progress bar characters
+const (
+	progressFull  = '█'
+	progressEmpty = '░'
+	progressHalf  = '▌'
+)
+
 // Progress draws horizontal progress bar (0.0-1.0)
 func (r Region) Progress(x, y, w int, pct float64, fg, bg terminal.RGB) {
 	if y < 0 || y >= r.H || w <= 0 {

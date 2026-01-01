@@ -4,6 +4,15 @@ import (
 	"unicode/utf8"
 )
 
+// --- Length calculation ---
+
+// RuneLen returns display width (rune count, not byte count)
+func RuneLen(s string) int {
+	return utf8.RuneCountInString(s)
+}
+
+// --- Truncation ---
+
 // Truncate truncates string with … suffix if exceeds maxLen
 func Truncate(s string, maxLen int) string {
 	if maxLen <= 0 {
@@ -60,6 +69,8 @@ func TruncateMiddle(s string, maxLen int) string {
 	return string(runes[:startLen]) + "…" + string(runes[len(runes)-endLen:])
 }
 
+// --- Padding ---
+
 // PadRight pads string with spaces to width
 func PadRight(s string, width int) string {
 	runes := []rune(s)
@@ -104,10 +115,7 @@ func PadCenter(s string, width int) string {
 	return string(result)
 }
 
-// RuneLen returns display width (rune count, not byte count)
-func RuneLen(s string) int {
-	return utf8.RuneCountInString(s)
-}
+// --- Text wrapping ---
 
 // WrapText wraps text at word boundaries to fit width
 // Returns slice of lines, each no longer than width
@@ -166,6 +174,8 @@ func WrapText(s string, width int) []string {
 
 	return lines
 }
+
+// --- Repetition ---
 
 // RepeatRune returns a string of n repeated runes
 func RepeatRune(r rune, n int) string {

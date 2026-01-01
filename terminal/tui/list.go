@@ -20,8 +20,7 @@ type ListOpts struct {
 	IconWidth int // Width reserved for icon, default 2
 }
 
-// List renders scrollable list items within region
-// Returns number of rows rendered
+// List renders scrollable list items within region, returns number of rows rendered
 func (r Region) List(items []ListItem, cursor, scroll int, opts ListOpts) int {
 	if r.H < 1 || len(items) == 0 {
 		return 0
@@ -97,19 +96,4 @@ func (r Region) List(items []ListItem, cursor, scroll int, opts ListOpts) int {
 	}
 
 	return rendered
-}
-
-// ExpandIcon chars
-const (
-	IconExpanded  = '▼'
-	IconCollapsed = '▶'
-	IconBullet    = '•'
-)
-
-// ExpandIconRune returns appropriate expand/collapse indicator
-func ExpandIconRune(expanded bool) rune {
-	if expanded {
-		return IconExpanded
-	}
-	return IconCollapsed
 }

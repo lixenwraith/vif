@@ -23,8 +23,7 @@ func NewRegion(cells []terminal.Cell, totalW, x, y, w, h int) Region {
 	}
 }
 
-// Sub returns a nested region with coordinates relative to parent
-// Result is clipped to parent bounds
+// Sub returns a nested region with coordinates relative to parent, result is clipped to parent bounds
 func (r Region) Sub(x, y, w, h int) Region {
 	// Clip to parent bounds
 	if x < 0 {

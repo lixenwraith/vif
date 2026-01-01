@@ -128,6 +128,7 @@ func (r Region) Table(headers []string, rows [][]string, opts TableOpts) {
 	}
 }
 
+// renderTableRow renders a single table row
 func (r Region) renderTableRow(y int, cells []string, widths []int, aligns []Align, sep rune, style Style) {
 	x := 0
 	for i, w := range widths {
