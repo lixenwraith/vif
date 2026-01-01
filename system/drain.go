@@ -15,7 +15,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
-// pendingDrainSpawn represents a queued drain spawnLightning awaiting materialization
+// pendingDrainSpawn represents a queued drain materialize spawn awaiting materialization
 type pendingDrainSpawn struct {
 	targetX            int    // Spawn position X
 	targetY            int    // Spawn position Y
@@ -25,7 +25,7 @@ type pendingDrainSpawn struct {
 
 // DrainSystem manages the drain entity lifecycle
 // Drain count = floor(heat / 10), max 10
-// Drains spawnLightning based on Heat only
+// Drains spawn materialize based on Heat only
 // Priority: 25 (after CleanerSystem:22, before DecaySystem:30)
 type DrainSystem struct {
 	mu    sync.Mutex
@@ -46,11 +46,14 @@ type DrainSystem struct {
 	// Spawn queue for staggered materialization
 	pendingSpawns []pendingDrainSpawn
 
-	// Monotonic counter for LIFO spawnLightning ordering
+	// Monotonic counter for LIFO materialize spawn ordering
 	nextSpawnOrder int64
 
 	// Spawn failure backoff (game ticks)
 	spawnCooldownUntil uint64
+
+	// Random source for knockback impulse randomization
+	rng *vmath.FastRand
 
 	// Cached metric pointers
 	statCount   *atomic.Int64
@@ -100,6 +103,7 @@ func (s *DrainSystem) initLocked() {
 	s.pendingSpawns = s.pendingSpawns[:0]
 	s.nextSpawnOrder = 0
 	s.spawnCooldownUntil = 0
+	s.rng = vmath.NewFastRand(uint32(s.res.Time.RealTime.UnixNano()))
 	s.statCount.Store(0)
 	s.statPending.Store(0)
 	s.paused = false
@@ -162,7 +166,7 @@ func (s *DrainSystem) Update() {
 		return
 	}
 
-	// Skip all spawnLightning/despawnLightning logic during quasar phase
+	// Skip all materialize spawn/despawn materialize logic during quasar phase
 	if s.paused {
 		s.statCount.Store(0)
 		s.statPending.Store(0)
@@ -171,7 +175,7 @@ func (s *DrainSystem) Update() {
 
 	currentTick := s.res.State.State.GetGameTicks()
 
-	// Process pending spawnLightning queue first
+	// Process pending materialize spawn queue first
 	s.processPendingSpawns()
 
 	// Multi-drain lifecycle based on heat
@@ -182,7 +186,7 @@ func (s *DrainSystem) Update() {
 	effectiveCount := currentCount + pendingCount
 
 	if effectiveCount < targetCount {
-		// Check spawnLightning cooldown
+		// Check materialize spawn cooldown
 		if currentTick >= s.spawnCooldownUntil {
 			needed := targetCount - effectiveCount
 			queued := s.queueDrainSpawns(needed)
@@ -205,7 +209,7 @@ func (s *DrainSystem) Update() {
 	} else if currentCount > targetCount {
 		// Too many drains (heat dropped)
 		s.despawnExcessDrains(currentCount - targetCount)
-		// Clear cooldown on despawnLightning (positions freed up)
+		// Clear cooldown on despawn materialize (positions freed up)
 		s.spawnCooldownUntil = 0
 	}
 
@@ -219,7 +223,7 @@ func (s *DrainSystem) Update() {
 	s.statPending.Store(int64(len(s.pendingSpawns)))
 }
 
-// removeCompletedSpawn removes spawnLightning entry after materialize completion
+// removeCompletedSpawn removes materialize spawn entry after materialize completion
 func (s *DrainSystem) removeCompletedSpawn(x, y int) {
 	for i, spawn := range s.pendingSpawns {
 		if spawn.targetX == x && spawn.targetY == y && spawn.materializeStarted {
@@ -239,7 +243,7 @@ func (s *DrainSystem) getHeat() int {
 	return 0
 }
 
-// hasPendingSpawns returns true if spawnLightning queue is non-empty
+// hasPendingSpawns returns true if materialize spawn queue is non-empty
 func (s *DrainSystem) hasPendingSpawns() bool {
 	return len(s.pendingSpawns) > 0
 }
@@ -264,7 +268,7 @@ func (s *DrainSystem) processPendingSpawns() {
 	}
 }
 
-// queueDrainSpawn adds a drain spawnLightning to the pending queue with stagger timing
+// queueDrainSpawn adds a drain materialize spawn to the pending queue with stagger timing
 func (s *DrainSystem) queueDrainSpawn(targetX, targetY int, staggerIndex int) {
 	currentTick := s.res.State.State.GetGameTicks()
 	scheduledTick := currentTick + uint64(staggerIndex)*uint64(constant.DrainSpawnStaggerTicks)
@@ -324,7 +328,7 @@ func (s *DrainSystem) getActiveDrainsBySpawnOrder() []core.Entity {
 }
 
 // randomSpawnOffset returns a valid position with boundary-stretched offset
-// When cursor is near edge, extends spawnLightning range on opposite side to maintain area
+// When cursor is near edge, extends materialize spawn range on opposite side to maintain area
 // Retries up to maxRetries times to find unoccupied cell not in pending queue
 func (s *DrainSystem) randomSpawnOffset(baseX, baseY int, queuedPositions map[uint64]bool) (int, int, bool) {
 	config := s.res.Config
@@ -333,7 +337,7 @@ func (s *DrainSystem) randomSpawnOffset(baseX, baseY int, queuedPositions map[ui
 	width := config.GameWidth
 	height := config.GameHeight
 
-	// Calculate spawnLightning range with boundary stretching
+	// Calculate materialize spawn range with boundary stretching
 	// X axis: maintain 2*radius+1 cell range by extending opposite side
 	minX := baseX - radius
 	maxX := baseX + radius
@@ -378,7 +382,7 @@ func (s *DrainSystem) randomSpawnOffset(baseX, baseY int, queuedPositions map[ui
 		x := minX + rand.Intn(rangeX)
 		y := minY + rand.Intn(rangeY)
 
-		// Check if position already queued for spawnLightning
+		// Check if position already queued for materialize spawn
 		key := uint64(x)<<32 | uint64(y)
 		if queuedPositions[key] {
 			continue
@@ -393,7 +397,7 @@ func (s *DrainSystem) randomSpawnOffset(baseX, baseY int, queuedPositions map[ui
 	return 0, 0, false
 }
 
-// buildQueuedPositionSet creates position exclusion map from all spawnLightning sources
+// buildQueuedPositionSet creates position exclusion map from all materialize spawn sources
 func (s *DrainSystem) buildQueuedPositionSet() map[uint64]bool {
 	queuedPositions := make(map[uint64]bool, len(s.pendingSpawns)+s.drainStore.Count()+s.matStore.Count()/4)
 
@@ -523,7 +527,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 		return
 	}
 
-	// Increment and assign spawnLightning order for LIFO tracking
+	// Increment and assign materialize spawn order for LIFO tracking
 	s.nextSpawnOrder++
 
 	// Initialize KineticState with spawn position, zero velocity
@@ -540,7 +544,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 		LastIntY:      spawnY,
 	}
 
-	// Handle collisions at spawnLightning position
+	// Handle collisions at materialize spawn position
 	// GetAllAt returns a copy, so iterating while destroying is safe
 	entitiesAtSpawn := s.world.Positions.GetAllAt(spawnX, spawnY)
 	for _, e := range entitiesAtSpawn {
@@ -558,7 +562,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	})
 }
 
-// requeueSpawnWithOffset attempts to find alternate position and re-queue spawnLightning
+// requeueSpawnWithOffset attempts to find alternate position and re-queue materialize spawn
 // Called when target position blocked by drain that moved into it
 func (s *DrainSystem) requeueSpawnWithOffset(blockedX, blockedY int) {
 	cursorEntity := s.res.Cursor.Entity
@@ -574,9 +578,9 @@ func (s *DrainSystem) requeueSpawnWithOffset(blockedX, blockedY int) {
 
 	newX, newY, valid := s.randomSpawnOffset(cursorPos.X, cursorPos.Y, queuedPositions)
 	if valid {
-		s.queueDrainSpawn(newX, newY, 0) // Immediate re-spawnLightning
+		s.queueDrainSpawn(newX, newY, 0) // Immediate re-spawn materialize
 	}
-	// If no valid position, spawnLightning dropped (map saturated with drains)
+	// If no valid position, materialize spawn dropped (map saturated with drains)
 }
 
 // isInsideShieldEllipse checks if position is within the shield ellipse using Q16.16 fixed-point
@@ -611,10 +615,10 @@ func (s *DrainSystem) handleDrainInteractions() {
 		return
 	}
 
-	// Phase 1: Detect drain-drain collisions (same cell)
+	// 1. Detect drain-drain collisions (same cell)
 	s.handleDrainDrainCollisions()
 
-	// Phase 2: Handle shield zone and cursor interactions
+	// 2. Handle shield zone and cursor interactions
 	drainEntities := s.drainStore.All()
 	for _, drainEntity := range drainEntities {
 		drain, ok := s.drainStore.Get(drainEntity)
@@ -639,8 +643,9 @@ func (s *DrainSystem) handleDrainInteractions() {
 		shield, shieldOk := s.shieldStore.Get(cursorEntity)
 		shieldActive := shieldOk && shield.Active
 
-		// Shield zone energy drain (applies to drains anywhere in shield ellipse)
+		// Shield zone interaction
 		if shieldActive && s.isInsideShieldEllipse(drainPos.X, drainPos.Y) {
+			// Energy drain (existing timer-based)
 			if now.Sub(drain.LastDrainTime) >= constant.DrainEnergyDrainInterval {
 				s.world.PushEvent(event.EventShieldDrain, &event.ShieldDrainPayload{
 					Amount: constant.DrainShieldEnergyDrainAmount,
@@ -648,21 +653,67 @@ func (s *DrainSystem) handleDrainInteractions() {
 				drain.LastDrainTime = now
 				s.drainStore.Set(drainEntity, drain)
 			}
-			// Drain persists when shield is active
+
+			// Shield knockback (immunity-gated)
+			if !now.Before(drain.DeflectUntil) {
+				s.applyShieldKnockback(drainEntity, &drain, drainPos, cursorPos)
+			}
+
 			continue
 		}
 
 		// Cursor collision (shield not active or drain outside shield)
 		if isOnCursor {
-			// No shield protection: reduce heat and despawnLightning
 			s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{
 				Delta: -constant.DrainHeatReductionAmount,
 			})
 		}
 	}
 
-	// Phase 3: Handle non-drain entity collisions
+	// 3. Handle non-drain entity collisions
 	s.handleEntityCollisions()
+}
+
+// applyShieldKnockback applies radial impulse when drain overlaps shield
+func (s *DrainSystem) applyShieldKnockback(
+	drainEntity core.Entity,
+	drain *component.DrainComponent,
+	drainPos component.PositionComponent,
+	cursorPos component.PositionComponent,
+) {
+	now := s.res.Time.GameTime
+
+	// Radial direction: cursor → drain (shield pushes outward)
+	radialX := vmath.FromInt(drainPos.X - cursorPos.X)
+	radialY := vmath.FromInt(drainPos.Y - cursorPos.Y)
+
+	// Zero vector fallback (drain centered on cursor)
+	if radialX == 0 && radialY == 0 {
+		radialX = vmath.Scale
+	}
+
+	// Collision impulse (same physics as cleaner, equal mass)
+	impulseX, impulseY := vmath.ApplyCollisionImpulse(
+		radialX, radialY,
+		vmath.MassRatioEqual,
+		constant.DrainDeflectAngleVar,
+		constant.ShieldKnockbackImpulseMin,
+		constant.ShieldKnockbackImpulseMax,
+		s.rng,
+	)
+
+	if impulseX == 0 && impulseY == 0 {
+		return
+	}
+
+	// Additive impulse
+	drain.VelX += impulseX
+	drain.VelY += impulseY
+
+	// Set immunity window
+	drain.DeflectUntil = now.Add(constant.ShieldKnockbackImmunity)
+
+	s.drainStore.Set(drainEntity, *drain)
 }
 
 // handleDrainDrainCollisions detects and removes all drains sharing a cell

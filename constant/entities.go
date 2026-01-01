@@ -60,10 +60,10 @@ const (
 	DrainDeflectImmunity = 350 * time.Millisecond
 
 	// DrainDeflectImpulseMinFloat is minimum deflection velocity (cells/sec)
-	DrainDeflectImpulseMinFloat = 12.0
+	DrainDeflectImpulseMinFloat = 15.0
 
 	// DrainDeflectImpulseMaxFloat is maximum deflection velocity (cells/sec)
-	DrainDeflectImpulseMaxFloat = 35.0
+	DrainDeflectImpulseMaxFloat = 40.0
 )
 
 // --- Quasar Entity ---
@@ -138,6 +138,18 @@ const (
 	QuasarShieldMaxOpacity = 0.3
 	// QuasarShield256Palette is xterm-256 index for solid rim (light gray)
 	QuasarShield256Palette uint8 = 250
+)
+
+// --- Shield Knockback ---
+const (
+	// ShieldKnockbackImmunity is duration of immunity after shield knockback
+	ShieldKnockbackImmunity = 350 * time.Millisecond
+
+	// ShieldKnockbackImpulseMinFloat is minimum knockback velocity (cells/sec)
+	ShieldKnockbackImpulseMinFloat = 15.0
+
+	// ShieldKnockbackImpulseMaxFloat is maximum knockback velocity (cells/sec)
+	ShieldKnockbackImpulseMaxFloat = 40.0
 )
 
 // --- Decay / Blossom Entities ---

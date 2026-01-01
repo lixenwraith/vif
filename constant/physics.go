@@ -24,4 +24,8 @@ var (
 	QuasarDrag              = vmath.FromFloat(QuasarDragFloat)
 	// QuasarSpeedMultiplierMaxFixed caps progressive speed increase (10x = Scale * 10)
 	QuasarSpeedMultiplierMaxFixed = vmath.Scale * QuasarSpeedMultiplierMax
+
+	// Shield knockback physics (Q16.16)
+	ShieldKnockbackImpulseMin = vmath.FromFloat(ShieldKnockbackImpulseMinFloat)
+	ShieldKnockbackImpulseMax = vmath.FromFloat(ShieldKnockbackImpulseMaxFloat)
 )

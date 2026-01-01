@@ -40,6 +40,9 @@ type QuasarSystem struct {
 	zapInvRxSq int32
 	zapInvRySq int32
 
+	// Random source for knockback impulse randomization
+	rng *vmath.FastRand
+
 	// Telemetry
 	statActive *atomic.Bool
 
@@ -78,6 +81,7 @@ func (s *QuasarSystem) initLocked() {
 	s.anchorEntity = 0
 	s.zapInvRxSq = 0
 	s.zapInvRySq = 0
+	s.rng = vmath.NewFastRand(uint32(s.res.Time.RealTime.UnixNano()))
 	s.statActive.Store(false)
 	s.enabled = true
 }
@@ -640,9 +644,14 @@ func (s *QuasarSystem) handleInteractions(anchorEntity core.Entity, header *comp
 	shield, shieldOk := s.shieldStore.Get(cursorEntity)
 	shieldActive := shieldOk && shield.Active
 
-	// Check each member position
-	anyInShield := false
+	// Stack-allocated buffer for shield overlapping member offsets (max 15 cells in 3x5 quasar)
+	var overlapOffsets [15]struct{ x, y int }
+	overlapCount := 0
 	anyOnCursor := false
+
+	// // Check each member position
+	// anyInShield := false
+	// anyOnCursor := false
 
 	for _, m := range header.Members {
 		if m.Entity == 0 {
@@ -661,14 +670,21 @@ func (s *QuasarSystem) handleInteractions(anchorEntity core.Entity, header *comp
 
 		// Shield overlap check
 		if shieldActive && s.isInsideShieldEllipse(memberPos.X, memberPos.Y, cursorPos, &shield) {
-			anyInShield = true
+			overlapOffsets[overlapCount] = struct{ x, y int }{int(m.OffsetX), int(m.OffsetY)}
+			overlapCount++
 		}
 	}
+	anyInShield := overlapCount > 0
 
 	// Update cached state
 	if quasar.IsOnCursor != anyOnCursor {
 		quasar.IsOnCursor = anyOnCursor
 		s.quasarStore.Set(anchorEntity, *quasar)
+	}
+
+	// Shield knockback check
+	if anyInShield {
+		s.applyShieldKnockback(anchorEntity, quasar, cursorPos, overlapOffsets[:overlapCount])
 	}
 
 	// Shield drain (once per tick if any overlap)
@@ -691,6 +707,70 @@ func (s *QuasarSystem) isInsideShieldEllipse(x, y int, cursorPos component.Posit
 	dx := vmath.FromInt(x - cursorPos.X)
 	dy := vmath.FromInt(y - cursorPos.Y)
 	return vmath.EllipseContains(dx, dy, shield.InvRxSq, shield.InvRySq)
+}
+
+// applyShieldKnockback applies radial impulse when quasar overlaps shield
+// Uses centroid of overlapping member offsets for offset-influenced direction
+func (s *QuasarSystem) applyShieldKnockback(
+	anchorEntity core.Entity,
+	quasar *component.QuasarComponent,
+	cursorPos component.PositionComponent,
+	overlaps []struct{ x, y int },
+) {
+	now := s.res.Time.GameTime
+
+	// Immunity gate (unified with cleaner knockback)
+	if now.Before(quasar.DeflectUntil) {
+		return
+	}
+
+	anchorPos, ok := s.world.Positions.Get(anchorEntity)
+	if !ok {
+		return
+	}
+
+	// Radial direction: cursor → anchor (shield pushes outward)
+	radialX := vmath.FromInt(anchorPos.X - cursorPos.X)
+	radialY := vmath.FromInt(anchorPos.Y - cursorPos.Y)
+
+	// Zero vector fallback (quasar centered on cursor)
+	if radialX == 0 && radialY == 0 {
+		radialX = vmath.Scale // Push right by default
+	}
+
+	// Centroid of overlapping member offsets (integer arithmetic)
+	sumX, sumY := 0, 0
+	for _, o := range overlaps {
+		sumX += o.x
+		sumY += o.y
+	}
+	centroidX := sumX / len(overlaps)
+	centroidY := sumY / len(overlaps)
+
+	// Offset-influenced collision impulse (same physics as cleaner)
+	impulseX, impulseY := vmath.ApplyOffsetCollisionImpulse(
+		radialX, radialY,
+		centroidX, centroidY,
+		vmath.OffsetInfluenceDefault,
+		vmath.MassRatioCleanerToQuasar,
+		constant.DrainDeflectAngleVar,
+		constant.ShieldKnockbackImpulseMin,
+		constant.ShieldKnockbackImpulseMax,
+		s.rng,
+	)
+
+	if impulseX == 0 && impulseY == 0 {
+		return
+	}
+
+	// Additive impulse (momentum transfer)
+	quasar.VelX += impulseX
+	quasar.VelY += impulseY
+
+	// Set immunity window
+	quasar.DeflectUntil = now.Add(constant.ShieldKnockbackImmunity)
+
+	s.quasarStore.Set(anchorEntity, *quasar)
 }
 
 // terminateQuasar ends the quasar phase
