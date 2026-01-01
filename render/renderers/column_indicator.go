@@ -6,20 +6,20 @@ import (
 	"github.com/lixenwraith/vi-fighter/render"
 )
 
-// ColumnIndicatorsRenderer draws column position indicators
-type ColumnIndicatorsRenderer struct {
+// ColumnIndicatorRenderer draws relative column numbers
+type ColumnIndicatorRenderer struct {
 	gameCtx *engine.GameContext
 }
 
-// NewColumnIndicatorsRenderer creates a column indicators renderer
-func NewColumnIndicatorsRenderer(gameCtx *engine.GameContext) *ColumnIndicatorsRenderer {
-	return &ColumnIndicatorsRenderer{
+// NewColumnIndicatorRenderer creates a column indicator renderer
+func NewColumnIndicatorRenderer(gameCtx *engine.GameContext) *ColumnIndicatorRenderer {
+	return &ColumnIndicatorRenderer{
 		gameCtx: gameCtx,
 	}
 }
 
 // Render implements SystemRenderer
-func (r *ColumnIndicatorsRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
+func (r *ColumnIndicatorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(constant.MaskUI)
 	indicatorY := ctx.GameY + ctx.GameHeight
 

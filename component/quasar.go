@@ -30,4 +30,7 @@ type QuasarComponent struct {
 	IsCharging      bool
 	ChargeRemaining time.Duration
 	ShieldActive    bool // Cleaner immunity during charge
+
+	HitPoints         int
+	HitFlashRemaining time.Duration
 }

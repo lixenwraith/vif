@@ -1,4 +1,5 @@
 package manifest
+
 // @lixen: #dev{feature[drain(render,system)],feature[quasar(render,system)]}
 
 import (
@@ -183,12 +184,12 @@ func RegisterRenderers() {
 		return renderers.NewHeatMeterRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityUI)
 
-	registry.RegisterRenderer("linenumbers", func(ctx any) any {
-		return renderers.NewLineNumbersRenderer(ctx.(*engine.GameContext))
+	registry.RegisterRenderer("rowindicator", func(ctx any) any {
+		return renderers.NewRowIndicatorRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityUI)
 
-	registry.RegisterRenderer("columnindicators", func(ctx any) any {
-		return renderers.NewColumnIndicatorsRenderer(ctx.(*engine.GameContext))
+	registry.RegisterRenderer("columnindicator", func(ctx any) any {
+		return renderers.NewColumnIndicatorRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityUI)
 
 	registry.RegisterRenderer("statusbar", func(ctx any) any {
@@ -253,8 +254,8 @@ func ActiveRenderers() []string {
 		"grayout",
 		"dim",
 		"heatmeter",
-		"linenumbers",
-		"columnindicators",
+		"rowindicator",
+		"columnindicator",
 		"statusbar",
 		"cursor",
 		"overlay",

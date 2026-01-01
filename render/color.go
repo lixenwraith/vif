@@ -93,7 +93,9 @@ var (
 	RgbShieldBase = RGB{180, 0, 150} // Deep Magenta
 
 	// Quasar colors
-	RgbQuasarEnraged = RGB{255, 60, 60} // Red tint during charge or zap phase
+	RgbQuasarEnraged = RGB{255, 60, 60}   // Red tint during charge or zap phase
+	RgbQuasarShield  = RGB{200, 200, 200} // Light gray for cleaner-protection shield halo
+	RgbQuasarFlash   = RGB{255, 255, 0}   // Bright yellow for hit flash
 
 	// General colors
 	RgbBlack = RGB{0, 0, 0} // Black for various uses

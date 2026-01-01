@@ -131,6 +131,7 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 			quasar.PreciseY = vmath.FromInt(anchorPos.Y)
 			quasar.SpeedMultiplier = vmath.Scale
 			quasar.LastSpeedIncreaseAt = now
+			quasar.HitPoints = constant.QuasarInitialHP // Init HP
 
 			// Initial velocity toward cursor
 			dx := vmath.FromInt(cursorPos.X - anchorPos.X)
@@ -206,6 +207,20 @@ func (s *QuasarSystem) Update() {
 		return
 	}
 
+	// Decrement flash timer
+	if quasar.HitFlashRemaining > 0 {
+		quasar.HitFlashRemaining -= s.res.Time.DeltaTime
+		if quasar.HitFlashRemaining < 0 {
+			quasar.HitFlashRemaining = 0
+		}
+	}
+
+	// Check HP for termination
+	if quasar.HitPoints <= 0 {
+		s.terminateQuasar()
+		return
+	}
+
 	// Check if cursor is within zap range
 	cursorInRange := s.isCursorInZapRange(anchorEntity)
 
@@ -224,8 +239,9 @@ func (s *QuasarSystem) Update() {
 
 	} else if quasar.IsZapping {
 		// Already zapping: continue zap, update target
-		s.updateZapTarget(&quasar, anchorEntity)
+		s.updateZapTarget(anchorEntity)
 		s.applyZapDamage()
+		s.quasarStore.Set(anchorEntity, quasar) // Persist flash decrement // TODO: check
 
 	} else if quasar.IsCharging {
 		// Charging: decrement timer, check completion
@@ -252,7 +268,6 @@ func (s *QuasarSystem) Update() {
 func (s *QuasarSystem) startCharging(quasar *component.QuasarComponent, anchorEntity core.Entity) {
 	quasar.IsCharging = true
 	quasar.ChargeRemaining = constant.QuasarChargeDuration
-	quasar.ShieldActive = true
 
 	s.quasarStore.Set(anchorEntity, *quasar)
 
@@ -279,7 +294,6 @@ func (s *QuasarSystem) cancelCharging(quasar *component.QuasarComponent, anchorE
 func (s *QuasarSystem) completeCharging(quasar *component.QuasarComponent, anchorEntity core.Entity) {
 	quasar.IsCharging = false
 	quasar.ChargeRemaining = 0
-	quasar.ShieldActive = false
 
 	s.quasarStore.Set(anchorEntity, *quasar)
 
@@ -470,6 +484,7 @@ func (s *QuasarSystem) startZapping(quasar *component.QuasarComponent, anchorEnt
 	})
 
 	quasar.IsZapping = true
+	quasar.ShieldActive = true // Shield active during zap
 	s.quasarStore.Set(anchorEntity, *quasar)
 }
 
@@ -478,11 +493,12 @@ func (s *QuasarSystem) stopZapping(quasar *component.QuasarComponent, anchorEnti
 	s.world.PushEvent(event.EventLightningDespawn, anchorEntity)
 
 	quasar.IsZapping = false
+	quasar.ShieldActive = false // Clear shield
 	s.quasarStore.Set(anchorEntity, *quasar)
 }
 
 // Update lightning target to track cursor
-func (s *QuasarSystem) updateZapTarget(quasar *component.QuasarComponent, anchorEntity core.Entity) {
+func (s *QuasarSystem) updateZapTarget(anchorEntity core.Entity) {
 	cursorEntity := s.res.Cursor.Entity
 	cursorPos, ok := s.world.Positions.Get(cursorEntity)
 	if !ok {

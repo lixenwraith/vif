@@ -6,20 +6,20 @@ import (
 	"github.com/lixenwraith/vi-fighter/render"
 )
 
-// LineNumbersRenderer draws relative line numbers
-type LineNumbersRenderer struct {
+// RowIndicatorRenderer draws relative row numbers
+type RowIndicatorRenderer struct {
 	gameCtx *engine.GameContext
 }
 
-// NewLineNumbersRenderer creates a line numbers renderer
-func NewLineNumbersRenderer(gameCtx *engine.GameContext) *LineNumbersRenderer {
-	return &LineNumbersRenderer{
+// NewRowIndicatorRenderer creates a row indicator renderer
+func NewRowIndicatorRenderer(gameCtx *engine.GameContext) *RowIndicatorRenderer {
+	return &RowIndicatorRenderer{
 		gameCtx: gameCtx,
 	}
 }
 
 // Render implements SystemRenderer
-func (r *LineNumbersRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
+func (r *RowIndicatorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(constant.MaskUI)
 
 	for y := 0; y < ctx.GameHeight; y++ {

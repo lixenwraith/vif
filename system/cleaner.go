@@ -459,52 +459,58 @@ func (s *CleanerSystem) deflectQuasar(anchorEntity, hitMember core.Entity, clean
 		return
 	}
 
-	// Shield active during charge phase blocks deflection
+	// Shield blocks all cleaner interaction
 	if quasar.ShieldActive {
 		return
 	}
 
-	// Check deflection immunity
-	if s.res.Time.GameTime.Before(quasar.DeflectUntil) {
+	// Flash immunity blocks new damage (debounce)
+	if quasar.HitFlashRemaining > 0 {
 		return
 	}
 
-	anchorPos, ok := s.world.Positions.Get(anchorEntity)
-	if !ok {
-		return
+	// Apply damage and start flash
+	quasar.HitPoints--
+	quasar.HitFlashRemaining = constant.QuasarHitFlashDuration
+
+	// Knockback only when not enraged
+	isEnraged := quasar.IsCharging || quasar.IsZapping
+	if !isEnraged {
+		anchorPos, ok := s.world.Positions.Get(anchorEntity)
+		if !ok {
+			s.quasarStore.Set(anchorEntity, quasar)
+			return
+		}
+		hitPos, ok := s.world.Positions.Get(hitMember)
+		if !ok {
+			s.quasarStore.Set(anchorEntity, quasar)
+			return
+		}
+
+		offsetX := hitPos.X - anchorPos.X
+		offsetY := hitPos.Y - anchorPos.Y
+
+		impulseX, impulseY := vmath.ApplyOffsetCollisionImpulse(
+			cleanerVelX, cleanerVelY,
+			offsetX, offsetY,
+			vmath.OffsetInfluenceDefault,
+			vmath.MassRatioCleanerToQuasar,
+			constant.DrainDeflectAngleVar,
+			constant.QuasarDeflectImpulseMin,
+			constant.QuasarDeflectImpulseMax,
+			s.rng,
+		)
+
+		if impulseX == 0 && impulseY == 0 {
+			return
+		}
+
+		// Reset velocity and apply impulse (clean knockback)
+		quasar.VelX = impulseX
+		quasar.VelY = impulseY
+
+		quasar.DeflectUntil = s.res.Time.GameTime.Add(constant.QuasarHitFlashDuration)
 	}
-	hitPos, ok := s.world.Positions.Get(hitMember)
-	if !ok {
-		return
-	}
-
-	offsetX := hitPos.X - anchorPos.X
-	offsetY := hitPos.Y - anchorPos.Y
-
-	impulseX, impulseY := vmath.ApplyOffsetCollisionImpulse(
-		cleanerVelX, cleanerVelY,
-		offsetX, offsetY,
-		vmath.OffsetInfluenceDefault,
-		vmath.MassRatioCleanerToQuasar,
-		constant.DrainDeflectAngleVar,
-		constant.QuasarDeflectImpulseMin,
-		constant.QuasarDeflectImpulseMax,
-		s.rng,
-	)
-
-	if impulseX == 0 && impulseY == 0 {
-		return
-	}
-
-	// // Add impulse to current velocity
-	// quasar.VelX += impulseX
-	// quasar.VelY += impulseY
-
-	// Reset velocity and apply impulse (clean knockback)
-	quasar.VelX = impulseX
-	quasar.VelY = impulseY
-
-	quasar.DeflectUntil = s.res.Time.GameTime.Add(constant.QuasarDeflectImmunity)
 
 	s.quasarStore.Set(anchorEntity, quasar)
 }

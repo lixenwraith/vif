@@ -116,6 +116,28 @@ const (
 
 	// QuasarChargeDuration is the delay before zapping starts when cursor exits range
 	QuasarChargeDuration = 3 * time.Second
+
+	// QuasarInitialHP is starting hit points
+	QuasarInitialHP = 10
+
+	// QuasarHitFlashDuration is yellow flash duration and immunity window on cleaner hit
+	QuasarHitFlashDuration = 150 * time.Millisecond
+)
+
+// --- Quasar Shield Visual ---
+const (
+	// QuasarShieldPad256X is horizontal cell padding for 256-color solid rim
+	QuasarShieldPad256X = 2
+	// QuasarShieldPad256Y is vertical cell padding for 256-color solid rim
+	QuasarShieldPad256Y = 1
+	// QuasarShieldPadTCX is horizontal cell padding for TrueColor gradient
+	QuasarShieldPadTCX = 4
+	// QuasarShieldPadTCY is vertical cell padding for TrueColor gradient
+	QuasarShieldPadTCY = 2
+	// QuasarShieldMaxOpacity is peak alpha at ellipse edge (TrueColor)
+	QuasarShieldMaxOpacity = 0.3
+	// QuasarShield256Palette is xterm-256 index for solid rim (light gray)
+	QuasarShield256Palette uint8 = 250
 )
 
 // --- Decay / Blossom Entities ---
