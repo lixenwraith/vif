@@ -1,5 +1,5 @@
 package component
-// @lixen: #dev{feature[drain(render,system)],feature[quasar(render,system)]}
+// @lixen: #dev{feature[drain(render,system)],feature[dust(render,system)],feature[quasar(render,system)]}
 
 // GlyphComponent represents a typeable spawned character entity
 type GlyphComponent struct {

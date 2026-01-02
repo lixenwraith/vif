@@ -1,4 +1,5 @@
 package renderers
+// @lixen: #dev{feature[dust(render,system)]}
 
 import (
 	"github.com/lixenwraith/vi-fighter/component"

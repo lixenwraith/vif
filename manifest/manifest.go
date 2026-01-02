@@ -1,6 +1,6 @@
 package manifest
 
-// @lixen: #dev{feature[drain(render,system)],feature[quasar(render,system)]}
+// @lixen: #dev{feature[drain(render,system)],feature[dust(render,system)],feature[quasar(render,system)]}
 
 import (
 	"github.com/lixenwraith/vi-fighter/component"
@@ -38,6 +38,7 @@ func RegisterComponents(w *engine.World) {
 	engine.RegisterComponent[component.MemberComponent](w)
 	engine.RegisterComponent[component.LightningComponent](w)
 	engine.RegisterComponent[component.SpiritComponent](w)
+	engine.RegisterComponent[component.DustComponent](w)
 }
 
 // RegisterSystems registers all system factories with the registry
@@ -99,6 +100,9 @@ func RegisterSystems() {
 	})
 	registry.RegisterSystem("quasar", func(w any) any {
 		return system.NewQuasarSystem(w.(*engine.World))
+	})
+	registry.RegisterSystem("dust", func(w any) any {
+		return system.NewDustSystem(w.(*engine.World))
 	})
 	registry.RegisterSystem("flash", func(w any) any {
 		return system.NewFlashSystem(w.(*engine.World))
@@ -228,6 +232,7 @@ func ActiveSystems() []string {
 		"lightning",
 		"drain",
 		"quasar",
+		"dust",
 		"flash",
 		"splash",
 		"death",

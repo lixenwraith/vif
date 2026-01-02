@@ -1,6 +1,6 @@
 package render
 
-// @lixen: #dev{feature[drain(render,system)],feature[quasar(render,system)]}
+// @lixen: #dev{feature[drain(render,system)],feature[dust(render,system)],feature[quasar(render,system)]}
 
 import (
 	"github.com/lixenwraith/vi-fighter/component"
@@ -39,6 +39,10 @@ var (
 	RgbBlossom     = RGB{255, 182, 193} // Light pink (cherry blossom)
 	RgbDrain       = RGB{0, 200, 200}   // Vibrant Cyan for drain entity
 	RgbMaterialize = RGB{0, 220, 220}   // Bright cyan for materialize head
+
+	RgbDustDark   = RGB{R: 60, G: 60, B: 60}    // Dark gray dust
+	RgbDustNormal = RGB{R: 128, G: 128, B: 128} // Mid-gray dust
+	RgbDustBright = RGB{R: 200, G: 200, B: 200} // Light gray dust
 
 	RgbLineNumbers     = RGB{180, 180, 180} // Brighter gray
 	RgbStatusBar       = RGB{255, 255, 255} // White

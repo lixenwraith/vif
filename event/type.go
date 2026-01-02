@@ -1,6 +1,6 @@
 package event
 
-// @lixen: #dev{feature[drain(render,system)],feature[quasar(render,system)]}
+// @lixen: #dev{feature[drain(render,system)],feature[dust(render,system)],feature[quasar(render,system)]}
 
 // EventType represents the type of game event
 type EventType int

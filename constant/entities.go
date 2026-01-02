@@ -1,6 +1,6 @@
 package constant
 
-// @lixen: #dev{feature[drain(render,system)],feature[quasar(render,system)]}
+// @lixen: #dev{feature[drain(render,system)],feature[dust(render,system)],feature[quasar(render,system)]}
 
 import (
 	"time"
@@ -193,6 +193,31 @@ const (
 
 	// SpiritBlinkHz is the color oscillation frequency during travel
 	SpiritBlinkHz = 12
+)
+
+// --- Dust Entity ---
+const (
+	// DustAttractionBaseFloat is orbital attraction strength (cells/sec²)
+	DustAttractionBaseFloat = 60.0
+
+	// DustOrbitRadiusMinFloat/MaxFloat for varied orbital radii (cells)
+	DustOrbitRadiusMinFloat = 3.0
+	DustOrbitRadiusMaxFloat = 8.0
+
+	// DustDampingFloat for orbit circularization (1/sec)
+	DustDampingFloat = 2.0
+
+	// DustChaseBoostFloat - attraction multiplier on large cursor movement
+	DustChaseBoostFloat = 3.0
+
+	// DustChaseThreshold - cursor delta (cells) triggering chase boost
+	DustChaseThreshold = 5
+
+	// DustChaseDecayFloat - boost decay rate (1/sec)
+	DustChaseDecayFloat = 4.0
+
+	// DustInitialSpeedFloat - tangential velocity magnitude at spawn (cells/sec)
+	DustInitialSpeedFloat = 32.0
 )
 
 // --- Shield Entity ---

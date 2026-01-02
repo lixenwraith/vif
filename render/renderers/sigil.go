@@ -1,5 +1,6 @@
 package renderers
-// @lixen: #dev{feature[drain(render,system)],feature[quasar(render,system)]}
+
+// @lixen: #dev{feature[drain(render,system)],feature[dust(render,system)],feature[quasar(render,system)]}
 
 import (
 	"github.com/lixenwraith/vi-fighter/component"
@@ -65,8 +66,12 @@ func resolveSigilColor(color component.SigilColor) render.RGB {
 		return render.RgbBlossom
 	case component.SigilDecay:
 		return render.RgbDecay
-	case component.SigilCleaner:
-		return render.RgbCleanerBasePositive
+	case component.SigilDustDark:
+		return render.RgbDustDark
+	case component.SigilDustNormal:
+		return render.RgbDustNormal
+	case component.SigilDustBright:
+		return render.RgbDustBright
 	default:
 		return render.RgbBackground
 	}

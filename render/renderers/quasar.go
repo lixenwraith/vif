@@ -1,6 +1,6 @@
 package renderers
 
-// @lixen: #dev{feature[quasar(render,system)]}
+// @lixen: #dev{feature[dust(render,system)],feature[quasar(render,system)]}
 
 import (
 	"time"

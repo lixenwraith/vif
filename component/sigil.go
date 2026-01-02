@@ -1,5 +1,6 @@
 package component
-// @lixen: #dev{feature[drain(render,system)],feature[quasar(render,system)]}
+
+// @lixen: #dev{feature[drain(render,system)],feature[dust(render,system)],feature[quasar(render,system)]}
 
 // SigilComponent provides visual representation for non-typeable moving entities
 // Used by: DrainSystem, BlossomSystem, CleanerSystem, DecaySystem
@@ -12,8 +13,10 @@ type SigilComponent struct {
 type SigilColor int
 
 const (
-	SigilDrain   SigilColor = iota // Light Cyan/drain color
-	SigilBlossom                   // Light Pink/blossom color
-	SigilCleaner                   // Yellow or Purple/cleaner color
-	SigilDecay                     // Dark Cyan/decay color
+	SigilDrain      SigilColor = iota // Light Cyan/drain color
+	SigilBlossom                      // Light Pink/blossom color
+	SigilDecay                        // Dark Cyan/decay color
+	SigilDustDark                     // Dark gray dust particle
+	SigilDustNormal                   // Mid-gray dust particle
+	SigilDustBright                   // Light gray dust particle
 )

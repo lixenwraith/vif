@@ -1,5 +1,5 @@
 package system
-// @lixen: #dev{feature[quasar(render,system)]}
+// @lixen: #dev{feature[dust(render,system)],feature[quasar(render,system)]}
 
 import (
 	"github.com/lixenwraith/vi-fighter/component"

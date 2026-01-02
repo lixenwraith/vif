@@ -1,6 +1,6 @@
 package constant
 
-// @lixen: #dev{feature[drain(render,system)],feature[quasar(render,system)]}
+// @lixen: #dev{feature[drain(render,system)],feature[dust(render,system)],feature[quasar(render,system)]}
 
 import "github.com/lixenwraith/vi-fighter/vmath"
 
@@ -28,4 +28,13 @@ var (
 	// Shield knockback physics (Q16.16)
 	ShieldKnockbackImpulseMin = vmath.FromFloat(ShieldKnockbackImpulseMinFloat)
 	ShieldKnockbackImpulseMax = vmath.FromFloat(ShieldKnockbackImpulseMaxFloat)
+
+	// Dust physics (Q16.16)
+	DustAttractionBase = vmath.FromFloat(DustAttractionBaseFloat)
+	DustOrbitRadiusMin = vmath.FromFloat(DustOrbitRadiusMinFloat)
+	DustOrbitRadiusMax = vmath.FromFloat(DustOrbitRadiusMaxFloat)
+	DustDamping        = vmath.FromFloat(DustDampingFloat)
+	DustChaseBoost     = vmath.FromFloat(DustChaseBoostFloat)
+	DustChaseDecay     = vmath.FromFloat(DustChaseDecayFloat)
+	DustInitialSpeed   = vmath.FromFloat(DustInitialSpeedFloat)
 )

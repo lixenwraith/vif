@@ -1,5 +1,6 @@
 package constant
-// @lixen: #dev{feature[drain(render,system)],feature[quasar(render,system)]}
+
+// @lixen: #dev{feature[drain(render,system)],feature[dust(render,system)],feature[quasar(render,system)]}
 
 import "time"
 
@@ -37,26 +38,27 @@ const MaxEntitiesPerCell = 31
 
 // System Execution Priorities (lower runs first)
 const (
-	PriorityShield      = 6
-	PriorityHeat        = 8
-	PriorityEnergy      = 10
-	PriorityBoost       = 12
-	PriorityTyping      = 13 // After boost, before composite
-	PriorityComposite   = 14 // After boost, before spawn (position sync)
-	PrioritySpawn       = 15
-	PriorityNugget      = 18
-	PriorityGold        = 20
-	PriorityCleaner     = 22
-	PriorityFuse        = 23 // After Cleaner, before Drain
-	PrioritySpirit      = 24 // After Fuse, before Drain // TODO: really? or after drain?
-	PriorityDrain       = 25
-	PriorityMaterialize = 26 // PriorityDrain + 1
-	PriorityQuasar      = 27 // After Drain
-	PriorityDecay       = 30
-	PriorityBlossom     = 31
-	PriorityLightning   = 32 // After Quasar
-	PriorityFlash       = 35
-	PriorityUI          = 50
+	PriorityShield      = 10
+	PriorityHeat        = 20
+	PriorityEnergy      = 30
+	PriorityBoost       = 40
+	PriorityTyping      = 50 // After boost, before composite
+	PriorityComposite   = 60 // After boost, before spawn (position sync)
+	PrioritySpawn       = 70
+	PriorityNugget      = 80
+	PriorityGold        = 90
+	PriorityCleaner     = 100
+	PriorityFuse        = 110 // After Cleaner, before Drain
+	PrioritySpirit      = 120 // After Fuse, before Drain // TODO: really? or after drain?
+	PriorityDrain       = 130
+	PriorityMaterialize = 140 // PriorityDrain + 1
+	PriorityQuasar      = 150 // After Drain
+	PriorityDust        = 160 // After Quasar, before Decay
+	PriorityDecay       = 170
+	PriorityBlossom     = 180
+	PriorityLightning   = 190 // After Quasar
+	PriorityFlash       = 200
+	PriorityUI          = 210
 	PriorityEffect      = 300
 	PrioritySplash      = 800 // After game logic, before rendering
 	PriorityDeath       = 850 // After game logic, before TimeKeeper

@@ -4,7 +4,7 @@ import (
 	"time"
 )
 
-// @lixen: #dev{feature[quasar(render,system)]}
+// @lixen: #dev{feature[dust(render,system)]}
 
 // QuasarChars defines the 3×5 visual representation
 var QuasarChars = [3][5]rune{
