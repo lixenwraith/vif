@@ -109,10 +109,20 @@ func (s *TypingSystem) HandleEvent(ev event.GameEvent) {
 
 // handleTyping processes a typed character at cursor position
 func (s *TypingSystem) handleTyping(cursorX, cursorY int, typedRune rune) {
-	// Find interactable entity at cursor position
-	entity := s.world.Positions.GetTopEntityFiltered(cursorX, cursorY, func(e core.Entity) bool {
-		return s.res.ZIndex.IsTypeable(e)
-	})
+	// Stack-allocated buffer for zero-allocation lookup
+	var buf [constant.MaxEntitiesPerCell]core.Entity
+	count := s.world.Positions.GetAllAtInto(cursorX, cursorY, buf[:])
+
+	var entity core.Entity
+
+	// Iterate to find typeable entity (Glyph)
+	// Break on first match for O(1) best case in crowded cells
+	for i := 0; i < count; i++ {
+		if s.glyphStore.Has(buf[i]) {
+			entity = buf[i]
+			break
+		}
+	}
 
 	if entity == 0 {
 		s.emitTypingError()

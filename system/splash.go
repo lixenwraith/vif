@@ -290,9 +290,18 @@ func (s *SplashSystem) validateMagnifier(splashEntity core.Entity, splash *compo
 		return false
 	}
 
-	glyphEntity := s.world.Positions.GetTopEntityFiltered(cursorPos.X, cursorPos.Y, func(e core.Entity) bool {
-		return s.glyphStore.Has(e)
-	})
+	// Zero-allocation lookup
+	var buf [constant.MaxEntitiesPerCell]core.Entity
+	count := s.world.Positions.GetAllAtInto(cursorPos.X, cursorPos.Y, buf[:])
+
+	var glyphEntity core.Entity
+
+	for i := 0; i < count; i++ {
+		if s.glyphStore.Has(buf[i]) {
+			glyphEntity = buf[i]
+			break
+		}
+	}
 
 	if glyphEntity == 0 {
 		s.world.DestroyEntity(splashEntity)
@@ -581,10 +590,18 @@ func (s *SplashSystem) calculateSmartLayout(cursorX, cursorY, charCount int) (in
 func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 	cursorX, cursorY := payload.X, payload.Y
 
-	// Query glyph entity under cursor
-	entity := s.world.Positions.GetTopEntityFiltered(cursorX, cursorY, func(e core.Entity) bool {
-		return s.glyphStore.Has(e)
-	})
+	// Zero-allocation lookup of glyph under cursor
+	var buf [constant.MaxEntitiesPerCell]core.Entity
+	count := s.world.Positions.GetAllAtInto(cursorX, cursorY, buf[:])
+
+	var entity core.Entity
+
+	for i := 0; i < count; i++ {
+		if s.glyphStore.Has(buf[i]) {
+			entity = buf[i]
+			break
+		}
+	}
 
 	if entity == 0 {
 		// No glyph entity - clear magnifier

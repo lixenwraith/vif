@@ -1,4 +1,5 @@
 package engine
+
 // @lixen: #dev{base(core),feature[drain(render,system)],feature[dust(render,system)],feature[quasar(render,system)]}
 
 import (
@@ -123,10 +124,6 @@ func NewGameContext(world *World, width, height int) *GameContext {
 
 	// 6. Cursor Resource
 	SetResource(ctx.World.Resources, &CursorResource{Entity: ctx.CursorEntity})
-
-	// ZIndex resolver for entity interaction ordering
-	zIndexResolver := NewZIndexResolver(ctx.World)
-	SetResource(ctx.World.Resources, zIndexResolver)
 
 	// Initialize atomic string pointers to empty strings
 	empty := ""

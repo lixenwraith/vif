@@ -22,6 +22,7 @@ type EnergySystem struct {
 	heatStore   *engine.Store[component.HeatComponent]
 	boostStore  *engine.Store[component.BoostComponent]
 	nuggetStore *engine.Store[component.NuggetComponent]
+	glyphStore  *engine.Store[component.GlyphComponent]
 
 	lastCorrect    time.Time
 	errorCursorSet bool
@@ -42,6 +43,7 @@ func NewEnergySystem(world *engine.World) engine.System {
 		heatStore:   engine.GetStore[component.HeatComponent](world),
 		boostStore:  engine.GetStore[component.BoostComponent](world),
 		nuggetStore: engine.GetStore[component.NuggetComponent](world),
+		glyphStore:  engine.GetStore[component.GlyphComponent](world),
 	}
 	s.initLocked()
 	return s
@@ -220,12 +222,9 @@ func (s *EnergySystem) handleDeleteRequest(payload *event.DeleteRequestPayload) 
 
 	entitiesToDelete := make([]core.Entity, 0)
 
-	// Use cached ZIndexResolver
-	resolver := s.res.ZIndex
-
 	// Helper to check and mark entity for deletion
 	checkEntity := func(entity core.Entity) {
-		if resolver == nil || !resolver.IsTypeable(entity) {
+		if !s.glyphStore.Has(entity) {
 			return
 		}
 

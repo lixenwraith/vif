@@ -1,4 +1,5 @@
 package engine
+
 // @lixen: #dev{base(core),feature[drain(render,system)],feature[dust(render,system)],feature[quasar(render,system)]}
 
 import (
@@ -18,7 +19,6 @@ type PositionStore struct {
 	entities   []core.Entity // Dense array for cache-friendly iteration
 	grid       *SpatialGrid
 	world      *World // Reference for z-index lookups
-	resolver   *ZIndexResolver
 }
 
 // NewPositionStore creates a new position store with spatial indexing
@@ -199,32 +199,6 @@ func (ps *PositionStore) SetWorld(w *World) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 	ps.world = w
-}
-
-// SetZIndexResolver sets the cached resolver reference
-// Called once by ZIndexResolver when created during bootstrap
-func (ps *PositionStore) SetZIndexResolver(z *ZIndexResolver) {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
-	ps.resolver = z
-}
-
-// GetTopEntityFiltered returns the highest z-index entity at position that passes filter
-// Returns 0 if no matching entity found
-func (ps *PositionStore) GetTopEntityFiltered(x, y int, filter func(core.Entity) bool) core.Entity {
-	ps.mu.RLock()
-	defer ps.mu.RUnlock()
-
-	view := ps.grid.GetAllAt(x, y)
-	if len(view) == 0 {
-		return 0
-	}
-
-	if ps.resolver == nil {
-		return 0
-	}
-
-	return ps.resolver.SelectTopEntityFiltered(view, filter)
 }
 
 // --- Batch Implementation ---

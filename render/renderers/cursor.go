@@ -1,4 +1,5 @@
 package renderers
+
 // @lixen: #dev{feature[drain(render,system)],feature[dust(render,system)],feature[quasar(render,system)]}
 
 import (
@@ -14,10 +15,10 @@ type CursorRenderer struct {
 	gameCtx     *engine.GameContext
 	cursorStore *engine.Store[component.CursorComponent]
 	glyphStore  *engine.Store[component.GlyphComponent]
+	sigilStore  *engine.Store[component.SigilComponent]
 	nuggetStore *engine.Store[component.NuggetComponent]
 	drainStore  *engine.Store[component.DrainComponent]
 	decayStore  *engine.Store[component.DecayComponent]
-	resolver    *engine.ZIndexResolver
 }
 
 // NewCursorRenderer creates a new cursor renderer
@@ -26,10 +27,10 @@ func NewCursorRenderer(gameCtx *engine.GameContext) *CursorRenderer {
 		gameCtx:     gameCtx,
 		cursorStore: engine.GetStore[component.CursorComponent](gameCtx.World),
 		glyphStore:  engine.GetStore[component.GlyphComponent](gameCtx.World),
+		sigilStore:  engine.GetStore[component.SigilComponent](gameCtx.World),
 		nuggetStore: engine.GetStore[component.NuggetComponent](gameCtx.World),
 		drainStore:  engine.GetStore[component.DrainComponent](gameCtx.World),
 		decayStore:  engine.GetStore[component.DecayComponent](gameCtx.World),
-		resolver:    engine.MustGetResource[*engine.ZIndexResolver](gameCtx.World.Resources),
 	}
 }
 
@@ -62,77 +63,54 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 	var charFgColor = render.RgbBlack
 
-	// 2. Get entities at cursor position using z-index selection
+	// 2. Scan entities at cursor position (Zero allocation)
+	var entitiesBuf [constant.MaxEntitiesPerCell]core.Entity
+	count := r.gameCtx.World.Positions.GetAllAtInto(ctx.CursorX, ctx.CursorY, entitiesBuf[:])
 
-	// Get all entities at cursor position
-	entities := r.gameCtx.World.Positions.GetAllAt(ctx.CursorX, ctx.CursorY)
+	var glyphEntity core.Entity
+	var sigilEntity core.Entity
 
-	// Check for Drain (highest priority overlay, masks everything)
-	isDrain := false
-	for _, e := range entities {
-		if r.drainStore.Has(e) {
-			isDrain = true
+	for i := 0; i < count; i++ {
+		e := entitiesBuf[i]
+
+		// Priority 1: Glyph (Interactable)
+		// Stop immediately if found (first found takes precedence)
+		if r.glyphStore.Has(e) {
+			glyphEntity = e
 			break
 		}
-	}
 
-	// Get the highest priority character entity for display (excluding cursor and non-character entities)
-	displayEntity := r.resolver.SelectTopEntityFiltered(entities, func(e core.Entity) bool {
-		// Exclude cursor itself and non-character entities
-		if e == r.gameCtx.CursorEntity {
-			return false
-		}
-		// Only consider entities with characters
-		return r.glyphStore.Has(e)
-	})
-
-	hasChar := displayEntity != 0
-	isNugget := false
-	var charFg render.RGB
-
-	if hasChar {
-		if glyph, ok := r.glyphStore.Get(displayEntity); ok {
-			charAtCursor = glyph.Rune
-			charFg = resolveGlyphColor(glyph)
-			charAtCursor = glyph.Rune
-			charFg = resolveGlyphColor(glyph)
-		}
-		if r.nuggetStore.Has(displayEntity) {
-			isNugget = true
-			charFg = render.RgbNuggetOrange
+		// Priority 2: Sigil (Visual/Enemy)
+		// Store candidate but continue searching for glyphs
+		if sigilEntity == 0 && r.sigilStore.Has(e) {
+			sigilEntity = e
 		}
 	}
 
-	// Priority 3: Decay (Lowest Priority)
-	hasDecay := false
-	if !isDrain && !hasChar {
-		for _, e := range entities {
-			if decay, ok := r.decayStore.Get(e); ok {
-				charAtCursor = decay.Char
-				hasDecay = true
-				break
+	// 3. Resolve Visuals
+	if glyphEntity != 0 {
+		if glyph, ok := r.glyphStore.Get(glyphEntity); ok {
+			charAtCursor = glyph.Rune
+			fg := resolveGlyphColor(glyph)
+
+			// Cursor background takes the entity's foreground color
+			cursorBgColor = fg
+
+			// Check for Nugget (special coloring)
+			if r.nuggetStore.Has(glyphEntity) {
+				cursorBgColor = render.RgbNuggetOrange
+				charFgColor = render.RgbNuggetDark
+			} else {
+				charFgColor = render.RgbBlack
 			}
 		}
-	}
-
-	// 3. Resolve Final Visuals based on priority
-	if isDrain {
-		// Drain overrides everything
-		charAtCursor = constant.DrainChar
-		cursorBgColor = render.RgbDrain
-		charFgColor = render.RgbBlack
-	} else if hasChar {
-		// Character found - inherit background from character's foreground color
-		cursorBgColor = charFg
-		if isNugget {
-			charFgColor = render.RgbNuggetDark
-		} else {
+	} else if sigilEntity != 0 {
+		if sigil, ok := r.sigilStore.Get(sigilEntity); ok {
+			charAtCursor = sigil.Rune
+			// Cursor background takes the sigil's color
+			cursorBgColor = resolveSigilColor(sigil.Color)
 			charFgColor = render.RgbBlack
 		}
-	} else if hasDecay {
-		// Decay found on empty space
-		cursorBgColor = render.RgbDecay
-		charFgColor = render.RgbBlack
 	}
 
 	// 4. Error Flash Overlay

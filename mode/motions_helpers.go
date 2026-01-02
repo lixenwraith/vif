@@ -291,7 +291,7 @@ func findLineEnd(ctx *engine.GameContext, cursorY int) int {
 	// Stack-allocated buffer for zero-alloc queries
 	var buf [constant.MaxEntitiesPerCell]core.Entity
 
-	resolver := engine.MustGetResource[*engine.ZIndexResolver](ctx.World.Resources)
+	glyphStore := engine.GetStore[component.GlyphComponent](ctx.World)
 
 	// Scan from right to left
 	for x := ctx.GameWidth - 1; x >= 0; x-- {
@@ -300,7 +300,7 @@ func findLineEnd(ctx *engine.GameContext, cursorY int) int {
 
 		// Check entities at this cell
 		for i := 0; i < count; i++ {
-			if buf[i] != 0 && resolver.IsTypeable(buf[i]) {
+			if buf[i] != 0 && glyphStore.Has(buf[i]) {
 				// Found right-most interactable entity
 				return x
 			}
@@ -328,7 +328,7 @@ func findFirstNonWhitespace(ctx *engine.GameContext, cursorY int) int {
 func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
 	var buf [constant.MaxEntitiesPerCell]core.Entity
 
-	resolver := engine.MustGetResource[*engine.ZIndexResolver](ctx.World.Resources)
+	glyphStore := engine.GetStore[component.GlyphComponent](ctx.World)
 
 	for y := cursorY - 1; y >= 0; y-- {
 		rowEmpty := true
@@ -336,7 +336,7 @@ func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
 		for x := 0; x < ctx.GameWidth && rowEmpty; x++ {
 			count := ctx.World.Positions.GetAllAtInto(x, y, buf[:])
 			for i := 0; i < count; i++ {
-				if buf[i] != 0 && resolver.IsTypeable(buf[i]) {
+				if buf[i] != 0 && glyphStore.Has(buf[i]) {
 					rowEmpty = false
 					break
 				}
@@ -354,7 +354,7 @@ func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
 func findNextEmptyLine(ctx *engine.GameContext, cursorY int) int {
 	var buf [constant.MaxEntitiesPerCell]core.Entity
 
-	resolver := engine.MustGetResource[*engine.ZIndexResolver](ctx.World.Resources)
+	glyphStore := engine.GetStore[component.GlyphComponent](ctx.World)
 
 	for y := cursorY + 1; y < ctx.GameHeight; y++ {
 		rowEmpty := true
@@ -362,7 +362,7 @@ func findNextEmptyLine(ctx *engine.GameContext, cursorY int) int {
 		for x := 0; x < ctx.GameWidth && rowEmpty; x++ {
 			count := ctx.World.Positions.GetAllAtInto(x, y, buf[:])
 			for i := 0; i < count; i++ {
-				if buf[i] != 0 && resolver.IsTypeable(buf[i]) {
+				if buf[i] != 0 && glyphStore.Has(buf[i]) {
 					rowEmpty = false
 					break
 				}

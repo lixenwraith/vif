@@ -1,4 +1,5 @@
 package engine
+
 // @lixen: #dev{base(core),feature[drain(render,system)],feature[dust(render,system)],feature[quasar(render,system)]}
 
 import (
@@ -78,7 +79,6 @@ type Resources struct {
 	State  *GameStateResource
 	Cursor *CursorResource
 	Events *EventQueueResource
-	ZIndex *ZIndexResolver
 
 	// Telemetry
 	Status *status.Registry
@@ -99,7 +99,6 @@ func GetResources(w *World) Resources {
 		State:  MustGetResource[*GameStateResource](w.Resources),
 		Events: MustGetResource[*EventQueueResource](w.Resources),
 		Status: MustGetResource[*status.Registry](w.Resources),
-		ZIndex: MustGetResource[*ZIndexResolver](w.Resources),
 	}
 
 	// Bridged resources from services: fail-fast for required, graceful for optional
