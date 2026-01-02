@@ -11,6 +11,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/event"
 )
 
+// TODO: ALL collision checks to be unified now that all are based on spiral search, different order and different starting radius, timer: 1, magnifier: 1, action: 2
+
 // BBox represents an axis-aligned bounding box for collision detection
 type BBox struct {
 	X, Y, W, H int
@@ -475,115 +477,126 @@ func (s *SplashSystem) cleanupSplashesBySlotAndAnchor(slot component.SplashSlot,
 	}
 }
 
-// calculateSmartLayout determines the best position for a transient splash
-// Avoids Cursor and Gold Sequences
+// calculateSmartLayout determines the best position for a transient action splash
+// Uses spiral search starting at 2x radius, growing to 4x, then fallback overlap
 func (s *SplashSystem) calculateSmartLayout(cursorX, cursorY, charCount int) (int, int) {
 	config := s.res.Config
-	width := config.GameWidth
-	height := config.GameHeight
+	centerX := config.GameWidth / 2
+	centerY := config.GameHeight / 2
 
-	// Splash Dimensions
 	splashW := charCount * constant.SplashCharWidth
 	splashH := constant.SplashCharHeight
 
-	// Define Quadrant Centers
-	// Q0: Top-Left, Q1: Top-Right, Q2: Bottom-Left, Q3: Bottom-Right
-	centers := []struct{ x, y int }{
-		{width / 4, height / 4},         // Q0
-		{width * 3 / 4, height / 4},     // Q1
-		{width / 4, height * 3 / 4},     // Q2
-		{width * 3 / 4, height * 3 / 4}, // Q3
+	// Early exit if splash cannot fit in game area
+	if splashW > config.GameWidth || splashH > config.GameHeight {
+		return max(0, cursorX-splashW/2), max(0, cursorY-splashH/2)
 	}
 
-	// Score Quadrants (Higher is better)
-	scores := []int{constant.SplashQuadrantBaseScore, constant.SplashQuadrantBaseScore, constant.SplashQuadrantBaseScore, constant.SplashQuadrantBaseScore}
+	minDist := float64(constant.SplashMinDistance)
+	occupiedBBoxes := s.getOccupiedSplashBBoxes()
 
-	// 1. Cursor Penalty
-	// Determine cursor quadrant
-	cursorQ := 0
-	if cursorX >= width/2 {
-		cursorQ |= 1
+	// Determine search direction and select angle order (same as magnifier)
+	searchCCW := s.getSearchDirection(cursorX, cursorY, centerX, centerY)
+	var angleOrder [8]int
+	if searchCCW {
+		angleOrder = magnifierAnglesCCW
+	} else {
+		angleOrder = magnifierAnglesCW
 	}
-	if cursorY >= height/2 {
-		cursorQ |= 2
-	}
-	scores[cursorQ] -= constant.SplashCursorPenalty
 
-	// 2. Gold Sequence Penalty
-	// Iterate composites with BehaviorGold
-	anchors := s.headerStore.All()
-	for _, anchor := range anchors {
-		header, ok := s.headerStore.Get(anchor)
-		if !ok || header.BehaviorID != component.BehaviorGold {
-			continue
-		}
+	// Spiral search: start at 2x radius, grow to 4x (3 levels)
+	for radiusLevel := 2; radiusLevel <= 4; radiusLevel++ {
+		radius := minDist * float64(radiusLevel)
 
-		// Check each living member's position
-		for _, m := range header.Members {
-			if m.Entity == 0 {
-				continue
-			}
-			pos, ok := s.world.Positions.Get(m.Entity)
-			if !ok {
+		for _, angleIdx := range angleOrder {
+			dir := spiralDirections[angleIdx]
+
+			// Calculate position in virtual space (circular)
+			vX := float64(cursorX) + dir[0]*radius
+			vY := float64(cursorY)*2.0 + dir[1]*radius
+
+			// Convert back to game space
+			anchorX := int(vX) - splashW/2
+			anchorY := int(vY/2.0) - splashH/2
+
+			if anchorX < 0 || anchorX+splashW > config.GameWidth ||
+				anchorY < 0 || anchorY+splashH > config.GameHeight {
 				continue
 			}
 
-			// Determine quadrant of this gold character
-			goldQ := 0
-			if pos.X >= width/2 {
-				goldQ |= 1
+			candidate := BBox{X: anchorX, Y: anchorY, W: splashW, H: splashH}
+			if !s.checkBBoxCollisionAny(candidate, occupiedBBoxes) {
+				return anchorX, anchorY
 			}
-			if pos.Y >= height/2 {
-				goldQ |= 2
-			}
-			// Apply soft penalty (cumulative, effectively vetoes the quadrant)
-			scores[goldQ] -= constant.SplashGoldSequencePenalty
 		}
 	}
 
-	// 3. Select Best Quadrant
-	bestQ := -1
-	maxScore := -9999
+	// Fallback: clamped positions at each angle direction
+	for _, angleIdx := range angleOrder {
+		dir := spiralDirections[angleIdx]
 
-	// Prefer opposite to cursor if scores tied
-	oppositeQ := cursorQ ^ 3 // 0<->3, 1<->2
+		anchorX := cursorX + int(dir[0]*minDist*2) - splashW/2
+		anchorY := cursorY + int(dir[1]*minDist) - splashH/2
 
-	// Check opposite first to give it precedence on ties
-	if scores[oppositeQ] > maxScore {
-		maxScore = scores[oppositeQ]
-		bestQ = oppositeQ
-	}
+		anchorX = max(0, min(anchorX, config.GameWidth-splashW))
+		anchorY = max(0, min(anchorY, config.GameHeight-splashH))
 
-	for i := 0; i < 4; i++ {
-		if i == oppositeQ {
-			continue
-		}
-		if scores[i] > maxScore {
-			maxScore = scores[i]
-			bestQ = i
+		candidate := BBox{X: anchorX, Y: anchorY, W: splashW, H: splashH}
+		if !s.checkBBoxCollisionAny(candidate, occupiedBBoxes) {
+			return anchorX, anchorY
 		}
 	}
 
-	// Calculate Anchor
-	cx, cy := centers[bestQ].x, centers[bestQ].y
-	anchorX := cx - splashW/2
-	anchorY := cy - splashH/2
-
-	// Clamp to Game Area
-	if anchorX < 0 {
-		anchorX = 0
+	// Ultimate fallback: opposite corner from cursor (accept overlap)
+	anchorX := 0
+	anchorY := 0
+	if cursorX < centerX {
+		anchorX = config.GameWidth - splashW
 	}
-	if anchorX+splashW > width {
-		anchorX = width - splashW
-	}
-	if anchorY < 0 {
-		anchorY = 0
-	}
-	if anchorY+splashH > height {
-		anchorY = height - splashH
+	if cursorY < centerY {
+		anchorY = config.GameHeight - splashH
 	}
 
 	return anchorX, anchorY
+}
+
+// getOccupiedSplashBBoxes returns bounding boxes for Timer and Magnifier splashes
+// Used by Action splash placement to avoid higher-priority splashes
+func (s *SplashSystem) getOccupiedSplashBBoxes() []BBox {
+	var boxes []BBox
+
+	entities := s.splashStore.All()
+	for _, entity := range entities {
+		splash, ok := s.splashStore.Get(entity)
+		if !ok {
+			continue
+		}
+
+		if splash.Slot != component.SlotTimer && splash.Slot != component.SlotMagnifier {
+			continue
+		}
+
+		x, y := splash.AnchorX, splash.AnchorY
+		if splash.AnchorEntity != 0 {
+			if pos, ok := s.world.Positions.Get(splash.AnchorEntity); ok {
+				x = pos.X + splash.OffsetX
+				y = pos.Y + splash.OffsetY
+			}
+		}
+
+		w := splash.Length * constant.SplashCharWidth
+		h := constant.SplashCharHeight
+
+		pad := constant.SplashCollisionPadding
+		boxes = append(boxes, BBox{
+			X: x - pad,
+			Y: y - pad,
+			W: w + (pad * 2),
+			H: h + (pad * 2),
+		})
+	}
+
+	return boxes
 }
 
 // handleCursorMoved updates the magnifier splash based on cursor position
@@ -663,8 +676,13 @@ func (s *SplashSystem) calculateProximityAnchor(cursorX, cursorY, charCount int)
 
 	splashW := charCount * constant.SplashCharWidth
 	splashH := constant.SplashCharHeight
-	minDist := float64(constant.SplashMinDistance)
 
+	// Early exit if splash cannot fit in game area
+	if splashW > config.GameWidth || splashH > config.GameHeight {
+		return max(0, cursorX-splashW/2), max(0, cursorY-splashH/2)
+	}
+
+	minDist := float64(constant.SplashMinDistance)
 	timerBBoxes := s.getTimerBBoxes()
 
 	// Determine search direction and select angle order
@@ -691,7 +709,7 @@ func (s *SplashSystem) calculateProximityAnchor(cursorX, cursorY, charCount int)
 			anchorX := int(vX) - splashW/2
 			anchorY := int(vY/2.0) - splashH/2
 
-			// Bounds check
+			// Bounds check - continue to next angle if OOB
 			if anchorX < 0 || anchorX+splashW > config.GameWidth ||
 				anchorY < 0 || anchorY+splashH > config.GameHeight {
 				continue
@@ -699,38 +717,48 @@ func (s *SplashSystem) calculateProximityAnchor(cursorX, cursorY, charCount int)
 
 			// Collision check against timers
 			candidate := BBox{X: anchorX, Y: anchorY, W: splashW, H: splashH}
-			collides := false
-			for _, timer := range timerBBoxes {
-				if s.checkBBoxCollision(candidate, timer) {
-					collides = true
-					break
-				}
-			}
-
-			if !collides {
+			if !s.checkBBoxCollisionAny(candidate, timerBBoxes) {
 				return anchorX, anchorY
 			}
 		}
 	}
 
-	// Final fallback: top-left diagonal position, clamped
-	anchorX := cursorX - splashW/2
-	anchorY := cursorY - splashH - int(minDist)
+	// Fallback: Try clamped positions at each angle direction
+	// This catches cases where spiral positions are OOB but clamped versions might work
+	for _, angleIdx := range angleOrder {
+		dir := spiralDirections[angleIdx]
 
-	if anchorX < 0 {
-		anchorX = 0
+		// Use minimum distance, apply aspect ratio correction for Y
+		anchorX := cursorX + int(dir[0]*minDist) - splashW/2
+		anchorY := cursorY + int(dir[1]*minDist/2) - splashH/2
+
+		// Clamp to valid bounds (order matters: ensure non-negative after width check)
+		anchorX = max(0, min(anchorX, config.GameWidth-splashW))
+		anchorY = max(0, min(anchorY, config.GameHeight-splashH))
+
+		candidate := BBox{X: anchorX, Y: anchorY, W: splashW, H: splashH}
+
+		if !s.checkBBoxCollisionAny(candidate, timerBBoxes) {
+			return anchorX, anchorY
+		}
 	}
-	if anchorX+splashW > config.GameWidth {
-		anchorX = config.GameWidth - splashW
-	}
-	if anchorY < 0 {
-		anchorY = 0
-	}
-	if anchorY+splashH > config.GameHeight {
-		anchorY = config.GameHeight - splashH
-	}
+
+	// Ultimate fallback: centered on cursor, clamped (accept potential collision)
+	// Ensures magnifier always has valid in-bounds position
+	anchorX := max(0, min(cursorX-splashW/2, config.GameWidth-splashW))
+	anchorY := max(0, min(cursorY-splashH/2, config.GameHeight-splashH))
 
 	return anchorX, anchorY
+}
+
+// checkBBoxCollisionAny returns true if candidate collides with any bbox in slice
+func (s *SplashSystem) checkBBoxCollisionAny(candidate BBox, boxes []BBox) bool {
+	for _, box := range boxes {
+		if s.checkBBoxCollision(candidate, box) {
+			return true
+		}
+	}
+	return false
 }
 
 // calculateTimerOffset finds valid offset for timer relative to anchor entity
