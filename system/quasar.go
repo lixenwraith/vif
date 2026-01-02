@@ -36,10 +36,6 @@ type QuasarSystem struct {
 	active       bool
 	anchorEntity core.Entity
 
-	// TODO: need update on resize
-	// Zap range visual circle radius (Q16.16)
-	zapRadius int32
-
 	// Random source for knockback impulse randomization
 	rng *vmath.FastRand
 
@@ -79,7 +75,6 @@ func (s *QuasarSystem) Init() {
 func (s *QuasarSystem) initLocked() {
 	s.active = false
 	s.anchorEntity = 0
-	s.zapRadius = 0
 	s.rng = vmath.NewFastRand(uint32(s.res.Time.RealTime.UnixNano()))
 	s.statActive.Store(false)
 	s.enabled = true
@@ -136,6 +131,9 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 			quasar.LastSpeedIncreaseAt = now
 			quasar.HitPoints = constant.QuasarInitialHP // Init HP
 
+			// Initialize dynamic radius
+			quasar.ZapRadius = s.calculateZapRadius()
+
 			// Initial velocity toward cursor
 			dx := vmath.FromInt(cursorPos.X - anchorPos.X)
 			dy := vmath.FromInt(cursorPos.Y - anchorPos.Y)
@@ -145,9 +143,6 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 
 			s.quasarStore.Set(s.anchorEntity, quasar)
 		}
-
-		// Compute zap range
-		s.updateZapRadius()
 
 		s.statActive.Store(true)
 		s.mu.Unlock()
@@ -166,12 +161,12 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
-// Compute zap range from game dimensions
-func (s *QuasarSystem) updateZapRadius() {
+// calculateZapRadius compute zap range from game dimensions
+func (s *QuasarSystem) calculateZapRadius() int32 {
 	width := s.res.Config.GameWidth
 	height := s.res.Config.GameHeight
 	// Visual radius = max(width/2, height) since height cells = height*2 visual units
-	s.zapRadius = vmath.FromInt(max(width/2, height))
+	return vmath.FromInt(max(width/2, height))
 }
 
 func (s *QuasarSystem) Update() {
@@ -210,6 +205,12 @@ func (s *QuasarSystem) Update() {
 		return
 	}
 
+	// Dynamic resize check: ensure radius is up to date with current screen dimensions
+	currentRadius := s.calculateZapRadius()
+	if quasar.ZapRadius != currentRadius {
+		quasar.ZapRadius = currentRadius
+	}
+
 	// Decrement flash timer
 	if quasar.HitFlashRemaining > 0 {
 		quasar.HitFlashRemaining -= s.res.Time.DeltaTime
@@ -225,7 +226,7 @@ func (s *QuasarSystem) Update() {
 	}
 
 	// Check if cursor is within zap range
-	cursorInRange := s.isCursorInZapRange(anchorEntity)
+	cursorInRange := s.isCursorInZapRange(anchorEntity, &quasar)
 
 	// State machine: InRange ←→ Charging → Zapping
 	if cursorInRange {
@@ -441,8 +442,8 @@ func (s *QuasarSystem) updateKineticMovement(anchorEntity core.Entity, quasar *c
 	}
 }
 
-// Check if cursor is within zap ellipse centered on quasar
-func (s *QuasarSystem) isCursorInZapRange(anchorEntity core.Entity) bool {
+// isCursorInZapRange checks if cursor is within zap ellipse centered on quasar
+func (s *QuasarSystem) isCursorInZapRange(anchorEntity core.Entity, quasar *component.QuasarComponent) bool {
 	cursorEntity := s.res.Cursor.Entity
 
 	anchorPos, ok := s.world.Positions.Get(anchorEntity)
@@ -461,7 +462,7 @@ func (s *QuasarSystem) isCursorInZapRange(anchorEntity core.Entity) bool {
 	// Inside visual circle = in range (no zap)
 	dyCirc := vmath.ScaleToCircular(dy) // Aspect correction: dy * 2
 	dist := vmath.MagnitudeEuclidean(dx, dyCirc)
-	return dist <= s.zapRadius
+	return dist <= quasar.ZapRadius
 }
 
 // Start zapping - spawnLightning tracked lightning

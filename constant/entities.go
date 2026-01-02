@@ -124,8 +124,12 @@ const (
 	QuasarHitFlashDuration = 150 * time.Millisecond
 )
 
-// --- Quasar Shield Visual ---
+// --- Quasar Visual ---
 const (
+	// QuasarZapBorderWidthCells defines target visual width of zap adaptive range border
+	QuasarZapBorderWidthCells = 1.5
+	// QuasarBorderPaddingCells is the padding to ensure continuous visual border in small window sizes
+	QuasarBorderPaddingCells = 2
 	// QuasarShieldPad256X is horizontal cell padding for 256-color solid rim
 	QuasarShieldPad256X = 2
 	// QuasarShieldPad256Y is vertical cell padding for 256-color solid rim
@@ -234,8 +238,11 @@ const (
 	SplashMaxLength  = 8
 	SplashDuration   = 1 * time.Second
 
-	// SplashTimerPadding is the vertical padding between gold timer and sequence
+	// SplashTimerPadding is the vertical padding between timer and anchor
 	SplashTimerPadding = 0
+
+	// SplashCollisionPadding is the cell padding between different splashes to prevent overcrowding
+	SplashCollisionPadding = 2
 )
 
 // --- Global Visual Effects ---

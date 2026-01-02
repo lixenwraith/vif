@@ -31,10 +31,6 @@ type QuasarRenderer struct {
 	shieldInvRySq int32
 	shieldPadX    int
 	shieldPadY    int
-
-	// Zap range visual circle - mirrors QuasarSystem.updateZapRadius exactly
-	zapRadius int32 // Visual circle radius (Q16.16)
-	zapRCells int   // Bounding box (grid cells)
 }
 
 // NewQuasarRenderer creates renderer with color-mode-specific shield strategy
@@ -63,13 +59,6 @@ func NewQuasarRenderer(gameCtx *engine.GameContext) *QuasarRenderer {
 	rx := vmath.FromFloat(float64(constant.QuasarWidth)/2.0 + float64(r.shieldPadX))
 	ry := vmath.FromFloat(float64(constant.QuasarHeight)/2.0 + float64(r.shieldPadY))
 	r.shieldInvRxSq, r.shieldInvRySq = vmath.EllipseInvRadiiSq(rx, ry)
-
-	// TODO: needs recompute on resize
-	// Precompute zap range - MUST match QuasarSystem.updateZapRadiu
-	width := gameCtx.GameWidth
-	height := gameCtx.GameHeight
-	r.zapRadius = vmath.FromInt(max(width/2, height))
-	r.zapRCells = max(width, height) + 2
 
 	return r
 }
@@ -122,15 +111,25 @@ func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.Re
 		borderColor = render.RgbDrain
 	}
 
-	// Boundary band thresholds (~1 cell width ring at ellipse edge)
-	// EllipseDistSq == Scale means exactly on boundary
-	// TODO: this needs to be screen size dependents, it has holes in small panes, ok for 150x50 ish
-	innerThreshold := vmath.FromFloat(0.99)
-	outerThreshold := vmath.FromFloat(1.01)
+	// Adaptive threshold calculation for consistent visual border width
+	// Target visual width in cells
+	borderHalfWidth := vmath.FromFloat(constant.QuasarZapBorderWidthCells / 2.0)
 
-	// Bounding box in grid cells (circle in visual space = ellipse in grid)
-	rxCells := r.zapRCells
-	ryCells := r.zapRCells/2 + 2 // Visual Y is 2x, so grid cells = radius/2
+	// Calculate delta in normalized space: visual_width / radius
+	// This ensures border stays same physical size regardless of window/radius size
+	if quasar.ZapRadius == 0 {
+		return
+	}
+	borderDelta := vmath.Div(borderHalfWidth, quasar.ZapRadius)
+
+	innerThreshold := vmath.Scale - borderDelta
+	outerThreshold := vmath.Scale + borderDelta
+
+	// Dynamic bounding box in grid cells (circle in visual space = ellipse in grid): radius (fixed) -> int cells
+	rVisual := quasar.ZapRadius
+	// Add padding to ensure coverage
+	rxCells := vmath.ToInt(rVisual) + constant.QuasarBorderPaddingCells
+	ryCells := vmath.ToInt(rVisual)/2 + constant.QuasarBorderPaddingCells // Visual Y is 2x, so grid cells = radius/2
 
 	minX := anchorX - rxCells
 	maxX := anchorX + rxCells
@@ -159,7 +158,7 @@ func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.Re
 			dist := vmath.MagnitudeEuclidean(dx, dyCirc)
 
 			// Normalized distance for boundary detection
-			normDist := vmath.Div(dist, r.zapRadius)
+			normDist := vmath.Div(dist, quasar.ZapRadius)
 
 			if normDist >= innerThreshold && normDist <= outerThreshold {
 				screenX := ctx.GameX + x

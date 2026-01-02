@@ -45,6 +45,7 @@ type SplashSystem struct {
 
 	splashStore *engine.Store[component.SplashComponent]
 	headerStore *engine.Store[component.CompositeHeaderComponent]
+	memberStore *engine.Store[component.MemberComponent]
 	glyphStore  *engine.Store[component.GlyphComponent]
 
 	enabled bool
@@ -146,6 +147,10 @@ func (s *SplashSystem) Update() {
 
 	dt := s.res.Time.DeltaTime
 
+	// Cache timer bboxes for magnifier collision checks to avoid allocs inside loop if not needed
+	var cachedTimerBBoxes []BBox
+	timersCached := false
+
 	entities := s.splashStore.All()
 	for _, entity := range entities {
 		splash, ok := s.splashStore.Get(entity)
@@ -201,6 +206,37 @@ func (s *SplashSystem) Update() {
 				continue // Entity was destroyed
 			}
 
+			// Validate Position against Timers (Continuous Validation)
+			if !timersCached {
+				cachedTimerBBoxes = s.getTimerBBoxes()
+				timersCached = true
+			}
+
+			// Construct current BBox for magnifier
+			magW := splash.Length * constant.SplashCharWidth
+			magH := constant.SplashCharHeight
+			magBBox := BBox{X: splash.AnchorX, Y: splash.AnchorY, W: magW, H: magH}
+
+			// Check against inflated timer boxes
+			collision := false
+			for _, timerBBox := range cachedTimerBBoxes {
+				if s.checkBBoxCollision(magBBox, timerBBox) {
+					collision = true
+					break
+				}
+			}
+
+			// If collision detected, attempt to find a new valid position
+			if collision {
+				if pos, ok := s.world.Positions.Get(s.res.Cursor.Entity); ok {
+					newX, newY := s.calculateProximityAnchor(pos.X, pos.Y, splash.Length)
+					if newX != splash.AnchorX || newY != splash.AnchorY {
+						splash.AnchorX = newX
+						splash.AnchorY = newY
+					}
+				}
+			}
+
 		}
 
 		// Write back component (state changed)
@@ -246,8 +282,7 @@ func (s *SplashSystem) handleSplashRequest(payload *event.SplashRequestPayload) 
 	})
 }
 
-// validateMagnifier checks if magnifier is still valid and updates content if entity changed
-// Returns false if magnifier was destroyed
+// validateMagnifier checks if magnifier is still valid and updates content if entity changed, returns false if magnifier was destroyed
 func (s *SplashSystem) validateMagnifier(splashEntity core.Entity, splash *component.SplashComponent) bool {
 	cursorPos, ok := s.world.Positions.Get(s.res.Cursor.Entity)
 	if !ok {
@@ -776,7 +811,14 @@ func (s *SplashSystem) getTimerBBoxes() []BBox {
 		w := splash.Length * constant.SplashCharWidth
 		h := constant.SplashCharHeight
 
-		boxes = append(boxes, BBox{X: x, Y: y, W: w, H: h})
+		// Apply padding for inter-splash collision (Inflated Bounding Box)
+		pad := constant.SplashCollisionPadding
+		boxes = append(boxes, BBox{
+			X: x - pad,
+			Y: y - pad,
+			W: w + (pad * 2),
+			H: h + (pad * 2),
+		})
 	}
 
 	return boxes

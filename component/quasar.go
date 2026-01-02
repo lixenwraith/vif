@@ -31,6 +31,10 @@ type QuasarComponent struct {
 	ChargeRemaining time.Duration
 	ShieldActive    bool // Cleaner immunity during charge
 
+	// Dynamic resize support
+	ZapRadius int32 // Q16.16, visual radius of zap circle (dynamic on resize)
+
+	// HP
 	HitPoints         int
 	HitFlashRemaining time.Duration
 }
