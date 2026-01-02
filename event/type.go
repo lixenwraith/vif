@@ -95,24 +95,19 @@ const (
 	// Payload: *GoldCompletionPayload
 	EventGoldDestroyed
 
-	// EventDirectionalCleanerRequest spawns 4-way cleaners from origin
-	// Trigger: Nugget collected at max heat, Enter in Normal mode with heat >= 10
+	// EventCleanerDirectionalRequest spawns 4-way cleaners from origin
+	// Trigger: Nugget collected at max heat, Enter in Normal or mode
 	// Consumer: CleanerSystem | Payload: *DirectionalCleanerPayload
-	EventDirectionalCleanerRequest
+	EventCleanerDirectionalRequest
 
-	// EventManualCleanerTrigger signals player request to use cleaner ability (consumes heat)
-	// Trigger: Enter key in Insert/Normal mode
-	// Consumer: HeatSystem | Payload: nil
-	EventManualCleanerTrigger
-
-	// EventCleanerRequest spawns cleaners on rows with Red characters
+	// EventCleanerSweepingRequest spawns cleaners on rows with Red(positive energy) or Blue(negative energy) glyphs
 	// Trigger: Gold sequence completed at max heat
 	// Consumer: CleanerSystem | Payload: nil
-	EventCleanerRequest
+	EventCleanerSweepingRequest
 
-	// EventCleanerFinished marks cleaner animation completion
+	// EventCleanerSweepingFinished marks cleaner animation completion
 	// Trigger: All cleaner entities destroyed | Payload: nil
-	EventCleanerFinished
+	EventCleanerSweepingFinished
 
 	// EventCharacterTyped signals Insert mode keypress
 	// Trigger: InputHandler on printable key

@@ -1,4 +1,5 @@
 package system
+
 // @lixen: #dev{feature[dust(render,system)]}
 
 import (
@@ -341,7 +342,7 @@ func (s *GoldSystem) handleGoldComplete() {
 	if hc, ok := s.heatStore.Get(cursorEntity); ok {
 		if hc.Current.Load() >= constant.MaxHeat {
 			// At max head trigger cleaners
-			s.world.PushEvent(event.EventCleanerRequest, nil)
+			s.world.PushEvent(event.EventCleanerSweepingRequest, nil)
 		} else {
 			// Fill heat to max
 			s.world.PushEvent(event.EventHeatSet, &event.HeatSetPayload{Value: constant.MaxHeat})

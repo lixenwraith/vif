@@ -37,4 +37,7 @@ var (
 	DustChaseBoost     = vmath.FromFloat(DustChaseBoostFloat)
 	DustChaseDecay     = vmath.FromFloat(DustChaseDecayFloat)
 	DustInitialSpeed   = vmath.FromFloat(DustInitialSpeedFloat)
+	// Dynamic scaling constants
+	DustBoostMax       = vmath.FromFloat(DustBoostMaxFloat)
+	DustShieldRedirect = vmath.FromFloat(DustShieldRedirectFloat)
 )

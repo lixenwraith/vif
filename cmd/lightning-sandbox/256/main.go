@@ -1,4 +1,3 @@
-// FILE: cmd/lightning-sandbox-256/main.go
 package main
 
 import (

@@ -257,8 +257,6 @@ func TestDecode_TypeMismatch(t *testing.T) {
 	}
 }
 
-// FILE: decode_fsm_test.go
-
 func TestLexer_DottedKeyVsFloat(t *testing.T) {
 	// Verify lexer correctly distinguishes dotted keys from floats
 	tests := []struct {

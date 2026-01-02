@@ -91,8 +91,8 @@ func (s *CleanerSystem) Priority() int {
 // EventTypes returns the event types CleanerSystem handles
 func (s *CleanerSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventCleanerRequest,
-		event.EventDirectionalCleanerRequest,
+		event.EventCleanerSweepingRequest,
+		event.EventCleanerDirectionalRequest,
 		event.EventGameReset,
 	}
 }
@@ -114,12 +114,12 @@ func (s *CleanerSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	switch ev.Type {
-	case event.EventCleanerRequest:
+	case event.EventCleanerSweepingRequest:
 		s.spawnCleaners()
 		s.spawned[ev.Frame] = true
 		s.hasSpawnedSession = true
 
-	case event.EventDirectionalCleanerRequest:
+	case event.EventCleanerDirectionalRequest:
 		if payload, ok := ev.Payload.(*event.DirectionalCleanerPayload); ok {
 			s.spawnDirectionalCleaners(payload.OriginX, payload.OriginY)
 			s.spawned[ev.Frame] = true
@@ -147,9 +147,9 @@ func (s *CleanerSystem) Update() {
 	entities := s.cleanerStore.All()
 	s.statActive.Store(int64(len(entities)))
 
-	// Push EventCleanerFinished when all cleaners have completed their animation
+	// Push EventCleanerSweepingFinished when all cleaners have completed their animation
 	if len(entities) == 0 && s.hasSpawnedSession {
-		s.world.PushEvent(event.EventCleanerFinished, nil)
+		s.world.PushEvent(event.EventCleanerSweepingFinished, nil)
 		s.hasSpawnedSession = false
 		return
 	}
@@ -270,9 +270,9 @@ func (s *CleanerSystem) Update() {
 	}
 
 	entities = s.cleanerStore.All()
-	// Push EventCleanerFinished when all cleaners have completed their animation
+	// Push EventCleanerSweepingFinished when all cleaners have completed their animation
 	if len(entities) == 0 && s.hasSpawnedSession {
-		s.world.PushEvent(event.EventCleanerFinished, nil)
+		s.world.PushEvent(event.EventCleanerSweepingFinished, nil)
 		s.hasSpawnedSession = false
 	}
 }
@@ -289,7 +289,7 @@ func (s *CleanerSystem) spawnCleaners() {
 		if !s.res.State.State.GrayoutPersist.Load() {
 			s.world.PushEvent(event.EventFuseDrains, nil)
 		}
-		s.world.PushEvent(event.EventCleanerFinished, nil)
+		s.world.PushEvent(event.EventCleanerSweepingFinished, nil)
 		return
 	}
 	s.statSpawned.Add(int64(spawnCount))

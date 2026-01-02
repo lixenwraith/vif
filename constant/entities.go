@@ -222,6 +222,12 @@ const (
 
 	// DustInitialSpeedFloat - tangential velocity magnitude at spawn (cells/sec)
 	DustInitialSpeedFloat = 32.0
+
+	// DustBoostMaxFloat is maximum speed multiplier at low entity count
+	DustBoostMaxFloat = 80.0
+
+	// DustShieldRedirectFloat is inward velocity nudge when exiting shield
+	DustShieldRedirectFloat = 20.0
 )
 
 // --- Shield Entity ---

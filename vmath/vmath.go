@@ -1,4 +1,5 @@
 package vmath
+
 // @lixen: #dev{base(core),feature[drain(render,system)],feature[dust(render,system)],feature[quasar(render,system)]}
 
 import (
@@ -15,20 +16,6 @@ const (
 	LUTSize = 1024
 	LUTMask = LUTSize - 1
 )
-
-// SinLUT and CosLUT scaled by Q16.16
-var (
-	SinLUT [LUTSize]int32
-	CosLUT [LUTSize]int32
-)
-
-func init() {
-	for i := 0; i < LUTSize; i++ {
-		rad := 2.0 * math.Pi * float64(i) / float64(LUTSize)
-		SinLUT[i] = int32(math.Sin(rad) * Scale)
-		CosLUT[i] = int32(math.Cos(rad) * Scale)
-	}
-}
 
 // --- Arithmetic ---
 

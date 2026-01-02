@@ -318,6 +318,10 @@ func (s *DustSystem) Update() {
 	cursorXFixed := vmath.FromInt(cursorPos.X)
 	cursorYFixed := vmath.FromInt(cursorPos.Y)
 
+	// Dynamic speed multiplier based on entity count
+	dustCount := len(dustEntities)
+	speedMultiplier := vmath.ExpDecayScaled(dustCount, constant.DustBoostMax)
+
 	// Track destroyed count for telemetry
 	var destroyedCount int64
 
@@ -335,6 +339,9 @@ func (s *DustSystem) Update() {
 		dy := dust.PreciseY - cursorYFixed
 		dyCirc := vmath.ScaleToCircular(dy)
 
+		// Pre-compute shield containment for this dust
+		dustInsideShield := shieldActive && vmath.EllipseContains(dx, dy, shield.InvRxSq, shield.InvRySq)
+
 		// Chase boost: apply on large cursor delta, decay over time
 		if applyChaseBoost {
 			dust.ChaseBoost = constant.DustChaseBoost
@@ -351,19 +358,21 @@ func (s *DustSystem) Update() {
 			// All physics in circular space
 			velYCirc := vmath.ScaleToCircular(dust.VelY)
 
-			// Orbital attraction toward cursor (boosted) in circular space
+			// Dynamic orbital attraction toward cursor (boosted, circular space, speed multiplier)
 			attraction := vmath.Mul(constant.DustAttractionBase, dust.ChaseBoost)
+			attraction = vmath.Mul(attraction, speedMultiplier)
 			ax, ay := vmath.OrbitalAttraction(dx, dyCirc, attraction)
 
 			// Update velocity in circular space
 			dust.VelX += vmath.Mul(ax, dtFixed)
 			velYCirc += vmath.Mul(ay, dtFixed)
 
-			// Dampen radial velocity to circularize orbit (circular space)
+			// Dynamic dampen radial velocity to circularize orbit (circular space, scales with speed multiplier)
+			effectiveDamping := vmath.Mul(constant.DustDamping, speedMultiplier)
 			dust.VelX, velYCirc = vmath.OrbitalDamp(
 				dust.VelX, velYCirc,
 				dx, dyCirc,
-				constant.DustDamping, dtFixed,
+				effectiveDamping, dtFixed,
 			)
 
 			// Transform velocity back to display (elliptical) space
@@ -399,6 +408,14 @@ func (s *DustSystem) Update() {
 			dust.VelY = -dust.VelY / 2
 		}
 
+		// Soft shield-edge redirection
+		if shieldActive && dust.WasInsideShield && !dustInsideShield {
+			redirectX, redirectY := vmath.Normalize2D(-dx, -dy)
+			dust.VelX += vmath.Mul(redirectX, constant.DustShieldRedirect)
+			dust.VelY += vmath.Mul(redirectY, constant.DustShieldRedirect)
+		}
+		dust.WasInsideShield = dustInsideShield
+
 		// Swept collision detection
 		destroyDust := false
 		var collisionBuf [constant.MaxEntitiesPerCell]core.Entity
@@ -423,8 +440,12 @@ func (s *DustSystem) Update() {
 
 				// Priority 1: Blossom/Decay - dust dies, other survives
 				if s.blossomStore.Has(target) || s.decayStore.Has(target) {
-					destroyDust = true
-					return false
+					// Shield protects dust from blossom/decay
+					if !dustInsideShield {
+						destroyDust = true
+						return false
+					}
+					continue // Protected, skip this collision
 				}
 
 				// Priority 2: Glyph collision
@@ -445,33 +466,36 @@ func (s *DustSystem) Update() {
 					continue
 				}
 
-				// Both die
+				// Glyph die
 				s.deathStore.Set(target, component.DeathComponent{})
-				destroyDust = true
 
-				// Energy reward if collision inside active shield
-				if shieldActive {
-					gdx := vmath.FromInt(x - cursorPos.X)
-					gdy := vmath.FromInt(y - cursorPos.Y)
-					if vmath.EllipseContains(gdx, gdy, shield.InvRxSq, shield.InvRySq) {
-						var energyDelta int
-						switch glyph.Type {
-						case component.GlyphGreen:
-							energyDelta = heat
-						case component.GlyphBlue:
-							energyDelta = heat * 2
-						case component.GlyphRed:
-							energyDelta = -heat
-						}
-						if energyDelta != 0 {
-							s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{
-								Delta: energyDelta,
-							})
-						}
+				// Dust survives if inside shield, dies otherwise
+				if !dustInsideShield {
+					destroyDust = true
+				}
+
+				// Energy reward when protected dust destroys glyph
+				if dustInsideShield {
+					var energyDelta int
+					switch glyph.Type {
+					case component.GlyphGreen:
+						energyDelta = heat
+					case component.GlyphBlue:
+						energyDelta = heat * 2
+					case component.GlyphRed:
+						energyDelta = -heat
+					}
+					if energyDelta != 0 {
+						s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{
+							Delta: energyDelta,
+						})
 					}
 				}
 
-				return false // Stop traversal
+				if destroyDust {
+					return false // Stop traversal
+				}
+				// Continue traversal if dust survived (inside shield)
 			}
 
 			return true // Continue traversal

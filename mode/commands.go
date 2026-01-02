@@ -197,7 +197,7 @@ func handleDecayCommand(ctx *engine.GameContext) CommandResult {
 
 // handleCleanerCommand triggers cleaners on Red character rows
 func handleCleanerCommand(ctx *engine.GameContext) CommandResult {
-	ctx.PushEvent(event.EventCleanerRequest, nil)
+	ctx.PushEvent(event.EventCleanerSweepingRequest, nil)
 	ctx.SetLastCommand(":cleaner")
 	return CommandResult{Continue: true, KeepPaused: false}
 }

@@ -232,6 +232,7 @@ func (s *TypingSystem) emitTypingFeedback(glyphType component.GlyphType, char ru
 	})
 }
 
+// emitTypingError emits events corresponding to typing error
 func (s *TypingSystem) emitTypingError() {
 	cursorEntity := s.res.Cursor.Entity
 
@@ -242,7 +243,7 @@ func (s *TypingSystem) emitTypingError() {
 	}
 
 	// Reset heat and boost
-	s.world.PushEvent(event.EventHeatSet, &event.HeatSetPayload{Value: 0})
+	s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: -10})
 	s.world.PushEvent(event.EventBoostDeactivate, nil)
 	s.world.PushEvent(event.EventEnergyBlinkStart, &event.EnergyBlinkPayload{Type: 0, Level: 0})
 	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{

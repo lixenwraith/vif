@@ -404,7 +404,7 @@ func (r *Router) handleFireCleaner() bool {
 		originX, originY = pos.X, pos.Y
 	}
 
-	r.ctx.PushEvent(event.EventDirectionalCleanerRequest, &event.DirectionalCleanerPayload{
+	r.ctx.PushEvent(event.EventCleanerDirectionalRequest, &event.DirectionalCleanerPayload{
 		OriginX: originX,
 		OriginY: originY,
 	})

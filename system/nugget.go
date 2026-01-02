@@ -321,7 +321,7 @@ func (s *NuggetSystem) collectNugget() {
 	}
 
 	if currentHeat >= constant.MaxHeat {
-		s.world.PushEvent(event.EventDirectionalCleanerRequest, &event.DirectionalCleanerPayload{
+		s.world.PushEvent(event.EventCleanerDirectionalRequest, &event.DirectionalCleanerPayload{
 			OriginX: nuggetPos.X,
 			OriginY: nuggetPos.Y,
 		})

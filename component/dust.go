@@ -1,4 +1,5 @@
 package component
+
 // @lixen: #dev{feature[dust(render,system)]}
 
 // DustComponent represents orbital dust particles from glyph transformation
@@ -21,4 +22,7 @@ type DustComponent struct {
 	// Grid tracking for spatial index sync
 	LastIntX int
 	LastIntY int
+
+	// Shield containment tracking for soft redirection
+	WasInsideShield bool
 }
