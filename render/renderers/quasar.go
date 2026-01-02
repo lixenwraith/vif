@@ -31,6 +31,10 @@ type QuasarRenderer struct {
 	shieldInvRySq int32
 	shieldPadX    int
 	shieldPadY    int
+
+	// Zap range visual circle - mirrors QuasarSystem.updateZapRadius exactly
+	zapRadius int32 // Visual circle radius (Q16.16)
+	zapRCells int   // Bounding box (grid cells)
 }
 
 // NewQuasarRenderer creates renderer with color-mode-specific shield strategy
@@ -60,6 +64,13 @@ func NewQuasarRenderer(gameCtx *engine.GameContext) *QuasarRenderer {
 	ry := vmath.FromFloat(float64(constant.QuasarHeight)/2.0 + float64(r.shieldPadY))
 	r.shieldInvRxSq, r.shieldInvRySq = vmath.EllipseInvRadiiSq(rx, ry)
 
+	// TODO: needs recompute on resize
+	// Precompute zap range - MUST match QuasarSystem.updateZapRadiu
+	width := gameCtx.GameWidth
+	height := gameCtx.GameHeight
+	r.zapRadius = vmath.FromInt(max(width/2, height))
+	r.zapRCells = max(width, height) + 2
+
 	return r
 }
 
@@ -88,6 +99,9 @@ func (r *QuasarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			continue
 		}
 
+		// Zap range border renders first (background layer)
+		r.renderZapRange(ctx, buf, anchorPos.X, anchorPos.Y, &quasar)
+
 		// Shield renders to background layer when active
 		if quasar.ShieldActive {
 			r.renderShield(ctx, buf, anchorPos.X, anchorPos.Y)
@@ -95,6 +109,66 @@ func (r *QuasarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 		// Member characters render to foreground layer
 		r.renderMembers(ctx, buf, &header, &quasar)
+	}
+}
+
+// renderZapRange renders zap range ellipse boundary
+func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.RenderBuffer, anchorX, anchorY int, quasar *component.QuasarComponent) {
+	// Use same color as quasar entity state
+	var borderColor render.RGB
+	if quasar.IsCharging || quasar.IsZapping {
+		borderColor = render.RgbQuasarEnraged
+	} else {
+		borderColor = render.RgbDrain
+	}
+
+	// Boundary band thresholds (~1 cell width ring at ellipse edge)
+	// EllipseDistSq == Scale means exactly on boundary
+	// TODO: this needs to be screen size dependents, it has holes in small panes, ok for 150x50 ish
+	innerThreshold := vmath.FromFloat(0.99)
+	outerThreshold := vmath.FromFloat(1.01)
+
+	// Bounding box in grid cells (circle in visual space = ellipse in grid)
+	rxCells := r.zapRCells
+	ryCells := r.zapRCells/2 + 2 // Visual Y is 2x, so grid cells = radius/2
+
+	minX := anchorX - rxCells
+	maxX := anchorX + rxCells
+	minY := anchorY - ryCells
+	maxY := anchorY + ryCells
+
+	if minX < 0 {
+		minX = 0
+	}
+	if maxX >= ctx.GameWidth {
+		maxX = ctx.GameWidth - 1
+	}
+	if minY < 0 {
+		minY = 0
+	}
+	if maxY >= ctx.GameHeight {
+		maxY = ctx.GameHeight - 1
+	}
+
+	for y := minY; y <= maxY; y++ {
+		for x := minX; x <= maxX; x++ {
+			// CRITICAL: Must match QuasarSystem.isCursorInZapRange exactly
+			dx := vmath.FromInt(x - anchorX)
+			dy := vmath.FromInt(y - anchorY)
+			dyCirc := vmath.ScaleToCircular(dy)
+			dist := vmath.MagnitudeEuclidean(dx, dyCirc)
+
+			// Normalized distance for boundary detection
+			normDist := vmath.Div(dist, r.zapRadius)
+
+			if normDist >= innerThreshold && normDist <= outerThreshold {
+				screenX := ctx.GameX + x
+				screenY := ctx.GameY + y
+
+				buf.Set(screenX, screenY, 0, render.RGBBlack, borderColor,
+					render.BlendScreen, 0.4, terminal.AttrNone)
+			}
+		}
 	}
 }
 

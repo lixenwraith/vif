@@ -80,3 +80,9 @@ func ReflectAxisX(velX, velY int32) (int32, int32) {
 func ReflectAxisY(velX, velY int32) (int32, int32) {
 	return velX, -velY
 }
+
+// MagnitudeEuclidean returns true Euclidean distance sqrt(x² + y²)
+// Use for visual accuracy; DistanceApprox for physics where ~4% error is acceptable
+func MagnitudeEuclidean(x, y int32) int32 {
+	return Sqrt(Mul(x, x) + Mul(y, y))
+}

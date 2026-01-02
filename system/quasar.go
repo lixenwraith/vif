@@ -36,9 +36,9 @@ type QuasarSystem struct {
 	active       bool
 	anchorEntity core.Entity
 
-	// Zap range ellipse (precomputed on config change)
-	zapInvRxSq int32
-	zapInvRySq int32
+	// TODO: need update on resize
+	// Zap range visual circle radius (Q16.16)
+	zapRadius int32
 
 	// Random source for knockback impulse randomization
 	rng *vmath.FastRand
@@ -79,8 +79,7 @@ func (s *QuasarSystem) Init() {
 func (s *QuasarSystem) initLocked() {
 	s.active = false
 	s.anchorEntity = 0
-	s.zapInvRxSq = 0
-	s.zapInvRySq = 0
+	s.zapRadius = 0
 	s.rng = vmath.NewFastRand(uint32(s.res.Time.RealTime.UnixNano()))
 	s.statActive.Store(false)
 	s.enabled = true
@@ -147,8 +146,8 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 			s.quasarStore.Set(s.anchorEntity, quasar)
 		}
 
-		// Compute zap range ellipse
-		s.updateZapEllipse()
+		// Compute zap range
+		s.updateZapRadius()
 
 		s.statActive.Store(true)
 		s.mu.Unlock()
@@ -167,12 +166,12 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
-// Compute zap range ellipse from game dimensions
-func (s *QuasarSystem) updateZapEllipse() {
-	config := s.res.Config
-	rx := vmath.FromInt(config.GameWidth / 2)
-	ry := vmath.FromInt(config.GameHeight / 2)
-	s.zapInvRxSq, s.zapInvRySq = vmath.EllipseInvRadiiSq(rx, ry)
+// Compute zap range from game dimensions
+func (s *QuasarSystem) updateZapRadius() {
+	width := s.res.Config.GameWidth
+	height := s.res.Config.GameHeight
+	// Visual radius = max(width/2, height) since height cells = height*2 visual units
+	s.zapRadius = vmath.FromInt(max(width/2, height))
 }
 
 func (s *QuasarSystem) Update() {
@@ -459,8 +458,10 @@ func (s *QuasarSystem) isCursorInZapRange(anchorEntity core.Entity) bool {
 	dx := vmath.FromInt(cursorPos.X - anchorPos.X)
 	dy := vmath.FromInt(cursorPos.Y - anchorPos.Y)
 
-	// Inside ellipse = in range (no zap)
-	return vmath.EllipseContains(dx, dy, s.zapInvRxSq, s.zapInvRySq)
+	// Inside visual circle = in range (no zap)
+	dyCirc := vmath.ScaleToCircular(dy) // Aspect correction: dy * 2
+	dist := vmath.MagnitudeEuclidean(dx, dyCirc)
+	return dist <= s.zapRadius
 }
 
 // Start zapping - spawnLightning tracked lightning
