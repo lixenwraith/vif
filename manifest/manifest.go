@@ -157,7 +157,7 @@ func RegisterRenderers() {
 	}, render.PriorityCleaner)
 
 	registry.RegisterRenderer("flash", func(ctx any) any {
-		return renderers.NewCleanerRenderer(ctx.(*engine.GameContext))
+		return renderers.NewFlashRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityParticle)
 
 	registry.RegisterRenderer("lightning", func(ctx any) any {

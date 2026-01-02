@@ -1,5 +1,5 @@
 package vmath
-// @lixen: #dev{feature[dust(render,system)],feature[quasar(render,system)]}
+// @lixen: #dev{base(core),feature[dust(render,system)],feature[quasar(render,system)]}
 
 // Mass ratio constants for collision physics (Q16.16)
 // Use with ApplyCollisionImpulse for different entity weights

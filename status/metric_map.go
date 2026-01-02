@@ -1,5 +1,5 @@
 package status
-// @lixen: #dev{feature[dust(render,system)]}
+// @lixen: #dev{base(core),feature[dust(render,system)]}
 
 import (
 	"sort"

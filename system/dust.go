@@ -21,10 +21,16 @@ type DustSystem struct {
 	world *engine.World
 	res   engine.Resources
 
-	dustStore   *engine.Store[component.DustComponent]
-	glyphStore  *engine.Store[component.GlyphComponent]
-	memberStore *engine.Store[component.MemberComponent]
-	sigilStore  *engine.Store[component.SigilComponent]
+	dustStore    *engine.Store[component.DustComponent]
+	glyphStore   *engine.Store[component.GlyphComponent]
+	memberStore  *engine.Store[component.MemberComponent]
+	sigilStore   *engine.Store[component.SigilComponent]
+	energyStore  *engine.Store[component.EnergyComponent]
+	shieldStore  *engine.Store[component.ShieldComponent]
+	heatStore    *engine.Store[component.HeatComponent]
+	blossomStore *engine.Store[component.BlossomComponent]
+	decayStore   *engine.Store[component.DecayComponent]
+	deathStore   *engine.Store[component.DeathComponent]
 
 	// Event state tracking
 	quasarActive bool
@@ -50,10 +56,16 @@ func NewDustSystem(world *engine.World) engine.System {
 		world: world,
 		res:   res,
 
-		dustStore:   engine.GetStore[component.DustComponent](world),
-		glyphStore:  engine.GetStore[component.GlyphComponent](world),
-		memberStore: engine.GetStore[component.MemberComponent](world),
-		sigilStore:  engine.GetStore[component.SigilComponent](world),
+		dustStore:    engine.GetStore[component.DustComponent](world),
+		glyphStore:   engine.GetStore[component.GlyphComponent](world),
+		memberStore:  engine.GetStore[component.MemberComponent](world),
+		sigilStore:   engine.GetStore[component.SigilComponent](world),
+		energyStore:  engine.GetStore[component.EnergyComponent](world),
+		shieldStore:  engine.GetStore[component.ShieldComponent](world),
+		heatStore:    engine.GetStore[component.HeatComponent](world),
+		blossomStore: engine.GetStore[component.BlossomComponent](world),
+		decayStore:   engine.GetStore[component.DecayComponent](world),
+		deathStore:   engine.GetStore[component.DeathComponent](world),
 
 		rng: vmath.NewFastRand(uint32(res.Time.RealTime.UnixNano())),
 
@@ -270,6 +282,21 @@ func (s *DustSystem) Update() {
 		return
 	}
 
+	// Fetch energy once for attraction gating
+	energyComp, _ := s.energyStore.Get(cursorEntity)
+	cursorEnergy := energyComp.Current.Load()
+	hasAttraction := cursorEnergy != 0
+
+	// Shield data for collision energy reward
+	shield, shieldOk := s.shieldStore.Get(cursorEntity)
+	shieldActive := shieldOk && shield.Active
+
+	// Heat for energy calculation
+	var heat int
+	if hc, ok := s.heatStore.Get(cursorEntity); ok {
+		heat = int(hc.Current.Load())
+	}
+
 	// Detect cursor jump for chase boost
 	s.mu.Lock()
 	cursorDeltaX := cursorPos.X - s.lastCursorX
@@ -291,11 +318,17 @@ func (s *DustSystem) Update() {
 	cursorXFixed := vmath.FromInt(cursorPos.X)
 	cursorYFixed := vmath.FromInt(cursorPos.Y)
 
+	// Track destroyed count for telemetry
+	var destroyedCount int64
+
 	for _, entity := range dustEntities {
 		dust, ok := s.dustStore.Get(entity)
 		if !ok {
 			continue
 		}
+
+		// Store old position for swept collision
+		oldX, oldY := dust.PreciseX, dust.PreciseY
 
 		// Position relative to cursor - transform to circular space for physics
 		dx := dust.PreciseX - cursorXFixed
@@ -313,28 +346,30 @@ func (s *DustSystem) Update() {
 			}
 		}
 
-		// All physics in circular space
-		// Transform velocity to circular space
-		velYCirc := vmath.ScaleToCircular(dust.VelY)
+		// Energy-gated attraction and damping
+		if hasAttraction {
+			// All physics in circular space
+			velYCirc := vmath.ScaleToCircular(dust.VelY)
 
-		// Orbital attraction toward cursor (boosted) in circular space
-		attraction := vmath.Mul(constant.DustAttractionBase, dust.ChaseBoost)
-		ax, ay := vmath.OrbitalAttraction(dx, dyCirc, attraction)
+			// Orbital attraction toward cursor (boosted) in circular space
+			attraction := vmath.Mul(constant.DustAttractionBase, dust.ChaseBoost)
+			ax, ay := vmath.OrbitalAttraction(dx, dyCirc, attraction)
 
-		// Manual integration: accel → velocity → damp → position
-		// Update velocity in circular space
-		dust.VelX += vmath.Mul(ax, dtFixed)
-		velYCirc += vmath.Mul(ay, dtFixed)
+			// Update velocity in circular space
+			dust.VelX += vmath.Mul(ax, dtFixed)
+			velYCirc += vmath.Mul(ay, dtFixed)
 
-		// Dampen radial velocity to circularize orbit (circular space)
-		dust.VelX, velYCirc = vmath.OrbitalDamp(
-			dust.VelX, velYCirc,
-			dx, dyCirc,
-			constant.DustDamping, dtFixed,
-		)
+			// Dampen radial velocity to circularize orbit (circular space)
+			dust.VelX, velYCirc = vmath.OrbitalDamp(
+				dust.VelX, velYCirc,
+				dx, dyCirc,
+				constant.DustDamping, dtFixed,
+			)
 
-		// Transform velocity back to display (elliptical) space
-		dust.VelY = vmath.ScaleFromCircular(velYCirc)
+			// Transform velocity back to display (elliptical) space
+			dust.VelY = vmath.ScaleFromCircular(velYCirc)
+		}
+		// When hasAttraction == false: velocity unchanged, dust scatters on momentum
 
 		// Integrate position
 		dust.PreciseX += vmath.Mul(dust.VelX, dtFixed)
@@ -362,6 +397,90 @@ func (s *DustSystem) Update() {
 			newY = config.GameHeight - 1
 			dust.PreciseY = vmath.FromInt(newY)
 			dust.VelY = -dust.VelY / 2
+		}
+
+		// Swept collision detection
+		destroyDust := false
+		var collisionBuf [constant.MaxEntitiesPerCell]core.Entity
+
+		vmath.Traverse(oldX, oldY, dust.PreciseX, dust.PreciseY, func(x, y int) bool {
+			// Skip previous frame's cell
+			if x == dust.LastIntX && y == dust.LastIntY {
+				return true
+			}
+
+			// Bounds check
+			if x < 0 || x >= config.GameWidth || y < 0 || y >= config.GameHeight {
+				return true
+			}
+
+			n := s.world.Positions.GetAllAtInto(x, y, collisionBuf[:])
+			for i := 0; i < n; i++ {
+				target := collisionBuf[i]
+				if target == 0 || target == entity {
+					continue
+				}
+
+				// Priority 1: Blossom/Decay - dust dies, other survives
+				if s.blossomStore.Has(target) || s.decayStore.Has(target) {
+					destroyDust = true
+					return false
+				}
+
+				// Priority 2: Glyph collision
+				if s.memberStore.Has(target) {
+					continue // Skip composite members
+				}
+				if s.deathStore.Has(target) {
+					continue // Already dying
+				}
+
+				glyph, ok := s.glyphStore.Get(target)
+				if !ok {
+					continue
+				}
+
+				// Level match required
+				if glyph.Level != dust.Level {
+					continue
+				}
+
+				// Both die
+				s.deathStore.Set(target, component.DeathComponent{})
+				destroyDust = true
+
+				// Energy reward if collision inside active shield
+				if shieldActive {
+					gdx := vmath.FromInt(x - cursorPos.X)
+					gdy := vmath.FromInt(y - cursorPos.Y)
+					if vmath.EllipseContains(gdx, gdy, shield.InvRxSq, shield.InvRySq) {
+						var energyDelta int
+						switch glyph.Type {
+						case component.GlyphGreen:
+							energyDelta = heat
+						case component.GlyphBlue:
+							energyDelta = heat * 2
+						case component.GlyphRed:
+							energyDelta = -heat
+						}
+						if energyDelta != 0 {
+							s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{
+								Delta: energyDelta,
+							})
+						}
+					}
+				}
+
+				return false // Stop traversal
+			}
+
+			return true // Continue traversal
+		})
+
+		if destroyDust {
+			s.deathStore.Set(entity, component.DeathComponent{})
+			destroyedCount++
+			continue // Skip grid sync for dying entity
 		}
 
 		// Update grid position if cell changed

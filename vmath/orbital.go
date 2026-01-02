@@ -1,6 +1,6 @@
 package vmath
 
-// @lixen: #dev{feature[dust(render,system)],feature[quasar(render,system)]}
+// @lixen: #dev{base(core),feature[dust(render,system)],feature[quasar(render,system)]}
 
 // OrbitalVelocity returns tangential velocity for circular orbit
 // attraction: centripetal acceleration at unit distance (G*M equivalent)
