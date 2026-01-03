@@ -25,16 +25,12 @@ func NewCompositeSystem(world *engine.World) engine.System {
 	s := &CompositeSystem{
 		world: world,
 	}
-	s.initLocked()
+	s.Init()
 	return s
 }
 
+// Init resets session state for new game
 func (s *CompositeSystem) Init() {
-	s.initLocked()
-}
-
-// initLocked performs session state reset
-func (s *CompositeSystem) initLocked() {
 	s.enabled = true
 }
 

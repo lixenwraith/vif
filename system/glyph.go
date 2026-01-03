@@ -4,7 +4,6 @@ import (
 	"math"
 	"math/rand"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -66,7 +65,6 @@ func (c GlyphCensus) ActiveColors() int {
 
 // GlyphSystem handles glyph sequence generation and spawning
 type GlyphSystem struct {
-	mu    sync.RWMutex
 	world *engine.World
 
 	// Spawn timing and rate
@@ -102,19 +100,12 @@ func NewGlyphSystem(world *engine.World) engine.System {
 	s.statOrphanGlyph = world.Resource.Status.Ints.Get("glyph.orphan_char")
 	s.statOrphanTypeable = world.Resource.Status.Ints.Get("glyph.orphan_typeable")
 
-	s.initLocked()
+	s.Init()
 	return s
 }
 
 // Init resets session state for new game
 func (s *GlyphSystem) Init() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.initLocked()
-}
-
-// initLocked performs session state reset, caller must hold s.mu
-func (s *GlyphSystem) initLocked() {
 	s.lastSpawnTime = time.Time{}
 	s.nextSpawnTime = time.Time{}
 	s.rateMultiplier = 1.0
@@ -166,9 +157,6 @@ func (s *GlyphSystem) HandleEvent(ev event.GameEvent) {
 
 // Update runs the spawnLightning system logic
 func (s *GlyphSystem) Update() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if !s.enabled {
 		return
 	}

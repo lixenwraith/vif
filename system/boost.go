@@ -28,17 +28,12 @@ func NewBoostSystem(world *engine.World) engine.System {
 	s.statActive = s.world.Resource.Status.Bools.Get("boost.active")
 	s.statRemaining = s.world.Resource.Status.Ints.Get("boost.remaining")
 
-	s.initLocked()
+	s.Init()
 	return s
 }
 
 // Init resets session state for new game
 func (s *BoostSystem) Init() {
-	s.initLocked()
-}
-
-// initLocked performs session state reset
-func (s *BoostSystem) initLocked() {
 	s.statActive.Store(false)
 	s.statRemaining.Store(0)
 	s.enabled = true

@@ -18,17 +18,12 @@ func NewFlashSystem(world *engine.World) engine.System {
 	s := &FlashSystem{
 		world: world,
 	}
-	s.initLocked()
+	s.Init()
 	return s
 }
 
 // Init resets session state for new game
 func (s *FlashSystem) Init() {
-	s.initLocked()
-}
-
-// initLocked performs session state reset
-func (s *FlashSystem) initLocked() {
 	s.enabled = true
 }
 

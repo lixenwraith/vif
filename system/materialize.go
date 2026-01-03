@@ -21,17 +21,12 @@ func NewMaterializeSystem(world *engine.World) engine.System {
 		world: world,
 	}
 
-	s.initLocked()
+	s.Init()
 	return s
 }
 
 // Init resets session state for new game
 func (s *MaterializeSystem) Init() {
-	s.initLocked()
-}
-
-// initLocked performs session state reset
-func (s *MaterializeSystem) initLocked() {
 	s.enabled = true
 }
 

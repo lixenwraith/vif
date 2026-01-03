@@ -2,7 +2,6 @@ package system
 
 import (
 	"math/rand"
-	"sync"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
@@ -26,7 +25,6 @@ type pendingDrainSpawn struct {
 // Drains spawn materialize based on Heat only
 // Priority: 25 (after CleanerSystem:22, before DecaySystem:30)
 type DrainSystem struct {
-	mu    sync.RWMutex
 	world *engine.World
 
 	// Spawn queue for staggered materialization
@@ -61,19 +59,12 @@ func NewDrainSystem(world *engine.World) engine.System {
 	s.statCount = s.world.Resource.Status.Ints.Get("drain.count")
 	s.statPending = s.world.Resource.Status.Ints.Get("drain.pending")
 
-	s.initLocked()
+	s.Init()
 	return s
 }
 
 // Init resets session state for new game
 func (s *DrainSystem) Init() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.initLocked()
-}
-
-// initLocked performs session state reset, caller must hold s.mu
-func (s *DrainSystem) initLocked() {
 	s.pendingSpawns = s.pendingSpawns[:0]
 	s.nextSpawnOrder = 0
 	s.spawnCooldownUntil = 0

@@ -22,15 +22,11 @@ func NewLightningSystem(world *engine.World) engine.System {
 	s := &LightningSystem{
 		world: world,
 	}
-	s.initLocked()
+	s.Init()
 	return s
 }
 
 func (s *LightningSystem) Init() {
-	s.initLocked()
-}
-
-func (s *LightningSystem) initLocked() {
 	s.enabled = true
 }
 

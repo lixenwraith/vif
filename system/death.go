@@ -28,17 +28,12 @@ func NewDeathSystem(world *engine.World) engine.System {
 
 	s.statKilled = s.world.Resource.Status.Ints.Get("death.killed")
 
-	s.initLocked()
+	s.Init()
 	return s
 }
 
 // Init resets session state for new game
 func (s *DeathSystem) Init() {
-	s.initLocked()
-}
-
-// initLocked performs session state reset
-func (s *DeathSystem) initLocked() {
 	s.statKilled.Store(0)
 	s.enabled = true
 }

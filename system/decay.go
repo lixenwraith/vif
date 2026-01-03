@@ -2,7 +2,6 @@ package system
 
 import (
 	"math/rand"
-	"sync"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
@@ -15,7 +14,6 @@ import (
 
 // DecaySystem handles character decay animation and logic
 type DecaySystem struct {
-	mu    sync.RWMutex
 	world *engine.World
 
 	// Per-frame tracking
@@ -40,19 +38,12 @@ func NewDecaySystem(world *engine.World) engine.System {
 	s.statCount = s.world.Resource.Status.Ints.Get("decay.count")
 	s.statApplied = s.world.Resource.Status.Ints.Get("decay.applied")
 
-	s.initLocked()
+	s.Init()
 	return s
 }
 
 // Init resets session state for new game
 func (s *DecaySystem) Init() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.initLocked()
-}
-
-// initLocked performs session state reset, caller must hold s.mu
-func (s *DecaySystem) initLocked() {
 	clear(s.decayedThisFrame)
 	clear(s.processedGridCells)
 	s.statCount.Store(0)
@@ -221,9 +212,7 @@ func (s *DecaySystem) updateDecayEntities() {
 					continue
 				}
 
-				s.mu.RLock()
 				alreadyHit := s.decayedThisFrame[target]
-				s.mu.RUnlock()
 				if alreadyHit {
 					continue
 				}
@@ -244,9 +233,7 @@ func (s *DecaySystem) updateDecayEntities() {
 					s.applyDecayToCharacter(target)
 				}
 
-				s.mu.Lock()
 				s.decayedThisFrame[target] = true
-				s.mu.Unlock()
 			}
 
 			s.processedGridCells[flatIdx] = true

@@ -2,7 +2,6 @@ package system
 
 import (
 	"math/rand"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -15,7 +14,6 @@ import (
 
 // NuggetSystem manages nugget spawnLightning and respawn logic
 type NuggetSystem struct {
-	mu    sync.RWMutex
 	world *engine.World
 
 	nuggetID           atomic.Int32
@@ -41,19 +39,12 @@ func NewNuggetSystem(world *engine.World) engine.System {
 	s.statCollected = world.Resource.Status.Ints.Get("nugget.collected")
 	s.statJumps = world.Resource.Status.Ints.Get("nugget.jumps")
 
-	s.initLocked()
+	s.Init()
 	return s
 }
 
 // Init resets session state for new game
 func (s *NuggetSystem) Init() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.initLocked()
-}
-
-// initLocked performs session state reset, caller must hold s.mu
-func (s *NuggetSystem) initLocked() {
 	s.nuggetID.Store(0)
 	s.lastSpawnAttempt = time.Time{}
 	s.activeNuggetEntity = 0
@@ -96,21 +87,17 @@ func (s *NuggetSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventNuggetCollected:
 		if payload, ok := ev.Payload.(*event.NuggetCollectedPayload); ok {
-			s.mu.Lock()
 			if s.activeNuggetEntity == payload.Entity {
 				s.activeNuggetEntity = 0
 			}
-			s.mu.Unlock()
 		}
 		s.statCollected.Add(1)
 
 	case event.EventNuggetDestroyed:
 		if payload, ok := ev.Payload.(*event.NuggetDestroyedPayload); ok {
-			s.mu.Lock()
 			if s.activeNuggetEntity == payload.Entity {
 				s.activeNuggetEntity = 0
 			}
-			s.mu.Unlock()
 		}
 	}
 }
@@ -123,9 +110,6 @@ func (s *NuggetSystem) Update() {
 
 	now := s.world.Resource.Time.GameTime
 	cursorEntity := s.world.Resource.Cursor.Entity
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	// Validate active nugget still exists
 	if s.activeNuggetEntity != 0 && !s.world.Component.Nugget.Has(s.activeNuggetEntity) {
@@ -176,9 +160,7 @@ func (s *NuggetSystem) handleJumpRequest() {
 	}
 
 	// 2. Check Active Nugget
-	s.mu.RLock()
 	nuggetEntity := s.activeNuggetEntity
-	s.mu.RUnlock()
 
 	if nuggetEntity == 0 {
 		return
@@ -188,11 +170,9 @@ func (s *NuggetSystem) handleJumpRequest() {
 	nuggetPos, ok := s.world.Position.Get(nuggetEntity)
 	if !ok {
 		// Stale reference - clear it
-		s.mu.Lock()
 		if s.activeNuggetEntity == nuggetEntity {
 			s.activeNuggetEntity = 0
 		}
-		s.mu.Unlock()
 		return
 	}
 

@@ -1,7 +1,6 @@
 package system
 
 import (
-	"sync"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
@@ -14,7 +13,6 @@ import (
 
 // CleanerSystem manages the cleaner animation and logic using vector physics
 type CleanerSystem struct {
-	mu    sync.Mutex
 	world *engine.World
 
 	spawned           map[int64]bool // Track which frames already spawned cleaners
@@ -41,19 +39,12 @@ func NewCleanerSystem(world *engine.World) engine.System {
 	s.statActive = s.world.Resource.Status.Ints.Get("cleaner.active")
 	s.statSpawned = s.world.Resource.Status.Ints.Get("cleaner.spawned")
 
-	s.initLocked()
+	s.Init()
 	return s
 }
 
 // Init resets session state for new game
 func (s *CleanerSystem) Init() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.initLocked()
-}
-
-// initLocked performs session state reset, caller must hold s.mu
-func (s *CleanerSystem) initLocked() {
 	clear(s.spawned)
 	s.hasSpawnedSession = false
 	s.rng = vmath.NewFastRand(uint32(s.world.Resource.Time.RealTime.UnixNano()))

@@ -25,15 +25,11 @@ func NewSpiritSystem(world *engine.World) engine.System {
 	s := &SpiritSystem{
 		world: world,
 	}
-	s.initLocked()
+	s.Init()
 	return s
 }
 
 func (s *SpiritSystem) Init() {
-	s.initLocked()
-}
-
-func (s *SpiritSystem) initLocked() {
 	s.destroyNextTick = s.destroyNextTick[:0]
 	s.enabled = true
 }

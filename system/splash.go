@@ -52,17 +52,12 @@ func NewSplashSystem(world *engine.World) engine.System {
 	s := &SplashSystem{
 		world: world,
 	}
-	s.initLocked()
+	s.Init()
 	return s
 }
 
 // Init resets session state for new game
 func (s *SplashSystem) Init() {
-	s.initLocked()
-}
-
-// initLocked performs session state reset
-func (s *SplashSystem) initLocked() {
 	s.enabled = true
 }
 

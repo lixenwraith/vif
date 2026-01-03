@@ -20,17 +20,12 @@ func NewTimeKeeperSystem(world *engine.World) engine.System {
 	s := &TimeKeeperSystem{
 		world: world,
 	}
-	s.initLocked()
+	s.Init()
 	return s
 }
 
 // Init resets session state for new game
 func (s *TimeKeeperSystem) Init() {
-	s.initLocked()
-}
-
-// initLocked performs session state reset
-func (s *TimeKeeperSystem) initLocked() {
 	s.enabled = true
 }
 

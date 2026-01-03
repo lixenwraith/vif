@@ -32,15 +32,11 @@ func NewFuseSystem(world *engine.World) engine.System {
 		world: world,
 	}
 
-	s.initLocked()
+	s.Init()
 	return s
 }
 
 func (s *FuseSystem) Init() {
-	s.initLocked()
-}
-
-func (s *FuseSystem) initLocked() {
 	s.fusing = false
 	s.fuseTimer = 0
 	s.targetX = 0

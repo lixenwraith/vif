@@ -25,17 +25,12 @@ func NewEnergySystem(world *engine.World) engine.System {
 	s := &EnergySystem{
 		world: world,
 	}
-	s.initLocked()
+	s.Init()
 	return s
 }
 
 // Init resets session state for new game
 func (s *EnergySystem) Init() {
-	s.initLocked()
-}
-
-// initLocked performs session state reset
-func (s *EnergySystem) initLocked() {
 	s.lastCorrect = time.Time{}
 	s.errorCursorSet = false
 	s.enabled = true

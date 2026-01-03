@@ -20,17 +20,12 @@ func NewPingSystem(world *engine.World) engine.System {
 	s := &PingSystem{
 		world: world,
 	}
-	s.initLocked()
+	s.Init()
 	return s
 }
 
 // Init resets session state for new game
 func (s *PingSystem) Init() {
-	s.initLocked()
-}
-
-// initLocked performs session state reset
-func (s *PingSystem) initLocked() {
 	s.enabled = true
 }
 

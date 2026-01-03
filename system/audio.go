@@ -22,17 +22,12 @@ func NewAudioSystem(world *engine.World) engine.System {
 		world:  world,
 		player: world.Resource.Audio.Player,
 	}
-	s.initLocked()
+	s.Init()
 	return s
 }
 
 // Init resets session state for new game
 func (s *AudioSystem) Init() {
-	s.initLocked()
-}
-
-// initLocked performs session state reset
-func (s *AudioSystem) initLocked() {
 	s.enabled = true
 }
 

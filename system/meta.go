@@ -22,22 +22,16 @@ type MetaSystem struct {
 
 // NewMetaSystem creates a new meta system
 func NewMetaSystem(ctx *engine.GameContext) engine.System {
-	world := ctx.World
 	s := &MetaSystem{
 		ctx:   ctx,
-		world: world,
+		world: ctx.World,
 	}
-	s.initLocked()
+	s.Init()
 	return s
 }
 
 // Init resets session state for new game
 func (s *MetaSystem) Init() {
-	s.initLocked()
-}
-
-// initLocked performs session state reset
-func (s *MetaSystem) initLocked() {
 	// No-op
 }
 

@@ -35,15 +35,11 @@ func NewTypingSystem(world *engine.World) engine.System {
 	s.statErrors = world.Resource.Status.Ints.Get("typing.errors")
 	s.statMaxStreak = world.Resource.Status.Ints.Get("typing.max_streak")
 
-	s.initLocked()
+	s.Init()
 	return s
 }
 
 func (s *TypingSystem) Init() {
-	s.initLocked()
-}
-
-func (s *TypingSystem) initLocked() {
 	s.currentStreak = 0
 	s.statCorrect.Store(0)
 	s.statErrors.Store(0)

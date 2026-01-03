@@ -17,17 +17,12 @@ func NewHeatSystem(world *engine.World) engine.System {
 	s := &HeatSystem{
 		world: world,
 	}
-	s.initLocked()
+	s.Init()
 	return s
 }
 
 // Init resets session state for new game
 func (s *HeatSystem) Init() {
-	s.initLocked()
-}
-
-// initLocked performs session state reset
-func (s *HeatSystem) initLocked() {
 	s.enabled = true
 }
 

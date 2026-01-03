@@ -3,7 +3,6 @@ package system
 import (
 	"math"
 	"math/rand"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -16,7 +15,6 @@ import (
 
 // GoldSystem manages the gold sequence mechanic autonomously
 type GoldSystem struct {
-	mu    sync.RWMutex
 	world *engine.World
 
 	// Internal state
@@ -44,19 +42,12 @@ func NewGoldSystem(world *engine.World) engine.System {
 	s.statAnchorID = s.world.Resource.Status.Ints.Get("gold.anchor_id")
 	s.statTimer = s.world.Resource.Status.Ints.Get("gold.timer")
 
-	s.initLocked()
+	s.Init()
 	return s
 }
 
 // Init resets session state for new game
 func (s *GoldSystem) Init() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.initLocked()
-}
-
-// initLocked performs session state reset, caller must hold s.mu
-func (s *GoldSystem) initLocked() {
 	s.active = false
 	s.anchorEntity = 0
 	s.startTime = time.Time{}
@@ -98,16 +89,12 @@ func (s *GoldSystem) HandleEvent(ev event.GameEvent) {
 	// TODO: implement enabled event for all systems
 	case event.EventGoldEnable:
 		if payload, ok := ev.Payload.(*event.GoldEnablePayload); ok {
-			s.mu.Lock()
 			s.spawnEnabled = payload.Enabled
-			s.mu.Unlock()
 		}
 
 	case event.EventGoldSpawnRequest:
-		s.mu.RLock()
 		enabled := s.spawnEnabled
 		active := s.active
-		s.mu.RUnlock()
 
 		if !enabled || active {
 			s.world.PushEvent(event.EventGoldSpawnFailed, nil)
@@ -126,9 +113,7 @@ func (s *GoldSystem) HandleEvent(ev event.GameEvent) {
 			return
 		}
 
-		s.mu.RLock()
 		isGoldAnchor := payload.AnchorID == s.anchorEntity
-		s.mu.RUnlock()
 
 		if isGoldAnchor {
 			if payload.RemainingCount == 0 {
@@ -146,11 +131,9 @@ func (s *GoldSystem) Update() {
 
 	now := s.world.Resource.Time.GameTime
 
-	s.mu.Lock()
 	active := s.active
 	timeoutTime := s.timeoutTime
 	anchorEntity := s.anchorEntity
-	s.mu.Unlock()
 
 	// Publish metrics
 	s.statActive.Store(active)
@@ -280,12 +263,10 @@ func (s *GoldSystem) spawnGold() bool {
 	})
 
 	// Phase 7: Activate internal state
-	s.mu.Lock()
 	s.active = true
 	s.anchorEntity = anchorEntity
 	s.startTime = now
 	s.timeoutTime = now.Add(constant.GoldDuration)
-	s.mu.Unlock()
 
 	// Emit spawnLightning event
 	s.world.PushEvent(event.EventGoldSpawned, &event.GoldSpawnedPayload{
@@ -301,12 +282,9 @@ func (s *GoldSystem) spawnGold() bool {
 
 // handleMemberTyped processes a gold character being typed
 func (s *GoldSystem) handleMemberTyped(payload *event.MemberTypedPayload) {
-	s.mu.RLock()
 	if !s.active || payload.AnchorID != s.anchorEntity {
-		s.mu.RUnlock()
 		return
 	}
-	s.mu.RUnlock()
 
 	// Check if sequence complete
 	if payload.RemainingCount == 0 {
@@ -316,9 +294,7 @@ func (s *GoldSystem) handleMemberTyped(payload *event.MemberTypedPayload) {
 
 // handleGoldComplete processes successful gold sequence completion
 func (s *GoldSystem) handleGoldComplete() {
-	s.mu.RLock()
 	anchorEntity := s.anchorEntity
-	s.mu.RUnlock()
 
 	// Check heat for cleaner trigger
 	cursorEntity := s.world.Resource.Cursor.Entity
@@ -347,12 +323,10 @@ func (s *GoldSystem) handleGoldComplete() {
 	// Destroy composite
 	s.destroyComposite(anchorEntity)
 
-	s.mu.Lock()
 	s.active = false
 	s.anchorEntity = 0
 	s.startTime = time.Time{}
 	s.timeoutTime = time.Time{}
-	s.mu.Unlock()
 
 	s.statActive.Store(false)
 	s.statTimer.Store(0)
@@ -361,9 +335,7 @@ func (s *GoldSystem) handleGoldComplete() {
 
 // handleGoldTimeout processes gold sequence expiration
 func (s *GoldSystem) handleGoldTimeout() {
-	s.mu.RLock()
 	anchorEntity := s.anchorEntity
-	s.mu.RUnlock()
 
 	s.world.PushEvent(event.EventGoldTimeout, &event.GoldCompletionPayload{
 		AnchorEntity: anchorEntity,
@@ -371,12 +343,10 @@ func (s *GoldSystem) handleGoldTimeout() {
 
 	s.destroyComposite(anchorEntity)
 
-	s.mu.Lock()
 	s.active = false
 	s.anchorEntity = 0
 	s.startTime = time.Time{}
 	s.timeoutTime = time.Time{}
-	s.mu.Unlock()
 
 	s.statActive.Store(false)
 	s.statTimer.Store(0)
@@ -385,9 +355,7 @@ func (s *GoldSystem) handleGoldTimeout() {
 
 // handleGoldDestroyed processes external gold destruction
 func (s *GoldSystem) handleGoldDestroyed() {
-	s.mu.RLock()
 	anchorEntity := s.anchorEntity
-	s.mu.RUnlock()
 
 	s.world.PushEvent(event.EventGoldDestroyed, &event.GoldCompletionPayload{
 		AnchorEntity: anchorEntity,
@@ -397,12 +365,10 @@ func (s *GoldSystem) handleGoldDestroyed() {
 		s.destroyComposite(anchorEntity)
 	}
 
-	s.mu.Lock()
 	s.active = false
 	s.anchorEntity = 0
 	s.startTime = time.Time{}
 	s.timeoutTime = time.Time{}
-	s.mu.Unlock()
 
 	s.statActive.Store(false)
 	s.statTimer.Store(0)
@@ -411,10 +377,8 @@ func (s *GoldSystem) handleGoldDestroyed() {
 
 // destroyCurrentGold destroys the current gold if active
 func (s *GoldSystem) destroyCurrentGold() {
-	s.mu.RLock()
 	anchorEntity := s.anchorEntity
 	active := s.active
-	s.mu.RUnlock()
 
 	if active && anchorEntity != 0 {
 		s.destroyComposite(anchorEntity)

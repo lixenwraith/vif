@@ -26,17 +26,12 @@ func NewShieldSystem(world *engine.World) engine.System {
 
 	s.statActive = s.world.Resource.Status.Bools.Get("shield.active")
 
-	s.initLocked()
+	s.Init()
 	return s
 }
 
 // Init resets session state for new game
 func (s *ShieldSystem) Init() {
-	s.initLocked()
-}
-
-// initLocked performs session state reset
-func (s *ShieldSystem) initLocked() {
 	s.statActive.Store(false)
 	s.enabled = true
 }

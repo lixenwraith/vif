@@ -1,7 +1,6 @@
 package system
 
 import (
-	"sync"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
@@ -15,7 +14,6 @@ import (
 // DustSystem manages orbital dust particles created from glyph transformation
 // Dust orbits cursor with chase behavior on large cursor movements
 type DustSystem struct {
-	mu    sync.RWMutex
 	world *engine.World
 
 	// Event state tracking
@@ -47,17 +45,11 @@ func NewDustSystem(world *engine.World) engine.System {
 	s.statActive = world.Resource.Status.Ints.Get("dust.active")
 	s.statDestroyed = world.Resource.Status.Ints.Get("dust.destroyed")
 
-	s.initLocked()
+	s.Init()
 	return s
 }
 
 func (s *DustSystem) Init() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.initLocked()
-}
-
-func (s *DustSystem) initLocked() {
 	s.quasarActive = false
 	s.lastCursorX = 0
 	s.lastCursorY = 0
@@ -92,19 +84,13 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 
 	switch ev.Type {
 	case event.EventQuasarSpawned:
-		s.mu.Lock()
 		s.quasarActive = true
-		s.mu.Unlock()
 
 	case event.EventQuasarDestroyed:
-		s.mu.Lock()
 		s.quasarActive = false
-		s.mu.Unlock()
 
 	case event.EventGoldComplete:
-		s.mu.RLock()
 		active := s.quasarActive
-		s.mu.RUnlock()
 
 		if active {
 			s.transformGlyphsToDust()
@@ -272,12 +258,10 @@ func (s *DustSystem) Update() {
 	}
 
 	// Detect cursor jump for chase boost
-	s.mu.Lock()
 	cursorDeltaX := cursorPos.X - s.lastCursorX
 	cursorDeltaY := cursorPos.Y - s.lastCursorY
 	s.lastCursorX = cursorPos.X
 	s.lastCursorY = cursorPos.Y
-	s.mu.Unlock()
 
 	// Check if cursor moved significantly
 	cursorDist := vmath.DistanceApprox(vmath.FromInt(cursorDeltaX), vmath.FromInt(cursorDeltaY))

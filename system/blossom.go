@@ -2,7 +2,6 @@ package system
 
 import (
 	"math/rand"
-	"sync"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
@@ -15,7 +14,6 @@ import (
 
 // BlossomSystem handles blossom entity movement and collision logic
 type BlossomSystem struct {
-	mu    sync.RWMutex
 	world *engine.World
 
 	// Per-frame tracking
@@ -40,19 +38,12 @@ func NewBlossomSystem(world *engine.World) engine.System {
 	s.statCount = s.world.Resource.Status.Ints.Get("blossom.count")
 	s.statApplied = s.world.Resource.Status.Ints.Get("blossom.applied")
 
-	s.initLocked()
+	s.Init()
 	return s
 }
 
 // Init resets session state for new game
 func (s *BlossomSystem) Init() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.initLocked()
-}
-
-// initLocked performs session state reset, caller must hold s.mu
-func (s *BlossomSystem) initLocked() {
 	clear(s.blossomedThisFrame)
 	clear(s.processedGridCells)
 	s.statCount.Store(0)
@@ -225,9 +216,7 @@ func (s *BlossomSystem) updateBlossomEntities() {
 				}
 
 				// Entity deduplication: ensure one blossom effect per target per tick
-				s.mu.RLock()
 				alreadyHit := s.blossomedThisFrame[target]
-				s.mu.RUnlock()
 				if alreadyHit {
 					continue
 				}
@@ -254,9 +243,7 @@ func (s *BlossomSystem) updateBlossomEntities() {
 					destroyBlossom = true
 				}
 
-				s.mu.Lock()
 				s.blossomedThisFrame[target] = true
-				s.mu.Unlock()
 			}
 
 			s.processedGridCells[flatIdx] = true

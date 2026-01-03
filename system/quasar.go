@@ -1,7 +1,6 @@
 package system
 
 import (
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -18,7 +17,6 @@ import (
 // Drains 1000 energy/tick when any part overlaps shield
 // Resets heat to 0 on direct cursor collision without shield
 type QuasarSystem struct {
-	mu    sync.RWMutex
 	world *engine.World
 
 	// Runtime state
@@ -42,17 +40,11 @@ func NewQuasarSystem(world *engine.World) engine.System {
 
 	s.statActive = world.Resource.Status.Bools.Get("quasar.active")
 
-	s.initLocked()
+	s.Init()
 	return s
 }
 
 func (s *QuasarSystem) Init() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.initLocked()
-}
-
-func (s *QuasarSystem) initLocked() {
 	s.active = false
 	s.anchorEntity = 0
 	s.rng = vmath.NewFastRand(uint32(s.world.Resource.Time.RealTime.UnixNano()))
@@ -74,11 +66,9 @@ func (s *QuasarSystem) EventTypes() []event.EventType {
 
 func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
-		s.mu.Lock()
 		if s.active && s.anchorEntity != 0 {
 			s.terminateQuasarLocked()
 		}
-		s.mu.Unlock()
 		s.Init()
 		return
 	}
@@ -93,7 +83,6 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 		if !ok {
 			return
 		}
-		s.mu.Lock()
 		s.active = true
 		s.anchorEntity = payload.AnchorEntity
 
@@ -125,15 +114,12 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 		s.statActive.Store(true)
-		s.mu.Unlock()
 
 		// Activate persistent grayout
 		s.world.Resource.GameState.State.StartGrayout()
 
 	case event.EventGoldComplete:
-		s.mu.RLock()
 		active := s.active
-		s.mu.RUnlock()
 
 		if active {
 			s.terminateQuasar()
@@ -154,10 +140,8 @@ func (s *QuasarSystem) Update() {
 		return
 	}
 
-	s.mu.RLock()
 	active := s.active
 	anchorEntity := s.anchorEntity
-	s.mu.RUnlock()
 
 	if !active || anchorEntity == 0 {
 		return
@@ -757,8 +741,6 @@ func (s *QuasarSystem) applyShieldKnockback(
 
 // terminateQuasar ends the quasar phase
 func (s *QuasarSystem) terminateQuasar() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.terminateQuasarLocked()
 }
 
