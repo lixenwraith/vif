@@ -1,7 +1,6 @@
 package renderers
 
 import (
-	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
@@ -9,8 +8,7 @@ import (
 
 // CleanerRenderer draws cleaner entities with gradient trails
 type CleanerRenderer struct {
-	gameCtx      *engine.GameContext
-	cleanerStore *engine.Store[component.CleanerComponent]
+	gameCtx *engine.GameContext
 
 	gradientPositive []render.RGB
 	gradientNegative []render.RGB
@@ -19,8 +17,7 @@ type CleanerRenderer struct {
 // NewCleanerRenderer creates cleaner renderer with gradient generation
 func NewCleanerRenderer(gameCtx *engine.GameContext) *CleanerRenderer {
 	r := &CleanerRenderer{
-		gameCtx:      gameCtx,
-		cleanerStore: engine.GetStore[component.CleanerComponent](gameCtx.World),
+		gameCtx: gameCtx,
 	}
 	r.buildGradients()
 	return r
@@ -46,7 +43,7 @@ func (r *CleanerRenderer) buildGradients() {
 // Render draws cleaner animation using trail of grid points
 // Cleaners are opaque and render ON TOP of everything (occlude shield)
 func (r *CleanerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.cleanerStore.All()
+	entities := r.gameCtx.World.Components.Cleaner.All()
 	if len(entities) == 0 {
 		return
 	}
@@ -57,7 +54,7 @@ func (r *CleanerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 	maxGradientIdx := gradientLen - 1
 
 	for _, entity := range entities {
-		cleaner, ok := r.cleanerStore.Get(entity)
+		cleaner, ok := r.gameCtx.World.Components.Cleaner.Get(entity)
 		if !ok {
 			continue
 		}

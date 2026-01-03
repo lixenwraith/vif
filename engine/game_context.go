@@ -200,7 +200,7 @@ func (ctx *GameContext) HandleResize() {
 
 // cleanupOutOfBoundsEntities tags entities that are outside the valid game area
 func (ctx *GameContext) cleanupOutOfBoundsEntities(width, height int) {
-	deathStore := GetStore[component.DeathComponent](ctx.World)
+	deathStore := ctx.World.Components.Death
 
 	// Unified cleanup: single PositionStore iteration handles all entity types
 	allEntities := ctx.World.Positions.All()
@@ -375,16 +375,16 @@ func (ctx *GameContext) CreateCursorEntity() {
 		Y: ctx.GameHeight / 2,
 	})
 
-	GetStore[component.CursorComponent](ctx.World).Set(ctx.CursorEntity, component.CursorComponent{})
+	ctx.World.Components.Cursor.Set(ctx.CursorEntity, component.CursorComponent{})
 
 	// Make cursor indestructible
-	GetStore[component.ProtectionComponent](ctx.World).Set(ctx.CursorEntity, component.ProtectionComponent{
+	ctx.World.Components.Protection.Set(ctx.CursorEntity, component.ProtectionComponent{
 		Mask:      component.ProtectAll,
 		ExpiresAt: 0, // No expiry
 	})
 
 	// Set PingComponent to cursor (handles crosshair and grid state)
-	GetStore[component.PingComponent](ctx.World).Set(ctx.CursorEntity, component.PingComponent{
+	ctx.World.Components.Ping.Set(ctx.CursorEntity, component.PingComponent{
 		ShowCrosshair: true,
 		GridActive:    false,
 		GridRemaining: 0,
@@ -392,13 +392,13 @@ func (ctx *GameContext) CreateCursorEntity() {
 	})
 
 	// Set HeatComponent to cursor
-	GetStore[component.HeatComponent](ctx.World).Set(ctx.CursorEntity, component.HeatComponent{})
+	ctx.World.Components.Heat.Set(ctx.CursorEntity, component.HeatComponent{})
 
 	// Set EnergyComponent to cursor
-	GetStore[component.EnergyComponent](ctx.World).Set(ctx.CursorEntity, component.EnergyComponent{})
+	ctx.World.Components.Energy.Set(ctx.CursorEntity, component.EnergyComponent{})
 
 	// Set ShieldComponent to cursor (initially invisible via GameState.ShieldActive)
-	GetStore[component.ShieldComponent](ctx.World).Set(ctx.CursorEntity, component.ShieldComponent{
+	ctx.World.Components.Shield.Set(ctx.CursorEntity, component.ShieldComponent{
 		RadiusX:       vmath.FromFloat(constant.ShieldRadiusX),
 		RadiusY:       vmath.FromFloat(constant.ShieldRadiusY),
 		MaxOpacity:    constant.ShieldMaxOpacity,
@@ -406,7 +406,7 @@ func (ctx *GameContext) CreateCursorEntity() {
 	})
 
 	// Set BoostComponent to cursor
-	GetStore[component.BoostComponent](ctx.World).Set(ctx.CursorEntity, component.BoostComponent{})
+	ctx.World.Components.Boost.Set(ctx.CursorEntity, component.BoostComponent{})
 }
 
 // ===== Audio =====

@@ -1,7 +1,6 @@
 package renderers
 
 import (
-	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
@@ -10,8 +9,7 @@ import (
 
 // HeatMeterRenderer draws the heat meter bar at the top of the screen
 type HeatMeterRenderer struct {
-	gameCtx   *engine.GameContext
-	heatStore *engine.Store[component.HeatComponent]
+	gameCtx *engine.GameContext
 
 	renderCell heatCellRenderer
 }
@@ -39,8 +37,7 @@ type heatCellRenderer func(buf *render.RenderBuffer, x, width int)
 // NewHeatMeterRenderer creates a heat meter renderer
 func NewHeatMeterRenderer(ctx *engine.GameContext) *HeatMeterRenderer {
 	h := &HeatMeterRenderer{
-		gameCtx:   ctx,
-		heatStore: engine.GetStore[component.HeatComponent](ctx.World),
+		gameCtx: ctx,
 	}
 
 	// Access RenderConfig for display mode
@@ -60,7 +57,7 @@ func (r *HeatMeterRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 	// Calculate Fill Limit from HeatComponent
 	heat := 0
-	if hc, ok := r.heatStore.Get(r.gameCtx.CursorEntity); ok {
+	if hc, ok := r.gameCtx.World.Components.Heat.Get(r.gameCtx.CursorEntity); ok {
 		heat = int(hc.Current.Load())
 	}
 	fillWidth := (ctx.Width * heat) / 100

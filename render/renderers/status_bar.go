@@ -6,7 +6,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
@@ -16,10 +15,7 @@ import (
 
 // StatusBarRenderer draws the status bar at the bottom
 type StatusBarRenderer struct {
-	gameCtx     *engine.GameContext
-	pingStore   *engine.Store[component.PingComponent]
-	energyStore *engine.Store[component.EnergyComponent]
-	boostStore  *engine.Store[component.BoostComponent]
+	gameCtx *engine.GameContext
 
 	// Color mode (persist throughout runtime)
 	colorMode terminal.ColorMode
@@ -44,10 +40,7 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 	reg := engine.MustGetResource[*status.Registry](gameCtx.World.ResourceStore)
 	cfg := engine.MustGetResource[*engine.RenderConfig](gameCtx.World.ResourceStore)
 	return &StatusBarRenderer{
-		gameCtx:     gameCtx,
-		pingStore:   engine.GetStore[component.PingComponent](gameCtx.World),
-		energyStore: engine.GetStore[component.EnergyComponent](gameCtx.World),
-		boostStore:  engine.GetStore[component.BoostComponent](gameCtx.World),
+		gameCtx: gameCtx,
 
 		colorMode: cfg.ColorMode,
 
@@ -217,7 +210,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 
 	// Priority 2: Energy
-	energyComp, _ := r.energyStore.Get(r.gameCtx.CursorEntity)
+	energyComp, _ := r.gameCtx.World.Components.Energy.Get(r.gameCtx.CursorEntity)
 	energyVal := energyComp.Current.Load()
 	energyText := fmt.Sprintf(" Energy: %d ", energyVal)
 
@@ -255,7 +248,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	rightItems = append(rightItems, statusItem{text: energyText, fg: energyFg, bg: energyBg})
 
 	// Priority 3: Boost (conditional)
-	boost, boostOk := r.boostStore.Get(r.gameCtx.CursorEntity)
+	boost, boostOk := r.gameCtx.World.Components.Boost.Get(r.gameCtx.CursorEntity)
 
 	if boostOk && boost.Active {
 		remaining := boost.Remaining.Seconds()
@@ -270,7 +263,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 
 	// Priority 4: Grid (conditional)
-	if ping, ok := r.pingStore.Get(r.gameCtx.CursorEntity); ok && ping.GridActive {
+	if ping, ok := r.gameCtx.World.Components.Ping.Get(r.gameCtx.CursorEntity); ok && ping.GridActive {
 		gridRemaining := ping.GridRemaining.Seconds()
 		if gridRemaining < 0 {
 			gridRemaining = 0

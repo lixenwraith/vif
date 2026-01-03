@@ -13,15 +13,13 @@ import (
 
 // SplashRenderer draws large block characters as background effect
 type SplashRenderer struct {
-	gameCtx     *engine.GameContext
-	splashStore *engine.Store[component.SplashComponent]
+	gameCtx *engine.GameContext
 }
 
 // NewSplashRenderer creates a new splash renderer
 func NewSplashRenderer(gameCtx *engine.GameContext) *SplashRenderer {
 	return &SplashRenderer{
-		gameCtx:     gameCtx,
-		splashStore: engine.GetStore[component.SplashComponent](gameCtx.World),
+		gameCtx: gameCtx,
 	}
 }
 
@@ -29,9 +27,9 @@ func NewSplashRenderer(gameCtx *engine.GameContext) *SplashRenderer {
 func (r *SplashRenderer) Render(gameCtx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(constant.MaskTransient)
 
-	entities := r.splashStore.All()
+	entities := r.gameCtx.World.Components.Splash.All()
 	for _, entity := range entities {
-		splash, ok := r.splashStore.Get(entity)
+		splash, ok := r.gameCtx.World.Components.Splash.Get(entity)
 		if !ok || splash.Length == 0 {
 			continue
 		}

@@ -12,22 +12,20 @@ import (
 type GoldRenderer struct {
 	gameCtx *engine.GameContext
 
-	headerStore *engine.Store[component.CompositeHeaderComponent]
-	glyphStore  *engine.Store[component.GlyphComponent]
+	// headerStore *engine.Store[component.CompositeHeaderComponent]
+	// glyphStore  *engine.Store[component.GlyphComponent]
 }
 
 // NewGoldRenderer creates a new gold renderer
 func NewGoldRenderer(gameCtx *engine.GameContext) *GoldRenderer {
 	return &GoldRenderer{
-		gameCtx:     gameCtx,
-		headerStore: engine.GetStore[component.CompositeHeaderComponent](gameCtx.World),
-		glyphStore:  engine.GetStore[component.GlyphComponent](gameCtx.World),
+		gameCtx: gameCtx,
 	}
 }
 
 // Render draws all gold sequence members
 func (r *GoldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	headers := r.headerStore.All()
+	headers := r.gameCtx.World.Components.Header.All()
 	if len(headers) == 0 {
 		return
 	}
@@ -35,7 +33,7 @@ func (r *GoldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 	buf.SetWriteMask(constant.MaskComposite)
 
 	for _, anchor := range headers {
-		header, ok := r.headerStore.Get(anchor)
+		header, ok := r.gameCtx.World.Components.Header.Get(anchor)
 		if !ok || header.BehaviorID != component.BehaviorGold {
 			continue
 		}
@@ -50,7 +48,7 @@ func (r *GoldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 				continue
 			}
 
-			glyph, hasGlyph := r.glyphStore.Get(member.Entity)
+			glyph, hasGlyph := r.gameCtx.World.Components.Glyph.Get(member.Entity)
 			if !hasGlyph {
 				continue
 			}

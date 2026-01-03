@@ -1,8 +1,8 @@
 package renderers
+
 // @lixen: #dev{feature[dust(render,system)]}
 
 import (
-	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
@@ -11,21 +11,19 @@ import (
 
 // FlashRenderer draws brief destruction flash effects
 type FlashRenderer struct {
-	gameCtx    *engine.GameContext
-	flashStore *engine.Store[component.FlashComponent]
+	gameCtx *engine.GameContext
 }
 
 // NewEffectsRenderer creates fg-only effects renderer for flash
 func NewFlashRenderer(gameCtx *engine.GameContext) *FlashRenderer {
 	return &FlashRenderer{
-		gameCtx:    gameCtx,
-		flashStore: engine.GetStore[component.FlashComponent](gameCtx.World),
+		gameCtx: gameCtx,
 	}
 }
 
 // Render draws brief flash effects when characters are removed
 func (r *FlashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.flashStore.All()
+	entities := r.gameCtx.World.Components.Flash.All()
 	if len(entities) == 0 {
 		return
 	}
@@ -33,7 +31,7 @@ func (r *FlashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 	buf.SetWriteMask(constant.MaskTransient)
 
 	for _, entity := range entities {
-		flash, ok := r.flashStore.Get(entity)
+		flash, ok := r.gameCtx.World.Components.Flash.Get(entity)
 		if !ok {
 			continue
 		}

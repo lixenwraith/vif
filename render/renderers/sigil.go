@@ -12,21 +12,19 @@ import (
 
 // SigilRenderer draws non-typeable moving entities (decay, blossom particles)
 type SigilRenderer struct {
-	gameCtx    *engine.GameContext
-	sigilStore *engine.Store[component.SigilComponent]
+	gameCtx *engine.GameContext
 }
 
 // NewSigilRenderer creates a new sigil renderer
 func NewSigilRenderer(gameCtx *engine.GameContext) *SigilRenderer {
 	return &SigilRenderer{
-		gameCtx:    gameCtx,
-		sigilStore: engine.GetStore[component.SigilComponent](gameCtx.World),
+		gameCtx: gameCtx,
 	}
 }
 
 // Render draws all sigil entities
 func (r *SigilRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.sigilStore.All()
+	entities := r.gameCtx.World.Components.Sigil.All()
 	if len(entities) == 0 {
 		return
 	}
@@ -34,7 +32,7 @@ func (r *SigilRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 	buf.SetWriteMask(constant.MaskTransient)
 
 	for _, entity := range entities {
-		sigil, ok := r.sigilStore.Get(entity)
+		sigil, ok := r.gameCtx.World.Components.Sigil.Get(entity)
 		if !ok {
 			continue
 		}

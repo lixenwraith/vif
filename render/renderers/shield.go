@@ -1,7 +1,6 @@
 package renderers
 
 import (
-	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
@@ -23,9 +22,7 @@ type shieldCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, nor
 
 // ShieldRenderer renders active shields with dynamic color from GameState
 type ShieldRenderer struct {
-	gameCtx     *engine.GameContext
-	shieldStore *engine.Store[component.ShieldComponent]
-	energyStore *engine.Store[component.EnergyComponent]
+	gameCtx *engine.GameContext
 
 	renderCell shieldCellRenderer
 
@@ -38,9 +35,7 @@ type ShieldRenderer struct {
 // NewShieldRenderer creates a new shield renderer
 func NewShieldRenderer(gameCtx *engine.GameContext) *ShieldRenderer {
 	s := &ShieldRenderer{
-		gameCtx:     gameCtx,
-		shieldStore: engine.GetStore[component.ShieldComponent](gameCtx.World),
-		energyStore: engine.GetStore[component.EnergyComponent](gameCtx.World),
+		gameCtx: gameCtx,
 	}
 
 	// Access RenderConfig for display mode and select strategy once
@@ -58,7 +53,7 @@ func NewShieldRenderer(gameCtx *engine.GameContext) *ShieldRenderer {
 // Render draws all active shields with quadratic falloff gradient
 func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(constant.MaskField)
-	shields := r.shieldStore.All()
+	shields := r.gameCtx.World.Components.Shield.All()
 	if len(shields) == 0 {
 		return
 	}
@@ -66,7 +61,7 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	// Energy-based shield color: positive/zero → yellow, negative → purple
 	r.frameColor = render.RgbCleanerBasePositive
 	r.framePalette = shield256Positive
-	if energyComp, ok := r.energyStore.Get(r.gameCtx.CursorEntity); ok {
+	if energyComp, ok := r.gameCtx.World.Components.Energy.Get(r.gameCtx.CursorEntity); ok {
 		if energyComp.Current.Load() < 0 {
 			r.frameColor = render.RgbCleanerBaseNegative
 			r.framePalette = shield256Negative
@@ -74,7 +69,7 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	}
 
 	for _, entity := range shields {
-		shield, okS := r.shieldStore.Get(entity)
+		shield, okS := r.gameCtx.World.Components.Shield.Get(entity)
 		pos, okP := r.gameCtx.World.Positions.Get(entity)
 
 		if !okS || !okP || !shield.Active {

@@ -1,7 +1,6 @@
 package renderers
 
 import (
-	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
@@ -11,19 +10,17 @@ import (
 
 // SpiritRenderer draws converging spirit entities with blinking effect
 type SpiritRenderer struct {
-	gameCtx     *engine.GameContext
-	spiritStore *engine.Store[component.SpiritComponent]
+	gameCtx *engine.GameContext
 }
 
 func NewSpiritRenderer(gameCtx *engine.GameContext) *SpiritRenderer {
 	return &SpiritRenderer{
-		gameCtx:     gameCtx,
-		spiritStore: engine.GetStore[component.SpiritComponent](gameCtx.World),
+		gameCtx: gameCtx,
 	}
 }
 
 func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.spiritStore.All()
+	entities := r.gameCtx.World.Components.Spirit.All()
 	if len(entities) == 0 {
 		return
 	}
@@ -35,7 +32,7 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	blinkPhase := (ctx.FrameNumber * int64(constant.SpiritBlinkHz) / 60) % 2
 
 	for _, entity := range entities {
-		spirit, ok := r.spiritStore.Get(entity)
+		spirit, ok := r.gameCtx.World.Components.Spirit.Get(entity)
 		if !ok {
 			continue
 		}

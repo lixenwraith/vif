@@ -97,8 +97,7 @@ type lightningBoltRenderer func(ctx render.RenderContext, buf *render.RenderBuff
 // LightningRenderer draws transient energy beams using sub-pixel resolution
 // Supports dual rendering paths: TrueColor (quadrant chars) and 256-color (half-blocks)
 type LightningRenderer struct {
-	gameCtx        *engine.GameContext
-	lightningStore *engine.Store[component.LightningComponent]
+	gameCtx *engine.GameContext
 
 	// Mode-specific renderer selected at construction
 	renderLightning lightningBoltRenderer
@@ -109,9 +108,8 @@ type LightningRenderer struct {
 // NewLightningRenderer creates a new lightning renderer with mode-appropriate rendering path
 func NewLightningRenderer(ctx *engine.GameContext) *LightningRenderer {
 	r := &LightningRenderer{
-		gameCtx:        ctx,
-		lightningStore: engine.GetStore[component.LightningComponent](ctx.World),
-		rng:            vmath.NewFastRand(1),
+		gameCtx: ctx,
+		rng:     vmath.NewFastRand(1),
 	}
 
 	// Select rendering strategy based on terminal color capability
@@ -128,7 +126,7 @@ func NewLightningRenderer(ctx *engine.GameContext) *LightningRenderer {
 
 // Render draws all active lightning bolts using the mode-appropriate renderer
 func (r *LightningRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.lightningStore.All()
+	entities := r.gameCtx.World.Components.Lightning.All()
 	if len(entities) == 0 {
 		return
 	}
@@ -136,7 +134,7 @@ func (r *LightningRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	buf.SetWriteMask(constant.MaskTransient)
 
 	for _, e := range entities {
-		l, ok := r.lightningStore.Get(e)
+		l, ok := r.gameCtx.World.Components.Lightning.Get(e)
 		if !ok || l.Remaining <= 0 {
 			continue
 		}

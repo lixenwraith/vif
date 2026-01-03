@@ -3,8 +3,6 @@ package engine
 // @lixen: #dev{base(core),feature[drain(render,system)],feature[dust(render,system)],feature[quasar(render,system)]}
 
 import (
-	"fmt"
-	"reflect"
 	"sync"
 	"sync/atomic"
 
@@ -22,11 +20,8 @@ type World struct {
 	ResourceStore *ResourceStore
 
 	// Position Store (Special - spatial index, kept as named field)
-	Positions *PositionStore
-
-	// Dynamic Component Stores (registered at startup)
-	componentStores map[reflect.Type]AnyStore
-	allStores       []AnyStore // For lifecycle operations (Clear, DestroyEntity)
+	Components ComponentStore
+	Positions  *PositionStore
 
 	// Direct pointers for high-frequency path optimization
 	eventQueue  *event.EventQueue
@@ -39,63 +34,14 @@ type World struct {
 // NewWorld creates a new ECS world with dynamic component store support
 func NewWorld() *World {
 	w := &World{
-		nextEntityID:    1,
-		ResourceStore:   NewResourceStore(),
-		systems:         make([]System, 0),
-		Positions:       NewPositionStore(),
-		componentStores: make(map[reflect.Type]AnyStore),
-		allStores:       make([]AnyStore, 0, 32),
+		nextEntityID:  1,
+		ResourceStore: NewResourceStore(),
+		systems:       make([]System, 0),
 	}
 
-	// Register Positions in allStores for lifecycle management
-	w.allStores = append(w.allStores, w.Positions)
-
-	// Set world reference for z-index lookups
-	w.Positions.SetWorld(w)
+	initComponentStores(w)
 
 	return w
-}
-
-// RegisterComponent creates and registers a typed component store
-// Must be called during initialization before systems access stores
-func RegisterComponent[T any](w *World) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	t := reflect.TypeOf((*T)(nil)).Elem()
-	if _, exists := w.componentStores[t]; exists {
-		return // Already registered, idempotent
-	}
-
-	store := NewStore[T]()
-	w.componentStores[t] = store
-	w.allStores = append(w.allStores, store)
-}
-
-// GetStore retrieves a typed component store
-// Panics if store not registered - indicates bootstrap error
-// Call only during system initialization, cache the result
-func GetStore[T any](w *World) *Store[T] {
-	t := reflect.TypeOf((*T)(nil)).Elem()
-
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-
-	if store, ok := w.componentStores[t]; ok {
-		return store.(*Store[T])
-	}
-	panic(fmt.Sprintf("component store not registered: %v", t))
-}
-
-// HasStore checks if a component store is registered
-func HasStore[T any](w *World) bool {
-	t := reflect.TypeOf((*T)(nil)).Elem()
-
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-
-	_, ok := w.componentStores[t]
-	return ok
 }
 
 // CreateEntity reserves a new entity ID
@@ -110,20 +56,20 @@ func (w *World) CreateEntity() core.Entity {
 
 // DestroyEntity removes all components associated with an entity
 func (w *World) DestroyEntity(e core.Entity) {
-	// Check protection before destruction
-	if HasStore[component.ProtectionComponent](w) {
-		protStore := GetStore[component.ProtectionComponent](w)
-		if prot, ok := protStore.Get(e); ok {
-			if prot.Mask == component.ProtectAll {
-				return // Entity is immortal
-			}
+	if prot, ok := w.Components.Protection.Get(e); ok {
+		if prot.Mask == component.ProtectAll {
+			return
 		}
 	}
+	w.removeFromAllStores(e)
+}
 
-	// Remove from all stores
-	for _, store := range w.allStores {
-		store.Remove(e)
-	}
+// Clear removes all entities and components from the world
+func (w *World) Clear() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.nextEntityID = 1
+	w.clearAllStores()
 }
 
 // AddSystem adds a system to the world and sorts by priority
@@ -192,17 +138,6 @@ func (w *World) UpdateLocked() {
 
 	for _, system := range systems {
 		system.Update()
-	}
-}
-
-// Clear removes all entities and components from the world
-func (w *World) Clear() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	w.nextEntityID = 1
-	for _, store := range w.allStores {
-		store.Clear()
 	}
 }
 

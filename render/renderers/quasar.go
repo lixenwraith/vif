@@ -20,9 +20,6 @@ type quasarShieldCellRenderer func(buf *render.RenderBuffer, screenX, screenY in
 type QuasarRenderer struct {
 	gameCtx *engine.GameContext
 
-	quasarStore *engine.Store[component.QuasarComponent]
-	headerStore *engine.Store[component.CompositeHeaderComponent]
-
 	// Shield rendering strategy selected at init
 	renderShieldCell quasarShieldCellRenderer
 
@@ -37,9 +34,6 @@ type QuasarRenderer struct {
 func NewQuasarRenderer(gameCtx *engine.GameContext) *QuasarRenderer {
 	r := &QuasarRenderer{
 		gameCtx: gameCtx,
-
-		quasarStore: engine.GetStore[component.QuasarComponent](gameCtx.World),
-		headerStore: engine.GetStore[component.CompositeHeaderComponent](gameCtx.World),
 	}
 
 	// Select shield strategy based on terminal color capability
@@ -65,7 +59,7 @@ func NewQuasarRenderer(gameCtx *engine.GameContext) *QuasarRenderer {
 
 // Render draws quasar composite with shield halo when zapping
 func (r *QuasarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	anchors := r.quasarStore.All()
+	anchors := r.gameCtx.World.Components.Quasar.All()
 	if len(anchors) == 0 {
 		return
 	}
@@ -73,12 +67,12 @@ func (r *QuasarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	buf.SetWriteMask(constant.MaskComposite)
 
 	for _, anchor := range anchors {
-		quasar, ok := r.quasarStore.Get(anchor)
+		quasar, ok := r.gameCtx.World.Components.Quasar.Get(anchor)
 		if !ok {
 			continue
 		}
 
-		header, ok := r.headerStore.Get(anchor)
+		header, ok := r.gameCtx.World.Components.Header.Get(anchor)
 		if !ok {
 			continue
 		}

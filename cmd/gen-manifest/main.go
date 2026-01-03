@@ -35,10 +35,10 @@ type Definitions struct {
 }
 
 func main() {
-	defs := parseDefinitions("manifest/definition.go")
+	defs := parseDefinitions("definition.go") // cwd is 'manifest/'
 
-	generateFile("engine/component_store_gen.go", componentStoreTemplate, defs)
-	generateFile("manifest/register_gen.go", registerTemplate, defs)
+	generateFile("../engine/component_store_gen.go", componentStoreTemplate, defs)
+	generateFile("register_gen.go", registerTemplate, defs)
 
 	fmt.Printf("Generated: %d components, %d systems, %d renderers\n",
 		len(defs.Components), len(defs.Systems), len(defs.Renderers))
@@ -161,24 +161,43 @@ var componentStoreTemplate = template.Must(template.New("store").Parse(`// Code 
 
 package engine
 
-import "github.com/lixenwraith/vi-fighter/component"
+import (
+	"github.com/lixenwraith/vi-fighter/component"
+	"github.com/lixenwraith/vi-fighter/core"
+)
 
-// ComponentStore provides cached pointers to typed component stores
-// Initialized once per system to eliminate runtime map lookups
+// ComponentStore provides typed component store pointers
+// Embedded in World, initialized once at world creation
 type ComponentStore struct {
 {{- range .Components }}
 	{{ .Field }} *Store[component.{{ .Type }}]
 {{- end }}
 }
 
-// GetComponentStore populates ComponentStore from world
-// Call once during system construction; pointers remain valid for application lifetime
-func GetComponentStore(w *World) ComponentStore {
-	return ComponentStore{
+// initComponentStores creates all component stores
+// Called once from NewWorld()
+func initComponentStores(w *World) {
 {{- range .Components }}
-		{{ .Field }}: GetStore[component.{{ .Type }}](w),
+	w.Components.{{ .Field }} = NewStore[component.{{ .Type }}]()
 {{- end }}
-	}
+	w.Positions = NewPositionStore()
+	w.Positions.SetWorld(w)
+}
+
+// removeFromAllStores removes entity from every component store
+func (w *World) removeFromAllStores(e core.Entity) {
+{{- range .Components }}
+	w.Components.{{ .Field }}.Remove(e)
+{{- end }}
+	w.Positions.Remove(e)
+}
+
+// clearAllStores clears all component stores
+func (w *World) clearAllStores() {
+{{- range .Components }}
+	w.Components.{{ .Field }}.Clear()
+{{- end }}
+	w.Positions.Clear()
 }
 `))
 
@@ -187,20 +206,12 @@ var registerTemplate = template.Must(template.New("register").Parse(`// Code gen
 package manifest
 
 import (
-	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/engine/registry"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/render/renderers"
 	"github.com/lixenwraith/vi-fighter/system"
 )
-
-// RegisterComponents registers all component types with the World
-func RegisterComponents(w *engine.World) {
-{{- range .Components }}
-	engine.RegisterComponent[component.{{ .Type }}](w)
-{{- end }}
-}
 
 // RegisterSystems registers all system factories with the registry
 func RegisterSystems() {

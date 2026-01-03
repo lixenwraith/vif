@@ -1,7 +1,6 @@
 package renderers
 
 import (
-	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
@@ -11,23 +10,18 @@ import (
 // NuggetRenderer draws the collectible nugget entity
 type NuggetRenderer struct {
 	gameCtx *engine.GameContext
-
-	nuggetStore *engine.Store[component.NuggetComponent]
-	glyphStore  *engine.Store[component.GlyphComponent]
 }
 
 // NewNuggetRenderer creates a new nugget renderer
 func NewNuggetRenderer(gameCtx *engine.GameContext) *NuggetRenderer {
 	return &NuggetRenderer{
-		gameCtx:     gameCtx,
-		nuggetStore: engine.GetStore[component.NuggetComponent](gameCtx.World),
-		glyphStore:  engine.GetStore[component.GlyphComponent](gameCtx.World),
+		gameCtx: gameCtx,
 	}
 }
 
 // Render draws all nugget entities
 func (r *NuggetRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.nuggetStore.All()
+	entities := r.gameCtx.World.Components.Nugget.All()
 	if len(entities) == 0 {
 		return
 	}
@@ -40,7 +34,7 @@ func (r *NuggetRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			continue
 		}
 
-		glyph, hasGlyph := r.glyphStore.Get(entity)
+		glyph, hasGlyph := r.gameCtx.World.Components.Glyph.Get(entity)
 		if !hasGlyph {
 			continue
 		}

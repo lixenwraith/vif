@@ -2,10 +2,13 @@
 
 package engine
 
-import "github.com/lixenwraith/vi-fighter/component"
+import (
+	"github.com/lixenwraith/vi-fighter/component"
+	"github.com/lixenwraith/vi-fighter/core"
+)
 
-// ComponentStore provides cached pointers to typed component stores
-// Initialized once per system to eliminate runtime map lookups
+// ComponentStore provides typed component store pointers
+// Embedded in World, initialized once at world creation
 type ComponentStore struct {
 	Glyph       *Store[component.GlyphComponent]
 	Sigil       *Store[component.SigilComponent]
@@ -34,34 +37,94 @@ type ComponentStore struct {
 	Timer       *Store[component.TimerComponent]
 }
 
-// GetComponentStore populates ComponentStore from world
-// Call once during system construction; pointers remain valid for application lifetime
-func GetComponentStore(w *World) ComponentStore {
-	return ComponentStore{
-		Glyph:       GetStore[component.GlyphComponent](w),
-		Sigil:       GetStore[component.SigilComponent](w),
-		Nugget:      GetStore[component.NuggetComponent](w),
-		Cursor:      GetStore[component.CursorComponent](w),
-		Protection:  GetStore[component.ProtectionComponent](w),
-		Energy:      GetStore[component.EnergyComponent](w),
-		Heat:        GetStore[component.HeatComponent](w),
-		Shield:      GetStore[component.ShieldComponent](w),
-		Boost:       GetStore[component.BoostComponent](w),
-		Ping:        GetStore[component.PingComponent](w),
-		Drain:       GetStore[component.DrainComponent](w),
-		Decay:       GetStore[component.DecayComponent](w),
-		Cleaner:     GetStore[component.CleanerComponent](w),
-		Blossom:     GetStore[component.BlossomComponent](w),
-		Quasar:      GetStore[component.QuasarComponent](w),
-		Dust:        GetStore[component.DustComponent](w),
-		Lightning:   GetStore[component.LightningComponent](w),
-		Spirit:      GetStore[component.SpiritComponent](w),
-		Materialize: GetStore[component.MaterializeComponent](w),
-		Header:      GetStore[component.CompositeHeaderComponent](w),
-		Member:      GetStore[component.MemberComponent](w),
-		Flash:       GetStore[component.FlashComponent](w),
-		Splash:      GetStore[component.SplashComponent](w),
-		Death:       GetStore[component.DeathComponent](w),
-		Timer:       GetStore[component.TimerComponent](w),
-	}
+// initComponentStores creates all component stores
+// Called once from NewWorld()
+func initComponentStores(w *World) {
+	w.Components.Glyph = NewStore[component.GlyphComponent]()
+	w.Components.Sigil = NewStore[component.SigilComponent]()
+	w.Components.Nugget = NewStore[component.NuggetComponent]()
+	w.Components.Cursor = NewStore[component.CursorComponent]()
+	w.Components.Protection = NewStore[component.ProtectionComponent]()
+	w.Components.Energy = NewStore[component.EnergyComponent]()
+	w.Components.Heat = NewStore[component.HeatComponent]()
+	w.Components.Shield = NewStore[component.ShieldComponent]()
+	w.Components.Boost = NewStore[component.BoostComponent]()
+	w.Components.Ping = NewStore[component.PingComponent]()
+	w.Components.Drain = NewStore[component.DrainComponent]()
+	w.Components.Decay = NewStore[component.DecayComponent]()
+	w.Components.Cleaner = NewStore[component.CleanerComponent]()
+	w.Components.Blossom = NewStore[component.BlossomComponent]()
+	w.Components.Quasar = NewStore[component.QuasarComponent]()
+	w.Components.Dust = NewStore[component.DustComponent]()
+	w.Components.Lightning = NewStore[component.LightningComponent]()
+	w.Components.Spirit = NewStore[component.SpiritComponent]()
+	w.Components.Materialize = NewStore[component.MaterializeComponent]()
+	w.Components.Header = NewStore[component.CompositeHeaderComponent]()
+	w.Components.Member = NewStore[component.MemberComponent]()
+	w.Components.Flash = NewStore[component.FlashComponent]()
+	w.Components.Splash = NewStore[component.SplashComponent]()
+	w.Components.Death = NewStore[component.DeathComponent]()
+	w.Components.Timer = NewStore[component.TimerComponent]()
+	w.Positions = NewPositionStore()
+	w.Positions.SetWorld(w)
+}
+
+// removeFromAllStores removes entity from every component store
+func (w *World) removeFromAllStores(e core.Entity) {
+	w.Components.Glyph.Remove(e)
+	w.Components.Sigil.Remove(e)
+	w.Components.Nugget.Remove(e)
+	w.Components.Cursor.Remove(e)
+	w.Components.Protection.Remove(e)
+	w.Components.Energy.Remove(e)
+	w.Components.Heat.Remove(e)
+	w.Components.Shield.Remove(e)
+	w.Components.Boost.Remove(e)
+	w.Components.Ping.Remove(e)
+	w.Components.Drain.Remove(e)
+	w.Components.Decay.Remove(e)
+	w.Components.Cleaner.Remove(e)
+	w.Components.Blossom.Remove(e)
+	w.Components.Quasar.Remove(e)
+	w.Components.Dust.Remove(e)
+	w.Components.Lightning.Remove(e)
+	w.Components.Spirit.Remove(e)
+	w.Components.Materialize.Remove(e)
+	w.Components.Header.Remove(e)
+	w.Components.Member.Remove(e)
+	w.Components.Flash.Remove(e)
+	w.Components.Splash.Remove(e)
+	w.Components.Death.Remove(e)
+	w.Components.Timer.Remove(e)
+	w.Positions.Remove(e)
+}
+
+// clearAllStores clears all component stores
+func (w *World) clearAllStores() {
+	w.Components.Glyph.Clear()
+	w.Components.Sigil.Clear()
+	w.Components.Nugget.Clear()
+	w.Components.Cursor.Clear()
+	w.Components.Protection.Clear()
+	w.Components.Energy.Clear()
+	w.Components.Heat.Clear()
+	w.Components.Shield.Clear()
+	w.Components.Boost.Clear()
+	w.Components.Ping.Clear()
+	w.Components.Drain.Clear()
+	w.Components.Decay.Clear()
+	w.Components.Cleaner.Clear()
+	w.Components.Blossom.Clear()
+	w.Components.Quasar.Clear()
+	w.Components.Dust.Clear()
+	w.Components.Lightning.Clear()
+	w.Components.Spirit.Clear()
+	w.Components.Materialize.Clear()
+	w.Components.Header.Clear()
+	w.Components.Member.Clear()
+	w.Components.Flash.Clear()
+	w.Components.Splash.Clear()
+	w.Components.Death.Clear()
+	w.Components.Timer.Clear()
+	w.Positions.Clear()
 }

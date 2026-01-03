@@ -68,7 +68,6 @@ func main() {
 
 	// 4. World Creation & Component Registry
 	world := engine.NewWorld()
-	manifest.RegisterComponents(world)
 
 	// TODO: check moving it up since no world dependency
 	// 5.: Service Initialization

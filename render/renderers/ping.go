@@ -1,7 +1,6 @@
 package renderers
 
 import (
-	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
@@ -11,9 +10,7 @@ import (
 
 // PingRenderer draws cursor row/column highlights and optional grid lines
 type PingRenderer struct {
-	gameCtx     *engine.GameContext
-	pingStore   *engine.Store[component.PingComponent]
-	shieldStore *engine.Store[component.ShieldComponent]
+	gameCtx *engine.GameContext
 
 	// Bitmask for shield exclusion (1 bit per cell)
 	// Reused across frames to avoid allocation
@@ -25,16 +22,14 @@ type PingRenderer struct {
 // NewPingRenderer creates a new ping renderer
 func NewPingRenderer(gameCtx *engine.GameContext) *PingRenderer {
 	return &PingRenderer{
-		gameCtx:     gameCtx,
-		pingStore:   engine.GetStore[component.PingComponent](gameCtx.World),
-		shieldStore: engine.GetStore[component.ShieldComponent](gameCtx.World),
+		gameCtx: gameCtx,
 	}
 }
 
 // Render draws the ping highlights and grid
 func (r *PingRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	// Get PingComponent from cursor (Single player assumption: ID 1/CursorEntity)
-	ping, ok := r.pingStore.Get(r.gameCtx.CursorEntity)
+	ping, ok := r.gameCtx.World.Components.Ping.Get(r.gameCtx.CursorEntity)
 	if !ok {
 		return
 	}
@@ -84,9 +79,9 @@ func (r *PingRenderer) computeExclusionMask(world *engine.World, w, h int) {
 	}
 
 	// Rasterize all active shields into the mask
-	shields := r.shieldStore.All()
+	shields := r.gameCtx.World.Components.Shield.All()
 	for _, entity := range shields {
-		shield, okS := r.shieldStore.Get(entity)
+		shield, okS := r.gameCtx.World.Components.Shield.Get(entity)
 		pos, okP := world.Positions.Get(entity)
 		if !okS || !okP || !shield.Active {
 			continue

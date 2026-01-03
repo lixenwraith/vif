@@ -1,7 +1,6 @@
 package mode
 
 import (
-	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -19,7 +18,7 @@ const (
 // getCharAt returns the character at the given position, or 0 if empty
 func getCharAt(ctx *engine.GameContext, x, y int) rune {
 	entities := ctx.World.Positions.GetAllAt(x, y)
-	glyphStore := engine.GetStore[component.GlyphComponent](ctx.World)
+	glyphStore := ctx.World.Components.Glyph
 
 	for _, entity := range entities {
 		if entity == ctx.CursorEntity || entity == 0 {
@@ -74,7 +73,7 @@ func validatePosition(ctx *engine.GameContext, x, y int) (validX, validY int) {
 func findCharInDirection(ctx *engine.GameContext, startX, startY int, target rune, count int, forward bool) (int, bool) {
 	occurrences := 0
 	lastMatch := -1
-	glyphStore := engine.GetStore[component.GlyphComponent](ctx.World)
+	glyphStore := ctx.World.Components.Glyph
 
 	if forward {
 		for x := startX + 1; x < ctx.GameWidth; x++ {
@@ -291,7 +290,7 @@ func findLineEnd(ctx *engine.GameContext, cursorY int) int {
 	// Stack-allocated buffer for zero-alloc queries
 	var buf [constant.MaxEntitiesPerCell]core.Entity
 
-	glyphStore := engine.GetStore[component.GlyphComponent](ctx.World)
+	glyphStore := ctx.World.Components.Glyph
 
 	// Scan from right to left
 	for x := ctx.GameWidth - 1; x >= 0; x-- {
@@ -328,7 +327,7 @@ func findFirstNonWhitespace(ctx *engine.GameContext, cursorY int) int {
 func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
 	var buf [constant.MaxEntitiesPerCell]core.Entity
 
-	glyphStore := engine.GetStore[component.GlyphComponent](ctx.World)
+	glyphStore := ctx.World.Components.Glyph
 
 	for y := cursorY - 1; y >= 0; y-- {
 		rowEmpty := true
@@ -354,7 +353,7 @@ func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
 func findNextEmptyLine(ctx *engine.GameContext, cursorY int) int {
 	var buf [constant.MaxEntitiesPerCell]core.Entity
 
-	glyphStore := engine.GetStore[component.GlyphComponent](ctx.World)
+	glyphStore := ctx.World.Components.Glyph
 
 	for y := cursorY + 1; y < ctx.GameHeight; y++ {
 		rowEmpty := true

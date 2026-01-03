@@ -28,19 +28,17 @@ const (
 
 // MaterializeRenderer draws phase-based converging beams
 type MaterializeRenderer struct {
-	gameCtx  *engine.GameContext
-	matStore *engine.Store[component.MaterializeComponent]
+	gameCtx *engine.GameContext
 }
 
 func NewMaterializeRenderer(ctx *engine.GameContext) *MaterializeRenderer {
 	return &MaterializeRenderer{
-		gameCtx:  ctx,
-		matStore: engine.GetStore[component.MaterializeComponent](ctx.World),
+		gameCtx: ctx,
 	}
 }
 
 func (r *MaterializeRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.matStore.All()
+	entities := r.gameCtx.World.Components.Materialize.All()
 	if len(entities) == 0 {
 		return
 	}
@@ -48,7 +46,7 @@ func (r *MaterializeRenderer) Render(ctx render.RenderContext, buf *render.Rende
 	buf.SetWriteMask(constant.MaskTransient)
 
 	for _, entity := range entities {
-		mat, ok := r.matStore.Get(entity)
+		mat, ok := r.gameCtx.World.Components.Materialize.Get(entity)
 		if !ok {
 			continue
 		}

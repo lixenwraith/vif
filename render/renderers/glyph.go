@@ -1,4 +1,5 @@
 package renderers
+
 // @lixen: #dev{feature[dust(render,system)]}
 
 import (
@@ -11,15 +12,13 @@ import (
 
 // GlyphRenderer draws typeable spawned content entities
 type GlyphRenderer struct {
-	gameCtx    *engine.GameContext
-	glyphStore *engine.Store[component.GlyphComponent]
+	gameCtx *engine.GameContext
 }
 
 // NewGlyphRenderer creates a new glyph renderer
 func NewGlyphRenderer(gameCtx *engine.GameContext) *GlyphRenderer {
 	return &GlyphRenderer{
-		gameCtx:    gameCtx,
-		glyphStore: engine.GetStore[component.GlyphComponent](gameCtx.World),
+		gameCtx: gameCtx,
 	}
 }
 
@@ -27,9 +26,9 @@ func NewGlyphRenderer(gameCtx *engine.GameContext) *GlyphRenderer {
 func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(constant.MaskGlyph)
 
-	entities := r.glyphStore.All()
+	entities := r.gameCtx.World.Components.Glyph.All()
 	for _, entity := range entities {
-		glyph, ok := r.glyphStore.Get(entity)
+		glyph, ok := r.gameCtx.World.Components.Glyph.Get(entity)
 		if !ok {
 			continue
 		}

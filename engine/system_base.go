@@ -14,6 +14,6 @@ func NewSystemBase(w *World) SystemBase {
 	return SystemBase{
 		World:     w,
 		Resource:  GetResourceStore(w),
-		Component: GetComponentStore(w),
+		Component: w.Components,
 	}
 }
