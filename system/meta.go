@@ -6,7 +6,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -17,33 +16,16 @@ import (
 // MetaSystem handles meta-game commands like Reset, Debug, and Help
 type MetaSystem struct {
 	ctx *engine.GameContext
-	res engine.Resources
 
-	// Cached stores for debug display and reset
-	drainStore  *engine.Store[component.DrainComponent]
-	energyStore *engine.Store[component.EnergyComponent]
-	heatStore   *engine.Store[component.HeatComponent]
-	shieldStore *engine.Store[component.ShieldComponent]
-	// glyphStore   *engine.Store[component.GlyphComponent]
-	nuggetStore  *engine.Store[component.NuggetComponent]
-	cleanerStore *engine.Store[component.CleanerComponent]
-	decayStore   *engine.Store[component.DecayComponent]
+	engine.SystemBase
 }
 
 // NewMetaSystem creates a new meta system
 func NewMetaSystem(ctx *engine.GameContext) engine.System {
 	world := ctx.World
 	s := &MetaSystem{
-		ctx:         ctx,
-		res:         engine.GetResources(world),
-		drainStore:  engine.GetStore[component.DrainComponent](world),
-		energyStore: engine.GetStore[component.EnergyComponent](world),
-		heatStore:   engine.GetStore[component.HeatComponent](world),
-		shieldStore: engine.GetStore[component.ShieldComponent](world),
-		// glyphStore:   engine.GetStore[component.GlyphComponent](world),
-		nuggetStore:  engine.GetStore[component.NuggetComponent](world),
-		cleanerStore: engine.GetStore[component.CleanerComponent](world),
-		decayStore:   engine.GetStore[component.DecayComponent](world),
+		ctx:        ctx,
+		SystemBase: engine.NewSystemBase(world),
 	}
 	s.initLocked()
 	return s
@@ -135,16 +117,16 @@ func (s *MetaSystem) handleDebugRequest() {
 
 	// Card: Player State
 	playerCard := core.OverlayCard{Title: "PLAYER"}
-	energyComp, _ := s.energyStore.Get(s.ctx.CursorEntity)
+	energyComp, _ := s.Component.Energy.Get(s.ctx.CursorEntity)
 	playerCard.Entries = append(playerCard.Entries, core.CardEntry{
 		Key: "Energy", Value: fmt.Sprintf("%d", energyComp.Current.Load()),
 	})
-	if hc, ok := s.heatStore.Get(s.ctx.CursorEntity); ok {
+	if hc, ok := s.Component.Heat.Get(s.ctx.CursorEntity); ok {
 		playerCard.Entries = append(playerCard.Entries, core.CardEntry{
 			Key: "Heat", Value: fmt.Sprintf("%d/%d", hc.Current.Load(), constant.MaxHeat),
 		})
 	}
-	if sc, ok := s.shieldStore.Get(s.ctx.CursorEntity); ok {
+	if sc, ok := s.Component.Shield.Get(s.ctx.CursorEntity); ok {
 		playerCard.Entries = append(playerCard.Entries, core.CardEntry{
 			Key: "Shield", Value: fmt.Sprintf("%v", sc.Active),
 		})
@@ -162,7 +144,7 @@ func (s *MetaSystem) handleDebugRequest() {
 	content.Items = append(content.Items, engineCard)
 
 	// Cards from status registry, grouped by prefix
-	reg := s.res.Status
+	reg := s.Resource.Status
 	groups := make(map[string][]core.CardEntry)
 
 	reg.Bools.Range(func(key string, ptr *atomic.Bool) {

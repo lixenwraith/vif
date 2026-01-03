@@ -1,4 +1,5 @@
 package system
+
 // @lixen: #dev{feature[dust(render,system)]}
 
 import (
@@ -67,11 +68,8 @@ func (c GlyphCensus) ActiveColors() int {
 
 // GlyphSystem handles glyph sequence generation and spawning
 type GlyphSystem struct {
-	mu    sync.RWMutex
-	world *engine.World
-	res   engine.Resources
-
-	glyphStore *engine.Store[component.GlyphComponent]
+	mu sync.RWMutex
+	engine.SystemBase
 
 	// Spawn timing and rate
 	lastSpawnTime  time.Time // When last spawnLightning occurred
@@ -95,21 +93,18 @@ type GlyphSystem struct {
 
 // NewGlyphSystem creates a new glyph system
 func NewGlyphSystem(world *engine.World) engine.System {
-	res := engine.GetResources(world)
+	res := engine.GetResourceStore(world)
 
 	s := &GlyphSystem{
-		world: world,
-		res:   res,
-
-		glyphStore: engine.GetStore[component.GlyphComponent](world),
-
-		// Cache metric pointers
-		statEnabled:        res.Status.Bools.Get("glyph.enabled"),
-		statDensity:        res.Status.Floats.Get("glyph.density"),
-		statRateMult:       res.Status.Floats.Get("glyph.rate_mult"),
-		statOrphanGlyph:    res.Status.Ints.Get("glyph.orphan_char"),
-		statOrphanTypeable: res.Status.Ints.Get("glyph.orphan_typeable"),
+		SystemBase: engine.NewSystemBase(world),
 	}
+
+	// Cache metric pointers
+	s.statEnabled = res.Status.Bools.Get("glyph.enabled")
+	s.statDensity = res.Status.Floats.Get("glyph.density")
+	s.statRateMult = res.Status.Floats.Get("glyph.rate_mult")
+	s.statOrphanGlyph = res.Status.Ints.Get("glyph.orphan_char")
+	s.statOrphanTypeable = res.Status.Ints.Get("glyph.orphan_typeable")
 
 	s.initLocked()
 	return s
@@ -182,11 +177,11 @@ func (s *GlyphSystem) Update() {
 		return
 	}
 
-	now := s.res.Time.GameTime
-	config := s.res.Config
+	now := s.Resource.Time.GameTime
+	config := s.Resource.Config
 
 	// Calculate current density and update rate multiplier
-	entityCount := s.world.Positions.Count()
+	entityCount := s.World.Positions.Count()
 	screenCapacity := config.GameWidth * config.GameHeight
 	density := s.calculateDensity(entityCount, screenCapacity)
 	s.updateRateMultiplier(density)
@@ -201,7 +196,7 @@ func (s *GlyphSystem) Update() {
 	}
 
 	// Snapshot content at frame start to prevent mid-frame race
-	s.frameContent = s.res.Content.Provider.CurrentContent()
+	s.frameContent = s.Resource.Content.Provider.CurrentContent()
 
 	// Detect content swap and reset index
 	if s.frameContent != nil && s.frameContent.Generation != s.localGeneration {
@@ -238,7 +233,7 @@ func (s *GlyphSystem) updateRateMultiplier(density float64) {
 
 // scheduleNextSpawn calculates and sets the next spawnLightning time
 func (s *GlyphSystem) scheduleNextSpawn() {
-	now := s.res.Time.GameTime
+	now := s.Resource.Time.GameTime
 	baseDelay := time.Duration(constant.SpawnIntervalMs) * time.Millisecond
 	adjustedDelay := time.Duration(float64(baseDelay) / s.rateMultiplier)
 
@@ -261,7 +256,7 @@ func (s *GlyphSystem) getNextBlock() content.CodeBlock {
 	s.localIndex++
 
 	// Notify service of consumption
-	s.res.Content.Provider.NotifyConsumed(1)
+	s.Resource.Content.Provider.NotifyConsumed(1)
 
 	return block
 }
@@ -282,14 +277,14 @@ func (s *GlyphSystem) runCensus() GlyphCensus {
 	var census GlyphCensus
 	var orphanGlyph, orphanTypeable int64
 
-	glyphEntities := s.glyphStore.All()
+	glyphEntities := s.Component.Glyph.All()
 	for _, entity := range glyphEntities {
-		if !s.world.Positions.Has(entity) {
+		if !s.World.Positions.Has(entity) {
 			orphanGlyph++
 			continue
 		}
 
-		glyph, ok := s.glyphStore.Get(entity)
+		glyph, ok := s.Component.Glyph.Get(entity)
 		if !ok {
 			continue
 		}
@@ -317,9 +312,9 @@ func (s *GlyphSystem) runCensus() GlyphCensus {
 		}
 	}
 
-	typeableEntities := s.glyphStore.All()
+	typeableEntities := s.Component.Glyph.All()
 	for _, entity := range typeableEntities {
-		if !s.world.Positions.Has(entity) {
+		if !s.World.Positions.Has(entity) {
 			orphanTypeable++
 		}
 	}
@@ -402,8 +397,8 @@ func (s *GlyphSystem) spawnGlyphs() {
 // placeLine attempts to place a single line on the screen
 // Lines exceeding GameWidth are cropped to fit available space
 func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyphLevel component.GlyphLevel) bool {
-	config := s.res.Config
-	cursorEntity := s.res.Cursor.Entity
+	config := s.Resource.Config
+	cursorEntity := s.Resource.Cursor.Entity
 
 	lineRunes := []rune(line)
 	lineLength := len(lineRunes)
@@ -441,14 +436,14 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 		// Check for overlaps using HasAny
 		hasOverlap := false
 		for i := 0; i < lineLength; i++ {
-			if s.world.Positions.HasAny(startCol+i, row) {
+			if s.World.Positions.HasAny(startCol+i, row) {
 				hasOverlap = true
 				break
 			}
 		}
 
 		// Check if too close to cursor
-		cursorPos, ok := s.world.Positions.Get(cursorEntity)
+		cursorPos, ok := s.World.Positions.Get(cursorEntity)
 		if !ok {
 			panic(nil)
 		}
@@ -482,7 +477,7 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 				continue
 			}
 
-			entity := s.world.CreateEntity()
+			entity := s.World.CreateEntity()
 			entities = append(entities, entityData{
 				entity: entity,
 				pos: component.PositionComponent{
@@ -494,7 +489,7 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 		}
 
 		// Phase 2: Batch position validation and commit
-		batch := s.world.Positions.BeginBatch()
+		batch := s.World.Positions.BeginBatch()
 		for _, ed := range entities {
 			batch.Add(ed.entity, ed.pos)
 		}
@@ -502,14 +497,14 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 		if err := batch.Commit(); err != nil {
 			// Collision detected - cleanup entities and try next attempt
 			for _, ed := range entities {
-				s.world.DestroyEntity(ed.entity)
+				s.World.DestroyEntity(ed.entity)
 			}
 			continue
 		}
 
 		// Phase 3: Set glyph and typeable components
 		for _, ed := range entities {
-			s.glyphStore.Set(ed.entity, component.GlyphComponent{
+			s.Component.Glyph.Set(ed.entity, component.GlyphComponent{
 				Rune:  ed.char,
 				Type:  glyphType,
 				Level: glyphLevel,

@@ -1,10 +1,10 @@
 package system
+
 // @lixen: #dev{feature[dust(render,system)]}
 
 import (
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
@@ -13,10 +13,7 @@ import (
 
 // ShieldSystem owns shield activation state and processes drain events
 type ShieldSystem struct {
-	world *engine.World
-	res   engine.Resources
-
-	shieldStore *engine.Store[component.ShieldComponent]
+	engine.SystemBase
 
 	statActive *atomic.Bool
 
@@ -25,15 +22,12 @@ type ShieldSystem struct {
 
 // NewShieldSystem creates a new shield system
 func NewShieldSystem(world *engine.World) engine.System {
-	res := engine.GetResources(world)
 	s := &ShieldSystem{
-		world: world,
-		res:   res,
-
-		shieldStore: engine.GetStore[component.ShieldComponent](world),
-
-		statActive: res.Status.Bools.Get("shield.active"),
+		SystemBase: engine.NewSystemBase(world),
 	}
+
+	s.statActive = s.Resource.Status.Bools.Get("shield.active")
+
 	s.initLocked()
 	return s
 }
@@ -75,11 +69,11 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
-	cursorEntity := s.res.Cursor.Entity
+	cursorEntity := s.Resource.Cursor.Entity
 
 	switch ev.Type {
 	case event.EventShieldActivate:
-		shield, ok := s.shieldStore.Get(cursorEntity)
+		shield, ok := s.Component.Shield.Get(cursorEntity)
 		if ok {
 			// Calculation cache on activation since at init cursor may not be read when game is reset
 			rx := vmath.FromFloat(constant.ShieldRadiusX)
@@ -88,15 +82,15 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 			shield.RadiusY = ry
 			shield.InvRxSq, shield.InvRySq = vmath.EllipseInvRadiiSq(rx, ry)
 			shield.Active = true
-			s.shieldStore.Set(cursorEntity, shield)
+			s.Component.Shield.Set(cursorEntity, shield)
 		}
 		s.statActive.Store(true)
 
 	case event.EventShieldDeactivate:
-		shield, ok := s.shieldStore.Get(cursorEntity)
+		shield, ok := s.Component.Shield.Get(cursorEntity)
 		if ok {
 			shield.Active = false
-			s.shieldStore.Set(cursorEntity, shield)
+			s.Component.Shield.Set(cursorEntity, shield)
 		}
 		s.statActive.Store(false)
 
@@ -113,9 +107,9 @@ func (s *ShieldSystem) Update() {
 		return
 	}
 
-	cursorEntity := s.res.Cursor.Entity
+	cursorEntity := s.Resource.Cursor.Entity
 
-	shield, ok := s.shieldStore.Get(cursorEntity)
+	shield, ok := s.Component.Shield.Get(cursorEntity)
 	if !ok || !shield.Active {
 		return
 	}
@@ -125,21 +119,20 @@ func (s *ShieldSystem) Update() {
 		panic(nil)
 	}
 
-	now := s.res.Time.GameTime
+	now := s.Resource.Time.GameTime
 
 	if now.Sub(shield.LastDrainTime) >= constant.ShieldPassiveDrainInterval {
 		s.applyConvergentDrain(constant.ShieldPassiveDrainAmount)
 		shield.LastDrainTime = now
-		s.shieldStore.Set(cursorEntity, shield)
+		s.Component.Shield.Set(cursorEntity, shield)
 	}
 }
 
 // applyConvergentDrain reduces energy magnitude toward zero by amount, clamping at zero
 func (s *ShieldSystem) applyConvergentDrain(amount int) {
-	cursorEntity := s.res.Cursor.Entity
+	cursorEntity := s.Resource.Cursor.Entity
 
-	energyStore := engine.GetStore[component.EnergyComponent](s.world)
-	energyComp, ok := energyStore.Get(cursorEntity)
+	energyComp, ok := s.Component.Energy.Get(cursorEntity)
 	if !ok {
 		return
 	}
@@ -166,7 +159,7 @@ func (s *ShieldSystem) applyConvergentDrain(amount int) {
 		}
 	}
 
-	s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{
+	s.World.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{
 		Delta: int(delta),
 	})
 }

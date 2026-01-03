@@ -1,4 +1,5 @@
 package engine
+
 // @lixen: #dev{base(core),feature[drain(render,system)],feature[dust(render,system)],feature[quasar(render,system)]}
 
 import (
@@ -17,12 +18,8 @@ type World struct {
 	mu           sync.RWMutex
 	nextEntityID core.Entity
 
-	// Global Resources
-	Resources *ResourceStore
-
-	// Direct pointers for high-frequency path optimization
-	eventQueue  *event.EventQueue
-	frameSource *atomic.Int64
+	// Global ResourceStore
+	ResourceStore *ResourceStore
 
 	// Position Store (Special - spatial index, kept as named field)
 	Positions *PositionStore
@@ -30,6 +27,10 @@ type World struct {
 	// Dynamic Component Stores (registered at startup)
 	componentStores map[reflect.Type]AnyStore
 	allStores       []AnyStore // For lifecycle operations (Clear, DestroyEntity)
+
+	// Direct pointers for high-frequency path optimization
+	eventQueue  *event.EventQueue
+	frameSource *atomic.Int64
 
 	systems     []System
 	updateMutex sync.Mutex
@@ -39,7 +40,7 @@ type World struct {
 func NewWorld() *World {
 	w := &World{
 		nextEntityID:    1,
-		Resources:       NewResourceStore(),
+		ResourceStore:   NewResourceStore(),
 		systems:         make([]System, 0),
 		Positions:       NewPositionStore(),
 		componentStores: make(map[reflect.Type]AnyStore),

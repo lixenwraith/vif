@@ -15,19 +15,8 @@ import (
 
 // BlossomSystem handles blossom entity movement and collision logic
 type BlossomSystem struct {
-	mu    sync.RWMutex
-	world *engine.World
-	res   engine.Resources
-
-	blossomStore *engine.Store[component.BlossomComponent]
-	decayStore   *engine.Store[component.DecayComponent]
-	protStore    *engine.Store[component.ProtectionComponent]
-	deathStore   *engine.Store[component.DeathComponent]
-	nuggetStore  *engine.Store[component.NuggetComponent]
-	sigilStore   *engine.Store[component.SigilComponent]
-	glyphStore   *engine.Store[component.GlyphComponent]
-	memberStore  *engine.Store[component.MemberComponent]
-	headerStore  *engine.Store[component.CompositeHeaderComponent]
+	mu sync.RWMutex
+	engine.SystemBase
 
 	// Per-frame tracking
 	blossomedThisFrame map[core.Entity]bool
@@ -41,27 +30,16 @@ type BlossomSystem struct {
 
 // NewBlossomSystem creates a new blossom system
 func NewBlossomSystem(world *engine.World) engine.System {
-	res := engine.GetResources(world)
 	s := &BlossomSystem{
-		world: world,
-		res:   res,
-
-		blossomStore: engine.GetStore[component.BlossomComponent](world),
-		decayStore:   engine.GetStore[component.DecayComponent](world),
-		protStore:    engine.GetStore[component.ProtectionComponent](world),
-		deathStore:   engine.GetStore[component.DeathComponent](world),
-		nuggetStore:  engine.GetStore[component.NuggetComponent](world),
-		sigilStore:   engine.GetStore[component.SigilComponent](world),
-		glyphStore:   engine.GetStore[component.GlyphComponent](world),
-		memberStore:  engine.GetStore[component.MemberComponent](world),
-		headerStore:  engine.GetStore[component.CompositeHeaderComponent](world),
-
-		blossomedThisFrame: make(map[core.Entity]bool),
-		processedGridCells: make(map[int]bool),
-
-		statCount:   res.Status.Ints.Get("blossom.count"),
-		statApplied: res.Status.Ints.Get("blossom.applied"),
+		SystemBase: engine.NewSystemBase(world),
 	}
+
+	s.blossomedThisFrame = make(map[core.Entity]bool)
+	s.processedGridCells = make(map[int]bool)
+
+	s.statCount = s.Resource.Status.Ints.Get("blossom.count")
+	s.statApplied = s.Resource.Status.Ints.Get("blossom.applied")
+
 	s.initLocked()
 	return s
 }
@@ -123,14 +101,14 @@ func (s *BlossomSystem) Update() {
 		return
 	}
 
-	count := s.blossomStore.Count()
+	count := s.Component.Blossom.Count()
 	if count == 0 {
 		s.statCount.Store(0)
 		return
 	}
 
 	s.updateBlossomEntities()
-	s.statCount.Store(int64(s.blossomStore.Count()))
+	s.statCount.Store(int64(s.Component.Blossom.Count()))
 }
 
 // spawnSingleBlossom creates one blossom entity at specified position
@@ -141,17 +119,17 @@ func (s *BlossomSystem) spawnSingleBlossom(x, y int, char rune, skipStartCell bo
 	velY := -vmath.FromFloat(speedFloat)
 	accelY := -vmath.FromFloat(constant.ParticleAcceleration)
 
-	entity := s.world.CreateEntity()
+	entity := s.World.CreateEntity()
 
 	// 1. Grid Position
-	s.world.Positions.Set(entity, component.PositionComponent{X: x, Y: y})
+	s.World.Positions.Set(entity, component.PositionComponent{X: x, Y: y})
 
 	// 2. Physics/Logic Component
 	lastX, lastY := -1, -1
 	if skipStartCell {
 		lastX, lastY = x, y
 	}
-	s.blossomStore.Set(entity, component.BlossomComponent{
+	s.Component.Blossom.Set(entity, component.BlossomComponent{
 		KineticState: component.KineticState{
 			PreciseX: vmath.FromInt(x),
 			PreciseY: vmath.FromInt(y),
@@ -164,7 +142,7 @@ func (s *BlossomSystem) spawnSingleBlossom(x, y int, char rune, skipStartCell bo
 	})
 
 	// 3. Render component
-	s.sigilStore.Set(entity, component.SigilComponent{
+	s.Component.Sigil.Set(entity, component.SigilComponent{
 		Rune:  char,
 		Color: component.SigilBlossom,
 	})
@@ -172,8 +150,8 @@ func (s *BlossomSystem) spawnSingleBlossom(x, y int, char rune, skipStartCell bo
 
 // spawnBlossomWave creates a screen-wide rising blossom wave
 func (s *BlossomSystem) spawnBlossomWave() {
-	gameWidth := s.res.Config.GameWidth
-	gameHeight := s.res.Config.GameHeight
+	gameWidth := s.Resource.Config.GameWidth
+	gameHeight := s.Resource.Config.GameHeight
 
 	// Spawn one blossom entity per column for full-width coverage
 	for column := 0; column < gameWidth; column++ {
@@ -184,17 +162,17 @@ func (s *BlossomSystem) spawnBlossomWave() {
 
 // updateBlossomEntities updates entity positions and applies blossom effects
 func (s *BlossomSystem) updateBlossomEntities() {
-	dtFixed := vmath.FromFloat(s.res.Time.DeltaTime.Seconds())
+	dtFixed := vmath.FromFloat(s.Resource.Time.DeltaTime.Seconds())
 	// Cap delta time to prevent tunneling on lag spikes
 	dtCap := vmath.FromFloat(0.1)
 	if dtFixed > dtCap {
 		dtFixed = dtCap
 	}
 
-	gameWidth := s.res.Config.GameWidth
-	gameHeight := s.res.Config.GameHeight
+	gameWidth := s.Resource.Config.GameWidth
+	gameHeight := s.Resource.Config.GameHeight
 
-	blossomEntities := s.blossomStore.All()
+	blossomEntities := s.Component.Blossom.All()
 
 	// Clear frame deduplication maps
 	clear(s.processedGridCells)
@@ -203,7 +181,7 @@ func (s *BlossomSystem) updateBlossomEntities() {
 	var collisionBuf [constant.MaxEntitiesPerCell]core.Entity
 
 	for _, entity := range blossomEntities {
-		b, ok := s.blossomStore.Get(entity)
+		b, ok := s.Component.Blossom.Get(entity)
 		if !ok {
 			continue
 		}
@@ -214,7 +192,7 @@ func (s *BlossomSystem) updateBlossomEntities() {
 
 		// 2D Boundary Check: Destroy if entity leaves the game area in any direction
 		if curX < 0 || curX >= gameWidth || curY < 0 || curY >= gameHeight {
-			s.world.DestroyEntity(entity)
+			s.World.DestroyEntity(entity)
 			continue
 		}
 
@@ -238,7 +216,7 @@ func (s *BlossomSystem) updateBlossomEntities() {
 			}
 
 			// Query entities at position using zero-alloc buffer
-			n := s.world.Positions.GetAllAtInto(x, y, collisionBuf[:])
+			n := s.World.Positions.GetAllAtInto(x, y, collisionBuf[:])
 
 			for i := 0; i < n && !destroyBlossom; i++ {
 				target := collisionBuf[i]
@@ -255,18 +233,18 @@ func (s *BlossomSystem) updateBlossomEntities() {
 				}
 
 				// Logic: Blossom vs Decay collision
-				if s.decayStore.Has(target) {
-					s.world.DestroyEntity(target)
+				if s.Component.Decay.Has(target) {
+					s.World.DestroyEntity(target)
 					destroyBlossom = true
 					continue
 				}
 
 				// Logic: Passthrough checks
-				if s.nuggetStore.Has(target) {
+				if s.Component.Nugget.Has(target) {
 					continue
 				}
-				if member, ok := s.memberStore.Get(target); ok {
-					if header, ok := s.headerStore.Get(member.AnchorID); ok && header.BehaviorID == component.BehaviorGold {
+				if member, ok := s.Component.Member.Get(target); ok {
+					if header, ok := s.Component.Header.Get(member.AnchorID); ok && header.BehaviorID == component.BehaviorGold {
 						continue
 					}
 				}
@@ -286,7 +264,7 @@ func (s *BlossomSystem) updateBlossomEntities() {
 		})
 
 		if destroyBlossom {
-			s.world.DestroyEntity(entity)
+			s.World.DestroyEntity(entity)
 			continue
 		}
 
@@ -295,9 +273,9 @@ func (s *BlossomSystem) updateBlossomEntities() {
 			if rand.Float64() < constant.ParticleChangeChance {
 				b.Char = constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
 				// Must update the component used by the renderer
-				if sigil, ok := s.sigilStore.Get(entity); ok {
+				if sigil, ok := s.Component.Sigil.Get(entity); ok {
 					sigil.Rune = b.Char
-					s.sigilStore.Set(entity, sigil)
+					s.Component.Sigil.Set(entity, sigil)
 				}
 			}
 			b.LastIntX = curX
@@ -305,22 +283,22 @@ func (s *BlossomSystem) updateBlossomEntities() {
 		}
 
 		// Grid Sync: Update PositionStore for spatial queries
-		s.world.Positions.Set(entity, component.PositionComponent{X: curX, Y: curY})
-		s.blossomStore.Set(entity, b)
+		s.World.Positions.Set(entity, component.PositionComponent{X: curX, Y: curY})
+		s.Component.Blossom.Set(entity, b)
 	}
 }
 
 // applyBlossomToCharacter applies blossom effect to a glyph character
 // Returns true if blossom should be destroyed (hit Red)
 func (s *BlossomSystem) applyBlossomToCharacter(entity core.Entity) bool {
-	glyph, ok := s.glyphStore.Get(entity)
+	glyph, ok := s.Component.Glyph.Get(entity)
 	if !ok {
 		return false
 	}
 
 	// Check protection
-	if prot, ok := s.protStore.Get(entity); ok {
-		now := s.res.Time.GameTime
+	if prot, ok := s.Component.Protection.Get(entity); ok {
+		now := s.Resource.Time.GameTime
 		if !prot.IsExpired(now.UnixNano()) && prot.Mask.Has(component.ProtectFromDecay) {
 			return false
 		}
@@ -334,7 +312,7 @@ func (s *BlossomSystem) applyBlossomToCharacter(entity core.Entity) bool {
 	// Increase level (inverse of decay)
 	if glyph.Level < component.GlyphBright {
 		glyph.Level++
-		s.glyphStore.Set(entity, glyph)
+		s.Component.Glyph.Set(entity, glyph)
 		s.statApplied.Add(1)
 	}
 	// At Bright: no effect, blossom continues

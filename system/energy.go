@@ -12,17 +12,7 @@ import (
 
 // EnergySystem handles character typing and energy calculation
 type EnergySystem struct {
-	world *engine.World
-	res   engine.Resources
-
-	energyStore *engine.Store[component.EnergyComponent]
-	cursorStore *engine.Store[component.CursorComponent]
-	protStore   *engine.Store[component.ProtectionComponent]
-	shieldStore *engine.Store[component.ShieldComponent]
-	heatStore   *engine.Store[component.HeatComponent]
-	boostStore  *engine.Store[component.BoostComponent]
-	nuggetStore *engine.Store[component.NuggetComponent]
-	glyphStore  *engine.Store[component.GlyphComponent]
+	engine.SystemBase
 
 	lastCorrect    time.Time
 	errorCursorSet bool
@@ -33,17 +23,7 @@ type EnergySystem struct {
 // NewEnergySystem creates a new energy system
 func NewEnergySystem(world *engine.World) engine.System {
 	s := &EnergySystem{
-		world: world,
-		res:   engine.GetResources(world),
-
-		energyStore: engine.GetStore[component.EnergyComponent](world),
-		cursorStore: engine.GetStore[component.CursorComponent](world),
-		protStore:   engine.GetStore[component.ProtectionComponent](world),
-		shieldStore: engine.GetStore[component.ShieldComponent](world),
-		heatStore:   engine.GetStore[component.HeatComponent](world),
-		boostStore:  engine.GetStore[component.BoostComponent](world),
-		nuggetStore: engine.GetStore[component.NuggetComponent](world),
-		glyphStore:  engine.GetStore[component.GlyphComponent](world),
+		SystemBase: engine.NewSystemBase(world),
 	}
 	s.initLocked()
 	return s
@@ -121,21 +101,21 @@ func (s *EnergySystem) Update() {
 		return
 	}
 
-	dt := s.res.Time.DeltaTime
-	cursorEntity := s.res.Cursor.Entity
+	dt := s.Resource.Time.DeltaTime
+	cursorEntity := s.Resource.Cursor.Entity
 
 	// Clear error flash after timeout
-	cursor, ok := s.cursorStore.Get(cursorEntity)
+	cursor, ok := s.Component.Cursor.Get(cursorEntity)
 	if ok && cursor.ErrorFlashRemaining > 0 {
 		cursor.ErrorFlashRemaining -= dt
 		if cursor.ErrorFlashRemaining <= 0 {
 			cursor.ErrorFlashRemaining = 0
 		}
-		s.cursorStore.Set(cursorEntity, cursor)
+		s.Component.Cursor.Set(cursorEntity, cursor)
 	}
 
 	// Clear energy blink after timeout
-	energyComp, ok := s.energyStore.Get(cursorEntity)
+	energyComp, ok := s.Component.Energy.Get(cursorEntity)
 	if ok && energyComp.BlinkActive.Load() {
 		remaining := energyComp.BlinkRemaining.Load() - dt.Nanoseconds()
 		if remaining <= 0 {
@@ -143,48 +123,48 @@ func (s *EnergySystem) Update() {
 			energyComp.BlinkActive.Store(false)
 		}
 		energyComp.BlinkRemaining.Store(remaining)
-		s.energyStore.Set(cursorEntity, energyComp)
+		s.Component.Energy.Set(cursorEntity, energyComp)
 	}
 
 	// Evaluate shield activation state
 	energy := energyComp.Current.Load()
-	shield, shieldOk := s.shieldStore.Get(cursorEntity)
+	shield, shieldOk := s.Component.Shield.Get(cursorEntity)
 	if shieldOk {
 		shieldActive := shield.Active
 		if energy != 0 && !shieldActive {
-			s.world.PushEvent(event.EventShieldActivate, nil)
+			s.World.PushEvent(event.EventShieldActivate, nil)
 		} else if energy == 0 && shieldActive {
-			s.world.PushEvent(event.EventShieldDeactivate, nil)
+			s.World.PushEvent(event.EventShieldDeactivate, nil)
 		}
 	}
 }
 
 // addEnergy modifies energy on target entity
 func (s *EnergySystem) addEnergy(delta int64) {
-	cursorEntity := s.res.Cursor.Entity
-	energyComp, ok := s.energyStore.Get(cursorEntity)
+	cursorEntity := s.Resource.Cursor.Entity
+	energyComp, ok := s.Component.Energy.Get(cursorEntity)
 	if !ok {
 		return
 	}
 	energyComp.Current.Add(delta)
-	s.energyStore.Set(cursorEntity, energyComp)
+	s.Component.Energy.Set(cursorEntity, energyComp)
 }
 
 // setEnergy sets energy value
 func (s *EnergySystem) setEnergy(value int64) {
-	cursorEntity := s.res.Cursor.Entity
-	energyComp, ok := s.energyStore.Get(cursorEntity)
+	cursorEntity := s.Resource.Cursor.Entity
+	energyComp, ok := s.Component.Energy.Get(cursorEntity)
 	if !ok {
 		return
 	}
 	energyComp.Current.Store(value)
-	s.energyStore.Set(cursorEntity, energyComp)
+	s.Component.Energy.Set(cursorEntity, energyComp)
 }
 
 // startBlink activates blink state
 func (s *EnergySystem) startBlink(blinkType, blinkLevel uint32) {
-	cursorEntity := s.res.Cursor.Entity
-	energyComp, ok := s.energyStore.Get(cursorEntity)
+	cursorEntity := s.Resource.Cursor.Entity
+	energyComp, ok := s.Component.Energy.Get(cursorEntity)
 	if !ok {
 		return
 	}
@@ -192,24 +172,24 @@ func (s *EnergySystem) startBlink(blinkType, blinkLevel uint32) {
 	energyComp.BlinkType.Store(blinkType)
 	energyComp.BlinkLevel.Store(blinkLevel)
 	energyComp.BlinkRemaining.Store(constant.EnergyBlinkTimeout.Nanoseconds())
-	s.energyStore.Set(cursorEntity, energyComp)
+	s.Component.Energy.Set(cursorEntity, energyComp)
 }
 
 // stopBlink clears blink state
 func (s *EnergySystem) stopBlink() {
-	cursorEntity := s.res.Cursor.Entity
-	energyComp, ok := s.energyStore.Get(cursorEntity)
+	cursorEntity := s.Resource.Cursor.Entity
+	energyComp, ok := s.Component.Energy.Get(cursorEntity)
 	if !ok {
 		return
 	}
 	energyComp.BlinkActive.Store(false)
 	energyComp.BlinkRemaining.Store(0)
-	s.energyStore.Set(cursorEntity, energyComp)
+	s.Component.Energy.Set(cursorEntity, energyComp)
 }
 
 // triggerEnergyBlink pushes blink event
 func (s *EnergySystem) triggerEnergyBlink(blinkType, blinkLevel uint32) {
-	s.world.PushEvent(event.EventEnergyBlinkStart, &event.EnergyBlinkPayload{
+	s.World.PushEvent(event.EventEnergyBlinkStart, &event.EnergyBlinkPayload{
 		Type:  blinkType,
 		Level: blinkLevel,
 	})
@@ -218,18 +198,18 @@ func (s *EnergySystem) triggerEnergyBlink(blinkType, blinkLevel uint32) {
 // TODO: move this to typing system
 // handleDeleteRequest processes deletion of entities in a range
 func (s *EnergySystem) handleDeleteRequest(payload *event.DeleteRequestPayload) {
-	config := s.res.Config
+	config := s.Resource.Config
 
 	entitiesToDelete := make([]core.Entity, 0)
 
 	// Helper to check and mark entity for deletion
 	checkEntity := func(entity core.Entity) {
-		if !s.glyphStore.Has(entity) {
+		if !s.Component.Glyph.Has(entity) {
 			return
 		}
 
 		// Check protection
-		if prot, ok := s.protStore.Get(entity); ok {
+		if prot, ok := s.Component.Protection.Get(entity); ok {
 			if prot.Mask.Has(component.ProtectFromDelete) || prot.Mask == component.ProtectAll {
 				return
 			}
@@ -247,9 +227,9 @@ func (s *EnergySystem) handleDeleteRequest(payload *event.DeleteRequestPayload) 
 		}
 
 		// Query all entities to find those in the row range
-		entities := s.world.Query().With(s.world.Positions).Execute()
+		entities := s.World.Query().With(s.World.Positions).Execute()
 		for _, entity := range entities {
-			pos, _ := s.world.Positions.Get(entity)
+			pos, _ := s.World.Positions.Get(entity)
 			if pos.Y >= startY && pos.Y <= endY {
 				checkEntity(entity)
 			}
@@ -280,7 +260,7 @@ func (s *EnergySystem) handleDeleteRequest(payload *event.DeleteRequestPayload) 
 
 			// Optimization: Get entities by cell for the range on this row
 			for x := minX; x <= maxX; x++ {
-				cellEntities := s.world.Positions.GetAllAt(x, y)
+				cellEntities := s.World.Positions.GetAllAt(x, y)
 				for _, entity := range cellEntities {
 					checkEntity(entity)
 				}
@@ -290,6 +270,6 @@ func (s *EnergySystem) handleDeleteRequest(payload *event.DeleteRequestPayload) 
 
 	// Batch deletion via DeathSystem (silent)
 	if len(entitiesToDelete) > 0 {
-		event.EmitDeathBatch(s.res.Events.Queue, 0, entitiesToDelete, s.res.Time.FrameNumber)
+		event.EmitDeathBatch(s.Resource.Events.Queue, 0, entitiesToDelete, s.Resource.Time.FrameNumber)
 	}
 }

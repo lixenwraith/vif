@@ -13,20 +13,14 @@ import (
 // LightningSystem manages lightning visual effect lifecycle
 // Supports both timed (auto-despawnLightning) and tracked (manual despawnLightning) modes
 type LightningSystem struct {
-	world *engine.World
-	res   engine.Resources
-
-	lightningStore *engine.Store[component.LightningComponent]
+	engine.SystemBase
 
 	enabled bool
 }
 
 func NewLightningSystem(world *engine.World) engine.System {
 	s := &LightningSystem{
-		world: world,
-		res:   engine.GetResources(world),
-
-		lightningStore: engine.GetStore[component.LightningComponent](world),
+		SystemBase: engine.NewSystemBase(world),
 	}
 	s.initLocked()
 	return s
@@ -50,16 +44,16 @@ func (s *LightningSystem) Update() {
 		return
 	}
 
-	entities := s.lightningStore.All()
+	entities := s.Component.Lightning.All()
 	if len(entities) == 0 {
 		return
 	}
 
-	deltaTime := s.res.Time.DeltaTime
+	deltaTime := s.Resource.Time.DeltaTime
 	var toDestroy []core.Entity
 
 	for _, e := range entities {
-		lc, ok := s.lightningStore.Get(e)
+		lc, ok := s.Component.Lightning.Get(e)
 		if !ok {
 			continue
 		}
@@ -74,13 +68,13 @@ func (s *LightningSystem) Update() {
 		if lc.Remaining <= 0 {
 			toDestroy = append(toDestroy, e)
 		} else {
-			s.lightningStore.Set(e, lc)
+			s.Component.Lightning.Set(e, lc)
 		}
 	}
 
 	for _, e := range toDestroy {
-		s.lightningStore.Remove(e)
-		s.world.DestroyEntity(e)
+		s.Component.Lightning.Remove(e)
+		s.World.DestroyEntity(e)
 	}
 }
 
@@ -123,7 +117,7 @@ func (s *LightningSystem) HandleEvent(ev event.GameEvent) {
 }
 
 func (s *LightningSystem) spawnLightning(p *event.LightningSpawnPayload) {
-	e := s.world.CreateEntity()
+	e := s.World.CreateEntity()
 
 	lc := component.LightningComponent{
 		Owner:     p.Owner,
@@ -143,39 +137,39 @@ func (s *LightningSystem) spawnLightning(p *event.LightningSpawnPayload) {
 		lc.Remaining = time.Hour // Effectively infinite for renderer check
 	}
 
-	s.lightningStore.Set(e, lc)
+	s.Component.Lightning.Set(e, lc)
 }
 
 func (s *LightningSystem) updateTarget(p *event.LightningUpdatePayload) {
 	// Find lightning by owner
-	for _, e := range s.lightningStore.All() {
-		lc, ok := s.lightningStore.Get(e)
+	for _, e := range s.Component.Lightning.All() {
+		lc, ok := s.Component.Lightning.Get(e)
 		if !ok || lc.Owner != p.Owner {
 			continue
 		}
 		lc.TargetX = p.TargetX
 		lc.TargetY = p.TargetY
-		s.lightningStore.Set(e, lc)
+		s.Component.Lightning.Set(e, lc)
 		return
 	}
 }
 
 func (s *LightningSystem) despawnLightning(owner core.Entity) {
 	// Find and destroy all lightning owned by this entity
-	for _, e := range s.lightningStore.All() {
-		lc, ok := s.lightningStore.Get(e)
+	for _, e := range s.Component.Lightning.All() {
+		lc, ok := s.Component.Lightning.Get(e)
 		if !ok || lc.Owner != owner {
 			continue
 		}
-		s.lightningStore.Remove(e)
-		s.world.DestroyEntity(e)
+		s.Component.Lightning.Remove(e)
+		s.World.DestroyEntity(e)
 	}
 }
 
 func (s *LightningSystem) destroyAll() {
-	entities := s.lightningStore.All()
+	entities := s.Component.Lightning.All()
 	for _, e := range entities {
-		s.lightningStore.Remove(e)
-		s.world.DestroyEntity(e)
+		s.Component.Lightning.Remove(e)
+		s.World.DestroyEntity(e)
 	}
 }

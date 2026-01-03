@@ -78,7 +78,7 @@ func main() {
 
 	// 6. Resource Bridge - Services contribute to ECS
 	hub.PublishResources(func(res any) {
-		engine.SetResource(world.Resources, res)
+		engine.SetResource(world.ResourceStore, res)
 	})
 
 	// 7. Terminal extraction (orchestrator needs interface directly)
@@ -115,7 +115,7 @@ func main() {
 	// Resolve color mode for RenderConfig
 	colorMode := term.ColorMode()
 	renderConfig := &engine.RenderConfig{ColorMode: colorMode}
-	engine.SetResource(ctx.World.Resources, renderConfig)
+	engine.SetResource(ctx.World.ResourceStore, renderConfig)
 
 	orchestrator := render.NewRenderOrchestrator(term, ctx.Width, ctx.Height)
 
@@ -180,8 +180,8 @@ func main() {
 
 	// 15. Start Game
 	// Get world resources
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.Resources)
-	statusReg := engine.MustGetResource[*status.Registry](world.Resources)
+	timeRes := engine.MustGetResource[*engine.TimeResource](world.ResourceStore)
+	statusReg := engine.MustGetResource[*status.Registry](world.ResourceStore)
 
 	// Signal initial frame ready
 	frameReady <- struct{}{}

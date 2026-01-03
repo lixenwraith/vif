@@ -14,16 +14,7 @@ import (
 // TypingSystem handles character typing validation and composite member ordering
 // Extracted from EnergySystem to support composite entity mechanics
 type TypingSystem struct {
-	world *engine.World
-	res   engine.Resources
-
-	glyphStore  *engine.Store[component.GlyphComponent]
-	memberStore *engine.Store[component.MemberComponent]
-	headerStore *engine.Store[component.CompositeHeaderComponent]
-	cursorStore *engine.Store[component.CursorComponent]
-	nuggetStore *engine.Store[component.NuggetComponent]
-	boostStore  *engine.Store[component.BoostComponent]
-	heatStore   *engine.Store[component.HeatComponent]
+	engine.SystemBase
 
 	statCorrect   *atomic.Int64
 	statErrors    *atomic.Int64
@@ -36,23 +27,15 @@ type TypingSystem struct {
 
 // NewTypingSystem creates a new typing system
 func NewTypingSystem(world *engine.World) engine.System {
-	res := engine.GetResources(world)
+	res := engine.GetResourceStore(world)
 	s := &TypingSystem{
-		world: world,
-		res:   res,
-
-		glyphStore:  engine.GetStore[component.GlyphComponent](world),
-		memberStore: engine.GetStore[component.MemberComponent](world),
-		headerStore: engine.GetStore[component.CompositeHeaderComponent](world),
-		cursorStore: engine.GetStore[component.CursorComponent](world),
-		nuggetStore: engine.GetStore[component.NuggetComponent](world),
-		boostStore:  engine.GetStore[component.BoostComponent](world),
-		heatStore:   engine.GetStore[component.HeatComponent](world),
-
-		statCorrect:   res.Status.Ints.Get("typing.correct"),
-		statErrors:    res.Status.Ints.Get("typing.errors"),
-		statMaxStreak: res.Status.Ints.Get("typing.max_streak"),
+		SystemBase: engine.NewSystemBase(world),
 	}
+
+	s.statCorrect = res.Status.Ints.Get("typing.correct")
+	s.statErrors = res.Status.Ints.Get("typing.errors")
+	s.statMaxStreak = res.Status.Ints.Get("typing.max_streak")
+
 	s.initLocked()
 	return s
 }
@@ -111,14 +94,14 @@ func (s *TypingSystem) HandleEvent(ev event.GameEvent) {
 func (s *TypingSystem) handleTyping(cursorX, cursorY int, typedRune rune) {
 	// Stack-allocated buffer for zero-allocation lookup
 	var buf [constant.MaxEntitiesPerCell]core.Entity
-	count := s.world.Positions.GetAllAtInto(cursorX, cursorY, buf[:])
+	count := s.World.Positions.GetAllAtInto(cursorX, cursorY, buf[:])
 
 	var entity core.Entity
 
 	// Iterate to find typeable entity (Glyph)
 	// Break on first match for O(1) best case in crowded cells
 	for i := 0; i < count; i++ {
-		if s.glyphStore.Has(buf[i]) {
+		if s.Component.Glyph.Has(buf[i]) {
 			entity = buf[i]
 			break
 		}
@@ -130,13 +113,13 @@ func (s *TypingSystem) handleTyping(cursorX, cursorY int, typedRune rune) {
 	}
 
 	// Check if this is a composite member
-	if member, ok := s.memberStore.Get(entity); ok {
+	if member, ok := s.Component.Member.Get(entity); ok {
 		s.handleCompositeMember(entity, member.AnchorID, typedRune)
 		return
 	}
 
 	// Check for standalone GlyphComponent
-	if glyph, ok := s.glyphStore.Get(entity); ok {
+	if glyph, ok := s.Component.Glyph.Get(entity); ok {
 		s.handleGlyph(entity, glyph, typedRune)
 		return
 	}
@@ -148,19 +131,19 @@ func (s *TypingSystem) handleTyping(cursorX, cursorY int, typedRune rune) {
 
 // applyUniversalRewards handles boost activation/extension and heat gain for any correct typing
 func (s *TypingSystem) applyUniversalRewards() {
-	cursorEntity := s.res.Cursor.Entity
+	cursorEntity := s.Resource.Cursor.Entity
 
 	// Check current boost state BEFORE pushing events
-	boost, ok := s.boostStore.Get(cursorEntity)
+	boost, ok := s.Component.Boost.Get(cursorEntity)
 	isBoostActive := ok && boost.Active
 
 	// Boost: activate or extend
 	if isBoostActive {
-		s.world.PushEvent(event.EventBoostExtend, &event.BoostExtendPayload{
+		s.World.PushEvent(event.EventBoostExtend, &event.BoostExtendPayload{
 			Duration: constant.BoostExtensionDuration,
 		})
 	} else {
-		s.world.PushEvent(event.EventBoostActivate, &event.BoostActivatePayload{
+		s.World.PushEvent(event.EventBoostActivate, &event.BoostActivatePayload{
 			Duration: constant.BoostBaseDuration,
 		})
 	}
@@ -171,7 +154,7 @@ func (s *TypingSystem) applyUniversalRewards() {
 	if isBoostActive {
 		heatGain = 2
 	}
-	s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: heatGain})
+	s.World.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: heatGain})
 
 	s.statCorrect.Add(1)
 	s.currentStreak++
@@ -187,17 +170,17 @@ func (s *TypingSystem) applyColorEnergy(colorType component.GlyphType) {
 	heat := s.getHeat()
 	switch colorType {
 	case component.GlyphGreen:
-		s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{Delta: heat})
+		s.World.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{Delta: heat})
 	case component.GlyphBlue:
-		s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{Delta: 2 * heat})
+		s.World.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{Delta: 2 * heat})
 	case component.GlyphRed:
-		s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{Delta: -heat})
+		s.World.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{Delta: -heat})
 	}
 }
 
 // emitTypingFeedback sends visual feedback (splash + blink)
 func (s *TypingSystem) emitTypingFeedback(glyphType component.GlyphType, char rune) {
-	cursorPos, _ := s.world.Positions.Get(s.res.Cursor.Entity)
+	cursorPos, _ := s.World.Positions.Get(s.Resource.Cursor.Entity)
 
 	var splashColor component.SplashColor
 	var blinkType uint32
@@ -220,11 +203,11 @@ func (s *TypingSystem) emitTypingFeedback(glyphType component.GlyphType, char ru
 		blinkType = 0
 	}
 
-	s.world.PushEvent(event.EventEnergyBlinkStart, &event.EnergyBlinkPayload{
+	s.World.PushEvent(event.EventEnergyBlinkStart, &event.EnergyBlinkPayload{
 		Type: blinkType,
 	})
 
-	s.world.PushEvent(event.EventSplashRequest, &event.SplashRequestPayload{
+	s.World.PushEvent(event.EventSplashRequest, &event.SplashRequestPayload{
 		Text:    string(char),
 		Color:   splashColor,
 		OriginX: cursorPos.X,
@@ -234,19 +217,19 @@ func (s *TypingSystem) emitTypingFeedback(glyphType component.GlyphType, char ru
 
 // emitTypingError emits events corresponding to typing error
 func (s *TypingSystem) emitTypingError() {
-	cursorEntity := s.res.Cursor.Entity
+	cursorEntity := s.Resource.Cursor.Entity
 
 	// Set cursor error flash
-	if cursor, ok := s.cursorStore.Get(cursorEntity); ok {
+	if cursor, ok := s.Component.Cursor.Get(cursorEntity); ok {
 		cursor.ErrorFlashRemaining = constant.ErrorBlinkTimeout
-		s.cursorStore.Set(cursorEntity, cursor)
+		s.Component.Cursor.Set(cursorEntity, cursor)
 	}
 
 	// Reset heat and boost
-	s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: -10})
-	s.world.PushEvent(event.EventBoostDeactivate, nil)
-	s.world.PushEvent(event.EventEnergyBlinkStart, &event.EnergyBlinkPayload{Type: 0, Level: 0})
-	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
+	s.World.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: -10})
+	s.World.PushEvent(event.EventBoostDeactivate, nil)
+	s.World.PushEvent(event.EventEnergyBlinkStart, &event.EnergyBlinkPayload{Type: 0, Level: 0})
+	s.World.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
 		SoundType: core.SoundError,
 	})
 
@@ -255,19 +238,19 @@ func (s *TypingSystem) emitTypingError() {
 }
 
 func (s *TypingSystem) moveCursorRight() {
-	cursorEntity := s.res.Cursor.Entity
-	config := s.res.Config
+	cursorEntity := s.Resource.Cursor.Entity
+	config := s.Resource.Config
 
-	if cursorPos, ok := s.world.Positions.Get(cursorEntity); ok && cursorPos.X < config.GameWidth-1 {
+	if cursorPos, ok := s.World.Positions.Get(cursorEntity); ok && cursorPos.X < config.GameWidth-1 {
 		cursorPos.X++
-		s.world.Positions.Set(cursorEntity, cursorPos)
+		s.World.Positions.Set(cursorEntity, cursorPos)
 	}
 }
 
 // getHeat reads current heat value from cursor's HeatComponent
 func (s *TypingSystem) getHeat() int {
-	cursorEntity := s.res.Cursor.Entity
-	if hc, ok := s.heatStore.Get(cursorEntity); ok {
+	cursorEntity := s.Resource.Cursor.Entity
+	if hc, ok := s.Component.Heat.Get(cursorEntity); ok {
 		return int(hc.Current.Load())
 	}
 	return 0
@@ -277,7 +260,7 @@ func (s *TypingSystem) getHeat() int {
 
 // handleCompositeMember processes typing for composite member entities
 func (s *TypingSystem) handleCompositeMember(entity core.Entity, anchorID core.Entity, typedRune rune) {
-	glyph, ok := s.glyphStore.Get(entity)
+	glyph, ok := s.Component.Glyph.Get(entity)
 	if !ok {
 		s.emitTypingError()
 		return
@@ -293,7 +276,7 @@ func (s *TypingSystem) handleCompositeMember(entity core.Entity, anchorID core.E
 	}
 
 	// Identify composite behavior for reward logic
-	header, ok := s.headerStore.Get(anchorID)
+	header, ok := s.Component.Header.Get(anchorID)
 	if !ok {
 		s.emitTypingError()
 		return
@@ -323,7 +306,7 @@ func (s *TypingSystem) handleCompositeMember(entity core.Entity, anchorID core.E
 			remaining++
 		}
 	}
-	s.world.PushEvent(event.EventMemberTyped, &event.MemberTypedPayload{
+	s.World.PushEvent(event.EventMemberTyped, &event.MemberTypedPayload{
 		AnchorID:       anchorID,
 		MemberEntity:   entity,
 		Char:           typedRune,
@@ -351,7 +334,7 @@ func (s *TypingSystem) handleGlyph(entity core.Entity, glyph component.GlyphComp
 	}
 
 	// Silent Death
-	event.EmitDeathOne(s.res.Events.Queue, entity, 0, s.res.Time.FrameNumber)
+	event.EmitDeathOne(s.Resource.Events.Queue, entity, 0, s.Resource.Time.FrameNumber)
 
 	// Splash typing feedback
 	s.emitTypingFeedback(glyph.Type, typedRune)
@@ -393,7 +376,7 @@ func (s *TypingSystem) isLeftmostMember(entity core.Entity, header *component.Co
 		if m.Entity == 0 {
 			continue
 		}
-		pos, ok := s.world.Positions.Get(m.Entity)
+		pos, ok := s.World.Positions.Get(m.Entity)
 		if !ok {
 			continue
 		}
@@ -447,7 +430,7 @@ func (s *TypingSystem) validateBossOrder(entity core.Entity, header *component.C
 		if m.Entity == 0 || m.Layer != component.LayerCore {
 			continue
 		}
-		pos, ok := s.world.Positions.Get(m.Entity)
+		pos, ok := s.World.Positions.Get(m.Entity)
 		if !ok {
 			continue
 		}

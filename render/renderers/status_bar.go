@@ -41,8 +41,8 @@ type StatusBarRenderer struct {
 
 // NewStatusBarRenderer creates a status bar renderer
 func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
-	reg := engine.MustGetResource[*status.Registry](gameCtx.World.Resources)
-	cfg := engine.MustGetResource[*engine.RenderConfig](gameCtx.World.Resources)
+	reg := engine.MustGetResource[*status.Registry](gameCtx.World.ResourceStore)
+	cfg := engine.MustGetResource[*engine.RenderConfig](gameCtx.World.ResourceStore)
 	return &StatusBarRenderer{
 		gameCtx:     gameCtx,
 		pingStore:   engine.GetStore[component.PingComponent](gameCtx.World),

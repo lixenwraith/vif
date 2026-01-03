@@ -86,11 +86,11 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	// Calculate game area
 	ctx.updateGameArea()
 
-	// -- Initialize Resources --
+	// -- Initialize Resource --
 
 	// 0. Status Registry (before other resources that may use it)
 	statusRegistry := status.NewRegistry()
-	SetResource(ctx.World.Resources, statusRegistry)
+	SetResource(ctx.World.ResourceStore, statusRegistry)
 
 	// 1. Config Resource
 	configRes := &ConfigResource{
@@ -101,7 +101,7 @@ func NewGameContext(world *World, width, height int) *GameContext {
 		GameX:        ctx.GameX,
 		GameY:        ctx.GameY,
 	}
-	SetResource(ctx.World.Resources, configRes)
+	SetResource(ctx.World.ResourceStore, configRes)
 
 	// 2. Time Resource (Initial state)
 	timeRes := &TimeResource{
@@ -110,20 +110,20 @@ func NewGameContext(world *World, width, height int) *GameContext {
 		DeltaTime:   constant.GameUpdateInterval,
 		FrameNumber: ctx.FrameNumber.Load(),
 	}
-	SetResource(ctx.World.Resources, timeRes)
+	SetResource(ctx.World.ResourceStore, timeRes)
 
 	// 3. Event Queue Resource
-	SetResource(ctx.World.Resources, &EventQueueResource{Queue: ctx.eventQueue})
+	SetResource(ctx.World.ResourceStore, &EventQueueResource{Queue: ctx.eventQueue})
 
 	// 4. Game State
 	ctx.State = NewGameState()
-	SetResource(ctx.World.Resources, &GameStateResource{State: ctx.State})
+	SetResource(ctx.World.ResourceStore, &GameStateResource{State: ctx.State})
 
 	// 5. Cursor Entity
 	ctx.CreateCursorEntity()
 
 	// 6. Cursor Resource
-	SetResource(ctx.World.Resources, &CursorResource{Entity: ctx.CursorEntity})
+	SetResource(ctx.World.ResourceStore, &CursorResource{Entity: ctx.CursorEntity})
 
 	// Initialize atomic string pointers to empty strings
 	empty := ""
@@ -169,7 +169,7 @@ func (ctx *GameContext) HandleResize() {
 
 	ctx.World.RunSafe(func() {
 		// Update existing ConfigResource in-place
-		configRes := MustGetResource[*ConfigResource](ctx.World.Resources)
+		configRes := MustGetResource[*ConfigResource](ctx.World.ResourceStore)
 		configRes.ScreenWidth = ctx.Width
 		configRes.ScreenHeight = ctx.Height
 		configRes.GameWidth = ctx.GameWidth
@@ -414,7 +414,7 @@ func (ctx *GameContext) CreateCursorEntity() {
 // GetAudioPlayer retrieves audio player from resources
 // Returns nil if audio unavailable
 func (ctx *GameContext) GetAudioPlayer() AudioPlayer {
-	if res, ok := GetResource[*AudioResource](ctx.World.Resources); ok {
+	if res, ok := GetResource[*AudioResource](ctx.World.ResourceStore); ok {
 		return res.Player
 	}
 	return nil

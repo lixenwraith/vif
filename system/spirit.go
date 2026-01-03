@@ -13,11 +13,7 @@ import (
 // Spirits travel from start to target position over a duration
 // Self-destruct on arrival; EventSpiritDespawn provides safety cleanup
 type SpiritSystem struct {
-	world *engine.World
-	res   engine.Resources
-
-	spiritStore *engine.Store[component.SpiritComponent]
-	protStore   *engine.Store[component.ProtectionComponent]
+	engine.SystemBase
 
 	// Deferred destruction for final frame visibility
 	destroyNextTick []core.Entity
@@ -27,11 +23,7 @@ type SpiritSystem struct {
 
 func NewSpiritSystem(world *engine.World) engine.System {
 	s := &SpiritSystem{
-		world: world,
-		res:   engine.GetResources(world),
-
-		spiritStore: engine.GetStore[component.SpiritComponent](world),
-		protStore:   engine.GetStore[component.ProtectionComponent](world),
+		SystemBase: engine.NewSystemBase(world),
 	}
 	s.initLocked()
 	return s
@@ -91,7 +83,7 @@ func (s *SpiritSystem) Update() {
 	}
 	s.destroyNextTick = s.destroyNextTick[:0]
 
-	entities := s.spiritStore.All()
+	entities := s.Component.Spirit.All()
 	if len(entities) == 0 {
 		return
 	}
@@ -99,7 +91,7 @@ func (s *SpiritSystem) Update() {
 	var toDestroy []core.Entity
 
 	for _, entity := range entities {
-		spirit, ok := s.spiritStore.Get(entity)
+		spirit, ok := s.Component.Spirit.Get(entity)
 		if !ok {
 			continue
 		}
@@ -111,7 +103,7 @@ func (s *SpiritSystem) Update() {
 			// Mark for destruction next tick - allows final frame render
 			s.destroyNextTick = append(s.destroyNextTick, entity)
 		}
-		s.spiritStore.Set(entity, spirit)
+		s.Component.Spirit.Set(entity, spirit)
 	}
 
 	// Destroy completed spirits
@@ -122,7 +114,7 @@ func (s *SpiritSystem) Update() {
 
 // spawnSpirit creates spirit entities and their components, without position store registration (vfx only, no world interaction)
 func (s *SpiritSystem) spawnSpirit(p *event.SpiritSpawnPayload) {
-	entity := s.world.CreateEntity()
+	entity := s.World.CreateEntity()
 
 	// Speed = Progress increment per tick for all spirits to arrive together
 	// Lerp handles distance normalization - progress 0→1 over duration
@@ -134,11 +126,11 @@ func (s *SpiritSystem) spawnSpirit(p *event.SpiritSpawnPayload) {
 	// speed := vmath.Scale / (durationTicks + 1)
 	speed := vmath.Scale / durationTicks
 
-	s.protStore.Set(entity, component.ProtectionComponent{
+	s.Component.Protection.Set(entity, component.ProtectionComponent{
 		Mask: component.ProtectAll,
 	})
 
-	s.spiritStore.Set(entity, component.SpiritComponent{
+	s.Component.Spirit.Set(entity, component.SpiritComponent{
 		StartX:     vmath.FromInt(p.StartX),
 		StartY:     vmath.FromInt(p.StartY),
 		TargetX:    vmath.FromInt(p.TargetX),
@@ -152,13 +144,13 @@ func (s *SpiritSystem) spawnSpirit(p *event.SpiritSpawnPayload) {
 }
 
 func (s *SpiritSystem) destroySpirit(entity core.Entity) {
-	s.protStore.Remove(entity)
-	s.spiritStore.Remove(entity)
-	s.world.DestroyEntity(entity)
+	s.Component.Protection.Remove(entity)
+	s.Component.Spirit.Remove(entity)
+	s.World.DestroyEntity(entity)
 }
 
 func (s *SpiritSystem) destroyAllSpirits() {
-	entities := s.spiritStore.All()
+	entities := s.Component.Spirit.All()
 	for _, entity := range entities {
 		s.destroySpirit(entity)
 	}

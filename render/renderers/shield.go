@@ -44,7 +44,7 @@ func NewShieldRenderer(gameCtx *engine.GameContext) *ShieldRenderer {
 	}
 
 	// Access RenderConfig for display mode and select strategy once
-	cfg := engine.MustGetResource[*engine.RenderConfig](gameCtx.World.Resources)
+	cfg := engine.MustGetResource[*engine.RenderConfig](gameCtx.World.ResourceStore)
 
 	if cfg.ColorMode == terminal.ColorMode256 {
 		s.renderCell = s.cell256

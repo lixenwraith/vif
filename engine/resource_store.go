@@ -68,12 +68,12 @@ func MustGetResource[T any](rs *ResourceStore) T {
 	return res
 }
 
-// === Cached Resources ===
+// === Cached Resource ===
 
-// Resources provides cached pointers to singleton resources
+// Resource provides cached pointers to singleton resources
 // Initialized once per system to eliminate runtime map lookups
-type Resources struct {
-	// World Resources
+type Resource struct {
+	// World Resource
 	Time   *TimeResource
 	Config *ConfigResource
 	State  *GameStateResource
@@ -89,33 +89,33 @@ type Resources struct {
 	Network *NetworkResource
 }
 
-// GetResources populates Resources from the world's resource store
+// GetResourceStore populates Resource from the world's resource store
 // Call once during system construction; pointers remain valid for application lifetime
-func GetResources(w *World) Resources {
-	res := Resources{
-		Time:   MustGetResource[*TimeResource](w.Resources),
-		Config: MustGetResource[*ConfigResource](w.Resources),
-		Cursor: MustGetResource[*CursorResource](w.Resources),
-		State:  MustGetResource[*GameStateResource](w.Resources),
-		Events: MustGetResource[*EventQueueResource](w.Resources),
-		Status: MustGetResource[*status.Registry](w.Resources),
+func GetResourceStore(w *World) Resource {
+	res := Resource{
+		Time:   MustGetResource[*TimeResource](w.ResourceStore),
+		Config: MustGetResource[*ConfigResource](w.ResourceStore),
+		Cursor: MustGetResource[*CursorResource](w.ResourceStore),
+		State:  MustGetResource[*GameStateResource](w.ResourceStore),
+		Events: MustGetResource[*EventQueueResource](w.ResourceStore),
+		Status: MustGetResource[*status.Registry](w.ResourceStore),
 	}
 
 	// Bridged resources from services: fail-fast for required, graceful for optional
-	res.Content = MustGetResource[*ContentResource](w.Resources)
+	res.Content = MustGetResource[*ContentResource](w.ResourceStore)
 
-	if audioRes, ok := GetResource[*AudioResource](w.Resources); ok && audioRes.Player != nil {
+	if audioRes, ok := GetResource[*AudioResource](w.ResourceStore); ok && audioRes.Player != nil {
 		res.Audio = audioRes
 	}
 
-	if netRes, ok := GetResource[*NetworkResource](w.Resources); ok {
+	if netRes, ok := GetResource[*NetworkResource](w.ResourceStore); ok {
 		res.Network = netRes
 	}
 
 	return res
 }
 
-// === World Resources ===
+// === World Resource ===
 
 // TimeResource wraps time data for systems
 // It is updated by the GameContext/ClockScheduler at the start of a frame/tick
@@ -174,7 +174,7 @@ type CursorResource struct {
 	Entity core.Entity
 }
 
-// === Bridged Resources from Service ===
+// === Bridged Resource from Service ===
 
 // ContentProvider defines the interface for content access
 // Matches content.Service public API

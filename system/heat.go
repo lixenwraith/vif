@@ -1,7 +1,6 @@
 package system
 
 import (
-	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
@@ -9,20 +8,14 @@ import (
 
 // HeatSystem owns HeatComponent mutations
 type HeatSystem struct {
-	world *engine.World
-	res   engine.Resources
-
-	heatStore *engine.Store[component.HeatComponent]
+	engine.SystemBase
 
 	enabled bool
 }
 
 func NewHeatSystem(world *engine.World) engine.System {
 	s := &HeatSystem{
-		world: world,
-		res:   engine.GetResources(world),
-
-		heatStore: engine.GetStore[component.HeatComponent](world),
+		SystemBase: engine.NewSystemBase(world),
 	}
 	s.initLocked()
 	return s
@@ -81,9 +74,9 @@ func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
 
 // addHeat applies delta with clamping and writes back to store
 func (s *HeatSystem) addHeat(delta int) {
-	cursorEntity := s.res.Cursor.Entity
+	cursorEntity := s.Resource.Cursor.Entity
 
-	heatComp, ok := s.heatStore.Get(cursorEntity)
+	heatComp, ok := s.Component.Heat.Get(cursorEntity)
 	if !ok {
 		return
 	}
@@ -103,14 +96,14 @@ func (s *HeatSystem) addHeat(delta int) {
 	heatComp.Current.Store(newVal)
 
 	// CRITICAL: Write the modified component copy back to the store
-	s.heatStore.Set(cursorEntity, heatComp)
+	s.Component.Heat.Set(cursorEntity, heatComp)
 }
 
 // setHeat stores absolute value with clamping and writes back to store
 func (s *HeatSystem) setHeat(value int) {
-	cursorEntity := s.res.Cursor.Entity
+	cursorEntity := s.Resource.Cursor.Entity
 
-	heatComp, ok := s.heatStore.Get(cursorEntity)
+	heatComp, ok := s.Component.Heat.Get(cursorEntity)
 	if !ok {
 		return
 	}
@@ -126,5 +119,5 @@ func (s *HeatSystem) setHeat(value int) {
 	heatComp.Current.Store(int64(value))
 
 	// CRITICAL: Write the modified component copy back to the store
-	s.heatStore.Set(cursorEntity, heatComp)
+	s.Component.Heat.Set(cursorEntity, heatComp)
 }

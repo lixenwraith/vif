@@ -3,7 +3,6 @@ package system
 import (
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
@@ -11,11 +10,7 @@ import (
 
 // PingSystem manages the state of ping highlights and grids
 type PingSystem struct {
-	world    *engine.World
-	res      engine.Resources
-	stateRes *engine.GameStateResource
-
-	pingStore *engine.Store[component.PingComponent]
+	engine.SystemBase
 
 	enabled bool
 }
@@ -23,10 +18,7 @@ type PingSystem struct {
 // NewPingSystem creates a new ping system
 func NewPingSystem(world *engine.World) engine.System {
 	s := &PingSystem{
-		world: world,
-		res:   engine.GetResources(world),
-
-		pingStore: engine.GetStore[component.PingComponent](world),
+		SystemBase: engine.NewSystemBase(world),
 	}
 	s.initLocked()
 	return s
@@ -80,11 +72,11 @@ func (s *PingSystem) Update() {
 		return
 	}
 
-	entities := s.pingStore.All()
-	dt := s.res.Time.DeltaTime
+	entities := s.Component.Ping.All()
+	dt := s.Resource.Time.DeltaTime
 
 	for _, entity := range entities {
-		ping, ok := s.pingStore.Get(entity)
+		ping, ok := s.Component.Ping.Get(entity)
 		if !ok {
 			continue
 		}
@@ -103,7 +95,7 @@ func (s *PingSystem) Update() {
 
 		// Commit changes back to store
 		if changed {
-			s.pingStore.Set(entity, ping)
+			s.Component.Ping.Set(entity, ping)
 		}
 	}
 }
@@ -111,14 +103,14 @@ func (s *PingSystem) Update() {
 // handleGridRequest activates the grid on the cursor entity
 func (s *PingSystem) handleGridRequest(duration time.Duration) {
 	// In single player, apply to the main cursor
-	entity := s.res.Cursor.Entity
+	entity := s.Resource.Cursor.Entity
 
-	ping, ok := s.pingStore.Get(entity)
+	ping, ok := s.Component.Ping.Get(entity)
 	if !ok {
 		return
 	}
 
 	ping.GridActive = true
 	ping.GridRemaining = duration
-	s.pingStore.Set(entity, ping)
+	s.Component.Ping.Set(entity, ping)
 }

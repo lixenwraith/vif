@@ -115,7 +115,7 @@ func NewLightningRenderer(ctx *engine.GameContext) *LightningRenderer {
 	}
 
 	// Select rendering strategy based on terminal color capability
-	cfg := engine.MustGetResource[*engine.RenderConfig](ctx.World.Resources)
+	cfg := engine.MustGetResource[*engine.RenderConfig](ctx.World.ResourceStore)
 
 	if cfg.ColorMode == terminal.ColorMode256 {
 		r.renderLightning = r.renderLightning256

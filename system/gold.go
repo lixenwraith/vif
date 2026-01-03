@@ -18,16 +18,8 @@ import (
 
 // GoldSystem manages the gold sequence mechanic autonomously
 type GoldSystem struct {
-	mu    sync.RWMutex
-	world *engine.World
-	res   engine.Resources
-
-	// Cached stores (resolved once at construction)
-	headerStore *engine.Store[component.CompositeHeaderComponent]
-	memberStore *engine.Store[component.MemberComponent]
-	glyphStore  *engine.Store[component.GlyphComponent]
-	protStore   *engine.Store[component.ProtectionComponent]
-	heatStore   *engine.Store[component.HeatComponent]
+	mu sync.RWMutex
+	engine.SystemBase
 
 	// Internal state
 	active       bool
@@ -46,21 +38,14 @@ type GoldSystem struct {
 
 // NewGoldSystem creates a new gold sequence system
 func NewGoldSystem(world *engine.World) engine.System {
-	res := engine.GetResources(world)
 	s := &GoldSystem{
-		world: world,
-		res:   res,
-
-		headerStore: engine.GetStore[component.CompositeHeaderComponent](world),
-		memberStore: engine.GetStore[component.MemberComponent](world),
-		glyphStore:  engine.GetStore[component.GlyphComponent](world),
-		protStore:   engine.GetStore[component.ProtectionComponent](world),
-		heatStore:   engine.GetStore[component.HeatComponent](world),
-
-		statActive:   res.Status.Bools.Get("gold.active"),
-		statAnchorID: res.Status.Ints.Get("gold.anchor_id"),
-		statTimer:    res.Status.Ints.Get("gold.timer"),
+		SystemBase: engine.NewSystemBase(world),
 	}
+
+	s.statActive = s.Resource.Status.Bools.Get("gold.active")
+	s.statAnchorID = s.Resource.Status.Ints.Get("gold.anchor_id")
+	s.statTimer = s.Resource.Status.Ints.Get("gold.timer")
+
 	s.initLocked()
 	return s
 }
@@ -127,14 +112,14 @@ func (s *GoldSystem) HandleEvent(ev event.GameEvent) {
 		s.mu.RUnlock()
 
 		if !enabled || active {
-			s.world.PushEvent(event.EventGoldSpawnFailed, nil)
+			s.World.PushEvent(event.EventGoldSpawnFailed, nil)
 			return
 		}
 
 		if s.spawnGold() {
 			// EventGoldSpawned emitted inside spawnGold
 		} else {
-			s.world.PushEvent(event.EventGoldSpawnFailed, nil)
+			s.World.PushEvent(event.EventGoldSpawnFailed, nil)
 		}
 
 	case event.EventMemberTyped:
@@ -161,7 +146,7 @@ func (s *GoldSystem) Update() {
 		return
 	}
 
-	now := s.res.Time.GameTime
+	now := s.Resource.Time.GameTime
 
 	s.mu.Lock()
 	active := s.active
@@ -188,7 +173,7 @@ func (s *GoldSystem) Update() {
 
 	// Check if composite still exists (external destruction detection)
 	if anchorEntity != 0 {
-		header, ok := s.headerStore.Get(anchorEntity)
+		header, ok := s.Component.Header.Get(anchorEntity)
 		if !ok || s.countLivingMembers(&header) == 0 {
 			s.handleGoldDestroyed()
 			return
@@ -203,7 +188,7 @@ func (s *GoldSystem) Update() {
 
 // spawnGold creates a new gold sequence
 func (s *GoldSystem) spawnGold() bool {
-	now := s.res.Time.GameTime
+	now := s.Resource.Time.GameTime
 
 	// Generate random 10-character sequence
 	sequence := make([]rune, constant.GoldSequenceLength)
@@ -218,7 +203,7 @@ func (s *GoldSystem) spawnGold() bool {
 	}
 
 	// Phase 1: Create Phantom Head entity (NO position yet)
-	anchorEntity := s.world.CreateEntity()
+	anchorEntity := s.World.CreateEntity()
 
 	// Phase 2: Create member entities
 	type entityData struct {
@@ -232,7 +217,7 @@ func (s *GoldSystem) spawnGold() bool {
 
 	// Set position component to gold entities
 	for i := 0; i < constant.GoldSequenceLength; i++ {
-		entity := s.world.CreateEntity()
+		entity := s.World.CreateEntity()
 		entities = append(entities, entityData{
 			entity: entity,
 			pos:    component.PositionComponent{X: x + i, Y: y},
@@ -241,43 +226,43 @@ func (s *GoldSystem) spawnGold() bool {
 	}
 
 	// Phase 3: Batch position commit (anchor NOT in grid - no collision at x,y)
-	batch := s.world.Positions.BeginBatch()
+	batch := s.World.Positions.BeginBatch()
 	for _, ed := range entities {
 		batch.Add(ed.entity, ed.pos)
 	}
 
 	if err := batch.Commit(); err != nil {
 		for _, ed := range entities {
-			s.world.DestroyEntity(ed.entity)
+			s.World.DestroyEntity(ed.entity)
 		}
-		s.world.DestroyEntity(anchorEntity)
+		s.World.DestroyEntity(anchorEntity)
 		return false
 	}
 
 	// Phase 4: Set Phantom Head to Positions AFTER batch success
 	// Direct Set bypasses HasAny validation, colocates with member 0
 	// TODO: check protectAll, it may conflicts with OOB bound, set specific protections
-	s.world.Positions.Set(anchorEntity, component.PositionComponent{X: x, Y: y})
-	s.protStore.Set(anchorEntity, component.ProtectionComponent{
+	s.World.Positions.Set(anchorEntity, component.PositionComponent{X: x, Y: y})
+	s.Component.Protection.Set(anchorEntity, component.ProtectionComponent{
 		Mask: component.ProtectAll,
 	})
 
 	// Phase 5: Set components to members
 	for i, ed := range entities {
 		// Typing target
-		s.glyphStore.Set(ed.entity, component.GlyphComponent{
+		s.Component.Glyph.Set(ed.entity, component.GlyphComponent{
 			Rune:  sequence[i],
 			Type:  component.GlyphGold,
 			Level: component.GlyphBright,
 		})
 
 		// Composite membership
-		s.memberStore.Set(ed.entity, component.MemberComponent{
+		s.Component.Member.Set(ed.entity, component.MemberComponent{
 			AnchorID: anchorEntity,
 		})
 
 		// Protect gold entities from decay/delete
-		s.protStore.Set(ed.entity, component.ProtectionComponent{
+		s.Component.Protection.Set(ed.entity, component.ProtectionComponent{
 			Mask: component.ProtectFromDelete | component.ProtectFromDecay,
 		})
 
@@ -291,7 +276,7 @@ func (s *GoldSystem) spawnGold() bool {
 	}
 
 	// Phase 6: Create composite header
-	s.headerStore.Set(anchorEntity, component.CompositeHeaderComponent{
+	s.Component.Header.Set(anchorEntity, component.CompositeHeaderComponent{
 		BehaviorID: component.BehaviorGold,
 		Members:    members,
 	})
@@ -305,7 +290,7 @@ func (s *GoldSystem) spawnGold() bool {
 	s.mu.Unlock()
 
 	// Emit spawnLightning event
-	s.world.PushEvent(event.EventGoldSpawned, &event.GoldSpawnedPayload{
+	s.World.PushEvent(event.EventGoldSpawned, &event.GoldSpawnedPayload{
 		AnchorEntity: anchorEntity,
 		OriginX:      x,
 		OriginY:      y,
@@ -338,27 +323,27 @@ func (s *GoldSystem) handleGoldComplete() {
 	s.mu.RUnlock()
 
 	// Check heat for cleaner trigger
-	cursorEntity := s.res.Cursor.Entity
-	if hc, ok := s.heatStore.Get(cursorEntity); ok {
+	cursorEntity := s.Resource.Cursor.Entity
+	if hc, ok := s.Component.Heat.Get(cursorEntity); ok {
 		if hc.Current.Load() >= constant.MaxHeat {
 			// At max head trigger cleaners
-			s.world.PushEvent(event.EventCleanerSweepingRequest, nil)
+			s.World.PushEvent(event.EventCleanerSweepingRequest, nil)
 		} else {
 			// Fill heat to max
-			s.world.PushEvent(event.EventHeatSet, &event.HeatSetPayload{Value: constant.MaxHeat})
+			s.World.PushEvent(event.EventHeatSet, &event.HeatSetPayload{Value: constant.MaxHeat})
 		}
 	} else {
 		panic("heat store doesn't exist")
 	}
 
 	// Emit completion event
-	s.world.PushEvent(event.EventGoldComplete, &event.GoldCompletionPayload{
+	s.World.PushEvent(event.EventGoldComplete, &event.GoldCompletionPayload{
 		AnchorEntity: anchorEntity,
 	})
 
 	// Play sound
-	if s.res.Audio != nil && s.res.Audio.Player != nil {
-		s.res.Audio.Player.Play(core.SoundCoin)
+	if s.Resource.Audio != nil && s.Resource.Audio.Player != nil {
+		s.Resource.Audio.Player.Play(core.SoundCoin)
 	}
 
 	// Destroy composite
@@ -382,7 +367,7 @@ func (s *GoldSystem) handleGoldTimeout() {
 	anchorEntity := s.anchorEntity
 	s.mu.RUnlock()
 
-	s.world.PushEvent(event.EventGoldTimeout, &event.GoldCompletionPayload{
+	s.World.PushEvent(event.EventGoldTimeout, &event.GoldCompletionPayload{
 		AnchorEntity: anchorEntity,
 	})
 
@@ -406,7 +391,7 @@ func (s *GoldSystem) handleGoldDestroyed() {
 	anchorEntity := s.anchorEntity
 	s.mu.RUnlock()
 
-	s.world.PushEvent(event.EventGoldDestroyed, &event.GoldCompletionPayload{
+	s.World.PushEvent(event.EventGoldDestroyed, &event.GoldCompletionPayload{
 		AnchorEntity: anchorEntity,
 	})
 
@@ -440,7 +425,7 @@ func (s *GoldSystem) destroyCurrentGold() {
 
 // destroyComposite removes phantom head and all members
 func (s *GoldSystem) destroyComposite(anchorEntity core.Entity) {
-	header, ok := s.headerStore.Get(anchorEntity)
+	header, ok := s.Component.Header.Get(anchorEntity)
 	if !ok {
 		return
 	}
@@ -449,19 +434,19 @@ func (s *GoldSystem) destroyComposite(anchorEntity core.Entity) {
 	var toDestroy []core.Entity
 	for _, m := range header.Members {
 		if m.Entity != 0 {
-			s.memberStore.Remove(m.Entity)
+			s.Component.Member.Remove(m.Entity)
 			toDestroy = append(toDestroy, m.Entity)
 		}
 	}
 
 	if len(toDestroy) > 0 {
-		event.EmitDeathBatch(s.res.Events.Queue, 0, toDestroy, s.res.Time.FrameNumber)
+		event.EmitDeathBatch(s.Resource.Events.Queue, 0, toDestroy, s.Resource.Time.FrameNumber)
 	}
 
 	// Remove protection and destroy phantom head
-	s.protStore.Remove(anchorEntity)
-	s.headerStore.Remove(anchorEntity)
-	s.world.DestroyEntity(anchorEntity)
+	s.Component.Protection.Remove(anchorEntity)
+	s.Component.Header.Remove(anchorEntity)
+	s.World.DestroyEntity(anchorEntity)
 }
 
 // countLivingMembers returns count of non-tombstone members
@@ -478,8 +463,8 @@ func (s *GoldSystem) countLivingMembers(header *component.CompositeHeaderCompone
 // findValidPosition finds a valid random position for the gold sequence
 // Caller must NOT hold s.mu lock
 func (s *GoldSystem) findValidPosition(seqLength int) (int, int) {
-	config := s.res.Config
-	cursorPos, ok := s.world.Positions.Get(s.res.Cursor.Entity)
+	config := s.Resource.Config
+	cursorPos, ok := s.World.Positions.Get(s.Resource.Cursor.Entity)
 	if !ok {
 		return -1, -1
 	}
@@ -502,7 +487,7 @@ func (s *GoldSystem) findValidPosition(seqLength int) (int, int) {
 		// Check for overlaps with existing characters
 		overlaps := false
 		for i := 0; i < seqLength; i++ {
-			if s.world.Positions.HasAny(x+i, y) {
+			if s.World.Positions.HasAny(x+i, y) {
 				overlaps = true
 				break
 			}

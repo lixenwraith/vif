@@ -19,7 +19,7 @@ type AudioSystem struct {
 // player may be nil if audio is disabled
 func NewAudioSystem(world *engine.World) engine.System {
 	var player engine.AudioPlayer
-	if res, ok := engine.GetResource[*engine.AudioResource](world.Resources); ok {
+	if res, ok := engine.GetResource[*engine.AudioResource](world.ResourceStore); ok {
 		player = res.Player
 	}
 	s := &AudioSystem{

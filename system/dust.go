@@ -17,20 +17,8 @@ import (
 // DustSystem manages orbital dust particles created from glyph transformation
 // Dust orbits cursor with chase behavior on large cursor movements
 type DustSystem struct {
-	mu    sync.RWMutex
-	world *engine.World
-	res   engine.Resources
-
-	dustStore    *engine.Store[component.DustComponent]
-	glyphStore   *engine.Store[component.GlyphComponent]
-	memberStore  *engine.Store[component.MemberComponent]
-	sigilStore   *engine.Store[component.SigilComponent]
-	energyStore  *engine.Store[component.EnergyComponent]
-	shieldStore  *engine.Store[component.ShieldComponent]
-	heatStore    *engine.Store[component.HeatComponent]
-	blossomStore *engine.Store[component.BlossomComponent]
-	decayStore   *engine.Store[component.DecayComponent]
-	deathStore   *engine.Store[component.DeathComponent]
+	mu sync.RWMutex
+	engine.SystemBase
 
 	// Event state tracking
 	quasarActive bool
@@ -51,28 +39,17 @@ type DustSystem struct {
 }
 
 func NewDustSystem(world *engine.World) engine.System {
-	res := engine.GetResources(world)
+	res := engine.GetResourceStore(world)
 	s := &DustSystem{
-		world: world,
-		res:   res,
-
-		dustStore:    engine.GetStore[component.DustComponent](world),
-		glyphStore:   engine.GetStore[component.GlyphComponent](world),
-		memberStore:  engine.GetStore[component.MemberComponent](world),
-		sigilStore:   engine.GetStore[component.SigilComponent](world),
-		energyStore:  engine.GetStore[component.EnergyComponent](world),
-		shieldStore:  engine.GetStore[component.ShieldComponent](world),
-		heatStore:    engine.GetStore[component.HeatComponent](world),
-		blossomStore: engine.GetStore[component.BlossomComponent](world),
-		decayStore:   engine.GetStore[component.DecayComponent](world),
-		deathStore:   engine.GetStore[component.DeathComponent](world),
-
-		rng: vmath.NewFastRand(uint32(res.Time.RealTime.UnixNano())),
-
-		statCreated:   res.Status.Ints.Get("dust.created"),
-		statActive:    res.Status.Ints.Get("dust.active"),
-		statDestroyed: res.Status.Ints.Get("dust.destroyed"),
+		SystemBase: engine.NewSystemBase(world),
 	}
+
+	s.rng = vmath.NewFastRand(uint32(res.Time.RealTime.UnixNano()))
+
+	s.statCreated = res.Status.Ints.Get("dust.created")
+	s.statActive = res.Status.Ints.Get("dust.active")
+	s.statDestroyed = res.Status.Ints.Get("dust.destroyed")
+
 	s.initLocked()
 	return s
 }
@@ -140,8 +117,8 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 
 // transformGlyphsToDust converts all non-composite glyphs to dust entities
 func (s *DustSystem) transformGlyphsToDust() {
-	cursorEntity := s.res.Cursor.Entity
-	cursorPos, ok := s.world.Positions.Get(cursorEntity)
+	cursorEntity := s.Resource.Cursor.Entity
+	cursorPos, ok := s.World.Positions.Get(cursorEntity)
 	if !ok {
 		return
 	}
@@ -154,21 +131,21 @@ func (s *DustSystem) transformGlyphsToDust() {
 		level  component.GlyphLevel
 	}
 
-	glyphEntities := s.glyphStore.All()
+	glyphEntities := s.Component.Glyph.All()
 	toTransform := make([]glyphData, 0, len(glyphEntities))
 
 	for _, entity := range glyphEntities {
 		// Skip composite members
-		if s.memberStore.Has(entity) {
+		if s.Component.Member.Has(entity) {
 			continue
 		}
 
-		pos, hasPos := s.world.Positions.Get(entity)
+		pos, hasPos := s.World.Positions.Get(entity)
 		if !hasPos {
 			continue
 		}
 
-		glyph, hasGlyph := s.glyphStore.Get(entity)
+		glyph, hasGlyph := s.Component.Glyph.Get(entity)
 		if !hasGlyph {
 			continue
 		}
@@ -191,7 +168,7 @@ func (s *DustSystem) transformGlyphsToDust() {
 	for i, gd := range toTransform {
 		deathEntities[i] = gd.entity
 	}
-	event.EmitDeathBatch(s.res.Events.Queue, event.EventFlashRequest, deathEntities, s.res.Time.FrameNumber)
+	event.EmitDeathBatch(s.Resource.Events.Queue, event.EventFlashRequest, deathEntities, s.Resource.Time.FrameNumber)
 
 	// Create dust entities at cached positions
 	for _, gd := range toTransform {
@@ -203,7 +180,7 @@ func (s *DustSystem) transformGlyphsToDust() {
 
 // spawnDust creates a single dust entity with orbital initialization
 func (s *DustSystem) spawnDust(x, y int, char rune, level component.GlyphLevel, cursorX, cursorY int) {
-	entity := s.world.CreateEntity()
+	entity := s.World.CreateEntity()
 
 	// Random orbit radius in [min, max]
 	radiusRange := int(constant.DustOrbitRadiusMax - constant.DustOrbitRadiusMin)
@@ -228,10 +205,10 @@ func (s *DustSystem) spawnDust(x, y int, char rune, level component.GlyphLevel, 
 	}
 
 	// Grid position
-	s.world.Positions.Set(entity, component.PositionComponent{X: x, Y: y})
+	s.World.Positions.Set(entity, component.PositionComponent{X: x, Y: y})
 
 	// Dust component with kinetic state
-	s.dustStore.Set(entity, component.DustComponent{
+	s.Component.Dust.Set(entity, component.DustComponent{
 		KineticState: component.KineticState{
 			PreciseX: vmath.FromInt(x),
 			PreciseY: vmath.FromInt(y),
@@ -259,7 +236,7 @@ func (s *DustSystem) spawnDust(x, y int, char rune, level component.GlyphLevel, 
 		color = component.SigilDustNormal
 	}
 
-	s.sigilStore.Set(entity, component.SigilComponent{
+	s.Component.Sigil.Set(entity, component.SigilComponent{
 		Rune:  char,
 		Color: color,
 	})
@@ -270,30 +247,30 @@ func (s *DustSystem) Update() {
 		return
 	}
 
-	dustEntities := s.dustStore.All()
+	dustEntities := s.Component.Dust.All()
 	if len(dustEntities) == 0 {
 		s.statActive.Store(0)
 		return
 	}
 
-	cursorEntity := s.res.Cursor.Entity
-	cursorPos, ok := s.world.Positions.Get(cursorEntity)
+	cursorEntity := s.Resource.Cursor.Entity
+	cursorPos, ok := s.World.Positions.Get(cursorEntity)
 	if !ok {
 		return
 	}
 
 	// Fetch energy once for attraction gating
-	energyComp, _ := s.energyStore.Get(cursorEntity)
+	energyComp, _ := s.Component.Energy.Get(cursorEntity)
 	cursorEnergy := energyComp.Current.Load()
 	hasAttraction := cursorEnergy != 0
 
 	// Shield data for collision energy reward
-	shield, shieldOk := s.shieldStore.Get(cursorEntity)
+	shield, shieldOk := s.Component.Shield.Get(cursorEntity)
 	shieldActive := shieldOk && shield.Active
 
 	// Heat for energy calculation
 	var heat int
-	if hc, ok := s.heatStore.Get(cursorEntity); ok {
+	if hc, ok := s.Component.Heat.Get(cursorEntity); ok {
 		heat = int(hc.Current.Load())
 	}
 
@@ -309,12 +286,12 @@ func (s *DustSystem) Update() {
 	cursorDist := vmath.DistanceApprox(vmath.FromInt(cursorDeltaX), vmath.FromInt(cursorDeltaY))
 	applyChaseBoost := cursorDist > vmath.FromInt(constant.DustChaseThreshold)
 
-	dtFixed := vmath.FromFloat(s.res.Time.DeltaTime.Seconds())
+	dtFixed := vmath.FromFloat(s.Resource.Time.DeltaTime.Seconds())
 	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
 		dtFixed = dtCap
 	}
 
-	config := s.res.Config
+	config := s.Resource.Config
 	cursorXFixed := vmath.FromInt(cursorPos.X)
 	cursorYFixed := vmath.FromInt(cursorPos.Y)
 
@@ -326,7 +303,7 @@ func (s *DustSystem) Update() {
 	var destroyedCount int64
 
 	for _, entity := range dustEntities {
-		dust, ok := s.dustStore.Get(entity)
+		dust, ok := s.Component.Dust.Get(entity)
 		if !ok {
 			continue
 		}
@@ -431,7 +408,7 @@ func (s *DustSystem) Update() {
 				return true
 			}
 
-			n := s.world.Positions.GetAllAtInto(x, y, collisionBuf[:])
+			n := s.World.Positions.GetAllAtInto(x, y, collisionBuf[:])
 			for i := 0; i < n; i++ {
 				target := collisionBuf[i]
 				if target == 0 || target == entity {
@@ -439,7 +416,7 @@ func (s *DustSystem) Update() {
 				}
 
 				// Priority 1: Blossom/Decay - dust dies, other survives
-				if s.blossomStore.Has(target) || s.decayStore.Has(target) {
+				if s.Component.Blossom.Has(target) || s.Component.Decay.Has(target) {
 					// Shield protects dust from blossom/decay
 					if !dustInsideShield {
 						destroyDust = true
@@ -449,14 +426,14 @@ func (s *DustSystem) Update() {
 				}
 
 				// Priority 2: Glyph collision
-				if s.memberStore.Has(target) {
+				if s.Component.Member.Has(target) {
 					continue // Skip composite members
 				}
-				if s.deathStore.Has(target) {
+				if s.Component.Death.Has(target) {
 					continue // Already dying
 				}
 
-				glyph, ok := s.glyphStore.Get(target)
+				glyph, ok := s.Component.Glyph.Get(target)
 				if !ok {
 					continue
 				}
@@ -467,7 +444,7 @@ func (s *DustSystem) Update() {
 				}
 
 				// Glyph die
-				s.deathStore.Set(target, component.DeathComponent{})
+				s.Component.Death.Set(target, component.DeathComponent{})
 
 				// Dust survives if inside shield, dies otherwise
 				if !dustInsideShield {
@@ -486,7 +463,7 @@ func (s *DustSystem) Update() {
 						energyDelta = -heat
 					}
 					if energyDelta != 0 {
-						s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{
+						s.World.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{
 							Delta: energyDelta,
 						})
 					}
@@ -502,7 +479,7 @@ func (s *DustSystem) Update() {
 		})
 
 		if destroyDust {
-			s.deathStore.Set(entity, component.DeathComponent{})
+			s.Component.Death.Set(entity, component.DeathComponent{})
 			destroyedCount++
 			continue // Skip grid sync for dying entity
 		}
@@ -511,10 +488,10 @@ func (s *DustSystem) Update() {
 		if newX != dust.LastIntX || newY != dust.LastIntY {
 			dust.LastIntX = newX
 			dust.LastIntY = newY
-			s.world.Positions.Set(entity, component.PositionComponent{X: newX, Y: newY})
+			s.World.Positions.Set(entity, component.PositionComponent{X: newX, Y: newY})
 		}
 
-		s.dustStore.Set(entity, dust)
+		s.Component.Dust.Set(entity, dust)
 	}
 
 	s.statActive.Store(int64(len(dustEntities)))

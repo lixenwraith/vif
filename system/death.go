@@ -1,4 +1,5 @@
 package system
+
 // @lixen: #dev{feature[dust(render,system)]}
 
 import (
@@ -14,13 +15,7 @@ import (
 // DeathSystem routes death requests through protection checks and effect emission
 // Game entities route through here; effect entities bypass via direct DeathComponent
 type DeathSystem struct {
-	world *engine.World
-	res   engine.Resources
-
-	deathStore *engine.Store[component.DeathComponent]
-	protStore  *engine.Store[component.ProtectionComponent]
-	glyphStore *engine.Store[component.GlyphComponent]
-	sigilStore *engine.Store[component.SigilComponent]
+	engine.SystemBase
 
 	statKilled *atomic.Int64
 
@@ -28,18 +23,13 @@ type DeathSystem struct {
 }
 
 func NewDeathSystem(world *engine.World) engine.System {
-	res := engine.GetResources(world)
+	// res := engine.GetResourceStore(world)
 	s := &DeathSystem{
-		world: world,
-		res:   res,
-
-		deathStore: engine.GetStore[component.DeathComponent](world),
-		protStore:  engine.GetStore[component.ProtectionComponent](world),
-		glyphStore: engine.GetStore[component.GlyphComponent](world),
-		sigilStore: engine.GetStore[component.SigilComponent](world),
-
-		statKilled: res.Status.Ints.Get("death.killed"),
+		SystemBase: engine.NewSystemBase(world),
 	}
+
+	s.statKilled = s.Resource.Status.Ints.Get("death.killed")
+
 	s.initLocked()
 	return s
 }
@@ -111,11 +101,11 @@ func (s *DeathSystem) markForDeath(entity core.Entity, effect event.EventType) {
 	}
 
 	// 1. Protection Check
-	if prot, ok := s.protStore.Get(entity); ok {
-		if !prot.IsExpired(s.res.Time.GameTime.UnixNano()) &&
+	if prot, ok := s.Component.Protection.Get(entity); ok {
+		if !prot.IsExpired(s.Resource.Time.GameTime.UnixNano()) &&
 			(prot.Mask.Has(component.ProtectFromDeath) || prot.Mask == component.ProtectAll) {
 			// If immortal, remove tag to not process again in Update()
-			s.deathStore.Remove(entity)
+			s.Component.Death.Remove(entity)
 			return
 		}
 	}
@@ -131,7 +121,7 @@ func (s *DeathSystem) markForDeath(entity core.Entity, effect event.EventType) {
 
 	// 4. Immediate Destruction
 	// Removes entity from ALL stores, making it invisible to next Render snapshot
-	s.world.DestroyEntity(entity)
+	s.World.DestroyEntity(entity)
 
 	s.statKilled.Add(1)
 }
@@ -143,16 +133,16 @@ func (s *DeathSystem) routeCleanup(entity core.Entity) {
 }
 
 func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType) {
-	pos, hasPos := s.world.Positions.Get(entity)
+	pos, hasPos := s.World.Positions.Get(entity)
 	if !hasPos {
 		return
 	}
 
 	// Extract char: glyph first, sigil fallback
 	var char rune
-	if glyph, ok := s.glyphStore.Get(entity); ok {
+	if glyph, ok := s.Component.Glyph.Get(entity); ok {
 		char = glyph.Rune
-	} else if sigil, ok := s.sigilStore.Get(entity); ok {
+	} else if sigil, ok := s.Component.Sigil.Get(entity); ok {
 		char = sigil.Rune
 	} else {
 		return
@@ -160,14 +150,14 @@ func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType
 
 	switch effectEvent {
 	case event.EventFlashRequest:
-		s.world.PushEvent(event.EventFlashRequest, &event.FlashRequestPayload{
+		s.World.PushEvent(event.EventFlashRequest, &event.FlashRequestPayload{
 			X:    pos.X,
 			Y:    pos.Y,
 			Char: char,
 		})
 
 	case event.EventBlossomSpawnOne:
-		s.world.PushEvent(event.EventBlossomSpawnOne, &event.BlossomSpawnPayload{
+		s.World.PushEvent(event.EventBlossomSpawnOne, &event.BlossomSpawnPayload{
 			X:             pos.X,
 			Y:             pos.Y,
 			Char:          char,
@@ -175,7 +165,7 @@ func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType
 		})
 
 	case event.EventDecaySpawnOne:
-		s.world.PushEvent(event.EventDecaySpawnOne, &event.DecaySpawnPayload{
+		s.World.PushEvent(event.EventDecaySpawnOne, &event.DecaySpawnPayload{
 			X:             pos.X,
 			Y:             pos.Y,
 			Char:          char,
@@ -194,7 +184,7 @@ func (s *DeathSystem) Update() {
 		return
 	}
 
-	entities := s.deathStore.All()
+	entities := s.Component.Death.All()
 	if len(entities) == 0 {
 		return
 	}

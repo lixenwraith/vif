@@ -44,7 +44,7 @@ func NewHeatMeterRenderer(ctx *engine.GameContext) *HeatMeterRenderer {
 	}
 
 	// Access RenderConfig for display mode
-	cfg := engine.MustGetResource[*engine.RenderConfig](ctx.World.Resources)
+	cfg := engine.MustGetResource[*engine.RenderConfig](ctx.World.ResourceStore)
 
 	if cfg.ColorMode == terminal.ColorMode256 {
 		h.renderCell = h.cell256

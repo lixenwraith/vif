@@ -10,11 +10,7 @@ import (
 
 // MaterializeSystem manages materializer animations and triggering spawnLightning completion
 type MaterializeSystem struct {
-	world *engine.World
-	res   engine.Resources
-
-	matStore  *engine.Store[component.MaterializeComponent]
-	protStore *engine.Store[component.ProtectionComponent]
+	engine.SystemBase
 
 	enabled bool
 }
@@ -22,12 +18,9 @@ type MaterializeSystem struct {
 // NewMaterializeSystem creates a new materialize system
 func NewMaterializeSystem(world *engine.World) engine.System {
 	s := &MaterializeSystem{
-		world: world,
-		res:   engine.GetResources(world),
-
-		matStore:  engine.GetStore[component.MaterializeComponent](world),
-		protStore: engine.GetStore[component.ProtectionComponent](world),
+		SystemBase: engine.NewSystemBase(world),
 	}
+
 	s.initLocked()
 	return s
 }
@@ -80,7 +73,7 @@ func (s *MaterializeSystem) Update() {
 		return
 	}
 
-	dtFixed := vmath.FromFloat(s.res.Time.DeltaTime.Seconds())
+	dtFixed := vmath.FromFloat(s.Resource.Time.DeltaTime.Seconds())
 	// Cap delta time to prevent tunneling on lag spikes
 	dtCap := vmath.FromFloat(0.1)
 	if dtFixed > dtCap {
@@ -91,13 +84,13 @@ func (s *MaterializeSystem) Update() {
 	durationFixed := vmath.FromFloat(constant.MaterializeAnimationDuration.Seconds())
 	progressDelta := vmath.Div(dtFixed, durationFixed)
 
-	entities := s.matStore.All()
+	entities := s.Component.Materialize.All()
 	if len(entities) == 0 {
 		return
 	}
 
 	for _, entity := range entities {
-		mat, ok := s.matStore.Get(entity)
+		mat, ok := s.Component.Materialize.Get(entity)
 		if !ok {
 			continue
 		}
@@ -105,22 +98,22 @@ func (s *MaterializeSystem) Update() {
 		mat.Progress += progressDelta
 
 		if mat.Progress >= vmath.Scale {
-			s.world.PushEvent(event.EventMaterializeComplete, &event.SpawnCompletePayload{
+			s.World.PushEvent(event.EventMaterializeComplete, &event.SpawnCompletePayload{
 				X:    mat.TargetX,
 				Y:    mat.TargetY,
 				Type: mat.Type,
 			})
-			s.world.DestroyEntity(entity)
+			s.World.DestroyEntity(entity)
 			continue
 		}
 
-		s.matStore.Set(entity, mat)
+		s.Component.Materialize.Set(entity, mat)
 	}
 }
 
 // spawnMaterializeEffect creates a single materialize effect entity
 func (s *MaterializeSystem) spawnMaterializeEffect(targetX, targetY int, spawnType component.SpawnType) {
-	config := s.res.Config
+	config := s.Resource.Config
 
 	// Clamp target coordinates
 	if targetX < 0 {
@@ -136,10 +129,10 @@ func (s *MaterializeSystem) spawnMaterializeEffect(targetX, targetY int, spawnTy
 		targetY = config.GameHeight - 1
 	}
 
-	entity := s.world.CreateEntity()
+	entity := s.World.CreateEntity()
 
 	// TODO: add protection
-	s.matStore.Set(entity, component.MaterializeComponent{
+	s.Component.Materialize.Set(entity, component.MaterializeComponent{
 		TargetX:  targetX,
 		TargetY:  targetY,
 		Progress: 0,

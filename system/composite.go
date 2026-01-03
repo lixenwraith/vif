@@ -1,4 +1,5 @@
 package system
+
 // @lixen: #dev{feature[dust(render,system)],feature[quasar(render,system)]}
 
 import (
@@ -16,12 +17,7 @@ import (
 // - Liveness validation and tombstone marking
 // - Lazy compaction of dead members
 type CompositeSystem struct {
-	world *engine.World
-	res   engine.Resources
-
-	headerStore *engine.Store[component.CompositeHeaderComponent]
-	memberStore *engine.Store[component.MemberComponent]
-	protStore   *engine.Store[component.ProtectionComponent]
+	engine.SystemBase
 
 	enabled bool
 }
@@ -29,12 +25,7 @@ type CompositeSystem struct {
 // NewCompositeSystem creates a new composite system
 func NewCompositeSystem(world *engine.World) engine.System {
 	s := &CompositeSystem{
-		world: world,
-		res:   engine.GetResources(world),
-
-		headerStore: engine.GetStore[component.CompositeHeaderComponent](world),
-		memberStore: engine.GetStore[component.MemberComponent](world),
-		protStore:   engine.GetStore[component.ProtectionComponent](world),
+		SystemBase: engine.NewSystemBase(world),
 	}
 	s.initLocked()
 	return s
@@ -83,7 +74,7 @@ func (s *CompositeSystem) HandleEvent(ev event.GameEvent) {
 	s.markMemberTombstone(payload.AnchorID, payload.MemberEntity)
 
 	// 2. Request death for the member entity
-	event.EmitDeathOne(s.res.Events.Queue, payload.MemberEntity, 0, s.res.Time.FrameNumber)
+	event.EmitDeathOne(s.Resource.Events.Queue, payload.MemberEntity, 0, s.Resource.Time.FrameNumber)
 }
 
 func (s *CompositeSystem) Update() {
@@ -91,15 +82,15 @@ func (s *CompositeSystem) Update() {
 		return
 	}
 
-	anchors := s.headerStore.All()
+	anchors := s.Component.Header.All()
 
 	for _, anchor := range anchors {
-		header, ok := s.headerStore.Get(anchor)
+		header, ok := s.Component.Header.Get(anchor)
 		if !ok {
 			continue
 		}
 
-		anchorPos, hasPos := s.world.Positions.Get(anchor)
+		anchorPos, hasPos := s.World.Positions.Get(anchor)
 		if !hasPos {
 			continue
 		}
@@ -111,7 +102,7 @@ func (s *CompositeSystem) Update() {
 		if deltaX != 0 || deltaY != 0 {
 			anchorPos.X += deltaX
 			anchorPos.Y += deltaY
-			s.world.Positions.Set(anchor, anchorPos)
+			s.World.Positions.Set(anchor, anchorPos)
 		}
 
 		// Phase 3: Propagate offsets to members + liveness validation
@@ -130,13 +121,13 @@ func (s *CompositeSystem) Update() {
 		}
 
 		// Write back header
-		s.headerStore.Set(anchor, header)
+		s.Component.Header.Set(anchor, header)
 	}
 }
 
 // markMemberTombstone internal helper for authoritative state update
 func (s *CompositeSystem) markMemberTombstone(anchorID, memberEntity core.Entity) {
-	header, ok := s.headerStore.Get(anchorID)
+	header, ok := s.Component.Header.Get(anchorID)
 	if !ok {
 		return
 	}
@@ -148,7 +139,7 @@ func (s *CompositeSystem) markMemberTombstone(anchorID, memberEntity core.Entity
 			break
 		}
 	}
-	s.headerStore.Set(anchorID, header)
+	s.Component.Header.Set(anchorID, header)
 }
 
 // integrateMovement applies 16.16 fixed-point velocity to accumulator
@@ -170,7 +161,7 @@ func (s *CompositeSystem) integrateMovement(header *component.CompositeHeaderCom
 
 // syncMembers updates member positions and validates liveness
 func (s *CompositeSystem) syncMembers(header *component.CompositeHeaderComponent, anchorX, anchorY int) {
-	config := s.res.Config
+	config := s.Resource.Config
 
 	for i := range header.Members {
 		member := &header.Members[i]
@@ -181,7 +172,7 @@ func (s *CompositeSystem) syncMembers(header *component.CompositeHeaderComponent
 		}
 
 		// Liveness check: if entity no longer has position, it was destroyed
-		if !s.world.Positions.Has(member.Entity) {
+		if !s.World.Positions.Has(member.Entity) {
 			member.Entity = 0 // Tombstone
 			header.Dirty = true
 			continue
@@ -193,14 +184,14 @@ func (s *CompositeSystem) syncMembers(header *component.CompositeHeaderComponent
 
 		// Bounds check - destroy before tombstoning
 		if newX < 0 || newX >= config.GameWidth || newY < 0 || newY >= config.GameHeight {
-			s.world.DestroyEntity(member.Entity)
+			s.World.DestroyEntity(member.Entity)
 			member.Entity = 0
 			header.Dirty = true
 			continue
 		}
 
 		// Use Move for existing entities (updates spatial grid atomically)
-		_ = s.world.Positions.Move(member.Entity, component.PositionComponent{
+		_ = s.World.Positions.Move(member.Entity, component.PositionComponent{
 			X: newX,
 			Y: newY,
 		})
@@ -239,27 +230,27 @@ func (s *CompositeSystem) handleEmptyComposite(anchor core.Entity, header *compo
 
 // destroyPhantomHead removes protection and destroys the phantom head
 func (s *CompositeSystem) destroyPhantomHead(anchor core.Entity) {
-	s.protStore.Remove(anchor)
-	s.headerStore.Remove(anchor)
-	s.world.DestroyEntity(anchor)
+	s.Component.Protection.Remove(anchor)
+	s.Component.Header.Remove(anchor)
+	s.World.DestroyEntity(anchor)
 }
 
 // CreatePhantomHead spawns an invisible controller entity for a composite group
 // Returns the phantom head entity ID
 func (s *CompositeSystem) CreatePhantomHead(x, y int, groupID uint64, behaviorID component.BehaviorID) core.Entity {
-	entity := s.world.CreateEntity()
+	entity := s.World.CreateEntity()
 
 	// Position at anchor point
-	s.world.Positions.Set(entity, component.PositionComponent{X: x, Y: y})
+	s.World.Positions.Set(entity, component.PositionComponent{X: x, Y: y})
 
 	// Header component with empty member slice
-	s.headerStore.Set(entity, component.CompositeHeaderComponent{
+	s.Component.Header.Set(entity, component.CompositeHeaderComponent{
 		BehaviorID: behaviorID,
 		Members:    make([]component.MemberEntry, 0, 16),
 	})
 
 	// Phantom heads are protected from all destruction except explicit removal
-	s.protStore.Set(entity, component.ProtectionComponent{
+	s.Component.Protection.Set(entity, component.ProtectionComponent{
 		Mask: component.ProtectAll,
 	})
 
@@ -268,7 +259,7 @@ func (s *CompositeSystem) CreatePhantomHead(x, y int, groupID uint64, behaviorID
 
 // AddMember attaches a member entity to an existing composite
 func (s *CompositeSystem) AddMember(anchorID, memberEntity core.Entity, offsetX, offsetY int8, layer uint8) {
-	header, ok := s.headerStore.Get(anchorID)
+	header, ok := s.Component.Header.Get(anchorID)
 	if !ok {
 		return
 	}
@@ -280,28 +271,28 @@ func (s *CompositeSystem) AddMember(anchorID, memberEntity core.Entity, offsetX,
 		OffsetY: offsetY,
 		Layer:   layer,
 	})
-	s.headerStore.Set(anchorID, header)
+	s.Component.Header.Set(anchorID, header)
 
 	// Set backlink to member
-	s.memberStore.Set(memberEntity, component.MemberComponent{
+	s.Component.Member.Set(memberEntity, component.MemberComponent{
 		AnchorID: anchorID,
 	})
 }
 
 // SetVelocity configures composite movement in 16.16 fixed-point
 func (s *CompositeSystem) SetVelocity(anchorID core.Entity, velX, velY int32) {
-	header, ok := s.headerStore.Get(anchorID)
+	header, ok := s.Component.Header.Get(anchorID)
 	if !ok {
 		return
 	}
 	header.VelX = velX
 	header.VelY = velY
-	s.headerStore.Set(anchorID, header)
+	s.Component.Header.Set(anchorID, header)
 }
 
 // DestroyComposite removes the phantom head and all members
 func (s *CompositeSystem) DestroyComposite(anchorID core.Entity) {
-	header, ok := s.headerStore.Get(anchorID)
+	header, ok := s.Component.Header.Get(anchorID)
 	if !ok {
 		return
 	}
@@ -309,19 +300,19 @@ func (s *CompositeSystem) DestroyComposite(anchorID core.Entity) {
 	// Destroy all living members
 	for _, member := range header.Members {
 		if member.Entity != 0 {
-			s.memberStore.Remove(member.Entity)
-			s.world.DestroyEntity(member.Entity)
+			s.Component.Member.Remove(member.Entity)
+			s.World.DestroyEntity(member.Entity)
 		}
 	}
 
 	// Remove protection and destroy phantom head
-	s.protStore.Remove(anchorID)
-	s.world.DestroyEntity(anchorID)
+	s.Component.Protection.Remove(anchorID)
+	s.World.DestroyEntity(anchorID)
 }
 
 // GetAnchorForMember resolves the phantom head from a member entity
 func (s *CompositeSystem) GetAnchorForMember(memberEntity core.Entity) (core.Entity, bool) {
-	member, ok := s.memberStore.Get(memberEntity)
+	member, ok := s.Component.Member.Get(memberEntity)
 	if !ok {
 		return 0, false
 	}
@@ -330,7 +321,7 @@ func (s *CompositeSystem) GetAnchorForMember(memberEntity core.Entity) (core.Ent
 
 // GetHeader retrieves the composite header for an anchor
 func (s *CompositeSystem) GetHeader(anchorID core.Entity) (component.CompositeHeaderComponent, bool) {
-	return s.headerStore.Get(anchorID)
+	return s.Component.Header.Get(anchorID)
 }
 
 // velocityFromFloat converts float units/second to 16.16 fixed-point per-tick

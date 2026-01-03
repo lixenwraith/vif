@@ -83,10 +83,10 @@ func NewClockScheduler(
 	updateDone := make(chan struct{}, 1)
 	resetChan := make(chan struct{}, 1)
 
-	timeRes := MustGetResource[*TimeResource](world.Resources)
-	stateRes := MustGetResource[*GameStateResource](world.Resources)
-	statusReg := MustGetResource[*status.Registry](world.Resources)
-	eqRes := MustGetResource[*EventQueueResource](world.Resources)
+	timeRes := MustGetResource[*TimeResource](world.ResourceStore)
+	stateRes := MustGetResource[*GameStateResource](world.ResourceStore)
+	statusReg := MustGetResource[*status.Registry](world.ResourceStore)
+	eqRes := MustGetResource[*EventQueueResource](world.ResourceStore)
 
 	cs := &ClockScheduler{
 		world: world,
@@ -102,7 +102,7 @@ func NewClockScheduler(
 		lastGameTickTime: pausableClock.Now(),
 		tickCount:        atomic.Uint64{},
 
-		eventRouter: event.NewRouter(MustGetResource[*EventQueueResource](world.Resources).Queue),
+		eventRouter: event.NewRouter(MustGetResource[*EventQueueResource](world.ResourceStore).Queue),
 
 		frameReady: frameReady,
 		updateDone: updateDone,

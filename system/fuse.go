@@ -17,18 +17,7 @@ import (
 // Receives EventFuseDrains from CleanerSystem when no valid targets exist at max heat
 // Destroys all drains and spawns a single Quasar composite entity
 type FuseSystem struct {
-	world *engine.World
-	res   engine.Resources
-
-	drainStore  *engine.Store[component.DrainComponent]
-	quasarStore *engine.Store[component.QuasarComponent]
-	headerStore *engine.Store[component.CompositeHeaderComponent]
-	memberStore *engine.Store[component.MemberComponent]
-	protStore   *engine.Store[component.ProtectionComponent]
-	glyphStore  *engine.Store[component.GlyphComponent]
-	matStore    *engine.Store[component.MaterializeComponent]
-	spiritStore *engine.Store[component.SpiritComponent]
-	timerStore  *engine.Store[component.TimerComponent]
+	engine.SystemBase
 
 	// Fusion state machine
 	fusing    bool
@@ -42,19 +31,9 @@ type FuseSystem struct {
 // NewFuseSystem creates a new fuse system
 func NewFuseSystem(world *engine.World) engine.System {
 	s := &FuseSystem{
-		world: world,
-		res:   engine.GetResources(world),
-
-		drainStore:  engine.GetStore[component.DrainComponent](world),
-		quasarStore: engine.GetStore[component.QuasarComponent](world),
-		headerStore: engine.GetStore[component.CompositeHeaderComponent](world),
-		memberStore: engine.GetStore[component.MemberComponent](world),
-		protStore:   engine.GetStore[component.ProtectionComponent](world),
-		glyphStore:  engine.GetStore[component.GlyphComponent](world),
-		matStore:    engine.GetStore[component.MaterializeComponent](world),
-		spiritStore: engine.GetStore[component.SpiritComponent](world),
-		timerStore:  engine.GetStore[component.TimerComponent](world),
+		SystemBase: engine.NewSystemBase(world),
 	}
+
 	s.initLocked()
 	return s
 }
@@ -86,7 +65,7 @@ func (s *FuseSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		// Abort any in-progress fusion
 		if s.fusing {
-			s.world.PushEvent(event.EventSpiritDespawn, nil)
+			s.World.PushEvent(event.EventSpiritDespawn, nil)
 		}
 		s.Init()
 		return
@@ -109,7 +88,7 @@ func (s *FuseSystem) Update() {
 	}
 
 	// Decrement timer
-	s.fuseTimer -= s.res.Time.DeltaTime.Nanoseconds()
+	s.fuseTimer -= s.Resource.Time.DeltaTime.Nanoseconds()
 
 	if s.fuseTimer <= 0 {
 		s.completeFuse()
@@ -119,15 +98,15 @@ func (s *FuseSystem) Update() {
 // executeFuse performs the drain-to-quasar transformation
 func (s *FuseSystem) executeFuse() {
 	// 1. Signal DrainSystem to stop spawning
-	s.world.PushEvent(event.EventDrainPause, nil)
+	s.World.PushEvent(event.EventDrainPause, nil)
 
 	// 2. Collect active drains and their positions
-	drains := s.drainStore.All()
+	drains := s.Component.Drain.All()
 	coords := make([]int, 0, len(drains)*2)
 	validDrains := make([]core.Entity, 0, len(drains))
 
 	for _, e := range drains {
-		if pos, ok := s.world.Positions.Get(e); ok {
+		if pos, ok := s.World.Positions.Get(e); ok {
 			coords = append(coords, pos.X, pos.Y)
 			validDrains = append(validDrains, e)
 		}
@@ -138,7 +117,7 @@ func (s *FuseSystem) executeFuse() {
 
 	// Fallback to center screen if no drains
 	if len(coords) == 0 {
-		config := s.res.Config
+		config := s.Resource.Config
 		cX = config.GameWidth / 2
 		cY = config.GameHeight / 2
 	}
@@ -153,7 +132,7 @@ func (s *FuseSystem) executeFuse() {
 		originY := coords[i*2+1]
 
 		// Spawn transient lightning entity
-		s.world.PushEvent(event.EventSpiritSpawn, &event.SpiritSpawnPayload{
+		s.World.PushEvent(event.EventSpiritSpawn, &event.SpiritSpawnPayload{
 			StartX:  originX,
 			StartY:  originY,
 			TargetX: s.targetX,
@@ -166,10 +145,10 @@ func (s *FuseSystem) executeFuse() {
 	}
 
 	// 6. Cleanup Pending Materializers (Fixes artifact issue)
-	mats := s.matStore.All()
+	mats := s.Component.Materialize.All()
 	for _, e := range mats {
-		if m, ok := s.matStore.Get(e); ok && m.Type == component.SpawnTypeDrain {
-			s.world.DestroyEntity(e)
+		if m, ok := s.Component.Materialize.Get(e); ok && m.Type == component.SpawnTypeDrain {
+			s.World.DestroyEntity(e)
 		}
 	}
 
@@ -184,7 +163,7 @@ func (s *FuseSystem) executeFuse() {
 // completeFuse finalizes the transformation after timer expires
 func (s *FuseSystem) completeFuse() {
 	// 1. Safety cleanup - despawnLightning any remaining spirits
-	s.world.PushEvent(event.EventSpiritDespawn, nil)
+	s.World.PushEvent(event.EventSpiritDespawn, nil)
 
 	// 2. Clear spawnLightning area
 	s.clearSpawnArea(s.targetX, s.targetY)
@@ -193,7 +172,7 @@ func (s *FuseSystem) completeFuse() {
 	anchorEntity := s.createQuasarComposite(s.targetX, s.targetY)
 
 	// 4. Notify QuasarSystem
-	s.world.PushEvent(event.EventQuasarSpawned, &event.QuasarSpawnedPayload{
+	s.World.PushEvent(event.EventQuasarSpawned, &event.QuasarSpawnedPayload{
 		AnchorEntity: anchorEntity,
 		OriginX:      s.targetX,
 		OriginY:      s.targetY,
@@ -206,20 +185,20 @@ func (s *FuseSystem) completeFuse() {
 
 // destroyAllDrains removes all drain entities without visual effects
 func (s *FuseSystem) destroyAllDrains() {
-	drains := s.drainStore.All()
+	drains := s.Component.Drain.All()
 	if len(drains) == 0 {
 		return
 	}
 
 	// Batch silent death (no effect event)
-	event.EmitDeathBatch(s.res.Events.Queue, 0, drains, s.res.Time.FrameNumber)
+	event.EmitDeathBatch(s.Resource.Events.Queue, 0, drains, s.Resource.Time.FrameNumber)
 }
 
 // clampSpawnPosition ensures the Quasar fits within bounds given a target center
 // Input x, y is the desired center (or centroid)
 // Returns the Phantom Head position (Quasar anchor)
 func (s *FuseSystem) clampSpawnPosition(targetX, targetY int) (int, int) {
-	config := s.res.Config
+	config := s.Resource.Config
 
 	// Phantom head is at (2,1) offset relative to Quasar top-left (0,0)
 	// We want targetX, targetY to be roughly the center of the Quasar
@@ -251,7 +230,7 @@ func (s *FuseSystem) clampSpawnPosition(targetX, targetY int) (int, int) {
 
 // calculateSpawnPosition returns center of game area
 func (s *FuseSystem) calculateSpawnPosition() (int, int) {
-	config := s.res.Config
+	config := s.Resource.Config
 
 	// Center position adjusted for phantom head offset
 	// Phantom head is at (2,1) within the 5x3 grid
@@ -286,7 +265,7 @@ func (s *FuseSystem) clearSpawnArea(anchorX, anchorY int) {
 	topLeftX := anchorX - constant.QuasarAnchorOffsetX
 	topLeftY := anchorY - constant.QuasarAnchorOffsetY
 
-	cursorEntity := s.res.Cursor.Entity
+	cursorEntity := s.Resource.Cursor.Entity
 	var toDestroy []core.Entity
 
 	for row := 0; row < constant.QuasarHeight; row++ {
@@ -294,13 +273,13 @@ func (s *FuseSystem) clearSpawnArea(anchorX, anchorY int) {
 			x := topLeftX + col
 			y := topLeftY + row
 
-			entities := s.world.Positions.GetAllAt(x, y)
+			entities := s.World.Positions.GetAllAt(x, y)
 			for _, e := range entities {
 				if e == 0 || e == cursorEntity {
 					continue
 				}
 				// Check protection
-				if prot, ok := s.protStore.Get(e); ok {
+				if prot, ok := s.Component.Protection.Get(e); ok {
 					if prot.Mask == component.ProtectAll {
 						continue
 					}
@@ -311,7 +290,7 @@ func (s *FuseSystem) clearSpawnArea(anchorX, anchorY int) {
 	}
 
 	if len(toDestroy) > 0 {
-		event.EmitDeathBatch(s.res.Events.Queue, 0, toDestroy, s.res.Time.FrameNumber)
+		event.EmitDeathBatch(s.Resource.Events.Queue, 0, toDestroy, s.Resource.Time.FrameNumber)
 	}
 }
 
@@ -322,16 +301,16 @@ func (s *FuseSystem) createQuasarComposite(anchorX, anchorY int) core.Entity {
 	topLeftY := anchorY - constant.QuasarAnchorOffsetY
 
 	// Create phantom head (controller entity)
-	anchorEntity := s.world.CreateEntity()
-	s.world.Positions.Set(anchorEntity, component.PositionComponent{X: anchorX, Y: anchorY})
+	anchorEntity := s.World.CreateEntity()
+	s.World.Positions.Set(anchorEntity, component.PositionComponent{X: anchorX, Y: anchorY})
 
 	// Phantom head is indestructible through lifecycle
-	s.protStore.Set(anchorEntity, component.ProtectionComponent{
+	s.Component.Protection.Set(anchorEntity, component.ProtectionComponent{
 		Mask: component.ProtectAll,
 	})
 
 	// Set QuasarComponent for runtime state
-	s.quasarStore.Set(anchorEntity, component.QuasarComponent{
+	s.Component.Quasar.Set(anchorEntity, component.QuasarComponent{
 		KineticState: component.KineticState{
 			PreciseX: vmath.FromInt(anchorX),
 			PreciseY: vmath.FromInt(anchorY),
@@ -352,18 +331,18 @@ func (s *FuseSystem) createQuasarComposite(anchorX, anchorY int) core.Entity {
 			offsetX := int8(col - constant.QuasarAnchorOffsetX)
 			offsetY := int8(row - constant.QuasarAnchorOffsetY)
 
-			entity := s.world.CreateEntity()
-			s.world.Positions.Set(entity, component.PositionComponent{X: memberX, Y: memberY})
+			entity := s.World.CreateEntity()
+			s.World.Positions.Set(entity, component.PositionComponent{X: memberX, Y: memberY})
 
 			// Quasar members are not typeable - they're obstacles, no GlyphComponent set
 
 			// Members protected from decay/delete but not from death (composite manages lifecycle)
-			s.protStore.Set(entity, component.ProtectionComponent{
+			s.Component.Protection.Set(entity, component.ProtectionComponent{
 				Mask: component.ProtectFromDecay | component.ProtectFromDelete,
 			})
 
 			// Backlink to anchor
-			s.memberStore.Set(entity, component.MemberComponent{
+			s.Component.Member.Set(entity, component.MemberComponent{
 				AnchorID: anchorEntity,
 			})
 
@@ -377,7 +356,7 @@ func (s *FuseSystem) createQuasarComposite(anchorX, anchorY int) core.Entity {
 	}
 
 	// Set composite header on phantom head
-	s.headerStore.Set(anchorEntity, component.CompositeHeaderComponent{
+	s.Component.Header.Set(anchorEntity, component.CompositeHeaderComponent{
 		BehaviorID: component.BehaviorQuasar,
 		Members:    members,
 		VelX:       0,

@@ -28,20 +28,8 @@ type pendingDrainSpawn struct {
 // Drains spawn materialize based on Heat only
 // Priority: 25 (after CleanerSystem:22, before DecaySystem:30)
 type DrainSystem struct {
-	mu    sync.Mutex
-	world *engine.World
-	res   engine.Resources
-
-	drainStore  *engine.Store[component.DrainComponent]
-	sigilStore  *engine.Store[component.SigilComponent]
-	matStore    *engine.Store[component.MaterializeComponent]
-	protStore   *engine.Store[component.ProtectionComponent]
-	shieldStore *engine.Store[component.ShieldComponent]
-	heatStore   *engine.Store[component.HeatComponent]
-	glyphStore  *engine.Store[component.GlyphComponent]
-	nuggetStore *engine.Store[component.NuggetComponent]
-	memberStore *engine.Store[component.MemberComponent]
-	headerStore *engine.Store[component.CompositeHeaderComponent]
+	mu sync.RWMutex
+	engine.SystemBase
 
 	// Spawn queue for staggered materialization
 	pendingSpawns []pendingDrainSpawn
@@ -66,27 +54,15 @@ type DrainSystem struct {
 
 // NewDrainSystem creates a new drain system
 func NewDrainSystem(world *engine.World) engine.System {
-	res := engine.GetResources(world)
 	s := &DrainSystem{
-		world: world,
-		res:   res,
-
-		drainStore:  engine.GetStore[component.DrainComponent](world),
-		sigilStore:  engine.GetStore[component.SigilComponent](world),
-		matStore:    engine.GetStore[component.MaterializeComponent](world),
-		protStore:   engine.GetStore[component.ProtectionComponent](world),
-		shieldStore: engine.GetStore[component.ShieldComponent](world),
-		heatStore:   engine.GetStore[component.HeatComponent](world),
-		glyphStore:  engine.GetStore[component.GlyphComponent](world),
-		nuggetStore: engine.GetStore[component.NuggetComponent](world),
-		memberStore: engine.GetStore[component.MemberComponent](world),
-		headerStore: engine.GetStore[component.CompositeHeaderComponent](world),
-
-		pendingSpawns: make([]pendingDrainSpawn, 0, constant.DrainMaxCount),
-
-		statCount:   res.Status.Ints.Get("drain.count"),
-		statPending: res.Status.Ints.Get("drain.pending"),
+		SystemBase: engine.NewSystemBase(world),
 	}
+
+	s.pendingSpawns = make([]pendingDrainSpawn, constant.DrainMaxCount)
+
+	s.statCount = s.Resource.Status.Ints.Get("drain.count")
+	s.statPending = s.Resource.Status.Ints.Get("drain.pending")
+
 	s.initLocked()
 	return s
 }
@@ -103,7 +79,7 @@ func (s *DrainSystem) initLocked() {
 	s.pendingSpawns = s.pendingSpawns[:0]
 	s.nextSpawnOrder = 0
 	s.spawnCooldownUntil = 0
-	s.rng = vmath.NewFastRand(uint32(s.res.Time.RealTime.UnixNano()))
+	s.rng = vmath.NewFastRand(uint32(s.Resource.Time.RealTime.UnixNano()))
 	s.statCount.Store(0)
 	s.statPending.Store(0)
 	s.paused = false
@@ -173,13 +149,13 @@ func (s *DrainSystem) Update() {
 		return
 	}
 
-	currentTick := s.res.State.State.GetGameTicks()
+	currentTick := s.Resource.State.State.GetGameTicks()
 
 	// Process pending materialize spawn queue first
 	s.processPendingSpawns()
 
 	// Multi-drain lifecycle based on heat
-	currentCount := s.drainStore.Count()
+	currentCount := s.Component.Drain.Count()
 	pendingCount := len(s.pendingSpawns)
 
 	targetCount := s.calcTargetDrainCount()
@@ -214,12 +190,12 @@ func (s *DrainSystem) Update() {
 	}
 
 	// Clock-based updates for active drains
-	if s.drainStore.Count() > 0 {
+	if s.Component.Drain.Count() > 0 {
 		s.updateDrainMovement()
 		s.handleDrainInteractions()
 	}
 
-	s.statCount.Store(int64(s.drainStore.Count()))
+	s.statCount.Store(int64(s.Component.Drain.Count()))
 	s.statPending.Store(int64(len(s.pendingSpawns)))
 }
 
@@ -236,8 +212,8 @@ func (s *DrainSystem) removeCompletedSpawn(x, y int) {
 
 // getHeat reads heat value from HeatComponent
 func (s *DrainSystem) getHeat() int {
-	cursorEntity := s.res.Cursor.Entity
-	if hc, ok := s.heatStore.Get(cursorEntity); ok {
+	cursorEntity := s.Resource.Cursor.Entity
+	if hc, ok := s.Component.Heat.Get(cursorEntity); ok {
 		return int(hc.Current.Load())
 	}
 	return 0
@@ -254,11 +230,11 @@ func (s *DrainSystem) processPendingSpawns() {
 		return
 	}
 
-	currentTick := s.res.State.State.GetGameTicks()
+	currentTick := s.Resource.State.State.GetGameTicks()
 	for i := range s.pendingSpawns {
 		spawn := &s.pendingSpawns[i]
 		if !spawn.materializeStarted && currentTick >= spawn.scheduledTick {
-			s.world.PushEvent(event.EventMaterializeRequest, &event.MaterializeRequestPayload{
+			s.World.PushEvent(event.EventMaterializeRequest, &event.MaterializeRequestPayload{
 				X:    spawn.targetX,
 				Y:    spawn.targetY,
 				Type: component.SpawnTypeDrain,
@@ -270,7 +246,7 @@ func (s *DrainSystem) processPendingSpawns() {
 
 // queueDrainSpawn adds a drain materialize spawn to the pending queue with stagger timing
 func (s *DrainSystem) queueDrainSpawn(targetX, targetY int, staggerIndex int) {
-	currentTick := s.res.State.State.GetGameTicks()
+	currentTick := s.Resource.State.State.GetGameTicks()
 	scheduledTick := currentTick + uint64(staggerIndex)*uint64(constant.DrainSpawnStaggerTicks)
 
 	s.pendingSpawns = append(s.pendingSpawns, pendingDrainSpawn{
@@ -293,7 +269,7 @@ func (s *DrainSystem) calcTargetDrainCount() int {
 
 // getActiveDrainsBySpawnOrder returns drains sorted by SpawnOrder descending (newest first)
 func (s *DrainSystem) getActiveDrainsBySpawnOrder() []core.Entity {
-	entities := s.drainStore.All()
+	entities := s.Component.Drain.All()
 	if len(entities) <= 1 {
 		return entities
 	}
@@ -306,7 +282,7 @@ func (s *DrainSystem) getActiveDrainsBySpawnOrder() []core.Entity {
 
 	ordered := make([]drainWithOrder, 0, len(entities))
 	for _, e := range entities {
-		if drain, ok := s.drainStore.Get(e); ok {
+		if drain, ok := s.Component.Drain.Get(e); ok {
 			ordered = append(ordered, drainWithOrder{entity: e, order: drain.SpawnOrder})
 		}
 	}
@@ -331,7 +307,7 @@ func (s *DrainSystem) getActiveDrainsBySpawnOrder() []core.Entity {
 // When cursor is near edge, extends materialize spawn range on opposite side to maintain area
 // Retries up to maxRetries times to find unoccupied cell not in pending queue
 func (s *DrainSystem) randomSpawnOffset(baseX, baseY int, queuedPositions map[uint64]bool) (int, int, bool) {
-	config := s.res.Config
+	config := s.Resource.Config
 	maxRetries := constant.DrainSpawnMaxRetries
 	radius := constant.DrainSpawnOffsetMax
 	width := config.GameWidth
@@ -399,7 +375,7 @@ func (s *DrainSystem) randomSpawnOffset(baseX, baseY int, queuedPositions map[ui
 
 // buildQueuedPositionSet creates position exclusion map from all materialize spawn sources
 func (s *DrainSystem) buildQueuedPositionSet() map[uint64]bool {
-	queuedPositions := make(map[uint64]bool, len(s.pendingSpawns)+s.drainStore.Count()+s.matStore.Count()/4)
+	queuedPositions := make(map[uint64]bool, len(s.pendingSpawns)+s.Component.Drain.Count()+s.Component.Materialize.Count()/4)
 
 	// Pending spawns
 	for _, ps := range s.pendingSpawns {
@@ -408,18 +384,18 @@ func (s *DrainSystem) buildQueuedPositionSet() map[uint64]bool {
 	}
 
 	// Active materializer targets
-	matEntities := s.matStore.All()
+	matEntities := s.Component.Materialize.All()
 	for _, e := range matEntities {
-		if mat, ok := s.matStore.Get(e); ok {
+		if mat, ok := s.Component.Materialize.Get(e); ok {
 			key := uint64(mat.TargetX)<<32 | uint64(mat.TargetY)
 			queuedPositions[key] = true
 		}
 	}
 
 	// Existing drain positions (authoritative iteration, not spatial query)
-	drainEntities := s.drainStore.All()
+	drainEntities := s.Component.Drain.All()
 	for _, e := range drainEntities {
-		if pos, ok := s.world.Positions.Get(e); ok {
+		if pos, ok := s.World.Positions.Get(e); ok {
 			key := uint64(pos.X)<<32 | uint64(pos.Y)
 			queuedPositions[key] = true
 		}
@@ -431,9 +407,9 @@ func (s *DrainSystem) buildQueuedPositionSet() map[uint64]bool {
 // hasDrainAt checks if any drain exists at position using authoritative Drains store
 // O(n) where n = drain count (max 10), immune to spatial grid saturation
 func (s *DrainSystem) hasDrainAt(x, y int) bool {
-	drainEntities := s.drainStore.All()
+	drainEntities := s.Component.Drain.All()
 	for _, e := range drainEntities {
-		if pos, ok := s.world.Positions.Get(e); ok {
+		if pos, ok := s.World.Positions.Get(e); ok {
 			if pos.X == x && pos.Y == y {
 				return true
 			}
@@ -445,9 +421,9 @@ func (s *DrainSystem) hasDrainAt(x, y int) bool {
 // queueDrainSpawns queues multiple drain spawns with stagger timing
 // Returns number of spawns successfully queued
 func (s *DrainSystem) queueDrainSpawns(count int) int {
-	cursorEntity := s.res.Cursor.Entity
+	cursorEntity := s.Resource.Cursor.Entity
 
-	cursorPos, ok := s.world.Positions.Get(cursorEntity)
+	cursorPos, ok := s.World.Positions.Get(cursorEntity)
 	if !ok {
 		return 0
 	}
@@ -484,15 +460,15 @@ func (s *DrainSystem) despawnExcessDrains(count int) {
 	}
 
 	for i := 0; i < toRemove; i++ {
-		event.EmitDeathOne(s.res.Events.Queue, ordered[i], event.EventFlashRequest, s.res.Time.FrameNumber)
+		event.EmitDeathOne(s.Resource.Events.Queue, ordered[i], event.EventFlashRequest, s.Resource.Time.FrameNumber)
 	}
 }
 
 // materializeDrainAt creates a drain entity at the specified position
 func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
-	config := s.res.Config
-	cursorEntity := s.res.Cursor.Entity
-	now := s.res.Time.GameTime
+	config := s.Resource.Config
+	cursorEntity := s.Resource.Cursor.Entity
+	now := s.Resource.Time.GameTime
 
 	// Clamp to bounds
 	if spawnX < 0 {
@@ -515,14 +491,14 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 		return
 	}
 
-	entity := s.world.CreateEntity()
+	entity := s.World.CreateEntity()
 
 	pos := component.PositionComponent{
 		X: spawnX,
 		Y: spawnY,
 	}
 
-	cursorPos, ok := s.world.Positions.Get(cursorEntity)
+	cursorPos, ok := s.World.Positions.Get(cursorEntity)
 	if !ok {
 		return
 	}
@@ -546,17 +522,17 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 
 	// Handle collisions at materialize spawn position
 	// GetAllAt returns a copy, so iterating while destroying is safe
-	entitiesAtSpawn := s.world.Positions.GetAllAt(spawnX, spawnY)
+	entitiesAtSpawn := s.World.Positions.GetAllAt(spawnX, spawnY)
 	for _, e := range entitiesAtSpawn {
 		if e != cursorEntity {
 			s.handleCollisionAtPosition(e)
 		}
 	}
 
-	s.world.Positions.Set(entity, pos)
-	s.drainStore.Set(entity, drain)
+	s.World.Positions.Set(entity, pos)
+	s.Component.Drain.Set(entity, drain)
 	// Visual component for sigil renderer and death system flash extraction
-	s.sigilStore.Set(entity, component.SigilComponent{
+	s.Component.Sigil.Set(entity, component.SigilComponent{
 		Rune:  constant.DrainChar,
 		Color: component.SigilDrain,
 	})
@@ -565,9 +541,9 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 // requeueSpawnWithOffset attempts to find alternate position and re-queue materialize spawn
 // Called when target position blocked by drain that moved into it
 func (s *DrainSystem) requeueSpawnWithOffset(blockedX, blockedY int) {
-	cursorEntity := s.res.Cursor.Entity
+	cursorEntity := s.Resource.Cursor.Entity
 
-	cursorPos, ok := s.world.Positions.Get(cursorEntity)
+	cursorPos, ok := s.World.Positions.Get(cursorEntity)
 	if !ok {
 		return
 	}
@@ -585,14 +561,14 @@ func (s *DrainSystem) requeueSpawnWithOffset(blockedX, blockedY int) {
 
 // isInsideShieldEllipse checks if position is within the shield ellipse using Q16.16 fixed-point
 func (s *DrainSystem) isInsideShieldEllipse(x, y int) bool {
-	cursorEntity := s.res.Cursor.Entity
+	cursorEntity := s.Resource.Cursor.Entity
 
-	shield, ok := s.shieldStore.Get(cursorEntity)
+	shield, ok := s.Component.Shield.Get(cursorEntity)
 	if !ok {
 		return false
 	}
 
-	cursorPos, ok := s.world.Positions.Get(cursorEntity)
+	cursorPos, ok := s.World.Positions.Get(cursorEntity)
 	if !ok {
 		return false
 	}
@@ -607,10 +583,10 @@ func (s *DrainSystem) isInsideShieldEllipse(x, y int) bool {
 
 // handleDrainInteractions processes all drain interactions per tick
 func (s *DrainSystem) handleDrainInteractions() {
-	cursorEntity := s.res.Cursor.Entity
-	now := s.res.Time.GameTime
+	cursorEntity := s.Resource.Cursor.Entity
+	now := s.Resource.Time.GameTime
 
-	cursorPos, ok := s.world.Positions.Get(cursorEntity)
+	cursorPos, ok := s.World.Positions.Get(cursorEntity)
 	if !ok {
 		return
 	}
@@ -619,14 +595,14 @@ func (s *DrainSystem) handleDrainInteractions() {
 	s.handleDrainDrainCollisions()
 
 	// 2. Handle shield zone and cursor interactions
-	drainEntities := s.drainStore.All()
+	drainEntities := s.Component.Drain.All()
 	for _, drainEntity := range drainEntities {
-		drain, ok := s.drainStore.Get(drainEntity)
+		drain, ok := s.Component.Drain.Get(drainEntity)
 		if !ok {
 			continue
 		}
 
-		drainPos, ok := s.world.Positions.Get(drainEntity)
+		drainPos, ok := s.World.Positions.Get(drainEntity)
 		if !ok {
 			continue
 		}
@@ -636,22 +612,22 @@ func (s *DrainSystem) handleDrainInteractions() {
 		// Update cached state
 		if drain.IsOnCursor != isOnCursor {
 			drain.IsOnCursor = isOnCursor
-			s.drainStore.Set(drainEntity, drain)
+			s.Component.Drain.Set(drainEntity, drain)
 		}
 
 		// Check shield state from component
-		shield, shieldOk := s.shieldStore.Get(cursorEntity)
+		shield, shieldOk := s.Component.Shield.Get(cursorEntity)
 		shieldActive := shieldOk && shield.Active
 
 		// Shield zone interaction
 		if shieldActive && s.isInsideShieldEllipse(drainPos.X, drainPos.Y) {
 			// Energy drain (existing timer-based)
 			if now.Sub(drain.LastDrainTime) >= constant.DrainEnergyDrainInterval {
-				s.world.PushEvent(event.EventShieldDrain, &event.ShieldDrainPayload{
+				s.World.PushEvent(event.EventShieldDrain, &event.ShieldDrainPayload{
 					Amount: constant.DrainShieldEnergyDrainAmount,
 				})
 				drain.LastDrainTime = now
-				s.drainStore.Set(drainEntity, drain)
+				s.Component.Drain.Set(drainEntity, drain)
 			}
 
 			// Shield knockback (immunity-gated)
@@ -664,7 +640,7 @@ func (s *DrainSystem) handleDrainInteractions() {
 
 		// Cursor collision (shield not active or drain outside shield)
 		if isOnCursor {
-			s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{
+			s.World.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{
 				Delta: -constant.DrainHeatReductionAmount,
 			})
 		}
@@ -681,7 +657,7 @@ func (s *DrainSystem) applyShieldKnockback(
 	drainPos component.PositionComponent,
 	cursorPos component.PositionComponent,
 ) {
-	now := s.res.Time.GameTime
+	now := s.Resource.Time.GameTime
 
 	// Radial direction: cursor → drain (shield pushes outward)
 	radialX := vmath.FromInt(drainPos.X - cursorPos.X)
@@ -713,7 +689,7 @@ func (s *DrainSystem) applyShieldKnockback(
 	// Set immunity window
 	drain.DeflectUntil = now.Add(constant.ShieldKnockbackImmunity)
 
-	s.drainStore.Set(drainEntity, *drain)
+	s.Component.Drain.Set(drainEntity, *drain)
 }
 
 // handleDrainDrainCollisions detects and removes all drains sharing a cell
@@ -721,9 +697,9 @@ func (s *DrainSystem) handleDrainDrainCollisions() {
 	// Build position -> drain entities map
 	drainPositions := make(map[uint64][]core.Entity)
 
-	drainEntities := s.drainStore.All()
+	drainEntities := s.Component.Drain.All()
 	for _, drainEntity := range drainEntities {
-		pos, ok := s.world.Positions.Get(drainEntity)
+		pos, ok := s.World.Positions.Get(drainEntity)
 		if !ok {
 			continue
 		}
@@ -735,7 +711,7 @@ func (s *DrainSystem) handleDrainDrainCollisions() {
 	for _, entities := range drainPositions {
 		if len(entities) > 1 {
 			for _, e := range entities {
-				event.EmitDeathOne(s.res.Events.Queue, e, event.EventFlashRequest, s.res.Time.FrameNumber)
+				event.EmitDeathOne(s.Resource.Events.Queue, e, event.EventFlashRequest, s.Resource.Time.FrameNumber)
 			}
 		}
 	}
@@ -743,21 +719,21 @@ func (s *DrainSystem) handleDrainDrainCollisions() {
 
 // handleEntityCollisions processes collisions with non-drain entities
 func (s *DrainSystem) handleEntityCollisions() {
-	cursorEntity := s.res.Cursor.Entity
+	cursorEntity := s.Resource.Cursor.Entity
 
-	entities := s.drainStore.All()
+	entities := s.Component.Drain.All()
 	for _, entity := range entities {
-		drainPos, ok := s.world.Positions.Get(entity)
+		drainPos, ok := s.World.Positions.Get(entity)
 		if !ok {
 			continue
 		}
 
-		targets := s.world.Positions.GetAllAt(drainPos.X, drainPos.Y)
+		targets := s.World.Positions.GetAllAt(drainPos.X, drainPos.Y)
 
 		for _, target := range targets {
 			if target != 0 && target != entity && target != cursorEntity {
 				// Skip other drains (handled separately)
-				if _, ok := s.drainStore.Get(target); ok {
+				if _, ok := s.Component.Drain.Get(target); ok {
 					continue
 				}
 				s.handleCollisionAtPosition(target)
@@ -768,16 +744,16 @@ func (s *DrainSystem) handleEntityCollisions() {
 
 // updateDrainMovement handles continuous kinetic drain movement toward cursor
 func (s *DrainSystem) updateDrainMovement() {
-	config := s.res.Config
-	cursorEntity := s.res.Cursor.Entity
-	now := s.res.Time.GameTime
+	config := s.Resource.Config
+	cursorEntity := s.Resource.Cursor.Entity
+	now := s.Resource.Time.GameTime
 
-	cursorPos, ok := s.world.Positions.Get(cursorEntity)
+	cursorPos, ok := s.World.Positions.Get(cursorEntity)
 	if !ok {
 		return
 	}
 
-	dtFixed := vmath.FromFloat(s.res.Time.DeltaTime.Seconds())
+	dtFixed := vmath.FromFloat(s.Resource.Time.DeltaTime.Seconds())
 	// Cap delta time to prevent tunneling on lag spikes
 	dtCap := vmath.FromFloat(0.1)
 	if dtFixed > dtCap {
@@ -792,9 +768,9 @@ func (s *DrainSystem) updateDrainMovement() {
 
 	var collisionBuf [constant.MaxEntitiesPerCell]core.Entity
 
-	drainEntities := s.drainStore.All()
+	drainEntities := s.Component.Drain.All()
 	for _, drainEntity := range drainEntities {
-		drain, ok := s.drainStore.Get(drainEntity)
+		drain, ok := s.Component.Drain.Get(drainEntity)
 		if !ok {
 			continue
 		}
@@ -870,14 +846,14 @@ func (s *DrainSystem) updateDrainMovement() {
 				return true
 			}
 
-			count := s.world.Positions.GetAllAtInto(x, y, collisionBuf[:])
+			count := s.World.Positions.GetAllAtInto(x, y, collisionBuf[:])
 			for i := 0; i < count; i++ {
 				target := collisionBuf[i]
 				if target == 0 || target == drainEntity || target == cursorEntity {
 					continue
 				}
 				// Skip other drains - handled by handleDrainDrainCollisions
-				if s.drainStore.Has(target) {
+				if s.Component.Drain.Has(target) {
 					continue
 				}
 				s.handleCollisionAtPosition(target)
@@ -889,23 +865,23 @@ func (s *DrainSystem) updateDrainMovement() {
 		if newX != drain.LastIntX || newY != drain.LastIntY {
 			drain.LastIntX = newX
 			drain.LastIntY = newY
-			s.world.Positions.Set(drainEntity, component.PositionComponent{X: newX, Y: newY})
+			s.World.Positions.Set(drainEntity, component.PositionComponent{X: newX, Y: newY})
 		}
 
 		// Update cursor overlap state
 		drain.IsOnCursor = newX == cursorPos.X && newY == cursorPos.Y
 
-		s.drainStore.Set(drainEntity, drain)
+		s.Component.Drain.Set(drainEntity, drain)
 	}
 }
 
 // handleCollisionAtPosition processes collision with a specific entity at a given position
 func (s *DrainSystem) handleCollisionAtPosition(entity core.Entity) {
-	cursorEntity := s.res.Cursor.Entity
+	cursorEntity := s.Resource.Cursor.Entity
 
 	// Check protection before any collision handling
-	if prot, ok := s.protStore.Get(entity); ok {
-		now := s.res.Time.GameTime
+	if prot, ok := s.Component.Protection.Get(entity); ok {
+		now := s.Resource.Time.GameTime
 		if !prot.IsExpired(now.UnixNano()) && prot.Mask.Has(component.ProtectFromDrain) {
 			return
 		}
@@ -917,30 +893,30 @@ func (s *DrainSystem) handleCollisionAtPosition(entity core.Entity) {
 	}
 
 	// Check composite membership first (handles Gold after migration)
-	if member, ok := s.memberStore.Get(entity); ok {
-		header, headerOk := s.headerStore.Get(member.AnchorID)
+	if member, ok := s.Component.Member.Get(entity); ok {
+		header, headerOk := s.Component.Header.Get(member.AnchorID)
 		if headerOk && header.BehaviorID == component.BehaviorGold {
 			s.handleGoldCompositeCollision(member.AnchorID, &header)
 			return
 		}
 		// Non-gold composite member: destroy single entity
-		s.world.DestroyEntity(entity)
+		s.World.DestroyEntity(entity)
 		return
 	}
 
 	// Check if it's a nugget, destroy and clean up the ID
-	if s.nuggetStore.Has(entity) {
+	if s.Component.Nugget.Has(entity) {
 		s.handleNuggetCollision(entity)
 		return
 	}
 
 	// Destroy the entity (Handles standard chars, Decay entities, etc.)
-	s.world.DestroyEntity(entity)
+	s.World.DestroyEntity(entity)
 }
 
 // handleGoldCompositeCollision destroys entire gold composite via anchor
 func (s *DrainSystem) handleGoldCompositeCollision(anchorEntity core.Entity, header *component.CompositeHeaderComponent) {
-	s.world.PushEvent(event.EventGoldDestroyed, &event.GoldCompletionPayload{
+	s.World.PushEvent(event.EventGoldDestroyed, &event.GoldCompletionPayload{
 		AnchorEntity: anchorEntity,
 	})
 
@@ -949,29 +925,29 @@ func (s *DrainSystem) handleGoldCompositeCollision(anchorEntity core.Entity, hea
 		if m.Entity == 0 {
 			continue
 		}
-		if pos, ok := s.world.Positions.Get(m.Entity); ok {
-			if glyph, ok := s.glyphStore.Get(m.Entity); ok {
-				s.world.PushEvent(event.EventFlashRequest, &event.FlashRequestPayload{
+		if pos, ok := s.World.Positions.Get(m.Entity); ok {
+			if glyph, ok := s.Component.Glyph.Get(m.Entity); ok {
+				s.World.PushEvent(event.EventFlashRequest, &event.FlashRequestPayload{
 					X: pos.X, Y: pos.Y, Char: glyph.Rune,
 				})
 			}
 		}
-		s.memberStore.Remove(m.Entity)
-		s.world.DestroyEntity(m.Entity)
+		s.Component.Member.Remove(m.Entity)
+		s.World.DestroyEntity(m.Entity)
 	}
 
 	// Destroy phantom head
-	s.protStore.Remove(anchorEntity)
-	s.headerStore.Remove(anchorEntity)
-	s.world.DestroyEntity(anchorEntity)
+	s.Component.Protection.Remove(anchorEntity)
+	s.Component.Header.Remove(anchorEntity)
+	s.World.DestroyEntity(anchorEntity)
 }
 
 // handleNuggetCollision destroys the nugget entity and emits destruction event
 func (s *DrainSystem) handleNuggetCollision(entity core.Entity) {
-	s.world.PushEvent(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{
+	s.World.PushEvent(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{
 		Entity: entity,
 	})
 
 	// Destroy the nugget entity
-	s.world.DestroyEntity(entity)
+	s.World.DestroyEntity(entity)
 }

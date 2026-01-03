@@ -43,7 +43,7 @@ func NewQuasarRenderer(gameCtx *engine.GameContext) *QuasarRenderer {
 	}
 
 	// Select shield strategy based on terminal color capability
-	cfg := engine.MustGetResource[*engine.RenderConfig](gameCtx.World.Resources)
+	cfg := engine.MustGetResource[*engine.RenderConfig](gameCtx.World.ResourceStore)
 
 	if cfg.ColorMode == terminal.ColorMode256 {
 		r.shieldPadX = constant.QuasarShieldPad256X
