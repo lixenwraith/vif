@@ -20,7 +20,7 @@ func NewSpiritRenderer(gameCtx *engine.GameContext) *SpiritRenderer {
 }
 
 func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.gameCtx.World.Components.Spirit.All()
+	entities := r.gameCtx.World.Component.Spirit.All()
 	if len(entities) == 0 {
 		return
 	}
@@ -32,7 +32,7 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	blinkPhase := (ctx.FrameNumber * int64(constant.SpiritBlinkHz) / 60) % 2
 
 	for _, entity := range entities {
-		spirit, ok := r.gameCtx.World.Components.Spirit.Get(entity)
+		spirit, ok := r.gameCtx.World.Component.Spirit.Get(entity)
 		if !ok {
 			continue
 		}

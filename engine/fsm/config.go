@@ -18,7 +18,7 @@ type StateConfig struct {
 // TransitionConfig represents a transition definition
 type TransitionConfig struct {
 	Trigger   string         `toml:"trigger"`              // Event Name or "Tick"
-	Target    string         `toml:"target"`               // Target State Name
+	Target    string         `toml:"target"`               // Target GameState Name
 	Guard     string         `toml:"guard,omitempty"`      // Guard function name
 	GuardArgs map[string]any `toml:"guard_args,omitempty"` // Parameters for factory guards
 }

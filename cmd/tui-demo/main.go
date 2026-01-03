@@ -253,7 +253,7 @@ func (app *appState) renderStatusBar(r tui.Region) {
 	})
 
 	// Title on left
-	r.Text(1, 0, "TUI Components Demo", app.theme.HeaderFg, app.theme.HeaderBg, terminal.AttrBold)
+	r.Text(1, 0, "TUI Component Demo", app.theme.HeaderFg, app.theme.HeaderBg, terminal.AttrBold)
 }
 
 func (app *appState) renderFooter(r tui.Region) {
@@ -406,7 +406,7 @@ func (app *appState) renderListDemo(r tui.Region) {
 
 func (app *appState) renderDialogDemo(r tui.Region) {
 	content := r.Pane(tui.PaneOpts{
-		Title:    "Dialog Components",
+		Title:    "Dialog Component",
 		Border:   tui.LineDouble,
 		BorderFg: app.theme.Border,
 		TitleFg:  app.theme.HeaderFg,
@@ -458,7 +458,7 @@ func (app *appState) renderToastDemo(r tui.Region) {
 
 func (app *appState) renderProgressDemo(r tui.Region) {
 	content := r.Pane(tui.PaneOpts{
-		Title:    "Progress Components",
+		Title:    "Progress Component",
 		Border:   tui.LineDouble,
 		BorderFg: app.theme.Border,
 		TitleFg:  app.theme.HeaderFg,

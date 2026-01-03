@@ -21,7 +21,7 @@ func NewNuggetRenderer(gameCtx *engine.GameContext) *NuggetRenderer {
 
 // Render draws all nugget entities
 func (r *NuggetRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.gameCtx.World.Components.Nugget.All()
+	entities := r.gameCtx.World.Component.Nugget.All()
 	if len(entities) == 0 {
 		return
 	}
@@ -29,12 +29,12 @@ func (r *NuggetRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	buf.SetWriteMask(constant.MaskGlyph)
 
 	for _, entity := range entities {
-		pos, hasPos := r.gameCtx.World.Positions.Get(entity)
+		pos, hasPos := r.gameCtx.World.Position.Get(entity)
 		if !hasPos {
 			continue
 		}
 
-		glyph, hasGlyph := r.gameCtx.World.Components.Glyph.Get(entity)
+		glyph, hasGlyph := r.gameCtx.World.Component.Glyph.Get(entity)
 		if !hasGlyph {
 			continue
 		}

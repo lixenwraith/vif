@@ -1,7 +1,5 @@
 package system
 
-// @lixen: #dev{feature[dust(render,system)]}
-
 import (
 	"sync/atomic"
 
@@ -13,7 +11,7 @@ import (
 
 // ShieldSystem owns shield activation state and processes drain events
 type ShieldSystem struct {
-	engine.SystemBase
+	world *engine.World
 
 	statActive *atomic.Bool
 
@@ -23,10 +21,10 @@ type ShieldSystem struct {
 // NewShieldSystem creates a new shield system
 func NewShieldSystem(world *engine.World) engine.System {
 	s := &ShieldSystem{
-		SystemBase: engine.NewSystemBase(world),
+		world: world,
 	}
 
-	s.statActive = s.Resource.Status.Bools.Get("shield.active")
+	s.statActive = s.world.Resource.Status.Bools.Get("shield.active")
 
 	s.initLocked()
 	return s
@@ -69,11 +67,11 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
-	cursorEntity := s.Resource.Cursor.Entity
+	cursorEntity := s.world.Resource.Cursor.Entity
 
 	switch ev.Type {
 	case event.EventShieldActivate:
-		shield, ok := s.Component.Shield.Get(cursorEntity)
+		shield, ok := s.world.Component.Shield.Get(cursorEntity)
 		if ok {
 			// Calculation cache on activation since at init cursor may not be read when game is reset
 			rx := vmath.FromFloat(constant.ShieldRadiusX)
@@ -82,15 +80,15 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 			shield.RadiusY = ry
 			shield.InvRxSq, shield.InvRySq = vmath.EllipseInvRadiiSq(rx, ry)
 			shield.Active = true
-			s.Component.Shield.Set(cursorEntity, shield)
+			s.world.Component.Shield.Set(cursorEntity, shield)
 		}
 		s.statActive.Store(true)
 
 	case event.EventShieldDeactivate:
-		shield, ok := s.Component.Shield.Get(cursorEntity)
+		shield, ok := s.world.Component.Shield.Get(cursorEntity)
 		if ok {
 			shield.Active = false
-			s.Component.Shield.Set(cursorEntity, shield)
+			s.world.Component.Shield.Set(cursorEntity, shield)
 		}
 		s.statActive.Store(false)
 
@@ -107,9 +105,9 @@ func (s *ShieldSystem) Update() {
 		return
 	}
 
-	cursorEntity := s.Resource.Cursor.Entity
+	cursorEntity := s.world.Resource.Cursor.Entity
 
-	shield, ok := s.Component.Shield.Get(cursorEntity)
+	shield, ok := s.world.Component.Shield.Get(cursorEntity)
 	if !ok || !shield.Active {
 		return
 	}
@@ -119,20 +117,20 @@ func (s *ShieldSystem) Update() {
 		panic(nil)
 	}
 
-	now := s.Resource.Time.GameTime
+	now := s.world.Resource.Time.GameTime
 
 	if now.Sub(shield.LastDrainTime) >= constant.ShieldPassiveDrainInterval {
 		s.applyConvergentDrain(constant.ShieldPassiveDrainAmount)
 		shield.LastDrainTime = now
-		s.Component.Shield.Set(cursorEntity, shield)
+		s.world.Component.Shield.Set(cursorEntity, shield)
 	}
 }
 
 // applyConvergentDrain reduces energy magnitude toward zero by amount, clamping at zero
 func (s *ShieldSystem) applyConvergentDrain(amount int) {
-	cursorEntity := s.Resource.Cursor.Entity
+	cursorEntity := s.world.Resource.Cursor.Entity
 
-	energyComp, ok := s.Component.Energy.Get(cursorEntity)
+	energyComp, ok := s.world.Component.Energy.Get(cursorEntity)
 	if !ok {
 		return
 	}
@@ -159,7 +157,7 @@ func (s *ShieldSystem) applyConvergentDrain(amount int) {
 		}
 	}
 
-	s.World.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{
+	s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{
 		Delta: int(delta),
 	})
 }

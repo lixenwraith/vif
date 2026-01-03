@@ -1,5 +1,4 @@
 package render
-// @lixen: #dev{feature[drain(render,system)],feature[dust(render,system)],feature[quasar(render,system)]}
 
 // SystemRenderer is implemented by systems with visual output
 type SystemRenderer interface {

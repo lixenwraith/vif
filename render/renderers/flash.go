@@ -1,6 +1,5 @@
 package renderers
 
-// @lixen: #dev{feature[dust(render,system)]}
 
 import (
 	"github.com/lixenwraith/vi-fighter/constant"
@@ -23,7 +22,7 @@ func NewFlashRenderer(gameCtx *engine.GameContext) *FlashRenderer {
 
 // Render draws brief flash effects when characters are removed
 func (r *FlashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.gameCtx.World.Components.Flash.All()
+	entities := r.gameCtx.World.Component.Flash.All()
 	if len(entities) == 0 {
 		return
 	}
@@ -31,7 +30,7 @@ func (r *FlashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 	buf.SetWriteMask(constant.MaskTransient)
 
 	for _, entity := range entities {
-		flash, ok := r.gameCtx.World.Components.Flash.Get(entity)
+		flash, ok := r.gameCtx.World.Component.Flash.Get(entity)
 		if !ok {
 			continue
 		}

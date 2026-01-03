@@ -17,8 +17,8 @@ const (
 
 // getCharAt returns the character at the given position, or 0 if empty
 func getCharAt(ctx *engine.GameContext, x, y int) rune {
-	entities := ctx.World.Positions.GetAllAt(x, y)
-	glyphStore := ctx.World.Components.Glyph
+	entities := ctx.World.Position.GetAllAt(x, y)
+	glyphStore := ctx.World.Component.Glyph
 
 	for _, entity := range entities {
 		if entity == ctx.CursorEntity || entity == 0 {
@@ -73,11 +73,11 @@ func validatePosition(ctx *engine.GameContext, x, y int) (validX, validY int) {
 func findCharInDirection(ctx *engine.GameContext, startX, startY int, target rune, count int, forward bool) (int, bool) {
 	occurrences := 0
 	lastMatch := -1
-	glyphStore := ctx.World.Components.Glyph
+	glyphStore := ctx.World.Component.Glyph
 
 	if forward {
 		for x := startX + 1; x < ctx.GameWidth; x++ {
-			entities := ctx.World.Positions.GetAllAt(x, startY)
+			entities := ctx.World.Position.GetAllAt(x, startY)
 			for _, entity := range entities {
 				if entity == 0 {
 					continue
@@ -94,7 +94,7 @@ func findCharInDirection(ctx *engine.GameContext, startX, startY int, target run
 		}
 	} else {
 		for x := startX - 1; x >= 0; x-- {
-			entities := ctx.World.Positions.GetAllAt(x, startY)
+			entities := ctx.World.Position.GetAllAt(x, startY)
 			for _, entity := range entities {
 				if entity == 0 {
 					continue
@@ -290,12 +290,12 @@ func findLineEnd(ctx *engine.GameContext, cursorY int) int {
 	// Stack-allocated buffer for zero-alloc queries
 	var buf [constant.MaxEntitiesPerCell]core.Entity
 
-	glyphStore := ctx.World.Components.Glyph
+	glyphStore := ctx.World.Component.Glyph
 
 	// Scan from right to left
 	for x := ctx.GameWidth - 1; x >= 0; x-- {
 		// Zero-alloc query
-		count := ctx.World.Positions.GetAllAtInto(x, cursorY, buf[:])
+		count := ctx.World.Position.GetAllAtInto(x, cursorY, buf[:])
 
 		// Check entities at this cell
 		for i := 0; i < count; i++ {
@@ -327,13 +327,13 @@ func findFirstNonWhitespace(ctx *engine.GameContext, cursorY int) int {
 func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
 	var buf [constant.MaxEntitiesPerCell]core.Entity
 
-	glyphStore := ctx.World.Components.Glyph
+	glyphStore := ctx.World.Component.Glyph
 
 	for y := cursorY - 1; y >= 0; y-- {
 		rowEmpty := true
 		// Scan row; stop early if any interactable entity is found
 		for x := 0; x < ctx.GameWidth && rowEmpty; x++ {
-			count := ctx.World.Positions.GetAllAtInto(x, y, buf[:])
+			count := ctx.World.Position.GetAllAtInto(x, y, buf[:])
 			for i := 0; i < count; i++ {
 				if buf[i] != 0 && glyphStore.Has(buf[i]) {
 					rowEmpty = false
@@ -353,13 +353,13 @@ func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
 func findNextEmptyLine(ctx *engine.GameContext, cursorY int) int {
 	var buf [constant.MaxEntitiesPerCell]core.Entity
 
-	glyphStore := ctx.World.Components.Glyph
+	glyphStore := ctx.World.Component.Glyph
 
 	for y := cursorY + 1; y < ctx.GameHeight; y++ {
 		rowEmpty := true
 		// Scan row; stop early if any interactable entity is found
 		for x := 0; x < ctx.GameWidth && rowEmpty; x++ {
-			count := ctx.World.Positions.GetAllAtInto(x, y, buf[:])
+			count := ctx.World.Position.GetAllAtInto(x, y, buf[:])
 			for i := 0; i < count; i++ {
 				if buf[i] != 0 && glyphStore.Has(buf[i]) {
 					rowEmpty = false

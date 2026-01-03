@@ -1,5 +1,5 @@
 package event
-// @lixen: #dev{feature[drain(render,system)],feature[dust(render,system)],feature[quasar(render,system)]}
+
 
 import (
 	"github.com/lixenwraith/vi-fighter/core"
@@ -34,14 +34,14 @@ func EmitDeathBatch(q *EventQueue, effect EventType, entities []core.Entity, fra
 }
 
 // Pattern 1: Individual Kill (e.g., TypingSystem, NuggetSystem)
-// event.EmitDeathOne(s.res.Events.Queue, entity, 0, s.res.Time.FrameNumber)
+// event.EmitDeathOne(s.res.Event.Queue, entity, 0, s.res.Time.FrameNumber)
 //
 // Pattern 2: Individual Kill with Flash Effect (e.g., Typing correct char)
-// event.EmitDeathOne(s.res.Events.Queue, entity, event.EventFlashRequest, s.res.Time.FrameNumber)
+// event.EmitDeathOne(s.res.Event.Queue, entity, event.EventFlashRequest, s.res.Time.FrameNumber)
 //
 // Pattern 3: Batch Kill (e.g., Cleaner sweep, Decay row)
 // 'toDestroy' is prepared []core.Entity slice
-// event.EmitDeathBatch(s.res.Events.Queue, event.EventFlashRequest, toDestroy, s.res.Time.FrameNumber)
+// event.EmitDeathBatch(s.res.Event.Queue, event.EventFlashRequest, toDestroy, s.res.Time.FrameNumber)
 //
 // **Pattern 4: Silent Batch (e.g., Range delete)**
-// event.EmitDeathBatch(s.res.Events.Queue, 0, toDestroy, s.res.Time.FrameNumber)
+// event.EmitDeathBatch(s.res.Event.Queue, 0, toDestroy, s.res.Time.FrameNumber)

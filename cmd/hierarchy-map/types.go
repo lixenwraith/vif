@@ -27,8 +27,8 @@ type AppState struct {
 	CategoryNames []string         // sorted category names from index
 	HierarchyUI   *CategoryUIState // Hierarchy UI state
 
-	DepByState *DetailPaneState // State for "Depended By" pane
-	DepOnState *DetailPaneState // State for "Depends On" pane
+	DepByState *DetailPaneState // GameState for "Depended By" pane
+	DepOnState *DetailPaneState // GameState for "Depends On" pane
 
 	DepAnalysisCache map[string]*DependencyAnalysis // file path → analysis
 

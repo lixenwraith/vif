@@ -106,6 +106,14 @@ func (s *AudioService) Player() AudioPlayer {
 	return s.audioEngine
 }
 
+// Resource returns AudioResource for ECS bridge (nil if disabled)
+func (s *AudioService) Resource() *engine.AudioResource {
+	if s.disabled.Load() || s.audioEngine == nil {
+		return nil
+	}
+	return &engine.AudioResource{Player: s.audioEngine}
+}
+
 // AudioPlayer defines the minimal audio interface used by game systems
 type AudioPlayer interface {
 	Play(core.SoundType) bool

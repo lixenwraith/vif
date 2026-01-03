@@ -1,6 +1,5 @@
 package renderers
 
-// @lixen: #dev{feature[dust(render,system)]}
 
 import (
 	"github.com/lixenwraith/vi-fighter/component"
@@ -26,9 +25,9 @@ func NewGlyphRenderer(gameCtx *engine.GameContext) *GlyphRenderer {
 func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(constant.MaskGlyph)
 
-	entities := r.gameCtx.World.Components.Glyph.All()
+	entities := r.gameCtx.World.Component.Glyph.All()
 	for _, entity := range entities {
-		glyph, ok := r.gameCtx.World.Components.Glyph.Get(entity)
+		glyph, ok := r.gameCtx.World.Component.Glyph.Get(entity)
 		if !ok {
 			continue
 		}
@@ -38,7 +37,7 @@ func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 			continue
 		}
 
-		pos, ok := r.gameCtx.World.Positions.Get(entity)
+		pos, ok := r.gameCtx.World.Position.Get(entity)
 		if !ok {
 			continue
 		}

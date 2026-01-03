@@ -1,5 +1,4 @@
 package status
-// @lixen: #dev{base(core),feature[dust(render,system)]}
 
 import (
 	"sync/atomic"

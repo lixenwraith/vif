@@ -15,7 +15,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/mode"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/service"
-	"github.com/lixenwraith/vi-fighter/status"
 	"github.com/lixenwraith/vi-fighter/system"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
@@ -66,7 +65,7 @@ func main() {
 		}
 	}
 
-	// 4. World Creation & Component Registry
+	// 4. World Creation, Resource & Component Initialization
 	world := engine.NewWorld()
 
 	// TODO: check moving it up since no world dependency
@@ -75,10 +74,8 @@ func main() {
 		panic(fmt.Sprintf("service init failed: %v", err))
 	}
 
-	// 6. Resource Bridge - Services contribute to ECS
-	hub.PublishResources(func(res any) {
-		engine.SetResource(world.ResourceStore, res)
-	})
+	// 6. Resource ServiceBridge - Services contribute to ECS
+	hub.PublishResources(world.Resource.ServiceBridge)
 
 	// 7. Terminal extraction (orchestrator needs interface directly)
 	termSvc := service.MustGet[*terminal.TerminalService](hub, "terminal")
@@ -113,8 +110,7 @@ func main() {
 	// 10. Render Orchestrator
 	// Resolve color mode for RenderConfig
 	colorMode := term.ColorMode()
-	renderConfig := &engine.RenderConfig{ColorMode: colorMode}
-	engine.SetResource(ctx.World.ResourceStore, renderConfig)
+	ctx.World.Resource.Render = &engine.RenderConfig{ColorMode: colorMode}
 
 	orchestrator := render.NewRenderOrchestrator(term, ctx.Width, ctx.Height)
 
@@ -178,9 +174,6 @@ func main() {
 	}
 
 	// 15. Start Game
-	// Get world resources
-	timeRes := engine.MustGetResource[*engine.TimeResource](world.ResourceStore)
-	statusReg := engine.MustGetResource[*status.Registry](world.ResourceStore)
 
 	// Signal initial frame ready
 	frameReady <- struct{}{}
@@ -190,12 +183,12 @@ func main() {
 	defer clockScheduler.Stop()
 
 	// Cache FPS metric pointer for render loop
-	statFPS := statusReg.Ints.Get("engine.fps")
+	statFPS := ctx.World.Resource.Status.Ints.Get("engine.fps")
 
 	// FPS tracking
 	var frameCount int64
 	// TODO: changed from time.Now(), check
-	lastFPSUpdate := timeRes.RealTime
+	lastFPSUpdate := ctx.World.Resource.Time.RealTime
 
 	// Set frame rate
 	frameTicker := time.NewTicker(constant.FrameUpdateInterval)
@@ -254,19 +247,19 @@ func main() {
 			// Copy the values to stack variables for minimal lock duration and ensuring RenderContext is built with consistent state
 			ctx.World.RunSafe(func() {
 				// TimeResource updated by ClockScheduler; refresh frame number for render
-				timeRes.FrameNumber = ctx.GetFrameNumber()
+				ctx.World.Resource.Time.FrameNumber = ctx.GetFrameNumber()
 
 				// During pause: skip game updates but still render
 				if ctx.IsPaused.Load() {
 					// Update time for paused rendering
-					timeRes.RealTime = ctx.PausableClock.RealTime()
+					ctx.World.Resource.Time.RealTime = ctx.PausableClock.RealTime()
 				}
 
-				// Copy TimeResource state by value for thread-safe reading
-				snapTimeRes = *timeRes
+				// Snapshot TimeResource state by value for thread-safe reading
+				snapTimeRes = *ctx.World.Resource.Time
 
 				// Capture cursor position
-				if pos, ok := ctx.World.Positions.Get(ctx.CursorEntity); ok {
+				if pos, ok := ctx.World.Position.Get(ctx.CursorEntity); ok {
 					snapCursorX = pos.X
 					snapCursorY = pos.Y
 				}

@@ -1,6 +1,5 @@
 package component
 
-// @lixen: #dev{feature[dust(render,system)]}
 
 // DustComponent represents orbital dust particles from glyph transformation
 // Created when gold is completed during quasar phase

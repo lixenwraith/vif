@@ -1,19 +1,18 @@
 package event
 
-// @lixen: #dev{feature[drain(render,system)],feature[dust(render,system)],feature[quasar(render,system)]}
 
 // EventType represents the type of game event
 type EventType int
 
 const (
-	// === Audio Events ===
+	// === Audio Event ===
 
 	// EventSoundRequest requests audio playback
 	// Trigger: Systems requiring audio feedback
 	// Consumer: AudioSystem | Payload: *SoundRequestPayload
 	EventSoundRequest EventType = iota
 
-	// === Network Events ===
+	// === Network Event ===
 
 	// EventNetworkConnect signals a new peer connection
 	// Trigger: NetworkService on accepted/established connection
@@ -45,7 +44,7 @@ const (
 	// Consumer: UISystem | Payload: *NetworkErrorPayload
 	EventNetworkError
 
-	// === Game Events ===
+	// === Game Event ===
 
 	// EventNuggetCollected signals nugget was collected by player
 	// Trigger: EnergySystem on successful nugget character match
@@ -68,7 +67,7 @@ const (
 	EventGoldEnable
 
 	// EventGoldSpawnRequest signals a specific request to try spawning a gold sequence
-	// Trigger: FSM State Action
+	// Trigger: FSM GameState Action
 	// Consumer: GoldSystem | Payload: nil
 	EventGoldSpawnRequest
 

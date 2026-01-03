@@ -12,7 +12,7 @@ var (
 	csiReset = []byte("\x1b[0m")
 	csiClear = []byte("\x1b[2J\x1b[H")
 	csiHome  = []byte("\x1b[H")
-	csiRIS   = []byte("\x1bc") // Reset to Initial State (emergency)
+	csiRIS   = []byte("\x1bc") // Reset to Initial GameState (emergency)
 	csiSGR0  = []byte("\x1b[0m")
 
 	// Cursor control

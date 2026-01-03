@@ -166,38 +166,38 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 )
 
-// ComponentStore provides typed component store pointers
+// Component provides typed component store pointers
 // Embedded in World, initialized once at world creation
-type ComponentStore struct {
+type Component struct {
 {{- range .Components }}
 	{{ .Field }} *Store[component.{{ .Type }}]
 {{- end }}
 }
 
-// initComponentStores creates all component stores
+// initComponents creates all component stores
 // Called once from NewWorld()
-func initComponentStores(w *World) {
+func initComponents(w *World) {
 {{- range .Components }}
-	w.Components.{{ .Field }} = NewStore[component.{{ .Type }}]()
+	w.Component.{{ .Field }} = NewStore[component.{{ .Type }}]()
 {{- end }}
-	w.Positions = NewPositionStore()
-	w.Positions.SetWorld(w)
+	w.Position = NewPosition()
+	w.Position.SetWorld(w)
 }
 
-// removeFromAllStores removes entity from every component store
-func (w *World) removeFromAllStores(e core.Entity) {
+// removeEntity removes entity from every component store
+func (w *World) removeEntity(e core.Entity) {
 {{- range .Components }}
-	w.Components.{{ .Field }}.Remove(e)
+	w.Component.{{ .Field }}.Remove(e)
 {{- end }}
-	w.Positions.Remove(e)
+	w.Position.Remove(e)
 }
 
-// clearAllStores clears all component stores
-func (w *World) clearAllStores() {
+// wipeAll clears all component stores
+func (w *World) wipeAll() {
 {{- range .Components }}
-	w.Components.{{ .Field }}.Clear()
+	w.Component.{{ .Field }}.Clear()
 {{- end }}
-	w.Positions.Clear()
+	w.Position.Clear()
 }
 `))
 

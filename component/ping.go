@@ -5,10 +5,10 @@ import (
 )
 
 type PingComponent struct {
-	// Crosshair (Ping) State
+	// Crosshair (Ping) GameState
 	ShowCrosshair bool
 
-	// Grid (PingGrid) State
+	// Grid (PingGrid) GameState
 	GridActive    bool
 	GridRemaining time.Duration // Remaining time in seconds
 

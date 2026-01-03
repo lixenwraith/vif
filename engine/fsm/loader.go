@@ -24,7 +24,7 @@ func (m *Machine[T]) LoadConfig(data []byte) error {
 	m.activeStateID = StateNone
 	m.activePath = m.activePath[:0]
 
-	// 3. First Pass: Create State IDs and Nodes
+	// 3. First Pass: Create GameState IDs and Nodes
 	nameToID := make(map[string]StateID)
 	// Reserve StateRoot = 1
 	m.nodes[StateRoot] = m.AddState(StateRoot, "Root", StateNone)
@@ -122,7 +122,7 @@ func (m *Machine[T]) LoadConfig(data []byte) error {
 		}
 	}
 
-	// 7. Validate Initial State
+	// 7. Validate Initial GameState
 	initialID, ok := nameToID[config.InitialState]
 	if !ok {
 		return fmt.Errorf("initial state '%s' not found", config.InitialState)

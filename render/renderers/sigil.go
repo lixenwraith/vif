@@ -1,6 +1,5 @@
 package renderers
 
-// @lixen: #dev{feature[drain(render,system)],feature[dust(render,system)],feature[quasar(render,system)]}
 
 import (
 	"github.com/lixenwraith/vi-fighter/component"
@@ -24,7 +23,7 @@ func NewSigilRenderer(gameCtx *engine.GameContext) *SigilRenderer {
 
 // Render draws all sigil entities
 func (r *SigilRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.gameCtx.World.Components.Sigil.All()
+	entities := r.gameCtx.World.Component.Sigil.All()
 	if len(entities) == 0 {
 		return
 	}
@@ -32,12 +31,12 @@ func (r *SigilRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 	buf.SetWriteMask(constant.MaskTransient)
 
 	for _, entity := range entities {
-		sigil, ok := r.gameCtx.World.Components.Sigil.Get(entity)
+		sigil, ok := r.gameCtx.World.Component.Sigil.Get(entity)
 		if !ok {
 			continue
 		}
 
-		pos, ok := r.gameCtx.World.Positions.Get(entity)
+		pos, ok := r.gameCtx.World.Position.Get(entity)
 		if !ok {
 			continue
 		}

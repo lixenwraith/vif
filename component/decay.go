@@ -1,5 +1,4 @@
 package component
-// @lixen: #dev{feature[dust(render,system)]}
 
 // DecayComponent represents a decay character entity
 type DecayComponent struct {

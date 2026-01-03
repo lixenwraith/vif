@@ -9,14 +9,14 @@ import (
 
 // FlashSystem manages the lifecycle of visual flash effects
 type FlashSystem struct {
-	engine.SystemBase
+	world *engine.World
 
 	enabled bool
 }
 
 func NewFlashSystem(world *engine.World) engine.System {
 	s := &FlashSystem{
-		SystemBase: engine.NewSystemBase(world),
+		world: world,
 	}
 	s.initLocked()
 	return s
@@ -65,19 +65,19 @@ func (s *FlashSystem) Update() {
 		return
 	}
 
-	dt := s.Resource.Time.DeltaTime
-	entities := s.Component.Flash.All()
+	dt := s.world.Resource.Time.DeltaTime
+	entities := s.world.Component.Flash.All()
 	for _, entity := range entities {
-		flash, ok := s.Component.Flash.Get(entity)
+		flash, ok := s.world.Component.Flash.Get(entity)
 		if !ok {
 			continue
 		}
 
 		flash.Remaining -= dt
 		if flash.Remaining <= 0 {
-			s.World.DestroyEntity(entity)
+			s.world.DestroyEntity(entity)
 		} else {
-			s.Component.Flash.Set(entity, flash)
+			s.world.Component.Flash.Set(entity, flash)
 		}
 	}
 }
@@ -92,6 +92,6 @@ func (s *FlashSystem) spawnDestructionFlash(x, y int, char rune) {
 		Duration:  constant.DestructionFlashDuration,
 	}
 
-	entity := s.World.CreateEntity()
-	s.Component.Flash.Set(entity, flash)
+	entity := s.world.CreateEntity()
+	s.world.Component.Flash.Set(entity, flash)
 }

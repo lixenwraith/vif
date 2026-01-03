@@ -67,7 +67,7 @@ type Editor struct {
 	cursorX int
 	cursorY int
 
-	// UI State
+	// UI GameState
 	previewText string
 	typingMode  bool
 	statusMsg   string

@@ -1,11 +1,11 @@
 package engine
-// @lixen: #dev{base(core),feature[drain(render,system)],feature[dust(render,system)],feature[quasar(render,system)]}
+
 
 // Entity is defined in core package to avoid cyclic dependency
 
-// Components are handled in Store
+// Component are handled in Store
 
-// System is an interface that all systems must implement
+// System is an interface that all system must implement
 type System interface {
 	Init()
 	Update()

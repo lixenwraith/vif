@@ -1,7 +1,5 @@
 package system
 
-// @lixen: #dev{feature[drain(render,system)],feature[quasar(render,system)]}
-
 import (
 	"sync"
 	"sync/atomic"
@@ -16,8 +14,8 @@ import (
 
 // CleanerSystem manages the cleaner animation and logic using vector physics
 type CleanerSystem struct {
-	mu sync.Mutex
-	engine.SystemBase
+	mu    sync.Mutex
+	world *engine.World
 
 	spawned           map[int64]bool // Track which frames already spawned cleaners
 	hasSpawnedSession bool           // Track if we spawned cleaners this session
@@ -35,13 +33,13 @@ type CleanerSystem struct {
 // NewCleanerSystem creates a new cleaner system
 func NewCleanerSystem(world *engine.World) engine.System {
 	s := &CleanerSystem{
-		SystemBase: engine.NewSystemBase(world),
+		world: world,
 	}
 
 	s.spawned = make(map[int64]bool)
 
-	s.statActive = s.Resource.Status.Ints.Get("cleaner.active")
-	s.statSpawned = s.Resource.Status.Ints.Get("cleaner.spawned")
+	s.statActive = s.world.Resource.Status.Ints.Get("cleaner.active")
+	s.statSpawned = s.world.Resource.Status.Ints.Get("cleaner.spawned")
 
 	s.initLocked()
 	return s
@@ -58,7 +56,7 @@ func (s *CleanerSystem) Init() {
 func (s *CleanerSystem) initLocked() {
 	clear(s.spawned)
 	s.hasSpawnedSession = false
-	s.rng = vmath.NewFastRand(uint32(s.Resource.Time.RealTime.UnixNano()))
+	s.rng = vmath.NewFastRand(uint32(s.world.Resource.Time.RealTime.UnixNano()))
 	s.deflectedAnchors = make(map[core.Entity]core.Entity, 4)
 	s.enabled = true
 }
@@ -114,29 +112,29 @@ func (s *CleanerSystem) Update() {
 		return
 	}
 
-	config := s.Resource.Config
+	config := s.world.Resource.Config
 
 	// Clean old entries from spawned map
-	currentFrame := s.Resource.Time.FrameNumber
+	currentFrame := s.world.Resource.Time.FrameNumber
 	for frame := range s.spawned {
 		if currentFrame-frame > constant.CleanerDeduplicationWindow {
 			delete(s.spawned, frame)
 		}
 	}
 
-	entities := s.Component.Cleaner.All()
+	entities := s.world.Component.Cleaner.All()
 	s.statActive.Store(int64(len(entities)))
 
 	// Push EventCleanerSweepingFinished when all cleaners have completed their animation
 	if len(entities) == 0 && s.hasSpawnedSession {
-		s.World.PushEvent(event.EventCleanerSweepingFinished, nil)
+		s.world.PushEvent(event.EventCleanerSweepingFinished, nil)
 		s.hasSpawnedSession = false
 		return
 	}
 
 	// Clean dead cleaners from deflection tracking
 	for anchor, cleaner := range s.deflectedAnchors {
-		if !s.Component.Cleaner.Has(cleaner) {
+		if !s.world.Component.Cleaner.Has(cleaner) {
 			delete(s.deflectedAnchors, anchor)
 		}
 	}
@@ -146,18 +144,18 @@ func (s *CleanerSystem) Update() {
 		return
 	}
 
-	dtFixed := vmath.FromFloat(s.Resource.Time.DeltaTime.Seconds())
+	dtFixed := vmath.FromFloat(s.world.Resource.Time.DeltaTime.Seconds())
 	gameWidth := config.GameWidth
 	gameHeight := config.GameHeight
 
 	for _, entity := range entities {
-		c, ok := s.Component.Cleaner.Get(entity)
+		c, ok := s.world.Component.Cleaner.Get(entity)
 		if !ok {
 			continue
 		}
 
-		// Read grid position from PositionStore (authoritative for spatial queries)
-		oldPos, hasPos := s.World.Positions.Get(entity)
+		// Read grid position from Position (authoritative for spatial queries)
+		oldPos, hasPos := s.world.Position.Get(entity)
 		if !hasPos {
 			continue
 		}
@@ -214,7 +212,7 @@ func (s *CleanerSystem) Update() {
 			}
 		}
 
-		// Trail Update & Grid Sync: Update trail ring buffer and sync PositionStore if cell changed
+		// Trail Update & Grid Sync: Update trail ring buffer and sync Position if cell changed
 		newGridX := vmath.ToInt(c.PreciseX)
 		newGridY := vmath.ToInt(c.PreciseY)
 
@@ -226,8 +224,8 @@ func (s *CleanerSystem) Update() {
 				c.TrailLen++
 			}
 
-			// Sync grid position to PositionStore
-			s.World.Positions.Set(entity, component.PositionComponent{X: newGridX, Y: newGridY})
+			// Sync grid position to Position
+			s.world.Position.Set(entity, component.PositionComponent{X: newGridX, Y: newGridY})
 		}
 
 		// Lifecycle Check: Destroy cleaner when it reaches target position
@@ -243,44 +241,44 @@ func (s *CleanerSystem) Update() {
 		}
 
 		if shouldDestroy {
-			s.World.DestroyEntity(entity)
+			s.world.DestroyEntity(entity)
 		} else {
-			s.Component.Cleaner.Set(entity, c)
+			s.world.Component.Cleaner.Set(entity, c)
 		}
 	}
 
-	entities = s.Component.Cleaner.All()
+	entities = s.world.Component.Cleaner.All()
 	// Push EventCleanerSweepingFinished when all cleaners have completed their animation
 	if len(entities) == 0 && s.hasSpawnedSession {
-		s.World.PushEvent(event.EventCleanerSweepingFinished, nil)
+		s.world.PushEvent(event.EventCleanerSweepingFinished, nil)
 		s.hasSpawnedSession = false
 	}
 }
 
 // spawnCleaners generates cleaner entities using generic stores
 func (s *CleanerSystem) spawnCleaners() {
-	config := s.Resource.Config
+	config := s.world.Resource.Config
 
 	rows := s.scanTargetRows()
 
 	spawnCount := len(rows)
 	// No rows to clean, trigger fuse drains if not in grayout
 	if spawnCount == 0 {
-		if !s.Resource.State.State.GrayoutPersist.Load() {
-			s.World.PushEvent(event.EventFuseDrains, nil)
+		if !s.world.Resource.GameState.State.GrayoutPersist.Load() {
+			s.world.PushEvent(event.EventFuseDrains, nil)
 		}
-		s.World.PushEvent(event.EventCleanerSweepingFinished, nil)
+		s.world.PushEvent(event.EventCleanerSweepingFinished, nil)
 		return
 	}
 	s.statSpawned.Add(int64(spawnCount))
 
-	s.World.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
+	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
 		SoundType: core.SoundWhoosh,
 	})
 
 	// Determine energy polarity once for entire batch
 	negativeEnergy := false
-	if energyComp, ok := s.Component.Energy.Get(s.Resource.Cursor.Entity); ok {
+	if energyComp, ok := s.world.Component.Energy.Get(s.world.Resource.Cursor.Entity); ok {
 		negativeEnergy = energyComp.Current.Load() < 0
 	}
 
@@ -330,10 +328,10 @@ func (s *CleanerSystem) spawnCleaners() {
 		}
 
 		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → CleanerComponent (float overlay)
-		entity := s.World.CreateEntity()
-		s.World.Positions.Set(entity, component.PositionComponent{X: startGridX, Y: startGridY})
-		s.Component.Cleaner.Set(entity, comp)
-		s.Component.Protection.Set(entity, component.ProtectionComponent{
+		entity := s.world.CreateEntity()
+		s.world.Position.Set(entity, component.PositionComponent{X: startGridX, Y: startGridY})
+		s.world.Component.Cleaner.Set(entity, comp)
+		s.world.Component.Protection.Set(entity, component.ProtectionComponent{
 			Mask: component.ProtectFromDrain | component.ProtectFromDeath,
 		})
 	}
@@ -341,14 +339,14 @@ func (s *CleanerSystem) spawnCleaners() {
 
 // checkCollisions handles collision logic with self-exclusion
 func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
-	// Query all entities at position (includes cleaner itself due to PositionStore registration)
-	targetEntities := s.World.Positions.GetAllAt(x, y)
+	// Query all entities at position (includes cleaner itself due to Position registration)
+	targetEntities := s.world.Position.GetAllAt(x, y)
 	if len(targetEntities) == 0 {
 		return
 	}
 
 	// Get cleaner velocity for drain deflection
-	cleaner, ok := s.Component.Cleaner.Get(selfEntity)
+	cleaner, ok := s.world.Component.Cleaner.Get(selfEntity)
 	if !ok {
 		return
 	}
@@ -358,7 +356,7 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 		if e == 0 || e == selfEntity {
 			continue
 		}
-		if s.Component.Drain.Has(e) {
+		if s.world.Component.Drain.Has(e) {
 			s.deflectDrain(e, cleaner.VelX, cleaner.VelY)
 		}
 	}
@@ -368,14 +366,14 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 		if e == 0 || e == selfEntity {
 			continue
 		}
-		member, ok := s.Component.Member.Get(e)
+		member, ok := s.world.Component.Member.Get(e)
 		if !ok {
 			continue
 		}
 		if lastCleaner, exists := s.deflectedAnchors[member.AnchorID]; exists && lastCleaner == selfEntity {
 			continue
 		}
-		header, ok := s.Component.Header.Get(member.AnchorID)
+		header, ok := s.world.Component.Header.Get(member.AnchorID)
 		if !ok {
 			continue
 		}
@@ -386,9 +384,9 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 	}
 
 	// Determine mode based on energy polarity
-	cursorEntity := s.Resource.Cursor.Entity
+	cursorEntity := s.world.Resource.Cursor.Entity
 	negativeEnergy := false
-	if energyComp, ok := s.Component.Energy.Get(cursorEntity); ok {
+	if energyComp, ok := s.world.Component.Energy.Get(cursorEntity); ok {
 		negativeEnergy = energyComp.Current.Load() < 0
 	}
 
@@ -402,7 +400,7 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 // deflectDrain applies deflection impulse to a drain entity
 // Physics-based impulse - additive to drain velocity, direction from cleaner
 func (s *CleanerSystem) deflectDrain(drainEntity core.Entity, cleanerVelX, cleanerVelY int32) {
-	drain, ok := s.Component.Drain.Get(drainEntity)
+	drain, ok := s.world.Component.Drain.Get(drainEntity)
 	if !ok {
 		return
 	}
@@ -427,14 +425,14 @@ func (s *CleanerSystem) deflectDrain(drainEntity core.Entity, cleanerVelX, clean
 	drain.VelY += impulseY
 
 	// Set immunity window
-	drain.DeflectUntil = s.Resource.Time.GameTime.Add(constant.DrainDeflectImmunity)
+	drain.DeflectUntil = s.world.Resource.Time.GameTime.Add(constant.DrainDeflectImmunity)
 
-	s.Component.Drain.Set(drainEntity, drain)
+	s.world.Component.Drain.Set(drainEntity, drain)
 }
 
 // deflectQuasar applies offset-aware collision impulse to quasar composite
 func (s *CleanerSystem) deflectQuasar(anchorEntity, hitMember core.Entity, cleanerVelX, cleanerVelY int32) {
-	quasar, ok := s.Component.Quasar.Get(anchorEntity)
+	quasar, ok := s.world.Component.Quasar.Get(anchorEntity)
 	if !ok {
 		return
 	}
@@ -456,14 +454,14 @@ func (s *CleanerSystem) deflectQuasar(anchorEntity, hitMember core.Entity, clean
 	// Knockback only when not enraged
 	isEnraged := quasar.IsCharging || quasar.IsZapping
 	if !isEnraged {
-		anchorPos, ok := s.World.Positions.Get(anchorEntity)
+		anchorPos, ok := s.world.Position.Get(anchorEntity)
 		if !ok {
-			s.Component.Quasar.Set(anchorEntity, quasar)
+			s.world.Component.Quasar.Set(anchorEntity, quasar)
 			return
 		}
-		hitPos, ok := s.World.Positions.Get(hitMember)
+		hitPos, ok := s.world.Position.Get(hitMember)
 		if !ok {
-			s.Component.Quasar.Set(anchorEntity, quasar)
+			s.world.Component.Quasar.Set(anchorEntity, quasar)
 			return
 		}
 
@@ -489,10 +487,10 @@ func (s *CleanerSystem) deflectQuasar(anchorEntity, hitMember core.Entity, clean
 		quasar.VelX = impulseX
 		quasar.VelY = impulseY
 
-		quasar.DeflectUntil = s.Resource.Time.GameTime.Add(constant.QuasarHitFlashDuration)
+		quasar.DeflectUntil = s.world.Resource.Time.GameTime.Add(constant.QuasarHitFlashDuration)
 	}
 
-	s.Component.Quasar.Set(anchorEntity, quasar)
+	s.world.Component.Quasar.Set(anchorEntity, quasar)
 }
 
 // processPositiveEnergy handles Red destruction with Blossom spawnLightning
@@ -504,7 +502,7 @@ func (s *CleanerSystem) processPositiveEnergy(targetEntities []core.Entity, self
 		if e == 0 || e == selfEntity {
 			continue
 		}
-		if glyph, ok := s.Component.Glyph.Get(e); ok {
+		if glyph, ok := s.world.Component.Glyph.Get(e); ok {
 			if glyph.Type == component.GlyphRed {
 				toDestroy = append(toDestroy, e)
 			}
@@ -515,7 +513,7 @@ func (s *CleanerSystem) processPositiveEnergy(targetEntities []core.Entity, self
 		return
 	}
 
-	event.EmitDeathBatch(s.Resource.Events.Queue, event.EventBlossomSpawnOne, toDestroy, s.Resource.Time.FrameNumber)
+	event.EmitDeathBatch(s.world.Resource.Event.Queue, event.EventBlossomSpawnOne, toDestroy, s.world.Resource.Time.FrameNumber)
 }
 
 // processNegativeEnergy handles Blue mutation to Green with Decay spawnLightning
@@ -526,17 +524,17 @@ func (s *CleanerSystem) processNegativeEnergy(x, y int, targetEntities []core.En
 			continue
 		}
 
-		glyph, ok := s.Component.Glyph.Get(e)
+		glyph, ok := s.world.Component.Glyph.Get(e)
 		if !ok || glyph.Type != component.GlyphBlue {
 			continue
 		}
 
 		// Mutate Blue → Green, preserving level
 		glyph.Type = component.GlyphGreen
-		s.Component.Glyph.Set(e, glyph)
+		s.world.Component.Glyph.Set(e, glyph)
 
 		// Spawn decay at same position (particle skips starting cell via LastIntX/Y)
-		s.World.PushEvent(event.EventDecaySpawnOne, &event.DecaySpawnPayload{
+		s.world.PushEvent(event.EventDecaySpawnOne, &event.DecaySpawnPayload{
 			X:             x,
 			Y:             y,
 			Char:          glyph.Rune,
@@ -547,15 +545,15 @@ func (s *CleanerSystem) processNegativeEnergy(x, y int, targetEntities []core.En
 
 // spawnDirectionalCleaners generates 4 cleaner entities from origin position
 func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
-	config := s.Resource.Config
+	config := s.world.Resource.Config
 
-	s.World.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
+	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
 		SoundType: core.SoundWhoosh,
 	})
 
 	// Determine energy polarity once for entire batch
 	negativeEnergy := false
-	if energyComp, ok := s.Component.Energy.Get(s.Resource.Cursor.Entity); ok {
+	if energyComp, ok := s.world.Component.Energy.Get(s.world.Resource.Cursor.Entity); ok {
 		negativeEnergy = energyComp.Current.Load() < 0
 	}
 
@@ -609,11 +607,11 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 		}
 
 		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → CleanerComponent (float overlay)
-		entity := s.World.CreateEntity()
-		s.World.Positions.Set(entity, component.PositionComponent{X: startGridX, Y: startGridY})
-		s.Component.Cleaner.Set(entity, comp)
+		entity := s.world.CreateEntity()
+		s.world.Position.Set(entity, component.PositionComponent{X: startGridX, Y: startGridY})
+		s.world.Component.Cleaner.Set(entity, comp)
 		// TODO: centralize protection via entity factory
-		s.Component.Protection.Set(entity, component.ProtectionComponent{
+		s.world.Component.Protection.Set(entity, component.ProtectionComponent{
 			Mask: component.ProtectFromDrain | component.ProtectFromDeath,
 		})
 	}
@@ -622,13 +620,13 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 // scanTargetRows finds rows containing target character type based on energy polarity
 // Returns rows with TypeRed (energy >= 0) or TypeBlue (energy < 0)
 func (s *CleanerSystem) scanTargetRows() []int {
-	config := s.Resource.Config
+	config := s.world.Resource.Config
 	gameHeight := config.GameHeight
 
 	// Determine target type based on energy polarity
 	targetType := component.GlyphRed
-	cursorEntity := s.Resource.Cursor.Entity
-	if energyComp, ok := s.Component.Energy.Get(cursorEntity); ok {
+	cursorEntity := s.world.Resource.Cursor.Entity
+	if energyComp, ok := s.world.Component.Energy.Get(cursorEntity); ok {
 		if energyComp.Current.Load() < 0 {
 			targetType = component.GlyphBlue
 		}
@@ -636,18 +634,18 @@ func (s *CleanerSystem) scanTargetRows() []int {
 
 	targetRows := make(map[int]bool)
 
-	entities := s.World.Query().
-		With(s.Component.Glyph).
-		With(s.World.Positions).
+	entities := s.world.Query().
+		With(s.world.Component.Glyph).
+		With(s.world.Position).
 		Execute()
 
 	for _, entity := range entities {
-		glyph, ok := s.Component.Glyph.Get(entity)
+		glyph, ok := s.world.Component.Glyph.Get(entity)
 		if !ok || glyph.Type != targetType {
 			continue
 		}
 
-		pos, hasPos := s.World.Positions.Get(entity)
+		pos, hasPos := s.world.Position.Get(entity)
 		if !hasPos {
 			continue
 		}

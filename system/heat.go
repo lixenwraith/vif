@@ -8,14 +8,14 @@ import (
 
 // HeatSystem owns HeatComponent mutations
 type HeatSystem struct {
-	engine.SystemBase
+	world *engine.World
 
 	enabled bool
 }
 
 func NewHeatSystem(world *engine.World) engine.System {
 	s := &HeatSystem{
-		SystemBase: engine.NewSystemBase(world),
+		world: world,
 	}
 	s.initLocked()
 	return s
@@ -74,9 +74,9 @@ func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
 
 // addHeat applies delta with clamping and writes back to store
 func (s *HeatSystem) addHeat(delta int) {
-	cursorEntity := s.Resource.Cursor.Entity
+	cursorEntity := s.world.Resource.Cursor.Entity
 
-	heatComp, ok := s.Component.Heat.Get(cursorEntity)
+	heatComp, ok := s.world.Component.Heat.Get(cursorEntity)
 	if !ok {
 		return
 	}
@@ -96,14 +96,14 @@ func (s *HeatSystem) addHeat(delta int) {
 	heatComp.Current.Store(newVal)
 
 	// CRITICAL: Write the modified component copy back to the store
-	s.Component.Heat.Set(cursorEntity, heatComp)
+	s.world.Component.Heat.Set(cursorEntity, heatComp)
 }
 
 // setHeat stores absolute value with clamping and writes back to store
 func (s *HeatSystem) setHeat(value int) {
-	cursorEntity := s.Resource.Cursor.Entity
+	cursorEntity := s.world.Resource.Cursor.Entity
 
-	heatComp, ok := s.Component.Heat.Get(cursorEntity)
+	heatComp, ok := s.world.Component.Heat.Get(cursorEntity)
 	if !ok {
 		return
 	}
@@ -119,5 +119,5 @@ func (s *HeatSystem) setHeat(value int) {
 	heatComp.Current.Store(int64(value))
 
 	// CRITICAL: Write the modified component copy back to the store
-	s.Component.Heat.Set(cursorEntity, heatComp)
+	s.world.Component.Heat.Set(cursorEntity, heatComp)
 }

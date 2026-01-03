@@ -39,7 +39,7 @@ func (r *Router) Register(handler Handler) {
 }
 
 // DispatchAll consumes all pending events and routes to handlers
-// Events are processed in FIFO order
+// Event are processed in FIFO order
 func (r *Router) DispatchAll() {
 	events := r.queue.Consume()
 	for _, ev := range events {

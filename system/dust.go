@@ -1,7 +1,5 @@
 package system
 
-// @lixen: #dev{feature[dust(render,system)]}
-
 import (
 	"sync"
 	"sync/atomic"
@@ -17,8 +15,8 @@ import (
 // DustSystem manages orbital dust particles created from glyph transformation
 // Dust orbits cursor with chase behavior on large cursor movements
 type DustSystem struct {
-	mu sync.RWMutex
-	engine.SystemBase
+	mu    sync.RWMutex
+	world *engine.World
 
 	// Event state tracking
 	quasarActive bool
@@ -39,16 +37,15 @@ type DustSystem struct {
 }
 
 func NewDustSystem(world *engine.World) engine.System {
-	res := engine.GetResourceStore(world)
 	s := &DustSystem{
-		SystemBase: engine.NewSystemBase(world),
+		world: world,
 	}
 
-	s.rng = vmath.NewFastRand(uint32(res.Time.RealTime.UnixNano()))
+	s.rng = vmath.NewFastRand(uint32(world.Resource.Time.RealTime.UnixNano()))
 
-	s.statCreated = res.Status.Ints.Get("dust.created")
-	s.statActive = res.Status.Ints.Get("dust.active")
-	s.statDestroyed = res.Status.Ints.Get("dust.destroyed")
+	s.statCreated = world.Resource.Status.Ints.Get("dust.created")
+	s.statActive = world.Resource.Status.Ints.Get("dust.active")
+	s.statDestroyed = world.Resource.Status.Ints.Get("dust.destroyed")
 
 	s.initLocked()
 	return s
@@ -117,8 +114,8 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 
 // transformGlyphsToDust converts all non-composite glyphs to dust entities
 func (s *DustSystem) transformGlyphsToDust() {
-	cursorEntity := s.Resource.Cursor.Entity
-	cursorPos, ok := s.World.Positions.Get(cursorEntity)
+	cursorEntity := s.world.Resource.Cursor.Entity
+	cursorPos, ok := s.world.Position.Get(cursorEntity)
 	if !ok {
 		return
 	}
@@ -131,21 +128,21 @@ func (s *DustSystem) transformGlyphsToDust() {
 		level  component.GlyphLevel
 	}
 
-	glyphEntities := s.Component.Glyph.All()
+	glyphEntities := s.world.Component.Glyph.All()
 	toTransform := make([]glyphData, 0, len(glyphEntities))
 
 	for _, entity := range glyphEntities {
 		// Skip composite members
-		if s.Component.Member.Has(entity) {
+		if s.world.Component.Member.Has(entity) {
 			continue
 		}
 
-		pos, hasPos := s.World.Positions.Get(entity)
+		pos, hasPos := s.world.Position.Get(entity)
 		if !hasPos {
 			continue
 		}
 
-		glyph, hasGlyph := s.Component.Glyph.Get(entity)
+		glyph, hasGlyph := s.world.Component.Glyph.Get(entity)
 		if !hasGlyph {
 			continue
 		}
@@ -168,7 +165,7 @@ func (s *DustSystem) transformGlyphsToDust() {
 	for i, gd := range toTransform {
 		deathEntities[i] = gd.entity
 	}
-	event.EmitDeathBatch(s.Resource.Events.Queue, event.EventFlashRequest, deathEntities, s.Resource.Time.FrameNumber)
+	event.EmitDeathBatch(s.world.Resource.Event.Queue, event.EventFlashRequest, deathEntities, s.world.Resource.Time.FrameNumber)
 
 	// Create dust entities at cached positions
 	for _, gd := range toTransform {
@@ -180,7 +177,7 @@ func (s *DustSystem) transformGlyphsToDust() {
 
 // spawnDust creates a single dust entity with orbital initialization
 func (s *DustSystem) spawnDust(x, y int, char rune, level component.GlyphLevel, cursorX, cursorY int) {
-	entity := s.World.CreateEntity()
+	entity := s.world.CreateEntity()
 
 	// Random orbit radius in [min, max]
 	radiusRange := int(constant.DustOrbitRadiusMax - constant.DustOrbitRadiusMin)
@@ -205,10 +202,10 @@ func (s *DustSystem) spawnDust(x, y int, char rune, level component.GlyphLevel, 
 	}
 
 	// Grid position
-	s.World.Positions.Set(entity, component.PositionComponent{X: x, Y: y})
+	s.world.Position.Set(entity, component.PositionComponent{X: x, Y: y})
 
 	// Dust component with kinetic state
-	s.Component.Dust.Set(entity, component.DustComponent{
+	s.world.Component.Dust.Set(entity, component.DustComponent{
 		KineticState: component.KineticState{
 			PreciseX: vmath.FromInt(x),
 			PreciseY: vmath.FromInt(y),
@@ -236,7 +233,7 @@ func (s *DustSystem) spawnDust(x, y int, char rune, level component.GlyphLevel, 
 		color = component.SigilDustNormal
 	}
 
-	s.Component.Sigil.Set(entity, component.SigilComponent{
+	s.world.Component.Sigil.Set(entity, component.SigilComponent{
 		Rune:  char,
 		Color: color,
 	})
@@ -247,30 +244,30 @@ func (s *DustSystem) Update() {
 		return
 	}
 
-	dustEntities := s.Component.Dust.All()
+	dustEntities := s.world.Component.Dust.All()
 	if len(dustEntities) == 0 {
 		s.statActive.Store(0)
 		return
 	}
 
-	cursorEntity := s.Resource.Cursor.Entity
-	cursorPos, ok := s.World.Positions.Get(cursorEntity)
+	cursorEntity := s.world.Resource.Cursor.Entity
+	cursorPos, ok := s.world.Position.Get(cursorEntity)
 	if !ok {
 		return
 	}
 
 	// Fetch energy once for attraction gating
-	energyComp, _ := s.Component.Energy.Get(cursorEntity)
+	energyComp, _ := s.world.Component.Energy.Get(cursorEntity)
 	cursorEnergy := energyComp.Current.Load()
 	hasAttraction := cursorEnergy != 0
 
 	// Shield data for collision energy reward
-	shield, shieldOk := s.Component.Shield.Get(cursorEntity)
+	shield, shieldOk := s.world.Component.Shield.Get(cursorEntity)
 	shieldActive := shieldOk && shield.Active
 
 	// Heat for energy calculation
 	var heat int
-	if hc, ok := s.Component.Heat.Get(cursorEntity); ok {
+	if hc, ok := s.world.Component.Heat.Get(cursorEntity); ok {
 		heat = int(hc.Current.Load())
 	}
 
@@ -286,12 +283,12 @@ func (s *DustSystem) Update() {
 	cursorDist := vmath.DistanceApprox(vmath.FromInt(cursorDeltaX), vmath.FromInt(cursorDeltaY))
 	applyChaseBoost := cursorDist > vmath.FromInt(constant.DustChaseThreshold)
 
-	dtFixed := vmath.FromFloat(s.Resource.Time.DeltaTime.Seconds())
+	dtFixed := vmath.FromFloat(s.world.Resource.Time.DeltaTime.Seconds())
 	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
 		dtFixed = dtCap
 	}
 
-	config := s.Resource.Config
+	config := s.world.Resource.Config
 	cursorXFixed := vmath.FromInt(cursorPos.X)
 	cursorYFixed := vmath.FromInt(cursorPos.Y)
 
@@ -303,7 +300,7 @@ func (s *DustSystem) Update() {
 	var destroyedCount int64
 
 	for _, entity := range dustEntities {
-		dust, ok := s.Component.Dust.Get(entity)
+		dust, ok := s.world.Component.Dust.Get(entity)
 		if !ok {
 			continue
 		}
@@ -408,7 +405,7 @@ func (s *DustSystem) Update() {
 				return true
 			}
 
-			n := s.World.Positions.GetAllAtInto(x, y, collisionBuf[:])
+			n := s.world.Position.GetAllAtInto(x, y, collisionBuf[:])
 			for i := 0; i < n; i++ {
 				target := collisionBuf[i]
 				if target == 0 || target == entity {
@@ -416,7 +413,7 @@ func (s *DustSystem) Update() {
 				}
 
 				// Priority 1: Blossom/Decay - dust dies, other survives
-				if s.Component.Blossom.Has(target) || s.Component.Decay.Has(target) {
+				if s.world.Component.Blossom.Has(target) || s.world.Component.Decay.Has(target) {
 					// Shield protects dust from blossom/decay
 					if !dustInsideShield {
 						destroyDust = true
@@ -426,14 +423,14 @@ func (s *DustSystem) Update() {
 				}
 
 				// Priority 2: Glyph collision
-				if s.Component.Member.Has(target) {
+				if s.world.Component.Member.Has(target) {
 					continue // Skip composite members
 				}
-				if s.Component.Death.Has(target) {
+				if s.world.Component.Death.Has(target) {
 					continue // Already dying
 				}
 
-				glyph, ok := s.Component.Glyph.Get(target)
+				glyph, ok := s.world.Component.Glyph.Get(target)
 				if !ok {
 					continue
 				}
@@ -444,7 +441,7 @@ func (s *DustSystem) Update() {
 				}
 
 				// Glyph die
-				s.Component.Death.Set(target, component.DeathComponent{})
+				s.world.Component.Death.Set(target, component.DeathComponent{})
 
 				// Dust survives if inside shield, dies otherwise
 				if !dustInsideShield {
@@ -463,7 +460,7 @@ func (s *DustSystem) Update() {
 						energyDelta = -heat
 					}
 					if energyDelta != 0 {
-						s.World.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{
+						s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{
 							Delta: energyDelta,
 						})
 					}
@@ -479,7 +476,7 @@ func (s *DustSystem) Update() {
 		})
 
 		if destroyDust {
-			s.Component.Death.Set(entity, component.DeathComponent{})
+			s.world.Component.Death.Set(entity, component.DeathComponent{})
 			destroyedCount++
 			continue // Skip grid sync for dying entity
 		}
@@ -488,10 +485,10 @@ func (s *DustSystem) Update() {
 		if newX != dust.LastIntX || newY != dust.LastIntY {
 			dust.LastIntX = newX
 			dust.LastIntY = newY
-			s.World.Positions.Set(entity, component.PositionComponent{X: newX, Y: newY})
+			s.world.Position.Set(entity, component.PositionComponent{X: newX, Y: newY})
 		}
 
-		s.Component.Dust.Set(entity, dust)
+		s.world.Component.Dust.Set(entity, dust)
 	}
 
 	s.statActive.Store(int64(len(dustEntities)))

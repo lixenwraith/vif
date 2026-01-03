@@ -201,7 +201,7 @@ func (r *Router) handleMotion(intent *input.Intent) bool {
 	}
 
 	r.ctx.World.RunSafe(func() {
-		pos, ok := r.ctx.World.Positions.Get(r.ctx.CursorEntity)
+		pos, ok := r.ctx.World.Position.Get(r.ctx.CursorEntity)
 		if !ok {
 			return
 		}
@@ -224,7 +224,7 @@ func (r *Router) handleCharMotion(intent *input.Intent) bool {
 	}
 
 	r.ctx.World.RunSafe(func() {
-		pos, ok := r.ctx.World.Positions.Get(r.ctx.CursorEntity)
+		pos, ok := r.ctx.World.Position.Get(r.ctx.CursorEntity)
 		if !ok {
 			return
 		}
@@ -256,7 +256,7 @@ func (r *Router) handleOperatorMotion(intent *input.Intent) bool {
 	}
 
 	r.ctx.World.RunSafe(func() {
-		pos, ok := r.ctx.World.Positions.Get(r.ctx.CursorEntity)
+		pos, ok := r.ctx.World.Position.Get(r.ctx.CursorEntity)
 		if !ok {
 			return
 		}
@@ -278,7 +278,7 @@ func (r *Router) handleOperatorMotion(intent *input.Intent) bool {
 
 func (r *Router) handleOperatorLine(intent *input.Intent) bool {
 	r.ctx.World.RunSafe(func() {
-		pos, ok := r.ctx.World.Positions.Get(r.ctx.CursorEntity)
+		pos, ok := r.ctx.World.Position.Get(r.ctx.CursorEntity)
 		if !ok {
 			return
 		}
@@ -315,7 +315,7 @@ func (r *Router) handleOperatorCharMotion(intent *input.Intent) bool {
 	}
 
 	r.ctx.World.RunSafe(func() {
-		pos, ok := r.ctx.World.Positions.Get(r.ctx.CursorEntity)
+		pos, ok := r.ctx.World.Position.Get(r.ctx.CursorEntity)
 		if !ok {
 			return
 		}
@@ -346,7 +346,7 @@ func (r *Router) handleOperatorCharMotion(intent *input.Intent) bool {
 
 func (r *Router) handleSpecial(intent *input.Intent) bool {
 	r.ctx.World.RunSafe(func() {
-		pos, ok := r.ctx.World.Positions.Get(r.ctx.CursorEntity)
+		pos, ok := r.ctx.World.Position.Get(r.ctx.CursorEntity)
 		if !ok {
 			return
 		}
@@ -400,7 +400,7 @@ func (r *Router) handleNuggetJump() bool {
 func (r *Router) handleFireCleaner() bool {
 	// Get cursor position for cleaner origin
 	var originX, originY int
-	if pos, ok := r.ctx.World.Positions.Get(r.ctx.CursorEntity); ok {
+	if pos, ok := r.ctx.World.Position.Get(r.ctx.CursorEntity); ok {
 		originX, originY = pos.X, pos.Y
 	}
 
@@ -463,7 +463,7 @@ func (r *Router) handleTextChar(intent *input.Intent) bool {
 
 func (r *Router) handleInsertChar(char rune) {
 	var posX, posY int
-	if pos, ok := r.ctx.World.Positions.Get(r.ctx.CursorEntity); ok {
+	if pos, ok := r.ctx.World.Position.Get(r.ctx.CursorEntity); ok {
 		posX, posY = pos.X, pos.Y
 	}
 
@@ -559,7 +559,7 @@ func (r *Router) handleTextNav(intent *input.Intent) bool {
 		}
 
 		r.ctx.World.RunSafe(func() {
-			pos, ok := r.ctx.World.Positions.Get(r.ctx.CursorEntity)
+			pos, ok := r.ctx.World.Position.Get(r.ctx.CursorEntity)
 			if !ok {
 				return
 			}
@@ -574,7 +574,7 @@ func (r *Router) handleTextNav(intent *input.Intent) bool {
 
 func (r *Router) handleInsertDeleteCurrent() bool {
 	r.ctx.World.RunSafe(func() {
-		pos, ok := r.ctx.World.Positions.Get(r.ctx.CursorEntity)
+		pos, ok := r.ctx.World.Position.Get(r.ctx.CursorEntity)
 		if !ok {
 			return
 		}
@@ -591,7 +591,7 @@ func (r *Router) handleInsertDeleteCurrent() bool {
 
 func (r *Router) handleInsertDeleteForward() bool {
 	r.ctx.World.RunSafe(func() {
-		pos, ok := r.ctx.World.Positions.Get(r.ctx.CursorEntity)
+		pos, ok := r.ctx.World.Position.Get(r.ctx.CursorEntity)
 		if !ok {
 			return
 		}
@@ -612,7 +612,7 @@ func (r *Router) handleInsertDeleteForward() bool {
 
 func (r *Router) handleInsertDeleteBack() bool {
 	r.ctx.World.RunSafe(func() {
-		pos, ok := r.ctx.World.Positions.Get(r.ctx.CursorEntity)
+		pos, ok := r.ctx.World.Position.Get(r.ctx.CursorEntity)
 		if !ok || pos.X == 0 {
 			return
 		}
@@ -689,7 +689,7 @@ func (r *Router) setLastCommandAndSplash(cmd string) {
 
 	// Get cursor position for splash origin
 	var originX, originY int
-	if pos, ok := r.ctx.World.Positions.Get(r.ctx.CursorEntity); ok {
+	if pos, ok := r.ctx.World.Position.Get(r.ctx.CursorEntity); ok {
 		originX, originY = pos.X, pos.Y
 	}
 

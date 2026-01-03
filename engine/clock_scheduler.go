@@ -17,10 +17,7 @@ import (
 // Provides infrastructure for phase transitions and state ownership
 // Handles pause-aware scheduling without busy-wait
 type ClockScheduler struct {
-	world    *World
-	timeRes  *TimeResource
-	stateRes *GameStateResource
-	eqRes    *EventQueueResource
+	world *World
 
 	pausableClock *PausableClock
 	isPaused      *atomic.Bool
@@ -48,7 +45,7 @@ type ClockScheduler struct {
 	// Event routing
 	eventRouter *event.Router
 
-	// Finite State Machine
+	// Finite GameState Machine
 	fsm *fsm.Machine[*World]
 
 	// Event loop configuration
@@ -83,10 +80,7 @@ func NewClockScheduler(
 	updateDone := make(chan struct{}, 1)
 	resetChan := make(chan struct{}, 1)
 
-	timeRes := MustGetResource[*TimeResource](world.ResourceStore)
-	stateRes := MustGetResource[*GameStateResource](world.ResourceStore)
-	statusReg := MustGetResource[*status.Registry](world.ResourceStore)
-	eqRes := MustGetResource[*EventQueueResource](world.ResourceStore)
+	statusReg := world.Resource.Status
 
 	cs := &ClockScheduler{
 		world: world,
@@ -95,14 +89,10 @@ func NewClockScheduler(
 		isPaused:      isPaused,
 		tickInterval:  tickInterval,
 
-		timeRes:  timeRes,
-		stateRes: stateRes,
-		eqRes:    eqRes,
-
 		lastGameTickTime: pausableClock.Now(),
 		tickCount:        atomic.Uint64{},
 
-		eventRouter: event.NewRouter(MustGetResource[*EventQueueResource](world.ResourceStore).Queue),
+		eventRouter: event.NewRouter(world.Resource.Event.Queue),
 
 		frameReady: frameReady,
 		updateDone: updateDone,
@@ -113,8 +103,6 @@ func NewClockScheduler(
 
 		eventLoopInterval:   constant.EventLoopInterval,
 		eventLoopBackoffMax: constant.EventLoopBackoffMax,
-
-		statusReg: statusReg,
 
 		statTicks:        statusReg.Ints.Get("engine.ticks"),
 		statEvBackoffs:   statusReg.Ints.Get("event.backoffs"),
@@ -147,7 +135,7 @@ func (cs *ClockScheduler) LoadFSM(config string, registerComponents func(*fsm.Ma
 		return fmt.Errorf("failed to load FSM config: %w", err)
 	}
 
-	// Initialize State (enters initial state)
+	// Initialize GameState (enters initial state)
 	if err := cs.fsm.Init(cs.world, cs.fsm.InitialStateID); err != nil {
 		return fmt.Errorf("failed to init FSM: %w", err)
 	}
@@ -296,7 +284,7 @@ func (cs *ClockScheduler) eventLoop() {
 			}
 
 			// Skip if queue empty (prevents busy-wait contention)
-			if cs.eqRes.Queue.Len() == 0 {
+			if cs.world.Resource.Event.Queue.Len() == 0 {
 				backoffCount = 0
 				continue
 			}
@@ -331,7 +319,7 @@ func (cs *ClockScheduler) eventLoop() {
 // dispatchOnePass consumes and dispatches pending events exactly once
 // Returns number of events processed
 func (cs *ClockScheduler) dispatchOnePass() int {
-	eventsList := cs.eqRes.Queue.Consume()
+	eventsList := cs.world.Resource.Event.Queue.Consume()
 	if len(eventsList) == 0 {
 		return 0
 	}
@@ -364,7 +352,7 @@ func (cs *ClockScheduler) dispatchAndProcessEvents() {
 func (cs *ClockScheduler) executeReset() {
 	// NOTE: Do not use RunSafe if called from a blocking system
 	// 1. Drain and discard stale events from the previous game session
-	_ = cs.eqRes.Queue.Consume()
+	_ = cs.world.Resource.Event.Queue.Consume()
 
 	// 2. Synchronize with world lock
 	// Acquire lock explicitly, wait till MetaSystem finishes its synchronous cleanup and releases the lock
@@ -387,7 +375,7 @@ func (cs *ClockScheduler) executeReset() {
 	cs.dispatchAndProcessEvents()
 
 	// 6. Transition to Running state
-	// Scheduler is the unpause authority during reset, preventing systems from ticking against an uninitialized FSM
+	// Scheduler is the unpause authority during reset, preventing system from ticking against an uninitialized FSM
 	cs.isPaused.Store(false)
 	cs.pausableClock.Resume()
 }
@@ -410,7 +398,7 @@ func (cs *ClockScheduler) processTick() {
 
 		// 1. Sync Time: Authoritative FrameNumber from GameState (Render Clock)
 		currentFrame := cs.world.FrameNumber()
-		cs.timeRes.Update(
+		cs.world.Resource.Time.Update(
 			now,
 			cs.pausableClock.RealTime(),
 			cs.tickInterval,
@@ -446,13 +434,13 @@ func (cs *ClockScheduler) processTick() {
 		cs.world.UpdateLocked()
 	})
 
-	ticks := cs.stateRes.State.IncrementGameTicks()
+	ticks := cs.world.Resource.GameState.State.IncrementGameTicks()
 	cs.statTicks.Store(int64(ticks))
 
 	if cs.tickCount.Load()%20 == 0 {
-		cs.stateRes.State.UpdateAPM(cs.statusReg)
+		cs.world.Resource.GameState.State.UpdateAPM(cs.world.Resource.Status)
 	}
 
-	cs.statEntityCount.Store(int64(cs.world.Positions.Count()))
-	cs.statQueueLen.Store(int64(cs.eqRes.Queue.Len()))
+	cs.statEntityCount.Store(int64(cs.world.Position.Count()))
+	cs.statQueueLen.Store(int64(cs.world.Resource.Event.Queue.Len()))
 }

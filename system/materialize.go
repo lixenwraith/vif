@@ -10,7 +10,7 @@ import (
 
 // MaterializeSystem manages materializer animations and triggering spawnLightning completion
 type MaterializeSystem struct {
-	engine.SystemBase
+	world *engine.World
 
 	enabled bool
 }
@@ -18,7 +18,7 @@ type MaterializeSystem struct {
 // NewMaterializeSystem creates a new materialize system
 func NewMaterializeSystem(world *engine.World) engine.System {
 	s := &MaterializeSystem{
-		SystemBase: engine.NewSystemBase(world),
+		world: world,
 	}
 
 	s.initLocked()
@@ -73,7 +73,7 @@ func (s *MaterializeSystem) Update() {
 		return
 	}
 
-	dtFixed := vmath.FromFloat(s.Resource.Time.DeltaTime.Seconds())
+	dtFixed := vmath.FromFloat(s.world.Resource.Time.DeltaTime.Seconds())
 	// Cap delta time to prevent tunneling on lag spikes
 	dtCap := vmath.FromFloat(0.1)
 	if dtFixed > dtCap {
@@ -84,13 +84,13 @@ func (s *MaterializeSystem) Update() {
 	durationFixed := vmath.FromFloat(constant.MaterializeAnimationDuration.Seconds())
 	progressDelta := vmath.Div(dtFixed, durationFixed)
 
-	entities := s.Component.Materialize.All()
+	entities := s.world.Component.Materialize.All()
 	if len(entities) == 0 {
 		return
 	}
 
 	for _, entity := range entities {
-		mat, ok := s.Component.Materialize.Get(entity)
+		mat, ok := s.world.Component.Materialize.Get(entity)
 		if !ok {
 			continue
 		}
@@ -98,22 +98,22 @@ func (s *MaterializeSystem) Update() {
 		mat.Progress += progressDelta
 
 		if mat.Progress >= vmath.Scale {
-			s.World.PushEvent(event.EventMaterializeComplete, &event.SpawnCompletePayload{
+			s.world.PushEvent(event.EventMaterializeComplete, &event.SpawnCompletePayload{
 				X:    mat.TargetX,
 				Y:    mat.TargetY,
 				Type: mat.Type,
 			})
-			s.World.DestroyEntity(entity)
+			s.world.DestroyEntity(entity)
 			continue
 		}
 
-		s.Component.Materialize.Set(entity, mat)
+		s.world.Component.Materialize.Set(entity, mat)
 	}
 }
 
 // spawnMaterializeEffect creates a single materialize effect entity
 func (s *MaterializeSystem) spawnMaterializeEffect(targetX, targetY int, spawnType component.SpawnType) {
-	config := s.Resource.Config
+	config := s.world.Resource.Config
 
 	// Clamp target coordinates
 	if targetX < 0 {
@@ -129,10 +129,10 @@ func (s *MaterializeSystem) spawnMaterializeEffect(targetX, targetY int, spawnTy
 		targetY = config.GameHeight - 1
 	}
 
-	entity := s.World.CreateEntity()
+	entity := s.world.CreateEntity()
 
 	// TODO: add protection
-	s.Component.Materialize.Set(entity, component.MaterializeComponent{
+	s.world.Component.Materialize.Set(entity, component.MaterializeComponent{
 		TargetX:  targetX,
 		TargetY:  targetY,
 		Progress: 0,

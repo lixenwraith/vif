@@ -1,5 +1,4 @@
 package component
-// @lixen: #dev{feature[dust(render,system)]}
 
 import "time"
 

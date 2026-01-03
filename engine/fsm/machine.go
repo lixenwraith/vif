@@ -92,7 +92,7 @@ func (m *Machine[T]) Update(ctx T, dt time.Duration) {
 			if trans.Event == 0 {
 				if trans.Guard == nil || trans.Guard(ctx) {
 					m.TransitionTo(ctx, trans.TargetID)
-					return // State changed, stop processing this tick
+					return // GameState changed, stop processing this tick
 				}
 			}
 		}
@@ -217,7 +217,7 @@ func (m *Machine[T]) TransitionTo(ctx T, targetID StateID) {
 		}
 	}
 
-	// 4. Update State
+	// 4. Update GameState
 	m.activeStateID = targetID
 	m.timeInState = 0
 

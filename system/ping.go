@@ -10,7 +10,7 @@ import (
 
 // PingSystem manages the state of ping highlights and grids
 type PingSystem struct {
-	engine.SystemBase
+	world *engine.World
 
 	enabled bool
 }
@@ -18,7 +18,7 @@ type PingSystem struct {
 // NewPingSystem creates a new ping system
 func NewPingSystem(world *engine.World) engine.System {
 	s := &PingSystem{
-		SystemBase: engine.NewSystemBase(world),
+		world: world,
 	}
 	s.initLocked()
 	return s
@@ -72,11 +72,11 @@ func (s *PingSystem) Update() {
 		return
 	}
 
-	entities := s.Component.Ping.All()
-	dt := s.Resource.Time.DeltaTime
+	entities := s.world.Component.Ping.All()
+	dt := s.world.Resource.Time.DeltaTime
 
 	for _, entity := range entities {
-		ping, ok := s.Component.Ping.Get(entity)
+		ping, ok := s.world.Component.Ping.Get(entity)
 		if !ok {
 			continue
 		}
@@ -95,7 +95,7 @@ func (s *PingSystem) Update() {
 
 		// Commit changes back to store
 		if changed {
-			s.Component.Ping.Set(entity, ping)
+			s.world.Component.Ping.Set(entity, ping)
 		}
 	}
 }
@@ -103,14 +103,14 @@ func (s *PingSystem) Update() {
 // handleGridRequest activates the grid on the cursor entity
 func (s *PingSystem) handleGridRequest(duration time.Duration) {
 	// In single player, apply to the main cursor
-	entity := s.Resource.Cursor.Entity
+	entity := s.world.Resource.Cursor.Entity
 
-	ping, ok := s.Component.Ping.Get(entity)
+	ping, ok := s.world.Component.Ping.Get(entity)
 	if !ok {
 		return
 	}
 
 	ping.GridActive = true
 	ping.GridRemaining = duration
-	s.Component.Ping.Set(entity, ping)
+	s.world.Component.Ping.Set(entity, ping)
 }

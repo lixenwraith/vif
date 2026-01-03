@@ -1,5 +1,5 @@
 package engine
-// @lixen: #dev{base(core),feature[drain(render,system)],feature[dust(render,system)],feature[quasar(render,system)]}
+
 
 import (
 	"sort"
@@ -21,7 +21,7 @@ type QueryBuilder struct {
 // Example:
 //
 //	entities := world.Query().
-//	    With(world.Positions).
+//	    With(world.Position).
 //	    With(world.Characters).
 //	    Execute()
 func (w *World) Query() *QueryBuilder {

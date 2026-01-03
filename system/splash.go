@@ -42,7 +42,7 @@ var timerAnglesCW = [8]int{0, 2, 1, 3, 4, 6, 7, 5}  // Bottom→Right→Top→Le
 
 // SplashSystem manages the lifecycle of splash entities
 type SplashSystem struct {
-	engine.SystemBase
+	world *engine.World
 
 	enabled bool
 }
@@ -50,7 +50,7 @@ type SplashSystem struct {
 // NewSplashSystem creates a new splash system
 func NewSplashSystem(world *engine.World) engine.System {
 	s := &SplashSystem{
-		SystemBase: engine.NewSystemBase(world),
+		world: world,
 	}
 	s.initLocked()
 	return s
@@ -136,15 +136,15 @@ func (s *SplashSystem) Update() {
 		return
 	}
 
-	dt := s.Resource.Time.DeltaTime
+	dt := s.world.Resource.Time.DeltaTime
 
 	// Cache timer bboxes for magnifier collision checks to avoid allocs inside loop if not needed
 	var cachedTimerBBoxes []BBox
 	timersCached := false
 
-	entities := s.Component.Splash.All()
+	entities := s.world.Component.Splash.All()
 	for _, entity := range entities {
-		splash, ok := s.Component.Splash.Get(entity)
+		splash, ok := s.world.Component.Splash.Get(entity)
 		if !ok {
 			continue
 		}
@@ -162,7 +162,7 @@ func (s *SplashSystem) Update() {
 
 				if remainingSec <= 0 {
 					// Timer expired - mark for destruction
-					s.World.DestroyEntity(entity)
+					s.world.DestroyEntity(entity)
 					continue
 				}
 
@@ -219,7 +219,7 @@ func (s *SplashSystem) Update() {
 
 			// If collision detected, attempt to find a new valid position
 			if collision {
-				if pos, ok := s.World.Positions.Get(s.Resource.Cursor.Entity); ok {
+				if pos, ok := s.world.Position.Get(s.world.Resource.Cursor.Entity); ok {
 					newX, newY := s.calculateProximityAnchor(pos.X, pos.Y, splash.Length)
 					if newX != splash.AnchorX || newY != splash.AnchorY {
 						splash.AnchorX = newX
@@ -231,7 +231,7 @@ func (s *SplashSystem) Update() {
 		}
 
 		// Write back component (state changed)
-		s.Component.Splash.Set(entity, splash)
+		s.world.Component.Splash.Set(entity, splash)
 	}
 }
 
@@ -263,11 +263,11 @@ func (s *SplashSystem) handleSplashRequest(payload *event.SplashRequestPayload) 
 	copy(splash.Content[:], runes[:length])
 
 	// 5. Spawn
-	entity := s.World.CreateEntity()
-	s.Component.Splash.Set(entity, splash)
+	entity := s.world.CreateEntity()
+	s.world.Component.Splash.Set(entity, splash)
 
 	// 6. Register with TimeKeeper for destruction
-	s.World.PushEvent(event.EventTimerStart, &event.TimerStartPayload{
+	s.world.PushEvent(event.EventTimerStart, &event.TimerStartPayload{
 		Entity:   entity,
 		Duration: constant.SplashDuration,
 	})
@@ -275,33 +275,33 @@ func (s *SplashSystem) handleSplashRequest(payload *event.SplashRequestPayload) 
 
 // validateMagnifier checks if magnifier is still valid and updates content if entity changed, returns false if magnifier was destroyed
 func (s *SplashSystem) validateMagnifier(splashEntity core.Entity, splash *component.SplashComponent) bool {
-	cursorPos, ok := s.World.Positions.Get(s.Resource.Cursor.Entity)
+	cursorPos, ok := s.world.Position.Get(s.world.Resource.Cursor.Entity)
 	if !ok {
-		s.World.DestroyEntity(splashEntity)
+		s.world.DestroyEntity(splashEntity)
 		return false
 	}
 
 	// Zero-allocation lookup
 	var buf [constant.MaxEntitiesPerCell]core.Entity
-	count := s.World.Positions.GetAllAtInto(cursorPos.X, cursorPos.Y, buf[:])
+	count := s.world.Position.GetAllAtInto(cursorPos.X, cursorPos.Y, buf[:])
 
 	var glyphEntity core.Entity
 
 	for i := 0; i < count; i++ {
-		if s.Component.Glyph.Has(buf[i]) {
+		if s.world.Component.Glyph.Has(buf[i]) {
 			glyphEntity = buf[i]
 			break
 		}
 	}
 
 	if glyphEntity == 0 {
-		s.World.DestroyEntity(splashEntity)
+		s.world.DestroyEntity(splashEntity)
 		return false
 	}
 
-	glyph, ok := s.Component.Glyph.Get(glyphEntity)
+	glyph, ok := s.world.Component.Glyph.Get(glyphEntity)
 	if !ok {
-		s.World.DestroyEntity(splashEntity)
+		s.world.DestroyEntity(splashEntity)
 		return false
 	}
 
@@ -350,21 +350,21 @@ func (s *SplashSystem) handleGoldSpawn(payload *event.GoldSpawnedPayload) {
 		}
 	}
 
-	entity := s.World.CreateEntity()
-	s.Component.Splash.Set(entity, splash)
+	entity := s.world.CreateEntity()
+	s.world.Component.Splash.Set(entity, splash)
 }
 
 // handleGoldFinish destroys the gold timer
 func (s *SplashSystem) handleGoldFinish(anchorEntity core.Entity) {
 	// Find and destroy specific timer
-	entities := s.Component.Splash.All()
+	entities := s.world.Component.Splash.All()
 	for _, entity := range entities {
-		splash, ok := s.Component.Splash.Get(entity)
+		splash, ok := s.world.Component.Splash.Get(entity)
 		if !ok {
 			continue
 		}
 		if splash.Slot == component.SlotTimer && splash.AnchorEntity == anchorEntity {
-			s.World.DestroyEntity(entity)
+			s.world.DestroyEntity(entity)
 			return // Found it
 		}
 	}
@@ -398,19 +398,19 @@ func (s *SplashSystem) handleQuasarChargeStart(payload *event.QuasarChargeStartP
 		}
 	}
 
-	entity := s.World.CreateEntity()
-	s.Component.Splash.Set(entity, splash)
+	entity := s.world.CreateEntity()
+	s.world.Component.Splash.Set(entity, splash)
 }
 
 // calculateTimerOffsetForQuasar positions timer above quasar center
 func (s *SplashSystem) calculateTimerOffsetForQuasar(anchorEntity core.Entity, timerWidth int) (int, int) {
-	config := s.Resource.Config
+	config := s.world.Resource.Config
 	timerH := constant.SplashCharHeight
 	padding := constant.SplashTimerPadding
 
 	var anchorX, anchorY int
 	if anchorEntity != 0 {
-		if pos, ok := s.World.Positions.Get(anchorEntity); ok {
+		if pos, ok := s.world.Position.Get(anchorEntity); ok {
 			anchorX = pos.X
 			anchorY = pos.Y
 		}
@@ -440,28 +440,28 @@ func (s *SplashSystem) calculateTimerOffsetForQuasar(anchorEntity core.Entity, t
 
 // cleanupSplashesBySlot removes all splashes of a specific slot
 func (s *SplashSystem) cleanupSplashesBySlot(slot component.SplashSlot) {
-	entities := s.Component.Splash.All()
+	entities := s.world.Component.Splash.All()
 	for _, entity := range entities {
-		splash, ok := s.Component.Splash.Get(entity)
+		splash, ok := s.world.Component.Splash.Get(entity)
 		if !ok {
 			continue
 		}
 		if splash.Slot == slot {
-			s.World.DestroyEntity(entity)
+			s.world.DestroyEntity(entity)
 		}
 	}
 }
 
 // cleanupSplashesBySlot removes all splashes of a specific slot for a composite anchor
 func (s *SplashSystem) cleanupSplashesBySlotAndAnchor(slot component.SplashSlot, anchor core.Entity) {
-	entities := s.Component.Splash.All()
+	entities := s.world.Component.Splash.All()
 	for _, entity := range entities {
-		splash, ok := s.Component.Splash.Get(entity)
+		splash, ok := s.world.Component.Splash.Get(entity)
 		if !ok {
 			continue
 		}
 		if splash.Slot == slot && splash.AnchorEntity == anchor {
-			s.World.DestroyEntity(entity)
+			s.world.DestroyEntity(entity)
 		}
 	}
 }
@@ -469,7 +469,7 @@ func (s *SplashSystem) cleanupSplashesBySlotAndAnchor(slot component.SplashSlot,
 // calculateSmartLayout determines the best position for a transient action splash
 // Uses spiral search starting at 2x radius, growing to 4x, then fallback overlap
 func (s *SplashSystem) calculateSmartLayout(cursorX, cursorY, charCount int) (int, int) {
-	config := s.Resource.Config
+	config := s.world.Resource.Config
 	centerX := config.GameWidth / 2
 	centerY := config.GameHeight / 2
 
@@ -554,9 +554,9 @@ func (s *SplashSystem) calculateSmartLayout(cursorX, cursorY, charCount int) (in
 func (s *SplashSystem) getOccupiedSplashBBoxes() []BBox {
 	var boxes []BBox
 
-	entities := s.Component.Splash.All()
+	entities := s.world.Component.Splash.All()
 	for _, entity := range entities {
-		splash, ok := s.Component.Splash.Get(entity)
+		splash, ok := s.world.Component.Splash.Get(entity)
 		if !ok {
 			continue
 		}
@@ -567,7 +567,7 @@ func (s *SplashSystem) getOccupiedSplashBBoxes() []BBox {
 
 		x, y := splash.AnchorX, splash.AnchorY
 		if splash.AnchorEntity != 0 {
-			if pos, ok := s.World.Positions.Get(splash.AnchorEntity); ok {
+			if pos, ok := s.world.Position.Get(splash.AnchorEntity); ok {
 				x = pos.X + splash.OffsetX
 				y = pos.Y + splash.OffsetY
 			}
@@ -594,12 +594,12 @@ func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 
 	// Zero-allocation lookup of glyph under cursor
 	var buf [constant.MaxEntitiesPerCell]core.Entity
-	count := s.World.Positions.GetAllAtInto(cursorX, cursorY, buf[:])
+	count := s.world.Position.GetAllAtInto(cursorX, cursorY, buf[:])
 
 	var entity core.Entity
 
 	for i := 0; i < count; i++ {
-		if s.Component.Glyph.Has(buf[i]) {
+		if s.world.Component.Glyph.Has(buf[i]) {
 			entity = buf[i]
 			break
 		}
@@ -612,7 +612,7 @@ func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 	}
 
 	// Get the character to display
-	glyph, ok := s.Component.Glyph.Get(entity)
+	glyph, ok := s.world.Component.Glyph.Get(entity)
 	if !ok {
 		s.cleanupSplashesBySlot(component.SlotMagnifier)
 		return
@@ -627,14 +627,14 @@ func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 	// Check for existing magnifier to update in place
 	existing := s.findSplashBySlot(component.SlotMagnifier)
 	if existing != 0 {
-		splash, ok := s.Component.Splash.Get(existing)
+		splash, ok := s.world.Component.Splash.Get(existing)
 		if ok {
 			splash.Content[0] = glyph.Rune
 			splash.Length = 1
 			splash.Color = color
 			splash.AnchorX = anchorX
 			splash.AnchorY = anchorY
-			s.Component.Splash.Set(existing, splash)
+			s.world.Component.Splash.Set(existing, splash)
 			return
 		}
 	}
@@ -651,15 +651,15 @@ func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 	}
 	splash.Content[0] = glyph.Rune
 
-	newEntity := s.World.CreateEntity()
-	s.Component.Splash.Set(newEntity, splash)
+	newEntity := s.world.CreateEntity()
+	s.world.Component.Splash.Set(newEntity, splash)
 }
 
 // calculateProximityAnchor uses spiral search to find valid magnifier position
 // Works in virtual circular space, converts back to game elliptical space
 // Searches diagonals first to avoid overlapping with ping crosshair lines
 func (s *SplashSystem) calculateProximityAnchor(cursorX, cursorY, charCount int) (int, int) {
-	config := s.Resource.Config
+	config := s.world.Resource.Config
 	centerX := config.GameWidth / 2
 	centerY := config.GameHeight / 2
 
@@ -753,14 +753,14 @@ func (s *SplashSystem) checkBBoxCollisionAny(candidate BBox, boxes []BBox) bool 
 // calculateTimerOffset finds valid offset for timer relative to anchor entity
 // Uses 8-direction search: cardinals first, then diagonals
 func (s *SplashSystem) calculateTimerOffset(anchorEntity core.Entity, seqLength, timerWidth int) (int, int) {
-	config := s.Resource.Config
+	config := s.world.Resource.Config
 	centerX := config.GameWidth / 2
 	timerH := constant.SplashCharHeight
 	padding := constant.SplashTimerPadding
 
 	var anchorX, anchorY int
 	if anchorEntity != 0 {
-		if pos, ok := s.World.Positions.Get(anchorEntity); ok {
+		if pos, ok := s.world.Position.Get(anchorEntity); ok {
 			anchorX = pos.X
 			anchorY = pos.Y
 		}
@@ -825,9 +825,9 @@ func (s *SplashSystem) getSearchDirection(cursorX, cursorY, centerX, centerY int
 func (s *SplashSystem) getTimerBBoxes() []BBox {
 	var boxes []BBox
 
-	entities := s.Component.Splash.All()
+	entities := s.world.Component.Splash.All()
 	for _, entity := range entities {
-		splash, ok := s.Component.Splash.Get(entity)
+		splash, ok := s.world.Component.Splash.Get(entity)
 		if !ok || splash.Slot != component.SlotTimer {
 			continue
 		}
@@ -835,7 +835,7 @@ func (s *SplashSystem) getTimerBBoxes() []BBox {
 		// Resolve actual position
 		x, y := splash.AnchorX, splash.AnchorY
 		if splash.AnchorEntity != 0 {
-			if pos, ok := s.World.Positions.Get(splash.AnchorEntity); ok {
+			if pos, ok := s.world.Position.Get(splash.AnchorEntity); ok {
 				x = pos.X + splash.OffsetX
 				y = pos.Y + splash.OffsetY
 			}
@@ -866,9 +866,9 @@ func (s *SplashSystem) checkBBoxCollision(a, b BBox) bool {
 
 // findSplashBySlot returns entity ID of first splash with given slot, or 0
 func (s *SplashSystem) findSplashBySlot(slot component.SplashSlot) core.Entity {
-	entities := s.Component.Splash.All()
+	entities := s.world.Component.Splash.All()
 	for _, entity := range entities {
-		splash, ok := s.Component.Splash.Get(entity)
+		splash, ok := s.world.Component.Splash.Get(entity)
 		if ok && splash.Slot == slot {
 			return entity
 		}

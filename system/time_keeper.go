@@ -10,7 +10,7 @@ import (
 // TimeKeeperSystem manages lifecycle timers for entities
 // It runs before cleanup to tag expired entities for destruction
 type TimeKeeperSystem struct {
-	engine.SystemBase
+	world *engine.World
 
 	enabled bool
 }
@@ -18,7 +18,7 @@ type TimeKeeperSystem struct {
 // NewTimeKeeperSystem creates a new timekeeper system
 func NewTimeKeeperSystem(world *engine.World) engine.System {
 	s := &TimeKeeperSystem{
-		SystemBase: engine.NewSystemBase(world),
+		world: world,
 	}
 	s.initLocked()
 	return s
@@ -60,7 +60,7 @@ func (s *TimeKeeperSystem) HandleEvent(ev event.GameEvent) {
 
 	if ev.Type == event.EventTimerStart {
 		if payload, ok := ev.Payload.(*event.TimerStartPayload); ok {
-			s.Component.Timer.Set(payload.Entity, component.TimerComponent{
+			s.world.Component.Timer.Set(payload.Entity, component.TimerComponent{
 				Remaining: payload.Duration,
 			})
 		}
@@ -73,11 +73,11 @@ func (s *TimeKeeperSystem) Update() {
 		return
 	}
 
-	entities := s.Component.Timer.All()
-	dt := s.Resource.Time.DeltaTime
+	entities := s.world.Component.Timer.All()
+	dt := s.world.Resource.Time.DeltaTime
 
 	for _, entity := range entities {
-		timer, ok := s.Component.Timer.Get(entity)
+		timer, ok := s.world.Component.Timer.Get(entity)
 		if !ok {
 			continue
 		}
@@ -86,10 +86,10 @@ func (s *TimeKeeperSystem) Update() {
 
 		if timer.Remaining <= 0 {
 			// Timer expired - Default action is destruction
-			s.Component.Timer.Remove(entity)
-			s.Component.Death.Set(entity, component.DeathComponent{})
+			s.world.Component.Timer.Remove(entity)
+			s.world.Component.Death.Set(entity, component.DeathComponent{})
 		} else {
-			s.Component.Timer.Set(entity, timer)
+			s.world.Component.Timer.Set(entity, timer)
 		}
 	}
 }

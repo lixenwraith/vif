@@ -14,7 +14,7 @@ const (
 	StateRoot StateID = 1
 )
 
-// Machine is the generic Hierarchical Finite State Machine runtime
+// Machine is the generic Hierarchical Finite GameState Machine runtime
 // T is the context type passed to actions and guards (e.g., *engine.World)
 type Machine[T any] struct {
 	// Graph Data (Immutable after load)
@@ -23,7 +23,7 @@ type Machine[T any] struct {
 	// Configuration
 	InitialStateID StateID // Stored during load for reset/init
 
-	// Runtime State
+	// Runtime GameState
 	activeStateID StateID       // The current leaf node
 	timeInState   time.Duration // Time elapsed in current state
 	activePath    []StateID     // Stack of active states (Root -> Child -> Leaf)
@@ -33,7 +33,7 @@ type Machine[T any] struct {
 	guardFactoryReg map[string]GuardFactoryFunc[T]
 	actionReg       map[string]ActionFunc[T]
 
-	// State metadata (populated by loader)
+	// GameState metadata (populated by loader)
 	StateDurations map[StateID]time.Duration // Max duration per state (0 = instant/event-driven)
 	StateIndices   map[StateID]int           // Deterministic index for color mapping
 	StateCount     int                       // Total non-Root states for normalization

@@ -29,7 +29,7 @@ func NewPingRenderer(gameCtx *engine.GameContext) *PingRenderer {
 // Render draws the ping highlights and grid
 func (r *PingRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	// Get PingComponent from cursor (Single player assumption: ID 1/CursorEntity)
-	ping, ok := r.gameCtx.World.Components.Ping.Get(r.gameCtx.CursorEntity)
+	ping, ok := r.gameCtx.World.Component.Ping.Get(r.gameCtx.CursorEntity)
 	if !ok {
 		return
 	}
@@ -79,10 +79,10 @@ func (r *PingRenderer) computeExclusionMask(world *engine.World, w, h int) {
 	}
 
 	// Rasterize all active shields into the mask
-	shields := r.gameCtx.World.Components.Shield.All()
+	shields := r.gameCtx.World.Component.Shield.All()
 	for _, entity := range shields {
-		shield, okS := r.gameCtx.World.Components.Shield.Get(entity)
-		pos, okP := world.Positions.Get(entity)
+		shield, okS := r.gameCtx.World.Component.Shield.Get(entity)
+		pos, okP := world.Position.Get(entity)
 		if !okS || !okP || !shield.Active {
 			continue
 		}

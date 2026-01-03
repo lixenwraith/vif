@@ -15,8 +15,8 @@ import (
 
 // NuggetSystem manages nugget spawnLightning and respawn logic
 type NuggetSystem struct {
-	mu sync.RWMutex
-	engine.SystemBase
+	mu    sync.RWMutex
+	world *engine.World
 
 	nuggetID           atomic.Int32
 	lastSpawnAttempt   time.Time
@@ -32,15 +32,14 @@ type NuggetSystem struct {
 
 // NewNuggetSystem creates a new nugget system
 func NewNuggetSystem(world *engine.World) engine.System {
-	res := engine.GetResourceStore(world)
 	s := &NuggetSystem{
-		SystemBase: engine.NewSystemBase(world),
+		world: world,
 	}
 
-	s.statActive = res.Status.Bools.Get("nugget.active")
-	s.statSpawned = res.Status.Ints.Get("nugget.spawned")
-	s.statCollected = res.Status.Ints.Get("nugget.collected")
-	s.statJumps = res.Status.Ints.Get("nugget.jumps")
+	s.statActive = world.Resource.Status.Bools.Get("nugget.active")
+	s.statSpawned = world.Resource.Status.Ints.Get("nugget.spawned")
+	s.statCollected = world.Resource.Status.Ints.Get("nugget.collected")
+	s.statJumps = world.Resource.Status.Ints.Get("nugget.jumps")
 
 	s.initLocked()
 	return s
@@ -122,21 +121,21 @@ func (s *NuggetSystem) Update() {
 		return
 	}
 
-	now := s.Resource.Time.GameTime
-	cursorEntity := s.Resource.Cursor.Entity
+	now := s.world.Resource.Time.GameTime
+	cursorEntity := s.world.Resource.Cursor.Entity
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// Validate active nugget still exists
-	if s.activeNuggetEntity != 0 && !s.Component.Nugget.Has(s.activeNuggetEntity) {
+	if s.activeNuggetEntity != 0 && !s.world.Component.Nugget.Has(s.activeNuggetEntity) {
 		s.activeNuggetEntity = 0
 	}
 
 	// Check cursor overlap for auto-collection
 	if s.activeNuggetEntity != 0 {
-		cursorPos, cursorOk := s.World.Positions.Get(cursorEntity)
-		nuggetPos, nuggetOk := s.World.Positions.Get(s.activeNuggetEntity)
+		cursorPos, cursorOk := s.world.Position.Get(cursorEntity)
+		nuggetPos, nuggetOk := s.world.Position.Get(s.activeNuggetEntity)
 		if cursorOk && nuggetOk && cursorPos.X == nuggetPos.X && cursorPos.Y == nuggetPos.Y {
 			s.collectNugget()
 		}
@@ -152,7 +151,7 @@ func (s *NuggetSystem) Update() {
 	}
 
 	// Validate entity still exists
-	if !s.Component.Nugget.Has(s.activeNuggetEntity) {
+	if !s.world.Component.Nugget.Has(s.activeNuggetEntity) {
 		s.activeNuggetEntity = 0
 	}
 
@@ -161,10 +160,10 @@ func (s *NuggetSystem) Update() {
 
 // handleJumpRequest attempts to jump cursor to the active nugget
 func (s *NuggetSystem) handleJumpRequest() {
-	cursorEntity := s.Resource.Cursor.Entity
+	cursorEntity := s.world.Resource.Cursor.Entity
 
 	// 1. Check Energy from component
-	energyComp, ok := s.Component.Energy.Get(cursorEntity)
+	energyComp, ok := s.world.Component.Energy.Get(cursorEntity)
 	if !ok {
 		return
 	}
@@ -186,7 +185,7 @@ func (s *NuggetSystem) handleJumpRequest() {
 	}
 
 	// 3. Get Nugget Position
-	nuggetPos, ok := s.World.Positions.Get(nuggetEntity)
+	nuggetPos, ok := s.world.Position.Get(nuggetEntity)
 	if !ok {
 		// Stale reference - clear it
 		s.mu.Lock()
@@ -198,7 +197,7 @@ func (s *NuggetSystem) handleJumpRequest() {
 	}
 
 	// 4. Move Cursor
-	s.World.Positions.Set(cursorEntity, component.PositionComponent{
+	s.world.Position.Set(cursorEntity, component.PositionComponent{
 		X: nuggetPos.X,
 		Y: nuggetPos.Y,
 	})
@@ -209,28 +208,26 @@ func (s *NuggetSystem) handleJumpRequest() {
 		delta = constant.NuggetJumpCost
 	}
 
-	s.World.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{
+	s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{
 		Delta: delta,
 	})
 
 	// 6. Play Sound
-	if audioRes, ok := engine.GetResource[*engine.AudioResource](s.World.ResourceStore); ok && audioRes.Player != nil {
-		audioRes.Player.Play(core.SoundBell)
-	}
+	s.world.Resource.Audio.Player.Play(core.SoundBell)
 
 	s.statJumps.Add(1)
 }
 
 // spawnNugget creates a new nugget at a random valid position, caller must hold s.mu lock
 func (s *NuggetSystem) spawnNugget() {
-	now := s.Resource.Time.GameTime
+	now := s.world.Resource.Time.GameTime
 	x, y := s.findValidPosition()
 	if x < 0 || y < 0 {
 		return
 	}
 
 	nuggetID := s.nuggetID.Add(1)
-	entity := s.World.CreateEntity()
+	entity := s.world.CreateEntity()
 
 	pos := component.PositionComponent{
 		X: x,
@@ -245,16 +242,16 @@ func (s *NuggetSystem) spawnNugget() {
 	}
 
 	// Use batch for atomic position validation
-	batch := s.World.Positions.BeginBatch()
+	batch := s.world.Position.BeginBatch()
 	batch.Add(entity, pos)
 	if err := batch.Commit(); err != nil {
 		// Position was taken while we were creating the nugget
-		s.World.DestroyEntity(entity)
+		s.world.DestroyEntity(entity)
 		return
 	}
 
 	// Set component after position is committed
-	s.Component.Nugget.Set(entity, nugget)
+	s.world.Component.Nugget.Set(entity, nugget)
 
 	s.activeNuggetEntity = entity
 
@@ -263,8 +260,8 @@ func (s *NuggetSystem) spawnNugget() {
 
 // findValidPosition finds a valid random position for a nugget
 func (s *NuggetSystem) findValidPosition() (int, int) {
-	config := s.Resource.Config
-	cursorPos, ok := s.World.Positions.Get(s.Resource.Cursor.Entity)
+	config := s.world.Resource.Config
+	cursorPos, ok := s.world.Position.Get(s.world.Resource.Cursor.Entity)
 	if !ok {
 		return -1, -1
 	}
@@ -298,28 +295,28 @@ func (s *NuggetSystem) collectNugget() {
 		return
 	}
 
-	nuggetPos, ok := s.World.Positions.Get(s.activeNuggetEntity)
+	nuggetPos, ok := s.world.Position.Get(s.activeNuggetEntity)
 	if !ok {
 		return
 	}
 
-	cursorEntity := s.Resource.Cursor.Entity
+	cursorEntity := s.world.Resource.Cursor.Entity
 	var currentHeat int64
-	if hc, ok := s.Component.Heat.Get(cursorEntity); ok {
+	if hc, ok := s.world.Component.Heat.Get(cursorEntity); ok {
 		currentHeat = hc.Current.Load()
 	}
 
 	if currentHeat >= constant.MaxHeat {
-		s.World.PushEvent(event.EventCleanerDirectionalRequest, &event.DirectionalCleanerPayload{
+		s.world.PushEvent(event.EventCleanerDirectionalRequest, &event.DirectionalCleanerPayload{
 			OriginX: nuggetPos.X,
 			OriginY: nuggetPos.Y,
 		})
 	} else {
-		s.World.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: constant.NuggetHeatIncrease})
+		s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: constant.NuggetHeatIncrease})
 	}
 
 	// TODO: death
-	s.World.DestroyEntity(s.activeNuggetEntity)
+	s.world.DestroyEntity(s.activeNuggetEntity)
 	s.activeNuggetEntity = 0
 
 	s.statCollected.Add(1)

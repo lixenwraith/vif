@@ -11,7 +11,7 @@ import (
 )
 
 type BoostSystem struct {
-	engine.SystemBase
+	world *engine.World
 
 	// Cached metric pointers
 	statActive    *atomic.Bool
@@ -22,11 +22,11 @@ type BoostSystem struct {
 
 func NewBoostSystem(world *engine.World) engine.System {
 	s := &BoostSystem{
-		SystemBase: engine.NewSystemBase(world),
+		world: world,
 	}
 
-	s.statActive = s.Resource.Status.Bools.Get("boost.active")
-	s.statRemaining = s.Resource.Status.Ints.Get("boost.remaining")
+	s.statActive = s.world.Resource.Status.Bools.Get("boost.active")
+	s.statRemaining = s.world.Resource.Status.Ints.Get("boost.remaining")
 
 	s.initLocked()
 	return s
@@ -87,10 +87,10 @@ func (s *BoostSystem) Update() {
 		return
 	}
 
-	dt := s.Resource.Time.DeltaTime
-	cursorEntity := s.Resource.Cursor.Entity
+	dt := s.world.Resource.Time.DeltaTime
+	cursorEntity := s.world.Resource.Cursor.Entity
 
-	boost, ok := s.Component.Boost.Get(cursorEntity)
+	boost, ok := s.world.Component.Boost.Get(cursorEntity)
 	if !ok || !boost.Active {
 		return
 	}
@@ -101,16 +101,16 @@ func (s *BoostSystem) Update() {
 		boost.Active = false
 	}
 
-	s.Component.Boost.Set(cursorEntity, boost)
+	s.world.Component.Boost.Set(cursorEntity, boost)
 
 	s.statActive.Store(boost.Active)
 	s.statRemaining.Store(int64(boost.Remaining))
 }
 
 func (s *BoostSystem) activate(duration time.Duration) {
-	cursorEntity := s.Resource.Cursor.Entity
+	cursorEntity := s.world.Resource.Cursor.Entity
 
-	boost, ok := s.Component.Boost.Get(cursorEntity)
+	boost, ok := s.world.Component.Boost.Get(cursorEntity)
 	if !ok {
 		boost = component.BoostComponent{}
 	}
@@ -121,25 +121,25 @@ func (s *BoostSystem) activate(duration time.Duration) {
 	boost.Remaining = duration
 	boost.TotalDuration = duration // Reset total for UI progress bar if applicable
 
-	s.Component.Boost.Set(cursorEntity, boost)
+	s.world.Component.Boost.Set(cursorEntity, boost)
 }
 
 func (s *BoostSystem) deactivate() {
-	cursorEntity := s.Resource.Cursor.Entity
+	cursorEntity := s.world.Resource.Cursor.Entity
 
-	boost, ok := s.Component.Boost.Get(cursorEntity)
+	boost, ok := s.world.Component.Boost.Get(cursorEntity)
 	if !ok {
 		return
 	}
 	boost.Active = false
 	boost.Remaining = 0
-	s.Component.Boost.Set(cursorEntity, boost)
+	s.world.Component.Boost.Set(cursorEntity, boost)
 }
 
 func (s *BoostSystem) extend(duration time.Duration) {
-	cursorEntity := s.Resource.Cursor.Entity
+	cursorEntity := s.world.Resource.Cursor.Entity
 
-	boost, ok := s.Component.Boost.Get(cursorEntity)
+	boost, ok := s.world.Component.Boost.Get(cursorEntity)
 	if !ok || !boost.Active {
 		return
 	}
@@ -151,5 +151,5 @@ func (s *BoostSystem) extend(duration time.Duration) {
 		boost.TotalDuration = boost.Remaining
 	}
 
-	s.Component.Boost.Set(cursorEntity, boost)
+	s.world.Component.Boost.Set(cursorEntity, boost)
 }

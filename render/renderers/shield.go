@@ -34,26 +34,23 @@ type ShieldRenderer struct {
 
 // NewShieldRenderer creates a new shield renderer
 func NewShieldRenderer(gameCtx *engine.GameContext) *ShieldRenderer {
-	s := &ShieldRenderer{
+	r := &ShieldRenderer{
 		gameCtx: gameCtx,
 	}
 
-	// Access RenderConfig for display mode and select strategy once
-	cfg := engine.MustGetResource[*engine.RenderConfig](gameCtx.World.ResourceStore)
-
-	if cfg.ColorMode == terminal.ColorMode256 {
-		s.renderCell = s.cell256
+	if r.gameCtx.World.Resource.Render.ColorMode == terminal.ColorMode256 {
+		r.renderCell = r.cell256
 	} else {
-		s.renderCell = s.cellTrueColor
+		r.renderCell = r.cellTrueColor
 	}
 
-	return s
+	return r
 }
 
 // Render draws all active shields with quadratic falloff gradient
 func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(constant.MaskField)
-	shields := r.gameCtx.World.Components.Shield.All()
+	shields := r.gameCtx.World.Component.Shield.All()
 	if len(shields) == 0 {
 		return
 	}
@@ -61,7 +58,7 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	// Energy-based shield color: positive/zero → yellow, negative → purple
 	r.frameColor = render.RgbCleanerBasePositive
 	r.framePalette = shield256Positive
-	if energyComp, ok := r.gameCtx.World.Components.Energy.Get(r.gameCtx.CursorEntity); ok {
+	if energyComp, ok := r.gameCtx.World.Component.Energy.Get(r.gameCtx.CursorEntity); ok {
 		if energyComp.Current.Load() < 0 {
 			r.frameColor = render.RgbCleanerBaseNegative
 			r.framePalette = shield256Negative
@@ -69,8 +66,8 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	}
 
 	for _, entity := range shields {
-		shield, okS := r.gameCtx.World.Components.Shield.Get(entity)
-		pos, okP := r.gameCtx.World.Positions.Get(entity)
+		shield, okS := r.gameCtx.World.Component.Shield.Get(entity)
+		pos, okP := r.gameCtx.World.Position.Get(entity)
 
 		if !okS || !okP || !shield.Active {
 			continue

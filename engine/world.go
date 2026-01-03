@@ -1,7 +1,5 @@
 package engine
 
-// @lixen: #dev{base(core),feature[drain(render,system)],feature[dust(render,system)],feature[quasar(render,system)]}
-
 import (
 	"sync"
 	"sync/atomic"
@@ -16,30 +14,30 @@ type World struct {
 	mu           sync.RWMutex
 	nextEntityID core.Entity
 
-	// Global ResourceStore
-	ResourceStore *ResourceStore
+	// Global Resource
+	Resource *Resource
 
 	// Position Store (Special - spatial index, kept as named field)
-	Components ComponentStore
-	Positions  *PositionStore
+	Component Component
+	Position  *Position
 
 	// Direct pointers for high-frequency path optimization
 	eventQueue  *event.EventQueue
 	frameSource *atomic.Int64
 
-	systems     []System
+	system      []System
 	updateMutex sync.Mutex
 }
 
 // NewWorld creates a new ECS world with dynamic component store support
 func NewWorld() *World {
 	w := &World{
-		nextEntityID:  1,
-		ResourceStore: NewResourceStore(),
-		systems:       make([]System, 0),
+		nextEntityID: 1,
+		Resource:     &Resource{},
+		system:       make([]System, 0),
 	}
 
-	initComponentStores(w)
+	initComponents(w)
 
 	return w
 }
@@ -56,12 +54,12 @@ func (w *World) CreateEntity() core.Entity {
 
 // DestroyEntity removes all components associated with an entity
 func (w *World) DestroyEntity(e core.Entity) {
-	if prot, ok := w.Components.Protection.Get(e); ok {
+	if prot, ok := w.Component.Protection.Get(e); ok {
 		if prot.Mask == component.ProtectAll {
 			return
 		}
 	}
-	w.removeFromAllStores(e)
+	w.removeEntity(e)
 }
 
 // Clear removes all entities and components from the world
@@ -69,7 +67,7 @@ func (w *World) Clear() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.nextEntityID = 1
-	w.clearAllStores()
+	w.wipeAll()
 }
 
 // AddSystem adds a system to the world and sorts by priority
@@ -77,25 +75,25 @@ func (w *World) AddSystem(system System) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	w.systems = append(w.systems, system)
+	w.system = append(w.system, system)
 
 	// Sort by priority (bubble sort, small N)
-	for i := 0; i < len(w.systems)-1; i++ {
-		for j := 0; j < len(w.systems)-i-1; j++ {
-			if w.systems[j].Priority() > w.systems[j+1].Priority() {
-				w.systems[j], w.systems[j+1] = w.systems[j+1], w.systems[j]
+	for i := 0; i < len(w.system)-1; i++ {
+		for j := 0; j < len(w.system)-i-1; j++ {
+			if w.system[j].Priority() > w.system[j+1].Priority() {
+				w.system[j], w.system[j+1] = w.system[j+1], w.system[j]
 			}
 		}
 	}
 }
 
-// Systems returns a copy of all registered systems
+// Systems returns a copy of all registered system
 // Used by ClockScheduler for event handler auto-registration
 func (w *World) Systems() []System {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	result := make([]System, len(w.systems))
-	copy(result, w.systems)
+	result := make([]System, len(w.system))
+	copy(result, w.system)
 	return result
 }
 
@@ -122,18 +120,18 @@ func (w *World) Unlock() {
 	w.updateMutex.Unlock()
 }
 
-// Update runs all systems sequentially
+// Update runs all system sequentially
 func (w *World) Update() {
 	w.RunSafe(func() {
 		w.UpdateLocked()
 	})
 }
 
-// UpdateLocked runs all systems assuming the caller already holds updateMutex
+// UpdateLocked runs all system assuming the caller already holds updateMutex
 func (w *World) UpdateLocked() {
 	w.mu.RLock()
-	systems := make([]System, len(w.systems))
-	copy(systems, w.systems)
+	systems := make([]System, len(w.system))
+	copy(systems, w.system)
 	w.mu.RUnlock()
 
 	for _, system := range systems {

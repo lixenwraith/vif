@@ -17,15 +17,15 @@ import (
 type MetaSystem struct {
 	ctx *engine.GameContext
 
-	engine.SystemBase
+	world *engine.World
 }
 
 // NewMetaSystem creates a new meta system
 func NewMetaSystem(ctx *engine.GameContext) engine.System {
 	world := ctx.World
 	s := &MetaSystem{
-		ctx:        ctx,
-		SystemBase: engine.NewSystemBase(world),
+		ctx:   ctx,
+		world: world,
 	}
 	s.initLocked()
 	return s
@@ -75,7 +75,7 @@ func (s *MetaSystem) Update() {
 // handleGameReset performs full game reset with deterministic ordering
 // Execution sequence (race-free):
 //  1. Entity cleanup (drains, world entities)
-//  2. State reset (counters, timers)
+//  2. GameState reset (counters, timers)
 //  3. Cursor recreation
 //  4. FSM reset (emits spawnLightning request, dispatched immediately)
 //
@@ -88,7 +88,7 @@ func (s *MetaSystem) handleGameReset() {
 	// Already inside world.RunSafe from main -> DispatchEventsImmediately
 	s.ctx.World.Clear()
 
-	// 3. State reset (counters, NextID → 1)
+	// 3. GameState reset (counters, NextID → 1)
 	s.ctx.State.Reset()
 
 	// 4. Cursor recreation (required before spawnLightning events)
@@ -115,18 +115,18 @@ func (s *MetaSystem) handleDebugRequest() {
 		Title: "DEBUG",
 	}
 
-	// Card: Player State
+	// Card: Player GameState
 	playerCard := core.OverlayCard{Title: "PLAYER"}
-	energyComp, _ := s.Component.Energy.Get(s.ctx.CursorEntity)
+	energyComp, _ := s.world.Component.Energy.Get(s.ctx.CursorEntity)
 	playerCard.Entries = append(playerCard.Entries, core.CardEntry{
 		Key: "Energy", Value: fmt.Sprintf("%d", energyComp.Current.Load()),
 	})
-	if hc, ok := s.Component.Heat.Get(s.ctx.CursorEntity); ok {
+	if hc, ok := s.world.Component.Heat.Get(s.ctx.CursorEntity); ok {
 		playerCard.Entries = append(playerCard.Entries, core.CardEntry{
 			Key: "Heat", Value: fmt.Sprintf("%d/%d", hc.Current.Load(), constant.MaxHeat),
 		})
 	}
-	if sc, ok := s.Component.Shield.Get(s.ctx.CursorEntity); ok {
+	if sc, ok := s.world.Component.Shield.Get(s.ctx.CursorEntity); ok {
 		playerCard.Entries = append(playerCard.Entries, core.CardEntry{
 			Key: "Shield", Value: fmt.Sprintf("%v", sc.Active),
 		})
@@ -144,7 +144,7 @@ func (s *MetaSystem) handleDebugRequest() {
 	content.Items = append(content.Items, engineCard)
 
 	// Cards from status registry, grouped by prefix
-	reg := s.Resource.Status
+	reg := s.world.Resource.Status
 	groups := make(map[string][]core.CardEntry)
 
 	reg.Bools.Range(func(key string, ptr *atomic.Bool) {

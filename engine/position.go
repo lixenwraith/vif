@@ -1,7 +1,5 @@
 package engine
 
-// @lixen: #dev{base(core),feature[drain(render,system)],feature[dust(render,system)],feature[quasar(render,system)]}
-
 import (
 	"fmt"
 	"sync"
@@ -11,9 +9,9 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 )
 
-// PositionStore maintains a spatial index using a fixed-capacity dense grid
+// Position maintains a spatial index using a fixed-capacity dense grid
 // It supports multiple entities per cell (up to MaxEntitiesPerCell)
-type PositionStore struct {
+type Position struct {
 	mu         sync.RWMutex
 	components map[core.Entity]component.PositionComponent
 	entities   []core.Entity // Dense array for cache-friendly iteration
@@ -21,10 +19,10 @@ type PositionStore struct {
 	world      *World // Reference for z-index lookups
 }
 
-// NewPositionStore creates a new position store with spatial indexing
-func NewPositionStore() *PositionStore {
+// NewPosition creates a new position store with spatial indexing
+func NewPosition() *Position {
 	// Default grid size, will be resized by GameContext if needed
-	return &PositionStore{
+	return &Position{
 		components: make(map[core.Entity]component.PositionComponent),
 		entities:   make([]core.Entity, 0, 64),
 		grid:       NewSpatialGrid(constant.DefaultGridWidth, constant.DefaultGridHeight), // Default safe size
@@ -33,42 +31,42 @@ func NewPositionStore() *PositionStore {
 
 // Set inserts or updates an entity's position
 // Multiple entities at the same location are allowed, overflow silently ignored
-func (ps *PositionStore) Set(e core.Entity, pos component.PositionComponent) {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
+func (p *Position) Set(e core.Entity, pos component.PositionComponent) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
 	// If entity already has a position, remove it from old grid location
-	if oldPos, exists := ps.components[e]; exists {
-		ps.grid.Remove(e, oldPos.X, oldPos.Y)
+	if oldPos, exists := p.components[e]; exists {
+		p.grid.Remove(e, oldPos.X, oldPos.Y)
 	} else {
 		// New entity, add to dense array
-		ps.entities = append(ps.entities, e)
+		p.entities = append(p.entities, e)
 	}
 
 	// Update component
-	ps.components[e] = pos
+	p.components[e] = pos
 
 	// Set to new grid location
-	_ = ps.grid.Add(e, pos.X, pos.Y)
+	_ = p.grid.Add(e, pos.X, pos.Y)
 }
 
 // Remove deletes an entity from the store and grid
-func (ps *PositionStore) Remove(e core.Entity) {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
+func (p *Position) Remove(e core.Entity) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
-	if pos, exists := ps.components[e]; exists {
+	if pos, exists := p.components[e]; exists {
 		// Remove from spatial grid
-		ps.grid.Remove(e, pos.X, pos.Y)
+		p.grid.Remove(e, pos.X, pos.Y)
 
 		// Remove from components map
-		delete(ps.components, e)
+		delete(p.components, e)
 
 		// Remove from dense entities array
-		for i, entity := range ps.entities {
+		for i, entity := range p.entities {
 			if entity == e {
-				ps.entities[i] = ps.entities[len(ps.entities)-1]
-				ps.entities = ps.entities[:len(ps.entities)-1]
+				p.entities[i] = p.entities[len(p.entities)-1]
+				p.entities = p.entities[:len(p.entities)-1]
 				break
 			}
 		}
@@ -76,37 +74,36 @@ func (ps *PositionStore) Remove(e core.Entity) {
 }
 
 // Move updates position atomically
-// Note: This version ignores collisions at the Store level
 // Systems should use HasAny() or GetAllAt() for collision logic before moving if needed
-func (ps *PositionStore) Move(e core.Entity, newPos component.PositionComponent) error {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
+func (p *Position) Move(e core.Entity, newPos component.PositionComponent) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
-	oldPos, exists := ps.components[e]
+	oldPos, exists := p.components[e]
 	if !exists {
 		return fmt.Errorf("entity %d does not have a position component", e)
 	}
 
 	// Remove from old grid pos
-	ps.grid.Remove(e, oldPos.X, oldPos.Y)
+	p.grid.Remove(e, oldPos.X, oldPos.Y)
 
 	// Update component
-	ps.components[e] = newPos
+	p.components[e] = newPos
 
 	// Set to new grid pos
-	// Note: explicit ignore for OOB and Cell full
-	_ = ps.grid.Add(e, newPos.X, newPos.Y)
+	// Explicit ignore for OOB and Cell full
+	_ = p.grid.Add(e, newPos.X, newPos.Y)
 
 	return nil
 }
 
-// GetAllAt returns a COPY of entities at the given position (concurrent safe but uses memory)
+// GetAllAt returns a COPY of entities at the given position (concurrent safe but uses memory),
 // Returns nil if position is out of bounds or empty
-func (ps *PositionStore) GetAllAt(x, y int) []core.Entity {
-	ps.mu.RLock()
-	defer ps.mu.RUnlock()
+func (p *Position) GetAllAt(x, y int) []core.Entity {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 
-	view := ps.grid.GetAllAt(x, y)
+	view := p.grid.GetAllAt(x, y)
 	if len(view) == 0 {
 		return nil
 	}
@@ -120,91 +117,91 @@ func (ps *PositionStore) GetAllAt(x, y int) []core.Entity {
 // GetAllAtInto copies entities into a caller-provided buffer and returns number of entities copied
 // SAFE and ZERO-ALLOCATION if buf is on stack
 // Use for Render/Physics
-func (ps *PositionStore) GetAllAtInto(x, y int, buf []core.Entity) int {
-	ps.mu.RLock()
-	defer ps.mu.RUnlock()
+func (p *Position) GetAllAtInto(x, y int, buf []core.Entity) int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 
-	view := ps.grid.GetAllAt(x, y)
+	view := p.grid.GetAllAt(x, y)
 	// Copy min(len(buf), len(view))
 	return copy(buf, view)
 }
 
 // HasAny O(1) returns true if any entity exists at the given coordinates
-func (ps *PositionStore) HasAny(x, y int) bool {
-	ps.mu.RLock()
-	defer ps.mu.RUnlock()
-	return ps.grid.HasAny(x, y)
+func (p *Position) HasAny(x, y int) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.grid.HasAny(x, y)
 }
 
 // ResizeGrid resizes the internal spatial grid
-func (ps *PositionStore) ResizeGrid(width, height int) {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
+func (p *Position) ResizeGrid(width, height int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
 	// Create new grid
-	ps.grid.Resize(width, height)
+	p.grid.Resize(width, height)
 
 	// Re-populate grid from components map
 	// This ensures consistency even if grid size changes
-	for e, pos := range ps.components {
-		// Note: explicit ignore for OOB and Cell full
-		_ = ps.grid.Add(e, pos.X, pos.Y)
+	for e, pos := range p.components {
+		// Explicit ignore for OOB and Cell full
+		_ = p.grid.Add(e, pos.X, pos.Y)
 	}
 }
 
 // Get retrieves a position component
-func (ps *PositionStore) Get(e core.Entity) (component.PositionComponent, bool) {
-	ps.mu.RLock()
-	defer ps.mu.RUnlock()
-	val, ok := ps.components[e]
+func (p *Position) Get(e core.Entity) (component.PositionComponent, bool) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	val, ok := p.components[e]
 	return val, ok
 }
 
 // Has checks if an entity has a position component
-func (ps *PositionStore) Has(e core.Entity) bool {
-	ps.mu.RLock()
-	defer ps.mu.RUnlock()
-	_, ok := ps.components[e]
+func (p *Position) Has(e core.Entity) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	_, ok := p.components[e]
 	return ok
 }
 
 // All returns all entities with position components
-func (ps *PositionStore) All() []core.Entity {
-	ps.mu.RLock()
-	defer ps.mu.RUnlock()
-	result := make([]core.Entity, len(ps.entities))
-	copy(result, ps.entities)
+func (p *Position) All() []core.Entity {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	result := make([]core.Entity, len(p.entities))
+	copy(result, p.entities)
 	return result
 }
 
 // Count returns the number of entities
-func (ps *PositionStore) Count() int {
-	ps.mu.RLock()
-	defer ps.mu.RUnlock()
-	return len(ps.entities)
+func (p *Position) Count() int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return len(p.entities)
 }
 
 // Clear removes all data
-func (ps *PositionStore) Clear() {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
+func (p *Position) Clear() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
-	ps.components = make(map[core.Entity]component.PositionComponent)
-	ps.entities = make([]core.Entity, 0, 64)
-	ps.grid.Clear()
+	p.components = make(map[core.Entity]component.PositionComponent)
+	p.entities = make([]core.Entity, 0, 64)
+	p.grid.Clear()
 }
 
 // SetWorld sets the world reference for z-index lookups
-func (ps *PositionStore) SetWorld(w *World) {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
-	ps.world = w
+func (p *Position) SetWorld(w *World) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.world = w
 }
 
 // --- Batch Implementation ---
 
 type PositionBatch struct {
-	store     *PositionStore
+	store     *Position
 	additions []positionAddition
 	committed bool
 }
@@ -214,9 +211,9 @@ type positionAddition struct {
 	pos    component.PositionComponent
 }
 
-func (ps *PositionStore) BeginBatch() *PositionBatch {
+func (p *Position) BeginBatch() *PositionBatch {
 	return &PositionBatch{
-		store:     ps,
+		store:     p,
 		additions: make([]positionAddition, 0),
 	}
 }
@@ -267,7 +264,7 @@ func (pb *PositionBatch) Commit() error {
 		}
 
 		pb.store.components[add.entity] = add.pos
-		// Note: explicit ignore for OOB and Cell full
+		// Explicit ignore for OOB and Cell full
 		_ = pb.store.grid.Add(add.entity, add.pos.X, add.pos.Y)
 	}
 
