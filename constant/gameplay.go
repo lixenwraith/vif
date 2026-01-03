@@ -19,8 +19,8 @@ const (
 
 // Boost Mechanics
 const (
-	// BoostBaseDuration is the initial duration when boost is activated via command
-	BoostBaseDuration = 10 * time.Second
+	// BoostBaseDuration is the initial duration when boost is activated
+	BoostBaseDuration = 500 * time.Millisecond
 
 	// BoostExtensionDuration is how long each matching color character extends the boost
 	BoostExtensionDuration = 500 * time.Millisecond

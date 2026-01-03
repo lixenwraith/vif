@@ -135,12 +135,25 @@ func (s *EnergySystem) Update() {
 }
 
 // addEnergy modifies energy on target entity
+// Respects boost immunity: blocks changes that converge toward zero
 func (s *EnergySystem) addEnergy(delta int64) {
 	cursorEntity := s.world.Resource.Cursor.Entity
 	energyComp, ok := s.world.Component.Energy.Get(cursorEntity)
 	if !ok {
 		return
 	}
+
+	// Boost immunity: block convergent drain
+	if boost, ok := s.world.Component.Boost.Get(cursorEntity); ok && boost.Active {
+		current := energyComp.Current.Load()
+		switch {
+		case current > 0 && delta < 0:
+			return
+		case current < 0 && delta > 0:
+			return
+		}
+	}
+
 	energyComp.Current.Add(delta)
 	s.world.Component.Energy.Set(cursorEntity, energyComp)
 }

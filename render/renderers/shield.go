@@ -15,6 +15,17 @@ const (
 	shield256Negative = 134 // Violet (matches RgbCleanerBaseNegative)
 )
 
+// TODO: move to constant maybe
+// Boost glow parameters (Q16.16)
+const (
+	// boostGlowRotationSpeed is 2 rotations/sec in Q16.16 (Scale = full rotation)
+	boostGlowRotationSpeed int32 = vmath.Scale * 2
+	// boostGlowEdgeThreshold is 0.6² in Q16.16 for rim detection
+	boostGlowEdgeThreshold int32 = 23593
+	// boostGlowIntensityFixed is 0.7 peak alpha in Q16.16
+	boostGlowIntensityFixed int32 = 45875
+)
+
 // shieldCellRenderer is the callback type for per-cell shield rendering
 // Defines the interface for rendering strategy (256-color vs TrueColor) selected at initialization
 // normalizedDistSq is Q16.16 squared distance where Scale = edge of ellipse
@@ -30,6 +41,14 @@ type ShieldRenderer struct {
 	frameColor           render.RGB
 	framePalette         uint8
 	frameMaxOpacityFixed int32 // Q16.16 max opacity for gradient calculation
+
+	// Boost glow per-frame state
+	boostGlowActive  bool
+	rotDirX, rotDirY int32 // Rotation direction unit vector
+
+	// TODO: move this cell state out of the renderer struct
+	// Current cell state (set before renderCell callback)
+	cellDx, cellDy int32
 }
 
 // NewShieldRenderer creates a new shield renderer
@@ -63,6 +82,19 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			r.frameColor = render.RgbCleanerBaseNegative
 			r.framePalette = shield256Negative
 		}
+	}
+
+	// Boost glow frame state
+	r.boostGlowActive = false
+	if boost, ok := r.gameCtx.World.Component.Boost.Get(r.gameCtx.CursorEntity); ok && boost.Active {
+		r.boostGlowActive = true
+		// 2 rotations/sec = 500ms period
+		nanos := ctx.GameTime.UnixNano()
+		period := int64(500_000_000) // TODO: magic number to constant
+		phase := nanos % period
+		angle := int32((phase * int64(vmath.Scale)) / period)
+		r.rotDirX = vmath.Cos(angle)
+		r.rotDirY = vmath.Sin(angle)
 	}
 
 	for _, entity := range shields {
@@ -104,6 +136,10 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 					continue
 				}
 
+				// Store for callback access
+				r.cellDx = dx
+				r.cellDy = dy
+
 				// Pass Q16.16 distance squared directly to cell renderer
 				r.renderCell(buf, ctx.GameX+x, ctx.GameY+y, normalizedDistSq)
 			}
@@ -129,6 +165,23 @@ func (r *ShieldRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screen
 
 	// Use BlendScreen for glowing effect on dark backgrounds
 	buf.Set(screenX, screenY, 0, render.RGBBlack, r.frameColor, render.BlendScreen, alpha, terminal.AttrNone)
+
+	// Boost glow on outer rim
+	if !r.boostGlowActive || normalizedDistSq <= boostGlowEdgeThreshold {
+		return
+	}
+
+	cellDirX, cellDirY := vmath.Normalize2D(r.cellDx, r.cellDy)
+	dot := vmath.DotProduct(cellDirX, cellDirY, r.rotDirX, r.rotDirY)
+
+	if dot <= 0 {
+		return
+	}
+
+	edgeFactor := vmath.Div(normalizedDistSq-boostGlowEdgeThreshold, vmath.Scale-boostGlowEdgeThreshold)
+	intensity := vmath.Mul(vmath.Mul(dot, edgeFactor), boostGlowIntensityFixed)
+
+	buf.Set(screenX, screenY, 0, render.RGBBlack, render.RgbBoostGlow, render.BlendSoftLight, vmath.ToFloat(intensity), terminal.AttrNone)
 }
 
 // cell256ThresholdSq is 0.8² in Q16.16 for rim detection (0.64 * 65536 = 41943)

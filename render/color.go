@@ -1,6 +1,5 @@
 package render
 
-
 import (
 	"github.com/lixenwraith/vi-fighter/component"
 )
@@ -57,6 +56,9 @@ var (
 	RgbPingBlue       = RGB{15, 25, 50}    // Very dark blue for ping on blue char
 	RgbCursorNormal   = RGB{255, 165, 0}   // Orange for normal mode
 	RgbCursorInsert   = RGB{255, 255, 255} // Bright white for insert mode
+
+	// Boost glow effect
+	RgbBoostGlow = RGB{255, 140, 200} // Vibrant pink for rotating shield glow
 
 	// Splash colors
 	RgbSplashInsert = RGB{200, 200, 200} // Light gray for insert mode
