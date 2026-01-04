@@ -72,7 +72,7 @@ func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventEnergyAdd:
 		if payload, ok := ev.Payload.(*event.EnergyAddPayload); ok {
-			s.addEnergy(int64(payload.Delta))
+			s.addEnergy(int64(payload.Delta), payload.Spend, payload.Convergent)
 		}
 
 	case event.EventEnergySet:
@@ -134,27 +134,74 @@ func (s *EnergySystem) Update() {
 	}
 }
 
-// addEnergy modifies energy on target entity
-// Respects boost immunity: blocks changes that converge toward zero
-func (s *EnergySystem) addEnergy(delta int64) {
+// addEnergy modifies energy on cursor entity
+// Spend: bypasses boost protection
+// Convergent: clamps at zero, cannot cross
+func (s *EnergySystem) addEnergy(delta int64, spend bool, convergent bool) {
 	cursorEntity := s.world.Resource.Cursor.Entity
 	energyComp, ok := s.world.Component.Energy.Get(cursorEntity)
 	if !ok {
 		return
 	}
 
-	// Boost immunity: block convergent drain
-	if boost, ok := s.world.Component.Boost.Get(cursorEntity); ok && boost.Active {
-		current := energyComp.Current.Load()
-		switch {
-		case current > 0 && delta < 0:
+	currentEnergy := energyComp.Current.Load()
+
+	// Absolute magnitude, direction determined by current sign
+	absDelta := delta
+	if absDelta < 0 {
+		absDelta = -absDelta
+	}
+
+	var newEnergy int64
+	negativeEnergy := currentEnergy < 0
+
+	switch {
+	case !spend && !convergent:
+		// Typing
+		newEnergy = currentEnergy + delta
+	case !spend && convergent:
+		// Drain, clamped to 0
+		if currentEnergy == 0 {
 			return
-		case current < 0 && delta > 0:
+		}
+		// Boost protection
+		if boost, ok := s.world.Component.Boost.Get(cursorEntity); ok && !boost.Active {
+			if negativeEnergy {
+				newEnergy = currentEnergy + absDelta
+			} else {
+				newEnergy = currentEnergy - absDelta
+			}
+			newNegativeEnergy := newEnergy < 0
+			if newNegativeEnergy != negativeEnergy {
+				newEnergy = 0
+			}
+		} else {
 			return
+		}
+	case spend && convergent:
+		// Shield passive drain, clamped to 0
+		if currentEnergy == 0 {
+			return
+		}
+		if negativeEnergy {
+			newEnergy = currentEnergy + absDelta
+		} else {
+			newEnergy = currentEnergy - absDelta
+		}
+		newNegativeEnergy := newEnergy < 0
+		if newNegativeEnergy != negativeEnergy {
+			newEnergy = 0
+		}
+	case spend && !convergent:
+		// Ability/conversion
+		if negativeEnergy {
+			newEnergy = currentEnergy + absDelta
+		} else {
+			newEnergy = currentEnergy - absDelta
 		}
 	}
 
-	energyComp.Current.Add(delta)
+	energyComp.Current.Store(newEnergy)
 	s.world.Component.Energy.Set(cursorEntity, energyComp)
 }
 

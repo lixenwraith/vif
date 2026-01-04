@@ -1,6 +1,5 @@
 package event
 
-
 import (
 	"sync"
 	"time"
@@ -52,7 +51,9 @@ var CharacterTypedPayloadPool = sync.Pool{
 
 // EnergyAddPayload contains energy delta
 type EnergyAddPayload struct {
-	Delta int
+	Delta      int
+	Spend      bool // True: bypasses boost protection
+	Convergent bool // True: clamp at zero, cannot cross
 }
 
 // EnergySetPayload contains energy value

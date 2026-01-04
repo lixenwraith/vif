@@ -89,7 +89,11 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventShieldDrain:
 		if payload, ok := ev.Payload.(*event.ShieldDrainPayload); ok {
-			s.applyConvergentDrain(payload.Amount)
+			s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{
+				Delta:      payload.Amount,
+				Spend:      false, // Subject to boost protection
+				Convergent: true,  // Clamp at zero
+			})
 		}
 	}
 }
@@ -107,52 +111,15 @@ func (s *ShieldSystem) Update() {
 		return
 	}
 
-	// TODO: if panics, add Lazy computation on first tick
-	if shield.InvRxSq == 0 || shield.InvRySq == 0 {
-		panic(nil)
-	}
-
 	now := s.world.Resource.Time.GameTime
 
 	if now.Sub(shield.LastDrainTime) >= constant.ShieldPassiveDrainInterval {
-		s.applyConvergentDrain(constant.ShieldPassiveDrainAmount)
+		s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{
+			Delta:      -constant.ShieldPassiveDrainAmount,
+			Spend:      true, // Bypass boost (passive cost)
+			Convergent: true, // Clamp at zero
+		})
 		shield.LastDrainTime = now
 		s.world.Component.Shield.Set(cursorEntity, shield)
 	}
-}
-
-// applyConvergentDrain reduces energy magnitude toward zero by amount, clamping at zero
-func (s *ShieldSystem) applyConvergentDrain(amount int) {
-	cursorEntity := s.world.Resource.Cursor.Entity
-
-	energyComp, ok := s.world.Component.Energy.Get(cursorEntity)
-	if !ok {
-		return
-	}
-
-	current := energyComp.Current.Load()
-	if current == 0 {
-		return
-	}
-
-	var delta int64
-	if current > 0 {
-		// Positive energy: subtract, clamp at 0
-		if current > int64(amount) {
-			delta = -int64(amount)
-		} else {
-			delta = -current // Clamp to exactly 0
-		}
-	} else {
-		// Negative energy: add, clamp at 0
-		if -current > int64(amount) {
-			delta = int64(amount)
-		} else {
-			delta = -current // Clamp to exactly 0
-		}
-	}
-
-	s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{
-		Delta: int(delta),
-	})
 }
