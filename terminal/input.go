@@ -6,8 +6,6 @@ import (
 	"runtime/debug"
 	"sync"
 	"time"
-
-	"golang.org/x/sys/unix"
 )
 
 // EventType distinguishes input event categories
@@ -35,7 +33,7 @@ type Event struct {
 
 // inputReader handles raw stdin parsing
 type inputReader struct {
-	fd      int
+	backend Backend
 	eventCh chan Event
 	stopCh  chan struct{}
 	doneCh  chan struct{}
@@ -51,9 +49,9 @@ type inputReader struct {
 const escapeTimeout = 50 * time.Millisecond
 
 // newInputReader creates a new input reader
-func newInputReader(fd int) *inputReader {
+func newInputReader(backend Backend) *inputReader {
 	return &inputReader{
-		fd:      fd,
+		backend: backend,
 		eventCh: make(chan Event, 64),
 		stopCh:  make(chan struct{}),
 		doneCh:  make(chan struct{}),
@@ -112,78 +110,28 @@ func (r *inputReader) readLoop() {
 		}
 	}()
 
-	buf := make([]byte, 256)
-
 	for {
-		select {
-		case <-r.stopCh:
-			// Emit EventClosed to unblock consumers like PollEvent
-			r.sendEvent(Event{Type: EventClosed})
+		// Blocking read from backend
+		data, err := r.backend.Read(r.stopCh)
+		if err != nil {
+			r.sendEvent(Event{Type: EventError, Err: err})
 			return
-		default:
 		}
 
-		// Use poll to check if data is available with timeout
-		// This allows checking stopCh periodically
-		ready, err := r.pollRead(100) // 100ms timeout
-		if err != nil {
+		if len(data) == 0 {
+			// Stop signal received or EOF
 			select {
 			case <-r.stopCh:
 				r.sendEvent(Event{Type: EventClosed})
 				return
-			case r.eventCh <- Event{Type: EventError, Err: err}:
-			}
-			return
-		}
-
-		if !ready {
-			continue // Timeout, check stopCh again
-		}
-
-		// Data available, read it
-		n, err := unix.Read(r.fd, buf)
-		if err != nil {
-			if err == unix.EINTR {
+			default:
+				// Empty read but not stopped, continue
 				continue
 			}
-			if err == unix.EAGAIN {
-				continue
-			}
-			select {
-			case <-r.stopCh:
-				r.sendEvent(Event{Type: EventClosed})
-				return
-			case r.eventCh <- Event{Type: EventError, Err: err}:
-			}
-			return
 		}
 
-		if n == 0 {
-			// EOF implies closure
-			r.sendEvent(Event{Type: EventClosed})
-			continue
-		}
-
-		r.parseInput(buf[:n])
+		r.parseInput(data)
 	}
-}
-
-// pollRead checks if data is available on fd with timeout (milliseconds)
-// Returns true if data available, false on timeout
-func (r *inputReader) pollRead(timeoutMs int) (bool, error) {
-	fds := []unix.PollFd{
-		{Fd: int32(r.fd), Events: unix.POLLIN},
-	}
-
-	n, err := unix.Poll(fds, timeoutMs)
-	if err != nil {
-		if err == unix.EINTR {
-			return false, nil // Interrupted, treat as timeout
-		}
-		return false, err
-	}
-
-	return n > 0 && (fds[0].Revents&unix.POLLIN) != 0, nil
 }
 
 // parseInput parses raw bytes into events
@@ -385,16 +333,23 @@ func (r *inputReader) parseControl(b byte) Event {
 
 // readMoreWithTimeout reads into embedded buffer, returns bytes read
 func (r *inputReader) readMoreWithTimeout() int {
-	ready, err := r.pollRead(int(escapeTimeout / time.Millisecond))
-	if err != nil || !ready {
+	// Create a temporary stop channel that closes after timeout
+	timeoutCh := make(chan struct{})
+	timer := time.AfterFunc(escapeTimeout, func() { close(timeoutCh) })
+	defer timer.Stop()
+
+	// Use backend read with the timeout channel as the stop signal
+	data, err := r.backend.Read(timeoutCh)
+
+	if err != nil || len(data) == 0 {
 		return 0
 	}
 
-	n, err := unix.Read(r.fd, r.escBuf[:])
-	if err != nil || n == 0 {
-		return 0
+	copy(r.escBuf[:], data)
+	if len(data) > len(r.escBuf) {
+		return len(r.escBuf)
 	}
-	return n
+	return len(data)
 }
 
 // sendEvent sends an event to the channel, non-blocking

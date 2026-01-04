@@ -2,7 +2,6 @@ package terminal
 
 import (
 	"bufio"
-	"io"
 )
 
 // outputBuffer manages double-buffered terminal output with diffing
@@ -24,10 +23,25 @@ type outputBuffer struct {
 	lastValid bool
 }
 
+// writerAdapter adapts Backend to io.Writer for bufio
+type writerAdapter struct {
+	b Backend
+}
+
+func (wa writerAdapter) Write(p []byte) (int, error) {
+	err := wa.b.Write(p)
+	if err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
 // newOutputBuffer creates a new output buffer
-func newOutputBuffer(w io.Writer, colorMode ColorMode) *outputBuffer {
+func newOutputBuffer(backend Backend, colorMode ColorMode) *outputBuffer {
+	// Use 128KB buffer for minimal calls to backend
+	adapter := writerAdapter{b: backend}
 	return &outputBuffer{
-		writer:    bufio.NewWriterSize(w, 131072), // 128KB buffer
+		writer:    bufio.NewWriterSize(adapter, 131072),
 		colorMode: colorMode,
 	}
 }

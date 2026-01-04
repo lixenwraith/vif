@@ -1,10 +1,5 @@
 package terminal
 
-import (
-	"os"
-	"strings"
-)
-
 // ColorMode indicates terminal color capability
 type ColorMode uint8
 
@@ -90,7 +85,7 @@ func redmeanDistance(r1, g1, b1, r2, g2, b2 int) int {
 	dr := r1 - r2
 	dg := g1 - g2
 	db := b1 - b2
-	return (((512+rmean)*dr*dr)>>8) + 4*dg*dg + (((767-rmean)*db*db)>>8)
+	return (((512 + rmean) * dr * dr) >> 8) + 4*dg*dg + (((767 - rmean) * db * db) >> 8)
 }
 
 // Color cube values for 6×6×6 palette (indices 16-231)
@@ -100,30 +95,4 @@ var cubeValues = [6]int{0, 95, 135, 175, 215, 255}
 // O(1) lookup via pre-computed Redmean LUT
 func RGBTo256(c RGB) uint8 {
 	return lut256[int(c.R>>2)<<12|int(c.G>>2)<<6|int(c.B>>2)]
-}
-
-// DetectColorMode determines terminal color capability from environment
-func DetectColorMode() ColorMode {
-	colorterm := os.Getenv("COLORTERM")
-	if colorterm == "truecolor" || colorterm == "24bit" {
-		return ColorModeTrueColor
-	}
-
-	if os.Getenv("KITTY_WINDOW_ID") != "" ||
-		os.Getenv("KONSOLE_VERSION") != "" ||
-		os.Getenv("ITERM_SESSION_ID") != "" ||
-		os.Getenv("ALACRITTY_WINDOW_ID") != "" ||
-		os.Getenv("ALACRITTY_LOG") != "" ||
-		os.Getenv("WEZTERM_PANE") != "" {
-		return ColorModeTrueColor
-	}
-
-	term := os.Getenv("TERM")
-	if strings.Contains(term, "truecolor") ||
-		strings.Contains(term, "24bit") ||
-		strings.Contains(term, "direct") {
-		return ColorModeTrueColor
-	}
-
-	return ColorMode256
 }

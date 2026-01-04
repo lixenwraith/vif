@@ -5,9 +5,6 @@ import (
 	"os"
 	"sync"
 	"sync/atomic"
-
-	"golang.org/x/sys/unix"
-	"golang.org/x/term"
 )
 
 // Attr represents text attributes (bitmask)
@@ -76,23 +73,19 @@ type Terminal interface {
 	PostEvent(Event)
 }
 
-// term implements Terminal
+// ResizeEvent represents a terminal resize
+type ResizeEvent struct {
+	Width  int
+	Height int
+}
+
+// termImpl implements Terminal using the Backend interface
 type termImpl struct {
-	in  *os.File
-	out *os.File
-
-	inFd  int
-	outFd int
-
-	oldState *term.State // Original terminal state
-
-	colorMode ColorMode
-	width     int
-	height    int
+	backend Backend
 
 	output      *outputBuffer
 	input       *inputReader
-	resize      *resizeHandler
+	resizeCh    chan ResizeEvent
 	syntheticCh chan Event
 
 	cursorVisible atomic.Bool
@@ -104,32 +97,25 @@ type termImpl struct {
 
 // New creates a new Terminal instance
 func New(colorMode ...ColorMode) Terminal {
+	b := newBackend()
+
 	var c ColorMode
 	if len(colorMode) == 0 {
+		// Use backend detection or fallback env detection for unix
 		c = DetectColorMode()
 	} else {
 		c = colorMode[0]
 	}
 
-	return &termImpl{
-		in:          os.Stdin,
-		out:         os.Stdout,
-		inFd:        int(os.Stdin.Fd()),
-		outFd:       int(os.Stdout.Fd()),
+	t := &termImpl{
+		backend:     b,
 		syntheticCh: make(chan Event, 16),
-		colorMode:   c,
+		resizeCh:    make(chan ResizeEvent, 1),
 	}
-}
 
-// NewWithFiles creates a Terminal with custom input/output files
-func NewWithFiles(in, out *os.File) Terminal {
-	return &termImpl{
-		in:          in,
-		out:         out,
-		inFd:        int(in.Fd()),
-		outFd:       int(out.Fd()),
-		syntheticCh: make(chan Event, 16),
-	}
+	// Initialize output buffer with backend
+	t.output = newOutputBuffer(b, c)
+	return t
 }
 
 // Init enters raw mode and sets up terminal
@@ -141,32 +127,41 @@ func (t *termImpl) Init() error {
 		return nil
 	}
 
-	// Get initial size
-	t.width, t.height = getTerminalSize(t.outFd)
-
-	// Enter raw mode
-	oldState, err := term.MakeRaw(t.inFd)
-	if err != nil {
+	// Initialize backend (raw mode)
+	if err := t.backend.Init(); err != nil {
 		return err
 	}
-	t.oldState = oldState
 
-	// Create output buffer
-	t.output = newOutputBuffer(t.out, t.colorMode)
-	t.output.resize(t.width, t.height)
+	w, h := t.backend.Size()
+	t.output.resize(w, h)
 
-	// Create input reader
-	t.input = newInputReader(t.inFd)
+	// Create input reader wrapping backend
+	t.input = newInputReader(t.backend)
 
-	// Create resize handler
-	t.resize = newResizeHandler(t.outFd)
+	// Set resize handler on backend
+	t.backend.SetResizeHandler(func(w, h int) {
+		// Non-blocking send to avoid backend blocking
+		select {
+		case t.resizeCh <- ResizeEvent{Width: w, Height: h}:
+		default:
+			// Drain and replace to ensure latest size is pending
+			select {
+			case <-t.resizeCh:
+			default:
+			}
+			select {
+			case t.resizeCh <- ResizeEvent{Width: w, Height: h}:
+			default:
+			}
+		}
+	})
 
 	// Enter alternate screen, hide cursor
 	t.writeRaw(csiAltScreenEnter)
 	t.writeRaw(csiCursorHide)
 
 	// DISABLE AUTO-WRAP
-	// Physically prevents terminal scroll/wrap on bottom-right corner write
+	// Prevents terminal scroll/wrap on bottom-right corner write
 	t.writeRaw(csiAutoWrapOff)
 
 	// Invisible cursor
@@ -175,9 +170,8 @@ func (t *termImpl) Init() error {
 	// Clear screen
 	t.output.clear(RGBBlack)
 
-	// Start input and resize handlers
+	// Start input reader
 	t.input.start()
-	t.resize.start()
 
 	t.initialized = true
 	return nil
@@ -196,9 +190,6 @@ func (t *termImpl) Fini() {
 	if t.input != nil {
 		t.input.stop()
 	}
-	if t.resize != nil {
-		t.resize.stop()
-	}
 
 	// Show cursor
 	t.writeRaw(csiCursorShow)
@@ -212,29 +203,25 @@ func (t *termImpl) Fini() {
 	// Reset attributes
 	t.writeRaw(csiSGR0)
 
-	// Restore terminal state
-	if t.oldState != nil {
-		term.Restore(t.inFd, t.oldState)
-	}
+	// Backend cleanup
+	t.backend.Fini()
 
 	t.finalized = true
 }
 
 // Size returns current terminal dimensions
 func (t *termImpl) Size() (int, int) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return t.width, t.height
+	return t.backend.Size()
 }
 
 // ResizeChan returns the resize event channel
 func (t *termImpl) ResizeChan() <-chan ResizeEvent {
-	return t.resize.events()
+	return t.resizeCh
 }
 
 // ColorMode returns detected color capability
 func (t *termImpl) ColorMode() ColorMode {
-	return t.colorMode
+	return t.output.colorMode
 }
 
 // Flush writes cell buffer to terminal
@@ -247,17 +234,10 @@ func (t *termImpl) Flush(cells []Cell, width, height int) {
 		return
 	}
 
-	// Atomic frame validation: query OS for actual dimensions
-	// If mismatch, drop frame to prevent resize race corruption
-	currW, currH := getTerminalSize(t.outFd)
+	// Validation against backend size; if mismatch, drop frame to prevent resize race corruption
+	currW, currH := t.backend.Size()
 	if currW != width || currH != height {
-		// Mismatch detected: resize happened but logic hasn't caught up, Abort with frame drop!
 		return
-	}
-
-	if width != t.width || height != t.height {
-		t.width = width
-		t.height = height
 	}
 
 	t.output.flush(cells, width, height)
@@ -310,23 +290,24 @@ func (t *termImpl) MoveCursor(x, y int) {
 		t.output.invalidateCursor()
 	}
 
+	w, h := t.backend.Size()
 	if x < 0 {
 		x = 0
 	}
 	if y < 0 {
 		y = 0
 	}
-	if x >= t.width {
-		x = t.width - 1
+	if x >= w {
+		x = w - 1
 	}
-	if y >= t.height {
-		y = t.height - 1
+	if y >= h {
+		y = h - 1
 	}
 
 	// Write through buffered writer to maintain stream order
-	w := t.output.writer
-	writeCursorPos(w, x, y)
-	w.Flush()
+	wBuf := t.output.writer
+	writeCursorPos(wBuf, x, y)
+	wBuf.Flush()
 }
 
 // Sync forces full redraw
@@ -338,13 +319,7 @@ func (t *termImpl) Sync() {
 		return
 	}
 
-	w, h := getTerminalSize(t.outFd)
-	t.width = w
-	t.height = h
-
-	t.output.resize(w, h)
-
-	// Physically clear terminal before full redraw
+	// Clear terminal before full redraw
 	// Diff-based rendering assumes physical terminal matches front buffer state
 	t.output.clear(RGBBlack)
 	t.output.forceFullRedraw()
@@ -365,11 +340,8 @@ func (t *termImpl) PollEvent() Event {
 		return ev
 	case ev := <-t.input.events():
 		return ev
-	case re := <-t.resize.events():
-		t.mu.Lock()
-		t.width = re.Width
-		t.height = re.Height
-		t.mu.Unlock()
+	case re := <-t.resizeCh:
+		// We can return resize event directly
 		return Event{
 			Type:   EventResize,
 			Width:  re.Width,
@@ -389,7 +361,7 @@ func (t *termImpl) PostEvent(ev Event) {
 
 // writeRaw writes raw bytes to output
 func (t *termImpl) writeRaw(data []byte) {
-	t.out.Write(data)
+	t.backend.Write(data)
 }
 
 // EmergencyReset attempts to restore terminal to sane state
@@ -412,20 +384,4 @@ func EmergencyReset(w io.Writer) {
 	// Attempt raw mode reset via stty - escape sequences alone don't restore termios
 	// This is best-effort; ignore errors in crash context
 	resetTerminalMode()
-}
-
-// resetTerminalMode attempts to restore terminal to cooked mode
-// Best-effort for crash recovery; errors ignored
-func resetTerminalMode() {
-	// Try to restore via /dev/tty (works even if stdin redirected)
-	if tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err == nil {
-		defer tty.Close()
-		fd := int(tty.Fd())
-		// Get current termios, enable ECHO and ICANON
-		if termios, err := unix.IoctlGetTermios(fd, unix.TCGETS); err == nil {
-			termios.Lflag |= unix.ECHO | unix.ICANON | unix.ISIG | unix.IEXTEN
-			termios.Iflag |= unix.ICRNL
-			unix.IoctlSetTermios(fd, unix.TCSETS, termios)
-		}
-	}
 }
