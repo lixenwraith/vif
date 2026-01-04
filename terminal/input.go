@@ -52,7 +52,7 @@ const escapeTimeout = 50 * time.Millisecond
 func newInputReader(backend Backend) *inputReader {
 	return &inputReader{
 		backend: backend,
-		eventCh: make(chan Event, 64),
+		eventCh: make(chan Event, 256),
 		stopCh:  make(chan struct{}),
 		doneCh:  make(chan struct{}),
 	}

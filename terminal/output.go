@@ -65,10 +65,8 @@ func (o *outputBuffer) resize(width, height int) {
 }
 
 // cellEqual compares two cells for equality (standalone for inlining)
-// Optimization: Skip foreground check to save CPU cycles considering current game context
 func cellEqual(a, b Cell) bool {
-	// A cell is only equal if every visual component matches.
-	// We check the most likely changed fields first (Rune/Bg).
+	// A cell is only equal if every visual component matches, checking most likely changed fields first (Rune/Bg)
 	return a.Rune == b.Rune &&
 		a.Bg == b.Bg &&
 		a.Fg == b.Fg &&
@@ -90,39 +88,87 @@ func (o *outputBuffer) flush(cells []Cell, width, height int) {
 
 	for y := 0; y < height; y++ {
 		rowStart := y * width
+
+		// Early termination: find last dirty cell in row (scan backward)
+		rowEnd := width
+		for rowEnd > 0 && cellEqual(cells[rowStart+rowEnd-1], o.front[rowStart+rowEnd-1]) {
+			rowEnd--
+		}
+		if rowEnd == 0 {
+			continue // Entire row unchanged
+		}
+
 		x := 0
-
-		for x < width {
+		for x < rowEnd {
 			idx := rowStart + x
-			newCell := cells[idx]
 
-			if cellEqual(newCell, o.front[idx]) {
+			if cellEqual(cells[idx], o.front[idx]) {
 				x++
 				continue
 			}
 
-			// Position cursor once for this dirty region
-			if !o.cursorValid || x != o.cursorX || y != o.cursorY {
-				// Always use non-destructive cursor movement
-				// TODO: review, optimization attempt for multiple jumps with ' ' write is destructive
-				if o.cursorValid && y == o.cursorY && x > o.cursorX {
-					writeCursorForward(w, x-o.cursorX)
-				} else {
-					writeCursorPos(w, x, y)
+			// Found dirty cell - check for small gaps ahead to potentially merge segments
+			segStart := x
+			segEnd := x + 1
+
+			// Extend segment through small gaps (≤3 unchanged cells)
+			for segEnd < rowEnd {
+				// Find gap size
+				gapStart := segEnd
+				for gapStart < rowEnd && cellEqual(cells[rowStart+gapStart], o.front[rowStart+gapStart]) {
+					gapStart++
 				}
-				o.cursorX = x
-				o.cursorY = y
-				o.cursorValid = true
+				gapSize := gapStart - segEnd
+
+				if gapSize == 0 {
+					// No gap, extend to next unchanged
+					for segEnd < rowEnd && !cellEqual(cells[rowStart+segEnd], o.front[rowStart+segEnd]) {
+						segEnd++
+					}
+					continue
+				}
+
+				if gapSize > 3 {
+					break // Gap too large, end segment here
+				}
+
+				// Gap logic check: only bridge the gap if the gap cells have the same attributes as the current segment, otherwise, emit SGR codes inside the gap, making it more expensive than a cursor move
+				gapCompatible := true
+				refCell := cells[rowStart+segEnd-1] // The last dirty cell of the current segment
+
+				for k := 0; k < gapSize; k++ {
+					gCell := cells[rowStart+segEnd+k]
+					// Strict equality on style/color to ensure no SGR emission
+					if gCell.Fg != refCell.Fg || gCell.Bg != refCell.Bg || gCell.Attrs != refCell.Attrs {
+						gapCompatible = false
+						break
+					}
+				}
+
+				if !gapCompatible {
+					break // Gap has different style, cheaper to jump
+				}
+
+				// Check if there's more dirty content after gap
+				if gapStart >= rowEnd {
+					break // Gap extends to row end
+				}
+
+				// Small gap with content after - include gap in segment
+				segEnd = gapStart
+				// Continue to find more dirty cells
+				for segEnd < rowEnd && !cellEqual(cells[rowStart+segEnd], o.front[rowStart+segEnd]) {
+					segEnd++
+				}
 			}
 
-			// Write all contiguous dirty cells, emitting style only when changed
-			for x < width {
-				cidx := rowStart + x
-				c := cells[cidx]
+			// Position cursor to segment start
+			o.moveCursorTo(w, segStart, y)
 
-				if cellEqual(c, o.front[cidx]) {
-					break
-				}
+			// Write segment [segStart, segEnd)
+			for sx := segStart; sx < segEnd; sx++ {
+				cidx := rowStart + sx
+				c := cells[cidx]
 
 				o.writeStyleCoalesced(w, c.Fg, c.Bg, c.Attrs)
 
@@ -138,15 +184,70 @@ func (o *outputBuffer) flush(cells []Cell, width, height int) {
 
 				o.front[cidx] = c
 				o.cursorX++
-				x++
 			}
+
+			x = segEnd
 		}
 	}
 
 	w.Write(csiSGR0)
 	o.lastValid = false
-
 	w.Flush()
+}
+
+// cursorForwardCost returns byte cost of cursor forward sequence
+func cursorForwardCost(n int) int {
+	if n == 1 {
+		return 3 // \x1b[C
+	}
+	return 3 + digitCount(n) // \x1b[nC
+}
+
+// cursorAbsoluteCost returns byte cost of absolute cursor position
+func cursorAbsoluteCost(x, y int) int {
+	// \x1b[row;colH = 2 + digits(row) + 1 + digits(col) + 1
+	return 4 + digitCount(y+1) + digitCount(x+1)
+}
+
+// digitCount returns number of decimal digits in n
+func digitCount(n int) int {
+	if n < 10 {
+		return 1
+	}
+	if n < 100 {
+		return 2
+	}
+	if n < 1000 {
+		return 3
+	}
+	return 4
+}
+
+// moveCursorTo positions cursor using most efficient method
+func (o *outputBuffer) moveCursorTo(w *bufio.Writer, x, y int) {
+	if o.cursorValid && o.cursorX == x && o.cursorY == y {
+		return
+	}
+
+	moved := false
+	if o.cursorValid && o.cursorY == y && x > o.cursorX {
+		gap := x - o.cursorX
+		fwdCost := cursorForwardCost(gap)
+		absCost := cursorAbsoluteCost(x, y)
+
+		if fwdCost < absCost {
+			writeCursorForward(w, gap)
+			moved = true
+		}
+	}
+
+	if !moved {
+		writeCursorPos(w, x, y)
+	}
+
+	o.cursorX = x
+	o.cursorY = y
+	o.cursorValid = true
 }
 
 // writeStyleCoalesced emits a single combined SGR sequence when style changes
@@ -215,12 +316,8 @@ func (o *outputBuffer) writeStyleCoalesced(w *bufio.Writer, fg, bg RGB, attr Att
 			first = false
 		}
 
-		// Foreground
 		o.writeFgInline(w, fg, attr)
-
-		// Background
 		o.writeBgInline(w, bg, attr)
-
 		w.WriteByte('m')
 	} else {
 		// Only colors changed, emit minimal sequence
