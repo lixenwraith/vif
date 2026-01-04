@@ -224,6 +224,7 @@ func (s *TypingSystem) emitTypingError() {
 	s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: -10})
 	s.world.PushEvent(event.EventBoostDeactivate, nil)
 	s.world.PushEvent(event.EventEnergyBlinkStart, &event.EnergyBlinkPayload{Type: 0, Level: 0})
+
 	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
 		SoundType: core.SoundError,
 	})
