@@ -4,6 +4,7 @@ import (
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/constant"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/vmath"
@@ -93,6 +94,9 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 				Delta:      payload.Amount,
 				Spend:      false, // Subject to boost protection
 				Convergent: true,  // Clamp at zero
+			})
+			s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
+				SoundType: core.SoundShield,
 			})
 		}
 	}

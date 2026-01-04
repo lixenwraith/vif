@@ -61,33 +61,31 @@ const (
 // Shield Deflect Sound
 const (
 	ShieldSoundDuration = 100 * time.Millisecond
-	ShieldSoundAttack   = 3 * time.Millisecond
-	ShieldSoundRelease  = 70 * time.Millisecond
-	ShieldStartFreq     = 120.0 // Hz - lowered from 220
-	ShieldEndFreq       = 35.0  // Hz - lowered from 55
+	ShieldSoundAttack   = 2 * time.Millisecond
+	ShieldSoundRelease  = 80 * time.Millisecond
+	ShieldStartFreq     = 160.0 // Hz - Raised slightly for audibility
+	ShieldEndFreq       = 40.0  // Hz
 )
 
 // Lightning Zap Sound (continuous)
 const (
-	ZapSoundDuration    = 400 * time.Millisecond
-	ZapSoundAttack      = 10 * time.Millisecond
-	ZapSoundRelease     = 40 * time.Millisecond
-	ZapModulationRate   = 14.0 // Hz - creates "zzZZzz" pulse
-	ZapCrackleIntensity = 0.4
+	ZapSoundDuration    = 180 * time.Millisecond // Halved for rapid re-triggering
+	ZapSoundAttack      = 5 * time.Millisecond
+	ZapSoundRelease     = 30 * time.Millisecond
+	ZapModulationRate   = 25.0 // Hz - Faster buzz to fit shorter duration
+	ZapCrackleIntensity = 0.3
 )
 
-// Lightning Crackle Sound (short bolt)
+// Lightning Crackle Sound (Short Bolt/Spark)
 const (
-	CrackleSoundDuration = 60 * time.Millisecond
-	CrackleBurstCount    = 5
-	CrackleBurstDuration = 4 * time.Millisecond
-	CrackleGapDuration   = 6 * time.Millisecond
+	CrackleSoundDuration = 80 * time.Millisecond
+	// Bursts replaced by impulse generation logic in generator
 )
 
 // Metal Hit Sound
 const (
-	MetalHitSoundDuration   = 70 * time.Millisecond  // Reduced from 220ms
-	MetalHitTransientLength = 5 * time.Millisecond   // Reduced from 8ms
-	MetalHitAttack          = 500 * time.Microsecond // Faster attack
-	MetalHitDecayRate       = 25 * time.Millisecond  // Fast decay constant
+	MetalHitSoundDuration   = 120 * time.Millisecond
+	MetalHitTransientLength = 4 * time.Millisecond
+	MetalHitAttack          = 1 * time.Millisecond
+	MetalHitDecayRate       = 40 * time.Millisecond
 )

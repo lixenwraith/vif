@@ -376,6 +376,40 @@ func applyWaveshaper(buf floatBuffer, drive float64) {
 	}
 }
 
+// applyOverdrive clips signals harder than waveshaper for aggressive harmonics
+func applyOverdrive(buf floatBuffer, drive float64) {
+	for i := range buf {
+		val := buf[i] * drive
+		// Hard clip with soft knee
+		if val > 1.0 {
+			val = 1.0
+		} else if val < -1.0 {
+			val = -1.0
+		} else {
+			// Polynomial shaping for warmth: x - x^3/3
+			val = val - (val*val*val)/3.0
+		}
+		buf[i] = val
+	}
+}
+
+// generateImpulses creates discrete high-amplitude spikes
+// density: 0.0-1.0 probability of spike per sample (very low values recommended, e.g. 0.001)
+func generateImpulses(samples int, density float64) floatBuffer {
+	buf := make(floatBuffer, samples)
+	for i := range buf {
+		if rand.Float64() < density {
+			// Random bipolar spike
+			if rand.Float64() > 0.5 {
+				buf[i] = 1.0
+			} else {
+				buf[i] = -1.0
+			}
+		}
+	}
+	return buf
+}
+
 // generateBurst creates a series of micro-transient noise bursts
 // burstCount: number of bursts, burstDuration: each burst length
 // gapVariation: 0.0-1.0 randomness in gap timing
@@ -524,55 +558,56 @@ func generateCoinSound() floatBuffer {
 func generateShieldSound() floatBuffer {
 	samples := durationToSamples(constant.ShieldSoundDuration.Seconds())
 
-	// Lower pitch sweep for deeper thump
-	thump := oscillatorSweep(waveSine, constant.ShieldStartFreq, constant.ShieldEndFreq, samples)
+	// Primary sweep - slightly higher start freq for audibility
+	sweep := oscillatorSweep(waveSine, constant.ShieldStartFreq, constant.ShieldEndFreq, samples)
 
-	// Add sub-harmonic for body
-	sub := oscillatorSweep(waveSine, constant.ShieldStartFreq/2, constant.ShieldEndFreq/2, samples)
+	// Add sub-harmonic
+	sub := oscillatorSweep(waveSine, constant.ShieldStartFreq*0.5, constant.ShieldEndFreq*0.5, samples)
 
-	// Combine before envelope
-	thump = mixFloatBuffers(thump, sub, 0.5)
+	// Mix and Drive: The saturation creates harmonics that make the bass audible on small speakers
+	combined := mixFloatBuffers(sweep, sub, 0.6)
+	applyOverdrive(combined, 2.5)
 
-	// Heavy low-pass to remove metallic character
-	filterBiquadLP(thump, 200.0, 0.5)
+	// Low-pass to remove the harsh edge of the overdrive, keeping the "thud"
+	filterBiquadLP(combined, 400.0, 1.0)
 
-	applyEnvelope(thump, constant.ShieldSoundAttack.Seconds(), constant.ShieldSoundRelease.Seconds())
+	// Add a filtered noise layer for the "force field" texture
+	noiseSamples := durationToSamples(0.04)
+	noise := oscillator(waveNoise, 0, noiseSamples)
+	filterBiquadBP(noise, 800.0, 2.0)
+	applyEnvelope(noise, 0.005, 0.03)
 
-	// Soft transient - filtered noise
-	transientSamples := durationToSamples(0.012)
-	transient := oscillator(waveNoise, 0, transientSamples)
-	filterBiquadLP(transient, 400.0, 0.707)
-	applyEnvelope(transient, 0.001, 0.010)
+	result := mixFloatBuffers(combined, noise, 0.2)
 
-	result := mixFloatBuffers(thump, transient, 0.15)
-
-	normalizePeak(result, 0.9)
+	applyEnvelope(result, constant.ShieldSoundAttack.Seconds(), constant.ShieldSoundRelease.Seconds())
+	normalizePeak(result, 0.95)
 	return result
 }
 
 func generateZapSound() floatBuffer {
+	// Shorter duration for continuous looping capability
 	samples := durationToSamples(constant.ZapSoundDuration.Seconds())
 
-	// Base: band-limited noise in mid frequencies
-	noise := oscillator(waveNoise, 0, samples)
-	filterBiquadBP(noise, 800.0, 1.5)
+	// Layer 1: Electrical Arc (Band-limited noise)
+	arc := oscillator(waveNoise, 0, samples)
+	filterBiquadBP(arc, 1200.0, 1.0)
 
-	// Amplitude modulation for "zzZZzz" pulsing effect
-	applyAM(noise, constant.ZapModulationRate, 0.6)
+	// Fast AM modulation for the "buzz" (approx 25Hz)
+	applyAM(arc, constant.ZapModulationRate, 0.8)
 
-	// Secondary wobble layer - slightly detuned
-	wobble := oscillator(waveNoise, 0, samples)
-	filterBiquadBP(wobble, 1200.0, 2.0)
-	applyAM(wobble, constant.ZapModulationRate*1.3, 0.5)
+	// Layer 2: High Voltage Hum (FM Synthesis)
+	// Carrier 110Hz, Modulator 55Hz (Sub-octave), High Index -> Saw-like buzz
+	hum := oscillatorFM(110.0, 55.0, 3.0, samples)
+	// Tremolo on the hum
+	applyAM(hum, constant.ZapModulationRate*0.5, 0.4)
 
-	// Low buzz undertone
-	buzz := oscillatorFM(120.0, 60.0, 2.0, samples)
-	applyAM(buzz, constant.ZapModulationRate*0.8, 0.3)
+	// Mix layers
+	result := mixFloatBuffers(arc, hum, 0.6)
 
-	// Combine layers
-	result := mixFloatBuffers(noise, wobble, 0.4)
-	result = mixFloatBuffers(result, buzz, 0.3)
+	// Slight distortion to fuse layers
+	applyWaveshaper(result, 1.5)
 
+	// Fast envelope for responsive re-triggering
 	applyEnvelope(result, constant.ZapSoundAttack.Seconds(), constant.ZapSoundRelease.Seconds())
 
 	normalizePeak(result, 0.85)
@@ -580,28 +615,28 @@ func generateZapSound() floatBuffer {
 }
 
 func generateCrackleSound() floatBuffer {
-	// Electrical crackle = rapid discrete micro-bursts, not sustained noise
-	bursts := generateBurst(
-		constant.CrackleBurstCount,
-		constant.CrackleBurstDuration.Seconds(),
-		constant.CrackleGapDuration.Seconds(),
-		0.6, // High gap variation for organic feel
-	)
+	samples := durationToSamples(constant.CrackleSoundDuration.Seconds())
 
-	// Band-pass to electrical frequency range
-	filterBiquadBP(bursts, 2500.0, 1.0)
+	// Electrical crackle is defined by discrete, high-voltage sparks
+	// 1. Generate sparse impulses (sparks)
+	sparks := generateImpulses(samples, 0.002) // ~80-90 sparks per second
 
-	// Add sharp high-freq snap at start
-	snapSamples := durationToSamples(0.008)
-	snap := oscillator(waveNoise, 0, snapSamples)
-	filterBiquadHP(snap, 3000.0, 0.707)
-	applyEnvelope(snap, 0.0003, 0.006)
+	// 2. High-pass filter to remove DC/thump, leaving only the "snap"
+	filterBiquadHP(sparks, 1500.0, 0.707)
 
-	// Prepend snap
-	result := concatFloatBuffers(snap, bursts)
+	// 3. Band-pass random resonance to vary the tone of sparks
+	// We simulate this by mixing a few differently filtered copies
+	layer2 := make(floatBuffer, len(sparks))
+	copy(layer2, sparks)
+	filterBiquadBP(layer2, 3500.0, 4.0) // High snap
 
-	// Overall envelope
-	applyEnvelope(result, 0.001, float64(len(result))/float64(constant.AudioSampleRate)*0.3)
+	result := mixFloatBuffers(sparks, layer2, 0.8)
+
+	// 4. Heavy distortion to turn "clicks" into "zaps"
+	applyOverdrive(result, 5.0)
+
+	// 5. Hard decay to ensure it sounds like a spark gap, not a noise wash
+	applyDecayEnvelope(result, 0.001, float64(constant.AudioSampleRate)*0.03)
 
 	normalizePeak(result, 0.9)
 	return result
@@ -609,36 +644,50 @@ func generateCrackleSound() floatBuffer {
 
 func generateMetalHitSound() floatBuffer {
 	samples := durationToSamples(constant.MetalHitSoundDuration.Seconds())
-	decaySamples := float64(constant.AudioSampleRate) * constant.MetalHitDecayRate.Seconds()
 
-	// Sharp transient
-	transientSamples := durationToSamples(constant.MetalHitTransientLength.Seconds())
-	transient := oscillator(waveNoise, 0, transientSamples)
-	filterBiquadBP(transient, 2000.0, 2.0)
-	applyEnvelope(transient, 0.0003, constant.MetalHitTransientLength.Seconds()*0.6)
+	// FM Synthesis is superior for metallic/inharmonic sounds
+	// Carrier: 800Hz (Body), Modulator: 1143Hz (non-integer ratio ~1.42), Index: High decaying to low
 
-	// Shorter inharmonic ring - fewer components, faster decay
-	ring1 := oscillator(waveSine, 1200.0, samples)
-	ring2 := oscillator(waveSine, 2050.0, samples)
+	// Create FM buffer manually to control index envelope
+	fm := make(floatBuffer, samples)
+	carrierPhase := 0.0
+	modPhase := 0.0
+	cFreq := 800.0
+	mFreq := 1143.0
 
-	applyDecayEnvelope(ring1, constant.MetalHitAttack.Seconds(), decaySamples)
-	applyDecayEnvelope(ring2, constant.MetalHitAttack.Seconds(), decaySamples*0.6)
+	cInc := cFreq / float64(constant.AudioSampleRate)
+	mInc := mFreq / float64(constant.AudioSampleRate)
 
-	ring := mixFloatBuffers(ring1, ring2, 0.5)
+	maxIndex := 5.0
 
-	// Combine
-	result := mixFloatBuffers(ring, transient, 0.7)
+	for i := range fm {
+		// Index decays over time: rich spectrum at start -> pure tone at end
+		progress := float64(i) / float64(samples)
+		index := maxIndex * (1.0 - progress*progress) // Quadratic decay
 
-	// Abrupt tail cutoff
-	cutoffStart := int(float64(len(result)) * 0.7)
-	cutoffLen := len(result) - cutoffStart
-	for i := cutoffStart; i < len(result); i++ {
-		fade := 1.0 - float64(i-cutoffStart)/float64(cutoffLen)
-		fade = fade * fade // Quadratic for sharper drop
-		result[i] *= fade
+		modVal := math.Sin(2 * math.Pi * modPhase)
+		fm[i] = math.Sin(2 * math.Pi * (carrierPhase + index*modVal))
+
+		carrierPhase += cInc
+		modPhase += mInc
 	}
 
-	normalizePeak(result, 0.9)
+	// Filter to remove mud
+	filterBiquadHP(fm, 200.0, 0.707)
+
+	// Sharp impact transient (Click)
+	transientSamples := durationToSamples(constant.MetalHitTransientLength.Seconds())
+	transient := oscillator(waveNoise, 0, transientSamples)
+	filterBiquadLP(transient, 3000.0, 1.0)
+	applyEnvelope(transient, 0.0005, 0.003)
+
+	// Mix Impact + FM Body
+	result := mixFloatBuffers(fm, transient, 0.5)
+
+	// Short envelope for a dead, solid hit
+	applyDecayEnvelope(result, constant.MetalHitAttack.Seconds(), float64(constant.AudioSampleRate)*constant.MetalHitDecayRate.Seconds())
+
+	normalizePeak(result, 0.95)
 	return result
 }
 

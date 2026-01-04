@@ -146,58 +146,47 @@ func (s *EnergySystem) addEnergy(delta int64, spend bool, convergent bool) {
 
 	currentEnergy := energyComp.Current.Load()
 
-	// Absolute magnitude, direction determined by current sign
+	// Fast path for typing (Direct modification, no clamps, raw delta)
+	// This is the most frequent operation and requires no defensive overhead
+	if !spend && !convergent {
+		energyComp.Current.Store(currentEnergy + delta)
+		s.world.Component.Energy.Set(cursorEntity, energyComp)
+		return
+	}
+
+	// Early exit for convergent logic on empty energy
+	if convergent && currentEnergy == 0 {
+		return
+	}
+
+	// Drain protection (Boost check)
+	// Only applies when converging (draining) without spending (passive drain)
+	if convergent && !spend {
+		if boost, ok := s.world.Component.Boost.Get(cursorEntity); !ok || boost.Active {
+			return
+		}
+	}
+
+	// Calculate defensive absolute magnitude
 	absDelta := delta
 	if absDelta < 0 {
 		absDelta = -absDelta
 	}
 
 	var newEnergy int64
-	negativeEnergy := currentEnergy < 0
 
-	switch {
-	case !spend && !convergent:
-		// Typing
-		newEnergy = currentEnergy + delta
-	case !spend && convergent:
-		// Drain, clamped to 0
-		if currentEnergy == 0 {
-			return
-		}
-		// Boost protection
-		if boost, ok := s.world.Component.Boost.Get(cursorEntity); ok && !boost.Active {
-			if negativeEnergy {
-				newEnergy = currentEnergy + absDelta
-			} else {
-				newEnergy = currentEnergy - absDelta
-			}
-			newNegativeEnergy := newEnergy < 0
-			if newNegativeEnergy != negativeEnergy {
-				newEnergy = 0
-			}
-		} else {
-			return
-		}
-	case spend && convergent:
-		// Shield passive drain, clamped to 0
-		if currentEnergy == 0 {
-			return
-		}
-		if negativeEnergy {
-			newEnergy = currentEnergy + absDelta
-		} else {
-			newEnergy = currentEnergy - absDelta
-		}
-		newNegativeEnergy := newEnergy < 0
-		if newNegativeEnergy != negativeEnergy {
+	// Apply magnitude reduction based on current sign (Spend and Converge both reduce magnitude)
+	if currentEnergy < 0 {
+		newEnergy = currentEnergy + absDelta
+		// Clamp to 0 if crossed over (convergent only)
+		if convergent && newEnergy > 0 {
 			newEnergy = 0
 		}
-	case spend && !convergent:
-		// Ability/conversion
-		if negativeEnergy {
-			newEnergy = currentEnergy + absDelta
-		} else {
-			newEnergy = currentEnergy - absDelta
+	} else {
+		newEnergy = currentEnergy - absDelta
+		// Clamp to 0 if crossed over (convergent only)
+		if convergent && newEnergy < 0 {
+			newEnergy = 0
 		}
 	}
 

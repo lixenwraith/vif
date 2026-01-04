@@ -207,7 +207,7 @@ package manifest
 
 import (
 	"github.com/lixenwraith/vi-fighter/engine"
-	"github.com/lixenwraith/vi-fighter/engine/registry"
+	"github.com/lixenwraith/vi-fighter/registry"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/render/renderers"
 	"github.com/lixenwraith/vi-fighter/system"

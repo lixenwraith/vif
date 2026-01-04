@@ -1,6 +1,5 @@
 package constant
 
-
 import "time"
 
 // Game Loop & Engine Timing
@@ -12,10 +11,10 @@ const (
 	GameUpdateInterval = 50 * time.Millisecond
 
 	// EventLoopInterval is the frequency at which events are attempted to be processed
-	EventLoopInterval = 1 * time.Millisecond
+	EventLoopInterval = 4 * time.Millisecond
 
 	// EventLoopBackoffMax is the maximum number of intervals that failure to acquire lock is tolerated (deferred to next event tick)
-	EventLoopBackoffMax = 8
+	EventLoopBackoffMax = 2
 
 	// EventLoopIterations is the cycles event loop attempts to consume events for immediate settling
 	EventLoopIterations = 16

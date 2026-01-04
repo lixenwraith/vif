@@ -224,7 +224,6 @@ func (s *DustSystem) spawnDust(x, y int, char rune, level component.GlyphLevel, 
 		Color: color,
 	})
 }
-
 func (s *DustSystem) Update() {
 	if !s.enabled {
 		return
@@ -277,11 +276,15 @@ func (s *DustSystem) Update() {
 	cursorYFixed := vmath.FromInt(cursorPos.Y)
 
 	// Dynamic speed multiplier based on entity count
+	// Increased boost scaling (4x) to make low-count survival more frantic/powerful
 	dustCount := len(dustEntities)
-	speedMultiplier := vmath.ExpDecayScaled(dustCount, constant.DustBoostMax)
+	boostMax := vmath.Mul(constant.DustBoostMax, vmath.FromInt(4))
+	speedMultiplier := vmath.ExpDecayScaled(dustCount, boostMax)
 
 	// Track destroyed count for telemetry
 	var destroyedCount int64
+	// Batch death candidates to reduce event pressure and GC
+	deathCandidates := make([]core.Entity, 0, 32)
 
 	for _, entity := range dustEntities {
 		dust, ok := s.world.Component.Dust.Get(entity)
@@ -396,22 +399,23 @@ func (s *DustSystem) Update() {
 					continue
 				}
 
-				// Priority 1: Blossom/Decay - dust dies, other survives
+				// Priority 0: Skip entities already marked for death this frame
+				// This prevents duplicate event emission and processing when multiple dust particles hit the same target
+				if s.world.Component.Death.Has(target) {
+					continue
+				}
+
+				// Priority 1: Blossom/Decay - dust destroys target
 				if s.world.Component.Blossom.Has(target) || s.world.Component.Decay.Has(target) {
-					// Shield protects dust from blossom/decay
-					if !dustInsideShield {
-						destroyDust = true
-						return false
-					}
-					continue // Protected, skip this collision
+					// Mark as dead immediately to prevent double-processing by other dust
+					s.world.Component.Death.Set(target, component.DeathComponent{})
+					deathCandidates = append(deathCandidates, target)
+					continue // Dust survives
 				}
 
 				// Priority 2: Glyph collision
 				if s.world.Component.Member.Has(target) {
 					continue // Skip composite members
-				}
-				if s.world.Component.Death.Has(target) {
-					continue // Already dying
 				}
 
 				glyph, ok := s.world.Component.Glyph.Get(target)
@@ -426,6 +430,7 @@ func (s *DustSystem) Update() {
 
 				// Glyph die
 				s.world.Component.Death.Set(target, component.DeathComponent{})
+				deathCandidates = append(deathCandidates, target)
 
 				// Dust survives if inside shield, dies otherwise
 				if !dustInsideShield {
@@ -453,7 +458,7 @@ func (s *DustSystem) Update() {
 				if destroyDust {
 					return false // Stop traversal
 				}
-				// Continue traversal if dust survived (inside shield)
+				// Continue traversal if dust survived (inside shield or Wave kill)
 			}
 
 			return true // Continue traversal
@@ -473,6 +478,12 @@ func (s *DustSystem) Update() {
 		}
 
 		s.world.Component.Dust.Set(entity, dust)
+	}
+
+	// Emit batch death events with Flash effect
+	// Death system will extract the character from components for the visual effect
+	if len(deathCandidates) > 0 {
+		event.EmitDeathBatch(s.world.Resource.Event.Queue, event.EventFlashRequest, deathCandidates, s.world.Resource.Time.FrameNumber)
 	}
 
 	s.statActive.Store(int64(len(dustEntities)))

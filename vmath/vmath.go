@@ -1,6 +1,5 @@
 package vmath
 
-
 import (
 	"math"
 	"unsafe"
@@ -115,6 +114,7 @@ func Sqrt(x int32) int32 {
 
 // --- Randomness ---
 
+// TODO: maybe just use sort.xorshif? it's uint64
 type FastRand struct {
 	state uint32
 }

@@ -2,6 +2,7 @@ package system
 
 import (
 	"github.com/lixenwraith/vi-fighter/constant"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 )
@@ -59,6 +60,11 @@ func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventHeatAdd:
 		if payload, ok := ev.Payload.(*event.HeatAddPayload); ok {
 			s.addHeat(payload.Delta)
+			if payload.Delta < 0 {
+				s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
+					SoundType: core.SoundMetalHit,
+				})
+			}
 		}
 	case event.EventHeatSet:
 		if payload, ok := ev.Payload.(*event.HeatSetPayload); ok {

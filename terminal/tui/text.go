@@ -177,7 +177,7 @@ func WrapText(s string, width int) []string {
 
 // --- Repetition ---
 
-// RepeatRune returns a string of n repeated runes
+// RepeatRune returns a string of n repeated runes, for string repeat use strings.Repeat
 func RepeatRune(r rune, n int) string {
 	if n <= 0 {
 		return ""
