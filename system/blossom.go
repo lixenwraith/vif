@@ -105,7 +105,7 @@ func (s *BlossomSystem) Update() {
 // spawnSingleBlossom creates one blossom entity at specified position
 func (s *BlossomSystem) spawnSingleBlossom(x, y int, char rune, skipStartCell bool) {
 	// Random speed between ParticleMinSpeed and ParticleMaxSpeed
-	// Note: Speed is converted to Q16.16. Blossom moves UP by default, so velocity is negative
+	// Note: Speed is converted to Q32.32. Blossom moves UP by default, so velocity is negative
 	speedFloat := constant.ParticleMinSpeed + rand.Float64()*(constant.ParticleMaxSpeed-constant.ParticleMinSpeed)
 	velY := -vmath.FromFloat(speedFloat)
 	accelY := -vmath.FromFloat(constant.ParticleAcceleration)

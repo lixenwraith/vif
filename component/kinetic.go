@@ -7,14 +7,14 @@ import (
 )
 
 // KineticState provides a reusable kinematic container for entities requiring sub-pixel motion
-// Uses Q16.16 fixed-point arithmetic for deterministic integration and high-performance physics updates
+// Uses Q32.32 fixed-point arithmetic for deterministic integration and high-performance physics updates
 type KineticState struct {
-	// PreciseX and PreciseY are sub-pixel coordinates in Q16.16 format
-	PreciseX, PreciseY int32
-	// VelX and VelY represent velocity in cells per second (Q16.16)
-	VelX, VelY int32
-	// AccelX and AccelY represent acceleration in cells per second squared (Q16.16)
-	AccelX, AccelY int32
+	// PreciseX and PreciseY are sub-pixel coordinates in Q32.32 format
+	PreciseX, PreciseY int64
+	// VelX and VelY represent velocity in cells per second (Q32.32)
+	VelX, VelY int64
+	// AccelX and AccelY represent acceleration in cells per second squared (Q32.32)
+	AccelX, AccelY int64
 
 	// DeflectUntil is immunity window end time for collision knockback
 	// Zero value means no active immunity
@@ -22,7 +22,7 @@ type KineticState struct {
 }
 
 // Integrate performs physics integration: v = v + a*dt; p = p + v*dt
-func (k *KineticState) Integrate(dt int32) (x, y int) {
+func (k *KineticState) Integrate(dt int64) (x, y int) {
 	k.VelX += vmath.Mul(k.AccelX, dt)
 	k.VelY += vmath.Mul(k.AccelY, dt)
 	k.PreciseX += vmath.Mul(k.VelX, dt)
@@ -31,13 +31,13 @@ func (k *KineticState) Integrate(dt int32) (x, y int) {
 }
 
 // ApplyImpulse adds velocity delta (momentum transfer)
-func (k *KineticState) ApplyImpulse(vx, vy int32) {
+func (k *KineticState) ApplyImpulse(vx, vy int64) {
 	k.VelX += vx
 	k.VelY += vy
 }
 
 // SetImpulse overrides velocity (hard redirect/stun)
-func (k *KineticState) SetImpulse(vx, vy int32) {
+func (k *KineticState) SetImpulse(vx, vy int64) {
 	k.VelX = vx
 	k.VelY = vy
 }

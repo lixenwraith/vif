@@ -15,21 +15,25 @@ const (
 	shield256Negative = 134 // Violet (matches RgbCleanerBaseNegative)
 )
 
-// TODO: move to constant maybe
-// Boost glow parameters (Q16.16)
-const (
-	// boostGlowRotationSpeed is 2 rotations/sec in Q16.16 (Scale = full rotation)
-	boostGlowRotationSpeed int32 = vmath.Scale * 2
-	// boostGlowEdgeThreshold is 0.6² in Q16.16 for rim detection
-	boostGlowEdgeThreshold int32 = 23593
-	// boostGlowIntensityFixed is 0.7 peak alpha in Q16.16
-	boostGlowIntensityFixed int32 = 45875
+// Boost glow parameters (Q32.32)
+var (
+	// boostGlowRotationSpeed is 2 rotations/sec in Q32.32 (Scale = full rotation)
+	boostGlowRotationSpeed int64 = vmath.Scale * 2
+
+	// boostGlowEdgeThreshold is 0.6² in Q32.32 for rim detection
+	boostGlowEdgeThreshold = vmath.FromFloat(0.36) // 0.6²
+
+	// boostGlowIntensityFixed is 0.7 peak alpha in Q32.32
+	boostGlowIntensityFixed = vmath.FromFloat(0.7)
+
+	// cell256ThresholdSq is 0.8² in Q32.32 for rim detection
+	cell256ThresholdSq = vmath.FromFloat(0.64) // 0.8²
 )
 
 // shieldCellRenderer is the callback type for per-cell shield rendering
 // Defines the interface for rendering strategy (256-color vs TrueColor) selected at initialization
-// normalizedDistSq is Q16.16 squared distance where Scale = edge of ellipse
-type shieldCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int32)
+// normalizedDistSq is Q32.32 squared distance where Scale = edge of ellipse
+type shieldCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int64)
 
 // ShieldRenderer renders active shields with dynamic color from GameState
 type ShieldRenderer struct {
@@ -37,18 +41,18 @@ type ShieldRenderer struct {
 
 	renderCell shieldCellRenderer
 
-	// Per-frame state (Q16.16 fixed-point for performance)
+	// Per-frame state (Q32.32 fixed-point for performance)
 	frameColor           render.RGB
 	framePalette         uint8
-	frameMaxOpacityFixed int32 // Q16.16 max opacity for gradient calculation
+	frameMaxOpacityFixed int64 // Q32.32 max opacity for gradient calculation
 
 	// Boost glow per-frame state
 	boostGlowActive  bool
-	rotDirX, rotDirY int32 // Rotation direction unit vector
+	rotDirX, rotDirY int64 // Rotation direction unit vector
 
-	// TODO: move this cell state out of the renderer struct
+	// TODO: find a better way to handle the state (no renderer arg)
 	// Current cell state (set before renderCell callback)
-	cellDx, cellDy int32
+	cellDx, cellDy int64
 }
 
 // NewShieldRenderer creates a new shield renderer
@@ -92,7 +96,7 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		nanos := ctx.GameTime.UnixNano()
 		period := int64(500_000_000) // TODO: magic number to constant
 		phase := nanos % period
-		angle := int32((phase * int64(vmath.Scale)) / period)
+		angle := int64((phase * int64(vmath.Scale)) / period)
 		r.rotDirX = vmath.Cos(angle)
 		r.rotDirY = vmath.Sin(angle)
 	}
@@ -105,10 +109,10 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			continue
 		}
 
-		// Cache max opacity as Q16.16 for fixed-point gradient calculation
+		// Cache max opacity as Q32.32 for fixed-point gradient calculation
 		r.frameMaxOpacityFixed = vmath.FromFloat(shield.MaxOpacity)
 
-		// Bounding box - integer radii from Q16.16
+		// Bounding box - integer radii from Q32.32
 		radiusXInt := vmath.ToInt(shield.RadiusX)
 		radiusYInt := vmath.ToInt(shield.RadiusY)
 
@@ -128,7 +132,7 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 				dx := vmath.FromInt(x - pos.X)
 				dy := vmath.FromInt(y - pos.Y)
 
-				// Ellipse containment check (Q16.16)
+				// Ellipse containment check (Q32.32)
 				// Returns squared normalized distance: <= Scale means inside
 				normalizedDistSq := vmath.EllipseDistSq(dx, dy, shield.InvRxSq, shield.InvRySq)
 
@@ -140,7 +144,7 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 				r.cellDx = dx
 				r.cellDy = dy
 
-				// Pass Q16.16 distance squared directly to cell renderer
+				// Pass Q32.32 distance squared directly to cell renderer
 				r.renderCell(buf, ctx.GameX+x, ctx.GameY+y, normalizedDistSq)
 			}
 		}
@@ -149,9 +153,9 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 // cellTrueColor renders a single shield cell with smooth gradient (TrueColor mode)
 // Uses pure fixed-point math until final alpha conversion for ~17% performance gain
-func (r *ShieldRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int32) {
+func (r *ShieldRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int64) {
 	// Simple quadratic gradient: Dark center -> Bright edge
-	// normalizedDistSq ranges from 0 (center) to Scale (edge) in Q16.16
+	// normalizedDistSq ranges from 0 (center) to Scale (edge) in Q32.32
 	// Squared curve keeps the center transparent/dark for text visibility,
 	// while ramping up smoothly to maximum intensity at the very edge
 	// This eliminates the "blocky" fade-out and ensures the rim is the brightest part
@@ -184,11 +188,8 @@ func (r *ShieldRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screen
 	buf.Set(screenX, screenY, 0, render.RGBBlack, render.RgbBoostGlow, render.BlendSoftLight, vmath.ToFloat(intensity), terminal.AttrNone)
 }
 
-// cell256ThresholdSq is 0.8² in Q16.16 for rim detection (0.64 * 65536 = 41943)
-const cell256ThresholdSq int32 = 41943
-
 // cell256 renders a single shield cell with discrete zones (256-color mode)
-func (r *ShieldRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int32) {
+func (r *ShieldRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int64) {
 	// In 256-color mode, center is transparent to ensure text legibility
 	// normalizedDistSq ranges from 0 (center) to Scale (edge)
 	// Threshold at 0.64 (0.8²) to match original dist < 0.8 check

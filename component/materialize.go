@@ -6,8 +6,8 @@ type MaterializeComponent struct {
 	// Target position (convergence point)
 	TargetX, TargetY int
 
-	// Animation progress in Q16.16: 0 = start, Scale = complete
-	Progress int32
+	// Animation progress in Q32.32: 0 = start, Scale = complete
+	Progress int64
 
 	// Beam width in cells (1 = single line, 3 = wide beam)
 	Width int

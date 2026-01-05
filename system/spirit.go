@@ -114,7 +114,7 @@ func (s *SpiritSystem) spawnSpirit(p *event.SpiritSpawnPayload) {
 
 	// Speed = Progress increment per tick for all spirits to arrive together
 	// Lerp handles distance normalization - progress 0→1 over duration
-	durationTicks := int32(constant.SpiritAnimationDuration / constant.GameUpdateInterval)
+	durationTicks := int64(constant.SpiritAnimationDuration / constant.GameUpdateInterval)
 	if durationTicks == 0 {
 		durationTicks = 1
 	}

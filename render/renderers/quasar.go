@@ -1,6 +1,5 @@
 package renderers
 
-
 import (
 	"time"
 
@@ -13,7 +12,7 @@ import (
 )
 
 // quasarShieldCellRenderer callback for per-cell shield rendering (256 vs TrueColor)
-type quasarShieldCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int32)
+type quasarShieldCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int64)
 
 // QuasarRenderer draws the quasar boss entity with optional shield halo
 type QuasarRenderer struct {
@@ -22,9 +21,9 @@ type QuasarRenderer struct {
 	// Shield rendering strategy selected at init
 	renderShieldCell quasarShieldCellRenderer
 
-	// Precomputed ellipse params for shield containment (Q16.16)
-	shieldInvRxSq int32
-	shieldInvRySq int32
+	// Precomputed ellipse params for shield containment (Q32.32)
+	shieldInvRxSq int64
+	shieldInvRySq int64
 	shieldPadX    int
 	shieldPadY    int
 }
@@ -196,7 +195,7 @@ func (r *QuasarRenderer) renderShield(ctx render.RenderContext, buf *render.Rend
 }
 
 // shieldCellTrueColor renders gradient blend from center to edge
-func (r *QuasarRenderer) shieldCellTrueColor(buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int32) {
+func (r *QuasarRenderer) shieldCellTrueColor(buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int64) {
 	// Quadratic gradient: transparent center → max opacity at edge
 	alphaFixed := vmath.Mul(normalizedDistSq, vmath.FromFloat(constant.QuasarShieldMaxOpacity))
 	alpha := vmath.ToFloat(alphaFixed)
@@ -204,11 +203,11 @@ func (r *QuasarRenderer) shieldCellTrueColor(buf *render.RenderBuffer, screenX, 
 	buf.Set(screenX, screenY, 0, render.RGBBlack, render.RgbQuasarShield, render.BlendScreen, alpha, terminal.AttrNone)
 }
 
-// quasarShield256ThresholdSq defines inner edge of solid rim (0.4 in Q16.16 squared)
-const quasarShield256ThresholdSq int32 = 26214
+// quasarShield256ThresholdSq defines inner edge of solid rim (0.4 in Q32.32 squared)
+var quasarShield256ThresholdSq = vmath.FromFloat(0.16)
 
 // shieldCell256 renders solid rim for outer portion of ellipse
-func (r *QuasarRenderer) shieldCell256(buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int32) {
+func (r *QuasarRenderer) shieldCell256(buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int64) {
 	// Skip center region, only render outer rim
 	if normalizedDistSq < quasarShield256ThresholdSq {
 		return

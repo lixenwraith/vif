@@ -20,21 +20,21 @@ const (
 // CollisionProfile defines collision interaction parameters
 // Profiles are typically pre-defined as package variables for zero allocation
 type CollisionProfile struct {
-	MassRatio        int32         // Impactor/target mass ratio (Q16.16, Scale = equal)
-	ImpulseMin       int32         // Minimum impulse magnitude (Q16.16 cells/sec)
-	ImpulseMax       int32         // Maximum impulse magnitude (Q16.16 cells/sec)
-	AngleVariance    int32         // Random angle spread in Q16.16 radians
+	MassRatio        int64         // Impactor/target mass ratio (Q32.32, Scale = equal)
+	ImpulseMin       int64         // Minimum impulse magnitude (Q32.32 cells/sec)
+	ImpulseMax       int64         // Maximum impulse magnitude (Q32.32 cells/sec)
+	AngleVariance    int64         // Random angle spread in Q32.32 radians
 	Mode             ImpulseMode   // Additive or Override
 	ImmunityDuration time.Duration // Post-collision immunity window
-	OffsetInfluence  int32         // Blend factor for offset-based direction (0 = none)
+	OffsetInfluence  int64         // Blend factor for offset-based direction (0 = none)
 }
 
 // ApplyCollision calculates and applies collision impulse to kinetic state
 // Returns true if impulse was applied (false if immune or zero impulse)
-// dirX, dirY: impact direction in Q16.16 (typically impactor velocity or radial vector)
+// dirX, dirY: impact direction in Q32.32 (typically impactor velocity or radial vector)
 func ApplyCollision(
 	kinetic *component.KineticState,
-	dirX, dirY int32,
+	dirX, dirY int64,
 	profile *CollisionProfile,
 	rng *vmath.FastRand,
 	now time.Time,
@@ -83,7 +83,7 @@ func ApplyCollision(
 // offsetX, offsetY: hit point offset from anchor in integer cells
 func ApplyOffsetCollision(
 	kinetic *component.KineticState,
-	dirX, dirY int32,
+	dirX, dirY int64,
 	offsetX, offsetY int,
 	profile *CollisionProfile,
 	rng *vmath.FastRand,

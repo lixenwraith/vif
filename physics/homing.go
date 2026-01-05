@@ -7,40 +7,40 @@ import (
 
 // HomingProfile defines homing behavior parameters
 type HomingProfile struct {
-	BaseSpeed   int32 // Target cruising speed (Q16.16 cells/sec)
-	HomingAccel int32 // Acceleration toward target (Q16.16 cells/sec²)
-	Drag        int32 // Deceleration when overspeed (Q16.16 1/sec)
+	BaseSpeed   int64 // Target cruising speed (Q32.32 cells/sec)
+	HomingAccel int64 // Acceleration toward target (Q32.32 cells/sec²)
+	Drag        int64 // Deceleration when overspeed (Q32.32 1/sec)
 
 	// Arrival steering (0 = disabled)
-	ArrivalRadius    int32 // Distance at which arrival steering begins (Q16.16)
-	ArrivalDragBoost int32 // Max drag multiplier at target (Q16.16, Scale = 1x)
+	ArrivalRadius    int64 // Distance at which arrival steering begins (Q32.32)
+	ArrivalDragBoost int64 // Max drag multiplier at target (Q32.32, Scale = 1x)
 
 	// Dead zone snap (0 = use default settling)
-	DeadZone int32 // Snap-to-target threshold (Q16.16)
+	DeadZone int64 // Snap-to-target threshold (Q32.32)
 }
 
 // ApplyHoming updates velocity to home toward target position
 // Returns true if entity is within settling distance (near-stationary at target)
-// targetX, targetY: target position in Q16.16
-// dt: delta time in Q16.16 seconds
+// targetX, targetY: target position in Q32.32
+// dt: delta time in Q32.32 seconds
 func ApplyHoming(
 	kinetic *component.KineticState,
-	targetX, targetY int32,
+	targetX, targetY int64,
 	profile *HomingProfile,
-	dt int32,
+	dt int64,
 ) bool {
 	return applyHomingInternal(kinetic, targetX, targetY, profile, vmath.Scale, dt, true)
 }
 
 // ApplyHomingScaled applies homing with speed multiplier (for progressive difficulty)
-// speedMultiplier: Q16.16 scale factor (Scale = 1.0x)
+// speedMultiplier: Q32.32 scale factor (Scale = 1.0x)
 // applyDrag: if false, skip drag application (for immunity-gated drag)
 func ApplyHomingScaled(
 	kinetic *component.KineticState,
-	targetX, targetY int32,
+	targetX, targetY int64,
 	profile *HomingProfile,
-	speedMultiplier int32,
-	dt int32,
+	speedMultiplier int64,
+	dt int64,
 	applyDrag bool,
 ) bool {
 	return applyHomingInternal(kinetic, targetX, targetY, profile, speedMultiplier, dt, applyDrag)
@@ -49,10 +49,10 @@ func ApplyHomingScaled(
 // applyHomingInternal is the shared implementation
 func applyHomingInternal(
 	kinetic *component.KineticState,
-	targetX, targetY int32,
+	targetX, targetY int64,
 	profile *HomingProfile,
-	speedMultiplier int32,
-	dt int32,
+	speedMultiplier int64,
+	dt int64,
 	applyDrag bool,
 ) bool {
 	dx := targetX - kinetic.PreciseX
@@ -66,7 +66,7 @@ func applyHomingInternal(
 	}
 
 	speed := vmath.Magnitude(kinetic.VelX, kinetic.VelY)
-	settleSpeedThreshold := int32(vmath.Scale) / 2 // 0.5 cells/sec
+	settleSpeedThreshold := int64(vmath.Scale) / 2 // 0.5 cells/sec
 
 	if dist < deadZone && speed < settleSpeedThreshold {
 		// Snap to exact target

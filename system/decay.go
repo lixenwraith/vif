@@ -106,7 +106,7 @@ func (s *DecaySystem) Update() {
 // spawnSingleDecay creates one decay entity at specified position
 func (s *DecaySystem) spawnSingleDecay(x, y int, char rune, skipStartCell bool) {
 	// Random speed between ParticleMinSpeed and ParticleMaxSpeed
-	// Note: Speed is converted to Q16.16. Decay moves DOWN by default, so velocity is positive
+	// Note: Speed is converted to Q32.32. Decay moves DOWN by default, so velocity is positive
 	speedFloat := constant.ParticleMinSpeed + rand.Float64()*(constant.ParticleMaxSpeed-constant.ParticleMinSpeed)
 	velY := vmath.FromFloat(speedFloat)
 	accelY := vmath.FromFloat(constant.ParticleAcceleration)

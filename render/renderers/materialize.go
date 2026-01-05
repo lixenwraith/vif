@@ -9,7 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
-// Phase thresholds in Q16.16
+// Phase thresholds in Q32.32
 var (
 	matFillEnd      = vmath.FromFloat(constant.MaterializeFillEnd)
 	matHoldEnd      = vmath.FromFloat(constant.MaterializeHoldEnd)
@@ -83,8 +83,8 @@ func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.R
 	distFixed := vmath.FromInt(distance)
 	progress := mat.Progress
 
-	// Calculate segment bounds based on phase (Q16.16)
-	var segStartFixed, segEndFixed int32
+	// Calculate segment bounds based on phase (Q32.32)
+	var segStartFixed, segEndFixed int64
 
 	switch {
 	case progress < matFillEnd:
@@ -117,8 +117,8 @@ func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.R
 	}
 }
 
-// calcIntensity returns Q16.16 intensity for a cell based on phase and position
-func (r *MaterializeRenderer) calcIntensity(progress int32, cellOffset, segStart, segEnd, distance int) int32 {
+// calcIntensity returns Q32.32 intensity for a cell based on phase and position
+func (r *MaterializeRenderer) calcIntensity(progress int64, cellOffset, segStart, segEnd, distance int) int64 {
 	if segEnd <= segStart {
 		return vmath.Scale
 	}
@@ -154,7 +154,7 @@ func (r *MaterializeRenderer) calcIntensity(progress int32, cellOffset, segStart
 	}
 }
 
-func (r *MaterializeRenderer) renderBeamCell(ctx render.RenderContext, buf *render.RenderBuffer, mat *component.MaterializeComponent, dir beamDir, edgePos, cellOffset int, intensity int32) {
+func (r *MaterializeRenderer) renderBeamCell(ctx render.RenderContext, buf *render.RenderBuffer, mat *component.MaterializeComponent, dir beamDir, edgePos, cellOffset int, intensity int64) {
 	// Calculate base cell position
 	var baseX, baseY int
 	switch dir {

@@ -13,12 +13,12 @@ type ShieldComponent struct {
 	MaxOpacity    float64   // Maximum opacity at center (0.0 to 1.0)
 	LastDrainTime time.Time // Last passive drain tick (for 1/sec cost)
 
-	// Q16.16 fixed-point values (set by ShieldSystem on creation/activation)
-	RadiusX int32 // Q16.16
-	RadiusY int32 // Q16.16
+	// Q32.32 fixed-point values (set by ShieldSystem on creation/activation)
+	RadiusX int64 // Q32.32
+	RadiusY int64 // Q32.32
 
-	// Precomputed Q16.16 inverse radii squared for ellipse checks
+	// Precomputed Q32.32 inverse radii squared for ellipse checks
 	// Set by ShieldSystem on activation/creation
-	InvRxSq int32
-	InvRySq int32
+	InvRxSq int64
+	InvRySq int64
 }

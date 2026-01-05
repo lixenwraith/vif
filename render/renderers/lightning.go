@@ -179,8 +179,8 @@ func (r *LightningRenderer) generateFractalPath(x1, y1, x2, y2 int, rng *vmath.F
 	// Octave 1: Coherent spine offset (single random value for whole path)
 	// Creates gentle arc, prevents "straight bundle" appearance
 	spineRand := rng.Next()
-	spineOffset := int32(spineRand>>16) - int32(vmath.Scale>>1)
-	spineOffset <<= 1                  // [-1.0, 1.0) in Q16.16
+	spineOffset := int64(spineRand>>32) - int64(vmath.Scale>>1)
+	spineOffset <<= 1                  // [-1.0, 1.0) in Q32.32
 	spineMagnitude := vmath.FromInt(4) // Max 4 sub-pixel spine curve
 	spineFixed := vmath.Mul(spineOffset, spineMagnitude)
 
@@ -218,7 +218,7 @@ func (r *LightningRenderer) generateFractalPath(x1, y1, x2, y2 int, rng *vmath.F
 
 		// Detail contribution: random per-segment, modulated by envelope
 		detailRand := rng.Next()
-		detailFrac := int32(detailRand>>16) - int32(vmath.Scale>>1)
+		detailFrac := int64(detailRand>>32) - int64(vmath.Scale>>1)
 		detailFrac <<= 1
 		detailJitter := vmath.Mul(vmath.Mul(detailFrac, detailMagnitude), envelope)
 
@@ -257,8 +257,8 @@ func (r *LightningRenderer) renderLightningTrueColor(ctx render.RenderContext, b
 	// Render accumulated quadrants with screen blend foreground
 	for key, bits := range cellHits {
 		// Unpack cell coordinates from map key
-		cx := int(int32(key >> 32))
-		cy := int(int32(key & 0xFFFFFFFF))
+		cx := int(int64(key >> 32))
+		cy := int(int64(key & 0xFFFFFFFF))
 
 		// Map to screen coordinates
 		screenX := ctx.GameX + cx
@@ -316,7 +316,7 @@ func (r *LightningRenderer) traceSubPixelLineQuadrant(hits map[uint64]uint8, sx0
 		quadrant := uint8(1 << (qy*2 + qx))
 
 		// Pack cell coordinates into 64-bit map key
-		key := uint64(uint32(cx))<<32 | uint64(uint32(cy))
+		key := uint64(cx)<<32 | uint64(cy)
 		hits[key] |= quadrant
 
 		if sx0 == sx1 && sy0 == sy1 {
@@ -361,8 +361,8 @@ func (r *LightningRenderer) renderLightning256(ctx render.RenderContext, buf *re
 	// Render accumulated half-blocks with foreground-only write
 	for key, bits := range cellHits {
 		// Unpack cell coordinates from map key
-		cx := int(int32(key >> 32))
-		cy := int(int32(key & 0xFFFFFFFF))
+		cx := int(int64(key >> 32))
+		cy := int(int64(key & 0xFFFFFFFF))
 
 		// Map to screen coordinates
 		screenX := ctx.GameX + cx
@@ -420,7 +420,7 @@ func (r *LightningRenderer) traceSubPixelLineHalf(hits map[uint64]uint8, sx0, sy
 		halfBit := uint8(1 << halfY)
 
 		// Pack cell coordinates into 64-bit map key
-		key := uint64(uint32(cx))<<32 | uint64(uint32(cy))
+		key := uint64(cx)<<32 | uint64(cy)
 		hits[key] |= halfBit
 
 		if sx0 == sx1 && sy0 == sy1 {

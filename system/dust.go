@@ -40,7 +40,7 @@ func NewDustSystem(world *engine.World) engine.System {
 		world: world,
 	}
 
-	s.rng = vmath.NewFastRand(uint32(world.Resource.Time.RealTime.UnixNano()))
+	s.rng = vmath.NewFastRand(uint64(world.Resource.Time.RealTime.UnixNano()))
 
 	s.statCreated = world.Resource.Status.Ints.Get("dust.created")
 	s.statActive = world.Resource.Status.Ints.Get("dust.active")
@@ -170,7 +170,7 @@ func (s *DustSystem) spawnDust(x, y int, char rune, level component.GlyphLevel, 
 	radiusRange := int(constant.DustOrbitRadiusMax - constant.DustOrbitRadiusMin)
 	orbitRadius := constant.DustOrbitRadiusMin
 	if radiusRange > 0 {
-		orbitRadius += int32(s.rng.Intn(radiusRange))
+		orbitRadius += int64(s.rng.Intn(radiusRange))
 	}
 
 	// Position relative to cursor for orbital calculation

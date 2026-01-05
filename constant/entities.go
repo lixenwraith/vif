@@ -1,6 +1,5 @@
 package constant
 
-
 import (
 	"time"
 )
@@ -35,11 +34,11 @@ const (
 	// DrainEnergyDrainAmount is the amount of energy drained per tick
 	DrainEnergyDrainAmount = 100
 
-	// DrainBaseSpeed is the normal homing velocity in cells/sec (Q16.16 via vmath.FromFloat)
+	// DrainBaseSpeed is the normal homing velocity in cells/sec (Q32.32 via vmath.FromFloat)
 	// Equivalent to previous 1 cell per DrainMoveInterval
 	DrainBaseSpeedFloat = 1.0
 
-	// DrainHomingAccel is acceleration toward cursor in cells/sec² (Q16.16)
+	// DrainHomingAccel is acceleration toward cursor in cells/sec² (Q32.32)
 	// Higher values = snappier homing, lower = more floaty
 	DrainHomingAccelFloat = 3.0
 

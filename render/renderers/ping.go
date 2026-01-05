@@ -87,7 +87,7 @@ func (r *PingRenderer) computeExclusionMask(world *engine.World, w, h int) {
 			continue
 		}
 
-		// Bounding box from Q16.16 radii
+		// Bounding box from Q32.32 radii
 		rx := vmath.ToInt(shield.RadiusX)
 		ry := vmath.ToInt(shield.RadiusY)
 		startX := pos.X - rx

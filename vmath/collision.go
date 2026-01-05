@@ -1,6 +1,6 @@
 package vmath
 
-// Mass ratio constants for collision physics (Q16.16)
+// Mass ratio constants for collision physics (Q32.32)
 // Use with ApplyCollisionImpulse for different entity weights
 const (
 	MassRatioEqual = Scale     // 1.0 - equal mass entities
@@ -8,9 +8,9 @@ const (
 	MassRatioHeavy = Scale * 2 // 2.0 - heavy impactor (more momentum transfer)
 )
 
-// Entity mass constants (Q16.16, relative units)
+// Entity mass constants (Q32.32, relative units)
 // Baseline: single-cell entity = Scale (1.0)
-// Entity mass constants (Q16.16, relative units)
+// Entity mass constants (Q32.32, relative units)
 // Baseline: single-cell entity = Scale (1.0)
 const (
 	MassDust    = Scale / 10 // 0.1 - dust particle
@@ -31,27 +31,29 @@ const (
 // Scale/3 ≈ 0.33 - offset contributes 1/3 to final direction
 const OffsetInfluenceDefault = Scale / 3
 
-// RadiansToRotation converts Q16.16 radians to rotation units
-// Rotation units: Scale (65536) = full rotation (2π)
+// RadiansToRotation converts Q32.32 radians to rotation units
+// Rotation units: Scale = full rotation (2π)
 // Usage: rotUnits = Mul(radians, RadiansToRotation)
-const RadiansToRotation int32 = 10430 // ≈ Scale / (2π)
+// Q32.32: const RadiansToRotation int32 = 10430 // ≈ Scale / (2π)
+// Q32.32: const RadiansToRotation int64 = 683565275 // ≈ Scale / (2π)
+const RadiansToRotation int64 = 683565275 // ≈ Scale / (2π)
 
 // ApplyCollisionImpulse calculates velocity delta from collision
 // Returns impulse vector to ADD to target's current velocity
 //
 // Parameters:
-//   - impactorVelX/Y: impacting object's velocity (Q16.16)
-//   - massRatio: impactor_mass / target_mass (Q16.16, Scale = equal)
-//   - angleVarRad: random angle variance in Q16.16 radians (0 = none)
-//   - magnitudeMin/Max: impulse magnitude bounds (Q16.16 cells/sec)
+//   - impactorVelX/Y: impacting object's velocity (Q32.32)
+//   - massRatio: impactor_mass / target_mass (Q32.32, Scale = equal)
+//   - angleVarRad: random angle variance in Q32.32 radians (0 = none)
+//   - magnitudeMin/Max: impulse magnitude bounds (Q32.32 cells/sec)
 //   - rng: random source (nil = no randomization)
 func ApplyCollisionImpulse(
-	impactorVelX, impactorVelY int32,
-	massRatio int32,
-	angleVarRad int32,
-	magnitudeMin, magnitudeMax int32,
+	impactorVelX, impactorVelY int64,
+	massRatio int64,
+	angleVarRad int64,
+	magnitudeMin, magnitudeMax int64,
 	rng *FastRand,
-) (impulseX, impulseY int32) {
+) (impulseX, impulseY int64) {
 	// Direction from impactor velocity
 	dirX, dirY := Normalize2D(impactorVelX, impactorVelY)
 
@@ -65,7 +67,7 @@ func ApplyCollisionImpulse(
 		angleVarRot := Mul(angleVarRad, RadiansToRotation)
 		angleRange := int(angleVarRot) * 2
 		if angleRange > 0 {
-			randomAngle := int32(rng.Intn(angleRange)) - angleVarRot
+			randomAngle := int64(rng.Intn(angleRange)) - angleVarRot
 			dirX, dirY = RotateVector(dirX, dirY, randomAngle)
 		}
 	}
@@ -74,7 +76,7 @@ func ApplyCollisionImpulse(
 	magnitude := magnitudeMin
 	if magnitudeMax > magnitudeMin && rng != nil {
 		magRange := int(magnitudeMax - magnitudeMin)
-		magnitude += int32(rng.Intn(magRange))
+		magnitude += int64(rng.Intn(magRange))
 	}
 
 	// Scale by mass ratio
@@ -87,22 +89,22 @@ func ApplyCollisionImpulse(
 // Combines impactor direction with "push away from hit point" effect for multi-cell entities
 //
 // Parameters:
-//   - impactorVelX/Y: impacting object's velocity (Q16.16)
+//   - impactorVelX/Y: impacting object's velocity (Q32.32)
 //   - offsetX/Y: hit position relative to target anchor (integer cells, converted internally)
 //   - offsetInfluence: blend factor for offset direction (0 = pure impactor, Scale = equal blend)
-//   - massRatio: impactor_mass / target_mass (Q16.16)
-//   - angleVarRad: random angle variance in Q16.16 radians
-//   - magnitudeMin/Max: impulse magnitude bounds (Q16.16 cells/sec)
+//   - massRatio: impactor_mass / target_mass (Q32.32)
+//   - angleVarRad: random angle variance in Q32.32 radians
+//   - magnitudeMin/Max: impulse magnitude bounds (Q32.32 cells/sec)
 //   - rng: random source (nil = no randomization)
 func ApplyOffsetCollisionImpulse(
-	impactorVelX, impactorVelY int32,
+	impactorVelX, impactorVelY int64,
 	offsetX, offsetY int,
-	offsetInfluence int32,
-	massRatio int32,
-	angleVarRad int32,
-	magnitudeMin, magnitudeMax int32,
+	offsetInfluence int64,
+	massRatio int64,
+	angleVarRad int64,
+	magnitudeMin, magnitudeMax int64,
 	rng *FastRand,
-) (impulseX, impulseY int32) {
+) (impulseX, impulseY int64) {
 	// Base direction from impactor velocity
 	baseX, baseY := Normalize2D(impactorVelX, impactorVelY)
 	if baseX == 0 && baseY == 0 {
@@ -110,7 +112,7 @@ func ApplyOffsetCollisionImpulse(
 	}
 
 	// Offset direction: push away from hit point (negate offset)
-	// Convert cell offset to Q16.16 for normalization
+	// Convert cell offset to Q32.32 for normalization
 	if offsetInfluence > 0 && (offsetX != 0 || offsetY != 0) {
 		offX := FromInt(-offsetX)
 		offY := FromInt(-offsetY)
@@ -130,7 +132,7 @@ func ApplyOffsetCollisionImpulse(
 		angleVarRot := Mul(angleVarRad, RadiansToRotation)
 		angleRange := int(angleVarRot) * 2
 		if angleRange > 0 {
-			randomAngle := int32(rng.Intn(angleRange)) - angleVarRot
+			randomAngle := int64(rng.Intn(angleRange)) - angleVarRot
 			baseX, baseY = RotateVector(baseX, baseY, randomAngle)
 		}
 	}
@@ -139,7 +141,7 @@ func ApplyOffsetCollisionImpulse(
 	magnitude := magnitudeMin
 	if magnitudeMax > magnitudeMin && rng != nil {
 		magRange := int(magnitudeMax - magnitudeMin)
-		magnitude += int32(rng.Intn(magRange))
+		magnitude += int64(rng.Intn(magRange))
 	}
 
 	// Scale by mass ratio

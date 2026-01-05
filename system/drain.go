@@ -69,7 +69,7 @@ func (s *DrainSystem) Init() {
 	s.pendingSpawns = s.pendingSpawns[:0]
 	s.nextSpawnOrder = 0
 	s.spawnCooldownUntil = 0
-	s.rng = vmath.NewFastRand(uint32(s.world.Resource.Time.RealTime.UnixNano()))
+	s.rng = vmath.NewFastRand(uint64(s.world.Resource.Time.RealTime.UnixNano()))
 	s.statCount.Store(0)
 	s.statPending.Store(0)
 	s.paused = false
@@ -549,7 +549,7 @@ func (s *DrainSystem) requeueSpawnWithOffset(blockedX, blockedY int) {
 	// If no valid position, materialize spawn dropped (map saturated with drains)
 }
 
-// isInsideShieldEllipse checks if position is within the shield ellipse using Q16.16 fixed-point
+// isInsideShieldEllipse checks if position is within the shield ellipse using Q32.32 fixed-point
 func (s *DrainSystem) isInsideShieldEllipse(x, y int) bool {
 	cursorEntity := s.world.Resource.Cursor.Entity
 

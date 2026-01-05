@@ -75,7 +75,7 @@ func (s *MaterializeSystem) Update() {
 		dtFixed = dtCap
 	}
 
-	// Progress velocity in Q16.16: full progress (Scale) over duration
+	// Progress velocity in Q32.32: full progress (Scale) over duration
 	durationFixed := vmath.FromFloat(constant.MaterializeAnimationDuration.Seconds())
 	progressDelta := vmath.Div(dtFixed, durationFixed)
 

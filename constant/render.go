@@ -28,7 +28,7 @@ const (
 const (
 	GrayoutDuration = 1 * time.Second
 	GrayoutMask     = MaskGlyph
-	a
+
 	DimFactor = 0.5
 	DimMask   = MaskAll ^ MaskUI
 )

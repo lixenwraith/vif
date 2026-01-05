@@ -48,7 +48,7 @@ func NewQuasarSystem(world *engine.World) engine.System {
 func (s *QuasarSystem) Init() {
 	s.active = false
 	s.anchorEntity = 0
-	s.rng = vmath.NewFastRand(uint32(s.world.Resource.Time.RealTime.UnixNano()))
+	s.rng = vmath.NewFastRand(uint64(s.world.Resource.Time.RealTime.UnixNano()))
 	s.statActive.Store(false)
 	s.enabled = true
 }
@@ -129,7 +129,7 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 }
 
 // calculateZapRadius compute zap range from game dimensions
-func (s *QuasarSystem) calculateZapRadius() int32 {
+func (s *QuasarSystem) calculateZapRadius() int64 {
 	width := s.world.Resource.Config.GameWidth
 	height := s.world.Resource.Config.GameHeight
 	// Visual radius = max(width/2, height) since height cells = height*2 visual units
@@ -296,8 +296,8 @@ func (s *QuasarSystem) updateKineticMovement(anchorEntity core.Entity, quasar *c
 	speedIncreaseInterval := time.Duration(constant.QuasarSpeedIncreaseTicks) * constant.GameUpdateInterval
 	if now.Sub(quasar.LastSpeedIncreaseAt) >= speedIncreaseInterval {
 		newMultiplier := vmath.Mul(quasar.SpeedMultiplier, vmath.FromFloat(1.0+constant.QuasarSpeedIncreasePercent))
-		if newMultiplier > int32(constant.QuasarSpeedMultiplierMaxFixed) {
-			newMultiplier = int32(constant.QuasarSpeedMultiplierMaxFixed)
+		if newMultiplier > int64(constant.QuasarSpeedMultiplierMaxFixed) {
+			newMultiplier = int64(constant.QuasarSpeedMultiplierMaxFixed)
 		}
 		quasar.SpeedMultiplier = newMultiplier
 		quasar.LastSpeedIncreaseAt = now

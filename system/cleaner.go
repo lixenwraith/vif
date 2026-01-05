@@ -48,7 +48,7 @@ func NewCleanerSystem(world *engine.World) engine.System {
 func (s *CleanerSystem) Init() {
 	clear(s.spawned)
 	s.hasSpawnedSession = false
-	s.rng = vmath.NewFastRand(uint32(s.world.Resource.Time.RealTime.UnixNano()))
+	s.rng = vmath.NewFastRand(uint64(s.world.Resource.Time.RealTime.UnixNano()))
 	s.deflectedAnchors = make(map[core.Entity]core.Entity, 4)
 	s.enabled = true
 }
@@ -281,7 +281,7 @@ func (s *CleanerSystem) spawnCleaners() {
 
 	// Spawn one cleaner per row with Red entities, alternating L→R and R→L direction
 	for _, row := range rows {
-		var startX, targetX, velX int32
+		var startX, targetX, velX int64
 		rowFixed := vmath.FromInt(row)
 
 		if row%2 != 0 {
@@ -391,7 +391,7 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 
 // deflectDrain applies deflection impulse to a drain entity
 // Physics-based impulse - additive to drain velocity, direction from cleaner
-func (s *CleanerSystem) deflectDrain(drainEntity core.Entity, cleanerVelX, cleanerVelY int32) {
+func (s *CleanerSystem) deflectDrain(drainEntity core.Entity, cleanerVelX, cleanerVelY int64) {
 	drain, ok := s.world.Component.Drain.Get(drainEntity)
 	if !ok {
 		return
@@ -405,7 +405,7 @@ func (s *CleanerSystem) deflectDrain(drainEntity core.Entity, cleanerVelX, clean
 }
 
 // deflectQuasar applies offset-aware collision impulse to quasar composite
-func (s *CleanerSystem) deflectQuasar(anchorEntity, hitMember core.Entity, cleanerVelX, cleanerVelY int32) {
+func (s *CleanerSystem) deflectQuasar(anchorEntity, hitMember core.Entity, cleanerVelX, cleanerVelY int64) {
 	quasar, ok := s.world.Component.Quasar.Get(anchorEntity)
 	if !ok {
 		return
@@ -532,9 +532,9 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 	oyFixed := vmath.FromInt(originY)
 
 	type dirDef struct {
-		velX, velY       int32
-		startX, startY   int32
-		targetX, targetY int32
+		velX, velY       int64
+		startX, startY   int64
+		targetX, targetY int64
 	}
 
 	directions := []dirDef{

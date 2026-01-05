@@ -1,12 +1,11 @@
 package constant
 
-
 import "github.com/lixenwraith/vi-fighter/vmath"
 
-// Pre-computed Q16.16 physics constants
+// Pre-computed Q32.32 physics constants
 // Initialized once, used by systems to avoid repeated FromFloat calls
 var (
-	// Drain physics (Q16.16)
+	// Drain physics (Q32.32)
 	DrainBaseSpeed         = vmath.FromFloat(DrainBaseSpeedFloat)
 	DrainHomingAccel       = vmath.FromFloat(DrainHomingAccelFloat)
 	DrainDrag              = vmath.FromFloat(DrainDragFloat)
@@ -15,7 +14,7 @@ var (
 	DrainDeflectImpulseMin = vmath.FromFloat(DrainDeflectImpulseMinFloat)
 	DrainDeflectImpulseMax = vmath.FromFloat(DrainDeflectImpulseMaxFloat)
 
-	// Quasar physics (Q16.16)
+	// Quasar physics (Q32.32)
 	QuasarDeflectImpulseMin = vmath.FromFloat(QuasarDeflectImpulseMinFloat)
 	QuasarDeflectImpulseMax = vmath.FromFloat(QuasarDeflectImpulseMaxFloat)
 	QuasarHomingAccel       = vmath.FromFloat(QuasarHomingAccelFloat)
@@ -24,11 +23,11 @@ var (
 	// QuasarSpeedMultiplierMaxFixed caps progressive speed increase (10x = Scale * 10)
 	QuasarSpeedMultiplierMaxFixed = vmath.Scale * QuasarSpeedMultiplierMax
 
-	// Shield knockback physics (Q16.16)
+	// Shield knockback physics (Q32.32)
 	ShieldKnockbackImpulseMin = vmath.FromFloat(ShieldKnockbackImpulseMinFloat)
 	ShieldKnockbackImpulseMax = vmath.FromFloat(ShieldKnockbackImpulseMaxFloat)
 
-	// Dust physics (Q16.16)
+	// Dust physics (Q32.32)
 	DustAttractionBase = vmath.FromFloat(DustAttractionBaseFloat)
 	DustOrbitRadiusMin = vmath.FromFloat(DustOrbitRadiusMinFloat)
 	DustOrbitRadiusMax = vmath.FromFloat(DustOrbitRadiusMaxFloat)

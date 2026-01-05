@@ -1,20 +1,19 @@
 package vmath
 
-
 // OrbitalVelocity returns tangential velocity for circular orbit
 // attraction: centripetal acceleration at unit distance (G*M equivalent)
-// radius: orbital radius (Q16.16)
+// radius: orbital radius (Q32.32)
 // Returns velocity magnitude for stable circular orbit
-func OrbitalVelocity(attraction, radius int32) int32 {
+func OrbitalVelocity(attraction, radius int64) int64 {
 	// v = sqrt(a * r)
 	return Sqrt(Mul(attraction, radius))
 }
 
 // OrbitalInsert returns velocity vector for circular orbit insertion
-// dx, dy: position relative to center (Q16.16)
+// dx, dy: position relative to center (Q32.32)
 // attraction: centripetal acceleration factor
 // clockwise: orbit direction
-func OrbitalInsert(dx, dy, attraction int32, clockwise bool) (vx, vy int32) {
+func OrbitalInsert(dx, dy, attraction int64, clockwise bool) (vx, vy int64) {
 	radius := Magnitude(dx, dy)
 	if radius == 0 {
 		return 0, 0
@@ -34,10 +33,10 @@ func OrbitalInsert(dx, dy, attraction int32, clockwise bool) (vx, vy int32) {
 }
 
 // OrbitalAttraction returns acceleration toward center for orbital motion
-// dx, dy: position relative to center (Q16.16)
+// dx, dy: position relative to center (Q32.32)
 // attraction: base attraction strength
 // Returns acceleration vector pointing toward center
-func OrbitalAttraction(dx, dy, attraction int32) (ax, ay int32) {
+func OrbitalAttraction(dx, dy, attraction int64) (ax, ay int64) {
 	distSq := Mul(dx, dx) + Mul(dy, dy)
 	if distSq == 0 {
 		return 0, 0
@@ -54,10 +53,10 @@ func OrbitalAttraction(dx, dy, attraction int32) (ax, ay int32) {
 // OrbitalDamp applies damping to circularize an elliptical orbit
 // vx, vy: current velocity
 // dx, dy: position relative to center
-// damping: factor per second (Q16.16, Scale = full damp)
+// damping: factor per second (Q32.32, Scale = full damp)
 // dt: delta time
 // Returns damped velocity that trends toward circular
-func OrbitalDamp(vx, vy, dx, dy, damping, dt int32) (nvx, nvy int32) {
+func OrbitalDamp(vx, vy, dx, dy, damping, dt int64) (nvx, nvy int64) {
 	// Decompose velocity into radial and tangential
 	dist := Magnitude(dx, dy)
 	if dist == 0 {

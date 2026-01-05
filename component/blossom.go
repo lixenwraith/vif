@@ -2,7 +2,7 @@ package component
 
 // BlossomComponent represents a blossom character entity
 type BlossomComponent struct {
-	KineticState // PreciseX/Y, VelX/Y, AccelX/Y (int32 Q16.16)
+	KineticState // PreciseX/Y, VelX/Y, AccelX/Y (int64 Q32.32)
 
 	// Visual
 	Char rune

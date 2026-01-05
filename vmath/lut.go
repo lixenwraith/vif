@@ -7,22 +7,22 @@ import (
 func init() {
 	// Sin/Cos LUT calculation
 	for i := 0; i < LUTSize; i++ {
-		rad := 2.0 * math.Pi * float64(i) / float64(LUTSize)
-		SinLUT[i] = int32(math.Sin(rad) * Scale)
-		CosLUT[i] = int32(math.Cos(rad) * Scale)
+		rad := 2.0 * math.Pi * float64(i) / LUTSize
+		SinLUT[i] = int64(math.Sin(rad) * Scale)
+		CosLUT[i] = int64(math.Cos(rad) * Scale)
 	}
 
 	// Exp LUT calculation
 	for i := 0; i < ExpLUTSize; i++ {
 		x := float64(i) * ExpLUTMaxInput / float64(ExpLUTSize-1)
-		ExpDecayLUT[i] = int32(math.Exp(-x/ExpLUTDecayK) * Scale)
+		ExpDecayLUT[i] = int64(math.Exp(-x/ExpLUTDecayK) * Scale)
 	}
 }
 
-// SinLUT and CosLUT scaled by Q16.16
+// SinLUT and CosLUT scaled by Q32.32
 var (
-	SinLUT [LUTSize]int32
-	CosLUT [LUTSize]int32
+	SinLUT [LUTSize]int64
+	CosLUT [LUTSize]int64
 )
 
 // Exponential decay LUT for performance-critical scaling
@@ -39,14 +39,14 @@ const ExpLUTMaxInput = 512
 // Higher K = slower decay, lower K = faster decay
 const ExpLUTDecayK = 30.0
 
-// ExpDecayLUT contains pre-computed e^(-x/k) values scaled to Q16.16
+// ExpDecayLUT contains pre-computed e^(-x/k) values scaled to Q32.32
 // Index maps linearly to input range [0, ExpLUTMaxInput]
-var ExpDecayLUT [ExpLUTSize]int32
+var ExpDecayLUT [ExpLUTSize]int64
 
-// ExpDecay returns e^(-count/k) in Q16.16 using LUT interpolation
+// ExpDecay returns e^(-count/k) in Q32.32 using LUT interpolation
 // Result ranges from Scale (at count=0) to ~0 (at high count)
 // O(1) with linear interpolation for smoothness
-func ExpDecay(count int) int32 {
+func ExpDecay(count int) int64 {
 	if count <= 0 {
 		return Scale
 	}
@@ -64,12 +64,12 @@ func ExpDecay(count int) int32 {
 
 	v0 := ExpDecayLUT[idx]
 	v1 := ExpDecayLUT[idx+1]
-	return v0 + int32((int64(v1-v0)*int64(frac))/int64(ExpLUTMaxInput))
+	return v0 + ((v1-v0)*int64(frac))/ExpLUTMaxInput
 }
 
-// ExpDecayScaled returns Scale + boostMax * e^(-count/k) in Q16.16
+// ExpDecayScaled returns Scale + boostMax * e^(-count/k) in Q32.32
 // Useful for speed/attraction multipliers that increase as count decreases
-// boostMax: Q16.16 maximum additional multiplier at count=0
-func ExpDecayScaled(count int, boostMax int32) int32 {
+// boostMax: Q32.32 maximum additional multiplier at count=0
+func ExpDecayScaled(count int, boostMax int64) int64 {
 	return Scale + Mul(boostMax, ExpDecay(count))
 }

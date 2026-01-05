@@ -10,9 +10,9 @@ import (
 type CleanerComponent struct {
 	KineticState // Embeds PreciseX, PreciseY, VelX, VelY, AccelX, AccelY
 
-	// Destruction target (tail must clear screen) - Q16.16
-	TargetX int32
-	TargetY int32
+	// Destruction target (tail must clear screen) - Q32.32
+	TargetX int64
+	TargetY int64
 
 	// Ring buffer trail (zero-allocation updates)
 	TrailRing [constant.CleanerTrailLength]core.Point

@@ -14,11 +14,11 @@ var QuasarChars = [3][5]rune{
 // QuasarComponent holds quasar-specific runtime state
 // Composite structure managed via CompositeHeaderComponent
 type QuasarComponent struct {
-	KineticState // PreciseX/Y, VelX/Y, AccelX/Y (Q16.16)
+	KineticState // PreciseX/Y, VelX/Y, AccelX/Y (Q32.32)
 
 	LastSpeedIncreaseAt time.Time // For periodic speed scaling
 
-	SpeedMultiplier int32 // Q16.16, current speed scale factor (starts at Scale)
+	SpeedMultiplier int64 // Q32.32, current speed scale factor (starts at Scale)
 
 	IsOnCursor bool // True if any member overlaps cursor position
 	IsZapping  bool // True if zapping cursor outside range
@@ -29,7 +29,7 @@ type QuasarComponent struct {
 	ShieldActive    bool // Cleaner immunity during charge
 
 	// Dynamic resize support
-	ZapRadius int32 // Q16.16, visual radius of zap circle (dynamic on resize)
+	ZapRadius int64 // Q32.32, visual radius of zap circle (dynamic on resize)
 
 	// HP
 	HitPoints         int
