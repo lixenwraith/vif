@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/physics"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -646,39 +647,15 @@ func (s *DrainSystem) applyShieldKnockback(
 	drainPos component.PositionComponent,
 	cursorPos component.PositionComponent,
 ) {
-	now := s.world.Resource.Time.GameTime
-
 	// Radial direction: cursor → drain (shield pushes outward)
 	radialX := vmath.FromInt(drainPos.X - cursorPos.X)
 	radialY := vmath.FromInt(drainPos.Y - cursorPos.Y)
 
-	// Zero vector fallback (drain centered on cursor)
-	if radialX == 0 && radialY == 0 {
-		radialX = vmath.Scale
+	now := s.world.Resource.Time.GameTime
+
+	if physics.ApplyCollision(&drain.KineticState, radialX, radialY, &physics.ShieldToDrain, s.rng, now) {
+		s.world.Component.Drain.Set(drainEntity, *drain)
 	}
-
-	// Collision impulse (same physics as cleaner, equal mass)
-	impulseX, impulseY := vmath.ApplyCollisionImpulse(
-		radialX, radialY,
-		vmath.MassRatioEqual,
-		constant.DrainDeflectAngleVar,
-		constant.ShieldKnockbackImpulseMin,
-		constant.ShieldKnockbackImpulseMax,
-		s.rng,
-	)
-
-	if impulseX == 0 && impulseY == 0 {
-		return
-	}
-
-	// Additive impulse
-	drain.VelX += impulseX
-	drain.VelY += impulseY
-
-	// Set immunity window
-	drain.DeflectUntil = now.Add(constant.ShieldKnockbackImmunity)
-
-	s.world.Component.Drain.Set(drainEntity, *drain)
 }
 
 // handleDrainDrainCollisions detects and removes all drains sharing a cell
@@ -764,40 +741,16 @@ func (s *DrainSystem) updateDrainMovement() {
 			continue
 		}
 
-		// Check deflection immunity
-		inDeflection := now.Before(drain.DeflectUntil)
-
-		if !inDeflection {
-			// Normal physics: homing + drag
-
-			// Homing direction toward cursor
-			dx := cursorXFixed - drain.PreciseX
-			dy := cursorYFixed - drain.PreciseY
-			dirX, dirY := vmath.Normalize2D(dx, dy)
-
-			currentSpeed := vmath.Magnitude(drain.VelX, drain.VelY)
-
-			// Scaled homing: reduce influence at high speeds for curved comeback
-			homingAccel := constant.DrainHomingAccel
-			if currentSpeed > constant.DrainBaseSpeed && currentSpeed > 0 {
-				// Scale by (baseSpeed / currentSpeed) for gradual curve
-				homingAccel = vmath.Div(vmath.Mul(constant.DrainHomingAccel, constant.DrainBaseSpeed), currentSpeed)
-			}
-
-			drain.VelX += vmath.Mul(vmath.Mul(dirX, homingAccel), dtFixed)
-			drain.VelY += vmath.Mul(vmath.Mul(dirY, homingAccel), dtFixed)
-
-			// Apply drag if overspeed
-			if currentSpeed > constant.DrainBaseSpeed && currentSpeed > 0 {
-				excess := currentSpeed - constant.DrainBaseSpeed
-				dragScale := vmath.Div(excess, currentSpeed)
-				dragAmount := vmath.Mul(vmath.Mul(constant.DrainDrag, dtFixed), dragScale)
-
-				drain.VelX -= vmath.Mul(drain.VelX, dragAmount)
-				drain.VelY -= vmath.Mul(drain.VelY, dragAmount)
-			}
+		// Homing only when not in deflection immunity
+		if !drain.IsImmune(now) {
+			physics.ApplyHoming(
+				&drain.KineticState,
+				cursorXFixed, cursorYFixed,
+				&physics.DrainHoming,
+				dtFixed,
+			)
 		}
-		// During deflection immunity: pure ballistic (no homing, no drag)
+		// During deflection: pure ballistic (no homing, no drag)
 
 		// Store previous position for traversal
 		oldPreciseX, oldPreciseY := drain.PreciseX, drain.PreciseY
@@ -805,24 +758,14 @@ func (s *DrainSystem) updateDrainMovement() {
 		// Integrate position
 		newX, newY := drain.Integrate(dtFixed)
 
-		// Boundary handling: reflect velocity on edge contact (pool table physics)
-		if newX < 0 {
-			newX = 0
-			drain.PreciseX = 0
-			drain.VelX, drain.VelY = vmath.ReflectAxisX(drain.VelX, drain.VelY)
-		} else if newX >= gameWidth {
-			newX = gameWidth - 1
-			drain.PreciseX = vmath.FromInt(gameWidth - 1)
-			drain.VelX, drain.VelY = vmath.ReflectAxisX(drain.VelX, drain.VelY)
+		// Boundary handling: reflect velocity on edge contact (pool table physics) via KineticState.ReflectBoundsX/Y
+		if newX < 0 || newX >= gameWidth {
+			drain.ReflectBoundsX(0, gameWidth)
+			newX = vmath.ToInt(drain.PreciseX)
 		}
-		if newY < 0 {
-			newY = 0
-			drain.PreciseY = 0
-			drain.VelX, drain.VelY = vmath.ReflectAxisY(drain.VelX, drain.VelY)
-		} else if newY >= gameHeight {
-			newY = gameHeight - 1
-			drain.PreciseY = vmath.FromInt(gameHeight - 1)
-			drain.VelX, drain.VelY = vmath.ReflectAxisY(drain.VelX, drain.VelY)
+		if newY < 0 || newY >= gameHeight {
+			drain.ReflectBoundsY(0, gameHeight)
+			newY = vmath.ToInt(drain.PreciseY)
 		}
 
 		// Swept collision detection via Traverse

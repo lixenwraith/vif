@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/physics"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -151,7 +152,7 @@ func (s *DustSystem) transformGlyphsToDust() {
 	for i, gd := range toTransform {
 		deathEntities[i] = gd.entity
 	}
-	event.EmitDeathBatch(s.world.Resource.Event.Queue, event.EventFlashRequest, deathEntities, s.world.Resource.Time.FrameNumber)
+	event.EmitDeathBatch(s.world.Resource.Event.Queue, 0, deathEntities, s.world.Resource.Time.FrameNumber)
 
 	// Create dust entities at cached positions
 	for _, gd := range toTransform {
@@ -204,6 +205,12 @@ func (s *DustSystem) spawnDust(x, y int, char rune, level component.GlyphLevel, 
 		Rune:        char,
 		LastIntX:    x,
 		LastIntY:    y,
+	})
+
+	// Protection from drain and quasar destruction
+	s.world.Component.Protection.Set(entity, component.ProtectionComponent{
+		Mask:      component.ProtectFromDrain,
+		ExpiresAt: 0, // Permanent
 	})
 
 	// Sigil for rendering - map level to grayscale
@@ -274,6 +281,7 @@ func (s *DustSystem) Update() {
 	config := s.world.Resource.Config
 	cursorXFixed := vmath.FromInt(cursorPos.X)
 	cursorYFixed := vmath.FromInt(cursorPos.Y)
+	now := s.world.Resource.Time.GameTime
 
 	// Dynamic speed multiplier based on entity count
 	// Increased boost scaling (4x) to make low-count survival more frantic/powerful
@@ -399,13 +407,53 @@ func (s *DustSystem) Update() {
 					continue
 				}
 
-				// Priority 0: Skip entities already marked for death this frame
+				// 1. Skip entities already marked for death this frame
 				// This prevents duplicate event emission and processing when multiple dust particles hit the same target
 				if s.world.Component.Death.Has(target) {
 					continue
 				}
 
-				// Priority 1: Blossom/Decay - dust destroys target
+				// 2. Drain deflection - dust passes through, imparts momentum
+				if s.world.Component.Drain.Has(target) {
+					if drain, ok := s.world.Component.Drain.Get(target); ok {
+						physics.ApplyCollision(
+							&drain.KineticState,
+							dust.VelX, dust.VelY,
+							&physics.DustToDrain,
+							s.rng,
+							now,
+						)
+						s.world.Component.Drain.Set(target, drain)
+					}
+					continue // Dust passes through
+				}
+
+				// 3. Quasar member deflection - dust passes through, imparts momentum
+				if member, ok := s.world.Component.Member.Get(target); ok {
+					if header, hOk := s.world.Component.Header.Get(member.AnchorID); hOk {
+						if header.BehaviorID == component.BehaviorQuasar {
+							if quasar, qOk := s.world.Component.Quasar.Get(member.AnchorID); qOk {
+								// Get hit offset from anchor
+								anchorPos, _ := s.world.Position.Get(member.AnchorID)
+								offsetX := x - anchorPos.X
+								offsetY := y - anchorPos.Y
+
+								physics.ApplyOffsetCollision(
+									&quasar.KineticState,
+									dust.VelX, dust.VelY,
+									offsetX, offsetY,
+									&physics.DustToQuasar,
+									s.rng,
+									now,
+								)
+								s.world.Component.Quasar.Set(member.AnchorID, quasar)
+							}
+						}
+					}
+					continue // Dust passes through composites
+				}
+
+				// 3. Blossom/Decay - dust destroys target
 				if s.world.Component.Blossom.Has(target) || s.world.Component.Decay.Has(target) {
 					// Mark as dead immediately to prevent double-processing by other dust
 					s.world.Component.Death.Set(target, component.DeathComponent{})
@@ -413,11 +461,7 @@ func (s *DustSystem) Update() {
 					continue // Dust survives
 				}
 
-				// Priority 2: Glyph collision
-				if s.world.Component.Member.Has(target) {
-					continue // Skip composite members
-				}
-
+				// 4. Glyph collision
 				glyph, ok := s.world.Component.Glyph.Get(target)
 				if !ok {
 					continue

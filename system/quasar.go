@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/physics"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -291,7 +292,7 @@ func (s *QuasarSystem) updateKineticMovement(anchorEntity core.Entity, quasar *c
 		dtFixed = dtCap
 	}
 
-	// Periodic speed scaling with cap
+	// Periodic speed scaling with cap (game logic, not physics)
 	speedIncreaseInterval := time.Duration(constant.QuasarSpeedIncreaseTicks) * constant.GameUpdateInterval
 	if now.Sub(quasar.LastSpeedIncreaseAt) >= speedIncreaseInterval {
 		newMultiplier := vmath.Mul(quasar.SpeedMultiplier, vmath.FromFloat(1.0+constant.QuasarSpeedIncreasePercent))
@@ -302,72 +303,26 @@ func (s *QuasarSystem) updateKineticMovement(anchorEntity core.Entity, quasar *c
 		quasar.LastSpeedIncreaseAt = now
 	}
 
-	inDeflection := now.Before(quasar.DeflectUntil)
-
 	cursorXFixed := vmath.FromInt(cursorPos.X)
 	cursorYFixed := vmath.FromInt(cursorPos.Y)
-	dx := cursorXFixed - quasar.PreciseX
-	dy := cursorYFixed - quasar.PreciseY
-	dist := vmath.Magnitude(dx, dy)
 
-	// Hard snap - dead zone clamp for zero wobble
-	deadZone := int32(vmath.Scale) / 2 // 0.5 cells
-	if dist < deadZone {
-		quasar.PreciseX = cursorXFixed
-		quasar.PreciseY = cursorYFixed
-		quasar.VelX = 0
-		quasar.VelY = 0
+	// Homing with arrival steering, drag only when not immune
+	settled := physics.ApplyHomingScaled(
+		&quasar.KineticState,
+		cursorXFixed, cursorYFixed,
+		&physics.QuasarHoming,
+		quasar.SpeedMultiplier,
+		dtFixed,
+		!quasar.IsImmune(now), // applyDrag gated by immunity
+	)
 
+	if settled {
 		// Sync grid position if snap crossed cell boundary
 		if anchorPos.X != cursorPos.X || anchorPos.Y != cursorPos.Y {
 			s.processCollisionsAtNewPositions(anchorEntity, cursorPos.X, cursorPos.Y)
 			s.world.Position.Set(anchorEntity, component.PositionComponent{X: cursorPos.X, Y: cursorPos.Y})
 		}
-
-		// Skip all physics, already at target
 		return
-	}
-
-	// Physics configuration
-	effectiveAccel := vmath.Mul(constant.QuasarHomingAccel, quasar.SpeedMultiplier)
-	effectiveDrag := constant.QuasarDrag
-
-	// ARRIVAL STEERING: Dampen motion when close to prevent overshoot
-	arrivalRadius := vmath.FromFloat(3.0)
-	if dist < arrivalRadius {
-		factor := vmath.Div(dist, arrivalRadius) // 0 at target, 1 at edge
-
-		// Ramp down acceleration
-		effectiveAccel = vmath.Mul(effectiveAccel, factor)
-
-		// Ramp up drag: 1x at edge → 4x at center
-		dampingBoost := vmath.FromFloat(4.0) - vmath.Mul(vmath.FromFloat(3.0), factor)
-		effectiveDrag = vmath.Mul(effectiveDrag, dampingBoost)
-	}
-
-	// Apply homing force (always, even during deflection per user spec)
-	dirX, dirY := vmath.Normalize2D(dx, dy)
-	quasar.VelX += vmath.Mul(vmath.Mul(dirX, effectiveAccel), dtFixed)
-	quasar.VelY += vmath.Mul(vmath.Mul(dirY, effectiveAccel), dtFixed)
-
-	// Drag only outside deflection (ballistic deflection)
-	if !inDeflection {
-		dragFactor := vmath.Mul(effectiveDrag, dtFixed)
-		if dragFactor > vmath.Scale {
-			dragFactor = vmath.Scale
-		}
-		quasar.VelX -= vmath.Mul(quasar.VelX, dragFactor)
-		quasar.VelY -= vmath.Mul(quasar.VelY, dragFactor)
-	}
-
-	// Soft settling - backup for edge cases
-	settleDistThreshold := int32(vmath.Scale) / 4  // 0.25 cells
-	settleSpeedThreshold := int32(vmath.Scale) / 2 // 0.5 cells/sec
-	speed := vmath.Magnitude(quasar.VelX, quasar.VelY)
-
-	if dist < settleDistThreshold && speed < settleSpeedThreshold {
-		quasar.VelX = 0
-		quasar.VelY = 0
 	}
 
 	// Integrate position
@@ -379,25 +334,9 @@ func (s *QuasarSystem) updateKineticMovement(anchorEntity core.Entity, quasar *c
 	minAnchorY := constant.QuasarAnchorOffsetY
 	maxAnchorY := config.GameHeight - (constant.QuasarHeight - constant.QuasarAnchorOffsetY)
 
-	if newX < minAnchorX {
-		newX = minAnchorX
-		quasar.PreciseX = vmath.FromInt(minAnchorX)
-		quasar.VelX, quasar.VelY = vmath.ReflectAxisX(quasar.VelX, quasar.VelY)
-	} else if newX >= maxAnchorX {
-		newX = maxAnchorX - 1
-		quasar.PreciseX = vmath.FromInt(maxAnchorX - 1)
-		quasar.VelX, quasar.VelY = vmath.ReflectAxisX(quasar.VelX, quasar.VelY)
-	}
-
-	if newY < minAnchorY {
-		newY = minAnchorY
-		quasar.PreciseY = vmath.FromInt(minAnchorY)
-		quasar.VelX, quasar.VelY = vmath.ReflectAxisY(quasar.VelX, quasar.VelY)
-	} else if newY >= maxAnchorY {
-		newY = maxAnchorY - 1
-		quasar.PreciseY = vmath.FromInt(maxAnchorY - 1)
-		quasar.VelX, quasar.VelY = vmath.ReflectAxisY(quasar.VelX, quasar.VelY)
-	}
+	quasar.ReflectBoundsX(minAnchorX, maxAnchorX)
+	quasar.ReflectBoundsY(minAnchorY, maxAnchorY)
+	newX, newY = quasar.GridPos()
 
 	// Update anchor position if cell changed
 	if newX != anchorPos.X || newY != anchorPos.Y {
@@ -538,7 +477,7 @@ func (s *QuasarSystem) processCollisionsAtNewPositions(anchorEntity core.Entity,
 
 				// Check protection
 				if prot, ok := s.world.Component.Protection.Get(e); ok {
-					if prot.Mask == component.ProtectAll {
+					if prot.Mask == component.ProtectAll || prot.Mask.Has(component.ProtectFromDrain) {
 						continue
 					}
 				}
@@ -564,7 +503,7 @@ func (s *QuasarSystem) processCollisionsAtNewPositions(anchorEntity core.Entity,
 	}
 
 	if len(toDestroy) > 0 {
-		event.EmitDeathBatch(s.world.Resource.Event.Queue, 0, toDestroy, s.world.Resource.Time.FrameNumber)
+		event.EmitDeathBatch(s.world.Resource.Event.Queue, event.EventFlashRequest, toDestroy, s.world.Resource.Time.FrameNumber)
 	}
 }
 
@@ -685,11 +624,6 @@ func (s *QuasarSystem) applyShieldKnockback(
 ) {
 	now := s.world.Resource.Time.GameTime
 
-	// Immunity gate (unified with cleaner knockback)
-	if now.Before(quasar.DeflectUntil) {
-		return
-	}
-
 	anchorPos, ok := s.world.Position.Get(anchorEntity)
 	if !ok {
 		return
@@ -713,30 +647,16 @@ func (s *QuasarSystem) applyShieldKnockback(
 	centroidX := sumX / len(overlaps)
 	centroidY := sumY / len(overlaps)
 
-	// Offset-influenced collision impulse (same physics as cleaner)
-	impulseX, impulseY := vmath.ApplyOffsetCollisionImpulse(
+	if physics.ApplyOffsetCollision(
+		&quasar.KineticState,
 		radialX, radialY,
 		centroidX, centroidY,
-		vmath.OffsetInfluenceDefault,
-		vmath.MassRatioCleanerToQuasar,
-		constant.DrainDeflectAngleVar,
-		constant.ShieldKnockbackImpulseMin,
-		constant.ShieldKnockbackImpulseMax,
+		&physics.ShieldToQuasar,
 		s.rng,
-	)
-
-	if impulseX == 0 && impulseY == 0 {
-		return
+		now,
+	) {
+		s.world.Component.Quasar.Set(anchorEntity, *quasar)
 	}
-
-	// Additive impulse (momentum transfer)
-	quasar.VelX += impulseX
-	quasar.VelY += impulseY
-
-	// Set immunity window
-	quasar.DeflectUntil = now.Add(constant.ShieldKnockbackImmunity)
-
-	s.world.Component.Quasar.Set(anchorEntity, *quasar)
 }
 
 // terminateQuasar ends the quasar phase

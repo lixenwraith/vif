@@ -10,7 +10,10 @@ const (
 
 // Entity mass constants (Q16.16, relative units)
 // Baseline: single-cell entity = Scale (1.0)
+// Entity mass constants (Q16.16, relative units)
+// Baseline: single-cell entity = Scale (1.0)
 const (
+	MassDust    = Scale / 10 // 0.1 - dust particle
 	MassDrain   = Scale      // 1.0 - single drain entity
 	MassCleaner = Scale      // 1.0 - cleaner block
 	MassQuasar  = Scale * 10 // 10.0 - fused from 10 drains
@@ -18,8 +21,10 @@ const (
 
 // Pre-computed mass ratios for collision (impactor_mass / target_mass)
 const (
-	MassRatioCleanerToDrain  = Scale      // 1.0 - equal mass
-	MassRatioCleanerToQuasar = Scale / 10 // 0.1 - cleaner is 10x lighter
+	MassRatioCleanerToDrain  = Scale       // 1.0 - equal mass
+	MassRatioCleanerToQuasar = Scale / 10  // 0.1 - cleaner is 10x lighter
+	MassRatioDustToDrain     = Scale / 10  // 0.1 - dust is 10x lighter than drain
+	MassRatioDustToQuasar    = Scale / 100 // 0.01 - dust is 100x lighter than quasar
 )
 
 // OffsetInfluenceDefault is standard blend factor for offset-based impulse

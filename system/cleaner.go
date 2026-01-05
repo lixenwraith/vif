@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/physics"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -396,29 +397,11 @@ func (s *CleanerSystem) deflectDrain(drainEntity core.Entity, cleanerVelX, clean
 		return
 	}
 
-	// Calculate collision impulse from cleaner velocity
-	impulseX, impulseY := vmath.ApplyCollisionImpulse(
-		cleanerVelX, cleanerVelY,
-		vmath.MassRatioEqual,
-		constant.DrainDeflectAngleVar,
-		constant.DrainDeflectImpulseMin,
-		constant.DrainDeflectImpulseMax,
-		s.rng,
-	)
+	now := s.world.Resource.Time.GameTime
 
-	// Zero impulse fallback (cleaner stationary - shouldn't happen)
-	if impulseX == 0 && impulseY == 0 {
-		return
+	if physics.ApplyCollision(&drain.KineticState, cleanerVelX, cleanerVelY, &physics.CleanerToDrain, s.rng, now) {
+		s.world.Component.Drain.Set(drainEntity, drain)
 	}
-
-	// Add impulse to current velocity (physics-based momentum transfer)
-	drain.VelX += impulseX
-	drain.VelY += impulseY
-
-	// Set immunity window
-	drain.DeflectUntil = s.world.Resource.Time.GameTime.Add(constant.DrainDeflectImmunity)
-
-	s.world.Component.Drain.Set(drainEntity, drain)
 }
 
 // deflectQuasar applies offset-aware collision impulse to quasar composite
@@ -459,26 +442,15 @@ func (s *CleanerSystem) deflectQuasar(anchorEntity, hitMember core.Entity, clean
 		offsetX := hitPos.X - anchorPos.X
 		offsetY := hitPos.Y - anchorPos.Y
 
-		impulseX, impulseY := vmath.ApplyOffsetCollisionImpulse(
+		now := s.world.Resource.Time.GameTime
+		physics.ApplyOffsetCollision(
+			&quasar.KineticState,
 			cleanerVelX, cleanerVelY,
 			offsetX, offsetY,
-			vmath.OffsetInfluenceDefault,
-			vmath.MassRatioCleanerToQuasar,
-			constant.DrainDeflectAngleVar,
-			constant.QuasarDeflectImpulseMin,
-			constant.QuasarDeflectImpulseMax,
+			&physics.CleanerToQuasar,
 			s.rng,
+			now,
 		)
-
-		if impulseX == 0 && impulseY == 0 {
-			return
-		}
-
-		// Reset velocity and apply impulse (clean knockback)
-		quasar.VelX = impulseX
-		quasar.VelY = impulseY
-
-		quasar.DeflectUntil = s.world.Resource.Time.GameTime.Add(constant.QuasarHitFlashDuration)
 	}
 
 	s.world.Component.Quasar.Set(anchorEntity, quasar)

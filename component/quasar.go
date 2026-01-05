@@ -4,7 +4,6 @@ import (
 	"time"
 )
 
-
 // QuasarChars defines the 3×5 visual representation
 var QuasarChars = [3][5]rune{
 	{'╔', '═', '╦', '═', '╗'},
@@ -17,7 +16,6 @@ var QuasarChars = [3][5]rune{
 type QuasarComponent struct {
 	KineticState // PreciseX/Y, VelX/Y, AccelX/Y (Q16.16)
 
-	DeflectUntil        time.Time // Immunity from homing/drag after cleaner hit
 	LastSpeedIncreaseAt time.Time // For periodic speed scaling
 
 	SpeedMultiplier int32 // Q16.16, current speed scale factor (starts at Scale)
