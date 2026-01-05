@@ -232,10 +232,21 @@ func (s *NuggetSystem) spawnNugget() {
 
 	// Set component after position is committed
 	s.world.Component.Nugget.Set(entity, nugget)
+	// Render component
+	s.world.Component.Sigil.Set(entity, component.SigilComponent{
+		Rune:  randomChar,
+		Color: component.SigilNugget,
+	})
 
 	s.activeNuggetEntity = entity
 
 	s.statSpawned.Add(1)
+
+	// Emit directional cleaners on spawn
+	s.world.PushEvent(event.EventCleanerDirectionalRequest, &event.DirectionalCleanerPayload{
+		OriginX: x,
+		OriginY: y,
+	})
 }
 
 // findValidPosition finds a valid random position for a nugget

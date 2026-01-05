@@ -100,7 +100,6 @@ var Renderers = []RendererDef{
 	{"splash", "NewSplashRenderer", "PrioritySplash"},
 	{"glyph", "NewGlyphRenderer", "PriorityEntities"},
 	{"sigil", "NewSigilRenderer", "PriorityEntities"},
-	{"nugget", "NewNuggetRenderer", "PriorityEntities"},
 	{"gold", "NewGoldRenderer", "PriorityEntities"},
 	{"shield", "NewShieldRenderer", "PriorityField"},
 	{"cleaner", "NewCleanerRenderer", "PriorityCleaner"},

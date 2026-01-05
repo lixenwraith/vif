@@ -1,6 +1,8 @@
 package system
 
 import (
+	"sync/atomic"
+
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -11,6 +13,9 @@ import (
 type HeatSystem struct {
 	world *engine.World
 
+	statCurrent *atomic.Int64
+	statAtMax   *atomic.Bool
+
 	enabled bool
 }
 
@@ -18,12 +23,18 @@ func NewHeatSystem(world *engine.World) engine.System {
 	s := &HeatSystem{
 		world: world,
 	}
+
+	s.statCurrent = s.world.Resource.Status.Ints.Get("heat.current")
+	s.statAtMax = s.world.Resource.Status.Bools.Get("heat.at_max")
+
 	s.Init()
 	return s
 }
 
 // Init resets session state for new game
 func (s *HeatSystem) Init() {
+	s.statCurrent.Store(0)
+	s.statAtMax.Store(false)
 	s.enabled = true
 }
 
@@ -68,11 +79,12 @@ func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
 		}
 	case event.EventHeatSet:
 		if payload, ok := ev.Payload.(*event.HeatSetPayload); ok {
-			s.setHeat(payload.Value)
+			s.setHeat(int64(payload.Value))
 		}
 	}
 }
 
+// TODO: refactor this and setHead more
 // addHeat applies delta with clamping and writes back to store
 func (s *HeatSystem) addHeat(delta int) {
 	cursorEntity := s.world.Resource.Cursor.Entity
@@ -86,22 +98,11 @@ func (s *HeatSystem) addHeat(delta int) {
 	current := heatComp.Current.Load()
 	newVal := current + int64(delta)
 
-	// Clamp
-	if newVal < 0 {
-		newVal = 0
-	}
-	if newVal > int64(constant.MaxHeat) {
-		newVal = int64(constant.MaxHeat)
-	}
-
-	heatComp.Current.Store(newVal)
-
-	// CRITICAL: Write the modified component copy back to the store
-	s.world.Component.Heat.Set(cursorEntity, heatComp)
+	s.setHeat(newVal)
 }
 
 // setHeat stores absolute value with clamping and writes back to store
-func (s *HeatSystem) setHeat(value int) {
+func (s *HeatSystem) setHeat(value int64) {
 	cursorEntity := s.world.Resource.Cursor.Entity
 
 	heatComp, ok := s.world.Component.Heat.Get(cursorEntity)
@@ -117,7 +118,10 @@ func (s *HeatSystem) setHeat(value int) {
 		value = constant.MaxHeat
 	}
 
-	heatComp.Current.Store(int64(value))
+	heatComp.Current.Store(value)
+
+	s.statCurrent.Store(value)
+	s.statAtMax.Store(value >= constant.MaxHeat)
 
 	// CRITICAL: Write the modified component copy back to the store
 	s.world.Component.Heat.Set(cursorEntity, heatComp)

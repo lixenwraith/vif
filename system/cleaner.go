@@ -50,6 +50,8 @@ func (s *CleanerSystem) Init() {
 	s.hasSpawnedSession = false
 	s.rng = vmath.NewFastRand(uint64(s.world.Resource.Time.RealTime.UnixNano()))
 	s.deflectedAnchors = make(map[core.Entity]core.Entity, 4)
+	s.statActive.Store(0)
+	s.statSpawned.Store(0)
 	s.enabled = true
 }
 
@@ -258,8 +260,9 @@ func (s *CleanerSystem) spawnCleaners() {
 	if spawnCount == 0 {
 		if !s.world.Resource.GameState.State.GrayoutPersist.Load() {
 			s.world.PushEvent(event.EventFuseDrains, nil)
+		} else {
+			s.world.PushEvent(event.EventCleanerSweepingFinished, nil)
 		}
-		s.world.PushEvent(event.EventCleanerSweepingFinished, nil)
 		return
 	}
 	s.statSpawned.Add(int64(spawnCount))

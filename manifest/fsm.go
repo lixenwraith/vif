@@ -45,6 +45,63 @@ func RegisterFSMComponents(m *fsm.Machine[*engine.World]) {
 		}
 	})
 
+	// StatusBoolEquals: Query status registry bool value
+	// Args: key (string), value (bool, default true)
+	m.RegisterGuardFactory("StatusBoolEquals", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
+		key, _ := args["key"].(string)
+		expected := true
+		if v, ok := args["value"].(bool); ok {
+			expected = v
+		}
+
+		return func(world *engine.World) bool {
+			if !world.Resource.Status.Bools.Has(key) {
+				return false
+			}
+			return world.Resource.Status.Bools.Get(key).Load() == expected
+		}
+	})
+
+	// StatusIntCompare: Query status registry int with comparison operator
+	// Args: key (string), op (string: eq|neq|gt|gte|lt|lte), value (int64)
+	m.RegisterGuardFactory("StatusIntCompare", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
+		key, _ := args["key"].(string)
+		op, _ := args["op"].(string)
+		var value int64
+		switch v := args["value"].(type) {
+		case float64:
+			value = int64(v)
+		case int64:
+			value = v
+		case int:
+			value = int64(v)
+		}
+
+		return func(world *engine.World) bool {
+			if !world.Resource.Status.Ints.Has(key) {
+				return false
+			}
+			current := world.Resource.Status.Ints.Get(key).Load()
+
+			switch op {
+			case "eq":
+				return current == value
+			case "neq":
+				return current != value
+			case "gt":
+				return current > value
+			case "gte":
+				return current >= value
+			case "lt":
+				return current < value
+			case "lte":
+				return current <= value
+			default:
+				return current == value
+			}
+		}
+	})
+
 	// --- GUARDS STATIC ---
 
 	// AlwaysTrue: Helper for unconditional transitions
@@ -73,81 +130,140 @@ initial = "TrySpawnGold"
 [states.Gameplay]
 parent = "Root"
 
+# === GOLD SPAWN CYCLE ===
+
 [states.TrySpawnGold]
 parent = "Gameplay"
 on_enter = [
-	{ action = "EmitEvent", event = "EventGoldSpawnRequest" }
+{ action = "EmitEvent", event = "EventGoldSpawnRequest" }
 ]
 transitions = [
-	{ trigger = "EventGoldSpawned", target = "GoldActive" },
-	{ trigger = "EventGoldSpawnFailed", target = "GoldRetryWait" }
+{ trigger = "EventGoldSpawned", target = "GoldActive" },
+{ trigger = "EventGoldSpawnFailed", target = "GoldRetryWait" }
 ]
 
 [states.GoldRetryWait]
 parent = "Gameplay"
 transitions = [
-	{ trigger = "Tick", target = "TrySpawnGold", guard = "StateTimeExceeds", guard_args = { ms = 1 } }
+{ trigger = "Tick", target = "TrySpawnGold", guard = "StateTimeExceeds", guard_args = { ms = 1 } }
 ]
 
 [states.GoldActive]
 parent = "Gameplay"
 transitions = [
-	{ trigger = "EventGoldComplete", target = "DecayWait" },
-	{ trigger = "EventGoldTimeout", target = "DecayWait" },
-	{ trigger = "EventGoldDestroyed", target = "DecayWait" }
+{ trigger = "EventGoldComplete", target = "SweepingPhase" },
+{ trigger = "EventGoldTimeout", target = "DecayWait" },
+{ trigger = "EventGoldDestroyed", target = "DecayWait" }
 ]
+
+# === SWEEPING PHASE (post gold-complete) ===
+
+[states.SweepingPhase]
+parent = "Gameplay"
+transitions = [
+{ trigger = "EventFuseDrains", target = "FusePhase" },
+{ trigger = "EventCleanerSweepingFinished", target = "DecayWait" }
+]
+
+# === QUASAR PHASE (parent for all quasar substates) ===
+
+[states.QuasarPhase]
+parent = "Gameplay"
+# Exit transition catchable from all children
+transitions = [
+{ trigger = "EventQuasarDestroyed", target = "QuasarCooldown" }
+]
+
+[states.FusePhase]
+parent = "QuasarPhase"
+transitions = [
+{ trigger = "EventQuasarSpawned", target = "QuasarSpawnGold" }
+]
+
+[states.QuasarSpawnGold]
+parent = "QuasarPhase"
+on_enter = [
+{ action = "EmitEvent", event = "EventGoldSpawnRequest" }
+]
+transitions = [
+{ trigger = "EventGoldSpawned", target = "QuasarGoldActive" },
+{ trigger = "EventGoldSpawnFailed", target = "QuasarGoldRetry" }
+]
+
+[states.QuasarGoldRetry]
+parent = "QuasarPhase"
+transitions = [
+{ trigger = "Tick", target = "QuasarSpawnGold", guard = "StateTimeExceeds", guard_args = { ms = 100 } }
+]
+
+[states.QuasarGoldActive]
+parent = "QuasarPhase"
+transitions = [
+# Gold complete during quasar: dust triggered by DustSystem, respawn gold
+{ trigger = "EventGoldComplete", target = "QuasarSpawnGold" },
+{ trigger = "EventGoldTimeout", target = "QuasarSpawnGold" },
+{ trigger = "EventGoldDestroyed", target = "QuasarSpawnGold" }
+]
+
+[states.QuasarCooldown]
+parent = "Gameplay"
+transitions = [
+{ trigger = "Tick", target = "TrySpawnGold", guard = "StateTimeExceeds", guard_args = { ms = 500 } }
+]
+
+# === DECAY/BLOSSOM WAVES ===
 
 [states.DecayWait]
 parent = "Gameplay"
 transitions = [
-	{ trigger = "Tick", target = "DecayAnimation", guard = "StateTimeExceeds", guard_args = { ms = 5000 } }
+{ trigger = "Tick", target = "DecayAnimation", guard = "StateTimeExceeds", guard_args = { ms = 5000 } }
 ]
 
 [states.DecayAnimation]
 parent = "Gameplay"
 on_enter = [
-	{ action = "EmitEvent", event = "EventDecayWave" }
+{ action = "EmitEvent", event = "EventDecayWave" }
 ]
 transitions = [
-	{ trigger = "Tick", target = "TrySpawnGold2", guard = "StateTimeExceeds", guard_args = { ms = 3000 } }
+{ trigger = "Tick", target = "TrySpawnGold2", guard = "StateTimeExceeds", guard_args = { ms = 3000 } }
 ]
 
 [states.TrySpawnGold2]
 parent = "Gameplay"
 on_enter = [
-	{ action = "EmitEvent", event = "EventGoldSpawnRequest" }
+{ action = "EmitEvent", event = "EventGoldSpawnRequest" }
 ]
 transitions = [
-	{ trigger = "EventGoldSpawned", target = "GoldActive2" },
-	{ trigger = "EventGoldSpawnFailed", target = "GoldRetryWait2" }
+{ trigger = "EventGoldSpawned", target = "GoldActive2" },
+{ trigger = "EventGoldSpawnFailed", target = "GoldRetryWait2" }
 ]
 
 [states.GoldRetryWait2]
 parent = "Gameplay"
 transitions = [
-	{ trigger = "Tick", target = "TrySpawnGold2", guard = "StateTimeExceeds", guard_args = { ms = 1 } }
+{ trigger = "Tick", target = "TrySpawnGold2", guard = "StateTimeExceeds", guard_args = { ms = 1 } }
 ]
 
 [states.GoldActive2]
 parent = "Gameplay"
 transitions = [
-	{ trigger = "EventGoldComplete", target = "BlossomWait" },
-	{ trigger = "EventGoldTimeout", target = "BlossomWait" },
-	{ trigger = "EventGoldDestroyed", target = "BlossomWait" }
+{ trigger = "EventGoldComplete", target = "SweepingPhase" },
+{ trigger = "EventGoldTimeout", target = "BlossomWait" },
+{ trigger = "EventGoldDestroyed", target = "BlossomWait" }
 ]
 
 [states.BlossomWait]
 parent = "Gameplay"
 transitions = [
-	{ trigger = "Tick", target = "BlossomAnimation", guard = "StateTimeExceeds", guard_args = { ms = 5000 } }
+{ trigger = "Tick", target = "BlossomAnimation", guard = "StateTimeExceeds", guard_args = { ms = 5000 } }
 ]
 
 [states.BlossomAnimation]
 parent = "Gameplay"
 on_enter = [
-	{ action = "EmitEvent", event = "EventBlossomWave" }
+{ action = "EmitEvent", event = "EventBlossomWave" }
 ]
 transitions = [
-	{ trigger = "Tick", target = "TrySpawnGold", guard = "StateTimeExceeds", guard_args = { ms = 3000 } }
+{ trigger = "Tick", target = "TrySpawnGold", guard = "StateTimeExceeds", guard_args = { ms = 3000 } }
 ]
 `

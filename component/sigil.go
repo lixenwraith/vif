@@ -1,6 +1,5 @@
 package component
 
-
 // SigilComponent provides visual representation for non-typeable moving entities
 // Used by: DrainSystem, BlossomSystem, CleanerSystem, DecaySystem
 type SigilComponent struct {
@@ -12,7 +11,8 @@ type SigilComponent struct {
 type SigilColor int
 
 const (
-	SigilDrain      SigilColor = iota // Light Cyan/drain color
+	SigilNugget     SigilColor = iota // Orange nugget color
+	SigilDrain                        // Light Cyan/drain color
 	SigilBlossom                      // Light Pink/blossom color
 	SigilDecay                        // Dark Cyan/decay color
 	SigilDustDark                     // Dark gray dust particle

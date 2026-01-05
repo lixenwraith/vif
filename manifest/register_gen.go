@@ -100,9 +100,6 @@ func RegisterRenderers() {
 	registry.RegisterRenderer("sigil", func(ctx any) any {
 		return renderers.NewSigilRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityEntities)
-	registry.RegisterRenderer("nugget", func(ctx any) any {
-		return renderers.NewNuggetRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityEntities)
 	registry.RegisterRenderer("gold", func(ctx any) any {
 		return renderers.NewGoldRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityEntities)
@@ -190,7 +187,6 @@ func ActiveRenderers() []string {
 		"splash",
 		"glyph",
 		"sigil",
-		"nugget",
 		"gold",
 		"shield",
 		"cleaner",

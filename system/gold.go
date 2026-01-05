@@ -296,19 +296,9 @@ func (s *GoldSystem) handleMemberTyped(payload *event.MemberTypedPayload) {
 func (s *GoldSystem) handleGoldComplete() {
 	anchorEntity := s.anchorEntity
 
-	// Check heat for cleaner trigger
-	cursorEntity := s.world.Resource.Cursor.Entity
-	if hc, ok := s.world.Component.Heat.Get(cursorEntity); ok {
-		if hc.Current.Load() >= constant.MaxHeat {
-			// At max head trigger cleaners
-			s.world.PushEvent(event.EventCleanerSweepingRequest, nil)
-		} else {
-			// Fill heat to max
-			s.world.PushEvent(event.EventHeatSet, &event.HeatSetPayload{Value: constant.MaxHeat})
-		}
-	} else {
-		panic("heat store doesn't exist")
-	}
+	// Fill heat to max and trigger sweeping cleaners
+	s.world.PushEvent(event.EventHeatSet, &event.HeatSetPayload{Value: constant.MaxHeat})
+	s.world.PushEvent(event.EventCleanerSweepingRequest, nil)
 
 	// Emit completion event
 	s.world.PushEvent(event.EventGoldComplete, &event.GoldCompletionPayload{

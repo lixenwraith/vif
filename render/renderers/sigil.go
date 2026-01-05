@@ -1,6 +1,5 @@
 package renderers
 
-
 import (
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
@@ -57,6 +56,8 @@ func (r *SigilRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 // resolveSigilColor maps SigilColor to RGB
 func resolveSigilColor(color component.SigilColor) render.RGB {
 	switch color {
+	case component.SigilNugget:
+		return render.RgbNuggetOrange
 	case component.SigilDrain:
 		return render.RgbDrain
 	case component.SigilBlossom:
