@@ -69,6 +69,7 @@ func (s *GoldSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventGoldEnable,
 		event.EventGoldSpawnRequest,
+		event.EventGoldCancel,
 		event.EventMemberTyped,
 		event.EventGameReset,
 	}
@@ -91,6 +92,9 @@ func (s *GoldSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.GoldEnablePayload); ok {
 			s.spawnEnabled = payload.Enabled
 		}
+
+	case event.EventGoldCancel:
+		s.destroyCurrentGold()
 
 	case event.EventGoldSpawnRequest:
 		enabled := s.spawnEnabled
@@ -296,11 +300,11 @@ func (s *GoldSystem) handleMemberTyped(payload *event.MemberTypedPayload) {
 func (s *GoldSystem) handleGoldComplete() {
 	anchorEntity := s.anchorEntity
 
-	// Fill heat to max and trigger sweeping cleaners
-	s.world.PushEvent(event.EventHeatSet, &event.HeatSetPayload{Value: constant.MaxHeat})
-	s.world.PushEvent(event.EventCleanerSweepingRequest, nil)
+	// // Fill heat to max and trigger sweeping cleaners
+	// s.world.PushEvent(event.EventHeatSet, &event.HeatSetPayload{Value: constant.MaxHeat})
+	// s.world.PushEvent(event.EventCleanerSweepingRequest, nil)
 
-	// Emit completion event
+	// Emit completion event, FSM is the reward authority
 	s.world.PushEvent(event.EventGoldComplete, &event.GoldCompletionPayload{
 		AnchorEntity: anchorEntity,
 	})

@@ -14,19 +14,34 @@ const (
 	StateRoot StateID = 1
 )
 
-// Machine is the generic Hierarchical Finite GameState Machine runtime
+// RegionState holds runtime state for a single parallel region
+type RegionState struct {
+	Name          string
+	ActiveStateID StateID
+	TimeInState   time.Duration
+	ActivePath    []StateID
+	Paused        bool
+}
+
+// Machine is the generic Hierarchical Finite State Machine runtime with parallel region support
 // T is the context type passed to actions and guards (e.g., *engine.World)
 type Machine[T any] struct {
 	// Graph Data (Immutable after load)
 	nodes map[StateID]*Node[T]
 
-	// Configuration
-	InitialStateID StateID // Stored during load for reset/init
+	// Region Configuration (from config)
+	regionInitials map[string]StateID // Region name -> initial state ID
 
-	// Runtime GameState
+	// Runtime State (per-region)
+	regions map[string]*RegionState
+
+	// TODO: deprecate after full migration
+	// Legacy single-state accessors (for backward compat, points to "main" region)
 	activeStateID StateID       // The current leaf node
 	timeInState   time.Duration // Time elapsed in current state
 	activePath    []StateID     // Stack of active states (Root -> Child -> Leaf)
+	// Deprecated: single-region compat
+	InitialStateID StateID
 
 	// Dependency Injection
 	guardReg        map[string]GuardFunc[T]
@@ -86,4 +101,10 @@ type GuardFactoryFunc[T any] func(m *Machine[T], args map[string]any) GuardFunc[
 type EmitEventArgs struct {
 	Type    event.EventType
 	Payload any
+}
+
+// RegionControlArgs holds args for region control actions
+type RegionControlArgs struct {
+	RegionName   string
+	InitialState string // For SpawnRegion
 }

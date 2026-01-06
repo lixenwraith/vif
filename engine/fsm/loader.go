@@ -21,13 +21,20 @@ func (m *Machine[T]) LoadConfig(data []byte) error {
 
 	// 2. Clear existing graph
 	m.nodes = make(map[StateID]*Node[T])
+	m.regions = make(map[string]*RegionState)
+	m.regionInitials = make(map[string]StateID)
 	m.activeStateID = StateNone
 	m.activePath = m.activePath[:0]
 
-	// 3. First Pass: Create GameState IDs and Nodes
-	nameToID := make(map[string]StateID)
-	// Reserve StateRoot = 1
+	// // 3. First Pass: Create GameState IDs and Nodes
+	// nameToID := make(map[string]StateID)
+	// // Reserve StateRoot = 1
+	// m.nodes[StateRoot] = m.AddState(StateRoot, "Root", StateNone)
+	// nameToID["Root"] = StateRoot
+
+	// 3. First Pass: Create GameState IDs and Nodes/Root node
 	m.nodes[StateRoot] = m.AddState(StateRoot, "Root", StateNone)
+	nameToID := make(map[string]StateID)
 	nameToID["Root"] = StateRoot
 
 	if _, ok := config.States["Root"]; !ok {
@@ -73,13 +80,13 @@ func (m *Machine[T]) LoadConfig(data []byte) error {
 
 		// Compile Actions
 		var err error
-		if node.OnEnter, err = m.compileActions(cfg.OnEnter); err != nil {
+		if node.OnEnter, err = m.compileActions(cfg.OnEnter, nameToID); err != nil {
 			return fmt.Errorf("state '%s' OnEnter: %w", name, err)
 		}
-		if node.OnUpdate, err = m.compileActions(cfg.OnUpdate); err != nil {
+		if node.OnUpdate, err = m.compileActions(cfg.OnUpdate, nameToID); err != nil {
 			return fmt.Errorf("state '%s' OnUpdate: %w", name, err)
 		}
-		if node.OnExit, err = m.compileActions(cfg.OnExit); err != nil {
+		if node.OnExit, err = m.compileActions(cfg.OnExit, nameToID); err != nil {
 			return fmt.Errorf("state '%s' OnExit: %w", name, err)
 		}
 
@@ -122,12 +129,32 @@ func (m *Machine[T]) LoadConfig(data []byte) error {
 		}
 	}
 
-	// 7. Validate Initial GameState
-	initialID, ok := nameToID[config.InitialState]
-	if !ok {
-		return fmt.Errorf("initial state '%s' not found", config.InitialState)
+	// // 7. Validate Initial GameState
+	// initialID, ok := nameToID[config.InitialState]
+	// if !ok {
+	// 	return fmt.Errorf("initial state '%s' not found", config.InitialState)
+	// }
+	// m.InitialStateID = initialID
+
+	// 7. Handle regions initial state
+	if len(config.Regions) > 0 {
+		// Multi-region mode
+		for regionName, regionCfg := range config.Regions {
+			initialID, ok := nameToID[regionCfg.Initial]
+			if !ok {
+				return fmt.Errorf("region '%s' references unknown initial state '%s'", regionName, regionCfg.Initial)
+			}
+			m.regionInitials[regionName] = initialID
+		}
+	} else if config.InitialState != "" {
+		// Legacy single-region mode
+		initialID, ok := nameToID[config.InitialState]
+		if !ok {
+			return fmt.Errorf("initial state '%s' not found", config.InitialState)
+		}
+		m.InitialStateID = initialID
+		m.regionInitials["main"] = initialID
 	}
-	m.InitialStateID = initialID
 
 	return nil
 }
@@ -142,10 +169,9 @@ func (m *Machine[T]) GetStateID(name string) (StateID, bool) {
 	return StateNone, false
 }
 
-func (m *Machine[T]) compileActions(configs []ActionConfig) ([]Action[T], error) {
+func (m *Machine[T]) compileActions(configs []ActionConfig, nameToID map[string]StateID) ([]Action[T], error) {
 	actions := make([]Action[T], 0, len(configs))
 	for _, cfg := range configs {
-		// Resolve Action Function
 		fn, ok := m.actionReg[cfg.Action]
 		if !ok {
 			return nil, fmt.Errorf("unknown action function '%s'", cfg.Action)
@@ -153,31 +179,40 @@ func (m *Machine[T]) compileActions(configs []ActionConfig) ([]Action[T], error)
 
 		var args any = nil
 
-		// Special handling for "EmitEvent" action to compile payload
-		if cfg.Action == "EmitEvent" {
+		switch cfg.Action {
+		case "EmitEvent":
 			if cfg.Event == "" {
 				return nil, fmt.Errorf("EmitEvent action requires 'event' field")
 			}
-
-			// Resolve Event Type
 			et, ok := event.GetEventType(cfg.Event)
 			if !ok {
 				return nil, fmt.Errorf("unknown event type '%s'", cfg.Event)
 			}
-
-			// Create Payload Struct
 			payload := event.NewPayloadStruct(et)
 			if payload != nil && cfg.Payload != nil {
-				// Decode map[string]any into struct
 				if err := toml.Decode(cfg.Payload, payload); err != nil {
 					return nil, fmt.Errorf("failed to decode payload for event '%s': %w", cfg.Event, err)
 				}
 			}
-
 			args = &EmitEventArgs{
 				Type:    et,
 				Payload: payload,
 			}
+
+		case "SpawnRegion", "TerminateRegion", "PauseRegion", "ResumeRegion":
+			if cfg.Region == "" {
+				return nil, fmt.Errorf("%s action requires 'region' field", cfg.Action)
+			}
+			rcArgs := &RegionControlArgs{
+				RegionName: cfg.Region,
+			}
+			if cfg.Action == "SpawnRegion" {
+				if cfg.InitialState == "" {
+					return nil, fmt.Errorf("SpawnRegion action requires 'initial_state' field")
+				}
+				rcArgs.InitialState = cfg.InitialState
+			}
+			args = rcArgs
 		}
 
 		actions = append(actions, Action[T]{
@@ -187,6 +222,52 @@ func (m *Machine[T]) compileActions(configs []ActionConfig) ([]Action[T], error)
 	}
 	return actions, nil
 }
+
+// func (m *Machine[T]) compileActions(configs []ActionConfig) ([]Action[T], error) {
+// 	actions := make([]Action[T], 0, len(configs))
+// 	for _, cfg := range configs {
+// 		// Resolve Action Function
+// 		fn, ok := m.actionReg[cfg.Action]
+// 		if !ok {
+// 			return nil, fmt.Errorf("unknown action function '%s'", cfg.Action)
+// 		}
+//
+// 		var args any = nil
+//
+// 		// Special handling for "EmitEvent" action to compile payload
+// 		if cfg.Action == "EmitEvent" {
+// 			if cfg.Event == "" {
+// 				return nil, fmt.Errorf("EmitEvent action requires 'event' field")
+// 			}
+//
+// 			// Resolve Event Type
+// 			et, ok := event.GetEventType(cfg.Event)
+// 			if !ok {
+// 				return nil, fmt.Errorf("unknown event type '%s'", cfg.Event)
+// 			}
+//
+// 			// Create Payload Struct
+// 			payload := event.NewPayloadStruct(et)
+// 			if payload != nil && cfg.Payload != nil {
+// 				// Decode map[string]any into struct
+// 				if err := toml.Decode(cfg.Payload, payload); err != nil {
+// 					return nil, fmt.Errorf("failed to decode payload for event '%s': %w", cfg.Event, err)
+// 				}
+// 			}
+//
+// 			args = &EmitEventArgs{
+// 				Type:    et,
+// 				Payload: payload,
+// 			}
+// 		}
+//
+// 		actions = append(actions, Action[T]{
+// 			Func: fn,
+// 			Args: args,
+// 		})
+// 	}
+// 	return actions, nil
+// }
 
 func (m *Machine[T]) compileTransitions(node *Node[T], configs []TransitionConfig, nameToID map[string]StateID) error {
 	for _, cfg := range configs {

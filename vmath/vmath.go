@@ -62,7 +62,29 @@ func Div(a, b int64) int64 {
 	// a << 32 as 128-bit: hi = a >> 32, lo = a << 32
 	hi := ua >> 32
 	lo := ua << 32
+
+	// Protection against overflow: if hi >= ub, the quotient will not fit in 64 bits
+	// This happens if |a| * Scale >= |b| * 2^64 (e.g. a=Scale, b=1)
+	if hi >= ub {
+		if negative {
+			return math.MinInt64
+		}
+		return math.MaxInt64
+	}
+
 	quo, _ := bits.Div64(hi, lo, ub)
+
+	// Saturate if the result exceeds int64 range
+	if quo > math.MaxInt64 {
+		// Special case: -2^63 is representable
+		if negative && quo == 1<<63 {
+			return math.MinInt64
+		}
+		if negative {
+			return math.MinInt64
+		}
+		return math.MaxInt64
+	}
 
 	if negative {
 		return -int64(quo)

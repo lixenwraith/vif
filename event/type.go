@@ -1,6 +1,5 @@
 package event
 
-
 // EventType represents the type of game event
 type EventType int
 
@@ -93,6 +92,11 @@ const (
 	// EventGoldDestroyed signals external gold destruction (e.g., Drain)
 	// Payload: *GoldCompletionPayload
 	EventGoldDestroyed
+
+	// EventGoldCancel signals mandatory cleanup of any active gold sequence
+	// Trigger: FSM exiting QuasarPhase or Reset
+	// Consumer: GoldSystem | Payload: nil
+	EventGoldCancel
 
 	// EventCleanerDirectionalRequest spawns 4-way cleaners from origin
 	// Trigger: Nugget collected at max heat, Enter in Normal or mode
@@ -304,6 +308,11 @@ const (
 	// Trigger: QuasarSystem when cursor re-enters zap range during charge
 	// Consumer: SplashSystem (destroy timer) | Payload: *QuasarChargeCancelPayload
 	EventQuasarChargeCancel
+
+	// EventQuasarCancel signals manual termination of the quasar phase
+	// Trigger: FSM (on GoldComplete during Quasar)
+	// Consumer: QuasarSystem | Payload: nil
+	EventQuasarCancel
 
 	// EventGrayoutStart signals persistent grayout activation
 	// Trigger: QuasarSystem on activation

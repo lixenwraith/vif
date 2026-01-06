@@ -72,9 +72,10 @@ type HeatAddPayload struct {
 	Delta int
 }
 
+// TODO: add toml tags to all payloads so they can be used in FSM EmitEvent actions
 // HeatSetPayload contains absolute heat value
 type HeatSetPayload struct {
-	Value int
+	Value int `toml:"value"`
 }
 
 // GoldEnablePayload controls gold spawning eligibility

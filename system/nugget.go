@@ -206,7 +206,6 @@ func (s *NuggetSystem) spawnNugget() {
 		return
 	}
 
-	nuggetID := s.nuggetID.Add(1)
 	entity := s.world.CreateEntity()
 
 	pos := component.PositionComponent{
@@ -217,7 +216,6 @@ func (s *NuggetSystem) spawnNugget() {
 	randomChar := constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
 	nugget := component.NuggetComponent{
 		Char:      randomChar,
-		ID:        int(nuggetID),
 		SpawnTime: now,
 	}
 

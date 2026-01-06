@@ -12,12 +12,20 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
+// directionalSpawnKey uniquely identifies a directional cleaner spawn request
+type directionalSpawnKey struct {
+	frame   int64
+	originX int
+	originY int
+}
+
 // CleanerSystem manages the cleaner animation and logic using vector physics
 type CleanerSystem struct {
 	world *engine.World
 
-	spawned           map[int64]bool // Track which frames already spawned cleaners
-	hasSpawnedSession bool           // Track if we spawned cleaners this session
+	sweepingFrames    map[int64]bool               // Frame-based dedup for sweeping cleaners
+	directionalSpawns map[directionalSpawnKey]bool // Position-aware dedup for directional cleaners
+	hasSpawnedSession bool                         // Track if we spawned cleaners this session
 
 	deflectedAnchors map[core.Entity]core.Entity // anchor -> cleaner that deflected it for deduplication of large entity hits
 
@@ -35,7 +43,8 @@ func NewCleanerSystem(world *engine.World) engine.System {
 		world: world,
 	}
 
-	s.spawned = make(map[int64]bool)
+	s.sweepingFrames = make(map[int64]bool)
+	s.directionalSpawns = make(map[directionalSpawnKey]bool)
 
 	s.statActive = s.world.Resource.Status.Ints.Get("cleaner.active")
 	s.statSpawned = s.world.Resource.Status.Ints.Get("cleaner.spawned")
@@ -46,7 +55,8 @@ func NewCleanerSystem(world *engine.World) engine.System {
 
 // Init resets session state for new game
 func (s *CleanerSystem) Init() {
-	clear(s.spawned)
+	clear(s.sweepingFrames)
+	clear(s.directionalSpawns)
 	s.hasSpawnedSession = false
 	s.rng = vmath.NewFastRand(uint64(s.world.Resource.Time.RealTime.UnixNano()))
 	s.deflectedAnchors = make(map[core.Entity]core.Entity, 4)
@@ -80,21 +90,29 @@ func (s *CleanerSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
-	// Check if we already spawned for this frame (deduplication)
-	if s.spawned[ev.Frame] {
-		return
-	}
-
 	switch ev.Type {
 	case event.EventCleanerSweepingRequest:
+		// Frame-only deduplication for sweeping (one global sweep per frame)
+		if s.sweepingFrames[ev.Frame] {
+			return
+		}
 		s.spawnCleaners()
-		s.spawned[ev.Frame] = true
+		s.sweepingFrames[ev.Frame] = true
 		s.hasSpawnedSession = true
 
 	case event.EventCleanerDirectionalRequest:
 		if payload, ok := ev.Payload.(*event.DirectionalCleanerPayload); ok {
+			// Position-aware deduplication for directional cleaners
+			key := directionalSpawnKey{
+				frame:   ev.Frame,
+				originX: payload.OriginX,
+				originY: payload.OriginY,
+			}
+			if s.directionalSpawns[key] {
+				return
+			}
 			s.spawnDirectionalCleaners(payload.OriginX, payload.OriginY)
-			s.spawned[ev.Frame] = true
+			s.directionalSpawns[key] = true
 			s.hasSpawnedSession = true
 		}
 	}
@@ -108,11 +126,16 @@ func (s *CleanerSystem) Update() {
 
 	config := s.world.Resource.Config
 
-	// Clean old entries from spawned map
+	// Clean old entries from deduplication maps
 	currentFrame := s.world.Resource.Time.FrameNumber
-	for frame := range s.spawned {
+	for frame := range s.sweepingFrames {
 		if currentFrame-frame > constant.CleanerDeduplicationWindow {
-			delete(s.spawned, frame)
+			delete(s.sweepingFrames, frame)
+		}
+	}
+	for key := range s.directionalSpawns {
+		if currentFrame-key.frame > constant.CleanerDeduplicationWindow {
+			delete(s.directionalSpawns, key)
 		}
 	}
 
@@ -258,11 +281,7 @@ func (s *CleanerSystem) spawnCleaners() {
 	spawnCount := len(rows)
 	// No rows to clean, trigger fuse drains if not in grayout
 	if spawnCount == 0 {
-		if !s.world.Resource.GameState.State.GrayoutPersist.Load() {
-			s.world.PushEvent(event.EventFuseDrains, nil)
-		} else {
-			s.world.PushEvent(event.EventCleanerSweepingFinished, nil)
-		}
+		s.world.PushEvent(event.EventCleanerSweepingFinished, nil)
 		return
 	}
 	s.statSpawned.Add(int64(spawnCount))

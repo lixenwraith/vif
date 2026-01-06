@@ -2,8 +2,14 @@ package fsm
 
 // RootConfig represents the top-level config structure
 type RootConfig struct {
-	InitialState string                  `toml:"initial"`
+	InitialState string                  `toml:"initial"` // Legacy single-region
+	Regions      map[string]RegionConfig `toml:"regions"` // Multi-region
 	States       map[string]*StateConfig `toml:"states"`
+}
+
+// RegionConfig defines a parallel region
+type RegionConfig struct {
+	Initial string `toml:"initial"`
 }
 
 // StateConfig represents a single state definition
@@ -25,7 +31,9 @@ type TransitionConfig struct {
 
 // ActionConfig represents an action definition
 type ActionConfig struct {
-	Action  string `toml:"action"`            // Action function name (e.g. "EmitEvent")
-	Event   string `toml:"event,omitempty"`   // For EmitEvent: Event Name
-	Payload any    `toml:"payload,omitempty"` // For EmitEvent: Event Payload (map[string]any from parser)
+	Action       string `toml:"action"`                  // Action function name (e.g. "EmitEvent")
+	Event        string `toml:"event,omitempty"`         // For EmitEvent: Event Name
+	Payload      any    `toml:"payload,omitempty"`       // For EmitEvent: Event Payload (map[string]any from parser)
+	Region       string `toml:"region,omitempty"`        // For region control actions
+	InitialState string `toml:"initial_state,omitempty"` // For SpawnRegion
 }

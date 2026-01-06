@@ -11,6 +11,8 @@ import (
 func NewMachine[T any]() *Machine[T] {
 	m := &Machine[T]{
 		nodes:           make(map[StateID]*Node[T]),
+		regionInitials:  make(map[string]StateID),
+		regions:         make(map[string]*RegionState),
 		guardReg:        make(map[string]GuardFunc[T]),
 		guardFactoryReg: make(map[string]GuardFactoryFunc[T]),
 		actionReg:       make(map[string]ActionFunc[T]),
@@ -38,23 +40,47 @@ func (m *Machine[T]) RegisterAction(name string, fn ActionFunc[T]) {
 	m.actionReg[name] = fn
 }
 
-// Init sets the initial state and runs its entry actions
-// Must be called after loading nodes
+// Init initializes all configured regions
 func (m *Machine[T]) Init(ctx T, initialID StateID) error {
+	// Legacy single-region mode (backward compat)
+	if len(m.regionInitials) == 0 {
+		return m.initRegion(ctx, "main", initialID)
+	}
+
+	// Multi-region mode
+	for regionName, regionInitial := range m.regionInitials {
+		if err := m.initRegion(ctx, regionName, regionInitial); err != nil {
+			return fmt.Errorf("region '%s': %w", regionName, err)
+		}
+	}
+
+	// TODO: check and resuse/adapt or deprecate
+	// Sync legacy accessors to "main" region if exists
+	m.syncLegacyAccessors()
+
+	return nil
+}
+
+// initRegion initializes a single region
+func (m *Machine[T]) initRegion(ctx T, regionName string, initialID StateID) error {
 	node, ok := m.nodes[initialID]
 	if !ok {
 		return fmt.Errorf("initial state ID %d not found", initialID)
 	}
 
-	// Set state directly without full transition logic (no exit)
-	m.activeStateID = initialID
-	m.timeInState = 0
-	m.activePath = make([]StateID, len(node.Path))
-	copy(m.activePath, node.Path)
+	region := &RegionState{
+		Name:          regionName,
+		ActiveStateID: initialID,
+		TimeInState:   0,
+		ActivePath:    make([]StateID, len(node.Path)),
+		Paused:        false,
+	}
+	copy(region.ActivePath, node.Path)
+
+	m.regions[regionName] = region
 
 	// Execute OnEnter for the entire chain from Root to Initial
-	// Since we are starting fresh, we enter everything
-	for _, id := range m.activePath {
+	for _, id := range region.ActivePath {
 		if n, exists := m.nodes[id]; exists {
 			for _, action := range n.OnEnter {
 				action.Func(ctx, action.Args)
@@ -65,34 +91,50 @@ func (m *Machine[T]) Init(ctx T, initialID StateID) error {
 	return nil
 }
 
-// Update advances the FSM by delta time
-// Handles automatic transitions (Event == 0) and per-tick actions
+// syncLegacyAccessors updates legacy single-state fields from "main" region
+func (m *Machine[T]) syncLegacyAccessors() {
+	if main, ok := m.regions["main"]; ok {
+		m.activeStateID = main.ActiveStateID
+		m.timeInState = main.TimeInState
+		m.activePath = main.ActivePath
+	}
+}
+
+// Update advances the FSM by delta time for all active regions
 func (m *Machine[T]) Update(ctx T, dt time.Duration) {
-	if m.activeStateID == StateNone {
+	for _, region := range m.regions {
+		if region.Paused {
+			continue
+		}
+		m.updateRegion(ctx, region, dt)
+	}
+
+	m.syncLegacyAccessors()
+}
+
+// updateRegion advances a single region, handling automatic transitions (Event == 0) and per-tick actions
+func (m *Machine[T]) updateRegion(ctx T, region *RegionState, dt time.Duration) {
+	if region.ActiveStateID == StateNone {
 		return
 	}
 
-	m.timeInState += dt
+	region.TimeInState += dt
 
-	// 1. Execute OnUpdate actions for current active state (Leaf)
-	// Design Choice: Do we update parents? Typically only the active leaf updates logic.
-	// We will execute only the active leaf updates to keep performance high.
-	leaf := m.nodes[m.activeStateID]
+	// Execute OnUpdate actions for current leaf state
+	leaf := m.nodes[region.ActiveStateID]
 	for _, action := range leaf.OnUpdate {
 		action.Func(ctx, action.Args)
 	}
 
-	// 2. Evaluate Tick Transitions (Event == 0)
-	// Bubble up: Leaf -> Parent -> Root
-	currID := m.activeStateID
+	// Evaluate Tick Transitions (Event == 0), bubble up
+	currID := region.ActiveStateID
 	for currID != StateNone {
 		node := m.nodes[currID]
 		for _, trans := range node.Transitions {
-			// 0 denotes a Tick/Auto transition
 			if trans.Event == 0 {
 				if trans.Guard == nil || trans.Guard(ctx) {
-					m.TransitionTo(ctx, trans.TargetID)
-					return // GameState changed, stop processing this tick
+					m.transitionRegion(ctx, region, trans.TargetID)
+					return
 				}
 			}
 		}
@@ -100,55 +142,38 @@ func (m *Machine[T]) Update(ctx T, dt time.Duration) {
 	}
 }
 
-// Reset returns FSM to initial state, executing full entry sequence
-// Preserves graph structure, zeros time tracking
-// MUST be called under World lock to prevent event dispatch races
-func (m *Machine[T]) Reset(ctx T) error {
-	if m.InitialStateID == StateNone {
-		return fmt.Errorf("FSM not initialized")
-	}
+// HandleEvent routes an external event through all active regions
+// Returns true if the event triggered a transition or was consumed
+func (m *Machine[T]) HandleEvent(ctx T, eventType event.EventType) bool {
+	handled := false
 
-	// Zero time tracking (prevents stale timer inheritance)
-	m.timeInState = 0
-
-	// TODO: seems fragile, should be able to immediately unplug considering system reset happens prior in pause
-	// Exit current state hierarchy (OnExit actions)
-	// Then enter initial state hierarchy (OnEnter actions)
-	// OnEnter will emit EventGoldSpawnRequest via EmitEvent action
-	if m.activeStateID != StateNone && m.activeStateID != m.InitialStateID {
-		// Perform clean exit from current state before re-init
-		currentPath := make([]StateID, len(m.activePath))
-		copy(currentPath, m.activePath)
-
-		// Walk up from leaf to root, executing OnExit
-		for i := len(currentPath) - 1; i >= 0; i-- {
-			if node, ok := m.nodes[currentPath[i]]; ok {
-				for _, action := range node.OnExit {
-					action.Func(ctx, action.Args)
-				}
-			}
+	for _, region := range m.regions {
+		if region.Paused {
+			continue
+		}
+		if m.handleEventInRegion(ctx, region, eventType) {
+			handled = true
 		}
 	}
 
-	// Re-initialize to initial state (runs OnEnter chain)
-	return m.Init(ctx, m.InitialStateID)
+	m.syncLegacyAccessors()
+	return handled
 }
 
-// HandleEvent routes an external event through the state hierarchy
-// Returns true if the event triggered a transition or was consumed
-func (m *Machine[T]) HandleEvent(ctx T, eventType event.EventType) bool {
-	if m.activeStateID == StateNone {
+// handleEventInRegion processes event in a single region
+func (m *Machine[T]) handleEventInRegion(ctx T, region *RegionState, eventType event.EventType) bool {
+	if region.ActiveStateID == StateNone {
 		return false
 	}
 
 	// Bubble up: Leaf -> Parent -> Root
-	currID := m.activeStateID
+	currID := region.ActiveStateID
 	for currID != StateNone {
 		node := m.nodes[currID]
 		for _, trans := range node.Transitions {
 			if trans.Event == eventType {
 				if trans.Guard == nil || trans.Guard(ctx) {
-					m.TransitionTo(ctx, trans.TargetID)
+					m.transitionRegion(ctx, region, trans.TargetID)
 					return true
 				}
 			}
@@ -159,27 +184,22 @@ func (m *Machine[T]) HandleEvent(ctx T, eventType event.EventType) bool {
 	return false
 }
 
-// TransitionTo performs a state change from current to target
-// Executes OnExit (up to LCA) and OnEnter (down from LCA)
-func (m *Machine[T]) TransitionTo(ctx T, targetID StateID) {
-	if m.activeStateID == targetID {
+// transitionRegion performs state change within a specific region
+func (m *Machine[T]) transitionRegion(ctx T, region *RegionState, targetID StateID) {
+	if region.ActiveStateID == targetID {
 		return
 	}
 
 	targetNode, ok := m.nodes[targetID]
 	if !ok {
-		// In production, log error. For now, silent fail or panic?
-		// Panic is safer to catch config errors early.
-		panic(fmt.Sprintf("FSM: Attempted transition to unknown state ID %d", targetID))
+		panic(fmt.Sprintf("FSM: Attempted transition to unknown state ID %d in region '%s'", targetID, region.Name))
 	}
 
-	// 1. Find LCA (Lowest Common Ancestor)
-	// We rely on the pre-calculated node.Path: [Root, ..., Parent, Node]
+	// Find LCA
 	lcaIndex := -1
-	currentPath := m.activePath
+	currentPath := region.ActivePath
 	targetPath := targetNode.Path
 
-	// Compare paths to find divergence point
 	minLen := len(currentPath)
 	if len(targetPath) < minLen {
 		minLen = len(targetPath)
@@ -193,9 +213,7 @@ func (m *Machine[T]) TransitionTo(ctx T, targetID StateID) {
 		}
 	}
 
-	// 2. Exit Phase
-	// Walk UP from Current Leaf to LCA (exclusive of LCA)
-	// currentPath indices: [len-1 ... lcaIndex+1]
+	// Exit Phase: walk UP from current leaf to LCA (exclusive)
 	for i := len(currentPath) - 1; i > lcaIndex; i-- {
 		nodeID := currentPath[i]
 		if node, exists := m.nodes[nodeID]; exists {
@@ -205,9 +223,7 @@ func (m *Machine[T]) TransitionTo(ctx T, targetID StateID) {
 		}
 	}
 
-	// 3. Enter Phase
-	// Walk DOWN from LCA (exclusive) to Target Leaf
-	// targetPath indices: [lcaIndex+1 ... len-1]
+	// Enter Phase: walk DOWN from LCA (exclusive) to target leaf
 	for i := lcaIndex + 1; i < len(targetPath); i++ {
 		nodeID := targetPath[i]
 		if node, exists := m.nodes[nodeID]; exists {
@@ -217,20 +233,126 @@ func (m *Machine[T]) TransitionTo(ctx T, targetID StateID) {
 		}
 	}
 
-	// 4. Update GameState
-	m.activeStateID = targetID
-	m.timeInState = 0
+	// Update region state
+	region.ActiveStateID = targetID
+	region.TimeInState = 0
 
-	// Update active path (copy target path)
-	// Re-use capacity if possible
-	if cap(m.activePath) >= len(targetPath) {
-		m.activePath = m.activePath[:len(targetPath)]
-		copy(m.activePath, targetPath)
+	if cap(region.ActivePath) >= len(targetPath) {
+		region.ActivePath = region.ActivePath[:len(targetPath)]
+		copy(region.ActivePath, targetPath)
 	} else {
-		m.activePath = make([]StateID, len(targetPath))
-		copy(m.activePath, targetPath)
+		region.ActivePath = make([]StateID, len(targetPath))
+		copy(region.ActivePath, targetPath)
 	}
 }
+
+// TransitionTo performs state change in "main" region (legacy compat)
+func (m *Machine[T]) TransitionTo(ctx T, targetID StateID) {
+	if region, ok := m.regions["main"]; ok {
+		m.transitionRegion(ctx, region, targetID)
+		m.syncLegacyAccessors()
+	}
+}
+
+// Reset returns FSM to initial state for all regions
+func (m *Machine[T]) Reset(ctx T) error {
+	// Exit all regions
+	for _, region := range m.regions {
+		if region.ActiveStateID != StateNone {
+			for i := len(region.ActivePath) - 1; i >= 0; i-- {
+				if node, ok := m.nodes[region.ActivePath[i]]; ok {
+					for _, action := range node.OnExit {
+						action.Func(ctx, action.Args)
+					}
+				}
+			}
+		}
+	}
+
+	// Clear regions
+	m.regions = make(map[string]*RegionState)
+
+	// Re-initialize
+	if len(m.regionInitials) == 0 {
+		if m.InitialStateID == StateNone {
+			return fmt.Errorf("FSM not initialized")
+		}
+		return m.initRegion(ctx, "main", m.InitialStateID)
+	}
+
+	return m.Init(ctx, StateNone)
+}
+
+// === Region Lifecycle Methods ===
+
+// SpawnRegion creates a new parallel region
+func (m *Machine[T]) SpawnRegion(ctx T, regionName string, initialID StateID) error {
+	if _, exists := m.regions[regionName]; exists {
+		return fmt.Errorf("region '%s' already exists", regionName)
+	}
+	return m.initRegion(ctx, regionName, initialID)
+}
+
+// TerminateRegion destroys a region, executing exit actions
+func (m *Machine[T]) TerminateRegion(ctx T, regionName string) error {
+	region, ok := m.regions[regionName]
+	if !ok {
+		return fmt.Errorf("region '%s' not found", regionName)
+	}
+
+	// Execute OnExit for entire path
+	for i := len(region.ActivePath) - 1; i >= 0; i-- {
+		if node, exists := m.nodes[region.ActivePath[i]]; exists {
+			for _, action := range node.OnExit {
+				action.Func(ctx, action.Args)
+			}
+		}
+	}
+
+	delete(m.regions, regionName)
+	m.syncLegacyAccessors()
+	return nil
+}
+
+// PauseRegion suspends a region's evaluation
+func (m *Machine[T]) PauseRegion(regionName string) {
+	if region, ok := m.regions[regionName]; ok {
+		region.Paused = true
+	}
+}
+
+// ResumeRegion resumes a region's evaluation
+func (m *Machine[T]) ResumeRegion(regionName string) {
+	if region, ok := m.regions[regionName]; ok {
+		region.Paused = false
+	}
+}
+
+// HasRegion checks if a region exists
+func (m *Machine[T]) HasRegion(regionName string) bool {
+	_, ok := m.regions[regionName]
+	return ok
+}
+
+// GetRegionState returns current state name for a region
+func (m *Machine[T]) GetRegionState(regionName string) string {
+	if region, ok := m.regions[regionName]; ok {
+		if node, ok := m.nodes[region.ActiveStateID]; ok {
+			return node.Name
+		}
+	}
+	return ""
+}
+
+// RegionTimeInState returns time spent in current state for a region
+func (m *Machine[T]) RegionTimeInState(regionName string) time.Duration {
+	if region, ok := m.regions[regionName]; ok {
+		return region.TimeInState
+	}
+	return 0
+}
+
+// === Legacy Accessors (for backward compat) ===
 
 // CurrentStateID returns the ID of the current leaf state
 func (m *Machine[T]) CurrentStateID() StateID {

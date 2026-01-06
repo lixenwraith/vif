@@ -60,7 +60,7 @@ func (s *QuasarSystem) Priority() int {
 func (s *QuasarSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventQuasarSpawned,
-		event.EventGoldComplete,
+		event.EventQuasarCancel,
 		event.EventGameReset,
 	}
 }
@@ -119,11 +119,9 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 		// Activate persistent grayout
 		s.world.Resource.GameState.State.StartGrayout()
 
-	case event.EventGoldComplete:
-		active := s.active
-
-		if active {
-			s.terminateQuasar()
+	case event.EventQuasarCancel:
+		if s.active {
+			s.terminateQuasarLocked()
 		}
 	}
 }
