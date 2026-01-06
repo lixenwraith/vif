@@ -24,15 +24,8 @@ const (
 	// DrainChar is the character used to render the drain entity (╬ - Unicode U+256C)
 	DrainChar = '╬'
 
-	// DEPRECATED: REMOVE AFTER MIGRATION
-	// DrainMoveInterval is the duration between drain movement updates
-	DrainMoveInterval = 1000 * time.Millisecond
-
 	// DrainEnergyDrainInterval is the duration between energy drain ticks
 	DrainEnergyDrainInterval = 1000 * time.Millisecond
-
-	// DrainEnergyDrainAmount is the amount of energy drained per tick
-	DrainEnergyDrainAmount = 100
 
 	// DrainBaseSpeed is the normal homing velocity in cells/sec (Q32.32 via vmath.FromFloat)
 	// Equivalent to previous 1 cell per DrainMoveInterval

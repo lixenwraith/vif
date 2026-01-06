@@ -157,6 +157,10 @@ func RegisterFSMComponents(m *fsm.Machine[*engine.World]) {
 const DefaultGameplayFSMConfig = `
 initial = "TrySpawnGold"
 
+# =============================================================================
+# MAIN REGION - Normal gameplay cycle
+# =============================================================================
+
 [states.Gameplay]
 parent = "Root"
 
@@ -191,20 +195,20 @@ transitions = [
 [states.PreSweepCheck]
 parent = "Gameplay"
 transitions = [
-    { trigger = "Tick", target = "SweepingPhaseHot", guard = "StatusBoolEquals", guard_args = { key = "heat.at_max", value = true } },
-    { trigger = "Tick", target = "SweepingPhaseNormal" }
+    { trigger = "Tick", target = "SweepingHot", guard = "StatusBoolEquals", guard_args = { key = "heat.at_max", value = true } },
+    { trigger = "Tick", target = "SweepingNormal" }
 ]
 
-[states.SweepingPhaseHot]
+[states.SweepingHot]
 parent = "Gameplay"
 on_enter = [
     { action = "EmitEvent", event = "EventCleanerSweepingRequest" }
 ]
 transitions = [
-    { trigger = "EventCleanerSweepingFinished", target = "FusePhase" }
+    { trigger = "EventCleanerSweepingFinished", target = "QuasarHandoff" }
 ]
 
-[states.SweepingPhaseNormal]
+[states.SweepingNormal]
 parent = "Gameplay"
 on_enter = [
     { action = "EmitEvent", event = "EventHeatSet", payload = { value = 100 } },
@@ -214,54 +218,16 @@ transitions = [
     { trigger = "EventCleanerSweepingFinished", target = "DecayWait" }
 ]
 
-# === QUASAR PHASE ===
+# === QUASAR HANDOFF (main pauses here) ===
 
-[states.QuasarPhase]
+[states.QuasarHandoff]
 parent = "Gameplay"
-on_exit = [
-    { action = "EmitEvent", event = "EventGoldCancel" }
-]
-transitions = [
-    { trigger = "EventQuasarDestroyed", target = "QuasarCooldown" }
-]
-
-[states.FusePhase]
-parent = "QuasarPhase"
 on_enter = [
-    { action = "EmitEvent", event = "EventFuseDrains" }
+    { action = "SpawnRegion", region = "quasar", initial_state = "QuasarFuse" },
+    { action = "PauseRegion", region = "main" }
 ]
 transitions = [
-    { trigger = "EventQuasarSpawned", target = "QuasarSpawnGold" }
-]
-
-[states.QuasarSpawnGold]
-parent = "QuasarPhase"
-on_enter = [
-    { action = "EmitEvent", event = "EventGoldSpawnRequest" }
-]
-transitions = [
-    { trigger = "EventGoldSpawned", target = "QuasarGoldActive" },
-    { trigger = "EventGoldSpawnFailed", target = "QuasarGoldRetry" }
-]
-
-[states.QuasarGoldRetry]
-parent = "QuasarPhase"
-transitions = [
-    { trigger = "Tick", target = "QuasarSpawnGold", guard = "StateTimeExceeds", guard_args = { ms = 100 } }
-]
-
-[states.QuasarGoldActive]
-parent = "QuasarPhase"
-transitions = [
-    { trigger = "EventGoldComplete", target = "QuasarSpawnGold" },
-    { trigger = "EventGoldTimeout", target = "QuasarSpawnGold" },
-    { trigger = "EventGoldDestroyed", target = "QuasarSpawnGold" }
-]
-
-[states.QuasarCooldown]
-parent = "Gameplay"
-transitions = [
-    { trigger = "Tick", target = "DecayWait", guard = "StateTimeExceeds", guard_args = { ms = 500 } }
+    { trigger = "Tick", target = "DecayWait" }
 ]
 
 # === DECAY/BLOSSOM WAVES ===
@@ -308,11 +274,11 @@ transitions = [
 [states.PreSweepCheck2]
 parent = "Gameplay"
 transitions = [
-    { trigger = "Tick", target = "SweepingPhaseHot", guard = "StatusBoolEquals", guard_args = { key = "heat.at_max", value = true } },
-    { trigger = "Tick", target = "SweepingPhaseNormal2" }
+    { trigger = "Tick", target = "SweepingHot", guard = "StatusBoolEquals", guard_args = { key = "heat.at_max", value = true } },
+    { trigger = "Tick", target = "SweepingNormal2" }
 ]
 
-[states.SweepingPhaseNormal2]
+[states.SweepingNormal2]
 parent = "Gameplay"
 on_enter = [
     { action = "EmitEvent", event = "EventHeatSet", payload = { value = 100 } },
@@ -336,4 +302,116 @@ on_enter = [
 transitions = [
     { trigger = "Tick", target = "TrySpawnGold", guard = "StateTimeExceeds", guard_args = { ms = 3000 } }
 ]
+
+# =============================================================================
+# QUASAR REGION - Spawned dynamically, self-contained
+# =============================================================================
+
+[states.QuasarCycle]
+parent = "Root"
+
+[states.QuasarFuse]
+parent = "QuasarCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventFuseDrains" }
+]
+transitions = [
+    { trigger = "EventQuasarSpawned", target = "QuasarGoldSpawn" }
+]
+
+[states.QuasarGoldSpawn]
+parent = "QuasarCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventGoldSpawnRequest" }
+]
+transitions = [
+    { trigger = "EventGoldSpawned", target = "QuasarGoldActive" },
+    { trigger = "EventGoldSpawnFailed", target = "QuasarGoldRetry" },
+    { trigger = "EventQuasarDestroyed", target = "QuasarExit" }
+]
+
+[states.QuasarGoldRetry]
+parent = "QuasarCycle"
+transitions = [
+    { trigger = "Tick", target = "QuasarGoldSpawn", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
+    { trigger = "EventQuasarDestroyed", target = "QuasarExit" }
+]
+
+[states.QuasarGoldActive]
+parent = "QuasarCycle"
+transitions = [
+    { trigger = "EventGoldComplete", target = "QuasarGoldSpawn" },
+    { trigger = "EventGoldTimeout", target = "QuasarGoldSpawn" },
+    { trigger = "EventGoldDestroyed", target = "QuasarGoldSpawn" },
+    { trigger = "EventQuasarDestroyed", target = "QuasarExit" }
+]
+
+[states.QuasarExit]
+parent = "QuasarCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventGoldCancel" },
+    { action = "ResumeRegion", region = "main" },
+    { action = "TerminateRegion", region = "quasar" }
+]
 `
+
+/*
+
+State trace (multi-region)
+
+```
+Region: main (default)
+────────────────────────────────────────────────────────
+Root
+└── Gameplay
+    ├── TrySpawnGold [on_enter: GoldSpawnRequest]
+    │   └→ GoldSpawned → GoldActive
+    │   └→ GoldSpawnFailed → GoldRetryWait
+    ├── GoldRetryWait → Tick[1ms] → TrySpawnGold
+    ├── GoldActive
+    │   └→ GoldComplete → PreSweepCheck
+    │   └→ Timeout/Destroyed → DecayWait
+    ├── PreSweepCheck
+    │   └→ Tick[heat.at_max=true] → SweepingHot
+    │   └→ Tick → SweepingNormal
+    ├── SweepingHot [on_enter: CleanerRequest]
+    │   └→ CleanerFinished → QuasarHandoff
+    ├── SweepingNormal [on_enter: HeatSet(100), CleanerRequest]
+    │   └→ CleanerFinished → DecayWait
+    ├── QuasarHandoff [on_enter: SpawnRegion(quasar), PauseRegion(main)]
+    │   └→ Tick → DecayWait  (fires when resumed)
+    ├── DecayWait → Tick[5s] → DecayAnimation
+    ├── DecayAnimation [on_enter: DecayWave] → Tick[3s] → TrySpawnGold2
+    ├── TrySpawnGold2 [on_enter: GoldSpawnRequest]
+    ├── GoldRetryWait2 → Tick[1ms] → TrySpawnGold2
+    ├── GoldActive2
+    │   └→ GoldComplete → PreSweepCheck2
+    │   └→ Timeout/Destroyed → BlossomWait
+    ├── PreSweepCheck2
+    │   └→ Tick[heat.at_max=true] → SweepingHot  (reuses same path)
+    │   └→ Tick → SweepingNormal2
+    ├── SweepingNormal2 [on_enter: HeatSet(100), CleanerRequest]
+    │   └→ CleanerFinished → BlossomWait
+    ├── BlossomWait → Tick[5s] → BlossomAnimation
+    └── BlossomAnimation [on_enter: BlossomWave] → Tick[3s] → TrySpawnGold
+
+Region: quasar (spawned dynamically)
+────────────────────────────────────────────────────────
+Root
+└── QuasarCycle
+    ├── QuasarFuse [on_enter: FuseDrains]
+    │   └→ QuasarSpawned → QuasarGoldSpawn
+    ├── QuasarGoldSpawn [on_enter: GoldSpawnRequest]
+    │   └→ GoldSpawned → QuasarGoldActive
+    │   └→ GoldSpawnFailed → QuasarGoldRetry
+    │   └→ QuasarDestroyed → QuasarExit
+    ├── QuasarGoldRetry
+    │   └→ Tick[100ms] → QuasarGoldSpawn
+    │   └→ QuasarDestroyed → QuasarExit
+    ├── QuasarGoldActive
+    │   └→ GoldComplete/Timeout/Destroyed → QuasarGoldSpawn (loop)
+    │   └→ QuasarDestroyed → QuasarExit
+    └── QuasarExit [on_enter: GoldCancel, ResumeRegion(main), TerminateRegion(quasar)]
+```
+
+*/

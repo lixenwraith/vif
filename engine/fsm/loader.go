@@ -26,12 +26,6 @@ func (m *Machine[T]) LoadConfig(data []byte) error {
 	m.activeStateID = StateNone
 	m.activePath = m.activePath[:0]
 
-	// // 3. First Pass: Create GameState IDs and Nodes
-	// nameToID := make(map[string]StateID)
-	// // Reserve StateRoot = 1
-	// m.nodes[StateRoot] = m.AddState(StateRoot, "Root", StateNone)
-	// nameToID["Root"] = StateRoot
-
 	// 3. First Pass: Create GameState IDs and Nodes/Root node
 	m.nodes[StateRoot] = m.AddState(StateRoot, "Root", StateNone)
 	nameToID := make(map[string]StateID)
@@ -129,13 +123,6 @@ func (m *Machine[T]) LoadConfig(data []byte) error {
 		}
 	}
 
-	// // 7. Validate Initial GameState
-	// initialID, ok := nameToID[config.InitialState]
-	// if !ok {
-	// 	return fmt.Errorf("initial state '%s' not found", config.InitialState)
-	// }
-	// m.InitialStateID = initialID
-
 	// 7. Handle regions initial state
 	if len(config.Regions) > 0 {
 		// Multi-region mode
@@ -222,52 +209,6 @@ func (m *Machine[T]) compileActions(configs []ActionConfig, nameToID map[string]
 	}
 	return actions, nil
 }
-
-// func (m *Machine[T]) compileActions(configs []ActionConfig) ([]Action[T], error) {
-// 	actions := make([]Action[T], 0, len(configs))
-// 	for _, cfg := range configs {
-// 		// Resolve Action Function
-// 		fn, ok := m.actionReg[cfg.Action]
-// 		if !ok {
-// 			return nil, fmt.Errorf("unknown action function '%s'", cfg.Action)
-// 		}
-//
-// 		var args any = nil
-//
-// 		// Special handling for "EmitEvent" action to compile payload
-// 		if cfg.Action == "EmitEvent" {
-// 			if cfg.Event == "" {
-// 				return nil, fmt.Errorf("EmitEvent action requires 'event' field")
-// 			}
-//
-// 			// Resolve Event Type
-// 			et, ok := event.GetEventType(cfg.Event)
-// 			if !ok {
-// 				return nil, fmt.Errorf("unknown event type '%s'", cfg.Event)
-// 			}
-//
-// 			// Create Payload Struct
-// 			payload := event.NewPayloadStruct(et)
-// 			if payload != nil && cfg.Payload != nil {
-// 				// Decode map[string]any into struct
-// 				if err := toml.Decode(cfg.Payload, payload); err != nil {
-// 					return nil, fmt.Errorf("failed to decode payload for event '%s': %w", cfg.Event, err)
-// 				}
-// 			}
-//
-// 			args = &EmitEventArgs{
-// 				Type:    et,
-// 				Payload: payload,
-// 			}
-// 		}
-//
-// 		actions = append(actions, Action[T]{
-// 			Func: fn,
-// 			Args: args,
-// 		})
-// 	}
-// 	return actions, nil
-// }
 
 func (m *Machine[T]) compileTransitions(node *Node[T], configs []TransitionConfig, nameToID map[string]StateID) error {
 	for _, cfg := range configs {
