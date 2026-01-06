@@ -63,6 +63,7 @@ func DefaultKeyTable() *KeyTable {
 			terminal.KeyHome:      {BehaviorMotion, MotionLineStart, SpecialNone, ModeTargetNone, IntentNone},
 			terminal.KeyEnd:       {BehaviorMotion, MotionLineEnd, SpecialNone, ModeTargetNone, IntentNone},
 			terminal.KeyTab:       {BehaviorAction, MotionNone, SpecialNone, ModeTargetNone, IntentNuggetJump},
+			terminal.KeyBacktab:   {BehaviorAction, MotionNone, SpecialNone, ModeTargetNone, IntentGoldJump},
 			terminal.KeyEnter:     {BehaviorAction, MotionNone, SpecialNone, ModeTargetNone, IntentFireCleaner},
 			terminal.KeyBackspace: {BehaviorMotion, MotionLeft, SpecialNone, ModeTargetNone, IntentNone},
 			terminal.KeyPageUp:    {BehaviorMotion, MotionHalfPageUp, SpecialNone, ModeTargetNone, IntentNone},

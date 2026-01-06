@@ -182,14 +182,11 @@ func (s *NuggetSystem) handleJumpRequest() {
 		Y: nuggetPos.Y,
 	})
 
-	// 5. Pay Energy Cost (move towards 0)
-	delta := -constant.NuggetJumpCost
-	if energy < 0 {
-		delta = constant.NuggetJumpCost
-	}
-
+	// 5. Pay Energy Cost (spend, convergent)
 	s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{
-		Delta: delta,
+		Delta:      -constant.NuggetJumpCost,
+		Spend:      true,
+		Convergent: true,
 	})
 
 	// 6. Play Sound

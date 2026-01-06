@@ -92,6 +92,7 @@ func InitRegistry() {
 	RegisterType("EventGoldTimeout", EventGoldTimeout, &GoldCompletionPayload{})
 	RegisterType("EventGoldDestroyed", EventGoldDestroyed, &GoldCompletionPayload{})
 	RegisterType("EventGoldCancel", EventGoldCancel, nil)
+	RegisterType("EventGoldJumpRequest", EventGoldJumpRequest, nil)
 	RegisterType("EventCharacterTyped", EventCharacterTyped, &CharacterTypedPayload{})
 	RegisterType("EventSplashRequest", EventSplashRequest, &SplashRequestPayload{})
 	RegisterType("EventEnergyAdd", EventEnergyAdd, &EnergyAddPayload{})

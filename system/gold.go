@@ -70,6 +70,7 @@ func (s *GoldSystem) EventTypes() []event.EventType {
 		event.EventGoldEnable,
 		event.EventGoldSpawnRequest,
 		event.EventGoldCancel,
+		event.EventGoldJumpRequest,
 		event.EventMemberTyped,
 		event.EventGameReset,
 	}
@@ -95,6 +96,9 @@ func (s *GoldSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventGoldCancel:
 		s.destroyCurrentGold()
+
+	case event.EventGoldJumpRequest:
+		s.handleJumpRequest()
 
 	case event.EventGoldSpawnRequest:
 		enabled := s.spawnEnabled
@@ -169,6 +173,77 @@ func (s *GoldSystem) Update() {
 	if now.After(timeoutTime) {
 		s.handleGoldTimeout()
 	}
+}
+
+// handleJumpRequest jumps cursor to the first living member of the gold sequence
+func (s *GoldSystem) handleJumpRequest() {
+	if !s.active || s.anchorEntity == 0 {
+		return
+	}
+
+	cursorEntity := s.world.Resource.Cursor.Entity
+
+	// 1. Check Energy from component
+	energyComp, ok := s.world.Component.Energy.Get(cursorEntity)
+	if !ok {
+		return
+	}
+
+	// Cost check (must have enough "absolute" energy to pay cost)
+	// Logic mimics NuggetSystem: allow jump only if energy moves towards zero
+	// If currently at 0, no jump
+	energy := energyComp.Current.Load()
+	cost := int64(constant.NuggetJumpCost)
+	if energy > -cost && energy < cost {
+		return
+	}
+
+	// 2. Find target position (First living member)
+	header, ok := s.world.Component.Header.Get(s.anchorEntity)
+	if !ok {
+		return
+	}
+
+	var targetEntity core.Entity
+	for _, m := range header.Members {
+		if m.Entity != 0 {
+			targetEntity = m.Entity
+			break
+		}
+	}
+
+	if targetEntity == 0 {
+		// No living members, should rely on update loop to clean up, but exit here
+		return
+	}
+
+	targetPos, ok := s.world.Position.Get(targetEntity)
+	if !ok {
+		return
+	}
+
+	// 3. Move Cursor
+	s.world.Position.Set(cursorEntity, component.PositionComponent{
+		X: targetPos.X,
+		Y: targetPos.Y,
+	})
+
+	// 4. Pay Energy Cost (Convergent Spend)
+	s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{
+		Delta:      -constant.NuggetJumpCost,
+		Spend:      true,
+		Convergent: true,
+	})
+
+	// 5. Play Sound
+	if s.world.Resource.Audio != nil {
+		s.world.Resource.Audio.Player.Play(core.SoundBell)
+	}
+
+	s.world.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{
+		X: targetPos.X,
+		Y: targetPos.Y,
+	})
 }
 
 // spawnGold creates a new gold sequence

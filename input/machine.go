@@ -322,6 +322,8 @@ func (m *Machine) processInsert(ev terminal.Event) *Intent {
 		switch ev.Key {
 		case terminal.KeyTab:
 			return &Intent{Type: IntentNuggetJump}
+		case terminal.KeyBacktab:
+			return &Intent{Type: IntentGoldJump}
 		case terminal.KeyEnter:
 			return &Intent{Type: IntentFireCleaner}
 		}

@@ -104,6 +104,11 @@ const (
 	// Consumer: GoldSystem | Payload: nil
 	EventGoldCancel
 
+	// EventGoldJumpRequest signals player intent to jump to active gold sequence
+	// Trigger: InputHandler (Shift+Tab key)
+	// Consumer: GoldSystem | Payload: nil
+	EventGoldJumpRequest
+
 	// EventCleanerDirectionalRequest spawns 4-way cleaners from origin
 	// Trigger: Nugget collected at max heat, Enter in Normal or mode
 	// Consumer: CleanerSystem | Payload: *DirectionalCleanerPayload

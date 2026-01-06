@@ -115,6 +115,8 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return r.handleSpecial(intent)
 	case input.IntentNuggetJump:
 		return r.handleNuggetJump()
+	case input.IntentGoldJump:
+		return r.handleGoldJump()
 	case input.IntentFireCleaner:
 		return r.handleFireCleaner()
 
@@ -394,6 +396,11 @@ func (r *Router) handleSpecial(intent *input.Intent) bool {
 
 func (r *Router) handleNuggetJump() bool {
 	r.ctx.PushEvent(event.EventNuggetJumpRequest, nil)
+	return true
+}
+
+func (r *Router) handleGoldJump() bool {
+	r.ctx.PushEvent(event.EventGoldJumpRequest, nil)
 	return true
 }
 
