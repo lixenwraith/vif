@@ -72,8 +72,8 @@ func RegisterFSMComponents(m *fsm.Machine[*engine.World]) {
 				}
 			}
 		}
-		return func(world *engine.World) bool {
-			return machine.TimeInState() >= duration
+		return func(world *engine.World, region *fsm.RegionState) bool {
+			return region.TimeInState >= duration
 		}
 	})
 
@@ -84,7 +84,7 @@ func RegisterFSMComponents(m *fsm.Machine[*engine.World]) {
 			expected = v
 		}
 
-		return func(world *engine.World) bool {
+		return func(world *engine.World, region *fsm.RegionState) bool {
 			if !world.Resource.Status.Bools.Has(key) {
 				return false
 			}
@@ -105,7 +105,7 @@ func RegisterFSMComponents(m *fsm.Machine[*engine.World]) {
 			value = int64(v)
 		}
 
-		return func(world *engine.World) bool {
+		return func(world *engine.World, region *fsm.RegionState) bool {
 			if !world.Resource.Status.Ints.Has(key) {
 				return false
 			}
@@ -132,30 +132,30 @@ func RegisterFSMComponents(m *fsm.Machine[*engine.World]) {
 
 	m.RegisterGuardFactory("RegionExists", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
 		regionName, _ := args["region"].(string)
-		return func(world *engine.World) bool {
+		return func(world *engine.World, region *fsm.RegionState) bool {
 			return machine.HasRegion(regionName)
 		}
 	})
 
 	// --- GUARDS (Static) ---
 
-	m.RegisterGuard("AlwaysTrue", func(world *engine.World) bool {
+	m.RegisterGuard("AlwaysTrue", func(world *engine.World, region *fsm.RegionState) bool {
 		return true
 	})
 
-	m.RegisterGuard("StateTimeExceeds10s", func(world *engine.World) bool {
-		return m.TimeInState() > 10*time.Second
+	m.RegisterGuard("StateTimeExceeds10s", func(world *engine.World, region *fsm.RegionState) bool {
+		return region.TimeInState > 10*time.Second
 	})
 
-	m.RegisterGuard("StateTimeExceeds2s", func(world *engine.World) bool {
-		return m.TimeInState() > 2*time.Second
+	m.RegisterGuard("StateTimeExceeds2s", func(world *engine.World, region *fsm.RegionState) bool {
+		return region.TimeInState > 2*time.Second
 	})
 }
 
-// DefaultGameplayFSMConfig returns the default TOML configuration matching the legacy ClockScheduler logic
-// This effectively ports the hardcoded Phase switch into data
+// DefaultGameplayFSMConfig returns the default TOML configuration
 const DefaultGameplayFSMConfig = `
-initial = "TrySpawnGold"
+[regions]
+main = { initial = "TrySpawnGold" }
 
 # =============================================================================
 # MAIN REGION - Normal gameplay cycle

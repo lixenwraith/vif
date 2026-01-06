@@ -4,12 +4,18 @@ package event
 type EventType int
 
 const (
+	// === Engine Event === // TODO: future implementation
+	// Mass entity cleanup
+	EventWorldClear EventType = iota
+	// System activation control
+	EventSystemToggle
+
 	// === Audio Event ===
 
 	// EventSoundRequest requests audio playback
 	// Trigger: Systems requiring audio feedback
 	// Consumer: AudioSystem | Payload: *SoundRequestPayload
-	EventSoundRequest EventType = iota
+	EventSoundRequest
 
 	// === Network Event ===
 

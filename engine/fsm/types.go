@@ -35,20 +35,12 @@ type Machine[T any] struct {
 	// Runtime State (per-region)
 	regions map[string]*RegionState
 
-	// TODO: deprecate after full migration
-	// Legacy single-state accessors (for backward compat, points to "main" region)
-	activeStateID StateID       // The current leaf node
-	timeInState   time.Duration // Time elapsed in current state
-	activePath    []StateID     // Stack of active states (Root -> Child -> Leaf)
-	// Deprecated: single-region compat
-	InitialStateID StateID
-
 	// Dependency Injection
 	guardReg        map[string]GuardFunc[T]
 	guardFactoryReg map[string]GuardFactoryFunc[T]
 	actionReg       map[string]ActionFunc[T]
 
-	// GameState metadata (populated by loader)
+	// State metadata (populated by loader)
 	StateDurations map[StateID]time.Duration // Max duration per state (0 = instant/event-driven)
 	StateIndices   map[StateID]int           // Deterministic index for color mapping
 	StateCount     int                       // Total non-Root states for normalization
@@ -87,7 +79,7 @@ type Action[T any] struct {
 }
 
 // GuardFunc returns true if the transition should occur
-type GuardFunc[T any] func(ctx T) bool
+type GuardFunc[T any] func(ctx T, region *RegionState) bool
 
 // ActionFunc executes a side effect
 type ActionFunc[T any] func(ctx T, args any)

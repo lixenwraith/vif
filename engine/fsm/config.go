@@ -2,9 +2,8 @@ package fsm
 
 // RootConfig represents the top-level config structure
 type RootConfig struct {
-	InitialState string                  `toml:"initial"` // Legacy single-region
-	Regions      map[string]RegionConfig `toml:"regions"` // Multi-region
-	States       map[string]*StateConfig `toml:"states"`
+	Regions map[string]RegionConfig `toml:"regions"` // Multi-region
+	States  map[string]*StateConfig `toml:"states"`
 }
 
 // RegionConfig defines a parallel region

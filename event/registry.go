@@ -64,6 +64,10 @@ func InitRegistry() {
 	registryInit = true
 
 	// Register all events from types.go
+
+	// Engine events
+	RegisterType("EventWorldClear", EventWorldClear, &WorldClearPayload{})
+	RegisterType("EventSystemToggle", EventSystemToggle, &SystemTogglePayload{})
 	// Audio events
 	RegisterType("EventSoundRequest", EventSoundRequest, &SoundRequestPayload{})
 	// Network events

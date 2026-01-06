@@ -136,7 +136,7 @@ func (cs *ClockScheduler) LoadFSM(config string, registerComponents func(*fsm.Ma
 	}
 
 	// Initialize GameState (enters initial state)
-	if err := cs.fsm.Init(cs.world, cs.fsm.InitialStateID); err != nil {
+	if err := cs.fsm.Init(cs.world); err != nil {
 		return fmt.Errorf("failed to init FSM: %w", err)
 	}
 
@@ -413,14 +413,15 @@ func (cs *ClockScheduler) processTick() {
 		cs.fsm.Update(cs.world, cs.tickInterval)
 
 		// 4. FSM Telemetry (after update, before post-settling)
-		cs.statFSMName.Store(cs.fsm.CurrentStateName())
-		cs.statFSMElapsed.Store(int64(cs.fsm.TimeInState()))
-		if maxDur, ok := cs.fsm.StateDurations[cs.fsm.CurrentStateID()]; ok {
+		// TODO: modify hard-coded main region to multi-region for complete telemetry
+		cs.statFSMName.Store(cs.fsm.GetRegionState("main"))
+		cs.statFSMElapsed.Store(int64(cs.fsm.RegionTimeInState("main")))
+		if maxDur, ok := cs.fsm.StateDurations[cs.fsm.RegionStateID("main")]; ok {
 			cs.statFSMMaxDur.Store(int64(maxDur))
 		} else {
 			cs.statFSMMaxDur.Store(0)
 		}
-		if idx, ok := cs.fsm.StateIndices[cs.fsm.CurrentStateID()]; ok {
+		if idx, ok := cs.fsm.StateIndices[cs.fsm.RegionStateID("main")]; ok {
 			cs.statFSMIndex.Store(int64(idx))
 		} else {
 			cs.statFSMIndex.Store(0)

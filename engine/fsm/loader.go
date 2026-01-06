@@ -19,14 +19,17 @@ func (m *Machine[T]) LoadConfig(data []byte) error {
 		return fmt.Errorf("failed to unmarshal FSM config: %w", err)
 	}
 
+	// Enforce regions existence
+	if len(config.Regions) == 0 {
+		return fmt.Errorf("at least one region must be defined in [regions]")
+	}
+
 	// 2. Clear existing graph
 	m.nodes = make(map[StateID]*Node[T])
 	m.regions = make(map[string]*RegionState)
 	m.regionInitials = make(map[string]StateID)
-	m.activeStateID = StateNone
-	m.activePath = m.activePath[:0]
 
-	// 3. First Pass: Create GameState IDs and Nodes/Root node
+	// 3. First Pass: Create State IDs and Nodes/Root node
 	m.nodes[StateRoot] = m.AddState(StateRoot, "Root", StateNone)
 	nameToID := make(map[string]StateID)
 	nameToID["Root"] = StateRoot
@@ -124,23 +127,12 @@ func (m *Machine[T]) LoadConfig(data []byte) error {
 	}
 
 	// 7. Handle regions initial state
-	if len(config.Regions) > 0 {
-		// Multi-region mode
-		for regionName, regionCfg := range config.Regions {
-			initialID, ok := nameToID[regionCfg.Initial]
-			if !ok {
-				return fmt.Errorf("region '%s' references unknown initial state '%s'", regionName, regionCfg.Initial)
-			}
-			m.regionInitials[regionName] = initialID
-		}
-	} else if config.InitialState != "" {
-		// Legacy single-region mode
-		initialID, ok := nameToID[config.InitialState]
+	for regionName, regionCfg := range config.Regions {
+		initialID, ok := nameToID[regionCfg.Initial]
 		if !ok {
-			return fmt.Errorf("initial state '%s' not found", config.InitialState)
+			return fmt.Errorf("region '%s' references unknown initial state '%s'", regionName, regionCfg.Initial)
 		}
-		m.InitialStateID = initialID
-		m.regionInitials["main"] = initialID
+		m.regionInitials[regionName] = initialID
 	}
 
 	return nil

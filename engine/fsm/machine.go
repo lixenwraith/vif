@@ -17,7 +17,6 @@ func NewMachine[T any]() *Machine[T] {
 		guardFactoryReg: make(map[string]GuardFactoryFunc[T]),
 		actionReg:       make(map[string]ActionFunc[T]),
 		// Pre-allocate path slice to avoid resize during typical depth operations
-		activePath:     make([]StateID, 0, 8),
 		StateDurations: make(map[StateID]time.Duration),
 		StateIndices:   make(map[StateID]int),
 		StateCount:     0,
@@ -41,22 +40,17 @@ func (m *Machine[T]) RegisterAction(name string, fn ActionFunc[T]) {
 }
 
 // Init initializes all configured regions
-func (m *Machine[T]) Init(ctx T, initialID StateID) error {
-	// Legacy single-region mode (backward compat)
+func (m *Machine[T]) Init(ctx T) error {
 	if len(m.regionInitials) == 0 {
-		return m.initRegion(ctx, "main", initialID)
+		return fmt.Errorf("FSM has no defined regions to initialize")
 	}
 
-	// Multi-region mode
+	// Multi-region initialization
 	for regionName, regionInitial := range m.regionInitials {
 		if err := m.initRegion(ctx, regionName, regionInitial); err != nil {
 			return fmt.Errorf("region '%s': %w", regionName, err)
 		}
 	}
-
-	// TODO: check and resuse/adapt or deprecate
-	// Sync legacy accessors to "main" region if exists
-	m.syncLegacyAccessors()
 
 	return nil
 }
@@ -91,15 +85,6 @@ func (m *Machine[T]) initRegion(ctx T, regionName string, initialID StateID) err
 	return nil
 }
 
-// syncLegacyAccessors updates legacy single-state fields from "main" region
-func (m *Machine[T]) syncLegacyAccessors() {
-	if main, ok := m.regions["main"]; ok {
-		m.activeStateID = main.ActiveStateID
-		m.timeInState = main.TimeInState
-		m.activePath = main.ActivePath
-	}
-}
-
 // Update advances the FSM by delta time for all active regions
 func (m *Machine[T]) Update(ctx T, dt time.Duration) {
 	for _, region := range m.regions {
@@ -108,8 +93,6 @@ func (m *Machine[T]) Update(ctx T, dt time.Duration) {
 		}
 		m.updateRegion(ctx, region, dt)
 	}
-
-	m.syncLegacyAccessors()
 }
 
 // updateRegion advances a single region, handling automatic transitions (Event == 0) and per-tick actions
@@ -132,7 +115,7 @@ func (m *Machine[T]) updateRegion(ctx T, region *RegionState, dt time.Duration) 
 		node := m.nodes[currID]
 		for _, trans := range node.Transitions {
 			if trans.Event == 0 {
-				if trans.Guard == nil || trans.Guard(ctx) {
+				if trans.Guard == nil || trans.Guard(ctx, region) {
 					m.transitionRegion(ctx, region, trans.TargetID)
 					return
 				}
@@ -156,7 +139,6 @@ func (m *Machine[T]) HandleEvent(ctx T, eventType event.EventType) bool {
 		}
 	}
 
-	m.syncLegacyAccessors()
 	return handled
 }
 
@@ -172,7 +154,7 @@ func (m *Machine[T]) handleEventInRegion(ctx T, region *RegionState, eventType e
 		node := m.nodes[currID]
 		for _, trans := range node.Transitions {
 			if trans.Event == eventType {
-				if trans.Guard == nil || trans.Guard(ctx) {
+				if trans.Guard == nil || trans.Guard(ctx, region) {
 					m.transitionRegion(ctx, region, trans.TargetID)
 					return true
 				}
@@ -246,14 +228,6 @@ func (m *Machine[T]) transitionRegion(ctx T, region *RegionState, targetID State
 	}
 }
 
-// TransitionTo performs state change in "main" region (legacy compat)
-func (m *Machine[T]) TransitionTo(ctx T, targetID StateID) {
-	if region, ok := m.regions["main"]; ok {
-		m.transitionRegion(ctx, region, targetID)
-		m.syncLegacyAccessors()
-	}
-}
-
 // Reset returns FSM to initial state for all regions
 func (m *Machine[T]) Reset(ctx T) error {
 	// Exit all regions
@@ -272,15 +246,8 @@ func (m *Machine[T]) Reset(ctx T) error {
 	// Clear regions
 	m.regions = make(map[string]*RegionState)
 
-	// Re-initialize
-	if len(m.regionInitials) == 0 {
-		if m.InitialStateID == StateNone {
-			return fmt.Errorf("FSM not initialized")
-		}
-		return m.initRegion(ctx, "main", m.InitialStateID)
-	}
-
-	return m.Init(ctx, StateNone)
+	// Re-initialize using loaded config
+	return m.Init(ctx)
 }
 
 // === Region Lifecycle Methods ===
@@ -310,7 +277,6 @@ func (m *Machine[T]) TerminateRegion(ctx T, regionName string) error {
 	}
 
 	delete(m.regions, regionName)
-	m.syncLegacyAccessors()
 	return nil
 }
 
@@ -352,22 +318,11 @@ func (m *Machine[T]) RegionTimeInState(regionName string) time.Duration {
 	return 0
 }
 
-// === Legacy Accessors (for backward compat) ===
-
-// CurrentStateID returns the ID of the current leaf state
-func (m *Machine[T]) CurrentStateID() StateID {
-	return m.activeStateID
-}
-
-// CurrentStateName returns the name of the current leaf state
-func (m *Machine[T]) CurrentStateName() string {
-	if n, ok := m.nodes[m.activeStateID]; ok {
-		return n.Name
+// RegionStateID returns the active StateID for a named region
+// Returns StateNone if region doesn't exist
+func (m *Machine[T]) RegionStateID(regionName string) StateID {
+	if region, ok := m.regions[regionName]; ok {
+		return region.ActiveStateID
 	}
-	return ""
-}
-
-// TimeInState returns the duration spent in the current active state
-func (m *Machine[T]) TimeInState() time.Duration {
-	return m.timeInState
+	return StateNone
 }
