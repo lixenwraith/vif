@@ -119,10 +119,14 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return r.handleGoldJump()
 	case input.IntentFireCleaner:
 		return r.handleFireCleaner()
+	case input.IntentFireSpecial:
+		return r.handleFireSpecial()
 
 	// Mode switching
 	case input.IntentModeSwitch:
 		return r.handleModeSwitch(intent)
+	case input.IntentAppend:
+		return r.handleAppend()
 
 	// Text entry
 	case input.IntentTextChar:
@@ -419,6 +423,11 @@ func (r *Router) handleFireCleaner() bool {
 	return true
 }
 
+func (r *Router) handleFireSpecial() bool {
+	r.ctx.PushEvent(event.EventFireSpecialRequest, nil)
+	return true
+}
+
 // ========== Mode Switch Handler ==========
 
 func (r *Router) handleModeSwitch(intent *input.Intent) bool {
@@ -447,6 +456,22 @@ func (r *Router) handleModeSwitch(intent *input.Intent) bool {
 
 	// Sync input.Machine
 	r.machine.SetMode(inputMode)
+
+	return true
+}
+
+func (r *Router) handleAppend() bool {
+	// 1. Move Cursor Right
+	r.ctx.World.RunSafe(func() {
+		if pos, ok := r.ctx.World.Position.Get(r.ctx.CursorEntity); ok {
+			result := MotionRight(r.ctx, pos.X, pos.Y, 1)
+			OpMove(r.ctx, result)
+		}
+	})
+
+	// 2. Switch to Insert Mode
+	r.ctx.SetMode(core.ModeInsert)
+	r.machine.SetMode(input.ModeInsert)
 
 	return true
 }

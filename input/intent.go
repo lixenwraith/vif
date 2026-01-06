@@ -26,9 +26,11 @@ const (
 	IntentNuggetJump  // Tab
 	IntentGoldJump    // Shift+Tab
 	IntentFireCleaner // Enter in Normal mode
+	IntentFireSpecial // \ in Normal mode
 
 	// Mode switching
 	IntentModeSwitch // i, /, :
+	IntentAppend     // a
 
 	// Text entry modes (Insert/Search/Command)
 	IntentTextChar            // Printable character

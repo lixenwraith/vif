@@ -82,6 +82,7 @@ func InitRegistry() {
 	RegisterType("EventNuggetDestroyed", EventNuggetDestroyed, &NuggetDestroyedPayload{})
 	RegisterType("EventNuggetJumpRequest", EventNuggetJumpRequest, nil)
 	RegisterType("EventCleanerDirectionalRequest", EventCleanerDirectionalRequest, &DirectionalCleanerPayload{})
+	RegisterType("EventFireSpecialRequest", EventFireSpecialRequest, nil)
 	RegisterType("EventCleanerSweepingRequest", EventCleanerSweepingRequest, nil)
 	RegisterType("EventCleanerSweepingFinished", EventCleanerSweepingFinished, nil)
 	RegisterType("EventGoldEnable", EventGoldEnable, &GoldEnablePayload{})

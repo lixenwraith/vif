@@ -1,4 +1,3 @@
-# CHANGED: Full Makefile replacement
 BINARY := vi-fighter
 SRC := ./cmd/vi-fighter
 BIN_DIR := bin
@@ -6,7 +5,7 @@ BIN_DIR := bin
 # Default to help if no target is specified
 .DEFAULT_GOAL := help
 
-.PHONY: help generate dev release wasm run clean
+.PHONY: help generate dev release wasm run clean check-go
 
 help:
 	@echo "Usage: make [target]"
@@ -21,7 +20,38 @@ help:
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
 
-generate:
+check-go:
+	@if ! command -v go >/dev/null 2>&1; then \
+		echo "Go compiler not found."; \
+		CMD=""; \
+		if [ -f /etc/arch-release ]; then \
+			CMD="sudo pacman -S go"; \
+		elif [ -f /etc/debian_version ]; then \
+			if command -v snap >/dev/null 2>&1; then \
+				CMD="sudo snap install go --classic"; \
+			fi; \
+		elif [ "$$(uname)" = "FreeBSD" ]; then \
+			CMD="sudo pkg install lang/go"; \
+		fi; \
+		if [ -n "$$CMD" ]; then \
+			echo "Proposed installation: $$CMD"; \
+			printf "Install now? [y/N] "; \
+			read yn; \
+			case "$$yn" in \
+				[Yy]*) $$CMD ;; \
+				*) echo "Aborted. Install Go manually to continue."; exit 1 ;; \
+			esac; \
+		else \
+			echo "Automatic installation unavailable (or apt packages outdated)."; \
+			echo "Install Go 1.25+ manually:"; \
+			echo "  1. Download: https://go.dev/dl/"; \
+			echo "  2. Extract to /usr/local"; \
+			echo "  3. Add /usr/local/go/bin to PATH"; \
+			exit 1; \
+		fi; \
+	fi
+
+generate: check-go
 	go generate ./manifest/...
 
 dev: generate | $(BIN_DIR)

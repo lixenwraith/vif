@@ -122,6 +122,13 @@ func (s *SpiritSystem) spawnSpirit(p *event.SpiritSpawnPayload) {
 	// speed := vmath.Scale / (durationTicks + 1)
 	speed := vmath.Scale / durationTicks
 
+	// Calculate Spin: ~1.5 rotations (Scale * 1.5)
+	// Alternating direction based on position parity to create chaotic implosion
+	spinMag := int64(vmath.Scale*3) / 2
+	if (p.StartX^p.StartY)&1 != 0 {
+		spinMag = -spinMag
+	}
+
 	s.world.Component.Protection.Set(entity, component.ProtectionComponent{
 		Mask: component.ProtectAll,
 	})
@@ -133,6 +140,7 @@ func (s *SpiritSystem) spawnSpirit(p *event.SpiritSpawnPayload) {
 		TargetY:    vmath.FromInt(p.TargetY),
 		Progress:   0,
 		Speed:      speed,
+		Spin:       spinMag,
 		Rune:       p.Char,
 		BaseColor:  p.BaseColor,
 		BlinkColor: p.BlinkColor,

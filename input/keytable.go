@@ -78,6 +78,9 @@ func DefaultKeyTable() *KeyTable {
 			'l': {BehaviorMotion, MotionRight, SpecialNone, ModeTargetNone, IntentNone},
 			' ': {BehaviorMotion, MotionRight, SpecialNone, ModeTargetNone, IntentNone},
 
+			// Append
+			'a': {BehaviorAction, MotionNone, SpecialNone, ModeTargetNone, IntentAppend},
+
 			// Word motions
 			'w': {BehaviorMotion, MotionWordForward, SpecialNone, ModeTargetNone, IntentNone},
 			'W': {BehaviorMotion, MotionWORDForward, SpecialNone, ModeTargetNone, IntentNone},
@@ -119,6 +122,9 @@ func DefaultKeyTable() *KeyTable {
 
 			// Prefix
 			'g': {BehaviorPrefix, MotionNone, SpecialNone, ModeTargetNone, IntentNone},
+
+			// Actions
+			'\\': {BehaviorAction, MotionNone, SpecialNone, ModeTargetNone, IntentFireSpecial},
 
 			// Mode switches
 			'i': {BehaviorModeSwitch, MotionNone, SpecialNone, ModeTargetInsert, IntentNone},

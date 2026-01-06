@@ -359,6 +359,11 @@ const (
 	// Trigger: QuasarSystem (zap ends)
 	// Consumer: LightningSystem | Payload: core.Entity
 	EventLightningDespawn
+
+	// EventFireSpecialRequest signals player intent to fire special ability
+	// Trigger: InputHandler (\ key)
+	// Consumer: TBD | Payload: nil
+	EventFireSpecialRequest
 )
 
 // GameEvent represents a single game event with metadata

@@ -18,6 +18,10 @@ type SpiritComponent struct {
 	// Speed increment per tick in Q32.32 (distance-dependent)
 	Speed int64
 
+	// Total rotation angle in Q32.32 radians (Scale = 2pi)
+	// Positive = CW, Negative = CCW
+	Spin int64
+
 	// Visual properties
 	Rune       rune
 	BaseColor  terminal.RGB
