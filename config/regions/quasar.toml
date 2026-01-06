@@ -1,0 +1,48 @@
+# Quasar region states (spawned dynamically via SpawnRegion action)
+
+[states.QuasarCycle]
+parent = "Root"
+
+[states.QuasarFuse]
+parent = "QuasarCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventFuseDrains" }
+]
+transitions = [
+    { trigger = "EventQuasarSpawned", target = "QuasarGoldSpawn" }
+]
+
+[states.QuasarGoldSpawn]
+parent = "QuasarCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventGoldSpawnRequest" }
+]
+transitions = [
+    { trigger = "EventGoldSpawned", target = "QuasarGoldActive" },
+    { trigger = "EventGoldSpawnFailed", target = "QuasarGoldRetry" },
+    { trigger = "EventQuasarDestroyed", target = "QuasarExit" }
+]
+
+[states.QuasarGoldRetry]
+parent = "QuasarCycle"
+transitions = [
+    { trigger = "Tick", target = "QuasarGoldSpawn", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
+    { trigger = "EventQuasarDestroyed", target = "QuasarExit" }
+]
+
+[states.QuasarGoldActive]
+parent = "QuasarCycle"
+transitions = [
+    { trigger = "EventGoldComplete", target = "QuasarGoldSpawn" },
+    { trigger = "EventGoldTimeout", target = "QuasarGoldSpawn" },
+    { trigger = "EventGoldDestroyed", target = "QuasarGoldSpawn" },
+    { trigger = "EventQuasarDestroyed", target = "QuasarExit" }
+]
+
+[states.QuasarExit]
+parent = "QuasarCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventGoldCancel" },
+    { action = "ResumeRegion", region = "main" },
+    { action = "TerminateRegion", region = "quasar" }
+]

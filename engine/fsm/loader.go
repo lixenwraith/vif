@@ -13,10 +13,21 @@ import (
 // Validates all references (states, guards, actions, events)
 // Clears existing graph data before loading
 func (m *Machine[T]) LoadConfig(data []byte) error {
-	// 1. Decode TOML into intermediate config
+	p := toml.NewParser(data)
+	parsed, err := p.Parse()
+	if err != nil {
+		return fmt.Errorf("failed to parse FSM config: %w", err)
+	}
+	return m.LoadConfigFromMap(parsed)
+}
+
+// LoadConfigFromMap builds the Machine from a pre-parsed config map
+// Used by file loader after merging external includes
+func (m *Machine[T]) LoadConfigFromMap(configMap map[string]any) error {
+	// 1. Decode map into intermediate config struct
 	var config RootConfig
-	if err := toml.Unmarshal(data, &config); err != nil {
-		return fmt.Errorf("failed to unmarshal FSM config: %w", err)
+	if err := toml.Decode(configMap, &config); err != nil {
+		return fmt.Errorf("failed to decode FSM config: %w", err)
 	}
 
 	// Enforce regions existence
@@ -38,7 +49,7 @@ func (m *Machine[T]) LoadConfig(data []byte) error {
 		config.States["Root"] = &StateConfig{}
 	}
 
-	// Generate IDs
+	// Generate IDs, Root = 1
 	nextID := 2
 
 	// Sort keys for deterministic ID generation
@@ -128,6 +139,10 @@ func (m *Machine[T]) LoadConfig(data []byte) error {
 
 	// 7. Handle regions initial state
 	for regionName, regionCfg := range config.Regions {
+		// Skip regions without initial (states-only, spawned dynamically)
+		if regionCfg.Initial == "" {
+			continue
+		}
 		initialID, ok := nameToID[regionCfg.Initial]
 		if !ok {
 			return fmt.Errorf("region '%s' references unknown initial state '%s'", regionName, regionCfg.Initial)

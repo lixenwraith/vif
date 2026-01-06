@@ -125,6 +125,7 @@ func (cs *ClockScheduler) RegisterEventHandler(handler event.Handler) {
 	cs.eventRouter.Register(handler)
 }
 
+// TODO: for tests without file detection, not used in main path
 // LoadFSM initializes HFSM with provided config and registry bridge, must be called before Start()
 func (cs *ClockScheduler) LoadFSM(config string, registerComponents func(*fsm.Machine[*World])) error {
 	// Register Actions/Guards
@@ -133,6 +134,25 @@ func (cs *ClockScheduler) LoadFSM(config string, registerComponents func(*fsm.Ma
 	// Load Graph
 	if err := cs.fsm.LoadConfig([]byte(config)); err != nil {
 		return fmt.Errorf("failed to load FSM config: %w", err)
+	}
+
+	// Initialize GameState (enters initial state)
+	if err := cs.fsm.Init(cs.world); err != nil {
+		return fmt.Errorf("failed to init FSM: %w", err)
+	}
+
+	return nil
+}
+
+// LoadFSMAuto initializes HFSM with auto-detection of external config
+// Falls back to embedded config if external not found
+func (cs *ClockScheduler) LoadFSMAuto(embeddedFallback string, registerComponents func(*fsm.Machine[*World])) error {
+	// Register Actions/Guards
+	registerComponents(cs.fsm)
+
+	// Load with auto-detection
+	if err := fsm.LoadConfigAuto(cs.fsm, embeddedFallback); err != nil {
+		return fmt.Errorf("failed to load FSM: %w", err)
 	}
 
 	// Initialize GameState (enters initial state)

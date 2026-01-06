@@ -147,9 +147,8 @@ func main() {
 	// Initialize Event Registry for payload reflection
 	event.InitRegistry()
 
-	// Load FSM Config
-	// NOTE: using embedded TOML manifest for now
-	if err := clockScheduler.LoadFSM(manifest.DefaultGameplayFSMConfig, manifest.RegisterFSMComponents); err != nil {
+	// Load FSM Config: external config with embedded fallback
+	if err := clockScheduler.LoadFSMAuto(manifest.DefaultGameplayFSMConfig, manifest.RegisterFSMComponents); err != nil {
 		panic(fmt.Sprintf("failed to load FSM: %v", err))
 	}
 

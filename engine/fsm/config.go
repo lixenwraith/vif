@@ -1,5 +1,12 @@
 package fsm
 
+// External configuration paths (Unix-only)
+const (
+	DefaultConfigDir  = "./config"
+	DefaultConfigFile = "game.toml"
+	DefaultConfigPath = DefaultConfigDir + "/" + DefaultConfigFile
+)
+
 // RootConfig represents the top-level config structure
 type RootConfig struct {
 	Regions map[string]RegionConfig `toml:"regions"` // Multi-region
@@ -9,6 +16,7 @@ type RootConfig struct {
 // RegionConfig defines a parallel region
 type RegionConfig struct {
 	Initial string `toml:"initial"`
+	File    string `toml:"file,omitempty"` // External file path, relative to config dir
 }
 
 // StateConfig represents a single state definition
