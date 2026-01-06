@@ -55,6 +55,7 @@ var Components = []ComponentDef{
 
 	// Effects
 	{"Flash", "FlashComponent"},
+	{"Explosion", "ExplosionComponent"},
 	{"Splash", "SplashComponent"},
 
 	// Lifecycle
@@ -87,6 +88,7 @@ var Systems = []SystemDef{
 	{"quasar", "NewQuasarSystem"},
 	{"dust", "NewDustSystem"},
 	{"flash", "NewFlashSystem"},
+	{"explosion", "NewExplosionSystem"},
 	{"splash", "NewSplashSystem"},
 	{"death", "NewDeathSystem"},
 	{"timekeeper", "NewTimeKeeperSystem"},
@@ -104,6 +106,7 @@ var Renderers = []RendererDef{
 	{"shield", "NewShieldRenderer", "PriorityField"},
 	{"cleaner", "NewCleanerRenderer", "PriorityCleaner"},
 	{"flash", "NewFlashRenderer", "PriorityParticle"},
+	{"explosion", "NewExplosionRenderer", "PriorityParticle"},
 	{"lightning", "NewLightningRenderer", "PriorityField"},
 	{"spirit", "NewSpiritRenderer", "PriorityParticle"},
 	{"materialize", "NewMaterializeRenderer", "PriorityMaterialize"},

@@ -51,6 +51,7 @@ const (
 	PriorityDrain       = 130
 	PriorityMaterialize = 140 // PriorityDrain + 1
 	PriorityQuasar      = 150 // After Drain
+	PriorityExplosion   = 155 // After Quasar, before Dust
 	PriorityDust        = 160 // After Quasar, before Decay
 	PriorityDecay       = 170
 	PriorityBlossom     = 180

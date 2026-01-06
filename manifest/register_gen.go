@@ -75,6 +75,9 @@ func RegisterSystems() {
 	registry.RegisterSystem("flash", func(w any) any {
 		return system.NewFlashSystem(w.(*engine.World))
 	})
+	registry.RegisterSystem("explosion", func(w any) any {
+		return system.NewExplosionSystem(w.(*engine.World))
+	})
 	registry.RegisterSystem("splash", func(w any) any {
 		return system.NewSplashSystem(w.(*engine.World))
 	})
@@ -111,6 +114,9 @@ func RegisterRenderers() {
 	}, render.PriorityCleaner)
 	registry.RegisterRenderer("flash", func(ctx any) any {
 		return renderers.NewFlashRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityParticle)
+	registry.RegisterRenderer("explosion", func(ctx any) any {
+		return renderers.NewExplosionRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityParticle)
 	registry.RegisterRenderer("lightning", func(ctx any) any {
 		return renderers.NewLightningRenderer(ctx.(*engine.GameContext))
@@ -174,6 +180,7 @@ func ActiveSystems() []string {
 		"quasar",
 		"dust",
 		"flash",
+		"explosion",
 		"splash",
 		"death",
 		"timekeeper",
@@ -191,6 +198,7 @@ func ActiveRenderers() []string {
 		"shield",
 		"cleaner",
 		"flash",
+		"explosion",
 		"lightning",
 		"spirit",
 		"materialize",

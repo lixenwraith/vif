@@ -364,6 +364,16 @@ const (
 	// Trigger: InputHandler (\ key)
 	// Consumer: TBD | Payload: nil
 	EventFireSpecialRequest
+
+	// EventExplosionRequest triggers explosion effect at location
+	// Trigger: EventFireSpecialRequest handler, or programmatic
+	// Consumer: ExplosionSystem | Payload: *ExplosionRequestPayload
+	EventExplosionRequest
+
+	// EventDustSpawnOne signals intent to spawn a single dust entity
+	// Trigger: ExplosionSystem, future effects
+	// Consumer: DustSystem | Payload: *DustSpawnPayload
+	EventDustSpawnOne
 )
 
 // GameEvent represents a single game event with metadata

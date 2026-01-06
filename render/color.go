@@ -94,6 +94,11 @@ var (
 	// Flash colors
 	RgbRemovalFlash = RGB{255, 255, 200} // Bright yellow-white flash
 
+	// Explosion gradient
+	RgbExplosionCore = RGB{255, 255, 220} // Bright white-yellow flash
+	RgbExplosionMid  = RGB{255, 120, 20}  // Intense orange
+	RgbExplosionEdge = RGB{120, 20, 0}    // Dark red fade
+
 	// Shield colors
 	RgbShieldBase = RGB{180, 0, 150} // Deep Magenta
 

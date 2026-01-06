@@ -66,6 +66,7 @@ func (s *DustSystem) Priority() int {
 
 func (s *DustSystem) EventTypes() []event.EventType {
 	return []event.EventType{
+		event.EventDustSpawnOne,
 		event.EventQuasarSpawned,
 		event.EventQuasarDestroyed,
 		event.EventGoldComplete,
@@ -84,6 +85,17 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	switch ev.Type {
+	case event.EventDustSpawnOne:
+		if p, ok := ev.Payload.(*event.DustSpawnPayload); ok {
+			cursorEntity := s.world.Resource.Cursor.Entity
+			cursorPos, ok := s.world.Position.Get(cursorEntity)
+			if !ok {
+				return
+			}
+			s.spawnDust(p.X, p.Y, p.Char, p.Level, cursorPos.X, cursorPos.Y)
+			s.statCreated.Add(1)
+		}
+
 	case event.EventQuasarSpawned:
 		s.quasarActive = true
 

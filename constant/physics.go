@@ -39,3 +39,8 @@ var (
 	DustBoostMax       = vmath.FromFloat(DustBoostMaxFloat)
 	DustShieldRedirect = vmath.FromFloat(DustShieldRedirectFloat)
 )
+
+// Explosion physics (Q32.32)
+var (
+	ExplosionRadius = vmath.FromFloat(ExplosionDefaultRadius)
+)

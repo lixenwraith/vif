@@ -118,6 +118,8 @@ func InitRegistry() {
 	RegisterType("EventMaterializeRequest", EventMaterializeRequest, &MaterializeRequestPayload{})
 	RegisterType("EventMaterializeComplete", EventMaterializeComplete, &SpawnCompletePayload{})
 	RegisterType("EventFlashRequest", EventFlashRequest, &FlashRequestPayload{})
+	RegisterType("EventExplosionRequest", EventExplosionRequest, &ExplosionRequestPayload{})
+	RegisterType("EventDustSpawnOne", EventDustSpawnOne, &DustSpawnPayload{})
 	RegisterType("EventBlossomSpawnOne", EventBlossomSpawnOne, &BlossomSpawnPayload{})
 	RegisterType("EventBlossomWave", EventBlossomWave, nil)
 	RegisterType("EventDecaySpawnOne", EventDecaySpawnOne, &DecaySpawnPayload{})

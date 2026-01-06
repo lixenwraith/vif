@@ -221,6 +221,21 @@ const (
 	DustShieldRedirectFloat = 20.0
 )
 
+// --- Explosion Effect ---
+const (
+	// ExplosionDefaultRadius is visual radius in cells (aspect-corrected)
+	ExplosionDefaultRadius = 8.0
+
+	// ExplosionDuration is total animation time
+	ExplosionDuration = 400 * time.Millisecond
+
+	// ExplosionCoreFraction is normalized distance for core zone (0.0-1.0)
+	ExplosionCoreFraction = 0.3
+
+	// ExplosionBodyFraction is normalized distance where body ends, edge begins
+	ExplosionBodyFraction = 0.8
+)
+
 // --- Shield Entity ---
 const (
 	ShieldRadiusX    = 10.5

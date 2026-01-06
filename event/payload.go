@@ -289,6 +289,21 @@ type QuasarChargeCancelPayload struct {
 	AnchorEntity core.Entity `toml:"anchor_entity"`
 }
 
+// ExplosionRequestPayload contains parameters for explosion effect
+type ExplosionRequestPayload struct {
+	X      int   `toml:"x"`
+	Y      int   `toml:"y"`
+	Radius int64 `toml:"radius"` // Q32.32, 0 = use default
+}
+
+// DustSpawnPayload contains parameters for single dust entity creation
+type DustSpawnPayload struct {
+	X     int                  `toml:"x"`
+	Y     int                  `toml:"y"`
+	Char  rune                 `toml:"char"`
+	Level component.GlyphLevel `toml:"level"`
+}
+
 // TODO: future multi-level / network
 // WorldClearPayload contains parameters for mass entity cleanup
 type WorldClearPayload struct {
