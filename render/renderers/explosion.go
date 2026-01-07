@@ -18,6 +18,10 @@ type ExplosionRenderer struct {
 	bufWidth    int
 	bufHeight   int
 	bufCapacity int
+
+	// Dirty rect for optimization (screen coordinates relative to GameX/Y)
+	minX, maxX int
+	minY, maxY int
 }
 
 func NewExplosionRenderer(ctx *engine.GameContext) *ExplosionRenderer {
@@ -66,6 +70,11 @@ func (r *ExplosionRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		r.accumulateCenter(c, durationNano)
 	}
 
+	// If nothing was drawn to the buffer, skip rendering
+	if r.maxX < r.minX || r.maxY < r.minY {
+		return
+	}
+
 	// Color mapping pass
 	buf.SetWriteMask(constant.MaskTransient)
 	r.renderBuffer(ctx, buf, requiredSize)
@@ -80,6 +89,7 @@ func (r *ExplosionRenderer) accumulateCenter(c *system.ExplosionCenter, duration
 	timeDecay := vmath.ExpDecay(ageIndex)
 
 	// Bounding box (aspect-corrected)
+	// Radius is horizontal cells. Vertical cells = radius / 2
 	radiusCells := vmath.ToInt(c.Radius)
 	radiusCellsY := radiusCells / 2
 
@@ -100,6 +110,20 @@ func (r *ExplosionRenderer) accumulateCenter(c *system.ExplosionCenter, duration
 	}
 	if maxY >= r.bufHeight {
 		maxY = r.bufHeight - 1
+	}
+
+	// Update dirty rect
+	if minX < r.minX {
+		r.minX = minX
+	}
+	if maxX > r.maxX {
+		r.maxX = maxX
+	}
+	if minY < r.minY {
+		r.minY = minY
+	}
+	if maxY > r.maxY {
+		r.maxY = maxY
 	}
 
 	radiusSq := vmath.Mul(c.Radius, c.Radius)
@@ -136,47 +160,62 @@ func (r *ExplosionRenderer) accumulateCenter(c *system.ExplosionCenter, duration
 }
 
 func (r *ExplosionRenderer) renderBuffer(ctx render.RenderContext, buf *render.RenderBuffer, size int) {
-	for idx := 0; idx < size; idx++ {
-		intensity := r.accBuffer[idx]
-		if intensity < constant.ExplosionEdgeThreshold {
-			continue
-		}
+	// Continuous Gradient Palette (Neon/Cyber)
+	edgeColor := render.RgbExplosionEdge // Deep Indigo
+	midColor := render.RgbExplosionMid   // Electric Cyan
+	coreColor := render.RgbExplosionCore // White
 
-		x := idx % r.bufWidth
-		y := idx / r.bufWidth
-
-		screenX := ctx.GameX + x
+	// Only iterate the dirty rectangle
+	for y := r.minY; y <= r.maxY; y++ {
+		rowOffset := y * r.bufWidth
 		screenY := ctx.GameY + y
 
-		var color render.RGB
-		var mode render.BlendMode
-		var alpha float64
+		for x := r.minX; x <= r.maxX; x++ {
+			intensity := r.accBuffer[rowOffset+x]
 
-		if intensity >= constant.ExplosionCoreThreshold {
-			// Core: white-yellow, full additive
-			color = render.RgbExplosionCore
-			mode = render.BlendAdd
-			alpha = 1.0
-		} else if intensity >= constant.ExplosionBodyThreshold {
-			// Body: orange gradient
-			t := vmath.ToFloat(vmath.Div(
-				intensity-constant.ExplosionBodyThreshold,
-				constant.ExplosionCoreThreshold-constant.ExplosionBodyThreshold,
-			))
-			color = render.Lerp(render.RgbExplosionMid, render.RgbExplosionCore, t)
-			mode = render.BlendAdd
-			alpha = 0.8
-		} else {
-			// Edge: red fade
-			t := vmath.ToFloat(vmath.Div(
-				intensity-constant.ExplosionEdgeThreshold,
-				constant.ExplosionBodyThreshold-constant.ExplosionEdgeThreshold,
-			))
-			color = render.Lerp(render.RgbExplosionEdge, render.RgbExplosionMid, t)
-			mode = render.BlendScreen
-			alpha = 0.5
+			// Skip near-zero values to save blend ops
+			if intensity < constant.ExplosionEdgeThreshold {
+				continue
+			}
+
+			// Clamp intensity to 1.0 (Scale) for color calculations
+			val := intensity
+			if val > vmath.Scale {
+				val = vmath.Scale
+			}
+
+			// Gradient Mapping (Fixed Point)
+			// 0.0 -> Edge, Midpoint -> Mid, 1.0 -> Core
+			var color render.RGB
+			var tFixed int64
+
+			if val < constant.ExplosionGradientMidpoint {
+				// Interpolate Edge -> Mid
+				// t = val / Midpoint
+				tFixed = vmath.Mul(val, constant.ExplosionGradientFactor)
+				color = render.LerpRGBFixed(edgeColor, midColor, tFixed)
+			} else {
+				// Interpolate Mid -> Core
+				// t = (val - Midpoint) / (1.0 - Midpoint)
+				// Assuming Midpoint is 0.5, denominator is 0.5, factor is 2.0
+				base := val - constant.ExplosionGradientMidpoint
+				tFixed = vmath.Mul(base, constant.ExplosionGradientFactor)
+				color = render.LerpRGBFixed(midColor, coreColor, tFixed)
+			}
+
+			// Alpha mapping: val * AlphaMax
+			alphaFixed := vmath.Mul(val, constant.ExplosionAlphaMax)
+			if alphaFixed < constant.ExplosionAlphaMin {
+				alphaFixed = constant.ExplosionAlphaMin
+			}
+
+			screenX := ctx.GameX + x
+
+			// Convert alpha to float only at the boundary API call
+			alphaFloat := vmath.ToFloat(alphaFixed)
+
+			// Use Additive blend for neon glow effect
+			buf.Set(screenX, screenY, 0, render.RGBBlack, color, render.BlendAdd, alphaFloat, terminal.AttrNone)
 		}
-
-		buf.Set(screenX, screenY, 0, render.RGBBlack, color, mode, alpha, terminal.AttrNone)
 	}
 }

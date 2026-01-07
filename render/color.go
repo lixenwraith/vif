@@ -2,6 +2,7 @@ package render
 
 import (
 	"github.com/lixenwraith/vi-fighter/component"
+	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // HeatGradientLUT holds the pre-calculated rainbow gradient
@@ -94,10 +95,15 @@ var (
 	// Flash colors
 	RgbRemovalFlash = RGB{255, 255, 200} // Bright yellow-white flash
 
-	// Explosion gradient
-	RgbExplosionCore = RGB{255, 255, 220} // Bright white-yellow flash
-	RgbExplosionMid  = RGB{255, 120, 20}  // Intense orange
-	RgbExplosionEdge = RGB{120, 20, 0}    // Dark red fade
+	// // Explosion gradient, Realistic, duke nukem 3D
+	// RgbExplosionCore = RGB{255, 255, 220} // Bright white-yellow flash
+	// RgbExplosionMid  = RGB{255, 120, 20}  // Intense orange
+	// RgbExplosionEdge = RGB{120, 20, 0}    // Dark red fade
+
+	// Explosion gradient (Neon/Cyber theme)
+	RgbExplosionCore = RGB{240, 255, 255} // Bright White-Cyan
+	RgbExplosionMid  = RGB{0, 255, 255}   // Electric Cyan
+	RgbExplosionEdge = RGB{40, 0, 180}    // Deep Indigo/Blue
 
 	// Shield colors
 	RgbShieldBase = RGB{180, 0, 150} // Deep Magenta
@@ -139,6 +145,16 @@ var (
 	RgbCommandInputText   = RGB{255, 255, 255} // White for command input
 	RgbStatusMessageText  = RGB{200, 200, 200} // Light gray for status messages
 )
+
+// LerpRGBFixed interpolates between colors using Q32.32 factor t
+func LerpRGBFixed(a, b RGB, t int64) RGB {
+	// (diff * t) >> Shift is equivalent to Mul(diff * Scale, t) since diff is integer
+	// We do the multiplication in 64-bit to prevent overflow before shift
+	r := int64(a.R) + ((int64(b.R)-int64(a.R))*t)>>vmath.Shift
+	g := int64(a.G) + ((int64(b.G)-int64(a.G))*t)>>vmath.Shift
+	bl := int64(a.B) + ((int64(b.B)-int64(a.B))*t)>>vmath.Shift
+	return RGB{R: uint8(r), G: uint8(g), B: uint8(bl)}
+}
 
 // calculateHeatColor returns the color for a given position in the heat meter gradient
 // Progress is 0.0 to 1.0, representing position from start to end

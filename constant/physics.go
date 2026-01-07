@@ -40,11 +40,6 @@ var (
 	DustShieldRedirect = vmath.FromFloat(DustShieldRedirectFloat)
 )
 
-// Explosion physics (Q32.32)
-var (
-	ExplosionRadius = vmath.FromFloat(ExplosionDefaultRadius)
-)
-
 // Explosion field VFX (Q32.32)
 var (
 	ExplosionFieldRadius      = vmath.FromFloat(ExplosionFieldRadiusFloat)
@@ -57,4 +52,11 @@ var (
 	ExplosionCoreThreshold    = vmath.FromFloat(ExplosionCoreThresholdFloat)
 	ExplosionBodyThreshold    = vmath.FromFloat(ExplosionBodyThresholdFloat)
 	ExplosionEdgeThreshold    = vmath.FromFloat(ExplosionEdgeThresholdFloat)
+
+	// Visual fixed-point constants
+	ExplosionAlphaMax         = vmath.FromFloat(ExplosionAlphaMaxFloat)
+	ExplosionAlphaMin         = vmath.FromFloat(ExplosionAlphaMinFloat)
+	ExplosionGradientMidpoint = vmath.FromFloat(ExplosionGradientMidpointFloat)
+	// Factor = 1.0 / Midpoint (2.0 for 0.5)
+	ExplosionGradientFactor = vmath.FromFloat(1.0 / ExplosionGradientMidpointFloat)
 )

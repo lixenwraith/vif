@@ -3,7 +3,6 @@ package system
 import (
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -36,6 +35,10 @@ type ExplosionSystem struct {
 	baseRadius  int64 // Default radius Q32.32
 	radiusCap   int64 // Maximum radius after merges Q32.32
 
+	// Reusable buffers to avoid allocation in hot path
+	entityBuf    []core.Entity
+	dustEntryBuf []event.DustSpawnEntry
+
 	statTriggered *atomic.Int64
 	statConverted *atomic.Int64
 	statMerged    *atomic.Int64
@@ -64,6 +67,10 @@ func (s *ExplosionSystem) Init() {
 	// Initialize package-level state
 	ExplosionDurationNano = constant.ExplosionFieldDuration.Nanoseconds()
 	ExplosionCenters = explosionBacking[:0]
+
+	// Reset buffers
+	s.entityBuf = make([]core.Entity, 0, 256)
+	s.dustEntryBuf = make([]event.DustSpawnEntry, 0, 256)
 
 	s.statTriggered.Store(0)
 	s.statConverted.Store(0)
@@ -198,6 +205,7 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 	config := s.world.Resource.Config
 	frame := s.world.Resource.Time.FrameNumber
 
+	// Radius is horizontal cells; Vertical is half that to maintain aspect ratio
 	radiusCells := vmath.ToInt(radius)
 	radiusCellsY := radiusCells / 2
 
@@ -221,13 +229,9 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 
 	radiusSq := vmath.Mul(radius, radius)
 
-	type candidate struct {
-		entity core.Entity
-		x, y   int
-		char   rune
-		level  component.GlyphLevel
-	}
-	candidates := make([]candidate, 0, 128)
+	// Clear reuse buffers
+	s.entityBuf = s.entityBuf[:0]
+	s.dustEntryBuf = s.dustEntryBuf[:0]
 
 	for y := minY; y <= maxY; y++ {
 		for x := minX; x <= maxX; x++ {
@@ -251,39 +255,33 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 					continue
 				}
 
-				candidates = append(candidates, candidate{
-					entity: e,
-					x:      x,
-					y:      y,
-					char:   glyph.Rune,
-					level:  glyph.Level,
+				// Append to local buffers
+				s.entityBuf = append(s.entityBuf, e)
+				s.dustEntryBuf = append(s.dustEntryBuf, event.DustSpawnEntry{
+					X:     x,
+					Y:     y,
+					Char:  glyph.Rune,
+					Level: glyph.Level,
 				})
 			}
 		}
 	}
 
-	if len(candidates) == 0 {
+	if len(s.entityBuf) == 0 {
 		return
 	}
 
-	deathEntities := make([]core.Entity, len(candidates))
-	for i, c := range candidates {
-		deathEntities[i] = c.entity
-	}
-	event.EmitDeathBatch(s.world.Resource.Event.Queue, 0, deathEntities, frame)
+	// Use buffered entities for death batch
+	event.EmitDeathBatch(s.world.Resource.Event.Queue, 0, s.entityBuf, frame)
 
+	// Use buffered entries for dust spawn
+	// We must acquire a pool object for the event payload, but we copy from our buffer
 	dustBatch := event.AcquireDustSpawnBatch()
-	for _, c := range candidates {
-		dustBatch.Entries = append(dustBatch.Entries, event.DustSpawnEntry{
-			X:     c.x,
-			Y:     c.y,
-			Char:  c.char,
-			Level: c.level,
-		})
-	}
+	dustBatch.Entries = append(dustBatch.Entries, s.dustEntryBuf...)
+
 	s.world.PushEvent(event.EventDustSpawnBatch, dustBatch)
 
-	s.statConverted.Add(int64(len(candidates)))
+	s.statConverted.Add(int64(len(s.entityBuf)))
 }
 
 func (s *ExplosionSystem) Update() {

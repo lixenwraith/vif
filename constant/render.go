@@ -5,7 +5,6 @@ import (
 )
 
 // Render masks categorize buffer cells for selective post-processing
-// Masks are bitfields allowing combination via OR and exclusion via XOR
 const (
 	MaskNone      uint8 = 0
 	MaskPing      uint8 = 1 << 0 // Background ping and ping grid
