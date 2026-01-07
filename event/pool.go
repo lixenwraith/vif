@@ -6,10 +6,12 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 )
 
+// --- Death pool ---
+
 var deathRequestPool = sync.Pool{
 	New: func() any {
 		return &DeathRequestPayload{
-			Entities: make([]core.Entity, 0, 32),
+			Entities: make([]core.Entity, 0, 256),
 		}
 	},
 }
@@ -32,4 +34,33 @@ func ReleaseDeathRequest(p *DeathRequestPayload) {
 	}
 	p.Entities = p.Entities[:0]
 	deathRequestPool.Put(p)
+}
+
+// --- Dust pool ---
+
+var dustSpawnBatchPool = sync.Pool{
+	New: func() any {
+		return &DustSpawnBatchPayload{
+			// Pre-allocate capacity for typical explosions to avoid resize allocs
+			Entries: make([]DustSpawnEntry, 0, 2048),
+		}
+	},
+}
+
+// AcquireDustSpawnBatch returns a pooled payload with reset slice
+func AcquireDustSpawnBatch() *DustSpawnBatchPayload {
+	p := dustSpawnBatchPool.Get().(*DustSpawnBatchPayload)
+	// Reslice to length 0, keeping capacity
+	p.Entries = p.Entries[:0]
+	return p
+}
+
+// ReleaseDustSpawnBatch returns payload to pool
+func ReleaseDustSpawnBatch(p *DustSpawnBatchPayload) {
+	if p == nil {
+		return
+	}
+	// Reslice to length 0 to clear references (though DustSpawnEntry contains no pointers, good practice)
+	p.Entries = p.Entries[:0]
+	dustSpawnBatchPool.Put(p)
 }

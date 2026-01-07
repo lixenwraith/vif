@@ -9,6 +9,21 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
+// TODO: future multi-level / network
+// WorldClearPayload contains parameters for mass entity cleanup
+type WorldClearPayload struct {
+	KeepProtected bool   `toml:"keep_protected"` // Preserve entities with ProtectAll
+	KeepCursor    bool   `toml:"keep_cursor"`    // Preserve cursor entity explicitly
+	RegionTag     string `toml:"region_tag"`     // If set, only clear entities tagged with this
+}
+
+// TODO: future multi-level, debug
+// SystemTogglePayload contains parameters for system activation control
+type SystemTogglePayload struct {
+	System string `toml:"system"` // System registry name
+	Active bool   `toml:"active"` // Target activation state
+}
+
 // DeleteRangeType defines the scope of deletion
 type DeleteRangeType int
 
@@ -304,17 +319,17 @@ type DustSpawnPayload struct {
 	Level component.GlyphLevel `toml:"level"`
 }
 
-// TODO: future multi-level / network
-// WorldClearPayload contains parameters for mass entity cleanup
-type WorldClearPayload struct {
-	KeepProtected bool   `toml:"keep_protected"` // Preserve entities with ProtectAll
-	KeepCursor    bool   `toml:"keep_cursor"`    // Preserve cursor entity explicitly
-	RegionTag     string `toml:"region_tag"`     // If set, only clear entities tagged with this
+// DustSpawnEntry is a value type for batch dust spawning
+// Must remain a struct (not pointer) to avoid GC pressure in pooled slices
+type DustSpawnEntry struct {
+	X     int
+	Y     int
+	Char  rune
+	Level component.GlyphLevel
 }
 
-// TODO: future multi-level, debug
-// SystemTogglePayload contains parameters for system activation control
-type SystemTogglePayload struct {
-	System string `toml:"system"` // System registry name
-	Active bool   `toml:"active"` // Target activation state
+// DustSpawnBatchPayload contains batch dust spawn data
+// Use AcquireDustSpawnBatch/ReleaseDustSpawnBatch for pooled allocation
+type DustSpawnBatchPayload struct {
+	Entries []DustSpawnEntry
 }

@@ -186,15 +186,17 @@ func (s *ExplosionSystem) triggerExplosion(centerX, centerY int, radius int64) {
 	}
 	event.EmitDeathBatch(s.world.Resource.Event.Queue, 0, deathEntities, frame)
 
-	// Spawn dust for each
+	// Batch dust spawn
+	dustBatch := event.AcquireDustSpawnBatch()
 	for _, c := range candidates {
-		s.world.PushEvent(event.EventDustSpawnOne, &event.DustSpawnPayload{
+		dustBatch.Entries = append(dustBatch.Entries, event.DustSpawnEntry{
 			X:     c.x,
 			Y:     c.y,
 			Char:  c.char,
 			Level: c.level,
 		})
 	}
+	s.world.PushEvent(event.EventDustSpawnBatch, dustBatch)
 
 	// Create visual explosion entity
 	s.createVisualEntity(centerX, centerY, radius)

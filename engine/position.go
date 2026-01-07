@@ -198,6 +198,65 @@ func (p *Position) SetWorld(w *World) {
 	p.world = w
 }
 
+// --- Unsafe operation ---
+
+// Lock manually acquires the write lock for bulk operations.
+// CRITICAL: Blocks all other readers/writers. Must be paired with Unlock().
+// Use only in high-performance system updates (e.g., DustSystem).
+func (p *Position) Lock() {
+	p.mu.Lock()
+}
+
+// Unlock releases the write lock manually.
+func (p *Position) Unlock() {
+	p.mu.Unlock()
+}
+
+// GetUnsafe retrieves position without locking.
+// CRITICAL: Caller MUST hold Lock/RLock.
+func (p *Position) GetUnsafe(e core.Entity) (component.PositionComponent, bool) {
+	val, ok := p.components[e]
+	return val, ok
+}
+
+// MoveUnsafe updates position without locking.
+// CRITICAL: Caller MUST hold Lock().
+func (p *Position) MoveUnsafe(e core.Entity, newPos component.PositionComponent) {
+	oldPos, exists := p.components[e]
+	if !exists {
+		return
+	}
+	p.grid.Remove(e, oldPos.X, oldPos.Y)
+	p.components[e] = newPos
+	// Explicit ignore for OOB and Cell full
+	_ = p.grid.Add(e, newPos.X, newPos.Y)
+}
+
+// GetAllAtIntoUnsafe copies entities at (x,y) into buf without locking.
+// CRITICAL: Caller MUST hold Lock/RLock.
+// Returns number of entities copied.
+func (p *Position) GetAllAtIntoUnsafe(x, y int, buf []core.Entity) int {
+	if x < 0 || x >= p.grid.Width || y < 0 || y >= p.grid.Height {
+		return 0
+	}
+
+	// Direct grid access is safe because we hold the lock
+	idx := y*p.grid.Width + x
+	cell := &p.grid.Cells[idx]
+	count := int(cell.Count)
+
+	if count == 0 {
+		return 0
+	}
+
+	if count > len(buf) {
+		count = len(buf)
+	}
+
+	copy(buf, cell.Entities[:count])
+	return count
+}
+
 // --- Batch Implementation ---
 
 type PositionBatch struct {
@@ -269,4 +328,29 @@ func (pb *PositionBatch) Commit() error {
 	}
 
 	return nil
+}
+
+// CommitForce applies batched additions without checking for existing entity collisions
+// Used for effects like Dust that overlay existing entities or replace them before death processing
+func (pb *PositionBatch) CommitForce() {
+	if pb.committed {
+		return
+	}
+	pb.committed = true
+
+	pb.store.mu.Lock()
+	defer pb.store.mu.Unlock()
+
+	for _, add := range pb.additions {
+		// Remove old position if exists
+		if oldPos, exists := pb.store.components[add.entity]; exists {
+			pb.store.grid.Remove(add.entity, oldPos.X, oldPos.Y)
+		} else {
+			pb.store.entities = append(pb.store.entities, add.entity)
+		}
+
+		pb.store.components[add.entity] = add.pos
+		// Explicit ignore for OOB and Cell full
+		_ = pb.store.grid.Add(add.entity, add.pos.X, add.pos.Y)
+	}
 }
