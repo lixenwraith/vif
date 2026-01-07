@@ -55,7 +55,6 @@ var Components = []ComponentDef{
 
 	// Effects
 	{"Flash", "FlashComponent"},
-	{"Explosion", "ExplosionComponent"},
 	{"Splash", "SplashComponent"},
 
 	// Lifecycle

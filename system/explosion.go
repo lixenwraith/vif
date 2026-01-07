@@ -11,13 +11,34 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
+// ExplosionCenter represents a single explosion for rendering
+// Written by ExplosionSystem, read by ExplosionRenderer
+type ExplosionCenter struct {
+	X, Y      int
+	Radius    int64 // Q32.32 cells
+	Intensity int64 // Q32.32, Scale = 1.0 base
+	Age       int64 // Nanoseconds since spawn
+}
+
+// Package-level state for renderer access
+// System writes, renderer reads - no synchronization needed (single-threaded game loop)
+var (
+	ExplosionCenters      []ExplosionCenter                            // Active slice view
+	ExplosionDurationNano int64                                        // For decay calculation
+	explosionBacking      [constant.ExplosionCenterCap]ExplosionCenter // Pre-allocated storage
+)
+
 // ExplosionSystem handles explosion triggering and glyph-to-dust transformation
-// Visual rendering is handled by ExplosionRenderer
 type ExplosionSystem struct {
 	world *engine.World
 
+	activeCount int   // Number of active centers
+	baseRadius  int64 // Default radius Q32.32
+	radiusCap   int64 // Maximum radius after merges Q32.32
+
 	statTriggered *atomic.Int64
 	statConverted *atomic.Int64
+	statMerged    *atomic.Int64
 
 	enabled bool
 }
@@ -29,14 +50,24 @@ func NewExplosionSystem(world *engine.World) engine.System {
 
 	s.statTriggered = world.Resource.Status.Ints.Get("explosion.triggered")
 	s.statConverted = world.Resource.Status.Ints.Get("explosion.converted")
+	s.statMerged = world.Resource.Status.Ints.Get("explosion.merged")
 
 	s.Init()
 	return s
 }
 
 func (s *ExplosionSystem) Init() {
+	s.activeCount = 0
+	s.baseRadius = constant.ExplosionFieldRadius
+	s.radiusCap = constant.ExplosionRadiusCapFixed
+
+	// Initialize package-level state
+	ExplosionDurationNano = constant.ExplosionFieldDuration.Nanoseconds()
+	ExplosionCenters = explosionBacking[:0]
+
 	s.statTriggered.Store(0)
 	s.statConverted.Store(0)
+	s.statMerged.Store(0)
 	s.enabled = true
 }
 
@@ -64,55 +95,117 @@ func (s *ExplosionSystem) HandleEvent(ev event.GameEvent) {
 
 	switch ev.Type {
 	case event.EventFireSpecialRequest:
-		// Fire explosions at ALL dust positions
-		dustEntities := s.world.Component.Dust.All()
-		if len(dustEntities) == 0 {
-			return
-		}
-
-		// Collect unique positions (multiple dust can share cell)
-		type pos struct{ x, y int }
-		positions := make(map[pos]bool, len(dustEntities))
-
-		for _, e := range dustEntities {
-			if p, ok := s.world.Position.Get(e); ok {
-				positions[pos{p.X, p.Y}] = true
-			}
-		}
-
-		// Destroy all dust first (they become explosions)
-		event.EmitDeathBatch(s.world.Resource.Event.Queue, 0, dustEntities, s.world.Resource.Time.FrameNumber)
-
-		// Trigger explosion at each unique position
-		for p := range positions {
-			s.triggerExplosion(p.x, p.y, constant.ExplosionRadius)
-		}
+		s.fireFromDust()
 
 	case event.EventExplosionRequest:
 		if p, ok := ev.Payload.(*event.ExplosionRequestPayload); ok {
 			radius := p.Radius
 			if radius == 0 {
-				radius = constant.ExplosionRadius
+				radius = s.baseRadius
 			}
-			s.triggerExplosion(p.X, p.Y, radius)
+			s.addCenter(p.X, p.Y, radius)
 		}
 	}
 }
 
-func (s *ExplosionSystem) triggerExplosion(centerX, centerY int, radius int64) {
+func (s *ExplosionSystem) fireFromDust() {
+	dustEntities := s.world.Component.Dust.All()
+	if len(dustEntities) == 0 {
+		return
+	}
+
+	type pos struct{ x, y int }
+	positions := make(map[pos]bool, len(dustEntities))
+
+	for _, e := range dustEntities {
+		if p, ok := s.world.Position.Get(e); ok {
+			positions[pos{p.X, p.Y}] = true
+		}
+	}
+
+	event.EmitDeathBatch(s.world.Resource.Event.Queue, 0, dustEntities, s.world.Resource.Time.FrameNumber)
+
+	for p := range positions {
+		s.addCenter(p.x, p.y, s.baseRadius)
+	}
+}
+
+func (s *ExplosionSystem) addCenter(x, y int, radius int64) {
+	centerX := vmath.FromInt(x)
+	centerY := vmath.FromInt(y)
+
+	// Merge check
+	for i := 0; i < s.activeCount; i++ {
+		c := &explosionBacking[i]
+		dx := centerX - vmath.FromInt(c.X)
+		dy := centerY - vmath.FromInt(c.Y)
+		distSq := vmath.Mul(dx, dx) + vmath.Mul(dy, dy)
+
+		if distSq <= constant.ExplosionMergeThresholdSq {
+			c.Age = 0
+			c.Intensity += constant.ExplosionIntensityBoost
+			if c.Intensity > constant.ExplosionIntensityCap {
+				c.Intensity = constant.ExplosionIntensityCap
+			}
+			newRadius := c.Radius
+			if radius > newRadius {
+				newRadius = radius
+			}
+			newRadius += constant.ExplosionRadiusBoost
+			if newRadius > s.radiusCap {
+				newRadius = s.radiusCap
+			}
+			c.Radius = newRadius
+
+			s.statMerged.Add(1)
+			return
+		}
+	}
+
+	// No merge - add new center
+	var idx int
+	if s.activeCount < constant.ExplosionCenterCap {
+		idx = s.activeCount
+		s.activeCount++
+	} else {
+		// Overflow: overwrite oldest
+		idx = 0
+		maxAge := explosionBacking[0].Age
+		for i := 1; i < constant.ExplosionCenterCap; i++ {
+			if explosionBacking[i].Age > maxAge {
+				maxAge = explosionBacking[i].Age
+				idx = i
+			}
+		}
+	}
+
+	explosionBacking[idx] = ExplosionCenter{
+		X:         x,
+		Y:         y,
+		Radius:    radius,
+		Intensity: vmath.Scale,
+		Age:       0,
+	}
+
+	// Update exported slice
+	ExplosionCenters = explosionBacking[:s.activeCount]
+
+	s.transformGlyphs(x, y, radius)
+	s.statTriggered.Add(1)
+}
+
+func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 	config := s.world.Resource.Config
 	frame := s.world.Resource.Time.FrameNumber
 
-	// Bounding box in grid cells (aspect-corrected: visual Y is 2x grid Y)
 	radiusCells := vmath.ToInt(radius)
-	radiusCellsY := radiusCells / 2 // Aspect correction for bounding box
+	radiusCellsY := radiusCells / 2
 
 	minX := centerX - radiusCells
 	maxX := centerX + radiusCells
 	minY := centerY - radiusCellsY
 	maxY := centerY + radiusCellsY
 
-	// Clamp to screen
 	if minX < 0 {
 		minX = 0
 	}
@@ -126,21 +219,18 @@ func (s *ExplosionSystem) triggerExplosion(centerX, centerY int, radius int64) {
 		maxY = config.GameHeight - 1
 	}
 
-	// Precompute radius squared for containment check
 	radiusSq := vmath.Mul(radius, radius)
 
-	// Collect candidates
 	type candidate struct {
 		entity core.Entity
 		x, y   int
 		char   rune
 		level  component.GlyphLevel
 	}
-	candidates := make([]candidate, 0, 64)
+	candidates := make([]candidate, 0, 128)
 
 	for y := minY; y <= maxY; y++ {
 		for x := minX; x <= maxX; x++ {
-			// Aspect-corrected distance check
 			dx := vmath.FromInt(x - centerX)
 			dy := vmath.FromInt(y - centerY)
 			dyCirc := vmath.ScaleToCircular(dy)
@@ -152,12 +242,12 @@ func (s *ExplosionSystem) triggerExplosion(centerX, centerY int, radius int64) {
 
 			entities := s.world.Position.GetAllAt(x, y)
 			for _, e := range entities {
-				// Filter: must have Glyph, must not be composite member
-				glyph, hasGlyph := s.world.Component.Glyph.Get(e)
-				if !hasGlyph {
+				if s.world.Component.Member.Has(e) {
 					continue
 				}
-				if s.world.Component.Member.Has(e) {
+
+				glyph, hasGlyph := s.world.Component.Glyph.Get(e)
+				if !hasGlyph {
 					continue
 				}
 
@@ -173,20 +263,15 @@ func (s *ExplosionSystem) triggerExplosion(centerX, centerY int, radius int64) {
 	}
 
 	if len(candidates) == 0 {
-		// Still create visual even with no targets
-		s.createVisualEntity(centerX, centerY, radius)
-		s.statTriggered.Add(1)
 		return
 	}
 
-	// Batch death (silent - no flash, dust handles visual)
 	deathEntities := make([]core.Entity, len(candidates))
 	for i, c := range candidates {
 		deathEntities[i] = c.entity
 	}
 	event.EmitDeathBatch(s.world.Resource.Event.Queue, 0, deathEntities, frame)
 
-	// Batch dust spawn
 	dustBatch := event.AcquireDustSpawnBatch()
 	for _, c := range candidates {
 		dustBatch.Entries = append(dustBatch.Entries, event.DustSpawnEntry{
@@ -198,52 +283,26 @@ func (s *ExplosionSystem) triggerExplosion(centerX, centerY int, radius int64) {
 	}
 	s.world.PushEvent(event.EventDustSpawnBatch, dustBatch)
 
-	// Create visual explosion entity
-	s.createVisualEntity(centerX, centerY, radius)
-
-	s.statTriggered.Add(1)
 	s.statConverted.Add(int64(len(candidates)))
 }
 
-func (s *ExplosionSystem) createVisualEntity(centerX, centerY int, radius int64) {
-	entity := s.world.CreateEntity()
-
-	s.world.Component.Explosion.Set(entity, component.ExplosionComponent{
-		CenterX:       centerX,
-		CenterY:       centerY,
-		MaxRadius:     radius,
-		CurrentRadius: 0,
-		Duration:      constant.ExplosionDuration,
-		Age:           0,
-	})
-}
-
 func (s *ExplosionSystem) Update() {
-	if !s.enabled {
+	if !s.enabled || s.activeCount == 0 {
 		return
 	}
 
-	dt := s.world.Resource.Time.DeltaTime
-	entities := s.world.Component.Explosion.All()
+	dtNano := s.world.Resource.Time.DeltaTime.Nanoseconds()
 
-	for _, entity := range entities {
-		exp, ok := s.world.Component.Explosion.Get(entity)
-		if !ok {
-			continue
+	write := 0
+	for i := 0; i < s.activeCount; i++ {
+		explosionBacking[i].Age += dtNano
+		if explosionBacking[i].Age < ExplosionDurationNano {
+			if write != i {
+				explosionBacking[write] = explosionBacking[i]
+			}
+			write++
 		}
-
-		exp.Age += dt
-
-		if exp.Age >= exp.Duration {
-			s.world.Component.Explosion.Remove(entity)
-			s.world.DestroyEntity(entity)
-			continue
-		}
-
-		// Expand radius: linear interpolation from 0 to MaxRadius
-		progress := vmath.FromFloat(float64(exp.Age) / float64(exp.Duration))
-		exp.CurrentRadius = vmath.Mul(exp.MaxRadius, progress)
-
-		s.world.Component.Explosion.Set(entity, exp)
 	}
+	s.activeCount = write
+	ExplosionCenters = explosionBacking[:s.activeCount]
 }

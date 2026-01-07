@@ -44,3 +44,17 @@ var (
 var (
 	ExplosionRadius = vmath.FromFloat(ExplosionDefaultRadius)
 )
+
+// Explosion field VFX (Q32.32)
+var (
+	ExplosionFieldRadius      = vmath.FromFloat(ExplosionFieldRadiusFloat)
+	ExplosionMergeThreshold   = vmath.FromFloat(ExplosionMergeThresholdFloat)
+	ExplosionMergeThresholdSq = vmath.Mul(ExplosionMergeThreshold, ExplosionMergeThreshold)
+	ExplosionIntensityBoost   = vmath.FromFloat(ExplosionIntensityBoostFloat)
+	ExplosionRadiusBoost      = vmath.FromFloat(ExplosionRadiusBoostFloat)
+	ExplosionIntensityCap     = vmath.FromFloat(ExplosionIntensityCapFloat)
+	ExplosionRadiusCapFixed   = vmath.Mul(ExplosionFieldRadius, vmath.FromFloat(ExplosionRadiusCapMultiplier))
+	ExplosionCoreThreshold    = vmath.FromFloat(ExplosionCoreThresholdFloat)
+	ExplosionBodyThreshold    = vmath.FromFloat(ExplosionBodyThresholdFloat)
+	ExplosionEdgeThreshold    = vmath.FromFloat(ExplosionEdgeThresholdFloat)
+)
