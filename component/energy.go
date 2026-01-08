@@ -5,7 +5,6 @@ import (
 )
 
 // EnergyComponent holds the energy state and visual blink state
-// Previously part of global GameState, now attached to the cursor entity
 type EnergyComponent struct {
 	Current        atomic.Int64
 	BlinkActive    atomic.Bool

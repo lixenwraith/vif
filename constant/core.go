@@ -34,6 +34,7 @@ const (
 // 31 * 8 (Entities) + 1 (Count) + 7 (Padding) = 256 bytes
 const MaxEntitiesPerCell = 31
 
+// TODO: review and reorder
 // System Execution Priorities (lower runs first)
 const (
 	PriorityShield      = 10
@@ -47,7 +48,7 @@ const (
 	PriorityGold        = 90
 	PriorityCleaner     = 100
 	PriorityFuse        = 110 // After Cleaner, before Drain
-	PrioritySpirit      = 120 // After Fuse, before Drain // TODO: really? or after drain?
+	PrioritySpirit      = 120 // After Fuse, before Drain
 	PriorityDrain       = 130
 	PriorityMaterialize = 140 // PriorityDrain + 1
 	PriorityQuasar      = 150 // After Drain

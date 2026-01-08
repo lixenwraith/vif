@@ -33,10 +33,16 @@ transitions = [
 [states.QuasarGoldActive]
 parent = "QuasarCycle"
 transitions = [
-    { trigger = "EventGoldComplete", target = "QuasarGoldSpawn" },
+    { trigger = "EventGoldComplete", target = "QuasarDustAll" },
     { trigger = "EventGoldTimeout", target = "QuasarGoldSpawn" },
     { trigger = "EventGoldDestroyed", target = "QuasarGoldSpawn" },
     { trigger = "EventQuasarDestroyed", target = "QuasarExit" }
+]
+
+[states.QuasarDustAll]
+parent = "QuasarCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventDustAll"}
 ]
 
 [states.QuasarExit]

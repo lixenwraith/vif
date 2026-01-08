@@ -24,7 +24,6 @@ type pendingDrainSpawn struct {
 // DrainSystem manages the drain entity lifecycle
 // Drain count = floor(heat / 10), max 10
 // Drains spawn materialize based on Heat only
-// Priority: 25 (after CleanerSystem:22, before DecaySystem:30)
 type DrainSystem struct {
 	world *engine.World
 
@@ -488,11 +487,6 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 		Y: spawnY,
 	}
 
-	cursorPos, ok := s.world.Position.Get(cursorEntity)
-	if !ok {
-		return
-	}
-
 	// Increment and assign materialize spawn order for LIFO tracking
 	s.nextSpawnOrder++
 
@@ -504,7 +498,6 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 			// VelX, VelY, AccelX, AccelY zero-initialized
 		},
 		LastDrainTime: now,
-		IsOnCursor:    spawnX == cursorPos.X && spawnY == cursorPos.Y,
 		SpawnOrder:    s.nextSpawnOrder,
 		LastIntX:      spawnX,
 		LastIntY:      spawnY,
@@ -597,14 +590,6 @@ func (s *DrainSystem) handleDrainInteractions() {
 			continue
 		}
 
-		isOnCursor := drainPos.X == cursorPos.X && drainPos.Y == cursorPos.Y
-
-		// Update cached state
-		if drain.IsOnCursor != isOnCursor {
-			drain.IsOnCursor = isOnCursor
-			s.world.Component.Drain.Set(drainEntity, drain)
-		}
-
 		// Check shield state from component
 		shield, shieldOk := s.world.Component.Shield.Get(cursorEntity)
 		shieldActive := shieldOk && shield.Active
@@ -628,11 +613,14 @@ func (s *DrainSystem) handleDrainInteractions() {
 			continue
 		}
 
+		isOnCursor := drainPos.X == cursorPos.X && drainPos.Y == cursorPos.Y
+
 		// Cursor collision (shield not active or drain outside shield)
 		if isOnCursor {
 			s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{
 				Delta: -constant.DrainHeatReductionAmount,
 			})
+			event.EmitDeathOne(s.world.Resource.Event.Queue, drainEntity, event.EventFlashRequest, s.world.Resource.Time.FrameNumber)
 		}
 	}
 
@@ -799,9 +787,6 @@ func (s *DrainSystem) updateDrainMovement() {
 			drain.LastIntY = newY
 			s.world.Position.Set(drainEntity, component.PositionComponent{X: newX, Y: newY})
 		}
-
-		// Update cursor overlap state
-		drain.IsOnCursor = newX == cursorPos.X && newY == cursorPos.Y
 
 		s.world.Component.Drain.Set(drainEntity, drain)
 	}

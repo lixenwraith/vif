@@ -2,8 +2,7 @@ package component
 
 import "sync/atomic"
 
-// HeatComponent tracks the heat meter state
-// Attached to cursor entity (single-player)
+// HeatComponent tracks the heat state
 type HeatComponent struct {
 	Current atomic.Int64
 }

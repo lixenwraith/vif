@@ -16,14 +16,11 @@ const (
 
 // Status Bar & Modes
 const (
-	// ModeIndicatorWidth is the consistent width for all mode indicators
-	ModeIndicatorWidth = 10
-
 	// Mode indicator text (padded to ModeIndicatorWidth)
-	ModeTextNormal  = " NORMAL  "
+	ModeTextNormal  = " NORMAL "
 	ModeTextVisual  = " VISUAL "
-	ModeTextInsert  = " INSERT  "
-	ModeTextSearch  = " SEARCH  "
+	ModeTextInsert  = " INSERT "
+	ModeTextSearch  = " SEARCH "
 	ModeTextCommand = " COMMAND "
 
 	// UI Symbols

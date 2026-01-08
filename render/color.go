@@ -48,9 +48,9 @@ var (
 	RgbColumnIndicator = RGB{180, 180, 180} // Brighter gray
 	RgbBackground      = RGB{26, 27, 38}    // Tokyo Night background
 
-	RgbPingHighlight  = RGB{5, 5, 5}       // Almost Black for INSERT mode ping
-	RgbPingLineNormal = RGB{40, 40, 40}    // Dark gray for NORMAL mode ping lines
-	RgbPingGridNormal = RGB{55, 55, 55}    // Slightly lighter gray for NORMAL mode ping grid
+	RgbPingHighlight  = RGB{55, 55, 55}    // Gray for INSERT mode ping
+	RgbPingLineNormal = RGB{5, 5, 5}       // Almost Black for NORMAL and VISUAL modes ping lines
+	RgbPingGridNormal = RGB{55, 55, 55}    // Gray for NORMAL mode ping grid
 	RgbPingOrange     = RGB{60, 40, 0}     // Very dark orange for ping on whitespace
 	RgbPingGreen      = RGB{0, 40, 0}      // Very dark green for ping on green char
 	RgbPingRed        = RGB{50, 15, 15}    // Very dark red for ping on red char
@@ -63,10 +63,9 @@ var (
 
 	// Splash colors
 	RgbSplashInsert = RGB{200, 200, 200} // Light gray for insert mode
-	RgbSplashNormal = RGB{153, 102, 0}   // Dark orange (ping base) for normal mode
+	RgbSplashNormal = RGB{153, 102, 0}   // Dark orange for normal mode
 	RgbTimerWhite   = RGB{155, 155, 155} // White for some actions
-	// Splash colors
-	RgbSplashCyan = RGB{0, 200, 200} // Cyan for quasar charge timer
+	RgbSplashCyan   = RGB{0, 200, 200}   // Cyan for quasar charge timer
 
 	// Nugget colors
 	RgbNuggetOrange = RGB{255, 165, 0}   // Same as insert cursor

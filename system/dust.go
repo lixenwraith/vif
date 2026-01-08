@@ -17,9 +17,6 @@ import (
 type DustSystem struct {
 	world *engine.World
 
-	// Event state tracking
-	quasarActive bool
-
 	// Cursor tracking for chase detection
 	lastCursorX int
 	lastCursorY int
@@ -51,7 +48,6 @@ func NewDustSystem(world *engine.World) engine.System {
 }
 
 func (s *DustSystem) Init() {
-	s.quasarActive = false
 	s.lastCursorX = 0
 	s.lastCursorY = 0
 	s.statCreated.Store(0)
@@ -68,9 +64,7 @@ func (s *DustSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventDustSpawnOne,
 		event.EventDustSpawnBatch,
-		event.EventQuasarSpawned,
-		event.EventQuasarDestroyed,
-		event.EventGoldComplete,
+		event.EventDustAll,
 		event.EventGameReset,
 	}
 }
@@ -137,18 +131,8 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 			event.ReleaseDustSpawnBatch(p)
 		}
 
-	case event.EventQuasarSpawned:
-		s.quasarActive = true
-
-	case event.EventQuasarDestroyed:
-		s.quasarActive = false
-
-	case event.EventGoldComplete:
-		active := s.quasarActive
-
-		if active {
-			s.transformGlyphsToDust()
-		}
+	case event.EventDustAll:
+		s.transformGlyphsToDust()
 	}
 }
 
@@ -612,75 +596,4 @@ func (s *DustSystem) spawnDust(x, y int, char rune, level component.GlyphLevel, 
 	s.world.Component.Dust.Set(entity, dust)
 	s.world.Component.Protection.Set(entity, prot)
 	s.world.Component.Sigil.Set(entity, sigil)
-}
-
-// spawnDustBatched creates a single dust entity adding it to the provided PositionBatch
-// Identical to spawnDust but delegates Position setting to the batch
-func (s *DustSystem) spawnDustBatched(batch *engine.PositionBatch, x, y int, char rune, level component.GlyphLevel, cursorX, cursorY int) {
-	entity := s.world.CreateEntity()
-
-	// Random orbit radius in [min, max]
-	radiusRange := int(constant.DustOrbitRadiusMax - constant.DustOrbitRadiusMin)
-	orbitRadius := constant.DustOrbitRadiusMin
-	if radiusRange > 0 {
-		orbitRadius += int64(s.rng.Intn(radiusRange))
-	}
-
-	// Position relative to cursor for orbital calculation
-	dx := vmath.FromInt(x - cursorX)
-	dy := vmath.FromInt(y - cursorY)
-
-	// Initial tangential velocity for orbit, random direction
-	clockwise := s.rng.Intn(2) == 0
-	vx, vy := vmath.OrbitalInsert(dx, dy, constant.DustAttractionBase, clockwise)
-
-	// Scale to initial speed
-	mag := vmath.Magnitude(vx, vy)
-	if mag > 0 {
-		vx = vmath.Mul(vmath.Div(vx, mag), constant.DustInitialSpeed)
-		vy = vmath.Mul(vmath.Div(vy, mag), constant.DustInitialSpeed)
-	}
-
-	// BATCHED: Add to position batch instead of setting directly
-	batch.Add(entity, component.PositionComponent{X: x, Y: y})
-
-	// Dust component with kinetic state
-	s.world.Component.Dust.Set(entity, component.DustComponent{
-		KineticState: component.KineticState{
-			PreciseX: vmath.FromInt(x),
-			PreciseY: vmath.FromInt(y),
-			VelX:     vx,
-			VelY:     vy,
-		},
-		Level:       level,
-		OrbitRadius: orbitRadius,
-		ChaseBoost:  vmath.Scale,
-		Rune:        char,
-		LastIntX:    x,
-		LastIntY:    y,
-	})
-
-	// Protection from drain and quasar destruction
-	s.world.Component.Protection.Set(entity, component.ProtectionComponent{
-		Mask:      component.ProtectFromDrain,
-		ExpiresAt: 0, // Permanent
-	})
-
-	// Sigil for rendering - map level to grayscale
-	var color component.SigilColor
-	switch level {
-	case component.GlyphDark:
-		color = component.SigilDustDark
-	case component.GlyphNormal:
-		color = component.SigilDustNormal
-	case component.GlyphBright:
-		color = component.SigilDustBright
-	default:
-		color = component.SigilDustNormal
-	}
-
-	s.world.Component.Sigil.Set(entity, component.SigilComponent{
-		Rune:  char,
-		Color: color,
-	})
 }

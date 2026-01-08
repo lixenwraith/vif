@@ -9,8 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 )
 
-// Position maintains a spatial index using a fixed-capacity dense grid
-// It supports multiple entities per cell (up to MaxEntitiesPerCell)
+// Position maintains a spatial index using a fixed-capacity dense grid, multiple entities per cell (up to MaxEntitiesPerCell)
 type Position struct {
 	mu         sync.RWMutex
 	components map[core.Entity]component.PositionComponent

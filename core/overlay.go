@@ -1,7 +1,6 @@
 package core
 
-// OverlayContent holds typed overlay data
-// Extensible via OverlayItem interface for future component types
+// OverlayContent holds typed overlay data, extensible via OverlayItem interface
 type OverlayContent struct {
 	Title string
 	Items []OverlayItem

@@ -155,4 +155,5 @@ func InitRegistry() {
 	RegisterType("EventLightningSpawn", EventLightningSpawn, &LightningSpawnPayload{})
 	RegisterType("EventLightningUpdate", EventLightningUpdate, &LightningUpdatePayload{})
 	RegisterType("EventLightningDespawn", EventLightningDespawn, nil)
+	RegisterType("EventDustAll", EventDustAll, nil)
 }

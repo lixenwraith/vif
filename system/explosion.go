@@ -3,6 +3,7 @@ package system
 import (
 	"sync/atomic"
 
+	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -201,6 +202,7 @@ func (s *ExplosionSystem) addCenter(x, y int, radius int64) {
 	s.statTriggered.Add(1)
 }
 
+// TODO: this conversion must be done in dust system, doing it here results in no telemetry and duplicate logic
 func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 	config := s.world.Resource.Config
 	frame := s.world.Resource.Time.FrameNumber
@@ -254,6 +256,12 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 				if !hasGlyph {
 					continue
 				}
+
+				// Set death component for deduplication
+				if s.world.Component.Death.Has(e) {
+					continue
+				}
+				s.world.Component.Death.Set(e, component.DeathComponent{})
 
 				// Append to local buffers
 				s.entityBuf = append(s.entityBuf, e)

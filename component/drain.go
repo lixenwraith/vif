@@ -10,9 +10,7 @@ import "time"
 type DrainComponent struct {
 	KineticState            // PreciseX/Y, VelX/Y, AccelX/Y, DeflectUntil (Q32.32)
 	LastDrainTime time.Time // Last time energy was drained (DrainEnergyDrainInterval)
-	// TODO: legacy, before cursor store, check to remove
-	IsOnCursor bool  // Cached state for efficient drain checks
-	SpawnOrder int64 // Monotonic counter for LIFO despawn ordering (higher = newer)
-	LastIntX   int   // Cell-entry detection
-	LastIntY   int   // Cell-entry detection
+	SpawnOrder    int64     // Monotonic counter for LIFO despawn ordering (higher = newer)
+	LastIntX      int       // Cell-entry detection
+	LastIntY      int       // Cell-entry detection
 }

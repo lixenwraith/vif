@@ -54,6 +54,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleDecayCommand(ctx)
 	case "cleaner":
 		return handleCleanerCommand(ctx)
+	case "dust":
+		return handleDustCommand(ctx)
 	case "d", "debug":
 		return handleDebugCommand(ctx)
 	case "h", "help", "?":
@@ -195,10 +197,17 @@ func handleDecayCommand(ctx *engine.GameContext) CommandResult {
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
-// handleCleanerCommand triggers cleaners on Red character rows
+// handleCleanerCommand triggers sweeping cleaners
 func handleCleanerCommand(ctx *engine.GameContext) CommandResult {
 	ctx.PushEvent(event.EventCleanerSweepingRequest, nil)
 	ctx.SetLastCommand(":cleaner")
+	return CommandResult{Continue: true, KeepPaused: false}
+}
+
+// handleDustCommand triggers glyph to dust transform
+func handleDustCommand(ctx *engine.GameContext) CommandResult {
+	ctx.PushEvent(event.EventDustAll, nil)
+	ctx.SetLastCommand(":dust")
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 

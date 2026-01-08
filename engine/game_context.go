@@ -452,7 +452,6 @@ func (ctx *GameContext) CreateCursorEntity() {
 		ShowCrosshair: true,
 		GridActive:    false,
 		GridRemaining: 0,
-		ContextAware:  true,
 	})
 
 	// Set HeatComponent to cursor

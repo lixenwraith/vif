@@ -11,8 +11,7 @@ var QuasarChars = [3][5]rune{
 	{'╚', '═', '╩', '═', '╝'},
 }
 
-// QuasarComponent holds quasar-specific runtime state
-// Composite structure managed via CompositeHeaderComponent
+// QuasarComponent holds quasar-specific runtime state, composite structure managed via CompositeHeaderComponent
 type QuasarComponent struct {
 	KineticState // PreciseX/Y, VelX/Y, AccelX/Y (Q32.32)
 

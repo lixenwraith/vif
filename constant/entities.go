@@ -270,7 +270,7 @@ const (
 	SplashCharWidth  = 12
 	SplashCharHeight = 12
 	SplashMaxLength  = 8
-	SplashDuration   = 1 * time.Second
+	SplashDuration   = 200 * time.Millisecond
 
 	// SplashTimerPadding is the vertical padding between timer and anchor
 	SplashTimerPadding = 0

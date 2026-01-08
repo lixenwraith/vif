@@ -384,6 +384,11 @@ const (
 	// Trigger: ExplosionFieldSystem on glyph transformation
 	// Consumer: DustSystem | Payload: *DustSpawnBatchPayload
 	EventDustSpawnBatch
+
+	// EventDustAll signals intent to spawn a single dust entity
+	// Trigger: FSM
+	// Consumer: DustSystem | Payload: nil
+	EventDustAll
 )
 
 // GameEvent represents a single game event with metadata

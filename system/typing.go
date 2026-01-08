@@ -167,12 +167,12 @@ func (s *TypingSystem) emitTypingFeedback(glyphType component.GlyphType, char ru
 	var blinkType uint32
 
 	switch glyphType {
-	case component.GlyphGreen:
-		splashColor = component.SplashColorGreen
-		blinkType = 2
 	case component.GlyphBlue:
 		splashColor = component.SplashColorBlue
 		blinkType = 1
+	case component.GlyphGreen:
+		splashColor = component.SplashColorGreen
+		blinkType = 2
 	case component.GlyphRed:
 		splashColor = component.SplashColorRed
 		blinkType = 3

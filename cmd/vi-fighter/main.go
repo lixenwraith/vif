@@ -186,7 +186,6 @@ func main() {
 
 	// FPS tracking
 	var frameCount int64
-	// TODO: changed from time.Now(), check
 	lastFPSUpdate := ctx.World.Resource.Time.RealTime
 
 	// Set frame rate
@@ -228,7 +227,7 @@ func main() {
 
 			// FPS calculation (once per second)
 			frameCount++
-			now := time.Now()
+			now := ctx.World.Resource.Time.RealTime
 			if now.Sub(lastFPSUpdate) >= time.Second {
 				statFPS.Store(frameCount)
 				frameCount = 0

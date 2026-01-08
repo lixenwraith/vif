@@ -232,20 +232,20 @@ func (s *SplashSystem) Update() {
 
 // handleSplashRequest creates a transient splash with smart layout
 func (s *SplashSystem) handleSplashRequest(payload *event.SplashRequestPayload) {
-	// 1. Enforce Uniqueness: Destroy existing in slot
+	// 1. Enforce unique action slot
 	s.cleanupSplashesBySlot(component.SlotAction)
 
-	// 2. Prepare Content
+	// 2. Prepare content
 	runes := []rune(payload.Text)
 	length := len(runes)
 	if length > constant.SplashMaxLength {
 		length = constant.SplashMaxLength
 	}
 
-	// 3. Smart Layout
+	// 3. Smart layout
 	anchorX, anchorY := s.calculateSmartLayout(payload.OriginX, payload.OriginY, length)
 
-	// 4. Create Component with Delta Timer
+	// 4. Create component with delta timer
 	splash := component.SplashComponent{
 		Length:    length,
 		Color:     payload.Color,
@@ -261,7 +261,7 @@ func (s *SplashSystem) handleSplashRequest(payload *event.SplashRequestPayload) 
 	entity := s.world.CreateEntity()
 	s.world.Component.Splash.Set(entity, splash)
 
-	// 6. Register with TimeKeeper for destruction
+	// 6. Register with timeKeeper for destruction
 	s.world.PushEvent(event.EventTimerStart, &event.TimerStartPayload{
 		Entity:   entity,
 		Duration: constant.SplashDuration,

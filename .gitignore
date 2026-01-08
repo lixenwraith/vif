@@ -2,6 +2,7 @@
 bin
 dev
 logs
+log
 cmake-build-*/
 build.sh
 vi-fighter
