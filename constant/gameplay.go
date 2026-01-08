@@ -17,6 +17,13 @@ const (
 	ErrorBlinkTimeout = 200 * time.Millisecond
 )
 
+// Glyph Energy
+const (
+	EnergyBaseBlue  = 2
+	EnergyBaseGreen = 1
+	EnergyBaseRed   = -2
+)
+
 // Boost Mechanics
 const (
 	// BoostBaseDuration is the initial duration when boost is activated

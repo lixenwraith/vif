@@ -70,7 +70,7 @@ var DustToQuasar = CollisionProfile{
 	AngleVariance:    constant.DrainDeflectAngleVar,
 	Mode:             ImpulseAdditive,
 	ImmunityDuration: 0, // No immunity - cumulative hits
-	OffsetInfluence:  vmath.OffsetInfluenceDefault,
+	OffsetInfluence:  0, // Center-of-mass collision, no offset instability
 }
 
 // Homing profiles

@@ -159,20 +159,6 @@ func (s *TypingSystem) applyUniversalRewards() {
 	}
 }
 
-// applyColorEnergy handles energy based on color type
-// Green: +heat, Blue: +2*heat, Red: -heat (mirrors green)
-func (s *TypingSystem) applyColorEnergy(colorType component.GlyphType) {
-	heat := s.getHeat()
-	switch colorType {
-	case component.GlyphGreen:
-		s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{Delta: heat})
-	case component.GlyphBlue:
-		s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{Delta: 2 * heat})
-	case component.GlyphRed:
-		s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{Delta: -heat})
-	}
-}
-
 // emitTypingFeedback sends visual feedback (splash + blink)
 func (s *TypingSystem) emitTypingFeedback(glyphType component.GlyphType, char rune) {
 	cursorPos, _ := s.world.Position.Get(s.world.Resource.Cursor.Entity)
@@ -262,11 +248,8 @@ func (s *TypingSystem) handleCompositeMember(entity core.Entity, anchorID core.E
 		return
 	}
 
-	targetChar := glyph.Rune
-	glyphType := glyph.Type
-
 	// Character match check
-	if targetChar != typedRune {
+	if glyph.Rune != typedRune {
 		s.emitTypingError()
 		return
 	}
@@ -289,11 +272,14 @@ func (s *TypingSystem) handleCompositeMember(entity core.Entity, anchorID core.E
 
 	// Color-based energy (only Blue/Green/Red for now)
 	if header.BehaviorID != component.BehaviorGold {
-		s.applyColorEnergy(glyphType)
+		s.world.PushEvent(event.EventEnergyGlyphConsumed, &event.GlyphConsumedPayload{
+			Type:  glyph.Type,
+			Level: glyph.Level,
+		})
 	}
 
 	// Visual feedback
-	s.emitTypingFeedback(glyphType, typedRune)
+	s.emitTypingFeedback(glyph.Type, typedRune)
 
 	// Signal composite system
 	remaining := 0
@@ -325,8 +311,10 @@ func (s *TypingSystem) handleGlyph(entity core.Entity, glyph component.GlyphComp
 	// Type-specific handling, placeholder for other type additions
 	switch glyph.Type {
 	case component.GlyphBlue, component.GlyphGreen, component.GlyphRed:
-		// Color-based energy
-		s.applyColorEnergy(glyph.Type)
+		s.world.PushEvent(event.EventEnergyGlyphConsumed, &event.GlyphConsumedPayload{
+			Type:  glyph.Type,
+			Level: glyph.Level,
+		})
 	}
 
 	// Silent Death

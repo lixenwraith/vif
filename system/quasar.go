@@ -323,6 +323,9 @@ func (s *QuasarSystem) updateKineticMovement(anchorEntity core.Entity, quasar *c
 		return
 	}
 
+	// Cap velocity before integration to prevent runaway from cumulative dust hits
+	physics.CapSpeed(&quasar.VelX, &quasar.VelY, constant.QuasarMaxSpeed)
+
 	// Integrate position
 	newX, newY := quasar.Integrate(dtFixed)
 

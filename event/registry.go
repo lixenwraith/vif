@@ -68,8 +68,10 @@ func InitRegistry() {
 	// Engine events
 	RegisterType("EventWorldClear", EventWorldClear, &WorldClearPayload{})
 	RegisterType("EventSystemToggle", EventSystemToggle, &SystemTogglePayload{})
+
 	// Audio events
 	RegisterType("EventSoundRequest", EventSoundRequest, &SoundRequestPayload{})
+
 	// Network events
 	RegisterType("EventNetworkConnect", EventNetworkConnect, &NetworkConnectPayload{})
 	RegisterType("EventNetworkDisconnect", EventNetworkDisconnect, &NetworkDisconnectPayload{})
@@ -77,6 +79,7 @@ func InitRegistry() {
 	RegisterType("EventStateSync", EventStateSync, &StateSyncPayload{})
 	RegisterType("EventNetworkEvent", EventNetworkEvent, &NetworkEventPayload{})
 	RegisterType("EventNetworkError", EventNetworkError, &NetworkErrorPayload{})
+
 	// Game events
 	RegisterType("EventNuggetCollected", EventNuggetCollected, &NuggetCollectedPayload{})
 	RegisterType("EventNuggetDestroyed", EventNuggetDestroyed, &NuggetDestroyedPayload{})
@@ -96,15 +99,23 @@ func InitRegistry() {
 	RegisterType("EventGoldJumpRequest", EventGoldJumpRequest, nil)
 	RegisterType("EventCharacterTyped", EventCharacterTyped, &CharacterTypedPayload{})
 	RegisterType("EventSplashRequest", EventSplashRequest, &SplashRequestPayload{})
+
+	// Energy
 	RegisterType("EventEnergyAdd", EventEnergyAdd, &EnergyAddPayload{})
 	RegisterType("EventEnergySet", EventEnergySet, &EnergySetPayload{})
+	RegisterType("EventEnergyGlyphConsumed", EventEnergyGlyphConsumed, &GlyphConsumedPayload{})
 	RegisterType("EventEnergyBlinkStart", EventEnergyBlinkStart, &EnergyBlinkPayload{})
 	RegisterType("EventEnergyBlinkStop", EventEnergyBlinkStop, nil)
+
+	// Heat
 	RegisterType("EventHeatAdd", EventHeatAdd, &HeatAddPayload{})
 	RegisterType("EventHeatSet", EventHeatSet, &HeatSetPayload{})
+
+	// Shield
 	RegisterType("EventShieldActivate", EventShieldActivate, nil)
 	RegisterType("EventShieldDeactivate", EventShieldDeactivate, nil)
 	RegisterType("EventShieldDrain", EventShieldDrain, &ShieldDrainPayload{})
+
 	RegisterType("EventDeleteRequest", EventDeleteRequest, &DeleteRequestPayload{})
 	RegisterType("EventPingGridRequest", EventPingGridRequest, &PingGridRequestPayload{})
 	RegisterType("EventGameReset", EventGameReset, nil)
@@ -129,6 +140,7 @@ func InitRegistry() {
 	RegisterType("EventDeathBatch", EventDeathBatch, &DeathRequestPayload{})
 	RegisterType("EventMemberTyped", EventMemberTyped, &MemberTypedPayload{})
 	RegisterType("EventCursorMoved", EventCursorMoved, &CursorMovedPayload{})
+
 	// Fuse/Quasar events
 	RegisterType("EventFuseDrains", EventFuseDrains, nil)
 	RegisterType("EventDrainPause", EventDrainPause, nil)

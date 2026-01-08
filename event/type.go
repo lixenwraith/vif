@@ -144,6 +144,11 @@ const (
 	// Consumer: EnergySystem | Payload: *EnergySetPayload
 	EventEnergySet
 
+	// EventEnergyGlyphConsumed signals glyph destruction for energy calculation
+	// Trigger: TypingSystem (correct character), DustSystem (shield collision)
+	// Consumer: EnergySystem | Payload: *GlyphConsumedPayload
+	EventEnergyGlyphConsumed
+
 	// EventEnergyBlinkStart signals visual blink trigger
 	// Trigger: Character typed (success/error)
 	// Consumer: EnergySystem | Payload: *EnergyBlinkPayload

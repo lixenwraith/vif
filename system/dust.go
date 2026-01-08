@@ -164,7 +164,7 @@ func (s *DustSystem) Update() {
 	}
 
 	// 1. PRE-FETCH Context Data (Cursor, Energy, etc.)
-	// Must do this BEFORE locking Position to avoid deadlock (Get() calls RLock)
+	// Must do this BEFORE locking Position to avoid deadlock
 	cursorEntity := s.world.Resource.Cursor.Entity
 	cursorPos, ok := s.world.Position.Get(cursorEntity)
 	if !ok {
@@ -180,20 +180,14 @@ func (s *DustSystem) Update() {
 	shield, shieldOk := s.world.Component.Shield.Get(cursorEntity)
 	shieldActive := shieldOk && shield.Active
 
-	// Heat for energy calculation
-	var heat int
-	if hc, ok := s.world.Component.Heat.Get(cursorEntity); ok {
-		heat = int(hc.Current.Load())
-	}
-
-	// Detect cursor jump for chase boost
+	// Chase boost on cursor jump
 	cursorDeltaX := cursorPos.X - s.lastCursorX
 	cursorDeltaY := cursorPos.Y - s.lastCursorY
 	s.lastCursorX = cursorPos.X
 	s.lastCursorY = cursorPos.Y
 
-	cursorDist := vmath.DistanceApprox(vmath.FromInt(cursorDeltaX), vmath.FromInt(cursorDeltaY))
-	applyChaseBoost := cursorDist > vmath.FromInt(constant.DustChaseThreshold)
+	cursorDisplacement := vmath.DistanceApprox(vmath.FromInt(cursorDeltaX), vmath.FromInt(cursorDeltaY))
+	applyChaseBoost := cursorDisplacement > vmath.FromInt(constant.DustChaseThreshold)
 
 	// 2. SETUP Physics Constants
 	dtFixed := vmath.FromFloat(s.world.Resource.Time.DeltaTime.Seconds())
@@ -205,11 +199,6 @@ func (s *DustSystem) Update() {
 	cursorXFixed := vmath.FromInt(cursorPos.X)
 	cursorYFixed := vmath.FromInt(cursorPos.Y)
 	now := s.world.Resource.Time.GameTime
-
-	// Dynamic speed multiplier
-	dustCount := len(dustEntities)
-	boostMax := vmath.Mul(constant.DustBoostMax, vmath.FromInt(4))
-	speedMultiplier := vmath.ExpDecayScaled(dustCount, boostMax)
 
 	// 3. LOCK Spatial Grid (Global Batch Lock)
 	// Critical optimization: eliminates ~4000 mutex ops per frame
@@ -227,43 +216,62 @@ func (s *DustSystem) Update() {
 			continue
 		}
 
-		// --- Physics Integration ---
-
+		// --- Position and Shield State ---
 		dx := dust.PreciseX - cursorXFixed
 		dy := dust.PreciseY - cursorYFixed
-		dyCirc := vmath.ScaleToCircular(dy)
 
 		dustInsideShield := shieldActive && vmath.EllipseContains(dx, dy, shield.InvRxSq, shield.InvRySq)
 
-		if applyChaseBoost {
-			dust.ChaseBoost = constant.DustChaseBoost
-		} else if dust.ChaseBoost > vmath.Scale {
-			decay := vmath.Mul(constant.DustChaseDecay, dtFixed)
-			dust.ChaseBoost -= decay
-			if dust.ChaseBoost < vmath.Scale {
-				dust.ChaseBoost = vmath.Scale
-			}
-		}
+		// --- Per-Particle Jitter (always active) ---
+		jitterAngle := int64(s.rng.Intn(vmath.LUTSize)) << (vmath.Shift - 10)
+		dust.VelX += vmath.Mul(vmath.Cos(jitterAngle), constant.DustJitter)
+		dust.VelY += vmath.Mul(vmath.Sin(jitterAngle), constant.DustJitter)
 
+		// --- Orbital Physics (only when energy != 0 / shield active) ---
 		if hasAttraction {
-			velYCirc := vmath.ScaleToCircular(dust.VelY)
-			attraction := vmath.Mul(constant.DustAttractionBase, dust.ChaseBoost)
-			attraction = vmath.Mul(attraction, speedMultiplier)
-			ax, ay := vmath.OrbitalAttraction(dx, dyCirc, attraction)
+			// Chase boost decay
+			if applyChaseBoost {
+				dust.ChaseBoost = constant.DustChaseBoost
+			} else if dust.ChaseBoost > vmath.Scale {
+				decay := vmath.Mul(constant.DustChaseDecay, dtFixed)
+				dust.ChaseBoost -= decay
+				if dust.ChaseBoost < vmath.Scale {
+					dust.ChaseBoost = vmath.Scale
+				}
+			}
+
+			// Equilibrium-seeking force toward target orbit radius
+			// Scale Y to circular space for visually circular orbit
+			stiffness := vmath.Mul(constant.DustAttractionBase, dust.ChaseBoost)
+			dyCirc := vmath.ScaleToCircular(dy)
+			ax, ayCirc := vmath.OrbitalEquilibrium(dx, dyCirc, dust.OrbitRadius, stiffness)
 
 			dust.VelX += vmath.Mul(ax, dtFixed)
-			velYCirc += vmath.Mul(ay, dtFixed)
+			dust.VelY += vmath.Mul(vmath.ScaleFromCircular(ayCirc), dtFixed)
 
-			effectiveDamping := vmath.Mul(constant.DustDamping, speedMultiplier)
+			// Orbital damping (converts radial velocity to tangential)
+			velYCirc := vmath.ScaleToCircular(dust.VelY)
 			dust.VelX, velYCirc = vmath.OrbitalDamp(
 				dust.VelX, velYCirc,
 				dx, dyCirc,
-				effectiveDamping, dtFixed,
+				constant.DustDamping, dtFixed,
 			)
 			dust.VelY = vmath.ScaleFromCircular(velYCirc)
 		}
 
-		// Store previous position for traversal
+		// --- Global Drag (v² model) ---
+		speed := vmath.Magnitude(dust.VelX, dust.VelY)
+		if speed > 0 {
+			dragAmount := vmath.Mul(vmath.Mul(constant.DustGlobalDrag, speed), dtFixed)
+			if dragAmount > vmath.Scale {
+				dragAmount = vmath.Scale
+			}
+			scaleFactor := vmath.Scale - dragAmount
+			dust.VelX = vmath.Mul(dust.VelX, scaleFactor)
+			dust.VelY = vmath.Mul(dust.VelY, scaleFactor)
+		}
+
+		// --- Position Integration ---
 		prevX, prevY := dust.PreciseX, dust.PreciseY
 
 		dust.PreciseX += vmath.Mul(dust.VelX, dtFixed)
@@ -293,14 +301,7 @@ func (s *DustSystem) Update() {
 			dust.VelY = -dust.VelY / 2
 		}
 
-		if shieldActive && dust.WasInsideShield && !dustInsideShield {
-			redirectX, redirectY := vmath.Normalize2D(-dx, -dy)
-			dust.VelX += vmath.Mul(redirectX, constant.DustShieldRedirect)
-			dust.VelY += vmath.Mul(redirectY, constant.DustShieldRedirect)
-		}
-		dust.WasInsideShield = dustInsideShield
-
-		// --- Zero-Allocation Traversal ---
+		// --- Zero-Allocation Collision Traversal ---
 
 		// Only traverse if we actually moved or need to check current cell
 		if newX != dust.LastIntX || newY != dust.LastIntY {
@@ -333,6 +334,7 @@ func (s *DustSystem) Update() {
 						continue
 					}
 
+					// --- Drain interaction ---
 					if s.world.Component.Drain.Has(target) {
 						if drain, ok := s.world.Component.Drain.Get(target); ok {
 							physics.ApplyCollision(
@@ -347,72 +349,89 @@ func (s *DustSystem) Update() {
 						continue
 					}
 
+					// --- Quasar interaction ---
 					if member, ok := s.world.Component.Member.Get(target); ok {
 						if header, hOk := s.world.Component.Header.Get(member.AnchorID); hOk {
 							if header.BehaviorID == component.BehaviorQuasar {
 								if quasar, qOk := s.world.Component.Quasar.Get(member.AnchorID); qOk {
-									// Safe unsafe-access to anchor pos
-									if anchorPos, pOk := s.world.Position.GetUnsafe(member.AnchorID); pOk {
-										offX := currX - anchorPos.X
-										offY := currY - anchorPos.Y
-										physics.ApplyOffsetCollision(
-											&quasar.KineticState,
-											dust.VelX, dust.VelY,
-											offX, offY,
-											&physics.DustToQuasar,
-											s.rng,
-											now,
-										)
-										s.world.Component.Quasar.Set(member.AnchorID, quasar)
-									}
+									// Center-of-mass collision, no offset calculation
+									physics.ApplyCollision(
+										&quasar.KineticState,
+										dust.VelX, dust.VelY,
+										&physics.DustToQuasar,
+										s.rng,
+										now,
+									)
+									s.world.Component.Quasar.Set(member.AnchorID, quasar)
 								}
 							}
 						}
 						continue
 					}
 
+					// --- Blossom/Decay interaction ---
 					if s.world.Component.Blossom.Has(target) || s.world.Component.Decay.Has(target) {
 						s.world.Component.Death.Set(target, component.DeathComponent{})
 						deathCandidates = append(deathCandidates, target)
 						continue
 					}
 
-					glyph, ok := s.world.Component.Glyph.Get(target)
-					if !ok || glyph.Level != dust.Level {
+					// --- Glyph interaction ---
+
+					// Prerequisite 1: Dust itself must be inside shield to interact with glyphs
+					if !dustInsideShield {
 						continue
 					}
 
-					s.world.Component.Death.Set(target, component.DeathComponent{})
-					deathCandidates = append(deathCandidates, target)
+					glyph, ok := s.world.Component.Glyph.Get(target)
+					if !ok {
+						continue
+					}
 
-					if !dustInsideShield {
+					// Prerequisite 2: Target Glyph must also be inside shield (handles shield entry edge cases, e.g. fast-moving dust)
+					gDx := vmath.FromInt(currX) - cursorXFixed
+					gDy := vmath.FromInt(currY) - cursorYFixed
+					if !vmath.EllipseContains(gDx, gDy, shield.InvRxSq, shield.InvRySq) {
+						continue
+					}
+
+					shouldKillGlyph := false
+					shouldKillDust := false
+
+					if cursorEnergy > 0 {
+						if glyph.Type == component.GlyphBlue {
+							shouldKillGlyph = true
+							shouldKillDust = true
+						} else if glyph.Type == component.GlyphRed {
+							shouldKillDust = true
+						}
+					} else if cursorEnergy < 0 {
+						if glyph.Type == component.GlyphRed {
+							shouldKillGlyph = true
+							shouldKillDust = true
+						} else if glyph.Type == component.GlyphBlue {
+							shouldKillDust = true
+						}
+					}
+					// Green, Gold, and Zero Energy: No interaction
+
+					if shouldKillGlyph {
+						s.world.Component.Death.Set(target, component.DeathComponent{})
+						deathCandidates = append(deathCandidates, target)
+						s.world.PushEvent(event.EventEnergyGlyphConsumed, &event.GlyphConsumedPayload{
+							Type:  glyph.Type,
+							Level: glyph.Level,
+						})
+					}
+
+					if shouldKillDust {
 						destroyDust = true
-					}
-
-					if dustInsideShield {
-						var energyDelta int
-						switch glyph.Type {
-						case component.GlyphGreen:
-							energyDelta = heat
-						case component.GlyphBlue:
-							energyDelta = heat * 2
-						case component.GlyphRed:
-							energyDelta = -heat
-						}
-						if energyDelta != 0 {
-							s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{
-								Delta: energyDelta,
-							})
-						}
-					}
-
-					if destroyDust {
-						break // Break entity loop
+						break // Dust destroyed, stop checking other entities in this cell
 					}
 				}
 
 				if destroyDust {
-					break // Break traversal loop
+					break
 				}
 			}
 
@@ -438,6 +457,7 @@ func (s *DustSystem) Update() {
 	}
 
 	s.statActive.Store(int64(len(dustEntities)))
+	s.statDestroyed.Add(destroyedCount)
 }
 
 // transformGlyphsToDust converts all non-composite glyphs to dust entities

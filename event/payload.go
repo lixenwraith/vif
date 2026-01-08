@@ -76,6 +76,12 @@ type EnergySetPayload struct {
 	Value int `toml:"value"`
 }
 
+// GlyphConsumedPayload contains glyph data for centralized energy calculation
+type GlyphConsumedPayload struct {
+	Type  component.GlyphType  `toml:"type"`
+	Level component.GlyphLevel `toml:"level"`
+}
+
 // EnergyBlinkPayload triggers visual blink state
 type EnergyBlinkPayload struct {
 	Type  uint32 `toml:"type"`  // 0=error, 1=blue, 2=green, 3=red, 4=gold
@@ -322,14 +328,14 @@ type DustSpawnPayload struct {
 // DustSpawnEntry is a value type for batch dust spawning
 // Must remain a struct (not pointer) to avoid GC pressure in pooled slices
 type DustSpawnEntry struct {
-	X     int
-	Y     int
-	Char  rune
-	Level component.GlyphLevel
+	X     int                  `toml:"x"`
+	Y     int                  `toml:"y"`
+	Char  rune                 `toml:"char"`
+	Level component.GlyphLevel `toml:"level"`
 }
 
 // DustSpawnBatchPayload contains batch dust spawn data
 // Use AcquireDustSpawnBatch/ReleaseDustSpawnBatch for pooled allocation
 type DustSpawnBatchPayload struct {
-	Entries []DustSpawnEntry
+	Entries []DustSpawnEntry `toml:"entries"`
 }

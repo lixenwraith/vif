@@ -19,6 +19,7 @@ var (
 	QuasarDeflectImpulseMax = vmath.FromFloat(QuasarDeflectImpulseMaxFloat)
 	QuasarHomingAccel       = vmath.FromFloat(QuasarHomingAccelFloat)
 	QuasarBaseSpeed         = vmath.FromFloat(QuasarBaseSpeedFloat)
+	QuasarMaxSpeed          = vmath.FromFloat(QuasarMaxSpeedFloat)
 	QuasarDrag              = vmath.FromFloat(QuasarDragFloat)
 	// QuasarSpeedMultiplierMaxFixed caps progressive speed increase (10x = Scale * 10)
 	QuasarSpeedMultiplierMaxFixed = vmath.Scale * QuasarSpeedMultiplierMax
@@ -26,8 +27,10 @@ var (
 	// Shield knockback physics (Q32.32)
 	ShieldKnockbackImpulseMin = vmath.FromFloat(ShieldKnockbackImpulseMinFloat)
 	ShieldKnockbackImpulseMax = vmath.FromFloat(ShieldKnockbackImpulseMaxFloat)
+)
 
-	// Dust physics (Q32.32)
+// Dust physics (Q32.32)
+var (
 	DustAttractionBase = vmath.FromFloat(DustAttractionBaseFloat)
 	DustOrbitRadiusMin = vmath.FromFloat(DustOrbitRadiusMinFloat)
 	DustOrbitRadiusMax = vmath.FromFloat(DustOrbitRadiusMaxFloat)
@@ -35,9 +38,8 @@ var (
 	DustChaseBoost     = vmath.FromFloat(DustChaseBoostFloat)
 	DustChaseDecay     = vmath.FromFloat(DustChaseDecayFloat)
 	DustInitialSpeed   = vmath.FromFloat(DustInitialSpeedFloat)
-	// Dynamic scaling constants
-	DustBoostMax       = vmath.FromFloat(DustBoostMaxFloat)
-	DustShieldRedirect = vmath.FromFloat(DustShieldRedirectFloat)
+	DustGlobalDrag     = vmath.FromFloat(DustGlobalDragFloat)
+	DustJitter         = vmath.FromFloat(DustJitterFloat)
 )
 
 // Explosion field VFX (Q32.32)

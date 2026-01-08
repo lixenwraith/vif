@@ -63,8 +63,7 @@ const (
 	QuasarWidth = 5
 	// QuasarHeight is the vertical cell count
 	QuasarHeight = 3
-	// QuasarMoveInterval is duration between movement updates (2× drain speed)
-	QuasarMoveInterval = 500 * time.Millisecond
+
 	// QuasarShieldDrain is energy drained per tick when any part overlaps shield
 	QuasarShieldDrain = 1000
 	// QuasarAnchorOffsetX is phantom head X offset from top-left (center column)
@@ -83,9 +82,6 @@ const (
 	// Set long since it's continuously refreshed while zapping
 	QuasarZapDuration = 500 * time.Millisecond
 
-	// QuasarDeflectImmunity is duration of immunity from homing after cleaner hit
-	QuasarDeflectImmunity = 250 * time.Millisecond
-
 	// QuasarDeflectImpulseMinFloat is minimum deflection velocity (cells/sec)
 	// Lower than drain due to mass ratio reduction
 	QuasarDeflectImpulseMinFloat = 15.0
@@ -98,6 +94,9 @@ const (
 
 	// QuasarBaseSpeedFloat is normal homing velocity (cells/sec)
 	QuasarBaseSpeedFloat = 2.0
+
+	// QuasarMaxSpeedFloat caps velocity after impulse accumulation (5x base speed)
+	QuasarMaxSpeedFloat = QuasarBaseSpeedFloat * 10.0
 
 	// QuasarDragFloat is deceleration when overspeed (1/sec)
 	QuasarDragFloat = 1.5
@@ -197,7 +196,7 @@ const (
 
 	// DustOrbitRadiusMinFloat/MaxFloat for varied orbital radii (cells)
 	DustOrbitRadiusMinFloat = 3.0
-	DustOrbitRadiusMaxFloat = 8.0
+	DustOrbitRadiusMaxFloat = 10.0
 
 	// DustDampingFloat for orbit circularization (1/sec)
 	DustDampingFloat = 2.0
@@ -205,8 +204,8 @@ const (
 	// DustChaseBoostFloat - attraction multiplier on large cursor movement
 	DustChaseBoostFloat = 3.0
 
-	// DustChaseThreshold - cursor delta (cells) triggering chase boost
-	DustChaseThreshold = 5
+	// DustChaseThreshold - cursor delta (cells) triggering chase boost and jitter
+	DustChaseThreshold = 3
 
 	// DustChaseDecayFloat - boost decay rate (1/sec)
 	DustChaseDecayFloat = 4.0
@@ -214,11 +213,12 @@ const (
 	// DustInitialSpeedFloat - tangential velocity magnitude at spawn (cells/sec)
 	DustInitialSpeedFloat = 32.0
 
-	// DustBoostMaxFloat is maximum speed multiplier at low entity count
-	DustBoostMaxFloat = 80.0
+	// DustGlobalDragFloat - quadratic drag coefficient (1/cell)
+	// Prevents overshoot: drag scales with speed²
+	DustGlobalDragFloat = 0.02
 
-	// DustShieldRedirectFloat is inward velocity nudge when exiting shield
-	DustShieldRedirectFloat = 20.0
+	// DustJitterFloat - constant random velocity added per frame (cells/sec)
+	DustJitterFloat = 2.0
 )
 
 // --- Explosion Field VFX ---

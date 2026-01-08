@@ -81,3 +81,28 @@ func OrbitalDamp(vx, vy, dx, dy, damping, dt int64) (nvx, nvy int64) {
 
 	return vx + Mul(deltaRadial, rx), vy + Mul(deltaRadial, ry)
 }
+
+// OrbitalEquilibrium returns acceleration toward target orbit radius
+// Positive when outside target (pull in), negative when inside (push out)
+// dx, dy: position relative to center (Q32.32)
+// targetRadius: desired orbit distance (Q32.32)
+// stiffness: force multiplier (Q32.32)
+func OrbitalEquilibrium(dx, dy, targetRadius, stiffness int64) (ax, ay int64) {
+	dist := Magnitude(dx, dy)
+	if dist == 0 {
+		// At center, push outward in random direction
+		return stiffness, 0
+	}
+
+	// Force proportional to (distance - target)
+	// Positive = too far = pull in
+	// Negative = too close = push out
+	delta := dist - targetRadius
+	forceMag := Mul(delta, stiffness)
+
+	// Direction toward center (will be negated if delta < 0)
+	dirX := Div(-dx, dist)
+	dirY := Div(-dy, dist)
+
+	return Mul(dirX, forceMag), Mul(dirY, forceMag)
+}

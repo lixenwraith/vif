@@ -46,6 +46,7 @@ func (s *EnergySystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventEnergyAdd,
 		event.EventEnergySet,
+		event.EventEnergyGlyphConsumed,
 		event.EventEnergyBlinkStart,
 		event.EventEnergyBlinkStop,
 		event.EventDeleteRequest,
@@ -78,6 +79,11 @@ func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
 	case event.EventEnergySet:
 		if payload, ok := ev.Payload.(*event.EnergySetPayload); ok {
 			s.setEnergy(int64(payload.Value))
+		}
+
+	case event.EventEnergyGlyphConsumed:
+		if payload, ok := ev.Payload.(*event.GlyphConsumedPayload); ok {
+			s.handleGlyphConsumed(payload.Type, payload.Level)
 		}
 
 	case event.EventEnergyBlinkStart:
@@ -203,6 +209,31 @@ func (s *EnergySystem) setEnergy(value int64) {
 	}
 	energyComp.Current.Store(value)
 	s.world.Component.Energy.Set(cursorEntity, energyComp)
+}
+
+// handleGlyphConsumed calculates and applies energy from glyph destruction
+func (s *EnergySystem) handleGlyphConsumed(glyphType component.GlyphType, _ component.GlyphLevel) {
+	cursorEntity := s.world.Resource.Cursor.Entity
+
+	// Fetch current heat
+	var heat int
+	if hc, ok := s.world.Component.Heat.Get(cursorEntity); ok {
+		heat = int(hc.Current.Load())
+	}
+
+	var delta int
+	switch glyphType {
+	case component.GlyphBlue:
+		delta = constant.EnergyBaseBlue * heat
+	case component.GlyphGreen:
+		delta = constant.EnergyBaseGreen * heat
+	case component.GlyphRed:
+		delta = constant.EnergyBaseRed * heat
+	default:
+		return
+	}
+
+	s.addEnergy(int64(delta), false, false)
 }
 
 // startBlink activates blink state
