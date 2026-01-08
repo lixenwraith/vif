@@ -105,6 +105,9 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	} else if r.gameCtx.IsInsertMode() {
 		modeText = constant.ModeTextInsert
 		modeBgColor = render.RgbModeInsertBg
+	} else if r.gameCtx.IsVisualMode() {
+		modeText = constant.ModeTextVisual
+		modeBgColor = render.RgbModeVisualBg
 	} else {
 		modeText = constant.ModeTextNormal
 		modeBgColor = render.RgbModeNormalBg

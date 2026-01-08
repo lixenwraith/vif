@@ -172,10 +172,11 @@ func (r *Router) handleEscape() bool {
 		r.ctx.SetCommandText("")
 		r.ctx.SetPaused(false)
 	case core.ModeOverlay:
-		r.ctx.SetOverlayState(false, "", 0)
 		r.ctx.SetPaused(false)
+	case core.ModeVisual:
+		// Exit to Normal mode
 	case core.ModeInsert:
-		// Nothing to clear
+		// Exit to Normal mode
 	case core.ModeNormal:
 		// Trigger ping grid
 		r.ctx.PushEvent(event.EventPingGridRequest, &event.PingGridRequestPayload{
@@ -447,11 +448,23 @@ func (r *Router) handleModeSwitch(intent *input.Intent) bool {
 		inputMode = input.ModeCommand
 		r.ctx.SetCommandText("")
 		r.ctx.SetPaused(true)
+	case input.ModeTargetVisual:
+		if r.ctx.IsVisualMode() {
+			// Toggle off
+			newMode = core.ModeNormal
+			inputMode = input.ModeNormal
+		} else {
+			newMode = core.ModeVisual
+			inputMode = input.ModeVisual
+		}
+	case input.ModeTargetNormal:
+		newMode = core.ModeNormal
+		inputMode = input.ModeNormal
 	default:
 		return true
 	}
 
-	// Update GameContext (authoritative)
+	// Update GameContext
 	r.ctx.SetMode(newMode)
 
 	// Sync input.Machine

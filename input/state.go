@@ -7,6 +7,7 @@ type InputMode uint8
 
 const (
 	ModeNormal InputMode = iota
+	ModeVisual
 	ModeInsert
 	ModeSearch
 	ModeCommand

@@ -268,6 +268,75 @@ func (ctx *GameContext) IsOverlayMode() bool {
 	return ctx.GetMode() == core.ModeOverlay
 }
 
+// IsNormalMode returns true if in normal mode
+func (ctx *GameContext) IsNormalMode() bool {
+	return ctx.GetMode() == core.ModeNormal
+}
+
+// IsVisualMode returns true if in visual mode
+func (ctx *GameContext) IsVisualMode() bool {
+	return ctx.GetMode() == core.ModeVisual
+}
+
+// VisualBandBounds holds the boundaries for visual mode operations
+type VisualBandBounds struct {
+	MinY, MaxY int
+	MinX, MaxX int
+	Active     bool // True if band is wider than single row
+}
+
+// GetVisualBandBounds returns the band boundaries for visual mode
+// If not in visual mode or shield inactive, returns single-row bounds
+func (ctx *GameContext) GetVisualBandBounds() VisualBandBounds {
+	pos, ok := ctx.World.Position.Get(ctx.CursorEntity)
+	if !ok {
+		return VisualBandBounds{}
+	}
+
+	bounds := VisualBandBounds{
+		MinY:   pos.Y,
+		MaxY:   pos.Y,
+		MinX:   0,
+		MaxX:   ctx.GameWidth - 1,
+		Active: false,
+	}
+
+	if !ctx.IsVisualMode() {
+		return bounds
+	}
+
+	// Check shield for band dimensions
+	shield, ok := ctx.World.Component.Shield.Get(ctx.CursorEntity)
+	if !ok || !shield.Active {
+		return bounds
+	}
+
+	halfWidth := vmath.ToInt(shield.RadiusX)
+	halfHeight := vmath.ToInt(shield.RadiusY)
+
+	bounds.MinY = pos.Y - halfHeight
+	bounds.MaxY = pos.Y + halfHeight
+	bounds.MinX = pos.X - halfWidth
+	bounds.MaxX = pos.X + halfWidth
+	bounds.Active = true
+
+	// Clamp to screen
+	if bounds.MinY < 0 {
+		bounds.MinY = 0
+	}
+	if bounds.MaxY >= ctx.GameHeight {
+		bounds.MaxY = ctx.GameHeight - 1
+	}
+	if bounds.MinX < 0 {
+		bounds.MinX = 0
+	}
+	if bounds.MaxX >= ctx.GameWidth {
+		bounds.MaxX = ctx.GameWidth - 1
+	}
+
+	return bounds
+}
+
 // ===== STATUS BAR ACCESSORS =====
 
 func (ctx *GameContext) GetCommandText() string {

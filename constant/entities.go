@@ -260,8 +260,8 @@ const (
 
 // --- Shield Entity ---
 const (
-	ShieldRadiusX    = 10.5
-	ShieldRadiusY    = 5.5
+	ShieldRadiusX    = 10
+	ShieldRadiusY    = 5
 	ShieldMaxOpacity = 0.3
 )
 

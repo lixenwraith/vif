@@ -62,115 +62,169 @@ func MotionRight(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 // MotionWordForward implements 'w' motion
 func MotionWordForward(ctx *engine.GameContext, x, y, count int) MotionResult {
-	endX := x
+	bounds := ctx.GetVisualBandBounds()
+	endX, endY := x, y
+
 	for i := 0; i < count; i++ {
-		prev := endX
-		endX = findNextWordStartVim(ctx, endX, y)
-		if endX == prev {
+		var newX, newY int
+		if bounds.Active {
+			newX, newY = findNextWordStartInBand(ctx, endX, endY, bounds)
+		} else {
+			newX = findNextWordStartVim(ctx, endX, y)
+			newY = y
+		}
+		if newX == endX && newY == endY {
 			break
 		}
+		endX, endY = newX, newY
 	}
-	endX, y = validatePosition(ctx, endX, y)
+
+	endX, endY = validatePosition(ctx, endX, endY)
 	return MotionResult{
 		StartX: x, StartY: y,
-		EndX: endX, EndY: y,
+		EndX: endX, EndY: endY,
 		Type: RangeChar, Style: StyleExclusive,
-		Valid: endX != x,
+		Valid: endX != x || endY != y,
 	}
 }
 
 // MotionWORDForward implements 'W' motion
 func MotionWORDForward(ctx *engine.GameContext, x, y, count int) MotionResult {
-	endX := x
+	bounds := ctx.GetVisualBandBounds()
+	endX, endY := x, y
+
 	for i := 0; i < count; i++ {
-		prev := endX
-		endX = findNextWORDStart(ctx, endX, y)
-		if endX == prev {
+		var newX, newY int
+		if bounds.Active {
+			newX, newY = findNextWORDStartInBand(ctx, endX, endY, bounds)
+		} else {
+			newX = findNextWORDStart(ctx, endX, y)
+			newY = y
+		}
+		if newX == endX && newY == endY {
 			break
 		}
+		endX, endY = newX, newY
 	}
-	endX, y = validatePosition(ctx, endX, y)
+
+	endX, endY = validatePosition(ctx, endX, endY)
 	return MotionResult{
 		StartX: x, StartY: y,
-		EndX: endX, EndY: y,
+		EndX: endX, EndY: endY,
 		Type: RangeChar, Style: StyleExclusive,
-		Valid: endX != x,
+		Valid: endX != x || endY != y,
 	}
 }
 
 // MotionWordEnd implements 'e' motion
 func MotionWordEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
-	endX := x
+	bounds := ctx.GetVisualBandBounds()
+	endX, endY := x, y
+
 	for i := 0; i < count; i++ {
-		prev := endX
-		endX = findWordEndVim(ctx, endX, y)
-		if endX == prev {
+		var newX, newY int
+		if bounds.Active {
+			newX, newY = findWordEndInBand(ctx, endX, endY, bounds)
+		} else {
+			newX = findWordEndVim(ctx, endX, y)
+			newY = y
+		}
+		if newX == endX && newY == endY {
 			break
 		}
+		endX, endY = newX, newY
 	}
-	endX, y = validatePosition(ctx, endX, y)
+
+	endX, endY = validatePosition(ctx, endX, endY)
 	return MotionResult{
 		StartX: x, StartY: y,
-		EndX: endX, EndY: y,
+		EndX: endX, EndY: endY,
 		Type: RangeChar, Style: StyleInclusive,
-		Valid: endX != x,
+		Valid: endX != x || endY != y,
 	}
 }
 
 // MotionWORDEnd implements 'E' motion
 func MotionWORDEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
-	endX := x
+	bounds := ctx.GetVisualBandBounds()
+	endX, endY := x, y
+
 	for i := 0; i < count; i++ {
-		prev := endX
-		endX = findWORDEnd(ctx, endX, y)
-		if endX == prev {
+		var newX, newY int
+		if bounds.Active {
+			newX, newY = findWORDEndInBand(ctx, endX, endY, bounds)
+		} else {
+			newX = findWORDEnd(ctx, endX, y)
+			newY = y
+		}
+		if newX == endX && newY == endY {
 			break
 		}
+		endX, endY = newX, newY
 	}
-	endX, y = validatePosition(ctx, endX, y)
+
+	endX, endY = validatePosition(ctx, endX, endY)
 	return MotionResult{
 		StartX: x, StartY: y,
-		EndX: endX, EndY: y,
+		EndX: endX, EndY: endY,
 		Type: RangeChar, Style: StyleInclusive,
-		Valid: endX != x,
+		Valid: endX != x || endY != y,
 	}
 }
 
 // MotionWordBack implements 'b' motion
 func MotionWordBack(ctx *engine.GameContext, x, y, count int) MotionResult {
-	endX := x
+	bounds := ctx.GetVisualBandBounds()
+	endX, endY := x, y
+
 	for i := 0; i < count; i++ {
-		prev := endX
-		endX = findPrevWordStartVim(ctx, endX, y)
-		if endX == prev {
+		var newX, newY int
+		if bounds.Active {
+			newX, newY = findPrevWordStartInBand(ctx, endX, endY, bounds)
+		} else {
+			newX = findPrevWordStartVim(ctx, endX, y)
+			newY = y
+		}
+		if newX == endX && newY == endY {
 			break
 		}
+		endX, endY = newX, newY
 	}
-	endX, y = validatePosition(ctx, endX, y)
+
+	endX, endY = validatePosition(ctx, endX, endY)
 	return MotionResult{
 		StartX: x, StartY: y,
-		EndX: endX, EndY: y,
+		EndX: endX, EndY: endY,
 		Type: RangeChar, Style: StyleExclusive,
-		Valid: endX != x,
+		Valid: endX != x || endY != y,
 	}
 }
 
 // MotionWORDBack implements 'B' motion
 func MotionWORDBack(ctx *engine.GameContext, x, y, count int) MotionResult {
-	endX := x
+	bounds := ctx.GetVisualBandBounds()
+	endX, endY := x, y
+
 	for i := 0; i < count; i++ {
-		prev := endX
-		endX = findPrevWORDStart(ctx, endX, y)
-		if endX == prev {
+		var newX, newY int
+		if bounds.Active {
+			newX, newY = findPrevWORDStartInBand(ctx, endX, endY, bounds)
+		} else {
+			newX = findPrevWORDStart(ctx, endX, y)
+			newY = y
+		}
+		if newX == endX && newY == endY {
 			break
 		}
+		endX, endY = newX, newY
 	}
-	endX, y = validatePosition(ctx, endX, y)
+
+	endX, endY = validatePosition(ctx, endX, endY)
 	return MotionResult{
 		StartX: x, StartY: y,
-		EndX: endX, EndY: y,
+		EndX: endX, EndY: endY,
 		Type: RangeChar, Style: StyleExclusive,
-		Valid: endX != x,
+		Valid: endX != x || endY != y,
 	}
 }
 
@@ -186,27 +240,42 @@ func MotionLineStart(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 // MotionFirstNonWS implements '^' motion
 func MotionFirstNonWS(ctx *engine.GameContext, x, y, count int) MotionResult {
-	endX := findFirstNonWhitespace(ctx, y)
+	bounds := ctx.GetVisualBandBounds()
+	var endX, endY int
+
+	if bounds.Active {
+		endX, endY = findFirstNonWhitespaceInBand(ctx, bounds)
+	} else {
+		endX = findFirstNonWhitespace(ctx, y)
+		endY = y
+	}
+
 	return MotionResult{
 		StartX: x, StartY: y,
-		EndX: endX, EndY: y,
+		EndX: endX, EndY: endY,
 		Type: RangeChar, Style: StyleInclusive,
-		Valid: endX != x,
+		Valid: endX != x || endY != y,
 	}
 }
 
 // MotionLineEnd implements '$' motion
 func MotionLineEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
-	lastEntityX := findLineEnd(ctx, y)
-	var endX int
+	bounds := ctx.GetVisualBandBounds()
+	var lastEntityX int
 
+	if bounds.Active {
+		lastEntityX = findLineEndInBand(ctx, bounds)
+	} else {
+		lastEntityX = findLineEnd(ctx, y)
+	}
+
+	var endX int
 	// Jump to screen edge if:
-	// 1. Line is empty (lastEntityX == -1)
-	// 2. We are already at the last entity (x == lastEntityX)
+	// 1. No entities found (lastEntityX == -1)
+	// 2. Already at the last entity (x == lastEntityX)
 	if lastEntityX == -1 || x == lastEntityX {
 		endX = ctx.GameWidth - 1
 	} else {
-		// Otherwise jump to the last entity
 		endX = lastEntityX
 	}
 
@@ -338,30 +407,18 @@ func MotionOrigin(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 // MotionFindForward implements 'f' motion (CharMotionFunc)
 func MotionFindForward(ctx *engine.GameContext, x, y, count int, char rune) MotionResult {
-	endX, found := findCharInDirection(ctx, x, y, char, count, true)
-	return MotionResult{
-		StartX: x, StartY: y,
-		EndX: endX, EndY: y,
-		Type: RangeChar, Style: StyleInclusive,
-		Valid: found,
-	}
-}
+	bounds := ctx.GetVisualBandBounds()
 
-// MotionFindBack implements 'F' motion (CharMotionFunc)
-func MotionFindBack(ctx *engine.GameContext, x, y, count int, char rune) MotionResult {
-	endX, found := findCharInDirection(ctx, x, y, char, count, false)
-	return MotionResult{
-		StartX: x, StartY: y,
-		EndX: endX, EndY: y,
-		Type: RangeChar, Style: StyleInclusive,
-		Valid: found,
-	}
-}
+	var endX, endY int
+	var found bool
 
-// MotionTillForward implements 't' motion (CharMotionFunc)
-// Returns adjusted position (target-1) with StyleInclusive per clarification
-func MotionTillForward(ctx *engine.GameContext, x, y, count int, char rune) MotionResult {
-	endX, found := findCharInDirection(ctx, x, y, char, count, true)
+	if bounds.Active {
+		endX, endY, found = findCharInBand(ctx, x, y, char, count, true, bounds)
+	} else {
+		endX, found = findCharInDirection(ctx, x, y, char, count, true)
+		endY = y
+	}
+
 	if !found {
 		return MotionResult{
 			StartX: x, StartY: y,
@@ -370,8 +427,30 @@ func MotionTillForward(ctx *engine.GameContext, x, y, count int, char rune) Moti
 			Valid: false,
 		}
 	}
-	// Adjacent target: no valid motion (Vim behavior)
-	if endX <= x+1 {
+
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: endX, EndY: endY,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: true,
+	}
+}
+
+// MotionFindBack implements 'F' motion (CharMotionFunc)
+func MotionFindBack(ctx *engine.GameContext, x, y, count int, char rune) MotionResult {
+	bounds := ctx.GetVisualBandBounds()
+
+	var endX, endY int
+	var found bool
+
+	if bounds.Active {
+		endX, endY, found = findCharInBand(ctx, x, y, char, count, false, bounds)
+	} else {
+		endX, found = findCharInDirection(ctx, x, y, char, count, false)
+		endY = y
+	}
+
+	if !found {
 		return MotionResult{
 			StartX: x, StartY: y,
 			EndX: x, EndY: y,
@@ -379,18 +458,99 @@ func MotionTillForward(ctx *engine.GameContext, x, y, count int, char rune) Moti
 			Valid: false,
 		}
 	}
+
 	return MotionResult{
 		StartX: x, StartY: y,
-		EndX: endX - 1, EndY: y,
+		EndX: endX, EndY: endY,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: true,
+	}
+}
+
+// MotionTillForward implements 't' motion (CharMotionFunc)
+func MotionTillForward(ctx *engine.GameContext, x, y, count int, char rune) MotionResult {
+	bounds := ctx.GetVisualBandBounds()
+
+	var endX, endY int
+	var found bool
+
+	if bounds.Active {
+		endX, endY, found = findCharInBand(ctx, x, y, char, count, true, bounds)
+	} else {
+		endX, found = findCharInDirection(ctx, x, y, char, count, true)
+		endY = y
+	}
+
+	if !found {
+		return MotionResult{
+			StartX: x, StartY: y,
+			EndX: x, EndY: y,
+			Type: RangeChar, Style: StyleInclusive,
+			Valid: false,
+		}
+	}
+
+	// Till: stop one position before target
+	// For band mode, need to handle row wrapping
+	if bounds.Active {
+		endX--
+		if endX < 0 {
+			endY--
+			if endY < bounds.MinY {
+				return MotionResult{
+					StartX: x, StartY: y,
+					EndX: x, EndY: y,
+					Type: RangeChar, Style: StyleInclusive,
+					Valid: false,
+				}
+			}
+			endX = ctx.GameWidth - 1
+		}
+	} else {
+		// Single row: adjacent target means no valid motion
+		if endX <= x+1 {
+			return MotionResult{
+				StartX: x, StartY: y,
+				EndX: x, EndY: y,
+				Type: RangeChar, Style: StyleInclusive,
+				Valid: false,
+			}
+		}
+		endX--
+	}
+
+	// Check we actually moved
+	if endX == x && endY == y {
+		return MotionResult{
+			StartX: x, StartY: y,
+			EndX: x, EndY: y,
+			Type: RangeChar, Style: StyleInclusive,
+			Valid: false,
+		}
+	}
+
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: endX, EndY: endY,
 		Type: RangeChar, Style: StyleInclusive,
 		Valid: true,
 	}
 }
 
 // MotionTillBack implements 'T' motion (CharMotionFunc)
-// Returns adjusted position (target+1) with StyleInclusive per clarification
 func MotionTillBack(ctx *engine.GameContext, x, y, count int, char rune) MotionResult {
-	endX, found := findCharInDirection(ctx, x, y, char, count, false)
+	bounds := ctx.GetVisualBandBounds()
+
+	var endX, endY int
+	var found bool
+
+	if bounds.Active {
+		endX, endY, found = findCharInBand(ctx, x, y, char, count, false, bounds)
+	} else {
+		endX, found = findCharInDirection(ctx, x, y, char, count, false)
+		endY = y
+	}
+
 	if !found {
 		return MotionResult{
 			StartX: x, StartY: y,
@@ -399,8 +559,37 @@ func MotionTillBack(ctx *engine.GameContext, x, y, count int, char rune) MotionR
 			Valid: false,
 		}
 	}
-	// Adjacent target: no valid motion (Vim behavior)
-	if endX >= x-1 {
+
+	// Till: stop one position after target (moving backward)
+	if bounds.Active {
+		endX++
+		if endX >= ctx.GameWidth {
+			endY++
+			if endY > bounds.MaxY {
+				return MotionResult{
+					StartX: x, StartY: y,
+					EndX: x, EndY: y,
+					Type: RangeChar, Style: StyleInclusive,
+					Valid: false,
+				}
+			}
+			endX = 0
+		}
+	} else {
+		// Single row: adjacent target means no valid motion
+		if endX >= x-1 {
+			return MotionResult{
+				StartX: x, StartY: y,
+				EndX: x, EndY: y,
+				Type: RangeChar, Style: StyleInclusive,
+				Valid: false,
+			}
+		}
+		endX++
+	}
+
+	// Check we actually moved
+	if endX == x && endY == y {
 		return MotionResult{
 			StartX: x, StartY: y,
 			EndX: x, EndY: y,
@@ -408,9 +597,10 @@ func MotionTillBack(ctx *engine.GameContext, x, y, count int, char rune) MotionR
 			Valid: false,
 		}
 	}
+
 	return MotionResult{
 		StartX: x, StartY: y,
-		EndX: endX + 1, EndY: y,
+		EndX: endX, EndY: endY,
 		Type: RangeChar, Style: StyleInclusive,
 		Valid: true,
 	}
@@ -448,48 +638,74 @@ func MotionHalfPageDown(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 // MotionColumnUp implements [ and gk - jump to first non-space above in same column
 func MotionColumnUp(ctx *engine.GameContext, x, y, count int) MotionResult {
-	endY := y
+	bounds := ctx.GetVisualBandBounds()
+	endX, endY := x, y
+
 	for i := 0; i < count; i++ {
-		found := false
-		for newY := endY - 1; newY >= 0; newY-- {
-			if getCharacterTypeAt(ctx, x, newY) != CharTypeSpace {
-				endY = newY
-				found = true
+		var newX, newY int
+		if bounds.Active {
+			newX, newY = findColumnUpInBand(ctx, endX, endY, bounds)
+		} else {
+			newX = x
+			found := false
+			for checkY := endY - 1; checkY >= 0; checkY-- {
+				if getCharacterTypeAt(ctx, x, checkY) != CharTypeSpace {
+					newY = checkY
+					found = true
+					break
+				}
+			}
+			if !found {
 				break
 			}
 		}
-		if !found {
+		if newX == endX && newY == endY {
 			break
 		}
+		endX, endY = newX, newY
 	}
+
 	return MotionResult{
 		StartX: x, StartY: y,
-		EndX: x, EndY: endY,
+		EndX: endX, EndY: endY,
 		Type: RangeChar, Style: StyleInclusive,
-		Valid: endY != y,
+		Valid: endX != x || endY != y,
 	}
 }
 
 // MotionColumnDown implements ] and gj - jump to first non-space below in same column
 func MotionColumnDown(ctx *engine.GameContext, x, y, count int) MotionResult {
-	endY := y
+	bounds := ctx.GetVisualBandBounds()
+	endX, endY := x, y
+
 	for i := 0; i < count; i++ {
-		found := false
-		for newY := endY + 1; newY < ctx.GameHeight; newY++ {
-			if getCharacterTypeAt(ctx, x, newY) != CharTypeSpace {
-				endY = newY
-				found = true
+		var newX, newY int
+		if bounds.Active {
+			newX, newY = findColumnDownInBand(ctx, endX, endY, bounds, ctx.GameHeight)
+		} else {
+			newX = x
+			found := false
+			for checkY := endY + 1; checkY < ctx.GameHeight; checkY++ {
+				if getCharacterTypeAt(ctx, x, checkY) != CharTypeSpace {
+					newY = checkY
+					found = true
+					break
+				}
+			}
+			if !found {
 				break
 			}
 		}
-		if !found {
+		if newX == endX && newY == endY {
 			break
 		}
+		endX, endY = newX, newY
 	}
+
 	return MotionResult{
 		StartX: x, StartY: y,
-		EndX: x, EndY: endY,
+		EndX: endX, EndY: endY,
 		Type: RangeChar, Style: StyleInclusive,
-		Valid: endY != y,
+		Valid: endX != x || endY != y,
 	}
 }

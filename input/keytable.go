@@ -128,6 +128,7 @@ func DefaultKeyTable() *KeyTable {
 
 			// Mode switches
 			'i': {BehaviorModeSwitch, MotionNone, SpecialNone, ModeTargetInsert, IntentNone},
+			'v': {BehaviorModeSwitch, MotionNone, SpecialNone, ModeTargetVisual, IntentNone},
 			'/': {BehaviorModeSwitch, MotionNone, SpecialNone, ModeTargetSearch, IntentNone},
 			':': {BehaviorModeSwitch, MotionNone, SpecialNone, ModeTargetCommand, IntentNone},
 

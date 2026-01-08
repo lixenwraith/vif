@@ -21,6 +21,7 @@ const (
 
 	// Mode indicator text (padded to ModeIndicatorWidth)
 	ModeTextNormal  = " NORMAL  "
+	ModeTextVisual  = " VISUAL "
 	ModeTextInsert  = " INSERT  "
 	ModeTextSearch  = " SEARCH  "
 	ModeTextCommand = " COMMAND "
@@ -51,21 +52,6 @@ const (
 const (
 	// SplashMinDistance is the minimum distance from cursor for magnifier placement
 	SplashMinDistance = 25
-
-	// SplashActionDuration is how long normal mode feedback displays
-	SplashActionDuration = 500 * time.Millisecond
-
-	// SplashFlashDuration is how long energy flash displays
-	SplashFlashDuration = 100 * time.Millisecond
-
-	// SplashQuadrantBaseScore is the base score for each quadrant in smart layout
-	SplashQuadrantBaseScore = 100
-
-	// SplashCursorPenalty is the penalty applied to the quadrant containing the cursor
-	SplashCursorPenalty = 1000
-
-	// SplashGoldSequencePenalty is the penalty applied per gold character in a quadrant
-	SplashGoldSequencePenalty = 50
 )
 
 // Ping

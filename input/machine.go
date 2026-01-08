@@ -76,7 +76,7 @@ func (m *Machine) Process(ev terminal.Event) *Intent {
 
 func (m *Machine) processKey(ev terminal.Event) *Intent {
 	switch m.mode {
-	case ModeNormal:
+	case ModeNormal, ModeVisual:
 		return m.processNormal(ev)
 	case ModeInsert:
 		return m.processInsert(ev)

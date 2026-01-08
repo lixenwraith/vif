@@ -76,6 +76,7 @@ var (
 
 	// Status bar backgrounds
 	RgbModeNormalBg  = RGB{135, 206, 250} // Light sky blue
+	RgbModeVisualBg  = RGB{255, 200, 100} // Orange-yellow for visual mode
 	RgbModeInsertBg  = RGB{144, 238, 144} // Light grass green
 	RgbModeSearchBg  = RGB{255, 165, 0}   // Orange
 	RgbModeCommandBg = RGB{160, 100, 160} // Light purple

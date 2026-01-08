@@ -139,22 +139,63 @@ func (r *PingRenderer) isExcluded(x, y int) bool {
 
 // drawCrosshair draws the crosshair lines respecting shield exclusion
 func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.RenderBuffer, color render.RGB) {
+	// Determine band dimensions based on mode and shield state
+	bandHalfWidth := 0
+	bandHalfHeight := 0
 
-	// Row
-	screenY := ctx.GameY + ctx.CursorY
-	if screenY >= ctx.GameY && screenY < ctx.GameY+ctx.GameHeight {
+	if r.gameCtx.IsVisualMode() {
+		// Check if shield is active to determine band size
+		if shield, ok := r.gameCtx.World.Component.Shield.Get(r.gameCtx.CursorEntity); ok && shield.Active {
+			bandHalfWidth = vmath.ToInt(shield.RadiusX)
+			bandHalfHeight = vmath.ToInt(shield.RadiusY)
+		}
+		// If shield inactive, band dimensions stay 0 (single line behavior)
+	}
+
+	// Calculate band bounds, clamped to screen
+	minY := ctx.CursorY - bandHalfHeight
+	maxY := ctx.CursorY + bandHalfHeight
+	minX := ctx.CursorX - bandHalfWidth
+	maxX := ctx.CursorX + bandHalfWidth
+
+	if minY < 0 {
+		minY = 0
+	}
+	if maxY >= ctx.GameHeight {
+		maxY = ctx.GameHeight - 1
+	}
+	if minX < 0 {
+		minX = 0
+	}
+	if maxX >= ctx.GameWidth {
+		maxX = ctx.GameWidth - 1
+	}
+
+	// Draw horizontal band (rows from minY to maxY, full width)
+	for y := minY; y <= maxY; y++ {
+		screenY := ctx.GameY + y
+		if screenY < ctx.GameY || screenY >= ctx.GameY+ctx.GameHeight {
+			continue
+		}
 		for x := 0; x < ctx.GameWidth; x++ {
-			if !r.isExcluded(x, ctx.CursorY) {
+			if !r.isExcluded(x, y) {
 				buf.Set(ctx.GameX+x, screenY, ' ', render.DefaultBgRGB, color, render.BlendReplace, 1.0, terminal.AttrNone)
 			}
 		}
 	}
 
-	// Column
-	screenX := ctx.GameX + ctx.CursorX
-	if screenX >= ctx.GameX && screenX < ctx.GameX+ctx.GameWidth {
+	// Draw vertical band (columns from minX to maxX, full height)
+	for x := minX; x <= maxX; x++ {
+		screenX := ctx.GameX + x
+		if screenX < ctx.GameX || screenX >= ctx.GameX+ctx.GameWidth {
+			continue
+		}
 		for y := 0; y < ctx.GameHeight; y++ {
-			if !r.isExcluded(ctx.CursorX, y) {
+			// Skip cells already drawn by horizontal band
+			if y >= minY && y <= maxY {
+				continue
+			}
+			if !r.isExcluded(x, y) {
 				buf.Set(screenX, ctx.GameY+y, ' ', render.DefaultBgRGB, color, render.BlendReplace, 1.0, terminal.AttrNone)
 			}
 		}

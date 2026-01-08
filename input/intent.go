@@ -116,6 +116,7 @@ const (
 	ModeTargetSearch
 	ModeTargetCommand
 	ModeTargetNormal
+	ModeTargetVisual
 )
 
 // ScrollDir for overlay navigation
