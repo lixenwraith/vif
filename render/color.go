@@ -1,7 +1,6 @@
 package render
 
 import (
-	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -212,38 +211,4 @@ func calculateHeatColor(progress float64) RGB {
 			B: uint8(225 - (225-147)*t),
 		}
 	}
-}
-
-// GetFgForSequence returns the foreground color for a given glyph type and level
-func GetFgForSequence(glyphType component.GlyphType, level component.GlyphLevel) RGB {
-	switch glyphType {
-	case component.GlyphGreen:
-		switch level {
-		case component.GlyphDark:
-			return RgbSequenceGreenDark
-		case component.GlyphNormal:
-			return RgbSequenceGreenNormal
-		case component.GlyphBright:
-			return RgbSequenceGreenBright
-		}
-	case component.GlyphRed:
-		switch level {
-		case component.GlyphDark:
-			return RgbSequenceRedDark
-		case component.GlyphNormal:
-			return RgbSequenceRedNormal
-		case component.GlyphBright:
-			return RgbSequenceRedBright
-		}
-	case component.GlyphBlue:
-		switch level {
-		case component.GlyphDark:
-			return RgbSequenceBlueDark
-		case component.GlyphNormal:
-			return RgbSequenceBlueNormal
-		case component.GlyphBright:
-			return RgbSequenceBlueBright
-		}
-	}
-	return RgbBackground
 }

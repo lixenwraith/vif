@@ -113,3 +113,27 @@ func (g *SpatialGrid) Resize(newWidth, newHeight int) {
 	g.Height = newHeight
 	g.Cells = make([]Cell, newWidth*newHeight)
 }
+
+// GridStats holds computed statistics for the spatial grid
+type GridStats struct {
+	CellsOccupied int
+	EntitiesTotal int
+	MaxOccupancy  int
+}
+
+// ComputeStats calculates grid statistics in a single pass
+// O(n) where n = Width * Height
+func (g *SpatialGrid) ComputeStats() GridStats {
+	var stats GridStats
+	for i := range g.Cells {
+		count := int(g.Cells[i].Count)
+		if count > 0 {
+			stats.CellsOccupied++
+			stats.EntitiesTotal += count
+			if count > stats.MaxOccupancy {
+				stats.MaxOccupancy = count
+			}
+		}
+	}
+	return stats
+}

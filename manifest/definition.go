@@ -91,6 +91,7 @@ var Systems = []SystemDef{
 	{"splash", "NewSplashSystem"},
 	{"death", "NewDeathSystem"},
 	{"timekeeper", "NewTimeKeeperSystem"},
+	{"diagnotics", "NewDiagnosticsSystem"},
 }
 
 // Renderers is the authoritative renderer list

@@ -27,6 +27,9 @@ type World struct {
 
 	system      []System
 	updateMutex sync.Mutex
+
+	// Stats
+	destroyedCount atomic.Int64
 }
 
 // NewWorld creates a new ECS world with dynamic component store support
@@ -60,6 +63,7 @@ func (w *World) DestroyEntity(e core.Entity) {
 		}
 	}
 	w.removeEntity(e)
+	w.destroyedCount.Add(1)
 }
 
 // Clear removes all entities and components from the world
@@ -168,4 +172,16 @@ func (w *World) PushEvent(eventType event.EventType, payload any) {
 		Payload: payload,
 		Frame:   w.frameSource.Load(),
 	})
+}
+
+// CreatedCount returns total entities ever created
+func (w *World) CreatedCount() int64 {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return int64(w.nextEntityID) - 1
+}
+
+// DestroyedCount returns total entities destroyed
+func (w *World) DestroyedCount() int64 {
+	return w.destroyedCount.Load()
 }

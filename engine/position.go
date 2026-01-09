@@ -353,3 +353,17 @@ func (pb *PositionBatch) CommitForce() {
 		_ = pb.store.grid.Add(add.entity, add.pos.X, add.pos.Y)
 	}
 }
+
+// GridStats returns computed statistics for the spatial grid
+func (p *Position) GridStats() GridStats {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.grid.ComputeStats()
+}
+
+// GridDimensions returns width and height of the spatial grid
+func (p *Position) GridDimensions() (width, height int) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.grid.Width, p.grid.Height
+}
