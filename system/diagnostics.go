@@ -133,16 +133,16 @@ func (s *DiagnosticsSystem) Update() {
 
 // TODO: add to code gen
 func (s *DiagnosticsSystem) collectStoreCounts() {
-	s.statPositionCount.Store(int64(s.world.Position.Count()))
-	s.statGlyphCount.Store(int64(s.world.Component.Glyph.Count()))
-	s.statSigilCount.Store(int64(s.world.Component.Sigil.Count()))
-	s.statMemberCount.Store(int64(s.world.Component.Member.Count()))
-	s.statHeaderCount.Store(int64(s.world.Component.Header.Count()))
-	s.statNuggetCount.Store(int64(s.world.Component.Nugget.Count()))
-	s.statDeathCount.Store(int64(s.world.Component.Death.Count()))
-	s.statShieldCount.Store(int64(s.world.Component.Shield.Count()))
-	s.statPingCount.Store(int64(s.world.Component.Ping.Count()))
-	s.statBoostCount.Store(int64(s.world.Component.Boost.Count()))
+	s.statPositionCount.Store(int64(s.world.Position.CountEntity()))
+	s.statGlyphCount.Store(int64(s.world.Component.Glyph.CountEntity()))
+	s.statSigilCount.Store(int64(s.world.Component.Sigil.CountEntity()))
+	s.statMemberCount.Store(int64(s.world.Component.Member.CountEntity()))
+	s.statHeaderCount.Store(int64(s.world.Component.Header.CountEntity()))
+	s.statNuggetCount.Store(int64(s.world.Component.Nugget.CountEntity()))
+	s.statDeathCount.Store(int64(s.world.Component.Death.CountEntity()))
+	s.statShieldCount.Store(int64(s.world.Component.Shield.CountEntity()))
+	s.statPingCount.Store(int64(s.world.Component.Ping.CountEntity()))
+	s.statBoostCount.Store(int64(s.world.Component.Boost.CountEntity()))
 }
 
 func (s *DiagnosticsSystem) collectGridMetrics() {
@@ -168,31 +168,31 @@ func (s *DiagnosticsSystem) collectConsistencyChecks() {
 	var orphanGlyph, orphanMember, emptyHeader int64
 
 	// Glyph without Position
-	for _, e := range s.world.Component.Glyph.All() {
-		if !s.world.Position.Has(e) {
+	for _, e := range s.world.Component.Glyph.AllEntity() {
+		if !s.world.Position.HasComponent(e) {
 			orphanGlyph++
 		}
 	}
 
 	// Member without valid anchor
-	for _, e := range s.world.Component.Member.All() {
-		member, ok := s.world.Component.Member.Get(e)
+	for _, e := range s.world.Component.Member.AllEntity() {
+		member, ok := s.world.Component.Member.GetComponent(e)
 		if !ok {
 			continue
 		}
-		if !s.world.Component.Header.Has(member.AnchorID) {
+		if !s.world.Component.Header.HasComponent(member.HeaderEntity) {
 			orphanMember++
 		}
 	}
 
-	// Header with no live members
-	for _, e := range s.world.Component.Header.All() {
-		header, ok := s.world.Component.Header.Get(e)
+	// HeaderEntity with no live members
+	for _, e := range s.world.Component.Header.AllEntity() {
+		header, ok := s.world.Component.Header.GetComponent(e)
 		if !ok {
 			continue
 		}
 		liveCount := 0
-		for _, m := range header.Members {
+		for _, m := range header.MemberEntries {
 			if m.Entity != 0 {
 				liveCount++
 			}

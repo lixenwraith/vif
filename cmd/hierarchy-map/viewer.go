@@ -95,7 +95,7 @@ func (app *AppState) OpenFileViewer(path string) {
 
 	// Load raw lines
 	lines := strings.Split(string(content), "\n")
-	// Remove trailing empty line from split if file ends with newline
+	// RemoveComponent trailing empty line from split if file ends with newline
 	if len(lines) > 0 && lines[len(lines)-1] == "" {
 		lines = lines[:len(lines)-1]
 	}
@@ -626,7 +626,7 @@ func (app *AppState) viewerToggleFold() {
 	for i, region := range v.FoldRegions {
 		if lineNum >= region.StartLine && lineNum <= region.EndLine {
 			v.FoldState[i] = true
-			// Move cursor to fold start
+			// MoveEntity cursor to fold start
 			for vi, vline := range v.visibleLines() {
 				if vline.LineNum-1 == region.StartLine {
 					v.Cursor = vi
@@ -833,7 +833,7 @@ func (app *AppState) renderFileViewer(r tui.Region) {
 			gutterBg = app.Theme.FocusBg
 		}
 
-		// Clear gutter
+		// ClearAllComponent gutter
 		for x := 0; x < gutter.W; x++ {
 			gutter.Cell(x, y, ' ', app.Theme.StatusFg, gutterBg, terminal.AttrNone)
 		}
@@ -847,7 +847,7 @@ func (app *AppState) renderFileViewer(r tui.Region) {
 		// Separator
 		gutter.Cell(gutterW, y, '│', app.Theme.Border, gutterBg, terminal.AttrDim)
 
-		// Clear text area
+		// ClearAllComponent text area
 		for x := 0; x < textArea.W; x++ {
 			textArea.Cell(x, y, ' ', app.Theme.Fg, bg, terminal.AttrNone)
 		}
@@ -942,7 +942,7 @@ func (app *AppState) renderViewerLine(r tui.Region, y, startX int, text string, 
 
 		ch := runes[runeIdx]
 
-		// Get style for this rune
+		// GetComponent style for this rune
 		fg := app.Theme.Fg
 		attr := terminal.AttrNone
 

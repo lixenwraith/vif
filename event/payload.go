@@ -105,7 +105,7 @@ type GoldEnablePayload struct {
 
 // GoldSpawnedPayload anchors countdown timer to sequence position
 type GoldSpawnedPayload struct {
-	AnchorEntity core.Entity   `toml:"anchor_entity"`
+	HeaderEntity core.Entity   `toml:"header_entity"`
 	OriginX      int           `toml:"origin_x"`
 	OriginY      int           `toml:"origin_y"`
 	Length       int           `toml:"length"`
@@ -114,7 +114,7 @@ type GoldSpawnedPayload struct {
 
 // GoldCompletionPayload identifies which timer to destroy
 type GoldCompletionPayload struct {
-	AnchorEntity core.Entity `toml:"anchor_entity"`
+	HeaderEntity core.Entity `toml:"header_entity"`
 }
 
 // SplashRequestPayload creates transient visual flash
@@ -231,10 +231,10 @@ type NetworkErrorPayload struct {
 
 // MemberTypedPayload signals a composite member was typed
 type MemberTypedPayload struct {
-	AnchorID       core.Entity `toml:"anchor_id"`
+	HeaderEntity   core.Entity `toml:"header_entity"`
 	MemberEntity   core.Entity `toml:"member_entity"`
 	Char           rune        `toml:"char"`
-	RemainingCount int         `toml:"remaining_count"` // Count of remaining live members after this one
+	RemainingCount int         `toml:"remaining_count"` // CountEntity of remaining live members after this one
 }
 
 // DecaySpawnPayload contains parameters to spawn a single decay entity
@@ -261,7 +261,7 @@ type CursorMovedPayload struct {
 
 // QuasarSpawnedPayload contains quasar spawn data
 type QuasarSpawnedPayload struct {
-	AnchorEntity core.Entity `toml:"anchor_entity"`
+	HeaderEntity core.Entity `toml:"header_entity"`
 	OriginX      int         `toml:"origin_x"`
 	OriginY      int         `toml:"origin_y"`
 }
@@ -301,13 +301,13 @@ type LightningUpdatePayload struct {
 
 // QuasarChargeStartPayload contains parameters for quasar charge countdown
 type QuasarChargeStartPayload struct {
-	AnchorEntity core.Entity   `toml:"anchor_entity"`
+	HeaderEntity core.Entity   `toml:"header_entity"`
 	Duration     time.Duration `toml:"duration"`
 }
 
 // QuasarChargeCancelPayload identifies which charge timer to destroy
 type QuasarChargeCancelPayload struct {
-	AnchorEntity core.Entity `toml:"anchor_entity"`
+	HeaderEntity core.Entity `toml:"header_entity"`
 }
 
 // ExplosionRequestPayload contains parameters for explosion effect

@@ -79,13 +79,13 @@ func (s *MaterializeSystem) Update() {
 	durationFixed := vmath.FromFloat(constant.MaterializeAnimationDuration.Seconds())
 	progressDelta := vmath.Div(dtFixed, durationFixed)
 
-	entities := s.world.Component.Materialize.All()
+	entities := s.world.Component.Materialize.AllEntity()
 	if len(entities) == 0 {
 		return
 	}
 
 	for _, entity := range entities {
-		mat, ok := s.world.Component.Materialize.Get(entity)
+		mat, ok := s.world.Component.Materialize.GetComponent(entity)
 		if !ok {
 			continue
 		}
@@ -102,7 +102,7 @@ func (s *MaterializeSystem) Update() {
 			continue
 		}
 
-		s.world.Component.Materialize.Set(entity, mat)
+		s.world.Component.Materialize.SetComponent(entity, mat)
 	}
 }
 
@@ -127,7 +127,7 @@ func (s *MaterializeSystem) spawnMaterializeEffect(targetX, targetY int, spawnTy
 	entity := s.world.CreateEntity()
 
 	// TODO: add protection
-	s.world.Component.Materialize.Set(entity, component.MaterializeComponent{
+	s.world.Component.Materialize.SetComponent(entity, component.MaterializeComponent{
 		TargetX:  targetX,
 		TargetY:  targetY,
 		Progress: 0,

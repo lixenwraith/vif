@@ -35,7 +35,7 @@ func (m *Machine[T]) LoadConfigFromMap(configMap map[string]any) error {
 		return fmt.Errorf("at least one region must be defined in [regions]")
 	}
 
-	// 2. Clear existing graph
+	// 2. ClearAllComponent existing graph
 	m.nodes = make(map[StateID]*Node[T])
 	m.regions = make(map[string]*RegionState)
 	m.regionInitials = make(map[string]StateID)

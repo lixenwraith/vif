@@ -20,7 +20,7 @@ func NewSpiritRenderer(gameCtx *engine.GameContext) *SpiritRenderer {
 }
 
 func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.gameCtx.World.Component.Spirit.All()
+	entities := r.gameCtx.World.Component.Spirit.AllEntity()
 	if len(entities) == 0 {
 		return
 	}
@@ -38,7 +38,7 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	)
 
 	for _, entity := range entities {
-		spirit, ok := r.gameCtx.World.Component.Spirit.Get(entity)
+		spirit, ok := r.gameCtx.World.Component.Spirit.GetComponent(entity)
 		if !ok {
 			continue
 		}

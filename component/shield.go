@@ -18,7 +18,7 @@ type ShieldComponent struct {
 	RadiusY int64 // Q32.32
 
 	// Precomputed Q32.32 inverse radii squared for ellipse checks
-	// Set by ShieldSystem on activation/creation
+	// SetComponent by ShieldSystem on activation/creation
 	InvRxSq int64
 	InvRySq int64
 }

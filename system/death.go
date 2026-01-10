@@ -94,11 +94,11 @@ func (s *DeathSystem) markForDeath(entity core.Entity, effect event.EventType) {
 	}
 
 	// 1. Protection Check
-	if prot, ok := s.world.Component.Protection.Get(entity); ok {
-		if !prot.IsExpired(s.world.Resource.Time.GameTime.UnixNano()) &&
-			(prot.Mask.Has(component.ProtectFromDeath) || prot.Mask == component.ProtectAll) {
+	if protComp, ok := s.world.Component.Protection.GetComponent(entity); ok {
+		if !protComp.IsExpired(s.world.Resource.Time.GameTime.UnixNano()) &&
+			(protComp.Mask.Has(component.ProtectFromDeath) || protComp.Mask == component.ProtectAll) {
 			// If immortal, remove tag to not process again in Update()
-			s.world.Component.Death.Remove(entity)
+			s.world.Component.Death.RemoveComponent(entity)
 			return
 		}
 	}
@@ -126,17 +126,17 @@ func (s *DeathSystem) routeCleanup(entity core.Entity) {
 }
 
 func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType) {
-	pos, hasPos := s.world.Position.Get(entity)
-	if !hasPos {
+	entityPos, ok := s.world.Position.Get(entity)
+	if !ok {
 		return
 	}
 
 	// Extract char: glyph first, sigil fallback
 	var char rune
-	if glyph, ok := s.world.Component.Glyph.Get(entity); ok {
-		char = glyph.Rune
-	} else if sigil, ok := s.world.Component.Sigil.Get(entity); ok {
-		char = sigil.Rune
+	if glyphComp, ok := s.world.Component.Glyph.GetComponent(entity); ok {
+		char = glyphComp.Rune
+	} else if sigilComp, ok := s.world.Component.Sigil.GetComponent(entity); ok {
+		char = sigilComp.Rune
 	} else {
 		return
 	}
@@ -144,23 +144,23 @@ func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType
 	switch effectEvent {
 	case event.EventFlashRequest:
 		s.world.PushEvent(event.EventFlashRequest, &event.FlashRequestPayload{
-			X:    pos.X,
-			Y:    pos.Y,
+			X:    entityPos.X,
+			Y:    entityPos.Y,
 			Char: char,
 		})
 
 	case event.EventBlossomSpawnOne:
 		s.world.PushEvent(event.EventBlossomSpawnOne, &event.BlossomSpawnPayload{
-			X:             pos.X,
-			Y:             pos.Y,
+			X:             entityPos.X,
+			Y:             entityPos.Y,
 			Char:          char,
 			SkipStartCell: true,
 		})
 
 	case event.EventDecaySpawnOne:
 		s.world.PushEvent(event.EventDecaySpawnOne, &event.DecaySpawnPayload{
-			X:             pos.X,
-			Y:             pos.Y,
+			X:             entityPos.X,
+			Y:             entityPos.Y,
 			Char:          char,
 			SkipStartCell: true,
 		})
@@ -170,20 +170,19 @@ func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType
 	}
 }
 
-// Update processes entities tagged with DeathComponent by systems not using the event path.
-// This preserves the "deferred" cleanup logic for OOB or timer-based destruction.
+// Update processes entities tagged with DeathComponent
 func (s *DeathSystem) Update() {
 	if !s.enabled {
 		return
 	}
 
-	entities := s.world.Component.Death.All()
-	if len(entities) == 0 {
+	deathEntities := s.world.Component.Death.AllEntity()
+	if len(deathEntities) == 0 {
 		return
 	}
 
-	for _, entity := range entities {
+	for _, deathEntity := range deathEntities {
 		// Route through markForDeath to ensure protection checks and visual effects are applied
-		s.markForDeath(entity, 0)
+		s.markForDeath(deathEntity, 0)
 	}
 }

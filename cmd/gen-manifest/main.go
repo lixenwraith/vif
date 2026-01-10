@@ -187,17 +187,17 @@ func initComponents(w *World) {
 // removeEntity removes entity from every component store
 func (w *World) removeEntity(e core.Entity) {
 {{- range .Components }}
-	w.Component.{{ .Field }}.Remove(e)
+	w.Component.{{ .Field }}.RemoveComponent(e)
 {{- end }}
-	w.Position.Remove(e)
+	w.Position.RemoveComponent(e)
 }
 
 // wipeAll clears all component stores
 func (w *World) wipeAll() {
 {{- range .Components }}
-	w.Component.{{ .Field }}.Clear()
+	w.Component.{{ .Field }}.ClearAllComponent()
 {{- end }}
-	w.Position.Clear()
+	w.Position.ClearAllComponent()
 }
 `))
 

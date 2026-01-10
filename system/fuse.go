@@ -95,7 +95,7 @@ func (s *FuseSystem) executeFuse() {
 	s.world.PushEvent(event.EventDrainPause, nil)
 
 	// 2. Collect active drains and their positions
-	drains := s.world.Component.Drain.All()
+	drains := s.world.Component.Drain.AllEntity()
 	coords := make([]int, 0, len(drains)*2)
 	validDrains := make([]core.Entity, 0, len(drains))
 
@@ -139,9 +139,9 @@ func (s *FuseSystem) executeFuse() {
 	}
 
 	// 6. Cleanup Pending Materializers (Fixes artifact issue)
-	mats := s.world.Component.Materialize.All()
+	mats := s.world.Component.Materialize.AllEntity()
 	for _, e := range mats {
-		if m, ok := s.world.Component.Materialize.Get(e); ok && m.Type == component.SpawnTypeDrain {
+		if m, ok := s.world.Component.Materialize.GetComponent(e); ok && m.Type == component.SpawnTypeDrain {
 			s.world.DestroyEntity(e)
 		}
 	}
@@ -167,7 +167,7 @@ func (s *FuseSystem) completeFuse() {
 
 	// 4. Notify QuasarSystem
 	s.world.PushEvent(event.EventQuasarSpawned, &event.QuasarSpawnedPayload{
-		AnchorEntity: anchorEntity,
+		HeaderEntity: anchorEntity,
 		OriginX:      s.targetX,
 		OriginY:      s.targetY,
 	})
@@ -179,7 +179,7 @@ func (s *FuseSystem) completeFuse() {
 
 // destroyAllDrains removes all drain entities without visual effects
 func (s *FuseSystem) destroyAllDrains() {
-	drains := s.world.Component.Drain.All()
+	drains := s.world.Component.Drain.AllEntity()
 	if len(drains) == 0 {
 		return
 	}
@@ -267,13 +267,13 @@ func (s *FuseSystem) clearSpawnArea(anchorX, anchorY int) {
 			x := topLeftX + col
 			y := topLeftY + row
 
-			entities := s.world.Position.GetAllAt(x, y)
+			entities := s.world.Position.GetAllEntityAt(x, y)
 			for _, e := range entities {
 				if e == 0 || e == cursorEntity {
 					continue
 				}
 				// Check protection
-				if prot, ok := s.world.Component.Protection.Get(e); ok {
+				if prot, ok := s.world.Component.Protection.GetComponent(e); ok {
 					if prot.Mask == component.ProtectAll {
 						continue
 					}
@@ -296,21 +296,20 @@ func (s *FuseSystem) createQuasarComposite(anchorX, anchorY int) core.Entity {
 
 	// Create phantom head (controller entity)
 	anchorEntity := s.world.CreateEntity()
-	s.world.Position.Set(anchorEntity, component.PositionComponent{X: anchorX, Y: anchorY})
+	s.world.Position.SetPosition(anchorEntity, component.PositionComponent{X: anchorX, Y: anchorY})
 
 	// Phantom head is indestructible through lifecycle
-	s.world.Component.Protection.Set(anchorEntity, component.ProtectionComponent{
+	s.world.Component.Protection.SetComponent(anchorEntity, component.ProtectionComponent{
 		Mask: component.ProtectAll,
 	})
 
-	// Set QuasarComponent for runtime state
-	s.world.Component.Quasar.Set(anchorEntity, component.QuasarComponent{
+	// SetPosition quasar component
+	s.world.Component.Quasar.SetComponent(anchorEntity, component.QuasarComponent{
 		KineticState: component.KineticState{
 			PreciseX: vmath.FromInt(anchorX),
 			PreciseY: vmath.FromInt(anchorY),
 		},
 		SpeedMultiplier: vmath.Scale,
-		IsOnCursor:      false,
 	})
 
 	// Build member entities
@@ -326,18 +325,16 @@ func (s *FuseSystem) createQuasarComposite(anchorX, anchorY int) core.Entity {
 			offsetY := int8(row - constant.QuasarAnchorOffsetY)
 
 			entity := s.world.CreateEntity()
-			s.world.Position.Set(entity, component.PositionComponent{X: memberX, Y: memberY})
+			s.world.Position.SetPosition(entity, component.PositionComponent{X: memberX, Y: memberY})
 
-			// Quasar members are not typeable - they're obstacles, no GlyphComponent set
-
-			// Members protected from decay/delete but not from death (composite manages lifecycle)
-			s.world.Component.Protection.Set(entity, component.ProtectionComponent{
+			// MemberEntries protected from decay/delete but not from death (composite manages lifecycle)
+			s.world.Component.Protection.SetComponent(entity, component.ProtectionComponent{
 				Mask: component.ProtectFromDecay | component.ProtectFromDelete,
 			})
 
 			// Backlink to anchor
-			s.world.Component.Member.Set(entity, component.MemberComponent{
-				AnchorID: anchorEntity,
+			s.world.Component.Member.SetComponent(entity, component.MemberComponent{
+				HeaderEntity: anchorEntity,
 			})
 
 			members = append(members, component.MemberEntry{
@@ -349,12 +346,12 @@ func (s *FuseSystem) createQuasarComposite(anchorX, anchorY int) core.Entity {
 		}
 	}
 
-	// Set composite header on phantom head
-	s.world.Component.Header.Set(anchorEntity, component.CompositeHeaderComponent{
-		BehaviorID: component.BehaviorQuasar,
-		Members:    members,
-		VelX:       0,
-		VelY:       0,
+	// SetPosition composite header on phantom head
+	s.world.Component.Header.SetComponent(anchorEntity, component.HeaderComponent{
+		BehaviorID:    component.BehaviorQuasar,
+		MemberEntries: members,
+		VelX:          0,
+		VelY:          0,
 	})
 
 	return anchorEntity

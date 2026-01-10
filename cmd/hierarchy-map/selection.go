@@ -38,7 +38,7 @@ func ExpandDepsFileLevel(selectedFiles map[string]bool, index *Index, cache map[
 			continue
 		}
 
-		// Get or compute analysis
+		// GetComponent or compute analysis
 		analysis := cache[current.path]
 		if analysis == nil {
 			a, err := AnalyzeFileDependencies(current.path, index.ModulePath)
@@ -158,7 +158,7 @@ func (app *AppState) computeOutputStats() (totalFiles, depFiles int, totalSize, 
 		}
 		totalSize += fi.Size
 
-		// Count as dep if in output but not directly selected/#all
+		// CountEntity as dep if in output but not directly selected/#all
 		if !directSet[path] {
 			depFiles++
 			depSize += fi.Size

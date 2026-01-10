@@ -73,15 +73,15 @@ func NewShieldRenderer(gameCtx *engine.GameContext) *ShieldRenderer {
 // Render draws all active shields with quadratic falloff gradient
 func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(constant.MaskField)
-	shields := r.gameCtx.World.Component.Shield.All()
-	if len(shields) == 0 {
+	shieldEntities := r.gameCtx.World.Component.Shield.AllEntity()
+	if len(shieldEntities) == 0 {
 		return
 	}
 
 	// Energy-based shield color: positive/zero → yellow, negative → purple
 	r.frameColor = render.RgbCleanerBasePositive
 	r.framePalette = shield256Positive
-	if energyComp, ok := r.gameCtx.World.Component.Energy.Get(r.gameCtx.CursorEntity); ok {
+	if energyComp, ok := r.gameCtx.World.Component.Energy.GetComponent(r.gameCtx.CursorEntity); ok {
 		if energyComp.Current.Load() < 0 {
 			r.frameColor = render.RgbCleanerBaseNegative
 			r.framePalette = shield256Negative
@@ -90,7 +90,7 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 	// Boost glow frame state
 	r.boostGlowActive = false
-	if boost, ok := r.gameCtx.World.Component.Boost.Get(r.gameCtx.CursorEntity); ok && boost.Active {
+	if boost, ok := r.gameCtx.World.Component.Boost.GetComponent(r.gameCtx.CursorEntity); ok && boost.Active {
 		r.boostGlowActive = true
 		// 2 rotations/sec = 500ms period
 		nanos := ctx.GameTime.UnixNano()
@@ -101,26 +101,29 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		r.rotDirY = vmath.Sin(angle)
 	}
 
-	for _, entity := range shields {
-		shield, okS := r.gameCtx.World.Component.Shield.Get(entity)
-		pos, okP := r.gameCtx.World.Position.Get(entity)
+	for _, shieldEntity := range shieldEntities {
+		shieldComp, ok := r.gameCtx.World.Component.Shield.GetComponent(shieldEntity)
+		if !ok || !shieldComp.Active {
+			continue
+		}
 
-		if !okS || !okP || !shield.Active {
+		shieldPos, ok := r.gameCtx.World.Position.Get(shieldEntity)
+		if !ok {
 			continue
 		}
 
 		// Cache max opacity as Q32.32 for fixed-point gradient calculation
-		r.frameMaxOpacityFixed = vmath.FromFloat(shield.MaxOpacity)
+		r.frameMaxOpacityFixed = vmath.FromFloat(shieldComp.MaxOpacity)
 
 		// Bounding box - integer radii from Q32.32
-		radiusXInt := vmath.ToInt(shield.RadiusX)
-		radiusYInt := vmath.ToInt(shield.RadiusY)
+		radiusXInt := vmath.ToInt(shieldComp.RadiusX)
+		radiusYInt := vmath.ToInt(shieldComp.RadiusY)
 
 		// Render area with OOB clamp
-		startX := max(0, pos.X-radiusXInt)
-		endX := min(ctx.GameWidth-1, pos.X+radiusXInt)
-		startY := max(0, pos.Y-radiusYInt)
-		endY := min(ctx.GameHeight-1, pos.Y+radiusYInt)
+		startX := max(0, shieldPos.X-radiusXInt)
+		endX := min(ctx.GameWidth-1, shieldPos.X+radiusXInt)
+		startY := max(0, shieldPos.Y-radiusYInt)
+		endY := min(ctx.GameHeight-1, shieldPos.Y+radiusYInt)
 
 		for y := startY; y <= endY; y++ {
 			for x := startX; x <= endX; x++ {
@@ -129,12 +132,12 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 					continue
 				}
 
-				dx := vmath.FromInt(x - pos.X)
-				dy := vmath.FromInt(y - pos.Y)
+				dx := vmath.FromInt(x - shieldPos.X)
+				dy := vmath.FromInt(y - shieldPos.Y)
 
 				// Ellipse containment check (Q32.32)
 				// Returns squared normalized distance: <= Scale means inside
-				normalizedDistSq := vmath.EllipseDistSq(dx, dy, shield.InvRxSq, shield.InvRySq)
+				normalizedDistSq := vmath.EllipseDistSq(dx, dy, shieldComp.InvRxSq, shieldComp.InvRySq)
 
 				if normalizedDistSq > vmath.Scale {
 					continue

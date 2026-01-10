@@ -54,7 +54,7 @@ func NewQuasarRenderer(gameCtx *engine.GameContext) *QuasarRenderer {
 
 // Render draws quasar composite with shield halo when zapping
 func (r *QuasarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	anchors := r.gameCtx.World.Component.Quasar.All()
+	anchors := r.gameCtx.World.Component.Quasar.AllEntity()
 	if len(anchors) == 0 {
 		return
 	}
@@ -62,12 +62,12 @@ func (r *QuasarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	buf.SetWriteMask(constant.MaskComposite)
 
 	for _, anchor := range anchors {
-		quasar, ok := r.gameCtx.World.Component.Quasar.Get(anchor)
+		quasar, ok := r.gameCtx.World.Component.Quasar.GetComponent(anchor)
 		if !ok {
 			continue
 		}
 
-		header, ok := r.gameCtx.World.Component.Header.Get(anchor)
+		header, ok := r.gameCtx.World.Component.Header.GetComponent(anchor)
 		if !ok {
 			continue
 		}
@@ -217,7 +217,7 @@ func (r *QuasarRenderer) shieldCell256(buf *render.RenderBuffer, screenX, screen
 }
 
 // renderMembers draws quasar character grid with state-based coloring
-func (r *QuasarRenderer) renderMembers(ctx render.RenderContext, buf *render.RenderBuffer, header *component.CompositeHeaderComponent, quasar *component.QuasarComponent) {
+func (r *QuasarRenderer) renderMembers(ctx render.RenderContext, buf *render.RenderBuffer, header *component.HeaderComponent, quasar *component.QuasarComponent) {
 	// Determine color: flash > enraged > normal
 	var color render.RGB
 	if quasar.HitFlashRemaining > 0 {
@@ -228,13 +228,13 @@ func (r *QuasarRenderer) renderMembers(ctx render.RenderContext, buf *render.Ren
 		color = render.RgbDrain
 	}
 
-	for _, member := range header.Members {
+	for _, member := range header.MemberEntries {
 		if member.Entity == 0 {
 			continue
 		}
 
-		pos, hasPos := r.gameCtx.World.Position.Get(member.Entity)
-		if !hasPos {
+		pos, ok := r.gameCtx.World.Position.Get(member.Entity)
+		if !ok {
 			continue
 		}
 

@@ -28,9 +28,8 @@ func NewPosition() *Position {
 	}
 }
 
-// Set inserts or updates an entity's position
-// Multiple entities at the same location are allowed, overflow silently ignored
-func (p *Position) Set(e core.Entity, pos component.PositionComponent) {
+// SetPosition inserts or updates an entity's position, multiple entities at one position are allowed, overflow silently ignored
+func (p *Position) SetPosition(e core.Entity, pos component.PositionComponent) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -45,23 +44,23 @@ func (p *Position) Set(e core.Entity, pos component.PositionComponent) {
 	// Update component
 	p.components[e] = pos
 
-	// Set to new grid location
+	// SetComponent to new grid location
 	_ = p.grid.Add(e, pos.X, pos.Y)
 }
 
-// Remove deletes an entity from the store and grid
-func (p *Position) Remove(e core.Entity) {
+// RemoveComponent deletes an entity from the store and grid
+func (p *Position) RemoveComponent(e core.Entity) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	if pos, exists := p.components[e]; exists {
-		// Remove from spatial grid
+		// RemoveComponent from spatial grid
 		p.grid.Remove(e, pos.X, pos.Y)
 
-		// Remove from components map
+		// RemoveComponent from components map
 		delete(p.components, e)
 
-		// Remove from dense entities array
+		// RemoveComponent from dense entities array
 		for i, entity := range p.entities {
 			if entity == e {
 				p.entities[i] = p.entities[len(p.entities)-1]
@@ -72,9 +71,8 @@ func (p *Position) Remove(e core.Entity) {
 	}
 }
 
-// Move updates position atomically
-// Systems should use HasAny() or GetAllAt() for collision logic before moving if needed
-func (p *Position) Move(e core.Entity, newPos component.PositionComponent) error {
+// MoveEntity updates position atomically
+func (p *Position) MoveEntity(e core.Entity, newPos component.PositionComponent) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -83,22 +81,21 @@ func (p *Position) Move(e core.Entity, newPos component.PositionComponent) error
 		return fmt.Errorf("entity %d does not have a position component", e)
 	}
 
-	// Remove from old grid pos
+	// RemoveComponent from old grid pos
 	p.grid.Remove(e, oldPos.X, oldPos.Y)
 
 	// Update component
 	p.components[e] = newPos
 
-	// Set to new grid pos
+	// SetComponent to new grid pos
 	// Explicit ignore for OOB and Cell full
 	_ = p.grid.Add(e, newPos.X, newPos.Y)
 
 	return nil
 }
 
-// GetAllAt returns a COPY of entities at the given position (concurrent safe but uses memory),
-// Returns nil if position is out of bounds or empty
-func (p *Position) GetAllAt(x, y int) []core.Entity {
+// GetAllEntityAt returns a COPY of entities at the given position (concurrent safe but uses memory), nil if OOB or empty
+func (p *Position) GetAllEntityAt(x, y int) []core.Entity {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
@@ -113,10 +110,8 @@ func (p *Position) GetAllAt(x, y int) []core.Entity {
 	return result
 }
 
-// GetAllAtInto copies entities into a caller-provided buffer and returns number of entities copied
-// SAFE and ZERO-ALLOCATION if buf is on stack
-// Use for Render/Physics
-func (p *Position) GetAllAtInto(x, y int, buf []core.Entity) int {
+// GetAllEntityAtInto copies entities into a caller-provided buffer and returns number of entities copied, Zero-alloc if buf is on stack
+func (p *Position) GetAllEntityAtInto(x, y int, buf []core.Entity) int {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
@@ -156,16 +151,16 @@ func (p *Position) Get(e core.Entity) (component.PositionComponent, bool) {
 	return val, ok
 }
 
-// Has checks if an entity has a position component
-func (p *Position) Has(e core.Entity) bool {
+// HasComponent checks if an entity has a position component
+func (p *Position) HasComponent(e core.Entity) bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	_, ok := p.components[e]
 	return ok
 }
 
-// All returns all entities with position components
-func (p *Position) All() []core.Entity {
+// AllEntity returns all entities with position components
+func (p *Position) AllEntity() []core.Entity {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	result := make([]core.Entity, len(p.entities))
@@ -173,15 +168,15 @@ func (p *Position) All() []core.Entity {
 	return result
 }
 
-// Count returns the number of entities
-func (p *Position) Count() int {
+// CountEntity returns the number of entities
+func (p *Position) CountEntity() int {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return len(p.entities)
 }
 
-// Clear removes all data
-func (p *Position) Clear() {
+// ClearAllComponent removes all data
+func (p *Position) ClearAllComponent() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -199,9 +194,7 @@ func (p *Position) SetWorld(w *World) {
 
 // --- Unsafe operation ---
 
-// Lock manually acquires the write lock for bulk operations.
-// CRITICAL: Blocks all other readers/writers. Must be paired with Unlock().
-// Use only in high-performance system updates (e.g., DustSystem).
+// Lock manually acquires the write lock for bulk operations, MUST be paired with Unlock()
 func (p *Position) Lock() {
 	p.mu.Lock()
 }
@@ -211,15 +204,13 @@ func (p *Position) Unlock() {
 	p.mu.Unlock()
 }
 
-// GetUnsafe retrieves position without locking.
-// CRITICAL: Caller MUST hold Lock/RLock.
+// GetUnsafe retrieves position without locking, caller MUST hold Lock/RLock
 func (p *Position) GetUnsafe(e core.Entity) (component.PositionComponent, bool) {
 	val, ok := p.components[e]
 	return val, ok
 }
 
-// MoveUnsafe updates position without locking.
-// CRITICAL: Caller MUST hold Lock().
+// MoveUnsafe updates position without locking, caller MUST hold Lock()
 func (p *Position) MoveUnsafe(e core.Entity, newPos component.PositionComponent) {
 	oldPos, exists := p.components[e]
 	if !exists {
@@ -231,9 +222,7 @@ func (p *Position) MoveUnsafe(e core.Entity, newPos component.PositionComponent)
 	_ = p.grid.Add(e, newPos.X, newPos.Y)
 }
 
-// GetAllAtIntoUnsafe copies entities at (x,y) into buf without locking.
-// CRITICAL: Caller MUST hold Lock/RLock.
-// Returns number of entities copied.
+// GetAllAtIntoUnsafe copies entities at (x,y) into buf without locking, caller MUST hold Lock/RLock, returns number of entities copied
 func (p *Position) GetAllAtIntoUnsafe(x, y int, buf []core.Entity) int {
 	if x < 0 || x >= p.grid.Width || y < 0 || y >= p.grid.Height {
 		return 0
@@ -329,7 +318,7 @@ func (pb *PositionBatch) Commit() error {
 	return nil
 }
 
-// CommitForce applies batched additions without checking for existing entity collisions
+// CommitForce applies batch addition without checking for existing entity collisions
 // Used for effects like Dust that overlay existing entities or replace them before death processing
 func (pb *PositionBatch) CommitForce() {
 	if pb.committed {

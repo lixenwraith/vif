@@ -37,8 +37,6 @@ func NewDustSystem(world *engine.World) engine.System {
 		world: world,
 	}
 
-	s.rng = vmath.NewFastRand(uint64(world.Resource.Time.RealTime.UnixNano()))
-
 	s.statCreated = world.Resource.Status.Ints.Get("dust.created")
 	s.statActive = world.Resource.Status.Ints.Get("dust.active")
 	s.statDestroyed = world.Resource.Status.Ints.Get("dust.destroyed")
@@ -50,6 +48,7 @@ func NewDustSystem(world *engine.World) engine.System {
 func (s *DustSystem) Init() {
 	s.lastCursorX = 0
 	s.lastCursorY = 0
+	s.rng = vmath.NewFastRand(uint64(s.world.Resource.Time.RealTime.UnixNano()))
 	s.statCreated.Store(0)
 	s.statActive.Store(0)
 	s.statDestroyed.Store(0)
@@ -119,9 +118,9 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 
 				// Add to batches
 				posBatch.Add(entity, component.PositionComponent{X: entry.X, Y: entry.Y})
-				s.world.Component.Dust.Set(entity, dust)
-				s.world.Component.Protection.Set(entity, prot)
-				s.world.Component.Sigil.Set(entity, sigil)
+				s.world.Component.Dust.SetComponent(entity, dust)
+				s.world.Component.Protection.SetComponent(entity, prot)
+				s.world.Component.Sigil.SetComponent(entity, sigil)
 			}
 
 			// Force commit because dust often spawns on top of dying glyphs (DeathSystem runs later)
@@ -141,7 +140,7 @@ func (s *DustSystem) Update() {
 		return
 	}
 
-	dustEntities := s.world.Component.Dust.All()
+	dustEntities := s.world.Component.Dust.AllEntity()
 	if len(dustEntities) == 0 {
 		s.statActive.Store(0)
 		return
@@ -156,13 +155,13 @@ func (s *DustSystem) Update() {
 	}
 
 	// Fetch energy once for attraction gating
-	energyComp, _ := s.world.Component.Energy.Get(cursorEntity)
+	energyComp, _ := s.world.Component.Energy.GetComponent(cursorEntity)
 	cursorEnergy := energyComp.Current.Load()
 	hasAttraction := cursorEnergy != 0
 
 	// Shield data for collision energy reward
-	shield, shieldOk := s.world.Component.Shield.Get(cursorEntity)
-	shieldActive := shieldOk && shield.Active
+	shield, ok := s.world.Component.Shield.GetComponent(cursorEntity)
+	shieldActive := ok && shield.Active
 
 	// Chase boost on cursor jump
 	cursorDeltaX := cursorPos.X - s.lastCursorX
@@ -184,8 +183,7 @@ func (s *DustSystem) Update() {
 	cursorYFixed := vmath.FromInt(cursorPos.Y)
 	now := s.world.Resource.Time.GameTime
 
-	// 3. LOCK Spatial Grid (Global Batch Lock)
-	// Critical optimization: eliminates ~4000 mutex ops per frame
+	// 3. LOCK Spatial Grid (Optimization: Global Batch Lock)
 	s.world.Position.Lock()
 	defer s.world.Position.Unlock()
 
@@ -195,7 +193,7 @@ func (s *DustSystem) Update() {
 
 	// 4. MAIN LOOP
 	for _, entity := range dustEntities {
-		dust, ok := s.world.Component.Dust.Get(entity)
+		dust, ok := s.world.Component.Dust.GetComponent(entity)
 		if !ok {
 			continue
 		}
@@ -314,13 +312,13 @@ func (s *DustSystem) Update() {
 						continue
 					}
 
-					if s.world.Component.Death.Has(target) {
+					if s.world.Component.Death.HasComponent(target) {
 						continue
 					}
 
 					// --- Drain interaction ---
-					if s.world.Component.Drain.Has(target) {
-						if drain, ok := s.world.Component.Drain.Get(target); ok {
+					if s.world.Component.Drain.HasComponent(target) {
+						if drain, ok := s.world.Component.Drain.GetComponent(target); ok {
 							physics.ApplyCollision(
 								&drain.KineticState,
 								dust.VelX, dust.VelY,
@@ -328,16 +326,16 @@ func (s *DustSystem) Update() {
 								s.rng,
 								now,
 							)
-							s.world.Component.Drain.Set(target, drain)
+							s.world.Component.Drain.SetComponent(target, drain)
 						}
 						continue
 					}
 
 					// --- Quasar interaction ---
-					if member, ok := s.world.Component.Member.Get(target); ok {
-						if header, hOk := s.world.Component.Header.Get(member.AnchorID); hOk {
+					if member, ok := s.world.Component.Member.GetComponent(target); ok {
+						if header, hOk := s.world.Component.Header.GetComponent(member.HeaderEntity); hOk {
 							if header.BehaviorID == component.BehaviorQuasar {
-								if quasar, qOk := s.world.Component.Quasar.Get(member.AnchorID); qOk {
+								if quasar, qOk := s.world.Component.Quasar.GetComponent(member.HeaderEntity); qOk {
 									// Center-of-mass collision, no offset calculation
 									physics.ApplyCollision(
 										&quasar.KineticState,
@@ -346,7 +344,7 @@ func (s *DustSystem) Update() {
 										s.rng,
 										now,
 									)
-									s.world.Component.Quasar.Set(member.AnchorID, quasar)
+									s.world.Component.Quasar.SetComponent(member.HeaderEntity, quasar)
 								}
 							}
 						}
@@ -354,8 +352,8 @@ func (s *DustSystem) Update() {
 					}
 
 					// --- Blossom/Decay interaction ---
-					if s.world.Component.Blossom.Has(target) || s.world.Component.Decay.Has(target) {
-						s.world.Component.Death.Set(target, component.DeathComponent{})
+					if s.world.Component.Blossom.HasComponent(target) || s.world.Component.Decay.HasComponent(target) {
+						s.world.Component.Death.SetComponent(target, component.DeathComponent{})
 						deathCandidates = append(deathCandidates, target)
 						continue
 					}
@@ -367,7 +365,7 @@ func (s *DustSystem) Update() {
 						continue
 					}
 
-					glyph, ok := s.world.Component.Glyph.Get(target)
+					glyph, ok := s.world.Component.Glyph.GetComponent(target)
 					if !ok {
 						continue
 					}
@@ -400,7 +398,7 @@ func (s *DustSystem) Update() {
 					// Green, Gold, and Zero Energy: No interaction
 
 					if shouldKillGlyph {
-						s.world.Component.Death.Set(target, component.DeathComponent{})
+						s.world.Component.Death.SetComponent(target, component.DeathComponent{})
 						deathCandidates = append(deathCandidates, target)
 						s.world.PushEvent(event.EventEnergyGlyphConsumed, &event.GlyphConsumedPayload{
 							Type:  glyph.Type,
@@ -420,7 +418,7 @@ func (s *DustSystem) Update() {
 			}
 
 			if destroyDust {
-				s.world.Component.Death.Set(entity, component.DeathComponent{})
+				s.world.Component.Death.SetComponent(entity, component.DeathComponent{})
 				destroyedCount++
 				continue
 			}
@@ -433,7 +431,7 @@ func (s *DustSystem) Update() {
 			s.world.Position.MoveUnsafe(entity, component.PositionComponent{X: newX, Y: newY})
 		}
 
-		s.world.Component.Dust.Set(entity, dust)
+		s.world.Component.Dust.SetComponent(entity, dust)
 	}
 
 	if len(deathCandidates) > 0 {
@@ -460,21 +458,21 @@ func (s *DustSystem) transformGlyphsToDust() {
 		level  component.GlyphLevel
 	}
 
-	glyphEntities := s.world.Component.Glyph.All()
+	glyphEntities := s.world.Component.Glyph.AllEntity()
 	toTransform := make([]glyphData, 0, len(glyphEntities))
 
 	for _, entity := range glyphEntities {
 		// Skip composite members
-		if s.world.Component.Member.Has(entity) {
+		if s.world.Component.Member.HasComponent(entity) {
 			continue
 		}
 
-		pos, hasPos := s.world.Position.Get(entity)
-		if !hasPos {
+		pos, ok := s.world.Position.Get(entity)
+		if !ok {
 			continue
 		}
 
-		glyph, hasGlyph := s.world.Component.Glyph.Get(entity)
+		glyph, hasGlyph := s.world.Component.Glyph.GetComponent(entity)
 		if !hasGlyph {
 			continue
 		}
@@ -507,9 +505,9 @@ func (s *DustSystem) transformGlyphsToDust() {
 		dust, prot, sigil := s.prepareDustComponents(gd.x, gd.y, gd.char, gd.level, cursorPos.X, cursorPos.Y)
 
 		posBatch.Add(entity, component.PositionComponent{X: gd.x, Y: gd.y})
-		s.world.Component.Dust.Set(entity, dust)
-		s.world.Component.Protection.Set(entity, prot)
-		s.world.Component.Sigil.Set(entity, sigil)
+		s.world.Component.Dust.SetComponent(entity, dust)
+		s.world.Component.Protection.SetComponent(entity, prot)
+		s.world.Component.Sigil.SetComponent(entity, sigil)
 	}
 
 	posBatch.CommitForce()
@@ -592,8 +590,8 @@ func (s *DustSystem) spawnDust(x, y int, char rune, level component.GlyphLevel, 
 	entity := s.world.CreateEntity()
 	dust, prot, sigil := s.prepareDustComponents(x, y, char, level, cursorX, cursorY)
 
-	s.world.Position.Set(entity, component.PositionComponent{X: x, Y: y})
-	s.world.Component.Dust.Set(entity, dust)
-	s.world.Component.Protection.Set(entity, prot)
-	s.world.Component.Sigil.Set(entity, sigil)
+	s.world.Position.SetPosition(entity, component.PositionComponent{X: x, Y: y})
+	s.world.Component.Dust.SetComponent(entity, dust)
+	s.world.Component.Protection.SetComponent(entity, prot)
+	s.world.Component.Sigil.SetComponent(entity, sigil)
 }

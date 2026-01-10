@@ -648,7 +648,7 @@ func (r *Router) handleInsertDeleteForward() bool {
 			Valid: true,
 		}
 		OpDelete(r.ctx, result)
-		// Move right
+		// Move cursor right
 		moveResult := MotionRight(r.ctx, pos.X, pos.Y, 1)
 		OpMove(r.ctx, moveResult)
 	})

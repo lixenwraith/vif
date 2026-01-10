@@ -11,9 +11,6 @@ import (
 // GoldRenderer draws gold sequence composite entities
 type GoldRenderer struct {
 	gameCtx *engine.GameContext
-
-	// headerStore *engine.Store[component.CompositeHeaderComponent]
-	// glyphStore  *engine.Store[component.GlyphComponent]
 }
 
 // NewGoldRenderer creates a new gold renderer
@@ -25,7 +22,7 @@ func NewGoldRenderer(gameCtx *engine.GameContext) *GoldRenderer {
 
 // Render draws all gold sequence members
 func (r *GoldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	headers := r.gameCtx.World.Component.Header.All()
+	headers := r.gameCtx.World.Component.Header.AllEntity()
 	if len(headers) == 0 {
 		return
 	}
@@ -33,22 +30,22 @@ func (r *GoldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 	buf.SetWriteMask(constant.MaskComposite)
 
 	for _, anchor := range headers {
-		header, ok := r.gameCtx.World.Component.Header.Get(anchor)
+		header, ok := r.gameCtx.World.Component.Header.GetComponent(anchor)
 		if !ok || header.BehaviorID != component.BehaviorGold {
 			continue
 		}
 
-		for _, member := range header.Members {
+		for _, member := range header.MemberEntries {
 			if member.Entity == 0 {
 				continue
 			}
 
-			pos, hasPos := r.gameCtx.World.Position.Get(member.Entity)
-			if !hasPos {
+			pos, ok := r.gameCtx.World.Position.Get(member.Entity)
+			if !ok {
 				continue
 			}
 
-			glyph, hasGlyph := r.gameCtx.World.Component.Glyph.Get(member.Entity)
+			glyph, hasGlyph := r.gameCtx.World.Component.Glyph.GetComponent(member.Entity)
 			if !hasGlyph {
 				continue
 			}

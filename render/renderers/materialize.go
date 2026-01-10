@@ -38,7 +38,7 @@ func NewMaterializeRenderer(ctx *engine.GameContext) *MaterializeRenderer {
 }
 
 func (r *MaterializeRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.gameCtx.World.Component.Materialize.All()
+	entities := r.gameCtx.World.Component.Materialize.AllEntity()
 	if len(entities) == 0 {
 		return
 	}
@@ -46,7 +46,7 @@ func (r *MaterializeRenderer) Render(ctx render.RenderContext, buf *render.Rende
 	buf.SetWriteMask(constant.MaskTransient)
 
 	for _, entity := range entities {
-		mat, ok := r.gameCtx.World.Component.Materialize.Get(entity)
+		mat, ok := r.gameCtx.World.Component.Materialize.GetComponent(entity)
 		if !ok {
 			continue
 		}

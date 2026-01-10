@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/physics"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -39,6 +40,9 @@ type ExplosionSystem struct {
 	// Reusable buffers to avoid allocation in hot path
 	entityBuf    []core.Entity
 	dustEntryBuf []event.DustSpawnEntry
+
+	// Random source for orbit radius and direction
+	rng *vmath.FastRand
 
 	statTriggered *atomic.Int64
 	statConverted *atomic.Int64
@@ -72,6 +76,8 @@ func (s *ExplosionSystem) Init() {
 	// Reset buffers
 	s.entityBuf = make([]core.Entity, 0, 256)
 	s.dustEntryBuf = make([]event.DustSpawnEntry, 0, 256)
+
+	s.rng = vmath.NewFastRand(uint64(s.world.Resource.Time.RealTime.UnixNano()))
 
 	s.statTriggered.Store(0)
 	s.statConverted.Store(0)
@@ -117,7 +123,7 @@ func (s *ExplosionSystem) HandleEvent(ev event.GameEvent) {
 }
 
 func (s *ExplosionSystem) fireFromDust() {
-	dustEntities := s.world.Component.Dust.All()
+	dustEntities := s.world.Component.Dust.AllEntity()
 	if len(dustEntities) == 0 {
 		return
 	}
@@ -206,6 +212,7 @@ func (s *ExplosionSystem) addCenter(x, y int, radius int64) {
 func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 	config := s.world.Resource.Config
 	frame := s.world.Resource.Time.FrameNumber
+	now := s.world.Resource.Time.GameTime
 
 	// Radius is horizontal cells; Vertical is half that to maintain aspect ratio
 	radiusCells := vmath.ToInt(radius)
@@ -246,22 +253,73 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 				continue
 			}
 
-			entities := s.world.Position.GetAllAt(x, y)
+			entities := s.world.Position.GetAllEntityAt(x, y)
 			for _, e := range entities {
-				if s.world.Component.Member.Has(e) {
+				if s.world.Component.Member.HasComponent(e) {
 					continue
 				}
 
-				glyph, hasGlyph := s.world.Component.Glyph.Get(e)
+				drain, hasDrain := s.world.Component.Drain.GetComponent(e)
+				if hasDrain {
+					drainPos, ok := s.world.Position.Get(e)
+					if !ok {
+						continue
+					}
+
+					diffX := int64(drainPos.X - centerX)
+					diffY := int64(drainPos.Y - centerY)
+					eVelX := vmath.Mul(constant.QuasarMaxSpeed, vmath.Div(radius, diffX))
+					eVelY := vmath.Mul(constant.QuasarMaxSpeed, vmath.Div(radius, diffY))
+
+					physics.ApplyCollision(
+						&drain.KineticState,
+						eVelX, eVelY,
+						&physics.ExplosionToDrain,
+						s.rng,
+						now,
+					)
+					s.world.Component.Drain.SetComponent(e, drain)
+				}
+
+				if member, ok := s.world.Component.Member.GetComponent(e); ok {
+					if header, hOk := s.world.Component.Header.GetComponent(e); hOk {
+						if header.BehaviorID == component.BehaviorQuasar {
+							anchorEntity := member.HeaderEntity
+							if quasar, qOk := s.world.Component.Quasar.GetComponent(anchorEntity); qOk {
+								quasarPos, ok := s.world.Position.Get(anchorEntity)
+								if !ok {
+									continue
+								}
+
+								diffX := int64(quasarPos.X - centerX)
+								diffY := int64(quasarPos.Y - centerY)
+								eVelX := vmath.Mul(constant.QuasarMaxSpeed, vmath.Div(radius, diffX))
+								eVelY := vmath.Mul(constant.QuasarMaxSpeed, vmath.Div(radius, diffY))
+
+								physics.ApplyCollision(
+									&drain.KineticState,
+									eVelX, eVelY,
+									&physics.ExplosionToQuasar,
+									s.rng,
+									now,
+								)
+								quasar.HitPoints--
+								s.world.Component.Quasar.SetComponent(member.HeaderEntity, quasar)
+							}
+						}
+					}
+				}
+
+				glyph, hasGlyph := s.world.Component.Glyph.GetComponent(e)
 				if !hasGlyph {
 					continue
 				}
 
-				// Set death component for deduplication
-				if s.world.Component.Death.Has(e) {
+				// SetPosition death component for deduplication
+				if s.world.Component.Death.HasComponent(e) {
 					continue
 				}
-				s.world.Component.Death.Set(e, component.DeathComponent{})
+				s.world.Component.Death.SetComponent(e, component.DeathComponent{})
 
 				// Append to local buffers
 				s.entityBuf = append(s.entityBuf, e)
@@ -282,8 +340,7 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 	// Use buffered entities for death batch
 	event.EmitDeathBatch(s.world.Resource.Event.Queue, 0, s.entityBuf, frame)
 
-	// Use buffered entries for dust spawn
-	// We must acquire a pool object for the event payload, but we copy from our buffer
+	// Use buffered entries for batch dust spawn
 	dustBatch := event.AcquireDustSpawnBatch()
 	dustBatch.Entries = append(dustBatch.Entries, s.dustEntryBuf...)
 

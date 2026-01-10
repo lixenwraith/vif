@@ -25,8 +25,8 @@ func NewStore[T any]() *Store[T] {
 	}
 }
 
-// Set inserts or updates a component for an entity
-func (s *Store[T]) Set(e core.Entity, val T) {
+// SetComponent inserts or updates a component for an entity
+func (s *Store[T]) SetComponent(e core.Entity, val T) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -36,22 +36,22 @@ func (s *Store[T]) Set(e core.Entity, val T) {
 	s.components[e] = val
 }
 
-// Get retrieves a component for an entity
-func (s *Store[T]) Get(e core.Entity) (T, bool) {
+// GetComponent retrieves a component for an entity
+func (s *Store[T]) GetComponent(e core.Entity) (T, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	val, ok := s.components[e]
 	return val, ok
 }
 
-// Remove deletes a component from an entity
-func (s *Store[T]) Remove(e core.Entity) {
+// RemoveComponent deletes a component from an entity
+func (s *Store[T]) RemoveComponent(e core.Entity) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if _, exists := s.components[e]; exists {
 		delete(s.components, e)
-		// Remove from entities slice
+		// RemoveComponent from entities slice
 		for i, entity := range s.entities {
 			if entity == e {
 				s.entities[i] = s.entities[len(s.entities)-1]
@@ -62,16 +62,16 @@ func (s *Store[T]) Remove(e core.Entity) {
 	}
 }
 
-// Has checks if entity has this component
-func (s *Store[T]) Has(e core.Entity) bool {
+// HasComponent checks if entity has this component
+func (s *Store[T]) HasComponent(e core.Entity) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	_, ok := s.components[e]
 	return ok
 }
 
-// All returns all entities with this component type
-func (s *Store[T]) All() []core.Entity {
+// AllEntity returns all entities with this component type
+func (s *Store[T]) AllEntity() []core.Entity {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	result := make([]core.Entity, len(s.entities))
@@ -79,15 +79,15 @@ func (s *Store[T]) All() []core.Entity {
 	return result
 }
 
-// Count returns number of entities with this component
-func (s *Store[T]) Count() int {
+// CountEntity returns number of entities with this component
+func (s *Store[T]) CountEntity() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.entities)
 }
 
-// Clear removes all components from this store
-func (s *Store[T]) Clear() {
+// ClearAllComponent removes all components from this store
+func (s *Store[T]) ClearAllComponent() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.components = make(map[core.Entity]T)

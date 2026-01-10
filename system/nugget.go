@@ -112,7 +112,7 @@ func (s *NuggetSystem) Update() {
 	cursorEntity := s.world.Resource.Cursor.Entity
 
 	// Validate active nugget still exists
-	if s.activeNuggetEntity != 0 && !s.world.Component.Nugget.Has(s.activeNuggetEntity) {
+	if s.activeNuggetEntity != 0 && !s.world.Component.Nugget.HasComponent(s.activeNuggetEntity) {
 		s.activeNuggetEntity = 0
 	}
 
@@ -135,7 +135,7 @@ func (s *NuggetSystem) Update() {
 	}
 
 	// Validate entity still exists
-	if !s.world.Component.Nugget.Has(s.activeNuggetEntity) {
+	if !s.world.Component.Nugget.HasComponent(s.activeNuggetEntity) {
 		s.activeNuggetEntity = 0
 	}
 
@@ -147,7 +147,7 @@ func (s *NuggetSystem) handleJumpRequest() {
 	cursorEntity := s.world.Resource.Cursor.Entity
 
 	// 1. Check Energy from component
-	energyComp, ok := s.world.Component.Energy.Get(cursorEntity)
+	energyComp, ok := s.world.Component.Energy.GetComponent(cursorEntity)
 	if !ok {
 		return
 	}
@@ -177,7 +177,7 @@ func (s *NuggetSystem) handleJumpRequest() {
 	}
 
 	// 4. Move Cursor
-	s.world.Position.Set(cursorEntity, component.PositionComponent{
+	s.world.Position.SetPosition(cursorEntity, component.PositionComponent{
 		X: nuggetPos.X,
 		Y: nuggetPos.Y,
 	})
@@ -225,10 +225,10 @@ func (s *NuggetSystem) spawnNugget() {
 		return
 	}
 
-	// Set component after position is committed
-	s.world.Component.Nugget.Set(entity, nugget)
+	// SetPosition component after position is committed
+	s.world.Component.Nugget.SetComponent(entity, nugget)
 	// Render component
-	s.world.Component.Sigil.Set(entity, component.SigilComponent{
+	s.world.Component.Sigil.SetComponent(entity, component.SigilComponent{
 		Rune:  randomChar,
 		Color: component.SigilNugget,
 	})
@@ -288,7 +288,7 @@ func (s *NuggetSystem) collectNugget() {
 
 	cursorEntity := s.world.Resource.Cursor.Entity
 	var currentHeat int64
-	if hc, ok := s.world.Component.Heat.Get(cursorEntity); ok {
+	if hc, ok := s.world.Component.Heat.GetComponent(cursorEntity); ok {
 		currentHeat = hc.Current.Load()
 	}
 

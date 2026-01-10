@@ -57,7 +57,7 @@ func (w *World) CreateEntity() core.Entity {
 
 // DestroyEntity removes all components associated with an entity
 func (w *World) DestroyEntity(e core.Entity) {
-	if prot, ok := w.Component.Protection.Get(e); ok {
+	if prot, ok := w.Component.Protection.GetComponent(e); ok {
 		if prot.Mask == component.ProtectAll {
 			return
 		}

@@ -247,7 +247,7 @@ func (cm *ContentManager) DiscoverContentFiles() error {
 		return fmt.Errorf("failed to read data directory: %w", err)
 	}
 
-	// Clear existing content files
+	// ClearAllComponent existing content files
 	cm.contentFiles = []string{}
 
 	// Scan for .txt files
@@ -310,7 +310,7 @@ func (cm *ContentManager) PreValidateAllContent() error {
 			continue
 		}
 
-		// Set to validated cache
+		// SetComponent to validated cache
 		cm.validatedCache = append(cm.validatedCache, validatedContent{
 			lines:    lines,
 			filePath: filePath,
@@ -468,7 +468,7 @@ func (cm *ContentManager) ValidateProcessedContent(lines []string) bool {
 		return false
 	}
 
-	// All lines should already be within MaxLineLength due to processing
+	// AllEntity lines should already be within MaxLineLength due to processing
 	// But we can verify for safety
 	for _, line := range lines {
 		if len(line) > constant.MaxLineLength {
@@ -638,7 +638,7 @@ func (cm *ContentManager) SelectRandomBlock() ([]string, string, error) {
 	}
 	defer file.Close()
 
-	// Count valid content lines
+	// CountEntity valid content lines
 	var validLineCount int
 	scanner := bufio.NewScanner(file)
 	lineCount := 0
@@ -671,7 +671,7 @@ func (cm *ContentManager) SelectRandomBlock() ([]string, string, error) {
 	// Select a random starting line
 	randomStartLine := rand.Intn(validLineCount)
 
-	// Get the content block
+	// GetComponent the content block
 	block, err := cm.GetContentBlock(selectedFile, randomStartLine, constant.ContentBlockSize)
 	if err != nil {
 		return nil, "", err
@@ -731,7 +731,7 @@ func (cm *ContentManager) SelectRandomBlockWithValidation() ([]string, string, e
 		}
 	}
 
-	// All retries failed, fall back to default content
+	// AllEntity retries failed, fall back to default content
 	err := fmt.Errorf("all %d attempts failed to load valid content", constant.MaxRetries)
 	cm.breaker.recordFailure(err)
 	return cm.GetDefaultContent(), "default", nil

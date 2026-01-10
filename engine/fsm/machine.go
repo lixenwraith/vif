@@ -243,7 +243,7 @@ func (m *Machine[T]) Reset(ctx T) error {
 		}
 	}
 
-	// Clear regions
+	// ClearAllComponent regions
 	m.regions = make(map[string]*RegionState)
 
 	// Re-initialize using loaded config

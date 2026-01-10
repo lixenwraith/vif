@@ -40,7 +40,7 @@ func (s *LightningSystem) Update() {
 		return
 	}
 
-	entities := s.world.Component.Lightning.All()
+	entities := s.world.Component.Lightning.AllEntity()
 	if len(entities) == 0 {
 		return
 	}
@@ -49,7 +49,7 @@ func (s *LightningSystem) Update() {
 	var toDestroy []core.Entity
 
 	for _, e := range entities {
-		lc, ok := s.world.Component.Lightning.Get(e)
+		lc, ok := s.world.Component.Lightning.GetComponent(e)
 		if !ok {
 			continue
 		}
@@ -64,12 +64,12 @@ func (s *LightningSystem) Update() {
 		if lc.Remaining <= 0 {
 			toDestroy = append(toDestroy, e)
 		} else {
-			s.world.Component.Lightning.Set(e, lc)
+			s.world.Component.Lightning.SetComponent(e, lc)
 		}
 	}
 
 	for _, e := range toDestroy {
-		s.world.Component.Lightning.Remove(e)
+		s.world.Component.Lightning.RemoveComponent(e)
 		s.world.DestroyEntity(e)
 	}
 }
@@ -133,39 +133,39 @@ func (s *LightningSystem) spawnLightning(p *event.LightningSpawnPayload) {
 		lc.Remaining = time.Hour // Effectively infinite for renderer check
 	}
 
-	s.world.Component.Lightning.Set(e, lc)
+	s.world.Component.Lightning.SetComponent(e, lc)
 }
 
 func (s *LightningSystem) updateTarget(p *event.LightningUpdatePayload) {
 	// Find lightning by owner
-	for _, e := range s.world.Component.Lightning.All() {
-		lc, ok := s.world.Component.Lightning.Get(e)
+	for _, e := range s.world.Component.Lightning.AllEntity() {
+		lc, ok := s.world.Component.Lightning.GetComponent(e)
 		if !ok || lc.Owner != p.Owner {
 			continue
 		}
 		lc.TargetX = p.TargetX
 		lc.TargetY = p.TargetY
-		s.world.Component.Lightning.Set(e, lc)
+		s.world.Component.Lightning.SetComponent(e, lc)
 		return
 	}
 }
 
 func (s *LightningSystem) despawnLightning(owner core.Entity) {
 	// Find and destroy all lightning owned by this entity
-	for _, e := range s.world.Component.Lightning.All() {
-		lc, ok := s.world.Component.Lightning.Get(e)
+	for _, e := range s.world.Component.Lightning.AllEntity() {
+		lc, ok := s.world.Component.Lightning.GetComponent(e)
 		if !ok || lc.Owner != owner {
 			continue
 		}
-		s.world.Component.Lightning.Remove(e)
+		s.world.Component.Lightning.RemoveComponent(e)
 		s.world.DestroyEntity(e)
 	}
 }
 
 func (s *LightningSystem) destroyAll() {
-	entities := s.world.Component.Lightning.All()
+	entities := s.world.Component.Lightning.AllEntity()
 	for _, e := range entities {
-		s.world.Component.Lightning.Remove(e)
+		s.world.Component.Lightning.RemoveComponent(e)
 		s.world.DestroyEntity(e)
 	}
 }

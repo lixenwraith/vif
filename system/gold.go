@@ -19,15 +19,15 @@ type GoldSystem struct {
 
 	// Internal state
 	active       bool
-	anchorEntity core.Entity // Phantom Head
+	headerEntity core.Entity // Phantom Head
 	startTime    time.Time
 	timeoutTime  time.Time
 	spawnEnabled bool
 
 	// Cached metric pointers
-	statActive   *atomic.Bool
-	statAnchorID *atomic.Int64
-	statTimer    *atomic.Int64
+	statActive        *atomic.Bool
+	stateHeaderEntity *atomic.Int64
+	statTimer         *atomic.Int64
 
 	enabled bool
 }
@@ -39,7 +39,7 @@ func NewGoldSystem(world *engine.World) engine.System {
 	}
 
 	s.statActive = s.world.Resource.Status.Bools.Get("gold.active")
-	s.statAnchorID = s.world.Resource.Status.Ints.Get("gold.anchor_id")
+	s.stateHeaderEntity = s.world.Resource.Status.Ints.Get("gold.header_entity")
 	s.statTimer = s.world.Resource.Status.Ints.Get("gold.timer")
 
 	s.Init()
@@ -49,12 +49,12 @@ func NewGoldSystem(world *engine.World) engine.System {
 // Init resets session state for new game
 func (s *GoldSystem) Init() {
 	s.active = false
-	s.anchorEntity = 0
+	s.headerEntity = 0
 	s.startTime = time.Time{}
 	s.timeoutTime = time.Time{}
 	s.spawnEnabled = true
 	s.statActive.Store(false)
-	s.statAnchorID.Store(0)
+	s.stateHeaderEntity.Store(0)
 	s.statTimer.Store(0)
 	s.enabled = true
 }
@@ -121,7 +121,7 @@ func (s *GoldSystem) HandleEvent(ev event.GameEvent) {
 			return
 		}
 
-		isGoldAnchor := payload.AnchorID == s.anchorEntity
+		isGoldAnchor := payload.HeaderEntity == s.headerEntity
 
 		if isGoldAnchor {
 			if payload.RemainingCount == 0 {
@@ -141,7 +141,7 @@ func (s *GoldSystem) Update() {
 
 	active := s.active
 	timeoutTime := s.timeoutTime
-	anchorEntity := s.anchorEntity
+	headerEntity := s.headerEntity
 
 	// Publish metrics
 	s.statActive.Store(active)
@@ -151,7 +151,7 @@ func (s *GoldSystem) Update() {
 			remaining = 0
 		}
 		s.statTimer.Store(int64(remaining))
-		s.statAnchorID.Store(int64(s.anchorEntity))
+		s.stateHeaderEntity.Store(int64(s.headerEntity))
 	} else {
 		s.statTimer.Store(0)
 	}
@@ -161,8 +161,8 @@ func (s *GoldSystem) Update() {
 	}
 
 	// Check if composite still exists (external destruction detection)
-	if anchorEntity != 0 {
-		header, ok := s.world.Component.Header.Get(anchorEntity)
+	if headerEntity != 0 {
+		header, ok := s.world.Component.Header.GetComponent(headerEntity)
 		if !ok || s.countLivingMembers(&header) == 0 {
 			s.handleGoldDestroyed()
 			return
@@ -177,14 +177,14 @@ func (s *GoldSystem) Update() {
 
 // handleJumpRequest jumps cursor to the first living member of the gold sequence
 func (s *GoldSystem) handleJumpRequest() {
-	if !s.active || s.anchorEntity == 0 {
+	if !s.active || s.headerEntity == 0 {
 		return
 	}
 
 	cursorEntity := s.world.Resource.Cursor.Entity
 
 	// 1. Check Energy from component
-	energyComp, ok := s.world.Component.Energy.Get(cursorEntity)
+	energyComp, ok := s.world.Component.Energy.GetComponent(cursorEntity)
 	if !ok {
 		return
 	}
@@ -199,13 +199,13 @@ func (s *GoldSystem) handleJumpRequest() {
 	}
 
 	// 2. Find target position (First living member)
-	header, ok := s.world.Component.Header.Get(s.anchorEntity)
+	header, ok := s.world.Component.Header.GetComponent(s.headerEntity)
 	if !ok {
 		return
 	}
 
 	var targetEntity core.Entity
-	for _, m := range header.Members {
+	for _, m := range header.MemberEntries {
 		if m.Entity != 0 {
 			targetEntity = m.Entity
 			break
@@ -223,7 +223,7 @@ func (s *GoldSystem) handleJumpRequest() {
 	}
 
 	// 3. Move Cursor
-	s.world.Position.Set(cursorEntity, component.PositionComponent{
+	s.world.Position.SetPosition(cursorEntity, component.PositionComponent{
 		X: targetPos.X,
 		Y: targetPos.Y,
 	})
@@ -262,10 +262,10 @@ func (s *GoldSystem) spawnGold() bool {
 		return false
 	}
 
-	// Phase 1: Create Phantom Head entity (NO position yet)
-	anchorEntity := s.world.CreateEntity()
+	// 1. Create Phantom Head entity (NO position yet)
+	headerEntity := s.world.CreateEntity()
 
-	// Phase 2: Create member entities
+	// 2. Create member entities
 	type entityData struct {
 		entity core.Entity
 		pos    component.PositionComponent
@@ -275,7 +275,7 @@ func (s *GoldSystem) spawnGold() bool {
 	// Create member entities
 	members := make([]component.MemberEntry, 0, constant.GoldSequenceLength)
 
-	// Set position component to gold entities
+	// SetPosition position component to gold entities
 	for i := 0; i < constant.GoldSequenceLength; i++ {
 		entity := s.world.CreateEntity()
 		entities = append(entities, entityData{
@@ -285,7 +285,7 @@ func (s *GoldSystem) spawnGold() bool {
 		})
 	}
 
-	// Phase 3: Batch position commit (anchor NOT in grid - no collision at x,y)
+	// 3. Batch position commit (anchor NOT in grid - no collision at x,y)
 	batch := s.world.Position.BeginBatch()
 	for _, ed := range entities {
 		batch.Add(ed.entity, ed.pos)
@@ -295,61 +295,60 @@ func (s *GoldSystem) spawnGold() bool {
 		for _, ed := range entities {
 			s.world.DestroyEntity(ed.entity)
 		}
-		s.world.DestroyEntity(anchorEntity)
+		s.world.DestroyEntity(headerEntity)
 		return false
 	}
 
-	// Phase 4: Set Phantom Head to Position AFTER batch success
-	// Direct Set bypasses HasAny validation, colocates with member 0
+	// 4. SetPosition Phantom Head to Position AFTER batch success
 	// TODO: check protectAll, it may conflicts with OOB bound, set specific protections
-	s.world.Position.Set(anchorEntity, component.PositionComponent{X: x, Y: y})
-	s.world.Component.Protection.Set(anchorEntity, component.ProtectionComponent{
+	s.world.Position.SetPosition(headerEntity, component.PositionComponent{X: x, Y: y})
+	s.world.Component.Protection.SetComponent(headerEntity, component.ProtectionComponent{
 		Mask: component.ProtectAll,
 	})
 
-	// Phase 5: Set components to members
+	// 5. SetPosition components to members
 	for i, ed := range entities {
 		// Typing target
-		s.world.Component.Glyph.Set(ed.entity, component.GlyphComponent{
+		s.world.Component.Glyph.SetComponent(ed.entity, component.GlyphComponent{
 			Rune:  sequence[i],
 			Type:  component.GlyphGold,
 			Level: component.GlyphBright,
 		})
 
 		// Composite membership
-		s.world.Component.Member.Set(ed.entity, component.MemberComponent{
-			AnchorID: anchorEntity,
+		s.world.Component.Member.SetComponent(ed.entity, component.MemberComponent{
+			HeaderEntity: headerEntity,
 		})
 
 		// Protect gold entities from decay/delete
-		s.world.Component.Protection.Set(ed.entity, component.ProtectionComponent{
+		s.world.Component.Protection.SetComponent(ed.entity, component.ProtectionComponent{
 			Mask: component.ProtectFromDelete | component.ProtectFromDecay,
 		})
 
-		// Set gold entity to composite member entities
+		// SetPosition gold entity to composite member entities
 		members = append(members, component.MemberEntry{
 			Entity:  ed.entity,
 			OffsetX: ed.offset,
 			OffsetY: 0,
-			Layer:   component.LayerCore,
+			Layer:   component.LayerGlyph,
 		})
 	}
 
-	// Phase 6: Create composite header
-	s.world.Component.Header.Set(anchorEntity, component.CompositeHeaderComponent{
-		BehaviorID: component.BehaviorGold,
-		Members:    members,
+	// 6. Create composite header
+	s.world.Component.Header.SetComponent(headerEntity, component.HeaderComponent{
+		BehaviorID:    component.BehaviorGold,
+		MemberEntries: members,
 	})
 
-	// Phase 7: Activate internal state
+	// 7. Activate internal state
 	s.active = true
-	s.anchorEntity = anchorEntity
+	s.headerEntity = headerEntity
 	s.startTime = now
 	s.timeoutTime = now.Add(constant.GoldDuration)
 
 	// Emit spawnLightning event
 	s.world.PushEvent(event.EventGoldSpawned, &event.GoldSpawnedPayload{
-		AnchorEntity: anchorEntity,
+		HeaderEntity: headerEntity,
 		OriginX:      x,
 		OriginY:      y,
 		Length:       constant.GoldSequenceLength,
@@ -361,7 +360,7 @@ func (s *GoldSystem) spawnGold() bool {
 
 // handleMemberTyped processes a gold character being typed
 func (s *GoldSystem) handleMemberTyped(payload *event.MemberTypedPayload) {
-	if !s.active || payload.AnchorID != s.anchorEntity {
+	if !s.active || payload.HeaderEntity != s.headerEntity {
 		return
 	}
 
@@ -373,15 +372,11 @@ func (s *GoldSystem) handleMemberTyped(payload *event.MemberTypedPayload) {
 
 // handleGoldComplete processes successful gold sequence completion
 func (s *GoldSystem) handleGoldComplete() {
-	anchorEntity := s.anchorEntity
-
-	// // Fill heat to max and trigger sweeping cleaners
-	// s.world.PushEvent(event.EventHeatSet, &event.HeatSetPayload{Value: constant.MaxHeat})
-	// s.world.PushEvent(event.EventCleanerSweepingRequest, nil)
+	headerEntity := s.headerEntity
 
 	// Emit completion event, FSM is the reward authority
 	s.world.PushEvent(event.EventGoldComplete, &event.GoldCompletionPayload{
-		AnchorEntity: anchorEntity,
+		HeaderEntity: headerEntity,
 	})
 
 	// Play sound
@@ -390,82 +385,82 @@ func (s *GoldSystem) handleGoldComplete() {
 	}
 
 	// Destroy composite
-	s.destroyComposite(anchorEntity)
+	s.destroyComposite(headerEntity)
 
 	s.active = false
-	s.anchorEntity = 0
+	s.headerEntity = 0
 	s.startTime = time.Time{}
 	s.timeoutTime = time.Time{}
 
 	s.statActive.Store(false)
 	s.statTimer.Store(0)
-	s.statAnchorID.Store(0)
+	s.stateHeaderEntity.Store(0)
 }
 
 // handleGoldTimeout processes gold sequence expiration
 func (s *GoldSystem) handleGoldTimeout() {
-	anchorEntity := s.anchorEntity
+	headerEntity := s.headerEntity
 
 	s.world.PushEvent(event.EventGoldTimeout, &event.GoldCompletionPayload{
-		AnchorEntity: anchorEntity,
+		HeaderEntity: headerEntity,
 	})
 
-	s.destroyComposite(anchorEntity)
+	s.destroyComposite(headerEntity)
 
 	s.active = false
-	s.anchorEntity = 0
+	s.headerEntity = 0
 	s.startTime = time.Time{}
 	s.timeoutTime = time.Time{}
 
 	s.statActive.Store(false)
 	s.statTimer.Store(0)
-	s.statAnchorID.Store(0)
+	s.stateHeaderEntity.Store(0)
 }
 
 // handleGoldDestroyed processes external gold destruction
 func (s *GoldSystem) handleGoldDestroyed() {
-	anchorEntity := s.anchorEntity
+	headerEntity := s.headerEntity
 
 	s.world.PushEvent(event.EventGoldDestroyed, &event.GoldCompletionPayload{
-		AnchorEntity: anchorEntity,
+		HeaderEntity: headerEntity,
 	})
 
-	if anchorEntity != 0 {
-		s.destroyComposite(anchorEntity)
+	if headerEntity != 0 {
+		s.destroyComposite(headerEntity)
 	}
 
 	s.active = false
-	s.anchorEntity = 0
+	s.headerEntity = 0
 	s.startTime = time.Time{}
 	s.timeoutTime = time.Time{}
 
 	s.statActive.Store(false)
 	s.statTimer.Store(0)
-	s.statAnchorID.Store(0)
+	s.stateHeaderEntity.Store(0)
 }
 
 // destroyCurrentGold destroys the current gold if active
 func (s *GoldSystem) destroyCurrentGold() {
-	anchorEntity := s.anchorEntity
+	headerEntity := s.headerEntity
 	active := s.active
 
-	if active && anchorEntity != 0 {
-		s.destroyComposite(anchorEntity)
+	if active && headerEntity != 0 {
+		s.destroyComposite(headerEntity)
 	}
 }
 
 // destroyComposite removes phantom head and all members
-func (s *GoldSystem) destroyComposite(anchorEntity core.Entity) {
-	header, ok := s.world.Component.Header.Get(anchorEntity)
+func (s *GoldSystem) destroyComposite(headerEntity core.Entity) {
+	header, ok := s.world.Component.Header.GetComponent(headerEntity)
 	if !ok {
 		return
 	}
 
 	// Collect living members for batch death
 	var toDestroy []core.Entity
-	for _, m := range header.Members {
+	for _, m := range header.MemberEntries {
 		if m.Entity != 0 {
-			s.world.Component.Member.Remove(m.Entity)
+			s.world.Component.Member.RemoveComponent(m.Entity)
 			toDestroy = append(toDestroy, m.Entity)
 		}
 	}
@@ -475,15 +470,15 @@ func (s *GoldSystem) destroyComposite(anchorEntity core.Entity) {
 	}
 
 	// Remove protection and destroy phantom head
-	s.world.Component.Protection.Remove(anchorEntity)
-	s.world.Component.Header.Remove(anchorEntity)
-	s.world.DestroyEntity(anchorEntity)
+	s.world.Component.Protection.RemoveComponent(headerEntity)
+	s.world.Component.Header.RemoveComponent(headerEntity)
+	s.world.DestroyEntity(headerEntity)
 }
 
 // countLivingMembers returns count of non-tombstone members
-func (s *GoldSystem) countLivingMembers(header *component.CompositeHeaderComponent) int {
+func (s *GoldSystem) countLivingMembers(header *component.HeaderComponent) int {
 	count := 0
-	for _, m := range header.Members {
+	for _, m := range header.MemberEntries {
 		if m.Entity != 0 {
 			count++
 		}

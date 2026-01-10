@@ -62,6 +62,29 @@ var DustToDrain = CollisionProfile{
 	OffsetInfluence:  0,
 }
 
+// TODO: fix after tests
+// ExplosionToDrain defines explosion-to-drain collision (severe impactor, cumulative)
+var ExplosionToDrain = CollisionProfile{
+	MassRatio:        vmath.MassRatioExplosionToDrain,
+	ImpulseMin:       constant.DrainDeflectImpulseMin,
+	ImpulseMax:       constant.DrainDeflectImpulseMax,
+	AngleVariance:    constant.DrainDeflectAngleVar,
+	Mode:             ImpulseAdditive,
+	ImmunityDuration: 50, // Immunity for dedup
+	OffsetInfluence:  0,
+}
+
+// ExplosionToQuasar defines explosion-to-drain collision (severe impactor, cumulative)
+var ExplosionToQuasar = CollisionProfile{
+	MassRatio:        vmath.MassRatioExplosionToQuasar,
+	ImpulseMin:       constant.QuasarDeflectImpulseMin,
+	ImpulseMax:       constant.QuasarDeflectImpulseMax,
+	AngleVariance:    constant.DrainDeflectAngleVar,
+	Mode:             ImpulseAdditive,
+	ImmunityDuration: 50, // Immunity for dedup
+	OffsetInfluence:  0,
+}
+
 // DustToQuasar defines dust-to-quasar collision (very light impactor, cumulative)
 var DustToQuasar = CollisionProfile{
 	MassRatio:        vmath.MassRatioDustToQuasar,

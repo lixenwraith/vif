@@ -61,9 +61,9 @@ func (s *FlashSystem) Update() {
 	}
 
 	dt := s.world.Resource.Time.DeltaTime
-	entities := s.world.Component.Flash.All()
+	entities := s.world.Component.Flash.AllEntity()
 	for _, entity := range entities {
-		flash, ok := s.world.Component.Flash.Get(entity)
+		flash, ok := s.world.Component.Flash.GetComponent(entity)
 		if !ok {
 			continue
 		}
@@ -72,7 +72,7 @@ func (s *FlashSystem) Update() {
 		if flash.Remaining <= 0 {
 			s.world.DestroyEntity(entity)
 		} else {
-			s.world.Component.Flash.Set(entity, flash)
+			s.world.Component.Flash.SetComponent(entity, flash)
 		}
 	}
 }
@@ -88,5 +88,5 @@ func (s *FlashSystem) spawnDestructionFlash(x, y int, char rune) {
 	}
 
 	entity := s.world.CreateEntity()
-	s.world.Component.Flash.Set(entity, flash)
+	s.world.Component.Flash.SetComponent(entity, flash)
 }

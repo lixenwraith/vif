@@ -85,66 +85,66 @@ func (s *BoostSystem) Update() {
 	dt := s.world.Resource.Time.DeltaTime
 	cursorEntity := s.world.Resource.Cursor.Entity
 
-	boost, ok := s.world.Component.Boost.Get(cursorEntity)
-	if !ok || !boost.Active {
+	boostComp, ok := s.world.Component.Boost.GetComponent(cursorEntity)
+	if !ok || !boostComp.Active {
 		return
 	}
 
-	boost.Remaining -= dt
-	if boost.Remaining <= 0 {
-		boost.Remaining = 0
-		boost.Active = false
+	boostComp.Remaining -= dt
+	if boostComp.Remaining <= 0 {
+		boostComp.Remaining = 0
+		boostComp.Active = false
 	}
 
-	s.world.Component.Boost.Set(cursorEntity, boost)
+	s.world.Component.Boost.SetComponent(cursorEntity, boostComp)
 
-	s.statActive.Store(boost.Active)
-	s.statRemaining.Store(int64(boost.Remaining))
+	s.statActive.Store(boostComp.Active)
+	s.statRemaining.Store(int64(boostComp.Remaining))
 }
 
 func (s *BoostSystem) activate(duration time.Duration) {
 	cursorEntity := s.world.Resource.Cursor.Entity
 
-	boost, ok := s.world.Component.Boost.Get(cursorEntity)
+	boostComp, ok := s.world.Component.Boost.GetComponent(cursorEntity)
 	if !ok {
-		boost = component.BoostComponent{}
+		boostComp = component.BoostComponent{}
 	}
 
 	// If already active, this resets/overwrites duration (or adds? usually activate implies fresh start)
 	// Design choice: Activate overwrites. Extend adds.
-	boost.Active = true
-	boost.Remaining = duration
-	boost.TotalDuration = duration // Reset total for UI progress bar if applicable
+	boostComp.Active = true
+	boostComp.Remaining = duration
+	boostComp.TotalDuration = duration // Reset total for UI progress bar if applicable
 
-	s.world.Component.Boost.Set(cursorEntity, boost)
+	s.world.Component.Boost.SetComponent(cursorEntity, boostComp)
 }
 
 func (s *BoostSystem) deactivate() {
 	cursorEntity := s.world.Resource.Cursor.Entity
 
-	boost, ok := s.world.Component.Boost.Get(cursorEntity)
+	boostComp, ok := s.world.Component.Boost.GetComponent(cursorEntity)
 	if !ok {
 		return
 	}
-	boost.Active = false
-	boost.Remaining = 0
-	s.world.Component.Boost.Set(cursorEntity, boost)
+	boostComp.Active = false
+	boostComp.Remaining = 0
+	s.world.Component.Boost.SetComponent(cursorEntity, boostComp)
 }
 
 func (s *BoostSystem) extend(duration time.Duration) {
 	cursorEntity := s.world.Resource.Cursor.Entity
 
-	boost, ok := s.world.Component.Boost.Get(cursorEntity)
-	if !ok || !boost.Active {
+	boostComp, ok := s.world.Component.Boost.GetComponent(cursorEntity)
+	if !ok || !boostComp.Active {
 		return
 	}
 
-	boost.Remaining += duration
+	boostComp.Remaining += duration
 	// Optionally cap at TotalDuration or allow it to grow?
 	// Allowing growth is standard for extensions
-	if boost.Remaining > boost.TotalDuration {
-		boost.TotalDuration = boost.Remaining
+	if boostComp.Remaining > boostComp.TotalDuration {
+		boostComp.TotalDuration = boostComp.Remaining
 	}
 
-	s.world.Component.Boost.Set(cursorEntity, boost)
+	s.world.Component.Boost.SetComponent(cursorEntity, boostComp)
 }

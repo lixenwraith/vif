@@ -50,7 +50,7 @@ var Components = []ComponentDef{
 	{"Materialize", "MaterializeComponent"},
 
 	// Composite
-	{"Header", "CompositeHeaderComponent"},
+	{"Header", "HeaderComponent"},
 	{"Member", "MemberComponent"},
 
 	// Effects

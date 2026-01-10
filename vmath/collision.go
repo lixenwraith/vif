@@ -21,10 +21,12 @@ const (
 
 // Pre-computed mass ratios for collision (impactor_mass / target_mass)
 const (
-	MassRatioCleanerToDrain  = Scale       // 1.0 - equal mass
-	MassRatioCleanerToQuasar = Scale / 10  // 0.1 - cleaner is 10x lighter
-	MassRatioDustToDrain     = Scale / 10  // 0.1 - dust is 10x lighter than drain
-	MassRatioDustToQuasar    = Scale / 100 // 0.01 - dust is 100x lighter than quasar
+	MassRatioExplosionToDrain  = Scale * 10  // 10.0 - 10x greater mass
+	MassRatioExplosionToQuasar = Scale       // 1.0 - 1x greater mass
+	MassRatioCleanerToDrain    = Scale       // 1.0 - equal mass
+	MassRatioCleanerToQuasar   = Scale / 10  // 0.1 - cleaner is 10x lighter
+	MassRatioDustToDrain       = Scale / 10  // 0.1 - dust is 10x lighter than drain
+	MassRatioDustToQuasar      = Scale / 100 // 0.01 - dust is 100x lighter than quasar
 )
 
 // OffsetInfluenceDefault is standard blend factor for offset-based impulse

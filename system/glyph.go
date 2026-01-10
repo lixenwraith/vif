@@ -165,7 +165,7 @@ func (s *GlyphSystem) Update() {
 	config := s.world.Resource.Config
 
 	// Calculate current density and update rate multiplier
-	entityCount := s.world.Position.Count()
+	entityCount := s.world.Position.CountEntity()
 	screenCapacity := config.GameWidth * config.GameHeight
 	density := s.calculateDensity(entityCount, screenCapacity)
 	s.updateRateMultiplier(density)
@@ -261,14 +261,14 @@ func (s *GlyphSystem) runCensus() GlyphCensus {
 	var census GlyphCensus
 	var orphanGlyph, orphanTypeable int64
 
-	glyphEntities := s.world.Component.Glyph.All()
+	glyphEntities := s.world.Component.Glyph.AllEntity()
 	for _, entity := range glyphEntities {
-		if !s.world.Position.Has(entity) {
+		if !s.world.Position.HasComponent(entity) {
 			orphanGlyph++
 			continue
 		}
 
-		glyph, ok := s.world.Component.Glyph.Get(entity)
+		glyph, ok := s.world.Component.Glyph.GetComponent(entity)
 		if !ok {
 			continue
 		}
@@ -296,9 +296,9 @@ func (s *GlyphSystem) runCensus() GlyphCensus {
 		}
 	}
 
-	typeableEntities := s.world.Component.Glyph.All()
+	typeableEntities := s.world.Component.Glyph.AllEntity()
 	for _, entity := range typeableEntities {
-		if !s.world.Position.Has(entity) {
+		if !s.world.Position.HasComponent(entity) {
 			orphanTypeable++
 		}
 	}
@@ -446,7 +446,7 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 
 		// Valid position found, create entities
 
-		// Phase 1: Create entities and prepare components
+		// 1. Create entities and prepare components
 		type entityData struct {
 			entity core.Entity
 			pos    component.PositionComponent
@@ -472,7 +472,7 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 			})
 		}
 
-		// Phase 2: Batch position validation and commit
+		// 2. Batch position validation and commit
 		batch := s.world.Position.BeginBatch()
 		for _, ed := range entities {
 			batch.Add(ed.entity, ed.pos)
@@ -486,9 +486,9 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 			continue
 		}
 
-		// Phase 3: Set glyph and typeable components
+		// 3. SetPosition glyph components
 		for _, ed := range entities {
-			s.world.Component.Glyph.Set(ed.entity, component.GlyphComponent{
+			s.world.Component.Glyph.SetComponent(ed.entity, component.GlyphComponent{
 				Rune:  ed.char,
 				Type:  glyphType,
 				Level: glyphLevel,

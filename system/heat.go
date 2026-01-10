@@ -89,7 +89,7 @@ func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
 func (s *HeatSystem) addHeat(delta int) {
 	cursorEntity := s.world.Resource.Cursor.Entity
 
-	heatComp, ok := s.world.Component.Heat.Get(cursorEntity)
+	heatComp, ok := s.world.Component.Heat.GetComponent(cursorEntity)
 	if !ok {
 		return
 	}
@@ -105,7 +105,7 @@ func (s *HeatSystem) addHeat(delta int) {
 func (s *HeatSystem) setHeat(value int64) {
 	cursorEntity := s.world.Resource.Cursor.Entity
 
-	heatComp, ok := s.world.Component.Heat.Get(cursorEntity)
+	heatComp, ok := s.world.Component.Heat.GetComponent(cursorEntity)
 	if !ok {
 		return
 	}
@@ -123,6 +123,6 @@ func (s *HeatSystem) setHeat(value int64) {
 	s.statCurrent.Store(value)
 	s.statAtMax.Store(value >= constant.MaxHeat)
 
-	// CRITICAL: Write the modified component copy back to the store
-	s.world.Component.Heat.Set(cursorEntity, heatComp)
+	// Write the modified component copy back to the store
+	s.world.Component.Heat.SetComponent(cursorEntity, heatComp)
 }

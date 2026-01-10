@@ -71,7 +71,7 @@ func ApplyCollision(
 		kinetic.SetImpulse(impulseX, impulseY)
 	}
 
-	// Set immunity
+	// SetPosition immunity
 	if profile.ImmunityDuration > 0 {
 		kinetic.SetImmunity(now.Add(profile.ImmunityDuration))
 	}
@@ -123,7 +123,7 @@ func ApplyOffsetCollision(
 		kinetic.SetImpulse(impulseX, impulseY)
 	}
 
-	// Set immunity
+	// SetPosition immunity
 	if profile.ImmunityDuration > 0 {
 		kinetic.SetImmunity(now.Add(profile.ImmunityDuration))
 	}

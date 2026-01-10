@@ -51,7 +51,7 @@ type AppState struct {
 type DetailPaneState struct {
 	FlatItems []DetailItem       // Flattened list for rendering
 	TreeState *tui.TreeState     // Cursor and scroll management
-	Expansion *tui.TreeExpansion // Header expansion state
+	Expansion *tui.TreeExpansion // HeaderEntity expansion state
 }
 
 // NewDetailPaneState creates initialized detail pane state
@@ -138,7 +138,7 @@ type FilterMode int
 const (
 	FilterOR  FilterMode = iota // Match ANY selected tag (union)
 	FilterAND                   // Match ALL selected groups (intersection)
-	FilterNOT                   // Remove from existing (subtraction)
+	FilterNOT                   // RemoveComponent from existing (subtraction)
 	FilterXOR                   // Toggle membership (symmetric difference)
 )
 

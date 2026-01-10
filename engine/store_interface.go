@@ -8,17 +8,17 @@ import (
 // This interface allows World to manage all stores uniformly
 // for operations like entity destruction without knowing the concrete type
 type AnyStore interface {
-	// Remove deletes a component from an entity
-	Remove(e core.Entity)
+	// RemoveComponent deletes a component from an entity
+	RemoveComponent(e core.Entity)
 
-	// Has checks if an entity has this component
-	Has(e core.Entity) bool
+	// HasComponent checks if an entity has this component
+	HasComponent(e core.Entity) bool
 
-	// Count returns the number of entities with this component
-	Count() int
+	// CountEntity returns the number of entities with this component
+	CountEntity() int
 
-	// Clear removes all components from this store
-	Clear()
+	// ClearAllComponent removes all components from this store
+	ClearAllComponent()
 }
 
 // QueryableStore extends AnyStore with query operations needed for
@@ -26,6 +26,6 @@ type AnyStore interface {
 type QueryableStore interface {
 	AnyStore
 
-	// All returns all entities that have this component type
-	All() []core.Entity
+	// AllEntity returns all entities that have this component type
+	AllEntity() []core.Entity
 }

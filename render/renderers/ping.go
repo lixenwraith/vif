@@ -29,7 +29,7 @@ func NewPingRenderer(gameCtx *engine.GameContext) *PingRenderer {
 // Render draws the ping highlights and grid
 func (r *PingRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	// Get PingComponent from cursor (Single player assumption: ID 1/CursorEntity)
-	ping, ok := r.gameCtx.World.Component.Ping.Get(r.gameCtx.CursorEntity)
+	ping, ok := r.gameCtx.World.Component.Ping.GetComponent(r.gameCtx.CursorEntity)
 	if !ok {
 		return
 	}
@@ -66,6 +66,7 @@ func (r *PingRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 func (r *PingRenderer) computeExclusionMask(world *engine.World, w, h int) {
 	// Resize mask if dimensions changed
 	// Need (w*h + 63) / 64 uint64s
+	// TODO: fix this magic
 	needed := (w*h + 63) / 64
 	if len(r.exclusionMask) < needed || r.maskWidth != w || r.maskHeight != h {
 		r.exclusionMask = make([]uint64, needed)
@@ -79,21 +80,25 @@ func (r *PingRenderer) computeExclusionMask(world *engine.World, w, h int) {
 	}
 
 	// Rasterize all active shields into the mask
-	shields := r.gameCtx.World.Component.Shield.All()
-	for _, entity := range shields {
-		shield, okS := r.gameCtx.World.Component.Shield.Get(entity)
-		pos, okP := world.Position.Get(entity)
-		if !okS || !okP || !shield.Active {
+	shieldEntities := r.gameCtx.World.Component.Shield.AllEntity()
+	for _, shieldEntity := range shieldEntities {
+		shieldComp, ok := r.gameCtx.World.Component.Shield.GetComponent(shieldEntity)
+		if !ok || !shieldComp.Active {
+			continue
+		}
+
+		shieldPos, ok := world.Position.Get(shieldEntity)
+		if !ok {
 			continue
 		}
 
 		// Bounding box from Q32.32 radii
-		rx := vmath.ToInt(shield.RadiusX)
-		ry := vmath.ToInt(shield.RadiusY)
-		startX := pos.X - rx
-		endX := pos.X + rx
-		startY := pos.Y - ry
-		endY := pos.Y + ry
+		rx := vmath.ToInt(shieldComp.RadiusX)
+		ry := vmath.ToInt(shieldComp.RadiusY)
+		startX := shieldPos.X - rx
+		endX := shieldPos.X + rx
+		startY := shieldPos.Y - ry
+		endY := shieldPos.Y + ry
 
 		// Clamp
 		if startX < 0 {
@@ -110,16 +115,16 @@ func (r *PingRenderer) computeExclusionMask(world *engine.World, w, h int) {
 		}
 
 		for y := startY; y <= endY; y++ {
-			dy := vmath.FromInt(y - pos.Y)
+			dy := vmath.FromInt(y - shieldPos.Y)
 			dySq := vmath.Mul(dy, dy)
 			rowOffset := y * w
 
 			for x := startX; x <= endX; x++ {
-				dx := vmath.FromInt(x - pos.X)
+				dx := vmath.FromInt(x - shieldPos.X)
 				dxSq := vmath.Mul(dx, dx)
 
 				// Ellipse containment: (dx²*invRxSq + dy²*invRySq) <= 1.0
-				if (vmath.Mul(dxSq, shield.InvRxSq) + vmath.Mul(dySq, shield.InvRySq)) <= vmath.Scale {
+				if (vmath.Mul(dxSq, shieldComp.InvRxSq) + vmath.Mul(dySq, shieldComp.InvRySq)) <= vmath.Scale {
 					idx := rowOffset + x
 					r.exclusionMask[idx/64] |= (1 << (idx % 64))
 				}

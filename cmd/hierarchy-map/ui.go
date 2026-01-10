@@ -608,7 +608,7 @@ func (app *AppState) collapseTreeNode() {
 		return
 	}
 
-	// Move to parent
+	// MoveEntity to parent
 	if node.Parent != nil && node.Parent.Path != "." {
 		for i, n := range app.TreeFlat {
 			if n == node.Parent {
@@ -680,7 +680,7 @@ func (app *AppState) selectAndAdvanceTree() {
 			app.Selected[f] = true
 		}
 
-		// Move to next sibling directory
+		// MoveEntity to next sibling directory
 		for i := app.TreeState.Cursor + 1; i < len(app.TreeFlat); i++ {
 			if app.TreeFlat[i].IsDir && app.TreeFlat[i].Depth == node.Depth {
 				app.TreeState.Cursor = i
@@ -776,7 +776,7 @@ func (app *AppState) collapseDetailItem(state *DetailPaneState) {
 		state.Expansion.Collapse(item.Key)
 		app.refreshDetailPanes()
 	} else if item.Level > 0 {
-		// Move to parent header
+		// MoveEntity to parent header
 		for i := state.TreeState.Cursor - 1; i >= 0; i-- {
 			if state.FlatItems[i].IsHeader && state.FlatItems[i].Level < item.Level {
 				state.TreeState.Cursor = i
@@ -888,7 +888,7 @@ func (app *AppState) selectAndAdvanceDetail(state *DetailPaneState) {
 			}
 		}
 
-		// Move to next header at same level
+		// MoveEntity to next header at same level
 		for i := state.TreeState.Cursor + 1; i < len(state.FlatItems); i++ {
 			if state.FlatItems[i].IsHeader && state.FlatItems[i].Level == item.Level {
 				state.TreeState.Cursor = i
@@ -1142,7 +1142,7 @@ func (app *AppState) rebuildDepByFlat() {
 		return
 	}
 
-	// Get target file's exported definitions for usage highlighting
+	// GetComponent target file's exported definitions for usage highlighting
 	var targetDefs map[string]bool
 	targetFile := app.getCurrentFileInfo()
 	if targetFile != nil && len(targetFile.Definitions) > 0 {

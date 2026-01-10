@@ -67,7 +67,7 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 
 	switch ev.Type {
 	case event.EventShieldActivate:
-		shield, ok := s.world.Component.Shield.Get(cursorEntity)
+		shield, ok := s.world.Component.Shield.GetComponent(cursorEntity)
 		if ok {
 			// Calculation cache on activation since at init cursor may not be read when game is reset
 			rx := vmath.FromFloat(constant.ShieldRadiusX)
@@ -76,15 +76,15 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 			shield.RadiusY = ry
 			shield.InvRxSq, shield.InvRySq = vmath.EllipseInvRadiiSq(rx, ry)
 			shield.Active = true
-			s.world.Component.Shield.Set(cursorEntity, shield)
+			s.world.Component.Shield.SetComponent(cursorEntity, shield)
 		}
 		s.statActive.Store(true)
 
 	case event.EventShieldDeactivate:
-		shield, ok := s.world.Component.Shield.Get(cursorEntity)
+		shield, ok := s.world.Component.Shield.GetComponent(cursorEntity)
 		if ok {
 			shield.Active = false
-			s.world.Component.Shield.Set(cursorEntity, shield)
+			s.world.Component.Shield.SetComponent(cursorEntity, shield)
 		}
 		s.statActive.Store(false)
 
@@ -110,7 +110,7 @@ func (s *ShieldSystem) Update() {
 
 	cursorEntity := s.world.Resource.Cursor.Entity
 
-	shield, ok := s.world.Component.Shield.Get(cursorEntity)
+	shield, ok := s.world.Component.Shield.GetComponent(cursorEntity)
 	if !ok || !shield.Active {
 		return
 	}
@@ -124,6 +124,6 @@ func (s *ShieldSystem) Update() {
 			Convergent: true, // Clamp at zero
 		})
 		shield.LastDrainTime = now
-		s.world.Component.Shield.Set(cursorEntity, shield)
+		s.world.Component.Shield.SetComponent(cursorEntity, shield)
 	}
 }

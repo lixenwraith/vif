@@ -1,6 +1,5 @@
 package engine
 
-
 import (
 	"time"
 
@@ -9,63 +8,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/status"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
-
-// // Resource is a thread-safe container for global game resources
-// // It allows system to access shared data (Time, Config, Input) without
-// // coupling to the GameContext
-// type Resource struct {
-// 	mu        sync.RWMutex
-// 	resources map[reflect.Type]any
-// }
-//
-// // NewResourceStore creates a new empty resource store
-// func NewResourceStore() *Resource {
-// 	return &Resource{
-// 		resources: make(map[reflect.Type]any),
-// 	}
-// }
-//
-// // Set registers or updates a resource in the store
-// // T must be the pointer type of the resource struct to ensure addressability if mutation is needed,
-// // or the struct type if read-only behavior is desired (though pointers are recommended for consistency)
-// func SetResource[T any](rs *Resource, resource T) {
-// 	rs.mu.Lock()
-// 	defer rs.mu.Unlock()
-// 	t := reflect.TypeOf(resource)
-// 	rs.resources[t] = resource
-// }
-//
-// // Get retrieves a resource of type T from the store
-// // Returns the zero value of T and false if not found
-// func GetResource[T any](rs *Resource) (T, bool) {
-// 	rs.mu.RLock()
-// 	defer rs.mu.RUnlock()
-//
-// 	// Get the type of T (we need to pass a dummy value to reflect.TypeOf if we don't have an instance)
-// 	// However, we can use a pointer to T to get the type
-// 	var target T
-// 	t := reflect.TypeOf(target)
-//
-// 	val, ok := rs.resources[t]
-// 	if !ok {
-// 		return target, false
-// 	}
-//
-// 	return val.(T), true
-// }
-//
-// // MustGetResource retrieves a resource or panics if missing
-// // Useful for core resources (Time, Config) that must exist
-// func MustGetResource[T any](rs *Resource) T {
-// 	res, ok := GetResource[T](rs)
-// 	if !ok {
-// 		var target T
-// 		panic("Required resource not found: " + reflect.TypeOf(target).String())
-// 	}
-// 	return res
-// }
-//
-// // === Cached Resource ===
 
 // Resources holds singleton game resources, initialized during GameContext creation, accessed via World.Resources
 type Resource struct {

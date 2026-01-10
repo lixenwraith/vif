@@ -11,7 +11,7 @@ var QuasarChars = [3][5]rune{
 	{'╚', '═', '╩', '═', '╝'},
 }
 
-// QuasarComponent holds quasar-specific runtime state, composite structure managed via CompositeHeaderComponent
+// QuasarComponent holds quasar-specific runtime state, composite structure managed via HeaderComponent
 type QuasarComponent struct {
 	KineticState // PreciseX/Y, VelX/Y, AccelX/Y (Q32.32)
 
@@ -19,8 +19,7 @@ type QuasarComponent struct {
 
 	SpeedMultiplier int64 // Q32.32, current speed scale factor (starts at Scale)
 
-	IsOnCursor bool // True if any member overlaps cursor position
-	IsZapping  bool // True if zapping cursor outside range
+	IsZapping bool // True if zapping cursor outside range
 
 	// Charge phase state (delay before zapping)
 	IsCharging      bool

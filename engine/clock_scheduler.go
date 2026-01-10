@@ -462,6 +462,6 @@ func (cs *ClockScheduler) processTick() {
 		cs.world.Resource.GameState.State.UpdateAPM(cs.world.Resource.Status)
 	}
 
-	cs.statEntityCount.Store(int64(cs.world.Position.Count()))
+	cs.statEntityCount.Store(int64(cs.world.Position.CountEntity()))
 	cs.statQueueLen.Store(int64(cs.world.Resource.Event.Queue.Len()))
 }

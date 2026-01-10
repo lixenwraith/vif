@@ -89,14 +89,14 @@ func (s *TypingSystem) HandleEvent(ev event.GameEvent) {
 func (s *TypingSystem) handleTyping(cursorX, cursorY int, typedRune rune) {
 	// Stack-allocated buffer for zero-allocation lookup
 	var buf [constant.MaxEntitiesPerCell]core.Entity
-	count := s.world.Position.GetAllAtInto(cursorX, cursorY, buf[:])
+	count := s.world.Position.GetAllEntityAtInto(cursorX, cursorY, buf[:])
 
 	var entity core.Entity
 
 	// Iterate to find typeable entity (Glyph)
 	// Break on first match for O(1) best case in crowded cells
 	for i := 0; i < count; i++ {
-		if s.world.Component.Glyph.Has(buf[i]) {
+		if s.world.Component.Glyph.HasComponent(buf[i]) {
 			entity = buf[i]
 			break
 		}
@@ -108,13 +108,13 @@ func (s *TypingSystem) handleTyping(cursorX, cursorY int, typedRune rune) {
 	}
 
 	// Check if this is a composite member
-	if member, ok := s.world.Component.Member.Get(entity); ok {
-		s.handleCompositeMember(entity, member.AnchorID, typedRune)
+	if member, ok := s.world.Component.Member.GetComponent(entity); ok {
+		s.handleCompositeMember(entity, member.HeaderEntity, typedRune)
 		return
 	}
 
 	// Check for standalone GlyphComponent
-	if glyph, ok := s.world.Component.Glyph.Get(entity); ok {
+	if glyph, ok := s.world.Component.Glyph.GetComponent(entity); ok {
 		s.handleGlyph(entity, glyph, typedRune)
 		return
 	}
@@ -129,7 +129,7 @@ func (s *TypingSystem) applyUniversalRewards() {
 	cursorEntity := s.world.Resource.Cursor.Entity
 
 	// Check current boost state BEFORE pushing events
-	boost, ok := s.world.Component.Boost.Get(cursorEntity)
+	boost, ok := s.world.Component.Boost.GetComponent(cursorEntity)
 	isBoostActive := ok && boost.Active
 
 	// Boost: activate or extend
@@ -200,10 +200,10 @@ func (s *TypingSystem) emitTypingFeedback(glyphType component.GlyphType, char ru
 func (s *TypingSystem) emitTypingError() {
 	cursorEntity := s.world.Resource.Cursor.Entity
 
-	// Set cursor error flash
-	if cursor, ok := s.world.Component.Cursor.Get(cursorEntity); ok {
+	// SetPosition cursor error flash
+	if cursor, ok := s.world.Component.Cursor.GetComponent(cursorEntity); ok {
 		cursor.ErrorFlashRemaining = constant.ErrorBlinkTimeout
-		s.world.Component.Cursor.Set(cursorEntity, cursor)
+		s.world.Component.Cursor.SetComponent(cursorEntity, cursor)
 	}
 
 	// Reset heat and boost
@@ -225,14 +225,14 @@ func (s *TypingSystem) moveCursorRight() {
 
 	if cursorPos, ok := s.world.Position.Get(cursorEntity); ok && cursorPos.X < config.GameWidth-1 {
 		cursorPos.X++
-		s.world.Position.Set(cursorEntity, cursorPos)
+		s.world.Position.SetPosition(cursorEntity, cursorPos)
 	}
 }
 
 // getHeat reads current heat value from cursor's HeatComponent
 func (s *TypingSystem) getHeat() int {
 	cursorEntity := s.world.Resource.Cursor.Entity
-	if hc, ok := s.world.Component.Heat.Get(cursorEntity); ok {
+	if hc, ok := s.world.Component.Heat.GetComponent(cursorEntity); ok {
 		return int(hc.Current.Load())
 	}
 	return 0
@@ -242,7 +242,7 @@ func (s *TypingSystem) getHeat() int {
 
 // handleCompositeMember processes typing for composite member entities
 func (s *TypingSystem) handleCompositeMember(entity core.Entity, anchorID core.Entity, typedRune rune) {
-	glyph, ok := s.world.Component.Glyph.Get(entity)
+	glyph, ok := s.world.Component.Glyph.GetComponent(entity)
 	if !ok {
 		s.emitTypingError()
 		return
@@ -255,7 +255,7 @@ func (s *TypingSystem) handleCompositeMember(entity core.Entity, anchorID core.E
 	}
 
 	// Identify composite behavior for reward logic
-	header, ok := s.world.Component.Header.Get(anchorID)
+	header, ok := s.world.Component.Header.GetComponent(anchorID)
 	if !ok {
 		s.emitTypingError()
 		return
@@ -283,13 +283,13 @@ func (s *TypingSystem) handleCompositeMember(entity core.Entity, anchorID core.E
 
 	// Signal composite system
 	remaining := 0
-	for _, m := range header.Members {
+	for _, m := range header.MemberEntries {
 		if m.Entity != 0 && m.Entity != entity {
 			remaining++
 		}
 	}
 	s.world.PushEvent(event.EventMemberTyped, &event.MemberTypedPayload{
-		AnchorID:       anchorID,
+		HeaderEntity:   anchorID,
 		MemberEntity:   entity,
 		Char:           typedRune,
 		RemainingCount: remaining,
@@ -328,7 +328,7 @@ func (s *TypingSystem) handleGlyph(entity core.Entity, glyph component.GlyphComp
 // === TYPING ORDER VALIDATION ===
 
 // validateTypingOrder checks if the entity is the next valid target based on BehaviorID heuristic
-func (s *TypingSystem) validateTypingOrder(entity core.Entity, header *component.CompositeHeaderComponent) bool {
+func (s *TypingSystem) validateTypingOrder(entity core.Entity, header *component.HeaderComponent) bool {
 	switch header.BehaviorID {
 	case component.BehaviorGold:
 		// Gold: strict left-to-right ordering (X→Y→EntityID)
@@ -351,12 +351,12 @@ func (s *TypingSystem) validateTypingOrder(entity core.Entity, header *component
 // isLeftmostMember returns true if entity is the leftmost living member
 // Ordering: X ascending → Y ascending → EntityID ascending
 // O(n) single pass, zero allocation
-func (s *TypingSystem) isLeftmostMember(entity core.Entity, header *component.CompositeHeaderComponent) bool {
+func (s *TypingSystem) isLeftmostMember(entity core.Entity, header *component.HeaderComponent) bool {
 	var leftmost core.Entity
 	leftmostX := math.MaxInt
 	leftmostY := math.MaxInt
 
-	for _, m := range header.Members {
+	for _, m := range header.MemberEntries {
 		if m.Entity == 0 {
 			continue
 		}
@@ -390,10 +390,10 @@ func (s *TypingSystem) isLeftmostMember(entity core.Entity, header *component.Co
 // Shield layer (1+): any order allowed
 // Core layer (0): must be leftmost core member
 // O(n) single pass, zero allocation
-func (s *TypingSystem) validateBossOrder(entity core.Entity, header *component.CompositeHeaderComponent) bool {
+func (s *TypingSystem) validateBossOrder(entity core.Entity, header *component.HeaderComponent) bool {
 	// Find entity's layer
 	var entityLayer uint8
-	for _, m := range header.Members {
+	for _, m := range header.MemberEntries {
 		if m.Entity == entity {
 			entityLayer = m.Layer
 			break
@@ -401,7 +401,7 @@ func (s *TypingSystem) validateBossOrder(entity core.Entity, header *component.C
 	}
 
 	// Shield layer: any order
-	if entityLayer > component.LayerCore {
+	if entityLayer > component.LayerGlyph {
 		return true
 	}
 
@@ -410,8 +410,8 @@ func (s *TypingSystem) validateBossOrder(entity core.Entity, header *component.C
 	leftmostX := math.MaxInt
 	leftmostY := math.MaxInt
 
-	for _, m := range header.Members {
-		if m.Entity == 0 || m.Layer != component.LayerCore {
+	for _, m := range header.MemberEntries {
+		if m.Entity == 0 || m.Layer != component.LayerGlyph {
 			continue
 		}
 		pos, ok := s.world.Position.Get(m.Entity)

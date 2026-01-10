@@ -1,6 +1,5 @@
 package renderers
 
-
 import (
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
@@ -36,7 +35,7 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		return
 	}
 
-	// 1. Determine Default GameState (Empty Cell)
+	// 1. Determine default GameState (Empty Cell)
 	var charAtCursor = ' '
 	var cursorBgColor render.RGB
 
@@ -49,9 +48,9 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 	var charFgColor = render.RgbBlack
 
-	// 2. Scan entities at cursor position (Zero allocation)
+	// 2. Scan entities at cursor position
 	var entitiesBuf [constant.MaxEntitiesPerCell]core.Entity
-	count := r.gameCtx.World.Position.GetAllAtInto(ctx.CursorX, ctx.CursorY, entitiesBuf[:])
+	count := r.gameCtx.World.Position.GetAllEntityAtInto(ctx.CursorX, ctx.CursorY, entitiesBuf[:])
 
 	var glyphEntity core.Entity
 	var sigilEntity core.Entity
@@ -61,21 +60,21 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 		// Priority 1: Glyph (Interactable)
 		// Stop immediately if found (first found takes precedence)
-		if r.gameCtx.World.Component.Glyph.Has(e) {
+		if r.gameCtx.World.Component.Glyph.HasComponent(e) {
 			glyphEntity = e
 			break
 		}
 
 		// Priority 2: Sigil (Visual/Enemy)
 		// Store candidate but continue searching for glyphs
-		if sigilEntity == 0 && r.gameCtx.World.Component.Sigil.Has(e) {
+		if sigilEntity == 0 && r.gameCtx.World.Component.Sigil.HasComponent(e) {
 			sigilEntity = e
 		}
 	}
 
 	// 3. Resolve Visuals
 	if glyphEntity != 0 {
-		if glyph, ok := r.gameCtx.World.Component.Glyph.Get(glyphEntity); ok {
+		if glyph, ok := r.gameCtx.World.Component.Glyph.GetComponent(glyphEntity); ok {
 			charAtCursor = glyph.Rune
 			fg := resolveGlyphColor(glyph)
 
@@ -83,7 +82,7 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			cursorBgColor = fg
 
 			// Check for Nugget (special coloring)
-			if r.gameCtx.World.Component.Nugget.Has(glyphEntity) {
+			if r.gameCtx.World.Component.Nugget.HasComponent(glyphEntity) {
 				cursorBgColor = render.RgbNuggetOrange
 				charFgColor = render.RgbNuggetDark
 			} else {
@@ -91,7 +90,7 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			}
 		}
 	} else if sigilEntity != 0 {
-		if sigil, ok := r.gameCtx.World.Component.Sigil.Get(sigilEntity); ok {
+		if sigil, ok := r.gameCtx.World.Component.Sigil.GetComponent(sigilEntity); ok {
 			charAtCursor = sigil.Rune
 			// Cursor background takes the sigil's color
 			cursorBgColor = resolveSigilColor(sigil.Color)
@@ -100,7 +99,7 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	}
 
 	// 4. Error Flash Overlay
-	cursorComp, ok := r.gameCtx.World.Component.Cursor.Get(r.gameCtx.CursorEntity)
+	cursorComp, ok := r.gameCtx.World.Component.Cursor.GetComponent(r.gameCtx.CursorEntity)
 	if ok && cursorComp.ErrorFlashRemaining > 0 {
 		cursorBgColor = render.RgbCursorError
 		charFgColor = render.RgbBlack

@@ -30,11 +30,11 @@ const (
 	MsgAuthResponse MessageType = 0x31
 )
 
-// Header precedes every message on the wire
+// HeaderEntity precedes every message on the wire
 // Fixed 12 bytes: [Type:1][Flags:1][Seq:4][Ack:4][Len:2]
 const HeaderSize = 12
 
-// Header flags
+// HeaderEntity flags
 const (
 	FlagNone       uint8 = 0x00
 	FlagNeedAck    uint8 = 0x01 // Sender expects acknowledgment

@@ -12,7 +12,7 @@ func OpMove(ctx *engine.GameContext, result MotionResult) {
 		return
 	}
 
-	ctx.World.Position.Set(ctx.CursorEntity, component.PositionComponent{
+	ctx.World.Position.SetPosition(ctx.CursorEntity, component.PositionComponent{
 		X: result.EndX,
 		Y: result.EndY,
 	})

@@ -194,7 +194,7 @@ func (app *appState) render() {
 
 	root := tui.NewRegion(cells, w, 0, 0, w, h)
 
-	// Header with status bar
+	// HeaderEntity with status bar
 	header, body := tui.SplitVFixed(root, 1)
 	app.renderStatusBar(header)
 

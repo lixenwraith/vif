@@ -14,7 +14,7 @@ import (
 // GameContext holds all game state including the ECS world
 type GameContext struct {
 	// ===== Immutable After Init =====
-	// Set once during NewGameContext. Pointers/values never modified.
+	// SetPosition once during NewGameContext. Pointers/values never modified.
 	// Safe for concurrent read without synchronization.
 
 	World         *World            // ECS world; has internal locking for component access
@@ -185,7 +185,7 @@ func (ctx *GameContext) HandleResize() {
 			if newX != pos.X || newY != pos.Y {
 				pos.X = newX
 				pos.Y = newY
-				ctx.World.Position.Set(ctx.CursorEntity, pos)
+				ctx.World.Position.SetPosition(ctx.CursorEntity, pos)
 				// Signal cursor movement if clamped due to resize
 				ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: newX, Y: newY})
 			}
@@ -198,7 +198,7 @@ func (ctx *GameContext) cleanupOutOfBoundsEntities(width, height int) {
 	deathStore := ctx.World.Component.Death
 
 	// Unified cleanup: single Position iteration handles all entity types
-	allEntities := ctx.World.Position.All()
+	allEntities := ctx.World.Position.AllEntity()
 	for _, e := range allEntities {
 		// Skip cursor entity (special case)
 		if e == ctx.CursorEntity {
@@ -209,7 +209,7 @@ func (ctx *GameContext) cleanupOutOfBoundsEntities(width, height int) {
 		// Death system informs respective system of their entity destruction
 		pos, _ := ctx.World.Position.Get(e)
 		if pos.X >= width || pos.Y >= height || pos.X < 0 || pos.Y < 0 {
-			deathStore.Set(e, component.DeathComponent{})
+			deathStore.SetComponent(e, component.DeathComponent{})
 		}
 	}
 
@@ -305,7 +305,7 @@ func (ctx *GameContext) GetPingBounds() PingBounds {
 	}
 
 	// Check shield for band dimensions
-	shield, ok := ctx.World.Component.Shield.Get(ctx.CursorEntity)
+	shield, ok := ctx.World.Component.Shield.GetComponent(ctx.CursorEntity)
 	if !ok || !shield.Active {
 		return bounds
 	}
@@ -433,42 +433,38 @@ func (ctx *GameContext) SetOverlayContent(content *core.OverlayContent) {
 func (ctx *GameContext) CreateCursorEntity() {
 	// Create cursor entity at the center of the screen
 	ctx.CursorEntity = ctx.World.CreateEntity()
-	ctx.World.Position.Set(ctx.CursorEntity, component.PositionComponent{
+	ctx.World.Position.SetPosition(ctx.CursorEntity, component.PositionComponent{
 		X: ctx.GameWidth / 2,
 		Y: ctx.GameHeight / 2,
 	})
 
-	ctx.World.Component.Cursor.Set(ctx.CursorEntity, component.CursorComponent{})
+	ctx.World.Component.Cursor.SetComponent(ctx.CursorEntity, component.CursorComponent{})
 
 	// Make cursor indestructible
-	ctx.World.Component.Protection.Set(ctx.CursorEntity, component.ProtectionComponent{
+	ctx.World.Component.Protection.SetComponent(ctx.CursorEntity, component.ProtectionComponent{
 		Mask:      component.ProtectAll,
 		ExpiresAt: 0, // No expiry
 	})
 
-	// Set PingComponent to cursor (handles crosshair and grid state)
-	ctx.World.Component.Ping.Set(ctx.CursorEntity, component.PingComponent{
+	// SetPosition components attached to cursor entity
+	ctx.World.Component.Ping.SetComponent(ctx.CursorEntity, component.PingComponent{
 		ShowCrosshair: true,
 		GridActive:    false,
 		GridRemaining: 0,
 	})
 
-	// Set HeatComponent to cursor
-	ctx.World.Component.Heat.Set(ctx.CursorEntity, component.HeatComponent{})
+	ctx.World.Component.Heat.SetComponent(ctx.CursorEntity, component.HeatComponent{})
 
-	// Set EnergyComponent to cursor
-	ctx.World.Component.Energy.Set(ctx.CursorEntity, component.EnergyComponent{})
+	ctx.World.Component.Energy.SetComponent(ctx.CursorEntity, component.EnergyComponent{})
 
-	// Set ShieldComponent to cursor (initially invisible via GameState.ShieldActive)
-	ctx.World.Component.Shield.Set(ctx.CursorEntity, component.ShieldComponent{
+	ctx.World.Component.Shield.SetComponent(ctx.CursorEntity, component.ShieldComponent{
 		RadiusX:       vmath.FromFloat(constant.ShieldRadiusX),
 		RadiusY:       vmath.FromFloat(constant.ShieldRadiusY),
 		MaxOpacity:    constant.ShieldMaxOpacity,
 		LastDrainTime: ctx.PausableClock.Now(),
 	})
 
-	// Set BoostComponent to cursor
-	ctx.World.Component.Boost.Set(ctx.CursorEntity, component.BoostComponent{})
+	ctx.World.Component.Boost.SetComponent(ctx.CursorEntity, component.BoostComponent{})
 }
 
 // ===== Audio =====

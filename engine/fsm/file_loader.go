@@ -100,7 +100,7 @@ func loadAndResolve(baseDir, filename string, visited map[string]bool) (map[stri
 			}
 		}
 
-		// Remove file key from region config (consumed during loading)
+		// RemoveComponent file key from region config (consumed during loading)
 		delete(regionCfg, "file")
 	}
 

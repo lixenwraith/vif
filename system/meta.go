@@ -111,16 +111,16 @@ func (s *MetaSystem) handleDebugRequest() {
 
 	// Card: Player GameState
 	playerCard := core.OverlayCard{Title: "PLAYER"}
-	energyComp, _ := s.world.Component.Energy.Get(s.ctx.CursorEntity)
+	energyComp, _ := s.world.Component.Energy.GetComponent(s.ctx.CursorEntity)
 	playerCard.Entries = append(playerCard.Entries, core.CardEntry{
 		Key: "Energy", Value: fmt.Sprintf("%d", energyComp.Current.Load()),
 	})
-	if hc, ok := s.world.Component.Heat.Get(s.ctx.CursorEntity); ok {
+	if hc, ok := s.world.Component.Heat.GetComponent(s.ctx.CursorEntity); ok {
 		playerCard.Entries = append(playerCard.Entries, core.CardEntry{
 			Key: "Heat", Value: fmt.Sprintf("%d/%d", hc.Current.Load(), constant.MaxHeat),
 		})
 	}
-	if sc, ok := s.world.Component.Shield.Get(s.ctx.CursorEntity); ok {
+	if sc, ok := s.world.Component.Shield.GetComponent(s.ctx.CursorEntity); ok {
 		playerCard.Entries = append(playerCard.Entries, core.CardEntry{
 			Key: "Shield", Value: fmt.Sprintf("%v", sc.Active),
 		})
@@ -230,7 +230,7 @@ func (s *MetaSystem) handleHelpRequest() {
 	content.Items = append(content.Items, core.OverlayCard{
 		Title: "MOVEMENT",
 		Entries: []core.CardEntry{
-			{Key: "h/j/k/l", Value: "Move left/down/up/right"},
+			{Key: "h/j/k/l", Value: "MoveEntity left/down/up/right"},
 			{Key: "w/b", Value: "Word forward/backward"},
 			{Key: "0/$", Value: "Line start/end"},
 			{Key: "gg/G", Value: "Top/bottom of screen"},
@@ -276,8 +276,8 @@ func (s *MetaSystem) handleHelpRequest() {
 		Entries: []core.CardEntry{
 			{Key: ":q", Value: "Quit game"},
 			{Key: ":n", Value: "New game"},
-			{Key: ":energy N", Value: "Set energy"},
-			{Key: ":heat N", Value: "Set heat"},
+			{Key: ":energy N", Value: "SetComponent energy"},
+			{Key: ":heat N", Value: "SetComponent heat"},
 			{Key: ":boost", Value: "Enable boost"},
 			{Key: ":spawnLightning on/off", Value: "Toggle spawning"},
 			{Key: ":d", Value: "Debug overlay"},

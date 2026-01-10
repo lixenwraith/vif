@@ -88,7 +88,7 @@ func main() {
 
 	// // 7. Audio Engine
 	// // Initialize audio from services
-	// if audioSvc, ok := hub.Get("audio"); ok {
+	// if audioSvc, ok := hub.GetComponent("audio"); ok {
 	// 	if as, ok := audioSvc.(*audio.AudioService); ok {
 	// 		if player := as.Player(); player != nil {
 	// 			ctx.SetAudioEngine(player.(engine.AudioPlayer))
@@ -97,7 +97,7 @@ func main() {
 	// } // Silent fail if audio could not be initialized
 
 	// 9. Systems Instantiation
-	// Set active systems to ECS world
+	// SetComponent active systems to ECS world
 	for _, name := range manifest.ActiveSystems() {
 		factory, ok := registry.GetSystem(name)
 		if !ok {
@@ -188,7 +188,7 @@ func main() {
 	var frameCount int64
 	lastFPSUpdate := ctx.World.Resource.Time.RealTime
 
-	// Set frame rate
+	// SetComponent frame rate
 	frameTicker := time.NewTicker(constant.FrameUpdateInterval)
 	defer frameTicker.Stop()
 

@@ -27,9 +27,9 @@ func NewSplashRenderer(gameCtx *engine.GameContext) *SplashRenderer {
 func (r *SplashRenderer) Render(gameCtx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(constant.MaskTransient)
 
-	entities := r.gameCtx.World.Component.Splash.All()
+	entities := r.gameCtx.World.Component.Splash.AllEntity()
 	for _, entity := range entities {
-		splash, ok := r.gameCtx.World.Component.Splash.Get(entity)
+		splash, ok := r.gameCtx.World.Component.Splash.GetComponent(entity)
 		if !ok || splash.Length == 0 {
 			continue
 		}
