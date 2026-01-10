@@ -139,40 +139,10 @@ func (r *PingRenderer) isExcluded(x, y int) bool {
 
 // drawCrosshair draws the crosshair lines respecting shield exclusion
 func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.RenderBuffer, color render.RGB) {
-	// Determine band dimensions based on mode and shield state
-	bandHalfWidth := 0
-	bandHalfHeight := 0
-
-	if r.gameCtx.IsVisualMode() {
-		// Check if shield is active to determine band size
-		if shield, ok := r.gameCtx.World.Component.Shield.Get(r.gameCtx.CursorEntity); ok && shield.Active {
-			bandHalfWidth = vmath.ToInt(shield.RadiusX)
-			bandHalfHeight = vmath.ToInt(shield.RadiusY)
-		}
-		// If shield inactive, band dimensions stay 0 (single line behavior)
-	}
-
-	// Calculate band bounds, clamped to screen
-	minY := ctx.CursorY - bandHalfHeight
-	maxY := ctx.CursorY + bandHalfHeight
-	minX := ctx.CursorX - bandHalfWidth
-	maxX := ctx.CursorX + bandHalfWidth
-
-	if minY < 0 {
-		minY = 0
-	}
-	if maxY >= ctx.GameHeight {
-		maxY = ctx.GameHeight - 1
-	}
-	if minX < 0 {
-		minX = 0
-	}
-	if maxX >= ctx.GameWidth {
-		maxX = ctx.GameWidth - 1
-	}
+	pingBounds := r.gameCtx.GetPingBounds()
 
 	// Draw horizontal band (rows from minY to maxY, full width)
-	for y := minY; y <= maxY; y++ {
+	for y := pingBounds.MinY; y <= pingBounds.MaxY; y++ {
 		screenY := ctx.GameY + y
 		if screenY < ctx.GameY || screenY >= ctx.GameY+ctx.GameHeight {
 			continue
@@ -185,14 +155,14 @@ func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.Rende
 	}
 
 	// Draw vertical band (columns from minX to maxX, full height)
-	for x := minX; x <= maxX; x++ {
+	for x := pingBounds.MinX; x <= pingBounds.MaxX; x++ {
 		screenX := ctx.GameX + x
 		if screenX < ctx.GameX || screenX >= ctx.GameX+ctx.GameWidth {
 			continue
 		}
 		for y := 0; y < ctx.GameHeight; y++ {
 			// Skip cells already drawn by horizontal band
-			if y >= minY && y <= maxY {
+			if y >= pingBounds.MinY && y <= pingBounds.MaxY {
 				continue
 			}
 			if !r.isExcluded(x, y) {

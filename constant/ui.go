@@ -53,5 +53,7 @@ const (
 
 // Ping
 const (
+	PingBoundFactor = 2
+
 	PingGridDuration = 500 * time.Millisecond
 )

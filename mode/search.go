@@ -61,14 +61,15 @@ func buildCharacterGrid(ctx *engine.GameContext) map[core.Point]rune {
 	grid := make(map[core.Point]rune)
 	glyphStore := ctx.World.Component.Glyph
 
-	entities := ctx.World.Query().
-		With(ctx.World.Position).
-		With(glyphStore).
-		Execute()
+	entities := ctx.World.Component.Glyph.All()
 
 	for _, entity := range entities {
-		pos, _ := ctx.World.Position.Get(entity)
-		glyph, _ := glyphStore.Get(entity)
+		pos, pOk := ctx.World.Position.Get(entity)
+		glyph, gOk := glyphStore.Get(entity)
+		if !pOk || !gOk {
+			panic(nil)
+			continue
+		}
 		grid[core.Point{X: pos.X, Y: pos.Y}] = glyph.Rune
 	}
 

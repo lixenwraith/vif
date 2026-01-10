@@ -278,26 +278,25 @@ func (ctx *GameContext) IsVisualMode() bool {
 	return ctx.GetMode() == core.ModeVisual
 }
 
-// VisualBandBounds holds the boundaries for visual mode operations
-type VisualBandBounds struct {
+// PingBounds holds the boundaries of ping crosshair and normal/visual mode operations
+type PingBounds struct {
 	MinY, MaxY int
 	MinX, MaxX int
 	Active     bool // True if band is wider than single row
 }
 
-// GetVisualBandBounds returns the band boundaries for visual mode
-// If not in visual mode or shield inactive, returns single-row bounds
-func (ctx *GameContext) GetVisualBandBounds() VisualBandBounds {
+// GetPingBounds returns the boundaries for pings and operations, in normal mode or shield inactive, returns single-row/column bounds
+func (ctx *GameContext) GetPingBounds() PingBounds {
 	pos, ok := ctx.World.Position.Get(ctx.CursorEntity)
 	if !ok {
-		return VisualBandBounds{}
+		return PingBounds{}
 	}
 
-	bounds := VisualBandBounds{
+	bounds := PingBounds{
 		MinY:   pos.Y,
 		MaxY:   pos.Y,
-		MinX:   0,
-		MaxX:   ctx.GameWidth - 1,
+		MinX:   pos.X,
+		MaxX:   pos.X,
 		Active: false,
 	}
 
@@ -311,8 +310,8 @@ func (ctx *GameContext) GetVisualBandBounds() VisualBandBounds {
 		return bounds
 	}
 
-	halfWidth := vmath.ToInt(shield.RadiusX)
-	halfHeight := vmath.ToInt(shield.RadiusY)
+	halfWidth := vmath.ToInt(shield.RadiusX) / constant.PingBoundFactor
+	halfHeight := vmath.ToInt(shield.RadiusY) / constant.PingBoundFactor
 
 	bounds.MinY = pos.Y - halfHeight
 	bounds.MaxY = pos.Y + halfHeight

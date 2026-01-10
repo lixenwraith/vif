@@ -44,6 +44,9 @@ parent = "QuasarCycle"
 on_enter = [
     { action = "EmitEvent", event = "EventDustAll"}
 ]
+transitions = [
+    { trigger = "EventQuasarDestroyed", target = "QuasarExit" }
+]
 
 [states.QuasarExit]
 parent = "QuasarCycle"

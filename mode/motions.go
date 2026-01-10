@@ -62,7 +62,7 @@ func MotionRight(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 // MotionWordForward implements 'w' motion
 func MotionWordForward(ctx *engine.GameContext, x, y, count int) MotionResult {
-	bounds := ctx.GetVisualBandBounds()
+	bounds := ctx.GetPingBounds()
 	endX, endY := x, y
 
 	for i := 0; i < count; i++ {
@@ -90,7 +90,7 @@ func MotionWordForward(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 // MotionWORDForward implements 'W' motion
 func MotionWORDForward(ctx *engine.GameContext, x, y, count int) MotionResult {
-	bounds := ctx.GetVisualBandBounds()
+	bounds := ctx.GetPingBounds()
 	endX, endY := x, y
 
 	for i := 0; i < count; i++ {
@@ -118,7 +118,7 @@ func MotionWORDForward(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 // MotionWordEnd implements 'e' motion
 func MotionWordEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
-	bounds := ctx.GetVisualBandBounds()
+	bounds := ctx.GetPingBounds()
 	endX, endY := x, y
 
 	for i := 0; i < count; i++ {
@@ -146,7 +146,7 @@ func MotionWordEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 // MotionWORDEnd implements 'E' motion
 func MotionWORDEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
-	bounds := ctx.GetVisualBandBounds()
+	bounds := ctx.GetPingBounds()
 	endX, endY := x, y
 
 	for i := 0; i < count; i++ {
@@ -174,7 +174,7 @@ func MotionWORDEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 // MotionWordBack implements 'b' motion
 func MotionWordBack(ctx *engine.GameContext, x, y, count int) MotionResult {
-	bounds := ctx.GetVisualBandBounds()
+	bounds := ctx.GetPingBounds()
 	endX, endY := x, y
 
 	for i := 0; i < count; i++ {
@@ -202,7 +202,7 @@ func MotionWordBack(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 // MotionWORDBack implements 'B' motion
 func MotionWORDBack(ctx *engine.GameContext, x, y, count int) MotionResult {
-	bounds := ctx.GetVisualBandBounds()
+	bounds := ctx.GetPingBounds()
 	endX, endY := x, y
 
 	for i := 0; i < count; i++ {
@@ -240,7 +240,7 @@ func MotionLineStart(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 // MotionFirstNonWS implements '^' motion
 func MotionFirstNonWS(ctx *engine.GameContext, x, y, count int) MotionResult {
-	bounds := ctx.GetVisualBandBounds()
+	bounds := ctx.GetPingBounds()
 	var endX, endY int
 
 	if bounds.Active {
@@ -260,7 +260,7 @@ func MotionFirstNonWS(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 // MotionLineEnd implements '$' motion
 func MotionLineEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
-	bounds := ctx.GetVisualBandBounds()
+	bounds := ctx.GetPingBounds()
 	var lastEntityX int
 
 	if bounds.Active {
@@ -407,7 +407,7 @@ func MotionOrigin(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 // MotionFindForward implements 'f' motion (CharMotionFunc)
 func MotionFindForward(ctx *engine.GameContext, x, y, count int, char rune) MotionResult {
-	bounds := ctx.GetVisualBandBounds()
+	bounds := ctx.GetPingBounds()
 
 	var endX, endY int
 	var found bool
@@ -438,7 +438,7 @@ func MotionFindForward(ctx *engine.GameContext, x, y, count int, char rune) Moti
 
 // MotionFindBack implements 'F' motion (CharMotionFunc)
 func MotionFindBack(ctx *engine.GameContext, x, y, count int, char rune) MotionResult {
-	bounds := ctx.GetVisualBandBounds()
+	bounds := ctx.GetPingBounds()
 
 	var endX, endY int
 	var found bool
@@ -469,7 +469,7 @@ func MotionFindBack(ctx *engine.GameContext, x, y, count int, char rune) MotionR
 
 // MotionTillForward implements 't' motion (CharMotionFunc)
 func MotionTillForward(ctx *engine.GameContext, x, y, count int, char rune) MotionResult {
-	bounds := ctx.GetVisualBandBounds()
+	bounds := ctx.GetPingBounds()
 
 	var endX, endY int
 	var found bool
@@ -539,7 +539,7 @@ func MotionTillForward(ctx *engine.GameContext, x, y, count int, char rune) Moti
 
 // MotionTillBack implements 'T' motion (CharMotionFunc)
 func MotionTillBack(ctx *engine.GameContext, x, y, count int, char rune) MotionResult {
-	bounds := ctx.GetVisualBandBounds()
+	bounds := ctx.GetPingBounds()
 
 	var endX, endY int
 	var found bool
@@ -638,7 +638,7 @@ func MotionHalfPageDown(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 // MotionColumnUp implements [ and gk - jump to first non-space above in same column
 func MotionColumnUp(ctx *engine.GameContext, x, y, count int) MotionResult {
-	bounds := ctx.GetVisualBandBounds()
+	bounds := ctx.GetPingBounds()
 	endX, endY := x, y
 
 	for i := 0; i < count; i++ {
@@ -675,7 +675,7 @@ func MotionColumnUp(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 // MotionColumnDown implements ] and gj - jump to first non-space below in same column
 func MotionColumnDown(ctx *engine.GameContext, x, y, count int) MotionResult {
-	bounds := ctx.GetVisualBandBounds()
+	bounds := ctx.GetPingBounds()
 	endX, endY := x, y
 
 	for i := 0; i < count; i++ {

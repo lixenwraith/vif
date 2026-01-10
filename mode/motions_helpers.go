@@ -482,38 +482,38 @@ func findMatchingBracketBackward(ctx *engine.GameContext, startX, startY int, cl
 // === Band-Aware Helpers (Visual Mode) ===
 
 // findNextWordStartInBand finds next word start within band (column-first: left-to-right, top-to-bottom)
-func findNextWordStartInBand(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.VisualBandBounds) (int, int) {
+func findNextWordStartInBand(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.PingBounds) (int, int) {
 	return scanBandForward(ctx, cursorX, cursorY, bounds, isWordStartAt)
 }
 
 // findPrevWordStartInBand finds previous word start within band (column-first backward)
-func findPrevWordStartInBand(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.VisualBandBounds) (int, int) {
+func findPrevWordStartInBand(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.PingBounds) (int, int) {
 	return scanBandBackward(ctx, cursorX, cursorY, bounds, isWordStartAt)
 }
 
 // findWordEndInBand finds word end within band (column-first: left-to-right, top-to-bottom)
-func findWordEndInBand(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.VisualBandBounds) (int, int) {
+func findWordEndInBand(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.PingBounds) (int, int) {
 	return scanBandForward(ctx, cursorX, cursorY, bounds, isWordEndAt)
 }
 
 // findNextWORDStartInBand finds next WORD start within band (column-first)
-func findNextWORDStartInBand(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.VisualBandBounds) (int, int) {
+func findNextWORDStartInBand(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.PingBounds) (int, int) {
 	return scanBandForward(ctx, cursorX, cursorY, bounds, isWORDStartAt)
 }
 
 // findPrevWORDStartInBand finds previous WORD start within band (column-first backward)
-func findPrevWORDStartInBand(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.VisualBandBounds) (int, int) {
+func findPrevWORDStartInBand(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.PingBounds) (int, int) {
 	return scanBandBackward(ctx, cursorX, cursorY, bounds, isWORDStartAt)
 }
 
 // findWORDEndInBand finds WORD end within band (column-first)
-func findWORDEndInBand(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.VisualBandBounds) (int, int) {
+func findWORDEndInBand(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.PingBounds) (int, int) {
 	return scanBandForward(ctx, cursorX, cursorY, bounds, isWORDEndAt)
 }
 
 // findCharInBand finds target char within band, column-first order (left-to-right, top-to-bottom)
 // Returns (x, y, found). Skips starting position.
-func findCharInBand(ctx *engine.GameContext, startX, startY int, target rune, count int, forward bool, bounds engine.VisualBandBounds) (int, int, bool) {
+func findCharInBand(ctx *engine.GameContext, startX, startY int, target rune, count int, forward bool, bounds engine.PingBounds) (int, int, bool) {
 	glyphStore := ctx.World.Component.Glyph
 	occurrences := 0
 	lastMatchX, lastMatchY := -1, -1
@@ -572,7 +572,7 @@ func findCharInBand(ctx *engine.GameContext, startX, startY int, target rune, co
 
 // findLineEndInBand returns rightmost entity X across all band rows
 // Returns -1 if no entities found
-func findLineEndInBand(ctx *engine.GameContext, bounds engine.VisualBandBounds) int {
+func findLineEndInBand(ctx *engine.GameContext, bounds engine.PingBounds) int {
 	var buf [constant.MaxEntitiesPerCell]core.Entity
 	glyphStore := ctx.World.Component.Glyph
 	rightmost := -1
@@ -595,7 +595,7 @@ func findLineEndInBand(ctx *engine.GameContext, bounds engine.VisualBandBounds) 
 }
 
 // findFirstNonWhitespaceInBand returns leftmost non-whitespace position in band
-func findFirstNonWhitespaceInBand(ctx *engine.GameContext, bounds engine.VisualBandBounds) (int, int) {
+func findFirstNonWhitespaceInBand(ctx *engine.GameContext, bounds engine.PingBounds) (int, int) {
 	for y := bounds.MinY; y <= bounds.MaxY; y++ {
 		for x := 0; x < ctx.GameWidth; x++ {
 			if getCharacterTypeAt(ctx, x, y) != CharTypeSpace {
@@ -609,7 +609,7 @@ func findFirstNonWhitespaceInBand(ctx *engine.GameContext, bounds engine.VisualB
 // findColumnUpInBand finds first glyph above cursor within band's X range
 // Searches from cursor row-1 to screen top, returns (x, y) of found character
 // Y search is NOT constrained by band - band only defines X search width
-func findColumnUpInBand(ctx *engine.GameContext, cursorX, startY int, bounds engine.VisualBandBounds) (int, int) {
+func findColumnUpInBand(ctx *engine.GameContext, cursorX, startY int, bounds engine.PingBounds) (int, int) {
 	glyphStore := ctx.World.Component.Glyph
 
 	for y := startY - 1; y >= 0; y-- {
@@ -628,7 +628,7 @@ func findColumnUpInBand(ctx *engine.GameContext, cursorX, startY int, bounds eng
 // findColumnDownInBand finds first glyph below cursor within band's X range
 // Searches from cursor row+1 to screen bottom, returns (x, y) of found character
 // Y search is NOT constrained by band - band only defines X search width
-func findColumnDownInBand(ctx *engine.GameContext, cursorX, startY int, bounds engine.VisualBandBounds, gameHeight int) (int, int) {
+func findColumnDownInBand(ctx *engine.GameContext, cursorX, startY int, bounds engine.PingBounds, gameHeight int) (int, int) {
 	glyphStore := ctx.World.Component.Glyph
 
 	for y := startY + 1; y < gameHeight; y++ {
@@ -702,7 +702,7 @@ func isWORDEndAt(ctx *engine.GameContext, x, y int) bool {
 
 // scanBandForward scans column-first (left-to-right, top-to-bottom) for predicate match
 // Skips cursor position, returns first match or original position if none found
-func scanBandForward(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.VisualBandBounds, predicate func(*engine.GameContext, int, int) bool) (int, int) {
+func scanBandForward(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.PingBounds, predicate func(*engine.GameContext, int, int) bool) (int, int) {
 	for x := cursorX; x < ctx.GameWidth; x++ {
 		for y := bounds.MinY; y <= bounds.MaxY; y++ {
 			// Skip cursor position and anything before it in scan order
@@ -719,7 +719,7 @@ func scanBandForward(ctx *engine.GameContext, cursorX, cursorY int, bounds engin
 
 // scanBandBackward scans column-first backward (right-to-left, bottom-to-top) for predicate match
 // Skips cursor position, returns first match or original position if none found
-func scanBandBackward(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.VisualBandBounds, predicate func(*engine.GameContext, int, int) bool) (int, int) {
+func scanBandBackward(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.PingBounds, predicate func(*engine.GameContext, int, int) bool) (int, int) {
 	for x := cursorX; x >= 0; x-- {
 		for y := bounds.MaxY; y >= bounds.MinY; y-- {
 			// Skip cursor position and anything after it in scan order

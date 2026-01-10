@@ -619,10 +619,7 @@ func (s *CleanerSystem) scanTargetRows() []int {
 
 	targetRows := make(map[int]bool)
 
-	entities := s.world.Query().
-		With(s.world.Component.Glyph).
-		With(s.world.Position).
-		Execute()
+	entities := s.world.Component.Glyph.All()
 
 	for _, entity := range entities {
 		glyph, ok := s.world.Component.Glyph.Get(entity)
