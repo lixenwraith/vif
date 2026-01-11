@@ -5,8 +5,10 @@ import (
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
+	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // World contains all entities and their components using typed stores
@@ -179,4 +181,52 @@ func (w *World) CreatedCount() int64 {
 // DestroyedCount returns total entities destroyed
 func (w *World) DestroyedCount() int64 {
 	return w.destroyedCount.Load()
+}
+
+// ===== Cursor Entity =====
+
+// CreateCursorEntity handles standard cursor entity creation and component attachment
+func (w *World) CreateCursorEntity() {
+	// 1. Create cursor entity at the center of the screen
+	cursorEntity := w.CreateEntity()
+	w.Positions.SetPosition(cursorEntity, component.PositionComponent{
+		X: w.Resources.Config.GameWidth / 2,
+		Y: w.Resources.Config.GameHeight / 2,
+	})
+
+	// 2. Setup cursor resource
+	w.Resources.Cursor = &CursorResource{Entity: cursorEntity}
+
+	// 3. Add cursor component
+	w.Components.Cursor.SetComponent(cursorEntity, component.CursorComponent{})
+
+	// 4. Add protection component, make cursor indestructible
+	w.Components.Protection.SetComponent(cursorEntity, component.ProtectionComponent{
+		Mask:      component.ProtectAll,
+		ExpiresAt: 0, // No expiry
+	})
+
+	// 5. Add position component to cursor
+	w.Components.Ping.SetComponent(cursorEntity, component.PingComponent{
+		ShowCrosshair: true,
+		GridActive:    false,
+		GridRemaining: 0,
+	})
+
+	// 6. Add heat component to cursor
+	w.Components.Heat.SetComponent(cursorEntity, component.HeatComponent{})
+
+	// 7. Add energy component to cursor
+	w.Components.Energy.SetComponent(cursorEntity, component.EnergyComponent{})
+
+	// 8. Add shield component to cursor
+	w.Components.Shield.SetComponent(cursorEntity, component.ShieldComponent{
+		RadiusX:       vmath.FromFloat(constant.ShieldRadiusX),
+		RadiusY:       vmath.FromFloat(constant.ShieldRadiusY),
+		MaxOpacity:    constant.ShieldMaxOpacity,
+		LastDrainTime: w.Resources.Time.GameTime,
+	})
+
+	// 9. Add boost component to cursor
+	w.Components.Boost.SetComponent(cursorEntity, component.BoostComponent{})
 }

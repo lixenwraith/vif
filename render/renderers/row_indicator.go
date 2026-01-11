@@ -29,7 +29,7 @@ func (r *RowIndicatorRenderer) Render(ctx render.RenderContext, buf *render.Rend
 			absRelative = -absRelative
 		}
 
-		screenY := ctx.GameY + y
+		screenY := ctx.GameYOffset + y
 
 		// Column 0: left padding (always empty, never highlighted)
 		buf.SetWithBg(0, screenY, ' ', render.RgbBackground, render.RgbBackground)

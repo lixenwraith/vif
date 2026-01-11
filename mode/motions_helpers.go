@@ -21,7 +21,7 @@ func getCharAt(ctx *engine.GameContext, x, y int) rune {
 	glyphStore := ctx.World.Components.Glyph
 
 	for _, entity := range entities {
-		if entity == ctx.CursorEntity || entity == 0 {
+		if entity == ctx.World.Resources.Cursor.Entity || entity == 0 {
 			continue
 		}
 		glyph, ok := glyphStore.GetComponent(entity)
@@ -57,13 +57,13 @@ func validatePosition(ctx *engine.GameContext, x, y int) (validX, validY int) {
 	validX, validY = x, y
 	if validX < 0 {
 		validX = 0
-	} else if validX >= ctx.GameWidth {
-		validX = ctx.GameWidth - 1
+	} else if validX >= ctx.World.Resources.Config.GameWidth {
+		validX = ctx.World.Resources.Config.GameWidth - 1
 	}
 	if validY < 0 {
 		validY = 0
-	} else if validY >= ctx.GameHeight {
-		validY = ctx.GameHeight - 1
+	} else if validY >= ctx.World.Resources.Config.GameHeight {
+		validY = ctx.World.Resources.Config.GameHeight - 1
 	}
 	return validX, validY
 }
@@ -76,7 +76,7 @@ func findCharInDirection(ctx *engine.GameContext, startX, startY int, target run
 	glyphStore := ctx.World.Components.Glyph
 
 	if forward {
-		for x := startX + 1; x < ctx.GameWidth; x++ {
+		for x := startX + 1; x < ctx.World.Resources.Config.GameWidth; x++ {
 			entities := ctx.World.Positions.GetAllEntityAt(x, startY)
 			for _, entity := range entities {
 				if entity == 0 {
@@ -124,23 +124,23 @@ func findNextWordStartVim(ctx *engine.GameContext, cursorX, cursorY int) int {
 	currentType := getCharacterTypeAt(ctx, x, cursorY)
 
 	if currentType != CharTypeSpace {
-		for x < ctx.GameWidth && getCharacterTypeAt(ctx, x, cursorY) == currentType {
+		for x < ctx.World.Resources.Config.GameWidth && getCharacterTypeAt(ctx, x, cursorY) == currentType {
 			x++
 		}
 	} else {
 		x++
 	}
 
-	for x < ctx.GameWidth && getCharacterTypeAt(ctx, x, cursorY) == CharTypeSpace {
+	for x < ctx.World.Resources.Config.GameWidth && getCharacterTypeAt(ctx, x, cursorY) == CharTypeSpace {
 		x++
 	}
 
-	if x >= ctx.GameWidth {
+	if x >= ctx.World.Resources.Config.GameWidth {
 		return cursorX
 	}
 	if x == cursorX {
 		x++
-		if x >= ctx.GameWidth {
+		if x >= ctx.World.Resources.Config.GameWidth {
 			return cursorX
 		}
 	}
@@ -151,19 +151,19 @@ func findNextWordStartVim(ctx *engine.GameContext, cursorX, cursorY int) int {
 
 func findWordEndVim(ctx *engine.GameContext, cursorX, cursorY int) int {
 	x := cursorX + 1
-	if x >= ctx.GameWidth {
+	if x >= ctx.World.Resources.Config.GameWidth {
 		return cursorX
 	}
 
-	for x < ctx.GameWidth && getCharacterTypeAt(ctx, x, cursorY) == CharTypeSpace {
+	for x < ctx.World.Resources.Config.GameWidth && getCharacterTypeAt(ctx, x, cursorY) == CharTypeSpace {
 		x++
 	}
-	if x >= ctx.GameWidth {
+	if x >= ctx.World.Resources.Config.GameWidth {
 		return cursorX
 	}
 
 	currentType := getCharacterTypeAt(ctx, x, cursorY)
-	for x < ctx.GameWidth {
+	for x < ctx.World.Resources.Config.GameWidth {
 		nextType := getCharacterTypeAt(ctx, x+1, cursorY)
 		if nextType == CharTypeSpace || nextType != currentType {
 			break
@@ -206,23 +206,23 @@ func findNextWORDStart(ctx *engine.GameContext, cursorX, cursorY int) int {
 	currentType := getCharacterTypeAt(ctx, x, cursorY)
 
 	if currentType != CharTypeSpace {
-		for x < ctx.GameWidth && getCharacterTypeAt(ctx, x, cursorY) != CharTypeSpace {
+		for x < ctx.World.Resources.Config.GameWidth && getCharacterTypeAt(ctx, x, cursorY) != CharTypeSpace {
 			x++
 		}
 	} else {
 		x++
 	}
 
-	for x < ctx.GameWidth && getCharacterTypeAt(ctx, x, cursorY) == CharTypeSpace {
+	for x < ctx.World.Resources.Config.GameWidth && getCharacterTypeAt(ctx, x, cursorY) == CharTypeSpace {
 		x++
 	}
 
-	if x >= ctx.GameWidth {
+	if x >= ctx.World.Resources.Config.GameWidth {
 		return cursorX
 	}
 	if x == cursorX {
 		x++
-		if x >= ctx.GameWidth {
+		if x >= ctx.World.Resources.Config.GameWidth {
 			return cursorX
 		}
 	}
@@ -233,18 +233,18 @@ func findNextWORDStart(ctx *engine.GameContext, cursorX, cursorY int) int {
 
 func findWORDEnd(ctx *engine.GameContext, cursorX, cursorY int) int {
 	x := cursorX + 1
-	if x >= ctx.GameWidth {
+	if x >= ctx.World.Resources.Config.GameWidth {
 		return cursorX
 	}
 
-	for x < ctx.GameWidth && getCharacterTypeAt(ctx, x, cursorY) == CharTypeSpace {
+	for x < ctx.World.Resources.Config.GameWidth && getCharacterTypeAt(ctx, x, cursorY) == CharTypeSpace {
 		x++
 	}
-	if x >= ctx.GameWidth {
+	if x >= ctx.World.Resources.Config.GameWidth {
 		return cursorX
 	}
 
-	for x < ctx.GameWidth {
+	for x < ctx.World.Resources.Config.GameWidth {
 		nextType := getCharacterTypeAt(ctx, x+1, cursorY)
 		if nextType == CharTypeSpace {
 			break
@@ -293,7 +293,7 @@ func findLineEnd(ctx *engine.GameContext, cursorY int) int {
 	glyphStore := ctx.World.Components.Glyph
 
 	// Scan from right to left
-	for x := ctx.GameWidth - 1; x >= 0; x-- {
+	for x := ctx.World.Resources.Config.GameWidth - 1; x >= 0; x-- {
 		// Zero-alloc query
 		count := ctx.World.Positions.GetAllEntityAtInto(x, cursorY, buf[:])
 
@@ -311,7 +311,7 @@ func findLineEnd(ctx *engine.GameContext, cursorY int) int {
 }
 
 func findFirstNonWhitespace(ctx *engine.GameContext, cursorY int) int {
-	for x := 0; x < ctx.GameWidth; x++ {
+	for x := 0; x < ctx.World.Resources.Config.GameWidth; x++ {
 		if getCharacterTypeAt(ctx, x, cursorY) != CharTypeSpace {
 			validX, _ := validatePosition(ctx, x, cursorY)
 			return validX
@@ -332,7 +332,7 @@ func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
 	for y := cursorY - 1; y >= 0; y-- {
 		rowEmpty := true
 		// Scan row; stop early if any interactable entity is found
-		for x := 0; x < ctx.GameWidth && rowEmpty; x++ {
+		for x := 0; x < ctx.World.Resources.Config.GameWidth && rowEmpty; x++ {
 			count := ctx.World.Positions.GetAllEntityAtInto(x, y, buf[:])
 			for i := 0; i < count; i++ {
 				if buf[i] != 0 && glyphStore.HasEntity(buf[i]) {
@@ -355,10 +355,10 @@ func findNextEmptyLine(ctx *engine.GameContext, cursorY int) int {
 
 	glyphStore := ctx.World.Components.Glyph
 
-	for y := cursorY + 1; y < ctx.GameHeight; y++ {
+	for y := cursorY + 1; y < ctx.World.Resources.Config.GameHeight; y++ {
 		rowEmpty := true
 		// Scan row; stop early if any interactable entity is found
-		for x := 0; x < ctx.GameWidth && rowEmpty; x++ {
+		for x := 0; x < ctx.World.Resources.Config.GameWidth && rowEmpty; x++ {
 			count := ctx.World.Positions.GetAllEntityAtInto(x, y, buf[:])
 			for i := 0; i < count; i++ {
 				if buf[i] != 0 && glyphStore.HasEntity(buf[i]) {
@@ -371,7 +371,7 @@ func findNextEmptyLine(ctx *engine.GameContext, cursorY int) int {
 			return y
 		}
 	}
-	return ctx.GameHeight - 1
+	return ctx.World.Resources.Config.GameHeight - 1
 }
 
 // --- Bracket Helpers ---
@@ -423,13 +423,13 @@ func findMatchingBracketForward(ctx *engine.GameContext, startX, startY int, ope
 	depth := 0
 	x, y := startX+1, startY
 
-	if x >= ctx.GameWidth {
+	if x >= ctx.World.Resources.Config.GameWidth {
 		x = 0
 		y++
 	}
 
-	for y < ctx.GameHeight {
-		for x < ctx.GameWidth {
+	for y < ctx.World.Resources.Config.GameHeight {
+		for x < ctx.World.Resources.Config.GameWidth {
 			ch := getCharAt(ctx, x, y)
 			if ch == openChar {
 				depth++
@@ -454,7 +454,7 @@ func findMatchingBracketBackward(ctx *engine.GameContext, startX, startY int, cl
 	if x < 0 {
 		y--
 		if y >= 0 {
-			x = ctx.GameWidth - 1
+			x = ctx.World.Resources.Config.GameWidth - 1
 		}
 	}
 
@@ -473,7 +473,7 @@ func findMatchingBracketBackward(ctx *engine.GameContext, startX, startY int, cl
 		}
 		y--
 		if y >= 0 {
-			x = ctx.GameWidth - 1
+			x = ctx.World.Resources.Config.GameWidth - 1
 		}
 	}
 	return -1, -1
@@ -533,7 +533,7 @@ func findCharInBand(ctx *engine.GameContext, startX, startY int, target rune, co
 	}
 
 	if forward {
-		for x := startX; x < ctx.GameWidth; x++ {
+		for x := startX; x < ctx.World.Resources.Config.GameWidth; x++ {
 			for y := bounds.MinY; y <= bounds.MaxY; y++ {
 				if x == startX && y <= startY {
 					continue
@@ -578,7 +578,7 @@ func findLineEndInBand(ctx *engine.GameContext, bounds engine.PingBounds) int {
 	rightmost := -1
 
 	for y := bounds.MinY; y <= bounds.MaxY; y++ {
-		for x := ctx.GameWidth - 1; x >= 0; x-- {
+		for x := ctx.World.Resources.Config.GameWidth - 1; x >= 0; x-- {
 			count := ctx.World.Positions.GetAllEntityAtInto(x, y, buf[:])
 			for i := 0; i < count; i++ {
 				if buf[i] != 0 && glyphStore.HasEntity(buf[i]) {
@@ -597,7 +597,7 @@ func findLineEndInBand(ctx *engine.GameContext, bounds engine.PingBounds) int {
 // findFirstNonWhitespaceInBand returns leftmost non-whitespace position in band
 func findFirstNonWhitespaceInBand(ctx *engine.GameContext, bounds engine.PingBounds) (int, int) {
 	for y := bounds.MinY; y <= bounds.MaxY; y++ {
-		for x := 0; x < ctx.GameWidth; x++ {
+		for x := 0; x < ctx.World.Resources.Config.GameWidth; x++ {
 			if getCharacterTypeAt(ctx, x, y) != CharTypeSpace {
 				return x, y
 			}
@@ -667,7 +667,7 @@ func isWordEndAt(ctx *engine.GameContext, x, y int) bool {
 	if current == CharTypeSpace {
 		return false
 	}
-	if x >= ctx.GameWidth-1 {
+	if x >= ctx.World.Resources.Config.GameWidth-1 {
 		return true
 	}
 	right := getCharacterTypeAt(ctx, x+1, y)
@@ -694,7 +694,7 @@ func isWORDEndAt(ctx *engine.GameContext, x, y int) bool {
 	if current == CharTypeSpace {
 		return false
 	}
-	if x >= ctx.GameWidth-1 {
+	if x >= ctx.World.Resources.Config.GameWidth-1 {
 		return true
 	}
 	return getCharacterTypeAt(ctx, x+1, y) == CharTypeSpace
@@ -703,7 +703,7 @@ func isWORDEndAt(ctx *engine.GameContext, x, y int) bool {
 // scanBandForward scans column-first (left-to-right, top-to-bottom) for predicate match
 // Skips cursor position, returns first match or original position if none found
 func scanBandForward(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.PingBounds, predicate func(*engine.GameContext, int, int) bool) (int, int) {
-	for x := cursorX; x < ctx.GameWidth; x++ {
+	for x := cursorX; x < ctx.World.Resources.Config.GameWidth; x++ {
 		for y := bounds.MinY; y <= bounds.MaxY; y++ {
 			// Skip cursor position and anything before it in scan order
 			if x == cursorX && y <= cursorY {

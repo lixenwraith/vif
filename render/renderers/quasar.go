@@ -150,8 +150,8 @@ func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.Re
 			normDist := vmath.Div(dist, quasar.ZapRadius)
 
 			if normDist >= innerThreshold && normDist <= outerThreshold {
-				screenX := ctx.GameX + x
-				screenY := ctx.GameY + y
+				screenX := ctx.GameXOffset + x
+				screenY := ctx.GameYOffset + y
 
 				buf.Set(screenX, screenY, 0, render.RGBBlack, borderColor,
 					render.BlendScreen, 0.4, terminal.AttrNone)
@@ -169,14 +169,14 @@ func (r *QuasarRenderer) renderShield(ctx render.RenderContext, buf *render.Rend
 	maxDY := constant.QuasarHeight - constant.QuasarAnchorOffsetY + r.shieldPadY - 1
 
 	for dy := minDY; dy <= maxDY; dy++ {
-		screenY := ctx.GameY + anchorY + dy
-		if screenY < ctx.GameY || screenY >= ctx.GameY+ctx.GameHeight {
+		screenY := ctx.GameYOffset + anchorY + dy
+		if screenY < ctx.GameYOffset || screenY >= ctx.GameYOffset+ctx.GameHeight {
 			continue
 		}
 
 		for dx := minDX; dx <= maxDX; dx++ {
-			screenX := ctx.GameX + anchorX + dx
-			if screenX < ctx.GameX || screenX >= ctx.Width {
+			screenX := ctx.GameXOffset + anchorX + dx
+			if screenX < ctx.GameXOffset || screenX >= ctx.ScreenWidth {
 				continue
 			}
 
@@ -243,11 +243,11 @@ func (r *QuasarRenderer) renderMembers(ctx render.RenderContext, buf *render.Ren
 		col := int(member.OffsetX) + constant.QuasarAnchorOffsetX
 		ch := component.QuasarChars[row][col]
 
-		screenX := ctx.GameX + pos.X
-		screenY := ctx.GameY + pos.Y
+		screenX := ctx.GameXOffset + pos.X
+		screenY := ctx.GameYOffset + pos.Y
 
-		if screenX < ctx.GameX || screenX >= ctx.Width ||
-			screenY < ctx.GameY || screenY >= ctx.GameY+ctx.GameHeight {
+		if screenX < ctx.GameXOffset || screenX >= ctx.ScreenWidth ||
+			screenY < ctx.GameYOffset || screenY >= ctx.GameYOffset+ctx.GameHeight {
 			continue
 		}
 

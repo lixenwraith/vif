@@ -85,8 +85,8 @@ func (s *MetaSystem) handleGameReset() {
 	// 3. GameState reset (counters, NextID → 1)
 	s.ctx.State.Reset()
 
-	// 4. Cursor recreation (required before spawnLightning events)
-	s.ctx.CreateCursorEntity()
+	// 4. Cursor recreation
+	s.ctx.World.CreateCursorEntity()
 
 	// 5. Reset mode and status
 	s.ctx.SetMode(core.ModeNormal)
@@ -109,18 +109,19 @@ func (s *MetaSystem) handleDebugRequest() {
 		Title: "DEBUG",
 	}
 
+	cursorEntity := s.ctx.World.Resources.Cursor.Entity
 	// Card: Player GameState
 	playerCard := core.OverlayCard{Title: "PLAYER"}
-	energyComp, _ := s.world.Components.Energy.GetComponent(s.ctx.CursorEntity)
+	energyComp, _ := s.world.Components.Energy.GetComponent(cursorEntity)
 	playerCard.Entries = append(playerCard.Entries, core.CardEntry{
 		Key: "Energy", Value: fmt.Sprintf("%d", energyComp.Current.Load()),
 	})
-	if hc, ok := s.world.Components.Heat.GetComponent(s.ctx.CursorEntity); ok {
+	if hc, ok := s.world.Components.Heat.GetComponent(cursorEntity); ok {
 		playerCard.Entries = append(playerCard.Entries, core.CardEntry{
 			Key: "Heat", Value: fmt.Sprintf("%d/%d", hc.Current.Load(), constant.MaxHeat),
 		})
 	}
-	if sc, ok := s.world.Components.Shield.GetComponent(s.ctx.CursorEntity); ok {
+	if sc, ok := s.world.Components.Shield.GetComponent(cursorEntity); ok {
 		playerCard.Entries = append(playerCard.Entries, core.CardEntry{
 			Key: "Shield", Value: fmt.Sprintf("%v", sc.Active),
 		})
@@ -132,7 +133,7 @@ func (s *MetaSystem) handleDebugRequest() {
 	engineCard.Entries = append(engineCard.Entries,
 		core.CardEntry{Key: "Frame", Value: fmt.Sprintf("%d", s.ctx.GetFrameNumber())},
 		core.CardEntry{Key: "Screen", Value: fmt.Sprintf("%dx%d", s.ctx.Width, s.ctx.Height)},
-		core.CardEntry{Key: "Game", Value: fmt.Sprintf("%dx%d", s.ctx.GameWidth, s.ctx.GameHeight)},
+		core.CardEntry{Key: "Game", Value: fmt.Sprintf("%dx%d", s.ctx.World.Resources.Config.GameWidth, s.ctx.World.Resources.Config.GameHeight)},
 		core.CardEntry{Key: "Paused", Value: fmt.Sprintf("%v", s.ctx.IsPaused.Load())},
 	)
 	content.Items = append(content.Items, engineCard)

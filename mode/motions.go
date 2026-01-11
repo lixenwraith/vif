@@ -21,7 +21,7 @@ func MotionLeft(ctx *engine.GameContext, x, y, count int) MotionResult {
 // MotionDown implements 'j' motion
 func MotionDown(ctx *engine.GameContext, x, y, count int) MotionResult {
 	endY := y
-	for i := 0; i < count && endY < ctx.GameHeight-1; i++ {
+	for i := 0; i < count && endY < ctx.World.Resources.Config.GameHeight-1; i++ {
 		endY++
 	}
 	return MotionResult{
@@ -49,7 +49,7 @@ func MotionUp(ctx *engine.GameContext, x, y, count int) MotionResult {
 // MotionRight implements 'l' and space motion
 func MotionRight(ctx *engine.GameContext, x, y, count int) MotionResult {
 	endX := x
-	for i := 0; i < count && endX < ctx.GameWidth-1; i++ {
+	for i := 0; i < count && endX < ctx.World.Resources.Config.GameWidth-1; i++ {
 		endX++
 	}
 	return MotionResult{
@@ -274,7 +274,7 @@ func MotionLineEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
 	// 1. No entities found (lastEntityX == -1)
 	// 2. Already at the last entity (x == lastEntityX)
 	if lastEntityX == -1 || x == lastEntityX {
-		endX = ctx.GameWidth - 1
+		endX = ctx.World.Resources.Config.GameWidth - 1
 	} else {
 		endX = lastEntityX
 	}
@@ -299,7 +299,7 @@ func MotionScreenTop(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 // MotionScreenMid implements 'M' motion
 func MotionScreenMid(ctx *engine.GameContext, x, y, count int) MotionResult {
-	midY := ctx.GameHeight / 2
+	midY := ctx.World.Resources.Config.GameHeight / 2
 	return MotionResult{
 		StartX: x, StartY: y,
 		EndX: x, EndY: midY,
@@ -310,7 +310,7 @@ func MotionScreenMid(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 // MotionScreenBot implements 'L' motion
 func MotionScreenBot(ctx *engine.GameContext, x, y, count int) MotionResult {
-	botY := ctx.GameHeight - 1
+	botY := ctx.World.Resources.Config.GameHeight - 1
 	return MotionResult{
 		StartX: x, StartY: y,
 		EndX: x, EndY: botY,
@@ -376,7 +376,7 @@ func MotionMatchBracket(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 // MotionFileEnd implements 'G' motion
 func MotionFileEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
-	endY := ctx.GameHeight - 1
+	endY := ctx.World.Resources.Config.GameHeight - 1
 	return MotionResult{
 		StartX: x, StartY: y,
 		EndX: x, EndY: endY,
@@ -504,7 +504,7 @@ func MotionTillForward(ctx *engine.GameContext, x, y, count int, char rune) Moti
 					Valid: false,
 				}
 			}
-			endX = ctx.GameWidth - 1
+			endX = ctx.World.Resources.Config.GameWidth - 1
 		}
 	} else {
 		// Single row: adjacent target means no valid motion
@@ -563,7 +563,7 @@ func MotionTillBack(ctx *engine.GameContext, x, y, count int, char rune) MotionR
 	// Till: stop one position after target (moving backward)
 	if bounds.Active {
 		endX++
-		if endX >= ctx.GameWidth {
+		if endX >= ctx.World.Resources.Config.GameWidth {
 			endY++
 			if endY > bounds.MaxY {
 				return MotionResult{
@@ -608,7 +608,7 @@ func MotionTillBack(ctx *engine.GameContext, x, y, count int, char rune) MotionR
 
 // MotionHalfPageUp implements PgUp motion
 func MotionHalfPageUp(ctx *engine.GameContext, x, y, count int) MotionResult {
-	halfHeight := ctx.GameHeight / 2
+	halfHeight := ctx.World.Resources.Config.GameHeight / 2
 	endY := y - (halfHeight * count)
 	if endY < 0 {
 		endY = 0
@@ -623,10 +623,10 @@ func MotionHalfPageUp(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 // MotionHalfPageDown implements PgDown motion
 func MotionHalfPageDown(ctx *engine.GameContext, x, y, count int) MotionResult {
-	halfHeight := ctx.GameHeight / 2
+	halfHeight := ctx.World.Resources.Config.GameHeight / 2
 	endY := y + (halfHeight * count)
-	if endY >= ctx.GameHeight {
-		endY = ctx.GameHeight - 1
+	if endY >= ctx.World.Resources.Config.GameHeight {
+		endY = ctx.World.Resources.Config.GameHeight - 1
 	}
 	return MotionResult{
 		StartX: x, StartY: y,
@@ -681,11 +681,11 @@ func MotionColumnDown(ctx *engine.GameContext, x, y, count int) MotionResult {
 	for i := 0; i < count; i++ {
 		var newX, newY int
 		if bounds.Active {
-			newX, newY = findColumnDownInBand(ctx, endX, endY, bounds, ctx.GameHeight)
+			newX, newY = findColumnDownInBand(ctx, endX, endY, bounds, ctx.World.Resources.Config.GameHeight)
 		} else {
 			newX = x
 			found := false
-			for checkY := endY + 1; checkY < ctx.GameHeight; checkY++ {
+			for checkY := endY + 1; checkY < ctx.World.Resources.Config.GameHeight; checkY++ {
 				if getCharacterTypeAt(ctx, x, checkY) != CharTypeSpace {
 					newY = checkY
 					found = true

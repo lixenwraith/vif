@@ -75,8 +75,8 @@ func (r *CleanerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 				continue
 			}
 
-			screenX := ctx.GameX + point.X
-			screenY := ctx.GameY + point.Y
+			screenX := ctx.GameXOffset + point.X
+			screenY := ctx.GameYOffset + point.Y
 
 			gradientIndex := i
 			if gradientIndex > maxGradientIdx {

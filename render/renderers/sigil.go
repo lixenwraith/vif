@@ -40,11 +40,11 @@ func (r *SigilRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 			continue
 		}
 
-		screenX := ctx.GameX + pos.X
-		screenY := ctx.GameY + pos.Y
+		screenX := ctx.GameXOffset + pos.X
+		screenY := ctx.GameYOffset + pos.Y
 
-		if screenX < ctx.GameX || screenX >= ctx.Width ||
-			screenY < ctx.GameY || screenY >= ctx.GameY+ctx.GameHeight {
+		if screenX < ctx.GameXOffset || screenX >= ctx.ScreenWidth ||
+			screenY < ctx.GameYOffset || screenY >= ctx.GameYOffset+ctx.GameHeight {
 			continue
 		}
 

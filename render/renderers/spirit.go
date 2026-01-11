@@ -73,12 +73,12 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			rotY := vmath.ScaleFromCircular(rotYCirc)
 
 			// 5. Map to screen space
-			screenX := ctx.GameX + vmath.ToInt(spirit.TargetX+rotX)
-			screenY := ctx.GameY + vmath.ToInt(spirit.TargetY+rotY)
+			screenX := ctx.GameXOffset + vmath.ToInt(spirit.TargetX+rotX)
+			screenY := ctx.GameYOffset + vmath.ToInt(spirit.TargetY+rotY)
 
 			// Bounds check
-			if screenX < ctx.GameX || screenX >= ctx.Width ||
-				screenY < ctx.GameY || screenY >= ctx.GameY+ctx.GameHeight {
+			if screenX < ctx.GameXOffset || screenX >= ctx.ScreenWidth ||
+				screenY < ctx.GameYOffset || screenY >= ctx.GameYOffset+ctx.GameHeight {
 				continue
 			}
 

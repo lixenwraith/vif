@@ -21,10 +21,10 @@ func NewColumnIndicatorRenderer(gameCtx *engine.GameContext) *ColumnIndicatorRen
 // Render implements SystemRenderer
 func (r *ColumnIndicatorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(constant.MaskUI)
-	indicatorY := ctx.GameY + ctx.GameHeight
+	indicatorY := ctx.GameYOffset + ctx.GameHeight
 
 	for x := 0; x < ctx.GameWidth; x++ {
-		screenX := ctx.GameX + x
+		screenX := ctx.GameXOffset + x
 		relativeCol := x - ctx.CursorX
 
 		var ch rune
@@ -58,7 +58,7 @@ func (r *ColumnIndicatorRenderer) Render(ctx render.RenderContext, buf *render.R
 	}
 
 	// Clear line number area for indicator row
-	for i := 0; i < ctx.GameX; i++ {
+	for i := 0; i < ctx.GameXOffset; i++ {
 		buf.SetWithBg(i, indicatorY, ' ', render.RgbBackground, render.RgbBackground)
 	}
 }

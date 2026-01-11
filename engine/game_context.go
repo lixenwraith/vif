@@ -17,10 +17,9 @@ type GameContext struct {
 	// SetPosition once during NewGameContext. Pointers/values never modified.
 	// Safe for concurrent read without synchronization.
 
-	World         *World         // ECS world; has internal locking for component access
-	State         *GameState     // Centralized game state; has internal atomics/mutex
+	World         *World         // ECS world; has internal lock
+	State         *GameState     // Centralized game state; has internal lock
 	PausableClock *PausableClock // Pausable time source; has internal sync
-	CursorEntity  core.Entity    // Singleton cursor entity ID; recreated only on :new
 
 	// ===== Channels =====
 	// Inherently thread-safe for send operations.
@@ -39,9 +38,8 @@ type GameContext struct {
 	// Accessed only from main goroutine (input, resize, render).
 	// No synchronization required.
 
-	Width, Height         int // Terminal dimensions
-	GameX, GameY          int // Game area offset from terminal origin
-	GameWidth, GameHeight int // Game area dimensions (excluding margins)
+	Width, Height            int // Terminal dimensions
+	GameXOffset, GameYOffset int // Game area offset from terminal origin
 
 	// ===== Mutex-Protected (ui.mu) =====
 	// All access requires holding ui.mu (RLock for read, Lock for write).
@@ -77,24 +75,20 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	ctx.SetMode(core.ModeNormal)
 
 	// Calculate game area
-	ctx.updateGameArea()
+	gameWidth, gameHeight := ctx.updateGameArea()
 
 	// -- Initialize Resources --
 
-	// 0. Status Registry (before other resources that may use it)
+	// 1. Status Registry (before other resources that may use it)
 	world.Resources.Status = status.NewRegistry()
 
-	// 1. Config Resource
+	// 2. Config Resource
 	world.Resources.Config = &ConfigResource{
-		ScreenWidth:  ctx.Width,
-		ScreenHeight: ctx.Height,
-		GameWidth:    ctx.GameWidth,
-		GameHeight:   ctx.GameHeight,
-		GameX:        ctx.GameX,
-		GameY:        ctx.GameY,
+		GameWidth:  gameWidth,
+		GameHeight: gameHeight,
 	}
 
-	// 2. Time Resource (Initial state)
+	// 3. Time Resource (Initial state)
 	world.Resources.Time = &TimeResource{
 		GameTime:    pausableClock.Now(),
 		RealTime:    pausableClock.RealTime(),
@@ -102,21 +96,18 @@ func NewGameContext(world *World, width, height int) *GameContext {
 		FrameNumber: ctx.FrameNumber.Load(),
 	}
 
-	// 3. Event Queue Resource
+	// 4. Event Queue Resource
 	world.Resources.Event = &EventQueueResource{Queue: event.NewEventQueue()}
 
 	// Wire World to this Context's frame source for events
 	world.SetFrameSource(&ctx.FrameNumber)
 
-	// 4. Game GameState
+	// 5. Game GameState
 	ctx.State = NewGameState()
 	world.Resources.Game = &GameStateResource{State: ctx.State}
 
-	// 5. Cursor Entity
-	ctx.CreateCursorEntity()
-
-	// 6. Cursor Resource
-	world.Resources.Cursor = &CursorResource{Entity: ctx.CursorEntity}
+	// 6. Cursor Entity
+	ctx.World.CreateCursorEntity()
 
 	// Initialize atomic string pointers to empty strings
 	empty := ""
@@ -138,52 +129,50 @@ func NewGameContext(world *World, width, height int) *GameContext {
 // ===== Screen =====
 
 // updateGameArea calculates the game area dimensions
-func (ctx *GameContext) updateGameArea() {
+func (ctx *GameContext) updateGameArea() (gameWidth, gameHeight int) {
 	// Calculate line number width based on height
-	gameHeight := ctx.Height - constant.BottomMargin - constant.TopMargin
+	gameHeight = ctx.Height - constant.BottomMargin - constant.TopMargin
 	if gameHeight < 1 {
 		gameHeight = 1
 	}
 
-	ctx.GameX = constant.LeftMargin
-	ctx.GameY = constant.TopMargin
-	ctx.GameWidth = ctx.Width - ctx.GameX
-	ctx.GameHeight = gameHeight
+	ctx.GameXOffset = constant.LeftMargin
+	ctx.GameYOffset = constant.TopMargin
+	gameWidth = ctx.Width - ctx.GameXOffset
 
-	if ctx.GameWidth < 1 {
-		ctx.GameWidth = 1
+	if gameWidth < 1 {
+		gameWidth = 1
 	}
+
+	return gameWidth, gameHeight
 }
 
 // HandleResize handles terminal resize events
 func (ctx *GameContext) HandleResize() {
 	// New Height and Width already set in context by main
-	ctx.updateGameArea()
+	gameWidth, gameHeight := ctx.updateGameArea()
 
 	ctx.World.RunSafe(func() {
 		// Update existing ConfigResource in-place
 		configRes := ctx.World.Resources.Config
-		configRes.ScreenWidth = ctx.Width
-		configRes.ScreenHeight = ctx.Height
-		configRes.GameWidth = ctx.GameWidth
-		configRes.GameHeight = ctx.GameHeight
-		configRes.GameX = ctx.GameX
-		configRes.GameY = ctx.GameY
+		configRes.GameWidth = gameWidth
+		configRes.GameHeight = gameHeight
 
 		// TODO: Optional disable (world.crop)
 		// Cleanup entities outside new bounds to prevent ghosting/resource usage
 		// Uses GameWidth/Height as valid coordinate space for entities, resizes Spatial Grid
-		ctx.cleanupOutOfBoundsEntities(ctx.GameWidth, ctx.GameHeight)
+		ctx.cleanupOutOfBoundsEntities(gameWidth, gameHeight)
 
+		cursorEntity := ctx.World.Resources.Cursor.Entity
 		// Clamp cursor position
-		if pos, ok := ctx.World.Positions.GetPosition(ctx.CursorEntity); ok {
-			newX := max(0, min(pos.X, ctx.GameWidth-1))
-			newY := max(0, min(pos.Y, ctx.GameHeight-1))
+		if pos, ok := ctx.World.Positions.GetPosition(cursorEntity); ok {
+			newX := max(0, min(pos.X, gameWidth-1))
+			newY := max(0, min(pos.Y, gameHeight-1))
 
 			if newX != pos.X || newY != pos.Y {
 				pos.X = newX
 				pos.Y = newY
-				ctx.World.Positions.SetPosition(ctx.CursorEntity, pos)
+				ctx.World.Positions.SetPosition(cursorEntity, pos)
 				// Signal cursor movement if clamped due to resize
 				ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: newX, Y: newY})
 			}
@@ -199,7 +188,7 @@ func (ctx *GameContext) cleanupOutOfBoundsEntities(width, height int) {
 	allEntities := ctx.World.Positions.AllEntities()
 	for _, e := range allEntities {
 		// Skip cursor entity (special case)
-		if e == ctx.CursorEntity {
+		if e == ctx.World.Resources.Cursor.Entity {
 			continue
 		}
 
@@ -285,7 +274,8 @@ type PingBounds struct {
 
 // GetPingBounds returns the boundaries for pings and operations, in normal mode or shield inactive, returns single-row/column bounds
 func (ctx *GameContext) GetPingBounds() PingBounds {
-	pos, ok := ctx.World.Positions.GetPosition(ctx.CursorEntity)
+	cursorEntity := ctx.World.Resources.Cursor.Entity
+	pos, ok := ctx.World.Positions.GetPosition(cursorEntity)
 	if !ok {
 		return PingBounds{}
 	}
@@ -303,7 +293,7 @@ func (ctx *GameContext) GetPingBounds() PingBounds {
 	}
 
 	// Check shield for band dimensions
-	shield, ok := ctx.World.Components.Shield.GetComponent(ctx.CursorEntity)
+	shield, ok := ctx.World.Components.Shield.GetComponent(cursorEntity)
 	if !ok || !shield.Active {
 		return bounds
 	}
@@ -317,18 +307,20 @@ func (ctx *GameContext) GetPingBounds() PingBounds {
 	bounds.MaxX = pos.X + halfWidth
 	bounds.Active = true
 
-	// Clamp to screen
+	// Clamp to game area
+	gameWidth := ctx.World.Resources.Config.GameWidth
+	gameHeight := ctx.World.Resources.Config.GameHeight
 	if bounds.MinY < 0 {
 		bounds.MinY = 0
 	}
-	if bounds.MaxY >= ctx.GameHeight {
-		bounds.MaxY = ctx.GameHeight - 1
+	if bounds.MaxY >= gameHeight {
+		bounds.MaxY = gameHeight - 1
 	}
 	if bounds.MinX < 0 {
 		bounds.MinX = 0
 	}
-	if bounds.MaxX >= ctx.GameWidth {
-		bounds.MaxX = ctx.GameWidth - 1
+	if bounds.MaxX >= gameWidth {
+		bounds.MaxX = gameWidth - 1
 	}
 
 	return bounds
@@ -423,46 +415,6 @@ func (ctx *GameContext) SetOverlayContent(content *core.OverlayContent) {
 		ctx.overlayTitle.Store(&empty)
 	}
 	ctx.overlayScroll.Store(0)
-}
-
-// ===== Cursor Entity =====
-
-// CreateCursorEntity handles standard cursor entity creation and component attachment
-func (ctx *GameContext) CreateCursorEntity() {
-	// Create cursor entity at the center of the screen
-	ctx.CursorEntity = ctx.World.CreateEntity()
-	ctx.World.Positions.SetPosition(ctx.CursorEntity, component.PositionComponent{
-		X: ctx.GameWidth / 2,
-		Y: ctx.GameHeight / 2,
-	})
-
-	ctx.World.Components.Cursor.SetComponent(ctx.CursorEntity, component.CursorComponent{})
-
-	// Make cursor indestructible
-	ctx.World.Components.Protection.SetComponent(ctx.CursorEntity, component.ProtectionComponent{
-		Mask:      component.ProtectAll,
-		ExpiresAt: 0, // No expiry
-	})
-
-	// SetPosition components attached to cursor entity
-	ctx.World.Components.Ping.SetComponent(ctx.CursorEntity, component.PingComponent{
-		ShowCrosshair: true,
-		GridActive:    false,
-		GridRemaining: 0,
-	})
-
-	ctx.World.Components.Heat.SetComponent(ctx.CursorEntity, component.HeatComponent{})
-
-	ctx.World.Components.Energy.SetComponent(ctx.CursorEntity, component.EnergyComponent{})
-
-	ctx.World.Components.Shield.SetComponent(ctx.CursorEntity, component.ShieldComponent{
-		RadiusX:       vmath.FromFloat(constant.ShieldRadiusX),
-		RadiusY:       vmath.FromFloat(constant.ShieldRadiusY),
-		MaxOpacity:    constant.ShieldMaxOpacity,
-		LastDrainTime: ctx.PausableClock.Now(),
-	})
-
-	ctx.World.Components.Boost.SetComponent(ctx.CursorEntity, component.BoostComponent{})
 }
 
 // ===== Audio =====

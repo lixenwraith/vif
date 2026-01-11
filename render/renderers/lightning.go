@@ -261,12 +261,12 @@ func (r *LightningRenderer) renderLightningTrueColor(ctx render.RenderContext, b
 		cy := int(int64(key & 0xFFFFFFFF))
 
 		// Map to screen coordinates
-		screenX := ctx.GameX + cx
-		screenY := ctx.GameY + cy
+		screenX := ctx.GameXOffset + cx
+		screenY := ctx.GameYOffset + cy
 
 		// Bounds check against game area
-		if screenX < ctx.GameX || screenX >= ctx.Width ||
-			screenY < ctx.GameY || screenY >= ctx.GameY+ctx.GameHeight {
+		if screenX < ctx.GameXOffset || screenX >= ctx.ScreenWidth ||
+			screenY < ctx.GameYOffset || screenY >= ctx.GameYOffset+ctx.GameHeight {
 			continue
 		}
 
@@ -365,12 +365,12 @@ func (r *LightningRenderer) renderLightning256(ctx render.RenderContext, buf *re
 		cy := int(int64(key & 0xFFFFFFFF))
 
 		// Map to screen coordinates
-		screenX := ctx.GameX + cx
-		screenY := ctx.GameY + cy
+		screenX := ctx.GameXOffset + cx
+		screenY := ctx.GameYOffset + cy
 
 		// Bounds check against game area
-		if screenX < ctx.GameX || screenX >= ctx.Width ||
-			screenY < ctx.GameY || screenY >= ctx.GameY+ctx.GameHeight {
+		if screenX < ctx.GameXOffset || screenX >= ctx.ScreenWidth ||
+			screenY < ctx.GameYOffset || screenY >= ctx.GameYOffset+ctx.GameHeight {
 			continue
 		}
 

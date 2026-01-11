@@ -61,15 +61,15 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 // Render implements SystemRenderer
 func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(constant.MaskUI)
-	statusY := ctx.GameY + ctx.GameHeight + 1
+	statusY := ctx.GameYOffset + ctx.GameHeight + 1
 
 	// Bounds check: skip if status row outside screen
-	if statusY >= ctx.Height {
+	if statusY >= ctx.ScreenHeight {
 		return
 	}
 
 	// Clear status bar
-	for x := 0; x < ctx.Width; x++ {
+	for x := 0; x < ctx.ScreenWidth; x++ {
 		buf.SetWithBg(x, statusY, ' ', render.RgbBackground, render.RgbBackground)
 	}
 
@@ -85,7 +85,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			audioBgColor = render.RgbAudioUnmuted
 		}
 		for _, ch := range constant.AudioStr {
-			if x >= ctx.Width {
+			if x >= ctx.ScreenWidth {
 				return // No space left
 			}
 			buf.SetWithBg(x, statusY, ch, render.RgbBlack, audioBgColor)
@@ -113,7 +113,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		modeBgColor = render.RgbModeNormalBg
 	}
 	for _, ch := range modeText {
-		if x >= ctx.Width {
+		if x >= ctx.ScreenWidth {
 			return
 		}
 		buf.SetWithBg(x, statusY, ch, render.RgbStatusText, modeBgColor)
@@ -126,7 +126,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	if lastCommand != "" && !r.gameCtx.IsSearchMode() && !r.gameCtx.IsCommandMode() {
 		leftEndX++
 		for _, ch := range lastCommand {
-			if leftEndX >= ctx.Width {
+			if leftEndX >= ctx.ScreenWidth {
 				return
 			}
 			buf.SetWithBg(leftEndX, statusY, ch, render.RgbLastCommandText, render.RgbBackground)
@@ -142,7 +142,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	if r.gameCtx.IsSearchMode() {
 		searchText = "/" + searchText
 		for _, ch := range searchText {
-			if leftEndX >= ctx.Width {
+			if leftEndX >= ctx.ScreenWidth {
 				return
 			}
 			buf.SetWithBg(leftEndX, statusY, ch, render.RgbSearchInputText, render.RgbBackground)
@@ -152,7 +152,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		commandText := r.gameCtx.GetCommandText()
 		commandText = ":" + commandText
 		for _, ch := range commandText {
-			if leftEndX >= ctx.Width {
+			if leftEndX >= ctx.ScreenWidth {
 				return
 			}
 			buf.SetWithBg(leftEndX, statusY, ch, render.RgbCommandInputText, render.RgbBackground)
@@ -162,7 +162,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		statusMessage := r.gameCtx.GetStatusMessage()
 		if statusMessage != "" {
 			for _, ch := range statusMessage {
-				if leftEndX >= ctx.Width {
+				if leftEndX >= ctx.ScreenWidth {
 					return
 				}
 				buf.SetWithBg(leftEndX, statusY, ch, render.RgbStatusMessageText, render.RgbBackground)
@@ -213,7 +213,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 
 	// Priority 2: Energy
-	energyComp, _ := r.gameCtx.World.Components.Energy.GetComponent(r.gameCtx.CursorEntity)
+	energyComp, _ := r.gameCtx.World.Components.Energy.GetComponent(r.gameCtx.World.Resources.Cursor.Entity)
 	energyVal := energyComp.Current.Load()
 	energyText := fmt.Sprintf(" Energy: %d ", energyVal)
 
@@ -251,7 +251,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	rightItems = append(rightItems, statusItem{text: energyText, fg: energyFg, bg: energyBg})
 
 	// Priority 3: Boost (conditional)
-	boost, boostOk := r.gameCtx.World.Components.Boost.GetComponent(r.gameCtx.CursorEntity)
+	boost, boostOk := r.gameCtx.World.Components.Boost.GetComponent(r.gameCtx.World.Resources.Cursor.Entity)
 
 	if boostOk && boost.Active {
 		remaining := boost.Remaining.Seconds()
@@ -266,7 +266,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 
 	// Priority 4: Grid (conditional)
-	if ping, ok := r.gameCtx.World.Components.Ping.GetComponent(r.gameCtx.CursorEntity); ok && ping.GridActive {
+	if ping, ok := r.gameCtx.World.Components.Ping.GetComponent(r.gameCtx.World.Resources.Cursor.Entity); ok && ping.GridActive {
 		gridRemaining := ping.GridRemaining.Seconds()
 		if gridRemaining < 0 {
 			gridRemaining = 0
@@ -309,7 +309,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	})
 
 	// Calculate which items fit, dropping from end (lowest priority)
-	availableWidth := ctx.Width - leftEndX
+	availableWidth := ctx.ScreenWidth - leftEndX
 	totalWidth := 0
 	fitCount := 0
 	for _, item := range rightItems {
@@ -326,7 +326,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 	// Render items that fit, right-aligned
 	if fitCount > 0 {
-		startX := ctx.Width - totalWidth
+		startX := ctx.ScreenWidth - totalWidth
 		for i := 0; i < fitCount; i++ {
 			item := rightItems[i]
 			for _, ch := range item.text {

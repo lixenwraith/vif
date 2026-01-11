@@ -30,8 +30,8 @@ func NewExplosionRenderer(ctx *engine.GameContext) *ExplosionRenderer {
 	}
 
 	// Pre-allocate for initial game dimensions
-	r.bufWidth = ctx.GameWidth
-	r.bufHeight = ctx.GameHeight
+	r.bufWidth = r.gameCtx.World.Resources.Config.GameWidth
+	r.bufHeight = r.gameCtx.World.Resources.Config.GameHeight
 	r.bufCapacity = r.bufWidth * r.bufHeight
 	if r.bufCapacity < 1 {
 		r.bufCapacity = 1
@@ -168,7 +168,7 @@ func (r *ExplosionRenderer) renderBuffer(ctx render.RenderContext, buf *render.R
 	// Only iterate the dirty rectangle
 	for y := r.minY; y <= r.maxY; y++ {
 		rowOffset := y * r.bufWidth
-		screenY := ctx.GameY + y
+		screenY := ctx.GameYOffset + y
 
 		for x := r.minX; x <= r.maxX; x++ {
 			intensity := r.accBuffer[rowOffset+x]
@@ -209,7 +209,7 @@ func (r *ExplosionRenderer) renderBuffer(ctx render.RenderContext, buf *render.R
 				alphaFixed = constant.ExplosionAlphaMin
 			}
 
-			screenX := ctx.GameX + x
+			screenX := ctx.GameXOffset + x
 
 			// Convert alpha to float only at the boundary API call
 			alphaFloat := vmath.ToFloat(alphaFixed)

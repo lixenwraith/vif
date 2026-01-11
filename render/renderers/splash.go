@@ -94,8 +94,8 @@ func (r *SplashRenderer) renderChar(gameCtx render.RenderContext, buf *render.Re
 	}
 
 	for row := 0; row < constant.SplashCharHeight; row++ {
-		screenY := gameCtx.GameY + gameY + row
-		if screenY < gameCtx.GameY || screenY >= gameCtx.GameY+gameCtx.GameHeight {
+		screenY := gameCtx.GameYOffset + gameY + row
+		if screenY < gameCtx.GameYOffset || screenY >= gameCtx.GameYOffset+gameCtx.GameHeight {
 			continue
 		}
 
@@ -106,8 +106,8 @@ func (r *SplashRenderer) renderChar(gameCtx render.RenderContext, buf *render.Re
 				continue
 			}
 
-			screenX := gameCtx.GameX + gameX + col
-			if screenX < gameCtx.GameX || screenX >= gameCtx.GameX+gameCtx.GameWidth {
+			screenX := gameCtx.GameXOffset + gameX + col
+			if screenX < gameCtx.GameXOffset || screenX >= gameCtx.GameXOffset+gameCtx.GameWidth {
 				continue
 			}
 

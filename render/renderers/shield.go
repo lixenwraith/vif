@@ -81,7 +81,7 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	// Energy-based shield color: positive/zero → yellow, negative → purple
 	r.frameColor = render.RgbCleanerBasePositive
 	r.framePalette = shield256Positive
-	if energyComp, ok := r.gameCtx.World.Components.Energy.GetComponent(r.gameCtx.CursorEntity); ok {
+	if energyComp, ok := r.gameCtx.World.Components.Energy.GetComponent(r.gameCtx.World.Resources.Cursor.Entity); ok {
 		if energyComp.Current.Load() < 0 {
 			r.frameColor = render.RgbCleanerBaseNegative
 			r.framePalette = shield256Negative
@@ -90,7 +90,7 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 	// Boost glow frame state
 	r.boostGlowActive = false
-	if boost, ok := r.gameCtx.World.Components.Boost.GetComponent(r.gameCtx.CursorEntity); ok && boost.Active {
+	if boost, ok := r.gameCtx.World.Components.Boost.GetComponent(r.gameCtx.World.Resources.Cursor.Entity); ok && boost.Active {
 		r.boostGlowActive = true
 		// 2 rotations/sec = 500ms period
 		nanos := ctx.GameTime.UnixNano()
@@ -148,7 +148,7 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 				r.cellDy = dy
 
 				// Pass Q32.32 distance squared directly to cell renderer
-				r.renderCell(buf, ctx.GameX+x, ctx.GameY+y, normalizedDistSq)
+				r.renderCell(buf, ctx.GameXOffset+x, ctx.GameYOffset+y, normalizedDistSq)
 			}
 		}
 	}

@@ -114,13 +114,13 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 				entity := s.world.CreateEntity()
 
 				// Use helper for physics/component generation
-				dust, prot, sigil := s.prepareDustComponents(entry.X, entry.Y, entry.Char, entry.Level, cursorPos.X, cursorPos.Y)
+				dustComp, protComp, sigilComp := s.prepareDustComponents(entry.X, entry.Y, entry.Char, entry.Level, cursorPos.X, cursorPos.Y)
 
-				// Add to batches
+				// Add components to batch entry entity
 				posBatch.Add(entity, component.PositionComponent{X: entry.X, Y: entry.Y})
-				s.world.Components.Dust.SetComponent(entity, dust)
-				s.world.Components.Protection.SetComponent(entity, prot)
-				s.world.Components.Sigil.SetComponent(entity, sigil)
+				s.world.Components.Dust.SetComponent(entity, dustComp)
+				s.world.Components.Protection.SetComponent(entity, protComp)
+				s.world.Components.Sigil.SetComponent(entity, sigilComp)
 			}
 
 			// Force commit because dust often spawns on top of dying glyphs (DeathSystem runs later)
@@ -146,8 +146,7 @@ func (s *DustSystem) Update() {
 		return
 	}
 
-	// 1. PRE-FETCH Context Data (Cursor, Energy, etc.)
-	// Must do this BEFORE locking Positions to avoid deadlock
+	// 1. PRE-FETCH Context Data (Cursor, Energy, etc.) BEFORE Positions lock to avoid deadlock
 	cursorEntity := s.world.Resources.Cursor.Entity
 	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 	if !ok {
@@ -172,13 +171,12 @@ func (s *DustSystem) Update() {
 	cursorDisplacement := vmath.DistanceApprox(vmath.FromInt(cursorDeltaX), vmath.FromInt(cursorDeltaY))
 	applyChaseBoost := cursorDisplacement > vmath.FromInt(constant.DustChaseThreshold)
 
-	// 2. SETUP Physics Constants
+	// 2. Setup Physics Constants
 	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
 	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
 		dtFixed = dtCap
 	}
 
-	config := s.world.Resources.Config
 	cursorXFixed := vmath.FromInt(cursorPos.X)
 	cursorYFixed := vmath.FromInt(cursorPos.Y)
 	now := s.world.Resources.Time.GameTime
@@ -262,13 +260,16 @@ func (s *DustSystem) Update() {
 		newX := vmath.ToInt(dust.PreciseX)
 		newY := vmath.ToInt(dust.PreciseY)
 
+		gameWidth := s.world.Resources.Config.GameWidth
+		gameHeight := s.world.Resources.Config.GameHeight
+
 		// Boundary reflection
 		if newX < 0 {
 			newX = 0
 			dust.PreciseX = 0
 			dust.VelX = -dust.VelX / 2
-		} else if newX >= config.GameWidth {
-			newX = config.GameWidth - 1
+		} else if newX >= gameWidth {
+			newX = gameWidth - 1
 			dust.PreciseX = vmath.FromInt(newX)
 			dust.VelX = -dust.VelX / 2
 		}
@@ -277,8 +278,8 @@ func (s *DustSystem) Update() {
 			newY = 0
 			dust.PreciseY = 0
 			dust.VelY = -dust.VelY / 2
-		} else if newY >= config.GameHeight {
-			newY = config.GameHeight - 1
+		} else if newY >= gameHeight {
+			newY = gameHeight - 1
 			dust.PreciseY = vmath.FromInt(newY)
 			dust.VelY = -dust.VelY / 2
 		}
@@ -298,8 +299,8 @@ func (s *DustSystem) Update() {
 					continue
 				}
 
-				// Check bounds (Traverser might step OOB temporarily)
-				if currX < 0 || currX >= config.GameWidth || currY < 0 || currY >= config.GameHeight {
+				// Check bounds (Traverser might step OOB)
+				if currX < 0 || currX >= gameWidth || currY < 0 || currY >= gameHeight {
 					continue
 				}
 

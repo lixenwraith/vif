@@ -12,7 +12,7 @@ func OpMove(ctx *engine.GameContext, result MotionResult) {
 		return
 	}
 
-	ctx.World.Positions.SetPosition(ctx.CursorEntity, component.PositionComponent{
+	ctx.World.Positions.SetPosition(ctx.World.Resources.Cursor.Entity, component.PositionComponent{
 		X: result.EndX,
 		Y: result.EndY,
 	})
@@ -56,7 +56,7 @@ func OpDelete(ctx *engine.GameContext, result MotionResult) {
 				// Wrap back to previous line if at start of line
 				if ey > 0 {
 					ey--
-					ex = ctx.GameWidth - 1
+					ex = ctx.World.Resources.Config.GameWidth - 1
 				} else {
 					// At 0,0 - effective range is empty if sx=0,sy=0
 					// Check if range became invalid (End before Start)

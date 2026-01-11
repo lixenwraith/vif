@@ -27,11 +27,11 @@ func (r *CursorRenderer) IsVisible() bool {
 // Render draws the cursor
 func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(constant.MaskUI)
-	screenX := ctx.GameX + ctx.CursorX
-	screenY := ctx.GameY + ctx.CursorY
+	screenX := ctx.GameXOffset + ctx.CursorX
+	screenY := ctx.GameYOffset + ctx.CursorY
 
 	// Bounds check
-	if screenX < ctx.GameX || screenX >= ctx.Width || screenY < ctx.GameY || screenY >= ctx.GameY+ctx.GameHeight {
+	if screenX < ctx.GameXOffset || screenX >= ctx.ScreenWidth || screenY < ctx.GameYOffset || screenY >= ctx.GameYOffset+ctx.GameHeight {
 		return
 	}
 
@@ -99,7 +99,7 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	}
 
 	// 4. Error Flash Overlay
-	cursorComp, ok := r.gameCtx.World.Components.Cursor.GetComponent(r.gameCtx.CursorEntity)
+	cursorComp, ok := r.gameCtx.World.Components.Cursor.GetComponent(r.gameCtx.World.Resources.Cursor.Entity)
 	if ok && cursorComp.ErrorFlashRemaining > 0 {
 		cursorBgColor = render.RgbCursorError
 		charFgColor = render.RgbBlack

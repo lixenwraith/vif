@@ -29,13 +29,13 @@ func NewPingRenderer(gameCtx *engine.GameContext) *PingRenderer {
 // Render draws the ping highlights and grid
 func (r *PingRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	// Get PingComponent from cursor (Single player assumption: ID 1/CursorEntity)
-	ping, ok := r.gameCtx.World.Components.Ping.GetComponent(r.gameCtx.CursorEntity)
+	pingComp, ok := r.gameCtx.World.Components.Ping.GetComponent(r.gameCtx.World.Resources.Cursor.Entity)
 	if !ok {
 		return
 	}
 
 	// Early exit if nothing to draw
-	if !ping.ShowCrosshair && !ping.GridActive {
+	if !pingComp.ShowCrosshair && !pingComp.GridActive {
 		return
 	}
 
@@ -45,7 +45,7 @@ func (r *PingRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 	r.computeExclusionMask(r.gameCtx.World, ctx.GameWidth, ctx.GameHeight)
 
 	// 2. Draw Crosshair (Row/Column Highlights)
-	if ping.ShowCrosshair {
+	if pingComp.ShowCrosshair {
 		var lineColor render.RGB
 		if r.gameCtx.IsInsertMode() {
 			lineColor = render.RgbPingHighlight
@@ -56,7 +56,7 @@ func (r *PingRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 	}
 
 	// 3. Draw Grid Lines
-	if ping.GridActive {
+	if pingComp.GridActive {
 		r.drawGrid(ctx, buf, render.RgbPingGridNormal)
 	}
 }
@@ -148,21 +148,21 @@ func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.Rende
 
 	// Draw horizontal band (rows from minY to maxY, full width)
 	for y := pingBounds.MinY; y <= pingBounds.MaxY; y++ {
-		screenY := ctx.GameY + y
-		if screenY < ctx.GameY || screenY >= ctx.GameY+ctx.GameHeight {
+		screenY := ctx.GameYOffset + y
+		if screenY < ctx.GameYOffset || screenY >= ctx.GameYOffset+ctx.GameHeight {
 			continue
 		}
 		for x := 0; x < ctx.GameWidth; x++ {
 			if !r.isExcluded(x, y) {
-				buf.Set(ctx.GameX+x, screenY, ' ', render.DefaultBgRGB, color, render.BlendReplace, 1.0, terminal.AttrNone)
+				buf.Set(ctx.GameXOffset+x, screenY, ' ', render.DefaultBgRGB, color, render.BlendReplace, 1.0, terminal.AttrNone)
 			}
 		}
 	}
 
 	// Draw vertical band (columns from minX to maxX, full height)
 	for x := pingBounds.MinX; x <= pingBounds.MaxX; x++ {
-		screenX := ctx.GameX + x
-		if screenX < ctx.GameX || screenX >= ctx.GameX+ctx.GameWidth {
+		screenX := ctx.GameXOffset + x
+		if screenX < ctx.GameXOffset || screenX >= ctx.GameXOffset+ctx.GameWidth {
 			continue
 		}
 		for y := 0; y < ctx.GameHeight; y++ {
@@ -171,7 +171,7 @@ func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.Rende
 				continue
 			}
 			if !r.isExcluded(x, y) {
-				buf.Set(screenX, ctx.GameY+y, ' ', render.DefaultBgRGB, color, render.BlendReplace, 1.0, terminal.AttrNone)
+				buf.Set(screenX, ctx.GameYOffset+y, ' ', render.DefaultBgRGB, color, render.BlendReplace, 1.0, terminal.AttrNone)
 			}
 		}
 	}
@@ -190,7 +190,7 @@ func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuff
 			inBounds = true
 			for y := 0; y < ctx.GameHeight; y++ {
 				if !r.isExcluded(colRight, y) {
-					buf.Set(ctx.GameX+colRight, ctx.GameY+y, ' ', render.DefaultBgRGB, color, render.BlendReplace, 1.0, terminal.AttrNone)
+					buf.Set(ctx.GameXOffset+colRight, ctx.GameYOffset+y, ' ', render.DefaultBgRGB, color, render.BlendReplace, 1.0, terminal.AttrNone)
 				}
 			}
 		}
@@ -198,7 +198,7 @@ func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuff
 			inBounds = true
 			for y := 0; y < ctx.GameHeight; y++ {
 				if !r.isExcluded(colLeft, y) {
-					buf.Set(ctx.GameX+colLeft, ctx.GameY+y, ' ', render.DefaultBgRGB, color, render.BlendReplace, 1.0, terminal.AttrNone)
+					buf.Set(ctx.GameXOffset+colLeft, ctx.GameYOffset+y, ' ', render.DefaultBgRGB, color, render.BlendReplace, 1.0, terminal.AttrNone)
 				}
 			}
 		}
@@ -219,7 +219,7 @@ func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuff
 			inBounds = true
 			for x := 0; x < ctx.GameWidth; x++ {
 				if !r.isExcluded(x, rowDown) {
-					buf.Set(ctx.GameX+x, ctx.GameY+rowDown, ' ', render.DefaultBgRGB, color, render.BlendReplace, 1.0, terminal.AttrNone)
+					buf.Set(ctx.GameXOffset+x, ctx.GameYOffset+rowDown, ' ', render.DefaultBgRGB, color, render.BlendReplace, 1.0, terminal.AttrNone)
 				}
 			}
 		}
@@ -227,7 +227,7 @@ func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuff
 			inBounds = true
 			for x := 0; x < ctx.GameWidth; x++ {
 				if !r.isExcluded(x, rowUp) {
-					buf.Set(ctx.GameX+x, ctx.GameY+rowUp, ' ', render.DefaultBgRGB, color, render.BlendReplace, 1.0, terminal.AttrNone)
+					buf.Set(ctx.GameXOffset+x, ctx.GameYOffset+rowUp, ' ', render.DefaultBgRGB, color, render.BlendReplace, 1.0, terminal.AttrNone)
 				}
 			}
 		}

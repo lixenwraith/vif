@@ -105,8 +105,8 @@ func NewOverlayRenderer(gameCtx *engine.GameContext) *OverlayRenderer {
 // Render draws the overlay window using TUI primitives
 func (r *OverlayRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	// Calculate overlay dimensions
-	overlayW := int(float64(ctx.Width) * constant.OverlayWidthPercent)
-	overlayH := int(float64(ctx.Height) * constant.OverlayHeightPercent)
+	overlayW := int(float64(ctx.ScreenWidth) * constant.OverlayWidthPercent)
+	overlayH := int(float64(ctx.ScreenHeight) * constant.OverlayHeightPercent)
 	if overlayW < 40 {
 		overlayW = 40
 	}
@@ -114,8 +114,8 @@ func (r *OverlayRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 		overlayH = 15
 	}
 
-	startX := (ctx.Width - overlayW) / 2
-	startY := (ctx.Height - overlayH) / 2
+	startX := (ctx.ScreenWidth - overlayW) / 2
+	startY := (ctx.ScreenHeight - overlayH) / 2
 
 	// Ensure adapter sized
 	if r.adapter == nil || r.adapter.Width() != overlayW || r.adapter.Height() != overlayH {

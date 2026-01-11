@@ -54,20 +54,20 @@ func (r *HeatMeterRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 	// Calculate Fill Limit from HeatComponent
 	heat := 0
-	if hc, ok := r.gameCtx.World.Components.Heat.GetComponent(r.gameCtx.CursorEntity); ok {
+	if hc, ok := r.gameCtx.World.Components.Heat.GetComponent(r.gameCtx.World.Resources.Cursor.Entity); ok {
 		heat = int(hc.Current.Load())
 	}
-	fillWidth := (ctx.Width * heat) / 100
+	fillWidth := (ctx.ScreenWidth * heat) / 100
 
 	// Render Loop
-	for x := 0; x < ctx.Width; x++ {
+	for x := 0; x < ctx.ScreenWidth; x++ {
 		// No early exit optimization, must clear the rest of the bar to Black/Empty
 		if x >= fillWidth {
 			// Draw Empty
 			buf.SetBgOnly(x, 0, render.RgbBlack)
 			continue
 		}
-		r.renderCell(buf, x, ctx.Width)
+		r.renderCell(buf, x, ctx.ScreenWidth)
 	}
 }
 

@@ -69,12 +69,8 @@ func (tr *TimeResource) Update(gameTime, realTime time.Time, deltaTime time.Dura
 
 // ConfigResource holds static or semi-static configuration data
 type ConfigResource struct {
-	ScreenWidth  int
-	ScreenHeight int
-	GameWidth    int
-	GameHeight   int
-	GameX        int
-	GameY        int
+	GameWidth  int
+	GameHeight int
 }
 
 // RenderConfig holds configuration for the rendering pipeline

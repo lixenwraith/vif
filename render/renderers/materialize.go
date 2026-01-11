@@ -207,8 +207,8 @@ func (r *MaterializeRenderer) renderBeamCell(ctx render.RenderContext, buf *rend
 
 		scaledColor := render.Scale(render.RgbMaterialize, intensityFloat)
 
-		screenX := ctx.GameX + cellX
-		screenY := ctx.GameY + cellY
+		screenX := ctx.GameXOffset + cellX
+		screenY := ctx.GameYOffset + cellY
 
 		buf.Set(screenX, screenY, 0, render.RGBBlack, scaledColor, render.BlendMaxBg, 1.0, terminal.AttrNone)
 	}
