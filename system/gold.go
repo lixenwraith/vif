@@ -38,9 +38,9 @@ func NewGoldSystem(world *engine.World) engine.System {
 		world: world,
 	}
 
-	s.statActive = s.world.Resource.Status.Bools.Get("gold.active")
-	s.stateHeaderEntity = s.world.Resource.Status.Ints.Get("gold.header_entity")
-	s.statTimer = s.world.Resource.Status.Ints.Get("gold.timer")
+	s.statActive = s.world.Resources.Status.Bools.Get("gold.active")
+	s.stateHeaderEntity = s.world.Resources.Status.Ints.Get("gold.header_entity")
+	s.statTimer = s.world.Resources.Status.Ints.Get("gold.timer")
 
 	s.Init()
 	return s
@@ -137,7 +137,7 @@ func (s *GoldSystem) Update() {
 		return
 	}
 
-	now := s.world.Resource.Time.GameTime
+	now := s.world.Resources.Time.GameTime
 
 	active := s.active
 	timeoutTime := s.timeoutTime
@@ -162,7 +162,7 @@ func (s *GoldSystem) Update() {
 
 	// Check if composite still exists (external destruction detection)
 	if headerEntity != 0 {
-		header, ok := s.world.Component.Header.GetComponent(headerEntity)
+		header, ok := s.world.Components.Header.GetComponent(headerEntity)
 		if !ok || s.countLivingMembers(&header) == 0 {
 			s.handleGoldDestroyed()
 			return
@@ -181,10 +181,10 @@ func (s *GoldSystem) handleJumpRequest() {
 		return
 	}
 
-	cursorEntity := s.world.Resource.Cursor.Entity
+	cursorEntity := s.world.Resources.Cursor.Entity
 
 	// 1. Check Energy from component
-	energyComp, ok := s.world.Component.Energy.GetComponent(cursorEntity)
+	energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity)
 	if !ok {
 		return
 	}
@@ -199,7 +199,7 @@ func (s *GoldSystem) handleJumpRequest() {
 	}
 
 	// 2. Find target position (First living member)
-	header, ok := s.world.Component.Header.GetComponent(s.headerEntity)
+	header, ok := s.world.Components.Header.GetComponent(s.headerEntity)
 	if !ok {
 		return
 	}
@@ -217,13 +217,13 @@ func (s *GoldSystem) handleJumpRequest() {
 		return
 	}
 
-	targetPos, ok := s.world.Position.Get(targetEntity)
+	targetPos, ok := s.world.Positions.Get(targetEntity)
 	if !ok {
 		return
 	}
 
 	// 3. Move Cursor
-	s.world.Position.SetPosition(cursorEntity, component.PositionComponent{
+	s.world.Positions.SetPosition(cursorEntity, component.PositionComponent{
 		X: targetPos.X,
 		Y: targetPos.Y,
 	})
@@ -236,8 +236,8 @@ func (s *GoldSystem) handleJumpRequest() {
 	})
 
 	// 5. Play Sound
-	if s.world.Resource.Audio != nil {
-		s.world.Resource.Audio.Player.Play(core.SoundBell)
+	if s.world.Resources.Audio != nil {
+		s.world.Resources.Audio.Player.Play(core.SoundBell)
 	}
 
 	s.world.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{
@@ -248,7 +248,7 @@ func (s *GoldSystem) handleJumpRequest() {
 
 // spawnGold creates a new gold sequence
 func (s *GoldSystem) spawnGold() bool {
-	now := s.world.Resource.Time.GameTime
+	now := s.world.Resources.Time.GameTime
 
 	// Generate random 10-character sequence
 	sequence := make([]rune, constant.GoldSequenceLength)
@@ -286,7 +286,7 @@ func (s *GoldSystem) spawnGold() bool {
 	}
 
 	// 3. Batch position commit (anchor NOT in grid - no collision at x,y)
-	batch := s.world.Position.BeginBatch()
+	batch := s.world.Positions.BeginBatch()
 	for _, ed := range entities {
 		batch.Add(ed.entity, ed.pos)
 	}
@@ -299,29 +299,29 @@ func (s *GoldSystem) spawnGold() bool {
 		return false
 	}
 
-	// 4. SetPosition Phantom Head to Position AFTER batch success
+	// 4. SetPosition Phantom Head to Positions AFTER batch success
 	// TODO: check protectAll, it may conflicts with OOB bound, set specific protections
-	s.world.Position.SetPosition(headerEntity, component.PositionComponent{X: x, Y: y})
-	s.world.Component.Protection.SetComponent(headerEntity, component.ProtectionComponent{
+	s.world.Positions.SetPosition(headerEntity, component.PositionComponent{X: x, Y: y})
+	s.world.Components.Protection.SetComponent(headerEntity, component.ProtectionComponent{
 		Mask: component.ProtectAll,
 	})
 
 	// 5. SetPosition components to members
 	for i, ed := range entities {
 		// Typing target
-		s.world.Component.Glyph.SetComponent(ed.entity, component.GlyphComponent{
+		s.world.Components.Glyph.SetComponent(ed.entity, component.GlyphComponent{
 			Rune:  sequence[i],
 			Type:  component.GlyphGold,
 			Level: component.GlyphBright,
 		})
 
 		// Composite membership
-		s.world.Component.Member.SetComponent(ed.entity, component.MemberComponent{
+		s.world.Components.Member.SetComponent(ed.entity, component.MemberComponent{
 			HeaderEntity: headerEntity,
 		})
 
 		// Protect gold entities from decay/delete
-		s.world.Component.Protection.SetComponent(ed.entity, component.ProtectionComponent{
+		s.world.Components.Protection.SetComponent(ed.entity, component.ProtectionComponent{
 			Mask: component.ProtectFromDelete | component.ProtectFromDecay,
 		})
 
@@ -335,7 +335,7 @@ func (s *GoldSystem) spawnGold() bool {
 	}
 
 	// 6. Create composite header
-	s.world.Component.Header.SetComponent(headerEntity, component.HeaderComponent{
+	s.world.Components.Header.SetComponent(headerEntity, component.HeaderComponent{
 		BehaviorID:    component.BehaviorGold,
 		MemberEntries: members,
 	})
@@ -380,8 +380,8 @@ func (s *GoldSystem) handleGoldComplete() {
 	})
 
 	// Play sound
-	if s.world.Resource.Audio != nil && s.world.Resource.Audio.Player != nil {
-		s.world.Resource.Audio.Player.Play(core.SoundCoin)
+	if s.world.Resources.Audio != nil && s.world.Resources.Audio.Player != nil {
+		s.world.Resources.Audio.Player.Play(core.SoundCoin)
 	}
 
 	// Destroy composite
@@ -451,7 +451,7 @@ func (s *GoldSystem) destroyCurrentGold() {
 
 // destroyComposite removes phantom head and all members
 func (s *GoldSystem) destroyComposite(headerEntity core.Entity) {
-	header, ok := s.world.Component.Header.GetComponent(headerEntity)
+	header, ok := s.world.Components.Header.GetComponent(headerEntity)
 	if !ok {
 		return
 	}
@@ -460,18 +460,18 @@ func (s *GoldSystem) destroyComposite(headerEntity core.Entity) {
 	var toDestroy []core.Entity
 	for _, m := range header.MemberEntries {
 		if m.Entity != 0 {
-			s.world.Component.Member.RemoveComponent(m.Entity)
+			s.world.Components.Member.RemoveEntity(m.Entity)
 			toDestroy = append(toDestroy, m.Entity)
 		}
 	}
 
 	if len(toDestroy) > 0 {
-		event.EmitDeathBatch(s.world.Resource.Event.Queue, 0, toDestroy, s.world.Resource.Time.FrameNumber)
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, toDestroy, s.world.Resources.Time.FrameNumber)
 	}
 
 	// Remove protection and destroy phantom head
-	s.world.Component.Protection.RemoveComponent(headerEntity)
-	s.world.Component.Header.RemoveComponent(headerEntity)
+	s.world.Components.Protection.RemoveEntity(headerEntity)
+	s.world.Components.Header.RemoveEntity(headerEntity)
 	s.world.DestroyEntity(headerEntity)
 }
 
@@ -489,8 +489,8 @@ func (s *GoldSystem) countLivingMembers(header *component.HeaderComponent) int {
 // findValidPosition finds a valid random position for the gold sequence
 // Caller must NOT hold s.mu lock
 func (s *GoldSystem) findValidPosition(seqLength int) (int, int) {
-	config := s.world.Resource.Config
-	cursorPos, ok := s.world.Position.Get(s.world.Resource.Cursor.Entity)
+	config := s.world.Resources.Config
+	cursorPos, ok := s.world.Positions.Get(s.world.Resources.Cursor.Entity)
 	if !ok {
 		return -1, -1
 	}
@@ -513,7 +513,7 @@ func (s *GoldSystem) findValidPosition(seqLength int) (int, int) {
 		// Check for overlaps with existing characters
 		overlaps := false
 		for i := 0; i < seqLength; i++ {
-			if s.world.Position.HasAny(x+i, y) {
+			if s.world.Positions.HasAny(x+i, y) {
 				overlaps = true
 				break
 			}

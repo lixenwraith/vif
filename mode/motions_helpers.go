@@ -17,8 +17,8 @@ const (
 
 // getCharAt returns the character at the given position, or 0 if empty
 func getCharAt(ctx *engine.GameContext, x, y int) rune {
-	entities := ctx.World.Position.GetAllEntityAt(x, y)
-	glyphStore := ctx.World.Component.Glyph
+	entities := ctx.World.Positions.GetAllEntityAt(x, y)
+	glyphStore := ctx.World.Components.Glyph
 
 	for _, entity := range entities {
 		if entity == ctx.CursorEntity || entity == 0 {
@@ -73,11 +73,11 @@ func validatePosition(ctx *engine.GameContext, x, y int) (validX, validY int) {
 func findCharInDirection(ctx *engine.GameContext, startX, startY int, target rune, count int, forward bool) (int, bool) {
 	occurrences := 0
 	lastMatch := -1
-	glyphStore := ctx.World.Component.Glyph
+	glyphStore := ctx.World.Components.Glyph
 
 	if forward {
 		for x := startX + 1; x < ctx.GameWidth; x++ {
-			entities := ctx.World.Position.GetAllEntityAt(x, startY)
+			entities := ctx.World.Positions.GetAllEntityAt(x, startY)
 			for _, entity := range entities {
 				if entity == 0 {
 					continue
@@ -94,7 +94,7 @@ func findCharInDirection(ctx *engine.GameContext, startX, startY int, target run
 		}
 	} else {
 		for x := startX - 1; x >= 0; x-- {
-			entities := ctx.World.Position.GetAllEntityAt(x, startY)
+			entities := ctx.World.Positions.GetAllEntityAt(x, startY)
 			for _, entity := range entities {
 				if entity == 0 {
 					continue
@@ -290,16 +290,16 @@ func findLineEnd(ctx *engine.GameContext, cursorY int) int {
 	// Stack-allocated buffer for zero-alloc queries
 	var buf [constant.MaxEntitiesPerCell]core.Entity
 
-	glyphStore := ctx.World.Component.Glyph
+	glyphStore := ctx.World.Components.Glyph
 
 	// Scan from right to left
 	for x := ctx.GameWidth - 1; x >= 0; x-- {
 		// Zero-alloc query
-		count := ctx.World.Position.GetAllEntityAtInto(x, cursorY, buf[:])
+		count := ctx.World.Positions.GetAllEntityAtInto(x, cursorY, buf[:])
 
 		// Check entities at this cell
 		for i := 0; i < count; i++ {
-			if buf[i] != 0 && glyphStore.HasComponent(buf[i]) {
+			if buf[i] != 0 && glyphStore.HasEntity(buf[i]) {
 				// Found right-most interactable entity
 				return x
 			}
@@ -327,15 +327,15 @@ func findFirstNonWhitespace(ctx *engine.GameContext, cursorY int) int {
 func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
 	var buf [constant.MaxEntitiesPerCell]core.Entity
 
-	glyphStore := ctx.World.Component.Glyph
+	glyphStore := ctx.World.Components.Glyph
 
 	for y := cursorY - 1; y >= 0; y-- {
 		rowEmpty := true
 		// Scan row; stop early if any interactable entity is found
 		for x := 0; x < ctx.GameWidth && rowEmpty; x++ {
-			count := ctx.World.Position.GetAllEntityAtInto(x, y, buf[:])
+			count := ctx.World.Positions.GetAllEntityAtInto(x, y, buf[:])
 			for i := 0; i < count; i++ {
-				if buf[i] != 0 && glyphStore.HasComponent(buf[i]) {
+				if buf[i] != 0 && glyphStore.HasEntity(buf[i]) {
 					rowEmpty = false
 					break
 				}
@@ -353,15 +353,15 @@ func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
 func findNextEmptyLine(ctx *engine.GameContext, cursorY int) int {
 	var buf [constant.MaxEntitiesPerCell]core.Entity
 
-	glyphStore := ctx.World.Component.Glyph
+	glyphStore := ctx.World.Components.Glyph
 
 	for y := cursorY + 1; y < ctx.GameHeight; y++ {
 		rowEmpty := true
 		// Scan row; stop early if any interactable entity is found
 		for x := 0; x < ctx.GameWidth && rowEmpty; x++ {
-			count := ctx.World.Position.GetAllEntityAtInto(x, y, buf[:])
+			count := ctx.World.Positions.GetAllEntityAtInto(x, y, buf[:])
 			for i := 0; i < count; i++ {
-				if buf[i] != 0 && glyphStore.HasComponent(buf[i]) {
+				if buf[i] != 0 && glyphStore.HasEntity(buf[i]) {
 					rowEmpty = false
 					break
 				}
@@ -514,12 +514,12 @@ func findWORDEndInBand(ctx *engine.GameContext, cursorX, cursorY int, bounds eng
 // findCharInBand finds target char within band, column-first order (left-to-right, top-to-bottom)
 // Returns (x, y, found). Skips starting position.
 func findCharInBand(ctx *engine.GameContext, startX, startY int, target rune, count int, forward bool, bounds engine.PingBounds) (int, int, bool) {
-	glyphStore := ctx.World.Component.Glyph
+	glyphStore := ctx.World.Components.Glyph
 	occurrences := 0
 	lastMatchX, lastMatchY := -1, -1
 
 	hasTargetAt := func(x, y int) bool {
-		entities := ctx.World.Position.GetAllEntityAt(x, y)
+		entities := ctx.World.Positions.GetAllEntityAt(x, y)
 		for _, entity := range entities {
 			if entity == 0 {
 				continue
@@ -574,14 +574,14 @@ func findCharInBand(ctx *engine.GameContext, startX, startY int, target rune, co
 // Returns -1 if no entities found
 func findLineEndInBand(ctx *engine.GameContext, bounds engine.PingBounds) int {
 	var buf [constant.MaxEntitiesPerCell]core.Entity
-	glyphStore := ctx.World.Component.Glyph
+	glyphStore := ctx.World.Components.Glyph
 	rightmost := -1
 
 	for y := bounds.MinY; y <= bounds.MaxY; y++ {
 		for x := ctx.GameWidth - 1; x >= 0; x-- {
-			count := ctx.World.Position.GetAllEntityAtInto(x, y, buf[:])
+			count := ctx.World.Positions.GetAllEntityAtInto(x, y, buf[:])
 			for i := 0; i < count; i++ {
-				if buf[i] != 0 && glyphStore.HasComponent(buf[i]) {
+				if buf[i] != 0 && glyphStore.HasEntity(buf[i]) {
 					if x > rightmost {
 						rightmost = x
 					}
@@ -610,13 +610,13 @@ func findFirstNonWhitespaceInBand(ctx *engine.GameContext, bounds engine.PingBou
 // Searches from cursor row-1 to screen top, returns (x, y) of found character
 // Y search is NOT constrained by band - band only defines X search width
 func findColumnUpInBand(ctx *engine.GameContext, cursorX, startY int, bounds engine.PingBounds) (int, int) {
-	glyphStore := ctx.World.Component.Glyph
+	glyphStore := ctx.World.Components.Glyph
 
 	for y := startY - 1; y >= 0; y-- {
 		for x := bounds.MinX; x <= bounds.MaxX; x++ {
-			entities := ctx.World.Position.GetAllEntityAt(x, y)
+			entities := ctx.World.Positions.GetAllEntityAt(x, y)
 			for _, entity := range entities {
-				if entity != 0 && glyphStore.HasComponent(entity) {
+				if entity != 0 && glyphStore.HasEntity(entity) {
 					return x, y
 				}
 			}
@@ -629,13 +629,13 @@ func findColumnUpInBand(ctx *engine.GameContext, cursorX, startY int, bounds eng
 // Searches from cursor row+1 to screen bottom, returns (x, y) of found character
 // Y search is NOT constrained by band - band only defines X search width
 func findColumnDownInBand(ctx *engine.GameContext, cursorX, startY int, bounds engine.PingBounds, gameHeight int) (int, int) {
-	glyphStore := ctx.World.Component.Glyph
+	glyphStore := ctx.World.Components.Glyph
 
 	for y := startY + 1; y < gameHeight; y++ {
 		for x := bounds.MinX; x <= bounds.MaxX; x++ {
-			entities := ctx.World.Position.GetAllEntityAt(x, y)
+			entities := ctx.World.Positions.GetAllEntityAt(x, y)
 			for _, entity := range entities {
-				if entity != 0 && glyphStore.HasComponent(entity) {
+				if entity != 0 && glyphStore.HasEntity(entity) {
 					return x, y
 				}
 			}

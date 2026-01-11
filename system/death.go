@@ -26,7 +26,7 @@ func NewDeathSystem(world *engine.World) engine.System {
 		world: world,
 	}
 
-	s.statKilled = s.world.Resource.Status.Ints.Get("death.killed")
+	s.statKilled = s.world.Resources.Status.Ints.Get("death.killed")
 
 	s.Init()
 	return s
@@ -94,11 +94,11 @@ func (s *DeathSystem) markForDeath(entity core.Entity, effect event.EventType) {
 	}
 
 	// 1. Protection Check
-	if protComp, ok := s.world.Component.Protection.GetComponent(entity); ok {
-		if !protComp.IsExpired(s.world.Resource.Time.GameTime.UnixNano()) &&
+	if protComp, ok := s.world.Components.Protection.GetComponent(entity); ok {
+		if !protComp.IsExpired(s.world.Resources.Time.GameTime.UnixNano()) &&
 			(protComp.Mask.Has(component.ProtectFromDeath) || protComp.Mask == component.ProtectAll) {
 			// If immortal, remove tag to not process again in Update()
-			s.world.Component.Death.RemoveComponent(entity)
+			s.world.Components.Death.RemoveEntity(entity)
 			return
 		}
 	}
@@ -126,16 +126,16 @@ func (s *DeathSystem) routeCleanup(entity core.Entity) {
 }
 
 func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType) {
-	entityPos, ok := s.world.Position.Get(entity)
+	entityPos, ok := s.world.Positions.Get(entity)
 	if !ok {
 		return
 	}
 
 	// Extract char: glyph first, sigil fallback
 	var char rune
-	if glyphComp, ok := s.world.Component.Glyph.GetComponent(entity); ok {
+	if glyphComp, ok := s.world.Components.Glyph.GetComponent(entity); ok {
 		char = glyphComp.Rune
-	} else if sigilComp, ok := s.world.Component.Sigil.GetComponent(entity); ok {
+	} else if sigilComp, ok := s.world.Components.Sigil.GetComponent(entity); ok {
 		char = sigilComp.Rune
 	} else {
 		return
@@ -176,7 +176,7 @@ func (s *DeathSystem) Update() {
 		return
 	}
 
-	deathEntities := s.world.Component.Death.AllEntity()
+	deathEntities := s.world.Components.Death.AllEntity()
 	if len(deathEntities) == 0 {
 		return
 	}

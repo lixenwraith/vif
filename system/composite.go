@@ -68,7 +68,7 @@ func (s *CompositeSystem) HandleEvent(ev event.GameEvent) {
 	s.markMemberTombstone(payload.HeaderEntity, payload.MemberEntity)
 
 	// 2. Request death for the member entity
-	event.EmitDeathOne(s.world.Resource.Event.Queue, payload.MemberEntity, 0, s.world.Resource.Time.FrameNumber)
+	event.EmitDeathOne(s.world.Resources.Event.Queue, payload.MemberEntity, 0, s.world.Resources.Time.FrameNumber)
 }
 
 func (s *CompositeSystem) Update() {
@@ -76,15 +76,15 @@ func (s *CompositeSystem) Update() {
 		return
 	}
 
-	headerEntities := s.world.Component.Header.AllEntity()
+	headerEntities := s.world.Components.Header.AllEntity()
 
 	for _, headerEntity := range headerEntities {
-		headerComp, ok := s.world.Component.Header.GetComponent(headerEntity)
+		headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
 		if !ok {
 			continue
 		}
 
-		headerPos, ok := s.world.Position.Get(headerEntity)
+		headerPos, ok := s.world.Positions.Get(headerEntity)
 		if !ok {
 			continue
 		}
@@ -96,7 +96,7 @@ func (s *CompositeSystem) Update() {
 		if deltaX != 0 || deltaY != 0 {
 			headerPos.X += deltaX
 			headerPos.Y += deltaY
-			s.world.Position.SetPosition(headerEntity, headerPos)
+			s.world.Positions.SetPosition(headerEntity, headerPos)
 		}
 
 		// 3. Propagate offsets to members + liveness validation
@@ -115,13 +115,13 @@ func (s *CompositeSystem) Update() {
 		}
 
 		// Write back headerComp
-		s.world.Component.Header.SetComponent(headerEntity, headerComp)
+		s.world.Components.Header.SetComponent(headerEntity, headerComp)
 	}
 }
 
 // markMemberTombstone internal helper for authoritative state update
 func (s *CompositeSystem) markMemberTombstone(headerEntity, memberEntity core.Entity) {
-	headerComp, ok := s.world.Component.Header.GetComponent(headerEntity)
+	headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
 	if !ok {
 		return
 	}
@@ -133,7 +133,7 @@ func (s *CompositeSystem) markMemberTombstone(headerEntity, memberEntity core.En
 			break
 		}
 	}
-	s.world.Component.Header.SetComponent(headerEntity, headerComp)
+	s.world.Components.Header.SetComponent(headerEntity, headerComp)
 }
 
 // TODO: migrate to Q32.32, this should be handled in kinetic psudo-comp
@@ -156,7 +156,7 @@ func (s *CompositeSystem) integrateMovement(headerComp *component.HeaderComponen
 
 // syncMembers updates member positions and validates liveness
 func (s *CompositeSystem) syncMembers(headerComp *component.HeaderComponent, headerX, headerY int) {
-	config := s.world.Resource.Config
+	config := s.world.Resources.Config
 
 	for i := range headerComp.MemberEntries {
 		memberEntry := &headerComp.MemberEntries[i]
@@ -167,7 +167,7 @@ func (s *CompositeSystem) syncMembers(headerComp *component.HeaderComponent, hea
 		}
 
 		// Liveness check: if entity no longer has position, it was destroyed
-		if !s.world.Position.HasComponent(memberEntry.Entity) {
+		if !s.world.Positions.HasEntity(memberEntry.Entity) {
 			memberEntry.Entity = 0 // Tombstone
 			headerComp.Dirty = true
 			continue
@@ -186,7 +186,7 @@ func (s *CompositeSystem) syncMembers(headerComp *component.HeaderComponent, hea
 		}
 
 		// Use MoveEntity for existing entities (updates spatial grid)
-		_ = s.world.Position.MoveEntity(memberEntry.Entity, component.PositionComponent{
+		_ = s.world.Positions.MoveEntity(memberEntry.Entity, component.PositionComponent{
 			X: newX,
 			Y: newY,
 		})
@@ -225,8 +225,8 @@ func (s *CompositeSystem) handleEmptyComposite(headerEntity core.Entity, headerC
 
 // destroyHead removes protection and destroys the phantom head
 func (s *CompositeSystem) destroyHead(headerEntity core.Entity) {
-	s.world.Component.Protection.RemoveComponent(headerEntity)
-	s.world.Component.Header.RemoveComponent(headerEntity)
+	s.world.Components.Protection.RemoveEntity(headerEntity)
+	s.world.Components.Header.RemoveEntity(headerEntity)
 	s.world.DestroyEntity(headerEntity)
 }
 
@@ -234,17 +234,17 @@ func (s *CompositeSystem) destroyHead(headerEntity core.Entity) {
 func (s *CompositeSystem) CreateHeader(x, y int, behaviorID component.BehaviorID) core.Entity {
 	entity := s.world.CreateEntity()
 
-	// Position at anchor point
-	s.world.Position.SetPosition(entity, component.PositionComponent{X: x, Y: y})
+	// Positions at anchor point
+	s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
 
 	// HeaderEntity component with empty member slice
-	s.world.Component.Header.SetComponent(entity, component.HeaderComponent{
+	s.world.Components.Header.SetComponent(entity, component.HeaderComponent{
 		BehaviorID:    behaviorID,
 		MemberEntries: make([]component.MemberEntry, 0, 16),
 	})
 
 	// Phantom heads are protected from all destruction except explicit removal
-	s.world.Component.Protection.SetComponent(entity, component.ProtectionComponent{
+	s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
 		Mask: component.ProtectAll,
 	})
 
@@ -253,7 +253,7 @@ func (s *CompositeSystem) CreateHeader(x, y int, behaviorID component.BehaviorID
 
 // AddMember attaches a member entity to an existing composite
 func (s *CompositeSystem) AddMember(headerEntity, memberEntity core.Entity, offsetX, offsetY int8, layer uint8) {
-	headerComp, ok := s.world.Component.Header.GetComponent(headerEntity)
+	headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
 	if !ok {
 		return
 	}
@@ -265,28 +265,28 @@ func (s *CompositeSystem) AddMember(headerEntity, memberEntity core.Entity, offs
 		OffsetY: offsetY,
 		Layer:   layer,
 	})
-	s.world.Component.Header.SetComponent(headerEntity, headerComp)
+	s.world.Components.Header.SetComponent(headerEntity, headerComp)
 
 	// SetPosition backlink to member
-	s.world.Component.Member.SetComponent(memberEntity, component.MemberComponent{
+	s.world.Components.Member.SetComponent(memberEntity, component.MemberComponent{
 		HeaderEntity: headerEntity,
 	})
 }
 
 // SetVelocity configures composite movement in 16.16 fixed-point
 func (s *CompositeSystem) SetVelocity(headerEntity core.Entity, velX, velY int64) {
-	headerComp, ok := s.world.Component.Header.GetComponent(headerEntity)
+	headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
 	if !ok {
 		return
 	}
 	headerComp.VelX = velX
 	headerComp.VelY = velY
-	s.world.Component.Header.SetComponent(headerEntity, headerComp)
+	s.world.Components.Header.SetComponent(headerEntity, headerComp)
 }
 
 // DestroyComposite removes the phantom head and all members
 func (s *CompositeSystem) DestroyComposite(headerEntity core.Entity) {
-	headerComp, ok := s.world.Component.Header.GetComponent(headerEntity)
+	headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
 	if !ok {
 		return
 	}
@@ -294,19 +294,19 @@ func (s *CompositeSystem) DestroyComposite(headerEntity core.Entity) {
 	// Destroy all living members
 	for _, member := range headerComp.MemberEntries {
 		if member.Entity != 0 {
-			s.world.Component.Member.RemoveComponent(member.Entity)
+			s.world.Components.Member.RemoveEntity(member.Entity)
 			s.world.DestroyEntity(member.Entity)
 		}
 	}
 
 	// Remove protection and destroy phantom head
-	s.world.Component.Protection.RemoveComponent(headerEntity)
+	s.world.Components.Protection.RemoveEntity(headerEntity)
 	s.world.DestroyEntity(headerEntity)
 }
 
 // GetAnchorForMember resolves the phantom head from a member entity
 func (s *CompositeSystem) GetAnchorForMember(memberEntity core.Entity) (core.Entity, bool) {
-	memberComp, ok := s.world.Component.Member.GetComponent(memberEntity)
+	memberComp, ok := s.world.Components.Member.GetComponent(memberEntity)
 	if !ok {
 		return 0, false
 	}

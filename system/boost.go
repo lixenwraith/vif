@@ -25,8 +25,8 @@ func NewBoostSystem(world *engine.World) engine.System {
 		world: world,
 	}
 
-	s.statActive = s.world.Resource.Status.Bools.Get("boost.active")
-	s.statRemaining = s.world.Resource.Status.Ints.Get("boost.remaining")
+	s.statActive = s.world.Resources.Status.Bools.Get("boost.active")
+	s.statRemaining = s.world.Resources.Status.Ints.Get("boost.remaining")
 
 	s.Init()
 	return s
@@ -82,10 +82,10 @@ func (s *BoostSystem) Update() {
 		return
 	}
 
-	dt := s.world.Resource.Time.DeltaTime
-	cursorEntity := s.world.Resource.Cursor.Entity
+	dt := s.world.Resources.Time.DeltaTime
+	cursorEntity := s.world.Resources.Cursor.Entity
 
-	boostComp, ok := s.world.Component.Boost.GetComponent(cursorEntity)
+	boostComp, ok := s.world.Components.Boost.GetComponent(cursorEntity)
 	if !ok || !boostComp.Active {
 		return
 	}
@@ -96,16 +96,16 @@ func (s *BoostSystem) Update() {
 		boostComp.Active = false
 	}
 
-	s.world.Component.Boost.SetComponent(cursorEntity, boostComp)
+	s.world.Components.Boost.SetComponent(cursorEntity, boostComp)
 
 	s.statActive.Store(boostComp.Active)
 	s.statRemaining.Store(int64(boostComp.Remaining))
 }
 
 func (s *BoostSystem) activate(duration time.Duration) {
-	cursorEntity := s.world.Resource.Cursor.Entity
+	cursorEntity := s.world.Resources.Cursor.Entity
 
-	boostComp, ok := s.world.Component.Boost.GetComponent(cursorEntity)
+	boostComp, ok := s.world.Components.Boost.GetComponent(cursorEntity)
 	if !ok {
 		boostComp = component.BoostComponent{}
 	}
@@ -116,25 +116,25 @@ func (s *BoostSystem) activate(duration time.Duration) {
 	boostComp.Remaining = duration
 	boostComp.TotalDuration = duration // Reset total for UI progress bar if applicable
 
-	s.world.Component.Boost.SetComponent(cursorEntity, boostComp)
+	s.world.Components.Boost.SetComponent(cursorEntity, boostComp)
 }
 
 func (s *BoostSystem) deactivate() {
-	cursorEntity := s.world.Resource.Cursor.Entity
+	cursorEntity := s.world.Resources.Cursor.Entity
 
-	boostComp, ok := s.world.Component.Boost.GetComponent(cursorEntity)
+	boostComp, ok := s.world.Components.Boost.GetComponent(cursorEntity)
 	if !ok {
 		return
 	}
 	boostComp.Active = false
 	boostComp.Remaining = 0
-	s.world.Component.Boost.SetComponent(cursorEntity, boostComp)
+	s.world.Components.Boost.SetComponent(cursorEntity, boostComp)
 }
 
 func (s *BoostSystem) extend(duration time.Duration) {
-	cursorEntity := s.world.Resource.Cursor.Entity
+	cursorEntity := s.world.Resources.Cursor.Entity
 
-	boostComp, ok := s.world.Component.Boost.GetComponent(cursorEntity)
+	boostComp, ok := s.world.Components.Boost.GetComponent(cursorEntity)
 	if !ok || !boostComp.Active {
 		return
 	}
@@ -146,5 +146,5 @@ func (s *BoostSystem) extend(duration time.Duration) {
 		boostComp.TotalDuration = boostComp.Remaining
 	}
 
-	s.world.Component.Boost.SetComponent(cursorEntity, boostComp)
+	s.world.Components.Boost.SetComponent(cursorEntity, boostComp)
 }

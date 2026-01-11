@@ -6,7 +6,7 @@ func (r *Router) executeRepeatFind(reverse bool) {
 		return
 	}
 
-	pos, ok := r.ctx.World.Position.Get(r.ctx.CursorEntity)
+	pos, ok := r.ctx.World.Positions.Get(r.ctx.CursorEntity)
 	if !ok {
 		return
 	}

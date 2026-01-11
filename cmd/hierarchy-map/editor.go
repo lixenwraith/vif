@@ -672,7 +672,7 @@ func (app *AppState) toggleEditorDeletion() {
 
 	for _, ref := range targets {
 		if alreadyDeleted {
-			// RemoveComponent from deletions
+			// RemoveEntity from deletions
 			app.removeFromDeletions(ref)
 		} else {
 			// Add to deletions

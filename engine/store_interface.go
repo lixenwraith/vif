@@ -9,10 +9,10 @@ import (
 // for operations like entity destruction without knowing the concrete type
 type AnyStore interface {
 	// RemoveComponent deletes a component from an entity
-	RemoveComponent(e core.Entity)
+	RemoveEntity(e core.Entity)
 
-	// HasComponent checks if an entity has this component
-	HasComponent(e core.Entity) bool
+	// HasEntity checks if an entity has this component
+	HasEntity(e core.Entity) bool
 
 	// CountEntity returns the number of entities with this component
 	CountEntity() int

@@ -138,7 +138,7 @@ type FilterMode int
 const (
 	FilterOR  FilterMode = iota // Match ANY selected tag (union)
 	FilterAND                   // Match ALL selected groups (intersection)
-	FilterNOT                   // RemoveComponent from existing (subtraction)
+	FilterNOT                   // RemoveEntity from existing (subtraction)
 	FilterXOR                   // Toggle membership (symmetric difference)
 )
 

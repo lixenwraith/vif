@@ -31,9 +31,9 @@ func NewTypingSystem(world *engine.World) engine.System {
 		world: world,
 	}
 
-	s.statCorrect = world.Resource.Status.Ints.Get("typing.correct")
-	s.statErrors = world.Resource.Status.Ints.Get("typing.errors")
-	s.statMaxStreak = world.Resource.Status.Ints.Get("typing.max_streak")
+	s.statCorrect = world.Resources.Status.Ints.Get("typing.correct")
+	s.statErrors = world.Resources.Status.Ints.Get("typing.errors")
+	s.statMaxStreak = world.Resources.Status.Ints.Get("typing.max_streak")
 
 	s.Init()
 	return s
@@ -89,14 +89,14 @@ func (s *TypingSystem) HandleEvent(ev event.GameEvent) {
 func (s *TypingSystem) handleTyping(cursorX, cursorY int, typedRune rune) {
 	// Stack-allocated buffer for zero-allocation lookup
 	var buf [constant.MaxEntitiesPerCell]core.Entity
-	count := s.world.Position.GetAllEntityAtInto(cursorX, cursorY, buf[:])
+	count := s.world.Positions.GetAllEntityAtInto(cursorX, cursorY, buf[:])
 
 	var entity core.Entity
 
 	// Iterate to find typeable entity (Glyph)
 	// Break on first match for O(1) best case in crowded cells
 	for i := 0; i < count; i++ {
-		if s.world.Component.Glyph.HasComponent(buf[i]) {
+		if s.world.Components.Glyph.HasEntity(buf[i]) {
 			entity = buf[i]
 			break
 		}
@@ -108,13 +108,13 @@ func (s *TypingSystem) handleTyping(cursorX, cursorY int, typedRune rune) {
 	}
 
 	// Check if this is a composite member
-	if member, ok := s.world.Component.Member.GetComponent(entity); ok {
+	if member, ok := s.world.Components.Member.GetComponent(entity); ok {
 		s.handleCompositeMember(entity, member.HeaderEntity, typedRune)
 		return
 	}
 
 	// Check for standalone GlyphComponent
-	if glyph, ok := s.world.Component.Glyph.GetComponent(entity); ok {
+	if glyph, ok := s.world.Components.Glyph.GetComponent(entity); ok {
 		s.handleGlyph(entity, glyph, typedRune)
 		return
 	}
@@ -126,10 +126,10 @@ func (s *TypingSystem) handleTyping(cursorX, cursorY int, typedRune rune) {
 
 // applyUniversalRewards handles boost activation/extension and heat gain for any correct typing
 func (s *TypingSystem) applyUniversalRewards() {
-	cursorEntity := s.world.Resource.Cursor.Entity
+	cursorEntity := s.world.Resources.Cursor.Entity
 
 	// Check current boost state BEFORE pushing events
-	boost, ok := s.world.Component.Boost.GetComponent(cursorEntity)
+	boost, ok := s.world.Components.Boost.GetComponent(cursorEntity)
 	isBoostActive := ok && boost.Active
 
 	// Boost: activate or extend
@@ -161,7 +161,7 @@ func (s *TypingSystem) applyUniversalRewards() {
 
 // emitTypingFeedback sends visual feedback (splash + blink)
 func (s *TypingSystem) emitTypingFeedback(glyphType component.GlyphType, char rune) {
-	cursorPos, _ := s.world.Position.Get(s.world.Resource.Cursor.Entity)
+	cursorPos, _ := s.world.Positions.Get(s.world.Resources.Cursor.Entity)
 
 	var splashColor component.SplashColor
 	var blinkType uint32
@@ -198,12 +198,12 @@ func (s *TypingSystem) emitTypingFeedback(glyphType component.GlyphType, char ru
 
 // emitTypingError emits events corresponding to typing error
 func (s *TypingSystem) emitTypingError() {
-	cursorEntity := s.world.Resource.Cursor.Entity
+	cursorEntity := s.world.Resources.Cursor.Entity
 
 	// SetPosition cursor error flash
-	if cursor, ok := s.world.Component.Cursor.GetComponent(cursorEntity); ok {
+	if cursor, ok := s.world.Components.Cursor.GetComponent(cursorEntity); ok {
 		cursor.ErrorFlashRemaining = constant.ErrorBlinkTimeout
-		s.world.Component.Cursor.SetComponent(cursorEntity, cursor)
+		s.world.Components.Cursor.SetComponent(cursorEntity, cursor)
 	}
 
 	// Reset heat and boost
@@ -220,19 +220,19 @@ func (s *TypingSystem) emitTypingError() {
 }
 
 func (s *TypingSystem) moveCursorRight() {
-	cursorEntity := s.world.Resource.Cursor.Entity
-	config := s.world.Resource.Config
+	cursorEntity := s.world.Resources.Cursor.Entity
+	config := s.world.Resources.Config
 
-	if cursorPos, ok := s.world.Position.Get(cursorEntity); ok && cursorPos.X < config.GameWidth-1 {
+	if cursorPos, ok := s.world.Positions.Get(cursorEntity); ok && cursorPos.X < config.GameWidth-1 {
 		cursorPos.X++
-		s.world.Position.SetPosition(cursorEntity, cursorPos)
+		s.world.Positions.SetPosition(cursorEntity, cursorPos)
 	}
 }
 
 // getHeat reads current heat value from cursor's HeatComponent
 func (s *TypingSystem) getHeat() int {
-	cursorEntity := s.world.Resource.Cursor.Entity
-	if hc, ok := s.world.Component.Heat.GetComponent(cursorEntity); ok {
+	cursorEntity := s.world.Resources.Cursor.Entity
+	if hc, ok := s.world.Components.Heat.GetComponent(cursorEntity); ok {
 		return int(hc.Current.Load())
 	}
 	return 0
@@ -242,7 +242,7 @@ func (s *TypingSystem) getHeat() int {
 
 // handleCompositeMember processes typing for composite member entities
 func (s *TypingSystem) handleCompositeMember(entity core.Entity, anchorID core.Entity, typedRune rune) {
-	glyph, ok := s.world.Component.Glyph.GetComponent(entity)
+	glyph, ok := s.world.Components.Glyph.GetComponent(entity)
 	if !ok {
 		s.emitTypingError()
 		return
@@ -255,7 +255,7 @@ func (s *TypingSystem) handleCompositeMember(entity core.Entity, anchorID core.E
 	}
 
 	// Identify composite behavior for reward logic
-	header, ok := s.world.Component.Header.GetComponent(anchorID)
+	header, ok := s.world.Components.Header.GetComponent(anchorID)
 	if !ok {
 		s.emitTypingError()
 		return
@@ -318,7 +318,7 @@ func (s *TypingSystem) handleGlyph(entity core.Entity, glyph component.GlyphComp
 	}
 
 	// Silent Death
-	event.EmitDeathOne(s.world.Resource.Event.Queue, entity, 0, s.world.Resource.Time.FrameNumber)
+	event.EmitDeathOne(s.world.Resources.Event.Queue, entity, 0, s.world.Resources.Time.FrameNumber)
 
 	// Splash typing feedback
 	s.emitTypingFeedback(glyph.Type, typedRune)
@@ -360,7 +360,7 @@ func (s *TypingSystem) isLeftmostMember(entity core.Entity, header *component.He
 		if m.Entity == 0 {
 			continue
 		}
-		pos, ok := s.world.Position.Get(m.Entity)
+		pos, ok := s.world.Positions.Get(m.Entity)
 		if !ok {
 			continue
 		}
@@ -414,7 +414,7 @@ func (s *TypingSystem) validateBossOrder(entity core.Entity, header *component.H
 		if m.Entity == 0 || m.Layer != component.LayerGlyph {
 			continue
 		}
-		pos, ok := s.world.Position.Get(m.Entity)
+		pos, ok := s.world.Positions.Get(m.Entity)
 		if !ok {
 			continue
 		}

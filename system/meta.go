@@ -111,16 +111,16 @@ func (s *MetaSystem) handleDebugRequest() {
 
 	// Card: Player GameState
 	playerCard := core.OverlayCard{Title: "PLAYER"}
-	energyComp, _ := s.world.Component.Energy.GetComponent(s.ctx.CursorEntity)
+	energyComp, _ := s.world.Components.Energy.GetComponent(s.ctx.CursorEntity)
 	playerCard.Entries = append(playerCard.Entries, core.CardEntry{
 		Key: "Energy", Value: fmt.Sprintf("%d", energyComp.Current.Load()),
 	})
-	if hc, ok := s.world.Component.Heat.GetComponent(s.ctx.CursorEntity); ok {
+	if hc, ok := s.world.Components.Heat.GetComponent(s.ctx.CursorEntity); ok {
 		playerCard.Entries = append(playerCard.Entries, core.CardEntry{
 			Key: "Heat", Value: fmt.Sprintf("%d/%d", hc.Current.Load(), constant.MaxHeat),
 		})
 	}
-	if sc, ok := s.world.Component.Shield.GetComponent(s.ctx.CursorEntity); ok {
+	if sc, ok := s.world.Components.Shield.GetComponent(s.ctx.CursorEntity); ok {
 		playerCard.Entries = append(playerCard.Entries, core.CardEntry{
 			Key: "Shield", Value: fmt.Sprintf("%v", sc.Active),
 		})
@@ -138,7 +138,7 @@ func (s *MetaSystem) handleDebugRequest() {
 	content.Items = append(content.Items, engineCard)
 
 	// Cards from status registry, grouped by prefix
-	reg := s.world.Resource.Status
+	reg := s.world.Resources.Status
 	groups := make(map[string][]core.CardEntry)
 
 	reg.Bools.Range(func(key string, ptr *atomic.Bool) {

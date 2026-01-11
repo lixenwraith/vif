@@ -34,7 +34,7 @@ func NewQuasarRenderer(gameCtx *engine.GameContext) *QuasarRenderer {
 		gameCtx: gameCtx,
 	}
 
-	if r.gameCtx.World.Resource.Render.ColorMode == terminal.ColorMode256 {
+	if r.gameCtx.World.Resources.Render.ColorMode == terminal.ColorMode256 {
 		r.shieldPadX = constant.QuasarShieldPad256X
 		r.shieldPadY = constant.QuasarShieldPad256Y
 		r.renderShieldCell = r.shieldCell256
@@ -54,7 +54,7 @@ func NewQuasarRenderer(gameCtx *engine.GameContext) *QuasarRenderer {
 
 // Render draws quasar composite with shield halo when zapping
 func (r *QuasarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	anchors := r.gameCtx.World.Component.Quasar.AllEntity()
+	anchors := r.gameCtx.World.Components.Quasar.AllEntity()
 	if len(anchors) == 0 {
 		return
 	}
@@ -62,17 +62,17 @@ func (r *QuasarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	buf.SetWriteMask(constant.MaskComposite)
 
 	for _, anchor := range anchors {
-		quasar, ok := r.gameCtx.World.Component.Quasar.GetComponent(anchor)
+		quasar, ok := r.gameCtx.World.Components.Quasar.GetComponent(anchor)
 		if !ok {
 			continue
 		}
 
-		header, ok := r.gameCtx.World.Component.Header.GetComponent(anchor)
+		header, ok := r.gameCtx.World.Components.Header.GetComponent(anchor)
 		if !ok {
 			continue
 		}
 
-		anchorPos, ok := r.gameCtx.World.Position.Get(anchor)
+		anchorPos, ok := r.gameCtx.World.Positions.Get(anchor)
 		if !ok {
 			continue
 		}
@@ -233,7 +233,7 @@ func (r *QuasarRenderer) renderMembers(ctx render.RenderContext, buf *render.Ren
 			continue
 		}
 
-		pos, ok := r.gameCtx.World.Position.Get(member.Entity)
+		pos, ok := r.gameCtx.World.Positions.Get(member.Entity)
 		if !ok {
 			continue
 		}

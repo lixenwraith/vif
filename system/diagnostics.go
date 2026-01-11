@@ -53,7 +53,7 @@ type DiagnosticsSystem struct {
 
 // NewDiagnosticsSystem creates a new diagnostics system
 func NewDiagnosticsSystem(world *engine.World) engine.System {
-	reg := world.Resource.Status
+	reg := world.Resources.Status
 
 	s := &DiagnosticsSystem{
 		world: world,
@@ -133,21 +133,21 @@ func (s *DiagnosticsSystem) Update() {
 
 // TODO: add to code gen
 func (s *DiagnosticsSystem) collectStoreCounts() {
-	s.statPositionCount.Store(int64(s.world.Position.CountEntity()))
-	s.statGlyphCount.Store(int64(s.world.Component.Glyph.CountEntity()))
-	s.statSigilCount.Store(int64(s.world.Component.Sigil.CountEntity()))
-	s.statMemberCount.Store(int64(s.world.Component.Member.CountEntity()))
-	s.statHeaderCount.Store(int64(s.world.Component.Header.CountEntity()))
-	s.statNuggetCount.Store(int64(s.world.Component.Nugget.CountEntity()))
-	s.statDeathCount.Store(int64(s.world.Component.Death.CountEntity()))
-	s.statShieldCount.Store(int64(s.world.Component.Shield.CountEntity()))
-	s.statPingCount.Store(int64(s.world.Component.Ping.CountEntity()))
-	s.statBoostCount.Store(int64(s.world.Component.Boost.CountEntity()))
+	s.statPositionCount.Store(int64(s.world.Positions.CountEntity()))
+	s.statGlyphCount.Store(int64(s.world.Components.Glyph.CountEntity()))
+	s.statSigilCount.Store(int64(s.world.Components.Sigil.CountEntity()))
+	s.statMemberCount.Store(int64(s.world.Components.Member.CountEntity()))
+	s.statHeaderCount.Store(int64(s.world.Components.Header.CountEntity()))
+	s.statNuggetCount.Store(int64(s.world.Components.Nugget.CountEntity()))
+	s.statDeathCount.Store(int64(s.world.Components.Death.CountEntity()))
+	s.statShieldCount.Store(int64(s.world.Components.Shield.CountEntity()))
+	s.statPingCount.Store(int64(s.world.Components.Ping.CountEntity()))
+	s.statBoostCount.Store(int64(s.world.Components.Boost.CountEntity()))
 }
 
 func (s *DiagnosticsSystem) collectGridMetrics() {
-	width, height := s.world.Position.GridDimensions()
-	stats := s.world.Position.GridStats()
+	width, height := s.world.Positions.GridDimensions()
+	stats := s.world.Positions.GridStats()
 
 	s.statGridWidth.Store(int64(width))
 	s.statGridHeight.Store(int64(height))
@@ -167,27 +167,27 @@ func (s *DiagnosticsSystem) collectGridMetrics() {
 func (s *DiagnosticsSystem) collectConsistencyChecks() {
 	var orphanGlyph, orphanMember, emptyHeader int64
 
-	// Glyph without Position
-	for _, e := range s.world.Component.Glyph.AllEntity() {
-		if !s.world.Position.HasComponent(e) {
+	// Glyph without Positions
+	for _, e := range s.world.Components.Glyph.AllEntity() {
+		if !s.world.Positions.HasEntity(e) {
 			orphanGlyph++
 		}
 	}
 
 	// Member without valid anchor
-	for _, e := range s.world.Component.Member.AllEntity() {
-		member, ok := s.world.Component.Member.GetComponent(e)
+	for _, e := range s.world.Components.Member.AllEntity() {
+		member, ok := s.world.Components.Member.GetComponent(e)
 		if !ok {
 			continue
 		}
-		if !s.world.Component.Header.HasComponent(member.HeaderEntity) {
+		if !s.world.Components.Header.HasEntity(member.HeaderEntity) {
 			orphanMember++
 		}
 	}
 
 	// HeaderEntity with no live members
-	for _, e := range s.world.Component.Header.AllEntity() {
-		header, ok := s.world.Component.Header.GetComponent(e)
+	for _, e := range s.world.Components.Header.AllEntity() {
+		header, ok := s.world.Components.Header.GetComponent(e)
 		if !ok {
 			continue
 		}

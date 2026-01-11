@@ -44,14 +44,14 @@ func (s *Store[T]) GetComponent(e core.Entity) (T, bool) {
 	return val, ok
 }
 
-// RemoveComponent deletes a component from an entity
-func (s *Store[T]) RemoveComponent(e core.Entity) {
+// RemoveEntity deletes a component from an entity
+func (s *Store[T]) RemoveEntity(e core.Entity) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if _, exists := s.components[e]; exists {
 		delete(s.components, e)
-		// RemoveComponent from entities slice
+		// RemoveEntity from entities slice
 		for i, entity := range s.entities {
 			if entity == e {
 				s.entities[i] = s.entities[len(s.entities)-1]
@@ -62,8 +62,8 @@ func (s *Store[T]) RemoveComponent(e core.Entity) {
 	}
 }
 
-// HasComponent checks if entity has this component
-func (s *Store[T]) HasComponent(e core.Entity) bool {
+// HasEntity checks if entity has this component
+func (s *Store[T]) HasEntity(e core.Entity) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	_, ok := s.components[e]

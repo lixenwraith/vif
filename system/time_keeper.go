@@ -55,7 +55,7 @@ func (s *TimeKeeperSystem) HandleEvent(ev event.GameEvent) {
 
 	if ev.Type == event.EventTimerStart {
 		if payload, ok := ev.Payload.(*event.TimerStartPayload); ok {
-			s.world.Component.Timer.SetComponent(payload.Entity, component.TimerComponent{
+			s.world.Components.Timer.SetComponent(payload.Entity, component.TimerComponent{
 				Remaining: payload.Duration,
 			})
 		}
@@ -68,11 +68,11 @@ func (s *TimeKeeperSystem) Update() {
 		return
 	}
 
-	entities := s.world.Component.Timer.AllEntity()
-	dt := s.world.Resource.Time.DeltaTime
+	entities := s.world.Components.Timer.AllEntity()
+	dt := s.world.Resources.Time.DeltaTime
 
 	for _, entity := range entities {
-		timer, ok := s.world.Component.Timer.GetComponent(entity)
+		timer, ok := s.world.Components.Timer.GetComponent(entity)
 		if !ok {
 			continue
 		}
@@ -81,10 +81,10 @@ func (s *TimeKeeperSystem) Update() {
 
 		if timer.Remaining <= 0 {
 			// Timer expired - Default action is destruction
-			s.world.Component.Timer.RemoveComponent(entity)
-			s.world.Component.Death.SetComponent(entity, component.DeathComponent{})
+			s.world.Components.Timer.RemoveEntity(entity)
+			s.world.Components.Death.SetComponent(entity, component.DeathComponent{})
 		} else {
-			s.world.Component.Timer.SetComponent(entity, timer)
+			s.world.Components.Timer.SetComponent(entity, timer)
 		}
 	}
 }

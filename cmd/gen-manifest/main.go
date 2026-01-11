@@ -178,26 +178,26 @@ type Component struct {
 // Called once from NewWorld()
 func initComponents(w *World) {
 {{- range .Components }}
-	w.Component.{{ .Field }} = NewStore[component.{{ .Type }}]()
+	w.Components.{{ .Field }} = NewStore[component.{{ .Type }}]()
 {{- end }}
-	w.Position = NewPosition()
-	w.Position.SetWorld(w)
+	w.Positions = NewPosition()
+	w.Positions.SetWorld(w)
 }
 
 // removeEntity removes entity from every component store
 func (w *World) removeEntity(e core.Entity) {
 {{- range .Components }}
-	w.Component.{{ .Field }}.RemoveComponent(e)
+	w.Components.{{ .Field }}.RemoveEntity(e)
 {{- end }}
-	w.Position.RemoveComponent(e)
+	w.Positions.RemoveEntity(e)
 }
 
 // wipeAll clears all component stores
 func (w *World) wipeAll() {
 {{- range .Components }}
-	w.Component.{{ .Field }}.ClearAllComponent()
+	w.Components.{{ .Field }}.ClearAllComponent()
 {{- end }}
-	w.Position.ClearAllComponent()
+	w.Positions.ClearAllComponent()
 }
 `))
 

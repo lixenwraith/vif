@@ -27,9 +27,9 @@ func NewSplashRenderer(gameCtx *engine.GameContext) *SplashRenderer {
 func (r *SplashRenderer) Render(gameCtx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(constant.MaskTransient)
 
-	entities := r.gameCtx.World.Component.Splash.AllEntity()
+	entities := r.gameCtx.World.Components.Splash.AllEntity()
 	for _, entity := range entities {
-		splash, ok := r.gameCtx.World.Component.Splash.GetComponent(entity)
+		splash, ok := r.gameCtx.World.Components.Splash.GetComponent(entity)
 		if !ok || splash.Length == 0 {
 			continue
 		}
@@ -64,7 +64,7 @@ func (r *SplashRenderer) resolveAnchor(splash *component.SplashComponent) (int, 
 	baseX, baseY := splash.AnchorX, splash.AnchorY
 
 	if splash.AnchorEntity != 0 {
-		if pos, ok := r.gameCtx.World.Position.Get(splash.AnchorEntity); ok {
+		if pos, ok := r.gameCtx.World.Positions.Get(splash.AnchorEntity); ok {
 			baseX = pos.X + splash.OffsetX
 			baseY = pos.Y + splash.OffsetY
 		}

@@ -68,7 +68,7 @@ func (s *MaterializeSystem) Update() {
 		return
 	}
 
-	dtFixed := vmath.FromFloat(s.world.Resource.Time.DeltaTime.Seconds())
+	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
 	// Cap delta time to prevent tunneling on lag spikes
 	dtCap := vmath.FromFloat(0.1)
 	if dtFixed > dtCap {
@@ -79,13 +79,13 @@ func (s *MaterializeSystem) Update() {
 	durationFixed := vmath.FromFloat(constant.MaterializeAnimationDuration.Seconds())
 	progressDelta := vmath.Div(dtFixed, durationFixed)
 
-	entities := s.world.Component.Materialize.AllEntity()
+	entities := s.world.Components.Materialize.AllEntity()
 	if len(entities) == 0 {
 		return
 	}
 
 	for _, entity := range entities {
-		mat, ok := s.world.Component.Materialize.GetComponent(entity)
+		mat, ok := s.world.Components.Materialize.GetComponent(entity)
 		if !ok {
 			continue
 		}
@@ -102,13 +102,13 @@ func (s *MaterializeSystem) Update() {
 			continue
 		}
 
-		s.world.Component.Materialize.SetComponent(entity, mat)
+		s.world.Components.Materialize.SetComponent(entity, mat)
 	}
 }
 
 // spawnMaterializeEffect creates a single materialize effect entity
 func (s *MaterializeSystem) spawnMaterializeEffect(targetX, targetY int, spawnType component.SpawnType) {
-	config := s.world.Resource.Config
+	config := s.world.Resources.Config
 
 	// Clamp target coordinates
 	if targetX < 0 {
@@ -127,7 +127,7 @@ func (s *MaterializeSystem) spawnMaterializeEffect(targetX, targetY int, spawnTy
 	entity := s.world.CreateEntity()
 
 	// TODO: add protection
-	s.world.Component.Materialize.SetComponent(entity, component.MaterializeComponent{
+	s.world.Components.Materialize.SetComponent(entity, component.MaterializeComponent{
 		TargetX:  targetX,
 		TargetY:  targetY,
 		Progress: 0,

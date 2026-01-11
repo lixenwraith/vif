@@ -40,7 +40,7 @@ func (r *Resource) ServiceBridge(res any) {
 	}
 }
 
-// === World Resource ===
+// === World Resources ===
 
 // TimeResource wraps time data for system
 // It is updated by the GameContext/ClockScheduler at the start of a frame/tick
@@ -99,7 +99,7 @@ type CursorResource struct {
 	Entity core.Entity
 }
 
-// === Bridged Resource from Service ===
+// === Bridged Resources from Service ===
 
 // ContentProvider defines the interface for content access
 // Matches content.Service public API

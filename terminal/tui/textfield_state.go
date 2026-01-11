@@ -14,7 +14,7 @@ func isWordChar(r rune) bool {
 // TextFieldState holds editable text field state
 type TextFieldState struct {
 	Text   []rune
-	Cursor int // Position before which cursor sits (0 = before first char)
+	Cursor int // Positions before which cursor sits (0 = before first char)
 	Scroll int // First visible rune index
 }
 

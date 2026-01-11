@@ -95,7 +95,7 @@ func (app *AppState) OpenFileViewer(path string) {
 
 	// Load raw lines
 	lines := strings.Split(string(content), "\n")
-	// RemoveComponent trailing empty line from split if file ends with newline
+	// RemoveEntity trailing empty line from split if file ends with newline
 	if len(lines) > 0 && lines[len(lines)-1] == "" {
 		lines = lines[:len(lines)-1]
 	}

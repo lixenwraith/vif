@@ -35,8 +35,8 @@ func NewDecaySystem(world *engine.World) engine.System {
 	s.decayedThisFrame = make(map[core.Entity]bool)
 	s.processedGridCells = make(map[int]bool)
 
-	s.statCount = s.world.Resource.Status.Ints.Get("decay.count")
-	s.statApplied = s.world.Resource.Status.Ints.Get("decay.applied")
+	s.statCount = s.world.Resources.Status.Ints.Get("decay.count")
+	s.statApplied = s.world.Resources.Status.Ints.Get("decay.applied")
 
 	s.Init()
 	return s
@@ -93,14 +93,14 @@ func (s *DecaySystem) Update() {
 		return
 	}
 
-	count := s.world.Component.Decay.CountEntity()
+	count := s.world.Components.Decay.CountEntity()
 	if count == 0 {
 		s.statCount.Store(0)
 		return
 	}
 
 	s.updateDecayEntities()
-	s.statCount.Store(int64(s.world.Component.Decay.CountEntity()))
+	s.statCount.Store(int64(s.world.Components.Decay.CountEntity()))
 }
 
 // spawnSingleDecay creates one decay entity at specified position
@@ -113,15 +113,15 @@ func (s *DecaySystem) spawnSingleDecay(x, y int, char rune, skipStartCell bool) 
 
 	entity := s.world.CreateEntity()
 
-	// 1. Grid Position
-	s.world.Position.SetPosition(entity, component.PositionComponent{X: x, Y: y})
+	// 1. Grid Positions
+	s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
 
-	// 2. Physics/Logic Component
+	// 2. Physics/Logic Components
 	lastX, lastY := -1, -1
 	if skipStartCell {
 		lastX, lastY = x, y
 	}
-	s.world.Component.Decay.SetComponent(entity, component.DecayComponent{
+	s.world.Components.Decay.SetComponent(entity, component.DecayComponent{
 		KineticState: component.KineticState{
 			PreciseX: vmath.FromInt(x),
 			PreciseY: vmath.FromInt(y),
@@ -134,7 +134,7 @@ func (s *DecaySystem) spawnSingleDecay(x, y int, char rune, skipStartCell bool) 
 	})
 
 	// 3. Visual component
-	s.world.Component.Sigil.SetComponent(entity, component.SigilComponent{
+	s.world.Components.Sigil.SetComponent(entity, component.SigilComponent{
 		Rune:  char,
 		Color: component.SigilDecay,
 	})
@@ -142,7 +142,7 @@ func (s *DecaySystem) spawnSingleDecay(x, y int, char rune, skipStartCell bool) 
 
 // spawnDecayWave creates a screen-wide falling decay wave
 func (s *DecaySystem) spawnDecayWave() {
-	gameWidth := s.world.Resource.Config.GameWidth
+	gameWidth := s.world.Resources.Config.GameWidth
 
 	// Spawn one decay entity per column for full-width coverage
 	for column := 0; column < gameWidth; column++ {
@@ -153,17 +153,17 @@ func (s *DecaySystem) spawnDecayWave() {
 
 // updateDecayEntities updates entity positions and applies decay
 func (s *DecaySystem) updateDecayEntities() {
-	dtFixed := vmath.FromFloat(s.world.Resource.Time.DeltaTime.Seconds())
+	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
 	// Cap delta time to prevent tunneling on lag spikes
 	dtCap := vmath.FromFloat(0.1)
 	if dtFixed > dtCap {
 		dtFixed = dtCap
 	}
 
-	gameWidth := s.world.Resource.Config.GameWidth
-	gameHeight := s.world.Resource.Config.GameHeight
+	gameWidth := s.world.Resources.Config.GameWidth
+	gameHeight := s.world.Resources.Config.GameHeight
 
-	decayEntities := s.world.Component.Decay.AllEntity()
+	decayEntities := s.world.Components.Decay.AllEntity()
 
 	// Clear frame deduplication maps
 	clear(s.processedGridCells)
@@ -174,7 +174,7 @@ func (s *DecaySystem) updateDecayEntities() {
 	var collisionBuf [constant.MaxEntitiesPerCell]core.Entity
 
 	for _, entity := range decayEntities {
-		d, ok := s.world.Component.Decay.GetComponent(entity)
+		d, ok := s.world.Components.Decay.GetComponent(entity)
 		if !ok {
 			continue
 		}
@@ -205,7 +205,7 @@ func (s *DecaySystem) updateDecayEntities() {
 				return true
 			}
 
-			n := s.world.Position.GetAllEntityAtInto(x, y, collisionBuf[:])
+			n := s.world.Positions.GetAllEntityAtInto(x, y, collisionBuf[:])
 			for i := 0; i < n; i++ {
 				target := collisionBuf[i]
 				if target == 0 || target == entity {
@@ -218,15 +218,15 @@ func (s *DecaySystem) updateDecayEntities() {
 				}
 
 				// Mutual destruction: decay + blossom annihilate
-				if s.world.Component.Blossom.HasComponent(target) {
+				if s.world.Components.Blossom.HasEntity(target) {
 					s.world.DestroyEntity(target)
 					s.world.DestroyEntity(entity)
 					break
 				}
 
-				if s.world.Component.Nugget.HasComponent(target) {
+				if s.world.Components.Nugget.HasEntity(target) {
 					s.world.PushEvent(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{Entity: target})
-					event.EmitDeathOne(s.world.Resource.Event.Queue, target, event.EventFlashRequest, s.world.Resource.Time.FrameNumber)
+					event.EmitDeathOne(s.world.Resources.Event.Queue, target, event.EventFlashRequest, s.world.Resources.Time.FrameNumber)
 				} else if s.shouldDieByDecay(target) {
 					deathCandidates = append(deathCandidates, target)
 				} else {
@@ -244,29 +244,29 @@ func (s *DecaySystem) updateDecayEntities() {
 		if d.LastIntX != curX || d.LastIntY != curY {
 			if rand.Float64() < constant.ParticleChangeChance {
 				d.Char = constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
-				if sigil, ok := s.world.Component.Sigil.GetComponent(entity); ok {
+				if sigil, ok := s.world.Components.Sigil.GetComponent(entity); ok {
 					sigil.Rune = d.Char
-					s.world.Component.Sigil.SetComponent(entity, sigil)
+					s.world.Components.Sigil.SetComponent(entity, sigil)
 				}
 			}
 			d.LastIntX = curX
 			d.LastIntY = curY
 		}
 
-		// Grid Sync: Update Position for spatial queries
-		s.world.Position.SetPosition(entity, component.PositionComponent{X: curX, Y: curY})
-		s.world.Component.Decay.SetComponent(entity, d)
+		// Grid Sync: Update Positions for spatial queries
+		s.world.Positions.SetPosition(entity, component.PositionComponent{X: curX, Y: curY})
+		s.world.Components.Decay.SetComponent(entity, d)
 	}
 
 	// Emit single batch event instead of scalar events per hit
 	if len(deathCandidates) > 0 {
-		event.EmitDeathBatch(s.world.Resource.Event.Queue, event.EventFlashRequest, deathCandidates, s.world.Resource.Time.FrameNumber)
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashRequest, deathCandidates, s.world.Resources.Time.FrameNumber)
 	}
 }
 
 // shouldDieByDecay checks if a character has reached the end of the decay chain
 func (s *DecaySystem) shouldDieByDecay(entity core.Entity) bool {
-	glyph, ok := s.world.Component.Glyph.GetComponent(entity)
+	glyph, ok := s.world.Components.Glyph.GetComponent(entity)
 	if !ok {
 		return false
 	}
@@ -275,14 +275,14 @@ func (s *DecaySystem) shouldDieByDecay(entity core.Entity) bool {
 
 // applyDecayToCharacter applies decay logic to a single character entity
 func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
-	glyph, ok := s.world.Component.Glyph.GetComponent(entity)
+	glyph, ok := s.world.Components.Glyph.GetComponent(entity)
 	if !ok {
 		return
 	}
 
 	// Check protection
-	if prot, ok := s.world.Component.Protection.GetComponent(entity); ok {
-		now := s.world.Resource.Time.GameTime
+	if prot, ok := s.world.Components.Protection.GetComponent(entity); ok {
+		now := s.world.Resources.Time.GameTime
 		if !prot.IsExpired(now.UnixNano()) && prot.Mask.Has(component.ProtectFromDecay) {
 			return
 		}
@@ -292,23 +292,23 @@ func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
 	if glyph.Level > component.GlyphDark {
 		// Decrease level if not level dark
 		glyph.Level--
-		s.world.Component.Glyph.SetComponent(entity, glyph)
+		s.world.Components.Glyph.SetComponent(entity, glyph)
 	} else {
 		// Dark level: type chain Blue→Green→Red→destroy
 		switch glyph.Type {
 		case component.GlyphBlue:
 			glyph.Type = component.GlyphGreen
 			glyph.Level = component.GlyphBright
-			s.world.Component.Glyph.SetComponent(entity, glyph)
+			s.world.Components.Glyph.SetComponent(entity, glyph)
 
 		case component.GlyphGreen:
 			glyph.Type = component.GlyphRed
 			glyph.Level = component.GlyphBright
-			s.world.Component.Glyph.SetComponent(entity, glyph)
+			s.world.Components.Glyph.SetComponent(entity, glyph)
 
 		default:
 			// Fallback: Red or other: destroy
-			event.EmitDeathOne(s.world.Resource.Event.Queue, entity, event.EventFlashRequest, s.world.Resource.Time.FrameNumber)
+			event.EmitDeathOne(s.world.Resources.Event.Queue, entity, event.EventFlashRequest, s.world.Resources.Time.FrameNumber)
 		}
 	}
 

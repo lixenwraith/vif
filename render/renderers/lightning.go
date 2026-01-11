@@ -112,7 +112,7 @@ func NewLightningRenderer(ctx *engine.GameContext) *LightningRenderer {
 		rng:     vmath.NewFastRand(1),
 	}
 
-	if r.gameCtx.World.Resource.Render.ColorMode == terminal.ColorMode256 {
+	if r.gameCtx.World.Resources.Render.ColorMode == terminal.ColorMode256 {
 		r.renderLightning = r.renderLightning256
 	} else {
 		r.renderLightning = r.renderLightningTrueColor
@@ -123,7 +123,7 @@ func NewLightningRenderer(ctx *engine.GameContext) *LightningRenderer {
 
 // Render draws all active lightning bolts using the mode-appropriate renderer
 func (r *LightningRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.gameCtx.World.Component.Lightning.AllEntity()
+	entities := r.gameCtx.World.Components.Lightning.AllEntity()
 	if len(entities) == 0 {
 		return
 	}
@@ -131,7 +131,7 @@ func (r *LightningRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	buf.SetWriteMask(constant.MaskTransient)
 
 	for _, e := range entities {
-		l, ok := r.gameCtx.World.Component.Lightning.GetComponent(e)
+		l, ok := r.gameCtx.World.Components.Lightning.GetComponent(e)
 		if !ok || l.Remaining <= 0 {
 			continue
 		}

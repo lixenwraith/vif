@@ -49,18 +49,18 @@ func (p *Position) SetPosition(e core.Entity, pos component.PositionComponent) {
 }
 
 // RemoveComponent deletes an entity from the store and grid
-func (p *Position) RemoveComponent(e core.Entity) {
+func (p *Position) RemoveEntity(e core.Entity) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	if pos, exists := p.components[e]; exists {
-		// RemoveComponent from spatial grid
+		// RemoveEntity from spatial grid
 		p.grid.Remove(e, pos.X, pos.Y)
 
-		// RemoveComponent from components map
+		// RemoveEntity from components map
 		delete(p.components, e)
 
-		// RemoveComponent from dense entities array
+		// RemoveEntity from dense entities array
 		for i, entity := range p.entities {
 			if entity == e {
 				p.entities[i] = p.entities[len(p.entities)-1]
@@ -81,7 +81,7 @@ func (p *Position) MoveEntity(e core.Entity, newPos component.PositionComponent)
 		return fmt.Errorf("entity %d does not have a position component", e)
 	}
 
-	// RemoveComponent from old grid pos
+	// RemoveEntity from old grid pos
 	p.grid.Remove(e, oldPos.X, oldPos.Y)
 
 	// Update component
@@ -151,8 +151,8 @@ func (p *Position) Get(e core.Entity) (component.PositionComponent, bool) {
 	return val, ok
 }
 
-// HasComponent checks if an entity has a position component
-func (p *Position) HasComponent(e core.Entity) bool {
+// HasEntity checks if an entity has a position component
+func (p *Position) HasEntity(e core.Entity) bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	_, ok := p.components[e]

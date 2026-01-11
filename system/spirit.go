@@ -79,7 +79,7 @@ func (s *SpiritSystem) Update() {
 	}
 	s.destroyNextTick = s.destroyNextTick[:0]
 
-	entities := s.world.Component.Spirit.AllEntity()
+	entities := s.world.Components.Spirit.AllEntity()
 	if len(entities) == 0 {
 		return
 	}
@@ -87,7 +87,7 @@ func (s *SpiritSystem) Update() {
 	var toDestroy []core.Entity
 
 	for _, entity := range entities {
-		spirit, ok := s.world.Component.Spirit.GetComponent(entity)
+		spirit, ok := s.world.Components.Spirit.GetComponent(entity)
 		if !ok {
 			continue
 		}
@@ -99,7 +99,7 @@ func (s *SpiritSystem) Update() {
 			// Mark for destruction next tick - allows final frame render
 			s.destroyNextTick = append(s.destroyNextTick, entity)
 		}
-		s.world.Component.Spirit.SetComponent(entity, spirit)
+		s.world.Components.Spirit.SetComponent(entity, spirit)
 	}
 
 	// Destroy completed spirits
@@ -129,11 +129,11 @@ func (s *SpiritSystem) spawnSpirit(p *event.SpiritSpawnPayload) {
 		spinMag = -spinMag
 	}
 
-	s.world.Component.Protection.SetComponent(entity, component.ProtectionComponent{
+	s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
 		Mask: component.ProtectAll,
 	})
 
-	s.world.Component.Spirit.SetComponent(entity, component.SpiritComponent{
+	s.world.Components.Spirit.SetComponent(entity, component.SpiritComponent{
 		StartX:     vmath.FromInt(p.StartX),
 		StartY:     vmath.FromInt(p.StartY),
 		TargetX:    vmath.FromInt(p.TargetX),
@@ -148,13 +148,13 @@ func (s *SpiritSystem) spawnSpirit(p *event.SpiritSpawnPayload) {
 }
 
 func (s *SpiritSystem) destroySpirit(entity core.Entity) {
-	s.world.Component.Protection.RemoveComponent(entity)
-	s.world.Component.Spirit.RemoveComponent(entity)
+	s.world.Components.Protection.RemoveEntity(entity)
+	s.world.Components.Spirit.RemoveEntity(entity)
 	s.world.DestroyEntity(entity)
 }
 
 func (s *SpiritSystem) destroyAllSpirits() {
-	entities := s.world.Component.Spirit.AllEntity()
+	entities := s.world.Components.Spirit.AllEntity()
 	for _, entity := range entities {
 		s.destroySpirit(entity)
 	}

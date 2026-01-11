@@ -67,11 +67,11 @@ func (s *PingSystem) Update() {
 		return
 	}
 
-	entities := s.world.Component.Ping.AllEntity()
-	dt := s.world.Resource.Time.DeltaTime
+	entities := s.world.Components.Ping.AllEntity()
+	dt := s.world.Resources.Time.DeltaTime
 
 	for _, entity := range entities {
-		ping, ok := s.world.Component.Ping.GetComponent(entity)
+		ping, ok := s.world.Components.Ping.GetComponent(entity)
 		if !ok {
 			continue
 		}
@@ -90,7 +90,7 @@ func (s *PingSystem) Update() {
 
 		// Commit changes back to store
 		if changed {
-			s.world.Component.Ping.SetComponent(entity, ping)
+			s.world.Components.Ping.SetComponent(entity, ping)
 		}
 	}
 }
@@ -98,14 +98,14 @@ func (s *PingSystem) Update() {
 // handleGridRequest activates the grid on the cursor entity
 func (s *PingSystem) handleGridRequest(duration time.Duration) {
 	// In single player, apply to the main cursor
-	entity := s.world.Resource.Cursor.Entity
+	entity := s.world.Resources.Cursor.Entity
 
-	ping, ok := s.world.Component.Ping.GetComponent(entity)
+	ping, ok := s.world.Components.Ping.GetComponent(entity)
 	if !ok {
 		return
 	}
 
 	ping.GridActive = true
 	ping.GridRemaining = duration
-	s.world.Component.Ping.SetComponent(entity, ping)
+	s.world.Components.Ping.SetComponent(entity, ping)
 }

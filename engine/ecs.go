@@ -1,9 +1,8 @@
 package engine
 
-
 // Entity is defined in core package to avoid cyclic dependency
 
-// Component are handled in Store
+// Components are handled in Store
 
 // System is an interface that all system must implement
 type System interface {

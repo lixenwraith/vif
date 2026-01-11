@@ -94,11 +94,11 @@ func NewGlyphSystem(world *engine.World) engine.System {
 	}
 
 	// Cache metric pointers
-	s.statEnabled = world.Resource.Status.Bools.Get("glyph.enabled")
-	s.statDensity = world.Resource.Status.Floats.Get("glyph.density")
-	s.statRateMult = world.Resource.Status.Floats.Get("glyph.rate_mult")
-	s.statOrphanGlyph = world.Resource.Status.Ints.Get("glyph.orphan_char")
-	s.statOrphanTypeable = world.Resource.Status.Ints.Get("glyph.orphan_typeable")
+	s.statEnabled = world.Resources.Status.Bools.Get("glyph.enabled")
+	s.statDensity = world.Resources.Status.Floats.Get("glyph.density")
+	s.statRateMult = world.Resources.Status.Floats.Get("glyph.rate_mult")
+	s.statOrphanGlyph = world.Resources.Status.Ints.Get("glyph.orphan_char")
+	s.statOrphanTypeable = world.Resources.Status.Ints.Get("glyph.orphan_typeable")
 
 	s.Init()
 	return s
@@ -161,11 +161,11 @@ func (s *GlyphSystem) Update() {
 		return
 	}
 
-	now := s.world.Resource.Time.GameTime
-	config := s.world.Resource.Config
+	now := s.world.Resources.Time.GameTime
+	config := s.world.Resources.Config
 
 	// Calculate current density and update rate multiplier
-	entityCount := s.world.Position.CountEntity()
+	entityCount := s.world.Positions.CountEntity()
 	screenCapacity := config.GameWidth * config.GameHeight
 	density := s.calculateDensity(entityCount, screenCapacity)
 	s.updateRateMultiplier(density)
@@ -180,7 +180,7 @@ func (s *GlyphSystem) Update() {
 	}
 
 	// Snapshot content at frame start to prevent mid-frame race
-	s.frameContent = s.world.Resource.Content.Provider.CurrentContent()
+	s.frameContent = s.world.Resources.Content.Provider.CurrentContent()
 
 	// Detect content swap and reset index
 	if s.frameContent != nil && s.frameContent.Generation != s.localGeneration {
@@ -217,7 +217,7 @@ func (s *GlyphSystem) updateRateMultiplier(density float64) {
 
 // scheduleNextSpawn calculates and sets the next spawnLightning time
 func (s *GlyphSystem) scheduleNextSpawn() {
-	now := s.world.Resource.Time.GameTime
+	now := s.world.Resources.Time.GameTime
 	baseDelay := time.Duration(constant.SpawnIntervalMs) * time.Millisecond
 	adjustedDelay := time.Duration(float64(baseDelay) / s.rateMultiplier)
 
@@ -240,7 +240,7 @@ func (s *GlyphSystem) getNextBlock() content.CodeBlock {
 	s.localIndex++
 
 	// Notify service of consumption
-	s.world.Resource.Content.Provider.NotifyConsumed(1)
+	s.world.Resources.Content.Provider.NotifyConsumed(1)
 
 	return block
 }
@@ -261,14 +261,14 @@ func (s *GlyphSystem) runCensus() GlyphCensus {
 	var census GlyphCensus
 	var orphanGlyph, orphanTypeable int64
 
-	glyphEntities := s.world.Component.Glyph.AllEntity()
+	glyphEntities := s.world.Components.Glyph.AllEntity()
 	for _, entity := range glyphEntities {
-		if !s.world.Position.HasComponent(entity) {
+		if !s.world.Positions.HasEntity(entity) {
 			orphanGlyph++
 			continue
 		}
 
-		glyph, ok := s.world.Component.Glyph.GetComponent(entity)
+		glyph, ok := s.world.Components.Glyph.GetComponent(entity)
 		if !ok {
 			continue
 		}
@@ -296,9 +296,9 @@ func (s *GlyphSystem) runCensus() GlyphCensus {
 		}
 	}
 
-	typeableEntities := s.world.Component.Glyph.AllEntity()
+	typeableEntities := s.world.Components.Glyph.AllEntity()
 	for _, entity := range typeableEntities {
-		if !s.world.Position.HasComponent(entity) {
+		if !s.world.Positions.HasEntity(entity) {
 			orphanTypeable++
 		}
 	}
@@ -381,8 +381,8 @@ func (s *GlyphSystem) spawnGlyphs() {
 // placeLine attempts to place a single line on the screen
 // Lines exceeding GameWidth are cropped to fit available space
 func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyphLevel component.GlyphLevel) bool {
-	config := s.world.Resource.Config
-	cursorEntity := s.world.Resource.Cursor.Entity
+	config := s.world.Resources.Config
+	cursorEntity := s.world.Resources.Cursor.Entity
 
 	lineRunes := []rune(line)
 	lineLength := len(lineRunes)
@@ -420,14 +420,14 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 		// Check for overlaps using HasAny
 		hasOverlap := false
 		for i := 0; i < lineLength; i++ {
-			if s.world.Position.HasAny(startCol+i, row) {
+			if s.world.Positions.HasAny(startCol+i, row) {
 				hasOverlap = true
 				break
 			}
 		}
 
 		// Check if too close to cursor
-		cursorPos, ok := s.world.Position.Get(cursorEntity)
+		cursorPos, ok := s.world.Positions.Get(cursorEntity)
 		if !ok {
 			panic(nil)
 		}
@@ -473,7 +473,7 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 		}
 
 		// 2. Batch position validation and commit
-		batch := s.world.Position.BeginBatch()
+		batch := s.world.Positions.BeginBatch()
 		for _, ed := range entities {
 			batch.Add(ed.entity, ed.pos)
 		}
@@ -488,7 +488,7 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 
 		// 3. SetPosition glyph components
 		for _, ed := range entities {
-			s.world.Component.Glyph.SetComponent(ed.entity, component.GlyphComponent{
+			s.world.Components.Glyph.SetComponent(ed.entity, component.GlyphComponent{
 				Rune:  ed.char,
 				Type:  glyphType,
 				Level: glyphLevel,

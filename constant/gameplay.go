@@ -124,7 +124,7 @@ const (
 	SpawnRateSlow   = 0.5 // Used when density > high threshold
 )
 
-// Position Finding
+// Positions Finding
 const (
 	// DrainSpawnMaxRetries is the maximum number of retries for finding valid drain spawn position
 	DrainSpawnMaxRetries = 10

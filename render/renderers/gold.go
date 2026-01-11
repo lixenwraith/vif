@@ -22,7 +22,7 @@ func NewGoldRenderer(gameCtx *engine.GameContext) *GoldRenderer {
 
 // Render draws all gold sequence members
 func (r *GoldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	headers := r.gameCtx.World.Component.Header.AllEntity()
+	headers := r.gameCtx.World.Components.Header.AllEntity()
 	if len(headers) == 0 {
 		return
 	}
@@ -30,7 +30,7 @@ func (r *GoldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 	buf.SetWriteMask(constant.MaskComposite)
 
 	for _, anchor := range headers {
-		header, ok := r.gameCtx.World.Component.Header.GetComponent(anchor)
+		header, ok := r.gameCtx.World.Components.Header.GetComponent(anchor)
 		if !ok || header.BehaviorID != component.BehaviorGold {
 			continue
 		}
@@ -40,12 +40,12 @@ func (r *GoldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 				continue
 			}
 
-			pos, ok := r.gameCtx.World.Position.Get(member.Entity)
+			pos, ok := r.gameCtx.World.Positions.Get(member.Entity)
 			if !ok {
 				continue
 			}
 
-			glyph, hasGlyph := r.gameCtx.World.Component.Glyph.GetComponent(member.Entity)
+			glyph, hasGlyph := r.gameCtx.World.Components.Glyph.GetComponent(member.Entity)
 			if !hasGlyph {
 				continue
 			}

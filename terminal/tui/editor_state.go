@@ -373,7 +373,7 @@ func (e *EditorState) MoveWordRight() {
 	}
 }
 
-// --- Position navigation ---
+// --- Positions navigation ---
 
 // MoveToLineStart moves cursor to start of line
 func (e *EditorState) MoveToLineStart() {

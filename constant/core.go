@@ -20,7 +20,7 @@ const (
 	EventLoopIterations = 16
 )
 
-// ECS & Resource Limits
+// ECS & Resources Limits
 const (
 	// EventQueueSize is the fixed capacity of the event ring buffer
 	EventQueueSize = 2048

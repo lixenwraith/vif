@@ -24,8 +24,8 @@ func NewHeatSystem(world *engine.World) engine.System {
 		world: world,
 	}
 
-	s.statCurrent = s.world.Resource.Status.Ints.Get("heat.current")
-	s.statAtMax = s.world.Resource.Status.Bools.Get("heat.at_max")
+	s.statCurrent = s.world.Resources.Status.Ints.Get("heat.current")
+	s.statAtMax = s.world.Resources.Status.Bools.Get("heat.at_max")
 
 	s.Init()
 	return s
@@ -87,9 +87,9 @@ func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
 // TODO: refactor this and setHead more
 // addHeat applies delta with clamping and writes back to store
 func (s *HeatSystem) addHeat(delta int) {
-	cursorEntity := s.world.Resource.Cursor.Entity
+	cursorEntity := s.world.Resources.Cursor.Entity
 
-	heatComp, ok := s.world.Component.Heat.GetComponent(cursorEntity)
+	heatComp, ok := s.world.Components.Heat.GetComponent(cursorEntity)
 	if !ok {
 		return
 	}
@@ -103,9 +103,9 @@ func (s *HeatSystem) addHeat(delta int) {
 
 // setHeat stores absolute value with clamping and writes back to store
 func (s *HeatSystem) setHeat(value int64) {
-	cursorEntity := s.world.Resource.Cursor.Entity
+	cursorEntity := s.world.Resources.Cursor.Entity
 
-	heatComp, ok := s.world.Component.Heat.GetComponent(cursorEntity)
+	heatComp, ok := s.world.Components.Heat.GetComponent(cursorEntity)
 	if !ok {
 		return
 	}
@@ -124,5 +124,5 @@ func (s *HeatSystem) setHeat(value int64) {
 	s.statAtMax.Store(value >= constant.MaxHeat)
 
 	// Write the modified component copy back to the store
-	s.world.Component.Heat.SetComponent(cursorEntity, heatComp)
+	s.world.Components.Heat.SetComponent(cursorEntity, heatComp)
 }

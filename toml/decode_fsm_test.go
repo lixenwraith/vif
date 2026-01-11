@@ -626,7 +626,7 @@ binary_val = 0b1010
 		t.Errorf("player.Health = %d", player.Health)
 	}
 	if player.Position.Y != -9.81e-1 {
-		t.Errorf("player.Position.Y = %e", player.Position.Y)
+		t.Errorf("player.Positions.Y = %e", player.Position.Y)
 	}
 	if len(player.Tags) != 2 {
 		t.Errorf("player.Tags = %v", player.Tags)

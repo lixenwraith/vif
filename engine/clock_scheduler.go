@@ -80,7 +80,7 @@ func NewClockScheduler(
 	updateDone := make(chan struct{}, 1)
 	resetChan := make(chan struct{}, 1)
 
-	statusReg := world.Resource.Status
+	statusReg := world.Resources.Status
 
 	cs := &ClockScheduler{
 		world: world,
@@ -92,7 +92,7 @@ func NewClockScheduler(
 		lastGameTickTime: pausableClock.Now(),
 		tickCount:        atomic.Uint64{},
 
-		eventRouter: event.NewRouter(world.Resource.Event.Queue),
+		eventRouter: event.NewRouter(world.Resources.Event.Queue),
 
 		frameReady: frameReady,
 		updateDone: updateDone,
@@ -304,7 +304,7 @@ func (cs *ClockScheduler) eventLoop() {
 			}
 
 			// Skip if queue empty (prevents busy-wait contention)
-			if cs.world.Resource.Event.Queue.Len() == 0 {
+			if cs.world.Resources.Event.Queue.Len() == 0 {
 				backoffCount = 0
 				continue
 			}
@@ -339,7 +339,7 @@ func (cs *ClockScheduler) eventLoop() {
 // dispatchOnePass consumes and dispatches pending events exactly once
 // Returns number of events processed
 func (cs *ClockScheduler) dispatchOnePass() int {
-	eventsList := cs.world.Resource.Event.Queue.Consume()
+	eventsList := cs.world.Resources.Event.Queue.Consume()
 	if len(eventsList) == 0 {
 		return 0
 	}
@@ -372,7 +372,7 @@ func (cs *ClockScheduler) dispatchAndProcessEvents() {
 func (cs *ClockScheduler) executeReset() {
 	// NOTE: Do not use RunSafe if called from a blocking system
 	// 1. Drain and discard stale events from the previous game session
-	_ = cs.world.Resource.Event.Queue.Consume()
+	_ = cs.world.Resources.Event.Queue.Consume()
 
 	// 2. Synchronize with world lock
 	// Acquire lock explicitly, wait till MetaSystem finishes its synchronous cleanup and releases the lock
@@ -418,7 +418,7 @@ func (cs *ClockScheduler) processTick() {
 
 		// 1. Sync Time: Authoritative FrameNumber from GameState (Render Clock)
 		currentFrame := cs.world.FrameNumber()
-		cs.world.Resource.Time.Update(
+		cs.world.Resources.Time.Update(
 			now,
 			cs.pausableClock.RealTime(),
 			cs.tickInterval,
@@ -455,13 +455,13 @@ func (cs *ClockScheduler) processTick() {
 		cs.world.UpdateLocked()
 	})
 
-	ticks := cs.world.Resource.GameState.State.IncrementGameTicks()
+	ticks := cs.world.Resources.GameState.State.IncrementGameTicks()
 	cs.statTicks.Store(int64(ticks))
 
 	if cs.tickCount.Load()%20 == 0 {
-		cs.world.Resource.GameState.State.UpdateAPM(cs.world.Resource.Status)
+		cs.world.Resources.GameState.State.UpdateAPM(cs.world.Resources.Status)
 	}
 
-	cs.statEntityCount.Store(int64(cs.world.Position.CountEntity()))
-	cs.statQueueLen.Store(int64(cs.world.Resource.Event.Queue.Len()))
+	cs.statEntityCount.Store(int64(cs.world.Positions.CountEntity()))
+	cs.statQueueLen.Store(int64(cs.world.Resources.Event.Queue.Len()))
 }

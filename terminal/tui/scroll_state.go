@@ -75,7 +75,7 @@ func (s *ScrollState) SetVisible(visible int) {
 	s.Clamp()
 }
 
-// --- Position queries ---
+// --- Positions queries ---
 
 // AtTop returns true if scrolled to top
 func (s *ScrollState) AtTop() bool {

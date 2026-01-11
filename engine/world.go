@@ -14,12 +14,12 @@ type World struct {
 	mu           sync.RWMutex
 	nextEntityID core.Entity
 
-	// Global Resource
-	Resource *Resource
+	// Global Resources
+	Resources *Resource
 
-	// Position Store (Special - spatial index, kept as named field)
-	Component Component
-	Position  *Position
+	// Positions Store (Special - spatial index, kept as named field)
+	Components Component
+	Positions  *Position
 
 	// Direct pointers for high-frequency path optimization
 	eventQueue  *event.EventQueue
@@ -36,7 +36,7 @@ type World struct {
 func NewWorld() *World {
 	w := &World{
 		nextEntityID: 1,
-		Resource:     &Resource{},
+		Resources:    &Resource{},
 		system:       make([]System, 0),
 	}
 
@@ -57,7 +57,7 @@ func (w *World) CreateEntity() core.Entity {
 
 // DestroyEntity removes all components associated with an entity
 func (w *World) DestroyEntity(e core.Entity) {
-	if prot, ok := w.Component.Protection.GetComponent(e); ok {
+	if prot, ok := w.Components.Protection.GetComponent(e); ok {
 		if prot.Mask == component.ProtectAll {
 			return
 		}

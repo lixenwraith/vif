@@ -85,10 +85,10 @@ func RegisterFSMComponents(m *fsm.Machine[*engine.World]) {
 		}
 
 		return func(world *engine.World, region *fsm.RegionState) bool {
-			if !world.Resource.Status.Bools.Has(key) {
+			if !world.Resources.Status.Bools.Has(key) {
 				return false
 			}
-			return world.Resource.Status.Bools.Get(key).Load() == expected
+			return world.Resources.Status.Bools.Get(key).Load() == expected
 		}
 	})
 
@@ -106,10 +106,10 @@ func RegisterFSMComponents(m *fsm.Machine[*engine.World]) {
 		}
 
 		return func(world *engine.World, region *fsm.RegionState) bool {
-			if !world.Resource.Status.Ints.Has(key) {
+			if !world.Resources.Status.Ints.Has(key) {
 				return false
 			}
-			current := world.Resource.Status.Ints.Get(key).Load()
+			current := world.Resources.Status.Ints.Get(key).Load()
 
 			switch op {
 			case "eq":

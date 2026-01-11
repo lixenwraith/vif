@@ -65,7 +65,7 @@ func main() {
 		}
 	}
 
-	// 4. World Creation, Resource & Component Initialization
+	// 4. World Creation, Resources & Components Initialization
 	world := engine.NewWorld()
 
 	// TODO: check moving it up since no world dependency
@@ -74,8 +74,8 @@ func main() {
 		panic(fmt.Sprintf("service init failed: %v", err))
 	}
 
-	// 6. Resource ServiceBridge - Services contribute to ECS
-	hub.PublishResources(world.Resource.ServiceBridge)
+	// 6. Resources ServiceBridge - Services contribute to ECS
+	hub.PublishResources(world.Resources.ServiceBridge)
 
 	// 7. Terminal extraction (orchestrator needs interface directly)
 	termSvc := service.MustGet[*terminal.TerminalService](hub, "terminal")
@@ -110,7 +110,7 @@ func main() {
 	// 10. Render Orchestrator
 	// Resolve color mode for RenderConfig
 	colorMode := term.ColorMode()
-	ctx.World.Resource.Render = &engine.RenderConfig{ColorMode: colorMode}
+	ctx.World.Resources.Render = &engine.RenderConfig{ColorMode: colorMode}
 
 	orchestrator := render.NewRenderOrchestrator(term, ctx.Width, ctx.Height)
 
@@ -182,11 +182,11 @@ func main() {
 	defer clockScheduler.Stop()
 
 	// Cache FPS metric pointer for render loop
-	statFPS := ctx.World.Resource.Status.Ints.Get("engine.fps")
+	statFPS := ctx.World.Resources.Status.Ints.Get("engine.fps")
 
 	// FPS tracking
 	var frameCount int64
-	lastFPSUpdate := ctx.World.Resource.Time.RealTime
+	lastFPSUpdate := ctx.World.Resources.Time.RealTime
 
 	// SetComponent frame rate
 	frameTicker := time.NewTicker(constant.FrameUpdateInterval)
@@ -227,7 +227,7 @@ func main() {
 
 			// FPS calculation (once per second)
 			frameCount++
-			now := ctx.World.Resource.Time.RealTime
+			now := ctx.World.Resources.Time.RealTime
 			if now.Sub(lastFPSUpdate) >= time.Second {
 				statFPS.Store(frameCount)
 				frameCount = 0
@@ -245,19 +245,19 @@ func main() {
 			// Copy the values to stack variables for minimal lock duration and ensuring RenderContext is built with consistent state
 			ctx.World.RunSafe(func() {
 				// TimeResource updated by ClockScheduler; refresh frame number for render
-				ctx.World.Resource.Time.FrameNumber = ctx.GetFrameNumber()
+				ctx.World.Resources.Time.FrameNumber = ctx.GetFrameNumber()
 
 				// During pause: skip game updates but still render
 				if ctx.IsPaused.Load() {
 					// Update time for paused rendering
-					ctx.World.Resource.Time.RealTime = ctx.PausableClock.RealTime()
+					ctx.World.Resources.Time.RealTime = ctx.PausableClock.RealTime()
 				}
 
 				// Snapshot TimeResource state by value for thread-safe reading
-				snapTimeRes = *ctx.World.Resource.Time
+				snapTimeRes = *ctx.World.Resources.Time
 
 				// Capture cursor position
-				if pos, ok := ctx.World.Position.Get(ctx.CursorEntity); ok {
+				if pos, ok := ctx.World.Positions.Get(ctx.CursorEntity); ok {
 					snapCursorX = pos.X
 					snapCursorY = pos.Y
 				}

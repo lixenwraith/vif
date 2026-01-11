@@ -84,13 +84,13 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	// Calculate game area
 	ctx.updateGameArea()
 
-	// -- Initialize Resource --
+	// -- Initialize Resources --
 
 	// 0. Status Registry (before other resources that may use it)
-	world.Resource.Status = status.NewRegistry()
+	world.Resources.Status = status.NewRegistry()
 
-	// 1. Config Resource
-	world.Resource.Config = &ConfigResource{
+	// 1. Config Resources
+	world.Resources.Config = &ConfigResource{
 		ScreenWidth:  ctx.Width,
 		ScreenHeight: ctx.Height,
 		GameWidth:    ctx.GameWidth,
@@ -99,26 +99,26 @@ func NewGameContext(world *World, width, height int) *GameContext {
 		GameY:        ctx.GameY,
 	}
 
-	// 2. Time Resource (Initial state)
-	world.Resource.Time = &TimeResource{
+	// 2. Time Resources (Initial state)
+	world.Resources.Time = &TimeResource{
 		GameTime:    pausableClock.Now(),
 		RealTime:    pausableClock.RealTime(),
 		DeltaTime:   constant.GameUpdateInterval,
 		FrameNumber: ctx.FrameNumber.Load(),
 	}
 
-	// 3. Event Queue Resource
-	world.Resource.Event = &EventQueueResource{Queue: ctx.eventQueue}
+	// 3. Event Queue Resources
+	world.Resources.Event = &EventQueueResource{Queue: ctx.eventQueue}
 
 	// 4. Game GameState
 	ctx.State = NewGameState()
-	world.Resource.GameState = &GameStateResource{State: ctx.State}
+	world.Resources.GameState = &GameStateResource{State: ctx.State}
 
 	// 5. Cursor Entity
 	ctx.CreateCursorEntity()
 
-	// 6. Cursor Resource
-	world.Resource.Cursor = &CursorResource{Entity: ctx.CursorEntity}
+	// 6. Cursor Resources
+	world.Resources.Cursor = &CursorResource{Entity: ctx.CursorEntity}
 
 	// Initialize atomic string pointers to empty strings
 	empty := ""
@@ -164,7 +164,7 @@ func (ctx *GameContext) HandleResize() {
 
 	ctx.World.RunSafe(func() {
 		// Update existing ConfigResource in-place
-		configRes := ctx.World.Resource.Config
+		configRes := ctx.World.Resources.Config
 		configRes.ScreenWidth = ctx.Width
 		configRes.ScreenHeight = ctx.Height
 		configRes.GameWidth = ctx.GameWidth
@@ -178,14 +178,14 @@ func (ctx *GameContext) HandleResize() {
 		ctx.cleanupOutOfBoundsEntities(ctx.GameWidth, ctx.GameHeight)
 
 		// Clamp cursor position
-		if pos, ok := ctx.World.Position.Get(ctx.CursorEntity); ok {
+		if pos, ok := ctx.World.Positions.Get(ctx.CursorEntity); ok {
 			newX := max(0, min(pos.X, ctx.GameWidth-1))
 			newY := max(0, min(pos.Y, ctx.GameHeight-1))
 
 			if newX != pos.X || newY != pos.Y {
 				pos.X = newX
 				pos.Y = newY
-				ctx.World.Position.SetPosition(ctx.CursorEntity, pos)
+				ctx.World.Positions.SetPosition(ctx.CursorEntity, pos)
 				// Signal cursor movement if clamped due to resize
 				ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: newX, Y: newY})
 			}
@@ -195,10 +195,10 @@ func (ctx *GameContext) HandleResize() {
 
 // cleanupOutOfBoundsEntities tags entities that are outside the valid game area
 func (ctx *GameContext) cleanupOutOfBoundsEntities(width, height int) {
-	deathStore := ctx.World.Component.Death
+	deathStore := ctx.World.Components.Death
 
-	// Unified cleanup: single Position iteration handles all entity types
-	allEntities := ctx.World.Position.AllEntity()
+	// Unified cleanup: single Positions iteration handles all entity types
+	allEntities := ctx.World.Positions.AllEntity()
 	for _, e := range allEntities {
 		// Skip cursor entity (special case)
 		if e == ctx.CursorEntity {
@@ -207,14 +207,14 @@ func (ctx *GameContext) cleanupOutOfBoundsEntities(width, height int) {
 
 		// Mark entities outside valid coordinate space [0, width) × [0, height)
 		// Death system informs respective system of their entity destruction
-		pos, _ := ctx.World.Position.Get(e)
+		pos, _ := ctx.World.Positions.Get(e)
 		if pos.X >= width || pos.Y >= height || pos.X < 0 || pos.Y < 0 {
 			deathStore.SetComponent(e, component.DeathComponent{})
 		}
 	}
 
 	// Resize spatial grid to match new dimensions
-	ctx.World.Position.ResizeGrid(width, height)
+	ctx.World.Positions.ResizeGrid(width, height)
 }
 
 // === Frame Number Accessories ===
@@ -287,7 +287,7 @@ type PingBounds struct {
 
 // GetPingBounds returns the boundaries for pings and operations, in normal mode or shield inactive, returns single-row/column bounds
 func (ctx *GameContext) GetPingBounds() PingBounds {
-	pos, ok := ctx.World.Position.Get(ctx.CursorEntity)
+	pos, ok := ctx.World.Positions.Get(ctx.CursorEntity)
 	if !ok {
 		return PingBounds{}
 	}
@@ -305,7 +305,7 @@ func (ctx *GameContext) GetPingBounds() PingBounds {
 	}
 
 	// Check shield for band dimensions
-	shield, ok := ctx.World.Component.Shield.GetComponent(ctx.CursorEntity)
+	shield, ok := ctx.World.Components.Shield.GetComponent(ctx.CursorEntity)
 	if !ok || !shield.Active {
 		return bounds
 	}
@@ -433,38 +433,38 @@ func (ctx *GameContext) SetOverlayContent(content *core.OverlayContent) {
 func (ctx *GameContext) CreateCursorEntity() {
 	// Create cursor entity at the center of the screen
 	ctx.CursorEntity = ctx.World.CreateEntity()
-	ctx.World.Position.SetPosition(ctx.CursorEntity, component.PositionComponent{
+	ctx.World.Positions.SetPosition(ctx.CursorEntity, component.PositionComponent{
 		X: ctx.GameWidth / 2,
 		Y: ctx.GameHeight / 2,
 	})
 
-	ctx.World.Component.Cursor.SetComponent(ctx.CursorEntity, component.CursorComponent{})
+	ctx.World.Components.Cursor.SetComponent(ctx.CursorEntity, component.CursorComponent{})
 
 	// Make cursor indestructible
-	ctx.World.Component.Protection.SetComponent(ctx.CursorEntity, component.ProtectionComponent{
+	ctx.World.Components.Protection.SetComponent(ctx.CursorEntity, component.ProtectionComponent{
 		Mask:      component.ProtectAll,
 		ExpiresAt: 0, // No expiry
 	})
 
 	// SetPosition components attached to cursor entity
-	ctx.World.Component.Ping.SetComponent(ctx.CursorEntity, component.PingComponent{
+	ctx.World.Components.Ping.SetComponent(ctx.CursorEntity, component.PingComponent{
 		ShowCrosshair: true,
 		GridActive:    false,
 		GridRemaining: 0,
 	})
 
-	ctx.World.Component.Heat.SetComponent(ctx.CursorEntity, component.HeatComponent{})
+	ctx.World.Components.Heat.SetComponent(ctx.CursorEntity, component.HeatComponent{})
 
-	ctx.World.Component.Energy.SetComponent(ctx.CursorEntity, component.EnergyComponent{})
+	ctx.World.Components.Energy.SetComponent(ctx.CursorEntity, component.EnergyComponent{})
 
-	ctx.World.Component.Shield.SetComponent(ctx.CursorEntity, component.ShieldComponent{
+	ctx.World.Components.Shield.SetComponent(ctx.CursorEntity, component.ShieldComponent{
 		RadiusX:       vmath.FromFloat(constant.ShieldRadiusX),
 		RadiusY:       vmath.FromFloat(constant.ShieldRadiusY),
 		MaxOpacity:    constant.ShieldMaxOpacity,
 		LastDrainTime: ctx.PausableClock.Now(),
 	})
 
-	ctx.World.Component.Boost.SetComponent(ctx.CursorEntity, component.BoostComponent{})
+	ctx.World.Components.Boost.SetComponent(ctx.CursorEntity, component.BoostComponent{})
 }
 
 // ===== Audio =====
@@ -472,8 +472,8 @@ func (ctx *GameContext) CreateCursorEntity() {
 // GetAudioPlayer retrieves audio player from resources
 // Returns nil if audio unavailable
 func (ctx *GameContext) GetAudioPlayer() AudioPlayer {
-	if ctx.World.Resource.Audio != nil {
-		return ctx.World.Resource.Audio.Player
+	if ctx.World.Resources.Audio != nil {
+		return ctx.World.Resources.Audio.Player
 	}
 	return nil
 }

@@ -37,12 +37,12 @@ type StatusBarRenderer struct {
 
 // NewStatusBarRenderer creates a status bar renderer
 func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
-	statusReg := gameCtx.World.Resource.Status
+	statusReg := gameCtx.World.Resources.Status
 
 	return &StatusBarRenderer{
 		gameCtx: gameCtx,
 
-		colorMode: gameCtx.World.Resource.Render.ColorMode,
+		colorMode: gameCtx.World.Resources.Render.ColorMode,
 
 		statFPS:        statusReg.Ints.Get("engine.fps"),
 		statAPM:        statusReg.Ints.Get("engine.apm"),
@@ -213,7 +213,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 
 	// Priority 2: Energy
-	energyComp, _ := r.gameCtx.World.Component.Energy.GetComponent(r.gameCtx.CursorEntity)
+	energyComp, _ := r.gameCtx.World.Components.Energy.GetComponent(r.gameCtx.CursorEntity)
 	energyVal := energyComp.Current.Load()
 	energyText := fmt.Sprintf(" Energy: %d ", energyVal)
 
@@ -251,7 +251,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	rightItems = append(rightItems, statusItem{text: energyText, fg: energyFg, bg: energyBg})
 
 	// Priority 3: Boost (conditional)
-	boost, boostOk := r.gameCtx.World.Component.Boost.GetComponent(r.gameCtx.CursorEntity)
+	boost, boostOk := r.gameCtx.World.Components.Boost.GetComponent(r.gameCtx.CursorEntity)
 
 	if boostOk && boost.Active {
 		remaining := boost.Remaining.Seconds()
@@ -266,7 +266,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 
 	// Priority 4: Grid (conditional)
-	if ping, ok := r.gameCtx.World.Component.Ping.GetComponent(r.gameCtx.CursorEntity); ok && ping.GridActive {
+	if ping, ok := r.gameCtx.World.Components.Ping.GetComponent(r.gameCtx.CursorEntity); ok && ping.GridActive {
 		gridRemaining := ping.GridRemaining.Seconds()
 		if gridRemaining < 0 {
 			gridRemaining = 0

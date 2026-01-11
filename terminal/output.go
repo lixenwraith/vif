@@ -162,7 +162,7 @@ func (o *outputBuffer) flush(cells []Cell, width, height int) {
 				}
 			}
 
-			// Position cursor to segment start
+			// Positions cursor to segment start
 			o.moveCursorTo(w, segStart, y)
 
 			// Write segment [segStart, segEnd)

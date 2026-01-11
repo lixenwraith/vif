@@ -3,7 +3,7 @@ package component
 import "github.com/lixenwraith/vi-fighter/terminal"
 
 // SpiritComponent represents a converging visual effect entity
-// Position presence is at StartX/StartY to avoid target saturation
+// Positions presence is at StartX/StartY to avoid target saturation
 // Actual render position is calculated via Lerp from Start to Target
 type SpiritComponent struct {
 	// Starting position in Q32.32 (where the spirit spawned)

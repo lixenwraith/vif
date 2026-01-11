@@ -56,9 +56,9 @@ func NewExplosionSystem(world *engine.World) engine.System {
 		world: world,
 	}
 
-	s.statTriggered = world.Resource.Status.Ints.Get("explosion.triggered")
-	s.statConverted = world.Resource.Status.Ints.Get("explosion.converted")
-	s.statMerged = world.Resource.Status.Ints.Get("explosion.merged")
+	s.statTriggered = world.Resources.Status.Ints.Get("explosion.triggered")
+	s.statConverted = world.Resources.Status.Ints.Get("explosion.converted")
+	s.statMerged = world.Resources.Status.Ints.Get("explosion.merged")
 
 	s.Init()
 	return s
@@ -77,7 +77,7 @@ func (s *ExplosionSystem) Init() {
 	s.entityBuf = make([]core.Entity, 0, 256)
 	s.dustEntryBuf = make([]event.DustSpawnEntry, 0, 256)
 
-	s.rng = vmath.NewFastRand(uint64(s.world.Resource.Time.RealTime.UnixNano()))
+	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
 
 	s.statTriggered.Store(0)
 	s.statConverted.Store(0)
@@ -123,7 +123,7 @@ func (s *ExplosionSystem) HandleEvent(ev event.GameEvent) {
 }
 
 func (s *ExplosionSystem) fireFromDust() {
-	dustEntities := s.world.Component.Dust.AllEntity()
+	dustEntities := s.world.Components.Dust.AllEntity()
 	if len(dustEntities) == 0 {
 		return
 	}
@@ -132,12 +132,12 @@ func (s *ExplosionSystem) fireFromDust() {
 	positions := make(map[pos]bool, len(dustEntities))
 
 	for _, e := range dustEntities {
-		if p, ok := s.world.Position.Get(e); ok {
+		if p, ok := s.world.Positions.Get(e); ok {
 			positions[pos{p.X, p.Y}] = true
 		}
 	}
 
-	event.EmitDeathBatch(s.world.Resource.Event.Queue, 0, dustEntities, s.world.Resource.Time.FrameNumber)
+	event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, dustEntities, s.world.Resources.Time.FrameNumber)
 
 	for p := range positions {
 		s.addCenter(p.x, p.y, s.baseRadius)
@@ -210,9 +210,9 @@ func (s *ExplosionSystem) addCenter(x, y int, radius int64) {
 
 // TODO: this conversion must be done in dust system, doing it here results in no telemetry and duplicate logic
 func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
-	config := s.world.Resource.Config
-	frame := s.world.Resource.Time.FrameNumber
-	now := s.world.Resource.Time.GameTime
+	config := s.world.Resources.Config
+	frame := s.world.Resources.Time.FrameNumber
+	now := s.world.Resources.Time.GameTime
 
 	// Radius is horizontal cells; Vertical is half that to maintain aspect ratio
 	radiusCells := vmath.ToInt(radius)
@@ -253,15 +253,15 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 				continue
 			}
 
-			entities := s.world.Position.GetAllEntityAt(x, y)
+			entities := s.world.Positions.GetAllEntityAt(x, y)
 			for _, e := range entities {
-				if s.world.Component.Member.HasComponent(e) {
+				if s.world.Components.Member.HasEntity(e) {
 					continue
 				}
 
-				drain, hasDrain := s.world.Component.Drain.GetComponent(e)
+				drain, hasDrain := s.world.Components.Drain.GetComponent(e)
 				if hasDrain {
-					drainPos, ok := s.world.Position.Get(e)
+					drainPos, ok := s.world.Positions.Get(e)
 					if !ok {
 						continue
 					}
@@ -278,15 +278,15 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 						s.rng,
 						now,
 					)
-					s.world.Component.Drain.SetComponent(e, drain)
+					s.world.Components.Drain.SetComponent(e, drain)
 				}
 
-				if member, ok := s.world.Component.Member.GetComponent(e); ok {
-					if header, hOk := s.world.Component.Header.GetComponent(e); hOk {
+				if member, ok := s.world.Components.Member.GetComponent(e); ok {
+					if header, hOk := s.world.Components.Header.GetComponent(e); hOk {
 						if header.BehaviorID == component.BehaviorQuasar {
 							anchorEntity := member.HeaderEntity
-							if quasar, qOk := s.world.Component.Quasar.GetComponent(anchorEntity); qOk {
-								quasarPos, ok := s.world.Position.Get(anchorEntity)
+							if quasar, qOk := s.world.Components.Quasar.GetComponent(anchorEntity); qOk {
+								quasarPos, ok := s.world.Positions.Get(anchorEntity)
 								if !ok {
 									continue
 								}
@@ -304,22 +304,22 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 									now,
 								)
 								quasar.HitPoints--
-								s.world.Component.Quasar.SetComponent(member.HeaderEntity, quasar)
+								s.world.Components.Quasar.SetComponent(member.HeaderEntity, quasar)
 							}
 						}
 					}
 				}
 
-				glyph, hasGlyph := s.world.Component.Glyph.GetComponent(e)
+				glyph, hasGlyph := s.world.Components.Glyph.GetComponent(e)
 				if !hasGlyph {
 					continue
 				}
 
 				// SetPosition death component for deduplication
-				if s.world.Component.Death.HasComponent(e) {
+				if s.world.Components.Death.HasEntity(e) {
 					continue
 				}
-				s.world.Component.Death.SetComponent(e, component.DeathComponent{})
+				s.world.Components.Death.SetComponent(e, component.DeathComponent{})
 
 				// Append to local buffers
 				s.entityBuf = append(s.entityBuf, e)
@@ -338,7 +338,7 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 	}
 
 	// Use buffered entities for death batch
-	event.EmitDeathBatch(s.world.Resource.Event.Queue, 0, s.entityBuf, frame)
+	event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, s.entityBuf, frame)
 
 	// Use buffered entries for batch dust spawn
 	dustBatch := event.AcquireDustSpawnBatch()
@@ -354,7 +354,7 @@ func (s *ExplosionSystem) Update() {
 		return
 	}
 
-	dtNano := s.world.Resource.Time.DeltaTime.Nanoseconds()
+	dtNano := s.world.Resources.Time.DeltaTime.Nanoseconds()
 
 	write := 0
 	for i := 0; i < s.activeCount; i++ {

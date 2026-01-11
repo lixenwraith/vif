@@ -40,7 +40,7 @@ func NewHeatMeterRenderer(ctx *engine.GameContext) *HeatMeterRenderer {
 		gameCtx: ctx,
 	}
 
-	if r.gameCtx.World.Resource.Render.ColorMode == terminal.ColorMode256 {
+	if r.gameCtx.World.Resources.Render.ColorMode == terminal.ColorMode256 {
 		r.renderCell = r.cell256
 	} else {
 		r.renderCell = r.cellTrueColor
@@ -54,7 +54,7 @@ func (r *HeatMeterRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 	// Calculate Fill Limit from HeatComponent
 	heat := 0
-	if hc, ok := r.gameCtx.World.Component.Heat.GetComponent(r.gameCtx.CursorEntity); ok {
+	if hc, ok := r.gameCtx.World.Components.Heat.GetComponent(r.gameCtx.CursorEntity); ok {
 		heat = int(hc.Current.Load())
 	}
 	fillWidth := (ctx.Width * heat) / 100

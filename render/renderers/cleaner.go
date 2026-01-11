@@ -43,7 +43,7 @@ func (r *CleanerRenderer) buildGradients() {
 // Render draws cleaner animation using trail of grid points
 // Cleaners are opaque and render ON TOP of everything (occlude shield)
 func (r *CleanerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.gameCtx.World.Component.Cleaner.AllEntity()
+	entities := r.gameCtx.World.Components.Cleaner.AllEntity()
 	if len(entities) == 0 {
 		return
 	}
@@ -54,7 +54,7 @@ func (r *CleanerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 	maxGradientIdx := gradientLen - 1
 
 	for _, entity := range entities {
-		cleaner, ok := r.gameCtx.World.Component.Cleaner.GetComponent(entity)
+		cleaner, ok := r.gameCtx.World.Components.Cleaner.GetComponent(entity)
 		if !ok {
 			continue
 		}
