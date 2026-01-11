@@ -125,6 +125,21 @@ type SplashRequestPayload struct {
 	OriginY int                   `toml:"origin_y"`
 }
 
+// SplashTimerPayload anchors countdown timer to sequence position
+type SplashTimerRequestPayload struct {
+	AnchorEntity core.Entity           `toml:"anchor_entity"`
+	OriginX      int                   `toml:"origin_x"`
+	OriginY      int                   `toml:"origin_y"`
+	Length       int                   `toml:"length"`
+	Duration     time.Duration         `toml:"duration"`
+	Color        component.SplashColor `toml:"color"`
+}
+
+// SplashTimerCancelPayload anchors countdown timer to sequence position
+type SplashTimerCancelPayload struct {
+	AnchorEntity core.Entity `toml:"anchor_entity"`
+}
+
 // PingGridRequestPayload carries configuration for the ping grid activation
 type PingGridRequestPayload struct {
 	Duration time.Duration `toml:"duration"`

@@ -12,7 +12,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/event"
 )
 
-// NuggetSystem manages nugget spawnLightning and respawn logic
+// NuggetSystem manages nugget spawn and respawn logic
 type NuggetSystem struct {
 	world *engine.World
 

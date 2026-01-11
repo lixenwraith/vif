@@ -346,13 +346,23 @@ func (s *GoldSystem) spawnGold() bool {
 	s.startTime = now
 	s.timeoutTime = now.Add(constant.GoldDuration)
 
-	// Emit spawnLightning event
+	// Emit spawn event
+	// TODO: trim down this payload now that splash is separate
 	s.world.PushEvent(event.EventGoldSpawned, &event.GoldSpawnedPayload{
 		HeaderEntity: headerEntity,
 		OriginX:      x,
 		OriginY:      y,
 		Length:       constant.GoldSequenceLength,
 		Duration:     constant.GoldDuration,
+	})
+	// Splash timer spawn event, no need for splash cancel event, automatically cancelled when anchor is destroyed
+	s.world.PushEvent(event.EventSplashTimerRequest, &event.SplashTimerRequestPayload{
+		AnchorEntity: headerEntity,
+		OriginX:      x,
+		OriginY:      y,
+		Length:       constant.GoldSequenceLength,
+		Duration:     constant.GoldDuration,
+		Color:        component.SplashColorWhite,
 	})
 
 	return true
@@ -421,6 +431,7 @@ func (s *GoldSystem) handleGoldTimeout() {
 func (s *GoldSystem) handleGoldDestroyed() {
 	headerEntity := s.headerEntity
 
+	// Emit event for FSM
 	s.world.PushEvent(event.EventGoldDestroyed, &event.GoldCompletionPayload{
 		HeaderEntity: headerEntity,
 	})

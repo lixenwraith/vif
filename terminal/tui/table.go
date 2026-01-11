@@ -100,13 +100,13 @@ func (r Region) Table(headers []string, rows [][]string, opts TableOpts) {
 
 	y := 0
 
-	// HeaderEntity row
+	// Header row
 	if y < r.H {
 		r.renderTableRow(y, headers, widths, opts.ColAligns, sep, opts.HeaderStyle)
 		y++
 	}
 
-	// HeaderEntity separator
+	// Header separator
 	if opts.RowSeparator != LineNone && y < r.H {
 		r.HLine(y, opts.RowSeparator, opts.HeaderStyle.Fg)
 		y++

@@ -185,7 +185,7 @@ func (s *DiagnosticsSystem) collectConsistencyChecks() {
 		}
 	}
 
-	// HeaderEntity with no live members
+	// Header with no live members
 	for _, e := range s.world.Components.Header.AllEntities() {
 		header, ok := s.world.Components.Header.GetComponent(e)
 		if !ok {

@@ -71,10 +71,8 @@ func (s *SplashSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventGameReset,
 		event.EventSplashRequest,
-		event.EventGoldSpawned,
-		event.EventGoldComplete,
-		event.EventGoldTimeout,
-		event.EventGoldDestroyed,
+		event.EventSplashTimerRequest,
+		event.EventSplashTimerCancel,
 		event.EventCursorMoved,
 		event.EventQuasarChargeStart,
 		event.EventQuasarChargeCancel,
@@ -98,14 +96,14 @@ func (s *SplashSystem) HandleEvent(ev event.GameEvent) {
 			s.handleSplashRequest(payload)
 		}
 
-	case event.EventGoldSpawned:
-		if payload, ok := ev.Payload.(*event.GoldSpawnedPayload); ok {
-			s.handleGoldSpawn(payload)
+	case event.EventSplashTimerRequest:
+		if payload, ok := ev.Payload.(*event.SplashTimerRequestPayload); ok {
+			s.handleTimerSpawn(payload)
 		}
 
-	case event.EventGoldComplete, event.EventGoldTimeout, event.EventGoldDestroyed:
-		if payload, ok := ev.Payload.(*event.GoldCompletionPayload); ok {
-			s.handleGoldFinish(payload.HeaderEntity)
+	case event.EventSplashTimerCancel:
+		if payload, ok := ev.Payload.(*event.SplashTimerCancelPayload); ok {
+			s.handleTimerCancel(payload.AnchorEntity)
 		}
 
 	case event.EventCursorMoved:
@@ -149,39 +147,42 @@ func (s *SplashSystem) Update() {
 
 		switch splashComp.Slot {
 		case component.SlotTimer:
+			anchorEntity := splashComp.AnchorEntity
+			if anchorEntity != 0 && !s.world.Components.Header.HasEntity(anchorEntity) {
+				// Anchored to entity and anchor entity destroyed
+				s.world.DestroyEntity(splashEntity)
+				continue
+			}
 
-			// Use Slot for timer behavior
-			if splashComp.Slot == component.SlotTimer {
-				// Display digits ceiling math - "1" shows for 1.0→0.001s, dies at 0
-				remainingSec := int(math.Ceil(splashComp.Remaining.Seconds()))
+			// Display digits ceiling math - "1" shows for 1.0→0.001s, dies at 0
+			remainingSec := int(math.Ceil(splashComp.Remaining.Seconds()))
 
-				if remainingSec <= 0 {
-					// Timer expired - mark for destruction
-					s.world.DestroyEntity(splashEntity)
-					continue
-				}
+			if remainingSec <= 0 {
+				// Timer expired - mark for destruction
+				s.world.DestroyEntity(splashEntity)
+				continue
+			}
 
-				// Multi-digit support
-				digits := strconv.Itoa(remainingSec)
-				newLength := len(digits)
+			// Multi-digit support
+			digits := strconv.Itoa(remainingSec)
+			newLength := len(digits)
 
-				// Update content if changed
-				contentChanged := newLength != splashComp.Length
-				if !contentChanged {
-					for i, d := range digits {
-						if splashComp.Content[i] != d {
-							contentChanged = true
-							break
-						}
+			// Update content if changed
+			contentChanged := newLength != splashComp.Length
+			if !contentChanged {
+				for i, d := range digits {
+					if splashComp.Content[i] != d {
+						contentChanged = true
+						break
 					}
 				}
+			}
 
-				if contentChanged {
-					splashComp.Length = newLength
-					for i, d := range digits {
-						if i < len(splashComp.Content) {
-							splashComp.Content[i] = d
-						}
+			if contentChanged {
+				splashComp.Length = newLength
+				for i, d := range digits {
+					if i < len(splashComp.Content) {
+						splashComp.Content[i] = d
 					}
 				}
 			}
@@ -310,9 +311,8 @@ func (s *SplashSystem) validateMagnifier(splashEntity core.Entity, splash *compo
 	return true
 }
 
-// TODO: change to generic timer, make gold system send splash timer request with gold anchor
-// handleGoldSpawn creates the persistent gold timer anchored to the gold entity
-func (s *SplashSystem) handleGoldSpawn(payload *event.GoldSpawnedPayload) {
+// handleTimerSpawn creates the persistent timer anchored to the anchor entity
+func (s *SplashSystem) handleTimerSpawn(payload *event.SplashTimerRequestPayload) {
 	s.cleanupSplashesBySlot(component.SlotTimer)
 
 	initialSec := int(math.Ceil(payload.Duration.Seconds()))
@@ -323,15 +323,15 @@ func (s *SplashSystem) handleGoldSpawn(payload *event.GoldSpawnedPayload) {
 
 	// Calculate offset using cardinal spiral search
 	offsetX, offsetY := s.calculateTimerOffset(
-		payload.HeaderEntity,
+		payload.AnchorEntity,
 		payload.Length,
 		timerCellWidth,
 	)
 
 	splashComp := component.SplashComponent{
 		Length:       digitCount,
-		Color:        component.SplashColorWhite,
-		AnchorEntity: payload.HeaderEntity,
+		Color:        payload.Color,
+		AnchorEntity: payload.AnchorEntity,
 		OffsetX:      offsetX,
 		OffsetY:      offsetY,
 		Slot:         component.SlotTimer,
@@ -349,8 +349,8 @@ func (s *SplashSystem) handleGoldSpawn(payload *event.GoldSpawnedPayload) {
 	s.world.Components.Splash.SetComponent(entity, splashComp)
 }
 
-// handleGoldFinish destroys the gold timer
-func (s *SplashSystem) handleGoldFinish(anchorEntity core.Entity) {
+// handleTimerCancel destroys existing timer splash
+func (s *SplashSystem) handleTimerCancel(anchorEntity core.Entity) {
 	// Find and destroy specific timer
 	splashEntities := s.world.Components.Splash.AllEntities()
 	for _, splashEntity := range splashEntities {

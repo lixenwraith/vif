@@ -237,7 +237,7 @@ func (s *CompositeSystem) CreateHeader(x, y int, behaviorID component.Behavior) 
 	// Positions at anchor point
 	s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
 
-	// HeaderEntity component with empty member slice
+	// Header component with empty member slice
 	s.world.Components.Header.SetComponent(entity, component.HeaderComponent{
 		Behavior:      behaviorID,
 		MemberEntries: make([]component.MemberEntry, 0, 16),

@@ -136,12 +136,12 @@ func (r *SplashRenderer) resolveSplashColor(c component.SplashColor) render.RGB 
 	case component.SplashColorNugget:
 		return render.RgbNuggetOrange
 	case component.SplashColorWhite:
-		return render.RgbTimerWhite
+		return render.RgbSplashWhite
 	case component.SplashColorBlossom:
 		return render.RgbBlossom
 	case component.SplashColorDecay:
 		return render.RgbDecay
 	default:
-		return render.RgbSplashNormal
+		return render.RgbSplashWhite
 	}
 }

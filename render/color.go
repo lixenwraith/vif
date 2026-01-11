@@ -61,9 +61,9 @@ var (
 	RgbBoostGlow = RGB{255, 140, 200} // Vibrant pink for rotating shield glow
 
 	// Splash colors
-	RgbSplashInsert = RGB{200, 200, 200} // Light gray for insert mode
 	RgbSplashNormal = RGB{153, 102, 0}   // Dark orange for normal mode
-	RgbTimerWhite   = RGB{155, 155, 155} // White for some actions
+	RgbSplashInsert = RGB{200, 200, 200} // Light gray for insert mode
+	RgbSplashWhite  = RGB{155, 155, 155} // White for some actions
 	RgbSplashCyan   = RGB{0, 200, 200}   // Cyan for quasar charge timer
 
 	// Nugget colors

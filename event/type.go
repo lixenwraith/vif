@@ -135,6 +135,16 @@ const (
 	// Consumer: SplashSystem | Payload: *SplashRequestPayload
 	EventSplashRequest
 
+	// EventSplashTimerRequest signals timer visual feedback
+	// Trigger: GoldSystem, QuasarSystem, ...
+	// Consumer: SplashSystem | Payload: *SplashTimerRequestPayload
+	EventSplashTimerRequest
+
+	// EventSplashTimerCancel signals ending timer visual feedback
+	// Trigger: GoldSystem, QuasarSystem, ...
+	// Consumer: SplashSystem | Payload: *SplashTimerCancelPayload
+	EventSplashTimerCancel
+
 	// EventEnergyAdd signals energy delta on target entity
 	// Trigger: Character typed, shield drain, nugget jump
 	// Consumer: EnergySystem | Payload: *EnergyAddPayload

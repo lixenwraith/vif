@@ -51,7 +51,7 @@ type AppState struct {
 type DetailPaneState struct {
 	FlatItems []DetailItem       // Flattened list for rendering
 	TreeState *tui.TreeState     // Cursor and scroll management
-	Expansion *tui.TreeExpansion // HeaderEntity expansion state
+	Expansion *tui.TreeExpansion // Header expansion state
 }
 
 // NewDetailPaneState creates initialized detail pane state
