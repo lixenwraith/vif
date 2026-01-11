@@ -28,7 +28,8 @@ type QuasarSystem struct {
 	rng *vmath.FastRand
 
 	// Telemetry
-	statActive *atomic.Bool
+	statActive    *atomic.Bool
+	statHitPoints *atomic.Int64
 
 	enabled bool
 }
@@ -40,6 +41,7 @@ func NewQuasarSystem(world *engine.World) engine.System {
 	}
 
 	s.statActive = world.Resources.Status.Bools.Get("quasar.active")
+	s.statHitPoints = world.Resources.Status.Ints.Get("quasar.hit_points")
 
 	s.Init()
 	return s
@@ -50,6 +52,7 @@ func (s *QuasarSystem) Init() {
 	s.headerEntity = 0
 	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
 	s.statActive.Store(false)
+	s.statHitPoints.Store(0)
 	s.enabled = true
 }
 
@@ -91,27 +94,28 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 		cursorEntity := s.world.Resources.Cursor.Entity
 		now := s.world.Resources.Time.GameTime
 
-		if quasar, ok := s.world.Components.Quasar.GetComponent(s.headerEntity); ok {
+		if quasarComp, ok := s.world.Components.Quasar.GetComponent(s.headerEntity); ok {
 			headerPos, _ := s.world.Positions.GetPosition(s.headerEntity)
 			cursorPos, _ := s.world.Positions.GetPosition(cursorEntity)
 
-			quasar.PreciseX = vmath.FromInt(headerPos.X)
-			quasar.PreciseY = vmath.FromInt(headerPos.Y)
-			quasar.SpeedMultiplier = vmath.Scale
-			quasar.LastSpeedIncreaseAt = now
-			quasar.HitPoints = constant.QuasarInitialHP // Init HP
+			quasarComp.PreciseX = vmath.FromInt(headerPos.X)
+			quasarComp.PreciseY = vmath.FromInt(headerPos.Y)
+			quasarComp.SpeedMultiplier = vmath.Scale
+			quasarComp.LastSpeedIncreaseAt = now
+			quasarComp.HitPoints = constant.QuasarInitialHP // Init HP
 
 			// Initialize dynamic radius
-			quasar.ZapRadius = s.calculateZapRadius()
+			quasarComp.ZapRadius = s.calculateZapRadius()
 
 			// Initial velocity toward cursor
 			dx := vmath.FromInt(cursorPos.X - headerPos.X)
 			dy := vmath.FromInt(cursorPos.Y - headerPos.Y)
 			dirX, dirY := vmath.Normalize2D(dx, dy)
-			quasar.VelX = vmath.Mul(dirX, constant.QuasarBaseSpeed)
-			quasar.VelY = vmath.Mul(dirY, constant.QuasarBaseSpeed)
+			quasarComp.VelX = vmath.Mul(dirX, constant.QuasarBaseSpeed)
+			quasarComp.VelY = vmath.Mul(dirY, constant.QuasarBaseSpeed)
 
-			s.world.Components.Quasar.SetComponent(s.headerEntity, quasar)
+			s.world.Components.Quasar.SetComponent(s.headerEntity, quasarComp)
+			s.statHitPoints.Store(int64(quasarComp.HitPoints))
 		}
 
 		s.statActive.Store(true)
@@ -139,24 +143,23 @@ func (s *QuasarSystem) Update() {
 		return
 	}
 
-	active := s.active
 	headerEntity := s.headerEntity
 
-	if !active || headerEntity == 0 {
+	if !s.active || headerEntity == 0 {
 		return
 	}
 
 	// Check heat for termination (heat=0 ends quasar phase)
 	cursorEntity := s.world.Resources.Cursor.Entity
-	if hc, ok := s.world.Components.Heat.GetComponent(cursorEntity); ok {
-		if hc.Current.Load() <= 0 {
+	if heatComp, ok := s.world.Components.Heat.GetComponent(cursorEntity); ok {
+		if heatComp.Current.Load() <= 0 {
 			s.terminateQuasar()
 			return
 		}
 	}
 
 	// Verify composite still exists
-	heaerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
+	headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
 	if !ok {
 		s.terminateQuasar()
 		return
@@ -228,7 +231,9 @@ func (s *QuasarSystem) Update() {
 	}
 
 	// Shield and cursor interaction (all states)
-	s.handleInteractions(headerEntity, &heaerComp, &quasarComp)
+	s.handleInteractions(headerEntity, &headerComp, &quasarComp)
+
+	s.statHitPoints.Store(int64(quasarComp.HitPoints))
 }
 
 // startCharging initiates the charge phase before zapping

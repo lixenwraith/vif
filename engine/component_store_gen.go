@@ -25,6 +25,7 @@ type Component struct {
 	Cleaner     *Store[component.CleanerComponent]
 	Blossom     *Store[component.BlossomComponent]
 	Quasar      *Store[component.QuasarComponent]
+	Swarm       *Store[component.SwarmComponent]
 	Dust        *Store[component.DustComponent]
 	Lightning   *Store[component.LightningComponent]
 	Spirit      *Store[component.SpiritComponent]
@@ -55,6 +56,7 @@ func initComponents(w *World) {
 	w.Components.Cleaner = NewStore[component.CleanerComponent]()
 	w.Components.Blossom = NewStore[component.BlossomComponent]()
 	w.Components.Quasar = NewStore[component.QuasarComponent]()
+	w.Components.Swarm = NewStore[component.SwarmComponent]()
 	w.Components.Dust = NewStore[component.DustComponent]()
 	w.Components.Lightning = NewStore[component.LightningComponent]()
 	w.Components.Spirit = NewStore[component.SpiritComponent]()
@@ -86,6 +88,7 @@ func (w *World) removeEntity(e core.Entity) {
 	w.Components.Cleaner.RemoveEntity(e)
 	w.Components.Blossom.RemoveEntity(e)
 	w.Components.Quasar.RemoveEntity(e)
+	w.Components.Swarm.RemoveEntity(e)
 	w.Components.Dust.RemoveEntity(e)
 	w.Components.Lightning.RemoveEntity(e)
 	w.Components.Spirit.RemoveEntity(e)
@@ -116,6 +119,7 @@ func (w *World) wipeAll() {
 	w.Components.Cleaner.ClearAllComponent()
 	w.Components.Blossom.ClearAllComponent()
 	w.Components.Quasar.ClearAllComponent()
+	w.Components.Swarm.ClearAllComponent()
 	w.Components.Dust.ClearAllComponent()
 	w.Components.Lightning.ClearAllComponent()
 	w.Components.Spirit.ClearAllComponent()

@@ -108,7 +108,7 @@ const (
 	QuasarChargeDuration = 3 * time.Second
 
 	// QuasarInitialHP is starting hit points
-	QuasarInitialHP = 10
+	QuasarInitialHP = 100
 
 	// QuasarHitFlashDuration is yellow flash duration and immunity window on cleaner hit
 	QuasarHitFlashDuration = 150 * time.Millisecond
@@ -132,6 +132,41 @@ const (
 	QuasarShieldMaxOpacity = 0.3
 	// QuasarShield256Palette is xterm-256 index for solid rim (light gray)
 	QuasarShield256Palette uint8 = 250
+)
+
+// --- Swarm Entity ---
+const (
+	// SwarmEnergyDrainInterval is the duration between energy drain ticks
+	SwarmEnergyDrainInterval = 1000 * time.Millisecond
+
+	// SwarmBaseSpeed is the normal homing velocity in cells/sec (Q32.32 via vmath.FromFloat)
+	// Equivalent to previous 1 cell per SwarmMoveInterval
+	SwarmBaseSpeedFloat = 2.0
+
+	// SwarmHomingAccel is acceleration toward cursor in cells/sec² (Q32.32)
+	// Higher values = snappier homing, lower = more floaty
+	SwarmHomingAccelFloat = 3.0
+
+	// SwarmDrag is deceleration rate when speed exceeds SwarmBaseSpeed (1/sec)
+	// Applied proportionally to excess speed for smooth convergence
+	SwarmDragFloat = 2.0
+
+	// SwarmDeflectImpulse is velocity magnitude added on cleaner collision (cells/sec)
+	// Determines how far drain travels before homing pulls it back
+	SwarmDeflectImpulseFloat = 2.0
+
+	// SwarmDeflectAngleVar is half-angle of random deflection cone (radians)
+	// ±0.35 rad ≈ ±20° spread for visual variety
+	SwarmDeflectAngleVarFloat = 0.45
+
+	// SwarmDeflectImmunity is the duration of immunity from homing/drag after cleaner collision
+	SwarmDeflectImmunity = 2000 * time.Millisecond
+
+	// SwarmDeflectImpulseMinFloat is minimum deflection velocity (cells/sec)
+	SwarmDeflectImpulseMinFloat = 15.0
+
+	// SwarmDeflectImpulseMaxFloat is maximum deflection velocity (cells/sec)
+	SwarmDeflectImpulseMaxFloat = 40.0
 )
 
 // --- Shield Knockback ---

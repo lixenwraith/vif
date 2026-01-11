@@ -302,7 +302,7 @@ const (
 	EventCursorMoved
 
 	// EventFuseDrains signals drains should fuse into quasar
-	// Trigger: CleanerSystem when no target rows at max heat
+	// Trigger: FSM
 	// Consumer: FuseSystem | Payload: nil
 	EventFuseDrains
 
@@ -400,6 +400,16 @@ const (
 	// Trigger: FSM
 	// Consumer: DustSystem | Payload: nil
 	EventDustAll
+
+	// EventSwarmSpawnRequest signals spawning a wave of 5 swarm composites
+	// Trigger: FSM
+	// Consumer: SwarmSystem | Payload: nil
+	EventSwarmSpawnRequest
+
+	// EventSwarmCancel signals destruction of all swarm composites
+	// Trigger: FSM
+	// Consumer: SwarmSystem | Payload: nil
+	EventSwarmCancel
 )
 
 // GameEvent represents a single game event with metadata

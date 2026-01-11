@@ -354,46 +354,43 @@ func (s *CleanerSystem) spawnCleaners() {
 // checkCollisions handles collision logic with self-exclusion
 func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 	// Query all entities at position (includes cleaner itself due to Positions registration)
-	targetEntities := s.world.Positions.GetAllEntityAt(x, y)
-	if len(targetEntities) == 0 {
+	entities := s.world.Positions.GetAllEntityAt(x, y)
+	if len(entities) == 0 {
 		return
 	}
 
-	// Get cleaner velocity for drain deflection
-	cleaner, ok := s.world.Components.Cleaner.GetComponent(selfEntity)
+	// Get cleaner velocity for deflection
+	cleanerComp, ok := s.world.Components.Cleaner.GetComponent(selfEntity)
 	if !ok {
 		return
 	}
 
-	// Deflect drains (energy-independent, cleaner passes through)
-	for _, e := range targetEntities {
-		if e == 0 || e == selfEntity {
+	// Deflect drains and quasar (energy-independent, cleaner passes through)
+	for _, entity := range entities {
+		if entity == 0 || entity == selfEntity {
 			continue
 		}
-		if s.world.Components.Drain.HasEntity(e) {
-			s.deflectDrain(e, cleaner.VelX, cleaner.VelY)
-		}
-	}
 
-	// Deflect quasar composites
-	for _, e := range targetEntities {
-		if e == 0 || e == selfEntity {
-			continue
+		// Drain
+		if s.world.Components.Drain.HasEntity(entity) {
+			s.deflectDrain(entity, cleanerComp.VelX, cleanerComp.VelY)
 		}
-		member, ok := s.world.Components.Member.GetComponent(e)
+
+		// Quasar
+		memberComp, ok := s.world.Components.Member.GetComponent(entity)
 		if !ok {
 			continue
 		}
-		if lastCleaner, exists := s.deflectedAnchors[member.HeaderEntity]; exists && lastCleaner == selfEntity {
+		if lastCleaner, exists := s.deflectedAnchors[memberComp.HeaderEntity]; exists && lastCleaner == selfEntity {
 			continue
 		}
-		header, ok := s.world.Components.Header.GetComponent(member.HeaderEntity)
+		headerComp, ok := s.world.Components.Header.GetComponent(memberComp.HeaderEntity)
 		if !ok {
 			continue
 		}
-		if header.Behavior == component.BehaviorQuasar {
-			s.deflectQuasar(member.HeaderEntity, e, cleaner.VelX, cleaner.VelY)
-			s.deflectedAnchors[member.HeaderEntity] = selfEntity
+		if headerComp.Behavior == component.BehaviorQuasar {
+			s.deflectQuasar(memberComp.HeaderEntity, entity, cleanerComp.VelX, cleanerComp.VelY)
+			s.deflectedAnchors[memberComp.HeaderEntity] = selfEntity
 		}
 	}
 
@@ -405,9 +402,9 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 	}
 
 	if negativeEnergy {
-		s.processNegativeEnergy(x, y, targetEntities, selfEntity)
+		s.processNegativeEnergy(x, y, entities, selfEntity)
 	} else {
-		s.processPositiveEnergy(targetEntities, selfEntity)
+		s.processPositiveEnergy(entities, selfEntity)
 	}
 }
 
@@ -427,37 +424,37 @@ func (s *CleanerSystem) deflectDrain(drainEntity core.Entity, cleanerVelX, clean
 }
 
 // deflectQuasar applies offset-aware collision impulse to quasar composite
-func (s *CleanerSystem) deflectQuasar(anchorEntity, hitMember core.Entity, cleanerVelX, cleanerVelY int64) {
-	quasar, ok := s.world.Components.Quasar.GetComponent(anchorEntity)
+func (s *CleanerSystem) deflectQuasar(headerEntity, hitMember core.Entity, cleanerVelX, cleanerVelY int64) {
+	quasarComp, ok := s.world.Components.Quasar.GetComponent(headerEntity)
 	if !ok {
 		return
 	}
 
 	// Shield blocks all cleaner interaction
-	if quasar.ShieldActive {
+	if quasarComp.ShieldActive {
 		return
 	}
 
 	// Flash immunity blocks new damage (debounce)
-	if quasar.HitFlashRemaining > 0 {
+	if quasarComp.HitFlashRemaining > 0 {
 		return
 	}
 
 	// Apply damage and start flash
-	quasar.HitPoints--
-	quasar.HitFlashRemaining = constant.QuasarHitFlashDuration
+	quasarComp.HitPoints--
+	quasarComp.HitFlashRemaining = constant.QuasarHitFlashDuration
 
 	// Knockback only when not enraged
-	isEnraged := quasar.IsCharging || quasar.IsZapping
+	isEnraged := quasarComp.IsCharging || quasarComp.IsZapping
 	if !isEnraged {
-		anchorPos, ok := s.world.Positions.GetPosition(anchorEntity)
+		anchorPos, ok := s.world.Positions.GetPosition(headerEntity)
 		if !ok {
-			s.world.Components.Quasar.SetComponent(anchorEntity, quasar)
+			s.world.Components.Quasar.SetComponent(headerEntity, quasarComp)
 			return
 		}
 		hitPos, ok := s.world.Positions.GetPosition(hitMember)
 		if !ok {
-			s.world.Components.Quasar.SetComponent(anchorEntity, quasar)
+			s.world.Components.Quasar.SetComponent(headerEntity, quasarComp)
 			return
 		}
 
@@ -466,7 +463,7 @@ func (s *CleanerSystem) deflectQuasar(anchorEntity, hitMember core.Entity, clean
 
 		now := s.world.Resources.Time.GameTime
 		physics.ApplyOffsetCollision(
-			&quasar.KineticState,
+			&quasarComp.KineticState,
 			cleanerVelX, cleanerVelY,
 			offsetX, offsetY,
 			&physics.CleanerToQuasar,
@@ -475,7 +472,7 @@ func (s *CleanerSystem) deflectQuasar(anchorEntity, hitMember core.Entity, clean
 		)
 	}
 
-	s.world.Components.Quasar.SetComponent(anchorEntity, quasar)
+	s.world.Components.Quasar.SetComponent(headerEntity, quasarComp)
 }
 
 // processPositiveEnergy handles Red destruction with Blossom spawnLightning

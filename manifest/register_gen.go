@@ -69,6 +69,9 @@ func RegisterSystems() {
 	registry.RegisterSystem("quasar", func(w any) any {
 		return system.NewQuasarSystem(w.(*engine.World))
 	})
+	registry.RegisterSystem("swarm", func(w any) any {
+		return system.NewSwarmSystem(w.(*engine.World))
+	})
 	registry.RegisterSystem("dust", func(w any) any {
 		return system.NewDustSystem(w.(*engine.World))
 	})
@@ -133,6 +136,9 @@ func RegisterRenderers() {
 	registry.RegisterRenderer("quasar", func(ctx any) any {
 		return renderers.NewQuasarRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityMulti)
+	registry.RegisterRenderer("swarm", func(ctx any) any {
+		return renderers.NewSwarmRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityMulti)
 	registry.RegisterRenderer("grayout", func(ctx any) any {
 		return renderers.NewGrayoutRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityPostProcess)
@@ -181,6 +187,7 @@ func ActiveSystems() []string {
 		"lightning",
 		"drain",
 		"quasar",
+		"swarm",
 		"dust",
 		"flash",
 		"explosion",
@@ -207,6 +214,7 @@ func ActiveRenderers() []string {
 		"spirit",
 		"materialize",
 		"quasar",
+		"swarm",
 		"grayout",
 		"dim",
 		"heatmeter",

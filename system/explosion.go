@@ -254,14 +254,11 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 			}
 
 			entities := s.world.Positions.GetAllEntityAt(x, y)
-			for _, e := range entities {
-				if s.world.Components.Member.HasEntity(e) {
-					continue
-				}
-
-				drain, hasDrain := s.world.Components.Drain.GetComponent(e)
-				if hasDrain {
-					drainPos, ok := s.world.Positions.GetPosition(e)
+			for _, entity := range entities {
+				// Drain
+				drainComp, ok := s.world.Components.Drain.GetComponent(entity)
+				if ok {
+					drainPos, ok := s.world.Positions.GetPosition(entity)
 					if !ok {
 						continue
 					}
@@ -272,21 +269,22 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 					eVelY := vmath.Mul(constant.QuasarMaxSpeed, vmath.Div(radius, diffY))
 
 					physics.ApplyCollision(
-						&drain.KineticState,
+						&drainComp.KineticState,
 						eVelX, eVelY,
 						&physics.ExplosionToDrain,
 						s.rng,
 						now,
 					)
-					s.world.Components.Drain.SetComponent(e, drain)
+					s.world.Components.Drain.SetComponent(entity, drainComp)
 				}
 
-				if member, ok := s.world.Components.Member.GetComponent(e); ok {
-					if header, hOk := s.world.Components.Header.GetComponent(e); hOk {
-						if header.Behavior == component.BehaviorQuasar {
-							anchorEntity := member.HeaderEntity
-							if quasar, qOk := s.world.Components.Quasar.GetComponent(anchorEntity); qOk {
-								quasarPos, ok := s.world.Positions.GetPosition(anchorEntity)
+				// Quasar
+				if memberComp, ok := s.world.Components.Member.GetComponent(entity); ok {
+					headerEntity := memberComp.HeaderEntity
+					if headerComp, ok := s.world.Components.Header.GetComponent(headerEntity); ok {
+						if headerComp.Behavior == component.BehaviorQuasar {
+							if quasarComp, ok := s.world.Components.Quasar.GetComponent(headerEntity); ok {
+								quasarPos, ok := s.world.Positions.GetPosition(headerEntity)
 								if !ok {
 									continue
 								}
@@ -297,32 +295,34 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 								eVelY := vmath.Mul(constant.QuasarMaxSpeed, vmath.Div(radius, diffY))
 
 								physics.ApplyCollision(
-									&drain.KineticState,
+									&quasarComp.KineticState,
 									eVelX, eVelY,
 									&physics.ExplosionToQuasar,
 									s.rng,
 									now,
 								)
-								quasar.HitPoints--
-								s.world.Components.Quasar.SetComponent(member.HeaderEntity, quasar)
+								quasarComp.HitPoints--
+								s.world.Components.Quasar.SetComponent(headerEntity, quasarComp)
 							}
+						} else {
+							continue // Non-quasar composite member (likely gold)
 						}
 					}
 				}
 
-				glyph, ok := s.world.Components.Glyph.GetComponent(e)
+				glyph, ok := s.world.Components.Glyph.GetComponent(entity)
 				if !ok {
 					continue
 				}
 
 				// SetPosition death component for deduplication
-				if s.world.Components.Death.HasEntity(e) {
+				if s.world.Components.Death.HasEntity(entity) {
 					continue
 				}
-				s.world.Components.Death.SetComponent(e, component.DeathComponent{})
+				s.world.Components.Death.SetComponent(entity, component.DeathComponent{})
 
 				// Append to local buffers
-				s.entityBuf = append(s.entityBuf, e)
+				s.entityBuf = append(s.entityBuf, entity)
 				s.dustEntryBuf = append(s.dustEntryBuf, event.DustSpawnEntry{
 					X:     x,
 					Y:     y,

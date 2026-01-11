@@ -347,11 +347,8 @@ func (s *GoldSystem) spawnGold() bool {
 	s.timeoutTime = now.Add(constant.GoldDuration)
 
 	// Emit spawn event
-	// TODO: trim down this payload now that splash is separate
 	s.world.PushEvent(event.EventGoldSpawned, &event.GoldSpawnedPayload{
 		HeaderEntity: headerEntity,
-		OriginX:      x,
-		OriginY:      y,
 		Length:       constant.GoldSequenceLength,
 		Duration:     constant.GoldDuration,
 	})

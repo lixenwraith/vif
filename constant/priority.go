@@ -18,16 +18,17 @@ const (
 	PriorityDrain       = 130
 	PriorityMaterialize = 140 // PriorityDrain + 1
 	PriorityQuasar      = 150 // After Drain
-	PriorityExplosion   = 155 // After Quasar, before Dust
-	PriorityDust        = 160 // After Quasar, before Decay
-	PriorityDecay       = 170
-	PriorityBlossom     = 180
-	PriorityLightning   = 190 // After Quasar
-	PriorityFlash       = 200
-	PriorityUI          = 210
-	PriorityEffect      = 300
+	PriorityExplosion   = 160 // After Quasar, before Dust
+	PriorityDust        = 170 // After Quasar, before Decay
+	PrioritySwarm       = 180
+	PriorityDecay       = 190
+	PriorityBlossom     = 200
+	PriorityLightning   = 210 // After Quasar
+	PriorityFlash       = 220
+	PriorityUI          = 230
+	PriorityEffect      = 500
 	PrioritySplash      = 800 // After game logic, before rendering
 	PriorityDeath       = 850 // After game logic, before TimeKeeper
 	PriorityTimekeeper  = 900 // After game logic, final
-	PriorityDiagnostics = 910 // After TimeKeeper, telemetry collection
+	PriorityDiagnostics = 950 // After TimeKeeper, telemetry collection
 )

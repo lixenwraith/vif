@@ -103,16 +103,14 @@ type GoldEnablePayload struct {
 	Enabled bool `toml:"enabled"`
 }
 
-// GoldSpawnedPayload anchors countdown timer to sequence position
+// GoldSpawnedPayload provides information about the spawned gold sequence
 type GoldSpawnedPayload struct {
 	HeaderEntity core.Entity   `toml:"header_entity"`
-	OriginX      int           `toml:"origin_x"`
-	OriginY      int           `toml:"origin_y"`
 	Length       int           `toml:"length"`
 	Duration     time.Duration `toml:"duration"`
 }
 
-// GoldCompletionPayload identifies which timer to destroy
+// GoldCompletionPayload identifies which gold sequence is completed
 type GoldCompletionPayload struct {
 	HeaderEntity core.Entity `toml:"header_entity"`
 }
@@ -128,11 +126,11 @@ type SplashRequestPayload struct {
 // SplashTimerPayload anchors countdown timer to sequence position
 type SplashTimerRequestPayload struct {
 	AnchorEntity core.Entity           `toml:"anchor_entity"`
+	Color        component.SplashColor `toml:"color"`
 	OriginX      int                   `toml:"origin_x"`
 	OriginY      int                   `toml:"origin_y"`
 	Length       int                   `toml:"length"`
 	Duration     time.Duration         `toml:"duration"`
-	Color        component.SplashColor `toml:"color"`
 }
 
 // SplashTimerCancelPayload anchors countdown timer to sequence position

@@ -1,13 +1,5 @@
 package vmath
 
-// Mass ratio constants for collision physics (Q32.32)
-// Use with ApplyCollisionImpulse for different entity weights
-const (
-	MassRatioEqual = Scale     // 1.0 - equal mass entities
-	MassRatioLight = Scale / 2 // 0.5 - light impactor (less momentum transfer)
-	MassRatioHeavy = Scale * 2 // 2.0 - heavy impactor (more momentum transfer)
-)
-
 // Entity mass constants (Q32.32, relative units)
 // Baseline: single-cell entity = Scale (1.0)
 // Entity mass constants (Q32.32, relative units)
@@ -19,12 +11,13 @@ const (
 	MassQuasar  = Scale * 10 // 10.0 - fused from 10 drains
 )
 
-// Pre-computed mass ratios for collision (impactor_mass / target_mass)
+// Pre-computed mass ratio constants for collision physics (Q32.32)
+// Use with ApplyCollisionImpulse for different entity weights
 const (
 	MassRatioExplosionToDrain  = Scale * 10  // 10.0 - 10x greater mass
 	MassRatioExplosionToQuasar = Scale       // 1.0 - 1x greater mass
-	MassRatioCleanerToDrain    = Scale       // 1.0 - equal mass
-	MassRatioCleanerToQuasar   = Scale / 10  // 0.1 - cleaner is 10x lighter
+	MassRatioEqual             = Scale       // 1.0 - equal mass entities
+	MassRatioBaseToQuasar      = Scale / 10  // 0.1 - cleaner and shield are 10x lighter
 	MassRatioDustToDrain       = Scale / 10  // 0.1 - dust is 10x lighter than drain
 	MassRatioDustToQuasar      = Scale / 100 // 0.01 - dust is 100x lighter than quasar
 )
