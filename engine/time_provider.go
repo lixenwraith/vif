@@ -2,7 +2,7 @@ package engine
 
 import "time"
 
-// TimeProvider provides the real system time with monotonic clock readings
+// TimeProvider provides the real systems time with monotonic clock readings
 // Used for real-time operations (UI, network) that should not pause
 type TimeProvider struct{}
 

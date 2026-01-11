@@ -161,7 +161,7 @@ func (s *TypingSystem) applyUniversalRewards() {
 
 // emitTypingFeedback sends visual feedback (splash + blink)
 func (s *TypingSystem) emitTypingFeedback(glyphType component.GlyphType, char rune) {
-	cursorPos, _ := s.world.Positions.Get(s.world.Resources.Cursor.Entity)
+	cursorPos, _ := s.world.Positions.GetPosition(s.world.Resources.Cursor.Entity)
 
 	var splashColor component.SplashColor
 	var blinkType uint32
@@ -223,7 +223,7 @@ func (s *TypingSystem) moveCursorRight() {
 	cursorEntity := s.world.Resources.Cursor.Entity
 	config := s.world.Resources.Config
 
-	if cursorPos, ok := s.world.Positions.Get(cursorEntity); ok && cursorPos.X < config.GameWidth-1 {
+	if cursorPos, ok := s.world.Positions.GetPosition(cursorEntity); ok && cursorPos.X < config.GameWidth-1 {
 		cursorPos.X++
 		s.world.Positions.SetPosition(cursorEntity, cursorPos)
 	}
@@ -271,7 +271,7 @@ func (s *TypingSystem) handleCompositeMember(entity core.Entity, anchorID core.E
 	s.applyUniversalRewards()
 
 	// Color-based energy (only Blue/Green/Red for now)
-	if header.BehaviorID != component.BehaviorGold {
+	if header.Behavior != component.BehaviorGold {
 		s.world.PushEvent(event.EventEnergyGlyphConsumed, &event.GlyphConsumedPayload{
 			Type:  glyph.Type,
 			Level: glyph.Level,
@@ -327,9 +327,9 @@ func (s *TypingSystem) handleGlyph(entity core.Entity, glyph component.GlyphComp
 
 // === TYPING ORDER VALIDATION ===
 
-// validateTypingOrder checks if the entity is the next valid target based on BehaviorID heuristic
+// validateTypingOrder checks if the entity is the next valid target based on Behavior heuristic
 func (s *TypingSystem) validateTypingOrder(entity core.Entity, header *component.HeaderComponent) bool {
-	switch header.BehaviorID {
+	switch header.Behavior {
 	case component.BehaviorGold:
 		// Gold: strict left-to-right ordering (X→Y→EntityID)
 		return s.isLeftmostMember(entity, header)
@@ -360,7 +360,7 @@ func (s *TypingSystem) isLeftmostMember(entity core.Entity, header *component.He
 		if m.Entity == 0 {
 			continue
 		}
-		pos, ok := s.world.Positions.Get(m.Entity)
+		pos, ok := s.world.Positions.GetPosition(m.Entity)
 		if !ok {
 			continue
 		}
@@ -414,7 +414,7 @@ func (s *TypingSystem) validateBossOrder(entity core.Entity, header *component.H
 		if m.Entity == 0 || m.Layer != component.LayerGlyph {
 			continue
 		}
-		pos, ok := s.world.Positions.Get(m.Entity)
+		pos, ok := s.world.Positions.GetPosition(m.Entity)
 		if !ok {
 			continue
 		}

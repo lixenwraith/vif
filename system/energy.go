@@ -302,9 +302,9 @@ func (s *EnergySystem) handleDeleteRequest(payload *event.DeleteRequestPayload) 
 		}
 
 		// Query all glyphs to find those in the row range
-		entities := s.world.Components.Glyph.AllEntity()
+		entities := s.world.Components.Glyph.AllEntities()
 		for _, entity := range entities {
-			pos, _ := s.world.Positions.Get(entity)
+			pos, _ := s.world.Positions.GetPosition(entity)
 			if pos.Y >= startY && pos.Y <= endY {
 				checkEntity(entity)
 			}

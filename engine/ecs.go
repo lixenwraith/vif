@@ -4,7 +4,7 @@ package engine
 
 // Components are handled in Store
 
-// System is an interface that all system must implement
+// System is an interface that all systems must implement
 type System interface {
 	Init()
 	Update()

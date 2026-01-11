@@ -61,7 +61,7 @@ func (s *FlashSystem) Update() {
 	}
 
 	dt := s.world.Resources.Time.DeltaTime
-	entities := s.world.Components.Flash.AllEntity()
+	entities := s.world.Components.Flash.AllEntities()
 	for _, entity := range entities {
 		flash, ok := s.world.Components.Flash.GetComponent(entity)
 		if !ok {

@@ -139,7 +139,7 @@ func (s *CleanerSystem) Update() {
 		}
 	}
 
-	cleanerEntities := s.world.Components.Cleaner.AllEntity()
+	cleanerEntities := s.world.Components.Cleaner.AllEntities()
 	s.statActive.Store(int64(len(cleanerEntities)))
 
 	// Push EventCleanerSweepingFinished when all cleaners have completed their animation
@@ -172,7 +172,7 @@ func (s *CleanerSystem) Update() {
 		}
 
 		// Read grid position from Positions (authoritative for spatial queries)
-		oldPos, ok := s.world.Positions.Get(entity)
+		oldPos, ok := s.world.Positions.GetPosition(entity)
 		if !ok {
 			continue
 		}
@@ -264,7 +264,7 @@ func (s *CleanerSystem) Update() {
 		}
 	}
 
-	cleanerEntities = s.world.Components.Cleaner.AllEntity()
+	cleanerEntities = s.world.Components.Cleaner.AllEntities()
 	// Push EventCleanerSweepingFinished when all cleaners have completed their animation
 	if len(cleanerEntities) == 0 && s.hasSpawnedSession {
 		s.world.PushEvent(event.EventCleanerSweepingFinished, nil)
@@ -391,7 +391,7 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 		if !ok {
 			continue
 		}
-		if header.BehaviorID == component.BehaviorQuasar {
+		if header.Behavior == component.BehaviorQuasar {
 			s.deflectQuasar(member.HeaderEntity, e, cleaner.VelX, cleaner.VelY)
 			s.deflectedAnchors[member.HeaderEntity] = selfEntity
 		}
@@ -450,12 +450,12 @@ func (s *CleanerSystem) deflectQuasar(anchorEntity, hitMember core.Entity, clean
 	// Knockback only when not enraged
 	isEnraged := quasar.IsCharging || quasar.IsZapping
 	if !isEnraged {
-		anchorPos, ok := s.world.Positions.Get(anchorEntity)
+		anchorPos, ok := s.world.Positions.GetPosition(anchorEntity)
 		if !ok {
 			s.world.Components.Quasar.SetComponent(anchorEntity, quasar)
 			return
 		}
-		hitPos, ok := s.world.Positions.Get(hitMember)
+		hitPos, ok := s.world.Positions.GetPosition(hitMember)
 		if !ok {
 			s.world.Components.Quasar.SetComponent(anchorEntity, quasar)
 			return
@@ -619,7 +619,7 @@ func (s *CleanerSystem) scanTargetRows() []int {
 
 	targetRows := make(map[int]bool)
 
-	entities := s.world.Components.Glyph.AllEntity()
+	entities := s.world.Components.Glyph.AllEntities()
 
 	for _, entity := range entities {
 		glyph, ok := s.world.Components.Glyph.GetComponent(entity)
@@ -627,7 +627,7 @@ func (s *CleanerSystem) scanTargetRows() []int {
 			continue
 		}
 
-		pos, ok := s.world.Positions.Get(entity)
+		pos, ok := s.world.Positions.GetPosition(entity)
 		if !ok {
 			continue
 		}

@@ -95,12 +95,12 @@ func (s *FuseSystem) executeFuse() {
 	s.world.PushEvent(event.EventDrainPause, nil)
 
 	// 2. Collect active drains and their positions
-	drains := s.world.Components.Drain.AllEntity()
+	drains := s.world.Components.Drain.AllEntities()
 	coords := make([]int, 0, len(drains)*2)
 	validDrains := make([]core.Entity, 0, len(drains))
 
 	for _, e := range drains {
-		if pos, ok := s.world.Positions.Get(e); ok {
+		if pos, ok := s.world.Positions.GetPosition(e); ok {
 			coords = append(coords, pos.X, pos.Y)
 			validDrains = append(validDrains, e)
 		}
@@ -139,7 +139,7 @@ func (s *FuseSystem) executeFuse() {
 	}
 
 	// 6. Cleanup Pending Materializers (Fixes artifact issue)
-	mats := s.world.Components.Materialize.AllEntity()
+	mats := s.world.Components.Materialize.AllEntities()
 	for _, e := range mats {
 		if m, ok := s.world.Components.Materialize.GetComponent(e); ok && m.Type == component.SpawnTypeDrain {
 			s.world.DestroyEntity(e)
@@ -179,7 +179,7 @@ func (s *FuseSystem) completeFuse() {
 
 // destroyAllDrains removes all drain entities without visual effects
 func (s *FuseSystem) destroyAllDrains() {
-	drains := s.world.Components.Drain.AllEntity()
+	drains := s.world.Components.Drain.AllEntities()
 	if len(drains) == 0 {
 		return
 	}
@@ -348,7 +348,7 @@ func (s *FuseSystem) createQuasarComposite(anchorX, anchorY int) core.Entity {
 
 	// SetPosition composite header on phantom head
 	s.world.Components.Header.SetComponent(anchorEntity, component.HeaderComponent{
-		BehaviorID:    component.BehaviorQuasar,
+		Behavior:      component.BehaviorQuasar,
 		MemberEntries: members,
 		VelX:          0,
 		VelY:          0,

@@ -92,8 +92,8 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 		now := s.world.Resources.Time.GameTime
 
 		if quasar, ok := s.world.Components.Quasar.GetComponent(s.headerEntity); ok {
-			headerPos, _ := s.world.Positions.Get(s.headerEntity)
-			cursorPos, _ := s.world.Positions.Get(cursorEntity)
+			headerPos, _ := s.world.Positions.GetPosition(s.headerEntity)
+			cursorPos, _ := s.world.Positions.GetPosition(cursorEntity)
 
 			quasar.PreciseX = vmath.FromInt(headerPos.X)
 			quasar.PreciseY = vmath.FromInt(headerPos.Y)
@@ -117,7 +117,7 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 		s.statActive.Store(true)
 
 		// Activate persistent grayout
-		s.world.Resources.GameState.State.StartGrayout()
+		s.world.Resources.Game.State.StartGrayout()
 
 	case event.EventQuasarCancel:
 		if s.active {
@@ -274,12 +274,12 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 	cursorEntity := s.world.Resources.Cursor.Entity
 	now := s.world.Resources.Time.GameTime
 
-	cursorPos, ok := s.world.Positions.Get(cursorEntity)
+	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 	if !ok {
 		return
 	}
 
-	headerPos, ok := s.world.Positions.Get(headerEntity)
+	headerPos, ok := s.world.Positions.GetPosition(headerEntity)
 	if !ok {
 		return
 	}
@@ -350,12 +350,12 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 func (s *QuasarSystem) isCursorInZapRange(headerEntity core.Entity, quasarComp *component.QuasarComponent) bool {
 	cursorEntity := s.world.Resources.Cursor.Entity
 
-	headerPos, ok := s.world.Positions.Get(headerEntity)
+	headerPos, ok := s.world.Positions.GetPosition(headerEntity)
 	if !ok {
 		return true // Failsafe: don't zap if can't determine
 	}
 
-	cursorPos, ok := s.world.Positions.Get(cursorEntity)
+	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 	if !ok {
 		return true
 	}
@@ -373,11 +373,11 @@ func (s *QuasarSystem) isCursorInZapRange(headerEntity core.Entity, quasarComp *
 func (s *QuasarSystem) startZapping(headerEntity core.Entity, quasarComp *component.QuasarComponent) {
 	cursorEntity := s.world.Resources.Cursor.Entity
 
-	headerPos, ok := s.world.Positions.Get(headerEntity)
+	headerPos, ok := s.world.Positions.GetPosition(headerEntity)
 	if !ok {
 		return
 	}
-	cursorPos, ok := s.world.Positions.Get(cursorEntity)
+	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 	if !ok {
 		return
 	}
@@ -410,7 +410,7 @@ func (s *QuasarSystem) stopZapping(headerEntity core.Entity, quasarComp *compone
 // Update lightning target to track cursor
 func (s *QuasarSystem) updateZapTarget(headerEntity core.Entity) {
 	cursorEntity := s.world.Resources.Cursor.Entity
-	cursorPos, ok := s.world.Positions.Get(cursorEntity)
+	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 	if !ok {
 		return
 	}
@@ -492,7 +492,7 @@ func (s *QuasarSystem) processCollisionsAtNewPositions(headerEntity core.Entity,
 
 				// Handle gold composite collision
 				if member, ok := s.world.Components.Member.GetComponent(e); ok {
-					if h, hOk := s.world.Components.Header.GetComponent(member.HeaderEntity); hOk && h.BehaviorID == component.BehaviorGold {
+					if h, hOk := s.world.Components.Header.GetComponent(member.HeaderEntity); hOk && h.Behavior == component.BehaviorGold {
 						s.destroyGoldComposite(member.HeaderEntity)
 						continue
 					}
@@ -542,7 +542,7 @@ func (s *QuasarSystem) destroyGoldComposite(headerEntity core.Entity) {
 func (s *QuasarSystem) handleInteractions(headerEntity core.Entity, headerComp *component.HeaderComponent, quasar *component.QuasarComponent) {
 	cursorEntity := s.world.Resources.Cursor.Entity
 
-	cursorPos, ok := s.world.Positions.Get(cursorEntity)
+	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 	if !ok {
 		return
 	}
@@ -560,7 +560,7 @@ func (s *QuasarSystem) handleInteractions(headerEntity core.Entity, headerComp *
 			continue
 		}
 
-		memberPos, ok := s.world.Positions.Get(m.Entity)
+		memberPos, ok := s.world.Positions.GetPosition(m.Entity)
 		if !ok {
 			continue
 		}
@@ -614,7 +614,7 @@ func (s *QuasarSystem) applyShieldKnockback(
 ) {
 	now := s.world.Resources.Time.GameTime
 
-	headerPos, ok := s.world.Positions.Get(headerEntity)
+	headerPos, ok := s.world.Positions.GetPosition(headerEntity)
 	if !ok {
 		return
 	}
@@ -671,7 +671,7 @@ func (s *QuasarSystem) terminateQuasarLocked() {
 	}
 
 	// End grayout
-	s.world.Resources.GameState.State.EndGrayout()
+	s.world.Resources.Game.State.EndGrayout()
 
 	// Resume drain spawning
 	s.world.PushEvent(event.EventDrainResume, nil)

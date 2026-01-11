@@ -370,7 +370,7 @@ func (cs *ClockScheduler) dispatchAndProcessEvents() {
 
 // executeReset performs FSM reset while scheduler mutex is held
 func (cs *ClockScheduler) executeReset() {
-	// NOTE: Do not use RunSafe if called from a blocking system
+	// NOTE: Do not use RunSafe if called from a blocking systems
 	// 1. Drain and discard stale events from the previous game session
 	_ = cs.world.Resources.Event.Queue.Consume()
 
@@ -395,7 +395,7 @@ func (cs *ClockScheduler) executeReset() {
 	cs.dispatchAndProcessEvents()
 
 	// 6. Transition to Running state
-	// Scheduler is the unpause authority during reset, preventing system from ticking against an uninitialized FSM
+	// Scheduler is the unpause authority during reset, preventing systems from ticking against an uninitialized FSM
 	cs.isPaused.Store(false)
 	cs.pausableClock.Resume()
 }
@@ -455,13 +455,13 @@ func (cs *ClockScheduler) processTick() {
 		cs.world.UpdateLocked()
 	})
 
-	ticks := cs.world.Resources.GameState.State.IncrementGameTicks()
+	ticks := cs.world.Resources.Game.State.IncrementGameTicks()
 	cs.statTicks.Store(int64(ticks))
 
 	if cs.tickCount.Load()%20 == 0 {
-		cs.world.Resources.GameState.State.UpdateAPM(cs.world.Resources.Status)
+		cs.world.Resources.Game.State.UpdateAPM(cs.world.Resources.Status)
 	}
 
-	cs.statEntityCount.Store(int64(cs.world.Positions.CountEntity()))
+	cs.statEntityCount.Store(int64(cs.world.Positions.CountEntities()))
 	cs.statQueueLen.Store(int64(cs.world.Resources.Event.Queue.Len()))
 }

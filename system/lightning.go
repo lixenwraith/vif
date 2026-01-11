@@ -40,7 +40,7 @@ func (s *LightningSystem) Update() {
 		return
 	}
 
-	entities := s.world.Components.Lightning.AllEntity()
+	entities := s.world.Components.Lightning.AllEntities()
 	if len(entities) == 0 {
 		return
 	}
@@ -138,7 +138,7 @@ func (s *LightningSystem) spawnLightning(p *event.LightningSpawnPayload) {
 
 func (s *LightningSystem) updateTarget(p *event.LightningUpdatePayload) {
 	// Find lightning by owner
-	for _, e := range s.world.Components.Lightning.AllEntity() {
+	for _, e := range s.world.Components.Lightning.AllEntities() {
 		lc, ok := s.world.Components.Lightning.GetComponent(e)
 		if !ok || lc.Owner != p.Owner {
 			continue
@@ -152,7 +152,7 @@ func (s *LightningSystem) updateTarget(p *event.LightningUpdatePayload) {
 
 func (s *LightningSystem) despawnLightning(owner core.Entity) {
 	// Find and destroy all lightning owned by this entity
-	for _, e := range s.world.Components.Lightning.AllEntity() {
+	for _, e := range s.world.Components.Lightning.AllEntities() {
 		lc, ok := s.world.Components.Lightning.GetComponent(e)
 		if !ok || lc.Owner != owner {
 			continue
@@ -163,7 +163,7 @@ func (s *LightningSystem) despawnLightning(owner core.Entity) {
 }
 
 func (s *LightningSystem) destroyAll() {
-	entities := s.world.Components.Lightning.AllEntity()
+	entities := s.world.Components.Lightning.AllEntities()
 	for _, e := range entities {
 		s.world.Components.Lightning.RemoveEntity(e)
 		s.world.DestroyEntity(e)

@@ -2,11 +2,11 @@ package component
 
 import "github.com/lixenwraith/vi-fighter/core"
 
-// BehaviorID routes composite events to behavior-specific systems
-type BehaviorID uint8
+// Behavior routes composite events to behavior-specific systems
+type Behavior uint8
 
 const (
-	BehaviorNone BehaviorID = iota
+	BehaviorNone Behavior = iota
 	BehaviorGold
 	BehaviorQuasar
 	BehaviorBubble
@@ -14,10 +14,9 @@ const (
 	BehaviorShield
 )
 
-// HeaderComponent resides on the Phantom Head (controller) entity
-// The Phantom Head is invisible, protected, and manages group lifecycle
+// HeaderComponent is on Phantom Head entity, which is invisible, protected and manages composite lifecycle
 type HeaderComponent struct {
-	BehaviorID BehaviorID
+	Behavior Behavior
 
 	// Contiguous slice for cache-friendly iteration
 	MemberEntries []MemberEntry

@@ -79,7 +79,7 @@ func (s *SpiritSystem) Update() {
 	}
 	s.destroyNextTick = s.destroyNextTick[:0]
 
-	entities := s.world.Components.Spirit.AllEntity()
+	entities := s.world.Components.Spirit.AllEntities()
 	if len(entities) == 0 {
 		return
 	}
@@ -154,7 +154,7 @@ func (s *SpiritSystem) destroySpirit(entity core.Entity) {
 }
 
 func (s *SpiritSystem) destroyAllSpirits() {
-	entities := s.world.Components.Spirit.AllEntity()
+	entities := s.world.Components.Spirit.AllEntities()
 	for _, entity := range entities {
 		s.destroySpirit(entity)
 	}

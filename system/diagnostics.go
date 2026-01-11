@@ -133,16 +133,16 @@ func (s *DiagnosticsSystem) Update() {
 
 // TODO: add to code gen
 func (s *DiagnosticsSystem) collectStoreCounts() {
-	s.statPositionCount.Store(int64(s.world.Positions.CountEntity()))
-	s.statGlyphCount.Store(int64(s.world.Components.Glyph.CountEntity()))
-	s.statSigilCount.Store(int64(s.world.Components.Sigil.CountEntity()))
-	s.statMemberCount.Store(int64(s.world.Components.Member.CountEntity()))
-	s.statHeaderCount.Store(int64(s.world.Components.Header.CountEntity()))
-	s.statNuggetCount.Store(int64(s.world.Components.Nugget.CountEntity()))
-	s.statDeathCount.Store(int64(s.world.Components.Death.CountEntity()))
-	s.statShieldCount.Store(int64(s.world.Components.Shield.CountEntity()))
-	s.statPingCount.Store(int64(s.world.Components.Ping.CountEntity()))
-	s.statBoostCount.Store(int64(s.world.Components.Boost.CountEntity()))
+	s.statPositionCount.Store(int64(s.world.Positions.CountEntities()))
+	s.statGlyphCount.Store(int64(s.world.Components.Glyph.CountEntities()))
+	s.statSigilCount.Store(int64(s.world.Components.Sigil.CountEntities()))
+	s.statMemberCount.Store(int64(s.world.Components.Member.CountEntities()))
+	s.statHeaderCount.Store(int64(s.world.Components.Header.CountEntities()))
+	s.statNuggetCount.Store(int64(s.world.Components.Nugget.CountEntities()))
+	s.statDeathCount.Store(int64(s.world.Components.Death.CountEntities()))
+	s.statShieldCount.Store(int64(s.world.Components.Shield.CountEntities()))
+	s.statPingCount.Store(int64(s.world.Components.Ping.CountEntities()))
+	s.statBoostCount.Store(int64(s.world.Components.Boost.CountEntities()))
 }
 
 func (s *DiagnosticsSystem) collectGridMetrics() {
@@ -168,14 +168,14 @@ func (s *DiagnosticsSystem) collectConsistencyChecks() {
 	var orphanGlyph, orphanMember, emptyHeader int64
 
 	// Glyph without Positions
-	for _, e := range s.world.Components.Glyph.AllEntity() {
+	for _, e := range s.world.Components.Glyph.AllEntities() {
 		if !s.world.Positions.HasEntity(e) {
 			orphanGlyph++
 		}
 	}
 
 	// Member without valid anchor
-	for _, e := range s.world.Components.Member.AllEntity() {
+	for _, e := range s.world.Components.Member.AllEntities() {
 		member, ok := s.world.Components.Member.GetComponent(e)
 		if !ok {
 			continue
@@ -186,7 +186,7 @@ func (s *DiagnosticsSystem) collectConsistencyChecks() {
 	}
 
 	// HeaderEntity with no live members
-	for _, e := range s.world.Components.Header.AllEntity() {
+	for _, e := range s.world.Components.Header.AllEntities() {
 		header, ok := s.world.Components.Header.GetComponent(e)
 		if !ok {
 			continue

@@ -257,7 +257,7 @@ func main() {
 				snapTimeRes = *ctx.World.Resources.Time
 
 				// Capture cursor position
-				if pos, ok := ctx.World.Positions.Get(ctx.CursorEntity); ok {
+				if pos, ok := ctx.World.Positions.GetPosition(ctx.World.Resources.Cursor.Entity); ok {
 					snapCursorX = pos.X
 					snapCursorY = pos.Y
 				}

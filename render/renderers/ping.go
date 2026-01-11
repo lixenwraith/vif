@@ -80,14 +80,14 @@ func (r *PingRenderer) computeExclusionMask(world *engine.World, w, h int) {
 	}
 
 	// Rasterize all active shields into the mask
-	shieldEntities := r.gameCtx.World.Components.Shield.AllEntity()
+	shieldEntities := r.gameCtx.World.Components.Shield.AllEntities()
 	for _, shieldEntity := range shieldEntities {
 		shieldComp, ok := r.gameCtx.World.Components.Shield.GetComponent(shieldEntity)
 		if !ok || !shieldComp.Active {
 			continue
 		}
 
-		shieldPos, ok := world.Positions.Get(shieldEntity)
+		shieldPos, ok := world.Positions.GetPosition(shieldEntity)
 		if !ok {
 			continue
 		}

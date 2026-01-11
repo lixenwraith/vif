@@ -78,7 +78,7 @@ func (s *MetaSystem) handleGameReset() {
 	// 1. Pause and stop audio
 	s.ctx.SetPaused(true)
 
-	// Phase 2: Synchronous World Cleanup
+	// 2. Synchronous World Cleanup
 	// Already inside world.RunSafe from main -> DispatchEventsImmediately
 	s.ctx.World.Clear()
 

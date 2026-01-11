@@ -165,7 +165,7 @@ func (s *GlyphSystem) Update() {
 	config := s.world.Resources.Config
 
 	// Calculate current density and update rate multiplier
-	entityCount := s.world.Positions.CountEntity()
+	entityCount := s.world.Positions.CountEntities()
 	screenCapacity := config.GameWidth * config.GameHeight
 	density := s.calculateDensity(entityCount, screenCapacity)
 	s.updateRateMultiplier(density)
@@ -261,7 +261,7 @@ func (s *GlyphSystem) runCensus() GlyphCensus {
 	var census GlyphCensus
 	var orphanGlyph, orphanTypeable int64
 
-	glyphEntities := s.world.Components.Glyph.AllEntity()
+	glyphEntities := s.world.Components.Glyph.AllEntities()
 	for _, entity := range glyphEntities {
 		if !s.world.Positions.HasEntity(entity) {
 			orphanGlyph++
@@ -296,7 +296,7 @@ func (s *GlyphSystem) runCensus() GlyphCensus {
 		}
 	}
 
-	typeableEntities := s.world.Components.Glyph.AllEntity()
+	typeableEntities := s.world.Components.Glyph.AllEntities()
 	for _, entity := range typeableEntities {
 		if !s.world.Positions.HasEntity(entity) {
 			orphanTypeable++
@@ -417,17 +417,17 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 
 		startCol := rand.Intn(maxStartCol + 1)
 
-		// Check for overlaps using HasAny
+		// Check for overlaps using HasAnyEntity
 		hasOverlap := false
 		for i := 0; i < lineLength; i++ {
-			if s.world.Positions.HasAny(startCol+i, row) {
+			if s.world.Positions.HasAnyEntity(startCol+i, row) {
 				hasOverlap = true
 				break
 			}
 		}
 
 		// Check if too close to cursor
-		cursorPos, ok := s.world.Positions.Get(cursorEntity)
+		cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 		if !ok {
 			panic(nil)
 		}

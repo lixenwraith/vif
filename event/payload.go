@@ -234,7 +234,7 @@ type MemberTypedPayload struct {
 	HeaderEntity   core.Entity `toml:"header_entity"`
 	MemberEntity   core.Entity `toml:"member_entity"`
 	Char           rune        `toml:"char"`
-	RemainingCount int         `toml:"remaining_count"` // CountEntity of remaining live members after this one
+	RemainingCount int         `toml:"remaining_count"` // CountEntities of remaining live members after this one
 }
 
 // DecaySpawnPayload contains parameters to spawn a single decay entity

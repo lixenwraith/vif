@@ -82,7 +82,7 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventDustSpawnOne:
 		if p, ok := ev.Payload.(*event.DustSpawnPayload); ok {
 			cursorEntity := s.world.Resources.Cursor.Entity
-			cursorPos, ok := s.world.Positions.Get(cursorEntity)
+			cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 			if !ok {
 				return
 			}
@@ -100,7 +100,7 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 			}
 
 			cursorEntity := s.world.Resources.Cursor.Entity
-			cursorPos, ok := s.world.Positions.Get(cursorEntity)
+			cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 			if !ok {
 				event.ReleaseDustSpawnBatch(p)
 				return
@@ -140,7 +140,7 @@ func (s *DustSystem) Update() {
 		return
 	}
 
-	dustEntities := s.world.Components.Dust.AllEntity()
+	dustEntities := s.world.Components.Dust.AllEntities()
 	if len(dustEntities) == 0 {
 		s.statActive.Store(0)
 		return
@@ -149,7 +149,7 @@ func (s *DustSystem) Update() {
 	// 1. PRE-FETCH Context Data (Cursor, Energy, etc.)
 	// Must do this BEFORE locking Positions to avoid deadlock
 	cursorEntity := s.world.Resources.Cursor.Entity
-	cursorPos, ok := s.world.Positions.Get(cursorEntity)
+	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 	if !ok {
 		return
 	}
@@ -334,7 +334,7 @@ func (s *DustSystem) Update() {
 					// --- Quasar interaction ---
 					if member, ok := s.world.Components.Member.GetComponent(target); ok {
 						if header, hOk := s.world.Components.Header.GetComponent(member.HeaderEntity); hOk {
-							if header.BehaviorID == component.BehaviorQuasar {
+							if header.Behavior == component.BehaviorQuasar {
 								if quasar, qOk := s.world.Components.Quasar.GetComponent(member.HeaderEntity); qOk {
 									// Center-of-mass collision, no offset calculation
 									physics.ApplyCollision(
@@ -445,7 +445,7 @@ func (s *DustSystem) Update() {
 // transformGlyphsToDust converts all non-composite glyphs to dust entities
 func (s *DustSystem) transformGlyphsToDust() {
 	cursorEntity := s.world.Resources.Cursor.Entity
-	cursorPos, ok := s.world.Positions.Get(cursorEntity)
+	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 	if !ok {
 		return
 	}
@@ -458,7 +458,7 @@ func (s *DustSystem) transformGlyphsToDust() {
 		level  component.GlyphLevel
 	}
 
-	glyphEntities := s.world.Components.Glyph.AllEntity()
+	glyphEntities := s.world.Components.Glyph.AllEntities()
 	toTransform := make([]glyphData, 0, len(glyphEntities))
 
 	for _, entity := range glyphEntities {
@@ -467,13 +467,13 @@ func (s *DustSystem) transformGlyphsToDust() {
 			continue
 		}
 
-		pos, ok := s.world.Positions.Get(entity)
+		pos, ok := s.world.Positions.GetPosition(entity)
 		if !ok {
 			continue
 		}
 
-		glyph, hasGlyph := s.world.Components.Glyph.GetComponent(entity)
-		if !hasGlyph {
+		glyph, ok := s.world.Components.Glyph.GetComponent(entity)
+		if !ok {
 			continue
 		}
 

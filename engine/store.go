@@ -70,8 +70,8 @@ func (s *Store[T]) HasEntity(e core.Entity) bool {
 	return ok
 }
 
-// AllEntity returns all entities with this component type
-func (s *Store[T]) AllEntity() []core.Entity {
+// AllEntities returns all entities with this component type
+func (s *Store[T]) AllEntities() []core.Entity {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	result := make([]core.Entity, len(s.entities))
@@ -79,8 +79,8 @@ func (s *Store[T]) AllEntity() []core.Entity {
 	return result
 }
 
-// CountEntity returns number of entities with this component
-func (s *Store[T]) CountEntity() int {
+// CountEntities returns number of entities with this component
+func (s *Store[T]) CountEntities() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.entities)

@@ -22,7 +22,7 @@ func NewSigilRenderer(gameCtx *engine.GameContext) *SigilRenderer {
 
 // Render draws all sigil entities
 func (r *SigilRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.gameCtx.World.Components.Sigil.AllEntity()
+	entities := r.gameCtx.World.Components.Sigil.AllEntities()
 	if len(entities) == 0 {
 		return
 	}
@@ -35,7 +35,7 @@ func (r *SigilRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 			continue
 		}
 
-		pos, ok := r.gameCtx.World.Positions.Get(entity)
+		pos, ok := r.gameCtx.World.Positions.GetPosition(entity)
 		if !ok {
 			continue
 		}

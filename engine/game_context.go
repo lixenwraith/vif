@@ -17,11 +17,10 @@ type GameContext struct {
 	// SetPosition once during NewGameContext. Pointers/values never modified.
 	// Safe for concurrent read without synchronization.
 
-	World         *World            // ECS world; has internal locking for component access
-	State         *GameState        // Centralized game state; has internal atomics/mutex
-	eventQueue    *event.EventQueue // Lock-free MPSC queue
-	PausableClock *PausableClock    // Pausable time source; has internal sync
-	CursorEntity  core.Entity       // Singleton cursor entity ID; recreated only on :new
+	World         *World         // ECS world; has internal locking for component access
+	State         *GameState     // Centralized game state; has internal atomics/mutex
+	PausableClock *PausableClock // Pausable time source; has internal sync
+	CursorEntity  core.Entity    // Singleton cursor entity ID; recreated only on :new
 
 	// ===== Channels =====
 	// Inherently thread-safe for send operations.
@@ -72,11 +71,7 @@ func NewGameContext(world *World, width, height int) *GameContext {
 		PausableClock: pausableClock,
 		Width:         width,
 		Height:        height,
-		eventQueue:    event.NewEventQueue(),
 	}
-
-	// Wire World to this Context's frame and event source
-	world.SetEventMetadata(ctx.eventQueue, &ctx.FrameNumber)
 
 	// Initialize atomic mode
 	ctx.SetMode(core.ModeNormal)
@@ -89,7 +84,7 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	// 0. Status Registry (before other resources that may use it)
 	world.Resources.Status = status.NewRegistry()
 
-	// 1. Config Resources
+	// 1. Config Resource
 	world.Resources.Config = &ConfigResource{
 		ScreenWidth:  ctx.Width,
 		ScreenHeight: ctx.Height,
@@ -99,7 +94,7 @@ func NewGameContext(world *World, width, height int) *GameContext {
 		GameY:        ctx.GameY,
 	}
 
-	// 2. Time Resources (Initial state)
+	// 2. Time Resource (Initial state)
 	world.Resources.Time = &TimeResource{
 		GameTime:    pausableClock.Now(),
 		RealTime:    pausableClock.RealTime(),
@@ -107,17 +102,20 @@ func NewGameContext(world *World, width, height int) *GameContext {
 		FrameNumber: ctx.FrameNumber.Load(),
 	}
 
-	// 3. Event Queue Resources
-	world.Resources.Event = &EventQueueResource{Queue: ctx.eventQueue}
+	// 3. Event Queue Resource
+	world.Resources.Event = &EventQueueResource{Queue: event.NewEventQueue()}
+
+	// Wire World to this Context's frame source for events
+	world.SetFrameSource(&ctx.FrameNumber)
 
 	// 4. Game GameState
 	ctx.State = NewGameState()
-	world.Resources.GameState = &GameStateResource{State: ctx.State}
+	world.Resources.Game = &GameStateResource{State: ctx.State}
 
 	// 5. Cursor Entity
 	ctx.CreateCursorEntity()
 
-	// 6. Cursor Resources
+	// 6. Cursor Resource
 	world.Resources.Cursor = &CursorResource{Entity: ctx.CursorEntity}
 
 	// Initialize atomic string pointers to empty strings
@@ -178,7 +176,7 @@ func (ctx *GameContext) HandleResize() {
 		ctx.cleanupOutOfBoundsEntities(ctx.GameWidth, ctx.GameHeight)
 
 		// Clamp cursor position
-		if pos, ok := ctx.World.Positions.Get(ctx.CursorEntity); ok {
+		if pos, ok := ctx.World.Positions.GetPosition(ctx.CursorEntity); ok {
 			newX := max(0, min(pos.X, ctx.GameWidth-1))
 			newY := max(0, min(pos.Y, ctx.GameHeight-1))
 
@@ -198,7 +196,7 @@ func (ctx *GameContext) cleanupOutOfBoundsEntities(width, height int) {
 	deathStore := ctx.World.Components.Death
 
 	// Unified cleanup: single Positions iteration handles all entity types
-	allEntities := ctx.World.Positions.AllEntity()
+	allEntities := ctx.World.Positions.AllEntities()
 	for _, e := range allEntities {
 		// Skip cursor entity (special case)
 		if e == ctx.CursorEntity {
@@ -206,8 +204,8 @@ func (ctx *GameContext) cleanupOutOfBoundsEntities(width, height int) {
 		}
 
 		// Mark entities outside valid coordinate space [0, width) × [0, height)
-		// Death system informs respective system of their entity destruction
-		pos, _ := ctx.World.Positions.Get(e)
+		// Death systems informs respective systems of their entity destruction
+		pos, _ := ctx.World.Positions.GetPosition(e)
 		if pos.X >= width || pos.Y >= height || pos.X < 0 || pos.Y < 0 {
 			deathStore.SetComponent(e, component.DeathComponent{})
 		}
@@ -287,7 +285,7 @@ type PingBounds struct {
 
 // GetPingBounds returns the boundaries for pings and operations, in normal mode or shield inactive, returns single-row/column bounds
 func (ctx *GameContext) GetPingBounds() PingBounds {
-	pos, ok := ctx.World.Positions.Get(ctx.CursorEntity)
+	pos, ok := ctx.World.Positions.GetPosition(ctx.CursorEntity)
 	if !ok {
 		return PingBounds{}
 	}

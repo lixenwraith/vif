@@ -118,8 +118,8 @@ func (s *NuggetSystem) Update() {
 
 	// Check cursor overlap for auto-collection
 	if s.activeNuggetEntity != 0 {
-		cursorPos, cursorOk := s.world.Positions.Get(cursorEntity)
-		nuggetPos, nuggetOk := s.world.Positions.Get(s.activeNuggetEntity)
+		cursorPos, cursorOk := s.world.Positions.GetPosition(cursorEntity)
+		nuggetPos, nuggetOk := s.world.Positions.GetPosition(s.activeNuggetEntity)
 		if cursorOk && nuggetOk && cursorPos.X == nuggetPos.X && cursorPos.Y == nuggetPos.Y {
 			s.collectNugget()
 		}
@@ -167,7 +167,7 @@ func (s *NuggetSystem) handleJumpRequest() {
 	}
 
 	// 3. Get Nugget Positions
-	nuggetPos, ok := s.world.Positions.Get(nuggetEntity)
+	nuggetPos, ok := s.world.Positions.GetPosition(nuggetEntity)
 	if !ok {
 		// Stale reference - clear it
 		if s.activeNuggetEntity == nuggetEntity {
@@ -247,7 +247,7 @@ func (s *NuggetSystem) spawnNugget() {
 // findValidPosition finds a valid random position for a nugget
 func (s *NuggetSystem) findValidPosition() (int, int) {
 	config := s.world.Resources.Config
-	cursorPos, ok := s.world.Positions.Get(s.world.Resources.Cursor.Entity)
+	cursorPos, ok := s.world.Positions.GetPosition(s.world.Resources.Cursor.Entity)
 	if !ok {
 		return -1, -1
 	}
@@ -281,7 +281,7 @@ func (s *NuggetSystem) collectNugget() {
 		return
 	}
 
-	nuggetPos, ok := s.world.Positions.Get(s.activeNuggetEntity)
+	nuggetPos, ok := s.world.Positions.GetPosition(s.activeNuggetEntity)
 	if !ok {
 		return
 	}

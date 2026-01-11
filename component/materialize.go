@@ -21,5 +21,5 @@ type SpawnType int
 
 const (
 	SpawnTypeDrain SpawnType = iota
-	// Future: SpawnTypeNugget, SpawnTypeBot, etc.
+	// Future: SpawnBot, etc.
 )

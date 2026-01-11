@@ -67,7 +67,7 @@ func (s *PingSystem) Update() {
 		return
 	}
 
-	entities := s.world.Components.Ping.AllEntity()
+	entities := s.world.Components.Ping.AllEntities()
 	dt := s.world.Resources.Time.DeltaTime
 
 	for _, entity := range entities {

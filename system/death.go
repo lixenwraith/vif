@@ -126,7 +126,7 @@ func (s *DeathSystem) routeCleanup(entity core.Entity) {
 }
 
 func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType) {
-	entityPos, ok := s.world.Positions.Get(entity)
+	entityPos, ok := s.world.Positions.GetPosition(entity)
 	if !ok {
 		return
 	}
@@ -176,7 +176,7 @@ func (s *DeathSystem) Update() {
 		return
 	}
 
-	deathEntities := s.world.Components.Death.AllEntity()
+	deathEntities := s.world.Components.Death.AllEntities()
 	if len(deathEntities) == 0 {
 		return
 	}

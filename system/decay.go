@@ -93,14 +93,14 @@ func (s *DecaySystem) Update() {
 		return
 	}
 
-	count := s.world.Components.Decay.CountEntity()
+	count := s.world.Components.Decay.CountEntities()
 	if count == 0 {
 		s.statCount.Store(0)
 		return
 	}
 
 	s.updateDecayEntities()
-	s.statCount.Store(int64(s.world.Components.Decay.CountEntity()))
+	s.statCount.Store(int64(s.world.Components.Decay.CountEntities()))
 }
 
 // spawnSingleDecay creates one decay entity at specified position
@@ -163,7 +163,7 @@ func (s *DecaySystem) updateDecayEntities() {
 	gameWidth := s.world.Resources.Config.GameWidth
 	gameHeight := s.world.Resources.Config.GameHeight
 
-	decayEntities := s.world.Components.Decay.AllEntity()
+	decayEntities := s.world.Components.Decay.AllEntities()
 
 	// Clear frame deduplication maps
 	clear(s.processedGridCells)

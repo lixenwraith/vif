@@ -12,12 +12,12 @@ import (
 // Resources holds singleton game resources, initialized during GameContext creation, accessed via World.Resources
 type Resource struct {
 	// World Resource
-	Time      *TimeResource
-	Config    *ConfigResource
-	GameState *GameStateResource
-	Cursor    *CursorResource
-	Event     *EventQueueResource
-	Render    *RenderConfig
+	Time   *TimeResource
+	Config *ConfigResource
+	Game   *GameStateResource
+	Cursor *CursorResource
+	Event  *EventQueueResource
+	Render *RenderConfig
 
 	// Telemetry
 	Status *status.Registry
@@ -42,7 +42,7 @@ func (r *Resource) ServiceBridge(res any) {
 
 // === World Resources ===
 
-// TimeResource wraps time data for system
+// TimeResource wraps time data for systems
 // It is updated by the GameContext/ClockScheduler at the start of a frame/tick
 type TimeResource struct {
 	// GameTime is the current time in the game world (affected by pause)
@@ -59,7 +59,7 @@ type TimeResource struct {
 }
 
 // Update modifies TimeResource fields in-place (zero allocation)
-// Must be called under world lock to prevent races with system reads
+// Must be called under world lock to prevent races with systems reads
 func (tr *TimeResource) Update(gameTime, realTime time.Time, deltaTime time.Duration, frameNumber int64) {
 	tr.GameTime = gameTime
 	tr.RealTime = realTime
@@ -84,12 +84,12 @@ type RenderConfig struct {
 	ColorMode terminal.ColorMode // 0=256, 1=TrueColor
 }
 
-// EventQueueResource wraps the event queue for system access
+// EventQueueResource wraps the event queue for systems access
 type EventQueueResource struct {
 	Queue *event.EventQueue
 }
 
-// GameStateResource wraps GameState for read access by system
+// GameStateResource wraps GameState for read access by systems
 type GameStateResource struct {
 	State *GameState
 }
@@ -113,7 +113,7 @@ type ContentResource struct {
 	Provider ContentProvider
 }
 
-// AudioPlayer defines the minimal audio interface used by game system
+// AudioPlayer defines the minimal audio interface used by game systems
 type AudioPlayer interface {
 	Play(core.SoundType) bool
 	ToggleMute() bool

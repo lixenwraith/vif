@@ -137,27 +137,27 @@ func (s *SplashSystem) Update() {
 	var cachedTimerBBoxes []BBox
 	timersCached := false
 
-	entities := s.world.Components.Splash.AllEntity()
-	for _, entity := range entities {
-		splash, ok := s.world.Components.Splash.GetComponent(entity)
+	splashEntities := s.world.Components.Splash.AllEntities()
+	for _, splashEntity := range splashEntities {
+		splashComp, ok := s.world.Components.Splash.GetComponent(splashEntity)
 		if !ok {
 			continue
 		}
 
 		// Delta-based time tracking (Robust against clock jumps/resets)
-		splash.Remaining -= dt
+		splashComp.Remaining -= dt
 
-		switch splash.Slot {
+		switch splashComp.Slot {
 		case component.SlotTimer:
 
 			// Use Slot for timer behavior
-			if splash.Slot == component.SlotTimer {
+			if splashComp.Slot == component.SlotTimer {
 				// Display digits ceiling math - "1" shows for 1.0→0.001s, dies at 0
-				remainingSec := int(math.Ceil(splash.Remaining.Seconds()))
+				remainingSec := int(math.Ceil(splashComp.Remaining.Seconds()))
 
 				if remainingSec <= 0 {
 					// Timer expired - mark for destruction
-					s.world.DestroyEntity(entity)
+					s.world.DestroyEntity(splashEntity)
 					continue
 				}
 
@@ -166,10 +166,10 @@ func (s *SplashSystem) Update() {
 				newLength := len(digits)
 
 				// Update content if changed
-				contentChanged := newLength != splash.Length
+				contentChanged := newLength != splashComp.Length
 				if !contentChanged {
 					for i, d := range digits {
-						if splash.Content[i] != d {
+						if splashComp.Content[i] != d {
 							contentChanged = true
 							break
 						}
@@ -177,10 +177,10 @@ func (s *SplashSystem) Update() {
 				}
 
 				if contentChanged {
-					splash.Length = newLength
+					splashComp.Length = newLength
 					for i, d := range digits {
-						if i < len(splash.Content) {
-							splash.Content[i] = d
+						if i < len(splashComp.Content) {
+							splashComp.Content[i] = d
 						}
 					}
 				}
@@ -188,7 +188,7 @@ func (s *SplashSystem) Update() {
 
 		case component.SlotMagnifier:
 			// Validate magnifier - re-query entity under cursor
-			if !s.validateMagnifier(entity, &splash) {
+			if !s.validateMagnifier(splashEntity, &splashComp) {
 				continue // Entity was destroyed
 			}
 
@@ -199,9 +199,9 @@ func (s *SplashSystem) Update() {
 			}
 
 			// Construct current BBox for magnifier
-			magW := splash.Length * constant.SplashCharWidth
+			magW := splashComp.Length * constant.SplashCharWidth
 			magH := constant.SplashCharHeight
-			magBBox := BBox{X: splash.AnchorX, Y: splash.AnchorY, W: magW, H: magH}
+			magBBox := BBox{X: splashComp.AnchorX, Y: splashComp.AnchorY, W: magW, H: magH}
 
 			// Check against inflated timer boxes
 			collision := false
@@ -214,11 +214,11 @@ func (s *SplashSystem) Update() {
 
 			// If collision detected, attempt to find a new valid position
 			if collision {
-				if pos, ok := s.world.Positions.Get(s.world.Resources.Cursor.Entity); ok {
-					newX, newY := s.calculateProximityAnchor(pos.X, pos.Y, splash.Length)
-					if newX != splash.AnchorX || newY != splash.AnchorY {
-						splash.AnchorX = newX
-						splash.AnchorY = newY
+				if pos, ok := s.world.Positions.GetPosition(s.world.Resources.Cursor.Entity); ok {
+					newX, newY := s.calculateProximityAnchor(pos.X, pos.Y, splashComp.Length)
+					if newX != splashComp.AnchorX || newY != splashComp.AnchorY {
+						splashComp.AnchorX = newX
+						splashComp.AnchorY = newY
 					}
 				}
 			}
@@ -226,7 +226,7 @@ func (s *SplashSystem) Update() {
 		}
 
 		// Write back component (state changed)
-		s.world.Components.Splash.SetComponent(entity, splash)
+		s.world.Components.Splash.SetComponent(splashEntity, splashComp)
 	}
 }
 
@@ -270,7 +270,7 @@ func (s *SplashSystem) handleSplashRequest(payload *event.SplashRequestPayload) 
 
 // validateMagnifier checks if magnifier is still valid and updates content if entity changed, returns false if magnifier was destroyed
 func (s *SplashSystem) validateMagnifier(splashEntity core.Entity, splash *component.SplashComponent) bool {
-	cursorPos, ok := s.world.Positions.Get(s.world.Resources.Cursor.Entity)
+	cursorPos, ok := s.world.Positions.GetPosition(s.world.Resources.Cursor.Entity)
 	if !ok {
 		s.world.DestroyEntity(splashEntity)
 		return false
@@ -328,7 +328,7 @@ func (s *SplashSystem) handleGoldSpawn(payload *event.GoldSpawnedPayload) {
 		timerCellWidth,
 	)
 
-	splash := component.SplashComponent{
+	splashComp := component.SplashComponent{
 		Length:       digitCount,
 		Color:        component.SplashColorWhite,
 		AnchorEntity: payload.HeaderEntity,
@@ -340,26 +340,26 @@ func (s *SplashSystem) handleGoldSpawn(payload *event.GoldSpawnedPayload) {
 	}
 
 	for i, d := range digits {
-		if i < len(splash.Content) {
-			splash.Content[i] = d
+		if i < len(splashComp.Content) {
+			splashComp.Content[i] = d
 		}
 	}
 
 	entity := s.world.CreateEntity()
-	s.world.Components.Splash.SetComponent(entity, splash)
+	s.world.Components.Splash.SetComponent(entity, splashComp)
 }
 
 // handleGoldFinish destroys the gold timer
 func (s *SplashSystem) handleGoldFinish(anchorEntity core.Entity) {
 	// Find and destroy specific timer
-	entities := s.world.Components.Splash.AllEntity()
-	for _, entity := range entities {
-		splash, ok := s.world.Components.Splash.GetComponent(entity)
+	splashEntities := s.world.Components.Splash.AllEntities()
+	for _, splashEntity := range splashEntities {
+		splashComp, ok := s.world.Components.Splash.GetComponent(splashEntity)
 		if !ok {
 			continue
 		}
-		if splash.Slot == component.SlotTimer && splash.AnchorEntity == anchorEntity {
-			s.world.DestroyEntity(entity)
+		if splashComp.Slot == component.SlotTimer && splashComp.AnchorEntity == anchorEntity {
+			s.world.DestroyEntity(splashEntity)
 			return // Found it
 		}
 	}
@@ -376,7 +376,7 @@ func (s *SplashSystem) handleQuasarChargeStart(payload *event.QuasarChargeStartP
 	timerCellWidth := digitCount * constant.SplashCharWidth
 	offsetX, offsetY := s.calculateTimerOffsetForQuasar(payload.HeaderEntity, timerCellWidth)
 
-	splash := component.SplashComponent{
+	splashComp := component.SplashComponent{
 		Length:       digitCount,
 		Color:        component.SplashColorCyan,
 		AnchorEntity: payload.HeaderEntity,
@@ -388,13 +388,13 @@ func (s *SplashSystem) handleQuasarChargeStart(payload *event.QuasarChargeStartP
 	}
 
 	for i, d := range digits {
-		if i < len(splash.Content) {
-			splash.Content[i] = d
+		if i < len(splashComp.Content) {
+			splashComp.Content[i] = d
 		}
 	}
 
 	entity := s.world.CreateEntity()
-	s.world.Components.Splash.SetComponent(entity, splash)
+	s.world.Components.Splash.SetComponent(entity, splashComp)
 }
 
 // calculateTimerOffsetForQuasar positions timer above quasar center
@@ -405,9 +405,9 @@ func (s *SplashSystem) calculateTimerOffsetForQuasar(anchorEntity core.Entity, t
 
 	var anchorX, anchorY int
 	if anchorEntity != 0 {
-		if pos, ok := s.world.Positions.Get(anchorEntity); ok {
-			anchorX = pos.X
-			anchorY = pos.Y
+		if splashPos, ok := s.world.Positions.GetPosition(anchorEntity); ok {
+			anchorX = splashPos.X
+			anchorY = splashPos.Y
 		}
 	}
 
@@ -435,28 +435,28 @@ func (s *SplashSystem) calculateTimerOffsetForQuasar(anchorEntity core.Entity, t
 
 // cleanupSplashesBySlot removes all splashes of a specific slot
 func (s *SplashSystem) cleanupSplashesBySlot(slot component.SplashSlot) {
-	entities := s.world.Components.Splash.AllEntity()
-	for _, entity := range entities {
-		splash, ok := s.world.Components.Splash.GetComponent(entity)
+	splashEntities := s.world.Components.Splash.AllEntities()
+	for _, splashEntity := range splashEntities {
+		splashComp, ok := s.world.Components.Splash.GetComponent(splashEntity)
 		if !ok {
 			continue
 		}
-		if splash.Slot == slot {
-			s.world.DestroyEntity(entity)
+		if splashComp.Slot == slot {
+			s.world.DestroyEntity(splashEntity)
 		}
 	}
 }
 
 // cleanupSplashesBySlot removes all splashes of a specific slot for a composite anchor
 func (s *SplashSystem) cleanupSplashesBySlotAndAnchor(slot component.SplashSlot, anchor core.Entity) {
-	entities := s.world.Components.Splash.AllEntity()
-	for _, entity := range entities {
-		splash, ok := s.world.Components.Splash.GetComponent(entity)
+	splashEntities := s.world.Components.Splash.AllEntities()
+	for _, splashEntity := range splashEntities {
+		splashComp, ok := s.world.Components.Splash.GetComponent(splashEntity)
 		if !ok {
 			continue
 		}
-		if splash.Slot == slot && splash.AnchorEntity == anchor {
-			s.world.DestroyEntity(entity)
+		if splashComp.Slot == slot && splashComp.AnchorEntity == anchor {
+			s.world.DestroyEntity(splashEntity)
 		}
 	}
 }
@@ -549,26 +549,26 @@ func (s *SplashSystem) calculateSmartLayout(cursorX, cursorY, charCount int) (in
 func (s *SplashSystem) getOccupiedSplashBBoxes() []BBox {
 	var boxes []BBox
 
-	entities := s.world.Components.Splash.AllEntity()
-	for _, entity := range entities {
-		splash, ok := s.world.Components.Splash.GetComponent(entity)
+	splashEntities := s.world.Components.Splash.AllEntities()
+	for _, splashEntity := range splashEntities {
+		splashComp, ok := s.world.Components.Splash.GetComponent(splashEntity)
 		if !ok {
 			continue
 		}
 
-		if splash.Slot != component.SlotTimer && splash.Slot != component.SlotMagnifier {
+		if splashComp.Slot != component.SlotTimer && splashComp.Slot != component.SlotMagnifier {
 			continue
 		}
 
-		x, y := splash.AnchorX, splash.AnchorY
-		if splash.AnchorEntity != 0 {
-			if pos, ok := s.world.Positions.Get(splash.AnchorEntity); ok {
-				x = pos.X + splash.OffsetX
-				y = pos.Y + splash.OffsetY
+		x, y := splashComp.AnchorX, splashComp.AnchorY
+		if splashComp.AnchorEntity != 0 {
+			if pos, ok := s.world.Positions.GetPosition(splashComp.AnchorEntity); ok {
+				x = pos.X + splashComp.OffsetX
+				y = pos.Y + splashComp.OffsetY
 			}
 		}
 
-		w := splash.Length * constant.SplashCharWidth
+		w := splashComp.Length * constant.SplashCharWidth
 		h := constant.SplashCharHeight
 
 		pad := constant.SplashCollisionPadding
@@ -607,35 +607,35 @@ func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 	}
 
 	// Get the character to display
-	glyph, ok := s.world.Components.Glyph.GetComponent(entity)
+	glyphComp, ok := s.world.Components.Glyph.GetComponent(entity)
 	if !ok {
 		s.cleanupSplashesBySlot(component.SlotMagnifier)
 		return
 	}
 
 	// Resolve color from glyph type
-	color := s.glyphToSplashColor(glyph.Type)
+	color := s.glyphToSplashColor(glyphComp.Type)
 
 	// Calculate proximity anchor (between cursor and center, min 15 chars away)
 	anchorX, anchorY := s.calculateProximityAnchor(cursorX, cursorY, 1)
 
 	// Check for existing magnifier to update in place
-	existing := s.findSplashBySlot(component.SlotMagnifier)
-	if existing != 0 {
-		splash, ok := s.world.Components.Splash.GetComponent(existing)
+	existingSplashEntity := s.findSplashEntityBySlot(component.SlotMagnifier)
+	if existingSplashEntity != 0 {
+		splashComp, ok := s.world.Components.Splash.GetComponent(existingSplashEntity)
 		if ok {
-			splash.Content[0] = glyph.Rune
-			splash.Length = 1
-			splash.Color = color
-			splash.AnchorX = anchorX
-			splash.AnchorY = anchorY
-			s.world.Components.Splash.SetComponent(existing, splash)
+			splashComp.Content[0] = glyphComp.Rune
+			splashComp.Length = 1
+			splashComp.Color = color
+			splashComp.AnchorX = anchorX
+			splashComp.AnchorY = anchorY
+			s.world.Components.Splash.SetComponent(existingSplashEntity, splashComp)
 			return
 		}
 	}
 
 	// Create new magnifier (persistent - no expiry while on char)
-	splash := component.SplashComponent{
+	splashComp := component.SplashComponent{
 		Length:    1,
 		Color:     color,
 		AnchorX:   anchorX,
@@ -644,10 +644,10 @@ func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 		Remaining: 0, // Persistent - managed by cursor movement
 		Duration:  0,
 	}
-	splash.Content[0] = glyph.Rune
+	splashComp.Content[0] = glyphComp.Rune
 
 	newEntity := s.world.CreateEntity()
-	s.world.Components.Splash.SetComponent(newEntity, splash)
+	s.world.Components.Splash.SetComponent(newEntity, splashComp)
 }
 
 // calculateProximityAnchor uses spiral search to find valid magnifier position
@@ -755,7 +755,7 @@ func (s *SplashSystem) calculateTimerOffset(anchorEntity core.Entity, seqLength,
 
 	var anchorX, anchorY int
 	if anchorEntity != 0 {
-		if pos, ok := s.world.Positions.Get(anchorEntity); ok {
+		if pos, ok := s.world.Positions.GetPosition(anchorEntity); ok {
 			anchorX = pos.X
 			anchorY = pos.Y
 		}
@@ -820,24 +820,24 @@ func (s *SplashSystem) getSearchDirection(cursorX, cursorY, centerX, centerY int
 func (s *SplashSystem) getTimerBBoxes() []BBox {
 	var boxes []BBox
 
-	entities := s.world.Components.Splash.AllEntity()
-	for _, entity := range entities {
-		splash, ok := s.world.Components.Splash.GetComponent(entity)
-		if !ok || splash.Slot != component.SlotTimer {
+	splashEntities := s.world.Components.Splash.AllEntities()
+	for _, splashEntity := range splashEntities {
+		splashComp, ok := s.world.Components.Splash.GetComponent(splashEntity)
+		if !ok || splashComp.Slot != component.SlotTimer {
 			continue
 		}
 
 		// Resolve actual position
-		x, y := splash.AnchorX, splash.AnchorY
-		if splash.AnchorEntity != 0 {
-			if pos, ok := s.world.Positions.Get(splash.AnchorEntity); ok {
-				x = pos.X + splash.OffsetX
-				y = pos.Y + splash.OffsetY
+		x, y := splashComp.AnchorX, splashComp.AnchorY
+		if splashComp.AnchorEntity != 0 {
+			if pos, ok := s.world.Positions.GetPosition(splashComp.AnchorEntity); ok {
+				x = pos.X + splashComp.OffsetX
+				y = pos.Y + splashComp.OffsetY
 			}
 		}
 
 		// Dynamic width for timer
-		w := splash.Length * constant.SplashCharWidth
+		w := splashComp.Length * constant.SplashCharWidth
 		h := constant.SplashCharHeight
 
 		// Apply padding for inter-splash collision (Inflated Bounding Box)
@@ -859,13 +859,13 @@ func (s *SplashSystem) checkBBoxCollision(a, b BBox) bool {
 		a.Y < b.Y+b.H && a.Y+a.H > b.Y
 }
 
-// findSplashBySlot returns entity ID of first splash with given slot, or 0
-func (s *SplashSystem) findSplashBySlot(slot component.SplashSlot) core.Entity {
-	entities := s.world.Components.Splash.AllEntity()
-	for _, entity := range entities {
-		splash, ok := s.world.Components.Splash.GetComponent(entity)
-		if ok && splash.Slot == slot {
-			return entity
+// findSplashEntityBySlot returns entity ID of first splash with given slot, or 0
+func (s *SplashSystem) findSplashEntityBySlot(slot component.SplashSlot) core.Entity {
+	splashEntities := s.world.Components.Splash.AllEntities()
+	for _, splashEntity := range splashEntities {
+		splashComp, ok := s.world.Components.Splash.GetComponent(splashEntity)
+		if ok && splashComp.Slot == slot {
+			return splashEntity
 		}
 	}
 	return 0

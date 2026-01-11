@@ -48,7 +48,7 @@ func (p *Position) SetPosition(e core.Entity, pos component.PositionComponent) {
 	_ = p.grid.Add(e, pos.X, pos.Y)
 }
 
-// RemoveComponent deletes an entity from the store and grid
+// RemoveEntity deletes an entity from the store and grid
 func (p *Position) RemoveEntity(e core.Entity) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -120,8 +120,8 @@ func (p *Position) GetAllEntityAtInto(x, y int, buf []core.Entity) int {
 	return copy(buf, view)
 }
 
-// HasAny O(1) returns true if any entity exists at the given coordinates
-func (p *Position) HasAny(x, y int) bool {
+// HasAnyEntity O(1) returns true if any entity exists at the given coordinates
+func (p *Position) HasAnyEntity(x, y int) bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.grid.HasAny(x, y)
@@ -143,8 +143,8 @@ func (p *Position) ResizeGrid(width, height int) {
 	}
 }
 
-// Get retrieves a position component
-func (p *Position) Get(e core.Entity) (component.PositionComponent, bool) {
+// GetPosition retrieves a position component
+func (p *Position) GetPosition(e core.Entity) (component.PositionComponent, bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	val, ok := p.components[e]
@@ -159,8 +159,8 @@ func (p *Position) HasEntity(e core.Entity) bool {
 	return ok
 }
 
-// AllEntity returns all entities with position components
-func (p *Position) AllEntity() []core.Entity {
+// AllEntities returns all entities with position components
+func (p *Position) AllEntities() []core.Entity {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	result := make([]core.Entity, len(p.entities))
@@ -168,8 +168,8 @@ func (p *Position) AllEntity() []core.Entity {
 	return result
 }
 
-// CountEntity returns the number of entities
-func (p *Position) CountEntity() int {
+// CountEntities returns the number of entities
+func (p *Position) CountEntities() int {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return len(p.entities)
@@ -270,7 +270,7 @@ func (pb *PositionBatch) Add(e core.Entity, pos component.PositionComponent) {
 }
 
 // Commit applies all batched additions
-// Checks with HasAny only to prevent unintended spawns on existing entities
+// Checks with HasAnyEntity only to prevent unintended spawns on existing entities
 func (pb *PositionBatch) Commit() error {
 	if pb.committed {
 		return fmt.Errorf("batch already committed")

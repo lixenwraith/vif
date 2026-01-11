@@ -20,7 +20,7 @@ func NewSpiritRenderer(gameCtx *engine.GameContext) *SpiritRenderer {
 }
 
 func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.gameCtx.World.Components.Spirit.AllEntity()
+	entities := r.gameCtx.World.Components.Spirit.AllEntities()
 	if len(entities) == 0 {
 		return
 	}

@@ -7,6 +7,7 @@ const (
 	// === Engine Event === // TODO: future implementation
 	// Mass entity cleanup
 	EventWorldClear EventType = iota
+
 	// System activation control
 	EventSystemToggle
 
@@ -120,7 +121,7 @@ const (
 	EventCleanerSweepingRequest
 
 	// EventCleanerSweepingFinished marks cleaner animation completion
-	// Trigger: AllEntity cleaner entities destroyed | Payload: nil
+	// Trigger: AllEntities cleaner entities destroyed | Payload: nil
 	EventCleanerSweepingFinished
 
 	// EventCharacterTyped signals Insert mode keypress

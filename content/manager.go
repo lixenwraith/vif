@@ -468,7 +468,7 @@ func (cm *ContentManager) ValidateProcessedContent(lines []string) bool {
 		return false
 	}
 
-	// AllEntity lines should already be within MaxLineLength due to processing
+	// AllEntities lines should already be within MaxLineLength due to processing
 	// But we can verify for safety
 	for _, line := range lines {
 		if len(line) > constant.MaxLineLength {
@@ -638,7 +638,7 @@ func (cm *ContentManager) SelectRandomBlock() ([]string, string, error) {
 	}
 	defer file.Close()
 
-	// CountEntity valid content lines
+	// CountEntities valid content lines
 	var validLineCount int
 	scanner := bufio.NewScanner(file)
 	lineCount := 0
@@ -731,7 +731,7 @@ func (cm *ContentManager) SelectRandomBlockWithValidation() ([]string, string, e
 		}
 	}
 
-	// AllEntity retries failed, fall back to default content
+	// AllEntities retries failed, fall back to default content
 	err := fmt.Errorf("all %d attempts failed to load valid content", constant.MaxRetries)
 	cm.breaker.recordFailure(err)
 	return cm.GetDefaultContent(), "default", nil

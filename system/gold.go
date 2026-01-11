@@ -217,7 +217,7 @@ func (s *GoldSystem) handleJumpRequest() {
 		return
 	}
 
-	targetPos, ok := s.world.Positions.Get(targetEntity)
+	targetPos, ok := s.world.Positions.GetPosition(targetEntity)
 	if !ok {
 		return
 	}
@@ -336,7 +336,7 @@ func (s *GoldSystem) spawnGold() bool {
 
 	// 6. Create composite header
 	s.world.Components.Header.SetComponent(headerEntity, component.HeaderComponent{
-		BehaviorID:    component.BehaviorGold,
+		Behavior:      component.BehaviorGold,
 		MemberEntries: members,
 	})
 
@@ -490,7 +490,7 @@ func (s *GoldSystem) countLivingMembers(header *component.HeaderComponent) int {
 // Caller must NOT hold s.mu lock
 func (s *GoldSystem) findValidPosition(seqLength int) (int, int) {
 	config := s.world.Resources.Config
-	cursorPos, ok := s.world.Positions.Get(s.world.Resources.Cursor.Entity)
+	cursorPos, ok := s.world.Positions.GetPosition(s.world.Resources.Cursor.Entity)
 	if !ok {
 		return -1, -1
 	}
@@ -513,7 +513,7 @@ func (s *GoldSystem) findValidPosition(seqLength int) (int, int) {
 		// Check for overlaps with existing characters
 		overlaps := false
 		for i := 0; i < seqLength; i++ {
-			if s.world.Positions.HasAny(x+i, y) {
+			if s.world.Positions.HasAnyEntity(x+i, y) {
 				overlaps = true
 				break
 			}

@@ -128,7 +128,7 @@ func (app *AppState) buildEditorTagTree() {
 	e := app.Editor
 	total := len(e.SelectedFiles)
 
-	// CountEntity occurrences at each level
+	// CountEntities occurrences at each level
 	type tagKey struct{ cat, group, mod, tag string }
 	tagCounts := make(map[tagKey]int)
 	modCounts := make(map[string]int)   // cat.group.mod -> count

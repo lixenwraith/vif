@@ -19,7 +19,7 @@ func PerformSearch(ctx *engine.GameContext, searchText string, forward bool) boo
 	grid := buildCharacterGrid(ctx)
 
 	// Get cursor position from ECS
-	pos, ok := ctx.World.Positions.Get(ctx.CursorEntity)
+	pos, ok := ctx.World.Positions.GetPosition(ctx.CursorEntity)
 	if !ok {
 		return false // Cursor entity missing - should never happen
 	}
@@ -61,10 +61,10 @@ func buildCharacterGrid(ctx *engine.GameContext) map[core.Point]rune {
 	grid := make(map[core.Point]rune)
 	glyphStore := ctx.World.Components.Glyph
 
-	entities := ctx.World.Components.Glyph.AllEntity()
+	entities := ctx.World.Components.Glyph.AllEntities()
 
 	for _, entity := range entities {
-		pos, pOk := ctx.World.Positions.Get(entity)
+		pos, pOk := ctx.World.Positions.GetPosition(entity)
 		glyph, gOk := glyphStore.GetComponent(entity)
 		if !pOk || !gOk {
 			panic(nil)

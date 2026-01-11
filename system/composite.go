@@ -76,7 +76,7 @@ func (s *CompositeSystem) Update() {
 		return
 	}
 
-	headerEntities := s.world.Components.Header.AllEntity()
+	headerEntities := s.world.Components.Header.AllEntities()
 
 	for _, headerEntity := range headerEntities {
 		headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
@@ -84,7 +84,7 @@ func (s *CompositeSystem) Update() {
 			continue
 		}
 
-		headerPos, ok := s.world.Positions.Get(headerEntity)
+		headerPos, ok := s.world.Positions.GetPosition(headerEntity)
 		if !ok {
 			continue
 		}
@@ -209,7 +209,7 @@ func (s *CompositeSystem) compactMembers(headerComp *component.HeaderComponent) 
 
 // handleEmptyComposite processes a composite with no remaining members
 func (s *CompositeSystem) handleEmptyComposite(headerEntity core.Entity, headerComp *component.HeaderComponent) {
-	switch headerComp.BehaviorID {
+	switch headerComp.Behavior {
 	case component.BehaviorGold:
 		// Gold completion handled by GoldSystem via events
 		s.destroyHead(headerEntity)
@@ -231,7 +231,7 @@ func (s *CompositeSystem) destroyHead(headerEntity core.Entity) {
 }
 
 // CreateHeader spawns an invisible head entity, returns phantom head entity
-func (s *CompositeSystem) CreateHeader(x, y int, behaviorID component.BehaviorID) core.Entity {
+func (s *CompositeSystem) CreateHeader(x, y int, behaviorID component.Behavior) core.Entity {
 	entity := s.world.CreateEntity()
 
 	// Positions at anchor point
@@ -239,7 +239,7 @@ func (s *CompositeSystem) CreateHeader(x, y int, behaviorID component.BehaviorID
 
 	// HeaderEntity component with empty member slice
 	s.world.Components.Header.SetComponent(entity, component.HeaderComponent{
-		BehaviorID:    behaviorID,
+		Behavior:      behaviorID,
 		MemberEntries: make([]component.MemberEntry, 0, 16),
 	})
 

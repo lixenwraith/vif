@@ -197,7 +197,7 @@ func (m *Machine) completeCharMotion(char rune) *Intent {
 func (m *Machine) processOperatorWait(key rune) *Intent {
 	m.cmdBuffer = append(m.cmdBuffer, key)
 
-	// CountEntity after operator
+	// CountEntities after operator
 	if key >= '1' && key <= '9' {
 		m.accumulateCount2(key)
 		return nil

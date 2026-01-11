@@ -92,14 +92,14 @@ func (s *BlossomSystem) Update() {
 		return
 	}
 
-	count := s.world.Components.Blossom.CountEntity()
+	count := s.world.Components.Blossom.CountEntities()
 	if count == 0 {
 		s.statCount.Store(0)
 		return
 	}
 
 	s.updateBlossomEntities()
-	s.statCount.Store(int64(s.world.Components.Blossom.CountEntity()))
+	s.statCount.Store(int64(s.world.Components.Blossom.CountEntities()))
 }
 
 // spawnSingleBlossom creates one blossom entity at specified position
@@ -163,7 +163,7 @@ func (s *BlossomSystem) updateBlossomEntities() {
 	gameWidth := s.world.Resources.Config.GameWidth
 	gameHeight := s.world.Resources.Config.GameHeight
 
-	blossomEntities := s.world.Components.Blossom.AllEntity()
+	blossomEntities := s.world.Components.Blossom.AllEntities()
 
 	// ClearAllComponent frame deduplication maps
 	clear(s.processedGridCells)
@@ -233,7 +233,7 @@ func (s *BlossomSystem) updateBlossomEntities() {
 					continue
 				}
 				if member, ok := s.world.Components.Member.GetComponent(target); ok {
-					if header, ok := s.world.Components.Header.GetComponent(member.HeaderEntity); ok && header.BehaviorID == component.BehaviorGold {
+					if header, ok := s.world.Components.Header.GetComponent(member.HeaderEntity); ok && header.Behavior == component.BehaviorGold {
 						continue
 					}
 				}

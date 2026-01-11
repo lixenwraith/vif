@@ -123,7 +123,7 @@ func (s *ExplosionSystem) HandleEvent(ev event.GameEvent) {
 }
 
 func (s *ExplosionSystem) fireFromDust() {
-	dustEntities := s.world.Components.Dust.AllEntity()
+	dustEntities := s.world.Components.Dust.AllEntities()
 	if len(dustEntities) == 0 {
 		return
 	}
@@ -132,7 +132,7 @@ func (s *ExplosionSystem) fireFromDust() {
 	positions := make(map[pos]bool, len(dustEntities))
 
 	for _, e := range dustEntities {
-		if p, ok := s.world.Positions.Get(e); ok {
+		if p, ok := s.world.Positions.GetPosition(e); ok {
 			positions[pos{p.X, p.Y}] = true
 		}
 	}
@@ -261,7 +261,7 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 
 				drain, hasDrain := s.world.Components.Drain.GetComponent(e)
 				if hasDrain {
-					drainPos, ok := s.world.Positions.Get(e)
+					drainPos, ok := s.world.Positions.GetPosition(e)
 					if !ok {
 						continue
 					}
@@ -283,10 +283,10 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 
 				if member, ok := s.world.Components.Member.GetComponent(e); ok {
 					if header, hOk := s.world.Components.Header.GetComponent(e); hOk {
-						if header.BehaviorID == component.BehaviorQuasar {
+						if header.Behavior == component.BehaviorQuasar {
 							anchorEntity := member.HeaderEntity
 							if quasar, qOk := s.world.Components.Quasar.GetComponent(anchorEntity); qOk {
-								quasarPos, ok := s.world.Positions.Get(anchorEntity)
+								quasarPos, ok := s.world.Positions.GetPosition(anchorEntity)
 								if !ok {
 									continue
 								}
@@ -310,8 +310,8 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 					}
 				}
 
-				glyph, hasGlyph := s.world.Components.Glyph.GetComponent(e)
-				if !hasGlyph {
+				glyph, ok := s.world.Components.Glyph.GetComponent(e)
+				if !ok {
 					continue
 				}
 

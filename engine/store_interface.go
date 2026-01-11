@@ -15,7 +15,7 @@ type AnyStore interface {
 	HasEntity(e core.Entity) bool
 
 	// CountEntity returns the number of entities with this component
-	CountEntity() int
+	CountEntities() int
 
 	// ClearAllComponent removes all components from this store
 	ClearAllComponent()
@@ -27,5 +27,5 @@ type QueryableStore interface {
 	AnyStore
 
 	// AllEntity returns all entities that have this component type
-	AllEntity() []core.Entity
+	AllEntities() []core.Entity
 }
