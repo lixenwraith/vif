@@ -355,11 +355,10 @@ func (s *GoldSystem) spawnGold() bool {
 	// Splash timer spawn event, no need for splash cancel event, automatically cancelled when anchor is destroyed
 	s.world.PushEvent(event.EventSplashTimerRequest, &event.SplashTimerRequestPayload{
 		AnchorEntity: headerEntity,
-		OriginX:      x,
-		OriginY:      y,
-		Length:       constant.GoldSequenceLength,
-		Duration:     constant.GoldDuration,
 		Color:        component.SplashColorWhite,
+		MarginRight:  constant.GoldSequenceLength,
+		MarginBottom: 1,
+		Duration:     constant.GoldDuration,
 	})
 
 	return true

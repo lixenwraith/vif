@@ -74,8 +74,6 @@ func (s *SplashSystem) EventTypes() []event.EventType {
 		event.EventSplashTimerRequest,
 		event.EventSplashTimerCancel,
 		event.EventCursorMoved,
-		event.EventQuasarChargeStart,
-		event.EventQuasarChargeCancel,
 	}
 }
 
@@ -109,16 +107,6 @@ func (s *SplashSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventCursorMoved:
 		if payload, ok := ev.Payload.(*event.CursorMovedPayload); ok {
 			s.handleCursorMoved(payload)
-		}
-
-	case event.EventQuasarChargeStart:
-		if payload, ok := ev.Payload.(*event.QuasarChargeStartPayload); ok {
-			s.handleQuasarChargeStart(payload)
-		}
-
-	case event.EventQuasarChargeCancel:
-		if payload, ok := ev.Payload.(*event.QuasarChargeCancelPayload); ok {
-			s.cleanupSplashesBySlotAndAnchor(component.SlotTimer, payload.HeaderEntity)
 		}
 	}
 }
@@ -167,25 +155,20 @@ func (s *SplashSystem) Update() {
 			digits := strconv.Itoa(remainingSec)
 			newLength := len(digits)
 
-			// Update content if changed
-			contentChanged := newLength != splashComp.Length
-			if !contentChanged {
-				for i, d := range digits {
-					if splashComp.Content[i] != d {
-						contentChanged = true
-						break
-					}
-				}
+			// TODO: Defensive, trace if necessary
+			if newLength > constant.SplashMaxLength {
+				newLength = constant.SplashMaxLength
 			}
 
-			if contentChanged {
-				splashComp.Length = newLength
-				for i, d := range digits {
-					if i < len(splashComp.Content) {
-						splashComp.Content[i] = d
-					}
-				}
+			// Update content if changed
+			splashComp.Length = newLength
+			for i, d := range digits {
+				splashComp.Content[i] = d
 			}
+
+			s.calculateTimerOffset(&splashComp)
+
+			s.world.Components.Splash.SetComponent(splashEntity, splashComp)
 
 		case component.SlotMagnifier:
 			// Validate magnifier - re-query entity under cursor
@@ -313,27 +296,20 @@ func (s *SplashSystem) validateMagnifier(splashEntity core.Entity, splash *compo
 
 // handleTimerSpawn creates the persistent timer anchored to the anchor entity
 func (s *SplashSystem) handleTimerSpawn(payload *event.SplashTimerRequestPayload) {
-	s.cleanupSplashesBySlot(component.SlotTimer)
+	s.cleanupSplashesBySlotAndAnchor(component.SlotTimer, payload.AnchorEntity)
 
 	initialSec := int(math.Ceil(payload.Duration.Seconds()))
 	digits := strconv.Itoa(initialSec)
 	digitCount := len(digits)
 
-	timerCellWidth := digitCount * constant.SplashCharWidth
-
-	// Calculate offset using cardinal spiral search
-	offsetX, offsetY := s.calculateTimerOffset(
-		payload.AnchorEntity,
-		payload.Length,
-		timerCellWidth,
-	)
-
 	splashComp := component.SplashComponent{
 		Length:       digitCount,
 		Color:        payload.Color,
 		AnchorEntity: payload.AnchorEntity,
-		OffsetX:      offsetX,
-		OffsetY:      offsetY,
+		MarginLeft:   payload.MarginLeft,
+		MarginRight:  payload.MarginRight,
+		MarginTop:    payload.MarginTop,
+		MarginBottom: payload.MarginBottom,
 		Slot:         component.SlotTimer,
 		Remaining:    payload.Duration,
 		Duration:     payload.Duration,
@@ -344,6 +320,8 @@ func (s *SplashSystem) handleTimerSpawn(payload *event.SplashTimerRequestPayload
 			splashComp.Content[i] = d
 		}
 	}
+
+	s.calculateTimerOffset(&splashComp)
 
 	entity := s.world.CreateEntity()
 	s.world.Components.Splash.SetComponent(entity, splashComp)
@@ -363,74 +341,6 @@ func (s *SplashSystem) handleTimerCancel(anchorEntity core.Entity) {
 			return // Found it
 		}
 	}
-}
-
-// handleQuasarChargeStart creates the quasar charge countdown timer
-func (s *SplashSystem) handleQuasarChargeStart(payload *event.QuasarChargeStartPayload) {
-	s.cleanupSplashesBySlotAndAnchor(component.SlotTimer, payload.HeaderEntity)
-
-	initialSec := int(math.Ceil(payload.Duration.Seconds()))
-	digits := strconv.Itoa(initialSec)
-	digitCount := len(digits)
-
-	timerCellWidth := digitCount * constant.SplashCharWidth
-	offsetX, offsetY := s.calculateTimerOffsetForQuasar(payload.HeaderEntity, timerCellWidth)
-
-	splashComp := component.SplashComponent{
-		Length:       digitCount,
-		Color:        component.SplashColorCyan,
-		AnchorEntity: payload.HeaderEntity,
-		OffsetX:      offsetX,
-		OffsetY:      offsetY,
-		Slot:         component.SlotTimer,
-		Remaining:    payload.Duration,
-		Duration:     payload.Duration,
-	}
-
-	for i, d := range digits {
-		if i < len(splashComp.Content) {
-			splashComp.Content[i] = d
-		}
-	}
-
-	entity := s.world.CreateEntity()
-	s.world.Components.Splash.SetComponent(entity, splashComp)
-}
-
-// calculateTimerOffsetForQuasar positions timer above quasar center
-func (s *SplashSystem) calculateTimerOffsetForQuasar(anchorEntity core.Entity, timerWidth int) (int, int) {
-	config := s.world.Resources.Config
-	timerH := constant.SplashCharHeight
-	padding := constant.SplashTimerPadding
-
-	var anchorX, anchorY int
-	if anchorEntity != 0 {
-		if splashPos, ok := s.world.Positions.GetPosition(anchorEntity); ok {
-			anchorX = splashPos.X
-			anchorY = splashPos.Y
-		}
-	}
-
-	// Center above quasar
-	offsetX := -timerWidth / 2
-	offsetY := -constant.QuasarAnchorOffsetY - timerH - padding
-
-	// Bounds adjustment
-	absX := anchorX + offsetX
-	absY := anchorY + offsetY
-
-	if absY < 0 {
-		// Place below instead
-		offsetY = constant.QuasarHeight - constant.QuasarAnchorOffsetY + padding
-	}
-	if absX < 0 {
-		offsetX = -anchorX
-	}
-	if absX+timerWidth > config.GameWidth {
-		offsetX = config.GameWidth - anchorX - timerWidth
-	}
-
-	return offsetX, offsetY
 }
 
 // cleanupSplashesBySlot removes all splashes of a specific slot
@@ -747,35 +657,49 @@ func (s *SplashSystem) checkBBoxCollisionAny(candidate BBox, boxes []BBox) bool 
 
 // calculateTimerOffset finds valid offset for timer relative to anchor entity
 // Uses 8-direction search: cardinals first, then diagonals
-func (s *SplashSystem) calculateTimerOffset(anchorEntity core.Entity, seqLength, timerWidth int) (int, int) {
-	config := s.world.Resources.Config
-	centerX := config.GameWidth / 2
-	timerH := constant.SplashCharHeight
-	padding := constant.SplashTimerPadding
+func (s *SplashSystem) calculateTimerOffset(splashComp *component.SplashComponent) {
+	gameWidth := s.world.Resources.Config.GameWidth
+	gameHeight := s.world.Resources.Config.GameHeight
 
+	padding := constant.SplashTimerPadding
+	topPadding := constant.SplashTopPadding
+
+	timerLength := splashComp.Length
+	timerWidth := timerLength * constant.SplashCharWidth
+	timerHeight := constant.SplashCharHeight
+
+	anchorEntity := splashComp.AnchorEntity
+	centerX := gameWidth / 2
 	var anchorX, anchorY int
 	if anchorEntity != 0 {
 		if pos, ok := s.world.Positions.GetPosition(anchorEntity); ok {
 			anchorX = pos.X
 			anchorY = pos.Y
 		}
+	} else {
+		anchorX = centerX
+		anchorY = gameHeight / 2
 	}
 
-	seqCenter := seqLength / 2
-	timerHalfW := timerWidth / 2
-	timerHalfH := timerH / 2
+	timerHalfWidth := timerWidth / 2
+	timerHalfHeight := timerHeight / 2
 
+	marginRight := splashComp.MarginRight
+	marginLeft := splashComp.MarginLeft
+	marginTop := splashComp.MarginTop
+	marginBottom := splashComp.MarginBottom
 	// 8 position offsets: cardinals (0-3), then diagonals (4-7)
 	type posOffset struct{ x, y int }
 	positions := []posOffset{
-		{seqCenter - timerHalfW, 1 + padding},       // 0: Bottom
-		{seqCenter - timerHalfW, -timerH - padding}, // 1: Top
-		{seqLength + padding, -timerHalfH},          // 2: Right
-		{-timerWidth - padding, -timerHalfH},        // 3: Left
-		{seqLength + padding, 1 + padding},          // 4: Bottom-right
-		{-timerWidth - padding, 1 + padding},        // 5: Bottom-left
-		{seqLength + padding, -timerH - padding},    // 6: Top-right
-		{-timerWidth - padding, -timerH - padding},  // 7: Top-left
+		// {anchorCenterX - timerHalfWidth, 1 + padding},               // 0: Bottom
+		{(marginRight-marginLeft)/2 - timerHalfWidth, marginBottom + padding},                          // 0: Bottom
+		{(marginRight-marginLeft)/2 - timerHalfWidth, -marginTop - timerHeight - padding - topPadding}, // 1: Top
+		{marginRight + padding, -timerHalfHeight - topPadding},                                         // 2: Right
+		{marginLeft - timerWidth - padding, -timerHalfHeight - topPadding},                             // 3: Left
+		{marginRight + padding, marginBottom + padding},                                                // 4: Bottom-right
+		{marginLeft - timerWidth - padding, marginBottom + padding},                                    // 5: Bottom-left
+		{marginRight + padding, marginTop - timerHeight + padding - topPadding},                        // 6: Top-right
+		{marginLeft - timerWidth - padding, marginTop - timerHeight + padding - topPadding},            // 7: Top-left
 	}
 
 	// Select angle order based on anchor quadrant
@@ -786,19 +710,22 @@ func (s *SplashSystem) calculateTimerOffset(anchorEntity core.Entity, seqLength,
 		order = timerAnglesCW
 	}
 
+	// Fallback to no offset
+	var offsetX, offsetY int
 	for _, idx := range order {
-		offset := positions[idx]
-		absX := anchorX + offset.x
-		absY := anchorY + offset.y
+		absX := anchorX + positions[idx].x
+		absY := anchorY + positions[idx].y
 
-		if absX >= 0 && absX+timerWidth <= config.GameWidth &&
-			absY >= 0 && absY+timerH <= config.GameHeight {
-			return offset.x, offset.y
+		if absX >= 0 && absX+timerWidth <= gameWidth &&
+			absY >= 0 && absY+timerHeight <= gameHeight {
+			offsetX = positions[idx].x
+			offsetY = positions[idx].y
+			break
 		}
 	}
 
-	// Fallback: bottom position (may be OOB)
-	return seqCenter - timerHalfW, 1 + padding
+	splashComp.OffsetX = offsetX
+	splashComp.OffsetY = offsetY
 }
 
 // getSearchDirection determines spiral rotation direction
@@ -883,6 +810,6 @@ func (s *SplashSystem) glyphToSplashColor(t component.GlyphType) component.Splas
 	case component.GlyphGold:
 		return component.SplashColorGold
 	default:
-		return component.SplashColorNormal
+		return component.SplashColorWhite
 	}
 }

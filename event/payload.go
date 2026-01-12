@@ -129,7 +129,10 @@ type SplashTimerRequestPayload struct {
 	Color        component.SplashColor `toml:"color"`
 	OriginX      int                   `toml:"origin_x"`
 	OriginY      int                   `toml:"origin_y"`
-	Length       int                   `toml:"length"`
+	MarginLeft   int                   `toml:"margin_left"`
+	MarginRight  int                   `toml:"margin_right"`
+	MarginTop    int                   `toml:"margin_top"`
+	MarginBottom int                   `toml:"margin_bottom"`
 	Duration     time.Duration         `toml:"duration"`
 }
 
@@ -312,17 +315,6 @@ type LightningUpdatePayload struct {
 	TargetY int         `toml:"target_y"`
 }
 
-// QuasarChargeStartPayload contains parameters for quasar charge countdown
-type QuasarChargeStartPayload struct {
-	HeaderEntity core.Entity   `toml:"header_entity"`
-	Duration     time.Duration `toml:"duration"`
-}
-
-// QuasarChargeCancelPayload identifies which charge timer to destroy
-type QuasarChargeCancelPayload struct {
-	HeaderEntity core.Entity `toml:"header_entity"`
-}
-
 // ExplosionRequestPayload contains parameters for explosion effect
 type ExplosionRequestPayload struct {
 	X      int   `toml:"x"`
@@ -351,4 +343,9 @@ type DustSpawnEntry struct {
 // Use AcquireDustSpawnBatch/ReleaseDustSpawnBatch for pooled allocation
 type DustSpawnBatchPayload struct {
 	Entries []DustSpawnEntry `toml:"entries"`
+}
+
+// MetaStatusMessagePayload contains message to be displayed in status bar
+type MetaStatusMessagePayload struct {
+	Message string `toml:"message"`
 }

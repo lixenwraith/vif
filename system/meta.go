@@ -44,8 +44,9 @@ func (s *MetaSystem) Priority() int {
 func (s *MetaSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventGameReset,
-		event.EventDebugRequest,
-		event.EventHelpRequest,
+		event.EventMetaStatusMessageRequest,
+		event.EventMetaDebugRequest,
+		event.EventMetaHelpRequest,
 	}
 }
 
@@ -54,9 +55,13 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventGameReset:
 		s.handleGameReset()
-	case event.EventDebugRequest:
+	case event.EventMetaStatusMessageRequest:
+		if payload, ok := ev.Payload.(*event.MetaStatusMessagePayload); ok {
+			s.handleMessageRequest(payload)
+		}
+	case event.EventMetaDebugRequest:
 		s.handleDebugRequest()
-	case event.EventHelpRequest:
+	case event.EventMetaHelpRequest:
 		s.handleHelpRequest()
 	}
 }
@@ -101,6 +106,11 @@ func (s *MetaSystem) handleGameReset() {
 	case s.ctx.ResetChan <- struct{}{}:
 	default:
 	}
+}
+
+// handleMessageRequest displays a message in status bar
+func (s *MetaSystem) handleMessageRequest(payload *event.MetaStatusMessagePayload) {
+	s.ctx.SetStatusMessage(payload.Message)
 }
 
 // handleDebugRequest shows debug information overlay with auto-discovered stats

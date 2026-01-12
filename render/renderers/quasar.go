@@ -81,7 +81,7 @@ func (r *QuasarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		r.renderZapRange(ctx, buf, anchorPos.X, anchorPos.Y, &quasar)
 
 		// Shield renders to background layer when active
-		if quasar.ShieldActive {
+		if quasar.IsShielded {
 			r.renderShield(ctx, buf, anchorPos.X, anchorPos.Y)
 		}
 

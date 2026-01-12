@@ -214,13 +214,13 @@ func handleDustCommand(ctx *engine.GameContext) CommandResult {
 // handleDebugCommand triggers debug overlay event
 func handleDebugCommand(ctx *engine.GameContext) CommandResult {
 	ctx.SetMode(core.ModeOverlay)
-	ctx.PushEvent(event.EventDebugRequest, nil)
+	ctx.PushEvent(event.EventMetaDebugRequest, nil)
 	return CommandResult{Continue: true, KeepPaused: true}
 }
 
 // handleHelpCommand triggers help overlay event
 func handleHelpCommand(ctx *engine.GameContext) CommandResult {
 	ctx.SetMode(core.ModeOverlay)
-	ctx.PushEvent(event.EventHelpRequest, nil)
+	ctx.PushEvent(event.EventMetaHelpRequest, nil)
 	return CommandResult{Continue: true, KeepPaused: true}
 }

@@ -431,7 +431,7 @@ func (s *CleanerSystem) deflectQuasar(headerEntity, hitMember core.Entity, clean
 	}
 
 	// Shield blocks all cleaner interaction
-	if quasarComp.ShieldActive {
+	if quasarComp.IsShielded {
 		return
 	}
 

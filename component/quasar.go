@@ -19,12 +19,14 @@ type QuasarComponent struct {
 
 	SpeedMultiplier int64 // Q32.32, current speed scale factor (starts at Scale)
 
-	IsZapping bool // True if zapping cursor outside range
+	// Quasar state
+	IsEnraged  bool
+	IsZapping  bool // True if zapping cursor outside range
+	IsCharging bool
+	IsShielded bool // Cleaner immunity during charge
 
 	// Charge phase state (delay before zapping)
-	IsCharging      bool
 	ChargeRemaining time.Duration
-	ShieldActive    bool // Cleaner immunity during charge
 
 	// Dynamic resize support
 	ZapRadius int64 // Q32.32, visual radius of zap circle (dynamic on resize)

@@ -177,8 +177,9 @@ func (s *DustSystem) Update() {
 		dtFixed = dtCap
 	}
 
-	cursorXFixed := vmath.FromInt(cursorPos.X)
-	cursorYFixed := vmath.FromInt(cursorPos.Y)
+	// Cursor position precise adjustment at the center of the cell to avoid skewed render
+	cursorXFixed := vmath.FromInt(cursorPos.X) + vmath.Scale>>1
+	cursorYFixed := vmath.FromInt(cursorPos.Y) + vmath.Scale>>1
 	now := s.world.Resources.Time.GameTime
 
 	// 3. LOCK Spatial Grid (Optimization: Global Batch Lock)

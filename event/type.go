@@ -215,15 +215,20 @@ const (
 	// Consumer: SpawnSystem | Payload: *SpawnChangePayload
 	EventSpawnChange
 
-	// EventDebugRequest signals a request to show debug overlay
+	// EventMetaDebugRequest signals a request to show debug overlay
 	// Trigger: Command :debug
 	// Consumer: CommandSystem | Payload: nil
-	EventDebugRequest
+	EventMetaDebugRequest
 
-	// EventHelpRequest signals a request to show help overlay
+	// EventMetaHelpRequest signals a request to show help overlay
 	// Trigger: Command :help
 	// Consumer: CommandSystem | Payload: nil
-	EventHelpRequest
+	EventMetaHelpRequest
+
+	// EventMetaHelpRequest signals a request to show help overlay
+	// Trigger: Systems :help
+	// Consumer: CommandSystem | Payload: *MetaStatusMessagePayload
+	EventMetaStatusMessageRequest
 
 	// EventTimerStart signals creation of a lifecycle timer for an entity
 	// Trigger: Systems creating transient entities (Splash, Flash)
@@ -325,16 +330,6 @@ const (
 	// Trigger: QuasarSystem on lifecycle end
 	// Consumer: (future: audio/effects) | Payload: nil
 	EventQuasarDestroyed
-
-	// EventQuasarChargeStart signals quasar entering charge phase before zapping
-	// Trigger: QuasarSystem when cursor exits zap range
-	// Consumer: SplashSystem (countdown timer) | Payload: *QuasarChargeStartPayload
-	EventQuasarChargeStart
-
-	// EventQuasarChargeCancel signals charge phase cancelled (cursor re-entered range)
-	// Trigger: QuasarSystem when cursor re-enters zap range during charge
-	// Consumer: SplashSystem (destroy timer) | Payload: *QuasarChargeCancelPayload
-	EventQuasarChargeCancel
 
 	// EventQuasarCancel signals manual termination of the quasar phase
 	// Trigger: FSM (on GoldComplete during Quasar)

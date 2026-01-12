@@ -60,24 +60,17 @@ func (r *SplashRenderer) Render(gameCtx render.RenderContext, buf *render.Render
 }
 
 // resolveAnchor determines the screen position for a splash
-func (r *SplashRenderer) resolveAnchor(splash *component.SplashComponent) (int, int) {
-	baseX, baseY := splash.AnchorX, splash.AnchorY
+func (r *SplashRenderer) resolveAnchor(splashComp *component.SplashComponent) (int, int) {
+	baseX, baseY := splashComp.AnchorX, splashComp.AnchorY
 
-	if splash.AnchorEntity != 0 {
-		if pos, ok := r.gameCtx.World.Positions.GetPosition(splash.AnchorEntity); ok {
-			baseX = pos.X + splash.OffsetX
-			baseY = pos.Y + splash.OffsetY
+	if splashComp.AnchorEntity != 0 {
+		if anchorPos, ok := r.gameCtx.World.Positions.GetPosition(splashComp.AnchorEntity); ok {
+			baseX = anchorPos.X + splashComp.OffsetX
+			baseY = anchorPos.Y + splashComp.OffsetY
 		}
-	}
-
-	// Dynamic centering for timer slot based on current digit count
-	if splash.Slot == component.SlotTimer {
-		// Recalculate centering based on actual length
-		// OffsetX was calculated for initial digit count, adjust for current
-		currentWidth := splash.Length * constant.SplashCharWidth
-		initialWidth := len(strconv.Itoa(int(math.Ceil(splash.Duration.Seconds())))) * constant.SplashCharWidth
-		adjustment := (initialWidth - currentWidth) / 2
-		baseX += adjustment
+	} else {
+		baseX = splashComp.AnchorX
+		baseY = splashComp.AnchorY
 	}
 
 	return baseX, baseY

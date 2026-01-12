@@ -243,8 +243,13 @@ func (s *QuasarSystem) startCharging(headerEntity core.Entity, quasarComp *compo
 
 	s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
 
-	s.world.PushEvent(event.EventQuasarChargeStart, &event.QuasarChargeStartPayload{
-		HeaderEntity: headerEntity,
+	s.world.PushEvent(event.EventSplashTimerRequest, &event.SplashTimerRequestPayload{
+		AnchorEntity: headerEntity,
+		Color:        component.SplashColorCyan,
+		MarginRight:  constant.QuasarAnchorOffsetX + 1, // Accounting for anchor column
+		MarginLeft:   constant.QuasarAnchorOffsetX,
+		MarginTop:    constant.QuasarAnchorOffsetY,
+		MarginBottom: constant.QuasarAnchorOffsetY + 1, // Accounting for anchor row
 		Duration:     constant.QuasarChargeDuration,
 	})
 }
@@ -253,12 +258,12 @@ func (s *QuasarSystem) startCharging(headerEntity core.Entity, quasarComp *compo
 func (s *QuasarSystem) cancelCharging(headerEntity core.Entity, quasarComp *component.QuasarComponent) {
 	quasarComp.IsCharging = false
 	quasarComp.ChargeRemaining = 0
-	quasarComp.ShieldActive = false
+	quasarComp.IsShielded = false
 
 	s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
 
-	s.world.PushEvent(event.EventQuasarChargeCancel, &event.QuasarChargeCancelPayload{
-		HeaderEntity: headerEntity,
+	s.world.PushEvent(event.EventSplashTimerCancel, &event.SplashTimerCancelPayload{
+		AnchorEntity: headerEntity,
 	})
 }
 
@@ -399,7 +404,7 @@ func (s *QuasarSystem) startZapping(headerEntity core.Entity, quasarComp *compon
 	})
 
 	quasarComp.IsZapping = true
-	quasarComp.ShieldActive = true // Shield active during zap
+	quasarComp.IsShielded = true // Shield active during zap
 	s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
 }
 
@@ -408,7 +413,7 @@ func (s *QuasarSystem) stopZapping(headerEntity core.Entity, quasarComp *compone
 	s.world.PushEvent(event.EventLightningDespawn, headerEntity)
 
 	quasarComp.IsZapping = false
-	quasarComp.ShieldActive = false // ClearAllComponent shield
+	quasarComp.IsShielded = false // ClearAllComponent shield
 	s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
 }
 
