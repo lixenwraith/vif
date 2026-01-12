@@ -833,7 +833,7 @@ func (app *AppState) renderFileViewer(r tui.Region) {
 			gutterBg = app.Theme.FocusBg
 		}
 
-		// ClearAllComponent gutter
+		// Clear gutter
 		for x := 0; x < gutter.W; x++ {
 			gutter.Cell(x, y, ' ', app.Theme.StatusFg, gutterBg, terminal.AttrNone)
 		}
@@ -847,7 +847,7 @@ func (app *AppState) renderFileViewer(r tui.Region) {
 		// Separator
 		gutter.Cell(gutterW, y, '│', app.Theme.Border, gutterBg, terminal.AttrDim)
 
-		// ClearAllComponent text area
+		// Clear text area
 		for x := 0; x < textArea.W; x++ {
 			textArea.Cell(x, y, ' ', app.Theme.Fg, bg, terminal.AttrNone)
 		}

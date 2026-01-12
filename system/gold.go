@@ -256,7 +256,7 @@ func (s *GoldSystem) spawnGold() bool {
 		sequence[i] = constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
 	}
 
-	// Find empty space to spawnLightning gold
+	// Find empty space to spawn gold
 	x, y := s.findValidPosition(constant.GoldSequenceLength)
 	if x < 0 || y < 0 {
 		return false

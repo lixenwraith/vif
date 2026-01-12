@@ -23,7 +23,7 @@ type GlyphKey struct {
 }
 
 // GlyphCensus holds entity counts for each type/level combination
-// Used for 6-color spawnLightning limit enforcement
+// Used for 6-color spawn limit enforcement
 type GlyphCensus struct {
 	BlueBright  int
 	BlueNormal  int
@@ -68,8 +68,8 @@ type GlyphSystem struct {
 	world *engine.World
 
 	// Spawn timing and rate
-	lastSpawnTime  time.Time // When last spawnLightning occurred
-	nextSpawnTime  time.Time // When next spawnLightning should occur
+	lastSpawnTime  time.Time // When last spawn occurred
+	nextSpawnTime  time.Time // When next spawn should occur
 	rateMultiplier float64   // 0.5x, 1.0x, 2.0x based on screen fill
 
 	// Content consumption tracking (frame-local)
@@ -133,7 +133,7 @@ func (s *GlyphSystem) EventTypes() []event.EventType {
 	}
 }
 
-// HandleEvent processes spawnLightning configuration events
+// HandleEvent processes spawn configuration events
 func (s *GlyphSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		s.Init()
@@ -155,7 +155,7 @@ func (s *GlyphSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
-// Update runs the spawnLightning system logic
+// Update runs the spawn system logic
 func (s *GlyphSystem) Update() {
 	if !s.enabled {
 		return
@@ -174,7 +174,7 @@ func (s *GlyphSystem) Update() {
 	s.statDensity.Set(density)
 	s.statRateMult.Set(s.rateMultiplier)
 
-	// Check if spawnLightning is due
+	// Check if spawn is due
 	if now.Before(s.nextSpawnTime) {
 		return
 	}
@@ -188,10 +188,10 @@ func (s *GlyphSystem) Update() {
 		s.localIndex = 0
 	}
 
-	// Generate and spawnLightning a new sequence of glyphs
+	// Generate and spawn a new sequence of glyphs
 	s.spawnGlyphs()
 
-	// Schedule next spawnLightning
+	// Schedule next spawn
 	s.scheduleNextSpawn()
 }
 
@@ -203,7 +203,7 @@ func (s *GlyphSystem) calculateDensity(entityCount, screenCapacity int) float64 
 	return float64(entityCount) / float64(screenCapacity)
 }
 
-// updateRateMultiplier adjusts spawnLightning rate based on screen density
+// updateRateMultiplier adjusts spawn rate based on screen density
 // <30% filled: 2x faster, 30-70%: normal, >70%: 0.5x slower
 func (s *GlyphSystem) updateRateMultiplier(density float64) {
 	if density < constant.SpawnDensityLowThreshold {
@@ -215,7 +215,7 @@ func (s *GlyphSystem) updateRateMultiplier(density float64) {
 	}
 }
 
-// scheduleNextSpawn calculates and sets the next spawnLightning time
+// scheduleNextSpawn calculates and sets the next spawn time
 func (s *GlyphSystem) scheduleNextSpawn() {
 	now := s.world.Resources.Time.GameTime
 	baseDelay := time.Duration(constant.SpawnIntervalMs) * time.Millisecond
@@ -256,7 +256,7 @@ func (s *GlyphSystem) hasBracesInBlock(lines []string) bool {
 }
 
 // runCensus iterates all glyph entities and counts types/levels
-// Called once per spawnLightning check, O(n)
+// Called once per spawn check, O(n)
 func (s *GlyphSystem) runCensus() GlyphCensus {
 	var census GlyphCensus
 	var orphanGlyph, orphanTypeable int64
@@ -354,7 +354,7 @@ func (s *GlyphSystem) spawnGlyphs() {
 	availableGlyphs := s.getAvailableGlyphsFromCensus(census)
 
 	if len(availableGlyphs) == 0 {
-		// All 6 type/level combinations are present, don't spawnLightning
+		// All 6 type/level combinations are present, don't spawn
 		return
 	}
 

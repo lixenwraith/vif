@@ -475,7 +475,7 @@ func (s *CleanerSystem) deflectQuasar(headerEntity, hitMember core.Entity, clean
 	s.world.Components.Quasar.SetComponent(headerEntity, quasarComp)
 }
 
-// processPositiveEnergy handles Red destruction with Blossom spawnLightning
+// processPositiveEnergy handles Red destruction with Blossom spawn
 func (s *CleanerSystem) processPositiveEnergy(targetEntities []core.Entity, selfEntity core.Entity) {
 	var toDestroy []core.Entity
 
@@ -498,7 +498,7 @@ func (s *CleanerSystem) processPositiveEnergy(targetEntities []core.Entity, self
 	event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventBlossomSpawnOne, toDestroy, s.world.Resources.Time.FrameNumber)
 }
 
-// processNegativeEnergy handles Blue mutation to Green with Decay spawnLightning
+// processNegativeEnergy handles Blue mutation to Green with Decay spawn
 func (s *CleanerSystem) processNegativeEnergy(x, y int, targetEntities []core.Entity, selfEntity core.Entity) {
 	// Iterate candidates with self-exclusion pattern
 	for _, e := range targetEntities {

@@ -177,7 +177,7 @@ func drawPaletteMode() {
 			rowBg = render.RGB{60, 60, 80}
 		}
 
-		// ClearAllComponent row
+		// Clear row
 		for x := 0; x < state.width; x++ {
 			buf.SetWithBg(x, y, ' ', fg, rowBg)
 		}

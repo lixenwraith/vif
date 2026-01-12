@@ -135,7 +135,7 @@ func (e *Editor) Run() {
 	for e.running {
 		ev := e.term.PollEvent()
 
-		// ClearAllComponent expired status
+		// Clear expired status
 		if !e.statusTimer.IsZero() && time.Now().After(e.statusTimer) {
 			e.statusMsg = ""
 			e.statusTimer = time.Time{}
@@ -945,8 +945,8 @@ func (e *Editor) drawHelp(cells []terminal.Cell) {
 	}
 
 	help := []string{
-		"MoveEntity: WASD/HJKL/Arrows  │  Toggle: SPACE  │  SetComponent: o/ENTER  │  ClearAllComponent: x/DEL  │  Char: [/]",
-		"Shift: <>/^v  │  Flip: |/_  │  ClearAllComponent: c  │  Invert: i  │  Reset: r  │  Glyph: Y=copy p=paste",
+		"MoveEntity: WASD/HJKL/Arrows  │  Toggle: SPACE  │  Add: o/ENTER  │  Clear: x/DEL  │  Char: [/]",
+		"Shift: <>/^v  │  Flip: |/_  │  Clear: c  │  Invert: i  │  Reset: r  │  Glyph: Y=copy p=paste",
 		"Row: X=clear F=fill R=yank P=paste O=ins↑ N=ins↓ Z=del  │  Preview: t  │  Jump: /",
 		"Export: y (char) E (all)  │  Quit: q/ESC",
 	}

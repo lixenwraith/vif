@@ -132,7 +132,7 @@ func (m *Mixer) loop() {
 					outBytes[i] = 0
 				}
 			} else {
-				// ClearAllComponent mix buffer
+				// Clear mix buffer
 				for i := range mixBuf {
 					mixBuf[i] = 0
 				}

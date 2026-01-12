@@ -165,7 +165,7 @@ func (s *BlossomSystem) updateBlossomEntities() {
 
 	blossomEntities := s.world.Components.Blossom.AllEntities()
 
-	// ClearAllComponent frame deduplication maps
+	// Clear frame deduplication maps
 	clear(s.processedGridCells)
 	clear(s.blossomedThisFrame)
 

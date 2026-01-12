@@ -392,7 +392,7 @@ func drawFlashEffect(startY int, fg, bg render.RGB) {
 		opacity = 0
 	}
 
-	// Flash uses SetComponent blend on foreground
+	// Flash uses Add blend on foreground
 	flashColor := render.RGB{
 		R: uint8(float64(baseColor.R) * opacity),
 		G: uint8(float64(baseColor.G) * opacity),
@@ -406,8 +406,8 @@ func drawFlashEffect(startY int, fg, bg render.RGB) {
 	drawText(29, startY, fmt.Sprintf("(%3d,%3d,%3d)", flashColor.R, flashColor.G, flashColor.B), render.RGB{150, 150, 150}, bg)
 	startY += 2
 
-	// Show SetComponent blend result on sample char
-	drawText(1, startY, "SetComponent blend on char 'A' (green):", fg, bg)
+	// Show add blend result on sample char
+	drawText(1, startY, "Add blend on char 'A' (green):", fg, bg)
 	startY++
 	charFg := render.RgbSequenceGreenNormal
 	addedTC := render.Add(charFg, flashColor, 1.0)

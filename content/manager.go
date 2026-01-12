@@ -247,7 +247,7 @@ func (cm *ContentManager) DiscoverContentFiles() error {
 		return fmt.Errorf("failed to read data directory: %w", err)
 	}
 
-	// ClearAllComponent existing content files
+	// Clear existing content files
 	cm.contentFiles = []string{}
 
 	// Scan for .txt files

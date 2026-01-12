@@ -226,7 +226,7 @@ func main() {
 						noise := math.Sin(normDist*20.0-currTime*4.0) * 0.1
 
 						val := render.Scale(e.Color, corona+noise)
-						// SetComponent white core
+						// Add white core
 						if core > 0 {
 							// Explicit alpha 1.0
 							val = render.Add(val, render.Scale(render.RGB{R: 255, G: 255, B: 255}, core), 1.0)
@@ -247,7 +247,7 @@ func main() {
 						// Explicit alpha 1.0
 						finalColor = render.Overlay(bg, bubbleCol, 1.0)
 
-						// SetComponent distinct rim highlight
+						// Add distinct rim highlight
 						if normDist > 0.85 {
 							// Explicit alpha 1.0
 							finalColor = render.Add(finalColor, render.Scale(render.RGB{R: 200, G: 255, B: 255}, (normDist-0.85)*6.0), 1.0)

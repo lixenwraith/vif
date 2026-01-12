@@ -20,7 +20,7 @@ type FuseSystem struct {
 	// Fusion state machine
 	fusing    bool
 	fuseTimer int64 // Remaining time in nanoseconds
-	targetX   int   // Quasar spawnLightning position (centroid)
+	targetX   int   // Quasar spawn position (centroid)
 	targetY   int
 
 	enabled bool
@@ -156,10 +156,10 @@ func (s *FuseSystem) executeFuse() {
 
 // completeFuse finalizes the transformation after timer expires
 func (s *FuseSystem) completeFuse() {
-	// 1. Safety cleanup - despawnLightning any remaining spirits
+	// 1. Safety cleanup - despawn any remaining spirits
 	s.world.PushEvent(event.EventSpiritDespawn, nil)
 
-	// 2. Clear spawnLightning area
+	// 2. Clear spawn area
 	s.clearSpawnArea(s.targetX, s.targetY)
 
 	// 3. Create Quasar composite

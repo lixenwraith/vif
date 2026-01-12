@@ -77,27 +77,17 @@ func main() {
 	// 6. Resources ServiceBridge - Services contribute to ECS
 	hub.PublishResources(world.Resources.ServiceBridge)
 
-	// 7. Terminal extraction (orchestrator needs interface directly)
+	// 7. Terminal extraction (orchestrator needs direct interface)
 	termSvc := service.MustGet[*terminal.TerminalService](hub, "terminal")
 	term := termSvc.Terminal()
 	width, height := term.Size()
 
 	// 8. GameContext Creation
-	// NOTE: World resources are initialized in GameContext
+	// World resources are initialized in GameContext
 	ctx := engine.NewGameContext(world, width, height)
 
-	// // 7. Audio Engine
-	// // Initialize audio from services
-	// if audioSvc, ok := hub.GetComponent("audio"); ok {
-	// 	if as, ok := audioSvc.(*audio.AudioService); ok {
-	// 		if player := as.Player(); player != nil {
-	// 			ctx.SetAudioEngine(player.(engine.AudioPlayer))
-	// 		}
-	// 	}
-	// } // Silent fail if audio could not be initialized
-
 	// 9. Systems Instantiation
-	// SetComponent active systems to ECS world
+	// Add active systems to ECS world
 	for _, name := range manifest.ActiveSystems() {
 		factory, ok := registry.GetSystem(name)
 		if !ok {
@@ -188,7 +178,7 @@ func main() {
 	var frameCount int64
 	lastFPSUpdate := ctx.World.Resources.Time.RealTime
 
-	// SetComponent frame rate
+	// Add frame rate
 	frameTicker := time.NewTicker(constant.FrameUpdateInterval)
 	defer frameTicker.Stop()
 

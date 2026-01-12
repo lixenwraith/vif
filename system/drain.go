@@ -104,7 +104,7 @@ func (s *DrainSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventDrainPause:
 		s.paused = true
-		// ClearAllComponent pending spawns to prevent stale materialize
+		// Clear pending spawns to prevent stale materialize
 		s.pendingSpawns = s.pendingSpawns[:0]
 
 	case event.EventDrainResume:

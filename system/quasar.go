@@ -379,7 +379,7 @@ func (s *QuasarSystem) isCursorInZapRange(headerEntity core.Entity, quasarComp *
 	return dist <= quasarComp.ZapRadius
 }
 
-// Start zapping - spawnLightning tracked lightning
+// Start zapping - spawn tracked lightning
 func (s *QuasarSystem) startZapping(headerEntity core.Entity, quasarComp *component.QuasarComponent) {
 	cursorEntity := s.world.Resources.Cursor.Entity
 
@@ -413,7 +413,7 @@ func (s *QuasarSystem) stopZapping(headerEntity core.Entity, quasarComp *compone
 	s.world.PushEvent(event.EventLightningDespawn, headerEntity)
 
 	quasarComp.IsZapping = false
-	quasarComp.IsShielded = false // ClearAllComponent shield
+	quasarComp.IsShielded = false // Clear shield
 	s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
 }
 
