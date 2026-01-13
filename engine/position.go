@@ -175,8 +175,8 @@ func (p *Position) CountEntities() int {
 	return len(p.entities)
 }
 
-// ClearAllComponent removes all data
-func (p *Position) ClearAllComponent() {
+// ClearAllComponents removes all data
+func (p *Position) ClearAllComponents() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 

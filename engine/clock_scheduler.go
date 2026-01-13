@@ -27,10 +27,6 @@ type ClockScheduler struct {
 	lastGameTickTime time.Time // Last tick in game time
 	nextTickDeadline time.Time // Next tick deadline for drift correction
 
-	// Tick counter for debugging and metrics
-	tickCount atomic.Uint64
-	mu        sync.RWMutex
-
 	// Control channels
 	stopChan  chan struct{}
 	stopOnce  sync.Once
@@ -90,7 +86,6 @@ func NewClockScheduler(
 		tickInterval:  tickInterval,
 
 		lastGameTickTime: pausableClock.Now(),
-		tickCount:        atomic.Uint64{},
 
 		eventRouter: event.NewRouter(world.Resources.Event.Queue),
 
@@ -187,10 +182,8 @@ func (cs *ClockScheduler) Stop() {
 func (cs *ClockScheduler) schedulerLoop() {
 	defer cs.wg.Done()
 
-	cs.mu.Lock()
 	cs.nextTickDeadline = cs.pausableClock.Now().Add(cs.tickInterval)
 	cs.lastGameTickTime = cs.pausableClock.Now()
-	cs.mu.Unlock()
 
 	timer := time.NewTimer(0)
 	if !timer.Stop() {
@@ -222,9 +215,7 @@ func (cs *ClockScheduler) schedulerLoop() {
 		} else {
 			gameNow := cs.pausableClock.Now()
 
-			cs.mu.RLock()
 			deadline := cs.nextTickDeadline
-			cs.mu.RUnlock()
 
 			if !gameNow.Before(deadline) {
 				select {
@@ -236,7 +227,6 @@ func (cs *ClockScheduler) schedulerLoop() {
 
 				cs.processTick()
 
-				cs.mu.Lock()
 				cs.lastGameTickTime = gameNow
 				cs.nextTickDeadline = cs.nextTickDeadline.Add(cs.tickInterval)
 
@@ -245,9 +235,6 @@ func (cs *ClockScheduler) schedulerLoop() {
 					cs.nextTickDeadline = gameNow.Add(cs.tickInterval)
 				}
 				deadline = cs.nextTickDeadline
-				cs.mu.Unlock()
-
-				cs.tickCount.Add(1)
 
 				select {
 				case cs.updateDone <- struct{}{}:
@@ -380,11 +367,8 @@ func (cs *ClockScheduler) executeReset() {
 	defer cs.world.Unlock()
 
 	// 3. Reset Scheduler internal timing
-	cs.mu.Lock()
-	cs.tickCount.Store(0)
 	cs.lastGameTickTime = cs.pausableClock.Now()
 	cs.nextTickDeadline = cs.lastGameTickTime.Add(cs.tickInterval)
-	cs.mu.Unlock()
 
 	// 4. Reset FSM state - This will trigger OnEnter actions
 	if err := cs.fsm.Reset(cs.world); err != nil {
@@ -416,7 +400,8 @@ func (cs *ClockScheduler) processTick() {
 	cs.world.RunSafe(func() {
 		now := cs.pausableClock.Now()
 
-		// 1. Sync Time: Authoritative FrameNumber from GameState (Render Clock)
+		// 1. Sync Time
+		// Frame number sourced from game context through world
 		currentFrame := cs.world.FrameNumber()
 		cs.world.Resources.Time.Update(
 			now,
@@ -456,12 +441,11 @@ func (cs *ClockScheduler) processTick() {
 	})
 
 	ticks := cs.world.Resources.Game.State.IncrementGameTicks()
-	cs.statTicks.Store(int64(ticks))
-
-	if cs.tickCount.Load()%20 == 0 {
+	if ticks%uint64(constant.GameTicksPerSecond) == 0 {
 		cs.world.Resources.Game.State.UpdateAPM(cs.world.Resources.Status)
 	}
 
+	cs.statTicks.Store(int64(ticks))
 	cs.statEntityCount.Store(int64(cs.world.Positions.CountEntities()))
 	cs.statQueueLen.Store(int64(cs.world.Resources.Event.Queue.Len()))
 }

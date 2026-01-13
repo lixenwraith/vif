@@ -195,9 +195,9 @@ func (w *World) removeEntity(e core.Entity) {
 // wipeAll clears all component stores
 func (w *World) wipeAll() {
 {{- range .Components }}
-	w.Components.{{ .Field }}.ClearAllComponent()
+	w.Components.{{ .Field }}.ClearAllComponents()
 {{- end }}
-	w.Positions.ClearAllComponent()
+	w.Positions.ClearAllComponents()
 }
 `))
 

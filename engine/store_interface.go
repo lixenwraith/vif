@@ -17,8 +17,8 @@ type AnyStore interface {
 	// CountEntity returns the number of entities with this component
 	CountEntities() int
 
-	// ClearAllComponent removes all components from this store
-	ClearAllComponent()
+	// ClearAllComponents removes all components from this store
+	ClearAllComponents()
 }
 
 // QueryableStore extends AnyStore with query operations needed for

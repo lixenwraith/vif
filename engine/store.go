@@ -14,7 +14,7 @@ var _ QueryableStore = (*Store[int])(nil)
 type Store[T any] struct {
 	mu         sync.RWMutex
 	components map[core.Entity]T
-	entities   []core.Entity // Dense array of entities that have this component
+	entities   []core.Entity // Array of entities that have this component
 }
 
 // NewStore creates a new component store for type T
@@ -86,8 +86,8 @@ func (s *Store[T]) CountEntities() int {
 	return len(s.entities)
 }
 
-// ClearAllComponent removes all components from this store
-func (s *Store[T]) ClearAllComponent() {
+// ClearAllComponents removes all components from this store
+func (s *Store[T]) ClearAllComponents() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.components = make(map[core.Entity]T)

@@ -10,6 +10,9 @@ const (
 	// GameUpdateInterval is the game logic update interval (clock tick)
 	GameUpdateInterval = 50 * time.Millisecond
 
+	// GameTicksPerSecond is used for APM calculation
+	GameTicksPerSecond = 1 * time.Second / GameUpdateInterval
+
 	// EventLoopInterval is the frequency at which events are attempted to be processed
 	EventLoopInterval = 4 * time.Millisecond
 
