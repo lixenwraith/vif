@@ -106,7 +106,8 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	ctx.State = NewGameState()
 	world.Resources.Game = &GameStateResource{State: ctx.State}
 
-	// 6. Cursor Entity
+	// 6. Environment and Cursor Entity
+	ctx.World.CreateEnvironment()
 	ctx.World.CreateCursorEntity()
 
 	// Initialize atomic string pointers to empty strings

@@ -6,15 +6,15 @@ type RenderPriority int
 const (
 	PriorityBackground  RenderPriority = 0
 	PriorityGrid        RenderPriority = 100
-	PrioritySplash      RenderPriority = 200
-	PriorityEntities    RenderPriority = 300
-	PriorityCleaner     RenderPriority = 400
-	PriorityField       RenderPriority = 500
-	PriorityMaterialize RenderPriority = 600
-	PriorityParticle    RenderPriority = 700
+	PriorityEntities    RenderPriority = 200
+	PriorityCleaner     RenderPriority = 300
+	PriorityField       RenderPriority = 400
+	PriorityMaterialize RenderPriority = 500
+	PriorityParticle    RenderPriority = 600
+	PrioritySplash      RenderPriority = 700
 	PriorityMulti       RenderPriority = 800
 	PriorityPostProcess RenderPriority = 900
-	PriorityUI          RenderPriority = 1000
-	PriorityOverlay     RenderPriority = 1100
-	PriorityDebug       RenderPriority = 2000
+	PriorityUI          RenderPriority = 2000
+	PriorityOverlay     RenderPriority = 2500
+	PriorityDebug       RenderPriority = 9000
 )

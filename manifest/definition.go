@@ -57,6 +57,7 @@ var Components = []ComponentDef{
 	// Effects
 	{"Flash", "FlashComponent"},
 	{"Splash", "SplashComponent"},
+	{"Environment", "EnvironmentComponent"},
 
 	// Lifecycle
 	{"Death", "DeathComponent"},
@@ -91,6 +92,7 @@ var Systems = []SystemDef{
 	{"flash", "NewFlashSystem"},
 	{"explosion", "NewExplosionSystem"},
 	{"splash", "NewSplashSystem"},
+	{"environment", "NewEnvironmentSystem"},
 	{"death", "NewDeathSystem"},
 	{"timekeeper", "NewTimeKeeperSystem"},
 	{"diagnotics", "NewDiagnosticsSystem"},

@@ -6,9 +6,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 )
 
-// Compile-time check to ensure Store implements QueryableStore
-var _ QueryableStore = (*Store[int])(nil)
-
 // Store is a generic container for a specific component type T
 // Uses sparse set pattern for cache-friendly iteration
 type Store[T any] struct {

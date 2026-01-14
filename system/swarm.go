@@ -62,20 +62,14 @@ func (s *SwarmSystem) EventTypes() []event.EventType {
 
 func (s *SwarmSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
-		if s.active {
-			s.Init()
-			return
-		}
+		s.Init()
+		return
+	}
 
-		if !s.enabled {
-			return
-		}
+	switch ev.Type {
+	case event.EventSwarmSpawnRequest:
 
-		switch ev.Type {
-		case event.EventSwarmSpawnRequest:
-
-		case event.EventSwarmCancel:
-		}
+	case event.EventSwarmCancel:
 	}
 }
 

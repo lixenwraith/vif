@@ -34,6 +34,7 @@ type Component struct {
 	Member      *Store[component.MemberComponent]
 	Flash       *Store[component.FlashComponent]
 	Splash      *Store[component.SplashComponent]
+	Environment *Store[component.EnvironmentComponent]
 	Death       *Store[component.DeathComponent]
 	Timer       *Store[component.TimerComponent]
 }
@@ -65,6 +66,7 @@ func initComponents(w *World) {
 	w.Components.Member = NewStore[component.MemberComponent]()
 	w.Components.Flash = NewStore[component.FlashComponent]()
 	w.Components.Splash = NewStore[component.SplashComponent]()
+	w.Components.Environment = NewStore[component.EnvironmentComponent]()
 	w.Components.Death = NewStore[component.DeathComponent]()
 	w.Components.Timer = NewStore[component.TimerComponent]()
 	w.Positions = NewPosition()
@@ -97,6 +99,7 @@ func (w *World) removeEntity(e core.Entity) {
 	w.Components.Member.RemoveEntity(e)
 	w.Components.Flash.RemoveEntity(e)
 	w.Components.Splash.RemoveEntity(e)
+	w.Components.Environment.RemoveEntity(e)
 	w.Components.Death.RemoveEntity(e)
 	w.Components.Timer.RemoveEntity(e)
 	w.Positions.RemoveEntity(e)
@@ -128,6 +131,7 @@ func (w *World) wipeAll() {
 	w.Components.Member.ClearAllComponents()
 	w.Components.Flash.ClearAllComponents()
 	w.Components.Splash.ClearAllComponents()
+	w.Components.Environment.ClearAllComponents()
 	w.Components.Death.ClearAllComponents()
 	w.Components.Timer.ClearAllComponents()
 	w.Positions.ClearAllComponents()
