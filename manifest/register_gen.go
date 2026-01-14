@@ -6,7 +6,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/registry"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/vi-fighter/render/renderers"
+	"github.com/lixenwraith/vi-fighter/render/renderer"
 	"github.com/lixenwraith/vi-fighter/system"
 )
 
@@ -101,70 +101,70 @@ func RegisterSystems() {
 // RegisterRenderers registers all renderer factories with priorities
 func RegisterRenderers() {
 	registry.RegisterRenderer("ping", func(ctx any) any {
-		return renderers.NewPingRenderer(ctx.(*engine.GameContext))
+		return renderer.NewPingRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityGrid)
 	registry.RegisterRenderer("splash", func(ctx any) any {
-		return renderers.NewSplashRenderer(ctx.(*engine.GameContext))
+		return renderer.NewSplashRenderer(ctx.(*engine.GameContext))
 	}, render.PrioritySplash)
 	registry.RegisterRenderer("glyph", func(ctx any) any {
-		return renderers.NewGlyphRenderer(ctx.(*engine.GameContext))
+		return renderer.NewGlyphRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityEntities)
 	registry.RegisterRenderer("sigil", func(ctx any) any {
-		return renderers.NewSigilRenderer(ctx.(*engine.GameContext))
+		return renderer.NewSigilRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityEntities)
 	registry.RegisterRenderer("gold", func(ctx any) any {
-		return renderers.NewGoldRenderer(ctx.(*engine.GameContext))
+		return renderer.NewGoldRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityEntities)
 	registry.RegisterRenderer("shield", func(ctx any) any {
-		return renderers.NewShieldRenderer(ctx.(*engine.GameContext))
+		return renderer.NewShieldRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityField)
 	registry.RegisterRenderer("cleaner", func(ctx any) any {
-		return renderers.NewCleanerRenderer(ctx.(*engine.GameContext))
+		return renderer.NewCleanerRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityCleaner)
 	registry.RegisterRenderer("flash", func(ctx any) any {
-		return renderers.NewFlashRenderer(ctx.(*engine.GameContext))
+		return renderer.NewFlashRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityParticle)
 	registry.RegisterRenderer("explosion", func(ctx any) any {
-		return renderers.NewExplosionRenderer(ctx.(*engine.GameContext))
+		return renderer.NewExplosionRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityParticle)
 	registry.RegisterRenderer("lightning", func(ctx any) any {
-		return renderers.NewLightningRenderer(ctx.(*engine.GameContext))
+		return renderer.NewLightningRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityField)
 	registry.RegisterRenderer("spirit", func(ctx any) any {
-		return renderers.NewSpiritRenderer(ctx.(*engine.GameContext))
+		return renderer.NewSpiritRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityParticle)
 	registry.RegisterRenderer("materialize", func(ctx any) any {
-		return renderers.NewMaterializeRenderer(ctx.(*engine.GameContext))
+		return renderer.NewMaterializeRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityMaterialize)
 	registry.RegisterRenderer("quasar", func(ctx any) any {
-		return renderers.NewQuasarRenderer(ctx.(*engine.GameContext))
+		return renderer.NewQuasarRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityMulti)
 	registry.RegisterRenderer("swarm", func(ctx any) any {
-		return renderers.NewSwarmRenderer(ctx.(*engine.GameContext))
+		return renderer.NewSwarmRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityMulti)
 	registry.RegisterRenderer("grayout", func(ctx any) any {
-		return renderers.NewGrayoutRenderer(ctx.(*engine.GameContext))
+		return renderer.NewGrayoutRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityPostProcess)
 	registry.RegisterRenderer("dim", func(ctx any) any {
-		return renderers.NewDimRenderer(ctx.(*engine.GameContext))
+		return renderer.NewDimRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityPostProcess)
 	registry.RegisterRenderer("heatmeter", func(ctx any) any {
-		return renderers.NewHeatMeterRenderer(ctx.(*engine.GameContext))
+		return renderer.NewHeatMeterRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityUI)
 	registry.RegisterRenderer("rowindicator", func(ctx any) any {
-		return renderers.NewRowIndicatorRenderer(ctx.(*engine.GameContext))
+		return renderer.NewRowIndicatorRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityUI)
 	registry.RegisterRenderer("columnindicator", func(ctx any) any {
-		return renderers.NewColumnIndicatorRenderer(ctx.(*engine.GameContext))
+		return renderer.NewColumnIndicatorRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityUI)
 	registry.RegisterRenderer("statusbar", func(ctx any) any {
-		return renderers.NewStatusBarRenderer(ctx.(*engine.GameContext))
+		return renderer.NewStatusBarRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityUI)
 	registry.RegisterRenderer("cursor", func(ctx any) any {
-		return renderers.NewCursorRenderer(ctx.(*engine.GameContext))
+		return renderer.NewCursorRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityUI)
 	registry.RegisterRenderer("overlay", func(ctx any) any {
-		return renderers.NewOverlayRenderer(ctx.(*engine.GameContext))
+		return renderer.NewOverlayRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityOverlay)
 }
 

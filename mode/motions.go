@@ -297,14 +297,25 @@ func MotionScreenTop(ctx *engine.GameContext, x, y, count int) MotionResult {
 	}
 }
 
-// MotionScreenMid implements 'M' motion
-func MotionScreenMid(ctx *engine.GameContext, x, y, count int) MotionResult {
+// MotionScreenVerticalMid implements 'M' motion
+func MotionScreenVerticalMid(ctx *engine.GameContext, x, y, count int) MotionResult {
 	midY := ctx.World.Resources.Config.GameHeight / 2
 	return MotionResult{
 		StartX: x, StartY: y,
 		EndX: x, EndY: midY,
 		Type: RangeChar, Style: StyleInclusive,
 		Valid: y != midY,
+	}
+}
+
+// MotionScreenHorizontalMid implements 'm' motion
+func MotionScreenHorizontalMid(ctx *engine.GameContext, x, y, count int) MotionResult {
+	midX := ctx.World.Resources.Config.GameWidth / 2
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: midX, EndY: y,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: x != midX,
 	}
 }
 

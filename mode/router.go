@@ -34,32 +34,33 @@ func NewRouter(ctx *engine.GameContext, machine *input.Machine) *Router {
 	}
 
 	r.motionLUT = map[input.MotionOp]MotionFunc{
-		input.MotionLeft:         MotionLeft,
-		input.MotionRight:        MotionRight,
-		input.MotionUp:           MotionUp,
-		input.MotionDown:         MotionDown,
-		input.MotionWordForward:  MotionWordForward,
-		input.MotionWORDForward:  MotionWORDForward,
-		input.MotionWordBack:     MotionWordBack,
-		input.MotionWORDBack:     MotionWORDBack,
-		input.MotionWordEnd:      MotionWordEnd,
-		input.MotionWORDEnd:      MotionWORDEnd,
-		input.MotionLineStart:    MotionLineStart,
-		input.MotionLineEnd:      MotionLineEnd,
-		input.MotionFirstNonWS:   MotionFirstNonWS,
-		input.MotionScreenTop:    MotionScreenTop,
-		input.MotionScreenMid:    MotionScreenMid,
-		input.MotionScreenBot:    MotionScreenBot,
-		input.MotionFileStart:    MotionFileStart,
-		input.MotionFileEnd:      MotionFileEnd,
-		input.MotionParaBack:     MotionParaBack,
-		input.MotionParaForward:  MotionParaForward,
-		input.MotionMatchBracket: MotionMatchBracket,
-		input.MotionOrigin:       MotionOrigin,
-		input.MotionHalfPageUp:   MotionHalfPageUp,
-		input.MotionHalfPageDown: MotionHalfPageDown,
-		input.MotionColumnUp:     MotionColumnUp,
-		input.MotionColumnDown:   MotionColumnDown,
+		input.MotionLeft:                MotionLeft,
+		input.MotionRight:               MotionRight,
+		input.MotionUp:                  MotionUp,
+		input.MotionDown:                MotionDown,
+		input.MotionWordForward:         MotionWordForward,
+		input.MotionWORDForward:         MotionWORDForward,
+		input.MotionWordBack:            MotionWordBack,
+		input.MotionWORDBack:            MotionWORDBack,
+		input.MotionWordEnd:             MotionWordEnd,
+		input.MotionWORDEnd:             MotionWORDEnd,
+		input.MotionLineStart:           MotionLineStart,
+		input.MotionLineEnd:             MotionLineEnd,
+		input.MotionFirstNonWS:          MotionFirstNonWS,
+		input.MotionScreenTop:           MotionScreenTop,
+		input.MotionScreenVerticalMid:   MotionScreenVerticalMid,
+		input.MotionScreenHorizontalMid: MotionScreenHorizontalMid,
+		input.MotionScreenBot:           MotionScreenBot,
+		input.MotionFileStart:           MotionFileStart,
+		input.MotionFileEnd:             MotionFileEnd,
+		input.MotionParaBack:            MotionParaBack,
+		input.MotionParaForward:         MotionParaForward,
+		input.MotionMatchBracket:        MotionMatchBracket,
+		input.MotionOrigin:              MotionOrigin,
+		input.MotionHalfPageUp:          MotionHalfPageUp,
+		input.MotionHalfPageDown:        MotionHalfPageDown,
+		input.MotionColumnUp:            MotionColumnUp,
+		input.MotionColumnDown:          MotionColumnDown,
 	}
 
 	r.charLUT = map[input.MotionOp]CharMotionFunc{
@@ -777,8 +778,10 @@ func motionOpToRune(op input.MotionOp) rune {
 		return '^'
 	case input.MotionScreenTop:
 		return 'H'
-	case input.MotionScreenMid:
+	case input.MotionScreenVerticalMid:
 		return 'M'
+	case input.MotionScreenHorizontalMid:
+		return 'm'
 	case input.MotionScreenBot:
 		return 'L'
 	case input.MotionFileStart:

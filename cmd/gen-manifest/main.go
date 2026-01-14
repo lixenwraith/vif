@@ -209,7 +209,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/registry"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/vi-fighter/render/renderers"
+	"github.com/lixenwraith/vi-fighter/render/renderer"
 	"github.com/lixenwraith/vi-fighter/system"
 )
 
@@ -226,7 +226,7 @@ func RegisterSystems() {
 func RegisterRenderers() {
 {{- range .Renderers }}
 	registry.RegisterRenderer("{{ .Name }}", func(ctx any) any {
-		return renderers.{{ .Constructor }}(ctx.(*engine.GameContext))
+		return renderer.{{ .Constructor }}(ctx.(*engine.GameContext))
 	}, render.{{ .Priority }})
 {{- end }}
 }

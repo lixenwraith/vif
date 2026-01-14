@@ -1,4 +1,4 @@
-package renderers
+package renderer
 
 import (
 	"github.com/lixenwraith/vi-fighter/component"

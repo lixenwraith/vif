@@ -53,37 +53,38 @@ const (
 type MotionOp uint8
 
 const (
-	MotionNone         MotionOp = iota
-	MotionLeft                  // h, Left arrow, Backspace
-	MotionRight                 // l, Right arrow, Space
-	MotionUp                    // k, Up arrow
-	MotionDown                  // j, Down arrow
-	MotionWordForward           // w
-	MotionWORDForward           // W
-	MotionWordBack              // b
-	MotionWORDBack              // B
-	MotionWordEnd               // e
-	MotionWORDEnd               // E
-	MotionLineStart             // 0, Home
-	MotionLineEnd               // $, End
-	MotionFirstNonWS            // ^
-	MotionScreenTop             // H
-	MotionScreenMid             // M
-	MotionScreenBot             // L
-	MotionFileStart             // gg
-	MotionFileEnd               // G
-	MotionParaBack              // {
-	MotionParaForward           // }
-	MotionMatchBracket          // %
-	MotionOrigin                // go
-	MotionFindForward           // f + char
-	MotionFindBack              // F + char
-	MotionTillForward           // t + char
-	MotionTillBack              // T + char
-	MotionHalfPageUp            // PgUp
-	MotionHalfPageDown          // PgDown
-	MotionColumnUp              // [ or gk
-	MotionColumnDown            // ] or gj
+	MotionNone                MotionOp = iota
+	MotionLeft                         // h, Left arrow, Backspace
+	MotionRight                        // l, Right arrow, Space
+	MotionUp                           // k, Up arrow
+	MotionDown                         // j, Down arrow
+	MotionWordForward                  // w
+	MotionWORDForward                  // W
+	MotionWordBack                     // b
+	MotionWORDBack                     // B
+	MotionWordEnd                      // e
+	MotionWORDEnd                      // E
+	MotionLineStart                    // 0, Home
+	MotionLineEnd                      // $, End
+	MotionFirstNonWS                   // ^
+	MotionScreenTop                    // H
+	MotionScreenVerticalMid            // M
+	MotionScreenHorizontalMid          // m
+	MotionScreenBot                    // L
+	MotionFileStart                    // gg
+	MotionFileEnd                      // G
+	MotionParaBack                     // {
+	MotionParaForward                  // }
+	MotionMatchBracket                 // %
+	MotionOrigin                       // go
+	MotionFindForward                  // f + char
+	MotionFindBack                     // F + char
+	MotionTillForward                  // t + char
+	MotionTillBack                     // T + char
+	MotionHalfPageUp                   // PgUp
+	MotionHalfPageDown                 // PgDown
+	MotionColumnUp                     // [ or gk
+	MotionColumnDown                   // ] or gj
 )
 
 // OperatorOp identifies operator type

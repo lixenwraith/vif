@@ -100,7 +100,8 @@ func DefaultKeyTable() *KeyTable {
 
 			// Screen motions
 			'H': {BehaviorMotion, MotionScreenTop, SpecialNone, ModeTargetNone, IntentNone},
-			'M': {BehaviorMotion, MotionScreenMid, SpecialNone, ModeTargetNone, IntentNone},
+			'M': {BehaviorMotion, MotionScreenVerticalMid, SpecialNone, ModeTargetNone, IntentNone},
+			'm': {BehaviorMotion, MotionScreenHorizontalMid, SpecialNone, ModeTargetNone, IntentNone},
 			'L': {BehaviorMotion, MotionScreenBot, SpecialNone, ModeTargetNone, IntentNone},
 			'G': {BehaviorMotion, MotionFileEnd, SpecialNone, ModeTargetNone, IntentNone},
 
