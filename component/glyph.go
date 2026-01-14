@@ -7,19 +7,21 @@ type GlyphComponent struct {
 	Level GlyphLevel
 }
 
-// GlyphType represents the semantic type affecting heat/energy
+// GlyphType represents the semantic type affecting game mechanics
 type GlyphType int
 
 const (
-	GlyphGreen GlyphType = iota // Positive energy
-	GlyphBlue                   // Double positive energy
-	GlyphRed                    // Negative energy
+	GlyphGreen GlyphType = iota
+	GlyphBlue
+	GlyphRed
+	GlyphWhite
 	GlyphGold
 )
 
-// GlyphLevel represents brightness affecting multiplier
+// GlyphLevel represents brightness (0 = dark, 1 = normal, 2 = bright)
 type GlyphLevel int
 
+// Order matters
 const (
 	GlyphDark   GlyphLevel = iota // x1
 	GlyphNormal                   // x2

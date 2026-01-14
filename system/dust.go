@@ -354,10 +354,14 @@ func (s *DustSystem) Update() {
 					}
 
 					// --- Blossom/Decay interaction ---
+
 					if s.world.Components.Blossom.HasEntity(target) || s.world.Components.Decay.HasEntity(target) {
 						s.world.Components.Death.SetComponent(target, component.DeathComponent{})
 						deathCandidates = append(deathCandidates, target)
-						continue
+						if !dustInsideShield {
+							destroyDust = true
+							break
+						}
 					}
 
 					// --- Glyph interaction ---
@@ -367,7 +371,7 @@ func (s *DustSystem) Update() {
 						continue
 					}
 
-					glyph, ok := s.world.Components.Glyph.GetComponent(target)
+					glyphComp, ok := s.world.Components.Glyph.GetComponent(target)
 					if !ok {
 						continue
 					}
@@ -383,17 +387,17 @@ func (s *DustSystem) Update() {
 					shouldKillDust := false
 
 					if cursorEnergy > 0 {
-						if glyph.Type == component.GlyphBlue {
+						if glyphComp.Type == component.GlyphBlue {
 							shouldKillGlyph = true
 							shouldKillDust = true
-						} else if glyph.Type == component.GlyphRed {
+						} else if glyphComp.Type == component.GlyphRed {
 							shouldKillDust = true
 						}
 					} else if cursorEnergy < 0 {
-						if glyph.Type == component.GlyphRed {
+						if glyphComp.Type == component.GlyphRed {
 							shouldKillGlyph = true
 							shouldKillDust = true
-						} else if glyph.Type == component.GlyphBlue {
+						} else if glyphComp.Type == component.GlyphBlue {
 							shouldKillDust = true
 						}
 					}
@@ -403,8 +407,8 @@ func (s *DustSystem) Update() {
 						s.world.Components.Death.SetComponent(target, component.DeathComponent{})
 						deathCandidates = append(deathCandidates, target)
 						s.world.PushEvent(event.EventEnergyGlyphConsumed, &event.GlyphConsumedPayload{
-							Type:  glyph.Type,
-							Level: glyph.Level,
+							Type:  glyphComp.Type,
+							Level: glyphComp.Level,
 						})
 					}
 

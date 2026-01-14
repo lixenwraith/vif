@@ -139,7 +139,7 @@ func (s *MetaSystem) handleDebugRequest() {
 	content.Items = append(content.Items, playerCard)
 
 	// Card: Engine (from context)
-	engineCard := core.OverlayCard{Title: "ENGINE"}
+	engineCard := core.OverlayCard{Title: "CONTEXT"}
 	engineCard.Entries = append(engineCard.Entries,
 		core.CardEntry{Key: "Frame", Value: fmt.Sprintf("%d", s.ctx.GetFrameNumber())},
 		core.CardEntry{Key: "Screen", Value: fmt.Sprintf("%dx%d", s.ctx.Width, s.ctx.Height)},
@@ -183,28 +183,12 @@ func (s *MetaSystem) handleDebugRequest() {
 		groups[prefix] = append(groups[prefix], core.CardEntry{Key: name, Value: ptr.Load()})
 	})
 
-	// Add registry groups as cards in deterministic order
-	groupOrder := []string{"engine", "event", "entity", "spawn", "boost", "gold", "decay"}
-	seen := make(map[string]bool)
-
-	for _, prefix := range groupOrder {
-		if entries, ok := groups[prefix]; ok && len(entries) > 0 {
-			content.Items = append(content.Items, core.OverlayCard{
-				Title:   strings.ToUpper(prefix),
-				Entries: entries,
-			})
-			seen[prefix] = true
-		}
-	}
-
 	// Remaining groups not in predefined order
 	for prefix, entries := range groups {
-		if !seen[prefix] && len(entries) > 0 {
-			content.Items = append(content.Items, core.OverlayCard{
-				Title:   strings.ToUpper(prefix),
-				Entries: entries,
-			})
-		}
+		content.Items = append(content.Items, core.OverlayCard{
+			Title:   strings.ToUpper(prefix),
+			Entries: entries,
+		})
 	}
 
 	s.ctx.SetOverlayContent(content)

@@ -167,7 +167,7 @@ func (s *CompositeSystem) syncMembers(headerComp *component.HeaderComponent, hea
 		}
 
 		// Liveness check: if entity no longer has position, it was destroyed
-		if !s.world.Positions.HasEntity(memberEntry.Entity) {
+		if !s.world.Positions.HasPosition(memberEntry.Entity) {
 			memberEntry.Entity = 0 // Tombstone
 			headerComp.Dirty = true
 			continue

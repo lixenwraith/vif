@@ -120,8 +120,8 @@ func (p *Position) GetAllEntityAtInto(x, y int, buf []core.Entity) int {
 	return copy(buf, view)
 }
 
-// HasAnyEntity O(1) returns true if any entity exists at the given coordinates
-func (p *Position) HasAnyEntity(x, y int) bool {
+// HasAnyEntityAt O(1) returns true if any entity exists at the given coordinates
+func (p *Position) HasAnyEntityAt(x, y int) bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.grid.HasAny(x, y)
@@ -151,8 +151,8 @@ func (p *Position) GetPosition(e core.Entity) (component.PositionComponent, bool
 	return val, ok
 }
 
-// HasEntity checks if an entity has a position component
-func (p *Position) HasEntity(e core.Entity) bool {
+// HasPosition checks if an entity has a position component
+func (p *Position) HasPosition(e core.Entity) bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	_, ok := p.components[e]
@@ -270,7 +270,7 @@ func (pb *PositionBatch) Add(e core.Entity, pos component.PositionComponent) {
 }
 
 // Commit applies all batched additions
-// Checks with HasAnyEntity only to prevent unintended spawns on existing entities
+// Checks with HasAnyEntityAt only to prevent unintended spawns on existing entities
 func (pb *PositionBatch) Commit() error {
 	if pb.committed {
 		return fmt.Errorf("batch already committed")

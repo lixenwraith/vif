@@ -698,10 +698,7 @@ func (r *Router) handleOverlayActivate() bool {
 func (r *Router) handleOverlayPageScroll(direction int) bool {
 	// Calculate visible height based on overlay dimensions
 	overlayH := int(float64(r.ctx.Height) * constant.OverlayHeightPercent)
-	// TODO: to constant if not delete, check in tiny pane
-	if overlayH < 10 {
-		overlayH = 10
-	}
+
 	// Subtract border (2) + padding (2) + hints row (1)
 	visibleH := overlayH - 2 - (2 * constant.OverlayPaddingY) - 1
 	pageSize := visibleH / 2
@@ -709,6 +706,7 @@ func (r *Router) handleOverlayPageScroll(direction int) bool {
 		pageSize = 1
 	}
 
+	// TODO: can scroll beyond last row, limit in tui
 	newScroll := r.ctx.GetOverlayScroll() + (direction * pageSize)
 	if newScroll < 0 {
 		newScroll = 0
@@ -724,7 +722,6 @@ func (r *Router) handleOverlayScroll(intent *input.Intent) bool {
 	if newScroll < 0 {
 		newScroll = 0
 	}
-	// Upper bound handled by renderer based on actual content height
 
 	r.ctx.SetOverlayScroll(newScroll)
 	return true

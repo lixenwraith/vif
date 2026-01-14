@@ -61,14 +61,14 @@ const (
 	NuggetMaxAttempts = 100
 
 	// NuggetJumpCost is the energy cost to jump to a nugget
-	NuggetJumpCost = 10
+	NuggetJumpCost = 100
 )
 
 // Character Spawn Logic
 const (
-	SpawnIntervalMs         = 2000
-	MinBlockLines           = 3
-	MaxBlockLines           = 15
+	SpawnIntervalMs         = 1000
+	MinBlockLines           = 2
+	MaxBlockLines           = 5
 	MaxPlacementTries       = 3
 	MinIndentChange         = 2
 	ContentRefreshThreshold = 0.8
@@ -113,15 +113,15 @@ const (
 // Spawn Rate Management
 const (
 	// SpawnDensityLowThreshold is the entity density below which spawn rate increases
-	SpawnDensityLowThreshold = 0.3 // Below: 2x spawn rate
+	SpawnDensityLowThreshold = 0.1 // Below: 2x spawn rate
 
 	// SpawnDensityHighThreshold is the entity density above which spawn rate decreases
-	SpawnDensityHighThreshold = 0.7 // Above: 0.5x spawn rate
+	SpawnDensityHighThreshold = 0.25 // Above: 0.5x spawn rate
 
 	// Spawn rate multipliers
-	SpawnRateFast   = 2.0 // Used when density < low threshold
-	SpawnRateNormal = 1.0 // Used when density is between thresholds
-	SpawnRateSlow   = 0.5 // Used when density > high threshold
+	SpawnRateFast   = 2.0  // Used when density < low threshold
+	SpawnRateNormal = 1.0  // Used when density is between thresholds
+	SpawnRateSlow   = 0.02 // Used when density > high threshold
 )
 
 // Positions Finding

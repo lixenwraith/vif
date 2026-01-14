@@ -22,11 +22,11 @@ func (v *ViewportScroll) SetDimensions(contentH, viewportH int) {
 
 // MaxOffset returns maximum valid scroll offset
 func (v *ViewportScroll) MaxOffset() int {
-	max := v.ContentH - v.ViewportH
-	if max < 0 {
+	maxOffset := v.ContentH - v.ViewportH
+	if maxOffset < 0 {
 		return 0
 	}
-	return max
+	return maxOffset
 }
 
 // CanScroll returns true if content exceeds viewport

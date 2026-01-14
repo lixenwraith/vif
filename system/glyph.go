@@ -23,54 +23,22 @@ type GlyphKey struct {
 }
 
 // GlyphCensus holds entity counts for each type/level combination
-// Used for 6-color spawn limit enforcement
-type GlyphCensus struct {
-	BlueBright  int
-	BlueNormal  int
-	BlueDark    int
-	GreenBright int
-	GreenNormal int
-	GreenDark   int
-}
+type GlyphCensus map[GlyphKey]int
 
-// Total returns sum of all tracked colors
-func (c GlyphCensus) Total() int {
-	return c.BlueBright + c.BlueNormal + c.BlueDark +
-		c.GreenBright + c.GreenNormal + c.GreenDark
-}
-
-// ActiveColors returns count of non-zero type/level combinations
-func (c GlyphCensus) ActiveColors() int {
-	count := 0
-	if c.BlueBright > 0 {
-		count++
-	}
-	if c.BlueNormal > 0 {
-		count++
-	}
-	if c.BlueDark > 0 {
-		count++
-	}
-	if c.GreenBright > 0 {
-		count++
-	}
-	if c.GreenNormal > 0 {
-		count++
-	}
-	if c.GreenDark > 0 {
-		count++
-	}
-	return count
-}
+// Allowed to spawn types and levels used as census keys
+var glyphSpawnTypes = []component.GlyphType{component.GlyphBlue, component.GlyphGreen}
+var glyphSpawnLevels = []component.GlyphLevel{component.GlyphDark, component.GlyphNormal, component.GlyphBright}
 
 // GlyphSystem handles glyph sequence generation and spawning
 type GlyphSystem struct {
 	world *engine.World
 
+	// Glyph census
+	census map[GlyphKey]int
+
 	// Spawn timing and rate
-	lastSpawnTime  time.Time // When last spawn occurred
-	nextSpawnTime  time.Time // When next spawn should occur
-	rateMultiplier float64   // 0.5x, 1.0x, 2.0x based on screen fill
+	nextSpawnTimer time.Duration
+	rateMultiplier float64 // 0.5x, 1.0x, 2.0x based on screen fill
 
 	// Content consumption tracking (frame-local)
 	localGeneration int64
@@ -78,11 +46,11 @@ type GlyphSystem struct {
 	frameContent    *content.PreparedContent // Snapshot for current frame
 
 	// Cached metric pointers
-	statEnabled        *atomic.Bool
-	statDensity        *status.AtomicFloat
-	statRateMult       *status.AtomicFloat
-	statOrphanGlyph    *atomic.Int64
-	statOrphanTypeable *atomic.Int64
+	statEnabled     *atomic.Bool
+	statDensity     *status.AtomicFloat
+	statRateMult    *status.AtomicFloat
+	statNextSpawnMS *atomic.Int64
+	statOrphanGlyph *atomic.Int64
 
 	enabled bool
 }
@@ -97,8 +65,8 @@ func NewGlyphSystem(world *engine.World) engine.System {
 	s.statEnabled = world.Resources.Status.Bools.Get("glyph.enabled")
 	s.statDensity = world.Resources.Status.Floats.Get("glyph.density")
 	s.statRateMult = world.Resources.Status.Floats.Get("glyph.rate_mult")
-	s.statOrphanGlyph = world.Resources.Status.Ints.Get("glyph.orphan_char")
-	s.statOrphanTypeable = world.Resources.Status.Ints.Get("glyph.orphan_typeable")
+	s.statNextSpawnMS = world.Resources.Status.Ints.Get("glyph.next_spawn_ms")
+	s.statOrphanGlyph = world.Resources.Status.Ints.Get("glyph.orphan_glyph")
 
 	s.Init()
 	return s
@@ -106,8 +74,10 @@ func NewGlyphSystem(world *engine.World) engine.System {
 
 // Init resets session state for new game
 func (s *GlyphSystem) Init() {
-	s.lastSpawnTime = time.Time{}
-	s.nextSpawnTime = time.Time{}
+	s.census = make(map[GlyphKey]int)
+	s.initCensus()
+
+	s.nextSpawnTimer = time.Duration(0)
 	s.rateMultiplier = 1.0
 	s.localGeneration = 0
 	s.localIndex = 0
@@ -115,9 +85,18 @@ func (s *GlyphSystem) Init() {
 	s.statEnabled.Store(true)
 	s.statDensity.Set(0)
 	s.statRateMult.Set(0)
+	s.statNextSpawnMS.Store(0)
 	s.statOrphanGlyph.Store(0)
-	s.statOrphanTypeable.Store(0)
 	s.enabled = true
+}
+
+// initCensus prepares an empty census with spawn keys
+func (s *GlyphSystem) initCensus() {
+	for _, spawnType := range glyphSpawnTypes {
+		for _, spawnLevel := range glyphSpawnLevels {
+			s.census[GlyphKey{Type: spawnType, Level: spawnLevel}] = 0
+		}
+	}
 }
 
 // Priority returns the system's priority
@@ -161,23 +140,29 @@ func (s *GlyphSystem) Update() {
 		return
 	}
 
-	now := s.world.Resources.Time.GameTime
 	config := s.world.Resources.Config
 
 	// Calculate current density and update rate multiplier
-	entityCount := s.world.Positions.CountEntities()
+	glyphCount := s.world.Components.Glyph.CountEntities()
 	screenCapacity := config.GameWidth * config.GameHeight
-	density := s.calculateDensity(entityCount, screenCapacity)
+	density := s.calculateDensity(glyphCount, screenCapacity)
 	s.updateRateMultiplier(density)
+
+	// Check if spawn is due
+	dt := s.world.Resources.Time.DeltaTime
+	s.nextSpawnTimer -= dt
 
 	// Update metrics
 	s.statDensity.Set(density)
 	s.statRateMult.Set(s.rateMultiplier)
+	s.statNextSpawnMS.Store(s.nextSpawnTimer.Milliseconds())
 
-	// Check if spawn is due
-	if now.Before(s.nextSpawnTime) {
+	maybeNewSpawnTimer := s.calculateNextSpawn()
+
+	if s.nextSpawnTimer > 0 && maybeNewSpawnTimer > s.nextSpawnTimer {
 		return
 	}
+	s.nextSpawnTimer = maybeNewSpawnTimer
 
 	// Snapshot content at frame start to prevent mid-frame race
 	s.frameContent = s.world.Resources.Content.Provider.CurrentContent()
@@ -190,9 +175,6 @@ func (s *GlyphSystem) Update() {
 
 	// Generate and spawn a new sequence of glyphs
 	s.spawnGlyphs()
-
-	// Schedule next spawn
-	s.scheduleNextSpawn()
 }
 
 // calculateDensity returns entity density as fraction of screen capacity
@@ -215,14 +197,12 @@ func (s *GlyphSystem) updateRateMultiplier(density float64) {
 	}
 }
 
-// scheduleNextSpawn calculates and sets the next spawn time
-func (s *GlyphSystem) scheduleNextSpawn() {
-	now := s.world.Resources.Time.GameTime
+// calculateNextSpawn calculates and sets the next spawn time
+func (s *GlyphSystem) calculateNextSpawn() time.Duration {
 	baseDelay := time.Duration(constant.SpawnIntervalMs) * time.Millisecond
 	adjustedDelay := time.Duration(float64(baseDelay) / s.rateMultiplier)
 
-	s.lastSpawnTime = now
-	s.nextSpawnTime = now.Add(adjustedDelay)
+	return adjustedDelay
 }
 
 // getNextBlock retrieves the next logical code block
@@ -255,116 +235,62 @@ func (s *GlyphSystem) hasBracesInBlock(lines []string) bool {
 	return false
 }
 
-// runCensus iterates all glyph entities and counts types/levels
+// updateCensus iterates all glyph entities and counts types/levels
 // Called once per spawn check, O(n)
-func (s *GlyphSystem) runCensus() GlyphCensus {
-	var census GlyphCensus
-	var orphanGlyph, orphanTypeable int64
+func (s *GlyphSystem) updateCensus() {
+	s.initCensus()
+
+	var orphanGlyph int64
 
 	glyphEntities := s.world.Components.Glyph.AllEntities()
-	for _, entity := range glyphEntities {
-		if !s.world.Positions.HasEntity(entity) {
+	for _, glyphEntity := range glyphEntities {
+		if !s.world.Positions.HasPosition(glyphEntity) {
 			orphanGlyph++
 			continue
 		}
 
-		glyph, ok := s.world.Components.Glyph.GetComponent(entity)
+		glyphComp, ok := s.world.Components.Glyph.GetComponent(glyphEntity)
 		if !ok {
 			continue
 		}
 
-		// Only count Blue and Green (Red excluded from 6-color limit)
-		switch glyph.Type {
-		case component.GlyphBlue:
-			switch glyph.Level {
-			case component.GlyphBright:
-				census.BlueBright++
-			case component.GlyphNormal:
-				census.BlueNormal++
-			case component.GlyphDark:
-				census.BlueDark++
-			}
-		case component.GlyphGreen:
-			switch glyph.Level {
-			case component.GlyphBright:
-				census.GreenBright++
-			case component.GlyphNormal:
-				census.GreenNormal++
-			case component.GlyphDark:
-				census.GreenDark++
-			}
+		if glyphComp.Type != component.GlyphBlue && glyphComp.Type != component.GlyphGreen {
+			continue
 		}
-	}
+		key := GlyphKey{Type: glyphComp.Type, Level: glyphComp.Level}
+		s.census[key]++
 
-	typeableEntities := s.world.Components.Glyph.AllEntities()
-	for _, entity := range typeableEntities {
-		if !s.world.Positions.HasEntity(entity) {
-			orphanTypeable++
-		}
 	}
 
 	s.statOrphanGlyph.Store(orphanGlyph)
-	s.statOrphanTypeable.Store(orphanTypeable)
 
-	return census
 }
 
-// getAvailableColorsFromCensus returns color/level combinations not present on screen
-func (s *GlyphSystem) getAvailableGlyphsFromCensus(census GlyphCensus) []GlyphKey {
-	available := make([]GlyphKey, 0, 6)
-
-	if census.BlueBright == 0 {
-		available = append(available, GlyphKey{
-			Type: component.GlyphBlue, Level: component.GlyphBright,
-		})
+// nextGlyphToSpawn returns color/level combinations not present on screen
+func (s *GlyphSystem) nextGlyphToSpawn() GlyphKey {
+	minGlyphCount := -1
+	var minGlyphKey GlyphKey
+	for key, count := range s.census {
+		if minGlyphCount == -1 {
+			minGlyphCount = count
+			minGlyphKey = key
+		} else if count < minGlyphCount {
+			minGlyphCount = count
+		}
 	}
-	if census.BlueNormal == 0 {
-		available = append(available, GlyphKey{
-			Type: component.GlyphBlue, Level: component.GlyphNormal,
-		})
-	}
-	if census.BlueDark == 0 {
-		available = append(available, GlyphKey{
-			Type: component.GlyphBlue, Level: component.GlyphDark,
-		})
-	}
-	if census.GreenBright == 0 {
-		available = append(available, GlyphKey{
-			Type: component.GlyphGreen, Level: component.GlyphBright,
-		})
-	}
-	if census.GreenNormal == 0 {
-		available = append(available, GlyphKey{
-			Type: component.GlyphGreen, Level: component.GlyphNormal,
-		})
-	}
-	if census.GreenDark == 0 {
-		available = append(available, GlyphKey{
-			Type: component.GlyphGreen, Level: component.GlyphDark,
-		})
-	}
-
-	return available
+	return minGlyphKey
 }
 
 // spawnGlyphs generates and spawns a new glyph block from file
 func (s *GlyphSystem) spawnGlyphs() {
 	// Census for glyph counters
-	census := s.runCensus()
-	availableGlyphs := s.getAvailableGlyphsFromCensus(census)
-
-	if len(availableGlyphs) == 0 {
-		// All 6 type/level combinations are present, don't spawn
-		return
-	}
+	s.updateCensus()
+	glyphKey := s.nextGlyphToSpawn()
 
 	// Check if we have content (already snapshotted in Update)
 	if s.frameContent == nil || len(s.frameContent.Blocks) == 0 {
 		return
 	}
-
-	// Select random available glyph type/level
-	glyphKey := availableGlyphs[rand.Intn(len(availableGlyphs))]
 
 	// Get next logical code block
 	block := s.getNextBlock()
@@ -400,6 +326,7 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 	// Try up to MaxPlacementTries times to find a valid position
 	for attempt := 0; attempt < constant.MaxPlacementTries; attempt++ {
 		// Random row selection
+		// TODO: convert to fast rand
 		row := rand.Intn(config.GameHeight)
 
 		// Check if line fits and find available columns
@@ -417,10 +344,10 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 
 		startCol := rand.Intn(maxStartCol + 1)
 
-		// Check for overlaps using HasAnyEntity
+		// Check for overlaps
 		hasOverlap := false
 		for i := 0; i < lineLength; i++ {
-			if s.world.Positions.HasAnyEntity(startCol+i, row) {
+			if s.world.Positions.HasAnyEntityAt(startCol+i, row) {
 				hasOverlap = true
 				break
 			}
@@ -429,7 +356,7 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 		// Check if too close to cursor
 		cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 		if !ok {
-			panic(nil)
+			return false
 		}
 		for i := 0; i < lineLength; i++ {
 			col := startCol + i

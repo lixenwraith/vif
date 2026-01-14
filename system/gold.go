@@ -520,7 +520,7 @@ func (s *GoldSystem) findValidPosition(seqLength int) (int, int) {
 		// Check for overlaps with existing characters
 		overlaps := false
 		for i := 0; i < seqLength; i++ {
-			if s.world.Positions.HasAnyEntity(x+i, y) {
+			if s.world.Positions.HasAnyEntityAt(x+i, y) {
 				overlaps = true
 				break
 			}

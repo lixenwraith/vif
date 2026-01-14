@@ -169,7 +169,7 @@ func (s *DiagnosticsSystem) collectConsistencyChecks() {
 
 	// Glyph without Positions
 	for _, e := range s.world.Components.Glyph.AllEntities() {
-		if !s.world.Positions.HasEntity(e) {
+		if !s.world.Positions.HasPosition(e) {
 			orphanGlyph++
 		}
 	}
