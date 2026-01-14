@@ -117,18 +117,18 @@ func (s *EnergySystem) Update() {
 
 	// Clear energy blink after timeout
 	energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity)
-	if ok && energyComp.BlinkActive.Load() {
-		remaining := energyComp.BlinkRemaining.Load() - dt.Nanoseconds()
+	if ok && energyComp.BlinkActive {
+		remaining := energyComp.BlinkRemaining - dt
 		if remaining <= 0 {
 			remaining = 0
-			energyComp.BlinkActive.Store(false)
+			energyComp.BlinkActive = false
 		}
-		energyComp.BlinkRemaining.Store(remaining)
+		energyComp.BlinkRemaining = remaining
 		s.world.Components.Energy.SetComponent(cursorEntity, energyComp)
 	}
 
 	// Evaluate shield activation state
-	energy := energyComp.Current.Load()
+	energy := energyComp.Current
 	shield, ok := s.world.Components.Shield.GetComponent(cursorEntity)
 	if ok {
 		shieldActive := shield.Active
@@ -150,12 +150,12 @@ func (s *EnergySystem) addEnergy(delta int64, spend bool, convergent bool) {
 		return
 	}
 
-	currentEnergy := energyComp.Current.Load()
+	currentEnergy := energyComp.Current
 
 	// Fast path for typing (Direct modification, no clamps, raw delta)
 	// This is the most frequent operation and requires no defensive overhead
 	if !spend && !convergent {
-		energyComp.Current.Store(currentEnergy + delta)
+		energyComp.Current = currentEnergy + delta
 		s.world.Components.Energy.SetComponent(cursorEntity, energyComp)
 		return
 	}
@@ -196,7 +196,7 @@ func (s *EnergySystem) addEnergy(delta int64, spend bool, convergent bool) {
 		}
 	}
 
-	energyComp.Current.Store(newEnergy)
+	energyComp.Current = newEnergy
 	s.world.Components.Energy.SetComponent(cursorEntity, energyComp)
 }
 
@@ -207,7 +207,7 @@ func (s *EnergySystem) setEnergy(value int64) {
 	if !ok {
 		return
 	}
-	energyComp.Current.Store(value)
+	energyComp.Current = value
 	s.world.Components.Energy.SetComponent(cursorEntity, energyComp)
 }
 
@@ -217,8 +217,8 @@ func (s *EnergySystem) handleGlyphConsumed(glyphType component.GlyphType, _ comp
 
 	// Fetch current heat
 	var heat int
-	if hc, ok := s.world.Components.Heat.GetComponent(cursorEntity); ok {
-		heat = int(hc.Current.Load())
+	if heatComp, ok := s.world.Components.Heat.GetComponent(cursorEntity); ok {
+		heat = heatComp.Current
 	}
 
 	var delta int
@@ -237,16 +237,16 @@ func (s *EnergySystem) handleGlyphConsumed(glyphType component.GlyphType, _ comp
 }
 
 // startBlink activates blink state
-func (s *EnergySystem) startBlink(blinkType, blinkLevel uint32) {
+func (s *EnergySystem) startBlink(blinkType, blinkLevel int) {
 	cursorEntity := s.world.Resources.Cursor.Entity
 	energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity)
 	if !ok {
 		return
 	}
-	energyComp.BlinkActive.Store(true)
-	energyComp.BlinkType.Store(blinkType)
-	energyComp.BlinkLevel.Store(blinkLevel)
-	energyComp.BlinkRemaining.Store(constant.EnergyBlinkTimeout.Nanoseconds())
+	energyComp.BlinkActive = true
+	energyComp.BlinkType = blinkType
+	energyComp.BlinkLevel = blinkLevel
+	energyComp.BlinkRemaining = constant.EnergyBlinkTimeout
 	s.world.Components.Energy.SetComponent(cursorEntity, energyComp)
 }
 
@@ -257,17 +257,9 @@ func (s *EnergySystem) stopBlink() {
 	if !ok {
 		return
 	}
-	energyComp.BlinkActive.Store(false)
-	energyComp.BlinkRemaining.Store(0)
+	energyComp.BlinkActive = false
+	energyComp.BlinkRemaining = 0
 	s.world.Components.Energy.SetComponent(cursorEntity, energyComp)
-}
-
-// triggerEnergyBlink pushes blink event
-func (s *EnergySystem) triggerEnergyBlink(blinkType, blinkLevel uint32) {
-	s.world.PushEvent(event.EventEnergyBlinkStart, &event.EnergyBlinkPayload{
-		Type:  blinkType,
-		Level: blinkLevel,
-	})
 }
 
 // TODO: move this to typing system

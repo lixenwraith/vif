@@ -55,7 +55,7 @@ func (r *HeatMeterRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	// Calculate Fill Limit from HeatComponent
 	heat := 0
 	if hc, ok := r.gameCtx.World.Components.Heat.GetComponent(r.gameCtx.World.Resources.Cursor.Entity); ok {
-		heat = int(hc.Current.Load())
+		heat = hc.Current
 	}
 	fillWidth := (ctx.ScreenWidth * heat) / 100
 

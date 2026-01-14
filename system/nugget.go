@@ -152,7 +152,7 @@ func (s *NuggetSystem) handleJumpRequest() {
 		return
 	}
 
-	energy := energyComp.Current.Load()
+	energy := energyComp.Current
 	cost := int64(constant.NuggetJumpCost)
 	// Allow jump if magnitude is sufficient in either direction
 	if energy < cost && energy > -cost {
@@ -287,9 +287,9 @@ func (s *NuggetSystem) collectNugget() {
 	}
 
 	cursorEntity := s.world.Resources.Cursor.Entity
-	var currentHeat int64
+	var currentHeat int
 	if hc, ok := s.world.Components.Heat.GetComponent(cursorEntity); ok {
-		currentHeat = hc.Current.Load()
+		currentHeat = hc.Current
 	}
 
 	if currentHeat >= constant.MaxHeat {

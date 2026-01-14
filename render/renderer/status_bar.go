@@ -214,7 +214,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 	// Priority 2: Energy
 	energyComp, _ := r.gameCtx.World.Components.Energy.GetComponent(r.gameCtx.World.Resources.Cursor.Entity)
-	energyVal := energyComp.Current.Load()
+	energyVal := energyComp.Current
 	energyText := fmt.Sprintf(" Energy: %d ", energyVal)
 
 	// Base colors based on energy polarity
@@ -225,9 +225,9 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		energyFg, energyBg = render.RgbBlack, render.RgbEnergyBg // black fg, white bg
 	}
 
-	blinkRemaining := energyComp.BlinkRemaining.Load()
-	if energyComp.BlinkActive.Load() && blinkRemaining > 0 {
-		typeCode := energyComp.BlinkType.Load()
+	blinkRemaining := energyComp.BlinkRemaining
+	if energyComp.BlinkActive && blinkRemaining > 0 {
+		typeCode := energyComp.BlinkType
 		if typeCode == 0 {
 			// Error: red text, keep polarity background
 			energyFg = render.RgbCursorError
@@ -344,7 +344,6 @@ func phaseColor(index, total int64) render.RGB {
 		return render.RgbModeNormalBg
 	}
 	// Map to 40-220 range to skip dark red/purple extremes
-	// TODO: may be expensive
 	lutIdx := 40 + int((index*180)/(total-1))
 	if lutIdx > 220 {
 		lutIdx = 220

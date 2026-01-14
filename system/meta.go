@@ -124,11 +124,11 @@ func (s *MetaSystem) handleDebugRequest() {
 	playerCard := core.OverlayCard{Title: "PLAYER"}
 	energyComp, _ := s.world.Components.Energy.GetComponent(cursorEntity)
 	playerCard.Entries = append(playerCard.Entries, core.CardEntry{
-		Key: "Energy", Value: fmt.Sprintf("%d", energyComp.Current.Load()),
+		Key: "Energy", Value: fmt.Sprintf("%d", energyComp.Current),
 	})
 	if hc, ok := s.world.Components.Heat.GetComponent(cursorEntity); ok {
 		playerCard.Entries = append(playerCard.Entries, core.CardEntry{
-			Key: "Heat", Value: fmt.Sprintf("%d/%d", hc.Current.Load(), constant.MaxHeat),
+			Key: "Heat", Value: fmt.Sprintf("%d/%d", hc.Current, constant.MaxHeat),
 		})
 	}
 	if sc, ok := s.world.Components.Shield.GetComponent(cursorEntity); ok {

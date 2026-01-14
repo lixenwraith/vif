@@ -199,15 +199,6 @@ func (s *DrainSystem) removeCompletedSpawn(x, y int) {
 	}
 }
 
-// getHeat reads heat value from HeatComponent
-func (s *DrainSystem) getHeat() int {
-	cursorEntity := s.world.Resources.Cursor.Entity
-	if hc, ok := s.world.Components.Heat.GetComponent(cursorEntity); ok {
-		return int(hc.Current.Load())
-	}
-	return 0
-}
-
 // hasPendingSpawns returns true if materialize spawn queue is non-empty
 func (s *DrainSystem) hasPendingSpawns() bool {
 	return len(s.pendingSpawns) > 0
@@ -248,8 +239,13 @@ func (s *DrainSystem) queueDrainSpawn(targetX, targetY int, staggerIndex int) {
 // calcTargetDrainCount returns the desired number of drains based on current heat
 // Formula: floor(heat / 10), capped at DrainMaxCount
 func (s *DrainSystem) calcTargetDrainCount() int {
-	heat := s.getHeat()
-	count := heat / 10 // Integer division = floor
+	cursorEntity := s.world.Resources.Cursor.Entity
+	currentHeat := 0
+	if heatComp, ok := s.world.Components.Heat.GetComponent(cursorEntity); ok {
+		currentHeat = heatComp.Current
+	}
+
+	count := currentHeat / 10 // int div floor
 	if count > constant.DrainMaxCount {
 		count = constant.DrainMaxCount
 	}

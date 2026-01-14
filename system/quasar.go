@@ -152,7 +152,7 @@ func (s *QuasarSystem) Update() {
 	// Check heat for termination (heat=0 ends quasar phase)
 	cursorEntity := s.world.Resources.Cursor.Entity
 	if heatComp, ok := s.world.Components.Heat.GetComponent(cursorEntity); ok {
-		if heatComp.Current.Load() <= 0 {
+		if heatComp.Current <= 0 {
 			s.terminateQuasar()
 			return
 		}

@@ -192,7 +192,7 @@ func (s *GoldSystem) handleJumpRequest() {
 	// Cost check (must have enough "absolute" energy to pay cost)
 	// Logic mimics NuggetSystem: allow jump only if energy moves towards zero
 	// If currently at 0, no jump
-	energy := energyComp.Current.Load()
+	energy := energyComp.Current
 	cost := int64(constant.NuggetJumpCost)
 	if energy > -cost && energy < cost {
 		return

@@ -293,7 +293,7 @@ func (s *CleanerSystem) spawnCleaners() {
 	// Determine energy polarity once for entire batch
 	negativeEnergy := false
 	if energyComp, ok := s.world.Components.Energy.GetComponent(s.world.Resources.Cursor.Entity); ok {
-		negativeEnergy = energyComp.Current.Load() < 0
+		negativeEnergy = energyComp.Current < 0
 	}
 
 	gameWidthFixed := vmath.FromInt(config.GameWidth)
@@ -398,7 +398,7 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 	cursorEntity := s.world.Resources.Cursor.Entity
 	negativeEnergy := false
 	if energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity); ok {
-		negativeEnergy = energyComp.Current.Load() < 0
+		negativeEnergy = energyComp.Current < 0
 	}
 
 	if negativeEnergy {
@@ -536,7 +536,7 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 	// Determine energy polarity once for entire batch
 	negativeEnergy := false
 	if energyComp, ok := s.world.Components.Energy.GetComponent(s.world.Resources.Cursor.Entity); ok {
-		negativeEnergy = energyComp.Current.Load() < 0
+		negativeEnergy = energyComp.Current < 0
 	}
 
 	gameWidthFixed := vmath.FromInt(config.GameWidth)
@@ -609,7 +609,7 @@ func (s *CleanerSystem) scanTargetRows() []int {
 	targetType := component.GlyphRed
 	cursorEntity := s.world.Resources.Cursor.Entity
 	if energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity); ok {
-		if energyComp.Current.Load() < 0 {
+		if energyComp.Current < 0 {
 			targetType = component.GlyphBlue
 		}
 	}

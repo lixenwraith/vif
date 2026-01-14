@@ -164,7 +164,7 @@ func (s *TypingSystem) emitTypingFeedback(glyphType component.GlyphType, char ru
 	cursorPos, _ := s.world.Positions.GetPosition(s.world.Resources.Cursor.Entity)
 
 	var splashColor component.SplashColor
-	var blinkType uint32
+	var blinkType int
 
 	switch glyphType {
 	case component.GlyphBlue:
@@ -227,15 +227,6 @@ func (s *TypingSystem) moveCursorRight() {
 		cursorPos.X++
 		s.world.Positions.SetPosition(cursorEntity, cursorPos)
 	}
-}
-
-// getHeat reads current heat value from cursor's HeatComponent
-func (s *TypingSystem) getHeat() int {
-	cursorEntity := s.world.Resources.Cursor.Entity
-	if hc, ok := s.world.Components.Heat.GetComponent(cursorEntity); ok {
-		return int(hc.Current.Load())
-	}
-	return 0
 }
 
 // === HANDLER PATHS ===

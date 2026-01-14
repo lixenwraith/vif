@@ -84,8 +84,8 @@ type GlyphConsumedPayload struct {
 
 // EnergyBlinkPayload triggers visual blink state
 type EnergyBlinkPayload struct {
-	Type  uint32 `toml:"type"`  // 0=error, 1=blue, 2=green, 3=red, 4=gold
-	Level uint32 `toml:"level"` // 0=dark, 1=normal, 2=bright
+	Type  int `toml:"type"`  // 0=error, 1=blue, 2=green, 3=red, 4=gold
+	Level int `toml:"level"` // 0=dark, 1=normal, 2=bright
 }
 
 // HeatAddPayload contains heat delta

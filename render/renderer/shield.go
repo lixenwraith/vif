@@ -82,7 +82,7 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	r.frameColor = render.RgbCleanerBasePositive
 	r.framePalette = shield256Positive
 	if energyComp, ok := r.gameCtx.World.Components.Energy.GetComponent(r.gameCtx.World.Resources.Cursor.Entity); ok {
-		if energyComp.Current.Load() < 0 {
+		if energyComp.Current < 0 {
 			r.frameColor = render.RgbCleanerBaseNegative
 			r.framePalette = shield256Negative
 		}

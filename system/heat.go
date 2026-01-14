@@ -79,7 +79,7 @@ func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
 		}
 	case event.EventHeatSet:
 		if payload, ok := ev.Payload.(*event.HeatSetPayload); ok {
-			s.setHeat(int64(payload.Value))
+			s.setHeat(payload.Value)
 		}
 	}
 }
@@ -95,14 +95,14 @@ func (s *HeatSystem) addHeat(delta int) {
 	}
 
 	// CAS loop is unnecessary on a local copy
-	current := heatComp.Current.Load()
-	newVal := current + int64(delta)
+	current := heatComp.Current
+	newVal := current + delta
 
 	s.setHeat(newVal)
 }
 
 // setHeat stores absolute value with clamping and writes back to store
-func (s *HeatSystem) setHeat(value int64) {
+func (s *HeatSystem) setHeat(value int) {
 	cursorEntity := s.world.Resources.Cursor.Entity
 
 	heatComp, ok := s.world.Components.Heat.GetComponent(cursorEntity)
@@ -118,9 +118,9 @@ func (s *HeatSystem) setHeat(value int64) {
 		value = constant.MaxHeat
 	}
 
-	heatComp.Current.Store(value)
+	heatComp.Current = value
 
-	s.statCurrent.Store(value)
+	s.statCurrent.Store(int64(value))
 	s.statAtMax.Store(value >= constant.MaxHeat)
 
 	// Write the modified component copy back to the store
