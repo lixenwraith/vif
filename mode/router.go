@@ -47,16 +47,18 @@ func NewRouter(ctx *engine.GameContext, machine *input.Machine) *Router {
 		input.MotionLineStart:           MotionLineStart,
 		input.MotionLineEnd:             MotionLineEnd,
 		input.MotionFirstNonWS:          MotionFirstNonWS,
-		input.MotionScreenTop:           MotionScreenTop,
 		input.MotionScreenVerticalMid:   MotionScreenVerticalMid,
 		input.MotionScreenHorizontalMid: MotionScreenHorizontalMid,
-		input.MotionScreenBot:           MotionScreenBot,
-		input.MotionFileStart:           MotionFileStart,
-		input.MotionFileEnd:             MotionFileEnd,
+		input.MotionScreenTop:           MotionScreenTop,
+		input.MotionScreenBottom:        MotionScreenBottom,
 		input.MotionParaBack:            MotionParaBack,
 		input.MotionParaForward:         MotionParaForward,
 		input.MotionMatchBracket:        MotionMatchBracket,
 		input.MotionOrigin:              MotionOrigin,
+		input.MotionEnd:                 MotionEnd,
+		input.MotionCenter:              MotionCenter,
+		input.MotionHalfPageLeft:        MotionHalfPageLeft,
+		input.MotionHalfPageRight:       MotionHalfPageRight,
 		input.MotionHalfPageUp:          MotionHalfPageUp,
 		input.MotionHalfPageDown:        MotionHalfPageDown,
 		input.MotionColumnUp:            MotionColumnUp,
@@ -776,17 +778,21 @@ func motionOpToRune(op input.MotionOp) rune {
 		return '$'
 	case input.MotionFirstNonWS:
 		return '^'
-	case input.MotionScreenTop:
-		return 'H'
 	case input.MotionScreenVerticalMid:
 		return 'M'
 	case input.MotionScreenHorizontalMid:
 		return 'm'
-	case input.MotionScreenBot:
+	case input.MotionHalfPageLeft:
+		return 'H'
+	case input.MotionHalfPageRight:
 		return 'L'
-	case input.MotionFileStart:
+	case input.MotionHalfPageDown:
+		return 'J'
+	case input.MotionHalfPageUp:
+		return 'K'
+	case input.MotionScreenTop:
 		return 'g'
-	case input.MotionFileEnd:
+	case input.MotionScreenBottom:
 		return 'G'
 	case input.MotionParaBack:
 		return '{'

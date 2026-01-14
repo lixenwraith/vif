@@ -77,6 +77,10 @@ func DefaultKeyTable() *KeyTable {
 			'k': {BehaviorMotion, MotionUp, SpecialNone, ModeTargetNone, IntentNone},
 			'l': {BehaviorMotion, MotionRight, SpecialNone, ModeTargetNone, IntentNone},
 			' ': {BehaviorMotion, MotionRight, SpecialNone, ModeTargetNone, IntentNone},
+			'H': {BehaviorMotion, MotionHalfPageLeft, SpecialNone, ModeTargetNone, IntentNone},
+			'J': {BehaviorMotion, MotionHalfPageDown, SpecialNone, ModeTargetNone, IntentNone},
+			'K': {BehaviorMotion, MotionHalfPageUp, SpecialNone, ModeTargetNone, IntentNone},
+			'L': {BehaviorMotion, MotionHalfPageRight, SpecialNone, ModeTargetNone, IntentNone},
 
 			// Append
 			'a': {BehaviorAction, MotionNone, SpecialNone, ModeTargetNone, IntentAppend},
@@ -99,11 +103,9 @@ func DefaultKeyTable() *KeyTable {
 			']': {BehaviorMotion, MotionColumnDown, SpecialNone, ModeTargetNone, IntentNone},
 
 			// Screen motions
-			'H': {BehaviorMotion, MotionScreenTop, SpecialNone, ModeTargetNone, IntentNone},
 			'M': {BehaviorMotion, MotionScreenVerticalMid, SpecialNone, ModeTargetNone, IntentNone},
 			'm': {BehaviorMotion, MotionScreenHorizontalMid, SpecialNone, ModeTargetNone, IntentNone},
-			'L': {BehaviorMotion, MotionScreenBot, SpecialNone, ModeTargetNone, IntentNone},
-			'G': {BehaviorMotion, MotionFileEnd, SpecialNone, ModeTargetNone, IntentNone},
+			'G': {BehaviorMotion, MotionScreenBottom, SpecialNone, ModeTargetNone, IntentNone},
 
 			// Paragraph motions
 			'{': {BehaviorMotion, MotionParaBack, SpecialNone, ModeTargetNone, IntentNone},
@@ -152,7 +154,7 @@ func DefaultKeyTable() *KeyTable {
 			'0': {BehaviorMotion, MotionLineStart, SpecialNone, ModeTargetNone, IntentNone},
 			'^': {BehaviorMotion, MotionFirstNonWS, SpecialNone, ModeTargetNone, IntentNone},
 			'$': {BehaviorMotion, MotionLineEnd, SpecialNone, ModeTargetNone, IntentNone},
-			'G': {BehaviorMotion, MotionFileEnd, SpecialNone, ModeTargetNone, IntentNone},
+			'G': {BehaviorMotion, MotionScreenBottom, SpecialNone, ModeTargetNone, IntentNone},
 			'{': {BehaviorMotion, MotionParaBack, SpecialNone, ModeTargetNone, IntentNone},
 			'}': {BehaviorMotion, MotionParaForward, SpecialNone, ModeTargetNone, IntentNone},
 			'%': {BehaviorMotion, MotionMatchBracket, SpecialNone, ModeTargetNone, IntentNone},
@@ -160,6 +162,10 @@ func DefaultKeyTable() *KeyTable {
 			'j': {BehaviorMotion, MotionDown, SpecialNone, ModeTargetNone, IntentNone},
 			'k': {BehaviorMotion, MotionUp, SpecialNone, ModeTargetNone, IntentNone},
 			'l': {BehaviorMotion, MotionRight, SpecialNone, ModeTargetNone, IntentNone},
+			'H': {BehaviorMotion, MotionHalfPageLeft, SpecialNone, ModeTargetNone, IntentNone},
+			'J': {BehaviorMotion, MotionHalfPageDown, SpecialNone, ModeTargetNone, IntentNone},
+			'K': {BehaviorMotion, MotionHalfPageUp, SpecialNone, ModeTargetNone, IntentNone},
+			'L': {BehaviorMotion, MotionHalfPageRight, SpecialNone, ModeTargetNone, IntentNone},
 			' ': {BehaviorMotion, MotionRight, SpecialNone, ModeTargetNone, IntentNone},
 			'f': {BehaviorCharWait, MotionFindForward, SpecialNone, ModeTargetNone, IntentNone},
 			'F': {BehaviorCharWait, MotionFindBack, SpecialNone, ModeTargetNone, IntentNone},
@@ -169,8 +175,10 @@ func DefaultKeyTable() *KeyTable {
 		},
 
 		PrefixG: map[rune]KeyEntry{
-			'g': {BehaviorMotion, MotionFileStart, SpecialNone, ModeTargetNone, IntentNone},
+			'g': {BehaviorMotion, MotionScreenTop, SpecialNone, ModeTargetNone, IntentNone},
 			'o': {BehaviorMotion, MotionOrigin, SpecialNone, ModeTargetNone, IntentNone},
+			'$': {BehaviorMotion, MotionEnd, SpecialNone, ModeTargetNone, IntentNone},
+			'm': {BehaviorMotion, MotionCenter, SpecialNone, ModeTargetNone, IntentNone},
 			'k': {BehaviorMotion, MotionColumnUp, SpecialNone, ModeTargetNone, IntentNone},
 			'j': {BehaviorMotion, MotionColumnDown, SpecialNone, ModeTargetNone, IntentNone},
 		},

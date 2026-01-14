@@ -287,16 +287,6 @@ func MotionLineEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
 	}
 }
 
-// MotionScreenTop implements 'H' motion
-func MotionScreenTop(ctx *engine.GameContext, x, y, count int) MotionResult {
-	return MotionResult{
-		StartX: x, StartY: y,
-		EndX: x, EndY: 0,
-		Type: RangeChar, Style: StyleInclusive,
-		Valid: y != 0,
-	}
-}
-
 // MotionScreenVerticalMid implements 'M' motion
 func MotionScreenVerticalMid(ctx *engine.GameContext, x, y, count int) MotionResult {
 	midY := ctx.World.Resources.Config.GameHeight / 2
@@ -316,17 +306,6 @@ func MotionScreenHorizontalMid(ctx *engine.GameContext, x, y, count int) MotionR
 		EndX: midX, EndY: y,
 		Type: RangeChar, Style: StyleInclusive,
 		Valid: x != midX,
-	}
-}
-
-// MotionScreenBot implements 'L' motion
-func MotionScreenBot(ctx *engine.GameContext, x, y, count int) MotionResult {
-	botY := ctx.World.Resources.Config.GameHeight - 1
-	return MotionResult{
-		StartX: x, StartY: y,
-		EndX: x, EndY: botY,
-		Type: RangeChar, Style: StyleInclusive,
-		Valid: y != botY,
 	}
 }
 
@@ -385,8 +364,8 @@ func MotionMatchBracket(ctx *engine.GameContext, x, y, count int) MotionResult {
 	}
 }
 
-// MotionFileEnd implements 'G' motion
-func MotionFileEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
+// MotionScreenBottom implements 'G' motion
+func MotionScreenBottom(ctx *engine.GameContext, x, y, count int) MotionResult {
 	endY := ctx.World.Resources.Config.GameHeight - 1
 	return MotionResult{
 		StartX: x, StartY: y,
@@ -396,13 +375,37 @@ func MotionFileEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
 	}
 }
 
-// MotionFileStart implements 'gg' motion
-func MotionFileStart(ctx *engine.GameContext, x, y, count int) MotionResult {
+// MotionScreenTop implements 'gg' motion
+func MotionScreenTop(ctx *engine.GameContext, x, y, count int) MotionResult {
 	return MotionResult{
 		StartX: x, StartY: y,
 		EndX: x, EndY: 0,
 		Type: RangeLine, Style: StyleInclusive,
 		Valid: y != 0,
+	}
+}
+
+// MotionEnd implements 'g$' motion (GameWidth-1,GameHeight-1)
+func MotionEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
+	rightX := ctx.World.Resources.Config.GameWidth - 1
+	botY := ctx.World.Resources.Config.GameHeight - 1
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: rightX, EndY: botY,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: x != rightX || y != botY,
+	}
+}
+
+// MotionCenter implements 'gm' motion (GameWidth/2,GameHeight/2)
+func MotionCenter(ctx *engine.GameContext, x, y, count int) MotionResult {
+	midX := ctx.World.Resources.Config.GameWidth / 2
+	midY := ctx.World.Resources.Config.GameHeight / 2
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: midX, EndY: midY,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: x != midX || y != midY,
 	}
 }
 
@@ -617,7 +620,37 @@ func MotionTillBack(ctx *engine.GameContext, x, y, count int, char rune) MotionR
 	}
 }
 
-// MotionHalfPageUp implements PgUp motion
+// MotionHalfPageLeft implements 'H' motion
+func MotionHalfPageLeft(ctx *engine.GameContext, x, y, count int) MotionResult {
+	halfWidth := ctx.World.Resources.Config.GameWidth / 2
+	endX := x - (halfWidth * count)
+	if endX < 0 {
+		endX = 0
+	}
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: endX, EndY: y,
+		Type: RangeLine, Style: StyleInclusive,
+		Valid: endX != x,
+	}
+}
+
+// MotionHalfPageRight implements 'L' motion
+func MotionHalfPageRight(ctx *engine.GameContext, x, y, count int) MotionResult {
+	halfWidth := ctx.World.Resources.Config.GameWidth / 2
+	endX := x + (halfWidth * count)
+	if endX >= ctx.World.Resources.Config.GameWidth {
+		endX = ctx.World.Resources.Config.GameWidth - 1
+	}
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: endX, EndY: y,
+		Type: RangeLine, Style: StyleInclusive,
+		Valid: endX != x,
+	}
+}
+
+// MotionHalfPageUp implements 'K' and PgUp motion
 func MotionHalfPageUp(ctx *engine.GameContext, x, y, count int) MotionResult {
 	halfHeight := ctx.World.Resources.Config.GameHeight / 2
 	endY := y - (halfHeight * count)
@@ -632,7 +665,7 @@ func MotionHalfPageUp(ctx *engine.GameContext, x, y, count int) MotionResult {
 	}
 }
 
-// MotionHalfPageDown implements PgDown motion
+// MotionHalfPageDown implements 'J' and PgDown motion
 func MotionHalfPageDown(ctx *engine.GameContext, x, y, count int) MotionResult {
 	halfHeight := ctx.World.Resources.Config.GameHeight / 2
 	endY := y + (halfHeight * count)

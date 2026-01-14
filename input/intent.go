@@ -67,22 +67,24 @@ const (
 	MotionLineStart                    // 0, Home
 	MotionLineEnd                      // $, End
 	MotionFirstNonWS                   // ^
-	MotionScreenTop                    // H
 	MotionScreenVerticalMid            // M
 	MotionScreenHorizontalMid          // m
-	MotionScreenBot                    // L
-	MotionFileStart                    // gg
-	MotionFileEnd                      // G
+	MotionScreenTop                    // gg
+	MotionScreenBottom                 // G
 	MotionParaBack                     // {
 	MotionParaForward                  // }
 	MotionMatchBracket                 // %
 	MotionOrigin                       // go
+	MotionEnd                          // g$
+	MotionCenter                       // gm
 	MotionFindForward                  // f + char
 	MotionFindBack                     // F + char
 	MotionTillForward                  // t + char
 	MotionTillBack                     // T + char
-	MotionHalfPageUp                   // PgUp
-	MotionHalfPageDown                 // PgDown
+	MotionHalfPageLeft                 // H
+	MotionHalfPageRight                // L
+	MotionHalfPageUp                   // K, PgUp
+	MotionHalfPageDown                 // J, PgDown
 	MotionColumnUp                     // [ or gk
 	MotionColumnDown                   // ] or gj
 )
