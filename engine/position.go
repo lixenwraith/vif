@@ -110,8 +110,8 @@ func (p *Position) GetAllEntityAt(x, y int) []core.Entity {
 	return result
 }
 
-// GetAllEntityAtInto copies entities into a caller-provided buffer and returns number of entities copied, Zero-alloc if buf is on stack
-func (p *Position) GetAllEntityAtInto(x, y int, buf []core.Entity) int {
+// GetAllEntitiesAtInto copies entities into a caller-provided buffer and returns number of entities copied, Zero-alloc if buf is on stack
+func (p *Position) GetAllEntitiesAtInto(x, y int, buf []core.Entity) int {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 

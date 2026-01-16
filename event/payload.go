@@ -64,16 +64,23 @@ var CharacterTypedPayloadPool = sync.Pool{
 	New: func() any { return &CharacterTypedPayload{} },
 }
 
-// EnergyAddPayload contains energy delta
-type EnergyAddPayload struct {
+// EnergyAddAmountPayload contains energy delta
+type EnergyAddAmountPayload struct {
 	Delta      int  `toml:"delta"`
 	Spend      bool `toml:"spend"`      // True: bypasses boost protection
 	Convergent bool `toml:"convergent"` // True: clamp at zero, cannot cross
 }
 
-// EnergySetPayload contains energy value
-type EnergySetPayload struct {
+// EnergySetAmountPayload contains energy value
+type EnergySetAmountPayload struct {
 	Value int `toml:"value"`
+}
+
+// EnergyAddPercentPayload contains energy delta
+type EnergyAddPercentPayload struct {
+	DeltaPercent int  `toml:"delta_percent"`
+	Spend        bool `toml:"spend"`      // True: bypasses boost protection
+	Convergent   bool `toml:"convergent"` // True: clamp at zero, cannot cross
 }
 
 // GlyphConsumedPayload contains glyph data for centralized energy calculation

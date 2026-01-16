@@ -6,6 +6,8 @@ import "time"
 const (
 	// MaxHeat is the maximum value for the heat meter (100%)
 	MaxHeat = 100
+
+	TypingErrorHeatPenalty = 10
 )
 
 // Energy System
@@ -45,6 +47,9 @@ const (
 
 	// GoldSequenceLength is the number of characters in the gold sequence
 	GoldSequenceLength = 10
+
+	// GoldJumpCost is the energy cost to jump to gold
+	GoldJumpCost = 1000
 )
 
 // Nugget System
@@ -103,8 +108,8 @@ const (
 
 // Shield Defense Costs
 const (
-	// ShieldPassiveDrainAmount is energy cost per second while shield is active
-	ShieldPassiveDrainAmount = 1
+	// ShieldPassiveEnergyPercentDrain is the energy percentage of total per second while shield is active
+	ShieldPassiveEnergyPercentDrain = 1
 
 	// ShieldPassiveDrainInterval is the interval for passive shield drain
 	ShieldPassiveDrainInterval = 1 * time.Second

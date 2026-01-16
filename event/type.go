@@ -145,15 +145,25 @@ const (
 	// Consumer: SplashSystem | Payload: *SplashTimerCancelPayload
 	EventSplashTimerCancel
 
-	// EventEnergyAdd signals energy delta on target entity
+	// EventEnergyAddAmount signals energy delta on target entity
 	// Trigger: Character typed, shield drain, nugget jump
-	// Consumer: EnergySystem | Payload: *EnergyAddPayload
-	EventEnergyAdd
+	// Consumer: EnergySystem | Payload: *EnergyAddAmountPayload
+	EventEnergyAddAmount
 
-	// EventEnergySet signals setting energy to specific value
+	// EventEnergySetAmount signals setting energy to specific value
 	// Trigger: Game reset, cheats
-	// Consumer: EnergySystem | Payload: *EnergySetPayload
-	EventEnergySet
+	// Consumer: EnergySystem | Payload: *EnergySetAmountPayload
+	EventEnergySetAmount
+
+	// EventEnergyAddPercent signals energy delta percentage on target entity
+	// Trigger: Shield passive drain
+	// Consumer: EnergySystem | Payload: *EnergyAddAmountPayload
+	EventEnergyAddPercent
+
+	// EventEnergyCrossedZero signals energy crossing zero
+	// Trigger: EnergySystem
+	// Consumer: BuffSystem | Payload: nil
+	EventEnergyCrossedZero
 
 	// EventEnergyGlyphConsumed signals glyph destruction for energy calculation
 	// Trigger: TypingSystem (correct character), DustSystem (shield collision)
@@ -411,5 +421,4 @@ const (
 type GameEvent struct {
 	Type    EventType
 	Payload any
-	Frame   int64 // For deduplication
 }

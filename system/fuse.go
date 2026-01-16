@@ -185,7 +185,7 @@ func (s *FuseSystem) destroyAllDrains() {
 	}
 
 	// Batch silent death (no effect event)
-	event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, drains, s.world.Resources.Time.FrameNumber)
+	event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, drains)
 }
 
 // clampSpawnPosition ensures the Quasar fits within bounds given a target center
@@ -284,7 +284,7 @@ func (s *FuseSystem) clearSpawnArea(anchorX, anchorY int) {
 	}
 
 	if len(toDestroy) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, toDestroy, s.world.Resources.Time.FrameNumber)
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, toDestroy)
 	}
 }
 

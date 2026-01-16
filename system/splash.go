@@ -262,7 +262,7 @@ func (s *SplashSystem) validateMagnifier(splashEntity core.Entity, splash *compo
 
 	// Zero-allocation lookup
 	var buf [constant.MaxEntitiesPerCell]core.Entity
-	count := s.world.Positions.GetAllEntityAtInto(cursorPos.X, cursorPos.Y, buf[:])
+	count := s.world.Positions.GetAllEntitiesAtInto(cursorPos.X, cursorPos.Y, buf[:])
 
 	var glyphEntity core.Entity
 
@@ -499,7 +499,7 @@ func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 
 	// Zero-allocation lookup of glyph under cursor
 	var buf [constant.MaxEntitiesPerCell]core.Entity
-	count := s.world.Positions.GetAllEntityAtInto(cursorX, cursorY, buf[:])
+	count := s.world.Positions.GetAllEntitiesAtInto(cursorX, cursorY, buf[:])
 
 	var entity core.Entity
 

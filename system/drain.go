@@ -445,7 +445,7 @@ func (s *DrainSystem) despawnExcessDrains(count int) {
 	}
 
 	for i := 0; i < toRemove; i++ {
-		event.EmitDeathOne(s.world.Resources.Event.Queue, ordered[i], event.EventFlashRequest, s.world.Resources.Time.FrameNumber)
+		event.EmitDeathOne(s.world.Resources.Event.Queue, ordered[i], event.EventFlashRequest)
 	}
 }
 
@@ -615,7 +615,7 @@ func (s *DrainSystem) handleDrainInteractions() {
 			s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{
 				Delta: -constant.DrainHeatReductionAmount,
 			})
-			event.EmitDeathOne(s.world.Resources.Event.Queue, drainEntity, event.EventFlashRequest, s.world.Resources.Time.FrameNumber)
+			event.EmitDeathOne(s.world.Resources.Event.Queue, drainEntity, event.EventFlashRequest)
 		}
 	}
 
@@ -660,7 +660,7 @@ func (s *DrainSystem) handleDrainDrainCollisions() {
 	for _, entities := range drainPositions {
 		if len(entities) > 1 {
 			for _, e := range entities {
-				event.EmitDeathOne(s.world.Resources.Event.Queue, e, event.EventFlashRequest, s.world.Resources.Time.FrameNumber)
+				event.EmitDeathOne(s.world.Resources.Event.Queue, e, event.EventFlashRequest)
 			}
 		}
 	}
@@ -761,7 +761,7 @@ func (s *DrainSystem) updateDrainMovement() {
 				return true
 			}
 
-			count := s.world.Positions.GetAllEntityAtInto(x, y, collisionBuf[:])
+			count := s.world.Positions.GetAllEntitiesAtInto(x, y, collisionBuf[:])
 			for i := 0; i < count; i++ {
 				target := collisionBuf[i]
 				if target == 0 || target == drainEntity || target == cursorEntity {

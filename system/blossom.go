@@ -207,7 +207,7 @@ func (s *BlossomSystem) updateBlossomEntities() {
 			}
 
 			// Query entities at position using zero-alloc buffer
-			n := s.world.Positions.GetAllEntityAtInto(x, y, collisionBuf[:])
+			n := s.world.Positions.GetAllEntitiesAtInto(x, y, collisionBuf[:])
 
 			for i := 0; i < n && !destroyBlossom; i++ {
 				target := collisionBuf[i]

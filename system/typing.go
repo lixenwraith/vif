@@ -60,6 +60,7 @@ func (s *TypingSystem) Update() {
 func (s *TypingSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventCharacterTyped,
+		event.EventDeleteRequest,
 		event.EventGameReset,
 	}
 }
@@ -82,6 +83,11 @@ func (s *TypingSystem) HandleEvent(ev event.GameEvent) {
 		}
 		s.handleTyping(payload.X, payload.Y, payload.Char)
 		event.CharacterTypedPayloadPool.Put(payload)
+
+	case event.EventDeleteRequest:
+		if payload, ok := ev.Payload.(*event.DeleteRequestPayload); ok {
+			s.handleDeleteRequest(payload)
+		}
 	}
 }
 
@@ -89,7 +95,7 @@ func (s *TypingSystem) HandleEvent(ev event.GameEvent) {
 func (s *TypingSystem) handleTyping(cursorX, cursorY int, typedRune rune) {
 	// Stack-allocated buffer for zero-allocation lookup
 	var buf [constant.MaxEntitiesPerCell]core.Entity
-	count := s.world.Positions.GetAllEntityAtInto(cursorX, cursorY, buf[:])
+	count := s.world.Positions.GetAllEntitiesAtInto(cursorX, cursorY, buf[:])
 
 	var entity core.Entity
 
@@ -206,8 +212,8 @@ func (s *TypingSystem) emitTypingError() {
 		s.world.Components.Cursor.SetComponent(cursorEntity, cursor)
 	}
 
-	// Reset heat and boost
-	s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: -10})
+	// Reset boost and apply heat penalty
+	s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: -constant.TypingErrorHeatPenalty})
 	s.world.PushEvent(event.EventBoostDeactivate, nil)
 	s.world.PushEvent(event.EventEnergyBlinkStart, &event.EnergyBlinkPayload{Type: 0, Level: 0})
 
@@ -309,7 +315,7 @@ func (s *TypingSystem) handleGlyph(entity core.Entity, glyph component.GlyphComp
 	}
 
 	// Silent Death
-	event.EmitDeathOne(s.world.Resources.Event.Queue, entity, 0, s.world.Resources.Time.FrameNumber)
+	event.EmitDeathOne(s.world.Resources.Event.Queue, entity, 0)
 
 	// Splash typing feedback
 	s.emitTypingFeedback(glyph.Type, typedRune)
@@ -429,4 +435,84 @@ func (s *TypingSystem) validateBossOrder(entity core.Entity, header *component.H
 	}
 
 	return leftmost == entity
+}
+
+// handleDeleteRequest processes deletion of entities in a range
+func (s *TypingSystem) handleDeleteRequest(payload *event.DeleteRequestPayload) {
+	config := s.world.Resources.Config
+
+	entitiesToDelete := make([]core.Entity, 0)
+
+	// Helper to check and mark entity for deletion
+	checkEntity := func(entity core.Entity) {
+		if !s.world.Components.Glyph.HasEntity(entity) {
+			return
+		}
+
+		// Check protection
+		if prot, ok := s.world.Components.Protection.GetComponent(entity); ok {
+			if prot.Mask.Has(component.ProtectFromDelete) || prot.Mask == component.ProtectAll {
+				return
+			}
+		}
+
+		entitiesToDelete = append(entitiesToDelete, entity)
+	}
+
+	cellEntitiesBuf := make([]core.Entity, constant.MaxEntitiesPerCell)
+
+	if payload.RangeType == event.DeleteRangeLine {
+		// Line deletion (inclusive rows)
+		startY, endY := payload.StartY, payload.EndY
+		// Ensure normalized order
+		if startY > endY {
+			startY, endY = endY, startY
+		}
+
+		// Query all glyphs to find those in the row range
+		entities := s.world.Components.Glyph.AllEntities()
+		for _, entity := range entities {
+			pos, _ := s.world.Positions.GetPosition(entity)
+			if pos.Y >= startY && pos.Y <= endY {
+				checkEntity(entity)
+			}
+		}
+
+	} else {
+		// Char deletion (can span multiple lines)
+		p1x, p1y := payload.StartX, payload.StartY
+		p2x, p2y := payload.EndX, payload.EndY
+
+		// Normalize: P1 should be textually before P2
+		if p1y > p2y || (p1y == p2y && p1x > p2x) {
+			p1x, p1y, p2x, p2y = p2x, p2y, p1x, p1y
+		}
+
+		// Iterate through all rows involved
+		for y := p1y; y <= p2y; y++ {
+			// Determine X bounds for this row
+			minX := 0
+			maxX := config.GameWidth - 1
+
+			if y == p1y {
+				minX = p1x
+			}
+			if y == p2y {
+				maxX = p2x
+			}
+
+			// Optimization: Get entities by cell for the range on this row
+			for x := minX; x <= maxX; x++ {
+				s.world.Positions.GetAllEntitiesAtInto(x, y, cellEntitiesBuf)
+				for _, entity := range cellEntitiesBuf {
+					checkEntity(entity)
+				}
+			}
+		}
+	}
+
+	// Batch deletion via DeathSystem (silent)
+	if len(entitiesToDelete) > 0 {
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, entitiesToDelete)
+	}
 }

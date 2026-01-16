@@ -183,22 +183,7 @@ func (s *GoldSystem) handleJumpRequest() {
 
 	cursorEntity := s.world.Resources.Cursor.Entity
 
-	// 1. Check Energy from component
-	energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity)
-	if !ok {
-		return
-	}
-
-	// Cost check (must have enough "absolute" energy to pay cost)
-	// Logic mimics NuggetSystem: allow jump only if energy moves towards zero
-	// If currently at 0, no jump
-	energy := energyComp.Current
-	cost := int64(constant.NuggetJumpCost)
-	if energy > -cost && energy < cost {
-		return
-	}
-
-	// 2. Find target position (First living member)
+	// 1. Find target position (First living member)
 	header, ok := s.world.Components.Header.GetComponent(s.headerEntity)
 	if !ok {
 		return
@@ -222,20 +207,27 @@ func (s *GoldSystem) handleJumpRequest() {
 		return
 	}
 
-	// 3. Move Cursor
+	// 2. Move Cursor
 	s.world.Positions.SetPosition(cursorEntity, component.PositionComponent{
 		X: targetPos.X,
 		Y: targetPos.Y,
 	})
 
-	// 4. Pay Energy Cost (Convergent Spend)
-	s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{
-		Delta:      -constant.NuggetJumpCost,
-		Spend:      true,
-		Convergent: true,
+	s.world.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{
+		X: targetPos.X,
+		Y: targetPos.Y,
 	})
 
-	// 5. Play Sound
+	// 3. Pay Energy Cost (spend, non-convergent)
+	s.world.PushEvent(event.EventEnergyAddAmount, &event.EnergyAddAmountPayload{
+		Delta: -constant.GoldJumpCost,
+		Spend: true,
+		// TODO: remove after gameplay test
+		// Convergent: true,
+		Convergent: false,
+	})
+
+	// 4. Play Sound
 	if s.world.Resources.Audio != nil {
 		s.world.Resources.Audio.Player.Play(core.SoundBell)
 	}
@@ -473,7 +465,7 @@ func (s *GoldSystem) destroyComposite(headerEntity core.Entity) {
 	}
 
 	if len(toDestroy) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, toDestroy, s.world.Resources.Time.FrameNumber)
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, toDestroy)
 	}
 
 	// Remove protection and destroy phantom head

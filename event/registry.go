@@ -105,8 +105,10 @@ func InitRegistry() {
 	RegisterType("EventSplashTimerCancel", EventSplashTimerCancel, &SplashTimerCancelPayload{})
 
 	// Energy
-	RegisterType("EventEnergyAdd", EventEnergyAdd, &EnergyAddPayload{})
-	RegisterType("EventEnergySet", EventEnergySet, &EnergySetPayload{})
+	RegisterType("EventEnergyAddAmount", EventEnergyAddAmount, &EnergyAddAmountPayload{})
+	RegisterType("EventEnergySetAmount", EventEnergySetAmount, &EnergySetAmountPayload{})
+	RegisterType("EventEnergyAddPercent", EventEnergyAddPercent, &EnergyAddPercentPayload{})
+	RegisterType("EventEnergyCrossedZero", EventEnergyCrossedZero, nil)
 	RegisterType("EventEnergyGlyphConsumed", EventEnergyGlyphConsumed, &GlyphConsumedPayload{})
 	RegisterType("EventEnergyBlinkStart", EventEnergyBlinkStart, &EnergyBlinkPayload{})
 	RegisterType("EventEnergyBlinkStop", EventEnergyBlinkStop, nil)

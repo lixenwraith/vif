@@ -94,7 +94,7 @@ func (s *HeatSystem) addHeat(delta int) {
 		return
 	}
 
-	// CAS loop is unnecessary on a local copy
+	// Update heat and clamp to bounds
 	current := heatComp.Current
 	newVal := current + delta
 

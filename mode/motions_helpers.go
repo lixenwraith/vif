@@ -295,7 +295,7 @@ func findLineEnd(ctx *engine.GameContext, cursorY int) int {
 	// Scan from right to left
 	for x := ctx.World.Resources.Config.GameWidth - 1; x >= 0; x-- {
 		// Zero-alloc query
-		count := ctx.World.Positions.GetAllEntityAtInto(x, cursorY, buf[:])
+		count := ctx.World.Positions.GetAllEntitiesAtInto(x, cursorY, buf[:])
 
 		// Check entities at this cell
 		for i := 0; i < count; i++ {
@@ -333,7 +333,7 @@ func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
 		rowEmpty := true
 		// Scan row; stop early if any interactable entity is found
 		for x := 0; x < ctx.World.Resources.Config.GameWidth && rowEmpty; x++ {
-			count := ctx.World.Positions.GetAllEntityAtInto(x, y, buf[:])
+			count := ctx.World.Positions.GetAllEntitiesAtInto(x, y, buf[:])
 			for i := 0; i < count; i++ {
 				if buf[i] != 0 && glyphStore.HasEntity(buf[i]) {
 					rowEmpty = false
@@ -359,7 +359,7 @@ func findNextEmptyLine(ctx *engine.GameContext, cursorY int) int {
 		rowEmpty := true
 		// Scan row; stop early if any interactable entity is found
 		for x := 0; x < ctx.World.Resources.Config.GameWidth && rowEmpty; x++ {
-			count := ctx.World.Positions.GetAllEntityAtInto(x, y, buf[:])
+			count := ctx.World.Positions.GetAllEntitiesAtInto(x, y, buf[:])
 			for i := 0; i < count; i++ {
 				if buf[i] != 0 && glyphStore.HasEntity(buf[i]) {
 					rowEmpty = false
@@ -579,7 +579,7 @@ func findLineEndInBand(ctx *engine.GameContext, bounds engine.PingBounds) int {
 
 	for y := bounds.MinY; y <= bounds.MaxY; y++ {
 		for x := ctx.World.Resources.Config.GameWidth - 1; x >= 0; x-- {
-			count := ctx.World.Positions.GetAllEntityAtInto(x, y, buf[:])
+			count := ctx.World.Positions.GetAllEntitiesAtInto(x, y, buf[:])
 			for i := 0; i < count; i++ {
 				if buf[i] != 0 && glyphStore.HasEntity(buf[i]) {
 					if x > rightmost {

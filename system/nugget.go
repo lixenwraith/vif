@@ -16,7 +16,6 @@ import (
 type NuggetSystem struct {
 	world *engine.World
 
-	nuggetID           atomic.Int32
 	lastSpawnAttempt   time.Time
 	activeNuggetEntity core.Entity
 
@@ -45,7 +44,6 @@ func NewNuggetSystem(world *engine.World) engine.System {
 
 // Init resets session state for new game
 func (s *NuggetSystem) Init() {
-	s.nuggetID.Store(0)
 	s.lastSpawnAttempt = time.Time{}
 	s.activeNuggetEntity = 0
 	s.statActive.Store(false)
@@ -121,7 +119,7 @@ func (s *NuggetSystem) Update() {
 		cursorPos, cursorOk := s.world.Positions.GetPosition(cursorEntity)
 		nuggetPos, nuggetOk := s.world.Positions.GetPosition(s.activeNuggetEntity)
 		if cursorOk && nuggetOk && cursorPos.X == nuggetPos.X && cursorPos.Y == nuggetPos.Y {
-			s.collectNugget()
+			s.collectNugget(nuggetPos.X, nuggetPos.Y)
 		}
 	}
 
@@ -146,27 +144,14 @@ func (s *NuggetSystem) Update() {
 func (s *NuggetSystem) handleJumpRequest() {
 	cursorEntity := s.world.Resources.Cursor.Entity
 
-	// 1. Check Energy from component
-	energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity)
-	if !ok {
-		return
-	}
-
-	energy := energyComp.Current
-	cost := int64(constant.NuggetJumpCost)
-	// Allow jump if magnitude is sufficient in either direction
-	if energy < cost && energy > -cost {
-		return
-	}
-
-	// 2. Check Active Nugget
+	// 1. Check Active Nugget
 	nuggetEntity := s.activeNuggetEntity
 
 	if nuggetEntity == 0 {
 		return
 	}
 
-	// 3. Get Nugget Positions
+	// 2. Get Nugget Positions
 	nuggetPos, ok := s.world.Positions.GetPosition(nuggetEntity)
 	if !ok {
 		// Stale reference - clear it
@@ -176,22 +161,28 @@ func (s *NuggetSystem) handleJumpRequest() {
 		return
 	}
 
-	// 4. Move Cursor
+	// 3. Move Cursor
 	s.world.Positions.SetPosition(cursorEntity, component.PositionComponent{
 		X: nuggetPos.X,
 		Y: nuggetPos.Y,
 	})
 
-	// 5. Pay Energy Cost (spend, convergent)
-	s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{
-		Delta:      -constant.NuggetJumpCost,
-		Spend:      true,
-		Convergent: true,
+	s.world.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{
+		X: nuggetPos.X,
+		Y: nuggetPos.Y,
 	})
 
-	// 6. Play Sound
-	s.world.Resources.Audio.Player.Play(core.SoundBell)
+	// 4. Pay Energy Cost (spend, non-convergent)
+	s.world.PushEvent(event.EventEnergyAddAmount, &event.EnergyAddAmountPayload{
+		Delta:      -constant.NuggetJumpCost,
+		Spend:      true,
+		Convergent: false,
+	})
 
+	// 5. Collect nugget that overlaps with cursor
+	s.collectNugget(nuggetPos.X, nuggetPos.Y)
+
+	// 5. Update stats
 	s.statJumps.Add(1)
 }
 
@@ -276,34 +267,19 @@ func (s *NuggetSystem) findValidPosition() (int, int) {
 }
 
 // collectNugget handles auto-collection when cursor overlaps nugget
-func (s *NuggetSystem) collectNugget() {
-	if s.activeNuggetEntity == 0 {
-		return
-	}
+func (s *NuggetSystem) collectNugget(nuggetPosX, nuggetPosY int) {
+	// 1. Play Sound
+	s.world.Resources.Audio.Player.Play(core.SoundBell)
 
-	nuggetPos, ok := s.world.Positions.GetPosition(s.activeNuggetEntity)
-	if !ok {
-		return
-	}
+	// 2. Emit directional cleaner, heat addition, and nugget death events
+	event.EmitDeathOne(s.world.Resources.Event.Queue, s.activeNuggetEntity, 0)
+	s.world.PushEvent(event.EventCleanerDirectionalRequest, &event.DirectionalCleanerPayload{
+		OriginX: nuggetPosX,
+		OriginY: nuggetPosY,
+	})
+	s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: constant.NuggetHeatIncrease})
 
-	cursorEntity := s.world.Resources.Cursor.Entity
-	var currentHeat int
-	if hc, ok := s.world.Components.Heat.GetComponent(cursorEntity); ok {
-		currentHeat = hc.Current
-	}
-
-	if currentHeat >= constant.MaxHeat {
-		s.world.PushEvent(event.EventCleanerDirectionalRequest, &event.DirectionalCleanerPayload{
-			OriginX: nuggetPos.X,
-			OriginY: nuggetPos.Y,
-		})
-	} else {
-		s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: constant.NuggetHeatIncrease})
-	}
-
-	// TODO: death
-	s.world.DestroyEntity(s.activeNuggetEntity)
+	// 3. Update system state and stats
 	s.activeNuggetEntity = 0
-
 	s.statCollected.Add(1)
 }

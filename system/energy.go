@@ -5,7 +5,6 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
-	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 )
@@ -44,12 +43,12 @@ func (s *EnergySystem) Priority() int {
 // EventTypes returns the event types EnergySystem handles
 func (s *EnergySystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventEnergyAdd,
-		event.EventEnergySet,
+		event.EventEnergyAddAmount,
+		event.EventEnergySetAmount,
+		event.EventEnergyAddPercent,
 		event.EventEnergyGlyphConsumed,
 		event.EventEnergyBlinkStart,
 		event.EventEnergyBlinkStop,
-		event.EventDeleteRequest,
 		event.EventGameReset,
 	}
 }
@@ -66,19 +65,26 @@ func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	switch ev.Type {
-	case event.EventDeleteRequest:
-		if payload, ok := ev.Payload.(*event.DeleteRequestPayload); ok {
-			s.handleDeleteRequest(payload)
-		}
-
-	case event.EventEnergyAdd:
-		if payload, ok := ev.Payload.(*event.EnergyAddPayload); ok {
+	case event.EventEnergyAddAmount:
+		if payload, ok := ev.Payload.(*event.EnergyAddAmountPayload); ok {
 			s.addEnergy(int64(payload.Delta), payload.Spend, payload.Convergent)
 		}
 
-	case event.EventEnergySet:
-		if payload, ok := ev.Payload.(*event.EnergySetPayload); ok {
-			s.setEnergy(int64(payload.Value))
+	case event.EventEnergySetAmount:
+		if payload, ok := ev.Payload.(*event.EnergySetAmountPayload); ok {
+			s.setEnergy(int64(payload.Value), false)
+		}
+
+	case event.EventEnergyAddPercent:
+		if payload, ok := ev.Payload.(*event.EnergyAddPercentPayload); ok {
+			energyComp, ok := s.world.Components.Energy.GetComponent(s.world.Resources.Cursor.Entity)
+			if !ok {
+				return
+			}
+			// Letting low energy and low percentage to fall to zero
+			delta := (int64(payload.DeltaPercent) * energyComp.Current) / 100
+
+			s.addEnergy(delta, payload.Spend, payload.Convergent)
 		}
 
 	case event.EventEnergyGlyphConsumed:
@@ -106,13 +112,13 @@ func (s *EnergySystem) Update() {
 	cursorEntity := s.world.Resources.Cursor.Entity
 
 	// Clear error flash after timeout
-	cursor, ok := s.world.Components.Cursor.GetComponent(cursorEntity)
-	if ok && cursor.ErrorFlashRemaining > 0 {
-		cursor.ErrorFlashRemaining -= dt
-		if cursor.ErrorFlashRemaining <= 0 {
-			cursor.ErrorFlashRemaining = 0
+	cursorComp, ok := s.world.Components.Cursor.GetComponent(cursorEntity)
+	if ok && cursorComp.ErrorFlashRemaining > 0 {
+		cursorComp.ErrorFlashRemaining -= dt
+		if cursorComp.ErrorFlashRemaining <= 0 {
+			cursorComp.ErrorFlashRemaining = 0
 		}
-		s.world.Components.Cursor.SetComponent(cursorEntity, cursor)
+		s.world.Components.Cursor.SetComponent(cursorEntity, cursorComp)
 	}
 
 	// Clear energy blink after timeout
@@ -129,9 +135,9 @@ func (s *EnergySystem) Update() {
 
 	// Evaluate shield activation state
 	energy := energyComp.Current
-	shield, ok := s.world.Components.Shield.GetComponent(cursorEntity)
+	shieldComp, ok := s.world.Components.Shield.GetComponent(cursorEntity)
 	if ok {
-		shieldActive := shield.Active
+		shieldActive := shieldComp.Active
 		if energy != 0 && !shieldActive {
 			s.world.PushEvent(event.EventShieldActivate, nil)
 		} else if energy == 0 && shieldActive {
@@ -194,12 +200,16 @@ func (s *EnergySystem) addEnergy(delta int64, spend bool, convergent bool) {
 		}
 	}
 
-	energyComp.Current = newEnergy
-	s.world.Components.Energy.SetComponent(cursorEntity, energyComp)
+	var crossedZero bool
+	if (newEnergy < 0 && currentEnergy > 0) || (newEnergy > 0 && currentEnergy < 0) {
+		crossedZero = true
+	}
+
+	s.setEnergy(newEnergy, crossedZero)
 }
 
 // setEnergy sets energy value
-func (s *EnergySystem) setEnergy(value int64) {
+func (s *EnergySystem) setEnergy(value int64, crossedZero bool) {
 	cursorEntity := s.world.Resources.Cursor.Entity
 	energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity)
 	if !ok {
@@ -207,6 +217,13 @@ func (s *EnergySystem) setEnergy(value int64) {
 	}
 	energyComp.Current = value
 	s.world.Components.Energy.SetComponent(cursorEntity, energyComp)
+
+	// Preventing one frame flickering of shield at zero energy
+	if value == 0 {
+		s.world.PushEvent(event.EventShieldDeactivate, nil)
+	} else if crossedZero {
+		s.world.PushEvent(event.EventEnergyCrossedZero, nil)
+	}
 }
 
 // handleGlyphConsumed calculates and applies energy from glyph destruction
@@ -258,83 +275,4 @@ func (s *EnergySystem) stopBlink() {
 	energyComp.BlinkActive = false
 	energyComp.BlinkRemaining = 0
 	s.world.Components.Energy.SetComponent(cursorEntity, energyComp)
-}
-
-// TODO: move this to typing system
-// handleDeleteRequest processes deletion of entities in a range
-func (s *EnergySystem) handleDeleteRequest(payload *event.DeleteRequestPayload) {
-	config := s.world.Resources.Config
-
-	entitiesToDelete := make([]core.Entity, 0)
-
-	// Helper to check and mark entity for deletion
-	checkEntity := func(entity core.Entity) {
-		if !s.world.Components.Glyph.HasEntity(entity) {
-			return
-		}
-
-		// Check protection
-		if prot, ok := s.world.Components.Protection.GetComponent(entity); ok {
-			if prot.Mask.Has(component.ProtectFromDelete) || prot.Mask == component.ProtectAll {
-				return
-			}
-		}
-
-		entitiesToDelete = append(entitiesToDelete, entity)
-	}
-
-	if payload.RangeType == event.DeleteRangeLine {
-		// Line deletion (inclusive rows)
-		startY, endY := payload.StartY, payload.EndY
-		// Ensure normalized order
-		if startY > endY {
-			startY, endY = endY, startY
-		}
-
-		// Query all glyphs to find those in the row range
-		entities := s.world.Components.Glyph.AllEntities()
-		for _, entity := range entities {
-			pos, _ := s.world.Positions.GetPosition(entity)
-			if pos.Y >= startY && pos.Y <= endY {
-				checkEntity(entity)
-			}
-		}
-
-	} else {
-		// Char deletion (can span multiple lines)
-		p1x, p1y := payload.StartX, payload.StartY
-		p2x, p2y := payload.EndX, payload.EndY
-
-		// Normalize: P1 should be textually before P2
-		if p1y > p2y || (p1y == p2y && p1x > p2x) {
-			p1x, p1y, p2x, p2y = p2x, p2y, p1x, p1y
-		}
-
-		// Iterate through all rows involved
-		for y := p1y; y <= p2y; y++ {
-			// Determine X bounds for this row
-			minX := 0
-			maxX := config.GameWidth - 1
-
-			if y == p1y {
-				minX = p1x
-			}
-			if y == p2y {
-				maxX = p2x
-			}
-
-			// Optimization: Get entities by cell for the range on this row
-			for x := minX; x <= maxX; x++ {
-				cellEntities := s.world.Positions.GetAllEntityAt(x, y)
-				for _, entity := range cellEntities {
-					checkEntity(entity)
-				}
-			}
-		}
-	}
-
-	// Batch deletion via DeathSystem (silent)
-	if len(entitiesToDelete) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, entitiesToDelete, s.world.Resources.Time.FrameNumber)
-	}
 }

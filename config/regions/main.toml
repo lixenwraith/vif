@@ -51,7 +51,7 @@ transitions = [
 parent = "Gameplay"
 on_enter = [
     { action = "EmitEvent", event = "EventHeatSet", payload = { value = 100 } },
-    { action = "EmitEvent", event = "EventEnergyAdd", payload = { delta = 1000, spend = false, convergent = false } },
+    { action = "EmitEvent", event = "EventEnergyAddAmount", payload = { delta = 1000, spend = false, convergent = false } },
     { action = "EmitEvent", event = "EventCleanerSweepingRequest" }
 ]
 transitions = [

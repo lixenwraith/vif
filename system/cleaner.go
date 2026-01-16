@@ -23,10 +23,6 @@ type directionalSpawnKey struct {
 type CleanerSystem struct {
 	world *engine.World
 
-	sweepingFrames    map[int64]bool               // Frame-based dedup for sweeping cleaners
-	directionalSpawns map[directionalSpawnKey]bool // Positions-aware dedup for directional cleaners
-	hasSpawnedSession bool                         // Track if we spawned cleaners this session
-
 	deflectedAnchors map[core.Entity]core.Entity // anchor -> cleaner that deflected it for deduplication of large entity hits
 
 	rng *vmath.FastRand
@@ -43,9 +39,6 @@ func NewCleanerSystem(world *engine.World) engine.System {
 		world: world,
 	}
 
-	s.sweepingFrames = make(map[int64]bool)
-	s.directionalSpawns = make(map[directionalSpawnKey]bool)
-
 	s.statActive = s.world.Resources.Status.Ints.Get("cleaner.active")
 	s.statSpawned = s.world.Resources.Status.Ints.Get("cleaner.spawned")
 
@@ -55,9 +48,6 @@ func NewCleanerSystem(world *engine.World) engine.System {
 
 // Init resets session state for new game
 func (s *CleanerSystem) Init() {
-	clear(s.sweepingFrames)
-	clear(s.directionalSpawns)
-	s.hasSpawnedSession = false
 	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
 	s.deflectedAnchors = make(map[core.Entity]core.Entity, 4)
 	s.statActive.Store(0)
@@ -92,28 +82,12 @@ func (s *CleanerSystem) HandleEvent(ev event.GameEvent) {
 
 	switch ev.Type {
 	case event.EventCleanerSweepingRequest:
-		// Frame-only deduplication for sweeping (one global sweep per frame)
-		if s.sweepingFrames[ev.Frame] {
-			return
-		}
-		s.spawnCleaners()
-		s.sweepingFrames[ev.Frame] = true
-		s.hasSpawnedSession = true
+		s.spawnSweepingCleaners()
 
 	case event.EventCleanerDirectionalRequest:
 		if payload, ok := ev.Payload.(*event.DirectionalCleanerPayload); ok {
 			// Positions-aware deduplication for directional cleaners
-			key := directionalSpawnKey{
-				frame:   ev.Frame,
-				originX: payload.OriginX,
-				originY: payload.OriginY,
-			}
-			if s.directionalSpawns[key] {
-				return
-			}
 			s.spawnDirectionalCleaners(payload.OriginX, payload.OriginY)
-			s.directionalSpawns[key] = true
-			s.hasSpawnedSession = true
 		}
 	}
 }
@@ -126,26 +100,12 @@ func (s *CleanerSystem) Update() {
 
 	config := s.world.Resources.Config
 
-	// Clean old entries from deduplication maps
-	currentFrame := s.world.Resources.Time.FrameNumber
-	for frame := range s.sweepingFrames {
-		if currentFrame-frame > constant.CleanerDeduplicationWindow {
-			delete(s.sweepingFrames, frame)
-		}
-	}
-	for key := range s.directionalSpawns {
-		if currentFrame-key.frame > constant.CleanerDeduplicationWindow {
-			delete(s.directionalSpawns, key)
-		}
-	}
-
 	cleanerEntities := s.world.Components.Cleaner.AllEntities()
 	s.statActive.Store(int64(len(cleanerEntities)))
 
 	// Push EventCleanerSweepingFinished when all cleaners have completed their animation
-	if len(cleanerEntities) == 0 && s.hasSpawnedSession {
+	if len(cleanerEntities) == 0 {
 		s.world.PushEvent(event.EventCleanerSweepingFinished, nil)
-		s.hasSpawnedSession = false
 		return
 	}
 
@@ -266,14 +226,13 @@ func (s *CleanerSystem) Update() {
 
 	cleanerEntities = s.world.Components.Cleaner.AllEntities()
 	// Push EventCleanerSweepingFinished when all cleaners have completed their animation
-	if len(cleanerEntities) == 0 && s.hasSpawnedSession {
+	if len(cleanerEntities) == 0 {
 		s.world.PushEvent(event.EventCleanerSweepingFinished, nil)
-		s.hasSpawnedSession = false
 	}
 }
 
-// spawnCleaners generates cleaner entities using generic stores
-func (s *CleanerSystem) spawnCleaners() {
+// spawnSweepingCleaners generates cleaner entities
+func (s *CleanerSystem) spawnSweepingCleaners() {
 	config := s.world.Resources.Config
 
 	rows := s.scanTargetRows()
@@ -495,7 +454,7 @@ func (s *CleanerSystem) processPositiveEnergy(targetEntities []core.Entity, self
 		return
 	}
 
-	event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventBlossomSpawnOne, toDestroy, s.world.Resources.Time.FrameNumber)
+	event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventBlossomSpawnOne, toDestroy)
 }
 
 // processNegativeEnergy handles Blue mutation to Green with Decay spawn

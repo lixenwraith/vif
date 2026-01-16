@@ -160,14 +160,13 @@ func (w *World) SetFrameSource(f *atomic.Int64) {
 // PushEvent emits a game event using direct cached pointers
 // This is the hot-path for all systems communication
 func (w *World) PushEvent(eventType event.EventType, payload any) {
-	if w.Resources.Event.Queue == nil || w.frameSource == nil {
+	if w.Resources.Event.Queue == nil {
 		return // Not yet initialized
 	}
 
 	w.Resources.Event.Queue.Push(event.GameEvent{
 		Type:    eventType,
 		Payload: payload,
-		Frame:   w.frameSource.Load(),
 	})
 }
 

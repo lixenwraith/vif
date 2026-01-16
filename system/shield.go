@@ -90,7 +90,7 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventShieldDrain:
 		if payload, ok := ev.Payload.(*event.ShieldDrainPayload); ok {
-			s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{
+			s.world.PushEvent(event.EventEnergyAddAmount, &event.EnergyAddAmountPayload{
 				Delta:      payload.Amount,
 				Spend:      false, // Subject to boost protection
 				Convergent: true,  // Clamp at zero
@@ -110,20 +110,20 @@ func (s *ShieldSystem) Update() {
 
 	cursorEntity := s.world.Resources.Cursor.Entity
 
-	shield, ok := s.world.Components.Shield.GetComponent(cursorEntity)
-	if !ok || !shield.Active {
+	shieldComp, ok := s.world.Components.Shield.GetComponent(cursorEntity)
+	if !ok || !shieldComp.Active {
 		return
 	}
 
 	now := s.world.Resources.Time.GameTime
 
-	if now.Sub(shield.LastDrainTime) >= constant.ShieldPassiveDrainInterval {
-		s.world.PushEvent(event.EventEnergyAdd, &event.EnergyAddPayload{
-			Delta:      -constant.ShieldPassiveDrainAmount,
-			Spend:      true, // Bypass boost (passive cost)
-			Convergent: true, // Clamp at zero
+	if now.Sub(shieldComp.LastDrainTime) >= constant.ShieldPassiveDrainInterval {
+		s.world.PushEvent(event.EventEnergyAddPercent, &event.EnergyAddPercentPayload{
+			DeltaPercent: constant.ShieldPassiveEnergyPercentDrain,
+			Spend:        true, // Bypass boost (passive cost)
+			Convergent:   true, // Clamp at zero
 		})
-		shield.LastDrainTime = now
-		s.world.Components.Shield.SetComponent(cursorEntity, shield)
+		shieldComp.LastDrainTime = now
+		s.world.Components.Shield.SetComponent(cursorEntity, shieldComp)
 	}
 }

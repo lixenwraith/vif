@@ -50,7 +50,7 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 	// 2. Scan entities at cursor position
 	var entitiesBuf [constant.MaxEntitiesPerCell]core.Entity
-	count := r.gameCtx.World.Positions.GetAllEntityAtInto(ctx.CursorX, ctx.CursorY, entitiesBuf[:])
+	count := r.gameCtx.World.Positions.GetAllEntitiesAtInto(ctx.CursorX, ctx.CursorY, entitiesBuf[:])
 
 	var glyphEntity core.Entity
 	var sigilEntity core.Entity

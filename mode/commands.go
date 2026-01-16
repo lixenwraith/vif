@@ -97,7 +97,7 @@ func handleEnergyCommand(ctx *engine.GameContext, args []string) CommandResult {
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
 
-	ctx.PushEvent(event.EventEnergySet, &event.EnergySetPayload{
+	ctx.PushEvent(event.EventEnergySetAmount, &event.EnergySetAmountPayload{
 		Value: value,
 	})
 
@@ -148,7 +148,7 @@ func handleBoostCommand(ctx *engine.GameContext) CommandResult {
 // handleGodCommand sets heat to max and energy to high value
 func handleGodCommand(ctx *engine.GameContext) CommandResult {
 	ctx.PushEvent(event.EventHeatSet, &event.HeatSetPayload{Value: constant.MaxHeat})
-	ctx.PushEvent(event.EventEnergySet, &event.EnergySetPayload{Value: constant.GodEnergyAmount})
+	ctx.PushEvent(event.EventEnergySetAmount, &event.EnergySetAmountPayload{Value: constant.GodEnergyAmount})
 	ctx.SetLastCommand(":god")
 	return CommandResult{Continue: true, KeepPaused: false}
 }
@@ -156,7 +156,7 @@ func handleGodCommand(ctx *engine.GameContext) CommandResult {
 // handleDemonCommand sets heat to max and energy to high value
 func handleDemonCommand(ctx *engine.GameContext) CommandResult {
 	ctx.PushEvent(event.EventHeatSet, &event.HeatSetPayload{Value: constant.MaxHeat})
-	ctx.PushEvent(event.EventEnergySet, &event.EnergySetPayload{Value: -constant.GodEnergyAmount})
+	ctx.PushEvent(event.EventEnergySetAmount, &event.EnergySetAmountPayload{Value: -constant.GodEnergyAmount})
 	ctx.SetLastCommand(":demon")
 	return CommandResult{Continue: true, KeepPaused: false}
 }

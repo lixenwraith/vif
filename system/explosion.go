@@ -137,7 +137,7 @@ func (s *ExplosionSystem) fireFromDust() {
 		}
 	}
 
-	event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, dustEntities, s.world.Resources.Time.FrameNumber)
+	event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, dustEntities)
 
 	for p := range positions {
 		s.addCenter(p.x, p.y, s.baseRadius)
@@ -211,7 +211,6 @@ func (s *ExplosionSystem) addCenter(x, y int, radius int64) {
 // TODO: this conversion must be done in dust system, doing it here results in no telemetry and duplicate logic
 func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 	config := s.world.Resources.Config
-	frame := s.world.Resources.Time.FrameNumber
 	now := s.world.Resources.Time.GameTime
 
 	// Radius is horizontal cells; Vertical is half that to maintain aspect ratio
@@ -338,7 +337,7 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 	}
 
 	// Use buffered entities for death batch
-	event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, s.entityBuf, frame)
+	event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, s.entityBuf)
 
 	// Use buffered entries for batch dust spawn
 	dustBatch := event.AcquireDustSpawnBatch()

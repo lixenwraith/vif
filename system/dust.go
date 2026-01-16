@@ -441,7 +441,7 @@ func (s *DustSystem) Update() {
 	}
 
 	if len(deathCandidates) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashRequest, deathCandidates, s.world.Resources.Time.FrameNumber)
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashRequest, deathCandidates)
 	}
 
 	s.statActive.Store(int64(len(dustEntities)))
@@ -501,7 +501,7 @@ func (s *DustSystem) transformGlyphsToDust() {
 	for i, gd := range toTransform {
 		deathEntities[i] = gd.entity
 	}
-	event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, deathEntities, s.world.Resources.Time.FrameNumber)
+	event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, deathEntities)
 
 	// Use batch creation for transformation dust
 	posBatch := s.world.Positions.BeginBatch()

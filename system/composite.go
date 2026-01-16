@@ -68,7 +68,7 @@ func (s *CompositeSystem) HandleEvent(ev event.GameEvent) {
 	s.markMemberTombstone(payload.HeaderEntity, payload.MemberEntity)
 
 	// 2. Request death for the member entity
-	event.EmitDeathOne(s.world.Resources.Event.Queue, payload.MemberEntity, 0, s.world.Resources.Time.FrameNumber)
+	event.EmitDeathOne(s.world.Resources.Event.Queue, payload.MemberEntity, 0)
 }
 
 func (s *CompositeSystem) Update() {

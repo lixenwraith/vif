@@ -10,13 +10,10 @@ const (
 	CleanerChar = '█'
 
 	// CleanerAnimationDuration is the total time for a cleaner to sweep across the screen
-	CleanerAnimationDuration = 1.0 * time.Second
+	CleanerAnimationDuration = 1000 * time.Millisecond
 
 	// CleanerTrailLength is the number of previous positions tracked for the fade trail effect
 	CleanerTrailLength = 10
-
-	// CleanerDeduplicationWindow is the number of frames to prevent duplicate spawns
-	CleanerDeduplicationWindow = 30
 )
 
 // --- Drain Entity ---
