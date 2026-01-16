@@ -16,19 +16,19 @@ type PaletteEntry struct {
 
 var gamePalette = []PaletteEntry{
 	// Sequences - Green
-	{"SeqGreenDark", render.RgbSequenceGreenDark, "Sequence"},
-	{"SeqGreenNormal", render.RgbSequenceGreenNormal, "Sequence"},
-	{"SeqGreenBright", render.RgbSequenceGreenBright, "Sequence"},
+	{"SeqGreenDark", render.RgbGlyphGreenDark, "Sequence"},
+	{"SeqGreenNormal", render.RgbGlyphGreenNormal, "Sequence"},
+	{"SeqGreenBright", render.RgbGlyphGreenBright, "Sequence"},
 	// Sequences - Red
-	{"SeqRedDark", render.RgbSequenceRedDark, "Sequence"},
-	{"SeqRedNormal", render.RgbSequenceRedNormal, "Sequence"},
-	{"SeqRedBright", render.RgbSequenceRedBright, "Sequence"},
+	{"SeqRedDark", render.RgbGlyphRedDark, "Sequence"},
+	{"SeqRedNormal", render.RgbGlyphRedNormal, "Sequence"},
+	{"SeqRedBright", render.RgbGlyphRedBright, "Sequence"},
 	// Sequences - Blue
-	{"SeqBlueDark", render.RgbSequenceBlueDark, "Sequence"},
-	{"SeqBlueNormal", render.RgbSequenceBlueNormal, "Sequence"},
-	{"SeqBlueBright", render.RgbSequenceBlueBright, "Sequence"},
+	{"SeqBlueDark", render.RgbGlyphBlueDark, "Sequence"},
+	{"SeqBlueNormal", render.RgbGlyphBlueNormal, "Sequence"},
+	{"SeqBlueBright", render.RgbGlyphBlueBright, "Sequence"},
 	// Sequences - Special
-	{"SeqGold", render.RgbSequenceGold, "Sequence"},
+	{"SeqGold", render.RgbGlyphGold, "Sequence"},
 
 	// Effects
 	{"Decay", render.RgbDecay, "Effect"},
@@ -51,7 +51,7 @@ var gamePalette = []PaletteEntry{
 	{"CursorError", render.RgbCursorError, "Cursor"},
 
 	// UI
-	{"LineNumbers", render.RgbLineNumbers, "UI"},
+	{"LineNumbers", render.RgbRowIndicator, "UI"},
 	{"StatusBar", render.RgbStatusBar, "UI"},
 	{"ColumnIndicator", render.RgbColumnIndicator, "UI"},
 	{"Background", render.RgbBackground, "UI"},

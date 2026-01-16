@@ -51,6 +51,7 @@ transitions = [
 parent = "Gameplay"
 on_enter = [
     { action = "EmitEvent", event = "EventHeatSet", payload = { value = 100 } },
+    { action = "EmitEvent", event = "EventEnergyAdd", payload = { delta = 1000, spend = false, convergent = false } },
     { action = "EmitEvent", event = "EventCleanerSweepingRequest" }
 ]
 transitions = [
@@ -81,62 +82,6 @@ transitions = [
 parent = "Gameplay"
 on_enter = [
     { action = "EmitEvent", event = "EventDecayWave" }
-]
-transitions = [
-    { trigger = "Tick", target = "TrySpawnGold2", guard = "StateTimeExceeds", guard_args = { ms = 3000 } }
-]
-
-[states.TrySpawnGold2]
-parent = "Gameplay"
-on_enter = [
-    { action = "EmitEvent", event = "EventGoldSpawnRequest" }
-]
-transitions = [
-    { trigger = "EventGoldSpawned", target = "GoldActive2" },
-    { trigger = "EventGoldSpawnFailed", target = "GoldRetryWait2" }
-]
-
-[states.GoldRetryWait2]
-parent = "Gameplay"
-transitions = [
-    { trigger = "Tick", target = "TrySpawnGold2", guard = "StateTimeExceeds", guard_args = { ms = 1 } }
-]
-
-[states.GoldActive2]
-parent = "Gameplay"
-transitions = [
-    { trigger = "EventGoldComplete", target = "PreSweepCheck2" },
-    { trigger = "EventGoldTimeout", target = "BlossomWait" },
-    { trigger = "EventGoldDestroyed", target = "BlossomWait" }
-]
-
-[states.PreSweepCheck2]
-parent = "Gameplay"
-transitions = [
-    { trigger = "Tick", target = "SweepingHot", guard = "StatusBoolEquals", guard_args = { key = "heat.at_max", value = true } },
-    { trigger = "Tick", target = "SweepingNormal2" }
-]
-
-[states.SweepingNormal2]
-parent = "Gameplay"
-on_enter = [
-    { action = "EmitEvent", event = "EventHeatSet", payload = { value = 100 } },
-    { action = "EmitEvent", event = "EventCleanerSweepingRequest" }
-]
-transitions = [
-    { trigger = "EventCleanerSweepingFinished", target = "BlossomWait" }
-]
-
-[states.BlossomWait]
-parent = "Gameplay"
-transitions = [
-    { trigger = "Tick", target = "BlossomAnimation", guard = "StateTimeExceeds", guard_args = { ms = 5000 } }
-]
-
-[states.BlossomAnimation]
-parent = "Gameplay"
-on_enter = [
-    { action = "EmitEvent", event = "EventBlossomWave" }
 ]
 transitions = [
     { trigger = "Tick", target = "TrySpawnGold", guard = "StateTimeExceeds", guard_args = { ms = 3000 } }

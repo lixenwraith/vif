@@ -18,20 +18,22 @@ func init() {
 
 // RGB color definitions for all game systems
 var (
-	// RGB color definitions for sequences - all dark/normal/bright levels have minimum floor to prevent perceptual blackout at low alpha
-	RgbSequenceGreenDark   = RGB{15, 130, 15} // Floor R/B to prevent blackout
-	RgbSequenceGreenNormal = RGB{20, 200, 20}
-	RgbSequenceGreenBright = RGB{50, 255, 50}
+	// RGB color definitions for glyphs - all dark/normal/bright levels have minimum floor to prevent perceptual blackout at low alpha
+	RgbGlyphBlueDark   = RGB{50, 80, 200} // Floor R/G
+	RgbGlyphBlueNormal = RGB{80, 130, 255}
+	RgbGlyphBlueBright = RGB{120, 170, 255}
 
-	RgbSequenceRedDark   = RGB{180, 40, 40} // Floor G/B
-	RgbSequenceRedNormal = RGB{255, 60, 60}
-	RgbSequenceRedBright = RGB{255, 100, 100}
+	RgbGlyphGreenDark   = RGB{15, 130, 15} // Floor R/B to prevent blackout
+	RgbGlyphGreenNormal = RGB{20, 200, 20}
+	RgbGlyphGreenBright = RGB{50, 255, 50}
 
-	RgbSequenceBlueDark   = RGB{50, 80, 200} // Floor R/G
-	RgbSequenceBlueNormal = RGB{80, 130, 255}
-	RgbSequenceBlueBright = RGB{120, 170, 255}
+	RgbGlyphRedDark   = RGB{180, 40, 40} // Floor G/B
+	RgbGlyphRedNormal = RGB{255, 60, 60}
+	RgbGlyphRedBright = RGB{255, 100, 100}
 
-	RgbSequenceGold = RGB{255, 255, 0} // Bright Yellow for gold sequence
+	RgbGlyphGold = RGB{255, 255, 0} // Bright Yellow for gold sequence
+
+	RgbGlyphWhite = RGB{255, 255, 255} // Pure white
 
 	RgbDecay       = RGB{0, 139, 139}   // Dark Cyan for decay animation
 	RgbBlossom     = RGB{255, 182, 193} // Light pink (cherry blossom)
@@ -42,9 +44,9 @@ var (
 	RgbDustNormal = RGB{R: 128, G: 128, B: 128} // Mid-gray dust
 	RgbDustBright = RGB{R: 200, G: 200, B: 200} // Light gray dust
 
-	RgbLineNumbers     = RGB{180, 180, 180} // Brighter gray
-	RgbStatusBar       = RGB{255, 255, 255} // White
+	RgbRowIndicator    = RGB{180, 180, 180} // Brighter gray
 	RgbColumnIndicator = RGB{180, 180, 180} // Brighter gray
+	RgbStatusBar       = RGB{255, 255, 255} // White
 	RgbBackground      = RGB{26, 27, 38}    // Tokyo Night background
 
 	RgbPingHighlight  = RGB{55, 55, 55}    // Gray for INSERT mode ping

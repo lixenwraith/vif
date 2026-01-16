@@ -117,13 +117,13 @@ func (r *SplashRenderer) resolveSplashColor(c component.SplashColor) render.RGB 
 	case component.SplashColorInsert:
 		return render.RgbSplashInsert
 	case component.SplashColorGreen:
-		return render.RgbSequenceGreenNormal
+		return render.RgbGlyphGreenNormal
 	case component.SplashColorBlue:
-		return render.RgbSequenceBlueNormal
+		return render.RgbGlyphBlueNormal
 	case component.SplashColorRed:
-		return render.RgbSequenceRedNormal
+		return render.RgbGlyphRedNormal
 	case component.SplashColorGold:
-		return render.RgbSequenceGold
+		return render.RgbGlyphGold
 	case component.SplashColorCyan:
 		return render.RgbSplashCyan
 	case component.SplashColorNugget:

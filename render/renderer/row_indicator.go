@@ -48,7 +48,7 @@ func (r *RowIndicatorRenderer) Render(ctx render.RenderContext, buf *render.Rend
 				bg = render.RgbCursorNormal
 			}
 		} else {
-			fg = render.RgbLineNumbers
+			fg = render.RgbRowIndicator
 			bg = render.RgbBackground
 
 			if absRelative%10 == 0 {

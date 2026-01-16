@@ -153,7 +153,6 @@ func (s *EnergySystem) addEnergy(delta int64, spend bool, convergent bool) {
 	currentEnergy := energyComp.Current
 
 	// Fast path for typing (Direct modification, no clamps, raw delta)
-	// This is the most frequent operation and requires no defensive overhead
 	if !spend && !convergent {
 		energyComp.Current = currentEnergy + delta
 		s.world.Components.Energy.SetComponent(cursorEntity, energyComp)
@@ -165,8 +164,7 @@ func (s *EnergySystem) addEnergy(delta int64, spend bool, convergent bool) {
 		return
 	}
 
-	// Drain protection (Boost check)
-	// Only applies when converging (draining) without spending (passive drain)
+	// Boost protection, only applies when converging (draining) without spending (passive drain)
 	if convergent && !spend {
 		if boost, ok := s.world.Components.Boost.GetComponent(cursorEntity); !ok || boost.Active {
 			return

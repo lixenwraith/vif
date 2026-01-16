@@ -241,7 +241,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			case 3:
 				blinkColor = render.RgbEnergyBlinkRed
 			case 4:
-				blinkColor = render.RgbSequenceGold
+				blinkColor = render.RgbGlyphGold
 			default:
 				blinkColor = render.RgbEnergyBlinkWhite
 			}

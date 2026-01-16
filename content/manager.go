@@ -19,30 +19,6 @@ var (
 	CommentPrefixes = []string{"//", "#"}
 )
 
-// findProjectRoot finds the project root by looking for go.mod
-// Returns the directory containing go.mod, or current directory if not found
-func findProjectRoot() string {
-	dir, err := os.Getwd()
-	if err != nil {
-		return "."
-	}
-
-	// Walk up the directory tree looking for go.mod
-	for {
-		goModPath := filepath.Join(dir, "go.mod")
-		if _, err := os.Stat(goModPath); err == nil {
-			return dir
-		}
-
-		parent := filepath.Dir(dir)
-		// If we've reached the root, stop
-		if parent == dir {
-			return "."
-		}
-		dir = parent
-	}
-}
-
 // circuitBreaker tracks failures and prevents excessive retries
 type circuitBreaker struct {
 	mu               sync.RWMutex
@@ -95,8 +71,11 @@ type ContentManager struct {
 // NewContentManager creates a new content manager
 // It automatically finds the project root and uses data/ directory from there
 func NewContentManager() *ContentManager {
-	projectRoot := findProjectRoot()
-	dataPath := filepath.Join(projectRoot, "data")
+	dir, err := os.Getwd()
+	if err != nil {
+		dir = "."
+	}
+	dataPath := filepath.Join(dir, "data")
 
 	return &ContentManager{
 		contentFiles:   []string{},
@@ -214,8 +193,7 @@ func (cm *ContentManager) validateFileEncoding(filePath string) error {
 			return fmt.Errorf("invalid UTF-8 encoding at line %d", lineNum)
 		}
 
-		// Check for control characters (but don't fail, we'll sanitize instead)
-		// Silent - control characters will be sanitized
+		// Control characters don't fail, but silently sanitized
 	}
 
 	if err := scanner.Err(); err != nil {

@@ -61,32 +61,32 @@ func resolveGlyphColor(g component.GlyphComponent) render.RGB {
 	case component.GlyphBlue:
 		switch g.Level {
 		case component.GlyphDark:
-			return render.RgbSequenceBlueDark
+			return render.RgbGlyphBlueDark
 		case component.GlyphNormal:
-			return render.RgbSequenceBlueNormal
+			return render.RgbGlyphBlueNormal
 		case component.GlyphBright:
-			return render.RgbSequenceBlueBright
+			return render.RgbGlyphBlueBright
 		}
 	case component.GlyphGreen:
 		switch g.Level {
 		case component.GlyphDark:
-			return render.RgbSequenceGreenDark
+			return render.RgbGlyphGreenDark
 		case component.GlyphNormal:
-			return render.RgbSequenceGreenNormal
+			return render.RgbGlyphGreenNormal
 		case component.GlyphBright:
-			return render.RgbSequenceGreenBright
+			return render.RgbGlyphGreenBright
 		}
 	case component.GlyphRed:
 		switch g.Level {
 		case component.GlyphDark:
-			return render.RgbSequenceRedDark
+			return render.RgbGlyphRedDark
 		case component.GlyphNormal:
-			return render.RgbSequenceRedNormal
+			return render.RgbGlyphRedNormal
 		case component.GlyphBright:
-			return render.RgbSequenceRedBright
+			return render.RgbGlyphRedBright
 		}
 	case component.GlyphGold:
-		return render.RgbSequenceGold
+		return render.RgbGlyphGold
 	}
 
 	// Debug

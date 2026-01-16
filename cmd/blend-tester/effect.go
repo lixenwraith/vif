@@ -224,9 +224,9 @@ func drawShieldEffect(startY int, fg, bg render.RGB) {
 		case ShieldGray:
 			shieldColor = render.RGB{128, 128, 128}
 		case ShieldBlue:
-			shieldColor = render.RgbSequenceBlueNormal
+			shieldColor = render.RgbGlyphBlueNormal
 		case ShieldGreen:
-			shieldColor = render.RgbSequenceGreenNormal
+			shieldColor = render.RgbGlyphGreenNormal
 		}
 	}
 
@@ -409,7 +409,7 @@ func drawFlashEffect(startY int, fg, bg render.RGB) {
 	// Show add blend result on sample char
 	drawText(1, startY, "Add blend on char 'A' (green):", fg, bg)
 	startY++
-	charFg := render.RgbSequenceGreenNormal
+	charFg := render.RgbGlyphGreenNormal
 	addedTC := render.Add(charFg, flashColor, 1.0)
 	idx := terminal.RGBTo256(addedTC)
 	added256 := Get256PaletteRGB(idx)
