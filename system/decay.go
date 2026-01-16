@@ -163,7 +163,7 @@ func (s *DecaySystem) updateDecayEntities() {
 	gameWidth := s.world.Resources.Config.GameWidth
 	gameHeight := s.world.Resources.Config.GameHeight
 
-	decayEntities := s.world.Components.Decay.AllEntities()
+	decayEntities := s.world.Components.Decay.GetAllEntities()
 
 	// Clear frame deduplication maps
 	clear(s.processedGridCells)

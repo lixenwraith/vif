@@ -163,7 +163,7 @@ func (s *BlossomSystem) updateBlossomEntities() {
 	gameWidth := s.world.Resources.Config.GameWidth
 	gameHeight := s.world.Resources.Config.GameHeight
 
-	blossomEntities := s.world.Components.Blossom.AllEntities()
+	blossomEntities := s.world.Components.Blossom.GetAllEntities()
 
 	// Clear frame deduplication maps
 	clear(s.processedGridCells)

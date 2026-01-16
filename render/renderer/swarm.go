@@ -28,7 +28,7 @@ func NewSwarmRenderer(gameCtx *engine.GameContext) *SwarmRenderer {
 
 // Render draws live swarm entities
 func (r *SwarmRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	anchors := r.gameCtx.World.Components.Swarm.AllEntities()
+	anchors := r.gameCtx.World.Components.Swarm.GetAllEntities()
 	if len(anchors) == 0 {
 		return
 	}

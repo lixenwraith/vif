@@ -79,7 +79,7 @@ func (s *MaterializeSystem) Update() {
 	durationFixed := vmath.FromFloat(constant.MaterializeAnimationDuration.Seconds())
 	progressDelta := vmath.Div(dtFixed, durationFixed)
 
-	entities := s.world.Components.Materialize.AllEntities()
+	entities := s.world.Components.Materialize.GetAllEntities()
 	if len(entities) == 0 {
 		return
 	}

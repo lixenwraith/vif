@@ -68,7 +68,7 @@ func (s *TimeKeeperSystem) Update() {
 		return
 	}
 
-	entities := s.world.Components.Timer.AllEntities()
+	entities := s.world.Components.Timer.GetAllEntities()
 	dt := s.world.Resources.Time.DeltaTime
 
 	for _, entity := range entities {

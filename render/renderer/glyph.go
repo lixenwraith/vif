@@ -24,7 +24,7 @@ func NewGlyphRenderer(gameCtx *engine.GameContext) *GlyphRenderer {
 func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(constant.MaskGlyph)
 
-	entities := r.gameCtx.World.Components.Glyph.AllEntities()
+	entities := r.gameCtx.World.Components.Glyph.GetAllEntities()
 	for _, entity := range entities {
 		glyph, ok := r.gameCtx.World.Components.Glyph.GetComponent(entity)
 		if !ok {

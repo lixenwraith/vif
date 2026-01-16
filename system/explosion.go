@@ -123,7 +123,7 @@ func (s *ExplosionSystem) HandleEvent(ev event.GameEvent) {
 }
 
 func (s *ExplosionSystem) fireFromDust() {
-	dustEntities := s.world.Components.Dust.AllEntities()
+	dustEntities := s.world.Components.Dust.GetAllEntities()
 	if len(dustEntities) == 0 {
 		return
 	}

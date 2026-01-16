@@ -123,7 +123,7 @@ func (s *SplashSystem) Update() {
 	var cachedTimerBBoxes []BBox
 	timersCached := false
 
-	splashEntities := s.world.Components.Splash.AllEntities()
+	splashEntities := s.world.Components.Splash.GetAllEntities()
 	for _, splashEntity := range splashEntities {
 		splashComp, ok := s.world.Components.Splash.GetComponent(splashEntity)
 		if !ok {
@@ -330,7 +330,7 @@ func (s *SplashSystem) handleTimerSpawn(payload *event.SplashTimerRequestPayload
 // handleTimerCancel destroys existing timer splash
 func (s *SplashSystem) handleTimerCancel(anchorEntity core.Entity) {
 	// Find and destroy specific timer
-	splashEntities := s.world.Components.Splash.AllEntities()
+	splashEntities := s.world.Components.Splash.GetAllEntities()
 	for _, splashEntity := range splashEntities {
 		splashComp, ok := s.world.Components.Splash.GetComponent(splashEntity)
 		if !ok {
@@ -345,7 +345,7 @@ func (s *SplashSystem) handleTimerCancel(anchorEntity core.Entity) {
 
 // cleanupSplashesBySlot removes all splashes of a specific slot
 func (s *SplashSystem) cleanupSplashesBySlot(slot component.SplashSlot) {
-	splashEntities := s.world.Components.Splash.AllEntities()
+	splashEntities := s.world.Components.Splash.GetAllEntities()
 	for _, splashEntity := range splashEntities {
 		splashComp, ok := s.world.Components.Splash.GetComponent(splashEntity)
 		if !ok {
@@ -359,7 +359,7 @@ func (s *SplashSystem) cleanupSplashesBySlot(slot component.SplashSlot) {
 
 // cleanupSplashesBySlot removes all splashes of a specific slot for a composite anchor
 func (s *SplashSystem) cleanupSplashesBySlotAndAnchor(slot component.SplashSlot, anchor core.Entity) {
-	splashEntities := s.world.Components.Splash.AllEntities()
+	splashEntities := s.world.Components.Splash.GetAllEntities()
 	for _, splashEntity := range splashEntities {
 		splashComp, ok := s.world.Components.Splash.GetComponent(splashEntity)
 		if !ok {
@@ -459,7 +459,7 @@ func (s *SplashSystem) calculateSmartLayout(cursorX, cursorY, charCount int) (in
 func (s *SplashSystem) getOccupiedSplashBBoxes() []BBox {
 	var boxes []BBox
 
-	splashEntities := s.world.Components.Splash.AllEntities()
+	splashEntities := s.world.Components.Splash.GetAllEntities()
 	for _, splashEntity := range splashEntities {
 		splashComp, ok := s.world.Components.Splash.GetComponent(splashEntity)
 		if !ok {
@@ -747,7 +747,7 @@ func (s *SplashSystem) getSearchDirection(cursorX, cursorY, centerX, centerY int
 func (s *SplashSystem) getTimerBBoxes() []BBox {
 	var boxes []BBox
 
-	splashEntities := s.world.Components.Splash.AllEntities()
+	splashEntities := s.world.Components.Splash.GetAllEntities()
 	for _, splashEntity := range splashEntities {
 		splashComp, ok := s.world.Components.Splash.GetComponent(splashEntity)
 		if !ok || splashComp.Slot != component.SlotTimer {
@@ -788,7 +788,7 @@ func (s *SplashSystem) checkBBoxCollision(a, b BBox) bool {
 
 // findSplashEntityBySlot returns entity ID of first splash with given slot, or 0
 func (s *SplashSystem) findSplashEntityBySlot(slot component.SplashSlot) core.Entity {
-	splashEntities := s.world.Components.Splash.AllEntities()
+	splashEntities := s.world.Components.Splash.GetAllEntities()
 	for _, splashEntity := range splashEntities {
 		splashComp, ok := s.world.Components.Splash.GetComponent(splashEntity)
 		if ok && splashComp.Slot == slot {

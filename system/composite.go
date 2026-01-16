@@ -76,7 +76,7 @@ func (s *CompositeSystem) Update() {
 		return
 	}
 
-	headerEntities := s.world.Components.Header.AllEntities()
+	headerEntities := s.world.Components.Header.GetAllEntities()
 
 	for _, headerEntity := range headerEntities {
 		headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)

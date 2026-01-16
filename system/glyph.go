@@ -242,7 +242,7 @@ func (s *GlyphSystem) updateCensus() {
 
 	var orphanGlyph int64
 
-	glyphEntities := s.world.Components.Glyph.AllEntities()
+	glyphEntities := s.world.Components.Glyph.GetAllEntities()
 	for _, glyphEntity := range glyphEntities {
 		if !s.world.Positions.HasPosition(glyphEntity) {
 			orphanGlyph++

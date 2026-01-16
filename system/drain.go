@@ -254,7 +254,7 @@ func (s *DrainSystem) calcTargetDrainCount() int {
 
 // getActiveDrainsBySpawnOrder returns drains sorted by SpawnOrder descending (newest first)
 func (s *DrainSystem) getActiveDrainsBySpawnOrder() []core.Entity {
-	entities := s.world.Components.Drain.AllEntities()
+	entities := s.world.Components.Drain.GetAllEntities()
 	if len(entities) <= 1 {
 		return entities
 	}
@@ -369,7 +369,7 @@ func (s *DrainSystem) buildQueuedPositionSet() map[uint64]bool {
 	}
 
 	// Active materializer targets
-	matEntities := s.world.Components.Materialize.AllEntities()
+	matEntities := s.world.Components.Materialize.GetAllEntities()
 	for _, matEntity := range matEntities {
 		if matComp, ok := s.world.Components.Materialize.GetComponent(matEntity); ok {
 			key := uint64(matComp.TargetX)<<32 | uint64(matComp.TargetY)
@@ -378,7 +378,7 @@ func (s *DrainSystem) buildQueuedPositionSet() map[uint64]bool {
 	}
 
 	// Existing drain positions (authoritative iteration, not spatial query)
-	drainEntities := s.world.Components.Drain.AllEntities()
+	drainEntities := s.world.Components.Drain.GetAllEntities()
 	for _, drainEntity := range drainEntities {
 		if drainPos, ok := s.world.Positions.GetPosition(drainEntity); ok {
 			key := uint64(drainPos.X)<<32 | uint64(drainPos.Y)
@@ -392,7 +392,7 @@ func (s *DrainSystem) buildQueuedPositionSet() map[uint64]bool {
 // hasDrainAt checks if any drain exists at position using authoritative Drains store
 // O(n) where n = drain count (max 10), immune to spatial grid saturation
 func (s *DrainSystem) hasDrainAt(x, y int) bool {
-	drainEntities := s.world.Components.Drain.AllEntities()
+	drainEntities := s.world.Components.Drain.GetAllEntities()
 	for _, e := range drainEntities {
 		if pos, ok := s.world.Positions.GetPosition(e); ok {
 			if pos.X == x && pos.Y == y {
@@ -573,7 +573,7 @@ func (s *DrainSystem) handleDrainInteractions() {
 	s.handleDrainDrainCollisions()
 
 	// 2. Handle shield zone and cursor interactions
-	drainEntities := s.world.Components.Drain.AllEntities()
+	drainEntities := s.world.Components.Drain.GetAllEntities()
 	for _, drainEntity := range drainEntities {
 		drain, ok := s.world.Components.Drain.GetComponent(drainEntity)
 		if !ok {
@@ -646,7 +646,7 @@ func (s *DrainSystem) handleDrainDrainCollisions() {
 	// Build position -> drain entities map
 	drainPositions := make(map[uint64][]core.Entity)
 
-	drainEntities := s.world.Components.Drain.AllEntities()
+	drainEntities := s.world.Components.Drain.GetAllEntities()
 	for _, drainEntity := range drainEntities {
 		pos, ok := s.world.Positions.GetPosition(drainEntity)
 		if !ok {
@@ -670,7 +670,7 @@ func (s *DrainSystem) handleDrainDrainCollisions() {
 func (s *DrainSystem) handleEntityCollisions() {
 	cursorEntity := s.world.Resources.Cursor.Entity
 
-	entities := s.world.Components.Drain.AllEntities()
+	entities := s.world.Components.Drain.GetAllEntities()
 	for _, entity := range entities {
 		drainPos, ok := s.world.Positions.GetPosition(entity)
 		if !ok {
@@ -717,7 +717,7 @@ func (s *DrainSystem) updateDrainMovement() {
 
 	var collisionBuf [constant.MaxEntitiesPerCell]core.Entity
 
-	drainEntities := s.world.Components.Drain.AllEntities()
+	drainEntities := s.world.Components.Drain.GetAllEntities()
 	for _, drainEntity := range drainEntities {
 		drain, ok := s.world.Components.Drain.GetComponent(drainEntity)
 		if !ok {

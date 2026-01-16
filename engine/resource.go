@@ -12,13 +12,12 @@ import (
 // Resources holds singleton game resources, initialized during GameContext creation, accessed via World.Resources
 type Resource struct {
 	// World Resource
-	Time        *TimeResource
-	Config      *ConfigResource
-	Game        *GameStateResource
-	Environment *EnvironmentResource
-	Cursor      *CursorResource
-	Event       *EventQueueResource
-	Render      *RenderConfig
+	Time   *TimeResource
+	Config *ConfigResource
+	Game   *GameStateResource
+	Cursor *CursorResource
+	Event  *EventQueueResource
+	Render *RenderConfig
 
 	// Telemetry
 	Status *status.Registry
@@ -89,11 +88,6 @@ type EventQueueResource struct {
 // GameStateResource wraps GameState for read access by systems
 type GameStateResource struct {
 	State *GameState
-}
-
-// EnvironmentResource holds the environment entity reference
-type EnvironmentResource struct {
-	Entity core.Entity
 }
 
 // CursorResource holds the cursor entity reference

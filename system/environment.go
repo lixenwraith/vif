@@ -77,8 +77,16 @@ func (s *EnvironmentSystem) Update() {
 
 // StartGrayout activates persistent grayscale effect
 func (s *EnvironmentSystem) StartGrayout() {
-	envEntity := s.world.Resources.Environment.Entity
-	envComp, _ := s.world.Components.Environment.GetComponent(envEntity)
+	envEntities := s.world.Components.Environment.GetAllEntities()
+	if len(envEntities) == 0 {
+		return
+	}
+	// TODO: multi env profile selection, active flag in component?
+	envEntity := envEntities[0]
+	envComp, ok := s.world.Components.Environment.GetComponent(envEntity)
+	if !ok {
+		return
+	}
 
 	envComp.GrayoutActive = true
 	envComp.GrayoutIntensity = 1.0
@@ -88,8 +96,15 @@ func (s *EnvironmentSystem) StartGrayout() {
 
 // EndGrayout deactivates persistent grayscale effect
 func (s *EnvironmentSystem) EndGrayout() {
-	envEntity := s.world.Resources.Environment.Entity
-	envComp, _ := s.world.Components.Environment.GetComponent(envEntity)
+	envEntities := s.world.Components.Environment.GetAllEntities()
+	if len(envEntities) == 0 {
+		return
+	}
+	envEntity := envEntities[0]
+	envComp, ok := s.world.Components.Environment.GetComponent(envEntity)
+	if !ok {
+		return
+	}
 
 	envComp.GrayoutActive = false
 	s.world.Components.Environment.SetComponent(envEntity, envComp)

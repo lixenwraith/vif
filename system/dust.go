@@ -140,7 +140,7 @@ func (s *DustSystem) Update() {
 		return
 	}
 
-	dustEntities := s.world.Components.Dust.AllEntities()
+	dustEntities := s.world.Components.Dust.GetAllEntities()
 	if len(dustEntities) == 0 {
 		s.statActive.Store(0)
 		return
@@ -464,7 +464,7 @@ func (s *DustSystem) transformGlyphsToDust() {
 		level  component.GlyphLevel
 	}
 
-	glyphEntities := s.world.Components.Glyph.AllEntities()
+	glyphEntities := s.world.Components.Glyph.GetAllEntities()
 	toTransform := make([]glyphData, 0, len(glyphEntities))
 
 	for _, entity := range glyphEntities {

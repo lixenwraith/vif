@@ -123,7 +123,7 @@ func NewLightningRenderer(ctx *engine.GameContext) *LightningRenderer {
 
 // Render draws all active lightning bolts using the mode-appropriate renderer
 func (r *LightningRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.gameCtx.World.Components.Lightning.AllEntities()
+	entities := r.gameCtx.World.Components.Lightning.GetAllEntities()
 	if len(entities) == 0 {
 		return
 	}

@@ -470,7 +470,7 @@ func (s *TypingSystem) handleDeleteRequest(payload *event.DeleteRequestPayload) 
 		}
 
 		// Query all glyphs to find those in the row range
-		entities := s.world.Components.Glyph.AllEntities()
+		entities := s.world.Components.Glyph.GetAllEntities()
 		for _, entity := range entities {
 			pos, _ := s.world.Positions.GetPosition(entity)
 			if pos.Y >= startY && pos.Y <= endY {

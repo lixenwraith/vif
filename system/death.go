@@ -176,7 +176,7 @@ func (s *DeathSystem) Update() {
 		return
 	}
 
-	deathEntities := s.world.Components.Death.AllEntities()
+	deathEntities := s.world.Components.Death.GetAllEntities()
 	if len(deathEntities) == 0 {
 		return
 	}

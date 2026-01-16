@@ -168,14 +168,14 @@ func (s *DiagnosticsSystem) collectConsistencyChecks() {
 	var orphanGlyph, orphanMember, emptyHeader int64
 
 	// Glyph without Positions
-	for _, e := range s.world.Components.Glyph.AllEntities() {
+	for _, e := range s.world.Components.Glyph.GetAllEntities() {
 		if !s.world.Positions.HasPosition(e) {
 			orphanGlyph++
 		}
 	}
 
 	// Member without valid anchor
-	for _, e := range s.world.Components.Member.AllEntities() {
+	for _, e := range s.world.Components.Member.GetAllEntities() {
 		member, ok := s.world.Components.Member.GetComponent(e)
 		if !ok {
 			continue
@@ -186,7 +186,7 @@ func (s *DiagnosticsSystem) collectConsistencyChecks() {
 	}
 
 	// Header with no live members
-	for _, e := range s.world.Components.Header.AllEntities() {
+	for _, e := range s.world.Components.Header.GetAllEntities() {
 		header, ok := s.world.Components.Header.GetComponent(e)
 		if !ok {
 			continue

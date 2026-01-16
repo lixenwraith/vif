@@ -54,7 +54,7 @@ func NewQuasarRenderer(gameCtx *engine.GameContext) *QuasarRenderer {
 
 // Render draws quasar composite with shield halo when zapping
 func (r *QuasarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	anchors := r.gameCtx.World.Components.Quasar.AllEntities()
+	anchors := r.gameCtx.World.Components.Quasar.GetAllEntities()
 	if len(anchors) == 0 {
 		return
 	}

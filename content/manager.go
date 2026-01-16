@@ -446,7 +446,7 @@ func (cm *ContentManager) ValidateProcessedContent(lines []string) bool {
 		return false
 	}
 
-	// AllEntities lines should already be within MaxLineLength due to processing
+	// GetAllEntities lines should already be within MaxLineLength due to processing
 	// But we can verify for safety
 	for _, line := range lines {
 		if len(line) > constant.MaxLineLength {
@@ -709,7 +709,7 @@ func (cm *ContentManager) SelectRandomBlockWithValidation() ([]string, string, e
 		}
 	}
 
-	// AllEntities retries failed, fall back to default content
+	// GetAllEntities retries failed, fall back to default content
 	err := fmt.Errorf("all %d attempts failed to load valid content", constant.MaxRetries)
 	cm.breaker.recordFailure(err)
 	return cm.GetDefaultContent(), "default", nil

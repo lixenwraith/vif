@@ -100,7 +100,7 @@ func (s *CleanerSystem) Update() {
 
 	config := s.world.Resources.Config
 
-	cleanerEntities := s.world.Components.Cleaner.AllEntities()
+	cleanerEntities := s.world.Components.Cleaner.GetAllEntities()
 	s.statActive.Store(int64(len(cleanerEntities)))
 
 	// Push EventCleanerSweepingFinished when all cleaners have completed their animation
@@ -224,7 +224,7 @@ func (s *CleanerSystem) Update() {
 		}
 	}
 
-	cleanerEntities = s.world.Components.Cleaner.AllEntities()
+	cleanerEntities = s.world.Components.Cleaner.GetAllEntities()
 	// Push EventCleanerSweepingFinished when all cleaners have completed their animation
 	if len(cleanerEntities) == 0 {
 		s.world.PushEvent(event.EventCleanerSweepingFinished, nil)
@@ -575,7 +575,7 @@ func (s *CleanerSystem) scanTargetRows() []int {
 
 	targetRows := make(map[int]bool)
 
-	entities := s.world.Components.Glyph.AllEntities()
+	entities := s.world.Components.Glyph.GetAllEntities()
 
 	for _, entity := range entities {
 		glyph, ok := s.world.Components.Glyph.GetComponent(entity)

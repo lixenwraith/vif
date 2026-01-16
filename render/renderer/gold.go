@@ -22,7 +22,7 @@ func NewGoldRenderer(gameCtx *engine.GameContext) *GoldRenderer {
 
 // Render draws all gold sequence members
 func (r *GoldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	headers := r.gameCtx.World.Components.Header.AllEntities()
+	headers := r.gameCtx.World.Components.Header.GetAllEntities()
 	if len(headers) == 0 {
 		return
 	}

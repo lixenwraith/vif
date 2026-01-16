@@ -189,8 +189,6 @@ func (w *World) CreateEnvironment() {
 	// 1. Create initial environment entity and component
 	envEntity := w.CreateEntity()
 	w.Components.Environment.SetComponent(envEntity, component.EnvironmentComponent{})
-
-	w.Resources.Environment = &EnvironmentResource{Entity: envEntity}
 }
 
 // CreateCursorEntity handles cursor entity and resource creation, and components attachment to cursor entity

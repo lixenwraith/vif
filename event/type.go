@@ -121,7 +121,7 @@ const (
 	EventCleanerSweepingRequest
 
 	// EventCleanerSweepingFinished marks cleaner animation completion
-	// Trigger: AllEntities cleaner entities destroyed | Payload: nil
+	// Trigger: GetAllEntities cleaner entities destroyed | Payload: nil
 	EventCleanerSweepingFinished
 
 	// EventCharacterTyped signals Insert mode keypress

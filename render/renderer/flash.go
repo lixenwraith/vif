@@ -21,7 +21,7 @@ func NewFlashRenderer(gameCtx *engine.GameContext) *FlashRenderer {
 
 // Render draws brief flash effects when characters are removed
 func (r *FlashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.gameCtx.World.Components.Flash.AllEntities()
+	entities := r.gameCtx.World.Components.Flash.GetAllEntities()
 	if len(entities) == 0 {
 		return
 	}
