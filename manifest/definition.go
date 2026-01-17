@@ -36,6 +36,7 @@ var Components = []ComponentDef{
 	{"Heat", "HeatComponent"},
 	{"Shield", "ShieldComponent"},
 	{"Boost", "BoostComponent"},
+	{"Buff", "BuffComponent"},
 	{"Ping", "PingComponent"},
 
 	// Entity behaviors
@@ -73,6 +74,7 @@ var Systems = []SystemDef{
 	{"shield", "NewShieldSystem"},
 	{"heat", "NewHeatSystem"},
 	{"boost", "NewBoostSystem"},
+	{"buff", "NewBuffSystem"},
 	{"typing", "NewTypingSystem"},
 	{"composite", "NewCompositeSystem"},
 	{"glyph", "NewGlyphSystem"},

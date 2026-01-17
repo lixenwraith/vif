@@ -27,6 +27,9 @@ func RegisterSystems() {
 	registry.RegisterSystem("boost", func(w any) any {
 		return system.NewBoostSystem(w.(*engine.World))
 	})
+	registry.RegisterSystem("buff", func(w any) any {
+		return system.NewBuffSystem(w.(*engine.World))
+	})
 	registry.RegisterSystem("typing", func(w any) any {
 		return system.NewTypingSystem(w.(*engine.World))
 	})
@@ -179,6 +182,7 @@ func ActiveSystems() []string {
 		"shield",
 		"heat",
 		"boost",
+		"buff",
 		"typing",
 		"composite",
 		"glyph",

@@ -155,11 +155,6 @@ const (
 	// Consumer: EnergySystem | Payload: *EnergySetPayload
 	EventEnergySetRequest
 
-	// // EventEnergyAddPercentRequest signals energy delta percentage on target entity
-	// // Trigger: Shield passive drain
-	// // Consumer: EnergySystem | Payload: *EnergyAddPayload
-	// EventEnergyAddPercentRequest
-
 	// EventEnergyCrossedZeroNotification signals energy crossing zero
 	// Trigger: EnergySystem
 	// Consumer: BuffSystem | Payload: nil
@@ -420,6 +415,11 @@ const (
 	// Trigger: CleanerSystem
 	// Consumer: VampireSystem | Payload: *VampireDrainRequestPayload
 	EventVampireDrainRequest
+
+	// EventBuffAddRequest signals activating buff for cursor
+	// Trigger: FSM
+	// Consumer: BuffSystem | Payload: *BuffAddRequestPayload
+	EventBuffAddRequest
 )
 
 // GameEvent represents a single game event with metadata

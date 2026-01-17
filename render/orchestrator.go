@@ -23,8 +23,8 @@ type RenderOrchestrator struct {
 func NewRenderOrchestrator(term terminal.Terminal, width, height int) *RenderOrchestrator {
 	return &RenderOrchestrator{
 		term:      term,
-		buffer:    NewRenderBuffer(width, height),
-		renderers: make([]rendererEntry, 0, 16),
+		buffer:    NewRenderBuffer(term.ColorMode(), width, height),
+		renderers: make([]rendererEntry, 0, 32),
 	}
 }
 

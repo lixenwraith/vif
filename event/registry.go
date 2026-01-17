@@ -118,6 +118,7 @@ func InitRegistry() {
 	RegisterType("EventEnergyBlinkStart", EventEnergyBlinkStart, &EnergyBlinkPayload{})
 	RegisterType("EventEnergyBlinkStop", EventEnergyBlinkStop, nil)
 	RegisterType("EventVampireDrainRequest", EventVampireDrainRequest, &VampireDrainRequestPayload{})
+	RegisterType("EventBuffAddRequest", EventBuffAddRequest, &BuffAddRequestPayload{})
 
 	// Heat
 	RegisterType("EventHeatAdd", EventHeatAdd, &HeatAddPayload{})

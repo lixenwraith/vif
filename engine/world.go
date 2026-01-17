@@ -193,20 +193,20 @@ func (w *World) CreateCursorEntity() {
 		ExpiresAt: 0, // No expiry
 	})
 
-	// 5. Add position component to cursor
+	// 5. Add position component
 	w.Components.Ping.SetComponent(cursorEntity, component.PingComponent{
 		ShowCrosshair: true,
 		GridActive:    false,
 		GridRemaining: 0,
 	})
 
-	// 6. Add heat component to cursor
+	// 6. Add heat component
 	w.Components.Heat.SetComponent(cursorEntity, component.HeatComponent{})
 
-	// 7. Add energy component to cursor
+	// 7. Add energy component
 	w.Components.Energy.SetComponent(cursorEntity, component.EnergyComponent{})
 
-	// 8. Add shield component to cursor
+	// 8. Add shield component
 	w.Components.Shield.SetComponent(cursorEntity, component.ShieldComponent{
 		RadiusX:       vmath.FromFloat(constant.ShieldRadiusX),
 		RadiusY:       vmath.FromFloat(constant.ShieldRadiusY),
@@ -214,8 +214,13 @@ func (w *World) CreateCursorEntity() {
 		LastDrainTime: w.Resources.Time.GameTime,
 	})
 
-	// 9. Add boost component to cursor
+	// 9. Add boost component
 	w.Components.Boost.SetComponent(cursorEntity, component.BoostComponent{})
+
+	// 10. Add buff component
+	w.Components.Buff.SetComponent(cursorEntity, component.BuffComponent{
+		Active: make(map[component.BuffType]bool),
+	})
 }
 
 // === Debug ===

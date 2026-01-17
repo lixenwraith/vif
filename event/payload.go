@@ -372,3 +372,8 @@ type VampireDrainRequestPayload struct {
 	TargetEntity core.Entity `toml:"target_entity"`
 	Delta        int         `toml:"delta"`
 }
+
+// BuffAddRequestPayload
+type BuffAddRequestPayload struct {
+	Buff component.BuffType `toml:"buff"` // 0=rod, 1=launcher, 2=chain
+}

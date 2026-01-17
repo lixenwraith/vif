@@ -7,6 +7,7 @@ import (
 
 // RenderBuffer is a compositor backed by terminal.Cell array with dirty tracking
 type RenderBuffer struct {
+	colorMode   terminal.ColorMode
 	cells       []terminal.Cell
 	touched     []bool
 	masks       []uint8
@@ -16,9 +17,10 @@ type RenderBuffer struct {
 }
 
 // NewRenderBuffer creates a buffer with the specified dimensions
-func NewRenderBuffer(width, height int) *RenderBuffer {
+func NewRenderBuffer(colorMode terminal.ColorMode, width, height int) *RenderBuffer {
 	size := width * height
 	return &RenderBuffer{
+		colorMode:   colorMode,
 		cells:       make([]terminal.Cell, size),
 		touched:     make([]bool, size),
 		masks:       make([]uint8, size),
@@ -245,7 +247,7 @@ func (b *RenderBuffer) finalize() {
 	for i := range b.cells {
 		if !b.touched[i] {
 			b.cells[i].Bg = RgbBackground
-		} else if constant.OcclusionDimEnabled && b.cells[i].Rune != 0 {
+		} else if b.colorMode == terminal.ColorModeTrueColor && constant.OcclusionDimEnabled && b.cells[i].Rune != 0 {
 			// Dim background when foreground character present
 			if b.masks[i]&(constant.OcclusionDimMask) != 0 {
 				b.cells[i].Bg = Scale(b.cells[i].Bg, constant.OcclusionDimFactor)

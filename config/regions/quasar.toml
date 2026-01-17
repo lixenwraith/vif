@@ -51,6 +51,7 @@ transitions = [
 [states.QuasarExit]
 parent = "QuasarCycle"
 on_enter = [
+    { action = "EmitEvent", event = "EventBuffAddRequest", payload = { buff = 0 } },
     { action = "EmitEvent", event = "EventGoldCancel" },
     { action = "ResumeRegion", region = "main" },
     { action = "TerminateRegion", region = "quasar" }

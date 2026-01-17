@@ -7,6 +7,7 @@ const (
 	PriorityHeat        = 20
 	PriorityEnergy      = 30
 	PriorityBoost       = 40
+	PriorityBuff        = 45
 	PriorityTyping      = 50 // After boost, before composite
 	PriorityComposite   = 60 // After boost, before spawn (position sync)
 	PrioritySpawn       = 70
