@@ -90,17 +90,13 @@ func NewGameContext(world *World, width, height int) *GameContext {
 
 	// 3. Time Resource (Initial state)
 	world.Resources.Time = &TimeResource{
-		GameTime:    pausableClock.Now(),
-		RealTime:    pausableClock.RealTime(),
-		DeltaTime:   constant.GameUpdateInterval,
-		FrameNumber: ctx.FrameNumber.Load(),
+		GameTime:  pausableClock.Now(),
+		RealTime:  pausableClock.RealTime(),
+		DeltaTime: constant.GameUpdateInterval,
 	}
 
 	// 4. Event Queue Resource
 	world.Resources.Event = &EventQueueResource{Queue: event.NewEventQueue()}
-
-	// Wire World to this Context's frame source for events
-	world.SetFrameSource(&ctx.FrameNumber)
 
 	// 5. Game GameState
 	ctx.State = NewGameState()

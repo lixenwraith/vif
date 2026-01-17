@@ -234,9 +234,6 @@ func main() {
 			// Lock world to safely access/mutate shared TimeResource
 			// Copy the values to stack variables for minimal lock duration and ensuring RenderContext is built with consistent state
 			ctx.World.RunSafe(func() {
-				// TimeResource updated by ClockScheduler; refresh frame number for render
-				ctx.World.Resources.Time.FrameNumber = ctx.GetFrameNumber()
-
 				// During pause: skip game updates but still render
 				if ctx.IsPaused.Load() {
 					// Update time for paused rendering

@@ -216,9 +216,6 @@ const (
 
 	// SpiritSafetyBuffer is additional time before safety despawn to allow final frame render
 	SpiritSafetyBuffer = 100 * time.Millisecond
-
-	// SpiritBlinkHz is the color oscillation frequency during travel
-	SpiritBlinkHz = 12
 )
 
 // --- Dust Entity ---

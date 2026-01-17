@@ -16,15 +16,10 @@ type World struct {
 	mu           sync.RWMutex
 	nextEntityID core.Entity
 
-	// Global Resources
 	Resources *Resource
 
-	// Positions Store (Special - spatial index, kept as named field)
 	Components Component
 	Positions  *Position
-
-	// Direct pointers for high-frequency path optimization
-	frameSource *atomic.Int64
 
 	systems     []System
 	updateMutex sync.Mutex
@@ -144,21 +139,7 @@ func (w *World) UpdateLocked() {
 	}
 }
 
-// FrameNumber returns the current authoritative frame index from GameContext
-func (w *World) FrameNumber() int64 {
-	if w.frameSource == nil {
-		return 0
-	}
-	return w.frameSource.Load()
-}
-
-// SetFrameSource wires the direct pointer to GameContext FrameNumber for PushEvent optimization
-func (w *World) SetFrameSource(f *atomic.Int64) {
-	w.frameSource = f
-}
-
-// PushEvent emits a game event using direct cached pointers
-// This is the hot-path for all systems communication
+// PushEvent emits a game event using direct cached pointers. HOT-PATH for all systems communication
 func (w *World) PushEvent(eventType event.EventType, payload any) {
 	if w.Resources.Event.Queue == nil {
 		return // Not yet initialized

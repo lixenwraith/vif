@@ -20,16 +20,12 @@ func NewSpiritRenderer(gameCtx *engine.GameContext) *SpiritRenderer {
 }
 
 func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.gameCtx.World.Components.Spirit.GetAllEntities()
-	if len(entities) == 0 {
+	spiritEntities := r.gameCtx.World.Components.Spirit.GetAllEntities()
+	if len(spiritEntities) == 0 {
 		return
 	}
 
 	buf.SetWriteMask(constant.MaskTransient)
-
-	// Calculate blink phase from frame number
-	// SpiritBlinkHz cycles per second, ~60 frames/sec
-	blinkPhase := (ctx.FrameNumber * int64(constant.SpiritBlinkHz) / 60) % 2
 
 	// Configuration for the trail effect
 	const (
@@ -37,21 +33,21 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		trailLag   = vmath.Scale / 60 // Fixed progress lag per segment (~1.6%)
 	)
 
-	for _, entity := range entities {
-		spirit, ok := r.gameCtx.World.Components.Spirit.GetComponent(entity)
+	for _, spiritEntity := range spiritEntities {
+		spiritComp, ok := r.gameCtx.World.Components.Spirit.GetComponent(spiritEntity)
 		if !ok {
 			continue
 		}
 
 		// Pre-calculate invariant vector and aspect-corrected Y for spiral math
-		relX := spirit.StartX - spirit.TargetX
-		relY := spirit.StartY - spirit.TargetY
+		relX := spiritComp.StartX - spiritComp.TargetX
+		relY := spiritComp.StartY - spiritComp.TargetY
 		relYCirc := vmath.ScaleToCircular(relY)
 
 		// Render loop: Draw head (i=0) and trailing segments (i>0)
 		for i := 0; i < trailSteps; i++ {
 			// Calculate progress for this segment
-			p := spirit.Progress - int64(i)*trailLag
+			p := spiritComp.Progress - int64(i)*trailLag
 			if p < 0 {
 				continue // Segment hasn't spawned yet
 			}
@@ -59,7 +55,7 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			// --- Spiral Trajectory Calculation ---
 
 			// 1. Calculate rotation at current progress
-			currentRot := vmath.Mul(p, spirit.Spin)
+			currentRot := vmath.Mul(p, spiritComp.Spin)
 
 			// 2. Rotate the aspect-corrected relative vector
 			rotX, rotYCirc := vmath.RotateVector(relX, relYCirc, currentRot)
@@ -73,8 +69,8 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			rotY := vmath.ScaleFromCircular(rotYCirc)
 
 			// 5. Map to screen space
-			screenX := ctx.GameXOffset + vmath.ToInt(spirit.TargetX+rotX)
-			screenY := ctx.GameYOffset + vmath.ToInt(spirit.TargetY+rotY)
+			screenX := ctx.GameXOffset + vmath.ToInt(spiritComp.TargetX+rotX)
+			screenY := ctx.GameYOffset + vmath.ToInt(spiritComp.TargetY+rotY)
 
 			// Bounds check
 			if screenX < ctx.GameXOffset || screenX >= ctx.ScreenWidth ||
@@ -88,18 +84,12 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			var alpha float64 = 1.0
 
 			if i == 0 {
-				// Head: Use blink logic and distance-based intensity
-				if blinkPhase == 0 {
-					color = spirit.BaseColor
-				} else {
-					color = spirit.BlinkColor
-				}
 				// Intensity increases as it approaches target (0.5 -> 1.0)
 				intensity := 0.5 + (vmath.ToFloat(p) * 0.5)
 				color = render.Scale(color, intensity)
 			} else {
 				// Trail: Use BaseColor with fast quadratic fade
-				color = spirit.BaseColor
+				color = spiritComp.BaseColor
 
 				// Normalized position in trail (0.0 to 1.0)
 				trailPos := float64(i) / float64(trailSteps)
@@ -114,7 +104,7 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			}
 
 			// Additive blend for glow effect
-			buf.Set(screenX, screenY, spirit.Rune, color, render.RGBBlack, render.BlendAddFg, alpha, terminal.AttrNone)
+			buf.Set(screenX, screenY, spiritComp.Rune, color, render.RGBBlack, render.BlendAddFg, alpha, terminal.AttrNone)
 		}
 	}
 }

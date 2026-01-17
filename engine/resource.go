@@ -42,8 +42,7 @@ func (r *Resource) ServiceBridge(res any) {
 
 // === World Resources ===
 
-// TimeResource wraps time data for systems
-// It is updated by the GameContext/ClockScheduler at the start of a frame/tick
+// TimeResource is time data snapshot for systems and is updated by ClockScheduler at the start of a tick
 type TimeResource struct {
 	// GameTime is the current time in the game world (affected by pause)
 	GameTime time.Time
@@ -53,18 +52,13 @@ type TimeResource struct {
 
 	// DeltaTime is the duration since the last update
 	DeltaTime time.Duration
-
-	// FrameNumber is the current frame count
-	FrameNumber int64
 }
 
-// Update modifies TimeResource fields in-place (zero allocation)
-// Must be called under world lock to prevent races with systems reads
-func (tr *TimeResource) Update(gameTime, realTime time.Time, deltaTime time.Duration, frameNumber int64) {
+// Update modifies TimeResource fields in-place, Must be called under world lock
+func (tr *TimeResource) Update(gameTime, realTime time.Time, deltaTime time.Duration) {
 	tr.GameTime = gameTime
 	tr.RealTime = realTime
 	tr.DeltaTime = deltaTime
-	tr.FrameNumber = frameNumber
 }
 
 // ConfigResource holds static or semi-static configuration data
@@ -74,7 +68,6 @@ type ConfigResource struct {
 }
 
 // RenderConfig holds configuration for the rendering pipeline
-// This decouples renderers from specific terminal implementations and allows dynamic adjustment
 type RenderConfig struct {
 	// Color Configuration
 	ColorMode terminal.ColorMode // 0=256, 1=TrueColor

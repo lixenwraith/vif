@@ -9,7 +9,6 @@ import (
 // RenderContext provides frame state, passed by value
 type RenderContext struct {
 	GameTime     time.Time
-	FrameNumber  int64
 	DeltaTime    float64
 	IsPaused     bool
 	CursorX      int
@@ -26,7 +25,6 @@ type RenderContext struct {
 func NewRenderContextFromGame(ctx *engine.GameContext, timeRes *engine.TimeResource, cursorX, cursorY int) RenderContext {
 	return RenderContext{
 		GameTime:     timeRes.GameTime,
-		FrameNumber:  timeRes.FrameNumber,
 		DeltaTime:    timeRes.DeltaTime.Seconds(),
 		IsPaused:     ctx.IsPaused.Load(),
 		CursorX:      cursorX,

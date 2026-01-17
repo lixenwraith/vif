@@ -401,17 +401,14 @@ func (cs *ClockScheduler) processTick() {
 		now := cs.pausableClock.Now()
 
 		// 1. Sync Time
-		// Frame number sourced from game context through world
-		currentFrame := cs.world.FrameNumber()
 		cs.world.Resources.Time.Update(
 			now,
 			cs.pausableClock.RealTime(),
 			cs.tickInterval,
-			currentFrame,
 		)
 
 		// 2. Initial Settling: Resolve everything accumulated during game tick
-		// Ensures FSM and Systems start with a consistent, settled world.
+		// Ensures FSM and Systems start with a consistent, settled world
 		cs.dispatchAndProcessEvents()
 
 		// 3. FSM Update: Advance state machine (may emit new events via Actions)
