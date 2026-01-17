@@ -65,7 +65,7 @@ func DefaultKeyTable() *KeyTable {
 			terminal.KeyTab:       {BehaviorAction, MotionNone, SpecialNone, ModeTargetNone, IntentNuggetJump},
 			terminal.KeyBacktab:   {BehaviorAction, MotionNone, SpecialNone, ModeTargetNone, IntentGoldJump},
 			terminal.KeyEnter:     {BehaviorAction, MotionNone, SpecialNone, ModeTargetNone, IntentFireCleaner},
-			terminal.KeyBackspace: {BehaviorMotion, MotionLeft, SpecialNone, ModeTargetNone, IntentNone},
+			terminal.KeyBackspace: {BehaviorAction, MotionNone, SpecialNone, ModeTargetNone, IntentFireSpecial},
 			terminal.KeyPageUp:    {BehaviorMotion, MotionHalfPageUp, SpecialNone, ModeTargetNone, IntentNone},
 			terminal.KeyPageDown:  {BehaviorMotion, MotionHalfPageDown, SpecialNone, ModeTargetNone, IntentNone},
 		},
@@ -76,7 +76,6 @@ func DefaultKeyTable() *KeyTable {
 			'j': {BehaviorMotion, MotionDown, SpecialNone, ModeTargetNone, IntentNone},
 			'k': {BehaviorMotion, MotionUp, SpecialNone, ModeTargetNone, IntentNone},
 			'l': {BehaviorMotion, MotionRight, SpecialNone, ModeTargetNone, IntentNone},
-			' ': {BehaviorMotion, MotionRight, SpecialNone, ModeTargetNone, IntentNone},
 			'H': {BehaviorMotion, MotionHalfPageLeft, SpecialNone, ModeTargetNone, IntentNone},
 			'J': {BehaviorMotion, MotionHalfPageDown, SpecialNone, ModeTargetNone, IntentNone},
 			'K': {BehaviorMotion, MotionHalfPageUp, SpecialNone, ModeTargetNone, IntentNone},
@@ -127,7 +126,8 @@ func DefaultKeyTable() *KeyTable {
 			'g': {BehaviorPrefix, MotionNone, SpecialNone, ModeTargetNone, IntentNone},
 
 			// Actions
-			'\\': {BehaviorAction, MotionNone, SpecialNone, ModeTargetNone, IntentFireSpecial},
+			// '\\': {BehaviorAction, MotionNone, SpecialNone, ModeTargetNone, IntentFireSpecial},
+			' ': {BehaviorAction, MotionNone, SpecialNone, ModeTargetNone, IntentFireSpecial},
 
 			// Mode switches
 			'i': {BehaviorModeSwitch, MotionNone, SpecialNone, ModeTargetInsert, IntentNone},
