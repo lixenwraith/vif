@@ -109,9 +109,8 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.ShieldDrainPayload); ok {
 			s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
 				Delta:      payload.Amount,
-				Spend:      false, // Subject to boost protection
-				Reward:     false,
-				Convergent: true, // Clamp at zero
+				Percentage: false,
+				Type:       event.EnergyDeltaPenalty,
 			})
 			s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
 				SoundType: core.SoundShield,
@@ -139,9 +138,8 @@ func (s *ShieldSystem) Update() {
 	if now.Sub(shieldComp.LastDrainTime) >= constant.ShieldPassiveDrainInterval {
 		s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
 			Delta:      constant.ShieldPassiveEnergyPercentDrain,
-			Spend:      true, // Bypass boost (passive cost)
-			Reward:     false,
-			Convergent: true, // Clamp at zero
+			Percentage: true,
+			Type:       event.EnergyDeltaPenalty,
 		})
 		shieldComp.LastDrainTime = now
 		s.world.Components.Shield.SetComponent(cursorEntity, shieldComp)

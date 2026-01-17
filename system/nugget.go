@@ -188,10 +188,9 @@ func (s *NuggetSystem) handleJumpRequest() {
 
 	// 4. Pay Energy Cost (spend, non-convergent)
 	s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
-		Delta:      -constant.NuggetJumpCost,
-		Spend:      true,
-		Reward:     false,
-		Convergent: false,
+		Delta:      constant.NuggetJumpCost,
+		Percentage: false,
+		Type:       event.EnergyDeltaSpend,
 	})
 
 	// 5. Collect nugget that overlaps with cursor

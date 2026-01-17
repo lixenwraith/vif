@@ -64,13 +64,20 @@ var CharacterTypedPayloadPool = sync.Pool{
 	New: func() any { return &CharacterTypedPayload{} },
 }
 
+// EnergyDeltaType identifies type of energy modification that should be applied
+type EnergyDeltaType int
+
+const (
+	EnergyDeltaPenalty EnergyDeltaType = iota // Penalties from interactions, absolute value decrease, clamp to zero
+	EnergyDeltaReward                         // Reward from actions, absolute value increase
+	EnergyDeltaSpend                          // Energy spent, convergent to zero and can cross zero
+)
+
 // EnergyAddPayload contains energy delta
 type EnergyAddPayload struct {
-	Delta      int  `toml:"delta"`      // Positive or negative, sign ignored if flags except percentage is set
-	Percentage bool `toml:"percentage"` // True: percentage of current energy
-	Spend      bool `toml:"spend"`      // True: bypasses boost protection
-	Reward     bool `toml:"reward"`     // True: adds to the current energy with the same sign
-	Convergent bool `toml:"convergent"` // True: clamp at zero, cannot cross
+	Delta      int             `toml:"delta"`      // Positive or negative, sign ignored if flags except percentage is set
+	Percentage bool            `toml:"percentage"` // True: percentage of current energy
+	Type       EnergyDeltaType `toml:"type"`
 }
 
 // EnergySetPayload contains energy value
@@ -301,7 +308,7 @@ type SpiritSpawnPayload struct {
 
 // LightningSpawnPayload contains parameters to spawn a lightning entity
 type LightningSpawnPayload struct {
-	// TODO: this assumes one lightning per entity, change later to allow multiple
+	// TODO: change to support 2 moving anchors
 	Owner     core.Entity                  `toml:"owner"` // Owning entity for lifecycle (required for tracked)
 	OriginX   int                          `toml:"origin_x"`
 	OriginY   int                          `toml:"origin_y"`
@@ -363,5 +370,5 @@ type MetaSystemCommandPayload struct {
 // VampireDrainRequestPayload
 type VampireDrainRequestPayload struct {
 	TargetEntity core.Entity `toml:"target_entity"`
-	DrainAmount  int         `toml:"drain_amount"`
+	Delta        int         `toml:"delta"`
 }

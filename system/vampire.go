@@ -1,7 +1,6 @@
 package system
 
 import (
-	"fmt"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
@@ -88,26 +87,20 @@ func (s *VampireSystem) Update() {
 
 func (s *VampireSystem) vampiricDrain(payload *event.VampireDrainRequestPayload) {
 	targetEntity := payload.TargetEntity
-	drainAmount := payload.DrainAmount
+	delta := payload.Delta
 	cursorEntity := s.world.Resources.Cursor.Entity
 	energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity)
-	if !ok || drainAmount == 0 {
+	if !ok || delta == 0 {
 		return
 	}
-
-	// Determine energy polarity for rewarding drain
-	// TODO: change energy system event and logic to handle this and gold reward
 	currentEnergy := energyComp.Current
 
-	// Emit events to energy and lightning systems
+	// Emit events to energy system
 	s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
-		Delta:      drainAmount,
-		Spend:      false,
-		Reward:     true,
-		Convergent: false,
+		Delta:      delta,
+		Percentage: false,
+		Type:       event.EnergyDeltaReward,
 	})
-
-	s.world.DebugPrint(fmt.Sprintf("delta: %d, energy: %d", drainAmount, currentEnergy))
 
 	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 	if !ok {
@@ -119,6 +112,7 @@ func (s *VampireSystem) vampiricDrain(payload *event.VampireDrainRequestPayload)
 		return
 	}
 
+	// Emit event to lightning system, color based on energy polarity
 	lightningColor := component.LightningGold
 	if currentEnergy < 0 {
 		lightningColor = component.LightningPurple

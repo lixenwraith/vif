@@ -347,7 +347,7 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 		if s.world.Components.Drain.HasEntity(entity) {
 			s.world.PushEvent(event.EventVampireDrainRequest, &event.VampireDrainRequestPayload{
 				TargetEntity: entity,
-				DrainAmount:  constant.VampireEnergyDrainAmount,
+				Delta:        constant.VampireEnergyDrainAmount,
 			})
 			s.deflectDrain(entity, cleanerComp.VelX, cleanerComp.VelY)
 		}
@@ -367,7 +367,7 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 		if headerComp.Behavior == component.BehaviorQuasar {
 			s.world.PushEvent(event.EventVampireDrainRequest, &event.VampireDrainRequestPayload{
 				TargetEntity: entity,
-				DrainAmount:  constant.VampireEnergyDrainAmount,
+				Delta:        constant.VampireEnergyDrainAmount,
 			})
 			s.deflectQuasar(memberComp.HeaderEntity, entity, cleanerComp.VelX, cleanerComp.VelY)
 			s.deflectedAnchors[memberComp.HeaderEntity] = selfEntity
@@ -526,8 +526,9 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 	horizontalSpeed := constant.CleanerBaseHorizontalSpeed
 	verticalSpeed := constant.CleanerBaseVerticalSpeed
 
-	oxFixed := vmath.FromInt(originX)
-	oyFixed := vmath.FromInt(originY)
+	// Shift for cell center precise coordinate adjustment
+	oxFixed := vmath.FromInt(originX) + vmath.Scale>>1
+	oyFixed := vmath.FromInt(originY) + vmath.Scale>>1
 
 	type dirDef struct {
 		velX, velY       int64
