@@ -270,9 +270,8 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 	}
 
 	gameWidthFixed := vmath.FromInt(config.GameWidth)
-	trailLenFixed := vmath.FromInt(constant.CleanerTrailLength)
-	durationFixed := vmath.FromFloat(constant.CleanerAnimationDuration.Seconds())
-	baseSpeed := vmath.Div(gameWidthFixed, durationFixed)
+	trailLenFixed := constant.CleanerTrailLenFixed
+	baseSpeed := constant.CleanerBaseHorizontalSpeed
 
 	// Spawn one cleaner per row with Red entities, alternating L→R and R→L direction
 	for _, row := range rows {
@@ -282,12 +281,12 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 		if row%2 != 0 {
 			// Left to right
 			startX = -trailLenFixed
-			targetX = gameWidthFixed + trailLenFixed
+			targetX = gameWidthFixed + trailLenFixed*2
 			velX = baseSpeed
 		} else {
 			// Right to left
 			startX = gameWidthFixed + trailLenFixed
-			targetX = -trailLenFixed
+			targetX = -trailLenFixed * 2
 			velX = -baseSpeed
 		}
 
@@ -326,7 +325,7 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 
 // checkCollisions handles collision logic with self-exclusion
 func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
-	// Query all entities at position (includes cleaner itself due to Positions registration)
+	// Query all entities at position (includes cleaner)
 	entities := s.world.Positions.GetAllEntityAt(x, y)
 	if len(entities) == 0 {
 		return
@@ -346,6 +345,10 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 
 		// Drain
 		if s.world.Components.Drain.HasEntity(entity) {
+			s.world.PushEvent(event.EventVampireDrainRequest, &event.VampireDrainRequestPayload{
+				TargetEntity: entity,
+				DrainAmount:  constant.VampireEnergyDrainAmount,
+			})
 			s.deflectDrain(entity, cleanerComp.VelX, cleanerComp.VelY)
 		}
 
@@ -362,6 +365,10 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 			continue
 		}
 		if headerComp.Behavior == component.BehaviorQuasar {
+			s.world.PushEvent(event.EventVampireDrainRequest, &event.VampireDrainRequestPayload{
+				TargetEntity: entity,
+				DrainAmount:  constant.VampireEnergyDrainAmount,
+			})
 			s.deflectQuasar(memberComp.HeaderEntity, entity, cleanerComp.VelX, cleanerComp.VelY)
 			s.deflectedAnchors[memberComp.HeaderEntity] = selfEntity
 		}
@@ -514,11 +521,10 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 
 	gameWidthFixed := vmath.FromInt(config.GameWidth)
 	gameHeightFixed := vmath.FromInt(config.GameHeight)
-	trailLenFixed := vmath.FromInt(constant.CleanerTrailLength)
-	durationFixed := vmath.FromFloat(constant.CleanerAnimationDuration.Seconds())
+	trailLenFixed := constant.CleanerTrailLenFixed
 
-	horizontalSpeed := vmath.Div(gameWidthFixed, durationFixed)
-	verticalSpeed := vmath.Div(gameHeightFixed, durationFixed)
+	horizontalSpeed := constant.CleanerBaseHorizontalSpeed
+	verticalSpeed := constant.CleanerBaseVerticalSpeed
 
 	oxFixed := vmath.FromInt(originX)
 	oyFixed := vmath.FromInt(originY)
@@ -530,10 +536,10 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 	}
 
 	directions := []dirDef{
-		{horizontalSpeed, 0, oxFixed, oyFixed, gameWidthFixed + trailLenFixed, oyFixed},
-		{-horizontalSpeed, 0, oxFixed, oyFixed, -trailLenFixed, oyFixed},
-		{0, verticalSpeed, oxFixed, oyFixed, oxFixed, gameHeightFixed + trailLenFixed},
-		{0, -verticalSpeed, oxFixed, oyFixed, oxFixed, -trailLenFixed},
+		{horizontalSpeed, 0, oxFixed, oyFixed, gameWidthFixed + 2*trailLenFixed, oyFixed},
+		{-horizontalSpeed, 0, oxFixed, oyFixed, -trailLenFixed * 2, oyFixed},
+		{0, verticalSpeed, oxFixed, oyFixed, oxFixed, gameHeightFixed + trailLenFixed*2},
+		{0, -verticalSpeed, oxFixed, oyFixed, oxFixed, -trailLenFixed * 2},
 	}
 
 	// Spawn 4 cleaners from origin, each traveling in a cardinal direction

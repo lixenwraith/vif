@@ -145,25 +145,25 @@ const (
 	// Consumer: SplashSystem | Payload: *SplashTimerCancelPayload
 	EventSplashTimerCancel
 
-	// EventEnergyAddAmount signals energy delta on target entity
+	// EventEnergyAddRequest signals energy delta on target entity
 	// Trigger: Character typed, shield drain, nugget jump
-	// Consumer: EnergySystem | Payload: *EnergyAddAmountPayload
-	EventEnergyAddAmount
+	// Consumer: EnergySystem | Payload: *EnergyAddPayload
+	EventEnergyAddRequest
 
-	// EventEnergySetAmount signals setting energy to specific value
+	// EventEnergySetRequest signals setting energy to specific value
 	// Trigger: Game reset, cheats
-	// Consumer: EnergySystem | Payload: *EnergySetAmountPayload
-	EventEnergySetAmount
+	// Consumer: EnergySystem | Payload: *EnergySetPayload
+	EventEnergySetRequest
 
-	// EventEnergyAddPercent signals energy delta percentage on target entity
-	// Trigger: Shield passive drain
-	// Consumer: EnergySystem | Payload: *EnergyAddAmountPayload
-	EventEnergyAddPercent
+	// // EventEnergyAddPercentRequest signals energy delta percentage on target entity
+	// // Trigger: Shield passive drain
+	// // Consumer: EnergySystem | Payload: *EnergyAddPayload
+	// EventEnergyAddPercentRequest
 
-	// EventEnergyCrossedZero signals energy crossing zero
+	// EventEnergyCrossedZeroNotification signals energy crossing zero
 	// Trigger: EnergySystem
 	// Consumer: BuffSystem | Payload: nil
-	EventEnergyCrossedZero
+	EventEnergyCrossedZeroNotification
 
 	// EventEnergyGlyphConsumed signals glyph destruction for energy calculation
 	// Trigger: TypingSystem (correct character), DustSystem (shield collision)
@@ -185,10 +185,10 @@ const (
 	// Consumer: HeatSystem | Payload: *HeatAddPayload
 	EventHeatAdd
 
-	// EventHeatSet signals absolute heat value
+	// EventHeatSetRequest signals absolute heat value
 	// Trigger: Gold complete, debug command, boost command, error reset
 	// Consumer: HeatSystem | Payload: *HeatSetPayload
-	EventHeatSet
+	EventHeatSetRequest
 
 	// EventShieldActivate signals shield should become active
 	// Trigger: EnergySystem when energy > 0 and shield inactive
@@ -415,6 +415,11 @@ const (
 	// Trigger: FSM
 	// Consumer: SwarmSystem | Payload: nil
 	EventSwarmCancel
+
+	// EventVampireDrainRequest signals energy drain from target hit
+	// Trigger: CleanerSystem
+	// Consumer: VampireSystem | Payload: *VampireDrainRequestPayload
+	EventVampireDrainRequest
 )
 
 // GameEvent represents a single game event with metadata

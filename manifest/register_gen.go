@@ -54,6 +54,9 @@ func RegisterSystems() {
 	registry.RegisterSystem("cleaner", func(w any) any {
 		return system.NewCleanerSystem(w.(*engine.World))
 	})
+	registry.RegisterSystem("vampire", func(w any) any {
+		return system.NewVampireSystem(w.(*engine.World))
+	})
 	registry.RegisterSystem("fuse", func(w any) any {
 		return system.NewFuseSystem(w.(*engine.World))
 	})
@@ -185,6 +188,7 @@ func ActiveSystems() []string {
 		"gold",
 		"materialize",
 		"cleaner",
+		"vampire",
 		"fuse",
 		"spirit",
 		"lightning",

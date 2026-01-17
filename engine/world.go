@@ -217,3 +217,10 @@ func (w *World) CreateCursorEntity() {
 	// 9. Add boost component to cursor
 	w.Components.Boost.SetComponent(cursorEntity, component.BoostComponent{})
 }
+
+// === Debug ===
+
+// DebugPrint prints a message in status bar via meta system
+func (w *World) DebugPrint(msg string) {
+	w.PushEvent(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{Message: msg})
+}

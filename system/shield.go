@@ -14,7 +14,8 @@ import (
 type ShieldSystem struct {
 	world *engine.World
 
-	statActive *atomic.Bool
+	statActive    *atomic.Bool
+	statShieldHit *atomic.Int64
 
 	enabled bool
 }
@@ -26,6 +27,7 @@ func NewShieldSystem(world *engine.World) engine.System {
 	}
 
 	s.statActive = s.world.Resources.Status.Bools.Get("shield.active")
+	s.statShieldHit = s.world.Resources.Status.Ints.Get("shield.shield_hit")
 
 	s.Init()
 	return s
@@ -34,6 +36,7 @@ func NewShieldSystem(world *engine.World) engine.System {
 // Init resets session state for new game
 func (s *ShieldSystem) Init() {
 	s.statActive.Store(false)
+	s.statShieldHit.Store(0)
 	s.enabled = true
 }
 
@@ -104,14 +107,16 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventShieldDrain:
 		if payload, ok := ev.Payload.(*event.ShieldDrainPayload); ok {
-			s.world.PushEvent(event.EventEnergyAddAmount, &event.EnergyAddAmountPayload{
+			s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
 				Delta:      payload.Amount,
 				Spend:      false, // Subject to boost protection
-				Convergent: true,  // Clamp at zero
+				Reward:     false,
+				Convergent: true, // Clamp at zero
 			})
 			s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
 				SoundType: core.SoundShield,
 			})
+			s.statShieldHit.Add(1)
 		}
 	}
 }
@@ -132,10 +137,11 @@ func (s *ShieldSystem) Update() {
 	now := s.world.Resources.Time.GameTime
 
 	if now.Sub(shieldComp.LastDrainTime) >= constant.ShieldPassiveDrainInterval {
-		s.world.PushEvent(event.EventEnergyAddPercent, &event.EnergyAddPercentPayload{
-			DeltaPercent: constant.ShieldPassiveEnergyPercentDrain,
-			Spend:        true, // Bypass boost (passive cost)
-			Convergent:   true, // Clamp at zero
+		s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
+			Delta:      constant.ShieldPassiveEnergyPercentDrain,
+			Spend:      true, // Bypass boost (passive cost)
+			Reward:     false,
+			Convergent: true, // Clamp at zero
 		})
 		shieldComp.LastDrainTime = now
 		s.world.Components.Shield.SetComponent(cursorEntity, shieldComp)

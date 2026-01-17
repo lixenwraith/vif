@@ -9,8 +9,10 @@ const (
 	// CleanerChar is the character used to render the cleaner block
 	CleanerChar = '█'
 
-	// CleanerAnimationDuration is the total time for a cleaner to sweep across the screen
-	CleanerAnimationDuration = 1000 * time.Millisecond
+	// CleanerBaseHorizontalSpeed
+	CleanerBaseHorizontalSpeedFloat = 80.0
+	// CleanerBaseVerticalSpeed
+	CleanerBaseVerticalSpeedFloat = 40.0
 
 	// CleanerTrailLength is the number of previous positions tracked for the fade trail effect
 	CleanerTrailLength = 10

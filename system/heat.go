@@ -57,7 +57,7 @@ func (s *HeatSystem) Update() {
 func (s *HeatSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventHeatAdd,
-		event.EventHeatSet,
+		event.EventHeatSetRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
@@ -91,7 +91,7 @@ func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
 				})
 			}
 		}
-	case event.EventHeatSet:
+	case event.EventHeatSetRequest:
 		if payload, ok := ev.Payload.(*event.HeatSetPayload); ok {
 			s.setHeat(payload.Value)
 		}

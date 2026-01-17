@@ -115,6 +115,12 @@ const (
 	ShieldPassiveDrainInterval = 1 * time.Second
 )
 
+// Vampire Drain
+const (
+	// VampireEnergyDrainAmount is the amount of energy absorbed energy on hit
+	VampireEnergyDrainAmount = 100
+)
+
 // Spawn Rate Management
 const (
 	// SpawnDensityLowThreshold is the entity density below which spawn rate increases

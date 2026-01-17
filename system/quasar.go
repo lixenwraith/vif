@@ -460,7 +460,7 @@ func (s *QuasarSystem) applyZapDamage() {
 		})
 	} else {
 		// Direct hit - reset heat (terminates phase)
-		s.world.PushEvent(event.EventHeatSet, &event.HeatSetPayload{Value: 0})
+		s.world.PushEvent(event.EventHeatSetRequest, &event.HeatSetPayload{Value: 0})
 	}
 }
 
@@ -617,7 +617,7 @@ func (s *QuasarSystem) handleInteractions(headerEntity core.Entity, headerComp *
 
 	// Direct cursor collision without shieldComp → reset heat to 0
 	if anyOnCursor && !shieldActive {
-		s.world.PushEvent(event.EventHeatSet, &event.HeatSetPayload{Value: 0})
+		s.world.PushEvent(event.EventHeatSetRequest, &event.HeatSetPayload{Value: 0})
 	}
 }
 

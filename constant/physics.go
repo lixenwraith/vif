@@ -2,8 +2,16 @@ package constant
 
 import "github.com/lixenwraith/vi-fighter/vmath"
 
-// Pre-computed Q32.32 physics constants
-// Initialized once, used by systems to avoid repeated FromFloat calls
+// Pre-computed Q32.32 physics constants, initialized once to avoid repeated float calculation and used by systems
+
+// Cleaner physics
+var (
+	CleanerBaseHorizontalSpeed = vmath.FromFloat(CleanerBaseHorizontalSpeedFloat)
+	CleanerBaseVerticalSpeed   = vmath.FromFloat(CleanerBaseVerticalSpeedFloat)
+	CleanerTrailLenFixed       = vmath.FromInt(CleanerTrailLength)
+)
+
+// Drain physics
 var (
 	// Drain physics (Q32.32)
 	DrainBaseSpeed         = vmath.FromFloat(DrainBaseSpeedFloat)
@@ -13,7 +21,10 @@ var (
 	DrainDeflectAngleVar   = vmath.FromFloat(DrainDeflectAngleVarFloat)
 	DrainDeflectImpulseMin = vmath.FromFloat(DrainDeflectImpulseMinFloat)
 	DrainDeflectImpulseMax = vmath.FromFloat(DrainDeflectImpulseMaxFloat)
+)
 
+// Quasar physics
+var (
 	// Quasar physics (Q32.32)
 	QuasarDeflectImpulseMin = vmath.FromFloat(QuasarDeflectImpulseMinFloat)
 	QuasarDeflectImpulseMax = vmath.FromFloat(QuasarDeflectImpulseMaxFloat)
@@ -29,7 +40,7 @@ var (
 	ShieldKnockbackImpulseMax = vmath.FromFloat(ShieldKnockbackImpulseMaxFloat)
 )
 
-// Dust physics (Q32.32)
+// Dust physics
 var (
 	DustAttractionBase = vmath.FromFloat(DustAttractionBaseFloat)
 	DustOrbitRadiusMin = vmath.FromFloat(DustOrbitRadiusMinFloat)
@@ -42,7 +53,7 @@ var (
 	DustJitter         = vmath.FromFloat(DustJitterFloat)
 )
 
-// Explosion field VFX (Q32.32)
+// Explosion field VFX
 var (
 	ExplosionFieldRadius      = vmath.FromFloat(ExplosionFieldRadiusFloat)
 	ExplosionMergeThreshold   = vmath.FromFloat(ExplosionMergeThresholdFloat)

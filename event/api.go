@@ -42,11 +42,3 @@ func EmitDeathBatch(q *EventQueue, effect EventType, entities []core.Entity) {
 //
 // **Pattern 4: Silent Batch (e.g., Range delete)**
 // event.EmitDeathBatch(s.res.Event.Queue, 0, toDestroy)
-
-// DebugPrint writes a message on status bar via meta system
-func DebugPrint(q *EventQueue, Message string) {
-	q.Push(GameEvent{
-		Type:    EventMetaStatusMessageRequest,
-		Payload: MetaStatusMessagePayload{Message: Message},
-	})
-}

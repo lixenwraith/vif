@@ -64,24 +64,26 @@ var CharacterTypedPayloadPool = sync.Pool{
 	New: func() any { return &CharacterTypedPayload{} },
 }
 
-// EnergyAddAmountPayload contains energy delta
-type EnergyAddAmountPayload struct {
-	Delta      int  `toml:"delta"`
+// EnergyAddPayload contains energy delta
+type EnergyAddPayload struct {
+	Delta      int  `toml:"delta"`      // Positive or negative, sign ignored if flags except percentage is set
+	Percentage bool `toml:"percentage"` // True: percentage of current energy
 	Spend      bool `toml:"spend"`      // True: bypasses boost protection
+	Reward     bool `toml:"reward"`     // True: adds to the current energy with the same sign
 	Convergent bool `toml:"convergent"` // True: clamp at zero, cannot cross
 }
 
-// EnergySetAmountPayload contains energy value
-type EnergySetAmountPayload struct {
+// EnergySetPayload contains energy value
+type EnergySetPayload struct {
 	Value int `toml:"value"`
 }
 
-// EnergyAddPercentPayload contains energy delta
-type EnergyAddPercentPayload struct {
-	DeltaPercent int  `toml:"delta_percent"`
-	Spend        bool `toml:"spend"`      // True: bypasses boost protection
-	Convergent   bool `toml:"convergent"` // True: clamp at zero, cannot cross
-}
+// // EnergyAddPercentPayload contains energy delta
+// type EnergyAddPercentPayload struct {
+// 	DeltaPercent int  `toml:"delta_percent"`
+// 	Spend        bool `toml:"spend"`      // True: bypasses boost protection
+// 	Convergent   bool `toml:"convergent"` // True: clamp at zero, cannot cross
+// }
 
 // GlyphConsumedPayload contains glyph data for centralized energy calculation
 type GlyphConsumedPayload struct {
@@ -356,4 +358,10 @@ type MetaStatusMessagePayload struct {
 type MetaSystemCommandPayload struct {
 	SystemName string `toml:"system_name"`
 	Enabled    bool   `toml:"enabled"`
+}
+
+// VampireDrainRequestPayload
+type VampireDrainRequestPayload struct {
+	TargetEntity core.Entity `toml:"target_entity"`
+	DrainAmount  int         `toml:"drain_amount"`
 }

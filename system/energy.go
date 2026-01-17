@@ -48,9 +48,8 @@ func (s *EnergySystem) Priority() int {
 // EventTypes returns the event types EnergySystem handles
 func (s *EnergySystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventEnergyAddAmount,
-		event.EventEnergySetAmount,
-		event.EventEnergyAddPercent,
+		event.EventEnergyAddRequest,
+		event.EventEnergySetRequest,
 		event.EventEnergyGlyphConsumed,
 		event.EventEnergyBlinkStart,
 		event.EventEnergyBlinkStop,
@@ -79,26 +78,14 @@ func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	switch ev.Type {
-	case event.EventEnergyAddAmount:
-		if payload, ok := ev.Payload.(*event.EnergyAddAmountPayload); ok {
-			s.addEnergy(int64(payload.Delta), payload.Spend, payload.Convergent)
+	case event.EventEnergyAddRequest:
+		if payload, ok := ev.Payload.(*event.EnergyAddPayload); ok {
+			s.addEnergy(int64(payload.Delta), payload.Percentage, payload.Spend, payload.Reward, payload.Convergent)
 		}
 
-	case event.EventEnergySetAmount:
-		if payload, ok := ev.Payload.(*event.EnergySetAmountPayload); ok {
+	case event.EventEnergySetRequest:
+		if payload, ok := ev.Payload.(*event.EnergySetPayload); ok {
 			s.setEnergy(int64(payload.Value), false)
-		}
-
-	case event.EventEnergyAddPercent:
-		if payload, ok := ev.Payload.(*event.EnergyAddPercentPayload); ok {
-			energyComp, ok := s.world.Components.Energy.GetComponent(s.world.Resources.Cursor.Entity)
-			if !ok {
-				return
-			}
-			// Letting low energy and low percentage to fall to zero
-			delta := (int64(payload.DeltaPercent) * energyComp.Current) / 100
-
-			s.addEnergy(delta, payload.Spend, payload.Convergent)
 		}
 
 	case event.EventEnergyGlyphConsumed:
@@ -163,7 +150,7 @@ func (s *EnergySystem) Update() {
 // addEnergy modifies energy on cursor entity
 // Spend: bypasses boost protection
 // Convergent: clamps at zero, cannot cross
-func (s *EnergySystem) addEnergy(delta int64, spend bool, convergent bool) {
+func (s *EnergySystem) addEnergy(delta int64, percentage, spend, reward, convergent bool) {
 	cursorEntity := s.world.Resources.Cursor.Entity
 	energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity)
 	if !ok {
@@ -172,11 +159,28 @@ func (s *EnergySystem) addEnergy(delta int64, spend bool, convergent bool) {
 
 	currentEnergy := energyComp.Current
 
-	// Fast path for typing (Direct modification, no clamps, raw delta)
-	if !spend && !convergent {
-		energyComp.Current = currentEnergy + delta
-		s.world.Components.Energy.SetComponent(cursorEntity, energyComp)
+	if percentage {
+		// Letting low energy and low percentage to fall to zero
+		delta = (delta * currentEnergy) / 100
+	}
+
+	if delta == 0 {
 		return
+	}
+
+	// Calculate defensive absolute magnitude
+	absDelta := delta
+	if absDelta < 0 {
+		absDelta = -absDelta
+	}
+
+	negativeEnergy := currentEnergy < 0
+
+	var newEnergy int64
+	// Fast path for typing (Direct modification, no clamps, raw delta)
+	if !spend && !convergent && !reward {
+		newEnergy = currentEnergy + delta
+		goto finalize
 	}
 
 	// Early exit for convergent logic on empty energy
@@ -186,18 +190,20 @@ func (s *EnergySystem) addEnergy(delta int64, spend bool, convergent bool) {
 
 	// Boost protection, only applies when converging (draining) without spending (passive drain)
 	if convergent && !spend {
-		if boost, ok := s.world.Components.Boost.GetComponent(cursorEntity); !ok || boost.Active {
+		if boost, ok := s.world.Components.Boost.GetComponent(cursorEntity); ok && boost.Active {
 			return
 		}
 	}
 
-	// Calculate defensive absolute magnitude
-	absDelta := delta
-	if absDelta < 0 {
-		absDelta = -absDelta
+	// Check reward first
+	if reward {
+		if negativeEnergy {
+			newEnergy = currentEnergy - absDelta
+		} else {
+			newEnergy = currentEnergy + absDelta
+		}
+		goto finalize
 	}
-
-	var newEnergy int64
 
 	// Apply magnitude reduction based on current sign (Spend and Converge both reduce magnitude)
 	if currentEnergy < 0 {
@@ -214,8 +220,9 @@ func (s *EnergySystem) addEnergy(delta int64, spend bool, convergent bool) {
 		}
 	}
 
+finalize:
 	var crossedZero bool
-	if (newEnergy < 0 && currentEnergy > 0) || (newEnergy > 0 && currentEnergy < 0) {
+	if newEnergy == 0 || (newEnergy > 0 && negativeEnergy) || (newEnergy < 0 && !negativeEnergy) {
 		crossedZero = true
 	}
 
@@ -236,7 +243,7 @@ func (s *EnergySystem) setEnergy(value int64, crossedZero bool) {
 	if value == 0 {
 		s.world.PushEvent(event.EventShieldDeactivate, nil)
 	} else if crossedZero {
-		s.world.PushEvent(event.EventEnergyCrossedZero, nil)
+		s.world.PushEvent(event.EventEnergyCrossedZeroNotification, nil)
 	}
 }
 
@@ -262,7 +269,7 @@ func (s *EnergySystem) handleGlyphConsumed(glyphType component.GlyphType, _ comp
 		return
 	}
 
-	s.addEnergy(int64(delta), false, false)
+	s.addEnergy(int64(delta), false, false, false, false)
 }
 
 // startBlink activates blink state

@@ -82,6 +82,7 @@ var Systems = []SystemDef{
 	{"gold", "NewGoldSystem"},
 	{"materialize", "NewMaterializeSystem"},
 	{"cleaner", "NewCleanerSystem"},
+	{"vampire", "NewVampireSystem"},
 	{"fuse", "NewFuseSystem"},
 	{"spirit", "NewSpiritSystem"},
 	{"lightning", "NewLightningSystem"},

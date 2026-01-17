@@ -13,6 +13,7 @@ const (
 	PriorityNugget      = 80
 	PriorityGold        = 90
 	PriorityCleaner     = 100
+	PriorityVampire     = 110 // After Cleaner, before Drain, Quasar, Swarm, Lightning
 	PriorityFuse        = 110 // After Cleaner, before Drain
 	PrioritySpirit      = 120 // After Fuse, before Drain
 	PriorityDrain       = 130

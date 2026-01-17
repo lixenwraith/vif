@@ -233,11 +233,10 @@ func (s *GoldSystem) handleJumpRequest() {
 	})
 
 	// 3. Pay Energy Cost (spend, non-convergent)
-	s.world.PushEvent(event.EventEnergyAddAmount, &event.EnergyAddAmountPayload{
-		Delta: -constant.GoldJumpCost,
-		Spend: true,
-		// TODO: remove after gameplay test
-		// Convergent: true,
+	s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
+		Delta:      constant.GoldJumpCost,
+		Spend:      true,
+		Reward:     false,
 		Convergent: false,
 	})
 
