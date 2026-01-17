@@ -29,6 +29,11 @@ func (s *TimeKeeperSystem) Init() {
 	s.enabled = true
 }
 
+// Name returns system's name
+func (s *TimeKeeperSystem) Name() string {
+	return "timekeeper"
+}
+
 // Priority returns the system's priority (runs just before CullSystem)
 func (s *TimeKeeperSystem) Priority() int {
 	return constant.PriorityTimekeeper
@@ -37,8 +42,9 @@ func (s *TimeKeeperSystem) Priority() int {
 // EventTypes returns the event types TimeKeeperSystem handles
 func (s *TimeKeeperSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventGameReset,
 		event.EventTimerStart,
+		event.EventMetaSystemCommandRequest,
+		event.EventGameReset,
 	}
 }
 
@@ -47,6 +53,14 @@ func (s *TimeKeeperSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		s.Init()
 		return
+	}
+
+	if ev.Type == event.EventMetaSystemCommandRequest {
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			if payload.SystemName == s.Name() {
+				s.enabled = payload.Enabled
+			}
+		}
 	}
 
 	if !s.enabled {

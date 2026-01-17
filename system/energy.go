@@ -35,6 +35,11 @@ func (s *EnergySystem) Init() {
 	s.enabled = true
 }
 
+// Name returns system's name
+func (s *EnergySystem) Name() string {
+	return "energy"
+}
+
 // Priority returns the system's priority
 func (s *EnergySystem) Priority() int {
 	return constant.PriorityEnergy
@@ -49,6 +54,7 @@ func (s *EnergySystem) EventTypes() []event.EventType {
 		event.EventEnergyGlyphConsumed,
 		event.EventEnergyBlinkStart,
 		event.EventEnergyBlinkStop,
+		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
 }
@@ -58,6 +64,14 @@ func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		s.Init()
 		return
+	}
+
+	if ev.Type == event.EventMetaSystemCommandRequest {
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			if payload.SystemName == s.Name() {
+				s.enabled = payload.Enabled
+			}
+		}
 	}
 
 	if !s.enabled {

@@ -217,28 +217,28 @@ const (
 
 	// EventGameReset signals a request to reset the game state
 	// Trigger: Command :new
-	// Consumer: CommandSystem | Payload: nil
+	// Consumer: MetaSystem | Payload: nil
 	EventGameReset
-
-	// EventSpawnChange signals a request to enable/disable spawning
-	// Trigger: Command :spawn
-	// Consumer: SpawnSystem | Payload: *SpawnChangePayload
-	EventSpawnChange
 
 	// EventMetaDebugRequest signals a request to show debug overlay
 	// Trigger: Command :debug
-	// Consumer: CommandSystem | Payload: nil
+	// Consumer: MetaSystem | Payload: nil
 	EventMetaDebugRequest
 
 	// EventMetaHelpRequest signals a request to show help overlay
 	// Trigger: Command :help
-	// Consumer: CommandSystem | Payload: nil
+	// Consumer: MetaSystem | Payload: nil
 	EventMetaHelpRequest
 
 	// EventMetaHelpRequest signals a request to show help overlay
-	// Trigger: Systems :help
-	// Consumer: CommandSystem | Payload: *MetaStatusMessagePayload
+	// Trigger: Systems
+	// Consumer: MetaSystem | Payload: *MetaStatusMessagePayload
 	EventMetaStatusMessageRequest
+
+	// EventMetaSystemCommandRequest signals a request to show help overlay
+	// Trigger: MetaSystems
+	// Consumer: Systems | Payload: *MetaSystemCommandPayload
+	EventMetaSystemCommandRequest
 
 	// EventTimerStart signals creation of a lifecycle timer for an entity
 	// Trigger: Systems creating transient entities (Splash, Flash)

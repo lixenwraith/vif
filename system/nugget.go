@@ -53,6 +53,11 @@ func (s *NuggetSystem) Init() {
 	s.enabled = true
 }
 
+// Name returns system's name
+func (s *NuggetSystem) Name() string {
+	return "nugget"
+}
+
 // Priority returns the system's priority
 func (s *NuggetSystem) Priority() int {
 	return constant.PriorityNugget
@@ -64,6 +69,7 @@ func (s *NuggetSystem) EventTypes() []event.EventType {
 		event.EventNuggetJumpRequest,
 		event.EventNuggetCollected,
 		event.EventNuggetDestroyed,
+		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
 }
@@ -73,6 +79,14 @@ func (s *NuggetSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		s.Init()
 		return
+	}
+
+	if ev.Type == event.EventMetaSystemCommandRequest {
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			if payload.SystemName == s.Name() {
+				s.enabled = payload.Enabled
+			}
+		}
 	}
 
 	if !s.enabled {

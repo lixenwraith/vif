@@ -75,6 +75,11 @@ func (s *DrainSystem) Init() {
 	s.enabled = true
 }
 
+// Name returns system's name
+func (s *DrainSystem) Name() string {
+	return "drain"
+}
+
 // Priority returns the system's priority
 func (s *DrainSystem) Priority() int {
 	return constant.PriorityDrain
@@ -86,6 +91,7 @@ func (s *DrainSystem) EventTypes() []event.EventType {
 		event.EventMaterializeComplete,
 		event.EventDrainPause,
 		event.EventDrainResume,
+		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
 }
@@ -95,6 +101,14 @@ func (s *DrainSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		s.Init()
 		return
+	}
+
+	if ev.Type == event.EventMetaSystemCommandRequest {
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			if payload.SystemName == s.Name() {
+				s.enabled = payload.Enabled
+			}
+		}
 	}
 
 	if !s.enabled {

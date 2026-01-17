@@ -51,6 +51,11 @@ func (s *BlossomSystem) Init() {
 	s.enabled = true
 }
 
+// Name returns system's name
+func (s *BlossomSystem) Name() string {
+	return "blossom"
+}
+
 // Priority returns the system's priority
 func (s *BlossomSystem) Priority() int {
 	return constant.PriorityBlossom
@@ -61,6 +66,7 @@ func (s *BlossomSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventBlossomWave,
 		event.EventBlossomSpawnOne,
+		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
 }
@@ -70,6 +76,14 @@ func (s *BlossomSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		s.Init()
 		return
+	}
+
+	if ev.Type == event.EventMetaSystemCommandRequest {
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			if payload.SystemName == s.Name() {
+				s.enabled = payload.Enabled
+			}
+		}
 	}
 
 	if !s.enabled {

@@ -39,6 +39,11 @@ func (s *BoostSystem) Init() {
 	s.enabled = true
 }
 
+// Name returns system's name
+func (s *BoostSystem) Name() string {
+	return "boost"
+}
+
 func (s *BoostSystem) Priority() int {
 	return constant.PriorityBoost
 }
@@ -48,6 +53,7 @@ func (s *BoostSystem) EventTypes() []event.EventType {
 		event.EventBoostActivate,
 		event.EventBoostDeactivate,
 		event.EventBoostExtend,
+		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
 }
@@ -56,6 +62,14 @@ func (s *BoostSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		s.Init()
 		return
+	}
+
+	if ev.Type == event.EventMetaSystemCommandRequest {
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			if payload.SystemName == s.Name() {
+				s.enabled = payload.Enabled
+			}
+		}
 	}
 
 	if !s.enabled {

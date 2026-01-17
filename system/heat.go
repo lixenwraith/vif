@@ -38,6 +38,11 @@ func (s *HeatSystem) Init() {
 	s.enabled = true
 }
 
+// Name returns system's name
+func (s *HeatSystem) Name() string {
+	return "heat"
+}
+
 func (s *HeatSystem) Priority() int {
 	return constant.PriorityHeat
 }
@@ -51,9 +56,10 @@ func (s *HeatSystem) Update() {
 
 func (s *HeatSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventGameReset,
 		event.EventHeatAdd,
 		event.EventHeatSet,
+		event.EventMetaSystemCommandRequest,
+		event.EventGameReset,
 	}
 }
 
@@ -61,6 +67,14 @@ func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		s.Init()
 		return
+	}
+
+	if ev.Type == event.EventMetaSystemCommandRequest {
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			if payload.SystemName == s.Name() {
+				s.enabled = payload.Enabled
+			}
+		}
 	}
 
 	if !s.enabled {

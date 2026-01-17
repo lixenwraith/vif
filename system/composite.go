@@ -34,14 +34,20 @@ func (s *CompositeSystem) Init() {
 	s.enabled = true
 }
 
+// Name returns system's name
+func (s *CompositeSystem) Name() string {
+	return "composite"
+}
+
 func (s *CompositeSystem) Priority() int {
 	return constant.PriorityComposite
 }
 
 func (s *CompositeSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventGameReset,
 		event.EventMemberTyped,
+		event.EventMetaSystemCommandRequest,
+		event.EventGameReset,
 	}
 }
 
@@ -49,6 +55,14 @@ func (s *CompositeSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		s.Init()
 		return
+	}
+
+	if ev.Type == event.EventMetaSystemCommandRequest {
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			if payload.SystemName == s.Name() {
+				s.enabled = payload.Enabled
+			}
+		}
 	}
 
 	if !s.enabled {

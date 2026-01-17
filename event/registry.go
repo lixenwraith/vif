@@ -80,6 +80,12 @@ func InitRegistry() {
 	RegisterType("EventNetworkEvent", EventNetworkEvent, &NetworkEventPayload{})
 	RegisterType("EventNetworkError", EventNetworkError, &NetworkErrorPayload{})
 
+	// Meta events
+	RegisterType("EventGameReset", EventGameReset, nil)
+	RegisterType("EventMetaDebugRequest", EventMetaDebugRequest, nil)
+	RegisterType("EventMetaHelpRequest", EventMetaHelpRequest, nil)
+	RegisterType("EventMetaSystemCommandRequest", EventMetaSystemCommandRequest, &MetaSystemCommandPayload{})
+
 	// Game events
 	RegisterType("EventNuggetCollected", EventNuggetCollected, &NuggetCollectedPayload{})
 	RegisterType("EventNuggetDestroyed", EventNuggetDestroyed, &NuggetDestroyedPayload{})
@@ -124,10 +130,7 @@ func InitRegistry() {
 
 	RegisterType("EventDeleteRequest", EventDeleteRequest, &DeleteRequestPayload{})
 	RegisterType("EventPingGridRequest", EventPingGridRequest, &PingGridRequestPayload{})
-	RegisterType("EventGameReset", EventGameReset, nil)
-	RegisterType("EventSpawnChange", EventSpawnChange, &SpawnChangePayload{})
-	RegisterType("EventMetaDebugRequest", EventMetaDebugRequest, nil)
-	RegisterType("EventMetaHelpRequest", EventMetaHelpRequest, nil)
+
 	RegisterType("EventTimerStart", EventTimerStart, &TimerStartPayload{})
 	RegisterType("EventBoostActivate", EventBoostActivate, &BoostActivatePayload{})
 	RegisterType("EventBoostDeactivate", EventBoostDeactivate, nil)

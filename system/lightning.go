@@ -30,6 +30,11 @@ func (s *LightningSystem) Init() {
 	s.enabled = true
 }
 
+// Name returns system's name
+func (s *LightningSystem) Name() string {
+	return "lightning"
+}
+
 func (s *LightningSystem) Priority() int {
 	// After quasar, before render
 	return constant.PriorityLightning
@@ -79,6 +84,7 @@ func (s *LightningSystem) EventTypes() []event.EventType {
 		event.EventLightningSpawn,
 		event.EventLightningUpdate,
 		event.EventLightningDespawn,
+		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
 }
@@ -88,6 +94,14 @@ func (s *LightningSystem) HandleEvent(ev event.GameEvent) {
 		s.destroyAll()
 		s.Init()
 		return
+	}
+
+	if ev.Type == event.EventMetaSystemCommandRequest {
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			if payload.SystemName == s.Name() {
+				s.enabled = payload.Enabled
+			}
+		}
 	}
 
 	if !s.enabled {

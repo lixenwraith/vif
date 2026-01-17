@@ -49,6 +49,11 @@ func (s *SwarmSystem) Init() {
 	s.enabled = true
 }
 
+// Name returns system's name
+func (s *SwarmSystem) Name() string {
+	return "swarm"
+}
+
 func (s *SwarmSystem) Priority() int {
 	return constant.PrioritySwarm
 }
@@ -56,6 +61,7 @@ func (s *SwarmSystem) Priority() int {
 func (s *SwarmSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventSwarmSpawnRequest,
+		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
 }
@@ -63,6 +69,18 @@ func (s *SwarmSystem) EventTypes() []event.EventType {
 func (s *SwarmSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		s.Init()
+		return
+	}
+
+	if ev.Type == event.EventMetaSystemCommandRequest {
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			if payload.SystemName == s.Name() {
+				s.enabled = payload.Enabled
+			}
+		}
+	}
+
+	if !s.enabled {
 		return
 	}
 

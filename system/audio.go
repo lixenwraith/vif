@@ -36,6 +36,11 @@ func (s *AudioSystem) Init() {
 	s.enabled = true
 }
 
+// Name returns system's name
+func (s *AudioSystem) Name() string {
+	return "audio"
+}
+
 // Priority returns the system's priority
 func (s *AudioSystem) Priority() int {
 	return constant.PriorityUI
@@ -44,8 +49,9 @@ func (s *AudioSystem) Priority() int {
 // EventTypes returns the event types AudioSystem handles
 func (s *AudioSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventGameReset,
 		event.EventSoundRequest,
+		event.EventMetaSystemCommandRequest,
+		event.EventGameReset,
 	}
 }
 
@@ -54,6 +60,14 @@ func (s *AudioSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		s.Init()
 		return
+	}
+
+	if ev.Type == event.EventMetaSystemCommandRequest {
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			if payload.SystemName == s.Name() {
+				s.enabled = payload.Enabled
+			}
+		}
 	}
 
 	if !s.enabled {

@@ -85,6 +85,11 @@ func (s *ExplosionSystem) Init() {
 	s.enabled = true
 }
 
+// Name returns system's name
+func (s *ExplosionSystem) Name() string {
+	return "explosion"
+}
+
 func (s *ExplosionSystem) Priority() int {
 	return constant.PriorityExplosion
 }
@@ -93,6 +98,7 @@ func (s *ExplosionSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventFireSpecialRequest,
 		event.EventExplosionRequest,
+		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
 }
@@ -101,6 +107,14 @@ func (s *ExplosionSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		s.Init()
 		return
+	}
+
+	if ev.Type == event.EventMetaSystemCommandRequest {
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			if payload.SystemName == s.Name() {
+				s.enabled = payload.Enabled
+			}
+		}
 	}
 
 	if !s.enabled {

@@ -27,14 +27,20 @@ func (s *FlashSystem) Init() {
 	s.enabled = true
 }
 
+// Name returns system's name
+func (s *FlashSystem) Name() string {
+	return "flash"
+}
+
 func (s *FlashSystem) Priority() int {
 	return constant.PriorityFlash
 }
 
 func (s *FlashSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventGameReset,
 		event.EventFlashRequest,
+		event.EventMetaSystemCommandRequest,
+		event.EventGameReset,
 	}
 }
 
@@ -42,6 +48,14 @@ func (s *FlashSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		s.Init()
 		return
+	}
+
+	if ev.Type == event.EventMetaSystemCommandRequest {
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			if payload.SystemName == s.Name() {
+				s.enabled = payload.Enabled
+			}
+		}
 	}
 
 	if !s.enabled {

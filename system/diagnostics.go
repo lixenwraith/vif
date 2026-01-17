@@ -99,17 +99,33 @@ func (s *DiagnosticsSystem) Init() {
 	s.enabled = true
 }
 
+// Name returns system's name
+func (s *DiagnosticsSystem) Name() string {
+	return "diagnostics"
+}
+
 func (s *DiagnosticsSystem) Priority() int {
 	return constant.PriorityDiagnostics
 }
 
 func (s *DiagnosticsSystem) EventTypes() []event.EventType {
-	return []event.EventType{event.EventGameReset}
+	return []event.EventType{
+		event.EventMetaSystemCommandRequest,
+		event.EventGameReset,
+	}
 }
 
 func (s *DiagnosticsSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		s.Init()
+	}
+
+	if ev.Type == event.EventMetaSystemCommandRequest {
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			if payload.SystemName == s.Name() {
+				s.enabled = payload.Enabled
+			}
+		}
 	}
 }
 

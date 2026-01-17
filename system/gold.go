@@ -59,6 +59,11 @@ func (s *GoldSystem) Init() {
 	s.enabled = true
 }
 
+// Name returns system's name
+func (s *GoldSystem) Name() string {
+	return "gold"
+}
+
 // Priority returns the system's priority
 func (s *GoldSystem) Priority() int {
 	return constant.PriorityGold
@@ -72,6 +77,7 @@ func (s *GoldSystem) EventTypes() []event.EventType {
 		event.EventGoldCancel,
 		event.EventGoldJumpRequest,
 		event.EventMemberTyped,
+		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
 }
@@ -81,6 +87,14 @@ func (s *GoldSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		s.Init()
 		return
+	}
+
+	if ev.Type == event.EventMetaSystemCommandRequest {
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			if payload.SystemName == s.Name() {
+				s.enabled = payload.Enabled
+			}
+		}
 	}
 
 	if !s.enabled {

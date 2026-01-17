@@ -34,6 +34,11 @@ func (s *SpiritSystem) Init() {
 	s.enabled = true
 }
 
+// Name returns system's name
+func (s *SpiritSystem) Name() string {
+	return "spirit"
+}
+
 func (s *SpiritSystem) Priority() int {
 	return constant.PrioritySpirit
 }
@@ -42,6 +47,7 @@ func (s *SpiritSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventSpiritSpawn,
 		event.EventSpiritDespawn,
+		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
 }
@@ -51,6 +57,14 @@ func (s *SpiritSystem) HandleEvent(ev event.GameEvent) {
 		s.destroyAllSpirits()
 		s.Init()
 		return
+	}
+
+	if ev.Type == event.EventMetaSystemCommandRequest {
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			if payload.SystemName == s.Name() {
+				s.enabled = payload.Enabled
+			}
+		}
 	}
 
 	if !s.enabled {

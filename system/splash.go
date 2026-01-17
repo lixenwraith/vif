@@ -61,6 +61,11 @@ func (s *SplashSystem) Init() {
 	s.enabled = true
 }
 
+// Name returns system's name
+func (s *SplashSystem) Name() string {
+	return "splash"
+}
+
 // Priority returns the system's priority (low, after game logic)
 func (s *SplashSystem) Priority() int {
 	return constant.PrioritySplash
@@ -69,11 +74,12 @@ func (s *SplashSystem) Priority() int {
 // EventTypes defines the events this system subscribes to
 func (s *SplashSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventGameReset,
 		event.EventSplashRequest,
 		event.EventSplashTimerRequest,
 		event.EventSplashTimerCancel,
 		event.EventCursorMoved,
+		event.EventMetaSystemCommandRequest,
+		event.EventGameReset,
 	}
 }
 
@@ -82,6 +88,14 @@ func (s *SplashSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		s.Init()
 		return
+	}
+
+	if ev.Type == event.EventMetaSystemCommandRequest {
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			if payload.SystemName == s.Name() {
+				s.enabled = payload.Enabled
+			}
+		}
 	}
 
 	if !s.enabled {

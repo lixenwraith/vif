@@ -153,11 +153,6 @@ type PingGridRequestPayload struct {
 	Duration time.Duration `toml:"duration"`
 }
 
-// SpawnChangePayload carries configuration for spawn state
-type SpawnChangePayload struct {
-	Enabled bool `toml:"enabled"`
-}
-
 // TimerStartPayload configuration for a new lifecycle timer
 type TimerStartPayload struct {
 	Entity   core.Entity   `toml:"entity"`
@@ -355,4 +350,10 @@ type DustSpawnBatchPayload struct {
 // MetaStatusMessagePayload contains message to be displayed in status bar
 type MetaStatusMessagePayload struct {
 	Message string `toml:"message"`
+}
+
+// MetaSystemCommandPayload contains commands to the systems (currently only enable/disable functionality)
+type MetaSystemCommandPayload struct {
+	SystemName string `toml:"system_name"`
+	Enabled    bool   `toml:"enabled"`
 }

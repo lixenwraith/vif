@@ -56,6 +56,11 @@ func (s *QuasarSystem) Init() {
 	s.enabled = true
 }
 
+// Name returns system's name
+func (s *QuasarSystem) Name() string {
+	return "quasar"
+}
+
 func (s *QuasarSystem) Priority() int {
 	return constant.PriorityQuasar
 }
@@ -64,6 +69,7 @@ func (s *QuasarSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventQuasarSpawned,
 		event.EventQuasarCancel,
+		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
 }
@@ -75,6 +81,14 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 		}
 		s.Init()
 		return
+	}
+
+	if ev.Type == event.EventMetaSystemCommandRequest {
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			if payload.SystemName == s.Name() {
+				s.enabled = payload.Enabled
+			}
+		}
 	}
 
 	if !s.enabled {

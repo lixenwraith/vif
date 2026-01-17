@@ -55,6 +55,11 @@ func (s *CleanerSystem) Init() {
 	s.enabled = true
 }
 
+// Name returns system's name
+func (s *CleanerSystem) Name() string {
+	return "cleaner"
+}
+
 // Priority returns the system's priority
 func (s *CleanerSystem) Priority() int {
 	return constant.PriorityCleaner
@@ -65,6 +70,7 @@ func (s *CleanerSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventCleanerSweepingRequest,
 		event.EventCleanerDirectionalRequest,
+		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
 }
@@ -74,6 +80,14 @@ func (s *CleanerSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		s.Init()
 		return
+	}
+
+	if ev.Type == event.EventMetaSystemCommandRequest {
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			if payload.SystemName == s.Name() {
+				s.enabled = payload.Enabled
+			}
+		}
 	}
 
 	if !s.enabled {

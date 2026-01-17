@@ -55,6 +55,11 @@ func (s *DustSystem) Init() {
 	s.enabled = true
 }
 
+// Name returns system's name
+func (s *DustSystem) Name() string {
+	return "dust"
+}
+
 func (s *DustSystem) Priority() int {
 	return constant.PriorityDust
 }
@@ -64,6 +69,7 @@ func (s *DustSystem) EventTypes() []event.EventType {
 		event.EventDustSpawnOne,
 		event.EventDustSpawnBatch,
 		event.EventDustAll,
+		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
 }
@@ -72,6 +78,14 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		s.Init()
 		return
+	}
+
+	if ev.Type == event.EventMetaSystemCommandRequest {
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			if payload.SystemName == s.Name() {
+				s.enabled = payload.Enabled
+			}
+		}
 	}
 
 	if !s.enabled {

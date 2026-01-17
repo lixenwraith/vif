@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/manifest"
 )
 
 // CommandResult represents the outcome of command execution
@@ -36,6 +37,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleQuitCommand(ctx)
 	case "n", "new":
 		return handleNewCommand(ctx)
+	case "s", "system":
+		return handleSystemCommand(ctx, args)
 	case "energy":
 		return handleEnergyCommand(ctx, args)
 	case "heat":
@@ -46,8 +49,6 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleGodCommand(ctx)
 	case "demon":
 		return handleDemonCommand(ctx)
-	case "spawn":
-		return handleSpawnCommand(ctx, args)
 	case "blossom":
 		return handleBlossomCommand(ctx)
 	case "decay":
@@ -82,6 +83,45 @@ func handleNewCommand(ctx *engine.GameContext) CommandResult {
 	ctx.PushEvent(event.EventGameReset, nil)
 	ctx.SetLastCommand(":new")
 	return CommandResult{Continue: true, KeepPaused: true}
+}
+
+// handleSystemCommand sets the energy to a specified value
+func handleSystemCommand(ctx *engine.GameContext, args []string) CommandResult {
+	if len(args) != 2 {
+		setCommandError(ctx, "Invalid arguments for system")
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+
+	validSystem := false
+	for _, s := range manifest.ActiveSystems() {
+		if args[0] == s {
+			validSystem = true
+			break
+		}
+	}
+	if !validSystem {
+		setCommandError(ctx, fmt.Sprintf("Invalid system: %s", args[0]))
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+
+	enabledFlag := false
+	switch args[1] {
+	case "e", "enable", "enabled":
+		enabledFlag = true
+	case "d", "disable", "disabled":
+		enabledFlag = false
+	default:
+		setCommandError(ctx, fmt.Sprintf("Invalid system: %s", args[0]))
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+
+	ctx.PushEvent(event.EventMetaSystemCommandRequest, &event.MetaSystemCommandPayload{
+		SystemName: args[0],
+		Enabled:    enabledFlag,
+	})
+
+	ctx.SetLastCommand(fmt.Sprintf(":system %s %v", args[0], enabledFlag))
+	return CommandResult{Continue: true, KeepPaused: false}
 }
 
 // handleEnergyCommand sets the energy to a specified value
@@ -158,28 +198,6 @@ func handleDemonCommand(ctx *engine.GameContext) CommandResult {
 	ctx.PushEvent(event.EventHeatSet, &event.HeatSetPayload{Value: constant.MaxHeat})
 	ctx.PushEvent(event.EventEnergySetAmount, &event.EnergySetAmountPayload{Value: -constant.GodEnergyAmount})
 	ctx.SetLastCommand(":demon")
-	return CommandResult{Continue: true, KeepPaused: false}
-}
-
-// handleSpawnCommand enables or disables entity spawning via event
-func handleSpawnCommand(ctx *engine.GameContext, args []string) CommandResult {
-	if len(args) != 1 {
-		setCommandError(ctx, "Invalid arguments for spawn")
-		return CommandResult{Continue: true, KeepPaused: false}
-	}
-
-	arg := strings.ToLower(args[0])
-	switch arg {
-	case "on":
-		ctx.PushEvent(event.EventSpawnChange, &event.SpawnChangePayload{Enabled: true})
-		ctx.SetLastCommand(":spawn on")
-	case "off":
-		ctx.PushEvent(event.EventSpawnChange, &event.SpawnChangePayload{Enabled: false})
-		ctx.SetLastCommand(":spawn off")
-	default:
-		setCommandError(ctx, "Invalid arguments for spawn")
-	}
-
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 

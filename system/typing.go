@@ -47,6 +47,11 @@ func (s *TypingSystem) Init() {
 	s.enabled = true
 }
 
+// Name returns system's name
+func (s *TypingSystem) Name() string {
+	return "typing"
+}
+
 func (s *TypingSystem) Priority() int {
 	return constant.PriorityTyping
 }
@@ -61,6 +66,7 @@ func (s *TypingSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventCharacterTyped,
 		event.EventDeleteRequest,
+		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
 }
@@ -69,6 +75,14 @@ func (s *TypingSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		s.Init()
 		return
+	}
+
+	if ev.Type == event.EventMetaSystemCommandRequest {
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			if payload.SystemName == s.Name() {
+				s.enabled = payload.Enabled
+			}
+		}
 	}
 
 	if !s.enabled {

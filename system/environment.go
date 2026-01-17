@@ -41,6 +41,11 @@ func (s *EnvironmentSystem) Init() {
 	s.enabled = true
 }
 
+// Name returns system's name
+func (s *EnvironmentSystem) Name() string {
+	return "environment"
+}
+
 func (s *EnvironmentSystem) Priority() int {
 	return constant.PrioritySwarm
 }
@@ -49,6 +54,7 @@ func (s *EnvironmentSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventGrayoutStart,
 		event.EventGrayoutEnd,
+		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
 }
@@ -56,6 +62,18 @@ func (s *EnvironmentSystem) EventTypes() []event.EventType {
 func (s *EnvironmentSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		s.Init()
+		return
+	}
+
+	if ev.Type == event.EventMetaSystemCommandRequest {
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			if payload.SystemName == s.Name() {
+				s.enabled = payload.Enabled
+			}
+		}
+	}
+
+	if !s.enabled {
 		return
 	}
 

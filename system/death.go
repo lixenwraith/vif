@@ -38,6 +38,11 @@ func (s *DeathSystem) Init() {
 	s.enabled = true
 }
 
+// Name returns system's name
+func (s *DeathSystem) Name() string {
+	return "death"
+}
+
 func (s *DeathSystem) Priority() int {
 	return constant.PriorityDeath
 }
@@ -46,6 +51,7 @@ func (s *DeathSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventDeathOne,
 		event.EventDeathBatch,
+		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
 }
@@ -54,6 +60,14 @@ func (s *DeathSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		s.Init()
 		return
+	}
+
+	if ev.Type == event.EventMetaSystemCommandRequest {
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			if payload.SystemName == s.Name() {
+				s.enabled = payload.Enabled
+			}
+		}
 	}
 
 	if !s.enabled {

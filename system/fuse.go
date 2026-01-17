@@ -44,6 +44,11 @@ func (s *FuseSystem) Init() {
 	s.enabled = true
 }
 
+// Name returns system's name
+func (s *FuseSystem) Name() string {
+	return "fuse"
+}
+
 func (s *FuseSystem) Priority() int {
 	return constant.PriorityFuse
 }
@@ -51,6 +56,7 @@ func (s *FuseSystem) Priority() int {
 func (s *FuseSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventFuseDrains,
+		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
 }
@@ -63,6 +69,14 @@ func (s *FuseSystem) HandleEvent(ev event.GameEvent) {
 		}
 		s.Init()
 		return
+	}
+
+	if ev.Type == event.EventMetaSystemCommandRequest {
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			if payload.SystemName == s.Name() {
+				s.enabled = payload.Enabled
+			}
+		}
 	}
 
 	if !s.enabled {

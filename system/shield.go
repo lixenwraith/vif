@@ -37,6 +37,11 @@ func (s *ShieldSystem) Init() {
 	s.enabled = true
 }
 
+// Name returns system's name
+func (s *ShieldSystem) Name() string {
+	return "shield"
+}
+
 // Priority returns the system's priority
 func (s *ShieldSystem) Priority() int {
 	return constant.PriorityShield
@@ -48,6 +53,7 @@ func (s *ShieldSystem) EventTypes() []event.EventType {
 		event.EventShieldActivate,
 		event.EventShieldDeactivate,
 		event.EventShieldDrain,
+		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
 }
@@ -57,6 +63,14 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		s.Init()
 		return
+	}
+
+	if ev.Type == event.EventMetaSystemCommandRequest {
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			if payload.SystemName == s.Name() {
+				s.enabled = payload.Enabled
+			}
+		}
 	}
 
 	if !s.enabled {

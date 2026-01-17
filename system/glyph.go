@@ -99,6 +99,11 @@ func (s *GlyphSystem) initCensus() {
 	}
 }
 
+// Name returns system's name
+func (s *GlyphSystem) Name() string {
+	return "glyph"
+}
+
 // Priority returns the system's priority
 func (s *GlyphSystem) Priority() int {
 	return constant.PrioritySpawn
@@ -107,7 +112,7 @@ func (s *GlyphSystem) Priority() int {
 // EventTypes returns the event types SpawnSystem handles
 func (s *GlyphSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventSpawnChange,
+		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
 }
@@ -121,17 +126,22 @@ func (s *GlyphSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
+	if ev.Type == event.EventMetaSystemCommandRequest {
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			if payload.SystemName == s.Name() {
+				s.enabled = payload.Enabled
+				s.statEnabled.Store(payload.Enabled)
+			}
+		}
+	}
+
 	if !s.enabled {
 		return
 	}
 
-	switch ev.Type {
-	case event.EventSpawnChange:
-		if payload, ok := ev.Payload.(*event.SpawnChangePayload); ok {
-			s.enabled = payload.Enabled
-			s.statEnabled.Store(payload.Enabled)
-		}
-	}
+	// switch ev.Type {
+	//
+	// }
 }
 
 // Update runs the spawn system logic

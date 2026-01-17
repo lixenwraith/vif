@@ -35,6 +35,11 @@ func (s *MetaSystem) Init() {
 	// No-op
 }
 
+// Name returns system's name
+func (s *MetaSystem) Name() string {
+	return "meta"
+}
+
 // Priority returns the system's priority
 func (s *MetaSystem) Priority() int {
 	return constant.PriorityUI
@@ -43,10 +48,10 @@ func (s *MetaSystem) Priority() int {
 // EventTypes returns the event types MetaSystem handles
 func (s *MetaSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventGameReset,
 		event.EventMetaStatusMessageRequest,
 		event.EventMetaDebugRequest,
 		event.EventMetaHelpRequest,
+		event.EventGameReset,
 	}
 }
 
