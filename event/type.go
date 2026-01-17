@@ -111,7 +111,7 @@ const (
 	EventGoldJumpRequest
 
 	// EventCleanerDirectionalRequest spawns 4-way cleaners from origin
-	// Trigger: Nugget collected at max heat, Enter in Normal or mode
+	// Trigger: Nugget collected at max heat, Enter in Normal, Visual or Insert modes
 	// Consumer: CleanerSystem | Payload: *DirectionalCleanerPayload
 	EventCleanerDirectionalRequest
 
@@ -420,6 +420,11 @@ const (
 	// Trigger: FSM
 	// Consumer: BuffSystem | Payload: *BuffAddRequestPayload
 	EventBuffAddRequest
+
+	// EventBuffFireRequest signals activating buff for cursor
+	// Trigger: Enter in Normal, Visual, Insert modes
+	// Consumer: BuffSystem | Payload: nil
+	EventBuffFireRequest
 )
 
 // GameEvent represents a single game event with metadata

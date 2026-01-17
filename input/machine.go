@@ -325,7 +325,7 @@ func (m *Machine) processInsert(ev terminal.Event) *Intent {
 		case terminal.KeyBacktab:
 			return &Intent{Type: IntentGoldJump}
 		case terminal.KeyEnter:
-			return &Intent{Type: IntentFireCleaner}
+			return &Intent{Type: IntentFireMain}
 		}
 
 		// Standard text navigation/system keys

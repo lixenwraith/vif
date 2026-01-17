@@ -120,8 +120,8 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return r.handleNuggetJump()
 	case input.IntentGoldJump:
 		return r.handleGoldJump()
-	case input.IntentFireCleaner:
-		return r.handleFireCleaner()
+	case input.IntentFireMain:
+		return r.handleFireMain()
 	case input.IntentFireSpecial:
 		return r.handleFireSpecial()
 
@@ -412,7 +412,7 @@ func (r *Router) handleGoldJump() bool {
 	return true
 }
 
-func (r *Router) handleFireCleaner() bool {
+func (r *Router) handleFireMain() bool {
 	// Get cursor position for cleaner origin
 	var originX, originY int
 	if pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Cursor.Entity); ok {
@@ -423,6 +423,8 @@ func (r *Router) handleFireCleaner() bool {
 		OriginX: originX,
 		OriginY: originY,
 	})
+
+	r.ctx.PushEvent(event.EventBuffFireRequest, nil)
 
 	return true
 }

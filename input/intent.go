@@ -25,7 +25,7 @@ const (
 	IntentSpecial     // x, D, n, N, ;, ,
 	IntentNuggetJump  // Tab
 	IntentGoldJump    // Shift+Tab
-	IntentFireCleaner // Enter in Normal mode
+	IntentFireMain    // Enter in Normal mode
 	IntentFireSpecial // \ in Normal mode
 
 	// Mode switching

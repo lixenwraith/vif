@@ -1,6 +1,7 @@
 package system
 
 import (
+	"fmt"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
@@ -18,6 +19,7 @@ type BuffSystem struct {
 
 	// Telemetry
 	statRod      *atomic.Bool
+	statRodFired *atomic.Int64
 	statLauncher *atomic.Bool
 	statChain    *atomic.Bool
 
@@ -31,6 +33,7 @@ func NewBuffSystem(world *engine.World) engine.System {
 	}
 
 	s.statRod = world.Resources.Status.Bools.Get("buff.rod")
+	s.statRodFired = world.Resources.Status.Ints.Get("buff.rod_fired")
 	s.statLauncher = world.Resources.Status.Bools.Get("buff.launcher")
 	s.statChain = world.Resources.Status.Bools.Get("buff.chain")
 
@@ -40,6 +43,7 @@ func NewBuffSystem(world *engine.World) engine.System {
 
 func (s *BuffSystem) Init() {
 	s.statRod.Store(false)
+	s.statRodFired.Store(0)
 	s.statLauncher.Store(false)
 	s.statChain.Store(false)
 	s.enabled = true
@@ -58,6 +62,7 @@ func (s *BuffSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventBuffAddRequest,
 		event.EventEnergyCrossedZeroNotification,
+		event.EventBuffFireRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
@@ -88,6 +93,10 @@ func (s *BuffSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventEnergyCrossedZeroNotification:
+		s.removeAllBuffs()
+
+	case event.EventBuffFireRequest:
+		s.fireAllBuffs()
 	}
 }
 
@@ -117,4 +126,88 @@ func (s *BuffSystem) addBuff(buff component.BuffType) {
 
 	buffComp.Active[buff] = true
 	s.world.Components.Buff.SetComponent(cursorEntity, buffComp)
+}
+
+func (s *BuffSystem) removeAllBuffs() {
+	cursorEntity := s.world.Resources.Cursor.Entity
+	buffComp, ok := s.world.Components.Buff.GetComponent(cursorEntity)
+	if !ok {
+		return
+	}
+
+	clear(buffComp.Active)
+	s.world.Components.Buff.SetComponent(cursorEntity, buffComp)
+	s.statRod.Store(false)
+	s.statLauncher.Store(false)
+	s.statChain.Store(false)
+}
+
+func (s *BuffSystem) fireAllBuffs() {
+	cursorEntity := s.world.Resources.Cursor.Entity
+	heatComp, ok := s.world.Components.Heat.GetComponent(cursorEntity)
+	if !ok {
+		return
+	}
+	shots := heatComp.Current / 10
+	if shots == 0 {
+		return
+	}
+	buffComp, ok := s.world.Components.Buff.GetComponent(cursorEntity)
+	if !ok {
+		return
+	}
+
+	for buff, active := range buffComp.Active {
+		if !active {
+			continue
+		}
+
+		s.world.DebugPrint(fmt.Sprintf("shots: %d", shots))
+
+		switch buff {
+		case component.BuffRod:
+			// Fire lightning to targets, corresponding to floor(heat/10)
+			rodShots := shots
+
+			// Quasar
+			quasarEntities := s.world.Components.Quasar.GetAllEntities()
+			for _, quasarEntity := range quasarEntities {
+				if rodShots == 0 {
+					break
+				}
+				quasarComp, ok := s.world.Components.Quasar.GetComponent(quasarEntity)
+				if !ok {
+					continue
+				}
+
+				s.world.PushEvent(event.EventVampireDrainRequest, &event.VampireDrainRequestPayload{
+					TargetEntity: quasarEntity,
+					Delta:        constant.VampireEnergyDrainAmount,
+				})
+				quasarComp.HitPoints--
+
+				rodShots--
+			}
+
+			// Drains
+			drainEntities := s.world.Components.Drain.GetAllEntities()
+			for _, drainEntity := range drainEntities {
+				if rodShots == 0 {
+					break
+				}
+				// TODO: shoot at closest ones
+				// drainPos, ok := s.world.Positions.GetPosition(drainEntity)
+				// if !ok {
+				// 	continue
+				// }
+				s.world.PushEvent(event.EventVampireDrainRequest, &event.VampireDrainRequestPayload{
+					TargetEntity: drainEntity,
+					Delta:        constant.VampireEnergyDrainAmount,
+				})
+				rodShots--
+				s.statRodFired.Add(1)
+			}
+
+		}
+	}
 }
