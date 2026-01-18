@@ -18,6 +18,7 @@ type NuggetSystem struct {
 
 	lastSpawnAttempt   time.Time
 	activeNuggetEntity core.Entity
+	nuggetOverload     int
 
 	statActive    *atomic.Bool
 	statSpawned   *atomic.Int64
@@ -46,6 +47,7 @@ func NewNuggetSystem(world *engine.World) engine.System {
 func (s *NuggetSystem) Init() {
 	s.lastSpawnAttempt = time.Time{}
 	s.activeNuggetEntity = 0
+	s.nuggetOverload = 0
 	s.statActive.Store(false)
 	s.statSpawned.Store(0)
 	s.statCollected.Store(0)
@@ -139,7 +141,7 @@ func (s *NuggetSystem) Update() {
 
 	// Spawn if no active nugget and cooldown elapsed
 	if s.activeNuggetEntity == 0 {
-		if now.Sub(s.lastSpawnAttempt) >= constant.NuggetSpawnIntervalSeconds {
+		if now.Sub(s.lastSpawnAttempt) >= constant.NuggetSpawnInterval {
 			s.lastSpawnAttempt = now
 			s.spawnNugget()
 		}
@@ -285,13 +287,25 @@ func (s *NuggetSystem) collectNugget(nuggetPosX, nuggetPosY int) {
 	// 1. Play Sound
 	s.world.Resources.Audio.Player.Play(core.SoundBell)
 
-	// 2. Emit directional cleaner, heat addition, and nugget death events
+	// 2. Emit directional cleaner and nugget death events
 	event.EmitDeathOne(s.world.Resources.Event.Queue, s.activeNuggetEntity, 0)
 	s.world.PushEvent(event.EventCleanerDirectionalRequest, &event.DirectionalCleanerPayload{
 		OriginX: nuggetPosX,
 		OriginY: nuggetPosY,
 	})
-	s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: constant.NuggetHeatIncrease})
+
+	heatComp, ok := s.world.Components.Heat.GetComponent(s.world.Resources.Cursor.Entity)
+	if ok {
+		if heatComp.Current == constant.MaxHeat {
+			s.nuggetOverload++
+			if s.nuggetOverload >= constant.NuggetOverloadCount {
+				s.world.PushEvent(event.EventNuggetOverloadNotification, nil)
+				s.nuggetOverload = 0
+			}
+		} else {
+			s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: constant.NuggetHeatIncrease})
+		}
+	}
 
 	// 3. Update system state and stats
 	s.activeNuggetEntity = 0

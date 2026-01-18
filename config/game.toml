@@ -2,6 +2,6 @@
 # External state files are merged before parsing
 
 [regions]
-main = { initial = "TrySpawnGold", file = "regions/main.toml" }
+main = { initial = "SpawnGold", file = "regions/main.toml" }
 # Quasar region spawned dynamically via SpawnRegion action; states loaded via file
 quasar = { file = "regions/quasar.toml" }

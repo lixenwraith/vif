@@ -304,7 +304,6 @@ func (s *GoldSystem) spawnGold() bool {
 	}
 
 	// 4. SetPosition Phantom Head to Positions AFTER batch success
-	// TODO: check protectAll, it may conflicts with OOB bound, set specific protections
 	s.world.Positions.SetPosition(headerEntity, component.PositionComponent{X: x, Y: y})
 	s.world.Components.Protection.SetComponent(headerEntity, component.ProtectionComponent{
 		Mask: component.ProtectAll,
@@ -361,7 +360,7 @@ func (s *GoldSystem) spawnGold() bool {
 		AnchorEntity: headerEntity,
 		Color:        component.SplashColorWhite,
 		MarginRight:  constant.GoldSequenceLength,
-		MarginBottom: 1,
+		MarginBottom: 1, // One line height
 		Duration:     constant.GoldDuration,
 	})
 

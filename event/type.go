@@ -67,6 +67,11 @@ const (
 	// Consumer: NuggetSystem | Payload: nil
 	EventNuggetJumpRequest
 
+	// EventNuggetOverloadNotification signals nugget overload
+	// Trigger: NuggetSystem
+	// Consumer: FSM | Payload: nil
+	EventNuggetOverloadNotification
+
 	// EventGoldEnable signals whether gold sequence spawning is allowed
 	// Trigger: FSM entering/exiting Normal state
 	// Consumer: GoldSystem | Payload: *GoldEnablePayload

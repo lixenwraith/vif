@@ -86,14 +86,21 @@ func InitRegistry() {
 	RegisterType("EventMetaHelpRequest", EventMetaHelpRequest, nil)
 	RegisterType("EventMetaSystemCommandRequest", EventMetaSystemCommandRequest, &MetaSystemCommandPayload{})
 
-	// Game events
+	// --- Game events ---
+
+	// Nugget
 	RegisterType("EventNuggetCollected", EventNuggetCollected, &NuggetCollectedPayload{})
 	RegisterType("EventNuggetDestroyed", EventNuggetDestroyed, &NuggetDestroyedPayload{})
 	RegisterType("EventNuggetJumpRequest", EventNuggetJumpRequest, nil)
+	RegisterType("EventNuggetOverloadNotification", EventNuggetOverloadNotification, nil)
+
+	// Cleaner
 	RegisterType("EventCleanerDirectionalRequest", EventCleanerDirectionalRequest, &DirectionalCleanerPayload{})
 	RegisterType("EventFireSpecialRequest", EventFireSpecialRequest, nil)
 	RegisterType("EventCleanerSweepingRequest", EventCleanerSweepingRequest, nil)
 	RegisterType("EventCleanerSweepingFinished", EventCleanerSweepingFinished, nil)
+
+	// Gold
 	RegisterType("EventGoldEnable", EventGoldEnable, &GoldEnablePayload{})
 	RegisterType("EventGoldSpawnRequest", EventGoldSpawnRequest, nil)
 	RegisterType("EventGoldSpawnFailed", EventGoldSpawnFailed, nil)

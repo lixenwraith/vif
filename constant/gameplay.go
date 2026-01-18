@@ -53,20 +53,21 @@ const (
 )
 
 // Nugget System
-//
-//goland:noinspection ALL
 const (
 	// NuggetHeatIncrease is the amount of heat increased by consuming a nugget
 	NuggetHeatIncrease = 10
 
-	// NuggetSpawnIntervalSeconds is the minimum interval between nugget spawns
-	NuggetSpawnIntervalSeconds = 0 * time.Second
+	// NuggetSpawnInterval is the minimum interval between nugget spawns
+	NuggetSpawnInterval = 0 * time.Millisecond
 
 	// NuggetMaxAttempts is the maximum number of random placement attempts (occupied cell results in retry)
 	NuggetMaxAttempts = 100
 
 	// NuggetJumpCost is the energy cost to jump to a nugget
 	NuggetJumpCost = 100
+
+	// NuggetOverloadCount is the number of nuggets that are taken at max heat to trigger nugget overload
+	NuggetOverloadCount = 10
 )
 
 // Character Spawn Logic
