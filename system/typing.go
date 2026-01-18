@@ -169,7 +169,7 @@ func (s *TypingSystem) applyUniversalRewards() {
 	if isBoostActive {
 		heatGain = 2
 	}
-	s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: heatGain})
+	s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Delta: heatGain})
 
 	s.statCorrect.Add(1)
 	s.currentStreak++
@@ -227,7 +227,7 @@ func (s *TypingSystem) emitTypingError() {
 	}
 
 	// Reset boost and apply heat penalty
-	s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: -constant.TypingErrorHeatPenalty})
+	s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Delta: -constant.HeatTypingErrorPenalty})
 	s.world.PushEvent(event.EventBoostDeactivate, nil)
 	s.world.PushEvent(event.EventEnergyBlinkStart, &event.EnergyBlinkPayload{Type: 0, Level: 0})
 

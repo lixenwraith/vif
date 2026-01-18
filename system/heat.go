@@ -13,8 +13,9 @@ import (
 type HeatSystem struct {
 	world *engine.World
 
-	statCurrent *atomic.Int64
-	statAtMax   *atomic.Bool
+	statCurrent  *atomic.Int64
+	statOverheat *atomic.Int64
+	statAtMax    *atomic.Bool
 
 	enabled bool
 }
@@ -25,6 +26,7 @@ func NewHeatSystem(world *engine.World) engine.System {
 	}
 
 	s.statCurrent = s.world.Resources.Status.Ints.Get("heat.current")
+	s.statOverheat = s.world.Resources.Status.Ints.Get("heat.overheat")
 	s.statAtMax = s.world.Resources.Status.Bools.Get("heat.at_max")
 
 	s.Init()
@@ -34,6 +36,7 @@ func NewHeatSystem(world *engine.World) engine.System {
 // Init resets session state for new game
 func (s *HeatSystem) Init() {
 	s.statCurrent.Store(0)
+	s.statOverheat.Store(0)
 	s.statAtMax.Store(false)
 	s.enabled = true
 }
@@ -56,7 +59,7 @@ func (s *HeatSystem) Update() {
 
 func (s *HeatSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventHeatAdd,
+		event.EventHeatAddRequest,
 		event.EventHeatSetRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
@@ -82,23 +85,17 @@ func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	switch ev.Type {
-	case event.EventHeatAdd:
-		if payload, ok := ev.Payload.(*event.HeatAddPayload); ok {
+	case event.EventHeatAddRequest:
+		if payload, ok := ev.Payload.(*event.HeatAddRequestPayload); ok {
 			s.addHeat(payload.Delta)
-			if payload.Delta < 0 {
-				s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
-					SoundType: core.SoundMetalHit,
-				})
-			}
 		}
 	case event.EventHeatSetRequest:
-		if payload, ok := ev.Payload.(*event.HeatSetPayload); ok {
+		if payload, ok := ev.Payload.(*event.HeatSetRequestPayload); ok {
 			s.setHeat(payload.Value)
 		}
 	}
 }
 
-// TODO: refactor this and setHead more
 // addHeat applies delta with clamping and writes back to store
 func (s *HeatSystem) addHeat(delta int) {
 	cursorEntity := s.world.Resources.Cursor.Entity
@@ -108,11 +105,38 @@ func (s *HeatSystem) addHeat(delta int) {
 		return
 	}
 
-	// Update heat and clamp to bounds
+	// Reset overheat if heat penalty
+	if delta < 0 {
+		heatComp.Overheat = 0
+		s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
+			SoundType: core.SoundMetalHit,
+		})
+	}
+
+	// Update heat, clamp to bounds, update overheat
 	current := heatComp.Current
 	newVal := current + delta
+	if newVal < 0 {
+		newVal = 0
+	}
+	if newVal > constant.HeatMax {
+		overheat := newVal - constant.HeatMax
+		newVal = constant.HeatMax
+		heatComp.Overheat += overheat
+	}
+	heatComp.Current = newVal
 
-	s.setHeat(newVal)
+	// Trigger and reset overheat if at or above max
+	if heatComp.Overheat >= constant.HeatMaxOverheat {
+		heatComp.Overheat = 0
+		s.world.PushEvent(event.EventHeatOverheatNotification, nil)
+	}
+
+	s.world.Components.Heat.SetComponent(cursorEntity, heatComp)
+
+	s.statCurrent.Store(int64(heatComp.Current))
+	s.statOverheat.Store(int64(heatComp.Overheat))
+	s.statAtMax.Store(newVal >= constant.HeatMax)
 }
 
 // setHeat stores absolute value with clamping and writes back to store
@@ -128,15 +152,18 @@ func (s *HeatSystem) setHeat(value int) {
 	if value < 0 {
 		value = 0
 	}
-	if value > constant.MaxHeat {
-		value = constant.MaxHeat
+	if value > constant.HeatMax {
+		heatComp.Overheat = value - constant.HeatMax
+		value = constant.HeatMax
+	} else {
+		heatComp.Overheat = 0
 	}
 
 	heatComp.Current = value
 
 	s.statCurrent.Store(int64(value))
-	s.statAtMax.Store(value >= constant.MaxHeat)
+	s.statOverheat.Store(int64(heatComp.Overheat))
+	s.statAtMax.Store(value >= constant.HeatMax)
 
-	// Write the modified component copy back to the store
 	s.world.Components.Heat.SetComponent(cursorEntity, heatComp)
 }

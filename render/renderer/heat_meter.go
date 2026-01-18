@@ -14,6 +14,10 @@ type HeatMeterRenderer struct {
 	renderCell heatCellRenderer
 }
 
+const (
+	overheatRune = '━'
+)
+
 // heat256LUT contains xterm 256-palette indices for 10 heat segments
 // Progression: deep red → orange → yellow → green → cyan → blue → purple
 // Indices from 6×6×6 color cube: index = 16 + 36*r + 6*g + b where r,g,b ∈ [0,5]
@@ -54,15 +58,15 @@ func (r *HeatMeterRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 	// Calculate Fill Limit from HeatComponent
 	heat := 0
-	if hc, ok := r.gameCtx.World.Components.Heat.GetComponent(r.gameCtx.World.Resources.Cursor.Entity); ok {
-		heat = hc.Current
+	if heatComp, ok := r.gameCtx.World.Components.Heat.GetComponent(r.gameCtx.World.Resources.Cursor.Entity); ok {
+		heat = heatComp.Current
 	}
-	fillWidth := (ctx.ScreenWidth * heat) / 100
+	heatFillWidth := (ctx.ScreenWidth * heat) / 100
 
 	// Render Loop
 	for x := 0; x < ctx.ScreenWidth; x++ {
 		// No early exit optimization, must clear the rest of the bar to Black/Empty
-		if x >= fillWidth {
+		if x >= heatFillWidth {
 			// Draw Empty
 			buf.SetBgOnly(x, 0, render.RgbBlack)
 			continue

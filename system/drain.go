@@ -626,7 +626,7 @@ func (s *DrainSystem) handleDrainInteractions() {
 
 		// Cursor collision (shield not active or drain outside shield)
 		if isOnCursor {
-			s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{
+			s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
 				Delta: -constant.DrainHeatReductionAmount,
 			})
 			event.EmitDeathOne(s.world.Resources.Event.Queue, drainEntity, event.EventFlashRequest)

@@ -6,55 +6,78 @@ parent = "Root"
 [states.QuasarFuse]
 parent = "QuasarCycle"
 on_enter = [
+    { action = "EmitEvent", event = "EventGrayoutStart" },
     { action = "EmitEvent", event = "EventFuseDrains" },
-    { action = "EmitEvent", event = "EventGrayoutStart" }
 ]
 transitions = [
-    { trigger = "EventQuasarSpawned", target = "QuasarGoldSpawn" }
+    { trigger = "EventQuasarSpawned", target = "QuasarGoldSpawn" },
 ]
 
 [states.QuasarGoldSpawn]
 parent = "QuasarCycle"
 on_enter = [
-    { action = "EmitEvent", event = "EventGoldSpawnRequest" }
+    { action = "EmitEvent", event = "EventGoldSpawnRequest" },
 ]
 transitions = [
+    { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = "0" } },
+    { trigger = "EventHeatOverheatNotification", target = "QuasarDustAll" },
     { trigger = "EventGoldSpawned", target = "QuasarGoldActive" },
     { trigger = "EventGoldSpawnFailed", target = "QuasarGoldRetry" },
-    { trigger = "EventQuasarDestroyed", target = "QuasarExit" }
+    { trigger = "EventQuasarDestroyed", target = "QuasarWin" },
 ]
 
 [states.QuasarGoldRetry]
 parent = "QuasarCycle"
 transitions = [
+    { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = "0" } },
+    { trigger = "EventHeatOverheatNotification", target = "QuasarDustAll" },
     { trigger = "Tick", target = "QuasarGoldSpawn", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
-    { trigger = "EventQuasarDestroyed", target = "QuasarExit" }
+    { trigger = "EventQuasarDestroyed", target = "QuasarWin" },
 ]
 
 [states.QuasarGoldActive]
 parent = "QuasarCycle"
 transitions = [
-    { trigger = "EventGoldComplete", target = "QuasarDustAll" },
+    { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = "0" } },
+    { trigger = "EventHeatOverheatNotification", target = "QuasarDustAll" },
     { trigger = "EventGoldTimeout", target = "QuasarGoldSpawn" },
     { trigger = "EventGoldDestroyed", target = "QuasarGoldSpawn" },
-    { trigger = "EventQuasarDestroyed", target = "QuasarExit" }
+    { trigger = "EventQuasarDestroyed", target = "QuasarWin" },
 ]
 
 [states.QuasarDustAll]
 parent = "QuasarCycle"
 on_enter = [
-    { action = "EmitEvent", event = "EventDustAll"}
+    { action = "EmitEvent", event = "EventDustAll"},
 ]
 transitions = [
-    { trigger = "EventQuasarDestroyed", target = "QuasarExit" }
+    { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = "0" } },
+    { trigger = "EventQuasarDestroyed", target = "QuasarWin" },
+]
+
+[states.QuasarWin]
+parent = "QuasarCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventBuffAddRequest", payload = { buff = 0 } },
+]
+transitions = [
+    { trigger = "Tick", target = "QuasarExit" },
+]
+
+[states.QuasarFail]
+parent = "QuasarCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventQuasarCancelRequest" },
+]
+transitions = [
+    { trigger = "Tick", target = "QuasarExit" },
 ]
 
 [states.QuasarExit]
 parent = "QuasarCycle"
 on_enter = [
-    { action = "EmitEvent", event = "EventBuffAddRequest", payload = { buff = 0 } },
     { action = "EmitEvent", event = "EventGrayoutEnd" },
     { action = "EmitEvent", event = "EventGoldCancel" },
     { action = "ResumeRegion", region = "main" },
-    { action = "TerminateRegion", region = "quasar" }
+    { action = "TerminateRegion", region = "quasar" },
 ]

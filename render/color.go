@@ -115,7 +115,8 @@ var (
 	RgbQuasarFlash   = RGB{255, 255, 0}   // Bright yellow for hit flash
 
 	// General colors
-	RgbBlack = RGB{0, 0, 0} // Black for various uses
+	RgbBlack = RGB{0, 0, 0}       // Black for various uses
+	RgbWhite = RGB{255, 255, 255} // White for various uses
 
 	// Audio indicator colors
 	RgbAudioMuted   = RGB{255, 0, 0} // Bright red when muted

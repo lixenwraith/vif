@@ -214,6 +214,8 @@ func (s *BuffSystem) fireAllBuffs() {
 				})
 				quasarComp.HitPoints--
 
+				s.world.Components.Quasar.SetComponent(quasarEntity, quasarComp)
+
 				rodShots--
 			}
 

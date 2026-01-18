@@ -104,19 +104,14 @@ type EnergyBlinkPayload struct {
 	Level int `toml:"level"` // 0=dark, 1=normal, 2=bright
 }
 
-// HeatAddPayload contains heat delta
-type HeatAddPayload struct {
+// HeatAddRequestPayload contains heat delta
+type HeatAddRequestPayload struct {
 	Delta int `toml:"delta"`
 }
 
-// HeatSetPayload contains absolute heat value
-type HeatSetPayload struct {
+// HeatSetRequestPayload contains absolute heat value
+type HeatSetRequestPayload struct {
 	Value int `toml:"value"`
-}
-
-// GoldEnablePayload controls gold spawning eligibility
-type GoldEnablePayload struct {
-	Enabled bool `toml:"enabled"`
 }
 
 // GoldSpawnedPayload provides information about the spawned gold sequence

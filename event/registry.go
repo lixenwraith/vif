@@ -67,7 +67,6 @@ func InitRegistry() {
 
 	// Engine events
 	RegisterType("EventWorldClear", EventWorldClear, &WorldClearPayload{})
-	RegisterType("EventSystemToggle", EventSystemToggle, &SystemTogglePayload{})
 
 	// Audio events
 	RegisterType("EventSoundRequest", EventSoundRequest, &SoundRequestPayload{})
@@ -92,7 +91,6 @@ func InitRegistry() {
 	RegisterType("EventNuggetCollected", EventNuggetCollected, &NuggetCollectedPayload{})
 	RegisterType("EventNuggetDestroyed", EventNuggetDestroyed, &NuggetDestroyedPayload{})
 	RegisterType("EventNuggetJumpRequest", EventNuggetJumpRequest, nil)
-	RegisterType("EventNuggetOverloadNotification", EventNuggetOverloadNotification, nil)
 
 	// Cleaner
 	RegisterType("EventCleanerDirectionalRequest", EventCleanerDirectionalRequest, &DirectionalCleanerPayload{})
@@ -101,7 +99,6 @@ func InitRegistry() {
 	RegisterType("EventCleanerSweepingFinished", EventCleanerSweepingFinished, nil)
 
 	// Gold
-	RegisterType("EventGoldEnable", EventGoldEnable, &GoldEnablePayload{})
 	RegisterType("EventGoldSpawnRequest", EventGoldSpawnRequest, nil)
 	RegisterType("EventGoldSpawnFailed", EventGoldSpawnFailed, nil)
 	RegisterType("EventGoldSpawned", EventGoldSpawned, &GoldSpawnedPayload{})
@@ -129,8 +126,9 @@ func InitRegistry() {
 	RegisterType("EventBuffFireRequest", EventBuffFireRequest, nil)
 
 	// Heat
-	RegisterType("EventHeatAdd", EventHeatAdd, &HeatAddPayload{})
-	RegisterType("EventHeatSetRequest", EventHeatSetRequest, &HeatSetPayload{})
+	RegisterType("EventHeatAddRequest", EventHeatAddRequest, &HeatAddRequestPayload{})
+	RegisterType("EventHeatSetRequest", EventHeatSetRequest, &HeatSetRequestPayload{})
+	RegisterType("EventHeatOverheatNotification", EventHeatOverheatNotification, nil)
 
 	// Shield
 	RegisterType("EventShieldActivate", EventShieldActivate, nil)
@@ -165,7 +163,7 @@ func InitRegistry() {
 	RegisterType("EventDrainResume", EventDrainResume, nil)
 	RegisterType("EventQuasarSpawned", EventQuasarSpawned, &QuasarSpawnedPayload{})
 	RegisterType("EventQuasarDestroyed", EventQuasarDestroyed, nil)
-	RegisterType("EventQuasarCancel", EventQuasarCancel, nil)
+	RegisterType("EventQuasarCancelRequest", EventQuasarCancelRequest, nil)
 	RegisterType("EventGrayoutStart", EventGrayoutStart, nil)
 	RegisterType("EventGrayoutEnd", EventGrayoutEnd, nil)
 	RegisterType("EventSpiritSpawn", EventSpiritSpawn, &SpiritSpawnPayload{})

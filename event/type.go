@@ -8,9 +8,6 @@ const (
 	// Mass entity cleanup
 	EventWorldClear EventType = iota
 
-	// System activation control
-	EventSystemToggle
-
 	// === Audio Event ===
 
 	// EventSoundRequest requests audio playback
@@ -66,16 +63,6 @@ const (
 	// Trigger: InputHandler (Tab key)
 	// Consumer: NuggetSystem | Payload: nil
 	EventNuggetJumpRequest
-
-	// EventNuggetOverloadNotification signals nugget overload
-	// Trigger: NuggetSystem
-	// Consumer: FSM | Payload: nil
-	EventNuggetOverloadNotification
-
-	// EventGoldEnable signals whether gold sequence spawning is allowed
-	// Trigger: FSM entering/exiting Normal state
-	// Consumer: GoldSystem | Payload: *GoldEnablePayload
-	EventGoldEnable
 
 	// EventGoldSpawnRequest signals a specific request to try spawning a gold sequence
 	// Trigger: FSM GameState Action
@@ -180,15 +167,20 @@ const (
 	// Consumer: EnergySystem | Payload: nil
 	EventEnergyBlinkStop
 
-	// EventHeatAdd signals heat delta modification
-	// Trigger: Character typed, drain hit, nugget collected
-	// Consumer: HeatSystem | Payload: *HeatAddPayload
-	EventHeatAdd
+	// EventHeatAddRequest signals heat delta modification
+	// Trigger: Character typed, drain/quasar hit, nugget/gold collected
+	// Consumer: HeatSystem | Payload: *HeatAddRequestPayload
+	EventHeatAddRequest
 
 	// EventHeatSetRequest signals absolute heat value
-	// Trigger: Gold complete, debug command, boost command, error reset
-	// Consumer: HeatSystem | Payload: *HeatSetPayload
+	// Trigger: MetaSystem commands
+	// Consumer: HeatSystem | Payload: *HeatSetRequestPayload
 	EventHeatSetRequest
+
+	// EventHeatSetRequest signals absolute heat value
+	// Trigger: HeatSystem
+	// Consumer: FSM | Payload: nil
+	EventHeatOverheatNotification
 
 	// EventShieldActivate signals shield should become active
 	// Trigger: EnergySystem when energy > 0 and shield inactive
@@ -341,10 +333,10 @@ const (
 	// Consumer: (future: audio/effects) | Payload: nil
 	EventQuasarDestroyed
 
-	// EventQuasarCancel signals manual termination of the quasar phase
+	// EventQuasarCancelRequest signals manual termination of the quasar phase
 	// Trigger: FSM (on GoldComplete during Quasar)
 	// Consumer: QuasarSystem | Payload: nil
-	EventQuasarCancel
+	EventQuasarCancelRequest
 
 	// EventGrayoutStart signals persistent grayout activation
 	// Trigger: FSM on Quasar

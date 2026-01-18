@@ -294,18 +294,19 @@ func (s *NuggetSystem) collectNugget(nuggetPosX, nuggetPosY int) {
 		OriginY: nuggetPosY,
 	})
 
-	heatComp, ok := s.world.Components.Heat.GetComponent(s.world.Resources.Cursor.Entity)
-	if ok {
-		if heatComp.Current == constant.MaxHeat {
-			s.nuggetOverload++
-			if s.nuggetOverload >= constant.NuggetOverloadCount {
-				s.world.PushEvent(event.EventNuggetOverloadNotification, nil)
-				s.nuggetOverload = 0
-			}
-		} else {
-			s.world.PushEvent(event.EventHeatAdd, &event.HeatAddPayload{Delta: constant.NuggetHeatIncrease})
-		}
-	}
+	// heatComp, ok := s.world.Components.Heat.GetComponent(s.world.Resources.Cursor.Entity)
+	// if ok {
+	// 	if heatComp.Current == constant.HeatMax {
+	// 		s.nuggetOverload++
+	// 		if s.nuggetOverload >= constant.NuggetOverloadCount {
+	// 			s.world.PushEvent(event.EventNuggetOverloadNotification, nil)
+	// 			s.nuggetOverload = 0
+	// 		}
+	// 	} else {
+	// 		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Delta: constant.NuggetHeatIncrease})
+	// 	}
+	// }
+	s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Delta: constant.NuggetHeatIncrease})
 
 	// 3. Update system state and stats
 	s.activeNuggetEntity = 0

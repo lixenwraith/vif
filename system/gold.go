@@ -72,7 +72,6 @@ func (s *GoldSystem) Priority() int {
 // EventTypes returns the event types GoldSystem handles
 func (s *GoldSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventGoldEnable,
 		event.EventGoldSpawnRequest,
 		event.EventGoldCancel,
 		event.EventGoldJumpRequest,
@@ -102,12 +101,6 @@ func (s *GoldSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	switch ev.Type {
-	// TODO: implement enabled event for all systems
-	case event.EventGoldEnable:
-		if payload, ok := ev.Payload.(*event.GoldEnablePayload); ok {
-			s.spawnEnabled = payload.Enabled
-		}
-
 	case event.EventGoldCancel:
 		s.destroyCurrentGold()
 

@@ -481,28 +481,28 @@ func (s *DustSystem) transformGlyphsToDust() {
 	glyphEntities := s.world.Components.Glyph.GetAllEntities()
 	toTransform := make([]glyphData, 0, len(glyphEntities))
 
-	for _, entity := range glyphEntities {
+	for _, glyphEntity := range glyphEntities {
 		// Skip composite members
-		if s.world.Components.Member.HasEntity(entity) {
+		if s.world.Components.Member.HasEntity(glyphEntity) {
 			continue
 		}
 
-		pos, ok := s.world.Positions.GetPosition(entity)
+		glyphPos, ok := s.world.Positions.GetPosition(glyphEntity)
 		if !ok {
 			continue
 		}
 
-		glyph, ok := s.world.Components.Glyph.GetComponent(entity)
+		glyphComp, ok := s.world.Components.Glyph.GetComponent(glyphEntity)
 		if !ok {
 			continue
 		}
 
 		toTransform = append(toTransform, glyphData{
-			entity: entity,
-			x:      pos.X,
-			y:      pos.Y,
-			char:   glyph.Rune,
-			level:  glyph.Level,
+			entity: glyphEntity,
+			x:      glyphPos.X,
+			y:      glyphPos.Y,
+			char:   glyphComp.Rune,
+			level:  glyphComp.Level,
 		})
 	}
 

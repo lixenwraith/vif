@@ -133,7 +133,7 @@ func (s *MetaSystem) handleDebugRequest() {
 	})
 	if hc, ok := s.world.Components.Heat.GetComponent(cursorEntity); ok {
 		playerCard.Entries = append(playerCard.Entries, core.CardEntry{
-			Key: "Heat", Value: fmt.Sprintf("%d/%d", hc.Current, constant.MaxHeat),
+			Key: "Heat", Value: fmt.Sprintf("%d/%d", hc.Current, constant.HeatMax),
 		})
 	}
 	if sc, ok := s.world.Components.Shield.GetComponent(cursorEntity); ok {

@@ -4,10 +4,14 @@ import "time"
 
 // Heat System
 const (
-	// MaxHeat is the maximum value for the heat meter (100%)
-	MaxHeat = 100
+	// HeatMax is the maximum value for the heat meter (100%)
+	HeatMax = 100
 
-	TypingErrorHeatPenalty = 10
+	// HeatMaxOverheat is the maximum overheat to trigger overheat event
+	HeatMaxOverheat = HeatMax // currently double heat amount
+
+	// HeatTypingErrorPenalty is the heat penalty when wrong character typed in insert mode
+	HeatTypingErrorPenalty = 10
 )
 
 // Energy System

@@ -161,11 +161,11 @@ func handleHeatCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if value < 0 {
 		value = 0
 	}
-	if value > constant.MaxHeat {
-		value = constant.MaxHeat
+	if value > constant.HeatMax {
+		value = constant.HeatMax
 	}
 
-	ctx.PushEvent(event.EventHeatSetRequest, &event.HeatSetPayload{Value: value})
+	ctx.PushEvent(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Value: value})
 	ctx.SetLastCommand(fmt.Sprintf(":heat %d", value))
 
 	return CommandResult{Continue: true, KeepPaused: false}
@@ -173,8 +173,8 @@ func handleHeatCommand(ctx *engine.GameContext, args []string) CommandResult {
 
 // handleBoostCommand triggers boost request event
 func handleBoostCommand(ctx *engine.GameContext) CommandResult {
-	ctx.PushEvent(event.EventHeatSetRequest, &event.HeatSetPayload{
-		Value: constant.MaxHeat,
+	ctx.PushEvent(event.EventHeatSetRequest, &event.HeatSetRequestPayload{
+		Value: constant.HeatMax,
 	})
 
 	ctx.PushEvent(event.EventBoostActivate, &event.BoostActivatePayload{
@@ -187,7 +187,7 @@ func handleBoostCommand(ctx *engine.GameContext) CommandResult {
 
 // handleGodCommand sets heat to max and energy to high value
 func handleGodCommand(ctx *engine.GameContext) CommandResult {
-	ctx.PushEvent(event.EventHeatSetRequest, &event.HeatSetPayload{Value: constant.MaxHeat})
+	ctx.PushEvent(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Value: constant.HeatMax})
 	ctx.PushEvent(event.EventEnergySetRequest, &event.EnergySetPayload{Value: constant.GodEnergyAmount})
 	ctx.SetLastCommand(":god")
 	return CommandResult{Continue: true, KeepPaused: false}
@@ -195,7 +195,7 @@ func handleGodCommand(ctx *engine.GameContext) CommandResult {
 
 // handleDemonCommand sets heat to max and energy to high value
 func handleDemonCommand(ctx *engine.GameContext) CommandResult {
-	ctx.PushEvent(event.EventHeatSetRequest, &event.HeatSetPayload{Value: constant.MaxHeat})
+	ctx.PushEvent(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Value: constant.HeatMax})
 	ctx.PushEvent(event.EventEnergySetRequest, &event.EnergySetPayload{Value: -constant.GodEnergyAmount})
 	ctx.SetLastCommand(":demon")
 	return CommandResult{Continue: true, KeepPaused: false}

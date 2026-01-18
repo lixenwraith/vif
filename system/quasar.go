@@ -68,7 +68,7 @@ func (s *QuasarSystem) Priority() int {
 func (s *QuasarSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventQuasarSpawned,
-		event.EventQuasarCancel,
+		event.EventQuasarCancelRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
@@ -77,7 +77,7 @@ func (s *QuasarSystem) EventTypes() []event.EventType {
 func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		if s.active && s.headerEntity != 0 {
-			s.terminateQuasarLocked()
+			s.terminateQuasar()
 		}
 		s.Init()
 		return
@@ -134,9 +134,9 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 
 		s.statActive.Store(true)
 
-	case event.EventQuasarCancel:
+	case event.EventQuasarCancelRequest:
 		if s.active {
-			s.terminateQuasarLocked()
+			s.terminateQuasar()
 		}
 	}
 }
@@ -158,15 +158,6 @@ func (s *QuasarSystem) Update() {
 
 	if !s.active || headerEntity == 0 {
 		return
-	}
-
-	// Check heat for termination (heat=0 ends quasar phase)
-	cursorEntity := s.world.Resources.Cursor.Entity
-	if heatComp, ok := s.world.Components.Heat.GetComponent(cursorEntity); ok {
-		if heatComp.Current <= 0 {
-			s.terminateQuasar()
-			return
-		}
 	}
 
 	// Verify composite still exists
@@ -198,6 +189,10 @@ func (s *QuasarSystem) Update() {
 
 	// Check HP for termination
 	if quasarComp.HitPoints <= 0 {
+		// Emit destroyed event
+		s.world.PushEvent(event.EventQuasarDestroyed, nil)
+		// TODO: audio effect
+
 		s.terminateQuasar()
 		return
 	}
@@ -456,8 +451,8 @@ func (s *QuasarSystem) applyZapDamage() {
 			Amount: constant.QuasarShieldDrain,
 		})
 	} else {
-		// Direct hit - reset heat (terminates phase)
-		s.world.PushEvent(event.EventHeatSetRequest, &event.HeatSetPayload{Value: 0})
+		// Direct hit - reduce 100 heat
+		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Delta: -constant.HeatMax})
 	}
 }
 
@@ -612,9 +607,9 @@ func (s *QuasarSystem) handleInteractions(headerEntity core.Entity, headerComp *
 		return // Shield protects from direct collision
 	}
 
-	// Direct cursor collision without shieldComp → reset heat to 0
+	// Direct cursor collision without shieldComp → reset heat
 	if anyOnCursor && !shieldActive {
-		s.world.PushEvent(event.EventHeatSetRequest, &event.HeatSetPayload{Value: 0})
+		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Delta: -constant.HeatMax})
 	}
 }
 
@@ -670,13 +665,8 @@ func (s *QuasarSystem) applyShieldKnockback(
 	}
 }
 
-// terminateQuasar ends the quasar phase
+// terminateQuasar ends quasar phase
 func (s *QuasarSystem) terminateQuasar() {
-	s.terminateQuasarLocked()
-}
-
-// terminateQuasarLocked ends quasar phase, caller must hold s.mu
-func (s *QuasarSystem) terminateQuasarLocked() {
 	if !s.active {
 		return
 	}
@@ -693,9 +683,6 @@ func (s *QuasarSystem) terminateQuasarLocked() {
 
 	// Resume drain spawning
 	s.world.PushEvent(event.EventDrainResume, nil)
-
-	// Emit destroyed event (for future audio/effects)
-	s.world.PushEvent(event.EventQuasarDestroyed, nil)
 
 	s.active = false
 	s.headerEntity = 0
