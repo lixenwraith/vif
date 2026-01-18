@@ -104,6 +104,25 @@ func (s *BuffSystem) Update() {
 	if !s.enabled {
 		return
 	}
+
+	cursorEntity := s.world.Resources.Cursor.Entity
+	buffComp, ok := s.world.Components.Buff.GetComponent(cursorEntity)
+	if !ok {
+		return
+	}
+
+	dt := s.world.Resources.Time.DeltaTime
+	for buff, active := range buffComp.Active {
+		if !active {
+			continue
+		}
+		buffComp.Cooldown[buff] -= dt
+		if buffComp.Cooldown[buff] < 0 {
+			buffComp.Cooldown[buff] = 0
+		}
+	}
+
+	s.world.Components.Buff.SetComponent(cursorEntity, buffComp)
 }
 
 func (s *BuffSystem) addBuff(buff component.BuffType) {
@@ -113,18 +132,21 @@ func (s *BuffSystem) addBuff(buff component.BuffType) {
 		return
 	}
 
+	buffComp.Active[buff] = true
 	switch buff {
 	case component.BuffRod:
+		buffComp.Cooldown[buff] = constant.BuffCooldownRod
 		s.statRod.Store(true)
 	case component.BuffLauncher:
+		buffComp.Cooldown[buff] = constant.BuffCooldownLauncher
 		s.statLauncher.Store(true)
 	case component.BuffChain:
+		buffComp.Cooldown[buff] = constant.BuffCooldownChain
 		s.statChain.Store(true)
 	default:
 		return
 	}
 
-	buffComp.Active[buff] = true
 	s.world.Components.Buff.SetComponent(cursorEntity, buffComp)
 }
 
@@ -136,6 +158,7 @@ func (s *BuffSystem) removeAllBuffs() {
 	}
 
 	clear(buffComp.Active)
+	clear(buffComp.Cooldown)
 	s.world.Components.Buff.SetComponent(cursorEntity, buffComp)
 	s.statRod.Store(false)
 	s.statLauncher.Store(false)
@@ -161,14 +184,19 @@ func (s *BuffSystem) fireAllBuffs() {
 		if !active {
 			continue
 		}
+		s.world.DebugPrint(fmt.Sprintf("shots: %d, cooldown: %v", shots, buffComp.Cooldown[buff]))
 
-		s.world.DebugPrint(fmt.Sprintf("shots: %d", shots))
+		if buffComp.Cooldown[buff] > 0 {
+			continue
+		}
 
 		switch buff {
 		case component.BuffRod:
+			buffComp.Cooldown[buff] = constant.BuffCooldownRod
 			// Fire lightning to targets, corresponding to floor(heat/10)
 			rodShots := shots
 
+			// TODO: enemy priority targets
 			// Quasar
 			quasarEntities := s.world.Components.Quasar.GetAllEntities()
 			for _, quasarEntity := range quasarEntities {

@@ -143,3 +143,10 @@ const (
 	// GoldSpawnMaxAttempts is the maximum number of attempts to find valid gold sequence position
 	GoldSpawnMaxAttempts = 100
 )
+
+// Buff Cooldowns
+const (
+	BuffCooldownRod      = 500 * time.Millisecond
+	BuffCooldownLauncher = 1000 * time.Millisecond
+	BuffCooldownChain    = 2000 * time.Millisecond
+)

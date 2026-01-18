@@ -3,6 +3,7 @@ package engine
 import (
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
@@ -219,7 +220,8 @@ func (w *World) CreateCursorEntity() {
 
 	// 10. Add buff component
 	w.Components.Buff.SetComponent(cursorEntity, component.BuffComponent{
-		Active: make(map[component.BuffType]bool),
+		Active:   make(map[component.BuffType]bool),
+		Cooldown: make(map[component.BuffType]time.Duration),
 	})
 }
 

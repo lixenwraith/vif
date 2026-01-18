@@ -342,7 +342,7 @@ const (
 	EventQuasarCancel
 
 	// EventGrayoutStart signals persistent grayout activation
-	// Trigger: QuasarSystem on activation
+	// Trigger: FSM on Quasar
 	// Consumer: GameState | Payload: nil
 	EventGrayoutStart
 

@@ -6,7 +6,8 @@ parent = "Root"
 [states.QuasarFuse]
 parent = "QuasarCycle"
 on_enter = [
-    { action = "EmitEvent", event = "EventFuseDrains" }
+    { action = "EmitEvent", event = "EventFuseDrains" },
+    { action = "EmitEvent", event = "EventGrayoutStart" }
 ]
 transitions = [
     { trigger = "EventQuasarSpawned", target = "QuasarGoldSpawn" }
@@ -52,6 +53,7 @@ transitions = [
 parent = "QuasarCycle"
 on_enter = [
     { action = "EmitEvent", event = "EventBuffAddRequest", payload = { buff = 0 } },
+    { action = "EmitEvent", event = "EventGrayoutEnd" },
     { action = "EmitEvent", event = "EventGoldCancel" },
     { action = "ResumeRegion", region = "main" },
     { action = "TerminateRegion", region = "quasar" }

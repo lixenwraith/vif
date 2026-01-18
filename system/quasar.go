@@ -134,9 +134,6 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 
 		s.statActive.Store(true)
 
-		// Activate persistent grayout
-		s.world.PushEvent(event.EventGrayoutStart, nil)
-
 	case event.EventQuasarCancel:
 		if s.active {
 			s.terminateQuasarLocked()
@@ -693,9 +690,6 @@ func (s *QuasarSystem) terminateQuasarLocked() {
 	if s.headerEntity != 0 {
 		s.destroyQuasarComposite(s.headerEntity)
 	}
-
-	// End grayout
-	s.world.PushEvent(event.EventGrayoutEnd, nil)
 
 	// Resume drain spawning
 	s.world.PushEvent(event.EventDrainResume, nil)

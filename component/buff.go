@@ -1,5 +1,9 @@
 package component
 
+import (
+	"time"
+)
+
 // BuffType: rod (lightning), launcher (missile), chain (pull)
 type BuffType int
 
@@ -11,5 +15,6 @@ const (
 
 // BuffComponent tracks cursor active buffs
 type BuffComponent struct {
-	Active map[BuffType]bool
+	Active   map[BuffType]bool
+	Cooldown map[BuffType]time.Duration
 }
