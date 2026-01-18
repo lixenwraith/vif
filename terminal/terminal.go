@@ -138,7 +138,7 @@ func (t *termImpl) Init() error {
 	// Create input reader wrapping backend
 	t.input = newInputReader(t.backend)
 
-	// SetPosition resize handler on backend
+	// Set resize handler on backend
 	t.backend.SetResizeHandler(func(w, h int) {
 		// Non-blocking send to avoid backend blocking
 		select {

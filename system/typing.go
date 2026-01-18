@@ -220,7 +220,7 @@ func (s *TypingSystem) emitTypingFeedback(glyphType component.GlyphType, char ru
 func (s *TypingSystem) emitTypingError() {
 	cursorEntity := s.world.Resources.Cursor.Entity
 
-	// SetPosition cursor error flash
+	// Set cursor error flash
 	if cursor, ok := s.world.Components.Cursor.GetComponent(cursorEntity); ok {
 		cursor.ErrorFlashRemaining = constant.ErrorBlinkTimeout
 		s.world.Components.Cursor.SetComponent(cursorEntity, cursor)

@@ -196,13 +196,10 @@ func (s *BuffSystem) fireAllBuffs() {
 			// Fire lightning to targets, corresponding to floor(heat/10)
 			rodShots := shots
 
-			// TODO: enemy priority targets
+			// TODO: combat priority targets
 			// Quasar
 			quasarEntities := s.world.Components.Quasar.GetAllEntities()
 			for _, quasarEntity := range quasarEntities {
-				if rodShots == 0 {
-					break
-				}
 				combatComp, ok := s.world.Components.Combat.GetComponent(quasarEntity)
 				if !ok {
 					continue
@@ -217,6 +214,9 @@ func (s *BuffSystem) fireAllBuffs() {
 				s.world.Components.Combat.SetComponent(quasarEntity, combatComp)
 
 				rodShots--
+				if rodShots == 0 {
+					break
+				}
 			}
 
 			// Drains

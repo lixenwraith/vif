@@ -107,7 +107,7 @@ const (
 	DrainSpawnOffsetMax = 10
 
 	// DrainSpawnStaggerTicks is game ticks between staggered spawns
-	// SetPosition to 0 for simultaneous spawning
+	// Set to 0 for simultaneous spawning
 	DrainSpawnStaggerTicks = 4
 )
 

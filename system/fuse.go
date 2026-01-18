@@ -311,14 +311,16 @@ func (s *FuseSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 		Mask: component.ProtectAll,
 	})
 
-	// SetPosition quasar component
+	// Set quasar components
 	s.world.Components.Quasar.SetComponent(headerEntity, component.QuasarComponent{
+		SpeedMultiplier: vmath.Scale,
+	})
+
+	s.world.Components.Kinetic.SetComponent(headerEntity, component.KineticComponent{
 		Kinetic: component.Kinetic{
 			PreciseX: vmath.FromInt(headerX),
 			PreciseY: vmath.FromInt(headerY),
-		},
-		SpeedMultiplier: vmath.Scale,
-	})
+		}})
 
 	// Build member entities
 	members := make([]component.MemberEntry, 0, constant.QuasarWidth*constant.QuasarHeight)
@@ -354,7 +356,7 @@ func (s *FuseSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 		}
 	}
 
-	// SetPosition composite header on phantom head
+	// Set composite header on phantom head
 	s.world.Components.Header.SetComponent(headerEntity, component.HeaderComponent{
 		Behavior:      component.BehaviorQuasar,
 		MemberEntries: members,

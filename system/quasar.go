@@ -107,27 +107,36 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 		cursorEntity := s.world.Resources.Cursor.Entity
 		now := s.world.Resources.Time.GameTime
 
-		if quasarComp, ok := s.world.Components.Quasar.GetComponent(s.headerEntity); ok {
-			headerPos, _ := s.world.Positions.GetPosition(s.headerEntity)
-			cursorPos, _ := s.world.Positions.GetPosition(cursorEntity)
-
-			quasarComp.PreciseX = vmath.FromInt(headerPos.X)
-			quasarComp.PreciseY = vmath.FromInt(headerPos.Y)
-			quasarComp.SpeedMultiplier = vmath.Scale
-			quasarComp.LastSpeedIncreaseAt = now
-
-			// Initialize dynamic radius
-			quasarComp.ZapRadius = s.calculateZapRadius()
-
-			// Initial velocity toward cursor
-			dx := vmath.FromInt(cursorPos.X - headerPos.X)
-			dy := vmath.FromInt(cursorPos.Y - headerPos.Y)
-			dirX, dirY := vmath.Normalize2D(dx, dy)
-			quasarComp.VelX = vmath.Mul(dirX, constant.QuasarBaseSpeed)
-			quasarComp.VelY = vmath.Mul(dirY, constant.QuasarBaseSpeed)
-
-			s.world.Components.Quasar.SetComponent(s.headerEntity, quasarComp)
+		quasarComp, ok := s.world.Components.Quasar.GetComponent(s.headerEntity)
+		if !ok {
+			return
 		}
+
+		kineticComp, ok := s.world.Components.Kinetic.GetComponent(s.headerEntity)
+		if !ok {
+			return
+		}
+
+		headerPos, _ := s.world.Positions.GetPosition(s.headerEntity)
+		cursorPos, _ := s.world.Positions.GetPosition(cursorEntity)
+
+		kineticComp.PreciseX = vmath.FromInt(headerPos.X)
+		kineticComp.PreciseY = vmath.FromInt(headerPos.Y)
+		quasarComp.SpeedMultiplier = vmath.Scale
+		quasarComp.LastSpeedIncreaseAt = now
+
+		// Initialize dynamic radius
+		quasarComp.ZapRadius = s.calculateZapRadius()
+
+		// Initial velocity toward cursor
+		dx := vmath.FromInt(cursorPos.X - headerPos.X)
+		dy := vmath.FromInt(cursorPos.Y - headerPos.Y)
+		dirX, dirY := vmath.Normalize2D(dx, dy)
+		kineticComp.VelX = vmath.Mul(dirX, constant.QuasarBaseSpeed)
+		kineticComp.VelY = vmath.Mul(dirY, constant.QuasarBaseSpeed)
+
+		s.world.Components.Quasar.SetComponent(s.headerEntity, quasarComp)
+		s.world.Components.Kinetic.SetComponent(s.headerEntity, kineticComp)
 
 		combatComp := component.CombatComponent{
 			HitPoints: constant.QuasarInitialHP,
@@ -302,6 +311,11 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 		return
 	}
 
+	kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity)
+	if !ok {
+		return
+	}
+
 	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
 	// Cap delta to prevent tunneling
 	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
@@ -324,13 +338,12 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 
 	// Homing with arrival steering, drag only when not immune
 	settled := physics.ApplyHomingScaled(
-		&quasarComp.Kinetic,
+		&kineticComp.Kinetic,
 		cursorXFixed, cursorYFixed,
 		&physics.QuasarHoming,
 		quasarComp.SpeedMultiplier,
 		dtFixed,
-		true,
-		// !quasarComp.IsImmune(now), // applyDrag gated by immunity
+		true, // !quasarComp.IsImmune(now), // applyDrag gated by immunity // TODO: change after full migration
 	)
 
 	if settled {
@@ -343,26 +356,28 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 	}
 
 	// Cap velocity before integration to prevent runaway from cumulative dust hits
-	physics.CapSpeed(&quasarComp.VelX, &quasarComp.VelY, constant.QuasarMaxSpeed)
+	physics.CapSpeed(&kineticComp.VelX, &kineticComp.VelY, constant.QuasarMaxSpeed)
 
 	// Integrate position
-	newX, newY := quasarComp.Integrate(dtFixed)
+	newX, newY := kineticComp.Integrate(dtFixed)
 
 	// Boundary reflection with footprint constraints
-	minAnchorX := constant.QuasarHeaderOffsetX
-	maxAnchorX := config.GameWidth - (constant.QuasarWidth - constant.QuasarHeaderOffsetX)
-	minAnchorY := constant.QuasarHeaderOffsetY
-	maxAnchorY := config.GameHeight - (constant.QuasarHeight - constant.QuasarHeaderOffsetY)
+	minHeaderX := constant.QuasarHeaderOffsetX
+	maxHeaderX := config.GameWidth - (constant.QuasarWidth - constant.QuasarHeaderOffsetX)
+	minHeaderY := constant.QuasarHeaderOffsetY
+	maxHeaderY := config.GameHeight - (constant.QuasarHeight - constant.QuasarHeaderOffsetY)
 
-	quasarComp.ReflectBoundsX(minAnchorX, maxAnchorX)
-	quasarComp.ReflectBoundsY(minAnchorY, maxAnchorY)
-	newX, newY = quasarComp.GridPos()
+	kineticComp.ReflectBoundsX(minHeaderX, maxHeaderX)
+	kineticComp.ReflectBoundsY(minHeaderY, maxHeaderY)
+	newX, newY = kineticComp.GridPos()
 
 	// Update header position if cell changed
 	if newX != headerPos.X || newY != headerPos.Y {
 		s.processCollisionsAtNewPositions(headerEntity, newX, newY)
 		s.world.Positions.SetPosition(headerEntity, component.PositionComponent{X: newX, Y: newY})
 	}
+
+	s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
 }
 
 // isCursorInZapRange checks if cursor is within zap ellipse centered on quasar
@@ -637,6 +652,10 @@ func (s *QuasarSystem) applyShieldKnockback(
 	if !ok {
 		return
 	}
+	kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity)
+	if !ok {
+		return
+	}
 
 	// Radial direction: cursor → anchor (shield pushes outward)
 	radialX := vmath.FromInt(headerPos.X - cursorPos.X)
@@ -657,13 +676,14 @@ func (s *QuasarSystem) applyShieldKnockback(
 	centroidY := sumY / len(overlaps)
 
 	if physics.ApplyOffsetCollision(
-		&quasarComp.Kinetic,
+		&kineticComp.Kinetic,
 		radialX, radialY,
 		centroidX, centroidY,
 		&physics.ShieldToQuasar,
 		s.rng,
 	) {
 		s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
+		s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
 	}
 }
 

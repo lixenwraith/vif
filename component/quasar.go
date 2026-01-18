@@ -13,7 +13,7 @@ var QuasarChars = [3][5]rune{
 
 // QuasarComponent holds quasar-specific runtime state, composite structure managed via HeaderComponent
 type QuasarComponent struct {
-	Kinetic // PreciseX/Y, VelX/Y, AccelX/Y (Q32.32)
+	// Kinetic // PreciseX/Y, VelX/Y, AccelX/Y (Q32.32)
 
 	LastSpeedIncreaseAt time.Time // For periodic speed scaling
 

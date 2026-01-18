@@ -423,7 +423,7 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 			continue
 		}
 
-		// 3. SetPosition glyph components
+		// 3. Set glyph components
 		for _, ed := range entities {
 			s.world.Components.Glyph.SetComponent(ed.entity, component.GlyphComponent{
 				Rune:  ed.char,

@@ -14,7 +14,7 @@ import (
 // GameContext holds all game state including the ECS world
 type GameContext struct {
 	// ===== Immutable After Init =====
-	// SetPosition once during NewGameContext. Pointers/values never modified.
+	// Set once during NewGameContext. Pointers/values never modified.
 	// Safe for concurrent read without synchronization.
 
 	World         *World         // ECS world; has internal lock

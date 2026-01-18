@@ -303,6 +303,10 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 								if !ok {
 									continue
 								}
+								kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity)
+								if !ok {
+									continue
+								}
 
 								diffX := int64(quasarPos.X - centerX)
 								diffY := int64(quasarPos.Y - centerY)
@@ -310,12 +314,14 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 								eVelY := vmath.Mul(constant.QuasarMaxSpeed, vmath.Div(radius, diffY))
 
 								physics.ApplyCollision(
-									&quasarComp.Kinetic,
+									&kineticComp.Kinetic,
 									eVelX, eVelY,
 									&physics.ExplosionToQuasar,
 									s.rng,
 								)
 								s.world.Components.Quasar.SetComponent(headerEntity, quasarComp)
+								s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
+
 								combatComp, ok := s.world.Components.Combat.GetComponent(headerEntity)
 								if ok {
 									combatComp.HitPoints--
@@ -328,12 +334,12 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 					}
 				}
 
-				glyph, ok := s.world.Components.Glyph.GetComponent(entity)
+				glyphComp, ok := s.world.Components.Glyph.GetComponent(entity)
 				if !ok {
 					continue
 				}
 
-				// SetPosition death component for deduplication
+				// Set death component for deduplication
 				if s.world.Components.Death.HasEntity(entity) {
 					continue
 				}
@@ -344,8 +350,8 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 				s.dustEntryBuf = append(s.dustEntryBuf, event.DustSpawnEntry{
 					X:     x,
 					Y:     y,
-					Char:  glyph.Rune,
-					Level: glyph.Level,
+					Char:  glyphComp.Rune,
+					Level: glyphComp.Level,
 				})
 			}
 		}

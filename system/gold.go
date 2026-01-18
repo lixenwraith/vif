@@ -272,7 +272,7 @@ func (s *GoldSystem) spawnGold() bool {
 	// Create member entities
 	members := make([]component.MemberEntry, 0, constant.GoldSequenceLength)
 
-	// SetPosition position component to gold entities
+	// Set position component to gold entities
 	for i := 0; i < constant.GoldSequenceLength; i++ {
 		entity := s.world.CreateEntity()
 		entities = append(entities, entityData{
@@ -296,13 +296,13 @@ func (s *GoldSystem) spawnGold() bool {
 		return false
 	}
 
-	// 4. SetPosition Phantom Head to Positions AFTER batch success
+	// 4. Set Phantom Head to Positions AFTER batch success
 	s.world.Positions.SetPosition(headerEntity, component.PositionComponent{X: x, Y: y})
 	s.world.Components.Protection.SetComponent(headerEntity, component.ProtectionComponent{
 		Mask: component.ProtectAll,
 	})
 
-	// 5. SetPosition components to members
+	// 5. Set components to members
 	for i, ed := range entities {
 		// Typing target
 		s.world.Components.Glyph.SetComponent(ed.entity, component.GlyphComponent{
@@ -321,7 +321,7 @@ func (s *GoldSystem) spawnGold() bool {
 			Mask: component.ProtectFromDelete | component.ProtectFromDecay,
 		})
 
-		// SetPosition gold entity to composite member entities
+		// Set gold entity to composite member entities
 		members = append(members, component.MemberEntry{
 			Entity:  ed.entity,
 			OffsetX: ed.offset,

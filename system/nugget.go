@@ -232,7 +232,7 @@ func (s *NuggetSystem) spawnNugget() {
 		return
 	}
 
-	// SetPosition component after position is committed
+	// Set component after position is committed
 	s.world.Components.Nugget.SetComponent(entity, nugget)
 	// Render component
 	s.world.Components.Sigil.SetComponent(entity, component.SigilComponent{

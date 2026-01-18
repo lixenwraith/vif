@@ -272,7 +272,7 @@ func (s *CompositeSystem) AddMember(headerEntity, memberEntity core.Entity, offs
 		return
 	}
 
-	// SetPosition member entry
+	// Set member entry
 	headerComp.MemberEntries = append(headerComp.MemberEntries, component.MemberEntry{
 		Entity:  memberEntity,
 		OffsetX: offsetX,
@@ -281,7 +281,7 @@ func (s *CompositeSystem) AddMember(headerEntity, memberEntity core.Entity, offs
 	})
 	s.world.Components.Header.SetComponent(headerEntity, headerComp)
 
-	// SetPosition backlink to member
+	// Set backlink to member
 	s.world.Components.Member.SetComponent(memberEntity, component.MemberComponent{
 		HeaderEntity: headerEntity,
 	})

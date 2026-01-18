@@ -396,11 +396,6 @@ func (s *CleanerSystem) deflectDrain(drainEntity core.Entity, cleanerVelX, clean
 		return
 	}
 
-	// enemyComp, ok := s.world.Components.Energy.GetComponent(drainEntity)
-	// if !ok {
-	// 	return
-	// }
-
 	if physics.ApplyCollision(&kineticComp.Kinetic, cleanerVelX, cleanerVelY, &physics.CleanerToDrain, s.rng) {
 		s.world.Components.Kinetic.SetComponent(drainEntity, kineticComp)
 	}
@@ -432,9 +427,14 @@ func (s *CleanerSystem) deflectQuasar(headerEntity, hitMember core.Entity, clean
 	combatComp.HitPoints--
 	combatComp.HitFlashRemaining = constant.QuasarHitFlashDuration
 
+	kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity)
+	if !ok {
+		return
+	}
+
 	// Knockback only when not enraged
 	if !quasarComp.IsEnraged {
-		anchorPos, ok := s.world.Positions.GetPosition(headerEntity)
+		headerPos, ok := s.world.Positions.GetPosition(headerEntity)
 		if !ok {
 			s.world.Components.Quasar.SetComponent(headerEntity, quasarComp)
 			return
@@ -445,11 +445,11 @@ func (s *CleanerSystem) deflectQuasar(headerEntity, hitMember core.Entity, clean
 			return
 		}
 
-		offsetX := hitPos.X - anchorPos.X
-		offsetY := hitPos.Y - anchorPos.Y
+		offsetX := hitPos.X - headerPos.X
+		offsetY := hitPos.Y - headerPos.Y
 
 		physics.ApplyOffsetCollision(
-			&quasarComp.Kinetic,
+			&kineticComp.Kinetic,
 			cleanerVelX, cleanerVelY,
 			offsetX, offsetY,
 			&physics.CleanerToQuasar,

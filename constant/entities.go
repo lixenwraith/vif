@@ -81,7 +81,7 @@ const (
 	QuasarSpeedIncreasePercent = 0.10
 
 	// QuasarZapDuration is the visual duration for zap lightning effect
-	// SetPosition long since it's continuously refreshed while zapping
+	// Set long since it's continuously refreshed while zapping
 	QuasarZapDuration = 500 * time.Millisecond
 
 	// QuasarDeflectImpulseMinFloat is minimum deflection velocity (cells/sec)

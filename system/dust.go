@@ -348,21 +348,22 @@ func (s *DustSystem) Update() {
 
 					// --- Quasar interaction ---
 					if member, ok := s.world.Components.Member.GetComponent(target); ok {
-						if header, hOk := s.world.Components.Header.GetComponent(member.HeaderEntity); hOk {
-							if header.Behavior == component.BehaviorQuasar {
-								if quasar, qOk := s.world.Components.Quasar.GetComponent(member.HeaderEntity); qOk {
-									// Center-of-mass collision, no offset calculation
-									physics.ApplyCollision(
-										&quasar.Kinetic,
-										dust.VelX, dust.VelY,
-										&physics.DustToQuasar,
-										s.rng,
-									)
-									s.world.Components.Quasar.SetComponent(member.HeaderEntity, quasar)
+						if headerComp, ok := s.world.Components.Header.GetComponent(member.HeaderEntity); ok {
+							if kineticComp, ok := s.world.Components.Kinetic.GetComponent(member.HeaderEntity); ok {
+								if headerComp.Behavior == component.BehaviorQuasar {
+									if quasarComp, ok := s.world.Components.Quasar.GetComponent(member.HeaderEntity); ok {
+										// Center-of-mass collision, no offset calculation
+										physics.ApplyCollision(
+											&kineticComp.Kinetic,
+											dust.VelX, dust.VelY,
+											&physics.DustToQuasar,
+											s.rng,
+										)
+										s.world.Components.Quasar.SetComponent(member.HeaderEntity, quasarComp)
+									}
 								}
 							}
 						}
-						continue
 					}
 
 					// --- Blossom/Decay interaction ---
