@@ -135,7 +135,7 @@ func (s *BlossomSystem) spawnSingleBlossom(x, y int, char rune, skipStartCell bo
 		lastX, lastY = x, y
 	}
 	s.world.Components.Blossom.SetComponent(entity, component.BlossomComponent{
-		KineticState: component.KineticState{
+		Kinetic: component.Kinetic{
 			PreciseX: vmath.FromInt(x),
 			PreciseY: vmath.FromInt(y),
 			VelY:     velY,

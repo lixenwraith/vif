@@ -6,22 +6,20 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
-	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/vi-fighter/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
-// FuseSystem orchestrates drain-to-quasar transformation
-// Receives EventFuseDrains from CleanerSystem when no valid targets exist at max heat
-// Destroys all drains and spawns a single Quasar composite entity
+// FuseSystem orchestrates drain-to-quasar transformation, destroying all drains and spawning a single quasar composite entity
 type FuseSystem struct {
 	world *engine.World
 
 	// Fusion state machine
 	fusing    bool
 	fuseTimer int64 // Remaining time in nanoseconds
-	targetX   int   // Quasar spawn position (centroid)
-	targetY   int
+
+	// Quasar spawn position (centroid of drains)
+	targetX int
+	targetY int
 
 	enabled bool
 }
@@ -140,15 +138,13 @@ func (s *FuseSystem) executeFuse() {
 		originY := coords[i*2+1]
 
 		// Spawn transient lightning entity
-		s.world.PushEvent(event.EventSpiritSpawn, &event.SpiritSpawnPayload{
-			StartX:  originX,
-			StartY:  originY,
-			TargetX: s.targetX,
-			TargetY: s.targetY,
-			Char:    constant.DrainChar,
-			// TODO: this is bad, only system needing colors, find a way not to import terminal or render
-			BaseColor:  terminal.RGB(render.RgbDrain),
-			BlinkColor: terminal.RGB{R: 255, G: 255, B: 0}, // Yellow blink
+		s.world.PushEvent(event.EventSpiritSpawn, &event.SpiritSpawnRequestPayload{
+			StartX:    originX,
+			StartY:    originY,
+			TargetX:   s.targetX,
+			TargetY:   s.targetY,
+			Char:      constant.DrainChar,
+			BaseColor: component.SpiritCyan,
 		})
 	}
 
@@ -177,13 +173,11 @@ func (s *FuseSystem) completeFuse() {
 	s.clearSpawnArea(s.targetX, s.targetY)
 
 	// 3. Create Quasar composite
-	anchorEntity := s.createQuasarComposite(s.targetX, s.targetY)
+	headerEntity := s.createQuasarComposite(s.targetX, s.targetY)
 
 	// 4. Notify QuasarSystem
 	s.world.PushEvent(event.EventQuasarSpawned, &event.QuasarSpawnedPayload{
-		HeaderEntity: anchorEntity,
-		OriginX:      s.targetX,
-		OriginY:      s.targetY,
+		HeaderEntity: headerEntity,
 	})
 
 	// 5. Reset state
@@ -204,7 +198,7 @@ func (s *FuseSystem) destroyAllDrains() {
 
 // clampSpawnPosition ensures the Quasar fits within bounds given a target center
 // Input x, y is the desired center (or centroid)
-// Returns the Phantom Head position (Quasar anchor)
+// Returns the Phantom Head position (Quasar header)
 func (s *FuseSystem) clampSpawnPosition(targetX, targetY int) (int, int) {
 	config := s.world.Resources.Config
 
@@ -216,8 +210,8 @@ func (s *FuseSystem) clampSpawnPosition(targetX, targetY int) (int, int) {
 
 	// However, we must ensure the entire 3x5 grid fits
 	// TopLeft = Anchor - AnchorOffset
-	topLeftX := targetX - constant.QuasarAnchorOffsetX
-	topLeftY := targetY - constant.QuasarAnchorOffsetY
+	topLeftX := targetX - constant.QuasarHeaderOffsetX
+	topLeftY := targetY - constant.QuasarHeaderOffsetY
 
 	if topLeftX < 0 {
 		topLeftX = 0
@@ -232,8 +226,8 @@ func (s *FuseSystem) clampSpawnPosition(targetX, targetY int) (int, int) {
 		topLeftY = config.GameHeight - constant.QuasarHeight
 	}
 
-	// Return adjusted anchor position
-	return topLeftX + constant.QuasarAnchorOffsetX, topLeftY + constant.QuasarAnchorOffsetY
+	// Return adjusted header position
+	return topLeftX + constant.QuasarHeaderOffsetX, topLeftY + constant.QuasarHeaderOffsetY
 }
 
 // calculateSpawnPosition returns center of game area
@@ -247,8 +241,8 @@ func (s *FuseSystem) calculateSpawnPosition() (int, int) {
 	centerY := config.GameHeight / 2
 
 	// Clamp to ensure quasar fits within bounds
-	topLeftX := centerX - constant.QuasarAnchorOffsetX
-	topLeftY := centerY - constant.QuasarAnchorOffsetY
+	topLeftX := centerX - constant.QuasarHeaderOffsetX
+	topLeftY := centerY - constant.QuasarHeaderOffsetY
 
 	if topLeftX < 0 {
 		topLeftX = 0
@@ -264,14 +258,14 @@ func (s *FuseSystem) calculateSpawnPosition() (int, int) {
 	}
 
 	// Return phantom head position (center of quasar)
-	return topLeftX + constant.QuasarAnchorOffsetX, topLeftY + constant.QuasarAnchorOffsetY
+	return topLeftX + constant.QuasarHeaderOffsetX, topLeftY + constant.QuasarHeaderOffsetY
 }
 
 // clearSpawnArea destroys all entities within the quasar footprint
-func (s *FuseSystem) clearSpawnArea(anchorX, anchorY int) {
-	// Calculate top-left from anchor position
-	topLeftX := anchorX - constant.QuasarAnchorOffsetX
-	topLeftY := anchorY - constant.QuasarAnchorOffsetY
+func (s *FuseSystem) clearSpawnArea(headerX, headerY int) {
+	// Calculate top-left from header position
+	topLeftX := headerX - constant.QuasarHeaderOffsetX
+	topLeftY := headerY - constant.QuasarHeaderOffsetY
 
 	cursorEntity := s.world.Resources.Cursor.Entity
 	var toDestroy []core.Entity
@@ -303,25 +297,25 @@ func (s *FuseSystem) clearSpawnArea(anchorX, anchorY int) {
 }
 
 // createQuasarComposite builds the 3x5 quasar entity structure
-func (s *FuseSystem) createQuasarComposite(anchorX, anchorY int) core.Entity {
-	// Calculate top-left from anchor position
-	topLeftX := anchorX - constant.QuasarAnchorOffsetX
-	topLeftY := anchorY - constant.QuasarAnchorOffsetY
+func (s *FuseSystem) createQuasarComposite(headerX, headerY int) core.Entity {
+	// Calculate top-left from header position
+	topLeftX := headerX - constant.QuasarHeaderOffsetX
+	topLeftY := headerY - constant.QuasarHeaderOffsetY
 
 	// Create phantom head (controller entity)
-	anchorEntity := s.world.CreateEntity()
-	s.world.Positions.SetPosition(anchorEntity, component.PositionComponent{X: anchorX, Y: anchorY})
+	headerEntity := s.world.CreateEntity()
+	s.world.Positions.SetPosition(headerEntity, component.PositionComponent{X: headerX, Y: headerY})
 
 	// Phantom head is indestructible through lifecycle
-	s.world.Components.Protection.SetComponent(anchorEntity, component.ProtectionComponent{
+	s.world.Components.Protection.SetComponent(headerEntity, component.ProtectionComponent{
 		Mask: component.ProtectAll,
 	})
 
 	// SetPosition quasar component
-	s.world.Components.Quasar.SetComponent(anchorEntity, component.QuasarComponent{
-		KineticState: component.KineticState{
-			PreciseX: vmath.FromInt(anchorX),
-			PreciseY: vmath.FromInt(anchorY),
+	s.world.Components.Quasar.SetComponent(headerEntity, component.QuasarComponent{
+		Kinetic: component.Kinetic{
+			PreciseX: vmath.FromInt(headerX),
+			PreciseY: vmath.FromInt(headerY),
 		},
 		SpeedMultiplier: vmath.Scale,
 	})
@@ -334,9 +328,9 @@ func (s *FuseSystem) createQuasarComposite(anchorX, anchorY int) core.Entity {
 			memberX := topLeftX + col
 			memberY := topLeftY + row
 
-			// Calculate offset from anchor
-			offsetX := int8(col - constant.QuasarAnchorOffsetX)
-			offsetY := int8(row - constant.QuasarAnchorOffsetY)
+			// Calculate offset from header
+			offsetX := int8(col - constant.QuasarHeaderOffsetX)
+			offsetY := int8(row - constant.QuasarHeaderOffsetY)
 
 			entity := s.world.CreateEntity()
 			s.world.Positions.SetPosition(entity, component.PositionComponent{X: memberX, Y: memberY})
@@ -346,9 +340,9 @@ func (s *FuseSystem) createQuasarComposite(anchorX, anchorY int) core.Entity {
 				Mask: component.ProtectFromDecay | component.ProtectFromDelete,
 			})
 
-			// Backlink to anchor
+			// Backlink to header
 			s.world.Components.Member.SetComponent(entity, component.MemberComponent{
-				HeaderEntity: anchorEntity,
+				HeaderEntity: headerEntity,
 			})
 
 			members = append(members, component.MemberEntry{
@@ -361,12 +355,12 @@ func (s *FuseSystem) createQuasarComposite(anchorX, anchorY int) core.Entity {
 	}
 
 	// SetPosition composite header on phantom head
-	s.world.Components.Header.SetComponent(anchorEntity, component.HeaderComponent{
+	s.world.Components.Header.SetComponent(headerEntity, component.HeaderComponent{
 		Behavior:      component.BehaviorQuasar,
 		MemberEntries: members,
 		VelX:          0,
 		VelY:          0,
 	})
 
-	return anchorEntity
+	return headerEntity
 }

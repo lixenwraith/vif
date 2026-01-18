@@ -110,7 +110,7 @@ func (s *LightningSystem) HandleEvent(ev event.GameEvent) {
 
 	switch ev.Type {
 	case event.EventLightningSpawn:
-		if p, ok := ev.Payload.(*event.LightningSpawnPayload); ok {
+		if p, ok := ev.Payload.(*event.LightningSpawnRequestPayload); ok {
 			s.spawnLightning(p)
 		}
 
@@ -126,7 +126,7 @@ func (s *LightningSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
-func (s *LightningSystem) spawnLightning(p *event.LightningSpawnPayload) {
+func (s *LightningSystem) spawnLightning(p *event.LightningSpawnRequestPayload) {
 	e := s.world.CreateEntity()
 
 	lc := component.LightningComponent{

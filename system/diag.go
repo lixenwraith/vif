@@ -11,8 +11,8 @@ import (
 
 const diagnosticsSampleInterval = 100
 
-// DiagnosticsSystem collects ECS telemetry for memory leak detection
-type DiagnosticsSystem struct {
+// DiagSystem collects ECS telemetry for memory leak detection
+type DiagSystem struct {
 	world *engine.World
 
 	tickCounter int64
@@ -51,11 +51,11 @@ type DiagnosticsSystem struct {
 	enabled bool
 }
 
-// NewDiagnosticsSystem creates a new diagnostics system
-func NewDiagnosticsSystem(world *engine.World) engine.System {
+// NewDiagSystem creates a new diagnostics system
+func NewDiagSystem(world *engine.World) engine.System {
 	reg := world.Resources.Status
 
-	s := &DiagnosticsSystem{
+	s := &DiagSystem{
 		world: world,
 
 		// Store counts
@@ -94,28 +94,28 @@ func NewDiagnosticsSystem(world *engine.World) engine.System {
 	return s
 }
 
-func (s *DiagnosticsSystem) Init() {
+func (s *DiagSystem) Init() {
 	s.tickCounter = 0
 	s.enabled = true
 }
 
 // Name returns system's name
-func (s *DiagnosticsSystem) Name() string {
+func (s *DiagSystem) Name() string {
 	return "diagnostics"
 }
 
-func (s *DiagnosticsSystem) Priority() int {
+func (s *DiagSystem) Priority() int {
 	return constant.PriorityDiagnostics
 }
 
-func (s *DiagnosticsSystem) EventTypes() []event.EventType {
+func (s *DiagSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
 }
 
-func (s *DiagnosticsSystem) HandleEvent(ev event.GameEvent) {
+func (s *DiagSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		s.Init()
 	}
@@ -129,7 +129,7 @@ func (s *DiagnosticsSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
-func (s *DiagnosticsSystem) Update() {
+func (s *DiagSystem) Update() {
 	if !s.enabled {
 		return
 	}
@@ -148,7 +148,7 @@ func (s *DiagnosticsSystem) Update() {
 }
 
 // TODO: add to code gen
-func (s *DiagnosticsSystem) collectStoreCounts() {
+func (s *DiagSystem) collectStoreCounts() {
 	s.statPositionCount.Store(int64(s.world.Positions.CountEntities()))
 	s.statGlyphCount.Store(int64(s.world.Components.Glyph.CountEntities()))
 	s.statSigilCount.Store(int64(s.world.Components.Sigil.CountEntities()))
@@ -161,7 +161,7 @@ func (s *DiagnosticsSystem) collectStoreCounts() {
 	s.statBoostCount.Store(int64(s.world.Components.Boost.CountEntities()))
 }
 
-func (s *DiagnosticsSystem) collectGridMetrics() {
+func (s *DiagSystem) collectGridMetrics() {
 	width, height := s.world.Positions.GridDimensions()
 	stats := s.world.Positions.GridStats()
 
@@ -180,7 +180,7 @@ func (s *DiagnosticsSystem) collectGridMetrics() {
 	}
 }
 
-func (s *DiagnosticsSystem) collectConsistencyChecks() {
+func (s *DiagSystem) collectConsistencyChecks() {
 	var orphanGlyph, orphanMember, emptyHeader int64
 
 	// Glyph without Positions
@@ -223,7 +223,7 @@ func (s *DiagnosticsSystem) collectConsistencyChecks() {
 	s.statEmptyHeader.Store(emptyHeader)
 }
 
-func (s *DiagnosticsSystem) collectLifecycleMetrics() {
+func (s *DiagSystem) collectLifecycleMetrics() {
 	created := s.world.CreatedCount()
 	destroyed := s.world.DestroyedCount()
 

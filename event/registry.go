@@ -121,7 +121,11 @@ func InitRegistry() {
 	RegisterType("EventEnergyGlyphConsumed", EventEnergyGlyphConsumed, &GlyphConsumedPayload{})
 	RegisterType("EventEnergyBlinkStart", EventEnergyBlinkStart, &EnergyBlinkPayload{})
 	RegisterType("EventEnergyBlinkStop", EventEnergyBlinkStop, nil)
+
+	// Vampire
 	RegisterType("EventVampireDrainRequest", EventVampireDrainRequest, &VampireDrainRequestPayload{})
+
+	// Buff
 	RegisterType("EventBuffAddRequest", EventBuffAddRequest, &BuffAddRequestPayload{})
 	RegisterType("EventBuffFireRequest", EventBuffFireRequest, nil)
 
@@ -135,41 +139,74 @@ func InitRegistry() {
 	RegisterType("EventShieldDeactivate", EventShieldDeactivate, nil)
 	RegisterType("EventShieldDrain", EventShieldDrain, &ShieldDrainPayload{})
 
-	RegisterType("EventDeleteRequest", EventDeleteRequest, &DeleteRequestPayload{})
-	RegisterType("EventPingGridRequest", EventPingGridRequest, &PingGridRequestPayload{})
-
+	// Boost
 	RegisterType("EventTimerStart", EventTimerStart, &TimerStartPayload{})
 	RegisterType("EventBoostActivate", EventBoostActivate, &BoostActivatePayload{})
 	RegisterType("EventBoostDeactivate", EventBoostDeactivate, nil)
 	RegisterType("EventBoostExtend", EventBoostExtend, &BoostExtendPayload{})
+
+	// Typing
+	RegisterType("EventDeleteRequest", EventDeleteRequest, &DeleteRequestPayload{})
+
+	// Ping
+	RegisterType("EventPingGridRequest", EventPingGridRequest, &PingGridRequestPayload{})
+
+	// Materialize
 	RegisterType("EventMaterializeRequest", EventMaterializeRequest, &MaterializeRequestPayload{})
 	RegisterType("EventMaterializeComplete", EventMaterializeComplete, &SpawnCompletePayload{})
+
+	// Effects
 	RegisterType("EventFlashRequest", EventFlashRequest, &FlashRequestPayload{})
 	RegisterType("EventExplosionRequest", EventExplosionRequest, &ExplosionRequestPayload{})
+
+	// Dust
 	RegisterType("EventDustSpawnOne", EventDustSpawnOne, &DustSpawnPayload{})
 	RegisterType("EventDustSpawnBatch", EventDustSpawnBatch, &DustSpawnBatchPayload{})
+	RegisterType("EventDustAll", EventDustAll, nil)
+
+	// Blossom
 	RegisterType("EventBlossomSpawnOne", EventBlossomSpawnOne, &BlossomSpawnPayload{})
 	RegisterType("EventBlossomWave", EventBlossomWave, nil)
+
+	// Decay
 	RegisterType("EventDecaySpawnOne", EventDecaySpawnOne, &DecaySpawnPayload{})
 	RegisterType("EventDecayWave", EventDecayWave, nil)
+
+	// Death
 	RegisterType("EventDeathOne", EventDeathOne, nil) // Scalar bit-packed payload (no struct), use api
 	RegisterType("EventDeathBatch", EventDeathBatch, &DeathRequestPayload{})
+
+	// Composite
 	RegisterType("EventMemberTyped", EventMemberTyped, &MemberTypedPayload{})
+
+	// Cursor
 	RegisterType("EventCursorMoved", EventCursorMoved, &CursorMovedPayload{})
 
 	// Fuse/Quasar events
 	RegisterType("EventFuseDrains", EventFuseDrains, nil)
+
+	// Drain
 	RegisterType("EventDrainPause", EventDrainPause, nil)
 	RegisterType("EventDrainResume", EventDrainResume, nil)
+
+	// Quasar
 	RegisterType("EventQuasarSpawned", EventQuasarSpawned, &QuasarSpawnedPayload{})
 	RegisterType("EventQuasarDestroyed", EventQuasarDestroyed, nil)
 	RegisterType("EventQuasarCancelRequest", EventQuasarCancelRequest, nil)
+
+	// Environment
 	RegisterType("EventGrayoutStart", EventGrayoutStart, nil)
 	RegisterType("EventGrayoutEnd", EventGrayoutEnd, nil)
-	RegisterType("EventSpiritSpawn", EventSpiritSpawn, &SpiritSpawnPayload{})
+
+	// Spirit
+	RegisterType("EventSpiritSpawn", EventSpiritSpawn, &SpiritSpawnRequestPayload{})
 	RegisterType("EventSpiritDespawn", EventSpiritDespawn, nil)
-	RegisterType("EventLightningSpawn", EventLightningSpawn, &LightningSpawnPayload{})
+
+	// Lightning
+	RegisterType("EventLightningSpawn", EventLightningSpawn, &LightningSpawnRequestPayload{})
 	RegisterType("EventLightningUpdate", EventLightningUpdate, &LightningUpdatePayload{})
 	RegisterType("EventLightningDespawn", EventLightningDespawn, nil)
-	RegisterType("EventDustAll", EventDustAll, nil)
+
+	// Enemy
+	RegisterType("EventCombatFullKnockbackRequest", EventCombatFullKnockbackRequest, &CombatKnockbackRequestPayload{})
 }

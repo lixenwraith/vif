@@ -194,7 +194,6 @@ func (s *DustSystem) Update() {
 	// Cursor position precise adjustment at the center of the cell to avoid skewed render
 	cursorXFixed := vmath.FromInt(cursorPos.X) + vmath.Scale>>1
 	cursorYFixed := vmath.FromInt(cursorPos.Y) + vmath.Scale>>1
-	now := s.world.Resources.Time.GameTime
 
 	// 3. LOCK Spatial Grid (Optimization: Global Batch Lock)
 	s.world.Positions.Lock()
@@ -333,16 +332,16 @@ func (s *DustSystem) Update() {
 					}
 
 					// --- Drain interaction ---
+					// TODO: fix later
 					if s.world.Components.Drain.HasEntity(target) {
-						if drain, ok := s.world.Components.Drain.GetComponent(target); ok {
+						if kineticComp, ok := s.world.Components.Kinetic.GetComponent(target); ok {
 							physics.ApplyCollision(
-								&drain.KineticState,
+								&kineticComp.Kinetic,
 								dust.VelX, dust.VelY,
 								&physics.DustToDrain,
 								s.rng,
-								now,
 							)
-							s.world.Components.Drain.SetComponent(target, drain)
+							s.world.Components.Kinetic.SetComponent(target, kineticComp)
 						}
 						continue
 					}
@@ -354,11 +353,10 @@ func (s *DustSystem) Update() {
 								if quasar, qOk := s.world.Components.Quasar.GetComponent(member.HeaderEntity); qOk {
 									// Center-of-mass collision, no offset calculation
 									physics.ApplyCollision(
-										&quasar.KineticState,
+										&quasar.Kinetic,
 										dust.VelX, dust.VelY,
 										&physics.DustToQuasar,
 										s.rng,
-										now,
 									)
 									s.world.Components.Quasar.SetComponent(member.HeaderEntity, quasar)
 								}
@@ -564,7 +562,7 @@ func (s *DustSystem) prepareDustComponents(x, y int, char rune, level component.
 
 	// Dust component
 	dust := component.DustComponent{
-		KineticState: component.KineticState{
+		Kinetic: component.Kinetic{
 			PreciseX: vmath.FromInt(x),
 			PreciseY: vmath.FromInt(y),
 			VelX:     vx,

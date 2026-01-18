@@ -8,7 +8,7 @@ import "time"
 // - Cursor collision without active shield (-10 Heat) and colliding drain despawns
 // - Drain-drain collision (all involved despawn)
 type DrainComponent struct {
-	KineticState            // PreciseX/Y, VelX/Y, AccelX/Y, DeflectUntil (Q32.32)
+	// Kinetic                 // PreciseX/Y, VelX/Y, AccelX/Y, DeflectUntil (Q32.32)
 	LastDrainTime time.Time // Last time energy was drained (DrainEnergyDrainInterval)
 	SpawnOrder    int64     // Monotonic counter for LIFO despawn ordering (higher = newer)
 	LastIntX      int       // Cell-entry detection

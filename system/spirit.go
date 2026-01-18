@@ -73,7 +73,7 @@ func (s *SpiritSystem) HandleEvent(ev event.GameEvent) {
 
 	switch ev.Type {
 	case event.EventSpiritSpawn:
-		if payload, ok := ev.Payload.(*event.SpiritSpawnPayload); ok {
+		if payload, ok := ev.Payload.(*event.SpiritSpawnRequestPayload); ok {
 			s.spawnSpirit(payload)
 		}
 
@@ -93,14 +93,14 @@ func (s *SpiritSystem) Update() {
 	}
 	s.destroyNextTick = s.destroyNextTick[:0]
 
-	entities := s.world.Components.Spirit.GetAllEntities()
-	if len(entities) == 0 {
+	spiritEntities := s.world.Components.Spirit.GetAllEntities()
+	if len(spiritEntities) == 0 {
 		return
 	}
 
 	var toDestroy []core.Entity
 
-	for _, entity := range entities {
+	for _, entity := range spiritEntities {
 		spirit, ok := s.world.Components.Spirit.GetComponent(entity)
 		if !ok {
 			continue
@@ -123,7 +123,7 @@ func (s *SpiritSystem) Update() {
 }
 
 // spawnSpirit creates spirit entities and their components, without position store registration (vfx only, no world interaction)
-func (s *SpiritSystem) spawnSpirit(p *event.SpiritSpawnPayload) {
+func (s *SpiritSystem) spawnSpirit(p *event.SpiritSpawnRequestPayload) {
 	entity := s.world.CreateEntity()
 
 	// Speed = Progress increment per tick for all spirits to arrive together
@@ -148,16 +148,15 @@ func (s *SpiritSystem) spawnSpirit(p *event.SpiritSpawnPayload) {
 	})
 
 	s.world.Components.Spirit.SetComponent(entity, component.SpiritComponent{
-		StartX:     vmath.FromInt(p.StartX),
-		StartY:     vmath.FromInt(p.StartY),
-		TargetX:    vmath.FromInt(p.TargetX),
-		TargetY:    vmath.FromInt(p.TargetY),
-		Progress:   0,
-		Speed:      speed,
-		Spin:       spinMag,
-		Rune:       p.Char,
-		BaseColor:  p.BaseColor,
-		BlinkColor: p.BlinkColor,
+		StartX:    vmath.FromInt(p.StartX),
+		StartY:    vmath.FromInt(p.StartY),
+		TargetX:   vmath.FromInt(p.TargetX),
+		TargetY:   vmath.FromInt(p.TargetY),
+		Progress:  0,
+		Speed:     speed,
+		Spin:      spinMag,
+		Rune:      p.Char,
+		BaseColor: p.BaseColor,
 	})
 }
 

@@ -35,7 +35,7 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		return
 	}
 
-	// 1. Determine default GameState (Empty Cell)
+	// 1. Determine default state (Empty Cell)
 	var charAtCursor = ' '
 	var cursorBgColor render.RGB
 

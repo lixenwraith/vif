@@ -3,6 +3,7 @@ package system
 import (
 	"math/rand"
 	"sync/atomic"
+	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
@@ -483,7 +484,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 		spawnY = config.GameHeight - 1
 	}
 
-	// Check for existing drain using authoritative store
+	// Check for existing drain
 	if s.hasDrainAt(spawnX, spawnY) {
 		// Collision with moved drain - re-queue at alternate position
 		s.requeueSpawnWithOffset(spawnX, spawnY)
@@ -500,17 +501,20 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	// Increment and assign materialize spawn order for LIFO tracking
 	s.nextSpawnOrder++
 
-	// Initialize KineticState with spawn position, zero velocity
-	drain := component.DrainComponent{
-		KineticState: component.KineticState{
-			PreciseX: vmath.FromInt(spawnX),
-			PreciseY: vmath.FromInt(spawnY),
-			// VelX, VelY, AccelX, AccelY zero-initialized
-		},
+	// Initialize Kinetic with spawn position, zero velocity
+	drainComp := component.DrainComponent{
+
 		LastDrainTime: now,
 		SpawnOrder:    s.nextSpawnOrder,
 		LastIntX:      spawnX,
 		LastIntY:      spawnY,
+	}
+	kineticComp := component.KineticComponent{
+		Kinetic: component.Kinetic{
+			PreciseX: vmath.FromInt(spawnX),
+			PreciseY: vmath.FromInt(spawnY),
+			// VelX, VelY, AccelX, AccelY zero-initialized
+		},
 	}
 
 	// Handle collisions at materialize spawn position
@@ -522,7 +526,16 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	}
 
 	s.world.Positions.SetPosition(entity, pos)
-	s.world.Components.Drain.SetComponent(entity, drain)
+	s.world.Components.Drain.SetComponent(entity, drainComp)
+	s.world.Components.Kinetic.SetComponent(entity, kineticComp)
+
+	// Combat component for interactions
+	s.world.Components.Combat.SetComponent(entity,
+		component.CombatComponent{
+			HitPoints:                  constant.DrainInitialHP,
+			KnockbackImmunityRemaining: time.Duration(0),
+		})
+
 	// Visual component for sigil renderer and death system flash extraction
 	s.world.Components.Sigil.SetComponent(entity, component.SigilComponent{
 		Rune:  constant.DrainChar,
@@ -555,7 +568,7 @@ func (s *DrainSystem) requeueSpawnWithOffset(blockedX, blockedY int) {
 func (s *DrainSystem) isInsideShieldEllipse(x, y int) bool {
 	cursorEntity := s.world.Resources.Cursor.Entity
 
-	shield, ok := s.world.Components.Shield.GetComponent(cursorEntity)
+	shieldComp, ok := s.world.Components.Shield.GetComponent(cursorEntity)
 	if !ok {
 		return false
 	}
@@ -570,7 +583,7 @@ func (s *DrainSystem) isInsideShieldEllipse(x, y int) bool {
 
 	// Ellipse equation: (dx²/rx² + dy²/ry²) <= 1  →  (dx² * invRxSq + dy² * invRySq) <= Scale
 	// Precomputed InvRxSq/InvRySq from ShieldSystem.cacheInverseRadii
-	return vmath.EllipseContains(dx, dy, shield.InvRxSq, shield.InvRySq)
+	return vmath.EllipseContains(dx, dy, shieldComp.InvRxSq, shieldComp.InvRySq)
 }
 
 // handleDrainInteractions processes all drain interactions per tick
@@ -614,10 +627,10 @@ func (s *DrainSystem) handleDrainInteractions() {
 				s.world.Components.Drain.SetComponent(drainEntity, drain)
 			}
 
-			// Shield knockback (immunity-gated)
-			if !now.Before(drain.DeflectUntil) {
-				s.applyShieldKnockback(drainEntity, &drain, drainPos, cursorPos)
-			}
+			s.world.PushEvent(event.EventCombatFullKnockbackRequest, &event.CombatKnockbackRequestPayload{
+				OriginEntity: cursorEntity,
+				TargetEntity: drainEntity,
+			})
 
 			continue
 		}
@@ -635,24 +648,6 @@ func (s *DrainSystem) handleDrainInteractions() {
 
 	// 3. Handle non-drain entity collisions
 	s.handleEntityCollisions()
-}
-
-// applyShieldKnockback applies radial impulse when drain overlaps shield
-func (s *DrainSystem) applyShieldKnockback(
-	drainEntity core.Entity,
-	drain *component.DrainComponent,
-	drainPos component.PositionComponent,
-	cursorPos component.PositionComponent,
-) {
-	// Radial direction: cursor → drain (shield pushes outward)
-	radialX := vmath.FromInt(drainPos.X - cursorPos.X)
-	radialY := vmath.FromInt(drainPos.Y - cursorPos.Y)
-
-	now := s.world.Resources.Time.GameTime
-
-	if physics.ApplyCollision(&drain.KineticState, radialX, radialY, &physics.ShieldToDrain, s.rng, now) {
-		s.world.Components.Drain.SetComponent(drainEntity, *drain)
-	}
 }
 
 // handleDrainDrainCollisions detects and removes all drains sharing a cell
@@ -709,7 +704,6 @@ func (s *DrainSystem) handleEntityCollisions() {
 func (s *DrainSystem) updateDrainMovement() {
 	config := s.world.Resources.Config
 	cursorEntity := s.world.Resources.Cursor.Entity
-	now := s.world.Resources.Time.GameTime
 
 	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 	if !ok {
@@ -733,15 +727,23 @@ func (s *DrainSystem) updateDrainMovement() {
 
 	drainEntities := s.world.Components.Drain.GetAllEntities()
 	for _, drainEntity := range drainEntities {
-		drain, ok := s.world.Components.Drain.GetComponent(drainEntity)
+		drainComp, ok := s.world.Components.Drain.GetComponent(drainEntity)
+		if !ok {
+			continue
+		}
+		combatComp, ok := s.world.Components.Combat.GetComponent(drainEntity)
+		if !ok {
+			continue
+		}
+		kineticComp, ok := s.world.Components.Kinetic.GetComponent(drainEntity)
 		if !ok {
 			continue
 		}
 
 		// Homing only when not in deflection immunity
-		if !drain.IsImmune(now) {
+		if combatComp.KnockbackImmunityRemaining == 0 {
 			physics.ApplyHoming(
-				&drain.KineticState,
+				&kineticComp.Kinetic,
 				cursorXFixed, cursorYFixed,
 				&physics.DrainHoming,
 				dtFixed,
@@ -750,28 +752,28 @@ func (s *DrainSystem) updateDrainMovement() {
 		// During deflection: pure ballistic (no homing, no drag)
 
 		// Store previous position for traversal
-		oldPreciseX, oldPreciseY := drain.PreciseX, drain.PreciseY
+		oldPreciseX, oldPreciseY := kineticComp.PreciseX, kineticComp.PreciseY
 
 		// Integrate position
-		newX, newY := drain.Integrate(dtFixed)
+		newX, newY := kineticComp.Integrate(dtFixed)
 
-		// Boundary handling: reflect velocity on edge contact (pool table physics) via KineticState.ReflectBoundsX/Y
+		// Boundary handling: reflect velocity on edge contact (pool table physics) via Kinetic.ReflectBoundsX/Y
 		if newX < 0 || newX >= gameWidth {
-			drain.ReflectBoundsX(0, gameWidth)
-			newX = vmath.ToInt(drain.PreciseX)
+			kineticComp.ReflectBoundsX(0, gameWidth)
+			newX = vmath.ToInt(kineticComp.PreciseX)
 		}
 		if newY < 0 || newY >= gameHeight {
-			drain.ReflectBoundsY(0, gameHeight)
-			newY = vmath.ToInt(drain.PreciseY)
+			kineticComp.ReflectBoundsY(0, gameHeight)
+			newY = vmath.ToInt(kineticComp.PreciseY)
 		}
 
 		// Swept collision detection via Traverse
-		vmath.Traverse(oldPreciseX, oldPreciseY, drain.PreciseX, drain.PreciseY, func(x, y int) bool {
+		vmath.Traverse(oldPreciseX, oldPreciseY, kineticComp.PreciseX, kineticComp.PreciseY, func(x, y int) bool {
 			if x < 0 || x >= gameWidth || y < 0 || y >= gameHeight {
 				return true
 			}
 			// Skip previous cell (already processed)
-			if x == drain.LastIntX && y == drain.LastIntY {
+			if x == drainComp.LastIntX && y == drainComp.LastIntY {
 				return true
 			}
 
@@ -791,13 +793,14 @@ func (s *DrainSystem) updateDrainMovement() {
 		})
 
 		// Grid sync on cell change
-		if newX != drain.LastIntX || newY != drain.LastIntY {
-			drain.LastIntX = newX
-			drain.LastIntY = newY
+		if newX != drainComp.LastIntX || newY != drainComp.LastIntY {
+			drainComp.LastIntX = newX
+			drainComp.LastIntY = newY
 			s.world.Positions.SetPosition(drainEntity, component.PositionComponent{X: newX, Y: newY})
 		}
 
-		s.world.Components.Drain.SetComponent(drainEntity, drain)
+		s.world.Components.Drain.SetComponent(drainEntity, drainComp)
+		s.world.Components.Kinetic.SetComponent(drainEntity, kineticComp)
 	}
 }
 

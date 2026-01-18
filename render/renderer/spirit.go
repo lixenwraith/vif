@@ -1,6 +1,7 @@
 package renderer
 
 import (
+	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
@@ -89,7 +90,7 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 				color = render.Scale(color, intensity)
 			} else {
 				// Trail: Use BaseColor with fast quadratic fade
-				color = spiritComp.BaseColor
+				color = resolveSpiritColor(spiritComp.BaseColor)
 
 				// Normalized position in trail (0.0 to 1.0)
 				trailPos := float64(i) / float64(trailSteps)
@@ -107,4 +108,29 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			buf.Set(screenX, screenY, spiritComp.Rune, color, render.RGBBlack, render.BlendAddFg, alpha, terminal.AttrNone)
 		}
 	}
+}
+
+// resolveSpiritColor maps SpiritColor to RGB
+func resolveSpiritColor(c component.SpiritColor) render.RGB {
+	switch c {
+	case component.SpiritRed:
+		return render.RgbRed
+	case component.SpiritOrange:
+		return render.RgbOrange
+	case component.SpiritYellow:
+		return render.RgbYellow
+	case component.SpiritGreen:
+		return render.RgbGreen
+	case component.SpiritCyan:
+		return render.RgbCyan
+	case component.SpiritBlue:
+		return render.RgbBlue
+	case component.SpiritMagenta:
+		return render.RgbMagenta
+	case component.SpiritWhite:
+		return render.RgbWhite
+	}
+
+	// Debug
+	return render.RgbWhite
 }

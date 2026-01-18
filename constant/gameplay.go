@@ -155,3 +155,8 @@ const (
 	BuffCooldownLauncher = 1000 * time.Millisecond
 	BuffCooldownChain    = 2000 * time.Millisecond
 )
+
+// Combat
+const (
+	CombatKnockbackImmunityInterval = 250 * time.Millisecond
+)

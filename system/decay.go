@@ -136,7 +136,7 @@ func (s *DecaySystem) spawnSingleDecay(x, y int, char rune, skipStartCell bool) 
 		lastX, lastY = x, y
 	}
 	s.world.Components.Decay.SetComponent(entity, component.DecayComponent{
-		KineticState: component.KineticState{
+		Kinetic: component.Kinetic{
 			PreciseX: vmath.FromInt(x),
 			PreciseY: vmath.FromInt(y),
 			VelY:     velY,

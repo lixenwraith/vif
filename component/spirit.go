@@ -1,6 +1,18 @@
 package component
 
-import "github.com/lixenwraith/vi-fighter/terminal"
+type SpiritColor int
+
+// Colors
+const (
+	SpiritRed SpiritColor = iota
+	SpiritOrange
+	SpiritYellow
+	SpiritGreen
+	SpiritCyan
+	SpiritBlue
+	SpiritMagenta
+	SpiritWhite
+)
 
 // SpiritComponent represents a converging visual effect entity
 // Positions presence is at StartX/StartY to avoid target saturation
@@ -24,6 +36,6 @@ type SpiritComponent struct {
 
 	// Visual properties
 	Rune       rune
-	BaseColor  terminal.RGB
-	BlinkColor terminal.RGB
+	BaseColor  SpiritColor
+	BlinkColor SpiritColor
 }

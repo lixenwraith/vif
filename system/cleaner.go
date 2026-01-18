@@ -298,7 +298,7 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 		trailRing[0] = core.Point{X: startGridX, Y: startGridY}
 
 		comp := component.CleanerComponent{
-			KineticState: component.KineticState{
+			Kinetic: component.Kinetic{
 				PreciseX: startX,
 				PreciseY: rowFixed,
 				VelX:     velX,
@@ -391,15 +391,18 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 // deflectDrain applies deflection impulse to a drain entity
 // Physics-based impulse - additive to drain velocity, direction from cleaner
 func (s *CleanerSystem) deflectDrain(drainEntity core.Entity, cleanerVelX, cleanerVelY int64) {
-	drain, ok := s.world.Components.Drain.GetComponent(drainEntity)
+	kineticComp, ok := s.world.Components.Kinetic.GetComponent(drainEntity)
 	if !ok {
 		return
 	}
 
-	now := s.world.Resources.Time.GameTime
+	// enemyComp, ok := s.world.Components.Energy.GetComponent(drainEntity)
+	// if !ok {
+	// 	return
+	// }
 
-	if physics.ApplyCollision(&drain.KineticState, cleanerVelX, cleanerVelY, &physics.CleanerToDrain, s.rng, now) {
-		s.world.Components.Drain.SetComponent(drainEntity, drain)
+	if physics.ApplyCollision(&kineticComp.Kinetic, cleanerVelX, cleanerVelY, &physics.CleanerToDrain, s.rng) {
+		s.world.Components.Kinetic.SetComponent(drainEntity, kineticComp)
 	}
 }
 
@@ -415,18 +418,22 @@ func (s *CleanerSystem) deflectQuasar(headerEntity, hitMember core.Entity, clean
 		return
 	}
 
+	combatComp, ok := s.world.Components.Combat.GetComponent(headerEntity)
+	if !ok {
+		return
+	}
+
 	// Flash immunity blocks new damage (debounce)
-	if quasarComp.HitFlashRemaining > 0 {
+	if combatComp.HitFlashRemaining > 0 {
 		return
 	}
 
 	// Apply damage and start flash
-	quasarComp.HitPoints--
-	quasarComp.HitFlashRemaining = constant.QuasarHitFlashDuration
+	combatComp.HitPoints--
+	combatComp.HitFlashRemaining = constant.QuasarHitFlashDuration
 
 	// Knockback only when not enraged
-	isEnraged := quasarComp.IsCharging || quasarComp.IsZapping
-	if !isEnraged {
+	if !quasarComp.IsEnraged {
 		anchorPos, ok := s.world.Positions.GetPosition(headerEntity)
 		if !ok {
 			s.world.Components.Quasar.SetComponent(headerEntity, quasarComp)
@@ -441,18 +448,17 @@ func (s *CleanerSystem) deflectQuasar(headerEntity, hitMember core.Entity, clean
 		offsetX := hitPos.X - anchorPos.X
 		offsetY := hitPos.Y - anchorPos.Y
 
-		now := s.world.Resources.Time.GameTime
 		physics.ApplyOffsetCollision(
-			&quasarComp.KineticState,
+			&quasarComp.Kinetic,
 			cleanerVelX, cleanerVelY,
 			offsetX, offsetY,
 			&physics.CleanerToQuasar,
 			s.rng,
-			now,
 		)
 	}
 
 	s.world.Components.Quasar.SetComponent(headerEntity, quasarComp)
+	s.world.Components.Combat.SetComponent(headerEntity, combatComp)
 }
 
 // processPositiveEnergy handles Red destruction with Blossom spawn
@@ -553,7 +559,7 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 		trailRing[0] = core.Point{X: startGridX, Y: startGridY}
 
 		comp := component.CleanerComponent{
-			KineticState: component.KineticState{
+			Kinetic: component.Kinetic{
 				PreciseX: dir.startX,
 				PreciseY: dir.startY,
 				VelX:     dir.velX,

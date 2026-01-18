@@ -69,6 +69,9 @@ func RegisterSystems() {
 	registry.RegisterSystem("lightning", func(w any) any {
 		return system.NewLightningSystem(w.(*engine.World))
 	})
+	registry.RegisterSystem("combat", func(w any) any {
+		return system.NewCombatSystem(w.(*engine.World))
+	})
 	registry.RegisterSystem("drain", func(w any) any {
 		return system.NewDrainSystem(w.(*engine.World))
 	})
@@ -99,8 +102,8 @@ func RegisterSystems() {
 	registry.RegisterSystem("timekeeper", func(w any) any {
 		return system.NewTimeKeeperSystem(w.(*engine.World))
 	})
-	registry.RegisterSystem("diagnotics", func(w any) any {
-		return system.NewDiagnosticsSystem(w.(*engine.World))
+	registry.RegisterSystem("diag", func(w any) any {
+		return system.NewDiagSystem(w.(*engine.World))
 	})
 }
 
@@ -196,6 +199,7 @@ func ActiveSystems() []string {
 		"fuse",
 		"spirit",
 		"lightning",
+		"combat",
 		"drain",
 		"quasar",
 		"swarm",
@@ -206,7 +210,7 @@ func ActiveSystems() []string {
 		"environment",
 		"death",
 		"timekeeper",
-		"diagnotics",
+		"diag",
 	}
 }
 

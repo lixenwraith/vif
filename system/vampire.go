@@ -118,7 +118,7 @@ func (s *VampireSystem) vampiricDrain(payload *event.VampireDrainRequestPayload)
 		lightningColor = component.LightningPurple
 	}
 
-	s.world.PushEvent(event.EventLightningSpawn, &event.LightningSpawnPayload{
+	s.world.PushEvent(event.EventLightningSpawn, &event.LightningSpawnRequestPayload{
 		Owner:     targetEntity,
 		OriginX:   cursorPos.X,
 		OriginY:   cursorPos.Y,

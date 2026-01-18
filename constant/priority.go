@@ -24,6 +24,7 @@ const (
 	PriorityDust        = 170 // After Quasar, before Decay
 	PriorityStorm       = 180 // After Drain, before Swarm and Lightning
 	PrioritySwarm       = 190
+	PriorityCombat      = 195
 	PriorityDecay       = 200
 	PriorityBlossom     = 210
 	PriorityLightning   = 220 // After Quasar

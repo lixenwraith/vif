@@ -6,7 +6,6 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
-	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // TODO: future multi-level / network
@@ -284,25 +283,22 @@ type CursorMovedPayload struct {
 // QuasarSpawnedPayload contains quasar spawn data
 type QuasarSpawnedPayload struct {
 	HeaderEntity core.Entity `toml:"header_entity"`
-	OriginX      int         `toml:"origin_x"`
-	OriginY      int         `toml:"origin_y"`
 }
 
-// SpiritSpawnPayload contains parameters to spawn a spirit entity
-type SpiritSpawnPayload struct {
+// SpiritSpawnRequestPayload contains parameters to spawn a spirit entity
+type SpiritSpawnRequestPayload struct {
 	// Starting position (grid coordinates)
 	StartX int `toml:"start_x"`
 	StartY int `toml:"start_y"`
 	// Target convergence position (grid coordinates)
-	TargetX    int          `toml:"target_x"`
-	TargetY    int          `toml:"target_y"`
-	Char       rune         `toml:"char"`
-	BaseColor  terminal.RGB `toml:"base_color"`
-	BlinkColor terminal.RGB `toml:"blink_color"`
+	TargetX   int                   `toml:"target_x"`
+	TargetY   int                   `toml:"target_y"`
+	Char      rune                  `toml:"char"`
+	BaseColor component.SpiritColor `toml:"base_color"`
 }
 
-// LightningSpawnPayload contains parameters to spawn a lightning entity
-type LightningSpawnPayload struct {
+// LightningSpawnRequestPayload contains parameters to spawn a lightning entity
+type LightningSpawnRequestPayload struct {
 	// TODO: change to support 2 moving anchors
 	Owner     core.Entity                  `toml:"owner"` // Owning entity for lifecycle (required for tracked)
 	OriginX   int                          `toml:"origin_x"`
@@ -371,4 +367,10 @@ type VampireDrainRequestPayload struct {
 // BuffAddRequestPayload
 type BuffAddRequestPayload struct {
 	Buff component.BuffType `toml:"buff"` // 0=rod, 1=launcher, 2=chain
+}
+
+// CombatKnockbackRequestPayload
+type CombatKnockbackRequestPayload struct {
+	OriginEntity core.Entity `toml:"origin_entity"`
+	TargetEntity core.Entity `toml:"target_entity"`
 }

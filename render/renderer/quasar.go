@@ -54,44 +54,49 @@ func NewQuasarRenderer(gameCtx *engine.GameContext) *QuasarRenderer {
 
 // Render draws quasar composite with shield halo when zapping
 func (r *QuasarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	anchors := r.gameCtx.World.Components.Quasar.GetAllEntities()
-	if len(anchors) == 0 {
+	headerEntities := r.gameCtx.World.Components.Quasar.GetAllEntities()
+	if len(headerEntities) == 0 {
 		return
 	}
 
 	buf.SetWriteMask(constant.MaskComposite)
 
-	for _, anchor := range anchors {
-		quasar, ok := r.gameCtx.World.Components.Quasar.GetComponent(anchor)
+	for _, headerEntity := range headerEntities {
+		quasarComp, ok := r.gameCtx.World.Components.Quasar.GetComponent(headerEntity)
 		if !ok {
 			continue
 		}
 
-		header, ok := r.gameCtx.World.Components.Header.GetComponent(anchor)
+		headerComp, ok := r.gameCtx.World.Components.Header.GetComponent(headerEntity)
 		if !ok {
 			continue
 		}
 
-		anchorPos, ok := r.gameCtx.World.Positions.GetPosition(anchor)
+		headerPos, ok := r.gameCtx.World.Positions.GetPosition(headerEntity)
+		if !ok {
+			continue
+		}
+
+		combatComp, ok := r.gameCtx.World.Components.Combat.GetComponent(headerEntity)
 		if !ok {
 			continue
 		}
 
 		// Zap range border renders first (background layer)
-		r.renderZapRange(ctx, buf, anchorPos.X, anchorPos.Y, &quasar)
+		r.renderZapRange(ctx, buf, headerPos.X, headerPos.Y, &quasarComp)
 
 		// Shield renders to background layer when active
-		if quasar.IsShielded {
-			r.renderShield(ctx, buf, anchorPos.X, anchorPos.Y)
+		if quasarComp.IsShielded {
+			r.renderShield(ctx, buf, headerPos.X, headerPos.Y)
 		}
 
 		// Member characters render to foreground layer
-		r.renderMembers(ctx, buf, &header, &quasar)
+		r.renderMembers(ctx, buf, &headerComp, &quasarComp, &combatComp)
 	}
 }
 
 // renderZapRange renders zap range ellipse boundary
-func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.RenderBuffer, anchorX, anchorY int, quasar *component.QuasarComponent) {
+func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.RenderBuffer, headerX, headerY int, quasar *component.QuasarComponent) {
 	// Use same color as quasar entity state
 	var borderColor render.RGB
 	if quasar.IsCharging || quasar.IsZapping {
@@ -120,10 +125,10 @@ func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.Re
 	rxCells := vmath.ToInt(rVisual) + constant.QuasarBorderPaddingCells
 	ryCells := vmath.ToInt(rVisual)/2 + constant.QuasarBorderPaddingCells // Visual Y is 2x, so grid cells = radius/2
 
-	minX := anchorX - rxCells
-	maxX := anchorX + rxCells
-	minY := anchorY - ryCells
-	maxY := anchorY + ryCells
+	minX := headerX - rxCells
+	maxX := headerX + rxCells
+	minY := headerY - ryCells
+	maxY := headerY + ryCells
 
 	if minX < 0 {
 		minX = 0
@@ -141,8 +146,8 @@ func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.Re
 	for y := minY; y <= maxY; y++ {
 		for x := minX; x <= maxX; x++ {
 			// CRITICAL: Must match QuasarSystem.isCursorInZapRange exactly
-			dx := vmath.FromInt(x - anchorX)
-			dy := vmath.FromInt(y - anchorY)
+			dx := vmath.FromInt(x - headerX)
+			dy := vmath.FromInt(y - headerY)
 			dyCirc := vmath.ScaleToCircular(dy)
 			dist := vmath.MagnitudeEuclidean(dx, dyCirc)
 
@@ -160,22 +165,22 @@ func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.Re
 	}
 }
 
-// renderShield draws elliptical halo centered on anchor position
-func (r *QuasarRenderer) renderShield(ctx render.RenderContext, buf *render.RenderBuffer, anchorX, anchorY int) {
-	// Bounding box relative to anchor (which is at center of quasar grid)
-	minDX := -r.shieldPadX - constant.QuasarAnchorOffsetX
-	maxDX := constant.QuasarWidth - constant.QuasarAnchorOffsetX + r.shieldPadX - 1
-	minDY := -r.shieldPadY - constant.QuasarAnchorOffsetY
-	maxDY := constant.QuasarHeight - constant.QuasarAnchorOffsetY + r.shieldPadY - 1
+// renderShield draws elliptical halo centered on header position
+func (r *QuasarRenderer) renderShield(ctx render.RenderContext, buf *render.RenderBuffer, headerX, headerY int) {
+	// Bounding box relative to header (which is at center of quasar grid)
+	minDX := -r.shieldPadX - constant.QuasarHeaderOffsetX
+	maxDX := constant.QuasarWidth - constant.QuasarHeaderOffsetX + r.shieldPadX - 1
+	minDY := -r.shieldPadY - constant.QuasarHeaderOffsetY
+	maxDY := constant.QuasarHeight - constant.QuasarHeaderOffsetY + r.shieldPadY - 1
 
 	for dy := minDY; dy <= maxDY; dy++ {
-		screenY := ctx.GameYOffset + anchorY + dy
+		screenY := ctx.GameYOffset + headerY + dy
 		if screenY < ctx.GameYOffset || screenY >= ctx.GameYOffset+ctx.GameHeight {
 			continue
 		}
 
 		for dx := minDX; dx <= maxDX; dx++ {
-			screenX := ctx.GameXOffset + anchorX + dx
+			screenX := ctx.GameXOffset + headerX + dx
 			if screenX < ctx.GameXOffset || screenX >= ctx.ScreenWidth {
 				continue
 			}
@@ -217,18 +222,19 @@ func (r *QuasarRenderer) shieldCell256(buf *render.RenderBuffer, screenX, screen
 }
 
 // renderMembers draws quasar character grid with state-based coloring
-func (r *QuasarRenderer) renderMembers(ctx render.RenderContext, buf *render.RenderBuffer, header *component.HeaderComponent, quasar *component.QuasarComponent) {
+func (r *QuasarRenderer) renderMembers(ctx render.RenderContext, buf *render.RenderBuffer, headerComp *component.HeaderComponent, quasarComp *component.QuasarComponent, combatComp *component.CombatComponent) {
+
 	// Determine color: flash > enraged > normal
 	var color render.RGB
-	if quasar.HitFlashRemaining > 0 {
-		color = r.calculateFlashColor(quasar.HitFlashRemaining)
-	} else if quasar.IsCharging || quasar.IsZapping {
+	if combatComp.HitFlashRemaining > 0 {
+		color = r.calculateFlashColor(combatComp.HitFlashRemaining)
+	} else if quasarComp.IsEnraged {
 		color = render.RgbQuasarEnraged
 	} else {
 		color = render.RgbDrain
 	}
 
-	for _, member := range header.MemberEntries {
+	for _, member := range headerComp.MemberEntries {
 		if member.Entity == 0 {
 			continue
 		}
@@ -239,8 +245,8 @@ func (r *QuasarRenderer) renderMembers(ctx render.RenderContext, buf *render.Ren
 		}
 
 		// Resolve rune from QuasarChars using member offset
-		row := int(member.OffsetY) + constant.QuasarAnchorOffsetY
-		col := int(member.OffsetX) + constant.QuasarAnchorOffsetX
+		row := int(member.OffsetY) + constant.QuasarHeaderOffsetY
+		col := int(member.OffsetX) + constant.QuasarHeaderOffsetX
 		ch := component.QuasarChars[row][col]
 
 		screenX := ctx.GameXOffset + pos.X

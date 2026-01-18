@@ -54,6 +54,9 @@ const (
 
 	// DrainDeflectImpulseMaxFloat is maximum deflection velocity (cells/sec)
 	DrainDeflectImpulseMaxFloat = 40.0
+
+	// DrainInitialHP
+	DrainInitialHP = 10
 )
 
 // --- Quasar Entity ---
@@ -65,10 +68,10 @@ const (
 
 	// QuasarShieldDrain is energy drained per tick when any part overlaps shield
 	QuasarShieldDrain = 1000
-	// QuasarAnchorOffsetX is phantom head X offset from top-left (center column)
-	QuasarAnchorOffsetX = 2
-	// QuasarAnchorOffsetY is phantom head Y offset from top-left (center row)
-	QuasarAnchorOffsetY = 1
+	// QuasarHeaderOffsetX is phantom head X offset from top-left (center column)
+	QuasarHeaderOffsetX = 2
+	// QuasarHeaderOffsetY is phantom head Y offset from top-left (center row)
+	QuasarHeaderOffsetY = 1
 
 	// QuasarSpeedIncreaseTicks
 	QuasarSpeedIncreaseTicks = 20

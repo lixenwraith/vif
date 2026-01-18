@@ -30,6 +30,7 @@ var Components = []ComponentDef{
 	{"Nugget", "NuggetComponent"},
 	{"Cursor", "CursorComponent"},
 	{"Protection", "ProtectionComponent"},
+	{"Kinetic", "KineticComponent"},
 
 	// Player state
 	{"Energy", "EnergyComponent"},
@@ -40,10 +41,11 @@ var Components = []ComponentDef{
 	{"Ping", "PingComponent"},
 
 	// Entity behaviors
-	{"Drain", "DrainComponent"},
 	{"Decay", "DecayComponent"},
-	{"Cleaner", "CleanerComponent"},
 	{"Blossom", "BlossomComponent"},
+	{"Cleaner", "CleanerComponent"},
+	{"Combat", "CombatComponent"},
+	{"Drain", "DrainComponent"},
 	{"Quasar", "QuasarComponent"},
 	{"Swarm", "SwarmComponent"},
 	{"Dust", "DustComponent"},
@@ -88,6 +90,7 @@ var Systems = []SystemDef{
 	{"fuse", "NewFuseSystem"},
 	{"spirit", "NewSpiritSystem"},
 	{"lightning", "NewLightningSystem"},
+	{"combat", "NewCombatSystem"},
 	{"drain", "NewDrainSystem"},
 	{"quasar", "NewQuasarSystem"},
 	{"swarm", "NewSwarmSystem"},
@@ -98,7 +101,7 @@ var Systems = []SystemDef{
 	{"environment", "NewEnvironmentSystem"},
 	{"death", "NewDeathSystem"},
 	{"timekeeper", "NewTimeKeeperSystem"},
-	{"diagnotics", "NewDiagnosticsSystem"},
+	{"diag", "NewDiagSystem"},
 }
 
 // Renderers is the authoritative renderer list

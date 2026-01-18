@@ -33,17 +33,11 @@ type CollisionProfile struct {
 // Returns true if impulse was applied (false if immune or zero impulse)
 // dirX, dirY: impact direction in Q32.32 (typically impactor velocity or radial vector)
 func ApplyCollision(
-	kinetic *component.KineticState,
+	kinetic *component.Kinetic,
 	dirX, dirY int64,
 	profile *CollisionProfile,
 	rng *vmath.FastRand,
-	now time.Time,
 ) bool {
-	// Immunity check
-	if kinetic.IsImmune(now) {
-		return false
-	}
-
 	// Zero direction fallback
 	if dirX == 0 && dirY == 0 {
 		dirX = vmath.Scale
@@ -71,29 +65,18 @@ func ApplyCollision(
 		kinetic.SetImpulse(impulseX, impulseY)
 	}
 
-	// SetPosition immunity
-	if profile.ImmunityDuration > 0 {
-		kinetic.SetImmunity(now.Add(profile.ImmunityDuration))
-	}
-
 	return true
 }
 
 // ApplyOffsetCollision calculates collision with offset influence for multi-cell entities
 // offsetX, offsetY: hit point offset from anchor in integer cells
 func ApplyOffsetCollision(
-	kinetic *component.KineticState,
+	kinetic *component.Kinetic,
 	dirX, dirY int64,
 	offsetX, offsetY int,
 	profile *CollisionProfile,
 	rng *vmath.FastRand,
-	now time.Time,
 ) bool {
-	// Immunity check
-	if kinetic.IsImmune(now) {
-		return false
-	}
-
 	// Zero direction fallback
 	if dirX == 0 && dirY == 0 {
 		dirX = vmath.Scale
@@ -121,11 +104,6 @@ func ApplyOffsetCollision(
 		kinetic.ApplyImpulse(impulseX, impulseY)
 	case ImpulseOverride:
 		kinetic.SetImpulse(impulseX, impulseY)
-	}
-
-	// SetPosition immunity
-	if profile.ImmunityDuration > 0 {
-		kinetic.SetImmunity(now.Add(profile.ImmunityDuration))
 	}
 
 	return true

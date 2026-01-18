@@ -350,7 +350,7 @@ const (
 
 	// EventSpiritSpawn signals intent to spawn a spirit entity
 	// Trigger: FuseSystem (or other systems needing convergence VFX)
-	// Consumer: SpiritSystem | Payload: *SpiritSpawnPayload
+	// Consumer: SpiritSystem | Payload: *SpiritSpawnRequestPayload
 	EventSpiritSpawn
 
 	// EventSpiritDespawn signals force-clear of all spirit entities
@@ -360,7 +360,7 @@ const (
 
 	// EventLightningSpawn signals intent to spawn a lightning visual effect
 	// Trigger: QuasarSystem (zap), FuseSystem (convergence)
-	// Consumer: LightningSystem | Payload: *LightningSpawnPayload
+	// Consumer: LightningSystem | Payload: *LightningSpawnRequestPayload
 	EventLightningSpawn
 
 	// EventLightningUpdate signals target position update for tracked lightning
@@ -422,6 +422,11 @@ const (
 	// Trigger: Enter in Normal, Visual, Insert modes
 	// Consumer: BuffSystem | Payload: nil
 	EventBuffFireRequest
+
+	// EventCombatFullKnockbackRequest signals applying knockback
+	// Trigger: DrainSystem, QuasarSystem, CleanerSystem, BuffSystem
+	// Consumer: CombatSystem | Payload: *CombatKnockbackRequestPayload
+	EventCombatFullKnockbackRequest
 )
 
 // GameEvent represents a single game event with metadata

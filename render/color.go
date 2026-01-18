@@ -18,6 +18,17 @@ func init() {
 
 // RGB color definitions for all game systems
 var (
+	// General colors for various uses
+	RgbBlack   = RGB{0, 0, 0}
+	RgbWhite   = RGB{255, 255, 255}
+	RgbRed     = RGB{255, 0, 0}
+	RgbOrange  = RGB{180, 120, 0}
+	RgbYellow  = RGB{255, 255, 0}
+	RgbGreen   = RGB{0, 255, 0}
+	RgbCyan    = RGB{0, 255, 255}
+	RgbBlue    = RGB{0, 0, 255}
+	RgbMagenta = RGB{255, 0, 255}
+
 	// RGB color definitions for glyphs - all dark/normal/bright levels have minimum floor to prevent perceptual blackout at low alpha
 	RgbGlyphBlueDark   = RGB{50, 80, 200} // Floor R/G
 	RgbGlyphBlueNormal = RGB{80, 130, 255}
@@ -96,7 +107,7 @@ var (
 	// Flash colors
 	RgbRemovalFlash = RGB{255, 255, 200} // Bright yellow-white flash
 
-	// // Explosion gradient, Realistic, duke nukem 3D
+	// // Explosion gradient, Realistic
 	// RgbExplosionCore = RGB{255, 255, 220} // Bright white-yellow flash
 	// RgbExplosionMid  = RGB{255, 120, 20}  // Intense orange
 	// RgbExplosionEdge = RGB{120, 20, 0}    // Dark red fade
@@ -113,10 +124,6 @@ var (
 	RgbQuasarEnraged = RGB{255, 60, 60}   // Red tint during charge or zap phase
 	RgbQuasarShield  = RGB{200, 200, 200} // Light gray for cleaner-protection shield halo
 	RgbQuasarFlash   = RGB{255, 255, 0}   // Bright yellow for hit flash
-
-	// General colors
-	RgbBlack = RGB{0, 0, 0}       // Black for various uses
-	RgbWhite = RGB{255, 255, 255} // White for various uses
 
 	// Audio indicator colors
 	RgbAudioMuted   = RGB{255, 0, 0} // Bright red when muted

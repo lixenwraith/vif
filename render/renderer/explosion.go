@@ -77,7 +77,7 @@ func (r *ExplosionRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 	// Color mapping pass
 	buf.SetWriteMask(constant.MaskTransient)
-	r.renderBuffer(ctx, buf, requiredSize)
+	r.renderBuffer(ctx, buf)
 }
 
 func (r *ExplosionRenderer) accumulateCenter(c *system.ExplosionCenter, durationNano int64) {
@@ -159,7 +159,7 @@ func (r *ExplosionRenderer) accumulateCenter(c *system.ExplosionCenter, duration
 	}
 }
 
-func (r *ExplosionRenderer) renderBuffer(ctx render.RenderContext, buf *render.RenderBuffer, size int) {
+func (r *ExplosionRenderer) renderBuffer(ctx render.RenderContext, buf *render.RenderBuffer) {
 	// Continuous Gradient Palette (Neon/Cyber)
 	edgeColor := render.RgbExplosionEdge // Deep Indigo
 	midColor := render.RgbExplosionMid   // Electric Cyan

@@ -15,16 +15,18 @@ type Component struct {
 	Nugget      *Store[component.NuggetComponent]
 	Cursor      *Store[component.CursorComponent]
 	Protection  *Store[component.ProtectionComponent]
+	Kinetic     *Store[component.KineticComponent]
 	Energy      *Store[component.EnergyComponent]
 	Heat        *Store[component.HeatComponent]
 	Shield      *Store[component.ShieldComponent]
 	Boost       *Store[component.BoostComponent]
 	Buff        *Store[component.BuffComponent]
 	Ping        *Store[component.PingComponent]
-	Drain       *Store[component.DrainComponent]
 	Decay       *Store[component.DecayComponent]
-	Cleaner     *Store[component.CleanerComponent]
 	Blossom     *Store[component.BlossomComponent]
+	Cleaner     *Store[component.CleanerComponent]
+	Combat      *Store[component.CombatComponent]
+	Drain       *Store[component.DrainComponent]
 	Quasar      *Store[component.QuasarComponent]
 	Swarm       *Store[component.SwarmComponent]
 	Dust        *Store[component.DustComponent]
@@ -48,16 +50,18 @@ func initComponents(w *World) {
 	w.Components.Nugget = NewStore[component.NuggetComponent]()
 	w.Components.Cursor = NewStore[component.CursorComponent]()
 	w.Components.Protection = NewStore[component.ProtectionComponent]()
+	w.Components.Kinetic = NewStore[component.KineticComponent]()
 	w.Components.Energy = NewStore[component.EnergyComponent]()
 	w.Components.Heat = NewStore[component.HeatComponent]()
 	w.Components.Shield = NewStore[component.ShieldComponent]()
 	w.Components.Boost = NewStore[component.BoostComponent]()
 	w.Components.Buff = NewStore[component.BuffComponent]()
 	w.Components.Ping = NewStore[component.PingComponent]()
-	w.Components.Drain = NewStore[component.DrainComponent]()
 	w.Components.Decay = NewStore[component.DecayComponent]()
-	w.Components.Cleaner = NewStore[component.CleanerComponent]()
 	w.Components.Blossom = NewStore[component.BlossomComponent]()
+	w.Components.Cleaner = NewStore[component.CleanerComponent]()
+	w.Components.Combat = NewStore[component.CombatComponent]()
+	w.Components.Drain = NewStore[component.DrainComponent]()
 	w.Components.Quasar = NewStore[component.QuasarComponent]()
 	w.Components.Swarm = NewStore[component.SwarmComponent]()
 	w.Components.Dust = NewStore[component.DustComponent]()
@@ -82,16 +86,18 @@ func (w *World) removeEntity(e core.Entity) {
 	w.Components.Nugget.RemoveEntity(e)
 	w.Components.Cursor.RemoveEntity(e)
 	w.Components.Protection.RemoveEntity(e)
+	w.Components.Kinetic.RemoveEntity(e)
 	w.Components.Energy.RemoveEntity(e)
 	w.Components.Heat.RemoveEntity(e)
 	w.Components.Shield.RemoveEntity(e)
 	w.Components.Boost.RemoveEntity(e)
 	w.Components.Buff.RemoveEntity(e)
 	w.Components.Ping.RemoveEntity(e)
-	w.Components.Drain.RemoveEntity(e)
 	w.Components.Decay.RemoveEntity(e)
-	w.Components.Cleaner.RemoveEntity(e)
 	w.Components.Blossom.RemoveEntity(e)
+	w.Components.Cleaner.RemoveEntity(e)
+	w.Components.Combat.RemoveEntity(e)
+	w.Components.Drain.RemoveEntity(e)
 	w.Components.Quasar.RemoveEntity(e)
 	w.Components.Swarm.RemoveEntity(e)
 	w.Components.Dust.RemoveEntity(e)
@@ -115,16 +121,18 @@ func (w *World) wipeAll() {
 	w.Components.Nugget.ClearAllComponents()
 	w.Components.Cursor.ClearAllComponents()
 	w.Components.Protection.ClearAllComponents()
+	w.Components.Kinetic.ClearAllComponents()
 	w.Components.Energy.ClearAllComponents()
 	w.Components.Heat.ClearAllComponents()
 	w.Components.Shield.ClearAllComponents()
 	w.Components.Boost.ClearAllComponents()
 	w.Components.Buff.ClearAllComponents()
 	w.Components.Ping.ClearAllComponents()
-	w.Components.Drain.ClearAllComponents()
 	w.Components.Decay.ClearAllComponents()
-	w.Components.Cleaner.ClearAllComponents()
 	w.Components.Blossom.ClearAllComponents()
+	w.Components.Cleaner.ClearAllComponents()
+	w.Components.Combat.ClearAllComponents()
+	w.Components.Drain.ClearAllComponents()
 	w.Components.Quasar.ClearAllComponents()
 	w.Components.Swarm.ClearAllComponents()
 	w.Components.Dust.ClearAllComponents()

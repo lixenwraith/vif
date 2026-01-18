@@ -203,7 +203,7 @@ func (s *BuffSystem) fireAllBuffs() {
 				if rodShots == 0 {
 					break
 				}
-				quasarComp, ok := s.world.Components.Quasar.GetComponent(quasarEntity)
+				combatComp, ok := s.world.Components.Combat.GetComponent(quasarEntity)
 				if !ok {
 					continue
 				}
@@ -212,9 +212,9 @@ func (s *BuffSystem) fireAllBuffs() {
 					TargetEntity: quasarEntity,
 					Delta:        constant.VampireEnergyDrainAmount,
 				})
-				quasarComp.HitPoints--
+				combatComp.HitPoints--
 
-				s.world.Components.Quasar.SetComponent(quasarEntity, quasarComp)
+				s.world.Components.Combat.SetComponent(quasarEntity, combatComp)
 
 				rodShots--
 			}

@@ -225,7 +225,6 @@ func (s *ExplosionSystem) addCenter(x, y int, radius int64) {
 // TODO: this conversion must be done in dust system, doing it here results in no telemetry and duplicate logic
 func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 	config := s.world.Resources.Config
-	now := s.world.Resources.Time.GameTime
 
 	// Radius is horizontal cells; Vertical is half that to maintain aspect ratio
 	radiusCells := vmath.ToInt(radius)
@@ -269,8 +268,7 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 			entities := s.world.Positions.GetAllEntityAt(x, y)
 			for _, entity := range entities {
 				// Drain
-				drainComp, ok := s.world.Components.Drain.GetComponent(entity)
-				if ok {
+				if s.world.Components.Drain.HasEntity(entity) {
 					drainPos, ok := s.world.Positions.GetPosition(entity)
 					if !ok {
 						continue
@@ -281,14 +279,18 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 					eVelX := vmath.Mul(constant.QuasarMaxSpeed, vmath.Div(radius, diffX))
 					eVelY := vmath.Mul(constant.QuasarMaxSpeed, vmath.Div(radius, diffY))
 
+					kineticComp, ok := s.world.Components.Kinetic.GetComponent(entity)
+					if !ok {
+						continue
+					}
+
 					physics.ApplyCollision(
-						&drainComp.KineticState,
+						&kineticComp.Kinetic,
 						eVelX, eVelY,
 						&physics.ExplosionToDrain,
 						s.rng,
-						now,
 					)
-					s.world.Components.Drain.SetComponent(entity, drainComp)
+					s.world.Components.Kinetic.SetComponent(entity, kineticComp)
 				}
 
 				// Quasar
@@ -308,14 +310,17 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 								eVelY := vmath.Mul(constant.QuasarMaxSpeed, vmath.Div(radius, diffY))
 
 								physics.ApplyCollision(
-									&quasarComp.KineticState,
+									&quasarComp.Kinetic,
 									eVelX, eVelY,
 									&physics.ExplosionToQuasar,
 									s.rng,
-									now,
 								)
-								quasarComp.HitPoints--
 								s.world.Components.Quasar.SetComponent(headerEntity, quasarComp)
+								combatComp, ok := s.world.Components.Combat.GetComponent(headerEntity)
+								if ok {
+									combatComp.HitPoints--
+									s.world.Components.Combat.SetComponent(headerEntity, combatComp)
+								}
 							}
 						} else {
 							continue // Non-quasar composite member (likely gold)

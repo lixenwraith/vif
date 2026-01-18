@@ -101,7 +101,6 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 		if !ok {
 			return
 		}
-		s.active = true
 		s.headerEntity = payload.HeaderEntity
 
 		// Initialize kinetic state
@@ -116,7 +115,6 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 			quasarComp.PreciseY = vmath.FromInt(headerPos.Y)
 			quasarComp.SpeedMultiplier = vmath.Scale
 			quasarComp.LastSpeedIncreaseAt = now
-			quasarComp.HitPoints = constant.QuasarInitialHP // Init HP
 
 			// Initialize dynamic radius
 			quasarComp.ZapRadius = s.calculateZapRadius()
@@ -129,9 +127,15 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 			quasarComp.VelY = vmath.Mul(dirY, constant.QuasarBaseSpeed)
 
 			s.world.Components.Quasar.SetComponent(s.headerEntity, quasarComp)
-			s.statHitPoints.Store(int64(quasarComp.HitPoints))
 		}
 
+		combatComp := component.CombatComponent{
+			HitPoints: constant.QuasarInitialHP,
+		}
+		s.world.Components.Combat.SetComponent(s.headerEntity, combatComp)
+
+		s.statHitPoints.Store(int64(combatComp.HitPoints))
+		s.active = true
 		s.statActive.Store(true)
 
 	case event.EventQuasarCancelRequest:
@@ -179,28 +183,23 @@ func (s *QuasarSystem) Update() {
 		quasarComp.ZapRadius = currentRadius
 	}
 
-	// Decrement flash timer
-	if quasarComp.HitFlashRemaining > 0 {
-		quasarComp.HitFlashRemaining -= s.world.Resources.Time.DeltaTime
-		if quasarComp.HitFlashRemaining < 0 {
-			quasarComp.HitFlashRemaining = 0
+	// Check HitPoints for termination
+	combatComp, ok := s.world.Components.Combat.GetComponent(headerEntity)
+	if ok {
+		if combatComp.HitPoints <= 0 {
+			// Emit destroyed event
+			s.world.PushEvent(event.EventQuasarDestroyed, nil)
+			// TODO: audio effect
+
+			s.terminateQuasar()
+			return
 		}
-	}
-
-	// Check HP for termination
-	if quasarComp.HitPoints <= 0 {
-		// Emit destroyed event
-		s.world.PushEvent(event.EventQuasarDestroyed, nil)
-		// TODO: audio effect
-
-		s.terminateQuasar()
-		return
 	}
 
 	// Check if cursor is within zap range
 	cursorInRange := s.isCursorInZapRange(headerEntity, &quasarComp)
 
-	// GameState machine: InRange ←→ Charging → Zapping
+	// State machine: InRange ←→ Charging → Zapping
 	if cursorInRange {
 		// Cursor in range: cancel any active state, return to homing
 		if quasarComp.IsZapping {
@@ -239,12 +238,13 @@ func (s *QuasarSystem) Update() {
 	// Shield and cursor interaction (all states)
 	s.handleInteractions(headerEntity, &headerComp, &quasarComp)
 
-	s.statHitPoints.Store(int64(quasarComp.HitPoints))
+	s.statHitPoints.Store(int64(combatComp.HitPoints))
 }
 
 // startCharging initiates the charge phase before zapping
 func (s *QuasarSystem) startCharging(headerEntity core.Entity, quasarComp *component.QuasarComponent) {
 	quasarComp.IsCharging = true
+	quasarComp.IsEnraged = true
 	quasarComp.ChargeRemaining = constant.QuasarChargeDuration
 
 	s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
@@ -252,10 +252,10 @@ func (s *QuasarSystem) startCharging(headerEntity core.Entity, quasarComp *compo
 	s.world.PushEvent(event.EventSplashTimerRequest, &event.SplashTimerRequestPayload{
 		AnchorEntity: headerEntity,
 		Color:        component.SplashColorCyan,
-		MarginRight:  constant.QuasarAnchorOffsetX + 1, // Accounting for anchor column
-		MarginLeft:   constant.QuasarAnchorOffsetX,
-		MarginTop:    constant.QuasarAnchorOffsetY,
-		MarginBottom: constant.QuasarAnchorOffsetY + 1, // Accounting for anchor row
+		MarginRight:  constant.QuasarHeaderOffsetX + 1, // Accounting for anchor column
+		MarginLeft:   constant.QuasarHeaderOffsetX,
+		MarginTop:    constant.QuasarHeaderOffsetY,
+		MarginBottom: constant.QuasarHeaderOffsetY + 1, // Accounting for anchor row
 		Duration:     constant.QuasarChargeDuration,
 	})
 }
@@ -265,6 +265,7 @@ func (s *QuasarSystem) cancelCharging(headerEntity core.Entity, quasarComp *comp
 	quasarComp.IsCharging = false
 	quasarComp.ChargeRemaining = 0
 	quasarComp.IsShielded = false
+	quasarComp.IsEnraged = false
 
 	s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
 
@@ -276,6 +277,7 @@ func (s *QuasarSystem) cancelCharging(headerEntity core.Entity, quasarComp *comp
 // completeCharging transitions from charging to zapping
 func (s *QuasarSystem) completeCharging(headerEntity core.Entity, quasarComp *component.QuasarComponent) {
 	quasarComp.IsCharging = false
+	quasarComp.IsEnraged = true
 	quasarComp.ChargeRemaining = 0
 
 	s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
@@ -322,12 +324,13 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 
 	// Homing with arrival steering, drag only when not immune
 	settled := physics.ApplyHomingScaled(
-		&quasarComp.KineticState,
+		&quasarComp.Kinetic,
 		cursorXFixed, cursorYFixed,
 		&physics.QuasarHoming,
 		quasarComp.SpeedMultiplier,
 		dtFixed,
-		!quasarComp.IsImmune(now), // applyDrag gated by immunity
+		true,
+		// !quasarComp.IsImmune(now), // applyDrag gated by immunity
 	)
 
 	if settled {
@@ -346,10 +349,10 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 	newX, newY := quasarComp.Integrate(dtFixed)
 
 	// Boundary reflection with footprint constraints
-	minAnchorX := constant.QuasarAnchorOffsetX
-	maxAnchorX := config.GameWidth - (constant.QuasarWidth - constant.QuasarAnchorOffsetX)
-	minAnchorY := constant.QuasarAnchorOffsetY
-	maxAnchorY := config.GameHeight - (constant.QuasarHeight - constant.QuasarAnchorOffsetY)
+	minAnchorX := constant.QuasarHeaderOffsetX
+	maxAnchorX := config.GameWidth - (constant.QuasarWidth - constant.QuasarHeaderOffsetX)
+	minAnchorY := constant.QuasarHeaderOffsetY
+	maxAnchorY := config.GameHeight - (constant.QuasarHeight - constant.QuasarHeaderOffsetY)
 
 	quasarComp.ReflectBoundsX(minAnchorX, maxAnchorX)
 	quasarComp.ReflectBoundsY(minAnchorY, maxAnchorY)
@@ -398,7 +401,7 @@ func (s *QuasarSystem) startZapping(headerEntity core.Entity, quasarComp *compon
 		return
 	}
 
-	s.world.PushEvent(event.EventLightningSpawn, &event.LightningSpawnPayload{
+	s.world.PushEvent(event.EventLightningSpawn, &event.LightningSpawnRequestPayload{
 		Owner:     headerEntity,
 		OriginX:   headerPos.X,
 		OriginY:   headerPos.Y,
@@ -410,6 +413,7 @@ func (s *QuasarSystem) startZapping(headerEntity core.Entity, quasarComp *compon
 	})
 
 	quasarComp.IsZapping = true
+	quasarComp.IsEnraged = true
 	quasarComp.IsShielded = true // Shield active during zap
 	s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
 }
@@ -419,6 +423,7 @@ func (s *QuasarSystem) stopZapping(headerEntity core.Entity, quasarComp *compone
 	s.world.PushEvent(event.EventLightningDespawn, headerEntity)
 
 	quasarComp.IsZapping = false
+	quasarComp.IsEnraged = false
 	quasarComp.IsShielded = false // Clear shield
 	s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
 }
@@ -478,8 +483,8 @@ func (s *QuasarSystem) processCollisionsAtNewPositions(headerEntity core.Entity,
 	var toDestroy []core.Entity
 
 	// Check each cell the quasar will occupy
-	topLeftX := headerX - constant.QuasarAnchorOffsetX
-	topLeftY := headerY - constant.QuasarAnchorOffsetY
+	topLeftX := headerX - constant.QuasarHeaderOffsetX
+	topLeftY := headerY - constant.QuasarHeaderOffsetY
 
 	for row := 0; row < constant.QuasarHeight; row++ {
 		for col := 0; col < constant.QuasarWidth; col++ {
@@ -628,8 +633,6 @@ func (s *QuasarSystem) applyShieldKnockback(
 	cursorPos component.PositionComponent,
 	overlaps []struct{ x, y int },
 ) {
-	now := s.world.Resources.Time.GameTime
-
 	headerPos, ok := s.world.Positions.GetPosition(headerEntity)
 	if !ok {
 		return
@@ -654,12 +657,11 @@ func (s *QuasarSystem) applyShieldKnockback(
 	centroidY := sumY / len(overlaps)
 
 	if physics.ApplyOffsetCollision(
-		&quasarComp.KineticState,
+		&quasarComp.Kinetic,
 		radialX, radialY,
 		centroidX, centroidY,
 		&physics.ShieldToQuasar,
 		s.rng,
-		now,
 	) {
 		s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
 	}
