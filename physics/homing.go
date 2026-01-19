@@ -24,7 +24,7 @@ type HomingProfile struct {
 // targetX, targetY: target position in Q32.32
 // dt: delta time in Q32.32 seconds
 func ApplyHoming(
-	kinetic *component.Kinetic,
+	kinetic *component.KineticComponent,
 	targetX, targetY int64,
 	profile *HomingProfile,
 	dt int64,
@@ -36,7 +36,7 @@ func ApplyHoming(
 // speedMultiplier: Q32.32 scale factor (Scale = 1.0x)
 // applyDrag: if false, skip drag application (for immunity-gated drag)
 func ApplyHomingScaled(
-	kinetic *component.Kinetic,
+	kinetic *component.KineticComponent,
 	targetX, targetY int64,
 	profile *HomingProfile,
 	speedMultiplier int64,
@@ -48,7 +48,7 @@ func ApplyHomingScaled(
 
 // applyHomingInternal is the shared implementation
 func applyHomingInternal(
-	kinetic *component.Kinetic,
+	kinetic *component.KineticComponent,
 	targetX, targetY int64,
 	profile *HomingProfile,
 	speedMultiplier int64,

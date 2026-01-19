@@ -158,7 +158,7 @@ func (s *CombatSystem) applyFullKnockback(
 		return
 	}
 
-	if physics.ApplyCollision(&kineticComp.Kinetic, radialX, radialY, &physics.ShieldToDrain, s.rng) {
+	if physics.ApplyCollision(&kineticComp, radialX, radialY, &physics.ShieldToDrain, s.rng) {
 		s.world.Components.Kinetic.SetComponent(targetEntity, kineticComp)
 	}
 	// TODO: check above condition implications

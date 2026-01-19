@@ -139,28 +139,32 @@ func (s *CleanerSystem) Update() {
 	gameWidth := config.GameWidth
 	gameHeight := config.GameHeight
 
-	for _, entity := range cleanerEntities {
-		c, ok := s.world.Components.Cleaner.GetComponent(entity)
+	for _, cleanerEntity := range cleanerEntities {
+		cleanerComp, ok := s.world.Components.Cleaner.GetComponent(cleanerEntity)
+		if !ok {
+			continue
+		}
+		kineticComp, ok := s.world.Components.Kinetic.GetComponent(cleanerEntity)
 		if !ok {
 			continue
 		}
 
 		// Read grid position from Positions (authoritative for spatial queries)
-		oldPos, ok := s.world.Positions.GetPosition(entity)
+		oldPos, ok := s.world.Positions.GetPosition(cleanerEntity)
 		if !ok {
 			continue
 		}
 
 		// Physics Update: Integrate velocity into float position (overlay state)
-		prevPreciseX := c.PreciseX
-		prevPreciseY := c.PreciseY
-		c.Integrate(dtFixed)
+		prevPreciseX := kineticComp.PreciseX
+		prevPreciseY := kineticComp.PreciseY
+		kineticComp.Integrate(dtFixed)
 
 		// Swept Collision Detection: Check all cells between previous and current position
-		if c.VelY != 0 && c.VelX == 0 {
+		if kineticComp.VelY != 0 && kineticComp.VelX == 0 {
 			// Vertical cleaner: sweep Y axis
 			prevY := vmath.ToInt(prevPreciseY)
-			currY := vmath.ToInt(c.PreciseY)
+			currY := vmath.ToInt(kineticComp.PreciseY)
 			startY, endY := prevY, currY
 			if startY > endY {
 				startY, endY = endY, startY
@@ -176,13 +180,13 @@ func (s *CleanerSystem) Update() {
 			// Check all traversed rows for collisions (with self-exclusion)
 			if startY <= endY {
 				for y := startY; y <= endY; y++ {
-					s.checkCollisions(oldPos.X, y, entity)
+					s.checkCollisions(oldPos.X, y, cleanerEntity)
 				}
 			}
-		} else if c.VelX != 0 {
+		} else if kineticComp.VelX != 0 {
 			// Horizontal cleaner: sweep X axis
 			prevX := vmath.ToInt(prevPreciseX)
-			currX := vmath.ToInt(c.PreciseX)
+			currX := vmath.ToInt(kineticComp.PreciseX)
 			startX, endX := prevX, currX
 			if startX > endX {
 				startX, endX = endX, startX
@@ -198,43 +202,44 @@ func (s *CleanerSystem) Update() {
 			// Check all traversed columns for collisions (with self-exclusion)
 			if startX <= endX {
 				for x := startX; x <= endX; x++ {
-					s.checkCollisions(x, oldPos.Y, entity)
+					s.checkCollisions(x, oldPos.Y, cleanerEntity)
 				}
 			}
 		}
 
 		// Trail Update & Grid Sync: Update trail ring buffer and sync Positions if cell changed
-		newGridX := vmath.ToInt(c.PreciseX)
-		newGridY := vmath.ToInt(c.PreciseY)
+		newGridX := vmath.ToInt(kineticComp.PreciseX)
+		newGridY := vmath.ToInt(kineticComp.PreciseY)
 
 		if newGridX != oldPos.X || newGridY != oldPos.Y {
 			// Update trail: add new grid position to ring buffer
-			c.TrailHead = (c.TrailHead + 1) % constant.CleanerTrailLength
-			c.TrailRing[c.TrailHead] = core.Point{X: newGridX, Y: newGridY}
-			if c.TrailLen < constant.CleanerTrailLength {
-				c.TrailLen++
+			cleanerComp.TrailHead = (cleanerComp.TrailHead + 1) % constant.CleanerTrailLength
+			cleanerComp.TrailRing[cleanerComp.TrailHead] = core.Point{X: newGridX, Y: newGridY}
+			if cleanerComp.TrailLen < constant.CleanerTrailLength {
+				cleanerComp.TrailLen++
 			}
 
 			// Sync grid position to Positions
-			s.world.Positions.SetPosition(entity, component.PositionComponent{X: newGridX, Y: newGridY})
+			s.world.Positions.SetPosition(cleanerEntity, component.PositionComponent{X: newGridX, Y: newGridY})
 		}
 
 		// Lifecycle Check: Destroy cleaner when it reaches target position
 		shouldDestroy := false
-		if c.VelX > 0 && c.PreciseX >= c.TargetX {
+		if kineticComp.VelX > 0 && kineticComp.PreciseX >= cleanerComp.TargetX {
 			shouldDestroy = true
-		} else if c.VelX < 0 && c.PreciseX <= c.TargetX {
+		} else if kineticComp.VelX < 0 && kineticComp.PreciseX <= cleanerComp.TargetX {
 			shouldDestroy = true
-		} else if c.VelY > 0 && c.PreciseY >= c.TargetY {
+		} else if kineticComp.VelY > 0 && kineticComp.PreciseY >= cleanerComp.TargetY {
 			shouldDestroy = true
-		} else if c.VelY < 0 && c.PreciseY <= c.TargetY {
+		} else if kineticComp.VelY < 0 && kineticComp.PreciseY <= cleanerComp.TargetY {
 			shouldDestroy = true
 		}
 
 		if shouldDestroy {
-			s.world.DestroyEntity(entity)
+			s.world.DestroyEntity(cleanerEntity)
 		} else {
-			s.world.Components.Cleaner.SetComponent(entity, c)
+			s.world.Components.Cleaner.SetComponent(cleanerEntity, cleanerComp)
+			s.world.Components.Kinetic.SetComponent(cleanerEntity, kineticComp)
 		}
 	}
 
@@ -297,13 +302,7 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 		var trailRing [constant.CleanerTrailLength]core.Point
 		trailRing[0] = core.Point{X: startGridX, Y: startGridY}
 
-		comp := component.CleanerComponent{
-			Kinetic: component.Kinetic{
-				PreciseX: startX,
-				PreciseY: rowFixed,
-				VelX:     velX,
-				VelY:     0,
-			},
+		cleanerComp := component.CleanerComponent{
 			TargetX:        targetX,
 			TargetY:        rowFixed,
 			TrailRing:      trailRing,
@@ -312,11 +311,18 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 			Char:           constant.CleanerChar,
 			NegativeEnergy: negativeEnergy,
 		}
+		kineticComp := component.KineticComponent{
+			PreciseX: startX,
+			PreciseY: rowFixed,
+			VelX:     velX,
+			VelY:     0,
+		}
 
 		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → CleanerComponent (float overlay)
 		entity := s.world.CreateEntity()
 		s.world.Positions.SetPosition(entity, component.PositionComponent{X: startGridX, Y: startGridY})
-		s.world.Components.Cleaner.SetComponent(entity, comp)
+		s.world.Components.Cleaner.SetComponent(entity, cleanerComp)
+		s.world.Components.Kinetic.SetComponent(entity, kineticComp)
 		s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
 			Mask: component.ProtectFromDrain | component.ProtectFromDeath,
 		})
@@ -331,8 +337,8 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 		return
 	}
 
-	// Get cleaner velocity for deflection
-	cleanerComp, ok := s.world.Components.Cleaner.GetComponent(selfEntity)
+	// Get cleaner kinetic for deflection
+	kineticComp, ok := s.world.Components.Kinetic.GetComponent(selfEntity)
 	if !ok {
 		return
 	}
@@ -349,7 +355,7 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 				TargetEntity: entity,
 				Delta:        constant.VampireEnergyDrainAmount,
 			})
-			s.deflectDrain(entity, cleanerComp.VelX, cleanerComp.VelY)
+			s.deflectDrain(entity, kineticComp.VelX, kineticComp.VelY)
 		}
 
 		// Quasar
@@ -369,7 +375,7 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 				TargetEntity: entity,
 				Delta:        constant.VampireEnergyDrainAmount,
 			})
-			s.deflectQuasar(memberComp.HeaderEntity, entity, cleanerComp.VelX, cleanerComp.VelY)
+			s.deflectQuasar(memberComp.HeaderEntity, entity, kineticComp.VelX, kineticComp.VelY)
 			s.deflectedAnchors[memberComp.HeaderEntity] = selfEntity
 		}
 	}
@@ -396,7 +402,7 @@ func (s *CleanerSystem) deflectDrain(drainEntity core.Entity, cleanerVelX, clean
 		return
 	}
 
-	if physics.ApplyCollision(&kineticComp.Kinetic, cleanerVelX, cleanerVelY, &physics.CleanerToDrain, s.rng) {
+	if physics.ApplyCollision(&kineticComp, cleanerVelX, cleanerVelY, &physics.CleanerToDrain, s.rng) {
 		s.world.Components.Kinetic.SetComponent(drainEntity, kineticComp)
 	}
 }
@@ -449,7 +455,7 @@ func (s *CleanerSystem) deflectQuasar(headerEntity, hitMember core.Entity, clean
 		offsetY := hitPos.Y - headerPos.Y
 
 		physics.ApplyOffsetCollision(
-			&kineticComp.Kinetic,
+			&kineticComp,
 			cleanerVelX, cleanerVelY,
 			offsetX, offsetY,
 			&physics.CleanerToQuasar,
@@ -558,13 +564,7 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 		var trailRing [constant.CleanerTrailLength]core.Point
 		trailRing[0] = core.Point{X: startGridX, Y: startGridY}
 
-		comp := component.CleanerComponent{
-			Kinetic: component.Kinetic{
-				PreciseX: dir.startX,
-				PreciseY: dir.startY,
-				VelX:     dir.velX,
-				VelY:     dir.velY,
-			},
+		cleanerComp := component.CleanerComponent{
 			TargetX:        dir.targetX,
 			TargetY:        dir.targetY,
 			TrailRing:      trailRing,
@@ -573,11 +573,18 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 			Char:           constant.CleanerChar,
 			NegativeEnergy: negativeEnergy,
 		}
+		kineticComp := component.KineticComponent{
+			PreciseX: dir.startX,
+			PreciseY: dir.startY,
+			VelX:     dir.velX,
+			VelY:     dir.velY,
+		}
 
 		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → CleanerComponent (float overlay)
 		entity := s.world.CreateEntity()
 		s.world.Positions.SetPosition(entity, component.PositionComponent{X: startGridX, Y: startGridY})
-		s.world.Components.Cleaner.SetComponent(entity, comp)
+		s.world.Components.Cleaner.SetComponent(entity, cleanerComp)
+		s.world.Components.Kinetic.SetComponent(entity, kineticComp)
 		// TODO: centralize protection via entity factory
 		s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
 			Mask: component.ProtectFromDrain | component.ProtectFromDeath,

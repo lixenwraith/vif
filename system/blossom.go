@@ -141,12 +141,10 @@ func (s *BlossomSystem) spawnSingleBlossom(x, y int, char rune, skipStartCell bo
 	})
 
 	kineticComp := component.KineticComponent{
-		Kinetic: component.Kinetic{
-			PreciseX: vmath.FromInt(x),
-			PreciseY: vmath.FromInt(y),
-			VelY:     velY,
-			AccelY:   accelY,
-		},
+		PreciseX: vmath.FromInt(x),
+		PreciseY: vmath.FromInt(y),
+		VelY:     velY,
+		AccelY:   accelY,
 	}
 	s.world.Components.Kinetic.SetComponent(entity, kineticComp)
 

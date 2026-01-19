@@ -510,11 +510,9 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 		LastIntY:      spawnY,
 	}
 	kineticComp := component.KineticComponent{
-		Kinetic: component.Kinetic{
-			PreciseX: vmath.FromInt(spawnX),
-			PreciseY: vmath.FromInt(spawnY),
-			// VelX, VelY, AccelX, AccelY zero-initialized
-		},
+		PreciseX: vmath.FromInt(spawnX),
+		PreciseY: vmath.FromInt(spawnY),
+		// VelX, VelY, AccelX, AccelY zero-initialized
 	}
 
 	// Handle collisions at materialize spawn position
@@ -743,7 +741,7 @@ func (s *DrainSystem) updateDrainMovement() {
 		// Homing only when not in deflection immunity
 		if combatComp.KnockbackImmunityRemaining == 0 {
 			physics.ApplyHoming(
-				&kineticComp.Kinetic,
+				&kineticComp,
 				cursorXFixed, cursorYFixed,
 				&physics.DrainHoming,
 				dtFixed,

@@ -336,7 +336,7 @@ func (s *DustSystem) Update() {
 					if s.world.Components.Drain.HasEntity(target) {
 						if drainKineticComp, ok := s.world.Components.Kinetic.GetComponent(target); ok {
 							physics.ApplyCollision(
-								&drainKineticComp.Kinetic,
+								&drainKineticComp,
 								kineticComp.VelX, kineticComp.VelY,
 								&physics.DustToDrain,
 								s.rng,
@@ -353,7 +353,7 @@ func (s *DustSystem) Update() {
 								if headerComp.Behavior == component.BehaviorQuasar {
 									// Center-of-mass collision, no offset calculation
 									physics.ApplyCollision(
-										&quasarKineticComp.Kinetic,
+										&quasarKineticComp,
 										kineticComp.VelX, kineticComp.VelY,
 										&physics.DustToQuasar,
 										s.rng,
@@ -565,12 +565,10 @@ func (s *DustSystem) prepareDustComponents(entity core.Entity, x, y int, char ru
 
 	// Kinetic component
 	kinetic := component.KineticComponent{
-		Kinetic: component.Kinetic{
-			PreciseX: vmath.FromInt(x),
-			PreciseY: vmath.FromInt(y),
-			VelX:     vx,
-			VelY:     vy,
-		},
+		PreciseX: vmath.FromInt(x),
+		PreciseY: vmath.FromInt(y),
+		VelX:     vx,
+		VelY:     vy,
 	}
 
 	// Protection component

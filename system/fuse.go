@@ -317,10 +317,9 @@ func (s *FuseSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 	})
 
 	s.world.Components.Kinetic.SetComponent(headerEntity, component.KineticComponent{
-		Kinetic: component.Kinetic{
-			PreciseX: vmath.FromInt(headerX),
-			PreciseY: vmath.FromInt(headerY),
-		}})
+		PreciseX: vmath.FromInt(headerX),
+		PreciseY: vmath.FromInt(headerY),
+	})
 
 	// Build member entities
 	members := make([]component.MemberEntry, 0, constant.QuasarWidth*constant.QuasarHeight)

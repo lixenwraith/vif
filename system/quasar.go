@@ -338,7 +338,7 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 
 	// Homing with arrival steering, drag only when not immune
 	settled := physics.ApplyHomingScaled(
-		&kineticComp.Kinetic,
+		&kineticComp,
 		cursorXFixed, cursorYFixed,
 		&physics.QuasarHoming,
 		quasarComp.SpeedMultiplier,
@@ -676,7 +676,7 @@ func (s *QuasarSystem) applyShieldKnockback(
 	centroidY := sumY / len(overlaps)
 
 	if physics.ApplyOffsetCollision(
-		&kineticComp.Kinetic,
+		&kineticComp,
 		radialX, radialY,
 		centroidX, centroidY,
 		&physics.ShieldToQuasar,
