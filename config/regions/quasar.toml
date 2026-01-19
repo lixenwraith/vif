@@ -1,4 +1,7 @@
-# Quasar region states (spawned dynamically via SpawnRegion action)
+# === Quasar region states ===
+# spawned dynamically via SpawnRegion action
+
+# --- QUASAR CYCLE ---
 
 [states.QuasarCycle]
 parent = "Root"
@@ -45,6 +48,9 @@ transitions = [
     { trigger = "EventQuasarDestroyed", target = "QuasarWin" },
 ]
 
+# --- DUST ALL ---
+# Overheat burst
+
 [states.QuasarDustAll]
 parent = "QuasarCycle"
 on_enter = [
@@ -54,6 +60,8 @@ transitions = [
     { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = "0" } },
     { trigger = "EventQuasarDestroyed", target = "QuasarWin" },
 ]
+
+# --- QUASAR END ---
 
 [states.QuasarWin]
 parent = "QuasarCycle"
@@ -72,6 +80,8 @@ on_enter = [
 transitions = [
     { trigger = "Tick", target = "QuasarExit" },
 ]
+
+# --- MAIN HANDOFF ---
 
 [states.QuasarExit]
 parent = "QuasarCycle"

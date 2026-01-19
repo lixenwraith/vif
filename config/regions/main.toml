@@ -1,9 +1,9 @@
-# Main gameplay region states
+# === Main gameplay region states ===
 
 [states.Gameplay]
 parent = "Root"
 
-# === GOLD SPAWN CYCLE ===
+# --- GOLD SPAWN CYCLE ---
 
 [states.SpawnGold]
 parent = "Gameplay"
@@ -25,7 +25,7 @@ transitions = [
     { trigger = "EventHeatBurstNotification", target = "QuasarHandoff" },
 ]
 
-# === SWEEPING EVALUATION ===
+# --- SWEEPING EVALUATION ---
 
 [states.PreSweepCheck]
 parent = "Gameplay"
@@ -54,7 +54,7 @@ transitions = [
     { trigger = "EventCleanerSweepingFinished", target = "DecayWait" },
 ]
 
-# === QUASAR HANDOFF ===
+# --- QUASAR HANDOFF ---
 
 [states.QuasarHandoff]
 parent = "Gameplay"
@@ -66,7 +66,7 @@ transitions = [
     { trigger = "Tick", target = "DecayWait" },
 ]
 
-# === DECAY WAVES ===
+# --- DECAY WAVES ---
 
 [states.DecayWait]
 parent = "Gameplay"

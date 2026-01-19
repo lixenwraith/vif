@@ -1,4 +1,4 @@
-# Root FSM configuration
+# === Root FSM configuration ===
 # External state files are merged before parsing
 
 [regions]

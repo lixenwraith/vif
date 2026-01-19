@@ -69,7 +69,7 @@ func (b *RenderBuffer) inBounds(x, y int) bool {
 	return x >= 0 && x < b.width && y >= 0 && y < b.height
 }
 
-// ===== COMPOSITOR API =====
+// === COMPOSITOR API ===
 
 // Set composites a cell with specified blend mode
 func (b *RenderBuffer) Set(x, y int, mainRune rune, fg, bg RGB, mode BlendMode, alpha float64, attrs terminal.Attr) {
@@ -184,7 +184,7 @@ func (b *RenderBuffer) SetBg256(x, y int, paletteIdx uint8) {
 	b.masks[idx] |= b.currentMask
 }
 
-// ===== POST-PROCESSING =====
+// === POST-PROCESSING ===
 
 // MutateDim multiplies colors by factor for cells matching targetMask
 // Respects Fg/Bg granularity: touched cells get both mutated, untouched get Fg only
@@ -240,7 +240,7 @@ func (b *RenderBuffer) MutateGrayscale(intensity float64, targetMask, excludeMas
 	}
 }
 
-// ===== OUTPUT =====
+// === OUTPUT ===
 
 // finalize sets default background to untouched cells and applies occlusion dimming
 func (b *RenderBuffer) finalize() {

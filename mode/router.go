@@ -163,7 +163,7 @@ func (r *Router) Handle(intent *input.Intent) bool {
 	return true
 }
 
-// ========== System Handlers ==========
+// --- System Handlers ---
 
 func (r *Router) handleEscape() bool {
 	currentMode := r.ctx.GetMode()
@@ -202,7 +202,7 @@ func (r *Router) handleToggleMute() bool {
 	return true
 }
 
-// ========== Motion Handlers ==========
+// --- Motion Handlers ---
 
 func (r *Router) handleMotion(intent *input.Intent) bool {
 	motionFn, ok := r.motionLUT[intent.Motion]
@@ -257,7 +257,7 @@ func (r *Router) handleCharMotion(intent *input.Intent) bool {
 	return true
 }
 
-// ========== Operator Handlers ==========
+// --- Operator Handlers ---
 
 func (r *Router) handleOperatorMotion(intent *input.Intent) bool {
 	motionFn, ok := r.motionLUT[intent.Motion]
@@ -352,7 +352,7 @@ func (r *Router) handleOperatorCharMotion(intent *input.Intent) bool {
 	return true
 }
 
-// ========== Special Command Handlers ==========
+// --- Special Command Handlers ---
 
 func (r *Router) handleSpecial(intent *input.Intent) bool {
 	r.ctx.World.RunSafe(func() {
@@ -434,7 +434,7 @@ func (r *Router) handleFireSpecial() bool {
 	return true
 }
 
-// ========== Mode Switch Handler ==========
+// --- Mode Switch Handler ---
 
 func (r *Router) handleModeSwitch(intent *input.Intent) bool {
 	var newMode core.GameMode
@@ -494,7 +494,7 @@ func (r *Router) handleAppend() bool {
 	return true
 }
 
-// ========== Text Entry Handlers ==========
+// --- Text Entry Handlers ---
 
 func (r *Router) handleTextChar(intent *input.Intent) bool {
 	currentMode := r.ctx.GetMode()
@@ -681,7 +681,7 @@ func (r *Router) handleInsertDeleteBack() bool {
 	return true
 }
 
-// ========== Overlay Handlers ==========
+// --- Overlay Handlers ---
 
 func (r *Router) handleOverlayClose() bool {
 	r.ctx.SetOverlayContent(nil)
@@ -729,7 +729,7 @@ func (r *Router) handleOverlayScroll(intent *input.Intent) bool {
 	return true
 }
 
-// ========== Helper Methods ==========
+// --- Helper Methods ---
 
 func (r *Router) setLastCommandAndSplash(cmd string) {
 	r.ctx.SetLastCommand(cmd)

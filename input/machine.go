@@ -90,7 +90,7 @@ func (m *Machine) processKey(ev terminal.Event) *Intent {
 	return nil
 }
 
-// ========== Normal Mode Processing ==========
+// === Normal Mode Processing ===
 
 func (m *Machine) processNormal(ev terminal.Event) *Intent {
 	// Handle special keys first
@@ -313,7 +313,7 @@ func (m *Machine) processOperatorPrefixG(key rune) *Intent {
 	}
 }
 
-// ========== Insert Mode Processing ==========
+// === Insert Mode Processing ===
 
 func (m *Machine) processInsert(ev terminal.Event) *Intent {
 	// Check navigation/system keys first
@@ -347,7 +347,7 @@ func (m *Machine) processInsert(ev terminal.Event) *Intent {
 	}
 }
 
-// ========== Search Mode Processing ==========
+// === Search Mode Processing ===
 
 func (m *Machine) processSearch(ev terminal.Event) *Intent {
 	// Check system/nav keys first
@@ -365,7 +365,7 @@ func (m *Machine) processSearch(ev terminal.Event) *Intent {
 	}
 }
 
-// ========== Command Mode Processing ==========
+// === Command Mode Processing ===
 
 func (m *Machine) processCommand(ev terminal.Event) *Intent {
 	// Check system/nav keys first
@@ -383,7 +383,7 @@ func (m *Machine) processCommand(ev terminal.Event) *Intent {
 	}
 }
 
-// ========== Overlay Mode Processing ==========
+// === Overlay Mode Processing ===
 
 func (m *Machine) processOverlay(ev terminal.Event) *Intent {
 	// Handle special keys
@@ -433,7 +433,7 @@ func (m *Machine) handleTextModeEntry(entry KeyEntry) *Intent {
 	return nil
 }
 
-// ========== Helper Methods ==========
+// === Helper Methods ===
 
 func (m *Machine) buildMotionIntent(motion MotionOp) *Intent {
 	count := m.effectiveCount()

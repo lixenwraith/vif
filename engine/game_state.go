@@ -9,7 +9,7 @@ import (
 
 // GameState centralizes game state with clear ownership boundaries
 type GameState struct {
-	// ===== REAL-TIME STATE (lock-free atomics) =====
+	// === REAL-TIME STATE (lock-free atomics) ===
 
 	// Runtime Metrics
 	GameTicks      atomic.Uint64
@@ -53,7 +53,7 @@ func (gs *GameState) Reset() {
 	gs.initState()
 }
 
-// ===== RUNTIME METRICS ACCESSORS =====
+// === RUNTIME METRICS ACCESSORS ===
 
 // IncrementGameTicks increments the game tick counter
 func (gs *GameState) IncrementGameTicks() (new uint64) {

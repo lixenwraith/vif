@@ -13,7 +13,7 @@ import (
 
 // GameContext holds all game state including the ECS world
 type GameContext struct {
-	// ===== Immutable After Init =====
+	// === Immutable After Init ===
 	// Set once during NewGameContext. Pointers/values never modified.
 	// Safe for concurrent read without synchronization.
 
@@ -21,12 +21,12 @@ type GameContext struct {
 	State         *GameState     // Centralized game state; has internal lock
 	PausableClock *PausableClock // Pausable time source; has internal sync
 
-	// ===== Channels =====
+	// === Channels ===
 	// Inherently thread-safe for send operations.
 
 	ResetChan chan<- struct{} // FSM reset signal; wired to ClockScheduler
 
-	// ===== Atomic (Self-Synchronized) =====
+	// === Atomic (Self-Synchronized) ===
 	// Safe for concurrent access via atomic operations.
 
 	FrameNumber atomic.Int64 // Render frame counter; incremented by main loop
@@ -34,14 +34,14 @@ type GameContext struct {
 	IsPaused    atomic.Bool  // Pause flag; actual timing handled by PausableClock
 	IsMuted     atomic.Bool  // Mute flag; keeps mute state
 
-	// ===== Main-Loop Exclusive =====
+	// === Main-Loop Exclusive ===
 	// Accessed only from main goroutine (input, resize, render).
 	// No synchronization required.
 
 	Width, Height            int // Terminal dimensions
 	GameXOffset, GameYOffset int // Game area offset from terminal origin
 
-	// ===== Mutex-Protected (ui.mu) =====
+	// === Mutex-Protected (ui.mu) ===
 	// All access requires holding ui.mu (RLock for read, Lock for write).
 
 	// Status bar state (atomic pointers for lock-free access)
@@ -123,7 +123,7 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	return ctx
 }
 
-// ===== Screen =====
+// === Screen ===
 
 // updateGameArea calculates the game area dimensions
 func (ctx *GameContext) updateGameArea() (gameWidth, gameHeight int) {
@@ -213,14 +213,14 @@ func (ctx *GameContext) IncrementFrameNumber() int64 {
 	return ctx.FrameNumber.Add(1)
 }
 
-// ===== EVENT QUEUE METHODS =====
+// === EVENT QUEUE METHODS ===
 
 // PushEvent adds an event to the event queue using the World's optimized dispatcher, ensuring consistent frame-stamping across game space and input sources
 func (ctx *GameContext) PushEvent(eventType event.EventType, payload any) {
 	ctx.World.PushEvent(eventType, payload)
 }
 
-// ===== MODE ACCESSORS =====
+// === MODE ACCESSORS ===
 
 // GetMode returns the current game mode
 func (ctx *GameContext) GetMode() core.GameMode {
@@ -323,7 +323,7 @@ func (ctx *GameContext) GetPingBounds() PingBounds {
 	return bounds
 }
 
-// ===== STATUS BAR ACCESSORS =====
+// === STATUS BAR ACCESSORS ===
 
 func (ctx *GameContext) GetCommandText() string {
 	if p := ctx.commandText.Load(); p != nil {
@@ -369,7 +369,7 @@ func (ctx *GameContext) SetLastCommand(cmd string) {
 	ctx.lastCommand.Store(&cmd)
 }
 
-// ===== OVERLAY ACCESSORS =====
+// === OVERLAY ACCESSORS ===
 
 func (ctx *GameContext) IsOverlayActive() bool {
 	return ctx.overlayActive.Load()
@@ -414,7 +414,7 @@ func (ctx *GameContext) SetOverlayContent(content *core.OverlayContent) {
 	ctx.overlayScroll.Store(0)
 }
 
-// ===== Audio =====
+// === Audio ===
 
 // GetAudioPlayer retrieves audio player from resources
 // Returns nil if audio unavailable
@@ -437,7 +437,7 @@ func (ctx *GameContext) ToggleAudioMute() bool {
 	return newMuted
 }
 
-// ===== Pause =====
+// === Pause ===
 
 // SetPaused sets the pause state using the pausable clock
 func (ctx *GameContext) SetPaused(paused bool) {

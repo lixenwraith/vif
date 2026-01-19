@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/asset"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -138,7 +139,7 @@ func main() {
 	event.InitRegistry()
 
 	// Load FSM Config: external config with embedded fallback
-	if err := clockScheduler.LoadFSMAuto(manifest.DefaultGameplayFSMConfig, manifest.RegisterFSMComponents); err != nil {
+	if err := clockScheduler.LoadFSMAuto(asset.DefaultGameplayFSMConfig, manifest.RegisterFSMComponents); err != nil {
 		panic(fmt.Sprintf("failed to load FSM: %v", err))
 	}
 
