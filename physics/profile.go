@@ -14,7 +14,7 @@ var CleanerToDrain = CollisionProfile{
 	ImpulseMax:       constant.DrainDeflectImpulseMax,
 	AngleVariance:    constant.DrainDeflectAngleVar,
 	Mode:             ImpulseAdditive,
-	ImmunityDuration: constant.DrainDeflectImmunity,
+	ImmunityDuration: constant.CombatKineticImmunityDuration,
 	OffsetInfluence:  0,
 }
 
@@ -25,7 +25,7 @@ var CleanerToQuasar = CollisionProfile{
 	ImpulseMax:       constant.QuasarDeflectImpulseMax,
 	AngleVariance:    constant.DrainDeflectAngleVar,
 	Mode:             ImpulseOverride,
-	ImmunityDuration: constant.QuasarHitFlashDuration,
+	ImmunityDuration: constant.CombatKineticImmunityDuration,
 	OffsetInfluence:  vmath.OffsetInfluenceDefault,
 }
 
@@ -36,7 +36,7 @@ var ShieldToDrain = CollisionProfile{
 	ImpulseMax:       constant.ShieldKnockbackImpulseMax,
 	AngleVariance:    constant.DrainDeflectAngleVar,
 	Mode:             ImpulseAdditive,
-	ImmunityDuration: constant.ShieldKnockbackImmunity,
+	ImmunityDuration: constant.CombatKineticImmunityDuration,
 	OffsetInfluence:  0,
 }
 
@@ -47,7 +47,7 @@ var ShieldToQuasar = CollisionProfile{
 	ImpulseMax:       constant.ShieldKnockbackImpulseMax,
 	AngleVariance:    constant.DrainDeflectAngleVar,
 	Mode:             ImpulseAdditive,
-	ImmunityDuration: constant.ShieldKnockbackImmunity,
+	ImmunityDuration: constant.CombatKineticImmunityDuration,
 	OffsetInfluence:  vmath.OffsetInfluenceDefault,
 }
 
@@ -69,7 +69,7 @@ var ExplosionToDrain = CollisionProfile{
 	ImpulseMax:       constant.DrainDeflectImpulseMax,
 	AngleVariance:    constant.DrainDeflectAngleVar,
 	Mode:             ImpulseAdditive,
-	ImmunityDuration: constant.DrainDeflectImmunity, // Immunity for dedup
+	ImmunityDuration: constant.CombatKineticImmunityDuration, // Immunity for dedup
 	OffsetInfluence:  0,
 }
 
@@ -80,7 +80,7 @@ var ExplosionToQuasar = CollisionProfile{
 	ImpulseMax:       constant.QuasarDeflectImpulseMax,
 	AngleVariance:    constant.DrainDeflectAngleVar,
 	Mode:             ImpulseAdditive,
-	ImmunityDuration: constant.QuasarHitFlashDuration, // Immunity for dedup
+	ImmunityDuration: constant.CombatHitFlashDuration, // Immunity for dedup
 	OffsetInfluence:  0,
 }
 

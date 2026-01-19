@@ -211,7 +211,7 @@ func (s *CompositeSystem) handleEmptyComposite(headerEntity core.Entity, headerC
 		// Gold completion handled by GoldSystem via events
 		s.destroyHead(headerEntity)
 
-	case component.BehaviorBubble, component.BehaviorBoss, component.BehaviorShield:
+	case component.BehaviorSwarm, component.BehaviorStorm:
 		// Future: emit behavior-specific completion events
 		s.destroyHead(headerEntity)
 

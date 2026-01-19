@@ -23,7 +23,7 @@ type directionalSpawnKey struct {
 type CleanerSystem struct {
 	world *engine.World
 
-	deflectedAnchors map[core.Entity]core.Entity // anchor -> cleaner that deflected it for deduplication of large entity hits
+	collidedHeaders map[core.Entity]core.Entity // anchor -> cleaner that deflected it for deduplication of large entity hits
 
 	rng *vmath.FastRand
 
@@ -49,7 +49,7 @@ func NewCleanerSystem(world *engine.World) engine.System {
 // Init resets session state for new game
 func (s *CleanerSystem) Init() {
 	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
-	s.deflectedAnchors = make(map[core.Entity]core.Entity, 4)
+	s.collidedHeaders = make(map[core.Entity]core.Entity, 4)
 	s.statActive.Store(0)
 	s.statSpawned.Store(0)
 	s.enabled = true
@@ -124,9 +124,9 @@ func (s *CleanerSystem) Update() {
 	}
 
 	// Clean dead cleaners from deflection tracking
-	for anchor, cleanerEntity := range s.deflectedAnchors {
+	for anchor, cleanerEntity := range s.collidedHeaders {
 		if !s.world.Components.Cleaner.HasEntity(cleanerEntity) {
-			delete(s.deflectedAnchors, anchor)
+			delete(s.collidedHeaders, anchor)
 		}
 	}
 
@@ -332,15 +332,10 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 
 // checkCollisions handles collision logic with self-exclusion
 func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
+	cursorEntity := s.world.Resources.Cursor.Entity
 	// Query all entities at position (includes cleaner)
 	entities := s.world.Positions.GetAllEntityAt(x, y)
 	if len(entities) == 0 {
-		return
-	}
-
-	// Get cleaner kinetic for deflection
-	kineticComp, ok := s.world.Components.Kinetic.GetComponent(selfEntity)
-	if !ok {
 		return
 	}
 
@@ -350,39 +345,47 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 			continue
 		}
 
-		// Drain
-		if s.world.Components.Drain.HasEntity(entity) {
-			s.world.PushEvent(event.EventVampireDrainRequest, &event.VampireDrainRequestPayload{
-				TargetEntity: entity,
-				Delta:        constant.VampireEnergyDrainAmount,
+		if s.world.Components.Combat.HasEntity(entity) {
+			s.world.PushEvent(event.EventCombatHitRequest, &event.CombatHitRequestPayload{
+				OwnerEntity:      cursorEntity,
+				OriginEntity:     selfEntity,
+				OriginCombatType: component.CombatTypeCleaner,
+				TargetEntity:     entity,
+				HitEntity:        entity,
 			})
-			s.deflectDrain(entity, kineticComp.VelX, kineticComp.VelY)
+			continue
 		}
 
-		// Quasar
-		memberComp, ok := s.world.Components.Member.GetComponent(entity)
-		if !ok {
-			continue
-		}
-		if lastCleaner, exists := s.deflectedAnchors[memberComp.HeaderEntity]; exists && lastCleaner == selfEntity {
-			continue
-		}
-		headerComp, ok := s.world.Components.Header.GetComponent(memberComp.HeaderEntity)
-		if !ok {
-			continue
-		}
-		if headerComp.Behavior == component.BehaviorQuasar {
-			s.world.PushEvent(event.EventVampireDrainRequest, &event.VampireDrainRequestPayload{
-				TargetEntity: entity,
-				Delta:        constant.VampireEnergyDrainAmount,
+		if s.world.Components.Member.HasEntity(entity) {
+			memberComp, ok := s.world.Components.Member.GetComponent(entity)
+			if !ok {
+				continue
+			}
+			headerEntity := memberComp.HeaderEntity
+			// Ignore non-combat composites
+			if !s.world.Components.Combat.HasEntity(headerEntity) {
+				continue
+			}
+			// Dedup hits
+			if lastCleaner, exists := s.collidedHeaders[memberComp.HeaderEntity]; exists && lastCleaner == selfEntity {
+				continue
+			}
+			s.collidedHeaders[memberComp.HeaderEntity] = selfEntity
+
+			s.world.PushEvent(event.EventCombatHitRequest, &event.CombatHitRequestPayload{
+				OwnerEntity:      cursorEntity,
+				OriginEntity:     selfEntity,
+				OriginCombatType: component.CombatTypeCleaner,
+				TargetEntity:     headerEntity,
+				HitEntity:        entity,
 			})
-			s.deflectQuasar(memberComp.HeaderEntity, entity, kineticComp.VelX, kineticComp.VelY)
-			s.deflectedAnchors[memberComp.HeaderEntity] = selfEntity
+			continue
 		}
+
 	}
 
 	// Determine mode based on energy polarity
-	cursorEntity := s.world.Resources.Cursor.Entity
+	// TODO: migrate to status?
 	negativeEnergy := false
 	if energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity); ok {
 		negativeEnergy = energyComp.Current < 0
@@ -395,92 +398,18 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 	}
 }
 
-// deflectDrain applies deflection impulse to a drain entity
-// Physics-based impulse - additive to drain velocity, direction from cleaner
-func (s *CleanerSystem) deflectDrain(drainEntity core.Entity, cleanerVelX, cleanerVelY int64) {
-	kineticComp, ok := s.world.Components.Kinetic.GetComponent(drainEntity)
-	if !ok {
-		return
-	}
-
-	if physics.ApplyCollision(&kineticComp.Kinetic, cleanerVelX, cleanerVelY, &physics.CleanerToDrain, s.rng) {
-		s.world.Components.Kinetic.SetComponent(drainEntity, kineticComp)
-	}
-}
-
-// deflectQuasar applies offset-aware collision impulse to quasar composite
-func (s *CleanerSystem) deflectQuasar(headerEntity, hitMember core.Entity, cleanerVelX, cleanerVelY int64) {
-	quasarComp, ok := s.world.Components.Quasar.GetComponent(headerEntity)
-	if !ok {
-		return
-	}
-
-	// Shield blocks all cleaner interaction
-	if quasarComp.IsShielded {
-		return
-	}
-
-	combatComp, ok := s.world.Components.Combat.GetComponent(headerEntity)
-	if !ok {
-		return
-	}
-
-	// Flash immunity blocks new damage (debounce)
-	if combatComp.HitFlashRemaining > 0 {
-		return
-	}
-
-	// Apply damage and start flash
-	combatComp.HitPoints--
-	combatComp.HitFlashRemaining = constant.QuasarHitFlashDuration
-
-	kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity)
-	if !ok {
-		return
-	}
-
-	// Knockback only when not enraged
-	if !quasarComp.IsEnraged {
-		headerPos, ok := s.world.Positions.GetPosition(headerEntity)
-		if !ok {
-			s.world.Components.Quasar.SetComponent(headerEntity, quasarComp)
-			return
-		}
-		hitPos, ok := s.world.Positions.GetPosition(hitMember)
-		if !ok {
-			s.world.Components.Quasar.SetComponent(headerEntity, quasarComp)
-			return
-		}
-
-		offsetX := hitPos.X - headerPos.X
-		offsetY := hitPos.Y - headerPos.Y
-
-		physics.ApplyOffsetCollision(
-			&kineticComp.Kinetic,
-			cleanerVelX, cleanerVelY,
-			offsetX, offsetY,
-			&physics.CleanerToQuasar,
-			s.rng,
-		)
-	}
-
-	s.world.Components.Quasar.SetComponent(headerEntity, quasarComp)
-	s.world.Components.Combat.SetComponent(headerEntity, combatComp)
-	s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
-}
-
 // processPositiveEnergy handles Red destruction with Blossom spawn
 func (s *CleanerSystem) processPositiveEnergy(targetEntities []core.Entity, selfEntity core.Entity) {
 	var toDestroy []core.Entity
 
 	// Iterate candidates with self-exclusion pattern
-	for _, e := range targetEntities {
-		if e == 0 || e == selfEntity {
+	for _, targetEntity := range targetEntities {
+		if targetEntity == 0 || targetEntity == selfEntity {
 			continue
 		}
-		if glyph, ok := s.world.Components.Glyph.GetComponent(e); ok {
-			if glyph.Type == component.GlyphRed {
-				toDestroy = append(toDestroy, e)
+		if glyphComp, ok := s.world.Components.Glyph.GetComponent(targetEntity); ok {
+			if glyphComp.Type == component.GlyphRed {
+				toDestroy = append(toDestroy, targetEntity)
 			}
 		}
 	}
@@ -495,25 +424,25 @@ func (s *CleanerSystem) processPositiveEnergy(targetEntities []core.Entity, self
 // processNegativeEnergy handles Blue mutation to Green with Decay spawn
 func (s *CleanerSystem) processNegativeEnergy(x, y int, targetEntities []core.Entity, selfEntity core.Entity) {
 	// Iterate candidates with self-exclusion pattern
-	for _, e := range targetEntities {
-		if e == 0 || e == selfEntity {
+	for _, targetEntity := range targetEntities {
+		if targetEntity == 0 || targetEntity == selfEntity {
 			continue
 		}
 
-		glyph, ok := s.world.Components.Glyph.GetComponent(e)
-		if !ok || glyph.Type != component.GlyphBlue {
+		glyphComp, ok := s.world.Components.Glyph.GetComponent(targetEntity)
+		if !ok || glyphComp.Type != component.GlyphBlue {
 			continue
 		}
 
 		// Mutate Blue → Green, preserving level
-		glyph.Type = component.GlyphGreen
-		s.world.Components.Glyph.SetComponent(e, glyph)
+		glyphComp.Type = component.GlyphGreen
+		s.world.Components.Glyph.SetComponent(targetEntity, glyphComp)
 
 		// Spawn decay at same position (particle skips starting cell via LastIntX/Y)
 		s.world.PushEvent(event.EventDecaySpawnOne, &event.DecaySpawnPayload{
 			X:             x,
 			Y:             y,
-			Char:          glyph.Rune,
+			Char:          glyphComp.Rune,
 			SkipStartCell: true,
 		})
 	}

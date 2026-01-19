@@ -358,10 +358,10 @@ const (
 	// Consumer: SpiritSystem | Payload: nil
 	EventSpiritDespawn
 
-	// EventLightningSpawn signals intent to spawn a lightning visual effect
+	// EventLightningSpawnRequest signals intent to spawn a lightning visual effect
 	// Trigger: QuasarSystem (zap), FuseSystem (convergence)
 	// Consumer: LightningSystem | Payload: *LightningSpawnRequestPayload
-	EventLightningSpawn
+	EventLightningSpawnRequest
 
 	// EventLightningUpdate signals target position update for tracked lightning
 	// Trigger: QuasarSystem (cursor tracking while zapping)
@@ -427,6 +427,11 @@ const (
 	// Trigger: DrainSystem, QuasarSystem, CleanerSystem, BuffSystem
 	// Consumer: CombatSystem | Payload: *CombatKnockbackRequestPayload
 	EventCombatFullKnockbackRequest
+
+	// EventCombatHitRequest signals applying knockback
+	// Trigger: DrainSystem, QuasarSystem, CleanerSystem, BuffSystem
+	// Consumer: CombatSystem | Payload: *CombatHitRequestPayload
+	EventCombatHitRequest
 )
 
 // GameEvent represents a single game event with metadata

@@ -203,10 +203,12 @@ func InitRegistry() {
 	RegisterType("EventSpiritDespawn", EventSpiritDespawn, nil)
 
 	// Lightning
-	RegisterType("EventLightningSpawn", EventLightningSpawn, &LightningSpawnRequestPayload{})
+	RegisterType("EventLightningSpawnRequest", EventLightningSpawnRequest, &LightningSpawnRequestPayload{})
 	RegisterType("EventLightningUpdate", EventLightningUpdate, &LightningUpdatePayload{})
+	// TODO: this needs to have some payload, currently designed for one
 	RegisterType("EventLightningDespawn", EventLightningDespawn, nil)
 
-	// Enemy
+	// Combat
 	RegisterType("EventCombatFullKnockbackRequest", EventCombatFullKnockbackRequest, &CombatKnockbackRequestPayload{})
+	RegisterType("EventCombatHitRequest", EventCombatHitRequest, &CombatHitRequestPayload{})
 }

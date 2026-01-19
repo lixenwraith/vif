@@ -531,8 +531,8 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	// Combat component for interactions
 	s.world.Components.Combat.SetComponent(entity,
 		component.CombatComponent{
-			HitPoints:                  constant.DrainInitialHP,
-			KnockbackImmunityRemaining: time.Duration(0),
+			HitPoints:                constant.CombatInitialHPDrain,
+			KineticImmunityRemaining: time.Duration(0),
 		})
 
 	// Visual component for sigil renderer and death system flash extraction
@@ -739,8 +739,8 @@ func (s *DrainSystem) updateDrainMovement() {
 			continue
 		}
 
-		// Homing only when not in deflection immunity
-		if combatComp.KnockbackImmunityRemaining == 0 {
+		// Homing only when not in kinetic immunity
+		if combatComp.KineticImmunityRemaining == 0 {
 			physics.ApplyHoming(
 				&kineticComp.Kinetic,
 				cursorXFixed, cursorYFixed,

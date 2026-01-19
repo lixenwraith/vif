@@ -46,17 +46,11 @@ const (
 	// ±0.35 rad ≈ ±20° spread for visual variety
 	DrainDeflectAngleVarFloat = 0.35
 
-	// DrainDeflectImmunity is the duration of immunity from homing/drag after cleaner collision
-	DrainDeflectImmunity = 350 * time.Millisecond
-
 	// DrainDeflectImpulseMinFloat is minimum deflection velocity (cells/sec)
 	DrainDeflectImpulseMinFloat = 15.0
 
 	// DrainDeflectImpulseMaxFloat is maximum deflection velocity (cells/sec)
 	DrainDeflectImpulseMaxFloat = 40.0
-
-	// DrainInitialHP
-	DrainInitialHP = 10
 )
 
 // --- Quasar Entity ---
@@ -108,18 +102,12 @@ const (
 
 	// QuasarChargeDuration is the delay before zapping starts when cursor exits range
 	QuasarChargeDuration = 3 * time.Second
-
-	// QuasarInitialHP is starting hit points
-	QuasarInitialHP = 100
-
-	// QuasarHitFlashDuration is yellow flash duration and immunity window on cleaner hit
-	QuasarHitFlashDuration = 150 * time.Millisecond
 )
 
 // --- Quasar Visual ---
 const (
 	// QuasarZapBorderWidthCells defines target visual width of zap adaptive range border
-	QuasarZapBorderWidthCells = 1.5
+	QuasarZapBorderWidthCells = 2
 	// QuasarBorderPaddingCells is the padding to ensure continuous visual border in small window sizes
 	QuasarBorderPaddingCells = 2
 	// QuasarShieldPad256X is horizontal cell padding for 256-color solid rim
@@ -161,26 +149,11 @@ const (
 	// ±0.35 rad ≈ ±20° spread for visual variety
 	SwarmDeflectAngleVarFloat = 0.45
 
-	// SwarmDeflectImmunity is the duration of immunity from homing/drag after cleaner collision
-	SwarmDeflectImmunity = 2000 * time.Millisecond
-
 	// SwarmDeflectImpulseMinFloat is minimum deflection velocity (cells/sec)
 	SwarmDeflectImpulseMinFloat = 15.0
 
 	// SwarmDeflectImpulseMaxFloat is maximum deflection velocity (cells/sec)
 	SwarmDeflectImpulseMaxFloat = 40.0
-)
-
-// --- Shield Knockback ---
-const (
-	// ShieldKnockbackImmunity is duration of immunity after shield knockback
-	ShieldKnockbackImmunity = 350 * time.Millisecond
-
-	// ShieldKnockbackImpulseMinFloat is minimum knockback velocity (cells/sec)
-	ShieldKnockbackImpulseMinFloat = 15.0
-
-	// ShieldKnockbackImpulseMaxFloat is maximum knockback velocity (cells/sec)
-	ShieldKnockbackImpulseMaxFloat = 40.0
 )
 
 // --- Decay / Blossom Entities ---
@@ -309,7 +282,7 @@ const (
 	// SplashTimerPadding is the vertical padding between timer and anchor
 	SplashTimerPadding = 1
 
-	// SplashTopPadding is adjustment for splash displayed on top of an anchor to account for vertical asymmetry of empty lines above and below splash font (1 top, 2 bottom)
+	// SplashTopPadding is adjustment for splash displayed on top/top-right/top-left/right/left of an anchor to account for vertical asymmetry of empty lines above and below splash font (1 top, 2 bottom)
 	SplashTopPadding = -1
 
 	// SplashCollisionPadding is the cell padding between different splashes to prevent overcrowding

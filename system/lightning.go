@@ -81,7 +81,7 @@ func (s *LightningSystem) Update() {
 
 func (s *LightningSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventLightningSpawn,
+		event.EventLightningSpawnRequest,
 		event.EventLightningUpdate,
 		event.EventLightningDespawn,
 		event.EventMetaSystemCommandRequest,
@@ -109,7 +109,7 @@ func (s *LightningSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	switch ev.Type {
-	case event.EventLightningSpawn:
+	case event.EventLightningSpawnRequest:
 		if p, ok := ev.Payload.(*event.LightningSpawnRequestPayload); ok {
 			s.spawnLightning(p)
 		}

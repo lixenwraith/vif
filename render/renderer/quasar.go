@@ -91,7 +91,7 @@ func (r *QuasarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		}
 
 		// Member characters render to foreground layer
-		r.renderMembers(ctx, buf, &headerComp, &quasarComp, &combatComp)
+		r.renderMembers(ctx, buf, &headerComp, &combatComp)
 	}
 }
 
@@ -105,8 +105,7 @@ func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.Re
 		borderColor = render.RgbDrain
 	}
 
-	// Adaptive threshold calculation for consistent visual border width
-	// Target visual width in cells
+	// Adaptive threshold calculation for consistent visual border width, target visual width in cells
 	borderHalfWidth := vmath.FromFloat(constant.QuasarZapBorderWidthCells / 2.0)
 
 	// Calculate delta in normalized space: visual_width / radius
@@ -222,13 +221,13 @@ func (r *QuasarRenderer) shieldCell256(buf *render.RenderBuffer, screenX, screen
 }
 
 // renderMembers draws quasar character grid with state-based coloring
-func (r *QuasarRenderer) renderMembers(ctx render.RenderContext, buf *render.RenderBuffer, headerComp *component.HeaderComponent, quasarComp *component.QuasarComponent, combatComp *component.CombatComponent) {
+func (r *QuasarRenderer) renderMembers(ctx render.RenderContext, buf *render.RenderBuffer, headerComp *component.HeaderComponent, combatComp *component.CombatComponent) {
 
 	// Determine color: flash > enraged > normal
 	var color render.RGB
 	if combatComp.HitFlashRemaining > 0 {
 		color = r.calculateFlashColor(combatComp.HitFlashRemaining)
-	} else if quasarComp.IsEnraged {
+	} else if combatComp.IsEnraged {
 		color = render.RgbQuasarEnraged
 	} else {
 		color = render.RgbDrain
@@ -263,7 +262,7 @@ func (r *QuasarRenderer) renderMembers(ctx render.RenderContext, buf *render.Ren
 
 // calculateFlashColor returns yellow with pulse effect (low→high→low)
 func (r *QuasarRenderer) calculateFlashColor(remaining time.Duration) render.RGB {
-	progress := float64(remaining) / float64(constant.QuasarHitFlashDuration)
+	progress := float64(remaining) / float64(constant.CombatHitFlashDuration)
 
 	var intensity float64
 	if progress > 0.67 {

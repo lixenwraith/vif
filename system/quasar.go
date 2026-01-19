@@ -1,6 +1,7 @@
 package system
 
 import (
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -139,7 +140,7 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 		s.world.Components.Kinetic.SetComponent(s.headerEntity, kineticComp)
 
 		combatComp := component.CombatComponent{
-			HitPoints: constant.QuasarInitialHP,
+			HitPoints: constant.CombatInitialHPQuasar,
 		}
 		s.world.Components.Combat.SetComponent(s.headerEntity, combatComp)
 
@@ -192,7 +193,7 @@ func (s *QuasarSystem) Update() {
 		quasarComp.ZapRadius = currentRadius
 	}
 
-	// Check HitPoints for termination
+	// Combat sync: termination if zero hitpoints
 	combatComp, ok := s.world.Components.Combat.GetComponent(headerEntity)
 	if ok {
 		if combatComp.HitPoints <= 0 {
@@ -247,13 +248,27 @@ func (s *QuasarSystem) Update() {
 	// Shield and cursor interaction (all states)
 	s.handleInteractions(headerEntity, &headerComp, &quasarComp)
 
+	// Combat update
+	if quasarComp.IsShielded {
+		combatComp.DamageImmunityRemaining = constant.CombatDamageImmunityDuration
+		combatComp.KineticImmunityRemaining = constant.CombatKineticImmunityDuration
+		combatComp.IsEnraged = true
+	} else if quasarComp.IsCharging || quasarComp.IsZapping {
+		combatComp.KineticImmunityRemaining = constant.CombatKineticImmunityDuration
+		combatComp.IsEnraged = true
+	} else {
+		combatComp.IsEnraged = false
+	}
+	s.world.Components.Combat.SetComponent(headerEntity, combatComp)
+
+	s.world.DebugPrint(fmt.Sprintf("HP: %d", combatComp.HitPoints))
+
 	s.statHitPoints.Store(int64(combatComp.HitPoints))
 }
 
 // startCharging initiates the charge phase before zapping
 func (s *QuasarSystem) startCharging(headerEntity core.Entity, quasarComp *component.QuasarComponent) {
 	quasarComp.IsCharging = true
-	quasarComp.IsEnraged = true
 	quasarComp.ChargeRemaining = constant.QuasarChargeDuration
 
 	s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
@@ -274,7 +289,6 @@ func (s *QuasarSystem) cancelCharging(headerEntity core.Entity, quasarComp *comp
 	quasarComp.IsCharging = false
 	quasarComp.ChargeRemaining = 0
 	quasarComp.IsShielded = false
-	quasarComp.IsEnraged = false
 
 	s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
 
@@ -286,7 +300,6 @@ func (s *QuasarSystem) cancelCharging(headerEntity core.Entity, quasarComp *comp
 // completeCharging transitions from charging to zapping
 func (s *QuasarSystem) completeCharging(headerEntity core.Entity, quasarComp *component.QuasarComponent) {
 	quasarComp.IsCharging = false
-	quasarComp.IsEnraged = true
 	quasarComp.ChargeRemaining = 0
 
 	s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
@@ -416,7 +429,7 @@ func (s *QuasarSystem) startZapping(headerEntity core.Entity, quasarComp *compon
 		return
 	}
 
-	s.world.PushEvent(event.EventLightningSpawn, &event.LightningSpawnRequestPayload{
+	s.world.PushEvent(event.EventLightningSpawnRequest, &event.LightningSpawnRequestPayload{
 		Owner:     headerEntity,
 		OriginX:   headerPos.X,
 		OriginY:   headerPos.Y,
@@ -428,7 +441,6 @@ func (s *QuasarSystem) startZapping(headerEntity core.Entity, quasarComp *compon
 	})
 
 	quasarComp.IsZapping = true
-	quasarComp.IsEnraged = true
 	quasarComp.IsShielded = true // Shield active during zap
 	s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
 }
@@ -438,7 +450,6 @@ func (s *QuasarSystem) stopZapping(headerEntity core.Entity, quasarComp *compone
 	s.world.PushEvent(event.EventLightningDespawn, headerEntity)
 
 	quasarComp.IsZapping = false
-	quasarComp.IsEnraged = false
 	quasarComp.IsShielded = false // Clear shield
 	s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
 }

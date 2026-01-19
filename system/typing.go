@@ -345,10 +345,6 @@ func (s *TypingSystem) validateTypingOrder(entity core.Entity, header *component
 		// Gold: strict left-to-right ordering (X→Y→EntityID)
 		return s.isLeftmostMember(entity, header)
 
-	case component.BehaviorBubble:
-		// Bubble: any order allowed
-		return true
-
 	case component.BehaviorBoss:
 		// Boss: Layer 0 (Core) must be typed in order, Layer 1+ (Shield) any order
 		return s.validateBossOrder(entity, header)

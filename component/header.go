@@ -9,9 +9,9 @@ const (
 	BehaviorNone Behavior = iota
 	BehaviorGold
 	BehaviorQuasar
-	BehaviorBubble
-	BehaviorBoss
-	BehaviorShield
+	BehaviorSwarm
+	BehaviorStorm
+	BehaviorBoss // Future
 )
 
 // HeaderComponent is on Phantom Head entity, which is invisible, protected and manages composite lifecycle
