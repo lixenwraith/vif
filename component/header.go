@@ -21,11 +21,6 @@ type HeaderComponent struct {
 	// Contiguous slice for cache-friendly iteration
 	MemberEntries []MemberEntry
 
-	// Fixed-Point (16.16) sub-pixel movement
-	// 1.0 velocity = 1 << 16 = 65536
-	VelX, VelY int64 // Velocity in fixed-point units per tick
-	AccX, AccY int64 // Fractional accumulation
-
 	// Hierarchy support (0 if root composite)
 	ParentHeader core.Entity
 

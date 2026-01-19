@@ -190,8 +190,7 @@ func (w *World) CreateCursorEntity() {
 
 	// 4. Add protection component, make cursor indestructible
 	w.Components.Protection.SetComponent(cursorEntity, component.ProtectionComponent{
-		Mask:      component.ProtectAll,
-		ExpiresAt: 0, // No expiry
+		Mask: component.ProtectAll,
 	})
 
 	// 5. Add position component

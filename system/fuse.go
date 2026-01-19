@@ -360,8 +360,6 @@ func (s *FuseSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 	s.world.Components.Header.SetComponent(headerEntity, component.HeaderComponent{
 		Behavior:      component.BehaviorQuasar,
 		MemberEntries: members,
-		VelX:          0,
-		VelY:          0,
 	})
 
 	return headerEntity

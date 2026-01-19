@@ -136,16 +136,20 @@ func (s *DecaySystem) spawnSingleDecay(x, y int, char rune, skipStartCell bool) 
 		lastX, lastY = x, y
 	}
 	s.world.Components.Decay.SetComponent(entity, component.DecayComponent{
+		Char:     char,
+		LastIntX: lastX,
+		LastIntY: lastY,
+	})
+
+	kineticComp := component.KineticComponent{
 		Kinetic: component.Kinetic{
 			PreciseX: vmath.FromInt(x),
 			PreciseY: vmath.FromInt(y),
 			VelY:     velY,
 			AccelY:   accelY,
 		},
-		Char:     char,
-		LastIntX: lastX,
-		LastIntY: lastY,
-	})
+	}
+	s.world.Components.Kinetic.SetComponent(entity, kineticComp)
 
 	// 3. Visual component
 	s.world.Components.Sigil.SetComponent(entity, component.SigilComponent{
@@ -188,14 +192,18 @@ func (s *DecaySystem) updateDecayEntities() {
 	var collisionBuf [constant.MaxEntitiesPerCell]core.Entity
 
 	for _, entity := range decayEntities {
-		d, ok := s.world.Components.Decay.GetComponent(entity)
+		decayComp, ok := s.world.Components.Decay.GetComponent(entity)
+		if !ok {
+			continue
+		}
+		kineticComp, ok := s.world.Components.Kinetic.GetComponent(entity)
 		if !ok {
 			continue
 		}
 
-		oldX, oldY := d.PreciseX, d.PreciseY
+		oldX, oldY := kineticComp.PreciseX, kineticComp.PreciseY
 		// Physics Integration (Fixed Point)
-		curX, curY := d.Integrate(dtFixed)
+		curX, curY := kineticComp.Integrate(dtFixed)
 
 		// 2D Boundary Check
 		if curX < 0 || curX >= gameWidth || curY < 0 || curY >= gameHeight {
@@ -204,13 +212,13 @@ func (s *DecaySystem) updateDecayEntities() {
 		}
 
 		// Swept Traversal via Supercover DDA
-		vmath.Traverse(oldX, oldY, d.PreciseX, d.PreciseY, func(x, y int) bool {
+		vmath.Traverse(oldX, oldY, kineticComp.PreciseX, kineticComp.PreciseY, func(x, y int) bool {
 			if x < 0 || x >= gameWidth || y < 0 || y >= gameHeight {
 				return true
 			}
 
 			// Skip cell from previous frame (already processed)
-			if x == d.LastIntX && y == d.LastIntY {
+			if x == decayComp.LastIntX && y == decayComp.LastIntY {
 				return true
 			}
 
@@ -255,21 +263,22 @@ func (s *DecaySystem) updateDecayEntities() {
 		})
 
 		// 2D Matrix Visual Effect: Update character on ANY cell entry
-		if d.LastIntX != curX || d.LastIntY != curY {
+		if decayComp.LastIntX != curX || decayComp.LastIntY != curY {
 			if rand.Float64() < constant.ParticleChangeChance {
-				d.Char = constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
+				decayComp.Char = constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
 				if sigil, ok := s.world.Components.Sigil.GetComponent(entity); ok {
-					sigil.Rune = d.Char
+					sigil.Rune = decayComp.Char
 					s.world.Components.Sigil.SetComponent(entity, sigil)
 				}
 			}
-			d.LastIntX = curX
-			d.LastIntY = curY
+			decayComp.LastIntX = curX
+			decayComp.LastIntY = curY
 		}
 
 		// Grid Sync: Update Positions for spatial queries
 		s.world.Positions.SetPosition(entity, component.PositionComponent{X: curX, Y: curY})
-		s.world.Components.Decay.SetComponent(entity, d)
+		s.world.Components.Decay.SetComponent(entity, decayComp)
+		s.world.Components.Kinetic.SetComponent(entity, kineticComp)
 	}
 
 	// Emit single batch event instead of scalar events per hit
@@ -289,36 +298,35 @@ func (s *DecaySystem) shouldDieByDecay(entity core.Entity) bool {
 
 // applyDecayToCharacter applies decay logic to a single character entity
 func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
-	glyph, ok := s.world.Components.Glyph.GetComponent(entity)
+	glyphComp, ok := s.world.Components.Glyph.GetComponent(entity)
 	if !ok {
 		return
 	}
 
 	// Check protection
-	if prot, ok := s.world.Components.Protection.GetComponent(entity); ok {
-		now := s.world.Resources.Time.GameTime
-		if !prot.IsExpired(now.UnixNano()) && prot.Mask.Has(component.ProtectFromDecay) {
+	if protComp, ok := s.world.Components.Protection.GetComponent(entity); ok {
+		if protComp.Mask.Has(component.ProtectFromDecay) {
 			return
 		}
 	}
 
 	// Apply decay logic
-	if glyph.Level > component.GlyphDark {
+	if glyphComp.Level > component.GlyphDark {
 		// Decrease level if not level dark
-		glyph.Level--
-		s.world.Components.Glyph.SetComponent(entity, glyph)
+		glyphComp.Level--
+		s.world.Components.Glyph.SetComponent(entity, glyphComp)
 	} else {
 		// Dark level: type chain Blue→Green→Red→destroy
-		switch glyph.Type {
+		switch glyphComp.Type {
 		case component.GlyphBlue:
-			glyph.Type = component.GlyphGreen
-			glyph.Level = component.GlyphBright
-			s.world.Components.Glyph.SetComponent(entity, glyph)
+			glyphComp.Type = component.GlyphGreen
+			glyphComp.Level = component.GlyphBright
+			s.world.Components.Glyph.SetComponent(entity, glyphComp)
 
 		case component.GlyphGreen:
-			glyph.Type = component.GlyphRed
-			glyph.Level = component.GlyphBright
-			s.world.Components.Glyph.SetComponent(entity, glyph)
+			glyphComp.Type = component.GlyphRed
+			glyphComp.Level = component.GlyphBright
+			s.world.Components.Glyph.SetComponent(entity, glyphComp)
 
 		default:
 			// Fallback: Red or other: destroy

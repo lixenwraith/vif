@@ -34,13 +34,4 @@ func (p ProtectionFlags) Has(flag ProtectionFlags) bool {
 type ProtectionComponent struct {
 	// Mask defines which mechanics this entity is immune to
 	Mask ProtectionFlags
-
-	// ExpiresAt is game time (UnixNano) when protection expires
-	// Zero value means permanent protection
-	ExpiresAt int64
-}
-
-// IsExpired checks if temporary protection has expired
-func (p ProtectionComponent) IsExpired(nowNano int64) bool {
-	return p.ExpiresAt > 0 && nowNano >= p.ExpiresAt
 }

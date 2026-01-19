@@ -135,16 +135,20 @@ func (s *BlossomSystem) spawnSingleBlossom(x, y int, char rune, skipStartCell bo
 		lastX, lastY = x, y
 	}
 	s.world.Components.Blossom.SetComponent(entity, component.BlossomComponent{
+		Char:     char,
+		LastIntX: lastX,
+		LastIntY: lastY,
+	})
+
+	kineticComp := component.KineticComponent{
 		Kinetic: component.Kinetic{
 			PreciseX: vmath.FromInt(x),
 			PreciseY: vmath.FromInt(y),
 			VelY:     velY,
 			AccelY:   accelY,
 		},
-		Char:     char,
-		LastIntX: lastX,
-		LastIntY: lastY,
-	})
+	}
+	s.world.Components.Kinetic.SetComponent(entity, kineticComp)
 
 	// 3. Render component
 	s.world.Components.Sigil.SetComponent(entity, component.SigilComponent{
@@ -186,14 +190,18 @@ func (s *BlossomSystem) updateBlossomEntities() {
 	var collisionBuf [constant.MaxEntitiesPerCell]core.Entity
 
 	for _, entity := range blossomEntities {
-		b, ok := s.world.Components.Blossom.GetComponent(entity)
+		blossomComp, ok := s.world.Components.Blossom.GetComponent(entity)
+		if !ok {
+			continue
+		}
+		kineticComp, ok := s.world.Components.Kinetic.GetComponent(entity)
 		if !ok {
 			continue
 		}
 
-		oldX, oldY := b.PreciseX, b.PreciseY
+		oldX, oldY := kineticComp.PreciseX, kineticComp.PreciseY
 		// Physics Integration (Fixed Point)
-		curX, curY := b.Integrate(dtFixed)
+		curX, curY := kineticComp.Integrate(dtFixed)
 
 		// 2D Boundary Check: Destroy if entity leaves the game area in any direction
 		if curX < 0 || curX >= gameWidth || curY < 0 || curY >= gameHeight {
@@ -203,14 +211,14 @@ func (s *BlossomSystem) updateBlossomEntities() {
 
 		destroyBlossom := false
 		// Swept Traversal: Check every grid cell intersected by the movement vector
-		vmath.Traverse(oldX, oldY, b.PreciseX, b.PreciseY, func(x, y int) bool {
+		vmath.Traverse(oldX, oldY, kineticComp.PreciseX, kineticComp.PreciseY, func(x, y int) bool {
 			// Bounds safety for the DDA callback
 			if x < 0 || x >= gameWidth || y < 0 || y >= gameHeight {
 				return true
 			}
 
 			// Skip cell from previous frame (already processed)
-			if x == b.LastIntX && y == b.LastIntY {
+			if x == blossomComp.LastIntX && y == blossomComp.LastIntY {
 				return true
 			}
 
@@ -270,50 +278,50 @@ func (s *BlossomSystem) updateBlossomEntities() {
 		}
 
 		// 2D Matrix Visual Effect: Randomize character when entering ANY new cell
-		if b.LastIntX != curX || b.LastIntY != curY {
+		if blossomComp.LastIntX != curX || blossomComp.LastIntY != curY {
 			if rand.Float64() < constant.ParticleChangeChance {
-				b.Char = constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
+				blossomComp.Char = constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
 				// Must update the component used by the renderer
 				if sigil, ok := s.world.Components.Sigil.GetComponent(entity); ok {
-					sigil.Rune = b.Char
+					sigil.Rune = blossomComp.Char
 					s.world.Components.Sigil.SetComponent(entity, sigil)
 				}
 			}
-			b.LastIntX = curX
-			b.LastIntY = curY
+			blossomComp.LastIntX = curX
+			blossomComp.LastIntY = curY
 		}
 
 		// Grid Sync: Update Positions for spatial queries
 		s.world.Positions.SetPosition(entity, component.PositionComponent{X: curX, Y: curY})
-		s.world.Components.Blossom.SetComponent(entity, b)
+		s.world.Components.Blossom.SetComponent(entity, blossomComp)
+		s.world.Components.Kinetic.SetComponent(entity, kineticComp)
 	}
 }
 
-// applyBlossomToCharacter applies blossom effect to a glyph character
-// Returns true if blossom should be destroyed (hit Red)
+// TODO: check if this can be refactored
+// applyBlossomToCharacter applies blossom effect to a glyph character, returns true if blossom should be destroyed (hit Red)
 func (s *BlossomSystem) applyBlossomToCharacter(entity core.Entity) bool {
-	glyph, ok := s.world.Components.Glyph.GetComponent(entity)
+	glyphComp, ok := s.world.Components.Glyph.GetComponent(entity)
 	if !ok {
 		return false
 	}
 
 	// Check protection
-	if prot, ok := s.world.Components.Protection.GetComponent(entity); ok {
-		now := s.world.Resources.Time.GameTime
-		if !prot.IsExpired(now.UnixNano()) && prot.Mask.Has(component.ProtectFromDecay) {
+	if protComp, ok := s.world.Components.Protection.GetComponent(entity); ok {
+		if protComp.Mask.Has(component.ProtectFromDecay) {
 			return false
 		}
 	}
 
 	// Red characters destroy the blossom
-	if glyph.Type == component.GlyphRed {
+	if glyphComp.Type == component.GlyphRed {
 		return true
 	}
 
 	// Increase level (inverse of decay)
-	if glyph.Level < component.GlyphBright {
-		glyph.Level++
-		s.world.Components.Glyph.SetComponent(entity, glyph)
+	if glyphComp.Level < component.GlyphBright {
+		glyphComp.Level++
+		s.world.Components.Glyph.SetComponent(entity, glyphComp)
 		s.statApplied.Add(1)
 	}
 	// At Bright: no effect, blossom continues

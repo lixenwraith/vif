@@ -103,15 +103,16 @@ func (s *CompositeSystem) Update() {
 			continue
 		}
 
-		// 1. Fixed-point movement integration
-		deltaX, deltaY := s.integrateMovement(&headerComp)
-
-		// 2. Update phantom head position if integer delta occurred
-		if deltaX != 0 || deltaY != 0 {
-			headerPos.X += deltaX
-			headerPos.Y += deltaY
-			s.world.Positions.SetPosition(headerEntity, headerPos)
-		}
+		// TODO: proper integration with kinetic (internal kinetic fields removed)
+		// // 1. Fixed-point movement integration
+		// deltaX, deltaY := s.integrateMovement(&headerComp)
+		//
+		// // 2. Update phantom head position if integer delta occurred
+		// if deltaX != 0 || deltaY != 0 {
+		// 	headerPos.X += deltaX
+		// 	headerPos.Y += deltaY
+		// 	s.world.Positions.SetPosition(headerEntity, headerPos)
+		// }
 
 		// 3. Propagate offsets to members + liveness validation
 		s.syncMembers(&headerComp, headerPos.X, headerPos.Y)
@@ -148,24 +149,6 @@ func (s *CompositeSystem) markMemberTombstone(headerEntity, memberEntity core.En
 		}
 	}
 	s.world.Components.Header.SetComponent(headerEntity, headerComp)
-}
-
-// TODO: migrate to Q32.32, this should be handled in kinetic psudo-comp
-// integrateMovement applies 16.16 fixed-point velocity to accumulator
-// Returns integer delta when accumulator overflows
-func (s *CompositeSystem) integrateMovement(headerComp *component.HeaderComponent) (int, int) {
-	headerComp.AccX += headerComp.VelX
-	headerComp.AccY += headerComp.VelY
-
-	// Integrate X
-	deltaX := int(headerComp.AccX / 65536)
-	headerComp.AccX %= 65536
-
-	// Integrate Y
-	deltaY := int(headerComp.AccY / 65536)
-	headerComp.AccY %= 65536
-
-	return deltaX, deltaY
 }
 
 // syncMembers updates member positions and validates liveness
@@ -285,17 +268,6 @@ func (s *CompositeSystem) AddMember(headerEntity, memberEntity core.Entity, offs
 	s.world.Components.Member.SetComponent(memberEntity, component.MemberComponent{
 		HeaderEntity: headerEntity,
 	})
-}
-
-// SetVelocity configures composite movement in 16.16 fixed-point
-func (s *CompositeSystem) SetVelocity(headerEntity core.Entity, velX, velY int64) {
-	headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
-	if !ok {
-		return
-	}
-	headerComp.VelX = velX
-	headerComp.VelY = velY
-	s.world.Components.Header.SetComponent(headerEntity, headerComp)
 }
 
 // DestroyComposite removes the phantom head and all members

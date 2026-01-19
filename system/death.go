@@ -109,8 +109,7 @@ func (s *DeathSystem) markForDeath(entity core.Entity, effect event.EventType) {
 
 	// 1. Protection Check
 	if protComp, ok := s.world.Components.Protection.GetComponent(entity); ok {
-		if !protComp.IsExpired(s.world.Resources.Time.GameTime.UnixNano()) &&
-			(protComp.Mask.Has(component.ProtectFromDeath) || protComp.Mask == component.ProtectAll) {
+		if protComp.Mask.Has(component.ProtectFromDeath) || protComp.Mask == component.ProtectAll {
 			// If immortal, remove tag to not process again in Update()
 			s.world.Components.Death.RemoveEntity(entity)
 			return

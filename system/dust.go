@@ -126,15 +126,10 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 			for i := 0; i < count; i++ {
 				entry := p.Entries[i]
 				entity := s.world.CreateEntity()
-
-				// Use helper for physics/component generation
-				dustComp, protComp, sigilComp := s.prepareDustComponents(entry.X, entry.Y, entry.Char, entry.Level, cursorPos.X, cursorPos.Y)
+				s.prepareDustComponents(entity, entry.X, entry.Y, entry.Char, entry.Level, cursorPos.X, cursorPos.Y)
 
 				// Add components to batch entry entity
 				posBatch.Add(entity, component.PositionComponent{X: entry.X, Y: entry.Y})
-				s.world.Components.Dust.SetComponent(entity, dustComp)
-				s.world.Components.Protection.SetComponent(entity, protComp)
-				s.world.Components.Sigil.SetComponent(entity, sigilComp)
 			}
 
 			// Force commit because dust often spawns on top of dying glyphs (DeathSystem runs later)
@@ -204,75 +199,80 @@ func (s *DustSystem) Update() {
 	var collisionBuf [constant.MaxEntitiesPerCell]core.Entity
 
 	// 4. MAIN LOOP
-	for _, entity := range dustEntities {
-		dust, ok := s.world.Components.Dust.GetComponent(entity)
+	for _, dustEntity := range dustEntities {
+		dustComp, ok := s.world.Components.Dust.GetComponent(dustEntity)
+		if !ok {
+			continue
+		}
+		kineticComp, ok := s.world.Components.Kinetic.GetComponent(dustEntity)
 		if !ok {
 			continue
 		}
 
 		// --- Positions and Shield State ---
-		dx := dust.PreciseX - cursorXFixed
-		dy := dust.PreciseY - cursorYFixed
+		dx := kineticComp.PreciseX - cursorXFixed
+		dy := kineticComp.PreciseY - cursorYFixed
 
 		dustInsideShield := shieldActive && vmath.EllipseContains(dx, dy, shield.InvRxSq, shield.InvRySq)
 
 		// --- Per-Particle Jitter (always active) ---
 		jitterAngle := int64(s.rng.Intn(vmath.LUTSize)) << (vmath.Shift - 10)
-		dust.VelX += vmath.Mul(vmath.Cos(jitterAngle), constant.DustJitter)
-		dust.VelY += vmath.Mul(vmath.Sin(jitterAngle), constant.DustJitter)
+		kineticComp.VelX += vmath.Mul(vmath.Cos(jitterAngle), constant.DustJitter)
+		kineticComp.VelY += vmath.Mul(vmath.Sin(jitterAngle), constant.DustJitter)
 
 		// --- Orbital Physics (only when energy != 0 / shield active) ---
 		if hasAttraction {
 			// Chase boost decay
 			if applyChaseBoost {
-				dust.ChaseBoost = constant.DustChaseBoost
-			} else if dust.ChaseBoost > vmath.Scale {
+				dustComp.ChaseBoost = constant.DustChaseBoost
+			} else if dustComp.ChaseBoost > vmath.Scale {
 				decay := vmath.Mul(constant.DustChaseDecay, dtFixed)
-				dust.ChaseBoost -= decay
-				if dust.ChaseBoost < vmath.Scale {
-					dust.ChaseBoost = vmath.Scale
+				// TODO: move chase boost to kinetic
+				dustComp.ChaseBoost -= decay
+				if dustComp.ChaseBoost < vmath.Scale {
+					dustComp.ChaseBoost = vmath.Scale
 				}
 			}
 
 			// Equilibrium-seeking force toward target orbit radius
 			// Scale Y to circular space for visually circular orbit
-			stiffness := vmath.Mul(constant.DustAttractionBase, dust.ChaseBoost)
+			stiffness := vmath.Mul(constant.DustAttractionBase, dustComp.ChaseBoost)
 			dyCirc := vmath.ScaleToCircular(dy)
-			ax, ayCirc := vmath.OrbitalEquilibrium(dx, dyCirc, dust.OrbitRadius, stiffness)
+			ax, ayCirc := vmath.OrbitalEquilibrium(dx, dyCirc, dustComp.OrbitRadius, stiffness)
 
-			dust.VelX += vmath.Mul(ax, dtFixed)
-			dust.VelY += vmath.Mul(vmath.ScaleFromCircular(ayCirc), dtFixed)
+			kineticComp.VelX += vmath.Mul(ax, dtFixed)
+			kineticComp.VelY += vmath.Mul(vmath.ScaleFromCircular(ayCirc), dtFixed)
 
 			// Orbital damping (converts radial velocity to tangential)
-			velYCirc := vmath.ScaleToCircular(dust.VelY)
-			dust.VelX, velYCirc = vmath.OrbitalDamp(
-				dust.VelX, velYCirc,
+			velYCirc := vmath.ScaleToCircular(kineticComp.VelY)
+			kineticComp.VelX, velYCirc = vmath.OrbitalDamp(
+				kineticComp.VelX, velYCirc,
 				dx, dyCirc,
 				constant.DustDamping, dtFixed,
 			)
-			dust.VelY = vmath.ScaleFromCircular(velYCirc)
+			kineticComp.VelY = vmath.ScaleFromCircular(velYCirc)
 		}
 
 		// --- Global Drag (v² model) ---
-		speed := vmath.Magnitude(dust.VelX, dust.VelY)
+		speed := vmath.Magnitude(kineticComp.VelX, kineticComp.VelY)
 		if speed > 0 {
 			dragAmount := vmath.Mul(vmath.Mul(constant.DustGlobalDrag, speed), dtFixed)
 			if dragAmount > vmath.Scale {
 				dragAmount = vmath.Scale
 			}
 			scaleFactor := vmath.Scale - dragAmount
-			dust.VelX = vmath.Mul(dust.VelX, scaleFactor)
-			dust.VelY = vmath.Mul(dust.VelY, scaleFactor)
+			kineticComp.VelX = vmath.Mul(kineticComp.VelX, scaleFactor)
+			kineticComp.VelY = vmath.Mul(kineticComp.VelY, scaleFactor)
 		}
 
 		// --- Positions Integration ---
-		prevX, prevY := dust.PreciseX, dust.PreciseY
+		prevX, prevY := kineticComp.PreciseX, kineticComp.PreciseY
 
-		dust.PreciseX += vmath.Mul(dust.VelX, dtFixed)
-		dust.PreciseY += vmath.Mul(dust.VelY, dtFixed)
+		kineticComp.PreciseX += vmath.Mul(kineticComp.VelX, dtFixed)
+		kineticComp.PreciseY += vmath.Mul(kineticComp.VelY, dtFixed)
 
-		newX := vmath.ToInt(dust.PreciseX)
-		newY := vmath.ToInt(dust.PreciseY)
+		newX := vmath.ToInt(kineticComp.PreciseX)
+		newY := vmath.ToInt(kineticComp.PreciseY)
 
 		gameWidth := s.world.Resources.Config.GameWidth
 		gameHeight := s.world.Resources.Config.GameHeight
@@ -280,36 +280,36 @@ func (s *DustSystem) Update() {
 		// Boundary reflection
 		if newX < 0 {
 			newX = 0
-			dust.PreciseX = 0
-			dust.VelX = -dust.VelX / 2
+			kineticComp.PreciseX = 0
+			kineticComp.VelX = -kineticComp.VelX / 2
 		} else if newX >= gameWidth {
 			newX = gameWidth - 1
-			dust.PreciseX = vmath.FromInt(newX)
-			dust.VelX = -dust.VelX / 2
+			kineticComp.PreciseX = vmath.FromInt(newX)
+			kineticComp.VelX = -kineticComp.VelX / 2
 		}
 
 		if newY < 0 {
 			newY = 0
-			dust.PreciseY = 0
-			dust.VelY = -dust.VelY / 2
+			kineticComp.PreciseY = 0
+			kineticComp.VelY = -kineticComp.VelY / 2
 		} else if newY >= gameHeight {
 			newY = gameHeight - 1
-			dust.PreciseY = vmath.FromInt(newY)
-			dust.VelY = -dust.VelY / 2
+			kineticComp.PreciseY = vmath.FromInt(newY)
+			kineticComp.VelY = -kineticComp.VelY / 2
 		}
 
 		// --- Zero-Allocation Collision Traversal ---
 
 		// Only traverse if we actually moved or need to check current cell
-		if newX != dust.LastIntX || newY != dust.LastIntY {
-			traverser := vmath.NewGridTraverser(prevX, prevY, dust.PreciseX, dust.PreciseY)
+		if newX != dustComp.LastIntX || newY != dustComp.LastIntY {
+			traverser := vmath.NewGridTraverser(prevX, prevY, kineticComp.PreciseX, kineticComp.PreciseY)
 			destroyDust := false
 
 			for traverser.Next() {
 				currX, currY := traverser.Pos()
 
 				// Skip cell from previous frame to avoid re-triggering logic
-				if currX == dust.LastIntX && currY == dust.LastIntY {
+				if currX == dustComp.LastIntX && currY == dustComp.LastIntY {
 					continue
 				}
 
@@ -323,7 +323,7 @@ func (s *DustSystem) Update() {
 
 				for i := 0; i < n; i++ {
 					target := collisionBuf[i]
-					if target == 0 || target == entity {
+					if target == 0 || target == dustEntity {
 						continue
 					}
 
@@ -334,14 +334,14 @@ func (s *DustSystem) Update() {
 					// --- Drain interaction ---
 					// TODO: fix later
 					if s.world.Components.Drain.HasEntity(target) {
-						if kineticComp, ok := s.world.Components.Kinetic.GetComponent(target); ok {
+						if drainKineticComp, ok := s.world.Components.Kinetic.GetComponent(target); ok {
 							physics.ApplyCollision(
-								&kineticComp.Kinetic,
-								dust.VelX, dust.VelY,
+								&drainKineticComp.Kinetic,
+								kineticComp.VelX, kineticComp.VelY,
 								&physics.DustToDrain,
 								s.rng,
 							)
-							s.world.Components.Kinetic.SetComponent(target, kineticComp)
+							s.world.Components.Kinetic.SetComponent(target, drainKineticComp)
 						}
 						continue
 					}
@@ -349,18 +349,16 @@ func (s *DustSystem) Update() {
 					// --- Quasar interaction ---
 					if member, ok := s.world.Components.Member.GetComponent(target); ok {
 						if headerComp, ok := s.world.Components.Header.GetComponent(member.HeaderEntity); ok {
-							if kineticComp, ok := s.world.Components.Kinetic.GetComponent(member.HeaderEntity); ok {
+							if quasarKineticComp, ok := s.world.Components.Kinetic.GetComponent(member.HeaderEntity); ok {
 								if headerComp.Behavior == component.BehaviorQuasar {
-									if quasarComp, ok := s.world.Components.Quasar.GetComponent(member.HeaderEntity); ok {
-										// Center-of-mass collision, no offset calculation
-										physics.ApplyCollision(
-											&kineticComp.Kinetic,
-											dust.VelX, dust.VelY,
-											&physics.DustToQuasar,
-											s.rng,
-										)
-										s.world.Components.Quasar.SetComponent(member.HeaderEntity, quasarComp)
-									}
+									// Center-of-mass collision, no offset calculation
+									physics.ApplyCollision(
+										&quasarKineticComp.Kinetic,
+										kineticComp.VelX, kineticComp.VelY,
+										&physics.DustToQuasar,
+										s.rng,
+									)
+									s.world.Components.Kinetic.SetComponent(member.HeaderEntity, quasarKineticComp)
 								}
 							}
 						}
@@ -389,7 +387,7 @@ func (s *DustSystem) Update() {
 						continue
 					}
 
-					// Prerequisite 2: Target Glyph must also be inside shield (handles shield entry edge cases, e.g. fast-moving dust)
+					// Prerequisite 2: Target Glyph must also be inside shield (handles shield entry edge cases, e.g. fast-moving dustComp)
 					gDx := vmath.FromInt(currX) - cursorXFixed
 					gDy := vmath.FromInt(currY) - cursorYFixed
 					if !vmath.EllipseContains(gDx, gDy, shield.InvRxSq, shield.InvRySq) {
@@ -437,20 +435,21 @@ func (s *DustSystem) Update() {
 			}
 
 			if destroyDust {
-				s.world.Components.Death.SetComponent(entity, component.DeathComponent{})
+				s.world.Components.Death.SetComponent(dustEntity, component.DeathComponent{})
 				destroyedCount++
 				continue
 			}
 		}
 
-		if newX != dust.LastIntX || newY != dust.LastIntY {
-			dust.LastIntX = newX
-			dust.LastIntY = newY
+		if newX != dustComp.LastIntX || newY != dustComp.LastIntY {
+			dustComp.LastIntX = newX
+			dustComp.LastIntY = newY
 			// Use Unsafe Move (we hold the lock)
-			s.world.Positions.MoveUnsafe(entity, component.PositionComponent{X: newX, Y: newY})
+			s.world.Positions.MoveUnsafe(dustEntity, component.PositionComponent{X: newX, Y: newY})
 		}
 
-		s.world.Components.Dust.SetComponent(entity, dust)
+		s.world.Components.Dust.SetComponent(dustEntity, dustComp)
+		s.world.Components.Kinetic.SetComponent(dustEntity, kineticComp)
 	}
 
 	if len(deathCandidates) > 0 {
@@ -521,12 +520,9 @@ func (s *DustSystem) transformGlyphsToDust() {
 
 	for _, gd := range toTransform {
 		entity := s.world.CreateEntity()
-		dust, prot, sigil := s.prepareDustComponents(gd.x, gd.y, gd.char, gd.level, cursorPos.X, cursorPos.Y)
+		s.prepareDustComponents(entity, gd.x, gd.y, gd.char, gd.level, cursorPos.X, cursorPos.Y)
 
 		posBatch.Add(entity, component.PositionComponent{X: gd.x, Y: gd.y})
-		s.world.Components.Dust.SetComponent(entity, dust)
-		s.world.Components.Protection.SetComponent(entity, prot)
-		s.world.Components.Sigil.SetComponent(entity, sigil)
 	}
 
 	posBatch.CommitForce()
@@ -534,11 +530,7 @@ func (s *DustSystem) transformGlyphsToDust() {
 }
 
 // prepareDustComponents calculates physics and component state for a new dust particle
-func (s *DustSystem) prepareDustComponents(x, y int, char rune, level component.GlyphLevel, cursorX, cursorY int) (
-	component.DustComponent,
-	component.ProtectionComponent,
-	component.SigilComponent,
-) {
+func (s *DustSystem) prepareDustComponents(entity core.Entity, x, y int, char rune, level component.GlyphLevel, cursorX, cursorY int) {
 	// Random orbit radius in [min, max]
 	radiusRange := int(constant.DustOrbitRadiusMax - constant.DustOrbitRadiusMin)
 	orbitRadius := constant.DustOrbitRadiusMin
@@ -563,12 +555,6 @@ func (s *DustSystem) prepareDustComponents(x, y int, char rune, level component.
 
 	// Dust component
 	dust := component.DustComponent{
-		Kinetic: component.Kinetic{
-			PreciseX: vmath.FromInt(x),
-			PreciseY: vmath.FromInt(y),
-			VelX:     vx,
-			VelY:     vy,
-		},
 		Level:       level,
 		OrbitRadius: orbitRadius,
 		ChaseBoost:  vmath.Scale,
@@ -577,10 +563,19 @@ func (s *DustSystem) prepareDustComponents(x, y int, char rune, level component.
 		LastIntY:    y,
 	}
 
-	// Protection
+	// Kinetic component
+	kinetic := component.KineticComponent{
+		Kinetic: component.Kinetic{
+			PreciseX: vmath.FromInt(x),
+			PreciseY: vmath.FromInt(y),
+			VelX:     vx,
+			VelY:     vy,
+		},
+	}
+
+	// Protection component
 	prot := component.ProtectionComponent{
-		Mask:      component.ProtectFromDrain,
-		ExpiresAt: 0, // Permanent
+		Mask: component.ProtectFromDrain,
 	}
 
 	// Sigil for rendering
@@ -601,16 +596,16 @@ func (s *DustSystem) prepareDustComponents(x, y int, char rune, level component.
 		Color: color,
 	}
 
-	return dust, prot, sigil
+	s.world.Components.Dust.SetComponent(entity, dust)
+	s.world.Components.Kinetic.SetComponent(entity, kinetic)
+	s.world.Components.Protection.SetComponent(entity, prot)
+	s.world.Components.Sigil.SetComponent(entity, sigil)
 }
 
 // spawnDust creates a single dust entity with orbital initialization
 func (s *DustSystem) spawnDust(x, y int, char rune, level component.GlyphLevel, cursorX, cursorY int) {
 	entity := s.world.CreateEntity()
-	dust, prot, sigil := s.prepareDustComponents(x, y, char, level, cursorX, cursorY)
+	s.prepareDustComponents(entity, x, y, char, level, cursorX, cursorY)
 
 	s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
-	s.world.Components.Dust.SetComponent(entity, dust)
-	s.world.Components.Protection.SetComponent(entity, prot)
-	s.world.Components.Sigil.SetComponent(entity, sigil)
 }

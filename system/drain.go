@@ -809,9 +809,8 @@ func (s *DrainSystem) handleCollisionAtPosition(entity core.Entity) {
 	cursorEntity := s.world.Resources.Cursor.Entity
 
 	// Check protection before any collision handling
-	if prot, ok := s.world.Components.Protection.GetComponent(entity); ok {
-		now := s.world.Resources.Time.GameTime
-		if !prot.IsExpired(now.UnixNano()) && prot.Mask.Has(component.ProtectFromDrain) {
+	if protComp, ok := s.world.Components.Protection.GetComponent(entity); ok {
+		if protComp.Mask.Has(component.ProtectFromDrain) {
 			return
 		}
 	}
