@@ -158,7 +158,7 @@ func (s *CleanerSystem) Update() {
 		// Physics Update: Integrate velocity into float position (overlay state)
 		prevPreciseX := kineticComp.PreciseX
 		prevPreciseY := kineticComp.PreciseY
-		kineticComp.Integrate(dtFixed)
+		physics.Integrate(&kineticComp.Kinetic, dtFixed)
 
 		// Swept Collision Detection: Check all cells between previous and current position
 		if kineticComp.VelY != 0 && kineticComp.VelX == 0 {
@@ -311,12 +311,13 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 			Char:           constant.CleanerChar,
 			NegativeEnergy: negativeEnergy,
 		}
-		kineticComp := component.KineticComponent{
+		kinetic := core.Kinetic{
 			PreciseX: startX,
 			PreciseY: rowFixed,
 			VelX:     velX,
 			VelY:     0,
 		}
+		kineticComp := component.KineticComponent{kinetic}
 
 		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → CleanerComponent (float overlay)
 		entity := s.world.CreateEntity()
@@ -402,7 +403,7 @@ func (s *CleanerSystem) deflectDrain(drainEntity core.Entity, cleanerVelX, clean
 		return
 	}
 
-	if physics.ApplyCollision(&kineticComp, cleanerVelX, cleanerVelY, &physics.CleanerToDrain, s.rng) {
+	if physics.ApplyCollision(&kineticComp.Kinetic, cleanerVelX, cleanerVelY, &physics.CleanerToDrain, s.rng) {
 		s.world.Components.Kinetic.SetComponent(drainEntity, kineticComp)
 	}
 }
@@ -455,7 +456,7 @@ func (s *CleanerSystem) deflectQuasar(headerEntity, hitMember core.Entity, clean
 		offsetY := hitPos.Y - headerPos.Y
 
 		physics.ApplyOffsetCollision(
-			&kineticComp,
+			&kineticComp.Kinetic,
 			cleanerVelX, cleanerVelY,
 			offsetX, offsetY,
 			&physics.CleanerToQuasar,
@@ -465,6 +466,7 @@ func (s *CleanerSystem) deflectQuasar(headerEntity, hitMember core.Entity, clean
 
 	s.world.Components.Quasar.SetComponent(headerEntity, quasarComp)
 	s.world.Components.Combat.SetComponent(headerEntity, combatComp)
+	s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
 }
 
 // processPositiveEnergy handles Red destruction with Blossom spawn
@@ -573,12 +575,13 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 			Char:           constant.CleanerChar,
 			NegativeEnergy: negativeEnergy,
 		}
-		kineticComp := component.KineticComponent{
+		kinetic := core.Kinetic{
 			PreciseX: dir.startX,
 			PreciseY: dir.startY,
 			VelX:     dir.velX,
 			VelY:     dir.velY,
 		}
+		kineticComp := component.KineticComponent{kinetic}
 
 		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → CleanerComponent (float overlay)
 		entity := s.world.CreateEntity()

@@ -336,7 +336,7 @@ func (s *DustSystem) Update() {
 					if s.world.Components.Drain.HasEntity(target) {
 						if drainKineticComp, ok := s.world.Components.Kinetic.GetComponent(target); ok {
 							physics.ApplyCollision(
-								&drainKineticComp,
+								&drainKineticComp.Kinetic,
 								kineticComp.VelX, kineticComp.VelY,
 								&physics.DustToDrain,
 								s.rng,
@@ -353,7 +353,7 @@ func (s *DustSystem) Update() {
 								if headerComp.Behavior == component.BehaviorQuasar {
 									// Center-of-mass collision, no offset calculation
 									physics.ApplyCollision(
-										&quasarKineticComp,
+										&quasarKineticComp.Kinetic,
 										kineticComp.VelX, kineticComp.VelY,
 										&physics.DustToQuasar,
 										s.rng,
@@ -554,7 +554,7 @@ func (s *DustSystem) prepareDustComponents(entity core.Entity, x, y int, char ru
 	}
 
 	// Dust component
-	dust := component.DustComponent{
+	dustComp := component.DustComponent{
 		Level:       level,
 		OrbitRadius: orbitRadius,
 		ChaseBoost:  vmath.Scale,
@@ -564,15 +564,16 @@ func (s *DustSystem) prepareDustComponents(entity core.Entity, x, y int, char ru
 	}
 
 	// Kinetic component
-	kinetic := component.KineticComponent{
+	kinetic := core.Kinetic{
 		PreciseX: vmath.FromInt(x),
 		PreciseY: vmath.FromInt(y),
 		VelX:     vx,
 		VelY:     vy,
 	}
+	kineticComp := component.KineticComponent{kinetic}
 
 	// Protection component
-	prot := component.ProtectionComponent{
+	protComp := component.ProtectionComponent{
 		Mask: component.ProtectFromDrain,
 	}
 
@@ -589,15 +590,15 @@ func (s *DustSystem) prepareDustComponents(entity core.Entity, x, y int, char ru
 		color = component.SigilDustNormal
 	}
 
-	sigil := component.SigilComponent{
+	sigilComp := component.SigilComponent{
 		Rune:  char,
 		Color: color,
 	}
 
-	s.world.Components.Dust.SetComponent(entity, dust)
-	s.world.Components.Kinetic.SetComponent(entity, kinetic)
-	s.world.Components.Protection.SetComponent(entity, prot)
-	s.world.Components.Sigil.SetComponent(entity, sigil)
+	s.world.Components.Dust.SetComponent(entity, dustComp)
+	s.world.Components.Kinetic.SetComponent(entity, kineticComp)
+	s.world.Components.Protection.SetComponent(entity, protComp)
+	s.world.Components.Sigil.SetComponent(entity, sigilComp)
 }
 
 // spawnDust creates a single dust entity with orbital initialization

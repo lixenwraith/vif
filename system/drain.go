@@ -509,11 +509,12 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 		LastIntX:      spawnX,
 		LastIntY:      spawnY,
 	}
-	kineticComp := component.KineticComponent{
+	kinetic := core.Kinetic{
 		PreciseX: vmath.FromInt(spawnX),
 		PreciseY: vmath.FromInt(spawnY),
 		// VelX, VelY, AccelX, AccelY zero-initialized
 	}
+	kineticComp := component.KineticComponent{kinetic}
 
 	// Handle collisions at materialize spawn position
 	entitiesAtSpawn := s.world.Positions.GetAllEntityAt(spawnX, spawnY)
@@ -741,7 +742,7 @@ func (s *DrainSystem) updateDrainMovement() {
 		// Homing only when not in deflection immunity
 		if combatComp.KnockbackImmunityRemaining == 0 {
 			physics.ApplyHoming(
-				&kineticComp,
+				&kineticComp.Kinetic,
 				cursorXFixed, cursorYFixed,
 				&physics.DrainHoming,
 				dtFixed,
@@ -753,15 +754,15 @@ func (s *DrainSystem) updateDrainMovement() {
 		oldPreciseX, oldPreciseY := kineticComp.PreciseX, kineticComp.PreciseY
 
 		// Integrate position
-		newX, newY := kineticComp.Integrate(dtFixed)
+		newX, newY := physics.Integrate(&kineticComp.Kinetic, dtFixed)
 
 		// Boundary handling: reflect velocity on edge contact (pool table physics) via Kinetic.ReflectBoundsX/Y
 		if newX < 0 || newX >= gameWidth {
-			kineticComp.ReflectBoundsX(0, gameWidth)
+			physics.ReflectBoundsX(&kineticComp.Kinetic, 0, gameWidth)
 			newX = vmath.ToInt(kineticComp.PreciseX)
 		}
 		if newY < 0 || newY >= gameHeight {
-			kineticComp.ReflectBoundsY(0, gameHeight)
+			physics.ReflectBoundsY(&kineticComp.Kinetic, 0, gameHeight)
 			newY = vmath.ToInt(kineticComp.PreciseY)
 		}
 

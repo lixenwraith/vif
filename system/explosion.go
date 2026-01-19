@@ -285,7 +285,7 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 					}
 
 					physics.ApplyCollision(
-						&kineticComp,
+						&kineticComp.Kinetic,
 						eVelX, eVelY,
 						&physics.ExplosionToDrain,
 						s.rng,
@@ -314,7 +314,7 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 								eVelY := vmath.Mul(constant.QuasarMaxSpeed, vmath.Div(radius, diffY))
 
 								physics.ApplyCollision(
-									&kineticComp,
+									&kineticComp.Kinetic,
 									eVelX, eVelY,
 									&physics.ExplosionToQuasar,
 									s.rng,

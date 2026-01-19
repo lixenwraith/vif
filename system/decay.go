@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/physics"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -141,12 +142,13 @@ func (s *DecaySystem) spawnSingleDecay(x, y int, char rune, skipStartCell bool) 
 		LastIntY: lastY,
 	})
 
-	kineticComp := component.KineticComponent{
+	kinetic := core.Kinetic{
 		PreciseX: vmath.FromInt(x),
 		PreciseY: vmath.FromInt(y),
 		VelY:     velY,
 		AccelY:   accelY,
 	}
+	kineticComp := component.KineticComponent{kinetic}
 	s.world.Components.Kinetic.SetComponent(entity, kineticComp)
 
 	// 3. Visual component
@@ -201,7 +203,7 @@ func (s *DecaySystem) updateDecayEntities() {
 
 		oldX, oldY := kineticComp.PreciseX, kineticComp.PreciseY
 		// Physics Integration (Fixed Point)
-		curX, curY := kineticComp.Integrate(dtFixed)
+		curX, curY := physics.Integrate(&kineticComp.Kinetic, dtFixed)
 
 		// 2D Boundary Check
 		if curX < 0 || curX >= gameWidth || curY < 0 || curY >= gameHeight {

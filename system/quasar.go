@@ -338,7 +338,7 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 
 	// Homing with arrival steering, drag only when not immune
 	settled := physics.ApplyHomingScaled(
-		&kineticComp,
+		&kineticComp.Kinetic,
 		cursorXFixed, cursorYFixed,
 		&physics.QuasarHoming,
 		quasarComp.SpeedMultiplier,
@@ -359,7 +359,7 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 	physics.CapSpeed(&kineticComp.VelX, &kineticComp.VelY, constant.QuasarMaxSpeed)
 
 	// Integrate position
-	newX, newY := kineticComp.Integrate(dtFixed)
+	newX, newY := physics.Integrate(&kineticComp.Kinetic, dtFixed)
 
 	// Boundary reflection with footprint constraints
 	minHeaderX := constant.QuasarHeaderOffsetX
@@ -367,9 +367,9 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 	minHeaderY := constant.QuasarHeaderOffsetY
 	maxHeaderY := config.GameHeight - (constant.QuasarHeight - constant.QuasarHeaderOffsetY)
 
-	kineticComp.ReflectBoundsX(minHeaderX, maxHeaderX)
-	kineticComp.ReflectBoundsY(minHeaderY, maxHeaderY)
-	newX, newY = kineticComp.GridPos()
+	physics.ReflectBoundsX(&kineticComp.Kinetic, minHeaderX, maxHeaderX)
+	physics.ReflectBoundsY(&kineticComp.Kinetic, minHeaderY, maxHeaderY)
+	newX, newY = physics.GridPos(&kineticComp.Kinetic)
 
 	// Update header position if cell changed
 	if newX != headerPos.X || newY != headerPos.Y {
@@ -676,7 +676,7 @@ func (s *QuasarSystem) applyShieldKnockback(
 	centroidY := sumY / len(overlaps)
 
 	if physics.ApplyOffsetCollision(
-		&kineticComp,
+		&kineticComp.Kinetic,
 		radialX, radialY,
 		centroidX, centroidY,
 		&physics.ShieldToQuasar,

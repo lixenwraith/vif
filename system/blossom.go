@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/physics"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -140,12 +141,13 @@ func (s *BlossomSystem) spawnSingleBlossom(x, y int, char rune, skipStartCell bo
 		LastIntY: lastY,
 	})
 
-	kineticComp := component.KineticComponent{
+	kinetic := core.Kinetic{
 		PreciseX: vmath.FromInt(x),
 		PreciseY: vmath.FromInt(y),
 		VelY:     velY,
 		AccelY:   accelY,
 	}
+	kineticComp := component.KineticComponent{kinetic}
 	s.world.Components.Kinetic.SetComponent(entity, kineticComp)
 
 	// 3. Render component
@@ -199,7 +201,7 @@ func (s *BlossomSystem) updateBlossomEntities() {
 
 		oldX, oldY := kineticComp.PreciseX, kineticComp.PreciseY
 		// Physics Integration (Fixed Point)
-		curX, curY := kineticComp.Integrate(dtFixed)
+		curX, curY := physics.Integrate(&kineticComp.Kinetic, dtFixed)
 
 		// 2D Boundary Check: Destroy if entity leaves the game area in any direction
 		if curX < 0 || curX >= gameWidth || curY < 0 || curY >= gameHeight {

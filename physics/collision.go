@@ -3,7 +3,7 @@ package physics
 import (
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/component"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -33,7 +33,7 @@ type CollisionProfile struct {
 // Returns true if impulse was applied (false if immune or zero impulse)
 // dirX, dirY: impact direction in Q32.32 (typically impactor velocity or radial vector)
 func ApplyCollision(
-	kinetic *component.KineticComponent,
+	k *core.Kinetic,
 	dirX, dirY int64,
 	profile *CollisionProfile,
 	rng *vmath.FastRand,
@@ -60,9 +60,9 @@ func ApplyCollision(
 	// Apply based on mode
 	switch profile.Mode {
 	case ImpulseAdditive:
-		kinetic.ApplyImpulse(impulseX, impulseY)
+		ApplyImpulse(k, impulseX, impulseY)
 	case ImpulseOverride:
-		kinetic.SetImpulse(impulseX, impulseY)
+		SetImpulse(k, impulseX, impulseY)
 	}
 
 	return true
@@ -71,7 +71,7 @@ func ApplyCollision(
 // ApplyOffsetCollision calculates collision with offset influence for multi-cell entities
 // offsetX, offsetY: hit point offset from anchor in integer cells
 func ApplyOffsetCollision(
-	kinetic *component.KineticComponent,
+	k *core.Kinetic,
 	dirX, dirY int64,
 	offsetX, offsetY int,
 	profile *CollisionProfile,
@@ -101,9 +101,9 @@ func ApplyOffsetCollision(
 	// Apply based on mode
 	switch profile.Mode {
 	case ImpulseAdditive:
-		kinetic.ApplyImpulse(impulseX, impulseY)
+		ApplyImpulse(k, impulseX, impulseY)
 	case ImpulseOverride:
-		kinetic.SetImpulse(impulseX, impulseY)
+		SetImpulse(k, impulseX, impulseY)
 	}
 
 	return true

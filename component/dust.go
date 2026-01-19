@@ -3,8 +3,6 @@ package component
 // DustComponent represents orbital dust particles from glyph transformation
 // Created when gold is completed during quasar phase
 type DustComponent struct {
-	// Kinetic // PreciseX/Y, VelX/Y, AccelX/Y (Q32.32)
-
 	// Grayscale level preserved from original glyph
 	Level GlyphLevel
 

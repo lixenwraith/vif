@@ -8,8 +8,6 @@ import (
 // CleanerComponent tracks cleaner entity movement and trail
 // Grid position managed by PositionComponent
 type CleanerComponent struct {
-	// Kinetic // Embeds PreciseX, PreciseY, VelX, VelY, AccelX, AccelY
-
 	// Destruction target (tail must clear screen) - Q32.32
 	TargetX int64
 	TargetY int64
