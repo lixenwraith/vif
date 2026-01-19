@@ -54,7 +54,21 @@ func (s *HeatSystem) Update() {
 	if !s.enabled {
 		return
 	}
-	// No tick-based logic; all mutations via events
+
+	cursorEntity := s.world.Resources.Cursor.Entity
+	heatComp, ok := s.world.Components.Heat.GetComponent(cursorEntity)
+	if !ok {
+		return
+	}
+
+	if heatComp.BurstFlashRemaining > 0 {
+		dt := s.world.Resources.Time.DeltaTime
+		heatComp.BurstFlashRemaining -= dt
+		if heatComp.BurstFlashRemaining <= 0 {
+			heatComp.BurstFlashRemaining = 0
+		}
+		s.world.Components.Heat.SetComponent(cursorEntity, heatComp)
+	}
 }
 
 func (s *HeatSystem) EventTypes() []event.EventType {
@@ -129,7 +143,8 @@ func (s *HeatSystem) addHeat(delta int) {
 	// Trigger and reset overheat if at or above max
 	if heatComp.Overheat >= constant.HeatMaxOverheat {
 		heatComp.Overheat = 0
-		s.world.PushEvent(event.EventHeatOverheatNotification, nil)
+		heatComp.BurstFlashRemaining = constant.HeatBurstFlashDuration
+		s.world.PushEvent(event.EventHeatBurstNotification, nil)
 	}
 
 	s.world.Components.Heat.SetComponent(cursorEntity, heatComp)

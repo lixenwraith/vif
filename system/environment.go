@@ -18,7 +18,8 @@ type EnvironmentSystem struct {
 	rng *vmath.FastRand
 
 	// Telemetry
-	statGrayoutActive *atomic.Bool
+	statGrayoutActive    *atomic.Bool
+	statGrayoutTotalTime *atomic.Int64
 
 	enabled bool
 }
@@ -29,7 +30,8 @@ func NewEnvironmentSystem(world *engine.World) engine.System {
 		world: world,
 	}
 
-	s.statGrayoutActive = world.Resources.Status.Bools.Get("environment.grayout")
+	s.statGrayoutActive = world.Resources.Status.Bools.Get("environment.grayout_active")
+	s.statGrayoutTotalTime = world.Resources.Status.Ints.Get("environment.grayout_total_time")
 
 	s.Init()
 	return s
@@ -91,6 +93,16 @@ func (s *EnvironmentSystem) Update() {
 		return
 	}
 
+	envEntities := s.world.Components.Environment.GetAllEntities()
+	envEntity := envEntities[0]
+	envComp, _ := s.world.Components.Environment.GetComponent(envEntity)
+
+	if envComp.GrayoutActive {
+		dt := s.world.Resources.Time.DeltaTime
+		envComp.GrayoutDuration += dt
+		s.world.Components.Environment.GetComponent(envEntity)
+		s.statGrayoutTotalTime.Add(int64(dt))
+	}
 }
 
 // StartGrayout activates persistent grayscale effect

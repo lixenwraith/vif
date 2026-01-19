@@ -12,6 +12,9 @@ const (
 
 	// HeatTypingErrorPenalty is the heat penalty when wrong character typed in insert mode
 	HeatTypingErrorPenalty = 10
+
+	// HeatBurstFlashDuration is the time burst flash indicator is shown on heat bar
+	HeatBurstFlashDuration = 150 * time.Millisecond
 )
 
 // Energy System

@@ -132,7 +132,7 @@ func InitRegistry() {
 	// Heat
 	RegisterType("EventHeatAddRequest", EventHeatAddRequest, &HeatAddRequestPayload{})
 	RegisterType("EventHeatSetRequest", EventHeatSetRequest, &HeatSetRequestPayload{})
-	RegisterType("EventHeatOverheatNotification", EventHeatOverheatNotification, nil)
+	RegisterType("EventHeatBurstNotification", EventHeatBurstNotification, nil)
 
 	// Shield
 	RegisterType("EventShieldActivate", EventShieldActivate, nil)

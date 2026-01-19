@@ -32,8 +32,7 @@ func HandleCrash(r any) {
 	os.Exit(1)
 }
 
-// Go runs a function in a new goroutine with panic recovery.
-// Use this instead of the 'go' keyword to ensure terminal cleanup on crash.
+// Go to be used instead of 'go' to run a function in a new goroutine with panic recovery, to cleanup terminal on crash
 func Go(fn func()) {
 	go func() {
 		defer func() {

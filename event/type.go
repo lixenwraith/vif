@@ -180,7 +180,7 @@ const (
 	// EventHeatSetRequest signals absolute heat value
 	// Trigger: HeatSystem
 	// Consumer: FSM | Payload: nil
-	EventHeatOverheatNotification
+	EventHeatBurstNotification
 
 	// EventShieldActivate signals shield should become active
 	// Trigger: EnergySystem when energy > 0 and shield inactive

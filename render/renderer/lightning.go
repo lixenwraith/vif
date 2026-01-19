@@ -45,16 +45,6 @@ var half256Chars = [4]rune{
 	'\u2588', // 11 - both halves (█) - was 219
 }
 
-// density256Chars provides intensity variants for future effects (trail, glow)
-// Ordered from lowest to highest density
-// Currently unused (future design) - renderLightning256 uses full density (219)
-var density256Chars = [4]rune{
-	'\u2591', // ░ - light shade (25%) - was 176
-	'\u2592', // ▒ - medium shade (50%) - was 177
-	'\u2593', // ▓ - dark shade (75%) - was 178
-	'\u2588', // █ - full block (100%) - was 219
-}
-
 // horizontal256Chars provides horizontal half-cell characters
 // Reserved for future horizontal sub-pixel support
 var horizontal256Chars = [2]rune{

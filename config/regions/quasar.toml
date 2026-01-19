@@ -20,7 +20,7 @@ on_enter = [
 ]
 transitions = [
     { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = "0" } },
-    { trigger = "EventHeatOverheatNotification", target = "QuasarDustAll" },
+    { trigger = "EventHeatBurstNotification", target = "QuasarDustAll" },
     { trigger = "EventGoldSpawned", target = "QuasarGoldActive" },
     { trigger = "EventGoldSpawnFailed", target = "QuasarGoldRetry" },
     { trigger = "EventQuasarDestroyed", target = "QuasarWin" },
@@ -30,7 +30,7 @@ transitions = [
 parent = "QuasarCycle"
 transitions = [
     { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = "0" } },
-    { trigger = "EventHeatOverheatNotification", target = "QuasarDustAll" },
+    { trigger = "EventHeatBurstNotification", target = "QuasarDustAll" },
     { trigger = "Tick", target = "QuasarGoldSpawn", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
     { trigger = "EventQuasarDestroyed", target = "QuasarWin" },
 ]
@@ -39,7 +39,7 @@ transitions = [
 parent = "QuasarCycle"
 transitions = [
     { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = "0" } },
-    { trigger = "EventHeatOverheatNotification", target = "QuasarDustAll" },
+    { trigger = "EventHeatBurstNotification", target = "QuasarDustAll" },
     { trigger = "EventGoldTimeout", target = "QuasarGoldSpawn" },
     { trigger = "EventGoldDestroyed", target = "QuasarGoldSpawn" },
     { trigger = "EventQuasarDestroyed", target = "QuasarWin" },
