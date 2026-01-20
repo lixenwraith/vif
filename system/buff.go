@@ -1,7 +1,6 @@
 package system
 
 import (
-	"fmt"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
@@ -184,7 +183,6 @@ func (s *BuffSystem) fireAllBuffs() {
 		if !active {
 			continue
 		}
-		s.world.DebugPrint(fmt.Sprintf("shots: %d, cooldown: %v", shots, buffComp.Cooldown[buff]))
 
 		if buffComp.Cooldown[buff] > 0 {
 			continue

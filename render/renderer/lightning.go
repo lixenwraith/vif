@@ -33,7 +33,6 @@ var quadrantChars = [16]rune{
 	'█', // 1111 - full block
 }
 
-// TODO: test in naked TTY
 // half256Chars provides vertical half-cell resolution for 256-color mode
 // CP437 block characters compatible with naked TTY
 // Uses Unicode block characters (equivalent to CP437 visuals)
@@ -93,6 +92,9 @@ type LightningRenderer struct {
 	renderLightning lightningBoltRenderer
 
 	rng *vmath.FastRand // Cached RNG
+
+	lastSpineRand  uint64
+	lastDetailRand uint64
 }
 
 // NewLightningRenderer creates a new lightning renderer with mode-appropriate rendering path
@@ -119,6 +121,12 @@ func (r *LightningRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 
 	buf.SetWriteMask(constant.MaskTransient)
+
+	// TODO: is there a better way handle this?
+	// Workaround to pause lightning animation when paused
+	if r.gameCtx.IsPaused.Load() {
+		r.rng = vmath.NewFastRand(uint64(r.gameCtx.World.Resources.Time.GameTime.Second()))
+	}
 
 	for _, e := range entities {
 		l, ok := r.gameCtx.World.Components.Lightning.GetComponent(e)

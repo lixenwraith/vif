@@ -1,7 +1,6 @@
 package system
 
 import (
-	"fmt"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
@@ -150,8 +149,6 @@ func (s *CombatSystem) applyFullKnockback(
 	if targetCombatComp.RemainingKineticImmunity > 0 {
 		return
 	}
-
-	s.world.DebugPrint(fmt.Sprintf("%s", targetCombatComp.RemainingKineticImmunity))
 
 	originPos, ok := s.world.Positions.GetPosition(originEntity)
 	if !ok {
