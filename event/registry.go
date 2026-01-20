@@ -210,5 +210,5 @@ func InitRegistry() {
 
 	// Combat
 	RegisterType("EventCombatFullKnockbackRequest", EventCombatFullKnockbackRequest, &CombatKnockbackRequestPayload{})
-	RegisterType("EventCombatHitRequest", EventCombatHitRequest, &CombatHitRequestPayload{})
+	RegisterType("EventCombatAttackRequest", EventCombatAttackRequest, &CombatAttackRequestPayload{})
 }

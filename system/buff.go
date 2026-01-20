@@ -207,7 +207,7 @@ func (s *BuffSystem) fireAllBuffs() {
 
 				s.world.PushEvent(event.EventVampireDrainRequest, &event.VampireDrainRequestPayload{
 					TargetEntity: quasarEntity,
-					Delta:        constant.VampireEnergyDrainAmount,
+					Delta:        constant.VampireDrainEnergyValue,
 				})
 				combatComp.HitPoints--
 
@@ -232,7 +232,7 @@ func (s *BuffSystem) fireAllBuffs() {
 				// }
 				s.world.PushEvent(event.EventVampireDrainRequest, &event.VampireDrainRequestPayload{
 					TargetEntity: drainEntity,
-					Delta:        constant.VampireEnergyDrainAmount,
+					Delta:        constant.VampireDrainEnergyValue,
 				})
 				rodShots--
 				s.statRodFired.Add(1)

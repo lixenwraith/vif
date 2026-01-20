@@ -375,11 +375,11 @@ type CombatKnockbackRequestPayload struct {
 	TargetEntity core.Entity `toml:"target_entity"`
 }
 
-// CombatHitRequestPayload
-type CombatHitRequestPayload struct {
-	OwnerEntity      core.Entity                `toml:"owner_entity"`
-	OriginEntity     core.Entity                `toml:"attack_entity"`
-	OriginCombatType component.CombatEntityType `toml:"origin_entity_type"`
-	TargetEntity     core.Entity                `toml:"target_entity"`
-	HitEntity        core.Entity                `toml:"defense_entity"`
+// CombatAttackRequestPayload
+type CombatAttackRequestPayload struct {
+	AttackType   component.CombatAttackType
+	OwnerEntity  core.Entity `toml:"owner_entity"`
+	OriginEntity core.Entity `toml:"origin_entity"`
+	TargetEntity core.Entity `toml:"target_entity"`
+	HitEntity    core.Entity `toml:"defense_entity"`
 }

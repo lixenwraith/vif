@@ -250,11 +250,11 @@ func (s *QuasarSystem) Update() {
 
 	// Combat update
 	if quasarComp.IsShielded {
-		combatComp.DamageImmunityRemaining = constant.CombatDamageImmunityDuration
-		combatComp.KineticImmunityRemaining = constant.CombatKineticImmunityDuration
+		combatComp.RemainingDamageImmunity = constant.CombatDamageImmunityDuration
+		combatComp.RemainingKineticImmunity = constant.CombatKineticImmunityDuration
 		combatComp.IsEnraged = true
 	} else if quasarComp.IsCharging || quasarComp.IsZapping {
-		combatComp.KineticImmunityRemaining = constant.CombatKineticImmunityDuration
+		combatComp.RemainingKineticImmunity = constant.CombatKineticImmunityDuration
 		combatComp.IsEnraged = true
 	} else {
 		combatComp.IsEnraged = false

@@ -428,10 +428,10 @@ const (
 	// Consumer: CombatSystem | Payload: *CombatKnockbackRequestPayload
 	EventCombatFullKnockbackRequest
 
-	// EventCombatHitRequest signals applying knockback
+	// EventCombatAttackRequest signals applying knockback
 	// Trigger: DrainSystem, QuasarSystem, CleanerSystem, BuffSystem
-	// Consumer: CombatSystem | Payload: *CombatHitRequestPayload
-	EventCombatHitRequest
+	// Consumer: CombatSystem | Payload: *CombatAttackRequestPayload
+	EventCombatAttackRequest
 )
 
 // GameEvent represents a single game event with metadata

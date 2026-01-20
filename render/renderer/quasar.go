@@ -225,8 +225,8 @@ func (r *QuasarRenderer) renderMembers(ctx render.RenderContext, buf *render.Ren
 
 	// Determine color: flash > enraged > normal
 	var color render.RGB
-	if combatComp.HitFlashRemaining > 0 {
-		color = r.calculateFlashColor(combatComp.HitFlashRemaining)
+	if combatComp.RemainingHitFlash > 0 {
+		color = r.calculateFlashColor(combatComp.RemainingHitFlash)
 	} else if combatComp.IsEnraged {
 		color = render.RgbCombatEnraged
 	} else {

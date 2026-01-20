@@ -125,8 +125,8 @@ const (
 
 // Vampire Drain
 const (
-	// VampireEnergyDrainAmount is the amount of energy absorbed energy on hit
-	VampireEnergyDrainAmount = 100
+	// VampireDrainEnergyValue is the amount of energy absorbed energy on hit
+	VampireDrainEnergyValue = 100
 )
 
 // Spawn Rate Management

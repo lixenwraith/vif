@@ -222,6 +222,13 @@ func (w *World) CreateCursorEntity() {
 		Active:   make(map[component.BuffType]bool),
 		Cooldown: make(map[component.BuffType]time.Duration),
 	})
+
+	// 11. Add combat component
+	w.Components.Combat.SetComponent(cursorEntity, component.CombatComponent{
+		OwnerEntity:      cursorEntity,
+		CombatEntityType: component.CombatEntityCursor,
+		HitPoints:        100,
+	})
 }
 
 // === Debug ===

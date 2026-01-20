@@ -318,12 +318,18 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 			VelY:     0,
 		}
 		kineticComp := component.KineticComponent{kinetic}
+		combatComp := component.CombatComponent{
+			OwnerEntity:      s.world.Resources.Cursor.Entity,
+			CombatEntityType: component.CombatEntityCleaner,
+			HitPoints:        1,
+		}
 
 		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → CleanerComponent (float overlay)
 		entity := s.world.CreateEntity()
 		s.world.Positions.SetPosition(entity, component.PositionComponent{X: startGridX, Y: startGridY})
 		s.world.Components.Cleaner.SetComponent(entity, cleanerComp)
 		s.world.Components.Kinetic.SetComponent(entity, kineticComp)
+		s.world.Components.Combat.SetComponent(entity, combatComp)
 		s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
 			Mask: component.ProtectFromDrain | component.ProtectFromDeath,
 		})
@@ -346,12 +352,12 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 		}
 
 		if s.world.Components.Combat.HasEntity(entity) {
-			s.world.PushEvent(event.EventCombatHitRequest, &event.CombatHitRequestPayload{
-				OwnerEntity:      cursorEntity,
-				OriginEntity:     selfEntity,
-				OriginCombatType: component.CombatTypeCleaner,
-				TargetEntity:     entity,
-				HitEntity:        entity,
+			s.world.PushEvent(event.EventCombatAttackRequest, &event.CombatAttackRequestPayload{
+				AttackType:   component.CombatAttackProjectile,
+				OwnerEntity:  cursorEntity,
+				OriginEntity: selfEntity,
+				TargetEntity: entity,
+				HitEntity:    entity,
 			})
 			continue
 		}
@@ -372,12 +378,12 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 			}
 			s.collidedHeaders[memberComp.HeaderEntity] = selfEntity
 
-			s.world.PushEvent(event.EventCombatHitRequest, &event.CombatHitRequestPayload{
-				OwnerEntity:      cursorEntity,
-				OriginEntity:     selfEntity,
-				OriginCombatType: component.CombatTypeCleaner,
-				TargetEntity:     headerEntity,
-				HitEntity:        entity,
+			s.world.PushEvent(event.EventCombatAttackRequest, &event.CombatAttackRequestPayload{
+				AttackType:   component.CombatAttackProjectile,
+				OwnerEntity:  cursorEntity,
+				OriginEntity: selfEntity,
+				TargetEntity: headerEntity,
+				HitEntity:    entity,
 			})
 			continue
 		}
@@ -511,12 +517,18 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 			VelY:     dir.velY,
 		}
 		kineticComp := component.KineticComponent{kinetic}
+		combatComp := component.CombatComponent{
+			OwnerEntity:      s.world.Resources.Cursor.Entity,
+			CombatEntityType: component.CombatEntityCleaner,
+			HitPoints:        1,
+		}
 
 		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → CleanerComponent (float overlay)
 		entity := s.world.CreateEntity()
 		s.world.Positions.SetPosition(entity, component.PositionComponent{X: startGridX, Y: startGridY})
 		s.world.Components.Cleaner.SetComponent(entity, cleanerComp)
 		s.world.Components.Kinetic.SetComponent(entity, kineticComp)
+		s.world.Components.Combat.SetComponent(entity, combatComp)
 		// TODO: centralize protection via entity factory
 		s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
 			Mask: component.ProtectFromDrain | component.ProtectFromDeath,

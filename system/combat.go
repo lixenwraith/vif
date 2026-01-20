@@ -59,7 +59,7 @@ func (s *CombatSystem) Priority() int {
 func (s *CombatSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventCombatFullKnockbackRequest,
-		event.EventCombatHitRequest,
+		event.EventCombatAttackRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
@@ -89,8 +89,8 @@ func (s *CombatSystem) HandleEvent(ev event.GameEvent) {
 			s.applyFullKnockback(payload.OriginEntity, payload.TargetEntity)
 		}
 
-	case event.EventCombatHitRequest:
-		if payload, ok := ev.Payload.(*event.CombatHitRequestPayload); ok {
+	case event.EventCombatAttackRequest:
+		if payload, ok := ev.Payload.(*event.CombatAttackRequestPayload); ok {
 			s.applyHit(payload)
 		}
 	}
@@ -111,26 +111,26 @@ func (s *CombatSystem) Update() {
 		}
 
 		// Update kinetic immunity timer
-		if combatComp.KineticImmunityRemaining > 0 {
-			combatComp.KineticImmunityRemaining -= dt
-			if combatComp.KineticImmunityRemaining < 0 {
-				combatComp.KineticImmunityRemaining = 0
+		if combatComp.RemainingKineticImmunity > 0 {
+			combatComp.RemainingKineticImmunity -= dt
+			if combatComp.RemainingKineticImmunity < 0 {
+				combatComp.RemainingKineticImmunity = 0
 			}
 		}
 
 		// Update damage immunity timer
-		if combatComp.DamageImmunityRemaining > 0 {
-			combatComp.DamageImmunityRemaining -= dt
-			if combatComp.DamageImmunityRemaining < 0 {
-				combatComp.DamageImmunityRemaining = 0
+		if combatComp.RemainingDamageImmunity > 0 {
+			combatComp.RemainingDamageImmunity -= dt
+			if combatComp.RemainingDamageImmunity < 0 {
+				combatComp.RemainingDamageImmunity = 0
 			}
 		}
 
 		// Update hit flash timer
-		if combatComp.HitFlashRemaining > 0 {
-			combatComp.HitFlashRemaining -= dt
-			if combatComp.HitFlashRemaining < 0 {
-				combatComp.HitFlashRemaining = 0
+		if combatComp.RemainingHitFlash > 0 {
+			combatComp.RemainingHitFlash -= dt
+			if combatComp.RemainingHitFlash < 0 {
+				combatComp.RemainingHitFlash = 0
 			}
 		}
 
@@ -147,11 +147,11 @@ func (s *CombatSystem) applyFullKnockback(
 	if !ok {
 		return
 	}
-	if targetCombatComp.KineticImmunityRemaining > 0 {
+	if targetCombatComp.RemainingKineticImmunity > 0 {
 		return
 	}
 
-	s.world.DebugPrint(fmt.Sprintf("%s", targetCombatComp.KineticImmunityRemaining))
+	s.world.DebugPrint(fmt.Sprintf("%s", targetCombatComp.RemainingKineticImmunity))
 
 	originPos, ok := s.world.Positions.GetPosition(originEntity)
 	if !ok {
@@ -177,24 +177,32 @@ func (s *CombatSystem) applyFullKnockback(
 		s.world.Components.Kinetic.SetComponent(targetEntity, kineticComp)
 	}
 	// TODO: check above condition implications
-	targetCombatComp.KineticImmunityRemaining = constant.CombatKnockbackImmunityInterval
+	targetCombatComp.RemainingKineticImmunity = constant.CombatKnockbackImmunityInterval
 	s.world.Components.Combat.SetComponent(targetEntity, targetCombatComp)
 }
 
 // applyHit applies combat hit to a target
-func (s *CombatSystem) applyHit(payload *event.CombatHitRequestPayload) {
+func (s *CombatSystem) applyHit(payload *event.CombatAttackRequestPayload) {
 	// TODO: telemetry
 	targetCombatComp, ok := s.world.Components.Combat.GetComponent(payload.TargetEntity)
 	if !ok {
 		return
 	}
-	// originCombatComp, ok := s.world.Components.Combat.GetComponent(payload.OriginEntity)
-	// if !ok {
-	// 	return
-	// }
+	var attackerCombatComp component.CombatComponent
+	if payload.OriginEntity != payload.OwnerEntity {
+		attackerCombatComp, ok = s.world.Components.Combat.GetComponent(payload.OriginEntity)
+		if !ok {
+			return
+		}
+	} else {
+		attackerCombatComp, ok = s.world.Components.Combat.GetComponent(payload.OwnerEntity)
+		if !ok {
+			return
+		}
+	}
 
 	// Generate combat matrix key
-	originCombatType := payload.OriginCombatType
+	attackerCombatType := attackerCombatComp.CombatEntityType
 	var targetCombatType component.CombatEntityType
 	// Target defensive checks and type determination
 	if payload.TargetEntity != payload.HitEntity {
@@ -211,7 +219,7 @@ func (s *CombatSystem) applyHit(payload *event.CombatHitRequestPayload) {
 
 		switch headerComp.Behavior {
 		case component.BehaviorQuasar:
-			targetCombatType = component.CombatTypeQuasar
+			targetCombatType = component.CombatEntityQuasar
 		case component.BehaviorSwarm:
 			return // Future
 		case component.BehaviorStorm:
@@ -222,21 +230,22 @@ func (s *CombatSystem) applyHit(payload *event.CombatHitRequestPayload) {
 	} else {
 		switch {
 		case payload.TargetEntity == s.world.Resources.Cursor.Entity:
-			targetCombatType = component.CombatTypeCursor
+			targetCombatType = component.CombatEntityCursor
 		case s.world.Components.Drain.HasEntity(payload.TargetEntity):
-			targetCombatType = component.CombatTypeDrain
+			targetCombatType = component.CombatEntityDrain
 		default:
 			return
 		}
 	}
-	combatMatrixKey := component.CombatMatrixKey{originCombatType, targetCombatType}
-	combatProfile, ok := component.CombatMatrix[combatMatrixKey]
+	combatMatrixKey := component.CombatMatrixKey{attackerCombatType, targetCombatType}
+	combatProfile, ok := component.CombatMatrix[payload.AttackType][combatMatrixKey]
 	if !ok {
 		return
 	}
 
 	// Apply damage hit
-	if targetCombatComp.DamageImmunityRemaining == 0 && combatProfile.DamageValue != 0 {
+	var targetDead bool
+	if targetCombatComp.RemainingDamageImmunity == 0 && combatProfile.DamageValue != 0 {
 		switch combatProfile.DamageType {
 		case component.CombatDamageDirect:
 			targetCombatComp.HitPoints -= combatProfile.DamageValue
@@ -244,70 +253,87 @@ func (s *CombatSystem) applyHit(payload *event.CombatHitRequestPayload) {
 				targetCombatComp.HitPoints = 0
 			}
 
-			// TODO: secondary effect in combat profile?
-			s.world.PushEvent(event.EventVampireDrainRequest, &event.VampireDrainRequestPayload{
-				TargetEntity: payload.HitEntity,
-				Delta:        constant.VampireEnergyDrainAmount,
-			})
 		}
 
-		targetCombatComp.HitFlashRemaining = constant.CombatHitFlashDuration
-		targetCombatComp.DamageImmunityRemaining = constant.CombatDamageImmunityDuration
+		targetCombatComp.RemainingHitFlash = constant.CombatHitFlashDuration
+		targetCombatComp.RemainingDamageImmunity = constant.CombatDamageImmunityDuration
 
 		if targetCombatComp.HitPoints == 0 {
 			s.world.Components.Combat.SetComponent(payload.TargetEntity, targetCombatComp)
-			// TODO: kill
-			return
+			// Not killing to let the chain attack to trigger, but
+			targetDead = true
 		}
 	}
 
-	// Apply kinetic hit/collision
-	if targetCombatComp.KineticImmunityRemaining == 0 && !targetCombatComp.IsEnraged {
-		switch combatProfile.HitType {
-		case component.CombatHitMass:
-			targetKineticComp, ok := s.world.Components.Kinetic.GetComponent(payload.TargetEntity)
-			if !ok {
-				return
-			}
-			originKineticComp, ok := s.world.Components.Kinetic.GetComponent(payload.OriginEntity)
-			if !ok {
-				return
-			}
+	// Emit chain attack if present
+	chainAttack := combatProfile.ChainAttack
+	if chainAttack != nil {
+		s.world.PushEvent(event.EventCombatAttackRequest, &event.CombatAttackRequestPayload{
+			AttackType:   chainAttack.AttackType,
+			OwnerEntity:  payload.OwnerEntity,
+			OriginEntity: payload.OwnerEntity,
+			TargetEntity: payload.TargetEntity,
+			HitEntity:    payload.HitEntity,
+		})
+	}
 
-			originVelX := originKineticComp.VelX
-			originVelY := originKineticComp.VelY
-
-			if payload.TargetEntity == payload.HitEntity {
-				// Non-composite collision
-				if physics.ApplyCollision(&targetKineticComp.Kinetic, originVelX, originVelY, combatProfile.CollisionProfile, s.rng) {
-					s.world.Components.Kinetic.SetComponent(payload.TargetEntity, targetKineticComp)
-				}
-			} else {
-				headerPos, ok := s.world.Positions.GetPosition(payload.TargetEntity)
-				if !ok {
-					return
-				}
-				hitPos, ok := s.world.Positions.GetPosition(payload.HitEntity)
-				if !ok {
-					return
-				}
-
-				offsetX := hitPos.X - headerPos.X
-				offsetY := hitPos.Y - headerPos.Y
-
-				// Composite collision
-				if physics.ApplyOffsetCollision(
-					&targetKineticComp.Kinetic,
-					originVelX, originVelY,
-					offsetX, offsetY,
-					combatProfile.CollisionProfile,
-					s.rng,
-				) {
-					s.world.Components.Kinetic.SetComponent(payload.TargetEntity, targetKineticComp)
-				}
-			}
+	// Apply effects
+	switch {
+	case combatProfile.EffectMask&component.CombatEffectVampireDrain != 0:
+		s.world.PushEvent(event.EventVampireDrainRequest, &event.VampireDrainRequestPayload{
+			TargetEntity: payload.HitEntity,
+			Delta:        constant.VampireDrainEnergyValue,
+		})
+	case combatProfile.EffectMask&component.CombatEffectKinetic != 0:
+		if !targetDead && targetCombatComp.RemainingKineticImmunity == 0 && !targetCombatComp.IsEnraged {
+			s.applyCollision(payload.OriginEntity, payload.HitEntity, payload.TargetEntity, combatProfile.CollisionProfile)
 		}
 	}
 
 	s.world.Components.Combat.SetComponent(payload.TargetEntity, targetCombatComp)
+}
+
+func (s *CombatSystem) applyCollision(originEntity, hitEntity, targetEntity core.Entity, collisionProfile *physics.CollisionProfile) {
+	// Apply kinetic hit/collision
+	targetKineticComp, ok := s.world.Components.Kinetic.GetComponent(targetEntity)
+	if !ok {
+		return
+	}
+	originKineticComp, ok := s.world.Components.Kinetic.GetComponent(originEntity)
+	if !ok {
+		return
+	}
+
+	originVelX := originKineticComp.VelX
+	originVelY := originKineticComp.VelY
+
+	if targetEntity == hitEntity {
+		// Non-composite collision
+		if physics.ApplyCollision(&targetKineticComp.Kinetic, originVelX, originVelY, collisionProfile, s.rng) {
+			s.world.Components.Kinetic.SetComponent(targetEntity, targetKineticComp)
+		}
+	} else {
+		headerPos, ok := s.world.Positions.GetPosition(targetEntity)
+		if !ok {
+			return
+		}
+		hitPos, ok := s.world.Positions.GetPosition(hitEntity)
+		if !ok {
+			return
+		}
+
+		offsetX := hitPos.X - headerPos.X
+		offsetY := hitPos.Y - headerPos.Y
+
+		// Composite collision
+		if physics.ApplyOffsetCollision(
+			&targetKineticComp.Kinetic,
+			originVelX, originVelY,
+			offsetX, offsetY,
+			collisionProfile,
+			s.rng,
+		) {
+			s.world.Components.Kinetic.SetComponent(targetEntity, targetKineticComp)
+		}
+	}
 }

@@ -533,7 +533,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	s.world.Components.Combat.SetComponent(entity,
 		component.CombatComponent{
 			HitPoints:                constant.CombatInitialHPDrain,
-			KineticImmunityRemaining: time.Duration(0),
+			RemainingKineticImmunity: time.Duration(0),
 		})
 
 	// Visual component for sigil renderer and death system flash extraction
@@ -741,7 +741,7 @@ func (s *DrainSystem) updateDrainMovement() {
 		}
 
 		// Homing only when not in kinetic immunity
-		if combatComp.KineticImmunityRemaining == 0 {
+		if combatComp.RemainingKineticImmunity == 0 {
 			physics.ApplyHoming(
 				&kineticComp.Kinetic,
 				cursorXFixed, cursorYFixed,
@@ -818,7 +818,7 @@ func (s *DrainSystem) updateDrainSigil() {
 		}
 
 		// Show hit flash first
-		if combatComp.HitFlashRemaining > 0 && sigilComp.Color != component.SigilHitFlash {
+		if combatComp.RemainingHitFlash > 0 && sigilComp.Color != component.SigilHitFlash {
 			sigilComp.Color = component.SigilHitFlash
 			s.world.Components.Sigil.SetComponent(drainEntity, sigilComp)
 			continue
@@ -830,7 +830,7 @@ func (s *DrainSystem) updateDrainSigil() {
 			continue
 		}
 		// Revert to normal if not already
-		if sigilComp.Color != component.SigilDrain && combatComp.HitFlashRemaining == 0 && !combatComp.IsEnraged {
+		if sigilComp.Color != component.SigilDrain && combatComp.RemainingHitFlash == 0 && !combatComp.IsEnraged {
 			sigilComp.Color = component.SigilDrain
 			s.world.Components.Sigil.SetComponent(drainEntity, sigilComp)
 		}
