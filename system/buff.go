@@ -1,12 +1,15 @@
 package system
 
 import (
+	"slices"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // BuffSystem manages the cursor gained effects and abilities, it resets on energy getting to or crossing zero
@@ -166,6 +169,10 @@ func (s *BuffSystem) removeAllBuffs() {
 
 func (s *BuffSystem) fireAllBuffs() {
 	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
+	if !ok {
+		return
+	}
 	heatComp, ok := s.world.Components.Heat.GetComponent(cursorEntity)
 	if !ok {
 		return
@@ -191,51 +198,106 @@ func (s *BuffSystem) fireAllBuffs() {
 		switch buff {
 		case component.BuffRod:
 			buffComp.Cooldown[buff] = constant.BuffCooldownRod
-			// Fire lightning to targets, corresponding to floor(heat/10)
-			rodShots := shots
 
-			// TODO: combat priority targets
-			// Quasar
-			quasarEntities := s.world.Components.Quasar.GetAllEntities()
-			for _, quasarEntity := range quasarEntities {
-				combatComp, ok := s.world.Components.Combat.GetComponent(quasarEntity)
+			// 1. Filter eligible targets
+			combatEntities := s.world.Components.Combat.GetAllEntities()
+			candidateTargetEntities := make([]core.Entity, 0, len(combatEntities))
+			for _, combatEntity := range combatEntities {
+				combatComp, ok := s.world.Components.Combat.GetComponent(combatEntity)
 				if !ok {
 					continue
 				}
+				if combatComp.OwnerEntity == cursorEntity {
+					continue
+				}
+				candidateTargetEntities = append(candidateTargetEntities, combatEntity)
+			}
 
-				s.world.PushEvent(event.EventVampireDrainRequest, &event.VampireDrainRequestPayload{
-					TargetEntity: quasarEntity,
-					Delta:        constant.VampireDrainEnergyValue,
-				})
-				combatComp.HitPoints--
-
-				s.world.Components.Combat.SetComponent(quasarEntity, combatComp)
-
-				rodShots--
-				if rodShots == 0 {
-					break
+			// 2. Prioritize composite targets
+			compositeIndex := 0
+			for scanIndex := range len(candidateTargetEntities) {
+				if s.world.Components.Header.HasEntity(candidateTargetEntities[scanIndex]) {
+					compositeIndex++
+					if compositeIndex < scanIndex {
+						candidateTargetEntities[scanIndex], candidateTargetEntities[compositeIndex] = candidateTargetEntities[compositeIndex], candidateTargetEntities[scanIndex]
+					}
 				}
 			}
 
-			// Drains
-			drainEntities := s.world.Components.Drain.GetAllEntities()
-			for _, drainEntity := range drainEntities {
-				if rodShots == 0 {
-					break
+			// 3. Set hit entity of composite targets (closest member entity)
+			finalTargetEntities := make([]core.Entity, 0, len(candidateTargetEntities))
+			finalHitEntities := make([]core.Entity, 0, len(candidateTargetEntities))
+			for i := range min(shots, compositeIndex) {
+				headerComp, ok := s.world.Components.Header.GetComponent(candidateTargetEntities[i])
+				if !ok {
+					continue
 				}
-				// TODO: shoot at closest ones
-				// drainPos, ok := s.world.Positions.GetPosition(drainEntity)
-				// if !ok {
-				// 	continue
-				// }
-				s.world.PushEvent(event.EventVampireDrainRequest, &event.VampireDrainRequestPayload{
-					TargetEntity: drainEntity,
-					Delta:        constant.VampireDrainEnergyValue,
+				var hitEntityCandidate core.Entity
+				var shortestMemberDistance int64
+				for _, memberEntry := range headerComp.MemberEntries {
+					memberPos, ok := s.world.Positions.GetPosition(memberEntry.Entity)
+					if !ok {
+						continue
+					}
+					memberDistance := vmath.MagnitudeEuclidean(
+						vmath.FromInt(cursorPos.X-memberPos.X),
+						vmath.FromInt(cursorPos.Y-memberPos.Y),
+					)
+					if hitEntityCandidate == 0 || memberDistance < shortestMemberDistance {
+						hitEntityCandidate = memberEntry.Entity
+						shortestMemberDistance = memberDistance
+					}
+				}
+				if hitEntityCandidate != 0 {
+					finalTargetEntities = append(finalTargetEntities, candidateTargetEntities[i])
+					finalHitEntities = append(finalHitEntities, hitEntityCandidate)
+				}
+			}
+
+			// 4. Fill the rest with closest non-composite entities
+			type entityDistance struct {
+				entity   core.Entity
+				distance int64
+			}
+			nonCompositeTargetEntities := make([]entityDistance, 0, len(candidateTargetEntities))
+			for i := compositeIndex; i < len(candidateTargetEntities); i++ {
+				targetPos, ok := s.world.Positions.GetPosition(candidateTargetEntities[i])
+				if !ok {
+					continue
+				}
+				nonCompositeTargetEntities = append(nonCompositeTargetEntities, entityDistance{
+					entity: candidateTargetEntities[i],
+					distance: vmath.MagnitudeEuclidean(
+						vmath.FromInt(cursorPos.X-targetPos.X),
+						vmath.FromInt(cursorPos.Y-targetPos.Y),
+					),
 				})
-				rodShots--
-				s.statRodFired.Add(1)
+			}
+			slices.SortStableFunc(nonCompositeTargetEntities, func(i, j entityDistance) int {
+				if i.distance < j.distance {
+					return -1
+				} else if i.distance > j.distance {
+					return 1
+				}
+				return 0
+			})
+			for i := range min(shots, len(candidateTargetEntities)) - len(finalTargetEntities) {
+				finalTargetEntities = append(finalTargetEntities, nonCompositeTargetEntities[i].entity)
+				finalHitEntities = append(finalHitEntities, nonCompositeTargetEntities[i].entity)
+			}
+
+			// 5. Fire lightning to targets
+			for i := range len(finalTargetEntities) {
+				s.world.PushEvent(event.EventCombatAttackRequest, &event.CombatAttackRequestPayload{
+					AttackType:   component.CombatAttackLightning,
+					OwnerEntity:  cursorEntity,
+					OriginEntity: cursorEntity,
+					TargetEntity: finalTargetEntities[i],
+					HitEntity:    finalHitEntities[i],
+				})
 			}
 
 		}
+		s.world.Components.Buff.SetComponent(cursorEntity, buffComp)
 	}
 }

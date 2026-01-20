@@ -123,7 +123,7 @@ func (r *LightningRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	buf.SetWriteMask(constant.MaskTransient)
 
 	// TODO: is there a better way handle this?
-	// Workaround to pause lightning animation when paused
+	// Workaround to freeze lightning animation when paused
 	if r.gameCtx.IsPaused.Load() {
 		r.rng = vmath.NewFastRand(uint64(r.gameCtx.World.Resources.Time.GameTime.Second()))
 	}

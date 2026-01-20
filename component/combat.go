@@ -27,7 +27,7 @@ const (
 	CombatDamageNone CombatDamageType = iota
 	CombatDamageDirect
 	CombatDamageArea
-	CombatDamageDOT // Future
+	CombatDamageOverTime // Future
 )
 
 // Attack Types
@@ -48,13 +48,12 @@ const (
 	CombatEffectLightning CombatEffectMask = 1 << iota
 	CombatEffectVampireDrain
 	CombatEffectKinetic
-	CombatEffectStun
+	CombatEffectStun // Future
 )
 
 // CombatComponent tags an entity to be identified as enemy for interactions
 type CombatComponent struct {
 	// OwnerEntity indicates owner/parent of the entity with combat component (e.g. cursor is the parent of cleaner)
-	// TODO: origin combat entity is unused in combat, only owner is used, change to this instead for future multi-player, deprecate owner from payload
 	OwnerEntity core.Entity
 
 	// CombatEntityType

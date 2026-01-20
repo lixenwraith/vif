@@ -249,7 +249,7 @@ func (s *CombatSystem) applyHit(payload *event.CombatAttackRequestPayload) {
 			if targetCombatComp.HitPoints < 0 {
 				targetCombatComp.HitPoints = 0
 			}
-
+		case component.CombatDamageArea:
 		}
 
 		targetCombatComp.RemainingHitFlash = constant.CombatHitFlashDuration

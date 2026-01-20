@@ -1,7 +1,6 @@
 package system
 
 import (
-	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -260,8 +259,6 @@ func (s *QuasarSystem) Update() {
 		combatComp.IsEnraged = false
 	}
 	s.world.Components.Combat.SetComponent(headerEntity, combatComp)
-
-	s.world.DebugPrint(fmt.Sprintf("HP: %d", combatComp.HitPoints))
 
 	s.statHitPoints.Store(int64(combatComp.HitPoints))
 }
