@@ -30,26 +30,26 @@ func (r *SigilRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 	buf.SetWriteMask(constant.MaskTransient)
 
 	for _, entity := range entities {
-		sigil, ok := r.gameCtx.World.Components.Sigil.GetComponent(entity)
+		sigilComp, ok := r.gameCtx.World.Components.Sigil.GetComponent(entity)
 		if !ok {
 			continue
 		}
 
-		pos, ok := r.gameCtx.World.Positions.GetPosition(entity)
+		sigilPos, ok := r.gameCtx.World.Positions.GetPosition(entity)
 		if !ok {
 			continue
 		}
 
-		screenX := ctx.GameXOffset + pos.X
-		screenY := ctx.GameYOffset + pos.Y
+		screenX := ctx.GameXOffset + sigilPos.X
+		screenY := ctx.GameYOffset + sigilPos.Y
 
 		if screenX < ctx.GameXOffset || screenX >= ctx.ScreenWidth ||
 			screenY < ctx.GameYOffset || screenY >= ctx.GameYOffset+ctx.GameHeight {
 			continue
 		}
 
-		fg := resolveSigilColor(sigil.Color)
-		buf.SetFgOnly(screenX, screenY, sigil.Rune, fg, terminal.AttrNone)
+		fg := resolveSigilColor(sigilComp.Color)
+		buf.SetFgOnly(screenX, screenY, sigilComp.Rune, fg, terminal.AttrNone)
 	}
 }
 
@@ -64,6 +64,10 @@ func resolveSigilColor(color component.SigilColor) render.RGB {
 		return render.RgbBlossom
 	case component.SigilDecay:
 		return render.RgbDecay
+	case component.SigilHitFlash:
+		return render.RgbCombatHitFlash
+	case component.SigilEnraged:
+		return render.RgbCombatEnraged
 	case component.SigilDustDark:
 		return render.RgbDustDark
 	case component.SigilDustNormal:

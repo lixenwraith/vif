@@ -39,6 +39,7 @@ const (
 // CombatComponent tags an entity to be identified as enemy for interactions
 type CombatComponent struct {
 	// OwnerEntity indicates owner/parent of the entity with combat component (e.g. cursor is the parent of cleaner)
+	// TODO: origin combat entity is unused in combat, only owner is used, used this instead for future multi-player, deprecate owner from payload
 	OwnerEntity core.Entity
 
 	// CombatType
@@ -69,10 +70,10 @@ type CombatProfile struct {
 
 type CombatMatrixKey [2]CombatEntityType
 
-type CombatMatrixMap map[CombatMatrixKey]CombatProfile
+type combatMatrixMap map[CombatMatrixKey]CombatProfile
 
 var (
-	CombatMatrix = CombatMatrixMap{
+	CombatMatrix = combatMatrixMap{
 		{CombatTypeCleaner, CombatTypeDrain}: CombatProfile{
 			DamageType:       CombatDamageDirect,
 			DamageValue:      1,

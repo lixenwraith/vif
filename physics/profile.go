@@ -18,7 +18,7 @@ var CleanerToDrain = CollisionProfile{
 	OffsetInfluence:  0,
 }
 
-// CleanerToQuasar defines cleaner-to-quasar collision (mass ratio, override for stun)
+// CleanerToQuasar defines cleaner-to-quasar collision (override for stun)
 var CleanerToQuasar = CollisionProfile{
 	MassRatio:        vmath.MassRatioBaseToQuasar,
 	ImpulseMin:       constant.QuasarDeflectImpulseMin,

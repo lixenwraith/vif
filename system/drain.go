@@ -197,6 +197,7 @@ func (s *DrainSystem) Update() {
 	if s.world.Components.Drain.CountEntities() > 0 {
 		s.updateDrainMovement()
 		s.handleDrainInteractions()
+		s.updateDrainSigil()
 	}
 
 	s.statCount.Store(int64(s.world.Components.Drain.CountEntities()))
@@ -800,6 +801,39 @@ func (s *DrainSystem) updateDrainMovement() {
 
 		s.world.Components.Drain.SetComponent(drainEntity, drainComp)
 		s.world.Components.Kinetic.SetComponent(drainEntity, kineticComp)
+	}
+}
+
+// updateDrainSigil()
+func (s *DrainSystem) updateDrainSigil() {
+	drainEntities := s.world.Components.Drain.GetAllEntities()
+	for _, drainEntity := range drainEntities {
+		sigilComp, ok := s.world.Components.Sigil.GetComponent(drainEntity)
+		if !ok {
+			continue
+		}
+		combatComp, ok := s.world.Components.Combat.GetComponent(drainEntity)
+		if !ok {
+			continue
+		}
+
+		// Show hit flash first
+		if combatComp.HitFlashRemaining > 0 && sigilComp.Color != component.SigilHitFlash {
+			sigilComp.Color = component.SigilHitFlash
+			s.world.Components.Sigil.SetComponent(drainEntity, sigilComp)
+			continue
+		}
+		// Show enraged second
+		if combatComp.IsEnraged && sigilComp.Color != component.SigilEnraged {
+			sigilComp.Color = component.SigilEnraged
+			s.world.Components.Sigil.SetComponent(drainEntity, sigilComp)
+			continue
+		}
+		// Revert to normal if not already
+		if sigilComp.Color != component.SigilDrain && combatComp.HitFlashRemaining == 0 && !combatComp.IsEnraged {
+			sigilComp.Color = component.SigilDrain
+			s.world.Components.Sigil.SetComponent(drainEntity, sigilComp)
+		}
 	}
 }
 

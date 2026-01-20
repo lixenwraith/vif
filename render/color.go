@@ -120,10 +120,12 @@ var (
 	// Shield colors
 	RgbShieldBase = RGB{180, 0, 150} // Deep Magenta
 
+	// CombatColors
+	RgbCombatEnraged  = RGB{255, 60, 60} // Red tint during charge or zap phase
+	RgbCombatHitFlash = RGB{255, 255, 0} // Bright yellow for hit flash
+
 	// Quasar colors
-	RgbQuasarEnraged = RGB{255, 60, 60}   // Red tint during charge or zap phase
-	RgbQuasarShield  = RGB{200, 200, 200} // Light gray for cleaner-protection shield halo
-	RgbQuasarFlash   = RGB{255, 255, 0}   // Bright yellow for hit flash
+	RgbQuasarShield = RGB{0, 200, 200} // Cyan for clean shield halo and quasar indication
 
 	// Audio indicator colors
 	RgbAudioMuted   = RGB{255, 0, 0} // Bright red when muted

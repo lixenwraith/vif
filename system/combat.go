@@ -236,8 +236,7 @@ func (s *CombatSystem) applyHit(payload *event.CombatHitRequestPayload) {
 	}
 
 	// Apply damage hit
-	// TODO: damage type switch
-	if targetCombatComp.DamageImmunityRemaining == 0 {
+	if targetCombatComp.DamageImmunityRemaining == 0 && combatProfile.DamageValue != 0 {
 		switch combatProfile.DamageType {
 		case component.CombatDamageDirect:
 			targetCombatComp.HitPoints -= combatProfile.DamageValue
@@ -255,8 +254,8 @@ func (s *CombatSystem) applyHit(payload *event.CombatHitRequestPayload) {
 		targetCombatComp.HitFlashRemaining = constant.CombatHitFlashDuration
 		targetCombatComp.DamageImmunityRemaining = constant.CombatDamageImmunityDuration
 
-		s.world.Components.Combat.SetComponent(payload.TargetEntity, targetCombatComp)
 		if targetCombatComp.HitPoints == 0 {
+			s.world.Components.Combat.SetComponent(payload.TargetEntity, targetCombatComp)
 			// TODO: kill
 			return
 		}
@@ -279,6 +278,7 @@ func (s *CombatSystem) applyHit(payload *event.CombatHitRequestPayload) {
 			originVelY := originKineticComp.VelY
 
 			if payload.TargetEntity == payload.HitEntity {
+				// Non-composite collision
 				if physics.ApplyCollision(&targetKineticComp.Kinetic, originVelX, originVelY, combatProfile.CollisionProfile, s.rng) {
 					s.world.Components.Kinetic.SetComponent(payload.TargetEntity, targetKineticComp)
 				}
@@ -295,6 +295,7 @@ func (s *CombatSystem) applyHit(payload *event.CombatHitRequestPayload) {
 				offsetX := hitPos.X - headerPos.X
 				offsetY := hitPos.Y - headerPos.Y
 
+				// Composite collision
 				if physics.ApplyOffsetCollision(
 					&targetKineticComp.Kinetic,
 					originVelX, originVelY,
@@ -307,4 +308,6 @@ func (s *CombatSystem) applyHit(payload *event.CombatHitRequestPayload) {
 			}
 		}
 	}
+
+	s.world.Components.Combat.SetComponent(payload.TargetEntity, targetCombatComp)
 }

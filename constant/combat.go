@@ -51,3 +51,4 @@ const (
 	// ShieldKnockbackImpulseMaxFloat is maximum knockback velocity (cells/sec)
 	ShieldKnockbackImpulseMaxFloat = 40.0
 )
+

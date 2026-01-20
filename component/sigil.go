@@ -15,6 +15,8 @@ const (
 	SigilDrain                        // Light Cyan/drain color
 	SigilBlossom                      // Light Pink/blossom color
 	SigilDecay                        // Dark Cyan/decay color
+	SigilHitFlash                     // Yellow combat hit flash color
+	SigilEnraged                      // Red combat enraged color
 	SigilDustDark                     // Dark gray dust particle
 	SigilDustNormal                   // Mid-gray dust particle
 	SigilDustBright                   // Light gray dust particle

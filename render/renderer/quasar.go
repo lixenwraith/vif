@@ -100,7 +100,7 @@ func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.Re
 	// Use same color as quasar entity state
 	var borderColor render.RGB
 	if quasar.IsCharging || quasar.IsZapping {
-		borderColor = render.RgbQuasarEnraged
+		borderColor = render.RgbCombatEnraged
 	} else {
 		borderColor = render.RgbDrain
 	}
@@ -228,7 +228,7 @@ func (r *QuasarRenderer) renderMembers(ctx render.RenderContext, buf *render.Ren
 	if combatComp.HitFlashRemaining > 0 {
 		color = r.calculateFlashColor(combatComp.HitFlashRemaining)
 	} else if combatComp.IsEnraged {
-		color = render.RgbQuasarEnraged
+		color = render.RgbCombatEnraged
 	} else {
 		color = render.RgbDrain
 	}
@@ -273,5 +273,5 @@ func (r *QuasarRenderer) calculateFlashColor(remaining time.Duration) render.RGB
 		intensity = 0.6 // Phase 3: low
 	}
 
-	return render.Scale(render.RgbQuasarFlash, intensity)
+	return render.Scale(render.RgbCombatHitFlash, intensity)
 }
