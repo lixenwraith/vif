@@ -620,8 +620,8 @@ func (s *DrainSystem) handleDrainInteractions() {
 		if shieldActive && s.isInsideShieldEllipse(drainPos.X, drainPos.Y) {
 			// Energy drain (existing timer-based)
 			if now.Sub(drain.LastDrainTime) >= constant.DrainEnergyDrainInterval {
-				s.world.PushEvent(event.EventShieldDrain, &event.ShieldDrainPayload{
-					Amount: constant.DrainShieldEnergyDrainAmount,
+				s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+					Value: constant.DrainShieldEnergyDrainAmount,
 				})
 				drain.LastDrainTime = now
 				s.world.Components.Drain.SetComponent(drainEntity, drain)

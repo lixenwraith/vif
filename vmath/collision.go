@@ -6,8 +6,10 @@ package vmath
 // Baseline: single-cell entity = Scale (1.0)
 const (
 	MassDust    = Scale / 10 // 0.1 - dust particle
+	MassCursor  = Scale      // 1.0 - base mass
 	MassDrain   = Scale      // 1.0 - single drain entity
 	MassCleaner = Scale      // 1.0 - cleaner block
+	MassSwarm   = Scale * 2  // 2.0 - equivalent to 2 drains
 	MassQuasar  = Scale * 10 // 10.0 - fused from 10 drains
 )
 
@@ -29,7 +31,7 @@ const OffsetInfluenceDefault = Scale / 3
 // RadiansToRotation converts Q32.32 radians to rotation units
 // Rotation units: Scale = full rotation (2π)
 // Usage: rotUnits = Mul(radians, RadiansToRotation)
-// Q32.32: const RadiansToRotation int32 = 10430 // ≈ Scale / (2π)
+// Q16.16: const RadiansToRotation int32 = 10430 // ≈ Scale / (2π)
 // Q32.32: const RadiansToRotation int64 = 683565275 // ≈ Scale / (2π)
 const RadiansToRotation int64 = 683565275 // ≈ Scale / (2π)
 

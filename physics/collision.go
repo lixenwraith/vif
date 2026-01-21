@@ -29,7 +29,8 @@ type CollisionProfile struct {
 	OffsetInfluence  int64         // Blend factor for offset-based direction (0 = none)
 }
 
-// ApplyCollision calculates and applies collision impulse. dirX, dirY: impact direction (impactor velocity or radial vector)
+// ApplyCollision calculates and applies collision impulse
+// dirX, dirY: impact direction (impactor velocity or radial vector)
 func ApplyCollision(
 	k *core.Kinetic,
 	dirX, dirY int64,
@@ -61,7 +62,9 @@ func ApplyCollision(
 
 }
 
-// ApplyOffsetCollision calculates collision with offset influence for multi-cell entities. offsetX, offsetY: hit point offset from anchor in integer cells
+// ApplyOffsetCollision calculates collision with offset influence for multi-cell entities
+// dirX, dirY: impact direction (impactor velocity or radial vector)
+// offsetX, offsetY: hit point offset from anchor in integer cells
 func ApplyOffsetCollision(
 	k *core.Kinetic,
 	dirX, dirY int64,

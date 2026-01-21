@@ -192,10 +192,10 @@ const (
 	// Consumer: ShieldSystem | Payload: nil
 	EventShieldDeactivate
 
-	// EventShieldDrain signals energy drain from external source
+	// EventShieldDrainRequest signals energy drain from external source
 	// Trigger: DrainSystem when drain inside shield zone
-	// Consumer: ShieldSystem | Payload: *ShieldDrainPayload
-	EventShieldDrain
+	// Consumer: ShieldSystem | Payload: *ShieldDrainRequestPayload
+	EventShieldDrainRequest
 
 	// EventDeleteRequest signals a deletion operation (x, d, etc.)
 	// Trigger: InputHandler via modes package

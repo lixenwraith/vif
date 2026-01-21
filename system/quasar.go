@@ -353,7 +353,7 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 		&physics.QuasarHoming,
 		quasarComp.SpeedMultiplier,
 		dtFixed,
-		true, // !quasarComp.IsImmune(now), // applyDrag gated by immunity // TODO: change after full migration
+		true, // Always apply drag regardless of kinetic immunity
 	)
 
 	if settled {
@@ -475,8 +475,8 @@ func (s *QuasarSystem) applyZapDamage() {
 
 	if shieldActive {
 		// Drain energy through shield
-		s.world.PushEvent(event.EventShieldDrain, &event.ShieldDrainPayload{
-			Amount: constant.QuasarShieldDrain,
+		s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+			Value: constant.QuasarShieldDrain,
 		})
 	} else {
 		// Direct hit - reduce 100 heat
@@ -595,11 +595,8 @@ func (s *QuasarSystem) handleInteractions(headerEntity core.Entity, headerComp *
 	shieldActive := ok && shieldComp.Active
 
 	// Stack-allocated buffer for shield overlapping member offsets (max 15 cells in 3x5 quasar)
-	// var overlapOffsets [15]struct{ x, y int }
-	overlapCount := 0
 	anyOnCursor := false
 
-	// TODO: patchwork
 	var hitEntities []core.Entity
 
 	for _, memberEntry := range headerComp.MemberEntries {
@@ -619,17 +616,13 @@ func (s *QuasarSystem) handleInteractions(headerEntity core.Entity, headerComp *
 
 		// Shield overlap check
 		if shieldActive && s.isInsideShieldEllipse(memberPos.X, memberPos.Y, cursorPos, &shieldComp) {
-			// overlapOffsets[overlapCount] = struct{ x, y int }{int(memberEntry.OffsetX), int(memberEntry.OffsetY)}
-			overlapCount++
-
 			hitEntities = append(hitEntities, memberEntry.Entity)
 		}
 	}
-	anyInShield := overlapCount > 0
+	anyInShield := len(hitEntities) > 0
 
 	// Shield knockback check
 	if anyInShield {
-		// s.applyShieldKnockback(headerEntity, quasar, cursorPos, overlapOffsets[:overlapCount])
 		s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
 			AttackType:   component.CombatAttackShield,
 			OwnerEntity:  cursorEntity,
@@ -637,20 +630,11 @@ func (s *QuasarSystem) handleInteractions(headerEntity core.Entity, headerComp *
 			TargetEntity: headerEntity,
 			HitEntities:  hitEntities,
 		})
-
-		// s.world.DebugPrint(fmt.Sprintf("owner: %d, target: %d, count: %d hit: %v", cursorEntity, headerEntity, len(hitEntities), hitEntities))
-	}
-
-	// Shield drain (once per tick if any overlap)
-	if anyInShield {
-		s.world.PushEvent(event.EventShieldDrain, &event.ShieldDrainPayload{
-			Amount: constant.QuasarShieldDrain,
+		s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+			Value: constant.QuasarShieldDrain,
 		})
-		return // Shield protects from direct collision
-	}
-
-	// Direct cursor collision without shieldComp → reset heat
-	if anyOnCursor && !shieldActive {
+	} else if anyOnCursor && !shieldActive {
+		// Direct cursor collision without shieldComp → reset heat
 		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Delta: -constant.HeatMax})
 	}
 }
@@ -661,53 +645,6 @@ func (s *QuasarSystem) isInsideShieldEllipse(x, y int, cursorPos component.Posit
 	dy := vmath.FromInt(y - cursorPos.Y)
 	return vmath.EllipseContains(dx, dy, shieldComp.InvRxSq, shieldComp.InvRySq)
 }
-
-// // applyShieldKnockback applies radial impulse when quasar overlaps shield
-// // Uses centroid of overlapping member offsets for offset-influenced direction
-// func (s *QuasarSystem) applyShieldKnockback(
-// 	headerEntity core.Entity,
-// 	quasarComp *component.QuasarComponent,
-// 	cursorPos component.PositionComponent,
-// 	overlaps []struct{ x, y int },
-// ) {
-// 	headerPos, ok := s.world.Positions.GetPosition(headerEntity)
-// 	if !ok {
-// 		return
-// 	}
-// 	kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity)
-// 	if !ok {
-// 		return
-// 	}
-//
-// 	// Radial direction: cursor → anchor (shield pushes outward)
-// 	radialX := vmath.FromInt(headerPos.X - cursorPos.X)
-// 	radialY := vmath.FromInt(headerPos.Y - cursorPos.Y)
-//
-// 	// Zero vector fallback (quasarComp centered on cursor)
-// 	if radialX == 0 && radialY == 0 {
-// 		radialX = vmath.Scale // Push right by default
-// 	}
-//
-// 	// Centroid of overlapping member offsets (integer arithmetic)
-// 	sumX, sumY := 0, 0
-// 	for _, o := range overlaps {
-// 		sumX += o.x
-// 		sumY += o.y
-// 	}
-// 	centroidX := sumX / len(overlaps)
-// 	centroidY := sumY / len(overlaps)
-//
-// 	if physics.ApplyOffsetCollision(
-// 		&kineticComp.Kinetic,
-// 		radialX, radialY,
-// 		centroidX, centroidY,
-// 		&physics.ShieldToQuasar,
-// 		s.rng,
-// 	) {
-// 		s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
-// 		s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
-// 	}
-// }
 
 // terminateQuasar ends quasar phase
 func (s *QuasarSystem) terminateQuasar() {

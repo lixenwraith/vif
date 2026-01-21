@@ -40,9 +40,9 @@ type DeleteRequestPayload struct {
 	EndY      int             `toml:"end_y"`
 }
 
-// ShieldDrainPayload contains energy drain amount from external sources
-type ShieldDrainPayload struct {
-	Amount int `toml:"amount"`
+// ShieldDrainRequestPayload contains energy drain amount from external sources
+type ShieldDrainRequestPayload struct {
+	Value int `toml:"value"`
 }
 
 // DirectionalCleanerPayload contains origin for 4-way cleaner spawn

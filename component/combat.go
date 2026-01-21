@@ -12,7 +12,6 @@ type CombatEntityType int
 
 const (
 	CombatEntityCursor CombatEntityType = iota
-
 	CombatEntityCleaner
 	CombatEntityDrain
 	CombatEntityQuasar
@@ -45,8 +44,7 @@ type CombatEffectMask uint64
 
 const CombatEffectNone CombatEffectMask = 0
 const (
-	CombatEffectLightning CombatEffectMask = 1 << iota
-	CombatEffectVampireDrain
+	CombatEffectVampireDrain CombatEffectMask = 1 << iota
 	CombatEffectKinetic
 	CombatEffectStun // Future
 )

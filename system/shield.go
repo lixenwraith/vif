@@ -55,7 +55,7 @@ func (s *ShieldSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventShieldActivate,
 		event.EventShieldDeactivate,
-		event.EventShieldDrain,
+		event.EventShieldDrainRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
@@ -105,10 +105,10 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 		}
 		s.statActive.Store(false)
 
-	case event.EventShieldDrain:
-		if payload, ok := ev.Payload.(*event.ShieldDrainPayload); ok {
+	case event.EventShieldDrainRequest:
+		if payload, ok := ev.Payload.(*event.ShieldDrainRequestPayload); ok {
 			s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
-				Delta:      payload.Amount,
+				Delta:      payload.Value,
 				Percentage: false,
 				Type:       event.EnergyDeltaPenalty,
 			})

@@ -137,7 +137,7 @@ func InitRegistry() {
 	// Shield
 	RegisterType("EventShieldActivate", EventShieldActivate, nil)
 	RegisterType("EventShieldDeactivate", EventShieldDeactivate, nil)
-	RegisterType("EventShieldDrain", EventShieldDrain, &ShieldDrainPayload{})
+	RegisterType("EventShieldDrainRequest", EventShieldDrainRequest, &ShieldDrainRequestPayload{})
 
 	// Boost
 	RegisterType("EventTimerStart", EventTimerStart, &TimerStartPayload{})
