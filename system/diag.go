@@ -101,7 +101,7 @@ func (s *DiagSystem) Init() {
 
 // Name returns system's name
 func (s *DiagSystem) Name() string {
-	return "diagnostics"
+	return "diag"
 }
 
 func (s *DiagSystem) Priority() int {

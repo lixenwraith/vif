@@ -146,8 +146,10 @@ func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType
 
 	// Extract char: glyph first, sigil fallback
 	var char rune
+	var level component.GlyphLevel
 	if glyphComp, ok := s.world.Components.Glyph.GetComponent(entity); ok {
 		char = glyphComp.Rune
+		level = glyphComp.Level
 	} else if sigilComp, ok := s.world.Components.Sigil.GetComponent(entity); ok {
 		char = sigilComp.Rune
 	} else {
@@ -176,6 +178,14 @@ func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType
 			Y:             entityPos.Y,
 			Char:          char,
 			SkipStartCell: true,
+		})
+
+	case event.EventDustSpawnOneRequest:
+		s.world.PushEvent(event.EventDustSpawnOneRequest, &event.DustSpawnOneRequestPayload{
+			X:     entityPos.X,
+			Y:     entityPos.Y,
+			Char:  char,
+			Level: level,
 		})
 
 		// Future: EventExplosionRequest, EventChainDeathRequest

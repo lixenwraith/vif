@@ -259,7 +259,12 @@ func (s *SplashSystem) handleSplashRequest(payload *event.SplashRequestPayload) 
 	entity := s.world.CreateEntity()
 	s.world.Components.Splash.SetComponent(entity, splash)
 
-	// 6. Register with timeKeeper for destruction
+	// 6. Protection
+	s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
+		Mask: component.ProtectFromDrain | component.ProtectFromDelete,
+	})
+
+	// 7. Register with timeKeeper for destruction
 	s.world.PushEvent(event.EventTimerStart, &event.TimerStartPayload{
 		Entity:   entity,
 		Duration: constant.SplashDuration,
@@ -339,6 +344,9 @@ func (s *SplashSystem) handleTimerSpawn(payload *event.SplashTimerRequestPayload
 
 	entity := s.world.CreateEntity()
 	s.world.Components.Splash.SetComponent(entity, splashComp)
+	s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
+		Mask: component.ProtectFromDrain | component.ProtectFromDelete,
+	})
 }
 
 // handleTimerCancel destroys existing timer splash
@@ -572,6 +580,9 @@ func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 
 	newEntity := s.world.CreateEntity()
 	s.world.Components.Splash.SetComponent(newEntity, splashComp)
+	s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
+		Mask: component.ProtectFromDrain | component.ProtectFromDelete,
+	})
 }
 
 // calculateProximityAnchor uses spiral search to find valid magnifier position

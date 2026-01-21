@@ -94,6 +94,9 @@ func (s *EnvironmentSystem) Update() {
 	}
 
 	envEntities := s.world.Components.Environment.GetAllEntities()
+	if len(envEntities) == 0 {
+		return
+	}
 	envEntity := envEntities[0]
 	envComp, _ := s.world.Components.Environment.GetComponent(envEntity)
 

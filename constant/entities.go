@@ -193,12 +193,16 @@ const (
 	// DustInitialSpeedFloat - tangential velocity magnitude at spawn (cells/sec)
 	DustInitialSpeedFloat = 32.0
 
-	// DustGlobalDragFloat - quadratic drag coefficient (1/cell)
-	// Prevents overshoot: drag scales with speed²
+	// DustGlobalDragFloat - quadratic drag coefficient (1/cell), prevents overshoot: drag scales with speed²
 	DustGlobalDragFloat = 0.02
 
 	// DustJitterFloat - constant random velocity added per frame (cells/sec)
 	DustJitterFloat = 2.0
+
+	// Timers are the lifetime of each dust type (dark is disabled for now)
+	DustTimerDark   = 2 * time.Second
+	DustTimerNormal = 5 * time.Second
+	DustTimerBright = 10 * time.Second
 )
 
 // --- Explosion Field VFX ---
@@ -265,6 +269,5 @@ const (
 // --- Global Visual Effects ---
 const (
 	// DestructionFlashDuration is how long the destruction flash effect lasts in milliseconds
-	// Used for drain collision, decay terminal, cleaner sweep
 	DestructionFlashDuration = 500 * time.Millisecond
 )

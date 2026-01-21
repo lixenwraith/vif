@@ -368,7 +368,7 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 	dustBatch := event.AcquireDustSpawnBatch()
 	dustBatch.Entries = append(dustBatch.Entries, s.dustEntryBuf...)
 
-	s.world.PushEvent(event.EventDustSpawnBatch, dustBatch)
+	s.world.PushEvent(event.EventDustSpawnBatchRequest, dustBatch)
 
 	s.statConverted.Add(int64(len(s.entityBuf)))
 }

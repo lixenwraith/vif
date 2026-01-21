@@ -461,7 +461,7 @@ func (s *DrainSystem) despawnExcessDrains(count int) {
 	}
 
 	for i := 0; i < toRemove; i++ {
-		event.EmitDeathOne(s.world.Resources.Event.Queue, ordered[i], event.EventFlashRequest)
+		event.EmitDeathOne(s.world.Resources.Event.Queue, ordered[i], event.EventSplashRequest)
 	}
 }
 
@@ -627,11 +627,6 @@ func (s *DrainSystem) handleDrainInteractions() {
 				s.world.Components.Drain.SetComponent(drainEntity, drain)
 			}
 
-			// s.world.PushEvent(event.EventCombatFullKnockbackRequest, &event.CombatKnockbackRequestPayload{
-			// 	OriginEntity: cursorEntity,
-			// 	TargetEntity: drainEntity,
-			// })
-
 			s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
 				AttackType:   component.CombatAttackShield,
 				OwnerEntity:  cursorEntity,
@@ -665,19 +660,19 @@ func (s *DrainSystem) handleDrainDrainCollisions() {
 
 	drainEntities := s.world.Components.Drain.GetAllEntities()
 	for _, drainEntity := range drainEntities {
-		pos, ok := s.world.Positions.GetPosition(drainEntity)
+		drainPos, ok := s.world.Positions.GetPosition(drainEntity)
 		if !ok {
 			continue
 		}
-		key := uint64(pos.X)<<32 | uint64(pos.Y)
-		drainPositions[key] = append(drainPositions[key], drainEntity)
+		posKey := uint64(drainPos.X)<<32 | uint64(drainPos.Y)
+		drainPositions[posKey] = append(drainPositions[posKey], drainEntity)
 	}
 
 	// Find and destroy all drains at cells with multiple drains
-	for _, entities := range drainPositions {
-		if len(entities) > 1 {
-			for _, e := range entities {
-				event.EmitDeathOne(s.world.Resources.Event.Queue, e, event.EventFlashRequest)
+	for _, drainEntitiesAtPosition := range drainPositions {
+		if len(drainEntitiesAtPosition) > 1 {
+			for _, colocatedDrainEntity := range drainEntitiesAtPosition {
+				event.EmitDeathOne(s.world.Resources.Event.Queue, colocatedDrainEntity, event.EventFlashRequest)
 			}
 		}
 	}
@@ -879,7 +874,14 @@ func (s *DrainSystem) handleCollisionAtPosition(entity core.Entity) {
 		return
 	}
 
+	// Convert glyphs to dust
+	if s.world.Components.Glyph.HasEntity(entity) {
+		event.EmitDeathOne(s.world.Resources.Event.Queue, entity, event.EventDustSpawnOneRequest)
+		return
+	}
+
 	// Destroy the entity (Handles standard chars, Decay entities, etc.)
+	// TODO: this is too broad, ensure proections from drain is set properly
 	s.world.DestroyEntity(entity)
 }
 

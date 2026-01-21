@@ -224,7 +224,7 @@ func handleCleanerCommand(ctx *engine.GameContext) CommandResult {
 
 // handleDustCommand triggers glyph to dust transform
 func handleDustCommand(ctx *engine.GameContext) CommandResult {
-	ctx.PushEvent(event.EventDustAll, nil)
+	ctx.PushEvent(event.EventDustAllRequest, nil)
 	ctx.SetLastCommand(":dust")
 	return CommandResult{Continue: true, KeepPaused: false}
 }

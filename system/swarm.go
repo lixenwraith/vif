@@ -87,7 +87,7 @@ func (s *SwarmSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventSwarmSpawnRequest:
 
-	case event.EventSwarmCancel:
+	case event.EventSwarmCancelRequest:
 	}
 }
 

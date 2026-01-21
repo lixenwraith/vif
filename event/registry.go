@@ -160,9 +160,9 @@ func InitRegistry() {
 	RegisterType("EventExplosionRequest", EventExplosionRequest, &ExplosionRequestPayload{})
 
 	// Dust
-	RegisterType("EventDustSpawnOne", EventDustSpawnOne, &DustSpawnPayload{})
-	RegisterType("EventDustSpawnBatch", EventDustSpawnBatch, &DustSpawnBatchPayload{})
-	RegisterType("EventDustAll", EventDustAll, nil)
+	RegisterType("EventDustSpawnOneRequest", EventDustSpawnOneRequest, &DustSpawnOneRequestPayload{})
+	RegisterType("EventDustSpawnBatchRequest", EventDustSpawnBatchRequest, &DustSpawnBatchRequestPayload{})
+	RegisterType("EventDustAllRequest", EventDustAllRequest, nil)
 
 	// Blossom
 	RegisterType("EventBlossomSpawnOne", EventBlossomSpawnOne, &BlossomSpawnPayload{})

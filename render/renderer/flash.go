@@ -42,8 +42,8 @@ func (r *FlashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 			continue
 		}
 
-		// Opacity fades from 0.0 to 1.0 over duration (transparent to bright)
-		opacity := 1.0 - (float64(flash.Remaining) / float64(flash.Duration))
+		// Opacity fades from 1.0 to 0.0 over duration (bright to transparent)
+		opacity := (float64(flash.Remaining) / float64(flash.Duration))
 		if opacity < 0.0 {
 			opacity = 0.0
 		}

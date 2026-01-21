@@ -40,7 +40,7 @@ func ReleaseDeathRequest(p *DeathRequestPayload) {
 
 var dustSpawnBatchPool = sync.Pool{
 	New: func() any {
-		return &DustSpawnBatchPayload{
+		return &DustSpawnBatchRequestPayload{
 			// Pre-allocate capacity for typical explosions to avoid resize allocs
 			Entries: make([]DustSpawnEntry, 0, 2048),
 		}
@@ -48,15 +48,15 @@ var dustSpawnBatchPool = sync.Pool{
 }
 
 // AcquireDustSpawnBatch returns a pooled payload with reset slice
-func AcquireDustSpawnBatch() *DustSpawnBatchPayload {
-	p := dustSpawnBatchPool.Get().(*DustSpawnBatchPayload)
+func AcquireDustSpawnBatch() *DustSpawnBatchRequestPayload {
+	p := dustSpawnBatchPool.Get().(*DustSpawnBatchRequestPayload)
 	// Reslice to length 0, keeping capacity
 	p.Entries = p.Entries[:0]
 	return p
 }
 
 // ReleaseDustSpawnBatch returns payload to pool
-func ReleaseDustSpawnBatch(p *DustSpawnBatchPayload) {
+func ReleaseDustSpawnBatch(p *DustSpawnBatchRequestPayload) {
 	if p == nil {
 		return
 	}

@@ -2,6 +2,7 @@ package system
 
 import (
 	"sync/atomic"
+	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
@@ -66,9 +67,9 @@ func (s *DustSystem) Priority() int {
 
 func (s *DustSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventDustSpawnOne,
-		event.EventDustSpawnBatch,
-		event.EventDustAll,
+		event.EventDustSpawnOneRequest,
+		event.EventDustSpawnBatchRequest,
+		event.EventDustAllRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
@@ -93,8 +94,11 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	switch ev.Type {
-	case event.EventDustSpawnOne:
-		if p, ok := ev.Payload.(*event.DustSpawnPayload); ok {
+	case event.EventDustSpawnOneRequest:
+		if p, ok := ev.Payload.(*event.DustSpawnOneRequestPayload); ok {
+			if p.Level == component.GlyphDark {
+				return
+			}
 			cursorEntity := s.world.Resources.Cursor.Entity
 			cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 			if !ok {
@@ -104,9 +108,9 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 			s.statCreated.Add(1)
 		}
 
-	case event.EventDustSpawnBatch:
+	case event.EventDustSpawnBatchRequest:
 		// Optimized batch handling with CommitForce and shared logic
-		if p, ok := ev.Payload.(*event.DustSpawnBatchPayload); ok {
+		if p, ok := ev.Payload.(*event.DustSpawnBatchRequestPayload); ok {
 			count := len(p.Entries)
 			if count == 0 {
 				event.ReleaseDustSpawnBatch(p)
@@ -125,8 +129,11 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 
 			for i := 0; i < count; i++ {
 				entry := p.Entries[i]
+				if entry.Level == component.GlyphDark {
+					continue
+				}
 				entity := s.world.CreateEntity()
-				s.prepareDustComponents(entity, entry.X, entry.Y, entry.Char, entry.Level, cursorPos.X, cursorPos.Y)
+				s.setDustComponents(entity, entry.X, entry.Y, entry.Char, entry.Level, cursorPos.X, cursorPos.Y)
 
 				// Add components to batch entry entity
 				posBatch.Add(entity, component.PositionComponent{X: entry.X, Y: entry.Y})
@@ -139,7 +146,7 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 			event.ReleaseDustSpawnBatch(p)
 		}
 
-	case event.EventDustAll:
+	case event.EventDustAllRequest:
 		s.transformGlyphsToDust()
 	}
 }
@@ -478,6 +485,7 @@ func (s *DustSystem) transformGlyphsToDust() {
 
 	glyphEntities := s.world.Components.Glyph.GetAllEntities()
 	toTransform := make([]glyphData, 0, len(glyphEntities))
+	toFlashKill := make([]core.Entity, len(glyphEntities))
 
 	for _, glyphEntity := range glyphEntities {
 		// Skip composite members
@@ -485,12 +493,16 @@ func (s *DustSystem) transformGlyphsToDust() {
 			continue
 		}
 
-		glyphPos, ok := s.world.Positions.GetPosition(glyphEntity)
+		glyphComp, ok := s.world.Components.Glyph.GetComponent(glyphEntity)
 		if !ok {
 			continue
 		}
+		if glyphComp.Level == component.GlyphDark {
+			toFlashKill = append(toFlashKill, glyphEntity)
+			continue
+		}
 
-		glyphComp, ok := s.world.Components.Glyph.GetComponent(glyphEntity)
+		glyphPos, ok := s.world.Positions.GetPosition(glyphEntity)
 		if !ok {
 			continue
 		}
@@ -504,11 +516,16 @@ func (s *DustSystem) transformGlyphsToDust() {
 		})
 	}
 
+	// Emit batch death with flash effect (no transform)
+	if len(toFlashKill) > 0 {
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashRequest, toFlashKill)
+	}
+
 	if len(toTransform) == 0 {
 		return
 	}
 
-	// Emit batch death with flash effect
+	// Emit batch death with no effect (transform)
 	deathEntities := make([]core.Entity, len(toTransform))
 	for i, gd := range toTransform {
 		deathEntities[i] = gd.entity
@@ -520,7 +537,7 @@ func (s *DustSystem) transformGlyphsToDust() {
 
 	for _, gd := range toTransform {
 		entity := s.world.CreateEntity()
-		s.prepareDustComponents(entity, gd.x, gd.y, gd.char, gd.level, cursorPos.X, cursorPos.Y)
+		s.setDustComponents(entity, gd.x, gd.y, gd.char, gd.level, cursorPos.X, cursorPos.Y)
 
 		posBatch.Add(entity, component.PositionComponent{X: gd.x, Y: gd.y})
 	}
@@ -529,8 +546,8 @@ func (s *DustSystem) transformGlyphsToDust() {
 	s.statCreated.Add(int64(len(toTransform)))
 }
 
-// prepareDustComponents calculates physics and component state for a new dust particle
-func (s *DustSystem) prepareDustComponents(entity core.Entity, x, y int, char rune, level component.GlyphLevel, cursorX, cursorY int) {
+// setDustComponents calculates physics and component state for a new dust particle
+func (s *DustSystem) setDustComponents(entity core.Entity, x, y int, char rune, level component.GlyphLevel, cursorX, cursorY int) {
 	// Random orbit radius in [min, max]
 	radiusRange := int(constant.DustOrbitRadiusMax - constant.DustOrbitRadiusMin)
 	orbitRadius := constant.DustOrbitRadiusMin
@@ -578,33 +595,39 @@ func (s *DustSystem) prepareDustComponents(entity core.Entity, x, y int, char ru
 	}
 
 	// Sigil for rendering
-	var color component.SigilColor
-	switch level {
-	case component.GlyphDark:
-		color = component.SigilDustDark
-	case component.GlyphNormal:
-		color = component.SigilDustNormal
-	case component.GlyphBright:
-		color = component.SigilDustBright
-	default:
-		color = component.SigilDustNormal
-	}
+	remaining, color := s.dustProperties(level)
 
 	sigilComp := component.SigilComponent{
 		Rune:  char,
 		Color: color,
 	}
 
+	timerComp := component.TimerComponent{Remaining: remaining}
+
 	s.world.Components.Dust.SetComponent(entity, dustComp)
 	s.world.Components.Kinetic.SetComponent(entity, kineticComp)
 	s.world.Components.Protection.SetComponent(entity, protComp)
 	s.world.Components.Sigil.SetComponent(entity, sigilComp)
+	s.world.Components.Timer.SetComponent(entity, timerComp)
 }
 
 // spawnDust creates a single dust entity with orbital initialization
 func (s *DustSystem) spawnDust(x, y int, char rune, level component.GlyphLevel, cursorX, cursorY int) {
 	entity := s.world.CreateEntity()
-	s.prepareDustComponents(entity, x, y, char, level, cursorX, cursorY)
+	s.setDustComponents(entity, x, y, char, level, cursorX, cursorY)
 
 	s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
+}
+
+func (s *DustSystem) dustProperties(level component.GlyphLevel) (time.Duration, component.SigilColor) {
+	switch level {
+	case component.GlyphDark:
+		return constant.DustTimerDark, component.SigilDustDark
+	case component.GlyphNormal:
+		return constant.DustTimerNormal, component.SigilDustNormal
+	case component.GlyphBright:
+		return constant.DustTimerBright, component.SigilDustBright
+	default:
+		return constant.DustTimerNormal, component.SigilDustNormal
+	}
 }

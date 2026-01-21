@@ -383,30 +383,30 @@ const (
 	// Consumer: ExplosionSystem | Payload: *ExplosionRequestPayload
 	EventExplosionRequest
 
-	// EventDustSpawnOne signals intent to spawn a single dust entity
+	// EventDustSpawnOneRequest signals intent to spawn a single dust entity
 	// Trigger: ExplosionSystem, future effects
-	// Consumer: DustSystem | Payload: *DustSpawnPayload
-	EventDustSpawnOne
+	// Consumer: DustSystem | Payload: *DustSpawnOneRequestPayload
+	EventDustSpawnOneRequest
 
-	// EventDustSpawnBatch signals intent to spawn multiple dust entities
+	// EventDustSpawnBatchRequest signals intent to spawn multiple dust entities
 	// Trigger: ExplosionFieldSystem on glyph transformation
-	// Consumer: DustSystem | Payload: *DustSpawnBatchPayload
-	EventDustSpawnBatch
+	// Consumer: DustSystem | Payload: *DustSpawnBatchRequestPayload
+	EventDustSpawnBatchRequest
 
-	// EventDustAll signals intent to spawn a single dust entity
+	// EventDustAllRequest signals intent to spawn a single dust entity
 	// Trigger: FSM
 	// Consumer: DustSystem | Payload: nil
-	EventDustAll
+	EventDustAllRequest
 
 	// EventSwarmSpawnRequest signals spawning a wave of 5 swarm composites
 	// Trigger: FSM
 	// Consumer: SwarmSystem | Payload: nil
 	EventSwarmSpawnRequest
 
-	// EventSwarmCancel signals destruction of all swarm composites
+	// EventSwarmCancelRequest signals destruction of all swarm composites
 	// Trigger: FSM
 	// Consumer: SwarmSystem | Payload: nil
-	EventSwarmCancel
+	EventSwarmCancelRequest
 
 	// EventVampireDrainRequest signals energy drain from target hit
 	// Trigger: CleanerSystem

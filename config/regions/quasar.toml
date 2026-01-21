@@ -54,7 +54,7 @@ transitions = [
 [states.QuasarDustAll]
 parent = "QuasarCycle"
 on_enter = [
-    { action = "EmitEvent", event = "EventDustAll"},
+    { action = "EmitEvent", event = "EventDustAllRequest"},
 ]
 transitions = [
     { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = "0" } },

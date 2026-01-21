@@ -324,8 +324,8 @@ type ExplosionRequestPayload struct {
 	Radius int64 `toml:"radius"` // Q32.32, 0 = use default
 }
 
-// DustSpawnPayload contains parameters for single dust entity creation
-type DustSpawnPayload struct {
+// DustSpawnOneRequestPayload contains parameters for single dust entity creation
+type DustSpawnOneRequestPayload struct {
 	X     int                  `toml:"x"`
 	Y     int                  `toml:"y"`
 	Char  rune                 `toml:"char"`
@@ -341,9 +341,9 @@ type DustSpawnEntry struct {
 	Level component.GlyphLevel `toml:"level"`
 }
 
-// DustSpawnBatchPayload contains batch dust spawn data
+// DustSpawnBatchRequestPayload contains batch dust spawn data
 // Use AcquireDustSpawnBatch/ReleaseDustSpawnBatch for pooled allocation
-type DustSpawnBatchPayload struct {
+type DustSpawnBatchRequestPayload struct {
 	Entries []DustSpawnEntry `toml:"entries"`
 }
 
