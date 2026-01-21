@@ -331,8 +331,8 @@ func (s *FuseSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 			memberY := topLeftY + row
 
 			// Calculate offset from header
-			offsetX := int8(col - constant.QuasarHeaderOffsetX)
-			offsetY := int8(row - constant.QuasarHeaderOffsetY)
+			offsetX := col - constant.QuasarHeaderOffsetX
+			offsetY := row - constant.QuasarHeaderOffsetY
 
 			entity := s.world.CreateEntity()
 			s.world.Positions.SetPosition(entity, component.PositionComponent{X: memberX, Y: memberY})

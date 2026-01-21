@@ -627,9 +627,17 @@ func (s *DrainSystem) handleDrainInteractions() {
 				s.world.Components.Drain.SetComponent(drainEntity, drain)
 			}
 
-			s.world.PushEvent(event.EventCombatFullKnockbackRequest, &event.CombatKnockbackRequestPayload{
+			// s.world.PushEvent(event.EventCombatFullKnockbackRequest, &event.CombatKnockbackRequestPayload{
+			// 	OriginEntity: cursorEntity,
+			// 	TargetEntity: drainEntity,
+			// })
+
+			s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+				AttackType:   component.CombatAttackShield,
+				OwnerEntity:  cursorEntity,
 				OriginEntity: cursorEntity,
 				TargetEntity: drainEntity,
+				HitEntities:  []core.Entity{drainEntity},
 			})
 
 			continue

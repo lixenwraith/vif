@@ -209,6 +209,7 @@ func InitRegistry() {
 	RegisterType("EventLightningDespawn", EventLightningDespawn, nil)
 
 	// Combat
-	RegisterType("EventCombatFullKnockbackRequest", EventCombatFullKnockbackRequest, &CombatKnockbackRequestPayload{})
-	RegisterType("EventCombatAttackRequest", EventCombatAttackRequest, &CombatAttackRequestPayload{})
+	// RegisterType("EventCombatFullKnockbackRequest", EventCombatFullKnockbackRequest, &CombatKnockbackRequestPayload{})
+	RegisterType("EventCombatAttackDirectRequest", EventCombatAttackDirectRequest, &CombatAttackDirectRequestPayload{})
+	RegisterType("EventCombatAttackAreaRequest", EventCombatAttackAreaRequest, &CombatAttackAreaRequestPayload{})
 }

@@ -29,15 +29,13 @@ type CollisionProfile struct {
 	OffsetInfluence  int64         // Blend factor for offset-based direction (0 = none)
 }
 
-// ApplyCollision calculates and applies collision impulse to kinetic state
-// Returns true if impulse was applied (false if immune or zero impulse)
-// dirX, dirY: impact direction in Q32.32 (typically impactor velocity or radial vector)
+// ApplyCollision calculates and applies collision impulse. dirX, dirY: impact direction (impactor velocity or radial vector)
 func ApplyCollision(
 	k *core.Kinetic,
 	dirX, dirY int64,
 	profile *CollisionProfile,
 	rng *vmath.FastRand,
-) bool {
+) {
 	// Zero direction fallback
 	if dirX == 0 && dirY == 0 {
 		dirX = vmath.Scale
@@ -53,10 +51,6 @@ func ApplyCollision(
 		rng,
 	)
 
-	if impulseX == 0 && impulseY == 0 {
-		return false
-	}
-
 	// Apply based on mode
 	switch profile.Mode {
 	case ImpulseAdditive:
@@ -65,18 +59,16 @@ func ApplyCollision(
 		SetImpulse(k, impulseX, impulseY)
 	}
 
-	return true
 }
 
-// ApplyOffsetCollision calculates collision with offset influence for multi-cell entities
-// offsetX, offsetY: hit point offset from anchor in integer cells
+// ApplyOffsetCollision calculates collision with offset influence for multi-cell entities. offsetX, offsetY: hit point offset from anchor in integer cells
 func ApplyOffsetCollision(
 	k *core.Kinetic,
 	dirX, dirY int64,
 	offsetX, offsetY int,
 	profile *CollisionProfile,
 	rng *vmath.FastRand,
-) bool {
+) {
 	// Zero direction fallback
 	if dirX == 0 && dirY == 0 {
 		dirX = vmath.Scale
@@ -94,10 +86,6 @@ func ApplyOffsetCollision(
 		rng,
 	)
 
-	if impulseX == 0 && impulseY == 0 {
-		return false
-	}
-
 	// Apply based on mode
 	switch profile.Mode {
 	case ImpulseAdditive:
@@ -105,6 +93,4 @@ func ApplyOffsetCollision(
 	case ImpulseOverride:
 		SetImpulse(k, impulseX, impulseY)
 	}
-
-	return true
 }

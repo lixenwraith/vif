@@ -10,8 +10,8 @@ import (
 // CleanerToDrain defines cleaner-to-drain collision (equal mass, additive)
 var CleanerToDrain = CollisionProfile{
 	MassRatio:        vmath.MassRatioEqual,
-	ImpulseMin:       constant.DrainDeflectImpulseMin,
-	ImpulseMax:       constant.DrainDeflectImpulseMax,
+	ImpulseMin:       constant.CollisionKineticImpulseMin,
+	ImpulseMax:       constant.CollisionKineticImpulseMax,
 	AngleVariance:    constant.DrainDeflectAngleVar,
 	Mode:             ImpulseAdditive,
 	ImmunityDuration: constant.CombatKineticImmunityDuration,
@@ -21,8 +21,8 @@ var CleanerToDrain = CollisionProfile{
 // CleanerToQuasar defines cleaner-to-quasar collision (override for stun)
 var CleanerToQuasar = CollisionProfile{
 	MassRatio:        vmath.MassRatioBaseToQuasar,
-	ImpulseMin:       constant.QuasarDeflectImpulseMin,
-	ImpulseMax:       constant.QuasarDeflectImpulseMax,
+	ImpulseMin:       constant.CollisionKineticImpulseMin,
+	ImpulseMax:       constant.CollisionKineticImpulseMax,
 	AngleVariance:    constant.DrainDeflectAngleVar,
 	Mode:             ImpulseOverride,
 	ImmunityDuration: constant.CombatKineticImmunityDuration,
@@ -32,8 +32,8 @@ var CleanerToQuasar = CollisionProfile{
 // ShieldToDrain defines shield-to-drain knockback (radial repulsion)
 var ShieldToDrain = CollisionProfile{
 	MassRatio:        vmath.MassRatioEqual,
-	ImpulseMin:       constant.ShieldKnockbackImpulseMin,
-	ImpulseMax:       constant.ShieldKnockbackImpulseMax,
+	ImpulseMin:       constant.CollisionKineticImpulseMin,
+	ImpulseMax:       constant.CollisionKineticImpulseMax,
 	AngleVariance:    constant.DrainDeflectAngleVar,
 	Mode:             ImpulseAdditive,
 	ImmunityDuration: constant.CombatKineticImmunityDuration,
@@ -43,10 +43,10 @@ var ShieldToDrain = CollisionProfile{
 // ShieldToQuasar defines shield-to-quasar knockback (centroid-based)
 var ShieldToQuasar = CollisionProfile{
 	MassRatio:        vmath.MassRatioBaseToQuasar,
-	ImpulseMin:       constant.ShieldKnockbackImpulseMin,
-	ImpulseMax:       constant.ShieldKnockbackImpulseMax,
+	ImpulseMin:       constant.CollisionKineticImpulseMin,
+	ImpulseMax:       constant.CollisionKineticImpulseMax,
 	AngleVariance:    constant.DrainDeflectAngleVar,
-	Mode:             ImpulseAdditive,
+	Mode:             ImpulseOverride,
 	ImmunityDuration: constant.CombatKineticImmunityDuration,
 	OffsetInfluence:  vmath.OffsetInfluenceDefault,
 }
@@ -54,8 +54,8 @@ var ShieldToQuasar = CollisionProfile{
 // DustToDrain defines dust-to-drain collision (light impactor, cumulative)
 var DustToDrain = CollisionProfile{
 	MassRatio:        vmath.MassRatioDustToDrain,
-	ImpulseMin:       constant.DrainDeflectImpulseMin,
-	ImpulseMax:       constant.DrainDeflectImpulseMax,
+	ImpulseMin:       constant.CollisionKineticImpulseMin,
+	ImpulseMax:       constant.CollisionKineticImpulseMax,
 	AngleVariance:    constant.DrainDeflectAngleVar,
 	Mode:             ImpulseAdditive,
 	ImmunityDuration: 0, // No immunity - cumulative hits
@@ -65,8 +65,8 @@ var DustToDrain = CollisionProfile{
 // ExplosionToDrain defines explosion-to-drain collision (severe impactor, cumulative)
 var ExplosionToDrain = CollisionProfile{
 	MassRatio:        vmath.MassRatioExplosionToDrain,
-	ImpulseMin:       constant.DrainDeflectImpulseMin,
-	ImpulseMax:       constant.DrainDeflectImpulseMax,
+	ImpulseMin:       constant.CollisionKineticImpulseMin,
+	ImpulseMax:       constant.CollisionKineticImpulseMax,
 	AngleVariance:    constant.DrainDeflectAngleVar,
 	Mode:             ImpulseAdditive,
 	ImmunityDuration: constant.CombatKineticImmunityDuration, // Immunity for dedup
@@ -76,8 +76,8 @@ var ExplosionToDrain = CollisionProfile{
 // ExplosionToQuasar defines explosion-to-drain collision (severe impactor, cumulative)
 var ExplosionToQuasar = CollisionProfile{
 	MassRatio:        vmath.MassRatioExplosionToQuasar,
-	ImpulseMin:       constant.QuasarDeflectImpulseMin,
-	ImpulseMax:       constant.QuasarDeflectImpulseMax,
+	ImpulseMin:       constant.CollisionKineticImpulseMin,
+	ImpulseMax:       constant.CollisionKineticImpulseMax,
 	AngleVariance:    constant.DrainDeflectAngleVar,
 	Mode:             ImpulseAdditive,
 	ImmunityDuration: constant.CombatHitFlashDuration, // Immunity for dedup
@@ -87,12 +87,12 @@ var ExplosionToQuasar = CollisionProfile{
 // DustToQuasar defines dust-to-quasar collision (very light impactor, cumulative)
 var DustToQuasar = CollisionProfile{
 	MassRatio:        vmath.MassRatioDustToQuasar,
-	ImpulseMin:       constant.QuasarDeflectImpulseMin,
-	ImpulseMax:       constant.QuasarDeflectImpulseMax,
+	ImpulseMin:       constant.CollisionKineticImpulseMin,
+	ImpulseMax:       constant.CollisionKineticImpulseMax,
 	AngleVariance:    constant.DrainDeflectAngleVar,
 	Mode:             ImpulseAdditive,
 	ImmunityDuration: 0, // No immunity - cumulative hits
-	OffsetInfluence:  0, // Center-of-mass collision, no offset instability
+	OffsetInfluence:  0, // Center-of-mass collision, no offset
 }
 
 // Homing profiles

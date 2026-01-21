@@ -43,12 +43,11 @@ const (
 	CombatHitFlashDuration = 150 * time.Millisecond
 )
 
-// --- Shield Knockback ---
+// Kinetic Collision Impulse
 const (
-	// ShieldKnockbackImpulseMinFloat is minimum knockback velocity (cells/sec)
-	ShieldKnockbackImpulseMinFloat = 15.0
+	// CollisionKineticImpulseMinFloat is minimum knockback velocity (cells/sec)
+	CollisionKineticImpulseMinFloat = 15.0
 
-	// ShieldKnockbackImpulseMaxFloat is maximum knockback velocity (cells/sec)
-	ShieldKnockbackImpulseMaxFloat = 40.0
+	// CollisionKineticImpulseMaxFloat is maximum knockback velocity (cells/sec)
+	CollisionKineticImpulseMaxFloat = 40.0
 )
-

@@ -38,7 +38,7 @@ const (
 // MemberEntry represents a single member in a composite group
 type MemberEntry struct {
 	Entity  core.Entity
-	OffsetX int8  // Relative to Phantom Head
-	OffsetY int8  // Relative to Phantom Head
+	OffsetX int   // Relative to Phantom Head
+	OffsetY int   // Relative to Phantom Head
 	Layer   uint8 // LayerGlyph, LayerShield, LayerEffect
 }

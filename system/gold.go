@@ -266,7 +266,7 @@ func (s *GoldSystem) spawnGold() bool {
 	type entityData struct {
 		entity core.Entity
 		pos    component.PositionComponent
-		offset int8
+		offset int
 	}
 	entities := make([]entityData, 0, constant.GoldSequenceLength)
 	// Create member entities
@@ -278,7 +278,7 @@ func (s *GoldSystem) spawnGold() bool {
 		entities = append(entities, entityData{
 			entity: entity,
 			pos:    component.PositionComponent{X: x + i, Y: y},
-			offset: int8(i),
+			offset: i,
 		})
 	}
 

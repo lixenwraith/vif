@@ -369,17 +369,20 @@ type BuffAddRequestPayload struct {
 	Buff component.BuffType `toml:"buff"` // 0=rod, 1=launcher, 2=chain
 }
 
-// CombatKnockbackRequestPayload
-type CombatKnockbackRequestPayload struct {
-	OriginEntity core.Entity `toml:"origin_entity"`
-	TargetEntity core.Entity `toml:"target_entity"`
+// CombatAttackDirectRequestPayload
+type CombatAttackDirectRequestPayload struct {
+	AttackType   component.CombatAttackType `toml:"attack_type"`
+	OwnerEntity  core.Entity                `toml:"owner_entity"`
+	OriginEntity core.Entity                `toml:"origin_entity"`
+	TargetEntity core.Entity                `toml:"target_entity"`
+	HitEntity    core.Entity                `toml:"hit_entity"`
 }
 
-// CombatAttackRequestPayload
-type CombatAttackRequestPayload struct {
-	AttackType   component.CombatAttackType
-	OwnerEntity  core.Entity `toml:"owner_entity"`
-	OriginEntity core.Entity `toml:"origin_entity"`
-	TargetEntity core.Entity `toml:"target_entity"`
-	HitEntity    core.Entity `toml:"defense_entity"`
+// CombatAttackAreaRequestPayload
+type CombatAttackAreaRequestPayload struct {
+	AttackType   component.CombatAttackType `toml:"attack_type"`
+	OwnerEntity  core.Entity                `toml:"owner_entity"`
+	OriginEntity core.Entity                `toml:"origin_entity"`
+	TargetEntity core.Entity                `toml:"target_entity"`
+	HitEntities  []core.Entity              `toml:"hit_entities"`
 }

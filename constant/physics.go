@@ -4,6 +4,12 @@ import "github.com/lixenwraith/vi-fighter/vmath"
 
 // Pre-computed Q32.32 physics constants, initialized once to avoid repeated float calculation and used by systems
 
+// Collision kinetic impulse
+var (
+	CollisionKineticImpulseMin = vmath.FromFloat(CollisionKineticImpulseMinFloat)
+	CollisionKineticImpulseMax = vmath.FromFloat(CollisionKineticImpulseMaxFloat)
+)
+
 // Cleaner physics
 var (
 	CleanerBaseHorizontalSpeed = vmath.FromFloat(CleanerBaseHorizontalSpeedFloat)
@@ -13,31 +19,22 @@ var (
 
 // Drain physics
 var (
-	// Drain physics (Q32.32)
-	DrainBaseSpeed         = vmath.FromFloat(DrainBaseSpeedFloat)
-	DrainHomingAccel       = vmath.FromFloat(DrainHomingAccelFloat)
-	DrainDrag              = vmath.FromFloat(DrainDragFloat)
-	DrainDeflectImpulse    = vmath.FromFloat(DrainDeflectImpulseFloat)
-	DrainDeflectAngleVar   = vmath.FromFloat(DrainDeflectAngleVarFloat)
-	DrainDeflectImpulseMin = vmath.FromFloat(DrainDeflectImpulseMinFloat)
-	DrainDeflectImpulseMax = vmath.FromFloat(DrainDeflectImpulseMaxFloat)
+	// Drain physics
+	DrainBaseSpeed       = vmath.FromFloat(DrainBaseSpeedFloat)
+	DrainHomingAccel     = vmath.FromFloat(DrainHomingAccelFloat)
+	DrainDrag            = vmath.FromFloat(DrainDragFloat)
+	DrainDeflectAngleVar = vmath.FromFloat(DrainDeflectAngleVarFloat)
 )
 
 // Quasar physics
 var (
-	// Quasar physics (Q32.32)
-	QuasarDeflectImpulseMin = vmath.FromFloat(QuasarDeflectImpulseMinFloat)
-	QuasarDeflectImpulseMax = vmath.FromFloat(QuasarDeflectImpulseMaxFloat)
-	QuasarHomingAccel       = vmath.FromFloat(QuasarHomingAccelFloat)
-	QuasarBaseSpeed         = vmath.FromFloat(QuasarBaseSpeedFloat)
-	QuasarMaxSpeed          = vmath.FromFloat(QuasarMaxSpeedFloat)
-	QuasarDrag              = vmath.FromFloat(QuasarDragFloat)
+	// Quasar physics
+	QuasarHomingAccel = vmath.FromFloat(QuasarHomingAccelFloat)
+	QuasarBaseSpeed   = vmath.FromFloat(QuasarBaseSpeedFloat)
+	QuasarMaxSpeed    = vmath.FromFloat(QuasarMaxSpeedFloat)
+	QuasarDrag        = vmath.FromFloat(QuasarDragFloat)
 	// QuasarSpeedMultiplierMaxFixed caps progressive speed increase (10x = Scale * 10)
 	QuasarSpeedMultiplierMaxFixed = vmath.Scale * QuasarSpeedMultiplierMax
-
-	// Shield knockback physics (Q32.32)
-	ShieldKnockbackImpulseMin = vmath.FromFloat(ShieldKnockbackImpulseMinFloat)
-	ShieldKnockbackImpulseMax = vmath.FromFloat(ShieldKnockbackImpulseMaxFloat)
 )
 
 // Dust physics

@@ -288,7 +288,7 @@ func (s *BuffSystem) fireAllBuffs() {
 
 			// 5. Fire lightning to targets
 			for i := range len(finalTargetEntities) {
-				s.world.PushEvent(event.EventCombatAttackRequest, &event.CombatAttackRequestPayload{
+				s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
 					AttackType:   component.CombatAttackLightning,
 					OwnerEntity:  cursorEntity,
 					OriginEntity: cursorEntity,

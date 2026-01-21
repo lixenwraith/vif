@@ -423,15 +423,15 @@ const (
 	// Consumer: BuffSystem | Payload: nil
 	EventBuffFireRequest
 
-	// EventCombatFullKnockbackRequest signals applying knockback
+	// EventCombatAttackDirectRequest signals applying knockback
 	// Trigger: DrainSystem, QuasarSystem, CleanerSystem, BuffSystem
-	// Consumer: CombatSystem | Payload: *CombatKnockbackRequestPayload
-	EventCombatFullKnockbackRequest
+	// Consumer: CombatSystem | Payload: *CombatAttackDirectRequestPayload
+	EventCombatAttackDirectRequest
 
-	// EventCombatAttackRequest signals applying knockback
+	// EventCombatAttackAreaRequest signals applying knockback
 	// Trigger: DrainSystem, QuasarSystem, CleanerSystem, BuffSystem
-	// Consumer: CombatSystem | Payload: *CombatAttackRequestPayload
-	EventCombatAttackRequest
+	// Consumer: CombatSystem | Payload: *CombatAttackAreaRequestPayload
+	EventCombatAttackAreaRequest
 )
 
 // GameEvent represents a single game event with metadata

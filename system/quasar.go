@@ -225,7 +225,7 @@ func (s *QuasarSystem) Update() {
 		// Already zapping: continue zap, update target
 		s.updateZapTarget(headerEntity)
 		s.applyZapDamage()
-		s.world.Components.Quasar.SetComponent(headerEntity, quasarComp) // Persist flash decrement // TODO: check
+		s.world.Components.Quasar.SetComponent(headerEntity, quasarComp)
 
 	} else if quasarComp.IsCharging {
 		// Charging: decrement timer, check completion
@@ -245,7 +245,7 @@ func (s *QuasarSystem) Update() {
 	}
 
 	// Shield and cursor interaction (all states)
-	s.handleInteractions(headerEntity, &headerComp, &quasarComp)
+	s.handleInteractions(headerEntity, &headerComp)
 
 	// Combat update
 	if quasarComp.IsShielded {
@@ -583,7 +583,7 @@ func (s *QuasarSystem) destroyGoldComposite(headerEntity core.Entity) {
 }
 
 // handleInteractions processes shield drain and cursor collision
-func (s *QuasarSystem) handleInteractions(headerEntity core.Entity, headerComp *component.HeaderComponent, quasar *component.QuasarComponent) {
+func (s *QuasarSystem) handleInteractions(headerEntity core.Entity, headerComp *component.HeaderComponent) {
 	cursorEntity := s.world.Resources.Cursor.Entity
 
 	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
@@ -595,16 +595,19 @@ func (s *QuasarSystem) handleInteractions(headerEntity core.Entity, headerComp *
 	shieldActive := ok && shieldComp.Active
 
 	// Stack-allocated buffer for shield overlapping member offsets (max 15 cells in 3x5 quasar)
-	var overlapOffsets [15]struct{ x, y int }
+	// var overlapOffsets [15]struct{ x, y int }
 	overlapCount := 0
 	anyOnCursor := false
 
-	for _, m := range headerComp.MemberEntries {
-		if m.Entity == 0 {
+	// TODO: patchwork
+	var hitEntities []core.Entity
+
+	for _, memberEntry := range headerComp.MemberEntries {
+		if memberEntry.Entity == 0 {
 			continue
 		}
 
-		memberPos, ok := s.world.Positions.GetPosition(m.Entity)
+		memberPos, ok := s.world.Positions.GetPosition(memberEntry.Entity)
 		if !ok {
 			continue
 		}
@@ -616,15 +619,26 @@ func (s *QuasarSystem) handleInteractions(headerEntity core.Entity, headerComp *
 
 		// Shield overlap check
 		if shieldActive && s.isInsideShieldEllipse(memberPos.X, memberPos.Y, cursorPos, &shieldComp) {
-			overlapOffsets[overlapCount] = struct{ x, y int }{int(m.OffsetX), int(m.OffsetY)}
+			// overlapOffsets[overlapCount] = struct{ x, y int }{int(memberEntry.OffsetX), int(memberEntry.OffsetY)}
 			overlapCount++
+
+			hitEntities = append(hitEntities, memberEntry.Entity)
 		}
 	}
 	anyInShield := overlapCount > 0
 
 	// Shield knockback check
 	if anyInShield {
-		s.applyShieldKnockback(headerEntity, quasar, cursorPos, overlapOffsets[:overlapCount])
+		// s.applyShieldKnockback(headerEntity, quasar, cursorPos, overlapOffsets[:overlapCount])
+		s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+			AttackType:   component.CombatAttackShield,
+			OwnerEntity:  cursorEntity,
+			OriginEntity: cursorEntity,
+			TargetEntity: headerEntity,
+			HitEntities:  hitEntities,
+		})
+
+		// s.world.DebugPrint(fmt.Sprintf("owner: %d, target: %d, count: %d hit: %v", cursorEntity, headerEntity, len(hitEntities), hitEntities))
 	}
 
 	// Shield drain (once per tick if any overlap)
@@ -648,52 +662,52 @@ func (s *QuasarSystem) isInsideShieldEllipse(x, y int, cursorPos component.Posit
 	return vmath.EllipseContains(dx, dy, shieldComp.InvRxSq, shieldComp.InvRySq)
 }
 
-// applyShieldKnockback applies radial impulse when quasar overlaps shield
-// Uses centroid of overlapping member offsets for offset-influenced direction
-func (s *QuasarSystem) applyShieldKnockback(
-	headerEntity core.Entity,
-	quasarComp *component.QuasarComponent,
-	cursorPos component.PositionComponent,
-	overlaps []struct{ x, y int },
-) {
-	headerPos, ok := s.world.Positions.GetPosition(headerEntity)
-	if !ok {
-		return
-	}
-	kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity)
-	if !ok {
-		return
-	}
-
-	// Radial direction: cursor → anchor (shield pushes outward)
-	radialX := vmath.FromInt(headerPos.X - cursorPos.X)
-	radialY := vmath.FromInt(headerPos.Y - cursorPos.Y)
-
-	// Zero vector fallback (quasarComp centered on cursor)
-	if radialX == 0 && radialY == 0 {
-		radialX = vmath.Scale // Push right by default
-	}
-
-	// Centroid of overlapping member offsets (integer arithmetic)
-	sumX, sumY := 0, 0
-	for _, o := range overlaps {
-		sumX += o.x
-		sumY += o.y
-	}
-	centroidX := sumX / len(overlaps)
-	centroidY := sumY / len(overlaps)
-
-	if physics.ApplyOffsetCollision(
-		&kineticComp.Kinetic,
-		radialX, radialY,
-		centroidX, centroidY,
-		&physics.ShieldToQuasar,
-		s.rng,
-	) {
-		s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
-		s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
-	}
-}
+// // applyShieldKnockback applies radial impulse when quasar overlaps shield
+// // Uses centroid of overlapping member offsets for offset-influenced direction
+// func (s *QuasarSystem) applyShieldKnockback(
+// 	headerEntity core.Entity,
+// 	quasarComp *component.QuasarComponent,
+// 	cursorPos component.PositionComponent,
+// 	overlaps []struct{ x, y int },
+// ) {
+// 	headerPos, ok := s.world.Positions.GetPosition(headerEntity)
+// 	if !ok {
+// 		return
+// 	}
+// 	kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity)
+// 	if !ok {
+// 		return
+// 	}
+//
+// 	// Radial direction: cursor → anchor (shield pushes outward)
+// 	radialX := vmath.FromInt(headerPos.X - cursorPos.X)
+// 	radialY := vmath.FromInt(headerPos.Y - cursorPos.Y)
+//
+// 	// Zero vector fallback (quasarComp centered on cursor)
+// 	if radialX == 0 && radialY == 0 {
+// 		radialX = vmath.Scale // Push right by default
+// 	}
+//
+// 	// Centroid of overlapping member offsets (integer arithmetic)
+// 	sumX, sumY := 0, 0
+// 	for _, o := range overlaps {
+// 		sumX += o.x
+// 		sumY += o.y
+// 	}
+// 	centroidX := sumX / len(overlaps)
+// 	centroidY := sumY / len(overlaps)
+//
+// 	if physics.ApplyOffsetCollision(
+// 		&kineticComp.Kinetic,
+// 		radialX, radialY,
+// 		centroidX, centroidY,
+// 		&physics.ShieldToQuasar,
+// 		s.rng,
+// 	) {
+// 		s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
+// 		s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
+// 	}
+// }
 
 // terminateQuasar ends quasar phase
 func (s *QuasarSystem) terminateQuasar() {

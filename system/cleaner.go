@@ -352,7 +352,7 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 		}
 
 		if s.world.Components.Combat.HasEntity(entity) {
-			s.world.PushEvent(event.EventCombatAttackRequest, &event.CombatAttackRequestPayload{
+			s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
 				AttackType:   component.CombatAttackProjectile,
 				OwnerEntity:  cursorEntity,
 				OriginEntity: selfEntity,
@@ -378,7 +378,7 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 			}
 			s.collidedHeaders[memberComp.HeaderEntity] = selfEntity
 
-			s.world.PushEvent(event.EventCombatAttackRequest, &event.CombatAttackRequestPayload{
+			s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
 				AttackType:   component.CombatAttackProjectile,
 				OwnerEntity:  cursorEntity,
 				OriginEntity: selfEntity,

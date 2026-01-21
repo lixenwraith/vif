@@ -38,19 +38,9 @@ const (
 	// Applied proportionally to excess speed for smooth convergence
 	DrainDragFloat = 2.0
 
-	// DrainDeflectImpulse is velocity magnitude added on cleaner collision (cells/sec)
-	// Determines how far drain travels before homing pulls it back
-	DrainDeflectImpulseFloat = 8.0
-
 	// DrainDeflectAngleVar is half-angle of random deflection cone (radians)
 	// ±0.35 rad ≈ ±20° spread for visual variety
 	DrainDeflectAngleVarFloat = 0.35
-
-	// DrainDeflectImpulseMinFloat is minimum deflection velocity (cells/sec)
-	DrainDeflectImpulseMinFloat = 15.0
-
-	// DrainDeflectImpulseMaxFloat is maximum deflection velocity (cells/sec)
-	DrainDeflectImpulseMaxFloat = 40.0
 )
 
 // --- Quasar Entity ---
@@ -77,13 +67,6 @@ const (
 	// QuasarZapDuration is the visual duration for zap lightning effect
 	// Set long since it's continuously refreshed while zapping
 	QuasarZapDuration = 500 * time.Millisecond
-
-	// QuasarDeflectImpulseMinFloat is minimum deflection velocity (cells/sec)
-	// Lower than drain due to mass ratio reduction
-	QuasarDeflectImpulseMinFloat = 15.0
-
-	// QuasarDeflectImpulseMaxFloat is maximum deflection velocity (cells/sec)
-	QuasarDeflectImpulseMaxFloat = 40.0
 
 	// QuasarHomingAccelFloat is acceleration toward cursor (cells/sec²)
 	QuasarHomingAccelFloat = 4.0
@@ -141,19 +124,9 @@ const (
 	// Applied proportionally to excess speed for smooth convergence
 	SwarmDragFloat = 2.0
 
-	// SwarmDeflectImpulse is velocity magnitude added on cleaner collision (cells/sec)
-	// Determines how far drain travels before homing pulls it back
-	SwarmDeflectImpulseFloat = 2.0
-
 	// SwarmDeflectAngleVar is half-angle of random deflection cone (radians)
 	// ±0.35 rad ≈ ±20° spread for visual variety
 	SwarmDeflectAngleVarFloat = 0.45
-
-	// SwarmDeflectImpulseMinFloat is minimum deflection velocity (cells/sec)
-	SwarmDeflectImpulseMinFloat = 15.0
-
-	// SwarmDeflectImpulseMaxFloat is maximum deflection velocity (cells/sec)
-	SwarmDeflectImpulseMaxFloat = 40.0
 )
 
 // --- Decay / Blossom Entities ---

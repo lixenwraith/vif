@@ -88,7 +88,6 @@ type CombatAttackProfile struct {
 
 type CombatMatrixKey [2]CombatEntityType
 
-// type combatMatrixMap map[CombatMatrixKey]*CombatAttackProfile
 type combatMatrixMap map[CombatAttackType]map[CombatMatrixKey]*CombatAttackProfile
 
 var CombatMatrix = combatMatrixMap{
@@ -161,7 +160,7 @@ var CombatAttackShieldToDrain = CombatAttackProfile{
 	AttackType:         CombatAttackShield,
 	AttackerEntityType: CombatEntityCursor,
 	DefenderEntityType: CombatEntityDrain,
-	DamageType:         CombatDamageDirect,
+	DamageType:         CombatDamageArea,
 	DamageValue:        0,
 	EffectMask:         CombatEffectKinetic,
 	ChainAttack:        nil,
@@ -172,7 +171,7 @@ var CombatAttackShieldToQuasar = CombatAttackProfile{
 	AttackType:         CombatAttackShield,
 	AttackerEntityType: CombatEntityCursor,
 	DefenderEntityType: CombatEntityQuasar,
-	DamageType:         CombatDamageDirect,
+	DamageType:         CombatDamageArea,
 	DamageValue:        0,
 	EffectMask:         CombatEffectKinetic,
 	ChainAttack:        nil,

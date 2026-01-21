@@ -249,7 +249,7 @@ func (s *CompositeSystem) CreateHeader(x, y int, behaviorID component.Behavior) 
 }
 
 // AddMember attaches a member entity to an existing composite
-func (s *CompositeSystem) AddMember(headerEntity, memberEntity core.Entity, offsetX, offsetY int8, layer uint8) {
+func (s *CompositeSystem) AddMember(headerEntity, memberEntity core.Entity, offsetX, offsetY int, layer uint8) {
 	headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
 	if !ok {
 		return
