@@ -116,26 +116,15 @@ func (s *DeathSystem) markForDeath(entity core.Entity, effect event.EventType) {
 		}
 	}
 
-	// 2. Routing/Cleanup Hooks
-	// Pre-destruction hook for informing other systems
-	s.routeCleanup(entity)
-
-	// 3. Visual Effects
+	// 2. Emit effect event
 	if effect != 0 {
 		s.emitEffect(entity, effect)
 	}
 
-	// 4. Immediate Destruction
-	// Removes entity from ALL stores, making it invisible to next Render snapshot
+	// 3. Immediate destruction: removes entity from all stores
 	s.world.DestroyEntity(entity)
 
 	s.statKilled.Add(1)
-}
-
-// routeCleanup handles informing other systems before the entity is purged
-func (s *DeathSystem) routeCleanup(entity core.Entity) {
-	// TODO: Future Implementation, it's already done with emitEffect, maybe expand and remove this branch, need batch processing
-	// Example: If entity has MemberComponent, emit EventMemberDied to CompositeSystem
 }
 
 func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType) {
