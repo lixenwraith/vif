@@ -65,15 +65,8 @@ func MotionWordForward(ctx *engine.GameContext, x, y, count int) MotionResult {
 	bounds := ctx.GetPingBounds()
 	endX, endY := x, y
 
-	// TODO: consolidate bounds/non-bounds
 	for i := 0; i < count; i++ {
-		var newX, newY int
-		if bounds.Active {
-			newX, newY = findNextWordStartInBounds(ctx, endX, endY, bounds)
-		} else {
-			newX = findNextWordStartVim(ctx, endX, y)
-			newY = y
-		}
+		newX, newY := findNextWordStartInBounds(ctx, endX, endY, bounds)
 		if newX == endX && newY == endY {
 			break
 		}
@@ -95,13 +88,7 @@ func MotionWORDForward(ctx *engine.GameContext, x, y, count int) MotionResult {
 	endX, endY := x, y
 
 	for i := 0; i < count; i++ {
-		var newX, newY int
-		if bounds.Active {
-			newX, newY = findNextWORDStartInBounds(ctx, endX, endY, bounds)
-		} else {
-			newX = findNextWORDStart(ctx, endX, y)
-			newY = y
-		}
+		newX, newY := findNextWORDStartInBounds(ctx, endX, endY, bounds)
 		if newX == endX && newY == endY {
 			break
 		}
@@ -123,13 +110,7 @@ func MotionWordEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
 	endX, endY := x, y
 
 	for i := 0; i < count; i++ {
-		var newX, newY int
-		if bounds.Active {
-			newX, newY = findWordEndInBounds(ctx, endX, endY, bounds)
-		} else {
-			newX = findWordEndVim(ctx, endX, y)
-			newY = y
-		}
+		newX, newY := findWordEndInBounds(ctx, endX, endY, bounds)
 		if newX == endX && newY == endY {
 			break
 		}
@@ -151,13 +132,7 @@ func MotionWORDEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
 	endX, endY := x, y
 
 	for i := 0; i < count; i++ {
-		var newX, newY int
-		if bounds.Active {
-			newX, newY = findWORDEndInBounds(ctx, endX, endY, bounds)
-		} else {
-			newX = findWORDEnd(ctx, endX, y)
-			newY = y
-		}
+		newX, newY := findWORDEndInBounds(ctx, endX, endY, bounds)
 		if newX == endX && newY == endY {
 			break
 		}
@@ -179,13 +154,7 @@ func MotionWordBack(ctx *engine.GameContext, x, y, count int) MotionResult {
 	endX, endY := x, y
 
 	for i := 0; i < count; i++ {
-		var newX, newY int
-		if bounds.Active {
-			newX, newY = findPrevWordStartInBounds(ctx, endX, endY, bounds)
-		} else {
-			newX = findPrevWordStartVim(ctx, endX, y)
-			newY = y
-		}
+		newX, newY := findPrevWordStartInBounds(ctx, endX, endY, bounds)
 		if newX == endX && newY == endY {
 			break
 		}
@@ -207,13 +176,7 @@ func MotionWORDBack(ctx *engine.GameContext, x, y, count int) MotionResult {
 	endX, endY := x, y
 
 	for i := 0; i < count; i++ {
-		var newX, newY int
-		if bounds.Active {
-			newX, newY = findPrevWORDStartInBounds(ctx, endX, endY, bounds)
-		} else {
-			newX = findPrevWORDStart(ctx, endX, y)
-			newY = y
-		}
+		newX, newY := findPrevWORDStartInBounds(ctx, endX, endY, bounds)
 		if newX == endX && newY == endY {
 			break
 		}
@@ -242,14 +205,8 @@ func MotionLineStart(ctx *engine.GameContext, x, y, count int) MotionResult {
 // MotionFirstNonWS implements '^' motion
 func MotionFirstNonWS(ctx *engine.GameContext, x, y, count int) MotionResult {
 	bounds := ctx.GetPingBounds()
-	var endX, endY int
 
-	if bounds.Active {
-		endX, endY = findFirstNonWhitespaceInBounds(ctx, bounds)
-	} else {
-		endX = findFirstNonWhitespace(ctx, y)
-		endY = y
-	}
+	endX, endY := findFirstNonWhitespaceInBounds(ctx, bounds)
 
 	return MotionResult{
 		StartX: x, StartY: y,
@@ -262,13 +219,8 @@ func MotionFirstNonWS(ctx *engine.GameContext, x, y, count int) MotionResult {
 // MotionLineEnd implements '$' motion
 func MotionLineEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
 	bounds := ctx.GetPingBounds()
-	var lastEntityX int
 
-	if bounds.Active {
-		lastEntityX = findLineEndInBounds(ctx, bounds)
-	} else {
-		lastEntityX = findLineEnd(ctx, y)
-	}
+	lastEntityX := findLineEndInBounds(ctx, bounds)
 
 	var endX int
 	// Jump to screen edge if:
@@ -424,15 +376,7 @@ func MotionOrigin(ctx *engine.GameContext, x, y, count int) MotionResult {
 func MotionFindForward(ctx *engine.GameContext, x, y, count int, char rune) MotionResult {
 	bounds := ctx.GetPingBounds()
 
-	var endX, endY int
-	var found bool
-
-	if bounds.Active {
-		endX, endY, found = findCharInBounds(ctx, x, y, char, count, true, bounds)
-	} else {
-		endX, found = findCharInDirection(ctx, x, y, char, count, true)
-		endY = y
-	}
+	endX, endY, found := findCharInBounds(ctx, x, y, char, count, true, bounds)
 
 	if !found {
 		return MotionResult{
@@ -455,15 +399,7 @@ func MotionFindForward(ctx *engine.GameContext, x, y, count int, char rune) Moti
 func MotionFindBack(ctx *engine.GameContext, x, y, count int, char rune) MotionResult {
 	bounds := ctx.GetPingBounds()
 
-	var endX, endY int
-	var found bool
-
-	if bounds.Active {
-		endX, endY, found = findCharInBounds(ctx, x, y, char, count, false, bounds)
-	} else {
-		endX, found = findCharInDirection(ctx, x, y, char, count, false)
-		endY = y
-	}
+	endX, endY, found := findCharInBounds(ctx, x, y, char, count, false, bounds)
 
 	if !found {
 		return MotionResult{
@@ -486,15 +422,7 @@ func MotionFindBack(ctx *engine.GameContext, x, y, count int, char rune) MotionR
 func MotionTillForward(ctx *engine.GameContext, x, y, count int, char rune) MotionResult {
 	bounds := ctx.GetPingBounds()
 
-	var endX, endY int
-	var found bool
-
-	if bounds.Active {
-		endX, endY, found = findCharInBounds(ctx, x, y, char, count, true, bounds)
-	} else {
-		endX, found = findCharInDirection(ctx, x, y, char, count, true)
-		endY = y
-	}
+	endX, endY, found := findCharInBounds(ctx, x, y, char, count, true, bounds)
 
 	if !found {
 		return MotionResult{
@@ -507,23 +435,10 @@ func MotionTillForward(ctx *engine.GameContext, x, y, count int, char rune) Moti
 
 	// Till: stop one position before target
 	// For bounds mode, need to handle row wrapping
-	if bounds.Active {
-		endX--
-		if endX < 0 {
-			endY--
-			if endY < bounds.MinY {
-				return MotionResult{
-					StartX: x, StartY: y,
-					EndX: x, EndY: y,
-					Type: RangeChar, Style: StyleInclusive,
-					Valid: false,
-				}
-			}
-			endX = ctx.World.Resources.Config.GameWidth - 1
-		}
-	} else {
-		// Single row: adjacent target means no valid motion
-		if endX <= x+1 {
+	endX--
+	if endX < 0 {
+		endY--
+		if endY < bounds.MinY {
 			return MotionResult{
 				StartX: x, StartY: y,
 				EndX: x, EndY: y,
@@ -531,7 +446,7 @@ func MotionTillForward(ctx *engine.GameContext, x, y, count int, char rune) Moti
 				Valid: false,
 			}
 		}
-		endX--
+		endX = ctx.World.Resources.Config.GameWidth - 1
 	}
 
 	// Check we actually moved
@@ -556,15 +471,7 @@ func MotionTillForward(ctx *engine.GameContext, x, y, count int, char rune) Moti
 func MotionTillBack(ctx *engine.GameContext, x, y, count int, char rune) MotionResult {
 	bounds := ctx.GetPingBounds()
 
-	var endX, endY int
-	var found bool
-
-	if bounds.Active {
-		endX, endY, found = findCharInBounds(ctx, x, y, char, count, false, bounds)
-	} else {
-		endX, found = findCharInDirection(ctx, x, y, char, count, false)
-		endY = y
-	}
+	endX, endY, found := findCharInBounds(ctx, x, y, char, count, false, bounds)
 
 	if !found {
 		return MotionResult{
@@ -576,23 +483,10 @@ func MotionTillBack(ctx *engine.GameContext, x, y, count int, char rune) MotionR
 	}
 
 	// Till: stop one position after target (moving backward)
-	if bounds.Active {
-		endX++
-		if endX >= ctx.World.Resources.Config.GameWidth {
-			endY++
-			if endY > bounds.MaxY {
-				return MotionResult{
-					StartX: x, StartY: y,
-					EndX: x, EndY: y,
-					Type: RangeChar, Style: StyleInclusive,
-					Valid: false,
-				}
-			}
-			endX = 0
-		}
-	} else {
-		// Single row: adjacent target means no valid motion
-		if endX >= x-1 {
+	endX++
+	if endX >= ctx.World.Resources.Config.GameWidth {
+		endY++
+		if endY > bounds.MaxY {
 			return MotionResult{
 				StartX: x, StartY: y,
 				EndX: x, EndY: y,
@@ -600,7 +494,7 @@ func MotionTillBack(ctx *engine.GameContext, x, y, count int, char rune) MotionR
 				Valid: false,
 			}
 		}
-		endX++
+		endX = 0
 	}
 
 	// Check we actually moved
@@ -687,23 +581,7 @@ func MotionColumnUp(ctx *engine.GameContext, x, y, count int) MotionResult {
 	endX, endY := x, y
 
 	for i := 0; i < count; i++ {
-		var newX, newY int
-		if bounds.Active {
-			newX, newY = findColumnUpInBounds(ctx, endX, endY, bounds)
-		} else {
-			newX = x
-			found := false
-			for checkY := endY - 1; checkY >= 0; checkY-- {
-				if getCharacterTypeAt(ctx, x, checkY) != CharTypeSpace {
-					newY = checkY
-					found = true
-					break
-				}
-			}
-			if !found {
-				break
-			}
-		}
+		newX, newY := findColumnUpInBounds(ctx, endX, endY, bounds)
 		if newX == endX && newY == endY {
 			break
 		}
@@ -724,23 +602,7 @@ func MotionColumnDown(ctx *engine.GameContext, x, y, count int) MotionResult {
 	endX, endY := x, y
 
 	for i := 0; i < count; i++ {
-		var newX, newY int
-		if bounds.Active {
-			newX, newY = findColumnDownInBounds(ctx, endX, endY, bounds, ctx.World.Resources.Config.GameHeight)
-		} else {
-			newX = x
-			found := false
-			for checkY := endY + 1; checkY < ctx.World.Resources.Config.GameHeight; checkY++ {
-				if getCharacterTypeAt(ctx, x, checkY) != CharTypeSpace {
-					newY = checkY
-					found = true
-					break
-				}
-			}
-			if !found {
-				break
-			}
-		}
+		newX, newY := findColumnDownInBounds(ctx, endX, endY, bounds, ctx.World.Resources.Config.GameHeight)
 		if newX == endX && newY == endY {
 			break
 		}
