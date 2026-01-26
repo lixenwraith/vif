@@ -146,7 +146,15 @@ func (s *DrainSystem) Update() {
 		return
 	}
 
-	// Skip all materialize spawn/despawn materialize logic during quasar phase
+	drainEntities := s.world.Components.Drain.GetAllEntities()
+	for _, drainEntity := range drainEntities {
+		combatComp, ok := s.world.Components.Combat.GetComponent(drainEntity)
+		if !ok || combatComp.HitPoints <= 0 {
+			event.EmitDeathOne(s.world.Resources.Event.Queue, drainEntity, event.EventFlashRequest)
+		}
+	}
+
+	// Skip all materialize spawn logic when paused
 	if s.paused {
 		s.statCount.Store(0)
 		s.statPending.Store(0)
@@ -881,7 +889,6 @@ func (s *DrainSystem) handleCollisionAtPosition(entity core.Entity) {
 	}
 
 	// Destroy the entity (Handles standard chars, Decay entities, etc.)
-	// TODO: this is too broad, ensure proections from drain is set properly
 	s.world.DestroyEntity(entity)
 }
 
