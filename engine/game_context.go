@@ -2,6 +2,7 @@ package engine
 
 import (
 	"sync/atomic"
+	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
@@ -14,20 +15,18 @@ import (
 // GameContext holds all game state including the ECS world
 type GameContext struct {
 	// === Immutable After Init ===
-	// Set once during NewGameContext. Pointers/values never modified.
-	// Safe for concurrent read without synchronization.
+	// Set once in NewGameContext, and pointers/values never modified, safe for concurrent read without sync
 
 	World         *World         // ECS world; has internal lock
 	State         *GameState     // Centralized game state; has internal lock
 	PausableClock *PausableClock // Pausable time source; has internal sync
 
 	// === Channels ===
-	// Inherently thread-safe for send operations.
+	// Inherently thread-safe for send operations
 
 	ResetChan chan<- struct{} // FSM reset signal; wired to ClockScheduler
 
 	// === Atomic (Self-Synchronized) ===
-	// Safe for concurrent access via atomic operations.
 
 	FrameNumber atomic.Int64 // Render frame counter; incremented by main loop
 	mode        atomic.Int32 // Game mode (core.GameMode); set by Router
@@ -35,14 +34,18 @@ type GameContext struct {
 	IsMuted     atomic.Bool  // Mute flag; keeps mute state
 
 	// === Main-Loop Exclusive ===
-	// Accessed only from main goroutine (input, resize, render).
-	// No synchronization required.
+	// Accessed only from main goroutine (input, resize, render)
+	// No sync required
 
 	Width, Height            int // Terminal dimensions
 	GameXOffset, GameYOffset int // Game area offset from terminal origin
 
-	// === Mutex-Protected (ui.mu) ===
-	// All access requires holding ui.mu (RLock for read, Lock for write).
+	// === Context Exclusive ===
+	// No sync required
+	lastFPSUpdate time.Time
+	frameCountFPS int64
+
+	// === Atomic States ===
 
 	// Status bar state (atomic pointers for lock-free access)
 	commandText   atomic.Pointer[string]
@@ -55,6 +58,9 @@ type GameContext struct {
 	overlayTitle   atomic.Pointer[string]
 	overlayScroll  atomic.Int32
 	overlayContent atomic.Pointer[core.OverlayContent]
+
+	// Cached FPS state
+	statFPS *atomic.Int64
 }
 
 // NewGameContext creates a GameContext using an existing ECS World
@@ -106,7 +112,7 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	ctx.World.CreateEnvironment()
 	ctx.World.CreateCursorEntity()
 
-	// Initialize atomic string pointers to empty strings
+	// 7. Initialize atomic string pointers to empty strings
 	empty := ""
 	ctx.commandText.Store(&empty)
 	ctx.searchText.Store(&empty)
@@ -114,11 +120,15 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	ctx.lastCommand.Store(&empty)
 	ctx.overlayTitle.Store(&empty)
 
-	// Initialize audio muted
+	// 8. Initialize audio muted
 	ctx.IsMuted.Store(true)
 
-	// Initialize pause state
+	// 9. Initialize pause state
 	ctx.IsPaused.Store(false)
+
+	// 10. Initialize FPS tracking
+	ctx.statFPS = ctx.World.Resources.Status.Ints.Get("engine.fps")
+	ctx.lastFPSUpdate = ctx.PausableClock.RealTime()
 
 	return ctx
 }
@@ -210,6 +220,15 @@ func (ctx *GameContext) GetFrameNumber() int64 {
 
 // IncrementFrameNumber advances the frame authority (called by Render Loop)
 func (ctx *GameContext) IncrementFrameNumber() int64 {
+	// FPS calculation (once per second)
+	ctx.frameCountFPS++
+	now := ctx.PausableClock.RealTime()
+	if now.Sub(ctx.lastFPSUpdate) >= time.Second {
+		ctx.statFPS.Store(ctx.frameCountFPS)
+		ctx.frameCountFPS = 0
+		ctx.lastFPSUpdate = now
+	}
+
 	return ctx.FrameNumber.Add(1)
 }
 

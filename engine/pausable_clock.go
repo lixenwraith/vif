@@ -18,18 +18,14 @@ type PausableClock struct {
 	isPaused        atomic.Bool
 	pauseStartTime  time.Time     // When current pause started (real time)
 	totalPausedTime time.Duration // Cumulative pause duration
-
-	// For external access to real time
-	realTimeProvider *TimeProvider
 }
 
 // NewPausableClock creates a new pausable clock
 func NewPausableClock() *PausableClock {
 	now := time.Now()
 	return &PausableClock{
-		realStartTime:    now,
-		gameStartTime:    now,
-		realTimeProvider: NewTimeProvider(),
+		realStartTime: now,
+		gameStartTime: now,
 	}
 }
 

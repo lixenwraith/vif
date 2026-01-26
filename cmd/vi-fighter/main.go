@@ -172,14 +172,7 @@ func main() {
 	clockScheduler.Start()
 	defer clockScheduler.Stop()
 
-	// Cache FPS metric pointer for render loop
-	statFPS := ctx.World.Resources.Status.Ints.Get("engine.fps")
-
-	// FPS tracking
-	var frameCount int64
-	lastFPSUpdate := ctx.World.Resources.Time.RealTime
-
-	// Add frame rate
+	// Set frame rate
 	frameTicker := time.NewTicker(constant.FrameUpdateInterval)
 	defer frameTicker.Stop()
 
@@ -191,8 +184,7 @@ func main() {
 	for {
 		select {
 		case ev := <-eventChan:
-			// Input handling always works (even during pause)
-			// Dumb pipe: Key Event → Machine → Intent → Router
+			// Input handling always works, Dumb pipe: Key Event → Machine → Intent → Router
 			intent := inputMachine.Process(ev)
 
 			if intent != nil {
@@ -215,15 +207,6 @@ func main() {
 		case <-frameTicker.C:
 			// Increment frame number at the start of the frame cycle
 			ctx.IncrementFrameNumber()
-
-			// FPS calculation (once per second)
-			frameCount++
-			now := ctx.World.Resources.Time.RealTime
-			if now.Sub(lastFPSUpdate) >= time.Second {
-				statFPS.Store(frameCount)
-				frameCount = 0
-				lastFPSUpdate = now
-			}
 
 			// Snapshots for rendering (captured safely under lock)
 			var (
