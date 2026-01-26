@@ -65,10 +65,11 @@ func MotionWordForward(ctx *engine.GameContext, x, y, count int) MotionResult {
 	bounds := ctx.GetPingBounds()
 	endX, endY := x, y
 
+	// TODO: consolidate bounds/non-bounds
 	for i := 0; i < count; i++ {
 		var newX, newY int
 		if bounds.Active {
-			newX, newY = findNextWordStartInBand(ctx, endX, endY, bounds)
+			newX, newY = findNextWordStartInBounds(ctx, endX, endY, bounds)
 		} else {
 			newX = findNextWordStartVim(ctx, endX, y)
 			newY = y
@@ -96,7 +97,7 @@ func MotionWORDForward(ctx *engine.GameContext, x, y, count int) MotionResult {
 	for i := 0; i < count; i++ {
 		var newX, newY int
 		if bounds.Active {
-			newX, newY = findNextWORDStartInBand(ctx, endX, endY, bounds)
+			newX, newY = findNextWORDStartInBounds(ctx, endX, endY, bounds)
 		} else {
 			newX = findNextWORDStart(ctx, endX, y)
 			newY = y
@@ -124,7 +125,7 @@ func MotionWordEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
 	for i := 0; i < count; i++ {
 		var newX, newY int
 		if bounds.Active {
-			newX, newY = findWordEndInBand(ctx, endX, endY, bounds)
+			newX, newY = findWordEndInBounds(ctx, endX, endY, bounds)
 		} else {
 			newX = findWordEndVim(ctx, endX, y)
 			newY = y
@@ -152,7 +153,7 @@ func MotionWORDEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
 	for i := 0; i < count; i++ {
 		var newX, newY int
 		if bounds.Active {
-			newX, newY = findWORDEndInBand(ctx, endX, endY, bounds)
+			newX, newY = findWORDEndInBounds(ctx, endX, endY, bounds)
 		} else {
 			newX = findWORDEnd(ctx, endX, y)
 			newY = y
@@ -180,7 +181,7 @@ func MotionWordBack(ctx *engine.GameContext, x, y, count int) MotionResult {
 	for i := 0; i < count; i++ {
 		var newX, newY int
 		if bounds.Active {
-			newX, newY = findPrevWordStartInBand(ctx, endX, endY, bounds)
+			newX, newY = findPrevWordStartInBounds(ctx, endX, endY, bounds)
 		} else {
 			newX = findPrevWordStartVim(ctx, endX, y)
 			newY = y
@@ -208,7 +209,7 @@ func MotionWORDBack(ctx *engine.GameContext, x, y, count int) MotionResult {
 	for i := 0; i < count; i++ {
 		var newX, newY int
 		if bounds.Active {
-			newX, newY = findPrevWORDStartInBand(ctx, endX, endY, bounds)
+			newX, newY = findPrevWORDStartInBounds(ctx, endX, endY, bounds)
 		} else {
 			newX = findPrevWORDStart(ctx, endX, y)
 			newY = y
@@ -244,7 +245,7 @@ func MotionFirstNonWS(ctx *engine.GameContext, x, y, count int) MotionResult {
 	var endX, endY int
 
 	if bounds.Active {
-		endX, endY = findFirstNonWhitespaceInBand(ctx, bounds)
+		endX, endY = findFirstNonWhitespaceInBounds(ctx, bounds)
 	} else {
 		endX = findFirstNonWhitespace(ctx, y)
 		endY = y
@@ -264,7 +265,7 @@ func MotionLineEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
 	var lastEntityX int
 
 	if bounds.Active {
-		lastEntityX = findLineEndInBand(ctx, bounds)
+		lastEntityX = findLineEndInBounds(ctx, bounds)
 	} else {
 		lastEntityX = findLineEnd(ctx, y)
 	}
@@ -427,7 +428,7 @@ func MotionFindForward(ctx *engine.GameContext, x, y, count int, char rune) Moti
 	var found bool
 
 	if bounds.Active {
-		endX, endY, found = findCharInBand(ctx, x, y, char, count, true, bounds)
+		endX, endY, found = findCharInBounds(ctx, x, y, char, count, true, bounds)
 	} else {
 		endX, found = findCharInDirection(ctx, x, y, char, count, true)
 		endY = y
@@ -458,7 +459,7 @@ func MotionFindBack(ctx *engine.GameContext, x, y, count int, char rune) MotionR
 	var found bool
 
 	if bounds.Active {
-		endX, endY, found = findCharInBand(ctx, x, y, char, count, false, bounds)
+		endX, endY, found = findCharInBounds(ctx, x, y, char, count, false, bounds)
 	} else {
 		endX, found = findCharInDirection(ctx, x, y, char, count, false)
 		endY = y
@@ -489,7 +490,7 @@ func MotionTillForward(ctx *engine.GameContext, x, y, count int, char rune) Moti
 	var found bool
 
 	if bounds.Active {
-		endX, endY, found = findCharInBand(ctx, x, y, char, count, true, bounds)
+		endX, endY, found = findCharInBounds(ctx, x, y, char, count, true, bounds)
 	} else {
 		endX, found = findCharInDirection(ctx, x, y, char, count, true)
 		endY = y
@@ -505,7 +506,7 @@ func MotionTillForward(ctx *engine.GameContext, x, y, count int, char rune) Moti
 	}
 
 	// Till: stop one position before target
-	// For band mode, need to handle row wrapping
+	// For bounds mode, need to handle row wrapping
 	if bounds.Active {
 		endX--
 		if endX < 0 {
@@ -559,7 +560,7 @@ func MotionTillBack(ctx *engine.GameContext, x, y, count int, char rune) MotionR
 	var found bool
 
 	if bounds.Active {
-		endX, endY, found = findCharInBand(ctx, x, y, char, count, false, bounds)
+		endX, endY, found = findCharInBounds(ctx, x, y, char, count, false, bounds)
 	} else {
 		endX, found = findCharInDirection(ctx, x, y, char, count, false)
 		endY = y
@@ -688,7 +689,7 @@ func MotionColumnUp(ctx *engine.GameContext, x, y, count int) MotionResult {
 	for i := 0; i < count; i++ {
 		var newX, newY int
 		if bounds.Active {
-			newX, newY = findColumnUpInBand(ctx, endX, endY, bounds)
+			newX, newY = findColumnUpInBounds(ctx, endX, endY, bounds)
 		} else {
 			newX = x
 			found := false
@@ -725,7 +726,7 @@ func MotionColumnDown(ctx *engine.GameContext, x, y, count int) MotionResult {
 	for i := 0; i < count; i++ {
 		var newX, newY int
 		if bounds.Active {
-			newX, newY = findColumnDownInBand(ctx, endX, endY, bounds, ctx.World.Resources.Config.GameHeight)
+			newX, newY = findColumnDownInBounds(ctx, endX, endY, bounds, ctx.World.Resources.Config.GameHeight)
 		} else {
 			newX = x
 			found := false
