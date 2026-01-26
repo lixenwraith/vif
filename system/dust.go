@@ -169,9 +169,12 @@ func (s *DustSystem) Update() {
 		return
 	}
 
-	// Fetch energy once for attraction gating
-	energyComp, _ := s.world.Components.Energy.GetComponent(cursorEntity)
-	cursorEnergy := energyComp.Current
+	// Fetch energy for attraction
+	var cursorEnergy int64
+	energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity)
+	if ok {
+		cursorEnergy = energyComp.Current
+	}
 	hasAttraction := cursorEnergy != 0
 
 	// Shield data for collision energy reward
