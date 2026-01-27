@@ -9,7 +9,11 @@ func MotionLeft(ctx *engine.GameContext, x, y, count int) MotionResult {
 	bounds := ctx.GetPingBounds()
 	endX := x
 	for i := 0; i < count && endX > 0; i++ {
-		endX -= (bounds.MaxX-bounds.MinX)/2 + 1
+		r := max(bounds.MaxX-x, x-bounds.MinX)
+		if r == 0 {
+			r = 1
+		}
+		endX -= r
 	}
 	if endX < 0 {
 		endX = 0
@@ -28,7 +32,11 @@ func MotionDown(ctx *engine.GameContext, x, y, count int) MotionResult {
 	endY := y
 	maxY := ctx.World.Resources.Config.GameHeight - 1
 	for i := 0; i < count && endY < maxY; i++ {
-		endY += (bounds.MaxY-bounds.MinY)/2 + 1
+		r := max(bounds.MaxY-y, y-bounds.MinY)
+		if r == 0 {
+			r = 1
+		}
+		endY += r
 	}
 	if endY > maxY {
 		endY = maxY
@@ -46,7 +54,11 @@ func MotionUp(ctx *engine.GameContext, x, y, count int) MotionResult {
 	bounds := ctx.GetPingBounds()
 	endY := y
 	for i := 0; i < count && endY > 0; i++ {
-		endY -= (bounds.MaxY-bounds.MinY)/2 + 1
+		r := max(bounds.MaxY-y, y-bounds.MinY)
+		if r == 0 {
+			r = 1
+		}
+		endY -= r
 	}
 	if endY < 0 {
 		endY = 0
@@ -65,7 +77,11 @@ func MotionRight(ctx *engine.GameContext, x, y, count int) MotionResult {
 	endX := x
 	maxX := ctx.World.Resources.Config.GameWidth - 1
 	for i := 0; i < count && endX < maxX; i++ {
-		endX += (bounds.MaxX-bounds.MinX)/2 + 1
+		r := max(bounds.MaxX-x, x-bounds.MinX)
+		if r == 0 {
+			r = 1
+		}
+		endX += r
 	}
 	if endX > maxX {
 		endX = maxX

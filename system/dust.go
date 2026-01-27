@@ -218,23 +218,6 @@ func (s *DustSystem) Update() {
 		if !ok {
 			continue
 		}
-		sigilComp, ok := s.world.Components.Sigil.GetComponent(dustEntity)
-		if !ok {
-			continue
-		}
-		timerComp, ok := s.world.Components.Timer.GetComponent(dustEntity)
-		if !ok {
-			deathCandidates = append(deathCandidates, dustEntity)
-		}
-
-		// --- Color Update ---
-		if sigilComp.Color == component.SigilDustBright && timerComp.Remaining < constant.DustTimerNormal {
-			sigilComp.Color = component.SigilDustNormal
-			s.world.Components.Sigil.SetComponent(dustEntity, sigilComp)
-		} else if sigilComp.Color == component.SigilDustNormal && timerComp.Remaining < constant.DustTimerDark {
-			sigilComp.Color = component.SigilDustDark
-			s.world.Components.Sigil.SetComponent(dustEntity, sigilComp)
-		}
 
 		// --- Positions and Shield State ---
 		dx := kineticComp.PreciseX - cursorXFixed
@@ -473,6 +456,24 @@ func (s *DustSystem) Update() {
 			dustComp.LastIntY = newY
 			// Use Unsafe Move (we hold the lock)
 			s.world.Positions.MoveUnsafe(dustEntity, component.PositionComponent{X: newX, Y: newY})
+		}
+
+		// --- Color Update ---
+		sigilComp, ok := s.world.Components.Sigil.GetComponent(dustEntity)
+		if !ok {
+			continue
+		}
+		timerComp, ok := s.world.Components.Timer.GetComponent(dustEntity)
+		if !ok {
+			deathCandidates = append(deathCandidates, dustEntity)
+		}
+
+		if sigilComp.Color == component.SigilDustBright && timerComp.Remaining < constant.DustTimerNormal {
+			sigilComp.Color = component.SigilDustNormal
+			s.world.Components.Sigil.SetComponent(dustEntity, sigilComp)
+		} else if sigilComp.Color == component.SigilDustNormal && timerComp.Remaining < constant.DustTimerDark {
+			sigilComp.Color = component.SigilDustDark
+			s.world.Components.Sigil.SetComponent(dustEntity, sigilComp)
 		}
 
 		s.world.Components.Dust.SetComponent(dustEntity, dustComp)

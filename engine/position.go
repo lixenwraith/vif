@@ -199,7 +199,7 @@ func (p *Position) Lock() {
 	p.mu.Lock()
 }
 
-// Unlock releases the write lock manually.
+// Unlock releases the write lock manually
 func (p *Position) Unlock() {
 	p.mu.Unlock()
 }

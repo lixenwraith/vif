@@ -201,8 +201,8 @@ const (
 
 	// Timers are the lifetime of each dust type (dark is disabled for now)
 	DustTimerDark   = 2 * time.Second
-	DustTimerNormal = 5 * time.Second
-	DustTimerBright = 10 * time.Second
+	DustTimerNormal = 4 * time.Second
+	DustTimerBright = 8 * time.Second
 )
 
 // --- Explosion Field VFX ---
