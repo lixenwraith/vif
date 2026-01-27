@@ -708,7 +708,6 @@ func (r *Router) handleOverlayPageScroll(direction int) bool {
 		pageSize = 1
 	}
 
-	// TODO: can scroll beyond last row, limit in tui
 	newScroll := r.ctx.GetOverlayScroll() + (direction * pageSize)
 	if newScroll < 0 {
 		newScroll = 0

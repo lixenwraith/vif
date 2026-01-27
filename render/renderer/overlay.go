@@ -201,6 +201,9 @@ func (r *OverlayRenderer) renderContent(outer, content tui.Region, data *core.Ov
 		r.renderCard(region, card, contentOffset, region.H)
 	})
 
+	// Sync clamped scroll back to GameContext to prevent drift
+	r.gameCtx.SetOverlayScroll(r.masonry.Viewport.Offset)
+
 	// Navigation hints
 	hints := "ESC close · j/k scroll · PgUp/PgDn page"
 	hintsX := (outer.W - tui.RuneLen(hints)) / 2

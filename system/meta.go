@@ -2,6 +2,7 @@ package system
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -124,38 +125,41 @@ func (s *MetaSystem) handleDebugRequest() {
 		Title: "DEBUG",
 	}
 
+	// Collect all stats into groups by prefix
+	groups := make(map[string][]core.CardEntry)
+
+	// Context stats
+	groups["context"] = []core.CardEntry{
+		{Key: "frame", Value: fmt.Sprintf("%d", s.ctx.GetFrameNumber())},
+		{Key: "screen", Value: fmt.Sprintf("%dx%d", s.ctx.Width, s.ctx.Height)},
+		{Key: "game", Value: fmt.Sprintf("%dx%d", s.ctx.World.Resources.Config.GameWidth, s.ctx.World.Resources.Config.GameHeight)},
+		{Key: "paused", Value: fmt.Sprintf("%v", s.ctx.IsPaused.Load())},
+	}
+
+	// Player stats from cursor entity components
 	cursorEntity := s.ctx.World.Resources.Cursor.Entity
-	// Card: Player GameState
-	playerCard := core.OverlayCard{Title: "PLAYER"}
-	energyComp, _ := s.world.Components.Energy.GetComponent(cursorEntity)
-	playerCard.Entries = append(playerCard.Entries, core.CardEntry{
-		Key: "Energy", Value: fmt.Sprintf("%d", energyComp.Current),
-	})
+	var playerEntries []core.CardEntry
+	if ec, ok := s.world.Components.Energy.GetComponent(cursorEntity); ok {
+		playerEntries = append(playerEntries, core.CardEntry{
+			Key: "energy", Value: fmt.Sprintf("%d", ec.Current),
+		})
+	}
 	if hc, ok := s.world.Components.Heat.GetComponent(cursorEntity); ok {
-		playerCard.Entries = append(playerCard.Entries, core.CardEntry{
-			Key: "Heat", Value: fmt.Sprintf("%d/%d", hc.Current, constant.HeatMax),
+		playerEntries = append(playerEntries, core.CardEntry{
+			Key: "heat", Value: fmt.Sprintf("%d/%d", hc.Current, constant.HeatMax),
 		})
 	}
 	if sc, ok := s.world.Components.Shield.GetComponent(cursorEntity); ok {
-		playerCard.Entries = append(playerCard.Entries, core.CardEntry{
-			Key: "Shield", Value: fmt.Sprintf("%v", sc.Active),
+		playerEntries = append(playerEntries, core.CardEntry{
+			Key: "shield", Value: fmt.Sprintf("%v", sc.Active),
 		})
 	}
-	content.Items = append(content.Items, playerCard)
+	if len(playerEntries) > 0 {
+		groups["player"] = playerEntries
+	}
 
-	// Card: Engine (from context)
-	engineCard := core.OverlayCard{Title: "CONTEXT"}
-	engineCard.Entries = append(engineCard.Entries,
-		core.CardEntry{Key: "Frame", Value: fmt.Sprintf("%d", s.ctx.GetFrameNumber())},
-		core.CardEntry{Key: "Screen", Value: fmt.Sprintf("%dx%d", s.ctx.Width, s.ctx.Height)},
-		core.CardEntry{Key: "Game", Value: fmt.Sprintf("%dx%d", s.ctx.World.Resources.Config.GameWidth, s.ctx.World.Resources.Config.GameHeight)},
-		core.CardEntry{Key: "Paused", Value: fmt.Sprintf("%v", s.ctx.IsPaused.Load())},
-	)
-	content.Items = append(content.Items, engineCard)
-
-	// Cards from status registry, grouped by prefix
+	// Status registry stats
 	reg := s.world.Resources.Status
-	groups := make(map[string][]core.CardEntry)
 
 	reg.Bools.Range(func(key string, ptr *atomic.Bool) {
 		prefix, name := splitStatKey(key)
@@ -188,8 +192,19 @@ func (s *MetaSystem) handleDebugRequest() {
 		groups[prefix] = append(groups[prefix], core.CardEntry{Key: name, Value: ptr.Load()})
 	})
 
-	// Remaining groups not in predefined order
-	for prefix, entries := range groups {
+	// Sort prefixes alphabetically
+	prefixes := make([]string, 0, len(groups))
+	for prefix := range groups {
+		prefixes = append(prefixes, prefix)
+	}
+	sort.Strings(prefixes)
+
+	// Build cards in sorted order with sorted entries
+	for _, prefix := range prefixes {
+		entries := groups[prefix]
+		sort.Slice(entries, func(i, j int) bool {
+			return entries[i].Key < entries[j].Key
+		})
 		content.Items = append(content.Items, core.OverlayCard{
 			Title:   strings.ToUpper(prefix),
 			Entries: entries,
