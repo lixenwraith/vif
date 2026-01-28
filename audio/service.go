@@ -3,7 +3,6 @@ package audio
 import (
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/service"
 )
@@ -99,7 +98,7 @@ func (s *AudioService) Engine() *AudioEngine {
 
 // Player returns an AudioPlayer interface for game systems
 // Returns nil if audio is disabled
-func (s *AudioService) Player() AudioPlayer {
+func (s *AudioService) Player() engine.AudioPlayer {
 	if s.disabled.Load() || s.audioEngine == nil {
 		return nil
 	}
@@ -112,12 +111,4 @@ func (s *AudioService) Resource() *engine.AudioResource {
 		return nil
 	}
 	return &engine.AudioResource{Player: s.audioEngine}
-}
-
-// AudioPlayer defines the minimal audio interface used by game systems
-type AudioPlayer interface {
-	Play(core.SoundType) bool
-	ToggleMute() bool
-	IsMuted() bool
-	IsRunning() bool
 }

@@ -217,16 +217,16 @@ func (s *BuffSystem) fireAllBuffs() {
 			compositeIndex := 0
 			for scanIndex := range len(candidateTargetEntities) {
 				if s.world.Components.Header.HasEntity(candidateTargetEntities[scanIndex]) {
-					compositeIndex++
-					if compositeIndex < scanIndex {
+					if scanIndex != compositeIndex {
 						candidateTargetEntities[scanIndex], candidateTargetEntities[compositeIndex] = candidateTargetEntities[compositeIndex], candidateTargetEntities[scanIndex]
 					}
+					compositeIndex++
 				}
 			}
 
-			// 3. Set hit entity of composite targets (closest member entity)
-			finalTargetEntities := make([]core.Entity, 0, len(candidateTargetEntities))
-			finalHitEntities := make([]core.Entity, 0, len(candidateTargetEntities))
+			// 3. Process composites (closest member per header)
+			finalTargetEntities := make([]core.Entity, 0, shots)
+			finalHitEntities := make([]core.Entity, 0, shots)
 			for i := range min(shots, compositeIndex) {
 				headerComp, ok := s.world.Components.Header.GetComponent(candidateTargetEntities[i])
 				if !ok {
@@ -255,35 +255,34 @@ func (s *BuffSystem) fireAllBuffs() {
 			}
 
 			// 4. Fill the rest with closest non-composite entities
-			type entityDistance struct {
-				entity   core.Entity
-				distance int64
-			}
-			nonCompositeTargetEntities := make([]entityDistance, 0, len(candidateTargetEntities))
-			for i := compositeIndex; i < len(candidateTargetEntities); i++ {
-				targetPos, ok := s.world.Positions.GetPosition(candidateTargetEntities[i])
-				if !ok {
-					continue
+			remaining := shots - len(finalTargetEntities)
+			if remaining > 0 && compositeIndex < len(candidateTargetEntities) {
+				type entityDistance struct {
+					entity   core.Entity
+					distance int64
 				}
-				nonCompositeTargetEntities = append(nonCompositeTargetEntities, entityDistance{
-					entity: candidateTargetEntities[i],
-					distance: vmath.MagnitudeEuclidean(
-						vmath.FromInt(cursorPos.X-targetPos.X),
-						vmath.FromInt(cursorPos.Y-targetPos.Y),
-					),
+				nonComposites := make([]entityDistance, 0, len(candidateTargetEntities)-compositeIndex)
+				for i := compositeIndex; i < len(candidateTargetEntities); i++ {
+					targetPos, ok := s.world.Positions.GetPosition(candidateTargetEntities[i])
+					if !ok {
+						continue
+					}
+					nonComposites = append(nonComposites, entityDistance{
+						entity: candidateTargetEntities[i],
+						distance: vmath.MagnitudeEuclidean(
+							vmath.FromInt(cursorPos.X-targetPos.X),
+							vmath.FromInt(cursorPos.Y-targetPos.Y),
+						),
+					})
+				}
+				slices.SortStableFunc(nonComposites, func(a, b entityDistance) int {
+					return int(a.distance - b.distance)
 				})
-			}
-			slices.SortStableFunc(nonCompositeTargetEntities, func(i, j entityDistance) int {
-				if i.distance < j.distance {
-					return -1
-				} else if i.distance > j.distance {
-					return 1
+				// Bound by actual available non-composites
+				for i := range min(remaining, len(nonComposites)) {
+					finalTargetEntities = append(finalTargetEntities, nonComposites[i].entity)
+					finalHitEntities = append(finalHitEntities, nonComposites[i].entity)
 				}
-				return 0
-			})
-			for i := range min(shots, len(candidateTargetEntities)) - len(finalTargetEntities) {
-				finalTargetEntities = append(finalTargetEntities, nonCompositeTargetEntities[i].entity)
-				finalHitEntities = append(finalHitEntities, nonCompositeTargetEntities[i].entity)
 			}
 
 			// 5. Fire lightning to targets
@@ -296,7 +295,6 @@ func (s *BuffSystem) fireAllBuffs() {
 					HitEntity:    finalHitEntities[i],
 				})
 			}
-
 		}
 		s.world.Components.Buff.SetComponent(cursorEntity, buffComp)
 	}

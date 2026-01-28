@@ -15,6 +15,46 @@ const (
 	// Consumer: AudioSystem | Payload: *SoundRequestPayload
 	EventSoundRequest
 
+	// EventMusicStart begins music playback
+	// Trigger: Game start, FSM state change
+	// Consumer: MusicSystem | Payload: *MusicStartPayload
+	EventMusicStart EventType = iota + 200 // Offset to avoid collision
+
+	// EventMusicStop halts music playback
+	// Trigger: Game pause, exit
+	// Consumer: MusicSystem | Payload: nil
+	EventMusicStop
+
+	// EventMusicPause toggles pause state
+	// Trigger: Pause menu
+	// Consumer: MusicSystem | Payload: nil
+	EventMusicPause
+
+	// EventBeatPatternRequest requests beat pattern change
+	// Trigger: FSM, game state changes
+	// Consumer: MusicSystem | Payload: *BeatPatternRequestPayload
+	EventBeatPatternRequest
+
+	// EventMelodyNoteRequest triggers single note
+	// Trigger: Game events (gold complete, etc)
+	// Consumer: MusicSystem | Payload: *MelodyNoteRequestPayload
+	EventMelodyNoteRequest
+
+	// EventMelodyPatternRequest requests melody pattern change
+	// Trigger: FSM, game state changes
+	// Consumer: MusicSystem | Payload: *MelodyPatternRequestPayload
+	EventMelodyPatternRequest
+
+	// EventMusicIntensityChange adjusts music intensity
+	// Trigger: Heat changes, phase transitions
+	// Consumer: MusicSystem | Payload: *MusicIntensityPayload
+	EventMusicIntensityChange
+
+	// EventMusicTempoChange adjusts BPM
+	// Trigger: Game state
+	// Consumer: MusicSystem | Payload: *MusicTempoPayload
+	EventMusicTempoChange
+
 	// === Network Event ===
 
 	// EventNetworkConnect signals a new peer connection
@@ -308,10 +348,10 @@ const (
 	// Consumer: SplashSystem (magnifier) | Payload: *CursorMovedPayload
 	EventCursorMoved
 
-	// EventFuseDrains signals drains should fuse into quasar
+	// EventQuasarFuseRequest signals drains should fuse into quasar
 	// Trigger: FSM
 	// Consumer: FuseSystem | Payload: nil
-	EventFuseDrains
+	EventQuasarFuseRequest
 
 	// EventDrainPause signals DrainSystem to stop spawning
 	// Trigger: FuseSystem before destroying drains
@@ -398,10 +438,25 @@ const (
 	// Consumer: DustSystem | Payload: nil
 	EventDustAllRequest
 
-	// EventSwarmSpawnRequest signals spawning a wave of 5 swarm composites
-	// Trigger: FSM
-	// Consumer: SwarmSystem | Payload: nil
-	EventSwarmSpawnRequest
+	// EventSwarmFuseRequest signals two enraged drains should fuse into swarm
+	// Trigger: DrainSystem when detecting enraged pair
+	// Consumer: FuseSystem | Payload: *SwarmFuseRequestPayload
+	EventSwarmFuseRequest
+
+	// EventSwarmSpawned signals swarm composite creation
+	// Trigger: FuseSystem after convergence animation
+	// Consumer: SwarmSystem | Payload: *SwarmSpawnedPayload
+	EventSwarmSpawned
+
+	// EventSwarmDespawned signals swarm termination
+	// Trigger: SwarmSystem on lifecycle end
+	// Consumer: (future: audio/FSM) | Payload: *SwarmDespawnedPayload
+	EventSwarmDespawned
+
+	// EventDrainAbsorbed signals drain absorbed by swarm
+	// Trigger: SwarmSystem on drain collision
+	// Consumer: (telemetry) | Payload: *DrainAbsorbedPayload
+	EventDrainAbsorbed
 
 	// EventSwarmCancelRequest signals destruction of all swarm composites
 	// Trigger: FSM

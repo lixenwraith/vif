@@ -92,18 +92,22 @@ var CombatMatrix = combatMatrixMap{
 	CombatAttackProjectile: {
 		{CombatEntityCleaner, CombatEntityDrain}:  &CombatAttackCleanerToDrain,
 		{CombatEntityCleaner, CombatEntityQuasar}: &CombatAttackCleanerToQuasar,
+		{CombatEntityCleaner, CombatEntitySwarm}:  &CombatAttackCleanerToSwarm,
 	},
 	CombatAttackShield: {
 		{CombatEntityCursor, CombatEntityDrain}:  &CombatAttackShieldToDrain,
 		{CombatEntityCursor, CombatEntityQuasar}: &CombatAttackShieldToQuasar,
+		{CombatEntityCursor, CombatEntitySwarm}:  &CombatAttackShieldToSwarm,
 	},
 	CombatAttackLightning: {
 		{CombatEntityCursor, CombatEntityDrain}:  &CombatAttackLightningToDrain,
 		{CombatEntityCursor, CombatEntityQuasar}: &CombatAttackLightningToQuasar,
+		{CombatEntityCursor, CombatEntitySwarm}:  &CombatAttackLightningToSwarm,
 	},
 	CombatAttackExplosion: {
 		{CombatEntityCursor, CombatEntityDrain}:  &CombatAttackExplosionToDrain,
 		{CombatEntityCursor, CombatEntityQuasar}: &CombatAttackExplosionToQuasar,
+		{CombatEntityCursor, CombatEntitySwarm}:  &CombatAttackExplosionToSwarm,
 	},
 }
 
@@ -196,4 +200,48 @@ var CombatAttackExplosionToQuasar = CombatAttackProfile{
 	EffectMask:         CombatEffectKinetic,
 	ChainAttack:        nil,
 	CollisionProfile:   &physics.ExplosionToQuasar,
+}
+
+var CombatAttackCleanerToSwarm = CombatAttackProfile{
+	AttackType:         CombatAttackProjectile,
+	AttackerEntityType: CombatEntityCleaner,
+	DefenderEntityType: CombatEntitySwarm,
+	DamageType:         CombatDamageDirect,
+	DamageValue:        1,
+	EffectMask:         CombatEffectKinetic,
+	ChainAttack:        &CombatAttackLightningToSwarm,
+	CollisionProfile:   &physics.CleanerToSwarm,
+}
+
+var CombatAttackShieldToSwarm = CombatAttackProfile{
+	AttackType:         CombatAttackShield,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntitySwarm,
+	DamageType:         CombatDamageArea,
+	DamageValue:        0,
+	EffectMask:         CombatEffectKinetic,
+	ChainAttack:        nil,
+	CollisionProfile:   &physics.ShieldToSwarm,
+}
+
+var CombatAttackLightningToSwarm = CombatAttackProfile{
+	AttackType:         CombatAttackLightning,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntitySwarm,
+	DamageType:         CombatDamageDirect,
+	DamageValue:        1,
+	EffectMask:         CombatEffectVampireDrain,
+	ChainAttack:        nil,
+	CollisionProfile:   nil,
+}
+
+var CombatAttackExplosionToSwarm = CombatAttackProfile{
+	AttackType:         CombatAttackExplosion,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntitySwarm,
+	DamageType:         CombatDamageArea,
+	DamageValue:        1,
+	EffectMask:         CombatEffectKinetic,
+	ChainAttack:        nil,
+	CollisionProfile:   &physics.ExplosionToSwarm,
 }

@@ -208,6 +208,49 @@ type SoundRequestPayload struct {
 	SoundType core.SoundType `toml:"sound_type"`
 }
 
+// MusicStartPayload initializes music state
+type MusicStartPayload struct {
+	BPM           int                 `toml:"bpm"`
+	Intensity     core.MusicIntensity `toml:"intensity"`
+	BeatPattern   core.PatternID      `toml:"beat_pattern"`
+	MelodyPattern core.PatternID      `toml:"melody_pattern"`
+}
+
+// BeatPatternRequestPayload requests beat pattern transition
+type BeatPatternRequestPayload struct {
+	Pattern        core.PatternID `toml:"pattern"`
+	TransitionTime time.Duration  `toml:"transition_time"` // 0 = default
+	Quantize       bool           `toml:"quantize"`        // Wait for bar boundary
+}
+
+// MelodyNoteRequestPayload triggers immediate note
+type MelodyNoteRequestPayload struct {
+	Note       int                 `toml:"note"`       // MIDI note number
+	Velocity   float64             `toml:"velocity"`   // 0.0-1.0
+	Duration   time.Duration       `toml:"duration"`   // 0 = use instrument default
+	Instrument core.InstrumentType `toml:"instrument"` // 0 = default (piano)
+}
+
+// MelodyPatternRequestPayload requests melody pattern transition
+type MelodyPatternRequestPayload struct {
+	Pattern        core.PatternID `toml:"pattern"`
+	RootNote       int            `toml:"root_note"` // MIDI note for pattern root
+	TransitionTime time.Duration  `toml:"transition_time"`
+	Quantize       bool           `toml:"quantize"`
+}
+
+// MusicIntensityPayload adjusts overall music intensity
+type MusicIntensityPayload struct {
+	Intensity      core.MusicIntensity `toml:"intensity"`
+	TransitionTime time.Duration       `toml:"transition_time"`
+}
+
+// MusicTempoPayload adjusts BPM
+type MusicTempoPayload struct {
+	BPM            int           `toml:"bpm"`
+	TransitionTime time.Duration `toml:"transition_time"` // Ramp duration
+}
+
 // DeathRequestPayload contains batch death request
 // EffectEvent: 0 = silent death, EventFlashRequest = flash, future: explosion, chain death
 type DeathRequestPayload struct {
@@ -385,4 +428,30 @@ type CombatAttackAreaRequestPayload struct {
 	OriginEntity core.Entity                `toml:"origin_entity"`
 	TargetEntity core.Entity                `toml:"target_entity"`
 	HitEntities  []core.Entity              `toml:"hit_entities"`
+}
+
+// SwarmFuseRequestPayload contains the two drains to fuse
+type SwarmFuseRequestPayload struct {
+	DrainA core.Entity `toml:"drain_a"`
+	DrainB core.Entity `toml:"drain_b"`
+}
+
+// SwarmSpawnedPayload contains swarm spawn data
+type SwarmSpawnedPayload struct {
+	HeaderEntity core.Entity `toml:"header_entity"`
+	SpawnX       int         `toml:"spawn_x"`
+	SpawnY       int         `toml:"spawn_y"`
+}
+
+// SwarmDespawnedPayload contains despawn reason
+type SwarmDespawnedPayload struct {
+	HeaderEntity core.Entity `toml:"header_entity"`
+	Reason       uint8       `toml:"reason"` // 0=timeout, 1=hp, 2=charges
+}
+
+// DrainAbsorbedPayload contains absorption data
+type DrainAbsorbedPayload struct {
+	SwarmEntity core.Entity `toml:"swarm_entity"`
+	DrainEntity core.Entity `toml:"drain_entity"`
+	HPAbsorbed  int         `toml:"hp_absorbed"`
 }

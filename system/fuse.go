@@ -1,6 +1,9 @@
 package system
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
@@ -9,17 +12,25 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
-// FuseSystem orchestrates drain-to-quasar transformation, destroying all drains and spawning a single quasar composite entity
+// pendingSwarmFuse tracks an in-progress drain→swarm fusion
+type pendingSwarmFuse struct {
+	targetX int
+	targetY int
+	timer   time.Duration
+}
+
+// FuseSystem orchestrates drain-to-quasar and drain-to-swarm transformations
 type FuseSystem struct {
 	world *engine.World
 
-	// Fusion state machine
+	// Quasar fusion state (single active)
 	fusing    bool
-	fuseTimer int64 // Remaining time in nanoseconds
+	fuseTimer time.Duration
+	targetX   int
+	targetY   int
 
-	// Quasar spawn position (centroid of drains)
-	targetX int
-	targetY int
+	// Swarm fusion state (multiple concurrent)
+	pendingSwarmFusions []pendingSwarmFuse
 
 	enabled bool
 }
@@ -30,6 +41,8 @@ func NewFuseSystem(world *engine.World) engine.System {
 		world: world,
 	}
 
+	s.pendingSwarmFusions = make([]pendingSwarmFuse, 0)
+
 	s.Init()
 	return s
 }
@@ -39,6 +52,7 @@ func (s *FuseSystem) Init() {
 	s.fuseTimer = 0
 	s.targetX = 0
 	s.targetY = 0
+	s.pendingSwarmFusions = s.pendingSwarmFusions[:0]
 	s.enabled = true
 }
 
@@ -53,7 +67,8 @@ func (s *FuseSystem) Priority() int {
 
 func (s *FuseSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventFuseDrains,
+		event.EventQuasarFuseRequest,
+		event.EventSwarmFuseRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
@@ -81,28 +96,40 @@ func (s *FuseSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
-	if ev.Type == event.EventFuseDrains {
+	switch ev.Type {
+	case event.EventQuasarFuseRequest:
 		if !s.fusing {
-			s.executeFuse()
+			s.handleQuasarFuse()
+		}
+
+	case event.EventSwarmFuseRequest:
+		if payload, ok := ev.Payload.(*event.SwarmFuseRequestPayload); ok {
+			s.handleSwarmFuse(payload.DrainA, payload.DrainB)
 		}
 	}
 }
 
 func (s *FuseSystem) Update() {
-	if !s.enabled || !s.fusing {
+	if !s.enabled {
 		return
 	}
 
-	// Decrement timer
-	s.fuseTimer -= s.world.Resources.Time.DeltaTime.Nanoseconds()
+	dt := s.world.Resources.Time.DeltaTime
 
-	if s.fuseTimer <= 0 {
-		s.completeFuse()
+	// Process quasar fusion timer
+	if s.fusing {
+		s.fuseTimer -= dt
+		if s.fuseTimer <= 0 {
+			s.completeQuasarFuse()
+		}
 	}
+
+	// Process swarm fusion timers
+	s.processSwarmFusions(dt)
 }
 
-// executeFuse performs the drain-to-quasar transformation
-func (s *FuseSystem) executeFuse() {
+// handleQuasarFuse performs the drain-to-quasar transformation
+func (s *FuseSystem) handleQuasarFuse() {
 	// 1. Signal DrainSystem to stop spawning
 	s.world.PushEvent(event.EventDrainPause, nil)
 
@@ -161,11 +188,11 @@ func (s *FuseSystem) executeFuse() {
 
 	// 8. Start timer
 	s.fusing = true
-	s.fuseTimer = (constant.SpiritAnimationDuration + constant.SpiritSafetyBuffer).Nanoseconds()
+	s.fuseTimer = constant.SpiritAnimationDuration + constant.SpiritSafetyBuffer
 }
 
-// completeFuse finalizes the transformation after timer expires
-func (s *FuseSystem) completeFuse() {
+// completeQuasarFuse finalizes the transformation after timer expires
+func (s *FuseSystem) completeQuasarFuse() {
 	// 1. Safety cleanup - despawn any remaining spirits
 	s.world.PushEvent(event.EventSpiritDespawn, nil)
 
@@ -183,6 +210,235 @@ func (s *FuseSystem) completeFuse() {
 	// 5. Reset state
 	s.fusing = false
 	s.fuseTimer = 0
+}
+
+// handleSwarmFuse initiates drain→swarm fusion
+func (s *FuseSystem) handleSwarmFuse(drainA, drainB core.Entity) {
+	// Get positions before destruction
+	posA, okA := s.world.Positions.GetPosition(drainA)
+	posB, okB := s.world.Positions.GetPosition(drainB)
+	if !okA || !okB {
+		return
+	}
+
+	// Calculate midpoint
+	midX := (posA.X + posB.X) / 2
+	midY := (posA.Y + posB.Y) / 2
+
+	// Clamp to valid spawn area
+	midX, midY = s.clampSwarmSpawnPosition(midX, midY)
+
+	// Destroy both drains silently
+	event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, []core.Entity{drainA, drainB})
+
+	// Spawn spirits converging to midpoint
+	s.world.PushEvent(event.EventSpiritSpawn, &event.SpiritSpawnRequestPayload{
+		StartX:    posA.X,
+		StartY:    posA.Y,
+		TargetX:   midX,
+		TargetY:   midY,
+		Char:      constant.DrainChar,
+		BaseColor: component.SpiritCyan,
+	})
+	s.world.PushEvent(event.EventSpiritSpawn, &event.SpiritSpawnRequestPayload{
+		StartX:    posB.X,
+		StartY:    posB.Y,
+		TargetX:   midX,
+		TargetY:   midY,
+		Char:      constant.DrainChar,
+		BaseColor: component.SpiritCyan,
+	})
+
+	// Track pending fusion
+	s.pendingSwarmFusions = append(s.pendingSwarmFusions, pendingSwarmFuse{
+		targetX: midX,
+		targetY: midY,
+		timer:   constant.SwarmFuseAnimationDuration,
+	})
+	// s.world.DebugPrint(fmt.Sprintf("%d", len(s.pendingSwarmFusions)))
+}
+
+// processSwarmFusions decrements timers and completes ready fusions
+func (s *FuseSystem) processSwarmFusions(dt time.Duration) {
+	s.world.DebugPrint(fmt.Sprintf("%d", len(s.pendingSwarmFusions)))
+	if len(s.pendingSwarmFusions) == 0 {
+		return
+	}
+
+	// Process in reverse to allow safe removal
+	for i := len(s.pendingSwarmFusions) - 1; i >= 0; i-- {
+		s.pendingSwarmFusions[i].timer -= dt
+
+		if s.pendingSwarmFusions[i].timer <= 0 {
+			s.completeSwarmFuse(s.pendingSwarmFusions[i].targetX, s.pendingSwarmFusions[i].targetY)
+
+			// Remove completed fusion (swap with last)
+			s.pendingSwarmFusions[i] = s.pendingSwarmFusions[len(s.pendingSwarmFusions)-1]
+			s.pendingSwarmFusions = s.pendingSwarmFusions[:len(s.pendingSwarmFusions)-1]
+			// s.pendingSwarmFusions = append(s.pendingSwarmFusions[:i], s.pendingSwarmFusions[i+1:]...)
+		}
+	}
+}
+
+// completeSwarmFuse creates swarm composite at target position
+func (s *FuseSystem) completeSwarmFuse(targetX, targetY int) {
+	// Clear spawn area
+	s.clearSwarmSpawnArea(targetX, targetY)
+
+	// Create swarm composite
+	headerEntity := s.createSwarmComposite(targetX, targetY)
+
+	// Notify SwarmSystem
+	s.world.PushEvent(event.EventSwarmSpawned, &event.SwarmSpawnedPayload{
+		HeaderEntity: headerEntity,
+		SpawnX:       targetX,
+		SpawnY:       targetY,
+	})
+}
+
+// clampSwarmSpawnPosition ensures swarm fits within bounds
+func (s *FuseSystem) clampSwarmSpawnPosition(targetX, targetY int) (int, int) {
+	config := s.world.Resources.Config
+
+	// Header at (1,0) offset, so top-left = header - offset
+	topLeftX := targetX - constant.SwarmHeaderOffsetX
+	topLeftY := targetY - constant.SwarmHeaderOffsetY
+
+	if topLeftX < 0 {
+		topLeftX = 0
+	}
+	if topLeftY < 0 {
+		topLeftY = 0
+	}
+	if topLeftX+constant.SwarmWidth > config.GameWidth {
+		topLeftX = config.GameWidth - constant.SwarmWidth
+	}
+	if topLeftY+constant.SwarmHeight > config.GameHeight {
+		topLeftY = config.GameHeight - constant.SwarmHeight
+	}
+
+	return topLeftX + constant.SwarmHeaderOffsetX, topLeftY + constant.SwarmHeaderOffsetY
+}
+
+// clearSwarmSpawnArea destroys entities within swarm footprint
+func (s *FuseSystem) clearSwarmSpawnArea(headerX, headerY int) {
+	topLeftX := headerX - constant.SwarmHeaderOffsetX
+	topLeftY := headerY - constant.SwarmHeaderOffsetY
+
+	cursorEntity := s.world.Resources.Cursor.Entity
+	var toDestroy []core.Entity
+
+	for row := 0; row < constant.SwarmHeight; row++ {
+		for col := 0; col < constant.SwarmWidth; col++ {
+			x := topLeftX + col
+			y := topLeftY + row
+
+			entities := s.world.Positions.GetAllEntityAt(x, y)
+			for _, e := range entities {
+				if e == 0 || e == cursorEntity {
+					continue
+				}
+				if prot, ok := s.world.Components.Protection.GetComponent(e); ok {
+					if prot.Mask == component.ProtectAll {
+						continue
+					}
+				}
+				toDestroy = append(toDestroy, e)
+			}
+		}
+	}
+
+	if len(toDestroy) > 0 {
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, toDestroy)
+	}
+}
+
+// createSwarmComposite builds the 4×2 swarm entity structure
+func (s *FuseSystem) createSwarmComposite(headerX, headerY int) core.Entity {
+	topLeftX := headerX - constant.SwarmHeaderOffsetX
+	topLeftY := headerY - constant.SwarmHeaderOffsetY
+
+	// Create phantom head
+	headerEntity := s.world.CreateEntity()
+	s.world.Positions.SetPosition(headerEntity, component.PositionComponent{X: headerX, Y: headerY})
+
+	// Phantom head is indestructible
+	s.world.Components.Protection.SetComponent(headerEntity, component.ProtectionComponent{
+		Mask: component.ProtectAll,
+	})
+
+	// Initialize swarm component
+	s.world.Components.Swarm.SetComponent(headerEntity, component.SwarmComponent{
+		State:                   component.SwarmStateChase,
+		PatternIndex:            0,
+		PatternRemaining:        constant.SwarmPatternDuration,
+		ChargeIntervalRemaining: constant.SwarmChargeInterval,
+		ChargesCompleted:        0,
+	})
+
+	// Initialize kinetic
+	kinetic := core.Kinetic{
+		PreciseX: vmath.FromInt(headerX),
+		PreciseY: vmath.FromInt(headerY),
+	}
+	s.world.Components.Kinetic.SetComponent(headerEntity, component.KineticComponent{Kinetic: kinetic})
+
+	// Initialize combat
+	s.world.Components.Combat.SetComponent(headerEntity, component.CombatComponent{
+		OwnerEntity:      headerEntity,
+		CombatEntityType: component.CombatEntitySwarm,
+		HitPoints:        constant.CombatInitialHPSwarm,
+	})
+
+	// TODO
+	// // Lifetime timer for automatic despawn
+	// s.world.Components.Timer.SetComponent(headerEntity, component.TimerComponent{
+	// 	Remaining: constant.SwarmLifetime,
+	// })
+
+	// Build member entities (pre-allocate all 8 positions)
+	members := make([]component.MemberEntry, 0, constant.SwarmWidth*constant.SwarmHeight)
+
+	for row := 0; row < constant.SwarmHeight; row++ {
+		for col := 0; col < constant.SwarmWidth; col++ {
+			memberX := topLeftX + col
+			memberY := topLeftY + row
+
+			offsetX := col - constant.SwarmHeaderOffsetX
+			offsetY := row - constant.SwarmHeaderOffsetY
+
+			entity := s.world.CreateEntity()
+			s.world.Positions.SetPosition(entity, component.PositionComponent{X: memberX, Y: memberY})
+
+			s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
+				Mask: component.ProtectFromDecay | component.ProtectFromDelete,
+			})
+
+			s.world.Components.Member.SetComponent(entity, component.MemberComponent{
+				HeaderEntity: headerEntity,
+			})
+
+			// Layer determined by pattern visibility (LayerGlyph = active, LayerEffect = inactive)
+			layer := component.LayerGlyph
+			if !component.SwarmPatternActive[0][row][col] {
+				layer = component.LayerEffect
+			}
+
+			members = append(members, component.MemberEntry{
+				Entity:  entity,
+				OffsetX: offsetX,
+				OffsetY: offsetY,
+				Layer:   layer,
+			})
+		}
+	}
+
+	s.world.Components.Header.SetComponent(headerEntity, component.HeaderComponent{
+		Behavior:      component.BehaviorSwarm,
+		MemberEntries: members,
+	})
+
+	return headerEntity
 }
 
 // destroyAllDrains removes all drain entities without visual effects

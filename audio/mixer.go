@@ -32,6 +32,10 @@ type Mixer struct {
 	// Accessed only by mix goroutine
 	active []activeSound
 
+	// Music
+	sequencer  *Sequencer
+	musicMuted atomic.Bool
+
 	// Stats
 	statsMu sync.Mutex
 	played  uint64
@@ -56,6 +60,7 @@ func NewMixer(out io.Writer, cfg *AudioConfig, cache *soundCache) *Mixer {
 		stopChan:  make(chan struct{}),
 		active:    make([]activeSound, 0, 8),
 		errChan:   make(chan error, 1),
+		sequencer: NewSequencer(constant.DefaultBPM),
 	}
 }
 
@@ -82,6 +87,10 @@ func (m *Mixer) Play(st core.SoundType, masterVol float64, effectVols map[core.S
 		vol *= ev
 	}
 
+	// Get dampening factor for rapid-fire sounds
+	_, dampen := m.cache.getWithDampening(st)
+	vol *= dampen
+
 	select {
 	case m.playQueue <- playRequest{sound: st, volume: vol}:
 	default:
@@ -94,6 +103,38 @@ func (m *Mixer) Play(st core.SoundType, masterVol float64, effectVols map[core.S
 // Errors returns channel for pipe errors
 func (m *Mixer) Errors() <-chan error {
 	return m.errChan
+}
+
+// SetMusicMuted sets music mute state
+func (m *Mixer) SetMusicMuted(muted bool) {
+	m.musicMuted.Store(muted)
+	if muted && m.sequencer != nil {
+		m.sequencer.Stop()
+	}
+}
+
+// IsMusicMuted returns music mute state
+func (m *Mixer) IsMusicMuted() bool {
+	return m.musicMuted.Load()
+}
+
+// Sequencer returns the sequencer for direct control
+func (m *Mixer) Sequencer() *Sequencer {
+	return m.sequencer
+}
+
+// StartMusic starts the sequencer
+func (m *Mixer) StartMusic() {
+	if m.sequencer != nil && !m.musicMuted.Load() {
+		m.sequencer.Start()
+	}
+}
+
+// StopMusic stops the sequencer
+func (m *Mixer) StopMusic() {
+	if m.sequencer != nil {
+		m.sequencer.Stop()
+	}
 }
 
 // loop is the main mixing goroutine
@@ -126,23 +167,23 @@ func (m *Mixer) loop() {
 			m.drainQueue(4)
 
 		case <-ticker.C:
-			if len(m.active) == 0 {
-				// Write silence to keep pipe alive
-				for i := range outBytes {
-					outBytes[i] = 0
-				}
-			} else {
-				// Clear mix buffer
-				for i := range mixBuf {
-					mixBuf[i] = 0
-				}
-
-				// Mix active sounds
-				m.active = m.mixActive(mixBuf, samplesPerTick)
-
-				// Convert to int16 bytes with soft limiting
-				floatToBytes(mixBuf, outBytes)
+			// Clear mix buffer
+			for i := range mixBuf {
+				mixBuf[i] = 0
 			}
+
+			// Generate music (if not muted)
+			if !m.musicMuted.Load() && m.sequencer != nil {
+				m.sequencer.Generate(mixBuf)
+			}
+
+			// Mix active sound effects
+			if len(m.active) > 0 {
+				m.active = m.mixActive(mixBuf, samplesPerTick)
+			}
+
+			// Convert to int16 bytes with soft limiting
+			floatToBytes(mixBuf, outBytes)
 
 			// Write to output
 			if _, err := m.output.Write(outBytes); err != nil {

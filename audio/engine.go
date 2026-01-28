@@ -24,6 +24,7 @@ type AudioEngine struct {
 
 	running    atomic.Bool
 	muted      atomic.Bool
+	musicMuted atomic.Bool
 	silentMode atomic.Bool
 
 	mu sync.RWMutex // Protects config
@@ -103,6 +104,9 @@ func (ae *AudioEngine) Start() error {
 
 	ae.mixer = NewMixer(writer, ae.config, ae.cache)
 	ae.mixer.Start()
+
+	// Initialize default patterns
+	InitDefaultPatterns()
 
 	// Monitor mixer errors
 	ae.wg.Add(1)
@@ -185,21 +189,66 @@ func (ae *AudioEngine) Play(st core.SoundType) bool {
 	return true
 }
 
-// ToggleMute toggles mute state, returns true if now enabled
-func (ae *AudioEngine) ToggleMute() bool {
-	newMute := !ae.muted.Load()
-	ae.muted.Store(newMute)
-	return !newMute
+// ToggleEffectMute toggles mute state, returns true if now unmuted
+func (ae *AudioEngine) ToggleEffectMute() bool {
+	wasMuted := ae.muted.Load()
+	ae.muted.Store(!wasMuted)
+	return wasMuted
 }
 
-// IsMuted returns current mute state
-func (ae *AudioEngine) IsMuted() bool {
+// IsEffectMuted returns current mute state
+func (ae *AudioEngine) IsEffectMuted() bool {
 	return ae.muted.Load()
 }
 
 // IsEnabled returns true if running and unmuted
 func (ae *AudioEngine) IsEnabled() bool {
 	return ae.running.Load() && !ae.muted.Load() && !ae.silentMode.Load()
+}
+
+// ToggleMusicMute toggles music mute state, returns true if music now enabled
+func (ae *AudioEngine) ToggleMusicMute() bool {
+	newMute := !ae.musicMuted.Load()
+	ae.musicMuted.Store(newMute)
+	if ae.mixer != nil {
+		ae.mixer.SetMusicMuted(newMute)
+	}
+	return !newMute
+}
+
+// IsMusicMuted returns music mute state
+func (ae *AudioEngine) IsMusicMuted() bool {
+	return ae.musicMuted.Load()
+}
+
+// SetMusicMuted sets music mute state directly
+func (ae *AudioEngine) SetMusicMuted(muted bool) {
+	ae.musicMuted.Store(muted)
+	if ae.mixer != nil {
+		ae.mixer.SetMusicMuted(muted)
+	}
+}
+
+// StartMusic starts music playback
+func (ae *AudioEngine) StartMusic() {
+	if ae.mixer != nil && !ae.musicMuted.Load() {
+		ae.mixer.StartMusic()
+	}
+}
+
+// StopMusic stops music playback
+func (ae *AudioEngine) StopMusic() {
+	if ae.mixer != nil {
+		ae.mixer.StopMusic()
+	}
+}
+
+// Sequencer returns the mixer's sequencer for direct control
+func (ae *AudioEngine) Sequencer() *Sequencer {
+	if ae.mixer != nil {
+		return ae.mixer.Sequencer()
+	}
+	return nil
 }
 
 // IsRunning returns true if engine is running (even in silent mode)
@@ -238,4 +287,63 @@ func (ae *AudioEngine) GetStats() (played, dropped, overflow uint64) {
 		return p, d, 0
 	}
 	return 0, 0, 0
+}
+
+// === Sequencer Control Methods ===
+
+// SetMusicBPM updates sequencer tempo
+func (ae *AudioEngine) SetMusicBPM(bpm int) {
+	if ae.mixer != nil && ae.mixer.Sequencer() != nil {
+		ae.mixer.Sequencer().SetBPM(bpm)
+	}
+}
+
+// SetMusicSwing sets shuffle amount
+func (ae *AudioEngine) SetMusicSwing(amount float64) {
+	if ae.mixer != nil && ae.mixer.Sequencer() != nil {
+		ae.mixer.Sequencer().SetSwing(amount)
+	}
+}
+
+// SetMusicVolume sets music volume
+func (ae *AudioEngine) SetMusicVolume(vol float64) {
+	if ae.mixer != nil && ae.mixer.Sequencer() != nil {
+		ae.mixer.Sequencer().SetVolume(vol)
+	}
+}
+
+// SetBeatPattern queues beat pattern change
+func (ae *AudioEngine) SetBeatPattern(pattern core.PatternID, crossfadeSamples int, quantize bool) {
+	if ae.mixer != nil && ae.mixer.Sequencer() != nil {
+		ae.mixer.Sequencer().SetBeatPattern(pattern, crossfadeSamples, quantize)
+	}
+}
+
+// SetMelodyPattern queues melody pattern change
+func (ae *AudioEngine) SetMelodyPattern(pattern core.PatternID, root int, crossfadeSamples int, quantize bool) {
+	if ae.mixer != nil && ae.mixer.Sequencer() != nil {
+		ae.mixer.Sequencer().SetMelodyPattern(pattern, root, crossfadeSamples, quantize)
+	}
+}
+
+// TriggerMelodyNote triggers immediate note
+func (ae *AudioEngine) TriggerMelodyNote(note int, velocity float64, durationSamples int, instr core.InstrumentType) {
+	if ae.mixer != nil && ae.mixer.Sequencer() != nil {
+		ae.mixer.Sequencer().TriggerNote(note, velocity, durationSamples, instr)
+	}
+}
+
+// ResetMusic resets sequencer state
+func (ae *AudioEngine) ResetMusic() {
+	if ae.mixer != nil && ae.mixer.Sequencer() != nil {
+		ae.mixer.Sequencer().Reset()
+	}
+}
+
+// IsMusicPlaying returns sequencer running state
+func (ae *AudioEngine) IsMusicPlaying() bool {
+	if ae.mixer != nil && ae.mixer.Sequencer() != nil {
+		return ae.mixer.Sequencer().IsRunning()
+	}
+	return false
 }

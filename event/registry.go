@@ -71,6 +71,16 @@ func InitRegistry() {
 	// Audio events
 	RegisterType("EventSoundRequest", EventSoundRequest, &SoundRequestPayload{})
 
+	// Music events
+	RegisterType("EventMusicStart", EventMusicStart, &MusicStartPayload{})
+	RegisterType("EventMusicStop", EventMusicStop, nil)
+	RegisterType("EventMusicPause", EventMusicPause, nil)
+	RegisterType("EventBeatPatternRequest", EventBeatPatternRequest, &BeatPatternRequestPayload{})
+	RegisterType("EventMelodyNoteRequest", EventMelodyNoteRequest, &MelodyNoteRequestPayload{})
+	RegisterType("EventMelodyPatternRequest", EventMelodyPatternRequest, &MelodyPatternRequestPayload{})
+	RegisterType("EventMusicIntensityChange", EventMusicIntensityChange, &MusicIntensityPayload{})
+	RegisterType("EventMusicTempoChange", EventMusicTempoChange, &MusicTempoPayload{})
+
 	// Network events
 	RegisterType("EventNetworkConnect", EventNetworkConnect, &NetworkConnectPayload{})
 	RegisterType("EventNetworkDisconnect", EventNetworkDisconnect, &NetworkDisconnectPayload{})
@@ -183,7 +193,7 @@ func InitRegistry() {
 	RegisterType("EventCursorMoved", EventCursorMoved, &CursorMovedPayload{})
 
 	// Fuse/Quasar events
-	RegisterType("EventFuseDrains", EventFuseDrains, nil)
+	RegisterType("EventQuasarFuseRequest", EventQuasarFuseRequest, nil)
 
 	// Drain
 	RegisterType("EventDrainPause", EventDrainPause, nil)
@@ -193,6 +203,13 @@ func InitRegistry() {
 	RegisterType("EventQuasarSpawned", EventQuasarSpawned, &QuasarSpawnedPayload{})
 	RegisterType("EventQuasarDestroyed", EventQuasarDestroyed, nil)
 	RegisterType("EventQuasarCancelRequest", EventQuasarCancelRequest, nil)
+
+	// Swarm
+	RegisterType("EventSwarmFuseRequest", EventSwarmFuseRequest, &SwarmFuseRequestPayload{})
+	RegisterType("EventSwarmSpawned", EventSwarmSpawned, &SwarmSpawnedPayload{})
+	RegisterType("EventSwarmDespawned", EventSwarmDespawned, &SwarmDespawnedPayload{})
+	RegisterType("EventDrainAbsorbed", EventDrainAbsorbed, &DrainAbsorbedPayload{})
+	RegisterType("EventSwarmCancelRequest", EventSwarmCancelRequest, nil)
 
 	// Environment
 	RegisterType("EventGrayoutStart", EventGrayoutStart, nil)

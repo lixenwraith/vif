@@ -106,7 +106,7 @@ func (s *GlyphSystem) Name() string {
 
 // Priority returns the system's priority
 func (s *GlyphSystem) Priority() int {
-	return constant.PrioritySpawn
+	return constant.PriorityGlyph
 }
 
 // EventTypes returns the event types SpawnSystem handles

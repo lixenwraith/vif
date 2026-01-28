@@ -10,7 +10,7 @@ const (
 	PriorityBuff        = 45
 	PriorityTyping      = 50 // After boost, before composite
 	PriorityComposite   = 60 // After boost, before spawn (position sync)
-	PrioritySpawn       = 70
+	PriorityGlyph       = 70
 	PriorityNugget      = 80
 	PriorityGold        = 90
 	PriorityCleaner     = 100

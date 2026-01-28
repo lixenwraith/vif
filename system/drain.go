@@ -22,8 +22,17 @@ type pendingDrainSpawn struct {
 	materializeStarted bool   // Prevent materializer accounting gap (1 tick in-flight event)
 }
 
+// drainCacheEntry holds cached drain data for single-pass processing
+type drainCacheEntry struct {
+	entity     core.Entity
+	drainComp  component.DrainComponent
+	combatComp component.CombatComponent
+	pos        component.PositionComponent
+	hasPos     bool
+}
+
 // DrainSystem manages the drain entity lifecycle
-// Drain count = floor(heat / 10), max 10
+// If not paused, drain count = floor(heat / 10), max 10
 // Drains spawn materialize based on Heat only
 type DrainSystem struct {
 	world *engine.World
@@ -39,6 +48,9 @@ type DrainSystem struct {
 
 	// Random source for knockback impulse randomization
 	rng *vmath.FastRand
+
+	// Per-tick cache to avoid repeated queries
+	drainCache []drainCacheEntry
 
 	// Cached metric pointers
 	statCount   *atomic.Int64
@@ -56,6 +68,7 @@ func NewDrainSystem(world *engine.World) engine.System {
 	}
 
 	s.pendingSpawns = make([]pendingDrainSpawn, constant.DrainMaxCount)
+	s.drainCache = make([]drainCacheEntry, 0, constant.DrainMaxCount)
 
 	s.statCount = s.world.Resources.Status.Ints.Get("drain.count")
 	s.statPending = s.world.Resources.Status.Ints.Get("drain.pending")
@@ -67,6 +80,7 @@ func NewDrainSystem(world *engine.World) engine.System {
 // Init resets session state for new game
 func (s *DrainSystem) Init() {
 	s.pendingSpawns = s.pendingSpawns[:0]
+	s.drainCache = s.drainCache[:0]
 	s.nextSpawnOrder = 0
 	s.spawnCooldownUntil = 0
 	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
@@ -146,12 +160,20 @@ func (s *DrainSystem) Update() {
 		return
 	}
 
-	drainEntities := s.world.Components.Drain.GetAllEntities()
-	for _, drainEntity := range drainEntities {
-		combatComp, ok := s.world.Components.Combat.GetComponent(drainEntity)
-		if !ok || combatComp.HitPoints <= 0 {
-			event.EmitDeathOne(s.world.Resources.Event.Queue, drainEntity, event.EventFlashRequest)
-		}
+	// 1. Cache all drain data for this tick
+	s.cacheDrainData()
+
+	// 2. Process HP checks, enrage state, termination
+	s.processDrainStates()
+
+	// 3. Detect and trigger swarm fusions (uses cached enraged state)
+	s.detectSwarmFusions()
+
+	// Skip spawn logic when paused
+	if s.paused {
+		s.statCount.Store(0)
+		s.statPending.Store(0)
+		return
 	}
 
 	// Skip all materialize spawn logic when paused
@@ -210,6 +232,124 @@ func (s *DrainSystem) Update() {
 
 	s.statCount.Store(int64(s.world.Components.Drain.CountEntities()))
 	s.statPending.Store(int64(len(s.pendingSpawns)))
+}
+
+// cacheDrainData populates drainCache with all drain entities and components
+func (s *DrainSystem) cacheDrainData() {
+	s.drainCache = s.drainCache[:0]
+
+	drainEntities := s.world.Components.Drain.GetAllEntities()
+	for _, entity := range drainEntities {
+		drainComp, ok := s.world.Components.Drain.GetComponent(entity)
+		if !ok {
+			continue
+		}
+
+		combatComp, ok := s.world.Components.Combat.GetComponent(entity)
+		if !ok {
+			continue
+		}
+
+		entry := drainCacheEntry{
+			entity:     entity,
+			drainComp:  drainComp,
+			combatComp: combatComp,
+		}
+
+		if pos, ok := s.world.Positions.GetPosition(entity); ok {
+			entry.pos = pos
+			entry.hasPos = true
+		}
+
+		s.drainCache = append(s.drainCache, entry)
+	}
+}
+
+// processDrainStates handles HP checks, enrage transitions, and termination
+func (s *DrainSystem) processDrainStates() {
+	for i := range s.drainCache {
+		entry := &s.drainCache[i]
+
+		// Termination check
+		if entry.combatComp.HitPoints <= 0 {
+			event.EmitDeathOne(s.world.Resources.Event.Queue, entry.entity, event.EventFlashRequest)
+			continue
+		}
+
+		// Enrage state transition
+		shouldEnrage := entry.combatComp.HitPoints < constant.DrainEnrageThreshold
+		if shouldEnrage != entry.combatComp.IsEnraged {
+			entry.combatComp.IsEnraged = shouldEnrage
+			s.world.Components.Combat.SetComponent(entry.entity, entry.combatComp)
+		}
+	}
+}
+
+// detectSwarmFusions pairs enraged drains and emits fusion requests
+func (s *DrainSystem) detectSwarmFusions() {
+	if s.paused {
+		return
+	}
+
+	// Collect enraged drain entities
+	var enragedDrains []core.Entity
+	for i := range s.drainCache {
+		entry := &s.drainCache[i]
+		// Skip already dead drains
+		if entry.combatComp.HitPoints <= 0 {
+			continue
+		}
+		if entry.combatComp.IsEnraged {
+			enragedDrains = append(enragedDrains, entry.entity)
+		}
+	}
+
+	// Pair enraged drains and emit fusion requests
+	for len(enragedDrains) >= 2 {
+		drainA := enragedDrains[0]
+		drainB := enragedDrains[1]
+		enragedDrains = enragedDrains[2:]
+
+		s.world.PushEvent(event.EventSwarmFuseRequest, &event.SwarmFuseRequestPayload{
+			DrainA: drainA,
+			DrainB: drainB,
+		})
+	}
+}
+
+// updateDrainSigil updates visual state based on combat state
+func (s *DrainSystem) updateDrainSigil() {
+	for i := range s.drainCache {
+		entry := &s.drainCache[i]
+
+		sigilComp, ok := s.world.Components.Sigil.GetComponent(entry.entity)
+		if !ok {
+			continue
+		}
+
+		// Re-fetch combat component as it may have been updated
+		combatComp, ok := s.world.Components.Combat.GetComponent(entry.entity)
+		if !ok {
+			continue
+		}
+
+		var targetColor component.SigilColor
+
+		// Priority: hit flash > enraged > normal
+		switch {
+		case combatComp.RemainingHitFlash > 0:
+			targetColor = component.SigilHitFlash
+		case combatComp.IsEnraged:
+			targetColor = component.SigilEnraged
+		default:
+			targetColor = component.SigilDrain
+		}
+
+		if sigilComp.Color != targetColor {
+			sigilComp.Color = targetColor
+			s.world.Components.Sigil.SetComponent(entry.entity, sigilComp)
+		}
+	}
 }
 
 // removeCompletedSpawn removes materialize spawn entry after materialize completion
@@ -812,39 +952,6 @@ func (s *DrainSystem) updateDrainMovement() {
 
 		s.world.Components.Drain.SetComponent(drainEntity, drainComp)
 		s.world.Components.Kinetic.SetComponent(drainEntity, kineticComp)
-	}
-}
-
-// updateDrainSigil()
-func (s *DrainSystem) updateDrainSigil() {
-	drainEntities := s.world.Components.Drain.GetAllEntities()
-	for _, drainEntity := range drainEntities {
-		sigilComp, ok := s.world.Components.Sigil.GetComponent(drainEntity)
-		if !ok {
-			continue
-		}
-		combatComp, ok := s.world.Components.Combat.GetComponent(drainEntity)
-		if !ok {
-			continue
-		}
-
-		// Show hit flash first
-		if combatComp.RemainingHitFlash > 0 && sigilComp.Color != component.SigilHitFlash {
-			sigilComp.Color = component.SigilHitFlash
-			s.world.Components.Sigil.SetComponent(drainEntity, sigilComp)
-			continue
-		}
-		// Show enraged second
-		if combatComp.IsEnraged && sigilComp.Color != component.SigilEnraged {
-			sigilComp.Color = component.SigilEnraged
-			s.world.Components.Sigil.SetComponent(drainEntity, sigilComp)
-			continue
-		}
-		// Revert to normal if not already
-		if sigilComp.Color != component.SigilDrain && combatComp.RemainingHitFlash == 0 && !combatComp.IsEnraged {
-			sigilComp.Color = component.SigilDrain
-			s.world.Components.Sigil.SetComponent(drainEntity, sigilComp)
-		}
 	}
 }
 

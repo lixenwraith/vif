@@ -41,6 +41,9 @@ const (
 	// DrainDeflectAngleVar is half-angle of random deflection cone (radians)
 	// ±0.35 rad ≈ ±20° spread for visual variety
 	DrainDeflectAngleVarFloat = 0.35
+
+	// DrainEnrageThreshold is HP below which drain becomes enraged
+	DrainEnrageThreshold = 5
 )
 
 // --- Quasar Entity ---
@@ -109,24 +112,47 @@ const (
 
 // --- Swarm Entity ---
 const (
-	// SwarmEnergyDrainInterval is the duration between energy drain ticks
-	SwarmEnergyDrainInterval = 1000 * time.Millisecond
+	// SwarmWidth is horizontal cell count
+	SwarmWidth = 4
+	// SwarmHeight is vertical cell count
+	SwarmHeight = 2
 
-	// SwarmBaseSpeed is the normal homing velocity in cells/sec (Q32.32 via vmath.FromFloat)
-	// Equivalent to previous 1 cell per SwarmMoveInterval
-	SwarmBaseSpeedFloat = 2.0
+	// SwarmHeaderOffsetX is phantom head X offset from top-left
+	SwarmHeaderOffsetX = 1
+	// SwarmHeaderOffsetY is phantom head Y offset from top-left
+	SwarmHeaderOffsetY = 0
 
-	// SwarmHomingAccel is acceleration toward cursor in cells/sec² (Q32.32)
-	// Higher values = snappier homing, lower = more floaty
-	SwarmHomingAccelFloat = 3.0
+	// SwarmPatternCount is number of visual patterns
+	SwarmPatternCount = 3
+	// SwarmPatternDuration is time per pattern before cycling
+	SwarmPatternDuration = 1500 * time.Millisecond
 
-	// SwarmDrag is deceleration rate when speed exceeds SwarmBaseSpeed (1/sec)
-	// Applied proportionally to excess speed for smooth convergence
+	// SwarmChargeInterval is time between charge sequences
+	SwarmChargeInterval = 5 * time.Second
+	// SwarmLockDuration is freeze time before charge
+	SwarmLockDuration = 2 * time.Second
+	// SwarmChargeDuration is charge travel time (fixed, speed calculated from distance)
+	SwarmChargeDuration = 800 * time.Millisecond
+	// SwarmDecelerationDuration is rapid stop after charge
+	SwarmDecelerationDuration = 100 * time.Millisecond
+
+	// SwarmLifetime is maximum swarm lifespan
+	SwarmLifetime = 35 * time.Second
+	// SwarmMaxCharges is charge count before despawn
+	SwarmMaxCharges = 5
+
+	// SwarmChaseSpeedMultiplier relative to drain base speed
+	SwarmChaseSpeedMultiplier = 4
+
+	// SwarmFuseAnimationDuration matches spirit convergence timing
+	SwarmFuseAnimationDuration = 500 * time.Millisecond
+
+	// SwarmHomingAccelFloat is acceleration toward cursor (cells/sec²)
+	SwarmHomingAccelFloat = 6.0
+	// SwarmDragFloat is deceleration when overspeed (1/sec)
 	SwarmDragFloat = 2.0
-
-	// SwarmDeflectAngleVar is half-angle of random deflection cone (radians)
-	// ±0.35 rad ≈ ±20° spread for visual variety
-	SwarmDeflectAngleVarFloat = 0.45
+	// SwarmDeflectAngleVarFloat is half-angle of random deflection cone (radians)
+	SwarmDeflectAngleVarFloat = 0.25
 )
 
 // --- Decay / Blossom Entities ---

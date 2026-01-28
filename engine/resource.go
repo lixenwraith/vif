@@ -102,12 +102,29 @@ type ContentResource struct {
 	Provider ContentProvider
 }
 
-// AudioPlayer defines the minimal audio interface used by game systems
+// AudioPlayer defines the audio interface used by game systems
 type AudioPlayer interface {
+	// Sound effects
 	Play(core.SoundType) bool
-	ToggleMute() bool
-	IsMuted() bool
+	ToggleEffectMute() bool
+	IsEffectMuted() bool
 	IsRunning() bool
+
+	// Music playback control
+	ToggleMusicMute() bool
+	IsMusicMuted() bool
+	StartMusic()
+	StopMusic()
+
+	// Sequencer control
+	SetMusicBPM(bpm int)
+	SetMusicSwing(amount float64)
+	SetMusicVolume(vol float64)
+	SetBeatPattern(pattern core.PatternID, crossfadeSamples int, quantize bool)
+	SetMelodyPattern(pattern core.PatternID, root int, crossfadeSamples int, quantize bool)
+	TriggerMelodyNote(note int, velocity float64, durationSamples int, instr core.InstrumentType)
+	ResetMusic()
+	IsMusicPlaying() bool
 }
 
 // AudioResource wraps the audio player interface

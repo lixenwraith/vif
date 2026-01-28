@@ -170,7 +170,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 		case component.BehaviorQuasar:
 			targetCombatType = component.CombatEntityQuasar
 		case component.BehaviorSwarm:
-			return // Future
+			targetCombatType = component.CombatEntitySwarm
 		case component.BehaviorStorm:
 			return // Future
 		default:

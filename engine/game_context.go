@@ -451,7 +451,7 @@ func (ctx *GameContext) ToggleAudioMute() bool {
 	if player == nil {
 		return ctx.IsMuted.Load()
 	}
-	newMuted := player.ToggleMute()
+	newMuted := player.ToggleEffectMute()
 	ctx.IsMuted.Store(newMuted)
 	return newMuted
 }
@@ -469,17 +469,17 @@ func (ctx *GameContext) SetPaused(paused bool) {
 		ctx.PausableClock.Pause()
 		// Capture pre-pause state, then mute for pause
 		if player != nil && player.IsRunning() {
-			ctx.IsMuted.Store(player.IsMuted())
-			if !player.IsMuted() {
-				player.ToggleMute()
+			ctx.IsMuted.Store(player.IsEffectMuted())
+			if !player.IsEffectMuted() {
+				player.ToggleEffectMute()
 			}
 		}
 	} else if !paused && wasPaused {
 		ctx.PausableClock.Resume()
 		// Restore pre-pause state (respects user toggle during pause)
 		if player != nil && player.IsRunning() {
-			if !ctx.IsMuted.Load() && player.IsMuted() {
-				player.ToggleMute()
+			if !ctx.IsMuted.Load() && player.IsEffectMuted() {
+				player.ToggleEffectMute()
 			}
 		}
 	}

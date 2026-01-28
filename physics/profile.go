@@ -95,6 +95,39 @@ var DustToQuasar = CollisionProfile{
 	OffsetInfluence:  0, // Center-of-mass collision, no offset
 }
 
+// CleanerToSwarm defines cleaner-to-swarm collision
+var CleanerToSwarm = CollisionProfile{
+	MassRatio:        vmath.MassRatioBaseToQuasar, // Swarm is heavy like quasar
+	ImpulseMin:       constant.CollisionKineticImpulseMin,
+	ImpulseMax:       constant.CollisionKineticImpulseMax,
+	AngleVariance:    constant.SwarmDeflectAngleVar,
+	Mode:             ImpulseOverride,
+	ImmunityDuration: constant.CombatKineticImmunityDuration,
+	OffsetInfluence:  vmath.OffsetInfluenceDefault,
+}
+
+// ShieldToSwarm defines shield-to-swarm knockback
+var ShieldToSwarm = CollisionProfile{
+	MassRatio:        vmath.MassRatioBaseToQuasar,
+	ImpulseMin:       constant.CollisionKineticImpulseMin,
+	ImpulseMax:       constant.CollisionKineticImpulseMax,
+	AngleVariance:    constant.SwarmDeflectAngleVar,
+	Mode:             ImpulseOverride,
+	ImmunityDuration: constant.CombatKineticImmunityDuration,
+	OffsetInfluence:  vmath.OffsetInfluenceDefault,
+}
+
+// ExplosionToSwarm defines explosion-to-swarm collision
+var ExplosionToSwarm = CollisionProfile{
+	MassRatio:        vmath.MassRatioExplosionToQuasar,
+	ImpulseMin:       constant.CollisionKineticImpulseMin,
+	ImpulseMax:       constant.CollisionKineticImpulseMax,
+	AngleVariance:    constant.SwarmDeflectAngleVar,
+	Mode:             ImpulseAdditive,
+	ImmunityDuration: constant.CombatHitFlashDuration,
+	OffsetInfluence:  0,
+}
+
 // Homing profiles
 
 // DrainHoming defines drain entity homing behavior
@@ -115,4 +148,14 @@ var QuasarHoming = HomingProfile{
 	ArrivalRadius:    vmath.FromFloat(3.0), // Begin arrival steering at 3 cells
 	ArrivalDragBoost: vmath.FromFloat(3.0), // 4x drag at target (1 + 3)
 	DeadZone:         vmath.Scale / 2,      // Snap at 0.5 cells
+}
+
+// SwarmHoming defines swarm chase behavior (4x drain speed)
+var SwarmHoming = HomingProfile{
+	BaseSpeed:        constant.SwarmChaseSpeed,
+	HomingAccel:      constant.SwarmHomingAccel,
+	Drag:             constant.SwarmDrag,
+	ArrivalRadius:    0,
+	ArrivalDragBoost: 0,
+	DeadZone:         0,
 }

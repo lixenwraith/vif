@@ -37,6 +37,14 @@ var (
 	QuasarSpeedMultiplierMaxFixed = vmath.Scale * QuasarSpeedMultiplierMax
 )
 
+// Swarm physics
+var (
+	SwarmChaseSpeed      = vmath.Mul(DrainBaseSpeed, vmath.FromInt(SwarmChaseSpeedMultiplier))
+	SwarmHomingAccel     = vmath.FromFloat(SwarmHomingAccelFloat)
+	SwarmDrag            = vmath.FromFloat(SwarmDragFloat)
+	SwarmDeflectAngleVar = vmath.FromFloat(SwarmDeflectAngleVarFloat)
+)
+
 // Dust physics
 var (
 	DustAttractionBase = vmath.FromFloat(DustAttractionBaseFloat)
