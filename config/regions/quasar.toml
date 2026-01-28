@@ -10,7 +10,7 @@ parent = "Root"
 parent = "QuasarCycle"
 on_enter = [
     { action = "EmitEvent", event = "EventGrayoutStart" },
-    { action = "EmitEvent", event = "EventQuasarFuseRequest" },
+    { action = "EmitEvent", event = "EventFuseQuasarRequest" },
 ]
 transitions = [
     { trigger = "EventQuasarSpawned", target = "QuasarGoldSpawn" },

@@ -21,7 +21,6 @@ type QuasarSystem struct {
 	world *engine.World
 
 	// Runtime state
-	active       bool
 	headerEntity core.Entity
 
 	// Random source for knockback impulse randomization
@@ -48,7 +47,6 @@ func NewQuasarSystem(world *engine.World) engine.System {
 }
 
 func (s *QuasarSystem) Init() {
-	s.active = false
 	s.headerEntity = 0
 	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
 	s.statActive.Store(false)
@@ -67,7 +65,7 @@ func (s *QuasarSystem) Priority() int {
 
 func (s *QuasarSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventQuasarSpawned,
+		event.EventQuasarSpawnRequest,
 		event.EventQuasarCancelRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
@@ -76,7 +74,7 @@ func (s *QuasarSystem) EventTypes() []event.EventType {
 
 func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
-		if s.active && s.headerEntity != 0 {
+		if s.headerEntity != 0 {
 			s.terminateQuasar()
 		}
 		s.Init()
@@ -96,62 +94,180 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	switch ev.Type {
-	case event.EventQuasarSpawned:
-		payload, ok := ev.Payload.(*event.QuasarSpawnedPayload)
-		if !ok {
-			return
+	case event.EventQuasarSpawnRequest:
+		if payload, ok := ev.Payload.(*event.QuasarSpawnRequestPayload); ok {
+			s.spawnQuasar(payload.SpawnX, payload.SpawnY)
 		}
-		s.headerEntity = payload.HeaderEntity
-
-		// Initialize kinetic state
-		cursorEntity := s.world.Resources.Cursor.Entity
-		now := s.world.Resources.Time.GameTime
-
-		quasarComp, ok := s.world.Components.Quasar.GetComponent(s.headerEntity)
-		if !ok {
-			return
-		}
-
-		kineticComp, ok := s.world.Components.Kinetic.GetComponent(s.headerEntity)
-		if !ok {
-			return
-		}
-
-		headerPos, _ := s.world.Positions.GetPosition(s.headerEntity)
-		cursorPos, _ := s.world.Positions.GetPosition(cursorEntity)
-
-		kineticComp.PreciseX = vmath.FromInt(headerPos.X)
-		kineticComp.PreciseY = vmath.FromInt(headerPos.Y)
-		quasarComp.SpeedMultiplier = vmath.Scale
-		quasarComp.LastSpeedIncreaseAt = now
-
-		// Initialize dynamic radius
-		quasarComp.ZapRadius = s.calculateZapRadius()
-
-		// Initial velocity toward cursor
-		dx := vmath.FromInt(cursorPos.X - headerPos.X)
-		dy := vmath.FromInt(cursorPos.Y - headerPos.Y)
-		dirX, dirY := vmath.Normalize2D(dx, dy)
-		kineticComp.VelX = vmath.Mul(dirX, constant.QuasarBaseSpeed)
-		kineticComp.VelY = vmath.Mul(dirY, constant.QuasarBaseSpeed)
-
-		s.world.Components.Quasar.SetComponent(s.headerEntity, quasarComp)
-		s.world.Components.Kinetic.SetComponent(s.headerEntity, kineticComp)
-
-		combatComp := component.CombatComponent{
-			HitPoints: constant.CombatInitialHPQuasar,
-		}
-		s.world.Components.Combat.SetComponent(s.headerEntity, combatComp)
-
-		s.statHitPoints.Store(int64(combatComp.HitPoints))
-		s.active = true
-		s.statActive.Store(true)
 
 	case event.EventQuasarCancelRequest:
-		if s.active {
-			s.terminateQuasar()
+		s.terminateQuasar()
+	}
+}
+
+func (s *QuasarSystem) spawnQuasar(targetX, targetY int) {
+	// 1. Clamp position to screen bounds
+	headerX, headerY := s.clampQuasarSpawnPosition(targetX, targetY)
+
+	// 2. Clear area
+	s.clearQuasarSpawnArea(headerX, headerY)
+
+	// 3. Create composite entity
+	headerEntity := s.createQuasarComposite(headerX, headerY)
+
+	// 4. Update internal state
+	s.headerEntity = headerEntity
+	s.statActive.Store(true)
+
+	// 5. Notify world
+	s.world.PushEvent(event.EventQuasarSpawned, &event.QuasarSpawnedPayload{
+		HeaderEntity: headerEntity,
+	})
+}
+
+// clampQuasarSpawnPosition ensures the Quasar fits within bounds given a target center
+// Input x, y is the desired center (or centroid)
+// Returns the Phantom Head position (Quasar header)
+func (s *QuasarSystem) clampQuasarSpawnPosition(targetX, targetY int) (int, int) {
+	config := s.world.Resources.Config
+
+	// Phantom head is at (2,1) offset relative to Quasar top-left (0,0)
+	// We want targetX, targetY to be roughly the center of the Quasar
+	// TopLeft = Center - CenterOffset
+	// Anchor = TopLeft + AnchorOffset
+	// Simplified: Anchor = Target
+
+	// However, we must ensure the entire 3x5 grid fits
+	// TopLeft = Anchor - AnchorOffset
+	topLeftX := targetX - constant.QuasarHeaderOffsetX
+	topLeftY := targetY - constant.QuasarHeaderOffsetY
+
+	if topLeftX < 0 {
+		topLeftX = 0
+	}
+	if topLeftY < 0 {
+		topLeftY = 0
+	}
+	if topLeftX+constant.QuasarWidth > config.GameWidth {
+		topLeftX = config.GameWidth - constant.QuasarWidth
+	}
+	if topLeftY+constant.QuasarHeight > config.GameHeight {
+		topLeftY = config.GameHeight - constant.QuasarHeight
+	}
+
+	// Return adjusted header position
+	return topLeftX + constant.QuasarHeaderOffsetX, topLeftY + constant.QuasarHeaderOffsetY
+}
+
+// clearQuasarSpawnArea destroys all entities within the quasar footprint
+func (s *QuasarSystem) clearQuasarSpawnArea(headerX, headerY int) {
+	// Calculate top-left from header position
+	topLeftX := headerX - constant.QuasarHeaderOffsetX
+	topLeftY := headerY - constant.QuasarHeaderOffsetY
+
+	cursorEntity := s.world.Resources.Cursor.Entity
+	var toDestroy []core.Entity
+
+	for row := 0; row < constant.QuasarHeight; row++ {
+		for col := 0; col < constant.QuasarWidth; col++ {
+			x := topLeftX + col
+			y := topLeftY + row
+
+			entities := s.world.Positions.GetAllEntityAt(x, y)
+			for _, e := range entities {
+				if e == 0 || e == cursorEntity {
+					continue
+				}
+				// Check protection
+				if prot, ok := s.world.Components.Protection.GetComponent(e); ok {
+					if prot.Mask == component.ProtectAll {
+						continue
+					}
+				}
+				toDestroy = append(toDestroy, e)
+			}
 		}
 	}
+
+	if len(toDestroy) > 0 {
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, toDestroy)
+	}
+}
+
+// createQuasarComposite builds the 3x5 quasar entity structure
+func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
+	// Calculate top-left from header position
+	topLeftX := headerX - constant.QuasarHeaderOffsetX
+	topLeftY := headerY - constant.QuasarHeaderOffsetY
+
+	// Create phantom head (controller entity)
+	headerEntity := s.world.CreateEntity()
+	s.world.Positions.SetPosition(headerEntity, component.PositionComponent{X: headerX, Y: headerY})
+
+	// Phantom head is indestructible through lifecycle
+	s.world.Components.Protection.SetComponent(headerEntity, component.ProtectionComponent{
+		Mask: component.ProtectAll,
+	})
+
+	// Set quasar components
+	s.world.Components.Quasar.SetComponent(headerEntity, component.QuasarComponent{
+		SpeedMultiplier: vmath.Scale,
+	})
+
+	// Set combat component
+	s.world.Components.Combat.SetComponent(headerEntity, component.CombatComponent{
+		OwnerEntity:      headerEntity,
+		CombatEntityType: component.CombatEntityQuasar,
+		HitPoints:        constant.CombatInitialHPQuasar,
+	})
+
+	// Set kinetic component
+	kinetic := core.Kinetic{
+		PreciseX: vmath.FromInt(headerX),
+		PreciseY: vmath.FromInt(headerY),
+	}
+	s.world.Components.Kinetic.SetComponent(headerEntity, component.KineticComponent{kinetic})
+
+	// Build member entities
+	members := make([]component.MemberEntry, 0, constant.QuasarWidth*constant.QuasarHeight)
+
+	for row := 0; row < constant.QuasarHeight; row++ {
+		for col := 0; col < constant.QuasarWidth; col++ {
+			memberX := topLeftX + col
+			memberY := topLeftY + row
+
+			// Calculate offset from header
+			offsetX := col - constant.QuasarHeaderOffsetX
+			offsetY := row - constant.QuasarHeaderOffsetY
+
+			entity := s.world.CreateEntity()
+			s.world.Positions.SetPosition(entity, component.PositionComponent{X: memberX, Y: memberY})
+
+			// MemberEntries protected from decay/delete but not from death (composite manages lifecycle)
+			s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
+				Mask: component.ProtectFromDecay | component.ProtectFromDelete,
+			})
+
+			// Backlink to header
+			s.world.Components.Member.SetComponent(entity, component.MemberComponent{
+				HeaderEntity: headerEntity,
+			})
+
+			members = append(members, component.MemberEntry{
+				Entity:  entity,
+				OffsetX: offsetX,
+				OffsetY: offsetY,
+				Layer:   component.LayerEffect,
+			})
+		}
+	}
+
+	// Set composite header on phantom head
+	s.world.Components.Header.SetComponent(headerEntity, component.HeaderComponent{
+		Behavior:      component.BehaviorQuasar,
+		MemberEntries: members,
+	})
+
+	return headerEntity
 }
 
 // calculateZapRadius compute zap range from game dimensions
@@ -169,7 +285,7 @@ func (s *QuasarSystem) Update() {
 
 	headerEntity := s.headerEntity
 
-	if !s.active || headerEntity == 0 {
+	if headerEntity == 0 {
 		return
 	}
 
@@ -615,7 +731,7 @@ func (s *QuasarSystem) handleInteractions(headerEntity core.Entity, headerComp *
 		}
 
 		// Shield overlap check
-		if shieldActive && s.isInsideShieldEllipse(memberPos.X, memberPos.Y, cursorPos, &shieldComp) {
+		if shieldActive && vmath.EllipseContainsPoint(memberPos.X, memberPos.Y, cursorPos.X, cursorPos.Y, shieldComp.InvRxSq, shieldComp.InvRySq) {
 			hitEntities = append(hitEntities, memberEntry.Entity)
 		}
 	}
@@ -639,33 +755,18 @@ func (s *QuasarSystem) handleInteractions(headerEntity core.Entity, headerComp *
 	}
 }
 
-// isInsideShieldEllipse checks if position is within shield using fixed-point math
-func (s *QuasarSystem) isInsideShieldEllipse(x, y int, cursorPos component.PositionComponent, shieldComp *component.ShieldComponent) bool {
-	dx := vmath.FromInt(x - cursorPos.X)
-	dy := vmath.FromInt(y - cursorPos.Y)
-	return vmath.EllipseContains(dx, dy, shieldComp.InvRxSq, shieldComp.InvRySq)
-}
-
 // terminateQuasar ends quasar phase
 func (s *QuasarSystem) terminateQuasar() {
-	if !s.active {
+	if s.headerEntity == 0 {
 		return
 	}
 
 	// Stop zapping via event (LightningSystem handles cleanup)
-	if s.headerEntity != 0 {
-		s.world.PushEvent(event.EventLightningDespawn, s.headerEntity)
-	}
+	s.world.PushEvent(event.EventLightningDespawn, s.headerEntity)
 
 	// Destroy composite
-	if s.headerEntity != 0 {
-		s.destroyQuasarComposite(s.headerEntity)
-	}
+	s.destroyQuasarComposite(s.headerEntity)
 
-	// Resume drain spawning
-	s.world.PushEvent(event.EventDrainResume, nil)
-
-	s.active = false
 	s.headerEntity = 0
 	s.statActive.Store(false)
 }

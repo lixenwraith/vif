@@ -64,3 +64,12 @@ func CircleDistSq(dx, dy int64) int64 {
 func CircleContains(dx, dy, radiusSq int64) bool {
 	return CircleDistSq(dx, dy) <= radiusSq
 }
+
+// EllipseContainsPoint checks if integer grid point (x,y) is inside ellipse centered at (cx,cy)
+// invRxSq, invRySq are precomputed inverse squared radii from EllipseInvRadiiSq
+// Ellipse equation: (dx²/rx² + dy²/ry²) <= 1  →  (dx² * invRxSq + dy² * invRySq) <= Scale
+func EllipseContainsPoint(x, y, cx, cy int, invRxSq, invRySq int64) bool {
+	dx := FromInt(x - cx)
+	dy := FromInt(y - cy)
+	return EllipseContains(dx, dy, invRxSq, invRySq)
+}

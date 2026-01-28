@@ -64,7 +64,8 @@ func (s *SwarmSystem) Priority() int {
 
 func (s *SwarmSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventSwarmSpawned,
+		event.EventSwarmSpawnRequest,
+		// event.EventSwarmSpawned,
 		event.EventSwarmCancelRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
@@ -90,9 +91,9 @@ func (s *SwarmSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	switch ev.Type {
-	case event.EventSwarmSpawned:
-		if payload, ok := ev.Payload.(*event.SwarmSpawnedPayload); ok {
-			s.initializeSwarm(payload.HeaderEntity)
+	case event.EventSwarmSpawnRequest:
+		if payload, ok := ev.Payload.(*event.SwarmSpawnRequestPayload); ok {
+			s.spawnSwarm(payload.SpawnX, payload.SpawnY)
 		}
 
 	case event.EventSwarmCancelRequest:
@@ -153,10 +154,10 @@ func (s *SwarmSystem) Update() {
 		}
 
 		// Interactions with cursor and shield
-		s.handleCursorInteractions(headerEntity, &swarmComp, &combatComp)
+		s.handleCursorInteractions(headerEntity)
 
 		// Drain absorption check
-		s.checkDrainAbsorption(headerEntity, &swarmComp, &combatComp)
+		s.checkDrainAbsorption(headerEntity, &combatComp)
 
 		// Persist components
 		s.world.Components.Swarm.SetComponent(headerEntity, swarmComp)
@@ -169,34 +170,164 @@ func (s *SwarmSystem) Update() {
 	s.statActive.Store(activeCount > 0)
 }
 
-// initializeSwarm sets up initial kinetic state for newly spawned swarm
-func (s *SwarmSystem) initializeSwarm(headerEntity core.Entity) {
+func (s *SwarmSystem) spawnSwarm(targetX, targetY int) {
+	// 1. Clamp position to screen bounds
+	headerX, headerY := s.clampSwarmSpawnPosition(targetX, targetY)
+
+	// 2. Clear area
+	s.clearSwarmSpawnArea(headerX, headerY)
+
+	// 3. Create Entity
+	headerEntity := s.createSwarmComposite(headerX, headerY)
+
+	// 4. Notify world
+	s.world.PushEvent(event.EventSwarmSpawned, &event.SwarmSpawnedPayload{
+		HeaderEntity: headerEntity,
+	})
+}
+
+// clampSwarmSpawnPosition ensures swarm fits within bounds
+func (s *SwarmSystem) clampSwarmSpawnPosition(targetX, targetY int) (int, int) {
+	config := s.world.Resources.Config
+
+	// Header at (1,0) offset, so top-left = header - offset
+	topLeftX := targetX - constant.SwarmHeaderOffsetX
+	topLeftY := targetY - constant.SwarmHeaderOffsetY
+
+	if topLeftX < 0 {
+		topLeftX = 0
+	}
+	if topLeftY < 0 {
+		topLeftY = 0
+	}
+	if topLeftX+constant.SwarmWidth > config.GameWidth {
+		topLeftX = config.GameWidth - constant.SwarmWidth
+	}
+	if topLeftY+constant.SwarmHeight > config.GameHeight {
+		topLeftY = config.GameHeight - constant.SwarmHeight
+	}
+
+	return topLeftX + constant.SwarmHeaderOffsetX, topLeftY + constant.SwarmHeaderOffsetY
+}
+
+// clearSwarmSpawnArea destroys entities within swarm footprint
+func (s *SwarmSystem) clearSwarmSpawnArea(headerX, headerY int) {
+	topLeftX := headerX - constant.SwarmHeaderOffsetX
+	topLeftY := headerY - constant.SwarmHeaderOffsetY
+
 	cursorEntity := s.world.Resources.Cursor.Entity
+	var toDestroy []core.Entity
 
-	headerPos, ok := s.world.Positions.GetPosition(headerEntity)
-	if !ok {
-		return
+	for row := 0; row < constant.SwarmHeight; row++ {
+		for col := 0; col < constant.SwarmWidth; col++ {
+			x := topLeftX + col
+			y := topLeftY + row
+
+			entities := s.world.Positions.GetAllEntityAt(x, y)
+			for _, e := range entities {
+				if e == 0 || e == cursorEntity {
+					continue
+				}
+				if prot, ok := s.world.Components.Protection.GetComponent(e); ok {
+					if prot.Mask == component.ProtectAll {
+						continue
+					}
+				}
+				toDestroy = append(toDestroy, e)
+			}
+		}
 	}
 
-	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
-	if !ok {
-		return
+	if len(toDestroy) > 0 {
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, toDestroy)
+	}
+}
+
+// createSwarmComposite builds the 4×2 swarm entity structure
+func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
+	topLeftX := headerX - constant.SwarmHeaderOffsetX
+	topLeftY := headerY - constant.SwarmHeaderOffsetY
+
+	// Create phantom head
+	headerEntity := s.world.CreateEntity()
+	s.world.Positions.SetPosition(headerEntity, component.PositionComponent{X: headerX, Y: headerY})
+
+	// Phantom head is indestructible
+	s.world.Components.Protection.SetComponent(headerEntity, component.ProtectionComponent{
+		Mask: component.ProtectAll,
+	})
+
+	// Initialize swarm component
+	s.world.Components.Swarm.SetComponent(headerEntity, component.SwarmComponent{
+		State:                   component.SwarmStateChase,
+		PatternIndex:            0,
+		PatternRemaining:        constant.SwarmPatternDuration,
+		ChargeIntervalRemaining: constant.SwarmChargeInterval,
+		ChargesCompleted:        0,
+	})
+
+	// Initialize kinetic
+	kinetic := core.Kinetic{
+		PreciseX: vmath.FromInt(headerX),
+		PreciseY: vmath.FromInt(headerY),
+	}
+	s.world.Components.Kinetic.SetComponent(headerEntity, component.KineticComponent{Kinetic: kinetic})
+
+	// Initialize combat
+	s.world.Components.Combat.SetComponent(headerEntity, component.CombatComponent{
+		OwnerEntity:      headerEntity,
+		CombatEntityType: component.CombatEntitySwarm,
+		HitPoints:        constant.CombatInitialHPSwarm,
+	})
+
+	// Lifetime timer for automatic despawn
+	s.world.Components.Timer.SetComponent(headerEntity, component.TimerComponent{
+		Remaining: constant.SwarmLifetime,
+	})
+
+	// Build member entities (pre-allocate all 8 positions)
+	members := make([]component.MemberEntry, 0, constant.SwarmWidth*constant.SwarmHeight)
+
+	for row := 0; row < constant.SwarmHeight; row++ {
+		for col := 0; col < constant.SwarmWidth; col++ {
+			memberX := topLeftX + col
+			memberY := topLeftY + row
+
+			offsetX := col - constant.SwarmHeaderOffsetX
+			offsetY := row - constant.SwarmHeaderOffsetY
+
+			entity := s.world.CreateEntity()
+			s.world.Positions.SetPosition(entity, component.PositionComponent{X: memberX, Y: memberY})
+
+			s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
+				Mask: component.ProtectFromDecay | component.ProtectFromDelete,
+			})
+
+			s.world.Components.Member.SetComponent(entity, component.MemberComponent{
+				HeaderEntity: headerEntity,
+			})
+
+			// Layer determined by pattern visibility (LayerGlyph = active, LayerEffect = inactive)
+			layer := component.LayerGlyph
+			if !component.SwarmPatternActive[0][row][col] {
+				layer = component.LayerEffect
+			}
+
+			members = append(members, component.MemberEntry{
+				Entity:  entity,
+				OffsetX: offsetX,
+				OffsetY: offsetY,
+				Layer:   layer,
+			})
+		}
 	}
 
-	kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity)
-	if !ok {
-		return
-	}
+	s.world.Components.Header.SetComponent(headerEntity, component.HeaderComponent{
+		Behavior:      component.BehaviorSwarm,
+		MemberEntries: members,
+	})
 
-	// Initial velocity toward cursor
-	dx := vmath.FromInt(cursorPos.X - headerPos.X)
-	dy := vmath.FromInt(cursorPos.Y - headerPos.Y)
-	dirX, dirY := vmath.Normalize2D(dx, dy)
-
-	kineticComp.VelX = vmath.Mul(dirX, constant.SwarmChaseSpeed)
-	kineticComp.VelY = vmath.Mul(dirY, constant.SwarmChaseSpeed)
-
-	s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
+	return headerEntity
 }
 
 // updatePatternCycle advances pattern animation
@@ -313,7 +444,8 @@ func (s *SwarmSystem) updateDecelerateState(
 	swarmComp.DecelRemaining -= dt
 	if swarmComp.DecelRemaining <= 0 {
 		// Transition back to Chase
-		s.enterChaseState(swarmComp)
+		swarmComp.State = component.SwarmStateChase
+		swarmComp.ChargeIntervalRemaining = constant.SwarmChargeInterval
 		return
 	}
 
@@ -387,12 +519,6 @@ func (s *SwarmSystem) enterDecelerateState(headerEntity core.Entity, swarmComp *
 	swarmComp.State = component.SwarmStateDecelerate
 	swarmComp.DecelRemaining = constant.SwarmDecelerationDuration
 	swarmComp.ChargesCompleted++
-}
-
-// enterChaseState transitions back to chase phase
-func (s *SwarmSystem) enterChaseState(swarmComp *component.SwarmComponent) {
-	swarmComp.State = component.SwarmStateChase
-	swarmComp.ChargeIntervalRemaining = constant.SwarmChargeInterval
 }
 
 // applyHomingMovement applies homing physics toward cursor
@@ -479,7 +605,6 @@ func (s *SwarmSystem) syncMemberPositions(headerEntity core.Entity, headerX, hea
 // checkDrainAbsorption detects and absorbs colliding drains
 func (s *SwarmSystem) checkDrainAbsorption(
 	headerEntity core.Entity,
-	swarmComp *component.SwarmComponent,
 	combatComp *component.CombatComponent,
 ) {
 	headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
@@ -530,7 +655,7 @@ func (s *SwarmSystem) checkDrainAbsorption(
 			event.EmitDeathOne(s.world.Resources.Event.Queue, e, 0)
 
 			// Emit absorption event
-			s.world.PushEvent(event.EventDrainAbsorbed, &event.DrainAbsorbedPayload{
+			s.world.PushEvent(event.EventSwarmAbsorbedDrain, &event.SwarmAbsorbedDrainPayload{
 				SwarmEntity: headerEntity,
 				DrainEntity: e,
 				HPAbsorbed:  hpAbsorbed,
@@ -542,8 +667,6 @@ func (s *SwarmSystem) checkDrainAbsorption(
 // handleCursorInteractions processes shield overlap and cursor collision
 func (s *SwarmSystem) handleCursorInteractions(
 	headerEntity core.Entity,
-	swarmComp *component.SwarmComponent,
-	combatComp *component.CombatComponent,
 ) {
 	cursorEntity := s.world.Resources.Cursor.Entity
 
@@ -580,7 +703,7 @@ func (s *SwarmSystem) handleCursorInteractions(
 		}
 
 		// Shield overlap check
-		if shieldActive && s.isInsideShieldEllipse(memberPos.X, memberPos.Y, cursorPos, &shieldComp) {
+		if shieldActive && vmath.EllipseContainsPoint(memberPos.X, memberPos.Y, cursorPos.X, cursorPos.Y, shieldComp.InvRxSq, shieldComp.InvRySq) {
 			hitEntities = append(hitEntities, member.Entity)
 		}
 	}
@@ -605,13 +728,6 @@ func (s *SwarmSystem) handleCursorInteractions(
 			Delta: -constant.DrainHeatReductionAmount,
 		})
 	}
-}
-
-// isInsideShieldEllipse checks if position is within shield
-func (s *SwarmSystem) isInsideShieldEllipse(x, y int, cursorPos component.PositionComponent, shieldComp *component.ShieldComponent) bool {
-	dx := vmath.FromInt(x - cursorPos.X)
-	dy := vmath.FromInt(y - cursorPos.Y)
-	return vmath.EllipseContains(dx, dy, shieldComp.InvRxSq, shieldComp.InvRySq)
 }
 
 // despawnSwarm destroys swarm composite and emits event

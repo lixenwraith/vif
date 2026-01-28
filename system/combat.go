@@ -284,7 +284,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 		case component.BehaviorQuasar:
 			targetCombatType = component.CombatEntityQuasar
 		case component.BehaviorSwarm:
-			return // Future
+			targetCombatType = component.CombatEntitySwarm
 		case component.BehaviorStorm:
 			return // Future
 		default:
@@ -379,7 +379,7 @@ func (s *CombatSystem) applyFieldCollision(originEntity, targetEntity core.Entit
 			for _, memberEntry := range headerComp.MemberEntries {
 				if hitEntity == memberEntry.Entity {
 					sumX += memberEntry.OffsetX
-					sumY += memberEntry.OffsetX
+					sumY += memberEntry.OffsetY
 				}
 			}
 		}

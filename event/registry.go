@@ -192,23 +192,25 @@ func InitRegistry() {
 	// Cursor
 	RegisterType("EventCursorMoved", EventCursorMoved, &CursorMovedPayload{})
 
-	// Fuse/Quasar events
-	RegisterType("EventQuasarFuseRequest", EventQuasarFuseRequest, nil)
+	// Fuse events
+	RegisterType("EventFuseQuasarRequest", EventFuseQuasarRequest, nil)
+	RegisterType("EventFuseSwarmRequest", EventFuseSwarmRequest, &FuseSwarmRequestPayload{})
 
 	// Drain
 	RegisterType("EventDrainPause", EventDrainPause, nil)
 	RegisterType("EventDrainResume", EventDrainResume, nil)
 
 	// Quasar
+	RegisterType("EventQuasarSpawnRequest", EventQuasarSpawnRequest, &QuasarSpawnRequestPayload{})
 	RegisterType("EventQuasarSpawned", EventQuasarSpawned, &QuasarSpawnedPayload{})
 	RegisterType("EventQuasarDestroyed", EventQuasarDestroyed, nil)
 	RegisterType("EventQuasarCancelRequest", EventQuasarCancelRequest, nil)
 
 	// Swarm
-	RegisterType("EventSwarmFuseRequest", EventSwarmFuseRequest, &SwarmFuseRequestPayload{})
+	RegisterType("EventSwarmSpawnRequest", EventSwarmSpawnRequest, &SwarmSpawnRequestPayload{})
 	RegisterType("EventSwarmSpawned", EventSwarmSpawned, &SwarmSpawnedPayload{})
 	RegisterType("EventSwarmDespawned", EventSwarmDespawned, &SwarmDespawnedPayload{})
-	RegisterType("EventDrainAbsorbed", EventDrainAbsorbed, &DrainAbsorbedPayload{})
+	RegisterType("EventSwarmAbsorbedDrain", EventSwarmAbsorbedDrain, &SwarmAbsorbedDrainPayload{})
 	RegisterType("EventSwarmCancelRequest", EventSwarmCancelRequest, nil)
 
 	// Environment

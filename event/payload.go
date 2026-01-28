@@ -430,8 +430,8 @@ type CombatAttackAreaRequestPayload struct {
 	HitEntities  []core.Entity              `toml:"hit_entities"`
 }
 
-// SwarmFuseRequestPayload contains the two drains to fuse
-type SwarmFuseRequestPayload struct {
+// FuseSwarmRequestPayload contains the two drains to fuse
+type FuseSwarmRequestPayload struct {
 	DrainA core.Entity `toml:"drain_a"`
 	DrainB core.Entity `toml:"drain_b"`
 }
@@ -439,8 +439,6 @@ type SwarmFuseRequestPayload struct {
 // SwarmSpawnedPayload contains swarm spawn data
 type SwarmSpawnedPayload struct {
 	HeaderEntity core.Entity `toml:"header_entity"`
-	SpawnX       int         `toml:"spawn_x"`
-	SpawnY       int         `toml:"spawn_y"`
 }
 
 // SwarmDespawnedPayload contains despawn reason
@@ -449,9 +447,21 @@ type SwarmDespawnedPayload struct {
 	Reason       uint8       `toml:"reason"` // 0=timeout, 1=hp, 2=charges
 }
 
-// DrainAbsorbedPayload contains absorption data
-type DrainAbsorbedPayload struct {
+// SwarmAbsorbedDrainPayload contains absorption data
+type SwarmAbsorbedDrainPayload struct {
 	SwarmEntity core.Entity `toml:"swarm_entity"`
 	DrainEntity core.Entity `toml:"drain_entity"`
 	HPAbsorbed  int         `toml:"hp_absorbed"`
+}
+
+// QuasarSpawnRequestPayload contains coordinates for creation
+type QuasarSpawnRequestPayload struct {
+	SpawnX int `toml:"spawn_x"`
+	SpawnY int `toml:"spawn_y"`
+}
+
+// SwarmSpawnRequestPayload contains coordinates for creation
+type SwarmSpawnRequestPayload struct {
+	SpawnX int `toml:"spawn_x"`
+	SpawnY int `toml:"spawn_y"`
 }

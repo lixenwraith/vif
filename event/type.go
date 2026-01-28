@@ -348,10 +348,10 @@ const (
 	// Consumer: SplashSystem (magnifier) | Payload: *CursorMovedPayload
 	EventCursorMoved
 
-	// EventQuasarFuseRequest signals drains should fuse into quasar
+	// EventFuseQuasarRequest signals drains should fuse into quasar
 	// Trigger: FSM
 	// Consumer: FuseSystem | Payload: nil
-	EventQuasarFuseRequest
+	EventFuseQuasarRequest
 
 	// EventDrainPause signals DrainSystem to stop spawning
 	// Trigger: FuseSystem before destroying drains
@@ -362,6 +362,16 @@ const (
 	// Trigger: QuasarSystem on quasar termination
 	// Consumer: DrainSystem | Payload: nil
 	EventDrainResume
+
+	// EventQuasarSpawnRequest signals QuasarSystem to create the entity at location
+	// Trigger: FuseSystem (after animation)
+	// Consumer: QuasarSystem | Payload: *QuasarSpawnRequestPayload
+	EventQuasarSpawnRequest
+
+	// EventSwarmSpawnRequest signals SwarmSystem to create the entity at location
+	// Trigger: FuseSystem (after animation)
+	// Consumer: SwarmSystem | Payload: *SwarmSpawnRequestPayload
+	EventSwarmSpawnRequest
 
 	// EventQuasarSpawned signals quasar composite creation
 	// Trigger: FuseSystem after creating quasar
@@ -438,10 +448,10 @@ const (
 	// Consumer: DustSystem | Payload: nil
 	EventDustAllRequest
 
-	// EventSwarmFuseRequest signals two enraged drains should fuse into swarm
+	// EventFuseSwarmRequest signals two enraged drains should fuse into swarm
 	// Trigger: DrainSystem when detecting enraged pair
-	// Consumer: FuseSystem | Payload: *SwarmFuseRequestPayload
-	EventSwarmFuseRequest
+	// Consumer: FuseSystem | Payload: *FuseSwarmRequestPayload
+	EventFuseSwarmRequest
 
 	// EventSwarmSpawned signals swarm composite creation
 	// Trigger: FuseSystem after convergence animation
@@ -453,10 +463,10 @@ const (
 	// Consumer: (future: audio/FSM) | Payload: *SwarmDespawnedPayload
 	EventSwarmDespawned
 
-	// EventDrainAbsorbed signals drain absorbed by swarm
+	// EventSwarmAbsorbedDrain signals drain absorbed by swarm
 	// Trigger: SwarmSystem on drain collision
-	// Consumer: (telemetry) | Payload: *DrainAbsorbedPayload
-	EventDrainAbsorbed
+	// Consumer: (telemetry) | Payload: *SwarmAbsorbedDrainPayload
+	EventSwarmAbsorbedDrain
 
 	// EventSwarmCancelRequest signals destruction of all swarm composites
 	// Trigger: FSM

@@ -310,7 +310,7 @@ func (s *DrainSystem) detectSwarmFusions() {
 		drainB := enragedDrains[1]
 		enragedDrains = enragedDrains[2:]
 
-		s.world.PushEvent(event.EventSwarmFuseRequest, &event.SwarmFuseRequestPayload{
+		s.world.PushEvent(event.EventFuseSwarmRequest, &event.FuseSwarmRequestPayload{
 			DrainA: drainA,
 			DrainB: drainB,
 		})
@@ -726,12 +726,7 @@ func (s *DrainSystem) isInsideShieldEllipse(x, y int) bool {
 		return false
 	}
 
-	dx := vmath.FromInt(x - cursorPos.X)
-	dy := vmath.FromInt(y - cursorPos.Y)
-
-	// Ellipse equation: (dx²/rx² + dy²/ry²) <= 1  →  (dx² * invRxSq + dy² * invRySq) <= Scale
-	// Precomputed InvRxSq/InvRySq from ShieldSystem.cacheInverseRadii
-	return vmath.EllipseContains(dx, dy, shieldComp.InvRxSq, shieldComp.InvRySq)
+	return vmath.EllipseContainsPoint(x, y, cursorPos.X, cursorPos.Y, shieldComp.InvRxSq, shieldComp.InvRySq)
 }
 
 // handleDrainInteractions processes all drain interactions per tick
