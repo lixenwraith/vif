@@ -9,9 +9,36 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
-	"github.com/lixenwraith/vi-fighter/physics"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
+
+// collisionContext holds pre-computed collision data for single tick
+type collisionContext struct {
+	// Cell flags: 1=drain, 2=quasar, 4=glyph, 8=decay/blossom
+	cellFlags map[uint64]uint8
+
+	// Impulse accumulators keyed by target entity
+	impulses map[core.Entity]*impulseAcc
+
+	// Quasar header for composite impulse routing
+	quasarHeader core.Entity
+}
+
+type impulseAcc struct {
+	vx, vy int64
+	hits   int
+}
+
+const (
+	cellFlagDrain  uint8 = 1
+	cellFlagQuasar uint8 = 2
+	cellFlagGlyph  uint8 = 4
+	cellFlagDecay  uint8 = 8
+)
+
+func posKey(x, y int) uint64 {
+	return uint64(x)<<32 | uint64(uint32(y))
+}
 
 // DustSystem manages orbital dust particles created from glyph transformation
 // Dust orbits cursor with chase behavior on large cursor movements
@@ -24,6 +51,9 @@ type DustSystem struct {
 
 	// Random source for orbit radius and direction
 	rng *vmath.FastRand
+
+	// Stagger tick for distributing chase boost activation (cycles 0-2)
+	staggerTick uint8
 
 	// Telemetry
 	statCreated   *atomic.Int64
@@ -50,6 +80,7 @@ func (s *DustSystem) Init() {
 	s.lastCursorX = 0
 	s.lastCursorY = 0
 	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
+	s.staggerTick = 0
 	s.statCreated.Store(0)
 	s.statActive.Store(0)
 	s.statDestroyed.Store(0)
@@ -181,6 +212,9 @@ func (s *DustSystem) Update() {
 	shield, ok := s.world.Components.Shield.GetComponent(cursorEntity)
 	shieldActive := ok && shield.Active
 
+	// Build collision context for this tick
+	collisionCtx := s.buildCollisionContext(shieldActive, cursorPos, &shield)
+
 	// Chase boost on cursor jump
 	cursorDeltaX := cursorPos.X - s.lastCursorX
 	cursorDeltaY := cursorPos.Y - s.lastCursorY
@@ -190,11 +224,23 @@ func (s *DustSystem) Update() {
 	cursorDisplacement := vmath.DistanceApprox(vmath.FromInt(cursorDeltaX), vmath.FromInt(cursorDeltaY))
 	applyChaseBoost := cursorDisplacement > vmath.FromInt(constant.DustChaseThreshold)
 
+	// Stagger tick advancement on cursor jump
+	if applyChaseBoost {
+		s.staggerTick = (s.staggerTick + 1) % 3
+	}
+
 	// 2. Setup Physics Constants
 	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
 	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
 		dtFixed = dtCap
 	}
+
+	// Pre-computed invariants for hot loop
+	var (
+		baseStiffness    = constant.DustAttractionBase
+		boostedStiffness = vmath.Mul(baseStiffness, constant.DustChaseBoost)
+		dragDtBase       = vmath.Mul(constant.DustGlobalDrag, dtFixed)
+	)
 
 	// Cursor position precise adjustment at the center of the cell to avoid skewed render
 	cursorXFixed := vmath.FromInt(cursorPos.X) + vmath.Scale>>1
@@ -232,13 +278,11 @@ func (s *DustSystem) Update() {
 
 		// --- Orbital Physics (only when energy != 0 / shield active) ---
 		if hasAttraction {
-			// Chase boost decay
-			if applyChaseBoost {
+			// Staggered chase boost: only activate for matching group
+			if applyChaseBoost && dustComp.ResponseGroup == s.staggerTick {
 				dustComp.ChaseBoost = constant.DustChaseBoost
 			} else if dustComp.ChaseBoost > vmath.Scale {
-				decay := vmath.Mul(constant.DustChaseDecay, dtFixed)
-				// TODO: move chase boost to kinetic
-				dustComp.ChaseBoost -= decay
+				dustComp.ChaseBoost -= vmath.Mul(constant.DustChaseDecay, dtFixed)
 				if dustComp.ChaseBoost < vmath.Scale {
 					dustComp.ChaseBoost = vmath.Scale
 				}
@@ -246,7 +290,14 @@ func (s *DustSystem) Update() {
 
 			// Equilibrium-seeking force toward target orbit radius
 			// Scale Y to circular space for visually circular orbit
-			stiffness := vmath.Mul(constant.DustAttractionBase, dustComp.ChaseBoost)
+			stiffness := baseStiffness
+			if dustComp.ChaseBoost > vmath.Scale {
+				// Interpolate: base + (boosted - base) * (boost - 1) / (maxBoost - 1)
+				boostFactor := dustComp.ChaseBoost - vmath.Scale
+				stiffness = baseStiffness + vmath.Mul(boostedStiffness-baseStiffness,
+					vmath.Div(boostFactor, constant.DustChaseBoost-vmath.Scale))
+			}
+
 			dyCirc := vmath.ScaleToCircular(dy)
 			ax, ayCirc := vmath.OrbitalEquilibrium(dx, dyCirc, dustComp.OrbitRadius, stiffness)
 
@@ -266,7 +317,8 @@ func (s *DustSystem) Update() {
 		// --- Global Drag (v² model) ---
 		speed := vmath.Magnitude(kineticComp.VelX, kineticComp.VelY)
 		if speed > 0 {
-			dragAmount := vmath.Mul(vmath.Mul(constant.DustGlobalDrag, speed), dtFixed)
+			// dragDtBase = DustGlobalDrag * dt (pre-computed)
+			dragAmount := vmath.Mul(dragDtBase, speed)
 			if dragAmount > vmath.Scale {
 				dragAmount = vmath.Scale
 			}
@@ -308,9 +360,7 @@ func (s *DustSystem) Update() {
 			kineticComp.VelY = -kineticComp.VelY / 2
 		}
 
-		// --- Zero-Allocation Collision Traversal ---
-
-		// Only traverse if we actually moved or need to check current cell
+		// --- Collision Traversal with Pre-computed Context ---
 		if newX != dustComp.LastIntX || newY != dustComp.LastIntY {
 			traverser := vmath.NewGridTraverser(prevX, prevY, kineticComp.PreciseX, kineticComp.PreciseY)
 			destroyDust := false
@@ -328,7 +378,14 @@ func (s *DustSystem) Update() {
 					continue
 				}
 
-				// Safe unsafe-access (we hold Lock)
+				// Early skip: no interactables in this cell
+				key := posKey(currX, currY)
+				flags, hasAny := collisionCtx.cellFlags[key]
+				if !hasAny {
+					continue
+				}
+
+				// Only query grid if flags indicate targets present, unsafe-access while holding lock
 				n := s.world.Positions.GetAllAtIntoUnsafe(currX, currY, collisionBuf[:])
 
 				for i := 0; i < n; i++ {
@@ -341,101 +398,92 @@ func (s *DustSystem) Update() {
 						continue
 					}
 
-					// --- Drain interaction ---
-					// TODO: fix later
-					if s.world.Components.Drain.HasEntity(target) {
-						if drainKineticComp, ok := s.world.Components.Kinetic.GetComponent(target); ok {
-							physics.ApplyCollision(
-								&drainKineticComp.Kinetic,
-								kineticComp.VelX, kineticComp.VelY,
-								&physics.DustToDrain,
-								s.rng,
-							)
-							s.world.Components.Kinetic.SetComponent(target, drainKineticComp)
-						}
+					// --- Drain (flag bit 0) ---
+					if flags&cellFlagDrain != 0 && s.world.Components.Drain.HasEntity(target) {
+						// Accumulate impulse instead of immediate apply
+						impulseX, impulseY := vmath.ApplyCollisionImpulse(
+							kineticComp.VelX, kineticComp.VelY,
+							vmath.MassRatioDustToDrain,
+							constant.DrainDeflectAngleVar,
+							constant.CollisionKineticImpulseMin,
+							constant.CollisionKineticImpulseMax,
+							s.rng,
+						)
+						collisionCtx.accumulateImpulse(target, impulseX, impulseY)
 						continue
 					}
 
-					// --- Quasar interaction ---
-					if member, ok := s.world.Components.Member.GetComponent(target); ok {
-						if headerComp, ok := s.world.Components.Header.GetComponent(member.HeaderEntity); ok {
-							if quasarKineticComp, ok := s.world.Components.Kinetic.GetComponent(member.HeaderEntity); ok {
-								if headerComp.Behavior == component.BehaviorQuasar {
-									// Center-of-mass collision, no offset calculation
-									physics.ApplyCollision(
-										&quasarKineticComp.Kinetic,
-										kineticComp.VelX, kineticComp.VelY,
-										&physics.DustToQuasar,
-										s.rng,
-									)
-									s.world.Components.Kinetic.SetComponent(member.HeaderEntity, quasarKineticComp)
-								}
+					// --- Quasar (flag bit 1) ---
+					if flags&cellFlagQuasar != 0 {
+						if member, ok := s.world.Components.Member.GetComponent(target); ok {
+							if collisionCtx.quasarHeader != 0 && member.HeaderEntity == collisionCtx.quasarHeader {
+								impulseX, impulseY := vmath.ApplyCollisionImpulse(
+									kineticComp.VelX, kineticComp.VelY,
+									vmath.MassRatioDustToQuasar,
+									constant.DrainDeflectAngleVar,
+									constant.CollisionKineticImpulseMin,
+									constant.CollisionKineticImpulseMax,
+									s.rng,
+								)
+								collisionCtx.accumulateImpulse(collisionCtx.quasarHeader, impulseX, impulseY)
 							}
 						}
+						continue
 					}
 
-					// --- Blossom/Decay interaction ---
+					// --- Decay/Blossom (flag bit 3) ---
+					if flags&cellFlagDecay != 0 {
+						if s.world.Components.Blossom.HasEntity(target) || s.world.Components.Decay.HasEntity(target) {
+							s.world.Components.Death.SetComponent(target, component.DeathComponent{})
+							deathCandidates = append(deathCandidates, target)
+							if !dustInsideShield {
+								destroyDust = true
+								break
+							}
+						}
+						continue
+					}
 
-					if s.world.Components.Blossom.HasEntity(target) || s.world.Components.Decay.HasEntity(target) {
-						s.world.Components.Death.SetComponent(target, component.DeathComponent{})
-						deathCandidates = append(deathCandidates, target)
-						if !dustInsideShield {
+					// --- Glyph (flag bit 2, requires shield context) ---
+					if flags&cellFlagGlyph != 0 && dustInsideShield {
+						glyphComp, ok := s.world.Components.Glyph.GetComponent(target)
+						if !ok {
+							continue
+						}
+
+						shouldKillGlyph := false
+						shouldKillDust := false
+
+						if cursorEnergy > 0 {
+							if glyphComp.Type == component.GlyphBlue {
+								shouldKillGlyph = true
+								shouldKillDust = true
+							} else if glyphComp.Type == component.GlyphRed {
+								shouldKillDust = true
+							}
+						} else if cursorEnergy < 0 {
+							if glyphComp.Type == component.GlyphRed {
+								shouldKillGlyph = true
+								shouldKillDust = true
+							} else if glyphComp.Type == component.GlyphBlue {
+								shouldKillDust = true
+							}
+						}
+						// Green, Gold, and Zero Energy: No interaction
+
+						if shouldKillGlyph {
+							s.world.Components.Death.SetComponent(target, component.DeathComponent{})
+							deathCandidates = append(deathCandidates, target)
+							s.world.PushEvent(event.EventEnergyGlyphConsumed, &event.GlyphConsumedPayload{
+								Type:  glyphComp.Type,
+								Level: glyphComp.Level,
+							})
+						}
+
+						if shouldKillDust {
 							destroyDust = true
-							break
+							break // Dust destroyed, stop checking other entities in this cell
 						}
-					}
-
-					// --- Glyph interaction ---
-
-					// Prerequisite 1: Dust itself must be inside shield to interact with glyphs
-					if !dustInsideShield {
-						continue
-					}
-
-					glyphComp, ok := s.world.Components.Glyph.GetComponent(target)
-					if !ok {
-						continue
-					}
-
-					// Prerequisite 2: Target Glyph must also be inside shield (handles shield entry edge cases, e.g. fast-moving dustComp)
-					gDx := vmath.FromInt(currX) - cursorXFixed
-					gDy := vmath.FromInt(currY) - cursorYFixed
-					if !vmath.EllipseContains(gDx, gDy, shield.InvRxSq, shield.InvRySq) {
-						continue
-					}
-
-					shouldKillGlyph := false
-					shouldKillDust := false
-
-					if cursorEnergy > 0 {
-						if glyphComp.Type == component.GlyphBlue {
-							shouldKillGlyph = true
-							shouldKillDust = true
-						} else if glyphComp.Type == component.GlyphRed {
-							shouldKillDust = true
-						}
-					} else if cursorEnergy < 0 {
-						if glyphComp.Type == component.GlyphRed {
-							shouldKillGlyph = true
-							shouldKillDust = true
-						} else if glyphComp.Type == component.GlyphBlue {
-							shouldKillDust = true
-						}
-					}
-					// Green, Gold, and Zero Energy: No interaction
-
-					if shouldKillGlyph {
-						s.world.Components.Death.SetComponent(target, component.DeathComponent{})
-						deathCandidates = append(deathCandidates, target)
-						s.world.PushEvent(event.EventEnergyGlyphConsumed, &event.GlyphConsumedPayload{
-							Type:  glyphComp.Type,
-							Level: glyphComp.Level,
-						})
-					}
-
-					if shouldKillDust {
-						destroyDust = true
-						break // Dust destroyed, stop checking other entities in this cell
 					}
 				}
 
@@ -480,12 +528,108 @@ func (s *DustSystem) Update() {
 		s.world.Components.Kinetic.SetComponent(dustEntity, kineticComp)
 	}
 
+	// Apply batched collision impulses
+	s.applyAccumulatedImpulses(collisionCtx)
+
 	if len(deathCandidates) > 0 {
 		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashRequest, deathCandidates)
 	}
 
 	s.statActive.Store(int64(len(dustEntities)))
 	s.statDestroyed.Add(destroyedCount)
+}
+
+// buildCollisionContext pre-computes collision data for current tick
+func (s *DustSystem) buildCollisionContext(shieldActive bool, cursorPos component.PositionComponent, shield *component.ShieldComponent) *collisionContext {
+	ctx := &collisionContext{
+		cellFlags: make(map[uint64]uint8, 256),
+		impulses:  make(map[core.Entity]*impulseAcc, 16),
+	}
+
+	// Drains
+	for _, e := range s.world.Components.Drain.GetAllEntities() {
+		if pos, ok := s.world.Positions.GetPosition(e); ok {
+			ctx.cellFlags[posKey(pos.X, pos.Y)] |= cellFlagDrain
+		}
+	}
+
+	// Quasar members
+	for _, headerEntity := range s.world.Components.Header.GetAllEntities() {
+		header, ok := s.world.Components.Header.GetComponent(headerEntity)
+		if !ok || header.Behavior != component.BehaviorQuasar {
+			continue
+		}
+		ctx.quasarHeader = headerEntity
+		for _, member := range header.MemberEntries {
+			if member.Entity == 0 {
+				continue
+			}
+			if pos, ok := s.world.Positions.GetPosition(member.Entity); ok {
+				ctx.cellFlags[posKey(pos.X, pos.Y)] |= cellFlagQuasar
+			}
+		}
+	}
+
+	// Glyphs (only if shield active, collision requires both dust and glyph inside)
+	if shieldActive {
+		cursorXFixed := vmath.FromInt(cursorPos.X)
+		cursorYFixed := vmath.FromInt(cursorPos.Y)
+		for _, e := range s.world.Components.Glyph.GetAllEntities() {
+			if pos, ok := s.world.Positions.GetPosition(e); ok {
+				dx := vmath.FromInt(pos.X) - cursorXFixed
+				dy := vmath.FromInt(pos.Y) - cursorYFixed
+				if vmath.EllipseContains(dx, dy, shield.InvRxSq, shield.InvRySq) {
+					ctx.cellFlags[posKey(pos.X, pos.Y)] |= cellFlagGlyph
+				}
+			}
+		}
+	}
+
+	// Decay/Blossom
+	for _, e := range s.world.Components.Decay.GetAllEntities() {
+		if pos, ok := s.world.Positions.GetPosition(e); ok {
+			ctx.cellFlags[posKey(pos.X, pos.Y)] |= cellFlagDecay
+		}
+	}
+	for _, e := range s.world.Components.Blossom.GetAllEntities() {
+		if pos, ok := s.world.Positions.GetPosition(e); ok {
+			ctx.cellFlags[posKey(pos.X, pos.Y)] |= cellFlagDecay
+		}
+	}
+
+	return ctx
+}
+
+// accumulateImpulse adds velocity delta to target's accumulator
+func (ctx *collisionContext) accumulateImpulse(target core.Entity, vx, vy int64) {
+	if acc, exists := ctx.impulses[target]; exists {
+		acc.vx += vx
+		acc.vy += vy
+		acc.hits++
+	} else {
+		ctx.impulses[target] = &impulseAcc{vx: vx, vy: vy, hits: 1}
+	}
+}
+
+// applyAccumulatedImpulses applies batched impulses to kinetic components
+func (s *DustSystem) applyAccumulatedImpulses(ctx *collisionContext) {
+	for entity, acc := range ctx.impulses {
+		if acc.hits == 0 {
+			continue
+		}
+		kc, ok := s.world.Components.Kinetic.GetComponent(entity)
+		if !ok {
+			continue
+		}
+
+		// Scale impulse by hit count with diminishing returns: sqrt(hits)
+		// Prevents excessive knockback from dust swarm while preserving impact
+		scaleFactor := vmath.Sqrt(vmath.FromInt(acc.hits))
+		kc.VelX += vmath.Div(acc.vx, scaleFactor)
+		kc.VelY += vmath.Div(acc.vy, scaleFactor)
+
+		s.world.Components.Kinetic.SetComponent(entity, kc)
+	}
 }
 
 // transformGlyphsToDust converts all non-composite glyphs to dust entities
@@ -593,10 +737,11 @@ func (s *DustSystem) setDustComponents(entity core.Entity, x, y int, char rune, 
 
 	// Dust component
 	dustComp := component.DustComponent{
-		OrbitRadius: orbitRadius,
-		ChaseBoost:  vmath.Scale,
-		LastIntX:    x,
-		LastIntY:    y,
+		OrbitRadius:   orbitRadius,
+		ChaseBoost:    vmath.Scale,
+		LastIntX:      x,
+		LastIntY:      y,
+		ResponseGroup: uint8(s.rng.Intn(3)),
 	}
 
 	// Kinetic component
