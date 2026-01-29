@@ -197,7 +197,7 @@ func (r *MaterializeRenderer) renderBeamCell(ctx render.RenderContext, buf *rend
 			cellIntensity = vmath.Mul(cellIntensity, matWidthFalloff)
 		}
 
-		// Convert to float for RGB scaling (final step only)
+		// Convert to float forterminal.RGB scaling (final step only)
 		intensityFloat := vmath.ToFloat(cellIntensity)
 		if intensityFloat > 1.0 {
 			intensityFloat = 1.0
@@ -206,11 +206,11 @@ func (r *MaterializeRenderer) renderBeamCell(ctx render.RenderContext, buf *rend
 			intensityFloat = 0.0
 		}
 
-		scaledColor := render.Scale(render.RgbMaterialize, intensityFloat)
+		scaledColor := render.Scale(visual.RgbMaterialize, intensityFloat)
 
 		screenX := ctx.GameXOffset + cellX
 		screenY := ctx.GameYOffset + cellY
 
-		buf.Set(screenX, screenY, 0, render.RGBBlack, scaledColor, render.BlendMaxBg, 1.0, terminal.AttrNone)
+		buf.Set(screenX, screenY, 0, visual.RgbBlack, scaledColor, render.BlendMaxBg, 1.0, terminal.AttrNone)
 	}
 }

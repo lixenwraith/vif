@@ -72,7 +72,7 @@ func (b *RenderBuffer) inBounds(x, y int) bool {
 // === COMPOSITOR API ===
 
 // Set composites a cell with specified blend mode
-func (b *RenderBuffer) Set(x, y int, mainRune rune, fg, bg RGB, mode BlendMode, alpha float64, attrs terminal.Attr) {
+func (b *RenderBuffer) Set(x, y int, mainRune rune, fg, bg terminal.RGB, mode BlendMode, alpha float64, attrs terminal.Attr) {
 	if !b.inBounds(x, y) {
 		return
 	}
@@ -130,7 +130,7 @@ func (b *RenderBuffer) Set(x, y int, mainRune rune, fg, bg RGB, mode BlendMode, 
 }
 
 // SetFgOnly writes rune, foreground, and attrs while preserving existing background
-func (b *RenderBuffer) SetFgOnly(x, y int, r rune, fg RGB, attrs terminal.Attr) {
+func (b *RenderBuffer) SetFgOnly(x, y int, r rune, fg terminal.RGB, attrs terminal.Attr) {
 	if !b.inBounds(x, y) {
 		return
 	}
@@ -144,7 +144,7 @@ func (b *RenderBuffer) SetFgOnly(x, y int, r rune, fg RGB, attrs terminal.Attr) 
 }
 
 // SetBgOnly updates background color while preserving existing rune/foreground
-func (b *RenderBuffer) SetBgOnly(x, y int, bg RGB) {
+func (b *RenderBuffer) SetBgOnly(x, y int, bg terminal.RGB) {
 	if !b.inBounds(x, y) {
 		return
 	}
@@ -156,7 +156,7 @@ func (b *RenderBuffer) SetBgOnly(x, y int, bg RGB) {
 }
 
 // SetWithBg writes a cell with explicit fg and bg colors (opaque replace)
-func (b *RenderBuffer) SetWithBg(x, y int, r rune, fg, bg RGB) {
+func (b *RenderBuffer) SetWithBg(x, y int, r rune, fg, bg terminal.RGB) {
 	if !b.inBounds(x, y) {
 		return
 	}
@@ -172,13 +172,13 @@ func (b *RenderBuffer) SetWithBg(x, y int, r rune, fg, bg RGB) {
 }
 
 // SetBg256 sets background using 256-color palette index directly
-// Bypasses RGB conversion for consistent 256-color rendering
+// Bypassesterminal.RGB conversion for consistent 256-color rendering
 func (b *RenderBuffer) SetBg256(x, y int, paletteIdx uint8) {
 	if !b.inBounds(x, y) {
 		return
 	}
 	idx := y*b.width + x
-	b.cells[idx].Bg = RGB{R: paletteIdx, G: 0, B: 0}
+	b.cells[idx].Bg = terminal.RGB{R: paletteIdx, G: 0, B: 0}
 	b.cells[idx].Attrs = terminal.AttrBg256
 	b.touched[idx] = true
 	b.masks[idx] |= b.currentMask
@@ -246,7 +246,7 @@ func (b *RenderBuffer) MutateGrayscale(intensity float64, targetMask, excludeMas
 func (b *RenderBuffer) finalize() {
 	for i := range b.cells {
 		if !b.touched[i] {
-			b.cells[i].Bg = RgbBackground
+			b.cells[i].Bg = visual.RgbBackground
 		} else if b.colorMode == terminal.ColorModeTrueColor && visual.OcclusionDimEnabled && b.cells[i].Rune != 0 {
 			// Dim background when foreground character present
 			if b.masks[i]&(visual.OcclusionDimMask) != 0 {

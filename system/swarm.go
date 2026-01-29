@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/physics"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
@@ -360,7 +361,7 @@ func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
 
 			// Layer determined by pattern visibility (LayerGlyph = active, LayerEffect = inactive)
 			layer := component.LayerGlyph
-			if !component.SwarmPatternActive[0][row][col] {
+			if !visual.SwarmPatternActive[0][row][col] {
 				layer = component.LayerEffect
 			}
 

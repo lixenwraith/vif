@@ -4,6 +4,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // ColumnIndicatorRenderer draws relative column numbers
@@ -28,16 +29,16 @@ func (r *ColumnIndicatorRenderer) Render(ctx render.RenderContext, buf *render.R
 		relativeCol := x - ctx.CursorX
 
 		var ch rune
-		var fg, bg render.RGB
+		var fg, bg terminal.RGB
 
 		if relativeCol == 0 {
 			ch = '0'
 			if r.gameCtx.IsSearchMode() || r.gameCtx.IsCommandMode() {
-				fg = render.RgbCursorNormal
-				bg = render.RgbBackground
+				fg = visual.RgbCursorNormal
+				bg = visual.RgbBackground
 			} else {
-				fg = render.RgbBlack
-				bg = render.RgbCursorNormal
+				fg = visual.RgbBlack
+				bg = visual.RgbCursorNormal
 			}
 		} else {
 			absRelative := relativeCol
@@ -51,14 +52,14 @@ func (r *ColumnIndicatorRenderer) Render(ctx render.RenderContext, buf *render.R
 			} else {
 				ch = ' '
 			}
-			fg = render.RgbColumnIndicator
-			bg = render.RgbBackground
+			fg = visual.RgbColumnIndicator
+			bg = visual.RgbBackground
 		}
 		buf.SetWithBg(screenX, indicatorY, ch, fg, bg)
 	}
 
 	// Clear line number area for indicator row
 	for i := 0; i < ctx.GameXOffset; i++ {
-		buf.SetWithBg(i, indicatorY, ' ', render.RgbBackground, render.RgbBackground)
+		buf.SetWithBg(i, indicatorY, ' ', visual.RgbBackground, visual.RgbBackground)
 	}
 }

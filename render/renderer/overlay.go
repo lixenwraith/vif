@@ -124,7 +124,7 @@ func (r *OverlayRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 	}
 
 	// Clear adapter for fresh frame
-	r.adapter.Clear(render.RgbOverlayBg)
+	r.adapter.Clear(visual.RgbOverlayBg)
 
 	root := r.adapter.Region()
 	content := r.gameCtx.GetOverlayContent()
@@ -138,9 +138,9 @@ func (r *OverlayRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 		Style:   tui.OverlayBorderTitle,
 		Title:   title,
 		Border:  tui.LineDouble,
-		Bg:      render.RgbOverlayBg,
-		Fg:      render.RgbOverlayBorder,
-		TitleFg: render.RgbOverlayTitle,
+		Bg:      visual.RgbOverlayBg,
+		Fg:      visual.RgbOverlayBorder,
+		TitleFg: visual.RgbOverlayTitle,
 	})
 
 	if content != nil {
@@ -208,12 +208,12 @@ func (r *OverlayRenderer) renderContent(outer, content tui.Region, data *core.Ov
 	// Navigation hints
 	hints := "ESC close · j/k scroll · PgUp/PgDn page"
 	hintsX := (outer.W - tui.RuneLen(hints)) / 2
-	outer.Text(hintsX, outer.H-2, hints, render.RgbOverlayHint, render.RgbOverlayBg, terminal.AttrDim)
+	outer.Text(hintsX, outer.H-2, hints, visual.RgbOverlayHint, visual.RgbOverlayBg, terminal.AttrDim)
 
 	// Scroll indicator
 	if indicator := r.masonry.ScrollIndicator(); indicator != "" {
 		indX := outer.W - tui.RuneLen(indicator) - 1
-		outer.Text(indX, outer.H-1, indicator, render.RgbOverlayBorder, render.RgbOverlayBg, terminal.AttrNone)
+		outer.Text(indX, outer.H-1, indicator, visual.RgbOverlayBorder, visual.RgbOverlayBg, terminal.AttrNone)
 	}
 }
 
@@ -271,7 +271,7 @@ func (r *OverlayRenderer) calculateCardLayouts(cards []core.OverlayCard, availW,
 func (r *OverlayRenderer) renderCard(region tui.Region, card core.OverlayCard, entryOffset, visibleH int) {
 	// Draw card frame if top border visible
 	if entryOffset == 0 {
-		region.Box(tui.LineSingle, render.RgbOverlayBorder)
+		region.Box(tui.LineSingle, visual.RgbOverlayBorder)
 
 		// Title in top border
 		if card.Title != "" && region.W > 4 {
@@ -280,7 +280,7 @@ func (r *OverlayRenderer) renderCard(region tui.Region, card core.OverlayCard, e
 				title = tui.Truncate(title, region.W-4)
 			}
 			titleX := 2
-			region.Text(titleX, 0, title, render.RgbOverlayHeader, render.RgbOverlayBg, terminal.AttrBold)
+			region.Text(titleX, 0, title, visual.RgbOverlayHeader, visual.RgbOverlayBg, terminal.AttrBold)
 		}
 	}
 
@@ -294,8 +294,8 @@ func (r *OverlayRenderer) renderCard(region tui.Region, card core.OverlayCard, e
 		return
 	}
 
-	keyStyle := tui.Style{Fg: render.RgbOverlayKey, Bg: render.RgbOverlayBg}
-	valStyle := tui.Style{Fg: render.RgbOverlayValue, Bg: render.RgbOverlayBg}
+	keyStyle := tui.Style{Fg: visual.RgbOverlayKey, Bg: visual.RgbOverlayBg}
+	valStyle := tui.Style{Fg: visual.RgbOverlayValue, Bg: visual.RgbOverlayBg}
 
 	for i, entry := range card.Entries {
 		y := innerY + i
@@ -314,9 +314,9 @@ func (r *OverlayRenderer) renderCard(region tui.Region, card core.OverlayCard, e
 	bottomY := 1 + len(card.Entries) - entryOffset
 	if bottomY >= 0 && bottomY < region.H {
 		for x := 1; x < region.W-1; x++ {
-			region.Cell(x, bottomY, '─', render.RgbOverlayBorder, render.RgbOverlayBg, terminal.AttrNone)
+			region.Cell(x, bottomY, '─', visual.RgbOverlayBorder, visual.RgbOverlayBg, terminal.AttrNone)
 		}
-		region.Cell(0, bottomY, '└', render.RgbOverlayBorder, render.RgbOverlayBg, terminal.AttrNone)
-		region.Cell(region.W-1, bottomY, '┘', render.RgbOverlayBorder, render.RgbOverlayBg, terminal.AttrNone)
+		region.Cell(0, bottomY, '└', visual.RgbOverlayBorder, visual.RgbOverlayBg, terminal.AttrNone)
+		region.Cell(region.W-1, bottomY, '┘', visual.RgbOverlayBorder, visual.RgbOverlayBg, terminal.AttrNone)
 	}
 }

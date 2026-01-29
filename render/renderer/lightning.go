@@ -10,75 +10,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
-// quadrantChars provides 2x2 sub-cell resolution for TrueColor mode
-// Bitmap encoding: bit0=UL, bit1=UR, bit2=LL, bit3=LR
-// Layout: [UL][UR]
-//
-//	[LL][LR]
-var quadrantChars = [16]rune{
-	' ', // 0000 - empty
-	'▘', // 0001 - upper-left
-	'▝', // 0010 - upper-right
-	'▀', // 0011 - upper half
-	'▖', // 0100 - lower-left
-	'▌', // 0101 - left half
-	'▞', // 0110 - anti-diagonal
-	'▛', // 0111 - UL + UR + LL
-	'▗', // 1000 - lower-right
-	'▚', // 1001 - diagonal
-	'▐', // 1010 - right half
-	'▜', // 1011 - UL + UR + LR
-	'▄', // 1100 - lower half
-	'▙', // 1101 - UL + LL + LR
-	'▟', // 1110 - UR + LL + LR
-	'█', // 1111 - full block
-}
-
-// half256Chars provides vertical half-cell resolution for 256-color mode
-// CP437 block characters compatible with naked TTY
-// Uses Unicode block characters (equivalent to CP437 visuals)
-// Bitmap encoding: bit0=top, bit1=bottom
-var half256Chars = [4]rune{
-	' ',      // 00 - empty
-	'\u2580', // 01 - top half only (▀) - was 223
-	'\u2584', // 10 - bottom half only (▄) - was 220
-	'\u2588', // 11 - both halves (█) - was 219
-}
-
-// horizontal256Chars provides horizontal half-cell characters
-// Reserved for future horizontal sub-pixel support
-var horizontal256Chars = [2]rune{
-	'\u258C', // ▌ - left half - was 221
-	'\u258E', // ▐ - right half - was 222
-}
-
-// COLOR LOOKUP TABLES
-// TrueColor gradient endpoints per lightning color type
-// Index by LightningColorType to get (core, hot) RGB pair
-// Core = base color at end of life, Hot = bright color at full life
-var lightningTrueColorLUT = [5][2]render.RGB{
-	// Cyan: cool cyan core -> white hot center
-	{render.RgbDrain, render.RgbEnergyBlinkWhite},
-	// Red: dark red core -> bright red-white
-	{{180, 40, 40}, {255, 200, 200}},
-	// Gold: orange core -> bright yellow-white
-	{{200, 150, 0}, {255, 255, 200}},
-	// Green: dark green core -> bright green-white
-	{{40, 150, 40}, {200, 255, 200}},
-	// Purple: dark purple core -> bright purple-white
-	{{120, 40, 180}, {220, 180, 255}},
-}
-
-// 256-color fixed palette indices per lightning color type
-// Uses xterm 256-palette for consistent appearance without blending
-var lightning256ColorLUT = [5]uint8{
-	51,  // Cyan (0,5,5) - bright cyan
-	196, // Red (5,0,0) - bright red
-	220, // Gold (5,4,0) - yellow-orange
-	46,  // Green (0,5,0) - bright green
-	129, // Purple (3,0,5) - medium purple
-}
-
 // lightningBoltRenderer defines the signature for mode-specific bolt rendering
 // Called per lightning entity with accumulated path data
 type lightningBoltRenderer func(ctx render.RenderContext, buf *render.RenderBuffer,
@@ -243,7 +174,7 @@ func (r *LightningRenderer) generateFractalPath(x1, y1, x2, y2 int, rng *vmath.F
 func (r *LightningRenderer) renderLightningTrueColor(ctx render.RenderContext, buf *render.RenderBuffer,
 	points []struct{ X, Y int }, colorType component.LightningColorType, alpha float64) {
 
-	color := lightningTrueColorLUT[colorType][0]
+	color := visual.LightningTrueColorLUT[colorType][0]
 
 	// Accumulate quadrant hits per cell
 	// Key: packed (x,y), Value: quadrant bitmap
@@ -270,13 +201,13 @@ func (r *LightningRenderer) renderLightningTrueColor(ctx render.RenderContext, b
 		}
 
 		// Get quadrant character from bitmap
-		char := quadrantChars[bits]
+		char := visual.QuadrantChars[bits]
 		if char == ' ' {
 			continue
 		}
 
 		// Screen blend foreground only - background untouched for theme preservation
-		buf.Set(screenX, screenY, char, color, render.RGBBlack, render.BlendScreenFg, alpha, terminal.AttrNone)
+		buf.Set(screenX, screenY, char, color, visual.RgbBlack, render.BlendScreenFg, alpha, terminal.AttrNone)
 	}
 }
 
@@ -347,7 +278,7 @@ func (r *LightningRenderer) renderLightning256(ctx render.RenderContext, buf *re
 	}
 
 	// Get fixed palette color for this lightning type
-	paletteIdx := lightning256ColorLUT[colorType]
+	paletteIdx := visual.Lightning256ColorLUT[colorType]
 
 	// Accumulate vertical half hits per cell
 	// Key: packed (x,y), Value: half bitmap (bit0=top, bit1=bottom)
@@ -374,7 +305,7 @@ func (r *LightningRenderer) renderLightning256(ctx render.RenderContext, buf *re
 		}
 
 		// Get half-block character from bitmap
-		char := half256Chars[bits]
+		char := visual.Half256Chars[bits]
 		if char == ' ' {
 			continue
 		}
@@ -382,7 +313,7 @@ func (r *LightningRenderer) renderLightning256(ctx render.RenderContext, buf *re
 		// SetFgOnly: write character and foreground color, preserve existing background
 		// This allows finalize() to set theme background on untouched cells
 		// Fg.R stores palette index when AttrFg256 is set
-		buf.SetFgOnly(screenX, screenY, char, render.RGB{R: paletteIdx}, terminal.AttrFg256)
+		buf.SetFgOnly(screenX, screenY, char, terminal.RGB{R: paletteIdx}, terminal.AttrFg256)
 	}
 }
 

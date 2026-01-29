@@ -15,6 +15,9 @@ const (
 
 	// ShieldPassiveDrainInterval is the interval for passive shield drain
 	ShieldPassiveDrainInterval = 1 * time.Second
+
+	// ShieldBoostRotationDuration is the animation speed at which the boost indicator rotates once around the shield
+	ShieldBoostRotationDuration = 500 * time.Millisecond
 )
 
 // Buff Cooldowns

@@ -4,13 +4,6 @@ import (
 	"time"
 )
 
-// QuasarChars defines the 3×5 visual representation
-var QuasarChars = [3][5]rune{
-	{'╔', '═', '╦', '═', '╗'},
-	{'╠', '═', '╬', '═', '╣'},
-	{'╚', '═', '╩', '═', '╝'},
-}
-
 // QuasarComponent holds quasar-specific runtime state, composite structure managed via HeaderComponent
 type QuasarComponent struct {
 	LastSpeedIncreaseAt time.Time // For periodic speed scaling

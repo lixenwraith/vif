@@ -81,7 +81,7 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 			// --- Coloring & Fading ---
 
-			var color render.RGB
+			var color terminal.RGB
 			var alpha float64 = 1.0
 
 			if i == 0 {
@@ -105,32 +105,32 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			}
 
 			// Additive blend for glow effect
-			buf.Set(screenX, screenY, spiritComp.Rune, color, render.RGBBlack, render.BlendAddFg, alpha, terminal.AttrNone)
+			buf.Set(screenX, screenY, spiritComp.Rune, color, visual.RgbBlack, render.BlendAddFg, alpha, terminal.AttrNone)
 		}
 	}
 }
 
-// resolveSpiritColor maps SpiritColor to RGB
-func resolveSpiritColor(c component.SpiritColor) render.RGB {
+// resolveSpiritColor maps SpiritColor toterminal.RGB
+func resolveSpiritColor(c component.SpiritColor) terminal.RGB {
 	switch c {
 	case component.SpiritRed:
-		return render.RgbRed
+		return visual.RgbRed
 	case component.SpiritOrange:
-		return render.RgbOrange
+		return visual.RgbOrange
 	case component.SpiritYellow:
-		return render.RgbYellow
+		return visual.RgbYellow
 	case component.SpiritGreen:
-		return render.RgbGreen
+		return visual.RgbGreen
 	case component.SpiritCyan:
-		return render.RgbCyan
+		return visual.RgbCyan
 	case component.SpiritBlue:
-		return render.RgbBlue
+		return visual.RgbBlue
 	case component.SpiritMagenta:
-		return render.RgbMagenta
+		return visual.RgbMagenta
 	case component.SpiritWhite:
-		return render.RgbWhite
+		return visual.RgbWhite
 	}
 
 	// Debug
-	return render.RgbWhite
+	return visual.RgbWhite
 }

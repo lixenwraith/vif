@@ -71,7 +71,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 	// Clear status bar
 	for x := 0; x < ctx.ScreenWidth; x++ {
-		buf.SetWithBg(x, statusY, ' ', render.RgbBackground, render.RgbBackground)
+		buf.SetWithBg(x, statusY, ' ', visual.RgbBackground, visual.RgbBackground)
 	}
 
 	// Track current x position for status bar elements
@@ -79,45 +79,45 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 	// Audio mute indicator - always visible
 	if player := r.gameCtx.GetAudioPlayer(); player != nil {
-		var audioBgColor render.RGB
+		var audioBgColor terminal.RGB
 		if player.IsEffectMuted() {
-			audioBgColor = render.RgbAudioMuted
+			audioBgColor = visual.RgbAudioMuted
 		} else {
-			audioBgColor = render.RgbAudioUnmuted
+			audioBgColor = visual.RgbAudioUnmuted
 		}
 		for _, ch := range parameter.AudioStr {
 			if x >= ctx.ScreenWidth {
 				return // No space left
 			}
-			buf.SetWithBg(x, statusY, ch, render.RgbBlack, audioBgColor)
+			buf.SetWithBg(x, statusY, ch, visual.RgbBlack, audioBgColor)
 			x++
 		}
 	}
 
 	// Mode indicator
 	var modeText string
-	var modeBgColor render.RGB
+	var modeBgColor terminal.RGB
 	if r.gameCtx.IsSearchMode() {
 		modeText = parameter.ModeTextSearch
-		modeBgColor = render.RgbModeSearchBg
+		modeBgColor = visual.RgbModeSearchBg
 	} else if r.gameCtx.IsCommandMode() {
 		modeText = parameter.ModeTextCommand
-		modeBgColor = render.RgbModeCommandBg
+		modeBgColor = visual.RgbModeCommandBg
 	} else if r.gameCtx.IsInsertMode() {
 		modeText = parameter.ModeTextInsert
-		modeBgColor = render.RgbModeInsertBg
+		modeBgColor = visual.RgbModeInsertBg
 	} else if r.gameCtx.IsVisualMode() {
 		modeText = parameter.ModeTextVisual
-		modeBgColor = render.RgbModeVisualBg
+		modeBgColor = visual.RgbModeVisualBg
 	} else {
 		modeText = parameter.ModeTextNormal
-		modeBgColor = render.RgbModeNormalBg
+		modeBgColor = visual.RgbModeNormalBg
 	}
 	for _, ch := range modeText {
 		if x >= ctx.ScreenWidth {
 			return
 		}
-		buf.SetWithBg(x, statusY, ch, render.RgbStatusText, modeBgColor)
+		buf.SetWithBg(x, statusY, ch, visual.RgbStatusText, modeBgColor)
 		x++
 	}
 
@@ -130,7 +130,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			if leftEndX >= ctx.ScreenWidth {
 				return
 			}
-			buf.SetWithBg(leftEndX, statusY, ch, render.RgbLastCommandText, render.RgbBackground)
+			buf.SetWithBg(leftEndX, statusY, ch, visual.RgbLastCommandText, visual.RgbBackground)
 			leftEndX++
 		}
 		leftEndX++
@@ -146,7 +146,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			if leftEndX >= ctx.ScreenWidth {
 				return
 			}
-			buf.SetWithBg(leftEndX, statusY, ch, render.RgbSearchInputText, render.RgbBackground)
+			buf.SetWithBg(leftEndX, statusY, ch, visual.RgbSearchInputText, visual.RgbBackground)
 			leftEndX++
 		}
 	} else if r.gameCtx.IsCommandMode() {
@@ -156,7 +156,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			if leftEndX >= ctx.ScreenWidth {
 				return
 			}
-			buf.SetWithBg(leftEndX, statusY, ch, render.RgbCommandInputText, render.RgbBackground)
+			buf.SetWithBg(leftEndX, statusY, ch, visual.RgbCommandInputText, visual.RgbBackground)
 			leftEndX++
 		}
 	} else {
@@ -166,7 +166,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 				if leftEndX >= ctx.ScreenWidth {
 					return
 				}
-				buf.SetWithBg(leftEndX, statusY, ch, render.RgbStatusMessageText, render.RgbBackground)
+				buf.SetWithBg(leftEndX, statusY, ch, visual.RgbStatusMessageText, visual.RgbBackground)
 				leftEndX++
 			}
 		}
@@ -178,8 +178,8 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 	type statusItem struct {
 		text string
-		fg   render.RGB
-		bg   render.RGB
+		fg   terminal.RGB
+		bg   terminal.RGB
 	}
 	var rightItems []statusItem
 
@@ -204,11 +204,11 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		}
 
 		// Calculate phase color from rainbow gradient
-		phaseBg := phaseColor(phaseIdx, phaseTotal)
+		phaseBg := render.RainbowIndexColor(phaseIdx, phaseTotal, visual.RgbModeNormalBg)
 
 		rightItems = append(rightItems, statusItem{
 			text: fmt.Sprintf(" %s: %.1fs ", phaseName, timerVal),
-			fg:   render.RgbBlack,
+			fg:   visual.RgbBlack,
 			bg:   phaseBg,
 		})
 	}
@@ -219,11 +219,11 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	energyText := fmt.Sprintf(" Energy: %d ", energyVal)
 
 	// Base colors based on energy polarity
-	var energyFg, energyBg render.RGB
+	var energyFg, energyBg terminal.RGB
 	if energyVal < 0 {
-		energyFg, energyBg = render.RgbEnergyBg, render.RgbBlack // white fg, black bg
+		energyFg, energyBg = visual.RgbEnergyBg, visual.RgbBlack // white fg, black bg
 	} else {
-		energyFg, energyBg = render.RgbBlack, render.RgbEnergyBg // black fg, white bg
+		energyFg, energyBg = visual.RgbBlack, visual.RgbEnergyBg // black fg, white bg
 	}
 
 	blinkRemaining := energyComp.BlinkRemaining
@@ -231,22 +231,22 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		typeCode := energyComp.BlinkType
 		if typeCode == 0 {
 			// Error: red text, keep polarity background
-			energyFg = render.RgbCursorError
+			energyFg = visual.RgbCursorError
 		} else {
-			var blinkColor render.RGB
+			var blinkColor terminal.RGB
 			switch typeCode {
 			case 1:
-				blinkColor = render.RgbEnergyBlinkBlue
+				blinkColor = visual.RgbEnergyBlinkBlue
 			case 2:
-				blinkColor = render.RgbEnergyBlinkGreen
+				blinkColor = visual.RgbEnergyBlinkGreen
 			case 3:
-				blinkColor = render.RgbEnergyBlinkRed
+				blinkColor = visual.RgbEnergyBlinkRed
 			case 4:
-				blinkColor = render.RgbGlyphGold
+				blinkColor = visual.RgbGlyphGold
 			default:
-				blinkColor = render.RgbEnergyBlinkWhite
+				blinkColor = visual.RgbEnergyBlinkWhite
 			}
-			energyFg, energyBg = render.RgbBlack, blinkColor
+			energyFg, energyBg = visual.RgbBlack, blinkColor
 		}
 	}
 	rightItems = append(rightItems, statusItem{text: energyText, fg: energyFg, bg: energyBg})
@@ -261,8 +261,8 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		}
 		rightItems = append(rightItems, statusItem{
 			text: fmt.Sprintf(" Boost: %.1fs ", remaining),
-			fg:   render.RgbStatusText,
-			bg:   render.RgbBoostBg,
+			fg:   visual.RgbStatusText,
+			bg:   visual.RgbBoostBg,
 		})
 	}
 
@@ -274,26 +274,26 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		}
 		rightItems = append(rightItems, statusItem{
 			text: fmt.Sprintf(" Grid: %.1fs ", gridRemaining),
-			fg:   render.RgbGridTimerFg,
-			bg:   render.RgbBackground,
+			fg:   visual.RgbGridTimerFg,
+			bg:   visual.RgbBackground,
 		})
 	}
 
 	// Priority 5-7: Metrics from registry (direct atomic reads)
 	rightItems = append(rightItems, statusItem{
 		text: fmt.Sprintf(" APM: %d ", r.statAPM.Load()),
-		fg:   render.RgbBlack,
-		bg:   render.RgbApmBg,
+		fg:   visual.RgbBlack,
+		bg:   visual.RgbApmBg,
 	})
 	rightItems = append(rightItems, statusItem{
 		text: fmt.Sprintf(" GT: %d ", r.statTicks.Load()),
-		fg:   render.RgbBlack,
-		bg:   render.RgbGtBg,
+		fg:   visual.RgbBlack,
+		bg:   visual.RgbGtBg,
 	})
 	rightItems = append(rightItems, statusItem{
 		text: fmt.Sprintf(" FPS: %d ", r.statFPS.Load()),
-		fg:   render.RgbBlack,
-		bg:   render.RgbFpsBg,
+		fg:   visual.RgbBlack,
+		bg:   visual.RgbFpsBg,
 	})
 
 	// Priority 8: Color Mode Indicator
@@ -305,8 +305,8 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 	rightItems = append(rightItems, statusItem{
 		text: colorModeStr,
-		fg:   render.RgbBlack,
-		bg:   render.RgbColorModeIndicator,
+		fg:   visual.RgbBlack,
+		bg:   visual.RgbColorModeIndicator,
 	})
 
 	// Calculate which items fit, dropping from end (lowest priority)
@@ -336,18 +336,4 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			}
 		}
 	}
-}
-
-// phaseColor returns rainbow-interpolated color for phase index
-// Uses offset range (40-220) to avoid dark extremes for text readability
-func phaseColor(index, total int64) render.RGB {
-	if total <= 1 {
-		return render.RgbModeNormalBg
-	}
-	// Map to 40-220 range to skip dark red/purple extremes
-	lutIdx := 40 + int((index*180)/(total-1))
-	if lutIdx > 220 {
-		lutIdx = 220
-	}
-	return render.HeatGradientLUT[lutIdx]
 }

@@ -162,9 +162,9 @@ func (r *ExplosionRenderer) accumulateCenter(c *system.ExplosionCenter, duration
 
 func (r *ExplosionRenderer) renderBuffer(ctx render.RenderContext, buf *render.RenderBuffer) {
 	// Continuous Gradient Palette (Neon/Cyber)
-	edgeColor := render.RgbExplosionEdge // Deep Indigo
-	midColor := render.RgbExplosionMid   // Electric Cyan
-	coreColor := render.RgbExplosionCore // White
+	edgeColor := visual.RgbExplosionEdge // Deep Indigo
+	midColor := visual.RgbExplosionMid   // Electric Cyan
+	coreColor := visual.RgbExplosionCore // White
 
 	// Only iterate the dirty rectangle
 	for y := r.minY; y <= r.maxY; y++ {
@@ -187,7 +187,7 @@ func (r *ExplosionRenderer) renderBuffer(ctx render.RenderContext, buf *render.R
 
 			// Gradient Mapping (Fixed Point)
 			// 0.0 -> Edge, Midpoint -> Mid, 1.0 -> Core
-			var color render.RGB
+			var color terminal.RGB
 			var tFixed int64
 
 			if val < parameter.ExplosionGradientMidpoint {
@@ -216,7 +216,7 @@ func (r *ExplosionRenderer) renderBuffer(ctx render.RenderContext, buf *render.R
 			alphaFloat := vmath.ToFloat(alphaFixed)
 
 			// Use Additive blend for neon glow effect
-			buf.Set(screenX, screenY, 0, render.RGBBlack, color, render.BlendAdd, alphaFloat, terminal.AttrNone)
+			buf.Set(screenX, screenY, 0, visual.RgbBlack, color, render.BlendAdd, alphaFloat, terminal.AttrNone)
 		}
 	}
 }

@@ -55,40 +55,40 @@ func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 	}
 }
 
-// resolveGlyphColor maps GlyphType and GlyphLevel to RGB
-func resolveGlyphColor(g component.GlyphComponent) render.RGB {
+// resolveGlyphColor maps GlyphType and GlyphLevel toterminal.RGB
+func resolveGlyphColor(g component.GlyphComponent) terminal.RGB {
 	switch g.Type {
 	case component.GlyphBlue:
 		switch g.Level {
 		case component.GlyphDark:
-			return render.RgbGlyphBlueDark
+			return visual.RgbGlyphBlueDark
 		case component.GlyphNormal:
-			return render.RgbGlyphBlueNormal
+			return visual.RgbGlyphBlueNormal
 		case component.GlyphBright:
-			return render.RgbGlyphBlueBright
+			return visual.RgbGlyphBlueBright
 		}
 	case component.GlyphGreen:
 		switch g.Level {
 		case component.GlyphDark:
-			return render.RgbGlyphGreenDark
+			return visual.RgbGlyphGreenDark
 		case component.GlyphNormal:
-			return render.RgbGlyphGreenNormal
+			return visual.RgbGlyphGreenNormal
 		case component.GlyphBright:
-			return render.RgbGlyphGreenBright
+			return visual.RgbGlyphGreenBright
 		}
 	case component.GlyphRed:
 		switch g.Level {
 		case component.GlyphDark:
-			return render.RgbGlyphRedDark
+			return visual.RgbGlyphRedDark
 		case component.GlyphNormal:
-			return render.RgbGlyphRedNormal
+			return visual.RgbGlyphRedNormal
 		case component.GlyphBright:
-			return render.RgbGlyphRedBright
+			return visual.RgbGlyphRedBright
 		}
 	case component.GlyphGold:
-		return render.RgbGlyphGold
+		return visual.RgbGlyphGold
 	}
 
 	// Debug
-	return render.RgbShieldBase
+	return visual.RgbShieldBase
 }

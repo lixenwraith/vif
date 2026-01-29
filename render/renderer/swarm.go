@@ -11,10 +11,10 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
-// swarmCellRenderer callback for RGB animated ASCII composite rendering (256 vs TrueColor)
+// swarmCellRenderer callback forterminal.RGB animated ASCII composite rendering (256 vs TrueColor)
 type swarmCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int64)
 
-// SwarmRenderer draws the quasar boss entity with optional shield halo
+// SwarmRenderer draws the swarm composite
 type SwarmRenderer struct {
 	gameCtx *engine.GameContext
 
@@ -55,14 +55,14 @@ func (r *SwarmRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		}
 
 		// Determine color: hit flash > enraged > normal
-		var color render.RGB
+		var color terminal.RGB
 		switch {
 		case combatComp.RemainingHitFlash > 0:
 			color = r.calculateFlashColor(combatComp.RemainingHitFlash)
 		case combatComp.IsEnraged:
-			color = render.RgbCombatEnraged
+			color = visual.RgbCombatEnraged
 		default:
-			color = render.RgbDrain
+			color = visual.RgbDrain
 		}
 
 		r.renderMembers(ctx, buf, &headerComp, &swarmComp, color)
@@ -75,7 +75,7 @@ func (r *SwarmRenderer) renderMembers(
 	buf *render.RenderBuffer,
 	headerComp *component.HeaderComponent,
 	swarmComp *component.SwarmComponent,
-	color render.RGB,
+	color terminal.RGB,
 ) {
 	patternIdx := swarmComp.PatternIndex
 	if patternIdx < 0 || patternIdx >= parameter.SwarmPatternCount {
@@ -108,13 +108,13 @@ func (r *SwarmRenderer) renderMembers(
 			continue
 		}
 
-		ch := component.SwarmPatternChars[patternIdx][row][col]
+		ch := visual.SwarmPatternChars[patternIdx][row][col]
 		buf.SetFgOnly(screenX, screenY, ch, color, terminal.AttrNone)
 	}
 }
 
 // calculateFlashColor returns yellow with pulse effect
-func (r *SwarmRenderer) calculateFlashColor(remaining time.Duration) render.RGB {
+func (r *SwarmRenderer) calculateFlashColor(remaining time.Duration) terminal.RGB {
 	progress := float64(remaining) / float64(parameter.CombatHitFlashDuration)
 
 	var intensity float64
@@ -126,5 +126,5 @@ func (r *SwarmRenderer) calculateFlashColor(remaining time.Duration) render.RGB 
 		intensity = 0.6
 	}
 
-	return render.Scale(render.RgbCombatHitFlash, intensity)
+	return render.Scale(visual.RgbCombatHitFlash, intensity)
 }

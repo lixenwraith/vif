@@ -4,6 +4,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // RowIndicatorRenderer draws relative row numbers
@@ -32,24 +33,24 @@ func (r *RowIndicatorRenderer) Render(ctx render.RenderContext, buf *render.Rend
 		screenY := ctx.GameYOffset + y
 
 		// Column 0: left padding (always empty, never highlighted)
-		buf.SetWithBg(0, screenY, ' ', render.RgbBackground, render.RgbBackground)
+		buf.SetWithBg(0, screenY, ' ', visual.RgbBackground, visual.RgbBackground)
 
 		// Column 1: line indicator
 		var ch rune
-		var fg, bg render.RGB
+		var fg, bg terminal.RGB
 
 		if relativeNum == 0 {
 			ch = '0'
 			if r.gameCtx.IsSearchMode() || r.gameCtx.IsCommandMode() {
-				fg = render.RgbCursorNormal
-				bg = render.RgbBackground
+				fg = visual.RgbCursorNormal
+				bg = visual.RgbBackground
 			} else {
-				fg = render.RgbBlack
-				bg = render.RgbCursorNormal
+				fg = visual.RgbBlack
+				bg = visual.RgbCursorNormal
 			}
 		} else {
-			fg = render.RgbRowIndicator
-			bg = render.RgbBackground
+			fg = visual.RgbRowIndicator
+			bg = visual.RgbBackground
 
 			if absRelative%10 == 0 {
 				ch = rune('0' + (absRelative/10)%10)

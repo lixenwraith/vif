@@ -46,18 +46,18 @@ func (r *PingRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 
 	// 2. Draw Crosshair (Row/Column Highlights)
 	if pingComp.ShowCrosshair {
-		var lineColor render.RGB
+		var lineColor terminal.RGB
 		if r.gameCtx.IsInsertMode() {
-			lineColor = render.RgbPingHighlight
+			lineColor = visual.RgbPingHighlight
 		} else {
-			lineColor = render.RgbPingLineNormal
+			lineColor = visual.RgbPingLineNormal
 		}
 		r.drawCrosshair(ctx, buf, lineColor)
 	}
 
 	// 3. Draw Grid Lines
 	if pingComp.GridActive {
-		r.drawGrid(ctx, buf, render.RgbPingGridNormal)
+		r.drawGrid(ctx, buf, visual.RgbPingGridNormal)
 	}
 }
 
@@ -143,7 +143,7 @@ func (r *PingRenderer) isExcluded(x, y int) bool {
 }
 
 // drawCrosshair draws the crosshair lines respecting shield exclusion
-func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.RenderBuffer, color render.RGB) {
+func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.RenderBuffer, color terminal.RGB) {
 	pingBounds := r.gameCtx.GetPingBounds()
 
 	// Draw horizontal band (rows from minY to maxY, full width)
@@ -178,7 +178,7 @@ func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.Rende
 }
 
 // drawGrid draws the 5-cell grid respecting shield exclusion
-func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuffer, color render.RGB) {
+func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuffer, color terminal.RGB) {
 	// Vertical lines at ±5, ±10, etc.
 	for n := 1; ; n++ {
 		offset := 5 * n

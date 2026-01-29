@@ -2,17 +2,11 @@ package renderer
 
 import (
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
-)
-
-// TODO: refactor 2-palette color store
-// 256-color palette indices for energy-based shield colors
-const (
-	shield256Positive = 226 // Bright yellow (matches RgbCleanerBasePositive)
-	shield256Negative = 134 // Violet (matches RgbCleanerBaseNegative)
 )
 
 // Boost glow parameters (Q32.32)
@@ -42,7 +36,7 @@ type ShieldRenderer struct {
 	renderCell shieldCellRenderer
 
 	// Per-frame state (Q32.32 fixed-point for performance)
-	frameColor           render.RGB
+	frameColor           terminal.RGB
 	framePalette         uint8
 	frameMaxOpacityFixed int64 // Q32.32 max opacity for gradient calculation
 
@@ -79,12 +73,12 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	}
 
 	// Energy-based shield color: positive/zero → yellow, negative → purple
-	r.frameColor = render.RgbCleanerBasePositive
-	r.framePalette = shield256Positive
+	r.frameColor = visual.RgbCleanerBasePositive
+	r.framePalette = visual.Shield256Positive
 	if energyComp, ok := r.gameCtx.World.Components.Energy.GetComponent(r.gameCtx.World.Resources.Cursor.Entity); ok {
 		if energyComp.Current < 0 {
-			r.frameColor = render.RgbCleanerBaseNegative
-			r.framePalette = shield256Negative
+			r.frameColor = visual.RgbCleanerBaseNegative
+			r.framePalette = visual.Shield256Negative
 		}
 	}
 
@@ -92,11 +86,11 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	r.boostGlowActive = false
 	if boost, ok := r.gameCtx.World.Components.Boost.GetComponent(r.gameCtx.World.Resources.Cursor.Entity); ok && boost.Active {
 		r.boostGlowActive = true
-		// 2 rotations/sec = 500ms period
+		// rotations/sec calculation
 		nanos := ctx.GameTime.UnixNano()
-		period := int64(500_000_000) // TODO: magic number to constant
+		period := int64(parameter.ShieldBoostRotationDuration)
 		phase := nanos % period
-		angle := int64((phase * int64(vmath.Scale)) / period)
+		angle := (phase * int64(vmath.Scale)) / period
 		r.rotDirX = vmath.Cos(angle)
 		r.rotDirY = vmath.Sin(angle)
 	}
@@ -171,7 +165,7 @@ func (r *ShieldRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screen
 	alpha := vmath.ToFloat(alphaFixed)
 
 	// Use BlendScreen for glowing effect on dark backgrounds
-	buf.Set(screenX, screenY, 0, render.RGBBlack, r.frameColor, render.BlendScreen, alpha, terminal.AttrNone)
+	buf.Set(screenX, screenY, 0, visual.RgbBlack, r.frameColor, render.BlendScreen, alpha, terminal.AttrNone)
 
 	// Boost glow on outer rim
 	if !r.boostGlowActive || normalizedDistSq <= boostGlowEdgeThreshold {
@@ -188,7 +182,7 @@ func (r *ShieldRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screen
 	edgeFactor := vmath.Div(normalizedDistSq-boostGlowEdgeThreshold, vmath.Scale-boostGlowEdgeThreshold)
 	intensity := vmath.Mul(vmath.Mul(dot, edgeFactor), boostGlowIntensityFixed)
 
-	buf.Set(screenX, screenY, 0, render.RGBBlack, render.RgbBoostGlow, render.BlendSoftLight, vmath.ToFloat(intensity), terminal.AttrNone)
+	buf.Set(screenX, screenY, 0, visual.RgbBlack, visual.RgbBoostGlow, render.BlendSoftLight, vmath.ToFloat(intensity), terminal.AttrNone)
 }
 
 // cell256 renders a single shield cell with discrete zones (256-color mode)

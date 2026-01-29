@@ -99,11 +99,11 @@ func (r *QuasarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 // renderZapRange renders zap range ellipse boundary
 func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.RenderBuffer, headerX, headerY int, quasar *component.QuasarComponent) {
 	// Use same color as quasar entity state
-	var borderColor render.RGB
+	var borderColor terminal.RGB
 	if quasar.IsCharging || quasar.IsZapping {
-		borderColor = render.RgbCombatEnraged
+		borderColor = visual.RgbCombatEnraged
 	} else {
-		borderColor = render.RgbDrain
+		borderColor = visual.RgbDrain
 	}
 
 	// Adaptive threshold calculation for consistent visual border width, target visual width in cells
@@ -158,7 +158,7 @@ func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.Re
 				screenX := ctx.GameXOffset + x
 				screenY := ctx.GameYOffset + y
 
-				buf.Set(screenX, screenY, 0, render.RGBBlack, borderColor,
+				buf.Set(screenX, screenY, 0, visual.RgbBlack, borderColor,
 					render.BlendScreen, 0.4, terminal.AttrNone)
 			}
 		}
@@ -205,7 +205,7 @@ func (r *QuasarRenderer) shieldCellTrueColor(buf *render.RenderBuffer, screenX, 
 	alphaFixed := vmath.Mul(normalizedDistSq, vmath.FromFloat(parameter.QuasarShieldMaxOpacity))
 	alpha := vmath.ToFloat(alphaFixed)
 
-	buf.Set(screenX, screenY, 0, render.RGBBlack, render.RgbQuasarShield, render.BlendScreen, alpha, terminal.AttrNone)
+	buf.Set(screenX, screenY, 0, visual.RgbBlack, visual.RgbQuasarShield, render.BlendScreen, alpha, terminal.AttrNone)
 }
 
 // quasarShield256ThresholdSq defines inner edge of solid rim (0.4 in Q32.32 squared)
@@ -225,13 +225,13 @@ func (r *QuasarRenderer) shieldCell256(buf *render.RenderBuffer, screenX, screen
 func (r *QuasarRenderer) renderMembers(ctx render.RenderContext, buf *render.RenderBuffer, headerComp *component.HeaderComponent, combatComp *component.CombatComponent) {
 
 	// Determine color: flash > enraged > normal
-	var color render.RGB
+	var color terminal.RGB
 	if combatComp.RemainingHitFlash > 0 {
 		color = r.calculateFlashColor(combatComp.RemainingHitFlash)
 	} else if combatComp.IsEnraged {
-		color = render.RgbCombatEnraged
+		color = visual.RgbCombatEnraged
 	} else {
-		color = render.RgbDrain
+		color = visual.RgbDrain
 	}
 
 	for _, member := range headerComp.MemberEntries {
@@ -247,7 +247,7 @@ func (r *QuasarRenderer) renderMembers(ctx render.RenderContext, buf *render.Ren
 		// Resolve rune from QuasarChars using member offset
 		row := int(member.OffsetY) + parameter.QuasarHeaderOffsetY
 		col := int(member.OffsetX) + parameter.QuasarHeaderOffsetX
-		ch := component.QuasarChars[row][col]
+		ch := visual.QuasarChars[row][col]
 
 		screenX := ctx.GameXOffset + pos.X
 		screenY := ctx.GameYOffset + pos.Y
@@ -262,7 +262,7 @@ func (r *QuasarRenderer) renderMembers(ctx render.RenderContext, buf *render.Ren
 }
 
 // calculateFlashColor returns yellow with pulse effect (low→high→low)
-func (r *QuasarRenderer) calculateFlashColor(remaining time.Duration) render.RGB {
+func (r *QuasarRenderer) calculateFlashColor(remaining time.Duration) terminal.RGB {
 	progress := float64(remaining) / float64(parameter.CombatHitFlashDuration)
 
 	var intensity float64
@@ -274,5 +274,5 @@ func (r *QuasarRenderer) calculateFlashColor(remaining time.Duration) render.RGB
 		intensity = 0.6 // Phase 3: low
 	}
 
-	return render.Scale(render.RgbCombatHitFlash, intensity)
+	return render.Scale(visual.RgbCombatHitFlash, intensity)
 }

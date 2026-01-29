@@ -6,6 +6,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // CursorRenderer draws the cursor with complex entity overlap handling
@@ -38,16 +39,16 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 	// 1. Determine default state (Empty Cell)
 	var charAtCursor = ' '
-	var cursorBgColor render.RGB
+	var cursorBgColor terminal.RGB
 
 	// Default background based on mode
 	if r.gameCtx.IsInsertMode() {
-		cursorBgColor = render.RgbCursorInsert
+		cursorBgColor = visual.RgbCursorInsert
 	} else {
-		cursorBgColor = render.RgbCursorNormal
+		cursorBgColor = visual.RgbCursorNormal
 	}
 
-	var charFgColor = render.RgbBlack
+	var charFgColor = visual.RgbBlack
 
 	// 2. Scan entities at cursor position
 	var entitiesBuf [parameter.MaxEntitiesPerCell]core.Entity
@@ -84,10 +85,10 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 			// Check for Nugget (special coloring)
 			if r.gameCtx.World.Components.Nugget.HasEntity(glyphEntity) {
-				cursorBgColor = render.RgbNuggetOrange
-				charFgColor = render.RgbNuggetDark
+				cursorBgColor = visual.RgbNuggetOrange
+				charFgColor = visual.RgbNuggetDark
 			} else {
-				charFgColor = render.RgbBlack
+				charFgColor = visual.RgbBlack
 			}
 		}
 	} else if sigilEntity != 0 {
@@ -95,15 +96,15 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			charAtCursor = sigil.Rune
 			// Cursor background takes the sigil's color
 			cursorBgColor = resolveSigilColor(sigil.Color)
-			charFgColor = render.RgbBlack
+			charFgColor = visual.RgbBlack
 		}
 	}
 
 	// 4. Error Flash Overlay
 	cursorComp, ok := r.gameCtx.World.Components.Cursor.GetComponent(r.gameCtx.World.Resources.Cursor.Entity)
 	if ok && cursorComp.ErrorFlashRemaining > 0 {
-		cursorBgColor = render.RgbCursorError
-		charFgColor = render.RgbBlack
+		cursorBgColor = visual.RgbCursorError
+		charFgColor = visual.RgbBlack
 	}
 
 	// 5. Render

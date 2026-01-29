@@ -58,7 +58,7 @@ func (r *GoldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 				continue
 			}
 
-			buf.SetFgOnly(screenX, screenY, glyph.Rune, render.RgbGlyphGold, terminal.AttrNone)
+			buf.SetFgOnly(screenX, screenY, glyph.Rune, visual.RgbGlyphGold, terminal.AttrNone)
 		}
 	}
 }

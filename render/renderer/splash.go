@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // SplashRenderer draws large block characters as background effect
@@ -78,7 +79,7 @@ func (r *SplashRenderer) resolveAnchor(splashComp *component.SplashComponent) (i
 }
 
 // renderChar renders a single splash character bitmap
-func (r *SplashRenderer) renderChar(gameCtx render.RenderContext, buf *render.RenderBuffer, char rune, gameX, gameY int, color render.RGB) {
+func (r *SplashRenderer) renderChar(gameCtx render.RenderContext, buf *render.RenderBuffer, char rune, gameX, gameY int, color terminal.RGB) {
 	var bitmap [12]uint16
 	// Bounds check and fallback for missing glyphs
 	if char < 32 || char > 126 {
@@ -110,32 +111,32 @@ func (r *SplashRenderer) renderChar(gameCtx render.RenderContext, buf *render.Re
 	}
 }
 
-// resolveSplashColor maps the SplashColor enum to actual render.RGB
-func (r *SplashRenderer) resolveSplashColor(c component.SplashColor) render.RGB {
+// resolveSplashColor maps the SplashColor enum to actual terminal.RGB
+func (r *SplashRenderer) resolveSplashColor(c component.SplashColor) terminal.RGB {
 	switch c {
 	case component.SplashColorNormal:
-		return render.RgbSplashNormal
+		return visual.RgbSplashNormal
 	case component.SplashColorInsert:
-		return render.RgbSplashInsert
+		return visual.RgbSplashInsert
 	case component.SplashColorGreen:
-		return render.RgbGlyphGreenNormal
+		return visual.RgbGlyphGreenNormal
 	case component.SplashColorBlue:
-		return render.RgbGlyphBlueNormal
+		return visual.RgbGlyphBlueNormal
 	case component.SplashColorRed:
-		return render.RgbGlyphRedNormal
+		return visual.RgbGlyphRedNormal
 	case component.SplashColorGold:
-		return render.RgbGlyphGold
+		return visual.RgbGlyphGold
 	case component.SplashColorCyan:
-		return render.RgbSplashCyan
+		return visual.RgbSplashCyan
 	case component.SplashColorNugget:
-		return render.RgbNuggetOrange
+		return visual.RgbNuggetOrange
 	case component.SplashColorWhite:
-		return render.RgbSplashWhite
+		return visual.RgbSplashWhite
 	case component.SplashColorBlossom:
-		return render.RgbBlossom
+		return visual.RgbBlossom
 	case component.SplashColorDecay:
-		return render.RgbDecay
+		return visual.RgbDecay
 	default:
-		return render.RgbSplashWhite
+		return visual.RgbSplashWhite
 	}
 }

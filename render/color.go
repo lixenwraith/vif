@@ -1,12 +1,14 @@
 package render
 
 import (
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
+	"github.com/lixenwraith/vi-fighter/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // HeatGradientLUT holds the pre-calculated rainbow gradient
 // 768 bytes, fits in L1 cache alongside other hot data
-var HeatGradientLUT [256]RGB
+var HeatGradientLUT [256]terminal.RGB
 
 func init() {
 	// Pre-calculate heat gradient
@@ -16,161 +18,34 @@ func init() {
 	}
 }
 
-// RGB color definitions for all game systems
-var (
-	// General colors for various uses
-	RgbBlack   = RGB{0, 0, 0}
-	RgbWhite   = RGB{255, 255, 255}
-	RgbRed     = RGB{255, 0, 0}
-	RgbOrange  = RGB{180, 120, 0}
-	RgbYellow  = RGB{255, 255, 0}
-	RgbGreen   = RGB{0, 255, 0}
-	RgbCyan    = RGB{0, 255, 255}
-	RgbBlue    = RGB{0, 0, 255}
-	RgbMagenta = RGB{255, 0, 255}
-
-	// RGB color definitions for glyphs - all dark/normal/bright levels have minimum floor to prevent perceptual blackout at low alpha
-	RgbGlyphBlueDark   = RGB{50, 80, 200} // Floor R/G
-	RgbGlyphBlueNormal = RGB{80, 130, 255}
-	RgbGlyphBlueBright = RGB{120, 170, 255}
-
-	RgbGlyphGreenDark   = RGB{15, 130, 15} // Floor R/B to prevent blackout
-	RgbGlyphGreenNormal = RGB{20, 200, 20}
-	RgbGlyphGreenBright = RGB{50, 255, 50}
-
-	RgbGlyphRedDark   = RGB{180, 40, 40} // Floor G/B
-	RgbGlyphRedNormal = RGB{255, 60, 60}
-	RgbGlyphRedBright = RGB{255, 100, 100}
-
-	RgbGlyphGold = RGB{255, 255, 0} // Bright Yellow for gold sequence
-
-	RgbGlyphWhite = RGB{255, 255, 255} // Pure white
-
-	RgbDecay       = RGB{0, 139, 139}   // Dark Cyan for decay animation
-	RgbBlossom     = RGB{255, 182, 193} // Light pink (cherry blossom)
-	RgbDrain       = RGB{0, 200, 200}   // Vibrant Cyan for drain entity
-	RgbMaterialize = RGB{0, 220, 220}   // Bright cyan for materialize head
-
-	RgbDustDark   = RGB{R: 60, G: 60, B: 60}    // Dark gray dust
-	RgbDustNormal = RGB{R: 128, G: 128, B: 128} // Mid-gray dust
-	RgbDustBright = RGB{R: 200, G: 200, B: 200} // Light gray dust
-
-	RgbRowIndicator    = RGB{180, 180, 180} // Brighter gray
-	RgbColumnIndicator = RGB{180, 180, 180} // Brighter gray
-	RgbStatusBar       = RGB{255, 255, 255} // White
-	RgbBackground      = RGB{26, 27, 38}    // Tokyo Night background
-
-	RgbPingHighlight  = RGB{55, 55, 55}    // Gray for INSERT mode ping
-	RgbPingLineNormal = RGB{5, 5, 5}       // Almost Black for NORMAL and VISUAL modes ping lines
-	RgbPingGridNormal = RGB{55, 55, 55}    // Gray for NORMAL mode ping grid
-	RgbPingOrange     = RGB{60, 40, 0}     // Very dark orange for ping on whitespace
-	RgbPingGreen      = RGB{0, 40, 0}      // Very dark green for ping on green char
-	RgbPingRed        = RGB{50, 15, 15}    // Very dark red for ping on red char
-	RgbPingBlue       = RGB{15, 25, 50}    // Very dark blue for ping on blue char
-	RgbCursorNormal   = RGB{255, 165, 0}   // Orange for normal mode
-	RgbCursorInsert   = RGB{255, 255, 255} // Bright white for insert mode
-
-	// Boost glow effect
-	RgbBoostGlow = RGB{255, 140, 200} // Vibrant pink for rotating shield glow
-
-	// Splash colors
-	RgbSplashNormal = RGB{153, 102, 0}   // Dark orange for normal mode
-	RgbSplashInsert = RGB{200, 200, 200} // Light gray for insert mode
-	RgbSplashWhite  = RGB{155, 155, 155} // White for some actions
-	RgbSplashCyan   = RGB{0, 200, 200}   // Cyan for quasar charge timer
-
-	// Nugget colors
-	RgbNuggetOrange = RGB{255, 165, 0}   // Same as insert cursor
-	RgbNuggetDark   = RGB{101, 67, 33}   // Dark brown for contrast
-	RgbCursorError  = RGB{255, 0, 0}     // Error Red
-	RgbTrailGray    = RGB{200, 200, 200} // Light gray base
-
-	// Status bar backgrounds
-	RgbModeNormalBg  = RGB{135, 206, 250} // Light sky blue
-	RgbModeVisualBg  = RGB{255, 200, 100} // Orange-yellow for visual mode
-	RgbModeInsertBg  = RGB{144, 238, 144} // Light grass green
-	RgbModeSearchBg  = RGB{255, 165, 0}   // Orange
-	RgbModeCommandBg = RGB{160, 100, 160} // Light purple
-	RgbEnergyBg      = RGB{255, 255, 255} // Bright white
-	RgbBoostBg       = RGB{255, 192, 203} // Pink for boost timer
-	RgbStatusText    = RGB{0, 0, 0}       // Dark text for status
-
-	// Runtime Metrics Backgrounds
-	RgbFpsBg = RGB{0, 255, 255}   // Cyan for FPS
-	RgbGtBg  = RGB{255, 200, 100} // Light Orange for Game Ticks
-	RgbApmBg = RGB{50, 205, 50}   // Lime Green for APM
-
-	// Cleaner colors
-	RgbCleanerBasePositive = RGB{255, 255, 0}   // Bright yellow for positive energy cleaners
-	RgbCleanerBaseNegative = RGB{170, 100, 210} // Violet for negative energy cleaners
-
-	// Flash colors
-	RgbRemovalFlash = RGB{255, 255, 200} // Bright yellow-white flash
-
-	// // Explosion gradient, Realistic
-	// RgbExplosionCore = RGB{255, 255, 220} // Bright white-yellow flash
-	// RgbExplosionMid  = RGB{255, 120, 20}  // Intense orange
-	// RgbExplosionEdge = RGB{120, 20, 0}    // Dark red fade
-
-	// Explosion gradient (Neon/Cyber theme)
-	RgbExplosionCore = RGB{240, 255, 255} // Bright White-Cyan
-	RgbExplosionMid  = RGB{0, 255, 255}   // Electric Cyan
-	RgbExplosionEdge = RGB{40, 0, 180}    // Deep Indigo/Blue
-
-	// Shield colors
-	RgbShieldBase = RGB{180, 0, 150} // Deep Magenta
-
-	// CombatColors
-	RgbCombatEnraged  = RGB{255, 60, 60} // Red tint during charge or zap phase
-	RgbCombatHitFlash = RGB{255, 255, 0} // Bright yellow for hit flash
-
-	// Quasar colors
-	RgbQuasarShield = RGB{0, 200, 200} // Cyan for clean shield halo and quasar indication
-
-	// Audio indicator colors
-	RgbAudioMuted   = RGB{255, 0, 0} // Bright red when muted
-	RgbAudioUnmuted = RGB{0, 255, 0} // Bright green when unmuted
-
-	// Energy meter blink colors
-	RgbEnergyBlinkBlue  = RGB{160, 210, 255} // Blue blink
-	RgbEnergyBlinkGreen = RGB{120, 255, 120} // Green blink
-	RgbEnergyBlinkRed   = RGB{255, 140, 140} // Red blink
-	RgbEnergyBlinkWhite = RGB{255, 255, 255} // White blink
-
-	// Overlay colors
-	RgbOverlayBorder    = RGB{0, 255, 255}            // Bright Cyan for border
-	RgbOverlayBg        = RGB{20, 20, 30}             // Dark background
-	RgbOverlayText      = RGB{255, 255, 255}          // White text for high contrast
-	RgbOverlayTitle     = RGB{255, 255, 0}            // Yellow for title
-	RgbOverlayHeader    = RGB{R: 255, G: 215, B: 0}   // Gold for headers
-	RgbOverlayKey       = RGB{R: 180, G: 180, B: 180} // Light gray for keys
-	RgbOverlayValue     = RGB{R: 100, G: 220, B: 100} // Green for values
-	RgbOverlayHint      = RGB{R: 120, G: 120, B: 120} // Dim for hints
-	RgbOverlaySeparator = RGB{R: 80, G: 80, B: 80}    // Dark for separators
-
-	// Status bar auxiliary colors
-	RgbColorModeIndicator = RGB{200, 200, 200} // Light gray for TC/256 indicator
-	RgbGridTimerFg        = RGB{255, 255, 255} // White for grid timer text
-	RgbLastCommandText    = RGB{255, 255, 0}   // Yellow for last command indicator
-	RgbSearchInputText    = RGB{255, 255, 255} // White for search input
-	RgbCommandInputText   = RGB{255, 255, 255} // White for command input
-	RgbStatusMessageText  = RGB{200, 200, 200} // Light gray for status messages
-)
-
 // LerpRGBFixed interpolates between colors using Q32.32 factor t
-func LerpRGBFixed(a, b RGB, t int64) RGB {
+func LerpRGBFixed(a, b terminal.RGB, t int64) terminal.RGB {
 	// (diff * t) >> Shift is equivalent to Mul(diff * Scale, t) since diff is integer
 	// We do the multiplication in 64-bit to prevent overflow before shift
 	r := int64(a.R) + ((int64(b.R)-int64(a.R))*t)>>vmath.Shift
 	g := int64(a.G) + ((int64(b.G)-int64(a.G))*t)>>vmath.Shift
 	bl := int64(a.B) + ((int64(b.B)-int64(a.B))*t)>>vmath.Shift
-	return RGB{R: uint8(r), G: uint8(g), B: uint8(bl)}
+	return terminal.RGB{R: uint8(r), G: uint8(g), B: uint8(bl)}
+}
+
+// RainbowIndexColor returns a color from HeatGradientLUT mapped to index/total
+// Uses bounded range to avoid dark extremes for text readability
+// Returns fallback color when total <= 1
+func RainbowIndexColor(index, total int64, fallback terminal.RGB) terminal.RGB {
+	if total <= 1 {
+		return fallback
+	}
+	lutIdx := visual.RainbowLUTMin + int((index*visual.RainbowLUTRange)/(total-1))
+	if lutIdx > visual.RainbowLUTMax {
+		lutIdx = visual.RainbowLUTMax
+	}
+	return HeatGradientLUT[lutIdx]
 }
 
 // calculateHeatColor returns the color for a given position in the heat meter gradient
 // Progress is 0.0 to 1.0, representing position from start to end
 // Only used for LUT generation
-func calculateHeatColor(progress float64) RGB {
+func calculateHeatColor(progress float64) terminal.RGB {
 	if progress < 0.0 {
 		progress = 0.0
 	}
@@ -179,48 +54,48 @@ func calculateHeatColor(progress float64) RGB {
 	}
 
 	// Rainbow gradient: deep red → orange → yellow → green → cyan → blue → purple/pink
-	// Split into segments
-	if progress < 0.167 { // Red to Orange
-		t := progress / 0.167
-		return RGB{
-			R: uint8(139 + (255-139)*t),
-			G: uint8(0 + 69*t),
-			B: 0,
+	switch {
+	case progress < visual.GradientSeg1: // Red to Orange
+		t := progress / visual.GradientSeg1
+		return terminal.RGB{
+			R: uint8(float64(visual.GradientDeepRed.R) + (float64(visual.GradientOrange.R)-float64(visual.GradientDeepRed.R))*t),
+			G: uint8(float64(visual.GradientDeepRed.G) + (float64(visual.GradientOrange.G)-float64(visual.GradientDeepRed.G))*t),
+			B: uint8(float64(visual.GradientDeepRed.B) + (float64(visual.GradientOrange.B)-float64(visual.GradientDeepRed.B))*t),
 		}
-	} else if progress < 0.333 { // Orange to Yellow
-		t := (progress - 0.167) / 0.166
-		return RGB{
-			R: 255,
-			G: uint8(69 + (215-69)*t),
-			B: 0,
+	case progress < visual.GradientSeg2: // Orange to Yellow
+		t := (progress - visual.GradientSeg1) / (visual.GradientSeg2 - visual.GradientSeg1)
+		return terminal.RGB{
+			R: uint8(float64(visual.GradientOrange.R) + (float64(visual.GradientYellow.R)-float64(visual.GradientOrange.R))*t),
+			G: uint8(float64(visual.GradientOrange.G) + (float64(visual.GradientYellow.G)-float64(visual.GradientOrange.G))*t),
+			B: uint8(float64(visual.GradientOrange.B) + (float64(visual.GradientYellow.B)-float64(visual.GradientOrange.B))*t),
 		}
-	} else if progress < 0.500 { // Yellow to Green
-		t := (progress - 0.333) / 0.167
-		return RGB{
-			R: uint8(255 - (255-34)*t),
-			G: uint8(215 - (215-139)*t),
-			B: uint8(34 * t),
+	case progress < visual.GradientSeg3: // Yellow to Green
+		t := (progress - visual.GradientSeg2) / (visual.GradientSeg3 - visual.GradientSeg2)
+		return terminal.RGB{
+			R: uint8(float64(visual.GradientYellow.R) + (float64(visual.GradientGreen.R)-float64(visual.GradientYellow.R))*t),
+			G: uint8(float64(visual.GradientYellow.G) + (float64(visual.GradientGreen.G)-float64(visual.GradientYellow.G))*t),
+			B: uint8(float64(visual.GradientYellow.B) + (float64(visual.GradientGreen.B)-float64(visual.GradientYellow.B))*t),
 		}
-	} else if progress < 0.667 { // Green to Cyan
-		t := (progress - 0.500) / 0.167
-		return RGB{
-			R: uint8(34 - 34*t),
-			G: uint8(139 + (206-139)*t),
-			B: uint8(34 + (209-34)*t),
+	case progress < visual.GradientSeg4: // Green to Cyan
+		t := (progress - visual.GradientSeg3) / (visual.GradientSeg4 - visual.GradientSeg3)
+		return terminal.RGB{
+			R: uint8(float64(visual.GradientGreen.R) + (float64(visual.GradientCyan.R)-float64(visual.GradientGreen.R))*t),
+			G: uint8(float64(visual.GradientGreen.G) + (float64(visual.GradientCyan.G)-float64(visual.GradientGreen.G))*t),
+			B: uint8(float64(visual.GradientGreen.B) + (float64(visual.GradientCyan.B)-float64(visual.GradientGreen.B))*t),
 		}
-	} else if progress < 0.833 { // Cyan to Blue
-		t := (progress - 0.667) / 0.166
-		return RGB{
-			R: uint8(65 * t),
-			G: uint8(206 - (206-105)*t),
-			B: uint8(209 + (225-209)*t),
+	case progress < visual.GradientSeg5: // Cyan to Blue
+		t := (progress - visual.GradientSeg4) / (visual.GradientSeg5 - visual.GradientSeg4)
+		return terminal.RGB{
+			R: uint8(float64(visual.GradientCyan.R) + (float64(visual.GradientBlue.R)-float64(visual.GradientCyan.R))*t),
+			G: uint8(float64(visual.GradientCyan.G) + (float64(visual.GradientBlue.G)-float64(visual.GradientCyan.G))*t),
+			B: uint8(float64(visual.GradientCyan.B) + (float64(visual.GradientBlue.B)-float64(visual.GradientCyan.B))*t),
 		}
-	} else { // Blue to Purple/Pink
-		t := (progress - 0.833) / 0.167
-		return RGB{
-			R: uint8(65 + (219-65)*t),
-			G: uint8(105 + 7*t),
-			B: uint8(225 - (225-147)*t),
+	default: // Blue to Purple/Pink
+		t := (progress - visual.GradientSeg5) / (1.0 - visual.GradientSeg5)
+		return terminal.RGB{
+			R: uint8(float64(visual.GradientBlue.R) + (float64(visual.GradientPurple.R)-float64(visual.GradientBlue.R))*t),
+			G: uint8(float64(visual.GradientBlue.G) + (float64(visual.GradientPurple.G)-float64(visual.GradientBlue.G))*t),
+			B: uint8(float64(visual.GradientBlue.B) + (float64(visual.GradientPurple.B)-float64(visual.GradientBlue.B))*t),
 		}
 	}
 }

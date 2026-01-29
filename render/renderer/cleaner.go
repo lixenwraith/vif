@@ -5,14 +5,15 @@ import (
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // CleanerRenderer draws cleaner entities with gradient trails
 type CleanerRenderer struct {
 	gameCtx *engine.GameContext
 
-	gradientPositive []render.RGB
-	gradientNegative []render.RGB
+	gradientPositive []terminal.RGB
+	gradientNegative []terminal.RGB
 }
 
 // NewCleanerRenderer creates cleaner renderer with gradient generation
@@ -28,16 +29,16 @@ func NewCleanerRenderer(gameCtx *engine.GameContext) *CleanerRenderer {
 func (r *CleanerRenderer) buildGradients() {
 	length := parameter.CleanerTrailLength
 
-	r.gradientPositive = make([]render.RGB, length)
-	r.gradientNegative = make([]render.RGB, length)
+	r.gradientPositive = make([]terminal.RGB, length)
+	r.gradientNegative = make([]terminal.RGB, length)
 
 	for i := 0; i < length; i++ {
 		opacity := 1.0 - (float64(i) / float64(length))
 		if opacity < 0 {
 			opacity = 0
 		}
-		r.gradientPositive[i] = render.Scale(render.RgbCleanerBasePositive, opacity)
-		r.gradientNegative[i] = render.Scale(render.RgbCleanerBaseNegative, opacity)
+		r.gradientPositive[i] = render.Scale(visual.RgbCleanerBasePositive, opacity)
+		r.gradientNegative[i] = render.Scale(visual.RgbCleanerBaseNegative, opacity)
 	}
 }
 
@@ -85,7 +86,7 @@ func (r *CleanerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 			}
 
 			// Cleaners are opaque (solid background)
-			buf.SetWithBg(screenX, screenY, cleaner.Char, gradient[gradientIndex], render.RgbBackground)
+			buf.SetWithBg(screenX, screenY, cleaner.Char, gradient[gradientIndex], visual.RgbBackground)
 		}
 	}
 }

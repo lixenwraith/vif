@@ -48,12 +48,12 @@ func (r *FlashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 			opacity = 0.0
 		}
 
-		flashColor := render.Scale(render.RgbRemovalFlash, opacity)
+		flashColor := render.Scale(visual.RgbRemovalFlash, opacity)
 
 		screenX := ctx.GameXOffset + flash.X
 		screenY := ctx.GameYOffset + flash.Y
 
 		// Additive blend on foreground only, preserves background
-		buf.Set(screenX, screenY, flash.Char, flashColor, render.RGBBlack, render.BlendAddFg, 1.0, terminal.AttrNone)
+		buf.Set(screenX, screenY, flash.Char, flashColor, visual.RgbBlack, render.BlendAddFg, 1.0, terminal.AttrNone)
 	}
 }

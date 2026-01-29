@@ -53,28 +53,28 @@ func (r *SigilRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 	}
 }
 
-// resolveSigilColor maps SigilColor to RGB
-func resolveSigilColor(color component.SigilColor) render.RGB {
+// resolveSigilColor maps SigilColor toterminal.RGB
+func resolveSigilColor(color component.SigilColor) terminal.RGB {
 	switch color {
 	case component.SigilNugget:
-		return render.RgbNuggetOrange
+		return visual.RgbNuggetOrange
 	case component.SigilDrain:
-		return render.RgbDrain
+		return visual.RgbDrain
 	case component.SigilBlossom:
-		return render.RgbBlossom
+		return visual.RgbBlossom
 	case component.SigilDecay:
-		return render.RgbDecay
+		return visual.RgbDecay
 	case component.SigilHitFlash:
-		return render.RgbCombatHitFlash
+		return visual.RgbCombatHitFlash
 	case component.SigilEnraged:
-		return render.RgbCombatEnraged
+		return visual.RgbCombatEnraged
 	case component.SigilDustDark:
-		return render.RgbDustDark
+		return visual.RgbDustDark
 	case component.SigilDustNormal:
-		return render.RgbDustNormal
+		return visual.RgbDustNormal
 	case component.SigilDustBright:
-		return render.RgbDustBright
+		return visual.RgbDustBright
 	default:
-		return render.RgbBackground
+		return visual.RgbBackground
 	}
 }
