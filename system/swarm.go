@@ -943,7 +943,7 @@ func (s *SwarmSystem) handleCursorInteractions(
 }
 
 // despawnSwarm destroys swarm composite and emits event
-func (s *SwarmSystem) despawnSwarm(headerEntity core.Entity, reason uint8) {
+func (s *SwarmSystem) despawnSwarm(headerEntity core.Entity, reason int) {
 	s.world.PushEvent(event.EventSwarmDespawned, &event.SwarmDespawnedPayload{
 		HeaderEntity: headerEntity,
 		Reason:       reason,

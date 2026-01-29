@@ -6,6 +6,7 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // TODO: future multi-level / network
@@ -177,6 +178,15 @@ type MaterializeRequestPayload struct {
 	X    int                 `toml:"x"`
 	Y    int                 `toml:"y"`
 	Type component.SpawnType `toml:"type"`
+}
+
+// MaterializeAreaRequestPayload for area-based materialization (swarm, quasar)
+type MaterializeAreaRequestPayload struct {
+	X          int                 `toml:"x"`          // Top-left X
+	Y          int                 `toml:"y"`          // Top-left Y
+	AreaWidth  int                 `toml:"area_width"` // 0 or 1 = single cell
+	AreaHeight int                 `toml:"area_height"`
+	Type       component.SpawnType `toml:"type"`
 }
 
 // SpawnCompletePayload carries details about a completed materialization
@@ -432,10 +442,30 @@ type CombatAttackAreaRequestPayload struct {
 	HitEntities  []core.Entity              `toml:"hit_entities"`
 }
 
+// FuseEffect defines visual effect type for fusion animations
+type FuseEffect int
+
+const (
+	FuseEffectNone        FuseEffect = iota
+	FuseEffectSpirit                 // Converging spirit trails
+	FuseEffectMaterialize            // Reverse beam convergence
+)
+
+// TODO: future implementation
+// FuseRequestPayload is generic payload for fusion types
+type FuseRequestPayload struct {
+	Sources []core.Entity `toml:"sources"`
+	TargetX int           `toml:"target_x"`
+	TargetY int           `toml:"target_y"`
+	Effect  FuseEffect    `toml:"effect"`
+	Type    int           `toml:"type"` // Maps to FuseType in fuse system
+}
+
 // FuseSwarmRequestPayload contains the two drains to fuse
 type FuseSwarmRequestPayload struct {
 	DrainA core.Entity `toml:"drain_a"`
 	DrainB core.Entity `toml:"drain_b"`
+	Effect FuseEffect  `toml:"effect"` // Defaults to FuseEffectSpirit (0)
 }
 
 // SwarmSpawnedPayload contains swarm spawn data
@@ -446,7 +476,7 @@ type SwarmSpawnedPayload struct {
 // SwarmDespawnedPayload contains despawn reason
 type SwarmDespawnedPayload struct {
 	HeaderEntity core.Entity `toml:"header_entity"`
-	Reason       uint8       `toml:"reason"` // 0=timeout, 1=hp, 2=charges
+	Reason       int         `toml:"reason"` // 0=timeout, 1=hp, 2=charges
 }
 
 // SwarmAbsorbedDrainPayload contains absorption data
@@ -466,4 +496,18 @@ type QuasarSpawnRequestPayload struct {
 type SwarmSpawnRequestPayload struct {
 	SpawnX int `toml:"spawn_x"`
 	SpawnY int `toml:"spawn_y"`
+}
+
+// MarkerSpawnRequestPayload for marker creation
+type MarkerSpawnRequestPayload struct {
+	X         int                   `toml:"x"`
+	Y         int                   `toml:"y"`
+	Width     int                   `toml:"width"`
+	Height    int                   `toml:"height"`
+	Shape     component.MarkerShape `toml:"shape"`
+	Color     terminal.RGB          `toml:"color"`
+	Intensity int64                 `toml:"intensity"` // Q32.32
+	Duration  time.Duration         `toml:"duration"`
+	PulseRate int64                 `toml:"pulse_rate"` // Q32.32, 0 = none
+	FadeMode  uint8                 `toml:"fade_mode"`  // 0=none, 1=out, 2=in
 }

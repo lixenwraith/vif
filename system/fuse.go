@@ -31,6 +31,8 @@ type pendingFusion struct {
 type FuseSystem struct {
 	world *engine.World
 
+	rng *vmath.FastRand
+
 	fusions []pendingFusion
 	enabled bool
 }
@@ -46,6 +48,7 @@ func NewFuseSystem(world *engine.World) engine.System {
 
 func (s *FuseSystem) Init() {
 	s.fusions = make([]pendingFusion, 0, 16)
+	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
 	s.enabled = true
 }
 
@@ -96,12 +99,13 @@ func (s *FuseSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventQuasarDestroyed:
+		// TODO: move to FSM
 		// FuseSystem manages the drain lifecycle during the Quasar phase: when Quasar dies (for any reason), resume drains
 		s.world.PushEvent(event.EventDrainResume, nil)
 
 	case event.EventFuseSwarmRequest:
 		if payload, ok := ev.Payload.(*event.FuseSwarmRequestPayload); ok {
-			s.handleSwarmFuse(payload.DrainA, payload.DrainB)
+			s.handleSwarmFuse(payload.DrainA, payload.DrainB, payload.Effect)
 		}
 	}
 }
@@ -136,49 +140,108 @@ func (s *FuseSystem) hasQuasarFusion() bool {
 	return false
 }
 
-// handleQuasarFuse initiates the mass fusion of all drains
+// applyEffect dispatches to effect-specific implementation
+func (s *FuseSystem) applyEffect(effect event.FuseEffect, sources []core.Point, area core.Area, spiritColor component.SpiritColor) {
+	switch effect {
+	case event.FuseEffectSpirit:
+		s.effectSpiritArea(sources, area, spiritColor)
+	case event.FuseEffectMaterialize:
+		s.effectMaterialize(area)
+	default:
+		s.effectSpiritArea(sources, area, spiritColor)
+	}
+}
+
+func (s *FuseSystem) effectSpiritArea(sources []core.Point, area core.Area, color component.SpiritColor) {
+	for i, src := range sources {
+		dest := vmath.AreaDistributePoint(area, i, s.rng)
+
+		s.world.PushEvent(event.EventSpiritSpawn, &event.SpiritSpawnRequestPayload{
+			StartX:    src.X,
+			StartY:    src.Y,
+			TargetX:   dest.X,
+			TargetY:   dest.Y,
+			Char:      parameter.DrainChar,
+			BaseColor: color,
+		})
+	}
+}
+
+func (s *FuseSystem) effectMaterialize(area core.Area) {
+	s.world.PushEvent(event.EventMaterializeAreaRequest, &event.MaterializeAreaRequestPayload{
+		X:          area.X,
+		Y:          area.Y,
+		AreaWidth:  area.Width,
+		AreaHeight: area.Height,
+		Type:       component.SpawnTypeSwarm,
+	})
+}
+
+func (s *FuseSystem) handleSwarmFuse(drainA, drainB core.Entity, effect event.FuseEffect) {
+	posA, okA := s.world.Positions.GetPosition(drainA)
+	posB, okB := s.world.Positions.GetPosition(drainB)
+	if !okA || !okB {
+		return
+	}
+
+	midX := (posA.X + posB.X) / 2
+	midY := (posA.Y + posB.Y) / 2
+
+	// Swarm top-left from midpoint (header at offset 1,0)
+	topLeftX := midX - parameter.SwarmHeaderOffsetX
+	topLeftY := midY - parameter.SwarmHeaderOffsetY
+
+	event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, []core.Entity{drainA, drainB})
+
+	sources := []core.Point{{X: posA.X, Y: posA.Y}, {X: posB.X, Y: posB.Y}}
+	area := core.Area{X: topLeftX, Y: topLeftY, Width: parameter.SwarmWidth, Height: parameter.SwarmHeight}
+	s.applyEffect(effect, sources, area, component.SpiritCyan)
+
+	s.fusions = append(s.fusions, pendingFusion{
+		Type:    FuseSwarm,
+		TargetX: midX,
+		TargetY: midY,
+		Timer:   parameter.SwarmFuseAnimationDuration,
+	})
+}
+
 func (s *FuseSystem) handleQuasarFuse() {
-	// 1. Signal DrainSystem to stop spawning
 	s.world.PushEvent(event.EventDrainPause, nil)
 
-	// 2. Collect active drains and calculate centroid
 	drains := s.world.Components.Drain.GetAllEntities()
-	coords := make([]int, 0, len(drains)*2)
+	sources := make([]core.Point, 0, len(drains))
 
-	// Only calculate centroid of valid, positioned drains
 	for _, e := range drains {
 		if pos, ok := s.world.Positions.GetPosition(e); ok {
-			coords = append(coords, pos.X, pos.Y)
+			sources = append(sources, core.Point{X: pos.X, Y: pos.Y})
 		}
 	}
 
-	cX, cY := vmath.CalculateCentroid(coords)
+	// Calculate centroid
+	sumX, sumY := 0, 0
+	for _, p := range sources {
+		sumX += p.X
+		sumY += p.Y
+	}
 
-	// Fallback to center screen if no drains found
-	if len(coords) == 0 {
+	var cX, cY int
+	if len(sources) > 0 {
+		cX = sumX / len(sources)
+		cY = sumY / len(sources)
+	} else {
 		config := s.world.Resources.Config
 		cX = config.GameWidth / 2
 		cY = config.GameHeight / 2
 	}
 
-	// 3. Visuals: Spawn spirits from drains to centroid
-	// Re-iterate to spawn spirits (using valid coords gathered previously or fresh query)
-	// Fresh query safer in case of concurrent mods, though unlikely in single thread
-	for _, e := range drains {
-		if pos, ok := s.world.Positions.GetPosition(e); ok {
-			s.world.PushEvent(event.EventSpiritSpawn, &event.SpiritSpawnRequestPayload{
-				StartX:    pos.X,
-				StartY:    pos.Y,
-				TargetX:   cX,
-				TargetY:   cY,
-				Char:      parameter.DrainChar,
-				BaseColor: component.SpiritCyan,
-			})
-		}
-	}
+	// Quasar top-left from centroid
+	topLeftX := cX - parameter.QuasarHeaderOffsetX
+	topLeftY := cY - parameter.QuasarHeaderOffsetY
 
-	// 4. Cleanup source entities
-	// Cleanup Pending Materializers (Drains that were about to spawn)
+	area := core.Area{X: topLeftX, Y: topLeftY, Width: parameter.QuasarWidth, Height: parameter.QuasarHeight}
+	s.applyEffect(event.FuseEffectSpirit, sources, area, component.SpiritCyan)
+
+	// Cleanup materializers and drains
 	mats := s.world.Components.Materialize.GetAllEntities()
 	for _, e := range mats {
 		if m, ok := s.world.Components.Materialize.GetComponent(e); ok && m.Type == component.SpawnTypeDrain {
@@ -186,46 +249,15 @@ func (s *FuseSystem) handleQuasarFuse() {
 		}
 	}
 
-	// Destroy all existing drains (silent death)
 	if len(drains) > 0 {
 		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, drains)
 	}
 
-	// 5. Queue Fusion
 	s.fusions = append(s.fusions, pendingFusion{
 		Type:    FuseQuasar,
 		TargetX: cX,
 		TargetY: cY,
 		Timer:   parameter.SpiritAnimationDuration + parameter.SpiritSafetyBuffer,
-	})
-}
-
-// handleSwarmFuse initiates fusion of two specific drains
-func (s *FuseSystem) handleSwarmFuse(drainA, drainB core.Entity) {
-	// Get positions before destruction
-	posA, okA := s.world.Positions.GetPosition(drainA)
-	posB, okB := s.world.Positions.GetPosition(drainB)
-	if !okA || !okB {
-		return
-	}
-
-	// Calculate midpoint
-	midX := (posA.X + posB.X) / 2
-	midY := (posA.Y + posB.Y) / 2
-
-	// Destroy both drains silently
-	event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, []core.Entity{drainA, drainB})
-
-	// Visuals: Spawn spirits converging to midpoint
-	s.spawnConvergenceSpirit(posA.X, posA.Y, midX, midY)
-	s.spawnConvergenceSpirit(posB.X, posB.Y, midX, midY)
-
-	// Queue Fusion
-	s.fusions = append(s.fusions, pendingFusion{
-		Type:    FuseSwarm,
-		TargetX: midX,
-		TargetY: midY,
-		Timer:   parameter.SwarmFuseAnimationDuration,
 	})
 }
 

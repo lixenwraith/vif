@@ -14,6 +14,16 @@ const (
 	SpiritWhite
 )
 
+type SpiritPattern int
+
+const (
+	SpiritPatternSpiral SpiritPattern = iota // Current behavior
+	SpiritPatternLinear                      // Direct line with fade
+	SpiritPatternWave                        // Sinusoidal oscillation
+	SpiritPatternBounce                      // Damped oscillation toward target
+	SpiritPatternOrbit                       // Partial orbit before converging
+)
+
 // SpiritComponent represents a converging visual effect entity
 // Positions presence is at StartX/StartY to avoid target saturation
 // Actual render position is calculated via Lerp from Start to Target
@@ -26,6 +36,10 @@ type SpiritComponent struct {
 
 	// Animation progress in Q32.32: 0 = start, Scale = complete
 	Progress int64
+
+	Pattern   SpiritPattern
+	Amplitude int64 // (Q32.32, for wave/bounce magnitude)
+	Frequency int64 // (Q32.32, oscillation rate)
 
 	// Speed increment per tick in Q32.32 (distance-dependent)
 	Speed int64

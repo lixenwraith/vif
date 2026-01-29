@@ -44,6 +44,7 @@ func (s *MaterializeSystem) Priority() int {
 func (s *MaterializeSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventMaterializeRequest,
+		event.EventMaterializeAreaRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
@@ -68,9 +69,23 @@ func (s *MaterializeSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
-	if ev.Type == event.EventMaterializeRequest {
+	switch ev.Type {
+	case event.EventMaterializeRequest:
 		if payload, ok := ev.Payload.(*event.MaterializeRequestPayload); ok {
-			s.spawnMaterializeEffect(payload.X, payload.Y, payload.Type)
+			s.spawnMaterializeEffect(payload.X, payload.Y, 1, 1, 1, payload.Type)
+		}
+
+	case event.EventMaterializeAreaRequest:
+		if payload, ok := ev.Payload.(*event.MaterializeAreaRequestPayload); ok {
+			width := payload.AreaWidth
+			height := payload.AreaHeight
+			if width < 1 {
+				width = 1
+			}
+			if height < 1 {
+				height = 1
+			}
+			s.spawnMaterializeEffect(payload.X, payload.Y, width, height, 1, payload.Type)
 		}
 	}
 }
@@ -92,35 +107,36 @@ func (s *MaterializeSystem) Update() {
 	durationFixed := vmath.FromFloat(parameter.MaterializeAnimationDuration.Seconds())
 	progressDelta := vmath.Div(dtFixed, durationFixed)
 
-	entities := s.world.Components.Materialize.GetAllEntities()
-	if len(entities) == 0 {
+	matEntities := s.world.Components.Materialize.GetAllEntities()
+	if len(matEntities) == 0 {
 		return
 	}
 
-	for _, entity := range entities {
-		mat, ok := s.world.Components.Materialize.GetComponent(entity)
+	for _, matEntity := range matEntities {
+		matComp, ok := s.world.Components.Materialize.GetComponent(matEntity)
 		if !ok {
 			continue
 		}
 
-		mat.Progress += progressDelta
+		matComp.Progress += progressDelta
 
-		if mat.Progress >= vmath.Scale {
+		if matComp.Progress >= vmath.Scale {
 			s.world.PushEvent(event.EventMaterializeComplete, &event.SpawnCompletePayload{
-				X:    mat.TargetX,
-				Y:    mat.TargetY,
-				Type: mat.Type,
+				X:    matComp.TargetX,
+				Y:    matComp.TargetY,
+				Type: matComp.Type,
+				// Note: SpawnCompletePayload may need AreaWidth/Height if consumers need it
 			})
-			s.world.DestroyEntity(entity)
+			s.world.DestroyEntity(matEntity)
 			continue
 		}
 
-		s.world.Components.Materialize.SetComponent(entity, mat)
+		s.world.Components.Materialize.SetComponent(matEntity, matComp)
 	}
 }
 
 // spawnMaterializeEffect creates a single materialize effect entity
-func (s *MaterializeSystem) spawnMaterializeEffect(targetX, targetY int, spawnType component.SpawnType) {
+func (s *MaterializeSystem) spawnMaterializeEffect(targetX, targetY, areaWidth, areaHeight, beamWidth int, spawnType component.SpawnType) {
 	config := s.world.Resources.Config
 
 	// Clamp target coordinates
@@ -141,10 +157,12 @@ func (s *MaterializeSystem) spawnMaterializeEffect(targetX, targetY int, spawnTy
 
 	// TODO: add protection
 	s.world.Components.Materialize.SetComponent(entity, component.MaterializeComponent{
-		TargetX:  targetX,
-		TargetY:  targetY,
-		Progress: 0,
-		Width:    1,
-		Type:     spawnType,
+		TargetX:    targetX,
+		TargetY:    targetY,
+		AreaWidth:  areaWidth,
+		AreaHeight: areaHeight,
+		Progress:   0,
+		BeamWidth:  beamWidth,
+		Type:       spawnType,
 	})
 }

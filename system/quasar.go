@@ -152,8 +152,6 @@ func (s *QuasarSystem) Update() {
 	combatComp, ok := s.world.Components.Combat.GetComponent(headerEntity)
 	if ok {
 		if combatComp.HitPoints <= 0 {
-			// Emit destroyed event
-			s.world.PushEvent(event.EventQuasarDestroyed, nil)
 			// TODO: audio effect
 
 			s.terminateQuasar()
@@ -844,6 +842,8 @@ func (s *QuasarSystem) terminateQuasar() {
 
 	// Destroy composite
 	s.destroyQuasarComposite(s.headerEntity)
+
+	s.world.PushEvent(event.EventQuasarDestroyed, nil)
 
 	s.headerEntity = 0
 	s.statActive.Store(false)

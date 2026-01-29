@@ -85,23 +85,34 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			var alpha float64 = 1.0
 
 			if i == 0 {
+				// Head: color cycle through gradient based on progress
+				color = spiritProgressColor(spiritComp.BaseColor, p)
 				// Intensity increases as it approaches target (0.5 -> 1.0)
 				intensity := 0.5 + (vmath.ToFloat(p) * 0.5)
 				color = render.Scale(color, intensity)
 			} else {
-				// Trail: Use BaseColor with fast quadratic fade
-				color = resolveSpiritColor(spiritComp.BaseColor)
+				// Trail: inherit cycled color with linear fade + boosted alpha
+				trailProgress := p - int64(i-1)*trailLag
+				if trailProgress < 0 {
+					trailProgress = 0
+				}
+				color = spiritProgressColor(spiritComp.BaseColor, trailProgress)
 
 				// Normalized position in trail (0.0 to 1.0)
 				trailPos := float64(i) / float64(trailSteps)
 
-				// Quadratic falloff: (1 - x)^2
 				fade := 1.0 - trailPos
-				fade = fade * fade
+				// TODO: review and compare old method, deprecate if new is acceptable
+				// fade = fade * fade // Quadratic falloff: (1 - x)^2
+				fade = fade * 1.3 // Boost instead of quadratic squash
+				if fade > 1.0 {
+					fade = 1.0
+				}
 
 				color = render.Scale(color, fade)
 				// Reduce alpha blend weight for tail to make it ghostly
-				alpha = fade
+				// alpha = fade
+				alpha = 0.4 + fade*0.6 // Higher base alpha
 			}
 
 			// Additive blend for glow effect
@@ -110,27 +121,12 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	}
 }
 
-// resolveSpiritColor maps SpiritColor toterminal.RGB
-func resolveSpiritColor(c component.SpiritColor) terminal.RGB {
-	switch c {
-	case component.SpiritRed:
-		return visual.RgbRed
-	case component.SpiritOrange:
-		return visual.RgbOrange
-	case component.SpiritYellow:
-		return visual.RgbYellow
-	case component.SpiritGreen:
-		return visual.RgbGreen
-	case component.SpiritCyan:
-		return visual.RgbCyan
-	case component.SpiritBlue:
-		return visual.RgbBlue
-	case component.SpiritMagenta:
-		return visual.RgbMagenta
-	case component.SpiritWhite:
-		return visual.RgbWhite
-	}
+// spiritProgressColor returns gradient color based on base and animation progress
+func spiritProgressColor(base component.SpiritColor, progress int64) terminal.RGB {
+	offset := visual.SpiritBaseOffsets[base]
+	// Progress adds 0-128 to cycle through ~half the gradient
+	progressOffset := int((progress * 128) >> vmath.Shift)
+	lutIdx := (offset + progressOffset) & 0xFF
 
-	// Debug
-	return visual.RgbWhite
+	return render.HeatGradientLUT[lutIdx]
 }

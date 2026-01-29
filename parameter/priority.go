@@ -31,6 +31,7 @@ const (
 	PriorityFlash       = 230
 	PriorityUI          = 240
 	PriorityEffect      = 500
+	PriorityMarker      = 510 // Before splash, after game logic
 	PrioritySplash      = 800 // After game logic, before rendering
 	PriorityDeath       = 850 // After game logic, before TimeKeeper
 	PriorityTimekeeper  = 900 // After game logic, final

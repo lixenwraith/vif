@@ -302,6 +302,11 @@ const (
 	// Consumer: DrainSystem (or others) | Payload: *SpawnCompletePayload
 	EventMaterializeComplete
 
+	// EventMaterializeAreaRequest for area-based materialization (swarm, quasar)
+	// Trigger: FuseSystem for multi-cell entity spawns
+	// Consumer: MaterializeSystem | Payload: *MaterializeAreaRequestPayload
+	EventMaterializeAreaRequest
+
 	// EventFlashRequest signals a request to spawn a destruction flash effect
 	// Trigger: Systems destroying entities with visual feedback (Drain, Cleaner, Decay)
 	// Consumer: FlashSystem | Payload: *FlashRequestPayload
@@ -497,6 +502,11 @@ const (
 	// Trigger: DrainSystem, QuasarSystem, CleanerSystem, BuffSystem
 	// Consumer: CombatSystem | Payload: *CombatAttackAreaRequestPayload
 	EventCombatAttackAreaRequest
+
+	// EventMarkerSpawnRequest signals a request to spawn a visual marker
+	// Trigger: FuseSystem, SwarmSystem, QuasarSystem, future boss telegraphs
+	// Consumer: MarkerSystem | Payload: *MarkerSpawnRequestPayload
+	EventMarkerSpawnRequest
 )
 
 // GameEvent represents a single game event with metadata

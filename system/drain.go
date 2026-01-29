@@ -331,6 +331,7 @@ func (s *DrainSystem) detectSwarmFusions() {
 		s.world.PushEvent(event.EventFuseSwarmRequest, &event.FuseSwarmRequestPayload{
 			DrainA: drainA,
 			DrainB: drainB,
+			Effect: event.FuseEffectMaterialize,
 		})
 	}
 }

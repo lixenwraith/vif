@@ -60,6 +60,7 @@ var Components = []ComponentDef{
 	// Effects
 	{"Flash", "FlashComponent"},
 	{"Splash", "SplashComponent"},
+	{"Marker", "MarkerComponent"},
 	{"Environment", "EnvironmentComponent"},
 
 	// Lifecycle
@@ -96,6 +97,7 @@ var Systems = []SystemDef{
 	{"swarm", "NewSwarmSystem"},
 	{"dust", "NewDustSystem"},
 	{"flash", "NewFlashSystem"},
+	{"marker", "NewMarkerSystem"},
 	{"explosion", "NewExplosionSystem"},
 	{"splash", "NewSplashSystem"},
 	{"environment", "NewEnvironmentSystem"},
@@ -116,6 +118,7 @@ var Renderers = []RendererDef{
 	{"shield", "NewShieldRenderer", "PriorityField"},
 	{"cleaner", "NewCleanerRenderer", "PriorityCleaner"},
 	{"flash", "NewFlashRenderer", "PriorityParticle"},
+	{"marker", "NewMarkerRenderer", "PriorityParticle"},
 	{"explosion", "NewExplosionRenderer", "PriorityParticle"},
 	{"lightning", "NewLightningRenderer", "PriorityField"},
 	{"spirit", "NewSpiritRenderer", "PriorityParticle"},

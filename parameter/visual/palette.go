@@ -31,3 +31,16 @@ var Lightning256ColorLUT = [5]uint8{
 	46,  // Green (0,5,0) - bright green
 	129, // Purple (3,0,5) - medium purple
 }
+
+// SpiritBaseOffsets color determines starting point in gradient (0-255) for spirit animation coloring
+// Uses existing HeatGradientLUT, progress maps to LUT range based on base color offset
+var SpiritBaseOffsets = [8]int{
+	0,   // Red
+	32,  // Orange
+	64,  // Yellow
+	96,  // Green
+	128, // Cyan
+	160, // Blue
+	192, // Magenta
+	224, // White (wrap to red)
+}

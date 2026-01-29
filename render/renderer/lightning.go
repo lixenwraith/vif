@@ -71,8 +71,7 @@ func (r *LightningRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		}
 
 		// Deterministic path: seed combines PathSeed + AnimFrame
-		// Non-tracked: AnimFrame=0, static shape
-		// Tracked: AnimFrame advances each tick, dancing effect
+		// XOR with golden ratio constant ensures full avalanche on AnimFrame increment
 		seed := l.PathSeed ^ (uint64(l.AnimFrame) * 0x9E3779B97F4A7C15)
 		rng := vmath.NewFastRand(seed)
 

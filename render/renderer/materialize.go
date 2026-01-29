@@ -60,21 +60,32 @@ func (r *MaterializeRenderer) Render(ctx render.RenderContext, buf *render.Rende
 }
 
 func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.RenderBuffer, mat *component.MaterializeComponent, dir beamDir) {
-	// Calculate edge position and distance to target
 	var edgePos, distance int
+	var spanStart, spanEnd int // Range along the target edge
+
 	switch dir {
 	case dirUp:
 		edgePos = 0
 		distance = mat.TargetY
+		spanStart = mat.TargetX
+		spanEnd = mat.TargetX + mat.AreaWidth - 1
 	case dirDown:
 		edgePos = ctx.GameHeight - 1
-		distance = ctx.GameHeight - 1 - mat.TargetY
+		targetBottom := mat.TargetY + mat.AreaHeight - 1
+		distance = ctx.GameHeight - 1 - targetBottom
+		spanStart = mat.TargetX
+		spanEnd = mat.TargetX + mat.AreaWidth - 1
 	case dirLeft:
 		edgePos = 0
 		distance = mat.TargetX
+		spanStart = mat.TargetY
+		spanEnd = mat.TargetY + mat.AreaHeight - 1
 	case dirRight:
 		edgePos = ctx.GameWidth - 1
-		distance = ctx.GameWidth - 1 - mat.TargetX
+		targetRight := mat.TargetX + mat.AreaWidth - 1
+		distance = ctx.GameWidth - 1 - targetRight
+		spanStart = mat.TargetY
+		spanEnd = mat.TargetY + mat.AreaHeight - 1
 	}
 
 	if distance <= 0 {
@@ -111,15 +122,53 @@ func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.R
 	segStart := vmath.ToInt(segStartFixed)
 	segEnd := vmath.ToInt(segEndFixed)
 
-	// Render cells in segment
+	// Render cells across the target edge span
 	for cellOffset := segStart; cellOffset <= segEnd; cellOffset++ {
-		intensity := r.calcIntensity(mat.Progress, cellOffset, segStart, segEnd, distance)
-		r.renderBeamCell(ctx, buf, mat, dir, edgePos, cellOffset, intensity)
+		intensity := r.calcIntensity(mat.Progress, cellOffset, segStart, segEnd)
+		for spanPos := spanStart; spanPos <= spanEnd; spanPos++ {
+			r.renderBeamCellSpan(ctx, buf, mat, dir, edgePos, cellOffset, spanPos, intensity)
+		}
 	}
 }
 
+func (r *MaterializeRenderer) renderBeamCellSpan(ctx render.RenderContext, buf *render.RenderBuffer, mat *component.MaterializeComponent, dir beamDir, edgePos, cellOffset, spanPos int, intensity int64) {
+	var cellX, cellY int
+	switch dir {
+	case dirUp:
+		cellX = spanPos
+		cellY = edgePos + cellOffset
+	case dirDown:
+		cellX = spanPos
+		cellY = edgePos - cellOffset
+	case dirLeft:
+		cellX = edgePos + cellOffset
+		cellY = spanPos
+	case dirRight:
+		cellX = edgePos - cellOffset
+		cellY = spanPos
+	}
+
+	if cellX < 0 || cellX >= ctx.GameWidth || cellY < 0 || cellY >= ctx.GameHeight {
+		return
+	}
+
+	intensityFloat := vmath.ToFloat(intensity)
+	if intensityFloat > 1.0 {
+		intensityFloat = 1.0
+	}
+	if intensityFloat < 0.0 {
+		intensityFloat = 0.0
+	}
+
+	scaledColor := render.Scale(visual.RgbMaterialize, intensityFloat)
+	screenX := ctx.GameXOffset + cellX
+	screenY := ctx.GameYOffset + cellY
+
+	buf.Set(screenX, screenY, 0, visual.RgbBlack, scaledColor, render.BlendMaxBg, 1.0, terminal.AttrNone)
+}
+
 // calcIntensity returns Q32.32 intensity for a cell based on phase and position
-func (r *MaterializeRenderer) calcIntensity(progress int64, cellOffset, segStart, segEnd, distance int) int64 {
+func (r *MaterializeRenderer) calcIntensity(progress int64, cellOffset, segStart, segEnd int) int64 {
 	if segEnd <= segStart {
 		return vmath.Scale
 	}
@@ -152,65 +201,5 @@ func (r *MaterializeRenderer) calcIntensity(progress int64, cellOffset, segStart
 		// Recede: bright at target end, fading toward receding edge
 		// Invert: cells closer to target (higher cellPos) stay brighter
 		return vmath.Div(vmath.FromInt(cellPos), vmath.FromInt(segLen))
-	}
-}
-
-func (r *MaterializeRenderer) renderBeamCell(ctx render.RenderContext, buf *render.RenderBuffer, mat *component.MaterializeComponent, dir beamDir, edgePos, cellOffset int, intensity int64) {
-	// Calculate base cell position
-	var baseX, baseY int
-	switch dir {
-	case dirUp:
-		baseX = mat.TargetX
-		baseY = edgePos + cellOffset
-	case dirDown:
-		baseX = mat.TargetX
-		baseY = edgePos - cellOffset
-	case dirLeft:
-		baseX = edgePos + cellOffset
-		baseY = mat.TargetY
-	case dirRight:
-		baseX = edgePos - cellOffset
-		baseY = mat.TargetY
-	}
-
-	// Render width with orthogonal falloff
-	halfWidth := mat.Width / 2
-	for offset := -halfWidth; offset <= halfWidth; offset++ {
-		var cellX, cellY int
-		switch dir {
-		case dirUp, dirDown:
-			cellX = baseX + offset
-			cellY = baseY
-		case dirLeft, dirRight:
-			cellX = baseX
-			cellY = baseY + offset
-		}
-
-		// Bounds check
-		if cellX < 0 || cellX >= ctx.GameWidth || cellY < 0 || cellY >= ctx.GameHeight {
-			continue
-		}
-
-		// Apply width falloff for side lines
-		cellIntensity := intensity
-		if offset != 0 {
-			cellIntensity = vmath.Mul(cellIntensity, matWidthFalloff)
-		}
-
-		// Convert to float forterminal.RGB scaling (final step only)
-		intensityFloat := vmath.ToFloat(cellIntensity)
-		if intensityFloat > 1.0 {
-			intensityFloat = 1.0
-		}
-		if intensityFloat < 0.0 {
-			intensityFloat = 0.0
-		}
-
-		scaledColor := render.Scale(visual.RgbMaterialize, intensityFloat)
-
-		screenX := ctx.GameXOffset + cellX
-		screenY := ctx.GameYOffset + cellY
-
-		buf.Set(screenX, screenY, 0, visual.RgbBlack, scaledColor, render.BlendMaxBg, 1.0, terminal.AttrNone)
 	}
 }
