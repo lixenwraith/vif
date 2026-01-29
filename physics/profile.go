@@ -128,6 +128,63 @@ var ExplosionToSwarm = CollisionProfile{
 	OffsetInfluence:  0,
 }
 
+// Soft-collision profiles
+
+// SoftCollisionDrainToQuasar defines drain-to-quasar soft repulsion
+var SoftCollisionDrainToQuasar = CollisionProfile{
+	MassRatio:        vmath.MassRatioEqual,
+	ImpulseMin:       constant.SoftCollisionImpulseMin,
+	ImpulseMax:       constant.SoftCollisionImpulseMax,
+	AngleVariance:    constant.SoftCollisionAngleVar,
+	Mode:             ImpulseAdditive,
+	ImmunityDuration: constant.SoftCollisionImmunityDuration,
+	OffsetInfluence:  0,
+}
+
+// SoftCollisionSwarmToSwarm defines swarm-to-swarm soft repulsion
+var SoftCollisionSwarmToSwarm = CollisionProfile{
+	MassRatio:        vmath.MassRatioEqual,
+	ImpulseMin:       constant.SoftCollisionImpulseMin,
+	ImpulseMax:       constant.SoftCollisionImpulseMax,
+	AngleVariance:    constant.SoftCollisionAngleVar,
+	Mode:             ImpulseAdditive,
+	ImmunityDuration: constant.SoftCollisionImmunityDuration,
+	OffsetInfluence:  0,
+}
+
+// SoftCollisionSwarmToQuasar defines swarm-to-quasar soft repulsion
+var SoftCollisionSwarmToQuasar = CollisionProfile{
+	MassRatio:        vmath.MassRatioBaseToQuasar, // Quasar is heavier
+	ImpulseMin:       constant.SoftCollisionImpulseMin,
+	ImpulseMax:       constant.SoftCollisionImpulseMax,
+	AngleVariance:    constant.SoftCollisionAngleVar,
+	Mode:             ImpulseAdditive,
+	ImmunityDuration: constant.SoftCollisionImmunityDuration,
+	OffsetInfluence:  0,
+}
+
+// SoftCollisionQuasarToSwarm defines quasar-to-swarm soft repulsion
+var SoftCollisionQuasarToSwarm = CollisionProfile{
+	MassRatio:        vmath.Scale * 10, // Quasar pushes swarm harder
+	ImpulseMin:       constant.SoftCollisionImpulseMin,
+	ImpulseMax:       constant.SoftCollisionImpulseMax,
+	AngleVariance:    constant.SoftCollisionAngleVar,
+	Mode:             ImpulseAdditive,
+	ImmunityDuration: constant.SoftCollisionImmunityDuration,
+	OffsetInfluence:  0,
+}
+
+// SoftCollisionQuasarToDrain defines quasar-to-drain soft repulsion
+var SoftCollisionQuasarToDrain = CollisionProfile{
+	MassRatio:        vmath.Scale * 10, // Quasar pushes drain harder
+	ImpulseMin:       constant.SoftCollisionImpulseMin,
+	ImpulseMax:       constant.SoftCollisionImpulseMax,
+	AngleVariance:    constant.SoftCollisionAngleVar,
+	Mode:             ImpulseAdditive,
+	ImmunityDuration: constant.SoftCollisionImmunityDuration,
+	OffsetInfluence:  0,
+}
+
 // Homing profiles
 
 // DrainHoming defines drain entity homing behavior

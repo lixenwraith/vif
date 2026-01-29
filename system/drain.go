@@ -52,6 +52,9 @@ type DrainSystem struct {
 	// Per-tick cache to avoid repeated queries
 	drainCache []drainCacheEntry
 
+	// Per-tick cache for soft collision detection
+	quasarCache []quasarCacheEntry
+
 	// Cached metric pointers
 	statCount   *atomic.Int64
 	statPending *atomic.Int64
@@ -69,6 +72,7 @@ func NewDrainSystem(world *engine.World) engine.System {
 
 	s.pendingSpawns = make([]pendingDrainSpawn, constant.DrainMaxCount)
 	s.drainCache = make([]drainCacheEntry, 0, constant.DrainMaxCount)
+	s.quasarCache = make([]quasarCacheEntry, 0, 1) // Typically 0-1 quasar
 
 	s.statCount = s.world.Resources.Status.Ints.Get("drain.count")
 	s.statPending = s.world.Resources.Status.Ints.Get("drain.pending")
@@ -163,20 +167,16 @@ func (s *DrainSystem) Update() {
 	// 1. Cache all drain data for this tick
 	s.cacheDrainData()
 
-	// 2. Process HP checks, enrage state, termination
+	// 2. Cache quasar data for soft collision
+	s.cacheQuasarData()
+
+	// 3. Process HP checks, enrage state, termination
 	s.processDrainStates()
 
-	// 3. Detect and trigger swarm fusions (uses cached enraged state)
+	// 4. Detect and trigger swarm fusions (uses cached enraged state)
 	s.detectSwarmFusions()
 
 	// Skip spawn logic when paused
-	if s.paused {
-		s.statCount.Store(0)
-		s.statPending.Store(0)
-		return
-	}
-
-	// Skip all materialize spawn logic when paused
 	if s.paused {
 		s.statCount.Store(0)
 		s.statPending.Store(0)
@@ -262,6 +262,24 @@ func (s *DrainSystem) cacheDrainData() {
 		}
 
 		s.drainCache = append(s.drainCache, entry)
+	}
+}
+
+// cacheQuasarData populates quasarCache for soft collision detection
+func (s *DrainSystem) cacheQuasarData() {
+	s.quasarCache = s.quasarCache[:0]
+
+	quasarEntities := s.world.Components.Quasar.GetAllEntities()
+	for _, entity := range quasarEntities {
+		pos, ok := s.world.Positions.GetPosition(entity)
+		if !ok {
+			continue
+		}
+		s.quasarCache = append(s.quasarCache, quasarCacheEntry{
+			entity: entity,
+			x:      pos.X,
+			y:      pos.Y,
+		})
 	}
 }
 
@@ -858,8 +876,7 @@ func (s *DrainSystem) updateDrainMovement() {
 
 	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
 	// Cap delta time to prevent tunneling on lag spikes
-	dtCap := vmath.FromFloat(0.1)
-	if dtFixed > dtCap {
+	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
 		dtFixed = dtCap
 	}
 
@@ -913,6 +930,11 @@ func (s *DrainSystem) updateDrainMovement() {
 			newY = vmath.ToInt(kineticComp.PreciseY)
 		}
 
+		// Soft collision with quasar (only when not immune)
+		if combatComp.RemainingKineticImmunity == 0 {
+			s.applySoftCollisionWithQuasar(drainEntity, &kineticComp, &combatComp, newX, newY)
+		}
+
 		// Swept collision detection via Traverse
 		vmath.Traverse(oldPreciseX, oldPreciseY, kineticComp.PreciseX, kineticComp.PreciseY, func(x, y int) bool {
 			if x < 0 || x >= gameWidth || y < 0 || y >= gameHeight {
@@ -947,6 +969,42 @@ func (s *DrainSystem) updateDrainMovement() {
 
 		s.world.Components.Drain.SetComponent(drainEntity, drainComp)
 		s.world.Components.Kinetic.SetComponent(drainEntity, kineticComp)
+		s.world.Components.Combat.SetComponent(drainEntity, combatComp)
+	}
+}
+
+// applySoftCollisionWithQuasar checks drain overlap with quasar and applies repulsion
+func (s *DrainSystem) applySoftCollisionWithQuasar(
+	drainEntity core.Entity,
+	kineticComp *component.KineticComponent,
+	combatComp *component.CombatComponent,
+	drainX, drainY int,
+) {
+	for _, qc := range s.quasarCache {
+		// Check if drain is inside quasar collision ellipse
+		if !vmath.EllipseContainsPoint(drainX, drainY, qc.x, qc.y,
+			constant.QuasarCollisionInvRxSq, constant.QuasarCollisionInvRySq) {
+			continue
+		}
+
+		// Calculate repulsion direction: quasar center → drain (push outward)
+		radialX := vmath.FromInt(drainX - qc.x)
+		radialY := vmath.FromInt(drainY - qc.y)
+
+		// Zero vector fallback (drain exactly at quasar center)
+		if radialX == 0 && radialY == 0 {
+			radialX = vmath.Scale
+		}
+
+		physics.ApplyCollision(
+			&kineticComp.Kinetic,
+			radialX, radialY,
+			&physics.SoftCollisionDrainToQuasar,
+			s.rng,
+		)
+
+		combatComp.RemainingKineticImmunity = constant.SoftCollisionImmunityDuration
+		return // One collision per tick
 	}
 }
 

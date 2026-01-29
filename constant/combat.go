@@ -51,3 +51,51 @@ const (
 	// CollisionKineticImpulseMaxFloat is maximum knockback velocity (cells/sec)
 	CollisionKineticImpulseMaxFloat = 40.0
 )
+
+// Soft collision parameters (inter-enemy repulsion)
+const (
+	// SoftCollisionImmunityDuration is immunity window after soft repulsion
+	SoftCollisionImmunityDuration = 100 * time.Millisecond
+
+	// SoftCollisionImpulseMinFloat is minimum repulsion velocity (cells/sec)
+	SoftCollisionImpulseMinFloat = 5.0
+
+	// SoftCollisionImpulseMaxFloat is maximum repulsion velocity (cells/sec)
+	SoftCollisionImpulseMaxFloat = 16.0
+
+	// SoftCollisionAngleVarFloat is random angle spread (radians, ~8°)
+	SoftCollisionAngleVarFloat = 0.15
+)
+
+// Swarm flocking separation parameters
+const (
+	// SwarmSeparationRadiusXFloat is horizontal separation zone (cells)
+	SwarmSeparationRadiusXFloat = 8.0
+
+	// SwarmSeparationRadiusYFloat is vertical separation zone (cells, aspect-corrected)
+	SwarmSeparationRadiusYFloat = 4.0
+
+	// SwarmSeparationStrengthFloat is separation acceleration (cells/sec²)
+	SwarmSeparationStrengthFloat = 3.0
+
+	// SwarmQuasarSeparationWeight is weight multiplier for quasar in separation calc
+	SwarmQuasarSeparationWeight = 0.3
+)
+
+// Entity collision radii (ellipse semi-axes from center)
+const (
+	// QuasarCollisionRadiusXFloat is quasar horizontal collision radius (5/2 cells)
+	QuasarCollisionRadiusXFloat = 2.5
+
+	// QuasarCollisionRadiusYFloat is quasar vertical collision radius (3/2 cells)
+	QuasarCollisionRadiusYFloat = 1.5
+
+	// SwarmCollisionRadiusXFloat is swarm horizontal collision radius (4/2 cells)
+	SwarmCollisionRadiusXFloat = 2.0
+
+	// SwarmCollisionRadiusYFloat is swarm vertical collision radius (2/2 cells)
+	SwarmCollisionRadiusYFloat = 1.0
+
+	// DrainCollisionRadiusFloat is drain collision radius (point entity with small area)
+	DrainCollisionRadiusFloat = 0.5
+)

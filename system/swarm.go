@@ -13,9 +13,16 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
+// swarmCacheEntry holds cached swarm data for flocking and soft collision
+type swarmCacheEntry struct {
+	entity core.Entity
+	x, y   int // Grid position of header
+}
+
 // SwarmSystem manages the elite enemy entity lifecycle
-// Swarm is a 3x5 animated composite, spawned by materialize, that tracks cursor at 2x drain speed, charges the cursor and doesn't get deflected by shield when charging
-// Removes one heat on direct cursor collision without shield, only despawns after hitpoints reach zero or by FSM, when dies spawns 2 drains
+// Swarm is a 4x2 animated composite, spawned by fusing 2 enraged drains, that tracks cursor at 4x drain speed, charges the cursor and doesn't get deflected by shield when charging due to enrage
+// Removes one heat on direct cursor collision without shield, despawns after hitpoints reach zero, uses 5 charges, or 30 second timer runs out
+// Does not pause drain spawn, absorbs drains to increase its health (fused and absorbed drains are respawned by drain system)
 type SwarmSystem struct {
 	world *engine.World
 
@@ -24,6 +31,10 @@ type SwarmSystem struct {
 
 	// Random source for knockback impulse randomization
 	rng *vmath.FastRand
+
+	// Per-tick cache for soft collision and flocking
+	swarmCache  []swarmCacheEntry
+	quasarCache []quasarCacheEntry
 
 	// Telemetry
 	statActive *atomic.Bool
@@ -37,6 +48,9 @@ func NewSwarmSystem(world *engine.World) engine.System {
 	s := &SwarmSystem{
 		world: world,
 	}
+
+	s.swarmCache = make([]swarmCacheEntry, 0, 10)
+	s.quasarCache = make([]quasarCacheEntry, 0, 1)
 
 	s.statActive = world.Resources.Status.Bools.Get("swarm.active")
 	s.statCount = world.Resources.Status.Ints.Get("swarm.count")
@@ -106,6 +120,9 @@ func (s *SwarmSystem) Update() {
 		return
 	}
 
+	// Cache combat entities for soft collision and flocking
+	s.cacheCombatEntities()
+
 	dt := s.world.Resources.Time.DeltaTime
 	dtFixed := vmath.FromFloat(dt.Seconds())
 	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
@@ -170,6 +187,40 @@ func (s *SwarmSystem) Update() {
 	s.statActive.Store(activeCount > 0)
 }
 
+// cacheCombatEntities populates caches for soft collision and flocking
+func (s *SwarmSystem) cacheCombatEntities() {
+	s.swarmCache = s.swarmCache[:0]
+	s.quasarCache = s.quasarCache[:0]
+
+	// Cache all swarm headers
+	swarmEntities := s.world.Components.Swarm.GetAllEntities()
+	for _, entity := range swarmEntities {
+		pos, ok := s.world.Positions.GetPosition(entity)
+		if !ok {
+			continue
+		}
+		s.swarmCache = append(s.swarmCache, swarmCacheEntry{
+			entity: entity,
+			x:      pos.X,
+			y:      pos.Y,
+		})
+	}
+
+	// Cache quasar header
+	quasarEntities := s.world.Components.Quasar.GetAllEntities()
+	for _, entity := range quasarEntities {
+		pos, ok := s.world.Positions.GetPosition(entity)
+		if !ok {
+			continue
+		}
+		s.quasarCache = append(s.quasarCache, quasarCacheEntry{
+			entity: entity,
+			x:      pos.X,
+			y:      pos.Y,
+		})
+	}
+}
+
 func (s *SwarmSystem) spawnSwarm(targetX, targetY int) {
 	// 1. Clamp position to screen bounds
 	headerX, headerY := s.clampSwarmSpawnPosition(targetX, targetY)
@@ -229,7 +280,7 @@ func (s *SwarmSystem) clearSwarmSpawnArea(headerX, headerY int) {
 					continue
 				}
 				if prot, ok := s.world.Components.Protection.GetComponent(e); ok {
-					if prot.Mask == component.ProtectAll {
+					if prot.Mask&component.ProtectFromDrain != 0 {
 						continue
 					}
 				}
@@ -300,7 +351,7 @@ func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
 			s.world.Positions.SetPosition(entity, component.PositionComponent{X: memberX, Y: memberY})
 
 			s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
-				Mask: component.ProtectFromDecay | component.ProtectFromDelete,
+				Mask: component.ProtectFromDecay | component.ProtectFromDelete | component.ProtectFromDrain,
 			})
 
 			s.world.Components.Member.SetComponent(entity, component.MemberComponent{
@@ -328,6 +379,145 @@ func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
 	})
 
 	return headerEntity
+}
+
+// calculateFlockingSeparation returns separation acceleration from nearby swarms and quasar, only used during chase state
+func (s *SwarmSystem) calculateFlockingSeparation(headerEntity core.Entity, headerX, headerY int) (sepX, sepY int64) {
+	// Separation from other swarms
+	for _, sc := range s.swarmCache {
+		if sc.entity == headerEntity {
+			continue
+		}
+
+		// Check if within separation ellipse
+		if !vmath.EllipseContainsPoint(sc.x, sc.y, headerX, headerY,
+			constant.SwarmSeparationInvRxSq, constant.SwarmSeparationInvRySq) {
+			continue
+		}
+
+		// Calculate separation direction: other swarm → this swarm (push away)
+		dx := vmath.FromInt(headerX - sc.x)
+		dy := vmath.FromInt(headerY - sc.y)
+
+		if dx == 0 && dy == 0 {
+			dx = vmath.Scale // Fallback direction
+		}
+
+		// Weight inversely proportional to distance
+		dist := vmath.Magnitude(dx, dy)
+		if dist == 0 {
+			dist = 1
+		}
+		dirX, dirY := vmath.Normalize2D(dx, dy)
+
+		// Closer = stronger separation
+		maxDist := vmath.FromFloat(constant.SwarmSeparationRadiusXFloat)
+		weight := vmath.Div(maxDist-dist, maxDist)
+		if weight < 0 {
+			weight = 0
+		}
+
+		sepX += vmath.Mul(vmath.Mul(dirX, constant.SwarmSeparationStrength), weight)
+		sepY += vmath.Mul(vmath.Mul(dirY, constant.SwarmSeparationStrength), weight)
+	}
+
+	// Separation from quasar (weighted lower)
+	for _, qc := range s.quasarCache {
+		if !vmath.EllipseContainsPoint(qc.x, qc.y, headerX, headerY,
+			constant.SwarmSeparationInvRxSq, constant.SwarmSeparationInvRySq) {
+			continue
+		}
+
+		dx := vmath.FromInt(headerX - qc.x)
+		dy := vmath.FromInt(headerY - qc.y)
+
+		if dx == 0 && dy == 0 {
+			dx = vmath.Scale
+		}
+
+		dist := vmath.Magnitude(dx, dy)
+		if dist == 0 {
+			dist = 1
+		}
+		dirX, dirY := vmath.Normalize2D(dx, dy)
+
+		maxDist := vmath.FromFloat(constant.SwarmSeparationRadiusXFloat)
+		weight := vmath.Div(maxDist-dist, maxDist)
+		if weight < 0 {
+			weight = 0
+		}
+
+		// Apply quasar weight modifier
+		quasarWeight := vmath.FromFloat(constant.SwarmQuasarSeparationWeight)
+		weight = vmath.Mul(weight, quasarWeight)
+
+		sepX += vmath.Mul(vmath.Mul(dirX, constant.SwarmSeparationStrength), weight)
+		sepY += vmath.Mul(vmath.Mul(dirY, constant.SwarmSeparationStrength), weight)
+	}
+
+	return sepX, sepY
+}
+
+// applySoftCollisions checks overlap with other combat entities and applies repulsion
+func (s *SwarmSystem) applySoftCollisions(
+	headerEntity core.Entity,
+	kineticComp *component.KineticComponent,
+	combatComp *component.CombatComponent,
+	headerX, headerY int,
+) {
+	if combatComp.RemainingKineticImmunity > 0 {
+		return
+	}
+
+	// Check collision with other swarms
+	for _, sc := range s.swarmCache {
+		if sc.entity == headerEntity {
+			continue
+		}
+
+		if !vmath.EllipseContainsPoint(headerX, headerY, sc.x, sc.y,
+			constant.SwarmCollisionInvRxSq, constant.SwarmCollisionInvRySq) {
+			continue
+		}
+
+		radialX := vmath.FromInt(headerX - sc.x)
+		radialY := vmath.FromInt(headerY - sc.y)
+		if radialX == 0 && radialY == 0 {
+			radialX = vmath.Scale
+		}
+
+		physics.ApplyCollision(
+			&kineticComp.Kinetic,
+			radialX, radialY,
+			&physics.SoftCollisionSwarmToSwarm,
+			s.rng,
+		)
+		combatComp.RemainingKineticImmunity = constant.SoftCollisionImmunityDuration
+		return
+	}
+
+	// Check collision with quasar
+	for _, qc := range s.quasarCache {
+		if !vmath.EllipseContainsPoint(headerX, headerY, qc.x, qc.y,
+			constant.QuasarCollisionInvRxSq, constant.QuasarCollisionInvRySq) {
+			continue
+		}
+
+		radialX := vmath.FromInt(headerX - qc.x)
+		radialY := vmath.FromInt(headerY - qc.y)
+		if radialX == 0 && radialY == 0 {
+			radialX = vmath.Scale
+		}
+
+		physics.ApplyCollision(
+			&kineticComp.Kinetic,
+			radialX, radialY,
+			&physics.SoftCollisionSwarmToQuasar,
+			s.rng,
+		)
+		combatComp.RemainingKineticImmunity = constant.SoftCollisionImmunityDuration
+		return
+	}
 }
 
 // updatePatternCycle advances pattern animation
@@ -529,6 +719,11 @@ func (s *SwarmSystem) applyHomingMovement(headerEntity core.Entity, dtFixed int6
 		return
 	}
 
+	headerPos, ok := s.world.Positions.GetPosition(headerEntity)
+	if !ok {
+		return
+	}
+
 	kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity)
 	if !ok {
 		return
@@ -543,6 +738,13 @@ func (s *SwarmSystem) applyHomingMovement(headerEntity core.Entity, dtFixed int6
 		&physics.SwarmHoming,
 		dtFixed,
 	)
+
+	// Apply flocking separation acceleration
+	sepX, sepY := s.calculateFlockingSeparation(headerEntity, headerPos.X, headerPos.Y)
+	if sepX != 0 || sepY != 0 {
+		kineticComp.VelX += vmath.Mul(sepX, dtFixed)
+		kineticComp.VelY += vmath.Mul(sepY, dtFixed)
+	}
 
 	s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
 }
@@ -561,6 +763,11 @@ func (s *SwarmSystem) integrateAndSync(headerEntity core.Entity, dtFixed int64) 
 		return
 	}
 
+	combatComp, ok := s.world.Components.Combat.GetComponent(headerEntity)
+	if !ok {
+		return
+	}
+
 	// Integrate position
 	newX, newY := physics.Integrate(&kineticComp.Kinetic, dtFixed)
 
@@ -574,7 +781,11 @@ func (s *SwarmSystem) integrateAndSync(headerEntity core.Entity, dtFixed int64) 
 	physics.ReflectBoundsY(&kineticComp.Kinetic, minHeaderY, maxHeaderY)
 	newX, newY = physics.GridPos(&kineticComp.Kinetic)
 
+	// Soft collision with other combat entities
+	s.applySoftCollisions(headerEntity, &kineticComp, &combatComp, newX, newY)
+
 	s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
+	s.world.Components.Combat.SetComponent(headerEntity, combatComp)
 
 	// Update positions if changed
 	if newX != headerPos.X || newY != headerPos.Y {

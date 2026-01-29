@@ -45,6 +45,36 @@ var (
 	SwarmDeflectAngleVar = vmath.FromFloat(SwarmDeflectAngleVarFloat)
 )
 
+// Soft collision impulse (inter-enemy repulsion)
+var (
+	SoftCollisionImpulseMin = vmath.FromFloat(SoftCollisionImpulseMinFloat)
+	SoftCollisionImpulseMax = vmath.FromFloat(SoftCollisionImpulseMaxFloat)
+	SoftCollisionAngleVar   = vmath.FromFloat(SoftCollisionAngleVarFloat)
+)
+
+// Swarm flocking separation
+var (
+	SwarmSeparationRadiusX  = vmath.FromFloat(SwarmSeparationRadiusXFloat)
+	SwarmSeparationRadiusY  = vmath.FromFloat(SwarmSeparationRadiusYFloat)
+	SwarmSeparationStrength = vmath.FromFloat(SwarmSeparationStrengthFloat)
+)
+
+// Entity collision radii (ellipse semi-axes for overlap detection)
+var (
+	QuasarCollisionRadiusX = vmath.FromFloat(QuasarCollisionRadiusXFloat)
+	QuasarCollisionRadiusY = vmath.FromFloat(QuasarCollisionRadiusYFloat)
+	SwarmCollisionRadiusX  = vmath.FromFloat(SwarmCollisionRadiusXFloat)
+	SwarmCollisionRadiusY  = vmath.FromFloat(SwarmCollisionRadiusYFloat)
+	DrainCollisionRadius   = vmath.FromFloat(DrainCollisionRadiusFloat)
+)
+
+// Pre-computed inverse squared radii for ellipse overlap checks
+var (
+	QuasarCollisionInvRxSq, QuasarCollisionInvRySq = vmath.EllipseInvRadiiSq(QuasarCollisionRadiusX, QuasarCollisionRadiusY)
+	SwarmCollisionInvRxSq, SwarmCollisionInvRySq   = vmath.EllipseInvRadiiSq(SwarmCollisionRadiusX, SwarmCollisionRadiusY)
+	SwarmSeparationInvRxSq, SwarmSeparationInvRySq = vmath.EllipseInvRadiiSq(SwarmSeparationRadiusX, SwarmSeparationRadiusY)
+)
+
 // Dust physics
 var (
 	DustAttractionBase = vmath.FromFloat(DustAttractionBaseFloat)
