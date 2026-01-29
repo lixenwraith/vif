@@ -1,8 +1,8 @@
 package component
 
 import (
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // CleanerComponent tracks cleaner entity movement and trail
@@ -13,7 +13,7 @@ type CleanerComponent struct {
 	TargetY int64
 
 	// Ring buffer trail (zero-allocation updates)
-	TrailRing [constant.CleanerTrailLength]core.Point
+	TrailRing [parameter.CleanerTrailLength]core.Point
 	TrailHead int // Most recent point index
 	TrailLen  int // Valid point count
 

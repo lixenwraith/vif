@@ -4,10 +4,10 @@ import (
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/physics"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
@@ -62,7 +62,7 @@ func (s *CleanerSystem) Name() string {
 
 // Priority returns the system's priority
 func (s *CleanerSystem) Priority() int {
-	return constant.PriorityCleaner
+	return parameter.PriorityCleaner
 }
 
 // EventTypes returns the event types CleanerSystem handles
@@ -213,9 +213,9 @@ func (s *CleanerSystem) Update() {
 
 		if newGridX != oldPos.X || newGridY != oldPos.Y {
 			// Update trail: add new grid position to ring buffer
-			cleanerComp.TrailHead = (cleanerComp.TrailHead + 1) % constant.CleanerTrailLength
+			cleanerComp.TrailHead = (cleanerComp.TrailHead + 1) % parameter.CleanerTrailLength
 			cleanerComp.TrailRing[cleanerComp.TrailHead] = core.Point{X: newGridX, Y: newGridY}
-			if cleanerComp.TrailLen < constant.CleanerTrailLength {
+			if cleanerComp.TrailLen < parameter.CleanerTrailLength {
 				cleanerComp.TrailLen++
 			}
 
@@ -275,8 +275,8 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 	}
 
 	gameWidthFixed := vmath.FromInt(config.GameWidth)
-	trailLenFixed := constant.CleanerTrailLenFixed
-	baseSpeed := constant.CleanerBaseHorizontalSpeed
+	trailLenFixed := parameter.CleanerTrailLenFixed
+	baseSpeed := parameter.CleanerBaseHorizontalSpeed
 
 	// Spawn one cleaner per row with Red entities, alternating L→R and R→L direction
 	for _, row := range rows {
@@ -299,7 +299,7 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 		startGridY := row
 
 		// Initialize trail ring buffer with starting position
-		var trailRing [constant.CleanerTrailLength]core.Point
+		var trailRing [parameter.CleanerTrailLength]core.Point
 		trailRing[0] = core.Point{X: startGridX, Y: startGridY}
 
 		cleanerComp := component.CleanerComponent{
@@ -308,7 +308,7 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 			TrailRing:      trailRing,
 			TrailHead:      0,
 			TrailLen:       1,
-			Char:           constant.CleanerChar,
+			Char:           parameter.CleanerChar,
 			NegativeEnergy: negativeEnergy,
 		}
 		kinetic := core.Kinetic{
@@ -470,10 +470,10 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 
 	gameWidthFixed := vmath.FromInt(config.GameWidth)
 	gameHeightFixed := vmath.FromInt(config.GameHeight)
-	trailLenFixed := constant.CleanerTrailLenFixed
+	trailLenFixed := parameter.CleanerTrailLenFixed
 
-	horizontalSpeed := constant.CleanerBaseHorizontalSpeed
-	verticalSpeed := constant.CleanerBaseVerticalSpeed
+	horizontalSpeed := parameter.CleanerBaseHorizontalSpeed
+	verticalSpeed := parameter.CleanerBaseVerticalSpeed
 
 	// Shift for cell center precise coordinate adjustment
 	oxFixed := vmath.FromInt(originX) + vmath.Scale>>1
@@ -498,7 +498,7 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 		startGridY := vmath.ToInt(dir.startY)
 
 		// Initialize trail ring buffer with starting position
-		var trailRing [constant.CleanerTrailLength]core.Point
+		var trailRing [parameter.CleanerTrailLength]core.Point
 		trailRing[0] = core.Point{X: startGridX, Y: startGridY}
 
 		cleanerComp := component.CleanerComponent{
@@ -507,7 +507,7 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 			TrailRing:      trailRing,
 			TrailHead:      0,
 			TrailLen:       1,
-			Char:           constant.CleanerChar,
+			Char:           parameter.CleanerChar,
 			NegativeEnergy: negativeEnergy,
 		}
 		kinetic := core.Kinetic{

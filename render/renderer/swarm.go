@@ -4,8 +4,9 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
@@ -35,7 +36,7 @@ func (r *SwarmRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		return
 	}
 
-	buf.SetWriteMask(constant.MaskComposite)
+	buf.SetWriteMask(visual.MaskComposite)
 
 	for _, headerEntity := range headerEntities {
 		swarmComp, ok := r.gameCtx.World.Components.Swarm.GetComponent(headerEntity)
@@ -77,7 +78,7 @@ func (r *SwarmRenderer) renderMembers(
 	color render.RGB,
 ) {
 	patternIdx := swarmComp.PatternIndex
-	if patternIdx < 0 || patternIdx >= constant.SwarmPatternCount {
+	if patternIdx < 0 || patternIdx >= parameter.SwarmPatternCount {
 		patternIdx = 0
 	}
 
@@ -100,10 +101,10 @@ func (r *SwarmRenderer) renderMembers(
 		}
 
 		// Convert offset to pattern array indices
-		row := member.OffsetY + constant.SwarmHeaderOffsetY
-		col := member.OffsetX + constant.SwarmHeaderOffsetX
+		row := member.OffsetY + parameter.SwarmHeaderOffsetY
+		col := member.OffsetX + parameter.SwarmHeaderOffsetX
 
-		if row < 0 || row >= constant.SwarmHeight || col < 0 || col >= constant.SwarmWidth {
+		if row < 0 || row >= parameter.SwarmHeight || col < 0 || col >= parameter.SwarmWidth {
 			continue
 		}
 
@@ -114,7 +115,7 @@ func (r *SwarmRenderer) renderMembers(
 
 // calculateFlashColor returns yellow with pulse effect
 func (r *SwarmRenderer) calculateFlashColor(remaining time.Duration) render.RGB {
-	progress := float64(remaining) / float64(constant.CombatHitFlashDuration)
+	progress := float64(remaining) / float64(parameter.CombatHitFlashDuration)
 
 	var intensity float64
 	if progress > 0.67 {

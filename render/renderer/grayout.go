@@ -1,8 +1,8 @@
 package renderer
 
 import (
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
 )
 
@@ -39,5 +39,5 @@ func (r *GrayoutRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 		return
 	}
 
-	buf.MutateGrayscale(intensity, constant.GrayoutMask, constant.MaskPing|constant.MaskField|constant.MaskTransient|constant.MaskComposite|constant.MaskUI)
+	buf.MutateGrayscale(intensity, visual.GrayoutMask, visual.MaskPing|visual.MaskField|visual.MaskTransient|visual.MaskComposite|visual.MaskUI)
 }

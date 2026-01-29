@@ -1,7 +1,7 @@
 package render
 
 import (
-	"github.com/lixenwraith/vi-fighter/constant"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
@@ -24,7 +24,7 @@ func NewRenderBuffer(colorMode terminal.ColorMode, width, height int) *RenderBuf
 		cells:       make([]terminal.Cell, size),
 		touched:     make([]bool, size),
 		masks:       make([]uint8, size),
-		currentMask: constant.MaskNone,
+		currentMask: visual.MaskNone,
 		width:       width,
 		height:      height,
 	}
@@ -56,7 +56,7 @@ func (b *RenderBuffer) Clear() {
 	clear(b.cells)
 	clear(b.touched)
 	clear(b.masks)
-	b.currentMask = constant.MaskNone
+	b.currentMask = visual.MaskNone
 }
 
 // SetWriteMask sets the mask for subsequent draw operations
@@ -247,10 +247,10 @@ func (b *RenderBuffer) finalize() {
 	for i := range b.cells {
 		if !b.touched[i] {
 			b.cells[i].Bg = RgbBackground
-		} else if b.colorMode == terminal.ColorModeTrueColor && constant.OcclusionDimEnabled && b.cells[i].Rune != 0 {
+		} else if b.colorMode == terminal.ColorModeTrueColor && visual.OcclusionDimEnabled && b.cells[i].Rune != 0 {
 			// Dim background when foreground character present
-			if b.masks[i]&(constant.OcclusionDimMask) != 0 {
-				b.cells[i].Bg = Scale(b.cells[i].Bg, constant.OcclusionDimFactor)
+			if b.masks[i]&(visual.OcclusionDimMask) != 0 {
+				b.cells[i].Bg = Scale(b.cells[i].Bg, visual.OcclusionDimFactor)
 			}
 		}
 	}

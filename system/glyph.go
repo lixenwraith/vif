@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/content"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/status"
 )
 
@@ -106,7 +106,7 @@ func (s *GlyphSystem) Name() string {
 
 // Priority returns the system's priority
 func (s *GlyphSystem) Priority() int {
-	return constant.PriorityGlyph
+	return parameter.PriorityGlyph
 }
 
 // EventTypes returns the event types SpawnSystem handles
@@ -198,18 +198,18 @@ func (s *GlyphSystem) calculateDensity(entityCount, screenCapacity int) float64 
 // updateRateMultiplier adjusts spawn rate based on screen density
 // <30% filled: 2x faster, 30-70%: normal, >70%: 0.5x slower
 func (s *GlyphSystem) updateRateMultiplier(density float64) {
-	if density < constant.SpawnDensityLowThreshold {
-		s.rateMultiplier = constant.SpawnRateFast
-	} else if density > constant.SpawnDensityHighThreshold {
-		s.rateMultiplier = constant.SpawnRateSlow
+	if density < parameter.SpawnDensityLowThreshold {
+		s.rateMultiplier = parameter.SpawnRateFast
+	} else if density > parameter.SpawnDensityHighThreshold {
+		s.rateMultiplier = parameter.SpawnRateSlow
 	} else {
-		s.rateMultiplier = constant.SpawnRateNormal
+		s.rateMultiplier = parameter.SpawnRateNormal
 	}
 }
 
 // calculateNextSpawn calculates and sets the next spawn time
 func (s *GlyphSystem) calculateNextSpawn() time.Duration {
-	baseDelay := time.Duration(constant.SpawnIntervalMs) * time.Millisecond
+	baseDelay := time.Duration(parameter.SpawnIntervalMs) * time.Millisecond
 	adjustedDelay := time.Duration(float64(baseDelay) / s.rateMultiplier)
 
 	return adjustedDelay
@@ -334,7 +334,7 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 	}
 
 	// Try up to MaxPlacementTries times to find a valid position
-	for attempt := 0; attempt < constant.MaxPlacementTries; attempt++ {
+	for attempt := 0; attempt < parameter.MaxPlacementTries; attempt++ {
 		// Random row selection
 		// TODO: convert to fast rand
 		row := rand.Intn(config.GameHeight)
@@ -370,8 +370,8 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 		}
 		for i := 0; i < lineLength; i++ {
 			col := startCol + i
-			if math.Abs(float64(col-cursorPos.X)) <= constant.CursorExclusionX &&
-				math.Abs(float64(row-cursorPos.Y)) <= constant.CursorExclusionY {
+			if math.Abs(float64(col-cursorPos.X)) <= parameter.CursorExclusionX &&
+				math.Abs(float64(row-cursorPos.Y)) <= parameter.CursorExclusionY {
 				hasOverlap = true
 				break
 			}

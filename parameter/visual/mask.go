@@ -1,4 +1,4 @@
-package constant
+package visual
 
 import (
 	"time"

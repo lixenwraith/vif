@@ -1,4 +1,4 @@
-package constant
+package parameter
 
 import (
 	"time"
@@ -98,4 +98,15 @@ const (
 
 	// DrainCollisionRadiusFloat is drain collision radius (point entity with small area)
 	DrainCollisionRadiusFloat = 0.5
+)
+
+// Vampire Drain
+const (
+	// VampireDrainEnergyValue is the amount of energy absorbed energy on hit
+	VampireDrainEnergyValue = 100
+)
+
+// Knockback
+const (
+	CombatKnockbackImmunityInterval = 250 * time.Millisecond
 )

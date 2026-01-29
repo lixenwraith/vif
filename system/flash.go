@@ -2,9 +2,9 @@ package system
 
 import (
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // FlashSystem manages the lifecycle of visual flash effects
@@ -33,7 +33,7 @@ func (s *FlashSystem) Name() string {
 }
 
 func (s *FlashSystem) Priority() int {
-	return constant.PriorityFlash
+	return parameter.PriorityFlash
 }
 
 func (s *FlashSystem) EventTypes() []event.EventType {
@@ -97,8 +97,8 @@ func (s *FlashSystem) spawnDestructionFlash(x, y int, char rune) {
 		X:         x,
 		Y:         y,
 		Char:      char,
-		Remaining: constant.DestructionFlashDuration,
-		Duration:  constant.DestructionFlashDuration,
+		Remaining: parameter.DestructionFlashDuration,
+		Duration:  parameter.DestructionFlashDuration,
 	}
 
 	entity := s.world.CreateEntity()

@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // GoldSystem manages the gold sequence mechanic autonomously
@@ -66,7 +66,7 @@ func (s *GoldSystem) Name() string {
 
 // Priority returns the system's priority
 func (s *GoldSystem) Priority() int {
-	return constant.PriorityGold
+	return parameter.PriorityGold
 }
 
 // EventTypes returns the event types GoldSystem handles
@@ -227,7 +227,7 @@ func (s *GoldSystem) handleJumpRequest() {
 
 	// 3. Pay Energy Cost (spend, non-convergent)
 	s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
-		Delta:      constant.GoldJumpCost,
+		Delta:      parameter.GoldJumpCost,
 		Percentage: false,
 		Type:       event.EnergyDeltaSpend,
 	})
@@ -248,13 +248,13 @@ func (s *GoldSystem) spawnGold() bool {
 	now := s.world.Resources.Time.GameTime
 
 	// Generate random 10-character sequence
-	sequence := make([]rune, constant.GoldSequenceLength)
-	for i := 0; i < constant.GoldSequenceLength; i++ {
-		sequence[i] = constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
+	sequence := make([]rune, parameter.GoldSequenceLength)
+	for i := 0; i < parameter.GoldSequenceLength; i++ {
+		sequence[i] = parameter.AlphanumericRunes[rand.Intn(len(parameter.AlphanumericRunes))]
 	}
 
 	// Find empty space to spawn gold
-	x, y := s.findValidPosition(constant.GoldSequenceLength)
+	x, y := s.findValidPosition(parameter.GoldSequenceLength)
 	if x < 0 || y < 0 {
 		return false
 	}
@@ -268,12 +268,12 @@ func (s *GoldSystem) spawnGold() bool {
 		pos    component.PositionComponent
 		offset int
 	}
-	entities := make([]entityData, 0, constant.GoldSequenceLength)
+	entities := make([]entityData, 0, parameter.GoldSequenceLength)
 	// Create member entities
-	members := make([]component.MemberEntry, 0, constant.GoldSequenceLength)
+	members := make([]component.MemberEntry, 0, parameter.GoldSequenceLength)
 
 	// Set position component to gold entities
-	for i := 0; i < constant.GoldSequenceLength; i++ {
+	for i := 0; i < parameter.GoldSequenceLength; i++ {
 		entity := s.world.CreateEntity()
 		entities = append(entities, entityData{
 			entity: entity,
@@ -340,21 +340,21 @@ func (s *GoldSystem) spawnGold() bool {
 	s.active = true
 	s.headerEntity = headerEntity
 	s.startTime = now
-	s.timeoutTime = now.Add(constant.GoldDuration)
+	s.timeoutTime = now.Add(parameter.GoldDuration)
 
 	// Emit spawn event
 	s.world.PushEvent(event.EventGoldSpawned, &event.GoldSpawnedPayload{
 		HeaderEntity: headerEntity,
-		Length:       constant.GoldSequenceLength,
-		Duration:     constant.GoldDuration,
+		Length:       parameter.GoldSequenceLength,
+		Duration:     parameter.GoldDuration,
 	})
 	// Splash timer spawn event, no need for splash cancel event, automatically cancelled when anchor is destroyed
 	s.world.PushEvent(event.EventSplashTimerRequest, &event.SplashTimerRequestPayload{
 		AnchorEntity: headerEntity,
 		Color:        component.SplashColorWhite,
-		MarginRight:  constant.GoldSequenceLength,
+		MarginRight:  parameter.GoldSequenceLength,
 		MarginBottom: 1, // One line height
-		Duration:     constant.GoldDuration,
+		Duration:     parameter.GoldDuration,
 	})
 
 	return true
@@ -498,13 +498,13 @@ func (s *GoldSystem) findValidPosition(seqLength int) (int, int) {
 		return -1, -1
 	}
 
-	for attempt := 0; attempt < constant.GoldSpawnMaxAttempts; attempt++ {
+	for attempt := 0; attempt < parameter.GoldSpawnMaxAttempts; attempt++ {
 		x := rand.Intn(config.GameWidth)
 		y := rand.Intn(config.GameHeight)
 
 		// Check if far enough from cursor
-		if math.Abs(float64(x-cursorPos.X)) <= constant.CursorExclusionX ||
-			math.Abs(float64(y-cursorPos.Y)) <= constant.CursorExclusionY {
+		if math.Abs(float64(x-cursorPos.X)) <= parameter.CursorExclusionX ||
+			math.Abs(float64(y-cursorPos.Y)) <= parameter.CursorExclusionY {
 			continue
 		}
 

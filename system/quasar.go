@@ -5,10 +5,10 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/physics"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
@@ -71,7 +71,7 @@ func (s *QuasarSystem) Name() string {
 }
 
 func (s *QuasarSystem) Priority() int {
-	return constant.PriorityQuasar
+	return parameter.PriorityQuasar
 }
 
 func (s *QuasarSystem) EventTypes() []event.EventType {
@@ -205,11 +205,11 @@ func (s *QuasarSystem) Update() {
 
 	// Combat update
 	if quasarComp.IsShielded {
-		combatComp.RemainingDamageImmunity = constant.CombatDamageImmunityDuration
-		combatComp.RemainingKineticImmunity = constant.CombatKineticImmunityDuration
+		combatComp.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
+		combatComp.RemainingKineticImmunity = parameter.CombatKineticImmunityDuration
 		combatComp.IsEnraged = true
 	} else if quasarComp.IsCharging || quasarComp.IsZapping {
-		combatComp.RemainingKineticImmunity = constant.CombatKineticImmunityDuration
+		combatComp.RemainingKineticImmunity = parameter.CombatKineticImmunityDuration
 		combatComp.IsEnraged = true
 	} else {
 		combatComp.IsEnraged = false
@@ -271,8 +271,8 @@ func (s *QuasarSystem) clampQuasarSpawnPosition(targetX, targetY int) (int, int)
 
 	// However, we must ensure the entire 3x5 grid fits
 	// TopLeft = Anchor - AnchorOffset
-	topLeftX := targetX - constant.QuasarHeaderOffsetX
-	topLeftY := targetY - constant.QuasarHeaderOffsetY
+	topLeftX := targetX - parameter.QuasarHeaderOffsetX
+	topLeftY := targetY - parameter.QuasarHeaderOffsetY
 
 	if topLeftX < 0 {
 		topLeftX = 0
@@ -280,28 +280,28 @@ func (s *QuasarSystem) clampQuasarSpawnPosition(targetX, targetY int) (int, int)
 	if topLeftY < 0 {
 		topLeftY = 0
 	}
-	if topLeftX+constant.QuasarWidth > config.GameWidth {
-		topLeftX = config.GameWidth - constant.QuasarWidth
+	if topLeftX+parameter.QuasarWidth > config.GameWidth {
+		topLeftX = config.GameWidth - parameter.QuasarWidth
 	}
-	if topLeftY+constant.QuasarHeight > config.GameHeight {
-		topLeftY = config.GameHeight - constant.QuasarHeight
+	if topLeftY+parameter.QuasarHeight > config.GameHeight {
+		topLeftY = config.GameHeight - parameter.QuasarHeight
 	}
 
 	// Return adjusted header position
-	return topLeftX + constant.QuasarHeaderOffsetX, topLeftY + constant.QuasarHeaderOffsetY
+	return topLeftX + parameter.QuasarHeaderOffsetX, topLeftY + parameter.QuasarHeaderOffsetY
 }
 
 // clearQuasarSpawnArea destroys all entities within the quasar footprint
 func (s *QuasarSystem) clearQuasarSpawnArea(headerX, headerY int) {
 	// Calculate top-left from header position
-	topLeftX := headerX - constant.QuasarHeaderOffsetX
-	topLeftY := headerY - constant.QuasarHeaderOffsetY
+	topLeftX := headerX - parameter.QuasarHeaderOffsetX
+	topLeftY := headerY - parameter.QuasarHeaderOffsetY
 
 	cursorEntity := s.world.Resources.Cursor.Entity
 	var toDestroy []core.Entity
 
-	for row := 0; row < constant.QuasarHeight; row++ {
-		for col := 0; col < constant.QuasarWidth; col++ {
+	for row := 0; row < parameter.QuasarHeight; row++ {
+		for col := 0; col < parameter.QuasarWidth; col++ {
 			x := topLeftX + col
 			y := topLeftY + row
 
@@ -329,8 +329,8 @@ func (s *QuasarSystem) clearQuasarSpawnArea(headerX, headerY int) {
 // createQuasarComposite builds the 3x5 quasar entity structure
 func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 	// Calculate top-left from header position
-	topLeftX := headerX - constant.QuasarHeaderOffsetX
-	topLeftY := headerY - constant.QuasarHeaderOffsetY
+	topLeftX := headerX - parameter.QuasarHeaderOffsetX
+	topLeftY := headerY - parameter.QuasarHeaderOffsetY
 
 	// Create phantom head (controller entity)
 	headerEntity := s.world.CreateEntity()
@@ -350,7 +350,7 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 	s.world.Components.Combat.SetComponent(headerEntity, component.CombatComponent{
 		OwnerEntity:      headerEntity,
 		CombatEntityType: component.CombatEntityQuasar,
-		HitPoints:        constant.CombatInitialHPQuasar,
+		HitPoints:        parameter.CombatInitialHPQuasar,
 	})
 
 	// Set kinetic component
@@ -361,16 +361,16 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 	s.world.Components.Kinetic.SetComponent(headerEntity, component.KineticComponent{kinetic})
 
 	// Build member entities
-	members := make([]component.MemberEntry, 0, constant.QuasarWidth*constant.QuasarHeight)
+	members := make([]component.MemberEntry, 0, parameter.QuasarWidth*parameter.QuasarHeight)
 
-	for row := 0; row < constant.QuasarHeight; row++ {
-		for col := 0; col < constant.QuasarWidth; col++ {
+	for row := 0; row < parameter.QuasarHeight; row++ {
+		for col := 0; col < parameter.QuasarWidth; col++ {
 			memberX := topLeftX + col
 			memberY := topLeftY + row
 
 			// Calculate offset from header
-			offsetX := col - constant.QuasarHeaderOffsetX
-			offsetY := row - constant.QuasarHeaderOffsetY
+			offsetX := col - parameter.QuasarHeaderOffsetX
+			offsetY := row - parameter.QuasarHeaderOffsetY
 
 			entity := s.world.CreateEntity()
 			s.world.Positions.SetPosition(entity, component.PositionComponent{X: memberX, Y: memberY})
@@ -414,18 +414,18 @@ func (s *QuasarSystem) calculateZapRadius() int64 {
 // startCharging initiates the charge phase before zapping
 func (s *QuasarSystem) startCharging(headerEntity core.Entity, quasarComp *component.QuasarComponent) {
 	quasarComp.IsCharging = true
-	quasarComp.ChargeRemaining = constant.QuasarChargeDuration
+	quasarComp.ChargeRemaining = parameter.QuasarChargeDuration
 
 	s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
 
 	s.world.PushEvent(event.EventSplashTimerRequest, &event.SplashTimerRequestPayload{
 		AnchorEntity: headerEntity,
 		Color:        component.SplashColorCyan,
-		MarginRight:  constant.QuasarHeaderOffsetX + 1, // Accounting for anchor column
-		MarginLeft:   constant.QuasarHeaderOffsetX,
-		MarginTop:    constant.QuasarHeaderOffsetY,
-		MarginBottom: constant.QuasarHeaderOffsetY + 1, // Accounting for anchor row
-		Duration:     constant.QuasarChargeDuration,
+		MarginRight:  parameter.QuasarHeaderOffsetX + 1, // Accounting for anchor column
+		MarginLeft:   parameter.QuasarHeaderOffsetX,
+		MarginTop:    parameter.QuasarHeaderOffsetY,
+		MarginBottom: parameter.QuasarHeaderOffsetY + 1, // Accounting for anchor row
+		Duration:     parameter.QuasarChargeDuration,
 	})
 }
 
@@ -481,11 +481,11 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 	}
 
 	// Periodic speed scaling with cap (game logic, not physics)
-	speedIncreaseInterval := time.Duration(constant.QuasarSpeedIncreaseTicks) * constant.GameUpdateInterval
+	speedIncreaseInterval := time.Duration(parameter.QuasarSpeedIncreaseTicks) * parameter.GameUpdateInterval
 	if now.Sub(quasarComp.LastSpeedIncreaseAt) >= speedIncreaseInterval {
-		newMultiplier := vmath.Mul(quasarComp.SpeedMultiplier, vmath.FromFloat(1.0+constant.QuasarSpeedIncreasePercent))
-		if newMultiplier > int64(constant.QuasarSpeedMultiplierMaxFixed) {
-			newMultiplier = int64(constant.QuasarSpeedMultiplierMaxFixed)
+		newMultiplier := vmath.Mul(quasarComp.SpeedMultiplier, vmath.FromFloat(1.0+parameter.QuasarSpeedIncreasePercent))
+		if newMultiplier > int64(parameter.QuasarSpeedMultiplierMaxFixed) {
+			newMultiplier = int64(parameter.QuasarSpeedMultiplierMaxFixed)
 		}
 		quasarComp.SpeedMultiplier = newMultiplier
 		quasarComp.LastSpeedIncreaseAt = now
@@ -514,16 +514,16 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 	}
 
 	// Cap velocity before integration to prevent runaway from cumulative dust hits
-	physics.CapSpeed(&kineticComp.VelX, &kineticComp.VelY, constant.QuasarMaxSpeed)
+	physics.CapSpeed(&kineticComp.VelX, &kineticComp.VelY, parameter.QuasarMaxSpeed)
 
 	// Integrate position
 	newX, newY := physics.Integrate(&kineticComp.Kinetic, dtFixed)
 
 	// Boundary reflection with footprint constraints
-	minHeaderX := constant.QuasarHeaderOffsetX
-	maxHeaderX := config.GameWidth - (constant.QuasarWidth - constant.QuasarHeaderOffsetX)
-	minHeaderY := constant.QuasarHeaderOffsetY
-	maxHeaderY := config.GameHeight - (constant.QuasarHeight - constant.QuasarHeaderOffsetY)
+	minHeaderX := parameter.QuasarHeaderOffsetX
+	maxHeaderX := config.GameWidth - (parameter.QuasarWidth - parameter.QuasarHeaderOffsetX)
+	minHeaderY := parameter.QuasarHeaderOffsetY
+	maxHeaderY := config.GameHeight - (parameter.QuasarHeight - parameter.QuasarHeaderOffsetY)
 
 	physics.ReflectBoundsX(&kineticComp.Kinetic, minHeaderX, maxHeaderX)
 	physics.ReflectBoundsY(&kineticComp.Kinetic, minHeaderY, maxHeaderY)
@@ -558,7 +558,7 @@ func (s *QuasarSystem) applySoftCollisionWithSwarm(
 	for _, sc := range s.swarmCache {
 		// Check if quasar overlaps swarm collision ellipse
 		if !vmath.EllipseContainsPoint(headerX, headerY, sc.x, sc.y,
-			constant.SwarmCollisionInvRxSq, constant.SwarmCollisionInvRySq) {
+			parameter.SwarmCollisionInvRxSq, parameter.SwarmCollisionInvRySq) {
 			continue
 		}
 
@@ -577,7 +577,7 @@ func (s *QuasarSystem) applySoftCollisionWithSwarm(
 			s.rng,
 		)
 
-		combatComp.RemainingKineticImmunity = constant.SoftCollisionImmunityDuration
+		combatComp.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
 		return // One collision per tick
 	}
 }
@@ -625,7 +625,7 @@ func (s *QuasarSystem) startZapping(headerEntity core.Entity, quasarComp *compon
 		TargetX:   cursorPos.X,
 		TargetY:   cursorPos.Y,
 		ColorType: component.LightningCyan,
-		Duration:  constant.QuasarZapDuration,
+		Duration:  parameter.QuasarZapDuration,
 		Tracked:   true,
 	})
 
@@ -668,11 +668,11 @@ func (s *QuasarSystem) applyZapDamage() {
 	if shieldActive {
 		// Drain energy through shield
 		s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-			Value: constant.QuasarShieldDrain,
+			Value: parameter.QuasarShieldDrain,
 		})
 	} else {
 		// Direct hit - reduce 100 heat
-		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Delta: -constant.HeatMax})
+		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Delta: -parameter.HeatMax})
 	}
 }
 
@@ -698,11 +698,11 @@ func (s *QuasarSystem) processCollisionsAtNewPositions(headerEntity core.Entity,
 	var toDestroy []core.Entity
 
 	// Check each cell the quasar will occupy
-	topLeftX := headerX - constant.QuasarHeaderOffsetX
-	topLeftY := headerY - constant.QuasarHeaderOffsetY
+	topLeftX := headerX - parameter.QuasarHeaderOffsetX
+	topLeftY := headerY - parameter.QuasarHeaderOffsetY
 
-	for row := 0; row < constant.QuasarHeight; row++ {
-		for col := 0; col < constant.QuasarWidth; col++ {
+	for row := 0; row < parameter.QuasarHeight; row++ {
+		for col := 0; col < parameter.QuasarWidth; col++ {
 			x := topLeftX + col
 			y := topLeftY + row
 
@@ -823,11 +823,11 @@ func (s *QuasarSystem) handleInteractions(headerEntity core.Entity, headerComp *
 			HitEntities:  hitEntities,
 		})
 		s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-			Value: constant.QuasarShieldDrain,
+			Value: parameter.QuasarShieldDrain,
 		})
 	} else if anyOnCursor && !shieldActive {
 		// Direct cursor collision without shieldComp → reset heat
-		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Delta: -constant.HeatMax})
+		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Delta: -parameter.HeatMax})
 	}
 }
 

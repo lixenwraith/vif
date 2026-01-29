@@ -4,8 +4,8 @@ import (
 	"math"
 	"math/rand"
 
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // Waveform types
@@ -23,7 +23,7 @@ type floatBuffer []float64
 func oscillator(waveType int, freq float64, samples int) floatBuffer {
 	buf := make(floatBuffer, samples)
 	phase := 0.0
-	phaseInc := freq / float64(constant.AudioSampleRate)
+	phaseInc := freq / float64(parameter.AudioSampleRate)
 
 	for i := 0; i < samples; i++ {
 		switch waveType {
@@ -52,8 +52,8 @@ func oscillator(waveType int, freq float64, samples int) floatBuffer {
 // applyEnvelope applies attack/release envelope in place
 func applyEnvelope(buf floatBuffer, attackSec, releaseSec float64) {
 	total := len(buf)
-	attackSamples := int(attackSec * float64(constant.AudioSampleRate))
-	releaseSamples := int(releaseSec * float64(constant.AudioSampleRate))
+	attackSamples := int(attackSec * float64(parameter.AudioSampleRate))
+	releaseSamples := int(releaseSec * float64(parameter.AudioSampleRate))
 
 	releaseStart := total - releaseSamples
 	if releaseStart < attackSamples {
@@ -94,7 +94,7 @@ func concatFloatBuffers(a, b floatBuffer) floatBuffer {
 
 // durationToSamples converts duration to sample count
 func durationToSamples(d float64) int {
-	return int(d * float64(constant.AudioSampleRate))
+	return int(d * float64(parameter.AudioSampleRate))
 }
 
 // oscillatorSweep generates waveform with linear frequency glide
@@ -105,7 +105,7 @@ func oscillatorSweep(waveType int, startFreq, endFreq float64, samples int) floa
 
 	for i := 0; i < samples; i++ {
 		freq := startFreq + freqDelta*float64(i)
-		phaseInc := freq / float64(constant.AudioSampleRate)
+		phaseInc := freq / float64(parameter.AudioSampleRate)
 
 		switch waveType {
 		case waveSine:
@@ -143,7 +143,7 @@ func applyCrackle(buf floatBuffer, intensity float64) {
 // decayRate: samples for amplitude to drop to ~37% (1/e)
 func applyDecayEnvelope(buf floatBuffer, attackSec float64, decayRate float64) {
 	total := len(buf)
-	attackSamples := int(attackSec * float64(constant.AudioSampleRate))
+	attackSamples := int(attackSec * float64(parameter.AudioSampleRate))
 
 	for i := 0; i < total; i++ {
 		var vol float64
@@ -164,8 +164,8 @@ func oscillatorFM(carrierFreq, modFreq, modIndex float64, samples int) floatBuff
 	buf := make(floatBuffer, samples)
 	carrierPhase := 0.0
 	modPhase := 0.0
-	carrierInc := carrierFreq / float64(constant.AudioSampleRate)
-	modInc := modFreq / float64(constant.AudioSampleRate)
+	carrierInc := carrierFreq / float64(parameter.AudioSampleRate)
+	modInc := modFreq / float64(parameter.AudioSampleRate)
 
 	for i := 0; i < samples; i++ {
 		modValue := math.Sin(2 * math.Pi * modPhase)
@@ -188,7 +188,7 @@ func oscillatorFM(carrierFreq, modFreq, modIndex float64, samples int) floatBuff
 // modFreq: oscillation rate in Hz, depth: 0.0-1.0 modulation depth
 func applyAM(buf floatBuffer, modFreq, depth float64) {
 	phase := 0.0
-	phaseInc := modFreq / float64(constant.AudioSampleRate)
+	phaseInc := modFreq / float64(parameter.AudioSampleRate)
 
 	for i := range buf {
 		mod := 1.0 - depth*0.5*(1.0+math.Sin(2*math.Pi*phase))
@@ -204,7 +204,7 @@ func applyAM(buf floatBuffer, modFreq, depth float64) {
 // Creates sum and difference frequencies for metallic/bell tones
 func applyRingMod(buf floatBuffer, modFreq float64) {
 	phase := 0.0
-	phaseInc := modFreq / float64(constant.AudioSampleRate)
+	phaseInc := modFreq / float64(parameter.AudioSampleRate)
 
 	for i := range buf {
 		buf[i] *= math.Sin(2 * math.Pi * phase)
@@ -264,7 +264,7 @@ func filterBiquadLP(buf floatBuffer, cutoffHz, q float64) {
 	if len(buf) < 2 {
 		return
 	}
-	omega := 2.0 * math.Pi * cutoffHz / float64(constant.AudioSampleRate)
+	omega := 2.0 * math.Pi * cutoffHz / float64(parameter.AudioSampleRate)
 	sinOmega := math.Sin(omega)
 	cosOmega := math.Cos(omega)
 	alpha := sinOmega / (2.0 * q)
@@ -301,7 +301,7 @@ func filterBiquadHP(buf floatBuffer, cutoffHz, q float64) {
 	if len(buf) < 2 {
 		return
 	}
-	omega := 2.0 * math.Pi * cutoffHz / float64(constant.AudioSampleRate)
+	omega := 2.0 * math.Pi * cutoffHz / float64(parameter.AudioSampleRate)
 	sinOmega := math.Sin(omega)
 	cosOmega := math.Cos(omega)
 	alpha := sinOmega / (2.0 * q)
@@ -337,7 +337,7 @@ func filterBiquadBP(buf floatBuffer, centerHz, q float64) {
 	if len(buf) < 2 {
 		return
 	}
-	omega := 2.0 * math.Pi * centerHz / float64(constant.AudioSampleRate)
+	omega := 2.0 * math.Pi * centerHz / float64(parameter.AudioSampleRate)
 	sinOmega := math.Sin(omega)
 	cosOmega := math.Cos(omega)
 	alpha := sinOmega / (2.0 * q)
@@ -513,56 +513,56 @@ func normalizePeak(buf floatBuffer, target float64) {
 // --- Sound Generators (unity gain) ---
 
 func generateErrorSound() floatBuffer {
-	samples := durationToSamples(constant.ErrorSoundDuration.Seconds())
+	samples := durationToSamples(parameter.ErrorSoundDuration.Seconds())
 	buf := oscillator(waveSaw, 100.0, samples)
-	applyEnvelope(buf, constant.ErrorSoundAttack.Seconds(), constant.ErrorSoundRelease.Seconds())
+	applyEnvelope(buf, parameter.ErrorSoundAttack.Seconds(), parameter.ErrorSoundRelease.Seconds())
 	return buf
 }
 
 func generateBellSound() floatBuffer {
-	samples := durationToSamples(constant.BellSoundDuration.Seconds())
+	samples := durationToSamples(parameter.BellSoundDuration.Seconds())
 
 	// Fundamental A5 (880Hz)
 	fund := oscillator(waveSine, 880.0, samples)
-	applyEnvelope(fund, constant.BellSoundAttack.Seconds(), constant.BellSoundFundamentalRelease.Seconds())
+	applyEnvelope(fund, parameter.BellSoundAttack.Seconds(), parameter.BellSoundFundamentalRelease.Seconds())
 
 	// Overtone A6 (1760Hz)
 	over := oscillator(waveSine, 1760.0, samples)
-	applyEnvelope(over, constant.BellSoundAttack.Seconds(), constant.BellSoundOvertoneRelease.Seconds())
+	applyEnvelope(over, parameter.BellSoundAttack.Seconds(), parameter.BellSoundOvertoneRelease.Seconds())
 
 	// Mix 70% fundamental + 30% overtone
 	return mixFloatBuffers(fund, over, 0.3/0.7)
 }
 
 func generateWhooshSound() floatBuffer {
-	samples := durationToSamples(constant.WhooshSoundDuration.Seconds())
+	samples := durationToSamples(parameter.WhooshSoundDuration.Seconds())
 	buf := oscillator(waveNoise, 0, samples)
-	applyEnvelope(buf, constant.WhooshSoundAttack.Seconds(), constant.WhooshSoundRelease.Seconds())
+	applyEnvelope(buf, parameter.WhooshSoundAttack.Seconds(), parameter.WhooshSoundRelease.Seconds())
 	return buf
 }
 
 func generateCoinSound() floatBuffer {
 	// Note 1: B5 (987.77 Hz)
-	n1Samples := durationToSamples(constant.CoinSoundNote1Duration.Seconds())
+	n1Samples := durationToSamples(parameter.CoinSoundNote1Duration.Seconds())
 	n1 := oscillator(waveSquare, 987.77, n1Samples)
-	applyEnvelope(n1, constant.CoinSoundAttack.Seconds(), constant.CoinSoundNote1Release.Seconds())
+	applyEnvelope(n1, parameter.CoinSoundAttack.Seconds(), parameter.CoinSoundNote1Release.Seconds())
 
 	// Note 2: E6 (1318.51 Hz)
-	n2Samples := durationToSamples(constant.CoinSoundNote2Duration.Seconds())
+	n2Samples := durationToSamples(parameter.CoinSoundNote2Duration.Seconds())
 	n2 := oscillator(waveSquare, 1318.51, n2Samples)
-	applyEnvelope(n2, constant.CoinSoundAttack.Seconds(), constant.CoinSoundNote2Release.Seconds())
+	applyEnvelope(n2, parameter.CoinSoundAttack.Seconds(), parameter.CoinSoundNote2Release.Seconds())
 
 	return concatFloatBuffers(n1, n2)
 }
 
 func generateShieldSound() floatBuffer {
-	samples := durationToSamples(constant.ShieldSoundDuration.Seconds())
+	samples := durationToSamples(parameter.ShieldSoundDuration.Seconds())
 
 	// Primary sweep - slightly higher start freq for audibility
-	sweep := oscillatorSweep(waveSine, constant.ShieldStartFreq, constant.ShieldEndFreq, samples)
+	sweep := oscillatorSweep(waveSine, parameter.ShieldStartFreq, parameter.ShieldEndFreq, samples)
 
 	// Add sub-harmonic
-	sub := oscillatorSweep(waveSine, constant.ShieldStartFreq*0.5, constant.ShieldEndFreq*0.5, samples)
+	sub := oscillatorSweep(waveSine, parameter.ShieldStartFreq*0.5, parameter.ShieldEndFreq*0.5, samples)
 
 	// Mix and Drive: The saturation creates harmonics that make the bass audible on small speakers
 	combined := mixFloatBuffers(sweep, sub, 0.6)
@@ -579,27 +579,27 @@ func generateShieldSound() floatBuffer {
 
 	result := mixFloatBuffers(combined, noise, 0.2)
 
-	applyEnvelope(result, constant.ShieldSoundAttack.Seconds(), constant.ShieldSoundRelease.Seconds())
+	applyEnvelope(result, parameter.ShieldSoundAttack.Seconds(), parameter.ShieldSoundRelease.Seconds())
 	normalizePeak(result, 0.95)
 	return result
 }
 
 func generateZapSound() floatBuffer {
 	// Shorter duration for continuous looping capability
-	samples := durationToSamples(constant.ZapSoundDuration.Seconds())
+	samples := durationToSamples(parameter.ZapSoundDuration.Seconds())
 
 	// Layer 1: Electrical Arc (Band-limited noise)
 	arc := oscillator(waveNoise, 0, samples)
 	filterBiquadBP(arc, 1200.0, 1.0)
 
 	// Fast AM modulation for the "buzz" (approx 25Hz)
-	applyAM(arc, constant.ZapModulationRate, 0.8)
+	applyAM(arc, parameter.ZapModulationRate, 0.8)
 
 	// Layer 2: High Voltage Hum (FM Synthesis)
 	// Carrier 110Hz, Modulator 55Hz (Sub-octave), High Index -> Saw-like buzz
 	hum := oscillatorFM(110.0, 55.0, 3.0, samples)
 	// Tremolo on the hum
-	applyAM(hum, constant.ZapModulationRate*0.5, 0.4)
+	applyAM(hum, parameter.ZapModulationRate*0.5, 0.4)
 
 	// Mix layers
 	result := mixFloatBuffers(arc, hum, 0.6)
@@ -608,14 +608,14 @@ func generateZapSound() floatBuffer {
 	applyWaveshaper(result, 1.5)
 
 	// Fast envelope for responsive re-triggering
-	applyEnvelope(result, constant.ZapSoundAttack.Seconds(), constant.ZapSoundRelease.Seconds())
+	applyEnvelope(result, parameter.ZapSoundAttack.Seconds(), parameter.ZapSoundRelease.Seconds())
 
 	normalizePeak(result, 0.85)
 	return result
 }
 
 func generateCrackleSound() floatBuffer {
-	samples := durationToSamples(constant.CrackleSoundDuration.Seconds())
+	samples := durationToSamples(parameter.CrackleSoundDuration.Seconds())
 
 	// Electrical crackle is defined by discrete, high-voltage sparks
 	// 1. Generate sparse impulses (sparks)
@@ -636,14 +636,14 @@ func generateCrackleSound() floatBuffer {
 	applyOverdrive(result, 5.0)
 
 	// 5. Hard decay to ensure it sounds like a spark gap, not a noise wash
-	applyDecayEnvelope(result, 0.001, float64(constant.AudioSampleRate)*0.03)
+	applyDecayEnvelope(result, 0.001, float64(parameter.AudioSampleRate)*0.03)
 
 	normalizePeak(result, 0.9)
 	return result
 }
 
 func generateMetalHitSound() floatBuffer {
-	samples := durationToSamples(constant.MetalHitSoundDuration.Seconds())
+	samples := durationToSamples(parameter.MetalHitSoundDuration.Seconds())
 
 	// FM Synthesis is superior for metallic/inharmonic sounds
 	// Carrier: 800Hz (Body), Modulator: 1143Hz (non-integer ratio ~1.42), Index: High decaying to low
@@ -655,8 +655,8 @@ func generateMetalHitSound() floatBuffer {
 	cFreq := 800.0
 	mFreq := 1143.0
 
-	cInc := cFreq / float64(constant.AudioSampleRate)
-	mInc := mFreq / float64(constant.AudioSampleRate)
+	cInc := cFreq / float64(parameter.AudioSampleRate)
+	mInc := mFreq / float64(parameter.AudioSampleRate)
 
 	maxIndex := 5.0
 
@@ -676,7 +676,7 @@ func generateMetalHitSound() floatBuffer {
 	filterBiquadHP(fm, 200.0, 0.707)
 
 	// Sharp impact transient (Click)
-	transientSamples := durationToSamples(constant.MetalHitTransientLength.Seconds())
+	transientSamples := durationToSamples(parameter.MetalHitTransientLength.Seconds())
 	transient := oscillator(waveNoise, 0, transientSamples)
 	filterBiquadLP(transient, 3000.0, 1.0)
 	applyEnvelope(transient, 0.0005, 0.003)
@@ -685,7 +685,7 @@ func generateMetalHitSound() floatBuffer {
 	result := mixFloatBuffers(fm, transient, 0.5)
 
 	// Short envelope for a dead, solid hit
-	applyDecayEnvelope(result, constant.MetalHitAttack.Seconds(), float64(constant.AudioSampleRate)*constant.MetalHitDecayRate.Seconds())
+	applyDecayEnvelope(result, parameter.MetalHitAttack.Seconds(), float64(parameter.AudioSampleRate)*parameter.MetalHitDecayRate.Seconds())
 
 	normalizePeak(result, 0.95)
 	return result

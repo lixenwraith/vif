@@ -1,4 +1,4 @@
-package constant
+package parameter
 
 import "github.com/lixenwraith/vi-fighter/vmath"
 

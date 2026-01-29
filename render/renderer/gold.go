@@ -2,8 +2,8 @@ package renderer
 
 import (
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
@@ -27,7 +27,7 @@ func (r *GoldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 		return
 	}
 
-	buf.SetWriteMask(constant.MaskComposite)
+	buf.SetWriteMask(visual.MaskComposite)
 
 	for _, anchor := range headers {
 		header, ok := r.gameCtx.World.Components.Header.GetComponent(anchor)

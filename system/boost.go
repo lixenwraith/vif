@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 type BoostSystem struct {
@@ -45,7 +45,7 @@ func (s *BoostSystem) Name() string {
 }
 
 func (s *BoostSystem) Priority() int {
-	return constant.PriorityBoost
+	return parameter.PriorityBoost
 }
 
 func (s *BoostSystem) EventTypes() []event.EventType {

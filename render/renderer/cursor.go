@@ -1,9 +1,10 @@
 package renderer
 
 import (
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
 )
 
@@ -26,7 +27,7 @@ func (r *CursorRenderer) IsVisible() bool {
 
 // Render draws the cursor
 func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	buf.SetWriteMask(constant.MaskUI)
+	buf.SetWriteMask(visual.MaskUI)
 	screenX := ctx.GameXOffset + ctx.CursorX
 	screenY := ctx.GameYOffset + ctx.CursorY
 
@@ -49,7 +50,7 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	var charFgColor = render.RgbBlack
 
 	// 2. Scan entities at cursor position
-	var entitiesBuf [constant.MaxEntitiesPerCell]core.Entity
+	var entitiesBuf [parameter.MaxEntitiesPerCell]core.Entity
 	count := r.gameCtx.World.Positions.GetAllEntitiesAtInto(ctx.CursorX, ctx.CursorY, entitiesBuf[:])
 
 	var glyphEntity core.Entity

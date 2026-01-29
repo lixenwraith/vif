@@ -3,9 +3,9 @@ package system
 import (
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -49,7 +49,7 @@ func (s *EnvironmentSystem) Name() string {
 }
 
 func (s *EnvironmentSystem) Priority() int {
-	return constant.PrioritySwarm
+	return parameter.PrioritySwarm
 }
 
 func (s *EnvironmentSystem) EventTypes() []event.EventType {

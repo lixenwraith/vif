@@ -1,9 +1,9 @@
 package system
 
 import (
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // AudioSystem consumes sound request events and plays audio
@@ -43,7 +43,7 @@ func (s *AudioSystem) Name() string {
 
 // Priority returns the system's priority
 func (s *AudioSystem) Priority() int {
-	return constant.PriorityUI
+	return parameter.PriorityUI
 }
 
 // EventTypes returns the event types AudioSystem handles

@@ -2,10 +2,10 @@ package system
 
 import (
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -40,7 +40,7 @@ func (s *SpiritSystem) Name() string {
 }
 
 func (s *SpiritSystem) Priority() int {
-	return constant.PrioritySpirit
+	return parameter.PrioritySpirit
 }
 
 func (s *SpiritSystem) EventTypes() []event.EventType {
@@ -128,7 +128,7 @@ func (s *SpiritSystem) spawnSpirit(p *event.SpiritSpawnRequestPayload) {
 
 	// Speed = Progress increment per tick for all spirits to arrive together
 	// Lerp handles distance normalization - progress 0→1 over duration
-	durationTicks := int64(constant.SpiritAnimationDuration / constant.GameUpdateInterval)
+	durationTicks := int64(parameter.SpiritAnimationDuration / parameter.GameUpdateInterval)
 	if durationTicks == 0 {
 		durationTicks = 1
 	}

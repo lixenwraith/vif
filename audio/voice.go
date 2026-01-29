@@ -4,8 +4,8 @@ import (
 	"math"
 	"math/rand"
 
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // Voice is the common interface for sound generators
@@ -135,7 +135,7 @@ func (v *TonalVoice) Sample() float64 {
 	}
 
 	// Advance phase
-	v.phase += v.freq / float64(constant.AudioSampleRate)
+	v.phase += v.freq / float64(parameter.AudioSampleRate)
 	if v.phase >= 1.0 {
 		v.phase -= 1.0
 	}
@@ -217,7 +217,7 @@ func (v *TonalVoice) generatePiano() float64 {
 	modIndex := 3.0 * v.envLevel // Index decreases with envelope
 
 	modFreq := v.freq * modRatio
-	v.modPhase += modFreq / float64(constant.AudioSampleRate)
+	v.modPhase += modFreq / float64(parameter.AudioSampleRate)
 	if v.modPhase >= 1.0 {
 		v.modPhase -= 1.0
 	}
@@ -253,23 +253,23 @@ func (v *TonalVoice) Trigger(params VoiceParams) {
 	v.filterState = 0
 
 	// Set ADSR based on instrument
-	sr := float64(constant.AudioSampleRate)
+	sr := float64(parameter.AudioSampleRate)
 	switch params.Instrument {
 	case core.InstrBass:
-		v.attack = int(constant.BassAttack * sr)
-		v.decay = int(constant.BassDecay * sr)
-		v.sustain = constant.BassSustain
-		v.release = int(constant.BassRelease * sr)
+		v.attack = int(parameter.BassAttack * sr)
+		v.decay = int(parameter.BassDecay * sr)
+		v.sustain = parameter.BassSustain
+		v.release = int(parameter.BassRelease * sr)
 	case core.InstrPiano:
-		v.attack = int(constant.PianoAttack * sr)
-		v.decay = int(constant.PianoDecay * sr)
-		v.sustain = constant.PianoSustain
-		v.release = int(constant.PianoRelease * sr)
+		v.attack = int(parameter.PianoAttack * sr)
+		v.decay = int(parameter.PianoDecay * sr)
+		v.sustain = parameter.PianoSustain
+		v.release = int(parameter.PianoRelease * sr)
 	case core.InstrPad:
-		v.attack = int(constant.PadAttack * sr)
-		v.decay = int(constant.PadDecay * sr)
-		v.sustain = constant.PadSustain
-		v.release = int(constant.PadRelease * sr)
+		v.attack = int(parameter.PadAttack * sr)
+		v.decay = int(parameter.PadDecay * sr)
+		v.sustain = parameter.PadSustain
+		v.release = int(parameter.PadRelease * sr)
 	default:
 		v.attack = int(0.01 * sr)
 		v.decay = int(0.1 * sr)
@@ -325,8 +325,8 @@ func generateDrumSound(instr core.InstrumentType) floatBuffer {
 }
 
 func generateKick() floatBuffer {
-	sr := constant.AudioSampleRate
-	duration := int(float64(sr) * constant.KickDecay)
+	sr := parameter.AudioSampleRate
+	duration := int(float64(sr) * parameter.KickDecay)
 	buf := make(floatBuffer, duration)
 
 	startFreq := 150.0
@@ -353,8 +353,8 @@ func generateKick() floatBuffer {
 }
 
 func generateHihat() floatBuffer {
-	sr := constant.AudioSampleRate
-	duration := int(float64(sr) * constant.HihatDecay)
+	sr := parameter.AudioSampleRate
+	duration := int(float64(sr) * parameter.HihatDecay)
 	buf := make(floatBuffer, duration)
 
 	for i := 0; i < duration; i++ {
@@ -373,8 +373,8 @@ func generateHihat() floatBuffer {
 }
 
 func generateSnare() floatBuffer {
-	sr := constant.AudioSampleRate
-	duration := int(float64(sr) * constant.SnareDecay)
+	sr := parameter.AudioSampleRate
+	duration := int(float64(sr) * parameter.SnareDecay)
 	buf := make(floatBuffer, duration)
 
 	// Tone component (200Hz body)
@@ -402,8 +402,8 @@ func generateSnare() floatBuffer {
 }
 
 func generateClap() floatBuffer {
-	sr := constant.AudioSampleRate
-	duration := int(float64(sr) * constant.ClapDecay)
+	sr := parameter.AudioSampleRate
+	duration := int(float64(sr) * parameter.ClapDecay)
 	buf := make(floatBuffer, duration)
 
 	// Multiple short noise bursts

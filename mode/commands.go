@@ -5,11 +5,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/manifest"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // CommandResult represents the outcome of command execution
@@ -161,8 +161,8 @@ func handleHeatCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if value < 0 {
 		value = 0
 	}
-	if value > constant.HeatMax {
-		value = constant.HeatMax
+	if value > parameter.HeatMax {
+		value = parameter.HeatMax
 	}
 
 	ctx.PushEvent(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Value: value})
@@ -174,11 +174,11 @@ func handleHeatCommand(ctx *engine.GameContext, args []string) CommandResult {
 // handleBoostCommand triggers boost request event
 func handleBoostCommand(ctx *engine.GameContext) CommandResult {
 	ctx.PushEvent(event.EventHeatSetRequest, &event.HeatSetRequestPayload{
-		Value: constant.HeatMax,
+		Value: parameter.HeatMax,
 	})
 
 	ctx.PushEvent(event.EventBoostActivate, &event.BoostActivatePayload{
-		Duration: constant.BoostBaseDuration,
+		Duration: parameter.BoostBaseDuration,
 	})
 
 	ctx.SetLastCommand(":boost")
@@ -187,16 +187,16 @@ func handleBoostCommand(ctx *engine.GameContext) CommandResult {
 
 // handleGodCommand sets heat to max and energy to high value
 func handleGodCommand(ctx *engine.GameContext) CommandResult {
-	ctx.PushEvent(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Value: constant.HeatMax})
-	ctx.PushEvent(event.EventEnergySetRequest, &event.EnergySetPayload{Value: constant.GodEnergyAmount})
+	ctx.PushEvent(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Value: parameter.HeatMax})
+	ctx.PushEvent(event.EventEnergySetRequest, &event.EnergySetPayload{Value: parameter.GodEnergyAmount})
 	ctx.SetLastCommand(":god")
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
 // handleDemonCommand sets heat to max and energy to high value
 func handleDemonCommand(ctx *engine.GameContext) CommandResult {
-	ctx.PushEvent(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Value: constant.HeatMax})
-	ctx.PushEvent(event.EventEnergySetRequest, &event.EnergySetPayload{Value: -constant.GodEnergyAmount})
+	ctx.PushEvent(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Value: parameter.HeatMax})
+	ctx.PushEvent(event.EventEnergySetRequest, &event.EnergySetPayload{Value: -parameter.GodEnergyAmount})
 	ctx.SetLastCommand(":demon")
 	return CommandResult{Continue: true, KeepPaused: false}
 }

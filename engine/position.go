@@ -5,8 +5,8 @@ import (
 	"sync"
 
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // Position maintains a spatial index using a fixed-capacity dense grid, multiple entities per cell (up to MaxEntitiesPerCell)
@@ -24,7 +24,7 @@ func NewPosition() *Position {
 	return &Position{
 		components: make(map[core.Entity]component.PositionComponent),
 		entities:   make([]core.Entity, 0, 64),
-		grid:       NewSpatialGrid(constant.DefaultGridWidth, constant.DefaultGridHeight), // Default safe size
+		grid:       NewSpatialGrid(parameter.DefaultGridWidth, parameter.DefaultGridHeight), // Default safe size
 	}
 }
 

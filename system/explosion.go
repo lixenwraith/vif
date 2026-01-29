@@ -4,10 +4,10 @@ import (
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/physics"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
@@ -24,9 +24,9 @@ type ExplosionCenter struct {
 // Package-level state for renderer access
 // System writes, renderer reads - no synchronization needed (single-threaded game loop)
 var (
-	ExplosionCenters      []ExplosionCenter                            // Active slice view
-	ExplosionDurationNano int64                                        // For decay calculation
-	explosionBacking      [constant.ExplosionCenterCap]ExplosionCenter // Pre-allocated storage
+	ExplosionCenters      []ExplosionCenter                             // Active slice view
+	ExplosionDurationNano int64                                         // For decay calculation
+	explosionBacking      [parameter.ExplosionCenterCap]ExplosionCenter // Pre-allocated storage
 )
 
 // ExplosionSystem handles explosion triggering and glyph-to-dust transformation
@@ -66,11 +66,11 @@ func NewExplosionSystem(world *engine.World) engine.System {
 
 func (s *ExplosionSystem) Init() {
 	s.activeCount = 0
-	s.baseRadius = constant.ExplosionFieldRadius
-	s.radiusCap = constant.ExplosionRadiusCapFixed
+	s.baseRadius = parameter.ExplosionFieldRadius
+	s.radiusCap = parameter.ExplosionRadiusCapFixed
 
 	// Initialize package-level state
-	ExplosionDurationNano = constant.ExplosionFieldDuration.Nanoseconds()
+	ExplosionDurationNano = parameter.ExplosionFieldDuration.Nanoseconds()
 	ExplosionCenters = explosionBacking[:0]
 
 	// Reset buffers
@@ -91,7 +91,7 @@ func (s *ExplosionSystem) Name() string {
 }
 
 func (s *ExplosionSystem) Priority() int {
-	return constant.PriorityExplosion
+	return parameter.PriorityExplosion
 }
 
 func (s *ExplosionSystem) EventTypes() []event.EventType {
@@ -169,17 +169,17 @@ func (s *ExplosionSystem) addCenter(x, y int, radius int64) {
 		dy := centerY - vmath.FromInt(c.Y)
 		distSq := vmath.Mul(dx, dx) + vmath.Mul(dy, dy)
 
-		if distSq <= constant.ExplosionMergeThresholdSq {
+		if distSq <= parameter.ExplosionMergeThresholdSq {
 			c.Age = 0
-			c.Intensity += constant.ExplosionIntensityBoost
-			if c.Intensity > constant.ExplosionIntensityCap {
-				c.Intensity = constant.ExplosionIntensityCap
+			c.Intensity += parameter.ExplosionIntensityBoost
+			if c.Intensity > parameter.ExplosionIntensityCap {
+				c.Intensity = parameter.ExplosionIntensityCap
 			}
 			newRadius := c.Radius
 			if radius > newRadius {
 				newRadius = radius
 			}
-			newRadius += constant.ExplosionRadiusBoost
+			newRadius += parameter.ExplosionRadiusBoost
 			if newRadius > s.radiusCap {
 				newRadius = s.radiusCap
 			}
@@ -192,14 +192,14 @@ func (s *ExplosionSystem) addCenter(x, y int, radius int64) {
 
 	// No merge - add new center
 	var idx int
-	if s.activeCount < constant.ExplosionCenterCap {
+	if s.activeCount < parameter.ExplosionCenterCap {
 		idx = s.activeCount
 		s.activeCount++
 	} else {
 		// Overflow: overwrite oldest
 		idx = 0
 		maxAge := explosionBacking[0].Age
-		for i := 1; i < constant.ExplosionCenterCap; i++ {
+		for i := 1; i < parameter.ExplosionCenterCap; i++ {
 			if explosionBacking[i].Age > maxAge {
 				maxAge = explosionBacking[i].Age
 				idx = i
@@ -276,8 +276,8 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 
 					diffX := int64(drainPos.X - centerX)
 					diffY := int64(drainPos.Y - centerY)
-					eVelX := vmath.Mul(constant.QuasarMaxSpeed, vmath.Div(radius, diffX))
-					eVelY := vmath.Mul(constant.QuasarMaxSpeed, vmath.Div(radius, diffY))
+					eVelX := vmath.Mul(parameter.QuasarMaxSpeed, vmath.Div(radius, diffX))
+					eVelY := vmath.Mul(parameter.QuasarMaxSpeed, vmath.Div(radius, diffY))
 
 					kineticComp, ok := s.world.Components.Kinetic.GetComponent(entity)
 					if !ok {
@@ -310,8 +310,8 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 
 								diffX := int64(quasarPos.X - centerX)
 								diffY := int64(quasarPos.Y - centerY)
-								eVelX := vmath.Mul(constant.QuasarMaxSpeed, vmath.Div(radius, diffX))
-								eVelY := vmath.Mul(constant.QuasarMaxSpeed, vmath.Div(radius, diffY))
+								eVelX := vmath.Mul(parameter.QuasarMaxSpeed, vmath.Div(radius, diffX))
+								eVelY := vmath.Mul(parameter.QuasarMaxSpeed, vmath.Div(radius, diffY))
 
 								physics.ApplyCollision(
 									&kineticComp.Kinetic,

@@ -7,10 +7,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/status"
 )
 
@@ -43,7 +43,7 @@ func (s *MetaSystem) Name() string {
 
 // Priority returns the system's priority
 func (s *MetaSystem) Priority() int {
-	return constant.PriorityUI
+	return parameter.PriorityUI
 }
 
 // EventTypes returns the event types MetaSystem handles
@@ -146,7 +146,7 @@ func (s *MetaSystem) handleDebugRequest() {
 	}
 	if hc, ok := s.world.Components.Heat.GetComponent(cursorEntity); ok {
 		playerEntries = append(playerEntries, core.CardEntry{
-			Key: "heat", Value: fmt.Sprintf("%d/%d", hc.Current, constant.HeatMax),
+			Key: "heat", Value: fmt.Sprintf("%d/%d", hc.Current, parameter.HeatMax),
 		})
 	}
 	if sc, ok := s.world.Components.Shield.GetComponent(cursorEntity); ok {

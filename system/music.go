@@ -1,10 +1,10 @@
 package system
 
 import (
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // MusicSystem handles music events and drives the sequencer
@@ -45,7 +45,7 @@ func (s *MusicSystem) Name() string {
 
 // Priority returns system priority
 func (s *MusicSystem) Priority() int {
-	return constant.PriorityUI + 1
+	return parameter.PriorityUI + 1
 }
 
 // EventTypes returns handled event types
@@ -92,7 +92,7 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 				s.player.SetBeatPattern(payload.BeatPattern, 0, false)
 			}
 			if payload.MelodyPattern != core.PatternSilence {
-				s.player.SetMelodyPattern(payload.MelodyPattern, constant.MIDINote(constant.NoteC, constant.OctaveMid), 0, false)
+				s.player.SetMelodyPattern(payload.MelodyPattern, parameter.MIDINote(parameter.NoteC, parameter.OctaveMid), 0, false)
 			}
 			s.player.StartMusic()
 		}
@@ -109,18 +109,18 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventBeatPatternRequest:
 		if payload, ok := ev.Payload.(*event.BeatPatternRequestPayload); ok {
-			crossfade := int(payload.TransitionTime.Seconds() * float64(constant.AudioSampleRate))
+			crossfade := int(payload.TransitionTime.Seconds() * float64(parameter.AudioSampleRate))
 			if crossfade == 0 {
-				crossfade = int(constant.PatternTransitionDefault.Seconds() * float64(constant.AudioSampleRate))
+				crossfade = int(parameter.PatternTransitionDefault.Seconds() * float64(parameter.AudioSampleRate))
 			}
 			s.player.SetBeatPattern(payload.Pattern, crossfade, payload.Quantize)
 		}
 
 	case event.EventMelodyNoteRequest:
 		if payload, ok := ev.Payload.(*event.MelodyNoteRequestPayload); ok {
-			duration := int(payload.Duration.Seconds() * float64(constant.AudioSampleRate))
+			duration := int(payload.Duration.Seconds() * float64(parameter.AudioSampleRate))
 			if duration == 0 {
-				duration = constant.SamplesPerStep(constant.DefaultBPM) * 2
+				duration = parameter.SamplesPerStep(parameter.DefaultBPM) * 2
 			}
 			instr := payload.Instrument
 			if instr == 0 {
@@ -131,9 +131,9 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventMelodyPatternRequest:
 		if payload, ok := ev.Payload.(*event.MelodyPatternRequestPayload); ok {
-			crossfade := int(payload.TransitionTime.Seconds() * float64(constant.AudioSampleRate))
+			crossfade := int(payload.TransitionTime.Seconds() * float64(parameter.AudioSampleRate))
 			if crossfade == 0 {
-				crossfade = int(constant.PatternTransitionDefault.Seconds() * float64(constant.AudioSampleRate))
+				crossfade = int(parameter.PatternTransitionDefault.Seconds() * float64(parameter.AudioSampleRate))
 			}
 			s.player.SetMelodyPattern(payload.Pattern, payload.RootNote, crossfade, payload.Quantize)
 		}

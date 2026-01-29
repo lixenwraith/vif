@@ -4,9 +4,9 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // EnergySystem handles character typing and energy calculation
@@ -42,7 +42,7 @@ func (s *EnergySystem) Name() string {
 
 // Priority returns the system's priority
 func (s *EnergySystem) Priority() int {
-	return constant.PriorityEnergy
+	return parameter.PriorityEnergy
 }
 
 // EventTypes returns the event types EnergySystem handles
@@ -269,11 +269,11 @@ func (s *EnergySystem) handleGlyphConsumed(glyphType component.GlyphType, _ comp
 	var delta int
 	switch glyphType {
 	case component.GlyphBlue:
-		delta = constant.EnergyBaseBlue * heat
+		delta = parameter.EnergyBaseBlue * heat
 	case component.GlyphGreen:
-		delta = constant.EnergyBaseGreen * heat
+		delta = parameter.EnergyBaseGreen * heat
 	case component.GlyphRed:
-		delta = constant.EnergyBaseRed * heat
+		delta = parameter.EnergyBaseRed * heat
 	default:
 		return
 	}
@@ -305,7 +305,7 @@ func (s *EnergySystem) startBlink(blinkType, blinkLevel int) {
 	energyComp.BlinkActive = true
 	energyComp.BlinkType = blinkType
 	energyComp.BlinkLevel = blinkLevel
-	energyComp.BlinkRemaining = constant.EnergyBlinkTimeout
+	energyComp.BlinkRemaining = parameter.EnergyBlinkTimeout
 	s.world.Components.Energy.SetComponent(cursorEntity, energyComp)
 }
 

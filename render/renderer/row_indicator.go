@@ -1,8 +1,8 @@
 package renderer
 
 import (
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
 )
 
@@ -20,7 +20,7 @@ func NewRowIndicatorRenderer(gameCtx *engine.GameContext) *RowIndicatorRenderer 
 
 // Render implements SystemRenderer
 func (r *RowIndicatorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	buf.SetWriteMask(constant.MaskUI)
+	buf.SetWriteMask(visual.MaskUI)
 
 	for y := 0; y < ctx.GameHeight; y++ {
 		relativeNum := y - ctx.CursorY

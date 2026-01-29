@@ -2,11 +2,11 @@ package mode
 
 import (
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/input"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // Router interprets Intents and executes game logic
@@ -183,7 +183,7 @@ func (r *Router) handleEscape() bool {
 	case core.ModeNormal:
 		// Trigger ping grid
 		r.ctx.PushEvent(event.EventPingGridRequest, &event.PingGridRequestPayload{
-			Duration: constant.PingGridDuration,
+			Duration: parameter.PingGridDuration,
 		})
 		return true // Stay in Normal mode
 	}
@@ -699,10 +699,10 @@ func (r *Router) handleOverlayActivate() bool {
 
 func (r *Router) handleOverlayPageScroll(direction int) bool {
 	// Calculate visible height based on overlay dimensions
-	overlayH := int(float64(r.ctx.Height) * constant.OverlayHeightPercent)
+	overlayH := int(float64(r.ctx.Height) * parameter.OverlayHeightPercent)
 
 	// Subtract border (2) + padding (2) + hints row (1)
-	visibleH := overlayH - 2 - (2 * constant.OverlayPaddingY) - 1
+	visibleH := overlayH - 2 - (2 * parameter.OverlayPaddingY) - 1
 	pageSize := visibleH / 2
 	if pageSize < 1 {
 		pageSize = 1

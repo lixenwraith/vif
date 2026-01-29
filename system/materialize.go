@@ -2,9 +2,9 @@ package system
 
 import (
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -37,7 +37,7 @@ func (s *MaterializeSystem) Name() string {
 
 // Priority returns the system's priority
 func (s *MaterializeSystem) Priority() int {
-	return constant.PriorityMaterialize
+	return parameter.PriorityMaterialize
 }
 
 // EventTypes returns event types handled
@@ -89,7 +89,7 @@ func (s *MaterializeSystem) Update() {
 	}
 
 	// Progress velocity in Q32.32: full progress (Scale) over duration
-	durationFixed := vmath.FromFloat(constant.MaterializeAnimationDuration.Seconds())
+	durationFixed := vmath.FromFloat(parameter.MaterializeAnimationDuration.Seconds())
 	progressDelta := vmath.Div(dtFixed, durationFixed)
 
 	entities := s.world.Components.Materialize.GetAllEntities()

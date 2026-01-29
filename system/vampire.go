@@ -4,9 +4,9 @@ import (
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // VampireSystem manages energy drain on hit
@@ -42,7 +42,7 @@ func (s *VampireSystem) Name() string {
 }
 
 func (s *VampireSystem) Priority() int {
-	return constant.PriorityVampire
+	return parameter.PriorityVampire
 }
 
 func (s *VampireSystem) EventTypes() []event.EventType {
@@ -125,7 +125,7 @@ func (s *VampireSystem) vampiricDrain(payload *event.VampireDrainRequestPayload)
 		TargetX:   targetPos.X,
 		TargetY:   targetPos.Y,
 		ColorType: lightningColor,
-		Duration:  constant.GameUpdateInterval,
+		Duration:  parameter.GameUpdateInterval,
 		Tracked:   false,
 	})
 

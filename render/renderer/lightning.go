@@ -2,8 +2,9 @@ package renderer
 
 import (
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
@@ -120,7 +121,7 @@ func (r *LightningRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		return
 	}
 
-	buf.SetWriteMask(constant.MaskTransient)
+	buf.SetWriteMask(visual.MaskTransient)
 
 	// TODO: is there a better way handle this?
 	// Workaround to freeze lightning animation when paused
@@ -139,7 +140,7 @@ func (r *LightningRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		points := r.generateFractalPath(l.OriginX, l.OriginY, l.TargetX, l.TargetY, r.rng)
 
 		// Dispatch to mode-specific renderer
-		r.renderLightning(ctx, buf, points, l.ColorType, constant.LightningAlpha)
+		r.renderLightning(ctx, buf, points, l.ColorType, parameter.LightningAlpha)
 	}
 }
 

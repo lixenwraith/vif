@@ -4,8 +4,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // Sequencer maintains tempo and generates continuous music output
@@ -56,13 +56,13 @@ func NewSequencer(bpm int) *Sequencer {
 
 // SetBPM updates tempo
 func (s *Sequencer) SetBPM(bpm int) {
-	if bpm < constant.MinBPM {
-		bpm = constant.MinBPM
-	} else if bpm > constant.MaxBPM {
-		bpm = constant.MaxBPM
+	if bpm < parameter.MinBPM {
+		bpm = parameter.MinBPM
+	} else if bpm > parameter.MaxBPM {
+		bpm = parameter.MaxBPM
 	}
 	s.bpm.Store(int32(bpm))
-	s.samplesPerStep.Store(int64(constant.SamplesPerStep(bpm)))
+	s.samplesPerStep.Store(int64(parameter.SamplesPerStep(bpm)))
 }
 
 // SetSwing sets shuffle amount (0.0 = straight, 0.5 = max shuffle)
@@ -114,11 +114,11 @@ func (s *Sequencer) Generate(buf []float64) {
 		// Check step boundary
 		if pos >= effectiveStepLen {
 			pos = 0
-			step = (step + 1) % int64(constant.MaxPatternLen)
+			step = (step + 1) % int64(parameter.MaxPatternLen)
 			s.currentStep.Store(step)
 
 			// Bar boundary check
-			if step%int64(constant.StepsPerBar) == 0 {
+			if step%int64(parameter.StepsPerBar) == 0 {
 				s.barCount.Add(1)
 				s.checkPendingTransitions()
 			}

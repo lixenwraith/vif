@@ -6,8 +6,9 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/asset"
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
 )
 
@@ -25,7 +26,7 @@ func NewSplashRenderer(gameCtx *engine.GameContext) *SplashRenderer {
 
 // Render draws all splash effects to background channel
 func (r *SplashRenderer) Render(gameCtx render.RenderContext, buf *render.RenderBuffer) {
-	buf.SetWriteMask(constant.MaskTransient)
+	buf.SetWriteMask(visual.MaskTransient)
 
 	entities := r.gameCtx.World.Components.Splash.GetAllEntities()
 	for _, entity := range entities {
@@ -46,13 +47,13 @@ func (r *SplashRenderer) Render(gameCtx render.RenderContext, buf *render.Render
 
 			digits := strconv.Itoa(remainingSec)
 			for i, d := range digits {
-				charX := anchorX + i*constant.SplashCharWidth
+				charX := anchorX + i*parameter.SplashCharWidth
 				r.renderChar(gameCtx, buf, d, charX, anchorY, displayColor)
 			}
 		} else {
 			// Transient: render content directly
 			for i := 0; i < splash.Length; i++ {
-				charX := anchorX + i*constant.SplashCharWidth
+				charX := anchorX + i*parameter.SplashCharWidth
 				r.renderChar(gameCtx, buf, splash.Content[i], charX, anchorY, displayColor)
 			}
 		}
@@ -86,14 +87,14 @@ func (r *SplashRenderer) renderChar(gameCtx render.RenderContext, buf *render.Re
 		bitmap = asset.SplashFont[char-32]
 	}
 
-	for row := 0; row < constant.SplashCharHeight; row++ {
+	for row := 0; row < parameter.SplashCharHeight; row++ {
 		screenY := gameCtx.GameYOffset + gameY + row
 		if screenY < gameCtx.GameYOffset || screenY >= gameCtx.GameYOffset+gameCtx.GameHeight {
 			continue
 		}
 
 		rowBits := bitmap[row]
-		for col := 0; col < constant.SplashCharWidth; col++ {
+		for col := 0; col < parameter.SplashCharWidth; col++ {
 			// MSB-first: bit 15 = column 0
 			if rowBits&(1<<(15-col)) == 0 {
 				continue

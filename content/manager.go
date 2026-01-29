@@ -11,7 +11,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/lixenwraith/vi-fighter/constant"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 var (
@@ -34,7 +34,7 @@ func (cb *circuitBreaker) recordFailure(err error) {
 	cb.failureCount++
 	cb.lastFailureError = err
 
-	if cb.failureCount >= constant.CircuitBreakerThreshold {
+	if cb.failureCount >= parameter.CircuitBreakerThreshold {
 		cb.isOpen = true
 	}
 }
@@ -321,7 +321,7 @@ func (cm *ContentManager) loadAndProcessFile(filePath string) ([]string, error) 
 		lineCount++
 
 		// Check for maximum block size to prevent memory issues
-		if lineCount > constant.MaxBlockSize {
+		if lineCount > parameter.MaxBlockSize {
 			break
 		}
 
@@ -337,8 +337,8 @@ func (cm *ContentManager) loadAndProcessFile(filePath string) ([]string, error) 
 		}
 
 		// Truncate if too long
-		if len(trimmed) > constant.MaxLineLength {
-			trimmed = trimmed[:constant.MaxLineLength]
+		if len(trimmed) > parameter.MaxLineLength {
+			trimmed = trimmed[:parameter.MaxLineLength]
 		}
 
 		allLines = append(allLines, trimmed)
@@ -428,8 +428,8 @@ func (cm *ContentManager) ProcessContentBlock(lines []string) []string {
 		}
 
 		// Truncate lines that are too long
-		if len(trimmed) > constant.MaxLineLength {
-			trimmed = trimmed[:constant.MaxLineLength]
+		if len(trimmed) > parameter.MaxLineLength {
+			trimmed = trimmed[:parameter.MaxLineLength]
 		}
 
 		processed = append(processed, trimmed)
@@ -442,14 +442,14 @@ func (cm *ContentManager) ProcessContentBlock(lines []string) []string {
 // Returns true if content is valid, false otherwise
 func (cm *ContentManager) ValidateProcessedContent(lines []string) bool {
 	// Check if we have enough lines
-	if len(lines) < constant.MinProcessedLines {
+	if len(lines) < parameter.MinProcessedLines {
 		return false
 	}
 
 	// GetAllEntities lines should already be within MaxLineLength due to processing
 	// But we can verify for safety
 	for _, line := range lines {
-		if len(line) > constant.MaxLineLength {
+		if len(line) > parameter.MaxLineLength {
 			return false
 		}
 	}
@@ -469,8 +469,8 @@ func (cm *ContentManager) GetContentBlock(filePath string, startLine, size int) 
 	}()
 
 	// Enforce maximum size limit
-	if size > constant.MaxBlockSize {
-		size = constant.MaxBlockSize
+	if size > parameter.MaxBlockSize {
+		size = parameter.MaxBlockSize
 	}
 
 	// Open the file
@@ -489,7 +489,7 @@ func (cm *ContentManager) GetContentBlock(filePath string, startLine, size int) 
 		lineCount++
 
 		// Prevent excessive memory usage
-		if lineCount > constant.MaxBlockSize {
+		if lineCount > parameter.MaxBlockSize {
 			break
 		}
 
@@ -570,7 +570,7 @@ func (cm *ContentManager) selectFromValidatedCache() ([]string, string, error) {
 	}
 
 	// Determine block size (use minimum of ContentBlockSize and available lines)
-	blockSize := constant.ContentBlockSize
+	blockSize := parameter.ContentBlockSize
 	if len(cached.lines) < blockSize {
 		blockSize = len(cached.lines)
 	}
@@ -625,7 +625,7 @@ func (cm *ContentManager) SelectRandomBlock() ([]string, string, error) {
 		lineCount++
 
 		// Prevent excessive scanning
-		if lineCount > constant.MaxBlockSize {
+		if lineCount > parameter.MaxBlockSize {
 			break
 		}
 
@@ -650,7 +650,7 @@ func (cm *ContentManager) SelectRandomBlock() ([]string, string, error) {
 	randomStartLine := rand.Intn(validLineCount)
 
 	// GetComponent the content block
-	block, err := cm.GetContentBlock(selectedFile, randomStartLine, constant.ContentBlockSize)
+	block, err := cm.GetContentBlock(selectedFile, randomStartLine, parameter.ContentBlockSize)
 	if err != nil {
 		return nil, "", err
 	}
@@ -687,7 +687,7 @@ func (cm *ContentManager) SelectRandomBlockWithValidation() ([]string, string, e
 	}
 
 	// Try to get valid content with retries
-	for attempt := 0; attempt < constant.MaxRetries; attempt++ {
+	for attempt := 0; attempt < parameter.MaxRetries; attempt++ {
 		// Try to select a random block
 		block, filePath, err := cm.SelectRandomBlock()
 		if err != nil {
@@ -710,7 +710,7 @@ func (cm *ContentManager) SelectRandomBlockWithValidation() ([]string, string, e
 	}
 
 	// GetAllEntities retries failed, fall back to default content
-	err := fmt.Errorf("all %d attempts failed to load valid content", constant.MaxRetries)
+	err := fmt.Errorf("all %d attempts failed to load valid content", parameter.MaxRetries)
 	cm.breaker.recordFailure(err)
 	return cm.GetDefaultContent(), "default", nil
 }

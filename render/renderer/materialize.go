@@ -2,8 +2,9 @@ package renderer
 
 import (
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
@@ -11,10 +12,10 @@ import (
 
 // Phase thresholds in Q32.32
 var (
-	matFillEnd      = vmath.FromFloat(constant.MaterializeFillEnd)
-	matHoldEnd      = vmath.FromFloat(constant.MaterializeHoldEnd)
+	matFillEnd      = vmath.FromFloat(parameter.MaterializeFillEnd)
+	matHoldEnd      = vmath.FromFloat(parameter.MaterializeHoldEnd)
 	matRecede       = vmath.Scale - matHoldEnd // Duration of recede phase
-	matWidthFalloff = vmath.FromFloat(constant.MaterializeWidthFalloff)
+	matWidthFalloff = vmath.FromFloat(parameter.MaterializeWidthFalloff)
 )
 
 type beamDir int
@@ -43,7 +44,7 @@ func (r *MaterializeRenderer) Render(ctx render.RenderContext, buf *render.Rende
 		return
 	}
 
-	buf.SetWriteMask(constant.MaskTransient)
+	buf.SetWriteMask(visual.MaskTransient)
 
 	for _, entity := range entities {
 		mat, ok := r.gameCtx.World.Components.Materialize.GetComponent(entity)
@@ -136,7 +137,7 @@ func (r *MaterializeRenderer) calcIntensity(progress int64, cellOffset, segStart
 		if cellOffset >= segEnd-2 && segEnd > 0 {
 			// Sine pulse: 0.8 + 0.2 * sin(progress * pulseHz * 2π)
 			// Approximate with vmath.Sin where angle 0..Scale = 0..2π
-			pulseAngle := vmath.Mul(progress, vmath.FromInt(constant.MaterializePulseHz))
+			pulseAngle := vmath.Mul(progress, vmath.FromInt(parameter.MaterializePulseHz))
 			pulseMod := vmath.Sin(pulseAngle) // -Scale to +Scale
 			pulseIntensity := vmath.Scale - vmath.FromFloat(0.2) + vmath.Div(pulseMod, vmath.FromInt(5))
 			return vmath.Mul(baseIntensity, pulseIntensity)

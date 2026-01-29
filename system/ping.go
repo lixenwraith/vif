@@ -3,9 +3,9 @@ package system
 import (
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // PingSystem manages the state of ping highlights and grids
@@ -36,7 +36,7 @@ func (s *PingSystem) Name() string {
 
 // Priority returns the system's priority
 func (s *PingSystem) Priority() int {
-	return constant.PriorityEffect
+	return parameter.PriorityEffect
 }
 
 // EventTypes returns the event types PingSystem handles

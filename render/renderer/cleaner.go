@@ -1,8 +1,9 @@
 package renderer
 
 import (
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
 )
 
@@ -25,7 +26,7 @@ func NewCleanerRenderer(gameCtx *engine.GameContext) *CleanerRenderer {
 
 // buildGradients builds gradients for cleaner trail rendering
 func (r *CleanerRenderer) buildGradients() {
-	length := constant.CleanerTrailLength
+	length := parameter.CleanerTrailLength
 
 	r.gradientPositive = make([]render.RGB, length)
 	r.gradientNegative = make([]render.RGB, length)
@@ -48,7 +49,7 @@ func (r *CleanerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 		return
 	}
 
-	buf.SetWriteMask(constant.MaskTransient)
+	buf.SetWriteMask(visual.MaskTransient)
 
 	gradientLen := len(r.gradientPositive)
 	maxGradientIdx := gradientLen - 1
@@ -68,7 +69,7 @@ func (r *CleanerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 		// Iterate trail ring buffer: index 0 is head (brightest), last is tail (faintest)
 		for i := 0; i < cleaner.TrailLen; i++ {
 			// Walk backwards from head in the ring buffer
-			idx := (cleaner.TrailHead - i + constant.CleanerTrailLength) % constant.CleanerTrailLength
+			idx := (cleaner.TrailHead - i + parameter.CleanerTrailLength) % parameter.CleanerTrailLength
 			point := cleaner.TrailRing[idx]
 
 			if point.X < 0 || point.X >= ctx.GameWidth || point.Y < 0 || point.Y >= ctx.GameHeight {

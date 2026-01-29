@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -208,9 +208,9 @@ func (w *World) CreateCursorEntity() {
 
 	// 8. Add shield component
 	w.Components.Shield.SetComponent(cursorEntity, component.ShieldComponent{
-		RadiusX:       vmath.FromFloat(constant.ShieldRadiusX),
-		RadiusY:       vmath.FromFloat(constant.ShieldRadiusY),
-		MaxOpacity:    constant.ShieldMaxOpacity,
+		RadiusX:       vmath.FromFloat(parameter.ShieldRadiusX),
+		RadiusY:       vmath.FromFloat(parameter.ShieldRadiusY),
+		MaxOpacity:    parameter.ShieldMaxOpacity,
 		LastDrainTime: w.Resources.Time.GameTime,
 	})
 

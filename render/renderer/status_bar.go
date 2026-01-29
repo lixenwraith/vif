@@ -6,8 +6,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/status"
 	"github.com/lixenwraith/vi-fighter/terminal"
@@ -60,7 +61,7 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 
 // Render implements SystemRenderer
 func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	buf.SetWriteMask(constant.MaskUI)
+	buf.SetWriteMask(visual.MaskUI)
 	statusY := ctx.GameYOffset + ctx.GameHeight + 1
 
 	// Bounds check: skip if status row outside screen
@@ -84,7 +85,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		} else {
 			audioBgColor = render.RgbAudioUnmuted
 		}
-		for _, ch := range constant.AudioStr {
+		for _, ch := range parameter.AudioStr {
 			if x >= ctx.ScreenWidth {
 				return // No space left
 			}
@@ -97,19 +98,19 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	var modeText string
 	var modeBgColor render.RGB
 	if r.gameCtx.IsSearchMode() {
-		modeText = constant.ModeTextSearch
+		modeText = parameter.ModeTextSearch
 		modeBgColor = render.RgbModeSearchBg
 	} else if r.gameCtx.IsCommandMode() {
-		modeText = constant.ModeTextCommand
+		modeText = parameter.ModeTextCommand
 		modeBgColor = render.RgbModeCommandBg
 	} else if r.gameCtx.IsInsertMode() {
-		modeText = constant.ModeTextInsert
+		modeText = parameter.ModeTextInsert
 		modeBgColor = render.RgbModeInsertBg
 	} else if r.gameCtx.IsVisualMode() {
-		modeText = constant.ModeTextVisual
+		modeText = parameter.ModeTextVisual
 		modeBgColor = render.RgbModeVisualBg
 	} else {
-		modeText = constant.ModeTextNormal
+		modeText = parameter.ModeTextNormal
 		modeBgColor = render.RgbModeNormalBg
 	}
 	for _, ch := range modeText {

@@ -3,8 +3,8 @@ package audio
 import (
 	"sync"
 
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // BeatTrack manages drum pattern playback
@@ -147,7 +147,7 @@ type MelodyTrack struct {
 	rootNote    int
 
 	// Voice pool
-	voices        [constant.MaxPolyphony]*TonalVoice
+	voices        [parameter.MaxPolyphony]*TonalVoice
 	stealStrategy core.VoiceStealStrategy
 
 	// Crossfade
@@ -198,7 +198,7 @@ func (t *MelodyTrack) TriggerStep(step int) {
 	for _, trig := range pattern.Notes {
 		if trig.Step == localStep {
 			note := root + trig.NoteOffset
-			duration := trig.Duration * constant.SamplesPerStep(constant.DefaultBPM)
+			duration := trig.Duration * parameter.SamplesPerStep(parameter.DefaultBPM)
 			t.TriggerNote(note, trig.Velocity, duration, pattern.Instrument)
 		}
 	}

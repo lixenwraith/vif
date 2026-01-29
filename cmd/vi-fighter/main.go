@@ -6,13 +6,13 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/asset"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/input"
 	"github.com/lixenwraith/vi-fighter/manifest"
 	"github.com/lixenwraith/vi-fighter/mode"
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/registry"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/service"
@@ -127,7 +127,7 @@ func main() {
 		world,
 		ctx.PausableClock,
 		&ctx.IsPaused,
-		constant.GameUpdateInterval,
+		parameter.GameUpdateInterval,
 		frameReady,
 	)
 
@@ -173,7 +173,7 @@ func main() {
 	defer clockScheduler.Stop()
 
 	// Set frame rate
-	frameTicker := time.NewTicker(constant.FrameUpdateInterval)
+	frameTicker := time.NewTicker(parameter.FrameUpdateInterval)
 	defer frameTicker.Stop()
 
 	eventChan := termSvc.Events()

@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/physics"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
@@ -70,8 +70,8 @@ func NewDrainSystem(world *engine.World) engine.System {
 		world: world,
 	}
 
-	s.pendingSpawns = make([]pendingDrainSpawn, constant.DrainMaxCount)
-	s.drainCache = make([]drainCacheEntry, 0, constant.DrainMaxCount)
+	s.pendingSpawns = make([]pendingDrainSpawn, parameter.DrainMaxCount)
+	s.drainCache = make([]drainCacheEntry, 0, parameter.DrainMaxCount)
 	s.quasarCache = make([]quasarCacheEntry, 0, 1) // Typically 0-1 quasar
 
 	s.statCount = s.world.Resources.Status.Ints.Get("drain.count")
@@ -101,7 +101,7 @@ func (s *DrainSystem) Name() string {
 
 // Priority returns the system's priority
 func (s *DrainSystem) Priority() int {
-	return constant.PriorityDrain
+	return parameter.PriorityDrain
 }
 
 // EventTypes returns the event types DrainSystem handles
@@ -295,7 +295,7 @@ func (s *DrainSystem) processDrainStates() {
 		}
 
 		// Enrage state transition
-		shouldEnrage := entry.combatComp.HitPoints < constant.DrainEnrageThreshold
+		shouldEnrage := entry.combatComp.HitPoints < parameter.DrainEnrageThreshold
 		if shouldEnrage != entry.combatComp.IsEnraged {
 			entry.combatComp.IsEnraged = shouldEnrage
 			s.world.Components.Combat.SetComponent(entry.entity, entry.combatComp)
@@ -409,7 +409,7 @@ func (s *DrainSystem) processPendingSpawns() {
 // queueDrainSpawn adds a drain materialize spawn to the pending queue with stagger timing
 func (s *DrainSystem) queueDrainSpawn(targetX, targetY int, staggerIndex int) {
 	currentTick := s.world.Resources.Game.State.GetGameTicks()
-	scheduledTick := currentTick + uint64(staggerIndex)*uint64(constant.DrainSpawnStaggerTicks)
+	scheduledTick := currentTick + uint64(staggerIndex)*uint64(parameter.DrainSpawnStaggerTicks)
 
 	s.pendingSpawns = append(s.pendingSpawns, pendingDrainSpawn{
 		targetX:       targetX,
@@ -428,8 +428,8 @@ func (s *DrainSystem) calcTargetDrainCount() int {
 	}
 
 	count := currentHeat / 10 // int div floor
-	if count > constant.DrainMaxCount {
-		count = constant.DrainMaxCount
+	if count > parameter.DrainMaxCount {
+		count = parameter.DrainMaxCount
 	}
 	return count
 }
@@ -475,8 +475,8 @@ func (s *DrainSystem) getActiveDrainsBySpawnOrder() []core.Entity {
 // Retries up to maxRetries times to find unoccupied cell not in pending queue
 func (s *DrainSystem) randomSpawnOffset(baseX, baseY int, queuedPositions map[uint64]bool) (int, int, bool) {
 	config := s.world.Resources.Config
-	maxRetries := constant.DrainSpawnMaxRetries
-	radius := constant.DrainSpawnOffsetMax
+	maxRetries := parameter.DrainSpawnMaxRetries
+	radius := parameter.DrainSpawnOffsetMax
 	width := config.GameWidth
 	height := config.GameHeight
 
@@ -698,13 +698,13 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	// Combat component for interactions
 	s.world.Components.Combat.SetComponent(entity,
 		component.CombatComponent{
-			HitPoints:                constant.CombatInitialHPDrain,
+			HitPoints:                parameter.CombatInitialHPDrain,
 			RemainingKineticImmunity: time.Duration(0),
 		})
 
 	// Visual component for sigil renderer and death system flash extraction
 	s.world.Components.Sigil.SetComponent(entity, component.SigilComponent{
-		Rune:  constant.DrainChar,
+		Rune:  parameter.DrainChar,
 		Color: component.SigilDrain,
 	})
 }
@@ -780,9 +780,9 @@ func (s *DrainSystem) handleDrainInteractions() {
 		// Shield zone interaction
 		if shieldActive && s.isInsideShieldEllipse(drainPos.X, drainPos.Y) {
 			// Energy drain (existing timer-based)
-			if now.Sub(drain.LastDrainTime) >= constant.DrainEnergyDrainInterval {
+			if now.Sub(drain.LastDrainTime) >= parameter.DrainEnergyDrainInterval {
 				s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-					Value: constant.DrainShieldEnergyDrainAmount,
+					Value: parameter.DrainShieldEnergyDrainAmount,
 				})
 				drain.LastDrainTime = now
 				s.world.Components.Drain.SetComponent(drainEntity, drain)
@@ -804,7 +804,7 @@ func (s *DrainSystem) handleDrainInteractions() {
 		// Cursor collision (shield not active or drain outside shield)
 		if isOnCursor {
 			s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
-				Delta: -constant.DrainHeatReductionAmount,
+				Delta: -parameter.DrainHeatReductionAmount,
 			})
 			event.EmitDeathOne(s.world.Resources.Event.Queue, drainEntity, event.EventFlashRequest)
 		}
@@ -886,7 +886,7 @@ func (s *DrainSystem) updateDrainMovement() {
 	cursorXFixed := vmath.FromInt(cursorPos.X)
 	cursorYFixed := vmath.FromInt(cursorPos.Y)
 
-	var collisionBuf [constant.MaxEntitiesPerCell]core.Entity
+	var collisionBuf [parameter.MaxEntitiesPerCell]core.Entity
 
 	drainEntities := s.world.Components.Drain.GetAllEntities()
 	for _, drainEntity := range drainEntities {
@@ -983,7 +983,7 @@ func (s *DrainSystem) applySoftCollisionWithQuasar(
 	for _, qc := range s.quasarCache {
 		// Check if drain is inside quasar collision ellipse
 		if !vmath.EllipseContainsPoint(drainX, drainY, qc.x, qc.y,
-			constant.QuasarCollisionInvRxSq, constant.QuasarCollisionInvRySq) {
+			parameter.QuasarCollisionInvRxSq, parameter.QuasarCollisionInvRySq) {
 			continue
 		}
 
@@ -1003,7 +1003,7 @@ func (s *DrainSystem) applySoftCollisionWithQuasar(
 			s.rng,
 		)
 
-		combatComp.RemainingKineticImmunity = constant.SoftCollisionImmunityDuration
+		combatComp.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
 		return // One collision per tick
 	}
 }

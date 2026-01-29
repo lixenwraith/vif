@@ -3,8 +3,8 @@ package component
 import (
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // SplashSlot identifies the visual purpose of a splash for uniqueness enforcement
@@ -37,9 +37,9 @@ const (
 // SplashComponent holds state for splash effects (typing feedback, timers)
 // Supports multiple concurrent entities
 type SplashComponent struct {
-	Content [constant.SplashMaxLength]rune // Content buffer
-	Length  int                            // Active character count
-	Color   SplashColor                    // Render color
+	Content [parameter.SplashMaxLength]rune // Content buffer
+	Length  int                             // Active character count
+	Color   SplashColor                     // Render color
 
 	// Positioning: AnchorEntity != 0 uses entity-relative, else absolute AnchorX/Y
 	AnchorEntity                                     core.Entity

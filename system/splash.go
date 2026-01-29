@@ -5,10 +5,10 @@ import (
 	"strconv"
 
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // TODO: ALL collision checks to be unified now that all are based on spiral search, different order and different starting radius, timer: 1, magnifier: 1, action: 2
@@ -68,7 +68,7 @@ func (s *SplashSystem) Name() string {
 
 // Priority returns the system's priority (low, after game logic)
 func (s *SplashSystem) Priority() int {
-	return constant.PrioritySplash
+	return parameter.PrioritySplash
 }
 
 // EventTypes defines the events this system subscribes to
@@ -170,8 +170,8 @@ func (s *SplashSystem) Update() {
 			newLength := len(digits)
 
 			// TODO: Defensive, trace if necessary
-			if newLength > constant.SplashMaxLength {
-				newLength = constant.SplashMaxLength
+			if newLength > parameter.SplashMaxLength {
+				newLength = parameter.SplashMaxLength
 			}
 
 			// Update content if changed
@@ -197,8 +197,8 @@ func (s *SplashSystem) Update() {
 			}
 
 			// Construct current BBox for magnifier
-			magW := splashComp.Length * constant.SplashCharWidth
-			magH := constant.SplashCharHeight
+			magW := splashComp.Length * parameter.SplashCharWidth
+			magH := parameter.SplashCharHeight
 			magBBox := BBox{X: splashComp.AnchorX, Y: splashComp.AnchorY, W: magW, H: magH}
 
 			// Check against inflated timer boxes
@@ -236,8 +236,8 @@ func (s *SplashSystem) handleSplashRequest(payload *event.SplashRequestPayload) 
 	// 2. Prepare content
 	runes := []rune(payload.Text)
 	length := len(runes)
-	if length > constant.SplashMaxLength {
-		length = constant.SplashMaxLength
+	if length > parameter.SplashMaxLength {
+		length = parameter.SplashMaxLength
 	}
 
 	// 3. Smart layout
@@ -250,8 +250,8 @@ func (s *SplashSystem) handleSplashRequest(payload *event.SplashRequestPayload) 
 		AnchorX:   anchorX,
 		AnchorY:   anchorY,
 		Slot:      component.SlotAction,
-		Remaining: constant.SplashDuration,
-		Duration:  constant.SplashDuration,
+		Remaining: parameter.SplashDuration,
+		Duration:  parameter.SplashDuration,
 	}
 	copy(splash.Content[:], runes[:length])
 
@@ -267,7 +267,7 @@ func (s *SplashSystem) handleSplashRequest(payload *event.SplashRequestPayload) 
 	// 7. Register with timeKeeper for destruction
 	s.world.PushEvent(event.EventTimerStart, &event.TimerStartPayload{
 		Entity:   entity,
-		Duration: constant.SplashDuration,
+		Duration: parameter.SplashDuration,
 	})
 }
 
@@ -280,7 +280,7 @@ func (s *SplashSystem) validateMagnifier(splashEntity core.Entity, splash *compo
 	}
 
 	// Zero-allocation lookup
-	var buf [constant.MaxEntitiesPerCell]core.Entity
+	var buf [parameter.MaxEntitiesPerCell]core.Entity
 	count := s.world.Positions.GetAllEntitiesAtInto(cursorPos.X, cursorPos.Y, buf[:])
 
 	var glyphEntity core.Entity
@@ -400,15 +400,15 @@ func (s *SplashSystem) calculateSmartLayout(cursorX, cursorY, charCount int) (in
 	centerX := config.GameWidth / 2
 	centerY := config.GameHeight / 2
 
-	splashW := charCount * constant.SplashCharWidth
-	splashH := constant.SplashCharHeight
+	splashW := charCount * parameter.SplashCharWidth
+	splashH := parameter.SplashCharHeight
 
 	// Early exit if splash cannot fit in game area
 	if splashW > config.GameWidth || splashH > config.GameHeight {
 		return max(0, cursorX-splashW/2), max(0, cursorY-splashH/2)
 	}
 
-	minDist := float64(constant.SplashMinDistance)
+	minDist := float64(parameter.SplashMinDistance)
 	occupiedBBoxes := s.getOccupiedSplashBBoxes()
 
 	// Determine search direction and select angle order (same as magnifier)
@@ -500,10 +500,10 @@ func (s *SplashSystem) getOccupiedSplashBBoxes() []BBox {
 			}
 		}
 
-		w := splashComp.Length * constant.SplashCharWidth
-		h := constant.SplashCharHeight
+		w := splashComp.Length * parameter.SplashCharWidth
+		h := parameter.SplashCharHeight
 
-		pad := constant.SplashCollisionPadding
+		pad := parameter.SplashCollisionPadding
 		boxes = append(boxes, BBox{
 			X: x - pad,
 			Y: y - pad,
@@ -520,7 +520,7 @@ func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 	cursorX, cursorY := payload.X, payload.Y
 
 	// Zero-allocation lookup of glyph under cursor
-	var buf [constant.MaxEntitiesPerCell]core.Entity
+	var buf [parameter.MaxEntitiesPerCell]core.Entity
 	count := s.world.Positions.GetAllEntitiesAtInto(cursorX, cursorY, buf[:])
 
 	var entity core.Entity
@@ -593,15 +593,15 @@ func (s *SplashSystem) calculateProximityAnchor(cursorX, cursorY, charCount int)
 	centerX := config.GameWidth / 2
 	centerY := config.GameHeight / 2
 
-	splashW := charCount * constant.SplashCharWidth
-	splashH := constant.SplashCharHeight
+	splashW := charCount * parameter.SplashCharWidth
+	splashH := parameter.SplashCharHeight
 
 	// Early exit if splash cannot fit in game area
 	if splashW > config.GameWidth || splashH > config.GameHeight {
 		return max(0, cursorX-splashW/2), max(0, cursorY-splashH/2)
 	}
 
-	minDist := float64(constant.SplashMinDistance)
+	minDist := float64(parameter.SplashMinDistance)
 	timerBBoxes := s.getTimerBBoxes()
 
 	// Determine search direction and select angle order
@@ -686,12 +686,12 @@ func (s *SplashSystem) calculateTimerOffset(splashComp *component.SplashComponen
 	gameWidth := s.world.Resources.Config.GameWidth
 	gameHeight := s.world.Resources.Config.GameHeight
 
-	padding := constant.SplashTimerPadding
-	topPadding := constant.SplashTopPadding
+	padding := parameter.SplashTimerPadding
+	topPadding := parameter.SplashTopPadding
 
 	timerLength := splashComp.Length
-	timerWidth := timerLength * constant.SplashCharWidth
-	timerHeight := constant.SplashCharHeight
+	timerWidth := timerLength * parameter.SplashCharWidth
+	timerHeight := parameter.SplashCharHeight
 
 	anchorEntity := splashComp.AnchorEntity
 	centerX := gameWidth / 2
@@ -789,11 +789,11 @@ func (s *SplashSystem) getTimerBBoxes() []BBox {
 		}
 
 		// Dynamic width for timer
-		w := splashComp.Length * constant.SplashCharWidth
-		h := constant.SplashCharHeight
+		w := splashComp.Length * parameter.SplashCharWidth
+		h := parameter.SplashCharHeight
 
 		// Apply padding for inter-splash collision (Inflated Bounding Box)
-		pad := constant.SplashCollisionPadding
+		pad := parameter.SplashCollisionPadding
 		boxes = append(boxes, BBox{
 			X: x - pad,
 			Y: y - pad,

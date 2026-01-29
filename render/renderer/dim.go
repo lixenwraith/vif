@@ -1,8 +1,8 @@
 package renderer
 
 import (
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
 )
 
@@ -23,5 +23,5 @@ func (r *DimRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer)
 	if !ctx.IsPaused {
 		return
 	}
-	buf.MutateDim(constant.DimFactor, constant.DimMask)
+	buf.MutateDim(visual.DimFactor, visual.DimMask)
 }

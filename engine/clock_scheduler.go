@@ -6,10 +6,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine/fsm"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/status"
 )
 
@@ -96,8 +96,8 @@ func NewClockScheduler(
 
 		fsm: fsm.NewMachine[*World](),
 
-		eventLoopInterval:   constant.EventLoopInterval,
-		eventLoopBackoffMax: constant.EventLoopBackoffMax,
+		eventLoopInterval:   parameter.EventLoopInterval,
+		eventLoopBackoffMax: parameter.EventLoopBackoffMax,
 
 		statTicks:        statusReg.Ints.Get("engine.ticks"),
 		statEvBackoffs:   statusReg.Ints.Get("event.backoffs"),
@@ -348,7 +348,7 @@ func (cs *ClockScheduler) dispatchOnePass() int {
 // dispatchAndProcessEvents settles pending events with iteration cap
 // Used by reset path where immediate settling is required
 func (cs *ClockScheduler) dispatchAndProcessEvents() {
-	for i := 0; i < constant.EventLoopIterations; i++ {
+	for i := 0; i < parameter.EventLoopIterations; i++ {
 		if cs.dispatchOnePass() == 0 {
 			return
 		}
@@ -438,7 +438,7 @@ func (cs *ClockScheduler) processTick() {
 	})
 
 	ticks := cs.world.Resources.Game.State.IncrementGameTicks()
-	if ticks%uint64(constant.GameTicksPerSecond) == 0 {
+	if ticks%uint64(parameter.GameTicksPerSecond) == 0 {
 		cs.world.Resources.Game.State.UpdateAPM(cs.world.Resources.Status)
 	}
 

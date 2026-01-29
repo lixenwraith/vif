@@ -5,10 +5,10 @@ import (
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/physics"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
@@ -59,7 +59,7 @@ func (s *BlossomSystem) Name() string {
 
 // Priority returns the system's priority
 func (s *BlossomSystem) Priority() int {
-	return constant.PriorityBlossom
+	return parameter.PriorityBlossom
 }
 
 // EventTypes returns the event types BlossomSystem handles
@@ -121,9 +121,9 @@ func (s *BlossomSystem) Update() {
 func (s *BlossomSystem) spawnSingleBlossom(x, y int, char rune, skipStartCell bool) {
 	// Random speed between ParticleMinSpeed and ParticleMaxSpeed
 	// Note: Speed is converted to Q32.32. Blossom moves UP by default, so velocity is negative
-	speedFloat := constant.ParticleMinSpeed + rand.Float64()*(constant.ParticleMaxSpeed-constant.ParticleMinSpeed)
+	speedFloat := parameter.ParticleMinSpeed + rand.Float64()*(parameter.ParticleMaxSpeed-parameter.ParticleMinSpeed)
 	velY := -vmath.FromFloat(speedFloat)
-	accelY := -vmath.FromFloat(constant.ParticleAcceleration)
+	accelY := -vmath.FromFloat(parameter.ParticleAcceleration)
 
 	entity := s.world.CreateEntity()
 
@@ -164,7 +164,7 @@ func (s *BlossomSystem) spawnBlossomWave() {
 
 	// Spawn one blossom entity per column for full-width coverage
 	for column := 0; column < gameWidth; column++ {
-		char := constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
+		char := parameter.AlphanumericRunes[rand.Intn(len(parameter.AlphanumericRunes))]
 		s.spawnSingleBlossom(column, gameHeight-1, char, false)
 	}
 }
@@ -187,7 +187,7 @@ func (s *BlossomSystem) updateBlossomEntities() {
 	clear(s.processedGridCells)
 	clear(s.blossomedThisFrame)
 
-	var collisionBuf [constant.MaxEntitiesPerCell]core.Entity
+	var collisionBuf [parameter.MaxEntitiesPerCell]core.Entity
 
 	for _, entity := range blossomEntities {
 		blossomComp, ok := s.world.Components.Blossom.GetComponent(entity)
@@ -279,8 +279,8 @@ func (s *BlossomSystem) updateBlossomEntities() {
 
 		// 2D Matrix Visual Effect: Randomize character when entering ANY new cell
 		if blossomComp.LastIntX != curX || blossomComp.LastIntY != curY {
-			if rand.Float64() < constant.ParticleChangeChance {
-				blossomComp.Char = constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
+			if rand.Float64() < parameter.ParticleChangeChance {
+				blossomComp.Char = parameter.AlphanumericRunes[rand.Intn(len(parameter.AlphanumericRunes))]
 				// Must update the component used by the renderer
 				if sigil, ok := s.world.Components.Sigil.GetComponent(entity); ok {
 					sigil.Rune = blossomComp.Char

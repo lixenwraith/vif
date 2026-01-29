@@ -1,9 +1,9 @@
 package mode
 
 import (
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // CharType represents the type of character at a position
@@ -73,7 +73,7 @@ func validatePosition(ctx *engine.GameContext, x, y int) (validX, validY int) {
 // findPrevEmptyLine finds the previous line with no interactable entities
 // Optimized for high entity counts using spatial grid traversal
 func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
-	var buf [constant.MaxEntitiesPerCell]core.Entity
+	var buf [parameter.MaxEntitiesPerCell]core.Entity
 
 	glyphStore := ctx.World.Components.Glyph
 
@@ -99,7 +99,7 @@ func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
 // findNextEmptyLine finds the next line with no interactable entities
 // Optimized for high entity counts using spatial grid traversal
 func findNextEmptyLine(ctx *engine.GameContext, cursorY int) int {
-	var buf [constant.MaxEntitiesPerCell]core.Entity
+	var buf [parameter.MaxEntitiesPerCell]core.Entity
 
 	glyphStore := ctx.World.Components.Glyph
 
@@ -321,7 +321,7 @@ func findCharInBounds(ctx *engine.GameContext, startX, startY int, target rune, 
 // findLineEndInBounds returns rightmost entity X across all bounds rows
 // Returns -1 if no entities found
 func findLineEndInBounds(ctx *engine.GameContext, bounds engine.PingBounds) int {
-	var buf [constant.MaxEntitiesPerCell]core.Entity
+	var buf [parameter.MaxEntitiesPerCell]core.Entity
 	glyphStore := ctx.World.Components.Glyph
 	rightmost := -1
 

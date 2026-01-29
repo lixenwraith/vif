@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // activeSound tracks a playing sound instance
@@ -60,7 +60,7 @@ func NewMixer(out io.Writer, cfg *AudioConfig, cache *soundCache) *Mixer {
 		stopChan:  make(chan struct{}),
 		active:    make([]activeSound, 0, 8),
 		errChan:   make(chan error, 1),
-		sequencer: NewSequencer(constant.DefaultBPM),
+		sequencer: NewSequencer(parameter.DefaultBPM),
 	}
 }
 
@@ -139,12 +139,12 @@ func (m *Mixer) StopMusic() {
 
 // loop is the main mixing goroutine
 func (m *Mixer) loop() {
-	ticker := time.NewTicker(constant.AudioBufferDuration)
+	ticker := time.NewTicker(parameter.AudioBufferDuration)
 	defer ticker.Stop()
 
-	samplesPerTick := constant.AudioBufferSamples
+	samplesPerTick := parameter.AudioBufferSamples
 	mixBuf := make([]float64, samplesPerTick)
-	outBytes := make([]byte, samplesPerTick*constant.AudioBytesPerFrame)
+	outBytes := make([]byte, samplesPerTick*parameter.AudioBytesPerFrame)
 
 	for {
 		select {

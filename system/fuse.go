@@ -4,10 +4,10 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -55,7 +55,7 @@ func (s *FuseSystem) Name() string {
 }
 
 func (s *FuseSystem) Priority() int {
-	return constant.PriorityFuse
+	return parameter.PriorityFuse
 }
 
 func (s *FuseSystem) EventTypes() []event.EventType {
@@ -171,7 +171,7 @@ func (s *FuseSystem) handleQuasarFuse() {
 				StartY:    pos.Y,
 				TargetX:   cX,
 				TargetY:   cY,
-				Char:      constant.DrainChar,
+				Char:      parameter.DrainChar,
 				BaseColor: component.SpiritCyan,
 			})
 		}
@@ -196,7 +196,7 @@ func (s *FuseSystem) handleQuasarFuse() {
 		Type:    FuseQuasar,
 		TargetX: cX,
 		TargetY: cY,
-		Timer:   constant.SpiritAnimationDuration + constant.SpiritSafetyBuffer,
+		Timer:   parameter.SpiritAnimationDuration + parameter.SpiritSafetyBuffer,
 	})
 }
 
@@ -225,7 +225,7 @@ func (s *FuseSystem) handleSwarmFuse(drainA, drainB core.Entity) {
 		Type:    FuseSwarm,
 		TargetX: midX,
 		TargetY: midY,
-		Timer:   constant.SwarmFuseAnimationDuration,
+		Timer:   parameter.SwarmFuseAnimationDuration,
 	})
 }
 
@@ -235,7 +235,7 @@ func (s *FuseSystem) spawnConvergenceSpirit(startX, startY, targetX, targetY int
 		StartY:    startY,
 		TargetX:   targetX,
 		TargetY:   targetY,
-		Char:      constant.DrainChar,
+		Char:      parameter.DrainChar,
 		BaseColor: component.SpiritCyan,
 	})
 }

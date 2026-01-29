@@ -5,10 +5,10 @@ import (
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -57,7 +57,7 @@ func (s *BuffSystem) Name() string {
 }
 
 func (s *BuffSystem) Priority() int {
-	return constant.PriorityBuff
+	return parameter.PriorityBuff
 }
 
 func (s *BuffSystem) EventTypes() []event.EventType {
@@ -137,13 +137,13 @@ func (s *BuffSystem) addBuff(buff component.BuffType) {
 	buffComp.Active[buff] = true
 	switch buff {
 	case component.BuffRod:
-		buffComp.Cooldown[buff] = constant.BuffCooldownRod
+		buffComp.Cooldown[buff] = parameter.BuffCooldownRod
 		s.statRod.Store(true)
 	case component.BuffLauncher:
-		buffComp.Cooldown[buff] = constant.BuffCooldownLauncher
+		buffComp.Cooldown[buff] = parameter.BuffCooldownLauncher
 		s.statLauncher.Store(true)
 	case component.BuffChain:
-		buffComp.Cooldown[buff] = constant.BuffCooldownChain
+		buffComp.Cooldown[buff] = parameter.BuffCooldownChain
 		s.statChain.Store(true)
 	default:
 		return
@@ -197,7 +197,7 @@ func (s *BuffSystem) fireAllBuffs() {
 
 		switch buff {
 		case component.BuffRod:
-			buffComp.Cooldown[buff] = constant.BuffCooldownRod
+			buffComp.Cooldown[buff] = parameter.BuffCooldownRod
 
 			// 1. Filter eligible targets
 			combatEntities := s.world.Components.Combat.GetAllEntities()

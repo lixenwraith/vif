@@ -2,8 +2,8 @@ package renderer
 
 import (
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
@@ -22,7 +22,7 @@ func NewGlyphRenderer(gameCtx *engine.GameContext) *GlyphRenderer {
 
 // Render draws all glyph entities
 func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	buf.SetWriteMask(constant.MaskGlyph)
+	buf.SetWriteMask(visual.MaskGlyph)
 
 	entities := r.gameCtx.World.Components.Glyph.GetAllEntities()
 	for _, entity := range entities {

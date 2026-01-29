@@ -1,8 +1,8 @@
 package audio
 
 import (
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // AudioConfig holds audio system configuration
@@ -28,6 +28,6 @@ func DefaultAudioConfig() *AudioConfig {
 			core.SoundCrackle:  0.6,
 			core.SoundMetalHit: 0.7,
 		},
-		SampleRate: constant.AudioSampleRate,
+		SampleRate: parameter.AudioSampleRate,
 	}
 }

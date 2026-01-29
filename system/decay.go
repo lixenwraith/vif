@@ -5,10 +5,10 @@ import (
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/physics"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
@@ -59,7 +59,7 @@ func (s *DecaySystem) Name() string {
 
 // Priority returns the system's priority
 func (s *DecaySystem) Priority() int {
-	return constant.PriorityDecay
+	return parameter.PriorityDecay
 }
 
 // EventTypes returns the event types DecaySystem handles
@@ -122,9 +122,9 @@ func (s *DecaySystem) Update() {
 func (s *DecaySystem) spawnSingleDecay(x, y int, char rune, skipStartCell bool) {
 	// Random speed between ParticleMinSpeed and ParticleMaxSpeed
 	// Note: Speed is converted to Q32.32. Decay moves DOWN by default, so velocity is positive
-	speedFloat := constant.ParticleMinSpeed + rand.Float64()*(constant.ParticleMaxSpeed-constant.ParticleMinSpeed)
+	speedFloat := parameter.ParticleMinSpeed + rand.Float64()*(parameter.ParticleMaxSpeed-parameter.ParticleMinSpeed)
 	velY := vmath.FromFloat(speedFloat)
-	accelY := vmath.FromFloat(constant.ParticleAcceleration)
+	accelY := vmath.FromFloat(parameter.ParticleAcceleration)
 
 	entity := s.world.CreateEntity()
 
@@ -164,7 +164,7 @@ func (s *DecaySystem) spawnDecayWave() {
 
 	// Spawn one decay entity per column for full-width coverage
 	for column := 0; column < gameWidth; column++ {
-		char := constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
+		char := parameter.AlphanumericRunes[rand.Intn(len(parameter.AlphanumericRunes))]
 		s.spawnSingleDecay(column, 0, char, false)
 	}
 }
@@ -189,7 +189,7 @@ func (s *DecaySystem) updateDecayEntities() {
 
 	// Local buffers
 	var deathCandidates []core.Entity
-	var collisionBuf [constant.MaxEntitiesPerCell]core.Entity
+	var collisionBuf [parameter.MaxEntitiesPerCell]core.Entity
 
 	for _, entity := range decayEntities {
 		decayComp, ok := s.world.Components.Decay.GetComponent(entity)
@@ -264,8 +264,8 @@ func (s *DecaySystem) updateDecayEntities() {
 
 		// 2D Matrix Visual Effect: Update character on ANY cell entry
 		if decayComp.LastIntX != curX || decayComp.LastIntY != curY {
-			if rand.Float64() < constant.ParticleChangeChance {
-				decayComp.Char = constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
+			if rand.Float64() < parameter.ParticleChangeChance {
+				decayComp.Char = parameter.AlphanumericRunes[rand.Intn(len(parameter.AlphanumericRunes))]
 				if sigil, ok := s.world.Components.Sigil.GetComponent(entity); ok {
 					sigil.Rune = decayComp.Char
 					s.world.Components.Sigil.SetComponent(entity, sigil)

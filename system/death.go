@@ -4,10 +4,10 @@ import (
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // DeathSystem routes death requests through protection checks and effect emission
@@ -44,7 +44,7 @@ func (s *DeathSystem) Name() string {
 }
 
 func (s *DeathSystem) Priority() int {
-	return constant.PriorityDeath
+	return parameter.PriorityDeath
 }
 
 func (s *DeathSystem) EventTypes() []event.EventType {

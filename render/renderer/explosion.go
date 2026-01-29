@@ -1,8 +1,9 @@
 package renderer
 
 import (
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/system"
 	"github.com/lixenwraith/vi-fighter/terminal"
@@ -76,7 +77,7 @@ func (r *ExplosionRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 
 	// Color mapping pass
-	buf.SetWriteMask(constant.MaskTransient)
+	buf.SetWriteMask(visual.MaskTransient)
 	r.renderBuffer(ctx, buf)
 }
 
@@ -174,7 +175,7 @@ func (r *ExplosionRenderer) renderBuffer(ctx render.RenderContext, buf *render.R
 			intensity := r.accBuffer[rowOffset+x]
 
 			// Skip near-zero values to save blend ops
-			if intensity < constant.ExplosionEdgeThreshold {
+			if intensity < parameter.ExplosionEdgeThreshold {
 				continue
 			}
 
@@ -189,24 +190,24 @@ func (r *ExplosionRenderer) renderBuffer(ctx render.RenderContext, buf *render.R
 			var color render.RGB
 			var tFixed int64
 
-			if val < constant.ExplosionGradientMidpoint {
+			if val < parameter.ExplosionGradientMidpoint {
 				// Interpolate Edge -> Mid
 				// t = val / Midpoint
-				tFixed = vmath.Mul(val, constant.ExplosionGradientFactor)
+				tFixed = vmath.Mul(val, parameter.ExplosionGradientFactor)
 				color = render.LerpRGBFixed(edgeColor, midColor, tFixed)
 			} else {
 				// Interpolate Mid -> Core
 				// t = (val - Midpoint) / (1.0 - Midpoint)
 				// Assuming Midpoint is 0.5, denominator is 0.5, factor is 2.0
-				base := val - constant.ExplosionGradientMidpoint
-				tFixed = vmath.Mul(base, constant.ExplosionGradientFactor)
+				base := val - parameter.ExplosionGradientMidpoint
+				tFixed = vmath.Mul(base, parameter.ExplosionGradientFactor)
 				color = render.LerpRGBFixed(midColor, coreColor, tFixed)
 			}
 
 			// Alpha mapping: val * AlphaMax
-			alphaFixed := vmath.Mul(val, constant.ExplosionAlphaMax)
-			if alphaFixed < constant.ExplosionAlphaMin {
-				alphaFixed = constant.ExplosionAlphaMin
+			alphaFixed := vmath.Mul(val, parameter.ExplosionAlphaMax)
+			if alphaFixed < parameter.ExplosionAlphaMin {
+				alphaFixed = parameter.ExplosionAlphaMin
 			}
 
 			screenX := ctx.GameXOffset + x

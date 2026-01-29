@@ -2,9 +2,9 @@ package system
 
 import (
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // TimeKeeperSystem manages lifecycle timers for entities
@@ -36,7 +36,7 @@ func (s *TimeKeeperSystem) Name() string {
 
 // Priority returns the system's priority (runs just before CullSystem)
 func (s *TimeKeeperSystem) Priority() int {
-	return constant.PriorityTimekeeper
+	return parameter.PriorityTimekeeper
 }
 
 // EventTypes returns the event types TimeKeeperSystem handles

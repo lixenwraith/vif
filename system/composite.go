@@ -2,10 +2,10 @@ package system
 
 import (
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // CompositeSystem manages composite entity groups
@@ -40,7 +40,7 @@ func (s *CompositeSystem) Name() string {
 }
 
 func (s *CompositeSystem) Priority() int {
-	return constant.PriorityComposite
+	return parameter.PriorityComposite
 }
 
 func (s *CompositeSystem) EventTypes() []event.EventType {

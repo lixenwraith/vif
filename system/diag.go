@@ -3,9 +3,9 @@ package system
 import (
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/status"
 )
 
@@ -105,7 +105,7 @@ func (s *DiagSystem) Name() string {
 }
 
 func (s *DiagSystem) Priority() int {
-	return constant.PriorityDiagnostics
+	return parameter.PriorityDiagnostics
 }
 
 func (s *DiagSystem) EventTypes() []event.EventType {

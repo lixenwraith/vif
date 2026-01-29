@@ -3,10 +3,10 @@ package system
 import (
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -47,7 +47,7 @@ func (s *ShieldSystem) Name() string {
 
 // Priority returns the system's priority
 func (s *ShieldSystem) Priority() int {
-	return constant.PriorityShield
+	return parameter.PriorityShield
 }
 
 // EventTypes returns the event types ShieldSystem handles
@@ -87,8 +87,8 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 		shield, ok := s.world.Components.Shield.GetComponent(cursorEntity)
 		if ok {
 			// Calculation cache on activation since at init cursor may not be read when game is reset
-			rx := vmath.FromFloat(constant.ShieldRadiusX)
-			ry := vmath.FromFloat(constant.ShieldRadiusY)
+			rx := vmath.FromFloat(parameter.ShieldRadiusX)
+			ry := vmath.FromFloat(parameter.ShieldRadiusY)
 			shield.RadiusX = rx
 			shield.RadiusY = ry
 			shield.InvRxSq, shield.InvRySq = vmath.EllipseInvRadiiSq(rx, ry)
@@ -135,9 +135,9 @@ func (s *ShieldSystem) Update() {
 
 	now := s.world.Resources.Time.GameTime
 
-	if now.Sub(shieldComp.LastDrainTime) >= constant.ShieldPassiveDrainInterval {
+	if now.Sub(shieldComp.LastDrainTime) >= parameter.ShieldPassiveDrainInterval {
 		s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
-			Delta:      constant.ShieldPassiveEnergyPercentDrain,
+			Delta:      parameter.ShieldPassiveEnergyPercentDrain,
 			Percentage: true,
 			Type:       event.EnergyDeltaPenalty,
 		})

@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // NuggetSystem manages nugget spawn and respawn logic
@@ -62,7 +62,7 @@ func (s *NuggetSystem) Name() string {
 
 // Priority returns the system's priority
 func (s *NuggetSystem) Priority() int {
-	return constant.PriorityNugget
+	return parameter.PriorityNugget
 }
 
 // EventTypes returns the event types NuggetSystem handles
@@ -141,7 +141,7 @@ func (s *NuggetSystem) Update() {
 
 	// Spawn if no active nugget and cooldown elapsed
 	if s.activeNuggetEntity == 0 {
-		if now.Sub(s.lastSpawnAttempt) >= constant.NuggetSpawnInterval {
+		if now.Sub(s.lastSpawnAttempt) >= parameter.NuggetSpawnInterval {
 			s.lastSpawnAttempt = now
 			s.spawnNugget()
 		}
@@ -190,7 +190,7 @@ func (s *NuggetSystem) handleJumpRequest() {
 
 	// 4. Pay Energy Cost (spend, non-convergent)
 	s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
-		Delta:      constant.NuggetJumpCost,
+		Delta:      parameter.NuggetJumpCost,
 		Percentage: false,
 		Type:       event.EnergyDeltaSpend,
 	})
@@ -217,7 +217,7 @@ func (s *NuggetSystem) spawnNugget() {
 		Y: y,
 	}
 
-	randomChar := constant.AlphanumericRunes[rand.Intn(len(constant.AlphanumericRunes))]
+	randomChar := parameter.AlphanumericRunes[rand.Intn(len(parameter.AlphanumericRunes))]
 	nugget := component.NuggetComponent{
 		Char:      randomChar,
 		SpawnTime: now,
@@ -259,7 +259,7 @@ func (s *NuggetSystem) findValidPosition() (int, int) {
 		return -1, -1
 	}
 
-	for attempt := 0; attempt < constant.NuggetMaxAttempts; attempt++ {
+	for attempt := 0; attempt < parameter.NuggetMaxAttempts; attempt++ {
 		x := rand.Intn(config.GameWidth)
 		y := rand.Intn(config.GameHeight)
 
@@ -272,7 +272,7 @@ func (s *NuggetSystem) findValidPosition() (int, int) {
 			dy = -dy
 		}
 
-		if dx <= constant.CursorExclusionX || dy <= constant.CursorExclusionY {
+		if dx <= parameter.CursorExclusionX || dy <= parameter.CursorExclusionY {
 			continue
 		}
 
@@ -296,17 +296,17 @@ func (s *NuggetSystem) collectNugget(nuggetPosX, nuggetPosY int) {
 
 	// heatComp, ok := s.world.Components.Heat.GetComponent(s.world.Resources.Cursor.Entity)
 	// if ok {
-	// 	if heatComp.Current == constant.HeatMax {
+	// 	if heatComp.Current == parameter.HeatMax {
 	// 		s.nuggetOverload++
-	// 		if s.nuggetOverload >= constant.NuggetOverloadCount {
+	// 		if s.nuggetOverload >= parameter.NuggetOverloadCount {
 	// 			s.world.PushEvent(event.EventNuggetOverloadNotification, nil)
 	// 			s.nuggetOverload = 0
 	// 		}
 	// 	} else {
-	// 		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Delta: constant.NuggetHeatIncrease})
+	// 		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Delta: parameter.NuggetHeatIncrease})
 	// 	}
 	// }
-	s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Delta: constant.NuggetHeatIncrease})
+	s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Delta: parameter.NuggetHeatIncrease})
 
 	// 3. Update system state and stats
 	s.activeNuggetEntity = 0

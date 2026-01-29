@@ -4,8 +4,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // soundCache stores pre-generated unity-gain float buffers
@@ -75,11 +75,11 @@ func (c *soundCache) getWithDampening(st core.SoundType) (floatBuffer, float64) 
 	elapsed := now.Sub(c.lastPlay[st])
 
 	var vol float64
-	if elapsed < constant.RapidFireCooldown {
+	if elapsed < parameter.RapidFireCooldown {
 		// Rapid fire: decay volume
-		c.rapidFireVol[st] *= constant.RapidFireDecay
-		if c.rapidFireVol[st] < constant.RapidFireMinVolume {
-			c.rapidFireVol[st] = constant.RapidFireMinVolume
+		c.rapidFireVol[st] *= parameter.RapidFireDecay
+		if c.rapidFireVol[st] < parameter.RapidFireMinVolume {
+			c.rapidFireVol[st] = parameter.RapidFireMinVolume
 		}
 		vol = c.rapidFireVol[st]
 	} else {

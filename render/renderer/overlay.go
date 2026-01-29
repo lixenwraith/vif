@@ -1,9 +1,10 @@
 package renderer
 
 import (
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
 	"github.com/lixenwraith/vi-fighter/terminal/tui"
@@ -105,8 +106,8 @@ func NewOverlayRenderer(gameCtx *engine.GameContext) *OverlayRenderer {
 // Render draws the overlay window using TUI primitives
 func (r *OverlayRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	// Calculate overlay dimensions
-	overlayW := int(float64(ctx.ScreenWidth) * constant.OverlayWidthPercent)
-	overlayH := int(float64(ctx.ScreenHeight) * constant.OverlayHeightPercent)
+	overlayW := int(float64(ctx.ScreenWidth) * parameter.OverlayWidthPercent)
+	overlayH := int(float64(ctx.ScreenHeight) * parameter.OverlayHeightPercent)
 	if overlayW < 40 {
 		overlayW = 40
 	}
@@ -146,7 +147,7 @@ func (r *OverlayRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 		r.renderContent(root, result.Content, content)
 	}
 
-	r.adapter.FlushTo(buf, startX, startY, constant.MaskUI)
+	r.adapter.FlushTo(buf, startX, startY, visual.MaskUI)
 }
 
 // IsVisible implements render.VisibilityToggle
@@ -156,10 +157,10 @@ func (r *OverlayRenderer) IsVisible() bool {
 
 func (r *OverlayRenderer) renderContent(outer, content tui.Region, data *core.OverlayContent) {
 	padded := content.Sub(
-		constant.OverlayPaddingX,
-		constant.OverlayPaddingY,
-		content.W-2*constant.OverlayPaddingX,
-		content.H-2*constant.OverlayPaddingY-1,
+		parameter.OverlayPaddingX,
+		parameter.OverlayPaddingY,
+		content.W-2*parameter.OverlayPaddingX,
+		content.H-2*parameter.OverlayPaddingY-1,
 	)
 
 	cards := data.Cards()

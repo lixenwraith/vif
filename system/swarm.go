@@ -5,10 +5,10 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/physics"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
@@ -73,7 +73,7 @@ func (s *SwarmSystem) Name() string {
 }
 
 func (s *SwarmSystem) Priority() int {
-	return constant.PrioritySwarm
+	return parameter.PrioritySwarm
 }
 
 func (s *SwarmSystem) EventTypes() []event.EventType {
@@ -150,7 +150,7 @@ func (s *SwarmSystem) Update() {
 		}
 
 		// Charges check → despawn
-		if swarmComp.ChargesCompleted >= constant.SwarmMaxCharges {
+		if swarmComp.ChargesCompleted >= parameter.SwarmMaxCharges {
 			s.despawnSwarm(headerEntity, 2) // reason: charges
 			continue
 		}
@@ -242,8 +242,8 @@ func (s *SwarmSystem) clampSwarmSpawnPosition(targetX, targetY int) (int, int) {
 	config := s.world.Resources.Config
 
 	// Header at (1,0) offset, so top-left = header - offset
-	topLeftX := targetX - constant.SwarmHeaderOffsetX
-	topLeftY := targetY - constant.SwarmHeaderOffsetY
+	topLeftX := targetX - parameter.SwarmHeaderOffsetX
+	topLeftY := targetY - parameter.SwarmHeaderOffsetY
 
 	if topLeftX < 0 {
 		topLeftX = 0
@@ -251,26 +251,26 @@ func (s *SwarmSystem) clampSwarmSpawnPosition(targetX, targetY int) (int, int) {
 	if topLeftY < 0 {
 		topLeftY = 0
 	}
-	if topLeftX+constant.SwarmWidth > config.GameWidth {
-		topLeftX = config.GameWidth - constant.SwarmWidth
+	if topLeftX+parameter.SwarmWidth > config.GameWidth {
+		topLeftX = config.GameWidth - parameter.SwarmWidth
 	}
-	if topLeftY+constant.SwarmHeight > config.GameHeight {
-		topLeftY = config.GameHeight - constant.SwarmHeight
+	if topLeftY+parameter.SwarmHeight > config.GameHeight {
+		topLeftY = config.GameHeight - parameter.SwarmHeight
 	}
 
-	return topLeftX + constant.SwarmHeaderOffsetX, topLeftY + constant.SwarmHeaderOffsetY
+	return topLeftX + parameter.SwarmHeaderOffsetX, topLeftY + parameter.SwarmHeaderOffsetY
 }
 
 // clearSwarmSpawnArea destroys entities within swarm footprint
 func (s *SwarmSystem) clearSwarmSpawnArea(headerX, headerY int) {
-	topLeftX := headerX - constant.SwarmHeaderOffsetX
-	topLeftY := headerY - constant.SwarmHeaderOffsetY
+	topLeftX := headerX - parameter.SwarmHeaderOffsetX
+	topLeftY := headerY - parameter.SwarmHeaderOffsetY
 
 	cursorEntity := s.world.Resources.Cursor.Entity
 	var toDestroy []core.Entity
 
-	for row := 0; row < constant.SwarmHeight; row++ {
-		for col := 0; col < constant.SwarmWidth; col++ {
+	for row := 0; row < parameter.SwarmHeight; row++ {
+		for col := 0; col < parameter.SwarmWidth; col++ {
 			x := topLeftX + col
 			y := topLeftY + row
 
@@ -296,8 +296,8 @@ func (s *SwarmSystem) clearSwarmSpawnArea(headerX, headerY int) {
 
 // createSwarmComposite builds the 4×2 swarm entity structure
 func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
-	topLeftX := headerX - constant.SwarmHeaderOffsetX
-	topLeftY := headerY - constant.SwarmHeaderOffsetY
+	topLeftX := headerX - parameter.SwarmHeaderOffsetX
+	topLeftY := headerY - parameter.SwarmHeaderOffsetY
 
 	// Create phantom head
 	headerEntity := s.world.CreateEntity()
@@ -312,8 +312,8 @@ func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
 	s.world.Components.Swarm.SetComponent(headerEntity, component.SwarmComponent{
 		State:                   component.SwarmStateChase,
 		PatternIndex:            0,
-		PatternRemaining:        constant.SwarmPatternDuration,
-		ChargeIntervalRemaining: constant.SwarmChargeInterval,
+		PatternRemaining:        parameter.SwarmPatternDuration,
+		ChargeIntervalRemaining: parameter.SwarmChargeInterval,
 		ChargesCompleted:        0,
 	})
 
@@ -328,24 +328,24 @@ func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
 	s.world.Components.Combat.SetComponent(headerEntity, component.CombatComponent{
 		OwnerEntity:      headerEntity,
 		CombatEntityType: component.CombatEntitySwarm,
-		HitPoints:        constant.CombatInitialHPSwarm,
+		HitPoints:        parameter.CombatInitialHPSwarm,
 	})
 
 	// Lifetime timer for automatic despawn
 	s.world.Components.Timer.SetComponent(headerEntity, component.TimerComponent{
-		Remaining: constant.SwarmLifetime,
+		Remaining: parameter.SwarmLifetime,
 	})
 
 	// Build member entities (pre-allocate all 8 positions)
-	members := make([]component.MemberEntry, 0, constant.SwarmWidth*constant.SwarmHeight)
+	members := make([]component.MemberEntry, 0, parameter.SwarmWidth*parameter.SwarmHeight)
 
-	for row := 0; row < constant.SwarmHeight; row++ {
-		for col := 0; col < constant.SwarmWidth; col++ {
+	for row := 0; row < parameter.SwarmHeight; row++ {
+		for col := 0; col < parameter.SwarmWidth; col++ {
 			memberX := topLeftX + col
 			memberY := topLeftY + row
 
-			offsetX := col - constant.SwarmHeaderOffsetX
-			offsetY := row - constant.SwarmHeaderOffsetY
+			offsetX := col - parameter.SwarmHeaderOffsetX
+			offsetY := row - parameter.SwarmHeaderOffsetY
 
 			entity := s.world.CreateEntity()
 			s.world.Positions.SetPosition(entity, component.PositionComponent{X: memberX, Y: memberY})
@@ -391,7 +391,7 @@ func (s *SwarmSystem) calculateFlockingSeparation(headerEntity core.Entity, head
 
 		// Check if within separation ellipse
 		if !vmath.EllipseContainsPoint(sc.x, sc.y, headerX, headerY,
-			constant.SwarmSeparationInvRxSq, constant.SwarmSeparationInvRySq) {
+			parameter.SwarmSeparationInvRxSq, parameter.SwarmSeparationInvRySq) {
 			continue
 		}
 
@@ -411,20 +411,20 @@ func (s *SwarmSystem) calculateFlockingSeparation(headerEntity core.Entity, head
 		dirX, dirY := vmath.Normalize2D(dx, dy)
 
 		// Closer = stronger separation
-		maxDist := vmath.FromFloat(constant.SwarmSeparationRadiusXFloat)
+		maxDist := vmath.FromFloat(parameter.SwarmSeparationRadiusXFloat)
 		weight := vmath.Div(maxDist-dist, maxDist)
 		if weight < 0 {
 			weight = 0
 		}
 
-		sepX += vmath.Mul(vmath.Mul(dirX, constant.SwarmSeparationStrength), weight)
-		sepY += vmath.Mul(vmath.Mul(dirY, constant.SwarmSeparationStrength), weight)
+		sepX += vmath.Mul(vmath.Mul(dirX, parameter.SwarmSeparationStrength), weight)
+		sepY += vmath.Mul(vmath.Mul(dirY, parameter.SwarmSeparationStrength), weight)
 	}
 
 	// Separation from quasar (weighted lower)
 	for _, qc := range s.quasarCache {
 		if !vmath.EllipseContainsPoint(qc.x, qc.y, headerX, headerY,
-			constant.SwarmSeparationInvRxSq, constant.SwarmSeparationInvRySq) {
+			parameter.SwarmSeparationInvRxSq, parameter.SwarmSeparationInvRySq) {
 			continue
 		}
 
@@ -441,18 +441,18 @@ func (s *SwarmSystem) calculateFlockingSeparation(headerEntity core.Entity, head
 		}
 		dirX, dirY := vmath.Normalize2D(dx, dy)
 
-		maxDist := vmath.FromFloat(constant.SwarmSeparationRadiusXFloat)
+		maxDist := vmath.FromFloat(parameter.SwarmSeparationRadiusXFloat)
 		weight := vmath.Div(maxDist-dist, maxDist)
 		if weight < 0 {
 			weight = 0
 		}
 
 		// Apply quasar weight modifier
-		quasarWeight := vmath.FromFloat(constant.SwarmQuasarSeparationWeight)
+		quasarWeight := vmath.FromFloat(parameter.SwarmQuasarSeparationWeight)
 		weight = vmath.Mul(weight, quasarWeight)
 
-		sepX += vmath.Mul(vmath.Mul(dirX, constant.SwarmSeparationStrength), weight)
-		sepY += vmath.Mul(vmath.Mul(dirY, constant.SwarmSeparationStrength), weight)
+		sepX += vmath.Mul(vmath.Mul(dirX, parameter.SwarmSeparationStrength), weight)
+		sepY += vmath.Mul(vmath.Mul(dirY, parameter.SwarmSeparationStrength), weight)
 	}
 
 	return sepX, sepY
@@ -476,7 +476,7 @@ func (s *SwarmSystem) applySoftCollisions(
 		}
 
 		if !vmath.EllipseContainsPoint(headerX, headerY, sc.x, sc.y,
-			constant.SwarmCollisionInvRxSq, constant.SwarmCollisionInvRySq) {
+			parameter.SwarmCollisionInvRxSq, parameter.SwarmCollisionInvRySq) {
 			continue
 		}
 
@@ -492,14 +492,14 @@ func (s *SwarmSystem) applySoftCollisions(
 			&physics.SoftCollisionSwarmToSwarm,
 			s.rng,
 		)
-		combatComp.RemainingKineticImmunity = constant.SoftCollisionImmunityDuration
+		combatComp.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
 		return
 	}
 
 	// Check collision with quasar
 	for _, qc := range s.quasarCache {
 		if !vmath.EllipseContainsPoint(headerX, headerY, qc.x, qc.y,
-			constant.QuasarCollisionInvRxSq, constant.QuasarCollisionInvRySq) {
+			parameter.QuasarCollisionInvRxSq, parameter.QuasarCollisionInvRySq) {
 			continue
 		}
 
@@ -515,7 +515,7 @@ func (s *SwarmSystem) applySoftCollisions(
 			&physics.SoftCollisionSwarmToQuasar,
 			s.rng,
 		)
-		combatComp.RemainingKineticImmunity = constant.SoftCollisionImmunityDuration
+		combatComp.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
 		return
 	}
 }
@@ -524,8 +524,8 @@ func (s *SwarmSystem) applySoftCollisions(
 func (s *SwarmSystem) updatePatternCycle(swarmComp *component.SwarmComponent, dt time.Duration) {
 	swarmComp.PatternRemaining -= dt
 	if swarmComp.PatternRemaining <= 0 {
-		swarmComp.PatternRemaining = constant.SwarmPatternDuration
-		swarmComp.PatternIndex = (swarmComp.PatternIndex + 1) % constant.SwarmPatternCount
+		swarmComp.PatternRemaining = parameter.SwarmPatternDuration
+		swarmComp.PatternIndex = (swarmComp.PatternIndex + 1) % parameter.SwarmPatternCount
 	}
 }
 
@@ -635,7 +635,7 @@ func (s *SwarmSystem) updateDecelerateState(
 	if swarmComp.DecelRemaining <= 0 {
 		// Transition back to Chase
 		swarmComp.State = component.SwarmStateChase
-		swarmComp.ChargeIntervalRemaining = constant.SwarmChargeInterval
+		swarmComp.ChargeIntervalRemaining = parameter.SwarmChargeInterval
 		return
 	}
 
@@ -665,7 +665,7 @@ func (s *SwarmSystem) enterLockState(headerEntity core.Entity, swarmComp *compon
 	}
 
 	swarmComp.State = component.SwarmStateLock
-	swarmComp.LockRemaining = constant.SwarmLockDuration
+	swarmComp.LockRemaining = parameter.SwarmLockDuration
 	swarmComp.LockedTargetX = cursorPos.X
 	swarmComp.LockedTargetY = cursorPos.Y
 
@@ -685,7 +685,7 @@ func (s *SwarmSystem) enterChargeState(headerEntity core.Entity, swarmComp *comp
 	}
 
 	swarmComp.State = component.SwarmStateCharge
-	swarmComp.ChargeRemaining = constant.SwarmChargeDuration
+	swarmComp.ChargeRemaining = parameter.SwarmChargeDuration
 
 	// Store charge start and target positions
 	swarmComp.ChargeStartX = kineticComp.PreciseX
@@ -696,7 +696,7 @@ func (s *SwarmSystem) enterChargeState(headerEntity core.Entity, swarmComp *comp
 	// Calculate initial charge velocity
 	dx := swarmComp.ChargeTargetX - swarmComp.ChargeStartX
 	dy := swarmComp.ChargeTargetY - swarmComp.ChargeStartY
-	chargeSec := constant.SwarmChargeDuration.Seconds()
+	chargeSec := parameter.SwarmChargeDuration.Seconds()
 
 	kineticComp.VelX = vmath.Div(dx, vmath.FromFloat(chargeSec))
 	kineticComp.VelY = vmath.Div(dy, vmath.FromFloat(chargeSec))
@@ -707,7 +707,7 @@ func (s *SwarmSystem) enterChargeState(headerEntity core.Entity, swarmComp *comp
 // enterDecelerateState transitions to deceleration phase
 func (s *SwarmSystem) enterDecelerateState(headerEntity core.Entity, swarmComp *component.SwarmComponent) {
 	swarmComp.State = component.SwarmStateDecelerate
-	swarmComp.DecelRemaining = constant.SwarmDecelerationDuration
+	swarmComp.DecelRemaining = parameter.SwarmDecelerationDuration
 	swarmComp.ChargesCompleted++
 }
 
@@ -772,10 +772,10 @@ func (s *SwarmSystem) integrateAndSync(headerEntity core.Entity, dtFixed int64) 
 	newX, newY := physics.Integrate(&kineticComp.Kinetic, dtFixed)
 
 	// Boundary constraints (swarm footprint must stay in bounds)
-	minHeaderX := constant.SwarmHeaderOffsetX
-	maxHeaderX := config.GameWidth - (constant.SwarmWidth - constant.SwarmHeaderOffsetX)
-	minHeaderY := constant.SwarmHeaderOffsetY
-	maxHeaderY := config.GameHeight - (constant.SwarmHeight - constant.SwarmHeaderOffsetY)
+	minHeaderX := parameter.SwarmHeaderOffsetX
+	maxHeaderX := config.GameWidth - (parameter.SwarmWidth - parameter.SwarmHeaderOffsetX)
+	minHeaderY := parameter.SwarmHeaderOffsetY
+	maxHeaderY := config.GameHeight - (parameter.SwarmHeight - parameter.SwarmHeaderOffsetY)
 
 	physics.ReflectBoundsX(&kineticComp.Kinetic, minHeaderX, maxHeaderX)
 	physics.ReflectBoundsY(&kineticComp.Kinetic, minHeaderY, maxHeaderY)
@@ -931,12 +931,12 @@ func (s *SwarmSystem) handleCursorInteractions(
 
 		// Energy drain
 		s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-			Value: constant.QuasarShieldDrain, // Same drain rate as quasar
+			Value: parameter.QuasarShieldDrain, // Same drain rate as quasar
 		})
 	} else if anyOnCursor && !shieldActive {
 		// Direct cursor collision without shield - reduce heat
 		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
-			Delta: -constant.DrainHeatReductionAmount,
+			Delta: -parameter.DrainHeatReductionAmount,
 		})
 	}
 }

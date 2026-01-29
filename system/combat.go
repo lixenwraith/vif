@@ -4,10 +4,10 @@ import (
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/physics"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
@@ -52,7 +52,7 @@ func (s *CombatSystem) Name() string {
 }
 
 func (s *CombatSystem) Priority() int {
-	return constant.PriorityCombat
+	return parameter.PriorityCombat
 }
 
 func (s *CombatSystem) EventTypes() []event.EventType {
@@ -210,8 +210,8 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 			targetCombatComp.HitPoints = 0
 		}
 
-		targetCombatComp.RemainingHitFlash = constant.CombatHitFlashDuration
-		targetCombatComp.RemainingDamageImmunity = constant.CombatDamageImmunityDuration
+		targetCombatComp.RemainingHitFlash = parameter.CombatHitFlashDuration
+		targetCombatComp.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
 
 		if targetCombatComp.HitPoints == 0 {
 			// Not killing to let the chain attack to trigger
@@ -236,7 +236,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 	case combatProfile.EffectMask&component.CombatEffectVampireDrain != 0:
 		s.world.PushEvent(event.EventVampireDrainRequest, &event.VampireDrainRequestPayload{
 			TargetEntity: payload.HitEntity,
-			Delta:        constant.VampireDrainEnergyValue,
+			Delta:        parameter.VampireDrainEnergyValue,
 		})
 	case combatProfile.EffectMask&component.CombatEffectKinetic != 0:
 		if !targetDead && targetCombatComp.RemainingKineticImmunity == 0 && !targetCombatComp.IsEnraged {
@@ -312,8 +312,8 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 			targetCombatComp.HitPoints = 0
 		}
 
-		targetCombatComp.RemainingHitFlash = constant.CombatHitFlashDuration
-		targetCombatComp.RemainingDamageImmunity = constant.CombatDamageImmunityDuration
+		targetCombatComp.RemainingHitFlash = parameter.CombatHitFlashDuration
+		targetCombatComp.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
 
 		if targetCombatComp.HitPoints == 0 {
 			// Not killing to let the chain attack to trigger
@@ -328,7 +328,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 	// case combatProfile.EffectMask&component.CombatEffectVampireDrain != 0:
 	// 	s.world.PushEvent(event.EventVampireDrainRequest, &event.VampireDrainRequestPayload{
 	// 		TargetEntity: payload.HitEntity,
-	// 		Delta:        constant.VampireDrainEnergyValue,
+	// 		Delta:        parameter.VampireDrainEnergyValue,
 	// 	})
 	case combatProfile.EffectMask&component.CombatEffectKinetic != 0:
 		if !targetDead && targetCombatComp.RemainingKineticImmunity == 0 && !targetCombatComp.IsEnraged {

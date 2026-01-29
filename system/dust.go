@@ -5,10 +5,10 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -93,7 +93,7 @@ func (s *DustSystem) Name() string {
 }
 
 func (s *DustSystem) Priority() int {
-	return constant.PriorityDust
+	return parameter.PriorityDust
 }
 
 func (s *DustSystem) EventTypes() []event.EventType {
@@ -222,7 +222,7 @@ func (s *DustSystem) Update() {
 	s.lastCursorY = cursorPos.Y
 
 	cursorDisplacement := vmath.DistanceApprox(vmath.FromInt(cursorDeltaX), vmath.FromInt(cursorDeltaY))
-	applyChaseBoost := cursorDisplacement > vmath.FromInt(constant.DustChaseThreshold)
+	applyChaseBoost := cursorDisplacement > vmath.FromInt(parameter.DustChaseThreshold)
 
 	// Stagger tick advancement on cursor jump
 	if applyChaseBoost {
@@ -237,9 +237,9 @@ func (s *DustSystem) Update() {
 
 	// Pre-computed invariants for hot loop
 	var (
-		baseStiffness    = constant.DustAttractionBase
-		boostedStiffness = vmath.Mul(baseStiffness, constant.DustChaseBoost)
-		dragDtBase       = vmath.Mul(constant.DustGlobalDrag, dtFixed)
+		baseStiffness    = parameter.DustAttractionBase
+		boostedStiffness = vmath.Mul(baseStiffness, parameter.DustChaseBoost)
+		dragDtBase       = vmath.Mul(parameter.DustGlobalDrag, dtFixed)
 	)
 
 	// Cursor position precise adjustment at the center of the cell to avoid skewed render
@@ -252,7 +252,7 @@ func (s *DustSystem) Update() {
 
 	var destroyedCount int64
 	deathCandidates := make([]core.Entity, 0, 32)
-	var collisionBuf [constant.MaxEntitiesPerCell]core.Entity
+	var collisionBuf [parameter.MaxEntitiesPerCell]core.Entity
 
 	// 4. MAIN LOOP
 	for _, dustEntity := range dustEntities {
@@ -273,16 +273,16 @@ func (s *DustSystem) Update() {
 
 		// --- Per-Particle Jitter (always active) ---
 		jitterAngle := int64(s.rng.Intn(vmath.LUTSize)) << (vmath.Shift - 10)
-		kineticComp.VelX += vmath.Mul(vmath.Cos(jitterAngle), constant.DustJitter)
-		kineticComp.VelY += vmath.Mul(vmath.Sin(jitterAngle), constant.DustJitter)
+		kineticComp.VelX += vmath.Mul(vmath.Cos(jitterAngle), parameter.DustJitter)
+		kineticComp.VelY += vmath.Mul(vmath.Sin(jitterAngle), parameter.DustJitter)
 
 		// --- Orbital Physics (only when energy != 0 / shield active) ---
 		if hasAttraction {
 			// Staggered chase boost: only activate for matching group
 			if applyChaseBoost && dustComp.ResponseGroup == s.staggerTick {
-				dustComp.ChaseBoost = constant.DustChaseBoost
+				dustComp.ChaseBoost = parameter.DustChaseBoost
 			} else if dustComp.ChaseBoost > vmath.Scale {
-				dustComp.ChaseBoost -= vmath.Mul(constant.DustChaseDecay, dtFixed)
+				dustComp.ChaseBoost -= vmath.Mul(parameter.DustChaseDecay, dtFixed)
 				if dustComp.ChaseBoost < vmath.Scale {
 					dustComp.ChaseBoost = vmath.Scale
 				}
@@ -295,7 +295,7 @@ func (s *DustSystem) Update() {
 				// Interpolate: base + (boosted - base) * (boost - 1) / (maxBoost - 1)
 				boostFactor := dustComp.ChaseBoost - vmath.Scale
 				stiffness = baseStiffness + vmath.Mul(boostedStiffness-baseStiffness,
-					vmath.Div(boostFactor, constant.DustChaseBoost-vmath.Scale))
+					vmath.Div(boostFactor, parameter.DustChaseBoost-vmath.Scale))
 			}
 
 			dyCirc := vmath.ScaleToCircular(dy)
@@ -309,7 +309,7 @@ func (s *DustSystem) Update() {
 			kineticComp.VelX, velYCirc = vmath.OrbitalDamp(
 				kineticComp.VelX, velYCirc,
 				dx, dyCirc,
-				constant.DustDamping, dtFixed,
+				parameter.DustDamping, dtFixed,
 			)
 			kineticComp.VelY = vmath.ScaleFromCircular(velYCirc)
 		}
@@ -404,9 +404,9 @@ func (s *DustSystem) Update() {
 						impulseX, impulseY := vmath.ApplyCollisionImpulse(
 							kineticComp.VelX, kineticComp.VelY,
 							vmath.MassRatioDustToDrain,
-							constant.DrainDeflectAngleVar,
-							constant.CollisionKineticImpulseMin,
-							constant.CollisionKineticImpulseMax,
+							parameter.DrainDeflectAngleVar,
+							parameter.CollisionKineticImpulseMin,
+							parameter.CollisionKineticImpulseMax,
 							s.rng,
 						)
 						collisionCtx.accumulateImpulse(target, impulseX, impulseY)
@@ -420,9 +420,9 @@ func (s *DustSystem) Update() {
 								impulseX, impulseY := vmath.ApplyCollisionImpulse(
 									kineticComp.VelX, kineticComp.VelY,
 									vmath.MassRatioDustToQuasar,
-									constant.DrainDeflectAngleVar,
-									constant.CollisionKineticImpulseMin,
-									constant.CollisionKineticImpulseMax,
+									parameter.DrainDeflectAngleVar,
+									parameter.CollisionKineticImpulseMin,
+									parameter.CollisionKineticImpulseMax,
 									s.rng,
 								)
 								collisionCtx.accumulateImpulse(collisionCtx.quasarHeader, impulseX, impulseY)
@@ -516,10 +516,10 @@ func (s *DustSystem) Update() {
 			deathCandidates = append(deathCandidates, dustEntity)
 		}
 
-		if sigilComp.Color == component.SigilDustBright && timerComp.Remaining < constant.DustTimerNormal {
+		if sigilComp.Color == component.SigilDustBright && timerComp.Remaining < parameter.DustTimerNormal {
 			sigilComp.Color = component.SigilDustNormal
 			s.world.Components.Sigil.SetComponent(dustEntity, sigilComp)
-		} else if sigilComp.Color == component.SigilDustNormal && timerComp.Remaining < constant.DustTimerDark {
+		} else if sigilComp.Color == component.SigilDustNormal && timerComp.Remaining < parameter.DustTimerDark {
 			sigilComp.Color = component.SigilDustDark
 			s.world.Components.Sigil.SetComponent(dustEntity, sigilComp)
 		}
@@ -714,8 +714,8 @@ func (s *DustSystem) transformGlyphsToDust() {
 // setDustComponents calculates physics and component state for a new dust particle
 func (s *DustSystem) setDustComponents(entity core.Entity, x, y int, char rune, level component.GlyphLevel, cursorX, cursorY int) {
 	// Random orbit radius in [min, max]
-	radiusRange := int(constant.DustOrbitRadiusMax - constant.DustOrbitRadiusMin)
-	orbitRadius := constant.DustOrbitRadiusMin
+	radiusRange := int(parameter.DustOrbitRadiusMax - parameter.DustOrbitRadiusMin)
+	orbitRadius := parameter.DustOrbitRadiusMin
 	if radiusRange > 0 {
 		orbitRadius += int64(s.rng.Intn(radiusRange))
 	}
@@ -726,13 +726,13 @@ func (s *DustSystem) setDustComponents(entity core.Entity, x, y int, char rune, 
 
 	// Initial tangential velocity for orbit, random direction
 	clockwise := s.rng.Intn(2) == 0
-	vx, vy := vmath.OrbitalInsert(dx, dy, constant.DustAttractionBase, clockwise)
+	vx, vy := vmath.OrbitalInsert(dx, dy, parameter.DustAttractionBase, clockwise)
 
 	// Scale to initial speed
 	mag := vmath.Magnitude(vx, vy)
 	if mag > 0 {
-		vx = vmath.Mul(vmath.Div(vx, mag), constant.DustInitialSpeed)
-		vy = vmath.Mul(vmath.Div(vy, mag), constant.DustInitialSpeed)
+		vx = vmath.Mul(vmath.Div(vx, mag), parameter.DustInitialSpeed)
+		vy = vmath.Mul(vmath.Div(vy, mag), parameter.DustInitialSpeed)
 	}
 
 	// Dust component
@@ -786,12 +786,12 @@ func (s *DustSystem) spawnDust(x, y int, char rune, level component.GlyphLevel, 
 func (s *DustSystem) dustProperties(level component.GlyphLevel) (time.Duration, component.SigilColor) {
 	switch level {
 	case component.GlyphDark:
-		return constant.DustTimerDark, component.SigilDustDark
+		return parameter.DustTimerDark, component.SigilDustDark
 	case component.GlyphNormal:
-		return constant.DustTimerNormal, component.SigilDustNormal
+		return parameter.DustTimerNormal, component.SigilDustNormal
 	case component.GlyphBright:
-		return constant.DustTimerBright, component.SigilDustBright
+		return parameter.DustTimerBright, component.SigilDustBright
 	default:
-		return constant.DustTimerNormal, component.SigilDustNormal
+		return parameter.DustTimerNormal, component.SigilDustNormal
 	}
 }

@@ -3,10 +3,10 @@ package system
 import (
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // HeatSystem owns HeatComponent mutations
@@ -47,7 +47,7 @@ func (s *HeatSystem) Name() string {
 }
 
 func (s *HeatSystem) Priority() int {
-	return constant.PriorityHeat
+	return parameter.PriorityHeat
 }
 
 func (s *HeatSystem) Update() {
@@ -133,17 +133,17 @@ func (s *HeatSystem) addHeat(delta int) {
 	if newVal < 0 {
 		newVal = 0
 	}
-	if newVal > constant.HeatMax {
-		overheat := newVal - constant.HeatMax
-		newVal = constant.HeatMax
+	if newVal > parameter.HeatMax {
+		overheat := newVal - parameter.HeatMax
+		newVal = parameter.HeatMax
 		heatComp.Overheat += overheat
 	}
 	heatComp.Current = newVal
 
 	// Trigger and reset overheat if at or above max
-	if heatComp.Overheat >= constant.HeatMaxOverheat {
+	if heatComp.Overheat >= parameter.HeatMaxOverheat {
 		heatComp.Overheat = 0
-		heatComp.BurstFlashRemaining = constant.HeatBurstFlashDuration
+		heatComp.BurstFlashRemaining = parameter.HeatBurstFlashDuration
 		s.world.PushEvent(event.EventHeatBurstNotification, nil)
 	}
 
@@ -151,7 +151,7 @@ func (s *HeatSystem) addHeat(delta int) {
 
 	s.statCurrent.Store(int64(heatComp.Current))
 	s.statOverheat.Store(int64(heatComp.Overheat))
-	s.statAtMax.Store(newVal >= constant.HeatMax)
+	s.statAtMax.Store(newVal >= parameter.HeatMax)
 }
 
 // setHeat stores absolute value with clamping and writes back to store
@@ -167,9 +167,9 @@ func (s *HeatSystem) setHeat(value int) {
 	if value < 0 {
 		value = 0
 	}
-	if value > constant.HeatMax {
-		heatComp.Overheat = value - constant.HeatMax
-		value = constant.HeatMax
+	if value > parameter.HeatMax {
+		heatComp.Overheat = value - parameter.HeatMax
+		value = parameter.HeatMax
 	} else {
 		heatComp.Overheat = 0
 	}
@@ -178,7 +178,7 @@ func (s *HeatSystem) setHeat(value int) {
 
 	s.statCurrent.Store(int64(value))
 	s.statOverheat.Store(int64(heatComp.Overheat))
-	s.statAtMax.Store(value >= constant.HeatMax)
+	s.statAtMax.Store(value >= parameter.HeatMax)
 
 	s.world.Components.Heat.SetComponent(cursorEntity, heatComp)
 }

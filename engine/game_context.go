@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/status"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
@@ -98,7 +98,7 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	world.Resources.Time = &TimeResource{
 		GameTime:  pausableClock.Now(),
 		RealTime:  pausableClock.RealTime(),
-		DeltaTime: constant.GameUpdateInterval,
+		DeltaTime: parameter.GameUpdateInterval,
 	}
 
 	// 4. Event Queue Resource
@@ -138,13 +138,13 @@ func NewGameContext(world *World, width, height int) *GameContext {
 // updateGameArea calculates the game area dimensions
 func (ctx *GameContext) updateGameArea() (gameWidth, gameHeight int) {
 	// Calculate line number width based on height
-	gameHeight = ctx.Height - constant.BottomMargin - constant.TopMargin
+	gameHeight = ctx.Height - parameter.BottomMargin - parameter.TopMargin
 	if gameHeight < 1 {
 		gameHeight = 1
 	}
 
-	ctx.GameXOffset = constant.LeftMargin
-	ctx.GameYOffset = constant.TopMargin
+	ctx.GameXOffset = parameter.LeftMargin
+	ctx.GameYOffset = parameter.TopMargin
 	gameWidth = ctx.Width - ctx.GameXOffset
 
 	if gameWidth < 1 {
@@ -314,8 +314,8 @@ func (ctx *GameContext) GetPingBounds() PingBounds {
 		return bounds
 	}
 
-	halfWidth := vmath.ToInt(shield.RadiusX) / constant.PingBoundFactor
-	halfHeight := vmath.ToInt(shield.RadiusY) / constant.PingBoundFactor
+	halfWidth := vmath.ToInt(shield.RadiusX) / parameter.PingBoundFactor
+	halfHeight := vmath.ToInt(shield.RadiusY) / parameter.PingBoundFactor
 
 	bounds.MinY = pos.Y - halfHeight
 	bounds.MaxY = pos.Y + halfHeight

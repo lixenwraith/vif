@@ -1,4 +1,4 @@
-package constant
+package parameter
 
 // AlphanumericRunes contains all alphanumeric characters as runes
 var AlphanumericRunes = []rune{

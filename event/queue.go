@@ -3,7 +3,7 @@ package event
 import (
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/constant"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // EventQueue is a lock-free MPSC ring buffer for game events
@@ -14,10 +14,10 @@ import (
 //
 // Overflow: Oldest events overwritten when full
 type EventQueue struct {
-	events    [constant.EventQueueSize]GameEvent
-	published [constant.EventQueueSize]atomic.Bool // True = slot fully written
-	head      atomic.Uint64                        // Read index
-	tail      atomic.Uint64                        // Write index
+	events    [parameter.EventQueueSize]GameEvent
+	published [parameter.EventQueueSize]atomic.Bool // True = slot fully written
+	head      atomic.Uint64                         // Read index
+	tail      atomic.Uint64                         // Write index
 }
 
 func NewEventQueue() *EventQueue {
@@ -35,15 +35,15 @@ func (eq *EventQueue) Push(event GameEvent) {
 		nextTail := currentTail + 1
 
 		if eq.tail.CompareAndSwap(currentTail, nextTail) {
-			idx := currentTail & constant.EventBufferMask
+			idx := currentTail & parameter.EventBufferMask
 
 			eq.events[idx] = event
 			eq.published[idx].Store(true) // MUST be after write
 
 			// Advance head if overwriting unread events
 			currentHead := eq.head.Load()
-			if nextTail-currentHead > constant.EventQueueSize {
-				eq.head.CompareAndSwap(currentHead, nextTail-constant.EventQueueSize)
+			if nextTail-currentHead > parameter.EventQueueSize {
+				eq.head.CompareAndSwap(currentHead, nextTail-parameter.EventQueueSize)
 			}
 			return
 		}
@@ -62,14 +62,14 @@ func (eq *EventQueue) Consume() []GameEvent {
 		}
 
 		maxAvailable := currentTail - currentHead
-		if maxAvailable > constant.EventQueueSize {
-			maxAvailable = constant.EventQueueSize
-			currentHead = currentTail - constant.EventQueueSize
+		if maxAvailable > parameter.EventQueueSize {
+			maxAvailable = parameter.EventQueueSize
+			currentHead = currentTail - parameter.EventQueueSize
 		}
 
 		result := make([]GameEvent, 0, maxAvailable)
 		for i := uint64(0); i < maxAvailable; i++ {
-			idx := (currentHead + i) & constant.EventBufferMask
+			idx := (currentHead + i) & parameter.EventBufferMask
 
 			if !eq.published[idx].Load() {
 				break // Writer incomplete
@@ -98,8 +98,8 @@ func (eq *EventQueue) Len() int {
 		return 0
 	}
 	diff := int(tail - head)
-	if diff > constant.EventQueueSize {
-		return constant.EventQueueSize
+	if diff > parameter.EventQueueSize {
+		return parameter.EventQueueSize
 	}
 	return diff
 }

@@ -1,4 +1,4 @@
-package constant
+package parameter
 
 import "time"
 
@@ -47,36 +47,6 @@ const (
 	GodEnergyAmount = 100_000_000_000
 )
 
-// Gold Mechanics
-const (
-	// GoldDuration is how long the gold sequence remains on screen
-	GoldDuration = 10 * time.Second
-
-	// GoldSequenceLength is the number of characters in the gold sequence
-	GoldSequenceLength = 10
-
-	// GoldJumpCost is the energy cost to jump to gold
-	GoldJumpCost = 1000
-)
-
-// Nugget System
-const (
-	// NuggetHeatIncrease is the amount of heat increased by consuming a nugget
-	NuggetHeatIncrease = 10
-
-	// NuggetSpawnInterval is the minimum interval between nugget spawns
-	NuggetSpawnInterval = 0 * time.Millisecond
-
-	// NuggetMaxAttempts is the maximum number of random placement attempts (occupied cell results in retry)
-	NuggetMaxAttempts = 100
-
-	// NuggetJumpCost is the energy cost to jump to a nugget
-	NuggetJumpCost = 100
-
-	// NuggetOverloadCount is the number of nuggets that are taken at max heat to trigger nugget overload
-	NuggetOverloadCount = 10
-)
-
 // Character Spawn Logic
 const (
 	SpawnIntervalMs         = 1000
@@ -93,40 +63,6 @@ const (
 	CursorExclusionX = 5
 	// CursorExclusionY is vertical distance from cursor that blocks spawn
 	CursorExclusionY = 3
-)
-
-// Drain System
-const (
-	// DrainMaxCount is the maximum number of drain entities (at 100% heat)
-	DrainMaxCount = 10
-
-	// DrainShieldEnergyDrainAmount is energy cost per tick per drain inside shield
-	DrainShieldEnergyDrainAmount = 100
-
-	// DrainHeatReductionAmount is heat penalty when drain hits cursor without shield
-	DrainHeatReductionAmount = 10
-
-	// DrainSpawnOffsetMax is the maximum random offset from cursor position (±N)
-	DrainSpawnOffsetMax = 10
-
-	// DrainSpawnStaggerTicks is game ticks between staggered spawns
-	// Set to 0 for simultaneous spawning
-	DrainSpawnStaggerTicks = 4
-)
-
-// Shield Defense Costs
-const (
-	// ShieldPassiveEnergyPercentDrain is the energy percentage of total per second while shield is active
-	ShieldPassiveEnergyPercentDrain = 1
-
-	// ShieldPassiveDrainInterval is the interval for passive shield drain
-	ShieldPassiveDrainInterval = 1 * time.Second
-)
-
-// Vampire Drain
-const (
-	// VampireDrainEnergyValue is the amount of energy absorbed energy on hit
-	VampireDrainEnergyValue = 100
 )
 
 // Spawn Rate Management
@@ -150,16 +86,4 @@ const (
 
 	// GoldSpawnMaxAttempts is the maximum number of attempts to find valid gold sequence position
 	GoldSpawnMaxAttempts = 100
-)
-
-// Buff Cooldowns
-const (
-	BuffCooldownRod      = 500 * time.Millisecond
-	BuffCooldownLauncher = 1000 * time.Millisecond
-	BuffCooldownChain    = 2000 * time.Millisecond
-)
-
-// Combat
-const (
-	CombatKnockbackImmunityInterval = 250 * time.Millisecond
 )

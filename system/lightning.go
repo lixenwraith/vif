@@ -4,10 +4,10 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // LightningSystem manages lightning visual effect lifecycle
@@ -37,7 +37,7 @@ func (s *LightningSystem) Name() string {
 
 func (s *LightningSystem) Priority() int {
 	// After quasar, before render
-	return constant.PriorityLightning
+	return parameter.PriorityLightning
 }
 
 func (s *LightningSystem) Update() {

@@ -5,10 +5,10 @@ import (
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/constant"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // TypingSystem handles character typing validation and composite member ordering
@@ -53,7 +53,7 @@ func (s *TypingSystem) Name() string {
 }
 
 func (s *TypingSystem) Priority() int {
-	return constant.PriorityTyping
+	return parameter.PriorityTyping
 }
 
 func (s *TypingSystem) Update() {
@@ -108,7 +108,7 @@ func (s *TypingSystem) HandleEvent(ev event.GameEvent) {
 // handleTyping processes a typed character at cursor position
 func (s *TypingSystem) handleTyping(cursorX, cursorY int, typedRune rune) {
 	// Stack-allocated buffer for zero-allocation lookup
-	var buf [constant.MaxEntitiesPerCell]core.Entity
+	var buf [parameter.MaxEntitiesPerCell]core.Entity
 	count := s.world.Positions.GetAllEntitiesAtInto(cursorX, cursorY, buf[:])
 
 	var entity core.Entity
@@ -155,11 +155,11 @@ func (s *TypingSystem) applyUniversalRewards() {
 	// Boost: activate or extend
 	if isBoostActive {
 		s.world.PushEvent(event.EventBoostExtend, &event.BoostExtendPayload{
-			Duration: constant.BoostExtensionDuration,
+			Duration: parameter.BoostExtensionDuration,
 		})
 	} else {
 		s.world.PushEvent(event.EventBoostActivate, &event.BoostActivatePayload{
-			Duration: constant.BoostBaseDuration,
+			Duration: parameter.BoostBaseDuration,
 		})
 	}
 
@@ -222,12 +222,12 @@ func (s *TypingSystem) emitTypingError() {
 
 	// Set cursor error flash
 	if cursor, ok := s.world.Components.Cursor.GetComponent(cursorEntity); ok {
-		cursor.ErrorFlashRemaining = constant.ErrorBlinkTimeout
+		cursor.ErrorFlashRemaining = parameter.ErrorBlinkTimeout
 		s.world.Components.Cursor.SetComponent(cursorEntity, cursor)
 	}
 
 	// Reset boost and apply heat penalty
-	s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Delta: -constant.HeatTypingErrorPenalty})
+	s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Delta: -parameter.HeatTypingErrorPenalty})
 	s.world.PushEvent(event.EventBoostDeactivate, nil)
 	s.world.PushEvent(event.EventEnergyBlinkStart, &event.EnergyBlinkPayload{Type: 0, Level: 0})
 
@@ -469,7 +469,7 @@ func (s *TypingSystem) handleDeleteRequest(payload *event.DeleteRequestPayload) 
 		entitiesToDelete = append(entitiesToDelete, entity)
 	}
 
-	cellEntitiesBuf := make([]core.Entity, constant.MaxEntitiesPerCell)
+	cellEntitiesBuf := make([]core.Entity, parameter.MaxEntitiesPerCell)
 
 	if payload.RangeType == event.DeleteRangeLine {
 		// Line deletion (inclusive rows)
