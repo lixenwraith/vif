@@ -123,9 +123,9 @@ const (
 	SwarmHeaderOffsetY = 0
 
 	// SwarmPatternCount is number of visual patterns
-	SwarmPatternCount = 3
+	SwarmPatternCount = 2
 	// SwarmPatternDuration is time per pattern before cycling
-	SwarmPatternDuration = 1500 * time.Millisecond
+	SwarmPatternDuration = 500 * time.Millisecond
 
 	// SwarmChargeInterval is time between charge sequences
 	SwarmChargeInterval = 5 * time.Second

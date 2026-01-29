@@ -14,27 +14,46 @@ const (
 	SwarmStateDecelerate
 )
 
+// // SwarmPatternChars defines visual patterns for swarm composite
+// var SwarmPatternChars = [3][2][4]rune{
+// 	// Pattern 0: Pulse State A (Bold/Expanded) - "The Aggressor"
+// 	{
+// 		{'╔', '═', '═', '╗'},
+// 		{'╚', '═', '═', '╝'},
+// 	},
+// 	// Pattern 1: Pulse State B (Thin/Contracted) - "The Drone"
+// 	{
+// 		{'┌', '─', '─', '┐'},
+// 		{'└', '─', '─', '┘'},
+// 	},
+// 	// Pattern 2: Attack/Transition State (Mix) - "The Glitch"
+// 	{
+// 		{'╓', '─', '─', '╖'},
+// 		{'╙', '─', '─', '╜'},
+// 	},
+// }
+
 // SwarmPatternChars defines visual patterns for swarm composite
-// Index: [pattern][row][col]
-// ▓ (U+2593) = active cell, ░ (U+2591) = inactive cell
-var SwarmPatternChars = [3][2][4]rune{
-	// Pattern 0: Solid
-	{{'▓', '▓', '▓', '▓'}, {'▓', '▓', '▓', '▓'}},
-	// Pattern 1: Hollow center
-	{{'▓', '░', '░', '▓'}, {'▓', '░', '░', '▓'}},
-	// Pattern 2: Checkerboard
-	{{'▓', '░', '▓', '░'}, {'░', '▓', '░', '▓'}},
+var SwarmPatternChars = [2][2][4]rune{
+	// Pattern 0: Pulse State O
+	{
+		{'▄', '▀', '▀', '▄'},
+		{'▀', '▄', '▄', '▀'},
+	},
+	// Pattern 1: Pulse State X
+	{
+		{'▀', '▄', '▄', '▀'},
+		{'▄', '▀', '▀', '▄'},
+	},
 }
 
-// SwarmPatternActive defines which cells are collision-active per pattern
-// true = interacts with entities, false = visual only
-var SwarmPatternActive = [3][2][4]bool{
-	// Pattern 0: All active
+// SwarmPatternActive defines which cells are collision-active
+// Keeping it simple and make the whole box collide
+var SwarmPatternActive = [2][2][4]bool{
+	// Pattern 0: All Active
 	{{true, true, true, true}, {true, true, true, true}},
-	// Pattern 1: Edges only
-	{{true, false, false, true}, {true, false, false, true}},
-	// Pattern 2: Alternating
-	{{true, false, true, false}, {false, true, false, true}},
+	// Pattern 1: All Active
+	{{true, true, true, true}, {true, true, true, true}},
 }
 
 // SwarmComponent holds swarm-specific runtime state
