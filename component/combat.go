@@ -7,7 +7,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/physics"
 )
 
-// TODO: change name, this is not entity anymore
 type CombatEntityType int
 
 const (

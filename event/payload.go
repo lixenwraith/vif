@@ -342,15 +342,17 @@ type SpiritSpawnRequestPayload struct {
 
 // LightningSpawnRequestPayload contains parameters to spawn a lightning entity
 type LightningSpawnRequestPayload struct {
-	// TODO: change to support 2 moving anchors
-	Owner     core.Entity                  `toml:"owner"` // Owning entity for lifecycle (required for tracked)
-	OriginX   int                          `toml:"origin_x"`
-	OriginY   int                          `toml:"origin_y"`
-	TargetX   int                          `toml:"target_x"`
-	TargetY   int                          `toml:"target_y"`
-	ColorType component.LightningColorType `toml:"color_type"`
-	Duration  time.Duration                `toml:"duration"`
-	Tracked   bool                         `toml:"tracked"` // If true, entity persists and target can be updated
+	Owner        core.Entity                  `toml:"owner"`
+	OriginX      int                          `toml:"origin_x"`
+	OriginY      int                          `toml:"origin_y"`
+	TargetX      int                          `toml:"target_x"`
+	TargetY      int                          `toml:"target_y"`
+	OriginEntity core.Entity                  `toml:"origin_entity"` // 0 = use OriginX/Y as static
+	TargetEntity core.Entity                  `toml:"target_entity"` // 0 = use TargetX/Y as static
+	ColorType    component.LightningColorType `toml:"color_type"`
+	Duration     time.Duration                `toml:"duration"`
+	Tracked      bool                         `toml:"tracked"` // If true, entity persists and target can be updated
+	PathSeed     uint64                       // 0 = system generates
 }
 
 // LightningUpdatePayload updates target position for tracked lightning

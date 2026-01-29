@@ -619,14 +619,16 @@ func (s *QuasarSystem) startZapping(headerEntity core.Entity, quasarComp *compon
 	}
 
 	s.world.PushEvent(event.EventLightningSpawnRequest, &event.LightningSpawnRequestPayload{
-		Owner:     headerEntity,
-		OriginX:   headerPos.X,
-		OriginY:   headerPos.Y,
-		TargetX:   cursorPos.X,
-		TargetY:   cursorPos.Y,
-		ColorType: component.LightningCyan,
-		Duration:  parameter.QuasarZapDuration,
-		Tracked:   true,
+		Owner:        headerEntity,
+		OriginX:      headerPos.X,
+		OriginY:      headerPos.Y,
+		TargetX:      cursorPos.X,
+		TargetY:      cursorPos.Y,
+		OriginEntity: headerEntity,
+		TargetEntity: cursorEntity,
+		ColorType:    component.LightningCyan,
+		Duration:     parameter.QuasarZapDuration,
+		Tracked:      true,
 	})
 
 	quasarComp.IsZapping = true

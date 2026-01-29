@@ -119,14 +119,16 @@ func (s *VampireSystem) vampiricDrain(payload *event.VampireDrainRequestPayload)
 	}
 
 	s.world.PushEvent(event.EventLightningSpawnRequest, &event.LightningSpawnRequestPayload{
-		Owner:     targetEntity,
-		OriginX:   cursorPos.X,
-		OriginY:   cursorPos.Y,
-		TargetX:   targetPos.X,
-		TargetY:   targetPos.Y,
-		ColorType: lightningColor,
-		Duration:  parameter.GameUpdateInterval,
-		Tracked:   false,
+		Owner:        cursorEntity,
+		OriginX:      cursorPos.X,
+		OriginY:      cursorPos.Y,
+		TargetX:      targetPos.X,
+		TargetY:      targetPos.Y,
+		OriginEntity: cursorEntity,
+		TargetEntity: targetEntity,
+		ColorType:    lightningColor,
+		Duration:     parameter.LightningZapDuration,
+		Tracked:      false,
 	})
 
 	s.statCount.Add(1)

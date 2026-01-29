@@ -8,12 +8,15 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // LightningSystem manages lightning visual effect lifecycle
 // Supports both timed (auto-despawnLightning) and tracked (manual despawnLightning) modes
 type LightningSystem struct {
 	world *engine.World
+
+	rng *vmath.FastRand // Seed generation for new lightnings
 
 	enabled bool
 }
@@ -27,6 +30,7 @@ func NewLightningSystem(world *engine.World) engine.System {
 }
 
 func (s *LightningSystem) Init() {
+	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
 	s.enabled = true
 }
 
@@ -59,12 +63,14 @@ func (s *LightningSystem) Update() {
 			continue
 		}
 
-		// Duration == 0 means tracked mode (manual despawnLightning)
+		// Advance animation frame for tracked mode (dancing effect)
 		if lc.Duration == 0 {
-			continue
+			lc.AnimFrame++
+			s.world.Components.Lightning.SetComponent(e, lc)
+			continue // Tracked mode: no duration decrement
 		}
 
-		// Decrement remaining time
+		// Non-tracked: decrement remaining time
 		lc.Remaining -= deltaTime
 		if lc.Remaining <= 0 {
 			toDestroy = append(toDestroy, e)
@@ -129,18 +135,27 @@ func (s *LightningSystem) HandleEvent(ev event.GameEvent) {
 func (s *LightningSystem) spawnLightning(p *event.LightningSpawnRequestPayload) {
 	e := s.world.CreateEntity()
 
-	lc := component.LightningComponent{
-		Owner:     p.Owner,
-		OriginX:   p.OriginX,
-		OriginY:   p.OriginY,
-		TargetX:   p.TargetX,
-		TargetY:   p.TargetY,
-		ColorType: p.ColorType,
-		Duration:  p.Duration,
-		Remaining: p.Duration,
+	// Generate seed if not provided
+	pathSeed := p.PathSeed
+	if pathSeed == 0 {
+		pathSeed = s.rng.Next()
 	}
 
-	// TODO: track properly
+	lc := component.LightningComponent{
+		Owner:        p.Owner,
+		OriginX:      p.OriginX,
+		OriginY:      p.OriginY,
+		TargetX:      p.TargetX,
+		TargetY:      p.TargetY,
+		OriginEntity: p.OriginEntity,
+		TargetEntity: p.TargetEntity,
+		ColorType:    p.ColorType,
+		PathSeed:     pathSeed,
+		AnimFrame:    0,
+		Duration:     p.Duration,
+		Remaining:    p.Duration,
+	}
+
 	// Tracked mode: Duration=0 signals manual lifecycle
 	if p.Tracked {
 		lc.Duration = 0

@@ -21,6 +21,10 @@ const (
 // Lightning Entity
 const (
 	LightningAlpha = 0.8
+
+	// LightningZapDuration is visual duration for short zap effects (vampire, buff)
+	// 2 frames at 60fps for perceptible but brief flash
+	LightningZapDuration = 2 * FrameUpdateInterval
 )
 
 // Spirit Entity

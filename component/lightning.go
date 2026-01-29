@@ -19,18 +19,24 @@ const (
 
 // LightningComponent represents a transient electrical effect between two points
 type LightningComponent struct {
-	// Start position
+	// Endpoint positions - used as fallback when entity is 0
 	OriginX, OriginY int
-
-	// End position
 	TargetX, TargetY int
+
+	// Entity tracking - resolved each frame by renderer (0 = use static position)
+	OriginEntity core.Entity
+	TargetEntity core.Entity
 
 	// Visual color variant (indexes into renderer LUTs)
 	ColorType LightningColorType
+
+	// Path determinism
+	PathSeed  uint64 // Seed for fractal path generation
+	AnimFrame uint32 // Incremented each tick for tracked mode dancing
 
 	// Animation state
 	Remaining time.Duration
 	Duration  time.Duration
 
-	Owner core.Entity // Source entity for lifecycle management (0 = unowned)
+	Owner core.Entity // Source entity for lifecycle management (despawn lookup)
 }
