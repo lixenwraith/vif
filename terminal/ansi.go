@@ -43,6 +43,16 @@ var (
 	csiAttrUnderline = []byte("\x1b[4m")
 	csiAttrBlink     = []byte("\x1b[5m")
 	csiAttrReverse   = []byte("\x1b[7m")
+
+	// Mouse mode sequences (SGR 1006 for extended coordinates)
+	csiMouseClickOn   = []byte("\x1b[?1000h") // Enable click reporting
+	csiMouseClickOff  = []byte("\x1b[?1000l")
+	csiMouseDragOn    = []byte("\x1b[?1002h") // Enable button-event (drag) tracking
+	csiMouseDragOff   = []byte("\x1b[?1002l")
+	csiMouseMotionOn  = []byte("\x1b[?1003h") // Enable any-event (all motion) tracking
+	csiMouseMotionOff = []byte("\x1b[?1003l")
+	csiMouseSGROn     = []byte("\x1b[?1006h") // Enable SGR extended mode
+	csiMouseSGROff    = []byte("\x1b[?1006l")
 )
 
 // writeInt writes an integer without allocation

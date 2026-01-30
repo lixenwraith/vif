@@ -12,6 +12,8 @@ type wasmBackend struct {
 	jsCallbacks   []js.Func
 }
 
+const escapeTimeoutMs = 10
+
 func newBackend() Backend {
 	return &wasmBackend{
 		width:   80,
@@ -84,6 +86,36 @@ func (b *wasmBackend) Write(p []byte) error {
 func (b *wasmBackend) Read(stopCh <-chan struct{}) ([]byte, error) {
 	select {
 	case data := <-b.inputCh:
+		// If we received exactly ESC, wait briefly for more data
+		// (in case it's start of escape sequence split across callbacks)
+		if len(data) == 1 && data[0] == 0x1b {
+			// Use JS setTimeout via a promise-based wait
+			moreCh := make(chan []byte, 1)
+
+			// Schedule timeout callback
+			var timeoutCb js.Func
+			timeoutCb = js.FuncOf(func(_ js.Value, _ []js.Value) any {
+				select {
+				case moreCh <- nil:
+				default:
+				}
+				timeoutCb.Release()
+				return nil
+			})
+			js.Global().Call("setTimeout", timeoutCb, escapeTimeoutMs)
+
+			// Wait for more data or timeout
+			select {
+			case more := <-b.inputCh:
+				// More data arrived, combine
+				return append(data, more...), nil
+			case <-moreCh:
+				// Timeout, return standalone ESC
+				return data, nil
+			case <-stopCh:
+				return nil, nil
+			}
+		}
 		return data, nil
 	case <-stopCh:
 		return nil, nil

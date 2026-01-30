@@ -3,6 +3,7 @@
 package terminal
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -22,6 +23,8 @@ type unixBackend struct {
 	resizeStopCh chan struct{}
 	resizeDoneCh chan struct{}
 }
+
+const escapeTimeoutMs = 10
 
 func newBackend() Backend {
 	return &unixBackend{
@@ -82,23 +85,24 @@ func (b *unixBackend) Read(stopCh <-chan struct{}) ([]byte, error) {
 			{Fd: int32(b.inFd), Events: unix.POLLIN},
 		}
 
-		// 100ms timeout
-		n, err := unix.Poll(fds, 100)
+		// Timeout to differentiate single space and space sequences
+		n, err := unix.Poll(fds, escapeTimeoutMs)
 		if err != nil {
-			if err == unix.EINTR {
+			if errors.Is(err, unix.EINTR) {
 				continue
 			}
 			return nil, err
 		}
 
 		if n == 0 {
-			continue // Timeout
+			// Timeout - return empty to let readLoop handle pending ESC
+			return nil, nil
 		}
 
 		// Read data
 		rn, err := unix.Read(b.inFd, buf)
 		if err != nil {
-			if err == unix.EINTR || err == unix.EAGAIN {
+			if errors.Is(err, unix.EINTR) || errors.Is(err, unix.EAGAIN) {
 				continue
 			}
 			return nil, err

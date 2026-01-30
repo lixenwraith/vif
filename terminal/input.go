@@ -26,9 +26,15 @@ type Event struct {
 	Key       Key
 	Rune      rune
 	Modifiers Modifier
-	Width     int // For EventResize
-	Height    int // For EventResize
-	Err       error
+	Width     int   // For EventResize
+	Height    int   // For EventResize
+	Err       error // For EventError
+
+	// Mouse event fields
+	MouseX      int
+	MouseY      int
+	MouseBtn    MouseButton
+	MouseAction MouseAction
 }
 
 // inputReader handles raw stdin parsing
@@ -40,8 +46,8 @@ type inputReader struct {
 	mu      sync.Mutex
 	running bool
 
-	// Embedded buffers for zero-alloc escape handling
-	escBuf [16]byte
+	// Persistent buffer for stream assembly, not fixed size zero-alloc to avoid corrupting partial UTF-8 at boundary
+	buf []byte
 }
 
 // escapeTimeout is the duration to wait after ESC to distinguish
@@ -55,6 +61,7 @@ func newInputReader(backend Backend) *inputReader {
 		eventCh: make(chan Event, 256),
 		stopCh:  make(chan struct{}),
 		doneCh:  make(chan struct{}),
+		buf:     make([]byte, 0, 256),
 	}
 }
 
@@ -119,30 +126,48 @@ func (r *inputReader) readLoop() {
 		}
 
 		if len(data) == 0 {
-			// Stop signal received or EOF
+			// Timeout (Unix poll) or empty read
+			// Emit pending standalone ESC if present
+			if len(r.buf) == 1 && r.buf[0] == 0x1b {
+				r.sendEvent(Event{Type: EventKey, Key: KeyEscape})
+				r.buf = r.buf[:0]
+			}
 			select {
 			case <-r.stopCh:
 				r.sendEvent(Event{Type: EventClosed})
 				return
 			default:
-				// Empty read but not stopped, continue
 				continue
 			}
 		}
 
-		r.parseInput(data)
+		// Append to persistent buffer
+		r.buf = append(r.buf, data...)
+
+		// Parse as much as possible, get consumed count
+		consumed := r.parseInput(r.buf)
+
+		// Compact buffer
+		if consumed > 0 {
+			if consumed >= len(r.buf) {
+				r.buf = r.buf[:0]
+			} else {
+				copy(r.buf, r.buf[consumed:])
+				r.buf = r.buf[:len(r.buf)-consumed]
+			}
+		}
 	}
 }
 
-// parseInput parses raw bytes into events
-func (r *inputReader) parseInput(data []byte) {
+// parseInput parses raw bytes into events and returns bytes consumed (stop on incomplete sequence)
+func (r *inputReader) parseInput(data []byte) int {
 	i := 0
 	n := len(data)
 
 	for i < n {
 		select {
 		case <-r.stopCh:
-			return
+			return i
 		default:
 		}
 
@@ -157,14 +182,22 @@ func (r *inputReader) parseInput(data []byte) {
 
 		// Escape sequence
 		if b == 0x1b {
-			consumed, ev := r.parseEscape(data[i:])
-			if consumed > 0 {
-				r.sendEvent(ev)
-				i += consumed
-				continue
+			// Need at least 2 bytes to determine sequence type
+			if i+1 >= n {
+				return i // Wait for more data
 			}
-			r.sendEvent(Event{Type: EventKey, Key: KeyEscape})
-			i++
+
+			consumed, ev := r.parseEscape(data[i:])
+			if consumed == 0 {
+				// Incomplete sequence, wait for more data
+				return i
+			}
+
+			// Only emit if not a swallowed unknown sequence
+			if ev.Key != KeyNone || ev.Type != EventKey {
+				r.sendEvent(ev)
+			}
+			i += consumed
 			continue
 		}
 
@@ -182,29 +215,57 @@ func (r *inputReader) parseInput(data []byte) {
 			continue
 		}
 
-		// UTF-8
-		rn, size := decodeRune(data[i:])
-		if size > 0 {
+		// UTF-8 multibyte
+		if b >= 0x80 {
+			// Check if full sequence available
+			seqLen := utf8SeqLen(b)
+			if seqLen == 0 {
+				// Invalid start byte, skip
+				i++
+				continue
+			}
+			if i+seqLen > n {
+				// Incomplete UTF-8, wait for more data
+				return i
+			}
+
+			rn, size := decodeRune(data[i:])
 			r.sendEvent(Event{Type: EventKey, Key: KeyRune, Rune: rn})
 			i += size
-		} else {
-			i++
+			continue
 		}
+
+		i++
 	}
+	return i
 }
 
-// parseEscape attempts to parse an escape sequence
+// utf8SeqLen returns expected UTF-8 sequence length from start byte, 0 if invalid
+func utf8SeqLen(b byte) int {
+	if b < 0x80 {
+		return 1
+	}
+	if b&0xe0 == 0xc0 {
+		return 2
+	}
+	if b&0xf0 == 0xe0 {
+		return 3
+	}
+	if b&0xf8 == 0xf0 {
+		return 4
+	}
+	return 0 // Invalid
+}
+
+// parseEscape attempts to parse an escape sequence, returns 0 on incomplete
 func (r *inputReader) parseEscape(data []byte) (int, Event) {
 	if len(data) < 2 {
-		extra := r.readMoreWithTimeout()
-		if extra == 0 {
-			return 0, Event{}
-		}
-		// Rare: split packet, must allocate
-		combined := make([]byte, len(data)+extra)
-		copy(combined, data)
-		copy(combined[len(data):], r.escBuf[:extra])
-		data = combined
+		return 0, Event{} // Incomplete, wait for more
+	}
+
+	// ESC ESC -> Alt+Escape
+	if data[1] == 0x1b {
+		return 2, Event{Type: EventKey, Key: KeyEscape, Modifiers: ModAlt}
 	}
 
 	if data[1] == '[' {
@@ -213,6 +274,15 @@ func (r *inputReader) parseEscape(data []byte) (int, Event) {
 	if data[1] == 'O' {
 		return r.parseSS3(data)
 	}
+
+	// Alt+Control character (ESC + 0x00-0x1F)
+	if data[1] < 0x20 {
+		ev := r.parseControl(data[1])
+		ev.Modifiers |= ModAlt
+		return 2, ev
+	}
+
+	// Alt+printable
 	if data[1] >= 0x20 && data[1] < 0x7f {
 		return 2, Event{Type: EventKey, Key: KeyRune, Rune: rune(data[1]), Modifiers: ModAlt}
 	}
@@ -224,6 +294,11 @@ func (r *inputReader) parseEscape(data []byte) (int, Event) {
 func (r *inputReader) parseCSI(data []byte) (int, Event) {
 	if len(data) < 3 {
 		return 0, Event{}
+	}
+
+	// SGR mouse: ESC [ < Btn ; X ; Y M/m
+	if data[2] == '<' {
+		return r.parseSGRMouse(data)
 	}
 
 	end := 2
@@ -244,14 +319,26 @@ func (r *inputReader) parseCSI(data []byte) (int, Event) {
 		end++
 	}
 
+	// Check if we found a terminator or ran out of data
+	if end <= 2 || end > maxScan {
+		return 0, Event{} // Incomplete
+	}
+
+	// Check last byte is valid terminator
+	lastByte := data[end-1]
+	if !((lastByte >= 'A' && lastByte <= 'Z') || (lastByte >= 'a' && lastByte <= 'z') || lastByte == '~') {
+		return 0, Event{} // Incomplete, no terminator found
+	}
+
 	if key, mod, ok := lookupCSI(data[2:end]); ok {
 		return end, Event{Type: EventKey, Key: key, Modifiers: mod}
 	}
 
-	return 0, Event{}
+	// Unknown but valid CSI syntax - consume and return KeyNone
+	return end, Event{Type: EventKey, Key: KeyNone}
 }
 
-// parseSS3 parses SS3 sequence without allocation
+// parseSS3 parses SS3 sequence without allocation, returns length even for unknown sequences
 func (r *inputReader) parseSS3(data []byte) (int, Event) {
 	if len(data) < 3 {
 		return 0, Event{}
@@ -259,7 +346,8 @@ func (r *inputReader) parseSS3(data []byte) (int, Event) {
 	if key, mod, ok := lookupSS3(data[2:3]); ok {
 		return 3, Event{Type: EventKey, Key: key, Modifiers: mod}
 	}
-	return 0, Event{}
+	// Unknown SS3 - consume to prevent garbage
+	return 3, Event{Type: EventKey, Key: KeyNone}
 }
 
 // parseControl maps control characters to keys
@@ -331,25 +419,126 @@ func (r *inputReader) parseControl(b byte) Event {
 	return Event{Type: EventKey, Key: KeyNone}
 }
 
-// readMoreWithTimeout reads into embedded buffer, returns bytes read
-func (r *inputReader) readMoreWithTimeout() int {
-	// Create a temporary stop channel that closes after timeout
-	timeoutCh := make(chan struct{})
-	timer := time.AfterFunc(escapeTimeout, func() { close(timeoutCh) })
-	defer timer.Stop()
-
-	// Use backend read with the timeout channel as the stop signal
-	data, err := r.backend.Read(timeoutCh)
-
-	if err != nil || len(data) == 0 {
-		return 0
+// parseSGRMouse parses mouse SGR sequences
+func (r *inputReader) parseSGRMouse(data []byte) (int, Event) {
+	// Format: ESC [ < Btn ; X ; Y M/m
+	// Minimum: ESC [ < 0 ; 1 ; 1 M = 10 bytes
+	if len(data) < 10 {
+		return 0, Event{}
 	}
 
-	copy(r.escBuf[:], data)
-	if len(data) > len(r.escBuf) {
-		return len(r.escBuf)
+	// Find terminator M or m
+	end := 3
+	for end < len(data) && end < 32 {
+		if data[end] == 'M' || data[end] == 'm' {
+			break
+		}
+		end++
 	}
-	return len(data)
+	if end >= len(data) || (data[end] != 'M' && data[end] != 'm') {
+		return 0, Event{}
+	}
+
+	// Parse: Btn;X;Y
+	params := data[3:end]
+	btn, x, y, ok := parseSGRParams(params)
+	if !ok {
+		return 0, Event{}
+	}
+
+	ev := Event{Type: EventMouse, MouseX: x - 1, MouseY: y - 1} // Convert to 0-indexed
+
+	// Decode button and action
+	// Bits 0-1: button (0=left, 1=middle, 2=right, 3=release)
+	// Bit 5 (32): motion
+	// Bit 6 (64): scroll
+	buttonID := btn & 0x03
+	isMotion := btn&32 != 0
+	isScroll := btn&64 != 0
+
+	if isScroll {
+		// Scroll: buttonID 0=up, 1=down
+		if buttonID == 0 {
+			ev.MouseBtn = MouseBtnWheelUp
+		} else {
+			ev.MouseBtn = MouseBtnWheelDown
+		}
+		ev.MouseAction = MouseActionPress // Scroll is instantaneous
+	} else {
+		// Regular button
+		switch buttonID {
+		case 0:
+			ev.MouseBtn = MouseBtnLeft
+		case 1:
+			ev.MouseBtn = MouseBtnMiddle
+		case 2:
+			ev.MouseBtn = MouseBtnRight
+		case 3:
+			ev.MouseBtn = MouseBtnNone // Release with no specific button
+		}
+
+		if data[end] == 'M' {
+			if isMotion {
+				if ev.MouseBtn != MouseBtnNone {
+					ev.MouseAction = MouseActionDrag
+				} else {
+					ev.MouseAction = MouseActionMove
+				}
+			} else {
+				ev.MouseAction = MouseActionPress
+			}
+		} else {
+			ev.MouseAction = MouseActionRelease
+		}
+	}
+
+	// Extract modifiers from button byte
+	if btn&4 != 0 {
+		ev.Modifiers |= ModShift
+	}
+	if btn&8 != 0 {
+		ev.Modifiers |= ModAlt
+	}
+	if btn&16 != 0 {
+		ev.Modifiers |= ModCtrl
+	}
+
+	return end + 1, ev
+}
+
+// parseSGRParams extracts btn, x, y from "Btn;X;Y" format
+func parseSGRParams(data []byte) (btn, x, y int, ok bool) {
+	state := 0 // 0=btn, 1=x, 2=y
+	val := 0
+
+	for _, b := range data {
+		if b == ';' {
+			switch state {
+			case 0:
+				btn = val
+			case 1:
+				x = val
+			}
+			state++
+			val = 0
+			if state > 2 {
+				return 0, 0, 0, false
+			}
+		} else if b >= '0' && b <= '9' {
+			val = val*10 + int(b-'0')
+			if val > 9999 { // Sanity limit
+				return 0, 0, 0, false
+			}
+		} else {
+			return 0, 0, 0, false
+		}
+	}
+
+	if state != 2 {
+		return 0, 0, 0, false
+	}
+	y = val
+	return btn, x, y, true
 }
 
 // sendEvent sends an event to the channel, non-blocking

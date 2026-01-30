@@ -71,6 +71,10 @@ type Terminal interface {
 
 	// PostEvent injects a synthetic event
 	PostEvent(Event)
+
+	// SetMouseMode enables/disables mouse event reporting
+	// Modes can be combined: MouseModeClick | MouseModeDrag
+	SetMouseMode(mode MouseMode) error
 }
 
 // ResizeEvent represents a terminal resize
@@ -93,6 +97,7 @@ type termImpl struct {
 	mu          sync.Mutex
 	initialized bool
 	finalized   bool
+	mouseMode   MouseMode
 }
 
 // New creates a new Terminal instance
@@ -184,6 +189,16 @@ func (t *termImpl) Fini() {
 
 	if !t.initialized || t.finalized {
 		return
+	}
+
+	// Disable mouse before other cleanup
+	if t.mouseMode != MouseModeNone {
+		w := t.output.writer
+		w.Write(csiMouseMotionOff)
+		w.Write(csiMouseDragOff)
+		w.Write(csiMouseClickOff)
+		w.Write(csiMouseSGROff)
+		w.Flush()
 	}
 
 	// Stop handlers
@@ -359,6 +374,56 @@ func (t *termImpl) PostEvent(ev Event) {
 	}
 }
 
+// SetMouseMode enables or disables mouse mode
+func (t *termImpl) SetMouseMode(mode MouseMode) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if !t.initialized || t.finalized {
+		return nil
+	}
+
+	oldMode := t.mouseMode
+	t.mouseMode = mode
+
+	w := t.output.writer
+
+	// Disable modes no longer needed (reverse order of enable)
+	if oldMode&MouseModeMotion != 0 && mode&MouseModeMotion == 0 {
+		w.Write(csiMouseMotionOff)
+	}
+	if oldMode&MouseModeDrag != 0 && mode&MouseModeDrag == 0 {
+		w.Write(csiMouseDragOff)
+	}
+	if oldMode&MouseModeClick != 0 && mode&MouseModeClick == 0 {
+		w.Write(csiMouseClickOff)
+	}
+
+	// Disable SGR if disabling all mouse
+	if mode == MouseModeNone && oldMode != MouseModeNone {
+		w.Write(csiMouseSGROff)
+	}
+
+	// Enable SGR first if enabling any mouse mode
+	if mode != MouseModeNone && oldMode == MouseModeNone {
+		w.Write(csiMouseSGROn)
+	}
+
+	// Enable new modes (click is base, drag extends, motion extends further)
+	if mode&MouseModeClick != 0 && oldMode&MouseModeClick == 0 {
+		w.Write(csiMouseClickOn)
+	}
+	if mode&MouseModeDrag != 0 && oldMode&MouseModeDrag == 0 {
+		w.Write(csiMouseDragOn)
+	}
+	if mode&MouseModeMotion != 0 && oldMode&MouseModeMotion == 0 {
+		w.Write(csiMouseMotionOn)
+	}
+
+	w.Flush()
+	return nil
+}
+
 // writeRaw writes raw bytes to output
 func (t *termImpl) writeRaw(data []byte) {
 	t.backend.Write(data)
@@ -369,6 +434,12 @@ func (t *termImpl) writeRaw(data []byte) {
 // EmergencyReset attempts to restore terminal to sane state
 // Call this from panic recovery if Fini() cannot be called normally
 func EmergencyReset(w io.Writer) {
+	// Disable mouse tracking
+	w.Write(csiMouseMotionOff)
+	w.Write(csiMouseDragOff)
+	w.Write(csiMouseClickOff)
+	w.Write(csiMouseSGROff)
+
 	// Write sequences to provided writer
 	w.Write(csiCursorShow)
 	w.Write(csiAltScreenExit)
