@@ -106,6 +106,10 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return r.handleMotion(intent)
 	case input.IntentCharMotion:
 		return r.handleCharMotion(intent)
+	case input.IntentMotionMarkerShow:
+		return r.handleMotionMarkerShow(intent)
+	case input.IntentMotionMarkerJump:
+		return r.handleMotionMarkerJump(intent)
 
 	// Normal mode operators
 	case input.IntentOperatorMotion:
@@ -273,6 +277,60 @@ func (r *Router) handleCharMotion(intent *input.Intent) bool {
 	}
 
 	return true
+}
+
+func (r *Router) handleMotionMarkerShow(intent *input.Intent) bool {
+	// Emit event for MotionMarkerSystem to show colored markers
+	dir := r.motionToDirection(intent.Motion)
+	r.ctx.PushEvent(event.EventMotionMarkerShowColored, &event.MotionMarkerShowPayload{
+		DirectionX: dir[0],
+		DirectionY: dir[1],
+	})
+	return true
+}
+
+func (r *Router) handleMotionMarkerJump(intent *input.Intent) bool {
+	// Clear colored markers
+	r.ctx.PushEvent(event.EventMotionMarkerClearColored, nil)
+
+	r.ctx.World.RunSafe(func() {
+		pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Cursor.Entity)
+		if !ok {
+			return
+		}
+
+		var glyphType component.GlyphType = -1 // -1 = any
+		switch intent.Char {
+		case 'r':
+			glyphType = component.GlyphRed
+		case 'g':
+			glyphType = component.GlyphGreen
+		case 'b':
+			glyphType = component.GlyphBlue
+		}
+
+		result := MotionColoredGlyph(r.ctx, pos.X, pos.Y, intent.Count, intent.Motion, glyphType)
+		OpMove(r.ctx, result)
+	})
+
+	if intent.Command != "" {
+		r.setLastCommandAndSplash(intent.Command)
+	}
+	return true
+}
+
+func (r *Router) motionToDirection(motion input.MotionOp) [2]int {
+	switch motion {
+	case input.MotionColoredGlyphRight:
+		return [2]int{1, 0}
+	case input.MotionColoredGlyphLeft:
+		return [2]int{-1, 0}
+	case input.MotionColoredGlyphUp:
+		return [2]int{0, -1}
+	case input.MotionColoredGlyphDown:
+		return [2]int{0, 1}
+	}
+	return [2]int{0, 0}
 }
 
 // --- Operator Handlers ---

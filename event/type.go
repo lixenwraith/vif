@@ -507,6 +507,16 @@ const (
 	// Trigger: FuseSystem, SwarmSystem, QuasarSystem, future boss telegraphs
 	// Consumer: MarkerSystem | Payload: *MarkerSpawnRequestPayload
 	EventMarkerSpawnRequest
+
+	// EventMotionMarkerShowColored signals a request to show colored glyph motion markers in ping bound
+	// Trigger: Input/Mode
+	// Consumer: MotionMarkerSystem | Payload: *MotionMarkerShowPayload
+	EventMotionMarkerShowColored
+
+	// EventMotionMarkerClearColored signals clearing colored motion markers (jump executed or cancelled)
+	// Trigger: Input/Mode
+	// Consumer: MotionMarkerSystem | Payload: nil
+	EventMotionMarkerClearColored
 )
 
 // GameEvent represents a single game event with metadata

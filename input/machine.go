@@ -18,6 +18,9 @@ type Machine struct {
 	charMotion MotionOp
 	prefix     rune
 
+	// Marker state - direction pending color selection
+	markerDirection MotionOp
+
 	// Command buffer for visual feedback
 	cmdBuffer []rune
 }
@@ -57,6 +60,7 @@ func (m *Machine) Reset() {
 	m.operator = OperatorNone
 	m.charMotion = MotionNone
 	m.prefix = 0
+	m.markerDirection = MotionNone
 	m.cmdBuffer = m.cmdBuffer[:0]
 }
 
@@ -115,6 +119,8 @@ func (m *Machine) processNormal(ev terminal.Event) *Intent {
 		return m.processPrefixG(ev.Rune)
 	case StateOperatorPrefixG:
 		return m.processOperatorPrefixG(ev.Rune)
+	case StateMarkerAwaitColor:
+		return m.processMarkerAwaitColor(ev.Rune)
 	}
 	return nil
 }
@@ -287,6 +293,16 @@ func (m *Machine) processPrefixG(key rune) *Intent {
 		return nil
 	}
 
+	if entry.Behavior == BehaviorMarkerStart {
+		m.markerDirection = entry.Motion
+		m.state = StateMarkerAwaitColor
+		return &Intent{
+			Type:    IntentMotionMarkerShow,
+			Motion:  entry.Motion,
+			Command: m.captureCommand(),
+		}
+	}
+
 	return m.buildMotionIntent(entry.Motion)
 }
 
@@ -311,6 +327,55 @@ func (m *Machine) processOperatorPrefixG(key rune) *Intent {
 		Count:    count,
 		Command:  cmd,
 	}
+}
+
+func (m *Machine) processMarkerAwaitColor(key rune) *Intent {
+	m.cmdBuffer = append(m.cmdBuffer, key)
+
+	// Direction repeat (gll, ghh, etc.) - jump to first glyph any color
+	directionKey := m.motionToDirectionKey(m.markerDirection)
+	if key == directionKey {
+		motion := m.markerDirection
+		cmd := m.captureCommand()
+		m.Reset()
+		return &Intent{
+			Type:    IntentMotionMarkerJump,
+			Motion:  motion,
+			Char:    0, // 0 = any color
+			Command: cmd,
+		}
+	}
+
+	// Color selection (r/g/b)
+	if key == 'r' || key == 'g' || key == 'b' {
+		motion := m.markerDirection
+		cmd := m.captureCommand()
+		m.Reset()
+		return &Intent{
+			Type:    IntentMotionMarkerJump,
+			Motion:  motion,
+			Char:    key, // 'r', 'g', 'b' - resolved to GlyphType in router
+			Command: cmd,
+		}
+	}
+
+	// Any other key cancels
+	m.Reset()
+	return nil
+}
+
+func (m *Machine) motionToDirectionKey(motion MotionOp) rune {
+	switch motion {
+	case MotionColoredGlyphRight:
+		return 'l'
+	case MotionColoredGlyphLeft:
+		return 'h'
+	case MotionColoredGlyphUp:
+		return 'k'
+	case MotionColoredGlyphDown:
+		return 'j'
+	}
+	return 0
 }
 
 // === Insert Mode Processing ===

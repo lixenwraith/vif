@@ -356,3 +356,73 @@ func (p *Position) GridDimensions() (width, height int) {
 	defer p.mu.RUnlock()
 	return p.grid.Width, p.grid.Height
 }
+
+// --- Range Operations ---
+
+// ScanLineResult holds entities found during line scan
+type ScanLineResult struct {
+	Entity core.Entity
+	X, Y   int
+}
+
+// ScanLine traverses cells from (startX, startY) in direction (dx, dy) until bounds or maxSteps
+// Acquires lock once for entire scan. Returns slice of (entity, x, y) for cells with matching filter
+// filter: nil = all entities, or func to test entity (e.g. HasGlyph)
+func (p *Position) ScanLine(startX, startY, dx, dy, maxSteps int, filter func(core.Entity) bool) []ScanLineResult {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	var results []ScanLineResult
+	x, y := startX, startY
+
+	for step := 0; step < maxSteps; step++ {
+		if x < 0 || x >= p.grid.Width || y < 0 || y >= p.grid.Height {
+			break
+		}
+
+		idx := y*p.grid.Width + x
+		cell := &p.grid.Cells[idx]
+
+		for i := uint8(0); i < cell.Count; i++ {
+			e := cell.Entities[i]
+			if filter == nil || filter(e) {
+				results = append(results, ScanLineResult{Entity: e, X: x, Y: y})
+			}
+		}
+
+		x += dx
+		y += dy
+	}
+
+	return results
+}
+
+// ScanLineFirst returns first entity matching filter along line, or (0, -1, -1) if none
+// Single-lock scan optimized for finding first match
+func (p *Position) ScanLineFirst(startX, startY, dx, dy, maxSteps int, filter func(core.Entity) bool) (core.Entity, int, int) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	x, y := startX, startY
+
+	for step := 0; step < maxSteps; step++ {
+		if x < 0 || x >= p.grid.Width || y < 0 || y >= p.grid.Height {
+			break
+		}
+
+		idx := y*p.grid.Width + x
+		cell := &p.grid.Cells[idx]
+
+		for i := uint8(0); i < cell.Count; i++ {
+			e := cell.Entities[i]
+			if filter == nil || filter(e) {
+				return e, x, y
+			}
+		}
+
+		x += dx
+		y += dy
+	}
+
+	return 0, -1, -1
+}

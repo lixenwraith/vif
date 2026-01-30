@@ -15,6 +15,7 @@ const (
 	BehaviorSpecial
 	BehaviorSystem
 	BehaviorAction
+	BehaviorMarkerStart // g+direction triggers marker show, transitions to color await
 )
 
 // KeyEntry describes a key's behavior without function pointers
@@ -180,8 +181,10 @@ func DefaultKeyTable() *KeyTable {
 			'o': {BehaviorMotion, MotionOrigin, SpecialNone, ModeTargetNone, IntentNone},
 			'$': {BehaviorMotion, MotionEnd, SpecialNone, ModeTargetNone, IntentNone},
 			'm': {BehaviorMotion, MotionCenter, SpecialNone, ModeTargetNone, IntentNone},
-			'k': {BehaviorMotion, MotionColumnUp, SpecialNone, ModeTargetNone, IntentNone},
-			'j': {BehaviorMotion, MotionColumnDown, SpecialNone, ModeTargetNone, IntentNone},
+			'h': {BehaviorMarkerStart, MotionColoredGlyphLeft, SpecialNone, ModeTargetNone, IntentNone},
+			'j': {BehaviorMarkerStart, MotionColoredGlyphDown, SpecialNone, ModeTargetNone, IntentNone},
+			'k': {BehaviorMarkerStart, MotionColoredGlyphUp, SpecialNone, ModeTargetNone, IntentNone},
+			'l': {BehaviorMarkerStart, MotionColoredGlyphRight, SpecialNone, ModeTargetNone, IntentNone},
 		},
 
 		OverlayRunes: map[rune]KeyEntry{

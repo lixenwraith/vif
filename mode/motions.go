@@ -1,7 +1,10 @@
 package mode
 
 import (
+	"github.com/lixenwraith/vi-fighter/component"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/input"
 )
 
 // MotionLeft implements 'h' motion
@@ -648,5 +651,94 @@ func MotionColumnDown(ctx *engine.GameContext, x, y, count int) MotionResult {
 		EndX: endX, EndY: endY,
 		Type: RangeChar, Style: StyleInclusive,
 		Valid: endX != x || endY != y,
+	}
+}
+
+// MotionColoredGlyph finds first glyph of specified type (or any if glyphType < 0) in direction
+// Uses bounds for visual mode
+func MotionColoredGlyph(ctx *engine.GameContext, x, y, count int, motion input.MotionOp, glyphType component.GlyphType) MotionResult {
+	bounds := ctx.GetPingBounds()
+	config := ctx.World.Resources.Config
+
+	var dx, dy int
+	switch motion {
+	case input.MotionColoredGlyphRight:
+		dx, dy = 1, 0
+	case input.MotionColoredGlyphLeft:
+		dx, dy = -1, 0
+	case input.MotionColoredGlyphUp:
+		dx, dy = 0, -1
+	case input.MotionColoredGlyphDown:
+		dx, dy = 0, 1
+	default:
+		return MotionResult{StartX: x, StartY: y, EndX: x, EndY: y, Valid: false}
+	}
+
+	glyphStore := ctx.World.Components.Glyph
+
+	filter := func(e core.Entity) bool {
+		if !glyphStore.HasEntity(e) {
+			return false
+		}
+		if glyphType < 0 {
+			return true // Any glyph
+		}
+		glyph, ok := glyphStore.GetComponent(e)
+		return ok && glyph.Type == glyphType
+	}
+
+	// Determine scan range based on direction and bounds
+	var maxSteps int
+	startX, startY := x+dx, y+dy
+
+	if dx != 0 {
+		// Horizontal scan within bounds Y range
+		maxSteps = config.GameWidth
+	} else {
+		// Vertical scan within bounds X range
+		maxSteps = config.GameHeight
+	}
+
+	// For bound-aware scanning, we scan cell by cell checking bounds
+	endX, endY := x, y
+	found := false
+
+	for step := 0; step < maxSteps; step++ {
+		checkX := startX + dx*step
+		checkY := startY + dy*step
+
+		// Bounds check
+		if checkX < 0 || checkX >= config.GameWidth || checkY < 0 || checkY >= config.GameHeight {
+			break
+		}
+
+		// Visual mode bounds check
+		if bounds.Active {
+			if dy == 0 && (checkY < bounds.MinY || checkY > bounds.MaxY) {
+				continue
+			}
+			if dx == 0 && (checkX < bounds.MinX || checkX > bounds.MaxX) {
+				continue
+			}
+		}
+
+		entities := ctx.World.Positions.GetAllEntityAt(checkX, checkY)
+		for _, e := range entities {
+			if filter(e) {
+				endX, endY = checkX, checkY
+				found = true
+				break
+			}
+		}
+		if found {
+			break
+		}
+	}
+
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: endX, EndY: endY,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: found,
 	}
 }

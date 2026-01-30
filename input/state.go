@@ -25,4 +25,5 @@ const (
 	StateOperatorCharWait
 	StatePrefixG
 	StateOperatorPrefixG
+	StateMarkerAwaitColor // After g+direction, awaiting r/g/b or repeat direction
 )

@@ -29,6 +29,10 @@ const (
 	IntentFireMain    // Enter in Normal mode
 	IntentFireSpecial // \ in Normal mode
 
+	// Motion markers
+	IntentMotionMarkerShow // gl/gh/gk/gj - show markers, await color
+	IntentMotionMarkerJump // r/g/b after marker show - jump to colored glyph
+
 	// Mode switching
 	IntentModeSwitch // i, /, :
 	IntentAppend     // a
@@ -86,8 +90,12 @@ const (
 	MotionHalfPageRight                // L
 	MotionHalfPageUp                   // K, PgUp
 	MotionHalfPageDown                 // J, PgDown
-	MotionColumnUp                     // [ or gk
-	MotionColumnDown                   // ] or gj
+	MotionColumnUp                     // [, u
+	MotionColumnDown                   // ], o
+	MotionColoredGlyphRight            // gl + color
+	MotionColoredGlyphLeft             // gh + color
+	MotionColoredGlyphUp               // gk + color
+	MotionColoredGlyphDown             // gj + color
 )
 
 // OperatorOp identifies operator type

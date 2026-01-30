@@ -93,6 +93,9 @@ func RegisterSystems() {
 	registry.RegisterSystem("explosion", func(w any) any {
 		return system.NewExplosionSystem(w.(*engine.World))
 	})
+	registry.RegisterSystem("motion_marker", func(w any) any {
+		return system.NewMotionMarkerSystem(w.(*engine.World))
+	})
 	registry.RegisterSystem("splash", func(w any) any {
 		return system.NewSplashSystem(w.(*engine.World))
 	})
@@ -213,6 +216,7 @@ func ActiveSystems() []string {
 		"flash",
 		"marker",
 		"explosion",
+		"motion_marker",
 		"splash",
 		"environment",
 		"death",

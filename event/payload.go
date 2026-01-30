@@ -511,3 +511,9 @@ type MarkerSpawnRequestPayload struct {
 	PulseRate int64                 `toml:"pulse_rate"` // Q32.32, 0 = none
 	FadeMode  uint8                 `toml:"fade_mode"`  // 0=none, 1=out, 2=in
 }
+
+// MotionMarkerShowPayload contains direction for colored marker display
+type MotionMarkerShowPayload struct {
+	DirectionX int `toml:"direction_x"` // -1, 0, 1
+	DirectionY int `toml:"direction_y"` // -1, 0, 1
+}

@@ -99,6 +99,7 @@ var Systems = []SystemDef{
 	{"flash", "NewFlashSystem"},
 	{"marker", "NewMarkerSystem"},
 	{"explosion", "NewExplosionSystem"},
+	{"motion_marker", "NewMotionMarkerSystem"},
 	{"splash", "NewSplashSystem"},
 	{"environment", "NewEnvironmentSystem"},
 	{"death", "NewDeathSystem"},
