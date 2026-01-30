@@ -111,7 +111,7 @@ func (s *PingSystem) Update() {
 // handleGridRequest activates the grid on the cursor entity
 func (s *PingSystem) handleGridRequest(duration time.Duration) {
 	// In single player, apply to the main cursor
-	entity := s.world.Resources.Cursor.Entity
+	entity := s.world.Resources.Player.Entity
 
 	ping, ok := s.world.Components.Ping.GetComponent(entity)
 	if !ok {

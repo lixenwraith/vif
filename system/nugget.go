@@ -123,7 +123,7 @@ func (s *NuggetSystem) Update() {
 	}
 
 	now := s.world.Resources.Time.GameTime
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 
 	// Validate active nugget still exists
 	if s.activeNuggetEntity != 0 && !s.world.Components.Nugget.HasEntity(s.activeNuggetEntity) {
@@ -158,7 +158,7 @@ func (s *NuggetSystem) Update() {
 
 // handleJumpRequest attempts to jump cursor to the active nugget
 func (s *NuggetSystem) handleJumpRequest() {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 
 	// 1. Check Active Nugget
 	nuggetEntity := s.activeNuggetEntity
@@ -254,7 +254,7 @@ func (s *NuggetSystem) spawnNugget() {
 // findValidPosition finds a valid random position for a nugget
 func (s *NuggetSystem) findValidPosition() (int, int) {
 	config := s.world.Resources.Config
-	cursorPos, ok := s.world.Positions.GetPosition(s.world.Resources.Cursor.Entity)
+	cursorPos, ok := s.world.Positions.GetPosition(s.world.Resources.Player.Entity)
 	if !ok {
 		return -1, -1
 	}

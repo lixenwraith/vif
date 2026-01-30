@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/core"
@@ -15,7 +16,7 @@ type Resource struct {
 	Time   *TimeResource
 	Config *ConfigResource
 	Game   *GameStateResource
-	Cursor *CursorResource
+	Player *PlayerResource
 	Event  *EventQueueResource
 	Render *RenderConfig
 
@@ -78,14 +79,42 @@ type EventQueueResource struct {
 	Queue *event.EventQueue
 }
 
+// PingBounds holds the boundaries for ping crosshair and operations
+type PingBounds struct {
+	RadiusX int  // Half-width from cursor (0 = single column)
+	RadiusY int  // Half-height from cursor (0 = single row)
+	Active  bool // True when visual mode + shield active
+}
+
+// PingAbsoluteBounds holds absolute coordinates derived from cursor position and radius
+type PingAbsoluteBounds struct {
+	MinX, MaxX int
+	MinY, MaxY int
+	Active     bool
+}
+
 // GameStateResource wraps GameState for read access by systems
 type GameStateResource struct {
 	State *GameState
 }
 
-// CursorResource holds the cursor entity reference
-type CursorResource struct {
+// PlayerResource holds the player cursor entity and derived state
+type PlayerResource struct {
 	Entity core.Entity
+	bounds atomic.Pointer[PingBounds]
+}
+
+// GetBounds returns current bounds snapshot (lock-free read)
+func (pr *PlayerResource) GetBounds() PingBounds {
+	if b := pr.bounds.Load(); b != nil {
+		return *b
+	}
+	return PingBounds{}
+}
+
+// SetBounds atomically updates bounds
+func (pr *PlayerResource) SetBounds(b PingBounds) {
+	pr.bounds.Store(&b)
 }
 
 // === Bridged Resources from Service ===

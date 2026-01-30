@@ -80,7 +80,7 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 
 	switch ev.Type {
 	case event.EventShieldActivate:
@@ -94,6 +94,7 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 			shield.InvRxSq, shield.InvRySq = vmath.EllipseInvRadiiSq(rx, ry)
 			shield.Active = true
 			s.world.Components.Shield.SetComponent(cursorEntity, shield)
+			s.world.UpdateBoundsRadius()
 		}
 		s.statActive.Store(true)
 
@@ -102,6 +103,7 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 		if ok {
 			shield.Active = false
 			s.world.Components.Shield.SetComponent(cursorEntity, shield)
+			s.world.UpdateBoundsRadius()
 		}
 		s.statActive.Store(false)
 
@@ -126,7 +128,7 @@ func (s *ShieldSystem) Update() {
 		return
 	}
 
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 
 	shieldComp, ok := s.world.Components.Shield.GetComponent(cursorEntity)
 	if !ok || !shieldComp.Active {

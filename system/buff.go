@@ -107,7 +107,7 @@ func (s *BuffSystem) Update() {
 		return
 	}
 
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 	buffComp, ok := s.world.Components.Buff.GetComponent(cursorEntity)
 	if !ok {
 		return
@@ -128,7 +128,7 @@ func (s *BuffSystem) Update() {
 }
 
 func (s *BuffSystem) addBuff(buff component.BuffType) {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 	buffComp, ok := s.world.Components.Buff.GetComponent(cursorEntity)
 	if !ok {
 		return
@@ -153,7 +153,7 @@ func (s *BuffSystem) addBuff(buff component.BuffType) {
 }
 
 func (s *BuffSystem) removeAllBuffs() {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 	buffComp, ok := s.world.Components.Buff.GetComponent(cursorEntity)
 	if !ok {
 		return
@@ -168,7 +168,7 @@ func (s *BuffSystem) removeAllBuffs() {
 }
 
 func (s *BuffSystem) fireAllBuffs() {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 	if !ok {
 		return

@@ -4,12 +4,14 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/status"
 )
 
 // GameState centralizes game state with clear ownership boundaries
 type GameState struct {
 	// === REAL-TIME STATE (lock-free atomics) ===
+	Mode atomic.Int32 // Game mode (core.GameMode); set by Router
 
 	// Runtime Metrics
 	GameTicks      atomic.Uint64
@@ -28,6 +30,8 @@ type GameState struct {
 // initState initializes all game state fields to starting values
 // Called by both NewGameState and Reset to avoid duplication
 func (gs *GameState) initState() {
+	// Reset game mode
+	gs.Mode.Store(int32(core.ModeNormal))
 	// Reset metrics
 	gs.GameTicks.Store(0)
 	gs.CurrentAPM.Store(0)
@@ -73,6 +77,16 @@ func (gs *GameState) RecordAction() {
 // GetAPM returns the current calculated APM
 func (gs *GameState) GetAPM() uint64 {
 	return gs.CurrentAPM.Load()
+}
+
+// GetMode returns current game mode
+func (gs *GameState) GetMode() core.GameMode {
+	return core.GameMode(gs.Mode.Load())
+}
+
+// SetMode sets current game mode
+func (gs *GameState) SetMode(m core.GameMode) {
+	gs.Mode.Store(int32(m))
 }
 
 // UpdateAPM rolls action history window and recalculates APM, called ~1/sec by scheduler, publishes results to status registry

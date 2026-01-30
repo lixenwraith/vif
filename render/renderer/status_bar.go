@@ -222,7 +222,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 
 	// Priority 2: Energy
-	energyComp, _ := r.gameCtx.World.Components.Energy.GetComponent(r.gameCtx.World.Resources.Cursor.Entity)
+	energyComp, _ := r.gameCtx.World.Components.Energy.GetComponent(r.gameCtx.World.Resources.Player.Entity)
 	energyVal := energyComp.Current
 	energyText := fmt.Sprintf(" Energy: %d ", energyVal)
 
@@ -260,7 +260,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	rightItems = append(rightItems, statusItem{text: energyText, fg: energyFg, bg: energyBg})
 
 	// Priority 3: Boost (conditional)
-	boost, boostOk := r.gameCtx.World.Components.Boost.GetComponent(r.gameCtx.World.Resources.Cursor.Entity)
+	boost, boostOk := r.gameCtx.World.Components.Boost.GetComponent(r.gameCtx.World.Resources.Player.Entity)
 
 	if boostOk && boost.Active {
 		remaining := boost.Remaining.Seconds()
@@ -275,7 +275,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 
 	// Priority 4: Grid (conditional)
-	if ping, ok := r.gameCtx.World.Components.Ping.GetComponent(r.gameCtx.World.Resources.Cursor.Entity); ok && ping.GridActive {
+	if ping, ok := r.gameCtx.World.Components.Ping.GetComponent(r.gameCtx.World.Resources.Player.Entity); ok && ping.GridActive {
 		gridRemaining := ping.GridRemaining.Seconds()
 		if gridRemaining < 0 {
 			gridRemaining = 0

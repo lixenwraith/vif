@@ -270,7 +270,7 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 
 	// Determine energy polarity once for entire batch
 	negativeEnergy := false
-	if energyComp, ok := s.world.Components.Energy.GetComponent(s.world.Resources.Cursor.Entity); ok {
+	if energyComp, ok := s.world.Components.Energy.GetComponent(s.world.Resources.Player.Entity); ok {
 		negativeEnergy = energyComp.Current < 0
 	}
 
@@ -319,7 +319,7 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 		}
 		kineticComp := component.KineticComponent{kinetic}
 		combatComp := component.CombatComponent{
-			OwnerEntity:      s.world.Resources.Cursor.Entity,
+			OwnerEntity:      s.world.Resources.Player.Entity,
 			CombatEntityType: component.CombatEntityCleaner,
 			HitPoints:        1,
 		}
@@ -338,7 +338,7 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 
 // checkCollisions handles collision logic with self-exclusion
 func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 	// Query all entities at position (includes cleaner)
 	entities := s.world.Positions.GetAllEntityAt(x, y)
 	if len(entities) == 0 {
@@ -464,7 +464,7 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 
 	// Determine energy polarity once for entire batch
 	negativeEnergy := false
-	if energyComp, ok := s.world.Components.Energy.GetComponent(s.world.Resources.Cursor.Entity); ok {
+	if energyComp, ok := s.world.Components.Energy.GetComponent(s.world.Resources.Player.Entity); ok {
 		negativeEnergy = energyComp.Current < 0
 	}
 
@@ -518,7 +518,7 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 		}
 		kineticComp := component.KineticComponent{kinetic}
 		combatComp := component.CombatComponent{
-			OwnerEntity:      s.world.Resources.Cursor.Entity,
+			OwnerEntity:      s.world.Resources.Player.Entity,
 			CombatEntityType: component.CombatEntityCleaner,
 			HitPoints:        1,
 		}
@@ -544,7 +544,7 @@ func (s *CleanerSystem) scanTargetRows() []int {
 
 	// Determine target type based on energy polarity
 	targetType := component.GlyphRed
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 	if energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity); ok {
 		if energyComp.Current < 0 {
 			targetType = component.GlyphBlue

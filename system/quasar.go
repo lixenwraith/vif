@@ -295,7 +295,7 @@ func (s *QuasarSystem) clearQuasarSpawnArea(headerX, headerY int) {
 	topLeftX := headerX - parameter.QuasarHeaderOffsetX
 	topLeftY := headerY - parameter.QuasarHeaderOffsetY
 
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 	var toDestroy []core.Entity
 
 	for row := 0; row < parameter.QuasarHeight; row++ {
@@ -454,7 +454,7 @@ func (s *QuasarSystem) completeCharging(headerEntity core.Entity, quasarComp *co
 // updateKineticMovement handles continuous kinetic quasar movement toward cursor
 func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarComp *component.QuasarComponent) {
 	config := s.world.Resources.Config
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 	now := s.world.Resources.Time.GameTime
 
 	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
@@ -582,7 +582,7 @@ func (s *QuasarSystem) applySoftCollisionWithSwarm(
 
 // isCursorInZapRange checks if cursor is within zap ellipse centered on quasar
 func (s *QuasarSystem) isCursorInZapRange(headerEntity core.Entity, quasarComp *component.QuasarComponent) bool {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 
 	headerPos, ok := s.world.Positions.GetPosition(headerEntity)
 	if !ok {
@@ -605,7 +605,7 @@ func (s *QuasarSystem) isCursorInZapRange(headerEntity core.Entity, quasarComp *
 
 // Start zapping - spawn tracked lightning
 func (s *QuasarSystem) startZapping(headerEntity core.Entity, quasarComp *component.QuasarComponent) {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 
 	headerPos, ok := s.world.Positions.GetPosition(headerEntity)
 	if !ok {
@@ -645,7 +645,7 @@ func (s *QuasarSystem) stopZapping(headerEntity core.Entity, quasarComp *compone
 
 // Update lightning target to track cursor
 func (s *QuasarSystem) updateZapTarget(headerEntity core.Entity) {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 	if !ok {
 		return
@@ -660,7 +660,7 @@ func (s *QuasarSystem) updateZapTarget(headerEntity core.Entity) {
 
 // Apply zap damage - same rate as shield overlap
 func (s *QuasarSystem) applyZapDamage() {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 
 	shield, ok := s.world.Components.Shield.GetComponent(cursorEntity)
 	shieldActive := ok && shield.Active
@@ -678,7 +678,7 @@ func (s *QuasarSystem) applyZapDamage() {
 
 // processCollisionsAtNewPositions destroys entities at quasar's destination
 func (s *QuasarSystem) processCollisionsAtNewPositions(headerEntity core.Entity, headerX, headerY int) {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 
 	header, ok := s.world.Components.Header.GetComponent(headerEntity)
 	if !ok {
@@ -776,7 +776,7 @@ func (s *QuasarSystem) destroyGoldComposite(headerEntity core.Entity) {
 
 // handleInteractions processes shield drain and cursor collision
 func (s *QuasarSystem) handleInteractions(headerEntity core.Entity, headerComp *component.HeaderComponent) {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 
 	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 	if !ok {

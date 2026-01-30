@@ -88,7 +88,7 @@ func (s *VampireSystem) Update() {
 func (s *VampireSystem) vampiricDrain(payload *event.VampireDrainRequestPayload) {
 	targetEntity := payload.TargetEntity
 	delta := payload.Delta
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 	energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity)
 	if !ok || delta == 0 {
 		return

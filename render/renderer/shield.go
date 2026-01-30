@@ -75,7 +75,7 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	// Energy-based shield color: positive/zero → yellow, negative → purple
 	r.frameColor = visual.RgbCleanerBasePositive
 	r.framePalette = visual.Shield256Positive
-	if energyComp, ok := r.gameCtx.World.Components.Energy.GetComponent(r.gameCtx.World.Resources.Cursor.Entity); ok {
+	if energyComp, ok := r.gameCtx.World.Components.Energy.GetComponent(r.gameCtx.World.Resources.Player.Entity); ok {
 		if energyComp.Current < 0 {
 			r.frameColor = visual.RgbCleanerBaseNegative
 			r.framePalette = visual.Shield256Negative
@@ -84,7 +84,7 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 	// Boost glow frame state
 	r.boostGlowActive = false
-	if boost, ok := r.gameCtx.World.Components.Boost.GetComponent(r.gameCtx.World.Resources.Cursor.Entity); ok && boost.Active {
+	if boost, ok := r.gameCtx.World.Components.Boost.GetComponent(r.gameCtx.World.Resources.Player.Entity); ok && boost.Active {
 		r.boostGlowActive = true
 		// rotations/sec calculation
 		nanos := ctx.GameTime.UnixNano()

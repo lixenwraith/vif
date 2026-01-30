@@ -19,7 +19,7 @@ func PerformSearch(ctx *engine.GameContext, searchText string, forward bool) boo
 	grid := buildCharacterGrid(ctx)
 
 	// Get cursor position from ECS
-	pos, ok := ctx.World.Positions.GetPosition(ctx.World.Resources.Cursor.Entity)
+	pos, ok := ctx.World.Positions.GetPosition(ctx.World.Resources.Player.Entity)
 	if !ok {
 		return false // Cursor entity missing - should never happen
 	}
@@ -88,7 +88,7 @@ func searchForward(ctx *engine.GameContext, grid map[core.Point]rune, pattern []
 		for x := xStart; x <= ctx.World.Resources.Config.GameWidth-len(pattern); x++ {
 			if matchesPattern(grid, x, y, pattern) {
 				// Write cursor position to ECS
-				ctx.World.Positions.SetPosition(ctx.World.Resources.Cursor.Entity, component.PositionComponent{
+				ctx.World.Positions.SetPosition(ctx.World.Resources.Player.Entity, component.PositionComponent{
 					X: x,
 					Y: y,
 				})
@@ -102,7 +102,7 @@ func searchForward(ctx *engine.GameContext, grid map[core.Point]rune, pattern []
 		for x := 0; x <= ctx.World.Resources.Config.GameWidth-len(pattern); x++ {
 			if matchesPattern(grid, x, y, pattern) {
 				// Write cursor position to ECS
-				ctx.World.Positions.SetPosition(ctx.World.Resources.Cursor.Entity, component.PositionComponent{
+				ctx.World.Positions.SetPosition(ctx.World.Resources.Player.Entity, component.PositionComponent{
 					X: x,
 					Y: y,
 				})
@@ -116,7 +116,7 @@ func searchForward(ctx *engine.GameContext, grid map[core.Point]rune, pattern []
 	for x := 0; x < startX; x++ {
 		if matchesPattern(grid, x, startY, pattern) {
 			// Write cursor position to ECS
-			ctx.World.Positions.SetPosition(ctx.World.Resources.Cursor.Entity, component.PositionComponent{
+			ctx.World.Positions.SetPosition(ctx.World.Resources.Player.Entity, component.PositionComponent{
 				X: x,
 				Y: startY,
 			})
@@ -140,7 +140,7 @@ func searchBackward(ctx *engine.GameContext, grid map[core.Point]rune, pattern [
 		for x := xEnd; x >= 0; x-- {
 			if matchesPattern(grid, x, y, pattern) {
 				// Write cursor position to ECS
-				ctx.World.Positions.SetPosition(ctx.World.Resources.Cursor.Entity, component.PositionComponent{
+				ctx.World.Positions.SetPosition(ctx.World.Resources.Player.Entity, component.PositionComponent{
 					X: x,
 					Y: y,
 				})
@@ -155,7 +155,7 @@ func searchBackward(ctx *engine.GameContext, grid map[core.Point]rune, pattern [
 		for x := ctx.World.Resources.Config.GameWidth - len(pattern); x >= 0; x-- {
 			if matchesPattern(grid, x, y, pattern) {
 				// Write cursor position to ECS
-				ctx.World.Positions.SetPosition(ctx.World.Resources.Cursor.Entity, component.PositionComponent{
+				ctx.World.Positions.SetPosition(ctx.World.Resources.Player.Entity, component.PositionComponent{
 					X: x,
 					Y: y,
 				})
@@ -169,7 +169,7 @@ func searchBackward(ctx *engine.GameContext, grid map[core.Point]rune, pattern [
 	for x := ctx.World.Resources.Config.GameWidth - len(pattern); x > startX; x-- {
 		if matchesPattern(grid, x, startY, pattern) {
 			// Write cursor position to ECS
-			ctx.World.Positions.SetPosition(ctx.World.Resources.Cursor.Entity, component.PositionComponent{
+			ctx.World.Positions.SetPosition(ctx.World.Resources.Player.Entity, component.PositionComponent{
 				X: x,
 				Y: startY,
 			})

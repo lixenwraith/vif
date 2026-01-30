@@ -29,7 +29,7 @@ func NewPingRenderer(gameCtx *engine.GameContext) *PingRenderer {
 // Render draws the ping highlights and grid
 func (r *PingRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	// Get PingComponent from cursor (Single player assumption: ID 1/CursorEntity)
-	pingComp, ok := r.gameCtx.World.Components.Ping.GetComponent(r.gameCtx.World.Resources.Cursor.Entity)
+	pingComp, ok := r.gameCtx.World.Components.Ping.GetComponent(r.gameCtx.World.Resources.Player.Entity)
 	if !ok {
 		return
 	}
@@ -144,7 +144,7 @@ func (r *PingRenderer) isExcluded(x, y int) bool {
 
 // drawCrosshair draws the crosshair lines respecting shield exclusion
 func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.RenderBuffer, color terminal.RGB) {
-	pingBounds := r.gameCtx.GetPingBounds()
+	pingBounds := r.gameCtx.World.GetPingAbsoluteBounds()
 
 	// Draw horizontal band (rows from minY to maxY, full width)
 	for y := pingBounds.MinY; y <= pingBounds.MaxY; y++ {

@@ -101,7 +101,7 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	}
 
 	// 4. Error Flash Overlay
-	cursorComp, ok := r.gameCtx.World.Components.Cursor.GetComponent(r.gameCtx.World.Resources.Cursor.Entity)
+	cursorComp, ok := r.gameCtx.World.Components.Cursor.GetComponent(r.gameCtx.World.Resources.Player.Entity)
 	if ok && cursorComp.ErrorFlashRemaining > 0 {
 		cursorBgColor = visual.RgbCursorError
 		charFgColor = visual.RgbBlack

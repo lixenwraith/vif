@@ -9,7 +9,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/status"
-	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // GameContext holds all game state including the ECS world
@@ -29,9 +28,9 @@ type GameContext struct {
 	// === Atomic (Self-Synchronized) ===
 
 	FrameNumber atomic.Int64 // Render frame counter; incremented by main loop
-	mode        atomic.Int32 // Game mode (core.GameMode); set by Router
-	IsPaused    atomic.Bool  // Pause flag; actual timing handled by PausableClock
-	IsMuted     atomic.Bool  // Mute flag; keeps mute state
+
+	IsPaused atomic.Bool // Pause flag; actual timing handled by PausableClock
+	IsMuted  atomic.Bool // Mute flag; keeps mute state
 
 	// === Main-Loop Exclusive ===
 	// Accessed only from main goroutine (input, resize, render)
@@ -76,9 +75,6 @@ func NewGameContext(world *World, width, height int) *GameContext {
 		Width:         width,
 		Height:        height,
 	}
-
-	// Initialize atomic mode
-	ctx.SetMode(core.ModeNormal)
 
 	// Calculate game area
 	gameWidth, gameHeight := ctx.updateGameArea()
@@ -170,7 +166,7 @@ func (ctx *GameContext) HandleResize() {
 		// Uses GameWidth/Height as valid coordinate space for entities, resizes Spatial Grid
 		ctx.cleanupOutOfBoundsEntities(gameWidth, gameHeight)
 
-		cursorEntity := ctx.World.Resources.Cursor.Entity
+		cursorEntity := ctx.World.Resources.Player.Entity
 		// Clamp cursor position
 		if pos, ok := ctx.World.Positions.GetPosition(cursorEntity); ok {
 			newX := max(0, min(pos.X, gameWidth-1))
@@ -195,7 +191,7 @@ func (ctx *GameContext) cleanupOutOfBoundsEntities(width, height int) {
 	allEntities := ctx.World.Positions.AllEntities()
 	for _, e := range allEntities {
 		// Skip cursor entity (special case)
-		if e == ctx.World.Resources.Cursor.Entity {
+		if e == ctx.World.Resources.Player.Entity {
 			continue
 		}
 
@@ -243,12 +239,12 @@ func (ctx *GameContext) PushEvent(eventType event.EventType, payload any) {
 
 // GetMode returns the current game mode
 func (ctx *GameContext) GetMode() core.GameMode {
-	return core.GameMode(ctx.mode.Load())
+	return ctx.World.Resources.Game.State.GetMode()
 }
 
 // SetMode sets the current game mode
 func (ctx *GameContext) SetMode(m core.GameMode) {
-	ctx.mode.Store(int32(m))
+	ctx.World.Resources.Game.State.SetMode(m)
 }
 
 // IsInsertMode returns true if in insert mode
@@ -279,67 +275,6 @@ func (ctx *GameContext) IsNormalMode() bool {
 // IsVisualMode returns true if in visual mode
 func (ctx *GameContext) IsVisualMode() bool {
 	return ctx.GetMode() == core.ModeVisual
-}
-
-// PingBounds holds the boundaries of ping crosshair and normal/visual mode operations
-type PingBounds struct {
-	MinY, MaxY int
-	MinX, MaxX int
-	Active     bool // True if band is wider than single row
-}
-
-// GetPingBounds returns the boundaries for pings and operations, in normal mode or shield inactive, returns single-row/column bounds
-func (ctx *GameContext) GetPingBounds() PingBounds {
-	cursorEntity := ctx.World.Resources.Cursor.Entity
-	pos, ok := ctx.World.Positions.GetPosition(cursorEntity)
-	if !ok {
-		return PingBounds{}
-	}
-
-	bounds := PingBounds{
-		MinY:   pos.Y,
-		MaxY:   pos.Y,
-		MinX:   pos.X,
-		MaxX:   pos.X,
-		Active: false,
-	}
-
-	if !ctx.IsVisualMode() {
-		return bounds
-	}
-
-	// Check shield for band dimensions
-	shield, ok := ctx.World.Components.Shield.GetComponent(cursorEntity)
-	if !ok || !shield.Active {
-		return bounds
-	}
-
-	halfWidth := vmath.ToInt(shield.RadiusX) / parameter.PingBoundFactor
-	halfHeight := vmath.ToInt(shield.RadiusY) / parameter.PingBoundFactor
-
-	bounds.MinY = pos.Y - halfHeight
-	bounds.MaxY = pos.Y + halfHeight
-	bounds.MinX = pos.X - halfWidth
-	bounds.MaxX = pos.X + halfWidth
-	bounds.Active = true
-
-	// Clamp to game area
-	gameWidth := ctx.World.Resources.Config.GameWidth
-	gameHeight := ctx.World.Resources.Config.GameHeight
-	if bounds.MinY < 0 {
-		bounds.MinY = 0
-	}
-	if bounds.MaxY >= gameHeight {
-		bounds.MaxY = gameHeight - 1
-	}
-	if bounds.MinX < 0 {
-		bounds.MinX = 0
-	}
-	if bounds.MaxX >= gameWidth {
-		bounds.MaxX = gameWidth - 1
-	}
-
-	return bounds
 }
 
 // === STATUS BAR ACCESSORS ===

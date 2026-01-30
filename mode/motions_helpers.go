@@ -21,7 +21,7 @@ func getCharAt(ctx *engine.GameContext, x, y int) rune {
 	glyphStore := ctx.World.Components.Glyph
 
 	for _, entity := range entities {
-		if entity == ctx.World.Resources.Cursor.Entity || entity == 0 {
+		if entity == ctx.World.Resources.Player.Entity || entity == 0 {
 			continue
 		}
 		glyph, ok := glyphStore.GetComponent(entity)
@@ -230,38 +230,38 @@ func findMatchingBracketBackward(ctx *engine.GameContext, startX, startY int, cl
 // === Bounds-Aware Helpers (Visual Mode) ===
 
 // findNextWordStartInBounds finds next word start within bounds (column-first: left-to-right, top-to-bottom)
-func findNextWordStartInBounds(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.PingBounds) (int, int) {
+func findNextWordStartInBounds(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.PingAbsoluteBounds) (int, int) {
 	return scanBoundsForward(ctx, cursorX, cursorY, bounds, isWordStartAt)
 }
 
 // findPrevWordStartInBounds finds previous word start within bounds (column-first backward)
-func findPrevWordStartInBounds(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.PingBounds) (int, int) {
+func findPrevWordStartInBounds(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.PingAbsoluteBounds) (int, int) {
 	return scanBoundsBackward(ctx, cursorX, cursorY, bounds, isWordStartAt)
 }
 
 // findWordEndInBounds finds word end within bounds (column-first: left-to-right, top-to-bottom)
-func findWordEndInBounds(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.PingBounds) (int, int) {
+func findWordEndInBounds(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.PingAbsoluteBounds) (int, int) {
 	return scanBoundsForward(ctx, cursorX, cursorY, bounds, isWordEndAt)
 }
 
 // findNextWORDStartInBounds finds next WORD start within bounds (column-first)
-func findNextWORDStartInBounds(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.PingBounds) (int, int) {
+func findNextWORDStartInBounds(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.PingAbsoluteBounds) (int, int) {
 	return scanBoundsForward(ctx, cursorX, cursorY, bounds, isWORDStartAt)
 }
 
 // findPrevWORDStartInBounds finds previous WORD start within bounds (column-first backward)
-func findPrevWORDStartInBounds(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.PingBounds) (int, int) {
+func findPrevWORDStartInBounds(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.PingAbsoluteBounds) (int, int) {
 	return scanBoundsBackward(ctx, cursorX, cursorY, bounds, isWORDStartAt)
 }
 
 // findWORDEndInBounds finds WORD end within bounds (column-first)
-func findWORDEndInBounds(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.PingBounds) (int, int) {
+func findWORDEndInBounds(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.PingAbsoluteBounds) (int, int) {
 	return scanBoundsForward(ctx, cursorX, cursorY, bounds, isWORDEndAt)
 }
 
 // findCharInBounds finds target char within bounds, column-first order (left-to-right, top-to-bottom)
 // Returns (x, y, found). Skips starting position.
-func findCharInBounds(ctx *engine.GameContext, startX, startY int, target rune, count int, forward bool, bounds engine.PingBounds) (int, int, bool) {
+func findCharInBounds(ctx *engine.GameContext, startX, startY int, target rune, count int, forward bool, bounds engine.PingAbsoluteBounds) (int, int, bool) {
 	glyphStore := ctx.World.Components.Glyph
 	occurrences := 0
 	lastMatchX, lastMatchY := -1, -1
@@ -320,7 +320,7 @@ func findCharInBounds(ctx *engine.GameContext, startX, startY int, target rune, 
 
 // findLineEndInBounds returns rightmost entity X across all bounds rows
 // Returns -1 if no entities found
-func findLineEndInBounds(ctx *engine.GameContext, bounds engine.PingBounds) int {
+func findLineEndInBounds(ctx *engine.GameContext, bounds engine.PingAbsoluteBounds) int {
 	var buf [parameter.MaxEntitiesPerCell]core.Entity
 	glyphStore := ctx.World.Components.Glyph
 	rightmost := -1
@@ -343,7 +343,7 @@ func findLineEndInBounds(ctx *engine.GameContext, bounds engine.PingBounds) int 
 }
 
 // findFirstNonWhitespaceInBounds returns leftmost non-whitespace position in bounds
-func findFirstNonWhitespaceInBounds(ctx *engine.GameContext, bounds engine.PingBounds) (int, int) {
+func findFirstNonWhitespaceInBounds(ctx *engine.GameContext, bounds engine.PingAbsoluteBounds) (int, int) {
 	for y := bounds.MinY; y <= bounds.MaxY; y++ {
 		for x := 0; x < ctx.World.Resources.Config.GameWidth; x++ {
 			if getCharacterTypeAt(ctx, x, y) != CharTypeSpace {
@@ -357,7 +357,7 @@ func findFirstNonWhitespaceInBounds(ctx *engine.GameContext, bounds engine.PingB
 // findColumnUpInBounds finds first glyph above cursor within bounds's X range
 // Searches from cursor row-1 to screen top, returns (x, y) of found character
 // Y search is NOT constrained by bounds - bounds only defines X search width
-func findColumnUpInBounds(ctx *engine.GameContext, cursorX, startY int, bounds engine.PingBounds) (int, int) {
+func findColumnUpInBounds(ctx *engine.GameContext, cursorX, startY int, bounds engine.PingAbsoluteBounds) (int, int) {
 	glyphStore := ctx.World.Components.Glyph
 
 	for y := startY - 1; y >= 0; y-- {
@@ -376,7 +376,7 @@ func findColumnUpInBounds(ctx *engine.GameContext, cursorX, startY int, bounds e
 // findColumnDownInBounds finds first glyph below cursor within bounds's X range
 // Searches from cursor row+1 to screen bottom, returns (x, y) of found character
 // Y search is NOT constrained by bounds - bounds only defines X search width
-func findColumnDownInBounds(ctx *engine.GameContext, cursorX, startY int, bounds engine.PingBounds, gameHeight int) (int, int) {
+func findColumnDownInBounds(ctx *engine.GameContext, cursorX, startY int, bounds engine.PingAbsoluteBounds, gameHeight int) (int, int) {
 	glyphStore := ctx.World.Components.Glyph
 
 	for y := startY + 1; y < gameHeight; y++ {
@@ -450,7 +450,7 @@ func isWORDEndAt(ctx *engine.GameContext, x, y int) bool {
 
 // scanBoundsForward scans column-first (left-to-right, top-to-bottom) for predicate match
 // Skips cursor position, returns first match or original position if none found
-func scanBoundsForward(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.PingBounds, predicate func(*engine.GameContext, int, int) bool) (int, int) {
+func scanBoundsForward(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.PingAbsoluteBounds, predicate func(*engine.GameContext, int, int) bool) (int, int) {
 	for x := cursorX; x < ctx.World.Resources.Config.GameWidth; x++ {
 		for y := bounds.MinY; y <= bounds.MaxY; y++ {
 			// Skip cursor position and anything before it in scan order
@@ -467,7 +467,7 @@ func scanBoundsForward(ctx *engine.GameContext, cursorX, cursorY int, bounds eng
 
 // scanBoundsBackward scans column-first backward (right-to-left, bottom-to-top) for predicate match
 // Skips cursor position, returns first match or original position if none found
-func scanBoundsBackward(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.PingBounds, predicate func(*engine.GameContext, int, int) bool) (int, int) {
+func scanBoundsBackward(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.PingAbsoluteBounds, predicate func(*engine.GameContext, int, int) bool) (int, int) {
 	for x := cursorX; x >= 0; x-- {
 		for y := bounds.MaxY; y >= bounds.MinY; y-- {
 			// Skip cursor position and anything after it in scan order

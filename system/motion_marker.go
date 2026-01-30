@@ -124,7 +124,7 @@ func (s *MotionMarkerSystem) clearColoredMarkers() {
 
 // validateBaseMarkers checks if glyphs still exist at marker positions, regenerates if changed
 func (s *MotionMarkerSystem) validateBaseMarkers() {
-	cursorPos, ok := s.world.Positions.GetPosition(s.world.Resources.Cursor.Entity)
+	cursorPos, ok := s.world.Positions.GetPosition(s.world.Resources.Player.Entity)
 	if !ok {
 		s.clearBaseMarkers()
 		return
@@ -160,7 +160,7 @@ func (s *MotionMarkerSystem) validateBaseMarkers() {
 
 	// Check if closer glyph exists
 	if !needsRegenerate {
-		bounds := s.world.Resources.Game.State // Need bounds from context
+		// bounds := s.world.Resources.Game.State // Need bounds from context
 		directions := s.getBoundAwareDirections(cursorPos.X, cursorPos.Y)
 		config := s.world.Resources.Config
 
@@ -223,7 +223,7 @@ func (s *MotionMarkerSystem) getBoundAwareDirections(cursorX, cursorY int) [][2]
 func (s *MotionMarkerSystem) showColoredMarkers(dx, dy int) {
 	s.clearColoredMarkers()
 
-	cursorPos, ok := s.world.Positions.GetPosition(s.world.Resources.Cursor.Entity)
+	cursorPos, ok := s.world.Positions.GetPosition(s.world.Resources.Player.Entity)
 	if !ok {
 		return
 	}

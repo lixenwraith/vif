@@ -267,7 +267,7 @@ func (s *SwarmSystem) clearSwarmSpawnArea(headerX, headerY int) {
 	topLeftX := headerX - parameter.SwarmHeaderOffsetX
 	topLeftY := headerY - parameter.SwarmHeaderOffsetY
 
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 	var toDestroy []core.Entity
 
 	for row := 0; row < parameter.SwarmHeight; row++ {
@@ -659,7 +659,7 @@ func (s *SwarmSystem) updateDecelerateState(
 
 // enterLockState transitions to lock phase
 func (s *SwarmSystem) enterLockState(headerEntity core.Entity, swarmComp *component.SwarmComponent) {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 	if !ok {
 		return
@@ -714,7 +714,7 @@ func (s *SwarmSystem) enterDecelerateState(headerEntity core.Entity, swarmComp *
 
 // applyHomingMovement applies homing physics toward cursor
 func (s *SwarmSystem) applyHomingMovement(headerEntity core.Entity, dtFixed int64) {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 	if !ok {
 		return
@@ -880,7 +880,7 @@ func (s *SwarmSystem) checkDrainAbsorption(
 func (s *SwarmSystem) handleCursorInteractions(
 	headerEntity core.Entity,
 ) {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 
 	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 	if !ok {

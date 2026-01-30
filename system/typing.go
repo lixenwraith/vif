@@ -146,7 +146,7 @@ func (s *TypingSystem) handleTyping(cursorX, cursorY int, typedRune rune) {
 
 // applyUniversalRewards handles boost activation/extension and heat gain for any correct typing
 func (s *TypingSystem) applyUniversalRewards() {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 
 	// Check current boost state BEFORE pushing events
 	boost, ok := s.world.Components.Boost.GetComponent(cursorEntity)
@@ -181,7 +181,7 @@ func (s *TypingSystem) applyUniversalRewards() {
 
 // emitTypingFeedback sends visual feedback (splash + blink)
 func (s *TypingSystem) emitTypingFeedback(glyphType component.GlyphType, char rune) {
-	cursorPos, _ := s.world.Positions.GetPosition(s.world.Resources.Cursor.Entity)
+	cursorPos, _ := s.world.Positions.GetPosition(s.world.Resources.Player.Entity)
 
 	var splashColor component.SplashColor
 	var blinkType int
@@ -218,7 +218,7 @@ func (s *TypingSystem) emitTypingFeedback(glyphType component.GlyphType, char ru
 
 // emitTypingError emits events corresponding to typing error
 func (s *TypingSystem) emitTypingError() {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 
 	// Set cursor error flash
 	if cursor, ok := s.world.Components.Cursor.GetComponent(cursorEntity); ok {
@@ -240,7 +240,7 @@ func (s *TypingSystem) emitTypingError() {
 }
 
 func (s *TypingSystem) moveCursorRight() {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 	config := s.world.Resources.Config
 
 	if cursorPos, ok := s.world.Positions.GetPosition(cursorEntity); ok && cursorPos.X < config.GameWidth-1 {

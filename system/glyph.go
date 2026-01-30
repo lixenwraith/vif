@@ -318,7 +318,7 @@ func (s *GlyphSystem) spawnGlyphs() {
 // Lines exceeding GameWidth are cropped to fit available space
 func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyphLevel component.GlyphLevel) bool {
 	config := s.world.Resources.Config
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 
 	lineRunes := []rune(line)
 	lineLength := len(lineRunes)

@@ -130,7 +130,7 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 			if p.Level == component.GlyphDark {
 				return
 			}
-			cursorEntity := s.world.Resources.Cursor.Entity
+			cursorEntity := s.world.Resources.Player.Entity
 			cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 			if !ok {
 				return
@@ -148,7 +148,7 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 				return
 			}
 
-			cursorEntity := s.world.Resources.Cursor.Entity
+			cursorEntity := s.world.Resources.Player.Entity
 			cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 			if !ok {
 				event.ReleaseDustSpawnBatch(p)
@@ -194,7 +194,7 @@ func (s *DustSystem) Update() {
 	}
 
 	// 1. PRE-FETCH Context Data (Cursor, Energy, etc.) BEFORE Positions lock to avoid deadlock
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 	if !ok {
 		return
@@ -634,7 +634,7 @@ func (s *DustSystem) applyAccumulatedImpulses(ctx *collisionContext) {
 
 // transformGlyphsToDust converts all non-composite glyphs to dust entities
 func (s *DustSystem) transformGlyphsToDust() {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 	if !ok {
 		return

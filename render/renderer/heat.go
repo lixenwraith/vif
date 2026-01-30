@@ -39,7 +39,7 @@ func (r *HeatMeterRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	buf.SetWriteMask(visual.MaskUI)
 
 	// Calculate Fill Limit from HeatComponent
-	heatComp, ok := r.gameCtx.World.Components.Heat.GetComponent(r.gameCtx.World.Resources.Cursor.Entity)
+	heatComp, ok := r.gameCtx.World.Components.Heat.GetComponent(r.gameCtx.World.Resources.Player.Entity)
 	if !ok {
 		return
 	}

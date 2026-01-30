@@ -97,7 +97,7 @@ func (s *BoostSystem) Update() {
 	}
 
 	dt := s.world.Resources.Time.DeltaTime
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 
 	boostComp, ok := s.world.Components.Boost.GetComponent(cursorEntity)
 	if !ok || !boostComp.Active {
@@ -117,7 +117,7 @@ func (s *BoostSystem) Update() {
 }
 
 func (s *BoostSystem) activate(duration time.Duration) {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 
 	boostComp, ok := s.world.Components.Boost.GetComponent(cursorEntity)
 	if !ok {
@@ -134,7 +134,7 @@ func (s *BoostSystem) activate(duration time.Duration) {
 }
 
 func (s *BoostSystem) deactivate() {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 
 	boostComp, ok := s.world.Components.Boost.GetComponent(cursorEntity)
 	if !ok {
@@ -146,7 +146,7 @@ func (s *BoostSystem) deactivate() {
 }
 
 func (s *BoostSystem) extend(duration time.Duration) {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 
 	boostComp, ok := s.world.Components.Boost.GetComponent(cursorEntity)
 	if !ok || !boostComp.Active {

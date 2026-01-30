@@ -21,7 +21,7 @@ const (
 	ProtectFromDeath
 
 	// ProtectAll makes entity completely indestructible
-	// Used for Cursor entity. World.DestroyEntity() will reject destruction
+	// World.DestroyEntity() will reject destruction
 	ProtectAll ProtectionFlags = 0xFF
 )
 

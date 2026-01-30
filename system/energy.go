@@ -110,7 +110,7 @@ func (s *EnergySystem) Update() {
 	}
 
 	dt := s.world.Resources.Time.DeltaTime
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 
 	// Clear error flash after timeout
 	cursorComp, ok := s.world.Components.Cursor.GetComponent(cursorEntity)
@@ -149,7 +149,7 @@ func (s *EnergySystem) Update() {
 
 // addEnergy modifies energy on cursor entity
 func (s *EnergySystem) addEnergy(delta int64, percentage bool, deltaType event.EnergyDeltaType) {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 	energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity)
 	if !ok {
 		return
@@ -236,7 +236,7 @@ func (s *EnergySystem) addEnergy(delta int64, percentage bool, deltaType event.E
 
 // setEnergy sets energy value
 func (s *EnergySystem) setEnergy(value int64) {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 	energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity)
 	if !ok {
 		return
@@ -253,7 +253,7 @@ func (s *EnergySystem) setEnergy(value int64) {
 
 // handleGlyphConsumed calculates and applies energy from glyph destruction
 func (s *EnergySystem) handleGlyphConsumed(glyphType component.GlyphType, _ component.GlyphLevel) {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 
 	heatComp, ok := s.world.Components.Heat.GetComponent(cursorEntity)
 	if !ok {
@@ -297,7 +297,7 @@ func (s *EnergySystem) handleGlyphConsumed(glyphType component.GlyphType, _ comp
 
 // startBlink activates blink state
 func (s *EnergySystem) startBlink(blinkType, blinkLevel int) {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 	energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity)
 	if !ok {
 		return
@@ -311,7 +311,7 @@ func (s *EnergySystem) startBlink(blinkType, blinkLevel int) {
 
 // stopBlink clears blink state
 func (s *EnergySystem) stopBlink() {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 	energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity)
 	if !ok {
 		return

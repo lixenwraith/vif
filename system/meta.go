@@ -137,7 +137,7 @@ func (s *MetaSystem) handleDebugRequest() {
 	}
 
 	// Player stats from cursor entity components
-	cursorEntity := s.ctx.World.Resources.Cursor.Entity
+	cursorEntity := s.ctx.World.Resources.Player.Entity
 	var playerEntries []core.CardEntry
 	if ec, ok := s.world.Components.Energy.GetComponent(cursorEntity); ok {
 		playerEntries = append(playerEntries, core.CardEntry{

@@ -55,7 +55,7 @@ func (s *HeatSystem) Update() {
 		return
 	}
 
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 	heatComp, ok := s.world.Components.Heat.GetComponent(cursorEntity)
 	if !ok {
 		return
@@ -112,7 +112,7 @@ func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
 
 // addHeat applies delta with clamping and writes back to store
 func (s *HeatSystem) addHeat(delta int) {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 
 	heatComp, ok := s.world.Components.Heat.GetComponent(cursorEntity)
 	if !ok {
@@ -156,7 +156,7 @@ func (s *HeatSystem) addHeat(delta int) {
 
 // setHeat stores absolute value with clamping and writes back to store
 func (s *HeatSystem) setHeat(value int) {
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 
 	heatComp, ok := s.world.Components.Heat.GetComponent(cursorEntity)
 	if !ok {

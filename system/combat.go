@@ -183,7 +183,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 		}
 	} else {
 		switch {
-		case payload.TargetEntity == s.world.Resources.Cursor.Entity:
+		case payload.TargetEntity == s.world.Resources.Player.Entity:
 			targetCombatType = component.CombatEntityCursor
 		case s.world.Components.Drain.HasEntity(payload.TargetEntity):
 			targetCombatType = component.CombatEntityDrain
@@ -266,7 +266,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 	}
 	if len(payload.HitEntities) == 1 && payload.TargetEntity == payload.HitEntities[0] {
 		switch {
-		case payload.TargetEntity == s.world.Resources.Cursor.Entity:
+		case payload.TargetEntity == s.world.Resources.Player.Entity:
 			targetCombatType = component.CombatEntityCursor
 		case s.world.Components.Drain.HasEntity(payload.TargetEntity):
 			targetCombatType = component.CombatEntityDrain

@@ -183,7 +183,9 @@ func (w *World) CreateCursorEntity() {
 	})
 
 	// 2. Setup cursor resource
-	w.Resources.Cursor = &CursorResource{Entity: cursorEntity}
+	w.Resources.Player = &PlayerResource{
+		Entity: cursorEntity,
+	}
 
 	// 3. Add cursor component
 	w.Components.Cursor.SetComponent(cursorEntity, component.CursorComponent{})
@@ -229,6 +231,57 @@ func (w *World) CreateCursorEntity() {
 		CombatEntityType: component.CombatEntityCursor,
 		HitPoints:        100,
 	})
+}
+
+// UpdateBoundsRadius recomputes and stores cursor bounds from current state
+func (w *World) UpdateBoundsRadius() {
+	player := w.Resources.Player
+	mode := w.Resources.Game.State.GetMode()
+
+	if mode != core.ModeVisual {
+		player.SetBounds(PingBounds{Active: false})
+		return
+	}
+
+	shield, ok := w.Components.Shield.GetComponent(player.Entity)
+	if !ok || !shield.Active {
+		player.SetBounds(PingBounds{Active: false})
+		return
+	}
+
+	player.SetBounds(PingBounds{
+		RadiusX: vmath.ToInt(shield.RadiusX) / parameter.PingBoundFactor,
+		RadiusY: vmath.ToInt(shield.RadiusY) / parameter.PingBoundFactor,
+		Active:  true,
+	})
+}
+
+// GetPingAbsoluteBounds returns absolute coordinates computed from cursor position and stored radius
+func (w *World) GetPingAbsoluteBounds() PingAbsoluteBounds {
+	bounds := w.Resources.Player.GetBounds()
+
+	cursorPos, ok := w.Positions.GetPosition(w.Resources.Player.Entity)
+	if !ok {
+		return PingAbsoluteBounds{}
+	}
+
+	if !bounds.Active {
+		return PingAbsoluteBounds{
+			MinX: cursorPos.X, MaxX: cursorPos.X,
+			MinY: cursorPos.Y, MaxY: cursorPos.Y,
+			Active: false,
+		}
+	}
+
+	config := w.Resources.Config
+
+	return PingAbsoluteBounds{
+		MinX:   max(0, cursorPos.X-bounds.RadiusX),
+		MaxX:   min(config.GameWidth-1, cursorPos.X+bounds.RadiusX),
+		MinY:   max(0, cursorPos.Y-bounds.RadiusY),
+		MaxY:   min(config.GameHeight-1, cursorPos.Y+bounds.RadiusY),
+		Active: true,
+	}
 }
 
 // === Debug ===

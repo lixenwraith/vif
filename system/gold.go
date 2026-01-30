@@ -188,7 +188,7 @@ func (s *GoldSystem) handleJumpRequest() {
 		return
 	}
 
-	cursorEntity := s.world.Resources.Cursor.Entity
+	cursorEntity := s.world.Resources.Player.Entity
 
 	// 1. Find target position (First living member)
 	header, ok := s.world.Components.Header.GetComponent(s.headerEntity)
@@ -493,7 +493,7 @@ func (s *GoldSystem) countLivingMembers(header *component.HeaderComponent) int {
 // Caller must NOT hold s.mu lock
 func (s *GoldSystem) findValidPosition(seqLength int) (int, int) {
 	config := s.world.Resources.Config
-	cursorPos, ok := s.world.Positions.GetPosition(s.world.Resources.Cursor.Entity)
+	cursorPos, ok := s.world.Positions.GetPosition(s.world.Resources.Player.Entity)
 	if !ok {
 		return -1, -1
 	}
