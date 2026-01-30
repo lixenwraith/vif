@@ -116,8 +116,10 @@ var (
 	RgbQuasarShield = terminal.RGB{0, 200, 200} // Cyan for clean shield halo and quasar indication
 
 	// Audio indicator colors
-	RgbAudioMuted   = terminal.RGB{255, 0, 0} // Bright red when muted
-	RgbAudioUnmuted = terminal.RGB{0, 255, 0} // Bright green when unmuted
+	RgbAudioBothOff     = terminal.RGB{R: 180, G: 60, B: 60}  // Red: both off
+	RgbAudioMusicOnly   = terminal.RGB{R: 200, G: 180, B: 60} // Yellow: effects off, music on
+	RgbAudioEffectsOnly = terminal.RGB{R: 60, G: 160, B: 60}  // Green: effects on, music off
+	RgbAudioBothOn      = terminal.RGB{R: 60, G: 120, B: 200} // Blue: both on
 
 	// Energy meter blink colors
 	RgbEnergyBlinkBlue  = terminal.RGB{160, 210, 255} // Blue blink

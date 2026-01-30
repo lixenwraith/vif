@@ -4,6 +4,30 @@ import (
 	"time"
 )
 
+// TODO: move to the music system
+// APMToBPM maps player actions-per-minute to music tempo
+// APM 0-60: 100 BPM (calm baseline)
+// APM 60-120: 100-140 BPM (linear scale)
+// APM 120-180: 140-180 BPM (linear scale, capped at MaxBPM)
+func APMToBPM(apm uint64) int {
+	const (
+		calmBPM   = 60
+		normalBPM = 140
+	)
+
+	if apm <= 60 {
+		return calmBPM
+	}
+	if apm <= 120 {
+		return calmBPM + int((apm-60)*(normalBPM-calmBPM)/60)
+	}
+	bpm := normalBPM + int((apm-120)*(MaxBPM-normalBPM)/60)
+	if bpm > MaxBPM {
+		return MaxBPM
+	}
+	return bpm
+}
+
 // Tempo and Timing
 const (
 	DefaultBPM         = 140 // Psytrance range: 135-150

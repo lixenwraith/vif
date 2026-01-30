@@ -54,7 +54,8 @@ func DefaultKeyTable() *KeyTable {
 		SpecialKeys: map[terminal.Key]KeyEntry{
 			terminal.KeyCtrlQ:     {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentQuit},
 			terminal.KeyCtrlC:     {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentQuit},
-			terminal.KeyCtrlS:     {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentToggleMute},
+			terminal.KeyCtrlS:     {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentToggleEffectMute},
+			terminal.KeyCtrlG:     {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentToggleMusicMute},
 			terminal.KeyEscape:    {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentEscape},
 			terminal.KeyUp:        {BehaviorMotion, MotionUp, SpecialNone, ModeTargetNone, IntentNone},
 			terminal.KeyDown:      {BehaviorMotion, MotionDown, SpecialNone, ModeTargetNone, IntentNone},
@@ -214,7 +215,7 @@ func DefaultKeyTable() *KeyTable {
 			terminal.KeyEscape:    {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentEscape},
 			terminal.KeyCtrlQ:     {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentQuit},
 			terminal.KeyCtrlC:     {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentQuit},
-			terminal.KeyCtrlS:     {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentToggleMute},
+			terminal.KeyCtrlS:     {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentToggleEffectMute},
 		},
 	}
 }

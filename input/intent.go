@@ -7,10 +7,11 @@ const (
 	IntentNone IntentType = iota
 
 	// System-level intents
-	IntentQuit       // Ctrl+Q, Ctrl+C
-	IntentEscape     // ESC key (context-dependent)
-	IntentToggleMute // Ctrl+S
-	IntentResize     // Terminal resize event
+	IntentQuit             // Ctrl+Q, Ctrl+C
+	IntentEscape           // ESC key (context-dependent)
+	IntentToggleEffectMute // Ctrl+S
+	IntentToggleMusicMute  // Ctrl+G
+	IntentResize           // Terminal resize event
 
 	// Normal mode navigation
 	IntentMotion     // h,j,k,l,w,b,0,$,G,gg,arrows,etc

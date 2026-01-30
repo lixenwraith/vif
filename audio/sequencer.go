@@ -207,7 +207,11 @@ func (s *Sequencer) TriggerNote(note int, velocity float64, durationSamples int,
 
 // Start begins sequencer
 func (s *Sequencer) Start() {
-	s.running.Store(true)
+	if s.running.CompareAndSwap(false, true) {
+		// Trigger step 0 on start to avoid skipping first beat
+		s.beatTrack.TriggerStep(0)
+		s.melodyTrack.TriggerStep(0)
+	}
 }
 
 // Stop halts sequencer

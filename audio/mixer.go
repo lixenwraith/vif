@@ -172,7 +172,7 @@ func (m *Mixer) loop() {
 				mixBuf[i] = 0
 			}
 
-			// Generate music (if not muted)
+			// Generate music (if not effectMuted)
 			if !m.musicMuted.Load() && m.sequencer != nil {
 				m.sequencer.Generate(mixBuf)
 			}

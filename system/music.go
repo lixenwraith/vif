@@ -12,6 +12,8 @@ type MusicSystem struct {
 	world  *engine.World
 	player engine.AudioPlayer
 
+	lastBPM int // Tracking changes
+
 	enabled bool
 }
 
@@ -32,6 +34,7 @@ func NewMusicSystem(world *engine.World) engine.System {
 
 // Init resets session state
 func (s *MusicSystem) Init() {
+	s.lastBPM = 0
 	s.enabled = true
 	if s.player != nil {
 		s.player.ResetMusic()
@@ -147,5 +150,19 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 
 // Update implements System interface
 func (s *MusicSystem) Update() {
-	// No tick-based logic; all driven by events
+	if !s.enabled || s.player == nil {
+		return
+	}
+
+	if !s.player.IsMusicPlaying() {
+		return
+	}
+
+	apm := s.world.Resources.Game.State.GetAPM()
+	bpm := parameter.APMToBPM(apm)
+
+	if bpm != s.lastBPM {
+		s.player.SetMusicBPM(bpm)
+		s.lastBPM = bpm
+	}
 }

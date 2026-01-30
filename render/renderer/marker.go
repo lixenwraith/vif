@@ -5,6 +5,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/vi-fighter/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -70,7 +71,54 @@ func (r *MarkerRenderer) renderRectangle(ctx render.RenderContext, buf *render.R
 }
 
 func (r *MarkerRenderer) renderInvert(ctx render.RenderContext, buf *render.RenderBuffer, marker *component.MarkerComponent) {
-	// Stub: character inversion for vim motion highlights
-	// Implementation requires reading existing cell fg/bg and swapping
-	// Deferred until buffer supports read-back or pre-render pass
+	if marker.Intensity <= 0 {
+		return
+	}
+
+	for dy := 0; dy < marker.Height; dy++ {
+		for dx := 0; dx < marker.Width; dx++ {
+			cellX := marker.X + dx
+			cellY := marker.Y + dy
+
+			if cellX < 0 || cellX >= ctx.GameWidth || cellY < 0 || cellY >= ctx.GameHeight {
+				continue
+			}
+
+			screenX := ctx.GameXOffset + cellX
+			screenY := ctx.GameYOffset + cellY
+
+			// Query world for entity at position
+			entities := r.gameCtx.World.Positions.GetAllEntityAt(cellX, cellY)
+
+			var char rune
+			var fg, bg terminal.RGB = visual.RgbWhite, visual.RgbBackground
+
+			for _, e := range entities {
+				if e == 0 {
+					continue
+				}
+
+				// Check glyph first
+				if glyph, ok := r.gameCtx.World.Components.Glyph.GetComponent(e); ok {
+					char = glyph.Rune
+					fg = resolveGlyphColor(glyph) // Reuse from cursor renderer or extract
+					break
+				}
+
+				// Fallback to sigil
+				if sigil, ok := r.gameCtx.World.Components.Sigil.GetComponent(e); ok {
+					char = sigil.Rune
+					fg = resolveSigilColor(sigil.Color)
+					break
+				}
+			}
+
+			if char == 0 {
+				char = ' '
+			}
+
+			// Invert: swap fg/bg
+			buf.SetWithBg(screenX, screenY, char, bg, fg)
+		}
+	}
 }

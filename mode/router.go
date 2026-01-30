@@ -93,8 +93,10 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return false
 	case input.IntentEscape:
 		return r.handleEscape()
-	case input.IntentToggleMute:
-		return r.handleToggleMute()
+	case input.IntentToggleEffectMute:
+		return r.handleToggleEffectMute()
+	case input.IntentToggleMusicMute:
+		return r.handleToggleMusicMute()
 	case input.IntentResize:
 		r.ctx.HandleResize()
 		return true
@@ -195,9 +197,25 @@ func (r *Router) handleEscape() bool {
 	return true
 }
 
-func (r *Router) handleToggleMute() bool {
+func (r *Router) handleToggleEffectMute() bool {
 	if player := r.ctx.GetAudioPlayer(); player != nil {
 		_ = player.ToggleEffectMute()
+	}
+	return true
+}
+
+func (r *Router) handleToggleMusicMute() bool {
+	player := r.ctx.GetAudioPlayer()
+	if player == nil {
+		return true
+	}
+
+	musicEnabled := player.ToggleMusicMute()
+	if musicEnabled {
+		bpm := parameter.APMToBPM(r.ctx.State.GetAPM())
+		player.SetMusicBPM(bpm)
+		player.SetBeatPattern(core.PatternBeatBasic, 0, false)
+		player.StartMusic()
 	}
 	return true
 }

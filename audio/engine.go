@@ -22,10 +22,10 @@ type AudioEngine struct {
 	stdin   io.WriteCloser
 	ossFile *os.File // For direct OSS writes
 
-	running    atomic.Bool
-	muted      atomic.Bool
-	musicMuted atomic.Bool
-	silentMode atomic.Bool
+	running     atomic.Bool
+	effectMuted atomic.Bool
+	musicMuted  atomic.Bool
+	silentMode  atomic.Bool
 
 	mu sync.RWMutex // Protects config
 	wg sync.WaitGroup
@@ -42,7 +42,8 @@ func NewAudioEngine(cfg ...*AudioConfig) (*AudioEngine, error) {
 		config: config,
 		cache:  newSoundCache(),
 	}
-	ae.muted.Store(!config.Enabled)
+	ae.effectMuted.Store(!config.Enabled)
+	ae.musicMuted.Store(!config.Enabled)
 
 	// Preload common sounds
 	ae.cache.preload()
@@ -172,7 +173,7 @@ func (ae *AudioEngine) Stop() {
 
 // Play queues a sound for playback
 func (ae *AudioEngine) Play(st core.SoundType) bool {
-	if !ae.running.Load() || ae.muted.Load() || ae.silentMode.Load() {
+	if !ae.running.Load() || ae.effectMuted.Load() || ae.silentMode.Load() {
 		return false
 	}
 
@@ -191,19 +192,19 @@ func (ae *AudioEngine) Play(st core.SoundType) bool {
 
 // ToggleEffectMute toggles mute state, returns true if now unmuted
 func (ae *AudioEngine) ToggleEffectMute() bool {
-	wasMuted := ae.muted.Load()
-	ae.muted.Store(!wasMuted)
+	wasMuted := ae.effectMuted.Load()
+	ae.effectMuted.Store(!wasMuted)
 	return wasMuted
 }
 
 // IsEffectMuted returns current mute state
 func (ae *AudioEngine) IsEffectMuted() bool {
-	return ae.muted.Load()
+	return ae.effectMuted.Load()
 }
 
 // IsEnabled returns true if running and unmuted
 func (ae *AudioEngine) IsEnabled() bool {
-	return ae.running.Load() && !ae.muted.Load() && !ae.silentMode.Load()
+	return ae.running.Load() && !ae.effectMuted.Load() && !ae.silentMode.Load()
 }
 
 // ToggleMusicMute toggles music mute state, returns true if music now enabled

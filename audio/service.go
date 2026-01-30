@@ -30,18 +30,18 @@ func (s *AudioService) Dependencies() []string {
 }
 
 // Init implements Service
-// args[0]: bool - initial mute state (true = muted, false = unmuted, default = muted)
+// args[0]: bool - initial mute state (true = effectMuted, false = unmuted, default = effectMuted)
 // Detects audio backend; sets disabled flag on failure (no error returned)
 func (s *AudioService) Init(args ...any) error {
 	config := DefaultAudioConfig()
 
-	// Apply mute arg: true = muted (Enabled=false), false = unmuted (Enabled=true)
+	// Apply mute arg: true = effectMuted (Enabled=false), false = unmuted (Enabled=true)
 	if len(args) > 0 {
 		if muted, ok := args[0].(bool); ok {
 			config.Enabled = !muted
 		}
 	}
-	// Default: config.Enabled = false (muted)
+	// Default: config.Enabled = false (effectMuted)
 
 	audioEngine, err := NewAudioEngine(config)
 	if err != nil {

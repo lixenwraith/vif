@@ -77,13 +77,21 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	// Track current x position for status bar elements
 	x := 0
 
-	// Audio mute indicator - always visible
+	// Audio state indicator - combined effects + music state
 	if player := r.gameCtx.GetAudioPlayer(); player != nil {
+		effectMuted := player.IsEffectMuted()
+		musicMuted := player.IsMusicMuted()
+
 		var audioBgColor terminal.RGB
-		if player.IsEffectMuted() {
-			audioBgColor = visual.RgbAudioMuted
-		} else {
-			audioBgColor = visual.RgbAudioUnmuted
+		switch {
+		case effectMuted && musicMuted:
+			audioBgColor = visual.RgbAudioBothOff // Red
+		case effectMuted && !musicMuted:
+			audioBgColor = visual.RgbAudioMusicOnly // Yellow
+		case !effectMuted && musicMuted:
+			audioBgColor = visual.RgbAudioEffectsOnly // Green
+		default:
+			audioBgColor = visual.RgbAudioBothOn // Blue
 		}
 		for _, ch := range parameter.AudioStr {
 			if x >= ctx.ScreenWidth {
