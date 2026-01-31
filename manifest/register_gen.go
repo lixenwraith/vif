@@ -144,7 +144,7 @@ func RegisterRenderers() {
 	}, render.PriorityParticle)
 	registry.RegisterRenderer("marker", func(ctx any) any {
 		return renderer.NewMarkerRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityParticle)
+	}, render.PriorityMarker)
 	registry.RegisterRenderer("explosion", func(ctx any) any {
 		return renderer.NewExplosionRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityParticle)

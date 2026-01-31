@@ -612,38 +612,33 @@ func MotionHalfPageDown(ctx *engine.GameContext, x, y, count int) MotionResult {
 	}
 }
 
-// MotionColumnUp implements [ and gk - jump to first non-space above in same column
+// MotionColumnUp implements [, u - jump to first non-space above in same column
 func MotionColumnUp(ctx *engine.GameContext, x, y, count int) MotionResult {
-	bounds := ctx.World.GetPingAbsoluteBounds()
-	endX, endY := x, y
-
-	for i := 0; i < count; i++ {
-		newX, newY := findColumnUpInBounds(ctx, endX, endY, bounds)
-		if newX == endX && newY == endY {
-			break
-		}
-		endX, endY = newX, newY
-	}
-
-	return MotionResult{
-		StartX: x, StartY: y,
-		EndX: endX, EndY: endY,
-		Type: RangeChar, Style: StyleInclusive,
-		Valid: endX != x || endY != y,
-	}
+	return motionScanDirectional(ctx, x, y, count, 0, -1)
 }
 
-// MotionColumnDown implements ] and gj - jump to first non-space below in same column
+// MotionColumnDown implements ], o - jump to first non-space below in same column
 func MotionColumnDown(ctx *engine.GameContext, x, y, count int) MotionResult {
+	return motionScanDirectional(ctx, x, y, count, 0, 1)
+}
+
+// motionScanDirectional is consolidated directional scanning algorithm
+func motionScanDirectional(ctx *engine.GameContext, x, y, count, dx, dy int) MotionResult {
 	bounds := ctx.World.GetPingAbsoluteBounds()
 	endX, endY := x, y
 
+	glyphStore := ctx.World.Components.Glyph
+	filter := func(e core.Entity) bool {
+		return glyphStore.HasEntity(e)
+	}
+
 	for i := 0; i < count; i++ {
-		newX, newY := findColumnDownInBounds(ctx, endX, endY, bounds, ctx.World.Resources.Config.GameHeight)
-		if newX == endX && newY == endY {
+		// Use shared engine logic for consistency
+		_, nextX, nextY, found := ctx.World.Positions.FindClosestEntityInDirection(endX, endY, dx, dy, bounds, filter)
+		if !found {
 			break
 		}
-		endX, endY = newX, newY
+		endX, endY = nextX, nextY
 	}
 
 	return MotionResult{
@@ -658,7 +653,6 @@ func MotionColumnDown(ctx *engine.GameContext, x, y, count int) MotionResult {
 // Uses bounds for visual mode
 func MotionColoredGlyph(ctx *engine.GameContext, x, y, count int, motion input.MotionOp, glyphType component.GlyphType) MotionResult {
 	bounds := ctx.World.GetPingAbsoluteBounds()
-	config := ctx.World.Resources.Config
 
 	var dx, dy int
 	switch motion {
@@ -687,52 +681,21 @@ func MotionColoredGlyph(ctx *engine.GameContext, x, y, count int, motion input.M
 		return ok && glyph.Type == glyphType
 	}
 
-	// Determine scan range based on direction and bounds
-	var maxSteps int
-	startX, startY := x+dx, y+dy
-
-	if dx != 0 {
-		// Horizontal scan within bounds Y range
-		maxSteps = config.GameWidth
-	} else {
-		// Vertical scan within bounds X range
-		maxSteps = config.GameHeight
-	}
-
-	// For bound-aware scanning, we scan cell by cell checking bounds
 	endX, endY := x, y
 	found := false
 
-	for step := 0; step < maxSteps; step++ {
-		checkX := startX + dx*step
-		checkY := startY + dy*step
+	for i := 0; i < count; i++ {
+		var nextX, nextY int
+		var ok bool
+		// Use the centralized engine logic
+		_, nextX, nextY, ok = ctx.World.Positions.FindClosestEntityInDirection(endX, endY, dx, dy, bounds, filter)
 
-		// Bounds check
-		if checkX < 0 || checkX >= config.GameWidth || checkY < 0 || checkY >= config.GameHeight {
+		if !ok {
+			// If not found in sequence, stop at last valid
 			break
 		}
-
-		// Visual mode bounds check
-		if bounds.Active {
-			if dy == 0 && (checkY < bounds.MinY || checkY > bounds.MaxY) {
-				continue
-			}
-			if dx == 0 && (checkX < bounds.MinX || checkX > bounds.MaxX) {
-				continue
-			}
-		}
-
-		entities := ctx.World.Positions.GetAllEntityAt(checkX, checkY)
-		for _, e := range entities {
-			if filter(e) {
-				endX, endY = checkX, checkY
-				found = true
-				break
-			}
-		}
-		if found {
-			break
-		}
+		endX, endY = nextX, nextY
+		found = true
 	}
 
 	return MotionResult{

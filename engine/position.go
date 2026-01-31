@@ -2,11 +2,13 @@ package engine
 
 import (
 	"fmt"
+	"math"
 	"sync"
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // Position maintains a spatial index using a fixed-capacity dense grid, multiple entities per cell (up to MaxEntitiesPerCell)
@@ -425,4 +427,153 @@ func (p *Position) ScanLineFirst(startX, startY, dx, dy, maxSteps int, filter fu
 	}
 
 	return 0, -1, -1
+}
+
+// FindClosestEntityInDirection searches for entities in a cardinal direction (up, down, left, right)
+// within the specified bounds. It enforces "Center-Oriented Consolidation".
+// Returns (entity, x, y, found).
+func (p *Position) FindClosestEntityInDirection(startX, startY, dx, dy int, bounds PingAbsoluteBounds, filter func(core.Entity) bool) (core.Entity, int, int, bool) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	// Direction handling
+	if dy != 0 {
+		// VERTICAL SCAN (Up/Down)
+		stepY := 1
+		if dy < 0 {
+			stepY = -1
+		}
+
+		// Main Axis (Y) always extends to grid edge
+		// Cross Axis (X) is constrained by bounds in inner loop
+		limitMinY, limitMaxY := 0, p.grid.Height-1
+
+		// Loop Y from start+step
+		y := startY + stepY
+		for {
+			// Check Main Axis bounds
+			if stepY > 0 {
+				if y > limitMaxY {
+					break
+				}
+			} else {
+				if y < limitMinY {
+					break
+				}
+			}
+
+			// Safety grid bounds (redundant but safe)
+			if y < 0 || y >= p.grid.Height {
+				break
+			}
+
+			// Scan the row segment [MinX, MaxX] (Cross Axis)
+			bestEntity := core.Entity(0)
+			bestX := -1
+			minDist := math.MaxInt
+
+			// Iterate X in bounds
+			// In Normal Mode, MinX==MaxX==startX, so we scan 1 cell (column mode).
+			// In Visual Mode, we scan the full radius width.
+			for x := bounds.MinX; x <= bounds.MaxX; x++ {
+				if x < 0 || x >= p.grid.Width {
+					continue
+				}
+
+				// Check cell
+				idx := y*p.grid.Width + x
+				cell := &p.grid.Cells[idx]
+				if cell.Count == 0 {
+					continue
+				}
+
+				// Check entities in cell
+				for i := uint8(0); i < cell.Count; i++ {
+					e := cell.Entities[i]
+					if filter == nil || filter(e) {
+						// Found a candidate. Is it closer to center (startX)?
+						dist := vmath.IntAbs(x - startX)
+						if dist < minDist {
+							minDist = dist
+							bestEntity = e
+							bestX = x
+						}
+					}
+				}
+			}
+
+			// If we found anything in this row, return the best one (consolidation)
+			// We return the *first* row encountered (closest to cursor Y)
+			if bestEntity != 0 {
+				return bestEntity, bestX, y, true
+			}
+
+			y += stepY
+		}
+
+	} else if dx != 0 {
+		// HORIZONTAL SCAN (Left/Right)
+		stepX := 1
+		if dx < 0 {
+			stepX = -1
+		}
+
+		// Main Axis (X) always extends to grid edge
+		// Cross Axis (Y) is constrained by bounds in inner loop
+		limitMinX, limitMaxX := 0, p.grid.Width-1
+
+		x := startX + stepX
+		for {
+			if stepX > 0 {
+				if x > limitMaxX {
+					break
+				}
+			} else {
+				if x < limitMinX {
+					break
+				}
+			}
+
+			if x < 0 || x >= p.grid.Width {
+				break
+			}
+
+			bestEntity := core.Entity(0)
+			bestY := -1
+			minDist := math.MaxInt
+
+			// Scan the col segment [MinY, MaxY] (Cross Axis)
+			for y := bounds.MinY; y <= bounds.MaxY; y++ {
+				if y < 0 || y >= p.grid.Height {
+					continue
+				}
+
+				idx := y*p.grid.Width + x
+				cell := &p.grid.Cells[idx]
+				if cell.Count == 0 {
+					continue
+				}
+
+				for i := uint8(0); i < cell.Count; i++ {
+					e := cell.Entities[i]
+					if filter == nil || filter(e) {
+						dist := vmath.IntAbs(y - startY)
+						if dist < minDist {
+							minDist = dist
+							bestEntity = e
+							bestY = y
+						}
+					}
+				}
+			}
+
+			if bestEntity != 0 {
+				return bestEntity, x, bestY, true
+			}
+
+			x += stepX
+		}
+	}
+
+	return 0, -1, -1, false
 }

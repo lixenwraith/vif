@@ -102,6 +102,8 @@ func DefaultKeyTable() *KeyTable {
 			// Column motions
 			'[': {BehaviorMotion, MotionColumnUp, SpecialNone, ModeTargetNone, IntentNone},
 			']': {BehaviorMotion, MotionColumnDown, SpecialNone, ModeTargetNone, IntentNone},
+			'u': {BehaviorMotion, MotionColumnUp, SpecialNone, ModeTargetNone, IntentNone},
+			'o': {BehaviorMotion, MotionColumnDown, SpecialNone, ModeTargetNone, IntentNone},
 
 			// Screen motions
 			'M': {BehaviorMotion, MotionScreenVerticalMid, SpecialNone, ModeTargetNone, IntentNone},

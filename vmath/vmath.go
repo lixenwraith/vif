@@ -250,3 +250,13 @@ func (r *FastRand) Intn(n int) int {
 	}
 	return int(r.Next() % uint64(n))
 }
+
+// --- Misc ---
+
+// IntAbs returns absolute value
+func IntAbs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}

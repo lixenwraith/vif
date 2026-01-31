@@ -24,8 +24,6 @@ func (r *MarkerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		return
 	}
 
-	buf.SetWriteMask(visual.MaskTransient)
-
 	for _, entity := range entities {
 		marker, ok := r.gameCtx.World.Components.Marker.GetComponent(entity)
 		if !ok {
@@ -37,8 +35,10 @@ func (r *MarkerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			// Invisible - no rendering
 			continue
 		case component.MarkerShapeRectangle:
+			buf.SetWriteMask(visual.MaskTransient)
 			r.renderRectangle(ctx, buf, &marker)
 		case component.MarkerShapeInvert:
+			buf.SetWriteMask(visual.MaskUI) // Motion markers render above splash
 			r.renderInvert(ctx, buf, &marker)
 		}
 	}

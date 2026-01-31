@@ -336,12 +336,14 @@ func (m *Machine) processMarkerAwaitColor(key rune) *Intent {
 	directionKey := m.motionToDirectionKey(m.markerDirection)
 	if key == directionKey {
 		motion := m.markerDirection
+		count := m.effectiveCount()
 		cmd := m.captureCommand()
 		m.Reset()
 		return &Intent{
 			Type:    IntentMotionMarkerJump,
 			Motion:  motion,
 			Char:    0, // 0 = any color
+			Count:   count,
 			Command: cmd,
 		}
 	}
@@ -349,12 +351,14 @@ func (m *Machine) processMarkerAwaitColor(key rune) *Intent {
 	// Color selection (r/g/b)
 	if key == 'r' || key == 'g' || key == 'b' {
 		motion := m.markerDirection
+		count := m.effectiveCount()
 		cmd := m.captureCommand()
 		m.Reset()
 		return &Intent{
 			Type:    IntentMotionMarkerJump,
 			Motion:  motion,
 			Char:    key, // 'r', 'g', 'b' - resolved to GlyphType in router
+			Count:   count,
 			Command: cmd,
 		}
 	}

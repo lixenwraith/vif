@@ -94,6 +94,7 @@ func InitRegistry() {
 	RegisterType("EventMetaDebugRequest", EventMetaDebugRequest, nil)
 	RegisterType("EventMetaHelpRequest", EventMetaHelpRequest, nil)
 	RegisterType("EventMetaSystemCommandRequest", EventMetaSystemCommandRequest, &MetaSystemCommandPayload{})
+	RegisterType("EventMetaStatusMessageRequest", EventMetaStatusMessageRequest, &MetaStatusMessagePayload{})
 
 	// --- Game events ---
 
@@ -164,6 +165,7 @@ func InitRegistry() {
 	// Materialize
 	RegisterType("EventMaterializeRequest", EventMaterializeRequest, &MaterializeRequestPayload{})
 	RegisterType("EventMaterializeComplete", EventMaterializeComplete, &SpawnCompletePayload{})
+	RegisterType("EventMaterializeAreaRequest", EventMaterializeAreaRequest, &MaterializeAreaRequestPayload{})
 
 	// Effects
 	RegisterType("EventFlashRequest", EventFlashRequest, &FlashRequestPayload{})
@@ -224,11 +226,20 @@ func InitRegistry() {
 	// Lightning
 	RegisterType("EventLightningSpawnRequest", EventLightningSpawnRequest, &LightningSpawnRequestPayload{})
 	RegisterType("EventLightningUpdate", EventLightningUpdate, &LightningUpdatePayload{})
-	// TODO: this needs to have some payload, currently designed for one
+	// TODO: this needs to have some payload, currently designed for all
 	RegisterType("EventLightningDespawn", EventLightningDespawn, nil)
 
 	// Combat
-	// RegisterType("EventCombatFullKnockbackRequest", EventCombatFullKnockbackRequest, &CombatKnockbackRequestPayload{})
 	RegisterType("EventCombatAttackDirectRequest", EventCombatAttackDirectRequest, &CombatAttackDirectRequestPayload{})
 	RegisterType("EventCombatAttackAreaRequest", EventCombatAttackAreaRequest, &CombatAttackAreaRequestPayload{})
+
+	// Marker
+	RegisterType("EventMarkerSpawnRequest", EventMarkerSpawnRequest, &MarkerSpawnRequestPayload{})
+
+	// Motion Marker (add new section)
+	RegisterType("EventMotionMarkerShowColored", EventMotionMarkerShowColored, &MotionMarkerShowPayload{})
+	RegisterType("EventMotionMarkerClearColored", EventMotionMarkerClearColored, nil)
+
+	// Mode
+	RegisterType("EventModeChangeNotification", EventModeChangeNotification, &ModeChangeNotificationPayload{})
 }

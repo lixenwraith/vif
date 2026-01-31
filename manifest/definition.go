@@ -120,7 +120,7 @@ var Renderers = []RendererDef{
 	{"shield", "NewShieldRenderer", "PriorityField"},
 	{"cleaner", "NewCleanerRenderer", "PriorityCleaner"},
 	{"flash", "NewFlashRenderer", "PriorityParticle"},
-	{"marker", "NewMarkerRenderer", "PriorityParticle"},
+	{"marker", "NewMarkerRenderer", "PriorityMarker"},
 	{"explosion", "NewExplosionRenderer", "PriorityParticle"},
 	{"lightning", "NewLightningRenderer", "PriorityField"},
 	{"spirit", "NewSpiritRenderer", "PriorityParticle"},
