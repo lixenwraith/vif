@@ -8,10 +8,16 @@ import (
 
 // Q32.32 Fixed Point constants
 const (
-	Shift   = 32
-	Scale   = 1 << Shift
-	Mask    = Scale - 1
-	Half    = 1 << (Shift - 1)
+	Shift = 32
+	Scale = 1 << Shift
+	Mask  = Scale - 1
+	Half  = 1 << (Shift - 1)
+
+	// CellCenter is the fixed-point offset to the center of a grid cell (0.5 in Q32.32)
+	CellCenter = Half
+)
+
+const (
 	LUTSize = 1024
 	LUTMask = LUTSize - 1
 )
@@ -259,4 +265,17 @@ func IntAbs(x int) int {
 		return -x
 	}
 	return x
+}
+
+// --- Grid math ---
+
+// CenteredFromGrid converts integer grid coordinates to centered Q32.32 position
+func CenteredFromGrid(x, y int) (int64, int64) {
+	return FromInt(x) + CellCenter, FromInt(y) + CellCenter
+}
+
+// GridFromCentered converts centered Q32.32 position to integer grid coordinates
+// Equivalent to ToInt but named for semantic clarity in physics contexts
+func GridFromCentered(px, py int64) (int, int) {
+	return ToInt(px), ToInt(py)
 }

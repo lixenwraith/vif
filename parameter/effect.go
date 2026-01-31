@@ -48,7 +48,7 @@ const (
 	ExplosionCenterCap = 256
 
 	// ExplosionMergeThresholdFloat is distance for center merging (cells)
-	ExplosionMergeThresholdFloat = 2.0
+	ExplosionMergeThresholdFloat = 4.0
 
 	// ExplosionIntensityBoostFloat is intensity added on merge
 	ExplosionIntensityBoostFloat = 0.3

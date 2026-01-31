@@ -8,7 +8,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
-	"github.com/lixenwraith/vi-fighter/physics"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -225,6 +224,7 @@ func (s *ExplosionSystem) addCenter(x, y int, radius int64) {
 // TODO: this conversion must be done in dust system, doing it here results in no telemetry and duplicate logic
 func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 	config := s.world.Resources.Config
+	cursorEntity := s.world.Resources.Player.Entity
 
 	// Radius is horizontal cells; Vertical is half that to maintain aspect ratio
 	radiusCells := vmath.ToInt(radius)
@@ -254,6 +254,10 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 	s.entityBuf = s.entityBuf[:0]
 	s.dustEntryBuf = s.dustEntryBuf[:0]
 
+	// Track combat entities for batched event emission
+	var hitDrains []core.Entity
+	hitComposites := make(map[core.Entity][]core.Entity) // header -> hit members
+
 	for y := minY; y <= maxY; y++ {
 		for x := minX; x <= maxX; x++ {
 			dx := vmath.FromInt(x - centerX)
@@ -267,85 +271,38 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 
 			entities := s.world.Positions.GetAllEntityAt(x, y)
 			for _, entity := range entities {
-				// Drain
+				// Drain - collect for batched combat event
 				if s.world.Components.Drain.HasEntity(entity) {
-					drainPos, ok := s.world.Positions.GetPosition(entity)
-					if !ok {
-						continue
-					}
-
-					diffX := int64(drainPos.X - centerX)
-					diffY := int64(drainPos.Y - centerY)
-					eVelX := vmath.Mul(parameter.QuasarMaxSpeed, vmath.Div(radius, diffX))
-					eVelY := vmath.Mul(parameter.QuasarMaxSpeed, vmath.Div(radius, diffY))
-
-					kineticComp, ok := s.world.Components.Kinetic.GetComponent(entity)
-					if !ok {
-						continue
-					}
-
-					physics.ApplyCollision(
-						&kineticComp.Kinetic,
-						eVelX, eVelY,
-						&physics.ExplosionToDrain,
-						s.rng,
-					)
-					s.world.Components.Kinetic.SetComponent(entity, kineticComp)
+					hitDrains = append(hitDrains, entity)
+					continue
 				}
 
-				// Quasar
+				// Composite member - collect by header
 				if memberComp, ok := s.world.Components.Member.GetComponent(entity); ok {
 					headerEntity := memberComp.HeaderEntity
-					if headerComp, ok := s.world.Components.Header.GetComponent(headerEntity); ok {
-						if headerComp.Behavior == component.BehaviorQuasar {
-							if quasarComp, ok := s.world.Components.Quasar.GetComponent(headerEntity); ok {
-								quasarPos, ok := s.world.Positions.GetPosition(headerEntity)
-								if !ok {
-									continue
-								}
-								kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity)
-								if !ok {
-									continue
-								}
-
-								diffX := int64(quasarPos.X - centerX)
-								diffY := int64(quasarPos.Y - centerY)
-								eVelX := vmath.Mul(parameter.QuasarMaxSpeed, vmath.Div(radius, diffX))
-								eVelY := vmath.Mul(parameter.QuasarMaxSpeed, vmath.Div(radius, diffY))
-
-								physics.ApplyCollision(
-									&kineticComp.Kinetic,
-									eVelX, eVelY,
-									&physics.ExplosionToQuasar,
-									s.rng,
-								)
-								s.world.Components.Quasar.SetComponent(headerEntity, quasarComp)
-								s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
-
-								combatComp, ok := s.world.Components.Combat.GetComponent(headerEntity)
-								if ok {
-									combatComp.HitPoints--
-									s.world.Components.Combat.SetComponent(headerEntity, combatComp)
-								}
-							}
-						} else {
-							continue // Non-quasar composite member (likely gold)
-						}
+					headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
+					if !ok {
+						continue
 					}
+
+					switch headerComp.Behavior {
+					case component.BehaviorQuasar, component.BehaviorSwarm, component.BehaviorStorm:
+						hitComposites[headerEntity] = append(hitComposites[headerEntity], entity)
+					}
+					continue
 				}
 
+				// Glyph - transform to dust
 				glyphComp, ok := s.world.Components.Glyph.GetComponent(entity)
 				if !ok {
 					continue
 				}
 
-				// Set death component for deduplication
 				if s.world.Components.Death.HasEntity(entity) {
 					continue
 				}
 				s.world.Components.Death.SetComponent(entity, component.DeathComponent{})
 
-				// Append to local buffers
 				s.entityBuf = append(s.entityBuf, entity)
 				s.dustEntryBuf = append(s.dustEntryBuf, event.DustSpawnEntry{
 					X:     x,
@@ -357,6 +314,33 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 		}
 	}
 
+	// Emit combat events for drains (individual targets)
+	for _, drainEntity := range hitDrains {
+		s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+			AttackType:   component.CombatAttackExplosion,
+			OwnerEntity:  cursorEntity,
+			OriginEntity: cursorEntity,
+			TargetEntity: drainEntity,
+			HitEntities:  []core.Entity{drainEntity},
+			OriginX:      centerX,
+			OriginY:      centerY,
+		})
+	}
+
+	// Emit combat events for composites (batched by header)
+	for headerEntity, hitMembers := range hitComposites {
+		s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+			AttackType:   component.CombatAttackExplosion,
+			OwnerEntity:  cursorEntity,
+			OriginEntity: cursorEntity,
+			TargetEntity: headerEntity,
+			HitEntities:  hitMembers,
+			OriginX:      centerX,
+			OriginY:      centerY,
+		})
+	}
+
+	// Glyph death and dust spawn
 	if len(s.entityBuf) == 0 {
 		return
 	}

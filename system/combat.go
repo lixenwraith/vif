@@ -252,19 +252,25 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 	if !ok {
 		return
 	}
-	attackerCombatComp, ok := s.world.Components.Combat.GetComponent(payload.OriginEntity)
-	if !ok {
+
+	// Generate combat matrix key
+	var attackerType component.CombatEntityType
+	if payload.OriginEntity == s.world.Resources.Player.Entity {
+		attackerType = component.CombatEntityCursor
+	} else if attackerComp, ok := s.world.Components.Combat.GetComponent(payload.OriginEntity); ok {
+		attackerType = attackerComp.CombatEntityType
+	} else {
 		return
 	}
 
-	// Generate combat matrix key
-	attackerType := attackerCombatComp.CombatEntityType
 	var targetCombatType component.CombatEntityType
-	// Target defensive checks and type determination
 	if len(payload.HitEntities) == 0 {
 		return
 	}
+
+	// Determine target type
 	if len(payload.HitEntities) == 1 && payload.TargetEntity == payload.HitEntities[0] {
+		// Single non-composite entity (drain)
 		switch {
 		case payload.TargetEntity == s.world.Resources.Player.Entity:
 			targetCombatType = component.CombatEntityCursor
@@ -274,7 +280,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 			return
 		}
 	} else {
-		// Composite hit check
+		// Composite hit
 		headerComp, ok := s.world.Components.Header.GetComponent(payload.TargetEntity)
 		if !ok {
 			return
@@ -302,10 +308,9 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 		return
 	}
 
-	// Apply damage hit
+	// Apply damage
 	var targetDead bool
 	if targetCombatComp.RemainingDamageImmunity == 0 && combatProfile.DamageValue != 0 {
-
 		damageValue := combatProfile.DamageValue * len(payload.HitEntities)
 		targetCombatComp.HitPoints -= damageValue
 		if targetCombatComp.HitPoints < 0 {
@@ -316,87 +321,20 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 		targetCombatComp.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
 
 		if targetCombatComp.HitPoints == 0 {
-			// Not killing to let the chain attack to trigger
 			targetDead = true
 		}
 	}
 
-	// TODO: chain attack
-
-	// Apply effects
-	switch {
-	// case combatProfile.EffectMask&component.CombatEffectVampireDrain != 0:
-	// 	s.world.PushEvent(event.EventVampireDrainRequest, &event.VampireDrainRequestPayload{
-	// 		TargetEntity: payload.HitEntity,
-	// 		Delta:        parameter.VampireDrainEnergyValue,
-	// 	})
-	case combatProfile.EffectMask&component.CombatEffectKinetic != 0:
+	// Apply kinetic effect
+	if combatProfile.EffectMask&component.CombatEffectKinetic != 0 {
 		if !targetDead && targetCombatComp.RemainingKineticImmunity == 0 && !targetCombatComp.IsEnraged {
-			s.applyFieldCollision(payload.OriginEntity, payload.TargetEntity, payload.HitEntities, combatProfile.CollisionProfile)
+			s.applyAreaKnockback(payload, combatProfile.CollisionProfile)
 		}
 	}
+
+	// TODO: chain attack and other effects switch
 
 	s.world.Components.Combat.SetComponent(payload.TargetEntity, targetCombatComp)
-
-}
-
-func (s *CombatSystem) applyFieldCollision(originEntity, targetEntity core.Entity, hitEntities []core.Entity, collisionProfile *physics.CollisionProfile) {
-	originPos, ok := s.world.Positions.GetPosition(originEntity)
-	if !ok {
-		return
-	}
-	targetPos, ok := s.world.Positions.GetPosition(targetEntity)
-	if !ok {
-		return
-	}
-	targetKineticComp, ok := s.world.Components.Kinetic.GetComponent(targetEntity)
-	if !ok {
-		return
-	}
-
-	// Radial direction: origin → target (e.g. cursor shield pushes drain outward)
-	// TODO: change to cell-center physics from grid coords
-	radialX := vmath.FromInt(targetPos.X - originPos.X)
-	radialY := vmath.FromInt(targetPos.Y - originPos.Y)
-
-	// Zero vector fallback (quasarComp centered on cursor)
-	if radialX == 0 && radialY == 0 {
-		radialX = vmath.Scale // Push right by default
-	}
-
-	if !s.world.Components.Header.HasEntity(targetEntity) {
-		physics.ApplyCollision(&targetKineticComp.Kinetic, radialX, radialY, &physics.ShieldToDrain, s.rng)
-		s.world.Components.Kinetic.SetComponent(targetEntity, targetKineticComp)
-	} else {
-		headerComp, ok := s.world.Components.Header.GetComponent(targetEntity)
-		if !ok {
-			return
-		}
-
-		// Centroid of overlapping member offsets (integer arithmetic)
-		sumX, sumY := 0, 0
-		for _, hitEntity := range hitEntities {
-			for _, memberEntry := range headerComp.MemberEntries {
-				if hitEntity == memberEntry.Entity {
-					sumX += memberEntry.OffsetX
-					sumY += memberEntry.OffsetY
-				}
-			}
-		}
-		centroidX := sumX / len(hitEntities)
-		centroidY := sumY / len(hitEntities)
-
-		physics.ApplyOffsetCollision(
-			&targetKineticComp.Kinetic,
-			radialX, radialY,
-			centroidX, centroidY,
-			collisionProfile,
-			s.rng,
-		)
-		s.world.Components.Kinetic.SetComponent(targetEntity, targetKineticComp)
-
-	}
-
 }
 
 func (s *CombatSystem) applyCollision(originEntity, targetEntity, hitEntity core.Entity, collisionProfile *physics.CollisionProfile) {
@@ -441,4 +379,80 @@ func (s *CombatSystem) applyCollision(originEntity, targetEntity, hitEntity core
 		s.world.Components.Kinetic.SetComponent(targetEntity, targetKineticComp)
 
 	}
+}
+
+// applyAreaKnockback calculates radial knockback for area attacks
+// Uses explicit OriginX/OriginY if set, otherwise falls back to OriginEntity position
+func (s *CombatSystem) applyAreaKnockback(payload *event.CombatAttackAreaRequestPayload, collisionProfile *physics.CollisionProfile) {
+	targetPos, ok := s.world.Positions.GetPosition(payload.TargetEntity)
+	if !ok {
+		return
+	}
+	targetKineticComp, ok := s.world.Components.Kinetic.GetComponent(payload.TargetEntity)
+	if !ok {
+		return
+	}
+
+	// Determine origin position for radial direction
+	var originX, originY int
+	if payload.OriginX != 0 || payload.OriginY != 0 {
+		// Explicit coordinates (explosion center)
+		originX = payload.OriginX
+		originY = payload.OriginY
+	} else {
+		// Fall back to entity position (shield, etc.)
+		originPos, ok := s.world.Positions.GetPosition(payload.OriginEntity)
+		if !ok {
+			return
+		}
+		originX = originPos.X
+		originY = originPos.Y
+	}
+
+	// Radial direction: origin → target (pushes outward)
+	radialX := vmath.FromInt(targetPos.X - originX)
+	radialY := vmath.FromInt(targetPos.Y - originY)
+
+	if radialX == 0 && radialY == 0 {
+		radialX = vmath.Scale // Fallback direction
+	}
+
+	// Single entity - direct radial knockback
+	if len(payload.HitEntities) == 1 && payload.TargetEntity == payload.HitEntities[0] {
+		physics.ApplyCollision(&targetKineticComp.Kinetic, radialX, radialY, collisionProfile, s.rng)
+		s.world.Components.Kinetic.SetComponent(payload.TargetEntity, targetKineticComp)
+		return
+	}
+
+	// Composite - calculate centroid offset for angled knockback
+	headerComp, ok := s.world.Components.Header.GetComponent(payload.TargetEntity)
+	if !ok {
+		physics.ApplyCollision(&targetKineticComp.Kinetic, radialX, radialY, collisionProfile, s.rng)
+		s.world.Components.Kinetic.SetComponent(payload.TargetEntity, targetKineticComp)
+		return
+	}
+
+	// Build offset centroid from hit members
+	sumX, sumY := 0, 0
+	hitCount := 0
+	for _, hitEntity := range payload.HitEntities {
+		for _, member := range headerComp.MemberEntries {
+			if hitEntity == member.Entity {
+				sumX += member.OffsetX
+				sumY += member.OffsetY
+				hitCount++
+				break
+			}
+		}
+	}
+
+	if hitCount == 0 {
+		physics.ApplyCollision(&targetKineticComp.Kinetic, radialX, radialY, collisionProfile, s.rng)
+	} else {
+		centroidX := sumX / hitCount
+		centroidY := sumY / hitCount
+		physics.ApplyOffsetCollision(&targetKineticComp.Kinetic, radialX, radialY, centroidX, centroidY, collisionProfile, s.rng)
+	}
+
+	s.world.Components.Kinetic.SetComponent(payload.TargetEntity, targetKineticComp)
 }

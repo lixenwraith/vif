@@ -318,10 +318,11 @@ func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
 		ChargesCompleted:        0,
 	})
 
-	// Initialize kinetic
+	// Initialize kinetic with cell-centered position
+	preciseX, preciseY := vmath.CenteredFromGrid(headerX, headerY)
 	kinetic := core.Kinetic{
-		PreciseX: vmath.FromInt(headerX),
-		PreciseY: vmath.FromInt(headerY),
+		PreciseX: preciseX,
+		PreciseY: preciseY,
 	}
 	s.world.Components.Kinetic.SetComponent(headerEntity, component.KineticComponent{Kinetic: kinetic})
 
@@ -592,7 +593,7 @@ func (s *SwarmSystem) updateChargeState(
 	swarmComp.ChargeRemaining -= dt
 	if swarmComp.ChargeRemaining <= 0 {
 		// Transition to Decelerate
-		s.enterDecelerateState(headerEntity, swarmComp)
+		s.enterDecelerateState(swarmComp)
 		return
 	}
 
@@ -688,11 +689,10 @@ func (s *SwarmSystem) enterChargeState(headerEntity core.Entity, swarmComp *comp
 	swarmComp.State = component.SwarmStateCharge
 	swarmComp.ChargeRemaining = parameter.SwarmChargeDuration
 
-	// Store charge start and target positions
+	// Store charge start and target positions (target is centered)
 	swarmComp.ChargeStartX = kineticComp.PreciseX
 	swarmComp.ChargeStartY = kineticComp.PreciseY
-	swarmComp.ChargeTargetX = vmath.FromInt(swarmComp.LockedTargetX)
-	swarmComp.ChargeTargetY = vmath.FromInt(swarmComp.LockedTargetY)
+	swarmComp.ChargeTargetX, swarmComp.ChargeTargetY = vmath.CenteredFromGrid(swarmComp.LockedTargetX, swarmComp.LockedTargetY)
 
 	// Calculate initial charge velocity
 	dx := swarmComp.ChargeTargetX - swarmComp.ChargeStartX
@@ -706,7 +706,7 @@ func (s *SwarmSystem) enterChargeState(headerEntity core.Entity, swarmComp *comp
 }
 
 // enterDecelerateState transitions to deceleration phase
-func (s *SwarmSystem) enterDecelerateState(headerEntity core.Entity, swarmComp *component.SwarmComponent) {
+func (s *SwarmSystem) enterDecelerateState(swarmComp *component.SwarmComponent) {
 	swarmComp.State = component.SwarmStateDecelerate
 	swarmComp.DecelRemaining = parameter.SwarmDecelerationDuration
 	swarmComp.ChargesCompleted++
@@ -730,8 +730,8 @@ func (s *SwarmSystem) applyHomingMovement(headerEntity core.Entity, dtFixed int6
 		return
 	}
 
-	cursorXFixed := vmath.FromInt(cursorPos.X)
-	cursorYFixed := vmath.FromInt(cursorPos.Y)
+	// Target cursor center
+	cursorXFixed, cursorYFixed := vmath.CenteredFromGrid(cursorPos.X, cursorPos.Y)
 
 	physics.ApplyHoming(
 		&kineticComp.Kinetic,

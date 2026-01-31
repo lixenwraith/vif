@@ -440,6 +440,10 @@ type CombatAttackAreaRequestPayload struct {
 	OriginEntity core.Entity                `toml:"origin_entity"`
 	TargetEntity core.Entity                `toml:"target_entity"`
 	HitEntities  []core.Entity              `toml:"hit_entities"`
+	// Optional explicit origin position for knockback direction (e.g., explosion center)
+	// When both are 0, uses OriginEntity position
+	OriginX int `toml:"origin_x"`
+	OriginY int `toml:"origin_y"`
 }
 
 // FuseEffect defines visual effect type for fusion animations

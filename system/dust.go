@@ -12,29 +12,29 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
+const (
+	cellFlagDrain           uint8 = 1
+	cellFlagCombatComposite uint8 = 2 // Renamed from cellFlagQuasar
+	cellFlagGlyph           uint8 = 4
+	cellFlagDecay           uint8 = 8
+)
+
 // collisionContext holds pre-computed collision data for single tick
 type collisionContext struct {
-	// Cell flags: 1=drain, 2=quasar, 4=glyph, 8=decay/blossom
+	// Cell flags: 1=drain, 2=combat composite, 4=glyph, 8=decay/blossom
 	cellFlags map[uint64]uint8
 
 	// Impulse accumulators keyed by target entity
 	impulses map[core.Entity]*impulseAcc
 
-	// Quasar header for composite impulse routing
-	quasarHeader core.Entity
+	// Combat composite headers for member->header routing
+	combatHeaders map[core.Entity]bool
 }
 
 type impulseAcc struct {
 	vx, vy int64
 	hits   int
 }
-
-const (
-	cellFlagDrain  uint8 = 1
-	cellFlagQuasar uint8 = 2
-	cellFlagGlyph  uint8 = 4
-	cellFlagDecay  uint8 = 8
-)
 
 func posKey(x, y int) uint64 {
 	return uint64(x)<<32 | uint64(uint32(y))
@@ -243,8 +243,7 @@ func (s *DustSystem) Update() {
 	)
 
 	// Cursor position precise adjustment at the center of the cell to avoid skewed render
-	cursorXFixed := vmath.FromInt(cursorPos.X) + vmath.Scale>>1
-	cursorYFixed := vmath.FromInt(cursorPos.Y) + vmath.Scale>>1
+	cursorXFixed, cursorYFixed := vmath.CenteredFromGrid(cursorPos.X, cursorPos.Y)
 
 	// 3. LOCK Spatial Grid (Optimization: Global Batch Lock)
 	s.world.Positions.Lock()
@@ -413,19 +412,19 @@ func (s *DustSystem) Update() {
 						continue
 					}
 
-					// --- Quasar (flag bit 1) ---
-					if flags&cellFlagQuasar != 0 {
+					// --- Combat Composite (Quasar, Swarm, Storm) ---
+					if flags&cellFlagCombatComposite != 0 {
 						if member, ok := s.world.Components.Member.GetComponent(target); ok {
-							if collisionCtx.quasarHeader != 0 && member.HeaderEntity == collisionCtx.quasarHeader {
+							if collisionCtx.combatHeaders[member.HeaderEntity] {
 								impulseX, impulseY := vmath.ApplyCollisionImpulse(
 									kineticComp.VelX, kineticComp.VelY,
-									vmath.MassRatioDustToQuasar,
+									vmath.MassRatioDustToQuasar, // Same mass ratio for all large composites
 									parameter.DrainDeflectAngleVar,
 									parameter.CollisionKineticImpulseMin,
 									parameter.CollisionKineticImpulseMax,
 									s.rng,
 								)
-								collisionCtx.accumulateImpulse(collisionCtx.quasarHeader, impulseX, impulseY)
+								collisionCtx.accumulateImpulse(member.HeaderEntity, impulseX, impulseY)
 							}
 						}
 						continue
@@ -542,8 +541,9 @@ func (s *DustSystem) Update() {
 // buildCollisionContext pre-computes collision data for current tick
 func (s *DustSystem) buildCollisionContext(shieldActive bool, cursorPos component.PositionComponent, shield *component.ShieldComponent) *collisionContext {
 	ctx := &collisionContext{
-		cellFlags: make(map[uint64]uint8, 256),
-		impulses:  make(map[core.Entity]*impulseAcc, 16),
+		cellFlags:     make(map[uint64]uint8, 256),
+		impulses:      make(map[core.Entity]*impulseAcc, 16),
+		combatHeaders: make(map[core.Entity]bool, 8),
 	}
 
 	// Drains
@@ -553,24 +553,29 @@ func (s *DustSystem) buildCollisionContext(shieldActive bool, cursorPos componen
 		}
 	}
 
-	// Quasar members
+	// Combat composites (Quasar, Swarm, future Storm)
 	for _, headerEntity := range s.world.Components.Header.GetAllEntities() {
 		header, ok := s.world.Components.Header.GetComponent(headerEntity)
-		if !ok || header.Behavior != component.BehaviorQuasar {
+		if !ok {
 			continue
 		}
-		ctx.quasarHeader = headerEntity
-		for _, member := range header.MemberEntries {
-			if member.Entity == 0 {
-				continue
-			}
-			if pos, ok := s.world.Positions.GetPosition(member.Entity); ok {
-				ctx.cellFlags[posKey(pos.X, pos.Y)] |= cellFlagQuasar
+
+		// Only combat-capable composites
+		switch header.Behavior {
+		case component.BehaviorQuasar, component.BehaviorSwarm, component.BehaviorStorm:
+			ctx.combatHeaders[headerEntity] = true
+			for _, member := range header.MemberEntries {
+				if member.Entity == 0 {
+					continue
+				}
+				if pos, ok := s.world.Positions.GetPosition(member.Entity); ok {
+					ctx.cellFlags[posKey(pos.X, pos.Y)] |= cellFlagCombatComposite
+				}
 			}
 		}
 	}
 
-	// Glyphs (only if shield active, collision requires both dust and glyph inside)
+	// Glyphs (only if shield active)
 	if shieldActive {
 		cursorXFixed := vmath.FromInt(cursorPos.X)
 		cursorYFixed := vmath.FromInt(cursorPos.Y)
@@ -720,9 +725,11 @@ func (s *DustSystem) setDustComponents(entity core.Entity, x, y int, char rune, 
 		orbitRadius += int64(s.rng.Intn(radiusRange))
 	}
 
-	// Positions relative to cursor for orbital calculation
-	dx := vmath.FromInt(x - cursorX)
-	dy := vmath.FromInt(y - cursorY)
+	// Position relative to cursor center for orbital calculation
+	cursorXFixed, cursorYFixed := vmath.CenteredFromGrid(cursorX, cursorY)
+	spawnXFixed, spawnYFixed := vmath.CenteredFromGrid(x, y)
+	dx := spawnXFixed - cursorXFixed
+	dy := spawnYFixed - cursorYFixed
 
 	// Initial tangential velocity for orbit, random direction
 	clockwise := s.rng.Intn(2) == 0

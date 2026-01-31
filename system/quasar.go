@@ -351,10 +351,11 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 		HitPoints:        parameter.CombatInitialHPQuasar,
 	})
 
-	// Set kinetic component
+	// Set kinetic component with centered position
+	preciseX, preciseY := vmath.CenteredFromGrid(headerX, headerY)
 	kinetic := core.Kinetic{
-		PreciseX: vmath.FromInt(headerX),
-		PreciseY: vmath.FromInt(headerY),
+		PreciseX: preciseX,
+		PreciseY: preciseY,
 	}
 	s.world.Components.Kinetic.SetComponent(headerEntity, component.KineticComponent{kinetic})
 
@@ -489,8 +490,8 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 		quasarComp.LastSpeedIncreaseAt = now
 	}
 
-	cursorXFixed := vmath.FromInt(cursorPos.X)
-	cursorYFixed := vmath.FromInt(cursorPos.Y)
+	// Target cursor center
+	cursorXFixed, cursorYFixed := vmath.CenteredFromGrid(cursorPos.X, cursorPos.Y)
 
 	// Homing with arrival steering, drag only when not immune
 	settled := physics.ApplyHomingScaled(
@@ -503,11 +504,17 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 	)
 
 	if settled {
+		// Snap to exact cursor center
+		kineticComp.PreciseX = cursorXFixed
+		kineticComp.PreciseY = cursorYFixed
+		kineticComp.VelX = 0
+		kineticComp.VelY = 0
 		// Sync grid position if snap crossed cell boundary
 		if headerPos.X != cursorPos.X || headerPos.Y != cursorPos.Y {
 			s.processCollisionsAtNewPositions(headerEntity, cursorPos.X, cursorPos.Y)
 			s.world.Positions.SetPosition(headerEntity, component.PositionComponent{X: cursorPos.X, Y: cursorPos.Y})
 		}
+		s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
 		return
 	}
 

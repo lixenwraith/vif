@@ -669,17 +669,17 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	// Increment and assign materialize spawn order for LIFO tracking
 	s.nextSpawnOrder++
 
-	// Initialize Kinetic with spawn position, zero velocity
+	// Initialize Kinetic with centered spawn position, zero velocity
+	preciseX, preciseY := vmath.CenteredFromGrid(spawnX, spawnY)
 	drainComp := component.DrainComponent{
-
 		LastDrainTime: now,
 		SpawnOrder:    s.nextSpawnOrder,
 		LastIntX:      spawnX,
 		LastIntY:      spawnY,
 	}
 	kinetic := core.Kinetic{
-		PreciseX: vmath.FromInt(spawnX),
-		PreciseY: vmath.FromInt(spawnY),
+		PreciseX: preciseX,
+		PreciseY: preciseY,
 		// VelX, VelY, AccelX, AccelY zero-initialized
 	}
 	kineticComp := component.KineticComponent{kinetic}
@@ -884,8 +884,8 @@ func (s *DrainSystem) updateDrainMovement() {
 	gameWidth := config.GameWidth
 	gameHeight := config.GameHeight
 
-	cursorXFixed := vmath.FromInt(cursorPos.X)
-	cursorYFixed := vmath.FromInt(cursorPos.Y)
+	// Target cursor center
+	cursorXFixed, cursorYFixed := vmath.CenteredFromGrid(cursorPos.X, cursorPos.Y)
 
 	var collisionBuf [parameter.MaxEntitiesPerCell]core.Entity
 
@@ -933,7 +933,7 @@ func (s *DrainSystem) updateDrainMovement() {
 
 		// Soft collision with quasar (only when not immune)
 		if combatComp.RemainingKineticImmunity == 0 {
-			s.applySoftCollisionWithQuasar(drainEntity, &kineticComp, &combatComp, newX, newY)
+			s.applySoftCollisionWithQuasar(&kineticComp, &combatComp, newX, newY)
 		}
 
 		// Swept collision detection via Traverse
@@ -976,7 +976,6 @@ func (s *DrainSystem) updateDrainMovement() {
 
 // applySoftCollisionWithQuasar checks drain overlap with quasar and applies repulsion
 func (s *DrainSystem) applySoftCollisionWithQuasar(
-	drainEntity core.Entity,
 	kineticComp *component.KineticComponent,
 	combatComp *component.CombatComponent,
 	drainX, drainY int,

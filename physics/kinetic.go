@@ -27,15 +27,16 @@ func SetImpulse(k *core.Kinetic, vx, vy int64) {
 }
 
 // ReflectBoundsX handles horizontal boundary collision, returns true if reflection occurred
+// Clamps to centered position within valid cell range [minX, maxX)
 func ReflectBoundsX(k *core.Kinetic, minX, maxX int) bool {
 	x := vmath.ToInt(k.PreciseX)
 	if x < minX {
-		k.PreciseX = vmath.FromInt(minX)
+		k.PreciseX = vmath.FromInt(minX) + vmath.CellCenter
 		k.VelX = -k.VelX
 		return true
 	}
 	if x >= maxX {
-		k.PreciseX = vmath.FromInt(maxX - 1)
+		k.PreciseX = vmath.FromInt(maxX-1) + vmath.CellCenter
 		k.VelX = -k.VelX
 		return true
 	}
@@ -43,15 +44,16 @@ func ReflectBoundsX(k *core.Kinetic, minX, maxX int) bool {
 }
 
 // ReflectBoundsY handles vertical boundary collision, returns true if reflection occurred
+// Clamps to centered position within valid cell range [minY, maxY)
 func ReflectBoundsY(k *core.Kinetic, minY, maxY int) bool {
 	y := vmath.ToInt(k.PreciseY)
 	if y < minY {
-		k.PreciseY = vmath.FromInt(minY)
+		k.PreciseY = vmath.FromInt(minY) + vmath.CellCenter
 		k.VelY = -k.VelY
 		return true
 	}
 	if y >= maxY {
-		k.PreciseY = vmath.FromInt(maxY - 1)
+		k.PreciseY = vmath.FromInt(maxY-1) + vmath.CellCenter
 		k.VelY = -k.VelY
 		return true
 	}
@@ -70,8 +72,7 @@ func GridPos(k *core.Kinetic) (x, y int) {
 	return vmath.ToInt(k.PreciseX), vmath.ToInt(k.PreciseY)
 }
 
-// SetGridPos sets precise position from integer grid coordinates
+// SetGridPos sets precise position from integer grid coordinates (centered)
 func SetGridPos(k *core.Kinetic, x, y int) {
-	k.PreciseX = vmath.FromInt(x)
-	k.PreciseY = vmath.FromInt(y)
+	k.PreciseX, k.PreciseY = vmath.CenteredFromGrid(x, y)
 }
