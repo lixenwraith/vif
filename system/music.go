@@ -158,7 +158,7 @@ func (s *MusicSystem) Update() {
 		return
 	}
 
-	apm := s.world.Resources.Game.State.GetAPM()
+	apm := s.world.Resources.Game.State.GetMusicAPM()
 	bpm := parameter.APMToBPM(apm)
 
 	if bpm != s.lastBPM {

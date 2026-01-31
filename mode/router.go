@@ -214,6 +214,7 @@ func (r *Router) handleToggleMusicMute() bool {
 		return true
 	}
 
+	// TODO: Move this to music system, should not be handled here
 	musicEnabled := player.ToggleMusicMute()
 	if musicEnabled {
 		bpm := parameter.APMToBPM(r.ctx.State.GetAPM())
@@ -548,6 +549,9 @@ func (r *Router) handleModeSwitch(intent *input.Intent) bool {
 	// Update GameContext
 	r.ctx.SetMode(newMode)
 	r.ctx.World.UpdateBoundsRadius()
+
+	// Notify world of mode change
+	r.ctx.PushEvent(event.EventModeChangeNotification, &event.ModeChangeNotificationPayload{Mode: newMode})
 
 	// Sync input.Machine
 	r.machine.SetMode(inputMode)

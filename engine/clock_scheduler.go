@@ -437,10 +437,14 @@ func (cs *ClockScheduler) processTick() {
 		cs.world.UpdateLocked()
 	})
 
+	// Increment ticks
 	ticks := cs.world.Resources.Game.State.IncrementGameTicks()
-	if ticks%uint64(parameter.GameTicksPerSecond) == 0 {
-		cs.world.Resources.Game.State.UpdateAPM(cs.world.Resources.Status)
-	}
+
+	// Update APM based on game time
+	cs.world.Resources.Game.State.UpdateAPM(
+		cs.world.Resources.Status,
+		cs.pausableClock.Now(),
+	)
 
 	cs.statTicks.Store(int64(ticks))
 	cs.statEntityCount.Store(int64(cs.world.Positions.CountEntities()))

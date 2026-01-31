@@ -517,3 +517,8 @@ type MotionMarkerShowPayload struct {
 	DirectionX int `toml:"direction_x"` // -1, 0, 1
 	DirectionY int `toml:"direction_y"` // -1, 0, 1
 }
+
+// ModeChangeNotificationPayload contains the new mode
+type ModeChangeNotificationPayload struct {
+	Mode core.GameMode `toml:"mode"`
+}

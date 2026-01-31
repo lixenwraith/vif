@@ -133,6 +133,9 @@ type ContentResource struct {
 
 // AudioPlayer defines the audio interface used by game systems
 type AudioPlayer interface {
+	// Global Pause
+	SetPaused(paused bool)
+
 	// Sound effects
 	Play(core.SoundType) bool
 	ToggleEffectMute() bool

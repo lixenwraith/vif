@@ -402,20 +402,15 @@ func (ctx *GameContext) SetPaused(paused bool) {
 
 	if paused && !wasPaused {
 		ctx.PausableClock.Pause()
-		// Capture pre-pause state, then mute for pause
+		// Pause audio engine (freezes sequencer, stops SFX)
 		if player != nil && player.IsRunning() {
-			ctx.IsMuted.Store(player.IsEffectMuted())
-			if !player.IsEffectMuted() {
-				player.ToggleEffectMute()
-			}
+			player.SetPaused(true)
 		}
 	} else if !paused && wasPaused {
 		ctx.PausableClock.Resume()
-		// Restore pre-pause state (respects user toggle during pause)
+		// Resume audio engine
 		if player != nil && player.IsRunning() {
-			if !ctx.IsMuted.Load() && player.IsEffectMuted() {
-				player.ToggleEffectMute()
-			}
+			player.SetPaused(false)
 		}
 	}
 }

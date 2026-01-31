@@ -517,6 +517,11 @@ const (
 	// Trigger: Input/Mode
 	// Consumer: MotionMarkerSystem | Payload: nil
 	EventMotionMarkerClearColored
+
+	// EventModeChangeNotification signals change of the mode
+	// Trigger: Input/Mode
+	// Consumer: MotionMarkerSystem | Payload: *ModeChangeNotificationPayload
+	EventModeChangeNotification
 )
 
 // GameEvent represents a single game event with metadata

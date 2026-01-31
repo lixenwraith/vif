@@ -28,6 +28,7 @@ type Mixer struct {
 	playQueue chan playRequest
 	stopChan  chan struct{}
 	stopped   atomic.Bool
+	paused    atomic.Bool
 
 	// Accessed only by mix goroutine
 	active []activeSound
@@ -62,6 +63,11 @@ func NewMixer(out io.Writer, cfg *AudioConfig, cache *soundCache) *Mixer {
 		errChan:   make(chan error, 1),
 		sequencer: NewSequencer(parameter.DefaultBPM),
 	}
+}
+
+// SetPaused sets the pause state
+func (m *Mixer) SetPaused(paused bool) {
+	m.paused.Store(paused)
 }
 
 // Start begins the mixing loop
@@ -146,12 +152,23 @@ func (m *Mixer) loop() {
 	mixBuf := make([]float64, samplesPerTick)
 	outBytes := make([]byte, samplesPerTick*parameter.AudioBytesPerFrame)
 
+	// Pause smoothing
+	pauseGain := 1.0
+
 	for {
 		select {
 		case <-m.stopChan:
 			return
 
 		case req := <-m.playQueue:
+			// If paused, drop new requests immediately to prevent queue buildup
+			if m.paused.Load() {
+				m.statsMu.Lock()
+				m.dropped++
+				m.statsMu.Unlock()
+				continue
+			}
+
 			buf := m.cache.get(req.sound)
 			if len(buf) > 0 {
 				m.active = append(m.active, activeSound{
@@ -172,14 +189,45 @@ func (m *Mixer) loop() {
 				mixBuf[i] = 0
 			}
 
-			// Generate music (if not effectMuted)
-			if !m.musicMuted.Load() && m.sequencer != nil {
-				m.sequencer.Generate(mixBuf)
+			isPaused := m.paused.Load()
+
+			// Handle Pause Fading (prevents clicks)
+			if isPaused {
+				if pauseGain > 0 {
+					pauseGain -= 0.2 // 250ms fade out (at 50ms tick)
+					if pauseGain < 0 {
+						pauseGain = 0
+					}
+				}
+			} else {
+				if pauseGain < 1.0 {
+					pauseGain += 0.2 // 250ms fade in
+					if pauseGain > 1.0 {
+						pauseGain = 1.0
+					}
+				}
 			}
 
-			// Mix active sound effects
-			if len(m.active) > 0 {
-				m.active = m.mixActive(mixBuf, samplesPerTick)
+			// Only process audio logic if we are audible or fading out
+			if pauseGain > 0.001 {
+				// Generate music (if not effectMuted and sequencer is running)
+				// If paused, Generate() is not called, freezing sequencer time, keeping the beat aligned for resume
+				if !isPaused && !m.musicMuted.Load() && m.sequencer != nil {
+					m.sequencer.Generate(mixBuf)
+				}
+
+				// Mix active sound effects
+				// Even if paused, letting tails play out or fade via pauseGain
+				if len(m.active) > 0 {
+					m.active = m.mixActive(mixBuf, samplesPerTick)
+				}
+
+				// Apply pause gain
+				if pauseGain < 1.0 {
+					for i := range mixBuf {
+						mixBuf[i] *= pauseGain
+					}
+				}
 			}
 
 			// Convert to int16 bytes with soft limiting

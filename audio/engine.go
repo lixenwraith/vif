@@ -23,6 +23,7 @@ type AudioEngine struct {
 	ossFile *os.File // For direct OSS writes
 
 	running     atomic.Bool
+	paused      atomic.Bool
 	effectMuted atomic.Bool
 	musicMuted  atomic.Bool
 	silentMode  atomic.Bool
@@ -49,6 +50,14 @@ func NewAudioEngine(cfg ...*AudioConfig) (*AudioEngine, error) {
 	ae.cache.preload()
 
 	return ae, nil
+}
+
+// SetPaused toggles the paused state of the mixer (music + effects)
+func (ae *AudioEngine) SetPaused(paused bool) {
+	ae.paused.Store(paused)
+	if ae.mixer != nil {
+		ae.mixer.SetPaused(paused)
+	}
 }
 
 // Start launches the audio backend and mixer
@@ -173,7 +182,7 @@ func (ae *AudioEngine) Stop() {
 
 // Play queues a sound for playback
 func (ae *AudioEngine) Play(st core.SoundType) bool {
-	if !ae.running.Load() || ae.effectMuted.Load() || ae.silentMode.Load() {
+	if !ae.running.Load() || ae.paused.Load() || ae.effectMuted.Load() || ae.silentMode.Load() {
 		return false
 	}
 
