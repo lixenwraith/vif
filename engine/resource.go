@@ -13,12 +13,13 @@ import (
 // Resources holds singleton game resources, initialized during GameContext creation, accessed via World.Resources
 type Resource struct {
 	// World Resource
-	Time   *TimeResource
-	Config *ConfigResource
-	Game   *GameStateResource
-	Player *PlayerResource
-	Event  *EventQueueResource
-	Render *RenderConfig
+	Time    *TimeResource
+	Config  *ConfigResource
+	Game    *GameStateResource
+	Player  *PlayerResource
+	Event   *EventQueueResource
+	Render  *RenderConfig
+	Genetic *GeneticResource
 
 	// Telemetry
 	Status *status.Registry
@@ -115,6 +116,33 @@ func (pr *PlayerResource) GetBounds() PingBounds {
 // SetBounds atomically updates bounds
 func (pr *PlayerResource) SetBounds(b PingBounds) {
 	pr.bounds.Store(&b)
+}
+
+// GeneticResource wraps GA engines for ECS access
+type GeneticResource struct {
+	Provider GeneticProvider
+}
+
+// GeneticProvider defines interface for genetic algorithm access
+type GeneticProvider interface {
+	Start()
+	Stop()
+	Reset()
+	SampleDrainGenotype() []float64
+	DecodeDrainPhenotype(genotype []float64) (homingAccel, shieldApproach, aggressionMult int64)
+	BeginDrainTracking(entity core.Entity, genotype []float64, spawnTime time.Time)
+	RecordDrainTick(entity core.Entity, distToCursor float64, inShield bool, dt time.Duration)
+	RecordDrainEnergyDrain(entity core.Entity, amount int64)
+	RecordDrainHeatChange(entity core.Entity, delta int)
+	EndDrainTracking(entity core.Entity, deathTime time.Time)
+	RecordPlayerShieldState(active bool)
+	RecordPlayerKeystroke(correct bool)
+	RecordPlayerMovement(distance float64)
+	// Telemetry
+	DrainGeneration() int
+	DrainPoolStats() (best, worst, avg float64)
+	DrainPendingCount() int
+	DrainOutcomesTotal() uint64
 }
 
 // === Bridged Resources from Service ===

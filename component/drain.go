@@ -12,4 +12,10 @@ type DrainComponent struct {
 	SpawnOrder    int64     // Monotonic counter for LIFO despawn ordering (higher = newer)
 	LastIntX      int       // Cell-entry detection
 	LastIntY      int       // Cell-entry detection
+
+	// Evolved phenotype parameters (Q32.32)
+	// Applied at spawn from GA population sample
+	Genotype       []float64 // Raw genotype for tracking
+	HomingAccel    int64     // Overrides parameter.DrainHomingAccel
+	AggressionMult int64     // Speed multiplier (Scale = 1.0)
 }

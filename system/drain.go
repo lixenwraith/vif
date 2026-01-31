@@ -59,6 +59,13 @@ type DrainSystem struct {
 	statCount   *atomic.Int64
 	statPending *atomic.Int64
 
+	// GA telemetry
+	statGAGen      *atomic.Int64
+	statGABest     *atomic.Int64
+	statGAAvg      *atomic.Int64
+	statGAPending  *atomic.Int64
+	statGAOutcomes *atomic.Int64
+
 	paused bool
 
 	enabled bool
@@ -77,6 +84,13 @@ func NewDrainSystem(world *engine.World) engine.System {
 	s.statCount = s.world.Resources.Status.Ints.Get("drain.count")
 	s.statPending = s.world.Resources.Status.Ints.Get("drain.pending")
 
+	// GA telemetry
+	s.statGAGen = s.world.Resources.Status.Ints.Get("ga.drain.gen")
+	s.statGABest = s.world.Resources.Status.Ints.Get("ga.drain.best")
+	s.statGAAvg = s.world.Resources.Status.Ints.Get("ga.drain.avg")
+	s.statGAPending = s.world.Resources.Status.Ints.Get("ga.drain.pending")
+	s.statGAOutcomes = s.world.Resources.Status.Ints.Get("ga.drain.outcomes")
+
 	s.Init()
 	return s
 }
@@ -92,6 +106,11 @@ func (s *DrainSystem) Init() {
 	s.statPending.Store(0)
 	s.paused = false
 	s.enabled = true
+
+	// Reset GA tracker on game reset (population retained)
+	if genetic := s.world.Resources.Genetic; genetic != nil && genetic.Provider != nil {
+		genetic.Provider.Reset()
+	}
 }
 
 // Name returns system's name
@@ -139,6 +158,9 @@ func (s *DrainSystem) HandleEvent(ev event.GameEvent) {
 		s.paused = true
 		// Clear pending spawns to prevent stale materialize
 		s.pendingSpawns = s.pendingSpawns[:0]
+
+		// End tracking for all active drains before fuse destroys them
+		s.endTrackingForAllDrains()
 
 	case event.EventDrainResume:
 		s.paused = false
@@ -232,6 +254,16 @@ func (s *DrainSystem) Update() {
 
 	s.statCount.Store(int64(s.world.Components.Drain.CountEntities()))
 	s.statPending.Store(int64(len(s.pendingSpawns)))
+
+	// GA telemetry
+	if genetic := s.world.Resources.Genetic; genetic != nil && genetic.Provider != nil {
+		s.statGAGen.Store(int64(genetic.Provider.DrainGeneration()))
+		best, _, avg := genetic.Provider.DrainPoolStats()
+		s.statGABest.Store(int64(best * 1000)) // Scale for int display
+		s.statGAAvg.Store(int64(avg * 1000))
+		s.statGAPending.Store(int64(genetic.Provider.DrainPendingCount()))
+		s.statGAOutcomes.Store(int64(genetic.Provider.DrainOutcomesTotal()))
+	}
 }
 
 // cacheDrainData populates drainCache with all drain entities and components
@@ -285,11 +317,19 @@ func (s *DrainSystem) cacheQuasarData() {
 
 // processDrainStates handles HP checks, enrage transitions, and termination
 func (s *DrainSystem) processDrainStates() {
+	now := s.world.Resources.Time.GameTime
+	genetic := s.world.Resources.Genetic
+
 	for i := range s.drainCache {
 		entry := &s.drainCache[i]
 
 		// Termination check
 		if entry.combatComp.HitPoints <= 0 {
+			// GA tracking: end tracking before death
+			if genetic != nil && genetic.Provider != nil {
+				genetic.Provider.EndDrainTracking(entry.entity, now)
+			}
+
 			event.EmitDeathOne(s.world.Resources.Event.Queue, entry.entity, event.EventFlashRequest)
 			continue
 		}
@@ -309,6 +349,9 @@ func (s *DrainSystem) detectSwarmFusions() {
 		return
 	}
 
+	genetic := s.world.Resources.Genetic
+	now := s.world.Resources.Time.GameTime
+
 	// Collect enraged drain entities
 	var enragedDrains []core.Entity
 	for i := range s.drainCache {
@@ -327,6 +370,12 @@ func (s *DrainSystem) detectSwarmFusions() {
 		drainA := enragedDrains[0]
 		drainB := enragedDrains[1]
 		enragedDrains = enragedDrains[2:]
+
+		// End tracking before fusion destroys them
+		if genetic != nil && genetic.Provider != nil {
+			genetic.Provider.EndDrainTracking(drainA, now)
+			genetic.Provider.EndDrainTracking(drainB, now)
+		}
 
 		s.world.PushEvent(event.EventFuseSwarmRequest, &event.FuseSwarmRequestPayload{
 			DrainA: drainA,
@@ -669,20 +718,37 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	// Increment and assign materialize spawn order for LIFO tracking
 	s.nextSpawnOrder++
 
+	// Sample genotype from GA population
+	var genotype []float64
+	var homingAccel, aggressionMult int64
+
+	if genetic := s.world.Resources.Genetic; genetic != nil && genetic.Provider != nil {
+		genotype = genetic.Provider.SampleDrainGenotype()
+		homingAccel, _, aggressionMult = genetic.Provider.DecodeDrainPhenotype(genotype)
+		genetic.Provider.BeginDrainTracking(entity, genotype, now)
+	} else {
+		// Fallback to default parameters
+		homingAccel = parameter.DrainHomingAccel
+		aggressionMult = vmath.Scale
+	}
+
 	// Initialize Kinetic with centered spawn position, zero velocity
 	preciseX, preciseY := vmath.CenteredFromGrid(spawnX, spawnY)
 	drainComp := component.DrainComponent{
-		LastDrainTime: now,
-		SpawnOrder:    s.nextSpawnOrder,
-		LastIntX:      spawnX,
-		LastIntY:      spawnY,
+		LastDrainTime:  now,
+		SpawnOrder:     s.nextSpawnOrder,
+		LastIntX:       spawnX,
+		LastIntY:       spawnY,
+		Genotype:       genotype,
+		HomingAccel:    homingAccel,
+		AggressionMult: aggressionMult,
 	}
 	kinetic := core.Kinetic{
 		PreciseX: preciseX,
 		PreciseY: preciseY,
 		// VelX, VelY, AccelX, AccelY zero-initialized
 	}
-	kineticComp := component.KineticComponent{kinetic}
+	kineticComp := component.KineticComponent{Kinetic: kinetic}
 
 	// Handle collisions at materialize spawn position
 	entitiesAtSpawn := s.world.Positions.GetAllEntityAt(spawnX, spawnY)
@@ -758,6 +824,8 @@ func (s *DrainSystem) handleDrainInteractions() {
 		return
 	}
 
+	genetic := s.world.Resources.Genetic
+
 	// 1. Detect drain-drain collisions (same cell)
 	s.handleDrainDrainCollisions()
 
@@ -787,6 +855,11 @@ func (s *DrainSystem) handleDrainInteractions() {
 				})
 				drain.LastDrainTime = now
 				s.world.Components.Drain.SetComponent(drainEntity, drain)
+
+				// GA tracking: record energy drained
+				if genetic != nil && genetic.Provider != nil {
+					genetic.Provider.RecordDrainEnergyDrain(drainEntity, int64(parameter.DrainShieldEnergyDrainAmount))
+				}
 			}
 
 			s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
@@ -804,6 +877,11 @@ func (s *DrainSystem) handleDrainInteractions() {
 
 		// Cursor collision (shield not active or drain outside shield)
 		if isOnCursor {
+			// GA tracking: record heat reduction
+			if genetic != nil && genetic.Provider != nil {
+				genetic.Provider.RecordDrainHeatChange(drainEntity, parameter.DrainHeatReductionAmount)
+			}
+
 			s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
 				Delta: -parameter.DrainHeatReductionAmount,
 			})
@@ -875,7 +953,12 @@ func (s *DrainSystem) updateDrainMovement() {
 		return
 	}
 
-	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
+	// Check shield state for GA tracking
+	shieldComp, shieldOk := s.world.Components.Shield.GetComponent(cursorEntity)
+	shieldActive := shieldOk && shieldComp.Active
+
+	dt := s.world.Resources.Time.DeltaTime
+	dtFixed := vmath.FromFloat(dt.Seconds())
 	// Cap delta time to prevent tunneling on lag spikes
 	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
 		dtFixed = dtCap
@@ -888,6 +971,8 @@ func (s *DrainSystem) updateDrainMovement() {
 	cursorXFixed, cursorYFixed := vmath.CenteredFromGrid(cursorPos.X, cursorPos.Y)
 
 	var collisionBuf [parameter.MaxEntitiesPerCell]core.Entity
+
+	genetic := s.world.Resources.Genetic
 
 	drainEntities := s.world.Components.Drain.GetAllEntities()
 	for _, drainEntity := range drainEntities {
@@ -904,16 +989,36 @@ func (s *DrainSystem) updateDrainMovement() {
 			continue
 		}
 
+		drainPos, posOk := s.world.Positions.GetPosition(drainEntity)
+
+		// GA tracking: record per-tick metrics
+		if genetic != nil && genetic.Provider != nil && posOk {
+			dx := float64(drainPos.X - cursorPos.X)
+			dy := float64(drainPos.Y - cursorPos.Y)
+			dist := dx*dx + dy*dy // squared distance
+			inShield := shieldActive && s.isInsideShieldEllipse(drainPos.X, drainPos.Y)
+			genetic.Provider.RecordDrainTick(drainEntity, dist, inShield, dt)
+		}
+
+		// Build per-entity homing profile using evolved parameters
+		homingProfile := physics.HomingProfile{
+			BaseSpeed:        vmath.Mul(parameter.DrainBaseSpeed, drainComp.AggressionMult),
+			HomingAccel:      drainComp.HomingAccel,
+			Drag:             parameter.DrainDrag,
+			ArrivalRadius:    0,
+			ArrivalDragBoost: 0,
+			DeadZone:         0,
+		}
+
 		// Homing only when not in kinetic immunity
 		if combatComp.RemainingKineticImmunity == 0 {
 			physics.ApplyHoming(
 				&kineticComp.Kinetic,
 				cursorXFixed, cursorYFixed,
-				&physics.DrainHoming,
+				&homingProfile,
 				dtFixed,
 			)
 		}
-		// During deflection: pure ballistic (no homing, no drag)
 
 		// Store previous position for traversal
 		oldPreciseX, oldPreciseY := kineticComp.PreciseX, kineticComp.PreciseY
@@ -1088,4 +1193,19 @@ func (s *DrainSystem) handleNuggetCollision(entity core.Entity) {
 
 	// Destroy the nugget entity
 	s.world.DestroyEntity(entity)
+}
+
+// endTrackingForAllDrains terminates GA tracking for all active drains
+// Called before mass destruction events (fuse, reset)
+func (s *DrainSystem) endTrackingForAllDrains() {
+	genetic := s.world.Resources.Genetic
+	if genetic == nil || genetic.Provider == nil {
+		return
+	}
+
+	now := s.world.Resources.Time.GameTime
+	drainEntities := s.world.Components.Drain.GetAllEntities()
+	for _, entity := range drainEntities {
+		genetic.Provider.EndDrainTracking(entity, now)
+	}
 }

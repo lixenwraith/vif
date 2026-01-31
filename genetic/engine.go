@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 	"math/rand/v2"
-	"runtime"
 	"sync"
+
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // --- Algorithm Engine ---
@@ -55,12 +56,12 @@ type EngineConfig struct {
 // DefaultConfig returns a reasonable default configuration.
 func DefaultConfig() EngineConfig {
 	return EngineConfig{
-		PoolSize:             100,
-		EliteCount:           2,
-		PerturbationRate:     0.01,
-		PerturbationStrength: 0.1,
-		MaxIterations:        1000,
-		Parallelism:          runtime.NumCPU(),
+		PoolSize:             parameter.GAPoolSize,
+		EliteCount:           parameter.GAEliteCount,
+		PerturbationRate:     parameter.GAPerturbationRate,
+		PerturbationStrength: parameter.GAPerturbationStrength,
+		MaxIterations:        parameter.GAMaxIterations,
+		Parallelism:          parameter.GAParallelism,
 		Seed:                 0,
 	}
 }
