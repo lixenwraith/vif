@@ -9,16 +9,17 @@ import (
 	"strings"
 )
 
-// Marshal returns the TOML encoding of v.
+// Marshal returns the TOML encoding of v
 //
-// Marshal supports struct and map types as the root object.
+// Marshal supports struct and map types as the root object
 // It follows standard TOML formatting:
-//   - Comments and whitespace are not preserved from original decoding.
+//   - Comments and whitespace are not preserved from original decoding
 //   - Dates are not supported (as per requirements).
-//   - Nil pointers are skipped.
-//   - Unexported fields are skipped.
-//   - Fields with `omitempty` are skipped if zero.
-//   - Struct fields/Map keys are sorted alphabetically for determinism.
+//   - Nil pointers are skipped
+//   - Unexported fields are skipped
+//   - Fields with `omitempty` are skipped if zero
+//   - Struct fields/Map keys are sorted alphabetically for determinism
+//   - Fully numerical keys are rejected
 func Marshal(v any) ([]byte, error) {
 	val := reflect.ValueOf(v)
 

@@ -304,3 +304,46 @@ func (e *StreamingEngine[S, F]) PendingCount() int {
 func (e *StreamingEngine[S, F]) EvaluationsStarted() uint64 {
 	return e.nextEvalID.Load()
 }
+
+// GetPoolSnapshot returns a copy of the current population for persistence
+func (e *StreamingEngine[S, F]) GetPoolSnapshot() *Pool[S, F] {
+	if e.currentPool == nil {
+		return nil
+	}
+
+	// Return shallow copy (Members slice is shared but candidates are value types)
+	snapshot := &Pool[S, F]{
+		Members:    make([]Candidate[S, F], len(e.currentPool.Members)),
+		Generation: e.currentPool.Generation,
+		Stats:      e.currentPool.Stats,
+	}
+	copy(snapshot.Members, e.currentPool.Members)
+	return snapshot
+}
+
+// InjectPopulation replaces the current pool with loaded data
+func (e *StreamingEngine[S, F]) InjectPopulation(candidates []Candidate[S, F], generation int) {
+	if len(candidates) == 0 {
+		return
+	}
+
+	// Resize to match config pool size
+	poolSize := e.config.PoolSize
+	if len(candidates) > poolSize {
+		candidates = candidates[:poolSize]
+	}
+
+	// Pad with random if insufficient
+	for len(candidates) < poolSize {
+		candidates = append(candidates, Candidate[S, F]{
+			Data:     e.initializer(e.rng),
+			Score:    F(0),
+			Metadata: make(map[string]any),
+		})
+	}
+
+	e.currentPool = &Pool[S, F]{
+		Members:    candidates,
+		Generation: generation,
+	}
+}

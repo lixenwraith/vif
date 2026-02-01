@@ -1,137 +1,122 @@
 package game
 
 import (
-	"math/rand/v2"
+	"time"
 
-	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/genetic"
+	"github.com/lixenwraith/vi-fighter/genetic/fitness"
+	"github.com/lixenwraith/vi-fighter/genetic/game/species"
+	"github.com/lixenwraith/vi-fighter/genetic/registry"
+	"github.com/lixenwraith/vi-fighter/genetic/tracking"
 	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
-// GeneticResource holds all GA engines
+// DecoderFunc converts genotype to game-specific phenotype
+type DecoderFunc func(genes []float64) any
+
+// GeneticResource provides GA services to the ECS
 type GeneticResource struct {
-	drainEngine     *genetic.StreamingEngine[[]float64, float64]
-	drainCodec      *DrainCodec
-	drainAggregator *CombatFitnessAggregator
+	registry    *registry.Registry
+	playerModel *PlayerBehaviorModel
+	decoders    map[registry.SpeciesID]DecoderFunc
 }
 
-// NewGeneticResource creates and initializes GA components
+// NewGeneticResource creates the resource and registers species
 func NewGeneticResource() *GeneticResource {
-	drainCodec := NewDrainCodec()
-	drainAggregator := NewCombatFitnessAggregator(DefaultDrainWeights)
-
-	drainInitializer := func(rng *rand.Rand) []float64 {
-		g := make([]float64, DrainGeneCount)
-		for i, b := range DrainBounds {
-			g[i] = b.Min + rng.Float64()*(b.Max-b.Min)
-		}
-		return g
-	}
-
-	drainPerturbator := &genetic.BoundedPerturbator{
-		Bounds:            DrainBounds,
-		StandardDeviation: parameter.GADrainPerturbationStdDev,
-	}
-
-	drainSelector := &genetic.TournamentSelector[[]float64, float64]{
-		TournamentSize:  parameter.GATournamentSize,
-		WithReplacement: true,
-	}
-
-	drainCombiner := &genetic.UniformCombiner[[]float64, float64, float64]{
-		MixProbability: parameter.GACrossoverMixProbability,
-	}
-
-	config := genetic.DefaultStreamingConfig()
-
-	drainEngine := genetic.NewStreamingEngine(
-		drainInitializer,
-		drainSelector,
-		drainCombiner,
-		drainPerturbator,
-		config,
-	)
-
 	r := &GeneticResource{
-		drainEngine:     drainEngine,
-		drainCodec:      drainCodec,
-		drainAggregator: drainAggregator,
+		registry:    registry.NewRegistry(parameter.GeneticPersistencePath),
+		playerModel: NewPlayerBehaviorModel(),
+		decoders:    make(map[registry.SpeciesID]DecoderFunc),
 	}
+
+	// Register drain species
+	_ = r.registry.Register(species.DrainConfig, species.NewDrainAggregator())
+	r.RegisterDecoder(species.DrainSpeciesID, species.DecodeDrain)
 
 	return r
 }
 
+// RegisterDecoder adds a phenotype decoder for a species
+func (r *GeneticResource) RegisterDecoder(id registry.SpeciesID, decoder DecoderFunc) {
+	r.decoders[id] = decoder
+}
+
+// Start initializes evolution engines
 func (r *GeneticResource) Start() {
-	r.drainEngine.Start()
+	_ = r.registry.Start()
 }
 
+// Stop halts evolution engines
 func (r *GeneticResource) Stop() {
-	r.drainEngine.Stop()
+	r.registry.Stop()
 }
 
+// Reset clears session state (populations retained)
 func (r *GeneticResource) Reset() {
-	// Population retained, pending cleared by engine
+	r.playerModel.Reset()
 }
 
-func (r *GeneticResource) Sample(species component.SpeciesType) ([]float64, uint64) {
-	switch species {
-	case component.SpeciesDrain:
-		samples := r.drainEngine.SamplePopulation(1)
-		if len(samples) == 0 {
-			// Fallback default
-			samples = [][]float64{{3.0, 0.0, 1.0}}
-		}
-		evalID := r.drainEngine.BeginEvaluation(samples[0])
-		return samples[0], uint64(evalID)
-
-	case component.SpeciesSwarm, component.SpeciesQuasar:
-		// Future implementation
-		return nil, 0
-	}
-	return nil, 0
+// Sample returns genotype and evaluation ID for a species
+func (r *GeneticResource) Sample(id registry.SpeciesID) ([]float64, uint64) {
+	return r.registry.Sample(id)
 }
 
-func (r *GeneticResource) Decode(species component.SpeciesType, genotype []float64) component.DecodedPhenotype {
-	switch species {
-	case component.SpeciesDrain:
-		p := r.drainCodec.Decode(genotype)
-		return component.DecodedPhenotype{
-			HomingAccel:    p.HomingAccel,
-			AggressionMult: p.AggressionMult,
-		}
-
-	case component.SpeciesSwarm, component.SpeciesQuasar:
-		// Future
-		return component.DecodedPhenotype{}
+// Decode returns typed phenotype for genes
+func (r *GeneticResource) Decode(id registry.SpeciesID, genes []float64) any {
+	decoder, ok := r.decoders[id]
+	if !ok {
+		return nil
 	}
-	return component.DecodedPhenotype{}
+	return decoder(genes)
 }
 
-func (r *GeneticResource) Complete(species component.SpeciesType, evalID uint64, fitness float64) {
-	switch species {
-	case component.SpeciesDrain:
-		r.drainEngine.CompleteEvaluation(genetic.EvalID(evalID), fitness)
+// BeginTracking starts metric collection for an evaluation
+func (r *GeneticResource) BeginTracking(id registry.SpeciesID, evalID uint64) tracking.Collector {
+	return r.registry.BeginTracking(id, evalID)
+}
 
-	case component.SpeciesSwarm, component.SpeciesQuasar:
-		// Future
+// CollectMetrics pushes metrics for an active evaluation
+func (r *GeneticResource) CollectMetrics(id registry.SpeciesID, evalID uint64, metrics tracking.MetricBundle, dt time.Duration) {
+	r.registry.CollectMetrics(id, evalID, metrics, dt)
+}
+
+// CompleteTracking finalizes metrics and calculates fitness
+func (r *GeneticResource) CompleteTracking(id registry.SpeciesID, evalID uint64, deathCondition tracking.MetricBundle) {
+	r.registry.CompleteTracking(id, evalID, deathCondition, r.PlayerContext())
+}
+
+// Complete reports fitness directly (legacy compatibility)
+func (r *GeneticResource) Complete(id registry.SpeciesID, evalID uint64, fitnessVal float64) {
+	r.registry.ReportFitness(id, evalID, fitnessVal)
+}
+
+// Stats returns population statistics
+func (r *GeneticResource) Stats(id registry.SpeciesID) registry.Stats {
+	return r.registry.Stats(id)
+}
+
+// SaveAll persists all populations
+func (r *GeneticResource) SaveAll() error {
+	return r.registry.SaveAll()
+}
+
+// PlayerModel returns the player behavior model
+func (r *GeneticResource) PlayerModel() *PlayerBehaviorModel {
+	return r.playerModel
+}
+
+// PlayerContext returns current player state as fitness context
+func (r *GeneticResource) PlayerContext() fitness.Context {
+	snapshot := r.playerModel.Snapshot()
+	return fitness.MapContext{
+		fitness.ContextThreatLevel:      snapshot.ThreatLevel(),
+		fitness.ContextEnergyManagement: snapshot.EnergyManagement,
+		fitness.ContextHeatManagement:   snapshot.HeatManagement,
+		fitness.ContextTypingAccuracy:   snapshot.TypingAccuracy,
+		"reaction_time_ms":              float64(snapshot.ReactionTime.Milliseconds()),
 	}
 }
 
-func (r *GeneticResource) Stats(species component.SpeciesType) component.GeneticStats {
-	switch species {
-	case component.SpeciesDrain:
-		best, worst, avg, _ := r.drainEngine.PoolStats()
-		return component.GeneticStats{
-			Generation:    r.drainEngine.Generation(),
-			Best:          best,
-			Worst:         worst,
-			Avg:           avg,
-			PendingCount:  r.drainEngine.PendingCount(),
-			OutcomesTotal: r.drainEngine.EvaluationsStarted(),
-		}
-
-	case component.SpeciesSwarm, component.SpeciesQuasar:
-		return component.GeneticStats{}
-	}
-	return component.GeneticStats{}
+// Tracker returns species tracker for telemetry
+func (r *GeneticResource) Tracker(id registry.SpeciesID) *registry.TrackedSpecies {
+	return r.registry.GetTracker(id)
 }

@@ -18,7 +18,8 @@ type DecodedPhenotype struct {
 	HomingAccel    int64
 	AggressionMult int64
 
-	// Swarm (future)
+	// TODO: these parameters are just placeholders, there is no meaning to optimize them
+	// Swarm
 	ChaseSpeedMult int64
 	LockDuration   time.Duration
 	ChargeDuration time.Duration

@@ -111,6 +111,9 @@ func RegisterSystems() {
 	registry.RegisterSystem("genetic", func(w any) any {
 		return system.NewGeneticSystem(w.(*engine.World))
 	})
+	registry.RegisterSystem("audio", func(w any) any {
+		return system.NewAudioSystem(w.(*engine.World))
+	})
 	registry.RegisterSystem("music", func(w any) any {
 		return system.NewMusicSystem(w.(*engine.World))
 	})
@@ -228,6 +231,7 @@ func ActiveSystems() []string {
 		"death",
 		"timekeeper",
 		"genetic",
+		"audio",
 		"music",
 		"diag",
 	}
