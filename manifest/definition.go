@@ -106,6 +106,7 @@ var Systems = []SystemDef{
 	{"death", "NewDeathSystem"},
 	{"timekeeper", "NewTimeKeeperSystem"},
 	{"genetic", "NewGeneticSystem"},
+	{"audio", "NewAudioSystem"},
 	{"music", "NewMusicSystem"},
 	{"diag", "NewDiagSystem"},
 }
