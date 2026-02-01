@@ -131,7 +131,7 @@ type GeneticProvider interface {
 	Reset()
 
 	Sample(species component.SpeciesType) (genotype []float64, evalID uint64)
-	Decode(species component.SpeciesType, genotype []float64) component.DecodedPhenotype
+	Decode(species component.SpeciesType, genotype []float64) any
 	Complete(species component.SpeciesType, evalID uint64, fitness float64)
 	Stats(species component.SpeciesType) component.GeneticStats
 }

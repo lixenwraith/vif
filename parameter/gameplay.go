@@ -87,3 +87,9 @@ const (
 	// GoldSpawnMaxAttempts is the maximum number of attempts to find valid gold sequence position
 	GoldSpawnMaxAttempts = 100
 )
+
+// Macro
+const (
+	// MacroPlaybackInterval is delay between each macro intent during playback
+	MacroPlaybackInterval = 500 * time.Millisecond
+)

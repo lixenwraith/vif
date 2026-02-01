@@ -3,40 +3,14 @@ package component
 import "time"
 
 // SpeciesType identifies the entity type for genetic routing
+// Matches registry.SpeciesID for type compatibility
 type SpeciesType uint8
 
 const (
-	SpeciesDrain SpeciesType = iota
+	SpeciesDrain SpeciesType = iota + 1
 	SpeciesSwarm
 	SpeciesQuasar
 )
-
-// DecodedPhenotype holds decoded genetic parameters for all species
-// Only fields relevant to the species are populated
-type DecodedPhenotype struct {
-	// Drain
-	HomingAccel    int64
-	AggressionMult int64
-
-	// TODO: these parameters are just placeholders, there is no meaning to optimize them
-	// Swarm
-	ChaseSpeedMult int64
-	LockDuration   time.Duration
-	ChargeDuration time.Duration
-
-	// Quasar (future)
-	ZapDuration time.Duration
-}
-
-// GeneticStats holds telemetry for a species population
-type GeneticStats struct {
-	Generation    int
-	Best          float64
-	Worst         float64
-	Avg           float64
-	PendingCount  int
-	OutcomesTotal uint64
-}
 
 // GenotypeComponent stores evolution data for tracked entities
 type GenotypeComponent struct {
@@ -50,4 +24,14 @@ type GenotypeComponent struct {
 	CumulativeDistSq float64
 	DistSamples      int
 	TimeInShield     time.Duration
+}
+
+// GeneticStats holds telemetry for a species population
+type GeneticStats struct {
+	Generation    int
+	Best          float64
+	Worst         float64
+	Avg           float64
+	PendingCount  int
+	OutcomesTotal uint64
 }

@@ -26,4 +26,5 @@ const (
 	StatePrefixG
 	StateOperatorPrefixG
 	StateMarkerAwaitColor // After g+direction, awaiting r/g/b or repeat direction
+	StateMacroAwait       // after '@', awaiting register key (q)
 )

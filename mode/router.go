@@ -15,6 +15,8 @@ type Router struct {
 	ctx     *engine.GameContext
 	machine *input.Machine
 
+	macro *MacroRecorder
+
 	// Input state (find/search repeat)
 	lastSearchText  string // Preserved for n/N repeat
 	lastFindChar    rune   // Target character for f/F/t/T
@@ -31,6 +33,7 @@ func NewRouter(ctx *engine.GameContext, machine *input.Machine) *Router {
 	r := &Router{
 		ctx:     ctx,
 		machine: machine,
+		macro:   NewMacroRecorder(),
 	}
 
 	r.motionLUT = map[input.MotionOp]MotionFunc{
@@ -81,11 +84,44 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return true
 	}
 
+	// Macro reset check (triggered by :new)
+	if r.ctx.MacroClearFlag.CompareAndSwap(true, false) {
+		r.macro.Reset()
+		r.ctx.MacroRecording.Store(false)
+		r.ctx.MacroPlaying.Store(false)
+	}
+
 	// Clear status message on any action
 	if r.ctx.GetStatusMessage() != "" {
 		r.ctx.SetStatusMessage("")
 	}
 	r.ctx.State.RecordAction()
+
+	// Macro playback interrupt: q stops playback
+	if r.macro.IsPlaying() && intent.Type == input.IntentMacroRecordToggle {
+		r.macro.StopPlayback()
+		r.ctx.MacroPlaying.Store(false)
+		return true
+	}
+
+	// Recording: ESC stops recording (then continues to normal ESC handling)
+	if r.macro.IsRecording() && intent.Type == input.IntentEscape {
+		r.macro.StopRecording()
+		r.ctx.MacroRecording.Store(false)
+	}
+
+	// Handle macro control intents
+	switch intent.Type {
+	case input.IntentMacroRecordToggle:
+		return r.handleMacroRecordToggle()
+	case input.IntentMacroPlay:
+		return r.handleMacroPlay(intent)
+	}
+
+	// Record intent if recording (exclude macro meta-intents, already handled above)
+	if r.macro.IsRecording() {
+		r.macro.Record(*intent)
+	}
 
 	switch intent.Type {
 	// System
@@ -807,6 +843,41 @@ func (r *Router) handleOverlayScroll(intent *input.Intent) bool {
 
 	r.ctx.SetOverlayScroll(newScroll)
 	return true
+}
+
+// --- Macro ---
+
+func (r *Router) handleMacroRecordToggle() bool {
+	if r.macro.IsRecording() {
+		r.macro.StopRecording()
+		r.ctx.MacroRecording.Store(false)
+	} else {
+		r.macro.StartRecording()
+		r.ctx.MacroRecording.Store(true)
+	}
+	return true
+}
+
+func (r *Router) handleMacroPlay(intent *input.Intent) bool {
+	now := r.ctx.PausableClock.Now()
+	if r.macro.StartPlayback(intent.Count, now) {
+		r.ctx.MacroPlaying.Store(true)
+	}
+	return true
+}
+
+// ProcessMacroTick returns next playback intent if ready, nil otherwise
+// Called from main loop; respects pause and command mode
+func (r *Router) ProcessMacroTick() *input.Intent {
+	if r.ctx.IsPaused.Load() || r.ctx.IsCommandMode() {
+		return nil
+	}
+	now := r.ctx.PausableClock.Now()
+	intent := r.macro.Tick(now)
+	if intent == nil && !r.macro.IsPlaying() {
+		r.ctx.MacroPlaying.Store(false)
+	}
+	return intent
 }
 
 // --- Helper Methods ---

@@ -121,6 +121,8 @@ func (m *Machine) processNormal(ev terminal.Event) *Intent {
 		return m.processOperatorPrefixG(ev.Rune)
 	case StateMarkerAwaitColor:
 		return m.processMarkerAwaitColor(ev.Rune)
+	case StateMacroAwait:
+		return m.processMacroAwait(ev.Rune)
 	}
 	return nil
 }
@@ -165,7 +167,11 @@ func (m *Machine) handleNormalEntry(entry KeyEntry, key rune) *Intent {
 
 	case BehaviorPrefix:
 		m.prefix = key
-		m.state = StatePrefixG
+		if key == '@' {
+			m.state = StateMacroAwait
+		} else {
+			m.state = StatePrefixG
+		}
 		return nil
 
 	case BehaviorModeSwitch:
@@ -358,6 +364,25 @@ func (m *Machine) processMarkerAwaitColor(key rune) *Intent {
 			Type:    IntentMotionMarkerJump,
 			Motion:  motion,
 			Char:    key, // 'r', 'g', 'b' - resolved to GlyphType in router
+			Count:   count,
+			Command: cmd,
+		}
+	}
+
+	// Any other key cancels
+	m.Reset()
+	return nil
+}
+
+func (m *Machine) processMacroAwait(key rune) *Intent {
+	m.cmdBuffer = append(m.cmdBuffer, key)
+
+	if key == 'q' {
+		count := m.effectiveCount()
+		cmd := m.captureCommand()
+		m.Reset()
+		return &Intent{
+			Type:    IntentMacroPlay,
 			Count:   count,
 			Command: cmd,
 		}

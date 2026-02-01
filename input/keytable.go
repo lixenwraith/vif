@@ -146,6 +146,10 @@ func DefaultKeyTable() *KeyTable {
 			'N': {BehaviorSpecial, MotionNone, SpecialSearchPrev, ModeTargetNone, IntentNone},
 			';': {BehaviorSpecial, MotionNone, SpecialRepeatFind, ModeTargetNone, IntentNone},
 			',': {BehaviorSpecial, MotionNone, SpecialRepeatFindRev, ModeTargetNone, IntentNone},
+
+			// Macro
+			'q': {BehaviorAction, MotionNone, SpecialNone, ModeTargetNone, IntentMacroRecordToggle},
+			'@': {BehaviorPrefix, MotionNone, SpecialNone, ModeTargetNone, IntentNone},
 		},
 
 		OperatorMotions: map[rune]KeyEntry{

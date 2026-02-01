@@ -33,6 +33,10 @@ const (
 	IntentMotionMarkerShow // gl/gh/gk/gj - show markers, await color
 	IntentMotionMarkerJump // r/g/b after marker show - jump to colored glyph
 
+	// Macro
+	IntentMacroRecordToggle // q - toggle macro recording
+	IntentMacroPlay         // @q - play macro
+
 	// Mode switching
 	IntentModeSwitch // i, /, :
 	IntentAppend     // a

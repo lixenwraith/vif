@@ -13,12 +13,16 @@ import (
 
 // --- Visual Constants ---
 var (
-	// Tokyo Night-ish palette
-	ColorBg    = terminal.RGB{R: 26, G: 27, B: 38}
-	ColorSmoke = terminal.RGB{R: 100, G: 100, B: 110}
-	ColorFire  = terminal.RGB{R: 255, G: 160, B: 50}
-	ColorCyan  = terminal.RGB{R: 0, G: 255, B: 255}
-	ColorPink  = terminal.RGB{R: 255, G: 0, B: 255}
+	ColorBg     = terminal.RGB{R: 26, G: 27, B: 38}
+	ColorSmoke  = terminal.RGB{R: 100, G: 100, B: 110}
+	ColorFire   = terminal.RGB{R: 255, G: 160, B: 50}
+	ColorCyan   = terminal.RGB{R: 0, G: 255, B: 255}
+	ColorPink   = terminal.RGB{R: 255, G: 0, B: 255}
+	ColorGold   = terminal.RGB{R: 255, G: 215, B: 0}
+	ColorGreen  = terminal.RGB{R: 50, G: 255, B: 50}
+	ColorPurple = terminal.RGB{R: 180, G: 100, B: 255}
+	ColorWhite  = terminal.RGB{R: 255, G: 255, B: 255}
+	ColorRed    = terminal.RGB{R: 255, G: 60, B: 60}
 )
 
 // --- Types ---
@@ -29,44 +33,56 @@ const (
 	MissileKinetic MissileType = iota
 	MissileHelix
 	MissileSeeker
+	MissileCluster
+	MissileLaser
+	MissileWave
+	MissileSpiral
+	MissileBounce
+	MissileCount // Sentinel for cycling
 )
 
 type Particle struct {
-	X, Y       int64 // Q32.32
+	X, Y       int64
 	VelX, VelY int64
-	Age        int // Frames alive
+	Age        int
 	MaxAge     int
 	Char       rune
 	ColorStart terminal.RGB
 	ColorEnd   terminal.RGB
+	Scale      float64 // Size multiplier for intensity
 }
 
 type Missile struct {
 	Type   MissileType
 	Active bool
 	Pos    core.Kinetic
-	Origin core.Point // Screen coords
-	Target core.Point // Screen coords
+	Origin core.Point
+	Target core.Point
 
-	// State for specific behaviors
-	Age       int64 // Frames
-	Phase     int64 // For Helix
-	SteerVecX int64 // For Seeker smoothing
+	Age       int64
+	Phase     int64
+	SteerVecX int64
 	SteerVecY int64
+
+	// Cluster submunitions
+	Children []*Missile
+
+	// Bounce state
+	Bounces int
+
+	// Spiral state
+	Angle int64
 
 	Trail []Particle
 }
 
-// Global state for screen dimensions
 var (
 	screenWidth  int
 	screenHeight int
+	globalRng    = vmath.NewFastRand(uint64(time.Now().UnixNano()))
 )
 
-// --- Logic Implementation ---
-
 func main() {
-	// 1. Setup Terminal
 	term := terminal.New(terminal.ColorModeTrueColor)
 	if err := term.Init(); err != nil {
 		panic(err)
@@ -74,23 +90,15 @@ func main() {
 	defer term.Fini()
 	term.SetCursorVisible(false)
 
-	// 2. Get Initial Size
 	screenWidth, screenHeight = term.Size()
-
-	// 3. Setup Render Buffer
 	buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, screenWidth, screenHeight)
 
-	// 4. State
 	missiles := make([]*Missile, 0)
-
-	// Targets: Top-Right, Mid-Right, Bottom-Right
 	targets := make([]core.Point, 3)
 	updateTargets(targets)
 
 	currentTargetIdx := 1
 	currentType := MissileKinetic
-
-	// Origin: Mid-Left
 	origin := core.Point{X: 10, Y: screenHeight / 2}
 
 	inputCh := make(chan terminal.Event, 10)
@@ -104,7 +112,6 @@ func main() {
 	ticker := time.NewTicker(time.Second / 60)
 	defer ticker.Stop()
 
-	// 5. Main Loop
 	running := true
 	for running {
 		select {
@@ -113,43 +120,25 @@ func main() {
 				switch ev.Key {
 				case terminal.KeyEscape, terminal.KeyCtrlC:
 					running = false
-
-				// --- Firing Controls ---
-				// Handle Spacebar (KeySpace usually triggers on specialized keyboards,
-				// but standard typing sends a Rune ' ')
 				case terminal.KeySpace:
 					m := SpawnMissile(currentType, origin, targets[currentTargetIdx])
 					missiles = append(missiles, m)
-
 				case terminal.KeyRune:
 					if ev.Rune == ' ' {
 						m := SpawnMissile(currentType, origin, targets[currentTargetIdx])
 						missiles = append(missiles, m)
 					}
-					// Support number keys as fallback
-					if ev.Rune == '1' {
-						currentType = MissileKinetic
+					if ev.Rune >= '1' && ev.Rune <= '8' {
+						currentType = MissileType(ev.Rune - '1')
 					}
-					if ev.Rune == '2' {
-						currentType = MissileHelix
-					}
-					if ev.Rune == '3' {
-						currentType = MissileSeeker
-					}
-
-				// --- Navigation Controls ---
 				case terminal.KeyUp:
 					currentTargetIdx = (currentTargetIdx - 1 + len(targets)) % len(targets)
 				case terminal.KeyDown:
 					currentTargetIdx = (currentTargetIdx + 1) % len(targets)
-
-				// --- Weapon Switching (User Mappings) ---
-				case terminal.KeyEnter:
-					currentType = MissileKinetic
-				case terminal.KeyTab:
-					currentType = MissileHelix
-				case terminal.KeyBackspace:
-					currentType = MissileSeeker
+				case terminal.KeyLeft:
+					currentType = (currentType - 1 + MissileCount) % MissileCount
+				case terminal.KeyRight:
+					currentType = (currentType + 1) % MissileCount
 				}
 			}
 
@@ -161,49 +150,59 @@ func main() {
 			term.Sync()
 
 		case <-ticker.C:
-			// Update
 			UpdateMissiles(missiles)
 
-			// Cleanup dead missiles
 			active := missiles[:0]
 			for _, m := range missiles {
-				if m.Active || len(m.Trail) > 0 {
+				if m.Active || len(m.Trail) > 0 || hasActiveChildren(m) {
 					active = append(active, m)
 				}
 			}
 			missiles = active
 
-			// Render
 			buf.Clear()
 
-			// Draw Targets
+			// Draw targets
 			for i, t := range targets {
-				char := 'O'
-				color := terminal.RGB{R: 100, G: 100, B: 100}
+				char, color := 'o', terminal.RGB{R: 80, G: 80, B: 80}
 				if i == currentTargetIdx {
-					char = 'X'
-					color = terminal.RGB{R: 255, G: 0, B: 0}
+					char, color = '◎', ColorRed
 				}
 				if t.X < screenWidth && t.Y < screenHeight {
 					buf.Set(t.X, t.Y, char, color, ColorBg, render.BlendReplace, 1.0, terminal.AttrBold)
 				}
 			}
 
-			// Draw Origin
-			buf.Set(origin.X, origin.Y, '>', terminal.RGB{R: 0, G: 255, B: 0}, ColorBg, render.BlendReplace, 1.0, terminal.AttrNone)
+			// Draw origin
+			buf.Set(origin.X, origin.Y, '▶', ColorGreen, ColorBg, render.BlendReplace, 1.0, terminal.AttrBold)
 
 			// Draw UI
-			uiText := fmt.Sprintf("Type: %s [Ent/Tab/Bksp] | Target: %d [Up/Down] | Fire: [Space] | Esc: Quit",
-				MissileTypeName(currentType), currentTargetIdx)
-			DrawString(buf, 2, screenHeight-1, uiText, terminal.RGB{R: 200, G: 200, B: 200})
+			uiText := fmt.Sprintf("[%s] ←/→:Type ↑/↓:Target Space:Fire Esc:Quit",
+				MissileTypeName(currentType))
+			DrawString(buf, 2, screenHeight-1, uiText, terminal.RGB{R: 180, G: 180, B: 180})
 
-			// Draw Missiles & Trails
+			// Draw type legend
+			for i := 0; i < int(MissileCount); i++ {
+				color := terminal.RGB{R: 100, G: 100, B: 100}
+				if MissileType(i) == currentType {
+					color = ColorGold
+				}
+				DrawString(buf, 2, 1+i, fmt.Sprintf("%d:%s", i+1, MissileTypeName(MissileType(i))), color)
+			}
+
 			RenderMissiles(buf, missiles)
-
-			// Output
 			buf.FlushToTerminal(term)
 		}
 	}
+}
+
+func hasActiveChildren(m *Missile) bool {
+	for _, c := range m.Children {
+		if c.Active || len(c.Trail) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func updateTargets(targets []core.Point) {
@@ -211,8 +210,6 @@ func updateTargets(targets []core.Point) {
 	targets[1] = core.Point{X: screenWidth - 10, Y: screenHeight / 2}
 	targets[2] = core.Point{X: screenWidth - 10, Y: screenHeight - 5}
 }
-
-// --- Spawning & Updates ---
 
 func SpawnMissile(t MissileType, origin, target core.Point) *Missile {
 	m := &Missile{
@@ -224,43 +221,59 @@ func SpawnMissile(t MissileType, origin, target core.Point) *Missile {
 			PreciseX: vmath.FromInt(origin.X),
 			PreciseY: vmath.FromInt(origin.Y),
 		},
-		Trail: make([]Particle, 0, 50),
+		Trail: make([]Particle, 0, 100),
 	}
 
-	// Initial Velocity Calculation
 	dx := vmath.FromInt(target.X - origin.X)
 	dy := vmath.FromInt(target.Y - origin.Y)
 	dist := vmath.Magnitude(dx, dy)
-
 	if dist == 0 {
 		dist = vmath.Scale
 	}
-
 	dirX := vmath.Div(dx, dist)
 	dirY := vmath.Div(dy, dist)
 
 	switch t {
 	case MissileKinetic:
-		speed := vmath.FromInt(60) // 60 cells/sec
+		speed := vmath.FromInt(55)
 		m.Pos.VelX = vmath.Mul(dirX, speed)
-		m.Pos.VelY = vmath.Mul(dirY, speed) - vmath.FromInt(10) // Aim slightly up
+		m.Pos.VelY = vmath.Mul(dirY, speed) - vmath.FromInt(15)
 
 	case MissileHelix:
-		speed := vmath.FromInt(40)
+		speed := vmath.FromInt(35)
 		m.Pos.VelX = vmath.Mul(dirX, speed)
 		m.Pos.VelY = vmath.Mul(dirY, speed)
 
 	case MissileSeeker:
-		speed := vmath.FromInt(15)
-		// Launch perpendicular to target
+		speed := vmath.FromInt(12)
 		perpX, perpY := vmath.Perpendicular(dirX, dirY)
-
-		if m.Origin.Y > m.Target.Y {
+		if origin.Y > target.Y {
 			perpX, perpY = -perpX, -perpY
 		}
-
 		m.Pos.VelX = vmath.Mul(perpX, speed)
 		m.Pos.VelY = vmath.Mul(perpY, speed)
+
+	case MissileCluster:
+		speed := vmath.FromInt(40)
+		m.Pos.VelX = vmath.Mul(dirX, speed)
+		m.Pos.VelY = vmath.Mul(dirY, speed) - vmath.FromInt(8)
+
+	case MissileLaser:
+		// Instant - no velocity, handled in update
+
+	case MissileWave:
+		speed := vmath.FromInt(45)
+		m.Pos.VelX = vmath.Mul(dirX, speed)
+		m.Pos.VelY = vmath.Mul(dirY, speed)
+
+	case MissileSpiral:
+		m.Angle = 0
+
+	case MissileBounce:
+		speed := vmath.FromInt(50)
+		m.Pos.VelX = vmath.Mul(dirX, speed)
+		m.Pos.VelY = vmath.Mul(dirY, speed)
+		m.Bounces = 3
 	}
 
 	return m
@@ -272,248 +285,510 @@ func UpdateMissiles(missiles []*Missile) {
 	for _, m := range missiles {
 		if !m.Active {
 			UpdateTrail(m)
+			for _, c := range m.Children {
+				if c.Active {
+					updateSingleMissile(c, dt)
+				}
+				UpdateTrail(c)
+			}
 			continue
 		}
 
-		m.Age++
-
-		switch m.Type {
-		case MissileKinetic:
-			// Ballistic
-			gravity := vmath.FromInt(20)
-			m.Pos.VelY += vmath.Mul(gravity, dt)
-
-			m.Pos.PreciseX += vmath.Mul(m.Pos.VelX, dt)
-			m.Pos.PreciseY += vmath.Mul(m.Pos.VelY, dt)
-
-			if m.Age%2 == 0 {
-				AddSmokeParticle(m)
-			}
-
-		case MissileHelix:
-			// Linear
-			m.Pos.PreciseX += vmath.Mul(m.Pos.VelX, dt)
-			m.Pos.PreciseY += vmath.Mul(m.Pos.VelY, dt)
-			m.Phase += vmath.FromInt(15)
-
-			// Helix Trail
-			baseX, baseY := vmath.Normalize2D(m.Pos.VelX, m.Pos.VelY)
-			perpX, perpY := vmath.Perpendicular(baseX, baseY)
-
-			amp := vmath.FromInt(2)
-			sinVal := vmath.Sin(m.Phase)
-			offX := vmath.Mul(vmath.Mul(perpX, amp), sinVal)
-			offY := vmath.Mul(vmath.Mul(perpY, amp), sinVal)
-
-			AddHelixParticle(m, offX, offY, ColorCyan)
-			AddHelixParticle(m, -offX, -offY, ColorPink)
-
-		case MissileSeeker:
-			// Steering
-			targetX := vmath.FromInt(m.Target.X)
-			targetY := vmath.FromInt(m.Target.Y)
-
-			dx := targetX - m.Pos.PreciseX
-			dy := targetY - m.Pos.PreciseY
-			dist := vmath.Magnitude(dx, dy)
-
-			if dist < vmath.FromInt(1) {
-				m.Active = false
-				continue
-			}
-
-			maxSpeed := vmath.FromInt(55)
-			steerForce := vmath.FromInt(120)
-
-			desiredX, desiredY := vmath.Normalize2D(dx, dy)
-			desiredX = vmath.Mul(desiredX, maxSpeed)
-			desiredY = vmath.Mul(desiredY, maxSpeed)
-
-			steerX := desiredX - m.Pos.VelX
-			steerY := desiredY - m.Pos.VelY
-
-			steerX, steerY = vmath.ClampMagnitude(steerX, steerY, steerForce)
-
-			m.Pos.VelX += vmath.Mul(steerX, dt)
-			m.Pos.VelY += vmath.Mul(steerY, dt)
-
-			m.Pos.PreciseX += vmath.Mul(m.Pos.VelX, dt)
-			m.Pos.PreciseY += vmath.Mul(m.Pos.VelY, dt)
-
-			AddFlareParticle(m)
-		}
-
-		px, py := vmath.ToInt(m.Pos.PreciseX), vmath.ToInt(m.Pos.PreciseY)
-
-		// Simple hit check
-		tDx := px - m.Target.X
-		tDy := py - m.Target.Y
-		if tDx*tDx+tDy*tDy < 4 {
-			m.Active = false
-		}
-
-		// Out of bounds
-		if px < 0 || px >= screenWidth || py < 0 || py >= screenHeight {
-			m.Active = false
-		}
-
+		updateSingleMissile(m, dt)
 		UpdateTrail(m)
 	}
 }
 
-// --- Particle System ---
+func updateSingleMissile(m *Missile, dt int64) {
+	if !m.Active {
+		return
+	}
+	m.Age++
+
+	switch m.Type {
+	case MissileKinetic:
+		gravity := vmath.FromInt(25)
+		m.Pos.VelY += vmath.Mul(gravity, dt)
+		m.Pos.PreciseX += vmath.Mul(m.Pos.VelX, dt)
+		m.Pos.PreciseY += vmath.Mul(m.Pos.VelY, dt)
+
+		// Dense smoke trail
+		if m.Age%2 == 0 {
+			speed := vmath.Magnitude(m.Pos.VelX, m.Pos.VelY)
+			intensity := float64(speed) / float64(vmath.FromInt(80))
+			if intensity > 1 {
+				intensity = 1
+			}
+			m.Trail = append(m.Trail, Particle{
+				X: m.Pos.PreciseX, Y: m.Pos.PreciseY,
+				VelX: -m.Pos.VelX / 20, VelY: -m.Pos.VelY / 20,
+				MaxAge: 25, Char: '░',
+				ColorStart: terminal.RGB{R: 255, G: 200, B: 150},
+				ColorEnd:   terminal.RGB{R: 60, G: 60, B: 70},
+				Scale:      intensity,
+			})
+		}
+		// Sparks
+		if m.Age%4 == 0 {
+			m.Trail = append(m.Trail, Particle{
+				X: m.Pos.PreciseX, Y: m.Pos.PreciseY,
+				VelX:   int64(globalRng.Intn(int(vmath.Scale*2))) - vmath.Scale,
+				VelY:   int64(globalRng.Intn(int(vmath.Scale*2))) - vmath.Scale,
+				MaxAge: 8, Char: '·',
+				ColorStart: ColorFire, ColorEnd: ColorRed,
+			})
+		}
+
+	case MissileHelix:
+		m.Pos.PreciseX += vmath.Mul(m.Pos.VelX, dt)
+		m.Pos.PreciseY += vmath.Mul(m.Pos.VelY, dt)
+		m.Phase += vmath.FromInt(12)
+
+		baseX, baseY := vmath.Normalize2D(m.Pos.VelX, m.Pos.VelY)
+		perpX, perpY := vmath.Perpendicular(baseX, baseY)
+
+		// Triple helix with phase offsets
+		for i := 0; i < 3; i++ {
+			phase := m.Phase + vmath.FromInt(i*120)
+			amp := vmath.FromFloat(2.5)
+			sinVal := vmath.Sin(phase)
+			cosVal := vmath.Cos(phase)
+
+			offX := vmath.Mul(vmath.Mul(perpX, amp), sinVal)
+			offY := vmath.Mul(vmath.Mul(perpY, amp), sinVal)
+
+			colors := []terminal.RGB{ColorCyan, ColorPink, ColorPurple}
+			m.Trail = append(m.Trail, Particle{
+				X: m.Pos.PreciseX + offX, Y: m.Pos.PreciseY + offY,
+				MaxAge: 18, Char: '∘',
+				ColorStart: colors[i], ColorEnd: terminal.RGB{R: 20, G: 20, B: 40},
+				Scale: 0.5 + 0.5*float64(cosVal)/float64(vmath.Scale),
+			})
+		}
+
+	case MissileSeeker:
+		targetX := vmath.FromInt(m.Target.X)
+		targetY := vmath.FromInt(m.Target.Y)
+		dx := targetX - m.Pos.PreciseX
+		dy := targetY - m.Pos.PreciseY
+		dist := vmath.Magnitude(dx, dy)
+
+		if dist < vmath.FromInt(2) {
+			m.Active = false
+			spawnExplosion(m)
+			return
+		}
+
+		maxSpeed := vmath.FromInt(50)
+		steerForce := vmath.FromInt(100)
+
+		desiredX, desiredY := vmath.Normalize2D(dx, dy)
+		desiredX = vmath.Mul(desiredX, maxSpeed)
+		desiredY = vmath.Mul(desiredY, maxSpeed)
+
+		steerX := desiredX - m.Pos.VelX
+		steerY := desiredY - m.Pos.VelY
+		steerX, steerY = vmath.ClampMagnitude(steerX, steerY, steerForce)
+
+		m.Pos.VelX += vmath.Mul(steerX, dt)
+		m.Pos.VelY += vmath.Mul(steerY, dt)
+		m.Pos.PreciseX += vmath.Mul(m.Pos.VelX, dt)
+		m.Pos.PreciseY += vmath.Mul(m.Pos.VelY, dt)
+
+		// Engine flare
+		velX, velY := vmath.Normalize2D(m.Pos.VelX, m.Pos.VelY)
+		m.Trail = append(m.Trail, Particle{
+			X:      m.Pos.PreciseX - vmath.Mul(velX, vmath.Scale),
+			Y:      m.Pos.PreciseY - vmath.Mul(velY, vmath.Scale),
+			MaxAge: 10, Char: '▓',
+			ColorStart: ColorWhite, ColorEnd: ColorFire,
+		})
+		// Side exhaust
+		perpX, perpY := vmath.Perpendicular(velX, velY)
+		for _, sign := range []int64{1, -1} {
+			m.Trail = append(m.Trail, Particle{
+				X:      m.Pos.PreciseX - vmath.Mul(velX, vmath.Scale/2) + sign*vmath.Mul(perpX, vmath.Scale/3),
+				Y:      m.Pos.PreciseY - vmath.Mul(velY, vmath.Scale/2) + sign*vmath.Mul(perpY, vmath.Scale/3),
+				MaxAge: 6, Char: '·',
+				ColorStart: ColorCyan, ColorEnd: ColorBg,
+			})
+		}
+
+	case MissileCluster:
+		gravity := vmath.FromInt(18)
+		m.Pos.VelY += vmath.Mul(gravity, dt)
+		m.Pos.PreciseX += vmath.Mul(m.Pos.VelX, dt)
+		m.Pos.PreciseY += vmath.Mul(m.Pos.VelY, dt)
+
+		if m.Age%3 == 0 {
+			m.Trail = append(m.Trail, Particle{
+				X: m.Pos.PreciseX, Y: m.Pos.PreciseY,
+				MaxAge: 15, Char: '░',
+				ColorStart: ColorGold, ColorEnd: ColorSmoke,
+			})
+		}
+
+		// Split at apex or after time
+		if m.Pos.VelY > 0 && m.Age > 20 && len(m.Children) == 0 {
+			m.Active = false
+			for i := 0; i < 5; i++ {
+				angle := float64(i)*math.Pi/2.5 - math.Pi/2
+				child := &Missile{
+					Type:   MissileSeeker,
+					Active: true,
+					Origin: core.Point{X: vmath.ToInt(m.Pos.PreciseX), Y: vmath.ToInt(m.Pos.PreciseY)},
+					Target: m.Target,
+					Pos: core.Kinetic{
+						PreciseX: m.Pos.PreciseX,
+						PreciseY: m.Pos.PreciseY,
+						VelX:     vmath.FromFloat(math.Cos(angle) * 20),
+						VelY:     vmath.FromFloat(math.Sin(angle) * 20),
+					},
+					Trail: make([]Particle, 0, 50),
+				}
+				m.Children = append(m.Children, child)
+			}
+			// Burst effect
+			for i := 0; i < 12; i++ {
+				angle := float64(i) * math.Pi / 6
+				m.Trail = append(m.Trail, Particle{
+					X: m.Pos.PreciseX, Y: m.Pos.PreciseY,
+					VelX:   vmath.FromFloat(math.Cos(angle) * 3),
+					VelY:   vmath.FromFloat(math.Sin(angle) * 3),
+					MaxAge: 12, Char: '*',
+					ColorStart: ColorWhite, ColorEnd: ColorGold,
+				})
+			}
+		}
+
+	case MissileLaser:
+		if m.Age == 1 {
+			// Draw instant beam
+			x1, y1 := m.Origin.X, m.Origin.Y
+			x2, y2 := m.Target.X, m.Target.Y
+			steps := max(vmath.IntAbs(x2-x1), vmath.IntAbs(y2-y1))
+			for i := 0; i <= steps; i++ {
+				t := float64(i) / float64(steps)
+				px := vmath.FromFloat(float64(x1) + t*float64(x2-x1))
+				py := vmath.FromFloat(float64(y1) + t*float64(y2-y1))
+				m.Trail = append(m.Trail, Particle{
+					X: px, Y: py,
+					MaxAge: 15 - i/4, Char: '═',
+					ColorStart: ColorWhite, ColorEnd: ColorCyan,
+					Scale: 1.0 - t*0.5,
+				})
+			}
+			// Impact flash
+			for i := 0; i < 8; i++ {
+				angle := float64(i) * math.Pi / 4
+				m.Trail = append(m.Trail, Particle{
+					X: vmath.FromInt(x2), Y: vmath.FromInt(y2),
+					VelX:   vmath.FromFloat(math.Cos(angle) * 4),
+					VelY:   vmath.FromFloat(math.Sin(angle) * 4),
+					MaxAge: 10, Char: '✦',
+					ColorStart: ColorWhite, ColorEnd: ColorCyan,
+				})
+			}
+		}
+		if m.Age > 3 {
+			m.Active = false
+		}
+
+	case MissileWave:
+		m.Phase += vmath.FromInt(8)
+		baseVelX, baseVelY := vmath.Normalize2D(m.Pos.VelX, m.Pos.VelY)
+		perpX, perpY := vmath.Perpendicular(baseVelX, baseVelY)
+
+		// Sinusoidal offset
+		amp := vmath.FromFloat(4.0)
+		sinVal := vmath.Sin(m.Phase)
+		offsetX := vmath.Mul(vmath.Mul(perpX, amp), sinVal)
+		offsetY := vmath.Mul(vmath.Mul(perpY, amp), sinVal)
+
+		m.Pos.PreciseX += vmath.Mul(m.Pos.VelX, dt) + vmath.Mul(offsetX, dt*3)
+		m.Pos.PreciseY += vmath.Mul(m.Pos.VelY, dt) + vmath.Mul(offsetY, dt*3)
+
+		// Rainbow trail
+		hue := int(m.Age) % 256
+		color := hueToRGB(hue)
+		m.Trail = append(m.Trail, Particle{
+			X: m.Pos.PreciseX, Y: m.Pos.PreciseY,
+			MaxAge: 20, Char: '~',
+			ColorStart: color, ColorEnd: ColorBg,
+		})
+
+	case MissileSpiral:
+		m.Angle += vmath.FromFloat(0.15)
+		radius := vmath.FromFloat(float64(m.Age) * 0.3)
+		if radius > vmath.FromInt(25) {
+			m.Active = false
+			return
+		}
+
+		centerX := vmath.FromInt(m.Origin.X)
+		centerY := vmath.FromInt(m.Origin.Y)
+		cos := vmath.Cos(m.Angle)
+		sin := vmath.Sin(m.Angle)
+
+		m.Pos.PreciseX = centerX + vmath.Mul(cos, radius)
+		m.Pos.PreciseY = centerY + vmath.Mul(sin, radius)/2 // Aspect correction
+
+		// Dual spiral trail
+		m.Trail = append(m.Trail, Particle{
+			X: m.Pos.PreciseX, Y: m.Pos.PreciseY,
+			MaxAge: 30, Char: '◦',
+			ColorStart: ColorGreen, ColorEnd: ColorBg,
+		})
+		// Opposite arm
+		m.Trail = append(m.Trail, Particle{
+			X:      centerX - vmath.Mul(cos, radius),
+			Y:      centerY - vmath.Mul(sin, radius)/2,
+			MaxAge: 30, Char: '◦',
+			ColorStart: ColorPurple, ColorEnd: ColorBg,
+		})
+
+	case MissileBounce:
+		m.Pos.PreciseX += vmath.Mul(m.Pos.VelX, dt)
+		m.Pos.PreciseY += vmath.Mul(m.Pos.VelY, dt)
+
+		px, py := vmath.ToInt(m.Pos.PreciseX), vmath.ToInt(m.Pos.PreciseY)
+		bounced := false
+
+		if px <= 0 || px >= screenWidth-1 {
+			m.Pos.VelX = -m.Pos.VelX
+			bounced = true
+		}
+		if py <= 0 || py >= screenHeight-2 {
+			m.Pos.VelY = -m.Pos.VelY
+			bounced = true
+		}
+
+		if bounced {
+			m.Bounces--
+			// Bounce spark
+			for i := 0; i < 6; i++ {
+				angle := float64(globalRng.Intn(628)) / 100
+				m.Trail = append(m.Trail, Particle{
+					X: m.Pos.PreciseX, Y: m.Pos.PreciseY,
+					VelX:   vmath.FromFloat(math.Cos(angle) * 5),
+					VelY:   vmath.FromFloat(math.Sin(angle) * 5),
+					MaxAge: 8, Char: '✧',
+					ColorStart: ColorWhite, ColorEnd: ColorGold,
+				})
+			}
+		}
+
+		if m.Bounces < 0 {
+			m.Active = false
+			spawnExplosion(m)
+			return
+		}
+
+		// Comet trail
+		m.Trail = append(m.Trail, Particle{
+			X: m.Pos.PreciseX, Y: m.Pos.PreciseY,
+			MaxAge: 12, Char: '▪',
+			ColorStart: ColorGold, ColorEnd: ColorRed,
+		})
+	}
+
+	// Bounds and hit check
+	px, py := vmath.ToInt(m.Pos.PreciseX), vmath.ToInt(m.Pos.PreciseY)
+	if m.Type != MissileLaser && m.Type != MissileSpiral {
+		tDx := px - m.Target.X
+		tDy := py - m.Target.Y
+		if tDx*tDx+tDy*tDy < 4 {
+			m.Active = false
+			spawnExplosion(m)
+		}
+		if px < 0 || px >= screenWidth || py < 0 || py >= screenHeight {
+			m.Active = false
+		}
+	}
+}
+
+func spawnExplosion(m *Missile) {
+	for i := 0; i < 16; i++ {
+		angle := float64(i) * math.Pi / 8
+		speed := 2.0 + float64(globalRng.Intn(30))/10
+		m.Trail = append(m.Trail, Particle{
+			X: m.Pos.PreciseX, Y: m.Pos.PreciseY,
+			VelX:   vmath.FromFloat(math.Cos(angle) * speed),
+			VelY:   vmath.FromFloat(math.Sin(angle) * speed),
+			MaxAge: 15, Char: '✦',
+			ColorStart: ColorWhite, ColorEnd: ColorFire,
+		})
+	}
+}
 
 func UpdateTrail(m *Missile) {
 	live := m.Trail[:0]
-	for _, p := range m.Trail {
+	for i := range m.Trail {
+		p := &m.Trail[i]
 		p.Age++
 		if p.Age < p.MaxAge {
 			p.X += p.VelX
 			p.Y += p.VelY
-			live = append(live, p)
+			live = append(live, *p)
 		}
 	}
 	m.Trail = live
 }
 
-func AddSmokeParticle(m *Missile) {
-	m.Trail = append(m.Trail, Particle{
-		X:          m.Pos.PreciseX,
-		Y:          m.Pos.PreciseY,
-		VelX:       0,
-		VelY:       0,
-		MaxAge:     20,
-		Char:       '#',
-		ColorStart: terminal.RGB{R: 200, G: 200, B: 200},
-		ColorEnd:   terminal.RGB{R: 50, G: 50, B: 60},
-	})
-}
-
-func AddHelixParticle(m *Missile, offX, offY int64, color terminal.RGB) {
-	m.Trail = append(m.Trail, Particle{
-		X:          m.Pos.PreciseX + offX,
-		Y:          m.Pos.PreciseY + offY,
-		VelX:       0,
-		VelY:       0,
-		MaxAge:     15,
-		Char:       '·',
-		ColorStart: color,
-		ColorEnd:   terminal.RGB{R: 0, G: 0, B: 50},
-	})
-}
-
-func AddFlareParticle(m *Missile) {
-	velX, velY := vmath.Normalize2D(m.Pos.VelX, m.Pos.VelY)
-	m.Trail = append(m.Trail, Particle{
-		X:          m.Pos.PreciseX - vmath.Mul(velX, vmath.FromInt(1)),
-		Y:          m.Pos.PreciseY - vmath.Mul(velY, vmath.FromInt(1)),
-		VelX:       0,
-		VelY:       0,
-		MaxAge:     8,
-		Char:       '▒',
-		ColorStart: ColorFire,
-		ColorEnd:   terminal.RGB{R: 100, G: 0, B: 0},
-	})
-}
-
-// --- Rendering ---
-
 func RenderMissiles(buf *render.RenderBuffer, missiles []*Missile) {
 	for _, m := range missiles {
-		// Draw Trail
-		for _, p := range m.Trail {
-			screenX := vmath.ToInt(p.X)
-			screenY := vmath.ToInt(p.Y)
+		renderMissileTrail(buf, m)
+		renderMissileBody(buf, m)
 
-			if screenX < 0 || screenX >= screenWidth || screenY < 0 || screenY >= screenHeight {
-				continue
-			}
-
-			t := int64(p.Age) * vmath.Scale / int64(p.MaxAge)
-			color := render.LerpRGBFixed(p.ColorStart, p.ColorEnd, t)
-
-			char := p.Char
-			if m.Type == MissileKinetic {
-				if p.Age > 5 {
-					char = ':'
-				}
-				if p.Age > 10 {
-					char = '.'
-				}
-			}
-			buf.Set(screenX, screenY, char, color, ColorBg, render.BlendAddFg, 1.0, terminal.AttrNone)
-		}
-
-		// Draw Missile Body
-		if m.Active {
-			screenX := vmath.ToInt(m.Pos.PreciseX)
-			screenY := vmath.ToInt(m.Pos.PreciseY)
-
-			if screenX >= 0 && screenX < screenWidth && screenY >= 0 && screenY < screenHeight {
-				var char rune
-				var color terminal.RGB
-
-				angle := math.Atan2(float64(m.Pos.VelY), float64(m.Pos.VelX))
-
-				switch m.Type {
-				case MissileKinetic:
-					char = AngleToChar(angle)
-					color = terminal.RGB{R: 255, G: 255, B: 255}
-				case MissileHelix:
-					chars := []rune{'+', 'x'}
-					char = chars[(m.Age/5)%2]
-					color = ColorCyan
-				case MissileSeeker:
-					char = AngleToArrow(angle)
-					color = ColorFire
-				}
-				buf.Set(screenX, screenY, char, color, ColorBg, render.BlendReplace, 1.0, terminal.AttrBold)
-			}
+		for _, c := range m.Children {
+			renderMissileTrail(buf, c)
+			renderMissileBody(buf, c)
 		}
 	}
+}
+
+func renderMissileTrail(buf *render.RenderBuffer, m *Missile) {
+	for _, p := range m.Trail {
+		screenX := vmath.ToInt(p.X)
+		screenY := vmath.ToInt(p.Y)
+
+		if screenX < 0 || screenX >= screenWidth || screenY < 0 || screenY >= screenHeight-1 {
+			continue
+		}
+
+		t := int64(p.Age) * vmath.Scale / int64(p.MaxAge)
+		color := render.LerpRGBFixed(p.ColorStart, p.ColorEnd, t)
+		alpha := 1.0 - float64(p.Age)/float64(p.MaxAge)
+		if p.Scale > 0 {
+			alpha *= p.Scale
+		}
+
+		char := p.Char
+		if m.Type == MissileKinetic {
+			switch {
+			case p.Age > 15:
+				char = '.'
+			case p.Age > 8:
+				char = '·'
+			}
+		}
+		buf.Set(screenX, screenY, char, color, ColorBg, render.BlendAddFg, alpha, terminal.AttrNone)
+	}
+}
+
+func renderMissileBody(buf *render.RenderBuffer, m *Missile) {
+	if !m.Active {
+		return
+	}
+
+	screenX := vmath.ToInt(m.Pos.PreciseX)
+	screenY := vmath.ToInt(m.Pos.PreciseY)
+
+	if screenX < 0 || screenX >= screenWidth || screenY < 0 || screenY >= screenHeight-1 {
+		return
+	}
+
+	var char rune
+	var color terminal.RGB
+	angle := math.Atan2(float64(m.Pos.VelY), float64(m.Pos.VelX))
+
+	switch m.Type {
+	case MissileKinetic:
+		char = AngleToChar(angle)
+		color = ColorWhite
+	case MissileHelix:
+		chars := []rune{'✧', '✦', '★'}
+		char = chars[(m.Age/4)%3]
+		color = render.LerpRGBFixed(ColorCyan, ColorPink, vmath.Sin(m.Phase))
+	case MissileSeeker:
+		char = AngleToArrow(angle)
+		color = ColorFire
+	case MissileCluster:
+		char = '◆'
+		color = ColorGold
+	case MissileLaser:
+		char = '⚡'
+		color = ColorCyan
+	case MissileWave:
+		char = '≋'
+		color = hueToRGB(int(m.Age) % 256)
+	case MissileSpiral:
+		char = '✺'
+		color = ColorGreen
+	case MissileBounce:
+		char = '●'
+		color = ColorGold
+	}
+
+	buf.Set(screenX, screenY, char, color, ColorBg, render.BlendReplace, 1.0, terminal.AttrBold)
+}
+
+func hueToRGB(hue int) terminal.RGB {
+	h := float64(hue) / 256.0 * 6.0
+	x := 1.0 - math.Abs(math.Mod(h, 2)-1)
+	var r, g, b float64
+	switch int(h) {
+	case 0:
+		r, g, b = 1, x, 0
+	case 1:
+		r, g, b = x, 1, 0
+	case 2:
+		r, g, b = 0, 1, x
+	case 3:
+		r, g, b = 0, x, 1
+	case 4:
+		r, g, b = x, 0, 1
+	default:
+		r, g, b = 1, 0, x
+	}
+	return terminal.RGB{R: uint8(r * 255), G: uint8(g * 255), B: uint8(b * 255)}
 }
 
 func AngleToChar(rad float64) rune {
 	if rad < 0 {
-		rad += math.Pi
+		rad += math.Pi * 2
 	}
 	deg := rad * 180 / math.Pi
-	if deg < 22.5 || deg > 157.5 {
-		return '-'
+	switch {
+	case deg < 22.5 || deg >= 337.5:
+		return '→'
+	case deg < 67.5:
+		return '↘'
+	case deg < 112.5:
+		return '↓'
+	case deg < 157.5:
+		return '↙'
+	case deg < 202.5:
+		return '←'
+	case deg < 247.5:
+		return '↖'
+	case deg < 292.5:
+		return '↑'
+	default:
+		return '↗'
 	}
-	if deg < 67.5 {
-		return '\\'
-	}
-	if deg < 112.5 {
-		return '|'
-	}
-	return '/'
 }
 
 func AngleToArrow(rad float64) rune {
 	deg := rad * 180 / math.Pi
-	if deg >= -22.5 && deg < 22.5 {
-		return '►'
-	}
-	if deg >= 22.5 && deg < 67.5 {
+	switch {
+	case deg >= -22.5 && deg < 22.5:
+		return '▸'
+	case deg >= 22.5 && deg < 67.5:
 		return '◢'
-	}
-	if deg >= 67.5 && deg < 112.5 {
-		return '▼'
-	}
-	if deg >= 112.5 && deg < 157.5 {
+	case deg >= 67.5 && deg < 112.5:
+		return '▾'
+	case deg >= 112.5 && deg < 157.5:
 		return '◣'
-	}
-	if deg >= 157.5 || deg < -157.5 {
-		return '◄'
-	}
-	if deg >= -157.5 && deg < -112.5 {
+	case deg >= 157.5 || deg < -157.5:
+		return '◂'
+	case deg >= -157.5 && deg < -112.5:
 		return '◤'
+	case deg >= -112.5 && deg < -67.5:
+		return '▴'
+	default:
+		return '◥'
 	}
-	if deg >= -112.5 && deg < -67.5 {
-		return '▲'
-	}
-	return '◥'
 }
 
 func DrawString(buf *render.RenderBuffer, x, y int, s string, color terminal.RGB) {
@@ -525,13 +800,18 @@ func DrawString(buf *render.RenderBuffer, x, y int, s string, color terminal.RGB
 }
 
 func MissileTypeName(t MissileType) string {
-	switch t {
-	case MissileKinetic:
-		return "KINETIC DART"
-	case MissileHelix:
-		return "HELIX PHASER"
-	case MissileSeeker:
-		return "SEEKER SWARM"
+	names := []string{
+		"KINETIC DART",
+		"HELIX PHASER",
+		"SEEKER SWARM",
+		"CLUSTER BOMB",
+		"LASER BEAM",
+		"WAVE RIDER",
+		"SPIRAL NOVA",
+		"BOUNCE BALL",
+	}
+	if int(t) < len(names) {
+		return names[t]
 	}
 	return "?"
 }

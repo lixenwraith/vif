@@ -129,6 +129,18 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		x++
 	}
 
+	// Macro recording indicator (overrides mode display)
+	if r.gameCtx.MacroRecording.Load() {
+		// Overwrite mode section with REC indicator
+		recText := parameter.ModeTextRecord
+		recX := x - len(modeText) // Start where mode text started
+		for i, ch := range recText {
+			if recX+i < ctx.ScreenWidth {
+				buf.SetWithBg(recX+i, statusY, ch, visual.RgbBlack, visual.RgbCursorError)
+			}
+		}
+	}
+
 	// Last command indicator
 	lastCommand := r.gameCtx.GetLastCommand()
 	leftEndX := x

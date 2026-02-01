@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/genetic/game/species"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/physics"
 	"github.com/lixenwraith/vi-fighter/vmath"
@@ -676,9 +677,11 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 
 	if genetic := s.world.Resources.Genetic; genetic != nil && genetic.Provider != nil {
 		genotype, evalID = genetic.Provider.Sample(component.SpeciesDrain)
-		phenotype := genetic.Provider.Decode(component.SpeciesDrain, genotype)
-		homingAccel = phenotype.HomingAccel
-		aggressionMult = phenotype.AggressionMult
+		phenotypeRaw := genetic.Provider.Decode(component.SpeciesDrain, genotype)
+		if phenotype, ok := phenotypeRaw.(species.DrainPhenotype); ok {
+			homingAccel = phenotype.HomingAccel
+			aggressionMult = phenotype.AggressionMult
+		}
 	}
 
 	// Initialize Kinetic with centered spawn position, zero velocity

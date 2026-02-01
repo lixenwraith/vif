@@ -178,3 +178,23 @@ func (ts *TrackedSpecies) Start() {
 func (ts *TrackedSpecies) Stop() {
 	ts.Engine.Stop()
 }
+
+// AcquireCollector gets a standard collector from pool
+func (ts *TrackedSpecies) AcquireCollector() *tracking.StandardCollector {
+	return ts.pool.AcquireStandard()
+}
+
+// ReleaseCollector returns standard collector to pool
+func (ts *TrackedSpecies) ReleaseCollector(c *tracking.StandardCollector) {
+	ts.pool.ReleaseStandard(c)
+}
+
+// AcquireCompositeCollector gets a composite collector from pool
+func (ts *TrackedSpecies) AcquireCompositeCollector() *tracking.CompositeCollector {
+	return ts.pool.AcquireComposite()
+}
+
+// ReleaseCompositeCollector returns composite collector to pool
+func (ts *TrackedSpecies) ReleaseCompositeCollector(c *tracking.CompositeCollector) {
+	ts.pool.ReleaseComposite(c)
+}

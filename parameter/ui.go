@@ -22,6 +22,7 @@ const (
 	ModeTextInsert  = " INSERT "
 	ModeTextSearch  = " SEARCH "
 	ModeTextCommand = " COMMAND "
+	ModeTextRecord  = " RECORD "
 
 	// UI Symbols
 	AudioStr = "♫ "

@@ -9,6 +9,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/genetic/game"
+	"github.com/lixenwraith/vi-fighter/genetic/game/species"
+	"github.com/lixenwraith/vi-fighter/genetic/tracking"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
@@ -17,7 +19,7 @@ import (
 type trackedEntity struct {
 	species   component.SpeciesType
 	evalID    uint64
-	collector *game.StandardCollector
+	collector *tracking.StandardCollector
 }
 
 // trackedComposite holds tracking state for composite entities (swarm, quasar)
@@ -25,7 +27,16 @@ type trackedComposite struct {
 	species      component.SpeciesType
 	evalID       uint64
 	headerEntity core.Entity
-	collector    *game.CompositeCollector
+	collector    *tracking.CompositeCollector
+}
+
+// EntityMetrics holds per-tick observation data
+type EntityMetrics struct {
+	DistanceToCursor float64
+	InsideShield     bool
+	CursorEnergy     int64
+	CursorHeat       int
+	MemberCount      int
 }
 
 // GeneticSystem observes entity lifecycle and reports fitness
@@ -71,6 +82,7 @@ func NewGeneticSystem(world *engine.World) engine.System {
 
 func (s *GeneticSystem) Init() {
 	clear(s.activeTracking)
+	clear(s.compositeTracking)
 	s.enabled = true
 
 	// Reset GA tracker on game reset (population retained, pending evals cleared)
@@ -144,8 +156,8 @@ func (s *GeneticSystem) Update() {
 		return
 	}
 
-	genetic := s.world.Resources.Genetic
-	if genetic == nil || genetic.Provider == nil {
+	genetic := s.getGeneticResource()
+	if genetic == nil {
 		return
 	}
 
@@ -154,8 +166,19 @@ func (s *GeneticSystem) Update() {
 	s.updatePlayerModel(genetic)
 	s.processEntityTracking(dt, genetic)
 	s.processCompositeTracking(dt, genetic)
-	s.detectNewEntities()
+	s.detectNewEntities(genetic)
 	s.updateTelemetry(genetic)
+}
+
+func (s *GeneticSystem) getGeneticResource() *game.GeneticResource {
+	if s.world.Resources.Genetic == nil || s.world.Resources.Genetic.Provider == nil {
+		return nil
+	}
+	res, ok := s.world.Resources.Genetic.Provider.(*game.GeneticResource)
+	if !ok {
+		return nil
+	}
+	return res
 }
 
 func (s *GeneticSystem) updateCursorState() {
@@ -182,25 +205,14 @@ func (s *GeneticSystem) updateCursorState() {
 	}
 }
 
-func (s *GeneticSystem) updatePlayerModel(genetic *engine.GeneticResource) {
-	res, ok := genetic.Provider.(*game.GeneticResource)
-	if !ok {
-		return
-	}
-
-	model := res.PlayerModel()
-	// TODO: EnergyMax doesn't make sense, energy can have polarity
-	model.RecordEnergyLevel(s.cursorEnergy, parameter.EnergyMax)
+func (s *GeneticSystem) updatePlayerModel(genetic *game.GeneticResource) {
+	model := genetic.PlayerModel()
+	model.RecordEnergyLevel(s.cursorEnergy)
 	model.RecordHeatLevel(s.cursorHeat, parameter.HeatMax)
 }
 
-func (s *GeneticSystem) processEntityTracking(dt time.Duration, genetic *engine.GeneticResource) {
-	res, ok := genetic.Provider.(*game.GeneticResource)
-	if !ok {
-		return
-	}
-
-	playerSnapshot := res.PlayerModel().Snapshot()
+func (s *GeneticSystem) processEntityTracking(dt time.Duration, genetic *game.GeneticResource) {
+	playerSnapshot := genetic.PlayerModel().Snapshot()
 
 	for entity, tracked := range s.activeTracking {
 		if !s.isEntityAlive(entity, tracked.species) {
@@ -226,24 +238,17 @@ func (s *GeneticSystem) processEntityTracking(dt time.Duration, genetic *engine.
 			)
 		}
 
-		metrics := game.EntityMetrics{
-			DistanceToCursor: dx*dx + dy*dy,
-			InsideShield:     insideShield,
-			CursorEnergy:     s.cursorEnergy,
-			CursorHeat:       s.cursorHeat,
+		metrics := tracking.MetricBundle{
+			species.DrainMetricDistanceSq: dx*dx + dy*dy,
+			species.DrainMetricInShield:   boolToFloat(insideShield),
 		}
 
 		tracked.collector.Collect(metrics, dt)
 	}
 }
 
-func (s *GeneticSystem) processCompositeTracking(dt time.Duration, genetic *engine.GeneticResource) {
-	res, ok := genetic.Provider.(*game.GeneticResource)
-	if !ok {
-		return
-	}
-
-	playerSnapshot := res.PlayerModel().Snapshot()
+func (s *GeneticSystem) processCompositeTracking(dt time.Duration, genetic *game.GeneticResource) {
+	playerSnapshot := genetic.PlayerModel().Snapshot()
 
 	for headerEntity, tracked := range s.compositeTracking {
 		header, ok := s.world.Components.Header.GetComponent(headerEntity)
@@ -268,19 +273,16 @@ func (s *GeneticSystem) processCompositeTracking(dt time.Duration, genetic *engi
 			}
 		}
 
-		metrics := game.EntityMetrics{
-			DistanceToCursor: dx*dx + dy*dy,
-			InsideShield:     false,
-			CursorEnergy:     s.cursorEnergy,
-			CursorHeat:       s.cursorHeat,
-			MemberCount:      memberCount,
+		metrics := tracking.MetricBundle{
+			species.DrainMetricDistanceSq: dx*dx + dy*dy,
+			tracking.MetricMemberCount:    float64(memberCount),
 		}
 
 		tracked.collector.Collect(metrics, dt)
 	}
 }
 
-func (s *GeneticSystem) detectNewEntities() {
+func (s *GeneticSystem) detectNewEntities(genetic *game.GeneticResource) {
 	for _, entity := range s.world.Components.Genotype.GetAllEntities() {
 		if _, tracked := s.activeTracking[entity]; tracked {
 			continue
@@ -294,32 +296,31 @@ func (s *GeneticSystem) detectNewEntities() {
 			continue
 		}
 
-		// Determine if this is a composite header or single entity
+		// Composite entities tracked via events, skip here
 		if s.world.Components.Header.HasEntity(entity) {
-			// Composite - tracked via events, skip here
 			continue
 		}
 
-		genetic := s.world.Resources.Genetic
-		res, ok := genetic.Provider.(*game.GeneticResource)
-		if !ok {
-			continue
-		}
-
-		tracker := res.Tracker(genoComp.Species)
-		if tracker == nil {
+		collector := genetic.AcquireCollector()
+		if collector == nil {
 			continue
 		}
 
 		s.activeTracking[entity] = &trackedEntity{
 			species:   genoComp.Species,
 			evalID:    genoComp.EvalID,
-			collector: tracker.AcquireCollector(),
+			collector: collector,
 		}
 	}
 }
 
 func (s *GeneticSystem) isEntityAlive(entity core.Entity, species component.SpeciesType) bool {
+	// Generic check: entity has genotype component
+	if !s.world.Components.Genotype.HasEntity(entity) {
+		return false
+	}
+
+	// Species-specific component check
 	switch species {
 	case component.SpeciesDrain:
 		return s.world.Components.Drain.HasEntity(entity)
@@ -335,29 +336,30 @@ func (s *GeneticSystem) completeEntityTracking(
 	entity core.Entity,
 	tracked *trackedEntity,
 	playerSnapshot game.PlayerBehaviorSnapshot,
-	genetic *engine.GeneticResource,
+	genetic *game.GeneticResource,
 ) {
-	res, ok := genetic.Provider.(*game.GeneticResource)
-	if !ok {
-		return
-	}
-
 	deathAtCursor := false
 	if pos, ok := s.world.Positions.GetPosition(entity); ok {
 		deathAtCursor = pos.X == s.cursorPos.X && pos.Y == s.cursorPos.Y
 	}
 
-	snapshot := tracked.collector.Finalize(deathAtCursor)
-
-	tracker := res.Tracker(tracked.species)
-	if tracker != nil && tracker.Aggregator != nil {
-		fitness := tracker.Aggregator.Calculate(snapshot, playerSnapshot)
-		genetic.Provider.Complete(tracked.species, tracked.evalID, fitness)
-		tracker.ReleaseCollector(tracked.collector)
+	deathCondition := tracking.MetricBundle{
+		tracking.MetricDeathAtTarget: boolToFloat(deathAtCursor),
 	}
+
+	snapshot := tracked.collector.Finalize(deathCondition)
+	ctx := genetic.PlayerContext()
+
+	ts := genetic.Tracker(species.DrainSpeciesID)
+	if ts != nil && ts.Aggregator != nil {
+		fitness := ts.Aggregator.Calculate(snapshot, ctx)
+		genetic.Complete(tracked.species, tracked.evalID, fitness)
+	}
+
+	genetic.ReleaseCollector(tracked.collector)
 }
 
-func (s *GeneticSystem) beginCompositeTracking(headerEntity core.Entity, species component.SpeciesType) {
+func (s *GeneticSystem) beginCompositeTracking(headerEntity core.Entity, speciesType component.SpeciesType) {
 	if _, exists := s.compositeTracking[headerEntity]; exists {
 		return
 	}
@@ -367,22 +369,21 @@ func (s *GeneticSystem) beginCompositeTracking(headerEntity core.Entity, species
 		return
 	}
 
-	genetic := s.world.Resources.Genetic
-	res, ok := genetic.Provider.(*game.GeneticResource)
-	if !ok {
+	genetic := s.getGeneticResource()
+	if genetic == nil {
 		return
 	}
 
-	tracker := res.Tracker(species)
-	if tracker == nil {
+	collector := genetic.AcquireCompositeCollector()
+	if collector == nil {
 		return
 	}
 
 	s.compositeTracking[headerEntity] = &trackedComposite{
-		species:      species,
+		species:      speciesType,
 		evalID:       genoComp.EvalID,
 		headerEntity: headerEntity,
-		collector:    tracker.AcquireCompositeCollector(),
+		collector:    collector,
 	}
 }
 
@@ -392,10 +393,9 @@ func (s *GeneticSystem) completeCompositeTracking(headerEntity core.Entity, deat
 		return
 	}
 
-	genetic := s.world.Resources.Genetic
-	res, resOk := genetic.Provider.(*game.GeneticResource)
-	if resOk {
-		playerSnapshot := res.PlayerModel().Snapshot()
+	genetic := s.getGeneticResource()
+	if genetic != nil {
+		playerSnapshot := genetic.PlayerModel().Snapshot()
 		s.completeCompositeTrackingInternal(headerEntity, tracked, playerSnapshot, genetic, deathAtCursor)
 	}
 
@@ -406,46 +406,53 @@ func (s *GeneticSystem) completeCompositeTrackingInternal(
 	headerEntity core.Entity,
 	tracked *trackedComposite,
 	playerSnapshot game.PlayerBehaviorSnapshot,
-	genetic *engine.GeneticResource,
+	genetic *game.GeneticResource,
 	deathAtCursor bool,
 ) {
-	res, ok := genetic.Provider.(*game.GeneticResource)
-	if !ok {
-		return
+	deathCondition := tracking.MetricBundle{
+		tracking.MetricDeathAtTarget: boolToFloat(deathAtCursor),
 	}
 
-	snapshot := tracked.collector.Finalize(deathAtCursor)
+	snapshot := tracked.collector.Finalize(deathCondition)
+	ctx := genetic.PlayerContext()
 
-	tracker := res.Tracker(tracked.species)
-	if tracker != nil && tracker.Aggregator != nil {
-		fitness := tracker.Aggregator.Calculate(snapshot, playerSnapshot)
-		genetic.Provider.Complete(tracked.species, tracked.evalID, fitness)
-		tracker.ReleaseCompositeCollector(tracked.collector)
+	ts := genetic.Tracker(species.DrainSpeciesID)
+	if ts != nil && ts.Aggregator != nil {
+		fitness := ts.Aggregator.Calculate(snapshot, ctx)
+		genetic.Complete(tracked.species, tracked.evalID, fitness)
 	}
+
+	genetic.ReleaseCompositeCollector(tracked.collector)
 }
 
-func (s *GeneticSystem) completeAllCompositeOfSpecies(species component.SpeciesType) {
-	genetic := s.world.Resources.Genetic
-	res, ok := genetic.Provider.(*game.GeneticResource)
-	if !ok {
+func (s *GeneticSystem) completeAllCompositeOfSpecies(speciesType component.SpeciesType) {
+	genetic := s.getGeneticResource()
+	if genetic == nil {
 		return
 	}
 
-	playerSnapshot := res.PlayerModel().Snapshot()
+	playerSnapshot := genetic.PlayerModel().Snapshot()
 
 	for headerEntity, tracked := range s.compositeTracking {
-		if tracked.species == species {
+		if tracked.species == speciesType {
 			s.completeCompositeTrackingInternal(headerEntity, tracked, playerSnapshot, genetic, false)
 			delete(s.compositeTracking, headerEntity)
 		}
 	}
 }
 
-func (s *GeneticSystem) updateTelemetry(genetic *engine.GeneticResource) {
-	stats := genetic.Provider.Stats(component.SpeciesDrain)
+func (s *GeneticSystem) updateTelemetry(genetic *game.GeneticResource) {
+	stats := genetic.Stats(component.SpeciesDrain)
 	s.statGeneration.Store(int64(stats.Generation))
 	s.statBest.Store(int64(stats.Best * 1000))
 	s.statAvg.Store(int64(stats.Avg * 1000))
 	s.statPending.Store(int64(stats.PendingCount))
 	s.statOutcomes.Store(int64(stats.OutcomesTotal))
+}
+
+func boolToFloat(b bool) float64 {
+	if b {
+		return 1.0
+	}
+	return 0.0
 }

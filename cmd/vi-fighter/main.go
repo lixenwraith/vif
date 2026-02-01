@@ -208,6 +208,14 @@ func main() {
 			// Increment frame number at the start of the frame cycle
 			ctx.IncrementFrameNumber()
 
+			// Process macro playback tick
+			if macroIntent := router.ProcessMacroTick(); macroIntent != nil {
+				if !router.Handle(macroIntent) {
+					return
+				}
+				clockScheduler.DispatchEventsImmediately()
+			}
+
 			// Snapshots for rendering (captured safely under lock)
 			var (
 				snapTimeRes engine.TimeResource

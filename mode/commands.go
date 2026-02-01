@@ -82,6 +82,7 @@ func handleQuitCommand(ctx *engine.GameContext) CommandResult {
 func handleNewCommand(ctx *engine.GameContext) CommandResult {
 	ctx.PushEvent(event.EventGameReset, nil)
 	ctx.SetLastCommand(":new")
+	ctx.MacroClearFlag.Store(true) // Signal macro reset
 	return CommandResult{Continue: true, KeepPaused: true}
 }
 
