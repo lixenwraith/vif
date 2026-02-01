@@ -45,6 +45,7 @@ var Components = []ComponentDef{
 	{"Blossom", "BlossomComponent"},
 	{"Cleaner", "CleanerComponent"},
 	{"Combat", "CombatComponent"},
+	{"Genotype", "GenotypeComponent"},
 	{"Drain", "DrainComponent"},
 	{"Quasar", "QuasarComponent"},
 	{"Swarm", "SwarmComponent"},
@@ -104,6 +105,7 @@ var Systems = []SystemDef{
 	{"environment", "NewEnvironmentSystem"},
 	{"death", "NewDeathSystem"},
 	{"timekeeper", "NewTimeKeeperSystem"},
+	{"genetic", "NewGeneticSystem"},
 	{"music", "NewMusicSystem"},
 	{"diag", "NewDiagSystem"},
 }

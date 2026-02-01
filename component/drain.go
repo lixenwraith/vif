@@ -13,9 +13,7 @@ type DrainComponent struct {
 	LastIntX      int       // Cell-entry detection
 	LastIntY      int       // Cell-entry detection
 
-	// Evolved phenotype parameters (Q32.32)
-	// Applied at spawn from GA population sample
-	Genotype       []float64 // Raw genotype for tracking
-	HomingAccel    int64     // Overrides parameter.DrainHomingAccel
-	AggressionMult int64     // Speed multiplier (Scale = 1.0)
+	// Evolved phenotype parameters (Q32.32), applied at spawn from genotype
+	HomingAccel    int64 // Overrides parameter.DrainHomingAccel
+	AggressionMult int64 // Speed multiplier (Scale = 1.0)
 }

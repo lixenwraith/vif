@@ -26,6 +26,7 @@ type Component struct {
 	Blossom     *Store[component.BlossomComponent]
 	Cleaner     *Store[component.CleanerComponent]
 	Combat      *Store[component.CombatComponent]
+	Genotype    *Store[component.GenotypeComponent]
 	Drain       *Store[component.DrainComponent]
 	Quasar      *Store[component.QuasarComponent]
 	Swarm       *Store[component.SwarmComponent]
@@ -62,6 +63,7 @@ func initComponents(w *World) {
 	w.Components.Blossom = NewStore[component.BlossomComponent]()
 	w.Components.Cleaner = NewStore[component.CleanerComponent]()
 	w.Components.Combat = NewStore[component.CombatComponent]()
+	w.Components.Genotype = NewStore[component.GenotypeComponent]()
 	w.Components.Drain = NewStore[component.DrainComponent]()
 	w.Components.Quasar = NewStore[component.QuasarComponent]()
 	w.Components.Swarm = NewStore[component.SwarmComponent]()
@@ -99,6 +101,7 @@ func (w *World) removeEntity(e core.Entity) {
 	w.Components.Blossom.RemoveEntity(e)
 	w.Components.Cleaner.RemoveEntity(e)
 	w.Components.Combat.RemoveEntity(e)
+	w.Components.Genotype.RemoveEntity(e)
 	w.Components.Drain.RemoveEntity(e)
 	w.Components.Quasar.RemoveEntity(e)
 	w.Components.Swarm.RemoveEntity(e)
@@ -135,6 +138,7 @@ func (w *World) wipeAll() {
 	w.Components.Blossom.ClearAllComponents()
 	w.Components.Cleaner.ClearAllComponents()
 	w.Components.Combat.ClearAllComponents()
+	w.Components.Genotype.ClearAllComponents()
 	w.Components.Drain.ClearAllComponents()
 	w.Components.Quasar.ClearAllComponents()
 	w.Components.Swarm.ClearAllComponents()

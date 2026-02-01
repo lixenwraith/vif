@@ -4,6 +4,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/status"
@@ -128,21 +129,11 @@ type GeneticProvider interface {
 	Start()
 	Stop()
 	Reset()
-	SampleDrainGenotype() []float64
-	DecodeDrainPhenotype(genotype []float64) (homingAccel, shieldApproach, aggressionMult int64)
-	BeginDrainTracking(entity core.Entity, genotype []float64, spawnTime time.Time)
-	RecordDrainTick(entity core.Entity, distToCursor float64, inShield bool, dt time.Duration)
-	RecordDrainEnergyDrain(entity core.Entity, amount int64)
-	RecordDrainHeatChange(entity core.Entity, delta int)
-	EndDrainTracking(entity core.Entity, deathTime time.Time)
-	RecordPlayerShieldState(active bool)
-	RecordPlayerKeystroke(correct bool)
-	RecordPlayerMovement(distance float64)
-	// Telemetry
-	DrainGeneration() int
-	DrainPoolStats() (best, worst, avg float64)
-	DrainPendingCount() int
-	DrainOutcomesTotal() uint64
+
+	Sample(species component.SpeciesType) (genotype []float64, evalID uint64)
+	Decode(species component.SpeciesType, genotype []float64) component.DecodedPhenotype
+	Complete(species component.SpeciesType, evalID uint64, fitness float64)
+	Stats(species component.SpeciesType) component.GeneticStats
 }
 
 // === Bridged Resources from Service ===

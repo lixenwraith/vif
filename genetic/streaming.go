@@ -92,7 +92,10 @@ func (e *StreamingEngine[S, F]) Start() {
 	if !e.running.CompareAndSwap(false, true) {
 		return
 	}
-	e.initializePool()
+	// Only initialize if pool doesn't exist (preserves population on restart/reset)
+	if e.currentPool == nil {
+		e.initializePool()
+	}
 	go e.evolutionLoop()
 }
 

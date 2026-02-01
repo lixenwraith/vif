@@ -31,10 +31,11 @@ const (
 	PriorityFlash        = 230
 	PriorityUI           = 240
 	PriorityEffect       = 500
-	PriorityMarker       = 510 // Before splash, after game logic
-	PrioritySplash       = 800 // After game logic, before rendering
-	PriorityMotionMarker = 810 // After game logic and splash, before rendering
-	PriorityDeath        = 850 // After game logic, before TimeKeeper
-	PriorityTimekeeper   = 900 // After game logic, final
-	PriorityDiagnostics  = 950 // After TimeKeeper, telemetry collection
+	PriorityMarker       = 510  // Before splash, after game logic
+	PrioritySplash       = 800  // After game logic, before rendering
+	PriorityMotionMarker = 810  // After game logic and splash, before rendering
+	PriorityDeath        = 850  // After game logic, before TimeKeeper
+	PriorityTimekeeper   = 900  // After game logic
+	PriorityGenetic      = 950  // After death and timekeeper, observes entity lifecycle
+	PriorityDiagnostics  = 1000 // After all others, telemetry collection
 )
