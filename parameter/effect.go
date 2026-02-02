@@ -75,35 +75,44 @@ const (
 
 // Cluster Missile - Parent Phase
 const (
-	// MissileClusterGravityFloat is downward acceleration (cells/sec²)
-	MissileClusterGravityFloat = 18.0
+	// MissileClusterLaunchSpeedFloat is parent travel speed (cells/sec)
+	MissileClusterLaunchSpeedFloat = 90.0
 
-	// MissileClusterLaunchSpeedFloat is initial velocity magnitude (cells/sec)
-	MissileClusterLaunchSpeedFloat = 40.0
+	// MissileClusterSplitRatio is fraction of distance to centroid before split (0.5 = halfway)
+	MissileClusterSplitRatio = 0.5
 
-	// MissileClusterLaunchAngleDegrees is upward bias from horizontal (degrees)
-	MissileClusterLaunchAngleDegrees = 15.0
+	// MissileClusterMinDistanceFloat is minimum travel before split allowed (cells)
+	MissileClusterMinDistanceFloat = 8.0
 
-	// MissileClusterMinAgeFrames is minimum frames before split check
-	MissileClusterMinAgeFrames = 12
+	// MissileParentMaxAgeFrames is safety timeout for forced split
+	MissileParentMaxAgeFrames = 60
 )
 
 // Cluster Missile - Child/Seeker Phase
 const (
-	// MissileSeekerMaxSpeedFloat is maximum homing velocity (cells/sec)
-	MissileSeekerMaxSpeedFloat = 50.0
+	// MissileSeekerMaxSpeedFloat is base homing velocity (cells/sec)
+	MissileSeekerMaxSpeedFloat = 180.0
 
-	// MissileSeekerSteerForceFloat is steering acceleration (cells/sec²)
-	MissileSeekerSteerForceFloat = 100.0
+	// MissileSeekerHomingAccelFloat is steering acceleration (cells/sec²)
+	MissileSeekerHomingAccelFloat = 400.0
 
-	// MissileSeekerSpreadAngleFloat is arc spread for children spawn (radians, ~72° total)
-	MissileSeekerSpreadAngleFloat = 1.26
+	// MissileSeekerDragFloat is velocity damping for stable turns
+	MissileSeekerDragFloat = 4.0
+
+	// MissileSeekerSpreadAngleFloat is arc spread for children spawn (radians, ~120°)
+	MissileSeekerSpreadAngleFloat = 2.1
+
+	// MissileSeekerStaggerFactor is velocity reduction per child index (0.05 = 5%)
+	MissileSeekerStaggerFactor = 0.05
+
+	// MissileSeekerArrivalRadius is distance to begin braking (cells)
+	MissileSeekerArrivalRadiusFloat = 2.0
 )
 
-// Missile Visual - Parent and Child
+// Missile Visuals - Parent and Child
 const (
 	// MissileTrailMaxAge is frames before trail point fades completely
-	MissileTrailMaxAge = 12
+	MissileTrailMaxAge = 6
 
 	// MissileTrailInterval is frames between trail point emissions
 	MissileTrailInterval = 1

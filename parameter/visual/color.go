@@ -121,11 +121,15 @@ var (
 	RgbOrbChain    = terminal.RGB{255, 105, 180} // Hot pink
 	RgbOrbFlash    = terminal.RGB{255, 255, 255} // White flash
 
-	// Missile trail colors (bounce-ball style: Gold → Red)
-	RgbMissileTrailStart = terminal.RGB{R: 255, G: 215, B: 0}   // Gold
-	RgbMissileTrailEnd   = terminal.RGB{R: 255, G: 60, B: 60}   // Red
-	RgbMissileBody       = terminal.RGB{R: 255, G: 200, B: 100} // Warm orange
-	RgbMissileSeeker     = terminal.RGB{R: 255, G: 140, B: 0}   // Orange
+	// Parent Missile: Chrome/White
+	RgbMissileParentBody       = terminal.RGB{255, 255, 255}
+	RgbMissileParentTrailStart = terminal.RGB{250, 250, 250}
+	RgbMissileParentTrailEnd   = terminal.RGB{80, 80, 90} // Steel gray
+
+	// Child Missile: Deep Orange
+	RgbMissileChildBody       = terminal.RGB{255, 140, 0}
+	RgbMissileChildTrailStart = terminal.RGB{200, 100, 0}
+	RgbMissileChildTrailEnd   = terminal.RGB{140, 60, 0}
 
 	// Missile impact explosion (warm palette - distinct from cyan/neon main explosion)
 	RgbMissileExplosionCore = terminal.RGB{R: 255, G: 255, B: 220} // Bright white-yellow

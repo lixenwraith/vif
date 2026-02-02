@@ -187,6 +187,16 @@ var SoftCollisionQuasarToDrain = CollisionProfile{
 
 // Homing profiles
 
+// MissileSeekerHoming defines seeker missile homing behavior
+var MissileSeekerHoming = HomingProfile{
+	BaseSpeed:        parameter.MissileSeekerMaxSpeed,
+	HomingAccel:      parameter.MissileSeekerHomingAccel,
+	Drag:             parameter.MissileSeekerDrag,
+	ArrivalRadius:    parameter.MissileSeekerArrivalRadius,
+	ArrivalDragBoost: vmath.Scale * 2, // 3x drag at target
+	DeadZone:         vmath.Scale / 2, // Snap at 0.5 cells
+}
+
 // DrainHoming defines drain entity homing behavior
 var DrainHoming = HomingProfile{
 	BaseSpeed:        parameter.DrainBaseSpeed,

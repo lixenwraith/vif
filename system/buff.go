@@ -560,15 +560,16 @@ func (s *BuffSystem) fireAllBuffs() {
 		return
 	}
 
-	// Resolve targets once, reuse for all buffs
-	var assignments []targetAssignment
+	// Resolve targets once
+	assignments := resolveBuffTargets(s.world, cursorPos.X, cursorPos.Y, shots)
+
+	// GUARD: If no targets are visible, don't waste energy/cooldowns
+	if len(assignments) == 0 {
+		return
+	}
 
 	for buff, active := range buffComp.Active {
-		if !active {
-			continue
-		}
-
-		if buffComp.Cooldown[buff] > 0 {
+		if !active || buffComp.Cooldown[buff] > 0 {
 			continue
 		}
 
@@ -599,37 +600,65 @@ func (s *BuffSystem) fireAllBuffs() {
 			}
 
 		case component.BuffLauncher:
-			buffComp.Cooldown[buff] = parameter.BuffCooldownLauncher
-
-			launcherOrbEntity := buffComp.Orbs[component.BuffLauncher]
-			if launcherOrbEntity != 0 {
-				s.triggerOrbFlash(launcherOrbEntity)
-			}
-
-			// Lazy resolve targets
+			// 1. Resolve targets based on current cursor position to determine if launcher should fire
 			if assignments == nil {
 				assignments = resolveBuffTargets(s.world, cursorPos.X, cursorPos.Y, shots)
 			}
 
-			// Calculate far quadrant target
-			targetX, targetY := s.calculateLauncherTarget(cursorPos.X, cursorPos.Y)
+			// Do not fire and waste cooldown if no target
+			if len(assignments) == 0 {
+				continue
+			}
 
-			// Get orb position for origin
+			// 2. Consume cooldown and handle orb-specific origin
+			buffComp.Cooldown[buff] = parameter.BuffCooldownLauncher
+			launcherOrbEntity := buffComp.Orbs[component.BuffLauncher]
+
+			// Origin of fire at launcher orb with cursor fallback
 			originX, originY := cursorPos.X, cursorPos.Y
 			if launcherOrbEntity != 0 {
+				s.triggerOrbFlash(launcherOrbEntity)
 				if orbPos, ok := s.world.Positions.GetPosition(launcherOrbEntity); ok {
 					originX, originY = orbPos.X, orbPos.Y
 				}
 			}
 
-			// Build target/hit slices for payload
+			// 3. Prepare target metadata and calculate Centroid
 			targets := make([]core.Entity, len(assignments))
 			hits := make([]core.Entity, len(assignments))
+
+			sumX, sumY := 0, 0
+			validPosCount := 0
+
 			for i, a := range assignments {
 				targets[i] = a.target
 				hits[i] = a.hit
+
+				// Accumulate positions for centroid calculation
+				if tPos, ok := s.world.Positions.GetPosition(a.target); ok {
+					sumX += tPos.X
+					sumY += tPos.Y
+					validPosCount++
+				}
 			}
 
+			// 4. Determine TargetX/Y (The "Split Point")
+			var targetX, targetY int
+			if validPosCount > 0 {
+				// The parent missile aims for the geometric center of its intended targets
+				centroidX := sumX / validPosCount
+				centroidY := sumY / validPosCount
+				// Split point is HALFWAY between origin and centroid for single boss target
+				targetX = originX + (centroidX-originX)/2
+				targetY = originY + (centroidY-originY)/2
+			} else {
+				// Fallback to screen center
+				config := s.world.Resources.Config
+				targetX = config.GameWidth / 2
+				targetY = config.GameHeight / 2
+			}
+
+			// 5. Fire the request
 			s.world.PushEvent(event.EventMissileSpawnRequest, &event.MissileSpawnRequestPayload{
 				OwnerEntity:  cursorEntity,
 				OriginEntity: launcherOrbEntity,
@@ -642,6 +671,7 @@ func (s *BuffSystem) fireAllBuffs() {
 				HitEntities:  hits,
 			})
 		}
+		// Update the component with new cooldowns and potentially updated orb states
 		s.world.Components.Buff.SetComponent(cursorEntity, buffComp)
 	}
 }
@@ -762,27 +792,4 @@ func resolveBuffTargets(
 		final[i] = result[i%len(result)]
 	}
 	return final
-}
-
-// calculateLauncherTarget returns far diagonal quadrant from cursor
-// Flexible function for tuning launch direction
-func (s *BuffSystem) calculateLauncherTarget(cursorX, cursorY int) (int, int) {
-	config := s.world.Resources.Config
-	centerX := config.GameWidth / 2
-	centerY := config.GameHeight / 2
-
-	// Determine which quadrant cursor is in, aim for opposite diagonal
-	var targetX, targetY int
-	if cursorX < centerX {
-		targetX = config.GameWidth - 1
-	} else {
-		targetX = 0
-	}
-	if cursorY < centerY {
-		targetY = config.GameHeight - 1
-	} else {
-		targetY = 0
-	}
-
-	return targetX, targetY
 }

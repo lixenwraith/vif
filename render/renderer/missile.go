@@ -10,11 +10,9 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
-// MissileRenderer draws cluster missiles and their trails
+// MissileRenderer draws cluster missiles and their trails using traversal for gaps
 type MissileRenderer struct {
-	gameCtx *engine.GameContext
-
-	// Mode-specific render function
+	gameCtx       *engine.GameContext
 	renderMissile missileRenderFunc
 }
 
@@ -26,16 +24,12 @@ type missileRenderFunc func(
 )
 
 func NewMissileRenderer(ctx *engine.GameContext) *MissileRenderer {
-	r := &MissileRenderer{
-		gameCtx: ctx,
-	}
-
+	r := &MissileRenderer{gameCtx: ctx}
 	if ctx.World.Resources.Render.ColorMode == terminal.ColorMode256 {
 		r.renderMissile = r.renderMissile256
 	} else {
 		r.renderMissile = r.renderMissileTrueColor
 	}
-
 	return r
 }
 
@@ -46,23 +40,20 @@ func (r *MissileRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 	}
 
 	buf.SetWriteMask(visual.MaskTransient)
-
 	for _, e := range entities {
 		missile, ok := r.gameCtx.World.Components.Missile.GetComponent(e)
 		if !ok {
 			continue
 		}
-
 		kinetic, ok := r.gameCtx.World.Components.Kinetic.GetComponent(e)
 		if !ok {
 			continue
 		}
-
 		r.renderMissile(ctx, buf, &missile, &kinetic)
 	}
 }
 
-// --- TrueColor Rendering ---
+// --- TrueColor ---
 
 func (r *MissileRenderer) renderMissileTrueColor(
 	ctx render.RenderContext,
@@ -70,62 +61,75 @@ func (r *MissileRenderer) renderMissileTrueColor(
 	missile *component.MissileComponent,
 	kinetic *component.KineticComponent,
 ) {
-	// Render trail (oldest to newest for proper overdraw)
-	r.renderTrailTrueColor(ctx, buf, missile)
-
-	// Render body
-	r.renderBodyTrueColor(ctx, buf, missile, kinetic)
+	r.renderTrailTrueColor(ctx, buf, missile, kinetic) // Pass kinetic for current pos
+	r.renderBody(ctx, buf, missile, kinetic, true)
 }
 
 func (r *MissileRenderer) renderTrailTrueColor(
 	ctx render.RenderContext,
 	buf *render.RenderBuffer,
 	missile *component.MissileComponent,
+	currentKinetic *component.KineticComponent,
 ) {
 	maxAge := parameter.MissileTrailMaxAge
 
-	// Iterate ring buffer from oldest to newest
+	// Determine palette based on missile type
+	startCol, endCol := visual.RgbMissileChildTrailStart, visual.RgbMissileChildTrailEnd
+	if missile.Type == component.MissileTypeClusterParent {
+		startCol, endCol = visual.RgbMissileParentTrailStart, visual.RgbMissileParentTrailEnd
+	}
+
+	prevX, prevY := currentKinetic.PreciseX, currentKinetic.PreciseY
+
 	for i := 0; i < missile.TrailLen; i++ {
-		idx := (missile.TrailHead - missile.TrailLen + i + component.TrailCapacity) % component.TrailCapacity
+		idx := (missile.TrailHead - 1 - i + component.TrailCapacity) % component.TrailCapacity
 		pt := &missile.Trail[idx]
 
 		if pt.Age >= maxAge {
-			continue
+			break
 		}
 
-		screenX := ctx.GameXOffset + vmath.ToInt(pt.X)
-		screenY := ctx.GameYOffset + vmath.ToInt(pt.Y)
+		// Pass specific colors to drawLine
+		r.drawStepLine(ctx, buf, prevX, prevY, pt.X, pt.Y, pt.Age, maxAge, startCol, endCol)
 
-		if screenX < ctx.GameXOffset || screenX >= ctx.GameXOffset+ctx.GameWidth ||
-			screenY < ctx.GameYOffset || screenY >= ctx.GameYOffset+ctx.GameHeight {
-			continue
-		}
+		prevX, prevY = pt.X, pt.Y
+	}
+}
 
-		// Alpha and color based on age (1.0 at birth, 0.0 at maxAge)
-		t := vmath.FromInt(pt.Age) * vmath.Scale / vmath.FromInt(maxAge)
-		alpha := 1.0 - float64(pt.Age)/float64(maxAge)
+func (r *MissileRenderer) drawStepLine(
+	ctx render.RenderContext,
+	buf *render.RenderBuffer,
+	x1, y1, x2, y2 int64,
+	age, maxAge int,
+	startCol, endCol terminal.RGB,
+) {
+	tFactor := float64(age) / float64(maxAge)
+	alpha := 1.0 - tFactor
+	color := render.LerpRGBFixed(startCol, endCol, vmath.FromFloat(tFactor))
 
-		// Lerp Gold → Red
-		color := render.LerpRGBFixed(visual.RgbMissileTrailStart, visual.RgbMissileTrailEnd, t)
+	// Step-DDA iterator (thinner diagonal profile than Supercover Traverse)
+	traverser := vmath.NewGridTraverser(x1, y1, x2, y2)
+	for traverser.Next() {
+		gx, gy := traverser.Pos()
+		screenX := ctx.GameXOffset + gx
+		screenY := ctx.GameYOffset + gy
 
 		buf.Set(screenX, screenY, visual.MissileTrailChar, color, visual.RgbBackground,
 			render.BlendAddFg, alpha, terminal.AttrNone)
 	}
 }
 
-func (r *MissileRenderer) renderBodyTrueColor(
+// --- Body Rendering (Shared) ---
+
+func (r *MissileRenderer) renderBody(
 	ctx render.RenderContext,
 	buf *render.RenderBuffer,
 	missile *component.MissileComponent,
 	kinetic *component.KineticComponent,
+	trueColor bool,
 ) {
 	screenX := ctx.GameXOffset + vmath.ToInt(kinetic.PreciseX)
 	screenY := ctx.GameYOffset + vmath.ToInt(kinetic.PreciseY)
-
-	if screenX < ctx.GameXOffset || screenX >= ctx.GameXOffset+ctx.GameWidth ||
-		screenY < ctx.GameYOffset || screenY >= ctx.GameYOffset+ctx.GameHeight {
-		return
-	}
 
 	var char rune
 	var color terminal.RGB
@@ -133,14 +137,19 @@ func (r *MissileRenderer) renderBodyTrueColor(
 	switch missile.Type {
 	case component.MissileTypeClusterParent:
 		char = visual.MissileParentChar
-		color = visual.RgbMissileBody
+		color = visual.RgbMissileParentBody
 	case component.MissileTypeClusterChild:
 		char = r.directionChar(kinetic.VelX, kinetic.VelY)
-		color = visual.RgbMissileSeeker
+		color = visual.RgbMissileChildBody
 	}
 
-	buf.Set(screenX, screenY, char, color, visual.RgbBackground,
-		render.BlendReplace, 1.0, terminal.AttrBold)
+	if trueColor {
+		buf.Set(screenX, screenY, char, color, visual.RgbBackground,
+			render.BlendReplace, 1.0, terminal.AttrBold)
+	} else {
+		// 256-color fallback remains as is or mapped to similar indices
+		buf.SetFgOnly(screenX, screenY, char, terminal.RGB{R: visual.Missile256Body}, terminal.AttrFg256|terminal.AttrBold)
+	}
 }
 
 // directionChar returns arrow character based on velocity direction

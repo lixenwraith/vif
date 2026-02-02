@@ -111,8 +111,8 @@ const (
 
 // Missile
 const (
-	// MissileImpactRadius is distance threshold for target hit (Q32.32)
-	MissileImpactRadiusFloat = 2.0
+	// MissileImpactRadiusFloat is hit detection threshold (cells)
+	MissileImpactRadiusFloat = 1.5
 )
 
 // Knockback
