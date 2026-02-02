@@ -1,7 +1,11 @@
 package genetic
 
 // Package genetic provides a flexible, generic-first genetic algorithm framework for optimization and search problems
-// Computer/digital terminology is used rather than biological metaphors where appropriate
+// 1. Has zero knowledge of game-specific types in core packages
+// 2. Supports both single entities and composite entities through unified interfaces
+// 3. Uses registration patterns instead of hardcoded species initialization
+// 4. Provides subscription-based metric collection instead of polling specific components
+// 5. Can theoretically be extracted and used in another application without modification to core packages
 
 import (
 	"math/rand/v2"

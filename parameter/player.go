@@ -27,6 +27,27 @@ const (
 	BuffCooldownChain    = 2000 * time.Millisecond
 )
 
+// Buff Orb Configuration
+const (
+	// OrbChar is the character used for buff orbs
+	OrbChar = '●' // U+25CF Black Circle
+
+	// OrbOrbitRadiusXFloat is horizontal orbital radius in cells
+	OrbOrbitRadiusXFloat = 12.0
+
+	// OrbOrbitRadiusYFloat is vertical orbital radius in cells (aspect-corrected)
+	OrbOrbitRadiusYFloat = 6.0
+
+	// OrbOrbitSpeed is rotations per second (Q32.32 Scale = 1 rot/sec)
+	OrbOrbitSpeedFloat = 0.5
+
+	// OrbRedistributeDuration is time for orbs to animate to new positions
+	OrbRedistributeDuration = 200 * time.Millisecond
+
+	// OrbFlashDuration is visual flash duration when orb fires
+	OrbFlashDuration = 100 * time.Millisecond
+)
+
 // Cleaner Entity
 const (
 	// CleanerChar is the character used to render the cleaner block

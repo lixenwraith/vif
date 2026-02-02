@@ -115,6 +115,12 @@ var (
 	// Quasar colors
 	RgbQuasarShield = terminal.RGB{0, 200, 200} // Cyan for clean shield halo and quasar indication
 
+	// Orb colors
+	RgbOrbRod      = terminal.RGB{0, 220, 220}   // Cyan
+	RgbOrbLauncher = terminal.RGB{255, 140, 0}   // Orange
+	RgbOrbChain    = terminal.RGB{255, 105, 180} // Hot pink
+	RgbOrbFlash    = terminal.RGB{255, 255, 255} // White flash
+
 	// Audio indicator colors
 	RgbAudioBothOff     = terminal.RGB{R: 180, G: 60, B: 60}  // Red: both off
 	RgbAudioMusicOnly   = terminal.RGB{R: 200, G: 180, B: 60} // Yellow: effects off, music on

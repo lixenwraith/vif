@@ -150,13 +150,18 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 	if !ok {
 		return
 	}
-	attackerCombatComp, ok := s.world.Components.Combat.GetComponent(payload.OriginEntity)
-	if !ok {
-		return
+
+	// Resolve attacker type: prefer OriginEntity, fallback to OwnerEntity if origin doesn't have combat component (e.g. visual-only entity like buff orb)
+	var attackerType component.CombatEntityType
+	if attackerCombatComp, ok := s.world.Components.Combat.GetComponent(payload.OriginEntity); ok {
+		attackerType = attackerCombatComp.CombatEntityType
+	} else if ownerCombatComp, ok := s.world.Components.Combat.GetComponent(payload.OwnerEntity); ok {
+		attackerType = ownerCombatComp.CombatEntityType
+	} else {
+		return // No valid attacker
 	}
 
 	// Generate combat matrix key
-	attackerType := attackerCombatComp.CombatEntityType
 	var targetCombatType component.CombatEntityType
 	// Target defensive checks and type determination
 	if payload.TargetEntity != payload.HitEntity {
@@ -234,10 +239,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 	// Apply effects
 	switch {
 	case combatProfile.EffectMask&component.CombatEffectVampireDrain != 0:
-		s.world.PushEvent(event.EventVampireDrainRequest, &event.VampireDrainRequestPayload{
-			TargetEntity: payload.HitEntity,
-			Delta:        parameter.VampireDrainEnergyValue,
-		})
+		s.applyVampireDrain(payload.OwnerEntity, payload.OriginEntity, payload.HitEntity)
 	case combatProfile.EffectMask&component.CombatEffectKinetic != 0:
 		if !targetDead && targetCombatComp.RemainingKineticImmunity == 0 && !targetCombatComp.IsEnraged {
 			s.applyCollision(payload.OriginEntity, payload.TargetEntity, payload.HitEntity, combatProfile.CollisionProfile)
@@ -335,6 +337,53 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 	// TODO: chain attack and other effects switch
 
 	s.world.Components.Combat.SetComponent(payload.TargetEntity, targetCombatComp)
+}
+
+// applyVampireDrain handles energy steal and lightning VFX directly
+// ownerEntity: receives energy (cursor)
+// originEntity: lightning origin (orb or cursor)
+// targetEntity: lightning target (hit entity)
+func (s *CombatSystem) applyVampireDrain(ownerEntity, originEntity, targetEntity core.Entity) {
+	energyComp, ok := s.world.Components.Energy.GetComponent(ownerEntity)
+	if !ok {
+		return
+	}
+	currentEnergy := energyComp.Current
+
+	// Energy reward
+	s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
+		Delta:      parameter.VampireDrainEnergyValue,
+		Percentage: false,
+		Type:       event.EnergyDeltaReward,
+	})
+
+	// Lightning VFX
+	originPos, ok := s.world.Positions.GetPosition(originEntity)
+	if !ok {
+		return
+	}
+	targetPos, ok := s.world.Positions.GetPosition(targetEntity)
+	if !ok {
+		return
+	}
+
+	lightningColor := component.LightningGold
+	if currentEnergy < 0 {
+		lightningColor = component.LightningPurple
+	}
+
+	s.world.PushEvent(event.EventLightningSpawnRequest, &event.LightningSpawnRequestPayload{
+		Owner:        ownerEntity,
+		OriginX:      originPos.X,
+		OriginY:      originPos.Y,
+		TargetX:      targetPos.X,
+		TargetY:      targetPos.Y,
+		OriginEntity: originEntity,
+		TargetEntity: targetEntity,
+		ColorType:    lightningColor,
+		Duration:     parameter.LightningZapDuration,
+		Tracked:      false,
+	})
 }
 
 func (s *CombatSystem) applyCollision(originEntity, targetEntity, hitEntity core.Entity, collisionProfile *physics.CollisionProfile) {

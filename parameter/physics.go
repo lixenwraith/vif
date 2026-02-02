@@ -108,3 +108,10 @@ var (
 	// Factor = 1.0 / Midpoint (2.0 for 0.5)
 	ExplosionGradientFactor = vmath.FromFloat(1.0 / ExplosionGradientMidpointFloat)
 )
+
+// Orb physics
+var (
+	OrbOrbitRadiusX = vmath.FromFloat(OrbOrbitRadiusXFloat)
+	OrbOrbitRadiusY = vmath.FromFloat(OrbOrbitRadiusYFloat)
+	OrbOrbitSpeed   = vmath.FromFloat(OrbOrbitSpeedFloat)
+)

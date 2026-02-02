@@ -2,6 +2,8 @@ package component
 
 import (
 	"time"
+
+	"github.com/lixenwraith/vi-fighter/core"
 )
 
 // BuffType: rod (lightning), launcher (missile), chain (pull)
@@ -17,4 +19,5 @@ const (
 type BuffComponent struct {
 	Active   map[BuffType]bool
 	Cooldown map[BuffType]time.Duration
+	Orbs     map[BuffType]core.Entity // Orb entity for each active buff
 }

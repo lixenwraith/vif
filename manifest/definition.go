@@ -38,6 +38,7 @@ var Components = []ComponentDef{
 	{"Shield", "ShieldComponent"},
 	{"Boost", "BoostComponent"},
 	{"Buff", "BuffComponent"},
+	{"Orb", "OrbComponent"},
 	{"Ping", "PingComponent"},
 
 	// Entity behaviors
@@ -88,7 +89,6 @@ var Systems = []SystemDef{
 	{"gold", "NewGoldSystem"},
 	{"materialize", "NewMaterializeSystem"},
 	{"cleaner", "NewCleanerSystem"},
-	{"vampire", "NewVampireSystem"},
 	{"fuse", "NewFuseSystem"},
 	{"spirit", "NewSpiritSystem"},
 	{"lightning", "NewLightningSystem"},

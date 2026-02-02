@@ -74,6 +74,14 @@ func resolveSigilColor(color component.SigilColor) terminal.RGB {
 		return visual.RgbDustNormal
 	case component.SigilDustBright:
 		return visual.RgbDustBright
+	case component.SigilOrbRod:
+		return visual.RgbOrbRod
+	case component.SigilOrbLauncher:
+		return visual.RgbOrbLauncher
+	case component.SigilOrbChain:
+		return visual.RgbOrbChain
+	case component.SigilOrbFlash:
+		return visual.RgbOrbFlash
 	default:
 		return visual.RgbBackground
 	}
