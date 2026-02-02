@@ -17,8 +17,10 @@ const (
 // Use with ApplyCollisionImpulse for different entity weights
 const (
 	MassRatioExplosionToDrain  = Scale * 10  // 10.0 - 10x greater mass
+	MassRatioExplosionToSwarm  = Scale * 5   // 5.0 - 5x greater mass
 	MassRatioExplosionToQuasar = Scale       // 1.0 - 1x greater mass
 	MassRatioEqual             = Scale       // 1.0 - equal mass entities
+	MassRatioBaseToSwarm       = Scale / 2   // 0.5
 	MassRatioBaseToQuasar      = Scale / 10  // 0.1 - cleaner and shield are 10x lighter
 	MassRatioDustToDrain       = Scale / 10  // 0.1 - dust is 10x lighter than drain
 	MassRatioDustToQuasar      = Scale / 100 // 0.01 - dust is 100x lighter than quasar

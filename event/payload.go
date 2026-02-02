@@ -372,11 +372,20 @@ type LightningUpdatePayload struct {
 	TargetY int         `toml:"target_y"`
 }
 
+// ExplosionType differentiates visual and behavioral explosion variants
+type ExplosionType uint8
+
+const (
+	ExplosionTypeDust    ExplosionType = iota // Converts glyphs to dust, cyan palette
+	ExplosionTypeMissile                      // Visual only, warm palette
+)
+
 // ExplosionRequestPayload contains parameters for explosion effect
 type ExplosionRequestPayload struct {
-	X      int   `toml:"x"`
-	Y      int   `toml:"y"`
-	Radius int64 `toml:"radius"` // Q32.32, 0 = use default
+	X      int           `toml:"x"`
+	Y      int           `toml:"y"`
+	Radius int64         `toml:"radius"` // Q32.32, 0 = use default
+	Type   ExplosionType `toml:"type"`   // Explosion variant
 }
 
 // DustSpawnOneRequestPayload contains parameters for single dust entity creation

@@ -12,16 +12,16 @@ import (
 )
 
 // ExplosionCenter represents a single explosion for rendering
-// Written by ExplosionSystem, read by ExplosionRenderer
 type ExplosionCenter struct {
 	X, Y      int
-	Radius    int64 // Q32.32 cells
-	Intensity int64 // Q32.32, Scale = 1.0 base
-	Age       int64 // Nanoseconds since spawn
+	Radius    int64               // Q32.32 cells
+	Intensity int64               // Q32.32, Scale = 1.0 base
+	Age       int64               // Nanoseconds since spawn
+	Type      event.ExplosionType // Explosion variant for palette selection
 }
 
-// Package-level state for renderer access
-// System writes, renderer reads - no synchronization needed (single-threaded game loop)
+// State for renderer access, System writes, renderer reads - no sync needed
+// TODO: this couples renderer to system, to be refactored
 var (
 	ExplosionCenters      []ExplosionCenter                             // Active slice view
 	ExplosionDurationNano int64                                         // For decay calculation
@@ -130,9 +130,30 @@ func (s *ExplosionSystem) HandleEvent(ev event.GameEvent) {
 			if radius == 0 {
 				radius = s.baseRadius
 			}
-			s.addCenter(p.X, p.Y, radius)
+			s.addCenter(p.X, p.Y, radius, p.Type)
 		}
 	}
+}
+
+func (s *ExplosionSystem) Update() {
+	if !s.enabled || s.activeCount == 0 {
+		return
+	}
+
+	dtNano := s.world.Resources.Time.DeltaTime.Nanoseconds()
+
+	write := 0
+	for i := 0; i < s.activeCount; i++ {
+		explosionBacking[i].Age += dtNano
+		if explosionBacking[i].Age < ExplosionDurationNano {
+			if write != i {
+				explosionBacking[write] = explosionBacking[i]
+			}
+			write++
+		}
+	}
+	s.activeCount = write
+	ExplosionCenters = explosionBacking[:s.activeCount]
 }
 
 func (s *ExplosionSystem) fireFromDust() {
@@ -153,17 +174,21 @@ func (s *ExplosionSystem) fireFromDust() {
 	event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, dustEntities)
 
 	for p := range positions {
-		s.addCenter(p.x, p.y, s.baseRadius)
+		s.addCenter(p.x, p.y, s.baseRadius, event.ExplosionTypeDust)
 	}
 }
 
-func (s *ExplosionSystem) addCenter(x, y int, radius int64) {
+func (s *ExplosionSystem) addCenter(x, y int, radius int64, explosionType event.ExplosionType) {
 	centerX := vmath.FromInt(x)
 	centerY := vmath.FromInt(y)
 
-	// Merge check
+	// Merge check - only merge same type
 	for i := 0; i < s.activeCount; i++ {
 		c := &explosionBacking[i]
+		if c.Type != explosionType {
+			continue
+		}
+
 		dx := centerX - vmath.FromInt(c.X)
 		dy := centerY - vmath.FromInt(c.Y)
 		distSq := vmath.Mul(dx, dx) + vmath.Mul(dy, dy)
@@ -212,12 +237,17 @@ func (s *ExplosionSystem) addCenter(x, y int, radius int64) {
 		Radius:    radius,
 		Intensity: vmath.Scale,
 		Age:       0,
+		Type:      explosionType,
 	}
 
 	// Update exported slice
 	ExplosionCenters = explosionBacking[:s.activeCount]
 
-	s.transformGlyphs(x, y, radius)
+	// Only dust explosions transform glyphs
+	if explosionType == event.ExplosionTypeDust {
+		s.transformGlyphs(x, y, radius)
+	}
+
 	s.statTriggered.Add(1)
 }
 
@@ -355,25 +385,4 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 	s.world.PushEvent(event.EventDustSpawnBatchRequest, dustBatch)
 
 	s.statConverted.Add(int64(len(s.entityBuf)))
-}
-
-func (s *ExplosionSystem) Update() {
-	if !s.enabled || s.activeCount == 0 {
-		return
-	}
-
-	dtNano := s.world.Resources.Time.DeltaTime.Nanoseconds()
-
-	write := 0
-	for i := 0; i < s.activeCount; i++ {
-		explosionBacking[i].Age += dtNano
-		if explosionBacking[i].Age < ExplosionDurationNano {
-			if write != i {
-				explosionBacking[write] = explosionBacking[i]
-			}
-			write++
-		}
-	}
-	s.activeCount = write
-	ExplosionCenters = explosionBacking[:s.activeCount]
 }

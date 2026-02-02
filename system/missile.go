@@ -404,18 +404,23 @@ func (s *MissileSystem) emitImpact(m *component.MissileComponent, k *component.K
 	ix := vmath.ToInt(k.PreciseX)
 	iy := vmath.ToInt(k.PreciseY)
 
-	s.world.PushEvent(event.EventMissileImpact, &event.MissileImpactPayload{
-		OwnerEntity:  m.Owner,
-		TargetEntity: m.TargetEntity,
-		HitEntity:    m.HitEntity,
-		ImpactX:      ix,
-		ImpactY:      iy,
-	})
+	// Emit combat damage event for target
+	if m.TargetEntity != 0 {
+		s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
+			AttackType:   component.CombatAttackMissile,
+			OwnerEntity:  m.Owner,
+			OriginEntity: m.Origin,
+			TargetEntity: m.TargetEntity,
+			HitEntity:    m.HitEntity,
+		})
+	}
 
+	// Emit visual-only missile explosion
 	s.world.PushEvent(event.EventExplosionRequest, &event.ExplosionRequestPayload{
 		X:      ix,
 		Y:      iy,
 		Radius: parameter.MissileExplosionRadius,
+		Type:   event.ExplosionTypeMissile,
 	})
 }
 

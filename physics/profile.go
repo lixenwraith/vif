@@ -97,7 +97,7 @@ var DustToQuasar = CollisionProfile{
 
 // CleanerToSwarm defines cleaner-to-swarm collision
 var CleanerToSwarm = CollisionProfile{
-	MassRatio:        vmath.MassRatioBaseToQuasar, // Swarm is heavy like quasar
+	MassRatio:        vmath.MassRatioBaseToSwarm, // Swarm is heavy like quasar
 	ImpulseMin:       parameter.CollisionKineticImpulseMin,
 	ImpulseMax:       parameter.CollisionKineticImpulseMax,
 	AngleVariance:    parameter.SwarmDeflectAngleVar,
@@ -119,7 +119,7 @@ var ShieldToSwarm = CollisionProfile{
 
 // ExplosionToSwarm defines explosion-to-swarm collision
 var ExplosionToSwarm = CollisionProfile{
-	MassRatio:        vmath.MassRatioExplosionToQuasar,
+	MassRatio:        vmath.MassRatioExplosionToSwarm,
 	ImpulseMin:       parameter.CollisionKineticImpulseMin,
 	ImpulseMax:       parameter.CollisionKineticImpulseMax,
 	AngleVariance:    parameter.SwarmDeflectAngleVar,
@@ -187,15 +187,7 @@ var SoftCollisionQuasarToDrain = CollisionProfile{
 
 // Homing profiles
 
-// MissileSeekerHoming defines seeker missile homing behavior
-var MissileSeekerHoming = HomingProfile{
-	BaseSpeed:        parameter.MissileSeekerMaxSpeed,
-	HomingAccel:      parameter.MissileSeekerHomingAccel,
-	Drag:             parameter.MissileSeekerDrag,
-	ArrivalRadius:    parameter.MissileSeekerArrivalRadius,
-	ArrivalDragBoost: vmath.Scale * 2, // 3x drag at target
-	DeadZone:         vmath.Scale / 2, // Snap at 0.5 cells
-}
+// TODO: wire in unused profiles
 
 // DrainHoming defines drain entity homing behavior
 var DrainHoming = HomingProfile{

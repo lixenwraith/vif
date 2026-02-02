@@ -2,6 +2,7 @@ package renderer
 
 import (
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
@@ -14,15 +15,29 @@ import (
 type ExplosionRenderer struct {
 	gameCtx *engine.GameContext
 
-	// Pre-allocated accumulation buffer
-	accBuffer   []int64
-	bufWidth    int
-	bufHeight   int
-	bufCapacity int
+	// Per-type accumulation buffers
+	accBufferDust    []int64
+	accBufferMissile []int64
+	bufWidth         int
+	bufHeight        int
+	bufCapacity      int
 
-	// Dirty rect for optimization (screen coordinates relative to GameX/Y)
-	minX, maxX int
-	minY, maxY int
+	// Dirty rects per type (screen coordinates relative to GameX/Y)
+	dustMinX, dustMaxX, dustMinY, dustMaxY             int
+	missileMinX, missileMaxX, missileMinY, missileMaxY int
+}
+
+// explosionPalette holds gradient colors for an explosion type
+type explosionPalette struct {
+	Edge, Mid, Core terminal.RGB
+}
+
+// Palette lookup indexed by ExplosionType
+var explosionPalettes = [2]explosionPalette{
+	// ExplosionTypeDust (cyan/neon theme)
+	{visual.RgbExplosionEdge, visual.RgbExplosionMid, visual.RgbExplosionCore},
+	// ExplosionTypeMissile (warm theme)
+	{visual.RgbMissileExplosionEdge, visual.RgbMissileExplosionMid, visual.RgbMissileExplosionCore},
 }
 
 func NewExplosionRenderer(ctx *engine.GameContext) *ExplosionRenderer {
@@ -30,14 +45,14 @@ func NewExplosionRenderer(ctx *engine.GameContext) *ExplosionRenderer {
 		gameCtx: ctx,
 	}
 
-	// Pre-allocate for initial game dimensions
 	r.bufWidth = r.gameCtx.World.Resources.Config.GameWidth
 	r.bufHeight = r.gameCtx.World.Resources.Config.GameHeight
 	r.bufCapacity = r.bufWidth * r.bufHeight
 	if r.bufCapacity < 1 {
 		r.bufCapacity = 1
 	}
-	r.accBuffer = make([]int64, r.bufCapacity)
+	r.accBufferDust = make([]int64, r.bufCapacity)
+	r.accBufferMissile = make([]int64, r.bufCapacity)
 
 	return r
 }
@@ -52,18 +67,21 @@ func (r *ExplosionRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	requiredSize := ctx.GameWidth * ctx.GameHeight
 	if requiredSize > r.bufCapacity {
 		r.bufCapacity = requiredSize
-		r.accBuffer = make([]int64, r.bufCapacity)
+		r.accBufferDust = make([]int64, r.bufCapacity)
+		r.accBufferMissile = make([]int64, r.bufCapacity)
 	}
 	r.bufWidth = ctx.GameWidth
 	r.bufHeight = ctx.GameHeight
 
-	// Clear accumulation buffer
-	clear(r.accBuffer[:requiredSize])
+	// Clear buffers and reset dirty rects
+	clear(r.accBufferDust[:requiredSize])
+	clear(r.accBufferMissile[:requiredSize])
+	r.resetDirtyRects()
 
-	// Accumulation pass: rasterize all centers into buffer
+	// Accumulation pass: rasterize centers into type-specific buffers
 	durationNano := system.ExplosionDurationNano
 	if durationNano <= 0 {
-		durationNano = 1 // Prevent division by zero
+		durationNano = 1
 	}
 
 	for i := range centers {
@@ -71,18 +89,29 @@ func (r *ExplosionRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		r.accumulateCenter(c, durationNano)
 	}
 
-	// If nothing was drawn to the buffer, skip rendering
-	if r.maxX < r.minX || r.maxY < r.minY {
-		return
+	// Render both types
+	buf.SetWriteMask(visual.MaskTransient)
+
+	if r.dustMaxX >= r.dustMinX && r.dustMaxY >= r.dustMinY {
+		r.renderTypeBuffer(ctx, buf, r.accBufferDust, event.ExplosionTypeDust,
+			r.dustMinX, r.dustMaxX, r.dustMinY, r.dustMaxY)
 	}
 
-	// Color mapping pass
-	buf.SetWriteMask(visual.MaskTransient)
-	r.renderBuffer(ctx, buf)
+	if r.missileMaxX >= r.missileMinX && r.missileMaxY >= r.missileMinY {
+		r.renderTypeBuffer(ctx, buf, r.accBufferMissile, event.ExplosionTypeMissile,
+			r.missileMinX, r.missileMaxX, r.missileMinY, r.missileMaxY)
+	}
+}
+
+func (r *ExplosionRenderer) resetDirtyRects() {
+	r.dustMinX, r.dustMinY = r.bufWidth, r.bufHeight
+	r.dustMaxX, r.dustMaxY = -1, -1
+	r.missileMinX, r.missileMinY = r.bufWidth, r.bufHeight
+	r.missileMaxX, r.missileMaxY = -1, -1
 }
 
 func (r *ExplosionRenderer) accumulateCenter(c *system.ExplosionCenter, durationNano int64) {
-	// Time decay via LUT: map age to 0-100 index range
+	// Time decay via LUT
 	ageIndex := int(c.Age * 100 / durationNano)
 	if ageIndex > 100 {
 		ageIndex = 100
@@ -90,7 +119,6 @@ func (r *ExplosionRenderer) accumulateCenter(c *system.ExplosionCenter, duration
 	timeDecay := vmath.ExpDecay(ageIndex)
 
 	// Bounding box (aspect-corrected)
-	// Radius is horizontal cells. Vertical cells = radius / 2
 	radiusCells := vmath.ToInt(c.Radius)
 	radiusCellsY := radiusCells / 2
 
@@ -113,18 +141,36 @@ func (r *ExplosionRenderer) accumulateCenter(c *system.ExplosionCenter, duration
 		maxY = r.bufHeight - 1
 	}
 
-	// Update dirty rect
-	if minX < r.minX {
-		r.minX = minX
-	}
-	if maxX > r.maxX {
-		r.maxX = maxX
-	}
-	if minY < r.minY {
-		r.minY = minY
-	}
-	if maxY > r.maxY {
-		r.maxY = maxY
+	// Select buffer and update dirty rect based on type
+	var accBuffer []int64
+	if c.Type == event.ExplosionTypeMissile {
+		accBuffer = r.accBufferMissile
+		if minX < r.missileMinX {
+			r.missileMinX = minX
+		}
+		if maxX > r.missileMaxX {
+			r.missileMaxX = maxX
+		}
+		if minY < r.missileMinY {
+			r.missileMinY = minY
+		}
+		if maxY > r.missileMaxY {
+			r.missileMaxY = maxY
+		}
+	} else {
+		accBuffer = r.accBufferDust
+		if minX < r.dustMinX {
+			r.dustMinX = minX
+		}
+		if maxX > r.dustMaxX {
+			r.dustMaxX = maxX
+		}
+		if minY < r.dustMinY {
+			r.dustMinY = minY
+		}
+		if maxY > r.dustMaxY {
+			r.dustMaxY = maxY
+		}
 	}
 
 	radiusSq := vmath.Mul(c.Radius, c.Radius)
@@ -149,74 +195,77 @@ func (r *ExplosionRenderer) accumulateCenter(c *system.ExplosionCenter, duration
 				continue
 			}
 
-			// Quadratic falloff: 1.0 at center, 0.0 at edge
-			distFalloff := vmath.Scale - vmath.Div(distSq, radiusSq)
+			// Falloff calculation differs by type
+			var distFalloff int64
+			if c.Type == event.ExplosionTypeMissile {
+				// Quadratic falloff for sharper edge
+				linearFalloff := vmath.Scale - vmath.Div(distSq, radiusSq)
+				distFalloff = vmath.Mul(linearFalloff, linearFalloff)
+			} else {
+				// Linear falloff for dust (softer, more diffuse)
+				distFalloff = vmath.Scale - vmath.Div(distSq, radiusSq)
+			}
 
-			// cellIntensity = baseIntensity * timeDecay * distFalloff
 			cellIntensity := vmath.Mul(vmath.Mul(c.Intensity, timeDecay), distFalloff)
-
-			r.accBuffer[rowOffset+x] += cellIntensity
+			accBuffer[rowOffset+x] += cellIntensity
 		}
 	}
 }
 
-func (r *ExplosionRenderer) renderBuffer(ctx render.RenderContext, buf *render.RenderBuffer) {
-	// Continuous Gradient Palette (Neon/Cyber)
-	edgeColor := visual.RgbExplosionEdge // Deep Indigo
-	midColor := visual.RgbExplosionMid   // Electric Cyan
-	coreColor := visual.RgbExplosionCore // White
+func (r *ExplosionRenderer) renderTypeBuffer(
+	ctx render.RenderContext,
+	buf *render.RenderBuffer,
+	accBuffer []int64,
+	explosionType event.ExplosionType,
+	minX, maxX, minY, maxY int,
+) {
+	palette := explosionPalettes[explosionType]
 
-	// Only iterate the dirty rectangle
-	for y := r.minY; y <= r.maxY; y++ {
+	// Missile uses Screen blend for brighter flash, dust uses Add for glow buildup
+	blendMode := render.BlendAdd
+	if explosionType == event.ExplosionTypeMissile {
+		blendMode = render.BlendScreen
+	}
+
+	for y := minY; y <= maxY; y++ {
 		rowOffset := y * r.bufWidth
 		screenY := ctx.GameYOffset + y
 
-		for x := r.minX; x <= r.maxX; x++ {
-			intensity := r.accBuffer[rowOffset+x]
+		for x := minX; x <= maxX; x++ {
+			intensity := accBuffer[rowOffset+x]
 
-			// Skip near-zero values to save blend ops
 			if intensity < parameter.ExplosionEdgeThreshold {
 				continue
 			}
 
-			// Clamp intensity to 1.0 (Scale) for color calculations
 			val := intensity
 			if val > vmath.Scale {
 				val = vmath.Scale
 			}
 
-			// Gradient Mapping (Fixed Point)
-			// 0.0 -> Edge, Midpoint -> Mid, 1.0 -> Core
+			// Gradient mapping
 			var color terminal.RGB
 			var tFixed int64
 
 			if val < parameter.ExplosionGradientMidpoint {
-				// Interpolate Edge -> Mid
-				// t = val / Midpoint
 				tFixed = vmath.Mul(val, parameter.ExplosionGradientFactor)
-				color = render.LerpRGBFixed(edgeColor, midColor, tFixed)
+				color = render.LerpRGBFixed(palette.Edge, palette.Mid, tFixed)
 			} else {
-				// Interpolate Mid -> Core
-				// t = (val - Midpoint) / (1.0 - Midpoint)
-				// Assuming Midpoint is 0.5, denominator is 0.5, factor is 2.0
 				base := val - parameter.ExplosionGradientMidpoint
 				tFixed = vmath.Mul(base, parameter.ExplosionGradientFactor)
-				color = render.LerpRGBFixed(midColor, coreColor, tFixed)
+				color = render.LerpRGBFixed(palette.Mid, palette.Core, tFixed)
 			}
 
-			// Alpha mapping: val * AlphaMax
+			// Alpha mapping
 			alphaFixed := vmath.Mul(val, parameter.ExplosionAlphaMax)
 			if alphaFixed < parameter.ExplosionAlphaMin {
 				alphaFixed = parameter.ExplosionAlphaMin
 			}
 
 			screenX := ctx.GameXOffset + x
-
-			// Convert alpha to float only at the boundary API call
 			alphaFloat := vmath.ToFloat(alphaFixed)
 
-			// Use Additive blend for neon glow effect
-			buf.Set(screenX, screenY, 0, visual.RgbBlack, color, render.BlendAdd, alphaFloat, terminal.AttrNone)
+			buf.Set(screenX, screenY, 0, visual.RgbBlack, color, blendMode, alphaFloat, terminal.AttrNone)
 		}
 	}
 }
