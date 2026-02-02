@@ -115,3 +115,17 @@ var (
 	OrbOrbitRadiusY = vmath.FromFloat(OrbOrbitRadiusYFloat)
 	OrbOrbitSpeed   = vmath.FromFloat(OrbOrbitSpeedFloat)
 )
+
+// Missile physics
+var (
+	MissileClusterGravity     = vmath.FromFloat(MissileClusterGravityFloat)
+	MissileClusterLaunchSpeed = vmath.FromFloat(MissileClusterLaunchSpeedFloat)
+	MissileSeekerMaxSpeed     = vmath.FromFloat(MissileSeekerMaxSpeedFloat)
+	MissileSeekerSteerForce   = vmath.FromFloat(MissileSeekerSteerForceFloat)
+	MissileSeekerSpreadAngle  = vmath.FromFloat(MissileSeekerSpreadAngleFloat)
+	MissileImpactRadius       = vmath.FromFloat(MissileImpactRadiusFloat)
+	MissileImpactRadiusSq     = vmath.Mul(MissileImpactRadius, MissileImpactRadius)
+	MissileExplosionRadius    = vmath.FromFloat(MissileExplosionRadiusFloat)
+	// Convert degrees to rotation fraction (Scale = full rotation = 360°)
+	MissileClusterLaunchAngle = vmath.FromFloat(MissileClusterLaunchAngleDegrees / 360.0)
+)

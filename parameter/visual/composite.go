@@ -20,11 +20,3 @@ var SwarmPatternChars = [2][2][4]rune{
 		{'▄', '▀', '▀', '▄'},
 	},
 }
-
-// SwarmPatternActive defines which cells are collision-active, keeping it simple and make the whole box collide
-var SwarmPatternActive = [2][2][4]bool{
-	// Pattern 0: All Active
-	{{true, true, true, true}, {true, true, true, true}},
-	// Pattern 1: All Active
-	{{true, true, true, true}, {true, true, true, true}},
-}

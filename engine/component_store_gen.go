@@ -33,6 +33,7 @@ type Component struct {
 	Swarm       *Store[component.SwarmComponent]
 	Dust        *Store[component.DustComponent]
 	Lightning   *Store[component.LightningComponent]
+	Missile     *Store[component.MissileComponent]
 	Spirit      *Store[component.SpiritComponent]
 	Materialize *Store[component.MaterializeComponent]
 	Header      *Store[component.HeaderComponent]
@@ -71,6 +72,7 @@ func initComponents(w *World) {
 	w.Components.Swarm = NewStore[component.SwarmComponent]()
 	w.Components.Dust = NewStore[component.DustComponent]()
 	w.Components.Lightning = NewStore[component.LightningComponent]()
+	w.Components.Missile = NewStore[component.MissileComponent]()
 	w.Components.Spirit = NewStore[component.SpiritComponent]()
 	w.Components.Materialize = NewStore[component.MaterializeComponent]()
 	w.Components.Header = NewStore[component.HeaderComponent]()
@@ -110,6 +112,7 @@ func (w *World) removeEntity(e core.Entity) {
 	w.Components.Swarm.RemoveEntity(e)
 	w.Components.Dust.RemoveEntity(e)
 	w.Components.Lightning.RemoveEntity(e)
+	w.Components.Missile.RemoveEntity(e)
 	w.Components.Spirit.RemoveEntity(e)
 	w.Components.Materialize.RemoveEntity(e)
 	w.Components.Header.RemoveEntity(e)
@@ -148,6 +151,7 @@ func (w *World) wipeAll() {
 	w.Components.Swarm.ClearAllComponents()
 	w.Components.Dust.ClearAllComponents()
 	w.Components.Lightning.ClearAllComponents()
+	w.Components.Missile.ClearAllComponents()
 	w.Components.Spirit.ClearAllComponents()
 	w.Components.Materialize.ClearAllComponents()
 	w.Components.Header.ClearAllComponents()

@@ -2,6 +2,8 @@ package parameter
 
 import (
 	"time"
+
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 )
 
 // Drain System
@@ -25,8 +27,8 @@ const (
 
 // Drain Entity
 const (
-	// DrainChar is the character used to render the drain entity (╬ - Unicode U+256C)
-	DrainChar = '╬'
+	// DrainChar is the character used to render the drain entity
+	DrainChar = visual.BorderDoubleCross
 
 	// DrainEnergyDrainInterval is the duration between energy drain ticks
 	DrainEnergyDrainInterval = 1000 * time.Millisecond
@@ -159,3 +161,11 @@ const (
 	// SwarmDeflectAngleVarFloat is half-angle of random deflection cone (radians)
 	SwarmDeflectAngleVarFloat = 0.25
 )
+
+// SwarmPatternActive defines which cells are collision-active, keeping it simple and make the whole box collide
+var SwarmPatternActive = [2][2][4]bool{
+	// Pattern 0: All Active
+	{{true, true, true, true}, {true, true, true, true}},
+	// Pattern 1: All Active
+	{{true, true, true, true}, {true, true, true, true}},
+}

@@ -29,6 +29,9 @@ const (
 
 	// CombatDamageExplosion is damage caused by each explosion center hit
 	CombatDamageExplosion = 1
+
+	// CombatDamageMissile is damage per missile impact
+	CombatDamageMissile = 2
 )
 
 // Timers
@@ -104,6 +107,12 @@ const (
 const (
 	// VampireDrainEnergyValue is the amount of energy absorbed energy on hit
 	VampireDrainEnergyValue = 100
+)
+
+// Missile
+const (
+	// MissileImpactRadius is distance threshold for target hit (Q32.32)
+	MissileImpactRadiusFloat = 2.0
 )
 
 // Knockback

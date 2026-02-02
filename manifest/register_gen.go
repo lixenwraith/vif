@@ -66,6 +66,9 @@ func RegisterSystems() {
 	registry.RegisterSystem("lightning", func(w any) any {
 		return system.NewLightningSystem(w.(*engine.World))
 	})
+	registry.RegisterSystem("missile", func(w any) any {
+		return system.NewMissileSystem(w.(*engine.World))
+	})
 	registry.RegisterSystem("combat", func(w any) any {
 		return system.NewCombatSystem(w.(*engine.World))
 	})
@@ -154,6 +157,9 @@ func RegisterRenderers() {
 	registry.RegisterRenderer("lightning", func(ctx any) any {
 		return renderer.NewLightningRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityField)
+	registry.RegisterRenderer("missile", func(ctx any) any {
+		return renderer.NewMissileRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityField)
 	registry.RegisterRenderer("spirit", func(ctx any) any {
 		return renderer.NewSpiritRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityParticle)
@@ -213,6 +219,7 @@ func ActiveSystems() []string {
 		"fuse",
 		"spirit",
 		"lightning",
+		"missile",
 		"combat",
 		"drain",
 		"quasar",
@@ -247,6 +254,7 @@ func ActiveRenderers() []string {
 		"marker",
 		"explosion",
 		"lightning",
+		"missile",
 		"spirit",
 		"materialize",
 		"quasar",

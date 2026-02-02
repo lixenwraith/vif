@@ -4,7 +4,8 @@ import (
 	"time"
 )
 
-// TODO: move to the music system
+// TODO: to be moved to music system or audio package
+
 // APMToBPM maps player actions-per-minute to music tempo
 // APM 0-60: 100 BPM (calm baseline)
 // APM 60-120: 100-140 BPM (linear scale)

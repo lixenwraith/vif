@@ -522,6 +522,16 @@ const (
 	// Trigger: Input/Mode
 	// Consumer: MotionMarkerSystem | Payload: *ModeChangeNotificationPayload
 	EventModeChangeNotification
+
+	// EventMissileSpawnRequest signals launcher buff firing a cluster missile
+	// Trigger: BuffSystem on launcher fire
+	// Consumer: MissileSystem | Payload: *MissileSpawnRequestPayload
+	EventMissileSpawnRequest
+
+	// EventMissileImpact signals missile reached target
+	// Trigger: MissileSystem on impact detection
+	// Consumer: CombatSystem, ExplosionSystem (future) | Payload: *MissileImpactPayload
+	EventMissileImpact
 )
 
 // GameEvent represents a single game event with metadata

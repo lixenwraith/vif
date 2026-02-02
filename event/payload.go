@@ -526,3 +526,25 @@ type MotionMarkerShowPayload struct {
 type ModeChangeNotificationPayload struct {
 	Mode core.GameMode `toml:"mode"`
 }
+
+// MissileSpawnRequestPayload contains cluster missile spawn parameters
+type MissileSpawnRequestPayload struct {
+	OwnerEntity  core.Entity   `toml:"owner_entity"`  // Cursor
+	OriginEntity core.Entity   `toml:"origin_entity"` // Launcher orb
+	OriginX      int           `toml:"origin_x"`
+	OriginY      int           `toml:"origin_y"`
+	TargetX      int           `toml:"target_x"` // Far quadrant aim point
+	TargetY      int           `toml:"target_y"`
+	ChildCount   int           `toml:"child_count"`  // heat/10
+	Targets      []core.Entity `toml:"targets"`      // Prioritized target entities
+	HitEntities  []core.Entity `toml:"hit_entities"` // Corresponding hit points (member or same as target)
+}
+
+// MissileImpactPayload contains impact event data
+type MissileImpactPayload struct {
+	OwnerEntity  core.Entity `toml:"owner_entity"`
+	TargetEntity core.Entity `toml:"target_entity"`
+	HitEntity    core.Entity `toml:"hit_entity"`
+	ImpactX      int         `toml:"impact_x"`
+	ImpactY      int         `toml:"impact_y"`
+}

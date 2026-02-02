@@ -73,6 +73,45 @@ const (
 	ExplosionGradientMidpointFloat = 0.5
 )
 
+// Cluster Missile - Parent Phase
+const (
+	// MissileClusterGravityFloat is downward acceleration (cells/sec²)
+	MissileClusterGravityFloat = 18.0
+
+	// MissileClusterLaunchSpeedFloat is initial velocity magnitude (cells/sec)
+	MissileClusterLaunchSpeedFloat = 40.0
+
+	// MissileClusterLaunchAngleDegrees is upward bias from horizontal (degrees)
+	MissileClusterLaunchAngleDegrees = 15.0
+
+	// MissileClusterMinAgeFrames is minimum frames before split check
+	MissileClusterMinAgeFrames = 12
+)
+
+// Cluster Missile - Child/Seeker Phase
+const (
+	// MissileSeekerMaxSpeedFloat is maximum homing velocity (cells/sec)
+	MissileSeekerMaxSpeedFloat = 50.0
+
+	// MissileSeekerSteerForceFloat is steering acceleration (cells/sec²)
+	MissileSeekerSteerForceFloat = 100.0
+
+	// MissileSeekerSpreadAngleFloat is arc spread for children spawn (radians, ~72° total)
+	MissileSeekerSpreadAngleFloat = 1.26
+)
+
+// Missile Visual - Parent and Child
+const (
+	// MissileTrailMaxAge is frames before trail point fades completely
+	MissileTrailMaxAge = 12
+
+	// MissileTrailInterval is frames between trail point emissions
+	MissileTrailInterval = 1
+
+	// MissileExplosionRadiusFloat is visual radius for impact explosion (smaller than main)
+	MissileExplosionRadiusFloat = 6.0
+)
+
 // Destruction Flash
 const (
 	// DestructionFlashDuration is how long the destruction flash effect lasts in milliseconds

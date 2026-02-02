@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -160,15 +161,13 @@ func (s *BuffSystem) addBuff(buff component.BuffType) {
 	}
 
 	buffComp.Active[buff] = true
+	buffComp.Cooldown[buff] = 0 // Ready to fire immediately
 	switch buff {
 	case component.BuffRod:
-		buffComp.Cooldown[buff] = parameter.BuffCooldownRod
 		s.statRod.Store(true)
 	case component.BuffLauncher:
-		buffComp.Cooldown[buff] = parameter.BuffCooldownLauncher
 		s.statLauncher.Store(true)
 	case component.BuffChain:
-		buffComp.Cooldown[buff] = parameter.BuffCooldownChain
 		s.statChain.Store(true)
 	default:
 		return
@@ -179,7 +178,7 @@ func (s *BuffSystem) addBuff(buff component.BuffType) {
 	// TEST: Add launcher orb for multi-orb testing
 	if buff == component.BuffRod && !buffComp.Active[component.BuffLauncher] {
 		buffComp.Active[component.BuffLauncher] = true
-		buffComp.Cooldown[component.BuffLauncher] = parameter.BuffCooldownLauncher
+		buffComp.Cooldown[component.BuffLauncher] = 0 // Ready immediately
 		s.statLauncher.Store(true)
 	}
 }
@@ -250,7 +249,7 @@ func (s *BuffSystem) spawnOrbEntity(ownerEntity core.Entity, buffType component.
 		sigilColor = component.SigilOrbChain
 	}
 	sigilComp := component.SigilComponent{
-		Rune:  parameter.OrbChar,
+		Rune:  visual.CircleBullsEye,
 		Color: sigilColor,
 	}
 
@@ -520,6 +519,9 @@ func (s *BuffSystem) fireAllBuffs() {
 		return
 	}
 
+	// Resolve targets once, reuse for all buffs
+	var assignments []targetAssignment
+
 	for buff, active := range buffComp.Active {
 		if !active {
 			continue
@@ -539,103 +541,207 @@ func (s *BuffSystem) fireAllBuffs() {
 				s.triggerOrbFlash(rodOrbEntity)
 			}
 
-			// 1. Filter eligible targets
-			combatEntities := s.world.Components.Combat.GetAllEntities()
-			candidateTargetEntities := make([]core.Entity, 0, len(combatEntities))
-			for _, combatEntity := range combatEntities {
-				combatComp, ok := s.world.Components.Combat.GetComponent(combatEntity)
-				if !ok {
-					continue
-				}
-				if combatComp.OwnerEntity == cursorEntity {
-					continue
-				}
-				candidateTargetEntities = append(candidateTargetEntities, combatEntity)
+			// Lazy resolve targets
+			if assignments == nil {
+				assignments = resolveBuffTargets(s.world, cursorPos.X, cursorPos.Y, shots)
 			}
 
-			// 2. Prioritize composite targets
-			compositeIndex := 0
-			for scanIndex := range len(candidateTargetEntities) {
-				if s.world.Components.Header.HasEntity(candidateTargetEntities[scanIndex]) {
-					if scanIndex != compositeIndex {
-						candidateTargetEntities[scanIndex], candidateTargetEntities[compositeIndex] = candidateTargetEntities[compositeIndex], candidateTargetEntities[scanIndex]
-					}
-					compositeIndex++
-				}
-			}
-
-			// 3. Process composites (closest member per header)
-			finalTargetEntities := make([]core.Entity, 0, shots)
-			finalHitEntities := make([]core.Entity, 0, shots)
-			for i := range min(shots, compositeIndex) {
-				headerComp, ok := s.world.Components.Header.GetComponent(candidateTargetEntities[i])
-				if !ok {
-					continue
-				}
-				var hitEntityCandidate core.Entity
-				var shortestMemberDistance int64
-				for _, memberEntry := range headerComp.MemberEntries {
-					memberPos, ok := s.world.Positions.GetPosition(memberEntry.Entity)
-					if !ok {
-						continue
-					}
-					memberDistance := vmath.MagnitudeEuclidean(
-						vmath.FromInt(cursorPos.X-memberPos.X),
-						vmath.FromInt(cursorPos.Y-memberPos.Y),
-					)
-					if hitEntityCandidate == 0 || memberDistance < shortestMemberDistance {
-						hitEntityCandidate = memberEntry.Entity
-						shortestMemberDistance = memberDistance
-					}
-				}
-				if hitEntityCandidate != 0 {
-					finalTargetEntities = append(finalTargetEntities, candidateTargetEntities[i])
-					finalHitEntities = append(finalHitEntities, hitEntityCandidate)
-				}
-			}
-
-			// 4. Fill the rest with closest non-composite entities
-			remaining := shots - len(finalTargetEntities)
-			if remaining > 0 && compositeIndex < len(candidateTargetEntities) {
-				type entityDistance struct {
-					entity   core.Entity
-					distance int64
-				}
-				nonComposites := make([]entityDistance, 0, len(candidateTargetEntities)-compositeIndex)
-				for i := compositeIndex; i < len(candidateTargetEntities); i++ {
-					targetPos, ok := s.world.Positions.GetPosition(candidateTargetEntities[i])
-					if !ok {
-						continue
-					}
-					nonComposites = append(nonComposites, entityDistance{
-						entity: candidateTargetEntities[i],
-						distance: vmath.MagnitudeEuclidean(
-							vmath.FromInt(cursorPos.X-targetPos.X),
-							vmath.FromInt(cursorPos.Y-targetPos.Y),
-						),
-					})
-				}
-				slices.SortStableFunc(nonComposites, func(a, b entityDistance) int {
-					return int(a.distance - b.distance)
-				})
-				// Bound by actual available non-composites
-				for i := range min(remaining, len(nonComposites)) {
-					finalTargetEntities = append(finalTargetEntities, nonComposites[i].entity)
-					finalHitEntities = append(finalHitEntities, nonComposites[i].entity)
-				}
-			}
-
-			// 5. Fire lightning to targets
-			for i := range len(finalTargetEntities) {
+			// Fire lightning to targets
+			for i := 0; i < min(shots, len(assignments)); i++ {
 				s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
 					AttackType:   component.CombatAttackLightning,
 					OwnerEntity:  cursorEntity,
 					OriginEntity: rodOrbEntity,
-					TargetEntity: finalTargetEntities[i],
-					HitEntity:    finalHitEntities[i],
+					TargetEntity: assignments[i].target,
+					HitEntity:    assignments[i].hit,
 				})
 			}
+
+		case component.BuffLauncher:
+			buffComp.Cooldown[buff] = parameter.BuffCooldownLauncher
+
+			launcherOrbEntity := buffComp.Orbs[component.BuffLauncher]
+			if launcherOrbEntity != 0 {
+				s.triggerOrbFlash(launcherOrbEntity)
+			}
+
+			// Lazy resolve targets
+			if assignments == nil {
+				assignments = resolveBuffTargets(s.world, cursorPos.X, cursorPos.Y, shots)
+			}
+
+			// Calculate far quadrant target
+			targetX, targetY := s.calculateLauncherTarget(cursorPos.X, cursorPos.Y)
+
+			// Get orb position for origin
+			originX, originY := cursorPos.X, cursorPos.Y
+			if launcherOrbEntity != 0 {
+				if orbPos, ok := s.world.Positions.GetPosition(launcherOrbEntity); ok {
+					originX, originY = orbPos.X, orbPos.Y
+				}
+			}
+
+			// Build target/hit slices for payload
+			targets := make([]core.Entity, len(assignments))
+			hits := make([]core.Entity, len(assignments))
+			for i, a := range assignments {
+				targets[i] = a.target
+				hits[i] = a.hit
+			}
+
+			s.world.PushEvent(event.EventMissileSpawnRequest, &event.MissileSpawnRequestPayload{
+				OwnerEntity:  cursorEntity,
+				OriginEntity: launcherOrbEntity,
+				OriginX:      originX,
+				OriginY:      originY,
+				TargetX:      targetX,
+				TargetY:      targetY,
+				ChildCount:   shots,
+				Targets:      targets,
+				HitEntities:  hits,
+			})
 		}
 		s.world.Components.Buff.SetComponent(cursorEntity, buffComp)
 	}
+}
+
+// targetAssignment holds resolved target and hit entity pair
+type targetAssignment struct {
+	target core.Entity // Header for composite, entity for single
+	hit    core.Entity // Member entity or same as target
+	dist   int64       // Distance from origin (for overflow distribution)
+}
+
+// resolveBuffTargets returns prioritized target assignments for buff abilities
+// Composites first (closest member per header), then distance-sorted singles
+// count: maximum assignments needed
+// Returns slice of assignments, may be shorter than count if insufficient targets
+func resolveBuffTargets(
+	world *engine.World,
+	originX, originY int,
+	count int,
+) []targetAssignment {
+	if count <= 0 {
+		return nil
+	}
+
+	cursorEntity := world.Resources.Player.Entity
+
+	// Collect all combat entities except cursor-owned
+	combatEntities := world.Components.Combat.GetAllEntities()
+	candidates := make([]core.Entity, 0, len(combatEntities))
+	for _, e := range combatEntities {
+		combat, ok := world.Components.Combat.GetComponent(e)
+		if !ok || combat.OwnerEntity == cursorEntity {
+			continue
+		}
+		candidates = append(candidates, e)
+	}
+
+	if len(candidates) == 0 {
+		return nil
+	}
+
+	// Separate composites and singles, resolve closest member for composites
+	composites := make([]targetAssignment, 0)
+	singles := make([]targetAssignment, 0)
+
+	for _, e := range candidates {
+		if world.Components.Header.HasEntity(e) {
+			// Composite: find closest member
+			header, ok := world.Components.Header.GetComponent(e)
+			if !ok {
+				continue
+			}
+			var bestMember core.Entity
+			var bestDist int64 = 1 << 62
+			for _, member := range header.MemberEntries {
+				pos, ok := world.Positions.GetPosition(member.Entity)
+				if !ok {
+					continue
+				}
+				d := vmath.MagnitudeEuclidean(
+					vmath.FromInt(originX-pos.X),
+					vmath.FromInt(originY-pos.Y),
+				)
+				if d < bestDist {
+					bestDist = d
+					bestMember = member.Entity
+				}
+			}
+			if bestMember != 0 {
+				composites = append(composites, targetAssignment{
+					target: e,
+					hit:    bestMember,
+					dist:   bestDist,
+				})
+			}
+		} else {
+			// Single entity
+			pos, ok := world.Positions.GetPosition(e)
+			if !ok {
+				continue
+			}
+			d := vmath.MagnitudeEuclidean(
+				vmath.FromInt(originX-pos.X),
+				vmath.FromInt(originY-pos.Y),
+			)
+			singles = append(singles, targetAssignment{
+				target: e,
+				hit:    e,
+				dist:   d,
+			})
+		}
+	}
+
+	// Sort singles by distance
+	slices.SortStableFunc(singles, func(a, b targetAssignment) int {
+		return int(a.dist - b.dist)
+	})
+
+	// Build result: composites first, then singles
+	result := make([]targetAssignment, 0, count)
+	result = append(result, composites...)
+	result = append(result, singles...)
+
+	// Distribute overflow: if count > len(result), cycle through by distance priority
+	if len(result) == 0 {
+		return nil
+	}
+
+	if len(result) >= count {
+		return result[:count]
+	}
+
+	// Overflow: repeat targets, prioritize composites then closest
+	final := make([]targetAssignment, count)
+	copy(final, result)
+	for i := len(result); i < count; i++ {
+		// Cycle through existing targets
+		final[i] = result[i%len(result)]
+	}
+	return final
+}
+
+// calculateLauncherTarget returns far diagonal quadrant from cursor
+// Flexible function for tuning launch direction
+func (s *BuffSystem) calculateLauncherTarget(cursorX, cursorY int) (int, int) {
+	config := s.world.Resources.Config
+	centerX := config.GameWidth / 2
+	centerY := config.GameHeight / 2
+
+	// Determine which quadrant cursor is in, aim for opposite diagonal
+	var targetX, targetY int
+	if cursorX < centerX {
+		targetX = config.GameWidth - 1
+	} else {
+		targetX = 0
+	}
+	if cursorY < centerY {
+		targetY = config.GameHeight - 1
+	} else {
+		targetY = 0
+	}
+
+	return targetX, targetY
 }

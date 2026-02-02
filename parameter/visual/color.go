@@ -121,6 +121,17 @@ var (
 	RgbOrbChain    = terminal.RGB{255, 105, 180} // Hot pink
 	RgbOrbFlash    = terminal.RGB{255, 255, 255} // White flash
 
+	// Missile trail colors (bounce-ball style: Gold → Red)
+	RgbMissileTrailStart = terminal.RGB{R: 255, G: 215, B: 0}   // Gold
+	RgbMissileTrailEnd   = terminal.RGB{R: 255, G: 60, B: 60}   // Red
+	RgbMissileBody       = terminal.RGB{R: 255, G: 200, B: 100} // Warm orange
+	RgbMissileSeeker     = terminal.RGB{R: 255, G: 140, B: 0}   // Orange
+
+	// Missile impact explosion (warm palette - distinct from cyan/neon main explosion)
+	RgbMissileExplosionCore = terminal.RGB{R: 255, G: 255, B: 220} // Bright white-yellow
+	RgbMissileExplosionMid  = terminal.RGB{R: 255, G: 140, B: 40}  // Warm orange
+	RgbMissileExplosionEdge = terminal.RGB{R: 180, G: 60, B: 20}   // Dark orange-red
+
 	// Audio indicator colors
 	RgbAudioBothOff     = terminal.RGB{R: 180, G: 60, B: 60}  // Red: both off
 	RgbAudioMusicOnly   = terminal.RGB{R: 200, G: 180, B: 60} // Yellow: effects off, music on
@@ -168,3 +179,10 @@ var LightningTrueColorLUT = [5][2]terminal.RGB{
 	// Purple: dark purple core -> bright purple-white
 	{{120, 40, 180}, {220, 180, 255}},
 }
+
+// 256-color palette indices for missile rendering
+const (
+	Missile256Trail  uint8 = 214 // Orange
+	Missile256Body   uint8 = 220 // Gold
+	Missile256Seeker uint8 = 208 // Dark orange
+)

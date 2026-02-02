@@ -52,6 +52,7 @@ var Components = []ComponentDef{
 	{"Swarm", "SwarmComponent"},
 	{"Dust", "DustComponent"},
 	{"Lightning", "LightningComponent"},
+	{"Missile", "MissileComponent"},
 	{"Spirit", "SpiritComponent"},
 	{"Materialize", "MaterializeComponent"},
 
@@ -92,6 +93,7 @@ var Systems = []SystemDef{
 	{"fuse", "NewFuseSystem"},
 	{"spirit", "NewSpiritSystem"},
 	{"lightning", "NewLightningSystem"},
+	{"missile", "NewMissileSystem"},
 	{"combat", "NewCombatSystem"},
 	{"drain", "NewDrainSystem"},
 	{"quasar", "NewQuasarSystem"},
@@ -126,6 +128,7 @@ var Renderers = []RendererDef{
 	{"marker", "NewMarkerRenderer", "PriorityMarker"},
 	{"explosion", "NewExplosionRenderer", "PriorityParticle"},
 	{"lightning", "NewLightningRenderer", "PriorityField"},
+	{"missile", "NewMissileRenderer", "PriorityField"},
 	{"spirit", "NewSpiritRenderer", "PriorityParticle"},
 	{"materialize", "NewMaterializeRenderer", "PriorityMaterialize"},
 	{"quasar", "NewQuasarRenderer", "PriorityMulti"},

@@ -29,9 +29,6 @@ const (
 
 // Buff Orb Configuration
 const (
-	// OrbChar is the character used for buff orbs
-	OrbChar = '●' // U+25CF Black Circle
-
 	// OrbOrbitRadiusXFloat is horizontal orbital radius in cells
 	OrbOrbitRadiusXFloat = 12.0
 
