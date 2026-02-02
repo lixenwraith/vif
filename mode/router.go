@@ -526,19 +526,7 @@ func (r *Router) handleGoldJump() bool {
 }
 
 func (r *Router) handleFireMain() bool {
-	// Get cursor position for cleaner origin
-	var originX, originY int
-	if pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity); ok {
-		originX, originY = pos.X, pos.Y
-	}
-
-	r.ctx.PushEvent(event.EventCleanerDirectionalRequest, &event.DirectionalCleanerPayload{
-		OriginX: originX,
-		OriginY: originY,
-	})
-
-	r.ctx.PushEvent(event.EventBuffFireRequest, nil)
-
+	r.ctx.PushEvent(event.EventBuffFireMainRequest, nil)
 	return true
 }
 

@@ -17,7 +17,8 @@ const (
 
 // BuffComponent tracks cursor active buffs
 type BuffComponent struct {
-	Active   map[BuffType]bool
-	Cooldown map[BuffType]time.Duration
-	Orbs     map[BuffType]core.Entity // Orb entity for each active buff
+	MainFireCooldown time.Duration
+	Active           map[BuffType]bool
+	Cooldown         map[BuffType]time.Duration
+	Orbs             map[BuffType]core.Entity // Orb entity for each active buff
 }

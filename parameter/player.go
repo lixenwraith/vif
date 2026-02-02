@@ -22,6 +22,7 @@ const (
 
 // Buff Cooldowns
 const (
+	BuffCooldownMainFire = 150 * time.Millisecond
 	BuffCooldownRod      = 500 * time.Millisecond
 	BuffCooldownLauncher = 1000 * time.Millisecond
 	BuffCooldownChain    = 2000 * time.Millisecond

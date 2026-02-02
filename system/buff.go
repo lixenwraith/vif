@@ -68,6 +68,7 @@ func (s *BuffSystem) EventTypes() []event.EventType {
 		event.EventBuffAddRequest,
 		event.EventEnergyCrossedZeroNotification,
 		event.EventBuffFireRequest,
+		event.EventBuffFireMainRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
@@ -100,6 +101,9 @@ func (s *BuffSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventEnergyCrossedZeroNotification:
 		s.removeAllBuffs()
 
+	case event.EventBuffFireMainRequest:
+		s.handleFireMain()
+
 	case event.EventBuffFireRequest:
 		s.fireAllBuffs()
 	}
@@ -118,6 +122,14 @@ func (s *BuffSystem) Update() {
 
 	dt := s.world.Resources.Time.DeltaTime
 
+	// Update main fire cooldown
+	if buffComp.MainFireCooldown > 0 {
+		buffComp.MainFireCooldown -= dt
+		if buffComp.MainFireCooldown < 0 {
+			buffComp.MainFireCooldown = 0
+		}
+	}
+
 	// Update buff cooldowns
 	for buff, active := range buffComp.Active {
 		if !active {
@@ -128,6 +140,7 @@ func (s *BuffSystem) Update() {
 			buffComp.Cooldown[buff] = 0
 		}
 	}
+
 	s.world.Components.Buff.SetComponent(cursorEntity, buffComp)
 
 	// Ensure orbs exist for active buffs (self-healing after resize/destruction)
@@ -498,6 +511,34 @@ func (s *BuffSystem) destroyAllOrbs() {
 	for _, orbEntity := range orbEntities {
 		s.destroyOrb(orbEntity)
 	}
+}
+
+func (s *BuffSystem) handleFireMain() {
+	cursorEntity := s.world.Resources.Player.Entity
+	buffComp, ok := s.world.Components.Buff.GetComponent(cursorEntity)
+	if !ok {
+		return
+	}
+
+	if buffComp.MainFireCooldown > 0 {
+		return
+	}
+
+	// Reset cooldown
+	buffComp.MainFireCooldown = parameter.BuffCooldownMainFire
+	s.world.Components.Buff.SetComponent(cursorEntity, buffComp)
+
+	// 1. Fire Main Weapon (Cleaner)
+	// Origin is current cursor position
+	if pos, ok := s.world.Positions.GetPosition(cursorEntity); ok {
+		s.world.PushEvent(event.EventCleanerDirectionalRequest, &event.DirectionalCleanerPayload{
+			OriginX: pos.X,
+			OriginY: pos.Y,
+		})
+	}
+
+	// 2. Fire Auxiliary Buffs
+	s.fireAllBuffs()
 }
 
 func (s *BuffSystem) fireAllBuffs() {
