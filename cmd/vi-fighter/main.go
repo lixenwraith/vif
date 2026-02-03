@@ -208,11 +208,14 @@ func main() {
 			// Increment frame number at the start of the frame cycle
 			ctx.IncrementFrameNumber()
 
-			// Process macro playback tick
-			if macroIntent := router.ProcessMacroTick(); macroIntent != nil {
+			// Process macro playback tick (may return multiple intents)
+			macroIntents := router.ProcessMacroTick()
+			for _, macroIntent := range macroIntents {
 				if !router.Handle(macroIntent) {
 					return
 				}
+			}
+			if len(macroIntents) > 0 {
 				clockScheduler.DispatchEventsImmediately()
 			}
 

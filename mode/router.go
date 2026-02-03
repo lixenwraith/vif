@@ -15,7 +15,7 @@ type Router struct {
 	ctx     *engine.GameContext
 	machine *input.Machine
 
-	macro *MacroRecorder
+	macro *MacroManager
 
 	// Input state (find/search repeat)
 	lastSearchText  string // Preserved for n/N repeat
@@ -33,7 +33,7 @@ func NewRouter(ctx *engine.GameContext, machine *input.Machine) *Router {
 	r := &Router{
 		ctx:     ctx,
 		machine: machine,
-		macro:   NewMacroRecorder(),
+		macro:   NewMacroManager(),
 	}
 
 	r.motionLUT = map[input.MotionOp]MotionFunc{
@@ -97,29 +97,28 @@ func (r *Router) Handle(intent *input.Intent) bool {
 	}
 	r.ctx.State.RecordAction()
 
-	// Macro playback interrupt: q stops playback
-	if r.macro.IsPlaying() && intent.Type == input.IntentMacroRecordToggle {
-		r.macro.StopPlayback()
-		r.ctx.MacroPlaying.Store(false)
+	// === Macro Context Interception ===
+	// IntentMacroRecordToggle is placeholder from 'q' key; route based on context
+	if intent.Type == input.IntentMacroRecordToggle {
+		if r.macro.IsRecording() {
+			// q while recording -> stop
+			r.macro.StopRecording()
+			r.ctx.MacroRecording.Store(false)
+			r.ctx.MacroRecordingLabel.Store(0)
+			return true
+		}
+		if r.macro.IsPlaying() {
+			// q while playing -> transition to stop-await state
+			r.machine.SetState(input.StateMacroStopAwait)
+			return true
+		}
+		// q while idle -> transition to record-await state
+		r.machine.SetState(input.StateMacroRecordAwait)
 		return true
 	}
 
-	// Recording: ESC stops recording (then continues to normal ESC handling)
-	if r.macro.IsRecording() && intent.Type == input.IntentEscape {
-		r.macro.StopRecording()
-		r.ctx.MacroRecording.Store(false)
-	}
-
-	// Handle macro control intents
-	switch intent.Type {
-	case input.IntentMacroRecordToggle:
-		return r.handleMacroRecordToggle()
-	case input.IntentMacroPlay:
-		return r.handleMacroPlay(intent)
-	}
-
-	// Record intent if recording (exclude macro meta-intents, already handled above)
-	if r.macro.IsRecording() {
+	// Record intent if recording (exclude macro control intents and playback-originated)
+	if r.macro.IsRecording() && !isMacroControlIntent(intent.Type) {
 		r.macro.Record(*intent)
 	}
 
@@ -188,6 +187,20 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return r.handleInsertDeleteForward()
 	case input.IntentInsertDeleteBack:
 		return r.handleInsertDeleteBack()
+
+	// Macro control
+	case input.IntentMacroRecordStart:
+		return r.handleMacroRecordStart(intent)
+	case input.IntentMacroRecordStop:
+		return r.handleMacroRecordStop()
+	case input.IntentMacroPlay:
+		return r.handleMacroPlay(intent)
+	case input.IntentMacroPlayInfinite:
+		return r.handleMacroPlayInfinite(intent)
+	case input.IntentMacroStopOne:
+		return r.handleMacroStopOne(intent)
+	case input.IntentMacroStopAll:
+		return r.handleMacroStopAll()
 
 	// Overlay
 	case input.IntentOverlayScroll:
@@ -835,37 +848,69 @@ func (r *Router) handleOverlayScroll(intent *input.Intent) bool {
 
 // --- Macro ---
 
-func (r *Router) handleMacroRecordToggle() bool {
-	if r.macro.IsRecording() {
-		r.macro.StopRecording()
-		r.ctx.MacroRecording.Store(false)
-	} else {
-		r.macro.StartRecording()
-		r.ctx.MacroRecording.Store(true)
+func (r *Router) handleMacroRecordStart(intent *input.Intent) bool {
+	label := intent.Char
+
+	// If this label is playing, stop it first (DP2: first press stops)
+	if r.macro.IsLabelPlaying(label) {
+		r.macro.StopPlayback(label)
+		r.updateMacroPlayingState()
+		return true
 	}
+
+	r.macro.StartRecording(label)
+	r.ctx.MacroRecording.Store(true)
+	r.ctx.MacroRecordingLabel.Store(int32(label))
+	return true
+}
+
+func (r *Router) handleMacroRecordStop() bool {
+	r.macro.StopRecording()
+	r.ctx.MacroRecording.Store(false)
+	r.ctx.MacroRecordingLabel.Store(0)
 	return true
 }
 
 func (r *Router) handleMacroPlay(intent *input.Intent) bool {
 	now := r.ctx.PausableClock.Now()
-	if r.macro.StartPlayback(intent.Count, now) {
+	if r.macro.StartPlayback(intent.Char, intent.Count, now) {
 		r.ctx.MacroPlaying.Store(true)
 	}
 	return true
 }
 
-// ProcessMacroTick returns next playback intent if ready, nil otherwise
-// Called from main loop; respects pause and command mode
-func (r *Router) ProcessMacroTick() *input.Intent {
+func (r *Router) handleMacroPlayInfinite(intent *input.Intent) bool {
+	now := r.ctx.PausableClock.Now()
+	if r.macro.StartPlayback(intent.Char, 0, now) { // 0 = infinite
+		r.ctx.MacroPlaying.Store(true)
+	}
+	return true
+}
+
+func (r *Router) handleMacroStopOne(intent *input.Intent) bool {
+	r.macro.StopPlayback(intent.Char)
+	r.updateMacroPlayingState()
+	return true
+}
+
+func (r *Router) handleMacroStopAll() bool {
+	r.macro.StopAllPlayback()
+	r.ctx.MacroPlaying.Store(false)
+	return true
+}
+
+func (r *Router) updateMacroPlayingState() {
+	r.ctx.MacroPlaying.Store(r.macro.IsPlaying())
+}
+
+func (r *Router) ProcessMacroTick() []*input.Intent {
 	if r.ctx.IsPaused.Load() || r.ctx.IsCommandMode() {
 		return nil
 	}
 	now := r.ctx.PausableClock.Now()
-	intent := r.macro.Tick(now)
-	if intent == nil && !r.macro.IsPlaying() {
-		r.ctx.MacroPlaying.Store(false)
-	}
-	return intent
+	intents := r.macro.Tick(now)
+	r.updateMacroPlayingState()
+	return intents
 }
 
 // --- Helper Methods ---
@@ -885,6 +930,17 @@ func (r *Router) setLastCommandAndSplash(cmd string) {
 		OriginX: originX,
 		OriginY: originY,
 	})
+}
+
+func isMacroControlIntent(t input.IntentType) bool {
+	switch t {
+	case input.IntentMacroRecordStart, input.IntentMacroRecordStop,
+		input.IntentMacroPlay, input.IntentMacroPlayInfinite,
+		input.IntentMacroStopOne, input.IntentMacroStopAll,
+		input.IntentMacroRecordToggle:
+		return true
+	}
+	return false
 }
 
 // motionOpToRune converts MotionOp to the canonical rune for tracking

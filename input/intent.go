@@ -34,8 +34,13 @@ const (
 	IntentMotionMarkerJump // r/g/b after marker show - jump to colored glyph
 
 	// Macro
-	IntentMacroRecordToggle // q - toggle macro recording
-	IntentMacroPlay         // @q - play macro
+	IntentMacroRecordStart  // q + label - start recording to label
+	IntentMacroRecordStop   // q while recording - stop recording
+	IntentMacroPlay         // [count]@label - play macro
+	IntentMacroPlayInfinite // @@label - play indefinitely
+	IntentMacroStopOne      // q + label while playing - stop that macro
+	IntentMacroStopAll      // q@ while playing - stop all macros
+	IntentMacroRecordToggle // q key - placeholder, Router interprets based on context
 
 	// Mode switching
 	IntentModeSwitch // i, /, :

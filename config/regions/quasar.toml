@@ -9,6 +9,7 @@ parent = "Root"
 [states.QuasarFuse]
 parent = "QuasarCycle"
 on_enter = [
+    { action = "EmitEvent", event = "EventDrainPause" },
     { action = "EmitEvent", event = "EventGrayoutStart" },
     { action = "EmitEvent", event = "EventFuseQuasarRequest" },
 ]
@@ -86,6 +87,7 @@ transitions = [
 [states.QuasarExit]
 parent = "QuasarCycle"
 on_enter = [
+    { action = "EmitEvent", event = "EventDrainResume" },
     { action = "EmitEvent", event = "EventGrayoutEnd" },
     { action = "EmitEvent", event = "EventGoldCancel" },
     { action = "ResumeRegion", region = "main" },

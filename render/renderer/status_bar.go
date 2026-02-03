@@ -131,8 +131,9 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 	// Macro recording indicator (overrides mode display)
 	if r.gameCtx.MacroRecording.Load() {
-		// Overwrite mode section with REC indicator
-		recText := parameter.ModeTextRecord
+		// Overwrite mode section with RECORD indicator
+		label := r.gameCtx.MacroRecordingLabel.Load()
+		recText := fmt.Sprintf("%s: %c ", parameter.ModeTextRecord, label)
 		recX := x - len(modeText) // Start where mode text started
 		for i, ch := range recText {
 			if recX+i < ctx.ScreenWidth {

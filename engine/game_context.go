@@ -33,9 +33,10 @@ type GameContext struct {
 	IsPaused atomic.Bool // Pause flag; actual timing handled by PausableClock
 	IsMuted  atomic.Bool // Mute flag; keeps mute state
 
-	MacroRecording atomic.Bool // True when macro is recording
-	MacroPlaying   atomic.Bool // True when macro is playing
-	MacroClearFlag atomic.Bool // Set by :new to signal macro reset
+	MacroRecording      atomic.Bool  // True when macro is recording
+	MacroRecordingLabel atomic.Int32 // Current recording label (rune), 0 if not recording
+	MacroPlaying        atomic.Bool  // True when any macro is playing
+	MacroClearFlag      atomic.Bool  // Set by :new to signal macro reset
 
 	// === Main-Loop Exclusive ===
 	// Accessed only from main goroutine (input, resize, render)

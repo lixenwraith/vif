@@ -25,6 +25,9 @@ const (
 	StateOperatorCharWait
 	StatePrefixG
 	StateOperatorPrefixG
-	StateMarkerAwaitColor // After g+direction, awaiting r/g/b or repeat direction
-	StateMacroAwait       // after '@', awaiting register key (q)
+	StateMarkerAwaitColor   // After g+direction, awaiting r/g/b or repeat direction
+	StateMacroRecordAwait   // after 'q' (not recording, not playing), awaiting label
+	StateMacroPlayAwait     // after '@', awaiting label or '@'
+	StateMacroInfiniteAwait // after '@@', awaiting label
+	StateMacroStopAwait     // after 'q' (while playing), awaiting label or '@'
 )

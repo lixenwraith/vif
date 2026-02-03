@@ -94,11 +94,22 @@ func (m *Machine) processKey(ev terminal.Event) *Intent {
 	return nil
 }
 
+func (m *Machine) SetState(state InputState) {
+	m.state = state
+	// Clear any partial command buffer when state is set externally
+	m.cmdBuffer = m.cmdBuffer[:0]
+}
+
 // === Normal Mode Processing ===
 
 func (m *Machine) processNormal(ev terminal.Event) *Intent {
 	// Handle special keys first
 	if ev.Key != terminal.KeyRune {
+		// Macro stop (Ctrl+@) works in all modes
+		if ev.Key == terminal.KeyCtrlSpace {
+			return &Intent{Type: IntentMacroStopAll}
+		}
+
 		if entry, ok := m.keyTable.SpecialKeys[ev.Key]; ok {
 			return m.handleNormalEntry(entry, 0)
 		}
@@ -121,8 +132,14 @@ func (m *Machine) processNormal(ev terminal.Event) *Intent {
 		return m.processOperatorPrefixG(ev.Rune)
 	case StateMarkerAwaitColor:
 		return m.processMarkerAwaitColor(ev.Rune)
-	case StateMacroAwait:
-		return m.processMacroAwait(ev.Rune)
+	case StateMacroRecordAwait:
+		return m.processMacroRecordAwait(ev.Rune)
+	case StateMacroPlayAwait:
+		return m.processMacroPlayAwait(ev.Rune)
+	case StateMacroInfiniteAwait:
+		return m.processMacroInfiniteAwait(ev.Rune)
+	case StateMacroStopAwait:
+		return m.processMacroStopAwait(ev.Rune)
 	}
 	return nil
 }
@@ -168,7 +185,7 @@ func (m *Machine) handleNormalEntry(entry KeyEntry, key rune) *Intent {
 	case BehaviorPrefix:
 		m.prefix = key
 		if key == '@' {
-			m.state = StateMacroAwait
+			m.state = StateMacroPlayAwait
 		} else {
 			m.state = StatePrefixG
 		}
@@ -374,21 +391,91 @@ func (m *Machine) processMarkerAwaitColor(key rune) *Intent {
 	return nil
 }
 
-func (m *Machine) processMacroAwait(key rune) *Intent {
+func (m *Machine) processMacroRecordAwait(key rune) *Intent {
 	m.cmdBuffer = append(m.cmdBuffer, key)
 
-	if key == 'q' {
+	if key >= 'a' && key <= 'z' {
+		cmd := m.captureCommand()
+		m.Reset()
+		return &Intent{
+			Type:    IntentMacroRecordStart,
+			Char:    key,
+			Command: cmd,
+		}
+	}
+
+	// Invalid label cancels
+	m.Reset()
+	return nil
+}
+
+func (m *Machine) processMacroPlayAwait(key rune) *Intent {
+	m.cmdBuffer = append(m.cmdBuffer, key)
+
+	// @@ -> infinite mode
+	if key == '@' {
+		m.state = StateMacroInfiniteAwait
+		return nil
+	}
+
+	// @<label> -> play with count
+	if key >= 'a' && key <= 'z' {
 		count := m.effectiveCount()
 		cmd := m.captureCommand()
 		m.Reset()
 		return &Intent{
 			Type:    IntentMacroPlay,
+			Char:    key,
 			Count:   count,
 			Command: cmd,
 		}
 	}
 
-	// Any other key cancels
+	m.Reset()
+	return nil
+}
+
+func (m *Machine) processMacroInfiniteAwait(key rune) *Intent {
+	m.cmdBuffer = append(m.cmdBuffer, key)
+
+	if key >= 'a' && key <= 'z' {
+		cmd := m.captureCommand()
+		m.Reset()
+		return &Intent{
+			Type:    IntentMacroPlayInfinite,
+			Char:    key,
+			Command: cmd,
+		}
+	}
+
+	m.Reset()
+	return nil
+}
+
+func (m *Machine) processMacroStopAwait(key rune) *Intent {
+	m.cmdBuffer = append(m.cmdBuffer, key)
+
+	// q@ -> stop all
+	if key == '@' {
+		cmd := m.captureCommand()
+		m.Reset()
+		return &Intent{
+			Type:    IntentMacroStopAll,
+			Command: cmd,
+		}
+	}
+
+	// q<label> -> stop specific
+	if key >= 'a' && key <= 'z' {
+		cmd := m.captureCommand()
+		m.Reset()
+		return &Intent{
+			Type:    IntentMacroStopOne,
+			Char:    key,
+			Command: cmd,
+		}
+	}
+
 	m.Reset()
 	return nil
 }
@@ -412,6 +499,11 @@ func (m *Machine) motionToDirectionKey(motion MotionOp) rune {
 func (m *Machine) processInsert(ev terminal.Event) *Intent {
 	// Check navigation/system keys first
 	if ev.Key != terminal.KeyRune {
+		// Macro stop (Ctrl+@) works in all modes
+		if ev.Key == terminal.KeyCtrlSpace {
+			return &Intent{Type: IntentMacroStopAll}
+		}
+
 		// Insert-mode game actions (Tab, Enter) take precedence
 		switch ev.Key {
 		case terminal.KeyTab:
@@ -446,6 +538,11 @@ func (m *Machine) processInsert(ev terminal.Event) *Intent {
 func (m *Machine) processSearch(ev terminal.Event) *Intent {
 	// Check system/nav keys first
 	if ev.Key != terminal.KeyRune {
+		// Macro stop (Ctrl+@) works in all modes
+		if ev.Key == terminal.KeyCtrlSpace {
+			return &Intent{Type: IntentMacroStopAll}
+		}
+
 		if entry, ok := m.keyTable.TextNavKeys[ev.Key]; ok {
 			return m.handleTextModeEntry(entry)
 		}
@@ -464,6 +561,11 @@ func (m *Machine) processSearch(ev terminal.Event) *Intent {
 func (m *Machine) processCommand(ev terminal.Event) *Intent {
 	// Check system/nav keys first
 	if ev.Key != terminal.KeyRune {
+		// Macro stop (Ctrl+@) works in all modes
+		if ev.Key == terminal.KeyCtrlSpace {
+			return &Intent{Type: IntentMacroStopAll}
+		}
+
 		if entry, ok := m.keyTable.TextNavKeys[ev.Key]; ok {
 			return m.handleTextModeEntry(entry)
 		}

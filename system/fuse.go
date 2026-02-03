@@ -64,7 +64,6 @@ func (s *FuseSystem) Priority() int {
 func (s *FuseSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventFuseQuasarRequest,
-		event.EventQuasarDestroyed, // Listen for cleanup to resume drains
 		event.EventFuseSwarmRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
@@ -97,11 +96,6 @@ func (s *FuseSystem) HandleEvent(ev event.GameEvent) {
 		if !s.hasQuasarFusion() {
 			s.handleQuasarFuse()
 		}
-
-	case event.EventQuasarDestroyed:
-		// TODO: move to FSM
-		// FuseSystem manages the drain lifecycle during the Quasar phase: when Quasar dies (for any reason), resume drains
-		s.world.PushEvent(event.EventDrainResume, nil)
 
 	case event.EventFuseSwarmRequest:
 		if payload, ok := ev.Payload.(*event.FuseSwarmRequestPayload); ok {
@@ -206,8 +200,6 @@ func (s *FuseSystem) handleSwarmFuse(drainA, drainB core.Entity, effect event.Fu
 }
 
 func (s *FuseSystem) handleQuasarFuse() {
-	s.world.PushEvent(event.EventDrainPause, nil)
-
 	drains := s.world.Components.Drain.GetAllEntities()
 	sources := make([]core.Point, 0, len(drains))
 

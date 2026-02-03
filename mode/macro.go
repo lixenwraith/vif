@@ -7,107 +7,205 @@ import (
 	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
-// MacroRecorder handles macro recording and playback for a single register
-// Designed for future multi-register expansion
-type MacroRecorder struct {
-	// Recording
-	recording bool
-	buffer    []input.Intent
-
-	// Playback
-	playing       bool
-	playbackQueue []input.Intent
-	playbackIndex int
-	repeatTarget  int
+// PlaybackState tracks a single macro's playback progress
+type PlaybackState struct {
+	label         rune
+	index         int
+	repeatTarget  int // 0 = infinite
 	repeatCurrent int
 	lastPlayTime  time.Time
+	startOrder    int // FIFO ordering
 }
 
-// NewMacroRecorder creates an empty recorder
-func NewMacroRecorder() *MacroRecorder {
-	return &MacroRecorder{
-		buffer:        make([]input.Intent, 0, 32),
-		playbackQueue: make([]input.Intent, 0, 32),
+// MacroManager handles multi-macro recording and concurrent playback
+type MacroManager struct {
+	// Storage
+	buffers map[rune][]input.Intent
+
+	// Recording state
+	recording   bool
+	recordLabel rune
+
+	// Playback state
+	active       map[rune]*PlaybackState
+	startCounter int // Monotonic counter for FIFO ordering
+}
+
+// NewMacroManager creates an empty manager
+func NewMacroManager() *MacroManager {
+	return &MacroManager{
+		buffers: make(map[rune][]input.Intent),
+		active:  make(map[rune]*PlaybackState),
 	}
 }
 
-func (m *MacroRecorder) IsRecording() bool { return m.recording }
-func (m *MacroRecorder) IsPlaying() bool   { return m.playing }
+func (m *MacroManager) IsRecording() bool    { return m.recording }
+func (m *MacroManager) RecordingLabel() rune { return m.recordLabel }
+func (m *MacroManager) IsPlaying() bool      { return len(m.active) > 0 }
+func (m *MacroManager) IsLabelPlaying(r rune) bool {
+	_, ok := m.active[r]
+	return ok
+}
 
-// StartRecording begins capturing intents, clears previous buffer
-func (m *MacroRecorder) StartRecording() {
+// StartRecording begins capturing intents to specified label
+// Stops any playback of that label first
+func (m *MacroManager) StartRecording(label rune) {
+	// Stop playback of this label if running
+	delete(m.active, label)
+
 	m.recording = true
-	m.buffer = m.buffer[:0]
+	m.recordLabel = label
+	m.buffers[label] = make([]input.Intent, 0, 32)
 }
 
 // StopRecording ends capture
-func (m *MacroRecorder) StopRecording() {
+func (m *MacroManager) StopRecording() {
 	m.recording = false
+	m.recordLabel = 0
 }
 
-// Record appends intent to buffer (caller filters meta-intents)
-func (m *MacroRecorder) Record(intent input.Intent) {
+// Record appends intent to current recording buffer
+// Ignores if not recording or if intent originated from playback
+func (m *MacroManager) Record(intent input.Intent) {
 	if !m.recording {
 		return
 	}
-	m.buffer = append(m.buffer, intent)
+	m.buffers[m.recordLabel] = append(m.buffers[m.recordLabel], intent)
 }
 
-// StartPlayback begins playback with count repetitions
-// Returns false if buffer empty (silent no-op)
-func (m *MacroRecorder) StartPlayback(count int, now time.Time) bool {
-	if len(m.buffer) == 0 {
+// StartPlayback begins playback of label with count repetitions (0 = infinite)
+// Returns false if buffer empty or already playing (no-op)
+func (m *MacroManager) StartPlayback(label rune, count int, now time.Time) bool {
+	// No-op if already playing this label
+	if _, playing := m.active[label]; playing {
 		return false
 	}
-	m.playing = true
-	m.playbackQueue = append(m.playbackQueue[:0], m.buffer...)
-	m.playbackIndex = 0
-	m.repeatTarget = count
-	m.repeatCurrent = 0
-	m.lastPlayTime = now.Add(-parameter.MacroPlaybackInterval) // Fire first immediately
+
+	buffer, exists := m.buffers[label]
+	if !exists || len(buffer) == 0 {
+		return false
+	}
+
+	m.startCounter++
+	m.active[label] = &PlaybackState{
+		label:         label,
+		index:         0,
+		repeatTarget:  count,
+		repeatCurrent: 0,
+		lastPlayTime:  now.Add(-parameter.MacroPlaybackInterval), // Fire first immediately
+		startOrder:    m.startCounter,
+	}
 	return true
 }
 
-// StopPlayback halts playback
-func (m *MacroRecorder) StopPlayback() {
-	m.playing = false
-	m.playbackIndex = 0
-	m.repeatCurrent = 0
+// StopPlayback halts playback of specific label
+func (m *MacroManager) StopPlayback(label rune) {
+	delete(m.active, label)
 }
 
-// Tick returns next intent if interval elapsed, nil otherwise
-func (m *MacroRecorder) Tick(now time.Time) *input.Intent {
-	if !m.playing || len(m.playbackQueue) == 0 {
+// StopAllPlayback halts all macro playback
+func (m *MacroManager) StopAllPlayback() {
+	m.active = make(map[rune]*PlaybackState)
+}
+
+// Tick returns intents ready for execution from all active macros
+// Returns slice ordered by start time (FIFO)
+func (m *MacroManager) Tick(now time.Time) []*input.Intent {
+	if len(m.active) == 0 {
 		return nil
 	}
 
-	if now.Sub(m.lastPlayTime) < parameter.MacroPlaybackInterval {
-		return nil
+	// Collect ready states in FIFO order
+	type readyItem struct {
+		state  *PlaybackState
+		intent *input.Intent
 	}
-	m.lastPlayTime = now
+	var ready []readyItem
 
-	// Check for repeat boundary
-	if m.playbackIndex >= len(m.playbackQueue) {
-		m.repeatCurrent++
-		if m.repeatCurrent >= m.repeatTarget {
-			m.StopPlayback()
-			return nil
+	for label, state := range m.active {
+		if now.Sub(state.lastPlayTime) < parameter.MacroPlaybackInterval {
+			continue
 		}
-		m.playbackIndex = 0
+
+		buffer := m.buffers[label]
+		if len(buffer) == 0 {
+			delete(m.active, label)
+			continue
+		}
+
+		// Check repeat boundary
+		if state.index >= len(buffer) {
+			state.repeatCurrent++
+			// 0 = infinite
+			if state.repeatTarget > 0 && state.repeatCurrent >= state.repeatTarget {
+				delete(m.active, label)
+				continue
+			}
+			state.index = 0
+		}
+
+		intent := buffer[state.index]
+		state.index++
+		state.lastPlayTime = now
+
+		ready = append(ready, readyItem{state: state, intent: &intent})
 	}
 
-	intent := m.playbackQueue[m.playbackIndex]
-	m.playbackIndex++
-	return &intent
+	if len(ready) == 0 {
+		return nil
+	}
+
+	// Sort by start order (FIFO)
+	for i := 0; i < len(ready)-1; i++ {
+		for j := i + 1; j < len(ready); j++ {
+			if ready[j].state.startOrder < ready[i].state.startOrder {
+				ready[i], ready[j] = ready[j], ready[i]
+			}
+		}
+	}
+
+	result := make([]*input.Intent, len(ready))
+	for i, item := range ready {
+		result[i] = item.intent
+	}
+	return result
+}
+
+// ActiveLabels returns currently playing macro labels (for UI)
+func (m *MacroManager) ActiveLabels() []rune {
+	if len(m.active) == 0 {
+		return nil
+	}
+
+	// Collect and sort by start order
+	type item struct {
+		label rune
+		order int
+	}
+	items := make([]item, 0, len(m.active))
+	for label, state := range m.active {
+		items = append(items, item{label, state.startOrder})
+	}
+	for i := 0; i < len(items)-1; i++ {
+		for j := i + 1; j < len(items); j++ {
+			if items[j].order < items[i].order {
+				items[i], items[j] = items[j], items[i]
+			}
+		}
+	}
+
+	result := make([]rune, len(items))
+	for i, it := range items {
+		result[i] = it.label
+	}
+	return result
 }
 
 // Reset clears all state (called on game reset)
-func (m *MacroRecorder) Reset() {
+func (m *MacroManager) Reset() {
 	m.recording = false
-	m.playing = false
-	m.buffer = m.buffer[:0]
-	m.playbackQueue = m.playbackQueue[:0]
-	m.playbackIndex = 0
-	m.repeatTarget = 0
-	m.repeatCurrent = 0
+	m.recordLabel = 0
+	m.buffers = make(map[rune][]input.Intent)
+	m.active = make(map[rune]*PlaybackState)
+	m.startCounter = 0
 }

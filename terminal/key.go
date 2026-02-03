@@ -72,7 +72,7 @@ const (
 	KeyCtrlZ
 
 	// Ctrl+special
-	KeyCtrlSpace
+	KeyCtrlSpace // Ctrl+@ / Ctrl+Space (Ctrl+@ produces NUL byte 0x00)
 	KeyCtrlBackslash
 	KeyCtrlBracketLeft
 	KeyCtrlBracketRight

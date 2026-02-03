@@ -148,7 +148,7 @@ func DefaultKeyTable() *KeyTable {
 			',': {BehaviorSpecial, MotionNone, SpecialRepeatFindRev, ModeTargetNone, IntentNone},
 
 			// Macro
-			'q': {BehaviorAction, MotionNone, SpecialNone, ModeTargetNone, IntentMacroRecordToggle},
+			'q': {BehaviorAction, MotionNone, SpecialNone, ModeTargetNone, IntentMacroRecordToggle}, // Router intercepts based on context
 			'@': {BehaviorPrefix, MotionNone, SpecialNone, ModeTargetNone, IntentNone},
 		},
 
