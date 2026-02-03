@@ -21,7 +21,7 @@ const (
 	EditorFocusFiles                    // Read-only file list
 )
 
-// Add CoverageState type
+// AddEntityAt CoverageState type
 type CoverageState uint8
 
 const (
@@ -181,7 +181,7 @@ func (app *AppState) buildEditorTagTree() {
 		}
 		catExpanded := e.TagExpansion.IsExpanded(catKey)
 
-		// Add category node
+		// AddEntityAt category node
 		e.TagTree = append(e.TagTree, EditorTagNode{
 			Type:      TagItemTypeCategory,
 			Category:  cat,
@@ -675,7 +675,7 @@ func (app *AppState) toggleEditorDeletion() {
 			// RemoveEntity from deletions
 			app.removeFromDeletions(ref)
 		} else {
-			// Add to deletions
+			// AddEntityAt to deletions
 			app.addToDeletions(ref)
 		}
 	}

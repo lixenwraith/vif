@@ -285,7 +285,7 @@ func (s *CompositeSystem) DestroyComposite(headerEntity core.Entity) {
 		}
 	}
 
-	// Remove protection and destroy phantom head
+	// RemoveEntityAt protection and destroy phantom head
 	s.world.Components.Protection.RemoveEntity(headerEntity)
 	s.world.DestroyEntity(headerEntity)
 }

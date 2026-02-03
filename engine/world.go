@@ -187,28 +187,28 @@ func (w *World) CreateCursorEntity() {
 		Entity: cursorEntity,
 	}
 
-	// 3. Add cursor component
+	// 3. AddEntityAt cursor component
 	w.Components.Cursor.SetComponent(cursorEntity, component.CursorComponent{})
 
-	// 4. Add protection component, make cursor indestructible
+	// 4. AddEntityAt protection component, make cursor indestructible
 	w.Components.Protection.SetComponent(cursorEntity, component.ProtectionComponent{
 		Mask: component.ProtectAll,
 	})
 
-	// 5. Add position component
+	// 5. AddEntityAt position component
 	w.Components.Ping.SetComponent(cursorEntity, component.PingComponent{
 		ShowCrosshair: true,
 		GridActive:    false,
 		GridRemaining: 0,
 	})
 
-	// 6. Add heat component
+	// 6. AddEntityAt heat component
 	w.Components.Heat.SetComponent(cursorEntity, component.HeatComponent{})
 
-	// 7. Add energy component
+	// 7. AddEntityAt energy component
 	w.Components.Energy.SetComponent(cursorEntity, component.EnergyComponent{})
 
-	// 8. Add shield component
+	// 8. AddEntityAt shield component
 	w.Components.Shield.SetComponent(cursorEntity, component.ShieldComponent{
 		RadiusX:       vmath.FromFloat(parameter.ShieldRadiusX),
 		RadiusY:       vmath.FromFloat(parameter.ShieldRadiusY),
@@ -216,16 +216,16 @@ func (w *World) CreateCursorEntity() {
 		LastDrainTime: w.Resources.Time.GameTime,
 	})
 
-	// 9. Add boost component
+	// 9. AddEntityAt boost component
 	w.Components.Boost.SetComponent(cursorEntity, component.BoostComponent{})
 
-	// 10. Add buff component
+	// 10. AddEntityAt buff component
 	w.Components.Buff.SetComponent(cursorEntity, component.BuffComponent{
 		Active:   make(map[component.BuffType]bool),
 		Cooldown: make(map[component.BuffType]time.Duration),
 	})
 
-	// 11. Add combat component
+	// 11. AddEntityAt combat component
 	w.Components.Combat.SetComponent(cursorEntity, component.CombatComponent{
 		OwnerEntity:      cursorEntity,
 		CombatEntityType: component.CombatEntityCursor,

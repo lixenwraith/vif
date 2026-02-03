@@ -184,7 +184,7 @@ func truncateSections(sections []BarSection, widths []int, sepLen, availW int) (
 			}
 		}
 
-		// Remove it
+		// RemoveEntityAt it
 		secs = append(secs[:minIdx], secs[minIdx+1:]...)
 		ws = append(ws[:minIdx], ws[minIdx+1:]...)
 	}

@@ -74,13 +74,13 @@ const (
 	GAFitnessMaxTicksDefault  = 600
 )
 
-// Add persistence path constant after existing constants
+// AddEntityAt persistence path constant after existing constants
 const (
 	// GeneticPersistencePath is the directory for population save files
 	GeneticPersistencePath = "./config/genetic"
 )
 
-// Add energy/heat max for normalization (if not already present elsewhere)
+// AddEntityAt energy/heat max for normalization (if not already present elsewhere)
 const (
 	// EnergyMax for player model normalization, it's NOT the real max heat
 	EnergyMax int64 = 10000

@@ -314,8 +314,8 @@ func (s *MetaSystem) handleHelpRequest() {
 		Entries: []core.CardEntry{
 			{Key: ":q", Value: "Quit game"},
 			{Key: ":n", Value: "New game"},
-			{Key: ":energy N", Value: "Add energy"},
-			{Key: ":heat N", Value: "Add heat"},
+			{Key: ":energy N", Value: "AddEntityAt energy"},
+			{Key: ":heat N", Value: "AddEntityAt heat"},
 			{Key: ":boost", Value: "Enable boost"},
 			{Key: ":spawn on/off", Value: "Toggle spawning"},
 			{Key: ":d", Value: "Debug overlay"},

@@ -37,7 +37,7 @@ func (p *Position) SetPosition(e core.Entity, pos component.PositionComponent) {
 
 	// If entity already has a position, remove it from old grid location
 	if oldPos, exists := p.components[e]; exists {
-		p.grid.Remove(e, oldPos.X, oldPos.Y)
+		p.grid.RemoveEntityAt(e, oldPos.X, oldPos.Y)
 	} else {
 		// New entity, add to dense array
 		p.entities = append(p.entities, e)
@@ -46,8 +46,8 @@ func (p *Position) SetPosition(e core.Entity, pos component.PositionComponent) {
 	// Update component
 	p.components[e] = pos
 
-	// Add to new grid location
-	_ = p.grid.Add(e, pos.X, pos.Y)
+	// AddEntityAt to new grid location
+	_ = p.grid.AddEntityAt(e, pos.X, pos.Y)
 }
 
 // RemoveEntity deletes an entity from the store and grid
@@ -57,7 +57,7 @@ func (p *Position) RemoveEntity(e core.Entity) {
 
 	if pos, exists := p.components[e]; exists {
 		// RemoveEntity from spatial grid
-		p.grid.Remove(e, pos.X, pos.Y)
+		p.grid.RemoveEntityAt(e, pos.X, pos.Y)
 
 		// RemoveEntity from components map
 		delete(p.components, e)
@@ -84,14 +84,14 @@ func (p *Position) MoveEntity(e core.Entity, newPos component.PositionComponent)
 	}
 
 	// RemoveEntity from old grid pos
-	p.grid.Remove(e, oldPos.X, oldPos.Y)
+	p.grid.RemoveEntityAt(e, oldPos.X, oldPos.Y)
 
 	// Update component
 	p.components[e] = newPos
 
-	// Add to new grid pos
+	// AddEntityAt to new grid pos
 	// Explicit ignore for OOB and Cell full
-	_ = p.grid.Add(e, newPos.X, newPos.Y)
+	_ = p.grid.AddEntityAt(e, newPos.X, newPos.Y)
 
 	return nil
 }
@@ -101,7 +101,7 @@ func (p *Position) GetAllEntityAt(x, y int) []core.Entity {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	view := p.grid.GetAllAt(x, y)
+	view := p.grid.GetAllEntitiesAt(x, y)
 	if len(view) == 0 {
 		return nil
 	}
@@ -117,7 +117,7 @@ func (p *Position) GetAllEntitiesAtInto(x, y int, buf []core.Entity) int {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	view := p.grid.GetAllAt(x, y)
+	view := p.grid.GetAllEntitiesAt(x, y)
 	// Copy min(len(buf), len(view))
 	return copy(buf, view)
 }
@@ -126,7 +126,7 @@ func (p *Position) GetAllEntitiesAtInto(x, y int, buf []core.Entity) int {
 func (p *Position) HasAnyEntityAt(x, y int) bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	return p.grid.HasAny(x, y)
+	return p.grid.HasAnyEntityAt(x, y)
 }
 
 // ResizeGrid resizes the internal spatial grid
@@ -141,7 +141,7 @@ func (p *Position) ResizeGrid(width, height int) {
 	// This ensures consistency even if grid size changes
 	for e, pos := range p.components {
 		// Explicit ignore for OOB and Cell full
-		_ = p.grid.Add(e, pos.X, pos.Y)
+		_ = p.grid.AddEntityAt(e, pos.X, pos.Y)
 	}
 }
 
@@ -201,20 +201,7 @@ func (p *Position) SetWorld(w *World) {
 func (p *Position) HasBlockingWallAt(x, y int, mask component.WallBlockMask) bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-
-	if p.world == nil {
-		return false
-	}
-
-	view := p.grid.GetAllAt(x, y)
-	for _, e := range view {
-		if wall, ok := p.world.Components.Wall.GetComponent(e); ok {
-			if wall.BlockMask.Has(mask) {
-				return true
-			}
-		}
-	}
-	return false
+	return p.HasBlockingWallAtUnsafe(x, y, mask)
 }
 
 // HasBlockingWallAtUnsafe checks wall without acquiring lock
@@ -232,7 +219,8 @@ func (p *Position) HasBlockingWallAtUnsafe(x, y int, mask component.WallBlockMas
 	cell := &p.grid.Cells[idx]
 	for i := uint8(0); i < cell.Count; i++ {
 		if wall, ok := p.world.Components.Wall.GetComponent(cell.Entities[i]); ok {
-			if wall.BlockMask.Has(mask) {
+			// If mask is 0, allow any wall. Otherwise check mask
+			if mask == 0 || wall.BlockMask.Has(mask) {
 				return true
 			}
 		}
@@ -244,18 +232,7 @@ func (p *Position) HasBlockingWallAtUnsafe(x, y int, mask component.WallBlockMas
 func (p *Position) HasAnyWallAt(x, y int) bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-
-	if p.world == nil {
-		return false
-	}
-
-	view := p.grid.GetAllAt(x, y)
-	for _, e := range view {
-		if p.world.Components.Wall.HasEntity(e) {
-			return true
-		}
-	}
-	return false
+	return p.HasBlockingWallAtUnsafe(x, y, 0)
 }
 
 // HasBlockingWallInArea returns true if any wall exists in rectangular area that blocks the given mask
@@ -263,28 +240,21 @@ func (p *Position) HasAnyWallAt(x, y int) bool {
 func (p *Position) HasBlockingWallInArea(x, y, width, height int, mask component.WallBlockMask) bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
+	return p.HasBlockingWallInAreaUnsafe(x, y, width, height, mask)
+}
 
+// HasBlockingWallInAreaUnsafe checks area for walls without locking
+func (p *Position) HasBlockingWallInAreaUnsafe(x, y, width, height int, mask component.WallBlockMask) bool {
 	if p.world == nil {
 		return false
 	}
 
-	for row := y; row < y+height; row++ {
-		for col := x; col < x+width; col++ {
-			if col < 0 || col >= p.grid.Width || row < 0 || row >= p.grid.Height {
-				continue
-			}
-			idx := row*p.grid.Width + col
-			cell := &p.grid.Cells[idx]
-			for i := uint8(0); i < cell.Count; i++ {
-				if wall, ok := p.world.Components.Wall.GetComponent(cell.Entities[i]); ok {
-					if wall.BlockMask.Has(mask) {
-						return true
-					}
-				}
-			}
+	return p.grid.HasAnyEntityInArea(x, y, width, height, func(e core.Entity) bool {
+		if wall, ok := p.world.Components.Wall.GetComponent(e); ok {
+			return mask == 0 || wall.BlockMask.Has(mask)
 		}
-	}
-	return false
+		return false
+	})
 }
 
 // SpiralSearchDirs defines direction vectors for spiral area search
@@ -348,27 +318,35 @@ func (p *Position) FindFreeAreaSpiral(
 	return 0, 0, false
 }
 
+// IsAreaFree checks if the rectangular area is strictly within grid bounds and free of blocking walls
+// Returns true only if the entire area is valid and empty of walls matching the mask
+func (p *Position) IsAreaFree(x, y, width, height int, mask component.WallBlockMask) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.isAreaFreeUnsafe(x, y, width, height, mask)
+}
+
+// IsBlocked checks if a specific point is invalid (OOB) or blocked by a wall
+// Consolidates IsOutOfBounds and HasBlockingWallAt for point entities
+func (p *Position) IsBlocked(x, y int, mask component.WallBlockMask) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	if p.IsOutOfBounds(x, y) {
+		return true
+	}
+	return p.HasBlockingWallAtUnsafe(x, y, mask)
+}
+
 // isAreaFreeUnsafe checks bounds and wall presence, caller must hold lock
 func (p *Position) isAreaFreeUnsafe(x, y, width, height int, mask component.WallBlockMask) bool {
+	// Strict bounds check: Area must be completely inside the grid
 	if x < 0 || y < 0 || x+width > p.grid.Width || y+height > p.grid.Height {
 		return false
 	}
 
-	for row := y; row < y+height; row++ {
-		for col := x; col < x+width; col++ {
-			idx := row*p.grid.Width + col
-			cell := &p.grid.Cells[idx]
-			for i := uint8(0); i < cell.Count; i++ {
-				if wall, ok := p.world.Components.Wall.GetComponent(cell.Entities[i]); ok {
-					if mask == 0 || wall.BlockMask.Has(mask) {
-						return false
-					}
-				}
-			}
-		}
-	}
-
-	return true
+	// Check for any blocking walls in the area
+	return !p.HasBlockingWallInAreaUnsafe(x, y, width, height, mask)
 }
 
 // IsOutOfBounds checks if position is outside spatial grid bounds
@@ -379,19 +357,13 @@ func (p *Position) IsOutOfBounds(x, y int) bool {
 // IsBlockedForParticle checks if position blocks particle movement (OOB or blocking wall)
 // Use for decay, blossom, dust boundary checks
 func (p *Position) IsBlockedForParticle(x, y int) bool {
-	if p.IsOutOfBounds(x, y) {
-		return true
-	}
-	return p.HasBlockingWallAt(x, y, component.WallBlockParticle)
+	return p.IsBlocked(x, y, component.WallBlockParticle)
 }
 
 // IsBlockedForSpawn checks if position blocks entity spawn (OOB, blocking wall, or occupied)
 // Use for glyph, gold, nugget placement validation
 func (p *Position) IsBlockedForSpawn(x, y int) bool {
-	if p.IsOutOfBounds(x, y) {
-		return true
-	}
-	if p.HasBlockingWallAt(x, y, component.WallBlockSpawn) {
+	if p.IsBlocked(x, y, component.WallBlockSpawn) {
 		return true
 	}
 	return p.HasAnyEntityAt(x, y)
@@ -421,10 +393,10 @@ func (p *Position) MoveUnsafe(e core.Entity, newPos component.PositionComponent)
 	if !exists {
 		return
 	}
-	p.grid.Remove(e, oldPos.X, oldPos.Y)
+	p.grid.RemoveEntityAt(e, oldPos.X, oldPos.Y)
 	p.components[e] = newPos
 	// Explicit ignore for OOB and Cell full
-	_ = p.grid.Add(e, newPos.X, newPos.Y)
+	_ = p.grid.AddEntityAt(e, newPos.X, newPos.Y)
 }
 
 // GetAllAtIntoUnsafe copies entities at (x,y) into buf without locking, caller MUST hold Lock/RLock, returns number of entities copied
@@ -491,9 +463,9 @@ func (pb *PositionBatch) Commit() error {
 
 	for _, add := range pb.additions {
 		// Check against existing entities
-		if pb.store.grid.HasAny(add.pos.X, add.pos.Y) {
+		if pb.store.grid.HasAnyEntityAt(add.pos.X, add.pos.Y) {
 			// Collision found in world
-			return fmt.Errorf("position (%d,%d) is occupied", add.pos.X, add.pos.Y)
+			return fmt.Errorf("position is occupied")
 		}
 
 		// Check against other items in this batch
@@ -501,23 +473,23 @@ func (pb *PositionBatch) Commit() error {
 			batchOccupied[add.pos.Y] = make(map[int]bool)
 		}
 		if batchOccupied[add.pos.Y][add.pos.X] {
-			return fmt.Errorf("batch conflict at position (%d,%d)", add.pos.X, add.pos.Y)
+			return fmt.Errorf("batch conflict at position")
 		}
 		batchOccupied[add.pos.Y][add.pos.X] = true
 	}
 
 	// 2. Application phase
 	for _, add := range pb.additions {
-		// Remove old position if exists
+		// RemoveEntityAt old position if exists
 		if oldPos, exists := pb.store.components[add.entity]; exists {
-			pb.store.grid.Remove(add.entity, oldPos.X, oldPos.Y)
+			pb.store.grid.RemoveEntityAt(add.entity, oldPos.X, oldPos.Y)
 		} else {
 			pb.store.entities = append(pb.store.entities, add.entity)
 		}
 
 		pb.store.components[add.entity] = add.pos
 		// Explicit ignore for OOB and Cell full
-		_ = pb.store.grid.Add(add.entity, add.pos.X, add.pos.Y)
+		_ = pb.store.grid.AddEntityAt(add.entity, add.pos.X, add.pos.Y)
 	}
 
 	return nil
@@ -535,16 +507,16 @@ func (pb *PositionBatch) CommitForce() {
 	defer pb.store.mu.Unlock()
 
 	for _, add := range pb.additions {
-		// Remove old position if exists
+		// RemoveEntityAt old position if exists
 		if oldPos, exists := pb.store.components[add.entity]; exists {
-			pb.store.grid.Remove(add.entity, oldPos.X, oldPos.Y)
+			pb.store.grid.RemoveEntityAt(add.entity, oldPos.X, oldPos.Y)
 		} else {
 			pb.store.entities = append(pb.store.entities, add.entity)
 		}
 
 		pb.store.components[add.entity] = add.pos
 		// Explicit ignore for OOB and Cell full
-		_ = pb.store.grid.Add(add.entity, add.pos.X, add.pos.Y)
+		_ = pb.store.grid.AddEntityAt(add.entity, add.pos.X, add.pos.Y)
 	}
 }
 
@@ -779,4 +751,231 @@ func (p *Position) FindClosestEntityInDirection(startX, startY, dx, dy int, boun
 	}
 
 	return 0, -1, -1, false
+}
+
+// --- Spiral search ---
+
+// PatternType defines search pattern for FindFreeFromPattern
+type PatternType uint8
+
+const (
+	// PatternCardinalFirst searches cardinals (N,S,E,W) then diagonals
+	PatternCardinalFirst PatternType = iota
+	// PatternDiagonalFirst searches diagonals then cardinals
+	PatternDiagonalFirst
+)
+
+// SearchDirection defines pattern rotation direction
+type SearchDirection uint8
+
+const (
+	SearchCW SearchDirection = iota
+	SearchCCW
+)
+
+// Pre-computed 8-direction offsets (unit vectors)
+// Index 0 = Top (N), proceeding clockwise
+var patternDirections = [8][2]int{
+	{0, -1},  // 0: N
+	{1, -1},  // 1: NE
+	{1, 0},   // 2: E
+	{1, 1},   // 3: SE
+	{0, 1},   // 4: S
+	{-1, 1},  // 5: SW
+	{-1, 0},  // 6: W
+	{-1, -1}, // 7: NW
+}
+
+// Angle orders for pattern searches
+var cardinalFirstCW = [8]int{0, 2, 4, 6, 1, 3, 5, 7}
+var cardinalFirstCCW = [8]int{0, 6, 4, 2, 7, 5, 3, 1}
+var diagonalFirstCW = [8]int{1, 3, 5, 7, 0, 2, 4, 6}
+var diagonalFirstCCW = [8]int{7, 5, 3, 1, 0, 6, 4, 2}
+
+// FindFreeFromPattern searches 8 directions at expanding radii for free area
+// Returns (absX, absY, found) - absolute position, not offset
+// aspectCorrect: apply terminal aspect ratio (1:2) to Y offsets
+// additionalCheck: optional callback for extra validation (nil = skip), returns true if valid
+func (p *Position) FindFreeFromPattern(
+	originX, originY int,
+	width, height int,
+	pattern PatternType,
+	startRadius, maxRadius int,
+	aspectCorrect bool,
+	mask component.WallBlockMask,
+	additionalCheck func(absX, absY, w, h int) bool,
+) (int, int, bool) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	// Compute direction internally
+	centerX := p.grid.Width / 2
+	direction := getSearchDirection(originX, centerX)
+
+	var order [8]int
+	switch {
+	case pattern == PatternCardinalFirst && direction == SearchCW:
+		order = cardinalFirstCW
+	case pattern == PatternCardinalFirst && direction == SearchCCW:
+		order = cardinalFirstCCW
+	case pattern == PatternDiagonalFirst && direction == SearchCW:
+		order = diagonalFirstCW
+	default:
+		order = diagonalFirstCCW
+	}
+
+	for radius := startRadius; radius <= maxRadius; radius++ {
+		for _, idx := range order {
+			dir := patternDirections[idx]
+
+			offsetX := dir[0] * radius
+			offsetY := dir[1] * radius
+			if aspectCorrect {
+				offsetY = dir[1] * ((radius + 1) / 2)
+			}
+
+			absX := originX + offsetX
+			absY := originY + offsetY
+
+			if !p.isAreaFreeUnsafe(absX, absY, width, height, mask) {
+				continue
+			}
+
+			if additionalCheck != nil && !additionalCheck(absX, absY, width, height) {
+				continue
+			}
+
+			return absX, absY, true
+		}
+	}
+
+	return 0, 0, false
+}
+
+// Exclusion defines a rectangular keep-out zone relative to an anchor point
+type Exclusion struct {
+	Left, Right, Top, Bottom int
+}
+
+// FindPlacementAroundExclusion finds valid position for object outside exclusion zone
+// Returns (offsetX, offsetY, found) where offset is relative to anchor
+// padding: gap between exclusion edge and placed object
+// topAdjust: visual compensation for font asymmetry (typically -1)
+func (p *Position) FindPlacementAroundExclusion(
+	anchorX, anchorY int,
+	objectW, objectH int,
+	exclusion Exclusion,
+	padding, topAdjust int,
+	pattern PatternType,
+	mask component.WallBlockMask,
+	additionalCheck func(absX, absY, w, h int) bool,
+) (int, int, bool) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	centerX := p.grid.Width / 2
+	direction := getSearchDirection(anchorX, centerX)
+
+	// Compute centering offsets
+	objHalfW := objectW / 2
+	objHalfH := objectH / 2
+	hCenter := (exclusion.Right - exclusion.Left) / 2
+
+	// 8 positions: cardinals (0-3), diagonals (4-7)
+	// Matches timer positioning logic exactly
+	offsets := [8][2]int{
+		{hCenter - objHalfW, exclusion.Bottom + padding},                                      // 0: Bottom
+		{hCenter - objHalfW, -exclusion.Top - objectH - padding + topAdjust},                  // 1: Top
+		{exclusion.Right + padding, -objHalfH + topAdjust},                                    // 2: Right
+		{-exclusion.Left - objectW - padding, -objHalfH + topAdjust},                          // 3: Left
+		{exclusion.Right + padding, exclusion.Bottom + padding},                               // 4: Bottom-right
+		{-exclusion.Left - objectW - padding, exclusion.Bottom + padding},                     // 5: Bottom-left
+		{exclusion.Right + padding, -exclusion.Top - objectH + padding + topAdjust},           // 6: Top-right
+		{-exclusion.Left - objectW - padding, -exclusion.Top - objectH + padding + topAdjust}, // 7: Top-left
+	}
+
+	var order [8]int
+	switch {
+	case pattern == PatternCardinalFirst && direction == SearchCW:
+		order = cardinalFirstCW
+	case pattern == PatternCardinalFirst && direction == SearchCCW:
+		order = cardinalFirstCCW
+	case pattern == PatternDiagonalFirst && direction == SearchCW:
+		order = diagonalFirstCW
+	default:
+		order = diagonalFirstCCW
+	}
+
+	// Primary: all 8 positions
+	for _, idx := range order {
+		absX := anchorX + offsets[idx][0]
+		absY := anchorY + offsets[idx][1]
+
+		if additionalCheck != nil && !additionalCheck(absX, absY, objectW, objectH) {
+			continue
+		}
+
+		if !p.isAreaFreeUnsafe(absX, absY, objectW, objectH, mask) {
+			continue
+		}
+
+		return offsets[idx][0], offsets[idx][1], true
+	}
+
+	// Secondary: 2x distance
+	for _, idx := range order {
+		absX := anchorX + offsets[idx][0]*2
+		absY := anchorY + offsets[idx][1]*2
+
+		if additionalCheck != nil && !additionalCheck(absX, absY, objectW, objectH) {
+			continue
+		}
+
+		if !p.isAreaFreeUnsafe(absX, absY, objectW, objectH, mask) {
+			continue
+		}
+
+		return offsets[idx][0] * 2, offsets[idx][1] * 2, true
+	}
+
+	// Tertiary: skip additionalCheck, keep wall avoidance
+	for _, idx := range order {
+		absX := anchorX + offsets[idx][0]
+		absY := anchorY + offsets[idx][1]
+
+		if p.isAreaFreeUnsafe(absX, absY, objectW, objectH, mask) {
+			return offsets[idx][0], offsets[idx][1], true
+		}
+	}
+
+	// Quaternary: clamp to bounds, skip walls
+	for _, idx := range order {
+		absX := anchorX + offsets[idx][0]
+		absY := anchorY + offsets[idx][1]
+
+		absX = max(0, min(absX, p.grid.Width-objectW))
+		absY = max(0, min(absY, p.grid.Height-objectH))
+
+		if p.HasBlockingWallInAreaUnsafe(absX, absY, objectW, objectH, mask) {
+			continue
+		}
+
+		return absX - anchorX, absY - anchorY, true
+	}
+
+	// Ultimate: force clamp first position
+	absX := anchorX + offsets[order[0]][0]
+	absY := anchorY + offsets[order[0]][1]
+	absX = max(0, min(absX, p.grid.Width-objectW))
+	absY = max(0, min(absY, p.grid.Height-objectH))
+
+	return absX - anchorX, absY - anchorY, false
+}
+
+// GetSearchDirection returns CCW if origin is right of center, CW otherwise
+func getSearchDirection(originX, centerX int) SearchDirection {
+	if originX > centerX {
+		return SearchCCW
+	}
+	return SearchCW
 }

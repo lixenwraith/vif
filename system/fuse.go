@@ -118,7 +118,7 @@ func (s *FuseSystem) Update() {
 		if s.fusions[i].Timer <= 0 {
 			s.completeFusion(s.fusions[i])
 
-			// Remove completed fusion
+			// RemoveEntityAt completed fusion
 			s.fusions[i] = s.fusions[len(s.fusions)-1]
 			s.fusions = s.fusions[:len(s.fusions)-1]
 		}

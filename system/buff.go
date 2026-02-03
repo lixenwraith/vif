@@ -188,7 +188,7 @@ func (s *BuffSystem) addBuff(buff component.BuffType) {
 
 	s.world.Components.Buff.SetComponent(cursorEntity, buffComp)
 
-	// TEST: Add launcher orb for multi-orb testing
+	// TEST: AddEntityAt launcher orb for multi-orb testing
 	if buff == component.BuffRod && !buffComp.Active[component.BuffLauncher] {
 		buffComp.Active[component.BuffLauncher] = true
 		buffComp.Cooldown[component.BuffLauncher] = 0 // Ready immediately

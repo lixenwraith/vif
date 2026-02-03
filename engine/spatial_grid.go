@@ -29,9 +29,9 @@ func NewSpatialGrid(width, height int) *SpatialGrid {
 	}
 }
 
-// Add inserts an entity into the grid at (x, y)
+// AddEntityAt inserts an entity into the grid at (x, y)
 // O(1), Returns false if bounds invalid or cell full (soft clip)
-func (g *SpatialGrid) Add(e core.Entity, x, y int) bool {
+func (g *SpatialGrid) AddEntityAt(e core.Entity, x, y int) bool {
 	if x < 0 || x >= g.Width || y < 0 || y >= g.Height {
 		return false
 	}
@@ -47,9 +47,9 @@ func (g *SpatialGrid) Add(e core.Entity, x, y int) bool {
 	return false
 }
 
-// Remove deletes an entity from the grid at (x, y)
+// RemoveEntityAt deletes an entity from the grid at (x, y)
 // O(k) where k <= 15. Uses swap-remove to maintain dense packing
-func (g *SpatialGrid) Remove(e core.Entity, x, y int) {
+func (g *SpatialGrid) RemoveEntityAt(e core.Entity, x, y int) {
 	if x < 0 || x >= g.Width || y < 0 || y >= g.Height {
 		return
 	}
@@ -74,10 +74,10 @@ func (g *SpatialGrid) Remove(e core.Entity, x, y int) {
 	}
 }
 
-// GetAllAt returns a slice view of entities at (x, y)
+// GetAllEntitiesAt returns a slice view of entities at (x, y)
 // INTERNAL USE ONLY - callers must copy or hold external lock
 // O(1), returns nil if empty or out of bounds
-func (g *SpatialGrid) GetAllAt(x, y int) []core.Entity {
+func (g *SpatialGrid) GetAllEntitiesAt(x, y int) []core.Entity {
 	if x < 0 || x >= g.Width || y < 0 || y >= g.Height {
 		return nil
 	}
@@ -90,12 +90,43 @@ func (g *SpatialGrid) GetAllAt(x, y int) []core.Entity {
 	return cell.Entities[:cell.Count]
 }
 
-// HasAny returns true if there is at least one entity at (x, y). O(1)
-func (g *SpatialGrid) HasAny(x, y int) bool {
+// HasAnyEntityAt returns true if there is at least one entity at (x, y). O(1)
+func (g *SpatialGrid) HasAnyEntityAt(x, y int) bool {
 	if x < 0 || x >= g.Width || y < 0 || y >= g.Height {
 		return false
 	}
 	return g.Cells[y*g.Width+x].Count > 0
+}
+
+// HasAnyEntityInArea checks if any entity within the rectangular area satisfies the predicate
+// It iterates only the intersection of the requested area and the grid bounds
+// Returns true immediately if the predicate returns true for any entity
+func (g *SpatialGrid) HasAnyEntityInArea(x, y, width, height int, predicate func(core.Entity) bool) bool {
+	// Clamp query area to grid dimensions to avoid OOB
+	startX := max(0, x)
+	startY := max(0, y)
+	endX := min(g.Width, x+width)
+	endY := min(g.Height, y+height)
+
+	if startX >= endX || startY >= endY {
+		return false
+	}
+
+	for row := startY; row < endY; row++ {
+		// Calculate row offset once
+		rowOffset := row * g.Width
+		for col := startX; col < endX; col++ {
+			idx := rowOffset + col
+			cell := &g.Cells[idx]
+			// Check entities in this cell
+			for i := uint8(0); i < cell.Count; i++ {
+				if predicate(cell.Entities[i]) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // Clear removes all entities from all cells

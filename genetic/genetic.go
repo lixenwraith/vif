@@ -55,7 +55,7 @@ func (ts *TournamentSelector[S, F]) Select(pool *Pool[S, F], size int, rng *rand
 
 		selected = append(selected, winner)
 
-		// Remove winner from pool if not using replacement
+		// RemoveEntityAt winner from pool if not using replacement
 		if !ts.WithReplacement {
 			// This is simplified; real implementation would track indices
 			// to avoid re-selection efficiently

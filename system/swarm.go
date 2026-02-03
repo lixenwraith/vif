@@ -750,8 +750,7 @@ func (s *SwarmSystem) applyHomingMovement(headerEntity core.Entity, dtFixed int6
 	s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
 }
 
-// integrateAndSync integrates physics and syncs member positions
-// Returns true if a wall/boundary was hit
+// integrateAndSync integrates physics and syncs member positions, returns true if a wall/boundary was hit
 func (s *SwarmSystem) integrateAndSync(headerEntity core.Entity, dtFixed int64) bool {
 	config := s.world.Resources.Config
 
@@ -770,7 +769,7 @@ func (s *SwarmSystem) integrateAndSync(headerEntity core.Entity, dtFixed int64) 
 		return false
 	}
 
-	// Define Wall Query
+	// Physics Integration with Wall Constraints
 	wallCheck := func(topLeftX, topLeftY int) bool {
 		return s.world.Positions.HasBlockingWallInArea(
 			topLeftX, topLeftY,
@@ -996,7 +995,7 @@ func (s *SwarmSystem) destroySwarmComposite(headerEntity core.Entity) {
 		}
 	}
 
-	// Remove components from phantom head
+	// RemoveEntityAt components from phantom head
 	s.world.Components.Swarm.RemoveEntity(headerEntity)
 	s.world.Components.Header.RemoveEntity(headerEntity)
 	s.world.Components.Combat.RemoveEntity(headerEntity)

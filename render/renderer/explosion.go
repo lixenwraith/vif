@@ -221,7 +221,7 @@ func (r *ExplosionRenderer) renderTypeBuffer(
 ) {
 	palette := explosionPalettes[explosionType]
 
-	// Missile uses Screen blend for brighter flash, dust uses Add for glow buildup
+	// Missile uses Screen blend for brighter flash, dust uses AddEntityAt for glow buildup
 	blendMode := render.BlendAdd
 	if explosionType == event.ExplosionTypeMissile {
 		blendMode = render.BlendScreen

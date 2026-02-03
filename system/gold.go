@@ -472,7 +472,7 @@ func (s *GoldSystem) destroyComposite(headerEntity core.Entity) {
 		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, toDestroy)
 	}
 
-	// Remove protection and destroy phantom head
+	// RemoveEntityAt protection and destroy phantom head
 	s.world.Components.Protection.RemoveEntity(headerEntity)
 	s.world.Components.Header.RemoveEntity(headerEntity)
 	s.world.DestroyEntity(headerEntity)

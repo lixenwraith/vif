@@ -87,6 +87,7 @@ func (s *MissileSystem) Update() {
 			continue
 		}
 
+		// TODO: change age to time.Duration
 		missileComp.Age++
 
 		switch missileComp.Type {
@@ -105,23 +106,20 @@ func (s *MissileSystem) Update() {
 			}
 		}
 
-		// OOB check - immediate destruction at boundary
 		gridX := vmath.ToInt(kineticComp.PreciseX)
 		gridY := vmath.ToInt(kineticComp.PreciseY)
 
-		if s.world.Positions.IsOutOfBounds(gridX, gridY) {
-			toDestroy = append(toDestroy, missileEntity)
-			continue
-		}
-
-		if s.world.Positions.HasBlockingWallAt(gridX, gridY, component.WallBlockKinetic) {
-			s.emitImpact(&missileComp, &kineticComp)
+		// Destruction when OOB, explosion when hits wall
+		if s.world.Positions.IsBlocked(gridX, gridY, component.WallBlockKinetic) {
+			if !s.world.Positions.IsOutOfBounds(gridX, gridY) {
+				s.emitImpact(&missileComp, &kineticComp)
+			}
 			toDestroy = append(toDestroy, missileEntity)
 			continue
 		}
 
 		// Update spatial grid position
-		if pos, ok := s.world.Positions.GetPosition(missileEntity); !ok || pos.X != gridX || pos.Y != gridY {
+		if missilePos, ok := s.world.Positions.GetPosition(missileEntity); !ok || missilePos.X != gridX || missilePos.Y != gridY {
 			s.world.Positions.SetPosition(missileEntity, component.PositionComponent{X: gridX, Y: gridY})
 		}
 

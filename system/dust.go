@@ -166,7 +166,7 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 				entity := s.world.CreateEntity()
 				s.setDustComponents(entity, entry.X, entry.Y, entry.Char, entry.Level, cursorPos.X, cursorPos.Y)
 
-				// Add components to batch entry entity
+				// AddEntityAt components to batch entry entity
 				posBatch.Add(entity, component.PositionComponent{X: entry.X, Y: entry.Y})
 			}
 

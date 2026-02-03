@@ -392,7 +392,7 @@ func drawFlashEffect(startY int, fg, bg render.RGB) {
 		opacity = 0
 	}
 
-	// Flash uses Add blend on foreground
+	// Flash uses AddEntityAt blend on foreground
 	flashColor := render.RGB{
 		R: uint8(float64(baseColor.R) * opacity),
 		G: uint8(float64(baseColor.G) * opacity),
@@ -407,7 +407,7 @@ func drawFlashEffect(startY int, fg, bg render.RGB) {
 	startY += 2
 
 	// Show add blend result on sample char
-	drawText(1, startY, "Add blend on char 'A' (green):", fg, bg)
+	drawText(1, startY, "AddEntityAt blend on char 'A' (green):", fg, bg)
 	startY++
 	charFg := render.RgbGlyphGreenNormal
 	addedTC := render.Add(charFg, flashColor, 1.0)

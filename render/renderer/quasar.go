@@ -121,7 +121,7 @@ func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.Re
 
 	// Dynamic bounding box in grid cells (circle in visual space = ellipse in grid): radius (fixed) -> int cells
 	rVisual := quasar.ZapRadius
-	// Add padding to ensure coverage
+	// AddEntityAt padding to ensure coverage
 	rxCells := vmath.ToInt(rVisual) + parameter.QuasarBorderPaddingCells
 	ryCells := vmath.ToInt(rVisual)/2 + parameter.QuasarBorderPaddingCells // Visual Y is 2x, so grid cells = radius/2
 

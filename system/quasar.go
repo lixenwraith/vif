@@ -874,7 +874,7 @@ func (s *QuasarSystem) destroyQuasarComposite(headerEntity core.Entity) {
 		}
 	}
 
-	// Remove components from phantom head
+	// RemoveEntityAt components from phantom head
 	s.world.Components.Quasar.RemoveEntity(headerEntity)
 	s.world.Components.Header.RemoveEntity(headerEntity)
 	s.world.Components.Protection.RemoveEntity(headerEntity)
